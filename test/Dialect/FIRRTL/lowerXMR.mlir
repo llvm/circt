@@ -797,7 +797,7 @@ firrtl.circuit "InternalPaths" {
   firrtl.extmodule private @RefExtMore(in in: !firrtl.uint<1>,
                                        out r: !firrtl.probe<uint<1>>,
                                        out data: !firrtl.uint<3>,
-                                       out r2: !firrtl.probe<vector<bundle<a: uint<3>>, 3>>) attributes {convention = #firrtl<convention scalarized>, internalPaths = ["path.to.internal.signal", "in"]}
+                                       out r2: !firrtl.probe<vector<bundle<a: uint<3>>, 3>>) attributes {convention = #firrtl<convention scalarized>, internalPaths = [#firrtl.internalpath, #firrtl.internalpath<"path.to.internal.signal">, #firrtl.internalpath, #firrtl.internalpath<"in">]}
   // CHECK: hw.hierpath private @xmrPath [@InternalPaths::@[[EXT_SYM:.+]]] 
   // CHECK: module public @InternalPaths(
   firrtl.module public @InternalPaths(in %in: !firrtl.uint<1>) {

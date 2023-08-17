@@ -193,7 +193,7 @@ def FExtModuleOp : FIRRTLModuleLike<"extmodule"> {
                    ParamDeclArrayAttr:$parameters,
                    DefaultValuedAttr<AnnotationArrayAttr,
                    "ArrayAttr()">:$annotations,
-                   DefaultValuedAttr<ArrayAttr, "{}">:$internalPaths
+                   OptionalAttr<InternalPathArrayAttr>:$internalPaths
                   );
   let results = (outs);
   let regions = (region AnyRegion:$body);
@@ -229,7 +229,7 @@ def FIntModuleOp : FIRRTLModuleLike<"intmodule"> {
                    ParamDeclArrayAttr:$parameters,
                    DefaultValuedAttr<AnnotationArrayAttr,
                    "ArrayAttr()">:$annotations,
-                   DefaultValuedAttr<ArrayAttr, "{}">:$internalPaths
+                   OptionalAttr<InternalPathArrayAttr>:$internalPaths
                   );
   let results = (outs);
   let regions = (region AnyRegion:$body);

@@ -513,15 +513,17 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
       // attribute which specifies the internal path into the extern module.
       // This string attribute will be used to generate the final xmr.
       auto internalPaths = extRefMod.getInternalPaths();
-      size_t pathsIndex = 0;
       auto numPorts = inst.getNumResults();
       SmallString<128> circuitRefPrefix;
 
       /// Get the resolution string for this ref-type port.
       auto getPath = [&](size_t portNo) {
-        // If there's an internalPaths array, grab the next element.
-        if (!internalPaths.empty())
-          return cast<StringAttr>(internalPaths[pathsIndex++]);
+        // If there's an internal path specified (with path), use that.
+        if (internalPaths)
+          if (auto path =
+                  cast<InternalPathAttr>(internalPaths->getValue()[portNo])
+                      .getPath())
+            return path;
 
         // Otherwise, we're using the ref ABI.  Generate the prefix string
         // and return the macro for the specified port.

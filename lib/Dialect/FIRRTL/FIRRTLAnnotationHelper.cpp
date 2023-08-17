@@ -453,10 +453,14 @@ static Value lowerInternalPathAnno(AnnoPathValue &srcTarget,
   // Now set the instance as the source for the final datatap xmr.
   srcTarget = AnnoPathValue(modInstance);
   if (auto extMod = dyn_cast<FExtModuleOp>((Operation *)mod)) {
-    // The extern module can have other internal paths attached to it,
-    // append this to them.
-    SmallVector<Attribute> paths(extMod.getInternalPathsAttr().getValue());
-    paths.push_back(internalPathAttr);
+    // Set the internal path for the new port, creating the paths array
+    // if not already present.
+    SmallVector<Attribute> paths;
+    if (auto internalPaths = extMod.getInternalPaths())
+      llvm::append_range(paths, internalPaths->getValue());
+    else
+      paths.resize(extMod.getNumPorts(), builder.getAttr<InternalPathAttr>());
+    paths.back() = builder.getAttr<InternalPathAttr>(internalPathAttr);
     extMod.setInternalPathsAttr(builder.getArrayAttr(paths));
   } else if (auto intMod = dyn_cast<FModuleOp>((Operation *)mod)) {
     auto builder = ImplicitLocOpBuilder::atBlockEnd(

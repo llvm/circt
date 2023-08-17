@@ -55,7 +55,7 @@ circuit Top : %[[
     skip
 
   extmodule BlackBox :
-
+    output existing : Probe<{a: UInt<5>, b: UInt<5>}[3]>
     defname = BlackBox
 
   module Child :

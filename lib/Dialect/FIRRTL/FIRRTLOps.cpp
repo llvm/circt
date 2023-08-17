@@ -520,7 +520,8 @@ BlockArgument FModuleOp::getArgument(size_t portNumber) {
 /// Insertion occurs in-order, such that ports with the same insertion index
 /// appear in the module in the same order they appeared in the list.
 static void insertPorts(FModuleLike op,
-                        ArrayRef<std::pair<unsigned, PortInfo>> ports) {
+                        ArrayRef<std::pair<unsigned, PortInfo>> ports,
+                        bool supportsInternalPaths = false) {
   if (ports.empty())
     return;
   unsigned oldNumArgs = op.getNumPorts();
@@ -536,15 +537,26 @@ static void insertPorts(FModuleLike op,
   assert(existingNames.size() == oldNumArgs);
   assert(existingTypes.size() == oldNumArgs);
   assert(existingLocs.size() == oldNumArgs);
+  SmallVector<Attribute> internalPaths;
+  auto emptyInternalPath = InternalPathAttr::get(op.getContext());
+  if (supportsInternalPaths) {
+    if (auto internalPathsAttr = op->getAttrOfType<ArrayAttr>("internalPaths"))
+      llvm::append_range(internalPaths, internalPathsAttr);
+    else
+      internalPaths.resize(oldNumArgs, emptyInternalPath);
+    assert(internalPaths.size() == oldNumArgs);
+  }
 
   SmallVector<Direction> newDirections;
-  SmallVector<Attribute> newNames, newTypes, newAnnos, newSyms, newLocs;
+  SmallVector<Attribute> newNames, newTypes, newAnnos, newSyms, newLocs,
+      newInternalPaths;
   newDirections.reserve(newNumArgs);
   newNames.reserve(newNumArgs);
   newTypes.reserve(newNumArgs);
   newAnnos.reserve(newNumArgs);
   newSyms.reserve(newNumArgs);
   newLocs.reserve(newNumArgs);
+  newInternalPaths.reserve(newNumArgs);
 
   auto emptyArray = ArrayAttr::get(op.getContext(), {});
 
@@ -557,6 +569,8 @@ static void insertPorts(FModuleLike op,
       newAnnos.push_back(op.getAnnotationsAttrForPort(oldIdx));
       newSyms.push_back(op.getPortSymbolAttr(oldIdx));
       newLocs.push_back(existingLocs[oldIdx]);
+      if (supportsInternalPaths)
+        newInternalPaths.push_back(internalPaths[oldIdx]);
       ++oldIdx;
     }
   };
@@ -571,6 +585,8 @@ static void insertPorts(FModuleLike op,
     newAnnos.push_back(annos ? annos : emptyArray);
     newSyms.push_back(port.sym);
     newLocs.push_back(port.loc);
+    if (supportsInternalPaths)
+      newInternalPaths.push_back(emptyInternalPath);
   }
   migrateOldPorts(oldNumArgs);
 
@@ -589,6 +605,17 @@ static void insertPorts(FModuleLike op,
   op->setAttr("portAnnotations", ArrayAttr::get(op.getContext(), newAnnos));
   op.setPortSymbols(newSyms);
   op->setAttr("portLocations", ArrayAttr::get(op.getContext(), newLocs));
+  if (supportsInternalPaths) {
+    // Drop if all-empty, otherwise set to new array.
+    auto empty = llvm::all_of(newInternalPaths, [](Attribute attr) {
+      return !cast<InternalPathAttr>(attr).getPath();
+    });
+    if (empty)
+      op->removeAttr("internalPaths");
+    else
+      op->setAttr("internalPaths",
+                  ArrayAttr::get(op.getContext(), newInternalPaths));
+  }
 }
 
 /// Erases the ports that have their corresponding bit set in `portIndices`.
@@ -632,12 +659,34 @@ static void erasePorts(FModuleLike op, const llvm::BitVector &portIndices) {
   op->setAttr("portLocations", ArrayAttr::get(op.getContext(), newPortLocs));
 }
 
+template <typename T>
+static void eraseInternalPaths(T op, const llvm::BitVector &portIndices) {
+  // Fixup internalPaths array.
+  auto internalPaths = op.getInternalPaths();
+  if (!internalPaths)
+    return;
+
+  auto newPaths =
+      removeElementsAtIndices(internalPaths->getValue(), portIndices);
+
+  // Drop if all-empty, otherwise set to new array.
+  auto empty = llvm::all_of(newPaths, [](Attribute attr) {
+    return !cast<InternalPathAttr>(attr).getPath();
+  });
+  if (empty)
+    op.removeInternalPathsAttr();
+  else
+    op.setInternalPathsAttr(ArrayAttr::get(op.getContext(), newPaths));
+}
+
 void FExtModuleOp::erasePorts(const llvm::BitVector &portIndices) {
   ::erasePorts(cast<FModuleLike>((Operation *)*this), portIndices);
+  eraseInternalPaths(*this, portIndices);
 }
 
 void FIntModuleOp::erasePorts(const llvm::BitVector &portIndices) {
   ::erasePorts(cast<FModuleLike>((Operation *)*this), portIndices);
+  eraseInternalPaths(*this, portIndices);
 }
 
 void FMemModuleOp::erasePorts(const llvm::BitVector &portIndices) {
@@ -666,11 +715,13 @@ void FModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
 }
 
 void FExtModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
-  ::insertPorts(cast<FModuleLike>((Operation *)*this), ports);
+  ::insertPorts(cast<FModuleLike>((Operation *)*this), ports,
+                /*supportsInternalPaths=*/true);
 }
 
 void FIntModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
-  ::insertPorts(cast<FModuleLike>((Operation *)*this), ports);
+  ::insertPorts(cast<FModuleLike>((Operation *)*this), ports,
+                /*supportsInternalPaths=*/true);
 }
 
 /// Inserts the given ports. The insertion indices are expected to be in order.
@@ -1054,13 +1105,6 @@ static void printFModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
   if (op->getAttrOfType<ArrayAttr>("annotations").empty())
     omittedAttrs.push_back("annotations");
 
-  // If there are no internal paths attributes we can omit the empty array.
-  if (op->hasAttr("internalPaths")) {
-    if (auto paths = op->getAttrOfType<ArrayAttr>("internalPaths"))
-      if (paths.empty())
-        omittedAttrs.push_back("internalPaths");
-  }
-
   p.printOptionalAttrDictWithKeyword(op->getAttrs(), omittedAttrs);
 }
 
@@ -1264,7 +1308,37 @@ LogicalResult FModuleOp::verify() {
   return success();
 }
 
+static LogicalResult
+verifyInternalPaths(FModuleLike op,
+                    std::optional<::mlir::ArrayAttr> internalPaths) {
+  if (!internalPaths)
+    return success();
+
+  // If internal paths are present, should cover all ports.
+  if (internalPaths->size() != op.getNumPorts())
+    return op.emitError("module has inconsistent internal path array with ")
+           << internalPaths->size() << " entries for " << op.getNumPorts()
+           << " ports";
+
+  // No internal paths for non-ref-type ports.
+  for (auto [idx, path, typeattr] : llvm::enumerate(
+           internalPaths->getAsRange<InternalPathAttr>(), op.getPortTypes())) {
+    if (path.getPath() &&
+        !type_isa<RefType>(cast<TypeAttr>(typeattr).getValue())) {
+      auto diag =
+          op.emitError("module has internal path for non-ref-type port ")
+          << op.getPortNameAttr(idx);
+      return diag.attachNote(op.getPortLocation(idx)) << "this port";
+    }
+  }
+
+  return success();
+}
+
 LogicalResult FExtModuleOp::verify() {
+  if (failed(verifyInternalPaths(*this, getInternalPaths())))
+    return failure();
+
   auto params = getParameters();
   if (params.empty())
     return success();
@@ -1286,6 +1360,9 @@ LogicalResult FExtModuleOp::verify() {
 }
 
 LogicalResult FIntModuleOp::verify() {
+  if (failed(verifyInternalPaths(*this, getInternalPaths())))
+    return failure();
+
   auto params = getParameters();
   if (params.empty())
     return success();
