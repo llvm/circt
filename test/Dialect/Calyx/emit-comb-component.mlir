@@ -6,11 +6,16 @@ module attributes {calyx.entrypoint = "main"} {
     %0 = hw.constant 1 : i32
     // CHECK: add0 = std_add(32);
     %1:3 = calyx.std_add @add0 : i32, i32, i32
+    // CHECK = mux0 = std_mux(32);
+    %2:4 = calyx.std_mux @mux0 : i1, i32, i32, i32
+    %3 = hw.constant 1 : i1
     calyx.wires {
       // CHECK: add0.left = in;
       calyx.assign %1#0 = %in : i32
       // CHECK: add0.right = 32'd1;
       calyx.assign %1#1 = %0 : i32
+      // CHECK: mux0.sel = 1'd1;
+      calyx.assign %2#0 = %3 : i1
       // CHECK: out = add0.out;
       calyx.assign %out = %1#2 : i32
     }

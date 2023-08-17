@@ -1,7 +1,7 @@
 // RUN: circt-opt %s --lower-scf-to-calyx -canonicalize -split-input-file | FileCheck %s
 
 // CHECK:     module attributes {calyx.entrypoint = "main"} {
-// CHECK-LABEL:  calyx.component @main(%in0: i32, %in1: i32, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%out0: i32, %done: i1 {done}) {
+// CHECK-LABEL:  calyx.component @main(%in0: i1, %in1: i32, %in2: i32, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%out0: i32, %done: i1 {done}) {
 // CHECK-DAG:      %true = hw.constant true
 // CHECK-DAG:      %std_sub_0.left, %std_sub_0.right, %std_sub_0.out = calyx.std_sub @std_sub_0 : i32, i32, i32
 // CHECK-DAG:      %std_lsh_0.left, %std_lsh_0.right, %std_lsh_0.out = calyx.std_lsh @std_lsh_0 : i32, i32, i32
@@ -9,15 +9,18 @@
 // CHECK-DAG:      %ret_arg0_reg.in, %ret_arg0_reg.write_en, %ret_arg0_reg.clk, %ret_arg0_reg.reset, %ret_arg0_reg.out, %ret_arg0_reg.done = calyx.register @ret_arg0_reg : i32, i1, i1, i1, i32, i1
 // CHECK-NEXT:     calyx.wires  {
 // CHECK-NEXT:       calyx.assign %out0 = %ret_arg0_reg.out : i32
-// CHECK-NEXT:       calyx.group @ret_assign_0  {
-// CHECK-NEXT:         calyx.assign %ret_arg0_reg.in = %std_sub_0.out : i32
+// CHECK-NEXT:       calyx.group @ret_assign_0 {
+// CHECK-NEXT:         calyx.assign %ret_arg0_reg.in = %std_mux_0.out : i32
 // CHECK-NEXT:         calyx.assign %ret_arg0_reg.write_en = %true : i1
+// CHECK-NEXT:         calyx.assign %std_mux_0.sel = %in0 : i1
+// CHECK-NEXT:         calyx.assign %std_mux_0.tru = %std_sub_0.out : i32
 // CHECK-NEXT:         calyx.assign %std_sub_0.left = %std_lsh_0.out : i32
 // CHECK-NEXT:         calyx.assign %std_lsh_0.left = %std_add_0.out : i32
-// CHECK-NEXT:         calyx.assign %std_add_0.left = %in0 : i32
-// CHECK-NEXT:         calyx.assign %std_add_0.right = %in1 : i32
-// CHECK-NEXT:         calyx.assign %std_lsh_0.right = %in0 : i32
+// CHECK-NEXT:         calyx.assign %std_add_0.left = %in1 : i32
+// CHECK-NEXT:         calyx.assign %std_add_0.right = %in2 : i32
+// CHECK-NEXT:         calyx.assign %std_lsh_0.right = %in1 : i32
 // CHECK-NEXT:         calyx.assign %std_sub_0.right = %std_add_0.out : i32
+// CHECK-NEXT:         calyx.assign %std_mux_0.fal = %std_add_0.out : i32
 // CHECK-NEXT:         calyx.group_done %ret_arg0_reg.done : i1
 // CHECK-NEXT:       }
 // CHECK-NEXT:     }
@@ -29,11 +32,12 @@
 // CHECK-NEXT:   } {toplevel}
 // CHECK-NEXT: }
 module {
-  func.func @main(%a0 : i32, %a1 : i32) -> i32 {
+  func.func @main(%sel : i1, %a0 : i32, %a1 : i32) -> i32 {
     %0 = arith.addi %a0, %a1 : i32
     %1 = arith.shli %0, %a0 : i32
     %2 = arith.subi %1, %0 : i32
-    return %2 : i32
+    %3 = arith.select %sel, %2, %0 : i32
+    return %3 : i32
   }
 }
 

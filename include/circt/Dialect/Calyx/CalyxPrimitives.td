@@ -123,7 +123,7 @@ def MemoryOp : CalyxPrimitive<"memory", []> {
 def SeqMemoryOp : CalyxPrimitive<"seq_mem", []> {
   let summary = "Defines a memory with sequential read";
   let description = [{
-    The "calyx.seq_mem" op defines a memory with sequential reads. Memories can 
+    The "calyx.seq_mem" op defines a memory with sequential reads. Memories can
     have any number of dimensions, as specified by the length of the `$sizes` and
     `$addrSizes` arrays. The `$addrSizes` specify the bitwidth of each dimension's
     address, and should be wide enough to address the range of the corresponding
@@ -266,6 +266,12 @@ def LshLibOp  : CombinationalArithBinaryLibraryOp<"lsh"> {}
 def AndLibOp  : CombinationalArithBinaryLibraryOp<"and"> {}
 def OrLibOp   : CombinationalArithBinaryLibraryOp<"or"> {}
 def XorLibOp  : CombinationalArithBinaryLibraryOp<"xor"> {}
+
+def MuxLibOp : CalyxLibraryOp<"mux", [
+  Combinational, SameTypeConstraint<"tru", "fal">, SameTypeConstraint<"tru", "out">
+  ]> {
+  let results = (outs I1:$sel, AnyType:$tru, AnyType:$fal, AnyType:$out);
+}
 
 class ArithBinaryPipeLibraryOp<string mnemonic> : ArithBinaryLibraryOp<mnemonic # "_pipe", [
     SameTypeConstraint<"left", "out">
