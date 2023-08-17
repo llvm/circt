@@ -194,6 +194,10 @@ class InstanceGraph {
   using NodeList = llvm::iplist<InstanceGraphNode>;
 
 public:
+  /// Create a new module graph of a circuit.  Must be called on the parent
+  /// operation of ModuleOpInterface ops.
+  InstanceGraph(Operation *parent);
+  InstanceGraph(const InstanceGraph &) = delete;
   virtual ~InstanceGraph() = default;
 
   /// Look up an InstanceGraphNode for a module.
@@ -217,7 +221,7 @@ public:
   bool isAncestor(ModuleOpInterface child, ModuleOpInterface parent);
 
   /// Get the node corresponding to the top-level module of a circuit.
-  virtual InstanceGraphNode *getTopLevelNode() = 0;
+  virtual InstanceGraphNode *getTopLevelNode() { return nullptr; }
 
   /// Get the nodes corresponding to the inferred top-level modules of a
   /// circuit.
@@ -258,11 +262,6 @@ public:
                                InstanceOpInterface newInst);
 
 protected:
-  /// Create a new module graph of a circuit.  Must be called on the parent
-  /// operation of ModuleOpInterface ops.
-  InstanceGraph(Operation *parent);
-  InstanceGraph(const InstanceGraph &) = delete;
-
   ModuleOpInterface getReferencedModuleImpl(InstanceOpInterface op);
 
   /// Get the node corresponding to the module.  If the node has does not exist
