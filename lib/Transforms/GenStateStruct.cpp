@@ -29,6 +29,8 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Diagnostics.h"
+#include "mlir/IR/MLIRContext.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Casting.h"
 
 using namespace circt;
@@ -39,23 +41,23 @@ using namespace hw;
 //===----------------------------------------------------------------------===//
 // StateStructGenerate Pass
 //===----------------------------------------------------------------------===//
+namespace {
 /// The Structure stores the information of the port of the module.
 struct PortInfoCollect {
-  StringRef portName;
   Type portType;
-  int direction;
   bool isTrigger;
+  StringRef portName;
+  ModulePort::Direction direction;
 };
 
 /// The Structure stores the information of the reg of the module.
 struct RegInfoCollect {
-  StringRef regName;
   Type regType;
   bool isOutputReg;
+  StringRef regName;
 };
 
-// Declare the class of GenStateStruct Pass.
-namespace {
+/// The Main class of GenStateStruct Pass.
 class GenStateStruct {
   // The flag to decide whether to generate the information of the ports which
   // will be packed as structs that stored in the global variable.
@@ -77,9 +79,6 @@ class GenStateStruct {
   /// from other modules. The leaf module will be the end of the instance graph.
   bool isleafModule(Operation *op);
 
-  /// The function to convert the port direction to the integer data.
-  int convertPortDirection(PortInfo &pInfo);
-
   /// The function to check whether this register is connected to the output
   /// port, which we call it output register.
   bool isOutputReg(sv::RegOp op);
@@ -94,7 +93,7 @@ class GenStateStruct {
   /// Its struct pointer is Opaque type which is used to solve cross-translation
   /// unit problem
   void overrideExternModule(
-      MLIRContext *ctx, HWModuleExternOp op,
+      HWModuleExternOp op,
       SmallVector<std::pair<mlir::Operation *, LLVM::LLVMPointerType>>
           &externTypeCollect);
 
@@ -112,13 +111,16 @@ class GenStateStruct {
   /// InOutType will hit the assertions in program and stop execution of
   /// this pass.
   Type convertInOutType(hw::InOutType type);
-  LLVM::LLVMStructType getExternModulePortTy(MLIRContext *ctx, bool noOpaqueTy,
-                                             HWModuleExternOp op);
+
+  /// The function to get port type from HWModuleExternOp.
+  LLVM::LLVMStructType getExternModulePortTy(HWModuleExternOp op,
+                                             bool noOpaqueTy);
 
 public:
   GenStateStruct(bool emitNoneInfo) : emitNoneInfo(emitNoneInfo) {}
   /// The function to add prefix to the given name and return the new name.
-  std::string addPrefixToName(StringRef name);
+  static StringAttr addPrefixToName(MLIRContext *ctx, const Twine &prefix,
+                                    StringRef name);
 
   /// This function is used to generate the struct type based on the given
   /// infomation of current module. The struct type is packed defaultly.
@@ -156,13 +158,12 @@ public:
   /// The function to override all modules in InstanceGraph based on a
   /// depth-first algorithm.
   void dfsOverrideModules(
-      MLIRContext *ctx,
+      Operation *topOp, InstanceGraph &instanceGraph,
+      DenseSet<Operation *> &overrided,
       SmallVector<std::pair<mlir::Operation *, LLVM::LLVMStructType>>
           &typeCollect,
       SmallVector<std::pair<mlir::Operation *, LLVM::LLVMPointerType>>
-          &externTypeCollect,
-      InstanceGraph &instanceGraph, DenseSet<Operation *> &overrided,
-      Operation *topOp);
+          &externTypeCollect);
 
   /// The function to get the number of secondary trigger signal.
   unsigned getNumOfSecondaryTriggerNum(HWModuleOp op);
@@ -187,21 +188,6 @@ bool GenStateStruct::isOutputReg(sv::RegOp op) {
   return outputReg;
 }
 
-int GenStateStruct::convertPortDirection(PortInfo &pInfo) {
-  // The value 0 is used to represent the port direction is unknown.
-  // when other function handle the value 0, it will hit the assertion.
-  if (pInfo.isInput())
-    return 1;
-
-  if (pInfo.isOutput())
-    return 2;
-
-  if (pInfo.isInOut())
-    return 3;
-
-  return 0;
-}
-
 // Check the value is stored in the Container or not.
 template <typename T>
 bool GenStateStruct::isIntInPairPart(SmallVector<std::pair<T, unsigned>> &vec,
@@ -224,7 +210,8 @@ T GenStateStruct::findOperationType(
                           });
   if (it != opTypePairs.end())
     return it->second;
-  // throw an exception, if not find the type.
+
+  // if not find the type, trigger the assertion.
   assert(it == opTypePairs.end() && "Can't find the type of the operation");
   return nullptr;
 }
@@ -239,10 +226,13 @@ bool GenStateStruct::isleafModule(Operation *op) {
   return isLeaf;
 }
 
-std::string GenStateStruct::addPrefixToName(StringRef name) {
-  std::string prefix = "_Struct_";
-  prefix.append(name.data(), name.size());
-  return prefix;
+StringAttr GenStateStruct::addPrefixToName(MLIRContext *ctx,
+                                           const Twine &prefix,
+                                           StringRef name) {
+  if (prefix.isSingleStringRef())
+    return StringAttr::get(ctx, Twine(prefix) + name);
+
+  return StringAttr::get(ctx, name);
 }
 
 Type GenStateStruct::convertInOutType(hw::InOutType type) {
@@ -265,10 +255,10 @@ Type GenStateStruct::convertInOutType(hw::InOutType type) {
   return elementTy;
 }
 
-LLVM::LLVMStructType
-GenStateStruct::getExternModulePortTy(MLIRContext *ctx, bool noOpaqueTy,
-                                      HWModuleExternOp op) {
+LLVM::LLVMStructType GenStateStruct::getExternModulePortTy(HWModuleExternOp op,
+                                                           bool noOpaqueTy) {
   SmallVector<Type> extModuleTy;
+  MLIRContext *ctx = op.getContext();
   ModulePortInfo externPInfo = op.getPortList();
 
   // The noOpaqueTy decides whether to create a opaque type or not.
@@ -280,7 +270,8 @@ GenStateStruct::getExternModulePortTy(MLIRContext *ctx, bool noOpaqueTy,
                                             /*isPacked=*/true);
   }
 
-  return LLVM::LLVMStructType::getOpaque(addPrefixToName(op.getName()), ctx);
+  return LLVM::LLVMStructType::getOpaque(
+      addPrefixToName(ctx, "_Struct_", op.getName()), ctx);
 }
 
 LLVM::LLVMStructType GenStateStruct::createStructType(
@@ -308,7 +299,7 @@ LLVM::LLVMStructType GenStateStruct::createStructType(
     // Add emitNoneInfo to control generation of port-info type.
     if (!emitNoneInfo) {
       auto arrayTy = LLVM::LLVMArrayType::get(i8Ty, pstruct.portName.size());
-      if (pstruct.direction != 2)
+      if (pstruct.direction != ModulePort::Direction::Output)
         innerStructTy = LLVM::LLVMStructType::getLiteral(
             ctx, {arrayTy, pstruct.portType, i2Ty, i1Ty},
             /*isPacked=*/true);
@@ -352,11 +343,12 @@ LLVM::LLVMStructType GenStateStruct::createStructType(
     if (auto refedModule =
             dyn_cast<HWModuleOp>(*instGraph.getReferencedModule(inst)))
       innerStructTy = LLVM::LLVMStructType::getIdentified(
-          ctx, addPrefixToName(refedModule.getName()));
+          ctx, addPrefixToName(ctx, "_Struct_", refedModule.getName()));
     else
       innerStructTy = getExternModulePortTy(
-          ctx, false,
-          dyn_cast<HWModuleExternOp>(*instGraph.getReferencedModule(inst)));
+          dyn_cast<HWModuleExternOp>(*instGraph.getReferencedModule(inst)),
+          false);
+
     packedStructTy.push_back(LLVM::LLVMPointerType::get(innerStructTy));
   }
 
@@ -370,7 +362,7 @@ LLVM::LLVMStructType GenStateStruct::createStructType(
   // whole struct definition beacuse the Indentified Struct does not support
   // modify structure directly.
   return LLVM::LLVMStructType::getNewIdentified(
-      ctx, addPrefixToName(op.getName()), clonedPortTy,
+      ctx, addPrefixToName(ctx, "_Struct_", op.getName()), clonedPortTy,
       /*isPacked=*/true);
 }
 
@@ -407,9 +399,9 @@ void GenStateStruct::initializeGlobalStruct(
   builder.setInsertionPoint(block, block->begin());
 
   LLVM::LLVMStructType innerStructTy;
-  IntegerType i1Ty = IntegerType::get(ctx, 1);
-  IntegerType i2Ty = IntegerType::get(ctx, 2);
-  IntegerType i8Ty = IntegerType::get(builder.getContext(), 8);
+  IntegerType i1Ty = builder.getIntegerType(1);
+  IntegerType i2Ty = builder.getIntegerType(2);
+  IntegerType i8Ty = builder.getIntegerType(8);
 
   SmallVector<Value> allInfo;
   SmallVector<Value> allDelayed;
@@ -437,16 +429,11 @@ void GenStateStruct::initializeGlobalStruct(
 
       innerPacked.push_back(array);
 
-      if (pstruct.direction != 2 && pstruct.direction != 0) {
+      if (pstruct.direction != ModulePort::Direction::Output) {
         innerStructTy = LLVM::LLVMStructType::getLiteral(
             ctx, {arrayTy, pstruct.portType, i2Ty, i1Ty},
             /*isPacked=*/true);
 
-        // If the data of port direction is invalid, throw an error and stop
-        // initialization.
-      } else if (pstruct.direction == 0) {
-        emitError(loc, "Failed to initialize this global struct beacuse of "
-                       "invalid port direction!");
       } else {
         innerStructTy = LLVM::LLVMStructType::getLiteral(
             ctx, {arrayTy, pstruct.portType, i2Ty},
@@ -564,11 +551,11 @@ void GenStateStruct::initializeGlobalStruct(
     if (auto refedModule =
             dyn_cast<HWModuleOp>(*instGraph.getReferencedModule(inst)))
       innerStructTy = LLVM::LLVMStructType::getIdentified(
-          ctx, addPrefixToName(refedModule.getName()));
+          ctx, addPrefixToName(ctx, "_Struct_", refedModule.getName()));
     else
       innerStructTy = getExternModulePortTy(
-          ctx, false,
-          dyn_cast<HWModuleExternOp>(*instGraph.getReferencedModule(inst)));
+          dyn_cast<HWModuleExternOp>(*instGraph.getReferencedModule(inst)),
+          false);
 
     Value nullPtr = builder.create<LLVM::NullOp>(
         loc, LLVM::LLVMPointerType::get(innerStructTy));
@@ -609,15 +596,13 @@ void GenStateStruct::collectPortInfo(HWModuleOp op,
                             i) != triIndexCollect.end();
 
     if (isContain)
-      pInfo.push_back({port.at(i).name, port.at(i).type,
-                       convertPortDirection(port.at(i)), true});
+      pInfo.push_back({port.at(i).type, true, port.at(i).name, port.at(i).dir});
     else
-      pInfo.push_back({port.at(i).name, port.at(i).type,
-                       convertPortDirection(port.at(i)), false});
+      pInfo.push_back(
+          {port.at(i).type, false, port.at(i).name, port.at(i).dir});
   }
   for (size_t j = argSize; j < argSize + resSize; j++) {
-    pInfo.push_back({port.at(j).name, port.at(j).type,
-                     convertPortDirection(port.at(j)), false});
+    pInfo.push_back({port.at(j).type, false, port.at(j).name, port.at(j).dir});
   }
 }
 
@@ -625,7 +610,7 @@ void GenStateStruct::collectRegInfo(HWModuleOp op,
                                     SmallVector<RegInfoCollect> &rInfo) {
   for (auto regOp : llvm::make_early_inc_range(op.getOps<sv::RegOp>())) {
     bool outputReg = isOutputReg(regOp);
-    rInfo.push_back({regOp.getName(), regOp.getType(), outputReg});
+    rInfo.push_back({regOp.getType(), outputReg, regOp.getName()});
   }
 }
 
@@ -670,11 +655,9 @@ void GenStateStruct::overrideModule(
   triggerVNum += getNumOfSecondaryTriggerNum(op);
 
   OpBuilder builder = OpBuilder::atBlockBegin(op.getBodyBlock());
-  // auto saveInPoint = builder.saveInsertionPoint();
 
   // Prepare basic info for newly added input port in PortInfo form.
-  StringAttr strAttr =
-      StringAttr::get(builder.getContext(), "ptr_struct_" + op.getName());
+  StringAttr strAttr = builder.getStringAttr("ptr_struct_" + op.getName());
   SmallVector<unsigned> arrEraseIn, arrEraseOut;
 
   // Insert the struct pointer that preserves all ports and states variables in
@@ -683,7 +666,7 @@ void GenStateStruct::overrideModule(
   op.prependInput(strAttr, LLVM::LLVMPointerType::get(type));
 
   // Create constantOp that is used in GEPOp as start index.
-  auto i32Ty = IntegerType::get(builder.getContext(), 32);
+  auto i32Ty = builder.getIntegerType(32);
   auto zeroC = builder.create<LLVM::ConstantOp>(loc, i32Ty,
                                                 builder.getI32IntegerAttr(0));
   auto arg0 = op.getArgument(0);
@@ -804,7 +787,7 @@ void GenStateStruct::overrideModule(
 }
 
 void GenStateStruct::overrideExternModule(
-    MLIRContext *ctx, hw::HWModuleExternOp op,
+    hw::HWModuleExternOp op,
     SmallVector<std::pair<mlir::Operation *, LLVM::LLVMPointerType>>
         &externTypeCollect) {
   auto inputPortNum = op.getNumArguments();
@@ -814,14 +797,14 @@ void GenStateStruct::overrideExternModule(
   // bitcast to.
   std::pair<mlir::Operation *, LLVM::LLVMPointerType> pair = std::make_pair(
       op.getOperation(),
-      LLVM::LLVMPointerType::get(getExternModulePortTy(ctx, true, op)));
+      LLVM::LLVMPointerType::get(getExternModulePortTy(op, true)));
   externTypeCollect.push_back(pair);
 
   // Prepare basic info for newly added input port in PortInfo form.
   hw::PortInfo structPInfo = PortInfo{
-      {/*name*/ StringAttr::get(ctx, "ptr_struct_" + op.getName()),
+      {/*name*/ StringAttr::get(op->getContext(), "ptr_struct_" + op.getName()),
        /*type*/
-       LLVM::LLVMPointerType::get(getExternModulePortTy(ctx, false, op)),
+       LLVM::LLVMPointerType::get(getExternModulePortTy(op, false)),
        /*direction*/ ModulePort::Direction::Input},
       /*argNum*/ 1,
       /*sym*/ {},
@@ -849,12 +832,11 @@ void GenStateStruct::overrideInstance(
 
   // Get necessary info from the original instance
   auto loc = inst.getLoc();
-  auto *ctx = builder.getContext();
-  auto subModule = instanceGraph.getReferencedModule(inst);
-  auto i32Ty = IntegerType::get(ctx, 32);
-  auto instName = StringAttr::get(ctx, inst.getInstanceName());
   auto instArgNums = inst.getNumOperands();
-  auto nameAttr = StringAttr::get(ctx, "sv.trigger");
+  auto i32Ty = builder.getIntegerType(32);
+  auto nameAttr = builder.getStringAttr("sv.trigger");
+  auto subModule = instanceGraph.getReferencedModule(inst);
+  auto instName = builder.getStringAttr(inst.getInstanceName());
 
   auto gepType = dyn_cast<LLVM::LLVMPointerType>(gep.getType());
   auto refedPointerType =
@@ -907,13 +889,12 @@ void GenStateStruct::overrideInstance(
 }
 
 void GenStateStruct::dfsOverrideModules(
-    MLIRContext *ctx,
+    Operation *op, InstanceGraph &instanceGraph,
+    DenseSet<Operation *> &overrided,
     SmallVector<std::pair<mlir::Operation *, LLVM::LLVMStructType>>
         &typeCollect,
     SmallVector<std::pair<mlir::Operation *, LLVM::LLVMPointerType>>
-        &externTypeCollect,
-    InstanceGraph &instanceGraph, DenseSet<Operation *> &overrided,
-    Operation *op) {
+        &externTypeCollect) {
   // If the current module has been overrided, return.
   if (overrided.count(op))
     return;
@@ -929,7 +910,7 @@ void GenStateStruct::dfsOverrideModules(
     }
 
     if (isa<hw::HWModuleExternOp>(op)) {
-      overrideExternModule(ctx, dyn_cast<hw::HWModuleExternOp>(op),
+      overrideExternModule(dyn_cast<hw::HWModuleExternOp>(op),
                            externTypeCollect);
     }
 
@@ -943,8 +924,8 @@ void GenStateStruct::dfsOverrideModules(
            cast<HWModuleOp>(op).getOps<hw::InstanceOp>())) {
     // Get the child module of the current instance.
     auto childModule = instanceGraph.getReferencedModule(inst);
-    dfsOverrideModules(ctx, typeCollect, externTypeCollect, instanceGraph,
-                       overrided, childModule);
+    dfsOverrideModules(childModule, instanceGraph, overrided, typeCollect,
+                       externTypeCollect);
   }
 
   // Process the current module overriding.
@@ -991,7 +972,8 @@ void StateStructGeneratePass::runOnOperation() {
 
     // Deal with current module contents and create corresponding struct
     LLVM::GlobalOp global = gstateStruct.createGlobalStruct(
-        loc, builder, module, gstateStruct.addPrefixToName(op.getName()), type);
+        loc, builder, module,
+        gstateStruct.addPrefixToName(ctx, "_Struct_", op.getName()), type);
 
     // Initialize the global struct.
     gstateStruct.initializeGlobalStruct(builder, op, global, type, instGraph,
@@ -1005,8 +987,8 @@ void StateStructGeneratePass::runOnOperation() {
 
   getOperation().walk([&](HWModuleOp op) {
     // Execute DFS overrideModules function to override all modules
-    gstateStruct.dfsOverrideModules(ctx, typeCollect, externTypeCollect,
-                                    instGraph, overridedModules, op);
+    gstateStruct.dfsOverrideModules(op, instGraph, overridedModules,
+                                    typeCollect, externTypeCollect);
   });
 }
 //===----------------------------------------------------------------------===//
