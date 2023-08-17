@@ -194,17 +194,19 @@ LogicalResult ReturnOp::verify() {
 //===----------------------------------------------------------------------===//
 
 LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  auto targetClass = getClass(&symbolTable);
+  auto targetClass = getClass(&symbolTable.getSymbolTable(
+      getOperation()->getParentOfType<mlir::ModuleOp>()));
   if (!targetClass)
     return emitOpError() << "'" << getTargetName() << "' does not exist";
 
   return success();
 }
 
-ClassOp InstanceOp::getClass(SymbolTableCollection *symbolTable) {
+ClassOp InstanceOp::getClass(SymbolTable *symbolTable) {
   auto mod = getOperation()->getParentOfType<mlir::ModuleOp>();
   if (symbolTable)
-    return symbolTable->lookupSymbolIn<ClassOp>(mod, getTargetNameAttr());
+    return dyn_cast<ClassOp>(
+        symbolTable->lookupSymbolIn(mod, getTargetNameAttr()));
 
   return mod.lookupSymbol<ClassOp>(getTargetNameAttr());
 }
@@ -219,17 +221,15 @@ LogicalResult GetPortOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   ScopeRefType crt = getInstance().getType().cast<ScopeRefType>();
   // @teqdruid TODO: make this more efficient using
   // innersymtablecollection when that's available to non-firrtl dialects.
-  auto targetClass =
-      symbolTable.lookupSymbolIn<ClassOp>(mod, crt.getScopeRef());
-  assert(targetClass && "should have been verified by the type system");
-  // @teqdruid TODO: make this more efficient using
-  // innersymtablecollection when that's available to non-firrtl dialects.
-  Operation *targetOp =
-      symbolTable.lookupSymbolIn(targetClass, getPortSymbolAttr());
+  auto targetScope =
+      symbolTable.lookupSymbolIn<ScopeOpInterface>(mod, crt.getScopeRef());
+  assert(targetScope && "should have been verified by the type system");
+  Operation *targetOp = targetScope.lookupPort(getPortSymbol());
 
   if (!targetOp)
     return emitOpError() << "port '" << getPortSymbolAttr()
-                         << "' does not exist in " << targetClass.getName();
+                         << "' does not exist in "
+                         << targetScope.getScopeName();
 
   auto portOp = dyn_cast<PortOpInterface>(targetOp);
   if (!portOp)
@@ -244,6 +244,22 @@ LogicalResult GetPortOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
                          << ", but this op has type " << thisPortType;
 
   return success();
+}
+
+LogicalResult GetPortOp::canonicalize(GetPortOp op, PatternRewriter &rewriter) {
+  // Canonicalize away get_port on %this in favor of using the port SSA value
+  // directly.
+  // get_port(%this, @P) -> ibis.port.#
+  auto parentScope = cast<ScopeOpInterface>(op->getParentOp());
+  auto scopeThis = parentScope.getThis();
+
+  if (op.getInstance() == scopeThis) {
+    auto definingPort = parentScope.lookupPort(op.getPortSymbol());
+    rewriter.replaceOp(op, {definingPort.getPort()});
+    return success();
+  }
+
+  return failure();
 }
 
 //===----------------------------------------------------------------------===//
@@ -270,22 +286,112 @@ LogicalResult ThisOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 // ContainerInstanceOp
 //===----------------------------------------------------------------------===//
 
-ContainerOp
-ContainerInstanceOp::getContainer(SymbolTableCollection *symbolTable) {
+ContainerOp ContainerInstanceOp::getContainer(SymbolTable *symbolTable) {
   auto mod = getOperation()->getParentOfType<mlir::ModuleOp>();
   if (symbolTable)
-    return symbolTable->lookupSymbolIn<ContainerOp>(mod, getTargetNameAttr());
+    return dyn_cast<ContainerOp>(
+        symbolTable->lookupSymbolIn(mod, getTargetNameAttr()));
 
   return mod.lookupSymbol<ContainerOp>(getTargetNameAttr());
 }
 
 LogicalResult
 ContainerInstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  auto targetContainer = getContainer(&symbolTable);
+  auto targetContainer = getContainer(&symbolTable.getSymbolTable(
+      getOperation()->getParentOfType<mlir::ModuleOp>()));
   if (!targetContainer)
     return emitOpError() << "'" << getTargetName() << "' does not exist";
 
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// PathOp
+//===----------------------------------------------------------------------===//
+
+/// Infer the return types of this operation.
+LogicalResult PathOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
+    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
+  auto path = attrs.get("path").cast<ArrayAttr>();
+  if (path.empty())
+    return failure();
+
+  auto lastStep = path.getValue().back().cast<PathStepAttr>();
+  results.push_back(lastStep.getType());
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// PathOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult PathStepAttr::verify(function_ref<InFlightDiagnostic()> emitError,
+                                   PathDirection direction, mlir::Type type,
+                                   mlir::FlatSymbolRefAttr instance) {
+  // 'parent' should never have an instance name specified.
+  if (direction == PathDirection::Parent && instance)
+    return emitError() << "ibis.step 'parent' may not specify an instance name";
+
+  if (direction == PathDirection::Child && !instance)
+    return emitError() << "ibis.step 'child' must specify an instance name";
+
+  // Only allow scoperefs
+  auto scoperefType = type.dyn_cast<ScopeRefType>();
+  if (!scoperefType)
+    return emitError() << "ibis.step type must be an !ibis.scoperef type";
+
+  return success();
+}
+
+LogicalResult PathOp::verify() {
+  auto pathRange = getPathAsRange();
+  if (pathRange.empty())
+    return emitOpError() << "ibis.path must have at least one step";
+
+  // Verify that each referenced child symbol actually exists at the module
+  // level.
+  auto mod = getOperation()->getParentOfType<mlir::ModuleOp>();
+  for (PathStepAttr step : getPathAsRange()) {
+    auto scoperefType = step.getType().cast<ScopeRefType>();
+    FlatSymbolRefAttr scopeRefSym = scoperefType.getScopeRef();
+    if (!scopeRefSym)
+      continue;
+
+    auto targetScope = mod.lookupSymbol(scopeRefSym);
+    if (!targetScope)
+      return emitOpError() << "ibis.step scoperef symbol '" << scopeRefSym
+                           << "' does not exist";
+  }
+
+  // Verify that the last step is fully typed.
+  PathStepAttr lastStep = *std::prev(getPathAsRange().end());
+  ScopeRefType lastStepType = lastStep.getType().cast<ScopeRefType>();
+  if (!lastStepType.getScopeRef())
+    return emitOpError()
+           << "last ibis.step in path must specify a symbol for the scoperef";
+
+  return success();
+}
+
+LogicalResult PathOp::canonicalize(PathOp op, PatternRewriter &rewriter) {
+  // Canonicalize away ibis.path [ibis.child] to just referencing the instance
+  // in the current scope.
+  auto range = op.getPathAsRange();
+  size_t pathSize = std::distance(range.begin(), range.end());
+  PathStepAttr firstStep = *range.begin();
+  if (pathSize == 1 && firstStep.getDirection() == PathDirection::Child) {
+    auto parentScope = cast<ScopeOpInterface>(op->getParentOp());
+    auto childInstance =
+        SymbolTable::lookupSymbolIn(parentScope, firstStep.getChild());
+    assert(childInstance && "should have been verified by the op verifier");
+    rewriter.replaceOp(op,
+                       {cast<ContainerInstanceOp>(childInstance).getResult()});
+    return success();
+  }
+
+  return failure();
 }
 
 //===----------------------------------------------------------------------===//
