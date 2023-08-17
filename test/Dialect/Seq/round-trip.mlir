@@ -57,6 +57,12 @@ hw.module @ClockGate(%clock: i1, %enable: i1, %test_enable: i1) {
   %cg2 = seq.clock_gate %clock, %enable, %test_enable sym @gate_sym
 }
 
+// CHECK-LABEL: hw.module @ClockMux
+hw.module @ClockMux(%cond: i1, %trueClock: i1, %falseClock: i1) -> (clock: i1) {
+  %clock = seq.clock_mux %cond, %trueClock, %falseClock
+  hw.output %clock : i1
+}
+
 hw.module @fifo1(%clk : i1, %rst : i1, %in : i32, %rdEn : i1, %wrEn : i1) -> () {
   // CHECK: %out, %full, %empty = seq.fifo depth 3 in %in rdEn %rdEn wrEn %wrEn clk %clk rst %rst : i32
   %out, %full, %empty = seq.fifo depth 3 in %in rdEn %rdEn wrEn %wrEn clk %clk rst %rst : i32

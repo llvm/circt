@@ -177,6 +177,22 @@ public:
   }
 };
 
+// Lower seq.clock_mux to a `comb.mux` op
+//
+class ClockMuxLowering : public OpConversionPattern<ClockMuxOp> {
+public:
+  using OpConversionPattern<ClockMuxOp>::OpConversionPattern;
+  using OpConversionPattern<ClockMuxOp>::OpAdaptor;
+
+  LogicalResult
+  matchAndRewrite(ClockMuxOp clockMux, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    rewriter.replaceOpWithNewOp<comb::MuxOp>(clockMux, adaptor.getCond(),
+                                             adaptor.getTrueClock(),
+                                             adaptor.getFalseClock(), true);
+    return success();
+  }
+};
 } // namespace
 
 namespace {
@@ -833,6 +849,7 @@ void SeqToSVPass::runOnOperation() {
   patterns.add<CompRegLower<CompRegOp>>(&ctxt, lowerToAlwaysFF);
   patterns.add<CompRegLower<CompRegClockEnabledOp>>(&ctxt, lowerToAlwaysFF);
   patterns.add<ClockGateLowering>(&ctxt);
+  patterns.add<ClockMuxLowering>(&ctxt);
 
   if (failed(applyPartialConversion(top, target, std::move(patterns))))
     signalPassFailure();

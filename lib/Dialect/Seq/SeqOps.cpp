@@ -755,6 +755,18 @@ std::optional<size_t> ClockGateOp::getTargetResultIndex() {
 }
 
 //===----------------------------------------------------------------------===//
+// ClockMuxOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult ClockMuxOp::fold(FoldAdaptor adaptor) {
+  if (isConstantOne(adaptor.getCond()))
+    return getTrueClock();
+  if (isConstantZero(adaptor.getCond()))
+    return getFalseClock();
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
 // FirMemOp
 //===----------------------------------------------------------------------===//
 
