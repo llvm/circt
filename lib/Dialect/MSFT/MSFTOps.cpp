@@ -693,7 +693,7 @@ LogicalResult MSFTModuleOp::verify() {
   return success();
 }
 
-SmallVector<Location> MSFTModuleOp::getPortLocs() {
+SmallVector<Location> MSFTModuleOp::getAllPortLocs() {
   SmallVector<Location> retval;
   if (auto locs = getArgLocs()) {
     for (auto l : locs)
@@ -714,23 +714,44 @@ SmallVector<Location> MSFTModuleOp::getPortLocs() {
   return retval;
 }
 
-SmallVector<ArrayAttr> MSFTModuleOp::getPortAttrs() {
-  SmallVector<ArrayAttr> retval;
+SmallVector<Attribute> MSFTModuleOp::getAllPortAttrs() {
+  SmallVector<Attribute> retval;
   if (auto attrs = getArgAttrs()) {
     for (auto a : *attrs)
-      retval.push_back(cast<ArrayAttr>(a));
+      retval.push_back(a);
   } else {
     for (unsigned i = 0, e = getNumInputs(); i < e; ++i)
       retval.push_back({});
   }
   if (auto attrs = getResAttrs()) {
     for (auto a : *attrs)
-      retval.push_back(cast<ArrayAttr>(a));
+      retval.push_back(a);
   } else {
     for (unsigned i = 0, e = getNumOutputs(); i < e; ++i)
       retval.push_back({});
   }
   return retval;
+}
+
+void MSFTModuleOp::setAllPortLocs(ArrayRef<Location> locs) {
+  auto numInputs = getNumInputs();
+  SmallVector<Attribute> argLocs(locs.begin(), locs.begin() + numInputs);
+  SmallVector<Attribute> resLocs(locs.begin() + numInputs, locs.end());
+  setArgLocsAttr(ArrayAttr::get(getContext(), argLocs));
+  setResultLocsAttr(ArrayAttr::get(getContext(), resLocs));
+}
+
+void MSFTModuleOp::setAllPortAttrs(ArrayRef<Attribute> attrs) {
+  auto numInputs = getNumInputs();
+  SmallVector<Attribute> argAttrs(attrs.begin(), attrs.begin() + numInputs);
+  SmallVector<Attribute> resAttrs(attrs.begin() + numInputs, attrs.end());
+  setArgAttrsAttr(ArrayAttr::get(getContext(), argAttrs));
+  setResAttrsAttr(ArrayAttr::get(getContext(), resAttrs));
+}
+
+void MSFTModuleOp::removeAllPortAttrs() {
+  setArgAttrsAttr(nullptr);
+  setResAttrsAttr(nullptr);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1007,7 +1028,7 @@ hw::ModulePortInfo MSFTModuleExternOp::getPortList() {
 
 hw::InnerSymAttr MSFTModuleExternOp::getPortSymbolAttr(size_t) { return {}; }
 
-SmallVector<Location> MSFTModuleExternOp::getPortLocs() {
+SmallVector<Location> MSFTModuleExternOp::getAllPortLocs() {
   SmallVector<Location> retval;
   auto empty = UnknownLoc::get(getContext());
   for (unsigned i = 0, e = getNumPorts(); i < e; ++i)
@@ -1015,23 +1036,39 @@ SmallVector<Location> MSFTModuleExternOp::getPortLocs() {
   return retval;
 }
 
-SmallVector<ArrayAttr> MSFTModuleExternOp::getPortAttrs() {
-  SmallVector<ArrayAttr> retval(getNumPorts());
+SmallVector<Attribute> MSFTModuleExternOp::getAllPortAttrs() {
+  SmallVector<Attribute> retval(getNumPorts());
   if (auto attrs = getArgAttrs()) {
     for (auto a : *attrs)
-      retval.push_back(cast<ArrayAttr>(a));
+      retval.push_back(a);
   } else {
     for (unsigned i = 0, e = getNumInputs(); i < e; ++i)
       retval.push_back({});
   }
   if (auto attrs = getResAttrs()) {
     for (auto a : *attrs)
-      retval.push_back(cast<ArrayAttr>(a));
+      retval.push_back(a);
   } else {
     for (unsigned i = 0, e = getNumOutputs(); i < e; ++i)
       retval.push_back({});
   }
   return retval;
+}
+void MSFTModuleExternOp::setAllPortLocs(ArrayRef<Location> locs) {
+  emitError("port locations not supported");
+}
+
+void MSFTModuleExternOp::setAllPortAttrs(ArrayRef<Attribute> attrs) {
+  auto numInputs = getNumInputs();
+  SmallVector<Attribute> argAttrs(attrs.begin(), attrs.begin() + numInputs);
+  SmallVector<Attribute> resAttrs(attrs.begin() + numInputs, attrs.end());
+  setArgAttrsAttr(ArrayAttr::get(getContext(), argAttrs));
+  setResAttrsAttr(ArrayAttr::get(getContext(), resAttrs));
+}
+
+void MSFTModuleExternOp::removeAllPortAttrs() {
+  setArgAttrsAttr(nullptr);
+  setResAttrsAttr(nullptr);
 }
 
 //===----------------------------------------------------------------------===//

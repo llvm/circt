@@ -1423,7 +1423,7 @@ ModulePortInfo HWModuleGeneratedOp::getPortList() {
   return getOperationPortList(getOperation());
 }
 
-SmallVector<Location> HWModuleOp::getPortLocs() {
+SmallVector<Location> HWModuleOp::getAllPortLocs() {
   SmallVector<Location> retval;
   if (auto locs = getArgLocs()) {
     for (auto l : locs)
@@ -1444,23 +1444,39 @@ SmallVector<Location> HWModuleOp::getPortLocs() {
   return retval;
 }
 
-SmallVector<Location> HWModuleExternOp::getPortLocs() { return {}; }
+SmallVector<Location> HWModuleExternOp::getAllPortLocs() { return {}; }
 
-SmallVector<Location> HWModuleGeneratedOp::getPortLocs() { return {}; }
+SmallVector<Location> HWModuleGeneratedOp::getAllPortLocs() { return {}; }
+
+void HWModuleOp::setAllPortLocs(ArrayRef<Location> locs) {
+  auto numInputs = getNumInputs();
+  SmallVector<Attribute> argLocs(locs.begin(), locs.begin() + numInputs);
+  SmallVector<Attribute> resLocs(locs.begin() + numInputs, locs.end());
+  setArgLocsAttr(ArrayAttr::get(getContext(), argLocs));
+  setResultLocsAttr(ArrayAttr::get(getContext(), resLocs));
+}
+
+void HWModuleExternOp::setAllPortLocs(ArrayRef<Location> locs) {
+  emitError("Locations on external modules not supported");
+}
+
+void HWModuleGeneratedOp::setAllPortLocs(ArrayRef<Location> locs) {
+  emitError("Locations on external modules not supported");
+}
 
 template <typename ModTy>
-static SmallVector<ArrayAttr> getPortAttrs(ModTy &mod) {
-  SmallVector<ArrayAttr> retval;
+static SmallVector<Attribute> getAllPortAttrs(ModTy &mod) {
+  SmallVector<Attribute> retval;
   if (auto attrs = mod.getArgAttrs()) {
     for (auto a : *attrs)
-      retval.push_back(cast<ArrayAttr>(a));
+      retval.push_back(a);
   } else {
     for (unsigned i = 0, e = mod.getNumInputs(); i < e; ++i)
       retval.push_back({});
   }
   if (auto attrs = mod.getResAttrs()) {
     for (auto a : *attrs)
-      retval.push_back(cast<ArrayAttr>(a));
+      retval.push_back(a);
   } else {
     for (unsigned i = 0, e = mod.getNumOutputs(); i < e; ++i)
       retval.push_back({});
@@ -1468,16 +1484,53 @@ static SmallVector<ArrayAttr> getPortAttrs(ModTy &mod) {
   return retval;
 }
 
-SmallVector<ArrayAttr> HWModuleOp::getPortAttrs() {
-  return ::getPortAttrs(*this);
+SmallVector<Attribute> HWModuleOp::getAllPortAttrs() {
+  return ::getAllPortAttrs(*this);
 }
 
-SmallVector<ArrayAttr> HWModuleExternOp::getPortAttrs() {
-  return ::getPortAttrs(*this);
+SmallVector<Attribute> HWModuleExternOp::getAllPortAttrs() {
+  return ::getAllPortAttrs(*this);
 }
 
-SmallVector<ArrayAttr> HWModuleGeneratedOp::getPortAttrs() {
-  return ::getPortAttrs(*this);
+SmallVector<Attribute> HWModuleGeneratedOp::getAllPortAttrs() {
+  return ::getAllPortAttrs(*this);
+}
+
+template <typename ModTy>
+static void setAllPortAttrs(ModTy &mod, ArrayRef<Attribute> attrs) {
+  auto numInputs = mod.getNumInputs();
+  SmallVector<Attribute> argAttrs(attrs.begin(), attrs.begin() + numInputs);
+  SmallVector<Attribute> resAttrs(attrs.begin() + numInputs, attrs.end());
+  mod.setArgAttrsAttr(ArrayAttr::get(mod.getContext(), argAttrs));
+  mod.setResAttrsAttr(ArrayAttr::get(mod.getContext(), resAttrs));
+}
+
+void HWModuleOp::setAllPortAttrs(ArrayRef<Attribute> attrs) {
+  return ::setAllPortAttrs(*this, attrs);
+}
+
+void HWModuleExternOp::setAllPortAttrs(ArrayRef<Attribute> attrs) {
+  return ::setAllPortAttrs(*this, attrs);
+}
+
+void HWModuleGeneratedOp::setAllPortAttrs(ArrayRef<Attribute> attrs) {
+  return ::setAllPortAttrs(*this, attrs);
+}
+
+template <typename ModTy>
+static void removeAllPortAttrs(ModTy &mod) {
+  mod.setArgAttrsAttr(nullptr);
+  mod.setResAttrsAttr(nullptr);
+}
+
+void HWModuleOp::removeAllPortAttrs() { return ::removeAllPortAttrs(*this); }
+
+void HWModuleExternOp::removeAllPortAttrs() {
+  return ::removeAllPortAttrs(*this);
+}
+
+void HWModuleGeneratedOp::removeAllPortAttrs() {
+  return ::removeAllPortAttrs(*this);
 }
 
 /// Lookup the generator for the symbol.  This returns null on

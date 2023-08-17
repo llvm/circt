@@ -542,13 +542,25 @@ hw::ModuleType ESIPureModuleOp::getHWModuleType() {
   return hw::ModulePortInfo(ArrayRef<hw::PortInfo>{});
 }
 
-SmallVector<Location> ESIPureModuleOp::getPortLocs() {
+SmallVector<Location> ESIPureModuleOp::getAllPortLocs() {
   SmallVector<Location> retval;
   return retval;
 }
 
-SmallVector<ArrayAttr> ESIPureModuleOp::getPortAttrs() {
-  SmallVector<ArrayAttr> retval;
+void ESIPureModuleOp::setAllPortLocs(ArrayRef<Location> locs) {
+  emitError("No ports for port locations");
+}
+
+void ESIPureModuleOp::setAllPortAttrs(ArrayRef<Attribute> attrs) {
+  emitError("No ports for port attributes");
+}
+
+void ESIPureModuleOp::removeAllPortAttrs() {
+  emitError("No ports for port attributes)");
+}
+
+SmallVector<Attribute> ESIPureModuleOp::getAllPortAttrs() {
+  SmallVector<Attribute> retval;
   return retval;
 }
 
