@@ -162,7 +162,7 @@ public:
     });
   }
 
-  std::string getName(FieldRef v) { return getFieldName(v).first; };
+  static std::string getName(FieldRef v) { return getFieldName(v).first; };
 
   unsigned getOrAddNode(Value v) {
     auto iter = valToFieldRefs.find(v);
@@ -451,17 +451,17 @@ public:
     SmallVector<bool> onStack(numNodes, false);
     SmallVector<unsigned> dfsStack;
 
-    auto hasCycle = [&](unsigned rootNode, SmallVector<bool> &visited,
+    auto hasCycle = [&](unsigned rootNode, DenseSet<unsigned> &visited,
                         bool recordPortPaths = false) {
-      if (visited[rootNode])
+      if (visited.contains(rootNode))
         return success();
       dfsStack.push_back(rootNode);
 
       while (!dfsStack.empty()) {
         auto currentNode = dfsStack.back();
 
-        if (!visited[currentNode]) {
-          visited[currentNode] = true;
+        if (!visited.contains(currentNode)) {
+          visited.insert(currentNode);
           onStack[currentNode] = true;
           LLVM_DEBUG(llvm::dbgs()
                      << "\n visiting :"
@@ -485,7 +485,7 @@ public:
         }
 
         for (auto neighbor : graph[currentNode].second) {
-          if (!visited[neighbor]) {
+          if (!visited.contains(neighbor)) {
             dfsStack.push_back(neighbor);
           } else if (onStack[neighbor]) {
             // Cycle found !!
@@ -511,7 +511,7 @@ public:
       return success();
     };
 
-    SmallVector<bool> visited(numNodes, false);
+    DenseSet<unsigned> visited;
     for (unsigned node = 0; node < graph.size(); ++node) {
       bool isPort = false;
       if (auto arg =
@@ -519,7 +519,7 @@ public:
         if (module.getPortDirection(arg.getArgNumber()) == Direction::Out) {
           // For output ports, reset the visited. Required to revisit the entire
           // graph, to discover all the paths that exist from any input port.
-          std::fill_n(visited.begin(), numNodes, false);
+          visited.clear();
           isPort = true;
         }
 
