@@ -78,41 +78,41 @@ void registerFromFIRFileTranslation();
 
 /// The FIRRTL specification version.
 struct FIRVersion {
-  uint32_t major, minor, patch;
+  constexpr FIRVersion(uint16_t major, uint16_t minor, uint16_t patch)
+      : major(major), minor(minor), patch(patch) {}
 
-  /// Three way compare of one FIRRTL version with another FIRRTL version.
-  /// Return 1 if the first version is greater than the second version, -1 if
-  /// the first version is less than the second version, and 0 if the versions
-  /// are equal.
-  static int compare(const FIRVersion &a, const FIRVersion &b) {
-    if (a.major > b.major)
-      return 1;
-    if (a.major < b.major)
-      return -1;
-    if (a.minor > b.minor)
-      return 1;
-    if (a.minor < b.minor)
-      return -1;
-    if (a.patch > b.patch)
-      return 1;
-    if (a.patch < b.patch)
-      return -1;
-    return 0;
+  explicit constexpr operator uint64_t() const {
+    return uint64_t(major) << 32 | uint64_t(minor) << 16 | uint64_t(patch);
   }
 
-  static FIRVersion minimumFIRVersion() { return {0, 2, 0}; }
+  constexpr bool operator<(FIRVersion rhs) const {
+    return uint64_t(*this) < uint64_t(rhs);
+  }
 
-  static FIRVersion defaultFIRVersion() { return {1, 0, 0}; }
+  constexpr bool operator>(FIRVersion rhs) const {
+    return uint64_t(*this) > uint64_t(rhs);
+  }
 
-  static FIRVersion latestFIRVersion() { return {3, 1, 0}; }
+  constexpr bool operator<=(FIRVersion rhs) const {
+    return uint64_t(*this) <= uint64_t(rhs);
+  }
 
-}; // namespace firrtl
+  constexpr bool operator>=(FIRVersion rhs) const {
+    return uint64_t(*this) >= uint64_t(rhs);
+  }
 
-/// Method to enable printing of FIRVersions
+  uint16_t major;
+  uint16_t minor;
+  uint16_t patch;
+};
+
+constexpr FIRVersion minimumFIRVersion(0, 2, 0);
+constexpr FIRVersion latestFIRVersion(3, 1, 0);
+constexpr FIRVersion defaultFIRVersion(1, 0, 0);
+
 template <typename T>
-static T &operator<<(T &os, const FIRVersion &version) {
-  os << version.major << "." << version.minor << "." << version.patch;
-  return os;
+T &operator<<(T &os, FIRVersion version) {
+  return os << version.major << "." << version.minor << "." << version.patch;
 }
 
 } // namespace firrtl

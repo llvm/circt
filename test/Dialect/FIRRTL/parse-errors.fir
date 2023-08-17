@@ -711,7 +711,7 @@ FIRRTL version 2.3.9
 circuit UnsupportedRadixSpecifiedIntegerLiterals:
   module UnsupportedRadixSpecifiedIntegerLiterals:
     output foo: UInt<8>
-    ; expected-error @below {{Radix-specified integer literals are a FIRRTL 2.4.0 feature, but the specified FIRRTL version was 2.3.9}}
+    ; expected-error @below {{radix-specified integer literals are a FIRRTL 2.4.0+ feature, but the specified FIRRTL version was 2.3.9}}
     foo <= UInt(0b101010)
 
 ;// -----
@@ -803,7 +803,7 @@ circuit VecOfProps:
 
 FIRRTL version 3.0.0
 circuit UnsupportedVersionDeclGroups:
-  ; expected-error @below {{unexpected token}}
+  ; expected-error @below {{optional groups are a FIRRTL 3.1.0+ feature, but the specified FIRRTL version was 3.0.0}}
   declgroup A, bind:
 
 ;// -----
@@ -811,7 +811,7 @@ circuit UnsupportedVersionDeclGroups:
 FIRRTL version 3.0.0
 circuit UnsupportedVersionGroups:
   module UnsupportedVersionGroups:
-    ; expected-error @below {{unexpected token}}
+    ; expected-error @below {{optional groups are a FIRRTL 3.1.0+ feature, but the specified FIRRTL version was 3.0.0}}
     group A:
 
 ;// -----
@@ -851,7 +851,7 @@ FIRRTL version 3.0.0
 circuit Top:
   module Top:
     output s : String
-    ; expected-error @above {{Properties are a FIRRTL 3.1.0+ feature, but the specified FIRRTL version was 3.0.0}}
+    ; expected-error @above {{Strings are a FIRRTL 3.1.0+ feature, but the specified FIRRTL version was 3.0.0}}
 
 ;// -----
 FIRRTL version 3.0.0
@@ -900,7 +900,7 @@ circuit Top:
     skip
 
   module Top:
-    ; expected-error @below {{unexpected token: objects are a FIRRTL 3.2.0+ feature, but the specified FIRRTL version was 3.0.0}}
+    ; expected-error @below {{object statements are a FIRRTL 3.2.0+ feature, but the specified FIRRTL version was 3.0.0}}
     object x of MyClass
 
 ;// -----
@@ -911,7 +911,7 @@ circuit Top:
     skip
 
   module Top:
-    ; expected-error @below {{unexpected token: Inst types are a FIRRTL 3.2.0+ feature, but the specified FIRRTL version was 3.0.0}}
+    ; expected-error @below {{Inst types are a FIRRTL 3.2.0+ feature, but the specified FIRRTL version was 3.0.0}}
     output o: Inst<MyClass>
     object x of MyClass
     propassign o, x

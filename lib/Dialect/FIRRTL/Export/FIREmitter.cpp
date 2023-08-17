@@ -597,7 +597,7 @@ void Emitter::emitStatement(RegResetOp op) {
   auto legalName = legalize(op.getNameAttr());
   addForceable(op, legalName);
   startStatement();
-  if (FIRVersion::compare(version, {3, 0, 0}) >= 0) {
+  if (FIRVersion(3, 0, 0) <= version) {
     ps.scopedBox(PP::ibox2, [&]() {
       ps << "regreset " << legalName;
       emitTypeWithColon(op.getResult().getType());
@@ -704,7 +704,7 @@ void Emitter::emitVerifStatement(T op, StringRef mnemonic) {
 
 void Emitter::emitStatement(ConnectOp op) {
   startStatement();
-  if (FIRVersion::compare(version, {3, 0, 0}) >= 0) {
+  if (FIRVersion(3, 0, 0) <= version) {
     ps.scopedBox(PP::ibox2, [&]() {
       if (op.getSrc().getDefiningOp<InvalidValueOp>()) {
         ps << "invalidate" << PP::space;
@@ -731,7 +731,7 @@ void Emitter::emitStatement(ConnectOp op) {
 
 void Emitter::emitStatement(StrictConnectOp op) {
   startStatement();
-  if (FIRVersion::compare(version, {3, 0, 0}) >= 0) {
+  if (FIRVersion(3, 0, 0) <= version) {
     ps.scopedBox(PP::ibox2, [&]() {
       if (op.getSrc().getDefiningOp<InvalidValueOp>()) {
         ps << "invalidate" << PP::space;
@@ -988,7 +988,7 @@ void Emitter::emitStatement(InvalidValueOp op) {
   emitType(op.getType());
   emitLocationAndNewLine(op);
   startStatement();
-  if (FIRVersion::compare(version, {3, 0, 0}) >= 0)
+  if (FIRVersion(3, 0, 0) <= version)
     ps << "invalidate " << PPExtString(name);
   else
     ps << PPExtString(name) << " is invalid";
@@ -1344,8 +1344,7 @@ void circt::firrtl::registerToFIRFileTranslation() {
   static mlir::TranslateFromMLIRRegistration toFIR(
       "export-firrtl", "emit FIRRTL dialect operations to .fir output",
       [](ModuleOp module, llvm::raw_ostream &os) {
-        return exportFIRFile(module, os, targetLineLength,
-                             FIRVersion::latestFIRVersion());
+        return exportFIRFile(module, os, targetLineLength, latestFIRVersion);
       },
       [](mlir::DialectRegistry &registry) {
         registry.insert<chirrtl::CHIRRTLDialect>();
