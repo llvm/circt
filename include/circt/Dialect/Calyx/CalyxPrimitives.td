@@ -267,7 +267,9 @@ def AndLibOp  : CombinationalArithBinaryLibraryOp<"and"> {}
 def OrLibOp   : CombinationalArithBinaryLibraryOp<"or"> {}
 def XorLibOp  : CombinationalArithBinaryLibraryOp<"xor"> {}
 
-def MuxLibOp : CalyxLibraryOp<"mux", [Combinational, SameTypeConstraint<"tru", "fal">, SameTypeConstraint<"tru", "out">]> {
+def MuxLibOp : CalyxLibraryOp<"mux", [
+  Combinational, SameTypeConstraint<"tru", "fal">, SameTypeConstraint<"tru", "out">
+  ]> {
   let results = (outs I1:$sel, AnyType:$tru, AnyType:$fal, AnyType:$out);
 }
 
