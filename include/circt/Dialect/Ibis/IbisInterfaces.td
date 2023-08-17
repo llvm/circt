@@ -24,7 +24,14 @@ def PortOpInterface : OpInterface<"PortOpInterface"> {
   let methods = [
     InterfaceMethod<
       "Returns the data type of the port.",
-      "mlir::Type", "getPortType">
+      "mlir::Type", "getPortType">,
+    InterfaceMethod<
+      "Returns the name of the port",
+      "mlir::StringAttr", "getPortName">,
+    InterfaceMethod<
+      "Returns the `!ibis.portref` value defined by the op",
+      "mlir::TypedValue<PortRefType>", "getPort"
+    >
   ];
 }
 
@@ -53,10 +60,26 @@ def ScopeOpInterface : OpInterface<"ScopeOpInterface", [Symbol]> {
       }]
     >,
     InterfaceMethod<
+      "Returns the `ThisOp` of this scope",
+      "Operation*", "getThisOp",
+      (ins), [{
+        return cast<ScopeOpInterface>($_op.getOperation()).getThis().getDefiningOp();
+      }]
+    >,
+    InterfaceMethod<
       "Returns the symbol name of the scope",
       "mlir::StringAttr", "getScopeName",
       (ins), [{
         return $_op.getNameAttr();
+      }]
+    >,
+    InterfaceMethod<
+      "Lookup a port in the scope",
+      "ibis::PortOpInterface", "lookupPort",
+      (ins "llvm::StringRef":$portName), [{
+        // @teqdruid TODO: make this more efficient using
+        // innersymtablecollection when that's available to non-firrtl dialects.
+        return dyn_cast_or_null<ibis::PortOpInterface>(SymbolTable::lookupSymbolIn($_op, portName));
       }]
     >
   ];

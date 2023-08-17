@@ -8,6 +8,8 @@
 
 #include "circt/Dialect/Ibis/IbisDialect.h"
 #include "circt/Dialect/Ibis/IbisOps.h"
+#include "mlir/IR/DialectImplementation.h"
+#include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
 using namespace ibis;
@@ -17,6 +19,7 @@ using namespace ibis;
 
 void IbisDialect::initialize() {
   registerTypes();
+  registerAttributes();
 
   // Register operations.
   addOperations<
@@ -25,5 +28,15 @@ void IbisDialect::initialize() {
       >();
 }
 
+void IbisDialect::registerAttributes() {
+  addAttributes<
+#define GET_ATTRDEF_LIST
+#include "circt/Dialect/Ibis/IbisAttributes.cpp.inc"
+      >();
+}
+
 // Provide implementations for the enums we use.
 #include "circt/Dialect/Ibis/IbisEnums.cpp.inc"
+
+#define GET_ATTRDEF_CLASSES
+#include "circt/Dialect/Ibis/IbisAttributes.cpp.inc"
