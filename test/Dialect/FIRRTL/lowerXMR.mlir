@@ -699,14 +699,14 @@ firrtl.circuit "Top" {
 
   // CHECK-NOT:   sv.macro.decl @ref_Top_Top_e
   // CHECK:  hw.hierpath private @[[XMR5:.+]] [@Foo::@[[FOO_X_SYM:.+]]]
-  // CHECK:  sv.macro.decl @ref_Top_Foo_x
-  // CHECK-NEXT{LITERAL}: sv.macro.def @ref_Top_Foo_x "{{0}}"
-  // CHECK-SAME:          ([@[[XMR5]]]) {output_file = #hw.output_file<"ref_Top_Foo.sv">}
+  // CHECK:  sv.macro.decl @ref_Foo_Foo_x
+  // CHECK-NEXT{LITERAL}: sv.macro.def @ref_Foo_Foo_x "{{0}}"
+  // CHECK-SAME:          ([@[[XMR5]]]) {output_file = #hw.output_file<"ref_Foo_Foo.sv">}
 
-  // CHECK-NEXT:  sv.macro.decl @ref_Top_Foo_y
-  // CHECK-NEXT:          sv.macro.def @ref_Top_Foo_y "internal.path"
+  // CHECK-NEXT:  sv.macro.decl @ref_Foo_Foo_y
+  // CHECK-NEXT:          sv.macro.def @ref_Foo_Foo_y "internal.path"
   // CHECK-NOT:           ([
-  // CHECK-SAME:          {output_file = #hw.output_file<"ref_Top_Foo.sv">}
+  // CHECK-SAME:          {output_file = #hw.output_file<"ref_Foo_Foo.sv">}
 
   // CHECK:        hw.hierpath private @[[XMR1]] [@Top::@[[TOP_W_SYM:.+]]]
   // CHECK:        hw.hierpath private @[[XMR2]] [@Top::@foo, @Foo::@[[FOO_X_SYM]]]

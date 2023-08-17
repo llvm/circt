@@ -349,17 +349,16 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
   }
 
   /// Generate the ABI ref_<circuit>_<module> prefix string into `prefix`.
+  /// As an extension, emit ref_<module>_<module> for all modules,
+  /// which is same for only spec-defined "public" module (main module).
+  /// However, this allows use of intermediate modules, as on the extmodule
+  /// side there's no notion of what circuit it belongs to.
   void getRefABIPrefix(FModuleLike mod, SmallVectorImpl<char> &prefix) {
-    auto modName = mod.getModuleName();
-    auto circuitName = getOperation().getName();
-    if (auto ext = dyn_cast<FExtModuleOp>(*mod)) {
-      // Use defName for module portion, if set.
+    auto name = mod.getModuleName();
+    if (auto ext = dyn_cast<FExtModuleOp>(*mod))
       if (auto defname = ext.getDefname(); defname && !defname->empty())
-        modName = *defname;
-      // Assume(/require) all extmodule's are within their own circuit.
-      circuitName = modName;
-    }
-    (Twine("ref_") + circuitName + "_" + modName).toVector(prefix);
+        name = *defname;
+    (Twine("ref_") + name + "_" + name).toVector(prefix);
   }
 
   /// Get full macro name as StringAttr for the specified ref port.
