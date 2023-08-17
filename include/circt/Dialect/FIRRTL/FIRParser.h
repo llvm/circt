@@ -79,7 +79,7 @@ void registerFromFIRFileTranslation();
 /// The FIRRTL specification version.
 struct FIRVersion {
   constexpr FIRVersion(uint16_t major, uint16_t minor, uint16_t patch)
-      : major(major), minor(minor), patch(patch) {}
+      : major{major}, minor{minor}, patch{patch} {}
 
   explicit constexpr operator uint64_t() const {
     return uint64_t(major) << 32 | uint64_t(minor) << 16 | uint64_t(patch);
