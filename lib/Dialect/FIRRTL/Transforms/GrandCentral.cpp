@@ -738,6 +738,9 @@ private:
 
   /// Returns a port's `inner_sym`, adding one if necessary.
   StringAttr getOrAddInnerSym(FModuleLike module, size_t portIdx);
+
+  /// Emit the hierarchy yaml file.
+  void emitHierarchyYamlFile(SmallVectorImpl<sv::InterfaceOp> &intfs);
 };
 
 } // namespace
@@ -1679,23 +1682,9 @@ void GrandCentralPass::runOnOperation() {
   // built exist.  However, still generate the YAML file if the annotation for
   // this was passed in because some flows expect this.
   if (worklist.empty()) {
-    if (!maybeHierarchyFileYAML)
-      return markAllAnalysesPreserved();
-    std::string yamlString;
-    llvm::raw_string_ostream stream(yamlString);
-    ::yaml::Context yamlContext({interfaceMap});
-    llvm::yaml::Output yout(stream);
-    OpBuilder builder(circuitOp);
     SmallVector<sv::InterfaceOp, 0> interfaceVec;
-    yamlize(yout, interfaceVec, true, yamlContext);
-    builder.setInsertionPointToStart(circuitOp.getBodyBlock());
-    builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), yamlString)
-        ->setAttr("output_file",
-                  hw::OutputFileAttr::getFromFilename(
-                      &getContext(), maybeHierarchyFileYAML->getValue(),
-                      /*excludFromFileList=*/true));
-    LLVM_DEBUG({ llvm::dbgs() << "Generated YAML:" << yamlString << "\n"; });
-    return;
+    emitHierarchyYamlFile(interfaceVec);
+    return markAllAnalysesPreserved();
   }
 
   // Setup the builder to create ops _inside the FIRRTL circuit_.  This is
@@ -2243,30 +2232,38 @@ void GrandCentralPass::runOnOperation() {
       continue;
   }
 
-  // If a `GrandCentralHierarchyFileAnnotation` was passed in, generate a YAML
-  // representation of the interfaces that we produced with the filename that
-  // that annotation provided.
-  if (maybeHierarchyFileYAML) {
-    std::string yamlString;
-    llvm::raw_string_ostream stream(yamlString);
-    ::yaml::Context yamlContext({interfaceMap});
-    llvm::yaml::Output yout(stream);
-    yamlize(yout, interfaceVec, true, yamlContext);
-
-    builder.setInsertionPointToStart(circuitOp.getBodyBlock());
-    builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), yamlString)
-        ->setAttr("output_file",
-                  hw::OutputFileAttr::getFromFilename(
-                      &getContext(), maybeHierarchyFileYAML->getValue(),
-                      /*excludFromFileList=*/true));
-    LLVM_DEBUG({ llvm::dbgs() << "Generated YAML:" << yamlString << "\n"; });
-  }
+  emitHierarchyYamlFile(interfaceVec);
 
   // Signal pass failure if any errors were found while examining circuit
   // annotations.
   if (removalError)
     return signalPassFailure();
   markAnalysesPreserved<NLATable>();
+}
+
+void GrandCentralPass::emitHierarchyYamlFile(
+    SmallVectorImpl<sv::InterfaceOp> &intfs) {
+  // If a `GrandCentralHierarchyFileAnnotation` was passed in, generate a YAML
+  // representation of the interfaces that we produced with the filename that
+  // that annotation provided.
+  if (!maybeHierarchyFileYAML)
+    return;
+
+  CircuitOp circuitOp = getOperation();
+
+  std::string yamlString;
+  llvm::raw_string_ostream stream(yamlString);
+  ::yaml::Context yamlContext({interfaceMap});
+  llvm::yaml::Output yout(stream);
+  yamlize(yout, intfs, true, yamlContext);
+
+  auto builder = OpBuilder::atBlockBegin(circuitOp.getBodyBlock());
+  builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), yamlString)
+      ->setAttr("output_file",
+                hw::OutputFileAttr::getFromFilename(
+                    &getContext(), maybeHierarchyFileYAML->getValue(),
+                    /*excludeFromFileList=*/true));
+  LLVM_DEBUG({ llvm::dbgs() << "Generated YAML:" << yamlString << "\n"; });
 }
 
 //===----------------------------------------------------------------------===//
