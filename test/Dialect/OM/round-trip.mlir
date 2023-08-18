@@ -167,7 +167,7 @@ om.class @StringConstant() {
 }
 
 // CHECK-LABEL: @Map
-// CHECK-SAME: !om.map<!om.string, !om.string>
-om.class @Map(%map: !om.map<!om.string, !om.string>) {
-  om.class.field @field, %map : !om.map<!om.string, !om.string>
+// CHECK-SAME: !om.map<!om.string>
+om.class @Map(%map: !om.map<!om.string>) {
+  om.class.field @field, %map : !om.map<!om.string>
 }

@@ -26,12 +26,3 @@ void circt::om::OMDialect::registerTypes() {
 #include "circt/Dialect/OM/OMTypes.cpp.inc"
       >();
 }
-
-mlir::LogicalResult
-circt::om::MapType::verify(llvm::function_ref<mlir::InFlightDiagnostic()> diag,
-                           mlir::Type keyType, mlir::Type elementType) {
-  if (!llvm::isa<om::StringType, mlir::IntegerType>(keyType))
-    return diag() << "map key type must be either string or integer but got "
-                  << keyType;
-  return mlir::success();
-}

@@ -52,22 +52,19 @@ def ListType : TypeDef<OMDialect, "List", []> {
 }
 
 def MapType : TypeDef<OMDialect, "Map", []> {
-  let summary = [{A type that represents a map. A key type must be either
-                  an integer or string type}];
+  let summary = [{A type that represents a string map}];
 
   let mnemonic = "map";
-  let parameters = (ins "mlir::Type": $keyType, "mlir::Type":$valueType);
+  let parameters = (ins "mlir::Type":$valueType);
   let assemblyFormat = [{
-    `<` $keyType `,` $valueType `>`
+    `<` $valueType `>`
   }];
 
   let builders = [
-    AttrBuilderWithInferredContext<(ins "::mlir::Type":$keyType, "::mlir::Type":$valueType), [{
-      return $_get(keyType.getContext(), keyType, valueType);
+    AttrBuilderWithInferredContext<(ins "::mlir::Type":$valueType), [{
+      return $_get(valueType.getContext(), valueType);
     }]>
   ];
-
-  let genVerifyDecl = 1;
 }
 
 def SymbolRefType : TypeDef<OMDialect, "SymbolRef", []> {
