@@ -1,5 +1,5 @@
 // This test checks that the custom port name gets propagated all the way down to Verilog
-// RUN: hlstool --calyx-hw --ir --ir-output-level=3 %s | FileCheck %s
+// RUN: hlstool --calyx-hw --ir --ir-output-level=rtl %s | FileCheck %s
 
 // CHECK: hw.module @control
 // CHECK: hw.module @main(%a: i32, %b: i32, %clk: i1, %reset: i1, %go: i1) -> (out: i1, done: i1)
