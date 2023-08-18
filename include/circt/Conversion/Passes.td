@@ -251,6 +251,10 @@ def CalyxNative : Pass<"lower-using-calyx-native", "mlir::ModuleOp"> {
   // XXX(rachitnigam): Are all these really needed? The pass just needs calyx operations.
   let dependentDialects = ["comb::CombDialect", "hw::HWDialect",
                            "seq::SeqDialect", "sv::SVDialect"];
+  let options = [
+    Option<"primitiveLib", "calyx-primitives-dir", "std::string",
+            "", "Directory containing Calyx primitives">
+  ];
 }
 
 

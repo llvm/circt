@@ -115,8 +115,14 @@ void CalyxNativePass::runOnOperation() {
   //                                         /*stdout=*/std::nullopt,
   //                                         /*stderr=*/std::nullopt};
 
-  auto args = llvm::ArrayRef<StringRef>(
-      {generatorExe, StringRef(nativeInputFileName), "--log", "info"});
+  if (primitiveLib == "") {
+    root.emitError("primitive library not specified");
+    return;
+  }
+
+  auto args =
+      llvm::ArrayRef<StringRef>({generatorExe, StringRef(nativeInputFileName),
+                                 "-l", primitiveLib, "-b", "mlir"});
   int result = llvm::sys::ExecuteAndWait(
       generatorExe, args, /*Env=*/std::nullopt,
       /*Redirects=*/{},
@@ -135,7 +141,7 @@ void CalyxNativePass::runOnOperation() {
     return;
   }
 
-  root.erase();
+  // root.erase();
 }
 
 std::unique_ptr<mlir::Pass> circt::createCalyxNativePass() {
