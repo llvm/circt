@@ -89,27 +89,41 @@ void CalyxNativePass::runOnOperation() {
 
   // Create a new emitter with the output file
   // Open the file
-  auto fd = mlir::openOutputFile(nativeInputFileName, &errMsg);
-  if (!fd) {
+  auto inputFile = mlir::openOutputFile(nativeInputFileName, &errMsg);
+  if (!inputFile) {
     root.emitError(errMsg);
     return;
   }
 
-  auto emitter = circt::calyx::exportCalyx(root, fd->os());
+  // Emit the file
+  auto res = circt::calyx::exportCalyx(root, inputFile->os());
+  inputFile->os().flush();
+  if (failed(res)) {
+    return;
+  }
+  inputFile->keep();
 
-  std::optional<StringRef> redirects[] = {
-      /*stdin=*/std::nullopt,
-      /*stdout=*/StringRef(nativeInputFileName),
-      /*stderr=*/std::nullopt};
+  // Print out the contents of the file we just wrote
+  // auto checkOut = llvm::MemoryBuffer::getFile(nativeInputFileName);
+  // auto fileContent = (*checkOut)->getBuffer();
+  // llvm::outs() << "Contents of the file:\n";
+  // llvm::outs() << "----------------------\n";
+  // llvm::outs() << fileContent;
+  // llvm::outs() << "----------------------\n";
 
-  auto args = llvm::ArrayRef<StringRef>();
+  // std::optional<StringRef> redirects[] = {/*stdin=*/std::nullopt,
+  //                                         /*stdout=*/std::nullopt,
+  //                                         /*stderr=*/std::nullopt};
+
+  auto args = llvm::ArrayRef<StringRef>(
+      {generatorExe, StringRef(nativeInputFileName), "--log", "info"});
   int result = llvm::sys::ExecuteAndWait(
       generatorExe, args, /*Env=*/std::nullopt,
-      /*Redirects=*/redirects,
+      /*Redirects=*/{},
       /*SecondsToWait=*/0, /*MemoryLimit=*/0, &errMsg);
 
   if (result != 0) {
-    root.emitError("execution of '" + generatorExe + "' failed");
+    root.emitError() << errMsg;
     return;
   }
 
@@ -120,6 +134,8 @@ void CalyxNativePass::runOnOperation() {
                    nativeInputFileName + "'");
     return;
   }
+
+  root.erase();
 }
 
 std::unique_ptr<mlir::Pass> circt::createCalyxNativePass() {
