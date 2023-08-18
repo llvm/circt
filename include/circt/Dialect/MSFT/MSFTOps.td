@@ -13,6 +13,7 @@ def InstanceOp : MSFTOp<"instance", [
         DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
         DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>,
         DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+        DeclareOpInterfaceMethods<PortList>,
         DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface>
     ]> {
   let summary = "Instantiate a module";
@@ -40,11 +41,6 @@ def InstanceOp : MSFTOp<"instance", [
     // Update the results.
     InstanceOp getWithNewResults(MSFTModuleOp mod,
                                  ArrayRef<unsigned> newToOldMap);
-
-    //===------------------------------------------------------------------===//
-    // PortList Methods
-    //===------------------------------------------------------------------===//
-    ::circt::hw::ModulePortInfo getPortList();
   }];
 
   /// sym keyword for optional symbol simplifies parsing
@@ -110,17 +106,14 @@ class MSFTModuleOpBase<string mnemonic, list<Trait> traits = []> :
           setNameFn(block->getArgument(i), name);
       }
     }
-
-    //===------------------------------------------------------------------===//
-    // PortList Methods
-    //===------------------------------------------------------------------===//
-    ::circt::hw::ModulePortInfo getPortList();
   }];
 }
 
 def MSFTModuleOp : MSFTModuleOpBase<"module",
       [RegionKindInterface, HasParent<"mlir::ModuleOp">,
        SingleBlockImplicitTerminator<"OutputOp">,
+       DeclareOpInterfaceMethods<PortList>,
+       DeclareOpInterfaceMethods<SymboledPortList>,
        DeclareOpInterfaceMethods<HWMutableModuleLike>]>{
   let summary = "MSFT HW Module";
   let description = [{
@@ -198,7 +191,10 @@ def MSFTModuleOp : MSFTModuleOpBase<"module",
 }
 
 def MSFTModuleExternOp : MSFTOp<"module.extern",
-      [Symbol, FunctionOpInterface, HasParent<"mlir::ModuleOp">, DeclareOpInterfaceMethods<HWModuleLike>]> {
+      [Symbol, FunctionOpInterface, HasParent<"mlir::ModuleOp">, 
+      DeclareOpInterfaceMethods<PortList>,
+      DeclareOpInterfaceMethods<SymboledPortList>,
+      DeclareOpInterfaceMethods<HWModuleLike>]> {
   let summary = "MSFT external Module";
   let description = [{
     Identical to `hw.module.extern`, and trivially lowers to that. This op
@@ -234,11 +230,6 @@ def MSFTModuleExternOp : MSFTOp<"module.extern",
 
     /// Returns the result types of this function.
     ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
-
-    //===------------------------------------------------------------------===//
-    // PortList Methods
-    //===------------------------------------------------------------------===//
-    ::circt::hw::ModulePortInfo getPortList();
   }];
 
   let extraClassDefinition = [{

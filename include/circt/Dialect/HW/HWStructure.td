@@ -30,6 +30,7 @@ include "mlir/Interfaces/SideEffectInterfaces.td"
 class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
     HWOp<mnemonic, traits # [
       DeclareOpInterfaceMethods<PortList>,
+      DeclareOpInterfaceMethods<SymboledPortList>,
       DeclareOpInterfaceMethods<HWModuleLike>,
       DeclareOpInterfaceMethods<HWMutableModuleLike>,
       Symbol, FunctionOpInterface,
@@ -51,16 +52,12 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
       ArrayRef<unsigned> eraseOutputs
     );
 
-    /// Attribute name for port symbols.
-    static StringRef getPortSymbolAttrName() {
-      return "hw.exportPort";
-    }
-
     void setPortSymbolAttr(size_t portIndex, ::circt::hw::InnerSymAttr sym);
 
     StringAttr getArgName(size_t index) {
       return dyn_cast<StringAttr>(getArgNames()[index]);
     }
+
   }];
 
   /// Additional class definitions inside the module op.
@@ -84,11 +81,18 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
       auto portSymAttr = StringAttr::get(getContext(), getPortSymbolAttrName());
       setPortAttr(portIndex, portSymAttr, sym);
     }
+
+    size_t $cppClass::getNumPorts() {
+      auto fnty = getFunctionType();
+      return fnty.getNumInputs() + fnty.getNumResults();
+    }
   }];
 
 }
 
-def HWTestModuleOp : HWOp<"testmodule", [Symbol, PortList,
+def HWTestModuleOp : HWOp<"testmodule", [Symbol,
+                                         DeclareOpInterfaceMethods<PortList>,
+                                         DeclareOpInterfaceMethods<SymboledPortList>,
                                          OpAsmOpInterface, 
                                          HasParent<"mlir::ModuleOp">, 
                                          IsolatedFromAbove,
@@ -107,11 +111,6 @@ def HWTestModuleOp : HWOp<"testmodule", [Symbol, PortList,
                                   mlir::OpAsmSetValueNameFn setNameFn);
 
     Block *getBodyBlock() { return &getRegion().front(); }
-
-    //===------------------------------------------------------------------===//
-    // PortList Methods
-    //===------------------------------------------------------------------===//
-    ::circt::hw::ModulePortInfo getPortList();
   }];
 
 }
@@ -471,6 +470,7 @@ def HWModuleGeneratedOp : HWModuleOpBase<"module.generated", [
 
 def InstanceOp : HWOp<"instance", [
         DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+        DeclareOpInterfaceMethods<PortList>,
         DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
         DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>,
         DeclareOpInterfaceMethods<HWInstanceLike>]> {
@@ -548,11 +548,6 @@ def InstanceOp : HWOp<"instance", [
 
     /// An InstanceOp may optionally define a symbol.
     bool isOptionalSymbol() { return true; }
-
-    //===------------------------------------------------------------------===//
-    // PortList Methods
-    //===------------------------------------------------------------------===//
-    ::circt::hw::ModulePortInfo getPortList();
 
   }];
 

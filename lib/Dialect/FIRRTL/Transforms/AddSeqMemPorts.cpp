@@ -34,7 +34,7 @@ struct AddSeqMemPortsPass : public AddSeqMemPortsBase<AddSeqMemPortsPass> {
   LogicalResult processFileAnno(Location loc, StringRef metadataDir,
                                 Annotation anno);
   LogicalResult processAnnos(CircuitOp circuit);
-  void createOutputFile(hw::HWModuleLike module);
+  void createOutputFile(igraph::ModuleOpInterface module);
   InstanceGraphNode *findDUT();
   void processMemModule(FMemModuleOp mem);
   LogicalResult processModule(FModuleOp module, bool isDUT);
@@ -274,7 +274,7 @@ LogicalResult AddSeqMemPortsPass::processModule(FModuleOp module, bool isDUT) {
   return success();
 }
 
-void AddSeqMemPortsPass::createOutputFile(hw::HWModuleLike module) {
+void AddSeqMemPortsPass::createOutputFile(igraph::ModuleOpInterface module) {
   // Insert the verbatim at the bottom of the circuit.
   auto circuit = getOperation();
   auto builder = OpBuilder::atBlockEnd(circuit.getBodyBlock());
@@ -422,7 +422,7 @@ void AddSeqMemPortsPass::runOnOperation() {
 
   // If there is an output file, create it.
   if (outputFile)
-    createOutputFile(dutNode->getModule<hw::HWModuleLike>());
+    createOutputFile(dutNode->getModule<igraph::ModuleOpInterface>());
 
   if (anythingChanged)
     markAnalysesPreserved<InstanceGraph>();

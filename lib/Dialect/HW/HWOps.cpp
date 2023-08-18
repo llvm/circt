@@ -1736,6 +1736,12 @@ void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 ModulePortInfo InstanceOp::getPortList() { return getOperationPortList(*this); }
 
+size_t InstanceOp::getNumPorts() {
+  SmallVector<Type> inputs(getOperandTypes());
+  SmallVector<Type> results(getResultTypes());
+  return inputs.size() + results.size();
+}
+
 Value InstanceOp::getValue(size_t idx) {
   auto mpi = getPortList();
   size_t inputPort = 0, outputPort = 0;
@@ -3495,6 +3501,15 @@ ModulePortInfo HWTestModuleOp::getPortList() {
     ports.push_back({{port}, i, sym, attr, loc});
   }
   return ModulePortInfo(ports);
+}
+
+size_t HWTestModuleOp::getNumPorts() { return getModuleType().getNumPorts(); }
+
+hw::InnerSymAttr HWTestModuleOp::getPortSymbolAttr(size_t portIndex) {
+  auto pa = getPortAttrs();
+  if (pa)
+    return cast<hw::InnerSymAttr>((*pa)[portIndex]);
+  return nullptr;
 }
 
 //===----------------------------------------------------------------------===//
