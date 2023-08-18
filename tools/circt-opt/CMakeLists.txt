@@ -18,7 +18,6 @@ target_link_libraries(circt-opt
   CIRCTCalyxNative
   CIRCTCalyxToFSM
   CIRCTCalyxTransforms
-  CIRCTExportCalyx
   CIRCTComb
   CIRCTCombTransforms
   CIRCTConvertToArcs

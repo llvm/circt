@@ -248,9 +248,7 @@ def CalyxNative : Pass<"lower-using-calyx-native", "mlir::ModuleOp"> {
     Calyx program into a purely strucutral representation.
   }];
   let constructor = "circt::createCalyxNativePass()";
-  // XXX(rachitnigam): Are all these really needed? The pass just needs calyx operations.
-  let dependentDialects = ["comb::CombDialect", "hw::HWDialect",
-                           "seq::SeqDialect", "sv::SVDialect"];
+  let dependentDialects = ["calyx::CalyxDialect"];
   let options = [
     Option<"primitiveLib", "primitives", "std::string",
             "", "Directory containing Calyx primitives">,

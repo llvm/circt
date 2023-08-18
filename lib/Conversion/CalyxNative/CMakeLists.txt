@@ -12,12 +12,8 @@ add_circt_library(CIRCTCalyxNative
 
   LINK_LIBS PUBLIC
   CIRCTCalyx
-  CIRCTSV
-  CIRCTSeq
-  CIRCTHW
+  CIRCTExportCalyx
   MLIRIR
   MLIRPass
-  MLIRFuncDialect
   MLIRSupport
-  MLIRTransforms
   )

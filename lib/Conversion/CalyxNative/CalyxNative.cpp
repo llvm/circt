@@ -15,8 +15,6 @@
 
 #include "circt/Conversion/CalyxNative.h"
 #include "circt/Dialect/Calyx/CalyxEmitter.h"
-#include "circt/Dialect/SV/SVDialect.h"
-#include "circt/Dialect/Seq/SeqOps.h"
 #include "mlir/Parser/Parser.h"
 #include "mlir/Support/FileUtilities.h"
 #include "llvm/Support/MemoryBuffer.h"
