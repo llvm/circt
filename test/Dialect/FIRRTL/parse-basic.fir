@@ -1146,7 +1146,6 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     module.in <= UInt(1)
 
   ; CHECK-LABEL: firrtl.module private @EnumTypes
-circuit EnumTypes:
   module EnumTypes:
     ; CHECK-SAME: in %i: !firrtl.enum<Some: uint<8>, None: uint<0>>
     input i : {| Some : UInt<8>, None |}
@@ -1170,6 +1169,14 @@ circuit EnumTypes:
       ; CHECK: }
       None:
         o is invalid
+
+  ; CHECK-LABEL: firrtl.module private @EnumInfer(
+  module EnumInfer:
+    input i : {| A: UInt<8>, None |}
+    output o : {| A: UInt, None |}
+
+    ; CHECK: connect %o, %i
+    o <= i
 
   ; CHECK-LABEL: module private @RefsChild(
   ; CHECK-SAME: out %r: !firrtl.probe<uint<1>>

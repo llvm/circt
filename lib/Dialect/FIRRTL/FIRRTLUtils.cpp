@@ -106,7 +106,6 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
     // Const-cast as needed, using widthless version of dest.
     // (dest is either widthless already, or source is and if the types
     //  can be const-cast'd, do so)
-    assert(srcType.isGround() && dstType.isGround());
     if (dstType != srcType && dstType.getWidthlessType() != srcType &&
         areTypesConstCastable(dstType.getWidthlessType(), srcType)) {
       src = builder.create<ConstCastOp>(dstType.getWidthlessType(), src);
