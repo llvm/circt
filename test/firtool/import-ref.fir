@@ -31,17 +31,18 @@ circuit TestHarness:
 ; CHECK-LABEL: module DUT(
 
 circuit DUT:
-  extmodule Inner:
+  extmodule NotTheRealName:
     input clock: Clock
     output read: Probe<UInt<32>>
     output write: RWProbe<UInt<32>>
+    defname = Inner
 
   module DUT:
     input clock: Clock
     output read: Probe<UInt<32>>
     output write: RWProbe<UInt<32>>
 
-    inst i of Inner
+    inst i of NotTheRealName
     i.clock <= clock
     define read = i.read
     define write = i.write
