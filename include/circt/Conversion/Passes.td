@@ -252,8 +252,8 @@ def CalyxNative : Pass<"lower-using-calyx-native", "mlir::ModuleOp"> {
   let dependentDialects = ["comb::CombDialect", "hw::HWDialect",
                            "seq::SeqDialect", "sv::SVDialect"];
   let options = [
-    Option<"primitiveLib", "calyx-primitives-dir", "std::string",
-            "", "Directory containing Calyx primitives">
+    Option<"primitiveLib", "primitives", "std::string",
+            "", "Directory containing Calyx primitives">,
   ];
 }
 

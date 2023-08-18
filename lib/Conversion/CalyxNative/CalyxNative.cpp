@@ -27,6 +27,7 @@
 #include "circt/Dialect/Seq/SeqOps.h"
 
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/Parser/Parser.h"
 #include "mlir/Support/FileUtilities.h"
 #include "mlir/Transforms/DialectConversion.h"
 
@@ -34,6 +35,7 @@
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/Process.h"
+#include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/ToolOutputFile.h"
 
 using namespace mlir;
@@ -57,8 +59,16 @@ public:
 void CalyxNativePass::runOnOperation() {
   ModuleOp root = getOperation();
 
-  SmallString<32> execName = llvm::sys::path::filename("calyx");
+  // User must specify location of the calyx primitive library.
+  if (primitiveLib == "") {
+    // XXX(rachitnigam): Probably a bad idea to hard code the name of the flag.
+    // Is there a better way?
+    root.emitError("primitive library not specified. Please specify it using "
+                   "--lower-using-calyx-native=\"primitives=<path>\"");
+    return;
+  }
 
+  SmallString<32> execName = llvm::sys::path::filename("calyx");
   auto exeMb = llvm::sys::findProgramByName(execName);
   // If cannot find the executable, then nothing to do, return.
   if (!exeMb) {
@@ -87,21 +97,19 @@ void CalyxNativePass::runOnOperation() {
     return;
   }
 
-  // Create a new emitter with the output file
-  // Open the file
+  // Emit the current program into a file so the native compiler can operate
+  // over it.
   auto inputFile = mlir::openOutputFile(nativeInputFileName, &errMsg);
   if (!inputFile) {
     root.emitError(errMsg);
     return;
   }
 
-  // Emit the file
   auto res = circt::calyx::exportCalyx(root, inputFile->os());
   inputFile->os().flush();
   if (failed(res)) {
     return;
   }
-  inputFile->keep();
 
   // Print out the contents of the file we just wrote
   // auto checkOut = llvm::MemoryBuffer::getFile(nativeInputFileName);
@@ -111,21 +119,27 @@ void CalyxNativePass::runOnOperation() {
   // llvm::outs() << fileContent;
   // llvm::outs() << "----------------------\n";
 
-  // std::optional<StringRef> redirects[] = {/*stdin=*/std::nullopt,
-  //                                         /*stdout=*/std::nullopt,
-  //                                         /*stderr=*/std::nullopt};
-
-  if (primitiveLib == "") {
-    root.emitError("primitive library not specified");
+  // Create a file for the native compiler to write the results into
+  SmallString<32> nativeOutputFileName;
+  errCode = llvm::sys::fs::getPotentiallyUniqueTempFileName(
+      "calyxNativeOutTemp", StringRef(""), nativeOutputFileName);
+  if (errCode != ok) {
+    root.emitError(
+        "cannot generate a unique temporary file name to store output");
     return;
   }
 
-  auto args =
-      llvm::ArrayRef<StringRef>({generatorExe, StringRef(nativeInputFileName),
-                                 "-l", primitiveLib, "-b", "mlir"});
+  std::optional<StringRef> redirects[] = {
+      /*stdin=*/std::nullopt,
+      /*stdout=*/StringRef(nativeOutputFileName),
+      /*stderr=*/std::nullopt};
+
+  auto args = llvm::ArrayRef<StringRef>(
+      {generatorExe, StringRef(nativeInputFileName), "-o",
+       StringRef(nativeOutputFileName), "-l", primitiveLib, "-b", "mlir"});
   int result = llvm::sys::ExecuteAndWait(
       generatorExe, args, /*Env=*/std::nullopt,
-      /*Redirects=*/{},
+      /*Redirects=*/redirects,
       /*SecondsToWait=*/0, /*MemoryLimit=*/0, &errMsg);
 
   if (result != 0) {
@@ -133,6 +147,8 @@ void CalyxNativePass::runOnOperation() {
     return;
   }
 
+  // Parse the output buffer into a Calyx operation so that we can insert it
+  // back into the program.
   auto bufferRead = llvm::MemoryBuffer::getFile(nativeInputFileName);
   if (!bufferRead || !*bufferRead) {
     root.emitError("execution of '" + generatorExe +
@@ -141,7 +157,18 @@ void CalyxNativePass::runOnOperation() {
     return;
   }
 
-  // root.erase();
+  // Load the output from the native compiler as a ModuleOp
+  auto loadedMod =
+      parseSourceFile<ModuleOp>(nativeOutputFileName.str(), root.getContext());
+  auto loadedBlock = loadedMod->getBody();
+
+  // XXX(rachitnigam): This is quite baroque. We insert the new block before the
+  // previous one and then remove the old block. A better thing to do would be
+  // to replace the moduleOp completely but I couldn't figure out how to do
+  // that.
+  auto oldBlock = root.getBody();
+  loadedBlock->moveBefore(oldBlock);
+  oldBlock->erase();
 }
 
 std::unique_ptr<mlir::Pass> circt::createCalyxNativePass() {
