@@ -739,8 +739,14 @@ private:
   /// Returns a port's `inner_sym`, adding one if necessary.
   StringAttr getOrAddInnerSym(FModuleLike module, size_t portIdx);
 
+  /// List of interfaces created by the pass.
+  SmallVector<sv::InterfaceOp, 2> interfaceVec;
+
   /// Emit the hierarchy yaml file.
-  void emitHierarchyYamlFile(SmallVectorImpl<sv::InterfaceOp> &intfs);
+  void emitHierarchyYamlFile();
+
+  /// Run the Grand Central transformation.
+  LogicalResult runGrandCentral();
 };
 
 } // namespace
@@ -1540,7 +1546,7 @@ HWModuleLike GrandCentralPass::getEnclosingModule(Value value,
 }
 
 /// This method contains the business logic of this pass.
-void GrandCentralPass::runOnOperation() {
+LogicalResult GrandCentralPass::runGrandCentral() {
   LLVM_DEBUG(llvm::dbgs() << "===- Running Grand Central Views/Interface Pass "
                              "-----------------------------===\n");
 
@@ -1643,16 +1649,15 @@ void GrandCentralPass::runOnOperation() {
     }
     return false;
   });
+  if (removalError)
+    return failure();
 
   // Find the DUT if it exists.  This needs to be known before the circuit is
   // walked.
   for (auto mod : circuitOp.getOps<FModuleOp>()) {
     if (failed(extractDUT(mod, dut)))
-      removalError = true;
+      return failure();
   }
-
-  if (removalError)
-    return signalPassFailure();
 
   LLVM_DEBUG({
     llvm::dbgs() << "Extraction Info:\n";
@@ -1677,15 +1682,6 @@ void GrandCentralPass::runOnOperation() {
       llvm::dbgs() << "<none>";
     llvm::dbgs() << "\n";
   });
-
-  // Exit immediately if no annotations indicative of interfaces that need to be
-  // built exist.  However, still generate the YAML file if the annotation for
-  // this was passed in because some flows expect this.
-  if (worklist.empty()) {
-    SmallVector<sv::InterfaceOp, 0> interfaceVec;
-    emitHierarchyYamlFile(interfaceVec);
-    return markAllAnalysesPreserved();
-  }
 
   // Setup the builder to create ops _inside the FIRRTL circuit_.  This is
   // necessary because interfaces and interface instances are created.
@@ -1720,9 +1716,14 @@ void GrandCentralPass::runOnOperation() {
   /// search at any modules which are known companions.
   DenseSet<hw::HWModuleLike> dutModules;
   FModuleOp effectiveDUT = dut;
-  if (!effectiveDUT)
-    effectiveDUT = cast<FModuleOp>(
-        *instancePaths->instanceGraph.getTopLevelNode()->getModule());
+  if (!effectiveDUT) {
+    auto topOp = instancePaths->instanceGraph.getTopLevelNode()->getModule();
+    effectiveDUT = dyn_cast<FModuleOp>(*topOp);
+    if (!effectiveDUT) {
+      markAllAnalysesPreserved();
+      return success();
+    }
+  }
   auto dfRange =
       llvm::depth_first(instancePaths->instanceGraph.lookup(effectiveDUT));
   for (auto i = dfRange.begin(), e = dfRange.end(); i != e;) {
@@ -1928,7 +1929,6 @@ void GrandCentralPass::runOnOperation() {
                 //   1) The module is the companion.
                 //   2) The module is NOT instantiated by the effective DUT.
                 auto *modNode = instancePaths->instanceGraph.lookup(mod);
-                SmallVector<InstanceRecord *> instances(modNode->uses());
                 if (modNode != companionNode &&
                     dutModules.count(modNode->getModule<hw::HWModuleLike>()))
                   continue;
@@ -1982,9 +1982,14 @@ void GrandCentralPass::runOnOperation() {
           });
         });
   });
-
   if (removalError)
-    return signalPassFailure();
+    return failure();
+
+  // Exit immediately if no interfaces are to be built.
+  if (worklist.empty()) {
+    markAllAnalysesPreserved();
+    return success();
+  }
 
   LLVM_DEBUG({
     // Print out the companion map and all leaf values that were discovered.
@@ -2040,7 +2045,6 @@ void GrandCentralPass::runOnOperation() {
   // will use XMRs to drive the interface.  If extraction info is available,
   // then the top-level instantiate interface will be marked for extraction via
   // a SystemVerilog bind.
-  SmallVector<sv::InterfaceOp, 2> interfaceVec;
   SmallDenseMap<FModuleLike, SmallVector<InterfaceElemsBuilder>>
       companionToInterfaceMap;
   auto compareInterfaceSignal = [&](InterfaceElemsBuilder &lhs,
@@ -2232,17 +2236,22 @@ void GrandCentralPass::runOnOperation() {
       continue;
   }
 
-  emitHierarchyYamlFile(interfaceVec);
-
   // Signal pass failure if any errors were found while examining circuit
   // annotations.
-  if (removalError)
+  return failure(removalError);
+}
+
+void GrandCentralPass::runOnOperation() {
+  if (failed(runGrandCentral()))
     return signalPassFailure();
+
+  // Generate the YAML file in all successful paths, even if no interfaces
+  // were generated, as downstream flows may expect it.
+  emitHierarchyYamlFile();
   markAnalysesPreserved<NLATable>();
 }
 
-void GrandCentralPass::emitHierarchyYamlFile(
-    SmallVectorImpl<sv::InterfaceOp> &intfs) {
+void GrandCentralPass::emitHierarchyYamlFile() {
   // If a `GrandCentralHierarchyFileAnnotation` was passed in, generate a YAML
   // representation of the interfaces that we produced with the filename that
   // that annotation provided.
@@ -2255,7 +2264,7 @@ void GrandCentralPass::emitHierarchyYamlFile(
   llvm::raw_string_ostream stream(yamlString);
   ::yaml::Context yamlContext({interfaceMap});
   llvm::yaml::Output yout(stream);
-  yamlize(yout, intfs, true, yamlContext);
+  yamlize(yout, interfaceVec, true, yamlContext);
 
   auto builder = OpBuilder::atBlockBegin(circuitOp.getBodyBlock());
   builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), yamlString)
