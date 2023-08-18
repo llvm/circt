@@ -31,18 +31,11 @@ def PortList : OpInterface<"PortList", []> {
 
 def SymboledPortList : OpInterface<"SymboledPortList", [PortList]> {
   let cppNamespace = "circt::hw";
-  let description = "Operations which produce a unified port list representation";
+  let description = "Operations which produce a unified port list representation which includes port symbols";
   let methods = [
     InterfaceMethod<"Get a port symbol attribute",
     "::circt::hw::InnerSymAttr", "getPortSymbolAttr", (ins "size_t":$portIndex)>,
   ];
-
-  let extraSharedClassDeclaration = [{
-    /// Attribute name for port symbols.
-    static StringRef getPortSymbolAttrName() {
-      return "hw.exportPort";
-    }
-  }];
 }
 
 
@@ -73,6 +66,10 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
   ];
 
   let extraSharedClassDeclaration = [{
+    /// Attribute name for port symbols.
+    static StringRef getPortSymbolAttrName() {
+      return "hw.exportPort";
+    }
 
     /// Return the region containing the body of this function.
     Region &getModuleBody() { return $_op->getRegion(0); }
