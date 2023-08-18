@@ -367,6 +367,8 @@ ArrayAttr DynamicInstanceOp::globalRefPath() {
 // InstanceOp
 //===----------------------------------------------------------------------===//
 
+size_t InstanceOp::getNumPorts() { return getNumOperands() + getNumResults(); }
+
 std::optional<size_t> InstanceOp::getTargetResultIndex() {
   // Inner symbols on instance operations target the op not any result.
   return std::nullopt;
@@ -503,6 +505,10 @@ hw::ModulePortInfo MSFTModuleOp::getPortList() {
                        resultLocs[i].cast<LocationAttr>()});
   }
   return hw::ModulePortInfo(inputs, outputs);
+}
+
+size_t MSFTModuleOp::getNumPorts() {
+  return getArgumentTypes().size() + getResultTypes().size();
 }
 
 SmallVector<BlockArgument>
@@ -1024,6 +1030,15 @@ hw::ModulePortInfo MSFTModuleExternOp::getPortList() {
   }
 
   return hw::ModulePortInfo(inputs, outputs);
+}
+
+size_t MSFTModuleExternOp::getNumPorts() {
+  auto typeAttr =
+      getOperation()->getAttrOfType<TypeAttr>(getFunctionTypeAttrName());
+  auto moduleType = typeAttr.getValue().cast<FunctionType>();
+  auto argTypes = moduleType.getInputs();
+  auto resultTypes = moduleType.getResults();
+  return argTypes.size() + resultTypes.size();
 }
 
 hw::InnerSymAttr MSFTModuleExternOp::getPortSymbolAttr(size_t) { return {}; }

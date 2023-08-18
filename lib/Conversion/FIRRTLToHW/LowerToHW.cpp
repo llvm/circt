@@ -284,8 +284,8 @@ struct CircuitLoweringState {
 
   // Return true if this module is the DUT or is instantiated by the DUT.
   // Returns false if the module is not instantiated by the DUT.
-  bool isInDUT(hw::HWModuleLike child) {
-    if (auto parent = dyn_cast<hw::HWModuleLike>(*dut))
+  bool isInDUT(igraph::ModuleOpInterface child) {
+    if (auto parent = dyn_cast<igraph::ModuleOpInterface>(*dut))
       return getInstanceGraph()->isAncestor(child, parent);
     return dut == child;
   }
@@ -295,7 +295,7 @@ struct CircuitLoweringState {
   // Return true if this module is instantiated by the Test Harness.  Returns
   // false if the module is not instantiated by the Test Harness or if the Test
   // Harness is not known.
-  bool isInTestHarness(hw::HWModuleLike mod) { return !isInDUT(mod); }
+  bool isInTestHarness(igraph::ModuleOpInterface mod) { return !isInDUT(mod); }
 
   InstanceGraph *getInstanceGraph() { return instanceGraph; }
 

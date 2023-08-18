@@ -319,7 +319,8 @@ void ExtractInstancesPass::collectAnnos() {
   LLVM_DEBUG(llvm::dbgs() << "Marking DUT hierarchy\n");
   SmallVector<InstanceGraphNode *> worklist;
   for (Operation *op : dutModules)
-    worklist.push_back(instanceGraph->lookup(cast<hw::HWModuleLike>(op)));
+    worklist.push_back(
+        instanceGraph->lookup(cast<igraph::ModuleOpInterface>(op)));
   while (!worklist.empty()) {
     auto *module = worklist.pop_back_val();
     dutModuleNames.insert(module->getModule().getModuleNameAttr());
@@ -582,7 +583,7 @@ void ExtractInstancesPass::extractInstances() {
     // the instances of the parent module, and wire the instance ports up to
     // the newly added parent module ports.
     auto *instParentNode =
-        instanceGraph->lookup(cast<hw::HWModuleLike>(*parent));
+        instanceGraph->lookup(cast<igraph::ModuleOpInterface>(*parent));
     for (auto *instRecord : instParentNode->uses()) {
       auto oldParentInst = cast<InstanceOp>(*instRecord->getInstance());
       auto newParent = oldParentInst->getParentOfType<FModuleLike>();

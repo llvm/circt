@@ -16,10 +16,11 @@
 include "mlir/IR/OpBase.td"
 include "circt/Dialect/HW/HWOpInterfaces.td"
 
-def FModuleLike : OpInterface<"FModuleLike", [HWModuleLike]> {
+def FModuleLike : OpInterface<"FModuleLike", [Symbol, SymboledPortList, InstanceGraphModuleOpInterface]> {
   let cppNamespace = "circt::firrtl";
   let description = "Provide common module information.";
   let methods = [
+
     //===------------------------------------------------------------------===//
     // Parameters
     //===------------------------------------------------------------------===//
@@ -339,9 +340,6 @@ def FModuleLike : OpInterface<"FModuleLike", [HWModuleLike]> {
     static_assert(
         ConcreteOp::template hasTrait<::mlir::SymbolOpInterface::Trait>(),
         "expected operation to be a symbol");
-    static_assert(
-        ConcreteOp::template hasTrait<::circt::hw::HWModuleLike::Trait>(),
-        "expected operation to be also be a hardware module");
     static_assert(
         ConcreteOp::template hasTrait<OpTrait::InnerSymbolTable>(),
         "expected operation to be an inner symbol table");

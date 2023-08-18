@@ -23,6 +23,8 @@ include "circt/Dialect/HW/HWOpInterfaces.td"
 def ESIPureModuleOp : ESI_Op<"pure_module",
       [Symbol, NoTerminator, RegionKindInterface, NoRegionArguments,
        SingleBlock, HasParent<"mlir::ModuleOp">,
+       DeclareOpInterfaceMethods<PortList>,
+       DeclareOpInterfaceMethods<SymboledPortList>,
        DeclareOpInterfaceMethods<HWModuleLike>]> {
   let summary = "ESI pure module";
   let description = [{
@@ -44,10 +46,6 @@ def ESIPureModuleOp : ESI_Op<"pure_module",
     // Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph;}
 
-    //===------------------------------------------------------------------===//
-    // PortList Methods
-    //===------------------------------------------------------------------===//
-    ::circt::hw::ModulePortInfo getPortList();
   }];
 }
 
