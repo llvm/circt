@@ -385,8 +385,7 @@ static LogicalResult doHLSFlowCalyx(
 
   // Lower to only SCF abstractions
   addIRLevel(IRLevel::PreCompile, [&]() {
-    pm.addPass(createSimpleCanonicalizerPass());
-    pm.addPass(mlir::createLiftControlFlowToSCFPass());
+    /* Nothing to do */
   });
 
   // Lower to Calyx

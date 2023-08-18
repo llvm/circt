@@ -38,7 +38,6 @@ target_link_libraries(hlstool
   MLIROptLib
   MLIRParser
   MLIRControlFlowDialect
-  MLIRControlFlowToSCF
   MLIRSupport
   MLIRTransforms
   MLIRSCFToControlFlow
