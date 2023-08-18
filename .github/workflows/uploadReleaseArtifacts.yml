@@ -125,10 +125,10 @@ jobs:
             json=$(echo $json | jq -c '.assert = "ON" | .mode = "relwithdebinfo"')
           fi
           echo "out=$json" >> $GITHUB_OUTPUT
-      - name: Add Build Config for CIRCT-full shared libs
-        id: add-build-config-circt-full-shared-libs
+      - name: Add Build Config for CIRCT-full (shared)
+        id: add-build-config-circt-full-shared
         run: |
-          json='{"name":"CIRCT-full shared libs","install_target":"install","package_name_prefix":"circt-full-shared-libs","mode":"release","assert":"OFF","shared":"ON","stats":"ON"}'
+          json='{"name":"CIRCT-full shared","install_target":"install","package_name_prefix":"circt-full-shared","mode":"release","assert":"OFF","shared":"ON","stats":"ON"}'
           if [[ ${{ github.event_name }} == 'schedule' ]] || [[ ${{ github.event_name }} == 'workflow_dispatch' ]]; then
             json=$(echo $json | jq -c '.assert = "ON" | .mode = "relwithdebinfo"')
           fi
@@ -136,7 +136,7 @@ jobs:
       - name: Build JSON Payloads
         id: build-json-payloads
         run: |
-          echo '${{ steps.add-build-config-firtool.outputs.out }}' '${{ steps.add-build-config-circt-full-shared-libs.outputs.out }}' | jq -sc . > build_configs.json
+          echo '${{ steps.add-build-config-firtool.outputs.out }}' '${{ steps.add-build-config-circt-full-shared.outputs.out }}' | jq -sc . > build_configs.json
           echo '${{ steps.add-linux.outputs.out }}' '${{ steps.add-macos.outputs.out }}' '${{ steps.add-windows.outputs.out }}' | jq -sc . > runners.json
 
           cat runners.json build_configs.json | jq -sc '[combinations | add]' > matrix-raw.json
