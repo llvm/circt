@@ -27,12 +27,14 @@
 #include "circt/Dialect/Seq/SeqOps.h"
 
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/Support/FileUtilities.h"
 #include "mlir/Transforms/DialectConversion.h"
 
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/Process.h"
+#include "llvm/Support/ToolOutputFile.h"
 
 using namespace mlir;
 using namespace circt;
@@ -74,9 +76,10 @@ void CalyxNativePass::runOnOperation() {
     generatorArgStrRef.push_back(a);
 
   std::string errMsg;
-  SmallString<32> genExecOutFileName;
+  SmallString<32> nativeInputFileName;
   auto errCode = llvm::sys::fs::getPotentiallyUniqueTempFileName(
-      "generatorCalloutTemp", StringRef(""), genExecOutFileName);
+      "calyxNativeTemp", StringRef(""), nativeInputFileName);
+
   // Default error code is 0.
   std::error_code ok;
   if (errCode != ok) {
@@ -84,9 +87,19 @@ void CalyxNativePass::runOnOperation() {
     return;
   }
 
+  // Create a new emitter with the output file
+  // Open the file
+  auto fd = mlir::openOutputFile(nativeInputFileName, &errMsg);
+  if (!fd) {
+    root.emitError(errMsg);
+    return;
+  }
+
+  auto emitter = circt::calyx::exportCalyx(root, fd->os());
+
   std::optional<StringRef> redirects[] = {
       /*stdin=*/std::nullopt,
-      /*stdout=*/StringRef(genExecOutFileName),
+      /*stdout=*/StringRef(nativeInputFileName),
       /*stderr=*/std::nullopt};
 
   auto args = llvm::ArrayRef<StringRef>();
@@ -100,11 +113,11 @@ void CalyxNativePass::runOnOperation() {
     return;
   }
 
-  auto bufferRead = llvm::MemoryBuffer::getFile(genExecOutFileName);
+  auto bufferRead = llvm::MemoryBuffer::getFile(nativeInputFileName);
   if (!bufferRead || !*bufferRead) {
     root.emitError("execution of '" + generatorExe +
                    "' did not produce any output file named '" +
-                   genExecOutFileName + "'");
+                   nativeInputFileName + "'");
     return;
   }
 }
