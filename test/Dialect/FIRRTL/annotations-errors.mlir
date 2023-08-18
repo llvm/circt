@@ -271,6 +271,21 @@ firrtl.circuit "InstancePortRef" attributes {rawAnnotations = [{
 }
 
 // -----
+// Check indexing into ref-type instance port is rejected.
+
+// expected-error @below {{annotation cannot target reference-type port 'ref' in module Ext}}
+// expected-error @below {{Unable to resolve target of annotation}}
+firrtl.circuit "InstancePortRefField" attributes {rawAnnotations = [{
+  class = "circt.test",
+  target = "~InstancePortRefField|InstancePortRefField>inst.ref.x"
+}]} {
+  firrtl.extmodule @Ext(out ref : !firrtl.ref<bundle<x: uint<1>>>)
+  firrtl.module @InstancePortRefField() {
+    %ref = firrtl.instance inst @Ext(out ref : !firrtl.ref<bundle<x: uint<1>>>)
+  }
+}
+
+// -----
 // Reject annotations on references.
 
 // expected-error @below {{cannot target reference-type 'out' in RefAnno}}
@@ -282,6 +297,21 @@ firrtl.circuit "RefAnno" attributes {rawAnnotations = [{
   firrtl.module @RefAnno(in %in : !firrtl.uint<1>, out %out : !firrtl.ref<uint<1>>) {
     %ref = firrtl.ref.send %in : !firrtl.uint<1>
     firrtl.ref.define %out, %ref : !firrtl.ref<uint<1>>
+  }
+}
+
+// -----
+// Reject annotations that index through references.
+
+// expected-error @below {{cannot target reference-type 'out' in RefFieldAnno}}
+// expected-error @below {{Unable to resolve target of annotation}}
+firrtl.circuit "RefFieldAnno" attributes {rawAnnotations = [{
+  class = "circt.test",
+  target = "~RefFieldAnno|RefFieldAnno>out.x"
+}]} {
+  firrtl.module @RefFieldAnno(in %in : !firrtl.bundle<x: uint<1>>, out %out : !firrtl.ref<bundle<x: uint<1>>>) {
+    %ref = firrtl.ref.send %in : !firrtl.bundle<x: uint<1>>
+    firrtl.ref.define %out, %ref : !firrtl.ref<bundle<x: uint<1>>>
   }
 }
 
