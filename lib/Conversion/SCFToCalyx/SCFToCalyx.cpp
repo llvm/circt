@@ -673,8 +673,13 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
            << "Currently do not support non-empty yield operations inside for "
               "loops. Run --scf-for-to-while before running --scf-to-calyx.";
   }
+
   auto whileOp = dyn_cast<scf::WhileOp>(yieldOp->getParentOp());
-  assert(whileOp);
+  if (!whileOp) {
+    return yieldOp.getOperation()->emitError()
+           << "Currently only support yield operations inside for and while "
+              "loops.";
+  }
   ScfWhileOp whileOpInterface(whileOp);
 
   auto assignGroup =
