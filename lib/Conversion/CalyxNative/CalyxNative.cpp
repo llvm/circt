@@ -15,35 +15,17 @@
 
 #include "circt/Conversion/CalyxNative.h"
 #include "circt/Dialect/Calyx/CalyxEmitter.h"
-#include "circt/Dialect/Calyx/CalyxOps.h"
-
-#include "circt/Dialect/Comb/CombDialect.h"
-#include "circt/Dialect/Comb/CombOps.h"
-#include "circt/Dialect/HW/HWDialect.h"
-#include "circt/Dialect/HW/HWOps.h"
-#include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/SV/SVDialect.h"
-#include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
-
-#include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Parser/Parser.h"
 #include "mlir/Support/FileUtilities.h"
-#include "mlir/Transforms/DialectConversion.h"
-
-#include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/Process.h"
-#include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/ToolOutputFile.h"
 
 using namespace mlir;
 using namespace circt;
-using namespace circt::calyx;
-using namespace circt::comb;
-using namespace circt::seq;
-using namespace circt::sv;
 
 /// ConversionPatterns.
 
@@ -110,14 +92,6 @@ void CalyxNativePass::runOnOperation() {
   if (failed(res)) {
     return;
   }
-
-  // Print out the contents of the file we just wrote
-  // auto checkOut = llvm::MemoryBuffer::getFile(nativeInputFileName);
-  // auto fileContent = (*checkOut)->getBuffer();
-  // llvm::outs() << "Contents of the file:\n";
-  // llvm::outs() << "----------------------\n";
-  // llvm::outs() << fileContent;
-  // llvm::outs() << "----------------------\n";
 
   // Create a file for the native compiler to write the results into
   SmallString<32> nativeOutputFileName;
