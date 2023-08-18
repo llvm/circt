@@ -2164,8 +2164,10 @@ struct circt::firrtl::detail::FEnumTypeStorage : detail::FIRRTLBaseTypeStorage {
       props.isPassive &= eltInfo.isPassive;
       props.containsAnalog |= eltInfo.containsAnalog;
       props.containsConst |= eltInfo.containsConst;
-      props.hasUninferredWidth |= eltInfo.hasUninferredWidth;
+      props.containsReference |= eltInfo.containsReference;
       props.containsTypeAlias |= eltInfo.containsTypeAlias;
+      props.hasUninferredReset |= eltInfo.hasUninferredReset;
+      props.hasUninferredWidth |= eltInfo.hasUninferredWidth;
       fieldID += 1;
       fieldIDs.push_back(fieldID);
       // Increment the field ID for the next field by the number of subfields.
