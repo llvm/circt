@@ -24,6 +24,7 @@ target_link_libraries(hlstool
   CIRCTSVTransforms
   CIRCTSCFToCalyx
   CIRCTCalyx
+  CIRCTCalyxNative
   CIRCTCalyxTransforms
   CIRCTCalyxToHW
   CIRCTCalyxToFSM
