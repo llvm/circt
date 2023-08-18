@@ -1,6 +1,6 @@
 // This test lowers an SCF construct through Calyx, FSM and (TODO)
 // to RTL.
-// RUN: hlstool %s --calyx-hw --ir --output-level=rtl | FileCheck %s
+// RUN: hlstool %s --calyx-hw --ir --output-level=post-compile | FileCheck %s
 
 // TODO: ... simulate the hardware!
 
