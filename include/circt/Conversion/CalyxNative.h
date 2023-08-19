@@ -1,4 +1,4 @@
-//===- CalyxNative.h - Calyx Native pass ----------------*- C++ -*-===//
+//===- CalyxNative.h - Calyx Native pass ------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_CONVERSION_CALYXNATIVE_CALYXNATIVE_H
-#define CIRCT_CONVERSION_CALYXNATIVE_CALYXNATIVE_H
+#ifndef CIRCT_CONVERSION_CALYXNATIVE_H
+#define CIRCT_CONVERSION_CALYXNATIVE_H
 
 #include "circt/Dialect/Calyx/CalyxOps.h"
 #include "circt/Support/LLVM.h"
@@ -29,4 +29,4 @@ std::unique_ptr<mlir::Pass> createCalyxNativePass();
 
 } // namespace circt
 
-#endif // CIRCT_CONVERSION_CALYXNATIVE_CALYXNATIVE_H
+#endif // CIRCT_CONVERSION_CALYXNATIVE_H
