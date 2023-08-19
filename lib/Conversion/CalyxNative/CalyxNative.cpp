@@ -60,7 +60,10 @@ LogicalResult CalyxNativePass::runOnModule(ModuleOp root) {
   llvm::ErrorOr<std::string> exeMb = llvm::sys::findProgramByName(execName);
   // If cannot find the executable, then nothing to do, return.
   if (!exeMb) {
-    root.emitError("cannot find executable: '" + execName + "'");
+    root.emitError() << "cannot find the `calyx` executable in PATH. "
+                     << "Consider installing `calyx` using `cargo install "
+                        "calyx` or reading the instructions here: "
+                        "https://docs.calyxir.org/#compiler-installation";
     return failure();
   }
   StringRef calyxExe = exeMb.get();
