@@ -68,7 +68,7 @@ LogicalResult CalyxNativePass::runOnModule(ModuleOp root) {
   std::string errMsg;
   SmallString<32> nativeInputFileName;
   std::error_code errCode = llvm::sys::fs::getPotentiallyUniqueTempFileName(
-      "calyxNativeTemp", /*suffix=*/StringRef(""), nativeInputFileName);
+      "calyxNativeTemp", /*suffix=*/"", nativeInputFileName);
 
   if (std::error_code ok; errCode != ok) {
     root.emitError(
@@ -94,21 +94,20 @@ LogicalResult CalyxNativePass::runOnModule(ModuleOp root) {
   // Create a file for the native compiler to write the results into
   SmallString<32> nativeOutputFileName;
   errCode = llvm::sys::fs::getPotentiallyUniqueTempFileName(
-      "calyxNativeOutTemp", /*suffix=*/StringRef(""), nativeOutputFileName);
+      "calyxNativeOutTemp", /*suffix=*/"", nativeOutputFileName);
   if (std::error_code ok; errCode != ok) {
     root.emitError(
         "cannot generate a unique temporary file name to store output");
     return failure();
   }
 
-  std::optional<StringRef> redirects[] = {
-      /*stdin=*/std::nullopt,
-      /*stdout=*/StringRef(nativeOutputFileName),
-      /*stderr=*/std::nullopt};
+  std::optional<StringRef> redirects[] = {/*stdin=*/std::nullopt,
+                                          /*stdout=*/nativeOutputFileName,
+                                          /*stderr=*/std::nullopt};
 
-  auto args = llvm::ArrayRef<StringRef>(
-      {calyxExe, StringRef(nativeInputFileName), "-o",
-       StringRef(nativeOutputFileName), "-l", primitiveLib, "-b", "mlir"});
+  auto args = llvm::ArrayRef<StringRef>{
+      calyxExe, nativeInputFileName, "-o", nativeOutputFileName,
+      "-l",     primitiveLib,        "-b", "mlir"};
   int result = llvm::sys::ExecuteAndWait(calyxExe, args, /*Env=*/std::nullopt,
                                          /*Redirects=*/redirects,
                                          /*SecondsToWait=*/0, /*MemoryLimit=*/0,
