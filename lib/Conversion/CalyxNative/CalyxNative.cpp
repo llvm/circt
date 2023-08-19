@@ -7,7 +7,8 @@
 
 //===----------------------------------------------------------------------===//
 //
-// This is the main Calyx to HW Conversion Pass Implementation.
+// Calls out to the native, Rust-based Calyx compiler using the `calyx` binary
+// to run passes.
 //
 //===----------------------------------------------------------------------===//
 
@@ -33,72 +34,71 @@ namespace {
 class CalyxNativePass : public CalyxNativeBase<CalyxNativePass> {
 public:
   void runOnOperation() override;
+
+private:
+  LogicalResult runOnModule(ModuleOp root);
 };
 } // end anonymous namespace
 
 void CalyxNativePass::runOnOperation() {
-  ModuleOp root = getOperation();
+  ModuleOp mod = getOperation();
+  if (failed(runOnModule(mod)))
+    return signalPassFailure();
+}
 
+LogicalResult CalyxNativePass::runOnModule(ModuleOp root) {
   // User must specify location of the calyx primitive library.
-  if (primitiveLib == "") {
-    // XXX(rachitnigam): Probably a bad idea to hard code the name of the flag.
-    // Is there a better way?
+  if (primitiveLib.empty()) {
+    // XXX(rachitnigam): Probably a bad idea to hard code the name of the
+    // flag. Is there a better way?
     root.emitError("primitive library not specified. Please specify it using "
                    "--lower-using-calyx-native=\"primitives=<path>\"");
-    return;
+    return failure();
   }
 
   SmallString<32> execName = llvm::sys::path::filename("calyx");
-  auto exeMb = llvm::sys::findProgramByName(execName);
+  llvm::ErrorOr<std::string> exeMb = llvm::sys::findProgramByName(execName);
   // If cannot find the executable, then nothing to do, return.
   if (!exeMb) {
     root.emitError("cannot find executable: '" + execName + "'");
-    return;
+    return failure();
   }
-  StringRef generatorExe = exeMb.get();
-
-  SmallVector<std::string> generatorArgs;
-  // First argument should be the executable name.
-  generatorArgs.push_back(generatorExe.str());
-
-  SmallVector<StringRef> generatorArgStrRef;
-  for (const std::string &a : generatorArgs)
-    generatorArgStrRef.push_back(a);
+  StringRef calyxExe = exeMb.get();
 
   std::string errMsg;
   SmallString<32> nativeInputFileName;
-  auto errCode = llvm::sys::fs::getPotentiallyUniqueTempFileName(
-      "calyxNativeTemp", StringRef(""), nativeInputFileName);
+  std::error_code errCode = llvm::sys::fs::getPotentiallyUniqueTempFileName(
+      "calyxNativeTemp", /*suffix=*/StringRef(""), nativeInputFileName);
 
-  // Default error code is 0.
-  std::error_code ok;
-  if (errCode != ok) {
-    root.emitError("cannot generate a unique temporary file name");
-    return;
+  if (std::error_code ok; errCode != ok) {
+    root.emitError(
+        "cannot generate a unique temporary file for input to Calyx compiler");
+    return failure();
   }
 
   // Emit the current program into a file so the native compiler can operate
   // over it.
-  auto inputFile = mlir::openOutputFile(nativeInputFileName, &errMsg);
-  if (!inputFile) {
+  std::unique_ptr<llvm::ToolOutputFile> inputFile =
+      mlir::openOutputFile(nativeInputFileName, &errMsg);
+  if (inputFile == nullptr) {
     root.emitError(errMsg);
-    return;
+    return failure();
   }
 
   auto res = circt::calyx::exportCalyx(root, inputFile->os());
-  inputFile->os().flush();
   if (failed(res)) {
-    return;
+    return failure();
   }
+  inputFile->os().flush();
 
   // Create a file for the native compiler to write the results into
   SmallString<32> nativeOutputFileName;
   errCode = llvm::sys::fs::getPotentiallyUniqueTempFileName(
-      "calyxNativeOutTemp", StringRef(""), nativeOutputFileName);
-  if (errCode != ok) {
+      "calyxNativeOutTemp", /*suffix=*/StringRef(""), nativeOutputFileName);
+  if (std::error_code ok; errCode != ok) {
     root.emitError(
         "cannot generate a unique temporary file name to store output");
-    return;
+    return failure();
   }
 
   std::optional<StringRef> redirects[] = {
@@ -107,40 +107,41 @@ void CalyxNativePass::runOnOperation() {
       /*stderr=*/std::nullopt};
 
   auto args = llvm::ArrayRef<StringRef>(
-      {generatorExe, StringRef(nativeInputFileName), "-o",
+      {calyxExe, StringRef(nativeInputFileName), "-o",
        StringRef(nativeOutputFileName), "-l", primitiveLib, "-b", "mlir"});
-  int result = llvm::sys::ExecuteAndWait(
-      generatorExe, args, /*Env=*/std::nullopt,
-      /*Redirects=*/redirects,
-      /*SecondsToWait=*/0, /*MemoryLimit=*/0, &errMsg);
+  int result = llvm::sys::ExecuteAndWait(calyxExe, args, /*Env=*/std::nullopt,
+                                         /*Redirects=*/redirects,
+                                         /*SecondsToWait=*/0, /*MemoryLimit=*/0,
+                                         &errMsg);
 
   if (result != 0) {
     root.emitError() << errMsg;
-    return;
+    return failure();
   }
 
   // Parse the output buffer into a Calyx operation so that we can insert it
   // back into the program.
   auto bufferRead = llvm::MemoryBuffer::getFile(nativeInputFileName);
   if (!bufferRead || !*bufferRead) {
-    root.emitError("execution of '" + generatorExe +
+    root.emitError("execution of '" + calyxExe +
                    "' did not produce any output file named '" +
                    nativeInputFileName + "'");
-    return;
+    return failure();
   }
 
   // Load the output from the native compiler as a ModuleOp
   auto loadedMod =
       parseSourceFile<ModuleOp>(nativeOutputFileName.str(), root.getContext());
-  auto loadedBlock = loadedMod->getBody();
+  auto *loadedBlock = loadedMod->getBody();
 
   // XXX(rachitnigam): This is quite baroque. We insert the new block before the
   // previous one and then remove the old block. A better thing to do would be
   // to replace the moduleOp completely but I couldn't figure out how to do
   // that.
-  auto oldBlock = root.getBody();
+  auto *oldBlock = root.getBody();
   loadedBlock->moveBefore(oldBlock);
   oldBlock->erase();
+  return success();
 }
 
 std::unique_ptr<mlir::Pass> circt::createCalyxNativePass() {

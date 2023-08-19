@@ -241,11 +241,11 @@ def CalyxToHW : Pass<"lower-calyx-to-hw", "mlir::ModuleOp"> {
 //===----------------------------------------------------------------------===//
 // CalyxNative
 //===----------------------------------------------------------------------===//
-def CalyxNative : Pass<"lower-using-calyx-native", "mlir::ModuleOp"> {
-  let summary = "Compile Calyx using the native compiler";
+def CalyxNative : Pass<"calyx-native", "mlir::ModuleOp"> {
+  let summary = "Callout to the Calyx native compiler and run a pass pipeline";
   let description = [{
-    This pass calls out to the native, Rust-based Calyx compiler to compile a
-    Calyx program into a purely strucutral representation.
+    This pass calls out to the native, Rust-based Calyx compiler to run passes
+    with it and generate a new, valid, calyx dialect program.
   }];
   let constructor = "circt::createCalyxNativePass()";
   let dependentDialects = ["calyx::CalyxDialect"];
