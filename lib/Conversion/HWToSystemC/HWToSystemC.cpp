@@ -58,16 +58,7 @@ struct ConvertHWModule : public OpConversionPattern<HWModuleOp> {
     auto *outputOp = module.getBodyBlock()->getTerminator();
     scModule.setVisibility(module.getVisibility());
 
-    SmallVector<Attribute> portAttrs;
-    if (auto argAttrs = module.getAllArgAttrs())
-      portAttrs.append(argAttrs.begin(), argAttrs.end());
-    else
-      portAttrs.append(module.getNumInputs(), Attribute());
-    if (auto resultAttrs = module.getAllResultAttrs())
-      portAttrs.append(resultAttrs.begin(), resultAttrs.end());
-    else
-      portAttrs.append(module.getNumOutputs(), Attribute());
-
+    auto portAttrs = module.getAllPortAttrs();
     scModule.setAllArgAttrs(portAttrs);
 
     // Create a systemc.func operation inside the module after the ctor.
