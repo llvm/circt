@@ -87,7 +87,7 @@ def ClassFieldOp : OMClassFieldLike<"class.field",
   );
 
   let assemblyFormat = [{
-    $sym_name `,` $value `:` type($value) attr-dict
+    $sym_name `,` $value  attr-dict `:` type($value)
   }];
 }
 
@@ -109,7 +109,7 @@ def ClassExternFieldOp : OMClassFieldLike<"class.extern.field",
   );
 
   let assemblyFormat = [{
-    $sym_name `:` $type attr-dict
+    $sym_name attr-dict `:` $type
   }];
 }
 
@@ -133,8 +133,8 @@ def ObjectOp : OMOp<"object",
   ];
 
   let assemblyFormat = [{
-    $className `(` $actualParams `)` `:`
-      functional-type($actualParams, $result) attr-dict
+    $className `(` $actualParams `)`  attr-dict `:`
+      functional-type($actualParams, $result)
   }];
 }
 
@@ -150,7 +150,7 @@ def ObjectFieldOp : OMOp<"object.field",
   );
 
   let assemblyFormat = [{
-    $object `,` $fieldPath `:` functional-type($object, $result) attr-dict
+    $object `,` $fieldPath attr-dict `:` functional-type($object, $result)
   }];
 }
 
@@ -213,7 +213,7 @@ def TupleCreateOp : OMOp<"tuple_create", [Pure, InferTypeOpInterface]> {
   );
 
   let assemblyFormat = [{
-    $inputs `:` type($inputs) attr-dict
+    $inputs attr-dict `:` type($inputs)
   }];
 
   let extraClassDeclaration = [{
@@ -248,7 +248,7 @@ def TupleGetOp : OMOp<"tuple_get", [Pure, InferTypeOpInterface]> {
   );
 
   let assemblyFormat = [{
-    $input `[` $index `]` `:` type($input) attr-dict
+    $input `[` $index `]` attr-dict `:` type($input)
   }];
 
   let extraClassDeclaration = [{
