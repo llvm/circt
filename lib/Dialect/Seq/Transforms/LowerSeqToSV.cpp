@@ -543,6 +543,10 @@ FirRegLower::tryRestoringSubaccess(OpBuilder &builder, Value reg, Value term,
 
 void FirRegLower::createTree(OpBuilder &builder, Value reg, Value term,
                              Value next) {
+  llvm::errs() << "FirRegLower::createTree on:\n";
+  llvm::errs() << "  reg = " << reg << "\n";
+  llvm::errs() << "  term = " << term << "\n";
+  llvm::errs() << "  next = " << next << "\n";
 
   SmallVector<std::tuple<Block *, Value, Value, Value>> worklist;
   auto addToWorklist = [&](Value reg, Value term, Value next) {
@@ -557,7 +561,9 @@ void FirRegLower::createTree(OpBuilder &builder, Value reg, Value term,
   };
 
   SmallVector<Value, 8> opsToDelete;
-  addToWorklist(reg, term, next);
+  addToWorklist(
+      reg, term,
+      next); // TODO may not even want this one, could feed multiple registers
   while (!worklist.empty()) {
     OpBuilder::InsertionGuard guard(builder);
     Block *block;
@@ -569,6 +575,13 @@ void FirRegLower::createTree(OpBuilder &builder, Value reg, Value term,
 
     auto mux = next.getDefiningOp<comb::MuxOp>();
     if (mux && mux.getTwoState()) {
+      auto foo = mux.getTrueValue();
+      auto bar = mux.getFalseValue();
+      llvm::errs() << "Inlining " << mux << "\n";
+      llvm::errs() << "  True value = " << foo << "\n";
+      llvm::errs() << "  False value = " << bar << "\n";
+      llvm::errs() << "  Result = " << mux.getResult() << "\n";
+      llvm::errs() << "  reg = " << reg << "\n";
       addToIfBlock(
           builder, mux.getCond(),
           [&]() { addToWorklist(reg, term, mux.getTrueValue()); },
@@ -576,7 +589,7 @@ void FirRegLower::createTree(OpBuilder &builder, Value reg, Value term,
       continue;
     }
     // If the next value is an array creation, split the value into
-    // invidial elements and construct trees recursively.
+    // individual elements and construct trees recursively.
     if (auto array = next.getDefiningOp<hw::ArrayCreateOp>()) {
       // First, try restoring subaccess assignments.
       if (auto matchResultOpt =
