@@ -66,7 +66,7 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
   let extraClassDefinition = extraModuleClassDefinition # [{
 
     ModuleType $cppClass::getHWModuleType() {
-      return detail::fnToMod(getFunctionType(), getArgNames(), getResultNames());
+      return detail::fnToMod(getFunctionType(), getArgNames().getValue(), getResultNames().getValue());
     }
 
     ::circt::hw::InnerSymAttr $cppClass::getPortSymbolAttr(size_t portIndex) {

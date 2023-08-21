@@ -174,7 +174,7 @@ def MSFTModuleOp : MSFTModuleOpBase<"module",
   let extraClassDefinition = [{
 
     ::circt::hw::ModuleType $cppClass::getHWModuleType() {
-      return ::circt::hw::detail::fnToMod(getFunctionType(), getArgNames(), getResultNames());
+      return ::circt::hw::detail::fnToMod(getFunctionType(), getArgNames().getValue(), getResultNames().getValue());
     }
 
     circt::hw::InnerSymAttr $cppClass::getPortSymbolAttr(size_t portIndex) {
@@ -234,7 +234,7 @@ def MSFTModuleExternOp : MSFTOp<"module.extern",
 
   let extraClassDefinition = [{
     ::circt::hw::ModuleType $cppClass::getHWModuleType() {
-      return ::circt::hw::detail::fnToMod(getFunctionType(), getArgNames(), getResultNames());
+      return ::circt::hw::detail::fnToMod(getFunctionType(), getArgNames().getValue(), getResultNames().getValue());
     }
   }];
 }
