@@ -603,6 +603,30 @@ LogicalResult ModuleType::verify(function_ref<InFlightDiagnostic()> emitError,
   return success();
 }
 
+size_t ModuleType::getPortIdForInputId(size_t idx) {
+  for (auto [i, p] : llvm::enumerate(getPorts())) {
+    if (p.dir != ModulePort::Direction::Output) {
+      if (!idx)
+        return i;
+      --idx;
+    }
+  }
+  assert(0 && "Out of bounds input port id");
+  return ~0UL;
+}
+
+size_t ModuleType::getPortIdForOutputId(size_t idx) {
+  for (auto [i, p] : llvm::enumerate(getPorts())) {
+    if (p.dir == ModulePort::Direction::Output) {
+      if (!idx)
+        return i;
+      --idx;
+    }
+  }
+  assert(0 && "Out of bounds output port id");
+  return ~0UL;
+}
+
 size_t ModuleType::getNumInputs() {
   return std::count_if(getPorts().begin(), getPorts().end(), [](auto &p) {
     return p.dir != ModulePort::Direction::Output;
@@ -630,57 +654,33 @@ SmallVector<Type> ModuleType::getInputTypes() {
 
 SmallVector<Type> ModuleType::getOutputTypes() {
   SmallVector<Type> retval;
-  for (auto &p : getPorts()) {
-    if (p.dir == ModulePort::Direction::Output) {
+  for (auto &p : getPorts())
+    if (p.dir == ModulePort::Direction::Output)
       retval.push_back(p.type);
-    }
-  }
   return retval;
 }
 
 Type ModuleType::getInputType(size_t idx) {
-  for (auto &p : getPorts()) {
-    if (p.dir == ModulePort::Direction::Input ||
-        p.dir == ModulePort::Direction::InOut) {
-      if (!idx)
-        return p.type;
-      --idx;
-    }
-  }
-  // Tolerate Malformed IR for debug printing
-  return {};
+  return getPorts()[getPortIdForInputId(idx)].type;
 }
 
 Type ModuleType::getOutputType(size_t idx) {
-  for (auto &p : getPorts()) {
-    if (p.dir == ModulePort::Direction::Output) {
-      if (!idx)
-        return p.type;
-      --idx;
-    }
-  }
-  // Tolerate Malformed IR for debug printing
-  return {};
+  return getPorts()[getPortIdForOutputId(idx)].type;
 }
 
 SmallVector<StringAttr> ModuleType::getInputNames() {
   SmallVector<StringAttr> retval;
-  for (auto &p : getPorts()) {
-    if (p.dir == ModulePort::Direction::Input ||
-        p.dir == ModulePort::Direction::InOut) {
+  for (auto &p : getPorts())
+    if (p.dir != ModulePort::Direction::Output)
       retval.push_back(p.name);
-    }
-  }
   return retval;
 }
 
 SmallVector<StringAttr> ModuleType::getOutputNames() {
   SmallVector<StringAttr> retval;
-  for (auto &p : getPorts()) {
-    if (p.dir == ModulePort::Direction::Output) {
+  for (auto &p : getPorts())
+    if (p.dir == ModulePort::Direction::Output)
       retval.push_back(p.name);
-    }
-  }
   return retval;
 }
 
@@ -694,16 +694,7 @@ StringRef ModuleType::getName(size_t idx) {
 }
 
 StringAttr ModuleType::getInputNameAttr(size_t idx) {
-  for (auto &p : getPorts()) {
-    if (p.dir == ModulePort::Direction::Input ||
-        p.dir == ModulePort::Direction::InOut) {
-      if (!idx)
-        return p.name;
-      --idx;
-    }
-  }
-  // Tolerate Malformed IR for debug printing
-  return {};
+  return getPorts()[getPortIdForInputId(idx)].name;
 }
 
 StringRef ModuleType::getInputName(size_t idx) {
@@ -714,15 +705,7 @@ StringRef ModuleType::getInputName(size_t idx) {
 }
 
 StringAttr ModuleType::getOutputNameAttr(size_t idx) {
-  for (auto &p : getPorts()) {
-    if (p.dir == ModulePort::Direction::Output) {
-      if (!idx)
-        return p.name;
-      --idx;
-    }
-  }
-  // Tolerate Malformed IR for debug printing
-  return {};
+  return getPorts()[getPortIdForOutputId(idx)].name;
 }
 
 StringRef ModuleType::getOutputName(size_t idx) {
