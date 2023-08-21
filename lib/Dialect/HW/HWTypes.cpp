@@ -644,9 +644,10 @@ size_t ModuleType::getNumPorts() { return getPorts().size(); }
 SmallVector<Type> ModuleType::getInputTypes() {
   SmallVector<Type> retval;
   for (auto &p : getPorts()) {
-    if (p.dir == ModulePort::Direction::Input ||
-        p.dir == ModulePort::Direction::InOut) {
+    if (p.dir == ModulePort::Direction::Input)
       retval.push_back(p.type);
+    else if (p.dir == ModulePort::Direction::InOut) {
+      retval.push_back(hw::InOutType::get(p.type));
     }
   }
   return retval;
