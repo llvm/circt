@@ -179,3 +179,17 @@ hw.module @FirMem(%addr: i4, %clock: i1, %data: i42) -> (out: i42) {
   %9 = comb.xor %1, %2, %3, %4, %5, %6, %7, %8 : i42
   hw.output %9 : i42
 }
+
+// CHECK-LABEL: @FirRom
+hw.module @FirRom(%addr: i4, %clock: i1, %data: i42) -> (out: i42) {
+  %true = hw.constant true
+  %false = hw.constant false
+
+  // CHECK: [[MEM:%.+]] = seq.firrom
+  %0 = seq.firrom 0 : <12 x 42>
+
+  // CHECK-NEXT: seq.firrom.read_port [[MEM]][%addr], clock %clock :
+  %1 = seq.firrom.read_port %0[%addr], clock %clock enable %true : <12 x 42>
+
+  hw.output %1 : i42
+}

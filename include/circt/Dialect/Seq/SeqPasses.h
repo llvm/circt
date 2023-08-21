@@ -33,6 +33,7 @@ std::unique_ptr<mlir::Pass> createLowerSeqHLMemPass();
 std::unique_ptr<mlir::Pass>
 createExternalizeClockGatePass(const ExternalizeClockGateOptions &options = {});
 std::unique_ptr<mlir::Pass> createLowerFirMemPass();
+std::unique_ptr<mlir::Pass> createLowerFirRomPass();
 std::unique_ptr<mlir::Pass> createLowerSeqFIFOPass();
 
 /// Generate the code for registering passes.

@@ -873,6 +873,28 @@ LogicalResult FirMemReadWriteOp::canonicalize(FirMemReadWriteOp op,
 }
 
 //===----------------------------------------------------------------------===//
+// FirRomOp
+//===----------------------------------------------------------------------===//
+
+void FirRomOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  auto nameAttr = (*this)->getAttrOfType<StringAttr>("name");
+  if (!nameAttr.getValue().empty())
+    setNameFn(getResult(), nameAttr.getValue());
+}
+
+std::optional<size_t> FirRomOp::getTargetResultIndex() { return 0; }
+
+LogicalResult FirRomReadOp::canonicalize(FirRomReadOp op,
+                                         PatternRewriter &rewriter) {
+  // Remove the enable if it is constant true.
+  if (isConstAllOnes(op.getEnable())) {
+    rewriter.updateRootInPlace(op, [&] { op.getEnableMutable().erase(0); });
+    return success();
+  }
+  return failure();
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 

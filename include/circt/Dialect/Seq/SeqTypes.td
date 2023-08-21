@@ -79,3 +79,18 @@ def FirMemType : SeqType<"FirMem"> {
   );
   let assemblyFormat = "`<` $depth `x` $width (`,` `mask` $maskWidth^)? `>`";
 }
+
+def FirRomType : SeqType<"FirRom"> {
+  let summary = "A FIRRTL-flavored ROM";
+  let description = [{
+    The `!seq.firrom` type represents a FIRRTL-flavored ROM declared by a
+    `seq.firrom` operation. It captures the parameters of the ROM that are
+    relevant to the read ports, such as width and depth.
+  }];
+  let mnemonic = "firrom";
+  let parameters = (ins
+    "uint64_t":$depth,
+    "uint32_t":$width
+  );
+  let assemblyFormat = "`<` $depth `x` $width `>`";
+}
