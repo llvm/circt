@@ -1031,9 +1031,7 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     result = PathType::get(getContext());
     break;
   case FIRToken::kw_List:
-    if (requireFeature({3, 2, 0}, "Lists"))
-      return failure();
-    if (parseListType(result))
+    if (requireFeature({3, 2, 0}, "Lists") || parseListType(result))
       return failure();
     break;
   }
