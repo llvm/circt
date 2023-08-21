@@ -1340,6 +1340,43 @@ firrtl.circuit "MapOfHW" {
 }
 
 // -----
+
+// Reject list.create with mixed element types.
+firrtl.circuit "MixedList" {
+  firrtl.module @MixedList(
+      in %s: !firrtl.string,
+      // expected-note @below {{prior use here}}
+      in %int: !firrtl.integer
+      ) {
+    // expected-error @below {{use of value '%int' expects different type than prior uses: '!firrtl.string' vs '!firrtl.integer'}}
+    firrtl.list.create %s, %int : !firrtl.list<string>
+  }
+}
+
+// -----
+
+// Reject list.create with elements of wrong type compared to result type.
+firrtl.circuit "ListCreateWrongType" {
+  firrtl.module @ListCreateWrongType(
+      // expected-note @below {{prior use here}}
+      in %int: !firrtl.integer
+      ) {
+    // expected-error @below {{use of value '%int' expects different type than prior uses: '!firrtl.string' vs '!firrtl.integer'}}
+    firrtl.list.create %int : !firrtl.list<string>
+  }
+}
+
+// -----
+
+// Reject list.create that doesn't create a list.
+firrtl.circuit "ListCreateNotList" {
+  firrtl.module @ListCreateNotList() {
+    // expected-error @below {{invalid kind of type specified}}
+    firrtl.list.create : !firrtl.string
+  }
+}
+
+// -----
 // Issue 4174-- handle duplicate module names.
 
 firrtl.circuit "hi" {
