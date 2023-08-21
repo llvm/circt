@@ -1337,8 +1337,8 @@ LogicalResult HWModuleOp::verify() {
            << numInputs << " arguments to match module signature";
 
   // Verify that the block arguments match the op's attributes.
-  for (auto [arg, type, loc] :
-       llvm::zip(getArguments(), type.getInputs(), getArgLocs())) {
+  for (auto [arg, type, loc] : llvm::zip(getBodyBlock()->getArguments(),
+                                         type.getInputs(), getArgLocs())) {
     if (arg.getType() != type)
       return emitOpError("block argument types should match signature types");
     if (arg.getLoc() != loc.cast<LocationAttr>())
