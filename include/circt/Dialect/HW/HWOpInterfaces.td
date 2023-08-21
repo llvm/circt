@@ -96,12 +96,22 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
     }
 
     /// Return the set of names on input and inout ports
-    SmallVector<StringAttr> getInputNames() {
+    SmallVector<StringAttr> getInputNamesStr() {
+      return $_op.getHWModuleType().getInputNamesStr();
+    }
+
+    /// Return the set of names on output ports
+    SmallVector<StringAttr> getOutputNamesStr() {
+      return $_op.getHWModuleType().getOutputNamesStr();
+    }
+    
+    /// Return the set of names on input and inout ports
+    SmallVector<Attribute> getInputNames() {
       return $_op.getHWModuleType().getInputNames();
     }
 
     /// Return the set of names on output ports
-    SmallVector<StringAttr> getOutputNames() {
+    SmallVector<Attribute> getOutputNames() {
       return $_op.getHWModuleType().getOutputNames();
     }
     

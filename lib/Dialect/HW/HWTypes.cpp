@@ -668,7 +668,7 @@ Type ModuleType::getOutputType(size_t idx) {
   return getPorts()[getPortIdForOutputId(idx)].type;
 }
 
-SmallVector<StringAttr> ModuleType::getInputNames() {
+SmallVector<StringAttr> ModuleType::getInputNamesStr() {
   SmallVector<StringAttr> retval;
   for (auto &p : getPorts())
     if (p.dir != ModulePort::Direction::Output)
@@ -676,8 +676,24 @@ SmallVector<StringAttr> ModuleType::getInputNames() {
   return retval;
 }
 
-SmallVector<StringAttr> ModuleType::getOutputNames() {
+SmallVector<StringAttr> ModuleType::getOutputNamesStr() {
   SmallVector<StringAttr> retval;
+  for (auto &p : getPorts())
+    if (p.dir == ModulePort::Direction::Output)
+      retval.push_back(p.name);
+  return retval;
+}
+
+SmallVector<Attribute> ModuleType::getInputNames() {
+  SmallVector<Attribute> retval;
+  for (auto &p : getPorts())
+    if (p.dir != ModulePort::Direction::Output)
+      retval.push_back(p.name);
+  return retval;
+}
+
+SmallVector<Attribute> ModuleType::getOutputNames() {
+  SmallVector<Attribute> retval;
   for (auto &p : getPorts())
     if (p.dir == ModulePort::Direction::Output)
       retval.push_back(p.name);
