@@ -54,8 +54,8 @@ static LogicalResult
 removeTransitionsToState(MachineOp machine, ArrayRef<StateOp> unreachableStates,
                          StateOp unreachableState) {
   auto stateUses = SymbolTable::getSymbolUses(unreachableState, machine);
-  if (stateUses.hasValue()) {
-    for (auto use : stateUses.getValue()) {
+  if (stateUses.has_value()) {
+    for (auto use : *stateUses) {
       Operation *user = use.getUser();
       auto transition = dyn_cast<TransitionOp>(user);
       if (!transition)
