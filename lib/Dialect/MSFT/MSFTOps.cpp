@@ -760,6 +760,26 @@ void MSFTModuleOp::removeAllPortAttrs() {
   setResAttrsAttr(nullptr);
 }
 
+void MSFTModuleOp::setHWModuleType(hw::ModuleType type) {
+  auto argAttrs = getAllInputAttrs();
+  auto resAttrs = getAllOutputAttrs();
+  setFunctionTypeAttr(TypeAttr::get(type.getFuncType()));
+  unsigned newNumArgs = getNumInputs();
+  unsigned newNumResults = getNumOutputs();
+
+  auto emptyDict = DictionaryAttr::get(getContext());
+  argAttrs.resize(newNumArgs, emptyDict);
+  resAttrs.resize(newNumResults, emptyDict);
+
+  SmallVector<Attribute> attrs;
+  attrs.append(argAttrs.begin(), argAttrs.end());
+  attrs.append(resAttrs.begin(), resAttrs.end());
+
+  if (attrs.empty())
+    return removeAllPortAttrs();
+  setAllPortAttrs(attrs);
+}
+
 //===----------------------------------------------------------------------===//
 // MSFTModuleExternOp
 //===----------------------------------------------------------------------===//
@@ -1084,6 +1104,26 @@ void MSFTModuleExternOp::setAllPortAttrs(ArrayRef<Attribute> attrs) {
 void MSFTModuleExternOp::removeAllPortAttrs() {
   setArgAttrsAttr(nullptr);
   setResAttrsAttr(nullptr);
+}
+
+void MSFTModuleExternOp::setHWModuleType(hw::ModuleType type) {
+  auto argAttrs = getAllInputAttrs();
+  auto resAttrs = getAllOutputAttrs();
+  setFunctionTypeAttr(TypeAttr::get(type.getFuncType()));
+  unsigned newNumArgs = getNumInputs();
+  unsigned newNumResults = getNumOutputs();
+
+  auto emptyDict = DictionaryAttr::get(getContext());
+  argAttrs.resize(newNumArgs, emptyDict);
+  resAttrs.resize(newNumResults, emptyDict);
+
+  SmallVector<Attribute> attrs;
+  attrs.append(argAttrs.begin(), argAttrs.end());
+  attrs.append(resAttrs.begin(), resAttrs.end());
+
+  if (attrs.empty())
+    return removeAllPortAttrs();
+  setAllPortAttrs(attrs);
 }
 
 //===----------------------------------------------------------------------===//

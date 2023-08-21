@@ -63,6 +63,9 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
     InterfaceMethod<"Set the port Locations",
     "void", "setAllPortLocs", (ins "ArrayRef<Location>":$locs)>,
 
+    InterfaceMethod<"Set the module type (and port names)",
+    "void", "setHWModuleType", (ins "::circt::hw::ModuleType":$type)>,
+
   ];
 
   let extraSharedClassDeclaration = [{

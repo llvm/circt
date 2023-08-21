@@ -1536,6 +1536,43 @@ void HWModuleGeneratedOp::removeAllPortAttrs() {
   return ::removeAllPortAttrs(*this);
 }
 
+template <typename ModTy>
+static void setHWModuleType(ModTy &mod, ModuleType type) {
+  auto argAttrs = mod.getAllInputAttrs();
+  auto resAttrs = mod.getAllOutputAttrs();
+  mod.setFunctionTypeAttr(TypeAttr::get(type.getFuncType()));
+  unsigned newNumArgs = type.getNumInputs();
+  unsigned newNumResults = type.getNumOutputs();
+
+  mod.setArgNamesAttr(ArrayAttr::get(mod.getContext(), type.getInputNames()));
+  mod.setResultNamesAttr(
+      ArrayAttr::get(mod.getContext(), type.getOutputNames()));
+
+  auto emptyDict = DictionaryAttr::get(mod.getContext());
+  argAttrs.resize(newNumArgs, emptyDict);
+  resAttrs.resize(newNumResults, emptyDict);
+
+  SmallVector<Attribute> attrs;
+  attrs.append(argAttrs.begin(), argAttrs.end());
+  attrs.append(resAttrs.begin(), resAttrs.end());
+
+  if (attrs.empty())
+    return mod.removeAllPortAttrs();
+  mod.setAllPortAttrs(attrs);
+}
+
+void HWModuleOp::setHWModuleType(ModuleType type) {
+  return ::setHWModuleType(*this, type);
+}
+
+void HWModuleExternOp::setHWModuleType(ModuleType type) {
+  return ::setHWModuleType(*this, type);
+}
+
+void HWModuleGeneratedOp::setHWModuleType(ModuleType type) {
+  return ::setHWModuleType(*this, type);
+}
+
 /// Lookup the generator for the symbol.  This returns null on
 /// invalid IR.
 Operation *HWModuleGeneratedOp::getGeneratorKindOp() {
