@@ -453,3 +453,17 @@ firrtl.circuit "Test" {
     firrtl.strictconnect %out, %blah_out : !firrtl.uint<1>
   }
 }
+
+// -----
+// Test that a live use of a forceable declaration keeps it alive.
+// https://github.com/llvm/circt/issues/5898
+
+// CHECK-LABEL: circuit "Issue5898"
+firrtl.circuit "Issue5898" {
+  firrtl.module @Issue5898(in %x: !firrtl.uint<5>, out %p: !firrtl.rwprobe<uint<5>>) {
+    // CHECK: connect
+    %w, %w_ref = firrtl.wire forceable : !firrtl.uint<5>, !firrtl.rwprobe<uint<5>>
+    firrtl.strictconnect %w, %x : !firrtl.uint<5>
+    firrtl.ref.define %p, %w_ref : !firrtl.rwprobe<uint<5>>
+  }
+}
