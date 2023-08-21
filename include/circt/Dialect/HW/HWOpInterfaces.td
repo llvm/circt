@@ -39,11 +39,20 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
     InterfaceMethod<"Get the module type",
     "::circt::hw::ModuleType", "getHWModuleType", (ins)>,
 
+    InterfaceMethod<"Set the module type",
+    "void", "setHWModuleType", (ins "::circt::hw::ModuleType":$type)>,
+
+    InterfaceMethod<"Set the module type, direct, no fixup.",
+    "void", "setHWModuleTypeAttr", (ins "::mlir::TypeAttr":$type)>,
+
     InterfaceMethod<"Get the port Attributes",
     "SmallVector<Attribute>", "getAllPortAttrs", (ins)>,
 
     InterfaceMethod<"Set the port Attributes",
     "void", "setAllPortAttrs", (ins "ArrayRef<Attribute>":$attrs)>,
+
+    InterfaceMethod<"Remove the port Attributes",
+    "void", "removeAllPortAttrs", (ins)>,
 
     InterfaceMethod<"Get the port Locations",
     "SmallVector<Location>", "getAllPortLocs", (ins)>,

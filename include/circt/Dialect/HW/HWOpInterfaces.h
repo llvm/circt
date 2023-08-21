@@ -22,6 +22,16 @@
 
 namespace circt {
 namespace hw {
+  class HWModuleLike;
+  
+namespace hwmodulelike_impl {
+void setModuleType(HWModuleLike op,
+                                              Type newType);
+}
+
+void populateHWModuleLikeTypeConversionPattern(StringRef moduleLikeOpName,
+                                               RewritePatternSet &patterns,
+                                               TypeConverter &converter);
 
 /// This holds the name, type, direction of a module's ports
 struct PortInfo : public ModulePort {

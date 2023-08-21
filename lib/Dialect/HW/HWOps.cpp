@@ -1517,6 +1517,38 @@ void HWModuleGeneratedOp::setAllPortAttrs(ArrayRef<Attribute> attrs) {
   return ::setAllPortAttrs(*this, attrs);
 }
 
+template <typename ModTy>
+static void removeAllPortAttrs(ModTy &mod) {
+  mod.setArgAttrsAttr(nullptr);
+  mod.setResAttrsAttr(nullptr);
+}
+
+void HWModuleOp::removeAllPortAttrs() {
+  return ::removeAllPortAttrs(*this);
+}
+
+void HWModuleExternOp::removeAllPortAttrs() {
+  return ::removeAllPortAttrs(*this);
+}
+
+void HWModuleGeneratedOp::removeAllPortAttrs() {
+  return ::removeAllPortAttrs(*this);
+}
+
+
+void HWModuleOp::setHWModuleTypeAttr(TypeAttr attr) {
+  abort();
+}
+
+void HWModuleExternOp::setHWModuleTypeAttr(TypeAttr attr) {
+  abort();
+}
+
+void HWModuleGeneratedOp::setHWModuleTypeAttr(TypeAttr attr) {
+  abort();
+}
+
+
 /// Lookup the generator for the symbol.  This returns null on
 /// invalid IR.
 Operation *HWModuleGeneratedOp::getGeneratorKindOp() {

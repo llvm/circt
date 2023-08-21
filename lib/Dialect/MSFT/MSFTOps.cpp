@@ -750,6 +750,11 @@ void MSFTModuleOp::setAllPortAttrs(ArrayRef<Attribute> attrs) {
   setResAttrsAttr(ArrayAttr::get(getContext(), resAttrs));
 }
 
+void MSFTModuleOp::removeAllPortAttrs() {
+  setArgAttrsAttr(nullptr);
+  setResAttrsAttr(nullptr);
+}
+
 //===----------------------------------------------------------------------===//
 // MSFTModuleExternOp
 //===----------------------------------------------------------------------===//
@@ -1063,6 +1068,11 @@ void MSFTModuleExternOp::setAllPortAttrs(ArrayRef<Attribute> attrs) {
   SmallVector<Attribute> resAttrs(attrs.begin() + numInputs, attrs.end());
   setArgAttrsAttr(ArrayAttr::get(getContext(), argAttrs));
   setResAttrsAttr(ArrayAttr::get(getContext(), resAttrs));
+}
+
+void MSFTModuleExternOp::removeAllPortAttrs() {
+  setArgAttrsAttr(nullptr);
+  setResAttrsAttr(nullptr);
 }
 
 //===----------------------------------------------------------------------===//
