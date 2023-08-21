@@ -1734,3 +1734,33 @@ circuit BasicProps :
     object o of SimpleClass
     ; TODO: This test needs to be fixed up once flow-checking for objects is implemented correctly.
     propassign b, o.b
+
+  ; CHECK-LABEL: module private @List
+  module List :
+    ; CHECK-SAME: out %strings: !firrtl.list<string>
+    ; CHECK-SAME: out %objs: !firrtl.list<class<@SimpleClass({{.*}})>>
+    ; CHECK-SAME: out %nested: !firrtl.list<list<string>>
+    output strings : List<String>
+    output objs : List<Inst<SimpleClass>>
+    output nested : List<List<String>>
+
+    ; CHECK-NEXT: %[[HELLO:.+]] = firrtl.string "hello"
+    ; CHECK-NEXT: %[[WORLD:.+]] = firrtl.string "world"
+    ; CHECK-NEXT: %[[STRINGS:.+]] = firrtl.list.create %[[HELLO]], %[[WORLD]] : !firrtl.list<string>
+    ; CHECK-NEXT: firrtl.propassign %strings, %[[STRINGS]] : !firrtl.list<string>
+    propassign strings, List<String>(String("hello"), String("world"))
+
+    ; CHECK-NEXT: %[[OBJ:.+]] = firrtl.object
+    ; CHECK-NEXT: %[[OBJS:.+]] = firrtl.list.create %[[OBJ]], %[[OBJ]] : !firrtl.list<class<@SimpleClass({{.*}})>>
+    ; CHECK-NEXT: firrtl.propassign %objs, %[[OBJS]] : !firrtl.list<class
+    object obj of SimpleClass
+    propassign objs, List<Inst<SimpleClass>>(obj, obj)
+
+    ; CHECK-NEXT: %[[EMPTY1:.+]] = firrtl.list.create : !firrtl.list<string>
+    ; CHECK-NEXT: %[[TEST:.+]] = firrtl.string "test"
+    ; CHECK-NEXT: %[[TESTLIST:.+]] = firrtl.list.create %[[TEST]] : !firrtl.list<string>
+    ; CHECK-NEXT: %[[EMPTY2:.+]] = firrtl.list.create : !firrtl.list<string>
+    ; CHECK-NEXT: %[[NESTED:.+]] = firrtl.list.create %[[EMPTY1]], %[[TESTLIST]], %[[EMPTY2]] : !firrtl.list<list<string>>
+    ; CHECK-NEXT: firrtl.propassign %nested, %[[NESTED]]
+    propassign nested, List<List<String>>(List<String>(), List<String>(String("test")), List<String>())
+
