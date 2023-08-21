@@ -56,6 +56,18 @@ static Value moveNameHint(OpResult old, Value passthrough) {
   return passthrough;
 }
 
+/// Return constant op with extracted from the given constant. Return high-order
+/// bits if `isHigh` is true.
+template <bool isHigh>
+static Value extractConst(PatternRewriter &builder, Location loc, Type destType,
+                          const APSInt &constant) {
+  auto width = type_cast<IntType>(destType).getWidthOrSentinel();
+  APInt result =
+      isHigh ? constant.extractBits(width, constant.getBitWidth() - width)
+             : constant.extractBits(width, 0);
+  return builder.create<ConstantOp>(loc, APSInt(result));
+}
+
 // Declarative canonicalization patterns
 namespace circt {
 namespace firrtl {
@@ -589,7 +601,8 @@ void AndPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
   results
       .insert<patterns::extendAnd, patterns::moveConstAnd, patterns::AndOfZero,
               patterns::AndOfAllOne, patterns::AndOfSelf, patterns::AndOfPad,
-              patterns::AndOfAsSIntL, patterns::AndOfAsSIntR>(context);
+              patterns::AndOfAsSIntL, patterns::AndOfAsSIntR,
+              patterns::AndPrimOpOfCatAndConst>(context);
 }
 
 OpFoldResult OrPrimOp::fold(FoldAdaptor adaptor) {
@@ -627,8 +640,8 @@ OpFoldResult OrPrimOp::fold(FoldAdaptor adaptor) {
 void OrPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                            MLIRContext *context) {
   results.insert<patterns::extendOr, patterns::moveConstOr, patterns::OrOfZero,
-                 patterns::OrOfAllOne, patterns::OrOfSelf, patterns::OrOfPad>(
-      context);
+                 patterns::OrOfAllOne, patterns::OrOfSelf, patterns::OrOfPad,
+                 patterns::OrPrimOpOfCatAndConst>(context);
 }
 
 OpFoldResult XorPrimOp::fold(FoldAdaptor adaptor) {
@@ -657,8 +670,8 @@ OpFoldResult XorPrimOp::fold(FoldAdaptor adaptor) {
 void XorPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
   results.insert<patterns::extendXor, patterns::moveConstXor,
-                 patterns::XorOfZero, patterns::XorOfSelf, patterns::XorOfPad>(
-      context);
+                 patterns::XorOfZero, patterns::XorOfSelf, patterns::XorOfPad,
+                 patterns::XorPrimOpOfCatAndConst>(context);
 }
 
 void LEQPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,

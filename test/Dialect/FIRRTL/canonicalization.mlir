@@ -3154,4 +3154,29 @@ firrtl.module @HasBeenReset(in %clock: !firrtl.clock, in %reset1: !firrtl.uint<1
   %constClockR1 = firrtl.node sym @constClockR1 %c5 : !firrtl.uint<1>
 }
 
+firrtl.module @BitwiseOfCatAndConst(in %in1_0: !firrtl.uint<1>, in %in1_1: !firrtl.uint<1>, in %in1_2: !firrtl.uint<1>,
+                                    in %in2_0: !firrtl.uint<2>, in %in2_1: !firrtl.uint<2>, in %in2_2: !firrtl.uint<2>,
+                                    out %b_0: !firrtl.uint<3>, out %b_1: !firrtl.uint<3>, out %b_2: !firrtl.uint<3>) {
+  %c4_ui3 = firrtl.constant 4 : !firrtl.uint<3>
+
+  // CHECK:      %[[RESULT:.+]] = firrtl.cat %in1_0, %c0_ui2 : (!firrtl.uint<1>, !firrtl.uint<2>) -> !firrtl.uint<3>
+  // CHECK-NEXT: firrtl.strictconnect %b_0, %[[RESULT]] : !firrtl.uint<3>
+  %0 = firrtl.cat %in1_0, %in2_0 : (!firrtl.uint<1>, !firrtl.uint<2>) -> !firrtl.uint<3>
+  %1 = firrtl.and %0, %c4_ui3 : (!firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<3>
+  firrtl.strictconnect %b_0, %1 : !firrtl.uint<3>
+
+  // CHECK:      %[[RESULT:.+]] = firrtl.cat %c1_ui1, %in2_1 : (!firrtl.uint<1>, !firrtl.uint<2>) -> !firrtl.uint<3>
+  // CHECK-NEXT: firrtl.strictconnect %b_1, %[[RESULT]] : !firrtl.uint<3>
+  %2 = firrtl.cat %in1_1, %in2_1 : (!firrtl.uint<1>, !firrtl.uint<2>) -> !firrtl.uint<3>
+  %3 = firrtl.or %2, %c4_ui3 : (!firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<3>
+  firrtl.strictconnect %b_1, %3 : !firrtl.uint<3>
+
+  // CHECK-NEXT: %[[NOT:.+]] = firrtl.xor %in1_2, %c1_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  // CHECK-NEXT: %[[RESULT:.+]] = firrtl.cat %[[NOT]], %in2_2 : (!firrtl.uint<1>, !firrtl.uint<2>) -> !firrtl.uint<3>
+  // CHECK-NEXT: firrtl.strictconnect %b_2, %[[RESULT]] : !firrtl.uint<3>
+  %4 = firrtl.cat %in1_2, %in2_2 : (!firrtl.uint<1>, !firrtl.uint<2>) -> !firrtl.uint<3>
+  %5 = firrtl.xor %4, %c4_ui3 : (!firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<3>
+  firrtl.strictconnect %b_2, %5 : !firrtl.uint<3>
+}
+
 }
