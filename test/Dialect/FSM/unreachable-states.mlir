@@ -5,7 +5,7 @@
 fsm.machine @foo(%arg0: i1) -> i1 attributes {initialState = "IDLE", stateType = i1} {
   %cnt = fsm.variable "cnt" {initValue = 0 : i16} : i16
 
-  fsm.state "IDLE" output  {
+  fsm.state @IDLE output  {
     fsm.output %arg0 : i1
   } transitions  {
     fsm.transition @B guard  {
@@ -16,18 +16,18 @@ fsm.machine @foo(%arg0: i1) -> i1 attributes {initialState = "IDLE", stateType =
     }
   }
 
-  // CHECK-NOT: fsm.state "A"
-  fsm.state "A" output  {
+  // CHECK-NOT: fsm.state @A
+  fsm.state @A output  {
     fsm.output %arg0 : i1
   } transitions  {}
 
-  // CHECK: fsm.state "B"
-  fsm.state "B" output  {
+  // CHECK: fsm.state @B
+  fsm.state @B output  {
     fsm.output %arg0 : i1
   } transitions  {}
 
-  // CHECK-NOT: fsm.state "C"
-  fsm.state "C" output  {
+  // CHECK-NOT: fsm.state @C
+  fsm.state @C output  {
     fsm.output %arg0 : i1
   } transitions  {}
 }
@@ -39,7 +39,7 @@ fsm.machine @foo(%arg0: i1) -> i1 attributes {initialState = "IDLE", stateType =
 fsm.machine @foo(%arg0: i1) -> i1 attributes {initialState = "IDLE", stateType = i1} {
   %cnt = fsm.variable "cnt" {initValue = 0 : i16} : i16
 
-  fsm.state "IDLE" output  {
+  fsm.state @IDLE output  {
     fsm.output %arg0 : i1
   } transitions  {
     fsm.transition @A guard  {
@@ -50,18 +50,18 @@ fsm.machine @foo(%arg0: i1) -> i1 attributes {initialState = "IDLE", stateType =
     }
   }
 
-  // CHECK: fsm.state "A"
-  fsm.state "A" output  {
+  // CHECK: fsm.state @A
+  fsm.state @A output  {
     fsm.output %arg0 : i1
   } transitions  {}
 
-  // CHECK-NOT: fsm.state "B"
-  fsm.state "B" output  {
+  // CHECK-NOT: fsm.state @B
+  fsm.state @A output  {
     fsm.output %arg0 : i1
   } transitions  { fsm.transition @C }
 
-  // CHECK-NOT: fsm.state "C"
-  fsm.state "C" output  {
+  // CHECK-NOT: fsm.state @C
+  fsm.state @C output  {
     fsm.output %arg0 : i1
   } transitions  { fsm.transition @B }
 }
