@@ -23,6 +23,7 @@ namespace calyx {
 
 std::unique_ptr<mlir::Pass> createCompileControlPass();
 std::unique_ptr<mlir::Pass> createGoInsertionPass();
+std::unique_ptr<mlir::Pass> createRemoveCombGroupsPass();
 std::unique_ptr<mlir::Pass> createRemoveGroupsPass();
 std::unique_ptr<mlir::Pass> createClkInsertionPass();
 std::unique_ptr<mlir::Pass> createResetInsertionPass();

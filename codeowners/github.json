@@ -1,6 +1,0 @@
-{
-  "name": "Add code owner to any github config change",
-  "includes": [".github/**"],
-  "action": "review",
-  "users": ["teqdruid"]
-}

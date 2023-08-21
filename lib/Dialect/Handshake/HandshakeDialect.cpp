@@ -39,7 +39,6 @@ void HandshakeDialect::initialize() {
 // Provide implementations for the enums, attributes and interfaces that we use.
 #define GET_ATTRDEF_CLASSES
 #include "circt/Dialect/Handshake/HandshakeAttributes.cpp.inc"
-#include "circt/Dialect/Handshake/HandshakeAttrs.cpp.inc"
 #include "circt/Dialect/Handshake/HandshakeDialect.cpp.inc"
 #include "circt/Dialect/Handshake/HandshakeEnums.cpp.inc"
 #include "circt/Dialect/Handshake/HandshakeInterfaces.cpp.inc"

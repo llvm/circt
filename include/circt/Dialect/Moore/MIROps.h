@@ -21,6 +21,5 @@
 #include "circt/Dialect/Moore/MooreEnums.h.inc"
 // Clang format shouldn't reorder these headers.
 #include "circt/Dialect/Moore/Moore.h.inc"
-#include "circt/Dialect/Moore/MooreStructs.h.inc"
 
 #endif // CIRCT_DIALECT_MOORE_MIROPS_H

@@ -1,4 +1,4 @@
-// RUN: circt-opt -pass-pipeline='firrtl.circuit(firrtl-remove-unused-ports)' %s -split-input-file | FileCheck %s
+// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-remove-unused-ports))' %s -split-input-file | FileCheck %s
 firrtl.circuit "Top"   {
   // CHECK-LABEL: firrtl.module @Top(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>,
   // CHECK-SAME :                    out %d_unused: !firrtl.uint<1>, out %d_invalid: !firrtl.uint<1>, out %d_constant: !firrtl.uint<1>)
@@ -48,9 +48,9 @@ firrtl.circuit "Top"   {
   }
 
   // Make sure that %a, %b and %c are not erased because they have an annotation or a symbol.
-  // CHECK-LABEL: firrtl.module private @Foo(in %a: !firrtl.uint<1> sym @dntSym, in %b: !firrtl.uint<1> [{a = "a"}], out %c: !firrtl.uint<1> sym @dntSym)
-  firrtl.module private @Foo(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>) attributes {
-    portAnnotations = [[], [{a = "a"}], []], portSyms = ["dntSym", "", "dntSym"]}
+  // CHECK-LABEL: firrtl.module private @Foo(in %a: !firrtl.uint<1> sym @dntSym, in %b: !firrtl.uint<1> [{a = "a"}], out %c: !firrtl.uint<1> sym @dntSym2)
+  firrtl.module private @Foo(in %a: !firrtl.uint<1> sym @dntSym, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1> sym @dntSym2) attributes {
+    portAnnotations = [[], [{a = "a"}], []]}
   {
     // CHECK: firrtl.connect %c, %{{invalid_ui1.*}}
     %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
@@ -119,9 +119,9 @@ firrtl.circuit "Top"   {
   }
 
   // Make sure that %a, %b and %c are not erased because they have an annotation or a symbol.
-  // CHECK-LABEL: firrtl.module private @Foo(in %a: !firrtl.uint<1> sym @dntSym, in %b: !firrtl.uint<1> [{a = "a"}], out %c: !firrtl.uint<1> sym @dntSym)
-  firrtl.module private @Foo(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>) attributes {
-    portAnnotations = [[], [{a = "a"}], []], portSyms = ["dntSym", "", "dntSym"]}
+  // CHECK-LABEL: firrtl.module private @Foo(in %a: !firrtl.uint<1> sym @dntSym, in %b: !firrtl.uint<1> [{a = "a"}], out %c: !firrtl.uint<1> sym @dntSym2)
+  firrtl.module private @Foo(in %a: !firrtl.uint<1> sym @dntSym, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1> sym @dntSym2) attributes {
+    portAnnotations = [[], [{a = "a"}], []]}
   {
     // CHECK: firrtl.strictconnect %c, %{{invalid_ui1.*}}
     %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>

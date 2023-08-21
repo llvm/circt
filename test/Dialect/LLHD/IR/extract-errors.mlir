@@ -28,7 +28,7 @@ func.func @illegal_result_array_too_big(%sig : !llhd.sig<!hw.array<3xi32>>, %ind
 // -----
 
 func.func @illegal_sig_to_int(%s : !llhd.sig<i32>, %ind: i5) {
-  // expected-error @+1 {{'llhd.sig.extract' op result #0 must be LLHD sig type of an integer bitvector of one or more bits values, but got 'i10'}}
+  // expected-error @+1 {{'llhd.sig.extract' op result #0 must be LLHD sig type of a signless integer bitvector values, but got 'i10'}}
   %0 = llhd.sig.extract %s from %ind : (!llhd.sig<i32>) -> i10
 
   return

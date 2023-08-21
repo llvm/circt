@@ -18,7 +18,7 @@ jobs:
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
       # time.
       - name: Get CIRCT
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           fetch-depth: 2
           submodules: "true"
@@ -42,14 +42,15 @@ jobs:
             -DLLVM_ENABLE_BINDINGS=OFF \
             -DLLVM_ENABLE_ASSERTIONS=ON \
             -DLLVM_EXTERNAL_PROJECTS=circt \
-            -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=$PWD/..
+            -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=$PWD/.. \
+            -DLLVM_LIT_ARGS="-v"
 
       - name: Build current LLVM commit
         id: build-current-llvm-commit
         run: |
           cd llvm
-          echo "::set-output name=sha::$(git rev-parse HEAD)"
-          cmake --build ../build --config Debug --target check-circt -- -j$(nproc)
+          echo "sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+          cmake --build ../build --config Debug --target check-circt --target check-circt-unit -- -j$(nproc)
 
       - name: Build latest LLVM commit
         id: build-latest-llvm-commit
@@ -58,15 +59,15 @@ jobs:
           cd llvm
           git fetch origin main
           git checkout --detach origin/main
-          echo "::set-output name=sha::$(git rev-parse HEAD)"
-          cmake --build ../build --config Debug --target check-circt -- -j$(nproc)
+          echo "sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+          cmake --build ../build --config Debug --target check-circt --target check-circt-unit -- -j$(nproc)
 
       - name: Bisect commits
         if: steps.build-latest-llvm-commit.outcome != 'success'
         run: |
           cd llvm
           git bisect start ${{ steps.build-latest-llvm-commit.outputs.sha }} ${{ steps.build-current-llvm-commit.outputs.sha }} -- mlir llvm
-          git bisect run cmake --build ../build --config Debug --target check-circt -- -j$(nproc)
+          git bisect run cmake --build ../build --config Debug --target check-circt --target check-circt-unit -- -j$(nproc)
 
       # Summarize Results (re-run tests to make the log easier to parse)
       - name: Summarize Results
@@ -76,6 +77,6 @@ jobs:
           git bisect log
           FIRST_BAD_COMMIT=$(git bisect log | sed -n 's/# first bad commit: \[\([0-9a-f]*\)\].*/\1/p')
           git checkout $FIRST_BAD_COMMIT
-          cmake --build ../build --config Debug --target check-circt -- -j$(nproc)
+          cmake --build ../build --config Debug --target check-circt --target check-circt-unit -- -j$(nproc)
 
   # --- end of track-llvm-changes job.

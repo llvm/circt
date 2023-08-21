@@ -48,7 +48,7 @@ class SmallerOrEqualResultTypeWidthConstraint<string result, string input>
 //===----------------------------------------------------------------------===//
 
 def LLHD_SigExtractOp : LLHD_Op<"sig.extract",
-    [NoSideEffect,
+    [Pure,
      SmallerOrEqualResultTypeWidthConstraint<"result", "input">,
      SigPtrIndexBitWidthConstraint<"lowBit", "input">]> {
 
@@ -68,14 +68,14 @@ def LLHD_SigExtractOp : LLHD_Op<"sig.extract",
   }];
 
   let extraClassDeclaration = [{
-    unsigned resultWidth()  { return getLLHDTypeWidth(result().getType()); }
-    unsigned inputWidth() { return getLLHDTypeWidth(input().getType()); }
+    unsigned getResultWidth()  { return getLLHDTypeWidth(getResult().getType()); }
+    unsigned getInputWidth() { return getLLHDTypeWidth(getInput().getType()); }
   }];
   let hasFolder = true;
 }
 
 def LLHD_PtrExtractOp : LLHD_Op<"ptr.extract",
-    [NoSideEffect,
+    [Pure,
      SmallerOrEqualResultTypeWidthConstraint<"result", "input">,
      SigPtrIndexBitWidthConstraint<"lowBit", "input">]> {
 
@@ -95,8 +95,8 @@ def LLHD_PtrExtractOp : LLHD_Op<"ptr.extract",
   }];
 
   let extraClassDeclaration = [{
-    unsigned resultWidth()  { return getLLHDTypeWidth(result().getType()); }
-    unsigned inputWidth() { return getLLHDTypeWidth(input().getType()); }
+    unsigned getResultWidth()  { return getLLHDTypeWidth(getResult().getType()); }
+    unsigned getInputWidth() { return getLLHDTypeWidth(getInput().getType()); }
   }];
   let hasFolder = true;
 }
@@ -106,7 +106,7 @@ def LLHD_PtrExtractOp : LLHD_Op<"ptr.extract",
 //===----------------------------------------------------------------------===//
 
 def LLHD_SigArraySliceOp : LLHD_Op<"sig.array_slice",
-    [NoSideEffect,
+    [Pure,
      SmallerOrEqualResultTypeWidthConstraint<"result", "input">,
      SameSigPtrArrayElementTypeConstraint<"result", "input">,
      SigPtrIndexBitWidthConstraint<"lowIndex", "input">]> {
@@ -141,14 +141,14 @@ def LLHD_SigArraySliceOp : LLHD_Op<"sig.array_slice",
   }];
 
   let extraClassDeclaration = [{
-    unsigned resultWidth()  { return getLLHDTypeWidth(result().getType()); }
-    unsigned inputWidth() { return getLLHDTypeWidth(input().getType()); }
+    unsigned getResultWidth()  { return getLLHDTypeWidth(getResult().getType()); }
+    unsigned getInputWidth() { return getLLHDTypeWidth(getInput().getType()); }
     hw::ArrayType getInputArrayType() {
-      return input().getType().cast<llhd::SigType>().getUnderlyingType()
+      return getInput().getType().cast<llhd::SigType>().getUnderlyingType()
         .cast<hw::ArrayType>();
     }
     hw::ArrayType getResultArrayType() {
-      return result().getType().cast<llhd::SigType>().getUnderlyingType()
+      return getResult().getType().cast<llhd::SigType>().getUnderlyingType()
         .cast<hw::ArrayType>();
     }
   }];
@@ -157,7 +157,7 @@ def LLHD_SigArraySliceOp : LLHD_Op<"sig.array_slice",
 }
 
 def LLHD_PtrArraySliceOp : LLHD_Op<"ptr.array_slice",
-    [NoSideEffect,
+    [Pure,
      SmallerOrEqualResultTypeWidthConstraint<"result", "input">,
      SameSigPtrArrayElementTypeConstraint<"result", "input">,
      SigPtrIndexBitWidthConstraint<"lowIndex", "input">]> {
@@ -192,14 +192,14 @@ def LLHD_PtrArraySliceOp : LLHD_Op<"ptr.array_slice",
   }];
 
   let extraClassDeclaration = [{
-    unsigned resultWidth()  { return getLLHDTypeWidth(result().getType()); }
-    unsigned inputWidth() { return getLLHDTypeWidth(input().getType()); }
+    unsigned getResultWidth()  { return getLLHDTypeWidth(getResult().getType()); }
+    unsigned getInputWidth() { return getLLHDTypeWidth(getInput().getType()); }
     hw::ArrayType getInputArrayType() {
-      return input().getType().cast<llhd::PtrType>().getUnderlyingType()
+      return getInput().getType().cast<llhd::PtrType>().getUnderlyingType()
         .cast<hw::ArrayType>();
     }
     hw::ArrayType getResultArrayType() {
-      return result().getType().cast<llhd::PtrType>().getUnderlyingType()
+      return getResult().getType().cast<llhd::PtrType>().getUnderlyingType()
         .cast<hw::ArrayType>();
     }
   }];
@@ -208,7 +208,7 @@ def LLHD_PtrArraySliceOp : LLHD_Op<"ptr.array_slice",
 }
 
 def LLHD_SigArrayGetOp : LLHD_Op<"sig.array_get",
-    [NoSideEffect,
+    [Pure,
      SigPtrIndexBitWidthConstraint<"index", "input">,
      SigArrayElementTypeConstraint<"result", "input">]> {
 
@@ -233,15 +233,14 @@ def LLHD_SigArrayGetOp : LLHD_Op<"sig.array_get",
 
   let extraClassDeclaration = [{
     hw::ArrayType getArrayType() {
-      return input().getType().cast<llhd::SigType>()
+      return getInput().getType().cast<llhd::SigType>()
       .getUnderlyingType().cast<hw::ArrayType>();
     }
   }];
-  let hasCanonicalizeMethod = true;
 }
 
 def LLHD_PtrArrayGetOp : LLHD_Op<"ptr.array_get",
-    [NoSideEffect,
+    [Pure,
      SigPtrIndexBitWidthConstraint<"index", "input">,
      PtrArrayElementTypeConstraint<"result", "input">]> {
 
@@ -266,18 +265,17 @@ def LLHD_PtrArrayGetOp : LLHD_Op<"ptr.array_get",
 
   let extraClassDeclaration = [{
     hw::ArrayType getArrayType() {
-      return input().getType().cast<llhd::PtrType>()
+      return getInput().getType().cast<llhd::PtrType>()
       .getUnderlyingType().cast<hw::ArrayType>();
     }
   }];
-  let hasCanonicalizeMethod = true;
 }
 
 //===----------------------------------------------------------------------===//
 // Structure Operations
 //===----------------------------------------------------------------------===//
 
-def LLHD_SigStructExtractOp : LLHD_Op<"sig.struct_extract", [NoSideEffect,
+def LLHD_SigStructExtractOp : LLHD_Op<"sig.struct_extract", [Pure,
   DeclareOpInterfaceMethods<InferTypeOpInterface>, InferTypeOpInterface]> {
   let summary = "Extract a field from a signal of a struct.";
   let description = [{
@@ -301,13 +299,13 @@ def LLHD_SigStructExtractOp : LLHD_Op<"sig.struct_extract", [NoSideEffect,
 
   let extraClassDeclaration = [{
     hw::StructType getStructType() {
-      return input().getType().cast<llhd::SigType>().getUnderlyingType()
+      return getInput().getType().cast<llhd::SigType>().getUnderlyingType()
         .cast<hw::StructType>();
     }
   }];
 }
 
-def LLHD_PtrStructExtractOp : LLHD_Op<"ptr.struct_extract", [NoSideEffect,
+def LLHD_PtrStructExtractOp : LLHD_Op<"ptr.struct_extract", [Pure,
   DeclareOpInterfaceMethods<InferTypeOpInterface>, InferTypeOpInterface]> {
   let summary = "Extract a field from a pointer to a struct.";
   let description = [{
@@ -331,7 +329,7 @@ def LLHD_PtrStructExtractOp : LLHD_Op<"ptr.struct_extract", [NoSideEffect,
 
   let extraClassDeclaration = [{
     hw::StructType getStructType() {
-      return input().getType().cast<llhd::PtrType>().getUnderlyingType()
+      return getInput().getType().cast<llhd::PtrType>().getUnderlyingType()
         .cast<hw::StructType>();
     }
   }];

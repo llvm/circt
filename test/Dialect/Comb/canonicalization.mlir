@@ -32,6 +32,15 @@ hw.module @muxConstantInputs2(%cond: i1) -> (o: i2) {
   hw.output %0 : i2
 }
 
+// CHECK-LABEL: @muxTF
+hw.module @muxTF(%cond: i1) -> (o: i1) {
+// CHECK-NEXT: hw.output %cond
+  %c0 = hw.constant 0 : i1
+  %c1 = hw.constant 1 : i1
+  %0 = comb.mux %cond, %c1, %c0: i1
+  hw.output %0 : i1
+}
+
 // CHECK-LABEL: @muxConstantInputsNegated
 hw.module @muxConstantInputsNegated(%cond: i1) -> (o: i2) {
 // CHECK-NEXT: %true = hw.constant true
@@ -45,10 +54,10 @@ hw.module @muxConstantInputsNegated(%cond: i1) -> (o: i2) {
 
 // CHECK-LABEL: @notMux
 hw.module @notMux(%a: i4, %b: i4, %cond: i1, %cond2: i1) -> (o: i4, o2: i4) {
-  // CHECK-NEXT: comb.mux %cond, %b, %a : i4
+  // CHECK-NEXT: comb.mux bin %cond, %b, %a : i4
   %c1 = hw.constant 1 : i1
   %0 = comb.xor %cond, %c1 : i1
-  %1 = comb.mux %0, %a, %b : i4
+  %1 = comb.mux bin %0, %a, %b : i4
 
   // CHECK-NEXT: %1 = comb.and %cond, %cond2 : i1
   // CHECK-NEXT: %2 = comb.mux %1, %b, %a : i4
@@ -138,30 +147,38 @@ hw.module @andCancel(%a: i4, %b : i4) -> (o1: i4, o2: i4) {
 }
 
 
-// CHECK-LABEL: hw.module @andDedup1(%arg0: i7, %arg1: i7)
-hw.module @andDedup1(%arg0: i7, %arg1: i7) -> (result: i7) {
+// CHECK-LABEL: hw.module @idempotentDeduped1(%arg0: i7, %arg1: i7)
+hw.module @idempotentDeduped1(%arg0: i7, %arg1: i7) -> (resAnd: i7, resOr: i7) {
 // CHECK-NEXT:    %0 = comb.and %arg0, %arg1 : i7
-// CHECK-NEXT:    hw.output %0 : i7
+// CHECK-NEXT:    %1 = comb.or %arg0, %arg1 : i7
+// CHECK-NEXT:    hw.output %0, %1 : i7, i7
   %0 = comb.and %arg0    : i7
   %1 = comb.and %0, %arg1: i7
-  hw.output %1 : i7
+  %2 = comb.or %arg0    : i7
+  %3 = comb.or %0, %arg1: i7
+  hw.output %1, %3 : i7, i7
 }
 
-// CHECK-LABEL: hw.module @andDedup2(%arg0: i7, %arg1: i7)
-hw.module @andDedup2(%arg0: i7, %arg1: i7) -> (result: i7) {
+// CHECK-LABEL: hw.module @idempotentDeduped2(%arg0: i7, %arg1: i7)
+hw.module @idempotentDeduped2(%arg0: i7, %arg1: i7) -> (resAnd: i7, resOr: i7) {
 // CHECK-NEXT:    %0 = comb.and %arg0, %arg1 : i7
-// CHECK-NEXT:    hw.output %0 : i7
+// CHECK-NEXT:    %1 = comb.or %arg0, %arg1 : i7
+// CHECK-NEXT:    hw.output %0, %1 : i7, i7
   %0 = comb.and %arg0, %arg0: i7
   %1 = comb.and %0, %arg1: i7
-  hw.output %1 : i7
+  %2 = comb.or %arg0, %arg0: i7
+  %3 = comb.or %0, %arg1: i7
+  hw.output %1, %3 : i7, i7
 }
 
-// CHECK-LABEL: hw.module @andDedupLong(%arg0: i7, %arg1: i7, %arg2: i7)
-hw.module @andDedupLong(%arg0: i7, %arg1: i7, %arg2: i7) -> (result: i7) {
+// CHECK-LABEL: hw.module @dedupLong(%arg0: i7, %arg1: i7, %arg2: i7)
+hw.module @dedupLong(%arg0: i7, %arg1: i7, %arg2: i7) -> (resAnd: i7, resOr: i7) {
 // CHECK-NEXT:    %0 = comb.and %arg0, %arg1, %arg2 : i7
-// CHECK-NEXT:    hw.output %0 : i7
+// CHECK-NEXT:    %1 = comb.or %arg0, %arg1, %arg2 : i7
+// CHECK-NEXT:    hw.output %0, %1 : i7, i7
   %0 = comb.and %arg0, %arg1, %arg2, %arg0: i7
-  hw.output %0 : i7
+  %1 = comb.or %arg0, %arg1, %arg2, %arg0: i7
+  hw.output %0, %1 : i7, i7
 }
 
 // CHECK-LABEL: hw.module @orExclusiveConcats
@@ -256,22 +273,6 @@ hw.module @extractNested(%0: i5) -> (o1 : i1) {
   hw.output %3 : i1
 }
 
-// CHECK-LABEL: @extractConstant
-hw.module @extractConstant(%arg0: i5, %cond1: i1, %cond2: i1) -> (o1: i1, o2: i4) {
-  //c2 ? (c1 ? 4'h2 : 4'h4) : 4'h0;
-  %c0 = hw.constant 0 : i4
-  %c2 = hw.constant 2 : i4
-  %c4 = hw.constant 4 : i4
-  %0 = comb.mux %cond1, %c0, %c4 : i4
-  %1 = comb.mux %cond2, %0, %c2 : i4
-
-  // CHECK: %false = hw.constant false
-  // CHECK: hw.output %false, 
-  %2 = comb.extract %1 from 3 : (i4) -> i1
-  hw.output %2, %1 : i1, i4
-}
-
-
 // CHECK-LABEL: @flattenMuxTrue
 hw.module @flattenMuxTrue(%arg0: i1, %arg1: i8, %arg2: i8, %arg3: i8, %arg4 : i8) -> (o1 : i8) {
 // CHECK-NEXT:    [[RET:%[0-9]+]] = comb.mux %arg0, %arg1, %arg4
@@ -322,6 +323,18 @@ hw.module @subCst(%a: i4) -> (o1: i4) {
   %c1 = hw.constant 4 : i4
   %b = comb.sub %a, %c1 : i4
   hw.output %b : i4
+}
+
+// CHECK-LABEL: @addConstAndConst
+hw.module @addConstAndConst(%a: i4) -> (o1: i4, o2: i4) {
+// CHECK: %c3_i4 = hw.constant 3 : i4
+// CHECK: [[RESULT:%.+]] = comb.add %a, %c3_i4 : i4
+// CHECK: hw.output [[RESULT]]
+  %c1 = hw.constant 1 : i4
+  %c2 = hw.constant 2 : i4
+  %b = comb.add %a, %c1 : i4
+  %c = comb.add %b, %c2 : i4
+  hw.output %c, %b : i4, i4
 }
 
 // Validates that when there is a matching suffix, and prefix, both of them are removed
@@ -776,6 +789,27 @@ hw.module @fold_mux_tree1(%sel: i2, %a: i8, %b: i8, %c: i8, %d: i8) -> (y: i8) {
   hw.output %5 : i8
 }
 
+// CHECK-LABEL: hw.module @fold_mux_tree1r
+hw.module @fold_mux_tree1r(%sel: i2, %a: i8, %b: i8, %c: i8, %d: i8) -> (y: i8) {
+  // CHECK-NEXT: %0 = hw.array_create %d, %c, %b, %a : i8
+  // CHECK-NEXT: %1 = hw.array_get %0[%sel]
+  // CHECK-NEXT: hw.output %1
+  %c2_i2 = hw.constant 2 : i2
+  %c1_i2 = hw.constant 1 : i2
+  %c3_i2 = hw.constant 3 : i2
+
+  %0 = comb.icmp eq %sel, %c1_i2 : i2
+  %1 = comb.mux %0, %b, %a : i8
+
+  %2 = comb.icmp eq %sel, %c2_i2 : i2
+  %3 = comb.mux %2, %c, %1 : i8
+
+  %4 = comb.icmp eq %sel, %c3_i2 : i2
+  %5 = comb.mux %4, %d, %3 : i8
+  hw.output %5 : i8
+}
+
+
 // CHECK-LABEL: hw.module @fold_mux_tree2
 // This is a sparse tree with 5/8ths load.
 hw.module @fold_mux_tree2(%sel: i3, %a: i8, %b: i8, %c: i8, %d: i8) -> (y: i8) {
@@ -1143,6 +1177,23 @@ hw.module @xorICmpConstant2(%value: i9, %value2: i9) -> (a: i1, b: i9) {
   // CHECK: hw.output %2, %1 : i1, i9
 }
 
+// CHECK-LABEL: func.func @xorICmpConstant3
+// Regression check for a dominance issue in icmp(xor) refactoring.
+func.func @xorICmpConstant3(%arg0: i9, %arg1: i9) -> i1 {
+  %c2_i9 = hw.constant 2 : i9
+  %c0_i9 = hw.constant 0 : i9
+  %1 = comb.xor %arg0, %arg1, %c2_i9 : i9
+  call @xorICmpConstant3Keep(%1) : (i9) -> ()
+  %2 = comb.icmp eq %1, %c0_i9 : i9
+  return %2 : i1
+  // CHECK: %0 = comb.xor %arg0, %arg1 : i9
+  // CHECK: %1 = comb.xor %0, %c2_i9 : i9
+  // CHECK: call @xorICmpConstant3Keep(%1)
+  // CHECK: %2 = comb.icmp eq %0, %c2_i9 : i9
+  // CHECK: return %2 : i1
+}
+
+func.func private @xorICmpConstant3Keep(%arg0: i9)
 
 // CHECK-LABEL: hw.module @test1560
 // This is an integration test for the testcase in Issue #1560.
@@ -1348,4 +1399,136 @@ hw.module @ReductionReplicate(%r: i4) -> (a:i1, b:i1, c:i1, d:i1) {
   %d = comb.icmp ne %0, %zero : i32
   // CHECK-NEXT: hw.output [[A]], [[B]], [[C]], [[D]]
   hw.output %a, %b, %c, %d: i1, i1, i1, i1
+}
+
+// CHECK-LABEL: @propagateNamehint
+hw.module @propagateNamehint(%x: i16) -> (o: i1) {
+  %c0_i16 = hw.constant 0 : i16
+  // swap %x and %c0_i16
+  // CHECK: %0 = comb.icmp eq %x, %c0_i16 {sv.namehint = "hint"}
+  %0 = comb.icmp eq %c0_i16, %x {sv.namehint = "hint"}: i16
+  hw.output %0 : i1
+}
+
+// CHECK-LABEL: @extractToReductionOps
+hw.module @extractToReductionOps(%a: i1, %b: i2) -> (c: i1, d: i1, e: i1) {
+  // CHECK-NEXT: %c-1_i2 = hw.constant -1 : i2
+  // CHECK-NEXT: %c0_i2 = hw.constant 0 : i2
+  // CHECK-NEXT: %0 = comb.icmp ne %b, %c0_i2 : i2
+  // CHECK-NEXT: %1 = comb.icmp eq %b, %c-1_i2 : i2
+  // CHECK-NEXT: %2 = comb.parity %b : i2
+  // CHECK-NEXT: hw.output %0, %1, %2 : i1, i1, i1
+  %0 = comb.extract %b from 1 : (i2) -> i1
+  %1 = comb.extract %b from 0 : (i2) -> i1
+  %2 = comb.or %0, %1 : i1
+  %3 = comb.and %0, %1 : i1
+  %4 = comb.xor %0, %1 : i1
+
+  hw.output %2, %3, %4 : i1, i1, i1
+}
+
+// https://github.com/llvm/circt/issues/2546
+// CHECK-LABEL: @Issue2546
+hw.module @Issue2546() -> (b: i1) {
+  %true = hw.constant true
+  %0 = comb.xor %0, %true : i1
+  hw.output %0 : i1
+}
+
+// CHECK-LABEL: hw.module @ArrayConcatFlatten
+hw.module @ArrayConcatFlatten(%a: !hw.array<3xi1>) -> (b: i3) {
+  // CHECK-NEXT:  %0 = hw.bitcast %a : (!hw.array<3xi1>) -> i3
+  // CHECK-NEXT: hw.output %0 : i3
+  %c-2_i2 = hw.constant -2 : i2
+  %c1_i2 = hw.constant 1 : i2
+  %c0_i2 = hw.constant 0 : i2
+  %0 = hw.array_get %a[%c0_i2] : !hw.array<3xi1>, i2
+  %1 = hw.array_get %a[%c1_i2] : !hw.array<3xi1>, i2
+  %2 = hw.array_get %a[%c-2_i2] : !hw.array<3xi1>, i2
+  %3 = comb.concat %1, %0 : i1, i1
+  %4 = comb.concat %2, %3 : i1, i2
+  hw.output %4 : i3
+}
+
+// CHECK-LABEL: hw.module @MuxSimplify
+hw.module @MuxSimplify(%index: i1, %a: i1, %foo_0: i2, %foo_1: i2) -> (r_0: i2, r_1: i2, r_2 : i2, r_3: i2, r_4 : i2, r_5: i2, r_6 : i2) {
+  %true = hw.constant true
+  %c-2_i2 = hw.constant -2 : i2
+  %c1_i2 = hw.constant 1 : i2
+  %0 = comb.xor bin %index, %true : i1
+  %1 = comb.mux bin %0, %c1_i2, %foo_0 : i2
+  %2 = comb.mux bin %index, %c1_i2, %foo_1 : i2
+  %3 = comb.mux bin %0, %c-2_i2, %foo_0 : i2
+  %4 = comb.mux bin %a, %1, %3 : i2
+  %5 = comb.mux bin %index, %c-2_i2, %foo_1 : i2
+  %6 = comb.mux bin %a, %2, %5 : i2
+  
+  %7 = comb.mux bin %a, %foo_0, %foo_1 : i2
+  %8 = comb.mux bin %index, %foo_0, %foo_1 : i2
+  %9 = comb.xor %a, %index : i1
+  %10 = comb.mux bin %9, %7, %8 : i2
+  
+  %11 = comb.mux bin %index, %foo_0, %foo_1 : i2
+  %12 = comb.mux bin %a, %foo_0, %11 : i2
+
+  %13 = comb.mux bin %index, %foo_1, %foo_0 : i2
+  %14 = comb.mux bin %a, %foo_0, %11 : i2
+
+  %15 = comb.mux bin %index, %foo_1, %foo_0 : i2
+  %16 = comb.mux bin %a, %11, %foo_0 : i2
+
+  %17 = comb.mux bin %index, %foo_0, %foo_1 : i2
+  %18 = comb.mux bin %a, %11, %foo_0 : i2
+
+  hw.output %4, %6, %10, %12, %14, %16, %18 : i2, i2, i2, i2, i2, i2, i2
+}
+// CHECK:  %0 = comb.mux %a, %c1_i2, %c-2_i2 : i2
+// CHECK-NEXT:  %1 = comb.mux bin %index, %foo_0, %0 : i2
+// CHECK-NEXT:  %2 = comb.mux %a, %c1_i2, %c-2_i2 : i2
+// CHECK-NEXT:  %3 = comb.mux bin %index, %2, %foo_1 : i2
+// CHECK-NEXT:  %4 = comb.xor %a, %index : i1 
+// CHECK-NEXT:  %5 = comb.mux %4, %a, %index : i1 
+// CHECK-NEXT:  %6 = comb.mux bin %5, %foo_0, %foo_1 : i2 
+// CHECK-NEXT:  %7 = comb.or %a, %index : i1
+// CHECK-NEXT:  %8 = comb.mux bin %7, %foo_0, %foo_1 : i2
+// CHECK-NEXT:  %9 = comb.or %a, %index : i1
+// CHECK-NEXT:  %10 = comb.mux bin %9, %foo_0, %foo_1 : i2
+// CHECK-NEXT:  %11 = comb.xor %a, %true : i1
+// CHECK-NEXT:  %12 = comb.or %11, %index : i1
+// CHECK-NEXT:  %13 = comb.mux bin %12, %foo_0, %foo_1 : i2
+// CHECK-NEXT:  %14 = comb.xor %a, %true : i1
+// CHECK-NEXT:  %15 = comb.or %14, %index : i1
+// CHECK-NEXT:  %16 = comb.mux bin %15, %foo_0, %foo_1 : i2
+// CHECK-NEXT:  hw.output %1, %3, %6, %8, %10, %13, %16
+
+// CHECK-LABEL: @twoStateICmp
+hw.module @twoStateICmp(%arg: i4) -> (cond: i1) {
+  // CHECK: %0 = comb.icmp bin eq %arg, %c-1_i4
+  %c-1_i4 = hw.constant -1 : i4
+  %0 = comb.icmp bin eq %c-1_i4, %arg : i4
+  hw.output %0 : i1
+}
+
+// https://github.com/llvm/circt/issues/5531
+// CHECK-LABEL: @Issue5531
+hw.module @Issue5531(%arg0: i64, %arg1: i64) -> (out: i32) {
+  // CHECK:  %2 = comb.mul %0, %1 {sv.namehint = "hint"} : i32
+  %2 = comb.mul %arg0, %arg1 {sv.namehint = "hint"} : i64
+  %3 = comb.extract %2 from 0 : (i64) -> i32
+  hw.output %3 : i32
+}
+
+// or(mux(c_1, a, 0), mux(c_2, a, 0), ..., mux(c_n, a, 0)) -> mux(or(c_1, c_2, .., c_n), a, 0)
+// CHECK-LABEL: OrMuxSameTrueValueAndZero
+// CHECK:      %[[OR:.+]] = comb.or bin %tag_0, %tag_1, %tag_2, %tag_3 : i1
+// CHECK-NEXT: %[[RESULT:.+]] = comb.mux bin %[[OR]], %in, %c0_i4 : i4
+// CHECK-NEXT: hw.output %[[RESULT]]
+hw.module @OrMuxSameTrueValueAndZero(%tag_0: i1, %tag_1: i1, %tag_2: i1, %tag_3: i1, %in: i4) -> (out: i4) {
+  %c0_i4 = hw.constant 0 : i4
+  %0 = comb.mux bin %tag_0, %in, %c0_i4 : i4
+  %1 = comb.mux bin %tag_1, %in, %c0_i4 : i4
+  %2 = comb.mux bin %tag_2, %in, %c0_i4 : i4
+  %3 = comb.mux bin %tag_3, %in, %c0_i4 : i4
+  %4 = comb.or bin %0, %1, %2, %3 : i4
+  hw.output %4 : i4
 }

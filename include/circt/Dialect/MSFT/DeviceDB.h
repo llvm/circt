@@ -113,8 +113,8 @@ public:
   walkPlacements(function_ref<void(PhysLocationAttr, DynInstDataOpInterface)>,
                  std::tuple<int64_t, int64_t, int64_t, int64_t> bounds =
                      std::make_tuple(-1, -1, -1, -1),
-                 Optional<PrimitiveType> primType = {},
-                 Optional<WalkOrder> = {});
+                 std::optional<PrimitiveType> primType = {},
+                 std::optional<WalkOrder> = {});
 
   /// Walk the region placement information.
   void walkRegionPlacements(function_ref<void(PDPhysRegionOp)>);
@@ -146,7 +146,7 @@ private:
   /// Load the placements from `inst`.  Return the number of placements which
   /// weren't added due to conflicts.
   size_t addPlacements(DynamicInstanceOp inst);
-  LogicalResult insertPlacement(DynInstDataOpInterface owner, PhysLocationAttr);
+  LogicalResult insertPlacement(DynInstDataOpInterface op, PhysLocationAttr);
 
   /// Load the database from the IR. Return the number of placements which
   /// failed to load due to invalid specifications.

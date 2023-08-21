@@ -50,7 +50,7 @@ void allocProc(State *state, char *owner, ProcState *procState) {
 void allocEntity(State *state, char *owner, uint8_t *entityState) {
   assert(state && "alloc_entity: state not found");
   auto it = state->getInstanceIterator(owner);
-  (*it).entityState = std::unique_ptr<uint8_t>(entityState);
+  (*it).entityState = entityState;
 }
 
 void driveSignal(State *state, SignalDetail *detail, uint8_t *value,

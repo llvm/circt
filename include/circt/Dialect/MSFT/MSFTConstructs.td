@@ -45,7 +45,7 @@ def PEOutputOp: MSFTOp<"pe.output", [Terminator]> {
 }
 
 def ChannelOp: MSFTOp<"constructs.channel",
-    [NoSideEffect, Symbol, HasParent<"MSFTModuleOp">,
+    [Pure, Symbol, HasParent<"MSFTModuleOp">,
      AllTypesMatch<["input", "output"]>]> {
 
   let summary = "A pipeline-able connection";
@@ -66,4 +66,38 @@ def ChannelOp: MSFTOp<"constructs.channel",
   let assemblyFormat = [{
     $input $clk $sym_name `(` $defaultStages `)` attr-dict `:` type($input)
   }];
+}
+
+// Linear, pipelineable datapath.
+def LinearOp : MSFTOp<"hlc.linear", [
+    SingleBlockImplicitTerminator<"OutputOp">
+  ]> {
+  let summary = "Model of a linear datapath which can be arbitrarily pipelined";
+  let description = [{
+    Defines a feed-forward datapath which can be scheduled into a pipeline.
+    Due to the feed-forwardness, the inner region is NOT a graph region.
+    Internally, only combinational operations (`comb`, `msft`, `hw`) are allowed.
+
+    Example:
+    ```mlir
+    msft.module @foo(%in0 : i32, %in1 : i32, %in2 : i32, %clk : i1) -> (out: i32) -> {
+      %0 = msft.hlc.linear(%a = %in0, %b = %in1, %c = %in2) clock %clk (i32, i32, i32) -> (i32) {
+        %0 = comb.mul %a, %b : i32
+        %1 = comb.add %0, %c : i32
+        msft.output %1 : i32
+      }
+    }
+    ```
+  }];
+
+  let arguments = (ins I1:$clock);
+  let results = (outs Variadic<AnyType>:$outs);
+  let regions = (region SizedRegion<1>:$datapath);
+
+  let extraClassDeclaration = [{
+    Block *getBodyBlock() { return &getDatapath().front(); }
+  }];
+
+  let hasVerifier = 1;
+  let assemblyFormat = [{ `clock` $clock attr-dict `:` type($outs) $datapath }];
 }

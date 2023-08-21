@@ -23,18 +23,18 @@ namespace circt {
 namespace sv {
 
 /// Given string \p origName, generate a new name if it conflicts with any
-/// keyword or any other name in the set \p recordNames. Use the int \p
-/// nextGeneratedNameID as a counter for suffix. Update the \p recordNames with
-/// the generated name and return the StringRef.
-llvm::StringRef resolveKeywordConflict(llvm::StringRef origName,
-                                       llvm::StringSet<> &recordNames,
-                                       size_t &nextGeneratedNameID);
+/// keyword or any other name in the map \p nextGeneratedNameIDs. Use the value
+/// of \p nextGeneratedNameIDs as a counter for suffix. Update the \p
+/// nextGeneratedNameIDs with the generated name and return the StringRef.
+llvm::StringRef
+resolveKeywordConflict(llvm::StringRef origName,
+                       llvm::StringMap<size_t> &nextGeneratedNameIDs);
 
 /// Legalize the specified name for use in SV output. Auto-uniquifies the name
 /// through \c resolveKeywordConflict if required. If the name is empty, a
 /// unique temp name is created.
-StringRef legalizeName(llvm::StringRef name, llvm::StringSet<> &recordNames,
-                       size_t &nextGeneratedNameID);
+StringRef legalizeName(llvm::StringRef name,
+                       llvm::StringMap<size_t> &nextGeneratedNameIDs);
 
 /// Check if a name is valid for use in SV output by only containing characters
 /// allowed in SV identifiers.

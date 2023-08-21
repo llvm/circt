@@ -14,6 +14,8 @@
 #define CIRCT_DIALECT_CALYX_OPS_H
 
 #include "circt/Dialect/Calyx/CalyxDialect.h"
+#include "circt/Dialect/HW/HWOps.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/FunctionInterfaces.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/RegionKindInterface.h"
@@ -89,13 +91,13 @@ struct PortInfo {
 
   /// Returns the attribute associated with the given name if it exists,
   /// otherwise std::nullopt.
-  llvm::Optional<Attribute> getAttribute(StringRef identifier) const {
+  std::optional<Attribute> getAttribute(StringRef identifier) const {
     assert(attributes && "PortInfo::attributes should be instantiated.");
     auto it = llvm::find_if(attributes, [&](auto idToAttribute) {
       return identifier == idToAttribute.getName();
     });
     if (it == attributes.end())
-      return None;
+      return std::nullopt;
     return it->getValue();
   }
 
@@ -109,11 +111,17 @@ struct PortInfo {
   }
 };
 
+/// A helper function to verify each operation with the Ccomponent trait.
+LogicalResult verifyComponent(Operation *op);
+
 /// A helper function to verify each operation with the Cell trait.
 LogicalResult verifyCell(Operation *op);
 
 /// A helper function to verify each operation with the Group Interface trait.
 LogicalResult verifyGroupInterface(Operation *op);
+
+/// A helper function to verify each operation with the If trait.
+LogicalResult verifyIf(Operation *op);
 
 /// Returns port information for the block argument provided.
 PortInfo getPortInfo(BlockArgument arg);

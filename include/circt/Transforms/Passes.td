@@ -22,7 +22,7 @@ def FlattenMemRef : Pass<"flatten-memref", "::mlir::ModuleOp"> {
     Flattens multidimensional memories and accesses to them into
     single-dimensional memories.}];
   let constructor = "circt::createFlattenMemRefPass()";
-  let dependentDialects = ["memref::MemRefDialect"];
+  let dependentDialects = ["mlir::memref::MemRefDialect"];
 }
 
 def FlattenMemRefCalls : Pass<"flatten-memref-calls", "::mlir::ModuleOp"> {
@@ -35,7 +35,39 @@ def FlattenMemRefCalls : Pass<"flatten-memref-calls", "::mlir::ModuleOp"> {
     It is up to users of this pass to define how these rewritten functions are
     to be implemented.}];
   let constructor = "circt::createFlattenMemRefCallsPass()";
-  let dependentDialects = ["memref::MemRefDialect"];
+  let dependentDialects = ["mlir::memref::MemRefDialect"];
+}
+
+def StripDebugInfoWithPred : Pass<"strip-debuginfo-with-pred", "::mlir::ModuleOp"> {
+  let summary = "Selectively strip debug info from all operations";
+
+  let description = [{
+    This pass extends mlir::StripDebugInfoPass to selectively strip locations with a
+    given predicate.
+  }];
+  let constructor = "circt::createStripDebugInfoWithPredPass({})";
+  let options = [
+    Option<"dropSuffix", "drop-suffix", "std::string",
+           /*default=*/"",
+           "Drop file location info with the specified suffix. This option is"
+           "intended to be used for testing."> ];
+}
+
+def MapArithToCombPass : InterfacePass<"map-arith-to-comb", "circt::hw::HWModuleLike"> {
+  let summary = "Map arith ops to combinational logic";
+  let description = [{
+    A pass which does a simple `arith` to `comb` mapping wherever possible.
+    This pass will not convert:  
+    * floating point operations
+    * operations using `vector`-typed values
+
+    This **does not** intend to be the definitive lowering/HLS pass of `arith`
+    operations in CIRCT (hence the name "map" instead of e.g. "lower").
+    Rather, it provides a simple way (mostly for testing purposes) to map
+    `arith` operations.
+  }];
+  let constructor = "circt::createMapArithToCombPass()";
+  let dependentDialects = ["circt::hw::HWDialect, mlir::arith::ArithDialect, circt::comb::CombDialect"];
 }
 
 #endif // CIRCT_TRANSFORMS_PASSES

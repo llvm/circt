@@ -8,11 +8,6 @@ mlir_tablegen(MooreEnums.cpp.inc -gen-enum-defs)
 add_public_tablegen_target(CIRCTMooreEnumsIncGen)
 add_dependencies(circt-headers CIRCTMooreEnumsIncGen)
 
-mlir_tablegen(MooreStructs.h.inc -gen-struct-attr-decls)
-mlir_tablegen(MooreStructs.cpp.inc -gen-struct-attr-defs)
-add_public_tablegen_target(CIRCTMooreStructsIncGen)
-add_dependencies(circt-headers CIRCTMooreStructsIncGen)
-
 mlir_tablegen(MooreAttributes.h.inc -gen-attrdef-decls
   -attrdefs-dialect MooreDialect)
 mlir_tablegen(MooreAttributes.cpp.inc -gen-attrdef-defs

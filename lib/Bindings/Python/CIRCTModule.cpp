@@ -10,13 +10,18 @@
 
 #include "circt-c/Dialect/Comb.h"
 #include "circt-c/Dialect/ESI.h"
+#include "circt-c/Dialect/FSM.h"
 #include "circt-c/Dialect/HW.h"
+#include "circt-c/Dialect/HWArith.h"
+#include "circt-c/Dialect/Handshake.h"
 #include "circt-c/Dialect/MSFT.h"
+#include "circt-c/Dialect/OM.h"
 #include "circt-c/Dialect/SV.h"
 #include "circt-c/Dialect/Seq.h"
 #include "circt-c/ExportVerilog.h"
 #include "mlir-c/Bindings/Python/Interop.h"
-#include "mlir-c/Registration.h"
+#include "mlir-c/IR.h"
+#include "mlir-c/Transforms.h"
 #include "mlir/Bindings/Python/PybindAdaptors.h"
 
 #include "llvm-c/ErrorHandling.h"
@@ -29,6 +34,10 @@ namespace py = pybind11;
 static void registerPasses() {
   registerSeqPasses();
   registerSVPasses();
+  registerFSMPasses();
+  registerHWArithPasses();
+  registerHandshakePasses();
+  mlirRegisterTransformsPasses();
 }
 
 PYBIND11_MODULE(_circt, m) {
@@ -61,6 +70,14 @@ PYBIND11_MODULE(_circt, m) {
         mlirDialectHandleRegisterDialect(hw, context);
         mlirDialectHandleLoadDialect(hw, context);
 
+        MlirDialectHandle hwarith = mlirGetDialectHandle__hwarith__();
+        mlirDialectHandleRegisterDialect(hwarith, context);
+        mlirDialectHandleLoadDialect(hwarith, context);
+
+        MlirDialectHandle om = mlirGetDialectHandle__om__();
+        mlirDialectHandleRegisterDialect(om, context);
+        mlirDialectHandleLoadDialect(om, context);
+
         MlirDialectHandle seq = mlirGetDialectHandle__seq__();
         mlirDialectHandleRegisterDialect(seq, context);
         mlirDialectHandleLoadDialect(seq, context);
@@ -68,6 +85,14 @@ PYBIND11_MODULE(_circt, m) {
         MlirDialectHandle sv = mlirGetDialectHandle__sv__();
         mlirDialectHandleRegisterDialect(sv, context);
         mlirDialectHandleLoadDialect(sv, context);
+
+        MlirDialectHandle fsm = mlirGetDialectHandle__fsm__();
+        mlirDialectHandleRegisterDialect(fsm, context);
+        mlirDialectHandleLoadDialect(fsm, context);
+
+        MlirDialectHandle handshake = mlirGetDialectHandle__handshake__();
+        mlirDialectHandleRegisterDialect(handshake, context);
+        mlirDialectHandleLoadDialect(handshake, context);
       },
       "Register CIRCT dialects on a PyMlirContext.");
 
@@ -88,4 +113,8 @@ PYBIND11_MODULE(_circt, m) {
   circt::python::populateDialectMSFTSubmodule(msft);
   py::module hw = m.def_submodule("_hw", "HW API");
   circt::python::populateDialectHWSubmodule(hw);
+  py::module om = m.def_submodule("_om", "OM API");
+  circt::python::populateDialectOMSubmodule(om);
+  py::module sv = m.def_submodule("_sv", "SV API");
+  circt::python::populateDialectSVSubmodule(sv);
 }

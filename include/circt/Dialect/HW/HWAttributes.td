@@ -10,11 +10,16 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_HW_HWATTRIBUTES_TD
+#define CIRCT_DIALECT_HW_HWATTRIBUTES_TD
+
+include "circt/Dialect/HW/HWDialect.td"
 include "mlir/IR/EnumAttr.td"
+include "mlir/IR/BuiltinAttributeInterfaces.td"
 
 /// An attribute to indicate the output file an operation should be emitted to.
 def OutputFileAttr : AttrDef<HWDialect, "OutputFile"> {
-  let summary = "Ouput file attribute";
+  let summary = "Output file attribute";
   let description = [{
     This attribute represents an output file for something which will be
     printed. The `filename` string is the file to be output to. If `filename`
@@ -86,19 +91,19 @@ def OutputFileAttr : AttrDef<HWDialect, "OutputFile"> {
 }
 
 // An attribute to indicate which filelist an operation's file should be
-// included in. 
+// included in.
 def FileListAttr : AttrDef<HWDialect, "FileList"> {
   let summary = "Ouput filelist attribute";
   let description = [{
     This attribute represents an output filelist for something which will be
-    printed. The `filename` string is the file which the filename of the 
-    operation to be output to. 
+    printed. The `filename` string is the file which the filename of the
+    operation to be output to.
 
     When ExportVerilog runs, some of the files produced are lists of other files
     which are produced.  Each filelist exported contains entities' output file
     with `FileListAttr` marked.
 
-    
+
     Examples:
     ```mlir
       #hw.ouput_filelist<"/home/tester/t.F">
@@ -125,10 +130,12 @@ def FileListAttr : AttrDef<HWDialect, "FileList"> {
 
 }
 
-/// An attribute describing a module parameter, or instance parameter
-/// specification.
-def ParamDeclAttr : AttrDef<HWDialect, "ParamDecl"> {
-  let summary = "module or instance parameter definition";
+def ParamDeclAttr : AttrDef<HWDialect, "ParamDecl", [TypedAttrInterface]> {
+  let summary = "Module or instance parameter definition";
+  let description = [{
+    An attribute describing a module parameter, or instance parameter
+    specification.
+  }];
 
   /// The value of the attribute - in a module, this is the default
   /// value (and may be missing).  In an instance, this is a required field that
@@ -136,7 +143,7 @@ def ParamDeclAttr : AttrDef<HWDialect, "ParamDecl"> {
   /// parameter for an instance when the applied value and the default value are
   /// the same.
   let parameters = (ins "::mlir::StringAttr":$name,
-                        "::mlir::TypeAttr":$type,
+                        AttributeSelfTypeParameter<"">:$type,
                         "::mlir::Attribute":$value);
   let mnemonic = "param.decl";
 
@@ -144,19 +151,19 @@ def ParamDeclAttr : AttrDef<HWDialect, "ParamDecl"> {
 
   let builders = [
     AttrBuilderWithInferredContext<(ins "::mlir::StringAttr":$name,
-                                         "::mlir::Type":$type),
+                                        "::mlir::Type":$type),
       "auto *context = type.getContext();\n"
-      "return $_get(context, name, TypeAttr::get(type), Attribute());">,
+      "return $_get(context, name, type, Attribute());">,
     AttrBuilderWithInferredContext<(ins "::mlir::StringRef":$name,
-                                         "::mlir::Type":$type),
+                                        "::mlir::Type":$type),
       "return get(StringAttr::get(type.getContext(), name), type);">,
 
     AttrBuilderWithInferredContext<(ins "::mlir::StringAttr":$name,
-                                        "::mlir::Attribute":$value),
+                                        "::mlir::TypedAttr":$value),
       "auto *context = value.getContext();\n"
-      "return $_get(context, name, TypeAttr::get(value.getType()), value);">,
+      "return $_get(context, name, value.getType(), value);">,
     AttrBuilderWithInferredContext<(ins "::mlir::StringRef":$name,
-                                        "::mlir::Attribute":$value),
+                                        "::mlir::TypedAttr":$value),
       "return get(StringAttr::get(value.getContext(), name), value);">
   ];
 
@@ -177,7 +184,8 @@ def ParamDeclArrayAttr
 /// This attribute models a reference to a named parameter within a module body.
 /// The type of the ParamDeclRefAttr must always be the same as the type of the
 /// parameter being referenced.
-def ParamDeclRefAttr : AttrDef<HWDialect, "ParamDeclRef"> {
+def ParamDeclRefAttr : AttrDef<HWDialect, "ParamDeclRef",
+                               [TypedAttrInterface]> {
   let summary = "Is a reference to a parameter value.";
   let parameters = (ins "::mlir::StringAttr":$name,
                         AttributeSelfTypeParameter<"">:$type);
@@ -193,16 +201,24 @@ def ParamDeclRefAttr : AttrDef<HWDialect, "ParamDeclRef"> {
   let hasCustomAssemblyFormat = 1;
 }
 
-def ParamVerbatimAttr : AttrDef<HWDialect, "ParamVerbatim"> {
+def ParamVerbatimAttr : AttrDef<HWDialect, "ParamVerbatim",
+                                [TypedAttrInterface]> {
   let summary =
     "Represents text to emit directly to SystemVerilog for a parameter";
   let parameters = (ins "::mlir::StringAttr":$value,
                         AttributeSelfTypeParameter<"">:$type);
   let mnemonic = "param.verbatim";
-
   let hasCustomAssemblyFormat = 1;
+  let builders = [
+    AttrBuilderWithInferredContext<(ins "::mlir::StringAttr":$value), [{
+      return get(value, NoneType::get(value.getContext()));
+    }]>,
+    AttrBuilderWithInferredContext<
+      (ins "::mlir::StringAttr":$value, "::mlir::Type":$type), [{
+        return get(value.getContext(), value, type);
+    }]>,
+  ];
 }
-
 
 /// Parameter Expression Opcodes.
 let cppNamespace = "circt::hw" in {
@@ -236,25 +252,27 @@ def PEOAttr  : I32EnumAttr<"PEO", "Parameter Expression Opcode",
                             PEO_CLog2, PEO_StrConcat]>;
 }
 
-def ParamExprAttr : AttrDef<HWDialect, "ParamExpr"> {
+def ParamExprAttr : AttrDef<HWDialect, "ParamExpr", [TypedAttrInterface]> {
   let summary = "Parameter expression combining operands";
   let parameters = (ins "PEO":$opcode,
-                        ArrayRefParameter<"::mlir::Attribute">:$operands,
+                        ArrayRefParameter<"::mlir::TypedAttr">:$operands,
                         AttributeSelfTypeParameter<"">:$type);
   let mnemonic = "param.expr";
 
   // Force all clients to go through our building logic so we can canonicalize
   // during building.
   let skipDefaultBuilders = 1;
- 
+
   let extraClassDeclaration = [{
     /// Build a parameter expression.  This automatically canonicalizes and
     /// folds, so it may not necessarily return a ParamExprAttr.
-    static Attribute get(PEO opcode, mlir::ArrayRef<mlir::Attribute> operands);
+    static mlir::TypedAttr get(PEO opcode,
+                               mlir::ArrayRef<mlir::TypedAttr> operands);
 
     /// Build a binary parameter expression for convenience.
-    static Attribute get(PEO opcode, mlir::Attribute lhs, mlir::Attribute rhs) {
-      Attribute operands[] = { lhs, rhs };
+    static mlir::TypedAttr get(PEO opcode, mlir::TypedAttr lhs,
+                                           mlir::TypedAttr rhs) {
+      mlir::TypedAttr operands[] = { lhs, rhs };
       return get(opcode, operands);
     }
   }];
@@ -262,10 +280,30 @@ def ParamExprAttr : AttrDef<HWDialect, "ParamExpr"> {
   let hasCustomAssemblyFormat = 1;
 }
 
+// An attribute to indicate an enumeration value.
+def EnumFieldAttr : AttrDef<HWDialect, "EnumField"> {
+  let summary = "Enumeration field attribute";
+  let description = [{
+    This attribute represents a field of an enumeration.
 
-let cppNamespace = "circt::hw" in {
-def WUW_Undefined : I32EnumAttrCase<"Undefined", 0>;
-def WUW_PortOrder : I32EnumAttrCase<"PortOrder", 1>;
-def WUWAttr : I32EnumAttr<"WUW", "Write Under Write Behavior",
-                          [WUW_Undefined, WUW_PortOrder]>;
+    Examples:
+    ```mlir
+      #hw.enum.value<A, !hw.enum<A, B, C>>
+    ```
+  }];
+  let mnemonic = "enum.field";
+  let parameters = (ins "::mlir::StringAttr":$field, "::mlir::TypeAttr":$type);
+
+  // Force all clients to go through our custom builder so we can check
+  // whether the requested enum value is part of the provided enum type.
+  let skipDefaultBuilders = 1;
+  let hasCustomAssemblyFormat = 1;
+
+  let extraClassDeclaration = [{
+    /// Builds a new EnumFieldAttr of the provided value.
+    /// This will fail if the value is not a member of the provided enum type.
+    static EnumFieldAttr get(::mlir::Location loc, ::mlir::StringAttr value, mlir::Type type);
+  }];
 }
+
+#endif // CIRCT_DIALECT_HW_HWATTRIBUTES_TD

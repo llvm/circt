@@ -21,7 +21,11 @@
 #include "circt/Dialect/ESI/cosim/CosimDpi.capnp.h"
 #include <capnp/ez-rpc.h>
 #include <thread>
+#if WIN32
+#include <io.h>
+#else
 #include <unistd.h>
+#endif
 
 using namespace capnp;
 using namespace circt::esi::cosim;
@@ -123,7 +127,7 @@ kj::Promise<void> EndpointServer::send(SendContext context) {
       msgSize.wordCount + 1, AllocationStrategy::FIXED_SIZE);
   builder->setRoot(capnpMsgPointer);
   auto segments = builder->getSegmentsForOutput();
-  KJ_ASSERT(segments.size() == 1);
+  KJ_REQUIRE(segments.size() == 1, "Messages must be one segment");
 
   // Now copy it into a blob and queue it.
   auto fstSegmentData = segments[0].asBytes();
@@ -147,7 +151,7 @@ CosimServer::CosimServer(EndpointRegistry &reg) : reg(reg) {}
 kj::Promise<void> CosimServer::list(ListContext context) {
   auto ifaces = context.getResults().initIfaces((unsigned int)reg.size());
   unsigned int ctr = 0u;
-  reg.iterateEndpoints([&](int id, const Endpoint &ep) {
+  reg.iterateEndpoints([&](std::string id, const Endpoint &ep) {
     ifaces[ctr].setEndpointID(id);
     ifaces[ctr].setSendTypeID(ep.getSendTypeId());
     ifaces[ctr].setRecvTypeID(ep.getRecvTypeId());

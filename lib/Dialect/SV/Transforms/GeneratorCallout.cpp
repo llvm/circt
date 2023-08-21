@@ -75,7 +75,7 @@ void HWGeneratorCalloutPass::processGenerator(
 
   // Ignore the generator op if the schema does not match the user specified
   // schema name from command line "-schema-name"
-  if (genSchema.descriptor().str() != schemaName)
+  if (genSchema.getDescriptor().str() != schemaName)
     return;
 
   SmallVector<std::string> generatorArgs;
@@ -93,7 +93,7 @@ void HWGeneratorCalloutPass::processGenerator(
   // Iterate over all the attributes in the schema.
   // Assumption: All the options required by the generator program must be
   // present in the schema.
-  for (auto attr : genSchema.requiredAttrs()) {
+  for (auto attr : genSchema.getRequiredAttrs()) {
     auto sAttr = attr.cast<StringAttr>();
     // Get the port name from schema.
     StringRef portName = sAttr.getValue();
@@ -127,9 +127,10 @@ void HWGeneratorCalloutPass::processGenerator(
     generatedModuleOp.emitError("cannot generate a unique temporary file name");
     return;
   }
-  Optional<StringRef> redirects[] = {None, StringRef(genExecOutFileName), None};
+  std::optional<StringRef> redirects[] = {
+      std::nullopt, StringRef(genExecOutFileName), std::nullopt};
   int result = llvm::sys::ExecuteAndWait(
-      generatorExe, generatorArgStrRef, /*Env=*/None,
+      generatorExe, generatorArgStrRef, /*Env=*/std::nullopt,
       /*Redirects=*/redirects,
       /*SecondsToWait=*/0, /*MemoryLimit=*/0, &errMsg);
 
@@ -151,7 +152,7 @@ void HWGeneratorCalloutPass::processGenerator(
   OpBuilder builder(generatedModuleOp);
   auto extMod = builder.create<hw::HWModuleExternOp>(
       generatedModuleOp.getLoc(), generatedModuleOp.getVerilogModuleNameAttr(),
-      generatedModuleOp.getPorts());
+      generatedModuleOp.getPortList());
   // Attach an attribute to which file the definition of the external
   // module exists in.
   extMod->setAttr("filenames", builder.getStringAttr(fileContent));

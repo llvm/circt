@@ -22,6 +22,7 @@
 #include "mlir/IR/BuiltinOps.h"
 
 using namespace mlir;
+using namespace mlir::affine;
 using namespace circt::analysis;
 
 /// Helper to iterate through memory operation pairs and check for dependences
@@ -38,11 +39,17 @@ static void checkMemrefDependence(SmallVectorImpl<Operation *> &memoryOps,
       if (results.count(destination) == 0)
         results[destination] = SmallVector<MemoryDependence>();
 
-      // Look for for inter-iteration dependences on the same memory location.
+      // Look for inter-iteration dependences on the same memory location.
       MemRefAccess src(source);
       MemRefAccess dst(destination);
       FlatAffineValueConstraints dependenceConstraints;
       SmallVector<DependenceComponent, 2> depComps;
+
+      // Requested depth might not be a valid comparison if they do not belong
+      // to the same loop nest
+      if (depth > getInnermostCommonLoopDepth({source, destination}))
+        continue;
+
       DependenceResult result = checkMemrefAccessDependence(
           src, dst, depth, &dependenceConstraints, &depComps, true);
 
@@ -56,16 +63,16 @@ static void checkMemrefDependence(SmallVectorImpl<Operation *> &memoryOps,
       // Collect surrounding loops to use in dependence components. Only proceed
       // if we are in the innermost loop.
       SmallVector<AffineForOp> enclosingLoops;
-      getLoopIVs(*destination, &enclosingLoops);
+      getAffineForIVs(*destination, &enclosingLoops);
       if (enclosingLoops.size() != depth)
         continue;
 
       // Look for the common parent that src and dst share. If there is none,
       // there is nothing more to do.
       SmallVector<Operation *> srcParents;
-      getEnclosingAffineForAndIfOps(*source, &srcParents);
+      getEnclosingAffineOps(*source, &srcParents);
       SmallVector<Operation *> dstParents;
-      getEnclosingAffineForAndIfOps(*destination, &dstParents);
+      getEnclosingAffineOps(*destination, &dstParents);
 
       Operation *commonParent = nullptr;
       for (auto *srcParent : llvm::reverse(srcParents)) {
@@ -129,7 +136,7 @@ circt::analysis::MemoryDependenceAnalysis::MemoryDependenceAnalysis(
 
   // Collect affine loops grouped by nesting depth.
   std::vector<SmallVector<AffineForOp, 2>> depthToLoops;
-  mlir::gatherLoops(funcOp, depthToLoops);
+  mlir::affine::gatherLoops(funcOp, depthToLoops);
 
   // Collect load and store operations to check.
   SmallVector<Operation *> memoryOps;

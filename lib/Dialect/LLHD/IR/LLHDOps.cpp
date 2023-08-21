@@ -71,10 +71,6 @@ static Attribute constFoldTernaryOp(ArrayRef<Attribute> operands,
   assert(operands.size() == 3 && "ternary op takes three operands");
   if (!operands[0] || !operands[1] || !operands[2])
     return {};
-  if (operands[0].getType() != operands[1].getType())
-    return {};
-  if (operands[0].getType() != operands[2].getType())
-    return {};
 
   if (operands[0].isa<AttrElementT>() && operands[1].isa<AttrElementT>() &&
       operands[2].isa<AttrElementT>()) {
@@ -127,7 +123,7 @@ struct constant_int_all_ones_matcher {
   bool match(Operation *op) {
     APInt value;
     return mlir::detail::constant_int_op_binder(&value).match(op) &&
-           value.isAllOnesValue();
+           value.isAllOnes();
   }
 };
 
@@ -156,32 +152,6 @@ Type circt::llhd::getLLHDElementType(Type type) {
 }
 
 //===---------------------------------------------------------------------===//
-// LLHD Trait Helper Functions
-//===---------------------------------------------------------------------===//
-
-static bool sameKindArbitraryWidth(Type lhsType, Type rhsType) {
-  if (lhsType.getTypeID() != rhsType.getTypeID())
-    return false;
-
-  if (auto sig = lhsType.dyn_cast<llhd::SigType>())
-    return sameKindArbitraryWidth(
-        sig.getUnderlyingType(),
-        rhsType.cast<llhd::SigType>().getUnderlyingType());
-  if (auto ptr = lhsType.dyn_cast<llhd::PtrType>())
-    return sameKindArbitraryWidth(
-        ptr.getUnderlyingType(),
-        rhsType.cast<llhd::PtrType>().getUnderlyingType());
-
-  if (auto array = lhsType.dyn_cast<hw::ArrayType>())
-    return array.getElementType() ==
-           rhsType.cast<hw::ArrayType>().getElementType();
-
-  return (!lhsType.isa<ShapedType>() ||
-          (lhsType.cast<ShapedType>().getElementType() ==
-           rhsType.cast<ShapedType>().getElementType()));
-}
-
-//===---------------------------------------------------------------------===//
 // LLHD Operations
 //===---------------------------------------------------------------------===//
 
@@ -189,9 +159,9 @@ static bool sameKindArbitraryWidth(Type lhsType, Type rhsType) {
 // ConstantTimeOp
 //===----------------------------------------------------------------------===//
 
-OpFoldResult llhd::ConstantTimeOp::fold(ArrayRef<Attribute> operands) {
-  assert(operands.empty() && "const has no operands");
-  return valueAttr();
+OpFoldResult llhd::ConstantTimeOp::fold(FoldAdaptor adaptor) {
+  assert(adaptor.getOperands().empty() && "const has no operands");
+  return getValueAttr();
 }
 
 void llhd::ConstantTimeOp::build(OpBuilder &builder, OperationState &result,
@@ -200,41 +170,6 @@ void llhd::ConstantTimeOp::build(OpBuilder &builder, OperationState &result,
   auto *ctx = builder.getContext();
   auto attr = TimeAttr::get(ctx, time, timeUnit, delta, epsilon);
   return build(builder, result, TimeType::get(ctx), attr);
-}
-
-//===----------------------------------------------------------------------===//
-// ShlOp
-//===----------------------------------------------------------------------===//
-
-OpFoldResult llhd::ShlOp::fold(ArrayRef<Attribute> operands) {
-  /// llhd.shl(base, hidden, 0) -> base
-  if (matchPattern(amount(), m_Zero()))
-    return base();
-
-  return constFoldTernaryOp<IntegerAttr>(
-      operands, [](APInt base, APInt hidden, APInt amt) {
-        base <<= amt;
-        base += hidden.getHiBits(amt.getZExtValue());
-        return base;
-      });
-}
-
-//===----------------------------------------------------------------------===//
-// ShrOp
-//===----------------------------------------------------------------------===//
-
-OpFoldResult llhd::ShrOp::fold(ArrayRef<Attribute> operands) {
-  /// llhd.shl(base, hidden, 0) -> base
-  if (matchPattern(amount(), m_Zero()))
-    return base();
-
-  return constFoldTernaryOp<IntegerAttr>(
-      operands, [](APInt base, APInt hidden, APInt amt) {
-        base = base.getHiBits(base.getBitWidth() - amt.getZExtValue());
-        hidden = hidden.getLoBits(amt.getZExtValue());
-        hidden <<= base.getBitWidth() - amt.getZExtValue();
-        return base + hidden;
-      });
 }
 
 //===----------------------------------------------------------------------===//
@@ -248,19 +183,19 @@ static OpFoldResult foldSigPtrExtractOp(Op op, ArrayRef<Attribute> operands) {
     return nullptr;
 
   // llhd.sig.extract(input, 0) with inputWidth == resultWidth => input
-  if (op.resultWidth() == op.inputWidth() &&
+  if (op.getResultWidth() == op.getInputWidth() &&
       operands[1].cast<IntegerAttr>().getValue().isZero())
-    return op.input();
+    return op.getInput();
 
   return nullptr;
 }
 
-OpFoldResult llhd::SigExtractOp::fold(ArrayRef<Attribute> operands) {
-  return foldSigPtrExtractOp(*this, operands);
+OpFoldResult llhd::SigExtractOp::fold(FoldAdaptor adaptor) {
+  return foldSigPtrExtractOp(*this, adaptor.getOperands());
 }
 
-OpFoldResult llhd::PtrExtractOp::fold(ArrayRef<Attribute> operands) {
-  return foldSigPtrExtractOp(*this, operands);
+OpFoldResult llhd::PtrExtractOp::fold(FoldAdaptor adaptor) {
+  return foldSigPtrExtractOp(*this, adaptor.getOperands());
 }
 
 //===----------------------------------------------------------------------===//
@@ -274,59 +209,38 @@ static OpFoldResult foldSigPtrArraySliceOp(Op op,
     return nullptr;
 
   // llhd.sig.array_slice(input, 0) with inputWidth == resultWidth => input
-  if (op.resultWidth() == op.inputWidth() &&
+  if (op.getResultWidth() == op.getInputWidth() &&
       operands[1].cast<IntegerAttr>().getValue().isZero())
-    return op.input();
+    return op.getInput();
 
   return nullptr;
 }
 
-OpFoldResult llhd::SigArraySliceOp::fold(ArrayRef<Attribute> operands) {
-  return foldSigPtrArraySliceOp(*this, operands);
+OpFoldResult llhd::SigArraySliceOp::fold(FoldAdaptor adaptor) {
+  return foldSigPtrArraySliceOp(*this, adaptor.getOperands());
 }
 
-OpFoldResult llhd::PtrArraySliceOp::fold(ArrayRef<Attribute> operands) {
-  return foldSigPtrArraySliceOp(*this, operands);
+OpFoldResult llhd::PtrArraySliceOp::fold(FoldAdaptor adaptor) {
+  return foldSigPtrArraySliceOp(*this, adaptor.getOperands());
 }
 
 template <class Op>
 static LogicalResult canonicalizeSigPtrArraySliceOp(Op op,
                                                     PatternRewriter &rewriter) {
-  IntegerAttr amountAttr, indexAttr;
-
-  if (!matchPattern(op.lowIndex(), m_Constant(&indexAttr)))
+  IntegerAttr indexAttr;
+  if (!matchPattern(op.getLowIndex(), m_Constant(&indexAttr)))
     return failure();
-
-  // llhd.sig.array_slice(llhd.shr(hidden, base, constant amt), constant index)
-  //   with amt + index + sliceWidth <= baseWidth
-  //   => llhd.sig.array_slice(base, amt + index)
-  if (matchPattern(op.input(),
-                   m_Op<llhd::ShrOp>(matchers::m_Any(), matchers::m_Any(),
-                                     m_Constant(&amountAttr)))) {
-    uint64_t amount = amountAttr.getValue().getZExtValue();
-    uint64_t index = indexAttr.getValue().getZExtValue();
-    auto shrOp = op.input().template getDefiningOp<llhd::ShrOp>();
-    unsigned baseWidth = shrOp.getBaseWidth();
-
-    if (amount + index + op.resultWidth() <= baseWidth) {
-      op.inputMutable().assign(shrOp.base());
-      Value newIndex = rewriter.create<hw::ConstantOp>(
-          op->getLoc(), amountAttr.getValue() + indexAttr.getValue());
-      op.lowIndexMutable().assign(newIndex);
-
-      return success();
-    }
-  }
 
   // llhd.sig.array_slice(llhd.sig.array_slice(target, a), b)
   //   => llhd.sig.array_slice(target, a+b)
   IntegerAttr a;
-  if (matchPattern(op.input(), m_Op<Op>(matchers::m_Any(), m_Constant(&a)))) {
-    auto sliceOp = op.input().template getDefiningOp<Op>();
-    op.inputMutable().assign(sliceOp.input());
+  if (matchPattern(op.getInput(),
+                   m_Op<Op>(matchers::m_Any(), m_Constant(&a)))) {
+    auto sliceOp = op.getInput().template getDefiningOp<Op>();
+    op.getInputMutable().assign(sliceOp.getInput());
     Value newIndex = rewriter.create<hw::ConstantOp>(
         op->getLoc(), a.getValue() + indexAttr.getValue());
-    op.lowIndexMutable().assign(newIndex);
+    op.getLowIndexMutable().assign(newIndex);
 
     return success();
   }
@@ -345,73 +259,14 @@ LogicalResult llhd::PtrArraySliceOp::canonicalize(llhd::PtrArraySliceOp op,
 }
 
 //===----------------------------------------------------------------------===//
-// SigArrayGetOp and PtrArrayGetOp
-//===----------------------------------------------------------------------===//
-
-template <class Op>
-static LogicalResult canonicalizeSigPtrArrayGetOp(Op op,
-                                                  PatternRewriter &rewriter) {
-  // llhd.sig.array_get(llhd.shr(hidden, base, constant amt), constant index)
-  IntegerAttr indexAttr, amountAttr;
-  if (matchPattern(op.index(), m_Constant(&indexAttr)) &&
-      matchPattern(op.input(),
-                   m_Op<llhd::ShrOp>(matchers::m_Any(), matchers::m_Any(),
-                                     m_Constant(&amountAttr)))) {
-    // Use APInt for index to keep the original bitwidth, zero-extend amount to
-    // add it to index without requiring the same bitwidth and using the width
-    // of index
-    APInt index = indexAttr.getValue();
-    uint64_t amount = amountAttr.getValue().getZExtValue();
-    auto shrOp = op.input().template getDefiningOp<llhd::ShrOp>();
-    unsigned baseWidth = shrOp.getBaseWidth();
-    unsigned hiddenWidth = shrOp.getHiddenWidth();
-
-    // with amt + index < baseWidth
-    //   => llhd.sig.array_get(base, amt + index)
-    if (amount + index.getZExtValue() < baseWidth) {
-      op.inputMutable().assign(shrOp.base());
-      Value newIndex =
-          rewriter.create<hw::ConstantOp>(op->getLoc(), amount + index);
-      op.indexMutable().assign(newIndex);
-
-      return success();
-    }
-
-    // with amt + index >= baseWidth && amt + index < baseWidth + hiddenWidth
-    //   => llhd.sig.array_get(hidden, amt + index - baseWidth)
-    if (amount + index.getZExtValue() < baseWidth + hiddenWidth) {
-      op.inputMutable().assign(shrOp.hidden());
-      Value newIndex = rewriter.create<hw::ConstantOp>(
-          op->getLoc(), amount + index - baseWidth);
-      op.indexMutable().assign(newIndex);
-
-      return success();
-    }
-  }
-
-  return failure();
-}
-
-LogicalResult llhd::SigArrayGetOp::canonicalize(llhd::SigArrayGetOp op,
-                                                PatternRewriter &rewriter) {
-  return canonicalizeSigPtrArrayGetOp(op, rewriter);
-}
-
-LogicalResult llhd::PtrArrayGetOp::canonicalize(llhd::PtrArrayGetOp op,
-                                                PatternRewriter &rewriter) {
-  return canonicalizeSigPtrArrayGetOp(op, rewriter);
-}
-
-//===----------------------------------------------------------------------===//
 // SigStructExtractOp and PtrStructExtractOp
 //===----------------------------------------------------------------------===//
 
 template <class SigPtrType>
-static LogicalResult
-inferReturnTypesOfStructExtractOp(MLIRContext *context, Optional<Location> loc,
-                                  ValueRange operands, DictionaryAttr attrs,
-                                  mlir::RegionRange regions,
-                                  SmallVectorImpl<Type> &results) {
+static LogicalResult inferReturnTypesOfStructExtractOp(
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
+    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   Type type = operands[0]
                   .getType()
                   .cast<SigPtrType>()
@@ -422,7 +277,7 @@ inferReturnTypesOfStructExtractOp(MLIRContext *context, Optional<Location> loc,
                                     .cast<StringAttr>()
                                     .getValue());
   if (!type) {
-    context->getDiagEngine().emit(loc.getValueOr(UnknownLoc()),
+    context->getDiagEngine().emit(loc.value_or(UnknownLoc()),
                                   DiagnosticSeverity::Error)
         << "invalid field name specified";
     return failure();
@@ -432,32 +287,32 @@ inferReturnTypesOfStructExtractOp(MLIRContext *context, Optional<Location> loc,
 }
 
 LogicalResult llhd::SigStructExtractOp::inferReturnTypes(
-    MLIRContext *context, Optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::RegionRange regions,
-    SmallVectorImpl<Type> &results) {
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
+    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   return inferReturnTypesOfStructExtractOp<llhd::SigType>(
-      context, loc, operands, attrs, regions, results);
+      context, loc, operands, attrs, properties, regions, results);
 }
 
 LogicalResult llhd::PtrStructExtractOp::inferReturnTypes(
-    MLIRContext *context, Optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::RegionRange regions,
-    SmallVectorImpl<Type> &results) {
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
+    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   return inferReturnTypesOfStructExtractOp<llhd::PtrType>(
-      context, loc, operands, attrs, regions, results);
+      context, loc, operands, attrs, properties, regions, results);
 }
 
 //===----------------------------------------------------------------------===//
 // DrvOp
 //===----------------------------------------------------------------------===//
 
-LogicalResult llhd::DrvOp::fold(ArrayRef<Attribute> operands,
+LogicalResult llhd::DrvOp::fold(FoldAdaptor adaptor,
                                 SmallVectorImpl<OpFoldResult> &result) {
-  if (!enable())
+  if (!getEnable())
     return failure();
 
-  if (matchPattern(enable(), m_One())) {
-    enableMutable().clear();
+  if (matchPattern(getEnable(), m_One())) {
+    getEnableMutable().clear();
     return success();
   }
 
@@ -466,10 +321,10 @@ LogicalResult llhd::DrvOp::fold(ArrayRef<Attribute> operands,
 
 LogicalResult llhd::DrvOp::canonicalize(llhd::DrvOp op,
                                         PatternRewriter &rewriter) {
-  if (!op.enable())
+  if (!op.getEnable())
     return failure();
 
-  if (matchPattern(op.enable(), m_Zero())) {
+  if (matchPattern(op.getEnable(), m_Zero())) {
     rewriter.eraseOp(op);
     return success();
   }
@@ -484,7 +339,7 @@ LogicalResult llhd::DrvOp::canonicalize(llhd::DrvOp op,
 // Implement this operation for the BranchOpInterface
 SuccessorOperands llhd::WaitOp::getSuccessorOperands(unsigned index) {
   assert(index == 0 && "invalid successor index");
-  return SuccessorOperands(destOpsMutable());
+  return SuccessorOperands(getDestOpsMutable());
 }
 
 //===----------------------------------------------------------------------===//
@@ -502,8 +357,8 @@ parseArgumentList(OpAsmParser &parser,
     OpAsmParser::Argument argument;
     Type argType;
     auto optArg = parser.parseOptionalArgument(argument);
-    if (optArg.hasValue()) {
-      if (succeeded(optArg.getValue())) {
+    if (optArg.has_value()) {
+      if (succeeded(optArg.value())) {
         if (!argument.ssaName.name.empty() &&
             succeeded(parser.parseColonType(argType))) {
           args.push_back(argument);
@@ -552,9 +407,10 @@ ParseResult llhd::EntityOp::parse(OpAsmParser &parser, OperationState &result) {
   if (parser.parseOptionalAttrDictWithKeyword(result.attributes))
     return failure();
 
-  auto type = parser.getBuilder().getFunctionType(argTypes, llvm::None);
-  result.addAttribute(circt::llhd::EntityOp::getTypeAttrName(),
-                      TypeAttr::get(type));
+  auto type = parser.getBuilder().getFunctionType(argTypes, std::nullopt);
+  result.addAttribute(
+      circt::llhd::EntityOp::getFunctionTypeAttrName(result.name),
+      TypeAttr::get(type));
 
   auto &body = *result.addRegion();
   if (parser.parseRegion(body, args))
@@ -576,14 +432,14 @@ static void printArgumentList(OpAsmPrinter &printer,
 
 void llhd::EntityOp::print(OpAsmPrinter &printer) {
   std::vector<BlockArgument> ins, outs;
-  uint64_t nIns = insAttr().getInt();
-  for (uint64_t i = 0; i < body().front().getArguments().size(); ++i) {
+  uint64_t nIns = getInsAttr().getInt();
+  for (uint64_t i = 0; i < getBody().front().getArguments().size(); ++i) {
     // no furter verification for the attribute type is required, already
     // handled by verify.
     if (i < nIns) {
-      ins.push_back(body().front().getArguments()[i]);
+      ins.push_back(getBody().front().getArguments()[i]);
     } else {
-      outs.push_back(body().front().getArguments()[i]);
+      outs.push_back(getBody().front().getArguments()[i]);
     }
   }
   auto entityName =
@@ -599,14 +455,14 @@ void llhd::EntityOp::print(OpAsmPrinter &printer) {
   printer.printOptionalAttrDictWithKeyword(
       (*this)->getAttrs(),
       /*elidedAttrs =*/{SymbolTable::getSymbolAttrName(),
-                        llhd::EntityOp::getTypeAttrName(), "ins"});
+                        getFunctionTypeAttrName(), "ins"});
   printer << " ";
-  printer.printRegion(body(), false, false);
+  printer.printRegion(getBody(), false, false);
 }
 
 LogicalResult llhd::EntityOp::verify() {
   uint64_t numArgs = getNumArguments();
-  uint64_t nIns = insAttr().getInt();
+  uint64_t nIns = getInsAttr().getInt();
   // check that there is at most one flag for each argument
   if (numArgs < nIns) {
     return emitError(
@@ -642,28 +498,28 @@ LogicalResult circt::llhd::EntityOp::verifyType() {
 
 LogicalResult circt::llhd::EntityOp::verifyBody() {
   // check signal names are unique
-  llvm::StringSet sigSet;
-  llvm::StringSet instSet;
+  llvm::StringSet<> sigSet;
+  llvm::StringSet<> instSet;
   auto walkResult = walk([&sigSet, &instSet](Operation *op) -> WalkResult {
     return TypeSwitch<Operation *, WalkResult>(op)
         .Case<SigOp>([&](auto sigOp) -> WalkResult {
-          if (!sigSet.insert(sigOp.name()).second)
+          if (!sigSet.insert(sigOp.getName()).second)
             return sigOp.emitError("redefinition of signal named '")
-                   << sigOp.name() << "'!";
+                   << sigOp.getName() << "'!";
 
           return success();
         })
         .Case<OutputOp>([&](auto outputOp) -> WalkResult {
-          if (outputOp.name() && !sigSet.insert(*outputOp.name()).second)
+          if (outputOp.getName() && !sigSet.insert(*outputOp.getName()).second)
             return outputOp.emitError("redefinition of signal named '")
-                   << *outputOp.name() << "'!";
+                   << *outputOp.getName() << "'!";
 
           return success();
         })
         .Case<InstOp>([&](auto instOp) -> WalkResult {
-          if (!instSet.insert(instOp.name()).second)
+          if (!instSet.insert(instOp.getName()).second)
             return instOp.emitError("redefinition of instance named '")
-                   << instOp.name() << "'!";
+                   << instOp.getName() << "'!";
 
           return success();
         })
@@ -679,6 +535,14 @@ Region *llhd::EntityOp::getCallableRegion() {
 
 ArrayRef<Type> llhd::EntityOp::getCallableResults() {
   return getFunctionType().getResults();
+}
+
+ArrayAttr llhd::EntityOp::getCallableArgAttrs() {
+  return getArgAttrs().value_or(nullptr);
+}
+
+ArrayAttr llhd::EntityOp::getCallableResAttrs() {
+  return getResAttrs().value_or(nullptr);
 }
 
 //===----------------------------------------------------------------------===//
@@ -709,7 +573,7 @@ LogicalResult llhd::ProcOp::verify() {
   // Check that the ins attribute is smaller or equal the number of
   // arguments
   uint64_t numArgs = getNumArguments();
-  uint64_t numIns = insAttr().getInt();
+  uint64_t numIns = getInsAttr().getInt();
   if (numArgs < numIns) {
     return emitOpError(
                "Cannot have more inputs than arguments, expected at most ")
@@ -734,8 +598,8 @@ parseProcArgumentList(OpAsmParser &parser, SmallVectorImpl<Type> &argTypes,
     OpAsmParser::Argument argument;
     Type argumentType;
     auto optArg = parser.parseOptionalArgument(argument);
-    if (optArg.hasValue()) {
-      if (succeeded(optArg.getValue())) {
+    if (optArg.has_value()) {
+      if (succeeded(optArg.value())) {
         // Reject this if the preceding argument was missing a name.
         if (argNames.empty() && !argTypes.empty())
           return parser.emitError(loc,
@@ -798,8 +662,8 @@ ParseResult llhd::ProcOp::parse(OpAsmParser &parser, OperationState &result) {
   if (parseProcArgumentList(parser, argTypes, argNames))
     return failure();
 
-  auto type = builder.getFunctionType(argTypes, llvm::None);
-  result.addAttribute(circt::llhd::ProcOp::getTypeAttrName(),
+  auto type = builder.getFunctionType(argTypes, std::nullopt);
+  result.addAttribute(circt::llhd::ProcOp::getFunctionTypeAttrName(result.name),
                       TypeAttr::get(type));
 
   auto *body = result.addRegion();
@@ -817,8 +681,8 @@ static void printProcArguments(OpAsmPrinter &p, Operation *op,
   auto printList = [&](unsigned i, unsigned max) -> void {
     for (; i < max; ++i) {
       p << body.front().getArgument(i) << " : " << types[i];
-      p.printOptionalAttrDict(
-          ::mlir::function_interface_impl::getArgAttrs(op, i));
+      p.printOptionalAttrDict(::mlir::function_interface_impl::getArgAttrs(
+          cast<mlir::FunctionOpInterface>(op), i));
 
       if (i < max - 1)
         p << ", ";
@@ -837,9 +701,9 @@ void llhd::ProcOp::print(OpAsmPrinter &printer) {
   printer << ' ';
   printer.printSymbolName(getName());
   printProcArguments(printer, getOperation(), type.getInputs(),
-                     insAttr().getInt());
+                     getInsAttr().getInt());
   printer << " ";
-  printer.printRegion(body(), false, true);
+  printer.printRegion(getBody(), false, true);
 }
 
 Region *llhd::ProcOp::getCallableRegion() {
@@ -848,6 +712,14 @@ Region *llhd::ProcOp::getCallableRegion() {
 
 ArrayRef<Type> llhd::ProcOp::getCallableResults() {
   return getFunctionType().getResults();
+}
+
+ArrayAttr llhd::ProcOp::getCallableArgAttrs() {
+  return getArgAttrs().value_or(nullptr);
+}
+
+ArrayAttr llhd::ProcOp::getCallableResAttrs() {
+  return getResAttrs().value_or(nullptr);
 }
 
 //===----------------------------------------------------------------------===//
@@ -865,7 +737,7 @@ LogicalResult llhd::InstOp::verify() {
   if (proc) {
     auto type = proc.getFunctionType();
 
-    if (proc.ins() != inputs().size())
+    if (proc.getIns() != getInputs().size())
       return emitOpError("incorrect number of inputs for proc instantiation");
 
     if (type.getNumInputs() != getNumOperands())
@@ -885,7 +757,7 @@ LogicalResult llhd::InstOp::verify() {
   if (entity) {
     auto type = entity.getFunctionType();
 
-    if (entity.ins() != inputs().size())
+    if (entity.getIns() != getInputs().size())
       return emitOpError("incorrect number of inputs for entity instantiation");
 
     if (type.getNumInputs() != getNumOperands())
@@ -906,7 +778,7 @@ LogicalResult llhd::InstOp::verify() {
   if (module) {
     auto type = module.getFunctionType();
 
-    if (type.getNumInputs() != inputs().size())
+    if (type.getNumInputs() != getInputs().size())
       return emitOpError(
           "incorrect number of inputs for hw.module instantiation");
 
@@ -949,7 +821,7 @@ FunctionType llhd::InstOp::getCalleeType() {
 
 LogicalResult llhd::ConnectOp::canonicalize(llhd::ConnectOp op,
                                             PatternRewriter &rewriter) {
-  if (op.lhs() == op.rhs())
+  if (op.getLhs() == op.getRhs())
     rewriter.eraseOp(op);
   return success();
 }
@@ -992,7 +864,7 @@ ParseResult llhd::RegOp::parse(OpAsmParser &parser, OperationState &result) {
     if (!attrOptional)
       return parser.emitError(parser.getCurrentLocation(),
                               "invalid string attribute");
-    modesArray.push_back(static_cast<int64_t>(attrOptional.getValue()));
+    modesArray.push_back(static_cast<int64_t>(*attrOptional));
     if (parser.parseOperand(trigger))
       return failure();
     if (parser.parseKeyword("after") || parser.parseOperand(delay))
@@ -1043,66 +915,66 @@ ParseResult llhd::RegOp::parse(OpAsmParser &parser, OperationState &result) {
   operandSizes.push_back(triggerOperands.size());
   operandSizes.push_back(delayOperands.size());
   operandSizes.push_back(gateOperands.size());
-  result.addAttribute("operand_segment_sizes",
-                      parser.getBuilder().getI32VectorAttr(operandSizes));
+  result.addAttribute("operandSegmentSizes",
+                      parser.getBuilder().getDenseI32ArrayAttr(operandSizes));
 
   return success();
 }
 
 void llhd::RegOp::print(OpAsmPrinter &printer) {
-  printer << " " << signal();
-  for (size_t i = 0, e = values().size(); i < e; ++i) {
-    Optional<llhd::RegMode> mode = llhd::symbolizeRegMode(
-        modes().getValue()[i].cast<IntegerAttr>().getInt());
+  printer << " " << getSignal();
+  for (size_t i = 0, e = getValues().size(); i < e; ++i) {
+    std::optional<llhd::RegMode> mode = llhd::symbolizeRegMode(
+        getModes().getValue()[i].cast<IntegerAttr>().getInt());
     if (!mode) {
       emitError("invalid RegMode");
       return;
     }
-    printer << ", (" << values()[i] << ", \""
-            << llhd::stringifyRegMode(mode.getValue()) << "\" " << triggers()[i]
-            << " after " << delays()[i];
+    printer << ", (" << getValues()[i] << ", \""
+            << llhd::stringifyRegMode(*mode) << "\" " << getTriggers()[i]
+            << " after " << getDelays()[i];
     if (hasGate(i))
       printer << " if " << getGateAt(i);
-    printer << " : " << values()[i].getType() << ")";
+    printer << " : " << getValues()[i].getType() << ")";
   }
   printer.printOptionalAttrDict((*this)->getAttrs(),
-                                {"modes", "gateMask", "operand_segment_sizes"});
-  printer << " : " << signal().getType();
+                                {"modes", "gateMask", "operandSegmentSizes"});
+  printer << " : " << getSignal().getType();
 }
 
 LogicalResult llhd::RegOp::verify() {
   // At least one trigger has to be present
-  if (triggers().size() < 1)
+  if (getTriggers().size() < 1)
     return emitError("At least one trigger quadruple has to be present.");
 
   // Values variadic operand must have the same size as the triggers variadic
-  if (values().size() != triggers().size())
+  if (getValues().size() != getTriggers().size())
     return emitOpError("Number of 'values' is not equal to the number of "
                        "'triggers', got ")
-           << values().size() << " modes, but " << triggers().size()
+           << getValues().size() << " modes, but " << getTriggers().size()
            << " triggers!";
 
   // Delay variadic operand must have the same size as the triggers variadic
-  if (delays().size() != triggers().size())
+  if (getDelays().size() != getTriggers().size())
     return emitOpError("Number of 'delays' is not equal to the number of "
                        "'triggers', got ")
-           << delays().size() << " modes, but " << triggers().size()
+           << getDelays().size() << " modes, but " << getTriggers().size()
            << " triggers!";
 
   // Array Attribute of RegModes must have the same number of elements as the
   // variadics
-  if (modes().size() != triggers().size())
+  if (getModes().size() != getTriggers().size())
     return emitOpError("Number of 'modes' is not equal to the number of "
                        "'triggers', got ")
-           << modes().size() << " modes, but " << triggers().size()
+           << getModes().size() << " modes, but " << getTriggers().size()
            << " triggers!";
 
   // Array Attribute 'gateMask' must have the same number of elements as the
   // triggers and values variadics
-  if (gateMask().size() != triggers().size())
+  if (getGateMask().size() != getTriggers().size())
     return emitOpError("Size of 'gateMask' is not equal to the size of "
                        "'triggers', got ")
-           << gateMask().size() << " modes, but " << triggers().size()
+           << getGateMask().size() << " modes, but " << getTriggers().size()
            << " triggers!";
 
   // Number of non-zero elements in 'gateMask' has to be the same as the size
@@ -1110,7 +982,7 @@ LogicalResult llhd::RegOp::verify() {
   // only once and in increasing order
   unsigned counter = 0;
   unsigned prevElement = 0;
-  for (Attribute maskElem : gateMask().getValue()) {
+  for (Attribute maskElem : getGateMask().getValue()) {
     int64_t val = maskElem.cast<IntegerAttr>().getInt();
     if (val < 0)
       return emitError("Element in 'gateMask' must not be negative!");
@@ -1123,16 +995,16 @@ LogicalResult llhd::RegOp::verify() {
           "(may have zeros in-between).");
     counter++;
   }
-  if (gates().size() != counter)
+  if (getGates().size() != counter)
     return emitError("The number of non-zero elements in 'gateMask' and the "
                      "size of the 'gates' variadic have to match.");
 
   // Each value must be either the same type as the 'signal' or the underlying
   // type of the 'signal'
-  for (auto val : values()) {
-    if (val.getType() != signal().getType() &&
+  for (auto val : getValues()) {
+    if (val.getType() != getSignal().getType() &&
         val.getType() !=
-            signal().getType().cast<llhd::SigType>().getUnderlyingType()) {
+            getSignal().getType().cast<llhd::SigType>().getUnderlyingType()) {
       return emitOpError(
           "type of each 'value' has to be either the same as the "
           "type of 'signal' or the underlying type of 'signal'");

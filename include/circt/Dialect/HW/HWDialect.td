@@ -13,6 +13,8 @@
 #ifndef CIRCT_DIALECT_HW_HWDIALECT
 #define CIRCT_DIALECT_HW_HWDIALECT
 
+include "mlir/IR/OpBase.td"
+
 def HWDialect : Dialect {
   let name = "hw";
   let cppNamespace = "::circt::hw";
@@ -36,5 +38,9 @@ def HWDialect : Dialect {
     void printAttribute(Attribute attr, DialectAsmPrinter &p) const override;
   }];
 }
+
+// Base class for the operation in this dialect.
+class HWOp<string mnemonic, list<Trait> traits = []> :
+    Op<HWDialect, mnemonic, traits>;
 
 #endif // CIRCT_DIALECT_HW_HWDIALECT

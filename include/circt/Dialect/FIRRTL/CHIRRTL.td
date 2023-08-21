@@ -17,8 +17,12 @@ include "mlir/IR/AttrTypeBase.td"
 include "mlir/IR/OpBase.td"
 include "mlir/IR/OpAsmInterface.td"
 include "circt/Dialect/FIRRTL/FIRRTLDialect.td"
-include "circt/Dialect/FIRRTL/FIRRTLAttributes.td"
 include "circt/Dialect/FIRRTL/FIRRTLTypes.td"
+include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.td"
+include "circt/Dialect/FIRRTL/FIRRTLAttributes.td"
+include "circt/Dialect/FIRRTL/FIRRTLEnums.td"
+include "circt/Dialect/HW/HWOpInterfaces.td"
+include "circt/Dialect/HW/HWTypes.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
 
@@ -62,11 +66,11 @@ def CMemoryType : TypeDef<CHIRRTLDialect, "CMemory"> {
     ```
   }];
 
-  let parameters = (ins "firrtl::FIRRTLType":$elementType,
+  let parameters = (ins "firrtl::FIRRTLBaseType":$elementType,
                         "uint64_t":$numElements);
 
   let builders = [
-    TypeBuilderWithInferredContext<(ins "firrtl::FIRRTLType":$elementType,
+    TypeBuilderWithInferredContext<(ins "firrtl::FIRRTLBaseType":$elementType,
                                         "uint64_t":$numElements), [{
       return $_get(elementType.getContext(), elementType, numElements);
     }]>
@@ -95,46 +99,51 @@ def CMemoryPortType : TypeDef<CHIRRTLDialect, "CMemoryPort"> {
 // CHIRRTL Operations
 //===----------------------------------------------------------------------===//
 
-def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface,
-                         ["getAsmResultNames"]>;
-
 // Base class for the operation in this dialect.
 class CHIRRTLOp<string mnemonic, list<Trait> traits = []> :
     Op<CHIRRTLDialect, mnemonic, traits>;
 
-def CombMemOp : CHIRRTLOp<"combmem", [HasCustomSSAName]> {
+def CombMemOp : CHIRRTLOp<"combmem", [HasCustomSSAName, DeclareOpInterfaceMethods<InnerSymbol,["getTargetResultIndex"]>, FNamableOp]> {
   let summary = "Define a new combinational memory";
   let description = [{
     Define a new behavioral combinational memory. Combinational memories have a
     write latency of 1 and a read latency of 0.
   }];
-  let arguments = (ins StrAttr:$name, AnnotationArrayAttr:$annotations,
-                              OptionalAttr<SymbolNameAttr>:$inner_sym);
+  let arguments = (ins StrAttr:$name, NameKindAttr:$nameKind,
+                       AnnotationArrayAttr:$annotations,
+                       OptionalAttr<InnerSymAttr>:$inner_sym,
+                       OptionalAttr<MemoryInitAttr>:$init);
   let results = (outs CMemoryType:$result);
-  let assemblyFormat = "(`sym` $inner_sym^)? custom<CombMemOp>(attr-dict) `:` qualified(type($result))";
+  let assemblyFormat = [{(`sym` $inner_sym^)? `` custom<NameKind>($nameKind)
+                         `` custom<CombMemOp>(attr-dict) `:` qualified(type($result))}];
   let builders = [
-    OpBuilder<(ins "firrtl::FIRRTLType":$elementType, "uint64_t":$numElements,
-                   "mlir::StringRef":$name, "ArrayAttr":$annotations,
-                   CArg<"StringAttr", "StringAttr()">:$inner_sym)>
+    OpBuilder<(ins "firrtl::FIRRTLBaseType":$elementType, "uint64_t":$numElements,
+                   "mlir::StringRef":$name, "firrtl::NameKindEnum":$nameKind,
+                   "ArrayAttr":$annotations,
+                   CArg<"StringAttr", "StringAttr()">:$innerSym,
+                   CArg<"firrtl::MemoryInitAttr", "firrtl::MemoryInitAttr{}">:$init)>
   ];
 }
 
-def SeqMemOp : CHIRRTLOp<"seqmem", [HasCustomSSAName]> {
+def SeqMemOp : CHIRRTLOp<"seqmem", [HasCustomSSAName, DeclareOpInterfaceMethods<InnerSymbol,["getTargetResultIndex"]>, FNamableOp]> {
   let summary = "Define a new sequential memory";
   let description = [{
     Define a new behavioral sequential memory.  Sequential memories have a
     write latency and a read latency of 1.
   }];
-  let arguments = (ins RUWAttr:$ruw, StrAttr:$name,
+  let arguments = (ins RUWAttr:$ruw, StrAttr:$name, NameKindAttr:$nameKind,
                        AnnotationArrayAttr:$annotations,
-                       OptionalAttr<SymbolNameAttr>:$inner_sym);
+                       OptionalAttr<InnerSymAttr>:$inner_sym,
+                       OptionalAttr<MemoryInitAttr>:$init);
   let results = (outs CMemoryType:$result);
-  let assemblyFormat = "(`sym` $inner_sym^)? $ruw custom<SeqMemOp>(attr-dict) `:` qualified(type($result))";
+  let assemblyFormat = [{(`sym` $inner_sym^)? `` custom<NameKind>($nameKind) $ruw
+                         custom<SeqMemOp>(attr-dict) `:` qualified(type($result))}];
   let builders = [
-    OpBuilder<(ins "firrtl::FIRRTLType":$elementType, "uint64_t":$numElements,
+    OpBuilder<(ins "firrtl::FIRRTLBaseType":$elementType, "uint64_t":$numElements,
                    "RUWAttr":$ruw, "mlir::StringRef":$name,
-                   "ArrayAttr":$annotations,
-                   CArg<"StringAttr", "StringAttr()">:$inner_sym)>
+                   "firrtl::NameKindEnum":$nameKind, "ArrayAttr":$annotations,
+                   CArg<"StringAttr", "StringAttr()">:$innerSym,
+                   CArg<"firrtl::MemoryInitAttr", "firrtl::MemoryInitAttr{}">:$init)>
   ];
 }
 
@@ -156,10 +165,10 @@ def MemoryPortOp : CHIRRTLOp<"memoryport", [InferTypeOpInterface,
   let arguments = (ins CMemoryType:$memory, MemDirAttr:$direction,
                     StrAttr:$name, AnnotationArrayAttr:$annotations);
 
-  let results = (outs FIRRTLType:$data, CMemoryPortType:$port);
+  let results = (outs FIRRTLBaseType:$data, CMemoryPortType:$port);
 
   let assemblyFormat = [{
-    $direction $memory custom<MemoryPortOp>(attr-dict) `:`
+    $direction $memory `` custom<MemoryPortOp>(attr-dict) `:`
        functional-type(operands, results)
   }];
 
@@ -177,9 +186,10 @@ def MemoryPortOp : CHIRRTLOp<"memoryport", [InferTypeOpInterface,
 
     /// Infer the return types of this operation.
     static LogicalResult inferReturnTypes(MLIRContext *context,
-                                          Optional<Location> loc,
+                                          std::optional<Location> loc,
                                           ValueRange operands,
                                           DictionaryAttr attrs,
+                                          mlir::OpaqueProperties properties,
                                           mlir::RegionRange regions,
                                           SmallVectorImpl<Type> &results);
   }];
@@ -204,4 +214,41 @@ def MemoryPortAccessOp : CHIRRTLOp<"memoryport.access"> {
   }];
 }
 
+def MemoryDebugPortOp : CHIRRTLOp<"debugport", [InferTypeOpInterface,
+      HasCustomSSAName]> {
+  let summary = "Declares a memory debug port on a memory";
+
+  let summary = "Defines a debug memory port on CHIRRTL memory";
+  let description = [{
+    This operation defines a new debug memory port on a `combmem`CHISEL.
+    `data` is the data returned from the memory port.
+  }];
+
+  let arguments = (ins CMemoryType:$memory,
+                    StrAttr:$name, AnnotationArrayAttr:$annotations);
+
+  let results = (outs RefType:$data);
+
+  let assemblyFormat = [{
+    $memory custom<MemoryDebugPortOp>(attr-dict) `:`
+       functional-type(operands, results)
+  }];
+
+  let builders = [
+    OpBuilder<(ins "::mlir::Type":$dataType, "::mlir::Value":$memory,
+                   CArg<"StringRef", "{}">:$name,
+                   CArg<"ArrayRef<Attribute>","{}">:$annotations)>
+  ];
+
+  let extraClassDeclaration = [{
+    /// Infer the return types of this operation.
+    static LogicalResult inferReturnTypes(MLIRContext *context,
+                                          std::optional<Location> loc,
+                                          ValueRange operands,
+                                          DictionaryAttr attrs,
+                                          mlir::OpaqueProperties properties,
+                                          mlir::RegionRange regions,
+                                          SmallVectorImpl<Type> &results);
+  }];
+}
 #endif // CHIRRTL_TD

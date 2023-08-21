@@ -19,23 +19,21 @@ include "circt/Dialect/Handshake/Handshake.td"
 def HasOneOperand : Constraint<CPred<"$_self.size() == 1">, "has one operand">;
 def HasOneResult : Constraint<CPred<"$_self.size() == 1">, "has one result">;
 
-def EliminateSimpleMergesPattern : Pat<(MergeOp $dataType, $size, $arg), (replaceWithValue $arg),
+def EliminateSimpleMergesPattern : Pat<(MergeOp $arg), (replaceWithValue $arg),
                                        [(HasOneOperand:$arg)]>;
 
-def EliminateSimpleBranchesPattern
-    : Pat<(BranchOp $dataType, $a), (replaceWithValue $a)>;
+def EliminateSimpleBranchesPattern: Pat<(BranchOp $a), (replaceWithValue $a)>;
 
-def EliminateSimpleForksPattern : Pat<(ForkOp
-                                       : $op $dataType, $size, $arg),
+def EliminateSimpleForksPattern : Pat<(ForkOp:$op $arg),
                                       (replaceWithValue $arg), [(HasOneResult
                                                                : $op)]>;
 
 def EliminateSunkConstantsPattern
-    : Pat<(SinkOp:$sink (ConstantOp $control, $value)),
+    : Pat<(SinkOp:$sink (ConstantOp $value, $ctrl)),
           (replaceWithValue $sink)>;
 
 def EliminateSunkBuffersPattern
-    : Pat<(SinkOp:$sink (BufferOp $dataType, $size, $value, $sequential, $initValues)),
-          (SinkOp $value)>;
+    : Pat<(SinkOp (BufferOp $operand, $size, $bufferType, $initValues)),
+          (SinkOp $operand)>;
 
 #endif // CIRCT_DIALECT_HANDSHAKE_HANDSHAKECANONICALIZATION_TD

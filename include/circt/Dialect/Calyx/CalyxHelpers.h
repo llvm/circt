@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_CALYX_CALYXHELPERS_H
 
 #include "circt/Dialect/Calyx/CalyxOps.h"
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/LLVM.h"
 
@@ -49,6 +50,22 @@ void addMandatoryComponentPorts(PatternRewriter &rewriter,
 // Returns the bit width for the given dimension. This will always be greater
 // than zero. See: https://github.com/llvm/circt/issues/2660
 unsigned handleZeroWidth(int64_t dim);
+
+/// Updates the guard of each assignment within a group with `op`.
+template <typename Op>
+static void updateGroupAssignmentGuards(OpBuilder &builder, GroupOp &group,
+                                        Op &op) {
+  group.walk([&](AssignOp assign) {
+    if (assign.getGuard())
+      // If the assignment is guarded already, take the bitwise & of the current
+      // guard and the group's go signal.
+      assign->setOperand(2, builder.create<comb::AndOp>(
+                                group.getLoc(), assign.getGuard(), op, false));
+    else
+      // Otherwise, just insert it as the guard.
+      assign->insertOperands(2, {op});
+  });
+}
 
 } // namespace calyx
 } // namespace circt

@@ -13,6 +13,7 @@
 include "mlir/IR/EnumAttr.td"
 
 def LLHD_SigOp : LLHD_Op<"sig", [
+    ParentOneOf<["llhd::EntityOp", "llhd::ProcOp"]>,
     TypesMatchWith<
       "type of 'init' and underlying type of 'signal' have to match.",
       "init", "result", "SigType::get($_self)">
@@ -278,26 +279,26 @@ def LLHD_RegOp : LLHD_Op<"reg", [
   let extraClassDeclaration = [{
     static StringRef getModeAttrName() { return "modes"; }
     static RegMode getRegModeByName(StringRef name) {
-      llvm::Optional<RegMode> optional =  symbolizeRegMode(name);
+      std::optional<RegMode> optional =  symbolizeRegMode(name);
       assert(optional && "Invalid RegMode string.");
-      return optional.getValue();
+      return *optional;
     }
 
     bool hasGate(unsigned index) {
-      assert(index < gateMask().getValue().size() && "Index out of range.");
-      return gateMask().getValue()[index].cast<IntegerAttr>().getInt() != 0;
+      assert(index < getGateMask().getValue().size() && "Index out of range.");
+      return getGateMask().getValue()[index].cast<IntegerAttr>().getInt() != 0;
     }
 
     Value getGateAt(unsigned index) {
-      assert(index < gateMask().getValue().size() && "Index out of range.");
+      assert(index < getGateMask().getValue().size() && "Index out of range.");
       if (!hasGate(index)) return Value();
       return
-        gates()[gateMask().getValue()[index].cast<IntegerAttr>().getInt()-1];
+        getGates()[getGateMask().getValue()[index].cast<IntegerAttr>().getInt()-1];
     }
 
     RegMode getRegModeAt(unsigned index) {
-      assert(index < modes().getValue().size() && "Index out of range.");
-      return (RegMode)modes().getValue()[index].cast<IntegerAttr>().getInt();
+      assert(index < getModes().getValue().size() && "Index out of range.");
+      return (RegMode)getModes().getValue()[index].cast<IntegerAttr>().getInt();
     }
   }];
 

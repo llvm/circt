@@ -56,6 +56,12 @@ std::string Signal::toHexString(unsigned elemIndex) const {
   }
   return ret;
 }
+
+Signal::~Signal() {
+  std::free(value);
+  value = nullptr;
+}
+
 //===----------------------------------------------------------------------===//
 // Slot
 //===----------------------------------------------------------------------===//
@@ -67,19 +73,19 @@ bool Slot::operator>(const Slot &rhs) const { return rhs.time < time; }
 void Slot::insertChange(int index, int bitOffset, uint8_t *bytes,
                         unsigned width) {
   // Get the amount of 64 bit words required to store the value in an APInt.
-  auto size = llvm::divideCeil(width, 64);
+  auto size = llvm::divideCeil(width, 8);
+
+  APInt buffer(width, 0);
+  llvm::LoadIntFromMemory(buffer, bytes, size);
+  auto offsetBufferPair = std::make_pair(bitOffset, buffer);
 
   if (changesSize >= buffers.size()) {
     // Create a new change buffer if we don't have any unused one available for
     // reuse.
-    buffers.push_back(std::make_pair(
-        bitOffset,
-        APInt(width, makeArrayRef(reinterpret_cast<uint64_t *>(bytes), size))));
+    buffers.push_back(offsetBufferPair);
   } else {
     // Reuse the first available buffer.
-    buffers[changesSize] = std::make_pair(
-        bitOffset,
-        APInt(width, makeArrayRef(reinterpret_cast<uint64_t *>(bytes), size)));
+    buffers[changesSize] = offsetBufferPair;
   }
 
   // Map the signal index to the change buffer so we can retrieve
@@ -186,6 +192,17 @@ void UpdateQueue::pop() {
 }
 
 //===----------------------------------------------------------------------===//
+// Instance
+//===----------------------------------------------------------------------===//
+
+Instance::~Instance() {
+  std::free(procState);
+  procState = nullptr;
+  std::free(entityState);
+  entityState = nullptr;
+}
+
+//===----------------------------------------------------------------------===//
 // State
 //===----------------------------------------------------------------------===//
 
@@ -231,7 +248,7 @@ void State::addProcPtr(std::string name, ProcState *procStatePtr) {
 
   // Store instance index in process state.
   procStatePtr->inst = it - instances.begin();
-  (*it).procState = std::unique_ptr<ProcState>(procStatePtr);
+  (*it).procState = procStatePtr;
 }
 
 int State::addSignalData(int index, std::string owner, uint8_t *value,

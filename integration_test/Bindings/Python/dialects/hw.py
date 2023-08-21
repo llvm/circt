@@ -3,9 +3,10 @@
 
 import circt
 from circt.dialects import hw
+from circt.support import attribute_to_var
 
-from mlir.ir import (Context, Location, InsertionPoint, IntegerType,
-                     IntegerAttr, Module, StringAttr, TypeAttr)
+from circt.ir import (Context, Location, InsertionPoint, IntegerType,
+                      IntegerAttr, Module, StringAttr, TypeAttr)
 
 with Context() as ctx, Location.unknown():
   circt.register_dialects(ctx)
@@ -22,7 +23,7 @@ with Context() as ctx, Location.unknown():
       constI2 = hw.ConstantOp(IntegerAttr.get(i2, 1))
       constI1 = hw.ConstantOp.create(i1, 1)
 
-      # CHECK: All arguments must be the same type to create an array
+      # CHECK: Argument 1 has a different element type (i32) than the element type of the array (i1)
       try:
         hw.ArrayCreateOp.create([constI1, constI32])
       except TypeError as e:
@@ -48,8 +49,8 @@ with Context() as ctx, Location.unknown():
       # CHECK: [[ARRAY2:%.+]] = hw.array_create %[[CONST]] : i32
       array2 = hw.ArrayCreateOp.create([constI32])
 
-      # CHECK: %false = hw.constant false
-      # CHECK: hw.array_get [[ARRAY2]][%false] : !hw.array<1xi32>
+      # CHECK: %c0_i0 = hw.constant 0 : i0
+      # CHECK: hw.array_get [[ARRAY2]][%c0_i0] : !hw.array<1xi32>
       hw.ArrayGetOp.create(array2, 0)
 
       # CHECK: [[STRUCT1:%.+]] = hw.struct_create (%c1_i32, %true) : !hw.struct<a: i32, b: i1>
@@ -74,18 +75,33 @@ with Context() as ctx, Location.unknown():
   print(typeAlias.scope)
   print(typeAlias.name)
 
-  pdecl = hw.ParamDeclAttr.get("param1", TypeAttr.get(i32),
-                               IntegerAttr.get(i32, 13))
-  # CHECK: #hw.param.decl<"param1": i32 = 13 : i32>
+  pdecl = hw.ParamDeclAttr.get("param1", i32, IntegerAttr.get(i32, 13))
+  # CHECK: #hw.param.decl<"param1": i32 = 13>
   print(pdecl)
 
-  pdecl = hw.ParamDeclAttr.get_nodefault("param2", TypeAttr.get(i32))
+  pdecl = hw.ParamDeclAttr.get_nodefault("param2", i32)
   # CHECK: #hw.param.decl<"param2": i32>
   print(pdecl)
+
+  # CHECK: #hw.param.decl.ref<"param2"> : i32
+  pdeclref = hw.ParamDeclRefAttr.get(ctx, "param2")
+  print(pdeclref)
+
+  # CHECK: !hw.int<#hw.param.decl.ref<"param2">>
+  pinttype = hw.ParamIntType.get_from_param(ctx, pdeclref)
+  print(pinttype)
 
   pverbatim = hw.ParamVerbatimAttr.get(StringAttr.get("this is verbatim"))
   # CHECK: #hw.param.verbatim<"this is verbatim">
   print(pverbatim)
+
+  inner_sym = hw.InnerSymAttr.get(StringAttr.get("some_sym"))
+  # CHECK: #hw<innerSym@some_sym>
+  print(inner_sym)
+  # CHECK: "some_sym"
+  print(inner_sym.symName)
+  # CHECK: some_sym
+  print(attribute_to_var(inner_sym))
 
   inner_ref = hw.InnerRefAttr.get(StringAttr.get("some_module"),
                                   StringAttr.get("some_instance"))

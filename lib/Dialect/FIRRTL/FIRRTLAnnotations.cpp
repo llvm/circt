@@ -14,20 +14,16 @@
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/Operation.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
 using namespace firrtl;
-
-static size_t getPortCount(Operation *op) {
-  if (auto module = dyn_cast<FModuleLike>(op))
-    return module.getNumPorts();
-  return op->getNumResults();
-}
 
 static ArrayAttr getAnnotationsFrom(Operation *op) {
   if (auto annots = op->getAttrOfType<ArrayAttr>(getAnnotationAttrName()))
@@ -67,7 +63,7 @@ AnnotationSet::AnnotationSet(Operation *op)
 static AnnotationSet forPort(Operation *op, size_t portNo) {
   auto ports = op->getAttrOfType<ArrayAttr>(getPortAnnotationAttrName());
   if (ports && !ports.empty())
-    return AnnotationSet(ports[portNo].cast<ArrayAttr>());
+    return AnnotationSet(cast<ArrayAttr>(ports[portNo]));
   return AnnotationSet(ArrayAttr::get(op->getContext(), {}));
 }
 
@@ -84,7 +80,7 @@ AnnotationSet AnnotationSet::get(Value v) {
   if (auto op = v.getDefiningOp())
     return AnnotationSet(op);
   // If its not an Operation, then must be a block argument.
-  auto arg = v.dyn_cast<BlockArgument>();
+  auto arg = dyn_cast<BlockArgument>(v);
   auto module = cast<FModuleOp>(arg.getOwner()->getParentOp());
   return forPort(module, arg.getArgNumber());
 }
@@ -416,7 +412,7 @@ bool AnnotationSet::removePortAnnotations(
   bool changed = false;
   for (unsigned argNum = 0, argNumEnd = ports.size(); argNum < argNumEnd;
        ++argNum) {
-    AnnotationSet annos(AnnotationSet(ports[argNum].cast<ArrayAttr>()));
+    AnnotationSet annos(AnnotationSet(cast<ArrayAttr>(ports[argNum])));
 
     // Go through all annotations on this port and extract the interesting
     // ones. If any modifications were done, keep a reduced set of attributes
@@ -439,22 +435,14 @@ bool AnnotationSet::removePortAnnotations(
 //===----------------------------------------------------------------------===//
 
 DictionaryAttr Annotation::getDict() const {
-  if (auto subAnno = attr.dyn_cast<SubAnnotationAttr>())
-    return subAnno.getAnnotations();
-  return attr.cast<DictionaryAttr>();
+  return cast<DictionaryAttr>(attr);
 }
 
-void Annotation::setDict(DictionaryAttr dict) {
-  if (auto subAnno = attr.dyn_cast<SubAnnotationAttr>())
-    attr = SubAnnotationAttr::get(subAnno.getContext(), subAnno.getFieldID(),
-                                  dict);
-  else
-    attr = dict;
-}
+void Annotation::setDict(DictionaryAttr dict) { attr = dict; }
 
 unsigned Annotation::getFieldID() const {
-  if (auto subAnno = attr.dyn_cast<SubAnnotationAttr>())
-    return subAnno.getFieldID();
+  if (auto fieldID = getMember<IntegerAttr>("circt.fieldID"))
+    return fieldID.getInt();
   return 0;
 }
 
@@ -565,14 +553,16 @@ void AnnoTarget::setAnnotations(AnnotationSet annotations) const {
       [&](auto target) { target.setAnnotations(annotations); });
 }
 
-StringAttr AnnoTarget::getInnerSym(ModuleNamespace &moduleNamespace) const {
+StringAttr
+AnnoTarget::getInnerSym(hw::InnerSymbolNamespace &moduleNamespace) const {
   return TypeSwitch<AnnoTarget, StringAttr>(*this)
       .Case<OpAnnoTarget, PortAnnoTarget>(
           [&](auto target) { return target.getInnerSym(moduleNamespace); })
       .Default([](auto target) { return StringAttr(); });
 }
 
-Attribute AnnoTarget::getNLAReference(ModuleNamespace &moduleNamespace) const {
+Attribute
+AnnoTarget::getNLAReference(hw::InnerSymbolNamespace &moduleNamespace) const {
   return TypeSwitch<AnnoTarget, Attribute>(*this)
       .Case<OpAnnoTarget, PortAnnoTarget>(
           [&](auto target) { return target.getNLAReference(moduleNamespace); })
@@ -594,41 +584,41 @@ void OpAnnoTarget::setAnnotations(AnnotationSet annotations) const {
   annotations.applyToOperation(getOp());
 }
 
-StringAttr OpAnnoTarget::getInnerSym(ModuleNamespace &moduleNamespace) const {
-  auto *context = getOp()->getContext();
-  auto innerSym = getOp()->getAttrOfType<StringAttr>("inner_sym");
-  if (!innerSym) {
-    // Try to come up with a reasonable name.
-    StringRef name = "inner_sym";
-    auto nameAttr = getOp()->getAttrOfType<StringAttr>("name");
-    if (nameAttr && !nameAttr.getValue().empty())
-      name = nameAttr.getValue();
-    innerSym = StringAttr::get(context, moduleNamespace.newName(name));
-    getOp()->setAttr("inner_sym", innerSym);
-  }
-  assert(innerSym && "invalid inner_sym");
-  return innerSym;
+StringAttr
+OpAnnoTarget::getInnerSym(hw::InnerSymbolNamespace &moduleNamespace) const {
+  return ::getOrAddInnerSym(
+      getOp(), [&moduleNamespace](auto _) -> hw::InnerSymbolNamespace & {
+        return moduleNamespace;
+      });
 }
 
 Attribute
-OpAnnoTarget::getNLAReference(ModuleNamespace &moduleNamespace) const {
+OpAnnoTarget::getNLAReference(hw::InnerSymbolNamespace &moduleNamespace) const {
   // If the op is a module, just return the module name.
   if (auto module = llvm::dyn_cast<FModuleLike>(getOp())) {
-    assert(module.moduleNameAttr() && "invalid NLA reference");
-    return FlatSymbolRefAttr::get(module.moduleNameAttr());
+    assert(module.getModuleNameAttr() && "invalid NLA reference");
+    return FlatSymbolRefAttr::get(module.getModuleNameAttr());
   }
   // Return an inner-ref to the target.
-  auto moduleName = getOp()->getParentOfType<FModuleLike>().moduleNameAttr();
-  auto innerSym = getInnerSym(moduleNamespace);
-  assert(moduleName && innerSym && "invalid NLA reference");
-  return hw::InnerRefAttr::get(moduleName, innerSym);
+  return ::getInnerRefTo(
+      getOp(), [&moduleNamespace](auto _) -> hw::InnerSymbolNamespace & {
+        return moduleNamespace;
+      });
 }
 
 FIRRTLType OpAnnoTarget::getType() const {
   auto *op = getOp();
+  // Annotations that target operations are resolved like inner symbols.
+  if (auto is = llvm::dyn_cast<hw::InnerSymbolOpInterface>(op)) {
+    auto result = is.getTargetResult();
+    if (!result)
+      return {};
+    return type_cast<FIRRTLType>(result.getType());
+  }
+  // Fallback to assuming the single result is the target.
   if (op->getNumResults() != 1)
     return {};
-  return op->getResult(0).getType().cast<FIRRTLType>();
+  return type_cast<FIRRTLType>(op->getResult(0).getType());
 }
 
 PortAnnoTarget::PortAnnoTarget(FModuleLike op, unsigned portNo)
@@ -655,59 +645,36 @@ void PortAnnoTarget::setAnnotations(AnnotationSet annotations) const {
     llvm_unreachable("unknown port target");
 }
 
-StringAttr PortAnnoTarget::getInnerSym(ModuleNamespace &moduleNamespace) const {
-  auto *context = getOp()->getContext();
-
+StringAttr
+PortAnnoTarget::getInnerSym(hw::InnerSymbolNamespace &moduleNamespace) const {
   // If this is not a module, we just need to get an inner_sym on the operation
   // itself.
-  if (!llvm::isa<FModuleLike>(getOp()))
-    return OpAnnoTarget(getOp()).getInnerSym(moduleNamespace);
-
-  auto portSyms = getOp()->getAttrOfType<ArrayAttr>("portSyms");
-  // If there is a valid sym, return it.
-  if (portSyms && !portSyms.empty())
-    if (auto innerSym = portSyms[getPortNo()].cast<StringAttr>())
-      if (!innerSym.strref().empty())
-        return innerSym;
-
-  // Create the new array.
-  SmallVector<Attribute> newSyms;
-  if (!portSyms || portSyms.empty())
-    newSyms.assign(getPortCount(getOp()), StringAttr::get(context, ""));
-  else
-    newSyms.assign(portSyms.begin(), portSyms.end());
-
-  // Try to come up with a reasonable name based on the port name.
-  StringRef name = "inner_sym";
-  if (auto portNames = getOp()->getAttrOfType<ArrayAttr>("portNames"))
-    name = portNames[getPortNo()].cast<StringAttr>().getValue();
-  else if (auto nameAttr = getOp()->getAttrOfType<StringAttr>("name"))
-    name = nameAttr.getValue();
-  auto innerSym = StringAttr::get(context, moduleNamespace.newName(name));
-
-  // Attach the inner sym.
-  newSyms[getPortNo()] = innerSym;
-  getOp()->setAttr("portSyms", ArrayAttr::get(context, newSyms));
-  return innerSym;
+  auto module = llvm::dyn_cast<FModuleLike>(getOp());
+  auto target = module ? hw::InnerSymTarget(getPortNo(), module)
+                       : hw::InnerSymTarget(getOp());
+  return ::getOrAddInnerSym(
+      target, [&moduleNamespace](auto _) -> hw::InnerSymbolNamespace & {
+        return moduleNamespace;
+      });
 }
 
-Attribute
-PortAnnoTarget::getNLAReference(ModuleNamespace &moduleNamespace) const {
+Attribute PortAnnoTarget::getNLAReference(
+    hw::InnerSymbolNamespace &moduleNamespace) const {
   auto module = llvm::dyn_cast<FModuleLike>(getOp());
-  if (!module)
-    module = getOp()->getParentOfType<FModuleLike>();
-  StringAttr moduleName = module.moduleNameAttr();
-  auto innerSym = getInnerSym(moduleNamespace);
-  assert(moduleName && innerSym && "invalid NLA reference");
-  return hw::InnerRefAttr::get(moduleName, innerSym);
+  auto target = module ? hw::InnerSymTarget(getPortNo(), module)
+                       : hw::InnerSymTarget(getOp());
+  return ::getInnerRefTo(
+      target, [&moduleNamespace](auto _) -> hw::InnerSymbolNamespace & {
+        return moduleNamespace;
+      });
 }
 
 FIRRTLType PortAnnoTarget::getType() const {
   auto *op = getOp();
   if (auto module = llvm::dyn_cast<FModuleLike>(op))
-    return module.getPortType(getPortNo());
+    return type_cast<FIRRTLType>(module.getPortType(getPortNo()));
   if (llvm::isa<MemOp, InstanceOp>(op))
-    return op->getResult(getPortNo()).getType().cast<FIRRTLType>();
+    return type_cast<FIRRTLType>(op->getResult(getPortNo()).getType());
   llvm_unreachable("unknow operation kind");
   return {};
 }
@@ -721,5 +688,31 @@ FIRRTLType PortAnnoTarget::getType() const {
 bool circt::firrtl::isOMIRStringEncodedPassthrough(StringRef type) {
   return type == "OMID" || type == "OMReference" || type == "OMBigInt" ||
          type == "OMLong" || type == "OMString" || type == "OMDouble" ||
-         type == "OMBigDecimal" || type == "OMDeleted" || type == "OMConstant";
+         type == "OMBigDecimal" || type == "OMDeleted";
+}
+
+//===----------------------------------------------------------------------===//
+// Utilities for Specific Annotations
+//
+// TODO: Remove these in favor of first-class annotations.
+//===----------------------------------------------------------------------===//
+
+LogicalResult circt::firrtl::extractDUT(const FModuleOp mod, FModuleOp &dut) {
+  if (!AnnotationSet(mod).hasAnnotation(dutAnnoClass))
+    return success();
+
+  // TODO: This check is duplicated multiple places, e.g., in
+  // WireDFT.  This should be factored out as part of the annotation
+  // lowering pass.
+  if (dut) {
+    auto diag = emitError(mod->getLoc())
+                << "is marked with a '" << dutAnnoClass << "', but '"
+                << dut.getModuleName()
+                << "' also had such an annotation (this should "
+                   "be impossible!)";
+    diag.attachNote(dut.getLoc()) << "the first DUT was found here";
+    return failure();
+  }
+  dut = mod;
+  return success();
 }

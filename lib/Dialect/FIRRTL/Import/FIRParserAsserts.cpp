@@ -15,6 +15,8 @@
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "llvm/ADT/APSInt.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/JSON.h"
 
@@ -164,6 +166,7 @@ ParseResult parseJson(Location loc, const JsonType &jsonValue, FnType fn) {
 enum class VerifFlavor {
   VerifLibAssert, // contains "[verif-library-assert]"
   VerifLibAssume, // contains "[verif-library-assume]"
+  VerifLibCover,  // contains "[verif-library-cover]"
   Assert,         // begins with "assert:"
   Assume,         // begins with "assume:"
   Cover,          // begins with "cover:"
@@ -177,35 +180,35 @@ enum class PredicateModifier { NoMod, TrueOrIsX };
 /// Parse a conditional compile toggle (e.g. "unrOnly") into the corresponding
 /// preprocessor guard macro name (e.g. "USE_UNR_ONLY_CONSTRAINTS"), or report
 /// an error.
-static Optional<StringRef>
+static std::optional<StringRef>
 parseConditionalCompileToggle(const ExtractionSummaryCursor<StringRef> &ex) {
   if (ex.value == "formalOnly")
     return {"USE_FORMAL_ONLY_CONSTRAINTS"};
   else if (ex.value == "unrOnly")
     return {"USE_UNR_ONLY_CONSTRAINTS"};
   ex.emitError() << "must be `formalOnly` or `unrOnly`";
-  return llvm::None;
+  return std::nullopt;
 }
 
 /// Parse a string into a `PredicateModifier`.
-static Optional<PredicateModifier>
+static std::optional<PredicateModifier>
 parsePredicateModifier(const ExtractionSummaryCursor<StringRef> &ex) {
   if (ex.value == "noMod")
     return PredicateModifier::NoMod;
   else if (ex.value == "trueOrIsX")
     return PredicateModifier::TrueOrIsX;
   ex.emitError() << "must be `noMod` or `trueOrIsX`";
-  return llvm::None;
+  return std::nullopt;
 }
 
 /// Check that an assertion "format" is one of the admissible values, or report
 /// an error.
-static Optional<StringRef>
+static std::optional<StringRef>
 parseAssertionFormat(const ExtractionSummaryCursor<StringRef> &ex) {
   if (ex.value == "sva" || ex.value == "ifElseFatal")
     return ex.value;
   ex.emitError() << "must be `sva` or `ifElseFatal`";
-  return llvm::None;
+  return std::nullopt;
 }
 
 /// Chisel has a tendency to emit complex assert/assume/cover statements encoded
@@ -249,20 +252,22 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
   // printOp.clock()` below since they are not CSEd.
   if (opIt != opEnd) {
     auto stopOp = dyn_cast<StopOp>(*opIt++);
-    if (!stopOp || opIt != opEnd || stopOp.clock() != printOp.clock() ||
-        stopOp.cond() != printOp.cond())
+    if (!stopOp || opIt != opEnd || stopOp.getClock() != printOp.getClock() ||
+        stopOp.getCond() != printOp.getCond())
       return success();
     stopOp.erase();
   }
 
   // Detect if we're dealing with a verification statement, and what flavor of
   // statement it is.
-  auto fmt = printOp.formatString();
+  auto fmt = printOp.getFormatString();
   VerifFlavor flavor;
   if (fmt.contains("[verif-library-assert]"))
     flavor = VerifFlavor::VerifLibAssert;
   else if (fmt.contains("[verif-library-assume]"))
     flavor = VerifFlavor::VerifLibAssume;
+  else if (fmt.contains("[verif-library-cover]"))
+    flavor = VerifFlavor::VerifLibCover;
   else if (fmt.consume_front("assert:"))
     flavor = VerifFlavor::Assert;
   else if (fmt.consume_front("assume:"))
@@ -284,21 +289,21 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
   //     node N = eq(cond, UInt<1>(0))
   //     when N:
   //       printf(clock, enable, ...)
-  Value flippedCond = whenStmt.condition();
+  Value flippedCond = whenStmt.getCondition();
   if (auto node = flippedCond.getDefiningOp<NodeOp>())
-    flippedCond = node.input();
+    flippedCond = node.getInput();
   if (auto notOp = flippedCond.getDefiningOp<NotPrimOp>()) {
-    flippedCond = notOp.input();
+    flippedCond = notOp.getInput();
   } else if (auto eqOp = flippedCond.getDefiningOp<EQPrimOp>()) {
     auto isConst0 = [](Value v) {
       if (auto constOp = v.getDefiningOp<ConstantOp>())
-        return constOp.value().isZero();
+        return constOp.getValue().isZero();
       return false;
     };
-    if (isConst0(eqOp.lhs()))
-      flippedCond = eqOp.rhs();
-    else if (isConst0(eqOp.rhs()))
-      flippedCond = eqOp.lhs();
+    if (isConst0(eqOp.getLhs()))
+      flippedCond = eqOp.getRhs();
+    else if (isConst0(eqOp.getRhs()))
+      flippedCond = eqOp.getLhs();
     else
       flippedCond = {};
   } else {
@@ -316,9 +321,9 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
     for (const auto &user : flippedCond.getUsers()) {
       TypeSwitch<Operation *>(user).Case<AssertOp, AssumeOp, CoverOp>(
           [&](auto op) {
-            if (op.clock() == printOp.clock() &&
-                op.enable() == printOp.cond() &&
-                op.predicate() == flippedCond && !op.isConcurrent())
+            if (op.getClock() == printOp.getClock() &&
+                op.getEnable() == printOp.getCond() &&
+                op.getPredicate() == flippedCond && !op.getIsConcurrent())
               opsToErase.insert(op);
           });
     }
@@ -379,30 +384,33 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
   case VerifFlavor::Cover:
   case VerifFlavor::AssertNotX: {
     // Extract label and message from the format string.
-    StringRef label, message;
-    std::tie(label, message) = fmt.split(':');
-    if (message.empty())
-      std::swap(label, message); // in case of no label
+    StringRef label;
+    StringRef message = fmt;
+    auto index = fmt.find(':');
+    if (index != StringRef::npos) {
+      label = fmt.slice(0, index);
+      message = fmt.slice(index + 1, StringRef::npos);
+    }
 
     // AssertNotX has the special format `assertNotX:%d:msg`, where the `%d`
     // would theoretically interpolate the value being check for X, but in
     // practice the Scala impl of ExtractTestCode just discards that `%d` label
     // and replaces it with `notX`. Also prepare the condition to be checked
     // here.
-    Value predicate = whenStmt.condition();
+    Value predicate = whenStmt.getCondition();
     if (flavor != VerifFlavor::Cover)
       predicate = builder.create<NotPrimOp>(predicate);
     if (flavor == VerifFlavor::AssertNotX) {
       label = "notX";
-      if (printOp.operands().size() != 1) {
+      if (printOp.getSubstitutions().size() != 1) {
         printOp.emitError("printf-encoded assertNotX requires one operand");
         return failure();
       }
       // Construct a `!whenCond | (value !== 1'bx)` predicate.
       Value notCond = predicate;
-      predicate = builder.create<XorRPrimOp>(printOp.operands()[0]);
-      predicate = builder.create<VerbatimExprOp>(UIntType::get(context, 1),
-                                                 "{{0}} !== 1'bx", predicate);
+      predicate = builder.create<XorRPrimOp>(printOp.getSubstitutions()[0]);
+      predicate = builder.create<IsXIntrinsicOp>(predicate);
+      predicate = builder.create<NotPrimOp>(predicate);
       predicate = builder.create<OrPrimOp>(notCond, predicate);
     }
 
@@ -416,20 +424,20 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
     // TODO: Sanitize the label by replacing whitespace with "_" as done in the
     // Scala impl of ExtractTestCode.
     ValueRange args;
-    if (printOp.operands().size())
-      args = printOp.operands().drop_front();
+    if (printOp.getSubstitutions().size())
+      args = printOp.getSubstitutions().drop_front();
     if (args.size())
       printOp.emitWarning()
           << "printf-encoded assertion has format string arguments which may "
              "cause lint warnings";
     if (flavor == VerifFlavor::Assert || flavor == VerifFlavor::AssertNotX)
-      builder.create<AssertOp>(printOp.clock(), predicate, printOp.cond(),
+      builder.create<AssertOp>(printOp.getClock(), predicate, printOp.getCond(),
                                message, args, label, true);
     else if (flavor == VerifFlavor::Assume)
-      builder.create<AssumeOp>(printOp.clock(), predicate, printOp.cond(),
+      builder.create<AssumeOp>(printOp.getClock(), predicate, printOp.getCond(),
                                message, args, label, true);
     else // VerifFlavor::Cover
-      builder.create<CoverOp>(printOp.clock(), predicate, printOp.cond(),
+      builder.create<CoverOp>(printOp.getClock(), predicate, printOp.getCond(),
                               message, args, label, true);
     printOp.erase();
     break;
@@ -438,8 +446,9 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
     // Handle the case of builtin Chisel assertions.
   case VerifFlavor::ChiselAssert: {
     auto op = builder.create<AssertOp>(
-        printOp.clock(), builder.create<NotPrimOp>(whenStmt.condition()),
-        printOp.cond(), fmt, printOp.operands(), "chisel3_builtin", true);
+        printOp.getClock(), builder.create<NotPrimOp>(whenStmt.getCondition()),
+        printOp.getCond(), fmt, printOp.getSubstitutions(), "chisel3_builtin",
+        true);
     op->setAttr("format", StringAttr::get(context, "ifElseFatal"));
     printOp.erase();
     break;
@@ -450,7 +459,8 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
     // to JSON and embedded in the print message within `<extraction-summary>`
     // XML tags.
   case VerifFlavor::VerifLibAssert:
-  case VerifFlavor::VerifLibAssume: {
+  case VerifFlavor::VerifLibAssume:
+  case VerifFlavor::VerifLibCover: {
     // Isolate the JSON text in the `<extraction-summary>` XML tag.
     StringRef prefix, exStr, suffix;
     std::tie(prefix, exStr) = fmt.split("<extraction-summary>");
@@ -463,7 +473,7 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
           "printf-encoded assert/assume requires extraction summary");
       diag.attachNote(printOp.getLoc())
           << "because printf message contains "
-             "`[verif-library-{assert,assume}]` tag";
+             "`[verif-library-{assert,assume,cover}]` tag";
       diag.attachNote(printOp.getLoc())
           << "expected JSON-encoded extraction summary in "
              "`<extraction-summary>` XML tag";
@@ -504,7 +514,7 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
         }))
       return failure();
 
-    Value predicate = whenStmt.condition();
+    Value predicate = whenStmt.getCondition();
     predicate = builder.create<NotPrimOp>(
         predicate); // assertion triggers when predicate fails
     switch (predMod) {
@@ -562,7 +572,7 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
       return failure();
 
     // Assertions carry an additional `format` field.
-    Optional<StringRef> format;
+    std::optional<StringRef> format;
     if (flavor == VerifFlavor::VerifLibAssert) {
       if (parseJson(printOp.getLoc(), exObj, [&](const auto &ex) {
             return ex.withObjectField("format", [&](const auto &ex) {
@@ -583,11 +593,17 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
     // TODO: The "ifElseFatal" variant isn't actually a concurrent assertion,
     // but downstream logic assumes that isConcurrent is set.
     if (flavor == VerifFlavor::VerifLibAssert)
-      op = builder.create<AssertOp>(printOp.clock(), predicate, printOp.cond(),
-                                    message, printOp.operands(), label, true);
-    else // VerifFlavor::VerifLibAssume
-      op = builder.create<AssumeOp>(printOp.clock(), predicate, printOp.cond(),
-                                    message, printOp.operands(), label, true);
+      op = builder.create<AssertOp>(printOp.getClock(), predicate,
+                                    printOp.getCond(), message,
+                                    printOp.getSubstitutions(), label, true);
+    else if (flavor == VerifFlavor::VerifLibAssume)
+      op = builder.create<AssumeOp>(printOp.getClock(), predicate,
+                                    printOp.getCond(), message,
+                                    printOp.getSubstitutions(), label, true);
+    else // VerifFlavor::VerifLibCover
+      op = builder.create<CoverOp>(printOp.getClock(), predicate,
+                                   printOp.getCond(), message,
+                                   printOp.getSubstitutions(), label, true);
     printOp.erase();
 
     // Attach additional attributes extracted from the JSON object.

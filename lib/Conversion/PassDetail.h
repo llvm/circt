@@ -10,13 +10,14 @@
 #ifndef CONVERSION_PASSDETAIL_H
 #define CONVERSION_PASSDETAIL_H
 
+#include "circt/Support/LoweringOptions.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/DialectRegistry.h"
 #include "mlir/Pass/Pass.h"
 
 namespace mlir {
 namespace arith {
-class ArithmeticDialect;
+class ArithDialect;
 } // namespace arith
 
 namespace cf {
@@ -39,16 +40,34 @@ namespace func {
 class FuncDialect;
 class FuncOp;
 } // namespace func
+
+namespace emitc {
+class EmitCDialect;
+} // namespace emitc
 } // namespace mlir
 
 namespace circt {
 
+namespace arc {
+class ArcDialect;
+} // namespace arc
+
+namespace dc {
+class DCDialect;
+} // namespace dc
+
+namespace fsm {
+class FSMDialect;
+} // namespace fsm
+
 namespace calyx {
 class CalyxDialect;
+class ComponentOp;
 } // namespace calyx
 
 namespace firrtl {
 class FIRRTLDialect;
+class CircuitOp;
 class FModuleOp;
 } // namespace firrtl
 
@@ -69,6 +88,14 @@ namespace llhd {
 class LLHDDialect;
 } // namespace llhd
 
+namespace ltl {
+class LTLDialect;
+} // namespace ltl
+
+namespace loopschedule {
+class LoopScheduleDialect;
+} // namespace loopschedule
+
 namespace comb {
 class CombDialect;
 } // namespace comb
@@ -78,9 +105,13 @@ class HWDialect;
 class HWModuleOp;
 } // namespace hw
 
-namespace staticlogic {
-class StaticLogicDialect;
-} // namespace staticlogic
+namespace hwarith {
+class HWArithDialect;
+} // namespace hwarith
+
+namespace pipeline {
+class PipelineDialect;
+} // namespace pipeline
 
 namespace seq {
 class SeqDialect;
@@ -89,6 +120,18 @@ class SeqDialect;
 namespace sv {
 class SVDialect;
 } // namespace sv
+
+namespace fsm {
+class FSMDialect;
+} // namespace fsm
+
+namespace systemc {
+class SystemCDialect;
+} // namespace systemc
+
+namespace verif {
+class VerifDialect;
+} // namespace verif
 
 // Generate the classes which represent the passes
 #define GEN_PASS_CLASSES

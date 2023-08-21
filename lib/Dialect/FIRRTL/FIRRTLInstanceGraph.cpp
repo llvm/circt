@@ -21,53 +21,39 @@ static CircuitOp findCircuitOp(Operation *operation) {
 }
 
 InstanceGraph::InstanceGraph(Operation *operation)
-    : InstanceGraphBase(findCircuitOp(operation)) {
-  topLevelNode = lookup(cast<CircuitOp>(getParent()).nameAttr());
+    : igraph::InstanceGraph(findCircuitOp(operation)) {
+  topLevelNode = lookup(cast<CircuitOp>(getParent()).getNameAttr());
 }
 
-ArrayRef<InstancePath> InstancePathCache::getAbsolutePaths(Operation *op) {
-  assert(isa<FModuleLike>(op));
-
-  // If we have reached the circuit root, we're done.
-  if (op == instanceGraph.getTopLevelNode()->getModule()) {
-    static InstancePath empty{};
-    return empty; // array with single empty path
+bool circt::firrtl::allUnder(ArrayRef<InstanceRecord *> nodes,
+                             InstanceGraphNode *top) {
+  DenseSet<InstanceGraphNode *> seen;
+  SmallVector<InstanceGraphNode *> worklist;
+  worklist.reserve(nodes.size());
+  seen.reserve(nodes.size());
+  seen.insert(top);
+  for (auto *n : nodes) {
+    auto *mod = n->getParent();
+    if (seen.insert(mod).second)
+      worklist.push_back(mod);
   }
 
-  // Fast path: hit the cache.
-  auto cached = absolutePathsCache.find(op);
-  if (cached != absolutePathsCache.end())
-    return cached->second;
+  while (!worklist.empty()) {
+    auto *node = worklist.back();
+    worklist.pop_back();
 
-  // For each instance, collect the instance paths to its parent and append the
-  // instance itself to each.
-  SmallVector<InstancePath, 8> extendedPaths;
-  for (auto *inst : instanceGraph[op]->uses()) {
-    auto instPaths = getAbsolutePaths(inst->getParent()->getModule());
-    extendedPaths.reserve(instPaths.size());
-    for (auto path : instPaths) {
-      extendedPaths.push_back(
-          appendInstance(path, cast<InstanceOp>(*inst->getInstance())));
+    assert(node != top);
+
+    // If reach top-level node we're not covered by 'top', return.
+    if (node->noUses())
+      return false;
+
+    // Otherwise, walk upwards.
+    for (auto *use : node->uses()) {
+      auto *mod = use->getParent();
+      if (seen.insert(mod).second)
+        worklist.push_back(mod);
     }
   }
-
-  // Move the list of paths into the bump allocator for later quick retrieval.
-  ArrayRef<InstancePath> pathList;
-  if (!extendedPaths.empty()) {
-    auto *paths = allocator.Allocate<InstancePath>(extendedPaths.size());
-    std::copy(extendedPaths.begin(), extendedPaths.end(), paths);
-    pathList = ArrayRef<InstancePath>(paths, extendedPaths.size());
-  }
-
-  absolutePathsCache.insert({op, pathList});
-  return pathList;
-}
-
-InstancePath InstancePathCache::appendInstance(InstancePath path,
-                                               InstanceOp inst) {
-  size_t n = path.size() + 1;
-  auto *newPath = allocator.Allocate<InstanceOp>(n);
-  std::copy(path.begin(), path.end(), newPath);
-  newPath[path.size()] = inst;
-  return InstancePath(newPath, n);
+  return true;
 }

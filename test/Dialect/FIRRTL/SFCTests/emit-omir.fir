@@ -1,4 +1,4 @@
-; RUN: firtool --repl-seq-mem --repl-seq-mem-file="dummy" --mem-to-reg-of-vec=0 --verify-diagnostics --verilog --emit-omir %s | FileCheck %s
+; RUN: firtool --repl-seq-mem --repl-seq-mem-file="dummy" --emit-omir %s | FileCheck %s
 
 circuit Foo : %[[
   {
@@ -18,7 +18,6 @@ circuit Foo : %[[
           {"info": "", "name": "d", "value": "OMString:hello"},
           {"info": "", "name": "f", "value": "OMBigDecimal:10.5"},
           {"info": "", "name": "g", "value": "OMDeleted"},
-          {"info": "", "name": "h", "value": "OMConstant:UInt<2>(\"h1\")"},
           {"info": "", "name": "i", "value": 42},
           {"info": "", "name": "j", "value": true},
           {"info": "", "name": "k", "value": 3.14}
@@ -62,6 +61,10 @@ circuit Foo : %[[
         ]
       }
     ]
+  },
+  {
+    "class": "firrtl.transforms.DontTouchAnnotation",
+    "target": "~Foo|Bar>shortint"
   }
 ]]
   extmodule MySRAM:
@@ -101,8 +104,6 @@ circuit Foo : %[[
 ; CHECK-NEXT:  "value": "OMBigDecimal:10.5"
 ; CHECK:       "name": "g"
 ; CHECK-NEXT:  "value": "OMDeleted"
-; CHECK:       "name": "h"
-; CHECK-NEXT:  "value": "OMConstant:UInt<2>(\"h1\")"
 ; CHECK:       "name": "i"
 ; CHECK-NEXT:  "value": 42
 ; CHECK:       "name": "j"
@@ -124,21 +125,21 @@ circuit Foo : %[[
 ; CHECK:       "name": "f"
 ; CHECK-NEXT:  "value": "OMReferenceTarget:~Foo|Bar"
 ; CHECK:       "name": "g",
-; CHECK-NEXT:  "value": "OMReferenceTarget:~Foo|Foo>signed_1"
+; CHECK-NEXT:  "value": "OMReferenceTarget:~Foo|Foo>signed_0"
 
 ; CHECK:       "id": "OMID:2"
 ; CHECK:       "name": "finalPath"
-; CHECK-NEXT:  "value": "OMMemberInstanceTarget:~Foo|Foo/parameter_2:Bar/longint_0:MySRAM"
+; CHECK-NEXT:  "value": "OMMemberInstanceTarget:~Foo|Foo/parameter_0:Bar/longint_0:MySRAM"
 
 ; CHECK:       "id": "OMID:3"
 ; CHECK:       "name": "finalPath"
-; CHECK-NEXT:  "value": "OMMemberInstanceTarget:~Foo|Foo/parameter_2:Bar/shortint_1:shortint_0/shortint_ext:{{[^"]+}}"
+; CHECK-NEXT:  "value": "OMMemberInstanceTarget:~Foo|Foo/parameter_0:Bar/shortint_0:shortint_0/shortint_ext:{{[^"]+}}"
 
 ; CHECK:       "id": "OMID:4"
 ; CHECK:       "name": "containingModule"
 ; CHECK-NEXT:  "value": "OMInstanceTarget:~Foo|Foo"
 ; CHECK:        "name": "portField",
-; CHECK-NEXT        "value": "OMReferenceTarget:~Foo|Foo/parameter_2:Bar>b_signed"
+; CHECK-NEXT:   "value": "OMReferenceTarget:~Foo|Foo/parameter_0:Bar>b_signed"
 ; CHECK:       "name": "ports"
 ; CHECK-NEXT:  "value": [
 ; CHECK-NEXT:    {
@@ -147,7 +148,7 @@ circuit Foo : %[[
 ; CHECK-NEXT:      "width": "OMBigInt:1d"
 ; CHECK-NEXT:    }
 ; CHECK-NEXT:    {
-; CHECK-NEXT:      "ref": "OMDontTouchedReferenceTarget:~Foo|Foo>signed_1",
+; CHECK-NEXT:      "ref": "OMDontTouchedReferenceTarget:~Foo|Foo>signed_0",
 ; CHECK-NEXT:      "direction": "OMString:Output",
 ; CHECK-NEXT:      "width": "OMBigInt:1f"
 ; CHECK-NEXT:    }

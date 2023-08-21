@@ -1,4 +1,4 @@
-# ===- CMakeLists.txt - PyCDE top level cmake ------------------*- cmake -*-===//
+# ===- CMakeLists.txt - PyCDE tests cmake ---------------------*- cmake -*-===//
 #
 # Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 # See https://llvm.org/LICENSE.txt for license information.
@@ -9,9 +9,7 @@
 set(PyCDE_TEST_DEPENDS
   FileCheck count not
   PyCDE
-  CIRCTMLIRPythonModules
-  CIRCTPythonModules
-  )
+)
 
 configure_lit_site_cfg(
   ${CMAKE_CURRENT_SOURCE_DIR}/lit.site.cfg.py.in

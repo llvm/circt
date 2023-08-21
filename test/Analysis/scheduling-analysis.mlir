@@ -28,23 +28,28 @@ func.func @test2(%arg0: memref<?xi32>, %arg1: memref<?xi32>) {
 
 // CHECK-LABEL: func @test3
 func.func @test3(%arg0: memref<?xi32>) {
+  // CHECK: %[[A0:.+]] = memref.alloca
   %0 = memref.alloca() : memref<1xi32>
+  // CHECK: %[[A1:.+]] = memref.alloca
   %1 = memref.alloca() : memref<1xi32>
+  // CHECK: %[[A2:.+]] = memref.alloca
   %2 = memref.alloca() : memref<1xi32>
   affine.for %arg1 = 0 to 10 {
-    // CHECK: affine.load %2[0] {dependence}
+    // CHECK: %[[A3:.+]] = affine.load %[[A2]][0] {dependence}
     %3 = affine.load %2[0] : memref<1xi32>
-    // CHECK: affine.load %1[0] {dependence}
+    // CHECK: %[[A4:.+]] = affine.load %[[A1]][0] {dependence}
     %4 = affine.load %1[0] : memref<1xi32>
-    // CHECK: affine.store %4, %2[0] {dependence}
+    // CHECK: affine.store %[[A4]], %[[A2]][0] {dependence}
     affine.store %4, %2[0] : memref<1xi32>
-    // CHECK: affine.load %0[0] {dependence}
+    // CHECK: %[[A5:.+]] = affine.load %[[A0]][0] {dependence}
     %5 = affine.load %0[0] : memref<1xi32>
-    // CHECK: affine.store %5, %1[0] {dependence}
+    // CHECK: affine.store %[[A5]], %[[A1]][0] {dependence}
     affine.store %5, %1[0] : memref<1xi32>
+    // CHECK: %[[A6:.+]] = affine.load
     %6 = affine.load %arg0[%arg1] : memref<?xi32>
+    // CHECK: %[[A7:.+]] = arith.addi %[[A3]], %[[A6]]
     %7 = arith.addi %3, %6 : i32
-    // CHECK: affine.store %7, %0[0] {dependence}
+    // CHECK: affine.store %[[A7]], %[[A0]][0] {dependence}
     affine.store %7, %0[0] : memref<1xi32>
   }
   return
@@ -103,6 +108,9 @@ func.func @test7(%arg0: memref<?xi32>) {
     affine.if #set2(%arg1) {
       %0 = affine.if #set3(%arg1) -> i32 {
         %1 = affine.load %arg0[%arg1] : memref<?xi32>
+        affine.yield %1 : i32
+      } else {
+        %1 = arith.constant 0 : i32
         affine.yield %1 : i32
       }
       // CHECK: } {dependence}

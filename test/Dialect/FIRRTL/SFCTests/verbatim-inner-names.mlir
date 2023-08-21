@@ -13,8 +13,8 @@ firrtl.circuit "Foo" {
     %instName_clockIn, %instName_clockOut = firrtl.instance instName sym @instSym @Bar(in extClockIn: !firrtl.clock, out extClockOut: !firrtl.clock)
     %nodeName = firrtl.node sym @nodeSym %value : !firrtl.uint<42>
     %wireName = firrtl.wire sym @wireSym : !firrtl.uint<42>
-    %regName = firrtl.reg sym @regSym %clock : !firrtl.uint<42>
-    %regResetName = firrtl.regreset sym @regResetSym %clock, %reset, %value : !firrtl.uint<1>, !firrtl.uint<42>, !firrtl.uint<42>
+    %regName = firrtl.reg sym @regSym %clock : !firrtl.clock, !firrtl.uint<42>
+    %regResetName = firrtl.regreset sym @regResetSym %clock, %reset, %value : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<42>, !firrtl.uint<42>
 
     %invalid_ui42 = firrtl.invalidvalue : !firrtl.uint<42>
     firrtl.connect %instName_clockIn, %clock : !firrtl.clock, !firrtl.clock

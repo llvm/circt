@@ -1,4 +1,4 @@
-; RUN: firtool %s -dedup=false --lower-memory --format=fir --annotation-file %s.anno.json --repl-seq-mem --repl-seq-mem-file="metadata/dutModule.conf" --verilog |  FileCheck %s
+; RUN: firtool %s --annotation-file %s.anno.json --repl-seq-mem --repl-seq-mem-file="dutModule.conf" |  FileCheck %s
 
 
 circuit test:
@@ -63,7 +63,7 @@ circuit test:
 ; CHECK-LABEL: module dutModule2
 ; CHECK:  dutMemory dutMemory
 
-  module hier1: 
+  module hier1:
     input clock: Clock
     input rAddr: UInt<4>
     input rEn: UInt<1>
@@ -90,11 +90,11 @@ circuit test:
     tbMemoryKind1.w.mask <= wMask
     tbMemoryKind1.w.data <= wData
 
-; CHECK=LABEL: module hier1
+; CHECK-LABEL: module hier1
 ; CHECK:  tbMemoryKind1_0 tbMemoryKind1
 
 
-  module hier2: 
+  module hier2:
     input clock: Clock
     input rAddr: UInt<4>
     input rEn: UInt<1>
@@ -111,11 +111,11 @@ circuit test:
     m.wMask <= wMask
     m.wData <= wData
 
-  module test: 
+  module test:
     input clock: Clock
     input rAddr: UInt<4>
     input rEn: UInt<1>
-    output rData: UInt<8>
+    output rData: UInt<8>[3]
     input wMask: UInt<1>
     input wData: UInt<8>
 
@@ -124,7 +124,7 @@ circuit test:
     h1.clock <= clock
     h1.rAddr <= rAddr
     h1.rEn <= rEn
-    rData <= h1.rData
+    rData[0] <= h1.rData
     h1.wMask <= wMask
     h1.wData <= wData
 
@@ -132,7 +132,7 @@ circuit test:
     h2.clock <= clock
     h2.rAddr <= rAddr
     h2.rEn <= rEn
-    rData <= h2.rData
+    rData[1] <= h2.rData
     h2.wMask <= wMask
     h2.wData <= wData
 
@@ -140,7 +140,7 @@ circuit test:
     m2.clock <= clock
     m2.rAddr <= rAddr
     m2.rEn <= rEn
-    rData <= m2.rData
+    rData[2] <= m2.rData
     m2.wMask <= wMask
     m2.wData <= wData
 
@@ -175,56 +175,25 @@ circuit test:
 ; CHECK-LABEL: external module tbMemoryKind1_0_ext
 
 
-; CHECK-LABEL: FILE "metadata/tb_seq_mems.json"
-; CHECK:      [
-; CHECK-NEXT:   {
-; CHECK-NEXT:     "module_name": "tbMemoryKind1_ext",
-; CHECK-NEXT:     "depth": 16,
-; CHECK-NEXT:     "width": 8,
-; CHECK-NEXT:     "masked": false,
-; CHECK-NEXT:     "read": true,
-; CHECK-NEXT:     "write": true,
-; CHECK-NEXT:     "readwrite": false,
-; CHECK-NEXT:     "extra_ports": [],
-; CHECK-NEXT:     "hierarchy": [
-; CHECK-NEXT:       "test.h2.m.tbMemoryKind1.tbMemoryKind1_ext"
-; CHECK-NEXT:     ]
-; CHECK-NEXT:   },
-; CHECK-NEXT:   {
-; CHECK-NEXT:     "module_name": "tbMemoryKind1_0_ext",
-; CHECK-NEXT:     "depth": 16,
-; CHECK-NEXT:     "width": 8,
-; CHECK-NEXT:     "masked": false,
-; CHECK-NEXT:     "read": true,
-; CHECK-NEXT:     "write": true,
-; CHECK-NEXT:     "readwrite": false,
-; CHECK-NEXT:     "extra_ports": [],
-; CHECK-NEXT:     "hierarchy": [
-; CHECK-NEXT:       "test.h1.tbMemoryKind1.tbMemoryKind1_0_ext"
-; CHECK-NEXT:     ]
-; CHECK-NEXT:   }
-; CHECK-NEXT: ]
-
-
-; CHECK-LABEL: FILE "metadata/seq_mems.json"
+; CHECK-LABEL: FILE "metadata{{[/\]}}seq_mems.json"
 ; CHECK:      [
 ; CHECK-NEXT:   {
 ; CHECK-NEXT:     "module_name": "dutMemory_ext",
 ; CHECK-NEXT:     "depth": 32,
 ; CHECK-NEXT:     "width": 8,
 ; CHECK-NEXT:     "masked": false,
-; CHECK-NEXT:     "read": true,
-; CHECK-NEXT:     "write": true,
-; CHECK-NEXT:     "readwrite": false,
+; CHECK-NEXT:     "read": 1,
+; CHECK-NEXT:     "write": 1,
+; CHECK-NEXT:     "readwrite": 0,
 ; CHECK-NEXT:     "extra_ports": [],
 ; CHECK-NEXT:     "hierarchy": [
-; CHECK-NEXT:       "dutModule.m.dutMemory.dutMemory_ext"
+; CHECK-NEXT:       "dutModule.hello.dutMemory.dutMemory_ext"
 ; CHECK-NEXT:     ]
 ; CHECK-NEXT:   }
 ; CHECK-NEXT: ]
 
 
-; CHECK-LABEL: FILE "metadata/dutModule.conf"
-; CHECK: name dutMemory_ext depth 32 width 8 ports write,read
+; CHECK-LABEL: FILE "dutModule.conf"
 ; CHECK: name tbMemoryKind1_ext depth 16 width 8 ports write,read
+; CHECK: name dutMemory_ext depth 32 width 8 ports write,read
 ; CHECK: name tbMemoryKind1_0_ext depth 16 width 8 ports write,read

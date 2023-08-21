@@ -3,6 +3,7 @@ add_circt_conversion_library(CIRCTLLHDToLLVM
 
   DEPENDS
   CIRCTConversionPassIncGen
+  MLIRArithDialect
 
   LINK_COMPONENTS
   Core
@@ -10,11 +11,16 @@ add_circt_conversion_library(CIRCTLLHDToLLVM
   LINK_LIBS PUBLIC
   CIRCTLLHD
   CIRCTComb
+  CIRCTCombToArith
+  CIRCTCombToLLVM
+  CIRCTHWToLLVM
   CIRCTHW
+  CIRCTSupport
+  MLIRArithToLLVM
   MLIRControlFlowToLLVM
   MLIRFuncToLLVM
   MLIRLLVMCommonConversion
-  MLIRVector
+  MLIRVectorDialect
   MLIRTransforms
   MLIRReconcileUnrealizedCasts
-)
+  )

@@ -11,14 +11,14 @@
 #ifndef CIRCT_C_DIALECT_SEQ_H
 #define CIRCT_C_DIALECT_SEQ_H
 
-#include "mlir-c/Registration.h"
+#include "mlir-c/IR.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(Sequential, seq);
-MLIR_CAPI_EXPORTED void registerSeqPasses();
+MLIR_CAPI_EXPORTED void registerSeqPasses(void);
 
 #ifdef __cplusplus
 }

@@ -35,37 +35,37 @@
 // classes here should be imported from the `mlir` namespace, not the `llvm`
 // namespace.
 namespace circt {
-using mlir::APFloat;
-using mlir::APInt;
-using mlir::APSInt;
-using mlir::ArrayRef;
-using mlir::cast;
-using mlir::cast_or_null;
-using mlir::DenseMap;
-using mlir::DenseMapInfo;
-using mlir::DenseSet;
-using mlir::dyn_cast;
-using mlir::dyn_cast_or_null;
-using mlir::function_ref;
-using mlir::isa;
-using mlir::isa_and_nonnull;
-using mlir::iterator_range;
-using mlir::MutableArrayRef;
-using mlir::None;
-using mlir::Optional;
-using mlir::PointerUnion;
-using mlir::raw_ostream;
-using mlir::SmallPtrSet;
-using mlir::SmallPtrSetImpl;
-using mlir::SmallString;
-using mlir::SmallVector;
-using mlir::SmallVectorImpl;
-using mlir::StringLiteral;
-using mlir::StringRef;
-using mlir::StringSet;
-using mlir::TinyPtrVector;
-using mlir::Twine;
-using mlir::TypeSwitch;
+using mlir::APFloat;          // NOLINT(misc-unused-using-decls)
+using mlir::APInt;            // NOLINT(misc-unused-using-decls)
+using mlir::APSInt;           // NOLINT(misc-unused-using-decls)
+using mlir::ArrayRef;         // NOLINT(misc-unused-using-decls)
+using mlir::BitVector;        // NOLINT(misc-unused-using-decls)
+using mlir::cast;             // NOLINT(misc-unused-using-decls)
+using mlir::cast_or_null;     // NOLINT(misc-unused-using-decls)
+using mlir::DenseMap;         // NOLINT(misc-unused-using-decls)
+using mlir::DenseMapInfo;     // NOLINT(misc-unused-using-decls)
+using mlir::DenseSet;         // NOLINT(misc-unused-using-decls)
+using mlir::dyn_cast;         // NOLINT(misc-unused-using-decls)
+using mlir::dyn_cast_or_null; // NOLINT(misc-unused-using-decls)
+using mlir::function_ref;     // NOLINT(misc-unused-using-decls)
+using mlir::isa;              // NOLINT(misc-unused-using-decls)
+using mlir::isa_and_nonnull;  // NOLINT(misc-unused-using-decls)
+using mlir::iterator_range;   // NOLINT(misc-unused-using-decls)
+using mlir::MutableArrayRef;  // NOLINT(misc-unused-using-decls)
+using mlir::PointerUnion;     // NOLINT(misc-unused-using-decls)
+using mlir::raw_ostream;      // NOLINT(misc-unused-using-decls)
+using mlir::SetVector;        // NOLINT(misc-unused-using-decls)
+using mlir::SmallPtrSet;      // NOLINT(misc-unused-using-decls)
+using mlir::SmallPtrSetImpl;  // NOLINT(misc-unused-using-decls)
+using mlir::SmallString;      // NOLINT(misc-unused-using-decls)
+using mlir::SmallVector;      // NOLINT(misc-unused-using-decls)
+using mlir::SmallVectorImpl;  // NOLINT(misc-unused-using-decls)
+using mlir::StringLiteral;    // NOLINT(misc-unused-using-decls)
+using mlir::StringRef;        // NOLINT(misc-unused-using-decls)
+using mlir::StringSet;        // NOLINT(misc-unused-using-decls)
+using mlir::TinyPtrVector;    // NOLINT(misc-unused-using-decls)
+using mlir::Twine;            // NOLINT(misc-unused-using-decls)
+using mlir::TypeSwitch;       // NOLINT(misc-unused-using-decls)
 } // namespace circt
 
 // Forward declarations of LLVM classes to be imported in to the circt
@@ -74,11 +74,14 @@ namespace llvm {
 template <typename KeyT, typename ValueT, unsigned InlineBuckets,
           typename KeyInfoT, typename BucketT>
 class SmallDenseMap;
+template <typename T, unsigned N, typename C>
+class SmallSet;
 } // namespace llvm
 
 // Import things we want into our namespace.
 namespace circt {
-using llvm::SmallDenseMap;
+using llvm::SmallDenseMap; // NOLINT(misc-unused-using-decls)
+using llvm::SmallSet;      // NOLINT(misc-unused-using-decls)
 } // namespace circt
 
 // Forward declarations of classes to be imported in to the circt namespace.
@@ -88,7 +91,8 @@ class AsmParser;
 class AsmPrinter;
 class Attribute;
 class Block;
-class BlockAndValueMapping;
+class TypedAttr;
+class IRMapping;
 class BlockArgument;
 class BoolAttr;
 class Builder;
@@ -114,6 +118,7 @@ class InFlightDiagnostic;
 class IntegerAttr;
 class IntegerType;
 class Location;
+class LocationAttr;
 class MemRefType;
 class MLIRContext;
 class ModuleOp;
@@ -124,6 +129,7 @@ class NoneType;
 class OpAsmDialectInterface;
 class OpAsmParser;
 class OpAsmPrinter;
+class OpaqueProperties;
 class OpBuilder;
 class OperandRange;
 class Operation;
@@ -159,8 +165,12 @@ class WalkResult;
 enum class RegionKind;
 struct CallInterfaceCallable;
 struct LogicalResult;
-struct MemRefAccess;
 struct OperationState;
+class OperationName;
+
+namespace affine {
+struct MemRefAccess;
+} // namespace affine
 
 template <typename T>
 class FailureOr;
@@ -190,7 +200,6 @@ using mlir::AsmParser;                 // NOLINT(misc-unused-using-decls)
 using mlir::AsmPrinter;                // NOLINT(misc-unused-using-decls)
 using mlir::Attribute;                 // NOLINT(misc-unused-using-decls)
 using mlir::Block;                     // NOLINT(misc-unused-using-decls)
-using mlir::BlockAndValueMapping;      // NOLINT(misc-unused-using-decls)
 using mlir::BlockArgument;             // NOLINT(misc-unused-using-decls)
 using mlir::BoolAttr;                  // NOLINT(misc-unused-using-decls)
 using mlir::Builder;                   // NOLINT(misc-unused-using-decls)
@@ -219,9 +228,10 @@ using mlir::IndexType;                 // NOLINT(misc-unused-using-decls)
 using mlir::InFlightDiagnostic;        // NOLINT(misc-unused-using-decls)
 using mlir::IntegerAttr;               // NOLINT(misc-unused-using-decls)
 using mlir::IntegerType;               // NOLINT(misc-unused-using-decls)
+using mlir::IRMapping;                 // NOLINT(misc-unused-using-decls)
 using mlir::Location;                  // NOLINT(misc-unused-using-decls)
+using mlir::LocationAttr;              // NOLINT(misc-unused-using-decls)
 using mlir::LogicalResult;             // NOLINT(misc-unused-using-decls)
-using mlir::MemRefAccess;              // NOLINT(misc-unused-using-decls)
 using mlir::MemRefType;                // NOLINT(misc-unused-using-decls)
 using mlir::MLIRContext;               // NOLINT(misc-unused-using-decls)
 using mlir::ModuleOp;                  // NOLINT(misc-unused-using-decls)
@@ -229,6 +239,7 @@ using mlir::MutableOperandRange;       // NOLINT(misc-unused-using-decls)
 using mlir::NamedAttribute;            // NOLINT(misc-unused-using-decls)
 using mlir::NamedAttrList;             // NOLINT(misc-unused-using-decls)
 using mlir::NoneType;                  // NOLINT(misc-unused-using-decls)
+using mlir::OpaqueProperties;          // NOLINT(misc-unused-using-decls)
 using mlir::OpAsmDialectInterface;     // NOLINT(misc-unused-using-decls)
 using mlir::OpAsmParser;               // NOLINT(misc-unused-using-decls)
 using mlir::OpAsmPrinter;              // NOLINT(misc-unused-using-decls)
@@ -237,6 +248,7 @@ using mlir::OpBuilder;                 // NOLINT(misc-unused-using-decls)
 using mlir::OpConversionPattern;       // NOLINT(misc-unused-using-decls)
 using mlir::OperandRange;              // NOLINT(misc-unused-using-decls)
 using mlir::Operation;                 // NOLINT(misc-unused-using-decls)
+using mlir::OperationName;             // NOLINT(misc-unused-using-decls)
 using mlir::OperationPass;             // NOLINT(misc-unused-using-decls)
 using mlir::OperationState;            // NOLINT(misc-unused-using-decls)
 using mlir::OpFoldResult;              // NOLINT(misc-unused-using-decls)
@@ -262,6 +274,7 @@ using mlir::TupleType;                 // NOLINT(misc-unused-using-decls)
 using mlir::Type;                      // NOLINT(misc-unused-using-decls)
 using mlir::TypeAttr;                  // NOLINT(misc-unused-using-decls)
 using mlir::TypeConverter;             // NOLINT(misc-unused-using-decls)
+using mlir::TypedAttr;                 // NOLINT(misc-unused-using-decls)
 using mlir::TypeID;                    // NOLINT(misc-unused-using-decls)
 using mlir::TypeRange;                 // NOLINT(misc-unused-using-decls)
 using mlir::TypeStorage;               // NOLINT(misc-unused-using-decls)
@@ -271,6 +284,7 @@ using mlir::Value;                     // NOLINT(misc-unused-using-decls)
 using mlir::ValueRange;                // NOLINT(misc-unused-using-decls)
 using mlir::VectorType;                // NOLINT(misc-unused-using-decls)
 using mlir::WalkResult;                // NOLINT(misc-unused-using-decls)
+using mlir::affine::MemRefAccess;      // NOLINT(misc-unused-using-decls)
 namespace OpTrait = mlir::OpTrait;
 } // namespace circt
 

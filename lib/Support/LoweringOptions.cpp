@@ -13,10 +13,9 @@
 
 #include "circt/Support/LoweringOptions.h"
 #include "mlir/IR/BuiltinOps.h"
-#include "llvm/Support/CommandLine.h"
-#include "llvm/Support/ManagedStatic.h"
 
 using namespace circt;
+using namespace mlir;
 
 //===----------------------------------------------------------------------===//
 // LoweringOptions
@@ -31,13 +30,23 @@ LoweringOptions::LoweringOptions(mlir::ModuleOp module) : LoweringOptions() {
   parseFromAttribute(module);
 }
 
-static Optional<LoweringOptions::LocationInfoStyle>
+static std::optional<LoweringOptions::LocationInfoStyle>
 parseLocationInfoStyle(StringRef option) {
-  return llvm::StringSwitch<llvm::Optional<LoweringOptions::LocationInfoStyle>>(
+  return llvm::StringSwitch<std::optional<LoweringOptions::LocationInfoStyle>>(
              option)
       .Case("plain", LoweringOptions::Plain)
       .Case("wrapInAtSquareBracket", LoweringOptions::WrapInAtSquareBracket)
-      .Default(llvm::None);
+      .Case("none", LoweringOptions::None)
+      .Default(std::nullopt);
+}
+
+static std::optional<LoweringOptions::WireSpillingHeuristic>
+parseWireSpillingHeuristic(StringRef option) {
+  return llvm::StringSwitch<
+             std::optional<LoweringOptions::WireSpillingHeuristic>>(option)
+      .Case("spillLargeTermsWithNamehints",
+            LoweringOptions::SpillLargeTermsWithNamehints)
+      .Default(std::nullopt);
 }
 
 void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
@@ -54,6 +63,8 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
       allowExprInEventControl = true;
     } else if (option == "disallowPackedArrays") {
       disallowPackedArrays = true;
+    } else if (option == "disallowPackedStructAssignments") {
+      disallowPackedStructAssignments = true;
     } else if (option == "disallowLocalVariables") {
       disallowLocalVariables = true;
     } else if (option == "verifLabels") {
@@ -63,8 +74,8 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
         errorHandler("expected integer source width");
         emittedLineLength = DEFAULT_LINE_LENGTH;
       }
-    } else if (option == "explicitBitcastAddMul") {
-      explicitBitcastAddMul = true;
+    } else if (option == "explicitBitcast") {
+      explicitBitcast = true;
     } else if (option == "emitReplicatedOpsToHeader") {
       emitReplicatedOpsToHeader = true;
     } else if (option.consume_front("maximumNumberOfTermsPerExpression=")) {
@@ -72,21 +83,40 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
         errorHandler("expected integer source width");
         maximumNumberOfTermsPerExpression = DEFAULT_TERM_LIMIT;
       }
-    } else if (option.consume_front("maximumNumberOfTermsInConcat=")) {
-      if (option.getAsInteger(10, maximumNumberOfTermsInConcat)) {
-        errorHandler("expected integer source width");
-        maximumNumberOfTermsInConcat = DEFAULT_CONCAT_TERM_LIMIT;
-      }
     } else if (option.consume_front("locationInfoStyle=")) {
       if (auto style = parseLocationInfoStyle(option)) {
         locationInfoStyle = *style;
       } else {
-        errorHandler("expected 'plain' or 'wrapInAtSquareBracket'");
+        errorHandler("expected 'plain', 'wrapInAtSquareBracket', or 'none'");
       }
     } else if (option == "disallowPortDeclSharing") {
       disallowPortDeclSharing = true;
     } else if (option == "printDebugInfo") {
       printDebugInfo = true;
+    } else if (option == "disallowExpressionInliningInPorts") {
+      disallowExpressionInliningInPorts = true;
+    } else if (option == "disallowMuxInlining") {
+      disallowMuxInlining = true;
+    } else if (option == "mitigateVivadoArrayIndexConstPropBug") {
+      mitigateVivadoArrayIndexConstPropBug = true;
+    } else if (option.consume_front("wireSpillingHeuristic=")) {
+      if (auto heuristic = parseWireSpillingHeuristic(option)) {
+        wireSpillingHeuristicSet |= *heuristic;
+      } else {
+        errorHandler("expected ''spillLargeTermsWithNamehints'");
+      }
+    } else if (option.consume_front("wireSpillingNamehintTermLimit=")) {
+      if (option.getAsInteger(10, wireSpillingNamehintTermLimit)) {
+        errorHandler(
+            "expected integer for number of namehint heurstic term limit");
+        wireSpillingNamehintTermLimit = DEFAULT_NAMEHINT_TERM_LIMIT;
+      }
+    } else if (option == "emitWireInPorts") {
+      emitWireInPorts = true;
+    } else if (option == "emitBindComments") {
+      emitBindComments = true;
+    } else if (option == "omitVersionComment") {
+      omitVersionComment = true;
     } else {
       errorHandler(llvm::Twine("unknown style option \'") + option + "\'");
       // We continue parsing options after a failure.
@@ -103,29 +133,45 @@ std::string LoweringOptions::toString() const {
     options += "exprInEventControl,";
   if (disallowPackedArrays)
     options += "disallowPackedArrays,";
+  if (disallowPackedStructAssignments)
+    options += "disallowPackedStructAssignments,";
   if (disallowLocalVariables)
     options += "disallowLocalVariables,";
   if (enforceVerifLabels)
     options += "verifLabels,";
-  if (explicitBitcastAddMul)
-    options += "explicitBitcastAddMul,";
+  if (explicitBitcast)
+    options += "explicitBitcast,";
   if (emitReplicatedOpsToHeader)
     options += "emitReplicatedOpsToHeader,";
   if (locationInfoStyle == LocationInfoStyle::WrapInAtSquareBracket)
     options += "locationInfoStyle=wrapInAtSquareBracket,";
+  if (locationInfoStyle == LocationInfoStyle::None)
+    options += "locationInfoStyle=none,";
   if (disallowPortDeclSharing)
     options += "disallowPortDeclSharing,";
   if (printDebugInfo)
     options += "printDebugInfo,";
+  if (isWireSpillingHeuristicEnabled(
+          WireSpillingHeuristic::SpillLargeTermsWithNamehints))
+    options += "wireSpillingHeuristic=spillLargeTermsWithNamehints,";
+  if (disallowExpressionInliningInPorts)
+    options += "disallowExpressionInliningInPorts,";
+  if (disallowMuxInlining)
+    options += "disallowMuxInlining,";
+  if (mitigateVivadoArrayIndexConstPropBug)
+    options += "mitigateVivadoArrayIndexConstPropBug,";
 
   if (emittedLineLength != DEFAULT_LINE_LENGTH)
     options += "emittedLineLength=" + std::to_string(emittedLineLength) + ',';
   if (maximumNumberOfTermsPerExpression != DEFAULT_TERM_LIMIT)
     options += "maximumNumberOfTermsPerExpression=" +
                std::to_string(maximumNumberOfTermsPerExpression) + ',';
-  if (maximumNumberOfTermsInConcat != DEFAULT_CONCAT_TERM_LIMIT)
-    options += "maximumNumberOfTermsInConcat=" +
-               std::to_string(maximumNumberOfTermsInConcat) + ',';
+  if (emitWireInPorts)
+    options += "emitWireInPorts,";
+  if (emitBindComments)
+    options += "emitBindComments,";
+  if (omitVersionComment)
+    options += "omitVersionComment,";
 
   // Remove a trailing comma if present.
   if (!options.empty()) {
@@ -147,60 +193,4 @@ void LoweringOptions::setAsAttribute(ModuleOp module) {
 void LoweringOptions::parseFromAttribute(ModuleOp module) {
   if (auto styleAttr = getAttributeFrom(module))
     parse(styleAttr.getValue(), [&](Twine error) { module.emitError(error); });
-}
-
-//===----------------------------------------------------------------------===//
-// Command Line Option Processing
-//===----------------------------------------------------------------------===//
-
-namespace {
-/// Commandline parser for LoweringOptions.  Delegates to the parser
-/// defined by LoweringOptions.
-struct LoweringOptionsParser : public llvm::cl::parser<LoweringOptions> {
-
-  LoweringOptionsParser(llvm::cl::Option &option)
-      : llvm::cl::parser<LoweringOptions>(option) {}
-
-  bool parse(llvm::cl::Option &option, StringRef argName, StringRef argValue,
-             LoweringOptions &value) {
-    bool failed = false;
-    value.parse(argValue, [&](Twine error) { failed = option.error(error); });
-    return failed;
-  }
-};
-
-/// Commandline arguments for verilog emission.  Used to dynamically register
-/// the command line arguments in multiple tools.
-struct LoweringCLOptions {
-  llvm::cl::opt<LoweringOptions, false, LoweringOptionsParser> loweringOptions{
-      "lowering-options",
-      llvm::cl::desc(
-          "Style options.  Valid flags include: alwaysFF, "
-          "noAlwaysComb, exprInEventControl, disallowPackedArrays, "
-          "disallowLocalVariables, verifLabels, emittedLineLength=<n>, "
-          "maximumNumberOfTermsPerExpression=<n>, "
-          "maximumNumberOfTermsInConcat=<n>, explicitBitcastAddMul, "
-          "emitReplicatedOpsToHeader, "
-          "locationInfoStyle={plain,wrapInAtSquareBracket}, "
-          "disallowPortDeclSharing, printDebugInfo"),
-      llvm::cl::value_desc("option")};
-};
-} // namespace
-
-/// The staticly initialized command line options.
-static llvm::ManagedStatic<LoweringCLOptions> clOptions;
-
-void circt::registerLoweringCLOptions() { *clOptions; }
-
-void circt::applyLoweringCLOptions(ModuleOp module) {
-  // If the command line options were not registered in the first place, there
-  // is nothing to parse.
-  if (!clOptions.isConstructed())
-    return;
-
-  // If an output style is applied on the command line, all previous options are
-  // discarded.
-  if (clOptions->loweringOptions.getNumOccurrences()) {
-    clOptions->loweringOptions.setAsAttribute(module);
-  }
 }

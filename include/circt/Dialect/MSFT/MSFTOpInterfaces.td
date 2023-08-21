@@ -27,7 +27,7 @@ def DynInstDataOpInterface : OpInterface<"DynInstDataOpInterface"> {
       /*args=*/(ins "::circt::hw::GlobalRefOp":$ref),
       /*methodBody=*/[{}],
       /*defaultImplementation=*/[{
-        $_op.refAttr(FlatSymbolRefAttr::get(ref));
+        $_op.setRefAttr(FlatSymbolRefAttr::get(ref));
       }]
     >,
     InterfaceMethod<
@@ -39,7 +39,34 @@ def DynInstDataOpInterface : OpInterface<"DynInstDataOpInterface"> {
       /*args=*/(ins),
       /*methodBody=*/[{}],
       /*defaultImplementation=*/[{
-        return $_op.refAttr();
+        return $_op.getRefAttr();
+      }]
+    >,
+    InterfaceMethod<
+      /*desc=*/[{
+        Get the top module op to which the GlobalRefOp which this op is referring.
+      }],
+      /*retTy=*/"Operation *",
+      /*methodName=*/"getTopModule",
+      /*args=*/(ins "circt::hw::HWSymbolCache &":$symCache),
+      /*methodBody=*/[{}],
+      /*defaultImplementation=*/[{
+        FlatSymbolRefAttr refSym = $_op.getGlobalRefSym();
+        if (!refSym) {
+          $_op->emitOpError("must run dynamic instance lowering first");
+          return nullptr;
+        }
+        auto ref = dyn_cast_or_null<hw::GlobalRefOp>(
+            symCache.getDefinition(refSym));
+        if (!ref) {
+          $_op->emitOpError("could not find hw.globalRef ") << refSym;
+          return nullptr;
+        }
+        if (ref.getNamepath().empty())
+          return nullptr;
+        auto modSym = FlatSymbolRefAttr::get(
+            ref.getNamepath()[0].cast<hw::InnerRefAttr>().getModule());
+        return symCache.getDefinition(modSym);
       }]
     >
   ];

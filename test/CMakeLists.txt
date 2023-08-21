@@ -1,6 +1,5 @@
 add_subdirectory(lib)
 add_subdirectory(CAPI)
-add_subdirectory(Dialect)
 
 configure_lit_site_cfg(
   ${CMAKE_CURRENT_SOURCE_DIR}/lit.site.cfg.py.in
@@ -18,15 +17,19 @@ configure_lit_site_cfg(
 set(CIRCT_TEST_DEPENDS
   FileCheck count not
   split-file
+  arcilator
   circt-capi-ir-test
+  circt-capi-om-test
+  circt-capi-firrtl-test
+  circt-as
+  circt-dis
   circt-opt
   circt-translate
   circt-reduce
-  esi-tester
   handshake-runner
   firtool
-  mlir-opt
-  mlir-cpu-runner
+  hlstool
+  om-linker
   )
 
 if (CIRCT_GTEST_AVAILABLE)
@@ -44,6 +47,6 @@ add_lit_testsuite(check-circt "Running the CIRCT regression tests"
   )
 set_target_properties(check-circt PROPERTIES FOLDER "Tests")
 
-add_lit_testsuites(CIRCT ${CMAKE_CURRENT_SOURCE_DIR}
-  DEPENDS ${CIRCT_TEST_DEPS}
-)
+add_lit_testsuites(CIRCT ${CMAKE_CURRENT_BINARY_DIR}
+  DEPENDS ${CIRCT_TEST_DEPENDS}
+  )

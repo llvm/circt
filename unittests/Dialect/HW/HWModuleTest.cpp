@@ -47,32 +47,32 @@ TEST(HWModuleOpTest, AddOutputs) {
   insertPorts.emplace_back(builder.getStringAttr("c"), wireC);
   top.insertOutputs(1, insertPorts);
 
-  auto ports = top.getAllPorts();
-  ASSERT_EQ(ports.size(), 4);
+  auto ports = top.getPortList();
+  ASSERT_EQ(ports.size(), 4u);
 
-  EXPECT_EQ(ports[0].name, builder.getStringAttr("a"));
-  EXPECT_EQ(ports[0].direction, PortDirection::OUTPUT);
-  EXPECT_EQ(ports[0].type, wireTy);
+  EXPECT_EQ(ports.at(0).name, builder.getStringAttr("a"));
+  EXPECT_EQ(ports.at(0).dir, ModulePort::Direction::Output);
+  EXPECT_EQ(ports.at(0).type, wireTy);
 
-  EXPECT_EQ(ports[1].name, builder.getStringAttr("b"));
-  EXPECT_EQ(ports[1].direction, PortDirection::OUTPUT);
-  EXPECT_EQ(ports[1].type, wireTy);
+  EXPECT_EQ(ports.at(1).name, builder.getStringAttr("b"));
+  EXPECT_EQ(ports.at(1).dir, ModulePort::Direction::Output);
+  EXPECT_EQ(ports.at(1).type, wireTy);
 
-  EXPECT_EQ(ports[2].name, builder.getStringAttr("c"));
-  EXPECT_EQ(ports[2].direction, PortDirection::OUTPUT);
-  EXPECT_EQ(ports[2].type, wireTy);
+  EXPECT_EQ(ports.at(2).name, builder.getStringAttr("c"));
+  EXPECT_EQ(ports.at(2).dir, ModulePort::Direction::Output);
+  EXPECT_EQ(ports.at(2).type, wireTy);
 
-  EXPECT_EQ(ports[3].name, builder.getStringAttr("d"));
-  EXPECT_EQ(ports[3].direction, PortDirection::OUTPUT);
-  EXPECT_EQ(ports[3].type, wireTy);
+  EXPECT_EQ(ports.at(3).name, builder.getStringAttr("d"));
+  EXPECT_EQ(ports.at(3).dir, ModulePort::Direction::Output);
+  EXPECT_EQ(ports.at(3).type, wireTy);
 
   auto output = cast<OutputOp>(top.getBodyBlock()->getTerminator());
-  ASSERT_EQ(output->getNumOperands(), 4);
+  ASSERT_EQ(output->getNumOperands(), 4u);
 
-  EXPECT_EQ(output->getOperand(0), wireA.result());
-  EXPECT_EQ(output->getOperand(1), wireB.result());
-  EXPECT_EQ(output->getOperand(2), wireC.result());
-  EXPECT_EQ(output->getOperand(3), wireD.result());
+  EXPECT_EQ(output->getOperand(0), wireA.getResult());
+  EXPECT_EQ(output->getOperand(1), wireB.getResult());
+  EXPECT_EQ(output->getOperand(2), wireC.getResult());
+  EXPECT_EQ(output->getOperand(3), wireD.getResult());
 }
 
 } // namespace

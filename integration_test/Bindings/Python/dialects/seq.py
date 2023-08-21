@@ -5,10 +5,10 @@ import sys
 
 import circt
 from circt.support import connect
-from circt.dialects import hw, seq
+from circt.dialects import hw, seq, sv
 
-from mlir.ir import *
-from mlir.passmanager import PassManager
+from circt.ir import *
+from circt.passmanager import PassManager
 
 with Context() as ctx, Location.unknown():
   circt.register_dialects(ctx)
@@ -25,30 +25,32 @@ with Context() as ctx, Location.unknown():
       reg_reset = hw.ConstantOp.create(i32, 0).result
       # CHECK: %[[INPUT_VAL:.+]] = hw.constant 45
       reg_input = hw.ConstantOp.create(i32, 45).result
-      # CHECK: %[[DATA_VAL:.+]] = seq.compreg %[[INPUT_VAL]], %clk, %rstn, %[[RESET_VAL]]
+      # CHECK: %[[DATA_VAL:.+]] = seq.compreg %[[INPUT_VAL]], %clk, %rst, %[[RESET_VAL]]
       reg = seq.CompRegOp(i32,
                           reg_input,
                           module.clk,
-                          reset=module.rstn,
+                          reset=module.rst,
                           reset_value=reg_reset,
                           name="my_reg")
 
       # CHECK: seq.compreg %[[INPUT_VAL]], %clk
       seq.reg(reg_input, module.clk)
-      # CHECK: seq.compreg %[[INPUT_VAL]], %clk, %rstn, %{{.+}}
-      seq.reg(reg_input, module.clk, reset=module.rstn)
+      # CHECK: seq.compreg %[[INPUT_VAL]], %clk, %rst, %{{.+}}
+      seq.reg(reg_input, module.clk, reset=module.rst)
       # CHECK: %[[RESET_VALUE:.+]] = hw.constant 123
-      # CHECK: seq.compreg %[[INPUT_VAL]], %clk, %rstn, %[[RESET_VALUE]]
+      # CHECK: seq.compreg %[[INPUT_VAL]], %clk, %rst, %[[RESET_VALUE]]
       custom_reset = hw.ConstantOp.create(i32, 123).result
-      seq.reg(reg_input,
-              module.clk,
-              reset=module.rstn,
-              reset_value=custom_reset)
+      seq.reg(reg_input, module.clk, reset=module.rst, reset_value=custom_reset)
       # CHECK: %FuBar = seq.compreg {{.+}}
       seq.reg(reg_input, module.clk, name="FuBar")
+      # CHECK: seq.compreg sym @FuBar
+      seq.reg(reg_input, module.clk, sym_name="FuBar")
 
-      # CHECK: %reg1 = seq.compreg %[[INPUT_VAL]], %clk
+      # CHECK: %reg1 = seq.compreg %[[INPUT_VAL]], %clk {sv.attributes = [#sv.attribute<"no_merge">]} : i32
+      sv_attr = sv.SVAttributeAttr.get("no_merge")
       reg1 = seq.CompRegOp.create(i32, clk=module.clk, name="reg1")
+
+      reg1.attributes["sv.attributes"] = ArrayAttr.get([sv_attr])
       connect(reg1.input, reg_input)
 
       # CHECK: %reg2 = seq.compreg %[[INPUT_VAL]], %clk
@@ -66,7 +68,7 @@ with Context() as ctx, Location.unknown():
       hw.OutputOp([reg.data])
 
     hw.HWModuleOp(name="top",
-                  input_ports=[("clk", i1), ("rstn", i1)],
+                  input_ports=[("clk", i1), ("rst", i1)],
                   output_ports=[("result", i32)],
                   body_builder=top)
 
@@ -76,8 +78,10 @@ with Context() as ctx, Location.unknown():
   # CHECK-LABEL: === Verilog ===
   print("=== Verilog ===")
 
-  pm = PassManager.parse("lower-seq-to-sv")
-  pm.run(m)
+  pm = PassManager.parse("builtin.module(lower-seq-to-sv)")
+  pm.run(m.operation)
   # CHECK: always_ff @(posedge clk)
   # CHECK: my_reg <= {{.+}}
+  # CHECK: (* no_merge *)
+  # CHECK: reg [31:0] reg1;
   circt.export_verilog(m, sys.stdout)

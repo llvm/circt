@@ -45,13 +45,15 @@ Value comb::createOrFoldSExt(Value value, Type destTy,
   return createOrFoldSExt(builder.getLoc(), value, destTy, builder);
 }
 
-Value comb::createOrFoldNot(Location loc, Value value, OpBuilder &builder) {
+Value comb::createOrFoldNot(Location loc, Value value, OpBuilder &builder,
+                            bool twoState) {
   auto allOnes = builder.create<hw::ConstantOp>(loc, value.getType(), -1);
-  return builder.createOrFold<XorOp>(loc, value, allOnes);
+  return builder.createOrFold<XorOp>(loc, value, allOnes, twoState);
 }
 
-Value comb::createOrFoldNot(Value value, ImplicitLocOpBuilder &builder) {
-  return createOrFoldNot(builder.getLoc(), value, builder);
+Value comb::createOrFoldNot(Value value, ImplicitLocOpBuilder &builder,
+                            bool twoState) {
+  return createOrFoldNot(builder.getLoc(), value, builder, twoState);
 }
 
 //===----------------------------------------------------------------------===//
@@ -80,6 +82,14 @@ ICmpPredicate ICmpOp::getFlippedPredicate(ICmpPredicate predicate) {
     return ICmpPredicate::ult;
   case ICmpPredicate::uge:
     return ICmpPredicate::ule;
+  case ICmpPredicate::ceq:
+    return ICmpPredicate::ceq;
+  case ICmpPredicate::cne:
+    return ICmpPredicate::cne;
+  case ICmpPredicate::weq:
+    return ICmpPredicate::weq;
+  case ICmpPredicate::wne:
+    return ICmpPredicate::wne;
   }
   llvm_unreachable("unknown comparison predicate");
 }
@@ -92,6 +102,10 @@ bool ICmpOp::isPredicateSigned(ICmpPredicate predicate) {
   case ICmpPredicate::uge:
   case ICmpPredicate::ne:
   case ICmpPredicate::eq:
+  case ICmpPredicate::cne:
+  case ICmpPredicate::ceq:
+  case ICmpPredicate::wne:
+  case ICmpPredicate::weq:
     return false;
   case ICmpPredicate::slt:
   case ICmpPredicate::sgt:
@@ -126,6 +140,14 @@ ICmpPredicate ICmpOp::getNegatedPredicate(ICmpPredicate predicate) {
     return ICmpPredicate::ule;
   case ICmpPredicate::uge:
     return ICmpPredicate::ult;
+  case ICmpPredicate::ceq:
+    return ICmpPredicate::cne;
+  case ICmpPredicate::cne:
+    return ICmpPredicate::ceq;
+  case ICmpPredicate::weq:
+    return ICmpPredicate::wne;
+  case ICmpPredicate::wne:
+    return ICmpPredicate::weq;
   }
   llvm_unreachable("unknown comparison predicate");
 }
@@ -133,7 +155,7 @@ ICmpPredicate ICmpOp::getNegatedPredicate(ICmpPredicate predicate) {
 /// Return true if this is an equality test with -1, which is a "reduction
 /// and" operation in Verilog.
 bool ICmpOp::isEqualAllOnes() {
-  if (predicate() != ICmpPredicate::eq)
+  if (getPredicate() != ICmpPredicate::eq)
     return false;
 
   if (auto op1 =
@@ -145,7 +167,7 @@ bool ICmpOp::isEqualAllOnes() {
 /// Return true if this is a not equal test with 0, which is a "reduction
 /// or" operation in Verilog.
 bool ICmpOp::isNotEqualZero() {
-  if (predicate() != ICmpPredicate::ne)
+  if (getPredicate() != ICmpPredicate::ne)
     return false;
 
   if (auto op1 =
@@ -162,7 +184,7 @@ LogicalResult ReplicateOp::verify() {
   // The source must be equal or smaller than the dest type, and an even
   // multiple of it.  Both are already known to be signless integers.
   auto srcWidth = getOperand().getType().cast<IntegerType>().getWidth();
-  auto dstWidth = getType().getWidth();
+  auto dstWidth = getType().cast<IntegerType>().getWidth();
   if (srcWidth == 0)
     return emitOpError("replicate does not take zero bit integer");
 
@@ -221,8 +243,8 @@ static unsigned getTotalWidth(ValueRange inputs) {
 }
 
 LogicalResult ConcatOp::verify() {
-  unsigned tyWidth = getType().getWidth();
-  unsigned operandsTotalWidth = getTotalWidth(inputs());
+  unsigned tyWidth = getType().cast<IntegerType>().getWidth();
+  unsigned operandsTotalWidth = getTotalWidth(getInputs());
   if (tyWidth != operandsTotalWidth)
     return emitOpError("ConcatOp requires operands total width to "
                        "match type width. operands "
@@ -240,12 +262,10 @@ void ConcatOp::build(OpBuilder &builder, OperationState &result, Value hd,
   result.addTypes(builder.getIntegerType(getTotalWidth(tl) + hdWidth));
 }
 
-LogicalResult ConcatOp::inferReturnTypes(MLIRContext *context,
-                                         Optional<Location> loc,
-                                         ValueRange operands,
-                                         DictionaryAttr attrs,
-                                         mlir::RegionRange regions,
-                                         SmallVectorImpl<Type> &results) {
+LogicalResult ConcatOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
+    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   unsigned resultWidth = getTotalWidth(operands);
   results.push_back(IntegerType::get(context, resultWidth));
   return success();
@@ -256,11 +276,23 @@ LogicalResult ConcatOp::inferReturnTypes(MLIRContext *context,
 //===----------------------------------------------------------------------===//
 
 LogicalResult ExtractOp::verify() {
-  unsigned srcWidth = input().getType().cast<IntegerType>().getWidth();
-  unsigned dstWidth = getType().getWidth();
-  if (lowBit() >= srcWidth || srcWidth - lowBit() < dstWidth)
+  unsigned srcWidth = getInput().getType().cast<IntegerType>().getWidth();
+  unsigned dstWidth = getType().cast<IntegerType>().getWidth();
+  if (getLowBit() >= srcWidth || srcWidth - getLowBit() < dstWidth)
     return emitOpError("from bit too large for input"), failure();
 
+  return success();
+}
+
+LogicalResult TruthTableOp::verify() {
+  size_t numInputs = getInputs().size();
+  if (numInputs >= sizeof(size_t) * 8)
+    return emitOpError("Truth tables support a maximum of ")
+           << sizeof(size_t) * 8 - 1 << " inputs on your platform";
+
+  ArrayAttr table = getLookupTable();
+  if (table.size() != (1ull << numInputs))
+    return emitOpError("Expected lookup table of 2^n length");
   return success();
 }
 

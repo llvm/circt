@@ -16,6 +16,7 @@
 #include "circt/Support/LLVM.h"
 #include <map>
 #include <memory>
+#include <optional>
 #include <set>
 
 namespace circt {
@@ -30,8 +31,13 @@ std::unique_ptr<mlir::Pass> createHandshakeMaterializeForksSinksPass();
 std::unique_ptr<mlir::Pass> createHandshakeDematerializeForksSinksPass();
 std::unique_ptr<mlir::Pass> createHandshakeRemoveBuffersPass();
 std::unique_ptr<mlir::Pass> createHandshakeAddIDsPass();
+std::unique_ptr<mlir::Pass>
+createHandshakeLowerExtmemToHWPass(std::optional<bool> createESIWrapper = {});
+std::unique_ptr<mlir::Pass> createHandshakeLegalizeMemrefsPass();
 std::unique_ptr<mlir::OperationPass<handshake::FuncOp>>
-createHandshakeInsertBuffersPass();
+createHandshakeInsertBuffersPass(const std::string &strategy = "all",
+                                 unsigned bufferSize = 2);
+std::unique_ptr<mlir::Pass> createHandshakeLockFunctionsPass();
 
 /// Iterates over the handshake::FuncOp's in the program to build an instance
 /// graph. In doing so, we detect whether there are any cycles in this graph, as
@@ -47,12 +53,19 @@ LogicalResult resolveInstanceGraph(ModuleOp moduleOp,
 // values have exactly one use.
 LogicalResult verifyAllValuesHasOneUse(handshake::FuncOp op);
 
-// Adds sink operations to any unused value in f.
+// Adds sink operations to any unused value in r.
 LogicalResult addSinkOps(Region &r, OpBuilder &rewriter);
 
-// Adds fork operations to any value with multiple uses in f.
+// Adds fork operations to any value with multiple uses in r.
 LogicalResult addForkOps(Region &r, OpBuilder &rewriter);
 void insertFork(Value result, bool isLazy, OpBuilder &rewriter);
+
+// Adds a locking mechanism around the region.
+LogicalResult lockRegion(Region &r, OpBuilder &rewriter);
+
+// Applies the spcified buffering strategy on the region r.
+LogicalResult bufferRegion(Region &r, OpBuilder &rewriter, StringRef strategy,
+                           unsigned bufferSize);
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION

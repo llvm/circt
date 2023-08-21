@@ -6,6 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "mlir/Pass/PassBase.td"
+
 def LowerToHW: Pass<"lower-msft-to-hw", "mlir::ModuleOp"> {
   let summary = "Lower MSFT ops to hw ops";
   let constructor = "circt::msft::createLowerToHWPass()";
@@ -51,4 +53,9 @@ def LowerConstructs: Pass<"msft-lower-constructs", "mlir::ModuleOp"> {
   let summary = "Lower high-level constructs";
   let constructor = "circt::msft::createLowerConstructsPass()";
   let dependentDialects = ["circt::hw::HWDialect"];
+}
+
+def DiscoverAppIDs: Pass<"msft-discover-appids", "mlir::ModuleOp"> {
+  let summary = "Discover the appids in a module hierarchy";
+  let constructor = "circt::msft::createDiscoverAppIDsPass()";
 }

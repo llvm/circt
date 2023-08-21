@@ -16,11 +16,10 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWPasses.h"
 #include "circt/Dialect/HW/HWSymCache.h"
-#include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Support/Namespace.h"
 #include "circt/Support/ValueMapper.h"
-#include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/IRMapping.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -75,12 +74,12 @@ static FailureOr<Value> narrowValueToArrayWidth(OpBuilder &builder, Value array,
 
 static hw::HWModuleOp targetModuleOp(hw::InstanceOp instanceOp,
                                      const SymbolCache &sc) {
-  auto *targetOp = sc.getDefinition(instanceOp.moduleNameAttr());
+  auto *targetOp = sc.getDefinition(instanceOp.getModuleNameAttr());
   auto targetHWModule = dyn_cast<hw::HWModuleOp>(targetOp);
   if (!targetHWModule)
     return {}; // Won't specialize external modules.
 
-  if (targetHWModule.parameters().size() == 0)
+  if (targetHWModule.getParameters().size() == 0)
     return {}; // nothing to record or specialize
 
   return targetHWModule;
@@ -110,7 +109,7 @@ struct EliminateParamValueOpPattern : public OpRewritePattern<ParamValueOp> {
                                 PatternRewriter &rewriter) const override {
     // Substitute the param value op with an evaluated constant operation.
     FailureOr<Attribute> evaluated =
-        evaluateParametricAttr(op.getLoc(), parameters, op.value());
+        evaluateParametricAttr(op.getLoc(), parameters, op.getValue());
     if (failed(evaluated))
       return failure();
     rewriter.replaceOpWithNewOp<hw::ConstantOp>(
@@ -132,22 +131,21 @@ public:
   LogicalResult
   matchAndRewrite(ArrayGetOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    auto inputType = type_cast<ArrayType>(op.input().getType());
+    auto inputType = type_cast<ArrayType>(op.getInput().getType());
     Type targetIndexType = IntegerType::get(
         getContext(),
         inputType.getSize() == 1 ? 1 : llvm::Log2_64_Ceil(inputType.getSize()));
 
-    if (op.index().getType().getIntOrFloatBitWidth() ==
+    if (op.getIndex().getType().getIntOrFloatBitWidth() ==
         targetIndexType.getIntOrFloatBitWidth())
       return failure(); // nothing to do
 
     // Narrow the index value.
     FailureOr<Value> narrowedIndex =
-        narrowValueToArrayWidth(rewriter, op.input(), op.index());
+        narrowValueToArrayWidth(rewriter, op.getInput(), op.getIndex());
     if (failed(narrowedIndex))
       return failure();
-    rewriter.replaceOpWithNewOp<ArrayGetOp>(op, op.input(),
-                                            narrowedIndex.getValue());
+    rewriter.replaceOpWithNewOp<ArrayGetOp>(op, op.getInput(), *narrowedIndex);
     return success();
   }
 };
@@ -169,13 +167,13 @@ struct ParametricTypeConversionPattern : public ConversionPattern {
     bool ok = true;
     rewriter.updateRootInPlace(op, [&]() {
       // Mutate result types
-      for (auto &it : llvm::enumerate(op->getResultTypes())) {
+      for (auto it : llvm::enumerate(op->getResultTypes())) {
         FailureOr<Type> res =
             evaluateParametricType(op->getLoc(), parameters, it.value());
         ok &= succeeded(res);
         if (!ok)
           return;
-        op->getResult(it.index()).setType(res.getValue());
+        op->getResult(it.index()).setType(*res);
       }
 
       // Note: 'operands' have already been converted with the supplied type
@@ -197,10 +195,10 @@ static void populateTypeConversion(Location loc, TypeConverter &typeConverter,
                                    ArrayAttr parameters) {
   // Possibly parametric types
   typeConverter.addConversion([=](hw::IntType type) {
-    return evaluateParametricType(loc, parameters, type).getValue();
+    return evaluateParametricType(loc, parameters, type);
   });
   typeConverter.addConversion([=](hw::ArrayType type) {
-    return evaluateParametricType(loc, parameters, type).getValue();
+    return evaluateParametricType(loc, parameters, type);
   });
 
   // Valid target types.
@@ -218,7 +216,7 @@ static LogicalResult registerNestedParametricInstanceOps(
         &parametersUsers) {
   // Register any nested parametric instance ops for the next loop
   auto walkResult = target->walk([&](InstanceOp instanceOp) -> WalkResult {
-    auto instanceParameters = instanceOp.parameters();
+    auto instanceParameters = instanceOp.getParameters();
     // We can ignore non-parametric instances
     if (instanceParameters.empty())
       return WalkResult::advance();
@@ -233,8 +231,8 @@ static LogicalResult registerNestedParametricInstanceOps(
                                               instanceParameterValue);
       if (failed(evaluated))
         return WalkResult::interrupt();
-      evaluatedInstanceParameters.push_back(hw::ParamDeclAttr::get(
-          instanceParameterDecl.getName(), evaluated.getValue()));
+      evaluatedInstanceParameters.push_back(
+          hw::ParamDeclAttr::get(instanceParameterDecl.getName(), *evaluated));
     }
 
     auto evaluatedInstanceParametersAttr =
@@ -274,20 +272,20 @@ static LogicalResult specializeModule(
   auto *ctx = builder.getContext();
   // Update the types of the source module ports based on evaluating any
   // parametric in/output ports.
-  auto ports = source.getPorts();
-  for (auto &in : llvm::enumerate(source.getFunctionType().getInputs())) {
+  auto ports = source.getPortList();
+  for (auto in : llvm::enumerate(source.getFunctionType().getInputs())) {
     FailureOr<Type> resType =
         evaluateParametricType(source.getLoc(), parameters, in.value());
     if (failed(resType))
       return failure();
-    ports.inputs[in.index()].type = resType.getValue();
+    ports.atInput(in.index()).type = *resType;
   }
-  for (auto &out : llvm::enumerate(source.getFunctionType().getResults())) {
+  for (auto out : llvm::enumerate(source.getFunctionType().getResults())) {
     FailureOr<Type> resolvedType =
         evaluateParametricType(source.getLoc(), parameters, out.value());
     if (failed(resolvedType))
       return failure();
-    ports.outputs[out.index()].type = resolvedType.getValue();
+    ports.atOutput(out.index()).type = *resolvedType;
   }
 
   // Create the specialized module using the evaluated port info.
@@ -309,7 +307,7 @@ static LogicalResult specializeModule(
   builder.setInsertionPointToStart(target.getBodyBlock());
 
   for (auto &op : source.getOps()) {
-    BlockAndValueMapping bvMapper;
+    IRMapping bvMapper;
     for (auto operand : op.getOperands())
       bvMapper.map(operand, mapper.get(operand));
     auto *newOp = builder.clone(op, bvMapper);
@@ -362,11 +360,11 @@ void HWSpecializePass::runOnOperation() {
   for (auto hwModule : module.getOps<hw::HWModuleOp>()) {
     // If this module is parametric, defer registering its parametric
     // instantiations until this module is specialized
-    if (!hwModule.parameters().empty())
+    if (!hwModule.getParameters().empty())
       continue;
     for (auto instanceOp : hwModule.getOps<hw::InstanceOp>()) {
       if (auto targetHWModule = targetModuleOp(instanceOp, sc)) {
-        auto parameters = instanceOp.parameters();
+        auto parameters = instanceOp.getParameters();
         registry.registerModuleOp(targetHWModule, parameters);
 
         parametersUsers[targetHWModule][parameters].push_back(instanceOp);

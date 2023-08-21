@@ -1,14 +1,14 @@
 // RUN: circt-opt -firrtl-print-nla-table %s  2>&1 | FileCheck %s
 
-// CHECK: BarNL: nla_1, nla, 
-// CHECK: BazNL: nla_1, nla_0, nla, 
-// CHECK: FooNL: nla_1, nla_0, nla, 
-// CHECK: FooL: 
+// CHECK: BarNL: nla_1, nla,
+// CHECK: BazNL: nla_1, nla_0, nla,
+// CHECK: FooNL: nla_1, nla_0, nla,
+// CHECK: FooL:
 
 firrtl.circuit "FooNL"  {
-  firrtl.nla @nla_1 [@FooNL::@baz, @BazNL::@bar, @BarNL]
-  firrtl.nla @nla_0 [@FooNL::@baz, @BazNL::@w]
-  firrtl.nla @nla [@FooNL::@baz, @BazNL::@bar, @BarNL::@w2]
+  hw.hierpath private @nla_1 [@FooNL::@baz, @BazNL::@bar, @BarNL]
+  hw.hierpath private @nla_0 [@FooNL::@baz, @BazNL]
+  hw.hierpath private @nla [@FooNL::@baz, @BazNL::@bar, @BarNL]
 
   firrtl.module @BarNL() attributes {annotations = [{circt.nonlocal = @nla_1, class = "circt.test", nl = "nl"}]} {
     %w2 = firrtl.wire sym @w2  {annotations = [{circt.fieldID = 5 : i32, circt.nonlocal = @nla, class = "circt.test", nl = "nl2"}]} : !firrtl.bundle<a: uint, b: vector<uint, 4>>
@@ -16,10 +16,10 @@ firrtl.circuit "FooNL"  {
   }
   firrtl.module @BazNL() {
     %w = firrtl.wire sym @w  {annotations = [{circt.nonlocal = @nla_0, class = "circt.test", nl = "nl"}]} : !firrtl.uint
-    firrtl.instance bar sym @bar  {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}, {circt.nonlocal = @nla_0, class = "circt.nonlocal"}, {circt.nonlocal = @nla_1, class = "circt.nonlocal"}]} @BarNL()
+    firrtl.instance bar sym @bar @BarNL()
   }
   firrtl.module @FooNL() {
-    firrtl.instance baz sym @baz  {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}, {circt.nonlocal = @nla_0, class = "circt.nonlocal"}, {circt.nonlocal = @nla_1, class = "circt.nonlocal"}]} @BazNL()
+    firrtl.instance baz sym @baz @BazNL()
   }
   firrtl.module @FooL() {
     %w3 = firrtl.wire  {annotations = [{class = "circt.test", nl = "nl3"}]} : !firrtl.uint

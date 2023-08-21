@@ -11,7 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 def LLHD_ConstantTimeOp : LLHD_Op<"constant_time",
-                                  [ConstantLike, NoSideEffect]> {
+                                  [ConstantLike, Pure]> {
   let summary = "Introduce a new time constant.";
   let description = [{
     The `llhd.constant_time` instruction introduces a new constant time value as

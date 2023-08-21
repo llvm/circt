@@ -9,8 +9,8 @@
 
 // LIST-TOP: test_mod.sv
 
-// LIST-BLACK-BOX:      magic/blackbox-inline.v
-// LIST-BLACK-BOX-NEXT: magic/blackbox-path.v
+// LIST-BLACK-BOX:      magic{{[/\]}}blackbox-inline.v
+// LIST-BLACK-BOX-NEXT: magic{{[/\]}}blackbox-path.v
 
 firrtl.circuit "test_mod" attributes {annotations = [
   // Black box processing should honor only the last annotation.

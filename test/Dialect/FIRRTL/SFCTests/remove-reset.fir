@@ -13,8 +13,8 @@ circuit Example :
     output out : UInt<1>[2]
     wire bar : UInt<1>
     bar is invalid
-    ; CHECK: %foo0 = firrtl.reg %clock :
-    ; CHECK: %foo1 = firrtl.reg %clock :
+    ; CHECK: %foo0 = firrtl.reg %clock
+    ; CHECK: %foo1 = firrtl.reg %clock
     reg foo0 : UInt<1>, clock with : (reset => (arst, bar))
     reg foo1 : UInt<1>, clock with : (reset => (srst, bar))
     foo0 <= in
@@ -28,8 +28,8 @@ circuit Example :
 ; is reset, given aggregate register 'foo' with 2-bit field 'a' and 1-bit field
 ; 'b', and aggregate, invalid wire 'bar' with the same fields, and 'foo' is
 ; initialized to 'bar', and 'bar.a[1]' connected to zero.
-circuit Example :
-  module Example :
+circuit Example1 :
+  module Example1 :
     input clock : Clock
     input arst : AsyncReset
     input srst : UInt<1>
@@ -40,12 +40,12 @@ circuit Example :
     bar is invalid
     bar.a[1] <= UInt<1>(0)
 
-    ; CHECK: %foo0_a_0 = firrtl.reg %clock :
+    ; CHECK: %foo0_a_0 = firrtl.reg %clock
     ; CHECK: %foo0_a_1 = firrtl.regreset %clock, %arst,
-    ; CHECK: %foo0_b = firrtl.reg %clock :
-    ; CHECK: %foo1_a_0 = firrtl.reg %clock :
+    ; CHECK: %foo0_b = firrtl.reg %clock
+    ; CHECK: %foo1_a_0 = firrtl.reg %clock
     ; CHECK: %foo1_a_1 = firrtl.regreset %clock, %srst,
-    ; CHECK: %foo1_b = firrtl.reg %clock :
+    ; CHECK: %foo1_b = firrtl.reg %clock
     reg foo0 : {a : UInt<1>[2], b : UInt<1>}, clock with : (reset => (arst, bar))
     reg foo1 : {a : UInt<1>[2], b : UInt<1>}, clock with : (reset => (srst, bar))
     foo0 <= in
@@ -59,8 +59,8 @@ circuit Example :
 ; with 1-bit field 'a' and 1-bit field 'b', and aggregate, invalid wires 'bar'
 ; and 'baz' with the same fields, and 'foo' is initialized to 'baz', and 'bar.a'
 ; is connected to zero, and 'baz' is connected to 'bar'.
-circuit Example :
-  module Example :
+circuit Example2 :
+  module Example2 :
     input clock : Clock
     input arst : AsyncReset
     input srst : UInt<1>
@@ -76,9 +76,9 @@ circuit Example :
     baz <= bar
 
     ; CHECK: %foo0_a = firrtl.regreset %clock, %arst,
-    ; CHECK: %foo0_b = firrtl.reg %clock :
+    ; CHECK: %foo0_b = firrtl.reg %clock
     ; CHECK: %foo1_a = firrtl.regreset %clock, %srst,
-    ; CHECK: %foo1_b = firrtl.reg %clock :
+    ; CHECK: %foo1_b = firrtl.reg %clock
     reg foo0 : { a : UInt<1>, b : UInt<1> }, clock with : (reset => (arst, baz))
     reg foo1 : { a : UInt<1>, b : UInt<1> }, clock with : (reset => (srst, baz))
     foo0 <= in
@@ -90,8 +90,8 @@ circuit Example :
 
 ; Should convert a reset wired to UInt<0> to a canonical non-reset, given foo's
 ; reset is connected to zero.
-circuit Example :
-  module Example :
+circuit Example3 :
+  module Example3 :
     input clock : Clock
     input in : UInt<2>
     output out : UInt<2>[3]
@@ -104,9 +104,9 @@ circuit Example :
     arst <= asAsyncReset(UInt<1>(0))
     srst <= UInt<1>(0)
 
-    ; CHECK: %foo0 = firrtl.reg %clock :
-    ; CHECK: %foo1 = firrtl.reg %clock :
-    ; CHECK: %foo2 = firrtl.reg %clock :
+    ; CHECK: %foo0 = firrtl.reg %clock
+    ; CHECK: %foo1 = firrtl.reg %clock
+    ; CHECK: %foo2 = firrtl.reg %clock
     reg foo0 : UInt<2>, clock with : (reset => (rst, UInt(3)))
     reg foo1 : UInt<2>, clock with : (reset => (arst, UInt(3)))
     reg foo2 : UInt<2>, clock with : (reset => (srst, UInt(3)))

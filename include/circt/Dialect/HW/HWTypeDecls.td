@@ -10,6 +10,12 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_HW_HWTYPEDECLS_TD
+#define CIRCT_DIALECT_HW_HWTYPEDECLS_TD
+
+include "circt/Dialect/HW/HWDialect.td"
+include "mlir/IR/SymbolInterfaces.td"
+
 //===----------------------------------------------------------------------===//
 // Declaration operations
 //===----------------------------------------------------------------------===//
@@ -30,7 +36,7 @@ def TypeScopeOp : HWOp<"type_scope",
   let assemblyFormat = "$sym_name $body attr-dict";
 
   let extraClassDeclaration = [{
-    Block *getBodyBlock() { return &body().front(); }
+    Block *getBodyBlock() { return &getBody().front(); }
   }];
 }
 
@@ -48,5 +54,10 @@ def TypedeclOp : HWOp<"typedecl", [Symbol, HasParent<"TypeScopeOp">]> {
 
   let extraClassDeclaration = [{
     StringRef getPreferredName();
+
+    // Returns the type alias type which this typedecl op defines.
+    Type getAliasType();
   }];
 }
+
+#endif // CIRCT_DIALECT_HW_HWTYPEDECLS_TD

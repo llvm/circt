@@ -128,8 +128,8 @@ LogicalResult scheduling::scheduleLP(CyclicProblem &prob, Operation *lastOp) {
         constraint->SetCoefficient(t[src], 1);
         constraint->SetCoefficient(t[dst], -1);
       }
-      constraint->SetCoefficient(
-          ii, -((double)prob.getDistance(dep).getValueOr(0)));
+      constraint->SetCoefficient(ii,
+                                 -((double)prob.getDistance(dep).value_or(0)));
     }
 
   // Invoke solver. The ILP is infeasible if the scheduling problem contained

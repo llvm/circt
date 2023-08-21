@@ -9,7 +9,7 @@
 #ifndef CIRCT_C_DIALECT_LLHD_H
 #define CIRCT_C_DIALECT_LLHD_H
 
-#include "mlir-c/Registration.h"
+#include "mlir-c/IR.h"
 
 #ifdef __cplusplus
 extern "C" {

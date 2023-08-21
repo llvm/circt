@@ -42,7 +42,7 @@ enum class Sign {
 /// Map a `Sign` to the corresponding keyword.
 StringRef getKeywordFromSign(const Sign &sign);
 /// Map the keywords `unsigned` and `signed` to the corresponding `Sign`.
-Optional<Sign> getSignFromKeyword(StringRef keyword);
+std::optional<Sign> getSignFromKeyword(StringRef keyword);
 
 template <typename Os>
 Os &operator<<(Os &os, const Sign &sign) {
@@ -310,7 +310,7 @@ public:
   ///
   /// Returns `None` if any of the type's dimensions is unsized, associative, or
   /// a queue, or the core type itself has no known size.
-  Optional<unsigned> getBitSize() const;
+  std::optional<unsigned> getBitSize() const;
 
   /// Get this type as a simple bit vector, if it is one. Returns a null type
   /// otherwise.
@@ -440,7 +440,7 @@ public:
   /// Get the size of this type in bits.
   ///
   /// Returns `None` if any of the type's dimensions is unsized.
-  Optional<unsigned> getBitSize() const;
+  std::optional<unsigned> getBitSize() const;
 
   /// Format this type in SystemVerilog syntax into an output stream. Useful to
   /// present the type back to the user in diagnostics.
@@ -527,7 +527,7 @@ public:
   };
 
   /// Get the integer type that corresponds to a keyword (like `bit`).
-  static Optional<Kind> getKindFromKeyword(StringRef keyword);
+  static std::optional<Kind> getKindFromKeyword(StringRef keyword);
   /// Get the keyword (like `bit`) for one of the integer types.
   static StringRef getKeyword(Kind kind);
   /// Get the default sign for one of the integer types.
@@ -538,9 +538,11 @@ public:
   static unsigned getBitSize(Kind kind);
   /// Get the integer type that corresponds to a domain and bit size. For
   /// example, returns `int` for `(TwoValued, 32)`.
-  static Optional<Kind> getKindFromDomainAndSize(Domain domain, unsigned size);
+  static std::optional<Kind> getKindFromDomainAndSize(Domain domain,
+                                                      unsigned size);
 
-  static IntType get(MLIRContext *context, Kind kind, Optional<Sign> sign = {});
+  static IntType get(MLIRContext *context, Kind kind,
+                     std::optional<Sign> sign = {});
 
   /// Create a `logic` type.
   static IntType getLogic(MLIRContext *context) { return get(context, Logic); }
@@ -594,7 +596,7 @@ public:
   };
 
   /// Get the integer type that corresponds to a keyword (like `bit`).
-  static Optional<Kind> getKindFromKeyword(StringRef keyword);
+  static std::optional<Kind> getKindFromKeyword(StringRef keyword);
   /// Get the keyword (like `bit`) for one of the integer types.
   static StringRef getKeyword(Kind kind);
   /// Get the size of one of the integer types.
@@ -801,9 +803,9 @@ public:
   PackedType fullyResolved() const;
 
   /// Get the dimension's range, or `None` if it is unsized.
-  Optional<Range> getRange() const;
+  std::optional<Range> getRange() const;
   /// Get the dimension's size, or `None` if it is unsized.
-  Optional<unsigned> getSize() const;
+  std::optional<unsigned> getSize() const;
 
 protected:
   using PackedType::PackedType;
@@ -812,7 +814,8 @@ protected:
 
 /// A packed unsized dimension, like `[]`.
 class PackedUnsizedDim : public Type::TypeBase<PackedUnsizedDim, PackedDim,
-                                               detail::UnsizedDimStorage> {
+                                               detail::UnsizedDimStorage,
+                                               ::mlir::TypeTrait::IsMutable> {
 public:
   static PackedUnsizedDim get(PackedType inner);
 
@@ -822,8 +825,9 @@ protected:
 };
 
 /// A packed range dimension, like `[a:b]`.
-class PackedRangeDim : public Type::TypeBase<PackedRangeDim, PackedDim,
-                                             detail::RangeDimStorage> {
+class PackedRangeDim
+    : public Type::TypeBase<PackedRangeDim, PackedDim, detail::RangeDimStorage,
+                            ::mlir::TypeTrait::IsMutable> {
 public:
   static PackedRangeDim get(PackedType inner, Range range);
 
@@ -895,7 +899,8 @@ protected:
 /// An unpacked unsized dimension, like `[]`.
 class UnpackedUnsizedDim
     : public Type::TypeBase<UnpackedUnsizedDim, UnpackedDim,
-                            detail::UnsizedDimStorage> {
+                            detail::UnsizedDimStorage,
+                            ::mlir::TypeTrait::IsMutable> {
 public:
   static UnpackedUnsizedDim get(UnpackedType inner);
 
@@ -906,7 +911,8 @@ protected:
 
 /// An unpacked array dimension, like `[a]`.
 class UnpackedArrayDim : public Type::TypeBase<UnpackedArrayDim, UnpackedDim,
-                                               detail::SizedDimStorage> {
+                                               detail::SizedDimStorage,
+                                               ::mlir::TypeTrait::IsMutable> {
 public:
   static UnpackedArrayDim get(UnpackedType inner, unsigned size);
 
@@ -920,7 +926,8 @@ protected:
 
 /// An unpacked range dimension, like `[a:b]`.
 class UnpackedRangeDim : public Type::TypeBase<UnpackedRangeDim, UnpackedDim,
-                                               detail::RangeDimStorage> {
+                                               detail::RangeDimStorage,
+                                               ::mlir::TypeTrait::IsMutable> {
 public:
   static UnpackedRangeDim get(UnpackedType inner, Range range);
 
@@ -956,7 +963,8 @@ protected:
 ///
 /// See IEEE 1800-2017 §7.8 "Associative arrays".
 class UnpackedAssocDim : public Type::TypeBase<UnpackedAssocDim, UnpackedDim,
-                                               detail::AssocDimStorage> {
+                                               detail::AssocDimStorage,
+                                               ::mlir::TypeTrait::IsMutable> {
 public:
   static UnpackedAssocDim get(UnpackedType inner, UnpackedType indexType = {});
 
@@ -971,14 +979,15 @@ protected:
 
 /// An unpacked queue dimension with optional bound, like `[$]` or `[$:a]`.
 class UnpackedQueueDim : public Type::TypeBase<UnpackedQueueDim, UnpackedDim,
-                                               detail::SizedDimStorage> {
+                                               detail::SizedDimStorage,
+                                               ::mlir::TypeTrait::IsMutable> {
 public:
   static UnpackedQueueDim get(UnpackedType inner,
-                              Optional<unsigned> bound = {});
+                              std::optional<unsigned> bound = {});
 
   /// Get the bound of the queue, i.e. the `a` in `[$:a]`. Returns `None` if the
   /// queue is unbounded.
-  Optional<unsigned> getBound() const;
+  std::optional<unsigned> getBound() const;
 
 protected:
   using Base::Base;
@@ -1033,7 +1042,7 @@ enum class StructKind {
 /// Map a `StructKind` to the corresponding mnemonic.
 StringRef getMnemonicFromStructKind(StructKind kind);
 /// Map a mnemonic to the corresponding `StructKind`.
-Optional<StructKind> getStructKindFromMnemonic(StringRef mnemonic);
+std::optional<StructKind> getStructKindFromMnemonic(StringRef mnemonic);
 
 template <typename Os>
 Os &operator<<(Os &os, const StructKind &kind) {
@@ -1078,7 +1087,7 @@ struct Struct {
   /// The size of this struct in bits. This is `None` if any member type has an
   /// unknown size. This is commonly the case for unpacked member types, or
   /// dimensions with unknown size such as `[]` or `[$]`.
-  Optional<unsigned> bitSize;
+  std::optional<unsigned> bitSize;
   /// The name of the surrounding typedef, if this struct is embedded in a
   /// typedef. Otherwise this is a null attribute.
   StringAttr name;
@@ -1094,7 +1103,7 @@ struct Struct {
   /// Format this struct in SystemVerilog syntax. Useful to present the struct
   /// back to the user in diagnostics.
   void format(llvm::raw_ostream &os, bool packed = false,
-              Optional<Sign> signing = {}) const;
+              std::optional<Sign> signing = {}) const;
 };
 
 inline llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
@@ -1105,12 +1114,14 @@ inline llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
 
 /// A packed struct.
 class PackedStructType : public Type::TypeBase<PackedStructType, PackedType,
-                                               detail::StructTypeStorage> {
+                                               detail::StructTypeStorage,
+                                               ::mlir::TypeTrait::IsMutable> {
 public:
   static PackedStructType get(StructKind kind, ArrayRef<StructMember> members,
                               StringAttr name, Location loc,
-                              Optional<Sign> sign = {});
-  static PackedStructType get(const Struct &strukt, Optional<Sign> sign = {}) {
+                              std::optional<Sign> sign = {});
+  static PackedStructType get(const Struct &strukt,
+                              std::optional<Sign> sign = {}) {
     return get(strukt.kind, strukt.members, strukt.name, strukt.loc, sign);
   }
 
@@ -1125,8 +1136,8 @@ public:
   /// back to the user in diagnostics.
   void format(llvm::raw_ostream &os) const {
     getStruct().format(os, true,
-                       isSignExplicit() ? Optional<Sign>(getSign())
-                                        : Optional<Sign>());
+                       isSignExplicit() ? std::optional<Sign>(getSign())
+                                        : std::optional<Sign>());
   }
 
   /// Allow implicit casts from `PackedStructType` to the actual struct
@@ -1140,7 +1151,8 @@ protected:
 /// An unpacked struct.
 class UnpackedStructType
     : public Type::TypeBase<UnpackedStructType, UnpackedType,
-                            detail::StructTypeStorage> {
+                            detail::StructTypeStorage,
+                            ::mlir::TypeTrait::IsMutable> {
 public:
   static UnpackedStructType get(StructKind kind, ArrayRef<StructMember> members,
                                 StringAttr name, Location loc);

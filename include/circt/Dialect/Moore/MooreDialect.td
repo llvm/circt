@@ -32,7 +32,6 @@ def MooreDialect : Dialect {
     void printType(Type, DialectAsmPrinter &) const override;
   }];
   let useDefaultTypePrinterParser = 0;
-  int emitAccessorPrefix = kEmitAccessorPrefix_Prefixed;
 }
 
 #endif // CIRCT_DIALECT_MOORE_MOOREDIALECT

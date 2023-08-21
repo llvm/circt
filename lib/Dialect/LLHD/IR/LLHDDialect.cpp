@@ -38,13 +38,11 @@ struct LLHDInlinerInterface : public mlir::DialectInlinerInterface {
   //===--------------------------------------------------------------------===//
 
   /// All operations within LLHD can be inlined.
-  bool isLegalToInline(Operation *, Region *, bool,
-                       BlockAndValueMapping &) const final {
+  bool isLegalToInline(Operation *, Region *, bool, IRMapping &) const final {
     return true;
   }
 
-  bool isLegalToInline(Region *, Region *src, bool,
-                       BlockAndValueMapping &) const final {
+  bool isLegalToInline(Region *, Region *src, bool, IRMapping &) const final {
     // Don't inline processes and entities
     return !isa<llhd::ProcOp>(src->getParentOp()) &&
            !isa<llhd::EntityOp>(src->getParentOp());

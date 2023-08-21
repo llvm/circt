@@ -15,6 +15,8 @@
 
 #include "circt/Scheduling/Problems.h"
 
+#include "llvm/Support/raw_ostream.h"
+
 #include <functional>
 
 namespace circt {
@@ -49,6 +51,9 @@ LogicalResult computeStartTimesInCycle(ChainingProblem &prob);
 
 /// Export \p prob as a DOT graph into \p fileName.
 void dumpAsDOT(Problem &prob, StringRef fileName);
+
+/// Print \p prob as a DOT graph onto \p stream.
+void dumpAsDOT(Problem &prob, raw_ostream &stream);
 
 } // namespace scheduling
 } // namespace circt

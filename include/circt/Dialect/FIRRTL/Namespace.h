@@ -29,50 +29,11 @@ struct CircuitNamespace : public Namespace {
   /// composed of any operation in the first level of the circuit that contains
   /// a symbol.
   void add(CircuitOp circuit) {
-    for (auto &op : *circuit.getBody())
+    for (auto &op : *circuit.getBodyBlock())
       if (auto symbol = op.getAttrOfType<mlir::StringAttr>(
               SymbolTable::getSymbolAttrName()))
         nextIndex.insert({symbol.getValue(), 0});
   }
-};
-
-/// The namespace of a `FModuleLike` operation, generally inhabited by its ports
-/// and declarations.
-struct ModuleNamespace : public Namespace {
-  ModuleNamespace() {}
-  ModuleNamespace(FModuleLike module) : module(module) { add(module); }
-
-  /// Populate the namespace from a module-like operation. This namespace will
-  /// be composed of the `inner_sym`s of the module's ports and declarations.
-  void add(FModuleLike module) {
-    addPorts(module);
-    addBody(module);
-  }
-
-  /// Populate the namespace with the ports of a module-like operation.
-  void addPorts(FModuleLike module) {
-    for (auto portSymbol : module.getPortSymbolsAttr().getAsRange<StringAttr>())
-      if (!portSymbol.getValue().empty())
-        nextIndex.insert({portSymbol.getValue(), 0});
-  }
-
-  void addPorts(ArrayRef<PortInfo> ports) {
-    for (auto port : ports)
-      if (port.sym)
-        nextIndex.insert({port.sym.getValue(), 0});
-  }
-
-  /// Populate the namespace with the body of a module-like operation.
-  void addBody(FModuleLike module) {
-    module.walk([&](Operation *op) {
-      auto attr = op->getAttrOfType<StringAttr>("inner_sym");
-      if (attr)
-        nextIndex.insert({attr.getValue(), 0});
-    });
-  }
-
-  /// The module associated with this namespace.
-  FModuleLike module;
 };
 
 } // namespace firrtl

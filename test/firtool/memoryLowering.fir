@@ -1,4 +1,4 @@
-; RUN: firtool %s --format=fir --lower-memory --annotation-file %s.anno.json -emit-metadata -repl-seq-mem -repl-seq-mem-file="metadata/test.conf" --verilog |  FileCheck %s
+; RUN: firtool %s --annotation-file %s.anno.json -repl-seq-mem -repl-seq-mem-file="test.conf" |  FileCheck %s
 
 circuit test:
   module test:
@@ -33,16 +33,16 @@ circuit test:
 
 ; CHECK: external module memory_ext
 
-; CHECK-LABEL: FILE "metadata/seq_mems.json"
+; CHECK-LABEL: FILE "metadata{{[/\]}}seq_mems.json"
 ; CHECK:      [
 ; CHECK-NEXT:   {
 ; CHECK-NEXT:     "module_name": "memory_ext",
 ; CHECK-NEXT:     "depth": 16,
 ; CHECK-NEXT:     "width": 32,
 ; CHECK-NEXT:     "masked": true,
-; CHECK-NEXT:     "read": true,
-; CHECK-NEXT:     "write": true,
-; CHECK-NEXT:     "readwrite": false,
+; CHECK-NEXT:     "read": 1,
+; CHECK-NEXT:     "write": 1,
+; CHECK-NEXT:     "readwrite": 0,
 ; CHECK-NEXT:     "mask_granularity": 8,
 ; CHECK-NEXT:     "extra_ports": [],
 ; CHECK-NEXT:     "hierarchy": [
@@ -51,6 +51,6 @@ circuit test:
 ; CHECK-NEXT:   }
 ; CHECK-NEXT: ]
 
-; CHECK: metadata/test.conf
+; CHECK: test.conf
 
 ; CHECK: name memory_ext depth 16 width 32 ports mwrite,read mask_gran 8

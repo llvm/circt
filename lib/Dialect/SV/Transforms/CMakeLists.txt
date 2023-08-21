@@ -7,6 +7,8 @@ add_circt_dialect_library(CIRCTSVTransforms
   PrettifyVerilog.cpp
   SVExtractTestCode.cpp
   HWExportModuleHierarchy.cpp
+  SVTraceIVerilog.cpp
+  HWEliminateInOutPorts.cpp
 
   DEPENDS
   CIRCTSVTransformsIncGen
@@ -14,6 +16,7 @@ add_circt_dialect_library(CIRCTSVTransforms
   LINK_LIBS PUBLIC
   CIRCTComb
   CIRCTHW
+  CIRCTSeq
   CIRCTSupport
   CIRCTSV
   MLIRIR

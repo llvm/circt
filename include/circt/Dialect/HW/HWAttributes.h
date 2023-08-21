@@ -10,17 +10,14 @@
 #define CIRCT_DIALECT_HW_ATTRIBUTES_H
 
 #include "mlir/IR/Attributes.h"
+#include "mlir/IR/BuiltinAttributeInterfaces.h"
 #include "mlir/IR/BuiltinAttributes.h"
 
 namespace circt {
 namespace hw {
 class PEOAttr;
+class EnumType;
 enum class PEO : uint32_t;
-
-// Eventually move this to an op trait
-struct InnerName {
-  static llvm::StringRef getInnerNameAttrName() { return "inner_sym"; }
-};
 
 // Forward declaration.
 class GlobalRefOp;
@@ -33,7 +30,7 @@ mlir::FailureOr<mlir::Type> evaluateParametricType(mlir::Location loc,
 
 /// Evaluates a parametric attribute (param.decl.ref/param.expr) based on a set
 /// of provided parameter values.
-mlir::FailureOr<mlir::Attribute>
+mlir::FailureOr<mlir::TypedAttr>
 evaluateParametricAttr(mlir::Location loc, mlir::ArrayAttr parameters,
                        mlir::Attribute paramAttr);
 

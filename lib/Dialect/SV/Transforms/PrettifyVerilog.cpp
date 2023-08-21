@@ -22,8 +22,10 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVPasses.h"
+#include "circt/Support/LoweringOptions.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Matchers.h"
+#include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
 
@@ -43,7 +45,16 @@ private:
   void sinkExpression(Operation *op);
   void useNamedOperands(Operation *op, DenseMap<Value, Operation *> &pipeMap);
 
+  bool splitStructAssignment(OpBuilder &builder, hw::StructType ty, Value dst,
+                             Value src);
+  bool splitArrayAssignment(OpBuilder &builder, hw::ArrayType ty, Value dst,
+                            Value src);
+  bool splitAssignment(OpBuilder &builder, Value dst, Value src);
+
   bool anythingChanged;
+  LoweringOptions options;
+
+  DenseSet<Operation *> toDelete;
 };
 } // end anonymous namespace
 
@@ -62,11 +73,219 @@ static bool isVerilogUnaryOperator(Operation *op) {
   return false;
 }
 
+/// Helper to convert a value to a constant integer if it is one.
+static std::optional<APInt> getInt(Value value) {
+  if (auto cst = dyn_cast_or_null<hw::ConstantOp>(value.getDefiningOp()))
+    return cst.getValue();
+  return std::nullopt;
+}
+
+// Checks whether the destination and the source of an assignment are the same.
+// However, the destination is a value with an inout type in SV form, while the
+// source is built using ops from HWAggregates.
+static bool isSelfWrite(Value dst, Value src) {
+  if (dst == src)
+    return true;
+
+  auto *srcOp = src.getDefiningOp();
+  auto *dstOp = dst.getDefiningOp();
+  if (!srcOp || !dstOp)
+    return false;
+
+  return TypeSwitch<Operation *, bool>(srcOp)
+      .Case<hw::StructExtractOp>([&](auto extract) {
+        auto toField = dyn_cast<sv::StructFieldInOutOp>(dstOp);
+        if (!toField)
+          return false;
+        if (toField.getField() != extract.getField())
+          return false;
+        return isSelfWrite(toField.getInput(), extract.getInput());
+      })
+      .Case<hw::ArrayGetOp>([&](auto get) {
+        auto toGet = dyn_cast<sv::ArrayIndexInOutOp>(dstOp);
+        if (!toGet || toGet.getIndex().getType() != get.getIndex().getType())
+          return false;
+        auto toIdx = getInt(toGet.getIndex());
+        auto fromIdx = getInt(get.getIndex());
+        if (!toIdx || !fromIdx || toIdx != fromIdx)
+          return false;
+        return isSelfWrite(toGet.getInput(), get.getInput());
+      })
+      .Case<sv::ReadInOutOp>([&](auto read) { return dst == read.getInput(); })
+      .Default([&](auto srcOp) { return false; });
+}
+
+/// Split an assignment to a structure to writes of individual fields.
+bool PrettifyVerilogPass::splitStructAssignment(OpBuilder &builder,
+                                                hw::StructType ty, Value dst,
+                                                Value src) {
+  // Follow a chain of injects to find all fields overwritten and separate
+  // them into a series of field updates instead of a whole-structure write.
+  DenseMap<StringAttr, std::pair<Location, Value>> fields;
+  while (auto inj = dyn_cast_or_null<hw::StructInjectOp>(src.getDefiningOp())) {
+    // Inner injects are overwritten by outer injects.
+    // Insert does not overwrite the store to be lowered.
+    auto field = std::make_pair(inj.getLoc(), inj.getNewValue());
+    fields.try_emplace(inj.getFieldAttr(), field);
+    src = inj.getInput();
+  }
+
+  // The origin must be either the object itself (partial update)
+  // or the whole object must be overwritten.
+  if (!isSelfWrite(dst, src) && ty.getElements().size() != fields.size())
+    return false;
+
+  // Emit the field assignments in the order of their definition.
+  for (auto &field : ty.getElements()) {
+    const auto &name = field.name;
+
+    auto it = fields.find(name);
+    if (it == fields.end())
+      continue;
+
+    auto &[loc, value] = it->second;
+    auto ref = builder.create<sv::StructFieldInOutOp>(loc, dst, name);
+    if (!splitAssignment(builder, ref, value))
+      builder.create<sv::PAssignOp>(loc, ref, value);
+  }
+  return true;
+}
+
+/// Split an assignment to an array element to writes of individual indices.
+bool PrettifyVerilogPass::splitArrayAssignment(OpBuilder &builder,
+                                               hw::ArrayType ty, Value dst,
+                                               Value src) {
+  // Follow a chain of concat + slice operations that alter a single element.
+  if (auto op = dyn_cast_or_null<hw::ArrayCreateOp>(src.getDefiningOp())) {
+    // TODO: consider breaking up array assignments into assignments
+    // to individual fields.
+    auto ty = hw::type_cast<hw::ArrayType>(op.getType());
+    if (ty.getSize() != 1)
+      return false;
+    APInt zero(std::max(1u, llvm::Log2_64_Ceil(ty.getSize())), 0);
+
+    Value value = op.getInputs()[0];
+    auto loc = op.getLoc();
+    auto index = builder.create<hw::ConstantOp>(loc, zero);
+
+    auto field = builder.create<sv::ArrayIndexInOutOp>(loc, dst, index);
+    if (!splitAssignment(builder, field, value))
+      builder.create<sv::PAssignOp>(loc, field, value);
+    return true;
+  }
+
+  // TODO: generalise to ranges and arbitrary concatenations.
+  SmallVector<std::tuple<APInt, Location, Value>> fields;
+  while (auto concat =
+             dyn_cast_or_null<hw::ArrayConcatOp>(src.getDefiningOp())) {
+    auto loc = concat.getLoc();
+
+    // Look for a slice and an element:
+    // concat(slice(a, 0, size - 1), elem)
+    // concat(elem, slice(a, 1, size - 1))
+    if (concat.getNumOperands() == 2) {
+      auto c = concat.getInputs();
+
+      auto lhs = dyn_cast_or_null<hw::ArraySliceOp>(c[1].getDefiningOp());
+      auto rhs = dyn_cast_or_null<hw::ArraySliceOp>(c[0].getDefiningOp());
+      auto midL = dyn_cast_or_null<hw::ArrayCreateOp>(c[1].getDefiningOp());
+      auto midR = dyn_cast_or_null<hw::ArrayCreateOp>(c[0].getDefiningOp());
+
+      auto size = hw::type_cast<hw::ArrayType>(concat.getType()).getSize();
+      if (lhs && midR) {
+        auto baseIdx = getInt(lhs.getLowIndex());
+        if (!baseIdx || *baseIdx != 0 || midR.getInputs().size() != 1)
+          break;
+        fields.emplace_back(APInt(baseIdx->getBitWidth(), size - 1), loc,
+                            midR.getInputs()[0]);
+        src = lhs.getInput();
+        continue;
+      }
+      if (rhs && midL) {
+        auto baseIdx = getInt(rhs.getLowIndex());
+        if (!baseIdx || *baseIdx != 1 || midL.getInputs().size() != 1)
+          break;
+        src = rhs.getInput();
+        fields.emplace_back(APInt(baseIdx->getBitWidth(), 0), loc,
+                            midL.getInputs()[0]);
+        continue;
+      }
+      break;
+    }
+
+    // Look for a pattern overwriting a single element of the array.
+    // concat(slice(a, 0, n - 1), create(get(a, n)), slice(n + 1, size -
+    // n))
+    if (concat.getNumOperands() == 3) {
+      auto c = concat.getInputs();
+      auto rhs = dyn_cast_or_null<hw::ArraySliceOp>(c[0].getDefiningOp());
+      auto mid = dyn_cast_or_null<hw::ArrayCreateOp>(c[1].getDefiningOp());
+      auto lhs = dyn_cast_or_null<hw::ArraySliceOp>(c[2].getDefiningOp());
+      if (!lhs || !mid || !rhs || mid.getInputs().size() != 1)
+        break;
+      auto elem = mid.getInputs()[0];
+      auto arr = lhs.getInput();
+      if (arr != rhs.getInput() || arr.getType() != concat.getType())
+        break;
+
+      auto lhsSize = hw::type_cast<hw::ArrayType>(lhs.getType()).getSize();
+      auto lhsIdx = getInt(lhs.getLowIndex());
+      auto rhsIdx = getInt(rhs.getLowIndex());
+      if (!lhsIdx || *lhsIdx != 0)
+        break;
+      if (!rhsIdx || *rhsIdx != lhsSize + 1)
+        break;
+      fields.emplace_back(*rhsIdx - 1, loc, elem);
+      src = arr;
+      continue;
+    }
+    break;
+  }
+
+  if (!isSelfWrite(dst, src))
+    return false;
+
+  // Emit the assignments in the order of the indices.
+  std::stable_sort(fields.begin(), fields.end(), [](auto l, auto r) {
+    return std::get<0>(l).ult(std::get<0>(r));
+  });
+
+  std::optional<APInt> last;
+  for (auto &[i, loc, value] : fields) {
+    if (i == last)
+      continue;
+    auto index = builder.create<hw::ConstantOp>(loc, i);
+    auto field = builder.create<sv::ArrayIndexInOutOp>(loc, dst, index);
+    if (!splitAssignment(builder, field, value))
+      builder.create<sv::PAssignOp>(loc, field, value);
+    last = i;
+  }
+  return true;
+}
+
+/// Instead of emitting a struct_inject to alter fields or concatenation
+/// to adjust array elements, emit a more readable sequence of disjoint
+/// assignments to individual fields and indices.  Returns true if
+/// sub-assignments were emitted and the original one can be deleted.
+bool PrettifyVerilogPass::splitAssignment(OpBuilder &builder, Value dst,
+                                          Value src) {
+  if (isSelfWrite(dst, src))
+    return true;
+
+  if (auto ty = hw::type_dyn_cast<hw::StructType>(src.getType()))
+    return splitStructAssignment(builder, ty, dst, src);
+
+  if (auto ty = hw::type_dyn_cast<hw::ArrayType>(src.getType()))
+    return splitArrayAssignment(builder, ty, dst, src);
+
+  return false;
+}
+
 /// Sink an operation into the same block where it is used.  This will clone the
 /// operation so it can be sunk into multiple blocks. If there are no more uses
 /// in the current block, the op will be removed.
 void PrettifyVerilogPass::sinkOrCloneOpToUses(Operation *op) {
-  assert(mlir::MemoryEffectOpInterface::hasNoEffect(op) &&
+  assert(mlir::isMemoryEffectFree(op) &&
          "Op with side effects cannot be sunk to its uses.");
   auto block = op->getBlock();
   // This maps a block to the block local instance of the op.
@@ -90,7 +309,7 @@ void PrettifyVerilogPass::sinkOrCloneOpToUses(Operation *op) {
   }
   // If this op is no longer used, drop it.
   if (op->use_empty()) {
-    op->erase();
+    toDelete.insert(op);
     anythingChanged = true;
   }
 }
@@ -119,6 +338,9 @@ bool PrettifyVerilogPass::prettifyUnaryOperator(Operation *op) {
   // don't duplicate any of them.
   for (auto *user : op->getUsers()) {
     if (isa<comb::ExtractOp, hw::ArraySliceOp>(user))
+      return false;
+    if (!options.allowExprInEventControl &&
+        isa<sv::AlwaysFFOp, sv::AlwaysOp>(user))
       return false;
   }
 
@@ -186,7 +408,7 @@ void PrettifyVerilogPass::sinkExpression(Operation *op) {
     if (curOpBlock != op->user_begin()->getBlock()) {
       // Ok, we're about to make a change, ensure that there are no side
       // effects.
-      if (!mlir::MemoryEffectOpInterface::hasNoEffect(op))
+      if (!mlir::isMemoryEffectFree(op))
         return;
 
       op->moveBefore(*op->user_begin());
@@ -234,7 +456,7 @@ void PrettifyVerilogPass::sinkExpression(Operation *op) {
 
   // Ok, we're about to make a change, ensure that there are no side
   // effects.
-  if (!mlir::MemoryEffectOpInterface::hasNoEffect(op))
+  if (!mlir::isMemoryEffectFree(op))
     return;
 
   // Ok, we found a common ancestor between all the users that is deeper than
@@ -254,6 +476,22 @@ void PrettifyVerilogPass::processPostOrder(Block &body) {
       for (auto &region : op.getRegions())
         for (auto &regionBlock : region.getBlocks())
           processPostOrder(regionBlock);
+    }
+
+    // Simplify assignments involving structures and arrays.
+    if (auto assign = dyn_cast<sv::PAssignOp>(op)) {
+      auto dst = assign.getDest();
+      auto src = assign.getSrc();
+      if (!isSelfWrite(dst, src)) {
+        OpBuilder builder(assign);
+        if (splitAssignment(builder, dst, src)) {
+          anythingChanged = true;
+          toDelete.insert(src.getDefiningOp());
+          toDelete.insert(dst.getDefiningOp());
+          assign.erase();
+          continue;
+        }
+      }
     }
 
     // Sink and duplicate unary operators.
@@ -298,6 +536,7 @@ void PrettifyVerilogPass::processPostOrder(Block &body) {
 
 void PrettifyVerilogPass::runOnOperation() {
   hw::HWModuleOp thisModule = getOperation();
+  options = LoweringOptions(thisModule->getParentOfType<mlir::ModuleOp>());
 
   // Keeps track if anything changed during this pass, used to determine if
   // the analyses were preserved.
@@ -305,6 +544,21 @@ void PrettifyVerilogPass::runOnOperation() {
 
   // Walk the operations in post-order, transforming any that are interesting.
   processPostOrder(*thisModule.getBodyBlock());
+
+  // Erase any dangling operands of simplified operations.
+  while (!toDelete.empty()) {
+    auto it = toDelete.begin();
+    Operation *op = *it;
+    toDelete.erase(it);
+
+    if (!op || !isOpTriviallyDead(op))
+      continue;
+
+    for (auto operand : op->getOperands())
+      toDelete.insert(operand.getDefiningOp());
+
+    op->erase();
+  }
 
   // If we did not change anything in the graph mark all analysis as
   // preserved.

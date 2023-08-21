@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_COMB_COMBOPS_H
 
 #include "circt/Dialect/Comb/CombDialect.h"
+#include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/FunctionInterfaces.h"
@@ -50,8 +51,10 @@ Value createOrFoldSExt(Location loc, Value value, Type destTy,
 Value createOrFoldSExt(Value value, Type destTy, ImplicitLocOpBuilder &builder);
 
 /// Create a ``Not'' gate on a value.
-Value createOrFoldNot(Location loc, Value value, OpBuilder &builder);
-Value createOrFoldNot(Value value, ImplicitLocOpBuilder &builder);
+Value createOrFoldNot(Location loc, Value value, OpBuilder &builder,
+                      bool twoState = false);
+Value createOrFoldNot(Value value, ImplicitLocOpBuilder &builder,
+                      bool twoState = false);
 
 } // namespace comb
 } // namespace circt

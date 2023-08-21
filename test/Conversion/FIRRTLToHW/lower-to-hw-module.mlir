@@ -5,11 +5,11 @@
 
 // We should get a large header boilerplate.
 // CHECK:   sv.ifdef "PRINTF_COND" {
-// CHECK-NEXT:   sv.verbatim "`define PRINTF_COND_ (`PRINTF_COND)"
+// CHECK-NEXT:   sv.macro.def @PRINTF_COND_ "(`PRINTF_COND)"
 // CHECK-NEXT:  } else  {
 firrtl.circuit "Simple" {
 
-   // CHECK-LABEL: hw.module.extern @MyParameterizedExtModule
+   // CHECK-LABEL: hw.module.extern private @MyParameterizedExtModule
    // CHECK-SAME: <DEFAULT: i64, DEPTH: f64, FORMAT: none, WIDTH: i8>
    // CHECK-SAME: (%in: i1) -> (out: i8)
    // CHECK: attributes {verilogName = "name_thing"}
@@ -62,7 +62,7 @@ firrtl.circuit "Simple" {
 
     firrtl.connect %xyz#2, %s8 : !firrtl.sint<8>, !firrtl.sint<8>
 
-    firrtl.printf %clock, %reset, "%x"(%xyz#3) : !firrtl.uint<4>
+    firrtl.printf %clock, %reset, "%x"(%xyz#3) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<4>
 
     // Parameterized module reference.
     // hw.instance carries the parameters, unlike at the FIRRTL layer.
@@ -76,7 +76,7 @@ firrtl.circuit "Simple" {
 
     firrtl.connect %myext#0, %reset : !firrtl.uint<1>, !firrtl.uint<1>
 
-    firrtl.printf %clock, %reset, "Something interesting! %x"(%myext#1) : !firrtl.uint<8>
+    firrtl.printf %clock, %reset, "Something interesting! %x"(%myext#1) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<8>
   }
 
   // CHECK-LABEL: hw.module private @OutputFirst(%in1: i1, %in4: i4) -> (out4: i4) {
@@ -100,22 +100,20 @@ firrtl.circuit "Simple" {
                              out %outD: !firrtl.uint<4>,
                              in %inE: !firrtl.uint<3>,
                              out %outE: !firrtl.uint<4>) {
-    // CHECK: %.outB.output = sv.wire sym @__PortMadness__.outB.output : !hw.inout<i4>
-    // CHECK: [[OUTBR:%.+]] = sv.read_inout %.outB.output
-    // CHECK: [[OUTC:%.+]] = sv.wire sym @__PortMadness__.outC.output : !hw.inout<i4>
-    // CHECK: [[OUTCR:%.+]] = sv.read_inout %.outC.output
-    // CHECK: [[OUTD:%.+]] = sv.wire sym @__PortMadness__.outD.output : !hw.inout<i4>
-    // CHECK: [[OUTDR:%.+]] = sv.read_inout %.outD.output
-
     // Normal
     firrtl.connect %outA, %inA : !firrtl.uint<4>, !firrtl.uint<4>
 
     // Multi connect
     firrtl.connect %outB, %inA : !firrtl.uint<4>, !firrtl.uint<4>
-    // CHECK: sv.assign %.outB.output, %inA : i4
     firrtl.connect %outB, %inB : !firrtl.uint<4>, !firrtl.uint<4>
-    // CHECK: sv.assign %.outB.output, %inB : i4
 
+    // Unconnected port outC reads as sv.constantZ.
+    // CHECK:      [[OUTB:%.+]] = hw.wire %inB
+    // CHECK-NEXT: [[OUTC:%.+]] = hw.wire %z_i4
+    // CHECK-NEXT: [[OUTD:%.+]] = hw.wire %z_i4
+    // CHECK-NEXT: [[T0:%.+]] = comb.concat %false, %inA
+    // CHECK-NEXT: [[T1:%.+]] = comb.concat %false, [[OUTC]]
+    // CHECK-NEXT: comb.sub bin [[T0]], [[T1]]
     %0 = firrtl.sub %inA, %outC : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
 
     // No connections to outD.
@@ -124,7 +122,16 @@ firrtl.circuit "Simple" {
 
     // Extension for outE
     // CHECK: [[OUTE:%.+]] = comb.concat %false, %inE : i1, i3
-    // CHECK: hw.output %inA, [[OUTBR]], [[OUTCR]], [[OUTDR]], [[OUTE]]
+    // CHECK: hw.output %inA, [[OUTB]], [[OUTC]], [[OUTD]], [[OUTE]]
+  }
+  
+  firrtl.module private @InputPorts(in %in : !firrtl.uint<1>) { }
+  firrtl.module private @InputPortsParent(in %in : !firrtl.uint<1>) {
+    // Double connected.
+    // CHECK: hw.instance "ip1" @InputPorts(in: %in: i1) -> ()
+    %ip1_in = firrtl.instance ip1 @InputPorts(in in : !firrtl.uint<1>)
+    firrtl.connect %ip1_in, %in : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %ip1_in, %in : !firrtl.uint<1>, !firrtl.uint<1>
   }
 
   // CHECK-LABEL: hw.module private @Analog(%a1: !hw.inout<i1>) -> (outClock: i1) {
@@ -147,7 +154,7 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT: hw.instance "myext" @MyParameterizedExtModule<DEFAULT: i64 = 0, DEPTH: f64 = 3.242000e+01, FORMAT: none = "xyz_timeout=%d\0A", WIDTH: i8 = 32>(in: [[ARG:%.+]]: i1) -> (out: i8)
     %myext:2 = firrtl.instance myext @MyParameterizedExtModule(in in: !firrtl.uint<1>, out out: !firrtl.uint<8>)
 
-    // CHECK: [[ADD:%.+]] = comb.add %0, %1
+    // CHECK: [[ADD:%.+]] = comb.add bin %0, %1
 
     // Calculation of input (the firrtl.add + firrtl.eq) happens after the
     // instance.
@@ -155,7 +162,7 @@ firrtl.circuit "Simple" {
 
     // Multiple uses of the add.
     %a = firrtl.eq %0, %arg2 : (!firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<1>
-    // CHECK-NEXT: [[ARG]] = comb.icmp eq [[ADD]], %arg2 : i3
+    // CHECK-NEXT: [[ARG]] = comb.icmp bin eq [[ADD]], %arg2 : i3
     firrtl.connect %myext#0, %a : !firrtl.uint<1>, !firrtl.uint<1>
 
     firrtl.connect %out0, %myext#1 : !firrtl.uint<8>, !firrtl.uint<8>
@@ -201,15 +208,14 @@ firrtl.circuit "Simple" {
   firrtl.module private @ZeroWidthInstance(in %iA: !firrtl.uint<4>,
                                    in %iB: !firrtl.uint<0>,
                                    in %iC: !firrtl.analog<0>,
+                                   in %iD: !firrtl.uint<1>,
+                                   in %iE: !firrtl.analog<1>,
                                    out %oA: !firrtl.uint<4>,
                                    out %oB: !firrtl.uint<0>) {
 
     // CHECK: %myinst.outa = hw.instance "myinst" @ZeroWidthPorts(inA: %iA: i4) -> (outa: i4)
     %myinst:5 = firrtl.instance myinst @ZeroWidthPorts(
       in inA: !firrtl.uint<4>, in inB: !firrtl.uint<0>, in inC: !firrtl.analog<0>, out outa: !firrtl.uint<4>, out outb: !firrtl.uint<0>)
-    // CHECK: = hw.instance "myinst" @SameNamePorts(inA: {{.+}}, inA: {{.+}}, inA: {{.+}}) -> (outa: i4, outa: i1)
-    %myinst_sameName:5 = firrtl.instance myinst @SameNamePorts(
-      in inA: !firrtl.uint<4>, in inA: !firrtl.uint<1>, in inA: !firrtl.analog<1>, out outa: !firrtl.uint<4>, out outa: !firrtl.uint<1>)
 
     // Output of the instance is fed into the input!
     firrtl.connect %myinst#0, %iA : !firrtl.uint<4>, !firrtl.uint<4>
@@ -217,6 +223,13 @@ firrtl.circuit "Simple" {
     firrtl.attach %myinst#2, %iC : !firrtl.analog<0>, !firrtl.analog<0>
     firrtl.connect %oA, %myinst#3 : !firrtl.uint<4>, !firrtl.uint<4>
     firrtl.connect %oB, %myinst#4 : !firrtl.uint<0>, !firrtl.uint<0>
+
+    // CHECK: = hw.instance "myinst" @SameNamePorts(inA: {{.+}}, inA: {{.+}}, inA: {{.+}}) -> (outa: i4, outa: i1)
+    %myinst_sameName:5 = firrtl.instance myinst @SameNamePorts(
+      in inA: !firrtl.uint<4>, in inA: !firrtl.uint<1>, in inA: !firrtl.analog<1>, out outa: !firrtl.uint<4>, out outa: !firrtl.uint<1>)
+    firrtl.connect %myinst_sameName#0, %iA : !firrtl.uint<4>, !firrtl.uint<4>
+    firrtl.connect %myinst_sameName#1, %iD : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.attach %myinst_sameName#2, %iE : !firrtl.analog<1>, !firrtl.analog<1>
 
     // CHECK: hw.output %myinst.outa
   }
@@ -246,15 +259,21 @@ firrtl.circuit "Simple" {
 
   // https://github.com/llvm/circt/issues/740
   // CHECK-LABEL: hw.module private @foo740(%led_0: !hw.inout<i1>) {
-  // CHECK:  %.led_0.wire = sv.wire
-  // CHECK-NEXT: sv.read_inout %.led_0.wire
-  // CHECK-NEXT:  hw.instance "fpga" @bar740(led_0: %.led_0.wire: !hw.inout<i1>) -> ()
+  // CHECK-NEXT:  hw.instance "fpga" @bar740(led_0: %led_0: !hw.inout<i1>) -> ()
   firrtl.extmodule private @bar740(in led_0: !firrtl.analog<1>)
   firrtl.module private @foo740(in %led_0: !firrtl.analog<1>) {
     %result = firrtl.instance fpga @bar740(in led_0: !firrtl.analog<1>)
     firrtl.attach %result, %led_0 : !firrtl.analog<1>, !firrtl.analog<1>
   }
-  
+
+  firrtl.extmodule private @UIntToAnalog_8(out a: !firrtl.analog<8>, out b: !firrtl.analog<8>)
+  firrtl.module @Example(out %port: !firrtl.analog<8>) {
+    // CHECK-LABEL: hw.module @Example(%port: !hw.inout<i8>)
+    // CHECK-NEXT: hw.instance "a2b" @UIntToAnalog_8(a: %port: !hw.inout<i8>, b: %port: !hw.inout<i8>)
+    %a2b_a, %a2b_b = firrtl.instance a2b  @UIntToAnalog_8(out a: !firrtl.analog<8>, out b: !firrtl.analog<8>)
+    firrtl.attach %port, %a2b_b, %a2b_a : !firrtl.analog<8>, !firrtl.analog<8>, !firrtl.analog<8>
+  }
+
   // Memory modules are lowered to plain external modules.
   // CHECK: hw.module.extern @MRead_ext(%R0_addr: i4, %R0_en: i1, %R0_clk: i1) -> (R0_data: i42) attributes {verilogName = "MRead_ext"}
   firrtl.memmodule @MRead_ext(in R0_addr: !firrtl.uint<4>, in R0_en: !firrtl.uint<1>, in R0_clk: !firrtl.uint<1>, out R0_data: !firrtl.uint<42>) attributes {dataWidth = 42 : ui32, depth = 12 : ui64, extraPorts = [], maskBits = 0 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 0 : ui32, readLatency = 0 : ui32, writeLatency = 1 : ui32}
@@ -262,4 +281,14 @@ firrtl.circuit "Simple" {
   // The following operations should be passed through without an error.
   // CHECK: sv.interface @SVInterface
   sv.interface @SVInterface { }
+
+  // DontTouch on ports becomes symbol.
+  // CHECK-LABEL: hw.module.extern private @PortDT
+  // CHECK-SAME: (%a: i1 {hw.exportPort = #hw<innerSym@__PortDT__a>}, %hassym: i1 {hw.exportPort = #hw<innerSym@hassym>})
+  // CHECK-SAME: -> (b: i2 {hw.exportPort = #hw<innerSym@__PortDT__b>})
+  firrtl.extmodule private @PortDT(
+    in a: !firrtl.uint<1> [{class = "firrtl.transforms.DontTouchAnnotation"}],
+    in hassym: !firrtl.uint<1> sym @hassym [{class = "firrtl.transforms.DontTouchAnnotation"}],
+    out b: !firrtl.uint<2> [{class = "firrtl.transforms.DontTouchAnnotation"}]
+  )
 }

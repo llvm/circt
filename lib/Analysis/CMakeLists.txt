@@ -17,7 +17,7 @@ add_circt_library(CIRCTSchedulingAnalysis
   SchedulingAnalysis.cpp
 
   LINK_LIBS PUBLIC
-  MLIRAffine
+  MLIRAffineDialect
   MLIRIR
   CIRCTDependenceAnalysis
   CIRCTScheduling
@@ -29,5 +29,6 @@ add_circt_library(CIRCTAnalysisTestPasses
   LINK_LIBS PUBLIC
   CIRCTDependenceAnalysis
   CIRCTSchedulingAnalysis
+  CIRCTHW
   MLIRPass
   )

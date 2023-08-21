@@ -183,7 +183,7 @@ sv.bind #hw.innerNameRef<@InternSrcMod::@A>
 
 hw.module @test() {
   // expected-error @+1 {{op invalid parameter value @test}}
-  %param_x = sv.localparam : i42 {value = @test}
+  %param_x = sv.localparam {value = @test} : i42
 }
 
 // -----
@@ -217,4 +217,24 @@ hw.module @ZeroWidthConstantX() {
 hw.module @ZeroWidthConstantZ() {
   // expected-error @+1 {{unsupported type}}
   %0 = sv.constantZ : !hw.struct<>
+}
+
+// -----
+
+hw.module @CaseEnum() {
+  %0 = hw.enum.constant A : !hw.enum<A, B, C>
+  // expected-error @+1 {{custom op 'sv.case' case value 'D' is not a member of enum type '!hw.enum<A, B, C>'}}
+  sv.case %0 : !hw.enum<A, B, C>
+    case D: {
+      sv.fwrite %fd, "x"
+    }
+}
+
+// -----
+
+hw.module @NoMessage(%clock: i1, %value : i4) -> () {
+  sv.always posedge %clock {
+    // expected-error @below {{failed to verify that has message if has substitutions}}
+   "sv.assert"(%clock, %value) { defer = 0 : i32 } : (i1, i4) -> ()
+  }
 }

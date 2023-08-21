@@ -26,7 +26,7 @@ MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(Moore, moore, MooreDialect)
 // Types
 //===----------------------------------------------------------------------===//
 
-static Optional<Sign> convertMooreSign(enum MooreSign sign) {
+static std::optional<Sign> convertMooreSign(enum MooreSign sign) {
   switch (sign) {
   case MooreSign::MooreSigned:
     return Sign::Signed;

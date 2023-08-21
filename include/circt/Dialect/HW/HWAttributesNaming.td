@@ -10,8 +10,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-def InnerRefAttr : AttrDef<HWDialect, "InnerRef", [
-    DeclareAttrInterfaceMethods<SubElementAttrInterface>]> {
+#ifndef CIRCT_DIALECT_HW_HWATTRIBUTESNAMING
+#define CIRCT_DIALECT_HW_HWATTRIBUTESNAMING
+
+include "circt/Dialect/HW/HWDialect.td"
+include "mlir/IR/AttrTypeBase.td"
+
+def InnerRefAttr : AttrDef<HWDialect, "InnerRef"> {
   let summary = "Refer to a name inside a module";
   let description = [{
     This works like a symbol reference, but to a name inside a module.
@@ -35,13 +40,6 @@ def InnerRefAttr : AttrDef<HWDialect, "InnerRef", [
     static InnerRefAttr getFromOperation(mlir::Operation *op,
                                          mlir::StringAttr symName,
                                          mlir::StringAttr moduleName);
-
-    /// Recursively traverse the sub-attribute.
-    void walkImmediateSubElements(
-        llvm::function_ref<void(mlir::Attribute)> walkAttrsFn,
-        llvm::function_ref<void(mlir::Type)> walkTypesFn) {
-      walkAttrsFn(getModule());
-    }
 
     /// Return the name of the referenced module.
     mlir::StringAttr getModule() const { return getModuleRef().getAttr(); }
@@ -68,3 +66,5 @@ def GlobalRefAttr : AttrDef<HWDialect, "GlobalRef"> {
     static constexpr char DialectAttrName[] = "circt.globalRef";
   }];
 }
+
+#endif // CIRCT_DIALECT_HW_HWATTRIBUTESNAMING

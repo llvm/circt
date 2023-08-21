@@ -10,6 +10,12 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_HW_HWTYPESIMPL_TD
+#define CIRCT_DIALECT_HW_HWTYPESIMPL_TD
+
+include "circt/Dialect/HW/HWDialect.td"
+include "mlir/IR/AttrTypeBase.td"
+
 // Base class for other typedefs. Provides dialact-specific defaults.
 class HWType<string name> : TypeDef<HWDialect, name> { }
 
@@ -27,7 +33,7 @@ def IntTypeImpl : HWType<"Int"> {
   }];
 
   let mnemonic = "int";
-  let parameters = (ins "::mlir::Attribute":$width);
+  let parameters = (ins "::mlir::TypedAttr":$width);
 
   let hasCustomAssemblyFormat = 1;
 
@@ -36,7 +42,7 @@ def IntTypeImpl : HWType<"Int"> {
   let extraClassDeclaration = [{
     /// Get an integer type for the specified width.  Note that this may return
     /// a builtin integer type if the width is a known-constant value.
-    static Type get(::mlir::Attribute width);
+    static Type get(::mlir::TypedAttr width);
   }];
 }
 
@@ -133,9 +139,37 @@ def StructTypeImpl : HWType<"Struct"> {
     using FieldInfo = ::circt::hw::detail::FieldInfo;
     mlir::Type getFieldType(mlir::StringRef fieldName);
     void getInnerTypes(mlir::SmallVectorImpl<mlir::Type>&);
-    llvm::Optional<unsigned> getFieldIndex(mlir::StringRef fieldName);
-    llvm::Optional<unsigned> getFieldIndex(mlir::StringAttr fieldName);
+    std::optional<unsigned> getFieldIndex(mlir::StringRef fieldName);
+    std::optional<unsigned> getFieldIndex(mlir::StringAttr fieldName);
   }];
+}
+
+// An enum type. Declares the hw::EnumType in C++.
+def EnumTypeImpl : HWType<"Enum"> {
+  let summary = "HW Enum type";
+  let description = [{
+    Represents an enumeration of values. Enums are interpreted as integers with
+    a synthesis-defined encoding.
+    !hw.enum<field1, field2>
+  }];
+  let mnemonic = "enum";
+  let parameters = (
+    ins "mlir::ArrayAttr":$fields
+  );
+
+  let extraClassDeclaration = [{
+    /// Returns true if the requested field is part of this enum
+    bool contains(mlir::StringRef field);
+
+    /// Returns the number of bits used by the enum
+    size_t getBitWidth();
+
+    /// Returns the index of the requested field, or a nullopt if the field is
+    // not part of this enum.
+    std::optional<size_t> indexOf(mlir::StringRef field);
+  }];
+
+  let hasCustomAssemblyFormat = 1;
 }
 
 // An untagged union. Declares the hw::UnionType in C++.
@@ -150,8 +184,11 @@ def UnionTypeImpl : HWType<"Union"> {
   let hasCustomAssemblyFormat = 1;
 
   let extraClassDeclaration = [{
-    using FieldInfo = ::circt::hw::detail::FieldInfo;
-    mlir::Type getFieldType(mlir::StringRef fieldName);
+    using FieldInfo = ::circt::hw::detail::OffsetFieldInfo;
+
+    FieldInfo getFieldInfo(::mlir::StringRef fieldName);
+    
+    ::mlir::Type getFieldType(::mlir::StringRef fieldName);
   }];
 }
 
@@ -190,3 +227,48 @@ def TypeAliasType : HWType<"TypeAlias"> {
     TypedeclOp getTypeDecl(const HWSymbolCache &cache);
   }];
 }
+
+def ModuleTypeImpl : HWType<"Module"> {
+  let summary = "Module Type";
+  let description = [{
+    Module types have ports.
+  }];
+  let parameters = (ins ArrayRefParameter<"::circt::hw::ModulePort", "port list">:$ports);
+  let assemblyFormat = "`(` $ports `)`";
+  let genVerifyDecl = 1;
+  let mnemonic = "module";
+
+  let extraClassDeclaration = [{
+    // Many of these are transitional and will be removed when modules and instances
+    // have moved over to this type.
+    size_t getNumPorts();
+    size_t getNumInputs();
+    size_t getNumOutputs();
+    SmallVector<Type> getInputTypes();
+    SmallVector<Type> getOutputTypes();
+    Type getInputType(size_t);
+    Type getOutputType(size_t);
+    SmallVector<StringAttr> getInputNames();
+    SmallVector<StringAttr> getOutputNames();
+    StringAttr getNameAttr(size_t);
+    StringRef getName(size_t);
+    StringAttr getInputNameAttr(size_t);
+    StringRef getInputName(size_t);
+    StringAttr getOutputNameAttr(size_t);
+    StringRef getOutputName(size_t);
+    FunctionType getFuncType();
+    bool isOutput(size_t);
+    size_t getInputIdForPortId(size_t);
+    size_t getOutputIdForPortId(size_t);
+    size_t getPortIdForInputId(size_t);
+    size_t getPortIdForOutputId(size_t);
+  }];
+}
+
+def HWStringTypeImpl : HWType<"String"> {
+  let summary = "String type";
+  let description = "Defines a string type for the hw-centric dialects";
+  let mnemonic = "string";
+}
+
+#endif // CIRCT_DIALECT_HW_HWTYPESIMPL_TD

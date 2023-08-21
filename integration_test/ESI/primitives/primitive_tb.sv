@@ -1,6 +1,6 @@
 // REQUIRES: ieee-sim
 // UNSUPPORTED: ieee-sim-iverilog
-// RUN: circt-rtl-sim.py --sim %ieee-sim %INC%/circt/Dialect/ESI/ESIPrimitives.sv %s
+// RUN: circt-rtl-sim.py --sim %ieee-sim %CIRCT_SOURCE%/lib/Dialect/ESI/ESIPrimitives.sv %s
 
 //===- primitive_tb.sv - tests for ESI primitives -----------*- verilog -*-===//
 //
@@ -12,7 +12,7 @@
 
 module top (
   input logic clk,
-  input logic rstn
+  input logic rst
 );
 
   logic a_valid = 0;
@@ -44,8 +44,8 @@ module top (
   end
 
   initial begin
-    // Wait until rstn is asserted.
-    while (!rstn) begin
+    // Wait until rstn is deasserted.
+    while (rst) begin
       @(posedge clk);
     end
 

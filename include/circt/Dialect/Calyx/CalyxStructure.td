@@ -10,8 +10,16 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "mlir/IR/EnumAttr.td"
+
+// "Forward-declare" these HW attributes rather than including or duplicating
+// them here. This lets us to refer to them in ODS, but delegates to HW in C++.
+// These are used to represent parameters for the PrimitiveOp.
+def ParamDeclAttr : Attr<CPred<"$_self.isa<hw::ParamDeclAttr>()">>;
+def ParamDeclArrayAttr : TypedArrayAttrBase<ParamDeclAttr, "parameter array">;
+
 def UndefinedOp : CalyxOp<"undef", [
-    NoSideEffect
+    Pure
   ]> {
   let summary = "Calyx Undefined Value";
   let description = [{
@@ -29,42 +37,17 @@ def UndefinedOp : CalyxOp<"undef", [
   let assemblyFormat = "attr-dict `:` qualified(type($res))";
 }
 
-def ProgramOp : CalyxContainer<"program", [
-    IsolatedFromAbove,
-    SymbolTable /* contains ComponentOp names. */
-  ]> {
-  let summary = "Calyx Program";
-  let description = [{
-    The "calyx.program" operation represents an overall Calyx
-    program, containing a list of Calyx components. This must
-    include an entry-point component.
-
-      ```mlir
-      calyx.program "main" { ... }
-      ```
-  }];
-  let arguments = (ins StrAttr:$entryPointName);
-
-  let extraClassDeclaration = [{
-    /// Returns the entry-point component into the
-    /// Calyx program.
-    ComponentOp getEntryPointComponent() {
-      return lookupSymbol<ComponentOp>(entryPointName());
-    }
-  }];
-  let assemblyFormat = "$entryPointName $body attr-dict";
-  let hasVerifier = 1;
-}
-
 def ComponentOp : CalyxOp<"component", [
-    HasParent<"ProgramOp">,
+    HasParent<"mlir::ModuleOp">,
+    RegionKindInterface,
     SymbolTable, /* contains Cell names. */
     Symbol,
     FunctionOpInterface,
     IsolatedFromAbove,
     SingleBlock,
     NoTerminator,
-    OpAsmOpInterface
+    OpAsmOpInterface,
+    DeclareOpInterfaceMethods<ComponentOpInterface>
   ]> {
   let summary = "Calyx Component";
   let description = [{
@@ -85,6 +68,9 @@ def ComponentOp : CalyxOp<"component", [
   }];
 
   let arguments = (ins
+    TypeAttrOf<FunctionType>:$function_type,
+    OptionalAttr<DictArrayAttr>:$arg_attrs,
+    OptionalAttr<DictArrayAttr>:$res_attrs,
     ArrayAttr:$portNames,
     ArrayAttr:$portAttributes,
     APIntAttr:$portDirections
@@ -98,12 +84,10 @@ def ComponentOp : CalyxOp<"component", [
 
   let extraClassDeclaration = [{
       using mlir::detail::FunctionOpInterfaceTrait<ComponentOp>::front;
-      using mlir::detail::FunctionOpInterfaceTrait<ComponentOp>::getBody;
+      using mlir::detail::FunctionOpInterfaceTrait<ComponentOp>::getFunctionBody;
 
-      /// Returns the type of this function.
-      FunctionType getFunctionType() {
-        return getFunctionTypeAttr().getValue().cast<FunctionType>();
-      }
+      // Implement RegionKindInterface.
+      static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph;}
 
       /// Returns the argument types of this function.
       ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
@@ -116,29 +100,11 @@ def ComponentOp : CalyxOp<"component", [
       LogicalResult verifyType() {
         auto type = getFunctionTypeAttr().getValue();
         if (!type.isa<FunctionType>())
-          return emitOpError("requires '" + getTypeAttrName() +
+          return emitOpError("requires '" +
+	                     getFunctionTypeAttrName().getValue() +
                              "' attribute of function type");
         return success();
       }
-
-      /// Returns the body of a Calyx component.
-      Block *getBody() {
-        Region* region = &getOperation()->getRegion(0);
-        assert(region->hasOneBlock() && "The body should have one Block.");
-        return &region->front();
-      }
-
-      /// Returns the region of a Calyx component.
-      Region *getRegion() { return &getOperation()->getRegion(0); }
-
-      /// Returns the port information for this component.
-      SmallVector<PortInfo> getPortInfo();
-
-      /// Returns the input port information for this component.
-      SmallVector<PortInfo> getInputPortInfo();
-
-      /// Returns the input port information for this component.
-      SmallVector<PortInfo> getOutputPortInfo();
 
       /// Returns the WiresOp of a Calyx Component.
       WiresOp getWiresOp();
@@ -162,12 +128,122 @@ def ComponentOp : CalyxOp<"component", [
                                     mlir::OpAsmSetValueNameFn setNameFn);
   }];
 
+  let extraClassDefinition = [{
+      Block* $cppClass::getBodyBlock() {
+        Region* region = getRegion();
+        assert(region->hasOneBlock() && "The body should have one Block.");
+        return &region->front();
+      }
+
+      StringRef $cppClass::getName() {
+        return cast<FunctionOpInterface>(**this).getName();
+      }
+
+      bool $cppClass::isComb() {
+        return false;
+      }
+
+      /// Returns the region of a Calyx component.
+      Region* $cppClass::getRegion() { return &getFunctionBody(); }
+  }];
+
+  let hasVerifier = 1;
+  let hasCustomAssemblyFormat = 1;
+}
+
+def CombComponentOp : CalyxOp<"comb_component", [
+    HasParent<"mlir::ModuleOp">,
+    SymbolTable, /* contains Cell names. */
+    Symbol,
+    FunctionOpInterface,
+    IsolatedFromAbove,
+    SingleBlock,
+    NoTerminator,
+    OpAsmOpInterface,
+    DeclareOpInterfaceMethods<ComponentOpInterface>
+  ]> {
+  let summary = "Calyx Combinational Component";
+  let description = [{
+    The "calyx.comb_component" operation represents a Calyx combinational component containing:
+    (1) In- and output port definitions that define the interface.
+    (2) Combinational cells and wires.
+
+    ```mlir
+      calyx.comb_component @C(%in: i32) -> (%out: i16) {
+        ...
+        calyx.wires { ... }
+      }
+    ```
+  }];
+
+  let arguments = (ins
+    TypeAttrOf<FunctionType>:$function_type,
+    OptionalAttr<DictArrayAttr>:$arg_attrs,
+    OptionalAttr<DictArrayAttr>:$res_attrs,
+    ArrayAttr:$portNames,
+    ArrayAttr:$portAttributes,
+    APIntAttr:$portDirections
+  );
+  let results = (outs);
+  let regions = (region SizedRegion<1>: $body);
+
+  let builders = [
+    OpBuilder<(ins "StringAttr":$name, "ArrayRef<PortInfo>":$ports)>
+  ];
+
+  let extraClassDeclaration = [{
+      using mlir::detail::FunctionOpInterfaceTrait<CombComponentOp>::front;
+      using mlir::detail::FunctionOpInterfaceTrait<CombComponentOp>::getFunctionBody;
+
+      /// Returns the argument types of this function.
+      ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
+
+      /// Returns the result types of this function.
+      ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
+
+      /// Verify the type attribute of this function. Returns failure and emits
+      /// an error if the attribute is invalid.
+      LogicalResult verifyType() {
+        auto type = getFunctionTypeAttr().getValue();
+        if (!type.isa<FunctionType>())
+          return emitOpError("requires '" +
+	                     getFunctionTypeAttrName().getValue() +
+                             "' attribute of function type");
+        return success();
+      }
+
+      /// Returns the WiresOp of a Calyx Component.
+      WiresOp getWiresOp();
+
+      void getAsmBlockArgumentNames(mlir::Region &region,
+                                    mlir::OpAsmSetValueNameFn setNameFn);
+  }];
+
+  let extraClassDefinition = [{
+      Block* $cppClass::getBodyBlock() {
+        Region* region = getRegion();
+        assert(region->hasOneBlock() && "The body should have one Block.");
+        return &region->front();
+      }
+
+      StringRef $cppClass::getName() {
+        return cast<FunctionOpInterface>(**this).getName();
+      }
+
+      bool $cppClass::isComb() {
+        return true;
+      }
+
+      /// Returns the region of a Calyx component.
+      Region* $cppClass::getRegion() { return &getFunctionBody(); }
+  }];
+
   let hasVerifier = 1;
   let hasCustomAssemblyFormat = 1;
 }
 
 def WiresOp : CalyxContainer<"wires", [
-    HasParent<"ComponentOp">,
+    ParentOneOf<["ComponentOp", "CombComponentOp"]>,
     SymbolTable /* contains GroupInterface names. */,
     RegionKindInterface
   ]> {
@@ -195,6 +271,14 @@ def WiresOp : CalyxContainer<"wires", [
   let extraClassDeclaration = [{
     /// Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
+
+    /// Returns the body of a Calyx component.
+    Block *getBodyBlock() {
+      Region* region = &getOperation()->getRegion(0);
+      assert(region->hasOneBlock() && "The body should have one Block.");
+      return &region->front();
+    }
+
   }];
 
   let hasVerifier = 1;
@@ -215,7 +299,7 @@ def InstanceOp : CalyxCell<"instance", [
   let extraClassDeclaration = [{
     /// Lookup the component for the symbol. This returns null on
     /// invalid IR.
-    ComponentOp getReferencedComponent();
+    ComponentInterface getReferencedComponent();
   }];
 
   let arguments = (ins
@@ -228,6 +312,37 @@ def InstanceOp : CalyxCell<"instance", [
     $sym_name `of` $componentName attr-dict (`:` qualified(type($results))^)?
   }];
 }
+
+def PrimitiveOp : CalyxCell<"primitive", [
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>
+  ]> {
+  let summary = "Calyx Primitive Instance";
+  let description = [{
+    Represents an instance of a Calyx primitive.
+
+    ```mlir
+      %c.in, %c.out = calyx.primitive @c of @MyExternalPrimitive : i64, i16
+    ```
+  }];
+
+  let extraClassDeclaration = [{
+    /// Lookup the component for the symbol. This returns null on
+    /// invalid IR.
+    hw::HWModuleExternOp getReferencedPrimitive();
+  }];
+
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<ParamDeclArrayAttr>:$parameters,
+    FlatSymbolRefAttr:$primitiveName
+  );
+  let results = (outs Variadic<AnyType>:$results);
+
+  let assemblyFormat = [{
+    $sym_name `of` $primitiveName `` custom<ParameterList>($parameters) attr-dict (`:` qualified(type($results))^)?
+  }];
+}
+
 
 def GroupOp : CalyxOp<"group", [
     HasParent<"WiresOp">,
@@ -264,6 +379,14 @@ def GroupOp : CalyxOp<"group", [
 
     /// Returns the GroupDoneOp for this group.
     GroupDoneOp getDoneOp();
+
+    /// Returns the body of a Calyx component.
+    Block *getBodyBlock() {
+      Region* region = &getOperation()->getRegion(0);
+      assert(region->hasOneBlock() && "The body should have one Block.");
+      return &region->front();
+    }
+
   }];
 
   let regions = (region SizedRegion<1>:$body);
@@ -312,6 +435,13 @@ def CombGroupOp : CalyxOp<"comb_group", [
   let extraClassDeclaration = [{
     // Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
+
+    /// Returns the body of a Calyx component.
+    Block *getBodyBlock() {
+      Region* region = &getOperation()->getRegion(0);
+      assert(region->hasOneBlock() && "The body should have one Block.");
+      return &region->front();
+    }
   }];
 
   let regions = (region SizedRegion<1>:$body);
@@ -335,9 +465,79 @@ def CombGroupOp : CalyxOp<"comb_group", [
   ];
 }
 
+def StaticGroupOp : CalyxOp<"static_group", [
+    HasParent<"WiresOp">,
+    DeclareOpInterfaceMethods<GroupOpInterface>,
+    NoRegionArguments,
+    RegionKindInterface,
+    SingleBlock,
+    Symbol,
+    NoTerminator
+  ]> {
+  let summary = "Calyx Static Group";
+  let description = [{
+    Represents a Calyx static group, which is a collection
+    of assignments that are only active when the group
+    is run from the control execution schedule. A group
+    signifies its termination with a special port named
+    a "done" port.
+
+    ```mlir
+      calyx.static_group latency<1> @MyStaticGroup {
+        calyx.assign %1 = %2 : i32
+      }
+    ```
+  }];
+
+  let arguments = (ins SymbolNameAttr: $sym_name,
+                   I64Attr: $latency);
+
+  let extraClassDeclaration = [{
+    // Implement RegionKindInterface.
+    static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
+
+    /// Returns the GroupGoOp for this group.
+    GroupGoOp getGoOp();
+
+    /// Returns the body of a Calyx component.
+    Block *getBodyBlock() {
+      Region* region = &getOperation()->getRegion(0);
+      assert(region->hasOneBlock() && "The body should have one Block.");
+      return &region->front();
+    }
+  }];
+
+  let regions = (region SizedRegion<1>:$body);
+  let assemblyFormat = "`latency` `<` $latency `>` $sym_name $body attr-dict";
+  let skipDefaultBuilders = true;
+  let builders = [
+    OpBuilder<(ins "StringRef":$sym_name, "uint64_t":$latency), [{
+      $_state.addAttribute(
+        mlir::SymbolTable::getSymbolAttrName(),
+        StringAttr::get($_state.getContext(), sym_name)
+      );
+      $_state.addAttribute(
+        getLatencyAttrName($_state.name),
+        mlir::IntegerAttr::get(IntegerType::get($_state.getContext(), 64), latency)
+      );
+      Region* region = $_state.addRegion();
+      region->push_back(new Block());
+    }]>,
+    OpBuilder<(ins "StringAttr":$sym_name, "uint64_t":$latency), [{
+      $_state.addAttribute(mlir::SymbolTable::getSymbolAttrName(), sym_name);
+      $_state.addAttribute(
+        getLatencyAttrName($_state.name),
+        mlir::IntegerAttr::get(IntegerType::get($_state.getContext(), 64), latency)
+      );
+      Region* region = $_state.addRegion();
+      region->push_back(new Block());
+    }]>
+  ];
+}
+
 def AssignOp : CalyxOp<"assign", [
     SameTypeConstraint<"dest", "src">,
-    ParentOneOf<["GroupOp", "CombGroupOp", "WiresOp"]>
+    ParentOneOf<["GroupOp", "CombGroupOp", "StaticGroupOp","WiresOp"]>
   ]> {
   let summary = "Calyx Assignment";
   let description = [{
@@ -416,4 +616,53 @@ def GroupGoOp : CalyxGroupPort<"group_go", [
       $_state.addOperands(src);
     }]>
   ];
+}
+
+def CycleOp : CalyxOp<"cycle", [
+  HasParent<"StaticGroupOp">,
+]> {
+  let summary = "Calyx Static Cycle Op";
+  let description = [{
+    Returns an I1 signal that is active `start` cycles after the static 
+    group starts, and inactive all other times. Optional `end` 
+    attribute allows the signal to be active from until `end` cycles
+    after the static group starts. Must be used within a static group.
+
+    ```mlir
+      calyx.static_group latency<2> @MyStaticGroup {
+        %1 = calyx.cycle 1 : i1
+      }
+    ```
+  }];
+  let arguments = (ins
+    I32Attr:$start,
+    OptionalAttr<I32Attr>:$end
+  );
+  let results = (outs 
+    I1:$active
+  );
+  let extraClassDeclaration = [{
+    /// Returns the latency of the parent static group.
+    uint32_t getGroupLatency();
+  }];
+  let builders = [
+    OpBuilder<(ins "uint32_t":$start), [{
+      $_state.addAttribute(
+        getStartAttrName($_state.name),
+        mlir::IntegerAttr::get(IntegerType::get($_state.getContext(), 32), start)
+      );
+    }]>,
+    OpBuilder<(ins "uint32_t":$start, "uint32_t":$end), [{
+      $_state.addAttribute(
+        getStartAttrName($_state.name),
+        mlir::IntegerAttr::get(IntegerType::get($_state.getContext(), 32), start)
+      );
+      $_state.addAttribute(
+        getEndAttrName($_state.name),
+        mlir::IntegerAttr::get(IntegerType::get($_state.getContext(), 32), end)
+      );
+    }]>
+  ];
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
 }

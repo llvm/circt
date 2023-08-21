@@ -142,6 +142,14 @@ LogicalResult Problem::verify() {
   return success();
 }
 
+std::optional<unsigned> Problem::getEndTime(Operation *op) {
+  if (auto startTime = getStartTime(op))
+    if (auto opType = getLinkedOperatorType(op))
+      if (auto latency = getLatency(*opType))
+        return startTime.value() + latency.value();
+  return std::nullopt;
+}
+
 //===----------------------------------------------------------------------===//
 // CyclicProblem
 //===----------------------------------------------------------------------===//
@@ -167,7 +175,7 @@ LogicalResult CyclicProblem::verifyPrecedence(Dependence dep) {
   unsigned stI = *getStartTime(i);
   unsigned latI = *getLatency(*getLinkedOperatorType(i));
   unsigned stJ = *getStartTime(j);
-  unsigned dist = getDistance(dep).getValueOr(0); // optional property
+  unsigned dist = getDistance(dep).value_or(0); // optional property
   unsigned ii = *getInitiationInterval();
 
   // check if i's result is available before j starts (dist iterations later)
@@ -411,17 +419,17 @@ Operation *Dependence::getDestination() const {
   return isDefUse() ? defUse->getOwner() : auxDst;
 }
 
-Optional<unsigned> Dependence::getSourceIndex() const {
+std::optional<unsigned> Dependence::getSourceIndex() const {
   if (!isDefUse())
-    return None;
+    return std::nullopt;
 
   assert(defUse->get().isa<OpResult>() && "source is not an operation");
   return defUse->get().dyn_cast<OpResult>().getResultNumber();
 }
 
-Optional<unsigned> Dependence::getDestinationIndex() const {
+std::optional<unsigned> Dependence::getDestinationIndex() const {
   if (!isDefUse())
-    return None;
+    return std::nullopt;
   return defUse->getOperandNumber();
 }
 

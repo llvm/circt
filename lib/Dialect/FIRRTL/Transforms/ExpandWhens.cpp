@@ -13,6 +13,7 @@
 #include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Support/FieldRef.h"
@@ -39,24 +40,53 @@ struct HashTableStack {
   using ScopeT = typename llvm::MapVector<KeyT, ValueT>;
   using StackT = typename llvm::SmallVector<ScopeT, 3>;
 
+  struct Iterator {
+    Iterator(typename StackT::iterator stackIt,
+             typename ScopeT::iterator scopeIt)
+        : stackIt(stackIt), scopeIt(scopeIt) {}
+
+    bool operator==(const Iterator &rhs) const {
+      return stackIt == rhs.stackIt && scopeIt == rhs.scopeIt;
+    }
+
+    bool operator!=(const Iterator &rhs) const { return !(*this == rhs); }
+
+    std::pair<KeyT, ValueT> &operator*() const { return *scopeIt; }
+
+    Iterator &operator++() {
+      if (scopeIt == stackIt->end())
+        scopeIt = (++stackIt)->begin();
+      else
+        ++scopeIt;
+      return *this;
+    }
+
+    typename StackT::iterator stackIt;
+    typename ScopeT::iterator scopeIt;
+  };
+
   HashTableStack() {
     // We require at least one scope.
     pushScope();
   }
 
-  // TODO: This class will need its own iterator eventually.
-  using iterator = typename ScopeT::iterator;
+  using iterator = Iterator;
 
-  iterator end() { return iterator(); }
+  iterator begin() {
+    return Iterator(mapStack.begin(), mapStack.first().begin());
+  }
+
+  iterator end() { return Iterator(mapStack.end() - 1, mapStack.back().end()); }
 
   iterator find(const KeyT &key) {
     // Try to find a hashtable with the missing value.
-    for (auto &map : llvm::reverse(mapStack)) {
+    for (auto i = mapStack.size(); i > 0; --i) {
+      auto &map = mapStack[i - 1];
       auto it = map.find(key);
       if (it != map.end())
-        return it;
+        return Iterator(mapStack.begin() + i - 1, it);
     }
-    return iterator();
+    return end();
   }
 
   ScopeT &getLastScope() { return mapStack.back(); }
@@ -102,12 +132,22 @@ public:
   using FIRRTLVisitor<ConcreteT>::visitDecl;
   using FIRRTLVisitor<ConcreteT>::visitStmt;
 
-  /// Records a connection to a destination in the current scope. This will
-  /// delete a previous connection to a destination if there was one. Returns
-  /// true if an old connect was erased.
-  bool setLastConnect(FieldRef dest, Operation *connection) {
+  /// Records a connection to a destination in the current scope.
+  /// If connection has static single connect behavior, this is all.
+  /// For connections with last-connect behavior, this will delete a previous
+  /// connection to a destination if there was one.
+  /// Returns true if an old connect was erased.
+  bool recordConnect(FieldRef dest, Operation *connection) {
     // Try to insert, if it doesn't insert, replace the previous value.
     auto itAndInserted = driverMap.getLastScope().insert({dest, connection});
+    if (isStaticSingleConnect(connection)) {
+      // There should be no non-null driver already, Verifier checks this.
+      assert(itAndInserted.second || !itAndInserted.first->second);
+      if (!itAndInserted.second)
+        itAndInserted.first->second = connection;
+      return false;
+    }
+    assert(isLastConnect(connection));
     if (!std::get<1>(itAndInserted)) {
       auto iterator = std::get<0>(itAndInserted);
       auto changed = false;
@@ -126,13 +166,26 @@ public:
   /// Get the destination value from a connection.  This supports any operation
   /// which is capable of driving a value.
   static Value getDestinationValue(Operation *op) {
-    return cast<FConnectLike>(op).dest();
+    return cast<FConnectLike>(op).getDest();
   }
 
   /// Get the source value from a connection. This supports any operation which
   /// is capable of driving a value.
   static Value getConnectedValue(Operation *op) {
-    return cast<FConnectLike>(op).src();
+    return cast<FConnectLike>(op).getSrc();
+  }
+
+  /// Return whether the connection has static single connection behavior.
+  static bool isStaticSingleConnect(Operation *op) {
+    return cast<FConnectLike>(op).hasStaticSingleConnectBehavior();
+  }
+
+  /// Return whether the connection has last-connect behavior.
+  /// Compared to static single connect behavior, with last-connect behavior
+  /// destinations can be connected to multiple times and are connected
+  /// conditionally when connecting out from under a 'when'.
+  static bool isLastConnect(Operation *op) {
+    return cast<FConnectLike>(op).hasLastConnectBehavior();
   }
 
   /// For every leaf field in the sink, record that it exists and should be
@@ -144,7 +197,7 @@ public:
     // Recurse through a bundle and declare each leaf sink node.
     std::function<void(Type, Flow)> declare = [&](Type type, Flow flow) {
       // If this is a bundle type, recurse to each of the fields.
-      if (auto bundleType = type.dyn_cast<BundleType>()) {
+      if (auto bundleType = type_dyn_cast<BundleType>(type)) {
         for (auto &element : bundleType.getElements()) {
           id++;
           if (element.isFlip)
@@ -156,7 +209,7 @@ public:
       }
 
       // If this is a vector type, recurse to each of the elements.
-      if (auto vectorType = type.dyn_cast<FVectorType>()) {
+      if (auto vectorType = type_dyn_cast<FVectorType>(type)) {
         for (unsigned i = 0; i < vectorType.getNumElements(); ++i) {
           id++;
           declare(vectorType.getElementType(), flow);
@@ -165,7 +218,7 @@ public:
       }
 
       // If this is an analog type, it does not need to be tracked.
-      if (auto analogType = type.dyn_cast<AnalogType>())
+      if (auto analogType = type_dyn_cast<AnalogType>(type))
         return;
 
       // If it is a leaf node with Flow::Sink or Flow::Duplex, it must be
@@ -182,6 +235,7 @@ public:
                                           Value dest, Value cond,
                                           Operation *whenTrueConn,
                                           Operation *whenFalseConn) {
+    assert(isLastConnect(whenTrueConn) && isLastConnect(whenFalseConn));
     auto fusedLoc =
         b.getFusedLoc({loc, whenTrueConn->getLoc(), whenFalseConn->getLoc()});
     auto whenTrue = getConnectedValue(whenTrueConn);
@@ -204,13 +258,13 @@ public:
     return b.create<ConnectOp>(loc, dest, newValue);
   }
 
-  void visitDecl(WireOp op) { declareSinks(op.result(), Flow::Duplex); }
+  void visitDecl(WireOp op) { declareSinks(op.getResult(), Flow::Duplex); }
 
   /// Take an aggregate value and construct ground subelements recursively.
   /// And then apply function `fn`.
   void foreachSubelement(OpBuilder &builder, Value value,
                          llvm::function_ref<void(Value)> fn) {
-    TypeSwitch<Type>(value.getType())
+    FIRRTLTypeSwitch<Type>(value.getType())
         .template Case<BundleType>([&](BundleType bundle) {
           for (auto i : llvm::seq(0u, (unsigned)bundle.getNumElements())) {
             auto subfield =
@@ -236,7 +290,7 @@ public:
       auto connect = builder.create<ConnectOp>(value.getLoc(), value, value);
       driverMap[getFieldRefFromValue(value)] = connect;
     };
-    foreachSubelement(builder, op.result(), fn);
+    foreachSubelement(builder, op.getResult(), fn);
   }
 
   void visitDecl(RegResetOp op) {
@@ -247,13 +301,13 @@ public:
       auto connect = builder.create<ConnectOp>(value.getLoc(), value, value);
       driverMap[getFieldRefFromValue(value)] = connect;
     };
-    foreachSubelement(builder, op.result(), fn);
+    foreachSubelement(builder, op.getResult(), fn);
   }
 
   void visitDecl(InstanceOp op) {
     // Track any instance inputs which need to be connected to for init
     // coverage.
-    for (auto result : llvm::enumerate(op.results()))
+    for (const auto &result : llvm::enumerate(op.getResults()))
       if (op.getPortDirection(result.index()) == Direction::Out)
         declareSinks(result.value(), Flow::Source);
       else
@@ -262,16 +316,25 @@ public:
 
   void visitDecl(MemOp op) {
     // Track any memory inputs which require connections.
-    for (auto result : op.results())
-      declareSinks(result, Flow::Sink);
+    for (auto result : op.getResults())
+      if (!isa<RefType>(result.getType()))
+        declareSinks(result, Flow::Sink);
   }
 
   void visitStmt(ConnectOp op) {
-    setLastConnect(getFieldRefFromValue(op.dest()), op);
+    recordConnect(getFieldRefFromValue(op.getDest()), op);
   }
 
   void visitStmt(StrictConnectOp op) {
-    setLastConnect(getFieldRefFromValue(op.dest()), op);
+    recordConnect(getFieldRefFromValue(op.getDest()), op);
+  }
+
+  void visitStmt(RefDefineOp op) {
+    recordConnect(getFieldRefFromValue(op.getDest()), op);
+  }
+
+  void visitStmt(PropAssignOp op) {
+    recordConnect(getFieldRefFromValue(op.getDest()), op);
   }
 
   void processWhenOp(WhenOp whenOp, Value outerCondition);
@@ -323,18 +386,21 @@ public:
         // Delete all old connections.
         thenConnect->erase();
         elseConnect->erase();
-        setLastConnect(dest, newConnect);
+        recordConnect(dest, newConnect);
 
-        // Do not process connect in the else scope.
-        elseScope.erase(dest);
         continue;
       }
 
       auto &outerConnect = std::get<1>(*outerIt);
       if (!outerConnect) {
-        // `dest` is null in the outer scope. This indicate an initialization
-        // problem: `mux(p, then, nullptr)`. Just delete the broken connect.
-        thenConnect->erase();
+        if (isLastConnect(thenConnect)) {
+          // `dest` is null in the outer scope. This indicate an initialization
+          // problem: `mux(p, then, nullptr)`. Just delete the broken connect.
+          thenConnect->erase();
+        } else {
+          assert(isStaticSingleConnect(thenConnect));
+          driverMap[dest] = thenConnect;
+        }
         continue;
       }
 
@@ -347,13 +413,18 @@ public:
 
       // Delete all old connections.
       thenConnect->erase();
-      setLastConnect(dest, newConnect);
+      recordConnect(dest, newConnect);
     }
 
     // Process all connects in the `else` block.
     for (auto &destAndConnect : elseScope) {
       auto dest = std::get<0>(destAndConnect);
       auto elseConnect = std::get<1>(destAndConnect);
+
+      // If this destination was driven in the 'then' scope, then we will have
+      // already consumed the driver from the 'else' scope, and we must skip it.
+      if (thenScope.contains(dest))
+        continue;
 
       auto outerIt = driverMap.find(dest);
       if (outerIt == driverMap.end()) {
@@ -365,9 +436,14 @@ public:
 
       auto &outerConnect = std::get<1>(*outerIt);
       if (!outerConnect) {
-        // `dest` is null in the outer scope. This indicate an initialization
-        // problem: `mux(p, null, else)`. Just delete the broken connect.
-        elseConnect->erase();
+        if (isLastConnect(elseConnect)) {
+          // `dest` is null in the outer scope. This indicates an initialization
+          // problem: `mux(p, then, nullptr)`. Just delete the broken connect.
+          elseConnect->erase();
+        } else {
+          assert(isStaticSingleConnect(elseConnect));
+          driverMap[dest] = elseConnect;
+        }
         continue;
       }
 
@@ -380,7 +456,7 @@ public:
 
       // Delete all old connections.
       elseConnect->erase();
-      setLastConnect(dest, newConnect);
+      recordConnect(dest, newConnect);
     }
   }
 };
@@ -391,7 +467,7 @@ public:
 //===----------------------------------------------------------------------===//
 
 /// This extends the LastConnectVisitor to handle all Simulation related
-/// constructs which do not neet any processing at the module scope, but need to
+/// constructs which do not need any processing at the module scope, but need to
 /// be processed inside of a WhenOp.
 namespace {
 class WhenOpVisitor : public LastConnectResolver<WhenOpVisitor> {
@@ -415,6 +491,10 @@ public:
   void visitStmt(PrintFOp op);
   void visitStmt(StopOp op);
   void visitStmt(WhenOp op);
+  void visitStmt(RefForceOp op);
+  void visitStmt(RefForceInitialOp op);
+  void visitStmt(RefReleaseOp op);
+  void visitStmt(RefReleaseInitialOp op);
 
 private:
   /// And a 1-bit value with the current condition.  If we are in the outer
@@ -438,27 +518,43 @@ void WhenOpVisitor::process(Block &block) {
 }
 
 void WhenOpVisitor::visitStmt(PrintFOp op) {
-  op.condMutable().assign(andWithCondition(op, op.cond()));
+  op.getCondMutable().assign(andWithCondition(op, op.getCond()));
 }
 
 void WhenOpVisitor::visitStmt(StopOp op) {
-  op.condMutable().assign(andWithCondition(op, op.cond()));
+  op.getCondMutable().assign(andWithCondition(op, op.getCond()));
 }
 
 void WhenOpVisitor::visitStmt(AssertOp op) {
-  op.enableMutable().assign(andWithCondition(op, op.enable()));
+  op.getEnableMutable().assign(andWithCondition(op, op.getEnable()));
 }
 
 void WhenOpVisitor::visitStmt(AssumeOp op) {
-  op.enableMutable().assign(andWithCondition(op, op.enable()));
+  op.getEnableMutable().assign(andWithCondition(op, op.getEnable()));
 }
 
 void WhenOpVisitor::visitStmt(CoverOp op) {
-  op.enableMutable().assign(andWithCondition(op, op.enable()));
+  op.getEnableMutable().assign(andWithCondition(op, op.getEnable()));
 }
 
 void WhenOpVisitor::visitStmt(WhenOp whenOp) {
   processWhenOp(whenOp, condition);
+}
+
+void WhenOpVisitor::visitStmt(RefForceOp op) {
+  op.getPredicateMutable().assign(andWithCondition(op, op.getPredicate()));
+}
+
+void WhenOpVisitor::visitStmt(RefForceInitialOp op) {
+  op.getPredicateMutable().assign(andWithCondition(op, op.getPredicate()));
+}
+
+void WhenOpVisitor::visitStmt(RefReleaseOp op) {
+  op.getPredicateMutable().assign(andWithCondition(op, op.getPredicate()));
+}
+
+void WhenOpVisitor::visitStmt(RefReleaseInitialOp op) {
+  op.getPredicateMutable().assign(andWithCondition(op, op.getPredicate()));
 }
 
 /// This is a common helper that is dispatched to by the concrete visitors.
@@ -472,16 +568,16 @@ void LastConnectResolver<ConcreteT>::processWhenOp(WhenOp whenOp,
   OpBuilder b(whenOp);
   auto loc = whenOp.getLoc();
   Block *parentBlock = whenOp->getBlock();
-  auto condition = whenOp.condition();
+  auto condition = whenOp.getCondition();
   auto ui1Type = condition.getType();
 
-  // Process both sides of the the WhenOp, fixing up all simulation
-  // contructs, and resolving last connect semantics in each block. This
-  // process returns the set of connects in each side of the when op.
+  // Process both sides of the WhenOp, fixing up all simulation constructs,
+  // and resolving last connect semantics in each block. This process returns
+  // the set of connects in each side of the when op.
 
   // Process the `then` block. If we are already in a whenblock, the we need to
   // conjoin ('and') the outer conditions.
-  auto thenCondition = whenOp.condition();
+  Value thenCondition = whenOp.getCondition();
   if (outerCondition)
     thenCondition =
         b.createOrFold<AndPrimOp>(loc, ui1Type, outerCondition, thenCondition);
@@ -495,7 +591,7 @@ void LastConnectResolver<ConcreteT>::processWhenOp(WhenOp whenOp,
   // Process the `else` block.
   DriverMap elseScope;
   if (whenOp.hasElseRegion()) {
-    // Else condition is the compliment of the then condition.
+    // Else condition is the complement of the then condition.
     auto elseCondition =
         b.createOrFold<NotPrimOp>(loc, condition.getType(), condition);
     // Conjoin the when condition with the outer condition.
@@ -531,6 +627,7 @@ public:
   void visitStmt(WhenOp whenOp);
   void visitStmt(ConnectOp connectOp);
   void visitStmt(StrictConnectOp connectOp);
+  void visitStmt(GroupOp groupOp);
 
   bool run(FModuleOp op);
   LogicalResult checkInitialization();
@@ -547,28 +644,28 @@ private:
 /// Run expand whens on the Module.  This will emit an error for each
 /// incomplete initialization found. If an initialiazation error was detected,
 /// this will return failure and leave the IR in an inconsistent state.
-bool ModuleVisitor::run(FModuleOp module) {
+bool ModuleVisitor::run(FModuleOp op) {
   // Track any results (flipped arguments) of the module for init coverage.
-  for (auto it : llvm::enumerate(module.getArguments())) {
-    auto flow = module.getPortDirection(it.index()) == Direction::In
+  for (const auto &it : llvm::enumerate(op.getArguments())) {
+    auto flow = op.getPortDirection(it.index()) == Direction::In
                     ? Flow::Source
                     : Flow::Sink;
     declareSinks(it.value(), flow);
   }
 
   // Process the body of the module.
-  for (auto &op : llvm::make_early_inc_range(*module.getBody())) {
+  for (auto &op : llvm::make_early_inc_range(*op.getBodyBlock())) {
     dispatchVisitor(&op);
   }
   return anythingChanged;
 }
 
 void ModuleVisitor::visitStmt(ConnectOp op) {
-  anythingChanged |= setLastConnect(getFieldRefFromValue(op.dest()), op);
+  anythingChanged |= recordConnect(getFieldRefFromValue(op.getDest()), op);
 }
 
 void ModuleVisitor::visitStmt(StrictConnectOp op) {
-  anythingChanged |= setLastConnect(getFieldRefFromValue(op.dest()), op);
+  anythingChanged |= recordConnect(getFieldRefFromValue(op.getDest()), op);
 }
 
 void ModuleVisitor::visitStmt(WhenOp whenOp) {
@@ -577,9 +674,16 @@ void ModuleVisitor::visitStmt(WhenOp whenOp) {
   processWhenOp(whenOp, /*outerCondition=*/{});
 }
 
+void ModuleVisitor::visitStmt(GroupOp groupOp) {
+  for (auto &op : llvm::make_early_inc_range(*groupOp.getBody())) {
+    dispatchVisitor(&op);
+  }
+}
+
 /// Perform initialization checking.  This uses the built up state from
 /// running on a module. Returns failure in the event of bad initialization.
 LogicalResult ModuleVisitor::checkInitialization() {
+  bool failed = false;
   for (auto destAndConnect : driverMap.getLastScope()) {
     // If there is valid connection to this destination, everything is good.
     auto *connect = std::get<1>(destAndConnect);
@@ -588,17 +692,21 @@ LogicalResult ModuleVisitor::checkInitialization() {
 
     // Get the op which defines the sink, and emit an error.
     FieldRef dest = std::get<0>(destAndConnect);
+    auto loc = dest.getValue().getLoc();
     auto *definingOp = dest.getDefiningOp();
     if (auto mod = dyn_cast<FModuleLike>(definingOp))
-      mlir::emitError(definingOp->getLoc())
-          << "port \"" + getFieldName(dest) +
-                 "\" not fully initialized in module \""
-          << mod.moduleName() << "\"";
+      mlir::emitError(loc) << "port \"" << getFieldName(dest).first
+                           << "\" not fully initialized in module \""
+                           << mod.getModuleName() << "\"";
     else
-      definingOp->emitError("sink \"" + getFieldName(dest) +
-                            "\" not fully initialized");
-    return failure();
+      mlir::emitError(loc)
+          << "sink \"" << getFieldName(dest).first
+          << "\" not fully initialized in module \""
+          << definingOp->getParentOfType<FModuleLike>().getModuleName() << "\"";
+    failed = true;
   }
+  if (failed)
+    return failure();
   return success();
 }
 

@@ -11,68 +11,75 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "circt/Dialect/HW/HWOpInterfaces.td"
 include "circt/Types.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 
 // Note that net declarations like 'wire' should not appear in an always block.
 def WireOp : SVOp<"wire", [NonProceduralOp,
-          DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
+          DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+          DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>]> {
   let summary = "Define a new wire";
   let description = [{
     Declare a SystemVerilog Net Declaration of 'wire' type.
      See SV Spec 6.7, pp97.
     }];
 
-  let arguments = (ins StrAttr:$name, OptionalAttr<SymbolNameAttr>:$inner_sym);
+  let arguments = (ins StrAttr:$name, OptionalAttr<InnerSymAttr>:$inner_sym);
   let results = (outs InOutType:$result);
 
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType,
-                      CArg<"StringAttr", "StringAttr()">:$name,
-                      CArg<"StringAttr", "StringAttr()">:$inner_sym)>,
+                   CArg<"StringAttr", "StringAttr()">:$name,
+                   CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym)>,
     OpBuilder<(ins "::mlir::Type":$elementType, CArg<"StringRef">:$name), [{
       return build($_builder, $_state, elementType,
                    $_builder.getStringAttr(name));
     }]>
   ];
 
-  let assemblyFormat = [{ (`sym` $inner_sym^)? custom<ImplicitSSAName>(attr-dict)
-                          `:` qualified(type($result)) }];
+  let assemblyFormat = [{
+    (`sym` $inner_sym^)? `` custom<ImplicitSSAName>($name) attr-dict
+    `:` qualified(type($result))
+  }];
   let hasCanonicalizeMethod = true;
 
   let extraClassDeclaration = [{
     Type getElementType() {
-      return result().getType().cast<InOutType>().getElementType();
+      return getResult().getType().cast<InOutType>().getElementType();
     }
   }];
 }
 
 def RegOp : SVOp<"reg", [
-          DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
+          DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+          DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>]> {
   let summary = "Define a new `reg` in SystemVerilog";
    let description = [{
      Declare a SystemVerilog Variable Declaration of 'reg' type.
      See SV Spec 6.8, pp100.
    }];
-  let arguments = (ins StrAttr:$name, OptionalAttr<SymbolNameAttr>:$inner_sym);
+  let arguments = (ins StrAttr:$name, OptionalAttr<InnerSymAttr>:$inner_sym);
   let results = (outs InOutType:$result);
 
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType,
                     CArg<"StringAttr", "StringAttr()">:$name,
-                    CArg<"StringAttr", "StringAttr()">:$inner_sym)>
+                    CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym)>
   ];
 
   // We handle the name in a custom way, so we use a customer parser/printer.
-  let assemblyFormat = [{ (`sym` $inner_sym^)? custom<ImplicitSSAName>(attr-dict)
-                          `:` qualified(type($result)) }];
+  let assemblyFormat = [{
+    (`sym` $inner_sym^)? `` custom<ImplicitSSAName>($name) attr-dict
+    `:` qualified(type($result))
+  }];
   let hasCanonicalizeMethod = true;
 
   let extraClassDeclaration = [{
     Type getElementType() {
-      return result().getType().cast<InOutType>().getElementType();
+      return getResult().getType().cast<InOutType>().getElementType();
     }
   }];
 }
@@ -98,18 +105,42 @@ def XMROp : SVOp<"xmr", []> {
   let assemblyFormat = "(`isRooted` $isRooted^)? custom<XMRPath>($path, $terminal) attr-dict `:` qualified(type($result))";
 }
 
+def XMRRefOp : SVOp<"xmr.ref", [DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
+  let summary = "Encode a reference to something with a hw.hierpath.";
+  let description = [{
+    This represents a hierarchical path, but using something which the compiler
+    can understand.  In contrast to the XMROp (which models pure Verilog
+    hierarchical paths which may not map to anything knowable in the circuit),
+    this op uses a `hw.hierpath` to refer to something which exists in the
+    circuit.
+
+    Generally, this operation is always preferred for situations where
+    hierarchical paths cannot be known statically and may change.
+
+    `verbatimSuffix` should only be populated when the final operation on the
+    path is an instance of an external module.
+  }];
+  let arguments = (
+    ins FlatSymbolRefAttr:$ref,
+    DefaultValuedAttr<StrAttr, "{}">:$verbatimSuffix
+  );
+  let results = (outs InOutType:$result);
+  let assemblyFormat = [{
+    $ref ( $verbatimSuffix^ )? attr-dict `:` qualified(type($result))
+  }];
+
+  let extraClassDeclaration = [{
+    hw::HierPathOp getReferencedPath(const hw::HWSymbolCache *cache);
+  }];
+}
+
 def ReadInOutOp
  : SVOp<"read_inout",
-        [NoSideEffect, InOutElementConstraint<"result", "input">]> {
+        [Pure, InOutElementConstraint<"result", "input">]> {
   let summary = "Get the value of from something of inout type (e.g. a wire or"
                 " inout port) as the value itself.";
   let arguments = (ins InOutType:$input);
   let results = (outs HWValueType:$result);
-
-  let builders = [
-    OpBuilder<(ins "Value":$input)>
-  ];
-
   let assemblyFormat = "$input attr-dict `:` qualified(type($input))";
 }
 
@@ -126,22 +157,17 @@ class InOutIndexConstraint<string value, string inoutValue>
 
 def ArrayIndexInOutOp
  : SVOp<"array_index_inout",
-        [NoSideEffect, InOutIndexConstraint<"result", "input">]> {
+        [Pure, InOutIndexConstraint<"result", "input">]> {
   let summary = "Index an inout memory to produce an inout element";
   let description = "See SV Spec 11.5.2.";
   let arguments = (ins InOutArrayType:$input, HWIntegerType:$index);
   let results = (outs InOutType:$result);
-
-  let builders = [
-    OpBuilder<(ins "Value":$input, "Value":$index)>
-  ];
-
   let assemblyFormat =
     "$input`[`$index`]` attr-dict `:` qualified(type($input)) `,` qualified(type($index))";
 }
 
 def IndexedPartSelectInOutOp : SVOp<"indexed_part_select_inout",
-                         [NoSideEffect, InferTypeOpInterface]> {
+                         [Pure, InferTypeOpInterface]> {
   let summary = "Address several contiguous bits of an inout type (e.g. a wire"
                 " or inout port). This is an indexed part-select operator."
                 "The base is an integer expression and the width is an "
@@ -154,19 +180,15 @@ def IndexedPartSelectInOutOp : SVOp<"indexed_part_select_inout",
                       UnitAttr:$decrement);
   let results = (outs InOutType:$result);
 
-  let builders = [
-    OpBuilder<(ins "Value":$input, "Value":$base, "int32_t":$width,
-                                 CArg<"bool", "false">:$decrement)>
-  ];
-
   let hasVerifier = 1;
 
   let extraClassDeclaration = [{
     /// Infer the return types of this operation.
     static LogicalResult inferReturnTypes(MLIRContext *context,
-                                          Optional<Location> loc,
+                                          std::optional<Location> loc,
                                           ValueRange operands,
                                           DictionaryAttr attrs,
+                                          mlir::OpaqueProperties properties,
                                           mlir::RegionRange regions,
                                           SmallVectorImpl<Type> &results);
   }];
@@ -181,7 +203,7 @@ def InOutStructType
          "an inout type with struct field", "::circt::hw::InOutType">;
 
 def StructFieldInOutOp : SVOp<"struct_field_inout",
-                              [NoSideEffect, InferTypeOpInterface]> {
+                              [Pure, InferTypeOpInterface]> {
   let summary = "Create an subfield inout memory to produce an inout element.";
   let description = "See SV Spec 7.2.";
 
@@ -194,11 +216,47 @@ def StructFieldInOutOp : SVOp<"struct_field_inout",
   let extraClassDeclaration = [{
     /// Infer the return types of this operation.
     static LogicalResult inferReturnTypes(MLIRContext *context,
-                                          Optional<Location> loc,
+                                          std::optional<Location> loc,
                                           ValueRange operands,
                                           DictionaryAttr attrs,
+                                          mlir::OpaqueProperties properties,
                                           mlir::RegionRange regions,
                                           SmallVectorImpl<Type> &results);
   }];
 
+}
+
+def LogicOp : SVOp<"logic", [
+      DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+      DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>]> {
+  let summary = "Define a logic";
+  let description = [{
+    Declare a SystemVerilog Variable Declaration of 'logic' type.
+    See SV Spec 6.8, pp100.
+    }];
+
+  let arguments = (ins StrAttr:$name, OptionalAttr<InnerSymAttr>:$inner_sym);
+  let results = (outs InOutType:$result);
+
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<(ins "::mlir::Type":$elementType,
+                   CArg<"StringAttr", "StringAttr()">:$name,
+                   CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym)>,
+    OpBuilder<(ins "::mlir::Type":$elementType, CArg<"StringRef">:$name), [{
+      return build($_builder, $_state, elementType,
+                   $_builder.getStringAttr(name));
+    }]>
+  ];
+
+  let assemblyFormat = [{
+    (`sym` $inner_sym^)? `` custom<ImplicitSSAName>($name) attr-dict
+    `:` qualified(type($result))
+  }];
+
+  let extraClassDeclaration = [{
+    Type getElementType() {
+      return getResult().getType().cast<InOutType>().getElementType();
+    }
+  }];
 }

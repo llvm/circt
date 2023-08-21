@@ -11,12 +11,23 @@ jobs:
   # integration testing prerequisite installed.
   build-circt:
     name: Build and Test
-    runs-on: ubuntu-18.04
+    # Run on an internal MSFT subscription. Please DO NOT use this for any other
+    # workflows without talking to John Demme (john.demme@microsoft.com, GH
+    # teqdruid) first. We may lose funding for this if it ends up costing too
+    # much.
+    # If individual jobs fail due to timeouts or disconnects, please report to
+    # John and re-run the job.
+    runs-on: ["self-hosted", "1ES.Pool=1ES-CIRCT-builds"]
     container:
-      image: ghcr.io/circt/images/circt-integration-test:v10.2
+      image: ghcr.io/circt/images/circt-integration-test:v12.2
+      volumes:
+        - /mnt:/__w/circt
     strategy:
       fail-fast: false
       matrix:
+        # Please clear all new builds with John first. Any changes to this
+        # matrix could result in a drastically increased number of builds, which
+        # in turn costs more. Changes which don't result in new builds are OK.
         build-assert: [ON, OFF]
         build-shared: [ON, OFF]
         build-type: [Debug, Release]
@@ -25,33 +36,35 @@ jobs:
             cxx: clang++
           - cc: gcc
             cxx: g++
+        lit-flags: ['', '--vg']
+        exclude:
+          - build-type: Debug
+            lit-flags: --vg
+          - build-type: Release
+            lit-flags: --vg
+            build-assert: OFF
+          - build-type: Release
+            lit-flags: --vg
+            build-shared: ON
+          # TODO: This corner is failing and has been for some time. #5253.
+          - build-type: Release
+            compiler: {cc: gcc, cxx: g++}
+            lit-flags: --vg
 
     steps:
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
       # time.
       - name: Get CIRCT
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           fetch-depth: 1
           submodules: true
 
-      # Setup Ccache
-      - name: Ccache setup
-        run: |
-          mkdir -p $GITHUB_WORKSPACE/${{ matrix.compiler.cc }}-${{ matrix.build-type }}-${{ matrix.build-shared }}-${{ matrix.build-assert }}/.ccache
-          ccache --set-config=cache_dir=$GITHUB_WORKSPACE/${{ matrix.compiler.cc }}-${{ matrix.build-type }}-${{ matrix.build-shared }}-${{ matrix.build-assert }}/.ccache
-          ccache --set-config=max_size=300M
-          ccache --set-config=compression=true
-          ccache -p
-          ccache -z
-
-      - name: Cache Ccache directory
-        uses: actions/cache@v2
+      - name: ccache
+        uses: hendrikmuhs/ccache-action@v1.2
         with:
-          path: ${{ github.workspace }}/${{ matrix.compiler.cc }}-${{ matrix.build-type }}-${{ matrix.build-shared }}-${{ matrix.build-assert }}/.ccache
-          key: ${{ matrix.compiler.cc }}-${{ matrix.build-type }}-${{ matrix.build-shared }}-${{ matrix.build-assert }}-${{ github.sha }}
-          restore-keys: |
-            ${{ matrix.compiler.cc }}-${{ matrix.build-type }}-${{ matrix.build-shared }}-${{ matrix.build-assert }}-
+          max-size: 300M
+          key: nightly-${{ matrix.compiler.cc }}-${{ matrix.build-type }}-${{ matrix.build-shared }}-${{ matrix.build-assert }}
 
       # --------
       # Build and test CIRCT
@@ -79,15 +92,17 @@ jobs:
             -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=.. \
             -DLLVM_TARGETS_TO_BUILD="host" \
             -DLLVM_USE_LINKER=lld \
+            -DLLVM_USE_SPLIT_DWARF=ON \
             -DMLIR_ENABLE_BINDINGS_PYTHON=ON \
-            -DCIRCT_BINDINGS_PYTHON_ENABLED=ON
+            -DCIRCT_BINDINGS_PYTHON_ENABLED=ON \
+            -DLLVM_LIT_ARGS="-v --show-unsupported ${{ matrix.lit-flags }}"
       - name: Test CIRCT
         run: |
           ninja -C build check-circt -j$(nproc)
+      - name: Unit Test CIRCT
+        run: |
+          ninja -C build check-circt-unit -j$(nproc)
       - name: Integration Test CIRCT
+        if: ${{ matrix.lit-flags == '' }}
         run: |
           ninja -C build check-circt-integration -j$(nproc)
-
-      - name: Ccache stats
-        run: |
-          ccache -s

@@ -34,4 +34,4 @@ namespace sv {
 } // namespace sv
 } // namespace circt
 
-#endif // DIALECT_FIRRTL_TRANSFORMS_PASSDETAIL_H
+#endif // DIALECT_SV_TRANSFORMS_PASSDETAIL_H

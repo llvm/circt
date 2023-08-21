@@ -23,106 +23,6 @@ using namespace circt;
 using namespace firrtl;
 
 //===----------------------------------------------------------------------===//
-// FieldRef helpers
-//===----------------------------------------------------------------------===//
-
-FieldRef circt::firrtl::getFieldRefFromValue(Value value) {
-  // This code walks upwards from the subfield and calculates the field ID at
-  // each level. At each stage, it must take the current id, and re-index it as
-  // a nested bundle under the parent field.. This is accomplished by using the
-  // parent field's ID as a base, and adding the field ID of the child.
-  unsigned id = 0;
-  while (value) {
-    Operation *op = value.getDefiningOp();
-
-    // If this is a block argument, we are done.
-    if (!op)
-      break;
-
-    if (auto subfieldOp = dyn_cast<SubfieldOp>(op)) {
-      value = subfieldOp.input();
-      auto bundleType = value.getType().cast<BundleType>();
-      // Rebase the current index on the parent field's index.
-      id += bundleType.getFieldID(subfieldOp.fieldIndex());
-    } else if (auto subindexOp = dyn_cast<SubindexOp>(op)) {
-      value = subindexOp.input();
-      auto vecType = value.getType().cast<FVectorType>();
-      // Rebase the current index on the parent field's index.
-      id += vecType.getFieldID(subindexOp.index());
-    } else {
-      break;
-    }
-  }
-  return {value, id};
-}
-
-/// Get the string name of a value which is a direct child of a declaration op.
-static void getDeclName(Value value, SmallString<64> &string) {
-  if (auto arg = value.dyn_cast<BlockArgument>()) {
-    // Get the module ports and get the name.
-    auto module = cast<FModuleOp>(arg.getOwner()->getParentOp());
-    SmallVector<PortInfo> ports = module.getPorts();
-    string += ports[arg.getArgNumber()].name.getValue();
-    return;
-  }
-
-  auto *op = value.getDefiningOp();
-  TypeSwitch<Operation *>(op)
-      .Case<InstanceOp, MemOp>([&](auto op) {
-        string += op.name();
-        string += ".";
-        string +=
-            op.getPortName(value.cast<OpResult>().getResultNumber()).getValue();
-      })
-      .Case<WireOp, RegOp, RegResetOp>([&](auto op) { string += op.name(); });
-}
-
-std::string circt::firrtl::getFieldName(const FieldRef &fieldRef) {
-  bool rootKnown;
-  return getFieldName(fieldRef, rootKnown);
-}
-
-std::string circt::firrtl::getFieldName(const FieldRef &fieldRef,
-                                        bool &rootKnown) {
-  SmallString<64> name;
-  auto value = fieldRef.getValue();
-  getDeclName(value, name);
-  rootKnown = !name.empty();
-
-  auto type = value.getType();
-  auto localID = fieldRef.getFieldID();
-  while (localID) {
-    if (auto bundleType = type.dyn_cast<BundleType>()) {
-      auto index = bundleType.getIndexForFieldID(localID);
-      // Add the current field string, and recurse into a subfield.
-      auto &element = bundleType.getElements()[index];
-      if (!name.empty())
-        name += ".";
-      name += element.name.getValue();
-      // Recurse in to the element type.
-      type = element.type;
-      localID = localID - bundleType.getFieldID(index);
-    } else if (auto vecType = type.dyn_cast<FVectorType>()) {
-      auto index = vecType.getIndexForFieldID(localID);
-      name += "[";
-      name += std::to_string(index);
-      name += "]";
-      // Recurse in to the element type.
-      type = vecType.getElementType();
-      localID = localID - vecType.getFieldID(index);
-    } else {
-      // If we reach here, the field ref is pointing inside some aggregate type
-      // that isn't a bundle or a vector. If the type is a ground type, then the
-      // localID should be 0 at this point, and we should have broken from the
-      // loop.
-      llvm_unreachable("unsupported type");
-    }
-  }
-
-  return name.str().str();
-}
-
-//===----------------------------------------------------------------------===//
 // Dialect specification.
 //===----------------------------------------------------------------------===//
 
@@ -152,33 +52,38 @@ Operation *FIRRTLDialect::materializeConstant(OpBuilder &builder,
   // Boolean constants. Boolean attributes are always a special constant type
   // like ClockType and ResetType.  Since BoolAttrs are also IntegerAttrs, its
   // important that this goes first.
-  if (auto attrValue = value.dyn_cast<BoolAttr>()) {
-    assert((type.isa<ClockType>() || type.isa<AsyncResetType>() ||
-            type.isa<ResetType>()) &&
-           "BoolAttrs can only be materialized for special constant types.");
+  if (auto attrValue = dyn_cast<BoolAttr>(value)) {
+    assert((isa<ClockType, AsyncResetType, ResetType>(type) &&
+            "BoolAttrs can only be materialized for special constant types."));
     return builder.create<SpecialConstantOp>(loc, type, attrValue);
   }
 
   // Integer constants.
-  if (auto attrValue = value.dyn_cast<IntegerAttr>()) {
+  if (auto attrValue = dyn_cast<IntegerAttr>(value)) {
     // Integer attributes (ui1) might still be special constant types.
     if (attrValue.getValue().getBitWidth() == 1 &&
-        (type.isa<ClockType>() || type.isa<AsyncResetType>() ||
-         type.isa<ResetType>()))
+        isa<ClockType, AsyncResetType, ResetType>(type))
       return builder.create<SpecialConstantOp>(
-          loc, type,
-          builder.getBoolAttr(attrValue.getValue().isAllOnesValue()));
+          loc, type, builder.getBoolAttr(attrValue.getValue().isAllOnes()));
 
-    assert((!type.cast<IntType>().hasWidth() ||
-            (unsigned)type.cast<IntType>().getWidthOrSentinel() ==
+    assert((!type_cast<IntType>(type).hasWidth() ||
+            (unsigned)type_cast<IntType>(type).getWidthOrSentinel() ==
                 attrValue.getValue().getBitWidth()) &&
            "type/value width mismatch materializing constant");
     return builder.create<ConstantOp>(loc, type, attrValue);
   }
 
-  // InvalidValue constants.
-  if (auto invalidValue = value.dyn_cast<InvalidValueAttr>())
-    return builder.create<InvalidValueOp>(loc, type);
+  // Aggregate constants.
+  if (auto arrayAttr = dyn_cast<ArrayAttr>(value)) {
+    if (isa<BundleType, FVectorType>(type))
+      return builder.create<AggregateConstantOp>(loc, type, arrayAttr);
+  }
+
+  // String constants.
+  if (auto stringAttr = dyn_cast<StringAttr>(value)) {
+    if (type_isa<StringType>(type))
+      return builder.create<StringConstantOp>(loc, type, stringAttr);
+  }
 
   return nullptr;
 }

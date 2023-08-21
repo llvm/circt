@@ -22,6 +22,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -37,7 +38,7 @@ static bool isConstantLike(Value value) {
   if (isa_and_nonnull<ConstantOp, InvalidValueOp>(value.getDefiningOp()))
     return true;
   if (auto bitcast = value.getDefiningOp<BitCastOp>())
-    return isConstant(bitcast.input());
+    return isConstant(bitcast.getInput());
 
   // TODO: Add unrealized_conversion, asUInt, asSInt
   return false;
@@ -78,24 +79,26 @@ bool MergeConnection::peelConnect(StrictConnectOp connect) {
   // partial connect. Also ignore non-passive connections or non-integer
   // connections.
   LLVM_DEBUG(llvm::dbgs() << "Visiting " << connect << "\n");
-  auto destTy = connect.dest().getType().cast<FIRRTLType>();
-  if (!destTy.isPassive() || !firrtl::getBitWidth(destTy).hasValue())
+  auto destTy = type_dyn_cast<FIRRTLBaseType>(connect.getDest().getType());
+  if (!destTy || !destTy.isPassive() ||
+      !firrtl::getBitWidth(destTy).has_value())
     return false;
 
-  auto destFieldRef = getFieldRefFromValue(connect.dest());
+  auto destFieldRef = getFieldRefFromValue(connect.getDest());
   auto destRoot = destFieldRef.getValue();
 
   // If dest is derived from mem op or has a ground type, we cannot merge them.
   // If the connect's destination is a root value, we cannot merge.
-  if (destRoot.getDefiningOp<MemOp>() || destRoot == connect.dest())
+  if (destRoot.getDefiningOp<MemOp>() || destRoot == connect.getDest())
     return false;
 
   Value parent;
   unsigned index;
-  if (auto subfield = dyn_cast<SubfieldOp>(connect.dest().getDefiningOp()))
-    parent = subfield.input(), index = subfield.fieldIndex();
-  else if (auto subindex = dyn_cast<SubindexOp>(connect.dest().getDefiningOp()))
-    parent = subindex.input(), index = subindex.index();
+  if (auto subfield = dyn_cast<SubfieldOp>(connect.getDest().getDefiningOp()))
+    parent = subfield.getInput(), index = subfield.getFieldIndex();
+  else if (auto subindex =
+               dyn_cast<SubindexOp>(connect.getDest().getDefiningOp()))
+    parent = subindex.getInput(), index = subindex.getIndex();
   else
     llvm_unreachable("unexpected destination");
 
@@ -106,9 +109,9 @@ bool MergeConnection::peelConnect(StrictConnectOp connect) {
   // If it is the first time to visit the parent op, then allocate the vector
   // for subconnections.
   if (count == 0) {
-    if (auto bundle = parent.getType().dyn_cast<BundleType>())
+    if (auto bundle = type_dyn_cast<BundleType>(parent.getType()))
       subConnections.resize(bundle.getNumElements());
-    if (auto vector = parent.getType().dyn_cast<FVectorType>())
+    if (auto vector = type_dyn_cast<FVectorType>(parent.getType()))
       subConnections.resize(vector.getNumElements());
   }
   ++count;
@@ -137,8 +140,8 @@ bool MergeConnection::peelConnect(StrictConnectOp connect) {
                                  unsigned sourceIndex) {
       // In the first iteration, register a parent value.
       if (destIndex == 0) {
-        if (subelement.input().getType() == parentType)
-          sourceParent = subelement.input();
+        if (subelement.getInput().getType() == parentType)
+          sourceParent = subelement.getInput();
         else {
           // If types are not same, it is not possible to use it.
           canUseSourceParent = false;
@@ -147,11 +150,11 @@ bool MergeConnection::peelConnect(StrictConnectOp connect) {
 
       // Check that input is the same as `sourceAggregate` and indexes match.
       canUseSourceParent &=
-          subelement.input() == sourceParent && destIndex == sourceIndex;
+          subelement.getInput() == sourceParent && destIndex == sourceIndex;
     };
 
     for (auto idx : llvm::seq(0u, (unsigned)aggregateType.getNumElements())) {
-      auto src = subConnections[idx].src();
+      auto src = subConnections[idx].getSrc();
       assert(src && "all subconnections are guranteed to exist");
       operands.push_back(src);
 
@@ -172,10 +175,10 @@ bool MergeConnection::peelConnect(StrictConnectOp connect) {
 
       TypeSwitch<Operation *>(src.getDefiningOp())
           .template Case<SubfieldOp>([&](SubfieldOp subfield) {
-            checkSourceParent(subfield, idx, subfield.fieldIndex());
+            checkSourceParent(subfield, idx, subfield.getFieldIndex());
           })
           .template Case<SubindexOp>([&](SubindexOp subindex) {
-            checkSourceParent(subindex, idx, subindex.index());
+            checkSourceParent(subindex, idx, subindex.getIndex());
           })
           .Default([&](auto) { canUseSourceParent = false; });
     }
@@ -199,52 +202,46 @@ bool MergeConnection::peelConnect(StrictConnectOp connect) {
     if (!enableAggressiveMerging && !areOperandsAllConstants)
       return Value();
 
+    SmallVector<Location> locs;
     // Otherwise, we concat all values and cast them into the aggregate type.
-    Value accumulate;
-    for (auto e : llvm::enumerate(operands)) {
+    for (auto idx : llvm::seq(0u, static_cast<unsigned>(operands.size()))) {
+      locs.push_back(subConnections[idx].getLoc());
       // Erase connections except for subConnections[index] since it must be
       // erased at the top-level loop.
-      if (e.index() != index)
-        subConnections[e.index()].erase();
-      auto value = e.value();
-      auto bitwidth =
-          firrtl::getBitWidth(value.getType().template cast<FIRRTLType>());
-      assert(bitwidth &&
-             "it should be checked at the beginning of `peelConnect`");
-      value = builder->createOrFold<BitCastOp>(
-          value.getLoc(), UIntType::get(value.getContext(), *bitwidth), value);
-
-      if (parentType.isa<FVectorType>())
-        accumulate = (accumulate ? builder->createOrFold<CatPrimOp>(
-                                       accumulate.getLoc(), value, accumulate)
-                                 : value);
-      else {
-        // Bundle subfields are filled from MSB to LSB.
-        accumulate = (accumulate ? builder->createOrFold<CatPrimOp>(
-                                       accumulate.getLoc(), accumulate, value)
-                                 : value);
-      }
+      if (idx != index)
+        subConnections[idx].erase();
     }
-    return builder->createOrFold<BitCastOp>(accumulate.getLoc(), parentType,
-                                            accumulate);
+
+    return isa<FVectorType>(parentType)
+               ? builder->createOrFold<VectorCreateOp>(
+                     builder->getFusedLoc(locs), parentType, operands)
+               : builder->createOrFold<BundleCreateOp>(
+                     builder->getFusedLoc(locs), parentType, operands);
   };
 
   Value merged;
-  if (auto bundle = parentType.dyn_cast_or_null<BundleType>())
+  if (auto bundle = dyn_cast_or_null<BundleType>(parentType))
     merged = getMergedValue(bundle);
-  if (auto vector = parentType.dyn_cast_or_null<FVectorType>())
+  if (auto vector = dyn_cast_or_null<FVectorType>(parentType))
     merged = getMergedValue(vector);
   if (!merged)
     return false;
 
-  builder->create<StrictConnectOp>(connect.getLoc(), parent, merged);
+  // Emit strict connect if possible, fallback to normal connect.
+  // Don't use emitConnect(), will split the connect apart.
+  auto parentBaseTy = type_cast<FIRRTLBaseType>(parentType);
+  if (parentBaseTy.isPassive() && !parentBaseTy.hasUninferredWidth())
+    builder->create<StrictConnectOp>(connect.getLoc(), parent, merged);
+  else
+    builder->create<ConnectOp>(connect.getLoc(), parent, merged);
+
   return true;
 }
 
 bool MergeConnection::run() {
   ImplicitLocOpBuilder theBuilder(moduleOp.getLoc(), moduleOp.getContext());
   builder = &theBuilder;
-  auto *body = moduleOp.getBody();
+  auto *body = moduleOp.getBodyBlock();
   // Merge connections by forward iterations.
   for (auto it = body->begin(), e = body->end(); it != e;) {
     auto connectOp = dyn_cast<StrictConnectOp>(*it);

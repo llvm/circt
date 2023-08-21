@@ -11,12 +11,30 @@
 //===----------------------------------------------------------------------===//
 
 include "mlir/Interfaces/InferTypeOpInterface.td"
+include "circt/Dialect/HW/HWTypes.td"
+include "circt/Dialect/SV/SVTypes.td"
 
 def HWValueOrInOutType : AnyTypeOf<[HWValueType, InOutType]>;
 def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface,
                          ["getAsmResultNames"]>;
 
-def VerbatimExprOp : SVOp<"verbatim.expr", [NoSideEffect, HasCustomSSAName]> {
+
+def SystemFunctionOp : SVOp<"system"> {
+  let summary = "Simple SV System Function calls";
+  let description = [{
+    This operation calls the indicated system verilog system function.  This
+    supports functions which take normal expression arguments.
+
+    See section 20 of the 2012 SV spec.
+  }];
+  let arguments = (ins StrAttr:$fnName, Variadic<AnyType>:$args);
+  let results = (outs AnyType:$out);
+
+  let assemblyFormat = "$fnName `(` $args `)` attr-dict `:` functional-type($args, $out)";
+}
+
+
+def VerbatimExprOp : SVOp<"verbatim.expr", [Pure, HasCustomSSAName]> {
   let summary = "Expression that expands to a value given SystemVerilog text";
   let description = [{
     This operation produces a typed value expressed by a string of
@@ -30,24 +48,24 @@ def VerbatimExprOp : SVOp<"verbatim.expr", [NoSideEffect, HasCustomSSAName]> {
     sv.verbatim.expr allows operand substitutions with {{0}} syntax.
     }];
 
-  let arguments = (ins StrAttr:$string, Variadic<AnyType>:$operands,
+  let arguments = (ins StrAttr:$format_string, Variadic<AnyType>:$substitutions,
                   DefaultValuedAttr<NameRefArrayAttr,"{}">:$symbols);
   let results = (outs HWValueOrInOutType:$result);
   let assemblyFormat = [{
-    $string (`(` $operands^ `)`)?
-      `:` functional-type($operands, $result) attr-dict
+    $format_string (`(` $substitutions^ `)`)?
+      `:` functional-type($substitutions, $result) attr-dict
   }];
 
   let builders = [
-    OpBuilder<(ins "Type":$resultType, "Twine":$string,
-                CArg<"ValueRange", "{}">:$operands),
+    OpBuilder<(ins "Type":$resultType, "Twine":$formatString,
+                CArg<"ValueRange", "{}">:$substitutions),
                "build(odsBuilder, odsState, resultType, "
-               "odsBuilder.getStringAttr(string), operands,"
+               "odsBuilder.getStringAttr(formatString), substitutions,"
                "odsBuilder.getArrayAttr({}));">,
-    OpBuilder<(ins "Type":$resultType, "StringAttr":$string,
-                CArg<"ValueRange", "{}">:$operands),
+    OpBuilder<(ins "Type":$resultType, "StringAttr":$formatString,
+                CArg<"ValueRange", "{}">:$substitutions),
                "build(odsBuilder, odsState, resultType, "
-               "string, operands,"
+               "formatString, substitutions,"
                "odsBuilder.getArrayAttr({}));">
   ];
 }
@@ -66,23 +84,24 @@ def VerbatimExprSEOp : SVOp<"verbatim.expr.se", [HasCustomSSAName]> {
     sv.verbatim.se.expr allows operand substitutions with {{0}} syntax.
     }];
 
-  let arguments = (ins StrAttr:$string, Variadic<AnyType>:$operands,
+  let arguments = (ins StrAttr:$format_string, Variadic<AnyType>:$substitutions,
                  DefaultValuedAttr<NameRefArrayAttr,"{}">:$symbols );
   let results = (outs HWValueOrInOutType:$result);
   let assemblyFormat = [{
-    $string (`(` $operands^ `)`)?
-      `:` functional-type($operands, $result) attr-dict
+    $format_string (`(` $substitutions^ `)`)?
+      `:` functional-type($substitutions, $result) attr-dict
   }];
 
   let builders = [
-    OpBuilder<(ins "Type":$resultType, "Twine":$string),
+    OpBuilder<(ins "Type":$resultType, "Twine":$formatString),
                "build(odsBuilder, odsState, resultType, "
-               "odsBuilder.getStringAttr(string), ValueRange{},"
+               "odsBuilder.getStringAttr(formatString), ValueRange{},"
                "odsBuilder.getArrayAttr({}));">
   ];
 }
 
-def MacroRefExprOp : SVOp<"macro.ref", [NoSideEffect, HasCustomSSAName]> {
+def MacroRefExprOp : SVOp<"macro.ref", [Pure, HasCustomSSAName,
+        DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "Expression to refer to a SystemVerilog macro";
   let description = [{
     This operation produces a value by referencing a named macro.
@@ -92,20 +111,50 @@ def MacroRefExprOp : SVOp<"macro.ref", [NoSideEffect, HasCustomSSAName]> {
     and emitted inline by the Verilog emitter.
     }];
 
-  let arguments = (ins MacroIdentAttr:$ident);
+  let arguments = (ins FlatSymbolRefAttr:$macroName, Variadic<AnyType>:$inputs);
   let results = (outs HWValueOrInOutType:$result);
 
-  let assemblyFormat = "`<` $ident `>` attr-dict `:` qualified(type($result))";
+  let assemblyFormat = "$macroName `(` $inputs `)` attr-dict `:` functional-type($inputs, $result)";
 
   let builders = [
     OpBuilder<(ins "Type":$resultType, "StringRef":$ident),
                "build(odsBuilder, odsState, resultType, "
-                 "::circt::sv::MacroIdentAttr::get("
-                   "$_builder.getContext(), ident));">
+                "FlatSymbolRefAttr::get($_builder.getContext(), ident), {});">
   ];
+
+  let extraClassDeclaration = [{
+    MacroDeclOp getReferencedMacro(const hw::HWSymbolCache *cache);
+  }];
 }
 
-def ConstantXOp : SVOp<"constantX", [NoSideEffect, HasCustomSSAName]> {
+def MacroRefExprSEOp : SVOp<"macro.ref.se", [HasCustomSSAName,
+        DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
+  let summary = "Expression to refer to a SystemVerilog macro";
+  let description = [{
+    This operation produces a value by referencing a named macro.
+
+    Presently, it is assumed that the referenced macro is not constant and has
+    side effects.  This expression is not subject to CSE.  It can not be
+    duplicated, but can be emitted inline by the Verilog emitter.
+    }];
+
+  let arguments = (ins FlatSymbolRefAttr:$macroName, Variadic<AnyType>:$inputs);
+  let results = (outs HWValueOrInOutType:$result);
+
+  let assemblyFormat = "$macroName `(` $inputs `)` attr-dict `:` functional-type($inputs, $result)";
+
+  let builders = [
+    OpBuilder<(ins "Type":$resultType, "StringRef":$ident),
+               "build(odsBuilder, odsState, resultType, "
+                "FlatSymbolRefAttr::get($_builder.getContext(), ident), {});">
+  ];
+
+  let extraClassDeclaration = [{
+    MacroDeclOp getReferencedMacro(const hw::HWSymbolCache *cache);
+  }];
+}
+
+def ConstantXOp : SVOp<"constantX", [Pure, HasCustomSSAName]> {
   let summary = "A constant of value 'x'";
   let description = [{
     This operation produces a constant value of 'x'.  This 'x' follows the
@@ -123,7 +172,7 @@ def ConstantXOp : SVOp<"constantX", [NoSideEffect, HasCustomSSAName]> {
   }];
 }
 
-def ConstantZOp : SVOp<"constantZ", [NoSideEffect, HasCustomSSAName]> {
+def ConstantZOp : SVOp<"constantZ", [Pure, HasCustomSSAName]> {
   let summary = "A constant of value 'z'";
   let description = [{
     This operation produces a constant value of 'z'.  This 'z' follows the
@@ -141,8 +190,19 @@ def ConstantZOp : SVOp<"constantZ", [NoSideEffect, HasCustomSSAName]> {
   }];
 }
 
+def ConstantStrOp : SVOp<"constantStr", [Pure]> {
+  let summary = "A constant of string value";
+  let description = [{
+    This operation produces a constant string literal.
+    }];
+
+  let arguments = (ins StrAttr:$str);
+  let results = (outs HWStringType:$result);
+  let assemblyFormat = " $str attr-dict";
+}
+
 def LocalParamOp : SVOp<"localparam",
-      [FirstAttrDerivedResultType, NoSideEffect, HasCustomSSAName]> {
+      [FirstAttrDerivedResultType, Pure, HasCustomSSAName]> {
   let summary = "Declare a localparam";
   let description = [{
     The localparam operation produces a `localparam` declaration. See SV spec
@@ -153,7 +213,7 @@ def LocalParamOp : SVOp<"localparam",
   let results = (outs HWValueType:$result);
 
   let assemblyFormat = [{
-    `:` qualified(type($result)) custom<ImplicitSSAName>(attr-dict)
+    `` custom<ImplicitSSAName>($name) attr-dict `:` qualified(type($result))
   }];
 
   let hasVerifier = 1;
@@ -161,7 +221,7 @@ def LocalParamOp : SVOp<"localparam",
 
 def IndexedPartSelectOp
  : SVOp<"indexed_part_select",
-        [NoSideEffect, InferTypeOpInterface]> {
+        [Pure, InferTypeOpInterface]> {
   let summary = "Read several contiguous bits of an int type."
                 "This is an indexed part-select operator."
                 "The base is an integer expression and the width is an "
@@ -173,19 +233,15 @@ def IndexedPartSelectOp
                       UnitAttr:$decrement);
   let results = (outs HWIntegerType:$result);
 
-  let builders = [
-    OpBuilder<(ins "Value":$input, "Value":$base, "int32_t":$width,
-                                                CArg<"bool", "false">:$decrement)>
-  ];
-
   let hasVerifier = 1;
 
   let extraClassDeclaration = [{
     /// Infer the return types of this operation.
     static LogicalResult inferReturnTypes(MLIRContext *context,
-                                          Optional<Location> loc,
+                                          std::optional<Location> loc,
                                           ValueRange operands,
                                           DictionaryAttr attrs,
+                                          mlir::OpaqueProperties properties,
                                           mlir::RegionRange regions,
                                           SmallVectorImpl<Type> &results);
   }];
@@ -194,7 +250,7 @@ def IndexedPartSelectOp
                         " attr-dict `:` qualified(type($input)) `,` qualified(type($base))";
 }
 
-def SampledOp : SVOp<"system.sampled", [SameOperandsAndResultType]> {
+def SampledOp : SVOp<"system.sampled", [Pure, SameOperandsAndResultType]> {
   let summary = "`$sampled` system function to sample a value";
   let description = [{
     Sample a value using System Verilog sampling semantics (see Section 16.5.1

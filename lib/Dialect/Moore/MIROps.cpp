@@ -20,12 +20,10 @@ using namespace circt::moore;
 // Type Inference
 //===----------------------------------------------------------------------===//
 
-LogicalResult ConcatOp::inferReturnTypes(MLIRContext *context,
-                                         Optional<Location> loc,
-                                         ValueRange operands,
-                                         DictionaryAttr attrs,
-                                         mlir::RegionRange regions,
-                                         SmallVectorImpl<Type> &results) {
+LogicalResult ConcatOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
+    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   Domain domain = Domain::TwoValued;
   unsigned size = 0;
   for (auto operand : operands) {
@@ -63,4 +61,3 @@ static void printLValueType(OpAsmPrinter &p, Operation *, Type lValueType) {
 #define GET_OP_CLASSES
 #include "circt/Dialect/Moore/Moore.cpp.inc"
 #include "circt/Dialect/Moore/MooreEnums.cpp.inc"
-#include "circt/Dialect/Moore/MooreStructs.cpp.inc"

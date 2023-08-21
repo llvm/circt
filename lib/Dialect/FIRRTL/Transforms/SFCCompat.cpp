@@ -19,6 +19,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -55,15 +56,16 @@ void SFCCompatPass::runOnOperation() {
 
     // If the `RegResetOp` has an invalidated initialization, then replace it
     // with a `RegOp`.
-    if (isModuleScopedDrivenBy<InvalidValueOp>(reg.resetValue(), true, false,
-                                               false)) {
-      LLVM_DEBUG(llvm::dbgs() << "  - RegResetOp '" << reg.name()
-                              << "' will be replaced with a RegOp\n");
+    if (walkDrivers(reg.getResetValue(), true, false, false,
+                    [](FieldRef dst, FieldRef src) {
+                      return src.isa<InvalidValueOp>();
+                    })) {
       ImplicitLocOpBuilder builder(reg.getLoc(), reg);
-      RegOp newReg =
-          builder.create<RegOp>(reg.getType(), reg.clockVal(), reg.name(),
-                                reg.annotations(), reg.inner_symAttr());
-      reg.replaceAllUsesWith(newReg.getResult());
+      RegOp newReg = builder.create<RegOp>(
+          reg.getResult().getType(), reg.getClockVal(), reg.getNameAttr(),
+          reg.getNameKindAttr(), reg.getAnnotationsAttr(),
+          reg.getInnerSymAttr(), reg.getForceableAttr());
+      reg.replaceAllUsesWith(newReg);
       reg.erase();
       madeModifications = true;
       continue;
@@ -72,28 +74,42 @@ void SFCCompatPass::runOnOperation() {
     // If the `RegResetOp` has an asynchronous reset and the reset value is not
     // a module-scoped constant when looking through wires and nodes, then
     // generate an error.  This implements the SFC's CheckResets pass.
-    if (!reg.resetSignal().getType().isa<AsyncResetType>())
+    if (!isa<AsyncResetType>(reg.getResetSignal().getType()))
       continue;
-    if (isModuleScopedDrivenBy<ConstantOp, InvalidValueOp, SpecialConstantOp>(
-            reg.resetValue(), true, true, true))
+    if (walkDrivers(
+            reg.getResetValue(), true, true, true,
+            [&](FieldRef dst, FieldRef src) {
+              if (src.isa<ConstantOp, InvalidValueOp, SpecialConstantOp>())
+                return true;
+              auto diag = emitError(reg.getLoc());
+              auto [fieldName, rootKnown] = getFieldName(dst);
+              diag << "register " << reg.getNameAttr()
+                   << " has an async reset, but its reset value";
+              if (rootKnown)
+                diag << " \"" << fieldName << "\"";
+              diag << " is not driven with a constant value through wires, "
+                      "nodes, or connects";
+              std::tie(fieldName, rootKnown) = getFieldName(src);
+              diag.attachNote(src.getLoc())
+                  << "reset driver is "
+                  << (rootKnown ? ("\"" + fieldName + "\"") : "here");
+              return false;
+            }))
       continue;
-    auto resetDriver =
-        getModuleScopedDriver(reg.resetValue(), true, true, true);
-    auto diag = reg.emitOpError()
-                << "has an async reset, but its reset value is not driven with "
-                   "a constant value through wires, nodes, or connects";
-    diag.attachNote(resetDriver.getLoc()) << "reset driver is here";
     return signalPassFailure();
   }
 
   // Convert all invalid values to zero.
   for (auto inv : invalidOps) {
-    // Skip invalids which have no uses.
-    if (inv->getUses().empty())
+    // Delete invalids which have no uses.
+    if (inv->getUses().empty()) {
+      inv->erase();
+      madeModifications = true;
       continue;
+    }
     ImplicitLocOpBuilder builder(inv.getLoc(), inv);
     Value replacement =
-        TypeSwitch<FIRRTLType, Value>(inv.getType())
+        FIRRTLTypeSwitch<FIRRTLType, Value>(inv.getType())
             .Case<ClockType, AsyncResetType, ResetType>(
                 [&](auto type) -> Value {
                   return builder.create<SpecialConstantOp>(

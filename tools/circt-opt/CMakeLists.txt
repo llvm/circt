@@ -1,59 +1,94 @@
 set(LLVM_LINK_COMPONENTS
   Support
-  )
+)
 
-add_llvm_tool(circt-opt
- circt-opt.cpp
+add_circt_tool(circt-opt
+  circt-opt.cpp
 )
 llvm_update_compile_flags(circt-opt)
 target_link_libraries(circt-opt
   PRIVATE
-  CIRCTAffineToStaticLogic
+  CIRCTAffineToLoopSchedule
   CIRCTAnalysisTestPasses
+  CIRCTArc
+  CIRCTArcToLLVM
+  CIRCTArcTransforms
   CIRCTCalyx
   CIRCTCalyxToHW
+  CIRCTCalyxToFSM
   CIRCTCalyxTransforms
+  CIRCTComb
+  CIRCTCombTransforms
+  CIRCTConvertToArcs
+  CIRCTDC
+  CIRCTDCToHW
+  CIRCTDCTransforms
   CIRCTESI
+  CIRCTExportChiselInterface
   CIRCTExportVerilog
   CIRCTFIRRTL
   CIRCTFIRRTLToHW
   CIRCTFIRRTLTransforms
   CIRCTFSM
   CIRCTFSMTransforms
+  CIRCTFSMToSV
   CIRCTHandshake
-  CIRCTHandshakeToFIRRTL
+  CIRCTHandshakeToDC
   CIRCTHandshakeToHW
   CIRCTHandshakeTransforms
   CIRCTLLHD
   CIRCTLLHDToLLVM
+  CIRCTHWToLLVM
+  CIRCTCombToArith
+  CIRCTCombToLLVM
   CIRCTLLHDTransforms
   CIRCTMoore
   CIRCTMooreToCore
   CIRCTMSFT
+  CIRCTMSFTTransforms
   CIRCTHW
+  CIRCTHWArith
+  CIRCTHWArithToHW
+  CIRCTIbis
+  CIRCTIbisTransforms
+  CIRCTInteropDialect
   CIRCTHWToLLHD
+  CIRCTHWToSystemC
+  CIRCTHWToSV
   CIRCTHWTransforms
+  CIRCTLoopSchedule
+  CIRCTLoopScheduleToCalyx
+  CIRCTLTL
   CIRCTSCFToCalyx
   CIRCTScheduling
-  CIRCTSchedulingTestPasses
   CIRCTSeq
   CIRCTSeqTransforms
+  CIRCTSSP
+  CIRCTSSPTransforms
   CIRCTStandardToHandshake
-  CIRCTStandardToStaticLogic
-  CIRCTStaticLogicOps
-  CIRCTStaticLogicToCalyx
+  CIRCTOM
+  CIRCTOMTransforms
+  CIRCTPipelineOps
+  CIRCTPipelineToHW
+  CIRCTPipelineTransforms
   CIRCTSV
   CIRCTSVTransforms
+  CIRCTHWArith
+  CIRCTSystemC
+  CIRCTSystemCTransforms
   CIRCTTransforms
+  CIRCTVerif
+  CIRCTVerifToSV
 
-  
   MLIRIR
-  MLIRLLVMIR
-  MLIRMemRef
+  MLIRLLVMDialect
+  MLIRMemRefDialect
   MLIROptLib
   MLIRParser
-  MLIRFunc
+  MLIRFuncDialect
   MLIRSupport
   MLIRTransforms
-  MLIRSCF
-  )
+  MLIRSCFDialect
+  MLIREmitCDialect
+  MLIRFuncInlinerExtension
+)

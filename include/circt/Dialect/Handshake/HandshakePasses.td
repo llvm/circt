@@ -62,6 +62,22 @@ def HandshakeRemoveBuffers : Pass<"handshake-remove-buffers", "handshake::FuncOp
   let constructor = "circt::handshake::createHandshakeRemoveBuffersPass()";
 }
 
+def HandshakeLowerExtmemToHW : Pass<"handshake-lower-extmem-to-hw", "mlir::ModuleOp"> {
+  let summary = "Lowers handshake.extmem and memref inputs to ports.";
+  let description = [{
+    Lowers handshake.extmem and memref inputs to a hardware-targeting
+    memory accessing scheme (explicit load- and store ports on the top
+    level interface).
+  }];
+  let constructor = "circt::handshake::createHandshakeLowerExtmemToHWPass()";
+  let dependentDialects = ["circt::hw::HWDialect", "circt::esi::ESIDialect",
+    "circt::comb::CombDialect", "mlir::arith::ArithDialect"];
+  let options = [
+    Option<"createESIWrapper", "wrap-esi", "bool", "false",
+      "Create an ESI wrapper for the module. Any extmem will be served by an esi.mem.ram service">,
+   ];
+}
+
 def HandshakeAddIDs : Pass<"handshake-add-ids", "handshake::FuncOp"> {
   let summary = "Add an ID to each operation in a handshake function.";
   let description = [{
@@ -85,6 +101,26 @@ def HandshakeInsertBuffers
     Option<"bufferSize", "buffer-size", "unsigned", /*default=*/"2",
            "Number of slots in each buffer">,
   ];
+}
+
+def HandshakeLockFunctions : Pass<"handshake-lock-functions", "handshake::FuncOp"> {
+  let summary = "Lock each function to only allow single invocations.";
+  let description = [{
+    This pass adds a locking mechanism to each handshake function. This mechanism
+    ensures that only one control token can be active in a function at each point
+    in time.
+  }];
+  let constructor = "circt::handshake::createHandshakeLockFunctionsPass()";
+}
+
+def HandshakeLegalizeMemrefs : Pass<"handshake-legalize-memrefs", "mlir::func::FuncOp"> {
+  let summary = "Memref legalization and lowering pass.";
+  let description = [{
+    Lowers various memref operations to a state suitable for passing to the
+    StandardToHandshake lowering.
+  }];
+  let constructor = "circt::handshake::createHandshakeLegalizeMemrefsPass()";
+  let dependentDialects = ["mlir::scf::SCFDialect"];
 }
 
 #endif // CIRCT_DIALECT_HANDSHAKE_HANDSHAKEPASSES_TD

@@ -51,8 +51,8 @@ void llhd::TemporalRegionAnalysis::recalculate(Operation *operation) {
 
   // Add the entry block and all blocks targeted by a wait terminator to the
   // initial work queue because they are always the entry block of a new TR
-  workQueue.insert(&proc.body().front());
-  proc.walk([&](WaitOp wait) { workQueue.insert(wait.dest()); });
+  workQueue.insert(&proc.getBody().front());
+  proc.walk([&](WaitOp wait) { workQueue.insert(wait.getDest()); });
 
   while (!workQueue.empty()) {
     // Find basic block in the work queue which has all predecessors already

@@ -74,11 +74,11 @@ public:
   std::string getStringValue() const;
   static std::string getStringValue(StringRef spelling);
 
-  /// Given a token containing a raw string, return its value, including removing
-  /// the quote characters and unescaping the quotes of the string. The lexer has
-  /// already verified that this token is valid.
-  std::string getRawStringValue() const;
-  static std::string getRawStringValue(StringRef spelling);
+  /// Given a token containing a verbatim string, return its value, including
+  /// removing the quote characters and unescaping the quotes of the string. The
+  /// lexer has already verified that this token is valid.
+  std::string getVerbatimStringValue() const;
+  static std::string getVerbatimStringValue(StringRef spelling);
 
   // Location processing.
   llvm::SMLoc getLoc() const;
@@ -112,7 +112,7 @@ public:
 
   /// Return the indentation level of the specified token or None if this token
   /// is preceded by another token on the same line.
-  Optional<unsigned> getIndentation(const FIRToken &tok) const;
+  std::optional<unsigned> getIndentation(const FIRToken &tok) const;
 
   /// Get an opaque pointer into the lexer state that can be restored later.
   FIRLexerCursor getCursor() const;
@@ -132,12 +132,10 @@ private:
   FIRToken lexInlineAnnotation(const char *tokStart);
   FIRToken lexIdentifierOrKeyword(const char *tokStart);
   FIRToken lexNumber(const char *tokStart);
-  FIRToken lexFloatingPoint(const char *tokStart);
   void skipComment();
-  FIRToken lexString(const char *tokStart, bool isRaw);
+  FIRToken lexString(const char *tokStart, bool isVerbatim);
 
   const llvm::SourceMgr &sourceMgr;
-  mlir::MLIRContext *const context;
   const mlir::StringAttr bufferNameIdentifier;
 
   StringRef curBuffer;

@@ -15,7 +15,7 @@ module attributes {circt.loweringOptions = "badOption,anotherOne"} {}
 hw.module.extern @A<width: none> ()
 
 hw.module @B() {
-  // expected-error @+1 {{op invalid parameter value @Foo}}
+  // expected-error @+1 {{should have a typed value; has value @Foo}}
   hw.instance "foo" @A<width: none = @Foo>() -> ()
 }
 

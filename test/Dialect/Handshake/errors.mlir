@@ -10,7 +10,7 @@ handshake.func @invalid_merge_like_wrong_type(%arg0: i1, %arg1: i32, %arg2: i64)
 // -----
 
 handshake.func @invalid_mux_unsupported_select(%arg0: tensor<i1>, %arg1: i32, %arg2: i32) {
-  // expected-error @+1 {{unsupported type for select operand: 'tensor<i1>'}}
+  // expected-error @+1 {{unsupported type for indexing value: 'tensor<i1>'}}
   %0 = mux %arg0 [%arg1, %arg2] : tensor<i1>, i32
   return %0 : i32
 }
@@ -18,21 +18,25 @@ handshake.func @invalid_mux_unsupported_select(%arg0: tensor<i1>, %arg1: i32, %a
 // -----
 
 handshake.func @invalid_mux_narrow_select(%arg0: i1, %arg1: i32, %arg2: i32, %arg3: i32) {
-  // expected-error @+1 {{select bitwidth was 1, which can mux 2 operands, but found 3 operands}}
+  // expected-error @+1 {{bitwidth of indexing value is 1, which can index into 2 operands, but found 3 operands}}
   %0 = mux %arg0 [%arg1, %arg2, %arg3] : i1, i32
   return %0 : i32
 }
 
 // -----
 
-handshake.func @foo(%ctrl : none) -> none{
-  return %ctrl : none
+handshake.func @invalid_cmerge_unsupported_index(%arg1: i32, %arg2: i32) -> tensor<i1> {
+  // expected-error @below {{unsupported type for indexing value: 'tensor<i1>'}}
+  %result, %index = control_merge %arg1, %arg2 : i32, tensor<i1>
+  return %index : tensor<i1>
 }
 
-handshake.func @invalid_instance_op(%arg0 : i32, %ctrl : none) -> none {
-  // expected-error @+1 {{'handshake.instance' op last operand must be a control (none-typed) operand.}}
-  instance @foo(%ctrl, %arg0) : (none, i32) -> ()
-  return %ctrl : none
+// -----
+
+handshake.func @invalid_cmerge_narrow_index(%arg1: i32, %arg2: i32, %arg3: i32) -> i1 {
+  // expected-error @below {{bitwidth of indexing value is 1, which can index into 2 operands, but found 3 operands}}
+  %result, %index = control_merge %arg1, %arg2, %arg3 : i32, i1
+  return %index : i1
 }
 
 // -----
@@ -87,18 +91,6 @@ handshake.func @invalid_instance_op(%arg0 : i32, %ctrl : none) -> none {
 
 // -----
 
-handshake.func @foo(%ctrl : none) -> none{
-  return %ctrl : none
-}
-
-handshake.func @invalid_instance_op(%ctrl : none) -> none {
-  // expected-error @+1 {{'handshake.instance' op must provide at least a control operand.}}
-  instance @foo() : () -> ()
-  return %ctrl : none
-}
-
-// -----
-
 func.func @foo() {
   return
 }
@@ -114,6 +106,14 @@ handshake.func @invalid_instance_op(%ctrl : none) -> none {
 handshake.func @invalid_multidim_memory(%ctrl : none) -> none {
   // expected-error @+1 {{'handshake.memory' op memref must have only a single dimension.}}
   memory [ld = 0, st = 0] () {id = 0 : i32, lsq = false} : memref<10x10xi8>, () -> ()
+  return %ctrl : none
+}
+
+// -----
+
+handshake.func @invalid_missing_lsq(%ctrl : none) -> none {
+  // expected-error @+1 {{'handshake.memory' op requires attribute 'lsq'}}
+  memory [ld = 0, st = 0] () {id = 0 : i32} : memref<10xi8>, () -> ()
   return %ctrl : none
 }
 
@@ -156,7 +156,7 @@ handshake.func @invalid_type_resnames(%a : i32, %b : none) -> none attributes {r
 // -----
 
 handshake.func @invalid_constant_value(%ctrl : none) -> none {
-  // expected-error @+1 {{'handshake.constant' op constant value type differs from operation result type.}}
+  // expected-error @+1 {{'handshake.constant' op constant value type 'i31' differs from operation result type 'i32'}}
   %0 = constant %ctrl {value = 1 : i31} : i32
   return %ctrl : none
 }
@@ -235,3 +235,27 @@ handshake.func @invalid_pack_wrong_types(%arg0 : i64, %arg1 : i32, %ctrl : none)
   %0 = handshake.pack %arg0, %arg1 : i64, i32
   return %0, %ctrl : tuple<i64, i32>, none
 }
+
+// -----
+
+handshake.func @invalid_memref_block_arg(%arg0 : memref<2xi64>, %ctrl : none) -> none {
+  // expected-error @-1 {{'handshake.func' op expected that block argument #0 is used by an 'extmemory' operation}}
+  return %ctrl : none
+}
+
+// -----
+
+handshake.func @invalid_sost_op_zero_size(%ctrl : none) -> (none, none) {
+  // expected-error @+1 {{'handshake.merge' op must have at least one data operand}}
+  %0 = merge : none
+  return %0, %ctrl : none, none
+}
+
+// -----
+
+handshake.func @invalid_sost_op_wrong_operands(%arg0 : i64, %arg1 : i32, %ctrl : none) -> (i64, none) { // expected-note {{prior use here}}
+  // expected-error @+1 {{use of value '%arg1' expects different type than prior uses: 'i64' vs 'i32'}}
+  %0, %1 = control_merge %arg0, %arg1 : i64, index
+  return %0, %ctrl : i64, none
+}
+

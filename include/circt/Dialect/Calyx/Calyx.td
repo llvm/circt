@@ -36,6 +36,8 @@ def CalyxDialect : Dialect {
     /// Register all Calyx attributes.
     void registerAttributes();
   }];
+  // Depends on the HWDialect to support external primitives using hw.module.extern
+  let dependentDialects = ["circt::hw::HWDialect"];
   let cppNamespace = "::circt::calyx";
 }
 
@@ -64,15 +66,16 @@ class CalyxContainer<string mnemonic, list<Trait> traits = []> :
   ])> {
   let assemblyFormat = "$body attr-dict";
   let regions = (region SizedRegion<1>: $body);
-
-  let extraClassDeclaration = [{
+  
+  code commonClassDeclaration = [{
     /// Returns the body of a Calyx container.
-    Block *getBody() {
+    Block *getBodyBlock() {
       Region* region = &getOperation()->getRegion(0);
       assert(region->hasOneBlock() && "The body should have one Block.");
       return &region->front();
     }
   }];
+  let extraClassDeclaration = commonClassDeclaration;
 }
 
 /// Base class for ports associated with a Calyx GroupOp.

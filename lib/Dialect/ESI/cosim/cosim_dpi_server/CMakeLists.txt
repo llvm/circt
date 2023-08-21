@@ -5,6 +5,13 @@
 ##===----------------------------------------------------------------------===//
 
 if(ESI_COSIM)
+  if (MSVC)
+    string(REPLACE "/EHs-c-" "" CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHa")
+  else ()
+    string(REPLACE "-fno-exceptions" "" CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
+  endif ()
+
   add_library(EsiCosimDpiServer SHARED
     DpiEntryPoints.cpp
     Server.cpp
@@ -14,7 +21,7 @@ if(ESI_COSIM)
       PROPERTIES
           LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
           RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
-	  CXX_VISIBILITY_PRESET "default"
+          CXX_VISIBILITY_PRESET "default"
   )
   add_dependencies(EsiCosimDpiServer EsiCosimCapnp MtiPli)
   target_link_libraries(EsiCosimDpiServer PRIVATE

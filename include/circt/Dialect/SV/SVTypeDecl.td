@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "circt/Dialect/HW/HWOpInterfaces.td"
 include "mlir/IR/EnumAttr.td"
 
 //===----------------------------------------------------------------------===//
@@ -37,12 +38,13 @@ def InterfaceOp : SVOp<"interface",
   }];
 
   let arguments = (ins
-    SymbolNameAttr:$sym_name
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<StrAttr>:$comment
   );
 
   let regions = (region SizedRegion<1>:$body);
 
-  let assemblyFormat = "attr-dict $sym_name $body";
+  let assemblyFormat = "$sym_name attr-dict-with-keyword $body";
 
   let skipDefaultBuilders = 1;
   let builders = [
@@ -51,12 +53,12 @@ def InterfaceOp : SVOp<"interface",
   ];
 
   let extraClassDeclaration = [{
-    Block *getBodyBlock() { return &body().front(); }
+    Block *getBodyBlock() { return &getBody().front(); }
 
     ModportType getModportType(::llvm::StringRef);
     InterfaceType getInterfaceType() {
       return InterfaceType::get(getContext(),
-        ::mlir::SymbolRefAttr::get(getContext(), sym_name()));
+        ::mlir::SymbolRefAttr::get(getContext(), getSymName()));
     }
     Type getSignalType(StringRef signalName);
 
@@ -116,19 +118,30 @@ def ModportDirection : I32EnumAttr<"ModportDirection",
   "Defines direction in a modport",
   [ModportDirectionInput, ModportDirectionOutput, ModportDirectionInOut]> {
   let genSpecializedAttr = 0;
+  let cppNamespace = "::circt::sv";
 }
 
 def ModportDirectionAttr : EnumAttr<SVDialect, ModportDirection,
   "modport_direction">;
 
-def ModportDirectionField : StructFieldAttr<"direction", ModportDirectionAttr>;
+class SV_Attr<string attrName, string attrMnemonic, list<Trait> traits = []>
+    : AttrDef<SVDialect, attrName, traits> {
+  let mnemonic = attrMnemonic;
+}
 
-def ModportSignalField : StructFieldAttr<"signal", FlatSymbolRefAttr>;
+def ModportStruct : SV_Attr<"ModportStruct", "mod_port"> {
+  let parameters = (ins
+                    "::circt::sv::ModportDirectionAttr":$direction,
+                    "mlir::FlatSymbolRefAttr":$signal);
 
-def ModportStructAttr : StructAttr<"ModportStructAttr", SVDialect,
-  [ModportDirectionField, ModportSignalField]>;
+  let assemblyFormat = "`<` struct(params) `>`";
 
-def ModportStructArrayAttr : TypedArrayAttrBase<ModportStructAttr,
+  let builders = [
+    AttrOrTypeBuilder<(ins "ModportDirection":$dir, "mlir::FlatSymbolRefAttr":$sig)>
+  ];
+}
+
+def ModportStructArrayAttr : TypedArrayAttrBase<ModportStruct,
   "array of modport structs">;
 
 def InterfaceModportOp : SVOp<"interface.modport",
@@ -197,7 +210,10 @@ def ModportType : SVType<"Modport"> {
 // Other operations
 //===----------------------------------------------------------------------===//
 
-def InterfaceInstanceOp : SVOp<"interface.instance"> {
+def InterfaceInstanceOp : SVOp<"interface.instance", [
+      HasCustomSSAName,
+      DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>
+    ]> {
   let summary = "Instantiate an interface";
   let description = [{
     Use this to declare an instance of an interface:
@@ -207,17 +223,17 @@ def InterfaceInstanceOp : SVOp<"interface.instance"> {
   }];
 
   let arguments = (ins StrAttr:$name,
-                       OptionalAttr<SymbolNameAttr>:$inner_sym);
+                       OptionalAttr<InnerSymAttr>:$inner_sym);
   let results = (outs InterfaceType : $result);
 
   let assemblyFormat = [{
-    (`sym` $inner_sym^)? custom<ImplicitSSAName>(attr-dict)
+    (`sym` $inner_sym^)? `` custom<ImplicitSSAName>($name) attr-dict
     `:` qualified(type($result))
   }];
 
   let builders = [
     OpBuilder<(ins "::mlir::Type":$result), [{
-      return build($_builder, $_state, result, None);
+      return build($_builder, $_state, result, std::nullopt);
     }]>
   ];
 
@@ -241,7 +257,7 @@ def InterfaceInstanceOp : SVOp<"interface.instance"> {
   }];
 }
 
-def GetModportOp: SVOp<"modport.get", [NoSideEffect]> {
+def GetModportOp: SVOp<"modport.get", [Pure]> {
   let summary = "Get a modport out of an interface instance";
   let description = [{
     Use this to extract a modport view to an instantiated interface. For
@@ -301,7 +317,7 @@ def AssignInterfaceSignalOp : SVOp<"interface.signal.assign", []> {
   let hasVerifier = 1;
 }
 
-def ReadInterfaceSignalOp : SVOp<"interface.signal.read", [NoSideEffect]> {
+def ReadInterfaceSignalOp : SVOp<"interface.signal.read", [Pure]> {
   let summary = "Access the data in an interface's signal.";
   let description = [{
     This is an expression to access a signal inside of an interface.

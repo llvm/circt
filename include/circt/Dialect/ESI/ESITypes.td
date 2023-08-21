@@ -7,9 +7,33 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// ESI will have a rich, high level type system. Currently, it is much more
-// minimal.
+// ESI extends the HW types by adding a List type.
 //
 //===----------------------------------------------------------------------===//
 
-class ESI_Type<string name> : TypeDef<ESI_Dialect, name> { }
+#ifndef CIRCT_DIALECT_ESI_TYPES_TD
+#define CIRCT_DIALECT_ESI_TYPES_TD
+
+include "circt/Dialect/ESI/ESIDialect.td"
+
+def ChannelType : DialectType<ESI_Dialect,
+    CPred<"isa<::circt::esi::ChannelType>($_self)">,
+    "an ESI channel",
+    "::circt::esi::ChannelType">;
+
+def ESIListType : ESI_Type<"List"> {
+  let summary = "a runtime-variably sized list";
+  let description = [{
+    In software, a chunk of memory with runtime-specified length. In hardware, a
+    stream of runtime-specified amount of data transmitted over many cycles in
+    compile-time specified specified windows (chunks).
+  }];
+
+  let mnemonic = "list";
+  let parameters = (ins "Type":$elementType);
+  let assemblyFormat = [{
+    `<` $elementType `>`
+  }];
+}
+
+#endif // CIRCT_DIALECT_ESI_TYPES_TD

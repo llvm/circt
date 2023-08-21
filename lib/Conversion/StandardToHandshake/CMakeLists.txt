@@ -1,8 +1,14 @@
 add_circt_library(CIRCTStandardToHandshake
   StandardToHandshake.cpp
+  InsertMergeBlocks.cpp
+  MaximizeSSA.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${MLIR_MAIN_INCLUDE_DIR}/mlir/Conversion/StandardToHandshake
+
+  DEPENDS
+  CIRCTConversionPassIncGen
+  MLIRArithDialect
 
   LINK_LIBS PUBLIC
   CIRCTHandshake
@@ -10,9 +16,9 @@ add_circt_library(CIRCTStandardToHandshake
   CIRCTSupport
   MLIRIR
   MLIRPass
-  MLIRArithmetic
-  MLIRControlFlow
-  MLIRFunc
+  MLIRArithDialect
+  MLIRControlFlowDialect
+  MLIRFuncDialect
   MLIRSupport
   MLIRTransforms
   MLIRAffineToStandard

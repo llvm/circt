@@ -15,36 +15,39 @@
 #ifndef CIRCT_DIALECT_HW_MODULEIMPLEMENTATION_H
 #define CIRCT_DIALECT_HW_MODULEIMPLEMENTATION_H
 
+#include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Support/LLVM.h"
-
 #include "mlir/IR/DialectImplementation.h"
 
 namespace circt {
 namespace hw {
 
 namespace module_like_impl {
-/// Get the portname from an SSA value string, if said value name is not a
-/// number.
-StringAttr getPortNameAttr(MLIRContext *context, StringRef name);
 
-/// This is a variant of mlor::parseFunctionSignature that allows names on
+struct PortParse : OpAsmParser::Argument {
+  ModulePort::Direction direction;
+};
+
+/// This is a variant of mlir::parseFunctionSignature that allows names on
 /// result arguments.
 ParseResult parseModuleFunctionSignature(
-    OpAsmParser &parser, SmallVectorImpl<OpAsmParser::Argument> &args,
-    bool &isVariadic, SmallVectorImpl<Type> &resultTypes,
+    OpAsmParser &parser, bool &isVariadic,
+    SmallVectorImpl<OpAsmParser::Argument> &args,
+    SmallVectorImpl<Attribute> &argNames, SmallVectorImpl<Attribute> &argLocs,
+    SmallVectorImpl<Attribute> &resultNames,
     SmallVectorImpl<DictionaryAttr> &resultAttrs,
-    SmallVectorImpl<Attribute> &resultNames);
-
-/// Parse a function result list with named results.
-ParseResult
-parseFunctionResultList(OpAsmParser &parser, SmallVectorImpl<Type> &resultTypes,
-                        SmallVectorImpl<DictionaryAttr> &resultAttrs,
-                        SmallVectorImpl<Attribute> &resultNames);
+    SmallVectorImpl<Attribute> &resultLocs, TypeAttr &type);
 
 /// Print a module signature with named results.
 void printModuleSignature(OpAsmPrinter &p, Operation *op,
                           ArrayRef<Type> argTypes, bool isVariadic,
                           ArrayRef<Type> resultTypes, bool &needArgNamesAttr);
+
+/// New Style parsing
+ParseResult parseModuleSignature(OpAsmParser &parser,
+                                 SmallVectorImpl<PortParse> &args,
+                                 TypeAttr &modType);
+void printModuleSignatureNew(OpAsmPrinter &p, Operation *op);
 
 } // namespace module_like_impl
 } // namespace hw

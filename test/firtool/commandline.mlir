@@ -2,6 +2,6 @@
 
 // CHECK: OVERVIEW: MLIR-based FIRRTL compiler
 // CHECK: General {{[Oo]}}ptions
-// CHECK: --lowering-options=
 // CHECK: Generic Options
 // CHECK: firtool Options
+// CHECK: --lowering-options=

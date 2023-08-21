@@ -3,6 +3,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt-c/Dialect/ESI.h"
+#include "circt/Dialect/ESI/ESIServices.h"
 #include "circt/Dialect/ESI/ESITypes.h"
 #include "mlir/CAPI/IR.h"
 #include "mlir/CAPI/Registration.h"
@@ -28,29 +29,42 @@ MlirLogicalResult circtESIExportCosimSchema(MlirModule module,
 }
 
 bool circtESITypeIsAChannelType(MlirType type) {
-  return unwrap(type).isa<ChannelPort>();
+  return unwrap(type).isa<ChannelType>();
 }
 
-MlirType circtESIChannelTypeGet(MlirType inner) {
+MlirType circtESIChannelTypeGet(MlirType inner, uint32_t signaling) {
+  auto signalEnum = symbolizeChannelSignaling(signaling);
+  if (!signalEnum)
+    return {};
   auto cppInner = unwrap(inner);
-  return wrap(ChannelPort::get(cppInner.getContext(), cppInner));
+  return wrap(ChannelType::get(cppInner.getContext(), cppInner, *signalEnum));
 }
 
 MlirType circtESIChannelGetInner(MlirType channelType) {
-  return wrap(unwrap(channelType).cast<ChannelPort>().getInner());
+  return wrap(unwrap(channelType).cast<ChannelType>().getInner());
+}
+uint32_t circtESIChannelGetSignaling(MlirType channelType) {
+  return (uint32_t)unwrap(channelType).cast<ChannelType>().getSignaling();
 }
 
-MlirOperation circtESIWrapModule(MlirOperation cModOp, long numPorts,
-                                 const MlirStringRef *ports) {
-  mlir::Operation *modOp = unwrap(cModOp);
-  llvm::SmallVector<llvm::StringRef, 8> portNamesRefs;
-  for (long i = 0; i < numPorts; ++i)
-    portNamesRefs.push_back(ports[i].data);
-  llvm::SmallVector<ESIPortValidReadyMapping, 8> portTriples;
-  resolvePortNames(modOp, portNamesRefs, portTriples);
-  mlir::OpBuilder b(modOp);
-  mlir::Operation *wrapper = buildESIWrapper(b, modOp, portTriples);
-  return wrap(wrapper);
+bool circtESITypeIsAnAnyType(MlirType type) {
+  return unwrap(type).isa<AnyType>();
+}
+MlirType circtESIAnyTypeGet(MlirContext ctxt) {
+  return wrap(AnyType::get(unwrap(ctxt)));
+}
+
+bool circtESITypeIsAListType(MlirType type) {
+  return unwrap(type).isa<ListType>();
+}
+
+MlirType circtESIListTypeGet(MlirType inner) {
+  auto cppInner = unwrap(inner);
+  return wrap(ListType::get(cppInner.getContext(), cppInner));
+}
+
+MlirType circtESIListTypeGetElementType(MlirType list) {
+  return wrap(unwrap(list).cast<ListType>().getElementType());
 }
 
 void circtESIAppendMlirFile(MlirModule cMod, MlirStringRef filename) {
@@ -68,4 +82,14 @@ void circtESIAppendMlirFile(MlirModule cMod, MlirStringRef filename) {
 }
 MlirOperation circtESILookup(MlirModule mod, MlirStringRef symbol) {
   return wrap(SymbolTable::lookupSymbolIn(unwrap(mod), unwrap(symbol)));
+}
+
+void circtESIRegisterGlobalServiceGenerator(
+    MlirStringRef impl_type, CirctESIServiceGeneratorFunc genFunc,
+    void *userData) {
+  ServiceGeneratorDispatcher::globalDispatcher().registerGenerator(
+      unwrap(impl_type), [genFunc, userData](ServiceImplementReqOp req,
+                                             ServiceDeclOpInterface decl) {
+        return unwrap(genFunc(wrap(req), wrap(decl.getOperation()), userData));
+      });
 }

@@ -1,4 +1,4 @@
-// RUN: circt-opt --pass-pipeline="firrtl.circuit(firrtl-prefix-modules)" %s | FileCheck %s
+// RUN: circt-opt --pass-pipeline="builtin.module(firrtl.circuit(firrtl-prefix-modules))" %s | FileCheck %s
 
 // Check that the circuit is updated when the main module is updated.
 // CHECK: firrtl.circuit "T_Top"
@@ -55,8 +55,14 @@ firrtl.circuit "Top" {
       prefix = "T_",
       inclusive = true
     }]} {
-    // CHECK: name = "T_ram"
-    %ram_ramport = firrtl.mem Undefined {depth = 256 : i64, name = "ram", portNames = ["ramport"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<8>, en: uint<1>, clk: clock, data flip: uint<1>>
+    // CHECK: firrtl.mem
+    // CHECK-SAME: name = "ram1"
+    // CHECK-SAME: prefix = "T_"
+    %ram1_r = firrtl.mem Undefined {depth = 256 : i64, name = "ram1", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<8>, en: uint<1>, clk: clock, data flip: uint<1>>
+    // CHECK: firrtl.mem
+    // CHECK-SAME: name = "ram2"
+    // CHECK-SAME: prefix = "T_foo_"
+    %ram2_r = firrtl.mem Undefined {depth = 256 : i64, name = "ram2", portNames = ["r"], prefix = "foo_", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<8>, en: uint<1>, clk: clock, data flip: uint<1>>
   }
 }
 
@@ -164,9 +170,9 @@ firrtl.circuit "Top" {
 }
 
 
-// Updates should be made to a Grand Central interface to add a "prefix" field
-// and the annotations associated with the parent and companion should have
-// their "name" field prefixed.
+// Updates should be made to a Grand Central interface to add a "prefix" field.
+// The annotatinos associated with the parent and companion should be
+// unmodified.
 // CHECK-LABEL: firrtl.circuit "GCTInterfacePrefix"
 // CHECK-SAME:    name = "MyView", prefix = "FOO_"
 firrtl.circuit "GCTInterfacePrefix"
@@ -177,7 +183,7 @@ firrtl.circuit "GCTInterfacePrefix"
     id = 0 : i64,
     name = "MyView"}]}  {
   // CHECK:      firrtl.module @FOO_MyView_companion
-  // CHECK-SAME:   name = "FOO_MyView"
+  // CHECK-SAME:   name = "MyView"
   firrtl.module @MyView_companion()
     attributes {annotations = [{
       class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
@@ -185,7 +191,7 @@ firrtl.circuit "GCTInterfacePrefix"
       name = "MyView",
       type = "companion"}]} {}
   // CHECK:      firrtl.module @FOO_DUT
-  // CHECK-SAME:   name = "FOO_MyView"
+  // CHECK-SAME:   name = "MyView"
   firrtl.module @DUT()
     attributes {annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation.parent",
@@ -205,10 +211,10 @@ firrtl.circuit "GCTInterfacePrefix"
 // CHECK: firrtl.circuit "T_NLATop"
 firrtl.circuit "NLATop" {
 
-  firrtl.nla @nla [@NLATop::@test, @Aardvark::@test, @Zebra]
-  firrtl.nla @nla_1 [@NLATop::@test,@Aardvark::@test_1, @Zebra]
-  // CHECK: firrtl.nla @nla [@T_NLATop::@test, @T_Aardvark::@test, @T_A_Z_Zebra]
-  // CHECK: firrtl.nla @nla_1 [@T_NLATop::@test, @T_Aardvark::@test_1, @T_A_Z_Zebra]
+  hw.hierpath private @nla [@NLATop::@test, @Aardvark::@test, @Zebra]
+  hw.hierpath private @nla_1 [@NLATop::@test,@Aardvark::@test_1, @Zebra]
+  // CHECK: hw.hierpath private @nla [@T_NLATop::@test, @T_Aardvark::@test, @T_A_Z_Zebra]
+  // CHECK: hw.hierpath private @nla_1 [@T_NLATop::@test, @T_Aardvark::@test_1, @T_A_Z_Zebra]
   // CHECK: firrtl.module @T_NLATop
   firrtl.module @NLATop()
     attributes {annotations = [{
@@ -254,7 +260,7 @@ firrtl.circuit "NLATop" {
 // completely untrodden territory for Grand Central.  However, the behavior here
 // is the exact same as how normal modules are cloned.)
 //
-// CHECK-LABLE: firrtl.circuit "GCTDataMemTapsPrefix"
+// CHECK-LABEL: firrtl.circuit "GCTDataMemTapsPrefix"
 firrtl.circuit "GCTDataMemTapsPrefix" {
   // CHECK:      firrtl.extmodule @FOO_DataTap
   // CHECK-SAME:   defname = "FOO_DataTap"
@@ -271,10 +277,11 @@ firrtl.circuit "GCTDataMemTapsPrefix" {
   // CHECK-SAME:   defname = "BAR_MemTap"
   firrtl.extmodule @MemTap(
     out mem: !firrtl.vector<uint<1>, 1>
-      [#firrtl.subAnno<fieldID = 1, {
+      [{
+        circt.fieldID = 1 : i32,
         class = "sifive.enterprise.grandcentral.MemTapAnnotation.port",
         id = 0 : i64,
-        word = 0 : i64}>])
+        word = 0 : i64}])
     attributes {defname = "MemTap"}
   // Module DUT has a "FOO_" prefix.
   firrtl.module @DUT()
@@ -302,56 +309,55 @@ firrtl.circuit "GCTDataMemTapsPrefix" {
   }
 }
 
-// Test the the NonLocalAnchor is properly updated.
+// Test the NonLocalAnchor is properly updated.
 // CHECK-LABEL: firrtl.circuit "FixNLA" {
-  firrtl.circuit "FixNLA"   {
-    firrtl.nla @nla_1 [@FixNLA::@bar, @Bar::@baz, @Baz]
-    // CHECK:   firrtl.nla @nla_1 [@FixNLA::@bar, @Bar::@baz, @Baz]
-    firrtl.nla @nla_2 [@FixNLA::@foo, @Foo::@bar, @Bar::@baz, @Baz::@s1]
-    // CHECK:   firrtl.nla @nla_2 [@FixNLA::@foo, @X_Foo::@bar, @X_Bar::@baz, @X_Baz::@s1]
-    firrtl.nla @nla_3 [@FixNLA::@bar, @Bar::@baz, @Baz]
-    // CHECK:   firrtl.nla @nla_3 [@FixNLA::@bar, @Bar::@baz, @Baz]
-    firrtl.nla @nla_4 [@Foo::@bar, @Bar::@baz, @Baz]
-    // CHECK:       firrtl.nla @nla_4 [@X_Foo::@bar, @X_Bar::@baz, @X_Baz]
-    // CHECK-LABEL: firrtl.module @FixNLA()
-    firrtl.module @FixNLA() {
-      firrtl.instance foo sym @foo  @Foo()
-      firrtl.instance bar sym @bar  @Bar()
-      // CHECK:   firrtl.instance foo sym @foo @X_Foo()
-      // CHECK:   firrtl.instance bar sym @bar @Bar()
-    }
-    firrtl.module @Foo() attributes {annotations = [{class = "sifive.enterprise.firrtl.NestedPrefixModulesAnnotation", inclusive = true, prefix = "X_"}]} {
-      firrtl.instance bar sym @bar  @Bar()
-    }
-    // CHECK-LABEL:   firrtl.module @X_Foo()
-    // CHECK:         firrtl.instance bar sym @bar @X_Bar()
-
-    // CHECK-LABEL:   firrtl.module @Bar()
-    firrtl.module @Bar() {
-      firrtl.instance baz sym @baz @Baz()
-      // CHECK:     firrtl.instance baz sym @baz @Baz()
-    }
-    // CHECK-LABEL: firrtl.module @X_Bar()
-    // CHECK:       firrtl.instance baz sym @baz @X_Baz()
-
-    firrtl.module @Baz() attributes {annotations = [{circt.nonlocal = @nla_1, class = "nla_1"}, {circt.nonlocal = @nla_3, class = "nla_3"}, {circt.nonlocal = @nla_4, class = "nla_4"}]} {
-      %mem_MPORT_en = firrtl.wire sym @s1  {annotations = [{circt.nonlocal = @nla_2, class = "nla_2"}]} : !firrtl.uint<1>
-    }
-    // CHECK-LABEL: firrtl.module @X_Baz()
-    // CHECK-SAME:  annotations = [{circt.nonlocal = @nla_4, class = "nla_4"}]
-    // CHECK:       %mem_MPORT_en = firrtl.wire sym @s1  {annotations = [{circt.nonlocal = @nla_2, class = "nla_2"}]} : !firrtl.uint<1>
-    // CHECK:       firrtl.module @Baz()
-    // CHECK-SAME:  annotations = [{circt.nonlocal = @nla_1, class = "nla_1"}, {circt.nonlocal = @nla_3, class = "nla_3"}]
-    // CHECK:       %mem_MPORT_en = firrtl.wire sym @s1  : !firrtl.uint<1>
-    
+firrtl.circuit "FixNLA"   {
+  hw.hierpath private @nla_1 [@FixNLA::@bar, @Bar::@baz, @Baz]
+  // CHECK:   hw.hierpath private @nla_1 [@FixNLA::@bar, @Bar::@baz, @Baz]
+  hw.hierpath private @nla_2 [@FixNLA::@foo, @Foo::@bar, @Bar::@baz, @Baz::@s1]
+  // CHECK:   hw.hierpath private @nla_2 [@FixNLA::@foo, @X_Foo::@bar, @X_Bar::@baz, @X_Baz::@s1]
+  hw.hierpath private @nla_3 [@FixNLA::@bar, @Bar::@baz, @Baz]
+  // CHECK:   hw.hierpath private @nla_3 [@FixNLA::@bar, @Bar::@baz, @Baz]
+  hw.hierpath private @nla_4 [@Foo::@bar, @Bar::@baz, @Baz]
+  // CHECK:       hw.hierpath private @nla_4 [@X_Foo::@bar, @X_Bar::@baz, @X_Baz]
+  // CHECK-LABEL: firrtl.module @FixNLA()
+  firrtl.module @FixNLA() {
+    firrtl.instance foo sym @foo  @Foo()
+    firrtl.instance bar sym @bar  @Bar()
+    // CHECK:   firrtl.instance foo sym @foo @X_Foo()
+    // CHECK:   firrtl.instance bar sym @bar @Bar()
   }
+  firrtl.module @Foo() attributes {annotations = [{class = "sifive.enterprise.firrtl.NestedPrefixModulesAnnotation", inclusive = true, prefix = "X_"}]} {
+    firrtl.instance bar sym @bar  @Bar()
+  }
+  // CHECK-LABEL:   firrtl.module @X_Foo()
+  // CHECK:         firrtl.instance bar sym @bar @X_Bar()
+
+  // CHECK-LABEL:   firrtl.module @Bar()
+  firrtl.module @Bar() {
+    firrtl.instance baz sym @baz @Baz()
+    // CHECK:     firrtl.instance baz sym @baz @Baz()
+  }
+  // CHECK-LABEL: firrtl.module @X_Bar()
+  // CHECK:       firrtl.instance baz sym @baz @X_Baz()
+
+  firrtl.module @Baz() attributes {annotations = [{circt.nonlocal = @nla_1, class = "nla_1"}, {circt.nonlocal = @nla_3, class = "nla_3"}, {circt.nonlocal = @nla_4, class = "nla_4"}]} {
+    %mem_MPORT_en = firrtl.wire sym @s1  {annotations = [{circt.nonlocal = @nla_2, class = "nla_2"}]} : !firrtl.uint<1>
+  }
+  // CHECK-LABEL: firrtl.module @X_Baz()
+  // CHECK-SAME:  annotations = [{circt.nonlocal = @nla_4, class = "nla_4"}]
+  // CHECK:       %mem_MPORT_en = firrtl.wire sym @s1  {annotations = [{circt.nonlocal = @nla_2, class = "nla_2"}]} : !firrtl.uint<1>
+  // CHECK:       firrtl.module @Baz()
+  // CHECK-SAME:  annotations = [{circt.nonlocal = @nla_1, class = "nla_1"}, {circt.nonlocal = @nla_3, class = "nla_3"}]
+  // CHECK:       %mem_MPORT_en = firrtl.wire sym @s1  : !firrtl.uint<1>
+}
 
 // Test that NonLocalAnchors are properly updated with memmodules.
 firrtl.circuit "Test"   {
-  // CHECK: firrtl.nla @nla_1 [@Test::@foo1, @A_Foo1::@bar, @A_Bar]
-  firrtl.nla @nla_1 [@Test::@foo1, @Foo1::@bar, @Bar]
-  // CHECK: firrtl.nla @nla_2 [@Test::@foo2, @B_Foo2::@bar, @B_Bar]
-  firrtl.nla @nla_2 [@Test::@foo2, @Foo2::@bar, @Bar]
+  // CHECK: hw.hierpath private @nla_1 [@Test::@foo1, @A_Foo1::@bar, @A_Bar]
+  hw.hierpath private @nla_1 [@Test::@foo1, @Foo1::@bar, @Bar]
+  // CHECK: hw.hierpath private @nla_2 [@Test::@foo2, @B_Foo2::@bar, @B_Bar]
+  hw.hierpath private @nla_2 [@Test::@foo2, @Foo2::@bar, @Bar]
 
   firrtl.module @Test() {
     firrtl.instance foo1 sym @foo1 @Foo1()
@@ -369,4 +375,55 @@ firrtl.circuit "Test"   {
   // CHECK: firrtl.memmodule @A_Bar() attributes {annotations = [{circt.nonlocal = @nla_1, class = "test1"}]
   // CHECK: firrtl.memmodule @B_Bar() attributes {annotations = [{circt.nonlocal = @nla_2, class = "test2"}]
   firrtl.memmodule @Bar() attributes {annotations = [{circt.nonlocal = @nla_1, class = "test1"}, {circt.nonlocal = @nla_2, class = "test2"}], dataWidth = 1 : ui32, depth = 16 : ui64, extraPorts = [], maskBits = 0 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 0 : ui32, readLatency = 0 : ui32,  writeLatency = 1 : ui32}
+}
+
+// Test that the MarkDUTAnnotation receives a prefix.
+// CHECK-LABEL: firrtl.circuit "Prefix_MarkDUTAnnotationGetsPrefix"
+firrtl.circuit "MarkDUTAnnotationGetsPrefix" {
+  // CHECK-NEXT: firrtl.module @Prefix_MarkDUTAnnotationGetsPrefix
+  // CHECK-SAME:   class = "sifive.enterprise.firrtl.MarkDUTAnnotation", prefix = "Prefix_"
+  firrtl.module @MarkDUTAnnotationGetsPrefix() attributes {
+    annotations = [
+     {
+       class = "sifive.enterprise.firrtl.MarkDUTAnnotation"
+     },
+     {
+       class = "sifive.enterprise.firrtl.NestedPrefixModulesAnnotation",
+       prefix = "Prefix_",
+       inclusive = true
+     }
+    ]
+  } {}
+}
+
+
+// Test that inner name refs are properly adjusted.
+firrtl.circuit "RewriteInnerNameRefs" {
+  // CHECK-LABEL: firrtl.module @Prefix_RewriteInnerNameRefs
+  firrtl.module @RewriteInnerNameRefs() attributes {
+    annotations = [
+     {
+       class = "sifive.enterprise.firrtl.NestedPrefixModulesAnnotation",
+       prefix = "Prefix_",
+       inclusive = true
+     }
+    ]
+  } {
+    %wire = firrtl.wire sym @wire : !firrtl.uint<1>
+    firrtl.instance nested @Nested()
+
+    // CHECK: #hw.innerNameRef<@Prefix_RewriteInnerNameRefs::@wire>
+    sv.verbatim "{{0}}" {symbols=[#hw.innerNameRef<@RewriteInnerNameRefs::@wire>]}
+
+    // CHECK: #hw.innerNameRef<@Prefix_RewriteInnerNameRefs::@wire>
+    // CHECK: #hw.innerNameRef<@Prefix_Nested::@wire>
+    sv.verbatim "{{0}} {{1}}" {symbols=[
+      #hw.innerNameRef<@RewriteInnerNameRefs::@wire>,
+      #hw.innerNameRef<@Nested::@wire>
+    ]}
+  }
+
+  firrtl.module @Nested() {
+    %wire = firrtl.wire sym @wire : !firrtl.uint<1>
+  }
 }

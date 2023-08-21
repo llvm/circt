@@ -5,8 +5,8 @@ import circt
 from circt.support import connect
 from circt.dialects import hw
 
-from mlir.ir import *
-from mlir.passmanager import PassManager
+from circt.ir import *
+from circt.passmanager import PassManager
 
 import sys
 
@@ -48,8 +48,7 @@ with Context() as ctx, Location.unknown():
         name="one_input",
         input_ports=[("a", i32)],
         parameters=[
-            hw.ParamDeclAttr.get("BANKS", TypeAttr.get(i32),
-                                 IntegerAttr.get(i32, 5))
+            hw.ParamDeclAttr.get("BANKS", i32, IntegerAttr.get(i32, 5))
         ],
         body_builder=lambda m: hw.OutputOp([]),
     )
@@ -81,23 +80,23 @@ with Context() as ctx, Location.unknown():
     # CHECK-LABEL: hw.module @instance_builder_tests
     def instance_builder_body(module):
       # CHECK: %[[INST1_RESULT:.+]] = hw.instance "inst1" @one_output()
-      inst1 = one_output.create("inst1")
+      inst1 = one_output.instantiate("inst1")
 
       # CHECK: hw.instance "inst2" @one_input<BANKS: i32 = 5>(a: %[[INST1_RESULT]]: i32)
-      one_input.create("inst2", a=inst1.a)
+      one_input.instantiate("inst2", a=inst1.a)
 
       # CHECK: hw.instance "inst4" @two_inputs(a: %[[INST1_RESULT]]: i32, b: %[[INST1_RESULT]]: i32)
-      inst4 = two_inputs.create("inst4", a=inst1.a)
+      inst4 = two_inputs.instantiate("inst4", a=inst1.a)
       connect(inst4.b, inst1.a)
 
       # CHECK: %[[INST5_RESULT:.+]] = hw.instance "inst5" @MyWidget(my_input: %[[INST5_RESULT]]: i32)
-      inst5 = op.create("inst5")
+      inst5 = op.instantiate("inst5")
       connect(inst5.my_input, inst5.my_output)
 
       # CHECK: hw.instance "inst6" @one_input<BANKS: i32 = 2>(a:
-      one_input.create("inst6",
-                       a=inst1.a,
-                       parameters={"BANKS": IntegerAttr.get(i32, 2)})
+      one_input.instantiate("inst6",
+                            a=inst1.a,
+                            parameters={"BANKS": IntegerAttr.get(i32, 2)})
 
     instance_builder_tests = hw.HWModuleOp(name="instance_builder_tests",
                                            body_builder=instance_builder_body)
@@ -114,8 +113,8 @@ with Context() as ctx, Location.unknown():
   # CHECK-LABEL: === Verilog ===
   print("=== Verilog ===")
 
-  pm = PassManager.parse("hw.module(hw-cleanup)")
-  pm.run(m)
+  pm = PassManager.parse("builtin.module(hw.module(hw-cleanup))")
+  pm.run(m.operation)
   # CHECK: module MyWidget
   # CHECK: external module FancyThing
   circt.export_verilog(m, sys.stdout)

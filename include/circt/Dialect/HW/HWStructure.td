@@ -10,11 +10,30 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_HW_HWSTRUCTURE_TD
+#define CIRCT_DIALECT_HW_HWSTRUCTURE_TD
+
+include "circt/Dialect/HW/HWAttributes.td"
+include "circt/Dialect/HW/HWDialect.td"
+include "circt/Dialect/HW/HWOpInterfaces.td"
+include "circt/Dialect/HW/HWTypes.td"
+include "mlir/IR/FunctionInterfaces.td"
+include "mlir/IR/OpAsmInterface.td"
+include "mlir/IR/OpBase.td"
+include "mlir/IR/RegionKindInterface.td"
+include "mlir/IR/SymbolInterfaces.td"
+include "mlir/Interfaces/ControlFlowInterfaces.td"
+include "mlir/Interfaces/SideEffectInterfaces.td"
+
 /// Base class factoring out some of the additional class declarations common to
 /// the module-like operations.
 class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
     HWOp<mnemonic, traits # [
-      DeclareOpInterfaceMethods<HWModuleLike>, FunctionOpInterface, Symbol,
+      DeclareOpInterfaceMethods<PortList>,
+      DeclareOpInterfaceMethods<SymboledPortList>,
+      DeclareOpInterfaceMethods<HWModuleLike>,
+      DeclareOpInterfaceMethods<HWMutableModuleLike>,
+      Symbol, FunctionOpInterface,
       OpAsmOpInterface, HasParent<"mlir::ModuleOp">]> {
   /// Additional class declarations inside the module op.
   code extraModuleClassDeclaration = ?;
@@ -33,20 +52,67 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
       ArrayRef<unsigned> eraseOutputs
     );
 
-    /// Insert ports into the module. Does not modify the block arguments of the
-    /// module body.
-    void insertPorts(
-      ArrayRef<std::pair<unsigned, PortInfo>> insertInputs,
-      ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs
-    ) { modifyPorts(insertInputs, insertOutputs, {}, {}); }
+    void setPortSymbolAttr(size_t portIndex, ::circt::hw::InnerSymAttr sym);
 
-    /// Erase ports from the module. Does not modify the block arguments of the
-    /// module body.
-    void erasePorts(
-      ArrayRef<unsigned> eraseInputs,
-      ArrayRef<unsigned> eraseOutputs
-    ) { modifyPorts({}, {}, eraseInputs, eraseOutputs); }
+    StringAttr getArgName(size_t index) {
+      return dyn_cast<StringAttr>(getArgNames()[index]);
+    }
+
   }];
+
+  /// Additional class definitions inside the module op.
+  code extraModuleClassDefinition = [{}];
+
+  let extraClassDefinition = extraModuleClassDefinition # [{
+
+    ModuleType $cppClass::getHWModuleType() {
+      return detail::fnToMod(getFunctionType(), getArgNames(), getResultNames());
+    }
+
+    ::circt::hw::InnerSymAttr $cppClass::getPortSymbolAttr(size_t portIndex) {
+      DictionaryAttr portAttrs = cast_or_null<DictionaryAttr>(getPortAttrs(portIndex));
+      if (portAttrs)
+        return portAttrs.getAs<::circt::hw::InnerSymAttr>(
+          getPortSymbolAttrName());
+      return {};
+    }
+
+    void $cppClass::setPortSymbolAttr(size_t portIndex, ::circt::hw::InnerSymAttr sym) {
+      auto portSymAttr = StringAttr::get(getContext(), getPortSymbolAttrName());
+      setPortAttr(portIndex, portSymAttr, sym);
+    }
+
+    size_t $cppClass::getNumPorts() {
+      auto fnty = getFunctionType();
+      return fnty.getNumInputs() + fnty.getNumResults();
+    }
+  }];
+
+}
+
+def HWTestModuleOp : HWOp<"testmodule", [Symbol,
+                                         DeclareOpInterfaceMethods<PortList>,
+                                         DeclareOpInterfaceMethods<SymboledPortList>,
+                                         OpAsmOpInterface, 
+                                         HasParent<"mlir::ModuleOp">, 
+                                         IsolatedFromAbove,
+                                         SingleBlockImplicitTerminator<"OutputOp">]> {
+  let arguments = (ins TypeAttrOf<ModuleType>:$module_type,
+                       OptionalAttr<DictArrayAttr>:$port_attrs,
+                       OptionalAttr<LocationArrayAttr>:$port_locs,
+                       ParamDeclArrayAttr:$parameters,
+                       OptionalAttr<StrAttr>:$comment);
+  let results = (outs);
+  let regions = (region SizedRegion<1>:$body);
+  let hasCustomAssemblyFormat = 1;
+
+  let extraClassDeclaration = [{
+    void getAsmBlockArgumentNames(mlir::Region &region,
+                                  mlir::OpAsmSetValueNameFn setNameFn);
+
+    Block *getBodyBlock() { return &getRegion().front(); }
+  }];
+
 }
 
 def HWModuleOp : HWModuleOpBase<"module",
@@ -58,7 +124,14 @@ def HWModuleOp : HWModuleOpBase<"module",
     name, a list of ports, a list of parameters, and a body that represents the
     connections within the module.
   }];
-  let arguments = (ins StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
+  let arguments = (ins SymbolNameAttr:$sym_name,
+                       TypeAttrOf<FunctionType>:$function_type,
+                       OptionalAttr<DictArrayAttr>:$arg_attrs,
+                       OptionalAttr<DictArrayAttr>:$res_attrs,
+                       StrArrayAttr:$argNames,
+                       StrArrayAttr:$resultNames,
+                       LocationArrayAttr:$argLocs,
+                       LocationArrayAttr:$resultLocs,
                        ParamDeclArrayAttr:$parameters,
                        StrAttr:$comment);
   let results = (outs);
@@ -73,25 +146,22 @@ def HWModuleOp : HWModuleOpBase<"module",
     OpBuilder<(ins "StringAttr":$name, "const ModulePortInfo &":$ports,
                    CArg<"ArrayAttr", "{}">:$parameters,
                    CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes,
+                   CArg<"StringAttr", "{}">:$comment,
+		   CArg<"bool", "true">:$shouldEnsureTerminator)>,
+    OpBuilder<(ins "StringAttr":$name, "const ModulePortInfo &":$ports,
+                   "HWModuleBuilder":$modBuilder,
+                   CArg<"ArrayAttr", "{}">:$parameters,
+                   CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes,
                    CArg<"StringAttr", "{}">:$comment)>
   ];
 
   let extraModuleClassDeclaration = [{
-    using mlir::detail::FunctionOpInterfaceTrait<HWModuleOp>::front;
-    using mlir::detail::FunctionOpInterfaceTrait<HWModuleOp>::getBody;
 
     // Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph;}
 
-    /// Decode information about the input and output ports on this module.
-    ModulePortInfo getPorts() {
-      return getModulePortInfo(*this);
-    }
-
-    /// Return all the module ports merged into one list.
-    SmallVector<PortInfo> getAllPorts() {
-      return getAllModulePortInfos(*this);
-    }
+    /// Returns the number of in or inout ports.
+    size_t getNumInOrInoutPorts() { return getArgumentTypes().size(); }
 
     /// Return the PortInfo for the specified input or inout port.
     PortInfo getInOrInoutPort(size_t i) {
@@ -103,19 +173,68 @@ def HWModuleOp : HWModuleOpBase<"module",
       return getModuleOutputPort(*this, i);
     }
 
+    /// Append an input with a given name and type to the port list.
+    /// If the name is not unique, a unique name is created and returned.
+    std::pair<StringAttr, BlockArgument>
+    appendInput(const Twine &name, Type ty) {
+      return insertInput(getNumInOrInoutPorts(), name, ty);
+    }
+
+    std::pair<StringAttr, BlockArgument>
+    appendInput(StringAttr name, Type ty) {
+      return insertInput(getNumInOrInoutPorts(), name.getValue(), ty);
+    }
+
+    /// Prepend an input with a given name and type to the port list.
+    /// If the name is not unique, a unique name is created and returned.
+    std::pair<StringAttr, BlockArgument>
+    prependInput(const Twine &name, Type ty) {
+      return insertInput(0, name, ty);
+    }
+
+    std::pair<StringAttr, BlockArgument>
+    prependInput(StringAttr name, Type ty) {
+      return insertInput(0, name.getValue(), ty);
+    }
+
+    /// Insert an input with a given name and type into the port list.
+    /// The input is added at the specified index.
+    std::pair<StringAttr, BlockArgument>
+    insertInput(unsigned index, StringAttr name, Type ty);
+
+    std::pair<StringAttr, BlockArgument>
+    insertInput(unsigned index, const Twine &name, Type ty) {
+      ::mlir::StringAttr nameAttr = ::mlir::StringAttr::get(getContext(), name);
+      return insertInput(index, nameAttr, ty);
+    }
+
+    /// Append an output with a given name and type to the port list.
+    /// If the name is not unique, a unique name is created.
+    void appendOutput(StringAttr name, Value value) {
+      return insertOutputs(getResultTypes().size(), {{name, value}});
+    }
+
+    void appendOutput(const Twine &name, Value value) {
+      ::mlir::StringAttr nameAttr = ::mlir::StringAttr::get(getContext(), name);
+      return insertOutputs(getResultTypes().size(), {{nameAttr, value}});
+    }
+
+    /// Prepend an output with a given name and type to the port list.
+    /// If the name is not unique, a unique name is created.
+    void prependOutput(StringAttr name, Value value) {
+      return insertOutputs(0, {{name, value}});
+    }
+
+    void prependOutput(const Twine &name, Value value) {
+      ::mlir::StringAttr nameAttr = ::mlir::StringAttr::get(getContext(), name);
+      return insertOutputs(0, {{nameAttr, value}});
+    }
+
     /// Inserts a list of output ports into the port list at a specific
     /// location, shifting all subsequent ports.  Rewrites the output op
     /// to return the associated values.
     void insertOutputs(unsigned index,
                        ArrayRef<std::pair<StringAttr, Value>> outputs);
-
-    /// Appends output ports to the module with the specified names and
-    /// rewrites the output op to return the associated values.
-    void appendOutputs(ArrayRef<std::pair<StringAttr, Value>> outputs);
-
-    // TODO(mlir): FunctionLike shouldn't produce a getBody() helper, it is
-    // squatting on the name.
-    Block *getBodyBlock() { return &body().front(); }
 
     // Get the module's symbolic name as StringAttr.
     StringAttr getNameAttr() {
@@ -130,11 +249,6 @@ def HWModuleOp : HWModuleOpBase<"module",
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
 
-    /// Returns the type of this function.
-    FunctionType getFunctionType() {
-      return getFunctionTypeAttr().getValue().cast<FunctionType>();
-    }
-
     /// Returns the argument types of this function.
     ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
 
@@ -146,7 +260,7 @@ def HWModuleOp : HWModuleOpBase<"module",
     LogicalResult verifyType() {
       auto type = getFunctionTypeAttr().getValue();
       if (!type.isa<FunctionType>())
-        return emitOpError("requires '" + getTypeAttrName() +
+        return emitOpError("requires '" + getFunctionTypeAttrName().getValue() +
                            "' attribute of function type");
       return success();
     }
@@ -170,7 +284,11 @@ def HWModuleExternOp : HWModuleOpBase<"module.extern"> {
     have proper parameterization in the hw.dialect.  We need a way to represent
     parameterized types instead of just concrete types.
   }];
-  let arguments = (ins StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
+  let arguments = (ins SymbolNameAttr:$sym_name,
+                       TypeAttrOf<FunctionType>:$function_type,
+		                   OptionalAttr<DictArrayAttr>:$arg_attrs,
+                       OptionalAttr<DictArrayAttr>:$res_attrs,
+                       StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
                        ParamDeclArrayAttr:$parameters,
                        OptionalAttr<StrAttr>:$verilogName);
   let results = (outs);
@@ -189,15 +307,6 @@ def HWModuleExternOp : HWModuleOpBase<"module.extern"> {
   ];
 
   let extraModuleClassDeclaration = [{
-    /// Decode information about the input and output ports on this module.
-    ModulePortInfo getPorts() {
-      return getModulePortInfo(*this);
-    }
-
-    /// Return all the module ports merged into one list.
-    SmallVector<PortInfo> getAllPorts() {
-      return getAllModulePortInfos(*this);
-    }
 
     /// Return the PortInfo for the specified input or inout port.
     PortInfo getInOrInoutPort(size_t i) {
@@ -235,11 +344,6 @@ def HWModuleExternOp : HWModuleOpBase<"module.extern"> {
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
 
-    /// Returns the type of this function.
-    FunctionType getFunctionType() {
-      return getFunctionTypeAttr().getValue().cast<FunctionType>();
-    }
-
     /// Returns the argument types of this function.
     ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
 
@@ -251,7 +355,7 @@ def HWModuleExternOp : HWModuleOpBase<"module.extern"> {
     LogicalResult verifyType() {
       auto type = getFunctionTypeAttr().getValue();
       if (!type.isa<FunctionType>())
-        return emitOpError("requires '" + getTypeAttrName() +
+        return emitOpError("requires '" + getFunctionTypeAttrName().getValue() +
                            "' attribute of function type");
       return success();
     }
@@ -296,7 +400,11 @@ def HWModuleGeneratedOp : HWModuleOpBase<"module.generated", [
     The 'verilogName' attribute (when present) specifies the spelling of the
     module name in Verilog we can use.  See hw.module for an explanation.
   }];
-  let arguments = (ins FlatSymbolRefAttr:$generatorKind,
+  let arguments = (ins SymbolNameAttr:$sym_name,
+                       FlatSymbolRefAttr:$generatorKind,
+                       TypeAttrOf<FunctionType>:$function_type,
+		                   OptionalAttr<DictArrayAttr>:$arg_attrs,
+                       OptionalAttr<DictArrayAttr>:$res_attrs,
                        StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
                        ParamDeclArrayAttr:$parameters,
                        OptionalAttr<StrAttr>:$verilogName);
@@ -318,16 +426,6 @@ def HWModuleGeneratedOp : HWModuleOpBase<"module.generated", [
   ];
 
   let extraModuleClassDeclaration = [{
-    /// Decode information about the input and output ports on this module.
-    ModulePortInfo getPorts() {
-      return getModulePortInfo(*this);
-    }
-
-    /// Return all the module ports merged into one list.
-    SmallVector<PortInfo> getAllPorts() {
-      return getAllModulePortInfos(*this);
-    }
-
     /// Return the name to use for the Verilog module that we're referencing
     /// here.  This is typically the symbol, but can be overridden with the
     /// verilogName attribute.
@@ -347,11 +445,6 @@ def HWModuleGeneratedOp : HWModuleOpBase<"module.generated", [
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
 
-    /// Returns the type of this function.
-    FunctionType getFunctionType() {
-      return getFunctionTypeAttr().getValue().cast<FunctionType>();
-    }
-
     /// Returns the argument types of this function.
     ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
 
@@ -363,7 +456,7 @@ def HWModuleGeneratedOp : HWModuleOpBase<"module.generated", [
     LogicalResult verifyType() {
       auto type = getFunctionTypeAttr().getValue();
       if (!type.isa<FunctionType>())
-        return emitOpError("requires '" + getTypeAttrName() +
+        return emitOpError("requires '" + getFunctionTypeAttrName().getValue() +
                            "' attribute of function type");
       return success();
     }
@@ -377,7 +470,9 @@ def HWModuleGeneratedOp : HWModuleOpBase<"module.generated", [
 
 def InstanceOp : HWOp<"instance", [
         DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+        DeclareOpInterfaceMethods<PortList>,
         DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+        DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>,
         DeclareOpInterfaceMethods<HWInstanceLike>]> {
   let summary = "Create an instance of a module";
   let description = [{
@@ -394,22 +489,22 @@ def InstanceOp : HWOp<"instance", [
                        Variadic<AnyType>:$inputs,
                        StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
                        ParamDeclArrayAttr:$parameters,
-                       OptionalAttr<SymbolNameAttr>:$inner_sym);
-  let results = (outs Variadic<AnyType>);
+                       OptionalAttr<InnerSymAttr>:$inner_sym);
+  let results = (outs Variadic<AnyType>:$results);
 
   let builders = [
     /// Create a instance that refers to a known module.
     OpBuilder<(ins "Operation*":$module, "StringAttr":$name,
                    "ArrayRef<Value>":$inputs,
                    CArg<"ArrayAttr", "{}">:$parameters,
-                   CArg<"StringAttr", "{}">:$sym_name)>,
+                   CArg<"InnerSymAttr", "{}">:$innerSym)>,
     /// Create a instance that refers to a known module.
     OpBuilder<(ins "Operation*":$module, "StringRef":$name,
                    "ArrayRef<Value>":$inputs,
                    CArg<"ArrayAttr", "{}">:$parameters,
-                   CArg<"StringAttr", "{}">:$sym_name), [{
+                   CArg<"InnerSymAttr", "{}">:$innerSym), [{
       build($_builder, $_state, module, $_builder.getStringAttr(name), inputs,
-            parameters, sym_name);
+            parameters, innerSym);
     }]>,
   ];
 
@@ -430,27 +525,22 @@ def InstanceOp : HWOp<"instance", [
 
     /// Change the names of all the input ports.
     void setArgumentNames(ArrayAttr names) {
-      argNamesAttr(names);
+      setArgNamesAttr(names);
     }
 
     /// Change the names of all the result ports.
     void setResultNames(ArrayAttr names) {
-      resultNamesAttr(names);
+      setResultNamesAttr(names);
     }
 
     /// Lookup the module or extmodule for the symbol.  This returns null on
     /// invalid IR.
-    Operation *getReferencedModule(const HWSymbolCache *cache = nullptr);
+    Operation *getReferencedModule(const HWSymbolCache *cache);
+    Operation *getReferencedModule(SymbolTable& tbl);
+    Operation *getReferencedModuleSlow();
 
-    /// Get the instances's name.
-    StringAttr getName() {
-      return instanceNameAttr();
-    }
-
-    /// Set the instance's name.
-    void setName(StringAttr name) {
-      instanceNameAttr(name);
-    }
+    /// Return the value for a port in port order.
+    Value getValue(size_t idx);
 
     //===------------------------------------------------------------------===//
     // SymbolOpInterface Methods
@@ -458,27 +548,28 @@ def InstanceOp : HWOp<"instance", [
 
     /// An InstanceOp may optionally define a symbol.
     bool isOptionalSymbol() { return true; }
+
   }];
 
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
 }
 
-def OutputOp : HWOp<"output", [Terminator, HasParent<"HWModuleOp">,
-                                NoSideEffect, ReturnLike]> {
+def OutputOp : HWOp<"output", [Terminator, HasParent<"HWModuleOp, HWTestModuleOp">,
+                                Pure, ReturnLike]> {
   let summary = "HW termination operation";
   let description = [{
     "hw.output" marks the end of a region in the HW dialect and the values
     to put on the output ports.
   }];
 
-  let arguments = (ins Variadic<AnyType>:$operands);
+  let arguments = (ins Variadic<AnyType>:$outputs);
 
   let builders = [
-    OpBuilder<(ins), "build($_builder, $_state, llvm::None);">
+    OpBuilder<(ins), "build($_builder, $_state, std::nullopt);">
   ];
 
-  let assemblyFormat = "attr-dict ($operands^ `:` qualified(type($operands)))?";
+  let assemblyFormat = "attr-dict ($outputs^ `:` qualified(type($outputs)))?";
 
   let hasVerifier = 1;
 }
@@ -500,18 +591,128 @@ def GlobalRefOp : HWOp<"globalRef", [
   let assemblyFormat = [{ $sym_name $namepath attr-dict }];
 }
 
-def ProbeOp : HWOp<"probe", []> {
-  let summary = "Probe values for use in remote references";
+def HierPathOp : HWOp<"hierpath",
+      [IsolatedFromAbove, Symbol,
+       DeclareOpInterfaceMethods<InnerRefUserOpInterface>]> {
+  let summary = "Hierarchical path specification";
   let description = [{
-    Captures values without binding to any accidental name.  This allows
-    capturing names holding values of interest while allowing the name to
-    resolved only at emission time.
+    The "hw.hierpath" operation represents a path through the hierarchy.
+    This is used to specify namable things for use in other operations, for
+    example in verbatim substitution. Non-local annotations also use these.
+  }];
+  let arguments = (ins SymbolNameAttr:$sym_name, NameRefArrayAttr:$namepath);
+  let results = (outs);
+  let hasCustomAssemblyFormat = 1;
+  let extraClassDeclaration = [{
+    /// Drop the module from the namepath. If its a InnerNameRef, then drop
+    /// the Module-Instance pair, else drop the final module from the namepath.
+    /// Return true if any update is made.
+    bool dropModule(StringAttr moduleToDrop);
+
+    /// Inline the module in the namepath.
+    /// Update the symbol name for the inlined module instance, by prepending
+    /// the symbol name of the instance at which the inling was done.
+    /// Return true if any update is made.
+    bool inlineModule(StringAttr moduleToDrop);
+
+    /// Replace the oldMod module with newMod module in the namepath of the NLA.
+    /// Return true if any update is made.
+    bool updateModule(StringAttr oldMod, StringAttr newMod);
+
+    /// Replace the oldMod module with newMod module in the namepath of the NLA.
+    /// Since the module is being updated, the symbols inside the module should
+    /// also be renamed. Use the rename Map to update the corresponding
+    /// inner_sym names in the namepath. Return true if any update is made.
+    bool updateModuleAndInnerRef(StringAttr oldMod, StringAttr newMod,
+         const llvm::DenseMap<StringAttr, StringAttr> &innerSymRenameMap);
+
+    /// Truncate the namepath for this NLA, at atMod module.
+    /// If includeMod is false, drop atMod and beyond, else include it and drop
+    /// everything after it.
+    /// Return true if any update is made.
+    bool truncateAtModule(StringAttr atMod, bool includeMod = true);
+
+    /// Return just the module part of the namepath at a specific index.
+    StringAttr modPart(unsigned i);
+
+    /// Return the root module.
+    StringAttr root();
+
+    /// Return just the reference part of the namepath at a specific index.
+    /// This will return an empty attribute if this is the leaf and the leaf is
+    /// a module.
+    StringAttr refPart(unsigned i);
+
+    /// Return the leaf reference.  This returns an empty attribute if the leaf
+    /// reference is a module.
+    StringAttr ref();
+
+    /// Return the leaf Module.
+    StringAttr leafMod();
+
+    /// Returns true, if the NLA path contains the module.
+    bool hasModule(StringAttr modName);
+
+    /// Returns true, if the NLA path contains the InnerSym {modName, symName}.
+    bool hasInnerSym(StringAttr modName, StringAttr symName) const;
+
+    /// Returns true if this NLA targets a module or instance of a module (as
+    /// opposed to an instance's port or something inside an instance).
+    bool isModule();
+
+    /// Returns true if this NLA targets something inside a module (as opposed
+    /// to a module or an instance of a module);
+    bool isComponent();
+    }];
+}
+
+// Edge behavior for trigger blocks. Currently these map 1:1 to SV event
+// control kinds.
+
+/// AtPosEdge triggers on a rise from 0 to 1/X/Z, or X/Z to 1.
+def AtPosEdge: I32EnumAttrCase<"AtPosEdge", 0, "posedge">;
+/// AtNegEdge triggers on a drop from 1 to 0/X/Z, or X/Z to 0.
+def AtNegEdge: I32EnumAttrCase<"AtNegEdge", 1, "negedge">;
+/// AtEdge(v) is syntactic sugar for "AtPosEdge(v) or AtNegEdge(v)".
+def AtEdge   : I32EnumAttrCase<"AtEdge", 2, "edge">;
+
+def EventControlAttr : I32EnumAttr<"EventControl", "edge control trigger",
+                                   [AtPosEdge, AtNegEdge, AtEdge]> {
+  let cppNamespace = "circt::hw";
+}
+
+def TriggeredOp : HWOp<"triggered", [
+    IsolatedFromAbove, SingleBlock, NoTerminator]> {
+  let summary = "A procedural region with a trigger condition";
+  let description = [{
+    A procedural region that can be triggered by an event. The trigger
+    condition is a 1-bit value that is activated based on some event control
+    attribute.
+    The operation is `IsolatedFromAbove`, and thus requires values passed into
+    the trigger region to be explicitly passed in through the `inputs` list.
   }];
 
-  let arguments = (ins SymbolNameAttr:$inner_sym,
-                       Variadic<AnyType>:$operands);
+  let regions = (region SizedRegion<1>:$body);
+  let arguments = (ins EventControlAttr:$event, I1:$trigger, Variadic<AnyType>:$inputs);
   let results = (outs);
 
-  let assemblyFormat = "$inner_sym attr-dict (`,` $operands^ `:` qualified(type($operands)))?";
+  let assemblyFormat = [{
+    $event $trigger  `(` $inputs `)` `:` type($inputs) $body attr-dict
+  }];
 
+  let extraClassDeclaration = [{
+    Block *getBodyBlock() { return &getBody().front(); }
+
+    // Return the input arguments inside the trigger region.
+    ArrayRef<BlockArgument> getInnerInputs() {
+      return getBodyBlock()->getArguments();
+    }
+  }];
+
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<(ins "EventControlAttr":$event, "Value":$trigger, "ValueRange":$inputs)>
+  ];
 }
+
+#endif // CIRCT_DIALECT_HW_HWSTRUCTURE_TD

@@ -48,12 +48,12 @@ static Value adjustIntegerWidth(OpBuilder &builder, Value value,
                                              intWidth - targetWidth);
   Value zero = builder.create<hw::ConstantOp>(
       loc, builder.getIntegerType(intWidth - targetWidth), 0);
-  Value isZero =
-      builder.create<comb::ICmpOp>(loc, comb::ICmpPredicate::eq, hi, zero);
+  Value isZero = builder.create<comb::ICmpOp>(loc, comb::ICmpPredicate::eq, hi,
+                                              zero, false);
   Value lo = builder.create<comb::ExtractOp>(loc, value, 0, targetWidth);
   Value max = builder.create<hw::ConstantOp>(
       loc, builder.getIntegerType(targetWidth), -1);
-  return builder.create<comb::MuxOp>(loc, isZero, lo, max);
+  return builder.create<comb::MuxOp>(loc, isZero, lo, max, false);
 }
 
 //===----------------------------------------------------------------------===//
@@ -121,7 +121,7 @@ struct ReturnOpConversion : public OpConversionPattern<func::ReturnOp> {
   LogicalResult
   matchAndRewrite(func::ReturnOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<func::ReturnOp>(op, adaptor.operands());
+    rewriter.replaceOpWithNewOp<func::ReturnOp>(op, adaptor.getOperands());
     return success();
   }
 };
@@ -203,7 +203,7 @@ struct ShlOpConversion : public OpConversionPattern<ShlOp> {
         adjustIntegerWidth(rewriter, adaptor.getAmount(),
                            resultType.getIntOrFloatBitWidth(), op->getLoc());
     rewriter.replaceOpWithNewOp<comb::ShlOp>(op, resultType, adaptor.getValue(),
-                                             amount);
+                                             amount, false);
     return success();
   }
 };
@@ -227,13 +227,13 @@ struct ShrOpConversion : public OpConversionPattern<ShrOp> {
                            resultType.getIntOrFloatBitWidth(), op->getLoc());
 
     if (adaptor.getArithmetic() && hasSignedResultType) {
-      rewriter.replaceOpWithNewOp<comb::ShrSOp>(op, resultType,
-                                                adaptor.getValue(), amount);
+      rewriter.replaceOpWithNewOp<comb::ShrSOp>(
+          op, resultType, adaptor.getValue(), amount, false);
       return success();
     }
 
-    rewriter.replaceOpWithNewOp<comb::ShrUOp>(op, resultType,
-                                              adaptor.getValue(), amount);
+    rewriter.replaceOpWithNewOp<comb::ShrUOp>(
+        op, resultType, adaptor.getValue(), amount, false);
     return success();
   }
 };
@@ -258,7 +258,7 @@ static bool hasMooreType(ValueRange values) {
 }
 
 template <typename Op>
-void addGenericLegality(ConversionTarget &target) {
+static void addGenericLegality(ConversionTarget &target) {
   target.addDynamicallyLegalOp<Op>([](Op op) {
     return !hasMooreType(op->getOperands()) && !hasMooreType(op->getResults());
   });
@@ -298,10 +298,10 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
   // Directly map simple bit vector types to a compact integer type. This needs
   // to be added after all of the other conversions above, such that SBVs
   // conversion gets tried first before any of the others.
-  typeConverter.addConversion([&](UnpackedType type) -> Optional<Type> {
+  typeConverter.addConversion([&](UnpackedType type) -> std::optional<Type> {
     if (auto sbv = type.getSimpleBitVectorOrNull())
       return mlir::IntegerType::get(type.getContext(), sbv.size);
-    return llvm::None;
+    return std::nullopt;
   });
 
   // Valid target types.

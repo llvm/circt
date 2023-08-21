@@ -10,24 +10,34 @@
 //
 //===----------------------------------------------------------------------===//
 
-include "mlir/IR/OpBase.td"
+#ifndef CIRCT_DIALECT_FIRRTL_FIRRTLOPINTERFACES_TD
+#define CIRCT_DIALECT_FIRRTL_FIRRTLOPINTERFACES_TD
 
-def FModuleLike : OpInterface<"FModuleLike"> {
+include "mlir/IR/OpBase.td"
+include "circt/Dialect/HW/HWOpInterfaces.td"
+
+def FModuleLike : OpInterface<"FModuleLike", [Symbol, SymboledPortList, InstanceGraphModuleOpInterface]> {
   let cppNamespace = "circt::firrtl";
-  let description = "Provide common  module information.";
+  let description = "Provide common module information.";
   let methods = [
 
     //===------------------------------------------------------------------===//
-    // Module Name
+    // Parameters
     //===------------------------------------------------------------------===//
 
-    InterfaceMethod<"Get the module name",
-    "StringRef", "moduleName", (ins),
-    /*methodBody=*/[{ return $_op.getName(); }]>,
+    InterfaceMethod<"Get the parameters",
+    "ArrayAttr", "getParameters", (ins),
+    /*methodBody=*/[{ return $_op.getParameters(); }]>,
 
-    InterfaceMethod<"Get the module name",
-    "StringAttr", "moduleNameAttr", (ins),
-    /*methodBody=*/[{ return $_op.getNameAttr(); }]>,
+    //===------------------------------------------------------------------===//
+    // Instantiation Convention
+    //===------------------------------------------------------------------===//
+
+    InterfaceMethod<"Get the module's instantiation convention",
+      "ConventionAttr", "getConventionAttr">,
+
+    InterfaceMethod<"Get the module's instantiation convention",
+      "Convention", "getConvention">,
 
     //===------------------------------------------------------------------===//
     // Port Directions
@@ -105,10 +115,10 @@ def FModuleLike : OpInterface<"FModuleLike"> {
     }]>,
 
     InterfaceMethod<"Get a port type",
-    "FIRRTLType", "getPortType", (ins "size_t":$portIndex), [{}],
+    "Type", "getPortType", (ins "size_t":$portIndex), [{}],
     /*defaultImplementation=*/[{
       auto typeAttr = $_op.getPortTypeAttr(portIndex);
-      return typeAttr.getValue().template cast<FIRRTLType>();
+      return typeAttr.getValue();
     }]>,
 
     //===------------------------------------------------------------------===//
@@ -147,6 +157,14 @@ def FModuleLike : OpInterface<"FModuleLike"> {
     //===------------------------------------------------------------------===//
     // Port Symbols
     //===------------------------------------------------------------------===//
+    // Symbol conventions:
+    // 1. Every element of the ArrayAttr(portSyms) must be NON-NULL.
+    // 2. An empty array represents no symbol.
+    //    a. TODO: Update the representation to avoid storing it.
+    // 3. The Getters return null if a port sym is invalid.
+    // 4. The fixupPortSymsArray, is a utility to update a portSyms
+    //    Vector, by replacing each null entry with empty array and
+    //    clearing the array if all the elements are empty.
 
     // Getters
     InterfaceMethod<"Get the port symbols attribute",
@@ -160,71 +178,112 @@ def FModuleLike : OpInterface<"FModuleLike"> {
       return $_op.getPortSymbolsAttr().getValue();
     }]>,
 
-    InterfaceMethod<"Get a port symbol attribute",
-    "StringAttr", "getPortSymbolAttr", (ins "size_t":$portIndex), [{}], [{
+    InterfaceMethod<"Check if port has symbol attribute",
+    "bool", "hasPortSymbolAttr", (ins "size_t":$portIndex), [{}], [{
       auto syms = $_op.getPortSymbols();
-      if (syms.empty())
-        return StringAttr::get($_op.getContext(), "");
-      return syms[portIndex].template cast<StringAttr>();
-    }]>,
-
-    InterfaceMethod<"Get a port symbol",
-    "StringRef", "getPortSymbol", (ins "size_t":$portIndex), [{}], [{
-      return $_op.getPortSymbolAttr(portIndex).getValue();
+        return  (!syms.empty() &&
+        !syms[portIndex].template cast<hw::InnerSymAttr>().empty());
     }]>,
 
     // Setters
-    InterfaceMethod<"Set the port symbols attribute", "void",
-    "setPortSymbolsAttr", (ins "ArrayAttr":$symbols), [{}], [{
-      if (llvm::all_of(symbols.getValue(), [](Attribute symbol) {
-         return symbol.cast<StringAttr>().getValue().empty(); }))
-        symbols = ArrayAttr::get($_op.getContext(), {});
-      assert(symbols.getValue().empty() ||
-             symbols.getValue().size() == $_op.getNumPorts());
-      $_op->setAttr(FModuleLike::getPortSymbolsAttrName(), symbols);
-    }]>,
-
-    InterfaceMethod<"Set the port symbols", "void",
+    InterfaceMethod<"Set the symbols of all ports and their fields", "void",
     "setPortSymbols", (ins "ArrayRef<Attribute>":$symbols), [{}], [{
-      if (llvm::all_of(symbols, [](Attribute symbol) {
-         return symbol.cast<StringAttr>().getValue().empty(); }))
-        symbols = {};
       assert(symbols.empty() || symbols.size() == $_op.getNumPorts());
-      $_op.setPortSymbolsAttr(ArrayAttr::get($_op.getContext(), symbols));
+      SmallVector<Attribute> newSyms(symbols.begin(), symbols.end());
+      FModuleLike::fixupPortSymsArray(newSyms, $_op.getContext());
+      assert(newSyms.empty() || newSyms.size() == $_op.getNumPorts());
+      $_op->setAttr(FModuleLike::getPortSymbolsAttrName(),
+                    ArrayAttr::get($_op.getContext(), newSyms));
     }]>,
 
-    InterfaceMethod<"Set a port symbol attribute", "void",
+    InterfaceMethod<"Set a port's top-level symbol to the specified string, dropping any symbols on its fields", "void",
     "setPortSymbolAttr", (ins "size_t":$portIndex, "StringAttr":$symbol), [{}],
     [{
       SmallVector<Attribute> symbols($_op.getPortSymbols().begin(),
                                      $_op.getPortSymbols().end());
       if (symbols.empty()) {
-        auto emptyString = StringAttr::get($_op.getContext(), "");
-        symbols.resize($_op.getNumPorts(), emptyString);
+        symbols.resize($_op.getNumPorts(),
+                      hw::InnerSymAttr::get($_op.getContext()));
+      }
+      assert(symbols.size() == $_op.getNumPorts());
+      symbols[portIndex] = hw::InnerSymAttr::get(symbol);
+
+      FModuleLike::fixupPortSymsArray(symbols, $_op.getContext());
+      assert(symbols.empty() || symbols.size() == $_op.getNumPorts());
+      $_op->setAttr(FModuleLike::getPortSymbolsAttrName(),
+                    ArrayAttr::get($_op.getContext(), symbols));
+    }]>,
+
+    InterfaceMethod<"Set the symbols for a port including its fields", "void",
+    "setPortSymbolsAttr", (ins "size_t":$portIndex, "circt::hw::InnerSymAttr":$symbol), [{}],
+    [{
+      SmallVector<Attribute> symbols($_op.getPortSymbols().begin(),
+                                     $_op.getPortSymbols().end());
+      if (symbols.empty()) {
+        if (symbol.empty())
+          return;
+        symbols.resize($_op.getNumPorts(),
+                      hw::InnerSymAttr::get($_op.getContext()));
       }
       assert(symbols.size() == $_op.getNumPorts());
       symbols[portIndex] = symbol;
-      $_op.setPortSymbols(symbols);
+
+      FModuleLike::fixupPortSymsArray(symbols, $_op.getContext());
+      assert(symbols.empty() || symbols.size() == $_op.getNumPorts());
+      $_op->setAttr(FModuleLike::getPortSymbolsAttrName(),
+                    ArrayAttr::get($_op.getContext(), symbols));
     }]>,
 
-    InterfaceMethod<"Set a port symbol", "void",
+    InterfaceMethod<"Set a port's top-level symbol to the specified string, dropping any symbols on its fields", "void",
     "setPortSymbol", (ins "size_t":$portIndex, "StringRef":$symbol), [{}], [{
       $_op.setPortSymbolAttr(portIndex, StringAttr::get($_op.getContext(),
         symbol));
     }]>,
 
     //===------------------------------------------------------------------===//
+    // Port Locations
+    //===------------------------------------------------------------------===//
+
+    InterfaceMethod<"Get the port locations attribute",
+    "ArrayAttr", "getPortLocationsAttr", (ins), [{}],
+    /*defaultImplementation=*/[{
+      return $_op->template
+        getAttrOfType<ArrayAttr>(FModuleLike::getPortLocationsAttrName());
+    }]>,
+
+    InterfaceMethod<"Get the port locations attribute",
+    "ArrayRef<Attribute>", "getPortLocations", (ins), [{}],
+    /*defaultImplementation=*/[{
+      return $_op.getPortLocationsAttr().getValue();
+    }]>,
+
+    InterfaceMethod<"Get a port's location attribute",
+    "LocationAttr", "getPortLocationAttr", (ins "size_t":$portIndex), [{}],
+    /*defaultImplementation=*/[{
+      return $_op.getPortLocationsAttr()[portIndex].
+        template cast<LocationAttr>();
+    }]>,
+
+    InterfaceMethod<"Get a port's location",
+    "Location", "getPortLocation", (ins "size_t":$portIndex), [{}],
+    /*defaultImplementation=*/[{
+      return $_op.getPortLocationAttr(portIndex);
+    }]>,
+
+    //===------------------------------------------------------------------===//
     // All Port Information
     //===------------------------------------------------------------------===//
 
-    InterfaceMethod<"Get the number of ports",
-    "size_t", "getNumPorts", (ins), [{}],
-    /*defaultImplementation=*/[{
-      return $_op.getPortTypesAttr().size();
-    }]>,
-
     InterfaceMethod<"Get information about all ports",
-    "SmallVector<PortInfo>", "getPorts">
+    "SmallVector<PortInfo>", "getPorts">,
+
+    InterfaceMethod<"Inserts the given ports at the corresponding indices",
+    "void", "insertPorts",
+    (ins "ArrayRef<std::pair<unsigned, PortInfo>>":$ports)>,
+
+    InterfaceMethod<"Erases the ports that have their corresponding bit set in `portIndices`",
+    "void", "erasePorts",
+    (ins "const llvm::BitVector&":$portIndices)>
   ];
 
   let extraClassDeclaration = [{
@@ -252,6 +311,29 @@ def FModuleLike : OpInterface<"FModuleLike"> {
     static StringRef getPortSymbolsAttrName() {
       return "portSyms";
     }
+
+    /// Get the attribute name for port locations.
+    static StringRef getPortLocationsAttrName() {
+      return "portLocations";
+    }
+
+    /// Replace NULL entries with invalid sym and clear array if all elements
+    /// are invalid.
+    static void fixupPortSymsArray(SmallVectorImpl<Attribute> &syms,
+                                   MLIRContext *context) {
+      // The lack of *any* port symbol is represented by an empty `portSyms`
+      // array as a shorthand.
+      if (llvm::none_of(syms, [&](auto &sym) {
+            return sym && !cast<hw::InnerSymAttr>(sym).empty();
+          })) {
+        syms.clear();
+        return;
+      }
+      auto empty = hw::InnerSymAttr::get(context);
+      for (auto &sym : syms)
+        if (!sym)
+          sym = empty;
+    }
   }];
 
   let verify = [{
@@ -259,9 +341,9 @@ def FModuleLike : OpInterface<"FModuleLike"> {
         ConcreteOp::template hasTrait<::mlir::SymbolOpInterface::Trait>(),
         "expected operation to be a symbol");
     static_assert(
-        ConcreteOp::template hasTrait<::circt::hw::HWModuleLike::Trait>(),
-        "expected operation to be also be a hardware module");
-    return verifyModuleLikeOpInterface(op);
+        ConcreteOp::template hasTrait<OpTrait::InnerSymbolTable>(),
+        "expected operation to be an inner symbol table");
+    return verifyModuleLikeOpInterface(cast<::circt::firrtl::FModuleLike>(op));
   }];
 }
 
@@ -271,42 +353,95 @@ def FConnectLike : OpInterface<"FConnectLike"> {
 
   let methods = [
     InterfaceMethod<"Return a destination of connection.",
-    "Value", "dest", (ins)>,
+    "Value", "getDest", (ins)>,
     InterfaceMethod<"Return a source of connection.",
-    "Value", "src", (ins)>,
+    "Value", "getSrc", (ins)>,
+    StaticInterfaceMethod<"Return connection behavior kind.",
+    "ConnectBehaviorKind", "getConnectBehaviorKind", (ins), [{}],
+     /*defaultImplementation=*/[{ return ConnectBehaviorKind::LastConnect; }]>,
+    StaticInterfaceMethod<"Returns true if ConnectBehavior is StaticSingleConnect.",
+    "bool", "hasStaticSingleConnectBehavior", (ins),
+     /*methodBody=*/[{ return getConnectBehaviorKind() == ConnectBehaviorKind::StaticSingleConnect; }]>,
+    StaticInterfaceMethod<"Returns true if ConnectBehavior is LastConnect.",
+    "bool", "hasLastConnectBehavior", (ins),
+     /*methodBody=*/[{ return getConnectBehaviorKind() == ConnectBehaviorKind::LastConnect; }]>
   ];
 }
 
-def InnerSymbol : OpInterface<"InnerSymbolOpInterface"> {
-  let description = [{
-    This interface describes an operation that may define an
-    `inner_sym`.  An `inner_sym` operation resides 
-    in arbitrarily-nested regions of a region that defines a
-    `InnerSymbolTable`.
-    Inner Symbols are different from normal symbols due to 
-    MLIR symbol table resolution rules.  Specifically normal
-    symbols are resolved by first going up to the closest
-    parent symbol table and resolving from there (recursing
-    down for complex symbol paths).  In FIRRTL and SV, modules
-    define a symbol in a circuit or std.module symbol table.
-    For instances to be able to resolve the modules they
-    instantiate, the symbol use in an instance must resolve 
-    in the top-level symbol table.  If a module were a
-    symbol table, instances resolving a symbol would start from 
-    their own module, never seeing other modules (since 
-    resolution would start in the parent module of the 
-    instance and be unable to go to the global scope).
-    The second problem arises from nesting.  Symbols defining 
-    ops must be immediate children of a symbol table.  FIRRTL
-    and SV operations which define a inner_sym are grandchildren,
-    at least, of a symbol table and may be much further nested.
-    Lastly, ports need to define inner_sym, something not allowed
-    by normal symbols.
-  }];
+def FNamableOp : OpInterface<"FNamableOp"> {
+  let cppNamespace = "circt::firrtl";
+  let description = [{The interface provides common methods for namable operations
+    related to name preservation semantics. }];
 
-  let cppNamespace = "::circt::firrtl";
-  let methods = [];
-
+  let methods = [
+    InterfaceMethod<"Return true if the name is droppable.",
+    "bool", "hasDroppableName", (ins), [{}], /*defaultImplementation=*/[{
+      return this->getOperation()->template
+             getAttrOfType<NameKindEnumAttr>("nameKind").getValue()
+             == NameKindEnum::DroppableName;
+    }]>,
+    InterfaceMethod<"Completely drop a name.",
+    "void", "dropName", (ins), [{}], /*defaultImplementation=*/[{
+      this->getOperation()->setAttr("nameKind",
+        NameKindEnumAttr::get(this->getOperation()->getContext(),
+                              NameKindEnum::DroppableName));
+      this->getOperation()->setAttr("name", StringAttr::get(this->getOperation()->getContext(), ""));
+    }]>,
+    InterfaceMethod<"Set a namekind.",
+    "void", "setNameKindAttr", (ins "firrtl::NameKindEnumAttr":$nameKind),
+                                       [{}], /*defaultImplementation=*/[{
+      this->getOperation()->setAttr("nameKind", nameKind);
+    }]>,
+    InterfaceMethod<"Return the name.",
+    "mlir::StringAttr", "getNameAttr", (ins), [{}],
+    /*defaultImplementation=*/[{
+      return this->getOperation()->template
+             getAttrOfType<mlir::StringAttr>("name");
+    }]>,
+    InterfaceMethod<"Return the name.",
+    "llvm::StringRef", "getName", (ins), [{}],
+    /*defaultImplementation=*/[{
+      return getNameAttr();
+    }]>
+  ];
 }
 
-def InnerSymbolTable : NativeOpTrait<"InnerSymbolTable">;
+def Forceable : OpInterface<"Forceable"> {
+  let cppNamespace = "circt::firrtl";
+  let description = [{
+    Interaction with declarations of forceable hardware components,
+    and managing references to them.
+  }];
+
+  let methods = [
+    InterfaceMethod<"Return true if the operation is forceable.",
+    "bool", "isForceable", (ins), [{}], /*defaultImplementation=*/[{
+      return $_op.getForceable();
+    }]>,
+    InterfaceMethod<"Return data value that will be targeted.",
+    "mlir::TypedValue<FIRRTLBaseType>", "getData", (ins), [{}], /*defaultImplementation=*/[{
+      return llvm::cast<mlir::TypedValue<FIRRTLBaseType>>($_op.getDataRaw());
+    }]>,
+    InterfaceMethod<"Return raw data value that will be targeted.",
+    "Value", "getDataRaw", (ins), [{}], /*defaultImplementation=*/[{
+      return $_op.getResult();
+    }]>,
+    InterfaceMethod<"Return data type that will be referenced.",
+    "FIRRTLBaseType", "getDataType", (ins), [{}], /*defaultImplementation=*/[{
+      return firrtl::type_cast<FIRRTLBaseType>($_op.getDataRaw().getType());
+    }]>,
+    InterfaceMethod<"Return reference result, or null if not active.",
+    "mlir::TypedValue<RefType>", "getDataRef", (ins), [{}], /*defaultImplementation=*/[{
+      return llvm::cast_or_null<mlir::TypedValue<RefType>>($_op.getRef());
+    }]>,
+  ];
+  let extraClassDeclaration = [{
+    /// Attribute name for 'forceable' tracking.
+    static StringRef getForceableAttrName() { return "forceable"; }
+  }];
+  let verify = [{
+    return detail::verifyForceableOp(cast<::circt::firrtl::Forceable>($_op));
+  }];
+}
+
+#endif // CIRCT_DIALECT_FIRRTL_FIRRTLOPINTERFACES_TD

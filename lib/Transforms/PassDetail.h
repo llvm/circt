@@ -17,20 +17,40 @@
 
 namespace mlir {
 class MemrefDialect;
-
 // Forward declaration from Dialect.h
 template <typename ConcreteDialect>
 void registerDialect(DialectRegistry &registry);
+
+namespace arith {
+class ArithDialect;
+} // namespace arith
 
 namespace memref {
 class MemRefDialect;
 } // end namespace memref
 
+namespace cf {
+class ControlFlowDialect;
+} // namespace cf
+
+namespace func {
+class FuncDialect;
+} // namespace func
+} // end namespace mlir
+
 namespace circt {
+namespace hw {
+class HWModuleLike;
+class HWDialect;
+} // namespace hw
+
+namespace comb {
+class CombDialect;
+} // namespace comb
+
 #define GEN_PASS_CLASSES
 #include "circt/Transforms/Passes.h.inc"
 
 } // namespace circt
-} // end namespace mlir
 
 #endif // TRANSFORMS_PASSDETAIL_H

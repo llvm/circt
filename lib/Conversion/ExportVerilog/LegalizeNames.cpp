@@ -14,22 +14,15 @@
 #include "ExportVerilogInternals.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/Verif/VerifOps.h"
+#include "circt/Support/LoweringOptions.h"
+#include "mlir/IR/Threading.h"
+#include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
 using namespace sv;
 using namespace hw;
 using namespace ExportVerilog;
-
-StringAttr ExportVerilog::getDeclarationName(Operation *op) {
-  if (auto attr = op->getAttrOfType<StringAttr>("name"))
-    return attr;
-  if (auto attr = op->getAttrOfType<StringAttr>("instanceName"))
-    return attr;
-  if (auto attr =
-          op->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName()))
-    return attr;
-  return {};
-}
 
 //===----------------------------------------------------------------------===//
 // NameCollisionResolver
@@ -38,7 +31,7 @@ StringAttr ExportVerilog::getDeclarationName(Operation *op) {
 /// Given a name that may have collisions or invalid symbols, return a
 /// replacement name to use, or null if the original name was ok.
 StringRef NameCollisionResolver::getLegalName(StringRef originalName) {
-  return legalizeName(originalName, usedNames, nextGeneratedNameID);
+  return legalizeName(originalName, nextGeneratedNameIDs);
 }
 
 //===----------------------------------------------------------------------===//
@@ -48,7 +41,7 @@ StringRef NameCollisionResolver::getLegalName(StringRef originalName) {
 void FieldNameResolver::setRenamedFieldName(StringAttr fieldName,
                                             StringAttr newFieldName) {
   renamedFieldNames[fieldName] = newFieldName;
-  usedFieldNames.insert(newFieldName);
+  nextGeneratedNameIDs.insert({newFieldName, 0});
 }
 
 StringAttr FieldNameResolver::getRenamedFieldName(StringAttr fieldName) {
@@ -58,20 +51,33 @@ StringAttr FieldNameResolver::getRenamedFieldName(StringAttr fieldName) {
 
   // If a field name is not verilog name or used already, we have to rename it.
   bool hasToBeRenamed = !sv::isNameValid(fieldName.getValue()) ||
-                        usedFieldNames.count(fieldName.getValue());
+                        nextGeneratedNameIDs.count(fieldName.getValue());
 
   if (!hasToBeRenamed) {
     setRenamedFieldName(fieldName, fieldName);
     return fieldName;
   }
 
-  StringRef newFieldName = sv::legalizeName(
-      fieldName.getValue(), usedFieldNames, nextGeneratedNameID);
+  StringRef newFieldName =
+      sv::legalizeName(fieldName.getValue(), nextGeneratedNameIDs);
 
   auto newFieldNameAttr = StringAttr::get(fieldName.getContext(), newFieldName);
 
   setRenamedFieldName(fieldName, newFieldNameAttr);
   return newFieldNameAttr;
+}
+
+std::string FieldNameResolver::getEnumFieldName(hw::EnumFieldAttr attr) {
+  auto aliasType = attr.getType().getValue().dyn_cast<hw::TypeAliasType>();
+  if (!aliasType)
+    return attr.getField().getValue().str();
+
+  auto fieldStr = attr.getField().getValue().str();
+  if (auto prefix = globalNames.getEnumPrefix(aliasType))
+    return (prefix.getValue() + "_" + fieldStr).str();
+
+  // No prefix registered, just use the bare field name.
+  return fieldStr;
 }
 
 //===----------------------------------------------------------------------===//
@@ -81,16 +87,16 @@ StringAttr FieldNameResolver::getRenamedFieldName(StringAttr fieldName) {
 namespace circt {
 namespace ExportVerilog {
 /// This class keeps track of modules and interfaces that need to be renamed, as
-/// well as module ports and parameters that need to be renamed.  This can
-/// happen either due to conflicts between them or due to a conflict with a
-/// Verilog keyword.
+/// well as module ports, parameters, declarations and verif labels that need to
+/// be renamed. This can happen either due to conflicts between them or due to
+/// a conflict with a Verilog keyword.
 ///
 /// Once constructed, this is immutable.
 class GlobalNameResolver {
 public:
-  /// Construct a GlobalNameResolver and do the initial scan to populate and
-  /// unique the module/interfaces and port/parameter names.
-  GlobalNameResolver(mlir::ModuleOp topLevel);
+  /// Construct a GlobalNameResolver and perform name legalization of the
+  /// module/interfaces, port/parameter and declaration names.
+  GlobalNameResolver(mlir::ModuleOp topLevel, const LoweringOptions &options);
 
   GlobalNameTable takeGlobalNameTable() { return std::move(globalNameTable); }
 
@@ -100,6 +106,9 @@ private:
   /// globalNameTable.
   void legalizeModuleNames(HWModuleOp module);
   void legalizeInterfaceNames(InterfaceOp interface);
+
+  // Gathers prefixes of enum types by inspecting typescopes in the module.
+  void gatherEnumPrefixes(mlir::ModuleOp topLevel);
 
   /// Set of globally visible names, to ensure uniqueness.
   NameCollisionResolver globalNameResolver;
@@ -113,9 +122,89 @@ private:
 } // namespace ExportVerilog
 } // namespace circt
 
+// This function legalizes local names in the given module.
+static void legalizeModuleLocalNames(HWModuleOp module,
+                                     const LoweringOptions &options,
+                                     const GlobalNameTable &globalNameTable) {
+  // A resolver for a local name collison.
+  NameCollisionResolver nameResolver;
+  // Register names used by parameters.
+  for (auto param : module.getParameters())
+    nameResolver.insertUsedName(globalNameTable.getParameterVerilogName(
+        module, param.cast<ParamDeclAttr>().getName()));
+
+  auto *ctxt = module.getContext();
+
+  auto verilogNameAttr = StringAttr::get(ctxt, "hw.verilogName");
+  // Legalize the port names.
+  auto ports = module.getPortList();
+  for (const PortInfo &port : ports) {
+    auto newName = nameResolver.getLegalName(port.name);
+    if (newName != port.name.getValue()) {
+      if (port.isOutput())
+        module.setResultAttr(port.argNum, verilogNameAttr,
+                             StringAttr::get(ctxt, newName));
+      else
+        module.setArgAttr(port.argNum, verilogNameAttr,
+                          StringAttr::get(ctxt, newName));
+    }
+  }
+
+  SmallVector<std::pair<Operation *, StringAttr>> nameEntries;
+  // Legalize the value names. We first mark existing hw.verilogName attrs as
+  // being used, and then resolve names of declarations.
+  module.walk([&](Operation *op) {
+    if (!isa<HWModuleOp>(op)) {
+      // If there is a hw.verilogName attr, mark names as used.
+      if (auto name = op->getAttrOfType<StringAttr>(verilogNameAttr)) {
+        nameResolver.insertUsedName(
+            op->getAttrOfType<StringAttr>(verilogNameAttr));
+      } else if (isa<sv::WireOp, hw::WireOp, RegOp, LogicOp, LocalParamOp,
+                     hw::InstanceOp, sv::InterfaceInstanceOp, sv::GenerateOp>(
+                     op)) {
+        // Otherwise, get a verilog name via `getSymOpName`.
+        nameEntries.emplace_back(
+            op, StringAttr::get(op->getContext(), getSymOpName(op)));
+      } else if (auto forOp = dyn_cast<ForOp>(op)) {
+        nameEntries.emplace_back(op, forOp.getInductionVarNameAttr());
+      } else if (isa<AssertOp, AssumeOp, CoverOp, AssertConcurrentOp,
+                     AssumeConcurrentOp, CoverConcurrentOp, verif::AssertOp,
+                     verif::CoverOp, verif::AssumeOp>(op)) {
+        // Notice and renamify the labels on verification statements.
+        if (auto labelAttr = op->getAttrOfType<StringAttr>("label"))
+          nameEntries.emplace_back(op, labelAttr);
+        else if (options.enforceVerifLabels) {
+          // If labels are required for all verif statements, get a default
+          // name from verificaiton kinds.
+          StringRef defaultName =
+              llvm::TypeSwitch<Operation *, StringRef>(op)
+                  .Case<AssertOp, AssertConcurrentOp, verif::AssertOp>(
+                      [](auto) { return "assert"; })
+                  .Case<CoverOp, CoverConcurrentOp, verif::CoverOp>(
+                      [](auto) { return "cover"; })
+                  .Case<AssumeOp, AssumeConcurrentOp, verif::AssumeOp>(
+                      [](auto) { return "assume"; });
+          nameEntries.emplace_back(
+              op, StringAttr::get(op->getContext(), defaultName));
+        }
+      }
+    }
+  });
+
+  for (auto [op, nameAttr] : nameEntries) {
+    auto newName = nameResolver.getLegalName(nameAttr);
+    assert(!newName.empty() && "must have a valid name");
+    // Add a legalized name to "hw.verilogName" attribute.
+    op->setAttr(verilogNameAttr, nameAttr.getValue() == newName
+                                     ? nameAttr
+                                     : StringAttr::get(ctxt, newName));
+  }
+}
+
 /// Construct a GlobalNameResolver and do the initial scan to populate and
 /// unique the module/interfaces and port/parameter names.
-GlobalNameResolver::GlobalNameResolver(mlir::ModuleOp topLevel) {
+GlobalNameResolver::GlobalNameResolver(mlir::ModuleOp topLevel,
+                                       const LoweringOptions &options) {
   // Register the names of external modules which we cannot rename. This has to
   // occur in a first pass separate from the modules and interfaces which we are
   // actually allowed to rename, in order to ensure that we don't accidentally
@@ -146,6 +235,32 @@ GlobalNameResolver::GlobalNameResolver(mlir::ModuleOp topLevel) {
       continue;
     }
   }
+
+  // Legalize names in HW modules parallelly.
+  mlir::parallelForEach(
+      topLevel.getContext(), topLevel.getOps<HWModuleOp>(), [&](auto module) {
+        legalizeModuleLocalNames(module, options, globalNameTable);
+      });
+
+  // Gather enum prefixes.
+  gatherEnumPrefixes(topLevel);
+}
+
+// Gathers prefixes of enum types by investigating typescopes in the module.
+void GlobalNameResolver::gatherEnumPrefixes(mlir::ModuleOp topLevel) {
+  auto *ctx = topLevel.getContext();
+  for (auto typeScope : topLevel.getOps<hw::TypeScopeOp>()) {
+    for (auto typeDecl : typeScope.getOps<hw::TypedeclOp>()) {
+      auto enumType = typeDecl.getType().dyn_cast<hw::EnumType>();
+      if (!enumType)
+        continue;
+
+      // Register the enum type as the alias type of the typedecl, since this is
+      // how users will request the prefix.
+      globalNameTable.enumPrefixes[typeDecl.getAliasType()] =
+          StringAttr::get(ctx, typeDecl.getPreferredName());
+    }
+  }
 }
 
 /// Check to see if the port names of the specified module conflict with
@@ -161,41 +276,13 @@ void GlobalNameResolver::legalizeModuleNames(HWModuleOp module) {
     module->setAttr("verilogName", StringAttr::get(ctxt, newName));
 
   NameCollisionResolver nameResolver;
-  auto verilogNameAttr = StringAttr::get(ctxt, "hw.verilogName");
-  // Legalize the port names.
-  size_t portIdx = 0;
-  SmallVector<Attribute, 4> argNames, resultNames;
-  for (const PortInfo &port : getAllModulePortInfos(module)) {
-    auto newName = nameResolver.getLegalName(port.name);
-    if (newName != port.name.getValue()) {
-      if (port.isOutput())
-        module.setResultAttr(port.argNum, verilogNameAttr,
-                             StringAttr::get(ctxt, newName));
-      else
-        module.setArgAttr(port.argNum, verilogNameAttr,
-                          StringAttr::get(ctxt, newName));
-    }
-    ++portIdx;
-  }
-
   // Legalize the parameter names.
-  for (auto param : module.parameters()) {
+  for (auto param : module.getParameters()) {
     auto paramAttr = param.cast<ParamDeclAttr>();
     auto newName = nameResolver.getLegalName(paramAttr.getName());
     if (newName != paramAttr.getName().getValue())
       globalNameTable.addRenamedParam(module, paramAttr.getName(), newName);
   }
-
-  // Legalize the value names.
-  module.walk([&](Operation *op) {
-    if (!isa<HWModuleOp>(op))
-      if (auto nameAttr = getDeclarationName(op)) {
-        auto newName = nameResolver.getLegalName(nameAttr);
-        if (newName != nameAttr.getValue()) {
-          op->setAttr(verilogNameAttr, StringAttr::get(ctxt, newName));
-        }
-      }
-  });
 }
 
 void GlobalNameResolver::legalizeInterfaceNames(InterfaceOp interface) {
@@ -223,7 +310,9 @@ void GlobalNameResolver::legalizeInterfaceNames(InterfaceOp interface) {
 
 /// Rewrite module names and interfaces to not conflict with each other or with
 /// Verilog keywords.
-GlobalNameTable ExportVerilog::legalizeGlobalNames(ModuleOp topLevel) {
-  GlobalNameResolver resolver(topLevel);
+GlobalNameTable
+ExportVerilog::legalizeGlobalNames(ModuleOp topLevel,
+                                   const LoweringOptions &options) {
+  GlobalNameResolver resolver(topLevel, options);
   return resolver.takeGlobalNameTable();
 }

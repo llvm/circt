@@ -16,7 +16,13 @@
 #ifndef DIALECT_HANDSHAKE_TRANSFORMS_PASSDETAILS_H
 #define DIALECT_HANDSHAKE_TRANSFORMS_PASSDETAILS_H
 
+#include "circt/Dialect/Comb/CombDialect.h"
+#include "circt/Dialect/ESI/ESIDialect.h"
+#include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Pass/Pass.h"
 
 namespace circt {

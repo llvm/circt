@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/Calyx/CalyxHelpers.h"
 #include "circt/Dialect/Calyx/CalyxOps.h"
 #include "circt/Dialect/Calyx/CalyxPasses.h"
 #include "circt/Support/LLVM.h"
@@ -32,7 +33,7 @@ static void modifyGroupOperations(ComponentOp component) {
   auto control = component.getControlOp();
   // Get the only EnableOp in the control.
   auto topLevel = *control.getRegion().getOps<EnableOp>().begin();
-  auto topLevelName = topLevel.groupName();
+  auto topLevelName = topLevel.getGroupName();
 
   auto wires = component.getWiresOp();
   Value componentGoPort = component.getGoPort();
@@ -43,12 +44,12 @@ static void modifyGroupOperations(ComponentOp component) {
     updateGroupAssignmentGuards(builder, group, componentGoPort);
 
     auto groupDone = group.getDoneOp();
-    if (topLevelName == group.sym_name()) {
+    if (topLevelName == group.getSymName()) {
       // Replace `calyx.group_done %0, %1 ? : i1`
       //    with `calyx.assign %done, %0, %1 ? : i1`
       auto assignOp =
           builder.create<AssignOp>(group->getLoc(), component.getDonePort(),
-                                   groupDone.src(), groupDone.guard());
+                                   groupDone.getSrc(), groupDone.getGuard());
       groupDone->replaceAllUsesWith(assignOp);
     } else {
       // Replace calyx.group_go's uses with its guard, e.g.
@@ -57,7 +58,7 @@ static void modifyGroupOperations(ComponentOp component) {
       //    ->
       //    %0 = comb.and %1, %3 : i1
       auto groupGo = group.getGoOp();
-      auto groupGoGuard = groupGo.guard();
+      auto groupGoGuard = groupGo.getGuard();
       groupGo.replaceAllUsesWith(groupGoGuard);
       groupGo->erase();
     }

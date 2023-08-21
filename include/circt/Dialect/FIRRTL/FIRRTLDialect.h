@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_FIRRTL_DIALECT_H
 
 #include "circt/Dialect/HW/HWDialect.h"
+#include "circt/Dialect/OM/OMDialect.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Dialect.h"
@@ -23,22 +24,5 @@
 
 // Pull in all enum type definitions and utility function declarations.
 #include "circt/Dialect/FIRRTL/FIRRTLEnums.h.inc"
-
-namespace circt {
-class FieldRef;
-
-namespace firrtl {
-
-/// Get the FieldRef from a value.  This will travel backwards to through the
-/// IR, following Subfield and Subindex to find the op which declares the
-/// location.
-FieldRef getFieldRefFromValue(Value value);
-
-/// Get a string identifier representing the FieldRef.
-std::string getFieldName(const FieldRef &fieldRef);
-std::string getFieldName(const FieldRef &fieldRef, bool &rootKnown);
-
-} // namespace firrtl
-} // namespace circt
 
 #endif // CIRCT_DIALECT_FIRRTL_IR_DIALECT_H

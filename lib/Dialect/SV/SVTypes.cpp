@@ -13,7 +13,7 @@
 #include "circt/Dialect/SV/SVTypes.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/SV/SVDialect.h"
-
+#include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "llvm/ADT/TypeSwitch.h"
 

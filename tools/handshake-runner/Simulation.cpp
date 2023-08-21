@@ -15,7 +15,7 @@
 
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/Handshake/Simulation.h"
-#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
@@ -71,14 +71,14 @@ void debugArg(const std::string &head, mlir::Value op, const APFloat &value,
 
 void debugArg(const std::string &head, mlir::Value op, const Any &value,
               double time) {
-  if (any_isa<APInt>(value)) {
-    debugArg(head, op, any_cast<APInt>(value), time);
-  } else if (any_isa<APFloat>(value)) {
-    debugArg(head, op, any_cast<APFloat>(value), time);
-  } else if (any_isa<unsigned>(value)) {
+  if (auto *val = any_cast<APInt>(&value)) {
+    debugArg(head, op, *val, time);
+  } else if (auto *val = any_cast<APFloat>(&value)) {
+    debugArg(head, op, val, time);
+  } else if (auto *val = any_cast<unsigned>(&value)) {
     // Represents an allocated buffer.
-    LLVM_DEBUG(dbgs() << "  " << head << ":  " << op << " = Buffer "
-                      << any_cast<unsigned>(value) << "\n");
+    LLVM_DEBUG(dbgs() << "  " << head << ":  " << op << " = Buffer " << *val
+                      << "\n");
   } else {
     llvm_unreachable("unknown type");
   }
@@ -790,8 +790,8 @@ HandshakeExecuter::HandshakeExecuter(
 
   // Initialize the value map for buffers with initial values.
   for (auto bufferOp : func.getOps<handshake::BufferOp>()) {
-    if (bufferOp.initValues().hasValue()) {
-      auto initValues = bufferOp.getInitValues();
+    if (bufferOp.getInitValues().has_value()) {
+      auto initValues = bufferOp.getInitValueArray();
       assert(initValues.size() == 1 &&
              "Handshake-runner only supports buffer initialization with a "
              "single buffer value.");
@@ -900,7 +900,7 @@ HandshakeExecuter::HandshakeExecuter(
 
     for (auto out : enumerate(op.getResults())) {
       LLVM_DEBUG(debugArg("OUT", out.value(), outValues[out.index()], time));
-      assert(outValues[out.index()].hasValue());
+      assert(outValues[out.index()].has_value());
       valueMap[out.value()] = outValues[out.index()];
       timeMap[out.value()] = time + 1;
       scheduleUses(readyList, valueMap, out.value());

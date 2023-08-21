@@ -32,7 +32,7 @@ static void doPortPassthrough(ComponentOp comp, Value fromPort,
                               StringRef portID) {
   MLIRContext *ctx = comp.getContext();
   OpBuilder builder(ctx);
-  builder.setInsertionPointToStart(comp.getWiresOp().getBody());
+  builder.setInsertionPointToStart(comp.getWiresOp().getBodyBlock());
 
   for (auto cell : comp.getOps<CellInterface>()) {
     for (auto port : cell.getInputPorts()) {

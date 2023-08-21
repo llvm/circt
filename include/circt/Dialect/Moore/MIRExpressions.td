@@ -13,7 +13,7 @@
 include "mlir/Interfaces/InferTypeOpInterface.td"
 
 
-def ConstantOp : MIROp<"constant", [NoSideEffect]> {
+def ConstantOp : MIROp<"constant", [Pure]> {
   let summary = "A constant value";
 
   let arguments = (ins I32Attr:$value);
@@ -22,7 +22,7 @@ def ConstantOp : MIROp<"constant", [NoSideEffect]> {
 }
 
 def ConcatOp : MIROp<"concat", [
-    NoSideEffect, DeclareOpInterfaceMethods<InferTypeOpInterface>
+    Pure, DeclareOpInterfaceMethods<InferTypeOpInterface>
 ]> {
   let summary = "A concatenation of expressions";
   let description = [{
@@ -49,7 +49,7 @@ def ConcatOp : MIROp<"concat", [
 //===----------------------------------------------------------------------===//
 
 class ShiftOp<string name> : MIROp<name, [
-    NoSideEffect, 
+    Pure, 
     TypesMatchWith<"value and result types must match",
                    "value", "result", "$_self">
 ]> {

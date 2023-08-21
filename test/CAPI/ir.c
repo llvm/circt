@@ -17,7 +17,7 @@
 #include "mlir-c/AffineMap.h"
 #include "mlir-c/BuiltinTypes.h"
 #include "mlir-c/Diagnostics.h"
-#include "mlir-c/Registration.h"
+#include "mlir-c/IR.h"
 
 #include <assert.h>
 #include <math.h>
@@ -25,7 +25,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-int registerOnlyHW() {
+int registerOnlyHW(void) {
   MlirContext ctx = mlirContextCreate();
   // The built-in dialect is always loaded.
   if (mlirContextGetNumLoadedDialects(ctx) != 1)
@@ -77,7 +77,7 @@ int registerOnlyHW() {
   return 0;
 }
 
-int testHWTypes() {
+int testHWTypes(void) {
   MlirContext ctx = mlirContextCreate();
   MlirDialectHandle hwHandle = mlirGetDialectHandle__hw__();
   mlirDialectHandleRegisterDialect(hwHandle, ctx);
@@ -123,7 +123,7 @@ int testHWTypes() {
   return 0;
 }
 
-int main() {
+int main(void) {
   fprintf(stderr, "@registration\n");
   int errcode = registerOnlyHW();
   fprintf(stderr, "%d\n", errcode);

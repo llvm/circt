@@ -27,7 +27,7 @@ module {
       %vec : !hw.array<#hw.param.decl.ref<"N"> x !hw.int<#hw.param.decl.ref<"X">>>,
       %a : !hw.int<#hw.param.decl.ref<"X">>) -> (out: !hw.int<#hw.param.decl.ref<"X">>) {
     %c0 = arith.constant 0 : i64
-    %first = hw.array_get %vec[%c0] : !hw.array<#hw.param.decl.ref<"N"> x !hw.int<#hw.param.decl.ref<"X">>>
+    %first = hw.array_get %vec[%c0] : !hw.array<#hw.param.decl.ref<"N"> x !hw.int<#hw.param.decl.ref<"X">>>, i64
     %0 = comb.add %first, %a : !hw.int<#hw.param.decl.ref<"X">>
     hw.output %0 : !hw.int<#hw.param.decl.ref<"X">>
   }

@@ -10,10 +10,12 @@
 #define CIRCT_DIALECT_MSFT_MSFTOPINTERFACES_H
 
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWSymCache.h"
 
 namespace circt {
 namespace msft {
 LogicalResult verifyDynInstData(Operation *);
+class InstanceHierarchyOp;
 } // namespace msft
 } // namespace circt
 #include "circt/Dialect/MSFT/MSFTOpInterfaces.h.inc"

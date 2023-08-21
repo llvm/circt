@@ -27,13 +27,17 @@ public:
   ResultType dispatchTypeOpVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<ConstantOp,
+        .template Case<ConstantOp, AggregateConstantOp,
                        // Array operations
                        ArraySliceOp, ArrayCreateOp, ArrayConcatOp, ArrayGetOp,
                        // Struct operations
                        StructCreateOp, StructExtractOp, StructInjectOp,
+                       // Union operations
+                       UnionCreateOp, UnionExtractOp,
                        // Cast operation
-                       BitcastOp, ParamValueOp>([&](auto expr) -> ResultType {
+                       BitcastOp, ParamValueOp,
+                       // Enum operations
+                       EnumConstantOp, EnumCmpOp>([&](auto expr) -> ResultType {
           return thisCast->visitTypeOp(expr, args...);
         })
         .Default([&](auto expr) -> ResultType {
@@ -60,15 +64,20 @@ public:
   }
 
   HANDLE(ConstantOp, Unhandled);
+  HANDLE(AggregateConstantOp, Unhandled);
   HANDLE(BitcastOp, Unhandled);
   HANDLE(ParamValueOp, Unhandled);
   HANDLE(StructCreateOp, Unhandled);
   HANDLE(StructExtractOp, Unhandled);
   HANDLE(StructInjectOp, Unhandled);
+  HANDLE(UnionCreateOp, Unhandled);
+  HANDLE(UnionExtractOp, Unhandled);
   HANDLE(ArraySliceOp, Unhandled);
   HANDLE(ArrayGetOp, Unhandled);
   HANDLE(ArrayCreateOp, Unhandled);
   HANDLE(ArrayConcatOp, Unhandled);
+  HANDLE(EnumCmpOp, Unhandled);
+  HANDLE(EnumConstantOp, Unhandled);
 #undef HANDLE
 };
 
@@ -80,7 +89,7 @@ public:
   ResultType dispatchStmtVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<ProbeOp, OutputOp, InstanceOp, TypeScopeOp, TypedeclOp>(
+        .template Case<OutputOp, InstanceOp, TypeScopeOp, TypedeclOp>(
             [&](auto expr) -> ResultType {
               return thisCast->visitStmt(expr, args...);
             })
@@ -118,7 +127,6 @@ public:
   }
 
   // Basic nodes.
-  HANDLE(ProbeOp, Unhandled);
   HANDLE(OutputOp, Unhandled);
   HANDLE(InstanceOp, Unhandled);
   HANDLE(TypeScopeOp, Unhandled);

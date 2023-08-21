@@ -14,7 +14,7 @@
 #define CIRCT_DIALECT_FIRRTL_FIRRTLINSTANCEGRAPH_H
 
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
-#include "circt/Dialect/HW/InstanceGraphBase.h"
+#include "circt/Support/InstanceGraph.h"
 #include "circt/Support/LLVM.h"
 #include "llvm/ADT/GraphTraits.h"
 #include "llvm/ADT/STLExtras.h"
@@ -22,8 +22,9 @@
 
 namespace circt {
 namespace firrtl {
-using InstanceRecord = hw::InstanceRecord;
-using InstanceGraphNode = hw::InstanceGraphNode;
+using InstanceRecord = igraph::InstanceRecord;
+using InstanceGraphNode = igraph::InstanceGraphNode;
+using InstancePathCache = igraph::InstancePathCache;
 
 /// This graph tracks modules and where they are instantiated. This is intended
 /// to be used as a cached analysis on FIRRTL circuits.  This class can be used
@@ -31,16 +32,16 @@ using InstanceGraphNode = hw::InstanceGraphNode;
 ///
 /// To use this class, retrieve a cached copy from the analysis manager:
 ///   auto &instanceGraph = getAnalysis<InstanceGraph>(getOperation());
-class InstanceGraph : public hw::InstanceGraphBase {
+class InstanceGraph : public igraph::InstanceGraph {
 public:
   /// Create a new module graph of a circuit.  This must be called on a FIRRTL
   /// CircuitOp or MLIR ModuleOp.
   explicit InstanceGraph(Operation *operation);
 
   /// Get the node corresponding to the top-level module of a circuit.
-  InstanceGraphNode *getTopLevelNode() override { return topLevelNode; }
+  igraph::InstanceGraphNode *getTopLevelNode() override { return topLevelNode; }
 
-  /// Get the module corresponding to the top-lebel module of a circuit.
+  /// Get the module corresponding to the top-level module of a circuit.
   FModuleLike getTopLevelModule() {
     return cast<FModuleLike>(*getTopLevelNode()->getModule());
   }
@@ -49,54 +50,19 @@ private:
   InstanceGraphNode *topLevelNode;
 };
 
-/// An absolute instance path.
-using InstancePath = ArrayRef<InstanceOp>;
-
-template <typename T>
-inline static T &formatInstancePath(T &into, const InstancePath &path) {
-  into << "$root";
-  for (auto inst : path)
-    into << "/" << inst.name() << ":" << inst.moduleName();
-  return into;
-}
-
-template <typename T>
-static T &operator<<(T &os, const InstancePath &path) {
-  return formatInstancePath(os, path);
-}
-
-/// A data structure that caches and provides absolute paths to module instances
-/// in the IR.
-struct InstancePathCache {
-  /// The instance graph of the IR.
-  InstanceGraph &instanceGraph;
-
-  explicit InstancePathCache(InstanceGraph &instanceGraph)
-      : instanceGraph(instanceGraph) {}
-  ArrayRef<InstancePath> getAbsolutePaths(Operation *op);
-
-private:
-  /// An allocator for individual instance paths and entire path lists.
-  llvm::BumpPtrAllocator allocator;
-
-  /// Cached absolute instance paths.
-  DenseMap<Operation *, ArrayRef<InstancePath>> absolutePathsCache;
-
-  /// Append an instance to a path.
-  InstancePath appendInstance(InstancePath path, InstanceOp inst);
-};
+bool allUnder(ArrayRef<InstanceRecord *> nodes, InstanceGraphNode *top);
 
 } // namespace firrtl
 } // namespace circt
 
 template <>
 struct llvm::GraphTraits<circt::firrtl::InstanceGraph *>
-    : public llvm::GraphTraits<circt::hw::InstanceGraphBase *> {};
+    : public llvm::GraphTraits<circt::igraph::InstanceGraph *> {};
 
 template <>
 struct llvm::DOTGraphTraits<circt::firrtl::InstanceGraph *>
-    : public llvm::DOTGraphTraits<circt::hw::InstanceGraphBase *> {
-  using llvm::DOTGraphTraits<circt::hw::InstanceGraphBase *>::DOTGraphTraits;
+    : public llvm::DOTGraphTraits<circt::igraph::InstanceGraph *> {
+  using llvm::DOTGraphTraits<circt::igraph::InstanceGraph *>::DOTGraphTraits;
 };
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLINSTANCEGRAPH_H

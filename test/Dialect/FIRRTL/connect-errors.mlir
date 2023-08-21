@@ -2,9 +2,9 @@
 // RUN: circt-opt %s -split-input-file -verify-diagnostics
 
 firrtl.circuit "test" {
-// expected-note @+1 {{the left-hand-side was defined here}}
+// expected-note @below {{the destination was defined here}}
 firrtl.module @test(in %a : !firrtl.uint<1>, out %b : !firrtl.uint<1>) {
-  // expected-error @+1 {{has invalid flow: the left-hand-side has source flow}}
+  // expected-error @below {{connect has invalid flow: the destination expression "a" has source flow, expected sink or duplex flow}}
   firrtl.connect %a, %b : !firrtl.uint<1>, !firrtl.uint<1>
 }
 }
@@ -262,12 +262,23 @@ firrtl.module @test(in %a : !firrtl.bundle<f1: uint<1>>, in %b : !firrtl.bundle<
 // -----
 
 firrtl.circuit "test" {
+// expected-note @below {{the destination was defined here}}
 firrtl.module @test(in %a : !firrtl.bundle<f1: uint<1>>, out %b : !firrtl.bundle<f1: uint<1>>) {
-  // expected-note @+1 {{the left-hand-side was defined here}}
-  %0 = firrtl.subfield %a(0) : (!firrtl.bundle<f1: uint<1>>) -> !firrtl.uint<1>
-  %1 = firrtl.subfield %b(0) : (!firrtl.bundle<f1: uint<1>>) -> !firrtl.uint<1>
-  // expected-error @+1 {{op has invalid flow: the left-hand-side has source flow}}
+  %0 = firrtl.subfield %a[f1] : !firrtl.bundle<f1: uint<1>>
+  %1 = firrtl.subfield %b[f1] : !firrtl.bundle<f1: uint<1>>
+  // expected-error @below {{connect has invalid flow: the destination expression "a.f1" has source flow, expected sink or duplex flow}}
   firrtl.connect %0, %1 : !firrtl.uint<1>, !firrtl.uint<1>
+}
+}
+
+// -----
+
+firrtl.circuit "test" {
+firrtl.module @test(in %a : !firrtl.uint<1>, out %b : !firrtl.uint<1>) {
+  // expected-note @below {{the destination was defined here}}
+  %0 = firrtl.and %a, %a: (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  // expected-error @below {{connect has invalid flow: the destination expression has source flow, expected sink or duplex flow}}
+  firrtl.connect %0, %b : !firrtl.uint<1>, !firrtl.uint<1>
 }
 }
 
@@ -291,14 +302,14 @@ firrtl.module @test(in %a : !firrtl.uint<2>, out %b : !firrtl.uint<1>) {
 ///     a.a.a <= ax.a.a
 
 firrtl.circuit "test"  {
+// expected-note @below {{the destination was defined here}}
 firrtl.module @test(out %a: !firrtl.bundle<a: bundle<a flip: uint<1>>>) {
   %ax = firrtl.wire  : !firrtl.bundle<a: bundle<a flip: uint<1>>>
-  %a_a = firrtl.subfield %a(0) : (!firrtl.bundle<a: bundle<a flip: uint<1>>>) -> !firrtl.bundle<a flip: uint<1>>
-  // expected-note @+1 {{the left-hand-side was defined here}}
-  %a_a_a = firrtl.subfield %a_a(0) : (!firrtl.bundle<a flip: uint<1>>) -> !firrtl.uint<1>
-  %ax_a = firrtl.subfield %ax(0) : (!firrtl.bundle<a: bundle<a flip: uint<1>>>) -> !firrtl.bundle<a flip: uint<1>>
-  %ax_a_a = firrtl.subfield %ax_a(0) : (!firrtl.bundle<a flip: uint<1>>) -> !firrtl.uint<1>
-  // expected-error @+1 {{invalid flow: the left-hand-side has source flow}}
+  %a_a = firrtl.subfield %a[a] : !firrtl.bundle<a: bundle<a flip: uint<1>>>
+  %a_a_a = firrtl.subfield %a_a[a] : !firrtl.bundle<a flip: uint<1>>
+  %ax_a = firrtl.subfield %ax[a] : !firrtl.bundle<a: bundle<a flip: uint<1>>>
+  %ax_a_a = firrtl.subfield %ax_a[a] : !firrtl.bundle<a flip: uint<1>>
+  // expected-error @below {{connect has invalid flow: the destination expression "a.a.a" has source flow}}
   firrtl.connect %a_a_a, %ax_a_a : !firrtl.uint<1>, !firrtl.uint<1>
 }
 }
@@ -312,12 +323,12 @@ firrtl.module @test(out %a: !firrtl.bundle<a: bundle<a flip: uint<1>>>) {
 ///     a.a <= ax.a
 
 firrtl.circuit "test"  {
+// expected-note @below {{the destination was defined here}}
 firrtl.module @test(out %a: !firrtl.bundle<a flip: bundle<a: uint<1>>>) {
   %ax = firrtl.wire  : !firrtl.bundle<a flip: bundle<a: uint<1>>>
-  // expected-note @+1 {{the left-hand-side was defined here}}
-  %a_a = firrtl.subfield %a(0) : (!firrtl.bundle<a flip: bundle<a: uint<1>>>) -> !firrtl.bundle<a: uint<1>>
-  %ax_a = firrtl.subfield %ax(0) : (!firrtl.bundle<a flip: bundle<a: uint<1>>>) -> !firrtl.bundle<a: uint<1>>
-  // expected-error @+1 {{invalid flow: the left-hand-side has source flow}}
+  %a_a = firrtl.subfield %a[a] : !firrtl.bundle<a flip: bundle<a: uint<1>>>
+  %ax_a = firrtl.subfield %ax[a] : !firrtl.bundle<a flip: bundle<a: uint<1>>>
+  // expected-error @+1 {{the destination expression "a.a" has source flow}}
   firrtl.connect %a_a, %ax_a : !firrtl.bundle<a: uint<1>>, !firrtl.bundle<a: uint<1>>
 }
 }
@@ -331,14 +342,14 @@ firrtl.module @test(out %a: !firrtl.bundle<a flip: bundle<a: uint<1>>>) {
 ///     a.a.a <= ax.a.a
 
 firrtl.circuit "test"  {
+// expected-note @below {{the destination was defined here}}
 firrtl.module @test(out %a: !firrtl.bundle<a flip: bundle<a: uint<1>>>) {
   %ax = firrtl.wire  : !firrtl.bundle<a flip: bundle<a: uint<1>>>
-  %a_a = firrtl.subfield %a(0) : (!firrtl.bundle<a flip: bundle<a: uint<1>>>) -> !firrtl.bundle<a: uint<1>>
-  // expected-note @+1 {{the left-hand-side was defined here}}
-  %a_a_a = firrtl.subfield %a_a(0) : (!firrtl.bundle<a: uint<1>>) -> !firrtl.uint<1>
-  %ax_a = firrtl.subfield %ax(0) : (!firrtl.bundle<a flip: bundle<a: uint<1>>>) -> !firrtl.bundle<a: uint<1>>
-  %ax_a_a = firrtl.subfield %ax_a(0) : (!firrtl.bundle<a: uint<1>>) -> !firrtl.uint<1>
-  // expected-error @+1 {{invalid flow: the left-hand-side has source flow}}
+  %a_a = firrtl.subfield %a[a] : !firrtl.bundle<a flip: bundle<a: uint<1>>>
+  %a_a_a = firrtl.subfield %a_a[a] : !firrtl.bundle<a: uint<1>>
+  %ax_a = firrtl.subfield %ax[a] : !firrtl.bundle<a flip: bundle<a: uint<1>>>
+  %ax_a_a = firrtl.subfield %ax_a[a] : !firrtl.bundle<a: uint<1>>
+  // expected-error @+1 {{connect has invalid flow: the destination expression "a.a.a" has source flow}}
   firrtl.connect %a_a_a, %ax_a_a : !firrtl.uint<1>, !firrtl.uint<1>
 }
 }
@@ -352,13 +363,35 @@ firrtl.module @test(out %a: !firrtl.bundle<a flip: bundle<a: uint<1>>>) {
 ///     a.a <= ax.a
 
 firrtl.circuit "test"  {
+// expected-note @below {{the destination was defined here}}
 firrtl.module @test(out %a: !firrtl.bundle<a flip: bundle<a flip: uint<1>>>) {
   %ax = firrtl.wire  : !firrtl.bundle<a flip: bundle<a flip: uint<1>>>
-  // expected-note @+1 {{the left-hand-side was defined here}}
-  %a_a = firrtl.subfield %a(0) : (!firrtl.bundle<a flip: bundle<a flip: uint<1>>>) -> !firrtl.bundle<a flip: uint<1>>
-  %ax_a = firrtl.subfield %ax(0) : (!firrtl.bundle<a flip: bundle<a flip: uint<1>>>) -> !firrtl.bundle<a flip: uint<1>>
-  // expected-error @+1 {{invalid flow: the left-hand-side has source flow}}
+  %a_a = firrtl.subfield %a[a] : !firrtl.bundle<a flip: bundle<a flip: uint<1>>>
+  %ax_a = firrtl.subfield %ax[a] : !firrtl.bundle<a flip: bundle<a flip: uint<1>>>
+  // expected-error @below {{connect has invalid flow: the destination expression "a.a" has source flow}}
   firrtl.connect %a_a, %ax_a : !firrtl.bundle<a flip: uint<1>>, !firrtl.bundle<a flip: uint<1>>
+}
+}
+
+// -----
+
+// Check that different labels cause the enumeration to not match.
+
+firrtl.circuit "test"  {
+firrtl.module @test(in %a: !firrtl.enum<a: uint<1>>, out %b: !firrtl.enum<a: uint<2>>) {
+  // expected-error @below {{type mismatch between destination '!firrtl.enum<a: uint<2>>' and source '!firrtl.enum<a: uint<1>>'}}
+  firrtl.connect %b, %a : !firrtl.enum<a: uint<2>>, !firrtl.enum<a: uint<1>>
+}
+}
+
+// -----
+
+// Check that different data types causes the enumeration to not match.
+
+firrtl.circuit "test"  {
+firrtl.module @test(in %a: !firrtl.enum<a: uint<0>>, out %b: !firrtl.enum<b: uint<0>>) {
+  // expected-error @below {{type mismatch between destination '!firrtl.enum<b: uint<0>>' and source '!firrtl.enum<a: uint<0>>'}}
+  firrtl.connect %b, %a : !firrtl.enum<b: uint<0>>, !firrtl.enum<a: uint<0>>
 }
 }
 
@@ -382,10 +415,10 @@ firrtl.module @test(out %a: !firrtl.bundle<a flip: bundle<a flip: uint<1>>>) {
 
 firrtl.circuit "test" {
 firrtl.module @test(out %a: !firrtl.uint<1>) {
+  // expected-note @below {{the source was defined here}}
   %memory_r = firrtl.mem Undefined  {depth = 2 : i64, name = "memory", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
-  // expected-note @+1 {{the right-hand-side was defined here}}
-  %memory_r_en = firrtl.subfield %memory_r(1) : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>) -> !firrtl.uint<1>
-  // expected-error @+1 {{invalid flow: the right-hand-side has sink flow}}
+  %memory_r_en = firrtl.subfield %memory_r[en] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
+  // expected-error @below {{connect has invalid flow: the source expression "memory.r.en" has sink flow}}
   firrtl.connect %a, %memory_r_en : !firrtl.uint<1>, !firrtl.uint<1>
 }
 }
@@ -399,14 +432,14 @@ firrtl.module @test(out %a: !firrtl.uint<1>) {
 ///     a.a.a <- ax.a.a
 
 firrtl.circuit "test"  {
+// expected-note @below {{the destination was defined here}}
 firrtl.module @test(out %a: !firrtl.bundle<a: bundle<a flip: uint<1>>>) {
   %ax = firrtl.wire  : !firrtl.bundle<a: bundle<a flip: uint<1>>>
-  %a_a = firrtl.subfield %a(0) : (!firrtl.bundle<a: bundle<a flip: uint<1>>>) -> !firrtl.bundle<a flip: uint<1>>
-  // expected-note @+1 {{the left-hand-side was defined here}}
-  %a_a_a = firrtl.subfield %a_a(0) : (!firrtl.bundle<a flip: uint<1>>) -> !firrtl.uint<1>
-  %ax_a = firrtl.subfield %ax(0) : (!firrtl.bundle<a: bundle<a flip: uint<1>>>) -> !firrtl.bundle<a flip: uint<1>>
-  %ax_a_a = firrtl.subfield %ax_a(0) : (!firrtl.bundle<a flip: uint<1>>) -> !firrtl.uint<1>
-  // expected-error @+1 {{invalid flow: the left-hand-side has source flow}}
+  %a_a = firrtl.subfield %a[a] : !firrtl.bundle<a: bundle<a flip: uint<1>>>
+  %a_a_a = firrtl.subfield %a_a[a] : !firrtl.bundle<a flip: uint<1>>
+  %ax_a = firrtl.subfield %ax[a] : !firrtl.bundle<a: bundle<a flip: uint<1>>>
+  %ax_a_a = firrtl.subfield %ax_a[a] : !firrtl.bundle<a flip: uint<1>>
+  // expected-error @below {{connect has invalid flow: the destination expression "a.a.a" has source flow}}
   firrtl.connect %a_a_a, %ax_a_a : !firrtl.uint<1>, !firrtl.uint<1>
 }
 }
@@ -420,12 +453,12 @@ firrtl.module @test(out %a: !firrtl.bundle<a: bundle<a flip: uint<1>>>) {
 ///     a.a <- ax.a
 
 firrtl.circuit "test"  {
+// expected-note @below {{the destination was defined here}}
 firrtl.module @test(out %a: !firrtl.bundle<a flip: bundle<a: uint<1>>>) {
   %ax = firrtl.wire  : !firrtl.bundle<a flip: bundle<a: uint<1>>>
-  // expected-note @+1 {{the left-hand-side was defined here}}
-  %a_a = firrtl.subfield %a(0) : (!firrtl.bundle<a flip: bundle<a: uint<1>>>) -> !firrtl.bundle<a: uint<1>>
-  %ax_a = firrtl.subfield %ax(0) : (!firrtl.bundle<a flip: bundle<a: uint<1>>>) -> !firrtl.bundle<a: uint<1>>
-  // expected-error @+1 {{invalid flow: the left-hand-side has source flow}}
+  %a_a = firrtl.subfield %a[a] : !firrtl.bundle<a flip: bundle<a: uint<1>>>
+  %ax_a = firrtl.subfield %ax[a] : !firrtl.bundle<a flip: bundle<a: uint<1>>>
+  // expected-error @+1 {{connect has invalid flow: the destination expression "a.a" has source flow}}
   firrtl.connect %a_a, %ax_a : !firrtl.bundle<a: uint<1>>, !firrtl.bundle<a: uint<1>>
 }
 }
@@ -439,14 +472,14 @@ firrtl.module @test(out %a: !firrtl.bundle<a flip: bundle<a: uint<1>>>) {
 ///     a.a.a <- ax.a.a
 
 firrtl.circuit "test"  {
+// expected-note @below {{the destination was defined here}}
 firrtl.module @test(out %a: !firrtl.bundle<a flip: bundle<a: uint<1>>>) {
   %ax = firrtl.wire  : !firrtl.bundle<a flip: bundle<a: uint<1>>>
-  %a_a = firrtl.subfield %a(0) : (!firrtl.bundle<a flip: bundle<a: uint<1>>>) -> !firrtl.bundle<a: uint<1>>
-  // expected-note @+1 {{the left-hand-side was defined here}}
-  %a_a_a = firrtl.subfield %a_a(0) : (!firrtl.bundle<a: uint<1>>) -> !firrtl.uint<1>
-  %ax_a = firrtl.subfield %ax(0) : (!firrtl.bundle<a flip: bundle<a: uint<1>>>) -> !firrtl.bundle<a: uint<1>>
-  %ax_a_a = firrtl.subfield %ax_a(0) : (!firrtl.bundle<a: uint<1>>) -> !firrtl.uint<1>
-  // expected-error @+1 {{invalid flow: the left-hand-side has source flow}}
+  %a_a = firrtl.subfield %a[a] : !firrtl.bundle<a flip: bundle<a: uint<1>>>
+  %a_a_a = firrtl.subfield %a_a[a] : !firrtl.bundle<a: uint<1>>
+  %ax_a = firrtl.subfield %ax[a] : !firrtl.bundle<a flip: bundle<a: uint<1>>>
+  %ax_a_a = firrtl.subfield %ax_a[a] : !firrtl.bundle<a: uint<1>>
+  // expected-error @below {{connect has invalid flow: the destination expression "a.a.a" has source flow}}
   firrtl.connect %a_a_a, %ax_a_a : !firrtl.uint<1>, !firrtl.uint<1>
 }
 }
@@ -460,12 +493,12 @@ firrtl.module @test(out %a: !firrtl.bundle<a flip: bundle<a: uint<1>>>) {
 ///     a.a <- ax.a
 
 firrtl.circuit "test"  {
+// expected-note @below {{the destination was defined here}}
 firrtl.module @test(out %a: !firrtl.bundle<a flip: bundle<a flip: uint<1>>>) {
   %ax = firrtl.wire  : !firrtl.bundle<a flip: bundle<a flip: uint<1>>>
-  // expected-note @+1 {{the left-hand-side was defined here}}
-  %a_a = firrtl.subfield %a(0) : (!firrtl.bundle<a flip: bundle<a flip: uint<1>>>) -> !firrtl.bundle<a flip: uint<1>>
-  %ax_a = firrtl.subfield %ax(0) : (!firrtl.bundle<a flip: bundle<a flip: uint<1>>>) -> !firrtl.bundle<a flip: uint<1>>
-  // expected-error @+1 {{invalid flow: the left-hand-side has source flow}}
+  %a_a = firrtl.subfield %a[a] : !firrtl.bundle<a flip: bundle<a flip: uint<1>>>
+  %ax_a = firrtl.subfield %ax[a] : !firrtl.bundle<a flip: bundle<a flip: uint<1>>>
+  // expected-error @below {{connect has invalid flow: the destination expression "a.a" has source flow}}
   firrtl.connect %a_a, %ax_a : !firrtl.bundle<a flip: uint<1>>, !firrtl.bundle<a flip: uint<1>>
 }
 }
@@ -490,10 +523,10 @@ firrtl.module @test(out %a: !firrtl.bundle<a flip: bundle<a flip: uint<1>>>) {
 
 firrtl.circuit "test" {
 firrtl.module @test(out %a: !firrtl.uint<1>) {
+  // expected-note @below {{the source was defined here}}
   %memory_r = firrtl.mem Undefined  {depth = 2 : i64, name = "memory", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
-  // expected-note @+1 {{the right-hand-side was defined here}}
-  %memory_r_en = firrtl.subfield %memory_r(1) : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>) -> !firrtl.uint<1>
-  // expected-error @+1 {{invalid flow: the right-hand-side has sink flow}}
+  %memory_r_en = firrtl.subfield %memory_r[en] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
+  // expected-error @below {{connect has invalid flow: the source expression "memory.r.en" has sink flow}}
   firrtl.connect %a, %memory_r_en : !firrtl.uint<1>, !firrtl.uint<1>
 }
 }
@@ -513,5 +546,207 @@ firrtl.circuit "test" {
 firrtl.module @test(in %a : !firrtl.uint<1>, out %b : !firrtl.sint<1>) {
   // expected-error @+1 {{type mismatch}}
   firrtl.connect %b, %a : !firrtl.sint<1>, !firrtl.uint<1>
+}
+}
+
+// -----
+
+// Non-const types cannot be connected to const types.
+
+firrtl.circuit "test" {
+firrtl.module @test(in %a : !firrtl.uint<1>, out %b : !firrtl.const.uint<1>) {
+  // expected-error @+1 {{type mismatch}}
+  firrtl.connect %b, %a : !firrtl.const.uint<1>, !firrtl.uint<1>
+}
+}
+
+// -----
+
+// Non-const aggregates cannot be connected to const types.
+
+firrtl.circuit "test" {
+firrtl.module @test(in %in   : !firrtl.bundle<a: uint<1>>,
+                    out %out : !firrtl.const.bundle<a: uint<1>>) {
+  // expected-error @+1 {{type mismatch}}
+  firrtl.connect %out, %in : !firrtl.const.bundle<a: uint<1>>, !firrtl.bundle<a: uint<1>>
+}
+}
+
+// -----
+
+/// Const flip types cannot be connected to non-const flip types.
+
+firrtl.circuit "test" {
+firrtl.module @test(in %in   : !firrtl.const.bundle<a flip: uint<1>>,
+                    out %out : !firrtl.bundle<a flip: uint<1>>) {
+  // expected-error @+1 {{type mismatch}}
+  firrtl.connect %out, %in : !firrtl.bundle<a flip: uint<1>>, !firrtl.const.bundle<a flip: uint<1>>
+}
+}
+
+// -----
+
+// Nested const flip types cannot be connected to non-const flip types.
+
+firrtl.circuit "test" {
+firrtl.module @test(in %in   : !firrtl.bundle<a flip: const.uint<1>>,
+                    out %out : !firrtl.bundle<a flip: uint<1>>) {
+  // expected-error @+1 {{type mismatch}}
+  firrtl.connect %out, %in : !firrtl.bundle<a flip: uint<1>>, !firrtl.bundle<a flip: const.uint<1>>
+}
+}
+
+// -----
+
+/// Non-const double flip types cannot be connected to const.
+
+firrtl.circuit "test" {
+firrtl.module @test(in %in   : !firrtl.bundle<a flip: bundle<a flip: uint<1>>>,
+                    out %out : !firrtl.const.bundle<a flip: bundle<a flip: uint<1>>>) {
+  // expected-error @+1 {{type mismatch}}
+  firrtl.connect %out, %in : !firrtl.const.bundle<a flip: bundle<a flip: uint<1>>>, 
+                             !firrtl.bundle<a flip: bundle<a flip: uint<1>>>
+}
+}
+
+// -----
+
+// Test that non-const subaccess of a const vector disallows assignment.
+firrtl.circuit "test" {
+firrtl.module @test(in %index: !firrtl.uint<1>, out %out: !firrtl.const.vector<uint<1>, 1>) {
+  %c = firrtl.constant 0 : !firrtl.uint<1>
+  %d = firrtl.subaccess %out[%index] : !firrtl.const.vector<uint<1>, 1>, !firrtl.uint<1>
+  // expected-error @+1 {{assignment to non-'const' subaccess of 'const' type is disallowed}}
+  firrtl.strictconnect %d, %c : !firrtl.uint<1>
+}
+}
+
+// -----
+
+// Test that non-const subaccess of a const vector disallows assignment, even if the source is const.
+firrtl.circuit "test" {
+firrtl.module @test(in %index: !firrtl.uint<1>, out %out: !firrtl.const.vector<uint<1>, 1>) {
+  %c = firrtl.constant 0 : !firrtl.const.uint<1>
+  %d = firrtl.subaccess %out[%index] : !firrtl.const.vector<uint<1>, 1>, !firrtl.uint<1>
+  // expected-error @+1 {{assignment to non-'const' subaccess of 'const' type is disallowed}}
+  firrtl.connect %d, %c : !firrtl.uint<1>, !firrtl.const.uint<1>
+}
+}
+
+// -----
+
+// Test that non-const subaccess of a flipped const vector disallows assignment.
+firrtl.circuit "test" {
+firrtl.module @test(in %index: !firrtl.uint<1>, in %in: !firrtl.const.vector<bundle<a flip: uint<1>>, 1>, out %out: !firrtl.bundle<a flip: uint<1>>) {
+  %element = firrtl.subaccess %in[%index] : !firrtl.const.vector<bundle<a flip: uint<1>>, 1>, !firrtl.uint<1>
+  // expected-error @+1 {{assignment to non-'const' subaccess of 'const' type is disallowed}}
+  firrtl.connect %out, %element : !firrtl.bundle<a flip: uint<1>>, !firrtl.bundle<a flip: uint<1>>
+}
+}
+
+// -----
+
+// Test that non-const subaccess of a flipped const vector disallows assignment, even if the source is const.
+firrtl.circuit "test" {
+firrtl.module @test(in %index: !firrtl.uint<1>, in %in: !firrtl.const.vector<bundle<a flip: uint<1>>, 1>, out %out: !firrtl.bundle<a flip: const.uint<1>>) {
+  %element = firrtl.subaccess %in[%index] : !firrtl.const.vector<bundle<a flip: uint<1>>, 1>, !firrtl.uint<1>
+  // expected-error @+1 {{assignment to non-'const' subaccess of 'const' type is disallowed}}
+  firrtl.connect %out, %element : !firrtl.bundle<a flip: const.uint<1>>, !firrtl.bundle<a flip: uint<1>>
+}
+}
+
+// -----
+firrtl.circuit "test" {
+firrtl.module @test(in %p: !firrtl.uint<1>, in %in: !firrtl.const.uint<2>, out %out: !firrtl.const.uint<2>) {
+  firrtl.when %p : !firrtl.uint<1> {
+    // expected-error @+1 {{assignment to 'const' type '!firrtl.const.uint<2>' is dependent on a non-'const' condition}}
+    firrtl.connect %out, %in : !firrtl.const.uint<2>, !firrtl.const.uint<2>
+  }
+}
+}
+
+// -----
+
+firrtl.circuit "test" {
+firrtl.module @test(in %p: !firrtl.uint<1>, in %in: !firrtl.const.uint<2>, out %out: !firrtl.const.uint<2>) {
+  firrtl.when %p : !firrtl.uint<1> {
+  } else {
+    // expected-error @+1 {{assignment to 'const' type '!firrtl.const.uint<2>' is dependent on a non-'const' condition}}
+    firrtl.connect %out, %in : !firrtl.const.uint<2>, !firrtl.const.uint<2>
+  }
+}
+}
+
+// -----
+
+firrtl.circuit "test" {
+firrtl.module @test(in %constP: !firrtl.const.uint<1>, in %p: !firrtl.uint<1>, in %in: !firrtl.const.uint<2>, out %out: !firrtl.const.uint<2>) {
+  firrtl.when %p : !firrtl.uint<1> {
+    firrtl.when %constP : !firrtl.const.uint<1> {
+      // expected-error @+1 {{assignment to 'const' type '!firrtl.const.uint<2>' is dependent on a non-'const' condition}}
+      firrtl.connect %out, %in : !firrtl.const.uint<2>, !firrtl.const.uint<2>
+    }
+  }
+}
+}
+
+// -----
+
+firrtl.circuit "test" {
+firrtl.module @test(in %p: !firrtl.uint<1>, in %in: !firrtl.bundle<a: const.uint<2>>, out %out: !firrtl.bundle<a: const.uint<2>>) {
+  firrtl.when %p : !firrtl.uint<1> {
+    // expected-error @+1 {{assignment to nested 'const' member of type '!firrtl.bundle<a: const.uint<2>>' is dependent on a non-'const' condition}}
+    firrtl.connect %out, %in : !firrtl.bundle<a: const.uint<2>>, !firrtl.bundle<a: const.uint<2>>
+  }
+}
+}
+
+// -----
+
+firrtl.circuit "test" {
+firrtl.module @test(in %p: !firrtl.uint<1>, in %in: !firrtl.const.bundle<a flip: uint<2>>, out %out: !firrtl.const.bundle<a flip: uint<2>>) {
+  firrtl.when %p : !firrtl.uint<1> {
+    // expected-error @+1 {{assignment to 'const' type '!firrtl.const.bundle<a flip: uint<2>>' is dependent on a non-'const' condition}}
+    firrtl.connect %out, %in : !firrtl.const.bundle<a flip: uint<2>>, !firrtl.const.bundle<a flip: uint<2>>
+  }
+}
+}
+
+// -----
+
+firrtl.circuit "test" {
+firrtl.module @test(in %p: !firrtl.uint<1>, in %in: !firrtl.bundle<a flip: const.uint<2>>, out %out: !firrtl.bundle<a flip: const.uint<2>>) {
+  firrtl.when %p : !firrtl.uint<1> {
+    // expected-error @+1 {{assignment to nested 'const' member of type '!firrtl.bundle<a flip: const.uint<2>>' is dependent on a non-'const' condition}}
+    firrtl.connect %out, %in : !firrtl.bundle<a flip: const.uint<2>>, !firrtl.bundle<a flip: const.uint<2>>
+  }
+}
+}
+
+// -----
+
+// Test that the declaration location of the bundle containing the field is checked.
+firrtl.circuit "test" {
+firrtl.module @test(in %p: !firrtl.uint<1>, out %out: !firrtl.const.bundle<a: uint<1>>) {
+  firrtl.when %p : !firrtl.uint<1> {
+    %f = firrtl.subfield %out[a] : !firrtl.const.bundle<a: uint<1>>
+    %c = firrtl.constant 0 : !firrtl.const.uint<1>
+    // expected-error @+1 {{assignment to 'const' type '!firrtl.const.uint<1>' is dependent on a non-'const' condition}}
+    firrtl.strictconnect %f, %c : !firrtl.const.uint<1>
+  }
+}
+}
+
+// -----
+
+// Test that the declaration location of the vector containing the field is checked.
+firrtl.circuit "test" {
+firrtl.module @test(in %p: !firrtl.uint<1>, out %out: !firrtl.const.vector<uint<1>, 1>) {
+  firrtl.when %p : !firrtl.uint<1> {
+    %e = firrtl.subindex %out[0] : !firrtl.const.vector<uint<1>, 1>
+    %c = firrtl.constant 0 : !firrtl.const.uint<1>
+    // expected-error @+1 {{assignment to 'const' type '!firrtl.const.uint<1>' is dependent on a non-'const' condition}}
+    firrtl.strictconnect %e, %c : !firrtl.const.uint<1>
+  }
 }
 }

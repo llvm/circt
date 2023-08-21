@@ -49,14 +49,11 @@ if( CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR )
 # Options and settings
 #-------------------------------------------------------------------------------
 
-  option(LLVM_INCLUDE_TOOLS "Generate build targets for the LLVM tools." ON)
-  option(LLVM_BUILD_TOOLS "Build the LLVM tools. If OFF, just generate build targets." ON)
-
-if (MSVC)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHs-c- /GR-")
-else ()
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-exceptions -fno-rtti")
-endif ()
+  if (MSVC)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHs-c- /GR-")
+  else ()
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-exceptions -fno-rtti")
+  endif ()
 
 #-------------------------------------------------------------------------------
 # MLIR/LLVM Configuration
@@ -84,17 +81,20 @@ endif ()
   # Handle unittests when building out-of-tree against an installed version of
   # LLVM/MLIR (not a build tree). Adapted from `llvm/flang/CMakeLists.txt`.
   set(CIRCT_GTEST_AVAILABLE 0)
-  set(UNITTEST_DIR ${LLVM_BUILD_MAIN_SRC_DIR}/utils/unittest)
-  if (NOT EXISTS ${UNITTEST_DIR}/googletest/include/gtest/gtest.h)
-    set(UNITTEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/llvm/llvm/utils/unittest)
-  endif()
-  if (EXISTS ${UNITTEST_DIR}/googletest/include/gtest/gtest.h)
-    if (NOT TARGET llvm_gtest)
+  if (TARGET llvm_gtest)
+    # Installed gtest, via LLVM_INSTALL_GTEST.  Preferred.
+    message(STATUS "LLVM GTest found, enabling unittests")
+    set(CIRCT_GTEST_AVAILABLE 1)
+  else()
+    set(UNITTEST_DIR ${LLVM_THIRD_PARTY_DIR}/unittest)
+    if (NOT EXISTS ${UNITTEST_DIR}/googletest/include/gtest/gtest.h)
+      set(UNITTEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/llvm/third-party/unittest)
+    endif()
+    if (EXISTS ${UNITTEST_DIR}/googletest/include/gtest/gtest.h)
       find_package(Threads)
       add_llvm_library(llvm_gtest
         ${UNITTEST_DIR}/googletest/src/gtest-all.cc
         ${UNITTEST_DIR}/googlemock/src/gmock-all.cc
-        LINK_LIBS pthread
         LINK_COMPONENTS Support # llvm::raw_ostream
         BUILDTREE_ONLY
       )
@@ -106,18 +106,19 @@ endif ()
         "${UNITTEST_DIR}/googletest"
         "${UNITTEST_DIR}/googlemock"
       )
+      target_link_libraries(llvm_gtest PUBLIC Threads::Threads)
       add_llvm_library(llvm_gtest_main
         ${UNITTEST_DIR}/UnitTestMain/TestMain.cpp
         LINK_LIBS llvm_gtest
         LINK_COMPONENTS Support # llvm::cl
         BUILDTREE_ONLY
       )
+      set(CIRCT_GTEST_AVAILABLE 1)
+    else()
+      message(WARNING "Skipping unittests since LLVM install does not include \
+        gtest headers and libraries")
+      set(CIRCT_GTEST_AVAILABLE 0)
     endif()
-    set(CIRCT_GTEST_AVAILABLE 1)
-  else()
-    message(WARNING "Skipping unittests since LLVM install does not include \
-      gtest headers and libraries")
-    set(CIRCT_GTEST_AVAILABLE 0)
   endif()
 
 else()
@@ -141,6 +142,8 @@ else()
   include_directories(SYSTEM ${MLIR_TABLEGEN_OUTPUT_DIR})
 
   set(BACKEND_PACKAGE_STRING "${PACKAGE_STRING}")
+
+  set(CIRCT_GTEST_AVAILABLE 1)
 endif()
 
 # Define the default arguments to use with 'lit', and an option for the user to
@@ -166,6 +169,12 @@ set(CIRCT_LIBRARY_DIR ${CMAKE_BINARY_DIR}/lib)
 set(CIRCT_TOOLS_DIR ${CMAKE_BINARY_DIR}/bin)
 set(CIRCT_UTILS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/utils)
 set(CIRCT_PYTHON_PACKAGES_DIR ${CIRCT_BINARY_DIR}/python_packages)
+
+
+option(CIRCT_INCLUDE_TOOLS "Generate build targets for the CIRCT tools." ON)
+option(CIRCT_BUILD_TOOLS "Build the CIRCT tools. If OFF, just generate build targets." ON)
+set(CIRCT_TOOLS_INSTALL_DIR "${CMAKE_INSTALL_BINDIR}" CACHE PATH
+    "Path for binary subdirectory (defaults to '${CMAKE_INSTALL_BINDIR}')")
 
 list(APPEND CMAKE_MODULE_PATH "${MLIR_MAIN_SRC_DIR}/cmake/modules")
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
@@ -194,7 +203,7 @@ if (NOT CIRCT_RELEASE_TAG_ENABLED)
 endif()
 
 set(CIRCT_RELEASE_TAG "circtorg" CACHE STRING
-    "Prefix of the release tag (e.g. circtorg, pycde and sifive).")
+    "Prefix of the release tag (e.g. circtorg, firtool, and pycde).")
 
 #-------------------------------------------------------------------------------
 # Verilator Configuration
@@ -256,6 +265,50 @@ else()
       set(VIVADO_PATH "")
       message(STATUS "Did not find vivado.")
     endif()
+  endif()
+endif()
+
+#-------------------------------------------------------------------------------
+# Clang-Tidy Configuration (for integration tests to check SystemC linting)
+#-------------------------------------------------------------------------------
+
+# If clang-tidy hasn't been explicitly disabled, find it.
+option(CLANG_TIDY_DISABLE "Disable the clang-tidy lint tests.")
+if (CLANG_TIDY_DISABLE)
+  message(STATUS "Disabling clang-tidy lint tests.")
+else()
+  if (EXISTS ${CLANG_TIDY_PATH})
+    get_filename_component(CLANG_TIDY_PATH ${CLANG_TIDY_PATH} DIRECTORY)
+    message(STATUS "Setting clang-tidy path to ${CLANG_TIDY_PATH}.")
+  else()
+    # Search for the `clang-tidy` command.
+    find_program(CLANG_TIDY_PATH "clang-tidy")
+    if(EXISTS ${CLANG_TIDY_PATH})
+      # Then strip the filename.
+      get_filename_component(CLANG_TIDY_PATH ${CLANG_TIDY_PATH} DIRECTORY)
+      message(STATUS "Found clang-tidy at ${CLANG_TIDY_PATH}.")
+    else()
+      set(CLANG_TIDY_PATH "")
+      message(STATUS "Did NOT find clang-tidy.")
+    endif()
+  endif()
+endif()
+
+#-------------------------------------------------------------------------------
+# SystemC Configuration
+#-------------------------------------------------------------------------------
+
+# If SystemC hasn't been explicitly disabled, find it.
+option(SYSTEMC_DISABLE "Disable the systemc tests.")
+if (SYSTEMC_DISABLE)
+  message(STATUS "Disabling systemc tests.")
+else()
+  find_file(HAVE_SYSTEMC systemc PATH /usr/include /usr/local/include ${SYSTEMC_PATH})
+  if(HAVE_SYSTEMC)
+    message(STATUS "Found systemc headers.")
+  else()
+    set(HAVE_SYSTEMC "")
+    message(STATUS "Did NOT find systemc headers.")
   endif()
 endif()
 
@@ -338,6 +391,19 @@ if (IVERILOG_DISABLE)
 else()
   find_program(IVERILOG_PATH "iverilog")
   if(EXISTS ${IVERILOG_PATH})
+    # Find iverilog version.
+    execute_process(COMMAND ${IVERILOG_PATH} -V
+      OUTPUT_VARIABLE IVERILOG_VERSION)
+
+    string(REGEX MATCH "Icarus Verilog version (([0-9]+)\.([0-9]+)) \.*"
+      MATCH ${IVERILOG_VERSION})
+
+    if (${CMAKE_MATCH_1} LESS 11.0)
+      message(FATAL_ERROR "CIRCT only supports Icarus Verilog version 11.0 and up. \
+                           Found version: ${CMAKE_MATCH_1}. You can disable \
+                           the Icarus Verilog tests with '-DIVERILOG_DISABLE=ON'.")
+      set(IVERILOG_PATH "")
+    endif()
     message(STATUS "Found iverilog at ${IVERILOG_PATH}.")
   else()
     set(IVERILOG_PATH "")
@@ -365,8 +431,20 @@ else()
   endif()
 
   if(CapnProto_FOUND)
+    message(STATUS "Found Cap'nProto at ${CapnProto_DIR}.")
     set(CMAKE_INSTALL_RPATH ${capnp_LIBDIR})
     set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+
+    # Some of our CMake code which is only used in Capnp builds uses newer CMake
+    # features. Since most compilations are not capnp builds, only require the
+    # new version for those builds.
+    if(CMAKE_VERSION VERSION_LESS "3.23.0")
+      message(SEND_ERROR
+          "Building CIRCT with Cap'nProto features enabled uses CMake features "
+          "that require at least version 3.23. Recommend upgrading to 3.23+ "
+          "for full support. Detected current version: ${CMAKE_VERSION}. If you "
+          "do not need ESI cosim features, you can use the CAPNP_DISABLE option.")
+    endif()
   endif()
 endif()
 
@@ -413,6 +491,41 @@ endif()
 llvm_canonicalize_cmake_booleans(CIRCT_LLHD_SIM_ENABLED)
 
 #-------------------------------------------------------------------------------
+# circt-lec Configuration
+#-------------------------------------------------------------------------------
+
+# If circt-lec hasn't been explicitly disabled, find it.
+option(CIRCT_LEC_DISABLE "Disable the Logical Equivalence Checker" OFF)
+if(CIRCT_LEC_DISABLE)
+  message(STATUS "Disabling circt-lec")
+else()
+  if(Z3_DIR)
+    # Search and load the package configuration file in the specified directory.
+    find_package(Z3 CONFIG REQUIRED PATHS ${Z3_DIR} NO_DEFAULT_PATH)
+    if(Z3_FOUND)
+      # Report the found library location and version
+      # similarly to LLVM's `FindZ3` CMake module.
+      get_target_property(Z3_LIB_LOCATION z3::libz3 IMPORTED_LOCATION_DEBUG)
+      message(STATUS "Found Z3: ${Z3_LIB_LOCATION} (found version \"${Z3_VERSION_STRING}\")")
+    endif()
+  else()
+    # Attempt initialising Z3 according to LLVM's `FindZ3` CMake module.
+    find_package(Z3)
+  endif()
+  
+  if(Z3_FOUND)
+    SET(CIRCT_LEC_Z3_VER 4.8.11)
+    if(Z3_VERSION_STRING VERSION_LESS ${CIRCT_LEC_Z3_VER})
+      message(WARNING "Cannot build circt-lec with outdated Z3 version ${Z3_VERSION_STRING}, requires ${CIRCT_LEC_Z3_VER}.")
+    else()
+      message(STATUS "Z3 identified as a logical backend.")
+      # Signal to proceed building circt-lec.
+      set(CIRCT_LEC_ENABLED ON)
+    endif()
+  endif()
+endif()
+
+#-------------------------------------------------------------------------------
 # Python Configuration
 #-------------------------------------------------------------------------------
 
@@ -424,6 +537,12 @@ if(CIRCT_BINDINGS_PYTHON_ENABLED)
   mlir_configure_python_dev_packages()
 else()
   message(STATUS "CIRCT Python bindings are disabled.")
+  # Lookup python either way as some integration tests use python without the
+  # bindings
+  find_package(Python3)
+  if(Python3_FOUND)
+    message(STATUS "Found python at ${Python3_EXECUTABLE}")
+  endif()
 endif()
 
 #-------------------------------------------------------------------------------
@@ -447,7 +566,9 @@ endif()
 
 add_subdirectory(include/circt)
 add_subdirectory(lib)
-add_subdirectory(tools)
+if(CIRCT_INCLUDE_TOOLS)
+  add_subdirectory(tools)
+endif()
 if (CIRCT_GTEST_AVAILABLE)
   add_subdirectory(unittests)
 endif()

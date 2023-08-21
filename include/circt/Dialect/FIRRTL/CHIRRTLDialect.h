@@ -13,7 +13,9 @@
 #ifndef CIRCT_DIALECT_FIRRTL_CHIRRTLDIALECT_H
 #define CIRCT_DIALECT_FIRRTL_CHIRRTLDIALECT_H
 
+#include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinAttributes.h"

@@ -10,12 +10,22 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_FIRRTL_FIRRTLSTRUCTURE_TD
+#define CIRCT_DIALECT_FIRRTL_FIRRTLSTRUCTURE_TD
+
+include "FIRRTLAttributes.td"
+include "FIRRTLDialect.td"
+include "FIRRTLEnums.td"
+include "FIRRTLOpInterfaces.td"
+include "circt/Dialect/HW/HWOpInterfaces.td"
 include "circt/Dialect/HW/HWTypes.td"
 include "circt/Types.td"
+include "mlir/IR/OpAsmInterface.td"
+include "mlir/IR/SymbolInterfaces.td"
 
 def CircuitOp : FIRRTLOp<"circuit",
       [IsolatedFromAbove, SymbolTable, SingleBlock, NoTerminator,
-       NoRegionArguments]> {
+       NoRegionArguments, InnerRefNamespace]> {
   let summary = "FIRRTL Circuit";
   let description = [{
     The "firrtl.circuit" operation represents an overall Verilog circuit,
@@ -34,29 +44,59 @@ def CircuitOp : FIRRTLOp<"circuit",
 
   let extraClassDeclaration = [{
     OpBuilder getBodyBuilder() {
-      assert(!body().empty() && "Unexpected empty 'body' region.");
-      Block &bodyBlock = body().front();
+      assert(!getBody().empty() && "Unexpected empty 'body' region.");
+      Block &bodyBlock = getBody().front();
       return OpBuilder::atBlockEnd(&bodyBlock);
     }
 
     /// Return body of this circuit.
-    Region &getBodyRegion();
-    Block *getBody();
+    Block *getBodyBlock();
 
     // Return the main module that is the entry point of the circuit.  This may
-    // be either an FModuleOp or an FExtModuleOp.
-    FModuleLike getMainModule();
+    // be either an FModuleOp or an FExtModuleOp.  A SymbolTable is optional.
+    FModuleLike getMainModule(mlir::SymbolTable* symtbl = nullptr);
   }];
 
-  let assemblyFormat = "$name custom<CircuitOpAttrs>(attr-dict) $body";
-  let hasVerifier = 1;
+  let assemblyFormat = "$name `` custom<CircuitOpAttrs>(attr-dict) $body";
+  let hasRegionVerifier = 1;
 }
 
-def FModuleOp : FIRRTLOp<"module", [IsolatedFromAbove, Symbol, SingleBlock,
-                                    NoTerminator, HasParent<"CircuitOp">,
-                                    DeclareOpInterfaceMethods<FModuleLike>,
-                                    DeclareOpInterfaceMethods<HWModuleLike>,
-                                    OpAsmOpInterface, InnerSymbolTable]> {
+class FIRRTLModuleLike<string mnemonic, list<Trait> traits = []> :
+  FIRRTLOp<mnemonic, traits # [
+    IsolatedFromAbove, Symbol, HasParent<"CircuitOp">,
+    DeclareOpInterfaceMethods<FModuleLike>,
+    DeclareOpInterfaceMethods<PortList>,
+    DeclareOpInterfaceMethods<SymboledPortList>,
+    DeclareOpInterfaceMethods<InstanceGraphModuleOpInterface>,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+    OpAsmOpInterface, InnerSymbolTable]> {
+
+  /// Additional class definitions inside the module op.
+  code extraModuleClassDefinition = [{}];
+  code extraModuleClassDeclaration = [{}];
+
+  let extraClassDeclaration = extraModuleClassDeclaration # [{
+  }];
+
+  let extraClassDefinition = extraModuleClassDefinition # [{
+
+    circt::hw::InnerSymAttr $cppClass::getPortSymbolAttr(size_t portIndex) {
+      auto syms = getPortSymbols();
+      if (syms.empty() ||
+          syms[portIndex].template cast<hw::InnerSymAttr>().empty())
+        return hw::InnerSymAttr();
+      return syms[portIndex].template cast<hw::InnerSymAttr>();
+    }
+
+    size_t $cppClass::getNumPorts() {
+      return getPortTypesAttr().size();
+    }
+  }];
+
+}
+
+
+def FModuleOp : FIRRTLModuleLike<"module", [SingleBlock, NoTerminator]> {
   let summary = "FIRRTL Module";
   let description = [{
     The "firrtl.module" operation represents a Verilog module, including a given
@@ -64,64 +104,104 @@ def FModuleOp : FIRRTLOp<"module", [IsolatedFromAbove, Symbol, SingleBlock,
     the module.
   }];
   let arguments =
-            (ins DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
+            (ins ConventionAttr:$convention,
+                 ArrayRefAttr:$portLocations,
+                 DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
 
   let results = (outs);
   let regions = (region SizedRegion<1>:$body);
 
   let skipDefaultBuilders = 1;
   let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
   let builders = [
-    OpBuilder<(ins "StringAttr":$name, "ArrayRef<PortInfo>":$ports,
-               CArg<"ArrayAttr","ArrayAttr()">:$annotations)>
+    OpBuilder<(ins "StringAttr":$name, "ConventionAttr":$convention,
+               "ArrayRef<PortInfo>":$ports,
+               CArg<"ArrayAttr", "ArrayAttr()">:$annotations)>,
   ];
 
-  let extraClassDeclaration = [{
-    Block *getBody() { return &body().front(); }
+  let extraModuleClassDeclaration = [{
+    Block *getBodyBlock() { return &getBody().front(); }
 
     using iterator = Block::iterator;
-    iterator begin() { return getBody()->begin(); }
-    iterator end() { return getBody()->end(); }
+    iterator begin() { return getBodyBlock()->begin(); }
+    iterator end() { return getBodyBlock()->end(); }
 
     Block::BlockArgListType getArguments() {
-      return getBody()->getArguments();
+      return getBodyBlock()->getArguments();
     }
 
     // Return the block argument for the port with the specified index.
     BlockArgument getArgument(size_t portNumber);
 
     OpBuilder getBodyBuilder() {
-      assert(!body().empty() && "Unexpected empty 'body' region.");
-      Block &bodyBlock = body().front();
+      assert(!getBody().empty() && "Unexpected empty 'body' region.");
+      Block &bodyBlock = getBody().front();
       return OpBuilder::atBlockEnd(&bodyBlock);
     }
 
-    /// Inserts the given ports.
-    void insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports);
-
-    /// Erases the ports listed in `portIndices`.  `portIndices` is expected to
-    /// be in order and unique.
-    void erasePorts(ArrayRef<unsigned> portIndices);
-
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
+    ArrayAttr getParameters();
   }];
 
 }
 
-def FExtModuleOp : FIRRTLOp<"extmodule",
-      [IsolatedFromAbove, Symbol, HasParent<"CircuitOp">, OpAsmOpInterface,
-       DeclareOpInterfaceMethods<FModuleLike>,
-       DeclareOpInterfaceMethods<HWModuleLike>]> {
-  let summary = "FIRRTL extmodule";
+def FExtModuleOp : FIRRTLModuleLike<"extmodule"> {
+  let summary = "FIRRTL external module";
   let description = [{
     The "firrtl.extmodule" operation represents an external reference to a
     Verilog module, including a given name and a list of ports.
+    LowerAnnotations can add RefType ports to it. Each RefType port
+    must have a corresponding entry in the internalPaths attribute.
+    The internalPaths attribute is used to represent opaque internal paths
+    into the external module, to be used for generating XMRs. Each RefType
+    port must be removed by LowerXMR pass.
   }];
   let arguments = (ins
                    OptionalAttr<StrAttr>:$defname,
+                   ConventionAttr:$convention,
+                   ArrayRefAttr:$portLocations,
                    ParamDeclArrayAttr:$parameters,
-                   DefaultValuedAttr<AnnotationArrayAttr, "ArrayAttr()">:$annotations
+                   DefaultValuedAttr<AnnotationArrayAttr,
+                   "ArrayAttr()">:$annotations,
+                   OptionalAttr<InternalPathArrayAttr>:$internalPaths
+                  );
+  let results = (outs);
+  let regions = (region AnyRegion:$body);
+
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<(ins "StringAttr":$name,
+                      "ConventionAttr":$convention,
+                      "ArrayRef<PortInfo>":$ports,
+                      CArg<"StringRef", "StringRef()">:$defnamAttr,
+                      CArg<"ArrayAttr", "ArrayAttr()">:$annotations,
+                      CArg<"ArrayAttr", "ArrayAttr()">:$parameters,
+                      CArg<"ArrayAttr", "ArrayAttr()">:$internalPaths)>
+  ];
+
+  let extraModuleClassDeclaration = [{
+    void getAsmBlockArgumentNames(mlir::Region &region,
+                                  mlir::OpAsmSetValueNameFn setNameFn);
+  }];
+
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+}
+
+def FIntModuleOp : FIRRTLModuleLike<"intmodule"> {
+  let summary = "FIRRTL intrinsic module";
+  let description = [{
+    The "firrtl.intmodule" operation represents a compiler intrinsic.
+  }];
+  let arguments = (ins
+                   OptionalAttr<StrAttr>:$intrinsic,
+                   ArrayRefAttr:$portLocations,
+                   ParamDeclArrayAttr:$parameters,
+                   DefaultValuedAttr<AnnotationArrayAttr,
+                   "ArrayAttr()">:$annotations,
+                   OptionalAttr<InternalPathArrayAttr>:$internalPaths
                   );
   let results = (outs);
   let regions = (region AnyRegion:$body);
@@ -130,12 +210,13 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
   let builders = [
     OpBuilder<(ins "StringAttr":$name,
                       "ArrayRef<PortInfo>":$ports,
-                      CArg<"StringRef", "StringRef()">:$defnamAttr,
+                      CArg<"StringRef", "StringRef()">:$intrinsicNameAttr,
                       CArg<"ArrayAttr", "ArrayAttr()">:$annotations,
-                      CArg<"ArrayAttr", "ArrayAttr()">:$parameters)>
+                      CArg<"ArrayAttr", "ArrayAttr()">:$parameters,
+                      CArg<"ArrayAttr", "ArrayAttr()">:$internalPaths)>
   ];
 
-  let extraClassDeclaration = [{
+  let extraModuleClassDeclaration = [{
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
   }];
@@ -144,16 +225,13 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
   let hasVerifier = 1;
 }
 
-def FMemModuleOp : FIRRTLOp<"memmodule",
-      [IsolatedFromAbove, Symbol, HasParent<"CircuitOp">, OpAsmOpInterface,
-       DeclareOpInterfaceMethods<FModuleLike>,
-       DeclareOpInterfaceMethods<HWModuleLike>]> {
-  let summary = "FIRRTL Generated Module";
+def FMemModuleOp : FIRRTLModuleLike<"memmodule"> {
+  let summary = "FIRRTL Generated Memory Module";
   let description = [{
     The "firrtl.memmodule" operation represents an external reference to a
     memory module. See the "firrtl.mem" op for a deeper explantation of the
     parameters.
-    
+
     A "firrtl.mem" operation is typically lowered to this operation when they
     are not directly lowered to registers by the compiler.
   }];
@@ -161,7 +239,9 @@ def FMemModuleOp : FIRRTLOp<"memmodule",
     (ins UI32Attr:$numReadPorts, UI32Attr:$numWritePorts,
          UI32Attr:$numReadWritePorts, UI32Attr:$dataWidth, UI32Attr:$maskBits,
          UI32Attr:$readLatency, UI32Attr:$writeLatency, UI64Attr:$depth,
-         ArrayAttr:$extraPorts, AnnotationArrayAttr:$annotations);
+         ArrayAttr:$extraPorts,
+         ArrayRefAttr:$portLocations,
+         AnnotationArrayAttr:$annotations);
   let results = (outs);
   let regions = (region AnyRegion:$body);
 
@@ -175,92 +255,101 @@ def FMemModuleOp : FIRRTLOp<"memmodule",
                    CArg<"ArrayAttr", "ArrayAttr()">:$annotations)>
   ];
 
-  let extraClassDeclaration = [{
+  let extraModuleClassDeclaration = [{
     /// Return true if this memory has a mask.
-    bool isMasked() { return maskBits() > 1; }
+    bool isMasked() { return getMaskBits() > 1; }
+    void getAsmBlockArgumentNames(mlir::Region &region,
+                                  mlir::OpAsmSetValueNameFn setNameFn);
+    ArrayAttr getParameters();
+  }];
 
-    /// Inserts the given ports.
-    void insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports);
+  let hasCustomAssemblyFormat = 1;
+}
+
+def ClassOp : FIRRTLModuleLike<"class", [
+  SingleBlock, NoTerminator,
+  DeclareOpInterfaceMethods<FModuleLike, [
+    // Class Ops do not support port annotations.
+    // Override this method to return an empty array attr.
+    "getPortAnnotationsAttr"]>,
+  DeclareOpInterfaceMethods<Symbol, ["canDiscardOnUseEmpty"]>]> {
+  let summary = "FIRRTL Class";
+  let description = [{
+    The "firrtl.class" operation defines a class of property-only objects,
+    including a given name, a list of ports, and a body that represents the
+    connections within the class.
+
+    A class may only have property ports, and its body may only be ops that act
+    on properties, such as propassign ops.
+  }];
+  let arguments = (ins SymbolNameAttr:$sym_name, APIntAttr:$portDirections,
+                       ArrayRefAttr:$portNames, ArrayRefAttr:$portTypes,
+                       ArrayRefAttr:$portSyms, ArrayRefAttr:$portLocations);
+  let results = (outs);
+  let regions = (region SizedRegion<1>:$body);
+
+  let skipDefaultBuilders = 1;
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+  let builders = [
+    OpBuilder<(ins
+      "StringAttr":$name,
+      "ArrayRef<PortInfo>":$ports)>];
+
+  let extraModuleClassDeclaration = [{
+    Block *getBodyBlock() { return &getBody().front(); }
+
+    using iterator = Block::iterator;
+    iterator begin() { return getBodyBlock()->begin(); }
+    iterator end() { return getBodyBlock()->end(); }
+
+    Block::BlockArgListType getArguments() {
+      return getBodyBlock()->getArguments();
+    }
+
+    // Return the block argument for the port with the specified index.
+    BlockArgument getArgument(size_t portNumber);
+
+    OpBuilder getBodyBuilder() {
+      assert(!getBody().empty() && "Unexpected empty 'body' region.");
+      Block &bodyBlock = getBody().front();
+      return OpBuilder::atBlockEnd(&bodyBlock);
+    }
 
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
-  }];
+    ArrayAttr getParameters();
 
-  let hasCustomAssemblyFormat = 1;
+    /// Verify that the given type agrees with this class.
+    LogicalResult verifyType(
+      ClassType type, function_ref<InFlightDiagnostic()> emitError);
+
+    /// Get the type for instances of this class.
+    ClassType getInstanceType();
+  }];
 }
 
-def NonLocalAnchor : FIRRTLOp<"nla",
-      [IsolatedFromAbove, Symbol, 
-       DeclareOpInterfaceMethods<SymbolUserOpInterface>,
-       HasParent<"CircuitOp">]> {
-  let summary = "Anchor for non-local annotations";
+def GroupDeclOp : FIRRTLOp<
+  "declgroup",
+  [IsolatedFromAbove, Symbol, SymbolTable, SingleBlock, NoTerminator,
+   ParentOneOf<["firrtl::CircuitOp", "firrtl::GroupDeclOp"]>]
+> {
+  let summary = "A declaration of an optional group";
   let description = [{
-    The "firrtl.nla" operation represents a common point for non-local (path)
-    annotations to anchor to in the global scope.  This lets components of the
-    path point to a common entity.
+    The `firrtl.declgroup` operation declares an optional group and a lowering
+    convetion for that group.  Optional groups are a feature of FIRRTL that add
+    verification or debugging code to an existing module at runtime.
+
+    A `firrtl.declgroup` operation only declares the group and any groups nested
+    under the current declaration.  Functionality is added to modules using the
+    `firrtl.group` operation.
   }];
-  let arguments = (ins SymbolNameAttr:$sym_name, NameRefArrayAttr:$namepath);
+  let arguments = (ins SymbolNameAttr:$sym_name, GroupConventionAttr:$convention);
   let results = (outs);
-  let hasCustomAssemblyFormat = 1;
-  let extraClassDeclaration = [{
-    /// Drop the module from the namepath. If its a InnerNameRef, then drop
-    /// the Module-Instance pair, else drop the final module from the namepath.
-    /// Return true if any update is made.
-    bool dropModule(StringAttr moduleToDrop);
-
-    /// Inline the module in the namepath.
-    /// Update the symbol name for the inlined module instance, by prepending
-    /// the symbol name of the instance at which the inling was done.
-    /// Return true if any update is made.
-    bool inlineModule(StringAttr moduleToDrop);
-
-    /// Replace the oldMod module with newMod module in the namepath of the NLA.
-    /// Return true if any update is made.
-    bool updateModule(StringAttr oldMod, StringAttr newMod);
-
-    /// Replace the oldMod module with newMod module in the namepath of the NLA.
-    /// Since the module is being updated, the symbols inside the module should
-    /// also be renamed. Use the rename Map to update the corresponding 
-    /// inner_sym names in the namepath. Return true if any update is made.
-    bool updateModuleAndInnerRef(StringAttr oldMod, StringAttr newMod,
-         const llvm::DenseMap<StringAttr, StringAttr> &innerSymRenameMap);
-
-    /// Truncate the namepath for this NLA, at atMod module.
-    /// If includeMod is false, drop atMod and beyond, else include it and drop
-    /// everything after it.
-    /// Return true if any update is made.
-    bool truncateAtModule(StringAttr atMod, bool includeMod = true);
-
-    /// Return just the module part of the namepath at a specific index.
-    StringAttr modPart(unsigned i);
-
-    /// Return the root module.
-    StringAttr root();
-
-    /// Return just the reference part of the namepath at a specific index.
-    /// This will return an empty attribute if this is the leaf and the leaf is
-    /// a module.
-    StringAttr refPart(unsigned i);
-
-    /// Return the leaf reference.  This returns an empty attribute if the leaf
-    /// reference is a module.
-    StringAttr ref();
-
-    /// Return the leaf Module.
-    StringAttr leafMod();
-
-    /// Returns true, if the NLA path contains the module.
-    bool hasModule(StringAttr modName);
-
-    /// Returns true, if the NLA path contains the InnerSym {modName, symName}.
-    bool hasInnerSym(StringAttr modName, StringAttr symName) const;
-
-    /// Returns true if this NLA targets a module or instance of a module (as
-    /// opposed to an instance's port or something inside an instance).
-    bool isModule();
-
-    /// Returns true if this NLA targets something inside a module (as opposed
-    /// to a module or an instance of a module);
-    bool isComponent();
-    }];
+  let regions = (region SizedRegion<1>:$body);
+  let assemblyFormat = [{
+    $sym_name $convention attr-dict-with-keyword $body
+  }];
 }
+
+#endif // CIRCT_DIALECT_FIRRTL_FIRRTLSTRUCTURE_TD

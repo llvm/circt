@@ -6,6 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "circt/Dialect/HW/HWAttributesNaming.td"
 include "circt/Dialect/HW/HWTypes.td"
 
 def DeclPhysicalRegionOp : MSFTOp<"physical_region",
@@ -82,12 +83,20 @@ def PDPhysRegionOp : MSFTOp<"pd.physregion",
 def InstanceHierarchyOp : MSFTOp<"instance.hierarchy",
                                  [HasParent<"mlir::ModuleOp">, NoTerminator]> {
   let summary = "The root of an instance hierarchy";
+  let description = [{
+    Models the "root" / "top" of an instance hierarchy. `DynamicInstanceOp`s
+    must be contained by this op. Specifies the top module and (optionally) an
+    "instance" name in the case where there are multiple instances of a
+    particular module in a design. (As is often the case where one isn't
+    producing the design's "top" module but a subdesign.)
+  }];
 
-  let arguments = (ins FlatSymbolRefAttr:$topModuleRef);
+  let arguments = (ins FlatSymbolRefAttr:$topModuleRef,
+                       OptionalAttr<StrAttr>:$instName);
   let regions = (region SizedRegion<1>:$body);
 
   let assemblyFormat = [{
-    $topModuleRef $body attr-dict
+    $topModuleRef ($instName^)? $body attr-dict
   }];
 }
 
@@ -111,7 +120,7 @@ def DynamicInstanceOp : MSFTOp<"instance.dynamic",
     gives them the symbol of the globalref which was created to replace the
     dynamic instance.
   }];
-  let arguments = (ins HWInnerRefAttr:$instanceRef);
+  let arguments = (ins InnerRefAttr:$instanceRef);
   let regions = (region SizedRegion<1>:$body);
 
   let assemblyFormat = [{

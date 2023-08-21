@@ -1,7 +1,9 @@
-; RUN: firtool --firrtl-grand-central --verilog --annotation-file %S/Wire.anno.json --annotation-file %S/Extract.anno.json %s | FileCheck %s --check-prefixes CHECK,EXTRACT
-; RUN: firtool --firrtl-grand-central --verilog --annotation-file %S/Wire.anno.json %s | FileCheck %s --check-prefixes CHECK,NOEXTRACT
-; RUN: firtool --firrtl-grand-central --verilog --annotation-file %S/Wire.anno.json --annotation-file %S/Extract.anno.json %s --annotation-file %S/YAML.anno.json | FileCheck %s --check-prefixes YAML
-; RUN: firtool --firrtl-grand-central --split-verilog --annotation-file %S/Wire.anno.json %s -o %t.folder > %t  && cat %t.folder/MyView_companion.sv | FileCheck %s --check-prefixes MYVIEW_COMPANION
+; RUN: firtool --lowering-options=emitBindComments --annotation-file %s.anno.json --annotation-file %s.Extract.anno.json %s | FileCheck %s --check-prefixes CHECK,EXTRACT
+; RUN: firtool --lowering-options=emitBindComments --preserve-values=named --annotation-file %s.anno.json %s | FileCheck %s --check-prefixes CHECK,NOEXTRACT
+; RUN: firtool --lowering-options=emitBindComments --annotation-file %s.anno.json --annotation-file %s.Extract.anno.json %s --annotation-file %s.YAML.anno.json | FileCheck %s --check-prefixes YAML
+; RUN: firtool --lowering-options=emitBindComments --split-verilog --annotation-file %s.anno.json %s -o %t.folder > %t  && cat %t.folder/MyView_companion.sv  | FileCheck %s --check-prefixes MYVIEW_COMPANION
+; RUN: firtool --lowering-options=emitBindComments --annotation-file %s.anno.json --annotation-file %s.Prefix.anno.json %s | FileCheck %s --check-prefixes PREFIX
+; RUN: firtool --annotation-file %s.anno.json %s --disable-opt
 
 circuit Top :
   extmodule BlackBox_DUT :
@@ -34,7 +36,7 @@ circuit Top :
     w.multivec[1][0] <= in.multivec[1][0]
     w.multivec[1][1] <= in.multivec[1][1]
     w.multivec[1][2] <= in.multivec[1][2]
-    w.uint <= in.uint
+    w.uint <= UInt<1>("h1")
     out.otherOther.other.sint <= w.otherOther.other.sint
     out.otherOther.other.uint <= w.otherOther.other.uint
     out.vecOfBundle[0].sint <= w.vecOfBundle[0].sint
@@ -56,6 +58,8 @@ circuit Top :
     output a: UInt<1>
     input b: UInt<1>
 
+  extmodule ExtModuleWithPort:
+    output source: UInt<1>[2]
 
   ; This checks that macro definitions (e.g. "define RANDOM") are included
   ; in MyView_companion.sv. There was a bug that macro definitions were not
@@ -142,6 +146,8 @@ circuit Top :
     inst bbox2 of BlackBox_DUTAndGCT
     bbox2.a <= in.uint
 
+    inst ext of ExtModuleWithPort
+
   module Top :
     input clock : Clock
     input reset : UInt<1>
@@ -182,80 +188,165 @@ circuit Top :
     out.multivec[1][2] <= dut.out.multivec[1][2]
     out.uint <= dut.out.uint
 
-    ; NOEXTRACT:      module MyView_companion();
+    ; PREFIX:         module FOO_BAR_MyView_companion(
+    ; PREFIX:         FOO_BAR_BAZ_MyInterface MyView(
+
+    ; NOEXTRACT:      module MyView_companion(
+    ; NOEXTRACT:      );
+    ; NOEXTRACT:        MyInterface MyView();
+    ; NOEXTRACT:        assign MyView.uint = [[DUT_w_uint:[a-zA-Z0-9_]+]];
+    ; NOEXTRACT-NEXT:   assign MyView.vec[0] = [[DUT_w_vec_0:[a-zA-Z0-9_]+]];
+    ; NOEXTRACT-NEXT:   assign MyView.vec[1] = [[DUT_w_vec_1:[a-zA-Z0-9_]+]];
+    ; NOEXTRACT-NEXT:   assign MyView.multivec[0][0] = [[DUT_w_multivec_0_0:[a-zA-Z0-9_]+]];
+    ; NOEXTRACT-NEXT:   assign MyView.multivec[0][1] = [[DUT_w_multivec_0_1:[a-zA-Z0-9_]+]];
+    ; NOEXTRACT-NEXT:   assign MyView.multivec[0][2] = [[DUT_w_multivec_0_2:[a-zA-Z0-9_]+]];
+    ; NOEXTRACT-NEXT:   assign MyView.multivec[1][0] = [[DUT_w_multivec_1_0:[a-zA-Z0-9_]+]];
+    ; NOEXTRACT-NEXT:   assign MyView.multivec[1][1] = [[DUT_w_multivec_1_1:[a-zA-Z0-9_]+]];
+    ; NOEXTRACT-NEXT:   assign MyView.multivec[1][2] = [[DUT_w_multivec_1_2:[a-zA-Z0-9_]+]];
+    ; NOEXTRACT-NEXT:   assign MyView.vecOfBundle[0].sint = [[DUT_w_vecOfBundle_0_sint:[a-zA-Z0-9_]+]];
+    ; NOEXTRACT-NEXT:   assign MyView.vecOfBundle[0].uint = [[DUT_w_vecOfBundle_0_uint:[a-zA-Z0-9_]+]];
+    ; NOEXTRACT-NEXT:   assign MyView.vecOfBundle[1].sint = [[DUT_w_vecOfBundle_1_sint:[a-zA-Z0-9_]+]];
+    ; NOEXTRACT-NEXT:   assign MyView.vecOfBundle[1].uint = [[DUT_w_vecOfBundle_1_uint:[a-zA-Z0-9_]+]];
+    ; NOEXTRACT-NEXT:   assign MyView.otherOther.other.sint = [[DUT_w_otherOther_other_sint:[a-zA-Z0-9_]+]];
+    ; NOEXTRACT-NEXT:   assign MyView.otherOther.other.uint = [[DUT_w_otherOther_other_uint:[a-zA-Z0-9_]+]];
+    ; NOEXTRACT-NEXT:   assign MyView.sub_uint = 1'h1;
+    ; NOEXTRACT-NEXT:   assign MyView.sub_vec[0] = [[DUT_submodule_w_vec_0:[a-zA-Z0-9_]+]];
+    ; NOEXTRACT-NEXT:   assign MyView.sub_vec[1] = [[DUT_submodule_w_vec_1:[a-zA-Z0-9_]+]];
+    ; NOEXTRACT-NEXT:   assign MyView.sub_vecOfBundle[0].sint = [[DUT_submodule_w_vecOfBundle_0_sint:[a-zA-Z0-9_]+]];
+    ; NOEXTRACT-NEXT:   assign MyView.sub_vecOfBundle[0].uint = [[DUT_submodule_w_vecOfBundle_0_uint:[a-zA-Z0-9_]+]];
+    ; NOEXTRACT-NEXT:   assign MyView.sub_vecOfBundle[1].sint = [[DUT_submodule_w_vecOfBundle_1_sint:[a-zA-Z0-9_]+]];
+    ; NOEXTRACT-NEXT:   assign MyView.sub_vecOfBundle[1].uint = [[DUT_submodule_w_vecOfBundle_1_uint:[a-zA-Z0-9_]+]];
+    ; NOEXTRACT-NEXT:   assign MyView.ext_port_1 = [[ExtModuleWithPort_source_1:[a-zA-Z0-9_]+]];
     ; NOEXTRACT:        Tap tap (
     ; NOEXTRACT-NEXT:     .b     (r),
     ; NOEXTRACT-NEXT:     .clock (clock),
     ; NOEXTRACT-NEXT:     .a     (_tap_a)
     ; NOEXTRACT-NEXT:   );
-    ; NOEXTRACT-NEXT:   MyView_mapping MyView_mapping{{ *}}();
     ; NOEXTRACT-NEXT: endmodule
 
     ; CHECK:          module DUT
     ; CHECK-NOT:      endmodule
-    ; EXTRACT:          // MyInterface MyView();
-    ; NOEXTRACT:        {{^ *}}MyInterface MyView();
     ; EXTRACT:          /* This instance is elsewhere emitted as a bind statement.
-    ; EXTRACT-NEXT:        MyView_companion MyView_companion
+    ; EXTRACT-NEXT:        MyView_companion MyView_companion (
+    ; EXTRACT-NEXT:          .[[in_uint_port:[a-zA-Z0-9_]+]]                             (in_uint),
+    ; EXTRACT-NEXT:          .[[in_vec_0_port:[a-zA-Z0-9_]+]]                            (in_vec_0),
+    ; EXTRACT-NEXT:          .[[in_vec_1_port:[a-zA-Z0-9_]+]]                            (in_vec_1),
+    ; EXTRACT-NEXT:          .[[in_multivec_0_0_port:[a-zA-Z0-9_]+]]                     (in_multivec_0_0),
+    ; EXTRACT-NEXT:          .[[in_multivec_0_1_port:[a-zA-Z0-9_]+]]                     (in_multivec_0_1),
+    ; EXTRACT-NEXT:          .[[in_multivec_0_2_port:[a-zA-Z0-9_]+]]                     (in_multivec_0_2),
+    ; EXTRACT-NEXT:          .[[in_multivec_1_0_port:[a-zA-Z0-9_]+]]                     (in_multivec_1_0),
+    ; EXTRACT-NEXT:          .[[in_multivec_1_1_port:[a-zA-Z0-9_]+]]                     (in_multivec_1_1),
+    ; EXTRACT-NEXT:          .[[in_multivec_1_2_port:[a-zA-Z0-9_]+]]                     (in_multivec_1_2),
+    ; EXTRACT-NEXT:          .[[in_vecOfBundle_0_sint_port:[a-zA-Z0-9_]+]]               (in_vecOfBundle_0_sint),
+    ; EXTRACT-NEXT:          .[[in_vecOfBundle_0_uint_port:[a-zA-Z0-9_]+]]               (in_vecOfBundle_0_uint),
+    ; EXTRACT-NEXT:          .[[in_vecOfBundle_1_sint_port:[a-zA-Z0-9_]+]]               (in_vecOfBundle_1_sint),
+    ; EXTRACT-NEXT:          .[[in_vecOfBundle_1_uint_port:[a-zA-Z0-9_]+]]               (in_vecOfBundle_1_uint),
+    ; EXTRACT-NEXT:          .[[in_otherOther_other_sint_port:[a-zA-Z0-9_]+]]            (in_otherOther_other_sint),
+    ; EXTRACT-NEXT:          .[[in_otherOther_other_uint_port:[a-zA-Z0-9_]+]]            (in_otherOther_other_uint),
+    ; EXTRACT-NEXT:          .[[DUT_submodule_in_vec_0_port:[a-zA-Z0-9_]+]]              (DUT.submodule.in_vec_0_probe),
+    ; EXTRACT-NEXT:          .[[DUT_submodule_in_vec_1_port:[a-zA-Z0-9_]+]]              (DUT.submodule.in_vec_1_probe),
+    ; EXTRACT-NEXT:          .[[DUT_submodule_in_vecOfBundle_0_sint_port:[a-zA-Z0-9_]+]] (DUT.submodule.in_vecOfBundle_0_sint_probe),
+    ; EXTRACT-NEXT:          .[[DUT_submodule_in_vecOfBundle_0_uint_port:[a-zA-Z0-9_]+]] (DUT.submodule.in_vecOfBundle_0_uint_probe),
+    ; EXTRACT-NEXT:          .[[DUT_submodule_in_vecOfBundle_1_sint_port:[a-zA-Z0-9_]+]] (DUT.submodule.in_vecOfBundle_1_sint_probe),
+    ; EXTRACT-NEXT:          .[[DUT_submodule_in_vecOfBundle_1_uint_port:[a-zA-Z0-9_]+]] (DUT.submodule.in_vecOfBundle_1_uint_probe),
+    ; EXTRACT-NEXT:          .[[ExtModuleWithPort_source_1_port:[a-zA-Z0-9_]+]]          ([[ExtModuleWithPort_source_1_wire:[a-zA-Z0-9_]+]])
+    ; EXTRACT-NEXT:        );
     ; EXTRACT-NEXT:     */
-    ; NOEXTRACT:        {{^ *}}MyView_companion MyView_companion
+    ; NOEXTRACT:        {{^ *}}MyView_companion MyView_companion (
+    ; NOEXTRACT-NEXT:        .[[DUT_w_uint]]                               (w_uint),
+    ; NOEXTRACT-NEXT:        .[[DUT_w_vec_0]]                              (w_vec_0),
+    ; NOEXTRACT-NEXT:        .[[DUT_w_vec_1]]                              (w_vec_1),
+    ; NOEXTRACT-NEXT:        .[[DUT_w_multivec_0_0]]                       (w_multivec_0_0),
+    ; NOEXTRACT-NEXT:        .[[DUT_w_multivec_0_1]]                       (w_multivec_0_1),
+    ; NOEXTRACT-NEXT:        .[[DUT_w_multivec_0_2]]                       (w_multivec_0_2),
+    ; NOEXTRACT-NEXT:        .[[DUT_w_multivec_1_0]]                       (w_multivec_1_0),
+    ; NOEXTRACT-NEXT:        .[[DUT_w_multivec_1_1]]                       (w_multivec_1_1),
+    ; NOEXTRACT-NEXT:        .[[DUT_w_multivec_1_2]]                       (w_multivec_1_2),
+    ; NOEXTRACT-NEXT:        .[[DUT_w_vecOfBundle_0_sint]]                 (w_vecOfBundle_0_sint),
+    ; NOEXTRACT-NEXT:        .[[DUT_w_vecOfBundle_0_uint]]                 (w_vecOfBundle_0_uint),
+    ; NOEXTRACT-NEXT:        .[[DUT_w_vecOfBundle_1_sint]]                 (w_vecOfBundle_1_sint),
+    ; NOEXTRACT-NEXT:        .[[DUT_w_vecOfBundle_1_uint]]                 (w_vecOfBundle_1_uint),
+    ; NOEXTRACT-NEXT:        .[[DUT_w_otherOther_other_sint]]              (w_otherOther_other_sint),
+    ; NOEXTRACT-NEXT:        .[[DUT_w_otherOther_other_uint]]              (w_otherOther_other_uint),
+    ; NOEXTRACT-NEXT:        .[[DUT_submodule_w_vec_0]]                    (DUT.submodule.w_vec_0_probe),
+    ; NOEXTRACT-NEXT:        .[[DUT_submodule_w_vec_1]]                    (DUT.submodule.w_vec_1_probe),
+    ; NOEXTRACT-NEXT:        .[[DUT_submodule_w_vecOfBundle_0_sint]]       (DUT.submodule.w_vecOfBundle_0_sint_probe),
+    ; NOEXTRACT-NEXT:        .[[DUT_submodule_w_vecOfBundle_0_uint]]       (DUT.submodule.w_vecOfBundle_0_uint_probe),
+    ; NOEXTRACT-NEXT:        .[[DUT_submodule_w_vecOfBundle_1_sint]]       (DUT.submodule.w_vecOfBundle_1_sint_probe),
+    ; NOEXTRACT-NEXT:        .[[DUT_submodule_w_vecOfBundle_1_uint]]       (DUT.submodule.w_vecOfBundle_1_uint_probe)
+    ; NOEXTRACT-NEXT:        .[[ExtModuleWithPort_source_1:[a-zA-Z0-9_]+]] ([[ExtModuleWithPort_source_1_wire:[a-zA-Z0-9_]+]])
+    ; NOEXTRACT-NEXT:      );
 
-    ; EXTRACT:        FILE "./BlackBox_DUT.v"
-    ; EXTRACT:        FILE "Wire/firrtl/gct/BlackBox_GCT.v"
-    ; EXTRACT:        FILE "Wire/firrtl/gct/BlackBox_DUTAndGCT.v"
+    ; CHECK:              ExtModuleWithPort ext (
+    ; CHECK-NEXT:           .source_0 (
+    ; CHECK-NEXT:           .source_1 ([[ExtModuleWithPort_source_1_wire]])
+    ; CHECK-NEXT:         );
 
-    ; EXTRACT:        FILE "firrtl_black_box_resource_files.f"
-    ; EXTRACT-NOT:    FILE
-    ; EXTRACT:          BlackBox_DUT.v
-    ; EXTRACT-NEXT:     Wire/firrtl/gct/BlackBox_DUTAndGCT.v
-    ; EXTRACT-NEXT:     Wire/firrtl/gct/BlackBox_GCT.v
-
-    ; EXTRACT:        FILE "Wire/firrtl/bindings.sv"
-    ; EXTRACT-NOT:    FILE
-    ; EXTRACT:        bind DUT MyInterface MyView{{ *}}(.*);
-    ; EXTRACT:        bind DUT MyView_companion MyView_companion{{ *}}();
-    ; NOEXTRACT-NOT:  FILE "Wire/firrtl/bindings.sv"
-
-    ; EXTRACT:        FILE "Wire/firrtl/gct/MyView_companion.sv"
-    ; NOEXTRACT-NOT:  FILE {{.*}}/MyView_companion.sv
-    ; EXTRACT:        module MyView_companion();
+    ; EXTRACT:        FILE "Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}MyView_companion.sv"
+    ; NOEXTRACT-NOT:  FILE {{.*}}{{[/\]}}MyView_companion.sv
+    ; EXTRACT:        module MyView_companion(
+    ; EXTRACT:          MyInterface MyView();
+    ; EXTRACT:          assign MyView.uint = [[in_uint_port]];
+    ; EXTRACT-NEXT:     assign MyView.vec[0] = [[in_vec_0_port]];
+    ; EXTRACT-NEXT:     assign MyView.vec[1] = [[in_vec_1_port]];
+    ; EXTRACT-NEXT:     assign MyView.multivec[0][0] = [[in_multivec_0_0_port]];
+    ; EXTRACT-NEXT:     assign MyView.multivec[0][1] = [[in_multivec_0_1_port]];
+    ; EXTRACT-NEXT:     assign MyView.multivec[0][2] = [[in_multivec_0_2_port]];
+    ; EXTRACT-NEXT:     assign MyView.multivec[1][0] = [[in_multivec_1_0_port]];
+    ; EXTRACT-NEXT:     assign MyView.multivec[1][1] = [[in_multivec_1_1_port]];
+    ; EXTRACT-NEXT:     assign MyView.multivec[1][2] = [[in_multivec_1_2_port]];
+    ; EXTRACT-NEXT:     assign MyView.vecOfBundle[0].sint = [[in_vecOfBundle_0_sint_port]];
+    ; EXTRACT-NEXT:     assign MyView.vecOfBundle[0].uint = [[in_vecOfBundle_0_uint_port]];
+    ; EXTRACT-NEXT:     assign MyView.vecOfBundle[1].sint = [[in_vecOfBundle_1_sint_port]];
+    ; EXTRACT-NEXT:     assign MyView.vecOfBundle[1].uint = [[in_vecOfBundle_1_uint_port]];
+    ; EXTRACT-NEXT:     assign MyView.otherOther.other.sint = [[in_otherOther_other_sint_port]];
+    ; EXTRACT-NEXT:     assign MyView.otherOther.other.uint = [[in_otherOther_other_uint_port]];
+    ; EXTRACT-NEXT:     assign MyView.sub_uint = 1'h1;
+    ; EXTRACT-NEXT:     assign MyView.sub_vec[0] = [[DUT_submodule_in_vec_0_port]];
+    ; EXTRACT-NEXT:     assign MyView.sub_vec[1] = [[DUT_submodule_in_vec_1_port]];
+    ; EXTRACT-NEXT:     assign MyView.sub_vecOfBundle[0].sint = [[DUT_submodule_in_vecOfBundle_0_sint_port]];
+    ; EXTRACT-NEXT:     assign MyView.sub_vecOfBundle[0].uint = [[DUT_submodule_in_vecOfBundle_0_uint_port]];
+    ; EXTRACT-NEXT:     assign MyView.sub_vecOfBundle[1].sint = [[DUT_submodule_in_vecOfBundle_1_sint_port]];
+    ; EXTRACT-NEXT:     assign MyView.sub_vecOfBundle[1].uint = [[DUT_submodule_in_vecOfBundle_1_uint_port]];
+    ; EXTRACT-NEXT:     assign MyView.ext_port_1 = [[ExtModuleWithPort_source_1_port]];
     ; EXTRACT:          Tap tap (
     ; EXTRACT-NEXT:       .b     (r),
-    ; EXTRACT-NEXT:       .clock (clock),
+    ; EXTRACT-NEXT:       .clock (_tap_clock),
     ; EXTRACT-NEXT:       .a     (_tap_a)
     ; EXTRACT-NEXT:     );
-    ; EXTRACT-NEXT:     MyView_mapping MyView_mapping{{ *}}();
     ; EXTRACT-NEXT:   endmodule
 
-    ; EXTRACT:        FILE "Wire/firrtl/gct/MyView_mapping.sv"
-    ; NOEXTRACT-NOT:  FILE {{.*}}/MyView_mapping.sv
-    ; CHECK:          module MyView_mapping();
-    ; CHECK-NEXT:       assign MyView.uint = Top.dut._gctTap;
-    ; CHECK-NEXT:       assign MyView.vec[0] = Top.dut._gctTap_0;
-    ; CHECK-NEXT:       assign MyView.vec[1] = Top.dut._gctTap_1;
-    ; CHECK-NEXT:       assign MyView.multivec[0][0] = Top.dut._gctTap_2;
-    ; CHECK-NEXT:       assign MyView.multivec[0][1] = Top.dut._gctTap_3;
-    ; CHECK-NEXT:       assign MyView.multivec[0][2] = Top.dut._gctTap_4;
-    ; CHECK-NEXT:       assign MyView.multivec[1][0] = Top.dut._gctTap_5;
-    ; CHECK-NEXT:       assign MyView.multivec[1][1] = Top.dut._gctTap_6;
-    ; CHECK-NEXT:       assign MyView.multivec[1][2] = Top.dut._gctTap_7;
-    ; CHECK-NEXT:       assign MyView.vecOfBundle[0].sint = Top.dut._gctTap_8;
-    ; CHECK-NEXT:       assign MyView.vecOfBundle[0].uint = Top.dut._gctTap_9;
-    ; CHECK-NEXT:       assign MyView.vecOfBundle[1].sint = Top.dut._gctTap_10;
-    ; CHECK-NEXT:       assign MyView.vecOfBundle[1].uint = Top.dut._gctTap_11;
-    ; CHECK-NEXT:       assign MyView.otherOther.other.sint = Top.dut._gctTap_12;
-    ; CHECK-NEXT:       assign MyView.otherOther.other.uint = Top.dut._gctTap_13;
-    ; CHECK-NEXT:       assign MyView.sub_uint = Top.dut.submodule._gctTap;
-    ; CHECK-NEXT:       assign MyView.sub_vec[0] = Top.dut.submodule._gctTap_0;
-    ; CHECK-NEXT:       assign MyView.sub_vec[1] = Top.dut.submodule._gctTap_1;
-    ; CHECK-NEXT:       assign MyView.sub_vecOfBundle[0].sint = Top.dut.submodule._gctTap_2;
-    ; CHECK-NEXT:       assign MyView.sub_vecOfBundle[0].uint = Top.dut.submodule._gctTap_3;
-    ; CHECK-NEXT:       assign MyView.sub_vecOfBundle[1].sint = Top.dut.submodule._gctTap_4;
-    ; CHECK-NEXT:       assign MyView.sub_vecOfBundle[1].uint = Top.dut.submodule._gctTap_5;
-    ; CHECK:          endmodule
+    ; EXTRACT:        FILE "Wire{{[/\]}}firrtl{{[/\]}}bindings.sv"
+    ; EXTRACT-NOT:    FILE
+    ; EXTRACT:        bind DUT MyView_companion MyView_companion{{ *}}(
+    ; EXTRACT-NEXT:          .[[in_uint_port]]                             (in_uint),
+    ; EXTRACT-NEXT:          .[[in_vec_0_port]]                            (in_vec_0),
+    ; EXTRACT-NEXT:          .[[in_vec_1_port]]                            (in_vec_1),
+    ; EXTRACT-NEXT:          .[[in_multivec_0_0_port]]                     (in_multivec_0_0),
+    ; EXTRACT-NEXT:          .[[in_multivec_0_1_port]]                     (in_multivec_0_1),
+    ; EXTRACT-NEXT:          .[[in_multivec_0_2_port]]                     (in_multivec_0_2),
+    ; EXTRACT-NEXT:          .[[in_multivec_1_0_port]]                     (in_multivec_1_0),
+    ; EXTRACT-NEXT:          .[[in_multivec_1_1_port]]                     (in_multivec_1_1),
+    ; EXTRACT-NEXT:          .[[in_multivec_1_2_port]]                     (in_multivec_1_2),
+    ; EXTRACT-NEXT:          .[[in_vecOfBundle_0_sint_port]]               (in_vecOfBundle_0_sint),
+    ; EXTRACT-NEXT:          .[[in_vecOfBundle_0_uint_port]]               (in_vecOfBundle_0_uint),
+    ; EXTRACT-NEXT:          .[[in_vecOfBundle_1_sint_port]]               (in_vecOfBundle_1_sint),
+    ; EXTRACT-NEXT:          .[[in_vecOfBundle_1_uint_port]]               (in_vecOfBundle_1_uint),
+    ; EXTRACT-NEXT:          .[[in_otherOther_other_sint_port]]            (in_otherOther_other_sint),
+    ; EXTRACT-NEXT:          .[[in_otherOther_other_uint_port]]            (in_otherOther_other_uint),
+    ; EXTRACT-NEXT:          .[[DUT_submodule_in_vec_0_port]]              (DUT.submodule.in_vec_0_probe),
+    ; EXTRACT-NEXT:          .[[DUT_submodule_in_vec_1_port]]              (DUT.submodule.in_vec_1_probe),
+    ; EXTRACT-NEXT:          .[[DUT_submodule_in_vecOfBundle_0_sint_port]] (DUT.submodule.in_vecOfBundle_0_sint_probe),
+    ; EXTRACT-NEXT:          .[[DUT_submodule_in_vecOfBundle_0_uint_port]] (DUT.submodule.in_vecOfBundle_0_uint_probe),
+    ; EXTRACT-NEXT:          .[[DUT_submodule_in_vecOfBundle_1_sint_port]] (DUT.submodule.in_vecOfBundle_1_sint_probe),
+    ; EXTRACT-NEXT:          .[[DUT_submodule_in_vecOfBundle_1_uint_port]] (DUT.submodule.in_vecOfBundle_1_uint_probe),
+    ; EXTRACT-NEXT:          .[[ExtModuleWithPort_source_1_port]]          ([[ExtModuleWithPort_source_1_wire]])
+    ; );
+    ; NOEXTRACT-NOT:  FILE "Wire{{[/\]}}firrtl{{[/\]}}bindings.sv"
 
-    ; EXTRACT:        FILE "Wire/firrtl/gct/MyInterface.sv"
-    ; NOEXTRACT-NOT:  FILE {{.*}}/MyInterface.sv
+    ; EXTRACT:        FILE "Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}MyInterface.sv"
+    ; NOEXTRACT-NOT:  FILE {{.*}}{{[/\]}}MyInterface.sv
+    ; PREFIX:         interface FOO_BAR_BAZ_MyInterface;
     ; CHECK:          interface MyInterface;
     ; CHECK-NEXT:       // a wire called 'uint'
     ; CHECK-NEXT:       logic uint;
@@ -274,36 +365,46 @@ circuit Top :
     ; CHECK-NEXT:       // a vector of a bundle in the submodule with a
     ; CHECK-NEXT:       // multiline comment
     ; CHECK-NEXT:       Sub_vecOfBundle sub_vecOfBundle[2]();
+    ; CHECK-NEXT:       // The second element of an external port
+    ; CHECK-NEXT:       logic ext_port_1;
+    ; CHECK-NEXT:       // <unsupported string type> foo_string;
+    ; CHECK-NEXT:       // <unsupported integer type> foo_integer;
+    ; CHECK-NEXT:       // <unsupported double type> foo_double;
+    ; CHECK-NEXT:       // <unsupported boolean type> foo_boolean;
     ; CHECK-NEXT:     endinterface
 
-    ; EXTRACT:        FILE "Wire/firrtl/gct/VecOfBundle.sv"
-    ; NOEXTRACT-NOT:  FILE {{.*}}/VecOfBundle.sv
+    ; EXTRACT:        FILE "Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}VecOfBundle.sv"
+    ; NOEXTRACT-NOT:  FILE {{.*}}{{[/\]}}VecOfBundle.sv
+    ; PREFIX:         interface FOO_BAR_BAZ_VecOfBundle;
     ; CHECK:          interface VecOfBundle;
     ; CHECK-NEXT:       logic [1:0] sint;
     ; CHECK-NEXT:       logic [3:0] uint;
     ; CHECK-NEXT:     endinterface
 
-    ; EXTRACT:        FILE "Wire/firrtl/gct/OtherOther.sv"
-    ; NOEXTRACT-NOT:  FILE {{.*}}/OtherOther.sv
+    ; EXTRACT:        FILE "Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}OtherOther.sv"
+    ; NOEXTRACT-NOT:  FILE {{.*}}{{[/\]}}OtherOther.sv
+    ; PREFIX:         interface FOO_BAR_BAZ_OtherOther;
     ; CHECK:          interface OtherOther;
     ; CHECK-NEXT:       Other other();
     ; CHECK:          endinterface
 
-    ; EXTRACT:        FILE "Wire/firrtl/gct/Other.sv"
-    ; NOEXTRACT-NOT:  FILE {{.*}}/Other.sv
+    ; EXTRACT:        FILE "Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}Other.sv"
+    ; NOEXTRACT-NOT:  FILE {{.*}}{{[/\]}}Other.sv
+    ; PREFIX:         interface FOO_BAR_BAZ_Other;
     ; CHECK:          interface Other;
     ; CHECK-NEXT:       logic [1:0] sint;
     ; CHECK-NEXT:       logic [3:0] uint;
     ; CHECK:          endinterface
 
-    ; EXTRACT:        FILE "Wire/firrtl/gct/Sub_vecOfBundle.sv"
-    ; NOEXTRACT-NOT:  FILE {{.*}}/Sub_vecOfBundle.sv
+    ; EXTRACT:        FILE "Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}Sub_vecOfBundle.sv"
+    ; NOEXTRACT-NOT:  FILE {{.*}}{{[/\]}}Sub_vecOfBundle.sv
+    ; PREFIX:         interface FOO_BAR_BAZ_Sub_vecOfBundle;
     ; CHECK:          interface Sub_vecOfBundle;
     ; CHECK-NEXT:       logic [1:0] sint;
     ; CHECK-NEXT:       logic [3:0] uint;
     ; CHECK:          endinterface
 
-    ; YAML:           FILE "Wire/firrtl/gct/gct.yaml"
+    ; YAML:           FILE "Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}gct.yaml"
     ; YAML:             - name: MyInterface
     ; YAML-NEXT:          fields:
     ; YAML-NEXT:            - name: uint
@@ -325,6 +426,10 @@ circuit Top :
     ; YAML-NEXT:            - name: sub_vec
     ; YAML-NEXT:              description: 'a vector called ''vec'' in the submodule'
     ; YAML-NEXT:              dimensions: [ 2 ]
+    ; YAML-NEXT:              width: 1
+    ; YAML-NEXT:            - name: ext_port_1
+    ; YAML-NEXT:              description: The second element of an external port
+    ; YAML-NEXT:              dimensions: [ ]
     ; YAML-NEXT:              width: 1
     ; YAML-NEXT:          instances:
     ; YAML-NEXT:            - name: vecOfBundle
@@ -372,3 +477,14 @@ circuit Top :
     ; YAML-NEXT:                    dimensions: [  ]
     ; YAML-NEXT:                    width: 4
     ; YAML-NEXT:                instances: []
+
+    ; EXTRACT:        FILE ".{{[/\]}}BlackBox_DUT.v"
+    ; EXTRACT:        FILE "Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}BlackBox_GCT.v"
+    ; EXTRACT:        FILE ".{{[/\]}}BlackBox_DUTAndGCT.v"
+
+    ; EXTRACT:        FILE "firrtl_black_box_resource_files.f"
+    ; EXTRACT-NOT:    FILE
+    ; EXTRACT:          BlackBox_DUT.v
+    ; EXTRACT-NEXT:     BlackBox_DUTAndGCT.v
+    ; EXTRACT-NEXT:     Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}BlackBox_GCT.v
+

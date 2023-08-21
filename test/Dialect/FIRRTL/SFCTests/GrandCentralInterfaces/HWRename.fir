@@ -1,4 +1,4 @@
-; RUN: firtool --firrtl-grand-central --verilog --annotation-file %S/HWRename.anno.json %s | FileCheck %s --check-prefixes CHECK
+; RUN: firtool --annotation-file %S/HWRename.anno.json %s | FileCheck %s
 
 circuit Top:
   module Companion :
@@ -26,20 +26,26 @@ circuit Top:
     signed.a <= a
     b <= signed.b
 
+    ; CHECK:      module Companion(
+    ; CHECK:        input [[port:[a-zA-Z0-9_]+]]
+    ; CHECK:      );
+    ; CHECK:        MyInterface MyView();
+    ; CHECK-NEXT:   assign MyView.[[elementName:.+]] = [[port]];
+    ; CHECK-NEXT: endmodule
+
     ; CHECK:      module DUT
-    ; CHECK:        wire [[gctTap:.+]];
-    ; CHECK-NEXT:   wire [[wireName:.+]];
-    ; CHECK:        assign [[gctTap]] = [[driver:.+]];
-    ; CHECK-NEXT:   assign [[wireName]] = [[driver]];
+    ; CHECK:        input a
+    ; CHECK:        output b
+    ; CHECK:          Companion companion (
+    ; CHECK-NEXT:       .[[port]] (a)
+    ; CHECK-NEXT:     );
+    ; Wire got optimized away!!
+    ; CHECK:          assign b = a;
     ; CHECK:      endmodule
 
     ; CHECK:      module Top
     ; CHECK:        DUT [[dutName:.+]] (
     ; CHECK:      endmodule
-
-    ; CHECK:      module MyView_mapping();
-    ; CHECK-NEXT:   assign MyView.[[elementName:.+]] = Top.[[dutName]].[[gctTap]]
-    ; CHECK-NEXT: endmodule
 
     ; CHECK: interface MyInterface
     ; CHECK-NEXT:   logic [[elementName]]

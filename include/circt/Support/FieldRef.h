@@ -36,8 +36,23 @@ public:
   /// Get the Value which created this location.
   Value getValue() const { return value; }
 
-  /// Get the operation which defines this field.
+  /// Get the operation which defines this field.  If the field is a block
+  /// argument it will return the operation which owns the block.
   Operation *getDefiningOp() const;
+
+  /// Get the operation which defines this field and cast it to the OpTy.
+  /// Returns null if the defining operation is of a different type.
+  template <typename OpTy>
+  OpTy getDefiningOp() const {
+    return llvm::dyn_cast<OpTy>(getDefiningOp());
+  }
+
+  template <typename... Any>
+  bool isa() const {
+    auto *op = getDefiningOp();
+    assert(op && "isa<> used on a null type.");
+    return ::llvm::isa<Any...>(op);
+  }
 
   /// Get the field ID of this FieldRef, which is a unique identifier mapped to
   /// a specific field in a bundle.
@@ -47,6 +62,9 @@ public:
   FieldRef getSubField(unsigned subFieldID) const {
     return FieldRef(value, id + subFieldID);
   }
+
+  /// Get the location associated with the value of this field ref.
+  Location getLoc() const { return getValue().getLoc(); }
 
   bool operator==(const FieldRef &other) const {
     return value == other.value && id == other.id;
