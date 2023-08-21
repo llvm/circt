@@ -1471,15 +1471,17 @@ static SmallVector<Attribute> getAllPortAttrs(ModTy &mod) {
     for (auto a : *attrs)
       retval.push_back(a);
   } else {
+    auto emptyDict = DictionaryAttr::get(mod.getContext());
     for (unsigned i = 0, e = mod.getNumInputs(); i < e; ++i)
-      retval.push_back({});
+      retval.push_back(emptyDict);
   }
   if (auto attrs = mod.getResAttrs()) {
     for (auto a : *attrs)
       retval.push_back(a);
   } else {
+    auto emptyDict = DictionaryAttr::get(mod.getContext());
     for (unsigned i = 0, e = mod.getNumOutputs(); i < e; ++i)
-      retval.push_back({});
+      retval.push_back(emptyDict);
   }
   return retval;
 }
@@ -1501,6 +1503,7 @@ static void setAllPortAttrs(ModTy &mod, ArrayRef<Attribute> attrs) {
   auto numInputs = mod.getNumInputs();
   SmallVector<Attribute> argAttrs(attrs.begin(), attrs.begin() + numInputs);
   SmallVector<Attribute> resAttrs(attrs.begin() + numInputs, attrs.end());
+
   mod.setArgAttrsAttr(ArrayAttr::get(mod.getContext(), argAttrs));
   mod.setResAttrsAttr(ArrayAttr::get(mod.getContext(), resAttrs));
 }
