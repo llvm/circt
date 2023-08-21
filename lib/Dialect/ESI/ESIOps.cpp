@@ -567,6 +567,10 @@ SmallVector<Attribute> ESIPureModuleOp::getAllPortAttrs() {
   return retval;
 }
 
+void ESIPureModuleOp::setHWModuleType(hw::ModuleType type) {
+  emitError("No ports for port types");
+}
+
 #define GET_OP_CLASSES
 #include "circt/Dialect/ESI/ESI.cpp.inc"
 

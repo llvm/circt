@@ -644,9 +644,10 @@ size_t ModuleType::getNumPorts() { return getPorts().size(); }
 SmallVector<Type> ModuleType::getInputTypes() {
   SmallVector<Type> retval;
   for (auto &p : getPorts()) {
-    if (p.dir == ModulePort::Direction::Input ||
-        p.dir == ModulePort::Direction::InOut) {
+    if (p.dir == ModulePort::Direction::Input)
       retval.push_back(p.type);
+    else if (p.dir == ModulePort::Direction::InOut) {
+      retval.push_back(hw::InOutType::get(p.type));
     }
   }
   return retval;
@@ -668,7 +669,7 @@ Type ModuleType::getOutputType(size_t idx) {
   return getPorts()[getPortIdForOutputId(idx)].type;
 }
 
-SmallVector<StringAttr> ModuleType::getInputNames() {
+SmallVector<StringAttr> ModuleType::getInputNamesStr() {
   SmallVector<StringAttr> retval;
   for (auto &p : getPorts())
     if (p.dir != ModulePort::Direction::Output)
@@ -676,8 +677,24 @@ SmallVector<StringAttr> ModuleType::getInputNames() {
   return retval;
 }
 
-SmallVector<StringAttr> ModuleType::getOutputNames() {
+SmallVector<StringAttr> ModuleType::getOutputNamesStr() {
   SmallVector<StringAttr> retval;
+  for (auto &p : getPorts())
+    if (p.dir == ModulePort::Direction::Output)
+      retval.push_back(p.name);
+  return retval;
+}
+
+SmallVector<Attribute> ModuleType::getInputNames() {
+  SmallVector<Attribute> retval;
+  for (auto &p : getPorts())
+    if (p.dir != ModulePort::Direction::Output)
+      retval.push_back(p.name);
+  return retval;
+}
+
+SmallVector<Attribute> ModuleType::getOutputNames() {
+  SmallVector<Attribute> retval;
   for (auto &p : getPorts())
     if (p.dir == ModulePort::Direction::Output)
       retval.push_back(p.name);
@@ -771,17 +788,19 @@ static llvm::hash_code hash_value(const ModulePort &port) {
 } // namespace hw
 } // namespace circt
 
-ModuleType circt::hw::detail::fnToMod(Operation *op, ArrayAttr inputNames,
-                                      ArrayAttr outputNames) {
+ModuleType circt::hw::detail::fnToMod(Operation *op,
+                                      ArrayRef<Attribute> inputNames,
+                                      ArrayRef<Attribute> outputNames) {
   return fnToMod(
       cast<FunctionType>(cast<mlir::FunctionOpInterface>(op).getFunctionType()),
       inputNames, outputNames);
 }
 
-ModuleType circt::hw::detail::fnToMod(FunctionType fnty, ArrayAttr inputNames,
-                                      ArrayAttr outputNames) {
+ModuleType circt::hw::detail::fnToMod(FunctionType fnty,
+                                      ArrayRef<Attribute> inputNames,
+                                      ArrayRef<Attribute> outputNames) {
   SmallVector<ModulePort> ports;
-  if (inputNames) {
+  if (!inputNames.empty()) {
     for (auto [t, n] : llvm::zip_equal(fnty.getInputs(), inputNames))
       if (auto iot = dyn_cast<hw::InOutType>(t))
         ports.push_back({cast<StringAttr>(n), iot.getElementType(),
@@ -796,7 +815,7 @@ ModuleType circt::hw::detail::fnToMod(FunctionType fnty, ArrayAttr inputNames,
       else
         ports.push_back({{}, t, ModulePort::Direction::Input});
   }
-  if (outputNames) {
+  if (!outputNames.empty()) {
     for (auto [t, n] : llvm::zip_equal(fnty.getResults(), outputNames))
       ports.push_back({cast<StringAttr>(n), t, ModulePort::Direction::Output});
   } else {
