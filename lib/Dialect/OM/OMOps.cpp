@@ -381,6 +381,47 @@ ParseResult circt::om::ListCreateOp::parse(OpAsmParser &parser,
 }
 
 //===----------------------------------------------------------------------===//
+// TupleCreateOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult TupleCreateOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> location, ValueRange operands,
+    DictionaryAttr attributes, OpaqueProperties, RegionRange regions,
+    llvm::SmallVectorImpl<Type> &inferredReturnTypes) {
+  ::llvm::SmallVector<Type> types;
+  for (auto op : operands)
+    types.push_back(op.getType());
+  inferredReturnTypes.push_back(TupleType::get(context, types));
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// TupleGetOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult TupleGetOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> location, ValueRange operands,
+    DictionaryAttr attributes, OpaqueProperties, RegionRange regions,
+    llvm::SmallVectorImpl<Type> &inferredReturnTypes) {
+  auto idx = attributes.getAs<IntegerAttr>("index");
+  if (operands.empty() || !idx)
+    return failure();
+
+  auto tupleTypes = operands[0].getType().cast<TupleType>().getTypes();
+  if (tupleTypes.size() <= idx.getValue().getLimitedValue()) {
+    if (location)
+      mlir::emitError(*location,
+                      "tuple index out-of-bounds, must be less than ")
+          << tupleTypes.size() << " but got "
+          << idx.getValue().getLimitedValue();
+    return failure();
+  }
+
+  inferredReturnTypes.push_back(tupleTypes[idx.getValue().getLimitedValue()]);
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 
