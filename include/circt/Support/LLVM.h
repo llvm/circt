@@ -106,6 +106,7 @@ class Dialect;
 class DialectAsmParser;
 class DialectAsmPrinter;
 class DictionaryAttr;
+class DistinctAttr;
 class ElementsAttr;
 class FileLineColLoc;
 class FlatSymbolRefAttr;
@@ -214,6 +215,7 @@ using mlir::Dialect;                   // NOLINT(misc-unused-using-decls)
 using mlir::DialectAsmParser;          // NOLINT(misc-unused-using-decls)
 using mlir::DialectAsmPrinter;         // NOLINT(misc-unused-using-decls)
 using mlir::DictionaryAttr;            // NOLINT(misc-unused-using-decls)
+using mlir::DistinctAttr;              // NOLINT(misc-unused-using-decls)
 using mlir::ElementsAttr;              // NOLINT(misc-unused-using-decls)
 using mlir::failed;                    // NOLINT(misc-unused-using-decls)
 using mlir::failure;                   // NOLINT(misc-unused-using-decls)
