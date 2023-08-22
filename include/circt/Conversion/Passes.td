@@ -656,15 +656,17 @@ def LowerArcToLLVM : Pass<"lower-arc-to-llvm", "mlir::ModuleOp"> {
 // ConvertSeqToSV
 //===----------------------------------------------------------------------===//
 
-def LowerSeqFIRRTLToSV: Pass<"lower-seq-firrtl-to-sv",  "mlir::ModuleOp"> {
+def LowerSeqToSV: Pass<"lower-seq-to-sv",  "mlir::ModuleOp"> {
   let summary = "Lower sequential firrtl ops to SV.";
-  let constructor = "circt::createSeqFIRRTLLowerToSVPass()";
-  let dependentDialects = ["circt::sv::SVDialect"];
+  let constructor = "circt::createLowerSeqToSVPass()";
+  let dependentDialects = ["circt::sv::SVDialect", "circt::hw::HWDialect"];
   let options = [
     Option<"disableRegRandomization", "disable-reg-randomization", "bool", "false",
            "Disable emission of register randomization code">,
     Option<"emitSeparateAlwaysBlocks", "emit-separate-always-blocks", "bool", "false",
-           "Emit assigments to registers in separate always blocks">
+           "Emit assigments to registers in separate always blocks">,
+    Option<"lowerToAlwaysFF", "lower-to-always-ff", "bool", "true",
+           "Place assignments to registers into `always_ff` blocks">
   ];
   let statistics = [
     Statistic<"numSubaccessRestored", "num-subaccess-restored",
