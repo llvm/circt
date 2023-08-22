@@ -25,28 +25,6 @@ def LowerSeqToSV: Pass<"lower-seq-to-sv", "mlir::ModuleOp"> {
   ];
 }
 
-def LowerSeqFIRRTLInitToSV: Pass<"lower-seq-firrtl-init-to-sv", "mlir::ModuleOp"> {
-  let summary = "Prep the module with macro definitions for firrtl registers.";
-  let constructor = "circt::seq::createLowerSeqFIRRTLInitToSV()";
-  let dependentDialects = ["circt::sv::SVDialect"];
-}
-
-def LowerSeqFIRRTLToSV: Pass<"lower-seq-firrtl-to-sv",  "hw::HWModuleOp"> {
-  let summary = "Lower sequential firrtl ops to SV.";
-  let constructor = "circt::seq::createSeqFIRRTLLowerToSVPass()";
-  let dependentDialects = ["circt::sv::SVDialect"];
-  let options = [
-    Option<"disableRegRandomization", "disable-reg-randomization", "bool", "false",
-           "Disable emission of register randomization code">,
-    Option<"emitSeparateAlwaysBlocks", "emit-separate-always-blocks", "bool", "false",
-           "Emit assigments to registers in separate always blocks">
-  ];
-  let statistics = [
-    Statistic<"numSubaccessRestored", "num-subaccess-restored",
-      "Number of lhs subaccess operations restored ">
-  ];
-}
-
 def LowerSeqFIFO : Pass<"lower-seq-fifo", "hw::HWModuleOp"> {
   let summary = "Lower seq.fifo ops";
   let constructor = "circt::seq::createLowerSeqFIFOPass()";
@@ -81,12 +59,6 @@ def ExternalizeClockGate: Pass<"externalize-clock-gate", "mlir::ModuleOp"> {
     Statistic<"numClockGatesConverted", "num-clock-gates-converted",
       "Number of clock gates converted to external module instances">
   ];
-}
-
-def LowerFirMem : Pass<"lower-seq-firmem", "mlir::ModuleOp"> {
-  let summary = "Lower seq.firmem ops to instances of hw.module.generated ops";
-  let constructor = "circt::seq::createLowerFirMemPass()";
-  let dependentDialects = ["circt::hw::HWDialect"];
 }
 
 #endif // CIRCT_DIALECT_SEQ_SEQPASSES
