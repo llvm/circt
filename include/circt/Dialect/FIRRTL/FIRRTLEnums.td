@@ -16,6 +16,8 @@
 include "FIRRTLDialect.td"
 include "mlir/IR/EnumAttr.td"
 
+let cppNamespace = "::circt::firrtl" in {
+
 //===----------------------------------------------------------------------===//
 // Name Kinds
 //===----------------------------------------------------------------------===//
@@ -94,5 +96,7 @@ def AtEdge   : I32EnumAttrCase<"AtEdge", 2, "edge">;
 
 def EventControlAttr : I32EnumAttr<"EventControl", "edge control trigger",
                                    [AtPosEdge, AtNegEdge, AtEdge]>  {}
+
+}
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLENUMS_TD
