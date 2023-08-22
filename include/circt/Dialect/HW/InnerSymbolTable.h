@@ -27,15 +27,17 @@ namespace hw {
 class InnerSymTarget {
 public:
   /// Default constructor, invalid.
-  /* implicit */ InnerSymTarget() { assert(!*this); }
+  InnerSymTarget() { assert(!*this); }
 
-  /// Target an operation, and optionally a field (=0 means the op itself).
-  explicit InnerSymTarget(Operation *op, size_t fieldID = 0)
+  /// Target an operation.
+  explicit InnerSymTarget(Operation *op) : InnerSymTarget(op, 0) {}
+
+  /// Target an operation and a field (=0 means the op itself).
+  InnerSymTarget(Operation *op, size_t fieldID)
       : op(op), portIdx(invalidPort), fieldID(fieldID) {}
 
   /// Target a port, and optionally a field (=0 means the port itself).
-  /// Operation should be an FModuleLike.
-  explicit InnerSymTarget(size_t portIdx, Operation *op, size_t fieldID = 0)
+  InnerSymTarget(size_t portIdx, Operation *op, size_t fieldID = 0)
       : op(op), portIdx(portIdx), fieldID(fieldID) {}
 
   InnerSymTarget(const InnerSymTarget &) = default;
