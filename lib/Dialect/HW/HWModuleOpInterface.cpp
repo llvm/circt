@@ -27,8 +27,8 @@ static LogicalResult convertModuleOpTypes(HWModuleLike modOp,
   if (!type)
     return failure();
 
-  // Convert the original function types.
-  // Update the function signature in-place.
+  // Convert the original port types.
+  // Update the module signature in-place.
   SmallVector<ModulePort> newPorts;
   TypeConverter::SignatureConversion result(type.getNumInputs());
   unsigned atInput = 0;
