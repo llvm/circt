@@ -71,20 +71,25 @@ struct ModuleInfo {
   mlir::ArrayAttr referredModuleNames;
 };
 
+struct SymbolTarget {
+  uint64_t index;
+  uint64_t fieldID;
+};
+
 /// This struct contains constant string attributes shared across different
 /// threads.
 struct StructuralHasherSharedConstants {
   explicit StructuralHasherSharedConstants(MLIRContext *context) {
     portTypesAttr = StringAttr::get(context, "portTypes");
     moduleNameAttr = StringAttr::get(context, "moduleName");
+    innerSymAttr = StringAttr::get(context, "inner_sym");
+    portSymsAttr = StringAttr::get(context, "portSyms");
     nonessentialAttributes.insert(StringAttr::get(context, "annotations"));
     nonessentialAttributes.insert(StringAttr::get(context, "name"));
     nonessentialAttributes.insert(StringAttr::get(context, "portAnnotations"));
     nonessentialAttributes.insert(StringAttr::get(context, "portNames"));
-    nonessentialAttributes.insert(StringAttr::get(context, "portSyms"));
     nonessentialAttributes.insert(StringAttr::get(context, "portLocations"));
     nonessentialAttributes.insert(StringAttr::get(context, "sym_name"));
-    nonessentialAttributes.insert(StringAttr::get(context, "inner_sym"));
   };
 
   // This is a cached "portTypes" string attr.
@@ -92,6 +97,12 @@ struct StructuralHasherSharedConstants {
 
   // This is a cached "moduleName" string attr.
   StringAttr moduleNameAttr;
+
+  // This is a cached "inner_sym" string attr.
+  StringAttr innerSymAttr;
+
+  // This is a cached "portSyms" string attr.
+  StringAttr portSymsAttr;
 
   // This is a set of every attribute we should ignore.
   DenseSet<Attribute> nonessentialAttributes;
@@ -139,21 +150,54 @@ private:
     update(type.getAsOpaquePointer());
   }
 
-  void update(BlockArgument arg) { indexes[arg] = currentIndex++; }
+  void record(void *address) {
+    auto size = indices.size();
+    indices[address] = size;
+  }
+
+  void update(BlockArgument arg) { record(arg.getAsOpaquePointer()); }
 
   void update(OpResult result) {
-    indexes[result] = currentIndex++;
+    record(result.getAsOpaquePointer());
     update(result.getType());
   }
 
   void update(OpOperand &operand) {
     // We hash the value's index as it apears in the block.
-    auto it = indexes.find(operand.get());
-    assert(it != indexes.end() && "op should have been previously hashed");
+    auto it = indices.find(operand.get().getAsOpaquePointer());
+    assert(it != indices.end() && "op should have been previously hashed");
     update(it->second);
   }
 
-  void update(DictionaryAttr dict, bool isInstance) {
+  void update(Operation *op, hw::InnerSymAttr attr) {
+    for (auto props : attr)
+      innerSymTargets[props.getName()] =
+          SymbolTarget{indices[op], props.getFieldID()};
+  }
+
+  void update(Value value, hw::InnerSymAttr attr) {
+    for (auto props : attr)
+      innerSymTargets[props.getName()] =
+          SymbolTarget{indices[value.getAsOpaquePointer()], props.getFieldID()};
+  }
+
+  void update(const SymbolTarget &target) {
+    update(target.index);
+    update(target.fieldID);
+  }
+
+  void update(InnerRefAttr attr) {
+    // We hash the value's index as it apears in the block.
+    auto it = innerSymTargets.find(attr.getName());
+    assert(it != innerSymTargets.end() &&
+           "inner symbol should have been previously hashed");
+    update(attr.getTypeID());
+    update(it->second);
+  }
+
+  /// Hash the top level attribute dictionary of the operation.  This function
+  /// has special handling for inner symbols, ports, and referenced modules.
+  void update(Operation *op, DictionaryAttr dict) {
     for (auto namedAttr : dict) {
       auto name = namedAttr.getName();
       auto value = namedAttr.getValue();
@@ -169,19 +213,45 @@ private:
         continue;
       }
 
+      // Special case the InnerSymbols to ignore the symbol names.
+      if (name == constants.portSymsAttr) {
+        if (op->getNumRegions() != 1)
+          continue;
+        auto &region = op->getRegion(0);
+        if (region.getBlocks().empty())
+          continue;
+        auto *block = &region.front();
+        auto syms = cast<ArrayAttr>(value).getAsRange<hw::InnerSymAttr>();
+        if (syms.empty())
+          continue;
+        for (auto [arg, sym] : llvm::zip_equal(block->getArguments(), syms))
+          update(arg, sym);
+        continue;
+      }
+      if (name == constants.innerSymAttr) {
+        auto innerSym = cast<hw::InnerSymAttr>(value);
+        update(op, innerSym);
+        continue;
+      }
+
       // For instance op, don't use `moduleName` attributes since they might be
       // replaced by dedup. Record the names and lazily combine their hashes.
       // It is assumed that module names are hashed only through instance ops;
       // it could cause suboptimal results if there was other operation that
       // refers to module names through essential attributes.
-      if (isInstance && name == constants.moduleNameAttr) {
+      if (isa<InstanceOp>(op) && name == constants.moduleNameAttr) {
         referredModuleNames.push_back(cast<FlatSymbolRefAttr>(value).getAttr());
         continue;
       }
 
       // Hash the interned pointer.
       update(name.getAsOpaquePointer());
-      update(value.getAsOpaquePointer());
+
+      // If this is an symbol reference, we need to perform name erasure.
+      if (auto innerRef = dyn_cast<hw::InnerRefAttr>(value))
+        update(innerRef);
+      else
+        update(value.getAsOpaquePointer());
     }
   }
 
@@ -201,8 +271,9 @@ private:
 
   // NOLINTNEXTLINE(misc-no-recursion)
   void update(Operation *op) {
+    record(op);
     update(op->getName());
-    update(op->getAttrDictionary(), /*isInstance=*/isa<InstanceOp>(op));
+    update(op, op->getAttrDictionary());
     // Hash the operands.
     for (auto &operand : op->getOpOperands())
       update(operand);
@@ -217,9 +288,12 @@ private:
       update(result);
   }
 
+  // Every operation and value is assigned a unique id based on their order of
+  // appearance
+  DenseMap<void *, unsigned> indices;
+
   // Every value is assigned a unique id based on their order of appearance.
-  unsigned currentIndex = 0;
-  DenseMap<Value, unsigned> indexes;
+  DenseMap<StringAttr, SymbolTarget> innerSymTargets;
 
   // This keeps track of module names in the order of the appearance.
   SmallVector<mlir::StringAttr> referredModuleNames;
@@ -243,7 +317,7 @@ struct Equivalence {
       : instanceGraph(instanceGraph) {
     noDedupClass = StringAttr::get(context, noDedupAnnoClass);
     dedupGroupClass = StringAttr::get(context, dedupGroupAnnoClass);
-    portTypesAttr = StringAttr::get(context, "portTypes");
+    portDirectionsAttr = StringAttr::get(context, "portDirections");
     nonessentialAttributes.insert(StringAttr::get(context, "annotations"));
     nonessentialAttributes.insert(StringAttr::get(context, "name"));
     nonessentialAttributes.insert(StringAttr::get(context, "portAnnotations"));
@@ -254,6 +328,14 @@ struct Equivalence {
     nonessentialAttributes.insert(StringAttr::get(context, "sym_name"));
     nonessentialAttributes.insert(StringAttr::get(context, "inner_sym"));
   }
+
+  struct ModuleData {
+    ModuleData(const hw::InnerSymbolTable &a, const hw::InnerSymbolTable &b)
+        : a(a), b(b) {}
+    IRMapping map;
+    const hw::InnerSymbolTable &a;
+    const hw::InnerSymbolTable &b;
+  };
 
   std::string prettyPrint(Attribute attr) {
     SmallString<64> buffer;
@@ -326,7 +408,7 @@ struct Equivalence {
     return failure();
   }
 
-  LogicalResult check(InFlightDiagnostic &diag, IRMapping &map, Operation *a,
+  LogicalResult check(InFlightDiagnostic &diag, ModuleData &data, Operation *a,
                       Block &aBlock, Operation *b, Block &bBlock) {
 
     // Block argument types.
@@ -373,7 +455,7 @@ struct Equivalence {
         if (failed(check(diag, "module port '" + portName + "'", a,
                          aArg->getType(), b, bArg->getType())))
           return failure();
-        map.map(aArg.value(), bArg.value());
+        data.map.map(aArg.value(), bArg.value());
         portNo++;
         continue;
       }
@@ -389,7 +471,7 @@ struct Equivalence {
     auto bIt = bBlock.begin();
     auto bEnd = bBlock.end();
     while (aIt != aEnd && bIt != bEnd)
-      if (failed(check(diag, map, &*aIt++, &*bIt++)))
+      if (failed(check(diag, data, &*aIt++, &*bIt++)))
         return failure();
     if (aIt != aEnd) {
       diag.attachNote(aIt->getLoc()) << "first block has more operations";
@@ -404,7 +486,7 @@ struct Equivalence {
     return success();
   }
 
-  LogicalResult check(InFlightDiagnostic &diag, IRMapping &map, Operation *a,
+  LogicalResult check(InFlightDiagnostic &diag, ModuleData &data, Operation *a,
                       Region &aRegion, Operation *b, Region &bRegion) {
     auto aIt = aRegion.begin();
     auto aEnd = aRegion.end();
@@ -413,7 +495,7 @@ struct Equivalence {
 
     // Region blocks.
     while (aIt != aEnd && bIt != bEnd)
-      if (failed(check(diag, map, a, *aIt++, b, *bIt++)))
+      if (failed(check(diag, data, a, *aIt++, b, *bIt++)))
         return failure();
     if (aIt != aEnd || bIt != bEnd) {
       diag.attachNote(a->getLoc())
@@ -450,7 +532,7 @@ struct Equivalence {
     return success();
   }
 
-  LogicalResult check(InFlightDiagnostic &diag, IRMapping &map, Operation *a,
+  LogicalResult check(InFlightDiagnostic &diag, ModuleData &data, Operation *a,
                       DictionaryAttr aDict, Operation *b,
                       DictionaryAttr bDict) {
     // Fast path.
@@ -472,7 +554,35 @@ struct Equivalence {
         return diag;
       }
 
-      if (attrName == "portDirections") {
+      if (isa<hw::InnerRefAttr>(aAttr) && isa<hw::InnerRefAttr>(bAttr)) {
+        auto bRef = cast<hw::InnerRefAttr>(bAttr);
+        auto aRef = cast<hw::InnerRefAttr>(aAttr);
+        // See if they are pointing at the same operation or port.
+        auto aTarget = data.a.lookup(aRef.getName());
+        auto bTarget = data.b.lookup(bRef.getName());
+        if (!aTarget || !bTarget)
+          diag.attachNote(a->getLoc())
+              << "malformed ir, possibly violating use-before-def";
+        auto error = [&]() {
+          diag.attachNote(a->getLoc())
+              << "operations have different targets, first operation has "
+              << aTarget;
+          diag.attachNote(b->getLoc()) << "second operation has " << bTarget;
+          return failure();
+        };
+        if (aTarget.isPort()) {
+          // If they are targeting ports, make sure its the same port number.
+          if (!bTarget.isPort() || aTarget.getPort() != bTarget.getPort())
+            return error();
+        } else {
+          // Otherwise make sure that they are targeting the same operation.
+          if (!bTarget.isOpOnly() ||
+              aTarget.getOp() != data.map.lookup(bTarget.getOp()))
+            return error();
+        }
+        if (aTarget.getField() != bTarget.getField())
+          return error();
+      } else if (attrName == portDirectionsAttr) {
         // Special handling for the port directions attribute for better
         // error messages.
         if (failed(check(diag, a, cast<IntegerAttr>(aAttr), b,
@@ -527,7 +637,7 @@ struct Equivalence {
   }
 
   // NOLINTNEXTLINE(misc-no-recursion)
-  LogicalResult check(InFlightDiagnostic &diag, IRMapping &map, Operation *a,
+  LogicalResult check(InFlightDiagnostic &diag, ModuleData &data, Operation *a,
                       Operation *b) {
     // Operation name.
     if (a->getName() != b->getName()) {
@@ -557,7 +667,7 @@ struct Equivalence {
       if (failed(check(diag, "operation result", a, aValue.getType(), b,
                        bValue.getType())))
         return failure();
-      map.map(aValue, bValue);
+      data.map.map(aValue, bValue);
     }
 
     // Operations operands.
@@ -570,7 +680,7 @@ struct Equivalence {
     for (auto operandPair : llvm::zip(a->getOperands(), b->getOperands())) {
       auto &aValue = std::get<0>(operandPair);
       auto &bValue = std::get<1>(operandPair);
-      if (bValue != map.lookup(aValue)) {
+      if (bValue != data.map.lookup(aValue)) {
         diag.attachNote(a->getLoc())
             << "operations use different operands, first operand is '"
             << getFieldName(getFieldRefFromValue(aValue)).first << "'";
@@ -578,11 +688,12 @@ struct Equivalence {
             << "second operand is '"
             << getFieldName(getFieldRefFromValue(bValue)).first
             << "', but should have been '"
-            << getFieldName(getFieldRefFromValue(map.lookup(aValue))).first
+            << getFieldName(getFieldRefFromValue(data.map.lookup(aValue))).first
             << "'";
         return failure();
       }
     }
+    data.map.map(a, b);
 
     // Operation regions.
     if (a->getNumRegions() != b->getNumRegions()) {
@@ -594,12 +705,12 @@ struct Equivalence {
     for (auto regionPair : llvm::zip(a->getRegions(), b->getRegions())) {
       auto &aRegion = std::get<0>(regionPair);
       auto &bRegion = std::get<1>(regionPair);
-      if (failed(check(diag, map, a, aRegion, b, bRegion)))
+      if (failed(check(diag, data, a, aRegion, b, bRegion)))
         return failure();
     }
 
     // Operation attributes.
-    if (failed(check(diag, map, a, a->getAttrDictionary(), b,
+    if (failed(check(diag, data, a, a->getAttrDictionary(), b,
                      b->getAttrDictionary())))
       return failure();
     return success();
@@ -607,7 +718,9 @@ struct Equivalence {
 
   // NOLINTNEXTLINE(misc-no-recursion)
   void check(InFlightDiagnostic &diag, Operation *a, Operation *b) {
-    IRMapping map;
+    hw::InnerSymbolTable aTable(a);
+    hw::InnerSymbolTable bTable(b);
+    ModuleData data(aTable, bTable);
     AnnotationSet aAnnos(a);
     AnnotationSet bAnnos(b);
     if (aAnnos.hasAnnotation(noDedupClass)) {
@@ -641,14 +754,14 @@ struct Equivalence {
       }
       return;
     }
-    if (failed(check(diag, map, a, b)))
+    if (failed(check(diag, data, a, b)))
       return;
     diag.attachNote(a->getLoc()) << "first module here";
     diag.attachNote(b->getLoc()) << "second module here";
   }
 
-  // This is a cached "portTypes" string attr.
-  StringAttr portTypesAttr;
+  // This is a cached "portDirections" string attr.
+  StringAttr portDirectionsAttr;
   // This is a cached "NoDedup" annotation class string attr.
   StringAttr noDedupClass;
   // This is a cached "DedupGroup" annotation class string attr.
