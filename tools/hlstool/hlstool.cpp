@@ -155,28 +155,34 @@ static cl::opt<IRLevel> irInputLevel(
     "input-level",
     cl::desc("Level at which to input IR at. It is flow-defined "
              "which value corersponds to which IR level."),
-    cl::values(clEnumValN(High, "high", "High-level dialects like affine"),
-               clEnumValN(PreCompile, "pre-compile",
-                          "The IR right before the core lowering dialect"),
-               clEnumValN(Core, "core", "The IR in core dialect"),
-               clEnumValN(PostCompile, "post-compile",
-                          "The lowest form of core IR (i.e. after all "
-                          "passes have run)"),
-               clEnumValN(RTL, "rtl", "The IR after lowering is performed")),
+    cl::values(
+        clEnumValN(High, "high", "High-level dialects like affine"),
+        clEnumValN(
+            PreCompile, "pre-compile",
+            "The IR right before the core lowering dialect (handshake/calyx)"),
+        clEnumValN(Core, "core", "The IR in core dialect (handshake/calyx)"),
+        clEnumValN(
+            PostCompile, "post-compile",
+            "The lowest form of core IR (handshake/calyx) (i.e. after all "
+            "passes have run)"),
+        clEnumValN(RTL, "rtl", "The IR after lowering is performed")),
     cl::init(IRLevel::High), cl::cat(mainCategory));
 
 static cl::opt<IRLevel> irOutputLevel(
     "output-level",
     cl::desc("Level at which to output IR at. It is flow-defined "
              "which value corersponds to which IR level."),
-    cl::values(clEnumValN(PreCompile, "pre-compile",
-                          "The IR right before the core lowering dialect"),
-               clEnumValN(Core, "core", "The IR in core dialect"),
-               clEnumValN(PostCompile, "post-compile",
-                          "The lowest form of core IR (i.e. after all "
-                          "passes have run)"),
-               clEnumValN(RTL, "rtl", "The IR after lowering is performed"),
-               clEnumValN(SV, "sv", "System verilog representation")),
+    cl::values(
+        clEnumValN(
+            PreCompile, "pre-compile",
+            "The IR right before the core lowering dialect (handshake/calyx)"),
+        clEnumValN(Core, "core", "The IR in core dialect (handshake/calyx)"),
+        clEnumValN(
+            PostCompile, "post-compile",
+            "The lowest form of core IR (handshake/calyx) (i.e. after all "
+            "passes have run)"),
+        clEnumValN(RTL, "rtl", "The IR after lowering is performed"),
+        clEnumValN(SV, "sv", "System verilog representation")),
     cl::init(IRLevel::SV), cl::cat(mainCategory));
 
 enum OutputFormatKind { OutputIR, OutputVerilog, OutputSplitVerilog };
