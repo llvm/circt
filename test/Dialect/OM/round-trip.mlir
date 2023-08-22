@@ -183,3 +183,11 @@ om.class @Tuple(%int: i1, %str: !om.string) {
   // CHECK-NEXT: om.class.field @val, %[[tuple_get]] : !om.string
   om.class.field @val, %val : !om.string
 }
+
+// CHECK-LABEL: @MapConstant
+om.class @MapConstant() {
+  // CHECK: %[[const1:.+]] = om.constant #om.map<i64, {a = 42 : i64, b = 32 : i64}> : !om.map<!om.string, i64>
+  %0 = om.constant #om.map<i64, {a = 42, b = 32}> : !om.map<!om.string, i64>
+  // CHECK: om.class.field @map_i64, %[[const1]] : !om.map<!om.string, i64>
+  om.class.field @map_i64, %0 : !om.map<!om.string, i64>
+}

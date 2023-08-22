@@ -14,6 +14,7 @@
 #include "circt/Dialect/OM/OMDialect.h"
 #include "circt/Dialect/OM/OMTypes.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "llvm/ADT/TypeSwitch.h"
 
@@ -33,6 +34,11 @@ Type circt::om::SymbolRefAttr::getType() {
 
 Type circt::om::ListAttr::getType() {
   return ListType::get(getContext(), getElementType());
+}
+
+Type circt::om::MapAttr::getType() {
+  return MapType::get(getContext(), StringType::get(getContext()),
+                      getValueType());
 }
 
 circt::om::SymbolRefAttr circt::om::SymbolRefAttr::get(mlir::Operation *op) {
@@ -60,6 +66,28 @@ circt::om::ListAttr::verify(function_ref<InFlightDiagnostic()> emitError,
     if (typedAttr.getType() != elementType) {
       emitError() << "an element of a list attribute must have a type "
                   << elementType << " but got " << typedAttr.getType();
+      return false;
+    }
+
+    return true;
+  }));
+}
+
+LogicalResult
+circt::om::MapAttr::verify(function_ref<InFlightDiagnostic()> emitError,
+                           mlir::Type valueType,
+                           mlir::DictionaryAttr elements) {
+  return success(llvm::all_of(elements, [&](auto attr) {
+    auto typedAttr = attr.getValue().template dyn_cast<mlir::TypedAttr>();
+    if (!typedAttr) {
+      emitError() << "a value of a map attribute must be a typed attr but got "
+                  << attr.getValue();
+      return false;
+    }
+    if (typedAttr.getType() != valueType) {
+      emitError() << "a value of a map attribute must have a type " << valueType
+                  << " but field " << attr.getName() << " has "
+                  << typedAttr.getType();
       return false;
     }
 
