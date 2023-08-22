@@ -23,6 +23,10 @@
 namespace circt {
 namespace hw {
 
+void populateHWModuleLikeTypeConversionPattern(StringRef moduleLikeOpName,
+                                               RewritePatternSet &patterns,
+                                               TypeConverter &converter);
+
 /// This holds the name, type, direction of a module's ports
 struct PortInfo : public ModulePort {
   /// This is the argument index or the result index depending on the direction.
