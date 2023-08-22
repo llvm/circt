@@ -55,7 +55,7 @@ on:
         description: "The prefix for package name"
         required: false
         type: string
-        default: firtool-bin
+        default: firrtl-bin
       cmake_c_compiler:
         description: "The C compiler to use"
         required: true

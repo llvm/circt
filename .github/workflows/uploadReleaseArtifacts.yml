@@ -120,7 +120,7 @@ jobs:
       - name: Add Build Config for firtool
         id: add-build-config-firtool
         run: |
-          json='{"name":"firtool","install_target":"install-firtool","package_name_prefix":"firtool-bin","mode":"release","assert":"OFF","shared":"OFF","stats":"ON"}'
+          json='{"name":"firtool","install_target":"install-firtool","package_name_prefix":"firrtl-bin","mode":"release","assert":"OFF","shared":"OFF","stats":"ON"}'
           if [[ ${{ github.event_name }} == 'schedule' ]] || [[ ${{ github.event_name }} == 'workflow_dispatch' ]]; then
             json=$(echo $json | jq -c '.assert = "ON" | .mode = "relwithdebinfo"')
           fi
