@@ -520,7 +520,7 @@ void LowerMemoryPass::runOnOperation() {
     return AnnotationSet(&op).hasAnnotation(dutAnnoClass);
   });
   if (it != body->end())
-    dut = instanceGraph.lookup(cast<hw::HWModuleLike>(*it));
+    dut = instanceGraph.lookup(cast<igraph::ModuleOpInterface>(*it));
 
   // The set of all modules underneath the design under test module.
   DenseSet<Operation *> dutModuleSet;

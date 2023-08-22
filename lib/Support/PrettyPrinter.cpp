@@ -114,6 +114,14 @@ void PrettyPrinter::add(Token t) {
         if (scanStack.empty())
           return print({t, 0});
         addScanToken(-1);
+      })
+      .Case([&](CallbackToken *c) {
+        // Callbacktoken must be associated with a listener, it doesn't have any
+        // meaning without it.
+        assert(listener);
+        if (scanStack.empty())
+          return print({t, 0});
+        tokens.push_back({t, 0});
       });
   rebaseIfNeeded();
 }
@@ -163,7 +171,7 @@ void PrettyPrinter::clear() {
   leftTotal = rightTotal = 1;
   tokens.clear();
   tokenOffset = 0;
-  if (listener)
+  if (listener && !donotClear)
     listener->clear();
 }
 
@@ -293,6 +301,15 @@ void PrettyPrinter::print(const FormattedToken &f) {
         if (frame.breaks != PrintBreaks::Fits &&
             frame.breaks != PrintBreaks::AlwaysFits)
           indent = frame.offset;
+      })
+      .Case([&](const CallbackToken *c) {
+        if (pendingIndentation) {
+          // This is necessary to get the correct location on the stream for the
+          // callback invocation.
+          os.indent(pendingIndentation);
+          pendingIndentation = 0;
+        }
+        listener->print();
       });
 }
 } // end namespace pretty

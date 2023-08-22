@@ -534,12 +534,15 @@ hw::ModuleType ESIPureModuleOp::getHWModuleType() {
   return hw::ModuleType::get(getContext(), {});
 }
 
-::circt::hw::InnerSymAttr ESIPureModuleOp::getPortSymbolAttr(size_t) {
-  return {};
-}
-
 ::circt::hw::ModulePortInfo ESIPureModuleOp::getPortList() {
   return hw::ModulePortInfo(ArrayRef<hw::PortInfo>{});
+}
+
+size_t ESIPureModuleOp::getNumPorts() { return 0; }
+
+hw::InnerSymAttr ESIPureModuleOp::getPortSymbolAttr(size_t portIndex) {
+  emitError("No ports for port locations");
+  return nullptr;
 }
 
 SmallVector<Location> ESIPureModuleOp::getAllPortLocs() {
@@ -562,6 +565,10 @@ void ESIPureModuleOp::removeAllPortAttrs() {
 SmallVector<Attribute> ESIPureModuleOp::getAllPortAttrs() {
   SmallVector<Attribute> retval;
   return retval;
+}
+
+void ESIPureModuleOp::setHWModuleType(hw::ModuleType type) {
+  emitError("No ports for port types");
 }
 
 #define GET_OP_CLASSES

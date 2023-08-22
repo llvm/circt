@@ -1822,15 +1822,14 @@ SmallVector<DictionaryAttr> PrimitiveOp::portAttributes() {
   SmallVector<DictionaryAttr> portAttributes;
   OpBuilder builder(getContext());
   hw::HWModuleExternOp prim = getReferencedPrimitive();
-  for (size_t i = 0, e = prim.getNumInputs(); i != e; ++i) {
-    DictionaryAttr dict = cleanCalyxPortAttrs(builder, prim.getArgAttrDict(i));
-    portAttributes.push_back(dict);
-  }
-  for (size_t i = 0, e = prim.getNumOutputs(); i != e; ++i) {
-    DictionaryAttr dict =
-        cleanCalyxPortAttrs(builder, prim.getResultAttrDict(i));
-    portAttributes.push_back(dict);
-  }
+  auto argAttrs = prim.getAllInputAttrs();
+  auto resAttrs = prim.getAllOutputAttrs();
+  for (auto a : argAttrs)
+    portAttributes.push_back(
+        cleanCalyxPortAttrs(builder, cast_or_null<DictionaryAttr>(a)));
+  for (auto a : resAttrs)
+    portAttributes.push_back(
+        cleanCalyxPortAttrs(builder, cast_or_null<DictionaryAttr>(a)));
   return portAttributes;
 }
 

@@ -192,3 +192,29 @@ firrtl.circuit "ConnectDestSubaccess" {
     firrtl.strictconnect %1, %value : !firrtl.uint<1>
   }
 }
+
+// -----
+
+firrtl.circuit "UndrivenInputPort" {
+  firrtl.extmodule private @Blackbox(in inst: !firrtl.uint<1>)
+
+  firrtl.module @UndrivenInputPort() {
+    // expected-error @below {{sink in combinational loop}}
+    %0 = firrtl.instance blackbox @Blackbox(in inst : !firrtl.uint<1>)
+    // expected-note @below {{through driver here}}
+    %1 = firrtl.instance blackbox @Blackbox(in inst : !firrtl.uint<1>)
+    firrtl.strictconnect %0, %1 : !firrtl.uint<1>
+    firrtl.strictconnect %1, %0 : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+firrtl.circuit "InputSelfDriver" {
+  firrtl.module private @InputPorts(in %in : !firrtl.uint<1>) { }
+  firrtl.module @InputSelfDriver(in %in : !firrtl.uint<1>) {
+    // expected-error @below {{sink does not have a driver}}
+    %ip2_in = firrtl.instance ip2 @InputPorts(in in : !firrtl.uint<1>)
+    firrtl.connect %ip2_in, %ip2_in : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+}

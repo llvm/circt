@@ -1337,8 +1337,8 @@ LogicalResult HWModuleOp::verify() {
            << numInputs << " arguments to match module signature";
 
   // Verify that the block arguments match the op's attributes.
-  for (auto [arg, type, loc] :
-       llvm::zip(getArguments(), type.getInputs(), getArgLocs())) {
+  for (auto [arg, type, loc] : llvm::zip(getBodyBlock()->getArguments(),
+                                         type.getInputs(), getArgLocs())) {
     if (arg.getType() != type)
       return emitOpError("block argument types should match signature types");
     if (arg.getLoc() != loc.cast<LocationAttr>())
@@ -1471,15 +1471,17 @@ static SmallVector<Attribute> getAllPortAttrs(ModTy &mod) {
     for (auto a : *attrs)
       retval.push_back(a);
   } else {
+    auto emptyDict = DictionaryAttr::get(mod.getContext());
     for (unsigned i = 0, e = mod.getNumInputs(); i < e; ++i)
-      retval.push_back({});
+      retval.push_back(emptyDict);
   }
   if (auto attrs = mod.getResAttrs()) {
     for (auto a : *attrs)
       retval.push_back(a);
   } else {
+    auto emptyDict = DictionaryAttr::get(mod.getContext());
     for (unsigned i = 0, e = mod.getNumOutputs(); i < e; ++i)
-      retval.push_back({});
+      retval.push_back(emptyDict);
   }
   return retval;
 }
@@ -1501,6 +1503,7 @@ static void setAllPortAttrs(ModTy &mod, ArrayRef<Attribute> attrs) {
   auto numInputs = mod.getNumInputs();
   SmallVector<Attribute> argAttrs(attrs.begin(), attrs.begin() + numInputs);
   SmallVector<Attribute> resAttrs(attrs.begin() + numInputs, attrs.end());
+
   mod.setArgAttrsAttr(ArrayAttr::get(mod.getContext(), argAttrs));
   mod.setResAttrsAttr(ArrayAttr::get(mod.getContext(), resAttrs));
 }
@@ -1531,6 +1534,43 @@ void HWModuleExternOp::removeAllPortAttrs() {
 
 void HWModuleGeneratedOp::removeAllPortAttrs() {
   return ::removeAllPortAttrs(*this);
+}
+
+template <typename ModTy>
+static void setHWModuleType(ModTy &mod, ModuleType type) {
+  auto argAttrs = mod.getAllInputAttrs();
+  auto resAttrs = mod.getAllOutputAttrs();
+  mod.setFunctionTypeAttr(TypeAttr::get(type.getFuncType()));
+  unsigned newNumArgs = type.getNumInputs();
+  unsigned newNumResults = type.getNumOutputs();
+
+  mod.setArgNamesAttr(ArrayAttr::get(mod.getContext(), type.getInputNames()));
+  mod.setResultNamesAttr(
+      ArrayAttr::get(mod.getContext(), type.getOutputNames()));
+
+  auto emptyDict = DictionaryAttr::get(mod.getContext());
+  argAttrs.resize(newNumArgs, emptyDict);
+  resAttrs.resize(newNumResults, emptyDict);
+
+  SmallVector<Attribute> attrs;
+  attrs.append(argAttrs.begin(), argAttrs.end());
+  attrs.append(resAttrs.begin(), resAttrs.end());
+
+  if (attrs.empty())
+    return mod.removeAllPortAttrs();
+  mod.setAllPortAttrs(attrs);
+}
+
+void HWModuleOp::setHWModuleType(ModuleType type) {
+  return ::setHWModuleType(*this, type);
+}
+
+void HWModuleExternOp::setHWModuleType(ModuleType type) {
+  return ::setHWModuleType(*this, type);
+}
+
+void HWModuleGeneratedOp::setHWModuleType(ModuleType type) {
+  return ::setHWModuleType(*this, type);
 }
 
 /// Lookup the generator for the symbol.  This returns null on
@@ -1735,6 +1775,12 @@ void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 ModulePortInfo InstanceOp::getPortList() { return getOperationPortList(*this); }
+
+size_t InstanceOp::getNumPorts() {
+  SmallVector<Type> inputs(getOperandTypes());
+  SmallVector<Type> results(getResultTypes());
+  return inputs.size() + results.size();
+}
 
 Value InstanceOp::getValue(size_t idx) {
   auto mpi = getPortList();
@@ -3495,6 +3541,15 @@ ModulePortInfo HWTestModuleOp::getPortList() {
     ports.push_back({{port}, i, sym, attr, loc});
   }
   return ModulePortInfo(ports);
+}
+
+size_t HWTestModuleOp::getNumPorts() { return getModuleType().getNumPorts(); }
+
+hw::InnerSymAttr HWTestModuleOp::getPortSymbolAttr(size_t portIndex) {
+  auto pa = getPortAttrs();
+  if (pa)
+    return cast<hw::InnerSymAttr>((*pa)[portIndex]);
+  return nullptr;
 }
 
 //===----------------------------------------------------------------------===//

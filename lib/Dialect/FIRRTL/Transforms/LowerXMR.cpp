@@ -342,10 +342,16 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
 
   /// Generate the ABI ref_<circuit>_<module> prefix string into `prefix`.
   void getRefABIPrefix(FModuleLike mod, SmallVectorImpl<char> &prefix) {
-    (Twine("ref_") +
-     (isa<FExtModuleOp>(mod) ? mod.getModuleName() : getOperation().getName()) +
-     "_" + mod.getModuleName())
-        .toVector(prefix);
+    auto modName = mod.getModuleName();
+    auto circuitName = getOperation().getName();
+    if (auto ext = dyn_cast<FExtModuleOp>(*mod)) {
+      // Use defName for module portion, if set.
+      if (auto defname = ext.getDefname(); defname && !defname->empty())
+        modName = *defname;
+      // Assume(/require) all extmodule's are within their own circuit.
+      circuitName = modName;
+    }
+    (Twine("ref_") + circuitName + "_" + modName).toVector(prefix);
   }
 
   /// Get full macro name as StringAttr for the specified ref port.

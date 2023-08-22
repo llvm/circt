@@ -22,20 +22,29 @@ def PortList : OpInterface<"PortList", []> {
   let description = "Operations which produce a unified port list representation";
   let methods = [
     InterfaceMethod<"Get port list",
-    "::circt::hw::ModulePortInfo", "getPortList", (ins)>
+    "::circt::hw::ModulePortInfo", "getPortList", (ins)>,
+
+    InterfaceMethod<"Get the number of ports",
+    "size_t", "getNumPorts", (ins)>,
   ];
 }
 
+def SymboledPortList : OpInterface<"SymboledPortList", [PortList]> {
+  let cppNamespace = "circt::hw";
+  let description = "Operations which produce a unified port list representation which includes port symbols";
+  let methods = [
+    InterfaceMethod<"Get a port symbol attribute",
+    "::circt::hw::InnerSymAttr", "getPortSymbolAttr", (ins "size_t":$portIndex)>,
+  ];
+}
+
+
 def HWModuleLike : OpInterface<"HWModuleLike", [
-  Symbol, PortList, InstanceGraphModuleOpInterface]> {
+  Symbol, SymboledPortList, InstanceGraphModuleOpInterface]> {
   let cppNamespace = "circt::hw";
   let description = "Provide common module information.";
 
   let methods = [
-
-    InterfaceMethod<"Get a port symbol attribute",
-    "::circt::hw::InnerSymAttr", "getPortSymbolAttr", (ins "size_t":$portIndex)>,
-
     InterfaceMethod<"Get the module type",
     "::circt::hw::ModuleType", "getHWModuleType", (ins)>,
 
@@ -54,9 +63,16 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
     InterfaceMethod<"Set the port Locations",
     "void", "setAllPortLocs", (ins "ArrayRef<Location>":$locs)>,
 
+    InterfaceMethod<"Set the module type (and port names)",
+    "void", "setHWModuleType", (ins "::circt::hw::ModuleType":$type)>,
+
   ];
 
   let extraSharedClassDeclaration = [{
+    /// Attribute name for port symbols.
+    static StringRef getPortSymbolAttrName() {
+      return "hw.exportPort";
+    }
 
     /// Return the region containing the body of this function.
     Region &getModuleBody() { return $_op->getRegion(0); }
@@ -72,11 +88,6 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
       return $_op.getModuleBody().getArgument($_op.getHWModuleType().getInputIdForPortId(idx));
     }
 
-    /// Return the total number of ports in the module
-    size_t getNumPorts() {
-      return $_op.getHWModuleType().getNumPorts();
-    }
-
     /// Return the total number of input and inout ports in the module
     size_t getNumInputs() {
       return $_op.getHWModuleType().getNumInputs();
@@ -88,12 +99,22 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
     }
 
     /// Return the set of names on input and inout ports
-    SmallVector<StringAttr> getInputNames() {
+    SmallVector<StringAttr> getInputNamesStr() {
+      return $_op.getHWModuleType().getInputNamesStr();
+    }
+
+    /// Return the set of names on output ports
+    SmallVector<StringAttr> getOutputNamesStr() {
+      return $_op.getHWModuleType().getOutputNamesStr();
+    }
+    
+    /// Return the set of names on input and inout ports
+    SmallVector<Attribute> getInputNames() {
       return $_op.getHWModuleType().getInputNames();
     }
 
     /// Return the set of names on output ports
-    SmallVector<StringAttr> getOutputNames() {
+    SmallVector<Attribute> getOutputNames() {
       return $_op.getHWModuleType().getOutputNames();
     }
     

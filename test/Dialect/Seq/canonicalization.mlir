@@ -135,6 +135,16 @@ hw.module @ClockGate(%clock: i1, %enable: i1, %enable2 : i1, %testEnable: i1) {
   %transitiveClock2 = hw.wire %11 sym @transitiveClock2 : i1
 }
 
+// CHECK-LABEL: hw.module @ClockMux
+hw.module @ClockMux(%cond: i1, %trueClock: i1, %falseClock: i1) -> (clk0: i1, clk1: i1){
+  %false = hw.constant false
+  %true = hw.constant true
+  %clock_true = seq.clock_mux %true, %trueClock, %falseClock
+  %clock_false = seq.clock_mux %false, %trueClock, %falseClock
+  // CHECK: hw.output %trueClock, %falseClock : i1, i1
+  hw.output %clock_true, %clock_false : i1, i1
+}
+
 // CHECK-LABEL: @FirMem
 hw.module @FirMem(%addr: i4, %clock: i1, %data: i42) -> (out: i42) {
   %true = hw.constant true

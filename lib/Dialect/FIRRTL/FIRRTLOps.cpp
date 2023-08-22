@@ -511,66 +511,6 @@ hw::ModulePortInfo FMemModuleOp::getPortList() {
   return ::getPortListImpl(*this);
 }
 
-void FModuleOp::setAllPortAttrs(ArrayRef<Attribute> attrs) {
-  emitError("HWModuleLike not implemented completely (setAllPortAttrs)");
-}
-
-void FIntModuleOp::setAllPortAttrs(ArrayRef<Attribute> attrs) {
-  emitError("HWModuleLike not implemented completely (setAllPortAttrs)");
-}
-
-void FMemModuleOp::setAllPortAttrs(ArrayRef<Attribute> attrs) {
-  emitError("HWModuleLike not implemented completely (setAllPortAttrs)");
-}
-
-void FExtModuleOp::setAllPortAttrs(ArrayRef<Attribute> attrs) {
-  emitError("HWModuleLike not implemented completely (setAllPortAttrs)");
-}
-
-void ClassOp::setAllPortAttrs(ArrayRef<Attribute> attrs) {
-  emitError("HWModuleLike not implemented completely (setAllPortAttrs)");
-}
-
-void FModuleOp::removeAllPortAttrs() {
-  emitError("HWModuleLike not implemented completely (removeAllPortAttrs)");
-}
-
-void FIntModuleOp::removeAllPortAttrs() {
-  emitError("HWModuleLike not implemented completely (removeAllPortAttrs)");
-}
-
-void FMemModuleOp::removeAllPortAttrs() {
-  emitError("HWModuleLike not implemented completely (removeAllPortAttrs)");
-}
-
-void FExtModuleOp::removeAllPortAttrs() {
-  emitError("HWModuleLike not implemented completely (removeAllPortAttrs)");
-}
-
-void ClassOp::removeAllPortAttrs() {
-  emitError("HWModuleLike not implemented completely (removeAllPortAttrs)");
-}
-
-void FModuleOp::setAllPortLocs(ArrayRef<Location> locs) {
-  emitError("HWModuleLike not implemented completely (setAllPortLocs)");
-}
-
-void FIntModuleOp::setAllPortLocs(ArrayRef<Location> locs) {
-  emitError("HWModuleLike not implemented completely (setAllPortLocs)");
-}
-
-void FMemModuleOp::setAllPortLocs(ArrayRef<Location> locs) {
-  emitError("HWModuleLike not implemented completely (setAllPortLocs)");
-}
-
-void FExtModuleOp::setAllPortLocs(ArrayRef<Location> locs) {
-  emitError("HWModuleLike not implemented completely (setAllPortLocs)");
-}
-
-void ClassOp::setAllPortLocs(ArrayRef<Location> locs) {
-  emitError("HWModuleLike not implemented completely (setAllPortLocs)");
-}
-
 // Return the port with the specified name.
 BlockArgument FModuleOp::getArgument(size_t portNumber) {
   return getBodyBlock()->getArgument(portNumber);
@@ -3575,6 +3515,40 @@ ParseResult FIntegerConstantOp::parse(OpAsmParser &parser,
       IntegerType::get(context, value.getBitWidth(), IntegerType::Signed);
   auto valueAttr = parser.getBuilder().getIntegerAttr(intType, value);
   result.addAttribute("value", valueAttr);
+  return success();
+}
+
+ParseResult ListCreateOp::parse(OpAsmParser &parser, OperationState &result) {
+  llvm::SmallVector<OpAsmParser::UnresolvedOperand, 16> operands;
+  ListType type;
+
+  if (parser.parseOperandList(operands) ||
+      parser.parseOptionalAttrDict(result.attributes) ||
+      parser.parseColonType(type))
+    return failure();
+  result.addTypes(type);
+
+  return parser.resolveOperands(operands, type.getElementType(),
+                                result.operands);
+}
+
+void ListCreateOp::print(OpAsmPrinter &p) {
+  p << " ";
+  p.printOperands(getElements());
+  p.printOptionalAttrDict((*this)->getAttrs());
+  p << " : " << getType();
+}
+
+LogicalResult ListCreateOp::verify() {
+  if (getElements().empty())
+    return success();
+
+  auto elementType = getElements().front().getType();
+  auto listElementType = getType().getElementType();
+  if (elementType != listElementType)
+    return emitOpError("has elements of type ")
+           << elementType << " instead of " << listElementType;
+
   return success();
 }
 

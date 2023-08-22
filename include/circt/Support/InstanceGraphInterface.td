@@ -61,13 +61,14 @@ def InstanceGraphModuleOpInterface : OpInterface<"ModuleOpInterface"> {
     InterfaceMethod<"Get the module name",
     "::llvm::StringRef", "getModuleName", (ins),
     /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{ return $_op.getName(); }]>,
+    /*defaultImplementation=*/[{ return $_op.getModuleNameAttr().getValue(); }]>,
 
     InterfaceMethod<"Get the module name",
     "::mlir::StringAttr", "getModuleNameAttr", (ins),
     /*methodBody=*/[{}],
     /*defaultImplementation=*/[{ return $_op.getNameAttr(); }]>,
   ];
+  
 }
 
 #endif // CIRCT_SUPPORT_INSTANCEGRAPH_INSTANCEGRAPHINTERFACE_TD

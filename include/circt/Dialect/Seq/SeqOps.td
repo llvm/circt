@@ -325,6 +325,32 @@ def ClockGateOp : SeqOp<"clock_gate", [
 }
 
 //===----------------------------------------------------------------------===//
+// Clock Multiplexer
+//===----------------------------------------------------------------------===//
+
+def ClockMuxOp : SeqOp<"clock_mux", [Pure]> {
+  let summary = "Safely selects a clock based on a condition";
+  let description = [{
+    The `seq.clock_mux` op selects a clock from two options. If `cond` is 
+    true, the first clock operand is selected to drive downstream logic. 
+    Otherwise, the second clock is used.
+
+    ```
+    %clock = seq.clock_mux %cond, %trueClock, %falseClock
+    ```
+  }];
+
+  let arguments = (ins I1:$cond, I1:$trueClock, I1:$falseClock);
+  let results = (outs I1:$result);
+
+  let hasFolder = 1;
+
+  let assemblyFormat = [{
+    $cond `,` $trueClock `,` $falseClock attr-dict
+  }];
+}
+
+//===----------------------------------------------------------------------===//
 // FIRRTL-flavored memory
 //===----------------------------------------------------------------------===//
 

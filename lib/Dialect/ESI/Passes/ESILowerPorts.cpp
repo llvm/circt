@@ -410,10 +410,10 @@ bool ESIPortsPass::updateFunc(HWModuleExternOp mod) {
 
   // Set the new types.
   auto newFuncType = FunctionType::get(ctxt, newArgTypes, newResultTypes);
-  mod.setType(newFuncType);
-  setModuleArgumentNames(mod, newArgNames);
+  auto newModType =
+      hw::detail::fnToMod(newFuncType, newArgNames, newResultNames);
+  mod.setHWModuleType(newModType);
   setModuleArgumentLocs(mod, newArgLocs);
-  setModuleResultNames(mod, newResultNames);
   setModuleResultLocs(mod, newResultLocs);
   return true;
 }

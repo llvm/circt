@@ -87,7 +87,7 @@ LogicalResult InnerSymbolTable::walkSymbols(Operation *op,
                  return WalkResult::interrupt();
 
            // Check for ports
-           if (auto mod = dyn_cast<HWModuleLike>(curOp)) {
+           if (auto mod = dyn_cast<SymboledPortList>(curOp)) {
              for (size_t i = 0, e = mod.getNumPorts(); i < e; ++i) {
                if (auto symAttr = mod.getPortSymbolAttr(i))
                  if (failed(walkSyms(symAttr, InnerSymTarget(i, curOp))))
@@ -135,7 +135,7 @@ StringAttr InnerSymbolTable::getInnerSymbol(const InnerSymTarget &target) {
   // Obtain the base InnerSymAttr for the specified target.
   auto getBase = [](auto &target) -> hw::InnerSymAttr {
     if (target.isPort()) {
-      if (auto mod = dyn_cast<HWModuleLike>(target.getOp())) {
+      if (auto mod = dyn_cast<SymboledPortList>(target.getOp())) {
         assert(target.getPort() < mod.getNumPorts());
         return mod.getPortSymbolAttr(target.getPort());
       }

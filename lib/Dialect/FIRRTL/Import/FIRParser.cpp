@@ -256,6 +256,7 @@ struct FIRParser {
   ParseResult parseFieldIdSeq(SmallVectorImpl<StringRef> &result,
                               const Twine &message);
   ParseResult parseEnumType(FIRRTLType &result);
+  ParseResult parseListType(FIRRTLType &result);
   ParseResult parseType(FIRRTLType &result, const Twine &message);
 
   ParseResult parseOptionalRUW(RUWAttr &result);
@@ -794,6 +795,25 @@ ParseResult FIRParser::parseEnumType(FIRRTLType &result) {
   return success();
 }
 
+/// list-type ::= 'List' '<' type '>'
+ParseResult FIRParser::parseListType(FIRRTLType &result) {
+  auto loc = getToken().getLoc();
+  consumeToken(FIRToken::kw_List);
+
+  FIRRTLType type;
+  if (parseToken(FIRToken::less, "expected '<' in List type") ||
+      parseType(type, "expected List element type") ||
+      parseToken(FIRToken::greater, "expected '>' in List type"))
+    return failure();
+
+  auto elementType = type_dyn_cast<PropertyType>(type);
+  if (!elementType)
+    return emitError(loc, "expected property type");
+
+  result = ListType::get(getContext(), elementType);
+  return success();
+}
+
 /// type ::= 'Clock'
 ///      ::= 'Reset'
 ///      ::= 'AsyncReset'
@@ -806,6 +826,7 @@ ParseResult FIRParser::parseEnumType(FIRRTLType &result) {
 ///      ::= 'RWProbe' '<' type '>'
 ///      ::= 'const' type
 ///      ::= 'String'
+///      ::= list-type
 ///      ::= id
 ///
 /// field: 'flip'? fieldId ':' type
@@ -1008,6 +1029,10 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
       return failure();
     consumeToken(FIRToken::kw_Path);
     result = PathType::get(getContext());
+    break;
+  case FIRToken::kw_List:
+    if (requireFeature({3, 2, 0}, "Lists") || parseListType(result))
+      return failure();
     break;
   }
 
@@ -1511,6 +1536,7 @@ private:
   ParseResult parsePostFixDynamicSubscript(Value &result);
   ParseResult parsePrimExp(Value &result);
   ParseResult parseIntegerLiteralExp(Value &result);
+  ParseResult parseListExp(Value &result);
 
   std::optional<ParseResult> parseExpWithLeadingKeyword(FIRToken keyword);
 
@@ -1701,6 +1727,7 @@ void FIRStmtParser::emitPartialConnect(ImplicitLocOpBuilder &builder, Value dst,
 ///      ::= prim
 ///      ::= integer-literal-exp
 ///      ::= enum-exp
+///      ::= list-exp
 ///      ::= 'String(' stringLit ')'
 ///      ::= exp '.' fieldId
 ///      ::= exp '[' intLit ']'
@@ -1783,6 +1810,15 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
       return failure();
     result =
         builder.create<FIntegerConstantOp>(APSInt(value, /*isUnsigned=*/false));
+    break;
+  }
+  case FIRToken::kw_List: {
+    if (requireFeature({3, 2, 0}, "Lists"))
+      return failure();
+    if (isLeadingStmt)
+      return emitError("unexpected List<>() as start of statement");
+    if (parseListExp(result))
+      return failure();
     break;
   }
 
@@ -2190,6 +2226,40 @@ ParseResult FIRStmtParser::parseIntegerLiteralExp(Value &result) {
 
   locationProcessor.setLoc(loc);
   result = moduleContext.getCachedConstantInt(builder, attr, type, value);
+  return success();
+}
+
+/// list-exp ::= list-type '(' exp* ')'
+ParseResult FIRStmtParser::parseListExp(Value &result) {
+  auto loc = getToken().getLoc();
+  FIRRTLType type;
+  if (parseListType(type))
+    return failure();
+  auto listType = type_cast<ListType>(type);
+  auto elementType = listType.getElementType();
+
+  if (parseToken(FIRToken::l_paren, "expected '(' in List expression"))
+    return failure();
+
+  SmallVector<Value, 3> operands;
+  if (parseListUntil(FIRToken::r_paren, [&]() -> ParseResult {
+        Value operand;
+        locationProcessor.setLoc(loc);
+        if (parseExp(operand, "expected expression in List expression"))
+          return failure();
+
+        if (operand.getType() != elementType)
+          return emitError(loc, "unexpected expression of type ")
+                 << operand.getType() << " in List expression of type "
+                 << elementType;
+
+        operands.push_back(operand);
+        return success();
+      }))
+    return failure();
+
+  locationProcessor.setLoc(loc);
+  result = builder.create<ListCreateOp>(listType, operands);
   return success();
 }
 
