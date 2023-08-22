@@ -30,7 +30,6 @@ def InterestingName: I32EnumAttrCase<"InterestingName", 1, "interesting_name">;
 def NameKindEnumImpl: I32EnumAttr<"NameKindEnum", "name kind",
               [DroppableName, InterestingName]> {
   let genSpecializedAttr = 0;
-  let cppNamespace = "::circt::firrtl";
 }
 
 def NameKindAttr: EnumAttr<FIRRTLDialect, NameKindEnumImpl, "name_kind">;
