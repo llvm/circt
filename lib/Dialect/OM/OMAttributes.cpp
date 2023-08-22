@@ -77,22 +77,18 @@ LogicalResult
 circt::om::MapAttr::verify(function_ref<InFlightDiagnostic()> emitError,
                            mlir::Type valueType,
                            mlir::DictionaryAttr elements) {
-  return success(llvm::all_of(elements, [&](auto attr) {
-    auto typedAttr = attr.getValue().template dyn_cast<mlir::TypedAttr>();
-    if (!typedAttr) {
-      emitError() << "a value of a map attribute must be a typed attr but got "
-                  << attr.getValue();
-      return false;
-    }
-    if (typedAttr.getType() != valueType) {
-      emitError() << "a value of a map attribute must have a type " << valueType
-                  << " but field " << attr.getName() << " has "
-                  << typedAttr.getType();
-      return false;
-    }
-
-    return true;
-  }));
+  for (auto attr : elements) {
+    auto typedAttr = llvm::dyn_cast<mlir::TypedAttr>(attr.getValue());
+    if (!typedAttr)
+      return emitError()
+             << "a value of a map attribute must be a typed attr but got "
+             << attr.getValue();
+    if (typedAttr.getType() != valueType)
+      return emitError() << "a value of a map attribute must have a type "
+                         << valueType << " but field " << attr.getName()
+                         << " has " << typedAttr.getType();
+  }
+  return success();
 }
 
 void circt::om::OMDialect::registerAttributes() {
