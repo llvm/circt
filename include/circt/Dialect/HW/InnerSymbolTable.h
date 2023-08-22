@@ -250,10 +250,10 @@ OS &operator<<(OS &os, const InnerSymTarget &target) {
     os << "field " << target.getField() << " of ";
 
   if (target.isPort())
-    os << "<port " << target.getPort() << " on @"
-       << SymbolTable::getSymbolName(target.getOp()) << ">";
+    os << "port " << target.getPort() << " on @"
+       << SymbolTable::getSymbolName(target.getOp()).getValue() << "";
   else
-    os << "<op " << *target.getOp() << ">";
+    os << "op " << *target.getOp() << "";
 
   return os;
 }
