@@ -244,6 +244,7 @@ def ModuleTypeImpl : HWType<"Module"> {
     size_t getNumPorts();
     size_t getNumInputs();
     size_t getNumOutputs();
+    SmallVector<Type> getPortTypes();
     SmallVector<Type> getInputTypes();
     SmallVector<Type> getOutputTypes();
     Type getInputType(size_t);

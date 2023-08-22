@@ -661,6 +661,13 @@ SmallVector<Type> ModuleType::getOutputTypes() {
   return retval;
 }
 
+SmallVector<Type> ModuleType::getPortTypes() {
+  SmallVector<Type> retval;
+  for (auto &p : getPorts())
+    retval.push_back(p.type);
+  return retval;
+}
+
 Type ModuleType::getInputType(size_t idx) {
   return getPorts()[getPortIdForInputId(idx)].type;
 }
