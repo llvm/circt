@@ -16,17 +16,13 @@
 #include "circt/Support/LLVM.h"
 #include <memory>
 
-namespace mlir {
-class Pass;
-} // namespace mlir
-
 namespace circt {
 
-#define GEN_PASS_DECL_LOWERSEQFIRRTLTOSV
+#define GEN_PASS_DECL_LOWERSEQTOSV
 #include "circt/Conversion/Passes.h.inc"
 
 std::unique_ptr<mlir::Pass>
-createSeqFIRRTLLowerToSVPass(const LowerSeqFIRRTLToSVOptions &options = {});
+createLowerSeqToSVPass(const LowerSeqToSVOptions &options = {});
 std::unique_ptr<mlir::Pass> createLowerFirMemPass();
 std::unique_ptr<mlir::Pass> createLowerSeqFIRRTLInitToSV();
 

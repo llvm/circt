@@ -278,7 +278,7 @@ static void loadHWLoweringPipeline(OpPassManager &pm) {
   pm.addPass(createSimpleCanonicalizerPass());
   pm.nest<hw::HWModuleOp>().addPass(circt::seq::createLowerSeqHLMemPass());
   pm.addPass(sv::createHWMemSimImplPass(false, false));
-  pm.addPass(seq::createSeqLowerToSVPass());
+  pm.addPass(circt::createLowerSeqToSVPass());
   pm.nest<hw::HWModuleOp>().addPass(sv::createHWCleanupPass());
 
   // Legalize unsupported operations within the modules.

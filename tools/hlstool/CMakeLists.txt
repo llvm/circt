@@ -18,6 +18,7 @@ target_link_libraries(hlstool
   CIRCTHW
   CIRCTHWTransforms
   CIRCTSeq
+  CIRCTSeqToSV
   CIRCTSeqTransforms
   CIRCTStandardToHandshake
   CIRCTSV

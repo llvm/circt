@@ -19,12 +19,9 @@
 namespace circt {
 namespace seq {
 
-#define GEN_PASS_DECL_LOWERSEQTOSV
 #define GEN_PASS_DECL_EXTERNALIZECLOCKGATE
 #include "circt/Dialect/Seq/SeqPasses.h.inc"
 
-std::unique_ptr<mlir::Pass>
-createSeqLowerToSVPass(std::optional<bool> lowerToAlwaysFF = {});
 std::unique_ptr<mlir::Pass> createLowerSeqHLMemPass();
 std::unique_ptr<mlir::Pass>
 createExternalizeClockGatePass(const ExternalizeClockGateOptions &options = {});
