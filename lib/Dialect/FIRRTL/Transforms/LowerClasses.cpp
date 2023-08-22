@@ -90,6 +90,12 @@ void LowerClassesPass::runOnOperation() {
   mlir::parallelForEach(ctx, loweringState,
                         [this](auto state) { lowerClass(state); });
 
+  // Completely erase Class module-likes
+  for (auto state : loweringState) {
+    if (isa<firrtl::ClassOp>(state.moduleLike))
+      state.moduleLike.erase();
+  }
+
   // Collect ops where Objects can be instantiated.
   SmallVector<Operation *> objectContainers;
   for (auto op : circuit.getOps<FModuleOp>())
@@ -220,11 +226,9 @@ void LowerClassesPass::lowerClass(ClassLoweringState &state) {
     op.erase();
   }
 
-  // If the module-like is a Class, completely erase it. Otherwise, erase just
-  // the property ports and ops.
-  if (isa<firrtl::ClassOp>(moduleLike)) {
-    moduleLike.erase();
-  } else {
+  // If the module-like is a Class, it will be completely erased later.
+  // Otherwise, erase just the property ports and ops.
+  if (!isa<firrtl::ClassOp>(moduleLike)) {
     // Erase ops in use before def order, thanks to FIRRTL's SSA regions.
     for (auto *op : llvm::reverse(opsToErase))
       op->erase();
