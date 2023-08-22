@@ -34,6 +34,18 @@ struct InnerSymbolNamespace : Namespace {
   }
 };
 
+struct InnerSymbolNamespaceCollection {
+
+  InnerSymbolNamespace &get(Operation *op) {
+    return collection.try_emplace(op, op).first->second;
+  }
+
+  InnerSymbolNamespace &operator[](Operation *op) { return get(op); }
+
+private:
+  DenseMap<Operation *, InnerSymbolNamespace> collection;
+};
+
 } // namespace hw
 } // namespace circt
 
