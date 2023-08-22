@@ -461,8 +461,8 @@ circuit Top : %[[
     "target":"~Top|Top/a_:A_/b_:B_>bar"
   }
 ]]
-  ; CHECK: hw.hierpath private @[[nla_a_:[_a-zA-Z0-9]+]] [@Top::@[[a_Sym:[_a-zA-Z0-9]+]], @A::@[[bSym:[_a-zA-Z0-9]+]], @B]
-  ; CHECK: hw.hierpath private @[[nla_a:[_a-zA-Z0-9]+]] [@Top::@[[aSym:[_a-zA-Z0-9]+]], @A::@[[bSym]], @B]
+  ; CHECK: hw.hierpath private @[[nla_a:[_a-zA-Z0-9]+]] [@Top::@[[aSym:[_a-zA-Z0-9]+]], @A::@[[bSym:[_a-zA-Z0-9]+]], @B]
+  ; CHECK: hw.hierpath private @[[nla_a_:[_a-zA-Z0-9]+]] [@Top::@[[a_Sym:[_a-zA-Z0-9]+]], @A::@[[bSym]], @B]
   ; CHECK: firrtl.module @Top
   module Top :
     ; CHECK-NEXT: firrtl.instance a sym @[[aSym]] @A()
@@ -520,14 +520,14 @@ circuit Top : %[[
     "target":"~Top|Top/a_:A_/b_:B_/c_:C_/d_:D_>bar"
   }
 ]]
-  ; CHECK:        hw.hierpath private @[[nla_a_:[_a-zA-Z0-9]+]]
-  ; CHECK-SAME:     [@Top::@[[a_Sym:[_a-zA-Z0-9]+]],
+  ; CHECK:        hw.hierpath private @[[nla_a:[_a-zA-Z0-9]+]]
+  ; CHECK-SAME:     [@Top::@[[aSym:[_a-zA-Z0-9]+]],
   ; CHECK-SAME:      @A::@[[bSym:[_a-zA-Z0-9]+]],
   ; CHECK-SAME:      @B::@[[cSym:[_a-zA-Z0-9]+]],
   ; CHECK-SAME:      @C::@[[dSym:[_a-zA-Z0-9]+]],
   ; CHECK-SAME:      @D]
-  ; CHECK-NEXT:   hw.hierpath private @[[nla_a:[_a-zA-Z0-9]+]]
-  ; CHECK-SAME:     [@Top::@[[aSym:[_a-zA-Z0-9]+]],
+  ; CHECK-NEXT:   hw.hierpath private @[[nla_a_:[_a-zA-Z0-9]+]]
+  ; CHECK-SAME:     [@Top::@[[a_Sym:[_a-zA-Z0-9]+]],
   ; CHECK-SAME:      @A::@[[bSym]],
   ; CHECK-SAME:      @B::@[[cSym]],
   ; CHECK-SAME:      @C::@[[dSym]],
@@ -645,19 +645,34 @@ circuit Top : %[[
     "target":"~Top|Top/a2:A/b:B/c:C"
   }
 ]]
-  ; CHECK:        hw.hierpath private @[[nla_12:[_a-zA-Z0-9]+]]
+  ; CHECK:        hw.hierpath private @[[nla_1:[_a-zA-Z0-9]+]]
+  ; CHECK-SAME:     [@Top::@[[TopbSym:[_a-zA-Z0-9]+]],
+  ; CHECK-SAME:      @B]
+  ; CHECK:        hw.hierpath private @[[nla_2:[_a-zA-Z0-9]+]]
+  ; CHECK-SAME:     [@Top::@[[Topb_Sym:[_a-zA-Z0-9]+]],
+  ; CHECK-SAME:      @B]
+  ; CHECK:        hw.hierpath private @[[nla_3:[_a-zA-Z0-9]+]]
+  ; CHECK-SAME:     [@Top::@[[Topa1Sym:[_a-zA-Z0-9]+]],
+  ; CHECK-SAME:      @A::@[[Ab_Sym:[_a-zA-Z0-9]+]],
+  ; CHECK-SAME:      @B]
+  ; CHECK:        hw.hierpath private @[[nla_4:[_a-zA-Z0-9]+]]
   ; CHECK-SAME:     [@Top::@[[Topa2Sym:[_a-zA-Z0-9]+]],
+  ; CHECK-SAME:      @A::@[[Ab_Sym]],
+  ; CHECK-SAME:      @B]
+  ; CHECK:        hw.hierpath private @[[nla_5:[_a-zA-Z0-9]+]]
+  ; CHECK-SAME:     [@Top::@[[Topa1Sym]],
   ; CHECK-SAME:      @A::@[[AbSym:[_a-zA-Z0-9]+]],
+  ; CHECK-SAME:      @B]
+  ; CHECK:        hw.hierpath private @[[nla_6:[_a-zA-Z0-9]+]]
+  ; CHECK-SAME:     [@Top::@[[Topa2Sym]],
+  ; CHECK-SAME:      @A::@[[AbSym]],
+  ; CHECK-SAME:      @B]
+  ; CHECK:        hw.hierpath private @[[nla_7:[_a-zA-Z0-9]+]]
+  ; CHECK-SAME:     [@Top::@[[TopbSym]],
   ; CHECK-SAME:      @B::@[[BcSym:[_a-zA-Z0-9]+]],
   ; CHECK-SAME:      @C]
-  ; CHECK:        hw.hierpath private @[[nla_11:[_a-zA-Z0-9]+]]
-  ; CHECK-SAME:     [@Top::@[[Topa1Sym:[_a-zA-Z0-9]+]],
-  ; CHECK-SAME:      @A::@[[AbSym]],
-  ; CHECK-SAME:      @B::@[[BcSym]],
-  ; CHECK-SAME:      @C]
-  ; CHECK:        hw.hierpath private @[[nla_10:[_a-zA-Z0-9]+]]
-  ; CHECK-SAME:     [@Top::@[[Topa2Sym]],
-  ; CHECK-SAME:      @A::@[[Ab_Sym:[_a-zA-Z0-9]+]],
+  ; CHECK:        hw.hierpath private @[[nla_8:[_a-zA-Z0-9]+]]
+  ; CHECK-SAME:     [@Top::@[[Topb_Sym]],
   ; CHECK-SAME:      @B::@[[BcSym]],
   ; CHECK-SAME:      @C]
   ; CHECK:        hw.hierpath private @[[nla_9:[_a-zA-Z0-9]+]]
@@ -665,36 +680,21 @@ circuit Top : %[[
   ; CHECK-SAME:      @A::@[[Ab_Sym]],
   ; CHECK-SAME:      @B::@[[BcSym]],
   ; CHECK-SAME:      @C]
-  ; CHECK:        hw.hierpath private @[[nla_8:[_a-zA-Z0-9]+]]
-  ; CHECK-SAME:     [@Top::@[[Topb_Sym:[_a-zA-Z0-9]+]],
-  ; CHECK-SAME:      @B::@[[BcSym]],
-  ; CHECK-SAME:      @C]
-  ; CHECK:        hw.hierpath private @[[nla_7:[_a-zA-Z0-9]+]]
-  ; CHECK-SAME:     [@Top::@[[TopbSym:[_a-zA-Z0-9]+]],
-  ; CHECK-SAME:      @B::@[[BcSym]],
-  ; CHECK-SAME:      @C]
-  ; CHECK:        hw.hierpath private @[[nla_6:[_a-zA-Z0-9]+]]
-  ; CHECK-SAME:     [@Top::@[[Topa2Sym]],
-  ; CHECK-SAME:      @A::@[[AbSym]],
-  ; CHECK-SAME:      @B]
-  ; CHECK:        hw.hierpath private @[[nla_5:[_a-zA-Z0-9]+]]
-  ; CHECK-SAME:     [@Top::@[[Topa1Sym]],
-  ; CHECK-SAME:      @A::@[[AbSym]],
-  ; CHECK-SAME:      @B]
-  ; CHECK:        hw.hierpath private @[[nla_4:[_a-zA-Z0-9]+]]
+  ; CHECK:        hw.hierpath private @[[nla_10:[_a-zA-Z0-9]+]]
   ; CHECK-SAME:     [@Top::@[[Topa2Sym]],
   ; CHECK-SAME:      @A::@[[Ab_Sym]],
-  ; CHECK-SAME:      @B]
-  ; CHECK:        hw.hierpath private @[[nla_3:[_a-zA-Z0-9]+]]
+  ; CHECK-SAME:      @B::@[[BcSym]],
+  ; CHECK-SAME:      @C]
+  ; CHECK:        hw.hierpath private @[[nla_11:[_a-zA-Z0-9]+]]
   ; CHECK-SAME:     [@Top::@[[Topa1Sym]],
-  ; CHECK-SAME:      @A::@[[Ab_Sym]],
-  ; CHECK-SAME:      @B]
-  ; CHECK:        hw.hierpath private @[[nla_2:[_a-zA-Z0-9]+]]
-  ; CHECK-SAME:     [@Top::@[[Topb_Sym]],
-  ; CHECK-SAME:      @B]
-  ; CHECK:        hw.hierpath private @[[nla_1:[_a-zA-Z0-9]+]]
-  ; CHECK-SAME:     [@Top::@[[TopbSym]],
-  ; CHECK-SAME:      @B]
+  ; CHECK-SAME:      @A::@[[AbSym]],
+  ; CHECK-SAME:      @B::@[[BcSym]],
+  ; CHECK-SAME:      @C]
+  ; CHECK:        hw.hierpath private @[[nla_12:[_a-zA-Z0-9]+]]
+  ; CHECK-SAME:     [@Top::@[[Topa2Sym]],
+  ; CHECK-SAME:      @A::@[[AbSym]],
+  ; CHECK-SAME:      @B::@[[BcSym]],
+  ; CHECK-SAME:      @C]
   ; CHECK-NEXT:   firrtl.module @Top
   module Top :
     ; CHECK-NEXT:   firrtl.instance b sym @[[TopbSym]]
