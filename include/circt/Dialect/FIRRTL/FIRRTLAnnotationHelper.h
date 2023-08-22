@@ -330,10 +330,7 @@ struct ApplyState {
   SmallVector<WiringProblem> wiringProblems;
 
   hw::InnerSymbolNamespace &getNamespace(FModuleLike module) {
-    auto &ptr = namespaces[module];
-    if (!ptr)
-      ptr = std::make_unique<hw::InnerSymbolNamespace>(module);
-    return *ptr;
+    return namespaces[module];
   }
 
   IntegerAttr newID() {
@@ -342,7 +339,7 @@ struct ApplyState {
   };
 
 private:
-  DenseMap<Operation *, std::unique_ptr<hw::InnerSymbolNamespace>> namespaces;
+  hw::InnerSymbolNamespaceCollection namespaces;
   unsigned annotationID = 0;
 };
 
