@@ -20,10 +20,10 @@ using namespace hw;
 // HWModuleLike Signature Conversion
 //===----------------------------------------------------------------------===//
 
-static LogicalResult convertModuleOpTypes(HWModuleLike funcOp,
+static LogicalResult convertModuleOpTypes(HWModuleLike modOp,
                                           const TypeConverter &typeConverter,
                                           ConversionPatternRewriter &rewriter) {
-  ModuleType type = funcOp.getHWModuleType();
+  ModuleType type = modOp.getHWModuleType();
   if (!type)
     return failure();
 
@@ -43,6 +43,7 @@ static LogicalResult convertModuleOpTypes(HWModuleLike funcOp,
     } else {
       if (failed(typeConverter.convertSignatureArg(
               atInput++,
+              /* inout ports need to be wrapped in the appropriate type */
               p.dir == ModulePort::Direction::Input ? p.type
                                                     : InOutType::get(p.type),
               result)))
@@ -53,12 +54,12 @@ static LogicalResult convertModuleOpTypes(HWModuleLike funcOp,
     }
   }
 
-  if (failed(rewriter.convertRegionTypes(&funcOp->getRegion(0), typeConverter,
+  if (failed(rewriter.convertRegionTypes(&modOp->getRegion(0), typeConverter,
                                          &result)))
     return failure();
 
   auto newType = ModuleType::get(rewriter.getContext(), newPorts);
-  rewriter.updateRootInPlace(funcOp, [&] { funcOp.setHWModuleType(newType); });
+  rewriter.updateRootInPlace(modOp, [&] { modOp.setHWModuleType(newType); });
 
   return success();
 }
@@ -75,8 +76,8 @@ struct HWModuleLikeSignatureConversion : public ConversionPattern {
   LogicalResult
   matchAndRewrite(Operation *op, ArrayRef<Value> /*operands*/,
                   ConversionPatternRewriter &rewriter) const override {
-    HWModuleLike funcOp = cast<HWModuleLike>(op);
-    return convertModuleOpTypes(funcOp, *typeConverter, rewriter);
+    HWModuleLike modOp = cast<HWModuleLike>(op);
+    return convertModuleOpTypes(modOp, *typeConverter, rewriter);
   }
 };
 } // namespace

@@ -24,7 +24,7 @@ static hw::StructType getStructType(Type type) {
 }
 
 // Legal if no in- or output type is a struct.
-static bool isLegalFuncLikeOp(hw::HWModuleLike moduleLikeOp) {
+static bool isLegalModLikeOp(hw::HWModuleLike moduleLikeOp) {
   return llvm::none_of(moduleLikeOp.getHWModuleType().getPortTypes(),
                        isStructType);
 }
@@ -185,7 +185,7 @@ static void addSignatureConversion(DenseMap<Operation *, IOInfo> &ioMap,
   // processed during signature conversion, which then allows us to use the
   // signature conversion in a recursive manner.
   target.addDynamicallyLegalOp<TOp...>([&](hw::HWModuleLike moduleLikeOp) {
-    if (isLegalFuncLikeOp(moduleLikeOp))
+    if (isLegalModLikeOp(moduleLikeOp))
       return true;
 
     // This op is involved in conversion. Check if the signature has changed.
@@ -204,10 +204,9 @@ static void addSignatureConversion(DenseMap<Operation *, IOInfo> &ioMap,
         return oldType != newType;
       });
     };
-    if (compareTypes(moduleLikeOp.getHWModuleType().getOutputTypes(),
-                     ioInfo.resTypes) ||
-        compareTypes(moduleLikeOp.getHWModuleType().getInputTypes(),
-                     ioInfo.argTypes))
+    auto mtype = moduleLikeOp.getHWModuleType();
+    if (compareTypes(mtype.getOutputTypes(), ioInfo.resTypes) ||
+        compareTypes(mtype.getInputTypes(), ioInfo.argTypes))
       return true;
 
     // We're pre-conversion for an op that was primed in the map - it will
@@ -219,7 +218,7 @@ static void addSignatureConversion(DenseMap<Operation *, IOInfo> &ioMap,
 template <typename T>
 static bool hasUnconvertedOps(mlir::ModuleOp module) {
   return llvm::any_of(module.getBody()->getOps<T>(),
-                      [](T op) { return !isLegalFuncLikeOp(op); });
+                      [](T op) { return !isLegalModLikeOp(op); });
 }
 
 template <typename T>
@@ -258,7 +257,6 @@ static void updateLocAttribute(Operation *op, StringRef attrName,
                                DenseMap<unsigned, hw::StructType> &structMap,
                                ArrayAttr oldLocs) {
   llvm::SmallVector<Attribute> newLocs;
-  llvm::errs() << "updateLocAttrs with : " << oldLocs << "\n";
   if (!oldLocs)
     return;
   for (auto [i, oldLoc] : llvm::enumerate(oldLocs)) {
@@ -274,7 +272,6 @@ static void updateLocAttribute(Operation *op, StringRef attrName,
     for (size_t i = 0, e = structType.getElements().size(); i < e; ++i)
       newLocs.push_back(oldLoc);
   }
-  llvm::errs() << "updateLocAttrs post : " << newLocs.size() << "\n\n";
   op->setAttr(attrName, ArrayAttr::get(op->getContext(), newLocs));
 }
 
