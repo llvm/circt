@@ -36,4 +36,11 @@ def ArrayRefAttr :
   let convertFromStorage = [{ $_self.getValue() }];
 }
 
+def DistinctAttr : Attr<CPred<"$_self.isa<::mlir::DistinctAttr>()">,
+                      "distinct attribute"> {
+  let storageType = [{ ::mlir::DistinctAttr }];
+  let returnType = [{ ::mlir::DistinctAttr }];
+  let convertFromStorage = "$_self";
+}
+
 #endif // CIRCT_TYPES
