@@ -803,11 +803,12 @@ void hw::modifyModulePorts(
   auto moduleOp = cast<HWModuleLike>(op);
   auto *context = moduleOp.getContext();
 
+  // Dig up the old argument and result data.
   auto oldArgNames = moduleOp.getInputNames();
   auto oldArgTypes = moduleOp.getInputTypes();
   auto oldArgAttrs = moduleOp.getAllInputAttrs();
   auto oldArgLocs = moduleOp.getInputLocs();
-  // Dig up the old argument and result data.
+
   auto oldResultNames = moduleOp.getOutputNames();
   auto oldResultTypes = moduleOp.getOutputTypes();
   auto oldResultAttrs = moduleOp.getAllOutputAttrs();
@@ -1007,8 +1008,8 @@ ModulePortInfo hw::getOperationPortList(Operation *op) {
     if (argLocs)
       loc = argLocs[i].cast<LocationAttr>();
     DictionaryAttr attrs;
-    if (auto fi = dyn_cast<mlir::FunctionOpInterface>(op))
-      attrs = fi.getArgAttrDict(i);
+    if (auto mi = dyn_cast<HWModuleLike>(op))
+      attrs = cast<DictionaryAttr>(mi.getInputAttrs(i));
     inputs.push_back({{argNames[i].cast<StringAttr>(), type, direction},
                       i,
                       getArgSym(op, i),
@@ -1024,8 +1025,8 @@ ModulePortInfo hw::getOperationPortList(Operation *op) {
     if (resultLocs)
       loc = resultLocs[i].cast<LocationAttr>();
     DictionaryAttr attrs;
-    if (auto fi = dyn_cast<mlir::FunctionOpInterface>(op))
-      attrs = fi.getResultAttrDict(i);
+    if (auto mi = dyn_cast<HWModuleLike>(op))
+      attrs = cast<DictionaryAttr>(mi.getOutputAttrs(i));
     outputs.push_back({{resultNames[i].cast<StringAttr>(), resultTypes[i],
                         ModulePort::Direction::Output},
                        i,
