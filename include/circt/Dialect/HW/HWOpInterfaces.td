@@ -127,6 +127,11 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
     }
     
     // Get the name for the specified input or inout port
+    StringRef getPortName(size_t idx) {
+      return $_op.getHWModuleType().getPortName(idx);
+    }
+
+    // Get the name for the specified input or inout port
     StringRef getInputName(size_t idx) {
       return $_op.getHWModuleType().getInputName(idx);
     }
