@@ -1,5 +1,14 @@
 # ESI cosimulation model
 
+**This cosim model has been temporarily set aside.** Instead, ESI is adopting a
+lower-level cosimulation BSP model exposing MMIO, host memory, and DRAM only.
+This makes it look like most PCIe platforms and thus enables more code reuse and
+easier debugging of those hardware platforms.
+
+Also, small pieces of this document are out of date.
+
+## Introduction
+
 Elastic Silicon Interfaces provides a feature called cosimulation. Cosim in
 general allows communication between the simulation and software. In the ESI
 case, it is typed and can be used to build an application and language

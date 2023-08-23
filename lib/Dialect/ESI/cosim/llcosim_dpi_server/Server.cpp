@@ -1,0 +1,108 @@
+//===- Server.cpp - LLCosim RPC server --------------------------*- C++ -*-===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// Definitions for the RPC server class. Capnp C++ RPC servers are based on
+// 'libkj' and its asyncrony model plus the capnp C++ API, both of which feel
+// very foreign. In general, both RPC arguments and returns are passed as a C++
+// object. In order to return data, the capnp message must be constructed inside
+// that object.
+//
+// A [capnp encoded message](https://capnproto.org/encoding.html) can have
+// multiple 'segments', which is a pain to deal with. (See comments below.)
+//
+//===----------------------------------------------------------------------===//
+
+#include "circt/Dialect/ESI/LLCosim/Server.h"
+#include "circt/Dialect/ESI/LLCosim/LLCosimDpi.capnp.h"
+#include <capnp/ez-rpc.h>
+#include <thread>
+#if WIN32
+#include <io.h>
+#else
+#include <unistd.h>
+#endif
+
+#include <cstdio>
+
+using namespace capnp;
+using namespace circt::esi::llcosim;
+
+namespace {
+/// Implements the `CosimDpiServer` interface from the RPC schema.
+class LLCosimServerImpl final : public LLCosimServer::Server {
+
+public:
+  LLCosimServerImpl() {}
+};
+} // anonymous namespace
+
+/// ----- CosimServer definitions.
+
+/// ----- RpcServer definitions.
+
+RpcServer::RpcServer() : mainThread(nullptr), stopSig(false) {}
+RpcServer::~RpcServer() { stop(); }
+
+/// Write the port number to a file. Necessary when we allow 'EzRpcServer' to
+/// select its own port. We can't use stdout/stderr because the flushing
+/// semantics are undefined (as in `flush()` doesn't work on all simulators).
+static void writePort(uint16_t port) {
+  // "cosim.cfg" since we may want to include other info in the future.
+  FILE *fd = fopen("cosim.cfg", "w");
+  fprintf(fd, "port: %u\n", (unsigned int)port);
+  fclose(fd);
+}
+
+void RpcServer::mainLoop(uint16_t port) {
+  capnp::EzRpcServer rpcServer(kj::heap<LLCosimServerImpl>(),
+                               /* bindAddress */ "*", port);
+  auto &waitScope = rpcServer.getWaitScope();
+  // If port is 0, ExRpcSever selects one and we have to wait to get the port.
+  if (port == 0) {
+    auto portPromise = rpcServer.getPort();
+    port = portPromise.wait(waitScope);
+  }
+  writePort(port);
+  printf("[COSIM] Listening on port: %u\n", (unsigned int)port);
+
+  // OK, this is uber hacky, but it unblocks me and isn't _too_ inefficient. The
+  // problem is that I can't figure out how read the stop signal from libkj
+  // asyncrony land.
+  //
+  // IIRC the main libkj wait loop uses `select()` (or something similar on
+  // Windows) on its FDs. As a result, any code which checks the stop variable
+  // doesn't run until there is some I/O. Probably the right way is to set up a
+  // pipe to deliver a shutdown signal.
+  //
+  // TODO: Figure out how to do this properly, if possible.
+  while (!stopSig) {
+    waitScope.poll();
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+}
+
+/// Start the server if not already started.
+void RpcServer::run(uint16_t port) {
+  Lock g(m);
+  if (mainThread == nullptr) {
+    mainThread = new std::thread(&RpcServer::mainLoop, this, port);
+  } else {
+    fprintf(stderr, "Warning: cannot Run() RPC server more than once!");
+  }
+}
+
+/// Signal the RPC server thread to stop. Wait for it to exit.
+void RpcServer::stop() {
+  Lock g(m);
+  if (mainThread == nullptr) {
+    fprintf(stderr, "RpcServer not Run()\n");
+  } else if (!stopSig) {
+    stopSig = true;
+    mainThread->join();
+  }
+}

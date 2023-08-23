@@ -27,3 +27,4 @@ add_circt_doc(ESITypes Dialects/ESITypes -gen-typedef-doc)
 
 
 add_subdirectory(cosim)
+add_subdirectory(LLCosim)

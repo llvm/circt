@@ -30,7 +30,7 @@ class CosimTestRunner:
 
   def __init__(self, testFile, schema, tmpdir, addlArgs, interactive: bool,
                include_aux_files: bool, exec: bool, exec_args: str,
-               server_only: bool):
+               server_only: bool, low_level: bool):
     """Parse a test file. Look for comments we recognize anywhere in the
         file. Assemble a list of sources."""
 
@@ -70,14 +70,23 @@ class CosimTestRunner:
       fileReader.close()
 
     self.sources = []
-    # Include the cosim DPI SystemVerilog files.
     if include_aux_files:
-      self.sources.insert(0, os.path.join(esiInclude, "cosim",
-                                          "Cosim_DpiPkg.sv"))
-      self.sources.insert(
-          1, os.path.join(esiInclude, "cosim", "Cosim_Endpoint.sv"))
-      self.sources.insert(2, os.path.join(esiInclude, "ESIPrimitives.sv"))
-    self.sources.append("@ESI_COSIM_PATH@")
+      self.sources.append(os.path.join(esiInclude, "ESIPrimitives.sv"))
+
+    if low_level:
+      # Include the llcosim DPI SystemVerilog files.
+      if include_aux_files:
+        self.sources.insert(
+            0, os.path.join(esiInclude, "LLCosim", "LLCosim_DpiPkg.sv"))
+      self.sources.append("@ESI_LLCOSIM_PATH@")
+    else:
+      # Include the cosim DPI SystemVerilog files.
+      if include_aux_files:
+        self.sources.insert(
+            0, os.path.join(esiInclude, "cosim", "Cosim_DpiPkg.sv"))
+        self.sources.insert(
+            1, os.path.join(esiInclude, "cosim", "Cosim_Endpoint.sv"))
+      self.sources.append("@ESI_COSIM_PATH@")
 
   def compile(self):
     """Compile with circt-rtl-sim.py"""
@@ -324,6 +333,9 @@ def __main__(args):
       "--server-only",
       action="store_true",
       help="Only run the cosim server, and do not run any test files")
+  argparser.add_argument("--low-level",
+                         action="store_true",
+                         help="Run the low level cosim server")
 
   argparser.add_argument("source",
                          help="The source run spec file",
@@ -346,7 +358,7 @@ def __main__(args):
 
   runner = CosimTestRunner(args.source, args.schema, args.tmpdir, args.addlArgs,
                            args.interactive, not args.no_aux_files, args.exec,
-                           args.test_args, args.server_only)
+                           args.test_args, args.server_only, args.low_level)
   rc = runner.compile()
   if rc != 0:
     return rc

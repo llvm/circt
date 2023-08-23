@@ -3,4 +3,5 @@
 ##===----------------------------------------------------------------------===//
 
 add_subdirectory(cosim_dpi_server)
+add_subdirectory(llcosim_dpi_server)
 add_subdirectory(MtiPliStub)

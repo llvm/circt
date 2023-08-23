@@ -25,6 +25,13 @@ if (TARGET EsiCosimDpiServer)
   set(ESI_COSIM_PATH ${ESI_COSIM_LIB_DIR}/libEsiCosimDpiServer.so)
 endif()
 
+# If ESI Low Level Cosim is available to build then enable its tests.
+if (TARGET EsiLLCosimDpiServer)
+  list(APPEND CIRCT_INTEGRATION_TEST_DEPENDS EsiLLCosimDpiServer)
+  get_property(ESI_LLCOSIM_LIB_DIR TARGET EsiLLCosimDpiServer PROPERTY LIBRARY_OUTPUT_DIRECTORY)
+  set(ESI_LLCOSIM_PATH ${ESI_COSIM_LIB_DIR}/libEsiLLCosimDpiServer.so)
+endif()
+
 # Enable circt-lec tests if it is built.
 if(CIRCT_LEC_ENABLED)
   list(APPEND CIRCT_INTEGRATION_TEST_DEPENDS circt-lec)

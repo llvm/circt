@@ -16,6 +16,12 @@ if (TARGET EsiCosimDpiServer)
   set(ESI_COSIM_PATH ${ESI_COSIM_LIB_DIR}/libEsiCosimDpiServer.so)
 endif()
 
+if (TARGET EsiLLCosimDpiServer)
+  list(APPEND CIRCT_INTEGRATION_TEST_DEPENDS EsiLLCosimDpiServer CIRCTESI)
+  get_property(ESI_LLCOSIM_LIB_DIR TARGET EsiLLCosimDpiServer PROPERTY LIBRARY_OUTPUT_DIRECTORY)
+  set(ESI_LLCOSIM_PATH ${ESI_LLCOSIM_LIB_DIR}/libEsiLLCosimDpiServer.so)
+endif()
+
 set(SOURCES esi-cosim-runner.py esi_cosim.py)
 foreach(file IN ITEMS ${SOURCES})
   configure_file(${file}.in ${CIRCT_TOOLS_DIR}/${file})

@@ -174,6 +174,13 @@ if config.esi_cosim_path != "":
       ('%ESIINC%', f'{config.circt_include_dir}/circt/Dialect/ESI/'))
   config.substitutions.append(('%ESICOSIM%', f'{config.esi_cosim_path}'))
 
+# Enable ESI cosim tests if they have been built.
+if config.esi_llcosim_path != "":
+  config.available_features.add('esi-llcosim')
+  config.substitutions.append(
+      ('%ESIINC%', f'{config.circt_include_dir}/circt/Dialect/ESI/'))
+  config.substitutions.append(('%ESILLCOSIM%', f'{config.esi_cosim_path}'))
+
 # Enable ESI's Capnp tests if they're supported.
 if config.esi_capnp != "":
   config.available_features.add('capnp')
