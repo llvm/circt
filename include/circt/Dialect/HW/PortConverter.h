@@ -175,7 +175,7 @@ class PortConverter : public PortConverterImpl {
 public:
   template <typename... Args>
   PortConverter(hw::InstanceGraph &graph, hw::HWMutableModuleLike mod,
-                Args &&... args)
+                Args &&...args)
       : PortConverterImpl(graph.lookup(cast<hw::HWModuleLike>(*mod))) {
     ssb = std::make_unique<PortConversionBuilderImpl>(*this, args...);
   }
