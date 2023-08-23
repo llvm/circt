@@ -303,7 +303,7 @@ void HWToLLHDPass::runOnOperation() {
   // Rewrite `hw.module`, `hw.output`, and `hw.instance`.
   HWToLLHDTypeConverter typeConverter;
   RewritePatternSet patterns(&context);
-  mlir::populateFunctionOpInterfaceTypeConversionPattern<HWModuleOp>(
+  populateHWModuleLikeTypeConversionPattern(HWModuleOp::getOperationName(),
       patterns, typeConverter);
   patterns.add<ConvertHWModule>(&context);
   patterns.add<ConvertInstance>(&context);
