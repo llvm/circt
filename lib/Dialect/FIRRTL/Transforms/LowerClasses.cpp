@@ -73,7 +73,10 @@ void LowerClassesPass::runOnOperation() {
 
   // Get the CircuitOp.
   auto circuits = getOperation().getOps<CircuitOp>();
-  if (std::distance(circuits.begin(), circuits.end()) != 1) {
+  auto count = std::distance(circuits.begin(), circuits.end());
+  if (count == 0)
+    return;
+  if (count > 1) {
     getOperation().emitError("expected exactly one CircuitOp, but found ")
         << std::distance(circuits.begin(), circuits.end());
     return signalPassFailure();
