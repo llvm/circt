@@ -234,7 +234,7 @@ static StringRef getPortVerilogName(Operation *module, size_t portArgNum) {
     if (auto updatedName = portDict.get(verilogNameAttr))
       return updatedName.cast<StringAttr>().getValue();
   // Get the original name of input port if no renaming.
-  return cast<HWModuleLike>(module).getHWModuleType().getPortName(portArgNum);
+  return cast<HWModuleLike>(module).getPortName(portArgNum);
 }
 
 /// This predicate returns true if the specified operation is considered a

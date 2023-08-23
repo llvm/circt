@@ -1440,11 +1440,13 @@ ModulePortInfo HWModuleGeneratedOp::getPortList() {
 SmallVector<Location> HWModuleOp::getAllPortLocs() {
   SmallVector<Location> retval;
   auto empty = UnknownLoc::get(getContext());
-  if (auto locs = getArgLocs())
+  auto locs = getArgLocs();
+  if (locs)
     for (auto l : locs)
       retval.push_back(cast<Location>(l));
   retval.resize(getNumInputs(), empty);
-  if (auto locs = getResultLocs())
+  locs = getResultLocs();
+  if (locs)
     for (auto l : locs)
       retval.push_back(cast<Location>(l));
   retval.resize(getNumInputs() + getNumOutputs(), empty);
@@ -1480,22 +1482,17 @@ void HWModuleGeneratedOp::setAllPortLocs(ArrayRef<Location> locs) {
 template <typename ModTy>
 static SmallVector<Attribute> getAllPortAttrs(ModTy &mod) {
   SmallVector<Attribute> retval;
-  if (auto attrs = mod.getArgAttrs()) {
+  auto empty = DictionaryAttr::get(mod.getContext());
+  auto attrs = mod.getArgAttrs();
+  if (attrs)
     for (auto a : *attrs)
       retval.push_back(a);
-  } else {
-    auto emptyDict = DictionaryAttr::get(mod.getContext());
-    for (unsigned i = 0, e = mod.getNumInputs(); i < e; ++i)
-      retval.push_back(emptyDict);
-  }
-  if (auto attrs = mod.getResAttrs()) {
+  retval.resize(mod.getNumInputs(), empty);
+  attrs = mod.getResAttrs();
+  if (attrs)
     for (auto a : *attrs)
       retval.push_back(a);
-  } else {
-    auto emptyDict = DictionaryAttr::get(mod.getContext());
-    for (unsigned i = 0, e = mod.getNumOutputs(); i < e; ++i)
-      retval.push_back(emptyDict);
-  }
+  retval.resize(mod.getNumInputs() + mod.getNumOutputs(), empty);
   return retval;
 }
 
