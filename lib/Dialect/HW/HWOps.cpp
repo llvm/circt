@@ -549,6 +549,9 @@ FunctionType hw::getModuleType(Operation *moduleOrInstance) {
   if (auto mod = dyn_cast<HWTestModuleOp>(moduleOrInstance))
     return mod.getModuleType().getFuncType();
 
+  if (auto mod = dyn_cast<HWModuleLike>(moduleOrInstance))
+    return mod.getHWModuleType().getFuncType();
+
   assert(isAnyModule(moduleOrInstance) &&
          "must be called on instance or module");
   return cast<mlir::FunctionOpInterface>(moduleOrInstance)
@@ -1197,11 +1200,11 @@ FunctionType getHWModuleOpType(Operation *op) {
 }
 
 template <typename ModuleTy>
-static void printModuleOp(OpAsmPrinter &p, Operation *op,
+static void printModuleOp(OpAsmPrinter &p, ModuleTy mod,
                           ExternModKind modKind) {
   using namespace mlir::function_interface_impl;
 
-  FunctionType fnType = getHWModuleOpType(op);
+  FunctionType fnType = mod.getHWModuleType().getFuncType();
   auto argTypes = fnType.getInputs();
   auto resultTypes = fnType.getResults();
 
@@ -1209,22 +1212,27 @@ static void printModuleOp(OpAsmPrinter &p, Operation *op,
 
   // Print the visibility of the module.
   StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
-  if (auto visibility = op->getAttrOfType<StringAttr>(visibilityAttrName))
+  if (auto visibility = mod.getOperation()->template getAttrOfType<StringAttr>(
+          visibilityAttrName))
     p << visibility.getValue() << ' ';
 
   // Print the operation and the function name.
-  p.printSymbolName(SymbolTable::getSymbolName(op).getValue());
+  p.printSymbolName(SymbolTable::getSymbolName(mod.getOperation()).getValue());
   if (modKind == GenMod) {
     p << ", ";
-    p.printSymbolName(cast<HWModuleGeneratedOp>(op).getGeneratorKind());
+    p.printSymbolName(
+        cast<HWModuleGeneratedOp>(mod.getOperation()).getGeneratorKind());
   }
 
   // Print the parameter list if present.
-  printOptionalParameterList(p, op, op->getAttrOfType<ArrayAttr>("parameters"));
+  printOptionalParameterList(
+      p, mod.getOperation(),
+      mod.getOperation()->template getAttrOfType<ArrayAttr>("parameters"));
 
   bool needArgNamesAttr = false;
-  module_like_impl::printModuleSignature(p, op, argTypes, /*isVariadic=*/false,
-                                         resultTypes, needArgNamesAttr);
+  module_like_impl::printModuleSignature(p, mod.getOperation(), argTypes,
+                                         /*isVariadic=*/false, resultTypes,
+                                         needArgNamesAttr);
 
   SmallVector<StringRef, 3> omittedAttrs;
   if (modKind == GenMod)
@@ -1232,28 +1240,34 @@ static void printModuleOp(OpAsmPrinter &p, Operation *op,
   if (!needArgNamesAttr)
     omittedAttrs.push_back("argNames");
   omittedAttrs.push_back("argLocs");
-  omittedAttrs.push_back(ModuleTy::getFunctionTypeAttrName(op->getName()));
-  omittedAttrs.push_back(ModuleTy::getArgAttrsAttrName(op->getName()));
-  omittedAttrs.push_back(ModuleTy::getResAttrsAttrName(op->getName()));
+  omittedAttrs.push_back(
+      ModuleTy::getFunctionTypeAttrName(mod.getOperation()->getName()));
+  omittedAttrs.push_back(
+      ModuleTy::getArgAttrsAttrName(mod.getOperation()->getName()));
+  omittedAttrs.push_back(
+      ModuleTy::getResAttrsAttrName(mod.getOperation()->getName()));
   omittedAttrs.push_back("resultNames");
   omittedAttrs.push_back("resultLocs");
   omittedAttrs.push_back("parameters");
   omittedAttrs.push_back(visibilityAttrName);
-  if (op->getAttrOfType<StringAttr>("comment").getValue().empty())
+  if (mod.getOperation()
+          ->template getAttrOfType<StringAttr>("comment")
+          .getValue()
+          .empty())
     omittedAttrs.push_back("comment");
 
-  printFunctionAttributes(p, op, omittedAttrs);
+  printFunctionAttributes(p, mod.getOperation(), omittedAttrs);
 }
 
 void HWModuleExternOp::print(OpAsmPrinter &p) {
-  printModuleOp<HWModuleExternOp>(p, *this, ExternMod);
+  printModuleOp(p, *this, ExternMod);
 }
 void HWModuleGeneratedOp::print(OpAsmPrinter &p) {
-  printModuleOp<HWModuleGeneratedOp>(p, *this, GenMod);
+  printModuleOp(p, *this, GenMod);
 }
 
 void HWModuleOp::print(OpAsmPrinter &p) {
-  printModuleOp<HWModuleOp>(p, *this, PlainMod);
+  printModuleOp(p, *this, PlainMod);
 
   // Print the body if this is not an external function.
   Region &body = getBody();
