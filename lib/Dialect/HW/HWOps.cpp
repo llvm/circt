@@ -1439,28 +1439,27 @@ ModulePortInfo HWModuleGeneratedOp::getPortList() {
 
 SmallVector<Location> HWModuleOp::getAllPortLocs() {
   SmallVector<Location> retval;
-  if (auto locs = getArgLocs()) {
+  auto empty = UnknownLoc::get(getContext());
+  if (auto locs = getArgLocs())
     for (auto l : locs)
       retval.push_back(cast<Location>(l));
-  } else {
-    auto empty = UnknownLoc::get(getContext());
-    for (unsigned i = 0, e = getNumInputs(); i < e; ++i)
-      retval.push_back(empty);
-  }
-  if (auto locs = getResultLocs()) {
+  retval.resize(getNumInputs(), empty);
+  if (auto locs = getResultLocs())
     for (auto l : locs)
       retval.push_back(cast<Location>(l));
-  } else {
-    auto empty = UnknownLoc::get(getContext());
-    for (unsigned i = 0, e = getNumOutputs(); i < e; ++i)
-      retval.push_back(empty);
-  }
+  retval.resize(getNumInputs() + getNumOutputs(), empty);
   return retval;
 }
 
-SmallVector<Location> HWModuleExternOp::getAllPortLocs() { return {}; }
+SmallVector<Location> HWModuleExternOp::getAllPortLocs() {
+  return SmallVector<Location>(getNumInputs() + getNumOutputs(),
+                               UnknownLoc::get(getContext()));
+}
 
-SmallVector<Location> HWModuleGeneratedOp::getAllPortLocs() { return {}; }
+SmallVector<Location> HWModuleGeneratedOp::getAllPortLocs() {
+  return SmallVector<Location>(getNumInputs() + getNumOutputs(),
+                               UnknownLoc::get(getContext()));
+}
 
 void HWModuleOp::setAllPortLocs(ArrayRef<Location> locs) {
   auto numInputs = getNumInputs();
