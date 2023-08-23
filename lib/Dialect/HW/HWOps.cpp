@@ -707,7 +707,7 @@ static void modifyModuleArgs(
     MLIRContext *context, ArrayRef<std::pair<unsigned, PortInfo>> insertArgs,
     ArrayRef<unsigned> removeArgs, ArrayRef<Attribute> oldArgNames,
     ArrayRef<Type> oldArgTypes, ArrayRef<Attribute> oldArgAttrs,
-    ArrayRef<Attribute> oldArgLocs, SmallVector<Attribute> &newArgNames,
+    ArrayRef<Location> oldArgLocs, SmallVector<Attribute> &newArgNames,
     SmallVector<Type> &newArgTypes, SmallVector<Attribute> &newArgAttrs,
     SmallVector<Attribute> &newArgLocs, Block *body = nullptr) {
 
@@ -800,25 +800,18 @@ void hw::modifyModulePorts(
     ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs,
     ArrayRef<unsigned> removeInputs, ArrayRef<unsigned> removeOutputs,
     Block *body) {
-  auto moduleOp = cast<mlir::FunctionOpInterface>(op);
+  auto moduleOp = cast<HWModuleLike>(op);
   auto *context = moduleOp.getContext();
 
-  auto arrayOrEmpty = [](ArrayAttr attr) {
-    return attr ? attr.getValue() : ArrayRef<Attribute>{};
-  };
-
+  auto oldArgNames = moduleOp.getInputNames();
+  auto oldArgTypes = moduleOp.getInputTypes();
+  auto oldArgAttrs = moduleOp.getAllInputAttrs();
+  auto oldArgLocs = moduleOp.getInputLocs();
   // Dig up the old argument and result data.
-  auto oldArgNames = moduleOp->getAttrOfType<ArrayAttr>("argNames").getValue();
-  auto oldArgTypes = moduleOp.getArgumentTypes();
-  auto oldArgAttrs = arrayOrEmpty(moduleOp.getArgAttrsAttr());
-  auto oldArgLocs = moduleOp->getAttrOfType<ArrayAttr>("argLocs").getValue();
-
-  auto oldResultNames =
-      moduleOp->getAttrOfType<ArrayAttr>("resultNames").getValue();
-  auto oldResultTypes = moduleOp.getResultTypes();
-  auto oldResultAttrs = arrayOrEmpty(moduleOp.getResAttrsAttr());
-  auto oldResultLocs =
-      moduleOp->getAttrOfType<ArrayAttr>("resultLocs").getValue();
+  auto oldResultNames = moduleOp.getOutputNames();
+  auto oldResultTypes = moduleOp.getOutputTypes();
+  auto oldResultAttrs = moduleOp.getAllOutputAttrs();
+  auto oldResultLocs = moduleOp.getOutputLocs();
 
   // Modify the ports.
   SmallVector<Attribute> newArgNames, newResultNames;
@@ -836,12 +829,14 @@ void hw::modifyModulePorts(
                    newResultLocs);
 
   // Update the module operation types and attributes.
-  moduleOp.setType(FunctionType::get(context, newArgTypes, newResultTypes));
+  auto fnty = FunctionType::get(context, newArgTypes, newResultTypes);
+  auto modty = detail::fnToMod(fnty, newArgNames, newResultNames);
+  moduleOp.setHWModuleType(modty);
   moduleOp->setAttr("argNames", ArrayAttr::get(context, newArgNames));
-  moduleOp.setArgAttrsAttr(ArrayAttr::get(context, newArgAttrs));
+  moduleOp.setAllInputAttrs(newArgAttrs);
   moduleOp->setAttr("argLocs", ArrayAttr::get(context, newArgLocs));
   moduleOp->setAttr("resultNames", ArrayAttr::get(context, newResultNames));
-  moduleOp.setResAttrsAttr(ArrayAttr::get(context, newResultAttrs));
+  moduleOp.setAllOutputAttrs(newResultAttrs);
   moduleOp->setAttr("resultLocs", ArrayAttr::get(context, newResultLocs));
 }
 
