@@ -3,6 +3,7 @@ add_circt_dialect_library(CIRCTIbisTransforms
   IbisContainerize.cpp
   IbisTunneling.cpp
   IbisPortrefLowering.cpp
+  IbisCleanSelfdrivers.cpp
 
   DEPENDS
   CIRCTIbisTransformsIncGen

@@ -67,4 +67,13 @@ def IbisPortrefLowering : Pass<"ibis-lower-portrefs", "mlir::ModuleOp"> {
   let constructor = "circt::ibis::createPortrefLoweringPass()";
 }
 
+def IbisCleanSelfdrivers : Pass<"ibis-clean-selfdrivers", "ibis::ContainerOp"> {
+  let summary = "Ibis clean selfdrivers pass";
+  let description = [{
+    Removes `ibis.port.input`s which are driven by operations within the same
+    container.
+  }];
+
+  let constructor = "circt::ibis::createCleanSelfdriversPass()";
+}
 #endif // CIRCT_DIALECT_IBIS_PASSES_TD
