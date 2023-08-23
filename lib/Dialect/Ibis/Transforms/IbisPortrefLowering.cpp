@@ -73,7 +73,7 @@ public:
           op.getLoc(), op.getPortName(), innerType);
 
       // Replace writes to the unwrapped port with writes to the new port.
-      for (auto unwrappedPortUser :
+      for (auto *unwrappedPortUser :
            llvm::make_early_inc_range(portUnwrapper.getResult().getUsers())) {
         PortWriteOp portWriter = dyn_cast<PortWriteOp>(unwrappedPortUser);
         if (!portWriter || portWriter.getPort() != portUnwrapper.getResult())
@@ -90,7 +90,7 @@ public:
       rewriter.replaceAllUsesWith(portUnwrapper.getResult(), rawInput);
 
       // Replace all ibis.port.read ops with a read of the new input.
-      for (auto portUser :
+      for (auto *portUser :
            llvm::make_early_inc_range(portUnwrapper.getResult().getUsers())) {
         PortReadOp portReader = dyn_cast<PortReadOp>(portUser);
         if (!portReader || portReader.getPort() != portUnwrapper.getResult())
@@ -123,7 +123,7 @@ public:
     // Locate the portwrapper - this is a writeOp with the output portref as
     // the portref value.
     PortWriteOp portWrapper;
-    for (auto user : op.getResult().getUsers()) {
+    for (auto *user : op.getResult().getUsers()) {
       portWrapper = dyn_cast<PortWriteOp>(user);
       if (portWrapper && portWrapper.getPort() == op.getResult())
         break;
@@ -184,7 +184,7 @@ class GetPortConversionPattern : public PortLoweringPattern<GetPortOp> {
       // Locate the get_port wrapper - this is a WriteOp with the get_port
       // result as the portref value.
       PortWriteOp getPortWrapper;
-      for (auto user : op.getResult().getUsers()) {
+      for (auto *user : op.getResult().getUsers()) {
         auto writeOp = dyn_cast<PortWriteOp>(user);
         if (!writeOp || writeOp.getPort() != op.getResult())
           continue;
@@ -218,7 +218,7 @@ class GetPortConversionPattern : public PortLoweringPattern<GetPortOp> {
       }
     } else {
       PortReadOp getPortUnwrapper;
-      for (auto user : op.getResult().getUsers()) {
+      for (auto *user : op.getResult().getUsers()) {
         auto readOp = dyn_cast<PortReadOp>(user);
         if (!readOp || readOp.getPort() != op.getResult())
           continue;
@@ -247,7 +247,7 @@ class GetPortConversionPattern : public PortLoweringPattern<GetPortOp> {
         // We then replace the whole structure above with simply writing the
         // driving value to the actual input port of the container.
         PortWriteOp portDriver;
-        for (auto user : getPortUnwrapper.getResult().getUsers()) {
+        for (auto *user : getPortUnwrapper.getResult().getUsers()) {
           auto writeOp = dyn_cast<PortWriteOp>(user);
           if (!writeOp || writeOp.getPort() != getPortUnwrapper.getResult())
             continue;
