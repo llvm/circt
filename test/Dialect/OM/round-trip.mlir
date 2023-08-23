@@ -166,6 +166,20 @@ om.class @StringConstant() {
   om.class.field @string, %0 : !om.string
 }
 
+// CHECK-LABEL: @Bool
+om.class @BoolConstant(%b0 : i1) {
+  // CHECK: %[[const1:.+]] = om.constant true
+  %1 = om.constant true
+  // CHECK: %[[const2:.+]] = om.constant false
+  %2 = om.constant false
+  // CHECK: om.class.field @bool, %b0
+  om.class.field @bool, %b0 : i1
+  // CHECK: om.class.field @bool2, %[[const1]]
+  om.class.field @bool2, %1 : i1
+  // CHECK: om.class.field @bool3, %[[const2]]
+  om.class.field @bool3, %2 : i1
+}
+
 // CHECK-LABEL: @Map
 // CHECK-SAME: !om.map<!om.string, !om.string>
 om.class @Map(%map: !om.map<!om.string, !om.string>) {
