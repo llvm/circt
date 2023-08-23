@@ -1888,23 +1888,24 @@ GlobalRefOp::verifySymbolUses(mlir::SymbolTableCollection &symTables) {
       // TODO: Doesn't yet work for symbls on FIRRTL module ports. Need to
       // implement an interface.
       if (isa<HWModuleOp, HWModuleExternOp>(mod)) {
-        if (auto argAttrs =
-                cast<mlir::FunctionOpInterface>(mod).getArgAttrsAttr())
-          for (auto attr :
-               argAttrs.cast<ArrayAttr>().getAsRange<DictionaryAttr>())
-            if (auto symRef = attr.getAs<hw::InnerSymAttr>("hw.exportPort"))
-              if (symRef.getSymName() == symName)
-                if (hasGlobalRef(attr.get(GlobalRefAttr::DialectAttrName)))
-                  return success();
+        auto hwmod = cast<HWModuleLike>(mod);
+        auto inAttrs = hwmod.getAllInputAttrs();
+        for (auto attr : inAttrs)
+          if (auto symRef = cast<DictionaryAttr>(attr).getAs<hw::InnerSymAttr>(
+                  "hw.exportPort"))
+            if (symRef.getSymName() == symName)
+              if (hasGlobalRef(cast<DictionaryAttr>(attr).get(
+                      GlobalRefAttr::DialectAttrName)))
+                return success();
 
-        if (auto resAttrs =
-                cast<mlir::FunctionOpInterface>(mod).getResAttrsAttr())
-          for (auto attr :
-               resAttrs.cast<ArrayAttr>().getAsRange<DictionaryAttr>())
-            if (auto symRef = attr.getAs<hw::InnerSymAttr>("hw.exportPort"))
-              if (symRef.getSymName() == symName)
-                if (hasGlobalRef(attr.get(GlobalRefAttr::DialectAttrName)))
-                  return success();
+        auto outAttrs = hwmod.getAllOutputAttrs();
+        for (auto attr : outAttrs)
+          if (auto symRef = cast<DictionaryAttr>(attr).getAs<hw::InnerSymAttr>(
+                  "hw.exportPort"))
+            if (symRef.getSymName() == symName)
+              if (hasGlobalRef(cast<DictionaryAttr>(attr).get(
+                      GlobalRefAttr::DialectAttrName)))
+                return success();
       }
     }
     if (innerSymOpNotFound)
