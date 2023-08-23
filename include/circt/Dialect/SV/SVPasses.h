@@ -19,13 +19,17 @@
 namespace circt {
 namespace sv {
 
+#define GEN_PASS_DECL_HWELIMINATEINOUTPORTS
+#include "circt/Dialect/SV/SVPasses.h.inc"
+
 std::unique_ptr<mlir::Pass> createPrettifyVerilogPass();
 std::unique_ptr<mlir::Pass> createHWCleanupPass(bool mergeAlwaysBlocks = true);
 std::unique_ptr<mlir::Pass> createHWStubExternalModulesPass();
 std::unique_ptr<mlir::Pass> createHWLegalizeModulesPass();
 std::unique_ptr<mlir::Pass> createSVTraceIVerilogPass();
 std::unique_ptr<mlir::Pass> createHWGeneratorCalloutPass();
-std::unique_ptr<mlir::Pass> createHWEliminateInOutPortsPass();
+std::unique_ptr<mlir::Pass> createHWEliminateInOutPortsPass(
+    const HWEliminateInOutPortsOptions &options = {});
 std::unique_ptr<mlir::Pass> createHWMemSimImplPass(
     bool replSeqMem = false, bool ignoreReadEnable = false,
     bool addMuxPragmas = false, bool disableMemRandomization = false,
