@@ -509,3 +509,29 @@ def FirMemReadWriteOp : SeqOp<"firmem.read_write_port", [
   let hasVerifier = 1;
   let hasCanonicalizeMethod = 1;
 }
+
+//===----------------------------------------------------------------------===//
+// Clock cast
+//===----------------------------------------------------------------------===//
+
+def ToClockOp : SeqOp<"to_clock", [Pure]> {
+  let summary = "Cast from a wire type to a clock type";
+
+  let arguments = (ins I1:$input);
+  let results = (outs ClockType:$output);
+
+  let assemblyFormat = "$input attr-dict";
+
+  let hasCanonicalizeMethod = 1;
+}
+
+def FromClockOp : SeqOp<"from_clock", [Pure]> {
+  let summary = "Cast from a clock type to a wire type";
+
+  let arguments = (ins ClockType:$input);
+  let results = (outs I1:$output);
+
+  let assemblyFormat = "$input attr-dict";
+
+  let hasCanonicalizeMethod = 1;
+}
