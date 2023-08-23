@@ -98,6 +98,10 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
       return $_op.getHWModuleType().getNumOutputs();
     }
 
+    SmallVector<mlir::Type> getPortTypes() {
+      return $_op.getHWModuleType().getPortTypes();
+    }
+
     SmallVector<mlir::Type> getInputTypes() {
       return $_op.getHWModuleType().getInputTypes();
     }
