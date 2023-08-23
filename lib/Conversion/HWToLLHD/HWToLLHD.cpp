@@ -304,7 +304,7 @@ void HWToLLHDPass::runOnOperation() {
   HWToLLHDTypeConverter typeConverter;
   RewritePatternSet patterns(&context);
   populateHWModuleLikeTypeConversionPattern(HWModuleOp::getOperationName(),
-      patterns, typeConverter);
+                                            patterns, typeConverter);
   patterns.add<ConvertHWModule>(&context);
   patterns.add<ConvertInstance>(&context);
   patterns.add<ConvertOutput>(&context);
