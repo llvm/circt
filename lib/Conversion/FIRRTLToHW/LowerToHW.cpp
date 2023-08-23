@@ -1449,6 +1449,33 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   Backedge createBackedge(Value orig, Type type);
   bool updateIfBackedge(Value dest, Value src);
 
+  /// Returns true if the lowered operation requires an inner symbol on it.
+  bool requiresInnerSymbol(hw::InnerSymbolOpInterface op) {
+    if (AnnotationSet::removeDontTouch(op))
+      return true;
+    if (!hasDroppableName(op))
+      return true;
+    if (auto forceable = dyn_cast<Forceable>(op.getOperation()))
+      if (forceable.isForceable())
+        return true;
+    return false;
+  }
+
+  /// Gets the lowered InnerSymAttr of this operation.  If the operation is
+  /// DontTouched, has a non-droppable name, or is forceable, then we will
+  /// ensure that the InnerSymAttr has a symbol with fieldID zero.
+  hw::InnerSymAttr lowerInnerSymbol(hw::InnerSymbolOpInterface op) {
+    auto attr = op.getInnerSymAttr();
+    // TODO: we should be checking for symbol collisions here and renaming as
+    // neccessary. As well, we should record the renamings in a map so that we
+    // can update any InnerRefAttrs that we find.
+    if (requiresInnerSymbol(op))
+      std::tie(attr, std::ignore) = getOrAddInnerSym(
+          op.getContext(), attr, 0,
+          [&]() -> hw::InnerSymbolNamespace & { return moduleNamespace; });
+    return attr;
+  }
+
   void runWithInsertionPointAtEndOfBlock(std::function<void(void)> fn,
                                          Region &region);
 
@@ -1707,7 +1734,7 @@ private:
   llvm::SmallDenseMap<std::pair<Block *, Attribute>, sv::IfDefOp> ifdefBlocks;
   llvm::SmallDenseMap<Block *, sv::InitialOp> initialBlocks;
 
-  /// A namespace that can be used to generte new symbol names that are unique
+  /// A namespace that can be used to generate new symbol names that are unique
   /// within this module.
   hw::InnerSymbolNamespace moduleNamespace;
 
@@ -2769,26 +2796,12 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
     return setLowering(op.getResult(), Value());
 
   // Name attr is required on sv.wire but optional on firrtl.wire.
-  StringAttr symName = getInnerSymName(op);
+  auto innerSym = lowerInnerSymbol(op);
   auto name = op.getNameAttr();
-  if (AnnotationSet::removeAnnotations(op, dontTouchAnnoClass) && !symName) {
-    auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
-    // Prepend the name of the module to make the symbol name unique in the
-    // symbol table, it is already unique in the module. Checking if the name
-    // is unique in the SymbolTable is non-trivial.
-    symName = builder.getStringAttr(moduleNamespace.newName(
-        Twine("__") + moduleName + Twine("__") + name.getValue()));
-  }
-  // For now, if forceable ensure has symbol.
-  if (!symName && (!op.hasDroppableName() || op.isForceable())) {
-    auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
-    symName = builder.getStringAttr(moduleNamespace.newName(
-        Twine("__") + moduleName + Twine("__") + name.getValue()));
-  }
   // This is not a temporary wire created by the compiler, so attach a symbol
   // name.
   auto wire = builder.create<hw::WireOp>(
-      op.getLoc(), getOrCreateZConstant(resultType), name, symName);
+      op.getLoc(), getOrCreateZConstant(resultType), name, innerSym);
 
   if (auto svAttrs = sv::getSVAttributes(op))
     sv::setSVAttributes(wire, svAttrs);
@@ -2828,27 +2841,15 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
   // Node operations are logical noops, but may carry annotations or be
   // referred to through an inner name. If a don't touch is present, ensure
   // that we have a symbol name so we can keep the node as a wire.
-  auto symName = getInnerSymName(op);
   auto name = op.getNameAttr();
-  if (AnnotationSet::removeAnnotations(op, dontTouchAnnoClass) && !symName) {
-    // name may be empty
-    auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
-    symName = builder.getStringAttr(Twine("__") + moduleName + Twine("__") +
-                                    name.getValue());
-  }
-  // For now, if forceable ensure has symbol.
-  if (!symName && (!hasDroppableName(op) || op.isForceable())) {
-    auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
-    symName = builder.getStringAttr(Twine("__") + moduleName + Twine("__") +
-                                    name.getValue());
-  }
+  auto innerSym = lowerInnerSymbol(op);
 
-  if (symName)
-    operand = builder.create<hw::WireOp>(operand, name, symName);
+  if (innerSym)
+    operand = builder.create<hw::WireOp>(operand, name, innerSym);
 
   // Move SV attributes.
   if (auto svAttrs = sv::getSVAttributes(op)) {
-    if (!symName)
+    if (!innerSym)
       operand = builder.create<hw::WireOp>(operand, name);
     sv::setSVAttributes(operand.getDefiningOp(), svAttrs);
   }
@@ -2867,15 +2868,8 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
   if (!clockVal)
     return failure();
 
-  // Add symbol if DontTouch annotation present.
-  // For now, also ensure has symbol if forceable.
-  auto innerSym = op.getInnerSymAttr();
-  if ((AnnotationSet::removeAnnotations(op, dontTouchAnnoClass) ||
-       op.getNameKind() == NameKindEnum::InterestingName || op.isForceable()) &&
-      !innerSym)
-    innerSym = hw::InnerSymAttr::get(op.getNameAttr());
-
   // Create a reg op, wiring itself to its input.
+  auto innerSym = lowerInnerSymbol(op);
   Backedge inputEdge = backedgeBuilder.get(resultType);
   auto reg = builder.create<seq::FirRegOp>(inputEdge, clockVal,
                                            op.getNameAttr(), innerSym);
@@ -2914,15 +2908,8 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
   if (!clockVal || !resetSignal || !resetValue)
     return failure();
 
-  // Add symbol if DontTouch annotation present.
-  // For now, also ensure has symbol if forceable.
-  auto innerSym = op.getInnerSymAttr();
-  if ((AnnotationSet::removeAnnotations(op, dontTouchAnnoClass) ||
-       op.getNameKind() == NameKindEnum::InterestingName || op.isForceable()) &&
-      !innerSym)
-    innerSym = hw::InnerSymAttr::get(op.getNameAttr());
-
   // Create a reg op, wiring itself to its input.
+  auto innerSym = lowerInnerSymbol(op);
   bool isAsync = type_isa<AsyncResetType>(op.getResetSignal().getType());
   Backedge inputEdge = backedgeBuilder.get(resultType);
   auto reg =
@@ -3855,10 +3842,11 @@ Value FIRRTLLowering::createValueWithMuxAnnotation(Operation *op, bool isMux2) {
     builder.setInsertionPoint(op);
     StringRef namehint = isMux2 ? "mux2cell_in" : "mux4cell_in";
     for (auto [idx, operand] : llvm::enumerate(op->getOperands())) {
-      auto sym = moduleNamespace.newName(Twine("__") + theModule.getName() +
-                                         Twine("__MUX__PRAGMA"));
+      auto [innerSym, _] = getOrAddInnerSym(
+          op->getContext(), /*attr=*/nullptr, 0,
+          [&]() -> hw::InnerSymbolNamespace & { return moduleNamespace; });
       auto wire =
-          builder.create<hw::WireOp>(operand, namehint + Twine(idx), sym);
+          builder.create<hw::WireOp>(operand, namehint + Twine(idx), innerSym);
       op->setOperand(idx, wire);
     }
   }

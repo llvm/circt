@@ -62,14 +62,14 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %c2_si3 = firrtl.constant 2 : !firrtl.sint<3>
 
 
-    // CHECK: %out4 = hw.wire [[OUT4_VAL:%.+]] sym @__Simple__out4 : i4
+    // CHECK: %out4 = hw.wire [[OUT4_VAL:%.+]] sym @{{.*}} : i4
     %out4 = firrtl.wire {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<4>
-    // CHECK: hw.wire {{%.+}} sym @__Simple{{.*}}
-    // CHECK: hw.wire {{%.+}} sym @__Simple{{.*}}
+    // CHECK: hw.wire {{%.+}} sym @{{.*}}
+    // CHECK: hw.wire {{%.+}} sym @{{.*}}
     %500 = firrtl.wire {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<4>
     %501 = firrtl.wire {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<5>
 
-    // CHECK: %dntnode = hw.wire %in1 sym @__Simple__dntnode
+    // CHECK: %dntnode = hw.wire %in1 sym @{{.+}}
     %dntnode = firrtl.node %in1 {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<4>
 
     // CHECK: %clockWire = hw.wire %false : i1
@@ -131,8 +131,11 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %out8 = firrtl.wire sym @__Simple__out8 : !firrtl.uint<4>
     firrtl.connect %out8, %in2 : !firrtl.uint<4>, !firrtl.uint<2>
 
-    // CHECK: %test-name = hw.wire {{%.+}} sym @__Simple__test-name : i4
-    firrtl.wire {name = "test-name", annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<4>
+    // CHECK: %innerSym = hw.wire %z_i4 sym [<@innersym,1,private>] : !hw.struct<a: i4>
+    %innerSym = firrtl.wire sym [<@innersym, 1, private>] : !firrtl.bundle<a: uint<4>>
+
+    // CHECK: %dontTouchWire = hw.wire %z_i4 sym [<@{{.+}},0,public>, <@dontTouch,1,private>] : !hw.struct<a: i4>
+    %dontTouchWire = firrtl.wire sym [<@dontTouch, 1, private>] {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.bundle<a: uint<4>>
 
     // CHECK: = hw.wire {{%.+}} : i2
     %_t_1 = firrtl.wire droppable_name : !firrtl.uint<2>
@@ -194,7 +197,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
     // Nodes with names become wires.
     // CHECK-NEXT: %n1 = hw.wire %in2
-    // CHECK-NEXT: %n2 = hw.wire %in2 sym @__Simple__n2 : i2
+    // CHECK-NEXT: %n2 = hw.wire %in2 sym @{{.+}} : i2
     %n1 = firrtl.node interesting_name %in2 {name = "n1"} : !firrtl.uint<2>
     %n2 = firrtl.node interesting_name %in2  {name = "n2", annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<2>
 
@@ -568,14 +571,14 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
   // CHECK-LABEL: hw.module private @foo
   firrtl.module private @foo() {
-    // CHECK:      %io_cpu_flush.wire = hw.wire %z_i1 sym @__foo__io_cpu_flush.wire : i1
+    // CHECK:      %io_cpu_flush.wire = hw.wire %z_i1 sym @{{.+}} : i1
     %io_cpu_flush.wire = firrtl.wire {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<1>
     // CHECK-NEXT: hw.instance "fetch" @bar(io_cpu_flush: %io_cpu_flush.wire: i1)
     %i = firrtl.instance fetch @bar(in io_cpu_flush: !firrtl.uint<1>)
     firrtl.connect %i, %io_cpu_flush.wire : !firrtl.uint<1>, !firrtl.uint<1>
 
     %hits_1_7 = firrtl.node %io_cpu_flush.wire {name = "hits_1_7", annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<1>
-    // CHECK-NEXT:  %hits_1_7 = hw.wire %io_cpu_flush.wire sym @__foo__hits_1_7 : i1
+    // CHECK-NEXT:  %hits_1_7 = hw.wire %io_cpu_flush.wire sym @{{.+}} : i1
     %1455 = builtin.unrealized_conversion_cast %hits_1_7 : !firrtl.uint<1> to !firrtl.uint<1>
   }
 
@@ -1309,9 +1312,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // Check forceable declarations are kept alive with symbols.
   // CHECK-LABEL: hw.module private @ForceableToSym(
   firrtl.module private @ForceableToSym(in %in: !firrtl.uint<4>, in %clk: !firrtl.clock, out %out: !firrtl.uint<4>) {
-    // CHECK-NEXT: %n = hw.wire %in sym @__ForceableToSym__n : i4
-    // CHECK-NEXT: %w = hw.wire %n sym @__ForceableToSym__w : i4
-    // CHECK-NEXT: %r = seq.firreg %w clock %clk sym @r : i4
+    // CHECK-NEXT: %n = hw.wire %in sym @{{.+}} : i4
+    // CHECK-NEXT: %w = hw.wire %n sym @{{.+}} : i4
+    // CHECK-NEXT: %r = seq.firreg %w clock %clk sym @{{.+}} : i4
     %n, %n_ref = firrtl.node %in forceable : !firrtl.uint<4>
     %w, %w_ref = firrtl.wire forceable : !firrtl.uint<4>, !firrtl.rwprobe<uint<4>>
     %r, %r_ref = firrtl.reg %clk forceable : !firrtl.clock, !firrtl.uint<4>, !firrtl.rwprobe<uint<4>>
@@ -1408,9 +1411,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   firrtl.module @MuxIntrinsics(in %sel1: !firrtl.uint<1>, in %sel2: !firrtl.uint<2>, in %v3: !firrtl.uint<32>, in %v2: !firrtl.uint<32>, in %v1: !firrtl.uint<32>, in %v0: !firrtl.uint<32>, out %out1: !firrtl.uint<32>, out %out2: !firrtl.uint<32>) attributes {convention = #firrtl<convention scalarized>} {
     %0 = firrtl.int.mux2cell(%sel1, %v1, %v0) : (!firrtl.uint<1>, !firrtl.uint<32>, !firrtl.uint<32>) -> !firrtl.uint<32>
     firrtl.strictconnect %out1, %0 : !firrtl.uint<32>
-    // CHECK-NEXT: %mux2cell_in0 = hw.wire %sel1 sym @__MuxIntrinsics__MUX__PRAGMA : i1
-    // CHECK-NEXT: %mux2cell_in1 = hw.wire %v1 sym @__MuxIntrinsics__MUX__PRAGMA_0 : i32
-    // CHECK-NEXT: %mux2cell_in2 = hw.wire %v0 sym @__MuxIntrinsics__MUX__PRAGMA_1 : i32
+    // CHECK-NEXT: %mux2cell_in0 = hw.wire %sel1 sym @{{.+}} : i1
+    // CHECK-NEXT: %mux2cell_in1 = hw.wire %v1 sym @{{.+}} : i32
+    // CHECK-NEXT: %mux2cell_in2 = hw.wire %v0 sym @{{.+}} : i32
     // CHECK-NEXT: %0 = comb.mux bin %mux2cell_in0, %mux2cell_in1, %mux2cell_in2 {sv.attributes = [#sv.attribute<"cadence map_to_mux", emitAsComment>]} : i32
     // CHECK-NEXT: %1 = sv.wire : !hw.inout<i32>
     // CHECK-NEXT: sv.assign %1, %0 {sv.attributes = [#sv.attribute<"synopsys infer_mux_override", emitAsComment>]} : i32
@@ -1418,8 +1421,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
     %1 = firrtl.int.mux4cell(%sel2, %v3, %v2, %v1, %v0) : (!firrtl.uint<2>, !firrtl.uint<32>, !firrtl.uint<32>, !firrtl.uint<32>, !firrtl.uint<32>) -> !firrtl.uint<32>
     firrtl.strictconnect %out2, %1 : !firrtl.uint<32>
-    // CHECK:      %mux4cell_in0 = hw.wire %3 sym @__MuxIntrinsics__MUX__PRAGMA_2 : !hw.array<4xi32>
-    // CHECK-NEXT: %mux4cell_in1 = hw.wire %sel2 sym @__MuxIntrinsics__MUX__PRAGMA_3 : i2
+    // CHECK:      %mux4cell_in0 = hw.wire %3 sym @{{.+}} : !hw.array<4xi32>
+    // CHECK-NEXT: %mux4cell_in1 = hw.wire %sel2 sym @{{.+}} : i2
     // CHECK-NEXT: %4 = hw.array_get %mux4cell_in0[%mux4cell_in1] {sv.attributes = [#sv.attribute<"cadence map_to_mux", emitAsComment>]} : !hw.array<4xi32>, i2
     // CHECK-NEXT: %5 = sv.wire : !hw.inout<i32>
     // CHECK-NEXT: sv.assign %5, %4 {sv.attributes = [#sv.attribute<"synopsys infer_mux_override", emitAsComment>]} : i32
