@@ -1278,18 +1278,18 @@ void HWModuleOp::print(OpAsmPrinter &p) {
   }
 }
 
-static LogicalResult verifyModuleCommon(Operation *module) {
+static LogicalResult verifyModuleCommon(HWModuleLike module) {
   assert(isAnyModule(module) &&
          "verifier hook should only be called on modules");
 
-  auto moduleType = getModuleType(module);
+  auto moduleType = module.getHWModuleType();
 
   auto argNames = module->getAttrOfType<ArrayAttr>("argNames");
   if (argNames.size() != moduleType.getNumInputs())
     return module->emitOpError("incorrect number of argument names");
 
   auto resultNames = module->getAttrOfType<ArrayAttr>("resultNames");
-  if (resultNames.size() != moduleType.getNumResults())
+  if (resultNames.size() != moduleType.getNumOutputs())
     return module->emitOpError("incorrect number of result names");
 
   auto argLocs = module->getAttrOfType<ArrayAttr>("argLocs");
@@ -1297,7 +1297,7 @@ static LogicalResult verifyModuleCommon(Operation *module) {
     return module->emitOpError("incorrect number of argument locations");
 
   auto resultLocs = module->getAttrOfType<ArrayAttr>("resultLocs");
-  if (resultLocs.size() != moduleType.getNumResults())
+  if (resultLocs.size() != moduleType.getNumOutputs())
     return module->emitOpError("incorrect number of result locations");
 
   SmallPtrSet<Attribute, 4> paramNames;
