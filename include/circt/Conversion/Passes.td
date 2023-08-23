@@ -250,8 +250,8 @@ def CalyxNative : Pass<"calyx-native", "mlir::ModuleOp"> {
   let constructor = "circt::createCalyxNativePass()";
   let dependentDialects = ["calyx::CalyxDialect"];
   let options = [
-    Option<"primitiveLib", "primitives", "std::string",
-            "", "Directory containing Calyx primitives">,
+    Option<"passPipeline", "pass-pipeline", "std::string",
+            "", "Passes to run with the native compiler">,
   ];
 }
 

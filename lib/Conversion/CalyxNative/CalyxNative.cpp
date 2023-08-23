@@ -47,17 +47,9 @@ void CalyxNativePass::runOnOperation() {
 }
 
 LogicalResult CalyxNativePass::runOnModule(ModuleOp root) {
-  // User must specify location of the calyx primitive library.
-  if (primitiveLib.empty()) {
-    // XXX(rachitnigam): Probably a bad idea to hard code the name of the
-    // flag. Is there a better way?
-    root.emitError("primitive library not specified. Please specify it using "
-                   "--lower-using-calyx-native=\"primitives=<path>\"");
-    return failure();
-  }
-
   SmallString<32> execName = llvm::sys::path::filename("calyx");
   llvm::ErrorOr<std::string> exeMb = llvm::sys::findProgramByName(execName);
+
   // If cannot find the executable, then nothing to do, return.
   if (!exeMb) {
     root.emitError() << "cannot find the `calyx` executable in PATH. "
@@ -104,17 +96,35 @@ LogicalResult CalyxNativePass::runOnModule(ModuleOp root) {
     return failure();
   }
 
+  llvm::SmallVector<StringRef> calyxArgs = {
+      calyxExe, nativeInputFileName, "-o", nativeOutputFileName, "-b", "mlir"};
+
+  // Configure the native pass pipeline. If passPipeline is provided, we expect
+  // it to be a comma separated list of passes to run.
+  if (!passPipeline.empty()) {
+    llvm::SmallVector<StringRef> passArgs;
+    llvm::StringRef ppRef = passPipeline;
+    ppRef.split(passArgs, ",");
+    for (auto pass : passArgs) {
+      if (pass.empty())
+        continue;
+      calyxArgs.push_back("-p");
+      calyxArgs.push_back(pass);
+    }
+  } else {
+    // If no arguments are specified, use the default pipeline.
+    calyxArgs.push_back("-p");
+    calyxArgs.push_back("all");
+  }
+
   std::optional<StringRef> redirects[] = {/*stdin=*/std::nullopt,
                                           /*stdout=*/nativeOutputFileName,
                                           /*stderr=*/std::nullopt};
 
-  auto args = llvm::ArrayRef<StringRef>{
-      calyxExe, nativeInputFileName, "-o", nativeOutputFileName,
-      "-l",     primitiveLib,        "-b", "mlir"};
-  int result = llvm::sys::ExecuteAndWait(calyxExe, args, /*Env=*/std::nullopt,
-                                         /*Redirects=*/redirects,
-                                         /*SecondsToWait=*/0, /*MemoryLimit=*/0,
-                                         &errMsg);
+  int result = llvm::sys::ExecuteAndWait(
+      calyxExe, calyxArgs, /*Env=*/std::nullopt,
+      /*Redirects=*/redirects,
+      /*SecondsToWait=*/0, /*MemoryLimit=*/0, &errMsg);
 
   if (result != 0) {
     root.emitError() << errMsg;
