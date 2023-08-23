@@ -19,6 +19,7 @@
 
 #include "circt/Dialect/ESI/LLCosim/Server.h"
 #include "circt/Dialect/ESI/LLCosim/LLCosimDpi.capnp.h"
+#include "circt/Dialect/ESI/LLCosim/dpi.h"
 #include <capnp/ez-rpc.h>
 #include <thread>
 #if WIN32
@@ -35,13 +36,18 @@ using namespace circt::esi::llcosim;
 namespace {
 /// Implements the `CosimDpiServer` interface from the RPC schema.
 class LLCosimServerImpl final : public LLCosimServer::Server {
-
 public:
   LLCosimServerImpl() {}
+
+  kj::Promise<void> test(TestContext) override;
 };
 } // anonymous namespace
 
 /// ----- CosimServer definitions.
+
+kj::Promise<void> LLCosimServerImpl::test(TestContext context) {
+  return kj::READY_NOW;
+}
 
 /// ----- RpcServer definitions.
 

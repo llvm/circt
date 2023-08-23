@@ -1,6 +1,7 @@
 // REQUIRES: esi-llcosim
 // RUN: esi-cosim-runner.py --low-level %s %s
-// PY: 
+// PY: import llcosim_test
+// PY: llcosim_test.test(rpcschemapath, simhostport)
 
 import LLCosim_DpiPkg::*;
 

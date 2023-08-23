@@ -13,10 +13,5 @@
 @0xd9df719e13276339;
 
 interface LLCosimServer @0xe30046acabda2ef9 {
-  # Write the the ESI MMIO space. Throws an exception on an error.
-  writeMMIO @0 (addr :UInt64, data :UInt64) -> ();
-
-  # Read from the ESI MMIO space at an address. Return data on success or throws
-  # an exception on error.
-  readMMIO @1 (addr :UInt64) -> (data :UInt64);
+  test @0 () -> ();
 }

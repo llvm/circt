@@ -56,8 +56,12 @@ class CosimTestRunner:
     self.simRunScript = os.path.join("@CIRCT_TOOLS_DIR@", "circt-rtl-sim.py")
 
     if schema == "":
-      schema = os.path.join("@CIRCT_SOURCE_DIR@", "include", "circt", "Dialect",
-                            "ESI", "cosim", "CosimDpi.capnp")
+      if low_level:
+        schema = os.path.join("@CIRCT_SOURCE_DIR@", "include", "circt",
+                              "Dialect", "ESI", "LLCosim", "LLCosimDpi.capnp")
+      else:
+        schema = os.path.join("@CIRCT_SOURCE_DIR@", "include", "circt",
+                              "Dialect", "ESI", "cosim", "CosimDpi.capnp")
     self.schema = schema
 
     if not self.exec and not self.server_only:
