@@ -98,7 +98,7 @@ struct ContainerOpConversionPattern : public OpConversionPattern<ContainerOp> {
       Value barg = hwMod.getBodyBlock()->getArgument(idx);
       InputPortOp inputPort = cpi.opInputs.at(input.name);
       // Replace all reads of the input port with the input block argument.
-      for (auto user : inputPort.getOperation()->getUsers()) {
+      for (auto *user : inputPort.getOperation()->getUsers()) {
         auto reader = dyn_cast<PortReadOp>(user);
         if (!reader)
           return rewriter.notifyMatchFailure(
@@ -170,13 +170,13 @@ struct ContainerInstanceOpConversionPattern
     llvm::DenseMap<StringAttr, PortReadOp> outputReadsToReplace;
     llvm::DenseMap<StringAttr, PortWriteOp> inputWritesToUse;
     llvm::SmallVector<Operation *> getPortsToErase;
-    for (auto user : op->getUsers()) {
+    for (auto *user : op->getUsers()) {
       auto getPort = dyn_cast<GetPortOp>(user);
       if (!getPort)
         return rewriter.notifyMatchFailure(
             user, "expected only ibis.get_port op usage of the instance");
 
-      for (auto user : getPort->getUsers()) {
+      for (auto *user : getPort->getUsers()) {
         auto res =
             llvm::TypeSwitch<Operation *, LogicalResult>(user)
                 .Case<PortReadOp>([&](auto read) {
@@ -255,7 +255,7 @@ struct ContainerInstanceOpConversionPattern
     }
 
     // Erase the get_port ops.
-    for (auto getPort : getPortsToErase)
+    for (auto *getPort : getPortsToErase)
       rewriter.eraseOp(getPort);
 
     // And finally erase the instance op.
