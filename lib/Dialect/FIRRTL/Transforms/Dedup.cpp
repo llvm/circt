@@ -1228,7 +1228,10 @@ private:
     // If the "from" operation has an inner_sym, we need to make sure the
     // "to" operation also has an `inner_sym` and then record the renaming.
     if (auto fromSym = getInnerSymName(from)) {
-      auto toSym = OpAnnoTarget(to).getInnerSym(getNamespace(toModule));
+      auto toSym =
+          getOrAddInnerSym(to, [&](auto _) -> hw::InnerSymbolNamespace & {
+            return getNamespace(toModule);
+          });
       renameMap[fromSym] = toSym;
     }
 
