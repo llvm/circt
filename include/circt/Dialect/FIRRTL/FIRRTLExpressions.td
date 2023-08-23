@@ -1119,6 +1119,21 @@ def FIntegerConstantOp : FIRRTLOp<"integer", [Pure, ConstantLike]> {
   let hasCustomAssemblyFormat = true;
 }
 
+def UnresolvedPathOp : FIRRTLOp<"unresolved_path", [Pure]> {
+  let summary = "Produce a path value";
+  let description = [{
+    Produces a value which represents a path to the target in a design.
+
+    Example:
+    ```mlir
+    0 = firrtl.unresolved_path "~Circuit|Module>w"
+    ```
+  }];
+  let arguments = (ins StrAttr:$target);
+  let results = (outs PathType:$result);
+  let assemblyFormat = "$target attr-dict";
+}
+
 def PathOp : FIRRTLOp<"path", [Pure,
                   DeclareOpInterfaceMethods<InnerRefUserOpInterface>]> {
   let summary = "Produce a path value";
