@@ -13,6 +13,9 @@
 #include "mlir/IR/DialectRegistry.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Location.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/StringRef.h"
+#include "llvm/Support/Casting.h"
 #include "llvm/Support/Debug.h"
 #include "gtest/gtest.h"
 #include <mlir/IR/BuiltinAttributes.h>
@@ -107,7 +110,8 @@ TEST(EvaluatorTests, InstantiateNullParam) {
   });
 
   auto result =
-      evaluator.instantiate(builder.getStringAttr("MyClass"), {IntegerAttr()});
+      evaluator.instantiate(builder.getStringAttr("MyClass"),
+                            getEvaluatorValuesFromAttributes({IntegerAttr()}));
 
   ASSERT_FALSE(succeeded(result));
 }
@@ -137,8 +141,9 @@ TEST(EvaluatorTests, InstantiateInvalidParamType) {
     ASSERT_EQ(diag.str(), "actual parameter for \"param\" has invalid type");
   });
 
-  auto result = evaluator.instantiate(builder.getStringAttr("MyClass"),
-                                      {builder.getF32FloatAttr(42)});
+  auto result = evaluator.instantiate(
+      builder.getStringAttr("MyClass"),
+      getEvaluatorValuesFromAttributes({builder.getF32FloatAttr(42)}));
 
   ASSERT_FALSE(succeeded(result));
 }
@@ -198,15 +203,19 @@ TEST(EvaluatorTests, InstantiateObjectWithParamField) {
 
   Evaluator evaluator(mod);
 
-  auto result = evaluator.instantiate(builder.getStringAttr("MyClass"),
-                                      {builder.getI32IntegerAttr(42)});
+  auto result = evaluator.instantiate(
+      builder.getStringAttr("MyClass"),
+      getEvaluatorValuesFromAttributes({builder.getI32IntegerAttr(42)}));
 
   ASSERT_TRUE(succeeded(result));
 
-  auto fieldValue =
-      std::get<Attribute>(
-          result.value()->getField(builder.getStringAttr("field")).value())
-          .dyn_cast<IntegerAttr>();
+  auto fieldValue = llvm::cast<evaluator::AttributeValue>(
+                        result.value()
+                            ->getField(builder.getStringAttr("field"))
+                            .value()
+                            .get())
+                        ->getAs<IntegerAttr>();
+
   ASSERT_TRUE(fieldValue);
   ASSERT_EQ(fieldValue.getValue(), 42);
 }
@@ -237,10 +246,12 @@ TEST(EvaluatorTests, InstantiateObjectWithConstantField) {
 
   ASSERT_TRUE(succeeded(result));
 
-  auto fieldValue =
-      std::get<Attribute>(
-          result.value()->getField(builder.getStringAttr("field")).value())
-          .dyn_cast<IntegerAttr>();
+  auto fieldValue = cast<evaluator::AttributeValue>(
+                        result.value()
+                            ->getField(builder.getStringAttr("field"))
+                            .value()
+                            .get())
+                        ->getAs<IntegerAttr>();
   ASSERT_TRUE(fieldValue);
   ASSERT_EQ(fieldValue.getValue(), 42);
 }
@@ -275,20 +286,22 @@ TEST(EvaluatorTests, InstantiateObjectWithChildObject) {
 
   Evaluator evaluator(mod);
 
-  auto result = evaluator.instantiate(builder.getStringAttr("MyClass"),
-                                      {builder.getI32IntegerAttr(42)});
+  auto result =
+      evaluator.instantiate(builder.getStringAttr("MyClass"),
+                            {std::make_shared<evaluator::AttributeValue>(
+                                builder.getI32IntegerAttr(42))});
 
   ASSERT_TRUE(succeeded(result));
 
-  auto fieldValue = std::get<std::shared_ptr<Object>>(
-      result.value()->getField(builder.getStringAttr("field")).value());
+  auto *fieldValue = llvm::cast<evaluator::ObjectValue>(
+      result.value()->getField(builder.getStringAttr("field")).value().get());
 
   ASSERT_TRUE(fieldValue);
 
   auto innerFieldValue =
-      std::get<Attribute>(
-          fieldValue->getField(builder.getStringAttr("field")).value())
-          .cast<IntegerAttr>();
+      llvm::cast<evaluator::AttributeValue>(
+          fieldValue->getField(builder.getStringAttr("field")).value().get())
+          ->getAs<IntegerAttr>();
 
   ASSERT_EQ(innerFieldValue.getValue(), 42);
 }
@@ -327,15 +340,19 @@ TEST(EvaluatorTests, InstantiateObjectWithFieldAccess) {
 
   Evaluator evaluator(mod);
 
-  auto result = evaluator.instantiate(builder.getStringAttr("MyClass"),
-                                      {builder.getI32IntegerAttr(42)});
+  auto result =
+      evaluator.instantiate(builder.getStringAttr("MyClass"),
+                            {std::make_shared<evaluator::AttributeValue>(
+                                builder.getI32IntegerAttr(42))});
 
   ASSERT_TRUE(succeeded(result));
 
-  auto fieldValue =
-      std::get<Attribute>(
-          result.value()->getField(builder.getStringAttr("field")).value())
-          .cast<IntegerAttr>();
+  auto fieldValue = llvm::cast<evaluator::AttributeValue>(
+                        result.value()
+                            ->getField(builder.getStringAttr("field"))
+                            .value()
+                            .get())
+                        ->getAs<IntegerAttr>();
 
   ASSERT_TRUE(fieldValue);
   ASSERT_EQ(fieldValue.getValue(), 42);
@@ -372,11 +389,21 @@ TEST(EvaluatorTests, InstantiateObjectWithChildObjectMemoized) {
 
   ASSERT_TRUE(succeeded(result));
 
-  auto field1Value = std::get<std::shared_ptr<Object>>(
-      result.value()->getField(builder.getStringAttr("field1")).value());
+  auto *field1Value = llvm::cast<evaluator::ObjectValue>(
+      result.value()->getField(builder.getStringAttr("field1")).value().get());
 
-  auto field2Value = std::get<std::shared_ptr<Object>>(
-      result.value()->getField(builder.getStringAttr("field2")).value());
+  auto *field2Value = llvm::cast<evaluator::ObjectValue>(
+      result.value()->getField(builder.getStringAttr("field2")).value().get());
+
+  auto fieldNames = result.value()->getFieldNames();
+
+  ASSERT_TRUE(fieldNames.size() == 2);
+  StringRef fieldNamesTruth[] = {"field1", "field2"};
+  for (auto fieldName : llvm::enumerate(fieldNames)) {
+    auto str = llvm::dyn_cast_or_null<StringAttr>(fieldName.value());
+    ASSERT_TRUE(str);
+    ASSERT_EQ(str.getValue(), fieldNamesTruth[fieldName.index()]);
+  }
 
   ASSERT_TRUE(field1Value);
   ASSERT_TRUE(field2Value);

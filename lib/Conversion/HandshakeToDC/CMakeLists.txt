@@ -6,6 +6,7 @@ add_circt_library(CIRCTHandshakeToDC
 
     DEPENDS
     CIRCTConversionPassIncGen
+    MLIRArithDialect
 
     LINK_LIBS PUBLIC
     CIRCTHW

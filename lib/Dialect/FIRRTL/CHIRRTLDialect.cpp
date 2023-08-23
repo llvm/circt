@@ -56,7 +56,7 @@ static void printCHIRRTLOp(OpAsmPrinter &p, Operation *op, DictionaryAttr attr,
   SmallVector<StringRef> elides(extraElides.begin(), extraElides.end());
 
   // Elide the symbol.
-  elides.push_back(hw::InnerName::getInnerNameAttrName());
+  elides.push_back(hw::InnerSymbolTable::getInnerSymbolAttrName());
 
   // Note that we only need to print the "name" attribute if the asmprinter
   // result name disagrees with it.  This can happen in strange cases, e.g.
@@ -123,7 +123,7 @@ LogicalResult MemoryPortOp::inferReturnTypes(
     DictionaryAttr attrs, mlir::OpaqueProperties properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   auto inType = operands[0].getType();
-  auto memType = dyn_cast<CMemoryType>(inType);
+  auto memType = type_dyn_cast<CMemoryType>(inType);
   if (!memType) {
     if (loc)
       mlir::emitError(*loc, "memory port requires memory operand");
@@ -195,7 +195,7 @@ LogicalResult MemoryDebugPortOp::inferReturnTypes(
     DictionaryAttr attrs, mlir::OpaqueProperties properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   auto inType = operands[0].getType();
-  auto memType = dyn_cast<CMemoryType>(inType);
+  auto memType = type_dyn_cast<CMemoryType>(inType);
   if (!memType) {
     if (loc)
       mlir::emitError(*loc, "memory port requires memory operand");

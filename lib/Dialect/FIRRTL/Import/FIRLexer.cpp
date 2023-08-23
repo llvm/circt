@@ -111,15 +111,15 @@ std::string FIRToken::getStringValue(StringRef spelling) {
   return result;
 }
 
-/// Given a token containing a raw string, return its value, including removing
-/// the quote characters and unescaping the quotes of the string. The lexer has
-/// already verified that this token is valid.
-std::string FIRToken::getRawStringValue() const {
-  assert(getKind() == raw_string);
-  return getRawStringValue(getSpelling());
+/// Given a token containing a verbatim string, return its value, including
+/// removing the quote characters and unescaping the quotes of the string. The
+/// lexer has already verified that this token is valid.
+std::string FIRToken::getVerbatimStringValue() const {
+  assert(getKind() == verbatim_string);
+  return getVerbatimStringValue(getSpelling());
 }
 
-std::string FIRToken::getRawStringValue(StringRef spelling) {
+std::string FIRToken::getVerbatimStringValue(StringRef spelling) {
   // Start by dropping the quotes.
   StringRef bytes = spelling.drop_front().drop_back();
 
@@ -294,9 +294,9 @@ FIRToken FIRLexer::lexTokenImpl() {
       continue;
 
     case '"':
-      return lexString(tokStart, /*isRaw=*/false);
+      return lexString(tokStart, /*isVerbatim=*/false);
     case '\'':
-      return lexString(tokStart, /*isRaw=*/true);
+      return lexString(tokStart, /*isVerbatim=*/true);
 
     case '+':
     case '-':
@@ -459,21 +459,21 @@ void FIRLexer::skipComment() {
   }
 }
 
-/// StringLit      ::= '"' UnquotedString? '"'
-/// RawString      ::= '\'' UnquotedString? '\''
-/// UnquotedString ::= ( '\\\'' | '\\"' | ~[\r\n] )+?
+/// StringLit         ::= '"' UnquotedString? '"'
+/// VerbatimStringLit ::= '\'' UnquotedString? '\''
+/// UnquotedString    ::= ( '\\\'' | '\\"' | ~[\r\n] )+?
 ///
-FIRToken FIRLexer::lexString(const char *tokStart, bool isRaw) {
+FIRToken FIRLexer::lexString(const char *tokStart, bool isVerbatim) {
   while (1) {
     switch (*curPtr++) {
     case '"': // This is the end of the string literal.
-      if (isRaw)
+      if (isVerbatim)
         break;
       return formToken(FIRToken::string, tokStart);
     case '\'': // This is the end of the raw string.
-      if (!isRaw)
+      if (!isVerbatim)
         break;
-      return formToken(FIRToken::raw_string, tokStart);
+      return formToken(FIRToken::verbatim_string, tokStart);
     case '\\':
       // Ignore escaped '\'' or '"'
       if (*curPtr == '\'' || *curPtr == '"')

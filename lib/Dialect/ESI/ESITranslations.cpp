@@ -37,16 +37,24 @@ using namespace circt::esi;
 #ifdef CAPNP
 
 namespace {
-struct ExportCosimSchema {
-  ExportCosimSchema(ModuleOp module, llvm::raw_ostream &os)
-      : module(module), os(os), diag(module.getContext()->getDiagEngine()),
-        unknown(UnknownLoc::get(module.getContext())) {
-    diag.registerHandler([this](Diagnostic &diag) -> LogicalResult {
+
+struct ErrorCountingHandler : public mlir::ScopedDiagnosticHandler {
+  ErrorCountingHandler(mlir::MLIRContext *context)
+      : mlir::ScopedDiagnosticHandler(context) {
+    setHandler([this](Diagnostic &diag) -> LogicalResult {
       if (diag.getSeverity() == mlir::DiagnosticSeverity::Error)
         ++errorCount;
       return failure();
     });
   }
+
+  size_t errorCount = 0;
+};
+
+struct ExportCosimSchema {
+  ExportCosimSchema(ModuleOp module, llvm::raw_ostream &os)
+      : module(module), os(os), handler(module.getContext()),
+        unknown(UnknownLoc::get(module.getContext())) {}
 
   /// Emit the whole schema.
   LogicalResult emit();
@@ -58,9 +66,8 @@ struct ExportCosimSchema {
 private:
   ModuleOp module;
   llvm::raw_ostream &os;
-  mlir::DiagnosticEngine &diag;
+  ErrorCountingHandler handler;
   const Location unknown;
-  size_t errorCount = 0;
 
   // All the `esi.cosim` input and output types encountered during the IR walk.
   // This is NOT in a deterministic order!
@@ -154,7 +161,7 @@ LogicalResult ExportCosimSchema::emit() {
   // Include the RPC schema in each generated file.
   emitCosimSchemaBody(os);
 
-  return errorCount == 0 ? success() : failure();
+  return success(handler.errorCount == 0);
 }
 
 LogicalResult circt::esi::exportCosimSchema(ModuleOp module,

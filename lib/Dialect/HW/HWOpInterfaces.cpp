@@ -28,6 +28,9 @@ LogicalResult hw::verifyInnerSymAttr(InnerSymbolOpInterface op) {
   if (!innerSym)
     return success();
 
+  if (innerSym.empty())
+    return op->emitOpError("has empty list of inner symbols");
+
   if (!op.supportsPerFieldSymbols()) {
     // The inner sym can only be specified on fieldID=0.
     if (innerSym.size() > 1 || !innerSym.getSymName()) {
@@ -43,7 +46,7 @@ LogicalResult hw::verifyInnerSymAttr(InnerSymbolOpInterface op) {
   // (there are no uses for this presently, but be open to this anyway.)
   if (!result)
     return success();
-  auto resultType = result.getType().dyn_cast<hw::FieldIDTypeInterface>();
+  auto resultType = result.getType().dyn_cast<FieldIDTypeInterface>();
   // If this type doesn't implement the FieldIDTypeInterface, then there is
   // nothing additional we can check.
   if (!resultType)
@@ -52,7 +55,7 @@ LogicalResult hw::verifyInnerSymAttr(InnerSymbolOpInterface op) {
   llvm::SmallBitVector indices(maxFields + 1);
   llvm::SmallPtrSet<Attribute, 8> symNames;
   // Ensure fieldID and symbol names are unique.
-  auto uniqSyms = [&](hw::InnerSymPropertiesAttr p) {
+  auto uniqSyms = [&](InnerSymPropertiesAttr p) {
     if (maxFields < p.getFieldID()) {
       op->emitOpError("field id:'" + Twine(p.getFieldID()) +
                       "' is greater than the maximum field id:'" +

@@ -17,7 +17,6 @@
 #include "circt/Dialect/Calyx/CalyxHelpers.h"
 #include "circt/Dialect/Calyx/CalyxOps.h"
 #include "circt/Dialect/Comb/CombOps.h"
-#include "circt/Dialect/Pipeline/Pipeline.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
@@ -85,11 +84,13 @@ void buildAssignmentsForRegisterWrite(OpBuilder &builder,
 // A structure representing a set of ports which act as a memory interface for
 // external memories.
 struct MemoryPortsImpl {
-  Value readData;
-  Value done;
-  Value writeData;
+  std::optional<Value> readData;
+  std::optional<Value> readEn;
+  std::optional<Value> readDone;
+  std::optional<Value> writeData;
+  std::optional<Value> writeEn;
+  std::optional<Value> writeDone;
   SmallVector<Value> addrPorts;
-  Value writeEn;
 };
 
 // Represents the interface of memory in Calyx. The various lowering passes
@@ -99,22 +100,31 @@ struct MemoryInterface {
   MemoryInterface();
   explicit MemoryInterface(const MemoryPortsImpl &ports);
   explicit MemoryInterface(calyx::MemoryOp memOp);
+  explicit MemoryInterface(calyx::SeqMemoryOp memOp);
 
   // Getter methods for each memory interface port.
   Value readData();
-  Value done();
+  Value readEn();
+  Value readDone();
   Value writeData();
   Value writeEn();
+  Value writeDone();
+  std::optional<Value> readDataOpt();
+  std::optional<Value> readEnOpt();
+  std::optional<Value> readDoneOpt();
+  std::optional<Value> writeDataOpt();
+  std::optional<Value> writeEnOpt();
+  std::optional<Value> writeDoneOpt();
   ValueRange addrPorts();
 
 private:
-  std::variant<calyx::MemoryOp, MemoryPortsImpl> impl;
+  std::variant<calyx::MemoryOp, calyx::SeqMemoryOp, MemoryPortsImpl> impl;
 };
 
-// A common interface for loop operations that need to be lowered to Calyx.
-class LoopInterface {
+// A common interface for any loop operation that needs to be lowered to Calyx.
+class BasicLoopInterface {
 public:
-  virtual ~LoopInterface();
+  virtual ~BasicLoopInterface();
 
   // Returns the arguments to this loop operation.
   virtual Block::BlockArgListType getBodyArgs() = 0;
@@ -122,17 +132,22 @@ public:
   // Returns body of this loop operation.
   virtual Block *getBodyBlock() = 0;
 
+  // Returns the location of the loop interface.
+  virtual Location getLoc() = 0;
+
+  // Returns the number of iterations the loop will conduct if known.
+  virtual std::optional<int64_t> getBound() = 0;
+};
+
+// A common interface for loop operations that have conditionals (e.g., while
+// loops) that need to be lowered to Calyx.
+class LoopInterface : BasicLoopInterface {
+public:
   // Returns the Block in which the condition exists.
   virtual Block *getConditionBlock() = 0;
 
   // Returns the condition as a Value.
   virtual Value getConditionValue() = 0;
-
-  // Returns the number of iterations the loop will conduct if known.
-  virtual std::optional<uint64_t> getBound() = 0;
-
-  // Returns the location of the loop interface.
-  virtual Location getLoc() = 0;
 };
 
 // Provides an interface for the control flow `while` operation across different
@@ -144,6 +159,26 @@ class WhileOpInterface : LoopInterface {
 public:
   explicit WhileOpInterface(T op) : impl(op) {}
   explicit WhileOpInterface(Operation *op) : impl(dyn_cast_or_null<T>(op)) {}
+
+  // Returns the operation.
+  T getOperation() { return impl; }
+
+  // Returns the source location of the operation.
+  Location getLoc() override { return impl->getLoc(); }
+
+private:
+  T impl;
+};
+
+// Provides an interface for the control flow `forOp` operation across different
+// dialects.
+template <typename T>
+class RepeatOpInterface : BasicLoopInterface {
+  static_assert(std::is_convertible_v<T, Operation *>);
+
+public:
+  explicit RepeatOpInterface(T op) : impl(op) {}
+  explicit RepeatOpInterface(Operation *op) : impl(dyn_cast_or_null<T>(op)) {}
 
   // Returns the operation.
   T getOperation() { return impl; }
@@ -198,7 +233,7 @@ private:
 // several lowering patterns.
 template <typename Loop>
 class LoopLoweringStateInterface {
-  static_assert(std::is_base_of_v<LoopInterface, Loop>);
+  static_assert(std::is_base_of_v<BasicLoopInterface, Loop>);
 
 public:
   ~LoopLoweringStateInterface() = default;
@@ -242,6 +277,22 @@ public:
     return it->second;
   }
 
+  /// Registers groups to be the loop init groups of `op`.
+  void setLoopInitGroups(Loop op, SmallVector<calyx::GroupOp> groups) {
+    Operation *operation = op.getOperation();
+    assert(loopInitGroups.count(operation) == 0 &&
+           "Init group(s) was already set for this loopOp");
+    loopInitGroups[operation] = std::move(groups);
+  }
+
+  /// Retrieve the loop init groups registered for `op`.
+  SmallVector<calyx::GroupOp> getLoopInitGroups(Loop op) {
+    auto it = loopInitGroups.find(op.getOperation());
+    assert(it != loopInitGroups.end() &&
+           "No init group(s) was set for this loopOp");
+    return it->second;
+  }
+
   /// Creates a new group that assigns the 'ops' values to the iter arg
   /// registers of the loop operation.
   calyx::GroupOp buildLoopIterArgAssignments(OpBuilder &builder, Loop op,
@@ -272,6 +323,10 @@ private:
   /// finishing a loop body. The execution of this group will write the
   /// yield'ed loop body values to the iteration argument registers.
   DenseMap<Operation *, calyx::GroupOp> loopLatchGroups;
+
+  /// Loop init groups are to be scheduled before the while operation. These
+  /// groups should set the initial value(s) of the loop init_args register(s).
+  DenseMap<Operation *, SmallVector<calyx::GroupOp>> loopInitGroups;
 };
 
 // Handles state during the lowering of a Calyx component. This provides common

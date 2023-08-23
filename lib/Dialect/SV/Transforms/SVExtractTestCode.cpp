@@ -18,6 +18,7 @@
 #include "circt/Dialect/HW/HWInstanceGraph.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWSymCache.h"
+#include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/Seq/SeqOps.h"
@@ -30,7 +31,7 @@ using namespace mlir;
 using namespace circt;
 using namespace sv;
 
-using BindTable = DenseMap<Attribute, SmallDenseMap<Attribute, sv::BindOp>>;
+using BindTable = DenseMap<StringAttr, SmallDenseMap<StringAttr, sv::BindOp>>;
 
 //===----------------------------------------------------------------------===//
 // StubExternalModules Helpers
@@ -147,17 +148,20 @@ static StringAttr getNameForPort(Value val, ArrayAttr modulePorts) {
           return reg.getNameAttr();
       }
     } else if (auto inst = dyn_cast<hw::InstanceOp>(op)) {
-      for (auto [index, result] : llvm::enumerate(inst.getResults()))
-        if (result == val) {
-          SmallString<64> portName = inst.getInstanceName();
-          portName += ".";
-          auto resultName = inst.getResultName(index);
-          if (resultName && !resultName.getValue().empty())
-            portName += resultName.getValue();
-          else
-            Twine(index).toVector(portName);
-          return StringAttr::get(val.getContext(), portName);
-        }
+      auto index = val.cast<mlir::OpResult>().getResultNumber();
+      SmallString<64> portName = inst.getInstanceName();
+      portName += ".";
+      auto resultName = inst.getResultName(index);
+      if (resultName && !resultName.getValue().empty())
+        portName += resultName.getValue();
+      else
+        Twine(index).toVector(portName);
+      return StringAttr::get(val.getContext(), portName);
+    } else if (op->getNumResults() == 1) {
+      if (auto name = op->getAttrOfType<StringAttr>("name"))
+        return name;
+      if (auto namehint = op->getAttrOfType<StringAttr>("sv.namehint"))
+        return namehint;
     }
   }
 
@@ -199,8 +203,9 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
     auto srcPorts = op.getArgNames();
     for (auto port : llvm::enumerate(realInputs)) {
       auto name = getNameForPort(port.value(), srcPorts);
-      ports.push_back({name, hw::PortDirection::INPUT, port.value().getType(),
-                       port.index()});
+      ports.push_back(
+          {{name, port.value().getType(), hw::ModulePort::Direction::Input},
+           port.index()});
     }
   }
 
@@ -224,15 +229,16 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
   b = OpBuilder::atBlockTerminator(op.getBodyBlock());
   auto inst = b.create<hw::InstanceOp>(
       op.getLoc(), newMod, newMod.getName(), realInputs, ArrayAttr(),
-      b.getStringAttr(
-          ("__ETC_" + getVerilogModuleNameAttr(op).getValue() + suffix).str()));
+      hw::InnerSymAttr::get(b.getStringAttr(
+          ("__ETC_" + getVerilogModuleNameAttr(op).getValue() + suffix)
+              .str())));
   inst->setAttr("doNotPrint", b.getBoolAttr(true));
   b = OpBuilder::atBlockEnd(
       &op->getParentOfType<mlir::ModuleOp>()->getRegion(0).front());
 
   auto bindOp = b.create<sv::BindOp>(op.getLoc(), op.getNameAttr(),
-                                     inst.getInnerSymAttr());
-  bindTable[op.getNameAttr()][inst.getInnerSymAttr()] = bindOp;
+                                     inst.getInnerSymAttr().getSymName());
+  bindTable[op.getNameAttr()][inst.getInnerSymAttr().getSymName()] = bindOp;
   if (fileName)
     bindOp->setAttr("output_file", fileName);
   return newMod;
@@ -288,7 +294,7 @@ static void updateOoOArgs(SmallVectorImpl<Operation *> &lateBoundOps,
 static void migrateOps(hw::HWModuleOp oldMod, hw::HWModuleOp newMod,
                        SetVector<Operation *> &depOps, IRMapping &cutMap,
                        hw::InstanceGraph &instanceGraph) {
-  hw::InstanceGraphNode *newModNode = instanceGraph.lookup(newMod);
+  igraph::InstanceGraphNode *newModNode = instanceGraph.lookup(newMod);
   SmallVector<Operation *, 16> lateBoundOps;
   OpBuilder b = OpBuilder::atBlockBegin(newMod.getBodyBlock());
   oldMod.walk<WalkOrder::PreOrder>([&](Operation *op) {
@@ -299,7 +305,7 @@ static void migrateOps(hw::HWModuleOp oldMod, hw::HWModuleOp newMod,
       if (hasOoOArgs(newMod, newOp))
         lateBoundOps.push_back(newOp);
       if (auto instance = dyn_cast<hw::InstanceOp>(op)) {
-        hw::InstanceGraphNode *instMod =
+        igraph::InstanceGraphNode *instMod =
             instanceGraph.lookup(instance.getModuleNameAttr().getAttr());
         newModNode->addInstance(instance, instMod);
       }
@@ -311,7 +317,7 @@ static void migrateOps(hw::HWModuleOp oldMod, hw::HWModuleOp newMod,
 // Check if the module has already been bound.
 static bool isBound(hw::HWModuleLike op, hw::InstanceGraph &instanceGraph) {
   auto *node = instanceGraph.lookup(op);
-  return llvm::any_of(node->uses(), [](hw::InstanceRecord *a) {
+  return llvm::any_of(node->uses(), [](igraph::InstanceRecord *a) {
     auto inst = a->getInstance();
     if (!inst)
       return false;
@@ -328,25 +334,58 @@ static void addExistingBinds(Block *topLevelModule, BindTable &bindTable) {
 }
 
 // Inline any modules that only have inputs for test code.
-static void inlineInputOnly(hw::HWModuleOp oldMod,
-                            hw::InstanceGraph &instanceGraph,
-                            BindTable &bindTable,
-                            SmallPtrSetImpl<Operation *> &opsToErase) {
+static void
+inlineInputOnly(hw::HWModuleOp oldMod, hw::InstanceGraph &instanceGraph,
+                BindTable &bindTable, SmallPtrSetImpl<Operation *> &opsToErase,
+                llvm::DenseSet<hw::InnerRefAttr> &innerRefUsedByNonBindOp) {
+
   // Check if the module only has inputs.
   if (oldMod.getNumOutputs() != 0)
     return;
 
+  // Check if it's ok to inline. We cannot inline the module if there exists a
+  // declaration with an inner symbol referred by non-bind ops (e.g. hierpath).
+  auto oldModName = oldMod.getModuleNameAttr();
+  for (auto port : oldMod.getPortList()) {
+    if (port.sym) {
+      for (auto property : port.sym) {
+        auto innerRef = hw::InnerRefAttr::get(oldModName, property.getName());
+        if (innerRefUsedByNonBindOp.count(innerRef)) {
+          oldMod.emitWarning() << "module " << oldMod.getModuleName()
+                               << " is an input only module but cannot "
+                                  "be inlined because a signal "
+                               << port.name << " is referred by name";
+          return;
+        }
+      }
+    }
+  }
+
+  for (auto op : oldMod.getBodyBlock()->getOps<hw::InnerSymbolOpInterface>()) {
+    if (auto innerSym = op.getInnerSymAttr()) {
+      for (auto property : innerSym) {
+        auto innerRef = hw::InnerRefAttr::get(oldModName, property.getName());
+        if (innerRefUsedByNonBindOp.count(innerRef)) {
+          op.emitWarning() << "module " << oldMod.getModuleName()
+                           << " is an input only module but cannot be inlined "
+                              "because signals are referred by name";
+          return;
+        }
+      }
+    }
+  }
+
   // Get the instance graph node for the old module.
-  hw::InstanceGraphNode *node = instanceGraph.lookup(oldMod);
+  igraph::InstanceGraphNode *node = instanceGraph.lookup(oldMod);
   assert(!node->noUses() &&
          "expected module for inlining to be instantiated at least once");
 
   // Iterate through each instance of the module.
   OpBuilder b(oldMod);
   bool allInlined = true;
-  for (hw::InstanceRecord *use : llvm::make_early_inc_range(node->uses())) {
+  for (igraph::InstanceRecord *use : llvm::make_early_inc_range(node->uses())) {
     // If there is no instance, move on.
-    hw::HWInstanceLike instLike = use->getInstance();
+    auto instLike = use->getInstance<hw::HWInstanceLike>();
     if (!instLike) {
       allInlined = false;
       continue;
@@ -356,6 +395,11 @@ static void inlineInputOnly(hw::HWModuleOp oldMod,
     hw::InstanceOp inst = cast<hw::InstanceOp>(instLike.getOperation());
     if (inst.getInnerSym().has_value()) {
       allInlined = false;
+      auto diag =
+          oldMod.emitWarning()
+          << "module " << oldMod.getModuleName()
+          << " cannot be inlined because there is an instance with a symbol";
+      diag.attachNote(inst.getLoc());
       continue;
     }
 
@@ -369,24 +413,55 @@ static void inlineInputOnly(hw::HWModuleOp oldMod,
     // Inline the body at the instantiation site.
     hw::HWModuleOp instParent =
         cast<hw::HWModuleOp>(use->getParent()->getModule());
-    hw::InstanceGraphNode *instParentNode = instanceGraph.lookup(instParent);
+    igraph::InstanceGraphNode *instParentNode =
+        instanceGraph.lookup(instParent);
     SmallVector<Operation *, 16> lateBoundOps;
     b.setInsertionPoint(inst);
+    // Namespace that tracks inner symbols in the parent module.
+    hw::InnerSymbolNamespace nameSpace(instParent);
+    // A map from old inner symbols to new ones.
+    DenseMap<mlir::StringAttr, mlir::StringAttr> symMapping;
+
     for (auto &op : *oldMod.getBodyBlock()) {
       // If the op was erased by instance extraction, don't copy it over.
       if (opsToErase.contains(&op))
         continue;
 
+      // If the op has an inner sym, first create a new inner sym for it.
+      if (auto innerSymOp = dyn_cast<hw::InnerSymbolOpInterface>(op)) {
+        if (auto innerSym = innerSymOp.getInnerSymAttr()) {
+          for (auto property : innerSym) {
+            auto oldName = property.getName();
+            auto newName =
+                b.getStringAttr(nameSpace.newName(oldName.getValue()));
+            auto result = symMapping.insert({oldName, newName});
+            (void)result;
+            assert(result.second && "inner symbols must be unique");
+          }
+        }
+      }
+
       // For instances in the bind table, update the bind with the new parent.
       if (auto innerInst = dyn_cast<hw::InstanceOp>(op)) {
         if (auto innerInstSym = innerInst.getInnerSymAttr()) {
-          auto it = bindTable[oldMod.getNameAttr()].find(innerInstSym);
+          auto it =
+              bindTable[oldMod.getNameAttr()].find(innerInstSym.getSymName());
           if (it != bindTable[oldMod.getNameAttr()].end()) {
             sv::BindOp bind = it->second;
             auto oldInnerRef = bind.getInstanceAttr();
-            auto newInnerRef = hw::InnerRefAttr::get(
-                instParent.getModuleNameAttr(), oldInnerRef.getName());
-            bind.setInstanceAttr(newInnerRef);
+            auto it = symMapping.find(oldInnerRef.getName());
+            assert(it != symMapping.end() &&
+                   "inner sym mapping must be already populated");
+            auto newName = it->second;
+            auto newInnerRef =
+                hw::InnerRefAttr::get(instParent.getModuleNameAttr(), newName);
+            OpBuilder::InsertionGuard g(b);
+            // Clone bind operations.
+            b.setInsertionPoint(bind);
+            sv::BindOp clonedBind = cast<sv::BindOp>(b.clone(*bind, mapping));
+            clonedBind.setInstanceAttr(newInnerRef);
+            bindTable[instParent.getModuleNameAttr()][newName] =
+                cast<sv::BindOp>(clonedBind);
           }
         }
       }
@@ -402,9 +477,24 @@ static void inlineInputOnly(hw::HWModuleOp oldMod,
         // If the cloned op is an instance, record it within the new parent in
         // the instance graph.
         if (auto innerInst = dyn_cast<hw::InstanceOp>(clonedOp)) {
-          hw::InstanceGraphNode *innerInstModule =
+          igraph::InstanceGraphNode *innerInstModule =
               instanceGraph.lookup(innerInst.getModuleNameAttr().getAttr());
           instParentNode->addInstance(innerInst, innerInstModule);
+        }
+
+        // If the cloned op has an inner sym, then attach an updated inner sym.
+        if (auto innerSymOp = dyn_cast<hw::InnerSymbolOpInterface>(clonedOp)) {
+          if (auto oldInnerSym = innerSymOp.getInnerSymAttr()) {
+            SmallVector<hw::InnerSymPropertiesAttr> properties;
+            for (auto property : oldInnerSym) {
+              auto newSymName = symMapping[property.getName()];
+              properties.push_back(hw::InnerSymPropertiesAttr::get(
+                  op.getContext(), newSymName, property.getFieldID(),
+                  property.getSymVisibility()));
+            }
+            auto innerSym = hw::InnerSymAttr::get(op.getContext(), properties);
+            innerSymOp.setInnerSymbolAttr(innerSym);
+          }
         }
       }
     }
@@ -420,6 +510,10 @@ static void inlineInputOnly(hw::HWModuleOp oldMod,
 
   // If all instances were inlined, remove the module.
   if (allInlined) {
+    // Erase old bind statements.
+    for (auto [_, bind] : bindTable[oldMod.getNameAttr()])
+      bind.erase();
+    bindTable[oldMod.getNameAttr()].clear();
     instanceGraph.erase(node);
     opsToErase.insert(oldMod);
   }
@@ -480,9 +574,10 @@ bool isInDesign(hw::HWSymbolCache &symCache, Operation *op,
     return true;
 
   // If an op has an innner sym, don't extract.
-  if (auto innerSym = op->getAttrOfType<StringAttr>("inner_sym"))
-    if (!innerSym.getValue().empty())
-      return true;
+  if (auto innerSymOp = dyn_cast<hw::InnerSymbolOpInterface>(op))
+    if (auto innerSym = innerSymOp.getInnerSymAttr())
+      if (!innerSym.empty())
+        return true;
 
   // Check whether the operation is a verification construct. Instance op could
   // be used as verification construct so make sure to check this property
@@ -555,9 +650,12 @@ private:
       return false;
 
     // Find the data-flow and structural ops to clone.  Result includes roots.
-    // Track dataflow until it reaches to design parts.
-    auto opsToClone = getBackwardSlice(
-        roots, [&](Operation *op) { return !opsInDesign.count(op); });
+    // Track dataflow until it reaches to design parts except for constants that
+    // can be cloned freely.
+    auto opsToClone = getBackwardSlice(roots, [&](Operation *op) {
+      return !opsInDesign.count(op) ||
+             op->hasTrait<mlir::OpTrait::ConstantLike>();
+    });
 
     // Find the dataflow into the clone set
     SetVector<Value> inputs;
@@ -579,7 +677,7 @@ private:
                                    bindFile, bindTable);
 
     // Register the newly created module in the instance graph.
-    instanceGraph->addModule(bmod);
+    instanceGraph->addHWModule(bmod);
 
     // do the clone
     migrateOps(module, bmod, opsToClone, cutMap, *instanceGraph);
@@ -603,6 +701,21 @@ void SVExtractTestCodeImplPass::runOnOperation() {
   this->instanceGraph = &getAnalysis<circt::hw::InstanceGraph>();
 
   auto top = getOperation();
+
+  // It takes extra effort to inline modules which contains inner symbols
+  // referred through hierpaths or unknown operations since we have to update
+  // inner refs users globally. However we do want to inline modules which
+  // contain bound instances so create a set of inner refs used by non bind op
+  // in order to allow bind ops.
+  DenseSet<hw::InnerRefAttr> innerRefUsedByNonBindOp;
+  top.walk([&](Operation *op) {
+    if (!isa<sv::BindOp>(op))
+      for (auto attr : op->getAttrs())
+        attr.getValue().walk([&](hw::InnerRefAttr attr) {
+          innerRefUsedByNonBindOp.insert(attr);
+        });
+  });
+
   auto *topLevelModule = top.getBody();
   auto assertDir =
       top->getAttrOfType<hw::OutputFileAttr>("firrtl.extract.assert");
@@ -678,8 +791,8 @@ void SVExtractTestCodeImplPass::runOnOperation() {
           doModule(rtlmod, isCover, "_cover", coverDir, coverBindFile,
                    bindTable, opsToErase, opsInDesign);
 
-      // If nothing is extracted, we are done.
-      if (!anyThingExtracted)
+      // If nothing is extracted and the module has an output, we are done.
+      if (!anyThingExtracted && rtlmod.getNumOutputs() != 0)
         continue;
 
       // Here, erase extracted operations as well as dead operations.
@@ -716,8 +829,9 @@ void SVExtractTestCodeImplPass::runOnOperation() {
       });
 
       // Inline any modules that only have inputs for test code.
-      if (!disableModuleInlining && anyThingExtracted)
-        inlineInputOnly(rtlmod, *instanceGraph, bindTable, opsToErase);
+      if (!disableModuleInlining)
+        inlineInputOnly(rtlmod, *instanceGraph, bindTable, opsToErase,
+                        innerRefUsedByNonBindOp);
 
       numOpsErased += opsToErase.size();
       while (!opsToErase.empty()) {

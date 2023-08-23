@@ -152,7 +152,7 @@ void HWGeneratorCalloutPass::processGenerator(
   OpBuilder builder(generatedModuleOp);
   auto extMod = builder.create<hw::HWModuleExternOp>(
       generatedModuleOp.getLoc(), generatedModuleOp.getVerilogModuleNameAttr(),
-      generatedModuleOp.getPorts());
+      generatedModuleOp.getPortList());
   // Attach an attribute to which file the definition of the external
   // module exists in.
   extMod->setAttr("filenames", builder.getStringAttr(fileContent));

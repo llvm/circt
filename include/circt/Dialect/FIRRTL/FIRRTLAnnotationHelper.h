@@ -16,7 +16,8 @@
 #include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
-#include "circt/Dialect/FIRRTL/Namespace.h"
+#include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 namespace circt {
@@ -71,6 +72,69 @@ struct AnnoPathValue {
     return false;
   }
 };
+
+template <typename T>
+static T &operator<<(T &os, const AnnoPathValue &path) {
+  os << "~" << path.ref.getModule()->getParentOfType<CircuitOp>().getName()
+     << "|";
+
+  if (path.isLocal()) {
+    os << path.ref.getModule().getModuleName();
+  } else {
+    os << path.instances.front()
+              ->getParentOfType<FModuleLike>()
+              .getModuleName();
+  }
+  for (auto inst : path.instances)
+    os << "/" << inst.getName() << ":" << inst.getModuleName();
+  if (!path.isOpOfType<FModuleOp, FExtModuleOp, InstanceOp>()) {
+    os << ">" << path.ref;
+    auto type = dyn_cast<FIRRTLBaseType>(path.ref.getType());
+    if (!type)
+      return os;
+    auto targetFieldID = path.fieldIdx;
+    while (targetFieldID) {
+      FIRRTLTypeSwitch<FIRRTLBaseType>(type)
+          .Case<FVectorType>([&](FVectorType vector) {
+            auto index = vector.getIndexForFieldID(targetFieldID);
+            os << "[" << index << "]";
+            type = vector.getElementType();
+            targetFieldID -= vector.getFieldID(index);
+          })
+          .template Case<BundleType>([&](BundleType bundle) {
+            auto index = bundle.getIndexForFieldID(targetFieldID);
+            os << "." << bundle.getElementName(index);
+            type = bundle.getElementType(index);
+            targetFieldID -= bundle.getFieldID(index);
+          })
+          .Default([&](auto) { targetFieldID = 0; });
+    }
+  }
+  return os;
+}
+
+template <typename T>
+static T &operator<<(T &os, const OpAnnoTarget &target) {
+  os << target.getOp()->getAttrOfType<StringAttr>("name").getValue();
+  return os;
+}
+
+template <typename T>
+static T &operator<<(T &os, const PortAnnoTarget &target) {
+  os << target.getModule().getPortName(target.getPortNo());
+  return os;
+}
+
+template <typename T>
+static T &operator<<(T &os, const AnnoTarget &target) {
+  if (auto op = target.dyn_cast<OpAnnoTarget>())
+    os << op;
+  else if (auto port = target.dyn_cast<PortAnnoTarget>())
+    os << port;
+  else
+    os << "<<Unknown Anno Target>>";
+  return os;
+}
 
 /// Cache AnnoTargets for a module's named things.
 struct AnnoTargetCache {
@@ -245,6 +309,26 @@ struct ModuleModifications {
   SmallVector<uturnPair> uturns;
 };
 
+/// A cache of existing HierPathOps, mostly used to facilitate HierPathOp reuse.
+struct HierPathCache {
+  HierPathCache(Operation *op, SymbolTable &symbolTable);
+
+  hw::HierPathOp getOpFor(ArrayAttr attr);
+
+  StringAttr getSymFor(ArrayAttr attr) {
+    return getOpFor(attr).getSymNameAttr();
+  }
+
+  FlatSymbolRefAttr getRefFor(ArrayAttr attr) {
+    return FlatSymbolRefAttr::get(getSymFor(attr));
+  }
+
+private:
+  OpBuilder builder;
+  DenseMap<ArrayAttr, hw::HierPathOp> cache;
+  SymbolTable &symbolTable;
+};
+
 /// State threaded through functions for resolving and applying annotations.
 struct ApplyState {
   using AddToWorklistFn = llvm::function_ref<void(DictionaryAttr)>;
@@ -252,25 +336,22 @@ struct ApplyState {
              AddToWorklistFn addToWorklistFn,
              InstancePathCache &instancePathCache)
       : circuit(circuit), symTbl(symTbl), addToWorklistFn(addToWorklistFn),
-        instancePathCache(instancePathCache) {}
+        instancePathCache(instancePathCache), hierPathCache(circuit, symTbl) {}
 
   CircuitOp circuit;
   SymbolTable &symTbl;
   CircuitTargetCache targetCaches;
   AddToWorklistFn addToWorklistFn;
   InstancePathCache &instancePathCache;
-  DenseMap<Attribute, FlatSymbolRefAttr> instPathToNLAMap;
+  HierPathCache hierPathCache;
   size_t numReusedHierPaths = 0;
 
   DenseSet<InstanceOp> wiringProblemInstRefs;
   DenseMap<StringAttr, LegacyWiringProblem> legacyWiringProblems;
   SmallVector<WiringProblem> wiringProblems;
 
-  ModuleNamespace &getNamespace(FModuleLike module) {
-    auto &ptr = namespaces[module];
-    if (!ptr)
-      ptr = std::make_unique<ModuleNamespace>(module);
-    return *ptr;
+  hw::InnerSymbolNamespace &getNamespace(FModuleLike module) {
+    return namespaces[module];
   }
 
   IntegerAttr newID() {
@@ -279,7 +360,7 @@ struct ApplyState {
   };
 
 private:
-  DenseMap<Operation *, std::unique_ptr<ModuleNamespace>> namespaces;
+  hw::InnerSymbolNamespaceCollection namespaces;
   unsigned annotationID = 0;
 };
 
@@ -346,11 +427,11 @@ A tryGetAs(DictionaryAttr &dict, const Attribute &root, StringRef key,
 /// Add ports to the module and all its instances and return the clone for
 /// `instOnPath`. This does not connect the new ports to anything. Replace
 /// the old instances with the new cloned instance in all the caches.
-InstanceOp addPortsToModule(
-    FModuleLike mod, InstanceOp instOnPath, FIRRTLType portType, Direction dir,
-    StringRef newName, InstancePathCache &instancePathcache,
-    llvm::function_ref<ModuleNamespace &(FModuleLike)> getNamespace,
-    CircuitTargetCache *targetCaches = nullptr);
+InstanceOp addPortsToModule(FModuleLike mod, InstanceOp instOnPath,
+                            FIRRTLType portType, Direction dir,
+                            StringRef newName,
+                            InstancePathCache &instancePathcache,
+                            CircuitTargetCache *targetCaches = nullptr);
 
 } // namespace firrtl
 } // namespace circt

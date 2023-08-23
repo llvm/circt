@@ -500,13 +500,13 @@ class _OpCache:
     the instance doesn't have a static op in the IR."""
 
     # Check static op existence.
-    inside_of_syms = self.get_sym_ops_in_module(inst.inside_of)
+    inside_of_syms = self.get_inner_sym_ops_in_module(inst.inside_of)
     if inst.symbol not in inside_of_syms:
       return None
 
     if inst not in self._instance_cache:
       ref = hw.InnerRefAttr.get(ir.StringAttr.get(inst._inside_of_symbol),
-                                inst.symbol)
+                                inst.symbol.symName)
       # Check if the dynamic instance op exists.
       parent_op = inst.parent._dyn_inst
       insts_in_parent = self.get_dyn_insts_in_inst(parent_op)
@@ -533,13 +533,13 @@ class _OpCache:
     if isinstance(op, msft.DynamicInstanceOp):
       parent_inst = self.get_or_create_inst_from_op(op.operation.parent.opview)
       instance_ref = hw.InnerRefAttr(op.instanceRef)
-      return parent_inst._children()[instance_ref.name]
+      return parent_inst._children()[hw.InnerSymAttr.get(instance_ref.name)]
     raise TypeError(
         "Can only resolve from InstanceHierarchyOp or DynamicInstanceOp")
 
-  def get_sym_ops_in_module(self,
-                            module: Module) -> Dict[ir.Attribute, ir.Operation]:
-    """Look into the IR inside 'module' for any ops which have a `sym_name`
+  def get_inner_sym_ops_in_module(
+      self, module: Module) -> Dict[ir.Attribute, ir.Operation]:
+    """Look into the IR inside 'module' for any ops which have an `inner_sym`
     attribute. Cached."""
 
     if module is None:
@@ -550,9 +550,9 @@ class _OpCache:
 
     if circt_mod not in self._module_inside_sym_cache:
       self._module_inside_sym_cache[circt_mod] = \
-        {op.attributes["sym_name"]: op
+        {op.attributes["inner_sym"]: op
          for op in circt_mod.entry_block
-         if "sym_name" in op.attributes}
+         if "inner_sym" in op.attributes}
 
     return self._module_inside_sym_cache[circt_mod]
 

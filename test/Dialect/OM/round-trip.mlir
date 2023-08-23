@@ -55,6 +55,26 @@ om.class @Empty() {}
 // CHECK-SAME: attributes {foo.bar = "baz"}
 om.class @DiscardableAttrs() attributes {foo.bar="baz"} {}
 
+// CHECK-LABEL: om.class.extern @Extern
+// CHECK-SAME: (%param1: i1, %param2: i2)
+om.class.extern @Extern(%param1: i1, %param2: i2) {
+  // CHECK: om.class.extern.field @field1 : i3
+  om.class.extern.field @field1 : i3
+
+  // CHECK: om.class.extern.field @field2 : i4
+  om.class.extern.field @field2 : i4
+}
+
+// CHECK-LABEL: om.class @ExternObject
+// CHECK-SAME: (%[[P0:.+]]: i1, %[[P1:.+]]: i2)
+om.class @ExternObject(%param1: i1, %param2: i2) {
+  // CHECK: %[[O0:.+]] = om.object @Extern(%[[P0]], %[[P1]])
+  %0 = om.object @Extern(%param1, %param2) : (i1, i2) -> !om.class.type<@Extern>
+
+  // CHECK: om.object.field %[[O0]], [@field1]
+  %1 = om.object.field %0, [@field1] : (!om.class.type<@Extern>) -> i3
+}
+
 om.class @NestedField1() {
   %0 = om.constant 1 : i1
   om.class.field @baz, %0 : i1
@@ -114,6 +134,30 @@ om.class @ListConstant() {
   om.class.field @list_i32, %1 : !om.list<i32>
 }
 
+// CHECK-LABEL: @ListCreate
+om.class @ListCreate() {
+  // CHECK: [[cst5_i8:%.+]] = om.constant 5 : i8
+  %cst5_i8 = om.constant 5 : i8
+  // CHECK: [[cst6_i8:%.+]] = om.constant 6 : i8
+  %cst6_i8 = om.constant 6 : i8
+  // CHECK: [[cst5_i32:%.+]] = om.constant 5 : i32
+  %cst5_i32 = om.constant 5 : i32
+  // CHECK: [[cst6_i32:%.+]] = om.constant 6 : i32
+  %cst6_i32 = om.constant 6 : i32
+
+  // CHECK: [[obj0:%.+]] = om.object @Widget([[cst5_i8]], [[cst6_i32]]) : (i8, i32) -> !om.class.type<@Widget>
+  %obj0 = om.object @Widget(%cst5_i8, %cst6_i32) : (i8, i32) -> !om.class.type<@Widget>
+
+  // CHECK: [[obj1:%.+]] = om.object @Widget([[cst6_i8]], [[cst5_i32]]) : (i8, i32) -> !om.class.type<@Widget>
+  %obj1 = om.object @Widget(%cst6_i8, %cst5_i32) : (i8, i32) -> !om.class.type<@Widget>
+
+  // CHECK: [[list:%.+]] = om.list_create [[obj0]], [[obj1]] : !om.class.type<@Widget>
+  %list = om.list_create %obj0, %obj1 : !om.class.type<@Widget>
+
+  // CHECK: om.class.field @list_field, [[list]] : !om.list<!om.class.type<@Widget>>
+  om.class.field @list_field, %list : !om.list<!om.class.type<@Widget>>
+}
+
 // CHECK-LABEL: @String
 om.class @StringConstant() {
   // CHECK: %[[const1:.+]] = om.constant "foo" : !om.string
@@ -146,4 +190,38 @@ om.class @RefecenceEachOthersField(%blue_1: i8, %green_1: i32) {
   %2 = om.object @Widget(%1, %green_1) : (i8, i32) -> !om.class.type<@Widget>
   // CHECK-NEXT: %[[field2]] = om.object.field %[[obj2]], [@green_1] : (!om.class.type<@Widget>) -> i32
   %3 = om.object.field %2, [@green_1] : (!om.class.type<@Widget>) -> i32
+}
+
+// CHECK-LABEL: @Map
+// CHECK-SAME: !om.map<!om.string, !om.string>
+om.class @Map(%map: !om.map<!om.string, !om.string>) {
+  om.class.field @field, %map : !om.map<!om.string, !om.string>
+}
+
+// CHECK-LABEL: @Tuple
+om.class @Tuple(%int: i1, %str: !om.string) {
+  // CHECK: %[[tuple:.+]] = om.tuple_create %int, %str : i1, !om.string
+  %tuple = om.tuple_create %int, %str  : i1, !om.string
+  // CHECK-NEXT: om.class.field @tuple, %[[tuple]] : tuple<i1, !om.string>
+  om.class.field @tuple, %tuple : tuple<i1, !om.string>
+  // CHECK-NEXT: %[[tuple_get:.+]] = om.tuple_get %[[tuple]][1] : tuple<i1, !om.string>
+  %val = om.tuple_get %tuple[1]  : tuple<i1, !om.string>
+  // CHECK-NEXT: om.class.field @val, %[[tuple_get]] : !om.string
+  om.class.field @val, %val : !om.string
+}
+
+// CHECK-LABEL: @MapConstant
+om.class @MapConstant() {
+  // CHECK: %[[const1:.+]] = om.constant #om.map<i64, {a = 42 : i64, b = 32 : i64}> : !om.map<!om.string, i64>
+  %0 = om.constant #om.map<i64, {a = 42, b = 32}> : !om.map<!om.string, i64>
+  // CHECK: om.class.field @map_i64, %[[const1]] : !om.map<!om.string, i64>
+  om.class.field @map_i64, %0 : !om.map<!om.string, i64>
+}
+
+// CHECK-LABEL: @MapCreate
+om.class @MapCreate(%e1: tuple<!om.string, !om.class.type<@Empty>>, %e2: tuple<!om.string, !om.class.type<@Empty>>) {
+  // CHECK: %[[map:.+]] = om.map_create %e1, %e2 : !om.string, !om.class.type<@Empty>
+  %map = om.map_create %e1, %e2 : !om.string, !om.class.type<@Empty>
+  // CHECK-NEXT: om.class.field @map_field, %[[map]] : !om.map<!om.string, !om.class.type<@Empty>>
+  om.class.field @map_field, %map : !om.map<!om.string, !om.class.type<@Empty>>
 }

@@ -62,7 +62,7 @@ public:
     return getOperation().getCondBlock().getTerminator()->getOperand(0);
   }
 
-  std::optional<uint64_t> getBound() override {
+  std::optional<int64_t> getBound() override {
     return getOperation().getTripCount();
   }
 };
@@ -383,12 +383,23 @@ private:
     IRRewriter::InsertionGuard guard(rewriter);
     rewriter.setInsertionPointToEnd(group.getBody());
     auto addrPorts = memoryInterface.addrPorts();
-    assert(addrPorts.size() == addressValues.size() &&
-           "Mismatch between number of address ports of the provided memory "
-           "and address assignment values");
-    for (auto address : enumerate(addressValues))
-      rewriter.create<calyx::AssignOp>(loc, addrPorts[address.index()],
-                                       address.value());
+    if (addressValues.empty()) {
+      assert(
+          addrPorts.size() == 1 &&
+          "We expected a 1 dimensional memory of size 1 because there were no "
+          "address assignment values");
+      // Assign 1'd0 to the address port.
+      rewriter.create<calyx::AssignOp>(
+          loc, addrPorts[0],
+          createConstant(loc, rewriter, getComponent(), 1, 0));
+    } else {
+      assert(addrPorts.size() == addressValues.size() &&
+             "Mismatch between number of address ports of the provided memory "
+             "and address assignment values");
+      for (auto address : enumerate(addressValues))
+        rewriter.create<calyx::AssignOp>(loc, addrPorts[address.index()],
+                                         address.value());
+    }
   }
 };
 
@@ -464,7 +475,8 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   rewriter.create<calyx::AssignOp>(
       storeOp.getLoc(), memoryInterface.writeEn(),
       createConstant(storeOp.getLoc(), rewriter, getComponent(), 1, 1));
-  rewriter.create<calyx::GroupDoneOp>(storeOp.getLoc(), memoryInterface.done());
+  rewriter.create<calyx::GroupDoneOp>(storeOp.getLoc(),
+                                      memoryInterface.writeDone());
 
   getState<ComponentLoweringState>().registerNonPipelineOperations(storeOp,
                                                                    group);
@@ -522,6 +534,12 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
   for (int64_t dim : memtype.getShape()) {
     sizes.push_back(dim);
     addrSizes.push_back(calyx::handleZeroWidth(dim));
+  }
+  // If memref has no size (e.g., memref<i32>) create a 1 dimensional memory of
+  // size 1.
+  if (sizes.empty() && addrSizes.empty()) {
+    sizes.push_back(1);
+    addrSizes.push_back(1);
   }
   auto memoryOp = rewriter.create<calyx::MemoryOp>(
       allocOp.getLoc(), componentState.getUniqueName("mem"),
@@ -810,7 +828,7 @@ struct FuncOpConversion : public calyx::FuncOpPartialLoweringPattern {
       unsigned outPortsIt = extMemPortIndices.getSecond().second +
                             compOp.getInputPortInfo().size();
       extMemPorts.readData = compOp.getArgument(inPortsIt++);
-      extMemPorts.done = compOp.getArgument(inPortsIt);
+      extMemPorts.writeDone = compOp.getArgument(inPortsIt);
       extMemPorts.writeData = compOp.getArgument(outPortsIt++);
       unsigned nAddresses = extMemPortIndices.getFirst()
                                 .getType()

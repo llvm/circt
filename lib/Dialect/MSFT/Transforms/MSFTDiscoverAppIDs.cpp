@@ -106,6 +106,11 @@ void DiscoverAppIDsPass::processMod(MSFTModuleOp mod) {
 
   if (finalModBases.empty())
     return;
+
+  // Sort the list to put it in a reasonable deterministic order.
+  llvm::sort(finalModBases, [](Attribute a, Attribute b) {
+    return cast<StringAttr>(a).getValue() < cast<StringAttr>(b).getValue();
+  });
   ArrayAttr childrenBases = ArrayAttr::get(mod.getContext(), finalModBases);
   mod.setChildAppIDBasesAttr(childrenBases);
 }

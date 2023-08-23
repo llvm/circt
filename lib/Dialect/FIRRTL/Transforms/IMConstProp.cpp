@@ -178,7 +178,7 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
   // we mark all ground elements as overdefined.
   void markOverdefined(Value value) {
     FieldRef fieldRef = getOrCacheFieldRefFromValue(value);
-    auto firrtlType = dyn_cast<FIRRTLType>(value.getType());
+    auto firrtlType = type_dyn_cast<FIRRTLType>(value.getType());
     if (!firrtlType) {
       markOverdefined(fieldRef);
       return;
@@ -236,9 +236,9 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
   void mergeLatticeValue(Value result, Value from) {
     FieldRef fieldRefFrom = getOrCacheFieldRefFromValue(from);
     FieldRef fieldRefResult = getOrCacheFieldRefFromValue(result);
-    if (!isa<FIRRTLType>(result.getType()))
+    if (!type_isa<FIRRTLType>(result.getType()))
       return mergeLatticeValue(fieldRefResult, fieldRefFrom);
-    walkGroundTypes(cast<FIRRTLType>(result.getType()),
+    walkGroundTypes(type_cast<FIRRTLType>(result.getType()),
                     [&](uint64_t fieldID, auto) {
                       mergeLatticeValue(fieldRefResult.getSubField(fieldID),
                                         fieldRefFrom.getSubField(fieldID));
@@ -442,15 +442,14 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
       markInstanceOp(instance);
     else if (auto mem = dyn_cast<MemOp>(op))
       markMemOp(mem);
-    else if (auto cast = dyn_cast<mlir::UnrealizedConversionCastOp>(op))
-      for (auto result : cast.getResults())
+    else if (isa<mlir::UnrealizedConversionCastOp, VerbatimExprOp,
+                 VerbatimWireOp, SubaccessOp>(op) ||
+             op.getNumOperands() == 0) {
+      // Mark operations whose results cannot be tracked as overdefined. Mark
+      // unhandled operations with no operand as well since otherwise they will
+      // remain unknown states until the end.
+      for (auto result : op.getResults())
         markOverdefined(result);
-    else if (auto verbatim = dyn_cast<VerbatimExprOp>(op))
-      markOverdefined(verbatim.getResult());
-    else if (auto verbatim = dyn_cast<VerbatimWireOp>(op))
-      markOverdefined(verbatim.getResult());
-    else if (auto subaccess = dyn_cast<SubaccessOp>(op)) {
-      markOverdefined(subaccess);
     } else if (!isa<SubindexOp, SubfieldOp, NodeOp>(&op) &&
                op.getNumResults() > 0) {
       // If an unknown operation has an aggregate operand, mark results as
@@ -462,12 +461,12 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
 
       bool hasAggregateOperand =
           llvm::any_of(op.getOperandTypes(), [](Type type) {
-            return isa<FVectorType, BundleType>(type);
+            return type_isa<FVectorType, BundleType>(type);
           });
 
       for (auto result : op.getResults())
         if (hasAggregateOperand ||
-            isa<FVectorType, BundleType>(result.getType()))
+            type_isa<FVectorType, BundleType>(result.getType()))
           markOverdefined(result);
     }
 
@@ -476,7 +475,7 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
     if (!isAggregate(&op)) {
       for (auto operand : op.getOperands()) {
         auto fieldRef = getOrCacheFieldRefFromValue(operand);
-        auto firrtlType = dyn_cast<FIRRTLType>(operand.getType());
+        auto firrtlType = type_dyn_cast<FIRRTLType>(operand.getType());
         if (!firrtlType)
           continue;
         walkGroundTypes(firrtlType, [&](uint64_t fieldID, auto type) {
@@ -488,7 +487,7 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
 }
 
 void IMConstPropPass::markWireOp(WireOp wire) {
-  auto type = dyn_cast<FIRRTLType>(wire.getResult().getType());
+  auto type = type_dyn_cast<FIRRTLType>(wire.getResult().getType());
   if (!type)
     return markOverdefined(wire.getResult());
 
@@ -589,7 +588,7 @@ getFieldIDOffset(FieldRef changedFieldRef, FIRRTLBaseType connectionType,
 void IMConstPropPass::mergeOnlyChangedLatticeValue(Value dest, Value src,
                                                    FieldRef changedFieldRef) {
 
-  auto destTypeFIRRTL = dyn_cast<FIRRTLType>(dest.getType());
+  auto destTypeFIRRTL = type_dyn_cast<FIRRTLType>(dest.getType());
   if (!destTypeFIRRTL) {
     // If the dest is not FIRRTL type, mark all of them overdefined anyway.
     markOverdefined(src);
@@ -617,7 +616,7 @@ void IMConstPropPass::mergeOnlyChangedLatticeValue(Value dest, Value src,
 void IMConstPropPass::visitConnectLike(FConnectLike connect,
                                        FieldRef changedFieldRef) {
   // Mark foreign types as overdefined.
-  auto destTypeFIRRTL = dyn_cast<FIRRTLType>(connect.getDest().getType());
+  auto destTypeFIRRTL = type_dyn_cast<FIRRTLType>(connect.getDest().getType());
   if (!destTypeFIRRTL) {
     markOverdefined(connect.getSrc());
     return markOverdefined(connect.getDest());
@@ -833,10 +832,12 @@ void IMConstPropPass::visitOperation(Operation *op, FieldRef changedField) {
     logger.getOStream() << "}\n";
   });
 
-  // Fold functions in general are allowed to do in-place updates, but FIRRTL
-  // does not do this and supporting it costs more.
-  assert(!foldResults.empty() &&
-         "FIRRTL fold functions shouldn't do in-place updates!");
+  // If the folding was in-place, keep going.  This is surprising, but since
+  // only folder that will do inplace updates is the communative folder, we
+  // aren't going to stop.  We don't update the results, since they didn't
+  // change, the op just got shuffled around.
+  if (foldResults.empty())
+    return visitOperation(op, changedField);
 
   // Merge the fold results into the lattice for this operation.
   assert(foldResults.size() == op->getNumResults() && "invalid result size");
@@ -854,11 +855,8 @@ void IMConstPropPass::visitOperation(Operation *op, FieldRef changedField) {
           latticeValues[getOrCacheFieldRefFromValue(foldResult.get<Value>())];
     }
 
-    // We do not "merge" the lattice value in, we set it.  This is because the
-    // fold functions can produce different values over time, e.g. in the
-    // presence of InvalidValue operands that get resolved to other constants.
-    setLatticeValue(getOrCacheFieldRefFromValue(op->getResult(i)),
-                    resultLattice);
+    mergeLatticeValue(getOrCacheFieldRefFromValue(op->getResult(i)),
+                      resultLattice);
   }
 }
 
@@ -910,7 +908,7 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
       return false;
 
     // Cannot materialize constants for non-base types.
-    if (!isa<FIRRTLBaseType>(value.getType()))
+    if (!type_isa<FIRRTLBaseType>(value.getType()))
       return false;
 
     auto cstValue =
@@ -940,7 +938,8 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
         // the aggregate value cannot be replaced. We can forward the constant
         // to its users, so IMDCE (or SV/HW canonicalizer) should remove the
         // aggregate if entire aggregate is dead.
-        if (auto type = dyn_cast<FIRRTLType>(connect.getDest().getType())) {
+        if (auto type =
+                type_dyn_cast<FIRRTLType>(connect.getDest().getType())) {
           if (getBaseType(type).isGround() &&
               isDeletableWireOrRegOrNode(destOp) && !isOverdefined(fieldRef)) {
             connect.erase();

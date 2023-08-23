@@ -5,6 +5,7 @@ add_circt_dialect_library(CIRCTFSM
   FSMTypes.cpp
 
   DEPENDS
+  MLIRArithDialect
   MLIRFSMIncGen
 
   LINK_LIBS PUBLIC

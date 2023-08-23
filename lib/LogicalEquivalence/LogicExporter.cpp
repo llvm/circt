@@ -53,7 +53,7 @@ struct Visitor : public hw::StmtVisitor<Visitor, LogicalResult>,
 
   /// Handles `hw.module` logic exporting.
   LogicalResult visit(hw::HWModuleOp op) {
-    for (auto argument : op.getArguments())
+    for (auto argument : op.getBodyBlock()->getArguments())
       circuit->addInput(argument);
     for (auto &op : op.getOps())
       if (failed(dispatch(&op)))
@@ -75,7 +75,7 @@ struct Visitor : public hw::StmtVisitor<Visitor, LogicalResult>,
 
   LogicalResult visitStmt(hw::InstanceOp op) {
     if (auto hwModule =
-            llvm::dyn_cast<hw::HWModuleOp>(op.getReferencedModule())) {
+            llvm::dyn_cast<hw::HWModuleOp>(op.getReferencedModuleSlow())) {
       circuit->addInstance(op.getInstanceName(), hwModule, op->getOperands(),
                            op->getResults());
       return success();

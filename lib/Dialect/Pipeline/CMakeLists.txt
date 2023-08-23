@@ -18,8 +18,8 @@ add_circt_dialect_library(CIRCTPipelineOps
   MLIRIR
 
   DEPENDS
+  MLIRArithDialect
   MLIRPipelineIncGen
-  CIRCTPipelineInterfacesIncGen
 )
 
 add_subdirectory(Transforms)

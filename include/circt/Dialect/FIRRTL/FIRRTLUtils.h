@@ -14,11 +14,14 @@
 #define CIRCT_DIALECT_FIRRTL_FIRRTLUTILS_H
 
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
-#include "circt/Dialect/FIRRTL/Namespace.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "llvm/Support/Parallel.h"
 
 namespace circt {
+namespace hw {
+struct InnerSymbolNamespace;
+} // namespace hw
+
 namespace firrtl {
 /// Emit a connect between two values.
 void emitConnect(OpBuilder &builder, Location loc, Value lhs, Value rhs);
@@ -110,27 +113,76 @@ void walkGroundTypes(FIRRTLType firrtlType,
 // Inner symbol and InnerRef helpers.
 //===----------------------------------------------------------------------===//
 
-/// Returns an operation's `inner_sym`, adding one if necessary.
-StringAttr
-getOrAddInnerSym(Operation *op, StringRef nameHint, FModuleOp mod,
-                 std::function<ModuleNamespace &(FModuleOp)> getNamespace);
+using GetNamespaceCallback =
+    llvm::function_ref<hw::InnerSymbolNamespace &(FModuleLike mod)>;
 
-/// Obtain an inner reference to an operation, possibly adding an `inner_sym`
-/// to that operation.
-hw::InnerRefAttr
-getInnerRefTo(Operation *op, StringRef nameHint,
-              std::function<ModuleNamespace &(FModuleOp)> getNamespace);
+/// Returns an inner symbol identifier for the specified target (op or port),
+/// adding one if necessary.
+StringAttr getOrAddInnerSym(const hw::InnerSymTarget &target,
+                            GetNamespaceCallback getNamespace);
 
-/// Returns a port's `inner_sym`, adding one if necessary.
-StringAttr
-getOrAddInnerSym(FModuleLike mod, size_t portIdx, StringRef nameHint,
-                 std::function<ModuleNamespace &(FModuleLike)> getNamespace);
+/// Obtain an inner reference to the target (operation or port),
+/// adding an inner symbol as necessary.
+hw::InnerRefAttr getInnerRefTo(const hw::InnerSymTarget &target,
+                               GetNamespaceCallback getNamespace);
 
-/// Obtain an inner reference to a port, possibly adding an `inner_sym`
-/// to the port.
-hw::InnerRefAttr
-getInnerRefTo(FModuleLike mod, size_t portIdx, StringRef nameHint,
-              std::function<ModuleNamespace &(FModuleLike)> getNamespace);
+/// Returns an inner symbol identifier for the specified operation, adding one
+/// if necessary.
+static inline StringAttr getOrAddInnerSym(Operation *op,
+                                          GetNamespaceCallback getNamespace) {
+  return getOrAddInnerSym(hw::InnerSymTarget(op), getNamespace);
+}
+/// Returns an inner symbol identifier for the specified operation's field
+/// adding one if necessary.
+static inline StringAttr getOrAddInnerSym(Operation *op, uint64_t fieldID,
+                                          GetNamespaceCallback getNamespace) {
+  return getOrAddInnerSym(hw::InnerSymTarget(op, fieldID), getNamespace);
+}
+
+/// Obtain an inner reference to an operation, possibly adding an inner symbol.
+static inline hw::InnerRefAttr
+getInnerRefTo(Operation *op, GetNamespaceCallback getNamespace) {
+  return getInnerRefTo(hw::InnerSymTarget(op), getNamespace);
+}
+
+/// Obtain an inner reference to an operation's field, possibly adding an inner
+/// symbol.
+static inline hw::InnerRefAttr
+getInnerRefTo(Operation *op, uint64_t fieldID,
+              GetNamespaceCallback getNamespace) {
+  return getInnerRefTo(hw::InnerSymTarget(op, fieldID), getNamespace);
+}
+
+/// Returns an inner symbol identifier for the specified port, adding one if
+/// necessary.
+static inline StringAttr getOrAddInnerSym(FModuleLike mod, size_t portIdx,
+                                          GetNamespaceCallback getNamespace) {
+  return getOrAddInnerSym(hw::InnerSymTarget(portIdx, mod), getNamespace);
+}
+
+/// Returns an inner symbol identifier for the specified port's field, adding
+/// one if necessary.
+static inline StringAttr getOrAddInnerSym(FModuleLike mod, size_t portIdx,
+                                          uint64_t fieldID,
+                                          GetNamespaceCallback getNamespace) {
+  return getOrAddInnerSym(hw::InnerSymTarget(portIdx, mod, fieldID),
+                          getNamespace);
+}
+
+/// Obtain an inner reference to a port, possibly adding an inner symbol.
+static inline hw::InnerRefAttr
+getInnerRefTo(FModuleLike mod, size_t portIdx,
+              GetNamespaceCallback getNamespace) {
+  return getInnerRefTo(hw::InnerSymTarget(portIdx, mod), getNamespace);
+}
+
+/// Obtain an inner reference to a port's field, possibly adding an inner
+/// symbol.
+static inline hw::InnerRefAttr
+getInnerRefTo(FModuleLike mod, size_t portIdx, uint64_t fieldID,
+              GetNamespaceCallback getNamespace) {
+  return getInnerRefTo(hw::InnerSymTarget(portIdx, mod, fieldID), getNamespace);
+}
 
 //===----------------------------------------------------------------------===//
 // Type utilities
@@ -162,10 +214,30 @@ inline FIRRTLType mapBaseType(FIRRTLType type,
       });
 }
 
+/// Return a FIRRTLType with its base type component mutated by the given
+/// function. Return null when the function returns null.
+/// (i.e., ref<T> -> ref<f(T)> if f(T) != null else null, and T -> f(T)).
+inline FIRRTLType
+mapBaseTypeNullable(FIRRTLType type,
+                    function_ref<FIRRTLBaseType(FIRRTLBaseType)> fn) {
+  return TypeSwitch<FIRRTLType, FIRRTLType>(type)
+      .Case<FIRRTLBaseType>([&](auto base) { return fn(base); })
+      .Case<RefType>([&](auto ref) -> FIRRTLType {
+        auto result = fn(ref.getType());
+        if (!result)
+          return {};
+        return RefType::get(result, ref.getForceable());
+      });
+}
+
 /// Given a type, return the corresponding lowered type for the HW dialect.
 /// Non-FIRRTL types are simply passed through. This returns a null type if it
-/// cannot be lowered.
-Type lowerType(Type type);
+/// cannot be lowered. The optional function is required to specify how to lower
+/// AliasTypes.
+Type lowerType(
+    Type type, std::optional<Location> loc = {},
+    llvm::function_ref<hw::TypeAliasType(Type, BaseTypeAliasType, Location)>
+        getTypeDeclFn = {});
 
 //===----------------------------------------------------------------------===//
 // Parser-related utilities

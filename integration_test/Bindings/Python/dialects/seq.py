@@ -43,6 +43,8 @@ with Context() as ctx, Location.unknown():
       seq.reg(reg_input, module.clk, reset=module.rst, reset_value=custom_reset)
       # CHECK: %FuBar = seq.compreg {{.+}}
       seq.reg(reg_input, module.clk, name="FuBar")
+      # CHECK: seq.compreg sym @FuBar
+      seq.reg(reg_input, module.clk, sym_name="FuBar")
 
       # CHECK: %reg1 = seq.compreg %[[INPUT_VAL]], %clk {sv.attributes = [#sv.attribute<"no_merge">]} : i32
       sv_attr = sv.SVAttributeAttr.get("no_merge")

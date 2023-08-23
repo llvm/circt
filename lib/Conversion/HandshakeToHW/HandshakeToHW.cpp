@@ -281,7 +281,7 @@ static ModulePortInfo getPortInfoForOp(Operation *op) {
 static llvm::SmallVector<hw::detail::FieldInfo>
 portToFieldInfo(llvm::ArrayRef<hw::PortInfo> portInfo) {
   llvm::SmallVector<hw::detail::FieldInfo> fieldInfo;
-  for (auto &port : portInfo)
+  for (auto port : portInfo)
     fieldInfo.push_back({port.name, port.type});
 
   return fieldInfo;
@@ -290,12 +290,12 @@ portToFieldInfo(llvm::ArrayRef<hw::PortInfo> portInfo) {
 // Convert any handshake.extmemory operations and the top-level I/O
 // associated with these.
 static LogicalResult convertExtMemoryOps(HWModuleOp mod) {
-  auto ports = mod.getPorts();
+  auto ports = mod.getPortList();
   auto *ctx = mod.getContext();
 
   // Gather memref ports to be converted.
   llvm::DenseMap<unsigned, Value> memrefPorts;
-  for (auto [i, arg] : llvm::enumerate(mod.getArguments())) {
+  for (auto [i, arg] : llvm::enumerate(mod.getBodyBlock()->getArguments())) {
     auto channel = arg.getType().dyn_cast<esi::ChannelType>();
     if (channel && channel.getInner().isa<MemRefType>())
       memrefPorts[i] = arg;
@@ -308,35 +308,36 @@ static LogicalResult convertExtMemoryOps(HWModuleOp mod) {
 
   auto getMemoryIOInfo = [&](Location loc, Twine portName, unsigned argIdx,
                              ArrayRef<hw::PortInfo> info,
-                             hw::PortDirection direction) {
+                             hw::ModulePort::Direction direction) {
     auto type = hw::StructType::get(ctx, portToFieldInfo(info));
     auto portInfo =
-        hw::PortInfo{b.getStringAttr(portName), direction, type, argIdx};
+        hw::PortInfo{{b.getStringAttr(portName), type, direction}, argIdx};
     return portInfo;
   };
 
   for (auto [i, arg] : memrefPorts) {
     // Insert ports into the module
-    auto memName = mod.getArgNames()[i].cast<StringAttr>();
+    auto memName = mod.getArgName(i);
 
     // Get the attached extmemory external module.
     auto extmemInstance = cast<hw::InstanceOp>(*arg.getUsers().begin());
     auto extmemMod =
-        cast<hw::HWModuleExternOp>(extmemInstance.getReferencedModule());
-    auto portInfo = extmemMod.getPorts();
+        cast<hw::HWModuleExternOp>(extmemInstance.getReferencedModuleSlow());
+    auto portInfo = extmemMod.getPortList();
 
     // The extmemory external module's interface is a direct wrapping of the
     // original handshake.extmemory operation in- and output types. Remove the
     // first input argument (the !esi.channel<memref> op) since that is what
     // we're replacing with a materialized interface.
-    portInfo.inputs.erase(portInfo.inputs.begin());
+    portInfo.eraseInput(0);
 
     // Add memory input - this is the output of the extmemory op.
+    SmallVector<PortInfo> outputs(portInfo.getOutputs());
     auto inPortInfo =
-        getMemoryIOInfo(arg.getLoc(), memName.strref() + "_in", i,
-                        portInfo.outputs, hw::PortDirection::INPUT);
+        getMemoryIOInfo(arg.getLoc(), memName.strref() + "_in", i, outputs,
+                        hw::ModulePort::Direction::Input);
     mod.insertPorts({{i, inPortInfo}}, {});
-    auto newInPort = mod.getArgument(i);
+    auto newInPort = mod.getArgumentForInput(i);
     // Replace the extmemory submodule outputs with the newly created inputs.
     b.setInsertionPointToStart(mod.getBodyBlock());
     auto newInPortExploded = b.create<hw::StructExplodeOp>(
@@ -345,10 +346,11 @@ static LogicalResult convertExtMemoryOps(HWModuleOp mod) {
 
     // Add memory output - this is the inputs of the extmemory op (without the
     // first argument);
-    unsigned outArgI = mod.getNumResults();
+    unsigned outArgI = mod.getNumOutputs();
+    SmallVector<PortInfo> inputs(portInfo.getInputs());
     auto outPortInfo =
         getMemoryIOInfo(arg.getLoc(), memName.strref() + "_out", outArgI,
-                        portInfo.inputs, hw::PortDirection::OUTPUT);
+                        inputs, hw::ModulePort::Direction::Output);
 
     auto memOutputArgs = extmemInstance.getOperands().drop_front();
     b.setInsertionPoint(mod.getBodyBlock()->getTerminator());
@@ -498,7 +500,7 @@ struct RTLBuilder {
            "signal must be provided to the reg(...) function.");
 
     return b.create<seq::CompRegOp>(loc, in.getType(), in, resolvedClk, name,
-                                    resolvedRst, rstValue, StringAttr());
+                                    resolvedRst, rstValue, hw::InnerSymAttr());
   }
 
   Value cmp(Value lhs, Value rhs, comb::ICmpPredicate predicate,
@@ -705,8 +707,8 @@ addSequentialIOOperandsIfNeeded(Operation *op,
     // Parent should at this point be a hw.module and have clock and reset
     // ports.
     auto parent = cast<hw::HWModuleOp>(op->getParentOp());
-    operands.push_back(parent.getArgument(parent.getNumArguments() - 2));
-    operands.push_back(parent.getArgument(parent.getNumArguments() - 1));
+    operands.push_back(parent.getArgumentForInput(parent.getNumInputs() - 2));
+    operands.push_back(parent.getArgumentForInput(parent.getNumInputs() - 1));
   }
 }
 
@@ -745,7 +747,7 @@ public:
             }
 
             BackedgeBuilder bb(b, op.getLoc());
-            RTLBuilder s(ports.getModulePortInfo(), b, op.getLoc(), clk, rst);
+            RTLBuilder s(ports.getPortList(), b, op.getLoc(), clk, rst);
             this->buildModule(op, bb, s, ports);
           });
     }
@@ -779,7 +781,7 @@ public:
       hs.ready = ready;
       unwrapped.inputs.push_back(hs);
     }
-    for (auto &outputInfo : ports.getModulePortInfo().outputs) {
+    for (auto &outputInfo : ports.getPortList().getOutputs()) {
       esi::ChannelType channelType =
           dyn_cast<esi::ChannelType>(outputInfo.type);
       if (!channelType)
@@ -1807,7 +1809,7 @@ public:
     } else {
       auto hwModuleOp = rewriter.create<hw::HWModuleOp>(
           op.getLoc(), rewriter.getStringAttr(op.getName()), ports);
-      auto args = hwModuleOp.getArguments().drop_back(2);
+      auto args = hwModuleOp.getBodyBlock()->getArguments().drop_back(2);
       rewriter.inlineBlockBefore(&op.getBody().front(),
                                  hwModuleOp.getBodyBlock()->getTerminator(),
                                  args);

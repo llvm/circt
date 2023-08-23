@@ -53,21 +53,37 @@ firrtl.circuit "unprocessedAnnotations" {
  firrtl.module @bar(in %io_cpu_flush: !firrtl.uint<1>){
   }
   firrtl.module @unprocessedAnnotations(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>,
-                            in %cond: !firrtl.uint<1>, in %value: !firrtl.uint<2>) {
+                                        in %cond: !firrtl.uint<1>, in %value: !firrtl.uint<2>,
+                                        in %io_cpu_flush: !firrtl.uint<1>) {
     // expected-warning @+1 {{unprocessed annotation:'firrtl.transforms.RemainingAnnotation1'}}
     %1 = firrtl.wire {annotations = [{class = "firrtl.transforms.RemainingAnnotation1"}]} : !firrtl.uint<1>
+
     // expected-warning @+1 {{unprocessed annotation:'firrtl.transforms.RemainingAnnotation2'}}
     %2 = firrtl.node %1 {annotations = [{class = "firrtl.transforms.RemainingAnnotation2"}]} : !firrtl.uint<1>
+
     // expected-warning @+1 {{unprocessed annotation:'firrtl.transforms.RemainingAnnotation3'}}
     %3 = firrtl.reg %clock {annotations = [{class = "firrtl.transforms.RemainingAnnotation3"}]} : !firrtl.clock, !firrtl.uint<1>
+
     // expected-warning @+1 {{unprocessed annotation:'firrtl.transforms.RemainingAnnotation4'}}
     %4 = firrtl.regreset %clock, %reset, %1 {annotations = [{class = "firrtl.transforms.RemainingAnnotation4"}]} : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+
     // expected-warning @+1 {{unprocessed annotation:'firrtl.transforms.RemainingAnnotation5'}}
-    %_M_read, %_M_rw, %_M_write = firrtl.mem Undefined {depth = 12 : i64, name = "_M", portNames = ["read", "rw",
-    "write"], readLatency = 0 : i32, writeLatency = 1 : i32, annotations = [{class =
-    "firrtl.transforms.RemainingAnnotation5"}]} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: sint<42>, wmode: uint<1>, wdata: sint<42>, wmask: uint<1>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>
+    %_M_read = firrtl.mem Undefined {depth = 12 : i64, name = "_M", portNames = ["read"], readLatency = 0 : i32, writeLatency = 1 : i32, annotations =
+      [{class = "firrtl.transforms.RemainingAnnotation5"}]} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>
+    %_M_read.clk = firrtl.subfield %_M_read[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>
+    %_M_read.en = firrtl.subfield %_M_read[en] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>
+    %_M_read.addr = firrtl.subfield %_M_read[addr] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>
+    %_M_read.data = firrtl.subfield %_M_read[data] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>
+    %c0_i1 = firrtl.constant 0 : !firrtl.uint<1>
+    %c0_i4 = firrtl.constant 0 : !firrtl.uint<4>
+    firrtl.strictconnect %_M_read.clk, %clock : !firrtl.clock
+    firrtl.strictconnect %_M_read.en, %c0_i1 : !firrtl.uint<1>
+    firrtl.strictconnect %_M_read.addr, %c0_i4 : !firrtl.uint<4>
+
     // expected-warning @+1 {{unprocessed annotation:'firrtl.transforms.RemainingAnnotation6'}}
     %5 = firrtl.instance fetch {annotations = [{class = "firrtl.transforms.RemainingAnnotation6"}]} @bar(in io_cpu_flush: !firrtl.uint<1>)
+    firrtl.connect %5, %io_cpu_flush : !firrtl.uint<1>, !firrtl.uint<1>
+
     %6 = firrtl.node %1 {annotations = [{class = "firrtl.transforms.RemainingAnnotation3"}]} : !firrtl.uint<1>
   }
 }
@@ -174,5 +190,31 @@ firrtl.circuit "ConnectDestSubaccess" {
     %1 = firrtl.subaccess %0[%index] : !firrtl.vector<uint<1>, 1>, !firrtl.uint<1>
     // expected-error @below {{'firrtl.strictconnect' op LowerToHW couldn't handle this operation}}
     firrtl.strictconnect %1, %value : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+firrtl.circuit "UndrivenInputPort" {
+  firrtl.extmodule private @Blackbox(in inst: !firrtl.uint<1>)
+
+  firrtl.module @UndrivenInputPort() {
+    // expected-error @below {{sink in combinational loop}}
+    %0 = firrtl.instance blackbox @Blackbox(in inst : !firrtl.uint<1>)
+    // expected-note @below {{through driver here}}
+    %1 = firrtl.instance blackbox @Blackbox(in inst : !firrtl.uint<1>)
+    firrtl.strictconnect %0, %1 : !firrtl.uint<1>
+    firrtl.strictconnect %1, %0 : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+firrtl.circuit "InputSelfDriver" {
+  firrtl.module private @InputPorts(in %in : !firrtl.uint<1>) { }
+  firrtl.module @InputSelfDriver(in %in : !firrtl.uint<1>) {
+    // expected-error @below {{sink does not have a driver}}
+    %ip2_in = firrtl.instance ip2 @InputPorts(in in : !firrtl.uint<1>)
+    firrtl.connect %ip2_in, %ip2_in : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }

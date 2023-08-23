@@ -90,7 +90,7 @@ circuit test:
     tbMemoryKind1.w.mask <= wMask
     tbMemoryKind1.w.data <= wData
 
-; CHECK=LABEL: module hier1
+; CHECK-LABEL: module hier1
 ; CHECK:  tbMemoryKind1_0 tbMemoryKind1
 
 
@@ -187,7 +187,7 @@ circuit test:
 ; CHECK-NEXT:     "readwrite": 0,
 ; CHECK-NEXT:     "extra_ports": [],
 ; CHECK-NEXT:     "hierarchy": [
-; CHECK-NEXT:       "dutModule.m.dutMemory.dutMemory_ext"
+; CHECK-NEXT:       "dutModule.hello.dutMemory.dutMemory_ext"
 ; CHECK-NEXT:     ]
 ; CHECK-NEXT:   }
 ; CHECK-NEXT: ]

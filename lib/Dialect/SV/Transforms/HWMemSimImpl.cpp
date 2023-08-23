@@ -16,7 +16,7 @@
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWSymCache.h"
-#include "circt/Dialect/HW/Namespace.h"
+#include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Dialect/Seq/SeqAttributes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -61,8 +61,9 @@ class HWMemSimImpl {
   SmallVector<sv::RegOp> registers;
 
   Value addPipelineStages(ImplicitLocOpBuilder &b,
-                          ModuleNamespace &moduleNamespace, size_t stages,
-                          Value clock, Value data, Value gate = {});
+                          hw::InnerSymbolNamespace &moduleNamespace,
+                          size_t stages, Value clock, Value data,
+                          const Twine &name, Value gate = {});
   sv::AlwaysOp lastPipelineAlwaysOp;
 
 public:
@@ -172,9 +173,9 @@ static Value getMemoryRead(ImplicitLocOpBuilder &b, Value memory, Value addr,
 }
 
 Value HWMemSimImpl::addPipelineStages(ImplicitLocOpBuilder &b,
-                                      ModuleNamespace &moduleNamespace,
+                                      hw::InnerSymbolNamespace &moduleNamespace,
                                       size_t stages, Value clock, Value data,
-                                      Value gate) {
+                                      const Twine &name, Value gate) {
   if (!stages)
     return data;
 
@@ -195,8 +196,10 @@ Value HWMemSimImpl::addPipelineStages(ImplicitLocOpBuilder &b,
   SmallVector<sv::RegOp> regs;
   b.setInsertionPoint(alwaysOp);
   for (unsigned i = 0; i < stages; ++i) {
-    auto regName = b.getStringAttr(moduleNamespace.newName("_GEN"));
-    auto reg = b.create<sv::RegOp>(data.getType(), StringAttr{}, regName);
+    auto regName =
+        b.getStringAttr(moduleNamespace.newName("_" + name + "_d" + Twine(i)));
+    auto reg = b.create<sv::RegOp>(data.getType(), regName,
+                                   hw::InnerSymAttr::get(regName));
     regs.push_back(reg);
     registers.push_back(reg);
   }
@@ -224,7 +227,7 @@ Value HWMemSimImpl::addPipelineStages(ImplicitLocOpBuilder &b,
 void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
   ImplicitLocOpBuilder b(op.getLoc(), op.getBody());
 
-  ModuleNamespace moduleNamespace(op);
+  InnerSymbolNamespace moduleNamespace(op);
 
   // Compute total number of mask bits.
   if (mem.maskGran == 0)
@@ -276,13 +279,16 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
       for (size_t j = 0, e = mem.readLatency; j != e; ++j) {
         auto enLast = en;
         if (j < e - 1)
-          en = addPipelineStages(b, moduleNamespace, 1, clock, en);
-        addr = addPipelineStages(b, moduleNamespace, 1, clock, addr, enLast);
+          en = addPipelineStages(b, moduleNamespace, 1, clock, en,
+                                 "R" + Twine(i) + "_en");
+        addr = addPipelineStages(b, moduleNamespace, 1, clock, addr,
+                                 "R" + Twine(i) + "_addr", enLast);
       }
     } else {
-      en = addPipelineStages(b, moduleNamespace, mem.readLatency, clock, en);
-      addr =
-          addPipelineStages(b, moduleNamespace, mem.readLatency, clock, addr);
+      en = addPipelineStages(b, moduleNamespace, mem.readLatency, clock, en,
+                             "R" + Twine(i) + "_en");
+      addr = addPipelineStages(b, moduleNamespace, mem.readLatency, clock, addr,
+                               "R" + Twine(i) + "_addr");
     }
 
     // Read Logic
@@ -312,31 +318,52 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
       wmaskBits = b.create<ConstantOp>(b.getIntegerAttr(en.getType(), 1));
 
     // Add common pipeline stages.
-    addr = addPipelineStages(b, moduleNamespace, numCommonStages, clock, addr);
-    en = addPipelineStages(b, moduleNamespace, numCommonStages, clock, en);
-    wmode =
-        addPipelineStages(b, moduleNamespace, numCommonStages, clock, wmode);
+    addr = addPipelineStages(b, moduleNamespace, numCommonStages, clock, addr,
+                             "RW" + Twine(i) + "_addr");
+    en = addPipelineStages(b, moduleNamespace, numCommonStages, clock, en,
+                           "RW" + Twine(i) + "_en");
+    wmode = addPipelineStages(b, moduleNamespace, numCommonStages, clock, wmode,
+                              "RW" + Twine(i) + "_mode");
 
     // Add read-only pipeline stages.
-    auto read_addr = addPipelineStages(
-        b, moduleNamespace, numReadStages - numCommonStages, clock, addr);
-    auto read_en = addPipelineStages(
-        b, moduleNamespace, numReadStages - numCommonStages, clock, en);
-    auto read_wmode = addPipelineStages(
-        b, moduleNamespace, numReadStages - numCommonStages, clock, wmode);
+    Value readAddr = addr;
+    Value readEn = en;
+    if (ignoreReadEnable) {
+      for (size_t j = 0, e = mem.readLatency; j != e; ++j) {
+        auto enLast = en;
+        if (j < e - 1)
+          readEn = addPipelineStages(b, moduleNamespace, 1, clock, en,
+                                     "RW" + Twine(i) + "_ren");
+        readAddr = addPipelineStages(b, moduleNamespace, 1, clock, addr,
+                                     "RW" + Twine(i) + "_raddr", enLast);
+      }
+    } else {
+      readAddr =
+          addPipelineStages(b, moduleNamespace, numReadStages - numCommonStages,
+                            clock, addr, "RW" + Twine(i) + "_raddr");
+      readEn =
+          addPipelineStages(b, moduleNamespace, numReadStages - numCommonStages,
+                            clock, en, "RW" + Twine(i) + "_ren");
+    }
+    auto readWMode =
+        addPipelineStages(b, moduleNamespace, numReadStages - numCommonStages,
+                          clock, wmode, "RW" + Twine(i) + "_rmode");
 
     // Add write-only pipeline stages.
-    auto write_addr = addPipelineStages(
-        b, moduleNamespace, numWriteStages - numCommonStages, clock, addr);
-    auto write_en = addPipelineStages(
-        b, moduleNamespace, numWriteStages - numCommonStages, clock, en);
-    auto write_wmode = addPipelineStages(
-        b, moduleNamespace, numWriteStages - numCommonStages, clock, wmode);
-    wdataIn =
-        addPipelineStages(b, moduleNamespace, numWriteStages, clock, wdataIn);
+    auto writeAddr =
+        addPipelineStages(b, moduleNamespace, numWriteStages - numCommonStages,
+                          clock, addr, "RW" + Twine(i) + "_waddr");
+    auto writeEn =
+        addPipelineStages(b, moduleNamespace, numWriteStages - numCommonStages,
+                          clock, en, "RW" + Twine(i) + "_wen");
+    auto writeWMode =
+        addPipelineStages(b, moduleNamespace, numWriteStages - numCommonStages,
+                          clock, wmode, "RW" + Twine(i) + "_wmode");
+    wdataIn = addPipelineStages(b, moduleNamespace, numWriteStages, clock,
+                                wdataIn, "RW" + Twine(i) + "_wdata");
     if (isMasked)
       wmaskBits = addPipelineStages(b, moduleNamespace, numWriteStages, clock,
-                                    wmaskBits);
+                                    wmaskBits, "RW" + Twine(i) + "_wmask");
 
     SmallVector<Value, 4> maskValues(maskBits);
     SmallVector<Value, 4> dataValues(maskBits);
@@ -355,25 +382,28 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
 
     // Read logic.
     Value rcond = b.createOrFold<comb::AndOp>(
-        read_en,
+        readEn,
         b.createOrFold<comb::ICmpOp>(
-            comb::ICmpPredicate::eq, read_wmode,
-            b.createOrFold<ConstantOp>(read_wmode.getType(), 0), false),
+            comb::ICmpPredicate::eq, readWMode,
+            b.createOrFold<ConstantOp>(readWMode.getType(), 0), false),
         false);
 
-    auto val = getMemoryRead(b, reg, read_addr, addMuxPragmas);
-    Value x = b.create<sv::ConstantXOp>(val.getType());
-    b.create<sv::AssignOp>(rWire, b.create<comb::MuxOp>(rcond, val, x, false));
+    auto val = getMemoryRead(b, reg, readAddr, addMuxPragmas);
+    if (!ignoreReadEnable) {
+      Value x = b.create<sv::ConstantXOp>(val.getType());
+      val = b.create<comb::MuxOp>(rcond, val, x, false);
+    }
+    b.create<sv::AssignOp>(rWire, val);
 
     // Write logic gaurded by the corresponding mask bit.
     for (auto wmask : llvm::enumerate(maskValues)) {
       b.create<sv::AlwaysOp>(sv::EventControl::AtPosEdge, clock, [&]() {
         auto wcond = b.createOrFold<comb::AndOp>(
-            write_en,
-            b.createOrFold<comb::AndOp>(wmask.value(), write_wmode, false),
+            writeEn,
+            b.createOrFold<comb::AndOp>(wmask.value(), writeWMode, false),
             false);
         b.create<sv::IfOp>(wcond, [&]() {
-          Value slotReg = b.create<sv::ArrayIndexInOutOp>(reg, write_addr);
+          Value slotReg = b.create<sv::ArrayIndexInOutOp>(reg, writeAddr);
           b.create<sv::PAssignOp>(
               b.createOrFold<sv::IndexedPartSelectInOutOp>(
                   slotReg,
@@ -402,12 +432,15 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
     else
       wmaskBits = b.create<ConstantOp>(b.getIntegerAttr(en.getType(), 1));
     // Add pipeline stages
-    addr = addPipelineStages(b, moduleNamespace, numStages, clock, addr);
-    en = addPipelineStages(b, moduleNamespace, numStages, clock, en);
-    wdataIn = addPipelineStages(b, moduleNamespace, numStages, clock, wdataIn);
+    addr = addPipelineStages(b, moduleNamespace, numStages, clock, addr,
+                             "W" + Twine(i) + "addr");
+    en = addPipelineStages(b, moduleNamespace, numStages, clock, en,
+                           "W" + Twine(i) + "en");
+    wdataIn = addPipelineStages(b, moduleNamespace, numStages, clock, wdataIn,
+                                "W" + Twine(i) + "data");
     if (isMasked)
-      wmaskBits =
-          addPipelineStages(b, moduleNamespace, numStages, clock, wmaskBits);
+      wmaskBits = addPipelineStages(b, moduleNamespace, numStages, clock,
+                                    wmaskBits, "W" + Twine(i) + "mask");
 
     SmallVector<Value, 4> maskValues(maskBits);
     SmallVector<Value, 4> dataValues(maskBits);
@@ -474,8 +507,8 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
   if (!mem.initFilename.empty()) {
     // Set an inner symbol on the register if one does not exist.
     if (!reg.getInnerSymAttr())
-      reg.setInnerSymAttr(
-          b.getStringAttr(moduleNamespace.newName(reg.getName())));
+      reg.setInnerSymAttr(hw::InnerSymAttr::get(
+          b.getStringAttr(moduleNamespace.newName(reg.getName()))));
 
     if (mem.initIsInline) {
       b.create<sv::IfDefOp>("ENABLE_INITIAL_MEM_", [&]() {
@@ -512,7 +545,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
       auto path = b.create<hw::HierPathOp>(
           mlirModuleNamespace.newName(op.getName() + "_path"),
           b.getArrayAttr(
-              ::InnerRefAttr::get(op.getNameAttr(), reg.getInnerSymAttr())));
+              ::InnerRefAttr::get(op.getNameAttr(), reg.getInnerNameAttr())));
 
       boundModule->setAttr("output_file", filename);
       b.setInsertionPointToStart(op.getBodyBlock());
@@ -528,15 +561,16 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
       b.setInsertionPointAfter(reg);
       auto boundInstance = b.create<hw::InstanceOp>(
           boundModule, boundModule.getName(), ArrayRef<Value>());
-      boundInstance->setAttr("inner_sym",
-                             b.getStringAttr(moduleNamespace.newName(
-                                 boundInstance.getInstanceName())));
+      boundInstance->setAttr(
+          "inner_sym",
+          hw::InnerSymAttr::get(b.getStringAttr(
+              moduleNamespace.newName(boundInstance.getInstanceName()))));
       boundInstance->setAttr("doNotPrint", b.getBoolAttr(true));
 
       // Bind the new module.
       b.setInsertionPointAfter(boundModule);
       auto bind = b.create<sv::BindOp>(hw::InnerRefAttr::get(
-          op.getNameAttr(), boundInstance.getInnerSymAttr()));
+          op.getNameAttr(), boundInstance.getInnerSymAttr().getSymName()));
       bind->setAttr("output_file", filename);
     }
   }
@@ -556,10 +590,10 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
         for (sv::RegOp &reg : registers)
           totalWidth += reg.getElementType().getIntOrFloatBitWidth();
         while (totalWidth > 0) {
-          auto name =
-              b.getStringAttr(moduleNamespace.newName(Twine("_RANDOM")));
-          randRegs.push_back(
-              b.create<sv::RegOp>(b.getIntegerType(randomWidth), name, name));
+          auto name = b.getStringAttr(moduleNamespace.newName("_RANDOM"));
+          auto innerSym = hw::InnerSymAttr::get(name);
+          randRegs.push_back(b.create<sv::RegOp>(b.getIntegerType(randomWidth),
+                                                 name, innerSym));
           totalWidth -= randomWidth;
         }
       });
@@ -606,7 +640,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
                 // Truncate the induction variable if necessary.
                 if (!outerIndVar.getType().isInteger(
                         llvm::Log2_64_Ceil(mem.depth)))
-                  iterValue = b.create<comb::ExtractOp>(
+                  iterValue = b.createOrFold<comb::ExtractOp>(
                       iterValue, 0, llvm::Log2_64_Ceil(mem.depth));
                 auto lhs = b.create<sv::ArrayIndexInOutOp>(reg, iterValue);
                 auto rhs = b.createOrFold<comb::ExtractOp>(
@@ -628,7 +662,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
             b.create<sv::VerbatimOp>(
                 b.getStringAttr("{{0}} = {`RANDOM};"), ValueRange{},
                 b.getArrayAttr(hw::InnerRefAttr::get(op.getNameAttr(),
-                                                     reg.getInnerSymAttr())));
+                                                     reg.getInnerNameAttr())));
           auto randRegIdx = 0;
           for (sv::RegOp &reg : registers) {
             SmallVector<std::pair<Attribute, std::pair<size_t, size_t>>> values;
@@ -640,7 +674,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
                 bits = 0;
               }
               auto innerRef = hw::InnerRefAttr::get(op.getNameAttr(),
-                                                    randReg.getInnerSymAttr());
+                                                    randReg.getInnerNameAttr());
               if (widthRemaining <= randomWidth - bits) {
                 values.push_back({innerRef, {bits + widthRemaining - 1, bits}});
                 bits += widthRemaining;
@@ -655,7 +689,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
             unsigned idx = 1;
             assert(reg.getInnerSymAttr());
             SmallVector<Attribute, 4> symbols({hw::InnerRefAttr::get(
-                op.getNameAttr(), reg.getInnerSymAttr())});
+                op.getNameAttr(), reg.getInnerNameAttr())});
             if (values.size() > 1)
               rhs.append("{");
             for (auto &v : values) {
@@ -722,10 +756,10 @@ void HWMemSimImplPass::runOnOperation() {
       if (replSeqMem && ((mem.readLatency == 1 && mem.writeLatency == 1) &&
                          mem.dataWidth > 0)) {
         builder.create<HWModuleExternOp>(oldModule.getLoc(), nameAttr,
-                                         oldModule.getPorts());
+                                         oldModule.getPortList());
       } else {
         auto newModule = builder.create<HWModuleOp>(
-            oldModule.getLoc(), nameAttr, oldModule.getPorts());
+            oldModule.getLoc(), nameAttr, oldModule.getPortList());
         if (auto outdir = oldModule->getAttr("output_file"))
           newModule->setAttr("output_file", outdir);
         newModule.setCommentAttr(

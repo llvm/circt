@@ -15,6 +15,7 @@
 
 include "circt/Dialect/HW/HWAttributes.td"
 include "circt/Dialect/HW/HWDialect.td"
+include "circt/Dialect/HW/HWOpInterfaces.td"
 include "circt/Dialect/HW/HWTypes.td"
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
@@ -56,7 +57,8 @@ def ConstantOp
 
 def WireOp : HWOp<"wire", [
     SameOperandsAndResultType,
-    DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
+    DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+    DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>]> {
   let summary = "Assign a name or symbol to an SSA edge";
   let description = [{
     An `hw.wire` is used to assign a human-readable name or a symbol for remote
@@ -88,22 +90,22 @@ def WireOp : HWOp<"wire", [
 
   let arguments = (ins AnyType:$input,
                        OptionalAttr<StrAttr>:$name,
-                       OptionalAttr<SymbolNameAttr>:$inner_sym);
+                       OptionalAttr<InnerSymAttr>:$inner_sym);
   let results = (outs AnyType:$result);
 
   let hasFolder = true;
   let hasCanonicalizeMethod = 1;
-  let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<(ins "mlir::Value":$input,
                    CArg<"const StringAttrOrRef &", "{}">:$name,
-                   CArg<"const StringAttrOrRef &", "{}">:$inner_sym), [{
+                   CArg<"const StringAttrOrRef &", "{}">:$innerSym), [{
       auto *context = odsBuilder.getContext();
       odsState.addOperands(input);
       if (auto attr = name.get(context))
         odsState.addAttribute(getNameAttrName(odsState.name), attr);
-      if (auto attr = inner_sym.get(context))
-        odsState.addAttribute(getInnerSymAttrName(odsState.name), attr);
+      if (auto attr = innerSym.get(context))
+        odsState.addAttribute(getInnerSymAttrName(odsState.name),
+                              InnerSymAttr::get(attr));
       odsState.addTypes(input.getType());
     }]>
   ];

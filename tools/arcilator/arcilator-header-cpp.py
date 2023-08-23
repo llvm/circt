@@ -194,7 +194,7 @@ def format_view_hierarchy(hierarchy: StateHierarchy, depth: int) -> str:
   lines = []
   for state in hierarchy.states:
     lines.append(f"{state_cpp_type(state)} &{clean_name(state.name)};")
-  if depth > 0:
+  if depth != 0:
     for child in hierarchy.children:
       lines.append(
           f"{indent(format_view_hierarchy(child, depth-1))} {clean_name(child.name)};"
@@ -213,7 +213,7 @@ def format_view_constructor(hierarchy: StateHierarchy, depth: int) -> str:
   lines = []
   for state in hierarchy.states:
     lines.append(f".{clean_name(state.name)} = {state_cpp_ref(state)}")
-  if depth > 0:
+  if depth != 0:
     for child in hierarchy.children:
       lines.append(
           f".{clean_name(child.name)} = {indent(format_view_constructor(child, depth-1))}"

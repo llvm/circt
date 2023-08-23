@@ -97,8 +97,8 @@ def IMConstProp : Pass<"firrtl-imconstprop", "firrtl::CircuitOp"> {
 def RegisterOptimizer : Pass<"firrtl-register-optimizer", "firrtl::FModuleOp"> {
   let summary = "Optimizer Registers";
   let description = [{
-    This pass applies classic FIRRTL register optimizations.  These 
-    optimizations are isolated to this pass as they can change the visible 
+    This pass applies classic FIRRTL register optimizations.  These
+    optimizations are isolated to this pass as they can change the visible
     behavior of the register, especially before reset.
   }];
   let constructor = "circt::firrtl::createRegisterOptimizerPass()";
@@ -177,8 +177,6 @@ def CreateSiFiveMetadata : Pass<"firrtl-emit-metadata", "mlir::ModuleOp"> {
   let constructor = "circt::firrtl::createCreateSiFiveMetadataPass()";
   let options = [Option<"replSeqMem", "repl-seq-mem", "bool", "false",
       "Lower the seq mem for macro replacement and emit relevant metadata">,
-    Option<"replSeqMemCircuit", "repl-seq-mem-circuit", "std::string", "",
-      "Circuit root for seq mem metadata">,
     Option<"replSeqMemFile", "repl-seq-mem-file", "std::string", "",
       "File to which emit seq meme metadata">
   ];
@@ -469,18 +467,6 @@ def GrandCentral : Pass<"firrtl-grand-central", "CircuitOp"> {
   ];
 }
 
-def CheckCombCycles : Pass<"firrtl-check-comb-cycles", "firrtl::CircuitOp"> {
-  let summary = "Check combinational cycles and emit errors";
-  let description = [{
-    This pass checks combinational cycles in the IR and emit errors.
-  }];
-  let options = [
-    Option<"printSimpleCycle", "print-simple-cycle", "bool", "true",
-      "Print a simple cycle instead of printing all operations in SCC">
-  ];
-  let constructor = "circt::firrtl::createCheckCombCyclesPass()";
-}
-
 def CheckCombLoops : Pass<"firrtl-check-comb-loops", "firrtl::CircuitOp"> {
   let summary = "Check combinational cycles and emit errors";
   let description = [{
@@ -693,13 +679,13 @@ def VBToBV : Pass<"firrtl-vb-to-bv", "firrtl::CircuitOp"> {
   let constructor = "circt::firrtl::createVBToBVPass()";
 }
 
-def DropConst : InterfacePass<"firrtl-drop-const", "firrtl::FModuleLike"> {
+def DropConst : Pass<"firrtl-drop-const", "firrtl::CircuitOp"> {
   let summary = "Drop 'const' modifier from types";
   let description = [{
-    This pass drops the 'const' modifier from all types and removes all 
-    const-cast ops. 
-    
-    This simplifies downstream passes and folds so that they do not need to 
+    This pass drops the 'const' modifier from all types and removes all
+    const-cast ops.
+
+    This simplifies downstream passes and folds so that they do not need to
     take 'const' into account.
   }];
   let constructor = "circt::firrtl::createDropConstPass()";
@@ -716,18 +702,28 @@ def FinalizeIR : Pass<"firrtl-finalize-ir", "mlir::ModuleOp"> {
   let dependentDialects = ["hw::HWDialect", "sv::SVDialect"];
 }
 
-def ExtractClasses : Pass<"firrtl-extract-classes", "mlir::ModuleOp"> {
-  let summary = "Extract OM classes from FIRRTL modules with properties";
+def LowerClasses : Pass<"firrtl-lower-classes", "mlir::ModuleOp"> {
+  let summary = "Lower FIRRTL classes and objects to OM classes and objects";
   let description = [{
-    This pass walks all FIRRTL modules and creates OM classes from their non-RTL
-    properties. OM classes are created with parameters corresponding to FIRRTL
-    input properties, and OM class fields corresponding to FIRRTL output
-    properties. FIRRTL operations are not converted to OM operations. A final
-    conversion pass is required, which can operate on the extracted OM classes
-    in parallel.
+    This pass walks all FIRRTL classes and creates OM classes. It also lowers
+    FIRRTL objects to OM objects. OM classes are created with parameters
+    corresponding to FIRRTL input properties, and OM class fields corresponding
+    to FIRRTL output properties. FIRRTL operations are converted to OM
+    operations.
   }];
-  let constructor = "circt::firrtl::createExtractClassesPass()";
+  let constructor = "circt::firrtl::createLowerClassesPass()";
   let dependentDialects = ["om::OMDialect"];
+}
+
+def LowerGroups : Pass<"firrtl-lower-groups", "firrtl::CircuitOp"> {
+  let summary = "Lower optional groups to instances";
+  let description = [{
+    This pass converts FIRRTL optional groups to new modules and instantiations.
+    Referenced SSA values captured by a group are converted to ports of the
+    created module.
+  }];
+  let constructor = "circt::firrtl::createLowerGroupsPass()";
+  let dependentDialects = ["sv::SVDialect"];
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD

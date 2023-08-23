@@ -8,8 +8,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input in: UInt
     output out: UInt<8>
 
-    ; CHECK: %0 = firrtl.widthCast %in : (!firrtl.uint) -> !firrtl.uint<8>
-    ; CHECK: firrtl.strictconnect %out, %0 : !firrtl.uint<8>
+    ; CHECK: firrtl.connect %out, %in : !firrtl.uint<8>, !firrtl.uint
     out <= in
 
   ; CHECK: }
@@ -147,7 +146,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK-NOT: firrtl.strictconnect %reset
     reset is invalid
 
-    ; CHECK: %out_0 = firrtl.wire interesting_name : !firrtl.bundle<member: bundle<0: bundle<clock: clock, reset: uint<1>>>>
+    ; CHECK: %out_0 = firrtl.wire interesting_name : !firrtl.bundle<member: bundle<"0": bundle<clock: clock, reset: uint<1>>>>
     wire out_0 : { member : { 0 : { clock : Clock, reset : UInt<1>}}}
 
     ; CHECK: %_t_3 = firrtl.wire interesting_name : !firrtl.vector<uint<1>, 12>
@@ -465,7 +464,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   module expr_stmt_ambiguity :
     ; CHECK: %reg = firrtl.wire interesting_name : !firrtl.uint
     wire reg : UInt
-    ; CHECK: firrtl.strictconnect %reg,
+    ; CHECK: firrtl.connect %reg,
     reg <= UInt(42)
 
     ; CHECK: %write = firrtl.wire
@@ -478,7 +477,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   module expr_stmt_ambiguity2 :
     ; CHECK: firrtl.instance write interesting_name @circuit
     inst write of circuit
-    ; CHECK: firrtl.strictconnect %write_in
+    ; CHECK: firrtl.connect %write_in
     write.in <= UInt(1)
 
   ; CHECK-LABEL: firrtl.module private @oversize_shift(
@@ -900,11 +899,11 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     c <= mux(sel, a, b)
     z <= mux(sel, x, y)
 
-  ; CHECK-LABEL: firrtl.extmodule private @RawStringParam
-  ; CHECK-SAME:    <TYPE: none = "bit",
-  ; CHECK-SAME:     FORMAT: none = "xyz_timeout=%d\\n",
-  ; CHECK-SAME:     MIXED_QUOTES: none = "\22'\\\22">
-  extmodule RawStringParam :
+  ; CHECK-LABEL: firrtl.extmodule private @VerbatimStringParam
+  ; CHECK-SAME:    <TYPE: none = #hw.param.verbatim<"bit">,
+  ; CHECK-SAME:     FORMAT: none = #hw.param.verbatim<"xyz_timeout=%d\\n">,
+  ; CHECK-SAME:     MIXED_QUOTES: none = #hw.param.verbatim<"\22'\\\22">>
+  extmodule VerbatimStringParam :
     parameter TYPE = 'bit'
     parameter FORMAT = 'xyz_timeout=%d\n'
     parameter MIXED_QUOTES = '"\'\"'
@@ -1147,7 +1146,6 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     module.in <= UInt(1)
 
   ; CHECK-LABEL: firrtl.module private @EnumTypes
-circuit EnumTypes:
   module EnumTypes:
     ; CHECK-SAME: in %i: !firrtl.enum<Some: uint<8>, None: uint<0>>
     input i : {| Some : UInt<8>, None |}
@@ -1171,22 +1169,14 @@ circuit EnumTypes:
       ; CHECK: }
       None:
         o is invalid
-  ; CHECK-LABEL: module private @String
 
-  module String :
-    ; CHECK-SAME: out %a: !firrtl.string
-    output a : String
-    ; CHECK: %0 = firrtl.string "hello"
-    ; CHECK: firrtl.propassign %a, %0 : !firrtl.string
-    propassign a, String("hello")
+  ; CHECK-LABEL: firrtl.module private @EnumInfer(
+  module EnumInfer:
+    input i : {| A: UInt<8>, None |}
+    output o : {| A: UInt, None |}
 
-  ; CHECK-LABEL: module private @BigInt
-  module BigInt :
-    ; CHECK-SAME: out %a: !firrtl.bigint
-    output a : BigInt
-    ; CHECK: %0 = firrtl.bigint -10
-    ; CHECK: firrtl.propassign %a, %0 : !firrtl.bigint
-    propassign a, BigInt(-10)
+    ; CHECK: connect %o, %i
+    o <= i
 
   ; CHECK-LABEL: module private @RefsChild(
   ; CHECK-SAME: out %r: !firrtl.probe<uint<1>>
@@ -1218,6 +1208,7 @@ circuit EnumTypes:
     output outconst : const UInt<1>
     ; CHECK-SAME: out %agg_out: !firrtl.probe<bundle<a: uint<1>, b: const.uint>>
     output agg_out : Probe<{a: UInt<1>, b: const UInt}>
+    output field_rw : RWProbe<UInt<1>>
 
     ; CHECK-NEXT: %[[RC_IN:.+]], %[[RC_R:.+]], %[[RC_RW:.+]] = firrtl.instance rc
     inst rc of RefsChild
@@ -1251,19 +1242,18 @@ circuit EnumTypes:
     ; CHECK-DAG: %[[AGG_B:.+]] = firrtl.subfield %[[AGG]][b]
     ; CHECK-DAG: %[[AGG_B_PROBE:.+]] = firrtl.ref.send %[[AGG_B]]
     ; CHECK-DAG: %[[READ_AGG_B_PROBE:.+]] = firrtl.ref.resolve %[[AGG_B_PROBE]]
-    ; CHECK-NEXT: %[[wfix:.*]] = firrtl.widthCast %[[READ_AGG_B_PROBE]]
-    ; CHECK-DAG: strictconnect %out2, %[[wfix]]
+    ; CHECK-DAG: connect %out2, %[[READ_AGG_B_PROBE]]
     out2 <= read(probe(agg.b))
     ; CHECK-DAG: %[[AGG2_PROBE:.+]] = firrtl.ref.send %[[AGG2]]
     ; CHECK-DAG: %[[READ_AGG2_PROBE:.+]] = firrtl.ref.resolve %[[AGG2_PROBE]]
     ; CHECK-DAG: %[[READ_AGG2_PROBE__B:.+]] = firrtl.subfield %[[READ_AGG2_PROBE]][b]
-    ; CHECK-DAG: strictconnect %out2, %[[READ_AGG2_PROBE__B]]
+    ; CHECK-DAG: connect %out2, %[[READ_AGG2_PROBE__B]]
     out2 <= read(probe(agg2)).b
 
     ; CHECK: %[[AGG3:.+]] = firrtl.wire
     wire agg3 : const { a : UInt<1>, b : UInt }
     ; CHECK-NEXT: %[[AGG3_PROBE:.+]] = firrtl.ref.send %[[AGG3]]
-    ; CHECK-NEXT: %[[AGG3_PROBE_CAST:.+]] = firrtl.ref.cast %[[AGG3_PROBE]] : (!firrtl.probe<const.bundle<a: uint<1>, b: uint>>) -> !firrtl.probe<bundle<a: uint<1>, b: const.uint>> 
+    ; CHECK-NEXT: %[[AGG3_PROBE_CAST:.+]] = firrtl.ref.cast %[[AGG3_PROBE]] : (!firrtl.probe<const.bundle<a: uint<1>, b: uint>>) -> !firrtl.probe<bundle<a: uint<1>, b: const.uint>>
     ; CHECK-NEXT: ref.define %agg_out, %[[AGG3_PROBE_CAST]]
     define agg_out = probe(agg3)
 
@@ -1271,7 +1261,7 @@ circuit EnumTypes:
     ; CHECK-NEXT: %[[REM_R2_1:.+]] = firrtl.ref.sub %[[REM_R2]][1]
     ; CHECK-NEXT: %[[REM_R2_1_A:.+]] = firrtl.ref.sub %[[REM_R2_1]][0]
     ; CHECK-NEXT: %[[READ_REM_R2_1_A:.+]] = firrtl.ref.resolve %[[REM_R2_1_A]]
-    ; CHECK-NEXT: strictconnect %out3, %[[READ_REM_R2_1_A]]
+    ; CHECK-NEXT: connect %out3, %[[READ_REM_R2_1_A]]
     inst rem of RefExtMore
     out3 <= read(rem.r2[1].a)
 
@@ -1279,6 +1269,15 @@ circuit EnumTypes:
     ; CHECK-DAG: %[[READ_PROBE_IN:.+]] = firrtl.ref.resolve %[[PROBE_IN]]
     ; CHECK-DAG: %[[SUM:.+]] = firrtl.and %[[READ_PROBE_IN]],
     outconst <= and(read(probe(in)), UInt(1))
+
+    ; CHECK: %[[AGG4:.+]], %[[AGG4_RWREF:.+]] = firrtl.wire
+    wire agg4 : { a : UInt, flip b : {x : UInt<1>} }[2]
+    ; (static ref expr creates dead subfield accesses, skip)
+    ; CHECK: %[[AGG4_RW_0:.+]] = firrtl.ref.sub %[[AGG4_RWREF]][0]
+    ; CHECK-NEXT: %[[AGG4_RW_0_b:.+]] = firrtl.ref.sub %[[AGG4_RW_0]][1]
+    ; CHECK-NEXT: %[[AGG4_RW_0_b_x:.+]] = firrtl.ref.sub %[[AGG4_RW_0_b]][0]
+    ; CHECK-NEXT: firrtl.ref.define %field_rw, %[[AGG4_RW_0_b_x]]
+    define field_rw = rwprobe(agg4[0].b.x)
 
   ; CHECK-LABEL: module private @ForceRelease(
   module ForceRelease :
@@ -1310,7 +1309,7 @@ circuit EnumTypes:
 
   ; CHECK-LABEL: extmodule private @RefExt(
   ; CHECK-SAME:  in in: !firrtl.uint<1>, out r: !firrtl.probe<uint<1>>
-  ; CHECK-SAME: internalPaths = ["in"]
+  ; CHECK-SAME: internalPaths = [#firrtl.internalpath, #firrtl.internalpath<"in">]
   extmodule RefExt :
     input in : UInt<1>
     output r : Probe<UInt<1>>
@@ -1321,7 +1320,7 @@ circuit EnumTypes:
   ; CHECK-SAME: out r: !firrtl.probe<uint<1>>
   ; CHECK-SAME: out data: !firrtl.uint<3>
   ; CHECK-SAME: out r2: !firrtl.probe<vector<bundle<a: uint<3>>, 3>>
-  ; CHECK-SAME: internalPaths = ["path.to.internal.signal", "in"]
+  ; CHECK-SAME: internalPaths = [#firrtl.internalpath, #firrtl.internalpath<"path.to.internal.signal">, #firrtl.internalpath, #firrtl.internalpath<"in">]
   extmodule RefExtMore :
     input in : UInt<1>
     output r : Probe<UInt<1>>
@@ -1339,6 +1338,21 @@ circuit EnumTypes:
     output data : UInt<3>
     output r2 : Probe<{a : UInt<3>}[3]>
 
+  ; CHECK-LABEL: @RWProbePort(
+  module RWProbePort:
+    ; CHECK: in %in: !firrtl.vector<uint<1>, 2> sym [<@[[IN_SYM:.+]],2,public>],
+    input in : UInt<1>[2]
+    output p : RWProbe<UInt<1>>
+    ; CHECK:  firrtl.ref.rwprobe <@RWProbePort::@[[IN_SYM]]> : !firrtl.rwprobe<uint<1>>
+    define p = rwprobe(in[1])
+
+  ; CHECK-LABEL: @RWProbeUninferredPort(
+  module RWProbeUninferredPort:
+    ; CHECK: in %in: !firrtl.vector<uint, 2> sym [<@[[IN_SYM:.+]],2,public>],
+    input in : UInt[2]
+    output p : RWProbe<UInt>
+    ; CHECK:  firrtl.ref.rwprobe <@RWProbeUninferredPort::@[[IN_SYM]]> : !firrtl.rwprobe<uint>
+    define p = rwprobe(in[1])
 
   ; CHECK-LABEL: module private @ProbeInvalidate
   ; CHECK-NEXT: }
@@ -1396,6 +1410,10 @@ circuit EnumTypes:
     ; CHECK-NEXT: firrtl.strictconnect %nonconst_w, [[CAST]] : !firrtl.sint<4>
     nonconst_w <= s4
 
+  ; CHECK-LABEL firrtl.class @SimpleClass() { }
+  ; Not version-gated yet, not in spec.
+  class SimpleClass:
+
 ;// -----
 
 ; CHECK-LABEL: firrtl.circuit "Foo_v3p0p0"
@@ -1419,22 +1437,22 @@ circuit Foo_v3p0p0:
     regreset r: UInt<1>, clock, reset, UInt<1>(0)
 
   ; CHECK: module private @LiteralIdentifiers
-  ; CHECK-SAME: in %_0: !firrtl.bundle<1: uint<1>>
-  ; CHECK-SAME: out %_2: !firrtl.bundle<3: uint<1>>
+  ; CHECK-SAME: in %_0: !firrtl.bundle<"1": uint<1>>
+  ; CHECK-SAME: out %_2: !firrtl.bundle<"3": uint<1>>
   ; CHECK-SAME: portNames = ["0", "2"]
   module LiteralIdentifiers:
     input `0`: {`1`: UInt<1>}
     output `2`: {`3`: UInt<1>}
 
-    ; CHECK-NEXT: %0 = firrtl.subfield %_0["1"] : !firrtl.bundle<1: uint<1>>
-    ; CHECK-NEXT: %1 = firrtl.subfield %_2["3"] : !firrtl.bundle<3: uint<1>>
+    ; CHECK-NEXT: %0 = firrtl.subfield %_0["1"] : !firrtl.bundle<"1": uint<1>>
+    ; CHECK-NEXT: %1 = firrtl.subfield %_2["3"] : !firrtl.bundle<"3": uint<1>>
     ; CHECK-NEXT: firrtl.strictconnect %1, %0 : !firrtl.uint<1>
     `2`.`3` <= `0`.`1`
 
     ; Ensure that `a` is equivalent to a.
     ; CHECK-NEXT: %a = firrtl.node {{.+}}%_0
     node `a` = `0`
-    ; CHECK-NEXT %b = firrtl.node {{.+}}%a
+    ; CHECK-NEXT: %b = firrtl.node {{.+}}%a
     node b = a
 
 ;// -----
@@ -1456,8 +1474,8 @@ circuit Foo_v1p9p9:
     bundleWithAnalog <- bundleWithAnalog
 
 
-    ; CHECK: [[A:%.+]] = firrtl.subfield %out_0[member] : !firrtl.bundle<member: bundle<0: bundle<clock: clock, reset: uint<1>>>>
-    ; CHECK: [[B:%.+]] = firrtl.subfield [[A]]["0"] : !firrtl.bundle<0: bundle<clock: clock, reset: uint<1>>>
+    ; CHECK: [[A:%.+]] = firrtl.subfield %out_0[member] : !firrtl.bundle<member: bundle<"0": bundle<clock: clock, reset: uint<1>>>>
+    ; CHECK: [[B:%.+]] = firrtl.subfield [[A]]["0"] : !firrtl.bundle<"0": bundle<clock: clock, reset: uint<1>>>
     ; CHECK: [[C:%.+]] = firrtl.subfield [[B]][reset] : !firrtl.bundle<clock: clock, reset: uint<1>>
     ; CHECK: firrtl.strictconnect %auto, [[C]] : !firrtl.uint<1>
     wire out_0 : { member : { 0 : { clock : Clock, reset : UInt<1>}}}
@@ -1519,61 +1537,230 @@ circuit RadixEncodedIntegerLiterals:
     output hs: SInt<8>
 
     ; CHECK:      %[[c42_ui7:[-a-zA-Z_0-9]+]] = firrtl.constant 42
-    ; CHECK-NEXT: %[[c_widthCast:[-a-zA-Z_0-9]+]] = firrtl.widthCast %[[c42_ui7]]
-    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c_widthCast]]
-    ; CHECK-NEXT: firrtl.strictconnect %bu, %[[c_constCast]]
+    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c42_ui7]]
+    ; CHECK-NEXT: firrtl.connect %bu, %[[c_constCast]]
     bu <= UInt(0b101010)
 
-    ; CHECK-NEXT: %[[c_widthCast:[-a-zA-Z_0-9]+]] = firrtl.widthCast %[[c42_ui7]]
-    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c_widthCast]]
-    ; CHECK-NEXT: firrtl.strictconnect %ou, %[[c_constCast]]
+    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c42_ui7]]
+    ; CHECK-NEXT: firrtl.connect %ou, %[[c_constCast]]
     ou <= UInt(0o052)
 
     ; Note: this creates a second constant because the width of a parsed
     ; constant is dependent on the overestimation of LLVM::StringRef.
     ;
     ; CHECK:      %[[c42_ui8:[-a-zA-Z_0-9]+]] = firrtl.constant 42
-    ; CHECK-NEXT: %[[c_widthCast:[-a-zA-Z_0-9]+]] = firrtl.widthCast %[[c42_ui8]]
-    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c_widthCast]]
-    ; CHECK-NEXT: firrtl.strictconnect %du0, %[[c_constCast]]
+    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c42_ui8]]
+    ; CHECK-NEXT: firrtl.connect %du0, %[[c_constCast]]
     du0 <= UInt(42)
 
-    ; CHECK-NEXT: %[[c_widthCast:[-a-zA-Z_0-9]+]] = firrtl.widthCast %[[c42_ui8]]
-    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c_widthCast]]
-    ; CHECK-NEXT: firrtl.strictconnect %du1, %[[c_constCast]]
+    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c42_ui8]]
+    ; CHECK-NEXT: firrtl.connect %du1, %[[c_constCast]]
     du1 <= UInt(0d42)
 
-    ; CHECK-NEXT: %[[c_widthCast:[-a-zA-Z_0-9]+]] = firrtl.widthCast %[[c42_ui7]]
-    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c_widthCast]]
-    ; CHECK-NEXT: firrtl.strictconnect %hu, %[[c_constCast]]
+    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c42_ui7]]
+    ; CHECK-NEXT: firrtl.connect %hu, %[[c_constCast]]
     hu <= UInt(0h2a)
 
     ; CHECK:      %[[cn42_si7:[-a-zA-Z_0-9]+]] = firrtl.constant -42
-    ; CHECK-NEXT: %[[c_widthCast:[-a-zA-Z_0-9]+]] = firrtl.widthCast %[[cn42_si7]]
-    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c_widthCast]]
-    ; CHECK-NEXT: firrtl.strictconnect %bs, %[[c_constCast]]
+    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[cn42_si7]]
+    ; CHECK-NEXT: firrtl.connect %bs, %[[c_constCast]]
     bs <= SInt(-0b101010)
 
-    ; CHECK-NEXT: %[[c_widthCast:[-a-zA-Z_0-9]+]] = firrtl.widthCast %[[cn42_si7]]
-    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c_widthCast]]
-    ; CHECK-NEXT: firrtl.strictconnect %os, %[[c_constCast]]
+    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[cn42_si7]]
+    ; CHECK-NEXT: firrtl.connect %os, %[[c_constCast]]
     os <= SInt(-0o52)
 
     ; Note: this creates a second constant because the width of a parsed
     ; constant is dependent on the overestimation of LLVM::StringRef.
     ;
     ; CHECK:      %[[cn42_si8:[-a-zA-Z_0-9]+]] = firrtl.constant -42
-    ; CHECK-NEXT: %[[c_widthCast:[-a-zA-Z_0-9]+]] = firrtl.widthCast %[[cn42_si8]]
-    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c_widthCast]]
-    ; CHECK-NEXT: firrtl.strictconnect %dus0, %[[c_constCast]]
+    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[cn42_si8]]
+    ; CHECK-NEXT: firrtl.connect %dus0, %[[c_constCast]]
     dus0 <= SInt(-42)
 
-    ; CHECK-NEXT: %[[c_widthCast:[-a-zA-Z_0-9]+]] = firrtl.widthCast %[[cn42_si8]]
-    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c_widthCast]]
-    ; CHECK-NEXT: firrtl.strictconnect %dus1, %[[c_constCast]]
+    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[cn42_si8]]
+    ; CHECK-NEXT: firrtl.connect %dus1, %[[c_constCast]]
     dus1 <= SInt(-0d42)
 
-    ; CHECK-NEXT: %[[c_widthCast:[-a-zA-Z_0-9]+]] = firrtl.widthCast %[[cn42_si7]]
-    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c_widthCast]]
-    ; CHECK-NEXT: firrtl.strictconnect %hs, %[[c_constCast]]
+    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[cn42_si7]]
+    ; CHECK-NEXT: firrtl.connect %hs, %[[c_constCast]]
     hs <= SInt(-0h2a)
+
+;// -----
+; Tests for type alias
+circuit Top:
+  type WordType = const UInt<32>
+  type ValidType = UInt<1>
+  type Data = {w: const WordType[2], valid: ValidType, flip ready: UInt<1>}
+  type Complex = { real: SInt<10>, imag: SInt<10> }
+  type Complex_id = Complex
+  ; expected-warning @+1 {{type alias for non-base type '!firrtl.probe<alias<Complex, bundle<real: sint<10>, imag: sint<10>>>>' is currently not supported. Type alias is stripped immediately}}
+  type ProbeComplex = Probe<Complex>
+  ; CHECK: @Top
+  ; CHECK-SAME: in %in_data: !firrtl.alias<Data, bundle<w: const.vector<const.alias<WordType, const.uint<32>>, 2>,
+  ; CHECK-SAME:                                         valid: alias<ValidType, uint<1>>, ready flip: uint<1>>>,
+  ; CHECK-SAME: in %in_complex: !firrtl.alias<Complex, bundle<real: sint<10>, imag: sint<10>>>
+  ; CHECK-SAME: out %out: !firrtl.probe<alias<Complex, bundle<real: sint<10>, imag: sint<10>>>>
+  ; CHECK-SAME: out %out_valid: !firrtl.alias<ValidType, uint<1>>
+
+  ; CHECK-NEXT: %[[RESULT:.+]] = firrtl.subfield %in_data[valid] : !firrtl.alias<Data, bundle<w: const.vector<const.alias<WordType, const.uint<32>>, 2>, valid: alias<ValidType, uint<1>>, ready flip: uint<1>>>
+  ; CHECK-NEXT: %c = firrtl.wire interesting_name : !firrtl.alias<Complex_id, alias<Complex, bundle<real: sint<10>, imag: sint<10>>>>
+  ; CHECK-NEXT: firrtl.strictconnect %out_valid, %[[RESULT]] : !firrtl.alias<ValidType, uint<1>>
+  module Top:
+    input in_data: Data
+    input in_complex: Complex
+    output out: ProbeComplex
+    output out_valid: ValidType
+    wire c: Complex_id
+    out_valid <= in_data.valid
+
+  ; CHECK-LABEL: firrtl.module private @Const
+  ; CHECK-SAME: (in %a: !firrtl.const.alias<ConstI1, const.uint<1>>)
+  type ConstI1 = const UInt<1>
+  module Const :
+    input a: ConstI1
+
+;// -----
+
+; CHECK-LABEL: firrtl.circuit "Groups"
+FIRRTL version 3.1.0
+circuit Groups:
+  declgroup A, bind:
+    declgroup B, bind:
+      declgroup C, bind:
+      declgroup D, bind:
+        declgroup E, bind:
+    declgroup F, bind:
+    ; CHECK-NEXT: firrtl.declgroup @A bind {
+    ; CHECK-NEXT:   firrtl.declgroup @B bind {
+    ; CHECK-NEXT:     firrtl.declgroup @C bind {
+    ; CHECK-NEXT:     }
+    ; CHECK-NEXT:     firrtl.declgroup @D bind {
+    ; CHECK-NEXT:       firrtl.declgroup @E bind {
+    ; CHECK-NEXT:       }
+    ; CHECK-NEXT:     }
+    ; CHECK-NEXT:   }
+    ; CHECK-NEXT:   firrtl.declgroup @F bind {
+    ; CHECK-NEXT:   }
+    ; CHECK-NEXT: }
+
+  ; CHECK: firrtl.module @Groups
+  module Groups:
+    input a: UInt<1>
+
+    group A:
+      node A_a = a
+      group B:
+        node B_a = a
+        group C:
+          node C_a = a
+        group D:
+          node D_a = a
+          group E:
+            node E_a = a
+      group F:
+        node F_a = a
+
+    ; CHECK-NEXT: firrtl.group @A {
+    ; CHECK-NEXT:   %A_a = firrtl.node{{.*}} %a
+    ; CHECK-NEXT:   firrtl.group @A::@B {
+    ; CHECK-NEXT:     %B_a = firrtl.node{{.*}} %a
+    ; CHECK-NEXT:     firrtl.group @A::@B::@C {
+    ; CHECK-NEXT:       %C_a = firrtl.node{{.*}} %a
+    ; CHECK-NEXT:     }
+    ; CHECK-NEXT:     firrtl.group @A::@B::@D {
+    ; CHECK-NEXT:       %D_a = firrtl.node{{.*}} %a
+    ; CHECK-NEXT:       firrtl.group @A::@B::@D::@E {
+    ; CHECK-NEXT:         %E_a = firrtl.node{{.*}} %a
+    ; CHECK-NEXT:       }
+    ; CHECK-NEXT:     }
+    ; CHECK-NEXT:   }
+    ; CHECK-NEXT:   firrtl.group @A::@F {
+    ; CHECK-NEXT:     %F_a = firrtl.node{{.*}} %a
+    ; CHECK-NEXT:   }
+    ; CHECK-NEXT: }
+
+
+;// -----
+; CHECK-LABEL: firrtl.circuit "BasicProps"
+FIRRTL version 3.2.0
+circuit BasicProps :
+  module BasicProps :
+  ; CHECK-LABEL: module private @Integer
+  module Integer :
+    ; CHECK-SAME: out %a: !firrtl.integer
+    output a : Integer
+    ; CHECK: %0 = firrtl.integer -10
+    ; CHECK: firrtl.propassign %a, %0 : !firrtl.integer
+    propassign a, Integer(-10)
+
+  ; CHECK-LABEL: module private @String
+  module String :
+    ; CHECK-SAME: out %a: !firrtl.string
+    output a : String
+    ; CHECK: %0 = firrtl.string "hello"
+    ; CHECK: firrtl.propassign %a, %0 : !firrtl.string
+    propassign a, String("hello")
+
+  ; CHECK-LABEL: module private @Path
+  module Path :
+    ; CHECK-SAME: in %a: !firrtl.path
+    ; CHECK-SAME: out %b: !firrtl.path
+    input a : Path
+    output b : Path
+    ; CHECK: firrtl.propassign %b, %a : !firrtl.path
+    propassign b, a
+
+  ; CHECK-LABEL: firrtl.class private @SimpleClass(in %a: !firrtl.string, out %b: !firrtl.string) {
+  ; CHECK-NEXT:     firrtl.propassign %b, %a : !firrtl.string
+  ; CHECK-NEXT:  }
+  class SimpleClass:
+    input a: String
+    output b: String
+    propassign b, a
+
+  ; CHECK-LABEL: firrtl.class private @Client(out %a: !firrtl.class<@SimpleClass(in a: !firrtl.string, out b: !firrtl.string)>)
+  class Client:
+    output a: Inst<SimpleClass>
+    ; CHECK-NEXT:  %0 = firrtl.object @SimpleClass(in a: !firrtl.string, out b: !firrtl.string)
+    object b of SimpleClass
+    ; CHECK-NEXT: firrtl.propassign %a, %0 : !firrtl.class<@SimpleClass(in a: !firrtl.string, out b: !firrtl.string)>
+    propassign a, b
+
+  ; CHECK-LABEL firrtl.class private @OtherClient(in %a: !firrtl.string, out %b: !firrtl.string)
+  class OtherClient:
+    input a : String
+    output b : String
+    object o of SimpleClass
+    ; TODO: This test needs to be fixed up once flow-checking for objects is implemented correctly.
+    propassign b, o.b
+
+  ; CHECK-LABEL: module private @List
+  module List :
+    ; CHECK-SAME: out %strings: !firrtl.list<string>
+    ; CHECK-SAME: out %objs: !firrtl.list<class<@SimpleClass({{.*}})>>
+    ; CHECK-SAME: out %nested: !firrtl.list<list<string>>
+    output strings : List<String>
+    output objs : List<Inst<SimpleClass>>
+    output nested : List<List<String>>
+
+    ; CHECK-NEXT: %[[HELLO:.+]] = firrtl.string "hello"
+    ; CHECK-NEXT: %[[WORLD:.+]] = firrtl.string "world"
+    ; CHECK-NEXT: %[[STRINGS:.+]] = firrtl.list.create %[[HELLO]], %[[WORLD]] : !firrtl.list<string>
+    ; CHECK-NEXT: firrtl.propassign %strings, %[[STRINGS]] : !firrtl.list<string>
+    propassign strings, List<String>(String("hello"), String("world"))
+
+    ; CHECK-NEXT: %[[OBJ:.+]] = firrtl.object
+    ; CHECK-NEXT: %[[OBJS:.+]] = firrtl.list.create %[[OBJ]], %[[OBJ]] : !firrtl.list<class<@SimpleClass({{.*}})>>
+    ; CHECK-NEXT: firrtl.propassign %objs, %[[OBJS]] : !firrtl.list<class
+    object obj of SimpleClass
+    propassign objs, List<Inst<SimpleClass>>(obj, obj)
+
+    ; CHECK-NEXT: %[[EMPTY1:.+]] = firrtl.list.create : !firrtl.list<string>
+    ; CHECK-NEXT: %[[TEST:.+]] = firrtl.string "test"
+    ; CHECK-NEXT: %[[TESTLIST:.+]] = firrtl.list.create %[[TEST]] : !firrtl.list<string>
+    ; CHECK-NEXT: %[[EMPTY2:.+]] = firrtl.list.create : !firrtl.list<string>
+    ; CHECK-NEXT: %[[NESTED:.+]] = firrtl.list.create %[[EMPTY1]], %[[TESTLIST]], %[[EMPTY2]] : !firrtl.list<list<string>>
+    ; CHECK-NEXT: firrtl.propassign %nested, %[[NESTED]]
+    propassign nested, List<List<String>>(List<String>(), List<String>(String("test")), List<String>())
+

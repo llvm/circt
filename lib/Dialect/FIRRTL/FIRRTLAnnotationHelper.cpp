@@ -42,10 +42,10 @@ static LogicalResult updateExpandedPort(StringRef field, AnnoTarget &ref) {
 /// represent bundle returns as split into constituent parts.
 static FailureOr<unsigned> findBundleElement(Operation *op, Type type,
                                              StringRef field) {
-  auto bundle = dyn_cast<BundleType>(type);
+  auto bundle = type_dyn_cast<BundleType>(type);
   if (!bundle) {
     op->emitError("field access '")
-        << field << "' into non-bundle type '" << bundle << "'";
+        << field << "' into non-bundle type '" << type << "'";
     return failure();
   }
   auto idx = bundle.getElementIndex(field);
@@ -66,7 +66,7 @@ static FailureOr<unsigned> findVectorElement(Operation *op, Type type,
     op->emitError("Cannot convert '") << indexStr << "' to an integer";
     return failure();
   }
-  auto vec = dyn_cast<FVectorType>(type);
+  auto vec = type_dyn_cast<FVectorType>(type);
   if (!vec) {
     op->emitError("index access '")
         << index << "' into non-vector type '" << type << "'";
@@ -95,14 +95,14 @@ static FailureOr<unsigned> findFieldID(AnnoTarget &ref,
       auto result = findVectorElement(op, type, token.name);
       if (failed(result))
         return failure();
-      auto vector = cast<FVectorType>(type);
+      auto vector = type_cast<FVectorType>(type);
       type = vector.getElementType();
       fieldIdx += vector.getFieldID(*result);
     } else {
       auto result = findBundleElement(op, type, token.name);
       if (failed(result))
         return failure();
-      auto bundle = cast<BundleType>(type);
+      auto bundle = type_cast<BundleType>(type);
       type = bundle.getElementType(*result);
       fieldIdx += bundle.getFieldID(*result);
     }
@@ -199,6 +199,14 @@ firrtl::resolveEntities(TokenAnnoTarget path, CircuitOp circuit,
         << "module doesn't exist '" << path.module << '\'';
     return {};
   }
+
+  // ClassOps may not participate in annotation targeting. Neither the class
+  // itself, nor any "named thing" defined under it, may be targeted by an anno.
+  if (isa<ClassOp>(mod)) {
+    mlir::emitError(mod.getLoc()) << "annotations cannot target classes";
+    return {};
+  }
+
   AnnoTarget ref;
   if (path.name.empty()) {
     assert(path.component.empty());
@@ -232,9 +240,9 @@ firrtl::resolveEntities(TokenAnnoTarget path, CircuitOp circuit,
   ArrayRef<TargetToken> component(path.component);
   if (auto instance = dyn_cast<InstanceOp>(ref.getOp())) {
     instances.push_back(instance);
-    auto target = instance.getReferencedModule(symTbl);
+    auto target = cast<FModuleLike>(instance.getReferencedModule(symTbl));
     if (component.empty()) {
-      ref = OpAnnoTarget(instance.getReferencedModule(symTbl));
+      ref = OpAnnoTarget(target);
     } else if (component.front().isIndex) {
       mlir::emitError(circuit.getLoc())
           << "illegal target '" << path.str() << "' indexes into an instance";
@@ -333,24 +341,19 @@ std::optional<AnnoPathValue> firrtl::resolvePath(StringRef rawPath,
   return resolveEntities(*tokens, circuit, symTbl, cache);
 }
 
-InstanceOp firrtl::addPortsToModule(
-    FModuleLike mod, InstanceOp instOnPath, FIRRTLType portType, Direction dir,
-    StringRef newName, InstancePathCache &instancePathcache,
-    llvm::function_ref<ModuleNamespace &(FModuleLike)> getNamespace,
-    CircuitTargetCache *targetCaches) {
+InstanceOp firrtl::addPortsToModule(FModuleLike mod, InstanceOp instOnPath,
+                                    FIRRTLType portType, Direction dir,
+                                    StringRef newName,
+                                    InstancePathCache &instancePathcache,
+                                    CircuitTargetCache *targetCaches) {
   // To store the cloned version of `instOnPath`.
   InstanceOp clonedInstOnPath;
   // Get a new port name from the Namespace.
-  auto portName = [&](FModuleLike nameForMod) {
-    return StringAttr::get(nameForMod.getContext(),
-                           getNamespace(nameForMod).newName(newName));
-  };
+  auto portName = StringAttr::get(mod.getContext(), newName);
   // The port number for the new port.
   unsigned portNo = getNumPorts(mod);
-  PortInfo portInfo = {portName(mod), portType, dir, {}, mod.getLoc()};
+  PortInfo portInfo = {portName, portType, dir, {}, mod.getLoc()};
   mod.insertPorts({{portNo, portInfo}});
-  if (targetCaches)
-    targetCaches->insertPort(mod, portNo);
   // Now update all the instances of `mod`.
   for (auto *use : instancePathcache.instanceGraph.lookup(mod)->uses()) {
     InstanceOp useInst = cast<InstanceOp>(use->getInstance());
@@ -378,6 +381,32 @@ void AnnoTargetCache::gatherTargets(FModuleLike mod) {
 
   // And named things
   mod.walk([&](Operation *op) { insertOp(op); });
+}
+
+//===----------------------------------------------------------------------===//
+// HierPathOpCache
+//===----------------------------------------------------------------------===//
+
+HierPathCache::HierPathCache(Operation *op, SymbolTable &symbolTable)
+    : builder(OpBuilder::atBlockBegin(&op->getRegion(0).front())),
+      symbolTable(symbolTable) {
+
+  // Populate the cache with any symbols preexisting.
+  for (auto &region : op->getRegions())
+    for (auto &block : region.getBlocks())
+      for (auto path : block.getOps<hw::HierPathOp>())
+        cache[path.getNamepathAttr()] = path;
+}
+
+hw::HierPathOp HierPathCache::getOpFor(ArrayAttr attr) {
+  auto &op = cache[attr];
+  if (!op) {
+    op = builder.create<hw::HierPathOp>(UnknownLoc::get(builder.getContext()),
+                                        "nla", attr);
+    symbolTable.insert(op);
+    op.setVisibility(SymbolTable::Visibility::Private);
+  }
+  return op;
 }
 
 //===----------------------------------------------------------------------===//
@@ -427,13 +456,9 @@ static Value lowerInternalPathAnno(AnnoPathValue &srcTarget,
   // This removes and replaces the instance, and returns the updated
   // instance.
   if (!state.wiringProblemInstRefs.contains(modInstance)) {
-    modInstance = addPortsToModule(
-        mod, modInstance, portRefType, Direction::Out, refName,
-        state.instancePathCache,
-        [&](FModuleLike mod) -> ModuleNamespace & {
-          return state.getNamespace(mod);
-        },
-        &state.targetCaches);
+    modInstance =
+        addPortsToModule(mod, modInstance, portRefType, Direction::Out, refName,
+                         state.instancePathCache, &state.targetCaches);
   } else {
     // As a current limitation, mixing legacy Wiring and Data Taps is forbidden
     // to prevent invalidating Values used later
@@ -454,10 +479,14 @@ static Value lowerInternalPathAnno(AnnoPathValue &srcTarget,
   // Now set the instance as the source for the final datatap xmr.
   srcTarget = AnnoPathValue(modInstance);
   if (auto extMod = dyn_cast<FExtModuleOp>((Operation *)mod)) {
-    // The extern module can have other internal paths attached to it,
-    // append this to them.
-    SmallVector<Attribute> paths(extMod.getInternalPathsAttr().getValue());
-    paths.push_back(internalPathAttr);
+    // Set the internal path for the new port, creating the paths array
+    // if not already present.
+    SmallVector<Attribute> paths;
+    if (auto internalPaths = extMod.getInternalPaths())
+      llvm::append_range(paths, internalPaths->getValue());
+    else
+      paths.resize(extMod.getNumPorts(), builder.getAttr<InternalPathAttr>());
+    paths.back() = builder.getAttr<InternalPathAttr>(internalPathAttr);
     extMod.setInternalPathsAttr(builder.getArrayAttr(paths));
   } else if (auto intMod = dyn_cast<FModuleOp>((Operation *)mod)) {
     auto builder = ImplicitLocOpBuilder::atBlockEnd(
@@ -573,9 +602,10 @@ LogicalResult circt::firrtl::applyGCTDataTaps(const AnnoPathValue &target,
       if (!moduleTarget)
         return failure();
       AnnoPathValue internalPathSrc;
-      auto targetType = cast<FIRRTLBaseType>(wireTarget->ref.getType());
+      auto targetType =
+          firrtl::type_cast<FIRRTLBaseType>(wireTarget->ref.getType());
       if (wireTarget->fieldIdx)
-        targetType = cast<FIRRTLBaseType>(
+        targetType = firrtl::type_cast<FIRRTLBaseType>(
             targetType.getFinalTypeByFieldID(wireTarget->fieldIdx));
       sendVal = lowerInternalPathAnno(internalPathSrc, *moduleTarget, target,
                                       internalPathAttr, targetType, state);
@@ -645,9 +675,9 @@ LogicalResult circt::firrtl::applyGCTDataTaps(const AnnoPathValue &target,
     auto *targetOp = wireTarget->ref.getOp();
     auto sinkBuilder = ImplicitLocOpBuilder::atBlockEnd(wireModule.getLoc(),
                                                         targetOp->getBlock());
-    auto wireType = cast<FIRRTLBaseType>(targetOp->getResult(0).getType());
+    auto wireType = type_cast<FIRRTLBaseType>(targetOp->getResult(0).getType());
     // Get type of sent value, if already a RefType, the base type.
-    auto valType = getBaseType(cast<FIRRTLType>(sendVal.getType()));
+    auto valType = getBaseType(type_cast<FIRRTLType>(sendVal.getType()));
     Value sink = getValueByFieldID(sinkBuilder, targetOp->getResult(0),
                                    wireTarget->fieldIdx);
 
@@ -658,11 +688,7 @@ LogicalResult circt::firrtl::applyGCTDataTaps(const AnnoPathValue &target,
       // Helper: create a wire, cast it with callback, connect cast to sink.
       auto addWireWithCast = [&](auto createCast) {
         auto wire =
-            sinkBuilder
-                .create<WireOp>(
-                    valType,
-                    state.getNamespace(wireModule).newName(tapName.getValue()))
-                .getResult();
+            sinkBuilder.create<WireOp>(valType, tapName.getValue()).getResult();
         emitConnect(sinkBuilder, sink, createCast(wire));
         sink = wire;
       };
@@ -758,7 +784,7 @@ LogicalResult circt::firrtl::applyGCTMemTaps(const AnnoPathValue &target,
 
   auto sendVal = memDbgPort;
   if (wireTarget->ref.getOp()->getResult(0).getType() !=
-      cast<RefType>(sendVal.getType()).getType())
+      type_cast<RefType>(sendVal.getType()).getType())
     return wireTarget->ref.getOp()->emitError(
         "cannot generate the MemTap, wiretap Type does not match the memory "
         "type");

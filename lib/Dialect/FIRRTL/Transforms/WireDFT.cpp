@@ -237,7 +237,7 @@ void WireDFTPass::runOnOperation() {
     return;
 
   // Stash UInt<1> type for use throughout.
-  auto uint1Type = cast<FIRRTLType>(enableSignal.getType());
+  auto uint1Type = type_cast<FIRRTLType>(enableSignal.getType());
 
   // Hard coded port result number; the clock gate test_en port is 1.
   // Language below reflects this as well.

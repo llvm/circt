@@ -37,11 +37,11 @@ hw.module @Loopback (%clk: i1) -> () {
 
 // CONN-LABEL: hw.module @Top2(%clk: i1) -> (chksum: i8) {
 // CONN:         [[r0:%.+]]:3 = esi.service.impl_req svc @HostComms impl as "topComms2"(%clk) : (i1) -> (i8, !esi.channel<i8>, !esi.channel<i8>) {
-// CONN:           %1 = esi.service.req.to_client <@HostComms::@Recv>(["r1", "m1", "loopback_tohw"]) : !esi.channel<i8>
-// CONN:           %2 = esi.service.req.to_client <@HostComms::@Recv>(["r1", "c1", "consumingFromChan"]) : !esi.channel<i8>
-// CONN:           esi.service.req.to_server %r1.m1.loopback_fromhw -> <@HostComms::@Send>(["r1", "m1", "loopback_fromhw"]) : !esi.channel<i8>
-// CONN:           esi.service.req.to_server %r1.p1.producedMsgChan -> <@HostComms::@Send>(["r1", "p1", "producedMsgChan"]) : !esi.channel<i8>
-// CONN:           esi.service.req.to_server %r1.p2.producedMsgChan -> <@HostComms::@Send>(["r1", "p2", "producedMsgChan"]) : !esi.channel<i8>
+// CONN-DAG:       esi.service.req.to_client <@HostComms::@Recv>(["r1", "m1", "loopback_tohw"]) : !esi.channel<i8>
+// CONN-DAG:       esi.service.req.to_client <@HostComms::@Recv>(["r1", "c1", "consumingFromChan"]) : !esi.channel<i8>
+// CONN-DAG:       esi.service.req.to_server %r1.m1.loopback_fromhw -> <@HostComms::@Send>(["r1", "m1", "loopback_fromhw"]) : !esi.channel<i8>
+// CONN-DAG:       esi.service.req.to_server %r1.p1.producedMsgChan -> <@HostComms::@Send>(["r1", "p1", "producedMsgChan"]) : !esi.channel<i8>
+// CONN-DAG:       esi.service.req.to_server %r1.p2.producedMsgChan -> <@HostComms::@Send>(["r1", "p2", "producedMsgChan"]) : !esi.channel<i8>
 // CONN:         }
 // CONN:         %r1.m1.loopback_fromhw, %r1.p1.producedMsgChan, %r1.p2.producedMsgChan = hw.instance "r1" @Rec(clk: %clk: i1, m1.loopback_tohw: [[r0]]#1: !esi.channel<i8>, c1.consumingFromChan: [[r0]]#2: !esi.channel<i8>) -> (m1.loopback_fromhw: !esi.channel<i8>, p1.producedMsgChan: !esi.channel<i8>, p2.producedMsgChan: !esi.channel<i8>)
 // CONN:         hw.output [[r0]]#0 : i8
@@ -112,8 +112,7 @@ msft.module @MsLoopback {} (%clk: i1) -> () {
 
 // CONN-LABEL: msft.module @InOutTop {} (%clk: i1) -> (chksum: i8) {
 // CONN:          %0:2 = esi.service.impl_req svc @HostComms impl as "topComms"(%clk) : (i1) -> (i8, !esi.channel<i16>) {
-// CONN:            %1 = esi.service.req.to_client <@HostComms::@ReqResp>(["m1", "loopback_inout"]) : !esi.channel<i16>
-// CONN:            esi.service.req.to_server %m1.loopback_inout -> <@HostComms::@ReqResp>(["m1", "loopback_inout"]) : !esi.channel<i8>
+// CONN:            esi.service.req.inout %m1.loopback_inout -> <@HostComms::@ReqResp>(["m1", "loopback_inout"]) : !esi.channel<i8> -> !esi.channel<i16>
 // CONN:          }
 // CONN:          %m1.loopback_inout = msft.instance @m1 @InOutLoopback(%clk, %0#1)  : (i1, !esi.channel<i16>) -> !esi.channel<i8>
 // CONN:          msft.output %0#0 : i8
@@ -195,3 +194,19 @@ hw.module @MemoryAccess1(%clk: i1, %rst: i1, %write: !esi.channel<!write>, %read
   %readData = esi.service.req.inout %readAddress -> <@MemA::@read> ([]) : !esi.channel<i5> -> !esi.channel<i64>
   hw.output %readData, %done : !esi.channel<i64>, !esi.channel<i0>
 }
+
+// CONN-LABEL: hw.module @MemoryAccess2Read(%clk: i1, %rst: i1, %write: !esi.channel<!hw.struct<address: i5, data: i64>>, %readAddress: !esi.channel<i5>, %readAddress2: !esi.channel<i5>) -> (readData: !esi.channel<i64>, readData2: !esi.channel<i64>, writeDone: !esi.channel<i0>) {
+// CONN:         %MemA = sv.reg : !hw.inout<uarray<20xi64>>
+// CONN:         esi.service.hierarchy.metadata path [] implementing @MemA impl as "sv_mem" clients [{client_name = [], port = #hw.innerNameRef<@MemA::@write>, to_client_type = !esi.channel<i0>, to_server_type = !esi.channel<!hw.struct<address: i5, data: i64>>}, {client_name = [], port = #hw.innerNameRef<@MemA::@read>, to_client_type = !esi.channel<i64>, to_server_type = !esi.channel<i5>}, {client_name = [], port = #hw.innerNameRef<@MemA::@read>, to_client_type = !esi.channel<i64>, to_server_type = !esi.channel<i5>}]
+// CONN:         hw.output %chanOutput_0, %chanOutput_4, %chanOutput : !esi.channel<i64>, !esi.channel<i64>, !esi.channel<i0>
+
+hw.module @MemoryAccess2Read(%clk: i1, %rst: i1, %write: !esi.channel<!write>, %readAddress: !esi.channel<i5>, %readAddress2: !esi.channel<i5>) -> (readData: !esi.channel<i64>, readData2: !esi.channel<i64>, writeDone: !esi.channel<i0>) {
+  esi.service.instance svc @MemA impl as "sv_mem" (%clk, %rst) : (i1, i1) -> ()
+  %done = esi.service.req.inout %write -> <@MemA::@write> ([]) : !esi.channel<!write> -> !esi.channel<i0>
+  %readData = esi.service.req.inout %readAddress -> <@MemA::@read> ([]) : !esi.channel<i5> -> !esi.channel<i64>
+  %readData2 = esi.service.req.inout %readAddress2 -> <@MemA::@read> ([]) : !esi.channel<i5> -> !esi.channel<i64>
+  hw.output %readData, %readData2, %done : !esi.channel<i64>, !esi.channel<i64>, !esi.channel<i0>
+}
+
+// Check that it doesn't crap out on external modules.
+hw.module.extern @extern()

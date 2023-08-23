@@ -51,6 +51,30 @@ hw.module @d0(%clk : i1, %rst : i1) -> () {
 hw.module @ClockGate(%clock: i1, %enable: i1, %test_enable: i1) {
   // CHECK-NEXT: seq.clock_gate %clock, %enable
   // CHECK-NEXT: seq.clock_gate %clock, %enable, %test_enable
+  // CHECK-NEXT: seq.clock_gate %clock, %enable, %test_enable sym @gate_sym
   %cg0 = seq.clock_gate %clock, %enable
   %cg1 = seq.clock_gate %clock, %enable, %test_enable
+  %cg2 = seq.clock_gate %clock, %enable, %test_enable sym @gate_sym
+}
+
+// CHECK-LABEL: hw.module @ClockMux
+hw.module @ClockMux(%cond: i1, %trueClock: i1, %falseClock: i1) -> (clock: i1) {
+  %clock = seq.clock_mux %cond, %trueClock, %falseClock
+  hw.output %clock : i1
+}
+
+hw.module @fifo1(%clk : i1, %rst : i1, %in : i32, %rdEn : i1, %wrEn : i1) -> () {
+  // CHECK: %out, %full, %empty = seq.fifo depth 3 in %in rdEn %rdEn wrEn %wrEn clk %clk rst %rst : i32
+  %out, %full, %empty = seq.fifo depth 3 in %in rdEn %rdEn wrEn %wrEn clk %clk rst %rst : i32
+}
+
+hw.module @fifo2(%clk : i1, %rst : i1, %in : i32, %rdEn : i1, %wrEn : i1) -> () {
+  // CHECK: %out, %full, %empty, %almostFull, %almostEmpty = seq.fifo depth 3 almost_full 2 almost_empty 1 in %in rdEn %rdEn wrEn %wrEn clk %clk rst %rst : i32
+  %out, %full, %empty, %almostFull, %almostEmpty = seq.fifo depth 3 almost_full 2 almost_empty 1 in %in rdEn %rdEn wrEn %wrEn clk %clk rst %rst : i32
+}
+
+
+hw.module @preset(%clock : i1, %reset : i1, %next : i32) -> () {
+  // CHECK: %reg = seq.firreg %next clock %clock preset 0 : i32
+  %reg = seq.firreg %next clock %clock preset 0 : i32
 }

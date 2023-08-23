@@ -119,10 +119,13 @@ from the design.
 reset is asynchronous.
 - **isAsync**: Optional boolean flag indicating whether the reset is
 asynchronous.
+- **preset**: Optional attribute specifying a preset value. If no preset
+attribute is present, the register is random-initialized.
 
 ```mlir
 %reg = seq.firreg %input clock %clk [ sym @sym ]
-    [ reset (sync|async) %reset, %value ] : $type(input)
+    [ reset (sync|async) %reset, %value ]
+    [ preset value ] : $type(input)
 ```
 
 Examples of registers:
@@ -134,7 +137,9 @@ Examples of registers:
     reset sync %reset, %value : i64
 
 %reg_async_reset = seq.firreg %input clock %clk sym @sym
-    reset async %reset, %value : i1
+    reset async %reset, %value : i1f
+
+%reg_preset = seq.firreg %next clock %clock preset 123 : i32
 ```
 
 A register without a reset lowers directly to an always block:
@@ -158,7 +163,7 @@ end
 ```
 
 Additionally, `sv` operations are also included to provide the register with
-a randomized preset value.
+a randomized preset value or an explicit preset constant.
 Since items assigned in an `always_ff` block cannot be initialised in an
 `initial` block, this register lowers to `always`.
 
@@ -298,3 +303,28 @@ specialization is needed) attached to the memory symbol.
   ```mlir
   %mem = seq.debug @myMemory : !seq.hlmem<4xi32>
   ```
+
+## The FIFO operation
+The `seq.fifo` operation intends to capture the semantics of a FIFO which
+eventually map to some form of on-chip resources. By having a FIFO abstraction,
+we provide an abstraction that can be targeted for target-specialized implementations,
+as well as default behavioral lowerings (based on `seq.hlmem`).
+
+The FIFO interface consists of:
+- **Inputs**:
+  - clock, reset
+  - input data
+  - read/write enable
+- **Outputs**:
+  - output data
+  - full, empty flags
+  - optional almost full, almost empty flags
+
+The fifo operation is configurable with the following parameters:
+1. Depth (cycles)
+2. Differing in- and output widths
+3. Almost empty/full thresholds (optional)
+
+Like `seq.hlmem` there are no guarantees that all possible fifo configuration
+are able to be lowered. Available lowering passes will pattern match on the
+requested fifo configuration and attempt to provide a legal lowering.

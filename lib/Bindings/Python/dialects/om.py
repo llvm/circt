@@ -5,10 +5,10 @@
 from __future__ import annotations
 
 from ._om_ops_gen import *
-from .._mlir_libs._circt._om import Evaluator as BaseEvaluator, Object as BaseObject, ClassType
+from .._mlir_libs._circt._om import Evaluator as BaseEvaluator, Object as BaseObject, List as BaseList, ClassType, ReferenceAttr, ListAttr, MapAttr
 
-from circt.ir import Attribute, Diagnostic, DiagnosticSeverity, Module, StringAttr
-from circt.support import attribute_to_var, var_to_attribute
+from ..ir import Attribute, Diagnostic, DiagnosticSeverity, Module, StringAttr
+from ..support import attribute_to_var, var_to_attribute
 
 import sys
 import logging
@@ -17,6 +17,50 @@ from typing import TYPE_CHECKING, Any, Sequence, TypeVar
 
 if TYPE_CHECKING:
   from _typeshed.stdlib.dataclass import DataclassInstance
+
+
+# Wrap a base mlir object with high-level object.
+def wrap_mlir_object(value):
+  # For primitives, return a Python value.
+  if isinstance(value, Attribute):
+    return attribute_to_var(value)
+
+  if isinstance(value, BaseList):
+    return List(value)
+
+  # For objects, return an Object, wrapping the base implementation.
+  assert isinstance(value, BaseObject)
+  return Object(value)
+
+
+def unwrap_python_object(value):
+  # Check if the value is a Primitive.
+  try:
+    return var_to_attribute(value)
+  except:
+    pass
+
+  if isinstance(value, List):
+    return BaseList(value)
+
+  # Otherwise, it must be an Object. Cast to the mlir object.
+  assert isinstance(value, Object)
+  return BaseObject(value)
+
+
+class List(BaseList):
+
+  def __init__(self, obj: BaseList) -> None:
+    super().__init__(obj)
+
+  def __getitem__(self, i):
+    val = super().__getitem__(i)
+    return wrap_mlir_object(val)
+
+  # Support iterating over a List by yielding its elements.
+  def __iter__(self):
+    for i in range(0, self.__len__()):
+      yield self.__getitem__(i)
 
 
 # Define the Object class by inheriting from the base implementation in C++.
@@ -28,14 +72,12 @@ class Object(BaseObject):
   def __getattr__(self, name: str):
     # Call the base method to get a field.
     field = super().__getattr__(name)
+    return wrap_mlir_object(field)
 
-    # For primitives, return a Python value.
-    if isinstance(field, Attribute):
-      return attribute_to_var(field)
-
-    # For objects, return an Object, wrapping the base implementation.
-    assert isinstance(field, BaseObject)
-    return Object(field)
+  # Support iterating over an Object by yielding its fields.
+  def __iter__(self):
+    for name in self.field_names:
+      yield (name, getattr(self, name))
 
 
 # Define the Evaluator class by inheriting from the base implementation in C++.
@@ -68,10 +110,9 @@ class Evaluator(BaseEvaluator):
       # Get the class name from the class name.
       class_name = StringAttr.get(cls)
 
-      # Get the actual parameter Attributes from the supplied variadic
-      # arguments. This relies on the circt.support helpers to convert from
-      # Python objects to Attributes.
-      actual_params = var_to_attribute(list(args))
+      # Get the actual parameter Values from the supplied variadic
+      # arguments.
+      actual_params = [unwrap_python_object(arg) for arg in args]
 
     # Call the base instantiate method.
     obj = super().instantiate(class_name, actual_params)

@@ -8,6 +8,7 @@
 
 #include "circt/Dialect/DC/DCOps.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/PatternMatch.h"
@@ -19,10 +20,9 @@ using namespace mlir;
 
 bool circt::dc::isI1ValueType(Type t) {
   auto vt = t.dyn_cast<ValueType>();
-  if (!vt || vt.getInnerTypes().size() != 1)
+  if (!vt)
     return false;
-
-  auto innerWidth = vt.getInnerTypes()[0].getIntOrFloatBitWidth();
+  auto innerWidth = vt.getInnerType().getIntOrFloatBitWidth();
   return innerWidth == 1;
 }
 
@@ -37,6 +37,10 @@ OpFoldResult JoinOp::fold(FoldAdaptor adaptor) {
   // Fold simple joins (joins with 1 input).
   if (auto tokens = getTokens(); tokens.size() == 1)
     return tokens.front();
+
+  // These folders are disabled to work around MLIR bugs when changing
+  // the number of operands.  https://github.com/llvm/llvm-project/issues/64280
+  return {};
 
   // Remove operands which originate from a dc.source op (redundant).
   auto *op = getOperation();
@@ -203,8 +207,7 @@ struct EliminateRedundantUnpackPattern : public OpRewritePattern<UnpackOp> {
   LogicalResult matchAndRewrite(UnpackOp unpack,
                                 PatternRewriter &rewriter) const override {
     // Is the value-side of the unpack used?
-    if (!llvm::all_of(unpack.getOutputs(),
-                      [](auto output) { return output.use_empty(); }))
+    if (!unpack.getOutput().use_empty())
       return failure();
 
     auto pack = unpack.getInput().getDefiningOp<PackOp>();
@@ -228,7 +231,7 @@ LogicalResult UnpackOp::fold(FoldAdaptor adaptor,
   // Unpack of a pack is a no-op.
   if (auto pack = getInput().getDefiningOp<PackOp>()) {
     results.push_back(pack.getToken());
-    results.append(pack.getInputs().begin(), pack.getInputs().end());
+    results.push_back(pack.getInput());
     return success();
   }
 
@@ -241,8 +244,7 @@ LogicalResult UnpackOp::inferReturnTypes(
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   auto inputType = operands.front().getType().cast<ValueType>();
   results.push_back(TokenType::get(context));
-  results.append(inputType.getInnerTypes().begin(),
-                 inputType.getInnerTypes().end());
+  results.push_back(inputType.getInnerType());
   return success();
 }
 
@@ -252,19 +254,12 @@ LogicalResult UnpackOp::inferReturnTypes(
 
 OpFoldResult PackOp::fold(FoldAdaptor adaptor) {
   auto token = getToken();
-  auto inputs = getInputs();
 
   // Pack of an unpack is a no-op.
   if (auto unpack = token.getDefiningOp<UnpackOp>()) {
-    llvm::SmallVector<Value> unpackResults = unpack.getResults();
-    if (unpackResults.size() == inputs.size() &&
-        llvm::all_of(llvm::zip(getInputs(), unpackResults), [&](auto it) {
-          return std::get<0>(it) == std::get<1>(it);
-        })) {
+    if (unpack.getOutput() == getInput())
       return unpack.getInput();
-    }
   }
-
   return {};
 }
 
@@ -273,9 +268,8 @@ LogicalResult PackOp::inferReturnTypes(
     DictionaryAttr attrs, mlir::OpaqueProperties properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   llvm::SmallVector<Type> inputTypes;
-  for (auto t : operands.drop_front().getTypes())
-    inputTypes.push_back(t);
-  auto valueType = dc::ValueType::get(context, inputTypes);
+  Type inputType = operands.back().getType();
+  auto valueType = dc::ValueType::get(context, inputType);
   results.push_back(valueType);
   return success();
 }
@@ -355,6 +349,44 @@ LogicalResult BufferOp::verify() {
       return emitOpError() << "expected " << getSize()
                            << " init values but got " << nInits << ".";
   }
+
+  return success();
+}
+
+// =============================================================================
+// ToESIOp
+// =============================================================================
+
+LogicalResult ToESIOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
+    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
+  Type channelEltType;
+  if (auto valueType = operands.front().getType().dyn_cast<ValueType>())
+    channelEltType = valueType.getInnerType();
+  else {
+    // dc.token => esi.channel<i0>
+    channelEltType = IntegerType::get(context, 0);
+  }
+
+  results.push_back(esi::ChannelType::get(context, channelEltType));
+  return success();
+}
+
+// =============================================================================
+// FromESIOp
+// =============================================================================
+
+LogicalResult FromESIOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
+    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
+  auto innerType =
+      operands.front().getType().cast<esi::ChannelType>().getInner();
+  if (auto intType = innerType.dyn_cast<IntegerType>(); intType.getWidth() == 0)
+    results.push_back(dc::TokenType::get(context));
+  else
+    results.push_back(dc::ValueType::get(context, innerType));
 
   return success();
 }

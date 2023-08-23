@@ -15,7 +15,7 @@ set(LIBS
   MLIRSupport
 )
 
-add_llvm_tool(circt-as circt-as.cpp DEPENDS ${LIBS})
+add_circt_tool(circt-as circt-as.cpp DEPENDS ${LIBS})
 target_link_libraries(circt-as PRIVATE ${LIBS})
 
 llvm_update_compile_flags(circt-as)

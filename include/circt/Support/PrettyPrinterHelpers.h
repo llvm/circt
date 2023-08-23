@@ -20,6 +20,7 @@
 #include "llvm/Support/Allocator.h"
 #include "llvm/Support/StringSaver.h"
 #include "llvm/Support/raw_ostream.h"
+#include <queue>
 
 namespace circt {
 namespace pretty {
@@ -164,6 +165,37 @@ public:
 
   /// PrettyPrinter::Listener::clear -- indicates no external refs.
   void clear() override;
+};
+
+/// Note: Callable class must implement a callable with signature:
+/// void (Data)
+template <typename CallableTy, typename DataTy>
+class PrintEventAndStorageListener : public TokenStringSaver {
+
+  /// List of all the unique data associated with each callback token.
+  /// The fact that tokens on a stream can never be printed out of order,
+  /// ensures that CallbackTokens are always added and invoked in FIFO order,
+  /// hence no need to record an index into the Data list.
+  std::queue<DataTy> dataQ;
+  /// The storage for the callback, as a function object.
+  CallableTy &callable;
+
+public:
+  PrintEventAndStorageListener(CallableTy &c) : callable(c) {}
+
+  /// PrettyPrinter::Listener::print -- indicates all the preceding tokens on
+  /// the stream have been printed.
+  /// This is invoked when the CallbackToken is printed.
+  void print() override {
+    std::invoke(callable, dataQ.front());
+    dataQ.pop();
+  }
+  /// Get a token with the obj data.
+  CallbackToken getToken(DataTy obj) {
+    // Insert data onto the list.
+    dataQ.push(obj);
+    return CallbackToken();
+  }
 };
 
 //===----------------------------------------------------------------------===//

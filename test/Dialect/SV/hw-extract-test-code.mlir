@@ -420,6 +420,7 @@ module {
 
 module {
   // CHECK-LABEL: @RegExtracted_cover
+  // CHECK-SAME: %designAndTestCode
   // CHECK: %testCode1 = seq.firreg
   // CHECK: %testCode2 = seq.firreg
   // CHECK-NOT: seq.firreg
@@ -444,4 +445,83 @@ module {
 
     hw.output %designAndTestCode : i1
   }
+}
+
+// -----
+// Check that constants are cloned freely.
+
+module {
+  // CHECK-LABEL: @ConstantCloned_cover(%in: i1, %clock: i1)
+  // CHECK-NEXT:   %true = hw.constant true
+  // CHECK-NEXT:   comb.xor bin %in, %true : i1
+  hw.module @ConstantCloned(%clock: i1, %in: i1) -> (out: i1) {
+    %true = hw.constant true
+    %not = comb.xor bin %in, %true : i1
+
+    sv.always posedge %clock {
+      sv.cover %not, immediate
+    }
+
+    hw.output %true : i1
+  }
+}
+
+// -----
+// Check that input only modules are inlined properly.
+
+module {
+  // @ShouldNotBeInlined cannot be inlined because there is a wire with an inner sym
+  // that is referred by hierpath op.
+  hw.hierpath private @Foo [@ShouldNotBeInlined::@foo]
+  hw.module private @ShouldNotBeInlined(%clock: i1, %a: i1) {
+    %w = sv.wire sym @foo: !hw.inout<i1>
+    sv.always posedge %clock {
+      sv.if %a {
+        sv.assert %a, immediate message "foo"
+      }
+    }
+    hw.output
+  }
+  hw.module private @Assert(%clock: i1, %a: i1) {
+    sv.always posedge %clock {
+      sv.if %a {
+        sv.assert %a, immediate message "foo"
+      }
+    }
+    hw.output
+  }
+
+  // CHECK-LABEL: hw.module private @AssertWrapper(%clock: i1, %a: i1) -> (b: i1) {
+  // CHECK-NEXT:  hw.instance "Assert_assert" sym @__ETC_Assert_assert @Assert_assert
+  // CHECK-SAME:  doNotPrint = true
+  hw.module private @AssertWrapper(%clock: i1, %a: i1) -> (b: i1) {
+    hw.instance "a3" @Assert(clock: %clock: i1, a: %a: i1) -> ()
+    hw.output %a: i1
+  }
+
+  // CHECK-NOT: @InputOnly
+  hw.module private @InputOnly(%clock: i1, %a: i1) -> () {
+    hw.instance "a4" @Assert(clock: %clock: i1, a: %a: i1) -> ()
+  }
+
+  // CHECK-LABEL: hw.module @Top(%clock: i1, %a: i1, %b: i1) {
+  // CHECK-NEXT:  hw.instance "Assert_assert" sym @__ETC_Assert_assert_0 @Assert_assert
+  // CHECK-SAME:  doNotPrint = true
+  // CHECK-NEXT:  hw.instance "Assert_assert" sym @__ETC_Assert_assert @Assert_assert
+  // CHECK-SAME:  doNotPrint = true
+  // CHECK-NEXT:  hw.instance "Assert_assert" sym @__ETC_Assert_assert_1 @Assert_assert
+  // CHECK-SAME:  doNotPrint = true
+  // CHECK-NEXT:  hw.instance "should_not_be_inlined" @ShouldNotBeInlined
+  // CHECK-NOT: doNotPrint
+  hw.module @Top(%clock: i1, %a: i1, %b: i1) {
+    hw.instance "a1" @Assert(clock: %clock: i1, a: %a: i1) -> ()
+    hw.instance "a2" @Assert(clock: %clock: i1, a: %b: i1) -> ()
+    hw.instance "a3" @InputOnly(clock: %clock: i1, a: %b: i1) -> ()
+    hw.instance "should_not_be_inlined" @ShouldNotBeInlined (clock: %clock: i1, a: %b: i1) -> ()
+    hw.output
+  }
+  // CHECK:       sv.bind <@Top::@__ETC_Assert_assert>
+  // CHECK-NEXT:  sv.bind <@Top::@__ETC_Assert_assert_0>
+  // CHECK-NEXT:  sv.bind <@Top::@__ETC_Assert_assert_1>
+  // CHECK-NEXT:  sv.bind <@AssertWrapper::@__ETC_Assert_assert>
 }

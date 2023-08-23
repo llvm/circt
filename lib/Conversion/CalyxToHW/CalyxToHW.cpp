@@ -44,7 +44,7 @@ struct ConvertComponentOp : public OpConversionPattern<ComponentOp> {
     SmallVector<hw::PortInfo> hwInputInfo;
     auto portInfo = component.getPortInfo();
     for (auto [name, type, direction, _] : portInfo)
-      hwInputInfo.push_back({name, hwDirection(direction), type});
+      hwInputInfo.push_back({{name, type, hwDirection(direction)}});
     ModulePortInfo hwPortInfo(hwInputInfo);
 
     SmallVector<Value> argValues;
@@ -77,12 +77,12 @@ struct ConvertComponentOp : public OpConversionPattern<ComponentOp> {
   }
 
 private:
-  hw::PortDirection hwDirection(calyx::Direction dir) const {
+  hw::ModulePort::Direction hwDirection(calyx::Direction dir) const {
     switch (dir) {
     case calyx::Direction::Input:
-      return hw::PortDirection::INPUT;
+      return hw::ModulePort::Direction::Input;
     case calyx::Direction::Output:
-      return hw::PortDirection::OUTPUT;
+      return hw::ModulePort::Direction::Output;
     }
     llvm_unreachable("unknown direction");
   }
@@ -236,6 +236,20 @@ private:
         })
         .Case([&](XorLibOp op) {
           convertArithBinaryOp<XorLibOp, XorOp>(op, wires, b);
+        })
+        .Case([&](MuxLibOp op) {
+          auto sel = wireIn(op.getSel(), op.instanceName(),
+                            op.portName(op.getSel()), b);
+          auto tru = wireIn(op.getTru(), op.instanceName(),
+                            op.portName(op.getTru()), b);
+          auto fal = wireIn(op.getFal(), op.instanceName(),
+                            op.portName(op.getFal()), b);
+
+          auto mux = b.create<MuxOp>(sel, tru, fal);
+
+          auto out =
+              wireOut(mux, op.instanceName(), op.portName(op.getOut()), b);
+          wires.append({sel.getInput(), tru.getInput(), fal.getInput(), out});
         })
         // Pipelined arithmetic operations.
         .Case([&](MultPipeLibOp op) {
@@ -399,20 +413,18 @@ private:
     return b.create<ReadInOutOp>(wire);
   }
 
-  CompRegOp reg(Value source, Value clock, Value reset, Twine name,
+  CompRegOp reg(Value source, Value clock, Value reset, const Twine &name,
                 ImplicitLocOpBuilder &b) const {
     auto resetValue = b.create<hw::ConstantOp>(source.getType(), 0);
-    auto regName = b.getStringAttr(name);
-    return b.create<CompRegOp>(source.getType(), source, clock, regName, reset,
-                               resetValue, regName);
+    return b.create<CompRegOp>(source, clock, reset, resetValue, name.str());
   }
 
   CompRegClockEnabledOp regCe(Value source, Value clock, Value ce, Value reset,
-                              Twine name, ImplicitLocOpBuilder &b) const {
+                              const Twine &name,
+                              ImplicitLocOpBuilder &b) const {
     auto resetValue = b.create<hw::ConstantOp>(source.getType(), 0);
-    auto regName = b.getStringAttr(name);
-    return b.create<CompRegClockEnabledOp>(source.getType(), source, clock, ce,
-                                           regName, reset, resetValue, regName);
+    return b.create<CompRegClockEnabledOp>(source, clock, ce, reset, resetValue,
+                                           name.str());
   }
 
   std::string createName(StringRef instanceName, StringRef portName) const {

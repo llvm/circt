@@ -107,3 +107,103 @@ firrtl.circuit "Bundle" {
     out mixed: !firrtl.openbundle<a: uint<1>, x flip: openvector<openbundle<p flip: probe<bundle<a: uint<1>, b: vector<uint<1>, 2>>>, data flip: uint<1>>, 2>, b: vector<uint<1>, 2>>,
     out nohw: !firrtl.openbundle<x: openvector<openbundle<p: probe<bundle<a: uint<1>, b: vector<uint<1>, 2>>>>, 2>>) attributes {convention = #firrtl<convention scalarized>}
 }
+
+// -----
+
+// CHECK-LABEL: circuit "RefsOnlyAggFirstLevel"
+firrtl.circuit "RefsOnlyAggFirstLevel" {
+  // CHECK-LABEL: module private @Child
+  // CHECK-SAME: (in %foo: !firrtl.bundle<x: uint<5>, y: uint<1>>, out %foo_refs_x: !firrtl.probe<uint<5>>, out %foo_refs_y: !firrtl.probe<uint<1>>)
+  firrtl.module private @Child(in %foo: !firrtl.openbundle<x: uint<5>, refs flip: openbundle<x: probe<uint<5>>, y: probe<uint<1>>>, y: uint<1>>) {
+    %0 = firrtl.opensubfield %foo[y] : !firrtl.openbundle<x: uint<5>, refs flip: openbundle<x: probe<uint<5>>, y: probe<uint<1>>>, y: uint<1>>
+    %1 = firrtl.opensubfield %foo[x] : !firrtl.openbundle<x: uint<5>, refs flip: openbundle<x: probe<uint<5>>, y: probe<uint<1>>>, y: uint<1>>
+    %2 = firrtl.opensubfield %foo[refs] : !firrtl.openbundle<x: uint<5>, refs flip: openbundle<x: probe<uint<5>>, y: probe<uint<1>>>, y: uint<1>>
+    %3 = firrtl.opensubfield %2[y] : !firrtl.openbundle<x: probe<uint<5>>, y: probe<uint<1>>>
+    %4 = firrtl.opensubfield %2[x] : !firrtl.openbundle<x: probe<uint<5>>, y: probe<uint<1>>>
+    %5 = firrtl.ref.send %1 : !firrtl.uint<5>
+    firrtl.ref.define %4, %5 : !firrtl.probe<uint<5>>
+    %6 = firrtl.ref.send %0 : !firrtl.uint<1>
+    firrtl.ref.define %3, %6 : !firrtl.probe<uint<1>>
+  }
+  // CHECK-LABEL: module @RefsOnlyAggFirstLevel(
+  firrtl.module @RefsOnlyAggFirstLevel(in %x: !firrtl.uint<5>, in %y: !firrtl.uint<1>, out %out: !firrtl.openbundle<x: probe<uint<5>>, y: probe<uint<1>>>) attributes {convention = #firrtl<convention scalarized>} {
+    %0 = firrtl.opensubfield %out[y] : !firrtl.openbundle<x: probe<uint<5>>, y: probe<uint<1>>>
+    %1 = firrtl.opensubfield %out[x] : !firrtl.openbundle<x: probe<uint<5>>, y: probe<uint<1>>>
+    // CHECK: firrtl.instance c interesting_name @Child(in foo: !firrtl.bundle<x: uint<5>, y: uint<1>>, out foo_refs_x: !firrtl.probe<uint<5>>, out foo_refs_y: !firrtl.probe<uint<1>>)
+    %c_foo = firrtl.instance c interesting_name @Child(in foo: !firrtl.openbundle<x: uint<5>, refs flip: openbundle<x: probe<uint<5>>, y: probe<uint<1>>>, y: uint<1>>)
+    %2 = firrtl.opensubfield %c_foo[refs] : !firrtl.openbundle<x: uint<5>, refs flip: openbundle<x: probe<uint<5>>, y: probe<uint<1>>>, y: uint<1>>
+    %3 = firrtl.opensubfield %2[y] : !firrtl.openbundle<x: probe<uint<5>>, y: probe<uint<1>>>
+    %4 = firrtl.opensubfield %2[x] : !firrtl.openbundle<x: probe<uint<5>>, y: probe<uint<1>>>
+    %5 = firrtl.opensubfield %c_foo[y] : !firrtl.openbundle<x: uint<5>, refs flip: openbundle<x: probe<uint<5>>, y: probe<uint<1>>>, y: uint<1>>
+    %6 = firrtl.opensubfield %c_foo[x] : !firrtl.openbundle<x: uint<5>, refs flip: openbundle<x: probe<uint<5>>, y: probe<uint<1>>>, y: uint<1>>
+    firrtl.strictconnect %6, %x : !firrtl.uint<5>
+    firrtl.strictconnect %5, %y : !firrtl.uint<1>
+    firrtl.ref.define %1, %4 : !firrtl.probe<uint<5>>
+    firrtl.ref.define %0, %3 : !firrtl.probe<uint<1>>
+  }
+}
+
+// -----
+
+// CHECK-LABEL: circuit "SymbolOnField"
+firrtl.circuit "SymbolOnField" {
+  // CHECK: @SymbolOnField
+  // CHECK-SAME: (out r: !firrtl.bundle<x: uint<1>> sym [<@sym,1,public>],
+  // CHECK-SAME:  out r_p: !firrtl.probe<uint<1>>)
+  firrtl.extmodule @SymbolOnField(out r : !firrtl.openbundle<p: probe<uint<1>>, x: uint<1>> sym [<@sym,2,public>])
+}
+
+// -----
+
+// CHECK-LABEL: circuit "ManySymbols"
+firrtl.circuit "ManySymbols" {
+   // Innner-syms on everything not a probe.
+   // (mixed.x[0].p and mixed.x[1].p are pulled out)
+  // CHECK: extmodule @ManySymbols(
+  // CHECK-SAME: <@mixed,0,public>,
+  // CHECK-SAME: <@a,1,public>,
+  // CHECK-SAME: <@xvec,2,public>,
+  // CHECK-SAME: <@x0,3,public>,
+  // CHECK-SAME: <@x0_data,4,public>,
+  // CHECK-SAME: <@x1,5,public>,
+  // CHECK-SAME: <@x1_data,6,public>,
+  // CHECK-SAME: <@b,7,public>
+  firrtl.extmodule @ManySymbols(
+    out mixed: !firrtl.openbundle<a: uint<1>,
+                                   x flip: openvector<openbundle<p flip: probe<bundle<a: uint<1>,
+                                                                                      b: vector<uint<1>, 2>>>,
+                                                                 data flip: uint<1>
+                                                      >, 2>,
+                                   b: vector<uint<1>, 2>>
+        sym [<@mixed,0,public>,
+               <@a,1,public>,
+               <@xvec,2,public>,
+                 <@x0,3,public>, <@x0_data,5,public>,
+                 <@x1,6,public>, <@x1_data,8,public>,
+               <@b,9,public>])
+
+  // Similar but with a refs-only agg between HW elements.
+  // Same HW-only contents as above.
+  // CHECK: extmodule @ManySymbols2(
+  // CHECK-SAME: <@mixed,0,public>,
+  // CHECK-SAME: <@a,1,public>,
+  // CHECK-SAME: <@xvec,2,public>,
+  // CHECK-SAME: <@x0,3,public>,
+  // CHECK-SAME: <@x0_data,4,public>,
+  // CHECK-SAME: <@x1,5,public>,
+  // CHECK-SAME: <@x1_data,6,public>,
+  // CHECK-SAME: <@b,7,public>
+  firrtl.extmodule @ManySymbols2(
+    out mixed: !firrtl.openbundle<a: uint<1>,
+                                   x flip: openvector<openbundle<refsonly : openbundle<p: probe<bundle<a: uint<1>,
+                                                                                                       b: vector<uint<1>, 2>>>>,
+                                                                 data flip: uint<1>
+                                                      >, 2>,
+                                   b: vector<uint<1>, 2>>
+        sym [<@mixed,0,public>,
+               <@a,1,public>,
+               <@xvec,2,public>,
+                 <@x0,3,public>, <@x0_data,6,public>,
+                 <@x1,7,public>, <@x1_data,10,public>,
+               <@b,11,public>])
+}

@@ -74,11 +74,11 @@ public:
   std::string getStringValue() const;
   static std::string getStringValue(StringRef spelling);
 
-  /// Given a token containing a raw string, return its value, including removing
-  /// the quote characters and unescaping the quotes of the string. The lexer has
-  /// already verified that this token is valid.
-  std::string getRawStringValue() const;
-  static std::string getRawStringValue(StringRef spelling);
+  /// Given a token containing a verbatim string, return its value, including
+  /// removing the quote characters and unescaping the quotes of the string. The
+  /// lexer has already verified that this token is valid.
+  std::string getVerbatimStringValue() const;
+  static std::string getVerbatimStringValue(StringRef spelling);
 
   // Location processing.
   llvm::SMLoc getLoc() const;
@@ -133,7 +133,7 @@ private:
   FIRToken lexIdentifierOrKeyword(const char *tokStart);
   FIRToken lexNumber(const char *tokStart);
   void skipComment();
-  FIRToken lexString(const char *tokStart, bool isRaw);
+  FIRToken lexString(const char *tokStart, bool isVerbatim);
 
   const llvm::SourceMgr &sourceMgr;
   const mlir::StringAttr bufferNameIdentifier;

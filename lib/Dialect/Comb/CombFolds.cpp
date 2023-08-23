@@ -82,6 +82,13 @@ static OpTy replaceOpWithNewOpAndCopyName(PatternRewriter &rewriter,
   return newOp;
 }
 
+// Return true if the op has SV attributes. Note that we cannot use a helper
+// function `hasSVAttributes` defined under SV dialect because of a cyclic
+// dependency.
+static bool hasSVAttributes(Operation *op) {
+  return op->hasAttr("sv.attributes");
+}
+
 namespace {
 template <typename SubType>
 struct ComplementMatcher {
@@ -214,6 +221,7 @@ static bool narrowOperationWidth(OpTy op, bool narrowTrailingBits,
                                                       inop, range.first));
   }
   Value newop = rewriter.createOrFold<OpTy>(op.getLoc(), newType, args);
+  newop.getDefiningOp()->setDialectAttrs(op->getDialectAttrs());
   if (range.first)
     newop = rewriter.createOrFold<ConcatOp>(
         op.getLoc(), newop,
@@ -225,7 +233,7 @@ static bool narrowOperationWidth(OpTy op, bool narrowTrailingBits,
         rewriter.create<hw::ConstantOp>(
             op.getLoc(), APInt::getZero(opType.getWidth() - range.second - 1)),
         newop);
-  replaceOpAndCopyName(rewriter, op, newop);
+  rewriter.replaceOp(op, newop);
   return true;
 }
 
@@ -1170,6 +1178,33 @@ LogicalResult OrOp::canonicalize(OrOp op, PatternRewriter &rewriter) {
     replaceOpWithNewOpAndCopyName<ICmpOp>(rewriter, op, ICmpPredicate::ne,
                                           source, cmpAgainst);
     return success();
+  }
+
+  // or(mux(c_1, a, 0), mux(c_2, a, 0), ..., mux(c_n, a, 0)) -> mux(or(c_1, c_2,
+  // .., c_n), a, 0)
+  if (auto firstMux = op.getOperand(0).getDefiningOp<comb::MuxOp>()) {
+    APInt value;
+    if (op.getTwoState() && firstMux.getTwoState() &&
+        matchPattern(firstMux.getFalseValue(), m_ConstantInt(&value)) &&
+        value.isZero()) {
+      SmallVector<Value> conditions{firstMux.getCond()};
+      auto check = [&](Value v) {
+        auto mux = v.getDefiningOp<comb::MuxOp>();
+        if (!mux)
+          return false;
+        conditions.push_back(mux.getCond());
+        return mux.getTwoState() &&
+               firstMux.getTrueValue() == mux.getTrueValue() &&
+               firstMux.getFalseValue() == mux.getFalseValue();
+      };
+      if (llvm::all_of(op.getOperands().drop_front(), check)) {
+        auto cond = rewriter.create<comb::OrOp>(op.getLoc(), conditions, true);
+        replaceOpWithNewOpAndCopyName<comb::MuxOp>(
+            rewriter, op, cond, firstMux.getTrueValue(),
+            firstMux.getFalseValue(), true);
+        return success();
+      }
+    }
   }
 
   /// TODO: or(..., x, not(x)) -> or(..., '1) -- complement
@@ -2228,6 +2263,9 @@ struct MuxRewriter : public mlir::OpRewritePattern<MuxOp> {
 
 LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
                                            PatternRewriter &rewriter) const {
+  // If the op has a SV attribute, don't optimize it.
+  if (hasSVAttributes(op))
+    return failure();
   APInt value;
 
   if (matchPattern(op.getTrueValue(), m_ConstantInt(&value))) {
@@ -2473,7 +2511,7 @@ static bool foldArrayOfMuxes(hw::ArrayCreateOp op, PatternRewriter &rewriter) {
   // Check the operands to the array create.  Ensure all of them are the
   // same op with the same number of operands.
   auto first = inputs[0].getDefiningOp<comb::MuxOp>();
-  if (!first)
+  if (!first || hasSVAttributes(first))
     return false;
 
   // Check whether all operands are muxes with the same condition.

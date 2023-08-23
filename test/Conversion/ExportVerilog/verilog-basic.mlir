@@ -1,5 +1,14 @@
 // RUN: circt-opt %s -test-apply-lowering-options='options=emitBindComments' -export-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
 
+
+hw.testmodule @NewStyle (input %a : i3, 
+                         output %b : i3, 
+                         input %c : i4, 
+                         output %d : i4, 
+                         inout %e : i64 {hw.exportPort = #hw<innerSym@symA>}) {
+  hw.output %a, %c : i3, i4
+ }
+
 // CHECK-LABEL: module inputs_only(
 // CHECK-NEXT:   input a,{{.*}}
 // CHECK-NEXT:         b
@@ -685,7 +694,6 @@ hw.module @bind_rename_port(%.io_req_ready.output: i1, %reset: i1 { hw.verilogNa
 hw.module @SiFive_MulDiv(%clock: i1, %reset: i1) -> (io_req_ready: i1) {
   %false = hw.constant false
   hw.instance "InvisibleBind_assert" sym @__ETC_SiFive_MulDiv_assert @bind_rename_port(".io_req_ready.output": %false: i1, reset: %reset: i1, clock: %clock: i1) -> () {doNotPrint = true}
-  hw.probe @unused, %false, %reset, %clock: i1,i1,i1
   hw.output %false : i1
   //      CHECK: bind_rename_port InvisibleBind_assert (
   // CHECK-NEXT:   ._io_req_ready_output (1'h0),

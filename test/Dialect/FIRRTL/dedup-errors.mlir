@@ -493,3 +493,87 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
     firrtl.instance test1 @Test0(in a : !firrtl.probe<uint<1>>)
   }
 }
+
+// -----
+
+// expected-error@below {{module "Bar" not deduplicated with "Foo"}}
+firrtl.circuit "MustDedup" attributes {annotations = [{
+      class = "firrtl.transforms.MustDeduplicateAnnotation",
+      modules = ["~MustDedup|Foo", "~MustDedup|Bar"]
+    }]} {
+
+  // expected-note@below {{module is in dedup group 'foo'}}
+  firrtl.module @Foo() attributes {annotations = [{
+    class = "firrtl.transforms.DedupGroupAnnotation",
+    group = "foo"
+  }]} { }
+
+  // expected-note@below {{module is not part of a dedup group}}
+  firrtl.module @Bar() { }
+
+  firrtl.module @MustDedup() {
+    firrtl.instance foo @Foo()
+    firrtl.instance bar  @Bar()
+  }
+}
+
+// -----
+
+firrtl.circuit "MustDedup" attributes {} {
+
+  // expected-error@below {{module belongs to multiple dedup groups: "foo", "bar"}}
+  firrtl.module @MustDedup() attributes {annotations = [
+    {
+      class = "firrtl.transforms.DedupGroupAnnotation",
+      group = "foo"
+    },
+    {
+      class = "firrtl.transforms.DedupGroupAnnotation",
+      group = "bar"
+    }
+  ]} { }
+}
+
+// -----
+
+// expected-error@below {{module "Test1" not deduplicated with "Test0"}}
+firrtl.circuit "MustDedup" attributes {annotations = [{
+      class = "firrtl.transforms.MustDeduplicateAnnotation",
+      modules = ["~MustDedup|Test0", "~MustDedup|Test1"]
+    }]} {
+  firrtl.module @Test0() {
+    %w0 = firrtl.wire sym [<@sym, 1, private>]: !firrtl.vector<uint<1>, 2>
+    // expected-note @below {{operations have different targets, first operation has field 1 of op %w0 = firrtl.wire sym [<@sym,1,private>] : !firrtl.vector<uint<1>, 2>}}
+    %1 = firrtl.ref.rwprobe <@Test0::@sym> : !firrtl.rwprobe<uint<1>>
+  }
+  firrtl.module @Test1() {
+    %w1 = firrtl.wire sym [<@sym, 2, private>]: !firrtl.vector<uint<1>, 2>
+    // expected-note @below {{second operation has field 2 of op %w1 = firrtl.wire sym [<@sym,2,private>] : !firrtl.vector<uint<1>, 2>}}
+    %0 = firrtl.ref.rwprobe <@Test1::@sym> : !firrtl.rwprobe<uint<1>>
+  }
+  firrtl.module @MustDedup() {
+    firrtl.instance test0 @Test0()
+    firrtl.instance test1 @Test1()
+  }
+}
+
+// -----
+
+// expected-error@below {{module "Test1" not deduplicated with "Test0"}}
+firrtl.circuit "MustDedup" attributes {annotations = [{
+      class = "firrtl.transforms.MustDeduplicateAnnotation",
+      modules = ["~MustDedup|Test0", "~MustDedup|Test1"]
+    }]} {
+  firrtl.module @Test0(in %in : !firrtl.vector<uint<1>, 2> sym [<@sym, 1, private>]) {
+    // expected-note @below {{operations have different targets, first operation has field 1 of port 0 on @Test0}}
+    %0 = firrtl.ref.rwprobe <@Test0::@sym> : !firrtl.rwprobe<uint<1>>
+  }
+  firrtl.module @Test1(in %in : !firrtl.vector<uint<1>, 2> sym [<@sym, 2, private>]) {
+    // expected-note @below {{second operation has field 2 of port 0 on @Test1}}
+    %0 = firrtl.ref.rwprobe <@Test1::@sym>: !firrtl.rwprobe<uint<1>>
+  }
+  firrtl.module @MustDedup() {
+    firrtl.instance test0 @Test0(in in : !firrtl.vector<uint<1>, 2>)
+    firrtl.instance test1 @Test1(in in : !firrtl.vector<uint<1>, 2>)
+  }
+}

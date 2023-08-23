@@ -13,7 +13,7 @@
 
 def SCModuleOp : SystemCOp<"module", [
     Symbol,
-    DeclareOpInterfaceMethods<HWModuleLike>,
+    DeclareOpInterfaceMethods<InstanceGraphModuleOpInterface>,
     FunctionOpInterface,
     IsolatedFromAbove,
     SingleBlock,
@@ -83,16 +83,15 @@ def SCModuleOp : SystemCOp<"module", [
       llvm::filter_iterator<Region::BlockArgListType::iterator,
                             std::function<bool(const BlockArgument &)>>>;
 
-    void getPortInfoList(SmallVectorImpl<hw::PortInfo> &portInfoList);
-    PortDirectionRange getPortsOfDirection(hw::PortDirection direction);
+    PortDirectionRange getPortsOfDirection(hw::ModulePort::Direction direction);
     PortDirectionRange getInputPorts() {
-      return getPortsOfDirection(hw::PortDirection::INPUT);
+      return getPortsOfDirection(hw::ModulePort::Direction::Input);
     }
     PortDirectionRange getOutputPorts() {
-      return getPortsOfDirection(hw::PortDirection::OUTPUT);
+      return getPortsOfDirection(hw::ModulePort::Direction::Output);
     }
     PortDirectionRange getInOutPorts() {
-      return getPortsOfDirection(hw::PortDirection::INOUT);
+      return getPortsOfDirection(hw::ModulePort::Direction::InOut);
     }
 
     // Return the Ctor operation in this module's body or create one if none
@@ -102,20 +101,11 @@ def SCModuleOp : SystemCOp<"module", [
     // Return the Destructor operation in this module's body or create one if
     // none exists yet.
     systemc::DestructorOp getOrCreateDestructor();
-  }];
 
-  let extraClassDefinition = [{
-    size_t $cppClass::getNumPorts() {
-      return getPortNames().size();
-    }
-
-    circt::hw::InnerSymAttr $cppClass::getPortSymbolAttr(size_t portIndex) {
-      for (NamedAttribute argAttr :
-           mlir::function_interface_impl::getArgAttrs(*this, portIndex))
-        if (auto sym = argAttr.getValue().dyn_cast<circt::hw::InnerSymAttr>())
-          return sym;
-      return circt::hw::InnerSymAttr();
-    }
+    //===------------------------------------------------------------------===//
+    // PortList Methods
+    //===------------------------------------------------------------------===//
+    ::circt::hw::ModulePortInfo getPortList();
   }];
 }
 

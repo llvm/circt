@@ -28,14 +28,15 @@ struct ModuleSizeCache {
   void clear() { moduleSizes.clear(); }
 
   uint64_t getModuleSize(HWModuleLike module,
-                         InstanceGraphBase &instanceGraph) {
+                         hw::InstanceGraph &instanceGraph) {
     if (auto it = moduleSizes.find(module); it != moduleSizes.end())
       return it->second;
     uint64_t size = 1;
     module->walk([&](Operation *op) {
       size += 1;
       if (auto instOp = dyn_cast<HWInstanceLike>(op))
-        if (auto instModule = instanceGraph.getReferencedModule(instOp))
+        if (auto instModule =
+                instanceGraph.getReferencedModule<hw::HWModuleLike>(instOp))
           size += getModuleSize(instModule, instanceGraph);
     });
     moduleSizes.insert({module, size});
@@ -64,7 +65,7 @@ struct ModuleExternalizer : public OpReduction<HWModuleOp> {
   LogicalResult rewrite(HWModuleOp op) override {
     OpBuilder builder(op);
     builder.create<HWModuleExternOp>(op->getLoc(), op.getModuleNameAttr(),
-                                     op.getPorts(), StringRef(),
+                                     op.getPortList(), StringRef(),
                                      op.getParameters());
     op->erase();
     return success();

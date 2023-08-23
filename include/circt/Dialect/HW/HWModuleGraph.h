@@ -14,8 +14,8 @@
 #define CIRCT_DIALECT_HW_HWMODULEGRAPH_H
 
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/HW/HWInstanceGraph.h"
 #include "circt/Dialect/HW/HWOps.h"
-#include "circt/Dialect/HW/InstanceGraphBase.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Support/LLVM.h"
 #include "llvm/ADT/GraphTraits.h"
@@ -150,14 +150,15 @@ struct llvm::DOTGraphTraits<circt::hw::HWModuleOp>
     auto &os = g.getOStream();
     os << "subgraph cluster_entry_args {\n";
     os << "label=\"Input arguments\";\n";
+    auto iports = mod.getPortList();
     for (auto [info, arg] :
-         llvm::zip(mod.getPorts().inputs, mod.getArguments())) {
+         llvm::zip(iports.getInputs(), mod.getBodyBlock()->getArguments())) {
       g.emitSimpleNode(reinterpret_cast<void *>(&arg), "",
                        info.getName().str());
     }
     os << "}\n";
     for (auto [info, arg] :
-         llvm::zip(mod.getPorts().inputs, mod.getArguments())) {
+         llvm::zip(iports.getInputs(), mod.getBodyBlock()->getArguments())) {
       for (auto *user : arg.getUsers()) {
         g.emitEdge(reinterpret_cast<void *>(&arg), 0, user, -1, "");
       }

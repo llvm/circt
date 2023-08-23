@@ -18,7 +18,6 @@ circuit Foo : %[[
           {"info": "", "name": "d", "value": "OMString:hello"},
           {"info": "", "name": "f", "value": "OMBigDecimal:10.5"},
           {"info": "", "name": "g", "value": "OMDeleted"},
-          {"info": "", "name": "h", "value": "OMConstant:UInt<2>(\"h1\")"},
           {"info": "", "name": "i", "value": 42},
           {"info": "", "name": "j", "value": true},
           {"info": "", "name": "k", "value": 3.14}
@@ -105,8 +104,6 @@ circuit Foo : %[[
 ; CHECK-NEXT:  "value": "OMBigDecimal:10.5"
 ; CHECK:       "name": "g"
 ; CHECK-NEXT:  "value": "OMDeleted"
-; CHECK:       "name": "h"
-; CHECK-NEXT:  "value": "OMConstant:UInt<2>(\"h1\")"
 ; CHECK:       "name": "i"
 ; CHECK-NEXT:  "value": 42
 ; CHECK:       "name": "j"
@@ -142,7 +139,7 @@ circuit Foo : %[[
 ; CHECK:       "name": "containingModule"
 ; CHECK-NEXT:  "value": "OMInstanceTarget:~Foo|Foo"
 ; CHECK:        "name": "portField",
-; CHECK-NEXT        "value": "OMReferenceTarget:~Foo|Foo/parameter_0:Bar>b_signed"
+; CHECK-NEXT:   "value": "OMReferenceTarget:~Foo|Foo/parameter_0:Bar>b_signed"
 ; CHECK:       "name": "ports"
 ; CHECK-NEXT:  "value": [
 ; CHECK-NEXT:    {

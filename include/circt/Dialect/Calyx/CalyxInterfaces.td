@@ -269,3 +269,69 @@ def ComponentOpInterface : OpInterface<"ComponentInterface"> {
 
   let verify = [{ return verifyComponent(op); }];
 }
+
+def IfOpInterface : OpInterface<"IfInterface"> {
+  let cppNamespace = "::circt::calyx";
+
+  let description = [{
+    This is an op interface for Calyx If control ops. Implemented
+    by Dynamic and Static If ops.
+  }];
+
+  let methods = [
+    InterfaceMethod<
+      "This returns true if the then body exists.",
+      "bool",
+      "thenBodyExists",
+      (ins),
+      /*methodBody=*/"",
+      /*defaultImplementation=*/[{
+        Region* region = &$_op->getRegion(0);
+        if (region == nullptr)
+          return false;
+        return !region->empty();
+      }]
+    >,
+    InterfaceMethod<
+      "This returns true if the else body exists.",
+      "bool",
+      "elseBodyExists",
+      (ins),
+      /*methodBody=*/"",
+      /*defaultImplementation=*/[{
+        Region* region = &$_op->getRegion(1);
+        if (region == nullptr)
+          return false;
+        return !region->empty();
+      }]
+    >,
+    InterfaceMethod<
+      "This returns the then body block.",
+      "Block*",
+      "getThenBody",
+      (ins),
+      /*methodBody=*/"",
+      /*defaultImplementation=*/[{
+        assert(thenBodyExists() && "Then region does not exist.");
+        Region* region = &$_op->getRegion(0);
+        assert(region->hasOneBlock() && "The Then body should have one Block.");
+        return &region->front();
+      }]
+    >,
+    InterfaceMethod<
+      "This returns the else body block.",
+      "Block*",
+      "getElseBody",
+      (ins),
+      /*methodBody=*/"",
+      /*defaultImplementation=*/[{
+        assert(elseBodyExists() && "Else region does not exist.");
+        Region* region = &$_op->getRegion(1);
+        assert(region->hasOneBlock() && "The Else body should have one Block.");
+        return &region->front();
+      }]
+    >
+  ];
+
+  let verify = [{ return verifyIf(op); }];
+}

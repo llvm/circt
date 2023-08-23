@@ -6,6 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "circt/Dialect/HW/HWAttributesNaming.td"
 include "circt/Dialect/HW/HWTypes.td"
 
 def DeclPhysicalRegionOp : MSFTOp<"physical_region",
@@ -119,7 +120,7 @@ def DynamicInstanceOp : MSFTOp<"instance.dynamic",
     gives them the symbol of the globalref which was created to replace the
     dynamic instance.
   }];
-  let arguments = (ins HWInnerRefAttr:$instanceRef);
+  let arguments = (ins InnerRefAttr:$instanceRef);
   let regions = (region SizedRegion<1>:$body);
 
   let assemblyFormat = [{

@@ -20,6 +20,7 @@
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -120,12 +121,8 @@ private:
                   SmallVectorImpl<char> &result);
 
   /// Get the cached namespace for a module.
-  ModuleNamespace &getModuleNamespace(FModuleLike module) {
-    auto it = moduleNamespaces.find(module);
-    if (it != moduleNamespaces.end())
-      return it->second;
-    return moduleNamespaces.insert({module, ModuleNamespace(module)})
-        .first->second;
+  hw::InnerSymbolNamespace &getModuleNamespace(FModuleLike module) {
+    return moduleNamespaces.try_emplace(module, module).first->second;
   }
 
   /// Whether any errors have occurred in the current `runOnOperation`.
@@ -143,7 +140,7 @@ private:
   /// Temporary `firrtl.hierpath` operations to be deleted at the end of the
   /// pass. Vector elements are unique.
   SmallVector<hw::HierPathOp> removeTempNLAs;
-  DenseMap<Operation *, ModuleNamespace> moduleNamespaces;
+  DenseMap<Operation *, hw::InnerSymbolNamespace> moduleNamespaces;
   /// Lookup table of instances by name and parent module.
   DenseMap<hw::InnerRefAttr, InstanceOp> instancesByName;
   /// Record to remove any temporary symbols added to instances.
@@ -640,7 +637,16 @@ void EmitOMIRPass::runOnOperation() {
       }
       if (sramIDs.erase(tracker.id))
         makeTrackerAbsolute(tracker);
-      trackers.insert({tracker.id, tracker});
+      if (auto [it, inserted] = trackers.try_emplace(tracker.id, tracker);
+          !inserted) {
+        auto diag = op->emitError(omirTrackerAnnoClass)
+                    << " annotation with same ID already found, must resolve "
+                       "to single target";
+        diag.attachNote(it->second.op->getLoc())
+            << "tracker with same ID already found here";
+        anyFailures = true;
+        return true;
+      }
       return true;
     };
     AnnotationSet::removePortAnnotations(op, setTracker);
@@ -680,12 +686,11 @@ void EmitOMIRPass::runOnOperation() {
 
   // Remove the temp symbol from instances.
   for (auto *op : tempSymInstances)
-    cast<InstanceOp>(op)->removeAttr("inner_sym");
+    cast<InstanceOp>(op).setInnerSymbolAttr({});
   tempSymInstances.clear();
 
   // Emit the OMIR JSON as a verbatim op.
-  auto builder = OpBuilder(circuitOp);
-  builder.setInsertionPointAfter(circuitOp);
+  auto builder = circuitOp.getBodyBuilder();
   auto verbatimOp =
       builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), jsonBuffer);
   auto fileAttr = hw::OutputFileAttr::getFromFilename(
@@ -713,9 +718,10 @@ void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
   // Get all the paths instantiating this module. If there is an NLA already
   // attached to this tracker, we use it as a base to disambiguate the path to
   // the memory.
-  hw::HWModuleLike mod;
+  igraph::ModuleOpInterface mod;
   if (tracker.nla)
-    mod = instanceGraph->lookup(tracker.nla.root())->getModule();
+    mod = instanceGraph->lookup(tracker.nla.root())
+              ->getModule<igraph::ModuleOpInterface>();
   else
     mod = tracker.op->getParentOfType<FModuleOp>();
 
@@ -741,12 +747,12 @@ void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
   // Assemble the module and name path for the NLA. Also attach an NLA reference
   // annotation to each instance participating in the path.
   SmallVector<Attribute> namepath;
-  auto addToPath = [&](Operation *op, StringAttr name) {
+  auto addToPath = [&](Operation *op) {
     namepath.push_back(getInnerRefTo(op));
   };
   // Add the path up to where the NLA starts.
   for (auto inst : paths[0])
-    addToPath(inst, inst.getInstanceNameAttr());
+    addToPath(inst);
   // Add the path from the NLA to the op.
   if (tracker.nla) {
     auto path = tracker.nla.getNamepath().getValue();
@@ -754,13 +760,13 @@ void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
       auto ref = attr.cast<hw::InnerRefAttr>();
       // Find the instance referenced by the NLA.
       auto *node = instanceGraph->lookup(ref.getModule());
-      auto it = llvm::find_if(*node, [&](hw::InstanceRecord *record) {
-        return getInnerSymName(cast<InstanceOp>(*record->getInstance())) ==
+      auto it = llvm::find_if(*node, [&](igraph::InstanceRecord *record) {
+        return getInnerSymName(record->getInstance<InstanceOp>()) ==
                ref.getName();
       });
       assert(it != node->end() &&
              "Instance referenced by NLA does not exist in module");
-      addToPath((*it)->getInstance(), ref.getName());
+      addToPath((*it)->getInstance());
     }
   }
 
@@ -934,7 +940,7 @@ void EmitOMIRPass::emitOptionalRTLPorts(DictionaryAttr node,
     jsonStream.attribute("name", "ports");
     jsonStream.attributeArray("value", [&] {
       for (const auto &port : llvm::enumerate(module.getPorts())) {
-        auto portType = dyn_cast<FIRRTLBaseType>(port.value().type);
+        auto portType = type_dyn_cast<FIRRTLBaseType>(port.value().type);
         if (!portType || portType.getBitWidthOrSentinel() == 0)
           continue;
         jsonStream.object([&] {
@@ -1231,16 +1237,16 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
 }
 
 hw::InnerRefAttr EmitOMIRPass::getInnerRefTo(Operation *op) {
-  return ::getInnerRefTo(op, "omir_sym",
-                         [&](FModuleOp module) -> ModuleNamespace & {
+  return ::getInnerRefTo(op,
+                         [&](FModuleLike module) -> hw::InnerSymbolNamespace & {
                            return getModuleNamespace(module);
                          });
 }
 
 hw::InnerRefAttr EmitOMIRPass::getInnerRefTo(FModuleLike module,
                                              size_t portIdx) {
-  return ::getInnerRefTo(module, portIdx, "omir_sym",
-                         [&](FModuleLike mod) -> ModuleNamespace & {
+  return ::getInnerRefTo(module, portIdx,
+                         [&](FModuleLike mod) -> hw::InnerSymbolNamespace & {
                            return getModuleNamespace(mod);
                          });
 }
@@ -1251,13 +1257,13 @@ FIRRTLType EmitOMIRPass::getTypeOf(Operation *op) {
   assert(op->getNumResults() == 1 &&
          isa<FIRRTLType>(op->getResult(0).getType()) &&
          "op must have a single FIRRTLType result");
-  return cast<FIRRTLType>(op->getResult(0).getType());
+  return type_cast<FIRRTLType>(op->getResult(0).getType());
 }
 
 FIRRTLType EmitOMIRPass::getTypeOf(FModuleLike mod, size_t portIdx) {
   Type portType = mod.getPortType(portIdx);
   assert(isa<FIRRTLType>(portType) && "port must have a FIRRTLType");
-  return cast<FIRRTLType>(portType);
+  return type_cast<FIRRTLType>(portType);
 }
 
 // Constructs a reference to a field of an aggregate FIRRTLType with a fieldID,
@@ -1266,7 +1272,7 @@ FIRRTLType EmitOMIRPass::getTypeOf(FModuleLike mod, size_t portIdx) {
 void EmitOMIRPass::addFieldID(FIRRTLType type, unsigned fieldID,
                               SmallVectorImpl<char> &result) {
   while (fieldID)
-    TypeSwitch<FIRRTLType>(type)
+    FIRRTLTypeSwitch<FIRRTLType>(type)
         .Case<FVectorType>([&](FVectorType vector) {
           size_t index = vector.getIndexForFieldID(fieldID);
           type = vector.getElementType();

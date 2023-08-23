@@ -122,7 +122,7 @@ LogicalResult circt::firrtl::detail::verifyForceableOp(Forceable op) {
   if (!forceable)
     return success();
   auto data = op.getDataRaw();
-  auto baseType = dyn_cast<FIRRTLBaseType>(data.getType());
+  auto baseType = type_dyn_cast<FIRRTLBaseType>(data.getType());
   if (!baseType)
     return op.emitOpError("has data that is not a base type");
   if (baseType.containsConst())

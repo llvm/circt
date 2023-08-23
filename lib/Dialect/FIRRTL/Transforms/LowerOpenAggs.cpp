@@ -49,8 +49,14 @@ struct NonHWField {
   bool isFlip;
   /// String suffix naming this field.
   SmallString<16> suffix;
+
+  /// Print this structure to the specified stream.
+  void print(raw_ostream &os) const;
+
+#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
   /// Print this structure to llvm::errs().
-  void dump() const;
+  LLVM_DUMP_METHOD void dump() const { print(llvm::errs()); }
+#endif
 };
 
 /// Mapped port info
@@ -65,40 +71,68 @@ struct PortMappingInfo {
   /// List of the individual non-hw fields to be split out.
   SmallVector<NonHWField, 0> fields;
 
+  /// List of fieldID's of interior nodes that map to nothing.
+  /// HW-only projection is empty, and not leaf.
+  SmallVector<uint64_t, 0> mapToNullInteriors;
+
+  hw::InnerSymAttr newSym = {};
+
   /// Determine number of types this argument maps to.
   size_t count(bool includeErased = false) const {
     if (identity)
       return 1;
     return fields.size() + (hwType ? 1 : 0) + (includeErased ? 1 : 0);
   }
-  void dump() const;
+
+  /// Print this structure to the specified stream.
+  void print(raw_ostream &os) const;
+
+#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
+  /// Print this structure to llvm::errs().
+  LLVM_DUMP_METHOD void dump() const { print(llvm::errs()); }
+#endif
 };
 
-llvm::raw_ostream &operator<<(llvm::raw_ostream &os, const NonHWField &field) {
-  return os << llvm::formatv(
-             "non-HW(type={0}, fieldID={1}, isFlip={2}, suffix={3})",
-             field.type, field.fieldID, field.isFlip, field.suffix);
+inline llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
+                                     const NonHWField &field) {
+  field.print(os);
+  return os;
 }
 
-llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
-                              const PortMappingInfo &pmi) {
-  if (pmi.identity)
-    return os << "(identity)";
-
-  os << "[[hw portion: ";
-  if (pmi.hwType)
-    os << pmi.hwType;
-  else
-    os << "(none)";
-  os << ", fields: ";
-  llvm::interleaveComma(pmi.fields, os);
-  return os << "]]";
+inline llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
+                                     const PortMappingInfo &pmi) {
+  pmi.print(os);
+  return os;
 }
 
 } // namespace
 
-void NonHWField::dump() const { llvm::errs() << *this; }
-void PortMappingInfo::dump() const { llvm::errs() << *this; }
+void NonHWField::print(llvm::raw_ostream &os) const {
+  os << llvm::formatv("non-HW(type={0}, fieldID={1}, isFlip={2}, suffix={3})",
+                      type, fieldID, isFlip, suffix);
+}
+void PortMappingInfo::print(llvm::raw_ostream &os) const {
+  if (identity) {
+    os << "(identity)";
+    return;
+  }
+
+  os << "[[hw portion: ";
+  if (hwType)
+    os << hwType;
+  else
+    os << "(none)";
+  os << ", fields: <";
+  llvm::interleaveComma(fields, os);
+  os << ">, mappedToNull: <";
+  llvm::interleaveComma(mapToNullInteriors, os);
+  os << ">, sym: ";
+  if (newSym)
+    os << newSym;
+  else
+    os << "()";
+  os << " ]]";
+}
 
 template <typename Range>
 LogicalResult walkPortMappings(
@@ -149,18 +183,21 @@ public:
   LogicalResult visitInvalidOp(Operation *op) { return visitUnhandledOp(op); }
 
 private:
-  /// Convert a type to its HW-only projection.,
+  /// Convert a type to its HW-only projection, adjusting symbols.
   /// Gather non-hw elements encountered and their names / positions.
   /// Returns a PortMappingInfo with its findings.
-  PortMappingInfo mapPortType(Type type);
+  FailureOr<PortMappingInfo> mapPortType(Type type, Location errorLoc,
+                                         hw::InnerSymAttr sym = {});
 
   MLIRContext *context;
 
   /// Map non-HW fields to their new Value.
+  /// Null value indicates no equivalent (dead).
+  /// These values are available wherever the root is used.
   DenseMap<FieldRef, Value> nonHWValues;
 
   /// Map from port to its hw-only aggregate equivalent.
-  DenseMap<Value, std::optional<Value>> hwOnlyAggMap;
+  DenseMap<Value, Value> hwOnlyAggMap;
 
   /// List of operations to erase at the end.
   SmallVector<Operation *> opsToErase;
@@ -170,8 +207,13 @@ private:
 LogicalResult Visitor::visit(FModuleLike mod) {
   auto ports = mod.getPorts();
 
-  SmallVector<PortMappingInfo, 16> portMappings(
-      llvm::map_range(ports, [&](auto &p) { return mapPortType(p.type); }));
+  SmallVector<PortMappingInfo, 16> portMappings;
+  for (auto &port : ports) {
+    auto pmi = mapPortType(port.type, port.loc, port.sym);
+    if (failed(pmi))
+      return failure();
+    portMappings.push_back(*pmi);
+  }
 
   /// Total number of types mapped to.
   /// Include erased ports.
@@ -210,16 +252,18 @@ LogicalResult Visitor::visit(FModuleLike mod) {
         if (pmi.hwType) {
           auto newPort = port;
           newPort.type = pmi.hwType;
+          newPort.sym = pmi.newSym;
           newPorts.emplace_back(idxOfInsertPoint, newPort);
+
+          assert(!port.sym ||
+                 (pmi.newSym && port.sym.size() == pmi.newSym.size()));
 
           // If want to run this pass later, need to fixup annotations.
           if (!port.annotations.empty())
             return mlir::emitError(port.loc)
                    << "annotations on open aggregates not handled yet";
         } else {
-          if (port.sym)
-            return mlir::emitError(port.loc)
-                   << "symbol found on aggregate with no HW";
+          assert(!port.sym && !pmi.newSym);
           if (!port.annotations.empty())
             return mlir::emitError(port.loc)
                    << "annotations found on aggregate with no HW";
@@ -272,14 +316,18 @@ LogicalResult Visitor::visit(FModuleLike mod) {
                            if (pmi.hwType)
                              hwOnlyAggMap[oldPort] =
                                  block->getArgument(++newPortIndex);
-                           else
-                             hwOnlyAggMap[oldPort] = std::nullopt;
 
                            for (auto &field : pmi.fields) {
                              auto ref = FieldRef(oldPort, field.fieldID);
                              auto newVal = block->getArgument(++newPortIndex);
                              nonHWValues[ref] = newVal;
                            }
+                           for (auto fieldID : pmi.mapToNullInteriors) {
+                             auto ref = FieldRef(oldPort, fieldID);
+                             assert(!nonHWValues.count(ref));
+                             nonHWValues[ref] = {};
+                           }
+
                            return success();
                          });
     if (failed(result))
@@ -335,23 +383,21 @@ LogicalResult Visitor::visitExpr(OpenSubfieldOp op) {
   auto resultRef = getFieldRefFromValue(op.getResult());
   auto nonHWForResult = nonHWValues.find(resultRef);
   if (nonHWForResult != nonHWValues.end()) {
-    auto newResult = nonHWForResult->second;
-    assert(op.getResult().getType() == newResult.getType());
-    assert(!isa<FIRRTLBaseType>(newResult.getType()));
-    op.getResult().replaceAllUsesWith(newResult);
+    // If has nonHW portion, RAUW to it.
+    if (auto newResult = nonHWForResult->second) {
+      assert(op.getResult().getType() == newResult.getType());
+      assert(!type_isa<FIRRTLBaseType>(newResult.getType()));
+      op.getResult().replaceAllUsesWith(newResult);
+    }
     return success();
   }
 
   assert(hwOnlyAggMap.count(op.getInput()));
 
   auto newInput = hwOnlyAggMap[op.getInput()];
-  // Skip if no hw-only portion.  This is dead.
-  if (!newInput.has_value()) {
-    hwOnlyAggMap[op.getResult()] = std::nullopt;
-    return success();
-  }
+  assert(newInput);
 
-  auto bundleType = cast<BundleType>(newInput->getType());
+  auto bundleType = type_cast<BundleType>(newInput.getType());
 
   // Recompute the "actual" index for this field, it may have changed.
   auto fieldName = op.getFieldName();
@@ -359,13 +405,13 @@ LogicalResult Visitor::visitExpr(OpenSubfieldOp op) {
   assert(newFieldIndex.has_value());
 
   ImplicitLocOpBuilder builder(op.getLoc(), op);
-  auto newOp = builder.create<SubfieldOp>(*newInput, *newFieldIndex);
+  auto newOp = builder.create<SubfieldOp>(newInput, *newFieldIndex);
   if (auto name = op->getAttrOfType<StringAttr>("name"))
     newOp->setAttr("name", name);
 
   hwOnlyAggMap[op.getResult()] = newOp;
 
-  if (isa<FIRRTLBaseType>(op.getType()))
+  if (type_isa<FIRRTLBaseType>(op.getType()))
     op.getResult().replaceAllUsesWith(newOp.getResult());
 
   return success();
@@ -382,30 +428,28 @@ LogicalResult Visitor::visitExpr(OpenSubindexOp op) {
   auto resultRef = getFieldRefFromValue(op.getResult());
   auto nonHWForResult = nonHWValues.find(resultRef);
   if (nonHWForResult != nonHWValues.end()) {
-    auto newResult = nonHWForResult->second;
-    assert(op.getResult().getType() == newResult.getType());
-    assert(!isa<FIRRTLBaseType>(newResult.getType()));
-    op.getResult().replaceAllUsesWith(newResult);
+    // If has nonHW portion, RAUW to it.
+    if (auto newResult = nonHWForResult->second) {
+      assert(op.getResult().getType() == newResult.getType());
+      assert(!type_isa<FIRRTLBaseType>(newResult.getType()));
+      op.getResult().replaceAllUsesWith(newResult);
+    }
     return success();
   }
 
   assert(hwOnlyAggMap.count(op.getInput()));
 
   auto newInput = hwOnlyAggMap[op.getInput()];
-  // Skip if no hw-only portion.  This is dead.
-  if (!newInput.has_value()) {
-    hwOnlyAggMap[op.getResult()] = std::nullopt;
-    return success();
-  }
+  assert(newInput);
 
   ImplicitLocOpBuilder builder(op.getLoc(), op);
-  auto newOp = builder.create<SubindexOp>(*newInput, op.getIndex());
+  auto newOp = builder.create<SubindexOp>(newInput, op.getIndex());
   if (auto name = op->getAttrOfType<StringAttr>("name"))
     newOp->setAttr("name", name);
 
   hwOnlyAggMap[op.getResult()] = newOp;
 
-  if (isa<FIRRTLBaseType>(op.getType()))
+  if (type_isa<FIRRTLBaseType>(op.getType()))
     op.getResult().replaceAllUsesWith(newOp.getResult());
   return success();
 }
@@ -413,8 +457,14 @@ LogicalResult Visitor::visitExpr(OpenSubindexOp op) {
 LogicalResult Visitor::visitDecl(InstanceOp op) {
   // Rewrite ports same strategy as for modules.
 
-  SmallVector<PortMappingInfo, 16> portMappings(llvm::map_range(
-      op.getResultTypes(), [&](auto type) { return mapPortType(type); }));
+  SmallVector<PortMappingInfo, 16> portMappings;
+
+  for (auto type : op.getResultTypes()) {
+    auto pmi = mapPortType(type, op.getLoc());
+    if (failed(pmi))
+      return failure();
+    portMappings.push_back(*pmi);
+  }
 
   /// Total number of types mapped to.
   size_t countWithErased = 0;
@@ -509,14 +559,17 @@ LogicalResult Visitor::visitDecl(InstanceOp op) {
         auto newPortIndex = newIndex;
         if (pmi.hwType)
           hwOnlyAggMap[oldResult] = newInst.getResult(newPortIndex++);
-        else
-          hwOnlyAggMap[oldResult] = std::nullopt;
 
         for (auto &field : pmi.fields) {
           auto ref = FieldRef(oldResult, field.fieldID);
           auto newVal = newInst.getResult(newPortIndex++);
           assert(newVal.getType() == field.type);
           nonHWValues[ref] = newVal;
+        }
+        for (auto fieldID : pmi.mapToNullInteriors) {
+          auto ref = FieldRef(oldResult, fieldID);
+          assert(!nonHWValues.count(ref));
+          nonHWValues[ref] = {};
         }
         return success();
       });
@@ -532,70 +585,123 @@ LogicalResult Visitor::visitDecl(InstanceOp op) {
 // Type Conversion
 //===----------------------------------------------------------------------===//
 
-PortMappingInfo Visitor::mapPortType(Type type) {
-  PortMappingInfo pi{false, {}, {}};
-  auto ftype = dyn_cast<FIRRTLType>(type);
+FailureOr<PortMappingInfo> Visitor::mapPortType(Type type, Location errorLoc,
+                                                hw::InnerSymAttr sym) {
+  PortMappingInfo pi{false, {}, {}, {}};
+  auto ftype = type_dyn_cast<FIRRTLType>(type);
   // Ports that aren't open aggregates are left alone.
   if (!ftype || !isa<OpenBundleType, OpenVectorType>(ftype)) {
     pi.identity = true;
     return pi;
   }
 
+  SmallVector<hw::InnerSymPropertiesAttr> newProps;
+
   // NOLINTBEGIN(misc-no-recursion)
   auto recurse = [&](auto &&f, FIRRTLType type, const Twine &suffix = "",
-                     bool flip = false,
-                     uint64_t fieldID = 0) -> FIRRTLBaseType {
-    return TypeSwitch<FIRRTLType, FIRRTLBaseType>(type)
-        .Case<FIRRTLBaseType>([](auto base) { return base; })
-        .template Case<OpenBundleType>(
-            [&](OpenBundleType obTy) -> FIRRTLBaseType {
+                     bool flip = false, uint64_t fieldID = 0,
+                     uint64_t newFieldID = 0) -> FailureOr<FIRRTLBaseType> {
+    auto newType =
+        TypeSwitch<FIRRTLType, FailureOr<FIRRTLBaseType>>(type)
+            .Case<FIRRTLBaseType>([](auto base) { return base; })
+            .template Case<OpenBundleType>([&](OpenBundleType obTy)
+                                               -> FailureOr<FIRRTLBaseType> {
               SmallVector<BundleType::BundleElement> hwElements;
+              uint64_t id = 0;
               for (const auto &[index, element] :
-                   llvm::enumerate(obTy.getElements()))
-                if (auto base =
-                        f(f, element.type, suffix + "_" + element.name.strref(),
-                          flip ^ element.isFlip,
-                          fieldID + obTy.getFieldID(index)))
-                  hwElements.emplace_back(element.name, element.isFlip, base);
+                   llvm::enumerate(obTy.getElements())) {
+                auto base =
+                    f(f, element.type, suffix + "_" + element.name.strref(),
+                      flip ^ element.isFlip, fieldID + obTy.getFieldID(index),
+                      newFieldID + id + 1);
+                if (failed(base))
+                  return failure();
+                if (*base) {
+                  hwElements.emplace_back(element.name, element.isFlip, *base);
+                  id += base->getMaxFieldID() + 1;
+                }
+              }
 
-              if (hwElements.empty())
+              if (hwElements.empty()) {
+                pi.mapToNullInteriors.push_back(fieldID);
                 return FIRRTLBaseType{};
+              }
 
               return BundleType::get(context, hwElements, obTy.isConst());
             })
-        .template Case<OpenVectorType>(
-            [&](OpenVectorType ovTy) -> FIRRTLBaseType {
+            .template Case<OpenVectorType>([&](OpenVectorType ovTy)
+                                               -> FailureOr<FIRRTLBaseType> {
+              uint64_t id = 0;
               FIRRTLBaseType convert;
               // Walk for each index to extract each leaf separately, but expect
               // same hw-only type for all.
               for (auto idx : llvm::seq<size_t>(0U, ovTy.getNumElements())) {
                 auto hwElementType =
                     f(f, ovTy.getElementType(), suffix + "_" + Twine(idx), flip,
-                      fieldID + ovTy.getFieldID(idx));
-                assert((!convert || convert == hwElementType) &&
+                      fieldID + ovTy.getFieldID(idx), newFieldID + id + 1);
+                if (failed(hwElementType))
+                  return failure();
+                assert((!convert || convert == *hwElementType) &&
                        "expected same hw type for all elements");
-                convert = hwElementType;
+                convert = *hwElementType;
+                if (convert)
+                  id += convert.getMaxFieldID() + 1;
               }
 
-              if (!convert)
+              if (!convert) {
+                pi.mapToNullInteriors.push_back(fieldID);
                 return FIRRTLBaseType{};
+              }
 
               return FVectorType::get(convert, ovTy.getNumElements(),
                                       ovTy.isConst());
             })
-        .template Case<RefType>([&](auto ref) {
-          // Do this better, don't re-serialize so much?
-          auto f = NonHWField{ref, fieldID, flip, {}};
-          suffix.toVector(f.suffix);
-          pi.fields.emplace_back(std::move(f));
-          return FIRRTLBaseType{};
-        })
-        .Default(FIRRTLBaseType{});
+            .template Case<RefType>([&](auto ref) {
+              // Do this better, don't re-serialize so much?
+              auto f = NonHWField{ref, fieldID, flip, {}};
+              suffix.toVector(f.suffix);
+              pi.fields.emplace_back(std::move(f));
+              return FIRRTLBaseType{};
+            })
+            .Default([&](auto _) {
+              pi.mapToNullInteriors.push_back(fieldID);
+              return FIRRTLBaseType{};
+            });
+    if (failed(newType))
+      return failure();
+
+    // If there's a symbol on this, add it with adjusted fieldID.
+    if (sym)
+      if (auto symOnThis = sym.getSymIfExists(fieldID)) {
+        if (!*newType)
+          return mlir::emitError(errorLoc, "inner symbol ")
+                 << symOnThis << " mapped to non-HW type";
+        newProps.push_back(hw::InnerSymPropertiesAttr::get(
+            context, symOnThis, newFieldID,
+            StringAttr::get(context, "public")));
+      }
+    return newType;
   };
 
-  pi.hwType = recurse(recurse, ftype);
+  auto hwType = recurse(recurse, ftype);
+  if (failed(hwType))
+    return failure();
+  pi.hwType = *hwType;
+
   assert(pi.hwType != type);
   // NOLINTEND(misc-no-recursion)
+
+  if (sym) {
+    assert(sym.size() == newProps.size());
+
+    if (!pi.hwType && !newProps.empty())
+      return mlir::emitError(errorLoc, "inner symbol on non-HW type");
+
+    llvm::sort(newProps, [](auto &p, auto &q) {
+      return p.getFieldID() < q.getFieldID();
+    });
+    pi.newSym = hw::InnerSymAttr::get(context, newProps);
+  }
 
   return pi;
 }

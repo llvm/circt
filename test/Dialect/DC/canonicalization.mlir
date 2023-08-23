@@ -1,4 +1,6 @@
 // RUN: circt-opt %s --canonicalize --cse --canonicalize | FileCheck %s
+// XFAIL: *
+// Waiting on: https://github.com/llvm/llvm-project/issues/64280
 
 // CHECK-LABEL:   func.func @staggeredJoin1(
 // CHECK-SAME:                    %[[VAL_0:.*]]: !dc.token,
@@ -45,39 +47,36 @@ func.func @fork(%a: !dc.token) -> (!dc.token) {
 
 // CHECK-LABEL:   func.func @packUnpack(
 // CHECK-SAME:                          %[[VAL_0:.*]]: !dc.token,
-// CHECK-SAME:                          %[[VAL_1:.*]]: i32,
-// CHECK-SAME:                          %[[VAL_2:.*]]: i1) -> (!dc.token, i32, i1) {
-// CHECK:           return %[[VAL_0]], %[[VAL_1]], %[[VAL_2]] : !dc.token, i32, i1
+// CHECK-SAME:                          %[[VAL_1:.*]]: i32) -> (!dc.token, i32) {
+// CHECK:           return %[[VAL_0]], %[[VAL_1]] : !dc.token, i32
 // CHECK:         }
-func.func @packUnpack(%a: !dc.token, %b : i32, %c : i1) -> (!dc.token, i32, i1) {
-    %0 = dc.pack %a [%b,%c] : i32, i1
-    %1:3 = dc.unpack %0 : !dc.value<i32, i1>
-    return %1#0, %1#1, %1#2 : !dc.token, i32, i1
+func.func @packUnpack(%a: !dc.token, %b : i32) -> (!dc.token, i32) {
+    %0 = dc.pack %a, %b : i32
+    %1:2 = dc.unpack %0 : !dc.value<i32>
+    return %1#0, %1#1 : !dc.token, i32
 }
 
 // CHECK-LABEL:   func.func @redundantPack(
 // CHECK-SAME:                             %[[VAL_0:.*]]: !dc.token,
-// CHECK-SAME:                             %[[VAL_1:.*]]: i32,
-// CHECK-SAME:                             %[[VAL_2:.*]]: i1) -> !dc.token {
+// CHECK-SAME:                             %[[VAL_1:.*]]: i32) -> !dc.token {
 // CHECK:           return %[[VAL_0]] : !dc.token
 // CHECK:         }
-func.func @redundantPack(%a: !dc.token, %b : i32, %c : i1) -> (!dc.token) {
-    %0 = dc.pack %a [%b,%c] : i32, i1 
-    %1:3 = dc.unpack %0 : !dc.value<i32, i1>
+func.func @redundantPack(%a: !dc.token, %b : i32) -> (!dc.token) {
+    %0 = dc.pack %a, %b : i32 
+    %1:2 = dc.unpack %0 : !dc.value<i32>
     return %1#0 : !dc.token
 }
 
 // CHECK-LABEL:   func.func @csePack(
 // CHECK-SAME:                       %[[VAL_0:.*]]: !dc.token,
-// CHECK-SAME:                       %[[VAL_1:.*]]: i32,
-// CHECK-SAME:                       %[[VAL_2:.*]]: i1) -> (!dc.value<i32, i1>, !dc.value<i32, i1>) {
-// CHECK:           %[[VAL_3:.*]] = dc.pack %[[VAL_0]]{{\[}}%[[VAL_1]], %[[VAL_2]]] : i32, i1
-// CHECK:           return %[[VAL_3]], %[[VAL_3]] : !dc.value<i32, i1>, !dc.value<i32, i1>
+// CHECK-SAME:                       %[[VAL_1:.*]]: i32) -> (!dc.value<i32>, !dc.value<i32>) {
+// CHECK:           %[[VAL_3:.*]] = dc.pack %[[VAL_0]], %[[VAL_1]] : i32
+// CHECK:           return %[[VAL_3]], %[[VAL_3]] : !dc.value<i32>, !dc.value<i32>
 // CHECK:         }
-func.func @csePack(%a: !dc.token, %b : i32, %c : i1) -> (!dc.value<i32, i1>, !dc.value<i32, i1>) {
-    %0 = dc.pack %a [%b,%c] : i32, i1
-    %1 = dc.pack %a [%b,%c] : i32, i1
-    return %0, %1 : !dc.value<i32, i1>, !dc.value<i32, i1>
+func.func @csePack(%a: !dc.token, %b : i32) -> (!dc.value<i32>, !dc.value<i32>) {
+    %0 = dc.pack %a, %b : i32
+    %1 = dc.pack %a, %b : i32
+    return %0, %1 : !dc.value<i32>, !dc.value<i32>
 }
 
 

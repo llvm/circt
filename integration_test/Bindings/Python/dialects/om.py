@@ -13,15 +13,40 @@ with Context() as ctx, Location.unknown():
 
   module = Module.parse("""
   module {
+    %sym = om.constant #om.ref<<@Root::@x>> : !om.ref
+
     om.class @Test(%param: i64) {
       om.class.field @field, %param : i64
 
-      %0 = om.object @Child() : () -> !om.class.type<@Child>
+      %c_14 = om.constant 14 : i64
+      %0 = om.object @Child(%c_14) : (i64) -> !om.class.type<@Child>
       om.class.field @child, %0 : !om.class.type<@Child>
+
+      om.class.field @reference, %sym : !om.ref
+
+      %list = om.constant #om.list<!om.string, ["X" : !om.string, "Y" : !om.string]> : !om.list<!om.string>
+      om.class.field @list, %list : !om.list<!om.string>
+
+      %c_15 = om.constant 15 : i64
+      %1 = om.object @Child(%c_15) : (i64) -> !om.class.type<@Child>
+      %list_child = om.list_create %0, %1: !om.class.type<@Child>
+      %2 = om.object @Nest(%list_child) : (!om.list<!om.class.type<@Child>>) -> !om.class.type<@Nest>
+      om.class.field @nest, %2 : !om.class.type<@Nest>
+
+      %3 = om.constant #om.map<i64, {a = 42, b = 32}> : !om.map<!om.string, i64>
+      om.class.field @map, %3 : !om.map<!om.string, i64>
     }
-    om.class @Child() {
-      %0 = om.constant 14 : i64
+
+    om.class @Child(%0: i64) {
       om.class.field @foo, %0 : i64
+    }
+
+    om.class @Nest(%0: !om.list<!om.class.type<@Child>>) {
+      om.class.field @list_child, %0 : !om.list<!om.class.type<@Child>>
+    }
+
+    hw.module @Root(%clock: i1) -> () {
+      %0 = sv.wire sym @x : !hw.inout<i1>
     }
   }
   """)
@@ -58,3 +83,27 @@ obj = evaluator.instantiate("Test", 42)
 print(obj.field)
 # CHECK: 14
 print(obj.child.foo)
+# CHECK: ('Root', 'x')
+print(obj.reference)
+
+for (name, field) in obj:
+  # CHECK: name: child, field: <circt.dialects.om.Object object
+  # CHECK: name: field, field: 42
+  # CHECK: name: reference, field: ('Root', 'x')
+  print(f"name: {name}, field: {field}")
+
+# CHECK: ['X', 'Y']
+print(obj.list)
+for child in obj.nest.list_child:
+  # CHECK: 14
+  # CHECK-NEXT: 15
+  print(child.foo)
+
+# CHECK: 2
+print(len(obj.map))
+# CHECK: {'a': 42, 'b': 32}
+print(obj.map)
+for k, v in obj.map.items():
+  # CHECK-NEXT: a 42
+  # CHECK-NEXT: b 32
+  print(k, v)

@@ -597,3 +597,23 @@ firrtl.circuit "Properties"   {
     firrtl.propassign %in, %out : !firrtl.string
   }
 }
+
+// -----
+// Incorrect visit of instance op results was resulting in missed cycles.
+
+firrtl.circuit "Bug5442" {
+  firrtl.module private @Bar(in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
+    firrtl.strictconnect %b, %a : !firrtl.uint<1>
+  }
+  firrtl.module private @Baz(in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>, out %c_d: !firrtl.uint<1>) {
+    firrtl.strictconnect %b, %a : !firrtl.uint<1>
+    firrtl.strictconnect %c_d, %a : !firrtl.uint<1>
+  }
+// expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: Bug5442.{bar.a <- baz.b <- baz.a <- bar.b <- bar.a}}}
+  firrtl.module @Bug5442() attributes {convention = #firrtl<convention scalarized>} {
+    %bar_a, %bar_b = firrtl.instance bar @Bar(in a: !firrtl.uint<1>, out b: !firrtl.uint<1>)
+    %baz_a, %baz_b, %baz_c_d = firrtl.instance baz @Baz(in a: !firrtl.uint<1>, out b: !firrtl.uint<1>, out c_d: !firrtl.uint<1>)
+    firrtl.strictconnect %bar_a, %baz_b : !firrtl.uint<1>
+    firrtl.strictconnect %baz_a, %bar_b : !firrtl.uint<1>
+  }
+}

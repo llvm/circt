@@ -1,6 +1,6 @@
 set(LLVM_LINK_COMPONENTS Support)
 
-add_llvm_tool(arcilator arcilator.cpp)
+add_circt_tool(arcilator arcilator.cpp)
 target_link_libraries(arcilator
   PRIVATE
   CIRCTArc
@@ -8,12 +8,16 @@ target_link_libraries(arcilator
   CIRCTArcTransforms
   CIRCTCombToArith
   CIRCTConvertToArcs
+  CIRCTSeqToSV
+  CIRCTSeqTransforms
   CIRCTSupport
+  CIRCTTransforms
   MLIRParser
   MLIRLLVMIRTransforms
   MLIRTargetLLVMIRExport
   MLIRBuiltinToLLVMIRTranslation
   MLIRLLVMToLLVMIRTranslation
+  MLIRFuncInlinerExtension
 )
 
 llvm_update_compile_flags(arcilator)

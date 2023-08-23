@@ -69,3 +69,20 @@ firrtl.circuit "Foo" attributes {annotations = [{
 }]} {
   firrtl.module @Foo() {}
 }
+
+// -----
+
+#loc = loc(unknown)
+firrtl.circuit "Foo" attributes {annotations = [{
+  class = "freechips.rocketchip.objectmodel.OMIRAnnotation",
+  nodes = [{info = #loc, id = "OMID:0", fields = {
+    a = {info = #loc, index = 1, value = {omir.tracker, id = 0, path = "~Foo|Foo>w", type = "OMMemberReferenceTarget"}}
+  }}]
+}]} {
+  firrtl.module @Foo() {
+    // expected-note @below {{tracker with same ID already found here}}
+    %w_a = firrtl.wire {annotations = [{class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0 : i64, type = "OMMemberReferenceTarget"}]} : !firrtl.uint<1>
+    // expected-error @below {{freechips.rocketchip.objectmodel.OMIRTracker annotation with same ID already found, must resolve to single target}}
+    %w_b = firrtl.wire {annotations = [{class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0 : i64, type = "OMMemberReferenceTarget"}]} : !firrtl.uint<1>
+}
+}

@@ -25,6 +25,8 @@ public:
   void runOnOperation() override;
 
 private:
+  void runOnPipeline(ScheduledPipelineOp p);
+
   // Recursively routes value v backwards through the pipeline, adding new
   // registers to 'stage' if the value was not already registered in the stage.
   // Returns the registerred version of 'v' through 'stage'.
@@ -105,23 +107,43 @@ Value ExplicitRegsPass::routeThroughStage(Value v, Block *stage) {
   return retVal;
 }
 
-void ExplicitRegsPass::runOnOperation() {
-  ScheduledPipelineOp pipeline = getOperation();
-  OpBuilder b(getOperation().getContext());
-  bb = std::make_shared<BackedgeBuilder>(b, getOperation().getLoc());
+void ExplicitRegsPass::runOnPipeline(ScheduledPipelineOp pipeline) {
+  OpBuilder b(pipeline.getContext());
+  bb = std::make_shared<BackedgeBuilder>(b, pipeline.getLoc());
+
+  // Cache external-like inputs in a set for fast lookup. This also includes
+  // clock, reset, and stall.
+  llvm::DenseSet<Value> extLikeInputs;
+  for (auto extInput : pipeline.getExtInputs())
+    extLikeInputs.insert(extInput);
+  extLikeInputs.insert(pipeline.getInnerClock());
+  extLikeInputs.insert(pipeline.getInnerReset());
+  if (pipeline.hasStall())
+    extLikeInputs.insert(pipeline.getInnerStall());
 
   // Iterate over the pipeline body in-order (!).
   stageMap = pipeline.getStageMap();
   for (Block *stage : pipeline.getOrderedStages()) {
-    for (auto &op : *stage) {
+    // Walk the stage body - we do this since register materialization needs
+    // to consider all levels of nesting within the stage.
+    stage->walk([&](Operation *op) {
       // Check the operands of this operation to see if any of them cross a
       // stage boundary.
-      for (OpOperand &operand : op.getOpOperands()) {
+      for (OpOperand &operand : op->getOpOperands()) {
+        if (extLikeInputs.contains(operand.get())) {
+          // Never route external inputs through a stage.
+          continue;
+        }
+        if (getParentStageInPipeline(pipeline, operand.get()) == stage) {
+          // The operand is defined by some operation or block which ultimately
+          // resides within the current pipeline stage. No routing needed.
+          continue;
+        }
         Value reroutedValue = routeThroughStage(operand.get(), stage);
         if (reroutedValue != operand.get())
-          op.setOperand(operand.getOperandNumber(), reroutedValue);
+          op->setOperand(operand.getOperandNumber(), reroutedValue);
       }
-    }
+    });
   }
 
   auto *ctx = &getContext();
@@ -156,19 +178,20 @@ void ExplicitRegsPass::runOnOperation() {
         passIns.push_back(value);
     }
 
-    // Append arguments to the predecessor stage terminator, which feeds this
-    // stage.
+    // Replace the predecessor stage terminator, which feeds this stage, with
+    // a new terminator that has materialized arguments.
     StageOp terminator = cast<StageOp>(predecessorStage->getTerminator());
-    terminator.getRegistersMutable().append(regIns);
-    terminator.getPassthroughsMutable().append(passIns);
+    b.setInsertionPoint(terminator);
+    b.create<StageOp>(terminator.getLoc(), terminator.getNextStage(), regIns,
+                      passIns);
+    terminator.erase();
 
     // ... add arguments to the next stage. Registers first, then passthroughs.
     llvm::SmallVector<Type> regAndPassTypes;
     llvm::append_range(regAndPassTypes, ValueRange(regIns).getTypes());
     llvm::append_range(regAndPassTypes, ValueRange(passIns).getTypes());
-    stage->addArguments(regAndPassTypes,
-                        llvm::SmallVector<Location>(regAndPassTypes.size(),
-                                                    UnknownLoc::get(ctx)));
+    for (auto [i, type] : llvm::enumerate(regAndPassTypes))
+      stage->insertArgument(i, type, UnknownLoc::get(ctx));
 
     // Replace backedges for the next stage with the new arguments.
     for (auto it : llvm::enumerate(regMap)) {
@@ -180,6 +203,11 @@ void ExplicitRegsPass::runOnOperation() {
 
   // Clear internal state. See https://github.com/llvm/circt/issues/3235
   stageRegOrPassMap.clear();
+}
+
+void ExplicitRegsPass::runOnOperation() {
+  getOperation()->walk(
+      [&](ScheduledPipelineOp pipeline) { runOnPipeline(pipeline); });
 }
 
 std::unique_ptr<mlir::Pass> circt::pipeline::createExplicitRegsPass() {

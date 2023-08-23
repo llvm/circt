@@ -200,8 +200,8 @@ circuit Top : %[[
     io.d <= d
 
     ; CHECK:      module Top
-    ; CHECK:        io_b = Top.foo.f;
-    ; CHECK-NEXT:   io_c = Top.foo.g;
+    ; CHECK:        io_b = Top.foo.f_probe;
+    ; CHECK-NEXT:   io_c = Top.foo.g_probe;
     ; CHECK-NEXT:   io_d = inv;
 
 ; // -----
@@ -246,7 +246,7 @@ circuit TestHarness : %[[
 ; CHECK:       module Top(
 ; CHECK-NOT:   endmodule
 ; CHECK:         Companion Companion (
-; CHECK-NEXT:    .[[bore:[a-zA-Z0-9_]+]] (Top.test.signal)
+; CHECK-NEXT:    .[[bore:[a-zA-Z0-9_]+]] (Top.test.signal_probe)
 ; CHECK:       endmodule
 
 ; CHECK:       module Companion(
@@ -495,7 +495,7 @@ circuit Top : %[[
 ; CHECK-NEXT:          [[Submodule_tap_2_port:[a-zA-Z0-9_]+]]
 ; CHECK-NEXT:          [[Submodule_tap_5_port:[a-zA-Z0-9_]+]]
 ;
-; CHECK-DAG:     tap_0 = wire_Submodule;
+; CHECK-DAG:     tap_0 = inv;
 ; CHECK-DAG:     tap_1 = [[Submodule_tap_1_port]];
 ; CHECK-DAG:     tap_2 = [[Submodule_tap_2_port]];
 ; CHECK-DAG:     tap_3 = 1'h0;
@@ -508,15 +508,15 @@ circuit Top : %[[
 ; CHECK-NEXT:          [[DUT_tap_8_port:[a-zA-Z0-9_]+]]
 ; CHECK-NEXT:          [[DUT_tap_11_port:[a-zA-Z0-9_]+]]
 ;
-; CHECK-DAG:     tap_6 = DUT.submodule.wire_Submodule;
-; CHECK-DAG:     tap_7 = wire_DUT;
+; CHECK-DAG:     tap_6 = DUT.submodule.wire_Submodule_probe;
+; CHECK-DAG:     tap_7 = inv;
 ; CHECK-DAG:     tap_8 = [[DUT_tap_8_port]];
 ; CHECK-DAG:     tap_9 = 1'h0;
 ; CHECK-DAG:     tap_10 = 1'h0;
 ; CHECK-DAG:     tap_11 = [[DUT_tap_11_port]];
 ;
 ; CHECK:         Submodule submodule (
-; CHECK-DAG:       .[[Submodule_tap_1_port]] (wire_DUT)
+; CHECK-DAG:       .[[Submodule_tap_1_port]] (inv)
 ; CHECK-DAG:       .[[Submodule_tap_2_port]] ([[DUT_tap_2_port]])
 ; CHECK-DAG:       .[[Submodule_tap_5_port]] ([[DUT_tap_5_port]])
 

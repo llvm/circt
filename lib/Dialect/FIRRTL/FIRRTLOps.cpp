@@ -124,7 +124,7 @@ static MemOp::PortKind getMemPortKindFromType(FIRRTLType type) {
   constexpr unsigned int wmode = 1 << 8;
   constexpr unsigned int def = 1 << 9;
   // Get the kind of port based on the fields of the Bundle.
-  auto portType = dyn_cast<BundleType>(type);
+  auto portType = type_dyn_cast<BundleType>(type);
   if (!portType)
     return MemOp::PortKind::Debug;
   unsigned fields = 0;
@@ -198,7 +198,7 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
       })
       .Case<MemOp>([&](auto op) {
         // only debug ports with RefType have source flow.
-        if (isa<RefType>(val.getType()))
+        if (type_isa<RefType>(val.getType()))
           return Flow::Source;
         return swap();
       })
@@ -221,7 +221,7 @@ DeclKind firrtl::getDeclarationKind(Value val) {
 }
 
 size_t firrtl::getNumPorts(Operation *op) {
-  if (auto module = dyn_cast<hw::HWModuleLike>(op))
+  if (auto module = dyn_cast<FModuleLike>(op))
     return module.getNumPorts();
   return op->getNumResults();
 }
@@ -229,7 +229,7 @@ size_t firrtl::getNumPorts(Operation *op) {
 /// Check whether an operation has a `DontTouch` annotation, or a symbol that
 /// should prevent certain types of canonicalizations.
 bool firrtl::hasDontTouch(Operation *op) {
-  return op->getAttr(hw::InnerName::getInnerNameAttrName()) ||
+  return op->getAttr(hw::InnerSymbolTable::getInnerSymbolAttrName()) ||
          AnnotationSet(op).hasDontTouch();
 }
 
@@ -331,17 +331,18 @@ LogicalResult CircuitOp::verifyRegions() {
 
   // Check that a module matching the "main" module exists in the circuit.
   auto mainModule = getMainModule(&symtbl);
-  if (!mainModule) {
-    emitOpError("must contain one module that matches main name '" + main +
-                "'");
-    return failure();
-  }
+  if (!mainModule)
+    return emitOpError("must contain one module that matches main name '" +
+                       main + "'");
+
+  // Even though ClassOps are FModuleLike, they are not a hardware entity, so
+  // we ban them from being our top-module in the design.
+  if (isa<ClassOp>(mainModule))
+    return emitOpError("must have a non-class top module");
 
   // Check that the main module is public.
-  if (!mainModule.isPublic()) {
-    emitOpError("main module '" + main + "' must be public");
-    return failure();
-  }
+  if (!mainModule.isPublic())
+    return emitOpError("main module '" + main + "' must be public");
 
   // Store a mapping of defname to either the first external module
   // that defines it or, preferentially, the first external module
@@ -418,9 +419,9 @@ LogicalResult CircuitOp::verifyRegions() {
       if (!extModule.getParameters().empty() ||
           !collidingExtModule.getParameters().empty()) {
         // Compare base types as widthless, others must match.
-        if (auto base = dyn_cast<FIRRTLBaseType>(aType))
+        if (auto base = type_dyn_cast<FIRRTLBaseType>(aType))
           aType = base.getWidthlessType();
-        if (auto base = dyn_cast<FIRRTLBaseType>(bType))
+        if (auto base = type_dyn_cast<FIRRTLBaseType>(bType))
           bType = base.getWidthlessType();
       }
       if (aType != bType)
@@ -455,9 +456,9 @@ Block *CircuitOp::getBodyBlock() { return &getBody().front(); }
 // FExtModuleOp and FModuleOp
 //===----------------------------------------------------------------------===//
 
-static SmallVector<PortInfo> getPorts(FModuleLike module) {
+static SmallVector<PortInfo> getPortImpl(FModuleLike module) {
   SmallVector<PortInfo> results;
-  for (unsigned i = 0, e = getNumPorts(module); i < e; ++i) {
+  for (unsigned i = 0, e = module.getNumPorts(); i < e; ++i) {
     results.push_back({module.getPortNameAttr(i), module.getPortType(i),
                        module.getPortDirection(i), module.getPortSymbolAttr(i),
                        module.getPortLocation(i),
@@ -466,20 +467,48 @@ static SmallVector<PortInfo> getPorts(FModuleLike module) {
   return results;
 }
 
-SmallVector<PortInfo> FModuleOp::getPorts() {
-  return ::getPorts(cast<FModuleLike>((Operation *)*this));
+SmallVector<PortInfo> FModuleOp::getPorts() { return ::getPortImpl(*this); }
+
+SmallVector<PortInfo> FExtModuleOp::getPorts() { return ::getPortImpl(*this); }
+
+SmallVector<PortInfo> FIntModuleOp::getPorts() { return ::getPortImpl(*this); }
+
+SmallVector<PortInfo> FMemModuleOp::getPorts() { return ::getPortImpl(*this); }
+
+static hw::ModulePort::Direction dirFtoH(Direction dir) {
+  if (dir == Direction::In)
+    return hw::ModulePort::Direction::Input;
+  if (dir == Direction::Out)
+    return hw::ModulePort::Direction::Output;
+  assert(0 && "invalid direction");
+  abort();
 }
 
-SmallVector<PortInfo> FExtModuleOp::getPorts() {
-  return ::getPorts(cast<FModuleLike>((Operation *)*this));
+static hw::ModulePortInfo getPortListImpl(FModuleLike module) {
+  SmallVector<hw::PortInfo> results;
+  for (unsigned i = 0, e = getNumPorts(module); i < e; ++i) {
+    results.push_back({{module.getPortNameAttr(i), module.getPortType(i),
+                        dirFtoH(module.getPortDirection(i))},
+                       i,
+                       module.getPortSymbolAttr(i),
+                       {},
+                       module.getPortLocation(i)});
+  }
+  return hw::ModulePortInfo(results);
 }
 
-SmallVector<PortInfo> FIntModuleOp::getPorts() {
-  return ::getPorts(cast<FModuleLike>((Operation *)*this));
+hw::ModulePortInfo FModuleOp::getPortList() { return ::getPortListImpl(*this); }
+
+hw::ModulePortInfo FExtModuleOp::getPortList() {
+  return ::getPortListImpl(*this);
 }
 
-SmallVector<PortInfo> FMemModuleOp::getPorts() {
-  return ::getPorts(cast<FModuleLike>((Operation *)*this));
+hw::ModulePortInfo FIntModuleOp::getPortList() {
+  return ::getPortListImpl(*this);
+}
+
+hw::ModulePortInfo FMemModuleOp::getPortList() {
+  return ::getPortListImpl(*this);
 }
 
 // Return the port with the specified name.
@@ -491,10 +520,11 @@ BlockArgument FModuleOp::getArgument(size_t portNumber) {
 /// Insertion occurs in-order, such that ports with the same insertion index
 /// appear in the module in the same order they appeared in the list.
 static void insertPorts(FModuleLike op,
-                        ArrayRef<std::pair<unsigned, PortInfo>> ports) {
+                        ArrayRef<std::pair<unsigned, PortInfo>> ports,
+                        bool supportsInternalPaths = false) {
   if (ports.empty())
     return;
-  unsigned oldNumArgs = getNumPorts(op);
+  unsigned oldNumArgs = op.getNumPorts();
   unsigned newNumArgs = oldNumArgs + ports.size();
 
   // Add direction markers and names for new ports.
@@ -507,15 +537,26 @@ static void insertPorts(FModuleLike op,
   assert(existingNames.size() == oldNumArgs);
   assert(existingTypes.size() == oldNumArgs);
   assert(existingLocs.size() == oldNumArgs);
+  SmallVector<Attribute> internalPaths;
+  auto emptyInternalPath = InternalPathAttr::get(op.getContext());
+  if (supportsInternalPaths) {
+    if (auto internalPathsAttr = op->getAttrOfType<ArrayAttr>("internalPaths"))
+      llvm::append_range(internalPaths, internalPathsAttr);
+    else
+      internalPaths.resize(oldNumArgs, emptyInternalPath);
+    assert(internalPaths.size() == oldNumArgs);
+  }
 
   SmallVector<Direction> newDirections;
-  SmallVector<Attribute> newNames, newTypes, newAnnos, newSyms, newLocs;
+  SmallVector<Attribute> newNames, newTypes, newAnnos, newSyms, newLocs,
+      newInternalPaths;
   newDirections.reserve(newNumArgs);
   newNames.reserve(newNumArgs);
   newTypes.reserve(newNumArgs);
   newAnnos.reserve(newNumArgs);
   newSyms.reserve(newNumArgs);
   newLocs.reserve(newNumArgs);
+  newInternalPaths.reserve(newNumArgs);
 
   auto emptyArray = ArrayAttr::get(op.getContext(), {});
 
@@ -528,6 +569,8 @@ static void insertPorts(FModuleLike op,
       newAnnos.push_back(op.getAnnotationsAttrForPort(oldIdx));
       newSyms.push_back(op.getPortSymbolAttr(oldIdx));
       newLocs.push_back(existingLocs[oldIdx]);
+      if (supportsInternalPaths)
+        newInternalPaths.push_back(internalPaths[oldIdx]);
       ++oldIdx;
     }
   };
@@ -542,6 +585,8 @@ static void insertPorts(FModuleLike op,
     newAnnos.push_back(annos ? annos : emptyArray);
     newSyms.push_back(port.sym);
     newLocs.push_back(port.loc);
+    if (supportsInternalPaths)
+      newInternalPaths.push_back(emptyInternalPath);
   }
   migrateOldPorts(oldNumArgs);
 
@@ -560,6 +605,17 @@ static void insertPorts(FModuleLike op,
   op->setAttr("portAnnotations", ArrayAttr::get(op.getContext(), newAnnos));
   op.setPortSymbols(newSyms);
   op->setAttr("portLocations", ArrayAttr::get(op.getContext(), newLocs));
+  if (supportsInternalPaths) {
+    // Drop if all-empty, otherwise set to new array.
+    auto empty = llvm::all_of(newInternalPaths, [](Attribute attr) {
+      return !cast<InternalPathAttr>(attr).getPath();
+    });
+    if (empty)
+      op->removeAttr("internalPaths");
+    else
+      op->setAttr("internalPaths",
+                  ArrayAttr::get(op.getContext(), newInternalPaths));
+  }
 }
 
 /// Erases the ports that have their corresponding bit set in `portIndices`.
@@ -575,7 +631,7 @@ static void erasePorts(FModuleLike op, const llvm::BitVector &portIndices) {
   ArrayRef<Attribute> portAnnos = op.getPortAnnotations();
   ArrayRef<Attribute> portSyms = op.getPortSymbols();
   ArrayRef<Attribute> portLocs = op.getPortLocations();
-  auto numPorts = getNumPorts(op);
+  auto numPorts = op.getNumPorts();
   (void)numPorts;
   assert(portDirections.size() == numPorts);
   assert(portNames.size() == numPorts);
@@ -603,12 +659,34 @@ static void erasePorts(FModuleLike op, const llvm::BitVector &portIndices) {
   op->setAttr("portLocations", ArrayAttr::get(op.getContext(), newPortLocs));
 }
 
+template <typename T>
+static void eraseInternalPaths(T op, const llvm::BitVector &portIndices) {
+  // Fixup internalPaths array.
+  auto internalPaths = op.getInternalPaths();
+  if (!internalPaths)
+    return;
+
+  auto newPaths =
+      removeElementsAtIndices(internalPaths->getValue(), portIndices);
+
+  // Drop if all-empty, otherwise set to new array.
+  auto empty = llvm::all_of(newPaths, [](Attribute attr) {
+    return !cast<InternalPathAttr>(attr).getPath();
+  });
+  if (empty)
+    op.removeInternalPathsAttr();
+  else
+    op.setInternalPathsAttr(ArrayAttr::get(op.getContext(), newPaths));
+}
+
 void FExtModuleOp::erasePorts(const llvm::BitVector &portIndices) {
   ::erasePorts(cast<FModuleLike>((Operation *)*this), portIndices);
+  eraseInternalPaths(*this, portIndices);
 }
 
 void FIntModuleOp::erasePorts(const llvm::BitVector &portIndices) {
   ::erasePorts(cast<FModuleLike>((Operation *)*this), portIndices);
+  eraseInternalPaths(*this, portIndices);
 }
 
 void FMemModuleOp::erasePorts(const llvm::BitVector &portIndices) {
@@ -637,11 +715,13 @@ void FModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
 }
 
 void FExtModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
-  ::insertPorts(cast<FModuleLike>((Operation *)*this), ports);
+  ::insertPorts(cast<FModuleLike>((Operation *)*this), ports,
+                /*supportsInternalPaths=*/true);
 }
 
 void FIntModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
-  ::insertPorts(cast<FModuleLike>((Operation *)*this), ports);
+  ::insertPorts(cast<FModuleLike>((Operation *)*this), ports,
+                /*supportsInternalPaths=*/true);
 }
 
 /// Inserts the given ports. The insertion indices are expected to be in order.
@@ -653,7 +733,7 @@ void FMemModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
 
 static void buildModule(OpBuilder &builder, OperationState &result,
                         StringAttr name, ArrayRef<PortInfo> ports,
-                        ArrayAttr annotations) {
+                        ArrayAttr annotations, bool withAnnotations = true) {
   // Add an attribute for the name.
   result.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), name);
 
@@ -687,15 +767,24 @@ static void buildModule(OpBuilder &builder, OperationState &result,
       direction::packAttribute(builder.getContext(), portDirections));
   result.addAttribute("portNames", builder.getArrayAttr(portNames));
   result.addAttribute("portTypes", builder.getArrayAttr(portTypes));
-  result.addAttribute("portAnnotations", builder.getArrayAttr(portAnnotations));
   result.addAttribute("portSyms", builder.getArrayAttr(portSyms));
   result.addAttribute("portLocations", builder.getArrayAttr(portLocs));
 
-  if (!annotations)
-    annotations = builder.getArrayAttr({});
-  result.addAttribute("annotations", annotations);
+  if (withAnnotations) {
+    if (!annotations)
+      annotations = builder.getArrayAttr({});
+    result.addAttribute("annotations", annotations);
+    result.addAttribute("portAnnotations",
+                        builder.getArrayAttr(portAnnotations));
+  }
 
   result.addRegion();
+}
+
+static void buildModuleWithoutAnnos(OpBuilder &builder, OperationState &result,
+                                    StringAttr name, ArrayRef<PortInfo> ports) {
+  return buildModule(builder, result, name, ports, {},
+                     /*withAnnotations=*/false);
 }
 
 void FModuleOp::build(OpBuilder &builder, OperationState &result,
@@ -857,6 +946,7 @@ static bool printModulePorts(OpAsmPrinter &p, Block *block,
 /// will populate `entryArgs`.
 static ParseResult
 parseModulePorts(OpAsmParser &parser, bool hasSSAIdentifiers,
+                 bool supportsSymbols,
                  SmallVectorImpl<OpAsmParser::Argument> &entryArgs,
                  SmallVectorImpl<Direction> &portDirections,
                  SmallVectorImpl<Attribute> &portNames,
@@ -917,16 +1007,18 @@ parseModulePorts(OpAsmParser &parser, bool hasSSAIdentifiers,
       entryArgs.back().type = portType;
 
     // Parse the optional port symbol.
-    hw::InnerSymAttr innerSymAttr;
-    if (succeeded(parser.parseOptionalKeyword("sym"))) {
-      NamedAttrList dummyAttrs;
-      if (parser.parseCustomAttributeWithFallback(
-              innerSymAttr, ::mlir::Type{},
-              hw::InnerSymbolTable::getInnerSymbolAttrName(), dummyAttrs)) {
-        return ::mlir::failure();
+    if (supportsSymbols) {
+      hw::InnerSymAttr innerSymAttr;
+      if (succeeded(parser.parseOptionalKeyword("sym"))) {
+        NamedAttrList dummyAttrs;
+        if (parser.parseCustomAttributeWithFallback(
+                innerSymAttr, ::mlir::Type{},
+                hw::InnerSymbolTable::getInnerSymbolAttrName(), dummyAttrs)) {
+          return ::mlir::failure();
+        }
       }
+      portSyms.push_back(innerSymAttr);
     }
-    portSyms.push_back(innerSymAttr);
 
     // Parse the port annotations.
     ArrayAttr annos;
@@ -1013,13 +1105,6 @@ static void printFModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
   if (op->getAttrOfType<ArrayAttr>("annotations").empty())
     omittedAttrs.push_back("annotations");
 
-  // If there are no internal paths attributes we can omit the empty array.
-  if (op->hasAttr("internalPaths")) {
-    if (auto paths = op->getAttrOfType<ArrayAttr>("internalPaths"))
-      if (paths.empty())
-        omittedAttrs.push_back("internalPaths");
-  }
-
   p.printOptionalAttrDictWithKeyword(op->getAttrs(), omittedAttrs);
 }
 
@@ -1103,9 +1188,9 @@ static ParseResult parseFModuleLikeOp(OpAsmParser &parser,
   SmallVector<Attribute, 4> portAnnotations;
   SmallVector<Attribute, 4> portSyms;
   SmallVector<Attribute, 4> portLocs;
-  if (parseModulePorts(parser, hasSSAIdentifiers, entryArgs, portDirections,
-                       portNames, portTypes, portAnnotations, portSyms,
-                       portLocs))
+  if (parseModulePorts(parser, hasSSAIdentifiers, /*supportsSymbols=*/true,
+                       entryArgs, portDirections, portNames, portTypes,
+                       portAnnotations, portSyms, portLocs))
     return failure();
 
   // If module attributes are present, parse them.
@@ -1223,7 +1308,37 @@ LogicalResult FModuleOp::verify() {
   return success();
 }
 
+static LogicalResult
+verifyInternalPaths(FModuleLike op,
+                    std::optional<::mlir::ArrayAttr> internalPaths) {
+  if (!internalPaths)
+    return success();
+
+  // If internal paths are present, should cover all ports.
+  if (internalPaths->size() != op.getNumPorts())
+    return op.emitError("module has inconsistent internal path array with ")
+           << internalPaths->size() << " entries for " << op.getNumPorts()
+           << " ports";
+
+  // No internal paths for non-ref-type ports.
+  for (auto [idx, path, typeattr] : llvm::enumerate(
+           internalPaths->getAsRange<InternalPathAttr>(), op.getPortTypes())) {
+    if (path.getPath() &&
+        !type_isa<RefType>(cast<TypeAttr>(typeattr).getValue())) {
+      auto diag =
+          op.emitError("module has internal path for non-ref-type port ")
+          << op.getPortNameAttr(idx);
+      return diag.attachNote(op.getPortLocation(idx)) << "this port";
+    }
+  }
+
+  return success();
+}
+
 LogicalResult FExtModuleOp::verify() {
+  if (failed(verifyInternalPaths(*this, getInternalPaths())))
+    return failure();
+
   auto params = getParameters();
   if (params.empty())
     return success();
@@ -1231,7 +1346,7 @@ LogicalResult FExtModuleOp::verify() {
   auto checkParmValue = [&](Attribute elt) -> bool {
     auto param = cast<ParamDeclAttr>(elt);
     auto value = param.getValue();
-    if (isa<IntegerAttr, StringAttr, FloatAttr>(value))
+    if (isa<IntegerAttr, StringAttr, FloatAttr, hw::ParamVerbatimAttr>(value))
       return true;
     emitError() << "has unknown extmodule parameter value '"
                 << param.getName().getValue() << "' = " << value;
@@ -1245,6 +1360,9 @@ LogicalResult FExtModuleOp::verify() {
 }
 
 LogicalResult FIntModuleOp::verify() {
+  if (failed(verifyInternalPaths(*this, getInternalPaths())))
+    return failure();
+
   auto params = getParameters();
   if (params.empty())
     return success();
@@ -1263,6 +1381,52 @@ LogicalResult FIntModuleOp::verify() {
     return failure();
 
   return success();
+}
+
+static LogicalResult verifyPortSymbolUses(FModuleLike module,
+                                          SymbolTableCollection &symbolTable) {
+  auto circuitOp = module->getParentOfType<CircuitOp>();
+
+  // verify types in ports.
+  for (size_t i = 0, e = module.getNumPorts(); i < e; ++i) {
+    auto type = module.getPortType(i);
+    auto classType = dyn_cast<ClassType>(type);
+    if (!classType)
+      continue;
+
+    // verify that the class exists.
+    auto className = classType.getNameAttr();
+    auto classOp = dyn_cast_or_null<ClassOp>(
+        symbolTable.lookupSymbolIn(circuitOp, className));
+    if (!classOp)
+      return module.emitOpError() << "references unknown class " << className;
+
+    // verify that the result type agrees with the class definition.
+    if (failed(classOp.verifyType(classType,
+                                  [&]() { return module.emitOpError(); })))
+      return failure();
+  }
+
+  return success();
+}
+
+LogicalResult FModuleOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return verifyPortSymbolUses(cast<FModuleLike>(getOperation()), symbolTable);
+}
+
+LogicalResult
+FExtModuleOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return verifyPortSymbolUses(cast<FModuleLike>(getOperation()), symbolTable);
+}
+
+LogicalResult
+FIntModuleOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return verifyPortSymbolUses(cast<FModuleLike>(getOperation()), symbolTable);
+}
+
+LogicalResult
+FMemModuleOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return verifyPortSymbolUses(cast<FModuleLike>(getOperation()), symbolTable);
 }
 
 void FModuleOp::getAsmBlockArgumentNames(mlir::Region &region,
@@ -1302,12 +1466,262 @@ ConventionAttr FMemModuleOp::getConventionAttr() {
 }
 
 //===----------------------------------------------------------------------===//
+// ClassOp
+//===----------------------------------------------------------------------===//
+
+void ClassOp::build(OpBuilder &builder, OperationState &result, StringAttr name,
+                    ArrayRef<PortInfo> ports) {
+  assert(
+      llvm::all_of(ports,
+                   [](const auto &port) { return port.annotations.empty(); }) &&
+      "class ports may not have annotations");
+
+  buildModuleWithoutAnnos(builder, result, name, ports);
+
+  // Create a region and a block for the body.
+  auto *bodyRegion = result.regions[0].get();
+  Block *body = new Block();
+  bodyRegion->push_back(body);
+
+  // Add arguments to the body block.
+  for (auto &elt : ports)
+    body->addArgument(elt.type, elt.loc);
+}
+
+void ClassOp::print(OpAsmPrinter &p) {
+  p << " ";
+
+  // Print the visibility of the class.
+  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  if (auto visibility = (*this)->getAttrOfType<StringAttr>(visibilityAttrName))
+    p << visibility.getValue() << ' ';
+
+  // Print the class name.
+  p.printSymbolName(getName());
+
+  auto portDirections = direction::unpackAttribute(getPortDirectionsAttr());
+
+  auto needPortNamesAttr =
+      printModulePorts(p, getBodyBlock(), portDirections, getPortNames(),
+                       getPortTypes(), {}, getPortSyms(), getPortLocations());
+
+  // Print the attr-dict.
+  SmallVector<StringRef, 8> omittedAttrs = {
+      "sym_name", "portNames",     "portTypes",       "portDirections",
+      "portSyms", "portLocations", visibilityAttrName};
+
+  // We can omit the portNames if they were able to be printed as properly as
+  // block arguments.
+  if (!needPortNamesAttr)
+    omittedAttrs.push_back("portNames");
+
+  p.printOptionalAttrDictWithKeyword((*this)->getAttrs(), omittedAttrs);
+
+  p << " ";
+  // Print the body.
+  p.printRegion(getBody(), /*printEntryBlockArgs=*/false,
+                /*printBlockTerminators=*/true);
+}
+
+ParseResult ClassOp::parse(OpAsmParser &parser, OperationState &result) {
+  auto *context = result.getContext();
+  auto &builder = parser.getBuilder();
+
+  // Parse the visibility attribute.
+  (void)mlir::impl::parseOptionalVisibilityKeyword(parser, result.attributes);
+
+  // Parse the name as a symbol.
+  StringAttr nameAttr;
+  if (parser.parseSymbolName(nameAttr, ::mlir::SymbolTable::getSymbolAttrName(),
+                             result.attributes))
+    return failure();
+
+  // Parse the module ports.
+  SmallVector<OpAsmParser::Argument> entryArgs;
+  SmallVector<Direction, 4> portDirections;
+  SmallVector<Attribute, 4> portNames;
+  SmallVector<Attribute, 4> portTypes;
+  SmallVector<Attribute, 4> portAnnotations;
+  SmallVector<Attribute, 4> portSyms;
+  SmallVector<Attribute, 4> portLocs;
+  if (parseModulePorts(parser, /*hasSSAIdentifiers=*/true,
+                       /*supportsSymbols=*/false, entryArgs, portDirections,
+                       portNames, portTypes, portAnnotations, portSyms,
+                       portLocs))
+    return failure();
+
+  // Ports on ClassOp cannot have annotations
+  for (auto annos : portAnnotations)
+    if (!cast<ArrayAttr>(annos).empty())
+      return failure();
+
+  // If attributes are present, parse them.
+  if (parser.parseOptionalAttrDictWithKeyword(result.attributes))
+    return failure();
+
+  assert(portNames.size() == portTypes.size());
+
+  // Record the argument and result types as an attribute.  This is necessary
+  // for external modules.
+
+  // Add port directions.
+  if (!result.attributes.get("portDirections"))
+    result.addAttribute("portDirections",
+                        direction::packAttribute(context, portDirections));
+
+  // Add port names.
+  if (!result.attributes.get("portNames"))
+    result.addAttribute("portNames", builder.getArrayAttr(portNames));
+
+  // Add the port types.
+  if (!result.attributes.get("portTypes"))
+    result.addAttribute("portTypes", builder.getArrayAttr(portTypes));
+
+  // Add the port symbols.
+  if (!result.attributes.get("portSyms")) {
+    FModuleLike::fixupPortSymsArray(portSyms, builder.getContext());
+    result.addAttribute("portSyms", builder.getArrayAttr(portSyms));
+  }
+
+  // Add port locations.
+  if (!result.attributes.get("portLocations"))
+    result.addAttribute("portLocations", ArrayAttr::get(context, portLocs));
+
+  // Notably missing compared to other FModuleLike, we do not track port
+  // annotations, nor port symbols, on classes.
+
+  // Parse the optional function body.
+  auto *body = result.addRegion();
+  if (parser.parseRegion(*body, entryArgs))
+    return failure();
+  if (body->empty())
+    body->push_back(new Block());
+
+  return success();
+}
+
+LogicalResult ClassOp::verify() {
+
+  for (auto operand : getBodyBlock()->getArguments()) {
+    auto type = operand.getType();
+    if (!isa<PropertyType>(type)) {
+      emitOpError("ports on a class must be properties");
+      return failure();
+    }
+  }
+
+  return success();
+}
+
+LogicalResult
+ClassOp::verifySymbolUses(::mlir::SymbolTableCollection &symbolTable) {
+  return verifyPortSymbolUses(cast<FModuleLike>(getOperation()), symbolTable);
+}
+
+void ClassOp::getAsmBlockArgumentNames(mlir::Region &region,
+                                       mlir::OpAsmSetValueNameFn setNameFn) {
+  getAsmBlockArgumentNamesImpl(getOperation(), region, setNameFn);
+}
+
+SmallVector<PortInfo> ClassOp::getPorts() {
+  return ::getPortImpl(cast<FModuleLike>((Operation *)*this));
+}
+
+void ClassOp::erasePorts(const llvm::BitVector &portIndices) {
+  ::erasePorts(cast<FModuleLike>((Operation *)*this), portIndices);
+  getBodyBlock()->eraseArguments(portIndices);
+}
+
+void ClassOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
+  ::insertPorts(cast<FModuleLike>((Operation *)*this), ports);
+}
+
+Convention ClassOp::getConvention() { return Convention::Internal; }
+
+ConventionAttr ClassOp::getConventionAttr() {
+  return ConventionAttr::get(getContext(), getConvention());
+}
+
+ArrayAttr ClassOp::getParameters() { return {}; }
+
+ArrayAttr ClassOp::getPortAnnotationsAttr() {
+  return ArrayAttr::get(getContext(), {});
+}
+
+hw::ModulePortInfo ClassOp::getPortList() { return ::getPortListImpl(*this); }
+
+LogicalResult
+ClassOp::verifyType(ClassType type,
+                    function_ref<InFlightDiagnostic()> emitError) {
+  // This check is probably not required, but done for sanity.
+  auto name = type.getNameAttr().getAttr();
+  auto expectedName = getModuleNameAttr();
+  if (name != expectedName)
+    return emitError() << "type has wrong name, got " << name << ", expected "
+                       << expectedName;
+
+  auto elements = type.getElements();
+  auto numElements = elements.size();
+  auto expectedNumElements = getNumPorts();
+  if (numElements != expectedNumElements)
+    return emitError() << "has wrong number of ports, got " << numElements
+                       << ", expected " << expectedNumElements;
+
+  for (unsigned i = 0; i < numElements; ++i) {
+    auto element = elements[i];
+
+    auto name = element.name;
+    auto expectedName = getPortNameAttr(i);
+    if (name != expectedName)
+      return emitError() << "port #" << i << " has wrong name, got " << name
+                         << ", expected " << expectedName;
+
+    auto direction = element.direction;
+    auto expectedDirection = getPortDirection(i);
+    if (direction != expectedDirection)
+      return emitError() << "port " << name << " has wrong direction, got "
+                         << direction::toString(direction) << ", expected "
+                         << direction::toString(expectedDirection);
+
+    auto type = element.type;
+    auto expectedType = getPortType(i);
+    if (type != expectedType)
+      return emitError() << "port " << name << " has wrong type, got " << type
+                         << ", expected " << expectedType;
+  }
+
+  return success();
+}
+
+ClassType ClassOp::getInstanceType() {
+  auto n = getNumPorts();
+  SmallVector<ClassElement> elements;
+  elements.reserve(n);
+  for (size_t i = 0; i < n; ++i)
+    elements.push_back(
+        {getPortNameAttr(i), getPortType(i), getPortDirection(i)});
+  auto name = FlatSymbolRefAttr::get(getNameAttr());
+  return ClassType::get(name, elements);
+}
+
+BlockArgument ClassOp::getArgument(size_t portNumber) {
+  return getBodyBlock()->getArgument(portNumber);
+}
+
+bool ClassOp::canDiscardOnUseEmpty() {
+  // ClassOps are referenced by ClassTypes, and these uses are not
+  // discovereable by the symbol infrastructure. Return false here to prevent
+  // passes like symbolDCE from removing our classes.
+  return false;
+}
+
+//===----------------------------------------------------------------------===//
 // Declarations
 //===----------------------------------------------------------------------===//
 
 /// Lookup the module or extmodule for the symbol.  This returns null on
 /// invalid IR.
-Operation *InstanceOp::getReferencedModule() {
+Operation *InstanceOp::getReferencedModuleSlow() {
   auto circuit = (*this)->getParentOfType<CircuitOp>();
   if (!circuit)
     return nullptr;
@@ -1315,9 +1729,12 @@ Operation *InstanceOp::getReferencedModule() {
   return circuit.lookupSymbol<FModuleLike>(getModuleNameAttr());
 }
 
-FModuleLike InstanceOp::getReferencedModule(SymbolTable &symbolTable) {
-  return symbolTable.lookup<FModuleLike>(
-      getModuleNameAttr().getLeafReference());
+hw::ModulePortInfo InstanceOp::getPortList() {
+  return cast<hw::PortList>(getReferencedModuleSlow()).getPortList();
+}
+
+Operation *InstanceOp::getReferencedModule(SymbolTable &symbolTable) {
+  return symbolTable.lookup(getModuleNameAttr().getLeafReference());
 }
 
 void InstanceOp::build(OpBuilder &builder, OperationState &result,
@@ -1377,7 +1794,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
 
   // Gather the result types.
   SmallVector<Type> resultTypes;
-  resultTypes.reserve(getNumPorts(module));
+  resultTypes.reserve(module.getNumPorts());
   llvm::transform(
       module.getPortTypes(), std::back_inserter(resultTypes),
       [](Attribute typeAttr) { return cast<TypeAttr>(typeAttr).getValue(); });
@@ -1527,7 +1944,7 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   // Check that all the attribute arrays are the right length up front.  This
   // lets us safely use the port name in error messages below.
   size_t numResults = getNumResults();
-  size_t numExpected = getNumPorts(referencedModule);
+  size_t numExpected = referencedModule.getNumPorts();
   if (numResults != numExpected) {
     return emitNote(emitOpError() << "has a wrong number of results; expected "
                                   << numExpected << " but got " << numResults);
@@ -1675,9 +2092,10 @@ ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
   if (parseNameKind(parser, nameKind) ||
       parser.parseOptionalAttrDict(result.attributes) ||
       parser.parseAttribute(moduleName, "moduleName", resultAttrs) ||
-      parseModulePorts(parser, /*hasSSAIdentifiers=*/false, entryArgs,
-                       portDirections, portNames, portTypes, portAnnotations,
-                       portSyms, portLocs))
+      parseModulePorts(parser, /*hasSSAIdentifiers=*/false,
+                       /*supportsSymbols=*/false, entryArgs, portDirections,
+                       portNames, portTypes, portAnnotations, portSyms,
+                       portLocs))
     return failure();
 
   // Add the attributes. We let attributes defined in the attr-dict override
@@ -1823,7 +2241,8 @@ LogicalResult MemOp::verify() {
     // Get a bundle type representing this port, stripping an outer
     // flip if it exists.  If this is not a bundle<> or
     // flip<bundle<>>, then this is an error.
-    BundleType portBundleType = dyn_cast<BundleType>(getResult(i).getType());
+    BundleType portBundleType =
+        type_dyn_cast<BundleType>(getResult(i).getType());
 
     // Require that all port names are unique.
     if (!portNamesSet.insert(portName).second) {
@@ -1840,14 +2259,14 @@ LogicalResult MemOp::verify() {
       emitOpError() << "could not get port with name " << portName;
       return failure();
     }
-    auto firrtlType = cast<FIRRTLType>(elt.getType());
+    auto firrtlType = type_cast<FIRRTLType>(elt.getType());
     MemOp::PortKind portKind = getMemPortKindFromType(firrtlType);
 
     if (portKind == MemOp::PortKind::Debug &&
-        !isa<RefType>(getResult(i).getType()))
+        !type_isa<RefType>(getResult(i).getType()))
       return emitOpError() << "has an invalid type on port " << portName
                            << " (expected Read/Write/ReadWrite/Debug)";
-    if (isa<RefType>(firrtlType) && e == 1)
+    if (type_isa<RefType>(firrtlType) && e == 1)
       return emitOpError()
              << "cannot have only one port of debug type. Debug port can only "
                 "exist alongside other read/write/read-write port";
@@ -1856,10 +2275,10 @@ LogicalResult MemOp::verify() {
     // found.
     FIRRTLBaseType dataType;
     if (portKind == MemOp::PortKind::Debug) {
-      auto resType = cast<RefType>(getResult(i).getType());
-      if (!(resType && isa<FVectorType>(resType.getType())))
+      auto resType = type_cast<RefType>(getResult(i).getType());
+      if (!(resType && type_isa<FVectorType>(resType.getType())))
         return emitOpError() << "debug ports must be a RefType of FVectorType";
-      dataType = cast<FVectorType>(resType.getType()).getElementType();
+      dataType = type_cast<FVectorType>(resType.getType()).getElementType();
     } else {
       auto dataTypeOption = portBundleType.getElement("data");
       if (!dataTypeOption && portKind == MemOp::PortKind::ReadWrite)
@@ -1951,6 +2370,12 @@ LogicalResult MemOp::verify() {
   return success();
 }
 
+static size_t getAddressWidth(size_t depth) {
+  return std::max(1U, llvm::Log2_64_Ceil(depth));
+}
+
+size_t MemOp::getAddrBits() { return getAddressWidth(getDepth()); }
+
 FIRRTLType MemOp::getTypeForPort(uint64_t depth, FIRRTLBaseType dataType,
                                  PortKind portKind, size_t maskBits) {
 
@@ -1970,8 +2395,7 @@ FIRRTLType MemOp::getTypeForPort(uint64_t depth, FIRRTLBaseType dataType,
 
   SmallVector<BundleType::BundleElement, 7> portFields;
 
-  auto addressType =
-      UIntType::get(context, std::max(1U, llvm::Log2_64_Ceil(depth)));
+  auto addressType = UIntType::get(context, getAddressWidth(depth));
 
   portFields.push_back({getId("addr"), false, addressType});
   portFields.push_back({getId("en"), false, UIntType::get(context, 1)});
@@ -2007,7 +2431,7 @@ SmallVector<MemOp::NamedPort> MemOp::getPorts() {
   // Each entry in the bundle is a port.
   for (size_t i = 0, e = getNumResults(); i != e; ++i) {
     // Each port is a bundle.
-    auto portType = cast<FIRRTLType>(getResult(i).getType());
+    auto portType = type_cast<FIRRTLType>(getResult(i).getType());
     result.push_back({getPortName(i), getMemPortKindFromType(portType)});
   }
   return result;
@@ -2016,32 +2440,32 @@ SmallVector<MemOp::NamedPort> MemOp::getPorts() {
 /// Return the kind of the specified port.
 MemOp::PortKind MemOp::getPortKind(StringRef portName) {
   return getMemPortKindFromType(
-      cast<FIRRTLType>(getPortNamed(portName).getType()));
+      type_cast<FIRRTLType>(getPortNamed(portName).getType()));
 }
 
 /// Return the kind of the specified port number.
 MemOp::PortKind MemOp::getPortKind(size_t resultNo) {
   return getMemPortKindFromType(
-      cast<FIRRTLType>(getResult(resultNo).getType()));
+      type_cast<FIRRTLType>(getResult(resultNo).getType()));
 }
 
 /// Return the number of bits in the mask for the memory.
 size_t MemOp::getMaskBits() {
 
   for (auto res : getResults()) {
-    if (isa<RefType>(res.getType()))
+    if (type_isa<RefType>(res.getType()))
       continue;
-    auto firstPortType = cast<FIRRTLBaseType>(res.getType());
+    auto firstPortType = type_cast<FIRRTLBaseType>(res.getType());
     if (getMemPortKindFromType(firstPortType) == PortKind::Read ||
         getMemPortKindFromType(firstPortType) == PortKind::Debug)
       continue;
 
     FIRRTLBaseType mType;
-    for (auto t : cast<BundleType>(firstPortType.getPassiveType())) {
+    for (auto t : type_cast<BundleType>(firstPortType.getPassiveType())) {
       if (t.name.getValue().contains("mask"))
         mType = t.type;
     }
-    if (isa<UIntType>(mType))
+    if (type_isa<UIntType>(mType))
       return mType.getBitWidthOrSentinel();
   }
   // Mask of zero bits means, either there are no write/readwrite ports or the
@@ -2053,15 +2477,15 @@ size_t MemOp::getMaskBits() {
 FIRRTLBaseType MemOp::getDataType() {
   assert(getNumResults() != 0 && "Mems with no read/write ports are illegal");
 
-  if (auto refType = dyn_cast<RefType>(getResult(0).getType()))
-    return cast<FVectorType>(refType.getType()).getElementType();
-  auto firstPortType = cast<FIRRTLBaseType>(getResult(0).getType());
+  if (auto refType = type_dyn_cast<RefType>(getResult(0).getType()))
+    return type_cast<FVectorType>(refType.getType()).getElementType();
+  auto firstPortType = type_cast<FIRRTLBaseType>(getResult(0).getType());
 
   StringRef dataFieldName = "data";
   if (getMemPortKindFromType(firstPortType) == PortKind::ReadWrite)
     dataFieldName = "rdata";
 
-  return cast<BundleType>(firstPortType.getPassiveType())
+  return type_cast<BundleType>(firstPortType.getPassiveType())
       .getElementType(dataFieldName);
 }
 
@@ -2070,7 +2494,7 @@ StringAttr MemOp::getPortName(size_t resultNo) {
 }
 
 FIRRTLBaseType MemOp::getPortType(size_t resultNo) {
-  return cast<FIRRTLBaseType>(getResults()[resultNo].getType());
+  return type_cast<FIRRTLBaseType>(getResults()[resultNo].getType());
 }
 
 Value MemOp::getPortNamed(StringAttr name) {
@@ -2269,6 +2693,54 @@ void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 std::optional<size_t> WireOp::getTargetResultIndex() { return 0; }
 
+void ObjectOp::build(OpBuilder &builder, OperationState &state,
+                     ClassType type) {
+  build(builder, state, type, type.getNameAttr());
+}
+
+void ObjectOp::build(OpBuilder &builder, OperationState &state, ClassOp klass) {
+  build(builder, state, klass.getInstanceType());
+}
+
+ParseResult ObjectOp::parse(OpAsmParser &parser, OperationState &result) {
+  ClassType type;
+  if (ClassType::parseInterface(parser, type))
+    return failure();
+
+  result.addTypes(type);
+  result.addAttribute("className", type.getNameAttr());
+  return success();
+}
+
+void ObjectOp::print(OpAsmPrinter &p) {
+  p << " ";
+  getType().printInterface(p);
+}
+
+LogicalResult ObjectOp::verify() { return success(); }
+
+LogicalResult ObjectOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto circuitOp = getOperation()->getParentOfType<CircuitOp>();
+  auto classType = getType();
+  auto className = classType.getNameAttr();
+
+  // verify that the class exists.
+  auto classOp = dyn_cast_or_null<ClassOp>(
+      symbolTable.lookupSymbolIn(circuitOp, className));
+  if (!classOp)
+    return emitOpError() << "references unknown class " << className;
+
+  // verify that the result type agrees with the class definition.
+  if (failed(classOp.verifyType(classType, [&]() { return emitOpError(); })))
+    return failure();
+
+  return success();
+}
+
+ClassOp ObjectOp::getReferencedClass(SymbolTable &symbolTable) {
+  return symbolTable.lookup<ClassOp>(getClassNameAttr().getLeafReference());
+}
+
 //===----------------------------------------------------------------------===//
 // Statements
 //===----------------------------------------------------------------------===//
@@ -2277,7 +2749,7 @@ LogicalResult AttachOp::verify() {
   // All known widths must match.
   std::optional<int32_t> commonWidth;
   for (auto operand : getOperands()) {
-    auto thisWidth = cast<AnalogType>(operand.getType()).getWidth();
+    auto thisWidth = type_cast<AnalogType>(operand.getType()).getWidth();
     if (!thisWidth)
       continue;
     if (!commonWidth) {
@@ -2335,13 +2807,13 @@ static bool isConstFieldDriven(FIRRTLBaseType type, bool isFlip = false,
   if (typeIsConst && type.isPassive())
     return !isFlip;
 
-  if (auto bundleType = dyn_cast<BundleType>(type))
+  if (auto bundleType = type_dyn_cast<BundleType>(type))
     return llvm::any_of(bundleType.getElements(), [&](auto &element) {
       return isConstFieldDriven(element.type, isFlip ^ element.isFlip,
                                 typeIsConst);
     });
 
-  if (auto vectorType = dyn_cast<FVectorType>(type))
+  if (auto vectorType = type_dyn_cast<FVectorType>(type))
     return isConstFieldDriven(vectorType.getElementType(), isFlip, typeIsConst);
 
   if (typeIsConst)
@@ -2354,9 +2826,9 @@ static bool isConstFieldDriven(FIRRTLBaseType type, bool isFlip = false,
 /// non-'const' conditions in when blocks.
 static LogicalResult checkConnectConditionality(FConnectLike connect) {
   auto dest = connect.getDest();
-  auto destType = dyn_cast<FIRRTLBaseType>(dest.getType());
+  auto destType = type_dyn_cast<FIRRTLBaseType>(dest.getType());
   auto src = connect.getSrc();
-  auto srcType = dyn_cast<FIRRTLBaseType>(src.getType());
+  auto srcType = type_dyn_cast<FIRRTLBaseType>(src.getType());
   if (!destType || !srcType)
     return success();
 
@@ -2375,6 +2847,7 @@ static LogicalResult checkConnectConditionality(FConnectLike connect) {
           .Case<SubaccessOp>([&](SubaccessOp op) {
             if (op.getInput()
                     .getType()
+                    .get()
                     .getElementTypePreservingConst()
                     .isConst())
               originalFieldType = originalFieldType.getConstType(true);
@@ -2446,8 +2919,8 @@ static LogicalResult checkConnectConditionality(FConnectLike connect) {
 LogicalResult ConnectOp::verify() {
   auto dstType = getDest().getType();
   auto srcType = getSrc().getType();
-  auto dstBaseType = dyn_cast<FIRRTLBaseType>(dstType);
-  auto srcBaseType = dyn_cast<FIRRTLBaseType>(srcType);
+  auto dstBaseType = type_dyn_cast<FIRRTLBaseType>(dstType);
+  auto srcBaseType = type_dyn_cast<FIRRTLBaseType>(srcType);
   if (!dstBaseType || !srcBaseType) {
     if (dstType != srcType)
       return emitError("may not connect different non-base types");
@@ -2479,12 +2952,18 @@ LogicalResult ConnectOp::verify() {
 }
 
 LogicalResult StrictConnectOp::verify() {
-  if (auto type = dyn_cast<FIRRTLType>(getDest().getType())) {
-    auto baseType = cast<FIRRTLBaseType>(type);
+  if (auto type = type_dyn_cast<FIRRTLType>(getDest().getType())) {
+    auto baseType = type_cast<FIRRTLBaseType>(type);
 
     // Analog types cannot be connected and must be attached.
     if (baseType && baseType.containsAnalog())
       return emitError("analog types may not be connected");
+
+    // The anonymous types of operands must be equivalent.
+    assert(areAnonymousTypesEquivalent(cast<FIRRTLBaseType>(getSrc().getType()),
+                                       baseType) &&
+           "`SameAnonTypeOperands` trait should have already rejected "
+           "structurally non-equivalent types");
   }
 
   // Check that the flows make sense.
@@ -2574,7 +3053,7 @@ void WhenOp::build(OpBuilder &builder, OperationState &result, Value condition,
 //===----------------------------------------------------------------------===//
 
 LogicalResult MatchOp::verify() {
-  auto type = getInput().getType();
+  FEnumType type = getInput().getType();
 
   // Make sure that the number of tags matches the number of regions.
   auto numCases = getTags().size();
@@ -2623,7 +3102,7 @@ LogicalResult MatchOp::verify() {
 
 void MatchOp::print(OpAsmPrinter &p) {
   auto input = getInput();
-  auto type = input.getType();
+  FEnumType type = input.getType();
   auto regions = getRegions();
   p << " " << input << " : " << type;
   SmallVector<StringRef> elided = {"tags"};
@@ -2656,7 +3135,7 @@ ParseResult MatchOp::parse(OpAsmParser &parser, OperationState &result) {
   Type type;
   if (parser.parseType(type))
     return failure();
-  auto enumType = dyn_cast<FEnumType>(type);
+  auto enumType = type_dyn_cast<FEnumType>(type);
   if (!enumType)
     return parser.emitError(loc, "expected enumeration type but got") << type;
 
@@ -2759,24 +3238,24 @@ bool firrtl::isExpression(Operation *op) {
 void InvalidValueOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   // Set invalid values to have a distinct name.
   std::string name;
-  if (auto ty = dyn_cast<IntType>(getType())) {
+  if (auto ty = type_dyn_cast<IntType>(getType())) {
     const char *base = ty.isSigned() ? "invalid_si" : "invalid_ui";
     auto width = ty.getWidthOrSentinel();
     if (width == -1)
       name = base;
     else
       name = (Twine(base) + Twine(width)).str();
-  } else if (auto ty = dyn_cast<AnalogType>(getType())) {
+  } else if (auto ty = type_dyn_cast<AnalogType>(getType())) {
     auto width = ty.getWidthOrSentinel();
     if (width == -1)
       name = "invalid_analog";
     else
       name = ("invalid_analog" + Twine(width)).str();
-  } else if (isa<AsyncResetType>(getType()))
+  } else if (type_isa<AsyncResetType>(getType()))
     name = "invalid_asyncreset";
-  else if (isa<ResetType>(getType()))
+  else if (type_isa<ResetType>(getType()))
     name = "invalid_reset";
-  else if (isa<ClockType>(getType()))
+  else if (type_isa<ClockType>(getType()))
     name = "invalid_clock";
   else
     name = "invalid";
@@ -2835,15 +3314,15 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
 
 LogicalResult ConstantOp::verify() {
   // If the result type has a bitwidth, then the attribute must match its width.
-  auto intType = getType();
+  IntType intType = getType();
   auto width = intType.getWidthOrSentinel();
   if (width != -1 && (int)getValue().getBitWidth() != width)
     return emitError(
         "firrtl.constant attribute bitwidth doesn't match return type");
 
   // The sign of the attribute's integer type must match our integer type sign.
-  auto attrType = cast<IntegerType>(getValueAttr().getType());
-  if (attrType.isSignless() || attrType.isSigned() != getType().isSigned())
+  auto attrType = type_cast<IntegerType>(getValueAttr().getType());
+  if (attrType.isSignless() || attrType.isSigned() != intType.isSigned())
     return emitError("firrtl.constant attribute has wrong sign");
 
   return success();
@@ -2876,7 +3355,7 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result,
 void ConstantOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   // For constants in particular, propagate the value into the result name to
   // make it easier to read the IR.
-  auto intTy = getType();
+  IntType intTy = getType();
   assert(intTy);
 
   // Otherwise, build a complex name with the value and type.
@@ -2934,11 +3413,11 @@ void SpecialConstantOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   specialName << 'c';
   specialName << static_cast<unsigned>(getValue());
   auto type = getType();
-  if (isa<ClockType>(type)) {
+  if (type_isa<ClockType>(type)) {
     specialName << "_clock";
-  } else if (isa<ResetType>(type)) {
+  } else if (type_isa<ResetType>(type)) {
     specialName << "_reset";
-  } else if (isa<AsyncResetType>(type)) {
+  } else if (type_isa<AsyncResetType>(type)) {
     specialName << "_asyncreset";
   }
   setNameFn(getResult(), specialName.str());
@@ -2960,7 +3439,7 @@ static bool checkAggConstant(Operation *op, Attribute attr,
     op->emitOpError("expected array attribute for aggregate constant");
     return false;
   }
-  if (auto array = dyn_cast<FVectorType>(type)) {
+  if (auto array = type_dyn_cast<FVectorType>(type)) {
     if (array.getNumElements() != attrlist.size()) {
       op->emitOpError("array attribute (")
           << attrlist.size() << ") has wrong size for vector constant ("
@@ -2971,7 +3450,7 @@ static bool checkAggConstant(Operation *op, Attribute attr,
       return checkAggConstant(op, attr, array.getElementType());
     });
   }
-  if (auto bundle = dyn_cast<BundleType>(type)) {
+  if (auto bundle = type_dyn_cast<BundleType>(type)) {
     if (bundle.getNumElements() != attrlist.size()) {
       op->emitOpError("array attribute (")
           << attrlist.size() << ") has wrong size for bundle constant ("
@@ -3002,13 +3481,13 @@ Attribute AggregateConstantOp::getAttributeFromFieldID(uint64_t fieldID) {
   FIRRTLBaseType type = getType();
   Attribute value = getFields();
   while (fieldID != 0) {
-    if (auto bundle = dyn_cast<BundleType>(type)) {
+    if (auto bundle = type_dyn_cast<BundleType>(type)) {
       auto index = bundle.getIndexForFieldID(fieldID);
       fieldID -= bundle.getFieldID(index);
       type = bundle.getElementType(index);
       value = cast<ArrayAttr>(value)[index];
     } else {
-      auto vector = cast<FVectorType>(type);
+      auto vector = type_cast<FVectorType>(type);
       auto index = vector.getIndexForFieldID(fieldID);
       fieldID -= vector.getFieldID(index);
       type = vector.getElementType();
@@ -3018,20 +3497,20 @@ Attribute AggregateConstantOp::getAttributeFromFieldID(uint64_t fieldID) {
   return value;
 }
 
-void BigIntConstantOp::print(OpAsmPrinter &p) {
+void FIntegerConstantOp::print(OpAsmPrinter &p) {
   p << " ";
   p.printAttributeWithoutType(getValueAttr());
   p.printOptionalAttrDict((*this)->getAttrs(), /*elidedAttrs=*/{"value"});
 }
 
-ParseResult BigIntConstantOp::parse(OpAsmParser &parser,
-                                    OperationState &result) {
+ParseResult FIntegerConstantOp::parse(OpAsmParser &parser,
+                                      OperationState &result) {
   auto *context = parser.getContext();
   APInt value;
   if (parser.parseInteger(value) ||
       parser.parseOptionalAttrDict(result.attributes))
     return failure();
-  result.addTypes(BigIntType::get(context));
+  result.addTypes(FIntegerType::get(context));
   auto intType =
       IntegerType::get(context, value.getBitWidth(), IntegerType::Signed);
   auto valueAttr = parser.getBuilder().getIntegerAttr(intType, value);
@@ -3039,25 +3518,62 @@ ParseResult BigIntConstantOp::parse(OpAsmParser &parser,
   return success();
 }
 
+ParseResult ListCreateOp::parse(OpAsmParser &parser, OperationState &result) {
+  llvm::SmallVector<OpAsmParser::UnresolvedOperand, 16> operands;
+  ListType type;
+
+  if (parser.parseOperandList(operands) ||
+      parser.parseOptionalAttrDict(result.attributes) ||
+      parser.parseColonType(type))
+    return failure();
+  result.addTypes(type);
+
+  return parser.resolveOperands(operands, type.getElementType(),
+                                result.operands);
+}
+
+void ListCreateOp::print(OpAsmPrinter &p) {
+  p << " ";
+  p.printOperands(getElements());
+  p.printOptionalAttrDict((*this)->getAttrs());
+  p << " : " << getType();
+}
+
+LogicalResult ListCreateOp::verify() {
+  if (getElements().empty())
+    return success();
+
+  auto elementType = getElements().front().getType();
+  auto listElementType = getType().getElementType();
+  if (elementType != listElementType)
+    return emitOpError("has elements of type ")
+           << elementType << " instead of " << listElementType;
+
+  return success();
+}
+
 LogicalResult BundleCreateOp::verify() {
-  if (getType().getNumElements() != getFields().size())
+  BundleType resultType = getType();
+  if (resultType.getNumElements() != getFields().size())
     return emitOpError("number of fields doesn't match type");
-  for (size_t i = 0; i < getType().getNumElements(); ++i)
-    if (!areTypesConstCastable(getType().getElementTypePreservingConst(i),
-                               cast<FIRRTLBaseType>(getOperand(i).getType())))
+  for (size_t i = 0; i < resultType.getNumElements(); ++i)
+    if (!areTypesConstCastable(
+            resultType.getElementTypePreservingConst(i),
+            type_cast<FIRRTLBaseType>(getOperand(i).getType())))
       return emitOpError("type of element doesn't match bundle for field ")
-             << getType().getElement(i).name;
+             << resultType.getElement(i).name;
   // TODO: check flow
   return success();
 }
 
 LogicalResult VectorCreateOp::verify() {
-  if (getType().getNumElements() != getFields().size())
+  FVectorType resultType = getType();
+  if (resultType.getNumElements() != getFields().size())
     return emitOpError("number of fields doesn't match type");
-  auto elemTy = getType().getElementTypePreservingConst();
-  for (size_t i = 0; i < getType().getNumElements(); ++i)
-    if (!areTypesConstCastable(elemTy,
-                               cast<FIRRTLBaseType>(getOperand(i).getType())))
+  auto elemTy = resultType.getElementTypePreservingConst();
+  for (size_t i = 0; i < resultType.getNumElements(); ++i)
+    if (!areTypesConstCastable(
+            elemTy, type_cast<FIRRTLBaseType>(getOperand(i).getType())))
       return emitOpError("type of element doesn't match vector element");
   // TODO: check flow
   return success();
@@ -3068,13 +3584,14 @@ LogicalResult VectorCreateOp::verify() {
 //===----------------------------------------------------------------------===//
 
 LogicalResult FEnumCreateOp::verify() {
-  auto elementIndex = getResult().getType().getElementIndex(getFieldName());
+  FEnumType resultType = getResult().getType();
+  auto elementIndex = resultType.getElementIndex(getFieldName());
   if (!elementIndex)
     return emitOpError("label ")
            << getFieldName() << " is not a member of the enumeration type "
-           << getResult().getType();
+           << resultType;
   if (!areTypesConstCastable(
-          getResult().getType().getElementTypePreservingConst(*elementIndex),
+          resultType.getElementTypePreservingConst(*elementIndex),
           getInput().getType()))
     return emitOpError("type of element doesn't match enum element");
   return success();
@@ -3113,7 +3630,7 @@ ParseResult FEnumCreateOp::parse(OpAsmParser &parser, OperationState &result) {
     return failure();
 
   auto outputType = functionType.getResult(0);
-  auto enumType = dyn_cast<FEnumType>(outputType);
+  auto enumType = type_dyn_cast<FEnumType>(outputType);
   if (!enumType)
     return parser.emitError(parser.getNameLoc(),
                             "output must be enum type, got ")
@@ -3138,7 +3655,7 @@ ParseResult FEnumCreateOp::parse(OpAsmParser &parser, OperationState &result) {
 //===----------------------------------------------------------------------===//
 
 LogicalResult IsTagOp::verify() {
-  if (getFieldIndex() >= getInput().getType().getNumElements())
+  if (getFieldIndex() >= getInput().getType().get().getNumElements())
     return emitOpError("element index is greater than the number of fields in "
                        "the bundle type");
   return success();
@@ -3166,7 +3683,7 @@ ParseResult IsTagOp::parse(OpAsmParser &parser, OperationState &result) {
   if (parser.resolveOperand(input, inputType, result.operands))
     return failure();
 
-  auto enumType = dyn_cast<FEnumType>(inputType);
+  auto enumType = type_dyn_cast<FEnumType>(inputType);
   if (!enumType)
     return parser.emitError(parser.getNameLoc(),
                             "input must be enum type, got ")
@@ -3209,7 +3726,7 @@ ParseResult parseSubfieldLikeOp(OpAsmParser &parser, OperationState &result) {
   if (parser.resolveOperand(input, inputType, result.operands))
     return failure();
 
-  auto bundleType = dyn_cast<typename OpTy::InputType>(inputType);
+  auto bundleType = type_dyn_cast<typename OpTy::InputType>(inputType);
   if (!bundleType)
     return parser.emitError(parser.getNameLoc(),
                             "input must be bundle type, got ")
@@ -3250,7 +3767,7 @@ ParseResult SubtagOp::parse(OpAsmParser &parser, OperationState &result) {
   if (parser.resolveOperand(input, inputType, result.operands))
     return failure();
 
-  auto enumType = dyn_cast<FEnumType>(inputType);
+  auto enumType = type_dyn_cast<FEnumType>(inputType);
   if (!enumType)
     return parser.emitError(parser.getNameLoc(),
                             "input must be enum type, got ")
@@ -3312,7 +3829,9 @@ void SubtagOp::print(::mlir::OpAsmPrinter &printer) {
 
 template <typename OpTy>
 static LogicalResult verifySubfieldLike(OpTy op) {
-  if (op.getFieldIndex() >= op.getInput().getType().getNumElements())
+  if (op.getFieldIndex() >=
+      firrtl::type_cast<typename OpTy::InputType>(op.getInput().getType())
+          .getNumElements())
     return op.emitOpError("subfield element index is greater than the number "
                           "of fields in the bundle type");
   return success();
@@ -3325,7 +3844,7 @@ LogicalResult OpenSubfieldOp::verify() {
 }
 
 LogicalResult SubtagOp::verify() {
-  if (getFieldIndex() >= getInput().getType().getNumElements())
+  if (getFieldIndex() >= getInput().getType().get().getNumElements())
     return emitOpError("subfield element index is greater than the number "
                        "of fields in the bundle type");
   return success();
@@ -3384,7 +3903,7 @@ LogicalResult ConstCastOp::verify() {
 FIRRTLType SubfieldOp::inferReturnType(ValueRange operands,
                                        ArrayRef<NamedAttribute> attrs,
                                        std::optional<Location> loc) {
-  auto inType = cast<BundleType>(operands[0].getType());
+  auto inType = type_cast<BundleType>(operands[0].getType());
   auto fieldIndex =
       getAttr<IntegerAttr>(attrs, "fieldIndex").getValue().getZExtValue();
 
@@ -3401,7 +3920,7 @@ FIRRTLType SubfieldOp::inferReturnType(ValueRange operands,
 FIRRTLType OpenSubfieldOp::inferReturnType(ValueRange operands,
                                            ArrayRef<NamedAttribute> attrs,
                                            std::optional<Location> loc) {
-  auto inType = cast<OpenBundleType>(operands[0].getType());
+  auto inType = type_cast<OpenBundleType>(operands[0].getType());
   auto fieldIndex =
       getAttr<IntegerAttr>(attrs, "fieldIndex").getValue().getZExtValue();
 
@@ -3416,7 +3935,7 @@ FIRRTLType OpenSubfieldOp::inferReturnType(ValueRange operands,
 }
 
 bool SubfieldOp::isFieldFlipped() {
-  auto bundle = getInput().getType();
+  BundleType bundle = getInput().getType();
   return bundle.getElement(getFieldIndex()).isFlip;
 }
 bool OpenSubfieldOp::isFieldFlipped() {
@@ -3431,7 +3950,7 @@ FIRRTLType SubindexOp::inferReturnType(ValueRange operands,
   auto fieldIdx =
       getAttr<IntegerAttr>(attrs, "index").getValue().getZExtValue();
 
-  if (auto vectorType = dyn_cast<FVectorType>(inType)) {
+  if (auto vectorType = type_dyn_cast<FVectorType>(inType)) {
     if (fieldIdx < vectorType.getNumElements())
       return vectorType.getElementTypePreservingConst();
     return emitInferRetTypeError(loc, "out of range index '", fieldIdx,
@@ -3448,7 +3967,7 @@ FIRRTLType OpenSubindexOp::inferReturnType(ValueRange operands,
   auto fieldIdx =
       getAttr<IntegerAttr>(attrs, "index").getValue().getZExtValue();
 
-  if (auto vectorType = dyn_cast<OpenVectorType>(inType)) {
+  if (auto vectorType = type_dyn_cast<OpenVectorType>(inType)) {
     if (fieldIdx < vectorType.getNumElements())
       return vectorType.getElementTypePreservingConst();
     return emitInferRetTypeError(loc, "out of range index '", fieldIdx,
@@ -3461,7 +3980,7 @@ FIRRTLType OpenSubindexOp::inferReturnType(ValueRange operands,
 FIRRTLType SubtagOp::inferReturnType(ValueRange operands,
                                      ArrayRef<NamedAttribute> attrs,
                                      std::optional<Location> loc) {
-  auto inType = cast<FEnumType>(operands[0].getType());
+  auto inType = type_cast<FEnumType>(operands[0].getType());
   auto fieldIndex =
       getAttr<IntegerAttr>(attrs, "fieldIndex").getValue().getZExtValue();
 
@@ -3482,11 +4001,11 @@ FIRRTLType SubaccessOp::inferReturnType(ValueRange operands,
   auto inType = operands[0].getType();
   auto indexType = operands[1].getType();
 
-  if (!isa<UIntType>(indexType))
+  if (!type_isa<UIntType>(indexType))
     return emitInferRetTypeError(loc, "subaccess index must be UInt type, not ",
                                  indexType);
 
-  if (auto vectorType = dyn_cast<FVectorType>(inType)) {
+  if (auto vectorType = type_dyn_cast<FVectorType>(inType)) {
     if (isConst(indexType))
       return vectorType.getElementTypePreservingConst();
     return vectorType.getElementType().getAllConstDroppedType();
@@ -3499,7 +4018,7 @@ FIRRTLType SubaccessOp::inferReturnType(ValueRange operands,
 FIRRTLType TagExtractOp::inferReturnType(ValueRange operands,
                                          ArrayRef<NamedAttribute> attrs,
                                          std::optional<Location> loc) {
-  auto inType = cast<FEnumType>(operands[0].getType());
+  auto inType = type_cast<FEnumType>(operands[0].getType());
   auto i = llvm::Log2_32_Ceil(inType.getNumElements());
   return UIntType::get(inType.getContext(), i);
 }
@@ -3543,7 +4062,80 @@ FIRRTLType MultibitMuxOp::inferReturnType(ValueRange operands,
       }))
     return emitInferRetTypeError(loc, "all inputs must have the same type");
 
-  return cast<FIRRTLType>(operands[1].getType());
+  return type_cast<FIRRTLType>(operands[1].getType());
+}
+
+//===----------------------------------------------------------------------===//
+// ObjectSubfieldOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ObjectSubfieldOp::inferReturnTypes(
+    MLIRContext *context, std::optional<mlir::Location> location,
+    ValueRange operands, DictionaryAttr attributes, OpaqueProperties properties,
+    RegionRange regions, llvm::SmallVectorImpl<Type> &inferredReturnTypes) {
+  auto type = inferReturnType(operands, attributes.getValue(), location);
+  if (!type)
+    return failure();
+  inferredReturnTypes.push_back(type);
+  return success();
+}
+
+Type ObjectSubfieldOp::inferReturnType(ValueRange operands,
+                                       ArrayRef<NamedAttribute> attrs,
+                                       std::optional<Location> loc) {
+  auto classType = dyn_cast<ClassType>(operands[0].getType());
+  if (!classType)
+    return emitInferRetTypeError(loc, "base object is not a class");
+
+  auto index = getAttr<IntegerAttr>(attrs, "index").getValue().getZExtValue();
+  if (classType.getNumElements() <= index)
+    return emitInferRetTypeError(loc, "element index is greater than the "
+                                      "number of fields in the object");
+
+  return classType.getElement(index).type;
+}
+
+void ObjectSubfieldOp::print(OpAsmPrinter &p) {
+  auto input = getInput();
+  auto classType = input.getType();
+  p << ' ' << input << "[";
+  p.printKeywordOrString(classType.getElement(getIndex()).name);
+  p << "]";
+  p.printOptionalAttrDict((*this)->getAttrs(), std::array{StringRef("index")});
+  p << " : " << classType;
+}
+
+ParseResult ObjectSubfieldOp::parse(OpAsmParser &parser,
+                                    OperationState &result) {
+  auto *context = parser.getContext();
+
+  OpAsmParser::UnresolvedOperand input;
+  std::string fieldName;
+  ClassType inputType;
+  if (parser.parseOperand(input) || parser.parseLSquare() ||
+      parser.parseKeywordOrString(&fieldName) || parser.parseRSquare() ||
+      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseType(inputType) ||
+      parser.resolveOperand(input, inputType, result.operands))
+    return failure();
+
+  auto index = inputType.getElementIndex(fieldName);
+  if (!index)
+    return parser.emitError(parser.getNameLoc(),
+                            "unknown field " + fieldName + " in class type ")
+           << inputType;
+  result.addAttribute("index",
+                      IntegerAttr::get(IntegerType::get(context, 32), *index));
+
+  SmallVector<Type> inferredReturnTypes;
+  if (failed(inferReturnTypes(context, result.location, result.operands,
+                              result.attributes.getDictionary(context),
+                              result.getRawProperties(), result.regions,
+                              inferredReturnTypes)))
+    return failure();
+  result.addTypes(inferredReturnTypes);
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -3561,8 +4153,8 @@ static bool isSameIntTypeKind(Type lhs, Type rhs, int32_t &lhsWidth,
                               int32_t &rhsWidth, bool &isConstResult,
                               std::optional<Location> loc) {
   // Must have two integer types with the same signedness.
-  auto lhsi = dyn_cast<IntType>(lhs);
-  auto rhsi = dyn_cast<IntType>(rhs);
+  auto lhsi = type_dyn_cast<IntType>(lhs);
+  auto rhsi = type_dyn_cast<IntType>(rhs);
   if (!lhsi || !rhsi || lhsi.isSigned() != rhsi.isSigned()) {
     if (loc) {
       if (lhsi && !rhsi)
@@ -3615,7 +4207,7 @@ FIRRTLType impl::inferAddSubResult(FIRRTLType lhs, FIRRTLType rhs,
 
   if (lhsWidth != -1 && rhsWidth != -1)
     resultWidth = std::max(lhsWidth, rhsWidth) + 1;
-  return IntType::get(lhs.getContext(), isa<SIntType>(lhs), resultWidth,
+  return IntType::get(lhs.getContext(), type_isa<SIntType>(lhs), resultWidth,
                       isConstResult);
 }
 
@@ -3629,7 +4221,7 @@ FIRRTLType MulPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
   if (lhsWidth != -1 && rhsWidth != -1)
     resultWidth = lhsWidth + rhsWidth;
 
-  return IntType::get(lhs.getContext(), isa<SIntType>(lhs), resultWidth,
+  return IntType::get(lhs.getContext(), type_isa<SIntType>(lhs), resultWidth,
                       isConstResult);
 }
 
@@ -3641,7 +4233,7 @@ FIRRTLType DivPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
     return {};
 
   // For unsigned, the width is the width of the numerator on the LHS.
-  if (isa<UIntType>(lhs))
+  if (type_isa<UIntType>(lhs))
     return UIntType::get(lhs.getContext(), lhsWidth, isConstResult);
 
   // For signed, the width is the width of the numerator on the LHS, plus 1.
@@ -3658,7 +4250,7 @@ FIRRTLType RemPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
 
   if (lhsWidth != -1 && rhsWidth != -1)
     resultWidth = std::min(lhsWidth, rhsWidth);
-  return IntType::get(lhs.getContext(), isa<SIntType>(lhs), resultWidth,
+  return IntType::get(lhs.getContext(), type_isa<SIntType>(lhs), resultWidth,
                       isConstResult);
 }
 
@@ -3676,11 +4268,11 @@ FIRRTLType impl::inferBitwiseResult(FIRRTLType lhs, FIRRTLType rhs,
 
 FIRRTLType impl::inferElementwiseResult(FIRRTLType lhs, FIRRTLType rhs,
                                         std::optional<Location> loc) {
-  if (!isa<FVectorType>(lhs) || !isa<FVectorType>(rhs))
+  if (!type_isa<FVectorType>(lhs) || !type_isa<FVectorType>(rhs))
     return {};
 
-  auto lhsVec = cast<FVectorType>(lhs);
-  auto rhsVec = cast<FVectorType>(rhs);
+  auto lhsVec = type_cast<FVectorType>(lhs);
+  auto rhsVec = type_cast<FVectorType>(rhs);
 
   if (lhsVec.getNumElements() != rhsVec.getNumElements())
     return {};
@@ -3690,7 +4282,7 @@ FIRRTLType impl::inferElementwiseResult(FIRRTLType lhs, FIRRTLType rhs,
                                rhsVec.getElementTypePreservingConst(), loc);
   if (!elemType)
     return {};
-  auto elemBaseType = cast<FIRRTLBaseType>(elemType);
+  auto elemBaseType = type_cast<FIRRTLBaseType>(elemType);
   return FVectorType::get(elemBaseType, lhsVec.getNumElements(),
                           lhsVec.isConst() && rhsVec.isConst() &&
                               elemBaseType.isConst());
@@ -3715,8 +4307,8 @@ FIRRTLType CatPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
 
 FIRRTLType DShlPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
                                              std::optional<Location> loc) {
-  auto lhsi = dyn_cast<IntType>(lhs);
-  auto rhsui = dyn_cast<UIntType>(rhs);
+  auto lhsi = type_dyn_cast<IntType>(lhs);
+  auto rhsui = type_dyn_cast<UIntType>(rhs);
   if (!rhsui || !lhsi)
     return emitInferRetTypeError(
         loc, "first operand should be integer, second unsigned int");
@@ -3745,8 +4337,8 @@ FIRRTLType DShlPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
 
 FIRRTLType DShlwPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
                                               std::optional<Location> loc) {
-  auto lhsi = dyn_cast<IntType>(lhs);
-  auto rhsu = dyn_cast<UIntType>(rhs);
+  auto lhsi = type_dyn_cast<IntType>(lhs);
+  auto rhsu = type_dyn_cast<UIntType>(rhs);
   if (!lhsi || !rhsu)
     return emitInferRetTypeError(
         loc, "first operand should be integer, second unsigned int");
@@ -3755,8 +4347,8 @@ FIRRTLType DShlwPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
 
 FIRRTLType DShrPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
                                              std::optional<Location> loc) {
-  auto lhsi = dyn_cast<IntType>(lhs);
-  auto rhsu = dyn_cast<UIntType>(rhs);
+  auto lhsi = type_dyn_cast<IntType>(lhs);
+  auto rhsu = type_dyn_cast<UIntType>(rhs);
   if (!lhsi || !rhsu)
     return emitInferRetTypeError(
         loc, "first operand should be integer, second unsigned int");
@@ -3785,7 +4377,7 @@ SizeOfIntrinsicOp::inferUnaryReturnType(FIRRTLType input,
 
 FIRRTLType AsSIntPrimOp::inferUnaryReturnType(FIRRTLType input,
                                               std::optional<Location> loc) {
-  auto base = dyn_cast<FIRRTLBaseType>(input);
+  auto base = type_dyn_cast<FIRRTLBaseType>(input);
   if (!base)
     return emitInferRetTypeError(loc, "operand must be a scalar base type");
   int32_t width = base.getBitWidthOrSentinel();
@@ -3796,7 +4388,7 @@ FIRRTLType AsSIntPrimOp::inferUnaryReturnType(FIRRTLType input,
 
 FIRRTLType AsUIntPrimOp::inferUnaryReturnType(FIRRTLType input,
                                               std::optional<Location> loc) {
-  auto base = dyn_cast<FIRRTLBaseType>(input);
+  auto base = type_dyn_cast<FIRRTLBaseType>(input);
   if (!base)
     return emitInferRetTypeError(loc, "operand must be a scalar base type");
   int32_t width = base.getBitWidthOrSentinel();
@@ -3808,7 +4400,7 @@ FIRRTLType AsUIntPrimOp::inferUnaryReturnType(FIRRTLType input,
 FIRRTLType
 AsAsyncResetPrimOp::inferUnaryReturnType(FIRRTLType input,
                                          std::optional<Location> loc) {
-  auto base = dyn_cast<FIRRTLBaseType>(input);
+  auto base = type_dyn_cast<FIRRTLBaseType>(input);
   if (!base)
     return emitInferRetTypeError(loc,
                                  "operand must be single bit scalar base type");
@@ -3825,14 +4417,14 @@ FIRRTLType AsClockPrimOp::inferUnaryReturnType(FIRRTLType input,
 
 FIRRTLType CvtPrimOp::inferUnaryReturnType(FIRRTLType input,
                                            std::optional<Location> loc) {
-  if (auto uiType = dyn_cast<UIntType>(input)) {
+  if (auto uiType = type_dyn_cast<UIntType>(input)) {
     auto width = uiType.getWidthOrSentinel();
     if (width != -1)
       ++width;
     return SIntType::get(input.getContext(), width, uiType.isConst());
   }
 
-  if (isa<SIntType>(input))
+  if (type_isa<SIntType>(input))
     return input;
 
   return emitInferRetTypeError(loc, "operand must have integer type");
@@ -3840,7 +4432,7 @@ FIRRTLType CvtPrimOp::inferUnaryReturnType(FIRRTLType input,
 
 FIRRTLType NegPrimOp::inferUnaryReturnType(FIRRTLType input,
                                            std::optional<Location> loc) {
-  auto inputi = dyn_cast<IntType>(input);
+  auto inputi = type_dyn_cast<IntType>(input);
   if (!inputi)
     return emitInferRetTypeError(loc, "operand must have integer type");
   int32_t width = inputi.getWidthOrSentinel();
@@ -3851,7 +4443,7 @@ FIRRTLType NegPrimOp::inferUnaryReturnType(FIRRTLType input,
 
 FIRRTLType NotPrimOp::inferUnaryReturnType(FIRRTLType input,
                                            std::optional<Location> loc) {
-  auto inputi = dyn_cast<IntType>(input);
+  auto inputi = type_dyn_cast<IntType>(input);
   if (!inputi)
     return emitInferRetTypeError(loc, "operand must have integer type");
   return UIntType::get(input.getContext(), inputi.getWidthOrSentinel(),
@@ -3884,7 +4476,7 @@ FIRRTLType BitsPrimOp::inferReturnType(ValueRange operands,
   auto high = getAttr<IntegerAttr>(attrs, "hi").getValue().getSExtValue();
   auto low = getAttr<IntegerAttr>(attrs, "lo").getValue().getSExtValue();
 
-  auto inputi = dyn_cast<IntType>(input);
+  auto inputi = type_dyn_cast<IntType>(input);
   if (!inputi)
     return emitInferRetTypeError(
         loc, "input type should be the int type but got ", input);
@@ -3926,7 +4518,7 @@ FIRRTLType HeadPrimOp::inferReturnType(ValueRange operands,
   auto input = operands[0].getType();
   auto amount = getAttr<IntegerAttr>(attrs, "amount").getValue().getSExtValue();
 
-  auto inputi = dyn_cast<IntType>(input);
+  auto inputi = type_dyn_cast<IntType>(input);
   if (amount < 0 || !inputi)
     return emitInferRetTypeError(
         loc, "operand must have integer type and amount must be >= 0");
@@ -3977,7 +4569,7 @@ static FIRRTLBaseType inferMuxReturnType(FIRRTLBaseType high,
   // Two different Int types can be compatible.  If either has unknown width,
   // then return it.  If both are known but different width, then return the
   // larger one.
-  if (isa<IntType>(low)) {
+  if (type_isa<IntType>(low)) {
     int32_t highWidth = high.getBitWidthOrSentinel();
     int32_t lowWidth = low.getBitWidthOrSentinel();
     if (lowWidth == -1)
@@ -3988,8 +4580,8 @@ static FIRRTLBaseType inferMuxReturnType(FIRRTLBaseType high,
   }
 
   // Infer vector types by comparing the element types.
-  auto highVector = dyn_cast<FVectorType>(high);
-  auto lowVector = dyn_cast<FVectorType>(low);
+  auto highVector = type_dyn_cast<FVectorType>(high);
+  auto lowVector = type_dyn_cast<FVectorType>(low);
   if (highVector && lowVector &&
       highVector.getNumElements() == lowVector.getNumElements()) {
     auto inner = inferMuxReturnType(highVector.getElementTypePreservingConst(),
@@ -4002,8 +4594,8 @@ static FIRRTLBaseType inferMuxReturnType(FIRRTLBaseType high,
   }
 
   // Infer bundle types by inferring names in a pairwise fashion.
-  auto highBundle = dyn_cast<BundleType>(high);
-  auto lowBundle = dyn_cast<BundleType>(low);
+  auto highBundle = type_dyn_cast<BundleType>(high);
+  auto lowBundle = type_dyn_cast<BundleType>(low);
   if (highBundle && lowBundle) {
     auto highElements = highBundle.getElements();
     auto lowElements = lowBundle.getElements();
@@ -4044,12 +4636,44 @@ static FIRRTLBaseType inferMuxReturnType(FIRRTLBaseType high,
 FIRRTLType MuxPrimOp::inferReturnType(ValueRange operands,
                                       ArrayRef<NamedAttribute> attrs,
                                       std::optional<Location> loc) {
-  auto highType = dyn_cast<FIRRTLBaseType>(operands[1].getType());
-  auto lowType = dyn_cast<FIRRTLBaseType>(operands[2].getType());
+  auto highType = type_dyn_cast<FIRRTLBaseType>(operands[1].getType());
+  auto lowType = type_dyn_cast<FIRRTLBaseType>(operands[2].getType());
   if (!highType || !lowType)
     return emitInferRetTypeError(loc, "operands must be base type");
   return inferMuxReturnType(highType, lowType, isConst(operands[0].getType()),
                             loc);
+}
+
+FIRRTLType Mux2CellIntrinsicOp::inferReturnType(ValueRange operands,
+                                                ArrayRef<NamedAttribute> attrs,
+                                                std::optional<Location> loc) {
+  auto highType = type_dyn_cast<FIRRTLBaseType>(operands[1].getType());
+  auto lowType = type_dyn_cast<FIRRTLBaseType>(operands[2].getType());
+  if (!highType || !lowType)
+    return emitInferRetTypeError(loc, "operands must be base type");
+  return inferMuxReturnType(highType, lowType, isConst(operands[0].getType()),
+                            loc);
+}
+
+FIRRTLType Mux4CellIntrinsicOp::inferReturnType(ValueRange operands,
+                                                ArrayRef<NamedAttribute> attrs,
+                                                std::optional<Location> loc) {
+  SmallVector<FIRRTLBaseType> types;
+  FIRRTLBaseType result;
+  for (unsigned i = 1; i < 5; i++) {
+    types.push_back(type_dyn_cast<FIRRTLBaseType>(operands[i].getType()));
+    if (!types.back())
+      return emitInferRetTypeError(loc, "operands must be base type");
+    if (result) {
+      result = inferMuxReturnType(result, types.back(),
+                                  isConst(operands[0].getType()), loc);
+      if (!result)
+        return result;
+    } else {
+      result = types.back();
+    }
+  }
+  return result;
 }
 
 FIRRTLType PadPrimOp::inferReturnType(ValueRange operands,
@@ -4058,7 +4682,7 @@ FIRRTLType PadPrimOp::inferReturnType(ValueRange operands,
   auto input = operands[0].getType();
   auto amount = getAttr<IntegerAttr>(attrs, "amount").getValue().getSExtValue();
 
-  auto inputi = dyn_cast<IntType>(input);
+  auto inputi = type_dyn_cast<IntType>(input);
   if (amount < 0 || !inputi)
     return emitInferRetTypeError(
         loc, "pad input must be integer and amount must be >= 0");
@@ -4078,7 +4702,7 @@ FIRRTLType ShlPrimOp::inferReturnType(ValueRange operands,
   auto input = operands[0].getType();
   auto amount = getAttr<IntegerAttr>(attrs, "amount").getValue().getSExtValue();
 
-  auto inputi = dyn_cast<IntType>(input);
+  auto inputi = type_dyn_cast<IntType>(input);
   if (amount < 0 || !inputi)
     return emitInferRetTypeError(
         loc, "shl input must be integer and amount must be >= 0");
@@ -4097,7 +4721,7 @@ FIRRTLType ShrPrimOp::inferReturnType(ValueRange operands,
   auto input = operands[0].getType();
   auto amount = getAttr<IntegerAttr>(attrs, "amount").getValue().getSExtValue();
 
-  auto inputi = dyn_cast<IntType>(input);
+  auto inputi = type_dyn_cast<IntType>(input);
   if (amount < 0 || !inputi)
     return emitInferRetTypeError(
         loc, "shr input must be integer and amount must be >= 0");
@@ -4116,7 +4740,7 @@ FIRRTLType TailPrimOp::inferReturnType(ValueRange operands,
   auto input = operands[0].getType();
   auto amount = getAttr<IntegerAttr>(attrs, "amount").getValue().getSExtValue();
 
-  auto inputi = dyn_cast<IntType>(input);
+  auto inputi = type_dyn_cast<IntType>(input);
   if (amount < 0 || !inputi)
     return emitInferRetTypeError(
         loc, "tail input must be integer and amount must be >= 0");
@@ -4130,6 +4754,26 @@ FIRRTLType TailPrimOp::inferReturnType(ValueRange operands,
   }
 
   return IntType::get(input.getContext(), false, width, inputi.isConst());
+}
+
+//===----------------------------------------------------------------------===//
+// Properties
+//===----------------------------------------------------------------------===//
+
+LogicalResult PathOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
+  auto targetRef = getTarget();
+
+  // Check if the target is local.
+  if (targetRef.getModule() !=
+      (*this)->getParentOfType<FModuleLike>().getModuleNameAttr())
+    return emitOpError() << "has non-local target";
+
+  // Check that the target exists.
+  auto target = ns.lookup(targetRef);
+  if (!target)
+    return emitOpError() << "has target that cannot be resolved: " << targetRef;
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -4178,11 +4822,11 @@ LogicalResult HWStructCastOp::verify() {
   // We must have a bundle and a struct, with matching pairwise fields
   BundleType bundleType;
   hw::StructType structType;
-  if ((bundleType = dyn_cast<BundleType>(getOperand().getType()))) {
+  if ((bundleType = type_dyn_cast<BundleType>(getOperand().getType()))) {
     structType = getType().dyn_cast<hw::StructType>();
     if (!structType)
       return emitError("result type must be a struct");
-  } else if ((bundleType = dyn_cast<BundleType>(getType()))) {
+  } else if ((bundleType = type_dyn_cast<BundleType>(getType()))) {
     structType = getOperand().getType().dyn_cast<hw::StructType>();
     if (!structType)
       return emitError("operand type must be a struct");
@@ -4334,7 +4978,7 @@ static ParseResult parseFIRRTLImplicitSSAName(OpAsmParser &parser,
 static void printFIRRTLImplicitSSAName(OpAsmPrinter &p, Operation *op,
                                        DictionaryAttr attrs) {
   SmallVector<StringRef, 4> elides;
-  elides.push_back(hw::InnerName::getInnerNameAttrName());
+  elides.push_back(hw::InnerSymbolTable::getInnerSymbolAttrName());
   elides.push_back(Forceable::getForceableAttrName());
   elideImplicitSSAName(p, op, attrs, elides);
   printElideAnnotations(p, op, attrs, elides);
@@ -4506,6 +5150,12 @@ void MultibitMuxOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 void MuxPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
+void Mux4CellIntrinsicOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void Mux2CellIntrinsicOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
 void NEQPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
@@ -4581,10 +5231,6 @@ void UninferredResetCastOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 
-void UninferredWidthCastOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  genericAsmResultNames(*this, setNameFn);
-}
-
 void ConstCastOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
@@ -4621,11 +5267,15 @@ void RefSubOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 
+void RWProbeOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+
 FIRRTLType RefResolveOp::inferReturnType(ValueRange operands,
                                          ArrayRef<NamedAttribute> attrs,
                                          std::optional<Location> loc) {
   Type inType = operands[0].getType();
-  auto inRefType = dyn_cast<RefType>(inType);
+  auto inRefType = type_dyn_cast<RefType>(inType);
   if (!inRefType)
     return emitInferRetTypeError(
         loc, "ref.resolve operand must be ref type, not ", inType);
@@ -4636,7 +5286,7 @@ FIRRTLType RefSendOp::inferReturnType(ValueRange operands,
                                       ArrayRef<NamedAttribute> attrs,
                                       std::optional<Location> loc) {
   Type inType = operands[0].getType();
-  auto inBaseType = dyn_cast<FIRRTLBaseType>(inType);
+  auto inBaseType = type_dyn_cast<FIRRTLBaseType>(inType);
   if (!inBaseType)
     return emitInferRetTypeError(
         loc, "ref.send operand must be base type, not ", inType);
@@ -4646,7 +5296,7 @@ FIRRTLType RefSendOp::inferReturnType(ValueRange operands,
 FIRRTLType RefSubOp::inferReturnType(ValueRange operands,
                                      ArrayRef<NamedAttribute> attrs,
                                      std::optional<Location> loc) {
-  auto refType = dyn_cast<RefType>(operands[0].getType());
+  auto refType = type_dyn_cast<RefType>(operands[0].getType());
   if (!refType)
     return emitInferRetTypeError(loc, "input must be of reference type");
   auto inType = refType.getType();
@@ -4657,7 +5307,7 @@ FIRRTLType RefSubOp::inferReturnType(ValueRange operands,
   // Probably best to demote to non-rw, but that has implications
   // for any LowerTypes behavior being relied on.
   // Allow for now, as need to LowerTypes things generally.
-  if (auto vectorType = dyn_cast<FVectorType>(inType)) {
+  if (auto vectorType = type_dyn_cast<FVectorType>(inType)) {
     if (fieldIdx < vectorType.getNumElements())
       return RefType::get(
           vectorType.getElementType().getConstType(
@@ -4666,7 +5316,7 @@ FIRRTLType RefSubOp::inferReturnType(ValueRange operands,
     return emitInferRetTypeError(loc, "out of range index '", fieldIdx,
                                  "' in RefType of vector type ", refType);
   }
-  if (auto bundleType = dyn_cast<BundleType>(inType)) {
+  if (auto bundleType = type_dyn_cast<BundleType>(inType)) {
     if (fieldIdx >= bundleType.getNumElements()) {
       return emitInferRetTypeError(loc,
                                    "subfield element index is greater than "
@@ -4680,6 +5330,153 @@ FIRRTLType RefSubOp::inferReturnType(ValueRange operands,
 
   return emitInferRetTypeError(
       loc, "ref.sub op requires a RefType of vector or bundle base type");
+}
+
+LogicalResult RWProbeOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
+  auto targetRef = getTarget();
+  if (targetRef.getModule() !=
+      (*this)->getParentOfType<FModuleLike>().getModuleNameAttr())
+    return emitOpError() << "has non-local target";
+
+  auto target = ns.lookup(targetRef);
+  if (!target)
+    return emitOpError() << "has target that cannot be resolved: " << targetRef;
+
+  auto checkFinalType = [&](auto type, Location loc) -> LogicalResult {
+    // Determine final type.
+    mlir::Type fType = type;
+    if (auto fieldIDType = type_dyn_cast<hw::FieldIDTypeInterface>(type))
+      fType = fieldIDType.getFinalTypeByFieldID(target.getField());
+    else
+      assert(target.getField() == 0);
+    // Check.
+    auto baseType = type_dyn_cast<FIRRTLBaseType>(fType);
+    if (!baseType || baseType.getPassiveType() != getType().getType()) {
+      auto diag = emitOpError("has type mismatch: target resolves to ")
+                  << fType << " instead of expected " << getType().getType();
+      diag.attachNote(loc) << "target resolves here";
+      return diag;
+    }
+    return success();
+  };
+  if (target.isPort()) {
+    auto mod = cast<FModuleLike>(target.getOp());
+    return checkFinalType(mod.getPortType(target.getPort()),
+                          mod.getPortLocation(target.getPort()));
+  }
+  hw::InnerSymbolOpInterface symOp =
+      cast<hw::InnerSymbolOpInterface>(target.getOp());
+  if (!symOp.getTargetResult())
+    return emitOpError("has target that cannot be probed")
+        .attachNote(symOp.getLoc())
+        .append("target resolves here");
+  auto *ancestor =
+      symOp.getTargetResult().getParentBlock()->findAncestorOpInBlock(**this);
+  if (!ancestor || !symOp->isBeforeInBlock(ancestor))
+    return emitOpError("is not dominated by target")
+        .attachNote(symOp.getLoc())
+        .append("target here");
+  return checkFinalType(symOp.getTargetResult().getType(), symOp.getLoc());
+}
+
+//===----------------------------------------------------------------------===//
+// Optional Group Operations
+//===----------------------------------------------------------------------===//
+
+LogicalResult GroupOp::verify() {
+  auto groupName = getGroupName();
+  auto *parentOp = (*this)->getParentOp();
+
+  // Verify the correctness of the symbol reference.  Only verify that this
+  // group makes sense in its parent module or group.
+  auto nestedReferences = groupName.getNestedReferences();
+  if (nestedReferences.empty()) {
+    if (!isa<FModuleOp>(parentOp)) {
+      auto diag = emitOpError() << "has an un-nested group symbol, but does "
+                                   "not have a 'firrtl.module' op as a parent";
+      return diag.attachNote(parentOp->getLoc())
+             << "illegal parent op defined here";
+    }
+  } else {
+    auto parentGroup = dyn_cast<GroupOp>(parentOp);
+    if (!parentGroup) {
+      auto diag = emitOpError()
+                  << "has a nested group symbol, but does not have a '"
+                  << getOperationName() << "' op as a parent'";
+      return diag.attachNote(parentOp->getLoc())
+             << "illegal parent op defined here";
+    }
+    auto parentGroupName = parentGroup.getGroupName();
+    if (parentGroupName.getRootReference() != groupName.getRootReference() ||
+        parentGroupName.getNestedReferences() !=
+            groupName.getNestedReferences().drop_back()) {
+      auto diag = emitOpError() << "is nested under an illegal group";
+      return diag.attachNote(parentGroup->getLoc())
+             << "illegal parent group defined here";
+    }
+  }
+
+  // Verify the body of the region.
+  Block *body = getBody(0);
+  bool failed = false;
+  body->walk<mlir::WalkOrder::PreOrder>([&](Operation *op) {
+    // Skip nested groups.  Those will be verified separately.
+    if (isa<GroupOp>(op))
+      return WalkResult::skip();
+    // Check all the operands of each op to make sure that only legal things are
+    // captured.
+    for (auto operand : op->getOperands()) {
+      // Any value captured from the current group is fine.
+      if (operand.getParentBlock() == body)
+        continue;
+      // Capture of a non-base type, e.g., reference is illegal.
+      FIRRTLBaseType baseType = dyn_cast<FIRRTLBaseType>(operand.getType());
+      if (!baseType) {
+        auto diag = emitOpError()
+                    << "captures an operand which is not a FIRRTL base type";
+        diag.attachNote(operand.getLoc()) << "operand is defined here";
+        diag.attachNote(op->getLoc()) << "operand is used here";
+        failed = true;
+        return WalkResult::advance();
+      }
+      // Capturing a non-passive type is illegal.
+      if (!baseType.isPassive()) {
+        auto diag = emitOpError()
+                    << "captures an operand which is not a passive type";
+        diag.attachNote(operand.getLoc()) << "operand is defined here";
+        diag.attachNote(op->getLoc()) << "operand is used here";
+        failed = true;
+        return WalkResult::advance();
+      }
+    }
+    // Ensure that the group does not drive any sinks.
+    if (auto connect = dyn_cast<FConnectLike>(op)) {
+      auto dest = getFieldRefFromValue(connect.getDest()).getValue();
+      if (dest.getParentBlock() == body)
+        return WalkResult::advance();
+      auto diag = connect.emitOpError()
+                  << "connects to a destination which is defined outside its "
+                     "enclosing group";
+      diag.attachNote(getLoc()) << "enclosing group is defined here";
+      diag.attachNote(dest.getLoc()) << "destination is defined here";
+      failed = true;
+    }
+    return WalkResult::advance();
+  });
+  if (failed)
+    return failure();
+
+  return success();
+}
+
+LogicalResult GroupOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto groupDeclOp = symbolTable.lookupNearestSymbolFrom<GroupDeclOp>(
+      *this, getGroupNameAttr());
+  if (!groupDeclOp) {
+    return emitOpError("invalid symbol reference");
+  }
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

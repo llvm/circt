@@ -1,4 +1,5 @@
 // RUN: circt-opt %s -prepare-for-emission --split-input-file -verify-diagnostics | FileCheck %s
+// RUN: circt-opt %s -export-verilog -split-input-file
 
 // CHECK: @namehint_variadic
 hw.module @namehint_variadic(%a: i3) -> (b: i3) {
@@ -213,18 +214,62 @@ module attributes {circt.loweringOptions = "maximumNumberOfTermsPerExpression=2"
 // -----
 
 // CHECK-LABEL:   hw.module @packed_struct_assignment(
-// CHECK-SAME:                                        %[[VAL_0:.*]]: i32) -> (out: !hw.struct<a: i32>, out2: !hw.struct<a: i32>) {
+// CHECK-SAME:                                        %[[VAL_0:.*]]: i32) -> (out: !hw.struct<a: i32>, out2: !hw.struct<a: i32>, out3: !hw.struct<a: i32>) {
 // CHECK:           %[[VAL_1:.*]] = sv.wire
-// CHECK:           %[[VAL_2:.*]] = sv.struct_field_inout %[[VAL_1]]["a"] : !hw.inout<struct<a: i32>>
-// CHECK:           sv.assign %[[VAL_2]], %[[VAL_0]] : i32
-// CHECK:           %[[VAL_3:.*]] = sv.read_inout %[[VAL_1]] : !hw.inout<struct<a: i32>>
-// CHECK:           %[[VAL_4:.*]] = sv.read_inout %[[VAL_1]] : !hw.inout<struct<a: i32>>
-// CHECK:           hw.output %[[VAL_4]], %[[VAL_3]] : !hw.struct<a: i32>, !hw.struct<a: i32>
+// CHECK-NEXT:      %[[VAL_2:.*]] = sv.struct_field_inout %[[VAL_1]]["a"]
+// CHECK-NEXT:      sv.assign %[[VAL_2]], %[[VAL_0]]
+// CHECK-NEXT:      %[[VAL_3:.*]] = sv.read_inout %[[VAL_1]]
+// CHECK-NEXT:      %[[VAL_4:.*]] = sv.read_inout %[[VAL_1]]
+// CHECK:           %[[VAL_5:.*]] = sv.wire
+// CHECK-NEXT:      %[[VAL_6:.*]] = sv.struct_field_inout %[[VAL_5]]["a"]
+// CHECK-NEXT:      sv.assign %[[VAL_6]], %c1_i32
+// CHECK-NEXT:      %[[VAL_7:.*]] = sv.read_inout %[[VAL_5]]
+// CHECK-NEXT:      hw.output %[[VAL_4]], %[[VAL_3]], %[[VAL_7]]
 // CHECK:         }
 !T = !hw.struct<a: i32>
 module attributes { circt.loweringOptions = "disallowPackedStructAssignments"} {
-  hw.module @packed_struct_assignment(%in : i32) -> (out: !T, out2: !T)  {
+  hw.module @packed_struct_assignment(%in : i32) -> (out: !T, out2: !T, out3: !T)  {
       %0 = hw.struct_create (%in) : !T
-      hw.output %0, %0 : !T, !T
+      %1 = hw.aggregate_constant [1: i32] : !T
+      hw.output %0, %0, %1 : !T, !T, !T
   }
+}
+
+// -----
+// LTL expressions that are used before being defined should not be spilled to
+// wires, where they crash the PrepareForEmission pass. They are always emitted
+// inline, so no need to restructure the IR.
+// CHECK-LABEL: hw.module @Issue5613
+hw.module @Issue5613(%a: i1, %b: i1) {
+  verif.assert %2 : !ltl.sequence
+  %0 = ltl.implication %2, %1 : !ltl.sequence, !ltl.property
+  %1 = ltl.or %b, %3 : i1, !ltl.property
+  %2 = ltl.and %b, %4 : i1, !ltl.sequence
+  %3 = ltl.not %b : i1
+  %4 = ltl.delay %a, 42 : i1
+  hw.output
+}
+
+// -----
+
+// If an operation is duplicated because it is always inline, make sure that the
+// recursive inlining of its operands (by splitting) may also duplicate an
+// operand which now needs to be spilled to a wire.
+//
+// See: https://github.com/llvm/circt/issues/5605
+// CHECK-LABEL: hw.module @Issue5605
+hw.module @Issue5605(%a: i1, %b: i1, %clock: i1, %reset: i1) {
+  %0 = comb.concat %a, %b : i1, i1
+  // CHECK:      %1 = sv.wire
+  // CHECK-NEXT: sv.assign %1, %0
+  %1 = sv.system.sampled %0 : i2
+  // CHECK-NEXT: %2 = sv.read_inout %1
+  // CHECK-NEXT: %3 = sv.system.sampled %2
+  // CHECK-NEXT: sv.assert.concurrent {{.*}}(%3)
+  sv.assert.concurrent posedge %clock, %reset label "assert_0" message "foo"(%1) : i2
+  // CHECK-NEXT: %4 = sv.read_inout %1
+  // CHECK-NEXT: %5 = sv.system.sampled %4
+  // CHECK-NEXT: sv.assert.concurrent {{.*}}(%5)
+  sv.assert.concurrent posedge %clock, %reset label "assert_1" message "bar"(%1) : i2
+  hw.output
 }

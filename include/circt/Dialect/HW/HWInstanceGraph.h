@@ -13,28 +13,30 @@
 #ifndef CIRCT_DIALECT_HW_HWINSTANCEGRAPH_H
 #define CIRCT_DIALECT_HW_HWINSTANCEGRAPH_H
 
-#include "circt/Dialect/HW/InstanceGraphBase.h"
+#include "circt/Dialect/HW/HWOpInterfaces.h"
+#include "circt/Support/InstanceGraph.h"
 
 namespace circt {
 namespace hw {
 
 /// HW-specific instance graph with a virtual entry node linking to
 /// all publicly visible modules.
-class InstanceGraph : public InstanceGraphBase {
+class InstanceGraph : public igraph::InstanceGraph {
 public:
   InstanceGraph(Operation *operation);
 
   /// Return the entry node linking to all public modules.
-  InstanceGraphNode *getTopLevelNode() override { return &entry; }
+  igraph::InstanceGraphNode *getTopLevelNode() override { return &entry; }
 
   /// Adds a module, updating links to entry.
-  InstanceGraphNode *addModule(HWModuleLike module) override;
+  igraph::InstanceGraphNode *addHWModule(HWModuleLike module);
 
   /// Erases a module, updating links to entry.
-  void erase(InstanceGraphNode *node) override;
+  void erase(igraph::InstanceGraphNode *node) override;
 
 private:
-  InstanceGraphNode entry;
+  using igraph::InstanceGraph::addModule;
+  igraph::InstanceGraphNode entry;
 };
 
 } // namespace hw
@@ -43,12 +45,12 @@ private:
 // Specialisation for the HW instance graph.
 template <>
 struct llvm::GraphTraits<circt::hw::InstanceGraph *>
-    : public llvm::GraphTraits<circt::hw::InstanceGraphBase *> {};
+    : public llvm::GraphTraits<circt::igraph::InstanceGraph *> {};
 
 template <>
 struct llvm::DOTGraphTraits<circt::hw::InstanceGraph *>
-    : public llvm::DOTGraphTraits<circt::hw::InstanceGraphBase *> {
-  using llvm::DOTGraphTraits<circt::hw::InstanceGraphBase *>::DOTGraphTraits;
+    : public llvm::DOTGraphTraits<circt::igraph::InstanceGraph *> {
+  using llvm::DOTGraphTraits<circt::igraph::InstanceGraph *>::DOTGraphTraits;
 };
 
 #endif // CIRCT_DIALECT_HW_HWINSTANCEGRAPH_H

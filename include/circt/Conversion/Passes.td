@@ -200,7 +200,14 @@ def LoopScheduleToCalyx : Pass<"lower-loopschedule-to-calyx", "mlir::ModuleOp"> 
 // PipelineTHW
 //===----------------------------------------------------------------------===//
 
-def PipelineToHW : Pass<"lower-pipeline-to-hw", "hw::HWModuleOp"> {
+// TODO: @mortbopet: There is a possible non-neglible speedup that can be achieved
+// here by allowing this pass to run on a per-hwmodule/whatever container the
+// pipeline is nested within-granularity. However, this conversion adds (and removes)
+// new modules to the top-level mlir::ModuleOp scope, which technically violates
+// hw::HWModuleLike's IsolatedFromAbove (and thus has previously caused
+// concurrency issues via. concurrent additions and removals to the mlir::ModuleOp
+// symboltable).
+def PipelineToHW : Pass<"lower-pipeline-to-hw", "mlir::ModuleOp"> {
   let summary = "Lower Pipeline to HW";
   let description = [{
     This pass lowers `pipeline.rtp` operations to HW.
@@ -211,7 +218,9 @@ def PipelineToHW : Pass<"lower-pipeline-to-hw", "hw::HWModuleOp"> {
   ];
   let options = [
     Option<"outlineStages", "outline-stages", "bool", "false",
-      "Outline each stage to a separate `hw.module`.">
+      "Outline each stage to a separate `hw.module`.">,
+    Option<"clockGateRegs", "clock-gate-regs", "bool", "false",
+      "Clock gate each register instead of (default) input muxing  (ASIC optimization).">
   ];
 }
 
@@ -383,9 +392,7 @@ def LowerFIRRTLToHW : Pass<"lower-firrtl-to-hw", "mlir::ModuleOp"> {
            "bool", "false",
     "Emit warnings on unprocessed annotations during lower-to-hw pass">,
     Option<"emitChiselAssertsAsSVA", "emit-chisel-asserts-as-sva",
-           "bool", "false","Convert all Chisel asserts to SVA">,
-    Option<"addMuxPragmas", "add-mux-pragmas", "bool", "false",
-            "Annotate mux pragmas to multibit mux and subacess results">
+           "bool", "false","Convert all Chisel asserts to SVA">
   ];
 }
 
@@ -406,6 +413,24 @@ def HandshakeToDC : Pass<"lower-handshake-to-dc", "mlir::ModuleOp"> {
   }];
   let constructor = "circt::createHandshakeToDCPass()";
   let dependentDialects = ["dc::DCDialect", "mlir::func::FuncDialect", "hw::HWDialect"];
+}
+
+//===----------------------------------------------------------------------===//
+// DCToHW
+//===----------------------------------------------------------------------===//
+
+def DCToHW : Pass<"lower-dc-to-hw", "mlir::ModuleOp"> {
+  let summary = "Lower DC to HW";
+  let description = [{
+    Lower DC to ESI/hw/comb/seq operations.
+    In case the IR contains DC operations that need to be clocked (fork, buffer),
+    there must exist a clock and reset signal in the parent `FunctionLike`
+    operation. These arguments are to be marked with a `dc.clock` and `dc.reset`
+    attribute, respectively.
+  }];
+  let constructor = "circt::createDCToHWPass()";
+  let dependentDialects = ["dc::DCDialect", "esi::ESIDialect", "hw::HWDialect",
+      "comb::CombDialect", "seq::SeqDialect"];
 }
 
 //===----------------------------------------------------------------------===//
@@ -506,6 +531,33 @@ def ConvertHWToSystemC : Pass<"convert-hw-to-systemc", "mlir::ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
+// HWToSV
+//===----------------------------------------------------------------------===//
+
+def LowerHWToSV : Pass<"lower-hw-to-sv", "hw::HWModuleOp"> {
+  let summary = "Convert HW to SV";
+  let description = [{
+    This pass converts various HW contructs to SV.
+  }];
+  let constructor = "circt::createLowerHWToSVPass()";
+  let dependentDialects = ["sv::SVDialect"];
+}
+
+//===----------------------------------------------------------------------===//
+// VerifToSV
+//===----------------------------------------------------------------------===//
+
+def LowerVerifToSV : Pass<"lower-verif-to-sv", "hw::HWModuleOp"> {
+  let summary = "Convert Verif to SV";
+  let description = [{
+    This pass converts various Verif contructs to SV.
+  }];
+  let constructor = "circt::createLowerVerifToSVPass()";
+  let dependentDialects = [
+    "sv::SVDialect", "hw::HWDialect", "comb::CombDialect"];
+}
+
+//===----------------------------------------------------------------------===//
 // StandardToHandshake
 //===----------------------------------------------------------------------===//
 
@@ -593,10 +645,45 @@ def LowerArcToLLVM : Pass<"lower-arc-to-llvm", "mlir::ModuleOp"> {
   let constructor = "circt::createLowerArcToLLVMPass()";
   let dependentDialects = [
     "arc::ArcDialect",
+    "mlir::cf::ControlFlowDialect",
     "mlir::LLVM::LLVMDialect",
     "mlir::scf::SCFDialect",
     "mlir::func::FuncDialect"
   ];
+}
+
+//===----------------------------------------------------------------------===//
+// ConvertSeqToSV
+//===----------------------------------------------------------------------===//
+
+def LowerSeqToSV: Pass<"lower-seq-to-sv",  "mlir::ModuleOp"> {
+  let summary = "Lower sequential firrtl ops to SV.";
+  let constructor = "circt::createLowerSeqToSVPass()";
+  let dependentDialects = ["circt::sv::SVDialect", "circt::hw::HWDialect"];
+  let options = [
+    Option<"disableRegRandomization", "disable-reg-randomization", "bool", "false",
+           "Disable emission of register randomization code">,
+    Option<"emitSeparateAlwaysBlocks", "emit-separate-always-blocks", "bool", "false",
+           "Emit assigments to registers in separate always blocks">,
+    Option<"lowerToAlwaysFF", "lower-to-always-ff", "bool", "true",
+           "Place assignments to registers into `always_ff` blocks">
+  ];
+  let statistics = [
+    Statistic<"numSubaccessRestored", "num-subaccess-restored",
+      "Number of lhs subaccess operations restored ">
+  ];
+}
+
+def LowerFirMem : Pass<"lower-seq-firmem", "mlir::ModuleOp"> {
+  let summary = "Lower seq.firmem ops to instances of hw.module.generated ops";
+  let constructor = "circt::createLowerFirMemPass()";
+  let dependentDialects = ["circt::hw::HWDialect"];
+}
+
+def LowerSeqFIRRTLInitToSV: Pass<"lower-seq-firrtl-init-to-sv", "mlir::ModuleOp"> {
+  let summary = "Prep the module with macro definitions for firrtl registers.";
+  let constructor = "circt::createLowerSeqFIRRTLInitToSV()";
+  let dependentDialects = ["circt::sv::SVDialect"];
 }
 
 #endif // CIRCT_CONVERSION_PASSES_TD

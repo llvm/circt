@@ -61,6 +61,31 @@ void elideImplicitSSAName(OpAsmPrinter &printer, Operation *op,
                           DictionaryAttr attrs,
                           SmallVectorImpl<StringRef> &elides);
 
+/// Print/parse binary operands type only when types are different.
+/// optional-bin-op-types := type($lhs) (, type($rhs))?
+void printOptionalBinaryOpTypes(OpAsmPrinter &p, Operation *op, Type lhs,
+                                Type rhs);
+ParseResult parseOptionalBinaryOpTypes(OpAsmParser &parser, Type &lhs,
+                                       Type &rhs);
+
+//===----------------------------------------------------------------------===//
+// KeywordBool Custom Directive
+//===----------------------------------------------------------------------===//
+
+/// Parse a boolean as one of two keywords. The `trueKeyword` will result in a
+/// true boolean; the `falseKeyword` will result in a false boolean.
+///
+/// labeled-bool ::= (true-label | false-label)
+ParseResult parseKeywordBool(OpAsmParser &parser, BoolAttr &attr,
+                             StringRef trueKeyword, StringRef falseKeyword);
+
+/// Print a boolean as one of two keywords. If the boolean is true, the
+/// `trueKeyword` is used; if it is false, the `falseKeyword` is used.
+///
+/// labeled-bool ::= (true-label | false-label)
+void printKeywordBool(OpAsmPrinter &printer, Operation *op, BoolAttr attr,
+                      StringRef trueKeyword, StringRef falseKeyword);
+
 } // namespace circt
 
 #endif // CIRCT_SUPPORT_CUSTOMDIRECTIVEIMPL_H

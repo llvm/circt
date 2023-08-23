@@ -40,7 +40,7 @@ static ClkRstIdxs getMachinePortInfo(SmallVectorImpl<hw::PortInfo> &ports,
   // Add clock port.
   hw::PortInfo clock;
   clock.name = b.getStringAttr("clk");
-  clock.direction = hw::PortDirection::INPUT;
+  clock.dir = hw::ModulePort::Direction::Input;
   clock.type = b.getI1Type();
   clock.argNum = machine.getNumArguments();
   ports.push_back(clock);
@@ -49,7 +49,7 @@ static ClkRstIdxs getMachinePortInfo(SmallVectorImpl<hw::PortInfo> &ports,
   // Add reset port.
   hw::PortInfo reset;
   reset.name = b.getStringAttr("rst");
-  reset.direction = hw::PortDirection::INPUT;
+  reset.dir = hw::ModulePort::Direction::Input;
   reset.type = b.getI1Type();
   reset.argNum = machine.getNumArguments() + 1;
   ports.push_back(reset);
@@ -199,7 +199,7 @@ void StateEncoding::setEncoding(StateOp state, Value v, bool wire) {
     auto stateType = getStateType();
     auto stateEncodingWire = b.create<sv::RegOp>(
         loc, stateType, b.getStringAttr("to_" + state.getName()),
-        /*inner_sym=*/state.getNameAttr());
+        hw::InnerSymAttr::get(state.getNameAttr()));
     b.create<sv::AssignOp>(loc, stateEncodingWire, v);
     encodedValue = b.create<sv::ReadInOutOp>(loc, stateEncodingWire);
   } else
@@ -339,7 +339,7 @@ MachineOpConverter::moveOps(Block *block,
     if (op.hasTrait<OpTrait::IsTerminator>())
       return &op;
 
-    op.moveBefore(&hwModuleOp.front(), b.getInsertionPoint());
+    op.moveBefore(hwModuleOp.getBodyBlock(), b.getInsertionPoint());
   }
   return nullptr;
 }
@@ -412,19 +412,19 @@ LogicalResult MachineOpConverter::dispatch() {
   SmallVector<hw::PortInfo, 16> ports;
   auto clkRstIdxs = getMachinePortInfo(ports, machineOp, b);
   hwModuleOp = b.create<hw::HWModuleOp>(loc, machineOp.getSymNameAttr(), ports);
-  b.setInsertionPointToStart(&hwModuleOp.front());
+  b.setInsertionPointToStart(hwModuleOp.getBodyBlock());
 
   // Replace all uses of the machine arguments with the arguments of the
   // new created HW module.
-  for (auto args :
-       llvm::zip(machineOp.getArguments(), hwModuleOp.front().getArguments())) {
+  for (auto args : llvm::zip(machineOp.getArguments(),
+                             hwModuleOp.getBodyBlock()->getArguments())) {
     auto machineArg = std::get<0>(args);
     auto hwModuleArg = std::get<1>(args);
     machineArg.replaceAllUsesWith(hwModuleArg);
   }
 
-  auto clock = hwModuleOp.front().getArgument(clkRstIdxs.clockIdx);
-  auto reset = hwModuleOp.front().getArgument(clkRstIdxs.resetIdx);
+  auto clock = hwModuleOp.getBodyBlock()->getArgument(clkRstIdxs.clockIdx);
+  auto reset = hwModuleOp.getBodyBlock()->getArgument(clkRstIdxs.resetIdx);
 
   // 2) Build state and variable registers.
   encoding =
@@ -567,7 +567,7 @@ LogicalResult MachineOpConverter::dispatch() {
 
   // Delete the default created output op and replace it with the output
   // muxes.
-  auto *oldOutputOp = hwModuleOp.front().getTerminator();
+  auto *oldOutputOp = hwModuleOp.getBodyBlock()->getTerminator();
   b.create<hw::OutputOp>(loc, outputPortAssignments);
   oldOutputOp->erase();
 

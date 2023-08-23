@@ -19,6 +19,7 @@
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/LLVMCommon/TypeConverter.h"
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMAttrs.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
@@ -322,17 +323,16 @@ struct ZeroCountOpLowering : public OpConversionPattern<arc::ZeroCountOp> {
   matchAndRewrite(arc::ZeroCountOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     // Use poison when input is zero.
-    Value undef = rewriter.create<LLVM::ConstantOp>(op->getLoc(),
-                                                    rewriter.getI1Type(), true);
+    IntegerAttr isZeroPoison = rewriter.getBoolAttr(true);
 
     if (op.getPredicate() == arc::ZeroCountPredicate::leading) {
       rewriter.replaceOpWithNewOp<LLVM::CountLeadingZerosOp>(
-          op, adaptor.getInput().getType(), adaptor.getInput(), undef);
+          op, adaptor.getInput().getType(), adaptor.getInput(), isZeroPoison);
       return success();
     }
 
     rewriter.replaceOpWithNewOp<LLVM::CountTrailingZerosOp>(
-        op, adaptor.getInput().getType(), adaptor.getInput(), undef);
+        op, adaptor.getInput().getType(), adaptor.getInput(), isZeroPoison);
     return success();
   }
 };

@@ -631,6 +631,27 @@ Example:
 }
 ```
 
+### DedupGroupAnnotation
+
+| Property   | Type   | Description                                |
+| ---------- | ------ | -------------                              |
+| class      | string | `firrtl.transforms.DedupGroupAnnotation`   |
+| target     | string | Module target                              |
+| group      | string | The dedup group that the module belongs to |
+
+This annotation assigns the targeted module to a dedup group. Modules that
+belong to a dedup group may only be deduplicated with modules that are part of
+the same group.
+
+Example:
+```json
+{
+  "class":"firrtl.transforms.DedupGroupAnnotation",
+  "target": "~Top|A",
+  "group": "foo"
+}
+```
+
 ### NestedPrefixModulesAnnotation
 
 | Property   | Type   | Description                                              |
@@ -714,7 +735,6 @@ The `value` field can be a JSON array or dictionary (corresponding to the `OMArr
 - `OMBigDecimal:<value>`
 - `OMFrozenTarget:<omir>`
 - `OMDeleted`
-- `OMConstant:<literal>`
 - `OMReferenceTarget:<target>`
 - `OMMemberReferenceTarget:<target>`
 - `OMMemberInstanceTarget:<target>`
@@ -736,7 +756,6 @@ Example:
         {"info": "", "name": "d", "value": "OMString:hello"},
         {"info": "", "name": "f", "value": "OMBigDecimal:10.5"},
         {"info": "", "name": "g", "value": "OMDeleted:"},
-        {"info": "", "name": "h", "value": "OMConstant:UInt<2>(\"h1\")"},
         {"info": "", "name": "i", "value": 42},
         {"info": "", "name": "j", "value": true},
         {"info": "", "name": "k", "value": 3.14}

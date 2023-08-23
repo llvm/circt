@@ -17,6 +17,8 @@ include "FIRRTLDialect.td"
 include "FIRRTLEnums.td"
 include "FIRRTLOpInterfaces.td"
 include "FIRRTLTypes.td"
+include "circt/Dialect/HW/HWTypes.td"
+include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
 def AttachOp : FIRRTLOp<"attach"> {
@@ -50,12 +52,17 @@ def ConnectOp : FIRRTLOp<"connect", [FConnectLike]> {
   let hasCanonicalizer = true;
 }
 
-def StrictConnectOp : FIRRTLOp<"strictconnect", [SameTypeOperands, FConnectLike]> {
+def SameAnonTypeOperands: PredOpTrait<
+        "operands must be structurally equivalent",
+        CPred<"areAnonymousTypesEquivalent(getOperand(0).getType(), getOperand(1).getType())">>;
+def StrictConnectOp : FIRRTLOp<"strictconnect", [FConnectLike,
+                      SameAnonTypeOperands]> {
   let summary = "Connect two signals";
   let description =  [{
     Connect two values with strict constraints:
     ```
       firrtl.strictconnect %dest, %src : t1
+      firrtl.strictconnect %dest, %src : t1, !firrtl.alias<foo, t1>
     ```
     }];
 
@@ -65,9 +72,8 @@ def StrictConnectOp : FIRRTLOp<"strictconnect", [SameTypeOperands, FConnectLike]
   let hasCanonicalizeMethod = true;
 
   let hasVerifier = 1;
-
-  let assemblyFormat =
-    "$dest `,` $src  attr-dict `:` qualified(type($dest))";
+  let assemblyFormat = [{$dest `,` $src  attr-dict `:`
+      custom<OptionalBinaryOpTypes>(type($dest), type($src))}];
 }
 
 def RefDefineOp : FIRRTLOp<"ref.define", [SameTypeOperands, FConnectLike]> {
@@ -272,8 +278,8 @@ def MatchOp : FIRRTLOp<"match", [SingleBlock, NoTerminator,
   }];
 }
 
-def PropAssignOp : FIRRTLOp<"propassign", [FConnectLike, SameTypeOperands,
-                                           HasParent<"FModuleOp">]> {
+def PropAssignOp : FIRRTLOp<"propassign",
+  [FConnectLike, SameTypeOperands, ParentOneOf<["FModuleOp", "ClassOp"]>]> {
   let summary = "Assign to a sink property value.";
   let description = [{
     Assign an output property value. The types must match exactly.
@@ -303,23 +309,12 @@ def ForceOp : FIRRTLOp<"force", [SameTypeOperands]> {
     "$dest `,` $src attr-dict `:` qualified(type($dest)) `,` qualified(type($src))";
 }
 
-def ProbeOp : FIRRTLOp<"probe"> {
-  let summary = "FIRRTL Value Probe";
-  let description = [{
-    Captures values without binding to any accidental name.
-  }];
-  let arguments = (ins SymbolNameAttr:$inner_sym, Variadic<FIRRTLBaseType>:$captured);
-  let results = (outs);
-
-  let assemblyFormat = "$inner_sym attr-dict ( `,` $captured^  `:` qualified(type($captured)))?";
-}
-
 //===- Reference force/release --------------------------------------------===//
 
 class ForceRefTypeConstraint<string ref, string base>
   : TypesMatchWith<"reference type of " # ref # " should be RWProbe of " # base,
                    base, ref,
-                   "RefType::get(cast<FIRRTLBaseType>($_self).getAllConstDroppedType(), true)">;
+                   "RefType::get(firrtl::type_cast<FIRRTLBaseType>($_self).getAllConstDroppedType(), true)">;
 
 def RefForceOp : FIRRTLOp<"ref.force",[ForceRefTypeConstraint<"dest", "src">]> {
   let summary = "FIRRTL force statement";
@@ -327,6 +322,7 @@ def RefForceOp : FIRRTLOp<"ref.force",[ForceRefTypeConstraint<"dest", "src">]> {
   let arguments = (ins ClockType:$clock, UInt1Type:$predicate, RWProbe:$dest, FIRRTLBaseType:$src);
   let assemblyFormat =
     "$clock `,` $predicate `,` $dest `,` $src attr-dict `:` type($clock) `,` type($predicate) `,` qualified(type($src))";
+  let hasCanonicalizer = 1;
 }
 def RefForceInitialOp : FIRRTLOp<"ref.force_initial",[ForceRefTypeConstraint<"dest", "src">]> {
   let summary = "FIRRTL force_initial statement";
@@ -334,6 +330,7 @@ def RefForceInitialOp : FIRRTLOp<"ref.force_initial",[ForceRefTypeConstraint<"de
   let arguments = (ins UInt1Type:$predicate, RWProbe:$dest, FIRRTLBaseType:$src);
   let assemblyFormat =
     "$predicate `,` $dest `,` $src attr-dict `:` type($predicate) `,` qualified(type($src))";
+  let hasCanonicalizer = 1;
 }
 def RefReleaseOp : FIRRTLOp<"ref.release"> {
   let summary = "FIRRTL release statement";
@@ -341,12 +338,14 @@ def RefReleaseOp : FIRRTLOp<"ref.release"> {
   let arguments = (ins ClockType:$clock, UInt1Type:$predicate, RWProbe:$dest);
   let assemblyFormat =
     "$clock `,` $predicate `,` $dest attr-dict `:` type($clock) `,` type($predicate) `,` qualified(type($dest))";
+  let hasCanonicalizer = 1;
 }
 def RefReleaseInitialOp : FIRRTLOp<"ref.release_initial"> {
   let summary = "FIRRTL release_initial statement";
   let description = "Release the target RWProbe.";
   let arguments = (ins UInt1Type:$predicate, RWProbe:$dest);
   let assemblyFormat = "$predicate `,` $dest attr-dict `:` type($predicate) `,` qualified(type($dest))";
+  let hasCanonicalizer = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -366,5 +365,37 @@ class VerifIntrinsicOp<string mnemonic, list<Trait> traits = []> :
 def VerifAssertIntrinsicOp : VerifIntrinsicOp<"assert">;
 def VerifAssumeIntrinsicOp : VerifIntrinsicOp<"assume">;
 def VerifCoverIntrinsicOp : VerifIntrinsicOp<"cover">;
+
+//===----------------------------------------------------------------------===//
+// Group Op
+//===----------------------------------------------------------------------===//
+
+def GroupOp : FIRRTLOp<
+  "group",
+  [SingleBlock, NoTerminator, NoRegionArguments,
+   ParentOneOf<["firrtl::FModuleOp", "firrtl::GroupOp"]>,
+   DeclareOpInterfaceMethods<SymbolUserOpInterface>]
+> {
+  let summary = "A definition of an optional group";
+  let description = [{
+    The `firrtl.group` operation defines optional code that is conditionally
+    part of a `firrtl.module`.  This is typically used to store verification or
+    debugging code that is lowered to a SystemVerilog `bind` instantiation.  An
+    optional group can read from (capture) values defined in parent group
+    definitions or in the parent module, but may not write to hardware declared
+    outside the group.
+
+    A `firrtl.group` must refer to an existing optional group declaration
+    (`firrtl.declgroup`) via a symbol reference.  A nested `firrtl.group` refers
+    to a nested group declaration via a nested symbol reference.
+  }];
+  let arguments = (ins SymbolRefAttr:$groupName);
+  let results = (outs);
+  let regions = (region SizedRegion<1>:$region);
+  let assemblyFormat = [{
+    $groupName $region attr-dict
+  }];
+  let hasVerifier = 1;
+}
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLSTATEMENTS_TD

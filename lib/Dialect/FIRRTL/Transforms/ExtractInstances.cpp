@@ -22,6 +22,7 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWDialect.h"
+#include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Support/Path.h"
 #include "mlir/IR/Attributes.h"
@@ -66,19 +67,15 @@ struct ExtractInstancesPass
   void createTraceFiles();
 
   /// Get the cached namespace for a module.
-  ModuleNamespace &getModuleNamespace(FModuleLike module) {
-    auto it = moduleNamespaces.find(module);
-    if (it != moduleNamespaces.end())
-      return it->second;
-    return moduleNamespaces.try_emplace(module, ModuleNamespace(module))
-        .first->second;
+  hw::InnerSymbolNamespace &getModuleNamespace(FModuleLike module) {
+    return moduleNamespaces.try_emplace(module, module).first->second;
   }
 
   /// Obtain an inner reference to an operation, possibly adding an `inner_sym`
   /// to that operation.
   InnerRefAttr getInnerRefTo(Operation *op) {
-    return ::getInnerRefTo(op, "extraction_sym",
-                           [&](FModuleOp mod) -> ModuleNamespace & {
+    return ::getInnerRefTo(op,
+                           [&](FModuleLike mod) -> hw::InnerSymbolNamespace & {
                              return getModuleNamespace(mod);
                            });
   }
@@ -138,7 +135,7 @@ struct ExtractInstancesPass
   /// The current circuit namespace valid within the call to `runOnOperation`.
   CircuitNamespace circuitNamespace;
   /// Cached module namespaces.
-  DenseMap<Operation *, ModuleNamespace> moduleNamespaces;
+  DenseMap<Operation *, hw::InnerSymbolNamespace> moduleNamespaces;
 };
 } // end anonymous namespace
 
@@ -322,7 +319,8 @@ void ExtractInstancesPass::collectAnnos() {
   LLVM_DEBUG(llvm::dbgs() << "Marking DUT hierarchy\n");
   SmallVector<InstanceGraphNode *> worklist;
   for (Operation *op : dutModules)
-    worklist.push_back(instanceGraph->lookup(cast<hw::HWModuleLike>(op)));
+    worklist.push_back(
+        instanceGraph->lookup(cast<igraph::ModuleOpInterface>(op)));
   while (!worklist.empty()) {
     auto *module = worklist.pop_back_val();
     dutModuleNames.insert(module->getModule().getModuleNameAttr());
@@ -536,7 +534,7 @@ void ExtractInstancesPass::extractInstances() {
           prefix.empty() ? Twine(name) : Twine(prefix) + "_" + name);
 
       PortInfo newPort{nameAttr,
-                       cast<FIRRTLType>(inst.getResult(portIdx).getType()),
+                       type_cast<FIRRTLType>(inst.getResult(portIdx).getType()),
                        direction::flip(inst.getPortDirection(portIdx))};
       newPort.loc = inst.getResult(portIdx).getLoc();
       newPorts.push_back({numParentPorts, newPort});
@@ -585,7 +583,7 @@ void ExtractInstancesPass::extractInstances() {
     // the instances of the parent module, and wire the instance ports up to
     // the newly added parent module ports.
     auto *instParentNode =
-        instanceGraph->lookup(cast<hw::HWModuleLike>(*parent));
+        instanceGraph->lookup(cast<igraph::ModuleOpInterface>(*parent));
     for (auto *instRecord : instParentNode->uses()) {
       auto oldParentInst = cast<InstanceOp>(*instRecord->getInstance());
       auto newParent = oldParentInst->getParentOfType<FModuleLike>();
@@ -885,7 +883,7 @@ void ExtractInstancesPass::groupInstances() {
         auto nameAttr = builder.getStringAttr(
             prefix.empty() ? Twine(name) : Twine(prefix) + "_" + name);
         PortInfo port{nameAttr,
-                      cast<FIRRTLType>(inst.getResult(portIdx).getType()),
+                      type_cast<FIRRTLType>(inst.getResult(portIdx).getType()),
                       inst.getPortDirection(portIdx)};
         port.loc = inst.getResult(portIdx).getLoc();
         ports.push_back(port);

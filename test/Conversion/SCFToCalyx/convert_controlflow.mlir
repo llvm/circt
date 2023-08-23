@@ -384,3 +384,185 @@ module {
     return %a2 : i32
   }
 }
+
+// -----
+
+// Test control flow order of While Loops w/ other operations in same basic block.
+// The ordering of the loops & operatioins should be maintained
+
+// CHECK-LABEL:   calyx.component @main(
+// CHECK-SAME:                          %[[VAL_0:.*]]: i1 {clk},
+// CHECK-SAME:                          %[[VAL_1:.*]]: i1 {reset},
+// CHECK-SAME:                          %[[VAL_2:.*]]: i1 {go}) -> (
+// CHECK-SAME:                          %[[VAL_3:.*]]: i1 {done}) {
+// CHECK:           %[[VAL_4:.*]] = hw.constant true
+// CHECK:           %[[VAL_5:.*]] = hw.constant 0 : i32
+// CHECK:           %[[VAL_6:.*]] = hw.constant 1 : i32
+// CHECK:           %[[VAL_7:.*]] = hw.constant 38 : i32
+// CHECK:           %[[VAL_8:.*]], %[[VAL_9:.*]] = calyx.std_slice @std_slice_2 : i32, i6
+// CHECK:           %[[VAL_10:.*]], %[[VAL_11:.*]] = calyx.std_slice @std_slice_1 : i32, i6
+// CHECK:           %[[VAL_12:.*]], %[[VAL_13:.*]] = calyx.std_slice @std_slice_0 : i32, i6
+// CHECK:           %[[VAL_14:.*]], %[[VAL_15:.*]], %[[VAL_16:.*]] = calyx.std_add @std_add_0 : i32, i32, i32
+// CHECK:           %[[VAL_17:.*]], %[[VAL_18:.*]], %[[VAL_19:.*]] = calyx.std_slt @std_slt_0 : i32, i32, i1
+// CHECK:           %[[VAL_20:.*]], %[[VAL_21:.*]], %[[VAL_22:.*]], %[[VAL_23:.*]], %[[VAL_24:.*]], %[[VAL_25:.*]] = calyx.register @load_0_reg : i32, i1, i1, i1, i32, i1
+// CHECK:           %[[VAL_26:.*]], %[[VAL_27:.*]], %[[VAL_28:.*]], %[[VAL_29:.*]], %[[VAL_30:.*]], %[[VAL_31:.*]], %[[VAL_32:.*]], %[[VAL_33:.*]] = calyx.seq_mem @mem_0 <[38] x 32> [6] {external = true} : i6, i32, i1, i1, i1, i32, i1, i1
+// CHECK:           %[[VAL_34:.*]], %[[VAL_35:.*]], %[[VAL_36:.*]], %[[VAL_37:.*]], %[[VAL_38:.*]], %[[VAL_39:.*]] = calyx.register @while_0_arg0_reg : i32, i1, i1, i1, i32, i1
+// CHECK:           calyx.wires {
+// CHECK:             calyx.group @assign_while_0_init_0 {
+// CHECK:               calyx.assign %[[VAL_34]] = %[[VAL_5]] : i32
+// CHECK:               calyx.assign %[[VAL_35]] = %[[VAL_4]] : i1
+// CHECK:               calyx.group_done %[[VAL_39]] : i1
+// CHECK:             }
+// CHECK:             calyx.group @bb0_0 {
+// CHECK:               calyx.assign %[[VAL_8]] = %[[VAL_5]] : i32
+// CHECK:               calyx.assign %[[VAL_26]] = %[[VAL_9]] : i6
+// CHECK:               calyx.assign %[[VAL_32]] = %[[VAL_4]] : i1
+// CHECK:               calyx.assign %[[VAL_20]] = %[[VAL_31]] : i32
+// CHECK:               calyx.assign %[[VAL_21]] = %[[VAL_33]] : i1
+// CHECK:               calyx.group_done %[[VAL_25]] : i1
+// CHECK:             }
+// CHECK:             calyx.comb_group @bb0_1 {
+// CHECK:               calyx.assign %[[VAL_17]] = %[[VAL_38]] : i32
+// CHECK:               calyx.assign %[[VAL_18]] = %[[VAL_7]] : i32
+// CHECK:             }
+// CHECK:             calyx.group @bb0_2 {
+// CHECK:               calyx.assign %[[VAL_10]] = %[[VAL_38]] : i32
+// CHECK:               calyx.assign %[[VAL_26]] = %[[VAL_11]] : i6
+// CHECK:               calyx.assign %[[VAL_27]] = %[[VAL_24]] : i32
+// CHECK:               calyx.assign %[[VAL_28]] = %[[VAL_4]] : i1
+// CHECK:               calyx.group_done %[[VAL_29]] : i1
+// CHECK:             }
+// CHECK:             calyx.group @assign_while_0_latch {
+// CHECK:               calyx.assign %[[VAL_34]] = %[[VAL_16]] : i32
+// CHECK:               calyx.assign %[[VAL_35]] = %[[VAL_4]] : i1
+// CHECK:               calyx.assign %[[VAL_14]] = %[[VAL_38]] : i32
+// CHECK:               calyx.assign %[[VAL_15]] = %[[VAL_6]] : i32
+// CHECK:               calyx.group_done %[[VAL_39]] : i1
+// CHECK:             }
+// CHECK:             calyx.group @bb0_4 {
+// CHECK:               calyx.assign %[[VAL_12]] = %[[VAL_6]] : i32
+// CHECK:               calyx.assign %[[VAL_26]] = %[[VAL_13]] : i6
+// CHECK:               calyx.assign %[[VAL_27]] = %[[VAL_24]] : i32
+// CHECK:               calyx.assign %[[VAL_28]] = %[[VAL_4]] : i1
+// CHECK:               calyx.group_done %[[VAL_29]] : i1
+// CHECK:             }
+// CHECK:           }
+// CHECK:           calyx.control {
+// CHECK:             calyx.seq {
+// CHECK:               calyx.enable @bb0_0
+// CHECK:               calyx.enable @assign_while_0_init_0
+// CHECK:               calyx.while %[[VAL_19]] with @bb0_1 {
+// CHECK:                 calyx.seq {
+// CHECK:                   calyx.enable @bb0_2
+// CHECK:                   calyx.enable @assign_while_0_latch
+// CHECK:                 }
+// CHECK:               }
+// CHECK:               calyx.enable @bb0_4
+// CHECK:             }
+// CHECK:           }
+// CHECK:         } {toplevel}
+module {
+  func.func @main() {
+    // declaring variables  
+    %c38 = arith.constant 38 : index
+    %c1 = arith.constant 1 : index
+    %c0 = arith.constant 0 : index
+    %c0_i32 = arith.constant 0 : i32
+    %alloca = memref.alloca() : memref<38xi32>
+
+    // load memory 
+    %0 = memref.load %alloca[%c0] : memref<38xi32>
+    // while loop 
+    %1 = scf.while (%arg0 = %c0) : (index) -> index {
+      %2 = arith.cmpi slt, %arg0, %c38 : index
+      scf.condition(%2) %arg0 : index
+    } do {
+    ^bb0(%arg0: index):
+      memref.store %0, %alloca[%arg0]: memref<38xi32>
+      %2 = arith.addi %arg0, %c1 : index
+      scf.yield %2 : index
+    }
+    // store memory 
+    memref.store %0, %alloca[%c1]: memref<38xi32>
+    return
+  }
+}
+
+// -----
+
+// Test the Compilation of simple scf.for loops into Calyx repeat statements 
+ 
+//CHECK:       module attributes {calyx.entrypoint = "main"} {
+//CHECK-LABEL:   calyx.component @main(%clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%done: i1 {done}) {
+//CHECK-DAG:       %true = hw.constant true
+//CHECK-DAG:       %c2_i32 = hw.constant 2 : i32
+//CHECK-DAG:       %c0_i32 = hw.constant 0 : i32
+//CHECK-DAG:       %c1_i32 = hw.constant 1 : i32
+//CHECK-DAG:       %std_slice_1.in, %std_slice_1.out = calyx.std_slice @std_slice_1 : i32, i6
+//CHECK-DAG:       %std_slice_0.in, %std_slice_0.out = calyx.std_slice @std_slice_0 : i32, i6
+//CHECK-DAG:       %std_add_1.left, %std_add_1.right, %std_add_1.out = calyx.std_add @std_add_1 : i32, i32, i32
+//CHECK-DAG:       %std_add_0.left, %std_add_0.right, %std_add_0.out = calyx.std_add @std_add_0 : i32, i32, i32
+//CHECK-DAG:       %load_0_reg.in, %load_0_reg.write_en, %load_0_reg.clk, %load_0_reg.reset, %load_0_reg.out, %load_0_reg.done = calyx.register @load_0_reg : i32, i1, i1, i1, i32, i1
+//CHECK-DAG:       %mem_0.addr0, %mem_0.write_data, %mem_0.write_en, %mem_0.write_done, %mem_0.clk, %mem_0.read_data, %mem_0.read_en, %mem_0.read_done = calyx.seq_mem @mem_0 <[40] x 32> [6] {external = true} : i6, i32, i1, i1, i1, i32, i1, i1
+//CHECK-DAG:       %for_0_induction_var_reg.in, %for_0_induction_var_reg.write_en, %for_0_induction_var_reg.clk, %for_0_induction_var_reg.reset, %for_0_induction_var_reg.out, %for_0_induction_var_reg.done = calyx.register @for_0_induction_var_reg : i32, i1, i1, i1, i32, i1
+//CHECK-NEXT:      calyx.wires {
+//CHECK-NEXT:        calyx.group @init_for_0_induction_var {
+//CHECK-NEXT:          calyx.assign %for_0_induction_var_reg.in = %c0_i32 : i32
+//CHECK-NEXT:          calyx.assign %for_0_induction_var_reg.write_en = %true : i1
+//CHECK-NEXT:          calyx.group_done %for_0_induction_var_reg.done : i1
+//CHECK-NEXT:        }
+//CHECK-NEXT:        calyx.group @bb0_0 {
+//CHECK-NEXT:          calyx.assign %std_slice_1.in = %for_0_induction_var_reg.out : i32
+//CHECK-NEXT:          calyx.assign %mem_0.addr0 = %std_slice_1.out : i6
+//CHECK-NEXT:          calyx.assign %mem_0.read_en = %true : i1
+//CHECK-NEXT:          calyx.assign %load_0_reg.in = %mem_0.read_data : i32
+//CHECK-NEXT:          calyx.assign %load_0_reg.write_en = %mem_0.read_done : i1
+//CHECK-NEXT:          calyx.group_done %load_0_reg.done : i1
+//CHECK-NEXT:        }
+//CHECK-NEXT:        calyx.group @bb0_2 {
+//CHECK-NEXT:          calyx.assign %std_slice_0.in = %for_0_induction_var_reg.out : i32
+//CHECK-NEXT:          calyx.assign %mem_0.addr0 = %std_slice_0.out : i6
+//CHECK-NEXT:          calyx.assign %mem_0.write_data = %std_add_0.out : i32
+//CHECK-NEXT:          calyx.assign %mem_0.write_en = %true : i1
+//CHECK-NEXT:          calyx.assign %std_add_0.left = %load_0_reg.out : i32
+//CHECK-NEXT:          calyx.assign %std_add_0.right = %c2_i32 : i32
+//CHECK-NEXT:          calyx.group_done %mem_0.write_done : i1
+//CHECK-NEXT:        }
+//CHECK-NEXT:        calyx.group @incr_for_0_induction_var {
+//CHECK-NEXT:          calyx.assign %std_add_1.left = %for_0_induction_var_reg.out : i32
+//CHECK-NEXT:          calyx.assign %std_add_1.right = %c1_i32 : i32
+//CHECK-NEXT:          calyx.assign %for_0_induction_var_reg.in = %std_add_1.out : i32
+//CHECK-NEXT:          calyx.assign %for_0_induction_var_reg.write_en = %true : i1
+//CHECK-NEXT:          calyx.group_done %for_0_induction_var_reg.done : i1
+//CHECK-NEXT:        }
+//CHECK-NEXT:      }
+//CHECK-NEXT:      calyx.control {
+//CHECK-NEXT:        calyx.seq {
+//CHECK-NEXT:          calyx.enable @init_for_0_induction_var
+//CHECK-NEXT:          calyx.repeat 40 {
+//CHECK-NEXT:            calyx.seq {
+//CHECK-NEXT:              calyx.enable @bb0_0
+//CHECK-NEXT:              calyx.enable @bb0_2
+//CHECK-NEXT:              calyx.enable @incr_for_0_induction_var
+//CHECK-NEXT:            }
+//CHECK-NEXT:          }
+//CHECK-NEXT:        }
+//CHECK-NEXT:      }
+//CHECK-NEXT:    } {toplevel}
+//CHECK-NEXT:  }
+
+module {
+  func.func @main() {
+    %alloca_1 = memref.alloca() : memref<40xi32>
+    %c0_11 = arith.constant 0 : index
+    %c40_12 = arith.constant 40 : index
+    %c1_13 = arith.constant 1 : index
+    %c2_32 = arith.constant 2 : i32
+    scf.for %arg0 = %c0_11 to %c40_12 step %c1_13 {
+      %0 = memref.load %alloca_1[%arg0] : memref<40xi32>
+      %2 = arith.addi %0, %c2_32 : i32
+      memref.store %2, %alloca_1[%arg0] : memref<40xi32>
+    }
+    return
+  }
+}

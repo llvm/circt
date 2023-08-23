@@ -22,10 +22,26 @@
 
 namespace circt {
 namespace hw {
+
+struct ModulePort {
+  enum Direction { Input, Output, InOut };
+  mlir::StringAttr name;
+  mlir::Type type;
+  Direction dir;
+};
+
 class HWSymbolCache;
 class ParamDeclAttr;
 class TypedeclOp;
+class ModuleType;
+
 namespace detail {
+
+ModuleType fnToMod(Operation *op, ArrayRef<Attribute> inputNames,
+                   ArrayRef<Attribute> outputNames);
+ModuleType fnToMod(FunctionType fn, ArrayRef<Attribute> inputNames,
+                   ArrayRef<Attribute> outputNames);
+
 /// Struct defining a field. Used in structs.
 struct FieldInfo {
   mlir::StringAttr name;

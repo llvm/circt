@@ -64,7 +64,7 @@ ScheduleLinearPipelinePass::schedulePipeline(UnscheduledPipelineOp pipeline) {
 
   // Set operation operator types.
   auto returnOp =
-      cast<pipeline::ReturnOp>(pipeline.getBodyBlock()->getTerminator());
+      cast<pipeline::ReturnOp>(pipeline.getEntryStage()->getTerminator());
   for (auto &op : pipeline.getOps()) {
     // Skip if is a known non-functional operator
     if (ignoreOp(&op))
@@ -137,20 +137,17 @@ ScheduleLinearPipelinePass::schedulePipeline(UnscheduledPipelineOp pipeline) {
   // Create the scheduled pipeline.
   b.setInsertionPoint(pipeline);
   auto schedPipeline = b.template create<pipeline::ScheduledPipelineOp>(
-      pipeline.getLoc(), pipeline->getResultTypes(), pipeline.getInputs(),
-      pipeline.getClock(), pipeline.getReset(), pipeline.getStall());
+      pipeline.getLoc(), pipeline.getDataOutputs().getTypes(),
+      pipeline.getInputs(), pipeline.getInputNames(), pipeline.getOutputNames(),
+      pipeline.getClock(), pipeline.getReset(), pipeline.getGo(),
+      pipeline.getStall(), pipeline.getNameAttr());
 
   Block *currentStage = schedPipeline.getStage(0);
 
   for (auto [oldBArg, newBArg] :
-       llvm::zip(pipeline.getBodyBlock()->getArguments(),
+       llvm::zip(pipeline.getEntryStage()->getArguments(),
                  currentStage->getArguments()))
     oldBArg.replaceAllUsesWith(newBArg);
-
-  // true-valued constant used for the enable signals throughout the pipeline.
-  b.setInsertionPointToStart(currentStage);
-  Value c1i1 = b.create<hw::ConstantOp>(pipeline.getLoc(), b.getI1Type(),
-                                        b.getIntegerAttr(b.getI1Type(), 1));
 
   // Iterate over the ops in the pipeline, and add them to the stage map.
   // While doing so, we also build the pipeline stage operations.
@@ -171,8 +168,8 @@ ScheduleLinearPipelinePass::schedulePipeline(UnscheduledPipelineOp pipeline) {
       // Create a StageOp in the new stage, and branch it to the newly created
       // stage.
       b.setInsertionPointToEnd(currentStage);
-      b.create<pipeline::StageOp>(pipeline.getLoc(), ValueRange{}, ValueRange{},
-                                  c1i1, newStage);
+      b.create<pipeline::StageOp>(pipeline.getLoc(), newStage, ValueRange{},
+                                  ValueRange{});
       currentStage = newStage;
     }
   }

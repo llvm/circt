@@ -85,12 +85,6 @@ struct FirtoolOptions {
       "dedup", llvm::cl::desc("Deduplicate structurally identical modules"),
       llvm::cl::init(false), llvm::cl::cat(category)};
 
-  llvm::cl::opt<bool> useOldCheckCombCycles{
-      "use-old-check-comb-cycles",
-      llvm::cl::desc(
-          "Use old CheckCombCycles pass, that does not support aggregates"),
-      llvm::cl::init(false), llvm::cl::Hidden, llvm::cl::cat(category)};
-
   llvm::cl::opt<bool> grandCentralInstantiateCompanionOnly{
       "grand-central-instantiate-companion",
       llvm::cl::desc("Run Grand Central in a mode where the companion module "
@@ -134,11 +128,6 @@ struct FirtoolOptions {
                      "relevant metadata"),
       llvm::cl::init(false), llvm::cl::cat(category)};
 
-  llvm::cl::opt<std::string> replSeqMemCircuit{
-      "repl-seq-mem-circuit",
-      llvm::cl::desc("Circuit root for seq mem metadata"), llvm::cl::init(""),
-      llvm::cl::cat(category)};
-
   llvm::cl::opt<std::string> replSeqMemFile{
       "repl-seq-mem-file", llvm::cl::desc("File name for seq mem metadata"),
       llvm::cl::init(""), llvm::cl::cat(category)};
@@ -180,7 +169,8 @@ struct FirtoolOptions {
       llvm::cl::init(false), llvm::cl::cat(category)};
 
   llvm::cl::opt<bool> addMuxPragmas{
-      "add-mux-pragmas", llvm::cl::desc("Annotate mux pragmas"),
+      "add-mux-pragmas",
+      llvm::cl::desc("Annotate mux pragmas for memory array access"),
       llvm::cl::init(false), llvm::cl::cat(category)};
 
   llvm::cl::opt<bool> emitChiselAssertsAsSVA{

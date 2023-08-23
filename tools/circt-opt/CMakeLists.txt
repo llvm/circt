@@ -2,7 +2,7 @@ set(LLVM_LINK_COMPONENTS
   Support
 )
 
-add_llvm_tool(circt-opt
+add_circt_tool(circt-opt
   circt-opt.cpp
 )
 llvm_update_compile_flags(circt-opt)
@@ -17,8 +17,11 @@ target_link_libraries(circt-opt
   CIRCTCalyxToHW
   CIRCTCalyxToFSM
   CIRCTCalyxTransforms
+  CIRCTComb
+  CIRCTCombTransforms
   CIRCTConvertToArcs
   CIRCTDC
+  CIRCTDCToHW
   CIRCTDCTransforms
   CIRCTESI
   CIRCTExportChiselInterface
@@ -46,9 +49,12 @@ target_link_libraries(circt-opt
   CIRCTHW
   CIRCTHWArith
   CIRCTHWArithToHW
+  CIRCTIbis
+  CIRCTIbisTransforms
   CIRCTInteropDialect
   CIRCTHWToLLHD
   CIRCTHWToSystemC
+  CIRCTHWToSV
   CIRCTHWTransforms
   CIRCTLoopSchedule
   CIRCTLoopScheduleToCalyx
@@ -56,11 +62,13 @@ target_link_libraries(circt-opt
   CIRCTSCFToCalyx
   CIRCTScheduling
   CIRCTSeq
+  CIRCTSeqToSV
   CIRCTSeqTransforms
   CIRCTSSP
   CIRCTSSPTransforms
   CIRCTStandardToHandshake
   CIRCTOM
+  CIRCTOMTransforms
   CIRCTPipelineOps
   CIRCTPipelineToHW
   CIRCTPipelineTransforms
@@ -71,6 +79,7 @@ target_link_libraries(circt-opt
   CIRCTSystemCTransforms
   CIRCTTransforms
   CIRCTVerif
+  CIRCTVerifToSV
 
   MLIRIR
   MLIRLLVMDialect
@@ -82,4 +91,5 @@ target_link_libraries(circt-opt
   MLIRTransforms
   MLIRSCFDialect
   MLIREmitCDialect
+  MLIRFuncInlinerExtension
 )

@@ -5,7 +5,7 @@
 from __future__ import annotations
 from typing import List, Optional, Set, Tuple, Dict
 
-from .common import (AppID, Clock, Input, Output, PortError, _PyProxy)
+from .common import (AppID, Clock, Input, Output, PortError, _PyProxy, Reset)
 from .support import (get_user_loc, _obj_to_attribute, create_type_string,
                       create_const_zero)
 from .signals import ClockSignal, Signal, _FromCirctValue
@@ -198,6 +198,7 @@ class ModuleLikeBuilderBase(_PyProxy):
     self.outputs: Optional[List[Tuple[str, Type]]] = None
     self.inputs: Optional[List[Tuple[str, Type]]] = None
     self.clocks: Optional[Set[int]] = None
+    self.resets: Optional[Set[int]] = None
     self.generators = None
     self.generator_port_proxy = None
     self.parameters = None
@@ -219,6 +220,7 @@ class ModuleLikeBuilderBase(_PyProxy):
     input_ports = []
     output_ports = []
     clock_ports = set()
+    reset_ports = set()
     generators = {}
     for attr_name, attr in self.cls_dct.items():
       if attr_name.startswith("_"):
@@ -240,6 +242,9 @@ class ModuleLikeBuilderBase(_PyProxy):
       if isinstance(attr, Clock):
         clock_ports.add(len(input_ports))
         input_ports.append((attr_name, Bits(1)))
+      elif isinstance(attr, Reset):
+        reset_ports.add(len(input_ports))
+        input_ports.append((attr_name, Bits(1)))
       elif isinstance(attr, Input):
         input_ports.append((attr_name, attr.type))
       elif isinstance(attr, Output):
@@ -250,6 +255,7 @@ class ModuleLikeBuilderBase(_PyProxy):
     self.outputs = output_ports
     self.inputs = input_ports
     self.clocks = clock_ports
+    self.resets = reset_ports
     self.generators = generators
 
   def create_port_proxy(self):
@@ -307,7 +313,7 @@ class ModuleLikeBuilderBase(_PyProxy):
   def name(self):
     if hasattr(self.modcls, "module_name"):
       return self.modcls.module_name
-    elif self.parameters is not None:
+    elif self.parameters is not None and len(self.generators) > 0:
       return _create_module_name(self.modcls.__name__, self.parameters)
     else:
       return self.modcls.__name__
@@ -465,14 +471,14 @@ class ModuleBuilder(ModuleLikeBuilderBase):
     if len(self.generators) == 0 and self.parameters is not None:
       parameters = ir.ArrayAttr.get(
           hwext.create_parameters(self.parameters, circt_mod))
-    inst = msft.InstanceOp(circt_mod.type.results,
-                           instance_name,
-                           ir.FlatSymbolRefAttr.get(
-                               ir.StringAttr(
-                                   circt_mod.attributes["sym_name"]).value),
-                           [sig.value for sig in input_values],
-                           parameters=parameters,
-                           loc=get_user_loc())
+    inst = msft.InstanceOp(
+        circt_mod.type.results,
+        hw.InnerSymAttr.get(ir.StringAttr.get(instance_name)),
+        ir.FlatSymbolRefAttr.get(
+            ir.StringAttr(circt_mod.attributes["sym_name"]).value),
+        [sig.value for sig in input_values],
+        parameters=parameters,
+        loc=get_user_loc())
     inst.verify()
     return inst
 
@@ -579,8 +585,7 @@ class modparams:
     if not issubclass(cls, Module):
       raise ValueError("Parameterization function must return Module class")
 
-    if len(cls._builder.generators) > 0:
-      cls._builder.parameters = cache_key[1]
+    cls._builder.parameters = cache_key[1]
     _MODULE_CACHE[cache_key] = cls
     return cls
 

@@ -10,12 +10,21 @@
 //
 //===----------------------------------------------------------------------===//
 
-include "circt/Dialect/HW/HWOpInterfaces.td"
+#ifndef CIRCT_DIALECT_ESI_STRUCTURE_TD
+#define CIRCT_DIALECT_ESI_STRUCTURE_TD
+
 include "mlir/IR/OpBase.td"
+include "mlir/IR/RegionKindInterface.td"
+include "mlir/IR/SymbolInterfaces.td"
+
+include "circt/Dialect/ESI/ESIDialect.td"
+include "circt/Dialect/HW/HWOpInterfaces.td"
 
 def ESIPureModuleOp : ESI_Op<"pure_module",
       [Symbol, NoTerminator, RegionKindInterface, NoRegionArguments,
        SingleBlock, HasParent<"mlir::ModuleOp">,
+       DeclareOpInterfaceMethods<PortList>,
+       DeclareOpInterfaceMethods<SymboledPortList>,
        DeclareOpInterfaceMethods<HWModuleLike>]> {
   let summary = "ESI pure module";
   let description = [{
@@ -36,6 +45,7 @@ def ESIPureModuleOp : ESI_Op<"pure_module",
   let extraClassDeclaration = [{
     // Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph;}
+
   }];
 }
 
@@ -88,3 +98,5 @@ def ESIPureModuleParamOp : ESI_Op<"pure_module.param",
   let results = (outs);
   let assemblyFormat = [{ $name `:` $type attr-dict }];
 }
+
+#endif // CIRCT_DIALECT_ESI_STRUCTURE_TD

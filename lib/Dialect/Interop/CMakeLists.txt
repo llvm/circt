@@ -14,6 +14,7 @@ add_circt_dialect_library(CIRCTInteropDialect
 
   LINK_LIBS PUBLIC
   MLIRIR
+  MLIRControlFlowInterfaces
 )
 
 add_dependencies(circt-headers MLIRInteropIncGen)

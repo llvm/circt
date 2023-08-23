@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Support/Version.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
@@ -67,7 +68,7 @@ int main(int argc, char **argv) {
   // Load the MLIR module.
   mlir::MLIRContext context;
   context.loadDialect<func::FuncDialect, memref::MemRefDialect,
-                      handshake::HandshakeDialect>();
+                      handshake::HandshakeDialect, cf::ControlFlowDialect>();
 
   // functions feeding into HLS tools might have attributes from high(er) level
   // dialects or parsers. Allow unregistered dialects to not fail in these

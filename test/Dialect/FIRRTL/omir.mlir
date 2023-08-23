@@ -153,11 +153,6 @@ firrtl.circuit "Foo"  attributes {rawAnnotations = [
           },
           {
             info = "",
-            name = "h",
-            value = "OMConstant:UInt<2>(\22h1\22)"
-          },
-          {
-            info = "",
             name = "i",
             value = 42 : i64
           },
@@ -189,10 +184,9 @@ firrtl.circuit "Foo"  attributes {rawAnnotations = [
 // CHECK-SAME:    e = {index = 4 {{[^{}]+}} value = "OMDouble:3.14"},
 // CHECK-SAME:    f = {index = 5 {{[^{}]+}} value = "OMBigDecimal:10.5"},
 // CHECK-SAME:    g = {index = 6 {{[^{}]+}} value = "OMDeleted:"},
-// CHECK-SAME:    h = {index = 7 {{[^{}]+}} value = "OMConstant:UInt<2>(\22h1\22)"},
-// CHECK-SAME:    i = {index = 8 {{[^{}]+}} value = 42 : i64},
-// CHECK-SAME:    j = {index = 9 {{[^{}]+}} value = true},
-// CHECK-SAME:    k = {index = 10 {{[^{}]+}} value = 3.14{{0+e\+0+}} : f64}
+// CHECK-SAME:    i = {index = 7 {{[^{}]+}} value = 42 : i64},
+// CHECK-SAME:    j = {index = 8 {{[^{}]+}} value = true},
+// CHECK-SAME:    k = {index = 9 {{[^{}]+}} value = 3.14{{0+e\+0+}} : f64}
 
 // -----
 
@@ -269,8 +263,8 @@ firrtl.circuit "Foo"  attributes {rawAnnotations = [
 // CHECK-SAME:    e = {{{[^{}]+}} value = {id = [[eID:[0-9]+]] : i64, omir.tracker, path = {{"[a-zA-Z~|:/>]+"}}, type = [[E_TYPE:"OM[a-zA-Z]+"]]
 // CHECK-SAME:    f = {{{[^{}]+}} value = {id = [[fID:[0-9]+]] : i64, omir.tracker, path = {{"[a-zA-Z~|:/>]+"}}, type = [[F_TYPE:"OM[a-zA-Z]+"]]
 // CHECK-SAME:    g = {{{[^{}]+}} value = {id = [[gID:[0-9]+]] : i64, omir.tracker, path = {{"[a-zA-Z~|:/>]+"}}, type = [[G_TYPE:"OM[a-zA-Z]+"]]
-// CHECK:       hw.hierpath private @[[Foo_cC_C:nla[_0-9]*]]
 // CHECK-NEXT:  hw.hierpath private @[[Foo_eE_E:nla[_0-9]*]]
+// CHECK:       hw.hierpath private @[[Foo_cC_C:nla[_0-9]*]]
 // CHECK:       firrtl.module private @C
 // CHECK-SAME:    {circt.nonlocal = @[[Foo_cC_C]], class = "freechips.rocketchip.objectmodel.OMIRTracker", id = [[cID]] : i64, type = [[C_TYPE]]}
 // CHECK:       firrtl.module private @D

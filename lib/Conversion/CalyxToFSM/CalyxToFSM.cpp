@@ -268,6 +268,81 @@ LogicalResult CompileFSMVisitor::visit(StateOp currentState, EnableOp enableOp,
   return success();
 }
 
+// CompileInvoke is used to convert invoke operations to group operations and
+// enable operations.
+class CompileInvoke {
+public:
+  CompileInvoke(ComponentOp component, OpBuilder builder)
+      : component(component), builder(builder) {}
+  void compile();
+
+private:
+  void lowerInvokeOp(InvokeOp invokeOp);
+  std::string getTransitionName(InvokeOp invokeOp);
+  ComponentOp component;
+  OpBuilder builder;
+  // Part of the group name. It is used to generate unique group names, the
+  // unique counter is reused across multiple calls to lowerInvokeOp, so the
+  // loop that's checking for name uniqueness usually finds a unique name on the
+  // first try.
+  size_t transitionNameTail = 0;
+};
+
+// Access all invokeOp.
+void CompileInvoke::compile() {
+  llvm::SmallVector<InvokeOp> invokeOps =
+      component.getControlOp().getInvokeOps();
+  for (InvokeOp op : invokeOps)
+    lowerInvokeOp(op);
+}
+
+// Get the name of the generation group.
+std::string CompileInvoke::getTransitionName(InvokeOp invokeOp) {
+  llvm::StringRef callee = invokeOp.getCallee();
+  std::string transitionNameHead = "invoke_" + callee.str() + "_";
+  std::string transitionName;
+
+  // The following loop is used to check if the transitionName already exists.
+  // If it does, the loop regenerates the transitionName.
+  do {
+    transitionName = transitionNameHead + std::to_string(transitionNameTail++);
+  } while (component.getWiresOp().lookupSymbol(transitionName));
+  return transitionName;
+}
+
+// Convert an invoke operation to a group operation and an enable operation.
+void CompileInvoke::lowerInvokeOp(InvokeOp invokeOp) {
+  // Create a ConstantOp to assign a value to the go port.
+  Operation *prevNode = component.getWiresOp().getOperation()->getPrevNode();
+  builder.setInsertionPointAfter(prevNode);
+  hw::ConstantOp constantOp = builder.create<hw::ConstantOp>(
+      prevNode->getLoc(), builder.getI1Type(), 1);
+  Location loc = component.getWiresOp().getLoc();
+
+  // Set the insertion point at the end of the wires block.
+  builder.setInsertionPointToEnd(component.getWiresOp().getBodyBlock());
+  std::string transitionName = getTransitionName(invokeOp);
+  GroupOp groupOp = builder.create<GroupOp>(loc, transitionName);
+  builder.setInsertionPointToStart(groupOp.getBodyBlock());
+  Value go = invokeOp.getInstGoValue();
+
+  // Assign a value to the go port.
+  builder.create<AssignOp>(loc, go, constantOp);
+  auto ports = invokeOp.getPorts();
+  auto inputs = invokeOp.getInputs();
+
+  // Generate a series of assignment operations from a list of parameters.
+  for (auto [port, input] : llvm::zip(ports, inputs))
+    builder.create<AssignOp>(loc, port, input);
+  Value done = invokeOp.getInstDoneValue();
+
+  // Generate a group_done operation with the instance's done port.
+  builder.create<calyx::GroupDoneOp>(loc, done);
+  builder.setInsertionPointAfter(invokeOp.getOperation());
+  builder.create<EnableOp>(invokeOp.getLoc(), transitionName);
+  invokeOp.erase();
+}
+
 class CalyxToFSMPass : public CalyxToFSMBase<CalyxToFSMPass> {
 public:
   void runOnOperation() override;
@@ -279,6 +354,8 @@ void CalyxToFSMPass::runOnOperation() {
   auto ctrlOp = component.getControlOp();
   assert(ctrlOp.getBodyBlock()->getOperations().size() == 1 &&
          "Expected a single top-level operation in the schedule");
+  CompileInvoke compileInvoke(component, builder);
+  compileInvoke.compile();
   Operation &topLevelCtrlOp = ctrlOp.getBodyBlock()->front();
   builder.setInsertionPoint(&topLevelCtrlOp);
 

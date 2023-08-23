@@ -1,13 +1,6 @@
 // This test lowers an SCF construct through Calyx, FSM and (TODO)
 // to RTL.
-// RUN: circt-opt %s \
-// RUN:     --lower-scf-to-calyx -canonicalize \
-// RUN:     --calyx-remove-comb-groups --canonicalize \
-// RUN:     --lower-calyx-to-fsm --canonicalize \
-// RUN:     --materialize-calyx-to-fsm --canonicalize \
-// RUN:     --calyx-remove-groups-fsm --canonicalize \
-// RUN:     --lower-calyx-to-hw --canonicalize \
-// RUN:     --convert-fsm-to-sv | FileCheck %s
+// RUN: hlstool %s --calyx-hw --ir --output-level=sv | FileCheck %s
 
 // TODO: ... simulate the hardware!
 

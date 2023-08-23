@@ -96,7 +96,7 @@ void Solver::printModel() {
       Operation *parentOp = value.getParentRegion()->getParentOp();
       if (auto op = llvm::dyn_cast<hw::HWModuleOp>(parentOp)) {
         // Argument of a `hw.module`.
-        lec::outs() << "argument name: " << op.getArgNames()[arg.getArgNumber()]
+        lec::outs() << "argument name: " << op.getArgName(arg.getArgNumber())
                     << "\n";
       } else {
         // Argument of a different operation.
@@ -173,6 +173,8 @@ LogicalResult Solver::constrainCircuits() {
     return failure();
   }
 
+  z3::expr_vector outputTerms(context);
+
   const auto *c1outIt = c1Outputs.begin();
   const auto *c2outIt = c2Outputs.begin();
   for (unsigned i = 0; i < nc1Outputs; i++) {
@@ -182,8 +184,11 @@ LogicalResult Solver::constrainCircuits() {
       return failure();
     }
     // Their ith outputs have to be equivalent.
-    solver.add(*c1outIt++ != *c2outIt++);
+    outputTerms.push_back(*c1outIt++ != *c2outIt++);
   }
+
+  // The circuits are not equivalent iff any of the outputs is not equal
+  solver.add(z3::mk_or(outputTerms));
 
   return success();
 }

@@ -32,7 +32,7 @@
     "cmake.configureArgs": [
       // LLVM
       "-DLLVM_ENABLE_PROJECTS=mlir",
-      "-DLLVM_TARGETS_TO_BUILD=X86;RISCV",
+      "-DLLVM_TARGETS_TO_BUILD=host",
       "-DLLVM_ENABLE_ASSERTIONS=ON",
       "-DLLVM_BUILD_EXAMPLES=OFF",
       "-DLLVM_ENABLE_OCAMLDOC=OFF",
@@ -48,7 +48,8 @@
 
       // Circt
       "-DLLVM_EXTERNAL_PROJECTS=circt",
-      "-DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=${workspaceFolder:CIRCT}"
+      "-DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=${workspaceFolder:CIRCT}",
+      "-DCIRCT_ENABLE_LLHD_SIM=OFF",
     ]
   },
   "extensions": {

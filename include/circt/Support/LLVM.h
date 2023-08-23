@@ -106,6 +106,7 @@ class Dialect;
 class DialectAsmParser;
 class DialectAsmPrinter;
 class DictionaryAttr;
+class DistinctAttr;
 class ElementsAttr;
 class FileLineColLoc;
 class FlatSymbolRefAttr;
@@ -129,6 +130,7 @@ class NoneType;
 class OpAsmDialectInterface;
 class OpAsmParser;
 class OpAsmPrinter;
+class OpaqueProperties;
 class OpBuilder;
 class OperandRange;
 class Operation;
@@ -213,6 +215,7 @@ using mlir::Dialect;                   // NOLINT(misc-unused-using-decls)
 using mlir::DialectAsmParser;          // NOLINT(misc-unused-using-decls)
 using mlir::DialectAsmPrinter;         // NOLINT(misc-unused-using-decls)
 using mlir::DictionaryAttr;            // NOLINT(misc-unused-using-decls)
+using mlir::DistinctAttr;              // NOLINT(misc-unused-using-decls)
 using mlir::ElementsAttr;              // NOLINT(misc-unused-using-decls)
 using mlir::failed;                    // NOLINT(misc-unused-using-decls)
 using mlir::failure;                   // NOLINT(misc-unused-using-decls)
@@ -238,6 +241,7 @@ using mlir::MutableOperandRange;       // NOLINT(misc-unused-using-decls)
 using mlir::NamedAttribute;            // NOLINT(misc-unused-using-decls)
 using mlir::NamedAttrList;             // NOLINT(misc-unused-using-decls)
 using mlir::NoneType;                  // NOLINT(misc-unused-using-decls)
+using mlir::OpaqueProperties;          // NOLINT(misc-unused-using-decls)
 using mlir::OpAsmDialectInterface;     // NOLINT(misc-unused-using-decls)
 using mlir::OpAsmParser;               // NOLINT(misc-unused-using-decls)
 using mlir::OpAsmPrinter;              // NOLINT(misc-unused-using-decls)

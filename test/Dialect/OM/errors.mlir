@@ -71,9 +71,48 @@ om.class @Class2(%arg0: i1) {
 
 // -----
 
+om.class.extern @Extern(%param1: i1) {
+  // expected-error @+1 {{'om.constant' op not allowed in external class}}
+  %0 = om.constant 0 : i1
+  om.class.extern.field @field1 : i1
+}
+
+// -----
+
 // CHECK-LABEL: @List
 om.class @List() {
   // expected-error @+1 {{an element of a list attribute must have a type 'i32' but got 'i64'}}
   %0 = om.constant #om.list< i32, [42 : i64]> : !om.list<i32>
   om.class.field @list, %0 : !om.list<i32>
+}
+
+// -----
+
+// CHECK-LABEL: @ListCreate
+om.class @ListCreate() {
+  %0 = om.constant 0 : i64
+  %1 = om.constant 1 : i32
+  // expected-error @+2 {{use of value '%1' expects different type than prior uses: 'i64' vs 'i32'}}
+  // expected-note @-2 {{prior use here}}
+  %lst = om.list_create %0, %1 : i64
+}
+
+// -----
+
+// expected-error @+1 {{map key type must be either string or integer but got '!om.list<!om.string>'}}
+om.class @Map(%map: !om.map<!om.list<!om.string>, !om.string>) {
+}
+
+// -----
+
+om.class @Tuple(%tuple: tuple<i1, !om.string>) {
+  // expected-error @+1 {{tuple index out-of-bounds, must be less than 2 but got 2}}
+  %val = om.tuple_get %tuple[2]  : tuple<i1, !om.string>
+}
+
+// -----
+
+om.class @MapConstant() {
+  // expected-error @+1 {{a value of a map attribute must have a type 'i64' but field "b" has '!om.list<i32>'}}
+  %0 = om.constant #om.map<i64, {a = 42, b = #om.list<i32, []>}> : !om.map<!om.string, i64>
 }

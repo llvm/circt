@@ -239,25 +239,32 @@ void InnerRefAttr::print(AsmPrinter &p) const {
 }
 
 //===----------------------------------------------------------------------===//
-// InnerSymAttr
+// InnerSymAttr and InnerSymPropertiesAttr
 //===----------------------------------------------------------------------===//
 
 Attribute InnerSymPropertiesAttr::parse(AsmParser &parser, Type type) {
   StringAttr name;
   NamedAttrList dummyList;
   int64_t fieldId = 0;
-  StringRef visibility;
   if (parser.parseLess() || parser.parseSymbolName(name, "name", dummyList) ||
       parser.parseComma() || parser.parseInteger(fieldId) ||
-      parser.parseComma() ||
-      parser.parseOptionalKeyword(&visibility,
-                                  {"public", "private", "nested"}) ||
-      parser.parseGreater())
+      parser.parseComma())
     return Attribute();
-  StringAttr visibilityAttr = parser.getBuilder().getStringAttr(visibility);
 
-  return InnerSymPropertiesAttr::get(parser.getContext(), name, fieldId,
-                                     visibilityAttr);
+  StringRef visibility;
+  auto loc = parser.getCurrentLocation();
+  if (parser.parseOptionalKeyword(&visibility,
+                                  {"public", "private", "nested"})) {
+    parser.emitError(loc, "expected 'public', 'private', or 'nested'");
+    return Attribute();
+  }
+  auto visibilityAttr = parser.getBuilder().getStringAttr(visibility);
+
+  if (parser.parseGreater())
+    return Attribute();
+
+  return parser.getChecked<InnerSymPropertiesAttr>(parser.getContext(), name,
+                                                   fieldId, visibilityAttr);
 }
 
 void InnerSymPropertiesAttr::print(AsmPrinter &odsPrinter) const {
@@ -265,7 +272,16 @@ void InnerSymPropertiesAttr::print(AsmPrinter &odsPrinter) const {
              << getSymVisibility().getValue() << ">";
 }
 
-StringAttr InnerSymAttr::getSymIfExists(unsigned fieldId) const {
+LogicalResult InnerSymPropertiesAttr::verify(
+    ::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError,
+    ::mlir::StringAttr name, uint64_t fieldID,
+    ::mlir::StringAttr symVisibility) {
+  if (!name || name.getValue().empty())
+    return emitError() << "inner symbol cannot have empty name";
+  return success();
+}
+
+StringAttr InnerSymAttr::getSymIfExists(uint64_t fieldId) const {
   const auto *it =
       llvm::find_if(getImpl()->props, [&](const InnerSymPropertiesAttr &p) {
         return p.getFieldID() == fieldId;
@@ -275,7 +291,7 @@ StringAttr InnerSymAttr::getSymIfExists(unsigned fieldId) const {
   return {};
 }
 
-InnerSymAttr InnerSymAttr::erase(unsigned fieldID) const {
+InnerSymAttr InnerSymAttr::erase(uint64_t fieldID) const {
   SmallVector<InnerSymPropertiesAttr> syms(getProps());
   const auto *it = llvm::find_if(syms, [fieldID](InnerSymPropertiesAttr p) {
     return p.getFieldID() == fieldID;
@@ -297,19 +313,24 @@ Attribute InnerSymAttr::parse(AsmParser &parser, Type type) {
   StringAttr sym;
   NamedAttrList dummyList;
   SmallVector<InnerSymPropertiesAttr, 4> names;
-  if (!parser.parseOptionalSymbolName(sym, "dummy", dummyList))
-    names.push_back(InnerSymPropertiesAttr::get(sym));
-  else if (parser.parseCommaSeparatedList(
-               OpAsmParser::Delimiter::Square, [&]() -> ParseResult {
-                 InnerSymPropertiesAttr prop;
-                 if (parser.parseCustomAttributeWithFallback(
-                         prop, mlir::Type{}, "dummy", dummyList))
-                   return failure();
+  if (!parser.parseOptionalSymbolName(sym, "dummy", dummyList)) {
+    auto prop = parser.getChecked<InnerSymPropertiesAttr>(
+        parser.getContext(), sym, 0,
+        StringAttr::get(parser.getContext(), "public"));
+    if (!prop)
+      return {};
+    names.push_back(prop);
+  } else if (parser.parseCommaSeparatedList(
+                 OpAsmParser::Delimiter::Square, [&]() -> ParseResult {
+                   InnerSymPropertiesAttr prop;
+                   if (parser.parseCustomAttributeWithFallback(
+                           prop, mlir::Type{}, "dummy", dummyList))
+                     return failure();
 
-                 names.push_back(prop);
+                   names.push_back(prop);
 
-                 return success();
-               }))
+                   return success();
+                 }))
     return Attribute();
 
   std::sort(names.begin(), names.end(),

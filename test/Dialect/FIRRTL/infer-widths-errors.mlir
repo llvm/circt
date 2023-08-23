@@ -18,16 +18,25 @@ firrtl.circuit "Foo" {
 // -----
 firrtl.circuit "Foo" {
   // expected-note @+1 {{Module `Bar` defined here:}}
-  firrtl.extmodule @Bar(in in: !firrtl.uint, 
-    out out: !firrtl.bundle<a : uint, b: uint<4>, c: vector<bundle<c: uint>,4>>)
+  firrtl.extmodule @Bar(
+    in in: !firrtl.uint,
+    out out: !firrtl.bundle<a : uint, b: uint<4>, c: vector<bundle<c: uint>,4>>,
+    out ref: !firrtl.rwprobe<bundle<a: uint>>,
+    out string: !firrtl.string)
   firrtl.module @Foo(in %in: !firrtl.uint<42>, out %out: !firrtl.bundle<a : uint, b: uint<4>, c: vector<bundle<c: uint>,4>>) {
-    // expected-error @+6 {{extern module `Bar` has ports of uninferred width}}
-    // expected-note @+5 {{Port: "in"}}
-    // expected-note @+4 {{Port: "out"}}
-    // expected-note @+3 {{Field: "out.a"}}
-    // expected-note @+2 {{Field: "out.c[].c"}}
-    // expected-note @+1 {{Only non-extern FIRRTL modules may contain unspecified widths to be inferred automatically.}}
-    %inst_in, %inst_out = firrtl.instance inst @Bar(in in: !firrtl.uint, out out: !firrtl.bundle<a : uint, b: uint<4>, c: vector<bundle<c: uint>,4>>)
+    // expected-error @below {{extern module `Bar` has ports of uninferred width}}
+    // expected-note @below {{Port: "in"}}
+    // expected-note @below {{Port: "out"}}
+    // expected-note @below {{Field: "out.a"}}
+    // expected-note @below {{Field: "out.c[].c"}}
+    // expected-note @below {{Port: "ref"}}
+    // expected-note @below {{Field: "ref.a"}}
+    // expected-note @below {{Only non-extern FIRRTL modules may contain unspecified widths to be inferred automatically.}}
+    %inst_in, %inst_out, %inst_ref, %inst_string = firrtl.instance inst @Bar(
+                                                     in in: !firrtl.uint,
+                                                     out out: !firrtl.bundle<a : uint, b: uint<4>, c: vector<bundle<c: uint>,4>>,
+                                                     out ref: !firrtl.rwprobe<bundle<a: uint>>,
+                                                     out string: !firrtl.string)
     firrtl.connect %inst_in, %in : !firrtl.uint, !firrtl.uint<42>
     firrtl.connect %out, %inst_out : !firrtl.bundle<a : uint, b: uint<4>, c: vector<bundle<c: uint>,4>>, !firrtl.bundle<a : uint, b: uint<4>, c: vector<bundle<c: uint>,4>>
   }
@@ -149,34 +158,6 @@ firrtl.circuit "Foo" {
 }
 
 // -----
-// https://github.com/llvm/circt/issues/5391
-// Unclear if widthCast is/should be allowed to be CSE'd.
-// This IR was generated from test on that issue before InferWidths.
-
-// Don't back-propagate widths.
-firrtl.circuit "Issue5391" {
-  firrtl.module @Issue5391(in %x: !firrtl.uint<1>,
-                           in %y: !firrtl.uint<2>,
-                           out %out1: !firrtl.uint,
-                           out %out2: !firrtl.uint) {
-    // expected-error @below {{uninferred width: wire "w" cannot satisfy all width requirements}}
-    %w = firrtl.wire : !firrtl.uint
-    %0 = firrtl.widthCast %x : (!firrtl.uint<1>) -> !firrtl.uint
-    firrtl.strictconnect %w, %0 : !firrtl.uint
-    %1 = firrtl.widthCast %y : (!firrtl.uint<2>) -> !firrtl.uint
-    // expected-note @below {{width is constrained to be at most 1 here:}}
-    // expected-note @below {{width is constrained to be at least 2 here:}}
-    firrtl.strictconnect %w, %1 : !firrtl.uint
-    %2 = firrtl.widthCast %w : (!firrtl.uint) -> !firrtl.uint
-    firrtl.strictconnect %out1, %2 : !firrtl.uint
-    %wx = firrtl.wire : !firrtl.uint
-    firrtl.strictconnect %wx, %0 : !firrtl.uint
-    %3 = firrtl.widthCast %wx : (!firrtl.uint) -> !firrtl.uint
-    firrtl.strictconnect %out2, %3 : !firrtl.uint
-  }
-}
-
-// -----
 // https://github.com/llvm/circt/issues/5002
 
 firrtl.circuit "Issue5002" {
@@ -194,5 +175,14 @@ firrtl.circuit "Issue5002" {
     // expected-note @below {{width is constrained to be at most 1 here:}}
     // expected-note @below {{width is constrained to be at least 2 here:}}
     firrtl.ref.define %inst2_ref, %w2_ref : !firrtl.rwprobe<uint>
+  }
+}
+
+// -----
+// https://github.com/llvm/circt/issues/5324
+
+firrtl.circuit "NoWidthEnum" {
+  // expected-error @below {{uninferred width: port "o.Some" is unconstrained}}
+  firrtl.module @NoWidthEnum(out %o: !firrtl.enum<Some: uint>) {
   }
 }

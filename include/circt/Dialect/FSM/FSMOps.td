@@ -12,14 +12,14 @@
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
-include "circt/Dialect/HW/HWOpInterfaces.td"
+include "circt/Support/InstanceGraphInterface.td"
 
 def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>;
 
 def MachineOp : FSMOp<"machine", [
       FunctionOpInterface,
       Symbol, SymbolTable, NoTerminator,
-      DeclareOpInterfaceMethods<HWModuleLike>]> {
+      DeclareOpInterfaceMethods<InstanceGraphModuleOpInterface>]> {
   let summary = "Define a finite-state machine";
   let description = [{
     `fsm.machine` represents a finite-state machine, including a machine name,
@@ -76,21 +76,11 @@ def MachineOp : FSMOp<"machine", [
 
     /// Return the name of the i'th result of this machine.
     StringAttr getResName(size_t i);
-  }];
 
-  let extraClassDefinition = [{
-    size_t $cppClass::getNumPorts() {
-      auto machineType = getFunctionType();
-      return machineType.getNumInputs() + machineType.getNumResults();
-    }
-
-    circt::hw::InnerSymAttr $cppClass::getPortSymbolAttr(size_t portIndex) {
-      for (NamedAttribute argAttr :
-           mlir::function_interface_impl::getArgAttrs(*this, portIndex))
-        if (auto sym = argAttr.getValue().dyn_cast<circt::hw::InnerSymAttr>())
-          return sym;
-      return circt::hw::InnerSymAttr();
-    }
+    //===------------------------------------------------------------------===//
+    // PortList Methods
+    //===------------------------------------------------------------------===//
+    ::circt::hw::ModulePortInfo getPortList();
   }];
 
   let skipDefaultBuilders = 1;
@@ -113,6 +103,11 @@ def InstanceOp : FSMOp<"instance", [Symbol, HasCustomSSAName]> {
   let extraClassDeclaration = [{
     /// Lookup the machine for the symbol. This returns null on invalid IR.
     MachineOp getMachineOp();
+
+    //===------------------------------------------------------------------===//
+    // PortList Methods
+    //===------------------------------------------------------------------===//
+    ::circt::hw::ModulePortInfo getPortList();
   }];
 
   let hasVerifier = 1;
@@ -143,7 +138,7 @@ def TriggerOp : FSMOp<"trigger", []> {
 
 def HWInstanceOp : FSMOp<"hw_instance", [
     Symbol,
-    DeclareOpInterfaceMethods<HWInstanceLike>
+    DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface>
   ]> {
   let summary = "Create a hardware-style instance of a state machine";
   let description = [{
@@ -167,12 +162,14 @@ def HWInstanceOp : FSMOp<"hw_instance", [
     MachineOp getMachineOp();
 
     /// Module name is the same as the machine name.
-    StringRef getModuleName() {
-      return getMachine();
-    }
-    FlatSymbolRefAttr getModuleNameAttr() {
-      return getMachineAttr();
-    }
+    StringRef getModuleName();
+
+    FlatSymbolRefAttr getModuleNameAttr();
+
+    //===------------------------------------------------------------------===//
+    // PortList Methods
+    //===------------------------------------------------------------------===//
+    ::circt::hw::ModulePortInfo getPortList();
   }];
 
   let hasVerifier = 1;

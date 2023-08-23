@@ -13,11 +13,13 @@
 #ifndef CIRCT_DIALECT_FIRRTL_TYPES_H
 #define CIRCT_DIALECT_FIRRTL_TYPES_H
 
+#include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/HW/HWTypeInterfaces.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/Types.h"
+#include "llvm/ADT/TypeSwitch.h"
 
 namespace circt {
 namespace firrtl {
@@ -25,12 +27,16 @@ namespace detail {
 struct FIRRTLBaseTypeStorage;
 struct WidthTypeStorage;
 struct BundleTypeStorage;
-struct VectorTypeStorage;
+struct FVectorTypeStorage;
 struct FEnumTypeStorage;
 struct CMemoryTypeStorage;
 struct RefTypeStorage;
+struct BaseTypeAliasStorage;
+struct OpenBundleTypeStorage;
+struct OpenVectorTypeStorage;
 } // namespace detail.
 
+class ClassType;
 class ClockType;
 class ResetType;
 class AsyncResetType;
@@ -45,7 +51,11 @@ class FEnumType;
 class RefType;
 class PropertyType;
 class StringType;
-class BigIntType;
+class FIntegerType;
+class ListType;
+class MapType;
+class PathType;
+class BaseTypeAliasType;
 
 /// A collection of bits indicating the recursive properties of a type.
 struct RecursiveTypeProperties {
@@ -57,6 +67,8 @@ struct RecursiveTypeProperties {
   bool containsAnalog : 1;
   /// Whether the type contains a const type.
   bool containsConst : 1;
+  /// Whether the type contains a type alias.
+  bool containsTypeAlias : 1;
   /// Whether the type has any uninferred bit widths.
   bool hasUninferredWidth : 1;
   /// Whether the type has any uninferred reset.
@@ -88,6 +100,11 @@ public:
   /// Return true if this is or contains a Reference type.
   bool containsReference() {
     return getRecursiveTypeProperties().containsReference;
+  }
+
+  /// Return true if this is an anonymous type (no type alias).
+  bool containsTypeAlias() {
+    return getRecursiveTypeProperties().containsTypeAlias;
   }
 
   /// Return true if this type contains an uninferred bit width.
@@ -132,6 +149,10 @@ public:
 
   /// Return this type with any flip types recursively removed from itself.
   FIRRTLBaseType getPassiveType();
+
+  /// Return this type with any type alias types recursively removed from
+  /// itself.
+  FIRRTLBaseType getAnonymousType();
 
   /// Return a 'const' or non-'const' version of this type.
   FIRRTLBaseType getConstType(bool isConst);
@@ -241,7 +262,17 @@ bool areTypesRefCastable(Type dstType, Type srcType);
 /// hold their counterparts.
 bool isTypeLarger(FIRRTLBaseType dstType, FIRRTLBaseType srcType);
 
+/// Return true if anonymous types of given arguments are equivalent by pointer
+/// comparison.
+bool areAnonymousTypesEquivalent(FIRRTLBaseType lhs, FIRRTLBaseType rhs);
+bool areAnonymousTypesEquivalent(mlir::Type lhs, mlir::Type rhs);
+
 mlir::Type getPassiveType(mlir::Type anyBaseFIRRTLType);
+
+/// Returns true if the given type has some flipped (aka unaligned) dataflow.
+/// This will be true if the port contains either bi-directional signals or
+/// analog types. Non-HW types (e.g., ref types) are never considered InOut.
+bool isTypeInOut(mlir::Type type);
 
 //===----------------------------------------------------------------------===//
 // Width Qualified Ground Types
@@ -309,12 +340,52 @@ class PropertyType : public FIRRTLType {
 public:
   /// Support method to enable LLVM-style type casting.
   static bool classof(Type type) {
-    return llvm::isa<StringType, BigIntType>(type);
+    return llvm::isa<ClassType, StringType, FIntegerType, ListType, MapType,
+                     PathType>(type);
   }
 
 protected:
   using FIRRTLType::FIRRTLType;
 };
+
+//===----------------------------------------------------------------------===//
+// ClassElement
+//===----------------------------------------------------------------------===//
+
+struct ClassElement {
+  ClassElement(StringAttr name, Type type, Direction direction)
+      : name(name), type(type), direction(direction) {}
+
+  StringAttr name;
+  Type type;
+  Direction direction;
+
+  StringRef getName() const { return name.getValue(); }
+
+  /// Return true if this is a simple output-only element.  If you want the
+  /// direction of the port, use the \p direction field directly.
+  bool isInput() const { return direction == Direction::In && !isInOut(); }
+
+  /// Return true if this is a simple input-only element.  If you want the
+  /// direction of the port, use the \p direction field directly.
+  bool isOutput() const { return direction == Direction::Out && !isInOut(); }
+
+  /// Return true if this is an inout port.  This will be true if the port
+  /// contains either bi-directional signals or analog types.
+  /// Non-HW types (e.g., ref types) are never considered InOut.
+  bool isInOut() const { return isTypeInOut(type); }
+
+  bool operator==(const ClassElement &rhs) const {
+    return name == rhs.name && type == rhs.type;
+  }
+
+  bool operator!=(const ClassElement &rhs) const { return !(*this == rhs); }
+};
+
+// NOLINTNEXTLINE(readability-identifier-naming)
+inline llvm::hash_code hash_value(const ClassElement &element) {
+  return llvm::hash_combine(element.name, element.type, element.direction);
+}
 
 //===----------------------------------------------------------------------===//
 // Type helpers
@@ -332,6 +403,7 @@ std::optional<int64_t> getBitWidth(FIRRTLBaseType type,
 // Parse a FIRRTL type without a leading `!firrtl.` dialect tag.
 ParseResult parseNestedType(FIRRTLType &result, AsmParser &parser);
 ParseResult parseNestedBaseType(FIRRTLBaseType &result, AsmParser &parser);
+ParseResult parseNestedPropertyType(PropertyType &result, AsmParser &parser);
 
 // Print a FIRRTL type without a leading `!firrtl.` dialect tag.
 void printNestedType(Type type, AsmPrinter &os);
@@ -366,5 +438,207 @@ struct DenseMapInfo<circt::firrtl::FIRRTLType> {
 };
 
 } // namespace llvm
+
+namespace circt {
+namespace firrtl {
+//===--------------------------------------------------------------------===//
+// Utility for type aliases
+//===--------------------------------------------------------------------===//
+
+/// A struct to check if there is a type derived from FIRRTLBaseType.
+/// `ContainAliasableTypes<BaseTy>::value` returns true if `BaseTy` is derived
+/// from `FIRRTLBaseType` and not `FIRRTLBaseType` itself, or is not FIRRTL type
+/// to cover type interfaces.
+template <typename head, typename... tail>
+class ContainAliasableTypes {
+public:
+  static constexpr bool value = ContainAliasableTypes<head>::value ||
+                                ContainAliasableTypes<tail...>::value;
+};
+
+template <typename BaseTy>
+class ContainAliasableTypes<BaseTy> {
+  static constexpr bool isFIRRTLBaseType =
+      std::is_base_of<FIRRTLBaseType, BaseTy>::value &&
+      !std::is_same_v<FIRRTLBaseType, BaseTy>;
+  static constexpr bool isFIRRTLType =
+      std::is_base_of<FIRRTLType, BaseTy>::value;
+
+public:
+  static constexpr bool value = isFIRRTLBaseType || !isFIRRTLType;
+};
+
+template <typename... BaseTy>
+bool type_isa(Type type) { // NOLINT(readability-identifier-naming)
+  // First check if the type is the requested type.
+  if (isa<BaseTy...>(type))
+    return true;
+
+  // If the requested type is a subtype of FIRRTLBaseType, then check if it is a
+  // type alias wrapping the requested type.
+  if constexpr (ContainAliasableTypes<BaseTy...>::value) {
+    if (auto alias = dyn_cast<BaseTypeAliasType>(type))
+      return type_isa<BaseTy...>(alias.getInnerType());
+  }
+
+  return false;
+}
+
+// type_isa for a nullable argument.
+template <typename... BaseTy>
+bool type_isa_and_nonnull(Type type) { // NOLINT(readability-identifier-naming)
+  if (!type)
+    return false;
+  return type_isa<BaseTy...>(type);
+}
+
+template <typename BaseTy>
+BaseTy type_cast(Type type) { // NOLINT(readability-identifier-naming)
+  assert(type_isa<BaseTy>(type) && "type must convert to requested type");
+
+  // If the type is the requested type, return it.
+  if (isa<BaseTy>(type))
+    return cast<BaseTy>(type);
+
+  // Otherwise, it must be a type alias wrapping the requested type.
+  if constexpr (ContainAliasableTypes<BaseTy>::value) {
+    if (auto alias = dyn_cast<BaseTypeAliasType>(type))
+      return type_cast<BaseTy>(alias.getInnerType());
+  }
+
+  // Otherwise, it should fail. `cast` should cause a better assertion failure,
+  // so just use it.
+  return cast<BaseTy>(type);
+}
+
+template <typename BaseTy>
+BaseTy type_dyn_cast(Type type) { // NOLINT(readability-identifier-naming)
+  if (type_isa<BaseTy>(type))
+    return type_cast<BaseTy>(type);
+  return {};
+}
+
+template <typename BaseTy>
+BaseTy
+type_dyn_cast_or_null(Type type) { // NOLINT(readability-identifier-naming)
+  if (type_isa_and_nonnull<BaseTy>(type))
+    return type_cast<BaseTy>(type);
+  return {};
+}
+
+//===--------------------------------------------------------------------===//
+// Type alias aware TypeSwitch.
+//===--------------------------------------------------------------------===//
+
+/// This class implements the same functionality as TypeSwitch except that
+/// it uses firrtl::type_dyn_cast for dynamic cast. llvm::TypeSwitch is not
+/// customizable so this class currently duplicates the code.
+template <typename T, typename ResultT = void>
+class FIRRTLTypeSwitch
+    : public llvm::detail::TypeSwitchBase<FIRRTLTypeSwitch<T, ResultT>, T> {
+public:
+  using BaseT = llvm::detail::TypeSwitchBase<FIRRTLTypeSwitch<T, ResultT>, T>;
+  using BaseT::BaseT;
+  using BaseT::Case;
+  FIRRTLTypeSwitch(FIRRTLTypeSwitch &&other) = default;
+
+  /// Add a case on the given type.
+  template <typename CaseT, typename CallableT>
+  FIRRTLTypeSwitch<T, ResultT> &
+  Case(CallableT &&caseFn) { // NOLINT(readability-identifier-naming)
+    if (result)
+      return *this;
+
+    // Check to see if CaseT applies to 'value'. Use `type_dyn_cast` here.
+    if (auto caseValue = circt::firrtl::type_dyn_cast<CaseT>(this->value))
+      result.emplace(caseFn(caseValue));
+    return *this;
+  }
+
+  /// As a default, invoke the given callable within the root value.
+  template <typename CallableT>
+  [[nodiscard]] ResultT
+  Default(CallableT &&defaultFn) { // NOLINT(readability-identifier-naming)
+    if (result)
+      return std::move(*result);
+    return defaultFn(this->value);
+  }
+
+  /// As a default, return the given value.
+  [[nodiscard]] ResultT
+  Default(ResultT defaultResult) { // NOLINT(readability-identifier-naming)
+    if (result)
+      return std::move(*result);
+    return defaultResult;
+  }
+
+  [[nodiscard]] operator ResultT() {
+    assert(result && "Fell off the end of a type-switch");
+    return std::move(*result);
+  }
+
+private:
+  /// The pointer to the result of this switch statement, once known,
+  /// null before that.
+  std::optional<ResultT> result;
+};
+
+/// Specialization of FIRRTLTypeSwitch for void returning callables.
+template <typename T>
+class FIRRTLTypeSwitch<T, void>
+    : public llvm::detail::TypeSwitchBase<FIRRTLTypeSwitch<T, void>, T> {
+public:
+  using BaseT = llvm::detail::TypeSwitchBase<FIRRTLTypeSwitch<T, void>, T>;
+  using BaseT::BaseT;
+  using BaseT::Case;
+  FIRRTLTypeSwitch(FIRRTLTypeSwitch &&other) = default;
+
+  /// Add a case on the given type.
+  template <typename CaseT, typename CallableT>
+  FIRRTLTypeSwitch<T, void> &
+  Case(CallableT &&caseFn) { // NOLINT(readability-identifier-naming)
+    if (foundMatch)
+      return *this;
+
+    // Check to see if any of the types apply to 'value'.
+    if (auto caseValue = circt::firrtl::type_dyn_cast<CaseT>(this->value)) {
+      caseFn(caseValue);
+      foundMatch = true;
+    }
+    return *this;
+  }
+
+  /// As a default, invoke the given callable within the root value.
+  template <typename CallableT>
+  void Default(CallableT &&defaultFn) { // NOLINT(readability-identifier-naming)
+    if (!foundMatch)
+      defaultFn(this->value);
+  }
+
+private:
+  /// A flag detailing if we have already found a match.
+  bool foundMatch = false;
+};
+
+template <typename BaseTy>
+class BaseTypeAliasOr
+    : public ::mlir::Type::TypeBase<BaseTypeAliasOr<BaseTy>,
+                                    firrtl::FIRRTLBaseType,
+                                    detail::FIRRTLBaseTypeStorage> {
+
+public:
+  using mlir::Type::TypeBase<BaseTypeAliasOr<BaseTy>, firrtl::FIRRTLBaseType,
+                             detail::FIRRTLBaseTypeStorage>::Base::Base;
+  // Support LLVM isa/cast/dyn_cast to BaseTy.
+  static bool classof(Type other) { return type_isa<BaseTy>(other); }
+
+  // Support C++ implicit conversions to BaseTy.
+  operator BaseTy() const { return circt::firrtl::type_cast<BaseTy>(*this); }
+
+  BaseTy get() const { return circt::firrtl::type_cast<BaseTy>(*this); }
+};
+
+} // namespace firrtl
+} // namespace circt
 
 #endif // CIRCT_DIALECT_FIRRTL_TYPES_H

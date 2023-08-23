@@ -361,9 +361,9 @@ firrtl.circuit "Top" {
   // CHECK: @nla_2
   hw.hierpath private @nla_1 [@Foo1::@dead, @EncodingModule]
   hw.hierpath private @nla_2 [@Foo2::@live, @EncodingModule]
-  // CHECK-LABEL private @EncodingModule
+  // CHECK-LABEL: private @EncodingModule
   // CHECK-NOT: @nla_1
-  // CHECK-SAME @nla_2
+  // CHECK-SAME: @nla_2
   firrtl.module private @EncodingModule(in %in: !firrtl.uint<1>, out %a: !firrtl.uint<1> [{circt.nonlocal = @nla_1, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0 : i64, type = "OMReferenceTarget"}, {circt.nonlocal = @nla_2, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 1 : i64, type = "OMReferenceTarget"}]) {
     firrtl.strictconnect %a, %in : !firrtl.uint<1>
   }
@@ -426,5 +426,44 @@ firrtl.circuit "Top" {
     // Remove a dead instance otherwise.
     // CHECK-NOT: baz2
     firrtl.instance baz2 sym @baz2 @Baz()
+  }
+}
+
+// -----
+
+// This tests that dead modules do not keep dead instance output ports alive.
+
+firrtl.circuit "Test" {
+  firrtl.extmodule @ExtModule(out out : !firrtl.uint<1>)
+
+  // %out is only used by a dead module. It should be removed from the port list.
+  // CHECK: firrtl.module private @Blah() {
+  firrtl.module private @Blah(out %out : !firrtl.uint<1>) {
+    %extmodule_out = firrtl.instance extmodule @ExtModule(out out : !firrtl.uint<1>)
+    firrtl.strictconnect %out, %extmodule_out : !firrtl.uint<1>
+  }
+  firrtl.module @Test() attributes {convention = #firrtl<convention scalarized>} {
+    // CHECK: firrtl.instance blah interesting_name @Blah()
+    %blah_out = firrtl.instance blah interesting_name @Blah(out out : !firrtl.uint<1>)
+  }
+  // This module is dead (unreachable from the toplevel) so the module should be removed.
+  // CHECK-NOT: firrtl.module private @Other
+  firrtl.module private @Other(out %out : !firrtl.uint<1>) {
+    %blah_out = firrtl.instance blah interesting_name @Blah(out out : !firrtl.uint<1>)
+    firrtl.strictconnect %out, %blah_out : !firrtl.uint<1>
+  }
+}
+
+// -----
+// Test that a live use of a forceable declaration keeps it alive.
+// https://github.com/llvm/circt/issues/5898
+
+// CHECK-LABEL: circuit "Issue5898"
+firrtl.circuit "Issue5898" {
+  firrtl.module @Issue5898(in %x: !firrtl.uint<5>, out %p: !firrtl.rwprobe<uint<5>>) {
+    // CHECK: connect
+    %w, %w_ref = firrtl.wire forceable : !firrtl.uint<5>, !firrtl.rwprobe<uint<5>>
+    firrtl.strictconnect %w, %x : !firrtl.uint<5>
+    firrtl.ref.define %p, %w_ref : !firrtl.rwprobe<uint<5>>
   }
 }

@@ -1,7 +1,6 @@
 add_circt_dialect_library(CIRCTFIRRTLTransforms
   AddSeqMemPorts.cpp
   BlackBoxReader.cpp
-  CheckCombCycles.cpp
   CheckCombLoops.cpp
   CreateSiFiveMetadata.cpp
   Dedup.cpp
@@ -9,7 +8,6 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   DropName.cpp
   EmitOMIR.cpp
   ExpandWhens.cpp
-  ExtractClasses.cpp
   ExtractInstances.cpp
   FlattenMemory.cpp
   FinalizeIR.cpp
@@ -24,6 +22,8 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   LegacyWiring.cpp
   LowerAnnotations.cpp
   LowerCHIRRTL.cpp
+  LowerClasses.cpp
+  LowerGroups.cpp
   LowerIntrinsics.cpp
   LowerMatches.cpp
   LowerMemory.cpp
@@ -50,6 +50,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   CIRCTFIRRTLTransformsIncGen
   MLIROMIncGen
   MLIROMAttrIncGen
+  MLIROMOpInterfacesIncGen
 
   LINK_LIBS PUBLIC
   CIRCTFIRRTL

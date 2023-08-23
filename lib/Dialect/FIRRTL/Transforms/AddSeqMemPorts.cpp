@@ -15,8 +15,8 @@
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
-#include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Support/Namespace.h"
 #include "llvm/ADT/PostOrderIterator.h"
@@ -34,22 +34,23 @@ struct AddSeqMemPortsPass : public AddSeqMemPortsBase<AddSeqMemPortsPass> {
   LogicalResult processFileAnno(Location loc, StringRef metadataDir,
                                 Annotation anno);
   LogicalResult processAnnos(CircuitOp circuit);
-  void createOutputFile(hw::HWModuleLike module);
+  void createOutputFile(igraph::ModuleOpInterface module);
   InstanceGraphNode *findDUT();
   void processMemModule(FMemModuleOp mem);
   LogicalResult processModule(FModuleOp module, bool isDUT);
 
   /// Get the cached namespace for a module.
-  ModuleNamespace &getModuleNamespace(FModuleLike module) {
+  hw::InnerSymbolNamespace &getModuleNamespace(FModuleLike module) {
     return moduleNamespaces.try_emplace(module, module).first->second;
   }
 
   /// Obtain an inner reference to an operation, possibly adding an `inner_sym`
   /// to that operation.
   hw::InnerRefAttr getInnerRefTo(Operation *op) {
-    return ::getInnerRefTo(op, "", [&](FModuleOp mod) -> ModuleNamespace & {
-      return getModuleNamespace(mod);
-    });
+    return ::getInnerRefTo(op,
+                           [&](FModuleLike mod) -> hw::InnerSymbolNamespace & {
+                             return getModuleNamespace(mod);
+                           });
   }
 
   /// This represents the collected information of the memories in a module.
@@ -77,7 +78,7 @@ struct AddSeqMemPortsPass : public AddSeqMemPortsBase<AddSeqMemPortsPass> {
   ArrayAttr extraPortsAttr;
 
   /// Cached module namespaces.
-  DenseMap<Operation *, ModuleNamespace> moduleNamespaces;
+  DenseMap<Operation *, hw::InnerSymbolNamespace> moduleNamespaces;
 
   bool anythingChanged;
 };
@@ -228,7 +229,7 @@ LogicalResult AddSeqMemPortsPass::processModule(FModuleOp module, bool isDUT) {
         // Record the extra port.
         extraPorts.push_back(
             {firstPortIndex,
-             {portName, cast<FIRRTLType>(portType), portDirection}});
+             {portName, type_cast<FIRRTLType>(portType), portDirection}});
         // If this is the DUT, then add a DontTouchAnnotation to any added ports
         // to guarantee that it won't be removed.
         if (isDUT)
@@ -273,7 +274,7 @@ LogicalResult AddSeqMemPortsPass::processModule(FModuleOp module, bool isDUT) {
   return success();
 }
 
-void AddSeqMemPortsPass::createOutputFile(hw::HWModuleLike module) {
+void AddSeqMemPortsPass::createOutputFile(igraph::ModuleOpInterface module) {
   // Insert the verbatim at the bottom of the circuit.
   auto circuit = getOperation();
   auto builder = OpBuilder::atBlockEnd(circuit.getBodyBlock());
@@ -360,7 +361,7 @@ void AddSeqMemPortsPass::runOnOperation() {
         StringAttr::get(context, "width"),
         IntegerAttr::get(
             ui32Type,
-            cast<FIRRTLBaseType>(userPort.type).getBitWidthOrSentinel()));
+            type_cast<FIRRTLBaseType>(userPort.type).getBitWidthOrSentinel()));
     extraPorts.push_back(DictionaryAttr::get(context, attrs));
   }
   extraPortsAttr = ArrayAttr::get(context, extraPorts);
@@ -421,7 +422,7 @@ void AddSeqMemPortsPass::runOnOperation() {
 
   // If there is an output file, create it.
   if (outputFile)
-    createOutputFile(dutNode->getModule());
+    createOutputFile(dutNode->getModule<igraph::ModuleOpInterface>());
 
   if (anythingChanged)
     markAnalysesPreserved<InstanceGraph>();

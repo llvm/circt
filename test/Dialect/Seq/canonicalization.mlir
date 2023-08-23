@@ -89,7 +89,7 @@ hw.module @UninitializedArrayElement(%a: i1, %clock: i1) -> (b: !hw.array<2xi1>)
 }
 
 // CHECK-LABEL: hw.module @ClockGate
-hw.module @ClockGate(%clock: i1, %enable: i1, %testEnable: i1) {
+hw.module @ClockGate(%clock: i1, %enable: i1, %enable2 : i1, %testEnable: i1) {
   // CHECK-NEXT: hw.constant false
   %false = hw.constant false
   %true = hw.constant true
@@ -119,4 +119,73 @@ hw.module @ClockGate(%clock: i1, %enable: i1, %testEnable: i1) {
   // CHECK-NEXT: %dropTestEnable = hw.wire [[TMP]] sym @dropTestEnable
   %6 = seq.clock_gate %clock, %enable, %false
   %dropTestEnable = hw.wire %6 sym @dropTestEnable : i1
+
+  // CHECK-NEXT: [[TCG1:%.+]] = seq.clock_gate %clock, %enable
+  // CHECK-NEXT: %transitiveClock1 = hw.wire [[TCG1]] sym @transitiveClock1  : i1
+  %7 = seq.clock_gate %clock, %enable
+  %8 = seq.clock_gate %clock, %enable
+  %transitiveClock1 = hw.wire %7 sym @transitiveClock1 : i1
+
+  // CHECK-NEXT: [[TCG2:%.+]] = seq.clock_gate %clock, %enable, %testEnable
+  // CHECK-NEXT: [[TCG3:%.+]] = seq.clock_gate [[TCG2]], %enable
+  // CHECK-NEXT: %transitiveClock2 = hw.wire [[TCG3]] sym @transitiveClock2  : i1
+  %9 = seq.clock_gate %clock, %enable, %testEnable
+  %10 = seq.clock_gate %9, %enable2 
+  %11 = seq.clock_gate %10, %enable, %testEnable
+  %transitiveClock2 = hw.wire %11 sym @transitiveClock2 : i1
+}
+
+// CHECK-LABEL: hw.module @ClockMux
+hw.module @ClockMux(%cond: i1, %trueClock: i1, %falseClock: i1) -> (clk0: i1, clk1: i1){
+  %false = hw.constant false
+  %true = hw.constant true
+  %clock_true = seq.clock_mux %true, %trueClock, %falseClock
+  %clock_false = seq.clock_mux %false, %trueClock, %falseClock
+  // CHECK: hw.output %trueClock, %falseClock : i1, i1
+  hw.output %clock_true, %clock_false : i1, i1
+}
+
+// CHECK-LABEL: @FirMem
+hw.module @FirMem(%addr: i4, %clock: i1, %data: i42) -> (out: i42) {
+  %true = hw.constant true
+  %false = hw.constant false
+  %c0_i3 = hw.constant 0 : i3
+  %c-1_i3 = hw.constant -1 : i3
+
+  // CHECK: [[MEM:%.+]] = seq.firmem
+  %0 = seq.firmem 0, 1, undefined, undefined : <12 x 42, mask 3>
+
+  // CHECK-NEXT: seq.firmem.read_port [[MEM]][%addr], clock %clock :
+  %1 = seq.firmem.read_port %0[%addr], clock %clock enable %true : <12 x 42, mask 3>
+
+  // CHECK-NEXT: seq.firmem.write_port %0[%addr] = %data, clock %clock {w0}
+  seq.firmem.write_port %0[%addr] = %data, clock %clock enable %true {w0} : <12 x 42, mask 3>
+  // CHECK-NOT: {w1}
+  seq.firmem.write_port %0[%addr] = %data, clock %clock enable %false {w1} : <12 x 42, mask 3>
+  // CHECK-NEXT: seq.firmem.write_port %0[%addr] = %data, clock %clock {w2}
+  seq.firmem.write_port %0[%addr] = %data, clock %clock mask %c-1_i3 {w2} : <12 x 42, mask 3>, i3
+  // CHECK-NOT: {w3}
+  seq.firmem.write_port %0[%addr] = %data, clock %clock mask %c0_i3 {w3} : <12 x 42, mask 3>, i3
+  // CHECK-NOT: {w4}
+  seq.firmem.write_port %0[%addr] = %data, clock %true {w4} : <12 x 42, mask 3>
+  // CHECK-NOT: {w5}
+  seq.firmem.write_port %0[%addr] = %data, clock %false {w5} : <12 x 42, mask 3>
+
+  // CHECK-NEXT: seq.firmem.read_write_port [[MEM]][%addr] = %data if %true, clock %clock {rw0}
+  %2 = seq.firmem.read_write_port %0[%addr] = %data if %true, clock %clock enable %true {rw0} : <12 x 42, mask 3>
+  // CHECK-NEXT: seq.firmem.read_port [[MEM]][%addr], clock %clock enable %false {rw1}
+  %3 = seq.firmem.read_write_port %0[%addr] = %data if %true, clock %clock enable %false {rw1} : <12 x 42, mask 3>
+  // CHECK-NEXT: seq.firmem.read_write_port [[MEM]][%addr] = %data if %true, clock %clock {rw2}
+  %4 = seq.firmem.read_write_port %0[%addr] = %data if %true, clock %clock mask %c-1_i3 {rw2} : <12 x 42, mask 3>, i3
+  // CHECK-NEXT: seq.firmem.read_port [[MEM]][%addr], clock %clock {rw3}
+  %5 = seq.firmem.read_write_port %0[%addr] = %data if %true, clock %clock mask %c0_i3 {rw3} : <12 x 42, mask 3>, i3
+  // CHECK-NEXT: seq.firmem.read_port [[MEM]][%addr], clock %clock {rw4}
+  %6 = seq.firmem.read_write_port %0[%addr] = %data if %false, clock %clock {rw4} : <12 x 42, mask 3>
+  // CHECK-NEXT: seq.firmem.read_port [[MEM]][%addr], clock %true {rw5}
+  %7 = seq.firmem.read_write_port %0[%addr] = %data if %true, clock %true {rw5} : <12 x 42, mask 3>
+  // CHECK-NEXT: seq.firmem.read_port [[MEM]][%addr], clock %false {rw6}
+  %8 = seq.firmem.read_write_port %0[%addr] = %data if %true, clock %false {rw6} : <12 x 42, mask 3>
+
+  %9 = comb.xor %1, %2, %3, %4, %5, %6, %7, %8 : i42
+  hw.output %9 : i42
 }

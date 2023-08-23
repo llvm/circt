@@ -16,7 +16,7 @@ circuit TestHarness:
     dut.clock <= clock
 
     ; CHECK: fwrite
-    ; CHECK-SAME "%x", TestHarness.dut.`ref_DUT_DUT_read)
+    ; CHECK-SAME: "%x", TestHarness.dut.`ref_DUT_DUT_read)
     printf(clock, UInt<1>(1) "%x", read(dut.read))
     ; CHECK: initial
     ; CHECK: force TestHarness.dut.`ref_DUT_DUT_write = 32'hDEADBEEF;
@@ -31,17 +31,18 @@ circuit TestHarness:
 ; CHECK-LABEL: module DUT(
 
 circuit DUT:
-  extmodule Inner:
+  extmodule NotTheRealName:
     input clock: Clock
     output read: Probe<UInt<32>>
     output write: RWProbe<UInt<32>>
+    defname = Inner
 
   module DUT:
     input clock: Clock
     output read: Probe<UInt<32>>
     output write: RWProbe<UInt<32>>
 
-    inst i of Inner
+    inst i of NotTheRealName
     i.clock <= clock
     define read = i.read
     define write = i.write

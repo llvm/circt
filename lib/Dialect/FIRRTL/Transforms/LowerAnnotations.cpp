@@ -26,6 +26,7 @@
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVAttributes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "llvm/ADT/APSInt.h"
@@ -117,21 +118,7 @@ static FlatSymbolRefAttr buildNLA(const AnnoPathValue &target,
       FlatSymbolRefAttr::get(target.ref.getModule().getModuleNameAttr()));
 
   auto instAttr = ArrayAttr::get(state.circuit.getContext(), insts);
-
-  // Re-use NLA for this path if already created.
-  auto it = state.instPathToNLAMap.find(instAttr);
-  if (it != state.instPathToNLAMap.end()) {
-    ++state.numReusedHierPaths;
-    return it->second;
-  }
-
-  // Create the NLA
-  auto nla = b.create<hw::HierPathOp>(state.circuit.getLoc(), "nla", instAttr);
-  state.symTbl.insert(nla);
-  nla.setVisibility(SymbolTable::Visibility::Private);
-  auto sym = FlatSymbolRefAttr::get(nla);
-  state.instPathToNLAMap.insert({instAttr, sym});
-  return sym;
+  return state.hierPathCache.getRefFor(instAttr);
 }
 
 /// Scatter breadcrumb annotations corresponding to non-local annotations
@@ -520,6 +507,8 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
     {inlineAnnoClass, {stdResolve, applyWithoutTarget<false, FModuleOp>}},
     {noDedupAnnoClass,
      {stdResolve, applyWithoutTarget<false, FModuleOp, FExtModuleOp>}},
+    {dedupGroupAnnoClass,
+     {stdResolve, applyWithoutTarget<false, FModuleOp, FExtModuleOp>}},
     {blackBoxInlineAnnoClass,
      {stdResolve, applyWithoutTarget<false, FExtModuleOp>}},
     {blackBoxPathAnnoClass,
@@ -744,8 +733,8 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
     builder.setInsertionPointToEnd(insertBlock);
 
     // Create RefSend/RefResolve if necessary.
-    if (isa<RefType>(dest.getType()) != isa<RefType>(src.getType())) {
-      if (isa<RefType>(dest.getType()))
+    if (type_isa<RefType>(dest.getType()) != type_isa<RefType>(src.getType())) {
+      if (type_isa<RefType>(dest.getType()))
         src = builder.create<RefSendOp>(src);
       else
         src = builder.create<RefResolveOp>(src);
@@ -896,8 +885,8 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
       sinkType = sink.getType();
 
       // Types must be connectable, which means FIRRTLType's.
-      auto sourceFType = dyn_cast<FIRRTLType>(sourceType);
-      auto sinkFType = dyn_cast<FIRRTLType>(sinkType);
+      auto sourceFType = type_dyn_cast<FIRRTLType>(sourceType);
+      auto sinkFType = type_dyn_cast<FIRRTLType>(sinkType);
       if (!sourceFType)
         return emitError(source.getLoc())
                << "Wiring Problem source type \"" << sourceType
@@ -920,19 +909,19 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
     }
     // If wiring using references, check that the sink value we connect to is
     // passive.
-    if (auto sinkFType = dyn_cast<FIRRTLType>(sink.getType());
-        sinkFType && isa<RefType>(sourceType) &&
+    if (auto sinkFType = type_dyn_cast<FIRRTLType>(sink.getType());
+        sinkFType && type_isa<RefType>(sourceType) &&
         !getBaseType(sinkFType).isPassive())
       return emitError(sink.getLoc())
              << "Wiring Problem sink type \"" << sink.getType()
              << "\" must be passive (no flips) when using references";
 
     // Record module modifications related to adding ports to modules.
-    auto addPorts = [&](ArrayRef<hw::HWInstanceLike> insts, Value val, Type tpe,
-                        Direction dir) {
+    auto addPorts = [&](ArrayRef<igraph::InstanceOpInterface> insts, Value val,
+                        Type tpe, Direction dir) {
       StringRef name, instName;
       for (auto inst : llvm::reverse(insts)) {
-        auto mod = cast<FModuleOp>(instanceGraph.getReferencedModule(inst));
+        auto mod = instanceGraph.getReferencedModule<FModuleOp>(inst);
         if (name.empty()) {
           if (problem.newNameHint.empty())
             name = state.getNamespace(mod).newName(

@@ -15,36 +15,10 @@
 
 include "mlir/Pass/PassBase.td"
 
-def LowerSeqToSV: Pass<"lower-seq-to-sv", "mlir::ModuleOp"> {
-  let summary = "Lower sequential ops to SV.";
-  let constructor = "circt::seq::createSeqLowerToSVPass()";
-  let dependentDialects = ["circt::sv::SVDialect"];
-  let options = [
-    Option<"lowerToAlwaysFF", "lower-to-always-ff", "bool", "true",
-           "Place assignments to registers into `always_ff` blocks">
-  ];
-}
-
-def LowerSeqFIRRTLInitToSV: Pass<"lower-seq-firrtl-init-to-sv", "mlir::ModuleOp"> {
-  let summary = "Prep the module with macro definitions for firrtl registers.";
-  let constructor = "circt::seq::createLowerSeqFIRRTLInitToSV()";
-  let dependentDialects = ["circt::sv::SVDialect"];
-}
-
-def LowerSeqFIRRTLToSV: Pass<"lower-seq-firrtl-to-sv",  "hw::HWModuleOp"> {
-  let summary = "Lower sequential firrtl ops to SV.";
-  let constructor = "circt::seq::createSeqFIRRTLLowerToSVPass()";
-  let dependentDialects = ["circt::sv::SVDialect"];
-  let options = [
-    Option<"disableRegRandomization", "disable-reg-randomization", "bool", "false",
-           "Disable emission of register randomization code">,
-    Option<"emitSeparateAlwaysBlocks", "emit-separate-always-blocks", "bool", "false",
-           "Emit assigments to registers in separate always blocks">
-  ];
-  let statistics = [
-    Statistic<"numSubaccessRestored", "num-subaccess-restored",
-      "Number of lhs subaccess operations restored ">
-  ];
+def LowerSeqFIFO : Pass<"lower-seq-fifo", "hw::HWModuleOp"> {
+  let summary = "Lower seq.fifo ops";
+  let constructor = "circt::seq::createLowerSeqFIFOPass()";
+  let dependentDialects = ["circt::hw::HWDialect", "circt::comb::CombDialect"];
 }
 
 def LowerSeqHLMem: Pass<"lower-seq-hlmem", "hw::HWModuleOp"> {

@@ -60,7 +60,7 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
     }
   }
 
-  pm.nest<firrtl::CircuitOp>().nestAny().addPass(firrtl::createDropConstPass());
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createDropConstPass());
 
   if (opt.dedup)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createDedupPass());
@@ -96,15 +96,7 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         firrtl::createRandomizeRegisterInitPass());
 
-  if (opt.useOldCheckCombCycles) {
-    if (opt.preserveAggregate == firrtl::PreserveAggregate::None)
-      pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCheckCombCyclesPass());
-    else
-      emitWarning(module.getLoc())
-          << "CheckCombCyclesPass doesn't support aggregate "
-             "values yet so it is skipped\n";
-  } else
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCheckCombLoopsPass());
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCheckCombLoopsPass());
 
   // If we parsed a FIRRTL file and have optimizations enabled, clean it up.
   if (!opt.disableOptimization)
@@ -127,8 +119,8 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
 
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createAddSeqMemPortsPass());
 
-  pm.addPass(firrtl::createCreateSiFiveMetadataPass(
-      opt.replSeqMem, opt.replSeqMemCircuit, opt.replSeqMemFile));
+  pm.addPass(firrtl::createCreateSiFiveMetadataPass(opt.replSeqMem,
+                                                    opt.replSeqMemFile));
 
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createExtractInstancesPass());
 
@@ -197,7 +189,7 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
 
   pm.addPass(createLowerFIRRTLToHWPass(
       opt.enableAnnotationWarning.getValue(),
-      opt.emitChiselAssertsAsSVA.getValue(), opt.addMuxPragmas.getValue(),
+      opt.emitChiselAssertsAsSVA.getValue(),
       !opt.isRandomEnabled(FirtoolOptions::RandomKind::Mem),
       !opt.isRandomEnabled(FirtoolOptions::RandomKind::Reg)));
 
@@ -218,11 +210,12 @@ LogicalResult firtool::populateHWToSV(mlir::PassManager &pm,
                                                opt.etcDisableModuleInlining));
 
   pm.addPass(seq::createExternalizeClockGatePass(opt.clockGateOpts));
-  pm.nest<hw::HWModuleOp>().addPass(seq::createSeqFIRRTLLowerToSVPass(
+  pm.addPass(circt::createLowerSeqToSVPass(
       {/*disableRandomization=*/!opt.isRandomEnabled(
            FirtoolOptions::RandomKind::Reg),
        /*emitSeparateAlwaysBlocks=*/
        opt.emitSeparateAlwaysBlocks}));
+  pm.addNestedPass<hw::HWModuleOp>(createLowerVerifToSVPass());
   pm.addPass(sv::createHWMemSimImplPass(
       opt.replSeqMem, opt.ignoreReadEnableMem, opt.addMuxPragmas,
       !opt.isRandomEnabled(FirtoolOptions::RandomKind::Mem),

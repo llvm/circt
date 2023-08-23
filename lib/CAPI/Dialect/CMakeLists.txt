@@ -3,6 +3,7 @@ set(LLVM_OPTIONAL_SOURCES
   Comb.cpp
   ESI.cpp
   FIRRTL.cpp
+  CHIRRTL.cpp
   MSFT.cpp
   HW.cpp
   HWArith.cpp
@@ -33,6 +34,14 @@ add_mlir_public_c_api_library(CIRCTCAPIESI
 
 add_mlir_public_c_api_library(CIRCTCAPIFIRRTL
   FIRRTL.cpp
+
+  LINK_LIBS PUBLIC
+  MLIRCAPIIR
+  CIRCTFIRRTL
+)
+
+add_mlir_public_c_api_library(CIRCTCAPICHIRRTL
+  CHIRRTL.cpp
 
   LINK_LIBS PUBLIC
   MLIRCAPIIR

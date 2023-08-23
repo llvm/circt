@@ -55,7 +55,7 @@ circuit Top : %[[
     skip
 
   extmodule BlackBox :
-
+    output existing : Probe<{a: UInt<5>, b: UInt<5>}[3]>
     defname = BlackBox
 
   module Child :
@@ -100,7 +100,7 @@ circuit Top : %[[
 ; CHECK-NOT:   endmodule
 ; CHECK:         input [[Child_boredPort:[a-zA-Z0-9_]+]]
 ; CHECK:         wire tap = [[Child_boredPort]];
-; CHECK;       endmodule
+; CHECK:       endmodule
 
 ; CHECK-LABEL: module ChildWrapper(
 ; CHECK-NOT:   endmodule
@@ -111,7 +111,7 @@ circuit Top : %[[
 
 ; CHECK-LABEL: module Top(
 ; CHECK-NOT:   endmodule
-; CHECK:         tap = Top.foo.b.inv;
+; CHECK:         tap = Top.foo.b.inv_probe;
 ; CHECK-NEXT:    tap2 = Top.unsigned_0.signed_0.localparam_0.random.something;
 ; CHECK-NEXT:    tap3 = Top.unsigned_0.signed_0.localparam_0.random.something_else;
 ; CHECK:         ChildWrapper unsigned_0 (

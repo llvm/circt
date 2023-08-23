@@ -1508,3 +1508,27 @@ hw.module @twoStateICmp(%arg: i4) -> (cond: i1) {
   %0 = comb.icmp bin eq %c-1_i4, %arg : i4
   hw.output %0 : i1
 }
+
+// https://github.com/llvm/circt/issues/5531
+// CHECK-LABEL: @Issue5531
+hw.module @Issue5531(%arg0: i64, %arg1: i64) -> (out: i32) {
+  // CHECK:  %2 = comb.mul %0, %1 {sv.namehint = "hint"} : i32
+  %2 = comb.mul %arg0, %arg1 {sv.namehint = "hint"} : i64
+  %3 = comb.extract %2 from 0 : (i64) -> i32
+  hw.output %3 : i32
+}
+
+// or(mux(c_1, a, 0), mux(c_2, a, 0), ..., mux(c_n, a, 0)) -> mux(or(c_1, c_2, .., c_n), a, 0)
+// CHECK-LABEL: OrMuxSameTrueValueAndZero
+// CHECK:      %[[OR:.+]] = comb.or bin %tag_0, %tag_1, %tag_2, %tag_3 : i1
+// CHECK-NEXT: %[[RESULT:.+]] = comb.mux bin %[[OR]], %in, %c0_i4 : i4
+// CHECK-NEXT: hw.output %[[RESULT]]
+hw.module @OrMuxSameTrueValueAndZero(%tag_0: i1, %tag_1: i1, %tag_2: i1, %tag_3: i1, %in: i4) -> (out: i4) {
+  %c0_i4 = hw.constant 0 : i4
+  %0 = comb.mux bin %tag_0, %in, %c0_i4 : i4
+  %1 = comb.mux bin %tag_1, %in, %c0_i4 : i4
+  %2 = comb.mux bin %tag_2, %in, %c0_i4 : i4
+  %3 = comb.mux bin %tag_3, %in, %c0_i4 : i4
+  %4 = comb.or bin %0, %1, %2, %3 : i4
+  hw.output %4 : i4
+}

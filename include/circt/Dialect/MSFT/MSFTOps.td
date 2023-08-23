@@ -7,16 +7,18 @@
 //===----------------------------------------------------------------------===//
 
 include "circt/Dialect/HW/HWOpInterfaces.td"
+include "circt/Dialect/HW/HWTypes.td"
 
 def InstanceOp : MSFTOp<"instance", [
-        Symbol,
         DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+        DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>,
         DeclareOpInterfaceMethods<SymbolUserOpInterface>,
-        DeclareOpInterfaceMethods<HWInstanceLike>
+        DeclareOpInterfaceMethods<PortList>,
+        DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface>
     ]> {
   let summary = "Instantiate a module";
 
-  let arguments = (ins SymbolNameAttr:$sym_name,
+  let arguments = (ins InnerSymAttr:$inner_sym,
                        FlatSymbolRefAttr:$moduleName,
                        Variadic<AnyType>:$inputs,
                        OptionalAttr<ParamDeclArrayAttr>:$parameters,
@@ -24,7 +26,7 @@ def InstanceOp : MSFTOp<"instance", [
   let results = (outs Variadic<AnyType>);
 
   let builders = [
-    OpBuilder<(ins "ArrayRef<Type>":$resultTypes, "StringAttr":$sym_name,
+    OpBuilder<(ins "ArrayRef<Type>":$resultTypes, "StringAttr":$symName,
                    "FlatSymbolRefAttr":$moduleName, "ArrayRef<Value>":$inputs)>
   ];
 
@@ -43,7 +45,7 @@ def InstanceOp : MSFTOp<"instance", [
 
   /// sym keyword for optional symbol simplifies parsing
   let assemblyFormat = [{
-    $sym_name $moduleName `(` $inputs `)` custom<ParameterList>($parameters)
+    $inner_sym $moduleName `(` $inputs `)` custom<ParameterList>($parameters)
       attr-dict `:` functional-type($inputs, results)
   }];
 }
@@ -63,8 +65,6 @@ class MSFTModuleOpBase<string mnemonic, list<Trait> traits = []> :
   code extraModuleClassDeclaration = ?;
 
   let extraClassDeclaration = extraModuleClassDeclaration # [{
-    // Decode information about the input and output ports on this module.
-    ::circt::hw::ModulePortInfo getPorts();
 
     // Get the module's symbolic name as StringAttr.
     StringAttr getNameAttr() {
@@ -112,6 +112,8 @@ class MSFTModuleOpBase<string mnemonic, list<Trait> traits = []> :
 def MSFTModuleOp : MSFTModuleOpBase<"module",
       [RegionKindInterface, HasParent<"mlir::ModuleOp">,
        SingleBlockImplicitTerminator<"OutputOp">,
+       DeclareOpInterfaceMethods<PortList>,
+       DeclareOpInterfaceMethods<SymboledPortList>,
        DeclareOpInterfaceMethods<HWMutableModuleLike>]>{
   let summary = "MSFT HW Module";
   let description = [{
@@ -170,9 +172,9 @@ def MSFTModuleOp : MSFTModuleOpBase<"module",
   }];
 
   let extraClassDefinition = [{
-    size_t $cppClass::getNumPorts() {
-      auto ports = getPorts();
-      return ports.inputs.size() + ports.outputs.size();
+
+    ::circt::hw::ModuleType $cppClass::getHWModuleType() {
+      return ::circt::hw::detail::fnToMod(getFunctionType(), getArgNames().getValue(), getResultNames().getValue());
     }
 
     circt::hw::InnerSymAttr $cppClass::getPortSymbolAttr(size_t portIndex) {
@@ -189,7 +191,10 @@ def MSFTModuleOp : MSFTModuleOpBase<"module",
 }
 
 def MSFTModuleExternOp : MSFTOp<"module.extern",
-      [Symbol, FunctionOpInterface, HasParent<"mlir::ModuleOp">]> {
+      [Symbol, FunctionOpInterface, HasParent<"mlir::ModuleOp">, 
+      DeclareOpInterfaceMethods<PortList>,
+      DeclareOpInterfaceMethods<SymboledPortList>,
+      DeclareOpInterfaceMethods<HWModuleLike>]> {
   let summary = "MSFT external Module";
   let description = [{
     Identical to `hw.module.extern`, and trivially lowers to that. This op
@@ -216,6 +221,7 @@ def MSFTModuleExternOp : MSFTOp<"module.extern",
   let hasVerifier = 1;
 
   let extraClassDeclaration = [{
+
     /// Decode information about the input and output ports on this module.
     hw::ModulePortInfo getPorts();
 
@@ -224,6 +230,12 @@ def MSFTModuleExternOp : MSFTOp<"module.extern",
 
     /// Returns the result types of this function.
     ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
+  }];
+
+  let extraClassDefinition = [{
+    ::circt::hw::ModuleType $cppClass::getHWModuleType() {
+      return ::circt::hw::detail::fnToMod(getFunctionType(), getArgNames().getValue(), getResultNames().getValue());
+    }
   }];
 }
 

@@ -93,7 +93,7 @@ def SensitiveOp : SystemCOp<"sensitive", [HasParent<"CtorOp">]> {
 
 def InstanceDeclOp : SystemCOp<"instance.decl", [
   DeclareOpInterfaceMethods<SymbolUserOpInterface>,
-  DeclareOpInterfaceMethods<HWInstanceLike>,
+  DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface>,
   HasCustomSSAName,
   SystemCNameDeclOpInterface,
   HasParent<"SCModuleOp">
@@ -139,6 +139,11 @@ def InstanceDeclOp : SystemCOp<"instance.decl", [
 
     /// An InstanceDeclOp may not optionally define a symbol.
     bool isOptionalSymbol() { return false; }
+
+    //===------------------------------------------------------------------===//
+    // PortList Methods
+    //===------------------------------------------------------------------===//
+    ::circt::hw::ModulePortInfo getPortList();
   }];
 }
 
@@ -252,6 +257,10 @@ def CallIndirectOp : SystemCOp<"cpp.call_indirect", [
     }]>];
 
   let extraClassDeclaration = [{
+    MutableOperandRange getArgOperandsMutable() {
+      return getCalleeOperandsMutable();
+    }
+
     /// Get the argument operands to the called function.
     operand_range getArgOperands() {
       return {arg_operand_begin(), arg_operand_end()};
@@ -324,6 +333,10 @@ def CallOp : SystemCOp<"cpp.call", [
 
   let extraClassDeclaration = [{
     FunctionType getCalleeType();
+    
+    MutableOperandRange getArgOperandsMutable() {
+      return getCalleeOperandsMutable();
+    }
 
     /// Get the argument operands to the called function.
     operand_range getArgOperands() {

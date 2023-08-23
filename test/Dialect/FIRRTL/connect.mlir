@@ -28,7 +28,7 @@ firrtl.module @reset3(in %a : !firrtl.reset, out %b : !firrtl.uint<1>) {
 }
 
 firrtl.module @reset4(in %a : !firrtl.reset, out %b : !firrtl.asyncreset) {
-  // CHECK firrtl.connect %b, %a
+  // CHECK: firrtl.connect %b, %a
   firrtl.connect %b, %a : !firrtl.asyncreset, !firrtl.reset
 }
 

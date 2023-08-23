@@ -19,9 +19,8 @@ add_circt_library(CIRCTSupport
   PrettyPrinterHelpers.cpp
   SymCache.cpp
   ValueMapper.cpp
+  InstanceGraph.cpp
   "${VERSION_CPP}"
-
-  ADDITIONAL_HEADER_DIRS
 
   LINK_LIBS PUBLIC
   MLIRIR

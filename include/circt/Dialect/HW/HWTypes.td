@@ -72,18 +72,17 @@ def HWAggregateType : DialectType<HWDialect,
       ::circt::hw::UnpackedArrayType,
       ::circt::hw::StructType>}]>;
 
-//===----------------------------------------------------------------------===//
-// Type Definitions
-//===----------------------------------------------------------------------===//
+// A handle to refer to circt::hw::ModuleType in ODS.
+def ModuleType : DialectType<HWDialect,
+    CPred<"isa<circt::hw::ModuleType>($_self)">,
+          "a module", "::circt::hw::ModuleType">;
 
-/// Points to a name within a module.
-def HWInnerRefAttr : Attr<
-  CPred<"$_self.isa<::circt::hw::InnerRefAttr>()">,
-        "name reference attribute"> {
-  let returnType = "::circt::hw::InnerRefAttr";
-  let storageType = "::circt::hw::InnerRefAttr";
-  let convertFromStorage = "$_self";
-}
+// A handle to refer to circt::hw::StringType in ODS.
+def HWStringType :
+    DialectType<HWDialect,
+      CPred<"::circt::hw::type_isa<circt::hw::StringType>($_self)">,
+      "a HW string", "::circt::hw::StringType">,
+    BuildableType<"::circt::hw::StringType::get($_builder.getContext())">;
 
 /// A flat symbol reference or a reference to a name within a module.
 def NameRefAttr : Attr<
@@ -103,7 +102,7 @@ def NameRefArrayAttr : TypedArrayAttrBase<NameRefAttr,
 def InnerSymProperties : AttrDef<HWDialect, "InnerSymProperties"> {
   let mnemonic = "innerSymProps";
   let parameters = (ins
-         "mlir::StringAttr":$name,
+         "::mlir::StringAttr":$name,
          DefaultValuedParameter<"uint64_t", "0">:$fieldID,
          DefaultValuedParameter<"::mlir::StringAttr", "public">:$sym_visibility
                      );
@@ -116,6 +115,7 @@ def InnerSymProperties : AttrDef<HWDialect, "InnerSymProperties"> {
   let hasCustomAssemblyFormat = 1;
   // The assembly format is as follows:
   // "`<` `@` $name `,` $fieldID `,` $sym_visibility `>`";
+  let genVerifyDecl = 1;
 }
 
 
@@ -133,7 +133,6 @@ def InnerSymAttr : AttrDef<HWDialect, "InnerSym"> {
   let parameters = (ins ArrayRefParameter<"InnerSymPropertiesAttr">:$props);
   let builders = [
     AttrBuilderWithInferredContext<(ins "::mlir::StringAttr":$sym),[{
-      assert(!sym.getValue().empty() && "symbol name must be non-empty");
       return get(sym.getContext(),
       {InnerSymPropertiesAttr::get(sym.getContext(), sym, 0,
                         mlir::StringAttr::get(sym.getContext(), "public"))});
@@ -145,7 +144,7 @@ def InnerSymAttr : AttrDef<HWDialect, "InnerSym"> {
   ];
   let extraClassDeclaration = [{
     /// Get the inner sym name for fieldID, if it exists.
-    mlir::StringAttr getSymIfExists(unsigned fieldID) const;
+    mlir::StringAttr getSymIfExists(uint64_t fieldID) const;
 
     /// Get the inner sym name for fieldID=0, if it exists.
     mlir::StringAttr getSymName() const { return getSymIfExists(0); }
@@ -157,7 +156,7 @@ def InnerSymAttr : AttrDef<HWDialect, "InnerSym"> {
     bool empty() const { return getProps().empty(); }
 
     /// Return an InnerSymAttr with the inner symbol for the specified fieldID removed.
-    InnerSymAttr erase(unsigned fieldID) const;
+    InnerSymAttr erase(uint64_t fieldID) const;
 
     using iterator = mlir::ArrayRef<InnerSymPropertiesAttr>::iterator;
     /// Iterator begin for all the InnerSymProperties.

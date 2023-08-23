@@ -4,11 +4,11 @@
 
 Welcome to the CIRCT project!
 
-"CIRCT" stands for "Circuit IR Compilers and Tools".  The CIRCT project is an 
-(experimental!) effort looking to apply MLIR and the LLVM development 
+"CIRCT" stands for "Circuit IR Compilers and Tools".  The CIRCT project is an
+(experimental!) effort looking to apply MLIR and the LLVM development
 methodology to the domain of hardware design tools.
 
-Take a look at the following diagram, which gives a brief overview of the 
+Take a look at the following diagram, which gives a brief overview of the
 current [dialects and how they interact](/includes/img/dialects.svg):
 
 <p align="center"><img src="/includes/img/dialectlegend.svg"/></p>
@@ -19,7 +19,7 @@ current [dialects and how they interact](/includes/img/dialects.svg):
 These commands can be used to setup CIRCT project:
 
 1) **Install Dependencies** of LLVM/MLIR according to [the
-  instructions](https://mlir.llvm.org/getting_started/), including cmake and 
+  instructions](https://mlir.llvm.org/getting_started/), including cmake and
 ninja.
 
 *Note:* CIRCT is known to build with at least GCC 9.4 and Clang 13.0.1, but
@@ -46,8 +46,8 @@ $ git submodule init
 $ git submodule update
 ```
 
-*Note:* The repository is set up so that `git submodule update` performs a 
-shallow clone, meaning it downloads just enough of the LLVM repository to check 
+*Note:* The repository is set up so that `git submodule update` performs a
+shallow clone, meaning it downloads just enough of the LLVM repository to check
 out the currently specified commit. If you wish to work with the full history of
 the LLVM repository, you can manually "unshallow" the submodule:
 
@@ -101,10 +101,10 @@ If you plan to use the Python bindings, you should also specify
 
 5) **Optionally configure your environment**:
 
-It is useful to add the `.../circt/build/bin` and `.../circt/llvm/build/bin` 
-directories to the end of your PATH, allowing you to use the tools like `circt-opt` 
-in a natural way on the command line.  Similarly, you need to be in the build 
-directory to invoke ninja, which is super annoying.  You might find a bash/zsh 
+It is useful to add the `.../circt/build/bin` and `.../circt/llvm/build/bin`
+directories to the end of your PATH, allowing you to use the tools like `circt-opt`
+in a natural way on the command line.  Similarly, you need to be in the build
+directory to invoke ninja, which is super annoying.  You might find a bash/zsh
 alias like this to be useful:
 
 ```bash
@@ -157,6 +157,24 @@ satisfiability problems. Here, it is optionally used in the static scheduling
 infrastructure. Binary distributions often do not include the required CMake
 build info. The `utils/get-or-tools.sh` script downloads, compiles, and
 installs a known good version to a directory within the CIRCT source code,
+
+## Setting up VS Code Workspace
+
+We've provided an example VS Code file in `.vscode/Unified.code-workspace.jsonc` that can be used with the VS Code editor. To use the file, first copy to into a workspace file:
+```sh
+cp .vscode/Unified.code-workspace.jsonc .vscode/circt.code-workspace
+```
+
+Next, open the workspace file in VS code using the command palette (Ctrl + Shift + P) and selecting "Open workspace from file" and selecting the `.vscode/circt.code-workspace` file.
+
+Alternatively, open the file using:
+```
+code .vscode/circt.code-workspace
+```
+and select "open workspace" on the bottom right.
+
+Once the workspace is loaded, install the recommended tools and select "CMake: Build" from the command palette to start the unified build process. This will build the LLVM dependencies and CIRCT together.
+
 where it is then picked up automatically by the build.
 
 ## Windows: notes on setting up with Ninja
@@ -215,8 +233,8 @@ GitHub issues.  Here are some high-level guidelines:
  * Beyond mechanical formatting issues, please follow the [LLVM Coding
    Standards](https://llvm.org/docs/CodingStandards.html).
 
- * Please practice "[incremental development](https://llvm.org/docs/DeveloperPolicy.html#incremental-development)", 
-   preferring to send a small series of incremental patches rather than large 
+ * Please practice "[incremental development](https://llvm.org/docs/DeveloperPolicy.html#incremental-development)",
+   preferring to send a small series of incremental patches rather than large
    patches.  There are other policies in the LLVM Developer Policy document that
    are worth skimming.
 
@@ -229,14 +247,14 @@ GitHub issues.  Here are some high-level guidelines:
 
 ## Submitting changes to LLVM / MLIR
 
-This project depends on MLIR and LLVM, and it is occasionally useful to improve 
+This project depends on MLIR and LLVM, and it is occasionally useful to improve
 them.
 To get set up for this:
 
-1) Follow the "[How to Contribute](https://mlir.llvm.org/getting_started/Contributing/)" 
+1) Follow the "[How to Contribute](https://mlir.llvm.org/getting_started/Contributing/)"
 instructions, and install the right tools, e.g. 'arcanist' and `clang-format`.
 2) Get an LLVM Phabricator account
-3) [Ask for LLVM commit access](https://llvm.org/docs/DeveloperPolicy.html#obtaining-commit-access), 
+3) [Ask for LLVM commit access](https://llvm.org/docs/DeveloperPolicy.html#obtaining-commit-access),
 the barrier is low.
 
 ### Submitting a patch

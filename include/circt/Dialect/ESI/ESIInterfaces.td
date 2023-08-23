@@ -10,6 +10,9 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_ESI_INTERFACES_TD
+#define CIRCT_DIALECT_ESI_INTERFACES_TD
+
 include "mlir/IR/OpBase.td"
 
 def ChannelOpInterface : OpInterface<"ChannelOpInterface"> {
@@ -64,3 +67,70 @@ def ServiceDeclOpInterface : OpInterface<"ServiceDeclOpInterface"> {
         }]>,
   ];
 }
+
+def ServiceReqOpInterface : OpInterface<"ServiceReqOpInterface"> {
+  let cppNamespace = "circt::esi";
+  let description = [{
+    Any op which is requesting connection to a service's port or has information
+    pertaining to one of said requests.
+  }];
+
+  let methods = [
+    InterfaceMethod<
+      "Returns the service port symbol.",
+      "hw::InnerRefAttr", "getServicePort", (ins)
+    >,
+    InterfaceMethod<
+      "Returns the client name path.",
+      "ArrayAttr", "getClientNamePath", (ins)
+    >,
+    InterfaceMethod<
+      "Set the client name path.",
+      "void", "setClientNamePath", (ins "ArrayAttr":$newClientNamePath),
+      /*methodBody=*/"",
+      /*defaultImplementation=*/[{
+        $_op.setClientNamePathAttr(newClientNamePath);
+      }]>,
+    InterfaceMethod<
+      "Returns the type headed to the client. Can be null.",
+      "Type", "getToClientType", (ins),
+      /*methodBody=*/[{
+        Value toClient = $_op.getToClient();
+        if (!toClient)
+          return {};
+        return toClient.getType();
+      }]>,
+    InterfaceMethod<
+      "Returns the value headed to the client. Can be null.",
+      "Value", "getToClient", (ins),
+      /*methodBody=*/"",
+      /*defaultImplementation=*/[{
+        return {};
+      }]>,
+    InterfaceMethod<
+      "Returns the type headed to the server. Can be null.",
+      "Type", "getToServerType", (ins),
+      /*methodBody=*/[{
+        Value toServer = $_op.getToServer();
+        if (!toServer)
+          return {};
+        return toServer.getType();
+      }]>,
+    InterfaceMethod<
+      "Returns the value headed to the server. Can be null.",
+      "Value", "getToServer", (ins),
+      /*methodBody=*/"",
+      /*defaultImplementation=*/[{
+        return {};
+      }]>,
+    InterfaceMethod<
+      "Set the value headed to the server. Can assert().",
+      "void", "setToServer", (ins "Value":$newValue),
+      /*methodBody=*/"",
+      /*defaultImplementation=*/[{
+        assert(false && "This op doesn't support the to server direction");
+      }]>
+  ];
+}
+
+#endif // CIRCT_DIALECT_ESI_INTERFACES_TD

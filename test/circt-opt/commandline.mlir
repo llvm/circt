@@ -20,6 +20,7 @@
 // DIALECT-SAME: handshake
 // DIALECT-SAME: hw
 // DIALECT-SAME: hwarith
+// DIALECT-SAME: ibis
 // DIALECT-SAME: interop
 // DIALECT-SAME: llhd
 // DIALECT-SAME: llvm

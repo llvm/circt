@@ -321,7 +321,7 @@ private:
 } // namespace
 
 static void addCallSiteOperands(
-    MutableArrayRef<CallOpMutableInterface> callSites,
+    MutableArrayRef<mlir::CallOpInterface> callSites,
     ArrayRef<std::variant<Operation *, unsigned>> operandMappings) {
   SmallDenseMap<Operation *, Operation *> clonedOps;
   SmallVector<Value> newOperands;
@@ -358,7 +358,7 @@ struct DedupPass : public DedupBase<DedupPass> {
   /// A mapping from arc names to arc definitions.
   DenseMap<StringAttr, DefineOp> arcByName;
   /// A mapping from arc definitions to call sites.
-  DenseMap<DefineOp, SmallVector<CallOpMutableInterface, 1>> callSites;
+  DenseMap<DefineOp, SmallVector<mlir::CallOpInterface, 1>> callSites;
 };
 
 struct ArcHash {
@@ -384,7 +384,7 @@ void DedupPass::runOnOperation() {
   }
 
   // Collect the arc call sites.
-  getOperation().walk([&](CallOpMutableInterface callOp) {
+  getOperation().walk([&](mlir::CallOpInterface callOp) {
     if (auto defOp =
             dyn_cast_or_null<DefineOp>(callOp.resolveCallable(&symbolTable)))
       callSites[arcByName.lookup(callOp.getCallableForCallee()
@@ -711,6 +711,9 @@ void DedupPass::runOnOperation() {
 }
 
 void DedupPass::replaceArcWith(DefineOp oldArc, DefineOp newArc) {
+  ++dedupPassNumArcsDeduped;
+  auto oldArcOps = oldArc.getOps();
+  dedupPassTotalOps += std::distance(oldArcOps.begin(), oldArcOps.end());
   auto &oldUses = callSites[oldArc];
   auto &newUses = callSites[newArc];
   auto newArcName = SymbolRefAttr::get(newArc.getSymNameAttr());

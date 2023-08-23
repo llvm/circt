@@ -14,9 +14,9 @@
 #ifndef CIRCT_DIALECT_HW_INNERSYMBOLTABLE_H
 #define CIRCT_DIALECT_HW_INNERSYMBOLTABLE_H
 
-#include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
-#include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Support/LLVM.h"
+#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/SymbolTable.h"
 #include "llvm/ADT/StringRef.h"
 
@@ -27,15 +27,17 @@ namespace hw {
 class InnerSymTarget {
 public:
   /// Default constructor, invalid.
-  /* implicit */ InnerSymTarget() { assert(!*this); }
+  InnerSymTarget() { assert(!*this); }
 
-  /// Target an operation, and optionally a field (=0 means the op itself).
-  explicit InnerSymTarget(Operation *op, size_t fieldID = 0)
+  /// Target an operation.
+  explicit InnerSymTarget(Operation *op) : InnerSymTarget(op, 0) {}
+
+  /// Target an operation and a field (=0 means the op itself).
+  InnerSymTarget(Operation *op, size_t fieldID)
       : op(op), portIdx(invalidPort), fieldID(fieldID) {}
 
   /// Target a port, and optionally a field (=0 means the port itself).
-  /// Operation should be an FModuleLike.
-  explicit InnerSymTarget(size_t portIdx, Operation *op, size_t fieldID = 0)
+  InnerSymTarget(size_t portIdx, Operation *op, size_t fieldID = 0)
       : op(op), portIdx(portIdx), fieldID(fieldID) {}
 
   InnerSymTarget(const InnerSymTarget &) = default;
@@ -250,10 +252,10 @@ OS &operator<<(OS &os, const InnerSymTarget &target) {
     os << "field " << target.getField() << " of ";
 
   if (target.isPort())
-    os << "<port " << target.getPort() << " on @"
-       << SymbolTable::getSymbolName(target.getOp()) << ">";
+    os << "port " << target.getPort() << " on @"
+       << SymbolTable::getSymbolName(target.getOp()).getValue() << "";
   else
-    os << "<op " << *target.getOp() << ">";
+    os << "op " << *target.getOp() << "";
 
   return os;
 }

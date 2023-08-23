@@ -21,3 +21,15 @@ firrtl.circuit "Foo" {
     firrtl.strictconnect %0, %2 : !firrtl.uint<1>
   }
 }
+
+// -----
+
+firrtl.circuit "Foo" {
+  firrtl.module @Foo(in %clock: !firrtl.clock, in %reset: !firrtl.reset, out %hbr: !firrtl.uint<1>) {
+    // expected-error @below {{uninferred reset passed to 'has_been_reset'; requires sync or async reset}}
+    // expected-note @below {{reset is of type '!firrtl.reset', should be '!firrtl.uint<1>' or '!firrtl.asyncreset'}}
+    // expected-error @below {{couldn't handle this operation}}
+    %0 = firrtl.int.has_been_reset %clock, %reset : !firrtl.reset
+    firrtl.strictconnect %hbr, %0 : !firrtl.uint<1>
+  }
+}
