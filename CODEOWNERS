@@ -9,6 +9,7 @@ tools/arcilator @fabianschuiki @maerhart
 **/Conversion/CalyxToFSM @mortbopet
 **/Conversion/CalyxToHW @mortbopet @mikeurbach
 **/Conversion/SCFToCalyx @mikeurbach @mortbopet
+**/Conversion/CalyxNative @rachitnigam
 **/Conversion/LoopScheduleToCalyx @andrewb1999 @mikeurbach
 
 # DC

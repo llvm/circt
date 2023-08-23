@@ -6,6 +6,7 @@ add_mlir_public_c_api_library(CIRCTCAPIConversion
   CIRCTArcToLLVM
   CIRCTCalyxToFSM
   CIRCTCalyxToHW
+  CIRCTCalyxNative
   CIRCTCombToArith
   CIRCTCombToLLVM
   CIRCTConvertToArcs
