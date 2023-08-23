@@ -48,6 +48,8 @@ struct PortInfo : public ModulePort {
   ssize_t getId() const { return isOutput() ? argNum : (-1 - argNum); };
 };
 
+raw_ostream &operator<<(raw_ostream &printer, PortInfo port);
+
 /// This holds a decoded list of input/inout and output ports for a module or
 /// instance.
 struct ModulePortInfo {
