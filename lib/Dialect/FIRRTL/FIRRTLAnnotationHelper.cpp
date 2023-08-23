@@ -384,6 +384,32 @@ void AnnoTargetCache::gatherTargets(FModuleLike mod) {
 }
 
 //===----------------------------------------------------------------------===//
+// HierPathOpCache
+//===----------------------------------------------------------------------===//
+
+HierPathCache::HierPathCache(Operation *op, SymbolTable &symbolTable)
+    : builder(OpBuilder::atBlockBegin(&op->getRegion(0).front())),
+      symbolTable(symbolTable) {
+
+  // Populate the cache with any symbols preexisting.
+  for (auto &region : op->getRegions())
+    for (auto &block : region.getBlocks())
+      for (auto path : block.getOps<hw::HierPathOp>())
+        cache[path.getNamepathAttr()] = path;
+}
+
+hw::HierPathOp HierPathCache::getOpFor(ArrayAttr attr) {
+  auto &op = cache[attr];
+  if (!op) {
+    op = builder.create<hw::HierPathOp>(UnknownLoc::get(builder.getContext()),
+                                        "nla", attr);
+    symbolTable.insert(op);
+    op.setVisibility(SymbolTable::Visibility::Private);
+  }
+  return op;
+}
+
+//===----------------------------------------------------------------------===//
 // Code related to handling Grand Central Data/Mem Taps annotations
 //===----------------------------------------------------------------------===//
 

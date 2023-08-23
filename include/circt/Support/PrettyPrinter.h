@@ -50,7 +50,7 @@ enum class IndentStyle { Visual, Block };
 
 class Token {
 public:
-  enum class Kind { String, Break, Begin, End };
+  enum class Kind { String, Break, Begin, End, Callback };
 
   struct TokenInfo {
     Kind kind; // Common initial sequence.
@@ -72,6 +72,11 @@ public:
   struct EndInfo : public TokenInfo {
     // Nothing
   };
+  // This can be used to associate a callback with the print event on the
+  // tokens stream. Since tokens strictly follow FIFO order on a queue, each
+  // CallbackToken can uniquely identify the data it is associated with, when it
+  // is added and popped from the queue.
+  struct CallbackInfo : public TokenInfo {};
 
 private:
   union {
@@ -80,6 +85,7 @@ private:
     BreakInfo breakInfo;
     BeginInfo beginInfo;
     EndInfo endInfo;
+    CallbackInfo callbackInfo;
   } data;
 
 protected:
@@ -93,6 +99,8 @@ protected:
       return t.data.beginInfo;
     if constexpr (k == Kind::End)
       return t.data.endInfo;
+    if constexpr (k == Kind::Callback)
+      return t.data.callbackInfo;
     llvm_unreachable("unhandled token kind");
   }
 
@@ -156,6 +164,10 @@ struct BeginToken : public TokenBase<BeginToken, Token::Kind::Begin> {
 
 struct EndToken : public TokenBase<EndToken, Token::Kind::End> {};
 
+struct CallbackToken : public TokenBase<CallbackToken, Token::Kind::Callback> {
+  CallbackToken() = default;
+};
+
 //===----------------------------------------------------------------------===//
 // PrettyPrinter
 //===----------------------------------------------------------------------===//
@@ -167,6 +179,8 @@ public:
     virtual ~Listener();
     /// No tokens referencing external memory are present.
     virtual void clear(){};
+    /// Listener for print event.
+    virtual void print(){};
   };
 
   /// PrettyPrinter for specified stream.
@@ -199,7 +213,7 @@ public:
   void addTokens(R &&tokens) {
     // Don't invoke listener until range processed, we own it now.
     {
-      llvm::SaveAndRestore<Listener *> save(listener, nullptr);
+      llvm::SaveAndRestore<bool> save(donotClear, true);
       for (Token &t : tokens)
         add(t);
     }
@@ -300,6 +314,9 @@ private:
 
   /// Hook for Token storage events.
   Listener *listener = nullptr;
+
+  /// Flag to identify a state when the clear cannot be called.
+  bool donotClear = false;
 
   /// Threshold for walking scan state and "rebasing" totals/offsets.
   static constexpr decltype(leftTotal) rebaseThreshold =

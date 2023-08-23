@@ -1,261 +1,26 @@
-//===- LowerSeqToSV.cpp - Seq to SV lowering ------------------------------===//
+//===- FirRegLowering.cpp - FirReg lowering utilities ---------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-//
-// This transform translate Seq ops to SV.
-//
-//===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
+#include "FirRegLowering.h"
 #include "circt/Dialect/Comb/CombOps.h"
-#include "circt/Dialect/HW/HWAttributes.h"
-#include "circt/Dialect/HW/HWOps.h"
-#include "circt/Dialect/SV/SVAttributes.h"
-#include "circt/Dialect/SV/SVOps.h"
-#include "circt/Dialect/Seq/SeqOps.h"
-#include "circt/Dialect/Seq/SeqPasses.h"
-#include "mlir/IR/Builders.h"
-#include "mlir/IR/DialectImplementation.h"
-#include "mlir/IR/ImplicitLocOpBuilder.h"
-#include "mlir/Pass/Pass.h"
-#include "mlir/Transforms/DialectConversion.h"
-#include "llvm/ADT/IntervalMap.h"
-#include "llvm/ADT/TypeSwitch.h"
-
-namespace circt {
-namespace seq {
-#define GEN_PASS_DEF_LOWERSEQFIRRTLINITTOSV
-#include "circt/Dialect/Seq/SeqPasses.h.inc"
-} // namespace seq
-} // namespace circt
+#include "mlir/IR/Threading.h"
+#include "llvm/Support/Debug.h"
 
 using namespace circt;
+using namespace hw;
 using namespace seq;
+using llvm::MapVector;
 
-namespace {
-#define GEN_PASS_DEF_LOWERSEQTOSV
-#define GEN_PASS_DEF_LOWERSEQFIRRTLTOSV
-#define GEN_PASS_DEF_LOWERSEQFIRRTLINITTOSV
-#include "circt/Dialect/Seq/SeqPasses.h.inc"
+#define DEBUG_TYPE "lower-seq-firreg"
 
-struct SeqToSVPass : public impl::LowerSeqToSVBase<SeqToSVPass> {
-  void runOnOperation() override;
-  using LowerSeqToSVBase::lowerToAlwaysFF;
-};
-
-struct SeqFIRRTLToSVPass
-    : public impl::LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass> {
-  void runOnOperation() override;
-  using LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass>::disableRegRandomization;
-  using LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass>::emitSeparateAlwaysBlocks;
-  using LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass>::LowerSeqFIRRTLToSVBase;
-  using LowerSeqFIRRTLToSVBase<SeqFIRRTLToSVPass>::numSubaccessRestored;
-};
-struct SeqFIRRTLInitToSVPass
-    : public impl::LowerSeqFIRRTLInitToSVBase<SeqFIRRTLInitToSVPass> {
-  void runOnOperation() override;
-};
-} // anonymous namespace
-
-/// Create the assign.
-static void createAssign(ConversionPatternRewriter &rewriter, sv::RegOp svReg,
-                         CompRegOp reg) {
-  rewriter.create<sv::PAssignOp>(reg.getLoc(), svReg, reg.getInput());
-}
-/// Create the assign inside of an if block.
-static void createAssign(ConversionPatternRewriter &rewriter, sv::RegOp svReg,
-                         CompRegClockEnabledOp reg) {
-  Location loc = reg.getLoc();
-  rewriter.create<sv::IfOp>(loc, reg.getClockEnable(), [&]() {
-    rewriter.create<sv::PAssignOp>(reg.getLoc(), svReg, reg.getInput());
-  });
-}
-
-namespace {
-/// Lower CompRegOp to `sv.reg` and `sv.alwaysff`. Use a posedge clock and
-/// synchronous reset.
-template <typename OpTy>
-class CompRegLower : public OpConversionPattern<OpTy> {
-public:
-  CompRegLower(MLIRContext *context, bool lowerToAlwaysFF)
-      : OpConversionPattern<OpTy>(context), lowerToAlwaysFF(lowerToAlwaysFF) {}
-
-  using OpConversionPattern<OpTy>::OpConversionPattern;
-  using OpAdaptor = typename OpConversionPattern<OpTy>::OpAdaptor;
-
-  LogicalResult
-  matchAndRewrite(OpTy reg, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const final {
-    Location loc = reg.getLoc();
-
-    auto svReg =
-        rewriter.create<sv::RegOp>(loc, reg.getResult().getType(),
-                                   reg.getNameAttr(), reg.getInnerSymAttr());
-    svReg->setDialectAttrs(reg->getDialectAttrs());
-
-    circt::sv::setSVAttributes(svReg, circt::sv::getSVAttributes(reg));
-
-    auto regVal = rewriter.create<sv::ReadInOutOp>(loc, svReg);
-
-    auto assignValue = [&] { createAssign(rewriter, svReg, reg); };
-    auto assignReset = [&] {
-      rewriter.create<sv::PAssignOp>(loc, svReg, adaptor.getResetValue());
-    };
-
-    if (adaptor.getReset() && adaptor.getResetValue()) {
-      if (lowerToAlwaysFF) {
-        rewriter.create<sv::AlwaysFFOp>(
-            loc, sv::EventControl::AtPosEdge, adaptor.getClk(),
-            ResetType::SyncReset, sv::EventControl::AtPosEdge,
-            adaptor.getReset(), assignValue, assignReset);
-      } else {
-        rewriter.create<sv::AlwaysOp>(
-            loc, sv::EventControl::AtPosEdge, adaptor.getClk(), [&] {
-              rewriter.create<sv::IfOp>(loc, adaptor.getReset(), assignReset,
-                                        assignValue);
-            });
-      }
-    } else {
-      if (lowerToAlwaysFF) {
-        rewriter.create<sv::AlwaysFFOp>(loc, sv::EventControl::AtPosEdge,
-                                        adaptor.getClk(), assignValue);
-      } else {
-        rewriter.create<sv::AlwaysOp>(loc, sv::EventControl::AtPosEdge,
-                                      adaptor.getClk(), assignValue);
-      }
-    }
-
-    rewriter.replaceOp(reg, regVal);
-    return success();
-  }
-
-private:
-  bool lowerToAlwaysFF;
-};
-
-// Lower seq.clock_gate to a fairly standard clock gate implementation.
-//
-class ClockGateLowering : public OpConversionPattern<ClockGateOp> {
-public:
-  using OpConversionPattern<ClockGateOp>::OpConversionPattern;
-  using OpAdaptor = typename OpConversionPattern<ClockGateOp>::OpAdaptor;
-  LogicalResult
-  matchAndRewrite(ClockGateOp clockGate, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const final {
-    auto loc = clockGate.getLoc();
-    Value clk = adaptor.getInput();
-
-    // enable in
-    Value enable = adaptor.getEnable();
-    if (auto te = adaptor.getTestEnable())
-      enable = rewriter.create<comb::OrOp>(loc, enable, te);
-
-    // Enable latch.
-    Value enableLatch = rewriter.create<sv::RegOp>(
-        loc, rewriter.getI1Type(), rewriter.getStringAttr("cg_en_latch"));
-
-    // Latch the enable signal using an always @* block.
-    rewriter.create<sv::AlwaysOp>(
-        loc, llvm::SmallVector<sv::EventControl>{}, llvm::SmallVector<Value>{},
-        [&]() {
-          rewriter.create<sv::IfOp>(
-              loc, comb::createOrFoldNot(loc, clk, rewriter), [&]() {
-                rewriter.create<sv::PAssignOp>(loc, enableLatch, enable);
-              });
-        });
-
-    // Create the gated clock signal.
-    Value gclk = rewriter.create<comb::AndOp>(
-        loc, clk, rewriter.create<sv::ReadInOutOp>(loc, enableLatch));
-    clockGate.replaceAllUsesWith(gclk);
-    rewriter.eraseOp(clockGate);
-    return success();
-  }
-};
-
-} // namespace
-
-namespace {
-/// Lower FirRegOp to `sv.reg` and `sv.always`.
-class FirRegLower {
-public:
-  FirRegLower(hw::HWModuleOp module, bool disableRegRandomization = false,
-              bool emitSeparateAlwaysBlocks = false)
-      : module(module), disableRegRandomization(disableRegRandomization),
-        emitSeparateAlwaysBlocks(emitSeparateAlwaysBlocks){};
-
-  void lower();
-
-  unsigned numSubaccessRestored = 0;
-
-private:
-  struct RegLowerInfo {
-    sv::RegOp reg;
-    IntegerAttr preset;
-    Value asyncResetSignal;
-    Value asyncResetValue;
-    int64_t randStart;
-    size_t width;
-  };
-
-  RegLowerInfo lower(FirRegOp reg);
-
-  void initialize(OpBuilder &builder, RegLowerInfo reg, ArrayRef<Value> rands);
-  void initializeRegisterElements(Location loc, OpBuilder &builder, Value reg,
-                                  Value rand, unsigned &pos);
-
-  void createTree(OpBuilder &builder, Value reg, Value term, Value next);
-  std::optional<std::tuple<Value, Value, Value>>
-  tryRestoringSubaccess(OpBuilder &builder, Value reg, Value term,
-                        hw::ArrayCreateOp nextArray);
-
-  void addToAlwaysBlock(Block *block, sv::EventControl clockEdge, Value clock,
-                        std::function<void(OpBuilder &)> body,
-                        ResetType resetStyle = {},
-                        sv::EventControl resetEdge = {}, Value reset = {},
-                        std::function<void(OpBuilder &)> resetBody = {});
-
-  void addToIfBlock(OpBuilder &builder, Value cond,
-                    const std::function<void()> &trueSide,
-                    const std::function<void()> &falseSide);
-
-  hw::ConstantOp getOrCreateConstant(Location loc, const APInt &value) {
-    OpBuilder builder(module.getBody());
-    auto &constant = constantCache[value];
-    if (constant) {
-      constant->setLoc(builder.getFusedLoc({constant->getLoc(), loc}));
-      return constant;
-    }
-
-    constant = builder.create<hw::ConstantOp>(loc, value);
-    return constant;
-  }
-
-  using AlwaysKeyType = std::tuple<Block *, sv::EventControl, Value, ResetType,
-                                   sv::EventControl, Value>;
-  llvm::SmallDenseMap<AlwaysKeyType, std::pair<sv::AlwaysOp, sv::IfOp>>
-      alwaysBlocks;
-
-  using IfKeyType = std::pair<Block *, Value>;
-  llvm::SmallDenseMap<IfKeyType, sv::IfOp> ifCache;
-
-  llvm::SmallDenseMap<APInt, hw::ConstantOp> constantCache;
-  llvm::SmallDenseMap<std::pair<Value, unsigned>, Value> arrayIndexCache;
-
-  hw::HWModuleOp module;
-
-  bool disableRegRandomization;
-  bool emitSeparateAlwaysBlocks;
-};
-} // namespace
-
-void FirRegLower::addToIfBlock(OpBuilder &builder, Value cond,
-                               const std::function<void()> &trueSide,
-                               const std::function<void()> &falseSide) {
+void FirRegLowering::addToIfBlock(OpBuilder &builder, Value cond,
+                                  const std::function<void()> &trueSide,
+                                  const std::function<void()> &falseSide) {
   auto op = ifCache.lookup({builder.getBlock(), cond});
   // Always build both sides of the if, in case we want to use an empty else
   // later. This way we don't have to build a new if and replace it.
@@ -272,7 +37,7 @@ void FirRegLower::addToIfBlock(OpBuilder &builder, Value cond,
   }
 }
 
-void FirRegLower::lower() {
+void FirRegLowering::lower() {
   // Find all registers to lower in the module.
   auto regs = module.getOps<seq::FirRegOp>();
   if (regs.empty())
@@ -467,8 +232,8 @@ static std::optional<APInt> getConstantValue(Value value) {
 //   reg[idx] <= val;
 //
 std::optional<std::tuple<Value, Value, Value>>
-FirRegLower::tryRestoringSubaccess(OpBuilder &builder, Value reg, Value term,
-                                   hw::ArrayCreateOp nextRegValue) {
+FirRegLowering::tryRestoringSubaccess(OpBuilder &builder, Value reg, Value term,
+                                      hw::ArrayCreateOp nextRegValue) {
   Value trueVal;
   SmallVector<Value> muxConditions;
   // Compat fix for GCC12's libstdc++, cannot use
@@ -540,8 +305,8 @@ FirRegLower::tryRestoringSubaccess(OpBuilder &builder, Value reg, Value term,
   return std::make_tuple(commonConditionValue, indexValue, trueVal);
 }
 
-void FirRegLower::createTree(OpBuilder &builder, Value reg, Value term,
-                             Value next) {
+void FirRegLowering::createTree(OpBuilder &builder, Value reg, Value term,
+                                Value next) {
 
   SmallVector<std::tuple<Block *, Value, Value, Value>> worklist;
   auto addToWorklist = [&](Value reg, Value term, Value next) {
@@ -634,7 +399,7 @@ void FirRegLower::createTree(OpBuilder &builder, Value reg, Value term,
   }
 }
 
-FirRegLower::RegLowerInfo FirRegLower::lower(FirRegOp reg) {
+FirRegLowering::RegLowerInfo FirRegLowering::lower(FirRegOp reg) {
   Location loc = reg.getLoc();
 
   ImplicitLocOpBuilder builder(reg.getLoc(), reg);
@@ -691,9 +456,11 @@ FirRegLower::RegLowerInfo FirRegLower::lower(FirRegOp reg) {
 // Initialize registers by assigning each element recursively instead of
 // initializing entire registers. This is necessary as a workaround for
 // verilator which allocates many local variables for concat op.
-void FirRegLower::initializeRegisterElements(Location loc, OpBuilder &builder,
-                                             Value reg, Value randomSource,
-                                             unsigned &pos) {
+// NOLINTBEGIN(misc-no-recursion)
+void FirRegLowering::initializeRegisterElements(Location loc,
+                                                OpBuilder &builder, Value reg,
+                                                Value randomSource,
+                                                unsigned &pos) {
   auto type = reg.getType().cast<sv::InOutType>().getElementType();
   if (auto intTy = hw::type_dyn_cast<IntegerType>(type)) {
     // Use randomSource[pos-1:pos-width] as a random value.
@@ -718,9 +485,10 @@ void FirRegLower::initializeRegisterElements(Location loc, OpBuilder &builder,
     assert(false && "unsupported type");
   }
 }
+// NOLINTEND(misc-no-recursion)
 
-void FirRegLower::initialize(OpBuilder &builder, RegLowerInfo reg,
-                             ArrayRef<Value> rands) {
+void FirRegLowering::initialize(OpBuilder &builder, RegLowerInfo reg,
+                                ArrayRef<Value> rands) {
   auto loc = reg.reg.getLoc();
   SmallVector<Value> nibbles;
   if (reg.width == 0)
@@ -745,12 +513,11 @@ void FirRegLower::initialize(OpBuilder &builder, RegLowerInfo reg,
   initializeRegisterElements(loc, builder, reg.reg, concat, pos);
 }
 
-void FirRegLower::addToAlwaysBlock(Block *block, sv::EventControl clockEdge,
-                                   Value clock,
-                                   std::function<void(OpBuilder &)> body,
-                                   ::ResetType resetStyle,
-                                   sv::EventControl resetEdge, Value reset,
-                                   std::function<void(OpBuilder &)> resetBody) {
+void FirRegLowering::addToAlwaysBlock(
+    Block *block, sv::EventControl clockEdge, Value clock,
+    const std::function<void(OpBuilder &)> &body, ::ResetType resetStyle,
+    sv::EventControl resetEdge, Value reset,
+    const std::function<void(OpBuilder &)> &resetBody) {
   auto loc = clock.getLoc();
   auto builder = ImplicitLocOpBuilder::atBlockTerminator(loc, block);
   AlwaysKeyType key{builder.getBlock(), clockEdge, clock,
@@ -820,52 +587,4 @@ void FirRegLower::addToAlwaysBlock(Block *block, sv::EventControl clockEdge,
   if (!emitSeparateAlwaysBlocks) {
     alwaysBlocks[key] = {alwaysOp, insideIfOp};
   }
-}
-
-void SeqToSVPass::runOnOperation() {
-  ModuleOp top = getOperation();
-
-  MLIRContext &ctxt = getContext();
-  ConversionTarget target(ctxt);
-  target.addIllegalDialect<SeqDialect>();
-  target.addLegalDialect<sv::SVDialect, comb::CombDialect, hw::HWDialect>();
-  RewritePatternSet patterns(&ctxt);
-  patterns.add<CompRegLower<CompRegOp>>(&ctxt, lowerToAlwaysFF);
-  patterns.add<CompRegLower<CompRegClockEnabledOp>>(&ctxt, lowerToAlwaysFF);
-  patterns.add<ClockGateLowering>(&ctxt);
-
-  if (failed(applyPartialConversion(top, target, std::move(patterns))))
-    signalPassFailure();
-}
-
-void SeqFIRRTLToSVPass::runOnOperation() {
-  hw::HWModuleOp module = getOperation();
-  FirRegLower firRegLower(module, disableRegRandomization,
-                          emitSeparateAlwaysBlocks);
-  firRegLower.lower();
-  numSubaccessRestored += firRegLower.numSubaccessRestored;
-}
-
-void SeqFIRRTLInitToSVPass::runOnOperation() {
-  ModuleOp top = getOperation();
-  OpBuilder builder(top.getBody(), top.getBody()->begin());
-  // FIXME: getOrCreate
-  builder.create<sv::MacroDeclOp>(top.getLoc(), "RANDOM", nullptr, nullptr);
-}
-
-std::unique_ptr<Pass>
-circt::seq::createSeqLowerToSVPass(std::optional<bool> lowerToAlwaysFF) {
-  auto pass = std::make_unique<SeqToSVPass>();
-  if (lowerToAlwaysFF)
-    pass->lowerToAlwaysFF = *lowerToAlwaysFF;
-  return pass;
-}
-
-std::unique_ptr<Pass> circt::seq::createLowerSeqFIRRTLInitToSV() {
-  return std::make_unique<SeqFIRRTLInitToSVPass>();
-}
-
-std::unique_ptr<Pass> circt::seq::createSeqFIRRTLLowerToSVPass(
-    const LowerSeqFIRRTLToSVOptions &options) {
-  return std::make_unique<SeqFIRRTLToSVPass>(options);
 }

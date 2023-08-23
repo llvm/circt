@@ -34,7 +34,6 @@
 
 using namespace circt;
 using namespace firrtl;
-using hw::HWModuleLike;
 
 //===----------------------------------------------------------------------===//
 // Collateral for generating a YAML representation of a SystemVerilog interface
@@ -648,7 +647,8 @@ private:
                  SmallVector<InterfaceElemsBuilder> &interfaceBuilder);
 
   /// Return the module associated with this value.
-  HWModuleLike getEnclosingModule(Value value, FlatSymbolRefAttr sym = {});
+  igraph::ModuleOpInterface getEnclosingModule(Value value,
+                                               FlatSymbolRefAttr sym = {});
 
   /// Inforamtion about how the circuit should be extracted.  This will be
   /// non-empty if an extraction annotation is found.
@@ -738,6 +738,9 @@ private:
 
   /// Returns a port's `inner_sym`, adding one if necessary.
   StringAttr getOrAddInnerSym(FModuleLike module, size_t portIdx);
+
+  /// Emit the hierarchy yaml file.
+  void emitHierarchyYamlFile(SmallVectorImpl<sv::InterfaceOp> &intfs);
 };
 
 } // namespace
@@ -1264,7 +1267,8 @@ bool GrandCentralPass::traverseField(
         assert(leafValue && "leafValue not found");
 
         auto companionModule = companionIDMap.lookup(id).companion;
-        HWModuleLike enclosing = getEnclosingModule(leafValue, sym);
+        igraph::ModuleOpInterface enclosing =
+            getEnclosingModule(leafValue, sym);
 
         auto tpe = type_cast<FIRRTLBaseType>(leafValue.getType());
 
@@ -1523,17 +1527,17 @@ std::optional<StringAttr> GrandCentralPass::traverseBundle(
 
 /// Return the module that is associated with this value.  Use the cached/lazily
 /// constructed symbol table to make this fast.
-HWModuleLike GrandCentralPass::getEnclosingModule(Value value,
-                                                  FlatSymbolRefAttr sym) {
+igraph::ModuleOpInterface
+GrandCentralPass::getEnclosingModule(Value value, FlatSymbolRefAttr sym) {
   if (auto blockArg = dyn_cast<BlockArgument>(value))
-    return cast<HWModuleLike>(blockArg.getOwner()->getParentOp());
+    return cast<igraph::ModuleOpInterface>(blockArg.getOwner()->getParentOp());
 
   auto *op = value.getDefiningOp();
   if (InstanceOp instance = dyn_cast<InstanceOp>(op))
-    return getSymbolTable().lookup<HWModuleLike>(
+    return getSymbolTable().lookup<igraph::ModuleOpInterface>(
         instance.getModuleNameAttr().getValue());
 
-  return op->getParentOfType<HWModuleLike>();
+  return op->getParentOfType<igraph::ModuleOpInterface>();
 }
 
 /// This method contains the business logic of this pass.
@@ -1679,23 +1683,9 @@ void GrandCentralPass::runOnOperation() {
   // built exist.  However, still generate the YAML file if the annotation for
   // this was passed in because some flows expect this.
   if (worklist.empty()) {
-    if (!maybeHierarchyFileYAML)
-      return markAllAnalysesPreserved();
-    std::string yamlString;
-    llvm::raw_string_ostream stream(yamlString);
-    ::yaml::Context yamlContext({interfaceMap});
-    llvm::yaml::Output yout(stream);
-    OpBuilder builder(circuitOp);
     SmallVector<sv::InterfaceOp, 0> interfaceVec;
-    yamlize(yout, interfaceVec, true, yamlContext);
-    builder.setInsertionPointToStart(circuitOp.getBodyBlock());
-    builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), yamlString)
-        ->setAttr("output_file",
-                  hw::OutputFileAttr::getFromFilename(
-                      &getContext(), maybeHierarchyFileYAML->getValue(),
-                      /*excludFromFileList=*/true));
-    LLVM_DEBUG({ llvm::dbgs() << "Generated YAML:" << yamlString << "\n"; });
-    return;
+    emitHierarchyYamlFile(interfaceVec);
+    return markAllAnalysesPreserved();
   }
 
   // Setup the builder to create ops _inside the FIRRTL circuit_.  This is
@@ -1729,7 +1719,7 @@ void GrandCentralPass::runOnOperation() {
   /// module as if it were the DUT.  This works by doing a depth-first walk of
   /// the instance graph, starting from the "effective" DUT and stopping the
   /// search at any modules which are known companions.
-  DenseSet<hw::HWModuleLike> dutModules;
+  DenseSet<igraph::ModuleOpInterface> dutModules;
   FModuleOp effectiveDUT = dut;
   if (!effectiveDUT)
     effectiveDUT = cast<FModuleOp>(
@@ -1742,7 +1732,7 @@ void GrandCentralPass::runOnOperation() {
       i.skipChildren();
       continue;
     }
-    dutModules.insert(i->getModule<hw::HWModuleLike>());
+    dutModules.insert(i->getModule<igraph::ModuleOpInterface>());
     // Manually increment the iterator to avoid walking off the end from
     // skipChildren.
     ++i;
@@ -1941,7 +1931,8 @@ void GrandCentralPass::runOnOperation() {
                 auto *modNode = instancePaths->instanceGraph.lookup(mod);
                 SmallVector<InstanceRecord *> instances(modNode->uses());
                 if (modNode != companionNode &&
-                    dutModules.count(modNode->getModule<hw::HWModuleLike>()))
+                    dutModules.count(
+                        modNode->getModule<igraph::ModuleOpInterface>()))
                   continue;
 
                 LLVM_DEBUG({
@@ -2243,30 +2234,38 @@ void GrandCentralPass::runOnOperation() {
       continue;
   }
 
-  // If a `GrandCentralHierarchyFileAnnotation` was passed in, generate a YAML
-  // representation of the interfaces that we produced with the filename that
-  // that annotation provided.
-  if (maybeHierarchyFileYAML) {
-    std::string yamlString;
-    llvm::raw_string_ostream stream(yamlString);
-    ::yaml::Context yamlContext({interfaceMap});
-    llvm::yaml::Output yout(stream);
-    yamlize(yout, interfaceVec, true, yamlContext);
-
-    builder.setInsertionPointToStart(circuitOp.getBodyBlock());
-    builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), yamlString)
-        ->setAttr("output_file",
-                  hw::OutputFileAttr::getFromFilename(
-                      &getContext(), maybeHierarchyFileYAML->getValue(),
-                      /*excludFromFileList=*/true));
-    LLVM_DEBUG({ llvm::dbgs() << "Generated YAML:" << yamlString << "\n"; });
-  }
+  emitHierarchyYamlFile(interfaceVec);
 
   // Signal pass failure if any errors were found while examining circuit
   // annotations.
   if (removalError)
     return signalPassFailure();
   markAnalysesPreserved<NLATable>();
+}
+
+void GrandCentralPass::emitHierarchyYamlFile(
+    SmallVectorImpl<sv::InterfaceOp> &intfs) {
+  // If a `GrandCentralHierarchyFileAnnotation` was passed in, generate a YAML
+  // representation of the interfaces that we produced with the filename that
+  // that annotation provided.
+  if (!maybeHierarchyFileYAML)
+    return;
+
+  CircuitOp circuitOp = getOperation();
+
+  std::string yamlString;
+  llvm::raw_string_ostream stream(yamlString);
+  ::yaml::Context yamlContext({interfaceMap});
+  llvm::yaml::Output yout(stream);
+  yamlize(yout, intfs, true, yamlContext);
+
+  auto builder = OpBuilder::atBlockBegin(circuitOp.getBodyBlock());
+  builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), yamlString)
+      ->setAttr("output_file",
+                hw::OutputFileAttr::getFromFilename(
+                    &getContext(), maybeHierarchyFileYAML->getValue(),
+                    /*excludeFromFileList=*/true));
+  LLVM_DEBUG({ llvm::dbgs() << "Generated YAML:" << yamlString << "\n"; });
 }
 
 //===----------------------------------------------------------------------===//

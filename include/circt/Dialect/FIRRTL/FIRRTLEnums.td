@@ -16,6 +16,8 @@
 include "FIRRTLDialect.td"
 include "mlir/IR/EnumAttr.td"
 
+let cppNamespace = "::circt::firrtl" in {
+
 //===----------------------------------------------------------------------===//
 // Name Kinds
 //===----------------------------------------------------------------------===//
@@ -28,7 +30,6 @@ def InterestingName: I32EnumAttrCase<"InterestingName", 1, "interesting_name">;
 def NameKindEnumImpl: I32EnumAttr<"NameKindEnum", "name kind",
               [DroppableName, InterestingName]> {
   let genSpecializedAttr = 0;
-  let cppNamespace = "::circt::firrtl";
 }
 
 def NameKindAttr: EnumAttr<FIRRTLDialect, NameKindEnumImpl, "name_kind">;
@@ -94,5 +95,7 @@ def AtEdge   : I32EnumAttrCase<"AtEdge", 2, "edge">;
 
 def EventControlAttr : I32EnumAttr<"EventControl", "edge control trigger",
                                    [AtPosEdge, AtNegEdge, AtEdge]>  {}
+
+}
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLENUMS_TD

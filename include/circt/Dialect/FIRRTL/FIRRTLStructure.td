@@ -65,7 +65,9 @@ class FIRRTLModuleLike<string mnemonic, list<Trait> traits = []> :
   FIRRTLOp<mnemonic, traits # [
     IsolatedFromAbove, Symbol, HasParent<"CircuitOp">,
     DeclareOpInterfaceMethods<FModuleLike>,
-    DeclareOpInterfaceMethods<HWModuleLike>,
+    DeclareOpInterfaceMethods<PortList>,
+    DeclareOpInterfaceMethods<SymboledPortList>,
+    DeclareOpInterfaceMethods<InstanceGraphModuleOpInterface>,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>,
     OpAsmOpInterface, InnerSymbolTable]> {
 
@@ -74,26 +76,9 @@ class FIRRTLModuleLike<string mnemonic, list<Trait> traits = []> :
   code extraModuleClassDeclaration = [{}];
 
   let extraClassDeclaration = extraModuleClassDeclaration # [{
-
-    //===------------------------------------------------------------------===//
-    // PortList Methods
-    //===------------------------------------------------------------------===//
-    ::circt::hw::ModulePortInfo getPortList();
   }];
 
   let extraClassDefinition = extraModuleClassDefinition # [{
-
-    circt::hw::ModuleType $cppClass::getHWModuleType() {
-      SmallVector<hw::ModulePort> newPorts;
-      auto num = getPortNames().size();
-      newPorts.reserve(num);
-      for (unsigned i = 0; i < num; ++i)
-        newPorts.push_back({getPortNameAttr(i), getPortType(i),
-                       getPortDirection(i) == Direction::In ? 
-                         hw::ModulePort::Direction::Input : 
-                         hw::ModulePort::Direction::Output});
-      return hw::ModuleType::get(getContext(), newPorts);
-    }
 
     circt::hw::InnerSymAttr $cppClass::getPortSymbolAttr(size_t portIndex) {
       auto syms = getPortSymbols();
@@ -103,22 +88,9 @@ class FIRRTLModuleLike<string mnemonic, list<Trait> traits = []> :
       return syms[portIndex].template cast<hw::InnerSymAttr>();
     }
 
-
-    SmallVector<Location> $cppClass::getAllPortLocs() {
-      SmallVector<Location> retval;
-        for (auto l : getPortLocations())
-          retval.push_back(cast<Location>(l));
-      return retval;
+    size_t $cppClass::getNumPorts() {
+      return getPortTypesAttr().size();
     }
-
-    // Don't count annotations as attributes
-    SmallVector<Attribute> $cppClass::getAllPortAttrs() {
-      SmallVector<Attribute> retval;
-      for (unsigned i = 0, e = getNumPorts(); i < e; ++i)
-          retval.push_back({});
-      return retval;
-    }
-
   }];
 
 }

@@ -3,12 +3,13 @@ add_circt_library(CIRCTFirtool
 
   LINK_LIBS PUBLIC
   CIRCTExportChiselInterface
-  CIRCTSVTransforms
-  CIRCTHWTransforms
   CIRCTFIRRTLToHW
   CIRCTFIRRTLTransforms
-  CIRCTTransforms
+  CIRCTHWTransforms
+  CIRCTSeqToSV
   CIRCTSeqTransforms
+  CIRCTSVTransforms
+  CIRCTTransforms
   CIRCTVerifToSV
 
   MLIRIR

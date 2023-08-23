@@ -1120,20 +1120,6 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.strictconnect %out, %b_inst : !firrtl.uint<1>
   }
 
-  // Check that combinational cycles with no outside driver are lowered to
-  // be driven from a wire.
-  // CHECK-LABEL: hw.module @UndrivenInputPort()
-  // CHECK-NEXT:    %undriven = sv.wire : !hw.inout<i1>
-  // CHECK-NEXT:    %0 = sv.read_inout %undriven : !hw.inout<i1>
-  // CHECK-NEXT:    hw.instance "blackbox" @Blackbox(inst: %0: i1) -> ()
-  // CHECK-NEXT:    hw.instance "blackbox" @Blackbox(inst: %0: i1) -> ()
-  firrtl.module @UndrivenInputPort() {
-    %0 = firrtl.instance blackbox @Blackbox(in inst : !firrtl.uint<1>)
-    %1 = firrtl.instance blackbox @Blackbox(in inst : !firrtl.uint<1>)
-    firrtl.strictconnect %0, %1 : !firrtl.uint<1>
-    firrtl.strictconnect %1, %0 : !firrtl.uint<1>
-  }
-
   // CHECK-LABEL: hw.module @LowerToFirReg(%clock: i1, %reset: i1, %value: i2)
   firrtl.module @LowerToFirReg(
     in %clock: !firrtl.clock,

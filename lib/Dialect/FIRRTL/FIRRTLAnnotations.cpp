@@ -675,7 +675,7 @@ FIRRTLType PortAnnoTarget::getType() const {
     return type_cast<FIRRTLType>(module.getPortType(getPortNo()));
   if (llvm::isa<MemOp, InstanceOp>(op))
     return type_cast<FIRRTLType>(op->getResult(getPortNo()).getType());
-  llvm_unreachable("unknow operation kind");
+  llvm_unreachable("unknown operation kind");
   return {};
 }
 

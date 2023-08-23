@@ -1136,6 +1136,24 @@ def PathOp : FIRRTLOp<"path", [Pure,
   let assemblyFormat = "$target attr-dict";
 }
 
+def ListCreateOp : FIRRTLOp<"list.create", [Pure, SameTypeOperands]> {
+  let summary = "Produce a list value";
+  let description = [{
+    Produces a value of list type containing the provided elements.
+
+    Example:
+    ```mlir
+    %3 = firrtl.list.create %0, %1, %2 : !firrtl.list<string>
+    ```
+  }];
+
+  let arguments = (ins Variadic<PropertyType>:$elements);
+  let results = (outs ListType:$result);
+
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+}
+
 //===----------------------------------------------------------------------===//
 // RefOperations: Operations on the RefType.
 //

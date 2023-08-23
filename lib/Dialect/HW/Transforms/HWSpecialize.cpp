@@ -301,8 +301,8 @@ static LogicalResult specializeModule(
   // cloning in the presence of backedges.
   BackedgeBuilder bb(builder, source.getLoc());
   ValueMapper mapper(&bb);
-  for (auto &&[src, dst] :
-       llvm::zip(source.getArguments(), target.getArguments()))
+  for (auto &&[src, dst] : llvm::zip(source.getBodyBlock()->getArguments(),
+                                     target.getBodyBlock()->getArguments()))
     mapper.set(src, dst);
   builder.setInsertionPointToStart(target.getBodyBlock());
 

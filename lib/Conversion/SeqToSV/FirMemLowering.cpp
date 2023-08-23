@@ -1,200 +1,49 @@
-//===- LowerFirMem.cpp - Seq FIRRTL memory lowering -----------------------===//
+//===- FirMemLowering.cpp - FirMem lowering utilities ---------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-//
-// This transform translate Seq FirMem ops to instances of HW generated modules.
-//
-//===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
-#include "circt/Support/Namespace.h"
+#include "FirMemLowering.h"
+#include "mlir/IR/Threading.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Support/Parallel.h"
-
-#define DEBUG_TYPE "lower-firmem"
 
 using namespace circt;
-using namespace seq;
 using namespace hw;
-using hw::HWModuleGeneratedOp;
+using namespace seq;
 using llvm::MapVector;
-using llvm::SmallDenseSet;
 
-//===----------------------------------------------------------------------===//
-// FIR Memory Parametrization
-//===----------------------------------------------------------------------===//
+#define DEBUG_TYPE "lower-seq-firmem"
 
-namespace {
-/// The configuration of a FIR memory.
-struct FirMemConfig {
-  size_t numReadPorts = 0;
-  size_t numWritePorts = 0;
-  size_t numReadWritePorts = 0;
-  size_t dataWidth = 0;
-  size_t depth = 0;
-  size_t readLatency = 0;
-  size_t writeLatency = 0;
-  size_t maskBits = 0;
-  RUW readUnderWrite = RUW::Undefined;
-  WUW writeUnderWrite = WUW::Undefined;
-  SmallVector<int32_t, 1> writeClockIDs;
-  StringRef initFilename;
-  bool initIsBinary = false;
-  bool initIsInline = false;
-  Attribute outputFile;
-  StringRef prefix;
+FirMemLowering::FirMemLowering(ModuleOp circuit)
+    : context(circuit.getContext()), circuit(circuit) {
+  symbolCache.addDefinitions(circuit);
+  globalNamespace.add(symbolCache);
 
-  llvm::hash_code hashValue() const {
-    return llvm::hash_combine(numReadPorts, numWritePorts, numReadWritePorts,
-                              dataWidth, depth, readLatency, writeLatency,
-                              maskBits, readUnderWrite, writeUnderWrite,
-                              initFilename, initIsBinary, initIsInline,
-                              outputFile, prefix) ^
-           llvm::hash_combine_range(writeClockIDs.begin(), writeClockIDs.end());
-  }
-
-  auto getTuple() const {
-    return std::make_tuple(numReadPorts, numWritePorts, numReadWritePorts,
-                           dataWidth, depth, readLatency, writeLatency,
-                           maskBits, readUnderWrite, writeUnderWrite,
-                           writeClockIDs, initFilename, initIsBinary,
-                           initIsInline, outputFile, prefix);
-  }
-
-  bool operator==(const FirMemConfig &other) const {
-    return getTuple() == other.getTuple();
-  }
-};
-} // namespace
-
-namespace llvm {
-template <>
-struct DenseMapInfo<FirMemConfig> {
-  static inline FirMemConfig getEmptyKey() {
-    FirMemConfig cfg;
-    cfg.depth = DenseMapInfo<size_t>::getEmptyKey();
-    return cfg;
-  }
-  static inline FirMemConfig getTombstoneKey() {
-    FirMemConfig cfg;
-    cfg.depth = DenseMapInfo<size_t>::getTombstoneKey();
-    return cfg;
-  }
-  static unsigned getHashValue(const FirMemConfig &cfg) {
-    return cfg.hashValue();
-  }
-  static bool isEqual(const FirMemConfig &lhs, const FirMemConfig &rhs) {
-    return lhs == rhs;
-  }
-};
-} // namespace llvm
-
-//===----------------------------------------------------------------------===//
-// Pass Implementation
-//===----------------------------------------------------------------------===//
-
-namespace {
-#define GEN_PASS_DEF_LOWERFIRMEM
-#include "circt/Dialect/Seq/SeqPasses.h.inc"
-
-struct LowerFirMemPass : public impl::LowerFirMemBase<LowerFirMemPass> {
-  /// A vector of unique `FirMemConfig`s and all the `FirMemOp`s that use it.
-  using UniqueConfig = std::pair<FirMemConfig, SmallVector<FirMemOp, 1>>;
-  using UniqueConfigs = SmallVector<UniqueConfig>;
-
-  void runOnOperation() override;
-
-  UniqueConfigs collectMemories(ArrayRef<HWModuleOp> modules);
-  FirMemConfig collectMemory(FirMemOp op);
-
-  SmallVector<HWModuleGeneratedOp>
-  createMemoryModules(MutableArrayRef<UniqueConfig> configs);
-  HWModuleGeneratedOp createMemoryModule(UniqueConfig &config,
-                                         OpBuilder &builder,
-                                         FlatSymbolRefAttr schemaSymRef,
-                                         Namespace &globalNamespace);
-
-  void lowerMemoriesInModule(
-      HWModuleOp module,
-      ArrayRef<std::tuple<FirMemConfig *, HWModuleGeneratedOp, FirMemOp>> mems);
-};
-} // namespace
-
-void LowerFirMemPass::runOnOperation() {
-  // Gather all HW modules. We'll parallelize over them.
-  SmallVector<HWModuleOp> modules;
-  getOperation().walk([&](HWModuleOp op) {
-    modules.push_back(op);
-    return WalkResult::skip();
-  });
-  LLVM_DEBUG(llvm::dbgs() << "Lowering memories in " << modules.size()
-                          << " modules\n");
-
-  // Gather all `FirMemOp`s in the HW modules and group them by configuration.
-  auto uniqueMems = collectMemories(modules);
-  LLVM_DEBUG(llvm::dbgs() << "Found " << uniqueMems.size()
-                          << " unique memory congiurations\n");
-  if (uniqueMems.empty()) {
-    markAllAnalysesPreserved();
-    return;
-  }
-
-  // Create the `HWModuleGeneratedOp`s for each unique configuration. The result
-  // is a vector of the same size as `uniqueMems`, with a `HWModuleGeneratedOp`
-  // for every unique memory configuration.
-  auto genOps = createMemoryModules(uniqueMems);
-
-  // Group the list of memories that we need to update per HW module. This will
-  // allow us to parallelize across HW modules.
-  MapVector<
-      HWModuleOp,
-      SmallVector<std::tuple<FirMemConfig *, HWModuleGeneratedOp, FirMemOp>>>
-      memsToLowerByModule;
-
-  for (auto [config, genOp] : llvm::zip(uniqueMems, genOps))
-    for (auto memOp : config.second)
-      memsToLowerByModule[memOp->getParentOfType<HWModuleOp>()].push_back(
-          {&config.first, genOp, memOp});
-
-  // Replace all `FirMemOp`s with instances of the generated module.
-  if (getContext().isMultithreadingEnabled()) {
-    llvm::parallelForEach(memsToLowerByModule, [&](auto pair) {
-      lowerMemoriesInModule(pair.first, pair.second);
-    });
-  } else {
-    for (auto [module, mems] : memsToLowerByModule)
-      lowerMemoriesInModule(module, mems);
-  }
+  // For each module, assign an index. Use it to identify the insertion point
+  // for the generated ops.
+  for (auto [index, module] : llvm::enumerate(circuit.getOps<HWModuleOp>()))
+    moduleIndex[module] = index;
 }
 
 /// Collect the memories in a list of HW modules.
-LowerFirMemPass::UniqueConfigs
-LowerFirMemPass::collectMemories(ArrayRef<HWModuleOp> modules) {
+FirMemLowering::UniqueConfigs
+FirMemLowering::collectMemories(ArrayRef<HWModuleOp> modules) {
   // For each module in the list populate a separate vector of `FirMemOp`s in
   // that module. This allows for the traversal of the HW modules to be
   // parallelized.
   using ModuleMemories = SmallVector<std::pair<FirMemConfig, FirMemOp>, 0>;
   SmallVector<ModuleMemories> memories(modules.size());
 
-  auto collect = [&](HWModuleOp module, ModuleMemories &memories) {
+  mlir::parallelFor(context, 0, modules.size(), [&](auto idx) {
     // TODO: Check if this module is in the DUT hierarchy.
     // bool isInDut = state.isInDUT(module);
-    module.walk([&](seq::FirMemOp op) {
-      memories.push_back({collectMemory(op), op});
+    HWModuleOp(modules[idx]).walk([&](seq::FirMemOp op) {
+      memories[idx].push_back({collectMemory(op), op});
     });
-  };
-
-  if (getContext().isMultithreadingEnabled()) {
-    llvm::parallelFor(0, modules.size(),
-                      [&](auto idx) { collect(modules[idx], memories[idx]); });
-  } else {
-    for (auto [module, moduleMemories] : llvm::zip(modules, memories))
-      collect(module, moduleMemories);
-  }
+  });
 
   // Group the gathered memories by unique `FirMemConfig` details.
   MapVector<FirMemConfig, SmallVector<FirMemOp, 1>> grouped;
@@ -202,7 +51,7 @@ LowerFirMemPass::collectMemories(ArrayRef<HWModuleOp> modules) {
     for (auto [summary, memOp] : moduleMemories)
       grouped[summary].push_back(memOp);
 
-  return grouped.takeVector();
+  return grouped;
 }
 
 /// Trace a value through wires to its original definition.
@@ -219,7 +68,7 @@ static Value lookThroughWires(Value value) {
 
 /// Determine the exact parametrization of the memory that should be generated
 /// for a given `FirMemOp`.
-FirMemConfig LowerFirMemPass::collectMemory(FirMemOp op) {
+FirMemConfig FirMemLowering::collectMemory(FirMemOp op) {
   FirMemConfig cfg;
   cfg.dataWidth = op.getType().getWidth();
   cfg.depth = op.getType().getDepth();
@@ -262,75 +111,50 @@ FirMemConfig LowerFirMemPass::collectMemory(FirMemOp op) {
   return cfg;
 }
 
-/// Create the `HWModuleGeneratedOp` for a list of memory parametrizations.
-SmallVector<HWModuleGeneratedOp>
-LowerFirMemPass::createMemoryModules(MutableArrayRef<UniqueConfig> configs) {
-  ModuleOp circuit = getOperation();
-
-  // Create or re-use the generator schema.
-  hw::HWGeneratorSchemaOp schemaOp;
-  for (auto op : circuit.getOps<hw::HWGeneratorSchemaOp>()) {
-    if (op.getDescriptor() == "FIRRTL_Memory") {
-      schemaOp = op;
-      break;
+FlatSymbolRefAttr FirMemLowering::getOrCreateSchema() {
+  if (!schemaOp) {
+    // Create or re-use the generator schema.
+    for (auto op : circuit.getOps<hw::HWGeneratorSchemaOp>()) {
+      if (op.getDescriptor() == "FIRRTL_Memory") {
+        schemaOp = op;
+        break;
+      }
+    }
+    if (!schemaOp) {
+      auto builder = OpBuilder::atBlockBegin(circuit.getBody());
+      std::array<StringRef, 14> schemaFields = {
+          "depth",          "numReadPorts",
+          "numWritePorts",  "numReadWritePorts",
+          "readLatency",    "writeLatency",
+          "width",          "maskGran",
+          "readUnderWrite", "writeUnderWrite",
+          "writeClockIDs",  "initFilename",
+          "initIsBinary",   "initIsInline"};
+      schemaOp = builder.create<hw::HWGeneratorSchemaOp>(
+          circuit.getLoc(), "FIRRTLMem", "FIRRTL_Memory",
+          builder.getStrArrayAttr(schemaFields));
     }
   }
-  if (!schemaOp) {
-    auto builder = OpBuilder::atBlockBegin(getOperation().getBody());
-    std::array<StringRef, 14> schemaFields = {
-        "depth",          "numReadPorts",
-        "numWritePorts",  "numReadWritePorts",
-        "readLatency",    "writeLatency",
-        "width",          "maskGran",
-        "readUnderWrite", "writeUnderWrite",
-        "writeClockIDs",  "initFilename",
-        "initIsBinary",   "initIsInline"};
-    schemaOp = builder.create<hw::HWGeneratorSchemaOp>(
-        getOperation().getLoc(), "FIRRTLMem", "FIRRTL_Memory",
-        builder.getStrArrayAttr(schemaFields));
-  }
-  auto schemaSymRef = FlatSymbolRefAttr::get(schemaOp);
-
-  // Determine the insertion point for each of the memory modules. We basically
-  // put them ahead of the first module that instantiates that memory. Do this
-  // here in one go such that the `isBeforeInBlock` calls don't have to
-  // re-enumerate the entire IR every time we insert one of the memory modules.
-  SmallVector<Operation *> insertionPoints;
-  insertionPoints.reserve(configs.size());
-  for (auto &config : configs) {
-    Operation *op = nullptr;
-    for (auto memOp : config.second)
-      if (auto parent = memOp->getParentOfType<HWModuleOp>())
-        if (!op || parent->isBeforeInBlock(op))
-          op = parent;
-    insertionPoints.push_back(op);
-  }
-
-  // Create the individual memory modules.
-  SymbolCache symbolCache;
-  symbolCache.addDefinitions(getOperation());
-  Namespace globalNamespace;
-  globalNamespace.add(symbolCache);
-
-  SmallVector<HWModuleGeneratedOp> genOps;
-  genOps.reserve(configs.size());
-  for (auto [config, insertBefore] : llvm::zip(configs, insertionPoints)) {
-    OpBuilder builder(circuit.getContext());
-    builder.setInsertionPoint(insertBefore);
-    genOps.push_back(
-        createMemoryModule(config, builder, schemaSymRef, globalNamespace));
-  }
-
-  return genOps;
+  return FlatSymbolRefAttr::get(schemaOp);
 }
 
 /// Create the `HWModuleGeneratedOp` for a single memory parametrization.
 HWModuleGeneratedOp
-LowerFirMemPass::createMemoryModule(UniqueConfig &config, OpBuilder &builder,
-                                    FlatSymbolRefAttr schemaSymRef,
-                                    Namespace &globalNamespace) {
-  const auto &mem = config.first;
-  auto &memOps = config.second;
+FirMemLowering::createMemoryModule(FirMemConfig &mem,
+                                   ArrayRef<seq::FirMemOp> memOps) {
+  auto schemaSymRef = getOrCreateSchema();
+
+  // Identify the first module which uses the memory configuration.
+  // Insert the generated module before it.
+  HWModuleOp insertPt;
+  for (auto memOp : memOps) {
+    auto parent = memOp->getParentOfType<HWModuleOp>();
+    if (!insertPt || moduleIndex[parent] < moduleIndex[insertPt])
+      insertPt = parent;
+  }
+
+  OpBuilder builder(context);
+  builder.setInsertionPoint(insertPt);
 
   // Pick a name for the memory. Honor the optional prefix and try to include
   // the common part of the names of the memory instances that use this
@@ -374,12 +198,11 @@ LowerFirMemPass::createMemoryModule(UniqueConfig &config, OpBuilder &builder,
   SmallVector<hw::PortInfo> ports;
 
   // Common types used for memory ports.
-  Type bitType = IntegerType::get(&getContext(), 1);
-  Type dataType =
-      IntegerType::get(&getContext(), std::max((size_t)1, mem.dataWidth));
-  Type maskType = IntegerType::get(&getContext(), mem.maskBits);
-  Type addrType = IntegerType::get(&getContext(),
-                                   std::max(1U, llvm::Log2_64_Ceil(mem.depth)));
+  Type bitType = IntegerType::get(context, 1);
+  Type dataType = IntegerType::get(context, std::max((size_t)1, mem.dataWidth));
+  Type maskType = IntegerType::get(context, mem.maskBits);
+  Type addrType =
+      IntegerType::get(context, std::max(1U, llvm::Log2_64_Ceil(mem.depth)));
 
   // Helper to add an input port.
   size_t inputIdx = 0;
@@ -458,12 +281,12 @@ LowerFirMemPass::createMemoryModule(UniqueConfig &config, OpBuilder &builder,
 
   // Combine the locations of all actual `FirMemOp`s to be the location of the
   // generated memory.
-  Location loc = memOps.front().getLoc();
+  Location loc = FirMemOp(memOps.front()).getLoc();
   if (memOps.size() > 1) {
     SmallVector<Location> locs;
     for (auto memOp : memOps)
       locs.push_back(memOp.getLoc());
-    loc = FusedLoc::get(&getContext(), locs);
+    loc = FusedLoc::get(context, locs);
   }
 
   // Create the module.
@@ -477,7 +300,7 @@ LowerFirMemPass::createMemoryModule(UniqueConfig &config, OpBuilder &builder,
 
 /// Replace all `FirMemOp`s in an HW module with an instance of the
 /// corresponding generated module.
-void LowerFirMemPass::lowerMemoriesInModule(
+void FirMemLowering::lowerMemoriesInModule(
     HWModuleOp module,
     ArrayRef<std::tuple<FirMemConfig *, HWModuleGeneratedOp, FirMemOp>> mems) {
   LLVM_DEBUG(llvm::dbgs() << "Lowering " << mems.size() << " memories in "
@@ -563,12 +386,4 @@ void LowerFirMemPass::lowerMemoriesInModule(
       user->erase();
     memOp.erase();
   }
-}
-
-//===----------------------------------------------------------------------===//
-// Pass Infrastructure
-//===----------------------------------------------------------------------===//
-
-std::unique_ptr<Pass> circt::seq::createLowerFirMemPass() {
-  return std::make_unique<LowerFirMemPass>();
 }

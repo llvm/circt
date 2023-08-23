@@ -702,9 +702,11 @@ void Emitter::emitPrimitivePorts(hw::HWModuleExternOp op) {
   auto emitPorts = [&](auto ports, bool isInput) {
     auto e = static_cast<size_t>(std::distance(ports.begin(), ports.end()));
     os << LParen();
+    auto type = op.getHWModuleType();
     for (auto [i, port] : llvm::enumerate(ports)) {
-      DictionaryAttr portAttr =
-          isInput ? op.getArgAttrDict(i) : op.getResultAttrDict(i);
+      DictionaryAttr portAttr = cast_or_null<DictionaryAttr>(
+          op.getPortAttrs(isInput ? type.getPortIdForInputId(i)
+                                  : type.getPortIdForOutputId(i)));
 
       os << getAttributes(op, portAttr) << port.name.getValue() << colon();
       // We only care about the bit width in the emitted .futil file.

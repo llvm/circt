@@ -699,3 +699,39 @@ firrtl.circuit "DedupGroup" {
     firrtl.instance bar  @Bar()
   }
 }
+
+// CHECK-LABEL: firrtl.circuit "InnerSymOpTarget"
+firrtl.circuit "InnerSymOpTarget" {
+  firrtl.module @Foo0() {
+    %w0 = firrtl.wire sym [<@sym0, 1, private>, <@sym1, 2, private>]: !firrtl.vector<uint<1>, 2>
+    %0 = firrtl.ref.rwprobe <@Foo0::@sym0> : !firrtl.rwprobe<uint<1>>
+    %1 = firrtl.ref.rwprobe <@Foo0::@sym1> : !firrtl.rwprobe<uint<1>>
+  }
+  // CHECK-NOT: firrtl.module @Foo1
+  firrtl.module @Foo1() {
+    %w1 = firrtl.wire sym [<@sym0, 2, private>, <@sym1, 1, private>]: !firrtl.vector<uint<1>, 2>
+    %0 = firrtl.ref.rwprobe <@Foo1::@sym1> : !firrtl.rwprobe<uint<1>>
+    %1 = firrtl.ref.rwprobe <@Foo1::@sym0> : !firrtl.rwprobe<uint<1>>
+  }
+  firrtl.module @InnerSymOpTarget() {
+    firrtl.instance foo0 @Foo0()
+    // CHECK: firrtl.instance foo1 @Foo0()
+    firrtl.instance foo1 @Foo1()
+  }
+}
+
+// CHECK-LABEL: firrtl.circuit "InnerSymPortTarget"
+firrtl.circuit "InnerSymPortTarget" {
+  firrtl.module @Foo0(in %in : !firrtl.uint<1> sym @sym) {
+    %0 = firrtl.ref.rwprobe <@Foo0::@sym> : !firrtl.rwprobe<uint<1>>
+  }
+  // CHECK-NOT: firrtl.module @Foo1
+  firrtl.module @Foo1(in %in : !firrtl.uint<1> sym @sym) {
+    %0 = firrtl.ref.rwprobe <@Foo1::@sym>: !firrtl.rwprobe<uint<1>>
+  }
+  firrtl.module @InnerSymPortTarget() {
+    firrtl.instance foo0 @Foo0(in in : !firrtl.uint<1>)
+    // CHECK: firrtl.instance foo1 @Foo0(in in: !firrtl.uint<1>)
+    firrtl.instance foo1 @Foo1(in in : !firrtl.uint<1>)
+  }
+}

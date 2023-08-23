@@ -915,3 +915,35 @@ circuit Top:
     output o: Inst<MyClass>
     object x of MyClass
     propassign o, x
+
+;// -----
+; Lists not yet supported.
+FIRRTL version 3.1.0
+circuit ListOfInt:
+   module ListOfInt:
+     ; expected-error @below {{Lists are a FIRRTL 3.2.0+ feature}}
+     output a : List<Integer>
+
+;// -----
+FIRRTL version 3.2.0
+circuit ListOfUInt:
+   module ListOfUInt:
+     ; expected-error @below {{expected property type}}
+     output a : List<UInt>
+
+;// -----
+; Wrong type of elements in List expression.
+FIRRTL version 3.2.0
+circuit ListOfUInt:
+   module ListOfUInt:
+     output a : List<String>
+     ; expected-error @below {{unexpected expression of type '!firrtl.integer' in List expression of type '!firrtl.string'}}
+     propassign a, List<String>(Integer(5))
+
+;// -----
+; List should not be leading a statement.
+FIRRTL version 3.2.0
+circuit LeadingList:
+  module LeadingList:
+    ; expected-error @below {{unexpected List<>() as start of statement}}
+    List<String>()

@@ -284,8 +284,8 @@ struct CircuitLoweringState {
 
   // Return true if this module is the DUT or is instantiated by the DUT.
   // Returns false if the module is not instantiated by the DUT.
-  bool isInDUT(hw::HWModuleLike child) {
-    if (auto parent = dyn_cast<hw::HWModuleLike>(*dut))
+  bool isInDUT(igraph::ModuleOpInterface child) {
+    if (auto parent = dyn_cast<igraph::ModuleOpInterface>(*dut))
       return getInstanceGraph()->isAncestor(child, parent);
     return dut == child;
   }
@@ -295,7 +295,7 @@ struct CircuitLoweringState {
   // Return true if this module is instantiated by the Test Harness.  Returns
   // false if the module is not instantiated by the Test Harness or if the Test
   // Harness is not known.
-  bool isInTestHarness(hw::HWModuleLike mod) { return !isInDUT(mod); }
+  bool isInTestHarness(igraph::ModuleOpInterface mod) { return !isInDUT(mod); }
 
   InstanceGraph *getInstanceGraph() { return instanceGraph; }
 
@@ -1788,24 +1788,30 @@ LogicalResult FIRRTLLowering::run() {
   // are folded, which means we would have to scan the entire lowering table to
   // safely replace a backedge.
   for (auto &[backedge, value] : backedges) {
+    SmallVector<Location> driverLocs;
     // In the case where we have backedges connected to other backedges, we have
     // to find the value that actually drives the group.
     while (true) {
-      // If the we find the original backedge we have some undriven logic.
+      // If we find the original backedge we have some undriven logic or
+      // a combinatorial loop. Bail out and provide information on the nodes.
       if (backedge == value) {
-        // Create a wire with no driver and use that as the backedge value.
-        OpBuilder::InsertionGuard guard(builder);
-        builder.setInsertionPointAfterValue(backedge);
-        value = builder.create<sv::WireOp>(backedge.getLoc(),
-                                           backedge.getType(), "undriven");
-        value = builder.createOrFold<sv::ReadInOutOp>(value);
-        break;
+        Location edgeLoc = backedge.getLoc();
+        if (driverLocs.empty()) {
+          mlir::emitError(edgeLoc, "sink does not have a driver");
+        } else {
+          auto diag = mlir::emitError(edgeLoc, "sink in combinational loop");
+          for (auto loc : driverLocs)
+            diag.attachNote(loc) << "through driver here";
+        }
+        backedgeBuilder.abandon();
+        return failure();
       }
       // If the value is not another backedge, we have found the driver.
       auto it = backedges.find(value);
       if (it == backedges.end())
         break;
       // Find what is driving the next backedge.
+      driverLocs.push_back(value.getLoc());
       value = it->second;
     }
     if (auto *defOp = backedge.getDefiningOp())

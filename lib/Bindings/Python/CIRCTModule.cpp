@@ -8,6 +8,7 @@
 
 #include "DialectModules.h"
 
+#include "circt-c/Conversion.h"
 #include "circt-c/Dialect/Comb.h"
 #include "circt-c/Dialect/ESI.h"
 #include "circt-c/Dialect/FSM.h"
@@ -37,6 +38,7 @@ static void registerPasses() {
   registerFSMPasses();
   registerHWArithPasses();
   registerHandshakePasses();
+  mlirRegisterConversionPasses();
   mlirRegisterTransformsPasses();
 }
 

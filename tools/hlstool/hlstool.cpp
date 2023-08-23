@@ -119,40 +119,73 @@ static cl::opt<HLSFlow>
                                   "Statically scheduled (Calyx path)")),
             cl::cat(mainCategory));
 
-enum DynamicParallelismKind {
-  DynamicParallelismNone,
-  DynamicParallelismLocking,
-  DynamicParallelismPipelining
-};
+enum DynamicParallelismKind { None, Locking, Pipelining };
 
 static cl::opt<DynamicParallelismKind> dynParallelism(
     "dynamic-parallelism", cl::desc("Specify the DHLS task parallelism kind"),
     cl::values(
-        clEnumValN(DynamicParallelismNone, "none",
+        clEnumValN(None, "none",
                    "Add no protection mechanisms that could prevent data races "
                    "when a function has multiple active invocations."),
-        clEnumValN(DynamicParallelismLocking, "locking",
+        clEnumValN(Locking, "locking",
                    "Add function locking protection mechanism which ensures "
                    "that only one function invocation is active."),
-        clEnumValN(DynamicParallelismPipelining, "pipelining",
+        clEnumValN(Pipelining, "pipelining",
                    "Add function pipelining mechanism that enables a "
                    "pipelined execution of multiple function invocations while "
                    "preserving correctness.")),
-    cl::init(DynamicParallelismPipelining), cl::cat(mainCategory));
+    cl::init(Pipelining), cl::cat(mainCategory));
+
+enum IRLevel {
+  // A high-level dialect like affine or scf
+  High,
+  // The IR right before the core lowering dialect
+  PreCompile,
+  // The IR in core dialect
+  Core,
+  // The lowest form of core IR (i.e. after all passes have run)
+  PostCompile,
+  // The IR after lowering is performed
+  RTL,
+  // System verilog representation
+  SV
+};
+
+static cl::opt<IRLevel> irInputLevel(
+    "input-level",
+    cl::desc("Level at which to input IR at. It is flow-defined "
+             "which value corersponds to which IR level."),
+    cl::values(
+        clEnumValN(High, "high", "High-level dialects like affine"),
+        clEnumValN(
+            PreCompile, "pre-compile",
+            "The IR right before the core lowering dialect (handshake/calyx)"),
+        clEnumValN(Core, "core", "The IR in core dialect (handshake/calyx)"),
+        clEnumValN(
+            PostCompile, "post-compile",
+            "The lowest form of core IR (handshake/calyx) (i.e. after all "
+            "passes have run)"),
+        clEnumValN(RTL, "rtl", "The IR after lowering is performed")),
+    cl::init(IRLevel::High), cl::cat(mainCategory));
+
+static cl::opt<IRLevel> irOutputLevel(
+    "output-level",
+    cl::desc("Level at which to output IR at. It is flow-defined "
+             "which value corersponds to which IR level."),
+    cl::values(
+        clEnumValN(
+            PreCompile, "pre-compile",
+            "The IR right before the core lowering dialect (handshake/calyx)"),
+        clEnumValN(Core, "core", "The IR in core dialect (handshake/calyx)"),
+        clEnumValN(
+            PostCompile, "post-compile",
+            "The lowest form of core IR (handshake/calyx) (i.e. after all "
+            "passes have run)"),
+        clEnumValN(RTL, "rtl", "The IR after lowering is performed"),
+        clEnumValN(SV, "sv", "System verilog representation")),
+    cl::init(IRLevel::SV), cl::cat(mainCategory));
 
 enum OutputFormatKind { OutputIR, OutputVerilog, OutputSplitVerilog };
-
-static cl::opt<int>
-    irInputLevel("ir-input-level",
-                 cl::desc("Level at which to input IR at. It is flow-defined "
-                          "which value corersponds to which IR level."),
-                 cl::init(-1), cl::cat(mainCategory));
-
-static cl::opt<int>
-    irOutputLevel("ir-output-level",
-                  cl::desc("Level at which to output IR at. It is flow-defined "
-                           "which value corersponds to which IR level."),
-                  cl::init(-1), cl::cat(mainCategory));
 
 static cl::opt<OutputFormatKind> outputFormat(
     cl::desc("Specify output format:"),
@@ -201,10 +234,6 @@ static std::unique_ptr<Pass> createSimpleCanonicalizerPass() {
 }
 
 static void loadDHLSPipeline(OpPassManager &pm) {
-  // Software lowering
-  pm.addPass(mlir::createLowerAffinePass());
-  pm.addPass(mlir::createConvertSCFToCFPass());
-
   // Memref legalization.
   pm.addPass(circt::createFlattenMemRefPass());
   pm.nest<func::FuncOp>().addPass(
@@ -215,11 +244,10 @@ static void loadDHLSPipeline(OpPassManager &pm) {
   // DHLS conversion
   pm.addPass(circt::createStandardToHandshakePass(
       /*sourceConstants=*/false,
-      /*disableTaskPipelining=*/dynParallelism !=
-          DynamicParallelismPipelining));
+      /*disableTaskPipelining=*/dynParallelism != Pipelining));
   pm.addPass(circt::handshake::createHandshakeLowerExtmemToHWPass(withESI));
 
-  if (dynParallelism == DynamicParallelismLocking) {
+  if (dynParallelism == Locking) {
     pm.nest<handshake::FuncOp>().addPass(
         circt::handshake::createHandshakeLockFunctionsPass());
     // The locking pass does not adapt forks, thus this additional pass is
@@ -250,7 +278,7 @@ static void loadHWLoweringPipeline(OpPassManager &pm) {
   pm.addPass(createSimpleCanonicalizerPass());
   pm.nest<hw::HWModuleOp>().addPass(circt::seq::createLowerSeqHLMemPass());
   pm.addPass(sv::createHWMemSimImplPass(false, false));
-  pm.addPass(seq::createSeqLowerToSVPass());
+  pm.addPass(circt::createLowerSeqToSVPass());
   pm.nest<hw::HWModuleOp>().addPass(sv::createHWCleanupPass());
 
   // Legalize unsupported operations within the modules.
@@ -266,42 +294,9 @@ static void loadHWLoweringPipeline(OpPassManager &pm) {
 // Tool driver code
 // --------------------------------------------------------------------------
 
-enum HLSFlowIRLevel {
-  High,
-  Mid,
-  Rtl,
-  Sv,
-};
-
-static void printHLSFlowDynamic() {
-  llvm::errs() << "Valid levels are:\n";
-  llvm::errs() << HLSFlowIRLevel::High << ": 'cf/scf/affine' level IR\n";
-  llvm::errs() << HLSFlowIRLevel::Mid << ": 'handshake/calyx' IR\n";
-  llvm::errs() << HLSFlowIRLevel::Rtl << ": 'hw/comb/seq' IR\n";
-  llvm::errs() << HLSFlowIRLevel::Sv << ": 'hw/comb/sv' IR\n";
-}
-
 static LogicalResult doHLSFlowDynamic(
     PassManager &pm, ModuleOp module,
     std::optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
-
-  if (irInputLevel < 0)
-    irInputLevel = HLSFlowIRLevel::High; // Default to highest level
-
-  if (irOutputLevel < 0)
-    irOutputLevel = HLSFlowIRLevel::Sv; // Default to lowest level
-
-  if (irInputLevel > HLSFlowIRLevel::Sv) {
-    llvm::errs() << "Invalid IR input level: " << irInputLevel << "\n";
-    printHLSFlowDynamic();
-    return failure();
-  }
-
-  if (outputFormat == OutputIR && (irOutputLevel > HLSFlowIRLevel::Sv)) {
-    llvm::errs() << "Invalid IR output level: " << irOutputLevel << "\n";
-    printHLSFlowDynamic();
-    return failure();
-  }
 
   bool suppressLaterPasses = false;
   auto notSuppressed = [&]() { return !suppressLaterPasses; };
@@ -324,20 +319,26 @@ static LogicalResult doHLSFlowDynamic(
     });
   };
 
-  addIRLevel(HLSFlowIRLevel::High, [&]() { loadDHLSPipeline(pm); });
-  addIRLevel(HLSFlowIRLevel::Mid,
+  // Software lowering
+  addIRLevel(IRLevel::PreCompile, [&]() {
+    pm.addPass(mlir::createLowerAffinePass());
+    pm.addPass(mlir::createConvertSCFToCFPass());
+  });
+
+  addIRLevel(IRLevel::Core, [&]() { loadDHLSPipeline(pm); });
+  addIRLevel(IRLevel::PostCompile,
              [&]() { loadHandshakeTransformsPipeline(pm); });
 
   // HW path.
 
-  addIRLevel(HLSFlowIRLevel::Rtl, [&]() {
+  addIRLevel(IRLevel::RTL, [&]() {
     pm.nest<handshake::FuncOp>().addPass(createSimpleCanonicalizerPass());
     pm.addPass(circt::createHandshakeToHWPass());
     pm.addPass(createSimpleCanonicalizerPass());
     loadESILoweringPipeline(pm);
   });
 
-  addIRLevel(HLSFlowIRLevel::Sv, [&]() { loadHWLoweringPipeline(pm); });
+  addIRLevel(IRLevel::SV, [&]() { loadHWLoweringPipeline(pm); });
 
   if (traceIVerilog)
     pm.addPass(circt::sv::createSVTraceIVerilogPass());
@@ -364,28 +365,6 @@ static LogicalResult doHLSFlowCalyx(
     PassManager &pm, ModuleOp module,
     std::optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
 
-  if (irInputLevel < 0) {
-    irInputLevel = HLSFlowIRLevel::High; // Default to highest level
-  }
-
-  if (irOutputLevel < 0) {
-    irOutputLevel = HLSFlowIRLevel::Sv; // Default to lowest level
-  }
-
-  // Lower than SV cannot be the input
-  if (irInputLevel > HLSFlowIRLevel::Sv) {
-    llvm::errs() << "Invalid IR input level: " << irInputLevel << "\n";
-    printHLSFlowDynamic();
-    return failure();
-  }
-
-  // Lower than SV cannot be an output
-  if (outputFormat == OutputIR && (irOutputLevel > HLSFlowIRLevel::Sv)) {
-    llvm::errs() << "Invalid IR output level: " << irOutputLevel << "\n";
-    printHLSFlowDynamic();
-    return failure();
-  }
-
   // XXX(rachitnigam): Duplicated from doHLSFlowDynamic. We should probably
   // abstract this pattern. The only problem is that addIRLevel captures this
   // mutable variable.
@@ -410,12 +389,18 @@ static LogicalResult doHLSFlowCalyx(
     });
   };
 
-  addIRLevel(HLSFlowIRLevel::High, [&]() {
-    pm.addPass(circt::createSCFToCalyxPass());
-    pm.addPass(createSimpleCanonicalizerPass());
+  // Lower to only SCF abstractions
+  addIRLevel(IRLevel::PreCompile, [&]() {
+    /* Nothing to do */
   });
 
-  addIRLevel(HLSFlowIRLevel::Mid, [&]() {
+  // Lower to Calyx
+  addIRLevel(IRLevel::Core,
+             [&]() { pm.addPass(circt::createSCFToCalyxPass()); });
+
+  // Run Calyx transforms
+  addIRLevel(IRLevel::PostCompile, [&]() {
+    pm.addPass(createSimpleCanonicalizerPass());
     // Eliminate Calyx's comb group abstraction
     pm.addNestedPass<calyx::ComponentOp>(
         circt::calyx::createRemoveCombGroupsPass());
@@ -436,13 +421,13 @@ static LogicalResult doHLSFlowCalyx(
 
   // HW path.
 
-  addIRLevel(HLSFlowIRLevel::Rtl, [&]() {
+  addIRLevel(IRLevel::RTL, [&]() {
     // Compile to HW
     pm.addPass(circt::createCalyxToHWPass());
     pm.addPass(createSimpleCanonicalizerPass());
   });
 
-  addIRLevel(HLSFlowIRLevel::Sv, [&]() {
+  addIRLevel(IRLevel::SV, [&]() {
     pm.addPass(circt::createConvertFSMToSVPass());
     loadHWLoweringPipeline(pm);
   });

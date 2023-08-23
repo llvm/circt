@@ -171,3 +171,15 @@ om.class @StringConstant() {
 om.class @Map(%map: !om.map<!om.string, !om.string>) {
   om.class.field @field, %map : !om.map<!om.string, !om.string>
 }
+
+// CHECK-LABEL: @Tuple
+om.class @Tuple(%int: i1, %str: !om.string) {
+  // CHECK: %[[tuple:.+]] = om.tuple_create %int, %str : i1, !om.string
+  %tuple = om.tuple_create %int, %str  : i1, !om.string
+  // CHECK-NEXT: om.class.field @tuple, %[[tuple]] : tuple<i1, !om.string>
+  om.class.field @tuple, %tuple : tuple<i1, !om.string>
+  // CHECK-NEXT: %[[tuple_get:.+]] = om.tuple_get %[[tuple]][1] : tuple<i1, !om.string>
+  %val = om.tuple_get %tuple[1]  : tuple<i1, !om.string>
+  // CHECK-NEXT: om.class.field @val, %[[tuple_get]] : !om.string
+  om.class.field @val, %val : !om.string
+}
