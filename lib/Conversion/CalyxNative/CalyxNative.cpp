@@ -81,9 +81,8 @@ LogicalResult CalyxNativePass::runOnModule(ModuleOp root) {
   }
 
   auto res = circt::calyx::exportCalyx(root, inputFile->os());
-  if (failed(res)) {
+  if (failed(res))
     return failure();
-  }
   inputFile->os().flush();
 
   // Create a file for the native compiler to write the results into
