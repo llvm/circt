@@ -31,8 +31,8 @@ hw.module @lowering(%clk: i1, %rst: i1, %in: i32) -> (a: i32, b: i32, c: i32, d:
   // CHECK: [[VAL_F:%.+]] = sv.read_inout %rF : !hw.inout<i32>
   %rF = seq.firreg %in clock %clk sym @regF reset async %rst, %cst0 : i32
 
-  // CHECK: %rAnamed = sv.reg sym @regA : !hw.inout<i32>
-  %r = seq.firreg %in clock %clk sym @regA { "name" = "rAnamed" }: i32
+  // CHECK: %rGnamed = sv.reg sym @regG : !hw.inout<i32>
+  %r = seq.firreg %in clock %clk sym @regG { "name" = "rGnamed" }: i32
 
   // CHECK: %rNoSym = sv.reg : !hw.inout<i32>
   %rNoSym = seq.firreg %in clock %clk : i32
@@ -40,7 +40,7 @@ hw.module @lowering(%clk: i1, %rst: i1, %in: i32) -> (a: i32, b: i32, c: i32, d:
   // CHECK:      sv.always posedge %clk {
   // CHECK-NEXT:   sv.passign %rA, %in : i32
   // CHECK-NEXT:   sv.passign %rD, %in : i32
-  // CHECK-NEXT:   sv.passign %rAnamed, %in : i32
+  // CHECK-NEXT:   sv.passign %rGnamed, %in : i32
   // CHECK-NEXT:   sv.passign %rNoSym, %in : i32
   // CHECK-NEXT: }
   // CHECK-NEXT: sv.always posedge %clk {
@@ -97,7 +97,7 @@ hw.module @lowering(%clk: i1, %rst: i1, %in: i32) -> (a: i32, b: i32, c: i32, d:
   // SEPARATE-NEXT:   }
   // SEPARATE-NEXT: }
   // SEPARATE-NEXT: sv.always posedge %clk {
-  // SEPARATE-NEXT:   sv.passign %rAnamed, %in : i32
+  // SEPARATE-NEXT:   sv.passign %rGnamed, %in : i32
   // SEPARATE-NEXT: }
   // SEPARATE-NEXT: sv.always posedge %clk {
   // SEPARATE-NEXT:   sv.passign %rNoSym, %in : i32
@@ -141,7 +141,7 @@ hw.module @lowering(%clk: i1, %rst: i1, %in: i32) -> (a: i32, b: i32, c: i32, d:
   // CHECK-NEXT:         %21 = sv.read_inout %13 : !hw.inout<i32>
   // CHECK-NEXT:         sv.bpassign %rF, %21 : i32
   // CHECK-NEXT:         %22 = sv.read_inout %14 : !hw.inout<i32>
-  // CHECK-NEXT:         sv.bpassign %rAnamed, %22 : i32
+  // CHECK-NEXT:         sv.bpassign %rGnamed, %22 : i32
   // CHECK-NEXT:         %23 = sv.read_inout %15 : !hw.inout<i32>
   // CHECK-NEXT:         sv.bpassign %rNoSym, %23 : i32
   // CHECK-NEXT:       }
