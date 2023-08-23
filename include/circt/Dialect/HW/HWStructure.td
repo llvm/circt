@@ -33,7 +33,7 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
       DeclareOpInterfaceMethods<SymboledPortList>,
       DeclareOpInterfaceMethods<HWModuleLike>,
       DeclareOpInterfaceMethods<HWMutableModuleLike>,
-      Symbol, FunctionOpInterface,
+      Symbol, FunctionOpInterface, InnerSymbolTable,
       OpAsmOpInterface, HasParent<"mlir::ModuleOp">]> {
   /// Additional class declarations inside the module op.
   code extraModuleClassDeclaration = ?;

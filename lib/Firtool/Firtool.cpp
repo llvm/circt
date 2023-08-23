@@ -10,6 +10,7 @@
 #include "circt/Conversion/Passes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Dialect/HW/HWPasses.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Dialect/Seq/SeqPasses.h"
 #include "circt/Support/Passes.h"
@@ -199,6 +200,9 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
     modulePM.addPass(createSimpleCanonicalizerPass());
   }
 
+  // Check inner symbols and inner refs.
+  pm.addPass(hw::createVerifyInnerRefNamespacePass());
+
   return success();
 }
 
@@ -231,5 +235,9 @@ LogicalResult firtool::populateHWToSV(mlir::PassManager &pm,
     modulePM.addPass(sv::createHWCleanupPass(
         /*mergeAlwaysBlocks=*/!opt.emitSeparateAlwaysBlocks));
   }
+
+  // Check inner symbols and inner refs.
+  pm.addPass(hw::createVerifyInnerRefNamespacePass());
+
   return success();
 }
