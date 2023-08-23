@@ -140,6 +140,7 @@ void HWInOutPortConversion::mapInputSignals(OpBuilder &b, Operation *inst,
 void HWInOutPortConversion::mapOutputSignals(
     OpBuilder &b, Operation *inst, Value instValue,
     SmallVectorImpl<Value> &newOperands, ArrayRef<Backedge> newResults) {
+  // FIXME: hw.inout cannot be used in outputs.
   assert(false &&
          "`hw.inout` outputs not yet supported. Currently, `hw.inout` "
          "outputs are handled by UntouchedPortConversion, given that "
