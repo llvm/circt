@@ -16,6 +16,12 @@
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Types.h"
 
+namespace circt::om {
+// Return true if the type is a pair whose first element is either string or
+// integer.
+bool isMapKeyValuePairType(mlir::Type);
+} // namespace circt::om
+
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/OM/OMTypes.h.inc"
 

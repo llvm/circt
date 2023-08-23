@@ -191,3 +191,11 @@ om.class @MapConstant() {
   // CHECK: om.class.field @map_i64, %[[const1]] : !om.map<!om.string, i64>
   om.class.field @map_i64, %0 : !om.map<!om.string, i64>
 }
+
+// CHECK-LABEL: @MapCreate
+om.class @MapCreate(%e1: tuple<!om.string, !om.class.type<@Empty>>, %e2: tuple<!om.string, !om.class.type<@Empty>>) {
+  // CHECK: %[[map:.+]] = om.map_create %e1, %e2 : !om.string, !om.class.type<@Empty>
+  %map = om.map_create %e1, %e2 : !om.string, !om.class.type<@Empty>
+  // CHECK-NEXT: om.class.field @map_field, %[[map]] : !om.map<!om.string, !om.class.type<@Empty>>
+  om.class.field @map_field, %map : !om.map<!om.string, !om.class.type<@Empty>>
+}
