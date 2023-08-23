@@ -182,6 +182,10 @@ def attribute_to_var(attr):
     return list(map(attribute_to_var, om.ListAttr(attr)))
   except ValueError:
     pass
+  try:
+    return {name: attribute_to_var(value) for name, value in om.MapAttr(attr)}
+  except ValueError:
+    pass
 
   raise TypeError(f"Cannot convert {repr(attr)} to python value")
 

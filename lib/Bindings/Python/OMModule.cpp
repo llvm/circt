@@ -153,6 +153,36 @@ PythonValue List::getElement(intptr_t i) {
   return omEvaluatorValueToPythonValue(omEvaluatorListGetElement(value, i));
 }
 
+class PyMapAttrIterator {
+public:
+  PyMapAttrIterator(MlirAttribute attr) : attr(std::move(attr)) {}
+
+  PyMapAttrIterator &dunderIter() { return *this; }
+
+  py::tuple dunderNext() {
+    if (nextIndex >= omMapAttrGetNumElements(attr))
+      throw py::stop_iteration();
+
+    MlirIdentifier key = omMapAttrGetElementKey(attr, nextIndex);
+    MlirAttribute value = omMapAttrGetElementValue(attr, nextIndex);
+    nextIndex++;
+
+    auto keyName = mlirIdentifierStr(key);
+    std::string keyStr(keyName.data, keyName.length);
+    return py::make_tuple(keyStr, value);
+  }
+
+  static void bind(py::module &m) {
+    py::class_<PyMapAttrIterator>(m, "MapAttributeIterator", py::module_local())
+        .def("__iter__", &PyMapAttrIterator::dunderIter)
+        .def("__next__", &PyMapAttrIterator::dunderNext);
+  }
+
+private:
+  MlirAttribute attr;
+  intptr_t nextIndex = 0;
+};
+
 PythonValue omEvaluatorValueToPythonValue(OMEvaluatorValue result) {
   // If the result is null, something failed. Diagnostic handling is
   // implemented in pure Python, so nothing to do here besides throwing an
@@ -226,6 +256,11 @@ void circt::python::populateDialectOMSubmodule(py::module &m) {
       .def("__iter__",
            [](MlirAttribute arr) { return PyListAttrIterator(arr); });
   PyListAttrIterator::bind(m);
+
+  mlir_attribute_subclass(m, "MapAttr", omAttrIsAMapAttr)
+      .def("__iter__", [](MlirAttribute arr) { return PyMapAttrIterator(arr); })
+      .def("__len__", &omMapAttrGetNumElements);
+  PyMapAttrIterator::bind(m);
 
   // Add the ClassType class definition.
   mlir_type_subclass(m, "ClassType", omTypeIsAClassType);

@@ -151,6 +151,20 @@ MLIR_CAPI_EXPORTED intptr_t omListAttrGetNumElements(MlirAttribute attr);
 MLIR_CAPI_EXPORTED MlirAttribute omListAttrGetElement(MlirAttribute attr,
                                                       intptr_t pos);
 
+//===----------------------------------------------------------------------===//
+// MapAttr API
+//===----------------------------------------------------------------------===//
+
+MLIR_CAPI_EXPORTED bool omAttrIsAMapAttr(MlirAttribute attr);
+
+MLIR_CAPI_EXPORTED intptr_t omMapAttrGetNumElements(MlirAttribute attr);
+
+MLIR_CAPI_EXPORTED MlirIdentifier omMapAttrGetElementKey(MlirAttribute attr,
+                                                         intptr_t pos);
+
+MLIR_CAPI_EXPORTED MlirAttribute omMapAttrGetElementValue(MlirAttribute attr,
+                                                          intptr_t pos);
+
 #ifdef __cplusplus
 }
 #endif
