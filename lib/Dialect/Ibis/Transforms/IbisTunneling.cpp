@@ -77,7 +77,7 @@ public:
 
     LogicalResult go() {
       // Gather the required port accesses of the ScopeRef.
-      for (auto user : op.getResult().getUsers()) {
+      for (auto *user : op.getResult().getUsers()) {
         auto getPortOp = dyn_cast<GetPortOp>(user);
         if (!getPortOp)
           return user->emitOpError() << "unknown user of a PathOp result - "
@@ -103,7 +103,7 @@ public:
 
       // Replace the get_port ops with the target value.
       for (auto [sym, portInfo] : portInfos) {
-        auto it = mapping.find(sym);
+        auto *it = mapping.find(sym);
         assert(it != mapping.end() &&
                "expected to find a portref mapping for all get_port ops");
         rewriter.replaceOp(portInfo.getPortOp, it->second);
@@ -116,6 +116,7 @@ public:
 
     // Dispatches tunneling in the current container and returns a value of the
     // target scoperef inside the current container.
+    // NOLINTNEXTLINE(misc-no-recursion)
     LogicalResult tunnelDispatch(InstanceGraphNode *currentContainer,
                                  llvm::ArrayRef<PathStepAttr> path,
                                  PortRefMapping &mapping) {
@@ -185,6 +186,7 @@ public:
     // target input port of the current container from any parent
     // (instantiating) containers, and return the value of the target scoperef
     // inside the current container.
+    // NOLINTNEXTLINE(misc-no-recursion)
     LogicalResult tunnelUp(InstanceGraphNode *currentContainer,
                            llvm::ArrayRef<PathStepAttr> path,
                            PortRefMapping &portMapping) {
@@ -194,8 +196,8 @@ public:
                << "cannot tunnel up from " << scopeOp.getScopeName()
                << " because it has no uses";
 
-      for (auto use : currentContainer->uses()) {
-        auto parentScopeNode = ig.lookup(use->getParent()->getModule());
+      for (auto *use : currentContainer->uses()) {
+        auto *parentScopeNode = ig.lookup(use->getParent()->getModule());
         auto parentScope = parentScopeNode->getModule<ScopeOpInterface>();
         PortRefMapping targetPortMapping;
         if (path.empty()) {
@@ -247,13 +249,14 @@ public:
 
     // Tunnels down relative to the current container, and returns the value of
     // the target scoperef inside the current container.
+    // NOLINTNEXTLINE(misc-no-recursion)
     LogicalResult tunnelDown(InstanceGraphNode *currentContainer,
                              FlatSymbolRefAttr tunnelInto,
                              llvm::ArrayRef<PathStepAttr> path,
                              PortRefMapping &portMapping) {
       // Locate the instance that we're tunneling into
       auto scopeOp = currentContainer->getModule<ScopeOpInterface>();
-      auto tunnelInstanceOp = SymbolTable::lookupSymbolIn(scopeOp, tunnelInto);
+      auto *tunnelInstanceOp = SymbolTable::lookupSymbolIn(scopeOp, tunnelInto);
       if (!tunnelInstanceOp)
         return op->emitOpError()
                << "expected an instance named " << tunnelInto << " in "
@@ -274,7 +277,7 @@ public:
 
       // We're not in the target, but tunneling into a child instance.
       // Create output ports in the child instance for the requested ports.
-      auto tunnelScopeNode = ig.lookup(ig.getReferencedModule(
+      auto *tunnelScopeNode = ig.lookup(ig.getReferencedModule(
           cast<InstanceOpInterface>(tunnelInstance.getOperation())));
       auto tunnelScope = tunnelScopeNode->getModule<ScopeOpInterface>();
 
