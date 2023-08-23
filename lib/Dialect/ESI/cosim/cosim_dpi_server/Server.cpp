@@ -57,18 +57,39 @@ public:
   kj::Promise<void> close(CloseContext) override;
 };
 
+class LowLevelServer final : public EsiLowLevel::Server {
+
+  LowLevel &bridge;
+
+  kj::Promise<void> pollResp(ReadMMIOContext context);
+
+public:
+  LowLevelServer(LowLevel &bridge);
+  /// Release the Endpoint should the client disconnect without properly closing
+  /// it.
+  ~LowLevelServer();
+  /// Disallow copying as the 'open' variable needs to track the endpoint.
+  LowLevelServer(const LowLevelServer &) = delete;
+
+  kj::Promise<void> readMMIO(ReadMMIOContext) override;
+};
+
 /// Implements the `CosimDpiServer` interface from the RPC schema.
 class CosimServer final : public CosimDpiServer::Server {
   /// The registry of endpoints. The RpcServer class owns this.
   EndpointRegistry &reg;
 
+  LowLevel &lowLevelBridge;
+
 public:
-  CosimServer(EndpointRegistry &reg);
+  CosimServer(EndpointRegistry &reg, LowLevel &lowLevelBridge);
 
   /// List all the registered interfaces.
   kj::Promise<void> list(ListContext ctxt) override;
   /// Open a specific interface, locking it in the process.
   kj::Promise<void> open(OpenContext ctxt) override;
+
+  kj::Promise<void> openLowLevel(OpenLowLevelContext ctxt) override;
 };
 } // anonymous namespace
 
@@ -144,9 +165,33 @@ kj::Promise<void> EndpointServer::close(CloseContext context) {
   return kj::READY_NOW;
 }
 
+/// ------ LowLevelServer definitions.
+
+LowLevelServer::LowLevelServer(LowLevel &bridge) : bridge(bridge) {}
+LowLevelServer::~LowLevelServer() {}
+
+kj::Promise<void> LowLevelServer::pollResp(ReadMMIOContext context) {
+  auto respMaybe = bridge.popReadResp();
+  if (!respMaybe.has_value()) {
+    return kj::evalLast(
+        [this, KJ_CPCAP(context)]() mutable { return pollResp(context); });
+  }
+  auto resp = respMaybe.value();
+  KJ_REQUIRE(resp.second == 0, "Read MMIO register encountered an error");
+  context.getResults().setData(resp.first);
+  return kj::READY_NOW;
+}
+
+kj::Promise<void> LowLevelServer::readMMIO(ReadMMIOContext context) {
+  bridge.pushReadReq(context.getParams().getAddress());
+  return kj::evalLast(
+      [this, KJ_CPCAP(context)]() mutable { return pollResp(context); });
+}
+
 /// ----- CosimServer definitions.
 
-CosimServer::CosimServer(EndpointRegistry &reg) : reg(reg) {}
+CosimServer::CosimServer(EndpointRegistry &reg, LowLevel &lowLevelBridge)
+    : reg(reg), lowLevelBridge(lowLevelBridge) {}
 
 kj::Promise<void> CosimServer::list(ListContext context) {
   auto ifaces = context.getResults().initIfaces((unsigned int)reg.size());
@@ -172,6 +217,11 @@ kj::Promise<void> CosimServer::open(OpenContext ctxt) {
   return kj::READY_NOW;
 }
 
+kj::Promise<void> CosimServer::openLowLevel(OpenLowLevelContext ctxt) {
+  ctxt.getResults().setLowLevel(kj::heap<LowLevelServer>(lowLevelBridge));
+  return kj::READY_NOW;
+}
+
 /// ----- RpcServer definitions.
 
 RpcServer::RpcServer() : mainThread(nullptr), stopSig(false) {}
@@ -188,7 +238,7 @@ static void writePort(uint16_t port) {
 }
 
 void RpcServer::mainLoop(uint16_t port) {
-  capnp::EzRpcServer rpcServer(kj::heap<CosimServer>(endpoints),
+  capnp::EzRpcServer rpcServer(kj::heap<CosimServer>(endpoints, lowLevelBridge),
                                /* bindAddress */ "*", port);
   auto &waitScope = rpcServer.getWaitScope();
   // If port is 0, ExRpcSever selects one and we have to wait to get the port.

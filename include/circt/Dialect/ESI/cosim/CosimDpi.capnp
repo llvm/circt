@@ -22,6 +22,8 @@ interface CosimDpiServer @0x85e029b5352bcdb5 {
   # Open one of them. Specify both the send and recv data types if want type
   # safety and your language supports it.
   open @1 [S, T] (iface :EsiDpiInterfaceDesc) -> (iface :EsiDpiEndpoint(S, T));
+
+  openLowLevel @2 () -> (lowLevel :EsiLowLevel);
 }
 
 # Description of a registered endpoint.
@@ -47,4 +49,9 @@ interface EsiDpiEndpoint @0xfb0a36bf859be47b (SendMsgType, RecvMsgType) {
 # A struct for untyped access to an endpoint.
 struct UntypedData @0xac6e64291027d47a {
   data @0 :Data;
+}
+
+interface EsiLowLevel @0xae716100ef82f6d6 {
+  writeMMIO @0 (address :UInt64, data :UInt64) -> ();
+  readMMIO  @1 (address :UInt64) -> (data :UInt64);
 }

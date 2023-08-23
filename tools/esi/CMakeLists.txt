@@ -21,4 +21,11 @@ foreach(file IN ITEMS ${SOURCES})
   configure_file(${file}.in ${CIRCT_TOOLS_DIR}/${file})
   list(APPEND OUTPUTS ${CIRCT_TOOLS_DIR}/${file})
 endforeach()
-add_custom_target(esi-cosim-runner SOURCES ${OUTPUTS})
+add_custom_target(esi-cosim-runner
+  SOURCES
+    ${OUTPUTS}
+  DEPENDS
+    circt-rtl-sim
+    esi-collateral
+    EsiCosimDpiServer
+)

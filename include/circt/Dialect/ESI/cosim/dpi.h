@@ -45,6 +45,12 @@ DPI int sv2cCosimserverEpTryPut(char *endpointId,
 DPI int sv2cCosimserverInit();
 /// Shutdown the RPC server.
 DPI void sv2cCosimserverFinish();
+
+DPI void sv2cCosimserverMMIOReadRespond(long long data, char error);
+DPI int sv2cCosimserverMMIOReadTryGet(int* address);
+DPI int sv2cCosimserverMMIORegister();
+DPI void sv2cCosimserverMMIOWriteRespond(char error);
+DPI int sv2cCosimserverMMIOWriteTryGet(int* address, long long* data);
 #ifdef __cplusplus
 }
 

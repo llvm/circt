@@ -15,7 +15,8 @@ if(ESI_COSIM)
   add_library(EsiCosimDpiServer SHARED
     DpiEntryPoints.cpp
     Server.cpp
-    Endpoint.cpp)
+    Endpoint.cpp
+    LowLevel.cpp)
 
   set_target_properties(EsiCosimDpiServer
       PROPERTIES

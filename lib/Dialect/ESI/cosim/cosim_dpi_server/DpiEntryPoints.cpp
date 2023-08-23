@@ -20,6 +20,7 @@
 #include "circt/Dialect/ESI/cosim/dpi.h"
 
 #include <algorithm>
+#include <cassert>
 #include <cstdlib>
 
 using namespace circt::esi::cosim;
@@ -96,7 +97,7 @@ static int validateSvOpenArray(const svOpenArrayHandle data,
   return 0;
 }
 
-// ---- DPI entry points ----
+// ---- Traditional cosim DPI entry points ----
 
 // Register simulated device endpoints.
 // - return 0 on success, non-zero on failure (duplicate EP registered).
@@ -254,3 +255,35 @@ DPI int sv2cCosimserverInit() {
   }
   return 0;
 }
+
+
+// ---- Low-level cosim DPI entry points ----
+
+static bool MMIORegistered = false;
+DPI int sv2cCosimserverMMIORegister() {
+  if (MMIORegistered) {
+    printf("ERROR: DPI MMIO master already registered!");
+    return -1;
+  }
+  sv2cCosimserverInit();
+  MMIORegistered = true;
+  return 0;
+}
+
+DPI int sv2cCosimserverMMIOReadTryGet(int* address) {
+  assert(server);
+  std::optional<int> reqAddress = server->lowLevelBridge.popReadReq();
+  if (!reqAddress.has_value())
+    return -1;
+  *address = reqAddress.value();
+  return 0;
+}
+
+DPI void sv2cCosimserverMMIOReadRespond(long long data, char error) {
+  assert(server);
+  printf("pushing %llx\n", data);
+  server->lowLevelBridge.pushReadResp(data, error);
+}
+
+DPI void sv2cCosimserverMMIOWriteRespond(char error) {}
+DPI int sv2cCosimserverMMIOWriteTryGet(int* address, long long* data) {}
