@@ -138,6 +138,12 @@ static bool isLegalOp(Operation *op) {
                          isSignednessType);
   }
 
+  if (auto modOp = dyn_cast<hw::HWModuleLike>(op)) {
+    return llvm::none_of(modOp.getPortTypes(), isSignednessType) &&
+           llvm::none_of(modOp.getBodyBlock()->getArgumentTypes(),
+                         isSignednessType);
+  }
+
   auto attrs = llvm::map_range(op->getAttrs(), [](const NamedAttribute &attr) {
     return attr.getValue();
   });
