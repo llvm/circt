@@ -23,7 +23,9 @@ class Pass;
 } // namespace mlir
 
 namespace circt {
+
 std::unique_ptr<mlir::Pass> createCalyxNativePass();
-}
+
+} // namespace circt
 
 #endif // CIRCT_CONVERSION_CALYXNATIVE_H
