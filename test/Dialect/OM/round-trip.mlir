@@ -213,3 +213,13 @@ om.class @MapCreate(%e1: tuple<!om.string, !om.class.type<@Empty>>, %e2: tuple<!
   // CHECK-NEXT: om.class.field @map_field, %[[map]] : !om.map<!om.string, !om.class.type<@Empty>>
   om.class.field @map_field, %map : !om.map<!om.string, !om.class.type<@Empty>>
 }
+
+hw.hierpath @HierPath [@PathModule::@wire]
+hw.module @PathModule() {
+  %wire = hw.wire %wire sym @wire : i1
+}
+// CHECK-LABEL: @Path
+om.class @Path() {
+  // CHECK: %0 = om.path reference @HierPath
+  %0 = om.path reference @HierPath
+}

@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/OM/OMOps.h"
 
+#include "circt/Dialect/HW/HWOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 
@@ -450,6 +451,16 @@ ParseResult circt::om::MapCreateOp::parse(OpAsmParser &parser,
   for (auto operand : operands)
     if (parser.resolveOperand(operand, operandType, result.operands))
       return failure();
+  return success();
+}
+
+LogicalResult PathOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  // Get the containing ModuleOp.
+  auto moduleOp = getOperation()->getParentOfType<ModuleOp>();
+  auto hierPath =
+      symbolTable.lookupSymbolIn<hw::HierPathOp>(moduleOp, getTargetAttr());
+  if (!hierPath)
+    return emitOpError("invalid symbol reference");
   return success();
 }
 
