@@ -25,3 +25,6 @@ void circt::om::OMDialect::initialize() {
   registerTypes();
   registerAttributes();
 }
+
+// Provide implementations for the enums we use.
+#include "circt/Dialect/OM/OMEnums.cpp.inc"
