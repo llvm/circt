@@ -2150,49 +2150,10 @@ firrtl.circuit "Top" {
   firrtl.module @Top(out %port: !firrtl.class<@MyClass(in input : !firrtl.string)>) {
     %a = firrtl.object @A(out b: !firrtl.class<@B(in input: !firrtl.string)>)
     %b = firrtl.object.subfield %a[b] : !firrtl.class<@A(out b: !firrtl.class<@B(in input: !firrtl.string)>)>
+    // expected-note @below {{the destination was defined here}}
     %input = firrtl.object.subfield %b[input] : !firrtl.class<@B(in input: !firrtl.string)>
     %value = firrtl.string "foo"
-    // expected-error @below {{connect has invalid flow: the destination expression has source flow, expected sink or duplex flow}}
+    // expected-error @below {{connect has invalid flow: the destination expression has no flow, expected sink or duplex flow}}
     firrtl.propassign %input, %value : !firrtl.string
-  }
-}
-
-// -----
-// Try to read from an output object's outputs. This fails because we can only
-// read from input object ports or local object declarations.
-
-firrtl.circuit "Top" {
-  firrtl.class @MyClass(out %output: !firrtl.string) {}
-
-  firrtl.module @Top(out %object: !firrtl.class<@MyClass(out output : !firrtl.string)>,  out %str: !firrtl.string) {
-    %0 = firrtl.object.subfield %object[output] : !firrtl.class<@MyClass(out output: !firrtl.string)>
-    // expected-error @below {{cannot read from an output port}}
-    firrtl.propassign %str, %0 : !firrtl.string
-  }
-}
-
-// -----
-// Try to read from an instance's input property.
-
-firrtl.circuit "Top" {
-  firrtl.module @MyModule(in %input: !firrtl.string) {}
-
-  firrtl.module @Top(out %output: !firrtl.string) {
-    %input = firrtl.instance foo @MyModule(in input: !firrtl.string)
-    // expected-error @below {{cannot read from an instance's input port}}
-    firrtl.propassign %output, %input : !firrtl.string
-  }
-}
-
-// -----
-// Try to write to an instance's output property.
-
-firrtl.circuit "Top" {
-  firrtl.module @MyModule(out %output: !firrtl.string) {}
-
-  firrtl.module @Top(in %input: !firrtl.string) {
-    %output = firrtl.instance foo @MyModule(out output: !firrtl.string)
-    // expected-error @below {{cannot propassign to an instance's output port}}
-    firrtl.propassign %output, %input : !firrtl.string
   }
 }

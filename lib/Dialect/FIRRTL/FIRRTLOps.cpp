@@ -164,17 +164,6 @@ static Flow memoryPortFlow(Direction d, bool flipped) {
   }
 }
 
-// Get the flow of a port on a remote object (ie the base object is an
-// input or output port).
-static Flow remoteObjectPortFlow(Direction d) {
-  switch (d) {
-  case Direction::In:
-    return Flow::None;
-  case Direction::Out:
-    return Flow::Source;
-  }
-}
-
 // Get the flow of a port on a local object op.
 static Flow localObjectPortFlow(Direction d) {
   switch (d) {
@@ -213,40 +202,43 @@ static Flow foldFlow(Value val, bool flipped) {
         // only debug ports with RefType have source flow.
         if (type_isa<RefType>(val.getType()))
           return Flow::Source;
-        return memoryPortFlow(Direction::Out, flipped);
+        return memoryPortFlow(Direction::In, flipped);
       })
       .Case<ObjectOp>([&](ObjectOp op) {
         // Object declarations are always sources.
         return Flow::Source;
       })
       .Case<ObjectSubfieldOp>([&](ObjectSubfieldOp op) {
-        bool remote = false;
+        auto input = op.getInput();
+        auto *inputOp = input.getDefiningOp();
+
+        // We are directly accessing a port on a local declaration.
+        if (auto objectOp = dyn_cast_or_null<ObjectOp>(inputOp)) {
+          auto classType = input.getType();
+          auto direction = classType.getElement(op.getIndex()).direction;
+          return localObjectPortFlow(direction);
+        }
+
+        // We are accessing a remote object. Input ports on remote objects are
+        // inaccessible, and thus have Flow::None. Walk backwards through the
+        // chain of subindexes, to detect if we have indexed through an input
+        // port. At the end, either we did index through an input port, or the
+        // entire path was through output ports with source flow.
         while (true) {
-          auto input = op.getInput();
-          if (auto arg = dyn_cast<BlockArgument>(input)) {
-            auto type = cast<ClassType>(arg.getType());
-            auto direction = type.getElement(op.getIndex()).direction;
-            return remoteObjectPortFlow(direction);
-          }
-          auto *inputOp = input.getDefiningOp();
-          if (auto instanceOp = dyn_cast<InstanceOp>(inputOp)) {
-            auto direction = instanceOp.getPortDirection(op.getIndex());
-            return remoteObjectPortFlow(direction);
-          }
-          if (auto objectOp = dyn_cast<ObjectOp>(inputOp)) {
-            auto classType = objectOp.getType();
-            auto direction = classType.getElement(op.getIndex()).direction;
-            if (remote)
-              return remoteObjectPortFlow(direction);
-            return localObjectPortFlow(direction);
-          }
-          remote = true;
-          op = cast<ObjectSubfieldOp>(inputOp);
-          auto inputType = input.getType();
-          auto direction = inputType.getElement(op.getIndex()).direction;
+          auto classType = input.getType();
+          auto direction = classType.getElement(op.getIndex()).direction;
           if (direction == Direction::In)
             return Flow::None;
-        }
+
+          op = dyn_cast_or_null<ObjectSubfieldOp>(inputOp);
+          if (op) {
+            input = op.getInput();
+            inputOp = input.getDefiningOp();
+            continue;
+          }
+    
+          return Flow::Source;
+        };
       })
       // Anything else acts like a universal source.
       .Default([&](auto) { return flip(Flow::Source, flipped); });
@@ -2804,7 +2796,6 @@ static LogicalResult checkConnectFlow(Operation *connect) {
   // TODO: Relax this to allow reads from output ports,
   // instance/memory input ports.
   auto srcFlow = foldFlow(src);
-  llvm::errs() << toString(srcFlow) << "\n";
   if (!isValidSrc(srcFlow)) {
     auto srcRef = getFieldRefFromValue(src);
     auto [srcName, rootKnown] = getFieldName(srcRef);
@@ -3042,6 +3033,7 @@ LogicalResult RefDefineOp::verify() {
 }
 
 LogicalResult PropAssignOp::verify() {
+  // Check that the flows make sense.
   if (failed(checkConnectFlow(*this)))
     return failure();
 

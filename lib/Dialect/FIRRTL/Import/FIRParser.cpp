@@ -1467,13 +1467,15 @@ private:
   ParseResult parseSimpleStmtImpl(unsigned stmtIndent);
 
   /// Attach invalid values to every element of the value.
-  void emitInvalidate(Value val, Flow flow);
+  void emitInvalidate(Value val, bool writable);
 
   // The FIRRTL specification describes Invalidates as a statement with
   // implicit connect semantics.  The FIRRTL dialect models it as a primitive
   // that returns an "Invalid Value", followed by an explicit connect to make
   // the representation simpler and more consistent.
-  void emitInvalidate(Value val) { emitInvalidate(val, foldFlow(val)); }
+  void emitInvalidate(Value val) { 
+    emitInvalidate(val, isValidDst(foldFlow(val)));
+  }
 
   /// Emit the logic for a partial connect using standard connect.
   void emitPartialConnect(ImplicitLocOpBuilder &builder, Value dst, Value src);
@@ -1570,7 +1572,7 @@ private:
 
 /// Attach invalid values to every element of the value.
 // NOLINTNEXTLINE(misc-no-recursion)
-void FIRStmtParser::emitInvalidate(Value val, Flow flow) {
+void FIRStmtParser::emitInvalidate(Value val, bool writable) {
   auto tpe = type_dyn_cast<FIRRTLBaseType>(val.getType());
   // Invalidate does nothing for non-base types.
   // When aggregates-of-refs are supported, instead check 'containsReference'
@@ -1580,7 +1582,7 @@ void FIRStmtParser::emitInvalidate(Value val, Flow flow) {
 
   auto props = tpe.getRecursiveTypeProperties();
   if (props.isPassive && !props.containsAnalog) {
-    if (flow == Flow::Source)
+    if (!writable)
       return;
     emitConnect(builder, val, builder.create<InvalidValueOp>(tpe));
     return;
@@ -1602,7 +1604,7 @@ void FIRStmtParser::emitInvalidate(Value val, Flow flow) {
             builder.setInsertionPointAfterValue(val);
             subfield = builder.create<SubfieldOp>(val, i);
           }
-          emitInvalidate(subfield, flip(flow, tpe.getElement(i).isFlip));
+          emitInvalidate(subfield, writable != tpe.getElement(i).isFlip);
         }
       })
       .Case<FVectorType>([&](auto tpe) {
@@ -1614,7 +1616,7 @@ void FIRStmtParser::emitInvalidate(Value val, Flow flow) {
             builder.setInsertionPointAfterValue(val);
             subindex = builder.create<SubindexOp>(tpex, val, i);
           }
-          emitInvalidate(subindex, flow);
+          emitInvalidate(subindex, writable);
         }
       });
 }
@@ -4839,7 +4841,7 @@ circt::firrtl::importFIRFile(SourceMgr &sourceMgr, MLIRContext *context,
   // the verifier.
   auto circuitVerificationTimer = ts.nest("Verify circuit");
   if (failed(verify(*module)))
-    return {};
+   return {};
 
   return module;
 }

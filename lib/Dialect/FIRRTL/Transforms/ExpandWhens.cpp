@@ -258,7 +258,7 @@ public:
     return b.create<ConnectOp>(loc, dest, newValue);
   }
 
-  void visitDecl(WireOp op) { declareSinks(op.getResult(), Flow::Sink); }
+  void visitDecl(WireOp op) { declareSinks(op.getResult(), Flow::Duplex); }
 
   /// Take an aggregate value and construct ground subelements recursively.
   /// And then apply function `fn`.

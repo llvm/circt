@@ -4,7 +4,7 @@
 firrtl.circuit "test" {
 // expected-note @below {{the destination was defined here}}
 firrtl.module @test(in %a : !firrtl.uint<1>, out %b : !firrtl.uint<1>) {
-  // expected-error @below {{connect has invalid flow: the destination expression "a" has source flow, expected sink flow}}
+  // expected-error @below {{connect has invalid flow: the destination expression "a" has source flow, expected sink or duplex flow}}
   firrtl.connect %a, %b : !firrtl.uint<1>, !firrtl.uint<1>
 }
 }
@@ -266,7 +266,7 @@ firrtl.circuit "test" {
 firrtl.module @test(in %a : !firrtl.bundle<f1: uint<1>>, out %b : !firrtl.bundle<f1: uint<1>>) {
   %0 = firrtl.subfield %a[f1] : !firrtl.bundle<f1: uint<1>>
   %1 = firrtl.subfield %b[f1] : !firrtl.bundle<f1: uint<1>>
-  // expected-error @below {{connect has invalid flow: the destination expression "a.f1" has source flow, expected sink flow}}
+  // expected-error @below {{connect has invalid flow: the destination expression "a.f1" has source flow, expected sink or duplex flow}}
   firrtl.connect %0, %1 : !firrtl.uint<1>, !firrtl.uint<1>
 }
 }
@@ -277,7 +277,7 @@ firrtl.circuit "test" {
 firrtl.module @test(in %a : !firrtl.uint<1>, out %b : !firrtl.uint<1>) {
   // expected-note @below {{the destination was defined here}}
   %0 = firrtl.and %a, %a: (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-  // expected-error @below {{connect has invalid flow: the destination expression has source flow, expected sink flow}}
+  // expected-error @below {{connect has invalid flow: the destination expression has source flow, expected sink or duplex flow}}
   firrtl.connect %0, %b : !firrtl.uint<1>, !firrtl.uint<1>
 }
 }
