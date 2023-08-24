@@ -111,7 +111,7 @@ on:
         type: string
       package_name_prefix:
         description: "The prefix for package name"
-        required: true
+        required: false
         type: string
       cmake_c_compiler:
         description: "The C compiler to use"
