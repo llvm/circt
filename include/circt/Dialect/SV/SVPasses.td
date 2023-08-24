@@ -184,6 +184,12 @@ def HWEliminateInOutPorts : Pass<"hw-eliminate-inout-ports",
   }];
   let constructor = "circt::sv::createHWEliminateInOutPortsPass()";
   let dependentDialects = ["circt::sv::SVDialect"];
+  let options = [
+    Option<"readSuffix", "read-suffix", "std::string", "\"_rd\"",
+           "Suffix to be used for the port when the inout port has readers">,
+    Option<"writeSuffix", "write-suffix", "std::string", "\"_wr\"",
+            "Suffix to be used for the port when the inout port has writers">
+  ];
 }
 
 #endif // CIRCT_DIALECT_SV_SVPASSES
