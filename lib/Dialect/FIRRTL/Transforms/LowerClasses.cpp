@@ -73,7 +73,10 @@ void LowerClassesPass::runOnOperation() {
 
   // Get the CircuitOp.
   auto circuits = getOperation().getOps<CircuitOp>();
-  if (std::distance(circuits.begin(), circuits.end()) != 1) {
+  auto count = std::distance(circuits.begin(), circuits.end());
+  if (count == 0)
+    return;
+  if (count > 1) {
     getOperation().emitError("expected exactly one CircuitOp, but found ")
         << std::distance(circuits.begin(), circuits.end());
     return signalPassFailure();
@@ -302,6 +305,22 @@ struct StringConstantOpConversion
   }
 };
 
+struct ListCreateOpConversion
+    : public OpConversionPattern<firrtl::ListCreateOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(firrtl::ListCreateOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto listType = getTypeConverter()->convertType<om::ListType>(op.getType());
+    if (!listType)
+      return failure();
+    rewriter.replaceOpWithNewOp<om::ListCreateOp>(op, listType,
+                                                  adaptor.getElements());
+    return success();
+  }
+};
+
 struct ClassFieldOpConversion : public OpConversionPattern<ClassFieldOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -349,12 +368,21 @@ static void populateConversionTarget(ConversionTarget &target) {
 
   // OM dialect operations are legal if they don't use FIRRTL types.
   target.addDynamicallyLegalDialect<OMDialect>([](Operation *op) {
-    auto noFIRRTLOperands = llvm::none_of(op->getOperandTypes(), [](Type type) {
-      return isa<FIRRTLDialect>(type.getDialect());
-    });
-    auto noFIRRTLResults = llvm::none_of(op->getResultTypes(), [](Type type) {
-      return isa<FIRRTLDialect>(type.getDialect());
-    });
+    auto containsFIRRTLType = [](Type type) {
+      return type
+          .walk([](Type type) {
+            return failure(isa<FIRRTLDialect>(type.getDialect()));
+          })
+          .wasInterrupted();
+    };
+    auto noFIRRTLOperands =
+        llvm::none_of(op->getOperandTypes(), [&containsFIRRTLType](Type type) {
+          return containsFIRRTLType(type);
+        });
+    auto noFIRRTLResults =
+        llvm::none_of(op->getResultTypes(), [&containsFIRRTLType](Type type) {
+          return containsFIRRTLType(type);
+        });
     return noFIRRTLOperands && noFIRRTLResults;
   });
 
@@ -388,6 +416,25 @@ static void populateTypeConverter(TypeConverter &converter) {
     return om::ClassType::get(type.getContext(), type.getNameAttr());
   });
 
+  // Convert FIRRTL List type to OM List type.
+  converter.addConversion(
+      [&converter](om::ListType type) -> std::optional<mlir::Type> {
+        // Convert any om.list<firrtl> -> om.list<om>
+        auto elementType = converter.convertType(type.getElementType());
+        if (!elementType)
+          return {};
+        return om::ListType::get(elementType);
+      });
+
+  converter.addConversion(
+      [&converter](firrtl::ListType type) -> std::optional<mlir::Type> {
+        // Convert any firrtl.list<firrtl> -> om.list<om>
+        auto elementType = converter.convertType(type.getElementType());
+        if (!elementType)
+          return {};
+        return om::ListType::get(elementType);
+      });
+
   // Add a target materialization to fold away unrealized conversion casts.
   converter.addTargetMaterialization(
       [](OpBuilder &builder, Type type, ValueRange values, Location loc) {
@@ -402,6 +449,7 @@ static void populateRewritePatterns(RewritePatternSet &patterns,
   patterns.add<StringConstantOpConversion>(converter, patterns.getContext());
   patterns.add<ClassFieldOpConversion>(converter, patterns.getContext());
   patterns.add<ClassOpSignatureConversion>(converter, patterns.getContext());
+  patterns.add<ListCreateOpConversion>(converter, patterns.getContext());
 }
 
 // Convert to OM ops and types in Classes or Modules.

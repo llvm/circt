@@ -35,3 +35,9 @@ circt::om::MapType::verify(llvm::function_ref<mlir::InFlightDiagnostic()> diag,
                   << keyType;
   return mlir::success();
 }
+
+bool circt::om::isMapKeyValuePairType(mlir::Type type) {
+  auto tuple = llvm::dyn_cast<mlir::TupleType>(type);
+  return tuple && tuple.getTypes().size() == 2 &&
+         llvm::isa<om::StringType, mlir::IntegerType>(tuple.getTypes().front());
+}

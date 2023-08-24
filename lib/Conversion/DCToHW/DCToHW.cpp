@@ -466,18 +466,16 @@ static UnwrappedIO unwrapIO(Operation *op, ValueRange operands,
 ///  attributes assigned to the arguments.
 static FailureOr<std::pair<Value, Value>> getClockAndReset(Operation *op) {
   auto *parent = op->getParentOp();
-  mlir::FunctionOpInterface parentFuncOp =
-      dyn_cast<mlir::FunctionOpInterface>(parent);
+  auto parentFuncOp = dyn_cast<HWModuleLike>(parent);
   if (!parentFuncOp)
-    return parent->emitOpError(
-        "parent op does not implement FunctionOpInterface");
+    return parent->emitOpError("parent op does not implement HWModuleLike");
 
-  SmallVector<DictionaryAttr> argAttrs;
-  parentFuncOp.getAllArgAttrs(argAttrs);
+  auto argAttrs = parentFuncOp.getAllInputAttrs();
 
   std::optional<size_t> clockIdx, resetIdx;
 
-  for (auto [idx, attrs] : llvm::enumerate(argAttrs)) {
+  for (auto [idx, battrs] : llvm::enumerate(argAttrs)) {
+    auto attrs = cast<DictionaryAttr>(battrs);
     if (attrs.get("dc.clock")) {
       if (clockIdx)
         return parent->emitOpError(
@@ -499,8 +497,8 @@ static FailureOr<std::pair<Value, Value>> getClockAndReset(Operation *op) {
   if (!resetIdx)
     return parent->emitOpError("no argument contains a 'dc.reset' attribute");
 
-  return {std::make_pair(parentFuncOp.getArgument(*clockIdx),
-                         parentFuncOp.getArgument(*resetIdx))};
+  return {std::make_pair(parentFuncOp.getArgumentForInput(*clockIdx),
+                         parentFuncOp.getArgumentForInput(*resetIdx))};
 }
 
 class ForkConversionPattern : public OpConversionPattern<ForkOp> {
@@ -793,10 +791,9 @@ static bool isDCType(Type type) { return type.isa<TokenType, ValueType>(); }
 ///  Returns true if the given `op` is considered as legal - i.e. it does not
 ///  contain any dc-typed values.
 static bool isLegalOp(Operation *op) {
-  if (auto funcOp = dyn_cast<FunctionOpInterface>(op)) {
-    return llvm::none_of(funcOp.getArgumentTypes(), isDCType) &&
-           llvm::none_of(funcOp.getResultTypes(), isDCType) &&
-           llvm::none_of(funcOp.getFunctionBody().getArgumentTypes(), isDCType);
+  if (auto funcOp = dyn_cast<HWModuleLike>(op)) {
+    return llvm::none_of(funcOp.getPortTypes(), isDCType) &&
+           llvm::none_of(funcOp.getBodyBlock()->getArgumentTypes(), isDCType);
   }
 
   bool operandsOK = llvm::none_of(op->getOperandTypes(), isDCType);

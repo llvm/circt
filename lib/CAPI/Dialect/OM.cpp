@@ -232,3 +232,26 @@ MlirAttribute omListAttrGetElement(MlirAttribute attr, intptr_t pos) {
   auto listAttr = llvm::cast<ListAttr>(unwrap(attr));
   return wrap(listAttr.getElements()[pos]);
 }
+
+//===----------------------------------------------------------------------===//
+// MapAttr API.
+//===----------------------------------------------------------------------===//
+
+bool omAttrIsAMapAttr(MlirAttribute attr) {
+  return unwrap(attr).isa<MapAttr>();
+}
+
+intptr_t omMapAttrGetNumElements(MlirAttribute attr) {
+  auto mapAttr = llvm::cast<MapAttr>(unwrap(attr));
+  return static_cast<intptr_t>(mapAttr.getElements().size());
+}
+
+MlirIdentifier omMapAttrGetElementKey(MlirAttribute attr, intptr_t pos) {
+  auto mapAttr = llvm::cast<MapAttr>(unwrap(attr));
+  return wrap(mapAttr.getElements().getValue()[pos].getName());
+}
+
+MlirAttribute omMapAttrGetElementValue(MlirAttribute attr, intptr_t pos) {
+  auto mapAttr = llvm::cast<MapAttr>(unwrap(attr));
+  return wrap(mapAttr.getElements().getValue()[pos].getValue());
+}

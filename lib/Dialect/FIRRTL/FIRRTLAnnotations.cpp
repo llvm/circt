@@ -553,14 +553,6 @@ void AnnoTarget::setAnnotations(AnnotationSet annotations) const {
       [&](auto target) { target.setAnnotations(annotations); });
 }
 
-StringAttr
-AnnoTarget::getInnerSym(hw::InnerSymbolNamespace &moduleNamespace) const {
-  return TypeSwitch<AnnoTarget, StringAttr>(*this)
-      .Case<OpAnnoTarget, PortAnnoTarget>(
-          [&](auto target) { return target.getInnerSym(moduleNamespace); })
-      .Default([](auto target) { return StringAttr(); });
-}
-
 Attribute
 AnnoTarget::getNLAReference(hw::InnerSymbolNamespace &moduleNamespace) const {
   return TypeSwitch<AnnoTarget, Attribute>(*this)
@@ -582,14 +574,6 @@ AnnotationSet OpAnnoTarget::getAnnotations() const {
 
 void OpAnnoTarget::setAnnotations(AnnotationSet annotations) const {
   annotations.applyToOperation(getOp());
-}
-
-StringAttr
-OpAnnoTarget::getInnerSym(hw::InnerSymbolNamespace &moduleNamespace) const {
-  return ::getOrAddInnerSym(
-      getOp(), [&moduleNamespace](auto _) -> hw::InnerSymbolNamespace & {
-        return moduleNamespace;
-      });
 }
 
 Attribute
@@ -643,19 +627,6 @@ void PortAnnoTarget::setAnnotations(AnnotationSet annotations) const {
     annotations.applyToPort(moduleOp, getPortNo());
   else
     llvm_unreachable("unknown port target");
-}
-
-StringAttr
-PortAnnoTarget::getInnerSym(hw::InnerSymbolNamespace &moduleNamespace) const {
-  // If this is not a module, we just need to get an inner_sym on the operation
-  // itself.
-  auto module = llvm::dyn_cast<FModuleLike>(getOp());
-  auto target = module ? hw::InnerSymTarget(getPortNo(), module)
-                       : hw::InnerSymTarget(getOp());
-  return ::getOrAddInnerSym(
-      target, [&moduleNamespace](auto _) -> hw::InnerSymbolNamespace & {
-        return moduleNamespace;
-      });
 }
 
 Attribute PortAnnoTarget::getNLAReference(

@@ -80,7 +80,27 @@ void module_like_impl::printModuleSignature(OpAsmPrinter &p, Operation *op,
   SmallString<32> resultNameStr;
   mlir::OpPrintingFlags flags;
 
-  auto funcOp = cast<mlir::FunctionOpInterface>(op);
+  // Handle either old FunctionOpInterface modules or new-style hwmodulelike
+  // This whole thing should be split up into two functions, but the delta is
+  // so small, we are leaving this for now.
+  auto modOp = dyn_cast<hw::HWModuleLike>(op);
+  auto funcOp = dyn_cast<mlir::FunctionOpInterface>(op);
+  SmallVector<Attribute> inputAttrs, outputAttrs;
+  if (funcOp) {
+    if (auto args = funcOp.getAllArgAttrs())
+      for (auto a : args.getValue())
+        inputAttrs.push_back(a);
+    else
+      inputAttrs.resize(funcOp.getNumArguments());
+    if (auto results = funcOp.getAllResultAttrs())
+      for (auto a : results.getValue())
+        outputAttrs.push_back(a);
+    else
+      outputAttrs.resize(funcOp.getNumResults());
+  } else {
+    inputAttrs = modOp.getAllInputAttrs();
+    outputAttrs = modOp.getAllOutputAttrs();
+  }
 
   p << '(';
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
@@ -106,7 +126,10 @@ void module_like_impl::printModuleSignature(OpAsmPrinter &p, Operation *op,
     }
 
     p.printType(argTypes[i]);
-    p.printOptionalAttrDict(getArgAttrs(funcOp, i));
+    auto inputAttr = inputAttrs[i];
+    p.printOptionalAttrDict(inputAttr
+                                ? cast<DictionaryAttr>(inputAttr).getValue()
+                                : ArrayRef<NamedAttribute>());
 
     // TODO: `printOptionalLocationSpecifier` will emit aliases for locations,
     // even if they are not printed.  This will have to be fixed upstream.  For
@@ -133,7 +156,10 @@ void module_like_impl::printModuleSignature(OpAsmPrinter &p, Operation *op,
       p.printKeywordOrString(getModuleResultNameAttr(op, i).getValue());
       p << ": ";
       p.printType(resultTypes[i]);
-      p.printOptionalAttrDict(getResultAttrs(funcOp, i));
+      auto outputAttr = outputAttrs[i];
+      p.printOptionalAttrDict(outputAttr
+                                  ? cast<DictionaryAttr>(outputAttr).getValue()
+                                  : ArrayRef<NamedAttribute>());
 
       // TODO: `printOptionalLocationSpecifier` will emit aliases for locations,
       // even if they are not printed.  This will have to be fixed upstream. For

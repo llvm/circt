@@ -53,4 +53,9 @@ def HWSpecialize : Pass<"hw-specialize", "mlir::ModuleOp"> {
   }];
 }
 
+def VerifyInnerRefNamespace : Pass<"hw-verify-irn"> {
+  let summary = "Verify InnerRefNamespaceLike operations, if not self-verifying.";
+  let constructor =  "circt::hw::createVerifyInnerRefNamespacePass()";
+}
+
 #endif // CIRCT_DIALECT_HW_PASSES_TD

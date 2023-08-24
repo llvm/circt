@@ -83,4 +83,23 @@ LogicalResult hw::verifyInnerSymAttr(InnerSymbolOpInterface op) {
   return success();
 }
 
+raw_ostream &circt::hw::operator<<(raw_ostream &printer, PortInfo port) {
+  StringRef dirstr;
+  switch (port.dir) {
+  case ModulePort::Direction::Input:
+    dirstr = "input";
+    break;
+  case ModulePort::Direction::Output:
+    dirstr = "output";
+    break;
+  case ModulePort::Direction::InOut:
+    dirstr = "inout";
+    break;
+  }
+  printer << dirstr << " " << port.name << " : " << port.type << " (argnum "
+          << port.argNum << ", sym " << port.sym << ", loc " << port.loc
+          << ", args " << port.attrs << ")";
+  return printer;
+}
+
 #include "circt/Dialect/HW/HWOpInterfaces.cpp.inc"

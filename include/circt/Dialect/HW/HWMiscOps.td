@@ -98,14 +98,13 @@ def WireOp : HWOp<"wire", [
   let builders = [
     OpBuilder<(ins "mlir::Value":$input,
                    CArg<"const StringAttrOrRef &", "{}">:$name,
-                   CArg<"const StringAttrOrRef &", "{}">:$innerSym), [{
+                   CArg<"hw::InnerSymAttr", "{}">:$innerSym), [{
       auto *context = odsBuilder.getContext();
       odsState.addOperands(input);
       if (auto attr = name.get(context))
         odsState.addAttribute(getNameAttrName(odsState.name), attr);
-      if (auto attr = innerSym.get(context))
-        odsState.addAttribute(getInnerSymAttrName(odsState.name),
-                              InnerSymAttr::get(attr));
+      if (innerSym)
+        odsState.addAttribute(getInnerSymAttrName(odsState.name), innerSym);
       odsState.addTypes(input.getType());
     }]>
   ];

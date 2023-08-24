@@ -32,6 +32,9 @@ with Context() as ctx, Location.unknown():
       %list_child = om.list_create %0, %1: !om.class.type<@Child>
       %2 = om.object @Nest(%list_child) : (!om.list<!om.class.type<@Child>>) -> !om.class.type<@Nest>
       om.class.field @nest, %2 : !om.class.type<@Nest>
+
+      %3 = om.constant #om.map<i64, {a = 42, b = 32}> : !om.map<!om.string, i64>
+      om.class.field @map, %3 : !om.map<!om.string, i64>
     }
 
     om.class @Child(%0: i64) {
@@ -95,3 +98,12 @@ for child in obj.nest.list_child:
   # CHECK: 14
   # CHECK-NEXT: 15
   print(child.foo)
+
+# CHECK: 2
+print(len(obj.map))
+# CHECK: {'a': 42, 'b': 32}
+print(obj.map)
+for k, v in obj.map.items():
+  # CHECK-NEXT: a 42
+  # CHECK-NEXT: b 32
+  print(k, v)

@@ -98,6 +98,18 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
       return $_op.getHWModuleType().getNumOutputs();
     }
 
+    SmallVector<mlir::Type> getPortTypes() {
+      return $_op.getHWModuleType().getPortTypes();
+    }
+
+    SmallVector<mlir::Type> getInputTypes() {
+      return $_op.getHWModuleType().getInputTypes();
+    }
+
+    SmallVector<mlir::Type> getOutputTypes() {
+      return $_op.getHWModuleType().getOutputTypes();
+    }
+
     /// Return the set of names on input and inout ports
     SmallVector<StringAttr> getInputNamesStr() {
       return $_op.getHWModuleType().getInputNamesStr();
@@ -118,6 +130,11 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
       return $_op.getHWModuleType().getOutputNames();
     }
     
+    // Get the name for the specified input or inout port
+    StringRef getPortName(size_t idx) {
+      return $_op.getHWModuleType().getPortName(idx);
+    }
+
     // Get the name for the specified input or inout port
     StringRef getInputName(size_t idx) {
       return $_op.getHWModuleType().getInputName(idx);
@@ -165,8 +182,7 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
 
     void setAllOutputAttrs(ArrayRef<Attribute> attrs) {
       SmallVector<Attribute> retval = $_op.getAllInputAttrs();
-      auto argAttrs = $_op.getAllInputAttrs();
-      retval.append(argAttrs.begin(), argAttrs.end());
+      retval.append(attrs.begin(), attrs.end());
       $_op.setAllPortAttrs(retval);
     }
 
@@ -206,6 +222,22 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
       auto locs = $_op.getAllPortLocs();
       locs[idx] = loc;
       return $_op.setAllPortLocs(locs);
+    }
+
+    SmallVector<Location> getInputLocs() {
+      auto locs = $_op.getAllPortLocs();
+      SmallVector<Location> retval;
+      for (unsigned x = 0, e = $_op.getNumInputs(); x < e; ++x)
+        retval.push_back(locs[$_op.getHWModuleType().getPortIdForInputId(x)]);
+      return retval;
+    }
+
+    SmallVector<Location> getOutputLocs() {
+      auto locs = $_op.getAllPortLocs();
+      SmallVector<Location> retval;
+      for (unsigned x = 0, e = $_op.getNumOutputs(); x < e; ++x)
+        retval.push_back(locs[$_op.getHWModuleType().getPortIdForOutputId(x)]);
+      return retval;
     }
 
   }];
