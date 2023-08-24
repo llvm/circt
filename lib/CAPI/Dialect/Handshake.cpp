@@ -15,7 +15,7 @@
 
 void registerHandshakePasses() {
   circt::handshake::registerPasses();
-  circt::registerStandardToHandshakePass();
+  circt::registerCFToHandshakePass();
   circt::registerHandshakeToHWPass();
 }
 MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(Handshake, handshake,

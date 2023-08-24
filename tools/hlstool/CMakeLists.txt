@@ -20,7 +20,7 @@ target_link_libraries(hlstool
   CIRCTSeq
   CIRCTSeqToSV
   CIRCTSeqTransforms
-  CIRCTStandardToHandshake
+  CIRCTCFToHandshake
   CIRCTSV
   CIRCTSVTransforms
   CIRCTSCFToCalyx

@@ -130,7 +130,7 @@ add_mlir_public_c_api_library(CIRCTCAPIHandshake
   CIRCTHandshake
   CIRCTHandshakeTransforms
   CIRCTHandshakeToHW
-  CIRCTStandardToHandshake
+  CIRCTCFToHandshake
 )
 
 add_mlir_public_c_api_library(CIRCTCAPIHWArith

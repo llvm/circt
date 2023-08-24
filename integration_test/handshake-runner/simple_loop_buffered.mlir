@@ -1,4 +1,4 @@
-// RUN: circt-opt -lower-std-to-handshake -handshake-materialize-forks-sinks %s \
+// RUN: circt-opt -lower-cf-to-handshake -handshake-materialize-forks-sinks %s \
 // RUN: | circt-opt --handshake-insert-buffers="strategy=all" \
 // RUN: | handshake-runner | FileCheck %s
 // CHECK: 42

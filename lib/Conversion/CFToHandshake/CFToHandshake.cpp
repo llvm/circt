@@ -1,4 +1,4 @@
-//===- StandardToHandshake.cpp - Convert standard MLIR into dataflow IR ---===//
+//===- CFToHandshake.cpp - Convert standard MLIR into dataflow IR ---------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -9,7 +9,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Conversion/StandardToHandshake.h"
+#include "circt/Conversion/CFToHandshake.h"
 #include "../PassDetail.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/Handshake/HandshakePasses.h"
@@ -1635,7 +1635,7 @@ HandshakeLowering::replaceCallOps(ConversionPatternRewriter &rewriter) {
 }
 
 namespace {
-/// Strategy class for SSA maximization during std-to-handshake conversion.
+/// Strategy class for SSA maximization during cf-to-handshake conversion.
 /// Block arguments of type MemRefType and allocation operations are not
 /// considered for SSA maximization.
 class HandshakeLoweringSSAStrategy : public SSAMaximizationStrategy {
@@ -1721,9 +1721,8 @@ struct HandshakeRemoveBlockPass
   void runOnOperation() override { removeBasicBlocks(getOperation()); }
 };
 
-struct StandardToHandshakePass
-    : public StandardToHandshakeBase<StandardToHandshakePass> {
-  StandardToHandshakePass(bool sourceConstants, bool disableTaskPipelining) {
+struct CFToHandshakePass : public CFToHandshakeBase<CFToHandshakePass> {
+  CFToHandshakePass(bool sourceConstants, bool disableTaskPipelining) {
     this->sourceConstants = sourceConstants;
     this->disableTaskPipelining = disableTaskPipelining;
   }
@@ -1748,10 +1747,10 @@ struct StandardToHandshakePass
 } // namespace
 
 std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
-circt::createStandardToHandshakePass(bool sourceConstants,
-                                     bool disableTaskPipelining) {
-  return std::make_unique<StandardToHandshakePass>(sourceConstants,
-                                                   disableTaskPipelining);
+circt::createCFToHandshakePass(bool sourceConstants,
+                               bool disableTaskPipelining) {
+  return std::make_unique<CFToHandshakePass>(sourceConstants,
+                                             disableTaskPipelining);
 }
 
 std::unique_ptr<mlir::OperationPass<handshake::FuncOp>>
