@@ -83,13 +83,17 @@ static FailureOr<unsigned> findFieldID(AnnoTarget &ref,
   auto *op = ref.getOp();
   auto fieldIdx = 0;
   // The first field for some ops refers to expanded return values.
-  if (isa<MemOp>(ref.getOp())) {
+  if (isa<MemOp>(op)) {
     if (failed(updateExpandedPort(tokens.front().name, ref)))
       return {};
     tokens = tokens.drop_front();
   }
 
   auto type = ref.getType();
+  if (!type)
+    return op->emitError(tokens.front().isIndex ? "index" : "field")
+           << " access in annotation not supported for this operation";
+
   for (auto token : tokens) {
     if (token.isIndex) {
       auto result = findVectorElement(op, type, token.name);
