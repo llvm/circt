@@ -94,6 +94,23 @@ static RetTy emitInferRetTypeError(std::optional<Location> loc,
   return {};
 }
 
+bool firrtl::isDuplexValue(Value val) {
+  // Block arguments are not duplex values.
+  while (Operation *op = val.getDefiningOp()) {
+    auto isDuplex =
+        TypeSwitch<Operation *, std::optional<bool>>(op)
+            .Case<SubfieldOp, SubindexOp, SubaccessOp>([&val](auto op) {
+              val = op.getInput();
+              return std::nullopt;
+            })
+            .Case<RegOp, RegResetOp, WireOp>([](auto) { return true; })
+            .Default([](auto) { return false; });
+    if (isDuplex)
+      return *isDuplex;
+  }
+  return false;
+}
+
 /// Return the kind of port this is given the port type from a 'mem' decl.
 static MemOp::PortKind getMemPortKindFromType(FIRRTLType type) {
   constexpr unsigned int addr = 1 << 0;

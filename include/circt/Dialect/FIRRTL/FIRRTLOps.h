@@ -57,7 +57,7 @@ bool isConstant(Value value);
 /// pairwise connect.
 bool isDuplexValue(Value val);
 
-enum class Flow : uint8_t { None = 0, Source = 1, Sink = 2, Duplex = 3 };
+enum class Flow : uint8_t { None, Source, Sink, Duplex };
 
 /// Get a flow's reverse.
 constexpr Flow flip(Flow flow, bool flipped = true) {
@@ -107,6 +107,10 @@ constexpr bool isValidDst(Flow flow) {
 /// A user should normally \a not have to change this from its default of \p
 /// Flow::Source.
 Flow foldFlow(Value val);
+
+enum class DeclKind { Port, Instance, Other };
+
+DeclKind getDeclarationKind(Value val);
 
 enum class ReadPortSubfield { addr, en, clk, data };
 enum class WritePortSubfield { addr, en, clk, data, mask };
