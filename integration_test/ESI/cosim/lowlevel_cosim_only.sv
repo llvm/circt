@@ -1,13 +1,5 @@
 // REQUIRES: esi-cosim
-// RUN: esi-cosim-runner.py %s %s
-// P Y: import IPython
-// P Y: IPython.embed()
-// PY: import esi_cosim
-// PY: c = esi_cosim.LowLevel(rpcschemapath, simhostport)
-// PY: r = c.low.readMMIO(40).wait()
-// PY: print(f"data resp: 0x{r.data:x}")
-// PY: r = c.low.readMMIO(0).wait()
-// PY: print(f"data resp: 0x{r.data:x}")
+// RUN: esi-cosim-runner.py --exec %s.py %s
 
 import Cosim_DpiPkg::*;
 
