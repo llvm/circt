@@ -23,6 +23,7 @@ interface CosimDpiServer @0x85e029b5352bcdb5 {
   # safety and your language supports it.
   open @1 [S, T] (iface :EsiDpiInterfaceDesc) -> (iface :EsiDpiEndpoint(S, T));
 
+  # Create a low level interface into the simulation.
   openLowLevel @2 () -> (lowLevel :EsiLowLevel);
 }
 
@@ -51,7 +52,11 @@ struct UntypedData @0xac6e64291027d47a {
   data @0 :Data;
 }
 
+# A low level interface simply provides MMIO and host memory access. In all
+# cases, hardware errors become exceptions.
 interface EsiLowLevel @0xae716100ef82f6d6 {
+  # Write to an MMIO register.
   writeMMIO @0 (address :UInt64, data :UInt64) -> ();
+  # Read from an MMIO register.
   readMMIO  @1 (address :UInt64) -> (data :UInt64);
 }

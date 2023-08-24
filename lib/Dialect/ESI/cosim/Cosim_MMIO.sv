@@ -46,12 +46,11 @@ module Cosim_MMIO
   input  logic [1:0]  bresp
 );
 
-  // Registration logic.
+  // Registration logic -- run once.
   bit Initialized = 0;
   always@(posedge clk) begin
-    // We've been instructed to start AND we're uninitialized.
     if (!Initialized) begin
-      int rc = cosim_mmio_register();
+      automatic int rc = cosim_mmio_register();
       assert (rc == 0);
       Initialized <= 1;
     end
@@ -65,12 +64,13 @@ module Cosim_MMIO
       if (arvalid && arready)
         arvalid <= 0;
       if (!arvalid) begin
-        int rc   = cosim_mmio_read_tryget(araddr);
+        automatic int rc = cosim_mmio_read_tryget(araddr);
         arvalid <= rc == 0;
       end
     end
   end
 
+  // MMIO read: response channel.
   assign rready = 1;
   always@(posedge clk) begin
     if (rvalid)
@@ -88,13 +88,14 @@ module Cosim_MMIO
       if (wvalid && wready)
         wvalid <= 0;
       if (!awvalid && !awvalid) begin
-        int rc   = cosim_mmio_write_tryget(awaddr, wdata);
+        automatic int rc = cosim_mmio_write_tryget(awaddr, wdata);
         awvalid <= rc == 0;
         wvalid  <= rc == 0;
       end
     end
   end
 
+  // MMIO write: response (error) channel.
   assign bready = 1;
   always@(posedge clk) begin
     if (bvalid)

@@ -57,10 +57,12 @@ public:
   kj::Promise<void> close(CloseContext) override;
 };
 
+/// Implement the low level cosim RPC protocol.
 class LowLevelServer final : public EsiLowLevel::Server {
-
+  // Queues to and from the simulation.
   LowLevel &bridge;
 
+  // Functions which poll for responses without blocking the main loop.
   kj::Promise<void> pollReadResp(ReadMMIOContext context);
   kj::Promise<void> pollWriteResp(WriteMMIOContext context);
 
@@ -72,6 +74,7 @@ public:
   /// Disallow copying as the 'open' variable needs to track the endpoint.
   LowLevelServer(const LowLevelServer &) = delete;
 
+  // Implement the protocol methods.
   kj::Promise<void> readMMIO(ReadMMIOContext) override;
   kj::Promise<void> writeMMIO(WriteMMIOContext) override;
 };

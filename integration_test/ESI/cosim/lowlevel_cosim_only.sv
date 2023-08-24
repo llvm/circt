@@ -1,6 +1,9 @@
 // REQUIRES: esi-cosim
 // RUN: esi-cosim-runner.py --exec %s.py %s
 
+// Test the low level cosim MMIO functionality. This test has 1024 64-bit
+// registers as a memory. It is an error to write to register 0.
+
 import Cosim_DpiPkg::*;
 
 module top(
@@ -58,7 +61,7 @@ module top(
   reg [63:0] regs [1023:0];
 
   assign arready = 1;
-  assign rdata = regs[araddr];
+  assign rdata = regs[araddr >> 3];
   assign rresp = araddr == 0 ? 3 : 0;
   always@(posedge clk) begin
     if (rst) begin
@@ -83,7 +86,7 @@ module top(
       if (write) begin
         bvalid <= 1;
         bresp <= awaddr == 0 ? 3 : 0;
-        regs[awaddr] <= wdata;
+        regs[awaddr >> 3] <= wdata;
       end
     end
   end

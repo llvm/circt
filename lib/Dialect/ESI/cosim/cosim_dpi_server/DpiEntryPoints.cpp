@@ -287,6 +287,7 @@ DPI void sv2cCosimserverMMIOWriteRespond(char error) {
   assert(server);
   server->lowLevelBridge.writeResps.push(error);
 }
+
 DPI int sv2cCosimserverMMIOWriteTryGet(int *address, long long *data) {
   assert(server);
   auto req = server->lowLevelBridge.writeReqs.pop();

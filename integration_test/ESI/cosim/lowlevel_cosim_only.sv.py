@@ -1,3 +1,5 @@
+# Test driver for mmio cosim.
+
 import esi_cosim
 import capnp
 import sys
