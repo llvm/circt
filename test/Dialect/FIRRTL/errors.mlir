@@ -1145,7 +1145,7 @@ firrtl.circuit "Foo" {
   firrtl.module @Foo(in  %_a: !firrtl.probe<uint<1>>) {
     %a = firrtl.wire : !firrtl.uint<1>
     %1 = firrtl.ref.send %a : !firrtl.uint<1>
-    // expected-error @+1 {{connect has invalid flow: the destination expression "_a" has source flow, expected sink flow}}
+    // expected-error @+1 {{connect has invalid flow: the destination expression "_a" has source flow, expected sink or duplex flow}}
     firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
   }
 }
@@ -1216,7 +1216,7 @@ firrtl.circuit "NoDefineIntoRefCast" {
     %dest_cast = firrtl.ref.cast %r : (!firrtl.probe<uint<1>>) -> !firrtl.probe<uint>
     %x = firrtl.wire : !firrtl.uint
     %xref = firrtl.ref.send %x : !firrtl.uint
-    // expected-error @below {{has invalid flow: the destination expression has source flow, expected sink flow}}
+    // expected-error @below {{has invalid flow: the destination expression has source flow, expected sink or duplex flow}}
     firrtl.ref.define %dest_cast, %xref : !firrtl.probe<uint>
   }
 }
@@ -1267,7 +1267,7 @@ firrtl.circuit "PropertyDriveSource" {
   // expected-note @below {{the destination was defined here}}
   firrtl.module @PropertyDriveSource(in %in: !firrtl.string) {
     %0 = firrtl.string "hello"
-    // expected-error @below {{connect has invalid flow: the destination expression "in" has source flow, expected sink flow}}
+    // expected-error @below {{connect has invalid flow: the destination expression "in" has source flow, expected sink or duplex flow}}
     firrtl.propassign %in, %0 : !firrtl.string
   }
 }
@@ -2092,44 +2092,16 @@ firrtl.circuit "InternalPathForNonRefType" {
 }
 
 // -----
-// Try to read from a local object's input port. This fails because we cannot
-// read from the input ports of an object.
-
-firrtl.circuit "Top" {
-  firrtl.class @MyClass(in %input: !firrtl.string) {}
-
-  firrtl.module @Top(out %port: !firrtl.string) {
-    %0 = firrtl.object @MyClass(in input: !firrtl.string)
-    %1 = firrtl.object.subfield %0[input] : !firrtl.class<@MyClass(in input: !firrtl.string)>
-    // expected-error @below {{cannot read from an object's input port}}
-    firrtl.propassign %port, %1 : !firrtl.string
-  }
-}
-
-// -----
 // Try to read from an output object's input ports.
 
 firrtl.circuit "Top" {
   firrtl.class @MyClass(in %input: !firrtl.string) {}
 
   firrtl.module @Top(out %object: !firrtl.class<@MyClass(in input : !firrtl.string)>,  out %str: !firrtl.string) {
+    // expected-note @below {{the source was defined here}}
     %0 = firrtl.object.subfield %object[input] : !firrtl.class<@MyClass(in input: !firrtl.string)>
-    // expected-error @below {{connect has invalid flow: the source expression has no flow, expected source or sink flow}}
+    // expected-error @below {{connect has invalid flow: the source expression has no flow, expected source or duplex flow}}
     firrtl.propassign %str, %0 : !firrtl.string
-  }
-}
-
-// -----
-// Try to read from an input object's input port.
-
-firrtl.circuit "Top" {
-  firrtl.class @MyClass(in %input: !firrtl.string) {}
-
-  firrtl.module @Top(out %port: !firrtl.string) {
-    %0 = firrtl.object @MyClass(in input: !firrtl.string)
-    %1 = firrtl.object.subfield %0[input] : !firrtl.class<@MyClass(in input: !firrtl.string)>
-    // expected-error @below {{cannot read from an object's input port}}
-    firrtl.propassign %port, %1 : !firrtl.string
   }
 }
 
@@ -2143,8 +2115,9 @@ firrtl.circuit "Top" {
 
   firrtl.module @Top(out %port: !firrtl.class<@MyClass(in input : !firrtl.string)>) {
     %0 = firrtl.string "foo"
+    // expected-note @below {{the destination was defined here}}
     %1 = firrtl.object.subfield %port[input] : !firrtl.class<@MyClass(in input: !firrtl.string)>
-    // expected-error @below {{connect has invalid flow: the destination expression has no flow, expected sink flow}}
+    // expected-error @below {{connect has invalid flow: the destination expression has no flow, expected sink or duplex flow}}
     firrtl.propassign %1, %0 : !firrtl.string
   }
 }
@@ -2157,8 +2130,9 @@ firrtl.circuit "Top" {
 
   firrtl.module @Top(out %port: !firrtl.class<@MyClass(in input : !firrtl.string)>) {
     %0 = firrtl.string "foo"
+    // expected-note @below {{the destination was defined here}}
     %1 = firrtl.object.subfield %port[input] : !firrtl.class<@MyClass(in input: !firrtl.string)>
-    // expected-error @below {{cannot propassign to a subfield of a port}}
+    // expected-error @below {{connect has invalid flow: the destination expression has no flow, expected sink or duplex flow}}
     firrtl.propassign %1, %0 : !firrtl.string
   }
 }
@@ -2178,7 +2152,7 @@ firrtl.circuit "Top" {
     %b = firrtl.object.subfield %a[b] : !firrtl.class<@A(out b: !firrtl.class<@B(in input: !firrtl.string)>)>
     %input = firrtl.object.subfield %b[input] : !firrtl.class<@B(in input: !firrtl.string)>
     %value = firrtl.string "foo"
-    // expected-error @below {{cannot propassign to an intermediate expression}}
+    // expected-error @below {{connect has invalid flow: the destination expression has source flow, expected sink or duplex flow}}
     firrtl.propassign %input, %value : !firrtl.string
   }
 }

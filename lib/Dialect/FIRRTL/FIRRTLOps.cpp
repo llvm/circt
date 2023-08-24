@@ -138,14 +138,24 @@ static MemOp::PortKind getMemPortKindFromType(FIRRTLType type) {
 static Flow portFlow(Direction d, bool flipped) {
   switch (d) {
   case Direction::In:
-    return flipped ? Flow::Sink : Flow::Source;
+    return flipped ? Flow::Duplex : Flow::Source;
   case Direction::Out:
-    return flipped ? Flow::Source : Flow::Sink;
+    return flipped ? Flow::Source : Flow::Duplex;
   }
 }
 
 // Get the flow of a port on an instance.
 static Flow instancePortFlow(Direction d, bool flipped) {
+  switch (d) {
+  case Direction::In:
+    return flipped ? Flow::Source : Flow::Duplex;
+  case Direction::Out:
+    return flipped ? Flow::Duplex : Flow::Source;
+  }
+}
+
+// Get the flow of a port on a memory op.
+static Flow memoryPortFlow(Direction d, bool flipped) {
   switch (d) {
   case Direction::In:
     return flipped ? Flow::Source : Flow::Sink;
@@ -165,11 +175,11 @@ static Flow remoteObjectPortFlow(Direction d) {
   }
 }
 
-// Get the flow of a port on a local object.
+// Get the flow of a port on a local object op.
 static Flow localObjectPortFlow(Direction d) {
   switch (d) {
   case Direction::In:
-    return Flow::Sink;
+    return Flow::Duplex;
   case Direction::Out:
     return Flow::Source;
   }
@@ -194,7 +204,7 @@ static Flow foldFlow(Value val, bool flipped) {
           [&](auto op) { return foldFlow(op.getInput(), flipped); })
       // Registers, Wires, and behavioral memory ports are always sinks.
       .Case<RegOp, RegResetOp, WireOp, MemoryPortOp>(
-          [](auto) { return Flow::Sink; })
+          [](auto) { return Flow::Duplex; })
       .Case<InstanceOp>([&](auto inst) {
         auto resultNo = cast<OpResult>(val).getResultNumber();
         return instancePortFlow(inst.getPortDirection(resultNo), flipped);
@@ -203,14 +213,14 @@ static Flow foldFlow(Value val, bool flipped) {
         // only debug ports with RefType have source flow.
         if (type_isa<RefType>(val.getType()))
           return Flow::Source;
-        /// A memop is a source unless fil
-        return flip(Flow::Sink, flipped);
+        return memoryPortFlow(Direction::Out, flipped);
       })
       .Case<ObjectOp>([&](ObjectOp op) {
         // Object declarations are always sources.
         return Flow::Source;
       })
       .Case<ObjectSubfieldOp>([&](ObjectSubfieldOp op) {
+        bool remote = false;
         while (true) {
           auto input = op.getInput();
           if (auto arg = dyn_cast<BlockArgument>(input)) {
@@ -218,7 +228,6 @@ static Flow foldFlow(Value val, bool flipped) {
             auto direction = type.getElement(op.getIndex()).direction;
             return remoteObjectPortFlow(direction);
           }
-
           auto *inputOp = input.getDefiningOp();
           if (auto instanceOp = dyn_cast<InstanceOp>(inputOp)) {
             auto direction = instanceOp.getPortDirection(op.getIndex());
@@ -227,9 +236,16 @@ static Flow foldFlow(Value val, bool flipped) {
           if (auto objectOp = dyn_cast<ObjectOp>(inputOp)) {
             auto classType = objectOp.getType();
             auto direction = classType.getElement(op.getIndex()).direction;
+            if (remote)
+              return remoteObjectPortFlow(direction);
             return localObjectPortFlow(direction);
           }
+          remote = true;
           op = cast<ObjectSubfieldOp>(inputOp);
+          auto inputType = input.getType();
+          auto direction = inputType.getElement(op.getIndex()).direction;
+          if (direction == Direction::In)
+            return Flow::None;
         }
       })
       // Anything else acts like a universal source.
@@ -2788,6 +2804,7 @@ static LogicalResult checkConnectFlow(Operation *connect) {
   // TODO: Relax this to allow reads from output ports,
   // instance/memory input ports.
   auto srcFlow = foldFlow(src);
+  llvm::errs() << toString(srcFlow) << "\n";
   if (!isValidSrc(srcFlow)) {
     auto srcRef = getFieldRefFromValue(src);
     auto [srcName, rootKnown] = getFieldName(srcRef);
@@ -2795,7 +2812,7 @@ static LogicalResult checkConnectFlow(Operation *connect) {
     diag << "connect has invalid flow: the source expression ";
     if (rootKnown)
       diag << "\"" << srcName << "\" ";
-    diag << "has " << toString(srcFlow) << ", expected source or sink flow";
+    diag << "has " << toString(srcFlow) << ", expected source or duplex flow";
     return diag.attachNote(srcRef.getLoc()) << "the source was defined here";
   }
 
@@ -2807,7 +2824,7 @@ static LogicalResult checkConnectFlow(Operation *connect) {
     diag << "connect has invalid flow: the destination expression ";
     if (rootKnown)
       diag << "\"" << dstName << "\" ";
-    diag << "has " << toString(dstFlow) << ", expected sink flow";
+    diag << "has " << toString(dstFlow) << ", expected sink or duplex flow";
     return diag.attachNote(dstRef.getLoc())
            << "the destination was defined here";
   }

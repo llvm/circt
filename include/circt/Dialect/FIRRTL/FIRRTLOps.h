@@ -51,15 +51,13 @@ size_t getNumPorts(Operation *op);
 bool isConstant(Operation *op);
 bool isConstant(Value value);
 
-enum class Flow { Source, Sink, None };
+/// Returns true if the value results from an expression with duplex flow.
+/// Duplex values have special treatment in bundle connect operations, and
+/// their flip orientation is not used to determine the direction of each
+/// pairwise connect.
+bool isDuplexValue(Value val);
 
-// Is this flow valid as the source of a connect-like operation.
-constexpr bool isValidSrc(Flow flow) {
-  return flow == Flow::Source || flow == Flow::Sink;
-}
-
-// Is this flow valid as the destination of a connect-like operation.
-constexpr bool isValidDst(Flow flow) { return flow == Flow::Sink; }
+enum class Flow : uint8_t { None = 0, Source = 1, Sink = 2, Duplex = 3 };
 
 /// Get a flow's reverse.
 constexpr Flow flip(Flow flow, bool flipped = true) {
@@ -78,13 +76,23 @@ constexpr Flow flip(Flow flow, bool flipped = true) {
 
 constexpr const char *toString(Flow flow) {
  switch (flow) {
+    case Flow::None:
+      return "no flow";
     case Flow::Source:
       return "source flow";
     case Flow::Sink:
       return "sink flow";
-    case Flow::None:
-      return "no flow";
+    case Flow::Duplex:
+      return "duplex flow";
   }
+}
+
+constexpr bool isValidSrc(Flow flow) {
+  return uint8_t(flow) & uint8_t(Flow::Source);
+}
+
+constexpr bool isValidDst(Flow flow) {
+  return uint8_t(flow) & uint8_t(Flow::Sink);
 }
 
 /// Compute the flow for a Value, \p val, as determined by the FIRRTL
