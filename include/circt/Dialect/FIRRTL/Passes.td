@@ -15,6 +15,17 @@
 
 include "mlir/Pass/PassBase.td"
 
+def ResolvePaths : Pass<"firrtl-resolve-paths", "firrtl::CircuitOp"> {
+  let summary = "Lowers UnresolvedPathOps to PathOps";
+  let description = [{
+    FIRRTL path operations are initially create as unresolved path operations,
+    which encode their target as a string. This pass parses and resolves those
+    target strings to actual path operations.  Path operations refer to their
+    targets using annotations with a unique identifier.
+  }];
+  let constructor = "circt::firrtl::createResolvePathsPass()";
+}
+
 def LowerFIRRTLAnnotations : Pass<"firrtl-lower-annotations", "firrtl::CircuitOp"> {
   let summary = "Lower FIRRTL annotations to usable entities";
   let description = [{

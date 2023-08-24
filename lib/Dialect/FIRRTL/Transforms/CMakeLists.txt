@@ -40,6 +40,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   RandomizeRegisterInit.cpp
   RegisterOptimizer.cpp
   RemoveUnusedPorts.cpp
+  ResolvePaths.cpp
   ResolveTraces.cpp
   SFCCompat.cpp
   VBToBV.cpp
