@@ -61,7 +61,8 @@ class LowLevelServer final : public EsiLowLevel::Server {
 
   LowLevel &bridge;
 
-  kj::Promise<void> pollResp(ReadMMIOContext context);
+  kj::Promise<void> pollReadResp(ReadMMIOContext context);
+  kj::Promise<void> pollWriteResp(WriteMMIOContext context);
 
 public:
   LowLevelServer(LowLevel &bridge);
@@ -72,6 +73,7 @@ public:
   LowLevelServer(const LowLevelServer &) = delete;
 
   kj::Promise<void> readMMIO(ReadMMIOContext) override;
+  kj::Promise<void> writeMMIO(WriteMMIOContext) override;
 };
 
 /// Implements the `CosimDpiServer` interface from the RPC schema.
@@ -170,11 +172,11 @@ kj::Promise<void> EndpointServer::close(CloseContext context) {
 LowLevelServer::LowLevelServer(LowLevel &bridge) : bridge(bridge) {}
 LowLevelServer::~LowLevelServer() {}
 
-kj::Promise<void> LowLevelServer::pollResp(ReadMMIOContext context) {
-  auto respMaybe = bridge.popReadResp();
+kj::Promise<void> LowLevelServer::pollReadResp(ReadMMIOContext context) {
+  auto respMaybe = bridge.readResps.pop();
   if (!respMaybe.has_value()) {
     return kj::evalLast(
-        [this, KJ_CPCAP(context)]() mutable { return pollResp(context); });
+        [this, KJ_CPCAP(context)]() mutable { return pollReadResp(context); });
   }
   auto resp = respMaybe.value();
   KJ_REQUIRE(resp.second == 0, "Read MMIO register encountered an error");
@@ -183,9 +185,27 @@ kj::Promise<void> LowLevelServer::pollResp(ReadMMIOContext context) {
 }
 
 kj::Promise<void> LowLevelServer::readMMIO(ReadMMIOContext context) {
-  bridge.pushReadReq(context.getParams().getAddress());
+  bridge.readReqs.push(context.getParams().getAddress());
   return kj::evalLast(
-      [this, KJ_CPCAP(context)]() mutable { return pollResp(context); });
+      [this, KJ_CPCAP(context)]() mutable { return pollReadResp(context); });
+}
+
+kj::Promise<void> LowLevelServer::pollWriteResp(WriteMMIOContext context) {
+  auto respMaybe = bridge.writeResps.pop();
+  if (!respMaybe.has_value()) {
+    return kj::evalLast(
+        [this, KJ_CPCAP(context)]() mutable { return pollWriteResp(context); });
+  }
+  auto resp = respMaybe.value();
+  KJ_REQUIRE(resp == 0, "write MMIO register encountered an error");
+  return kj::READY_NOW;
+}
+
+kj::Promise<void> LowLevelServer::writeMMIO(WriteMMIOContext context) {
+  bridge.writeReqs.push(context.getParams().getAddress(),
+                        context.getParams().getData());
+  return kj::evalLast(
+      [this, KJ_CPCAP(context)]() mutable { return pollWriteResp(context); });
 }
 
 /// ----- CosimServer definitions.

@@ -43,7 +43,7 @@ module Cosim_MMIO
   // MMIO write: write response channel.
   input  logic        bvalid,
   output reg          bready,
-  input  logic [31:0] bdata
+  input  logic [1:0]  bresp
 );
 
   // Registration logic.
@@ -65,7 +65,7 @@ module Cosim_MMIO
       if (arvalid && arready)
         arvalid <= 0;
       if (!arvalid) begin
-        int rc = Cosim_DpiPkg::cosim_mmio_read_tryget(araddr);
+        int rc   = cosim_mmio_read_tryget(araddr);
         arvalid <= rc == 0;
       end
     end
@@ -75,6 +75,30 @@ module Cosim_MMIO
   always@(posedge clk) begin
     if (rvalid)
       cosim_mmio_read_respond(rdata, {6'b0, rresp});
+  end
+
+  // MMIO write: address and data channels.
+  always@(posedge clk) begin
+    if (rst) begin
+      awvalid <= 0;
+      wvalid <= 0;
+    end else begin
+      if (awvalid && awready)
+        awvalid <= 0;
+      if (wvalid && wready)
+        wvalid <= 0;
+      if (!awvalid && !awvalid) begin
+        int rc   = cosim_mmio_write_tryget(awaddr, wdata);
+        awvalid <= rc == 0;
+        wvalid  <= rc == 0;
+      end
+    end
+  end
+
+  assign bready = 1;
+  always@(posedge clk) begin
+    if (bvalid)
+      cosim_mmio_write_respond({6'b0, bresp});
   end
 
 endmodule

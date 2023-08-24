@@ -256,7 +256,6 @@ DPI int sv2cCosimserverInit() {
   return 0;
 }
 
-
 // ---- Low-level cosim DPI entry points ----
 
 static bool MMIORegistered = false;
@@ -270,9 +269,9 @@ DPI int sv2cCosimserverMMIORegister() {
   return 0;
 }
 
-DPI int sv2cCosimserverMMIOReadTryGet(int* address) {
+DPI int sv2cCosimserverMMIOReadTryGet(int *address) {
   assert(server);
-  std::optional<int> reqAddress = server->lowLevelBridge.popReadReq();
+  std::optional<int> reqAddress = server->lowLevelBridge.readReqs.pop();
   if (!reqAddress.has_value())
     return -1;
   *address = reqAddress.value();
@@ -281,9 +280,19 @@ DPI int sv2cCosimserverMMIOReadTryGet(int* address) {
 
 DPI void sv2cCosimserverMMIOReadRespond(long long data, char error) {
   assert(server);
-  printf("pushing %llx\n", data);
-  server->lowLevelBridge.pushReadResp(data, error);
+  server->lowLevelBridge.readResps.push(data, error);
 }
 
-DPI void sv2cCosimserverMMIOWriteRespond(char error) {}
-DPI int sv2cCosimserverMMIOWriteTryGet(int* address, long long* data) {}
+DPI void sv2cCosimserverMMIOWriteRespond(char error) {
+  assert(server);
+  server->lowLevelBridge.writeResps.push(error);
+}
+DPI int sv2cCosimserverMMIOWriteTryGet(int *address, long long *data) {
+  assert(server);
+  auto req = server->lowLevelBridge.writeReqs.pop();
+  if (!req.has_value())
+    return -1;
+  *address = req.value().first;
+  *data = req.value().second;
+  return 0;
+}

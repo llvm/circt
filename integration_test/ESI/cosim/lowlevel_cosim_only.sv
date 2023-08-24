@@ -21,18 +21,18 @@ module top(
 
   // MMIO write: address channel.
   logic        awvalid;
-  logic        awready;
+  reg          awready;
   logic [31:0] awaddr;
 
   // MMIO write: data channel.
   logic        wvalid;
-  logic        wready;
+  reg          wready;
   logic [63:0] wdata;
 
   // MMIO write: write response channel.
-  logic        bvalid;
+  reg          bvalid;
   logic        bready;
-  logic [31:0] bdata;
+  reg   [1:0]  bresp;
 
   Cosim_MMIO mmio (
     .clk(clk),
@@ -52,17 +52,40 @@ module top(
     .wdata(wdata),
     .bvalid(bvalid),
     .bready(bready),
-    .bdata(bdata)
+    .bresp(bresp)
   );
 
+  reg [63:0] regs [1023:0];
+
   assign arready = 1;
-  assign rdata = {araddr, 32'b0};
-  assign rresp = araddr == 0 ? 1 : 0;
+  assign rdata = regs[araddr];
+  assign rresp = araddr == 0 ? 3 : 0;
   always@(posedge clk) begin
-    if (arvalid)
-      rvalid <= 1;
-    if (rready && rvalid)
+    if (rst) begin
       rvalid <= 0;
+    end else begin
+      if (arvalid)
+        rvalid <= 1;
+      if (rready && rvalid)
+        rvalid <= 0;
+    end
+  end
+
+  wire write = awvalid && wvalid && !bvalid;
+  assign awready = write;
+  assign wready = write;
+  always@(posedge clk) begin
+    if (rst) begin
+      bvalid <= 0;
+    end else begin
+      if (bvalid && bready)
+        bvalid <= 0;
+      if (write) begin
+        bvalid <= 1;
+        bresp <= awaddr == 0 ? 3 : 0;
+        regs[awaddr] <= wdata;
+      end
+    end
   end
 
 endmodule
