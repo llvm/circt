@@ -69,15 +69,15 @@ inline Flow swapFlow(Flow flow, bool flipped) {
 }
 
 constexpr const char *toString(Flow flow) {
- switch (flow) {
-    case Flow::None:
-      return "no flow";
-    case Flow::Source:
-      return "source flow";
-    case Flow::Sink:
-      return "sink flow";
-    case Flow::Duplex:
-      return "duplex flow";
+  switch (flow) {
+  case Flow::None:
+    return "no flow";
+  case Flow::Source:
+    return "source flow";
+  case Flow::Sink:
+    return "sink flow";
+  case Flow::Duplex:
+    return "duplex flow";
   }
 }
 

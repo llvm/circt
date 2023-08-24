@@ -183,7 +183,8 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
 
   return TypeSwitch<Operation *, Flow>(op)
       .Case<SubfieldOp, OpenSubfieldOp>([&](auto op) {
-        return foldFlow(op.getInput(), op.isFieldFlipped() ? swap() : accumulatedFlow);
+        return foldFlow(op.getInput(),
+                        op.isFieldFlipped() ? swap() : accumulatedFlow);
       })
       .Case<SubindexOp, SubaccessOp, OpenSubindexOp, RefSubOp>(
           [&](auto op) { return foldFlow(op.getInput(), accumulatedFlow); })
@@ -232,7 +233,7 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
             inputOp = input.getDefiningOp();
             continue;
           }
-    
+
           return accumulatedFlow;
         };
       })
