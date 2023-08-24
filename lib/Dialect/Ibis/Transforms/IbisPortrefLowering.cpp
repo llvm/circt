@@ -66,6 +66,7 @@ public:
               "port reference");
 
     // Replace the inner portref + port access with a "raw" port.
+    OpBuilder::InsertionGuard g(rewriter);
     rewriter.setInsertionPoint(op);
     if (d == Direction::Input) {
       // references to inputs becomes outputs (write from this container)
@@ -133,6 +134,7 @@ public:
       return rewriter.notifyMatchFailure(
           op, "expected an ibis.port.write to wrap the output portref");
 
+    OpBuilder::InsertionGuard g(rewriter);
     rewriter.setInsertionPoint(op);
     if (d == Direction::Input) {
       // Outputs of inputs are inputs (external driver into this container).
@@ -178,6 +180,7 @@ class GetPortConversionPattern : public PortLoweringPattern<GetPortOp> {
 
     StringAttr portName = op.getPortSymbolAttr().getAttr();
 
+    OpBuilder::InsertionGuard g(rewriter);
     rewriter.setInsertionPoint(op);
     Operation *wrapper;
     if (outerDirection == Direction::Input) {
