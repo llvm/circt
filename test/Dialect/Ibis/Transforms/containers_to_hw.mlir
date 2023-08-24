@@ -1,7 +1,7 @@
 // RUN: circt-opt --split-input-file --ibis-convert-containers-to-hw %s | FileCheck %s
 
 
-// CHECK:  hw.module @C(%in: i1) -> (out: i1) {
+// CHECK:  hw.module @B(%in: i1) -> (out: i1) {
 // CHECK:    hw.output %in : i1
 // CHECK:  }
 // CHECK:  hw.module @AccessSibling(%p_b_out: i1) -> (p_b_in: i1) {
@@ -9,12 +9,12 @@
 // CHECK:  }
 // CHECK:  hw.module @Parent() {
 // CHECK:    %a.p_b_in = hw.instance "a" @AccessSibling(p_b_out: %b.out: i1) -> (p_b_in: i1)
-// CHECK:    %b.out = hw.instance "b" @C(in: %a.p_b_in: i1) -> (out: i1)
+// CHECK:    %b.out = hw.instance "b" @B(in: %a.p_b_in: i1) -> (out: i1)
 // CHECK:    hw.output
 // CHECK:  }
 
-ibis.container @C {
-  %this = ibis.this @C 
+ibis.container @B {
+  %this = ibis.this @B 
   %in = ibis.port.input @in : i1
   %out = ibis.port.output @out : i1
 
@@ -39,7 +39,7 @@ ibis.container @Parent {
   %a.p_b_in.ref = ibis.get_port %a, @p_b_in : !ibis.scoperef<@AccessSibling> -> !ibis.portref<out i1>
   %a.p_b_in.ref.val = ibis.port.read %a.p_b_in.ref : !ibis.portref<out i1>
   ibis.port.write %b.in.ref, %a.p_b_in.ref.val : !ibis.portref<in i1>
-  %b = ibis.container.instance @b, @C 
-  %b.out.ref = ibis.get_port %b, @out : !ibis.scoperef<@C> -> !ibis.portref<out i1>
-  %b.in.ref = ibis.get_port %b, @in : !ibis.scoperef<@C> -> !ibis.portref<in i1>
+  %b = ibis.container.instance @b, @B 
+  %b.out.ref = ibis.get_port %b, @out : !ibis.scoperef<@B> -> !ibis.portref<out i1>
+  %b.in.ref = ibis.get_port %b, @in : !ibis.scoperef<@B> -> !ibis.portref<in i1>
 }
