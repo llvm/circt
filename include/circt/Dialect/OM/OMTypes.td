@@ -76,11 +76,16 @@ def SymbolRefType : TypeDef<OMDialect, "SymbolRef", []> {
   let mnemonic = "sym_ref";
 }
 
-
 def StringType : TypeDef<OMDialect, "String", []> {
   let summary = "A type that represents a string.";
 
   let mnemonic = "string";
+}
+
+def PathType : TypeDef<OMDialect, "Path", []> {
+  let summary = "A path to a hardware component";
+
+  let mnemonic = "path";
 }
 
 #endif // CIRCT_DIALECT_OM_OMTYPES_TD
