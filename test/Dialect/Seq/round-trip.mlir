@@ -78,3 +78,8 @@ hw.module @preset(%clock : i1, %reset : i1, %next : i32) -> () {
   // CHECK: %reg = seq.firreg %next clock %clock preset 0 : i32
   %reg = seq.firreg %next clock %clock preset 0 : i32
 }
+
+hw.module @clock_dividers(%clock: i1) -> () {
+  // CHECK: seq.clock_div %clock by 1
+  %by_2 = seq.clock_div %clock by 1
+}

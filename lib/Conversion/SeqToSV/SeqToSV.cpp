@@ -215,6 +215,57 @@ public:
     return success();
   }
 };
+
+/// Lower `seq.clock_div` to a behavioural clock divider
+///
+class ClockDividerLowering : public OpConversionPattern<ClockDivider> {
+public:
+  using OpConversionPattern<ClockDivider>::OpConversionPattern;
+  using OpConversionPattern<ClockDivider>::OpAdaptor;
+
+  LogicalResult
+  matchAndRewrite(ClockDivider clockDiv, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    Location loc = clockDiv.getLoc();
+
+    Value one;
+    if (clockDiv.getPow2()) {
+      one = rewriter.create<hw::ConstantOp>(loc, APInt(1, 1));
+    }
+
+    Value output = clockDiv.getClockIn();
+
+    SmallVector<Value> regs;
+    for (unsigned i = 0; i < clockDiv.getPow2(); ++i) {
+      Value reg = rewriter.create<sv::RegOp>(
+          loc, rewriter.getI1Type(),
+          rewriter.getStringAttr("clock_out_" + std::to_string(i)));
+      regs.push_back(reg);
+
+      rewriter.create<sv::AlwaysOp>(
+          loc, sv::EventControl::AtPosEdge, output, [&] {
+            Value outputVal = rewriter.create<sv::ReadInOutOp>(loc, reg);
+            Value inverted = rewriter.create<comb::XorOp>(loc, outputVal, one);
+            rewriter.create<sv::BPAssignOp>(loc, reg, inverted);
+          });
+
+      output = rewriter.create<sv::ReadInOutOp>(loc, reg);
+    }
+
+    if (!regs.empty()) {
+      Value zero = rewriter.create<hw::ConstantOp>(loc, APInt(1, 0));
+      rewriter.create<sv::InitialOp>(loc, [&] {
+        for (Value reg : regs) {
+          rewriter.create<sv::BPAssignOp>(loc, reg, zero);
+        }
+      });
+    }
+
+    rewriter.replaceOp(clockDiv, output);
+    return success();
+  }
+};
+
 } // namespace
 
 static bool isLegalOp(Operation *op) {
@@ -278,6 +329,7 @@ void SeqToSVPass::runOnOperation() {
   patterns.add<ClockCastLowering<seq::ToClockOp>>(context);
   patterns.add<ClockGateLowering>(context);
   patterns.add<ClockMuxLowering>(context);
+  patterns.add<ClockDividerLowering>(context);
   patterns.add<TypeConversionPattern>(typeConverter, context);
 
   if (failed(applyPartialConversion(circuit, target, std::move(patterns))))

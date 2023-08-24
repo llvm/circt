@@ -351,6 +351,28 @@ def ClockMuxOp : SeqOp<"clock_mux", [Pure]> {
 }
 
 //===----------------------------------------------------------------------===//
+// Clock Dividers
+//===----------------------------------------------------------------------===//
+
+def ClockDivider : SeqOp<"clock_div", [Pure]> {
+  let summary = "Produces a clock divided by a power of two";
+  let description = [{
+    The output clock is phase-aligned to the input clock.
+
+    ```
+    %div_clock = seq.clock_div %clock by 1
+    ```
+  }];
+
+  let arguments = (ins I1:$clockIn, I8Attr:$pow2);
+  let results = (outs I1:$clockOut);
+
+  let assemblyFormat = [{
+    $clockIn `by` $pow2 attr-dict
+  }];
+}
+
+//===----------------------------------------------------------------------===//
 // FIRRTL-flavored memory
 //===----------------------------------------------------------------------===//
 
