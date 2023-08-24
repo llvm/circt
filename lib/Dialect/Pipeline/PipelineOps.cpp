@@ -425,8 +425,46 @@ void ScheduledPipelineOp::getAsmBlockArgumentNames(
       setNameFn(getInnerGo(), "g");
 
     } else {
-      for (auto [argi, arg] : llvm::enumerate(block.getArguments().drop_back()))
-        setNameFn(arg, llvm::formatv("s{0}_arg{1}", i, argi).str());
+      // Predecessor stageOp might have register and passthrough names
+      // specified, which we can use to name the block arguments.
+      auto predStageOp =
+          cast<StageOp>(block.getSinglePredecessor()->getTerminator());
+      size_t nRegs = predStageOp.getRegisters().size();
+      auto nPassthrough = predStageOp.getPassthroughs().size();
+
+      auto regNames = predStageOp.getRegisterNames();
+      auto passthroughNames = predStageOp.getPassthroughNames();
+
+      // Register naming...
+      for (size_t regI = 0; regI < nRegs; ++regI) {
+        auto arg = block.getArguments()[regI];
+
+        if (regNames) {
+          auto nameAttr = (*regNames)[regI].dyn_cast<StringAttr>();
+          if (nameAttr && !nameAttr.strref().empty()) {
+            setNameFn(arg, nameAttr);
+            continue;
+          }
+        }
+        setNameFn(arg, llvm::formatv("s{0}_reg{1}", i, regI).str());
+      }
+
+      // Passthrough naming...
+      for (size_t passthroughI = 0; passthroughI < nPassthrough;
+           ++passthroughI) {
+        auto arg = block.getArguments()[nRegs + passthroughI];
+
+        if (passthroughNames) {
+          auto nameAttr =
+              (*passthroughNames)[passthroughI].dyn_cast<StringAttr>();
+          if (nameAttr && !nameAttr.strref().empty()) {
+            setNameFn(arg, nameAttr);
+            continue;
+          }
+        }
+        setNameFn(arg, llvm::formatv("s{0}_pass{1}", i, passthroughI).str());
+      }
+
       // Last argument in any (non-entry) stage is the stage valid signal.
       setNameFn(block.getArguments().back(),
                 llvm::formatv("s{0}_valid", i).str());
@@ -787,12 +825,37 @@ void StageOp::build(OpBuilder &odsBuilder, OperationState &odsState,
                         odsBuilder.getI64ArrayAttr(clockGatesPerRegister));
 }
 
+void StageOp::build(OpBuilder &odsBuilder, OperationState &odsState,
+                    Block *dest, ValueRange registers, ValueRange passthroughs,
+                    llvm::ArrayRef<llvm::SmallVector<Value>> clockGateList,
+                    mlir::ArrayAttr registerNames,
+                    mlir::ArrayAttr passthroughNames) {
+  build(odsBuilder, odsState, dest, registers, passthroughs);
+
+  llvm::SmallVector<Value> clockGates;
+  llvm::SmallVector<int64_t> clockGatesPerRegister(registers.size(), 0);
+  for (auto gates : clockGateList) {
+    llvm::append_range(clockGates, gates);
+    clockGatesPerRegister.push_back(gates.size());
+  }
+  odsState.attributes.set("clockGatesPerRegister",
+                          odsBuilder.getI64ArrayAttr(clockGatesPerRegister));
+  odsState.addOperands(clockGates);
+
+  if (registerNames)
+    odsState.addAttribute("registerNames", registerNames);
+
+  if (passthroughNames)
+    odsState.addAttribute("passthroughNames", passthroughNames);
+}
+
 ValueRange StageOp::getClockGatesForReg(unsigned regIdx) {
   assert(regIdx < getRegisters().size() && "register index out of bounds.");
 
-  // TODO: This could be optimized quite a bit if we didn't store clock gates
-  // per register as an array of sizes... look into using properties and maybe
-  // attaching a more complex datastructure to reduce compute here.
+  // TODO: This could be optimized quite a bit if we didn't store clock
+  // gates per register as an array of sizes... look into using properties
+  // and maybe attaching a more complex datastructure to reduce compute
+  // here.
 
   unsigned clockGateStartIdx = 0;
   for (auto [index, nClockGatesAttr] :
@@ -811,7 +874,8 @@ ValueRange StageOp::getClockGatesForReg(unsigned regIdx) {
 }
 
 LogicalResult StageOp::verify() {
-  // Verify that the target block has the correct arguments as this stage op.
+  // Verify that the target block has the correct arguments as this stage
+  // op.
   llvm::SmallVector<Type> expectedTargetArgTypes;
   llvm::append_range(expectedTargetArgTypes, getRegisters().getTypes());
   llvm::append_range(expectedTargetArgTypes, getPassthroughs().getTypes());
@@ -838,6 +902,22 @@ LogicalResult StageOp::verify() {
   if (getClockGatesPerRegister().size() != getRegisters().size())
     return emitOpError("expected clockGatesPerRegister to be equally sized to "
                        "the number of registers.");
+
+  // Verify that, if provided, the list of register names is equally sized
+  // to the number of registers.
+  if (auto regNames = getRegisterNames()) {
+    if (regNames->size() != getRegisters().size())
+      return emitOpError("expected registerNames to be equally sized to "
+                         "the number of registers.");
+  }
+
+  // Verify that, if provided, the list of passthrough names is equally sized
+  // to the number of passthroughs.
+  if (auto passthroughNames = getPassthroughNames()) {
+    if (passthroughNames->size() != getPassthroughs().size())
+      return emitOpError("expected passthroughNames to be equally sized to "
+                         "the number of passthroughs.");
+  }
 
   return success();
 }
@@ -876,15 +956,15 @@ LogicalResult LatencyOp::verify() {
     for (auto &use : res.getUses()) {
       auto *user = use.getOwner();
 
-      // The user may reside within a block which is not a stage (e.g. inside
-      // a pipeline.latency op). Determine the stage which this use resides
-      // within.
+      // The user may reside within a block which is not a stage (e.g.
+      // inside a pipeline.latency op). Determine the stage which this use
+      // resides within.
       Block *userStage =
           getParentStageInPipeline(scheduledPipelineParent, user);
       unsigned useDistance = stageDistance(definingStage, userStage);
 
-      // Is this a stage op and is the value passed through? if so, this is a
-      // legal use.
+      // Is this a stage op and is the value passed through? if so, this is
+      // a legal use.
       StageOp stageOp = dyn_cast<StageOp>(user);
       if (userStage == definingStage && stageOp) {
         if (llvm::is_contained(stageOp.getPassthroughs(), res))
@@ -892,8 +972,8 @@ LogicalResult LatencyOp::verify() {
       }
 
       // The use is not a passthrough. Check that the distance between
-      // the defining stage and the user stage is at least the latency of the
-      // result.
+      // the defining stage and the user stage is at least the latency of
+      // the result.
       if (useDistance < latency) {
         auto diag = emitOpError("result ")
                     << i << " is used before it is available.";

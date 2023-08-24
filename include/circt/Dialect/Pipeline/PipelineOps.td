@@ -312,10 +312,9 @@ def StageOp : Op<Pipeline_Dialect, "stage", [
 
   let builders = [
     OpBuilder<(ins "Block*":$dest, "ValueRange":$registers, "ValueRange":$passthroughs)>,
-    // Clock gate builder, which takes a mapping between the registers and
-    // and their clock gate hierarchy.
     OpBuilder<(ins "Block*":$dest, "ValueRange":$registers, "ValueRange":$passthroughs,
-      "const llvm::DenseMap<Value, llvm::SmallVector<Value>>&":$clockGates,
+      // Clock gates per register, in the order of the registers.
+      "llvm::ArrayRef<llvm::SmallVector<Value>>":$clockGates,
       CArg<"mlir::ArrayAttr", "{}">:$registerNames, CArg<"mlir::ArrayAttr", "{}">:$passthroughNames)>
   ];
 }
@@ -363,7 +362,7 @@ def LatencyOp : Op<Pipeline_Dialect, "latency", [
   let skipDefaultBuilders = 1;
 
   let assemblyFormat = [{
-    attr-dict $latency `->` `(` type($results) `)` $body
+    $latency `->` `(` type($results) `)` $body attr-dict
   }];
 
   let extraClassDeclaration = [{
