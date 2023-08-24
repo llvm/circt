@@ -19,8 +19,8 @@ namespace cosim {
 // DPI functions for low level functionality.
 class LowLevel {
 public:
-  LowLevel(){};
-  ~LowLevel(){};
+  LowLevel() = default;
+  ~LowLevel() = default;
   /// Disallow copying. There is only ONE low level object per RPC server, so
   /// copying is almost always a bug.
   LowLevel(const LowLevel &) = delete;

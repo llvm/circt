@@ -258,14 +258,14 @@ DPI int sv2cCosimserverInit() {
 
 // ---- Low-level cosim DPI entry points ----
 
-static bool MMIORegistered = false;
+static bool mmioRegistered = false;
 DPI int sv2cCosimserverMMIORegister() {
-  if (MMIORegistered) {
+  if (mmioRegistered) {
     printf("ERROR: DPI MMIO master already registered!");
     return -1;
   }
   sv2cCosimserverInit();
-  MMIORegistered = true;
+  mmioRegistered = true;
   return 0;
 }
 

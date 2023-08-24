@@ -68,11 +68,6 @@ class LowLevelServer final : public EsiLowLevel::Server {
 
 public:
   LowLevelServer(LowLevel &bridge);
-  /// Release the Endpoint should the client disconnect without properly closing
-  /// it.
-  ~LowLevelServer();
-  /// Disallow copying as the 'open' variable needs to track the endpoint.
-  LowLevelServer(const LowLevelServer &) = delete;
 
   // Implement the protocol methods.
   kj::Promise<void> readMMIO(ReadMMIOContext) override;
@@ -173,7 +168,6 @@ kj::Promise<void> EndpointServer::close(CloseContext context) {
 /// ------ LowLevelServer definitions.
 
 LowLevelServer::LowLevelServer(LowLevel &bridge) : bridge(bridge) {}
-LowLevelServer::~LowLevelServer() {}
 
 kj::Promise<void> LowLevelServer::pollReadResp(ReadMMIOContext context) {
   auto respMaybe = bridge.readResps.pop();
