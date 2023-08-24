@@ -62,25 +62,6 @@ enum class Flow : uint8_t { None, Source, Sink, Duplex };
 /// Get a flow's reverse.
 Flow swapFlow(Flow flow);
 
-inline Flow swapFlow(Flow flow, bool flipped) {
-  if (!flipped)
-    return flow;
-  return swapFlow(flow);
-}
-
-constexpr const char *toString(Flow flow) {
-  switch (flow) {
-  case Flow::None:
-    return "no flow";
-  case Flow::Source:
-    return "source flow";
-  case Flow::Sink:
-    return "sink flow";
-  case Flow::Duplex:
-    return "duplex flow";
-  }
-}
-
 constexpr bool isValidSrc(Flow flow) {
   return uint8_t(flow) & uint8_t(Flow::Source);
 }
