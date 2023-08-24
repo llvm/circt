@@ -92,6 +92,8 @@ std::unique_ptr<mlir::Pass> createFlattenMemoryPass();
 
 std::unique_ptr<mlir::Pass> createInferWidthsPass();
 
+std::unique_ptr<mlir::Pass> createInferWidthsAltPass();
+
 std::unique_ptr<mlir::Pass> createInferResetsPass();
 
 std::unique_ptr<mlir::Pass> createLowerMemoryPass();

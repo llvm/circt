@@ -1,4 +1,5 @@
 // RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-infer-widths))' --verify-diagnostics --split-input-file %s
+// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-infer-widths-alt))' --verify-diagnostics --split-input-file %s
 
 firrtl.circuit "Foo" {
   firrtl.module @Foo(in %clk: !firrtl.clock) {

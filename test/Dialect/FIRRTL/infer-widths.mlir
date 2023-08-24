@@ -1,4 +1,5 @@
 // RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-infer-widths))' --verify-diagnostics %s | FileCheck %s
+// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-infer-widths-alt))' --verify-diagnostics %s | FileCheck %s
 
 firrtl.circuit "Foo" {
   // CHECK-LABEL: @InferConstant
@@ -38,10 +39,13 @@ firrtl.circuit "Foo" {
     // Check that the invalid values are duplicated, and a corner case where the
     // wire won't be updated with a width until after updating the invalid value
     // above.
+    // It is not the job of infer-widths to duplicate invalids.  Invalids should 
+    // not be CSEd, but the parser ensured they were unique.
     // CHECK: %invalid_ui2 = firrtl.invalidvalue : !firrtl.uint<2>
+    %invalid2_ui = firrtl.invalidvalue : !firrtl.uint
     %w = firrtl.wire : !firrtl.uint
     %c2_ui = firrtl.constant 2 : !firrtl.uint
-    firrtl.connect %w, %invalid_ui : !firrtl.uint, !firrtl.uint
+    firrtl.connect %w, %invalid2_ui : !firrtl.uint, !firrtl.uint
     firrtl.connect %w, %c2_ui : !firrtl.uint, !firrtl.uint
 
     // Check that invalid values are inferred to width zero if not used in a
@@ -452,14 +456,14 @@ firrtl.circuit "Foo" {
     firrtl.cover %clk, %true, %true, "foo" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
   }
 
-  // Issue #1088
+  // Issue #1088 // THIS IS STUPID BEHAVIOR
   // CHECK-LABEL: @Issue1088
   firrtl.module @Issue1088(out %y: !firrtl.sint<4>) {
     // CHECK: %x = firrtl.wire : !firrtl.sint<9>
     // CHECK: %c200_si9 = firrtl.constant 200 : !firrtl.sint<9>
     // CHECK: %0 = firrtl.tail %x, 5 : (!firrtl.sint<9>) -> !firrtl.uint<4>
     // CHECK: %1 = firrtl.asSInt %0 : (!firrtl.uint<4>) -> !firrtl.sint<4>
-    // CHECK: firrtl.connect %y, %1 : !firrtl.sint<4>, !firrtl.sint<4>
+    // CHECK: connect %y, %1 : !firrtl.sint<4>
     // CHECK: firrtl.connect %x, %c200_si9 : !firrtl.sint<9>, !firrtl.sint<9>
     %x = firrtl.wire : !firrtl.sint
     %c200_si = firrtl.constant 200 : !firrtl.sint
@@ -475,7 +479,7 @@ firrtl.circuit "Foo" {
     firrtl.connect %w, %c1_ui1 : !firrtl.uint, !firrtl.uint<1>
     %w1 = firrtl.wire  : !firrtl.uint<0>
     // CHECK: %0 = firrtl.tail %w, 1 : (!firrtl.uint<1>) -> !firrtl.uint<0>
-    // CHECK: firrtl.connect %w1, %0 : !firrtl.uint<0>, !firrtl.uint<0>
+    // CHECK: connect %w1, %0 : !firrtl.uint<0>
     firrtl.connect %w1, %w : !firrtl.uint<0>, !firrtl.uint
   }
 
@@ -939,7 +943,7 @@ firrtl.circuit "Foo" {
   // CHECK-LABEL: module @MuxIntrinsics
   // CHECK-SAME: %sel: !firrtl.uint<1>
   // CHECK-SAME: %sel2: !firrtl.uint<2>
-  firrtl.module @MuxIntrinsics(in %sel: !firrtl.uint, in %sel2: !firrtl.uint, in %high: !firrtl.uint<1>, in %low: !firrtl.uint<1>, out %out1: !firrtl.uint, out %out2: !firrtl.uint) {
+  firrtl.module @MuxIntrinsics(in %sel: !firrtl.uint<1>, in %sel2: !firrtl.uint<2>, in %high: !firrtl.uint<1>, in %low: !firrtl.uint<1>, out %out1: !firrtl.uint, out %out2: !firrtl.uint) {
     %c3_ui4 = firrtl.constant 3 : !firrtl.uint<4>
     %c3_ui3 = firrtl.constant 3 : !firrtl.uint<3>
     %c2_ui2 = firrtl.constant 2 : !firrtl.uint<2>
@@ -949,11 +953,11 @@ firrtl.circuit "Foo" {
     %c1 = firrtl.constant 0: !firrtl.uint
     // CHECK: firrtl.int.mux2cell
     // CHECK-SAME: (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-    %0 = firrtl.int.mux2cell(%sel, %c0_ui1, %c1) : (!firrtl.uint, !firrtl.uint<1>, !firrtl.uint) -> !firrtl.uint
+    %0 = firrtl.int.mux2cell(%sel, %c0_ui1, %c1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint) -> !firrtl.uint
     firrtl.connect %out1, %0: !firrtl.uint, !firrtl.uint
     // CHECK: firrtl.int.mux4cell
     // CHECK-SAME: (!firrtl.uint<2>, !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<3>, !firrtl.uint<1>) -> !firrtl.uint<3>
-    %1 = firrtl.int.mux4cell(%sel2, %c1_ui1, %c2_ui2, %c3_ui3, %c1) : (!firrtl.uint, !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<3>, !firrtl.uint) -> !firrtl.uint
+    %1 = firrtl.int.mux4cell(%sel2, %c1_ui1, %c2_ui2, %c3_ui3, %c1) : (!firrtl.uint<2>, !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<3>, !firrtl.uint) -> !firrtl.uint
     firrtl.connect %out2, %1: !firrtl.uint, !firrtl.uint
   }
 

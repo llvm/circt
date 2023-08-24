@@ -2493,14 +2493,15 @@ uint64_t RefType::getMaxFieldID() const { return 0; }
 
 circt::hw::FieldIDTypeInterface
 RefType::getFinalTypeByFieldID(uint64_t fieldID) const {
-  assert(fieldID == 0);
-  return *this;
+  return getType().getFinalTypeByFieldID(fieldID - 1);
 }
 
 std::pair<circt::hw::FieldIDTypeInterface, uint64_t>
 RefType::getSubTypeByFieldID(uint64_t fieldID) const {
-  assert(fieldID == 0);
-  return {*this, 0};
+  if (fieldID == 0)
+    return {*this, 0};
+  auto retval = getType().getSubTypeByFieldID(fieldID - 1);
+  return {retval.first, retval.second+1};
 }
 
 std::pair<uint64_t, bool> RefType::rootChildFieldID(uint64_t fieldID,
