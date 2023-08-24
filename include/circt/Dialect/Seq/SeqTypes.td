@@ -79,3 +79,12 @@ def FirMemType : SeqType<"FirMem"> {
   );
   let assemblyFormat = "`<` $depth `x` $width (`,` `mask` $maskWidth^)? `>`";
 }
+
+def ClockType : SeqType<"Clock"> {
+  let summary = "A type for clock-carrying wires";
+  let description = [{
+    The `!seq.clock` type represents signals which can be used to drive the
+    clock input of sequential operations.
+  }];
+  let mnemonic = "clock";
+}

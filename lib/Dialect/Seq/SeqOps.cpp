@@ -885,6 +885,27 @@ LogicalResult FirMemReadWriteOp::canonicalize(FirMemReadWriteOp op,
 }
 
 //===----------------------------------------------------------------------===//
+// ToClockOp/FromClockOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ToClockOp::canonicalize(ToClockOp op, PatternRewriter &rewriter) {
+  if (auto fromClock = op.getInput().getDefiningOp<FromClockOp>()) {
+    rewriter.replaceOp(op, fromClock.getInput());
+    return success();
+  }
+  return failure();
+}
+
+LogicalResult FromClockOp::canonicalize(FromClockOp op,
+                                        PatternRewriter &rewriter) {
+  if (auto toClock = op.getInput().getDefiningOp<ToClockOp>()) {
+    rewriter.replaceOp(op, toClock.getInput());
+    return success();
+  }
+  return failure();
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 

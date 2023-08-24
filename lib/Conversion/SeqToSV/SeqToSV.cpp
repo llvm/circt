@@ -20,6 +20,7 @@
 #include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
+#include "circt/Support/ConversionPatterns.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -190,7 +191,46 @@ public:
     return success();
   }
 };
+
+/// Map `seq.clock` to `i1`.
+struct SeqToSVTypeConverter : public TypeConverter {
+  SeqToSVTypeConverter() {
+    addConversion([](Type type) { return type; });
+    addConversion([](seq::ClockType type) {
+      return IntegerType::get(type.getContext(), 1);
+    });
+  }
+};
+
+/// Eliminate no-op clock casts.
+template <typename T>
+class ClockCastLowering : public OpConversionPattern<T> {
+public:
+  using OpConversionPattern<T>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(T op, typename T::Adaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    rewriter.replaceOp(op, adaptor.getInput());
+    return success();
+  }
+};
 } // namespace
+
+static bool isLegalOp(Operation *op) {
+  if (auto module = dyn_cast<hw::HWModuleLike>(op)) {
+    return llvm::all_of(module.getPortList(), [](hw::PortInfo port) {
+      return !hw::type_isa<seq::ClockType>(port.type);
+    });
+  }
+  bool allOperandsLowered = llvm::all_of(op->getOperands(), [](auto op) {
+    return !hw::type_isa<seq::ClockType>(op.getType());
+  });
+  bool allResultsLowered = llvm::all_of(op->getResults(), [](auto result) {
+    return !hw::type_isa<seq::ClockType>(result.getType());
+  });
+  return allOperandsLowered && allResultsLowered;
+}
 
 void SeqToSVPass::runOnOperation() {
   auto circuit = getOperation();
@@ -225,15 +265,21 @@ void SeqToSVPass::runOnOperation() {
       memLowering.lowerMemoriesInModule(module, it->second);
   });
 
+  // Mark all ops which can have clock types as illegal.
   ConversionTarget target(*context);
   target.addIllegalDialect<SeqDialect>();
-  target.addLegalDialect<sv::SVDialect, comb::CombDialect, hw::HWDialect>();
+  target.markUnknownOpDynamicallyLegal(isLegalOp);
 
+  SeqToSVTypeConverter typeConverter;
   RewritePatternSet patterns(context);
   patterns.add<CompRegLower<CompRegOp>>(context, lowerToAlwaysFF);
   patterns.add<CompRegLower<CompRegClockEnabledOp>>(context, lowerToAlwaysFF);
+  patterns.add<ClockCastLowering<seq::FromClockOp>>(context);
+  patterns.add<ClockCastLowering<seq::ToClockOp>>(context);
   patterns.add<ClockGateLowering>(context);
   patterns.add<ClockMuxLowering>(context);
+  patterns.add<TypeConversionPattern>(typeConverter, context);
+
   if (failed(applyPartialConversion(circuit, target, std::move(patterns))))
     signalPassFailure();
 }
