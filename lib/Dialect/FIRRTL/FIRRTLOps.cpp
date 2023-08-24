@@ -164,16 +164,6 @@ Flow firrtl::swapFlow(Flow flow) {
   }
 }
 
-// Get the flow of a port on a local object op.
-static Flow localObjectPortFlow(Direction d) {
-  switch (d) {
-  case Direction::In:
-    return Flow::Duplex;
-  case Direction::Out:
-    return Flow::Source;
-  }
-}
-
 Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
   auto swap = [&accumulatedFlow]() -> Flow {
     return swapFlow(accumulatedFlow);
@@ -197,7 +187,7 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
       })
       .Case<SubindexOp, SubaccessOp, OpenSubindexOp, RefSubOp>(
           [&](auto op) { return foldFlow(op.getInput(), accumulatedFlow); })
-      // Registers, Wires, and behavioral memory ports are always sinks.
+      // Registers, Wires, and behavioral memory ports are always Duplex.
       .Case<RegOp, RegResetOp, WireOp, MemoryPortOp>(
           [](auto) { return Flow::Duplex; })
       .Case<InstanceOp>([&](auto inst) {
@@ -212,10 +202,6 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
           return Flow::Source;
         return swap();
       })
-      .Case<ObjectOp>([&](ObjectOp op) {
-        // Object declarations are always sources.
-        return Flow::Source;
-      })
       .Case<ObjectSubfieldOp>([&](ObjectSubfieldOp op) {
         auto input = op.getInput();
         auto *inputOp = input.getDefiningOp();
@@ -224,7 +210,9 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
         if (auto objectOp = dyn_cast_or_null<ObjectOp>(inputOp)) {
           auto classType = input.getType();
           auto direction = classType.getElement(op.getIndex()).direction;
-          return localObjectPortFlow(direction);
+          if (direction == Direction::In)
+            return Flow::Sink;
+          return Flow::Source;
         }
 
         // We are accessing a remote object. Input ports on remote objects are
@@ -245,7 +233,7 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
             continue;
           }
     
-          return Flow::Source;
+          return accumulatedFlow;
         };
       })
       // Anything else acts like a universal source.
