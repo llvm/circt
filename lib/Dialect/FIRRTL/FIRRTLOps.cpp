@@ -151,33 +151,16 @@ static MemOp::PortKind getMemPortKindFromType(FIRRTLType type) {
   return MemOp::PortKind::Debug;
 }
 
-// Get the flow of a port.
-static Flow portFlow(Direction d, bool flipped) {
-  switch (d) {
-  case Direction::In:
-    return flipped ? Flow::Duplex : Flow::Source;
-  case Direction::Out:
-    return flipped ? Flow::Source : Flow::Duplex;
-  }
-}
-
-// Get the flow of a port on an instance.
-static Flow instancePortFlow(Direction d, bool flipped) {
-  switch (d) {
-  case Direction::In:
-    return flipped ? Flow::Source : Flow::Duplex;
-  case Direction::Out:
-    return flipped ? Flow::Duplex : Flow::Source;
-  }
-}
-
-// Get the flow of a port on a memory op.
-static Flow memoryPortFlow(Direction d, bool flipped) {
-  switch (d) {
-  case Direction::In:
-    return flipped ? Flow::Source : Flow::Sink;
-  case Direction::Out:
-    return flipped ? Flow::Sink : Flow::Source;
+Flow firrtl::swapFlow(Flow flow) {
+  switch (flow) {
+  case Flow::None:
+    return Flow::None;
+  case Flow::Source:
+    return Flow::Sink;
+  case Flow::Sink:
+    return Flow::Source;
+  case Flow::Duplex:
+    return Flow::Duplex;
   }
 }
 
@@ -191,35 +174,43 @@ static Flow localObjectPortFlow(Direction d) {
   }
 }
 
-static Flow foldFlow(Value val, bool flipped) {
+Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
+  auto swap = [&accumulatedFlow]() -> Flow {
+    return swapFlow(accumulatedFlow);
+  };
+
   if (auto blockArg = dyn_cast<BlockArgument>(val)) {
-    auto *op = blockArg.getOwner()->getParentOp();
-    auto direction = Direction::In;
-    if (auto moduleLike = dyn_cast<FModuleLike>(op))
-      direction = moduleLike.getPortDirection(blockArg.getArgNumber());
-    return portFlow(direction, flipped);
+    auto *op = val.getParentBlock()->getParentOp();
+    if (auto moduleLike = dyn_cast<FModuleLike>(op)) {
+      auto direction = moduleLike.getPortDirection(blockArg.getArgNumber());
+      if (direction == Direction::Out)
+        return swap();
+    }
+    return accumulatedFlow;
   }
 
   Operation *op = val.getDefiningOp();
 
   return TypeSwitch<Operation *, Flow>(op)
       .Case<SubfieldOp, OpenSubfieldOp>([&](auto op) {
-        return foldFlow(op.getInput(), flipped != op.isFieldFlipped());
+        return foldFlow(op.getInput(), op.isFieldFlipped() ? swap() : accumulatedFlow);
       })
       .Case<SubindexOp, SubaccessOp, OpenSubindexOp, RefSubOp>(
-          [&](auto op) { return foldFlow(op.getInput(), flipped); })
+          [&](auto op) { return foldFlow(op.getInput(), accumulatedFlow); })
       // Registers, Wires, and behavioral memory ports are always sinks.
       .Case<RegOp, RegResetOp, WireOp, MemoryPortOp>(
           [](auto) { return Flow::Duplex; })
       .Case<InstanceOp>([&](auto inst) {
         auto resultNo = cast<OpResult>(val).getResultNumber();
-        return instancePortFlow(inst.getPortDirection(resultNo), flipped);
+        if (inst.getPortDirection(resultNo) == Direction::Out)
+          return accumulatedFlow;
+        return swap();
       })
       .Case<MemOp>([&](auto op) {
         // only debug ports with RefType have source flow.
         if (type_isa<RefType>(val.getType()))
           return Flow::Source;
-        return memoryPortFlow(Direction::In, flipped);
+        return swap();
       })
       .Case<ObjectOp>([&](ObjectOp op) {
         // Object declarations are always sources.
@@ -258,10 +249,22 @@ static Flow foldFlow(Value val, bool flipped) {
         };
       })
       // Anything else acts like a universal source.
-      .Default([&](auto) { return flip(Flow::Source, flipped); });
+      .Default([&](auto) { return accumulatedFlow; });
 }
 
-Flow firrtl::foldFlow(Value val) { return ::foldFlow(val, false); }
+// TODO: This is doing the same walk as foldFlow.  These two functions can be
+// combined and return a (flow, kind) product.
+DeclKind firrtl::getDeclarationKind(Value val) {
+  Operation *op = val.getDefiningOp();
+  if (!op)
+    return DeclKind::Port;
+
+  return TypeSwitch<Operation *, DeclKind>(op)
+      .Case<InstanceOp>([](auto) { return DeclKind::Instance; })
+      .Case<SubfieldOp, SubindexOp, SubaccessOp, OpenSubfieldOp, OpenSubindexOp,
+            RefSubOp>([](auto op) { return getDeclarationKind(op.getInput()); })
+      .Default([](auto) { return DeclKind::Other; });
+}
 
 size_t firrtl::getNumPorts(Operation *op) {
   if (auto module = dyn_cast<FModuleLike>(op))
@@ -2814,14 +2817,18 @@ static LogicalResult checkConnectFlow(Operation *connect) {
   // instance/memory input ports.
   auto srcFlow = foldFlow(src);
   if (!isValidSrc(srcFlow)) {
-    auto srcRef = getFieldRefFromValue(src);
-    auto [srcName, rootKnown] = getFieldName(srcRef);
-    auto diag = emitError(connect->getLoc());
-    diag << "connect has invalid flow: the source expression ";
-    if (rootKnown)
-      diag << "\"" << srcName << "\" ";
-    diag << "has " << toString(srcFlow) << ", expected source or duplex flow";
-    return diag.attachNote(srcRef.getLoc()) << "the source was defined here";
+    // A sink that is a port output or instance input used as a source is okay.
+    auto kind = getDeclarationKind(src);
+    if (kind != DeclKind::Port && kind != DeclKind::Instance) {
+      auto srcRef = getFieldRefFromValue(src);
+      auto [srcName, rootKnown] = getFieldName(srcRef);
+      auto diag = emitError(connect->getLoc());
+      diag << "connect has invalid flow: the source expression ";
+      if (rootKnown)
+        diag << "\"" << srcName << "\" ";
+      diag << "has " << toString(srcFlow) << ", expected source or duplex flow";
+      return diag.attachNote(srcRef.getLoc()) << "the source was defined here";
+    }
   }
 
   auto dstFlow = foldFlow(dst);

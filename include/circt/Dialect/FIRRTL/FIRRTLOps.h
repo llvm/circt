@@ -60,18 +60,12 @@ bool isDuplexValue(Value val);
 enum class Flow : uint8_t { None, Source, Sink, Duplex };
 
 /// Get a flow's reverse.
-constexpr Flow flip(Flow flow, bool flipped = true) {
+Flow swapFlow(Flow flow);
+
+inline Flow swapFlow(Flow flow, bool flipped) {
   if (!flipped)
     return flow;
-
-  switch (flow) {
-  case Flow::Sink:
-    return Flow::Source;
-  case Flow::Source:
-    return Flow::Sink;
-  default:
-    return flow;
-  }
+  return swapFlow(flow);
 }
 
 constexpr const char *toString(Flow flow) {
@@ -106,7 +100,7 @@ constexpr bool isValidDst(Flow flow) {
 /// duplex is duplex.  The \p accumulatedFlow parameter sets the initial flow.
 /// A user should normally \a not have to change this from its default of \p
 /// Flow::Source.
-Flow foldFlow(Value val);
+Flow foldFlow(Value val, Flow accumulatedFlow = Flow::Source);
 
 enum class DeclKind { Port, Instance, Other };
 
