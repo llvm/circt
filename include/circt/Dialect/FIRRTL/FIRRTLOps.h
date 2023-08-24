@@ -51,16 +51,41 @@ size_t getNumPorts(Operation *op);
 bool isConstant(Operation *op);
 bool isConstant(Value value);
 
-/// Returns true if the value results from an expression with duplex flow.
-/// Duplex values have special treatment in bundle connect operations, and
-/// their flip orientation is not used to determine the direction of each
-/// pairwise connect.
-bool isDuplexValue(Value val);
+enum class Flow { Source, Sink, None };
 
-enum class Flow { Source, Sink, Duplex };
+// Is this flow valid as the source of a connect-like operation.
+constexpr bool isValidSrc(Flow flow) {
+  return flow == Flow::Source || flow == Flow::Sink;
+}
+
+// Is this flow valid as the destination of a connect-like operation.
+constexpr bool isValidDst(Flow flow) { return flow == Flow::Sink; }
 
 /// Get a flow's reverse.
-Flow swapFlow(Flow flow);
+constexpr Flow flip(Flow flow, bool flipped = true) {
+  if (!flipped)
+    return flow;
+
+  switch (flow) {
+  case Flow::Sink:
+    return Flow::Source;
+  case Flow::Source:
+    return Flow::Sink;
+  default:
+    return flow;
+  }
+}
+
+constexpr const char *toString(Flow flow) {
+ switch (flow) {
+    case Flow::Source:
+      return "source flow";
+    case Flow::Sink:
+      return "sink flow";
+    case Flow::None:
+      return "no flow";
+  }
+}
 
 /// Compute the flow for a Value, \p val, as determined by the FIRRTL
 /// specification.  This recursively walks backwards from \p val to the
@@ -73,11 +98,7 @@ Flow swapFlow(Flow flow);
 /// duplex is duplex.  The \p accumulatedFlow parameter sets the initial flow.
 /// A user should normally \a not have to change this from its default of \p
 /// Flow::Source.
-Flow foldFlow(Value val, Flow accumulatedFlow = Flow::Source);
-
-enum class DeclKind { Port, Instance, Other };
-
-DeclKind getDeclarationKind(Value val);
+Flow foldFlow(Value val);
 
 enum class ReadPortSubfield { addr, en, clk, data };
 enum class WritePortSubfield { addr, en, clk, data, mask };

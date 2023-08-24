@@ -37,8 +37,8 @@ firrtl.circuit "Classes" {
     firrtl.propassign %out, %1 : !firrtl.string
   }
 
-  // CHECK-LABEL firrtl.module @PropassignObjectPort(out %out : !firrtl.string)
-  firrtl.module @PropassignObjectPort(out %out : !firrtl.string) {
+  // CHECK-LABEL: firrtl.module @PropassignObjectPort(out %out: !firrtl.string)
+  firrtl.module @PropassignObjectPort(out %out: !firrtl.string) {
     // CHECK: %0 = firrtl.object @StringPassThru(in in_str: !firrtl.string, out out_str: !firrtl.string)
     // CHECK: %1 = firrtl.string "foo"
     // CHECK: %2  = firrtl.object.subfield %0[in_str] : !firrtl.class<@StringPassThru(in in_str: !firrtl.string, out out_str: !firrtl.string)>
@@ -55,7 +55,7 @@ firrtl.circuit "Classes" {
 
   firrtl.module @ModuleWithInputString(in %in : !firrtl.string) {}
 
-    // CHECK-LABEL firrtl.module @PropassignObjectPort(out %out: !firrtl.string)
+    // CHECK-LABEL: firrtl.module @PropassignToInstancePort(in %in: !firrtl.string)
   firrtl.module @PropassignToInstancePort(in %in: !firrtl.string) {
     // CHECK: %foo_in = firrtl.instance foo @ModuleWithInputString(in in: !firrtl.string)
     // CHECK: firrtl.propassign %foo_in, %in : !firrtl.string

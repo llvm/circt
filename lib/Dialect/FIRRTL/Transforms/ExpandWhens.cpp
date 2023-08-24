@@ -201,7 +201,7 @@ public:
         for (auto &element : bundleType.getElements()) {
           id++;
           if (element.isFlip)
-            declare(element.type, swapFlow(flow));
+            declare(element.type, flip(flow));
           else
             declare(element.type, flow);
         }
@@ -258,7 +258,7 @@ public:
     return b.create<ConnectOp>(loc, dest, newValue);
   }
 
-  void visitDecl(WireOp op) { declareSinks(op.getResult(), Flow::Duplex); }
+  void visitDecl(WireOp op) { declareSinks(op.getResult(), Flow::Sink); }
 
   /// Take an aggregate value and construct ground subelements recursively.
   /// And then apply function `fn`.

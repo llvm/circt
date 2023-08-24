@@ -94,23 +94,6 @@ static RetTy emitInferRetTypeError(std::optional<Location> loc,
   return {};
 }
 
-bool firrtl::isDuplexValue(Value val) {
-  // Block arguments are not duplex values.
-  while (Operation *op = val.getDefiningOp()) {
-    auto isDuplex =
-        TypeSwitch<Operation *, std::optional<bool>>(op)
-            .Case<SubfieldOp, SubindexOp, SubaccessOp>([&val](auto op) {
-              val = op.getInput();
-              return std::nullopt;
-            })
-            .Case<RegOp, RegResetOp, WireOp>([](auto) { return true; })
-            .Default([](auto) { return false; });
-    if (isDuplex)
-      return *isDuplex;
-  }
-  return false;
-}
-
 /// Return the kind of port this is given the port type from a 'mem' decl.
 static MemOp::PortKind getMemPortKindFromType(FIRRTLType type) {
   constexpr unsigned int addr = 1 << 0;
@@ -151,74 +134,109 @@ static MemOp::PortKind getMemPortKindFromType(FIRRTLType type) {
   return MemOp::PortKind::Debug;
 }
 
-Flow firrtl::swapFlow(Flow flow) {
-  switch (flow) {
-  case Flow::Source:
-    return Flow::Sink;
-  case Flow::Sink:
-    return Flow::Source;
-  case Flow::Duplex:
-    return Flow::Duplex;
+// Get the flow of a port.
+static Flow portFlow(Direction d, bool flipped) {
+  switch (d) {
+  case Direction::In:
+    return flipped ? Flow::Sink : Flow::Source;
+  case Direction::Out:
+    return flipped ? Flow::Source : Flow::Sink;
   }
-  llvm_unreachable("invalid flow");
 }
 
-Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
-  auto swap = [&accumulatedFlow]() -> Flow {
-    return swapFlow(accumulatedFlow);
-  };
+// Get the flow of a port on an instance.
+static Flow instancePortFlow(Direction d, bool flipped) {
+  switch (d) {
+  case Direction::In:
+    return flipped ? Flow::Source : Flow::Sink;
+  case Direction::Out:
+    return flipped ? Flow::Sink : Flow::Source;
+  }
+}
 
+// Get the flow of a port on a remote object (ie the base object is an
+// input or output port).
+static Flow remoteObjectPortFlow(Direction d) {
+  switch (d) {
+  case Direction::In:
+    return Flow::None;
+  case Direction::Out:
+    return Flow::Source;
+  }
+}
+
+// Get the flow of a port on a local object.
+static Flow localObjectPortFlow(Direction d) {
+  switch (d) {
+  case Direction::In:
+    return Flow::Sink;
+  case Direction::Out:
+    return Flow::Source;
+  }
+}
+
+static Flow foldFlow(Value val, bool flipped) {
   if (auto blockArg = dyn_cast<BlockArgument>(val)) {
-    auto *op = val.getParentBlock()->getParentOp();
-    if (auto moduleLike = dyn_cast<FModuleLike>(op)) {
-      auto direction = moduleLike.getPortDirection(blockArg.getArgNumber());
-      if (direction == Direction::Out)
-        return swap();
-    }
-    return accumulatedFlow;
+    auto *op = blockArg.getOwner()->getParentOp();
+    auto direction = Direction::In;
+    if (auto moduleLike = dyn_cast<FModuleLike>(op))
+      direction = moduleLike.getPortDirection(blockArg.getArgNumber());
+    return portFlow(direction, flipped);
   }
 
   Operation *op = val.getDefiningOp();
 
   return TypeSwitch<Operation *, Flow>(op)
       .Case<SubfieldOp, OpenSubfieldOp>([&](auto op) {
-        return foldFlow(op.getInput(),
-                        op.isFieldFlipped() ? swap() : accumulatedFlow);
+        return foldFlow(op.getInput(), flipped != op.isFieldFlipped());
       })
       .Case<SubindexOp, SubaccessOp, OpenSubindexOp, RefSubOp>(
-          [&](auto op) { return foldFlow(op.getInput(), accumulatedFlow); })
-      // Registers, Wires, and behavioral memory ports are always Duplex.
+          [&](auto op) { return foldFlow(op.getInput(), flipped); })
+      // Registers, Wires, and behavioral memory ports are always sinks.
       .Case<RegOp, RegResetOp, WireOp, MemoryPortOp>(
-          [](auto) { return Flow::Duplex; })
+          [](auto) { return Flow::Sink; })
       .Case<InstanceOp>([&](auto inst) {
         auto resultNo = cast<OpResult>(val).getResultNumber();
-        if (inst.getPortDirection(resultNo) == Direction::Out)
-          return accumulatedFlow;
-        return swap();
+        return instancePortFlow(inst.getPortDirection(resultNo), flipped);
       })
       .Case<MemOp>([&](auto op) {
         // only debug ports with RefType have source flow.
         if (type_isa<RefType>(val.getType()))
           return Flow::Source;
-        return swap();
+        /// A memop is a source unless fil
+        return flip(Flow::Sink, flipped);
+      })
+      .Case<ObjectOp>([&](ObjectOp op) {
+        // Object declarations are always sources.
+        return Flow::Source;
+      })
+      .Case<ObjectSubfieldOp>([&](ObjectSubfieldOp op) {
+        while (true) {
+          auto input = op.getInput();
+          if (auto arg = dyn_cast<BlockArgument>(input)) {
+            auto type = cast<ClassType>(arg.getType());
+            auto direction = type.getElement(op.getIndex()).direction;
+            return remoteObjectPortFlow(direction);
+          }
+
+          auto *inputOp = input.getDefiningOp();
+          if (auto instanceOp = dyn_cast<InstanceOp>(inputOp)) {
+            auto direction = instanceOp.getPortDirection(op.getIndex());
+            return remoteObjectPortFlow(direction);
+          }
+          if (auto objectOp = dyn_cast<ObjectOp>(inputOp)) {
+            auto classType = objectOp.getType();
+            auto direction = classType.getElement(op.getIndex()).direction;
+            return localObjectPortFlow(direction);
+          }
+          op = cast<ObjectSubfieldOp>(inputOp);
+        }
       })
       // Anything else acts like a universal source.
-      .Default([&](auto) { return accumulatedFlow; });
+      .Default([&](auto) { return flip(Flow::Source, flipped); });
 }
 
-// TODO: This is doing the same walk as foldFlow.  These two functions can be
-// combined and return a (flow, kind) product.
-DeclKind firrtl::getDeclarationKind(Value val) {
-  Operation *op = val.getDefiningOp();
-  if (!op)
-    return DeclKind::Port;
-
-  return TypeSwitch<Operation *, DeclKind>(op)
-      .Case<InstanceOp>([](auto) { return DeclKind::Instance; })
-      .Case<SubfieldOp, SubindexOp, SubaccessOp, OpenSubfieldOp, OpenSubindexOp,
-            RefSubOp>([](auto op) { return getDeclarationKind(op.getInput()); })
-      .Default([](auto) { return DeclKind::Other; });
-}
+Flow firrtl::foldFlow(Value val) { return ::foldFlow(val, false); }
 
 size_t firrtl::getNumPorts(Operation *op) {
   if (auto module = dyn_cast<FModuleLike>(op))
@@ -2769,28 +2787,27 @@ static LogicalResult checkConnectFlow(Operation *connect) {
 
   // TODO: Relax this to allow reads from output ports,
   // instance/memory input ports.
-  if (foldFlow(src) == Flow::Sink) {
-    // A sink that is a port output or instance input used as a source is okay.
-    auto kind = getDeclarationKind(src);
-    if (kind != DeclKind::Port && kind != DeclKind::Instance) {
-      auto srcRef = getFieldRefFromValue(src);
-      auto [srcName, rootKnown] = getFieldName(srcRef);
-      auto diag = emitError(connect->getLoc());
-      diag << "connect has invalid flow: the source expression ";
-      if (rootKnown)
-        diag << "\"" << srcName << "\" ";
-      diag << "has sink flow, expected source or duplex flow";
-      return diag.attachNote(srcRef.getLoc()) << "the source was defined here";
-    }
+  auto srcFlow = foldFlow(src);
+  if (!isValidSrc(srcFlow)) {
+    auto srcRef = getFieldRefFromValue(src);
+    auto [srcName, rootKnown] = getFieldName(srcRef);
+    auto diag = emitError(connect->getLoc());
+    diag << "connect has invalid flow: the source expression ";
+    if (rootKnown)
+      diag << "\"" << srcName << "\" ";
+    diag << "has " << toString(srcFlow) << ", expected source or sink flow";
+    return diag.attachNote(srcRef.getLoc()) << "the source was defined here";
   }
-  if (foldFlow(dst) == Flow::Source) {
+
+  auto dstFlow = foldFlow(dst);
+  if (!isValidDst(dstFlow)) {
     auto dstRef = getFieldRefFromValue(dst);
     auto [dstName, rootKnown] = getFieldName(dstRef);
     auto diag = emitError(connect->getLoc());
     diag << "connect has invalid flow: the destination expression ";
     if (rootKnown)
       diag << "\"" << dstName << "\" ";
-    diag << "has source flow, expected sink or duplex flow";
+    diag << "has " << toString(dstFlow) << ", expected sink flow";
     return diag.attachNote(dstRef.getLoc())
            << "the destination was defined here";
   }
@@ -3007,116 +3024,8 @@ LogicalResult RefDefineOp::verify() {
   return success();
 }
 
-static LogicalResult checkPropAssignSrc(PropAssignOp propAssign) {
-  Value src = propAssign.getSrc();
-  while (true) {
-    // If we are reading from a block argument, it must be an input port.
-    if (auto blockArg = dyn_cast<BlockArgument>(src)) {
-      auto *definingOp = src.getParentBlock()->getParentOp();
-      if (auto moduleLike = dyn_cast<FModuleLike>(definingOp)) {
-        auto direction = moduleLike.getPortDirection(blockArg.getArgNumber());
-        if (direction == Direction::Out)
-          return emitError(propAssign->getLoc(),
-                           "cannot read from an output port");
-      }
-      return success();
-    }
-
-    auto result = cast<OpResult>(src);
-    auto *definingOp = result.getDefiningOp();
-
-    // If we are reading from an instance's ports, it must be an output.
-    if (auto instanceOp = dyn_cast<InstanceOp>(definingOp)) {
-      auto direction = instanceOp.getPortDirection(result.getResultNumber());
-      if (direction == Direction::In)
-        return emitError(propAssign->getLoc(),
-                         "cannot read from an instance's input port");
-      return success();
-    }
-
-    // An object subfield must be an output port of a valid source object.
-    if (auto subfieldOp =
-            dyn_cast<ObjectSubfieldOp>(cast<OpResult>(src).getDefiningOp())) {
-      auto input = subfieldOp.getInput();
-      auto classType = input.getType();
-      const auto &element = classType.getElement(subfieldOp.getIndex());
-      // We can never read from the inputs of an object.
-      if (element.direction == Direction::In)
-        return emitError(propAssign->getLoc(),
-                         "cannot read from an object's input port");
-      // the object itself must also be a valid source.
-      src = input;
-      continue;
-    }
-
-    // Otherwise, we assume the src is some value-producing expression.
-    return success();
-  }
-}
-
-static LogicalResult checkPropAssignDest(PropAssignOp propAssign) {
-  auto dest = propAssign.getDest();
-
-  // if we are writing to a block argument directly, the block argument
-  // must be an output port.
-  if (auto blockArg = dyn_cast<BlockArgument>(dest)) {
-    auto *definingOp = dest.getParentBlock()->getParentOp();
-    if (auto moduleLike = dyn_cast<FModuleLike>(definingOp)) {
-      auto direction = moduleLike.getPortDirection(blockArg.getArgNumber());
-      if (direction == Direction::In)
-        return emitError(propAssign->getLoc(),
-                         "cannot propassign to an input port");
-    }
-    return success();
-  }
-
-  auto result = cast<OpResult>(dest);
-  auto *definingOp = result.getDefiningOp();
-
-  // If we are writing to an instance's port, the port must be an input.
-  if (auto instanceOp = dyn_cast<InstanceOp>(definingOp)) {
-    auto direction = instanceOp.getPortDirection(result.getResultNumber());
-    if (direction == Direction::Out)
-      return emitError(propAssign->getLoc(),
-                       "cannot propassign to an instance's output port");
-    return success();
-  }
-
-  // if we are writing to an object.subfield op, the base object must be a
-  // local object declaration. We do not allow writing through multiple
-  // object subfield ops (eg `propassign object.p.q.r, "foo"`).
-  if (auto objectSubfieldOp = dyn_cast<ObjectSubfieldOp>(definingOp)) {
-    auto input = objectSubfieldOp.getInput();
-
-    // Fail if we are writing to a specific field on a port. We can only
-    // write an entire object to the port, we cannot assign output objects
-    // piecemeal.
-    if (auto blockArg = dyn_cast<BlockArgument>(input))
-      return emitError(propAssign->getLoc(),
-                       "cannot propassign to a subfield of a port");
-
-    auto *inputDefiningOp = input.getDefiningOp();
-
-    // We can assign to a local object's port, if the flow is correct.
-    if (auto objectOp = dyn_cast<ObjectOp>(inputDefiningOp)) {
-      auto objectType = objectOp.getType();
-      const auto &element = objectType.getElement(objectSubfieldOp.getIndex());
-      if (element.direction != Direction::In)
-        return emitError(propAssign.getLoc(),
-                         "cannot propassign to an object's output port");
-      return success();
-    }
-  }
-
-  // Otherwise, we assume the dest is some intermediate expression which
-  // cannot be assigned.
-  return emitError(propAssign->getLoc(),
-                   "cannot propassign to an intermediate expression");
-}
-
 LogicalResult PropAssignOp::verify() {
-  // Check the flow for the source and destination.
-  if (failed(checkPropAssignSrc(*this)) || failed(checkPropAssignDest(*this)))
+  if (failed(checkConnectFlow(*this)))
     return failure();
 
   // Verify that there is a single value driving the destination.

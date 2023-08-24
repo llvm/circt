@@ -1602,8 +1602,7 @@ void FIRStmtParser::emitInvalidate(Value val, Flow flow) {
             builder.setInsertionPointAfterValue(val);
             subfield = builder.create<SubfieldOp>(val, i);
           }
-          emitInvalidate(subfield,
-                         tpe.getElement(i).isFlip ? swapFlow(flow) : flow);
+          emitInvalidate(subfield, flip(flow, tpe.getElement(i).isFlip));
         }
       })
       .Case<FVectorType>([&](auto tpe) {
