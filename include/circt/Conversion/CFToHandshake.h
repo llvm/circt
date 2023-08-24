@@ -218,7 +218,7 @@ template <typename T, typename... TArgs, typename... TArgs2>
 LogicalResult runPartialLowering(
     T &instance,
     LogicalResult (T::*memberFunc)(ConversionPatternRewriter &, TArgs2...),
-    TArgs &... args) {
+    TArgs &...args) {
   return partiallyLowerRegion(
       [&](Region &, ConversionPatternRewriter &rewriter) -> LogicalResult {
         return (instance.*memberFunc)(rewriter, args...);
