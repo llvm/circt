@@ -1051,8 +1051,8 @@ PortInfo hw::getModuleInOrInoutPort(Operation *op, size_t idx) {
   }
 
   DictionaryAttr attrs;
-  if (auto fi = dyn_cast<mlir::FunctionOpInterface>(op))
-    attrs = fi.getArgAttrDict(idx);
+  if (auto mi = dyn_cast<HWModuleLike>(op))
+    attrs = cast<DictionaryAttr>(mi.getInputAttrs(idx));
 
   auto direction =
       isInOut ? ModulePort::Direction::InOut : ModulePort::Direction::Input;
@@ -1070,8 +1070,8 @@ PortInfo hw::getModuleOutputPort(Operation *op, size_t idx) {
   auto resultTypes = getModuleType(op).getResults();
   assert(idx < resultNames.size() && "invalid result number");
   DictionaryAttr attrs;
-  if (auto fi = dyn_cast<mlir::FunctionOpInterface>(op))
-    attrs = fi.getResultAttrDict(idx);
+  if (auto mi = dyn_cast<HWModuleLike>(op))
+    attrs = cast<DictionaryAttr>(mi.getOutputAttrs(idx));
   return {{resultNames[idx].cast<StringAttr>(), resultTypes[idx],
            ModulePort::Direction::Output},
           idx,
@@ -1190,6 +1190,8 @@ ParseResult HWModuleGeneratedOp::parse(OpAsmParser &parser,
 }
 
 FunctionType getHWModuleOpType(Operation *op) {
+  if (auto mod = dyn_cast<HWModuleLike>(op))
+    return mod.getHWModuleType().getFuncType();
   return cast<mlir::FunctionOpInterface>(op)
       .getFunctionType()
       .cast<FunctionType>();

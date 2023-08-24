@@ -202,7 +202,7 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
 
     void setPortAttr(size_t idx, StringAttr name, Attribute value) {
       auto attrs = $_op.getAllPortAttrs();
-      NamedAttrList pattr(cast_or_null<DictionaryAttr>(attrs[idx]));
+      NamedAttrList pattr(cast<DictionaryAttr>(attrs[idx]));
       Attribute oldValue;
       if (!value)
         oldValue = pattr.erase(name);
