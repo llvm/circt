@@ -310,6 +310,10 @@ firrtl.module @PathTest(in %in: !firrtl.path, out %out: !firrtl.path) {
   
   // CHECK: firrtl.unresolved_path "target-string"
   firrtl.unresolved_path "target-string"
+  
+  // CHECK: firrtl.path reference distinct[0]<>
+  %0 = firrtl.path reference distinct[0]<>
+  
 }
 
 // CHECK-LABEL: TypeAlias
