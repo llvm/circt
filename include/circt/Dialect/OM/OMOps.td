@@ -13,6 +13,8 @@
 #ifndef CIRCT_DIALECT_OM_OMOPS_TD
 #define CIRCT_DIALECT_OM_OMOPS_TD
 
+include "circt/Dialect/OM/OMDialect.td"
+include "circt/Dialect/OM/OMEnums.td"
 include "circt/Dialect/OM/OMOpInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
@@ -283,6 +285,29 @@ def MapCreateOp : OMOp<"map_create", [Pure, SameTypeOperands]> {
   );
 
   let hasCustomAssemblyFormat = true;
+}
+
+def PathOp : OMOp<"path", [Pure, 
+      DeclareOpInterfaceMethods<SymbolUserOpInterface>
+    ]> {
+  let summary = "Produce a path value";
+  let description = [{
+    Produces a value which represents a hierarchical path to a hardware
+    component.
+
+    Example:
+    ```mlir
+    hw.module @Foo {
+      %wire = hw.wire sym @w: !i1
+    }
+    hw.hierpath @Path [@Foo::@w]
+    %0 = om.path member @Path
+    ```
+  }];
+  let arguments = (ins TargetKind:$targetKind,
+                       FlatSymbolRefAttr:$target);
+  let results = (outs PathType:$result);
+  let assemblyFormat = "$targetKind $target attr-dict";
 }
 
 #endif // CIRCT_DIALECT_OM_OMOPS_TD
