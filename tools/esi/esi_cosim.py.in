@@ -47,3 +47,12 @@ class CosimBase:
         time.sleep(0.01)
     assert recvResp.resp is not None
     return recvResp.resp.as_struct(expectedType)
+
+
+class LowLevel:
+  def __init__(self, schemaPath, hostPort):
+    """Load the schema and connect to the RPC server"""
+    self.schema = capnp.load(schemaPath)
+    self.rpc_client = capnp.TwoPartyClient(hostPort)
+    self.cosim = self.rpc_client.bootstrap().cast_as(self.schema.CosimDpiServer)
+    self.low = self.cosim.openLowLevel().wait().lowLevel
