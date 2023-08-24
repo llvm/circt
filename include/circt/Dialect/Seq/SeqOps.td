@@ -509,3 +509,87 @@ def FirMemReadWriteOp : SeqOp<"firmem.read_write_port", [
   let hasVerifier = 1;
   let hasCanonicalizeMethod = 1;
 }
+
+//===----------------------------------------------------------------------===//
+// FIRRTL-flavored ROM
+//===----------------------------------------------------------------------===//
+
+def FirRomOp : SeqOp<"firrom", [
+  MemoryEffects<[MemAlloc]>,
+  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+  DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>
+]> {
+  let summary = "A FIRRTL-flavored ROM";
+  let description = [{
+    The `seq.firrom` op represents ROMs lowered from the FIRRTL dialect. It is
+    used to capture some of the peculiarities of what FIRRTL expects from ROMs,
+    while still representing them at the HW dialect level.
+
+    A `seq.firrom` declares the ROM and captures the memory-level parameters
+    such as width and depth or how read/write collisions are resolved. The read
+    port are expressed as separate operations that take the declared memory as
+    an operand.
+  }];
+
+  let arguments = (ins
+    I32Attr:$readLatency,
+    OptionalAttr<StrAttr>:$name,
+    OptionalAttr<InnerSymAttr>:$inner_sym,
+    OptionalAttr<FirRomInitAttr>:$init,
+    OptionalAttr<StrAttr>:$prefix,
+    OptionalAttr<AnyAttr>:$output_file
+  );
+  let results = (outs FirRomType:$memory);
+
+  let assemblyFormat = [{
+    (`sym` $inner_sym^)? `` custom<ImplicitSSAName>($name)
+    $readLatency
+    attr-dict `:` type($memory)
+  }];
+}
+
+class AddressMatchesFirRom<string memoryValue, string addressValue> :
+  TypesMatchWith<"address type should match clog2 of ROM depth",
+    memoryValue, addressValue, [{
+      IntegerType::get(
+        $_self.getContext(),
+        std::max(1U, llvm::Log2_64_Ceil(cast<FirRomType>($_self).getDepth())))
+    }]>;
+
+class DataMatchesFirRom<string memoryValue, string dataValue> :
+  TypesMatchWith<"data type should match ROM width",
+    memoryValue, dataValue, [{
+      IntegerType::get(
+        $_self.getContext(),
+        std::max(1U, cast<FirRomType>($_self).getWidth()))
+    }]>;
+
+
+def FirRomReadOp : SeqOp<"firrom.read_port", [
+  MemoryEffects<[MemRead]>,
+  AddressMatchesFirRom<"memory", "address">,
+  DataMatchesFirRom<"memory", "data">
+]> {
+  let summary = "A ROM read port";
+  let description = [{
+    The `seq.firrom.read_port` op represents a read port on a `seq.firrom`
+    memory. It takes the memory as an operand, together with the address to
+    be read, the clock on which the read is synchronized, and an optional
+    enable. Omitting the enable operand has the same effect as passing a
+    constant `true` to it.
+  }];
+
+  let arguments = (ins
+    FirRomType:$memory,
+    AnySignlessInteger:$address,
+    I1:$clock,
+    Optional<I1>:$enable
+  );
+  let results = (outs AnySignlessInteger:$data);
+  let assemblyFormat = [{
+    $memory `[` $address `]` `,` `clock` $clock
+    (`enable` $enable^)?
+    attr-dict `:` type($memory)
+  }];
+  let hasCanonicalizeMethod = 1;
+}
