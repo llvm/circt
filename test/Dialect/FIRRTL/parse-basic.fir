@@ -1410,10 +1410,6 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK-NEXT: firrtl.strictconnect %nonconst_w, [[CAST]] : !firrtl.sint<4>
     nonconst_w <= s4
 
-  ; CHECK-LABEL firrtl.class @SimpleClass() { }
-  ; Not version-gated yet, not in spec.
-  class SimpleClass:
-
 ;// -----
 
 ; CHECK-LABEL: firrtl.circuit "Foo_v3p0p0"

@@ -4516,6 +4516,10 @@ ParseResult FIRCircuitParser::parseClass(CircuitOp circuit, unsigned indent) {
   SmallVector<PortInfo, 8> portList;
   SmallVector<SMLoc> portLocs;
   LocWithInfo info(getToken().getLoc(), this);
+
+  if (requireFeature({3, 2, 0}, "classes"))
+    return failure();
+
   consumeToken(FIRToken::kw_class);
   if (parseId(name, "expected class name") ||
       parseToken(FIRToken::colon, "expected ':' in class definition") ||
