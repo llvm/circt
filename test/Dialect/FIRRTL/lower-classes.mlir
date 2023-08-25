@@ -24,6 +24,11 @@ firrtl.circuit "Component" {
     firrtl.propassign %someString, %0 : !firrtl.string
   }
 
+  // CHECK-LABEL: om.class.extern @ExtClass(%input: !om.string) {
+  // CHECK-NEXT:    om.class.extern.field @field : !om.string
+  // CHECK-NEXT:  }
+  firrtl.extclass private @ExtClass(in input: !firrtl.string, out field: !firrtl.string)
+
   // CHECK-LABEL: om.class @ClassEntrypoint
   firrtl.class private @ClassEntrypoint(out %obj_0_out: !firrtl.class<@Class_1(out someInt: !firrtl.integer)>) {
     // CHECK: %[[OBJ1:.+]] = om.object @Class_1() : () -> !om.class.type<@Class_1>

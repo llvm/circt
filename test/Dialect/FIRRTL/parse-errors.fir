@@ -816,16 +816,34 @@ circuit GroupAndCircuitShareName:
 
 ;// -----
 
+FIRRTL version 3.2.0
 circuit Top:
   ; expected-error @below {{class cannot be the top of a circuit}}
   class Top:
 
 ;// -----
 
+FIRRTL version 3.2.0
+circuit Top:
+  ; expected-error @below {{extclass cannot be the top of a circuit}}
+  extclass Top:
+
+;// -----
+
+FIRRTL version 3.2.0
 circuit Top:
   module Top:
   class Foo:
     ;; expected-error @below {{ports on classes must be properties}}
+    input a: UInt<8>
+
+;// -----
+
+FIRRTL version 3.2.0
+circuit Top:
+  module Top:
+  extclass Foo:
+    ;; expected-error @below {{ports on extclasses must be properties}}
     input a: UInt<8>
 
 ;// -----

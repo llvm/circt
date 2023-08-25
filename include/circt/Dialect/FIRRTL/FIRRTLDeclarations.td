@@ -615,12 +615,12 @@ def ObjectOp :  FIRRTLOp<"object", [
   let hasVerifier = 1;
   let builders = [
     OpBuilder<(ins "ClassType":$type)>,
-    OpBuilder<(ins "ClassOp":$klass)>
+    OpBuilder<(ins "ClassLike":$klass)>
   ];
   let extraClassDeclaration = [{
     /// Lookup the module or extmodule for the symbol.  This returns null on
     /// invalid IR.
-    ClassOp getReferencedClass(SymbolTable& symbolTable);
+    ClassLike getReferencedClass(SymbolTable& symbolTable);
   }];
 }
 
