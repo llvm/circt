@@ -55,7 +55,7 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
     void setPortSymbolAttr(size_t portIndex, ::circt::hw::InnerSymAttr sym);
 
     StringAttr getArgName(size_t index) {
-      return dyn_cast<StringAttr>(getArgNames()[index]);
+      return getHWModuleType().getInputNameAttr(index);
     }
 
   }];
@@ -162,7 +162,7 @@ def HWModuleOp : HWModuleOpBase<"module",
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph;}
 
     /// Returns the number of in or inout ports.
-    size_t getNumInOrInoutPorts() { return getArgumentTypes().size(); }
+    size_t getNumInOrInoutPorts() { return getHWModuleType().getNumInputs(); }
 
     /// Return the PortInfo for the specified input or inout port.
     PortInfo getInOrInoutPort(size_t i) {
@@ -212,12 +212,12 @@ def HWModuleOp : HWModuleOpBase<"module",
     /// Append an output with a given name and type to the port list.
     /// If the name is not unique, a unique name is created.
     void appendOutput(StringAttr name, Value value) {
-      return insertOutputs(getResultTypes().size(), {{name, value}});
+      return insertOutputs(getNumOutputs(), {{name, value}});
     }
 
     void appendOutput(const Twine &name, Value value) {
       ::mlir::StringAttr nameAttr = ::mlir::StringAttr::get(getContext(), name);
-      return insertOutputs(getResultTypes().size(), {{nameAttr, value}});
+      return insertOutputs(getNumOutputs(), {{nameAttr, value}});
     }
 
     /// Prepend an output with a given name and type to the port list.
