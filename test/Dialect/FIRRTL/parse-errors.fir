@@ -947,3 +947,46 @@ circuit LeadingList:
   module LeadingList:
     ; expected-error @below {{unexpected List<>() as start of statement}}
     List<String>()
+
+;// -----
+; Path should not be leading a statement.
+FIRRTL version 3.2.0
+circuit LeadingPath:
+  module LeadingPath:
+    ; expected-error @below {{unexpected path() as start of statement}}
+    path("")
+
+;// -----
+FIRRTL version 3.1.0
+circuit PathVersion:
+  module PathVersion:
+    output path : Path
+    ; expected-error @below {{paths are a FIRRTL 3.2.0+ feature, but the specified FIRRTL version was 3.1.0}}
+    propassign path, path("")
+
+;// -----
+; Path operation should have a single string argument.
+FIRRTL version 3.2.0
+circuit BadPathExpr:
+  module BadPathExp:
+    output path : Path
+    ; expected-error @below {{expected target string in path expression}}
+    propassign path, path()
+
+;// -----
+; Path operation should have a single string argument.
+FIRRTL version 3.2.0
+circuit BadPathExpr:
+  module BadPathExp:
+    output path : Path
+    ; expected-error @below {{expected ')' in path expression}}
+    propassign path, path("hello", "goodbye")
+
+;// -----
+; Path operation should have a single string argument.
+FIRRTL version 3.2.0
+circuit BadPathExpr:
+  module BadPathExp:
+    output path : Path
+    ; expected-error @below {{expected target string in path expression}}
+    propassign path, path(UInt<1>(1))
