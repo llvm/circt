@@ -291,6 +291,18 @@ struct FIntegerConstantOpConversion
   }
 };
 
+struct BoolConstantOpConversion : public OpConversionPattern<BoolConstantOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(BoolConstantOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<om::ConstantOp>(
+        op, rewriter.getBoolAttr(adaptor.getValue()));
+    return success();
+  }
+};
+
 struct StringConstantOpConversion
     : public OpConversionPattern<StringConstantOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -435,6 +447,10 @@ static void populateTypeConverter(TypeConverter &converter) {
         return om::ListType::get(elementType);
       });
 
+  // Convert FIRRTL Bool type to OM
+  converter.addConversion(
+      [](BoolType type) { return IntegerType::get(type.getContext(), 1); });
+
   // Add a target materialization to fold away unrealized conversion casts.
   converter.addTargetMaterialization(
       [](OpBuilder &builder, Type type, ValueRange values, Location loc) {
@@ -450,6 +466,7 @@ static void populateRewritePatterns(RewritePatternSet &patterns,
   patterns.add<ClassFieldOpConversion>(converter, patterns.getContext());
   patterns.add<ClassOpSignatureConversion>(converter, patterns.getContext());
   patterns.add<ListCreateOpConversion>(converter, patterns.getContext());
+  patterns.add<BoolConstantOpConversion>(converter, patterns.getContext());
 }
 
 // Convert to OM ops and types in Classes or Modules.

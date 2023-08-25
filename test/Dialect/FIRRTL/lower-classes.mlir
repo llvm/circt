@@ -81,4 +81,12 @@ firrtl.circuit "Component" {
     // CHECK-NEXT: om.class.field @out_nested, %[[NESTED]] : !om.list<!om.list<!om.string>>
     // CHECK-NEXT: om.class.field @out_objs, %[[OBJS]] : !om.list<!om.class.type<@ClassTest>
   }
+
+  // CHECK-LABEL: om.class @BoolTest()
+  firrtl.class @BoolTest(out %b : !firrtl.bool) {
+    // CHECK-NEXT: %[[TRUE:.+]] = om.constant true
+    // CHECK-NEXT: om.class.field @b, %[[TRUE]] : i1
+    %true = firrtl.bool true
+    firrtl.propassign %b, %true : !firrtl.bool
+  }
 }
