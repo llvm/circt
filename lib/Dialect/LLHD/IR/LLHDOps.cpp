@@ -776,29 +776,28 @@ LogicalResult llhd::InstOp::verify() {
       (*this)->getParentOfType<ModuleOp>().lookupSymbol<hw::HWModuleOp>(
           calleeAttr.getValue());
   if (module) {
-    auto type = module.getFunctionType();
 
-    if (type.getNumInputs() != getInputs().size())
+    if (module.getNumInputs() != getInputs().size())
       return emitOpError(
           "incorrect number of inputs for hw.module instantiation");
 
-    if (type.getNumResults() + type.getNumInputs() != getNumOperands())
+    if (module.getNumOutputs() + module.getNumInputs() != getNumOperands())
       return emitOpError(
           "incorrect number of outputs for hw.module instantiation");
 
     // Check input types
-    for (size_t i = 0, e = type.getNumInputs(); i != e; ++i) {
+    for (size_t i = 0, e = module.getNumInputs(); i != e; ++i) {
       if (getOperand(i).getType().cast<llhd::SigType>().getUnderlyingType() !=
-          type.getInput(i))
+          module.getInputTypes()[i])
         return emitOpError("input type mismatch");
     }
 
     // Check output types
-    for (size_t i = 0, e = type.getNumResults(); i != e; ++i) {
-      if (getOperand(type.getNumInputs() + i)
+    for (size_t i = 0, e = module.getNumOutputs(); i != e; ++i) {
+      if (getOperand(module.getNumInputs() + i)
               .getType()
               .cast<llhd::SigType>()
-              .getUnderlyingType() != type.getResult(i))
+              .getUnderlyingType() != module.getOutputTypes()[i])
         return emitOpError("output type mismatch");
     }
 
