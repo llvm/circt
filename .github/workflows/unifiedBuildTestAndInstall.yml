@@ -48,15 +48,13 @@ on:
         type: boolean
         default: false
       install:
-        description: "Install steps to run"
+        description: "Install steps to run (empty if do not install)"
         required: false
         type: string
-        default: install-firtool
       package_name_prefix:
-        description: "The prefix for package name"
+        description: "The prefix for package name (has no effect unless \"install\" is set)"
         required: false
         type: string
-        default: firrtl-bin
       cmake_c_compiler:
         description: "The C compiler to use"
         required: true
@@ -237,17 +235,18 @@ jobs:
           NAME=${{ inputs.package_name_prefix }}-${{ steps.name_dir.outputs.os }}-${{ steps.name_dir.outputs.arch }}.${{ steps.name_dir.outputs.archive }}
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
       - name: Package Binaries Linux and MacOS
-        if: runner.os == 'macOS' || runner.os == 'Linux'
+        if: inputs.install && ( runner.os == 'macOS' || runner.os == 'Linux' )
         run: |
           mv install ${{ steps.name_dir.outputs.value }}
           ${{ steps.name_dir.outputs.tar }} ${{ steps.name_archive.outputs.name }} ${{ steps.name_dir.outputs.value }}
       - name: Package Binaries Windows
-        if: runner.os == 'Windows'
+        if: inputs.install && runner.os == 'Windows'
         shell: pwsh
         run: |
           mv install ${{ steps.name_dir.outputs.value }}
           Compress-Archive -Path ${{ steps.name_dir.outputs.value }} -DestinationPath ${{ steps.name_archive.outputs.name }}
       - name: Show Tarball
+        if: inputs.install
         shell: bash
         run: |
           ls -l ${{ steps.name_archive.outputs.name }}
@@ -256,14 +255,14 @@ jobs:
 # Upload build artifacts
       - name: Upload Binary (Non-Tag)
         uses: actions/upload-artifact@v3
-        if: github.ref_type != 'tag'
+        if: inputs.install && github.ref_type != 'tag'
         with:
           name: ${{ steps.name_archive.outputs.name }}
           path: ${{ steps.name_archive.outputs.name }}
           retention-days: 7
       - name: Upload SHA256 (Non-Tag)
         uses: actions/upload-artifact@v3
-        if: github.ref_type != 'tag'
+        if: inputs.install && github.ref_type != 'tag'
         with:
           name: ${{ steps.name_archive.outputs.name }}.sha256
           path: ${{ steps.name_archive.outputs.name }}.sha256
@@ -271,7 +270,7 @@ jobs:
 
       - name: Upload Binaries (Tag)
         uses: AButler/upload-release-assets@v2.0
-        if: github.ref_type == 'tag'
+        if: inputs.install && github.ref_type == 'tag'
         with:
           # The * will grab the .sha256 as well
           files: ${{ steps.name_archive.outputs.name }}*
