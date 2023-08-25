@@ -32,7 +32,7 @@ class OMOp<string mnemonic, list<Trait> traits = []> :
 class OMClassLike<string mnemonic, list<Trait> traits = []> :
   OMOp<mnemonic, traits # [
     SingleBlock, NoTerminator, Symbol, SymbolTable,
-    HasParent<"mlir::ModuleOp">, RegionKindInterface
+    HasParent<"mlir::ModuleOp">, RegionKindInterface,
     DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmBlockArgumentNames"]>,
     DeclareOpInterfaceMethods<ClassLike>]> {
 
@@ -66,7 +66,7 @@ class OMClassFieldLike<string mnemonic, list<Trait> traits = []> :
 // Class definitions
 //===----------------------------------------------------------------------===//
 
-def ClassOp : OMClassLike<"class", [RegionKindInterface]> {
+def ClassOp : OMClassLike<"class", []> {
   let extraClassDeclaration = [{
     mlir::Block *getBodyBlock() { return &getBody().front(); }
     // This builds a ClassOp, and populates it with the CLassFieldOps.
