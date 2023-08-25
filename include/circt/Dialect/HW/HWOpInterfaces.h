@@ -48,6 +48,8 @@ struct PortInfo : public ModulePort {
   ssize_t getId() const { return isOutput() ? argNum : (-1 - argNum); };
 };
 
+raw_ostream &operator<<(raw_ostream &printer, PortInfo port);
+
 /// This holds a decoded list of input/inout and output ports for a module or
 /// instance.
 struct ModulePortInfo {
@@ -222,6 +224,17 @@ namespace detail {
 LogicalResult verifyInnerRefNamespace(Operation *op);
 } // namespace detail
 
+/// Classify operations that are InnerRefNamespace-like,
+/// until structure is in place to do this via Traits.
+/// Useful for getParentOfType<>, or scheduling passes.
+/// Prefer putting the trait on operations here or downstream.
+struct InnerRefNamespaceLike {
+  /// Return if this operation is explicitly an IRN or appears compatible.
+  static bool classof(mlir::Operation *op);
+  /// Return if this operation is explicitly an IRN or appears compatible.
+  static bool classof(const mlir::RegisteredOperationName *opInfo);
+};
+
 } // namespace hw
 } // namespace circt
 
@@ -261,7 +274,7 @@ public:
 
     // InnerSymbolTable's must be directly nested within an InnerRefNamespace.
     auto *parent = op->getParentOp();
-    if (!parent || !parent->hasTrait<InnerRefNamespace>())
+    if (!parent || !isa<circt::hw::InnerRefNamespaceLike>(parent))
       return op->emitError(
           "InnerSymbolTable must have InnerRefNamespace parent");
 

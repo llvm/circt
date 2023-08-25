@@ -72,11 +72,12 @@ class CosimTestRunner:
     self.sources = []
     # Include the cosim DPI SystemVerilog files.
     if include_aux_files:
-      self.sources.insert(0, os.path.join(esiInclude, "cosim",
-                                          "Cosim_DpiPkg.sv"))
-      self.sources.insert(
-          1, os.path.join(esiInclude, "cosim", "Cosim_Endpoint.sv"))
-      self.sources.insert(2, os.path.join(esiInclude, "ESIPrimitives.sv"))
+      self.sources += [
+        os.path.join(esiInclude, "cosim", "Cosim_DpiPkg.sv"),
+        os.path.join(esiInclude, "cosim", "Cosim_Endpoint.sv"),
+        os.path.join(esiInclude, "cosim", "Cosim_MMIO.sv"),
+        os.path.join(esiInclude, "ESIPrimitives.sv")
+      ]
     self.sources.append("@ESI_COSIM_PATH@")
 
   def compile(self):

@@ -20,11 +20,12 @@ target_link_libraries(hlstool
   CIRCTSeq
   CIRCTSeqToSV
   CIRCTSeqTransforms
-  CIRCTStandardToHandshake
+  CIRCTCFToHandshake
   CIRCTSV
   CIRCTSVTransforms
   CIRCTSCFToCalyx
   CIRCTCalyx
+  CIRCTCalyxNative
   CIRCTCalyxTransforms
   CIRCTCalyxToHW
   CIRCTCalyxToFSM

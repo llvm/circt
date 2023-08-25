@@ -166,6 +166,20 @@ om.class @StringConstant() {
   om.class.field @string, %0 : !om.string
 }
 
+// CHECK-LABEL: @Bool
+om.class @BoolConstant(%b0 : i1) {
+  // CHECK: %[[const1:.+]] = om.constant true
+  %1 = om.constant true
+  // CHECK: %[[const2:.+]] = om.constant false
+  %2 = om.constant false
+  // CHECK: om.class.field @bool, %b0
+  om.class.field @bool, %b0 : i1
+  // CHECK: om.class.field @bool2, %[[const1]]
+  om.class.field @bool2, %1 : i1
+  // CHECK: om.class.field @bool3, %[[const2]]
+  om.class.field @bool3, %2 : i1
+}
+
 // CHECK-LABEL: @Map
 // CHECK-SAME: !om.map<!om.string, !om.string>
 om.class @Map(%map: !om.map<!om.string, !om.string>) {
@@ -190,4 +204,22 @@ om.class @MapConstant() {
   %0 = om.constant #om.map<i64, {a = 42, b = 32}> : !om.map<!om.string, i64>
   // CHECK: om.class.field @map_i64, %[[const1]] : !om.map<!om.string, i64>
   om.class.field @map_i64, %0 : !om.map<!om.string, i64>
+}
+
+// CHECK-LABEL: @MapCreate
+om.class @MapCreate(%e1: tuple<!om.string, !om.class.type<@Empty>>, %e2: tuple<!om.string, !om.class.type<@Empty>>) {
+  // CHECK: %[[map:.+]] = om.map_create %e1, %e2 : !om.string, !om.class.type<@Empty>
+  %map = om.map_create %e1, %e2 : !om.string, !om.class.type<@Empty>
+  // CHECK-NEXT: om.class.field @map_field, %[[map]] : !om.map<!om.string, !om.class.type<@Empty>>
+  om.class.field @map_field, %map : !om.map<!om.string, !om.class.type<@Empty>>
+}
+
+hw.hierpath @HierPath [@PathModule::@wire]
+hw.module @PathModule() {
+  %wire = hw.wire %wire sym @wire : i1
+}
+// CHECK-LABEL: @Path
+om.class @Path() {
+  // CHECK: %0 = om.path reference @HierPath
+  %0 = om.path reference @HierPath
 }

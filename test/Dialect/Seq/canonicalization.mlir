@@ -189,3 +189,19 @@ hw.module @FirMem(%addr: i4, %clock: i1, %data: i42) -> (out: i42) {
   %9 = comb.xor %1, %2, %3, %4, %5, %6, %7, %8 : i42
   hw.output %9 : i42
 }
+
+// CHECK-LABEL: @through_clock
+hw.module @through_clock(%clock: !seq.clock) -> (out: !seq.clock) {
+  // CHECK: hw.output %clock : !seq.clock
+  %tmp = seq.from_clock %clock
+  %out = seq.to_clock %tmp
+  hw.output %out : !seq.clock
+}
+
+// CHECK-LABEL: @through_wire
+hw.module @through_wire(%clock: i1) -> (out: i1) {
+  // CHECK: hw.output %clock : i1
+  %tmp = seq.to_clock %clock
+  %out = seq.from_clock %tmp
+  hw.output %out : i1
+}

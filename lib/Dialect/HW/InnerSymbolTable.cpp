@@ -242,5 +242,17 @@ LogicalResult verifyInnerRefNamespace(Operation *op) {
 }
 
 } // namespace detail
+
+bool InnerRefNamespaceLike::classof(mlir::Operation *op) {
+  return op->hasTrait<mlir::OpTrait::InnerRefNamespace>() ||
+         op->hasTrait<mlir::OpTrait::SymbolTable>();
+}
+
+bool InnerRefNamespaceLike::classof(
+    const mlir::RegisteredOperationName *opInfo) {
+  return opInfo->hasTrait<mlir::OpTrait::InnerRefNamespace>() ||
+         opInfo->hasTrait<mlir::OpTrait::SymbolTable>();
+}
+
 } // namespace hw
 } // namespace circt

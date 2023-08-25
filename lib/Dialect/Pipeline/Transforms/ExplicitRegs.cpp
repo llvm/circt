@@ -20,6 +20,14 @@ using namespace pipeline;
 
 namespace {
 
+struct NamedValue {
+  Value v;
+  StringAttr name;
+  operator Value() const { return v; }
+  operator Attribute() const { return name; }
+  operator llvm::StringRef() const { return name.getValue(); }
+};
+
 class ExplicitRegsPass : public ExplicitRegsBase<ExplicitRegsPass> {
 public:
   void runOnOperation() override;
@@ -29,18 +37,24 @@ private:
 
   // Recursively routes value v backwards through the pipeline, adding new
   // registers to 'stage' if the value was not already registered in the stage.
-  // Returns the registerred version of 'v' through 'stage'.
-  Value routeThroughStage(Value v, Block *stage);
+  // Returns the registered version of 'v' through 'stage'.
+  NamedValue routeThroughStage(Value v, Block *stage);
 
   // Returns the distance between two stages in the pipeline. The distance is
   // defined wrt. the ordered stages of the pipeline.
   int64_t stageDistance(Block *from, Block *to);
+
+  // Returns a suitable name for a value.
+  StringAttr genValueName(Value v);
 
   struct RoutedValue {
     Backedge v;
     // If true, this value is routed through a stage as a register, else
     // it is routed through a stage as a pass-through.e
     bool isReg;
+    StringAttr name;
+
+    operator NamedValue() { return NamedValue{v, name}; }
   };
   // A mapping storing whether a given stage register constains a registerred
   // version of a given value. The registered version will be a backedge during
@@ -55,6 +69,7 @@ private:
   llvm::DenseMap<Block *, unsigned> stageMap;
 
   std::shared_ptr<BackedgeBuilder> bb;
+  ScheduledPipelineOp parent;
 };
 
 } // end anonymous namespace
@@ -65,27 +80,57 @@ int64_t ExplicitRegsPass::stageDistance(Block *from, Block *to) {
   return toStage - fromStage;
 }
 
+StringAttr ExplicitRegsPass::genValueName(Value v) {
+  Operation *definingOp = v.getDefiningOp();
+  StringAttr valueName;
+  auto setNameFn = [&](Value other, StringRef name) {
+    if (other == v)
+      valueName = StringAttr::get(other.getContext(), name);
+  };
+  if (definingOp) {
+    if (OpAsmOpInterface asmInterface = dyn_cast<OpAsmOpInterface>(definingOp))
+      asmInterface.getAsmResultNames(setNameFn);
+    // Somewhat comb specific - look for an sv.namehint attribute.
+    else if (auto nameHint =
+                 definingOp->getAttrOfType<StringAttr>("sv.namehint"))
+      valueName = nameHint;
+    else
+      valueName = StringAttr::get(v.getContext(), "");
+  } else {
+    // It's a block argument - leverage the OpAsmOpInterface of the pipeline
+    // op.
+    auto asmInterface = cast<OpAsmOpInterface>(parent.getOperation());
+    asmInterface.getAsmBlockArgumentNames(parent.getBody(), setNameFn);
+  }
+
+  assert(valueName && "Wasn't able to generate a name for a value");
+  return valueName;
+}
+
 // NOLINTNEXTLINE(misc-no-recursion)
-Value ExplicitRegsPass::routeThroughStage(Value v, Block *stage) {
+NamedValue ExplicitRegsPass::routeThroughStage(Value v, Block *stage) {
   Value retVal = v;
   Block *definingStage = retVal.getParentBlock();
 
   // Is the value defined in the current stage?
-  if (definingStage == stage)
-    return retVal;
+  if (definingStage == stage) {
+    // Value is defined in the current stage - no routing needed, but we need to
+    // define a name.
+    return NamedValue{retVal, genValueName(retVal)};
+  }
 
   auto regIt = stageRegOrPassMap[stage].find(retVal);
   if (regIt != stageRegOrPassMap[stage].end()) {
     // 'v' is already routed through 'stage' - return the registered/passed
     // version.
-    return regIt->second.v;
+    return regIt->second;
   }
 
   // Is the value a constant? If so, we allow it; constants are special cases
   // which are allowed to be used in any stage.
   auto *definingOp = retVal.getDefiningOp();
   if (definingOp && definingOp->hasTrait<OpTrait::ConstantLike>())
-    return retVal;
+    return NamedValue{retVal, StringAttr::get(retVal.getContext(), "")};
 
   // Value is defined somewhere before the provided stage - route it through the
   // stage, and recurse to the predecessor stage.
@@ -97,18 +142,24 @@ Value ExplicitRegsPass::routeThroughStage(Value v, Block *stage) {
   // is less than the distance between the current stage and the defining stage.
   bool isReg = valueLatency < stageDistance(definingStage, stage);
   auto valueBackedge = bb->get(retVal.getType());
-  stageRegOrPassMap[stage].insert({retVal, {valueBackedge, isReg}});
+  auto stageRegBE = stageRegOrPassMap[stage].insert(
+      {retVal, RoutedValue{valueBackedge, isReg,
+                           StringAttr::get(retVal.getContext(), "")}});
   retVal = valueBackedge;
 
   // Recurse - recursion will only create a new backedge if necessary.
   Block *stagePred = stage->getSinglePredecessor();
   assert(stagePred && "Expected stage to have a single predecessor");
-  routeThroughStage(v, stagePred);
-  return retVal;
+  auto namedV = routeThroughStage(v, stagePred);
+  // And name the backedge using the routed value result name.
+  stageRegBE.first->second.name = namedV.name;
+
+  return NamedValue{retVal, namedV.name};
 }
 
 void ExplicitRegsPass::runOnPipeline(ScheduledPipelineOp pipeline) {
   OpBuilder b(pipeline.getContext());
+  parent = pipeline;
   bb = std::make_shared<BackedgeBuilder>(b, pipeline.getLoc());
 
   // Cache external-like inputs in a set for fast lookup. This also includes
@@ -154,19 +205,26 @@ void ExplicitRegsPass::runOnPipeline(ScheduledPipelineOp pipeline) {
     // Gather register inputs to this stage, either from a predecessor stage
     // or from the original op.
     llvm::SmallVector<Value> regIns, passIns;
+    llvm::SmallVector<Attribute> regNames, passNames;
     Block *predecessorStage = stage->getSinglePredecessor();
     auto predStageRegOrPassMap = stageRegOrPassMap.find(predecessorStage);
     assert(predecessorStage && "Stage should always have a single predecessor");
     for (auto &[value, backedge] : regMap) {
+      if (backedge.isReg)
+        regNames.push_back(backedge.name);
+      else
+        passNames.push_back(backedge.name);
+
       if (predStageRegOrPassMap != stageRegOrPassMap.end()) {
         // Grab the value if passed through the predecessor stage, else,
         // use the raw value.
         auto predRegIt = predStageRegOrPassMap->second.find(value);
         if (predRegIt != predStageRegOrPassMap->second.end()) {
-          if (backedge.isReg)
+          if (backedge.isReg) {
             regIns.push_back(predRegIt->second.v);
-          else
+          } else {
             passIns.push_back(predRegIt->second.v);
+          }
           continue;
         }
       }
@@ -182,8 +240,10 @@ void ExplicitRegsPass::runOnPipeline(ScheduledPipelineOp pipeline) {
     // a new terminator that has materialized arguments.
     StageOp terminator = cast<StageOp>(predecessorStage->getTerminator());
     b.setInsertionPoint(terminator);
+    llvm::SmallVector<llvm::SmallVector<Value>> clockGates;
     b.create<StageOp>(terminator.getLoc(), terminator.getNextStage(), regIns,
-                      passIns);
+                      passIns, clockGates, b.getArrayAttr(regNames),
+                      b.getArrayAttr(passNames));
     terminator.erase();
 
     // ... add arguments to the next stage. Registers first, then passthroughs.

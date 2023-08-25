@@ -722,20 +722,17 @@ SmallVector<Location> MSFTModuleOp::getAllPortLocs() {
 
 SmallVector<Attribute> MSFTModuleOp::getAllPortAttrs() {
   SmallVector<Attribute> retval;
-  if (auto attrs = getArgAttrs()) {
+  auto empty = DictionaryAttr::get(getContext());
+  auto attrs = getArgAttrs();
+  if (attrs)
     for (auto a : *attrs)
       retval.push_back(a);
-  } else {
-    for (unsigned i = 0, e = getNumInputs(); i < e; ++i)
-      retval.push_back({});
-  }
-  if (auto attrs = getResAttrs()) {
+  retval.resize(getNumInputs(), empty);
+  attrs = getResAttrs();
+  if (attrs)
     for (auto a : *attrs)
       retval.push_back(a);
-  } else {
-    for (unsigned i = 0, e = getNumOutputs(); i < e; ++i)
-      retval.push_back({});
-  }
+  retval.resize(getNumInputs() + getNumOutputs(), empty);
   return retval;
 }
 
@@ -764,6 +761,10 @@ void MSFTModuleOp::setHWModuleType(hw::ModuleType type) {
   auto argAttrs = getAllInputAttrs();
   auto resAttrs = getAllOutputAttrs();
   setFunctionTypeAttr(TypeAttr::get(type.getFuncType()));
+  auto argNames = type.getInputNames();
+  auto resultNames = type.getOutputNames();
+  setArgNamesAttr(ArrayAttr::get(getContext(), argNames));
+  setResultNamesAttr(ArrayAttr::get(getContext(), resultNames));
   unsigned newNumArgs = getNumInputs();
   unsigned newNumResults = getNumOutputs();
 

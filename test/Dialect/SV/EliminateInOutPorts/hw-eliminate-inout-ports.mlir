@@ -69,27 +69,3 @@ hw.module @passthroughTwoLevels() {
   hw.instance "passthrough" @passthrough(a : %0 : !hw.inout<i42>) -> ()
 }
 
-
-// For now, we don't support/touch inout ports. We add a test here to add
-// an early detection signal if something changes in the inout port handling
-// logic in CIRCT.
-
-// CHECK-LABEL:   hw.module @outputInout() -> (out: !hw.inout<i42>) {
-// CHECK:           %[[VAL_0:.*]] = sv.wire : !hw.inout<i42>
-// CHECK:           hw.output %[[VAL_0]] : !hw.inout<i42>
-// CHECK:         }
-hw.module @outputInout() -> (out : !hw.inout<i42>) {
-  %0 = sv.wire : !hw.inout<i42>
-  hw.output %0 : !hw.inout<i42>
-}
-
-// CHECK-LABEL:   hw.module @outputInoutDriver() {
-// CHECK:           %[[VAL_0:.*]] = hw.instance "outputInout" @outputInout() -> (out: !hw.inout<i42>)
-// CHECK:           sv.assign %[[VAL_0]], %[[VAL_1:.*]] : i42
-// CHECK:           %[[VAL_1]] = hw.instance "write" @write() -> (a_wr: i42)
-// CHECK:           hw.output
-// CHECK:         }
-hw.module @outputInoutDriver() {
-  %0 = hw.instance "outputInout" @outputInout() -> (out : !hw.inout<i42>)
-  hw.instance "write" @write(a : %0 : !hw.inout<i42>) -> ()
-}

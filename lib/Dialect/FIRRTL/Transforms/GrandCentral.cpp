@@ -733,12 +733,6 @@ private:
   /// A store of the YAML representation of interfaces.
   DenseMap<Attribute, sv::InterfaceOp> interfaceMap;
 
-  /// Returns an operation's `inner_sym`, adding one if necessary.
-  StringAttr getOrAddInnerSym(Operation *op);
-
-  /// Returns a port's `inner_sym`, adding one if necessary.
-  StringAttr getOrAddInnerSym(FModuleLike module, size_t portIdx);
-
   /// Emit the hierarchy yaml file.
   void emitHierarchyYamlFile(SmallVectorImpl<sv::InterfaceOp> &intfs);
 };

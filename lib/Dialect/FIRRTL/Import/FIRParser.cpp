@@ -1522,6 +1522,7 @@ private:
     return parseExpImpl(result, message, /*isLeadingStmt:*/ true);
   }
   ParseResult parseEnumExp(Value &result);
+  ParseResult parsePathExp(Value &result);
   ParseResult parseRefExp(Value &result, const Twine &message);
   ParseResult parseStaticRefExp(Value &result, const Twine &message);
 
@@ -1821,6 +1822,12 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
       return failure();
     break;
   }
+  case FIRToken::lp_path:
+    if (isLeadingStmt)
+      return emitError("unexpected path() as start of statement");
+    if (requireFeature({3, 2, 0}, "paths") || parsePathExp(result))
+      return failure();
+    break;
 
     // Otherwise there are a bunch of keywords that are treated as identifiers
     // try them.
@@ -2965,6 +2972,22 @@ ParseResult FIRStmtParser::parseStaticRefExp(Value &result,
   };
   return failure(parseIdOrInstance() ||
                  parseOptionalExpPostscript(result, false));
+}
+
+/// path ::= 'path(' StringLit ')'
+// NOLINTNEXTLINE(misc-no-recursion)
+ParseResult FIRStmtParser::parsePathExp(Value &result) {
+  auto startTok = consumeToken(FIRToken::lp_path);
+  locationProcessor.setLoc(startTok.getLoc());
+  StringRef target;
+  if (parseGetSpelling(target) ||
+      parseToken(FIRToken::string,
+                 "expected target string in path expression") ||
+      parseToken(FIRToken::r_paren, "expected ')' in path expression"))
+    return failure();
+  result = builder.create<UnresolvedPathOp>(
+      StringAttr::get(getContext(), FIRToken::getStringValue(target)));
+  return success();
 }
 
 /// define ::= 'define' static_reference '=' ref_expr info?

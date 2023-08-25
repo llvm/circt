@@ -27,4 +27,16 @@ def IbisContainerize : Pass<"ibis-containerize", "ModuleOp"> {
   let constructor = "circt::ibis::createContainerizePass()";
 }
 
+def IbisTunneling : Pass<"ibis-tunneling", "mlir::ModuleOp"> {
+  let summary = "Ibis tunneling pass";
+  let description = [{
+    Tunnels relative `get_port` ops through the module hierarchy, based on
+    `ibis.path` ops. The result of this pass is that various new in- and output
+    ports of `!ibis.portref<...>` type are created.
+    After this pass, `get_port` ops should only exist at the same scope of
+    container instantiations.
+  }];
+  let constructor = "circt::ibis::createTunnelingPass()";
+}
+
 #endif // CIRCT_DIALECT_IBIS_PASSES_TD

@@ -239,6 +239,25 @@ def CalyxToHW : Pass<"lower-calyx-to-hw", "mlir::ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
+// CalyxNative
+//===----------------------------------------------------------------------===//
+def CalyxNative : Pass<"calyx-native", "mlir::ModuleOp"> {
+  let summary = "Callout to the Calyx native compiler and run a pass pipeline";
+  let description = [{
+    This pass calls out to the native, Rust-based Calyx compiler to run passes
+    with it and generate a new, valid, calyx dialect program.
+  }];
+  let constructor = "circt::createCalyxNativePass()";
+  let dependentDialects = ["calyx::CalyxDialect"];
+  let options = [
+    Option<"passPipeline", "pass-pipeline", "std::string",
+            "", "Passes to run with the native compiler">,
+  ];
+}
+
+
+
+//===----------------------------------------------------------------------===//
 // CalyxToFSM
 //===----------------------------------------------------------------------===//
 
@@ -558,12 +577,12 @@ def LowerVerifToSV : Pass<"lower-verif-to-sv", "hw::HWModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
-// StandardToHandshake
+// CFToHandshake
 //===----------------------------------------------------------------------===//
 
-def StandardToHandshake : Pass<"lower-std-to-handshake", "mlir::ModuleOp"> {
-  let summary = "Lower Standard MLIR into Handshake IR";
-  let constructor = "circt::createStandardToHandshakePass()";
+def CFToHandshake : Pass<"lower-cf-to-handshake", "mlir::ModuleOp"> {
+  let summary = "Lower func and CF into Handshake IR";
+  let constructor = "circt::createCFToHandshakePass()";
   let dependentDialects = ["handshake::HandshakeDialect"];
   let options =
     [Option<"sourceConstants", "source-constants", "bool", "false",

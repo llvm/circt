@@ -1704,12 +1704,11 @@ circuit BasicProps :
 
   ; CHECK-LABEL: module private @Path
   module Path :
-    ; CHECK-SAME: in %a: !firrtl.path
-    ; CHECK-SAME: out %b: !firrtl.path
-    input a : Path
-    output b : Path
-    ; CHECK: firrtl.propassign %b, %a : !firrtl.path
-    propassign b, a
+    ; CHECK-SAME: out %path: !firrtl.path
+    output path : Path
+    ; CHECK: firrtl.unresolved_path "OMDeleted"
+    ; CHECK: firrtl.propassign %path, %0 : !firrtl.path
+    propassign path, path("OMDeleted")
 
   ; CHECK-LABEL: firrtl.class private @SimpleClass(in %a: !firrtl.string, out %b: !firrtl.string) {
   ; CHECK-NEXT:     firrtl.propassign %b, %a : !firrtl.string

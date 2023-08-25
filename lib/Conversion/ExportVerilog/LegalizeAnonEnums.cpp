@@ -136,6 +136,20 @@ struct LegalizeAnonEnums : public LegalizeAnonEnumsBase<LegalizeAnonEnums> {
         return FunctionType::get(context, inputs, results);
       return {};
     }
+    if (auto modType = dyn_cast<ModuleType>(type)) {
+      bool changed = false;
+      SmallVector<ModulePort> ports;
+      for (auto &p : modType.getPorts()) {
+        ports.push_back(p);
+        if (auto newType = processType(p.type)) {
+          ports.back().type = newType;
+          changed = true;
+        }
+      }
+      if (changed)
+        return ModuleType::get(context, ports);
+      return {};
+    }
 
     // Default case is that it is not an aggregate type.
     return {};
@@ -159,9 +173,9 @@ struct LegalizeAnonEnums : public LegalizeAnonEnumsBase<LegalizeAnonEnums> {
       }
 
       // Update the operation signature if it is function-like.
-      if (auto funcLike = dyn_cast<mlir::FunctionOpInterface>(op))
-        if (auto newType = processType(funcLike.getFunctionType()))
-          funcLike.setFunctionTypeAttr(TypeAttr::get(newType));
+      if (auto modLike = dyn_cast<HWModuleLike>(op))
+        if (auto newType = processType(modLike.getHWModuleType()))
+          modLike.setHWModuleType(cast<ModuleType>(newType));
 
       // Update all operations results.
       for (auto result : op->getResults())

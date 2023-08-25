@@ -13,6 +13,8 @@
 #ifndef CIRCT_DIALECT_OM_OMOPS_TD
 #define CIRCT_DIALECT_OM_OMOPS_TD
 
+include "circt/Dialect/OM/OMDialect.td"
+include "circt/Dialect/OM/OMEnums.td"
 include "circt/Dialect/OM/OMOpInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
@@ -259,6 +261,53 @@ def TupleGetOp : OMOp<"tuple_get", [Pure, InferTypeOpInterface]> {
       ::mlir::OpaqueProperties, ::mlir::RegionRange regions,
       ::llvm::SmallVectorImpl<::mlir::Type> &inferredReturnTypes);
    }];
+}
+
+def MapKeyValuePair: Type<CPred<"::circt::om::isMapKeyValuePairType($_self)">,
+                        "a pair whose first element is an attribute",
+                        "::mlir::TupleType">;
+
+def MapCreateOp : OMOp<"map_create", [Pure, SameTypeOperands]> {
+  let summary = "Create a map";
+  let description = [{
+    Creates a map from a sequence of inputs.
+
+    ```
+    %map = om.map_create %e1, %e2 : !om.string, i8
+    ```
+    where `%e1` and `e2` have !om.tuple<!om.string, i8> and
+    `%map` has `!om.map<!om.string, i8>` type.
+  }];
+
+  let arguments = (ins Variadic<MapKeyValuePair>:$inputs);
+  let results = (outs
+    MapType:$result
+  );
+
+  let hasCustomAssemblyFormat = true;
+}
+
+def PathOp : OMOp<"path", [Pure, 
+      DeclareOpInterfaceMethods<SymbolUserOpInterface>
+    ]> {
+  let summary = "Produce a path value";
+  let description = [{
+    Produces a value which represents a hierarchical path to a hardware
+    component.
+
+    Example:
+    ```mlir
+    hw.module @Foo {
+      %wire = hw.wire sym @w: !i1
+    }
+    hw.hierpath @Path [@Foo::@w]
+    %0 = om.path member @Path
+    ```
+  }];
+  let arguments = (ins TargetKind:$targetKind,
+                       FlatSymbolRefAttr:$target);
+  let results = (outs PathType:$result);
+  let assemblyFormat = "$targetKind $target attr-dict";
 }
 
 #endif // CIRCT_DIALECT_OM_OMOPS_TD

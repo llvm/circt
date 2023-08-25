@@ -307,6 +307,13 @@ firrtl.module @PropertyNestedTest(in %in: !firrtl.map<integer, list<map<string, 
 // CHECK-SAME: (in %in: !firrtl.path, out %out: !firrtl.path)
 firrtl.module @PathTest(in %in: !firrtl.path, out %out: !firrtl.path) {
   firrtl.propassign %out, %in : !firrtl.path
+  
+  // CHECK: firrtl.unresolved_path "target-string"
+  firrtl.unresolved_path "target-string"
+  
+  // CHECK: firrtl.path reference distinct[0]<>
+  %0 = firrtl.path reference distinct[0]<>
+  
 }
 
 // CHECK-LABEL: TypeAlias

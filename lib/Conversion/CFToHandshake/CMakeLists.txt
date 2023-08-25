@@ -1,10 +1,10 @@
-add_circt_library(CIRCTStandardToHandshake
-  StandardToHandshake.cpp
+add_circt_library(CIRCTCFToHandshake
+  CFToHandshake.cpp
   InsertMergeBlocks.cpp
   MaximizeSSA.cpp
 
   ADDITIONAL_HEADER_DIRS
-  ${MLIR_MAIN_INCLUDE_DIR}/mlir/Conversion/StandardToHandshake
+  ${MLIR_MAIN_INCLUDE_DIR}/mlir/Conversion/CFToHandshake
 
   DEPENDS
   CIRCTConversionPassIncGen

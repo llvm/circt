@@ -351,6 +351,28 @@ def ClockMuxOp : SeqOp<"clock_mux", [Pure]> {
 }
 
 //===----------------------------------------------------------------------===//
+// Clock Dividers
+//===----------------------------------------------------------------------===//
+
+def ClockDivider : SeqOp<"clock_div", [Pure]> {
+  let summary = "Produces a clock divided by a power of two";
+  let description = [{
+    The output clock is phase-aligned to the input clock.
+
+    ```
+    %div_clock = seq.clock_div %clock by 1
+    ```
+  }];
+
+  let arguments = (ins I1:$clockIn, I8Attr:$pow2);
+  let results = (outs I1:$clockOut);
+
+  let assemblyFormat = [{
+    $clockIn `by` $pow2 attr-dict
+  }];
+}
+
+//===----------------------------------------------------------------------===//
 // FIRRTL-flavored memory
 //===----------------------------------------------------------------------===//
 
@@ -507,5 +529,31 @@ def FirMemReadWriteOp : SeqOp<"firmem.read_write_port", [
     attr-dict `:` type($memory) (`,` type($mask)^)?
   }];
   let hasVerifier = 1;
+  let hasCanonicalizeMethod = 1;
+}
+
+//===----------------------------------------------------------------------===//
+// Clock cast
+//===----------------------------------------------------------------------===//
+
+def ToClockOp : SeqOp<"to_clock", [Pure]> {
+  let summary = "Cast from a wire type to a clock type";
+
+  let arguments = (ins I1:$input);
+  let results = (outs ClockType:$output);
+
+  let assemblyFormat = "$input attr-dict";
+
+  let hasCanonicalizeMethod = 1;
+}
+
+def FromClockOp : SeqOp<"from_clock", [Pure]> {
+  let summary = "Cast from a clock type to a wire type";
+
+  let arguments = (ins ClockType:$input);
+  let results = (outs I1:$output);
+
+  let assemblyFormat = "$input attr-dict";
+
   let hasCanonicalizeMethod = 1;
 }

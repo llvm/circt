@@ -242,7 +242,7 @@ static void loadDHLSPipeline(OpPassManager &pm) {
   pm.nest<handshake::FuncOp>().addPass(createSimpleCanonicalizerPass());
 
   // DHLS conversion
-  pm.addPass(circt::createStandardToHandshakePass(
+  pm.addPass(circt::createCFToHandshakePass(
       /*sourceConstants=*/false,
       /*disableTaskPipelining=*/dynParallelism != Pipelining));
   pm.addPass(circt::handshake::createHandshakeLowerExtmemToHWPass(withESI));

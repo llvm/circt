@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "../PassDetail.h"
-#include "circt/Conversion/StandardToHandshake.h"
+#include "circt/Conversion/CFToHandshake.h"
 #include "mlir/Analysis/CFGLoopInfo.h"
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/LLVMCommon/Pattern.h"

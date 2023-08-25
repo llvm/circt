@@ -3,6 +3,7 @@ add_circt_dialect_library(CIRCTHWTransforms
   HWSpecialize.cpp
   PrintHWModuleGraph.cpp
   FlattenIO.cpp
+  VerifyInnerRefNamespace.cpp
 
   DEPENDS
   CIRCTHWTransformsIncGen
