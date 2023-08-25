@@ -1350,7 +1350,7 @@ LogicalResult HWModuleOp::verify() {
 
   // Verify that the block arguments match the op's attributes.
   for (auto [arg, type, loc] : llvm::zip(getBodyBlock()->getArguments(),
-                                         type.getInputs(), getArgLocs())) {
+                                         getInputTypes(), getInputLocs())) {
     if (arg.getType() != type)
       return emitOpError("block argument types should match signature types");
     if (arg.getLoc() != loc.cast<LocationAttr>())
@@ -1410,7 +1410,7 @@ void HWModuleOp::insertOutputs(unsigned index,
 }
 
 void HWModuleOp::appendOutputs(ArrayRef<std::pair<StringAttr, Value>> outputs) {
-  return insertOutputs(getResultTypes().size(), outputs);
+  return insertOutputs(getNumOutputs(), outputs);
 }
 
 void HWModuleOp::getAsmBlockArgumentNames(mlir::Region &region,
@@ -1452,13 +1452,11 @@ SmallVector<Location> HWModuleOp::getAllPortLocs() {
 }
 
 SmallVector<Location> HWModuleExternOp::getAllPortLocs() {
-  return SmallVector<Location>(getNumInputs() + getNumOutputs(),
-                               UnknownLoc::get(getContext()));
+  return SmallVector<Location>(getNumPorts(), UnknownLoc::get(getContext()));
 }
 
 SmallVector<Location> HWModuleGeneratedOp::getAllPortLocs() {
-  return SmallVector<Location>(getNumInputs() + getNumOutputs(),
-                               UnknownLoc::get(getContext()));
+  return SmallVector<Location>(getNumPorts(), UnknownLoc::get(getContext()));
 }
 
 void HWModuleOp::setAllPortLocs(ArrayRef<Location> locs) {

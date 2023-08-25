@@ -130,7 +130,7 @@ struct IOInfo {
   DenseMap<unsigned, hw::StructType> argStructs, resStructs;
 
   // Records of the original arg/res types.
-  TypeRange argTypes, resTypes;
+  SmallVector<Type> argTypes, resTypes;
 };
 
 class FlattenIOTypeConverter : public TypeConverter {
@@ -294,8 +294,8 @@ static DenseMap<Operation *, IOInfo> populateIOInfoMap(mlir::ModuleOp module) {
   DenseMap<Operation *, IOInfo> ioInfoMap;
   for (auto op : module.getOps<T>()) {
     IOInfo ioInfo;
-    ioInfo.argTypes = op.getArgumentTypes();
-    ioInfo.resTypes = op.getResultTypes();
+    ioInfo.argTypes = op.getInputTypes();
+    ioInfo.resTypes = op.getOutputTypes();
     for (auto [i, arg] : llvm::enumerate(ioInfo.argTypes)) {
       if (auto structType = getStructType(arg))
         ioInfo.argStructs[i] = structType;
