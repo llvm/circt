@@ -1,5 +1,5 @@
 // RUN: handshake-runner %s 3 2 1 | FileCheck %s
-// RUN: circt-opt -lower-std-to-handshake -handshake-materialize-forks-sinks %s > handshake.mlir
+// RUN: circt-opt -lower-cf-to-handshake -handshake-materialize-forks-sinks %s > handshake.mlir
 // RUN  handshake-runner handshake.mlir 3 2 1 | FileCheck %s
 // CHECK: 5
 

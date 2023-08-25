@@ -16,5 +16,6 @@
 #include "mlir/IR/Dialect.h"
 
 #include "circt/Dialect/OM/OMDialect.h.inc"
+#include "circt/Dialect/OM/OMEnums.h.inc"
 
 #endif // CIRCT_DIALECT_OM_OMDIALECT_H

@@ -117,7 +117,7 @@ def HandshakeLegalizeMemrefs : Pass<"handshake-legalize-memrefs", "mlir::func::F
   let summary = "Memref legalization and lowering pass.";
   let description = [{
     Lowers various memref operations to a state suitable for passing to the
-    StandardToHandshake lowering.
+    CFToHandshake lowering.
   }];
   let constructor = "circt::handshake::createHandshakeLegalizeMemrefsPass()";
   let dependentDialects = ["mlir::scf::SCFDialect"];

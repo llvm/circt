@@ -1119,21 +1119,37 @@ def FIntegerConstantOp : FIRRTLOp<"integer", [Pure, ConstantLike]> {
   let hasCustomAssemblyFormat = true;
 }
 
-def PathOp : FIRRTLOp<"path", [Pure,
-                  DeclareOpInterfaceMethods<InnerRefUserOpInterface>]> {
+def UnresolvedPathOp : FIRRTLOp<"unresolved_path", [Pure]> {
   let summary = "Produce a path value";
   let description = [{
     Produces a value which represents a path to the target in a design.
 
     Example:
     ```mlir
-    %w = firrtl.wire sym @wire : !firrtl.uint<1>
-    %0 = firrtl.path <@foo::@wire>
+    0 = firrtl.unresolved_path "~Circuit|Module>w"
     ```
   }];
-  let arguments = (ins InnerRefAttr:$target);
+  let arguments = (ins StrAttr:$target);
   let results = (outs PathType:$result);
   let assemblyFormat = "$target attr-dict";
+}
+
+def PathOp : FIRRTLOp<"path", [Pure]> {
+  let summary = "Produce a path value";
+  let description = [{
+    Produces a value which represents a path to the target in a design.
+
+    Example:
+    ```mlir
+    hw.hierpath @Path [@Foo::@bar, @Bar]
+    %wire = firrtl.wire {annotations = [ {class = "circt.tracker", id = distinct[0]<>, circt.nonlocal = @Path} ]} : !firrtl.uint<1>
+    %0 = firrtl.path reference distinct[0]<>
+    ```
+  }];
+  let arguments = (ins TargetKind:$targetKind,
+                       DistinctAttr:$target);
+  let results = (outs PathType:$result);
+  let assemblyFormat = "$targetKind $target attr-dict";
 }
 
 def ListCreateOp : FIRRTLOp<"list.create", [Pure, SameTypeOperands]> {

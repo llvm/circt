@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -706,52 +707,48 @@ void circt::firrtl::walkGroundTypes(
   recurse(recurse, type);
 }
 
-/// Returns an operation's `inner_sym`, adding one if necessary.
-StringAttr circt::firrtl::getOrAddInnerSym(const hw::InnerSymTarget &target,
-                                           GetNamespaceCallback getNamespace) {
+// Return InnerSymAttr with sym on specified fieldID.
+std::pair<hw::InnerSymAttr, StringAttr> circt::firrtl::getOrAddInnerSym(
+    MLIRContext *context, hw::InnerSymAttr attr, uint64_t fieldID,
+    llvm::function_ref<hw::InnerSymbolNamespace &()> getNamespace) {
+  SmallVector<hw::InnerSymPropertiesAttr> props;
+  if (attr) {
+    // If already present, return it.
+    if (auto sym = attr.getSymIfExists(fieldID))
+      return {attr, sym};
+    llvm::append_range(props, attr.getProps());
+  }
 
-  // Return InnerSymAttr with sym on specified fieldID.
-  auto getOrAdd = [&](auto mod, hw::InnerSymAttr attr,
-                      auto fieldID) -> std::pair<hw::InnerSymAttr, StringAttr> {
-    assert(mod);
-    auto *context = mod.getContext();
+  // Otherwise, create symbol and add to list.
+  auto sym = StringAttr::get(context, getNamespace().newName("sym"));
+  props.push_back(hw::InnerSymPropertiesAttr::get(
+      context, sym, fieldID, StringAttr::get(context, "public")));
+  // TODO: store/ensure always sorted, insert directly, faster search.
+  // For now, just be good and sort by fieldID.
+  llvm::sort(props,
+             [](auto &p, auto &q) { return p.getFieldID() < q.getFieldID(); });
+  return {hw::InnerSymAttr::get(context, props), sym};
+}
 
-    SmallVector<hw::InnerSymPropertiesAttr> props;
-    if (attr) {
-      // If already present, return it.
-      if (auto sym = attr.getSymIfExists(fieldID))
-        return {attr, sym};
-      llvm::append_range(props, attr.getProps());
-    }
-
-    // Otherwise, create symbol and add to list.
-    auto sym = StringAttr::get(context, getNamespace(mod).newName("sym"));
-    props.push_back(hw::InnerSymPropertiesAttr::get(
-        context, sym, fieldID, StringAttr::get(context, "public")));
-    // TODO: store/ensure always sorted, insert directly, faster search.
-    // For now, just be good and sort by fieldID.
-    llvm::sort(props, [](auto &p, auto &q) {
-      return p.getFieldID() < q.getFieldID();
-    });
-    return {hw::InnerSymAttr::get(context, props), sym};
-  };
-
+StringAttr circt::firrtl::getOrAddInnerSym(
+    const hw::InnerSymTarget &target,
+    llvm::function_ref<hw::InnerSymbolNamespace &()> getNamespace) {
   if (target.isPort()) {
     if (auto mod = dyn_cast<FModuleOp>(target.getOp())) {
       auto portIdx = target.getPort();
       assert(portIdx < mod.getNumPorts());
       auto [attr, sym] =
-          getOrAdd(mod, mod.getPortSymbolAttr(portIdx), target.getField());
+          getOrAddInnerSym(mod.getContext(), mod.getPortSymbolAttr(portIdx),
+                           target.getField(), getNamespace);
       mod.setPortSymbolsAttr(portIdx, attr);
       return sym;
     }
   } else {
     // InnerSymbols only supported if op implements the interface.
     if (auto symOp = dyn_cast<hw::InnerSymbolOpInterface>(target.getOp())) {
-      auto mod = symOp->getParentOfType<FModuleOp>();
-      assert(mod);
       auto [attr, sym] =
-          getOrAdd(mod, symOp.getInnerSymAttr(), target.getField());
+          getOrAddInnerSym(symOp.getContext(), symOp.getInnerSymAttr(),
+                           target.getField(), getNamespace);
       symOp.setInnerSymbolAttr(attr);
       return sym;
     }
@@ -759,6 +756,20 @@ StringAttr circt::firrtl::getOrAddInnerSym(const hw::InnerSymTarget &target,
 
   assert(0 && "target must be port of FModuleOp or InnerSymbol");
   return {};
+}
+
+StringAttr circt::firrtl::getOrAddInnerSym(const hw::InnerSymTarget &target,
+                                           GetNamespaceCallback getNamespace) {
+  FModuleLike module;
+  if (target.isOpOnly())
+    module = target.getOp()->getParentOfType<FModuleOp>();
+  else
+    module = cast<FModuleLike>(target.getOp());
+  assert(module);
+
+  return getOrAddInnerSym(target, [&]() -> hw::InnerSymbolNamespace & {
+    return getNamespace(module);
+  });
 }
 
 /// Obtain an inner reference to an operation, possibly adding an `inner_sym`

@@ -45,6 +45,20 @@ DPI int sv2cCosimserverEpTryPut(char *endpointId,
 DPI int sv2cCosimserverInit();
 /// Shutdown the RPC server.
 DPI void sv2cCosimserverFinish();
+
+/// Register an MMIO module. Just checks that there is only one instantiated.
+DPI int sv2cCosimserverMMIORegister();
+
+/// Read MMIO function pair. Assumes that reads come back in the order in which
+/// they were requested.
+DPI int sv2cCosimserverMMIOReadTryGet(int *address);
+DPI void sv2cCosimserverMMIOReadRespond(long long data, char error);
+
+/// Write MMIO function pair. Assumes that write errors come back in the order
+/// in which the writes were issued.
+DPI int sv2cCosimserverMMIOWriteTryGet(int *address, long long *data);
+DPI void sv2cCosimserverMMIOWriteRespond(char error);
+
 #ifdef __cplusplus
 }
 

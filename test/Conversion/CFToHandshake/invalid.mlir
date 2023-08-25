@@ -1,4 +1,4 @@
-// RUN: circt-opt -lower-std-to-handshake %s -split-input-file -verify-diagnostics
+// RUN: circt-opt -lower-cf-to-handshake %s -split-input-file -verify-diagnostics
 
 func.func @multidim() -> i32 {
   // expected-error @+1 {{memref's must be both statically sized and unidimensional.}}

@@ -1,5 +1,5 @@
 // RUN: handshake-runner %s | FileCheck %s
-// RUN: circt-opt -lower-std-to-handshake -handshake-materialize-forks-sinks %s | handshake-runner | FileCheck %s
+// RUN: circt-opt -lower-cf-to-handshake -handshake-materialize-forks-sinks %s | handshake-runner | FileCheck %s
 // CHECK: 763 2996
 module {
   func.func @muladd(%1:index, %2:index, %3:index) -> (index) {

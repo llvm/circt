@@ -13,6 +13,8 @@
 #ifndef CIRCT_DIALECT_OM_OMDIALECT
 #define CIRCT_DIALECT_OM_OMDIALECT
 
+include "mlir/IR/OpBase.td"
+
 def OMDialect : Dialect {
   let name = "om";
   let cppNamespace = "::circt::om";

@@ -9,6 +9,10 @@
 add_circt_dialect(OM om)
 add_circt_dialect_doc(OM om)
 
+set(LLVM_TARGET_DEFINITIONS OMEnums.td)
+mlir_tablegen(OMEnums.h.inc -gen-enum-decls)
+mlir_tablegen(OMEnums.cpp.inc -gen-enum-defs)
+
 set(LLVM_TARGET_DEFINITIONS OM.td)
 mlir_tablegen(OMAttributes.h.inc -gen-attrdef-decls)
 mlir_tablegen(OMAttributes.cpp.inc -gen-attrdef-defs)

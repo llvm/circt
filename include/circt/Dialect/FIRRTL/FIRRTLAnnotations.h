@@ -426,10 +426,6 @@ struct AnnoTarget {
   /// Get the parent module of the target.
   FModuleLike getModule() const;
 
-  /// Get the inner_sym attribute of an op.  If there is no attached inner_sym,
-  /// then one will be created and attached to the op.
-  StringAttr getInnerSym(hw::InnerSymbolNamespace &moduleNamespace) const;
-
   /// Get a reference to this target suitable for use in an NLA.
   Attribute getNLAReference(hw::InnerSymbolNamespace &moduleNamespace) const;
 
@@ -450,7 +446,6 @@ struct OpAnnoTarget : public AnnoTarget {
 
   AnnotationSet getAnnotations() const;
   void setAnnotations(AnnotationSet annotations) const;
-  StringAttr getInnerSym(hw::InnerSymbolNamespace &moduleNamespace) const;
   Attribute getNLAReference(hw::InnerSymbolNamespace &moduleNamespace) const;
   FIRRTLType getType() const;
 
@@ -472,7 +467,6 @@ struct PortAnnoTarget : public AnnoTarget {
 
   AnnotationSet getAnnotations() const;
   void setAnnotations(AnnotationSet annotations) const;
-  StringAttr getInnerSym(hw::InnerSymbolNamespace &moduleNamespace) const;
   Attribute getNLAReference(hw::InnerSymbolNamespace &moduleNamespace) const;
   FIRRTLType getType() const;
 

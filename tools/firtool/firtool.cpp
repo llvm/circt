@@ -22,6 +22,7 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWPasses.h"
 #include "circt/Dialect/LTL/LTLDialect.h"
 #include "circt/Dialect/OM/OMDialect.h"
 #include "circt/Dialect/OM/OMOps.h"
@@ -325,6 +326,8 @@ static LogicalResult processBuffer(
   // Legalize away "open" aggregates to hw-only versions.
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerOpenAggsPass());
 
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createResolvePathsPass());
+
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerFIRRTLAnnotationsPass(
       disableAnnotationsUnknown, disableAnnotationsClassless,
       lowerAnnotationsNoRefTypePorts));
@@ -380,6 +383,9 @@ static LogicalResult processBuffer(
     // Emit module and testbench hierarchy JSON files.
     if (exportModuleHierarchy)
       pm.addPass(sv::createHWExportModuleHierarchyPass(outputFilename));
+
+    // Check inner symbols and inner refs.
+    pm.addPass(hw::createVerifyInnerRefNamespacePass());
 
     // Emit a single file or multiple files depending on the output format.
     switch (outputFormat) {

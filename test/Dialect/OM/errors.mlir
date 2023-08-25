@@ -116,3 +116,11 @@ om.class @MapConstant() {
   // expected-error @+1 {{a value of a map attribute must have a type 'i64' but field "b" has '!om.list<i32>'}}
   %0 = om.constant #om.map<i64, {a = 42, b = #om.list<i32, []>}> : !om.map<!om.string, i64>
 }
+
+// -----
+
+om.class @Thing() { }
+om.class @BadPath() {
+  // expected-error @below {{invalid symbol reference}}
+  %0 = om.path reference @Thing
+}

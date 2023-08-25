@@ -15,6 +15,7 @@ target_link_libraries(circt-opt
   CIRCTArcTransforms
   CIRCTCalyx
   CIRCTCalyxToHW
+  CIRCTCalyxNative
   CIRCTCalyxToFSM
   CIRCTCalyxTransforms
   CIRCTComb
@@ -66,7 +67,7 @@ target_link_libraries(circt-opt
   CIRCTSeqTransforms
   CIRCTSSP
   CIRCTSSPTransforms
-  CIRCTStandardToHandshake
+  CIRCTCFToHandshake
   CIRCTOM
   CIRCTOMTransforms
   CIRCTPipelineOps

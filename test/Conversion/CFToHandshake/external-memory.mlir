@@ -1,4 +1,4 @@
-// RUN: circt-opt -lower-std-to-handshake %s --split-input-file | FileCheck %s
+// RUN: circt-opt -lower-cf-to-handshake %s --split-input-file | FileCheck %s
 
 // CHECK-LABEL:   handshake.func @main(
 // CHECK-SAME:                         %[[VAL_0:.*]]: memref<4xi32>,

@@ -96,6 +96,17 @@ def AtEdge   : I32EnumAttrCase<"AtEdge", 2, "edge">;
 def EventControlAttr : I32EnumAttr<"EventControl", "edge control trigger",
                                    [AtPosEdge, AtNegEdge, AtEdge]>  {}
 
+//===----------------------------------------------------------------------===//
+// OM Targets
+//===----------------------------------------------------------------------===//
+
+def DontTouch : I32EnumAttrCase<"DontTouch", 0, "dont_touch">;
+def MemberInstance: I32EnumAttrCase<"MemberInstance", 1, "member_instance">;
+def MemberReference: I32EnumAttrCase<"MemberReference", 2, "member_reference">;
+def Reference: I32EnumAttrCase<"Reference", 3, "reference">;
+def TargetKind : I32EnumAttr<"TargetKind", "object model target kind",
+  [DontTouch, MemberInstance, MemberReference, Reference]>  {}
+
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLENUMS_TD

@@ -1,4 +1,4 @@
-// RUN: circt-opt -lower-std-to-handshake -split-input-file %s | FileCheck %s
+// RUN: circt-opt -lower-cf-to-handshake -split-input-file %s | FileCheck %s
 
 // CHECK-LABEL:   handshake.func @bar(
 // CHECK-SAME:                        %[[VAL_0:.*]]: i32,

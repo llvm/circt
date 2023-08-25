@@ -1,4 +1,4 @@
-// RUN: circt-opt --split-input-file -lower-std-to-handshake %s | FileCheck %s
+// RUN: circt-opt --split-input-file -lower-cf-to-handshake %s | FileCheck %s
 
 // CHECK-LABEL: handshake.func @foo(
 // CHECK-SAME:      %[[CTRL:.*]]: none, ...) -> none

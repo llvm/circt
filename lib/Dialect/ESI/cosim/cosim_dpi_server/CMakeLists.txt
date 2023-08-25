@@ -15,8 +15,8 @@ if(ESI_COSIM)
   add_library(EsiCosimDpiServer SHARED
     DpiEntryPoints.cpp
     Server.cpp
-    Endpoint.cpp)
-
+    Endpoint.cpp
+  )
   set_target_properties(EsiCosimDpiServer
       PROPERTIES
           LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib

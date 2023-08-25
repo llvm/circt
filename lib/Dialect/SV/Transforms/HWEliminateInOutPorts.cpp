@@ -22,8 +22,13 @@ using namespace igraph;
 
 namespace {
 
+#define GEN_PASS_DEF_HWELIMINATEINOUTPORTS
+#include "circt/Dialect/SV/SVPasses.h.inc"
+
 struct HWEliminateInOutPortsPass
-    : public sv::HWEliminateInOutPortsBase<HWEliminateInOutPortsPass> {
+    : public impl::HWEliminateInOutPortsBase<HWEliminateInOutPortsPass> {
+  using HWEliminateInOutPortsBase<
+      HWEliminateInOutPortsPass>::HWEliminateInOutPortsBase;
   void runOnOperation() override;
 };
 } // end anonymous namespace
@@ -32,7 +37,9 @@ namespace {
 
 class HWInOutPortConversion : public PortConversion {
 public:
-  HWInOutPortConversion(PortConverterImpl &converter, hw::PortInfo port);
+  HWInOutPortConversion(PortConverterImpl &converter, hw::PortInfo port,
+                        llvm::StringRef readSuffix,
+                        llvm::StringRef writeSuffix);
 
   void mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
                        SmallVectorImpl<Value> &newOperands,
@@ -57,11 +64,19 @@ private:
 
   // Handles to port info of the newly created ports.
   PortInfo readPort, writePort;
+
+  // Suffix to be used when creating read ports.
+  llvm::StringRef readSuffix;
+  // Suffix to be used when creating write ports.
+  llvm::StringRef writeSuffix;
 };
 
 HWInOutPortConversion::HWInOutPortConversion(PortConverterImpl &converter,
-                                             hw::PortInfo port)
-    : PortConversion(converter, port) {}
+                                             hw::PortInfo port,
+                                             llvm::StringRef readSuffix,
+                                             llvm::StringRef writeSuffix)
+    : PortConversion(converter, port), readSuffix(readSuffix),
+      writeSuffix(writeSuffix) {}
 
 LogicalResult HWInOutPortConversion::init() {
   // Gather readers and writers (how to handle sv.passign?)
@@ -87,7 +102,7 @@ void HWInOutPortConversion::buildInputSignals() {
   if (hasReaders()) {
     // Replace all sv::ReadInOutOp's with the new input.
     Value readValue =
-        converter.createNewInput(origPort, "_rd", origPort.type, readPort);
+        converter.createNewInput(origPort, readSuffix, origPort.type, readPort);
     Value origInput = body->getArgument(origPort.argNum);
     for (auto *user : llvm::make_early_inc_range(origInput.getUsers())) {
       sv::ReadInOutOp read = dyn_cast<sv::ReadInOutOp>(user);
@@ -102,8 +117,8 @@ void HWInOutPortConversion::buildInputSignals() {
   if (hasWriters()) {
     // Replace the sv::AssignOp with the new output.
     sv::AssignOp write = writers.front();
-    converter.createNewOutput(origPort, "_wr", origPort.type, write.getSrc(),
-                              writePort);
+    converter.createNewOutput(origPort, writeSuffix, origPort.type,
+                              write.getSrc(), writePort);
     write.erase();
   }
 }
@@ -140,6 +155,7 @@ void HWInOutPortConversion::mapInputSignals(OpBuilder &b, Operation *inst,
 void HWInOutPortConversion::mapOutputSignals(
     OpBuilder &b, Operation *inst, Value instValue,
     SmallVectorImpl<Value> &newOperands, ArrayRef<Backedge> newResults) {
+  // FIXME: hw.inout cannot be used in outputs.
   assert(false &&
          "`hw.inout` outputs not yet supported. Currently, `hw.inout` "
          "outputs are handled by UntouchedPortConversion, given that "
@@ -150,12 +166,22 @@ void HWInOutPortConversion::mapOutputSignals(
 
 class HWInoutPortConversionBuilder : public PortConversionBuilder {
 public:
-  using PortConversionBuilder::PortConversionBuilder;
+  HWInoutPortConversionBuilder(PortConverterImpl &converter,
+                               llvm::StringRef readSuffix,
+                               llvm::StringRef writeSuffix)
+      : PortConversionBuilder(converter), readSuffix(readSuffix),
+        writeSuffix(writeSuffix) {}
+
   FailureOr<std::unique_ptr<PortConversion>> build(hw::PortInfo port) override {
     if (port.dir == hw::ModulePort::Direction::InOut)
-      return {std::make_unique<HWInOutPortConversion>(converter, port)};
+      return {std::make_unique<HWInOutPortConversion>(converter, port,
+                                                      readSuffix, writeSuffix)};
     return PortConversionBuilder::build(port);
   }
+
+private:
+  llvm::StringRef readSuffix;
+  llvm::StringRef writeSuffix;
 };
 
 } // namespace
@@ -195,14 +221,16 @@ void HWEliminateInOutPortsPass::runOnOperation() {
           dyn_cast_or_null<hw::HWMutableModuleLike>(*node->getModule());
       if (!mutableModule)
         continue;
-      if (failed(PortConverter<HWInoutPortConversionBuilder>(instanceGraph,
-                                                             mutableModule)
+      if (failed(PortConverter<HWInoutPortConversionBuilder>(
+                     instanceGraph, mutableModule, readSuffix.getValue(),
+                     writeSuffix.getValue())
                      .run()))
         return signalPassFailure();
     }
   }
 }
 
-std::unique_ptr<Pass> circt::sv::createHWEliminateInOutPortsPass() {
-  return std::make_unique<HWEliminateInOutPortsPass>();
+std::unique_ptr<Pass> circt::sv::createHWEliminateInOutPortsPass(
+    const HWEliminateInOutPortsOptions &options) {
+  return std::make_unique<HWEliminateInOutPortsPass>(options);
 }

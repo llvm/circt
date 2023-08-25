@@ -708,10 +708,12 @@ SmallVector<Attribute> ModuleType::getOutputNames() {
   return retval;
 }
 
-StringAttr ModuleType::getNameAttr(size_t idx) { return getPorts()[idx].name; }
+StringAttr ModuleType::getPortNameAttr(size_t idx) {
+  return getPorts()[idx].name;
+}
 
-StringRef ModuleType::getName(size_t idx) {
-  auto sa = getNameAttr(idx);
+StringRef ModuleType::getPortName(size_t idx) {
+  auto sa = getPortNameAttr(idx);
   if (sa)
     return sa.getValue();
   return {};

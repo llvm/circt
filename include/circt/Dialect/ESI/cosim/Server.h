@@ -17,6 +17,7 @@
 #define CIRCT_DIALECT_ESI_COSIM_SERVER_H
 
 #include "circt/Dialect/ESI/cosim/Endpoint.h"
+#include "circt/Dialect/ESI/cosim/LowLevel.h"
 #include <thread>
 
 namespace circt {
@@ -30,6 +31,7 @@ namespace cosim {
 class RpcServer {
 public:
   EndpointRegistry endpoints;
+  LowLevel lowLevelBridge;
 
   RpcServer();
   ~RpcServer();

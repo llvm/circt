@@ -191,6 +191,19 @@ om.class @RefecenceEachOthersField(%blue_1: i8, %green_1: i32) {
   // CHECK-NEXT: %[[field2]] = om.object.field %[[obj2]], [@green_1] : (!om.class.type<@Widget>) -> i32
   %3 = om.object.field %2, [@green_1] : (!om.class.type<@Widget>) -> i32
 }
+// CHECK-LABEL: @Bool
+om.class @BoolConstant(%b0 : i1) {
+  // CHECK: %[[const1:.+]] = om.constant true
+  %1 = om.constant true
+  // CHECK: %[[const2:.+]] = om.constant false
+  %2 = om.constant false
+  // CHECK: om.class.field @bool, %b0
+  om.class.field @bool, %b0 : i1
+  // CHECK: om.class.field @bool2, %[[const1]]
+  om.class.field @bool2, %1 : i1
+  // CHECK: om.class.field @bool3, %[[const2]]
+  om.class.field @bool3, %2 : i1
+}
 
 // CHECK-LABEL: @Map
 // CHECK-SAME: !om.map<!om.string, !om.string>
@@ -224,4 +237,14 @@ om.class @MapCreate(%e1: tuple<!om.string, !om.class.type<@Empty>>, %e2: tuple<!
   %map = om.map_create %e1, %e2 : !om.string, !om.class.type<@Empty>
   // CHECK-NEXT: om.class.field @map_field, %[[map]] : !om.map<!om.string, !om.class.type<@Empty>>
   om.class.field @map_field, %map : !om.map<!om.string, !om.class.type<@Empty>>
+}
+
+hw.hierpath @HierPath [@PathModule::@wire]
+hw.module @PathModule() {
+  %wire = hw.wire %wire sym @wire : i1
+}
+// CHECK-LABEL: @Path
+om.class @Path() {
+  // CHECK: %0 = om.path reference @HierPath
+  %0 = om.path reference @HierPath
 }

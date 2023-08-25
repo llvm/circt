@@ -1,4 +1,4 @@
-//===- StandardToHandshake.h ------------------------------------*- C++ -*-===//
+//===- CFToHandshake.h ------------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_CONVERSION_STANDARDTOHANDSHAKE_H_
-#define CIRCT_CONVERSION_STANDARDTOHANDSHAKE_H_
+#ifndef CIRCT_CONVERSION_CFTOHANDSHAKE_H_
+#define CIRCT_CONVERSION_CFTOHANDSHAKE_H_
 
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/Handshake/HandshakePasses.h"
@@ -289,8 +289,8 @@ std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
 createHandshakeAnalysisPass();
 
 std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
-createStandardToHandshakePass(bool sourceConstants = false,
-                              bool disableTaskPipelining = false);
+createCFToHandshakePass(bool sourceConstants = false,
+                        bool disableTaskPipelining = false);
 
 std::unique_ptr<mlir::OperationPass<handshake::FuncOp>>
 createHandshakeCanonicalizePass();
@@ -317,4 +317,4 @@ std::unique_ptr<mlir::Pass> createMaximizeSSAPass();
 
 } // namespace circt
 
-#endif // CIRCT_CONVERSION_STANDARDTOHANDSHAKE_H_
+#endif // CIRCT_CONVERSION_CFTOHANDSHAKE_H_
