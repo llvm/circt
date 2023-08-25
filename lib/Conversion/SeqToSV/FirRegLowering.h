@@ -21,9 +21,11 @@ namespace circt {
 /// Lower FirRegOp to `sv.reg` and `sv.always`.
 class FirRegLowering {
 public:
-  FirRegLowering(hw::HWModuleOp module, bool disableRegRandomization = false,
+  FirRegLowering(TypeConverter &typeConverter, hw::HWModuleOp module,
+                 bool disableRegRandomization = false,
                  bool emitSeparateAlwaysBlocks = false)
-      : module(module), disableRegRandomization(disableRegRandomization),
+      : typeConverter(typeConverter), module(module),
+        disableRegRandomization(disableRegRandomization),
         emitSeparateAlwaysBlocks(emitSeparateAlwaysBlocks){};
 
   void lower();
@@ -84,6 +86,7 @@ private:
   llvm::SmallDenseMap<APInt, hw::ConstantOp> constantCache;
   llvm::SmallDenseMap<std::pair<Value, unsigned>, Value> arrayIndexCache;
 
+  TypeConverter &typeConverter;
   hw::HWModuleOp module;
 
   bool disableRegRandomization;

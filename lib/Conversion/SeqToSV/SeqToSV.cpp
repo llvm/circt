@@ -57,8 +57,10 @@ namespace {
 template <typename OpTy>
 class CompRegLower : public OpConversionPattern<OpTy> {
 public:
-  CompRegLower(MLIRContext *context, bool lowerToAlwaysFF)
-      : OpConversionPattern<OpTy>(context), lowerToAlwaysFF(lowerToAlwaysFF) {}
+  CompRegLower(MLIRContext *context, TypeConverter &typeConverter,
+               bool lowerToAlwaysFF)
+      : OpConversionPattern<OpTy>(context), typeConverter(typeConverter),
+        lowerToAlwaysFF(lowerToAlwaysFF) {}
 
   using OpConversionPattern<OpTy>::OpConversionPattern;
   using OpAdaptor = typename OpConversionPattern<OpTy>::OpAdaptor;
@@ -68,16 +70,19 @@ public:
                   ConversionPatternRewriter &rewriter) const final {
     Location loc = reg.getLoc();
 
-    auto svReg =
-        rewriter.create<sv::RegOp>(loc, reg.getResult().getType(),
-                                   reg.getNameAttr(), reg.getInnerSymAttr());
+    auto regTy = typeConverter.convertType(reg.getType());
+
+    auto svReg = rewriter.create<sv::RegOp>(loc, regTy, reg.getNameAttr(),
+                                            reg.getInnerSymAttr());
     svReg->setDialectAttrs(reg->getDialectAttrs());
 
     circt::sv::setSVAttributes(svReg, circt::sv::getSVAttributes(reg));
 
     auto regVal = rewriter.create<sv::ReadInOutOp>(loc, svReg);
 
-    auto assignValue = [&] { createAssign(rewriter, svReg, reg); };
+    auto assignValue = [&] {
+      createAssign(rewriter, reg.getLoc(), svReg, reg);
+    };
     auto assignReset = [&] {
       rewriter.create<sv::PAssignOp>(loc, svReg, adaptor.getResetValue());
     };
@@ -110,28 +115,28 @@ public:
   }
 
   // Helper to create an assignment based on the register type.
-  void createAssign(ConversionPatternRewriter &rewriter, sv::RegOp svReg,
-                    OpTy reg) const;
+  void createAssign(ConversionPatternRewriter &rewriter, Location loc,
+                    sv::RegOp svReg, OpAdaptor reg) const;
 
 private:
+  TypeConverter &typeConverter;
   bool lowerToAlwaysFF;
 };
 
 /// Create the assign.
 template <>
 void CompRegLower<CompRegOp>::createAssign(ConversionPatternRewriter &rewriter,
-                                           sv::RegOp svReg,
-                                           CompRegOp reg) const {
-  rewriter.create<sv::PAssignOp>(reg.getLoc(), svReg, reg.getInput());
+                                           Location loc, sv::RegOp svReg,
+                                           OpAdaptor reg) const {
+  rewriter.create<sv::PAssignOp>(loc, svReg, reg.getInput());
 }
 /// Create the assign inside of an if block.
 template <>
 void CompRegLower<CompRegClockEnabledOp>::createAssign(
-    ConversionPatternRewriter &rewriter, sv::RegOp svReg,
-    CompRegClockEnabledOp reg) const {
-  Location loc = reg.getLoc();
+    ConversionPatternRewriter &rewriter, Location loc, sv::RegOp svReg,
+    OpAdaptor reg) const {
   rewriter.create<sv::IfOp>(loc, reg.getClockEnable(), [&]() {
-    rewriter.create<sv::PAssignOp>(reg.getLoc(), svReg, reg.getInput());
+    rewriter.create<sv::PAssignOp>(loc, svReg, reg.getInput());
   });
 }
 
@@ -307,7 +312,8 @@ void SeqToSVPass::runOnOperation() {
 
   // Lower memories and registers in modules in parallel.
   mlir::parallelForEach(&getContext(), modules, [&](HWModuleOp module) {
-    FirRegLowering regLowering(module, disableRegRandomization,
+    SeqToSVTypeConverter typeConverter;
+    FirRegLowering regLowering(typeConverter, module, disableRegRandomization,
                                emitSeparateAlwaysBlocks);
     regLowering.lower();
     numSubaccessRestored += regLowering.numSubaccessRestored;
@@ -317,14 +323,16 @@ void SeqToSVPass::runOnOperation() {
   });
 
   // Mark all ops which can have clock types as illegal.
+  SeqToSVTypeConverter typeConverter;
   ConversionTarget target(*context);
   target.addIllegalDialect<SeqDialect>();
   target.markUnknownOpDynamicallyLegal(isLegalOp);
 
-  SeqToSVTypeConverter typeConverter;
   RewritePatternSet patterns(context);
-  patterns.add<CompRegLower<CompRegOp>>(context, lowerToAlwaysFF);
-  patterns.add<CompRegLower<CompRegClockEnabledOp>>(context, lowerToAlwaysFF);
+  patterns.add<CompRegLower<CompRegOp>>(context, typeConverter,
+                                        lowerToAlwaysFF);
+  patterns.add<CompRegLower<CompRegClockEnabledOp>>(context, typeConverter,
+                                                    lowerToAlwaysFF);
   patterns.add<ClockCastLowering<seq::FromClockOp>>(context);
   patterns.add<ClockCastLowering<seq::ToClockOp>>(context);
   patterns.add<ClockGateLowering>(context);
