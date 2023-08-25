@@ -72,7 +72,8 @@ def ClassOp : IbisOp<"class", [
 class InstanceOpBase<string mnemonic> : IbisOp<mnemonic, [
     Symbol,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>,
-    InstanceGraphInstanceOpInterface
+    InstanceGraphInstanceOpInterface,
+    HasCustomSSAName
 ]> {
 
   let arguments = (ins SymbolNameAttr:$sym_name, FlatSymbolRefAttr:$targetName);
@@ -249,7 +250,9 @@ def PathStepAttr : AttrDef<IbisDialect, "PathStep", [TypedAttrInterface]> {
 def PathStepArrayAttr :
   TypedArrayAttrBase<PathStepAttr, "Path step array attribute">;
 
-def PathOp : IbisOp<"path", [Pure, InferTypeOpInterface]> {
+def PathOp : IbisOp<"path", [
+    Pure, InferTypeOpInterface, HasCustomSSAName
+  ]> {
   let summary = "Ibis path";
   let description = [{
     The `ibis.path` operation describes an instance hierarchy path relative to
@@ -291,7 +294,8 @@ def PathOp : IbisOp<"path", [Pure, InferTypeOpInterface]> {
 }
 
 def ThisOp : IbisOp<"this", [
-  DeclareOpInterfaceMethods<SymbolUserOpInterface>
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+  HasCustomSSAName
 ]> {
   let summary = "Return a handle to the current scope `!ibis.scoperef`";
   let arguments = (ins FlatSymbolRefAttr:$scopeName);
@@ -382,15 +386,56 @@ def ContainerInstanceOp : InstanceOpBase<"container.instance"> {
   }];
 }
 
-class InnerTypeToPortRefTypeConstraint<string lhs, string rhs, string dir>
-  : TypesMatchWith<"the rhs type dictates the inner type of the rhs portref type",
-    lhs, rhs, "PortRefType::get($_ctxt, $_self, ibis::Direction::" # dir # ")">;
+def GetPortOp : IbisOp<"get_port", [
+      Pure,
+      DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+      HasCustomSSAName
+]> {
+  let summary = "Ibis get port";
+  let description = [{
+    Given an Ibis class reference, returns a port of said class. The port
+    is specified by the symbol name of the port in the referenced class.
+    
+    Importantly, the user must specify how they intend to use the op, by
+    specifying the direction of the portref type that this op is generated with.
+    If the request port is to be read from, the type must be `!ibis.portref<out T>`
+    and if the port is to be written to, the type must be `!ibis.portref<in T>`.
+    This is to ensure that the usage is reflected in the get_port type which in
+    turn is used by the tunneling passes to create the proper ports through the
+    hierarchy.
+    
+    This implies that the portref direction of the get_port op is independent of
+    the actual direction of the target port, and only the inner portref type
+    must match.
+  }];
+
+  let arguments = (ins
+    ScopeRefType:$instance,
+    FlatSymbolRefAttr:$portSymbol);
+  let results = (outs PortRefType:$port);
+  let assemblyFormat = [{
+    $instance `,` $portSymbol `:` qualified(type($instance)) `->`
+      qualified(type($port)) attr-dict
+  }];
+
+  let builders = [
+    OpBuilder<(ins "Value":$instance, "StringAttr":$portName, "Type":$innerPortType,
+        "ibis::Direction":$direction), [{
+      build($_builder, $_state, $_builder.getType<PortRefType>(
+        innerPortType, direction), instance, portName
+      );
+    }]>
+  ];
+
+  let hasCanonicalizeMethod = 1;
+}
 
 class PortLikeOp<string mnemonic, list<Trait> traits = []> :
     IbisOp<mnemonic, !listconcat(traits, [
       PortOpInterface,
       ParentOneOf<["ClassOp", "ContainerOp"]>,
-      InferTypeOpInterface
+      InferTypeOpInterface,
+      HasCustomSSAName
   ])> {
   let arguments = (ins SymbolNameAttr:$sym_name, TypeAttrOf<AnyType>:$type);
   let results = (outs PortRefType:$port);
@@ -417,40 +462,27 @@ class PortLikeOp<string mnemonic, list<Trait> traits = []> :
                                           mlir::OpaqueProperties properties,
                                           mlir::RegionRange regions,
                                           SmallVectorImpl<Type> &results) {
-      results.push_back(PortRefType::get(context, attrs.get("type").cast<TypeAttr>().getValue(), getPortDirection()));
+      results.push_back(PortRefType::get(context, attrs.get("type")
+        .cast<TypeAttr>().getValue(), getPortDirection()));
       return success();
     }
   }];
 
+  let hasVerifier = 1;
+
   code extraPortClassDefinition = ?;
-  let extraClassDefinition =  extraPortClassDefinition;
-}
+  let extraClassDefinition =  extraPortClassDefinition # [{
+    LogicalResult $cppClass::verify() {
+      if(getType().isa<ScopeRefType>())
+        return emitOpError("port type cannot be a scope reference");
+      
+      return success();
+    }
 
-def GetPortOp : IbisOp<"get_port", [
-      Pure,
-      DeclareOpInterfaceMethods<SymbolUserOpInterface>
-]> {
-  let summary = "Ibis get port";
-  let description = [{
-    Given an Ibis class reference, returns a port of said class. The port
-    is specified by the symbol name of the port in the referenced class.
+    void $cppClass::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+      setNameFn(getResult(), getPortName());
+    }
   }];
-
-  let arguments = (ins
-    ScopeRefType:$instance,
-    FlatSymbolRefAttr:$portSymbol);
-  let results = (outs PortRefType:$port);
-  let assemblyFormat = [{
-    $instance `,` $portSymbol `:` qualified(type($instance)) `->` qualified(type($port)) attr-dict
-  }];
-
-  let builders = [
-    OpBuilder<(ins "Value":$instance, "StringAttr":$portName, "Type":$innerPortType, "ibis::Direction":$direction), [{
-      build($_builder, $_state, $_builder.getType<PortRefType>(innerPortType, direction), instance, portName);
-    }]>
-  ];
-
-  let hasCanonicalizeMethod = 1;
 }
 
 def InputPortOp : PortLikeOp<"port.input"> {
@@ -465,25 +497,116 @@ def InputPortOp : PortLikeOp<"port.input"> {
 
 def OutputPortOp : PortLikeOp<"port.output"> {
   let summary = "Ibis output port";
-
   let extraPortClassDefinition = [{
     ibis::Direction OutputPortOp::getPortDirection() {
       return ibis::Direction::Output;
     }
   }];
+  let hasCanonicalizeMethod = 1;
 }
 
+class WireLikeOp<string mnemonic, list<Trait> traits = []> :
+    IbisOp<mnemonic, !listconcat(traits, [
+      PortOpInterface,
+      ParentOneOf<["ClassOp", "ContainerOp"]>,
+      HasCustomSSAName
+  ])> {
+
+  let extraClassDeclaration = [{
+    Type getPortType() {
+      return getPort().getType();
+    }
+
+    mlir::StringAttr getPortName() {
+      return getSymNameAttr();
+    }
+
+    static ibis::Direction getPortDirection();
+  }];
+}
+
+class InnerTypeToPortrefTypeConstraint<string lhs, string rhs, string dir>
+  : TypesMatchWith<"the rhs type dictates the inner type of the rhs portref type",
+    lhs, rhs, "PortRefType::get($_ctxt, $_self, ibis::Direction::" # dir # ")">;
+
 class PortRefToInnerTypeConstraint<string lhs, string rhs>
-  : TypesMatchWith<"the lhs portref dictates the rhs type",
+  : TypesMatchWith<"the inner type of the lhs portref type dictates the rhs type",
     lhs, rhs, "$_self.cast<PortRefType>().getPortType()">;
+
+def InputWireOp : WireLikeOp<"wire.input", [
+  InnerTypeToPortrefTypeConstraint<"output", "port", "Input">
+]> {
+  let summary = "Ibis input wire";
+  let description = [{
+    An input wire defines an `ibis.portref<in T>` port alongside a value
+    of type `T` which represents the value to-be-written to the wire.
+  }];
+
+  let arguments = (ins SymbolNameAttr:$sym_name);
+  let results = (outs PortRefType:$port, AnyType:$output);
+  let assemblyFormat = [{
+    $sym_name `:` qualified(type($output)) attr-dict
+  }];
+
+  let extraClassDefinition =  [{
+    ibis::Direction $cppClass::getPortDirection() {
+      return ibis::Direction::Input;
+    }
+
+    void $cppClass::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+      setNameFn(getPort(), getPortName());
+      setNameFn(getOutput(), StringAttr::get(getContext(),
+        getPortName().strref() + ".out").strref());
+    }
+  }];
+
+  let builders = [
+    OpBuilder<(ins "StringAttr":$name, "Type":$innerPortType), [{
+      build($_builder, $_state,
+        {$_builder.getType<PortRefType>(
+          innerPortType, ibis::Direction::Input), innerPortType}, name);
+    }]>
+  ];
+
+  let hasCanonicalizeMethod = 1;
+}
+
+def OutputWireOp : WireLikeOp<"wire.output", [
+  InnerTypeToPortrefTypeConstraint<"input", "port", "Output">
+]> {
+  let summary = "Ibis output wire";
+  let description = [{
+    An output wire defines an `ibis.portref<out T>` port that can be read.
+    The operation takes an input value of type `T` which represents the value
+    on the output portref.
+  }];
+
+  let arguments = (ins SymbolNameAttr:$sym_name, AnyType:$input);
+  let results = (outs PortRefType:$port);
+  let assemblyFormat = [{
+    $sym_name `,` $input `:` qualified(type($input)) attr-dict
+  }];
+  let extraClassDefinition = [{
+    ibis::Direction $cppClass::getPortDirection() {
+      return ibis::Direction::Output;
+    }
+
+    void $cppClass::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+      setNameFn(getPort(), getPortName());
+    }
+  }];
+
+  let hasCanonicalizeMethod = 1;
+}
 
 def PortReadOp : IbisOp<"port.read", [
       PortRefToInnerTypeConstraint<"port", "output">,
-      Pure
+      Pure,
+      HasCustomSSAName
 ]> {
   let summary = "Ibis port read";
   let description = [{
-    Read the value of a local port (i.e. a port of 'this' class).
+    Read the value of a port reference.
   }];
 
   let arguments = (ins PortRefType:$port);
@@ -494,16 +617,16 @@ def PortReadOp : IbisOp<"port.read", [
 }
 
 def PortWriteOp : IbisOp<"port.write", [
-      InnerTypeToPortRefTypeConstraint<"value", "port", "Input">
+      PortRefToInnerTypeConstraint<"port", "value">
 ]> {
   let summary = "Ibis port write";
   let description = [{
-    Write a value to a local port (i.e. a port of 'this' class).
+    Write a value to a port reference.
   }];
 
   let arguments = (ins PortRefType:$port, AnyType:$value);
   let assemblyFormat = [{
-    $port `,` $value attr-dict `:` type($value)
+    $port `,` $value attr-dict `:` qualified(type($port))
   }];
 }
 
