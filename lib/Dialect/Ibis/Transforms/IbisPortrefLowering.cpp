@@ -23,17 +23,10 @@ using namespace ibis;
 
 namespace {
 
-template <typename TPort>
-class PortLoweringPattern : public OpConversionPattern<TPort> {
+class InputPortConversionPattern : public OpConversionPattern<InputPortOp> {
 public:
-  PortLoweringPattern(MLIRContext *context)
-      : OpConversionPattern<TPort>(context) {}
-};
-
-class InputPortConversionPattern : public PortLoweringPattern<InputPortOp> {
-public:
-  using PortLoweringPattern::PortLoweringPattern;
-  using OpAdaptor = typename PortLoweringPattern<InputPortOp>::OpAdaptor;
+  using OpConversionPattern::OpConversionPattern;
+  using OpAdaptor = typename OpConversionPattern<InputPortOp>::OpAdaptor;
 
   LogicalResult
   matchAndRewrite(InputPortOp op, OpAdaptor adaptor,
@@ -109,10 +102,10 @@ public:
   }
 };
 
-class OutputPortConversionPattern : public PortLoweringPattern<OutputPortOp> {
+class OutputPortConversionPattern : public OpConversionPattern<OutputPortOp> {
 public:
-  using PortLoweringPattern::PortLoweringPattern;
-  using OpAdaptor = typename PortLoweringPattern<OutputPortOp>::OpAdaptor;
+  using OpConversionPattern::OpConversionPattern;
+  using OpAdaptor = typename OpConversionPattern<OutputPortOp>::OpAdaptor;
 
   LogicalResult
   matchAndRewrite(OutputPortOp op, OpAdaptor adaptor,
@@ -163,9 +156,9 @@ public:
   }
 };
 
-class GetPortConversionPattern : public PortLoweringPattern<GetPortOp> {
-  using PortLoweringPattern::PortLoweringPattern;
-  using OpAdaptor = typename PortLoweringPattern<GetPortOp>::OpAdaptor;
+class GetPortConversionPattern : public OpConversionPattern<GetPortOp> {
+  using OpConversionPattern::OpConversionPattern;
+  using OpAdaptor = typename OpConversionPattern<GetPortOp>::OpAdaptor;
 
   LogicalResult
   matchAndRewrite(GetPortOp op, OpAdaptor adaptor,

@@ -19,9 +19,17 @@
   That is:
   - write to `portref<in portref<in, T>>` becomes `out T`
   - read from `portref<in portref<out, T>>` becomes `in T`
-  - write to `portref<out portref<out, T>>` becomes `out T` (a port reference inside the module will be driven by a value from the outside)
-  - read from `portref<out portref<in, T>>` becomes `in T` (a port reference inside the module will be driven by a value from the outside)
+  - write to `portref<out portref<out, T>>` becomes `out T` (a port reference
+    inside the module will be driven by a value from the outside)
+  - read from `portref<out portref<in, T>>` becomes `in T` (a port reference
+    inside the module will be driven by a value from the outside)
 4. Removal of self-driving inputs:
-  In cases where children drive parent ports, the prior case may create situations where a container drives its own input ports (and by extension, no other instantiating container is expected to drive that port of the instance, if the IR is correct). We thus run `ibis-clean-selfdrivers` to replace these self-driven ports by the actual values that are being driven into them.
+  In cases where children drive parent ports, the prior case may create
+  situations where a container drives its own input ports (and by extension, no
+  other instantiating container is expected to drive that port of the instance,
+  if the IR is correct). We thus run `ibis-clean-selfdrivers` to replace these
+  self-driven ports by the actual values that are being driven into them.
 5. HW lowering:
-  At this point, there no longer exist any relative references in the Ibis IR, and all instantiations should (if the IR is correct) have all of their inputs driven. This means that we can now lower the IR to `hw.module`s.
+  At this point, there no longer exist any relative references in the Ibis IR,
+  and all instantiations should (if the IR is correct) have all of their inputs
+  driven. This means that we can now lower the IR to `hw.module`s.
