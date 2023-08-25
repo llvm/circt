@@ -116,6 +116,11 @@ LogicalResult CalyxNativePass::runOnModule(ModuleOp root) {
     calyxArgs.push_back("all");
   }
 
+  // We always need to run the lower-guards pass in the native compiler to emit
+  // valid MLIR
+  calyxArgs.push_back("-p");
+  calyxArgs.push_back("lower-guards");
+
   std::optional<StringRef> redirects[] = {/*stdin=*/std::nullopt,
                                           /*stdout=*/nativeOutputFileName,
                                           /*stderr=*/std::nullopt};
