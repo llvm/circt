@@ -379,3 +379,41 @@ firrtl.circuit "Component"
   // expected-error @+1 {{annotations cannot target classes}}
   firrtl.class @Class(in %port: !firrtl.string) {}
 }
+
+// -----
+// Don't crash trying to annotate-subindex through targets that don't name a result.
+
+// expected-error @below {{Unable to resolve target of annotation: {class = "circt.test", target = "~Issue5947|Issue5947>mem[0]"}}}
+firrtl.circuit "Issue5947"
+  attributes {
+    rawAnnotations = [
+      {
+        class = "circt.test",
+        target = "~Issue5947|Issue5947>mem[0]"
+      }
+    ]
+} {
+  firrtl.module @Issue5947() {
+    // expected-error @below {{index access in annotation not supported for this operation}}
+    %mem = chirrtl.combmem : !chirrtl.cmemory<uint<1>, 2>
+  }
+}
+
+// -----
+// Don't crash trying to annotate-subfield through targets that don't name a result.
+
+// expected-error @below {{Unable to resolve target of annotation: {class = "circt.test", target = "~Issue5947|Issue5947>mem.a"}}}
+firrtl.circuit "Issue5947"
+  attributes {
+    rawAnnotations = [
+      {
+        class = "circt.test",
+        target = "~Issue5947|Issue5947>mem.a"
+      }
+    ]
+} {
+  firrtl.module @Issue5947() {
+    // expected-error @below {{field access in annotation not supported for this operation}}
+    %mem = chirrtl.combmem : !chirrtl.cmemory<uint<1>, 2>
+  }
+}
