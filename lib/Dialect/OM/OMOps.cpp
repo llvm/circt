@@ -299,8 +299,16 @@ circt::om::ObjectFieldOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   for (size_t i = 0, e = fields.size(); i < e; ++i) {
     // Verify the field exists on the ClassOp.
     auto field = fields[i];
-    ClassFieldLike fieldDef = cast_or_null<ClassFieldLike>(
-        symbolTable.lookupSymbolIn(classDef, field));
+    ClassFieldLike fieldDef;
+    classDef.walk([&](SymbolOpInterface symbol) {
+      if (auto fieldLike = dyn_cast<ClassFieldLike>(symbol.getOperation())) {
+        if (symbol.getNameAttr() == field.getAttr()) {
+          fieldDef = fieldLike;
+          return WalkResult::interrupt();
+        }
+      }
+      return WalkResult::advance();
+    });
     if (!fieldDef) {
       auto error = emitOpError("referenced non-existant field ") << field;
       error.attachNote(classDef.getLoc()) << "class defined here";
