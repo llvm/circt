@@ -341,7 +341,7 @@ static LogicalResult convertExtMemoryOps(HWModuleOp mod) {
     // Replace the extmemory submodule outputs with the newly created inputs.
     b.setInsertionPointToStart(mod.getBodyBlock());
     auto newInPortExploded = b.create<hw::StructExplodeOp>(
-        arg.getLoc(), extmemMod.getResultTypes(), newInPort);
+        arg.getLoc(), extmemMod.getOutputTypes(), newInPort);
     extmemInstance.replaceAllUsesWith(newInPortExploded.getResults());
 
     // Add memory output - this is the inputs of the extmemory op (without the

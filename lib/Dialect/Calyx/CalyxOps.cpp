@@ -2674,7 +2674,7 @@ Value InvokeOp::getInstGoValue() {
       })
       .Case<PrimitiveOp>([&](auto op) {
         auto moduleExternOp = op.getReferencedPrimitive();
-        auto argAttrs = moduleExternOp.getArgAttrsAttr();
+        auto argAttrs = moduleExternOp.getAllInputAttrs();
         for (auto [attr, res] : llvm::zip(argAttrs, op.getResults())) {
           if (DictionaryAttr dictAttr = dyn_cast<DictionaryAttr>(attr)) {
             if (!dictAttr.empty()) {
@@ -2710,7 +2710,7 @@ Value InvokeOp::getInstDoneValue() {
       .Case<PrimitiveOp>([&](auto op) {
         PrimitiveOp primOp = cast<PrimitiveOp>(operation);
         auto moduleExternOp = primOp.getReferencedPrimitive();
-        auto resAttrs = moduleExternOp.getResAttrsAttr();
+        auto resAttrs = moduleExternOp.getAllOutputAttrs();
         for (auto [attr, res] : llvm::zip(resAttrs, primOp.getResults())) {
           if (DictionaryAttr dictAttr = dyn_cast<DictionaryAttr>(attr)) {
             if (!dictAttr.empty()) {
@@ -2730,7 +2730,7 @@ getHwModuleExtGoOrDonePortNumber(hw::HWModuleExternOp &moduleExternOp,
                                  bool isGo) {
   size_t ret = 0;
   std::string str = isGo ? "calyx.go" : "calyx.done";
-  for (Attribute attr : moduleExternOp.getArgAttrsAttr()) {
+  for (Attribute attr : moduleExternOp.getAllInputAttrs()) {
     if (DictionaryAttr dictAttr = dyn_cast<DictionaryAttr>(attr)) {
       ret = llvm::count_if(dictAttr, [&](NamedAttribute iter) {
         return iter.getName().getValue() == str;

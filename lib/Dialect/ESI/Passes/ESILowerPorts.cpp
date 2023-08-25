@@ -357,7 +357,7 @@ bool ESIPortsPass::updateFunc(HWModuleExternOp mod) {
   // port is found.
   SmallVector<Type, 16> newArgTypes;
   size_t nextArgNo = 0;
-  for (auto argTy : mod.getArgumentTypes()) {
+  for (auto argTy : mod.getInputTypes()) {
     auto chanTy = argTy.dyn_cast<ChannelType>();
     newArgNames.push_back(getModuleArgumentNameAttr(mod, nextArgNo));
     newArgLocs.push_back(getModuleArgumentLocAttr(mod, nextArgNo));
@@ -380,10 +380,9 @@ bool ESIPortsPass::updateFunc(HWModuleExternOp mod) {
   // an operand.
   SmallVector<Type, 8> newResultTypes;
   SmallVector<DictionaryAttr, 4> newResultAttrs;
-  auto funcType = mod.getFunctionType();
   for (size_t resNum = 0, numRes = mod.getNumOutputs(); resNum < numRes;
        ++resNum) {
-    Type resTy = funcType.getResult(resNum);
+    Type resTy = mod.getOutputTypes()[resNum];
     auto chanTy = resTy.dyn_cast<ChannelType>();
     auto resNameAttr = getModuleResultNameAttr(mod, resNum);
     auto resLocAttr = getModuleResultLocAttr(mod, resNum);
@@ -464,7 +463,6 @@ static std::string &constructInstanceName(Value operand, sv::InterfaceOp iface,
 void ESIPortsPass::updateInstance(HWModuleExternOp mod, InstanceOp inst) {
   using namespace circt::sv;
   circt::ImplicitLocOpBuilder instBuilder(inst.getLoc(), inst);
-  FunctionType funcTy = mod.getFunctionType();
 
   // op counter for error reporting purposes.
   size_t opNum = 0;
@@ -485,7 +483,7 @@ void ESIPortsPass::updateInstance(HWModuleExternOp mod, InstanceOp inst) {
     // being used in the module.
     auto iface = build->getOrConstructInterface(instChanTy);
     if (iface.getModportType(ESIHWBuilder::sourceStr) !=
-        funcTy.getInput(opNum)) {
+        mod.getInputTypes()[opNum]) {
       inst.emitOpError("ESI ChannelType (operand #")
           << opNum << ") doesn't match module!";
       ++opNum;
@@ -529,7 +527,8 @@ void ESIPortsPass::updateInstance(HWModuleExternOp mod, InstanceOp inst) {
     // Get the interface from the cache, and make sure it's the same one as
     // being used in the module.
     auto iface = build->getOrConstructInterface(instChanTy);
-    if (iface.getModportType(ESIHWBuilder::sinkStr) != funcTy.getInput(opNum)) {
+    if (iface.getModportType(ESIHWBuilder::sinkStr) !=
+        mod.getInputTypes()[opNum]) {
       inst.emitOpError("ESI ChannelType (result #")
           << resNum << ", operand #" << opNum << ") doesn't match module!";
       ++opNum;
