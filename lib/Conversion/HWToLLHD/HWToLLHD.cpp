@@ -42,9 +42,10 @@ struct ConvertHWModule : public OpConversionPattern<HWModuleOp> {
   matchAndRewrite(HWModuleOp module, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     // Collect the HW module's port types.
-    unsigned numInputs = module.getNumInputs();
-    TypeRange moduleInputs = module.getInputTypes();
-    TypeRange moduleOutputs = module.getOutputTypes();
+    FunctionType moduleType = module.getFunctionType();
+    unsigned numInputs = moduleType.getNumInputs();
+    TypeRange moduleInputs = moduleType.getInputs();
+    TypeRange moduleOutputs = moduleType.getResults();
 
     // LLHD entities port types are all expressed as block arguments to the op,
     // so collect all of the types in the expected order (inputs then outputs).
