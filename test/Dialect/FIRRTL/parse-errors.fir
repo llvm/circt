@@ -1021,3 +1021,61 @@ circuit Top:
     ; expected-error @below {{only hardware types can be 'const'}}
     output out : const Bool
 
+;// -----
+; Maps not yet supported.
+FIRRTL version 3.1.0
+circuit MapStrToInt:
+   module MapStrToInt:
+     ; expected-error @below {{Maps are a FIRRTL 3.2.0+ feature}}
+     output a : Map<String, Integer>
+
+;// -----
+; Map with non-property key type.
+FIRRTL version 3.2.0
+circuit MapUIntTo:
+   module MapUIntTo:
+     ; expected-error @below {{expected property type}}
+     output a : Map<UInt, String>
+
+;// -----
+; Map with non-property value type.
+FIRRTL version 3.2.0
+circuit MapToUInt:
+   module MapToUInt:
+     ; expected-error @below {{expected property type}}
+     output a : Map<String, UInt>
+
+;// -----
+; Wrong type of keys in Map expression.
+FIRRTL version 3.2.0
+circuit MapToString:
+   module MapToString:
+     output a : Map<Integer, String>
+     ; expected-error @below {{unexpected expression of type '!firrtl.string' for key in Map expression, expected '!firrtl.integer'}}
+     propassign a, Map<Integer, String>(String("hello") -> String("world"))
+
+;// -----
+; Wrong type of values in Map expression.
+FIRRTL version 3.2.0
+circuit MapBoolTo:
+   module MapBoolTo:
+     output a : Map<Bool, Integer>
+     ; expected-error @below {{unexpected expression of type '!firrtl.string' for value in Map expression, expected '!firrtl.integer'}}
+     propassign a, Map<Bool, Integer>(Bool(true) -> String("world"))
+
+
+;// -----
+; Map should not be leading a statement.
+FIRRTL version 3.2.0
+circuit LeadingMap:
+  module LeadingMap:
+    ; expected-error @below {{unexpected Map<>() as start of statement}}
+    Map<String>()
+
+;// -----
+; Map should not be const.
+FIRRTL version 3.2.0
+circuit ConstMap:
+  module ConstMap:
+    ; expected-error @below {{only hardware types can be 'const'}}
+    output m: const Map<String, String>
