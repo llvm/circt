@@ -153,6 +153,8 @@ static MemOp::PortKind getMemPortKindFromType(FIRRTLType type) {
 
 Flow firrtl::swapFlow(Flow flow) {
   switch (flow) {
+  case Flow::None:
+    return Flow::None;
   case Flow::Source:
     return Flow::Sink;
   case Flow::Sink:
@@ -160,7 +162,19 @@ Flow firrtl::swapFlow(Flow flow) {
   case Flow::Duplex:
     return Flow::Duplex;
   }
-  llvm_unreachable("invalid flow");
+}
+
+constexpr const char *toString(Flow flow) {
+  switch (flow) {
+  case Flow::None:
+    return "no flow";
+  case Flow::Source:
+    return "source flow";
+  case Flow::Sink:
+    return "sink flow";
+  case Flow::Duplex:
+    return "duplex flow";
+  }
 }
 
 Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
@@ -201,6 +215,40 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
         if (type_isa<RefType>(val.getType()))
           return Flow::Source;
         return swap();
+      })
+      .Case<ObjectSubfieldOp>([&](ObjectSubfieldOp op) {
+        auto input = op.getInput();
+        auto *inputOp = input.getDefiningOp();
+
+        // We are directly accessing a port on a local declaration.
+        if (auto objectOp = dyn_cast_or_null<ObjectOp>(inputOp)) {
+          auto classType = input.getType();
+          auto direction = classType.getElement(op.getIndex()).direction;
+          if (direction == Direction::In)
+            return Flow::Sink;
+          return Flow::Source;
+        }
+
+        // We are accessing a remote object. Input ports on remote objects are
+        // inaccessible, and thus have Flow::None. Walk backwards through the
+        // chain of subindexes, to detect if we have indexed through an input
+        // port. At the end, either we did index through an input port, or the
+        // entire path was through output ports with source flow.
+        while (true) {
+          auto classType = input.getType();
+          auto direction = classType.getElement(op.getIndex()).direction;
+          if (direction == Direction::In)
+            return Flow::None;
+
+          op = dyn_cast_or_null<ObjectSubfieldOp>(inputOp);
+          if (op) {
+            input = op.getInput();
+            inputOp = input.getDefiningOp();
+            continue;
+          }
+
+          return accumulatedFlow;
+        };
       })
       // Anything else acts like a universal source.
       .Default([&](auto) { return accumulatedFlow; });
@@ -2769,7 +2817,8 @@ static LogicalResult checkConnectFlow(Operation *connect) {
 
   // TODO: Relax this to allow reads from output ports,
   // instance/memory input ports.
-  if (foldFlow(src) == Flow::Sink) {
+  auto srcFlow = foldFlow(src);
+  if (!isValidSrc(srcFlow)) {
     // A sink that is a port output or instance input used as a source is okay.
     auto kind = getDeclarationKind(src);
     if (kind != DeclKind::Port && kind != DeclKind::Instance) {
@@ -2779,18 +2828,20 @@ static LogicalResult checkConnectFlow(Operation *connect) {
       diag << "connect has invalid flow: the source expression ";
       if (rootKnown)
         diag << "\"" << srcName << "\" ";
-      diag << "has sink flow, expected source or duplex flow";
+      diag << "has " << toString(srcFlow) << ", expected source or duplex flow";
       return diag.attachNote(srcRef.getLoc()) << "the source was defined here";
     }
   }
-  if (foldFlow(dst) == Flow::Source) {
+
+  auto dstFlow = foldFlow(dst);
+  if (!isValidDst(dstFlow)) {
     auto dstRef = getFieldRefFromValue(dst);
     auto [dstName, rootKnown] = getFieldName(dstRef);
     auto diag = emitError(connect->getLoc());
     diag << "connect has invalid flow: the destination expression ";
     if (rootKnown)
       diag << "\"" << dstName << "\" ";
-    diag << "has source flow, expected sink or duplex flow";
+    diag << "has " << toString(dstFlow) << ", expected sink or duplex flow";
     return diag.attachNote(dstRef.getLoc())
            << "the destination was defined here";
   }
