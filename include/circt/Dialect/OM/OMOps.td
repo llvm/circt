@@ -34,7 +34,6 @@ class OMOp<string mnemonic, list<Trait> traits = []> :
 class OMClassLike<string mnemonic, list<Trait> traits = []> :
   OMOp<mnemonic, traits # [
     SingleBlock, NoTerminator, Symbol, RegionKindInterface,
-    HasParent<"mlir::ModuleOp">,
     DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmBlockArgumentNames"]>,
     DeclareOpInterfaceMethods<ClassLike>]> {
 

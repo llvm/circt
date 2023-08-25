@@ -72,16 +72,7 @@ void LowerClassesPass::runOnOperation() {
   MLIRContext *ctx = &getContext();
 
   // Get the CircuitOp.
-  auto circuits = getOperation().getOps<CircuitOp>();
-  auto count = std::distance(circuits.begin(), circuits.end());
-  if (count == 0)
-    return;
-  if (count > 1) {
-    getOperation().emitError("expected exactly one CircuitOp, but found ")
-        << std::distance(circuits.begin(), circuits.end());
-    return signalPassFailure();
-  }
-  CircuitOp circuit = *circuits.begin();
+  CircuitOp circuit = getOperation();
 
   // Create new OM Class ops serially.
   SmallVector<ClassLoweringState> loweringState;
@@ -101,10 +92,9 @@ void LowerClassesPass::runOnOperation() {
 
   // Collect ops where Objects can be instantiated.
   SmallVector<Operation *> objectContainers;
-  for (auto op : circuit.getOps<FModuleOp>())
-    objectContainers.push_back(op);
-  for (auto op : getOperation().getOps<om::ClassOp>())
-    objectContainers.push_back(op);
+  for (auto &op : circuit.getOps())
+    if (isa<FModuleOp, om::ClassOp>(op))
+      objectContainers.push_back(&op);
 
   // Update Object creation ops in Classes or Modules in parallel.
   mlir::parallelForEach(ctx, objectContainers,
@@ -139,7 +129,7 @@ ClassLoweringState LowerClassesPass::createClass(FModuleLike moduleLike) {
     if (port.isInput() && isa<PropertyType>(port.type))
       formalParamNames.push_back(port.name);
 
-  OpBuilder builder = OpBuilder::atBlockEnd(getOperation().getBody(0));
+  OpBuilder builder = OpBuilder::atBlockEnd(getOperation().getBodyBlock());
 
   // Take the name from the FIRRTL Class or Module to create the OM Class name.
   StringRef className = moduleLike.getName();

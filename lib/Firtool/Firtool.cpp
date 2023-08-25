@@ -188,7 +188,7 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
   // RefType ports and ops.
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerXMRPass());
 
-  pm.addPass(firrtl::createLowerClassesPass());
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerClassesPass());
 
   pm.addPass(createLowerFIRRTLToHWPass(
       opt.enableAnnotationWarning.getValue(),
