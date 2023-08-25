@@ -42,21 +42,21 @@ void StripSVPass::runOnOperation() {
 
   for (auto extModOp : mlirModule.getOps<hw::HWModuleExternOp>()) {
     if (extModOp.getVerilogModuleName() == "EICG_wrapper") {
-      if (extModOp.getArgNames() != expectedClockGateInputs ||
-          extModOp.getResultNames() != expectedClockGateOutputs) {
+      if (!llvm::equal(extModOp.getInputNames(), expectedClockGateInputs) ||
+          !llvm::equal(extModOp.getOutputNames(), expectedClockGateOutputs)) {
         extModOp.emitError("clock gate module `")
             << extModOp.getModuleName() << "` has incompatible port names "
-            << extModOp.getArgNamesAttr() << " -> "
-            << extModOp.getResultNamesAttr();
+            << extModOp.getInputNames() << " -> "
+            << extModOp.getOutputNames();
         return signalPassFailure();
       }
-      if (extModOp.getArgumentTypes() !=
-              ArrayRef<Type>{i1Type, i1Type, i1Type} ||
-          extModOp.getResultTypes() != ArrayRef<Type>{i1Type}) {
+      if (!llvm::equal(extModOp.getInputTypes(),
+              ArrayRef<Type>{i1Type, i1Type, i1Type}) ||
+          !llvm::equal(extModOp.getOutputTypes(), ArrayRef<Type>{i1Type})) {
         extModOp.emitError("clock gate module `")
             << extModOp.getModuleName() << "` has incompatible port types "
-            << extModOp.getArgumentTypes() << " -> "
-            << extModOp.getResultTypes();
+            << extModOp.getInputTypes() << " -> "
+            << extModOp.getOutputTypes();
         return signalPassFailure();
       }
       clockGateModuleNames.insert(extModOp.getModuleNameAttr());
