@@ -577,12 +577,12 @@ def LowerVerifToSV : Pass<"lower-verif-to-sv", "hw::HWModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
-// StandardToHandshake
+// CFToHandshake
 //===----------------------------------------------------------------------===//
 
-def StandardToHandshake : Pass<"lower-std-to-handshake", "mlir::ModuleOp"> {
-  let summary = "Lower Standard MLIR into Handshake IR";
-  let constructor = "circt::createStandardToHandshakePass()";
+def CFToHandshake : Pass<"lower-cf-to-handshake", "mlir::ModuleOp"> {
+  let summary = "Lower func and CF into Handshake IR";
+  let constructor = "circt::createCFToHandshakePass()";
   let dependentDialects = ["handshake::HandshakeDialect"];
   let options =
     [Option<"sourceConstants", "source-constants", "bool", "false",

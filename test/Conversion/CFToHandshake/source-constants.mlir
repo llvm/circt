@@ -1,4 +1,4 @@
-// RUN: circt-opt -lower-std-to-handshake="source-constants" %s | FileCheck %s
+// RUN: circt-opt -lower-cf-to-handshake="source-constants" %s | FileCheck %s
 
 // CHECK-LABEL:   handshake.func @foo(
 // CHECK-SAME:                        %[[VAL_1:.*]]: none, ...) -> (i32, none)

@@ -12,7 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "../PassDetail.h"
-#include "circt/Conversion/StandardToHandshake.h"
+#include "circt/Conversion/CFToHandshake.h"
 #include "circt/Transforms/Passes.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/MLIRContext.h"

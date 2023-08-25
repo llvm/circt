@@ -1,4 +1,4 @@
-// RUN: circt-opt -lower-std-to-handshake %s --canonicalize --split-input-file --verify-diagnostics
+// RUN: circt-opt -lower-cf-to-handshake %s --canonicalize --split-input-file --verify-diagnostics
 
 // expected-error @+1 {{expected a merge block to have two predecessors.}}
 func.func @missingMergeBlocks(%arg0: i1) {

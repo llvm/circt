@@ -107,7 +107,7 @@ class System:
   def set_debug():
     ir._GlobalDebug.flag = True
 
-  # TODO: Ideally, we'd be able to run the std-to-handshake lowering passes in
+  # TODO: Ideally, we'd be able to run the cf-to-handshake lowering passes in
   # pycde.  As of now, however, the cf/memref/arith dialects are not registered
   # so the assembly can't be loaded. The right way to do this is to have pycde
   # load those dialects, though there isn't a python hook to selectively load
@@ -118,7 +118,7 @@ class System:
   #     "flatten-memref",
   #     "flatten-memref-calls",
   #     "func.func(handshake-legalize-memrefs)",
-  #     "lower-std-to-handshake",
+  #     "lower-cf-to-handshake",
   #     "canonicalize",
   #     "handshake-lower-extmem-to-hw{wrap-esi}",
   #     "canonicalize",

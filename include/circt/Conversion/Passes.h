@@ -15,6 +15,7 @@
 
 #include "circt/Conversion/AffineToLoopSchedule.h"
 #include "circt/Conversion/ArcToLLVM.h"
+#include "circt/Conversion/CFToHandshake.h"
 #include "circt/Conversion/CalyxNative.h"
 #include "circt/Conversion/CalyxToFSM.h"
 #include "circt/Conversion/CalyxToHW.h"
@@ -38,7 +39,6 @@
 #include "circt/Conversion/PipelineToHW.h"
 #include "circt/Conversion/SCFToCalyx.h"
 #include "circt/Conversion/SeqToSV.h"
-#include "circt/Conversion/StandardToHandshake.h"
 #include "circt/Conversion/VerifToSV.h"
 #include "mlir/IR/DialectRegistry.h"
 #include "mlir/Pass/Pass.h"
