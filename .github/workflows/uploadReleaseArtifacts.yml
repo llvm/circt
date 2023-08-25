@@ -73,8 +73,8 @@ jobs:
           sha256: shasum -a 256
           cont: '\'
           setup:
-          cmake_c_compiler: clang
-          cmake_cxx_compiler: clang++
+          cmake_c_compiler: clang-12
+          cmake_cxx_compiler: clang++-12
         run: |
           json=$(echo '${{ toJSON(env) }}' | jq -c)
           echo $json
