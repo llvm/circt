@@ -118,9 +118,15 @@ public:
     // the portref value.
     PortWriteOp portWrapper;
     for (auto *user : op.getResult().getUsers()) {
-      portWrapper = dyn_cast<PortWriteOp>(user);
-      if (portWrapper && portWrapper.getPort() == op.getResult())
+      auto writeOp = dyn_cast<PortWriteOp>(user);
+      if (writeOp && writeOp.getPort() == op.getResult()) {
+        if (portWrapper)
+          return rewriter.notifyMatchFailure(
+              op, "expected a single ibis.port.write to wrap the output "
+                  "portref, but found multiple");
+        portWrapper = writeOp;
         break;
+      }
     }
 
     if (!portWrapper)
@@ -312,6 +318,8 @@ void PortrefLoweringPass::runOnOperation() {
                                .template cast<PortRefType>();
     return !portType.getPortType().isa<PortRefType>();
   });
+
+  PortReadOp op;
 
   // get_port's are legal when they do not have portref types anymore.
   target.addDynamicallyLegalOp<GetPortOp>([&](GetPortOp op) {
