@@ -1024,6 +1024,12 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     consumeToken(FIRToken::kw_Integer);
     result = FIntegerType::get(getContext());
     break;
+  case FIRToken::kw_Bool:
+    if (requireFeature({3, 1, 0}, "Bools")) // Not really.
+      return failure();
+    consumeToken(FIRToken::kw_Bool);
+    result = BoolType::get(getContext());
+    break;
   case FIRToken::kw_Path:
     if (requireFeature({3, 1, 0}, "Paths"))
       return failure();
@@ -1811,6 +1817,25 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
       return failure();
     result =
         builder.create<FIntegerConstantOp>(APSInt(value, /*isUnsigned=*/false));
+    break;
+  }
+  case FIRToken::kw_Bool: {
+    if (requireFeature({3, 1, 0}, "Bools")) // Not really.
+      return failure();
+    locationProcessor.setLoc(getToken().getLoc());
+    consumeToken(FIRToken::kw_Bool);
+    if (parseToken(FIRToken::l_paren, "expected '(' in Bool expression"))
+      return failure();
+    bool value;
+    if (consumeIf(FIRToken::kw_true))
+      value = true;
+    else if (consumeIf(FIRToken::kw_false))
+      value = false;
+    else
+      return emitError("expected true or false in Bool expression");
+    if (parseToken(FIRToken::r_paren, "expected ')' in Bool expression"))
+      return failure();
+    result = builder.create<BoolConstantOp>(value);
     break;
   }
   case FIRToken::kw_List: {

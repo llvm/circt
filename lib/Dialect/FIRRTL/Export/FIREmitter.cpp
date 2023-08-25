@@ -113,6 +113,7 @@ struct Emitter {
   void emitExpression(ConstCastOp op);
   void emitExpression(StringConstantOp op);
   void emitExpression(FIntegerConstantOp op);
+  void emitExpression(BoolConstantOp op);
 
   void emitPrimExpr(StringRef mnemonic, Operation *op,
                     ArrayRef<uint32_t> attrs = {});
@@ -1021,7 +1022,7 @@ void Emitter::emitExpression(Value value) {
           // Miscellaneous
           BitsPrimOp, HeadPrimOp, TailPrimOp, PadPrimOp, MuxPrimOp, ShlPrimOp,
           ShrPrimOp, UninferredResetCastOp, ConstCastOp, StringConstantOp,
-          FIntegerConstantOp,
+          FIntegerConstantOp, BoolConstantOp,
           // Reference expressions
           RefSendOp, RefResolveOp, RefSubOp, RWProbeOp, RefCastOp>(
           [&](auto op) {
@@ -1177,6 +1178,10 @@ void Emitter::emitExpression(FIntegerConstantOp op) {
   ps << ")";
 }
 
+void Emitter::emitExpression(BoolConstantOp op) {
+  ps << "Bool(" << (op.getValue() ? "true" : "false") << ")";
+}
+
 void Emitter::emitExpression(StringConstantOp op) {
   ps << "String(";
   ps.writeQuotedEscaped(op.getValue());
@@ -1291,6 +1296,7 @@ void Emitter::emitType(Type type, bool includeConst) {
       })
       .Case<StringType>([&](StringType type) { ps << "String"; })
       .Case<FIntegerType>([&](FIntegerType type) { ps << "Integer"; })
+      .Case<BoolType>([&](BoolType type) { ps << "Bool"; })
       .Case<PathType>([&](PathType type) { ps << "Path"; })
       .Default([&](auto type) {
         llvm_unreachable("all types should be implemented");

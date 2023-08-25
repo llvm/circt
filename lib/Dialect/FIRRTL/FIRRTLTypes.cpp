@@ -114,6 +114,7 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
       })
       .Case<StringType>([&](auto stringType) { os << "string"; })
       .Case<FIntegerType>([&](auto integerType) { os << "integer"; })
+      .Case<BoolType>([&](auto boolType) { os << "bool"; })
       .Case<ListType>([&](auto listType) {
         os << "list<";
         printNestedType(listType.getElementType(), os);
@@ -383,6 +384,14 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
       return failure();
     }
     result = FIntegerType::get(parser.getContext());
+    return success();
+  }
+  if (name.equals("bool")) {
+    if (isConst) {
+      parser.emitError(parser.getNameLoc(), "bools cannot be const");
+      return failure();
+    }
+    result = BoolType::get(parser.getContext());
     return success();
   }
   if (name.equals("list")) {
@@ -2671,7 +2680,8 @@ void FIRRTLDialect::registerTypes() {
            // References and open aggregates
            RefType, OpenBundleType, OpenVectorType,
            // Non-Hardware types
-           ClassType, StringType, FIntegerType, ListType, MapType, PathType>();
+           ClassType, StringType, FIntegerType, BoolType, ListType, MapType,
+           PathType>();
 }
 
 // Get the bit width for this type, return None  if unknown. Unlike
