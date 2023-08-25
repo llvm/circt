@@ -632,4 +632,12 @@ def PathImpl : FIRRTLImplType<"Path", [], "circt::firrtl::FIRRTLType"> {
   let genAccessors = true;
 }
 
+def BoolImpl : FIRRTLImplType<"Bool", [], "circt::firrtl::FIRRTLType"> {
+  let summary = [{
+    A boolean property.  Not representable in hardware.
+  }];
+  let parameters = (ins);
+  let genStorageClass = true;
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLTYPESIMPL_TD

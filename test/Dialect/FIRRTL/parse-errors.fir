@@ -990,3 +990,34 @@ circuit BadPathExpr:
     output path : Path
     ; expected-error @below {{expected target string in path expression}}
     propassign path, path(UInt<1>(1))
+
+;// -----
+; CHeck version handling for Bool.
+FIRRTL version 3.0.0
+
+circuit Top:
+  module Top:
+    ; expected-error @below {{Bools are a FIRRTL 3.1.0+ feature, but the specified FIRRTL version was 3.0.0}}
+    input in : Bool
+    output out : Bool
+    propassign out, in
+
+;// -----
+; Bool literal must be true or false.
+FIRRTL version 3.1.0
+
+circuit Top:
+  module Top:
+    output out : Bool
+    ; expected-error @below {{expected true or false in Bool expression}}
+    propassign out, Bool(0)
+
+;// -----
+; Properties can't be const.
+FIRRTL version 3.1.0
+
+circuit Top:
+  module Top:
+    ; expected-error @below {{only hardware types can be 'const'}}
+    output out : const Bool
+

@@ -37,6 +37,7 @@ firrtl.circuit "Foo" {
     // CHECK-NEXT: output b2 : RWProbe<UInt<1>>
     // CHECK-NEXT: input string : String
     // CHECK-NEXT: input integer : Integer
+    // CHECK-NEXT: input bool : Bool
     // CHECK-NEXT: input path : Path
     in %a00: !firrtl.clock,
     in %a01: !firrtl.reset,
@@ -54,6 +55,7 @@ firrtl.circuit "Foo" {
     out %b2: !firrtl.rwprobe<uint<1>>,
     in %string: !firrtl.string,
     in %integer: !firrtl.integer,
+    in %bool : !firrtl.bool,
     in %path : !firrtl.path
   ) {}
 
@@ -641,7 +643,8 @@ firrtl.circuit "Foo" {
   
   // CHECK-LABEL: module Properties :
   firrtl.module @Properties(out %string : !firrtl.string,
-                            out %integer : !firrtl.integer) {
+                            out %integer : !firrtl.integer,
+                            out %bool : !firrtl.bool) {
     // CHECK: propassign string, String("hello")
     %0 = firrtl.string "hello"
     firrtl.propassign %string, %0 : !firrtl.string
@@ -649,6 +652,10 @@ firrtl.circuit "Foo" {
     // CHECK: propassign integer, Integer(99)
     %1 = firrtl.integer 99
     firrtl.propassign %integer, %1 : !firrtl.integer
+
+    // CHECK: propassign bool, Bool(true)
+    %true = firrtl.bool true
+    firrtl.propassign %bool, %true : !firrtl.bool
   }
 
   // Test optional group declaration and definition emission.

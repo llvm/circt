@@ -1170,6 +1170,22 @@ def ListCreateOp : FIRRTLOp<"list.create", [Pure, SameTypeOperands]> {
   let hasVerifier = 1;
 }
 
+def BoolConstantOp : FIRRTLOp<"bool", [Pure, ConstantLike]> {
+  let summary = "Produce a constant boolean value";
+  let description = [{
+    Produces a constant value of boolean type.
+
+    Example:
+    ```mlir
+    %0 = firrtl.bool true
+    ```
+  }];
+  let arguments = (ins BoolAttr:$value);
+  let results = (outs BoolType:$result);
+  let hasFolder = 1;
+  let assemblyFormat = "$value attr-dict";
+}
+
 //===----------------------------------------------------------------------===//
 // RefOperations: Operations on the RefType.
 //

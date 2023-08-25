@@ -1694,6 +1694,19 @@ circuit BasicProps :
     ; CHECK: firrtl.propassign %a, %0 : !firrtl.integer
     propassign a, Integer(-10)
 
+  ; CHECK-LABEL: module private @Bool
+  module Bool :
+    ; CHECK-SAME: out %true: !firrtl.bool
+    ; CHECK-SAME: out %false: !firrtl.bool
+    output true : Bool
+    output false : Bool
+    ; CHECK-NEXT: %0 = firrtl.bool true
+    ; CHECK-NEXT: firrtl.propassign %true, %0 : !firrtl.bool
+    ; CHECK-NEXT: %1 = firrtl.bool false
+    ; CHECK-NEXT: firrtl.propassign %false, %1 : !firrtl.bool
+    propassign true, Bool(true)
+    propassign false, Bool(false)
+
   ; CHECK-LABEL: module private @String
   module String :
     ; CHECK-SAME: out %a: !firrtl.string

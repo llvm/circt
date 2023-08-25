@@ -316,6 +316,17 @@ firrtl.module @PathTest(in %in: !firrtl.path, out %out: !firrtl.path) {
   
 }
 
+// CHECK-LABEL: BoolTest
+// CHECK-SAME:  (in %in: !firrtl.bool, out %out: !firrtl.bool)
+firrtl.module @BoolTest(in %in: !firrtl.bool, out %out: !firrtl.bool) {
+  firrtl.propassign %out, %in : !firrtl.bool
+
+  // CHECK: %0 = firrtl.bool true
+  %0 = firrtl.bool true
+  // CHECK: %1 = firrtl.bool false
+  %1 = firrtl.bool false
+}
+
 // CHECK-LABEL: TypeAlias
 // CHECK-SAME: %in: !firrtl.alias<bar, uint<1>>
 // CHECK-SAME: %const: !firrtl.const.alias<baz, const.uint<1>>

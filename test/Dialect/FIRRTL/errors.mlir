@@ -2199,3 +2199,12 @@ firrtl.circuit "Top" {
     firrtl.propassign %input, %value : !firrtl.string
   }
 }
+
+// -----
+
+firrtl.circuit "InvalidBool" {
+  firrtl.module @InvalidBool() {
+     // expected-error @below {{invalid kind of attribute specified}}
+     %0 = firrtl.bool "invalid"
+  }
+}
