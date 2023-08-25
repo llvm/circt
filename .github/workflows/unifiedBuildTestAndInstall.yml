@@ -66,6 +66,11 @@ on:
         type: choice
         options:
           - clang
+          - clang-10
+          - clang-11
+          - clang-12
+          - clang-13
+          - clang-14
           - gcc
           - cl
         default: clang
@@ -75,6 +80,11 @@ on:
         type: choice
         options:
           - clang++
+          - clang++-10
+          - clang++-11
+          - clang++-12
+          - clang++-13
+          - clang++-14
           - gcc++
           - cl
         default: clang++
