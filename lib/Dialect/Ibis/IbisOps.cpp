@@ -224,6 +224,8 @@ LogicalResult GetPortOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   ScopeOpInterface targetScope =
       symbolTable.lookupSymbolIn<ScopeOpInterface>(mod, crt.getScopeRef());
   assert(targetScope && "should have been verified by the type system");
+  // @teqdruid TODO: make this more efficient using
+  // innersymtablecollection when that's available to non-firrtl dialects.
   Operation *targetOp = targetScope.lookupPort(getPortSymbol());
 
   if (!targetOp)

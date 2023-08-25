@@ -382,7 +382,7 @@ def ContainerInstanceOp : InstanceOpBase<"container.instance"> {
   }];
 }
 
-class InnerTypeToPortrefTypeConstraint<string lhs, string rhs, string dir>
+class InnerTypeToPortRefTypeConstraint<string lhs, string rhs, string dir>
   : TypesMatchWith<"the rhs type dictates the inner type of the rhs portref type",
     lhs, rhs, "PortRefType::get($_ctxt, $_self, ibis::Direction::" # dir # ")">;
 
@@ -494,7 +494,7 @@ def PortReadOp : IbisOp<"port.read", [
 }
 
 def PortWriteOp : IbisOp<"port.write", [
-      InnerTypeToPortrefTypeConstraint<"value", "port", "Input">
+      InnerTypeToPortRefTypeConstraint<"value", "port", "Input">
 ]> {
   let summary = "Ibis port write";
   let description = [{
