@@ -7,7 +7,6 @@ set(CIRCT_INTEGRATION_TEST_DEPENDS
   circt-opt
   circt-translate
   circt-rtl-sim
-  esi-cosim-runner
   firtool
   hlstool
   handshake-runner
@@ -21,6 +20,7 @@ endif()
 # If ESI Cosim is available to build then enable its tests.
 if (TARGET EsiCosimDpiServer)
   list(APPEND CIRCT_INTEGRATION_TEST_DEPENDS EsiCosimDpiServer)
+  list(APPEND CIRCT_INTEGRATION_TEST_DEPENDS esi-cosim-runner)
   get_property(ESI_COSIM_LIB_DIR TARGET EsiCosimDpiServer PROPERTY LIBRARY_OUTPUT_DIRECTORY)
   set(ESI_COSIM_PATH ${ESI_COSIM_LIB_DIR}/libEsiCosimDpiServer.so)
 endif()
