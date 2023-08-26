@@ -351,7 +351,8 @@ bool ESIPortsPass::updateFunc(HWModuleExternOp mod) {
 
   bool updated = false;
 
-  SmallVector<Attribute> newArgNames, newArgLocs, newResultNames, newResultLocs;
+  SmallVector<Attribute> newArgNames, newResultNames;
+  SmallVector<Location> newArgLocs, newResultLocs;
 
   // Reconstruct the list of operand types, changing the type whenever an ESI
   // port is found.
@@ -359,8 +360,8 @@ bool ESIPortsPass::updateFunc(HWModuleExternOp mod) {
   size_t nextArgNo = 0;
   for (auto argTy : mod.getInputTypes()) {
     auto chanTy = argTy.dyn_cast<ChannelType>();
-    newArgNames.push_back(getModuleArgumentNameAttr(mod, nextArgNo));
-    newArgLocs.push_back(getModuleArgumentLocAttr(mod, nextArgNo));
+    newArgNames.push_back(mod.getInputNameAttr(nextArgNo));
+    newArgLocs.push_back(mod.getInputLoc(nextArgNo));
     nextArgNo++;
 
     if (!chanTy) {
@@ -384,8 +385,8 @@ bool ESIPortsPass::updateFunc(HWModuleExternOp mod) {
        ++resNum) {
     Type resTy = mod.getOutputTypes()[resNum];
     auto chanTy = resTy.dyn_cast<ChannelType>();
-    auto resNameAttr = getModuleResultNameAttr(mod, resNum);
-    auto resLocAttr = getModuleResultLocAttr(mod, resNum);
+    auto resNameAttr = mod.getOutputNameAttr(resNum);
+    auto resLocAttr = mod.getOutputLoc(resNum);
     if (!chanTy) {
       newResultTypes.push_back(resTy);
       newResultNames.push_back(resNameAttr);
@@ -412,8 +413,8 @@ bool ESIPortsPass::updateFunc(HWModuleExternOp mod) {
   auto newModType =
       hw::detail::fnToMod(newFuncType, newArgNames, newResultNames);
   mod.setHWModuleType(newModType);
-  setModuleArgumentLocs(mod, newArgLocs);
-  setModuleResultLocs(mod, newResultLocs);
+  mod.setInputLocs(newArgLocs);
+  mod.setOutputLocs(newResultLocs);
   return true;
 }
 

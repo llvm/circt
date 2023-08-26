@@ -601,36 +601,6 @@ void hw::setModuleResultNames(Operation *module, ArrayRef<Attribute> names) {
   module->setAttr("resultNames", ArrayAttr::get(module->getContext(), names));
 }
 
-LocationAttr hw::getModuleArgumentLocAttr(Operation *module, size_t argNo) {
-  auto argumentLocs = module->getAttrOfType<ArrayAttr>("argLocs");
-  // Tolerate malformed IR here to enable debug printing etc.
-  if (argumentLocs && argNo < argumentLocs.size())
-    return argumentLocs[argNo].cast<LocationAttr>();
-  return LocationAttr();
-}
-
-LocationAttr hw::getModuleResultLocAttr(Operation *module, size_t resultNo) {
-  auto resultLocs = module->getAttrOfType<ArrayAttr>("resultLocs");
-  // Tolerate malformed IR here to enable debug printing etc.
-  if (resultLocs && resultNo < resultLocs.size())
-    return resultLocs[resultNo].cast<LocationAttr>();
-  return LocationAttr();
-}
-
-void hw::setModuleArgumentLocs(Operation *module, ArrayRef<Attribute> locs) {
-  assert(isAnyModule(module) && "Must be called on a module");
-  assert(getModuleType(module).getNumInputs() == locs.size() &&
-         "incorrect number of argument locations specified");
-  module->setAttr("argLocs", ArrayAttr::get(module->getContext(), locs));
-}
-
-void hw::setModuleResultLocs(Operation *module, ArrayRef<Attribute> locs) {
-  assert(isAnyModule(module) && "Must be called on a module");
-  assert(getModuleType(module).getNumResults() == locs.size() &&
-         "incorrect number of result locations specified");
-  module->setAttr("resultLocs", ArrayAttr::get(module->getContext(), locs));
-}
-
 // Flag for parsing different module types
 enum ExternModKind { PlainMod, ExternMod, GenMod };
 
@@ -1435,44 +1405,54 @@ ModulePortInfo HWModuleGeneratedOp::getPortList() {
   return getOperationPortList(getOperation());
 }
 
-SmallVector<Location> HWModuleOp::getAllPortLocs() {
+template <typename ModTy>
+static SmallVector<Location> getAllPortLocs(ModTy module) {
   SmallVector<Location> retval;
-  auto empty = UnknownLoc::get(getContext());
-  auto locs = getArgLocs();
+  auto empty = UnknownLoc::get(module.getContext());
+  auto locs = module.getArgLocs();
   if (locs)
     for (auto l : locs)
       retval.push_back(cast<Location>(l));
-  retval.resize(getNumInputs(), empty);
-  locs = getResultLocs();
+  retval.resize(module.getNumInputs(), empty);
+  locs = module.getResultLocs();
   if (locs)
     for (auto l : locs)
       retval.push_back(cast<Location>(l));
-  retval.resize(getNumInputs() + getNumOutputs(), empty);
+  retval.resize(module.getNumInputs() + module.getNumOutputs(), empty);
   return retval;
 }
 
+SmallVector<Location> HWModuleOp::getAllPortLocs() {
+  return ::getAllPortLocs(*this);
+}
+
 SmallVector<Location> HWModuleExternOp::getAllPortLocs() {
-  return SmallVector<Location>(getNumPorts(), UnknownLoc::get(getContext()));
+  return ::getAllPortLocs(*this);
 }
 
 SmallVector<Location> HWModuleGeneratedOp::getAllPortLocs() {
-  return SmallVector<Location>(getNumPorts(), UnknownLoc::get(getContext()));
+  return ::getAllPortLocs(*this);
+}
+
+template <typename ModTy>
+static void setAllPortLocs(ArrayRef<Location> locs, ModTy module) {
+  auto numInputs = module.getNumInputs();
+  SmallVector<Attribute> argLocs(locs.begin(), locs.begin() + numInputs);
+  SmallVector<Attribute> resLocs(locs.begin() + numInputs, locs.end());
+  module.setArgLocsAttr(ArrayAttr::get(module.getContext(), argLocs));
+  module.setResultLocsAttr(ArrayAttr::get(module.getContext(), resLocs));
 }
 
 void HWModuleOp::setAllPortLocs(ArrayRef<Location> locs) {
-  auto numInputs = getNumInputs();
-  SmallVector<Attribute> argLocs(locs.begin(), locs.begin() + numInputs);
-  SmallVector<Attribute> resLocs(locs.begin() + numInputs, locs.end());
-  setArgLocsAttr(ArrayAttr::get(getContext(), argLocs));
-  setResultLocsAttr(ArrayAttr::get(getContext(), resLocs));
+  ::setAllPortLocs(locs, *this);
 }
 
 void HWModuleExternOp::setAllPortLocs(ArrayRef<Location> locs) {
-  emitError("Locations on external modules not supported");
+  ::setAllPortLocs(locs, *this);
 }
 
 void HWModuleGeneratedOp::setAllPortLocs(ArrayRef<Location> locs) {
-  emitError("Locations on external modules not supported");
+  ::setAllPortLocs(locs, *this);
 }
 
 template <typename ModTy>

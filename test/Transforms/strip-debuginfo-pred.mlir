@@ -12,10 +12,10 @@ func.func @inline_notation() {
   return
 }
 
-// CHECK: hw.module @MyModule(%a: i1 loc(unknown)) -> (b: i1 loc(unknown))
+// CHECK: hw.module @MyModule(%a: i1) -> (b: i1)
 hw.module @MyModule(%a : i1 loc("a.txt":0:0)) -> (b : i1 loc ("b.txt":0:0)) {
   hw.output %a : i1
 }
 
-// CHECK: hw.module.extern @MyExtModule(%a: i1 loc(unknown)) -> (b: i1 loc(unknown))
+// CHECK: hw.module.extern @MyExtModule(%a: i1) -> (b: i1)
 hw.module.extern @MyExtModule(%a : i1 loc("a.txt":0:0)) -> (b : i1 loc ("b.txt":0:0))

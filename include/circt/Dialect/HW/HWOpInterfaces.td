@@ -224,12 +224,29 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
       return $_op.setAllPortLocs(locs);
     }
 
+    Location getInputLoc(size_t idx) {
+      return $_op.getAllPortLocs()[$_op.getHWModuleType().getPortIdForInputId(idx)];
+    }
+
+    Location getOutputLoc(size_t idx) {
+      return $_op.getAllPortLocs()[$_op.getHWModuleType().getPortIdForOutputId(idx)];
+    }
+
     SmallVector<Location> getInputLocs() {
       auto locs = $_op.getAllPortLocs();
       SmallVector<Location> retval;
       for (unsigned x = 0, e = $_op.getNumInputs(); x < e; ++x)
         retval.push_back(locs[$_op.getHWModuleType().getPortIdForInputId(x)]);
       return retval;
+    }
+
+    void setInputLocs(ArrayRef<Location> inAttrs) {
+      assert(inAttrs.size() == getNumInputs());
+      auto outAttrs = getOutputLocs();
+      SmallVector<Location> attrs;
+      attrs.append(inAttrs.begin(), inAttrs.end());
+      attrs.append(outAttrs.begin(), outAttrs.end());
+      $_op.setAllPortLocs(attrs);
     }
 
     SmallVector<Location> getOutputLocs() {
@@ -240,6 +257,14 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
       return retval;
     }
 
+    void setOutputLocs(ArrayRef<Location> outAttrs) {
+      assert(outAttrs.size() == getNumOutputs());
+      auto inAttrs = getInputLocs();
+      SmallVector<Location> attrs;
+      attrs.append(inAttrs.begin(), inAttrs.end());
+      attrs.append(outAttrs.begin(), outAttrs.end());
+      $_op.setAllPortLocs(attrs);
+    }
   }];
 
   let verify = [{

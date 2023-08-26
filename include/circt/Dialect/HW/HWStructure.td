@@ -289,7 +289,10 @@ def HWModuleExternOp : HWModuleOpBase<"module.extern"> {
                        TypeAttrOf<FunctionType>:$function_type,
 		                   OptionalAttr<DictArrayAttr>:$arg_attrs,
                        OptionalAttr<DictArrayAttr>:$res_attrs,
-                       StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
+                       StrArrayAttr:$argNames,
+                       StrArrayAttr:$resultNames,
+                       LocationArrayAttr:$argLocs,
+                       LocationArrayAttr:$resultLocs,
                        ParamDeclArrayAttr:$parameters,
                        OptionalAttr<StrAttr>:$verilogName);
   let results = (outs);
@@ -407,6 +410,8 @@ def HWModuleGeneratedOp : HWModuleOpBase<"module.generated", [
 		                   OptionalAttr<DictArrayAttr>:$arg_attrs,
                        OptionalAttr<DictArrayAttr>:$res_attrs,
                        StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
+                       LocationArrayAttr:$argLocs,
+                       LocationArrayAttr:$resultLocs,
                        ParamDeclArrayAttr:$parameters,
                        OptionalAttr<StrAttr>:$verilogName);
   let results = (outs);
