@@ -19,7 +19,7 @@ class CalyxPrimitive<string mnemonic, list<Trait> traits = []> :
 }
 
 /// The n-bit, undef op which only provides the out signal
-def UndefLibOp: CalyxPrimitive<"undef"> {
+def UndefLibOp: CalyxPrimitive<"undefined", []> {
   let summary = "An undefined signal";
   let description = [{
     The "calyx.undef" op defines an undefined signal. An undefined signal can be
@@ -29,17 +29,14 @@ def UndefLibOp: CalyxPrimitive<"undef"> {
       %undef.out = calyx.undef @undef : i32
     ```
   }];
-  let arguments = (ins
-    SymbolNameAttr:$sym_name,
-    I64Attr:$width
-  );
-  let results = (outs AnyType:$out);
+  let arguments = (ins SymbolNameAttr:$sym_name);
   let builders = [
-    OpBuilder<(ins
-      "StringRef":$sym_name,
-      "int64_t":$width
-    )>
+    OpBuilder<(ins "StringRef":$sym_name, "::mlir::TypeRange":$resultTypes), [{
+      $_state.addAttribute(mlir::SymbolTable::getSymbolAttrName(), $_builder.getStringAttr(sym_name));
+      $_state.addTypes(resultTypes);
+    }]>
   ];
+  let results = (outs AnyType:$out);
 }
 
 /// Trait used to mark certain operations in the Calyx dialect as combinational.
