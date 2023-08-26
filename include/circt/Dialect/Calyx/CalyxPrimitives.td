@@ -18,6 +18,30 @@ class CalyxPrimitive<string mnemonic, list<Trait> traits = []> :
     let skipDefaultBuilders = 1;
 }
 
+/// The n-bit, undef op which only provides the out signal
+def UndefLibOp: CalyxPrimitive<"undef"> {
+  let summary = "An undefined signal";
+  let description = [{
+    The "calyx.undef" op defines an undefined signal. An undefined signal can be
+    replaced with any value representable in n-bits.
+    ```mlir
+      // A 32-bit undefined value
+      %undef.out = calyx.undef @undef : i32
+    ```
+  }];
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    I64Attr:$width
+  );
+  let results = (outs AnyType:$out);
+  let builders = [
+    OpBuilder<(ins
+      "StringRef":$sym_name,
+      "int64_t":$width
+    )>
+  ];
+}
+
 /// Trait used to mark certain operations in the Calyx dialect as combinational.
 def Combinational : NativeOpTrait<"Combinational"> {
   let cppNamespace = "::circt::calyx";

@@ -2850,6 +2850,18 @@ LogicalResult SliceLibOp::verify() {
   return success();
 }
 
+// Undef op
+SmallVector<StringRef> UndefLibOp::portNames() { return {"out"}; }
+SmallVector<Direction> UndefLibOp::portDirections() { return {Output}; }
+void UndefLibOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  getCellAsmResultNames(setNameFn, *this, this->portNames());
+}
+bool UndefLibOp::isCombinational() { return false; }
+SmallVector<DictionaryAttr> UndefLibOp::portAttributes() {
+  return {DictionaryAttr::get(getContext())};
+}
+
+// Mux op
 SmallVector<StringRef> MuxLibOp::portNames() {
   return {"sel", "tru", "fal", "out"};
 }
