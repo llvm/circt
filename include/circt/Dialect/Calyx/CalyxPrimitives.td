@@ -37,6 +37,17 @@ def UndefLibOp: CalyxPrimitive<"undefined", []> {
     }]>
   ];
   let results = (outs AnyType:$out);
+  let extraClassDefinition = [{
+    bool $cppClass::isCombinational() { return false; }
+    SmallVector<StringRef> $cppClass::portNames() { return {"out"}; }
+    SmallVector<Direction> $cppClass::portDirections() { return {Output}; }
+    void $cppClass::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+      getCellAsmResultNames(setNameFn, *this, this->portNames());
+    }
+    SmallVector<DictionaryAttr> $cppClass::portAttributes() {
+      return {DictionaryAttr::get(getContext())};
+    }
+  }];
 }
 
 /// Trait used to mark certain operations in the Calyx dialect as combinational.
@@ -292,6 +303,22 @@ def MuxLibOp : CalyxLibraryOp<"mux", [
   Combinational, SameTypeConstraint<"tru", "fal">, SameTypeConstraint<"tru", "out">
   ]> {
   let results = (outs I1:$sel, AnyType:$tru, AnyType:$fal, AnyType:$out);
+  let extraClassDefinition = [{
+    SmallVector<StringRef> $cppClass::portNames() {
+      return {"sel", "tru", "fal", "out"};
+    }
+    SmallVector<Direction> $cppClass::portDirections() {
+      return {Input, Input, Input, Output};
+    }
+    void $cppClass::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+      getCellAsmResultNames(setNameFn, *this, this->portNames());
+    }
+    bool $cppClass::isCombinational() { return true; }
+    SmallVector<DictionaryAttr> $cppClass::portAttributes() {
+      return {DictionaryAttr::get(getContext()), DictionaryAttr::get(getContext()),
+              DictionaryAttr::get(getContext()), DictionaryAttr::get(getContext())};
+    }
+  }];
 }
 
 class ArithBinaryPipeLibraryOp<string mnemonic> : ArithBinaryLibraryOp<mnemonic # "_pipe", [
