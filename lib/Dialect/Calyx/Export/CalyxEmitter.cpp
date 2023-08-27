@@ -126,13 +126,18 @@ private:
   /// Returns the library name for a given Operation Type.
   FailureOr<StringRef> getLibraryFor(Operation *op) {
     return TypeSwitch<Operation *, FailureOr<StringRef>>(op)
-        .Case<MemoryOp, RegisterOp, NotLibOp, AndLibOp, OrLibOp, XorLibOp,
-              AddLibOp, SubLibOp, GtLibOp, LtLibOp, EqLibOp, NeqLibOp, GeLibOp,
-              LeLibOp, LshLibOp, RshLibOp, SliceLibOp, PadLibOp, WireLibOp,
-              MuxLibOp>([&](auto op) -> FailureOr<StringRef> {
-          static constexpr std::string_view sCore = "core";
-          return {sCore};
-        })
+        .Case<AddLibOp, RegisterOp, UndefLibOp, WireLibOp>(
+            [&](auto op) -> FailureOr<StringRef> {
+              static constexpr std::string_view sCompile = "compile";
+              return {sCompile};
+            })
+        .Case<MemoryOp, NotLibOp, AndLibOp, OrLibOp, XorLibOp, SubLibOp,
+              GtLibOp, LtLibOp, EqLibOp, NeqLibOp, GeLibOp, LeLibOp, LshLibOp,
+              RshLibOp, SliceLibOp, PadLibOp, MuxLibOp>(
+            [&](auto op) -> FailureOr<StringRef> {
+              static constexpr std::string_view sCore = "core";
+              return {sCore};
+            })
         .Case<SgtLibOp, SltLibOp, SeqLibOp, SneqLibOp, SgeLibOp, SleLibOp,
               SrshLibOp, MultPipeLibOp, RemUPipeLibOp, RemSPipeLibOp,
               DivUPipeLibOp, DivSPipeLibOp>(
@@ -247,6 +252,9 @@ struct Emitter {
 
   // Register emission
   void emitRegister(RegisterOp reg);
+
+  // Emit undefined op
+  void emitUndef(UndefLibOp op);
 
   // Memory emission
   void emitMemory(MemoryOp memory);
@@ -613,6 +621,7 @@ void Emitter::emitComponent(ComponentInterface op) {
   emitCalyxSection("cells", [&]() {
     for (auto &&bodyOp : *op.getBodyBlock()) {
       TypeSwitch<Operation *>(&bodyOp)
+          .Case<UndefLibOp>([&](auto op) { emitUndef(op); })
           .Case<WiresOp>([&](auto op) { wires = op; })
           .Case<ControlOp>([&](auto op) { control = op; })
           .Case<InstanceOp>([&](auto op) { emitInstance(op); })
@@ -764,6 +773,13 @@ void Emitter::emitRegister(RegisterOp reg) {
   size_t bitWidth = reg.getIn().getType().getIntOrFloatBitWidth();
   indent() << getAttributes(reg) << reg.instanceName() << space() << equals()
            << space() << "std_reg" << LParen() << std::to_string(bitWidth)
+           << RParen() << semicolonEndL();
+}
+
+void Emitter::emitUndef(UndefLibOp op) {
+  size_t bitwidth = op.getOut().getType().getIntOrFloatBitWidth();
+  indent() << getAttributes(op) << op.instanceName() << space() << equals()
+           << space() << "undef" << LParen() << std::to_string(bitwidth)
            << RParen() << semicolonEndL();
 }
 
