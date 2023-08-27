@@ -9,6 +9,7 @@
 #include "FirRegLowering.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "mlir/IR/Threading.h"
+#include "mlir/Transforms/DialectConversion.h"
 #include "llvm/Support/Debug.h"
 
 using namespace circt;
@@ -401,11 +402,12 @@ void FirRegLowering::createTree(OpBuilder &builder, Value reg, Value term,
 
 FirRegLowering::RegLowerInfo FirRegLowering::lower(FirRegOp reg) {
   Location loc = reg.getLoc();
+  Type regTy = typeConverter.convertType(reg.getType());
 
   ImplicitLocOpBuilder builder(reg.getLoc(), reg);
   RegLowerInfo svReg{nullptr, reg.getPresetAttr(), nullptr, nullptr, -1, 0};
-  svReg.reg = builder.create<sv::RegOp>(loc, reg.getType(), reg.getNameAttr());
-  svReg.width = hw::getBitWidth(reg.getResult().getType());
+  svReg.reg = builder.create<sv::RegOp>(loc, regTy, reg.getNameAttr());
+  svReg.width = hw::getBitWidth(regTy);
 
   if (auto attr = reg->getAttrOfType<IntegerAttr>("firrtl.random_init_start"))
     svReg.randStart = attr.getUInt();
