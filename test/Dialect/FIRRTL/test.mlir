@@ -294,7 +294,18 @@ firrtl.module @ListTest(in %s1: !firrtl.string,
 // CHECK-LABEL: MapTest
 // CHECK-SAME:  (in %in: !firrtl.map<integer, string>, out %out: !firrtl.map<integer, string>)
 firrtl.module @MapTest(in %in: !firrtl.map<integer, string>, out %out: !firrtl.map<integer, string>) {
+  // CHECK-NEXT: propassign %out, %in : !firrtl.map<integer, string>
   firrtl.propassign %out, %in : !firrtl.map<integer, string>
+
+  // CHECK-NEXT: %[[EMPTY:.+]] = firrtl.map.create : !firrtl.map<integer, string>
+  %empty = firrtl.map.create : !firrtl.map<integer, string>
+
+  // CHECK-NEXT: %[[HELLO:.+]] = firrtl.string "hello"
+  // CHECK-NEXT: %[[WORLD:.+]] = firrtl.string "world"
+  // CHECK-NEXT: %{{.+}} = firrtl.map.create (%in -> %[[HELLO]], %[[EMPTY]] -> %[[WORLD]]) : !firrtl.map<map<integer, string>, string>
+  %hello = firrtl.string "hello"
+  %world = firrtl.string "world"
+  %mapmap = firrtl.map.create (%in -> %hello, %empty -> %world) : !firrtl.map<map<integer, string>, string>
 }
 
 // CHECK-LABEL: PropertyNestedTest
