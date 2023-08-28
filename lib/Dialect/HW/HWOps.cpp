@@ -679,7 +679,7 @@ static void modifyModuleArgs(
     ArrayRef<Type> oldArgTypes, ArrayRef<Attribute> oldArgAttrs,
     ArrayRef<Location> oldArgLocs, SmallVector<Attribute> &newArgNames,
     SmallVector<Type> &newArgTypes, SmallVector<Attribute> &newArgAttrs,
-    SmallVector<Attribute> &newArgLocs, Block *body = nullptr) {
+    SmallVector<Location> &newArgLocs, Block *body = nullptr) {
 
 #ifndef NDEBUG
   // Check that the `insertArgs` and `removeArgs` indices are in ascending
@@ -788,7 +788,7 @@ void hw::modifyModulePorts(
   SmallVector<Attribute> newArgNames, newResultNames;
   SmallVector<Type> newArgTypes, newResultTypes;
   SmallVector<Attribute> newArgAttrs, newResultAttrs;
-  SmallVector<Attribute> newArgLocs, newResultLocs;
+  SmallVector<Location> newArgLocs, newResultLocs;
 
   modifyModuleArgs(context, insertInputs, removeInputs, oldArgNames,
                    oldArgTypes, oldArgAttrs, oldArgLocs, newArgNames,
@@ -805,10 +805,10 @@ void hw::modifyModulePorts(
   moduleOp.setHWModuleType(modty);
   moduleOp->setAttr("argNames", ArrayAttr::get(context, newArgNames));
   moduleOp.setAllInputAttrs(newArgAttrs);
-  moduleOp->setAttr("argLocs", ArrayAttr::get(context, newArgLocs));
+  moduleOp.setInputLocs(newArgLocs);
   moduleOp->setAttr("resultNames", ArrayAttr::get(context, newResultNames));
   moduleOp.setAllOutputAttrs(newResultAttrs);
-  moduleOp->setAttr("resultLocs", ArrayAttr::get(context, newResultLocs));
+  moduleOp.setOutputLocs(newResultLocs);
 }
 
 void HWModuleOp::build(OpBuilder &builder, OperationState &result,
@@ -1260,11 +1260,11 @@ static LogicalResult verifyModuleCommon(HWModuleLike module) {
   if (resultNames.size() != moduleType.getNumOutputs())
     return module->emitOpError("incorrect number of result names");
 
-  auto argLocs = module->getAttrOfType<ArrayAttr>("argLocs");
+  auto argLocs = module.getInputLocs();
   if (argLocs.size() != moduleType.getNumInputs())
     return module->emitOpError("incorrect number of argument locations");
 
-  auto resultLocs = module->getAttrOfType<ArrayAttr>("resultLocs");
+  auto resultLocs = module.getOutputLocs();
   if (resultLocs.size() != moduleType.getNumOutputs())
     return module->emitOpError("incorrect number of result locations");
 
