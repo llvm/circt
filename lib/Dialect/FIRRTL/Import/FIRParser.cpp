@@ -861,6 +861,7 @@ ParseResult FIRParser::parseMapType(FIRRTLType &result) {
 ///      ::= 'const' type
 ///      ::= 'String'
 ///      ::= list-type
+///      ::= map-type
 ///      ::= id
 ///
 /// field: 'flip'? fieldId ':' type
@@ -2343,7 +2344,7 @@ ParseResult FIRStmtParser::parseListExp(Value &result) {
   return success();
 }
 
-/// map-exp ::= map-type '(' exp* ')'
+/// map-exp ::= map-type '(' ( exp '->' exp )* ')'
 ParseResult FIRStmtParser::parseMapExp(Value &result) {
   auto loc = getToken().getLoc();
   FIRRTLType type;

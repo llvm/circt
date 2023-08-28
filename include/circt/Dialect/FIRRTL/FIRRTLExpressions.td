@@ -1177,7 +1177,7 @@ def MapCreateOp : FIRRTLOp<"map.create", [Pure, SameVariadicOperandSize]> {
 
     Example:
     ```mlir
-    %4 = firrtl.list.map (%0 -> %1, %2 -> %3) : !firrtl.map<string, integer>
+    %4 = firrtl.map.create (%0 -> %1, %2 -> %3) : !firrtl.map<string, integer>
     ```
   }];
 
