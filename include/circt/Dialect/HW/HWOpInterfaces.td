@@ -240,6 +240,14 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
       return retval;
     }
 
+    ArrayAttr getInputLocsAttr() {
+      auto locs = $_op.getAllPortLocs();
+      SmallVector<Attribute> retval;
+      for (unsigned x = 0, e = $_op.getNumInputs(); x < e; ++x)
+        retval.push_back(locs[$_op.getHWModuleType().getPortIdForInputId(x)]);
+      return ArrayAttr::get($_op->getContext(), retval);
+    }
+
     void setInputLocs(ArrayRef<Location> inAttrs) {
       assert(inAttrs.size() == getNumInputs());
       auto outAttrs = getOutputLocs();
@@ -255,6 +263,14 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
       for (unsigned x = 0, e = $_op.getNumOutputs(); x < e; ++x)
         retval.push_back(locs[$_op.getHWModuleType().getPortIdForOutputId(x)]);
       return retval;
+    }
+
+    ArrayAttr getOutputLocsAttr() {
+      auto locs = $_op.getAllPortLocs();
+      SmallVector<Attribute> retval;
+      for (unsigned x = 0, e = $_op.getNumOutputs(); x < e; ++x)
+        retval.push_back(locs[$_op.getHWModuleType().getPortIdForOutputId(x)]);
+      return ArrayAttr::get($_op->getContext(), retval);
     }
 
     void setOutputLocs(ArrayRef<Location> outAttrs) {
