@@ -38,12 +38,6 @@ ModulePort::Direction flip(ModulePort::Direction direction);
 
 /// TODO: Move all these functions to a hw::ModuleLike interface.
 
-/// Return the PortInfo for the specified input or inout port.
-PortInfo getModuleInOrInoutPort(Operation *op, size_t idx);
-
-/// Return the PortInfo for the specified output port.
-PortInfo getModuleOutputPort(Operation *op, size_t idx);
-
 /// Return all the ports of a module or an instance.
 ModulePortInfo getOperationPortList(Operation *op);
 

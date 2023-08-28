@@ -86,6 +86,15 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
       auto fnty = getFunctionType();
       return fnty.getNumInputs() + fnty.getNumResults();
     }
+
+    PortInfo $cppClass::getInputPort(size_t idx) {
+      return hw::getOperationPortList(*this).atInput(idx);
+    }
+
+    PortInfo $cppClass::getOutputPort(size_t idx) {
+      return hw::getOperationPortList(*this).atOutput(idx);
+    }
+
   }];
 
 }
@@ -165,14 +174,10 @@ def HWModuleOp : HWModuleOpBase<"module",
     size_t getNumInOrInoutPorts() { return getHWModuleType().getNumInputs(); }
 
     /// Return the PortInfo for the specified input or inout port.
-    PortInfo getInOrInoutPort(size_t i) {
-      return getModuleInOrInoutPort(*this, i);
-    }
+    PortInfo getInputPort(size_t i);
 
     /// Return the PortInfo for the specified output port.
-    PortInfo getOutputPort(size_t i) {
-      return getModuleOutputPort(*this, i);
-    }
+    PortInfo getOutputPort(size_t i);
 
     /// Append an input with a given name and type to the port list.
     /// If the name is not unique, a unique name is created and returned.
@@ -313,14 +318,10 @@ def HWModuleExternOp : HWModuleOpBase<"module.extern"> {
   let extraModuleClassDeclaration = [{
 
     /// Return the PortInfo for the specified input or inout port.
-    PortInfo getInOrInoutPort(size_t i) {
-      return getModuleInOrInoutPort(*this, i);
-    }
+    PortInfo getInputPort(size_t i);
 
     /// Return the PortInfo for the specified output port.
-    PortInfo getOutputPort(size_t i) {
-      return getModuleOutputPort(*this, i);
-    }
+    PortInfo getOutputPort(size_t i);
 
     /// Return the name to use for the Verilog module that we're referencing
     /// here.  This is typically the symbol, but can be overridden with the
@@ -432,6 +433,12 @@ def HWModuleGeneratedOp : HWModuleOpBase<"module.generated", [
   ];
 
   let extraModuleClassDeclaration = [{
+    /// Return the PortInfo for the specified input or inout port.
+    PortInfo getInputPort(size_t i);
+
+    /// Return the PortInfo for the specified output port.
+    PortInfo getOutputPort(size_t i);
+
     /// Return the name to use for the Verilog module that we're referencing
     /// here.  This is typically the symbol, but can be overridden with the
     /// verilogName attribute.
