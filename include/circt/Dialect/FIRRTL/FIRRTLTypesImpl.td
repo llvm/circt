@@ -461,13 +461,13 @@ def FEnumImpl : FIRRTLImplType<"FEnum", [FieldIDTypeInterface]> {
 def RefImpl : FIRRTLImplType<"Ref",
                              [DeclareTypeInterfaceMethods<FieldIDTypeInterface>],
                              "::circt::firrtl::FIRRTLType"> {
-  let summary = [{
+  let summary = "A reference to a signal elsewhere.";
+  let description = [{
     A reference type, such as `firrtl.probe<uint<1>>` or `firrtl.rwprobe<uint<2>>`.
 
     Used for remote reads and writes of the wrapped base type.
 
-    Parameterized over the referenced base type,
-    which must be passive and for now must also be ground.
+    Parameterized over the referenced base type, with flips removed.
 
     Not a base type.
 
@@ -589,34 +589,26 @@ def ClassImpl : FIRRTLImplType<"Class", [], "circt::firrtl::FIRRTLType"> {
 }
 
 def StringImpl : FIRRTLImplType<"String", [], "circt::firrtl::FIRRTLType"> {
-  let summary = [{
-    An unlimited length string type. Not representable in hardware.
-  }];
+  let summary = "An unlimited length string type. Not representable in hardware.";
   let parameters = (ins);
   let genStorageClass = true;
 }
 
 def IntegerImpl : FIRRTLImplType<"FInteger", [], "circt::firrtl::FIRRTLType"> {
-  let summary = [{
-    An unlimited length signed integer type.  Not representable in hardware.
-  }];
+  let summary = "An unlimited length signed integer type.  Not representable in hardware.";
   let parameters = (ins);
   let genStorageClass = true;
 }
 
 def ListImpl : FIRRTLImplType<"List", [], "circt::firrtl::FIRRTLType"> {
-  let summary = [{
-    A typed property list of any length.  Not representable in hardware.
-  }];
+  let summary = "A typed property list of any length.  Not representable in hardware.";
   let parameters = (ins TypeParameter<"circt::firrtl::PropertyType", "element type">:$elementType);
   let genStorageClass = true;
   let genAccessors = true;
 }
 
 def MapImpl : FIRRTLImplType<"Map", [], "circt::firrtl::FIRRTLType"> {
-  let summary = [{
-    A typed map of properties.  Not representable in hardware.
-  }];
+  let summary = "A typed map of properties.  Not representable in hardware.";
   let parameters = (ins TypeParameter<"circt::firrtl::PropertyType", "key type">:$keyType,
                     TypeParameter<"circt::firrtl::PropertyType", "value type">:$valueType);
   let genStorageClass = true;
@@ -624,18 +616,14 @@ def MapImpl : FIRRTLImplType<"Map", [], "circt::firrtl::FIRRTLType"> {
 }
 
 def PathImpl : FIRRTLImplType<"Path", [], "circt::firrtl::FIRRTLType"> {
-  let summary = [{
-    A path to a hardware entity.  Not representable in hardware.
-  }];
+  let summary = "A path to a hardware entity.  Not representable in hardware.";
   let parameters = (ins);
   let genStorageClass = true;
   let genAccessors = true;
 }
 
 def BoolImpl : FIRRTLImplType<"Bool", [], "circt::firrtl::FIRRTLType"> {
-  let summary = [{
-    A boolean property.  Not representable in hardware.
-  }];
+  let summary = "A boolean property.  Not representable in hardware.";
   let parameters = (ins);
   let genStorageClass = true;
 }
