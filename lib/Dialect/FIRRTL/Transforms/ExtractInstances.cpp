@@ -866,7 +866,8 @@ void ExtractInstancesPass::groupInstances() {
     OpBuilder builder(parentOp);
 
     // Uniquify the wrapper name.
-    wrapperName = circuitNamespace.newName(wrapperName);
+    auto wrapperModuleName = builder.getStringAttr(
+        circuitNamespace.newName(dutPrefix + wrapperName));
     auto wrapperInstName =
         builder.getStringAttr(getModuleNamespace(parent).newName(wrapperName));
 
@@ -918,13 +919,12 @@ void ExtractInstancesPass::groupInstances() {
 
         // The relevant part of the NLA is of the form `Top::bb`, which we want
         // to expand to `Top::wrapperInst` and `Wrapper::bb`.
-        auto wrapperNameAttr = builder.getStringAttr(wrapperName);
         auto ref1 = InnerRefAttr::get(parent.moduleNameAttr(), wrapperInstName);
         Attribute ref2;
         if (auto innerRef = nlaPath[nlaIdx].dyn_cast<InnerRefAttr>())
-          ref2 = InnerRefAttr::get(wrapperNameAttr, innerRef.getName());
+          ref2 = InnerRefAttr::get(wrapperModuleName, innerRef.getName());
         else
-          ref2 = FlatSymbolRefAttr::get(wrapperNameAttr);
+          ref2 = FlatSymbolRefAttr::get(wrapperModuleName);
         LLVM_DEBUG(llvm::dbgs() << "    - Expanding " << nlaPath[nlaIdx]
                                 << " to (" << ref1 << ", " << ref2 << ")\n");
         nlaPath[nlaIdx] = ref1;
@@ -935,14 +935,13 @@ void ExtractInstancesPass::groupInstances() {
         nla.namepathAttr(builder.getArrayAttr(nlaPath));
         LLVM_DEBUG(llvm::dbgs() << "    - Modified to " << nla << "\n");
         // Add the NLA to the wrapper module.
-        nlaTable.addNLAtoModule(nla, wrapperNameAttr);
+        nlaTable.addNLAtoModule(nla, wrapperModuleName);
       }
     }
 
     // Create the wrapper module.
-    auto wrapper = builder.create<FModuleOp>(
-        builder.getUnknownLoc(), builder.getStringAttr(dutPrefix + wrapperName),
-        ports);
+    auto wrapper = builder.create<FModuleOp>(builder.getUnknownLoc(),
+                                             wrapperModuleName, ports);
 
     // Instantiate the wrapper module in the parent and replace uses of the
     // extracted instances' ports with the corresponding wrapper module ports.
