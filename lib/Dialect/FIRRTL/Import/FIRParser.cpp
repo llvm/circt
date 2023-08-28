@@ -2335,7 +2335,8 @@ ParseResult FIRStmtParser::parseListExp(Value &result) {
   return success();
 }
 
-/// map-exp ::= map-type '(' ( exp '->' exp )* ')'
+/// kv-pair ::= exp '->' exp
+/// map-exp ::= map-type '(' ( kv-pair ( ',' kv-pair )* )? ')'
 ParseResult FIRStmtParser::parseMapExp(Value &result) {
   auto loc = getToken().getLoc();
   FIRRTLType type;
