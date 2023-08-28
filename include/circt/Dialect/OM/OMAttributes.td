@@ -103,4 +103,22 @@ def MapAttr : AttrDef<OMDialect, "Map", [TypedAttrInterface]> {
   }];
 }
 
+def OMPathAttribute : AttrDef<OMDialect, "Path", [TypedAttrInterface]> {
+  let summary = "An attribute that represents a path";
+
+  let mnemonic = "path";
+
+  let parameters = (ins "::mlir::StringAttr":$path);
+
+  let builders = [
+    AttrBuilderWithInferredContext<(ins "::mlir::StringAttr":$path)>
+  ];
+
+  let assemblyFormat = " `<` $path `>` ";
+
+  let extraClassDeclaration = [{
+    mlir::Type getType();
+  }];
+}
+
 #endif // CIRCT_DIALECT_OM_OMATTRIBUTES_TD
