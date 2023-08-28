@@ -3283,8 +3283,9 @@ LogicalResult HierPathOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
       return emitOpError() << "instance path is incorrect. Expected module: "
                            << expectedModuleName
                            << " instead found: " << innerRef.getModule();
-  } else if (expectedModuleName !=
-             leafRef.cast<FlatSymbolRefAttr>().getAttr()) {
+  } else if (expectedModuleName &&
+             expectedModuleName !=
+                 leafRef.cast<FlatSymbolRefAttr>().getAttr()) {
     // This is the case when the nla is applied to a module.
     return emitOpError() << "instance path is incorrect. Expected module: "
                          << expectedModuleName << " instead found: "
