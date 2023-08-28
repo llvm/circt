@@ -144,8 +144,14 @@ firrtl.module @TestNodeName(in %in1 : !firrtl.uint<8>) {
 }
 
 // Basic test for NLA operations.
-// CHECK: hw.hierpath private @nla [@Parent::@child, @Child]
-hw.hierpath private @nla [@Parent::@child, @Child]
+// CHECK: hw.hierpath private @nla0 [@Parent]
+// CHECK: hw.hierpath private @nla1 [@Parent::@child]
+// CHECK: hw.hierpath private @nla2 [@Parent::@child, @Child]
+// CHECK: hw.hierpath private @nla3 [@Parent::@child, @Child::@w]
+hw.hierpath private @nla0 [@Parent]
+hw.hierpath private @nla1 [@Parent::@child]
+hw.hierpath private @nla2 [@Parent::@child, @Child]
+hw.hierpath private @nla3 [@Parent::@child, @Child::@w]
 firrtl.module @Child() {
   %w = firrtl.wire sym @w : !firrtl.uint<1>
 }
