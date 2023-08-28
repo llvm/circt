@@ -626,6 +626,13 @@ int main(int argc, char **argv) {
     registerExportSplitChiselInterfacePass();
     registerExportSplitVerilogPass();
     registerExportVerilogPass();
+
+    // Conversion passes:
+    registerPrepareForEmissionPass();
+    registerLowerFIRRTLToHWPass();
+    registerLegalizeAnonEnumsPass();
+    registerLowerSeqToSVPass();
+    registerLowerVerifToSVPass();
   }
 
   // Register any pass manager command line options.
