@@ -1784,7 +1784,7 @@ circuit BasicProps :
     ; CHECK-SAME: out %str2objs: !firrtl.map<string, class<@SimpleClass({{.*}})>>
     ; CHECK-SAME: out %int2list: !firrtl.map<integer, list<string>>
     ; CHECK-SAME: out %empty: !firrtl.map<integer, integer>
-    output str2str : Map<String> ; Considering supporting shorthand, key type default is string.
+    output str2str : Map<String, String>
     output str2objs : Map<String, Inst<SimpleClass>>
     output int2list : Map<Integer, List<String>>
     output empty : Map<Integer, Integer>
@@ -1793,7 +1793,7 @@ circuit BasicProps :
     ; CHECK-NEXT: %[[WORLD:.+]] = firrtl.string "world"
     ; CHECK-NEXT: %[[STRINGS:.+]] = firrtl.map.create (%[[HELLO]] -> %[[WORLD]]) : !firrtl.map<string, string>
     ; CHECK-NEXT: firrtl.propassign %str2str, %[[STRINGS]] : !firrtl.map<string, string>
-    propassign str2str, Map<String>(String("hello") -> String("world"))
+    propassign str2str, Map<String, String>(String("hello") -> String("world"))
 
     ; CHECK-NEXT: %[[OBJ:.+]] = firrtl.object
     ; CHECK-NEXT: %[[HELLO:.+]] = firrtl.string "hello"

@@ -824,25 +824,16 @@ ParseResult FIRParser::parseListType(FIRRTLType &result) {
   return success();
 }
 
-/// If not specified, assume key type is String.
-/// map-type ::= 'Map' '<' type '>'
-///          ::= 'Map' '<' type ',' type '>'
+/// map-type ::= 'Map' '<' type ',' type '>'
 ParseResult FIRParser::parseMapType(FIRRTLType &result) {
   consumeToken(FIRToken::kw_Map);
 
   PropertyType key, value;
   if (parseToken(FIRToken::less, "expected '<' in Map type") ||
-      parsePropertyType(key, "expected Map key or value type"))
+      parsePropertyType(key, "expected Map key type") ||
+      parsePropertyType(value, "expected Map value type") ||
+      parseToken(FIRToken::greater, "expected '>' in Map type"))
     return failure();
-  if (consumeIf(FIRToken::greater)) {
-    // Shorthand, if only one type the key is String.
-    value = key;
-    key = cast<PropertyType>(StringType::get(getContext()));
-  } else {
-    if (parsePropertyType(value, "expected Map value type") ||
-        parseToken(FIRToken::greater, "expected '>' in Map type"))
-      return failure();
-  }
 
   result = MapType::get(getContext(), key, value);
   return success();
