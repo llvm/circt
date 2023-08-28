@@ -166,6 +166,31 @@ om.class @StringConstant() {
   om.class.field @string, %0 : !om.string
 }
 
+// CHECK-LABEL: @LinkedList
+om.class @LinkedList(%prev: !om.class.type<@LinkedList>) {
+  om.class.field @prev, %prev : !om.class.type<@LinkedList>
+}
+
+// CHECK-LABEL: @ReferenceEachOther
+om.class @ReferenceEachOther() {
+  // CHECK-NEXT: %[[obj1:.+]] = om.object @LinkedList(%[[obj2:.+]]) : (!om.class.type<@LinkedList>) -> !om.class.type<@LinkedList>
+  // CHECK-NEXT: %[[obj2]] = om.object @LinkedList(%[[obj1]]) : (!om.class.type<@LinkedList>) -> !om.class.type<@LinkedList>
+  %0 = om.object @LinkedList(%1) : (!om.class.type<@LinkedList>) -> !om.class.type<@LinkedList>
+  %1 = om.object @LinkedList(%0) : (!om.class.type<@LinkedList>) -> !om.class.type<@LinkedList>
+}
+
+// CHECK-LABEL: @RefecenceEachOthersField
+om.class @RefecenceEachOthersField(%blue_1: i8, %green_1: i32) {
+  // CHECK-NEXT: %[[obj1:.+]] = om.object @Widget(%blue_1, %[[field2:.+]]) : (i8, i32) -> !om.class.type<@Widget>
+  %0 = om.object @Widget(%blue_1, %3) : (i8, i32) -> !om.class.type<@Widget>
+  // CHECK-NEXT: %[[field1:.+]] = om.object.field %[[obj1]], [@blue_1] : (!om.class.type<@Widget>) -> i8
+  %1 = om.object.field %0, [@blue_1] : (!om.class.type<@Widget>) -> i8
+
+  // CHECK-NEXT: %[[obj2:.+]] = om.object @Widget(%[[field1]], %green_1) : (i8, i32) -> !om.class.type<@Widget>
+  %2 = om.object @Widget(%1, %green_1) : (i8, i32) -> !om.class.type<@Widget>
+  // CHECK-NEXT: %[[field2]] = om.object.field %[[obj2]], [@green_1] : (!om.class.type<@Widget>) -> i32
+  %3 = om.object.field %2, [@green_1] : (!om.class.type<@Widget>) -> i32
+}
 // CHECK-LABEL: @Bool
 om.class @BoolConstant(%b0 : i1) {
   // CHECK: %[[const1:.+]] = om.constant true

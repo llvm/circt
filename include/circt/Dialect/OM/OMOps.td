@@ -21,6 +21,7 @@ include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/IR/BuiltinAttributeInterfaces.td"
 include "mlir/IR/BuiltinTypes.td"
 include "mlir/IR/OpAsmInterface.td"
+include "mlir/IR/RegionKindInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
 
 class OMOp<string mnemonic, list<Trait> traits = []> :
@@ -33,7 +34,7 @@ class OMOp<string mnemonic, list<Trait> traits = []> :
 class OMClassLike<string mnemonic, list<Trait> traits = []> :
   OMOp<mnemonic, traits # [
     SingleBlock, NoTerminator, Symbol, SymbolTable,
-    HasParent<"mlir::ModuleOp">,
+    HasParent<"mlir::ModuleOp">, RegionKindInterface,
     DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmBlockArgumentNames"]>,
     DeclareOpInterfaceMethods<ClassLike>]> {
 
@@ -78,6 +79,11 @@ def ClassOp : OMClassLike<"class"> {
     mlir::ArrayRef<mlir::StringRef> formalParamNames,
     mlir::ArrayRef<mlir::StringRef> fieldNames,
     mlir::ArrayRef<mlir::Type> fieldTypes);
+
+    // Implement RegionKindInterface.
+    static mlir::RegionKind getRegionKind(unsigned index) {
+      return mlir::RegionKind::Graph;
+    }
   }];
 }
 
@@ -100,6 +106,11 @@ def ClassFieldOp : OMClassFieldLike<"class.field",
 def ClassExternOp : OMClassLike<"class.extern"> {
   let extraClassDeclaration = [{
     mlir::Block *getBodyBlock() { return &getBody().front(); }
+    
+    // Implement RegionKindInterface.
+    static mlir::RegionKind getRegionKind(unsigned index) {
+      return mlir::RegionKind::Graph;
+    }
   }];
 }
 
