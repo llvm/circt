@@ -2674,14 +2674,10 @@ ParseResult ClassType::parseInterface(AsmParser &parser, ClassType &result) {
 //===----------------------------------------------------------------------===//
 
 void FIRRTLDialect::registerTypes() {
-  addTypes<SIntType, UIntType, ClockType, ResetType, AsyncResetType, AnalogType,
-           // Derived Types
-           BundleType, FVectorType, FEnumType, BaseTypeAliasType,
-           // References and open aggregates
-           RefType, OpenBundleType, OpenVectorType,
-           // Non-Hardware types
-           ClassType, StringType, FIntegerType, BoolType, ListType, MapType,
-           PathType>();
+  addTypes<
+#define GET_TYPEDEF_LIST
+#include "circt/Dialect/FIRRTL/FIRRTLTypes.cpp.inc"
+      >();
 }
 
 // Get the bit width for this type, return None  if unknown. Unlike
