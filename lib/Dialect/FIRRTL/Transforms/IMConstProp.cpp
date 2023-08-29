@@ -78,6 +78,8 @@ public:
   /// Initialize a lattice value with a constant.
   /*implicit*/ LatticeValue(IntegerAttr attr)
       : valueAndTag(attr, Kind::Constant) {}
+  /*implicit*/ LatticeValue(StringAttr attr)
+      : valueAndTag(attr, Kind::Constant) {}
 
   static LatticeValue getOverdefined() {
     LatticeValue result;
@@ -105,8 +107,14 @@ public:
   /// Returns nullptr otherwise.
   Attribute getValue() const { return valueAndTag.getPointer(); }
 
-  /// If this is in the constant state, return the IntegerAttr.
-  IntegerAttr getConstant() const {
+  /// If this is in the constant state, return the attribute.
+  Attribute getConstant() const {
+    assert(isConstant());
+    return getValue();
+  }
+
+  /// If this is in the constant state and is an IntegerAttr, return it.
+  IntegerAttr getIntConstant() const {
     assert(isConstant());
     return getValue().dyn_cast_or_null<IntegerAttr>();
   }
@@ -143,7 +151,7 @@ public:
 
 private:
   /// The attribute value if this is a constant and the tag for the element
-  /// kind.  The attribute is always an IntegerAttr.
+  /// kind.
   llvm::PointerIntPair<Attribute, 2, Kind> valueAndTag;
 };
 } // end anonymous namespace
@@ -179,7 +187,7 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
   void markOverdefined(Value value) {
     FieldRef fieldRef = getOrCacheFieldRefFromValue(value);
     auto firrtlType = type_dyn_cast<FIRRTLType>(value.getType());
-    if (!firrtlType) {
+    if (!firrtlType || type_isa<PropertyType>(firrtlType)) {
       markOverdefined(fieldRef);
       return;
     }
@@ -238,6 +246,8 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
     FieldRef fieldRefResult = getOrCacheFieldRefFromValue(result);
     if (!type_isa<FIRRTLType>(result.getType()))
       return mergeLatticeValue(fieldRefResult, fieldRefFrom);
+    if (type_isa<PropertyType>(result.getType()))
+      return mergeLatticeValue(fieldRefResult, fieldRefFrom);
     walkGroundTypes(type_cast<FIRRTLType>(result.getType()),
                     [&](uint64_t fieldID, auto) {
                       mergeLatticeValue(fieldRefResult.getSubField(fieldID),
@@ -278,7 +288,7 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
   /// Return the lattice value for the specified SSA value, extended to the
   /// width of the specified destType.  If allowTruncation is true, then this
   /// allows truncating the lattice value to the specified type.
-  LatticeValue getExtendedLatticeValue(FieldRef value, FIRRTLBaseType destType,
+  LatticeValue getExtendedLatticeValue(FieldRef value, FIRRTLType destType,
                                        bool allowTruncation = false);
 
   /// Mark the given block as executable.
@@ -287,10 +297,10 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
   void markMemOp(MemOp mem);
 
   void markInvalidValueOp(InvalidValueOp invalid);
-  void markConstantOp(ConstantOp constant);
   void markAggregateConstantOp(AggregateConstantOp constant);
-  void markSpecialConstantOp(SpecialConstantOp specialConstant);
   void markInstanceOp(InstanceOp instance);
+  template <typename OpTy>
+  void markConstantValueOp(OpTy op);
 
   void visitConnectLike(FConnectLike connect, FieldRef changedFieldRef);
   void visitRefSend(RefSendOp send, FieldRef changedFieldRef);
@@ -378,7 +388,7 @@ void IMConstPropPass::runOnOperation() {
 /// of the specified destType.  If allowTruncation is true, then this allows
 /// truncating the lattice value to the specified type.
 LatticeValue IMConstPropPass::getExtendedLatticeValue(FieldRef value,
-                                                      FIRRTLBaseType destType,
+                                                      FIRRTLType destType,
                                                       bool allowTruncation) {
   // If 'value' hasn't been computed yet, then it is unknown.
   auto it = latticeValues.find(value);
@@ -396,11 +406,24 @@ LatticeValue IMConstPropPass::getExtendedLatticeValue(FieldRef value,
   if (auto boolAttr = dyn_cast<BoolAttr>(constant)) {
     // No extOrTrunc necessary for clock or reset types.
     return LatticeValue(boolAttr);
+  } else if (auto strAttr = dyn_cast<StringAttr>(constant)) {
+    return LatticeValue(strAttr);
   }
 
+  assert(result.getIntConstant());
+
+  // No extOrTrunc for property types.
+  if (isa<PropertyType>(destType))
+    return LatticeValue(result.getIntConstant());
+
+  // Non-base (or non-ref) types are overdefined.
+  auto baseType = getBaseType(destType);
+  if (!baseType)
+    return LatticeValue::getOverdefined();
+
   // If destType is wider than the source constant type, extend it.
-  auto resultConstant = result.getConstant().getAPSInt();
-  auto destWidth = destType.getBitWidthOrSentinel();
+  auto resultConstant = result.getIntConstant().getAPSInt();
+  auto destWidth = baseType.getBitWidthOrSentinel();
   if (destWidth == -1) // We don't support unknown width FIRRTL.
     return LatticeValue::getOverdefined();
   if (resultConstant.getBitWidth() == (unsigned)destWidth)
@@ -426,58 +449,59 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
 
   for (auto &op : *block) {
     // Handle each of the special operations in the firrtl dialect.
-    if (isa<RegOp, RegResetOp>(&op))
-      markOverdefined(op.getResult(0));
-    else if (auto wire = dyn_cast<WireOp>(&op))
-      markWireOp(wire);
-    else if (auto constant = dyn_cast<ConstantOp>(op))
-      markConstantOp(constant);
-    else if (auto aggregateConstant = dyn_cast<AggregateConstantOp>(op))
-      markAggregateConstantOp(aggregateConstant);
-    else if (auto specialConstant = dyn_cast<SpecialConstantOp>(op))
-      markSpecialConstantOp(specialConstant);
-    else if (auto invalid = dyn_cast<InvalidValueOp>(op))
-      markInvalidValueOp(invalid);
-    else if (auto instance = dyn_cast<InstanceOp>(op))
-      markInstanceOp(instance);
-    else if (auto mem = dyn_cast<MemOp>(op))
-      markMemOp(mem);
-    else if (isa<mlir::UnrealizedConversionCastOp, VerbatimExprOp,
-                 VerbatimWireOp, SubaccessOp>(op) ||
-             op.getNumOperands() == 0) {
-      // Mark operations whose results cannot be tracked as overdefined. Mark
-      // unhandled operations with no operand as well since otherwise they will
-      // remain unknown states until the end.
-      for (auto result : op.getResults())
-        markOverdefined(result);
-    } else if (!isa<SubindexOp, SubfieldOp, NodeOp>(&op) &&
-               op.getNumResults() > 0) {
-      // If an unknown operation has an aggregate operand, mark results as
-      // overdefined since we cannot track the dataflow. Similarly if the
-      // operations create aggregate values, we mark them overdefined.
+    TypeSwitch<Operation *>(&op)
+        .Case<RegOp, RegResetOp>(
+            [&](auto reg) { markOverdefined(op.getResult(0)); })
+        .Case<WireOp>([&](auto wire) { markWireOp(wire); })
+        .Case<ConstantOp, SpecialConstantOp, StringConstantOp,
+              FIntegerConstantOp, BoolConstantOp>(
+            [&](auto constOp) { markConstantValueOp(constOp); })
+        .Case<AggregateConstantOp>(
+            [&](auto aggConstOp) { markAggregateConstantOp(aggConstOp); })
+        .Case<InvalidValueOp>(
+            [&](auto invalid) { markInvalidValueOp(invalid); })
+        .Case<InstanceOp>([&](auto instance) { markInstanceOp(instance); })
+        .Case<MemOp>([&](auto mem) { markMemOp(mem); })
+        .Default([&](auto _) {
+          if (isa<mlir::UnrealizedConversionCastOp, VerbatimExprOp,
+                  VerbatimWireOp, SubaccessOp>(op) ||
+              op.getNumOperands() == 0) {
+            // Mark operations whose results cannot be tracked as overdefined.
+            // Mark unhandled operations with no operand as well since otherwise
+            // they will remain unknown states until the end.
+            for (auto result : op.getResults())
+              markOverdefined(result);
+          } else if (!isa<SubindexOp, SubfieldOp, NodeOp>(&op) &&
+                     op.getNumResults() > 0) {
+            // If an unknown operation has an aggregate operand, mark results as
+            // overdefined since we cannot track the dataflow. Similarly if the
+            // operations create aggregate values, we mark them overdefined.
 
-      // TODO: We should handle aggregate operations such as vector_create,
-      // bundle_create or vector operations.
+            // TODO: We should handle aggregate operations such as
+            // vector_create, bundle_create or vector operations.
 
-      bool hasAggregateOperand =
-          llvm::any_of(op.getOperandTypes(), [](Type type) {
-            return type_isa<FVectorType, BundleType>(type);
-          });
+            bool hasAggregateOperand =
+                llvm::any_of(op.getOperandTypes(), [](Type type) {
+                  return type_isa<FVectorType, BundleType>(type);
+                });
 
-      for (auto result : op.getResults())
-        if (hasAggregateOperand ||
-            type_isa<FVectorType, BundleType>(result.getType()))
-          markOverdefined(result);
-    }
+            for (auto result : op.getResults())
+              if (hasAggregateOperand ||
+                  type_isa<FVectorType, BundleType>(result.getType()))
+                markOverdefined(result);
+          }
+        });
 
-    // This tracks a dependency from field refs to operations which need to be
-    // added to worklist when lattice values change.
+    // This tracks a dependency from field refs to operations which need
+    // to be added to worklist when lattice values change.
     if (!isAggregate(&op)) {
       for (auto operand : op.getOperands()) {
         auto fieldRef = getOrCacheFieldRefFromValue(operand);
         auto firrtlType = type_dyn_cast<FIRRTLType>(operand.getType());
         if (!firrtlType)
           continue;
+        if (type_isa<PropertyType>(firrtlType))
+          fieldRefToUsers[fieldRef].push_back(&op);
         walkGroundTypes(firrtlType, [&](uint64_t fieldID, auto type) {
           fieldRefToUsers[fieldRef.getSubField(fieldID)].push_back(&op);
         });
@@ -502,9 +526,10 @@ void IMConstPropPass::markMemOp(MemOp mem) {
     markOverdefined(result);
 }
 
-void IMConstPropPass::markConstantOp(ConstantOp constant) {
-  mergeLatticeValue(getOrCacheFieldRefFromValue(constant),
-                    LatticeValue(constant.getValueAttr()));
+template <typename OpTy>
+void IMConstPropPass::markConstantValueOp(OpTy op) {
+  mergeLatticeValue(getOrCacheFieldRefFromValue(op),
+                    LatticeValue(op.getValueAttr()));
 }
 
 void IMConstPropPass::markAggregateConstantOp(AggregateConstantOp constant) {
@@ -513,11 +538,6 @@ void IMConstPropPass::markAggregateConstantOp(AggregateConstantOp constant) {
                       LatticeValue(cast<IntegerAttr>(
                           constant.getAttributeFromFieldID(fieldID))));
   });
-}
-
-void IMConstPropPass::markSpecialConstantOp(SpecialConstantOp specialConstant) {
-  mergeLatticeValue(getOrCacheFieldRefFromValue(specialConstant),
-                    LatticeValue(specialConstant.getValueAttr()));
 }
 
 void IMConstPropPass::markInvalidValueOp(InvalidValueOp invalid) {
@@ -594,17 +614,22 @@ void IMConstPropPass::mergeOnlyChangedLatticeValue(Value dest, Value src,
     markOverdefined(src);
     return markOverdefined(dest);
   }
-  FIRRTLBaseType baseType = getBaseType(destTypeFIRRTL);
-  if (!baseType) {
-    // If the dest has no base type, mark all overdefined.
-    // In the future, may be possible to propagate property constants.
-    markOverdefined(src);
-    return markOverdefined(dest);
-  }
-
 
   auto fieldRefSrc = getOrCacheFieldRefFromValue(src);
   auto fieldRefDest = getOrCacheFieldRefFromValue(dest);
+
+  // TODO: This can be rewritten to be in terms of a hw::FieldIDTypeInterface
+  // if/when properties are that.
+  FIRRTLBaseType baseType = getBaseType(destTypeFIRRTL);
+  if (!baseType) {
+    // Support fieldID == 0 even for non-base types (e.g., properties).
+    if (fieldRefSrc.getFieldID() == 0 && fieldRefDest.getFieldID() == 0)
+      return mergeLatticeValue(fieldRefDest, fieldRefSrc);
+
+    // Otherwise, mark all overdefined.
+    markOverdefined(src);
+    return markOverdefined(dest);
+  }
   // If a changed field ref is included the source value, find an offset in the
   // connection.
   if (auto srcOffset = getFieldIDOffset(changedFieldRef, baseType, fieldRefSrc))
@@ -628,13 +653,6 @@ void IMConstPropPass::visitConnectLike(FConnectLike connect,
     return markOverdefined(connect.getDest());
   }
 
-  FIRRTLBaseType baseType = getBaseType(destTypeFIRRTL);
-  if (!baseType) {
-    // If the dest has no base type, mark all overdefined.
-    markOverdefined(connect.getSrc());
-    return markOverdefined(connect.getDest());
-  }
-
   auto fieldRefSrc = getOrCacheFieldRefFromValue(connect.getSrc());
   auto fieldRefDest = getOrCacheFieldRefFromValue(connect.getDest());
   if (auto subaccess = fieldRefDest.getValue().getDefiningOp<SubaccessOp>()) {
@@ -649,9 +667,10 @@ void IMConstPropPass::visitConnectLike(FConnectLike connect,
   }
 
   auto propagateElementLattice = [&](uint64_t fieldID,
-                                     FIRRTLBaseType destType) {
+                                     FIRRTLType destType) {
     auto fieldRefDestConnected = fieldRefDest.getSubField(fieldID);
-    assert(destType.isGround());
+    assert(!type_isa<FIRRTLBaseType>(destType) ||
+           type_cast<FIRRTLBaseType>(destType).isGround());
 
     // Handle implicit extensions.
     auto srcValue =
@@ -703,6 +722,19 @@ void IMConstPropPass::visitConnectLike(FConnectLike connect,
             .attachNote(connect.getDest().getLoc())
         << "connect destination is here";
   };
+
+  // TODO: This can be rewritten to be in terms of a hw::FieldIDTypeInterface
+  // if/when properties are that.
+  FIRRTLBaseType baseType = getBaseType(destTypeFIRRTL);
+  if (!baseType) {
+    // Support fieldID == 0 even for non-base types (e.g., properties).
+    if (fieldRefSrc.getFieldID() == 0 && fieldRefDest.getFieldID() == 0)
+      return propagateElementLattice(0, destTypeFIRRTL);
+
+    // Otherwise, mark all overdefined.
+    markOverdefined(connect.getSrc());
+    return markOverdefined(connect.getDest());
+  }
 
   if (auto srcOffset = getFieldIDOffset(changedFieldRef, baseType, fieldRefSrc))
     propagateElementLattice(
@@ -859,7 +891,9 @@ void IMConstPropPass::visitOperation(Operation *op, FieldRef changedField) {
     if (Attribute foldAttr = dyn_cast<Attribute>(foldResult)) {
       if (auto intAttr = dyn_cast<IntegerAttr>(foldAttr))
         resultLattice = LatticeValue(intAttr);
-      else // Treat non integer constants as overdefined.
+      else if (auto strAttr = dyn_cast<StringAttr>(foldAttr))
+        resultLattice = LatticeValue(strAttr);
+      else // Treat unsupported constants as overdefined.
         resultLattice = LatticeValue::getOverdefined();
     } else { // Folding to an operand results in its value.
       resultLattice =
@@ -918,8 +952,11 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
         it->second.isUnknown())
       return false;
 
-    // Cannot materialize constants for non-base types.
-    if (!type_isa<FIRRTLBaseType>(value.getType()))
+    // Cannot materialize constants for certain types.
+    // TODO: Let materializeConstant tell us what it supports instead of this.
+    // Presently it asserts on unsupported combinations, so check this here.
+    if (!type_isa<FIRRTLBaseType, FIntegerType, StringType, BoolType>(
+            value.getType()))
       return false;
 
     auto cstValue =
@@ -976,8 +1013,11 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
       continue;
     }
 
-    // Don't "refold" constants.  TODO: Unique in the module entry block.
-    if (isa<ConstantOp, SpecialConstantOp, InvalidValueOp>(op))
+    // Don't "refold" constants.
+    // If you don't skip here, everything will crash mysteriously and
+    // inconsistently, and asan/ubsan cannot save you.  Here be dragons.
+    if (isa<ConstantOp, SpecialConstantOp, InvalidValueOp>(op) ||
+        op.hasTrait<mlir::OpTrait::ConstantLike>())
       continue;
 
     // If the op had any constants folded, replace them.
