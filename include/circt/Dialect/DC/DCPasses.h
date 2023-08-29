@@ -21,6 +21,7 @@ namespace dc {
 
 std::unique_ptr<mlir::Pass> createDCMaterializeForksSinksPass();
 std::unique_ptr<mlir::Pass> createDCDematerializeForksSinksPass();
+std::unique_ptr<mlir::Pass> createDCTestSCFToDCPass();
 
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/DC/DCPasses.h.inc"
