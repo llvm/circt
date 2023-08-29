@@ -88,4 +88,19 @@ def PathType : TypeDef<OMDialect, "Path", []> {
   let mnemonic = "path";
 }
 
+def EnumType : TypeDef<OMDialect, "Enum", []> {
+  let summary = "An enum type";
+
+  let mnemonic = "enum";
+  let parameters = (
+    ins ArrayRefParameter<
+      "::circt::om::EnumType::EnumElement", 
+      "enum fields">: $elements
+  );
+  let hasCustomAssemblyFormat = 1;
+  let extraClassDeclaration = [{
+    using EnumElement = ::circt::om::detail::EnumElement;
+  }];
+}
+
 #endif // CIRCT_DIALECT_OM_OMTYPES_TD
