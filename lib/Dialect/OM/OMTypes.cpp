@@ -54,7 +54,8 @@ bool operator==(const EnumElement &a, const EnumElement &b) {
   return a.name == b.name && a.type == b.type;
 }
 
-llvm::hash_code hash_value(const EnumElement &fi) {
+llvm::hash_code
+hash_value(const EnumElement &fi) { // NOLINT(readability-identifier-naming)
   return llvm::hash_combine(fi.name, fi.type);
 }
 } // namespace detail
@@ -64,7 +65,8 @@ llvm::hash_code hash_value(const EnumElement &fi) {
 /// Parse a list of field names and types within <>. E.g.:
 /// <foo: i7, bar: i8>
 static mlir::ParseResult
-parseFields(AsmParser &p, SmallVectorImpl<EnumType::EnumElement> &parameters) {
+parseEnumFields(AsmParser &p,
+                SmallVectorImpl<EnumType::EnumElement> &parameters) {
   return p.parseCommaSeparatedList(
       mlir::AsmParser::Delimiter::LessGreater, [&]() -> ParseResult {
         StringRef name;
@@ -78,7 +80,8 @@ parseFields(AsmParser &p, SmallVectorImpl<EnumType::EnumElement> &parameters) {
 }
 
 /// Print out a list of named fields surrounded by <>.
-static void printFields(AsmPrinter &p, ArrayRef<EnumType::EnumElement> fields) {
+static void printEnumFields(AsmPrinter &p,
+                            ArrayRef<EnumType::EnumElement> fields) {
   p << '<';
   llvm::interleaveComma(fields, p, [&](const EnumType::EnumElement &field) {
     p << field.name.getValue() << ": " << field.type;
@@ -88,11 +91,11 @@ static void printFields(AsmPrinter &p, ArrayRef<EnumType::EnumElement> fields) {
 
 mlir::Type circt::om::EnumType::parse(AsmParser &p) {
   llvm::SmallVector<EnumType::EnumElement, 4> parameters;
-  if (parseFields(p, parameters))
+  if (parseEnumFields(p, parameters))
     return Type();
   return get(p.getContext(), parameters);
 }
 
 void circt::om::EnumType::print(AsmPrinter &p) const {
-  printFields(p, getElements());
+  printEnumFields(p, getElements());
 }
