@@ -170,9 +170,6 @@ def HWModuleOp : HWModuleOpBase<"module",
     // Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph;}
 
-    /// Returns the number of in or inout ports.
-    size_t getNumInOrInoutPorts() { return getHWModuleType().getNumInputs(); }
-
     /// Return the PortInfo for the specified input or inout port.
     PortInfo getInputPort(size_t i);
 
