@@ -964,12 +964,10 @@ ModulePortInfo hw::getOperationPortList(Operation *op) {
   auto argTypes = getModuleType(op).getInputs();
   auto argLocs = op->getAttrOfType<ArrayAttr>("argLocs");
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
-    bool isInOut = false;
     auto type = argTypes[i];
     auto direction = ModulePort::Direction::Input;
 
     if (auto inout = type.dyn_cast<InOutType>()) {
-      isInOut = true;
       type = inout.getElementType();
       direction = ModulePort::Direction::InOut;
     }
