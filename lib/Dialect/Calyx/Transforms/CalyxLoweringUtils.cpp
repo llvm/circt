@@ -770,7 +770,7 @@ BuildCallInstance::partiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
       resultTypes.push_back(type);
     std::string instanceName = getInstanceName(callOp);
 
-    // Determines if an instance needs to be created.If the same function was
+    // Determines if an instance needs to be created. If the same function was
     // called by CallOp before, it doesn't need to be created, if not, the
     // instance is created.
     if (!getState().getInstance(instanceName)) {
