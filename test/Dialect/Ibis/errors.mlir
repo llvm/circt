@@ -99,3 +99,39 @@ ibis.class @PathStepChildMissingSymbol {
   // expected-error @+1 {{ibis.step 'child' must specify an instance name}}
   %p = ibis.path [#ibis.step<child : !ibis.scoperef<@A>>]
 }
+
+// -----
+
+ibis.class @InvalidVar {
+  %this = ibis.this @C
+  // expected-error @+1 {{'ibis.var' op attribute 'type' failed to satisfy constraint: any memref type}}
+  ibis.var @var : i32
+}
+
+// -----
+
+ibis.class @InvalidGetVar {
+  %this = ibis.this @InvalidGetVar
+  ibis.var @var : memref<i32>
+  ibis.method @foo()  {
+    %parent = ibis.path [
+      #ibis.step<parent : !ibis.scoperef<@InvalidGetVar>>
+    ]
+    // expected-error @+1 {{'ibis.get_var' op result #0 must be memref of any type values, but got 'i32'}}
+    %var = ibis.get_var %parent, @var : !ibis.scoperef<@InvalidGetVar> -> i32
+  }
+}
+
+// -----
+
+ibis.class @InvalidGetVar2 {
+  %this = ibis.this @InvalidGetVar2
+  ibis.var @var : memref<i32>
+  ibis.method @foo()  {
+    %parent = ibis.path [
+      #ibis.step<parent : !ibis.scoperef<@InvalidGetVar2>>
+    ]
+    // expected-error @+1 {{'ibis.get_var' op dereferenced type ('memref<i1>') must match variable type ('memref<i32>')}}
+    %var = ibis.get_var %parent, @var : !ibis.scoperef<@InvalidGetVar2> -> memref<i1>
+  }
+}

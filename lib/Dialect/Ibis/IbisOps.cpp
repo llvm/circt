@@ -20,6 +20,18 @@ using namespace mlir;
 using namespace circt;
 using namespace ibis;
 
+// Looks up a `sym`-symbol defining operation of type T in the `mlir::ModuleOp`
+// parent scope of the provided `base` operation.
+template <typename T>
+static T lookupInModule(Operation *base, FlatSymbolRefAttr sym,
+                        SymbolTable *symbolTable) {
+  auto mod = base->getParentOfType<mlir::ModuleOp>();
+  if (symbolTable)
+    return dyn_cast<T>(symbolTable->lookupSymbolIn(mod, sym));
+
+  return mod.lookupSymbol<T>(sym);
+}
+
 template <typename TSymAttr>
 ParseResult parseScopeRefFromName(OpAsmParser &parser, Type &scopeRefType,
                                   TSymAttr sym) {
@@ -235,6 +247,45 @@ LogicalResult ReturnOp::verify() {
 }
 
 //===----------------------------------------------------------------------===//
+// GetVarOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult GetVarOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto varOp = getTarget(&symbolTable.getSymbolTable(
+      getOperation()->getParentOfType<mlir::ModuleOp>()));
+
+  if (failed(varOp))
+    return failure();
+
+  // Ensure that the dereferenced type is the same type as the variable type.
+  if (varOp->getType() != getType())
+    return emitOpError() << "dereferenced type (" << getType()
+                         << ") must match variable type (" << varOp->getType()
+                         << ")";
+
+  return success();
+}
+
+FailureOr<VarOp> GetVarOp::getTarget(SymbolTable *symbolTable) {
+  auto targetClassSym =
+      getInstance().getType().cast<ScopeRefType>().getScopeRef();
+  auto targetClass =
+      lookupInModule<ClassOp>(getOperation(), targetClassSym, symbolTable);
+
+  if (!targetClass)
+    return emitOpError() << "'" << targetClassSym << "' does not exist";
+
+  // Lookup the variable inside the class scope.
+  auto varName = getVarName();
+  auto var = dyn_cast_or_null<VarOp>(
+      symbolTable->lookupSymbolIn(targetClass.getOperation(), varName));
+  if (!var)
+    return emitOpError() << "'" << varName << "' does not exist in '"
+                         << targetClassSym << "'";
+  return {var};
+}
+
+//===----------------------------------------------------------------------===//
 // InstanceOp
 //===----------------------------------------------------------------------===//
 
@@ -248,12 +299,8 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 }
 
 ClassOp InstanceOp::getClass(SymbolTable *symbolTable) {
-  auto mod = getOperation()->getParentOfType<mlir::ModuleOp>();
-  if (symbolTable)
-    return dyn_cast<ClassOp>(
-        symbolTable->lookupSymbolIn(mod, getTargetNameAttr()));
-
-  return mod.lookupSymbol<ClassOp>(getTargetNameAttr());
+  return lookupInModule<ClassOp>(getOperation(), getTargetNameAttr(),
+                                 symbolTable);
 }
 
 void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {

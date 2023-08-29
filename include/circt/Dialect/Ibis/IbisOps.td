@@ -189,6 +189,46 @@ def ReturnOp : IbisOp<"return", [
   ];
 }
 
+def MemRefTypeAttr : TypeAttrBase<"MemRefType", "any memref type">;
+def VarOp : IbisOp<"var", [
+  Symbol
+]> {
+  let summary = "Ibis variable definition";
+  let description = [{
+    Defines an Ibis class member variable. The variable is typed with a 
+    `memref.memref` type, and may define either a singleton or uni-dimensional
+    array of values.
+    `ibis.var` defines a symbol within the encompassing class scope which can
+    be dereferenced through a `!ibis.scoperef` value of the parent class.
+  }];
+
+  let arguments = (ins SymbolNameAttr:$sym_name, MemRefTypeAttr:$type);
+  let assemblyFormat = "$sym_name `:` $type attr-dict";
+}
+
+def GetVarOp : IbisOp<"get_var", [
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+  HasCustomSSAName
+]> {
+  let summary = "Dereferences an ibis member variable through a scoperef";
+  let arguments = (ins ScopeRefType:$instance, FlatSymbolRefAttr:$varName);
+  let results = (outs AnyMemRef:$var);
+  let assemblyFormat = [{
+    $instance `,` $varName attr-dict `:` qualified(type($instance)) `->` qualified(type($var))
+  }];
+
+  let extraClassDeclaration = [{
+    // Return the `VarOp` that this operation is referencing.
+    FailureOr<VarOp> getTarget(SymbolTable* symbolTable = nullptr);
+  }];
+
+  let extraClassDefinition = [{
+    void $cppClass::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+      setNameFn(getResult(), getVarName());
+    }
+  }];
+}
+
 def CallOp : IbisOp<"call", [CallOpInterface]> {
   let summary = "Ibis method call";
   let description = [{
