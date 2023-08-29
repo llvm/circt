@@ -62,14 +62,6 @@ struct ContainerPortInfo {
       portInfo.dir = hw::ModulePort::Direction::Output;
       outputs.push_back(portInfo);
     }
-
-    // Sort the in- and output port lists by name to ensure deterministic
-    // ordering.
-    auto cmp = [](const hw::PortInfo *lhs, const hw::PortInfo *rhs) {
-      return lhs->name.getValue().compare(rhs->name.getValue());
-    };
-    llvm::array_pod_sort(inputs.begin(), inputs.end(), cmp);
-    llvm::array_pod_sort(outputs.begin(), outputs.end(), cmp);
     hwPorts = std::make_unique<hw::ModulePortInfo>(inputs, outputs);
   }
 };
@@ -118,9 +110,9 @@ struct ContainerOpConversionPattern : public OpConversionPattern<ContainerOp> {
       auto users = outputPort->getUsers();
       size_t nUsers = std::distance(users.begin(), users.end());
       if (nUsers != 1)
-        return rewriter.notifyMatchFailure(
-            outputPort, "expected exactly one ibis.port.write op of the output "
-                        "port");
+        return outputPort->emitOpError()
+               << "expected exactly one ibis.port.write op of the output "
+                  "port";
       auto writer = cast<PortWriteOp>(*users.begin());
       outputValues.push_back(writer.getValue());
       rewriter.eraseOp(outputPort);
