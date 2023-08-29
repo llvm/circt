@@ -223,3 +223,9 @@ om.class @Path() {
   // CHECK: %0 = om.path reference @HierPath
   %0 = om.path reference @HierPath
 }
+
+// CHECK-LABEL: @Enum
+// CHECK-SAME: !om.enum<a: !om.string, b: i64>
+om.class @Enum(%e : !om.enum<a: !om.string, b: i64>) {
+  om.class.field @map_i64, %e : !om.enum<a: !om.string, b: i64>
+}

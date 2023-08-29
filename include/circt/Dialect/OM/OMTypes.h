@@ -20,6 +20,15 @@ namespace circt::om {
 // Return true if the type is a pair whose first element is either string or
 // integer.
 bool isMapKeyValuePairType(mlir::Type);
+
+namespace detail {
+struct EnumElement {
+  mlir::StringAttr name;
+  mlir::Type type;
+};
+
+} // namespace detail
+
 } // namespace circt::om
 
 #define GET_TYPEDEF_CLASSES
