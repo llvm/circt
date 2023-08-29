@@ -628,8 +628,8 @@ void IMConstPropPass::visitConnectLike(FConnectLike connect,
   auto fieldRefDest = getOrCacheFieldRefFromValue(connect.getDest());
   if (auto subaccess = fieldRefDest.getValue().getDefiningOp<SubaccessOp>()) {
     // If the destination is subaccess, we give up to precisely track
-    // lattice values and marke entire aggregate as overdefined. These code
-    // should be dead unless we stop lowering of subaccess in LowerTypes,
+    // lattice values and mark entire aggregate as overdefined. This code
+    // should be dead unless we stop lowering of subaccess in LowerTypes.
     Value parent = subaccess.getInput();
     while (parent.getDefiningOp() &&
            parent.getDefiningOp()->getNumOperands() > 0)
@@ -796,7 +796,7 @@ void IMConstPropPass::visitOperation(Operation *op, FieldRef changedField) {
   }
 
   // Simulate the result of folding this operation to a constant. If folding
-  // fails or was an in-place fold, mark the results as overdefined.
+  // fails mark the results as overdefined.
   SmallVector<OpFoldResult, 8> foldResults;
   foldResults.reserve(op->getNumResults());
   if (failed(op->fold(operandConstants, foldResults))) {
@@ -833,7 +833,7 @@ void IMConstPropPass::visitOperation(Operation *op, FieldRef changedField) {
   });
 
   // If the folding was in-place, keep going.  This is surprising, but since
-  // only folder that will do inplace updates is the communative folder, we
+  // only folder that will do in-place updates is the commutative folder, we
   // aren't going to stop.  We don't update the results, since they didn't
   // change, the op just got shuffled around.
   if (foldResults.empty())
