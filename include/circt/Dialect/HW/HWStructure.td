@@ -254,15 +254,6 @@ def HWModuleOp : HWModuleOpBase<"module",
     }
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
-    /// Verify the type attribute of this function. Returns failure and emits
-    /// an error if the attribute is invalid.
-    LogicalResult verifyType() {
-      auto type = getFunctionTypeAttr().getValue();
-      if (!type.isa<FunctionType>())
-        return emitOpError("requires '" + getFunctionTypeAttrName().getValue() +
-                           "' attribute of function type");
-      return success();
-    }
 
     /// Verifies the body of the function.
     LogicalResult verifyBody();
@@ -342,15 +333,6 @@ def HWModuleExternOp : HWModuleOpBase<"module.extern"> {
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
 
-    /// Verify the type attribute of this function. Returns failure and emits
-    /// an error if the attribute is invalid.
-    LogicalResult verifyType() {
-      auto type = getFunctionTypeAttr().getValue();
-      if (!type.isa<FunctionType>())
-        return emitOpError("requires '" + getFunctionTypeAttrName().getValue() +
-                           "' attribute of function type");
-      return success();
-    }
   }];
 
   let hasCustomAssemblyFormat = 1;
@@ -445,17 +427,6 @@ def HWModuleGeneratedOp : HWModuleOpBase<"module.generated", [
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
 
-    /// Verify the type attribute of this function. Returns failure and emits
-    /// an error if the attribute is invalid.
-    LogicalResult verifyType() {
-      auto type = getFunctionTypeAttr().getValue();
-      if (!type.isa<FunctionType>())
-        return emitOpError("requires '" + getFunctionTypeAttrName().getValue() +
-                           "' attribute of function type");
-      return success();
-    }
-
-    TypeAttr getTypeAttr();
   }];
 
   let hasCustomAssemblyFormat = 1;
