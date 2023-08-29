@@ -35,20 +35,19 @@ public:
     Type innerType = innerPortRefType.getPortType();
     Direction d = innerPortRefType.getDirection();
 
-    // Canonical form check - canonicalization should have ensured that only
-    // a single port unwrapper was present, so if this is not the case, the
-    // user should run canonicalization. This goes for other assumptions in the
-    // following code - we require a canonical form to avoid having to deal
-    // with a bunch of edge cases.
+    // CSE check - CSE should have ensured that only a single port unwrapper was
+    // present, so if this is not the case, the user should run
+    // CSE. This goes for other assumptions in the following code -
+    // we require a CSEd form to avoid having to deal with a bunch of edge
+    // cases.
     auto portrefUsers = op.getResult().getUsers();
     size_t nPortrefUsers =
         std::distance(portrefUsers.begin(), portrefUsers.end());
     if (nPortrefUsers != 1)
       return rewriter.notifyMatchFailure(
           op, "expected a single ibis.port.read as the only user of the input "
-              "port reference, but found multiple. This indicates that the IR "
-              "was not in a canonical form - please run canonicalization prior "
-              "to this pass");
+              "port reference, but found multiple readers - please run CSE "
+              "prior to this pass");
 
     // A single PortReadOp should be present, which unwraps the portref<portref>
     // into a portref.
@@ -278,7 +277,7 @@ class GetPortConversionPattern : public OpConversionPattern<GetPortOp> {
         // 1. a read op which unwraps the portref<out portref<in T>> into a
         //    portref<in T>
         //      %r = ibis.port.read %rr : !ibis.portref<out !ibis.portref<in T>>
-        // 2. one (or multiple, if not in canonical form)
+        // 2. one (or multiple, if not CSEd)
         //
         // We then replace the read op with the actual output port of the
         // container.
