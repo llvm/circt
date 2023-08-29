@@ -273,3 +273,14 @@ hw.module @Issue5605(%a: i1, %b: i1, %clock: i1, %reset: i1) {
   sv.assert.concurrent posedge %clock, %reset label "assert_1" message "bar"(%1) : i2
   hw.output
 }
+
+// -----
+
+module attributes {circt.loweringOptions = "disallowExpressionInliningInPorts"} {
+  hw.module.extern @Bar(%a: !hw.inout<i1>) -> (b: i1)
+  // CHECK-LABEL: hw.module @DontSpillInout
+  hw.module @DontSpillInout() {
+    %a = sv.wire : !hw.inout<i1>
+    %bar.b = hw.instance "bar" @Bar(a: %a: !hw.inout<i1>) -> (b: i1)
+  }
+}

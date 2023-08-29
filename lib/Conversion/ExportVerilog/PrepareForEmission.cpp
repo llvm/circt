@@ -77,7 +77,7 @@ static void spillWiresForInstanceInputs(InstanceOp op) {
     auto src = op.getOperand(nextOpNo);
     ++nextOpNo;
 
-    if (isSimpleReadOrPort(src))
+    if (port.isInOut() || isSimpleReadOrPort(src))
       continue;
 
     nameTmp.resize(namePrefixSize);
