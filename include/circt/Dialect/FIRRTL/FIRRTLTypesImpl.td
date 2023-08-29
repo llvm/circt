@@ -459,7 +459,7 @@ def FEnumImpl : FIRRTLImplType<"FEnum", [FieldIDTypeInterface]> {
 }
 
 def RefImpl : FIRRTLImplType<"Ref",
-                             [DeclareTypeInterfaceMethods<FieldIDTypeInterface>],
+                             [AtomicFieldIDTypeInterface],
                              "::circt::firrtl::FIRRTLType"> {
   let summary = "A reference to a signal elsewhere.";
   let description = [{
