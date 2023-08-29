@@ -17,6 +17,7 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/LLVM.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 
 #include <memory>
 
@@ -40,6 +41,9 @@ calyx::InstanceOp createInstance(Location loc, OpBuilder &builder,
                                  SmallVectorImpl<Type> &resultTypes,
                                  std::string &instanceName,
                                  StringRef componentName);
+
+/// A helper function to get the instance name.
+std::string getInstanceName(mlir::func::CallOp callOp);
 
 // Returns whether this operation is a leaf node in the Calyx control.
 // TODO(github.com/llvm/circt/issues/1679): Add Invoke.

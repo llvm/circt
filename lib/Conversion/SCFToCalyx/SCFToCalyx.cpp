@@ -103,7 +103,7 @@ struct ForScheduleable {
   uint64_t bound;
 };
 
-struct CallScheduleanle {
+struct CallScheduleable {
   /// Instance for invoking.
   calyx::InstanceOp instanceOp;
   // CallOp for getting the arguments.
@@ -112,7 +112,7 @@ struct CallScheduleanle {
 
 /// A variant of types representing scheduleable operations.
 using Scheduleable = std::variant<calyx::GroupOp, WhileScheduleable,
-                                  ForScheduleable, CallScheduleanle>;
+                                  ForScheduleable, CallScheduleable>;
 
 class WhileLoopLoweringStateInterface
     : calyx::LoopLoweringStateInterface<ScfWhileOp> {
@@ -909,23 +909,24 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      CallOp callOp) const {
-  std::string instanceName = callOp.getCallee().str() + "_instance";
+  std::string instanceName = calyx::getInstanceName(callOp);
   calyx::InstanceOp instanceOp =
       getState<ComponentLoweringState>().getInstance(instanceName);
   SmallVector<Value, 4> outputPorts;
   auto portInfos = instanceOp.getReferencedComponent().getPortInfo();
-  for (auto portInfo : enumerate(portInfos)) {
-    if (portInfo.value().direction == calyx::Direction::Output)
-      outputPorts.push_back(instanceOp.getResult(portInfo.index()));
+  for (auto [idx, portInfo] : enumerate(portInfos)) {
+    if (portInfo.direction == calyx::Direction::Output)
+      outputPorts.push_back(instanceOp.getResult(idx));
   }
+
   // Replacing a CallOp results in the out port of the instance.
-  for (auto value : llvm::enumerate(callOp.getResults()))
-    value.value().replaceAllUsesWith(outputPorts[value.index()]);
+  for (auto [idx, result] : llvm::enumerate(callOp.getResults()))
+    rewriter.replaceAllUsesWith(result, outputPorts[idx]);
 
   // CallScheduleanle requires an instance, while CallOp can be used to get the
   // input ports.
   getState<ComponentLoweringState>().addBlockScheduleable(
-      callOp.getOperation()->getBlock(), CallScheduleanle{instanceOp, callOp});
+      callOp.getOperation()->getBlock(), CallScheduleable{instanceOp, callOp});
   return success();
 }
 
@@ -1346,7 +1347,7 @@ private:
                                          forLatchGroup.getName());
         if (res.failed())
           return res;
-      } else if (auto *callSchedPtr = std::get_if<CallScheduleanle>(&group)) {
+      } else if (auto *callSchedPtr = std::get_if<CallScheduleable>(&group)) {
         auto instanceOp = callSchedPtr->instanceOp;
         OpBuilder::InsertionGuard g(rewriter);
         auto callBody = rewriter.create<calyx::SeqOp>(instanceOp.getLoc());
@@ -1355,9 +1356,8 @@ private:
         rewriter.create<calyx::EnableOp>(instanceOp.getLoc(), initGroupName);
         SmallVector<Value, 4> instancePorts;
         auto inputPorts = callSchedPtr->callOp.getOperands();
-        for (size_t i = 0; i < inputPorts.size(); ++i) {
-          instancePorts.push_back(instanceOp.getResult(i));
-        }
+        llvm::copy(instanceOp.getResults().take_front(inputPorts.size()),
+                   std::back_inserter(instancePorts));
         rewriter.create<calyx::InvokeOp>(
             instanceOp.getLoc(), instanceOp.getSymName(), instancePorts,
             inputPorts, ArrayAttr::get(rewriter.getContext(), {}),

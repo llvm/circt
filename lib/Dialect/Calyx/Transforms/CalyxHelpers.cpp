@@ -47,6 +47,10 @@ calyx::InstanceOp createInstance(Location loc, OpBuilder &builder,
                                     componentName);
 }
 
+std::string getInstanceName(mlir::func::CallOp callOp) {
+  return callOp.getCallee().str() + "_instance";
+}
+
 bool isControlLeafNode(Operation *op) { return isa<calyx::EnableOp>(op); }
 
 DictionaryAttr getMandatoryPortAttr(MLIRContext *ctx, StringRef name) {

@@ -768,7 +768,7 @@ BuildCallInstance::partiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
       resultTypes.push_back(type);
     for (auto type : componentOp.getResultTypes())
       resultTypes.push_back(type);
-    std::string instanceName = callOp.getCallee().str() + "_instance";
+    std::string instanceName = getInstanceName(callOp);
 
     // Determines if an instance needs to be created.If the same function was
     // called by CallOp before, it doesn't need to be created, if not, the
@@ -790,10 +790,8 @@ BuildCallInstance::partiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
       rewriter.setInsertionPointToStart(groupOp.getBodyBlock());
       auto portInfos = instanceOp.getReferencedComponent().getPortInfo();
       auto results = instanceOp.getResults();
-      for (auto [portInfo, result] : llvm::zip(portInfos, results)) {
-        if (portInfo.hasAttribute("go"))
-          rewriter.create<calyx::AssignOp>(callOp.getLoc(), result, constantOp);
-        else if (portInfo.hasAttribute("reset"))
+      for (const auto &[portInfo, result] : llvm::zip(portInfos, results)) {
+        if (portInfo.hasAttribute("go") || portInfo.hasAttribute("reset"))
           rewriter.create<calyx::AssignOp>(callOp.getLoc(), result, constantOp);
         else if (portInfo.hasAttribute("done"))
           rewriter.create<calyx::GroupDoneOp>(callOp.getLoc(), result);
