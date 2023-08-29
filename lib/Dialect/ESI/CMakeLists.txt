@@ -82,41 +82,45 @@ add_library(esi-collateral INTERFACE)
 # This is an alternative to configure_file to ensure that the file is copied
 # on every build (not just during CMake configure).
 function(copy_esi_runtime FILENAME)
-  # An optional "OUTDIR" argument can be passed to specify the relative location
-  # within the ESI_RUNTIME_DIR. If not specified, the file will be copied to the
-  # root of the ESI_RUNTIME_DIR.
-  cmake_parse_arguments(ARG "" "OUTDIR" "" ${ARGN})
-  if (NOT ARG_OUTDIR)
-    set(ARG_OUTDIR "")
-  else()
-    set(ARG_OUTDIR "${ARG_OUTDIR}/")
-  endif()
-
-  get_filename_component(DST ${FILENAME} NAME)
   get_filename_component(SRC ${FILENAME} REALPATH)
   add_custom_command(TARGET CIRCTESI PRE_BUILD
     COMMAND ${CMAKE_COMMAND} -E
-    copy ${SRC} ${ESI_RUNTIME_DIR}/${ARG_OUTDIR}${DST})
+    copy ${SRC} ${ESI_RUNTIME_DIR}/${FILENAME})
   target_sources(esi-collateral PUBLIC FILE_SET HEADERS
     BASE_DIRS "."
     FILES "${FILENAME}")
 endfunction()
 
+set(ESI_RUNTIME_SRCS
+  cosim/Cosim_DpiPkg.sv
+  cosim/Cosim_Endpoint.sv
+  cosim/Cosim_MMIO.sv
+  ESIPrimitives.sv
+
+  runtime/CMakeLists.txt
+  runtime/cpp/include/esi/Accelerator.h
+  runtime/cpp/include/esi/StdServices.h
+  runtime/cpp/include/esi/backends/Cosim.h
+  runtime/cpp/include/esi/backends/capnp.h
+  runtime/cpp/include/esi/esi.h
+  runtime/cpp/lib/Accelerator.cpp
+  runtime/cpp/lib/backends/Cosim.cpp
+  runtime/cpp/tools/esiquery.cpp
+  runtime/python/esi/main.cpp
+)
 
 if (ESI_CAPNP)
-  copy_esi_runtime(cosim/Cosim_DpiPkg.sv OUTDIR cosim)
-  copy_esi_runtime(cosim/Cosim_Endpoint.sv OUTDIR cosim)
-  copy_esi_runtime(cosim/Cosim_MMIO.sv OUTDIR cosim)
   install(FILES ${CapnProto_capnp_IMPORTED_LOCATION} DESTINATION lib)
   install(FILES ${CapnProto_capnpc_IMPORTED_LOCATION} DESTINATION lib)
   install(FILES ${CapnProto_kj_IMPORTED_LOCATION} DESTINATION lib)
+  add_dependencies(esi-collateral EsiCosimCapnp)
 
   # These are not Capnp files, but they use a feature from a newer version of
   # CMake. Adding them here as a mitigation.
   # TODO: Figure out what to do longer term.
-  copy_esi_runtime(ESIPrimitives.sv OUTDIR)
-  copy_esi_runtime(runtime/cpp/include/esi/esi.h OUTDIR cpp/include/esi)
-  copy_esi_runtime(runtime/cpp/include/esi/backends/capnp.h OUTDIR cpp/include/esi/backends)
+  foreach(SRC ${ESI_RUNTIME_SRCS})
+    copy_esi_runtime(${SRC})
+  endforeach()
 
   target_compile_definitions(obj.CIRCTESI PRIVATE CAPNP)
   target_link_libraries(obj.CIRCTESI CapnProto::capnp CapnProto::capnpc)

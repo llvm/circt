@@ -139,7 +139,7 @@ if(ESI_COSIM)
   )
   install(TARGETS EsiCosimCapnp
     FILE_SET HEADERS
-    DESTINATION python_packages/pycde/collateral
+    DESTINATION python_packages/pycde/collateral/runtime
     COMPONENT PyCDE
   )
 endif()
