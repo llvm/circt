@@ -190,28 +190,6 @@ def HWModuleOp : HWModuleOpBase<"module",
       return insertInput(index, nameAttr, ty);
     }
 
-    /// Append an output with a given name and type to the port list.
-    /// If the name is not unique, a unique name is created.
-    void appendOutput(StringAttr name, Value value) {
-      return insertOutputs(getNumOutputs(), {{name, value}});
-    }
-
-    void appendOutput(const Twine &name, Value value) {
-      ::mlir::StringAttr nameAttr = ::mlir::StringAttr::get(getContext(), name);
-      return insertOutputs(getNumOutputs(), {{nameAttr, value}});
-    }
-
-    /// Prepend an output with a given name and type to the port list.
-    /// If the name is not unique, a unique name is created.
-    void prependOutput(StringAttr name, Value value) {
-      return insertOutputs(0, {{name, value}});
-    }
-
-    void prependOutput(const Twine &name, Value value) {
-      ::mlir::StringAttr nameAttr = ::mlir::StringAttr::get(getContext(), name);
-      return insertOutputs(0, {{nameAttr, value}});
-    }
-
     /// Inserts a list of output ports into the port list at a specific
     /// location, shifting all subsequent ports.  Rewrites the output op
     /// to return the associated values.
