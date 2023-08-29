@@ -966,14 +966,14 @@ ModulePortInfo hw::getOperationPortList(Operation *op) {
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
     bool isInOut = false;
     auto type = argTypes[i];
+    auto direction = ModulePort::Direction::Input;
 
     if (auto inout = type.dyn_cast<InOutType>()) {
       isInOut = true;
       type = inout.getElementType();
+      direction = ModulePort::Direction::InOut;
     }
 
-    auto direction =
-        isInOut ? ModulePort::Direction::InOut : ModulePort::Direction::Input;
     LocationAttr loc;
     if (argLocs)
       loc = argLocs[i].cast<LocationAttr>();
