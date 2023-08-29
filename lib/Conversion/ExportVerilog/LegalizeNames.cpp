@@ -144,12 +144,21 @@ static void legalizeModuleLocalNames(HWModuleOp module,
   auto verilogNameAttr = StringAttr::get(ctxt, "hw.verilogName");
   // Legalize the port names.
   auto ports = module.getPortList();
-  for (auto [idx, port] : llvm::enumerate(ports)) {
-    auto newName = nameResolver.getLegalName(port.name);
-    if (newName != port.name.getValue()) {
-      module.setPortAttr(idx, verilogNameAttr, StringAttr::get(ctxt, newName));
-    }
-  }
+  auto setName = [&](size_t idx, Attribute name) {
+    if (name)
+      // If the verilogName exists, then set it un-conditionally.
+      return StringAttr::get(
+          ctxt, nameResolver.getLegalName(name.cast<StringAttr>()));
+
+    auto oldName = ports.at(idx).name;
+    auto newName = nameResolver.getLegalName(oldName);
+    StringAttr updatedAttr;
+    // Set the verilogName attr only if the name is updated.
+    if (newName != oldName)
+      updatedAttr = StringAttr::get(ctxt, newName);
+    return updatedAttr;
+  };
+  module.setPortAttrs(verilogNameAttr, setName);
 
   SmallVector<std::pair<Operation *, StringAttr>> nameEntries;
   // Legalize the value names. We first mark existing hw.verilogName attrs as
