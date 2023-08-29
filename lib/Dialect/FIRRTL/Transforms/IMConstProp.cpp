@@ -666,8 +666,7 @@ void IMConstPropPass::visitConnectLike(FConnectLike connect,
     return markOverdefined(parent);
   }
 
-  auto propagateElementLattice = [&](uint64_t fieldID,
-                                     FIRRTLType destType) {
+  auto propagateElementLattice = [&](uint64_t fieldID, FIRRTLType destType) {
     auto fieldRefDestConnected = fieldRefDest.getSubField(fieldID);
     assert(!type_isa<FIRRTLBaseType>(destType) ||
            type_cast<FIRRTLBaseType>(destType).isGround());
