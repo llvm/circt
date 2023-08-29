@@ -275,8 +275,9 @@ LogicalResult HandshakeLowerExtmemToHWPass::wrapESI(
   auto outputOp =
       cast<hw::OutputOp>(wrapperMod.getBodyBlock()->getTerminator());
   b.setInsertionPoint(outputOp);
-  b.create<hw::OutputOp>(outputOp.getLoc(), instance.getResults().take_front(
-                                                wrapperMod.getNumOutputs()));
+  b.create<hw::OutputOp>(
+      outputOp.getLoc(),
+      instance.getResults().take_front(wrapperMod.getNumOutputPorts()));
   outputOp.erase();
 
   return success();

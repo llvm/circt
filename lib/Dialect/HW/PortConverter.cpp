@@ -151,9 +151,9 @@ LogicalResult PortConverterImpl::run() {
   // lowered ESI ports with the non-ESI ports. Also, the 'modifyPorts' method
   // ends up rebuilding the port lists anyway, so this isn't nearly as expensive
   // as it may seem.
-  SmallVector<unsigned> inputsToErase(mod.getNumInputs());
+  SmallVector<unsigned> inputsToErase(mod.getNumInputPorts());
   std::iota(inputsToErase.begin(), inputsToErase.end(), 0);
-  SmallVector<unsigned> outputsToErase(mod.getNumOutputs());
+  SmallVector<unsigned> outputsToErase(mod.getNumOutputPorts());
   std::iota(outputsToErase.begin(), outputsToErase.end(), 0);
 
   mod.modifyPorts(newInputs, newOutputs, inputsToErase, outputsToErase);

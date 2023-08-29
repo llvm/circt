@@ -42,7 +42,7 @@ struct ConvertHWModule : public OpConversionPattern<HWModuleOp> {
   matchAndRewrite(HWModuleOp module, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     // Collect the HW module's port types.
-    unsigned numInputs = module.getNumInputs();
+    unsigned numInputs = module.getNumInputPorts();
     auto moduleInputs = module.getInputTypes();
     auto moduleOutputs = module.getOutputTypes();
 

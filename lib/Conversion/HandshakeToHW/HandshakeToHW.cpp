@@ -346,7 +346,7 @@ static LogicalResult convertExtMemoryOps(HWModuleOp mod) {
 
     // Add memory output - this is the inputs of the extmemory op (without the
     // first argument);
-    unsigned outArgI = mod.getNumOutputs();
+    unsigned outArgI = mod.getNumOutputPorts();
     SmallVector<PortInfo> inputs(portInfo.getInputs());
     auto outPortInfo =
         getMemoryIOInfo(arg.getLoc(), memName.strref() + "_out", outArgI,
@@ -707,8 +707,10 @@ addSequentialIOOperandsIfNeeded(Operation *op,
     // Parent should at this point be a hw.module and have clock and reset
     // ports.
     auto parent = cast<hw::HWModuleOp>(op->getParentOp());
-    operands.push_back(parent.getArgumentForInput(parent.getNumInputs() - 2));
-    operands.push_back(parent.getArgumentForInput(parent.getNumInputs() - 1));
+    operands.push_back(
+        parent.getArgumentForInput(parent.getNumInputPorts() - 2));
+    operands.push_back(
+        parent.getArgumentForInput(parent.getNumInputPorts() - 1));
   }
 }
 

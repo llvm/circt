@@ -381,7 +381,7 @@ bool ESIPortsPass::updateFunc(HWModuleExternOp mod) {
   // an operand.
   SmallVector<Type, 8> newResultTypes;
   SmallVector<DictionaryAttr, 4> newResultAttrs;
-  for (size_t resNum = 0, numRes = mod.getNumOutputs(); resNum < numRes;
+  for (size_t resNum = 0, numRes = mod.getNumOutputPorts(); resNum < numRes;
        ++resNum) {
     Type resTy = mod.getOutputTypes()[resNum];
     auto chanTy = resTy.dyn_cast<ChannelType>();

@@ -1337,7 +1337,7 @@ void HWModuleOp::insertOutputs(unsigned index,
 }
 
 void HWModuleOp::appendOutputs(ArrayRef<std::pair<StringAttr, Value>> outputs) {
-  return insertOutputs(getNumOutputs(), outputs);
+  return insertOutputs(getNumOutputPorts(), outputs);
 }
 
 void HWModuleOp::getAsmBlockArgumentNames(mlir::Region &region,
@@ -1370,12 +1370,12 @@ static SmallVector<Location> getAllPortLocs(ModTy module) {
   if (locs)
     for (auto l : locs)
       retval.push_back(cast<Location>(l));
-  retval.resize(module.getNumInputs(), empty);
+  retval.resize(module.getNumInputPorts(), empty);
   locs = module.getResultLocs();
   if (locs)
     for (auto l : locs)
       retval.push_back(cast<Location>(l));
-  retval.resize(module.getNumInputs() + module.getNumOutputs(), empty);
+  retval.resize(module.getNumInputPorts() + module.getNumOutputPorts(), empty);
   return retval;
 }
 
@@ -1393,7 +1393,7 @@ SmallVector<Location> HWModuleGeneratedOp::getAllPortLocs() {
 
 template <typename ModTy>
 static void setAllPortLocs(ArrayRef<Location> locs, ModTy module) {
-  auto numInputs = module.getNumInputs();
+  auto numInputs = module.getNumInputPorts();
   SmallVector<Attribute> argLocs(locs.begin(), locs.begin() + numInputs);
   SmallVector<Attribute> resLocs(locs.begin() + numInputs, locs.end());
   module.setArgLocsAttr(ArrayAttr::get(module.getContext(), argLocs));
@@ -1420,12 +1420,12 @@ static SmallVector<Attribute> getAllPortAttrs(ModTy &mod) {
   if (attrs)
     for (auto a : *attrs)
       retval.push_back(a);
-  retval.resize(mod.getNumInputs(), empty);
+  retval.resize(mod.getNumInputPorts(), empty);
   attrs = mod.getResAttrs();
   if (attrs)
     for (auto a : *attrs)
       retval.push_back(a);
-  retval.resize(mod.getNumInputs() + mod.getNumOutputs(), empty);
+  retval.resize(mod.getNumInputPorts() + mod.getNumOutputPorts(), empty);
   return retval;
 }
 
@@ -1443,7 +1443,7 @@ SmallVector<Attribute> HWModuleGeneratedOp::getAllPortAttrs() {
 
 template <typename ModTy>
 static void setAllPortAttrs(ModTy &mod, ArrayRef<Attribute> attrs) {
-  auto numInputs = mod.getNumInputs();
+  auto numInputs = mod.getNumInputPorts();
   SmallVector<Attribute> argAttrs(attrs.begin(), attrs.begin() + numInputs);
   SmallVector<Attribute> resAttrs(attrs.begin() + numInputs, attrs.end());
 
@@ -1720,9 +1720,17 @@ void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 ModulePortInfo InstanceOp::getPortList() { return getOperationPortList(*this); }
 
 size_t InstanceOp::getNumPorts() {
-  SmallVector<Type> inputs(getOperandTypes());
-  SmallVector<Type> results(getResultTypes());
-  return inputs.size() + results.size();
+  return getNumInputPorts() + getNumOutputPorts();
+}
+
+size_t InstanceOp::getNumInputPorts() { return getNumOperands(); }
+
+size_t InstanceOp::getNumOutputPorts() { return getNumResults(); }
+
+size_t InstanceOp::getPortIdForInputId(size_t idx) { return idx; }
+
+size_t InstanceOp::getPortIdForOutputId(size_t idx) {
+  return idx + getNumInputPorts();
 }
 
 Value InstanceOp::getValue(size_t idx) {
@@ -3489,6 +3497,20 @@ ModulePortInfo HWTestModuleOp::getPortList() {
 }
 
 size_t HWTestModuleOp::getNumPorts() { return getModuleType().getNumPorts(); }
+size_t HWTestModuleOp::getNumInputPorts() {
+  return getModuleType().getNumInputs();
+}
+size_t HWTestModuleOp::getNumOutputPorts() {
+  return getModuleType().getNumOutputs();
+}
+
+size_t HWTestModuleOp::getPortIdForInputId(size_t idx) {
+  return getModuleType().getPortIdForInputId(idx);
+}
+
+size_t HWTestModuleOp::getPortIdForOutputId(size_t idx) {
+  return getModuleType().getPortIdForOutputId(idx);
+}
 
 hw::InnerSymAttr HWTestModuleOp::getPortSymbolAttr(size_t portIndex) {
   auto pa = getPortAttrs();

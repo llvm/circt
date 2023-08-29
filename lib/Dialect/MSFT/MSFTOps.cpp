@@ -368,6 +368,14 @@ ArrayAttr DynamicInstanceOp::globalRefPath() {
 //===----------------------------------------------------------------------===//
 
 size_t InstanceOp::getNumPorts() { return getNumOperands() + getNumResults(); }
+size_t InstanceOp::getNumInputPorts() { return getNumOperands(); }
+size_t InstanceOp::getNumOutputPorts() { return getNumResults(); }
+
+size_t InstanceOp::getPortIdForInputId(size_t idx) { return idx; }
+
+size_t InstanceOp::getPortIdForOutputId(size_t idx) {
+  return idx + getNumInputPorts();
+}
 
 std::optional<size_t> InstanceOp::getTargetResultIndex() {
   // Inner symbols on instance operations target the op not any result.
@@ -509,6 +517,16 @@ hw::ModulePortInfo MSFTModuleOp::getPortList() {
 
 size_t MSFTModuleOp::getNumPorts() {
   return getArgumentTypes().size() + getResultTypes().size();
+}
+
+size_t MSFTModuleOp::getNumInputPorts() { return getArgumentTypes().size(); }
+
+size_t MSFTModuleOp::getNumOutputPorts() { return getResultTypes().size(); }
+
+size_t MSFTModuleOp::getPortIdForInputId(size_t idx) { return idx; }
+
+size_t MSFTModuleOp::getPortIdForOutputId(size_t idx) {
+  return idx + getNumInputPorts();
 }
 
 SmallVector<BlockArgument>
@@ -706,7 +724,7 @@ SmallVector<Location> MSFTModuleOp::getAllPortLocs() {
       retval.push_back(cast<Location>(l));
   } else {
     auto empty = UnknownLoc::get(getContext());
-    for (unsigned i = 0, e = getNumInputs(); i < e; ++i)
+    for (unsigned i = 0, e = getNumInputPorts(); i < e; ++i)
       retval.push_back(empty);
   }
   if (auto locs = getResultLocs()) {
@@ -714,7 +732,7 @@ SmallVector<Location> MSFTModuleOp::getAllPortLocs() {
       retval.push_back(cast<Location>(l));
   } else {
     auto empty = UnknownLoc::get(getContext());
-    for (unsigned i = 0, e = getNumOutputs(); i < e; ++i)
+    for (unsigned i = 0, e = getNumOutputPorts(); i < e; ++i)
       retval.push_back(empty);
   }
   return retval;
@@ -727,17 +745,17 @@ SmallVector<Attribute> MSFTModuleOp::getAllPortAttrs() {
   if (attrs)
     for (auto a : *attrs)
       retval.push_back(a);
-  retval.resize(getNumInputs(), empty);
+  retval.resize(getNumInputPorts(), empty);
   attrs = getResAttrs();
   if (attrs)
     for (auto a : *attrs)
       retval.push_back(a);
-  retval.resize(getNumInputs() + getNumOutputs(), empty);
+  retval.resize(getNumInputPorts() + getNumOutputPorts(), empty);
   return retval;
 }
 
 void MSFTModuleOp::setAllPortLocs(ArrayRef<Location> locs) {
-  auto numInputs = getNumInputs();
+  auto numInputs = getNumInputPorts();
   SmallVector<Attribute> argLocs(locs.begin(), locs.begin() + numInputs);
   SmallVector<Attribute> resLocs(locs.begin() + numInputs, locs.end());
   setArgLocsAttr(ArrayAttr::get(getContext(), argLocs));
@@ -745,7 +763,7 @@ void MSFTModuleOp::setAllPortLocs(ArrayRef<Location> locs) {
 }
 
 void MSFTModuleOp::setAllPortAttrs(ArrayRef<Attribute> attrs) {
-  auto numInputs = getNumInputs();
+  auto numInputs = getNumInputPorts();
   SmallVector<Attribute> argAttrs(attrs.begin(), attrs.begin() + numInputs);
   SmallVector<Attribute> resAttrs(attrs.begin() + numInputs, attrs.end());
   setArgAttrsAttr(ArrayAttr::get(getContext(), argAttrs));
@@ -765,8 +783,8 @@ void MSFTModuleOp::setHWModuleType(hw::ModuleType type) {
   auto resultNames = type.getOutputNames();
   setArgNamesAttr(ArrayAttr::get(getContext(), argNames));
   setResultNamesAttr(ArrayAttr::get(getContext(), resultNames));
-  unsigned newNumArgs = getNumInputs();
-  unsigned newNumResults = getNumOutputs();
+  unsigned newNumArgs = getNumInputPorts();
+  unsigned newNumResults = getNumOutputPorts();
 
   auto emptyDict = DictionaryAttr::get(getContext());
   argAttrs.resize(newNumArgs, emptyDict);
@@ -1057,9 +1075,27 @@ size_t MSFTModuleExternOp::getNumPorts() {
   auto typeAttr =
       getOperation()->getAttrOfType<TypeAttr>(getFunctionTypeAttrName());
   auto moduleType = typeAttr.getValue().cast<FunctionType>();
-  auto argTypes = moduleType.getInputs();
-  auto resultTypes = moduleType.getResults();
-  return argTypes.size() + resultTypes.size();
+  return moduleType.getNumInputs() + moduleType.getNumResults();
+}
+
+size_t MSFTModuleExternOp::getNumInputPorts() {
+  auto typeAttr =
+      getOperation()->getAttrOfType<TypeAttr>(getFunctionTypeAttrName());
+  auto moduleType = typeAttr.getValue().cast<FunctionType>();
+  return moduleType.getNumInputs();
+}
+
+size_t MSFTModuleExternOp::getNumOutputPorts() {
+  auto typeAttr =
+      getOperation()->getAttrOfType<TypeAttr>(getFunctionTypeAttrName());
+  auto moduleType = typeAttr.getValue().cast<FunctionType>();
+  return moduleType.getNumResults();
+}
+
+size_t MSFTModuleExternOp::getPortIdForInputId(size_t idx) { return idx; }
+
+size_t MSFTModuleExternOp::getPortIdForOutputId(size_t idx) {
+  return idx + getNumInputPorts();
 }
 
 hw::InnerSymAttr MSFTModuleExternOp::getPortSymbolAttr(size_t) { return {}; }
@@ -1078,14 +1114,14 @@ SmallVector<Attribute> MSFTModuleExternOp::getAllPortAttrs() {
     for (auto a : *attrs)
       retval.push_back(a);
   } else {
-    for (unsigned i = 0, e = getNumInputs(); i < e; ++i)
+    for (unsigned i = 0, e = getNumInputPorts(); i < e; ++i)
       retval.push_back({});
   }
   if (auto attrs = getResAttrs()) {
     for (auto a : *attrs)
       retval.push_back(a);
   } else {
-    for (unsigned i = 0, e = getNumOutputs(); i < e; ++i)
+    for (unsigned i = 0, e = getNumOutputPorts(); i < e; ++i)
       retval.push_back({});
   }
   return retval;
@@ -1095,7 +1131,7 @@ void MSFTModuleExternOp::setAllPortLocs(ArrayRef<Location> locs) {
 }
 
 void MSFTModuleExternOp::setAllPortAttrs(ArrayRef<Attribute> attrs) {
-  auto numInputs = getNumInputs();
+  auto numInputs = getNumInputPorts();
   SmallVector<Attribute> argAttrs(attrs.begin(), attrs.begin() + numInputs);
   SmallVector<Attribute> resAttrs(attrs.begin() + numInputs, attrs.end());
   setArgAttrsAttr(ArrayAttr::get(getContext(), argAttrs));
@@ -1111,8 +1147,8 @@ void MSFTModuleExternOp::setHWModuleType(hw::ModuleType type) {
   auto argAttrs = getAllInputAttrs();
   auto resAttrs = getAllOutputAttrs();
   setFunctionTypeAttr(TypeAttr::get(type.getFuncType()));
-  unsigned newNumArgs = getNumInputs();
-  unsigned newNumResults = getNumOutputs();
+  unsigned newNumArgs = getNumInputPorts();
+  unsigned newNumResults = getNumOutputPorts();
 
   auto emptyDict = DictionaryAttr::get(getContext());
   argAttrs.resize(newNumArgs, emptyDict);

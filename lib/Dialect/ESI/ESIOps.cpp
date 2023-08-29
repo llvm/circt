@@ -539,6 +539,16 @@ hw::ModuleType ESIPureModuleOp::getHWModuleType() {
 }
 
 size_t ESIPureModuleOp::getNumPorts() { return 0; }
+size_t ESIPureModuleOp::getNumInputPorts() { return 0; }
+size_t ESIPureModuleOp::getNumOutputPorts() { return 0; }
+size_t ESIPureModuleOp::getPortIdForInputId(size_t) {
+  assert(0 && "Out of bounds input port id");
+  return ~0ULL;
+}
+size_t ESIPureModuleOp::getPortIdForOutputId(size_t) {
+  assert(0 && "Out of bounds output port id");
+  return ~0ULL;
+}
 
 hw::InnerSymAttr ESIPureModuleOp::getPortSymbolAttr(size_t portIndex) {
   emitError("No ports for port locations");

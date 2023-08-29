@@ -524,9 +524,9 @@ ESIConnectServicesPass::surfaceReqs(hw::HWMutableModuleLike mod,
   Block *body = &mod->getRegion(0).front();
 
   // Track initial operand/result counts and the new IO.
-  unsigned origNumInputs = mod.getNumInputs();
+  unsigned origNumInputs = mod.getNumInputPorts();
   SmallVector<std::pair<unsigned, hw::PortInfo>> newInputs;
-  unsigned origNumOutputs = mod.getNumOutputs();
+  unsigned origNumOutputs = mod.getNumOutputPorts();
   SmallVector<std::pair<mlir::StringAttr, Value>> newOutputs;
 
   // Assemble a port name from an array.

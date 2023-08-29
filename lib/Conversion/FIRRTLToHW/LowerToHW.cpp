@@ -1385,7 +1385,7 @@ LogicalResult FIRRTLModuleLowering::lowerModulePortsAndMoveBody(
     if (!resultHWType.isInteger(0)) {
       auto output =
           castFromFIRRTLType(newArg.getResult(), resultHWType, outputBuilder);
-      auto idx = newModule.getNumInputs() + outputs.size();
+      auto idx = newModule.getNumInputPorts() + outputs.size();
       outputs.push_back(output);
 
       // If output port has symbol, move it to this wire.
