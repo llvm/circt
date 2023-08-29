@@ -221,6 +221,24 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
       }
     }
 
+    void setPortAttrs(StringAttr attrName,
+        llvm::function_ref<Attribute(size_t, Attribute)> updateAttrCallback) {
+      auto attrs = $_op.getAllPortAttrs();
+      bool updated = false;
+      auto ctxt = $_op.getContext();
+      for (size_t idx = 0, e = attrs.size(); idx != e; ++idx) {
+        NamedAttrList pattr(cast<mlir::DictionaryAttr>(attrs[idx]));
+        auto newAttr = updateAttrCallback(idx, pattr.get(attrName));
+        if (newAttr) {
+          pattr.set(attrName, newAttr);
+          attrs[idx] = pattr.getDictionary(ctxt);
+          updated = true;
+        }
+      }
+      if (updated)
+        $_op.setAllPortAttrs(attrs);
+    }
+
     Location getPortLoc(size_t idx) {
       return $_op.getAllPortLocs()[idx];
     }
