@@ -783,23 +783,6 @@ circuit KeywordTypeName:
   type module = UInt; expected-error {{cannot use keyword 'module' for type alias name}}
 
 ;// -----
-; https://github.com/llvm/circt/issues/5494
-FIRRTL version 3.1.0
-
-circuit BundleOfProps:
-  module BundleOfProps:
-    input x : {a : String}
-    ; expected-error @above {{type '!firrtl.string' cannot be used as field in a bundle}}
-
-;// -----
-FIRRTL version 3.1.0
-
-circuit VecOfProps:
-  module VecOfProps:
-    input x : String[2]
-    ; expected-error @above {{type '!firrtl.string' cannot be used in a vector}}
-
-;// -----
 
 FIRRTL version 3.0.0
 circuit UnsupportedVersionDeclGroups:

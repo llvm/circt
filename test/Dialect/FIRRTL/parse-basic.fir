@@ -1813,3 +1813,22 @@ circuit BasicProps :
     ; CHECK-NEXT: %[[EMPTY:.+]] = firrtl.map.create : !firrtl.map<integer, integer>
     ; CHECK-NEXT: firrtl.propassign %empty, %[[EMPTY]]
     propassign empty, Map<Integer, Integer>()
+
+;// -----
+FIRRTL version 3.1.0
+
+; CHECK-LABEL: circuit "BundleOfProps"
+circuit BundleOfProps:
+  module BundleOfProps:
+    input x : {a : String}
+    ; CHECK: openbundle<a: string>
+
+;// -----
+FIRRTL version 3.1.0
+
+; CHECK-LABEL: circuit "VecOfProps"
+circuit VecOfProps:
+  module VecOfProps:
+    input x : String[2]
+    ; CHECK: openvector<string, 2>
+

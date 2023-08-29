@@ -207,3 +207,29 @@ firrtl.circuit "ManySymbols" {
                  <@x1,7,public>, <@x1_data,10,public>,
                <@b,11,public>])
 }
+
+// -----
+
+// CHECK-LABEL: circuit "BundleOfProps"
+firrtl.circuit "BundleOfProps" {
+  // CHECK: module @BundleOfProps
+  // CHECK-SAME: in %x: !firrtl.bundle<b: uint<5>>,
+  // CHECK-SAME: in %x_a: !firrtl.string,
+  // CHECK-SAME: out %y: !firrtl.bundle<a: uint<5>>,
+  // CHECK-SAME: out %y_b_c_l: !firrtl.list<string>)
+  firrtl.module @BundleOfProps(in %x: !firrtl.openbundle<a: string, b: uint<5>>,
+                               out %y: !firrtl.openbundle<a: uint<5>,
+                                                          b flip: openbundle<c flip: openbundle<l: list<string>>>>) {
+    %x_a = firrtl.opensubfield %x[a] : !firrtl.openbundle<a: string, b: uint<5>>
+    %x_b = firrtl.opensubfield %x[b] : !firrtl.openbundle<a: string, b: uint<5>>
+
+    %y_a = firrtl.opensubfield %y[a] : !firrtl.openbundle<a: uint<5>, b flip: openbundle<c flip: openbundle<l: list<string>>>>
+    %y_b = firrtl.opensubfield %y[b] : !firrtl.openbundle<a: uint<5>, b flip: openbundle<c flip: openbundle<l: list<string>>>>
+    %y_b_c = firrtl.opensubfield %y_b[c] : !firrtl.openbundle<c flip: openbundle<l: list<string>>>
+    %y_b_c_l = firrtl.opensubfield %y_b_c[l] : !firrtl.openbundle<l: list<string>>
+    %str = firrtl.string "test"
+    %list = firrtl.list.create %x_a, %str : !firrtl.list<string>
+    firrtl.propassign %y_b_c_l, %list : !firrtl.list<string>
+    firrtl.strictconnect %y_a, %x_b : !firrtl.uint<5>
+  }
+}

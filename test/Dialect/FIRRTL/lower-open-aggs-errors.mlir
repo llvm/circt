@@ -55,7 +55,7 @@ firrtl.circuit "UnhandledOp" {
     %r_p = firrtl.opensubfield %r[p] : !firrtl.openbundle<p: probe<uint<1>>>
     firrtl.ref.define %r_p, %ref : !firrtl.probe<uint<1>>
 
-    // expected-error @below {{unhandled use or producer of types containing references}}
+    // expected-error @below {{unhandled use or producer of types containing non-hw types}}
     %x = firrtl.wire : !firrtl.openbundle<p : probe<uint<1>>>
   }
 }
