@@ -1842,27 +1842,11 @@ firrtl.circuit "ConstOpenVector" {
 }
 
 // -----
-// Elements must support FieldID's.
-
-firrtl.circuit "OpenVectorNotFieldID" {
-  // expected-error @below {{vector element type does not support fieldID's, type: '!firrtl.string'}}
-  firrtl.extmodule @OpenVectorNotFieldID(out out : !firrtl.openvector<string, 2>)
-}
-
-// -----
 // No const with probes within.
 
 firrtl.circuit "ConstOpenBundle" {
   // expected-error @below {{'const' bundle cannot have references, but element "x" has type '!firrtl.probe<uint<1>>'}}
   firrtl.extmodule @ConstOpenBundle(out out : !firrtl.const.openbundle<x: probe<uint<1>>>)
-}
-
-// -----
-// Elements must support FieldID's.
-
-firrtl.circuit "OpenBundleNotFieldID" {
-  // expected-error @below {{bundle element "a" has unsupported type that does not support fieldID's: '!firrtl.string'}}
-  firrtl.extmodule @OpenBundleNotFieldID(out out : !firrtl.openbundle<a: string>)
 }
 
 // -----
