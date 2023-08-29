@@ -242,9 +242,14 @@ LogicalResult UnpackOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
     DictionaryAttr attrs, mlir::OpaqueProperties properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
-  auto inputType = operands.front().getType().cast<ValueType>();
+  Type inputType = operands.front().getType();
+  auto valueType = inputType.dyn_cast<ValueType>();
+  if (!valueType)
+    return mlir::emitError(*loc)
+           << "unpack operand must be a token or value type but got "
+           << inputType;
   results.push_back(TokenType::get(context));
-  results.push_back(inputType.getInnerType());
+  results.push_back(valueType.getInnerType());
   return success();
 }
 
@@ -321,6 +326,29 @@ public:
 void SelectOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                            MLIRContext *context) {
   results.insert<EliminateBranchToSelectPattern>(context);
+}
+
+// =============================================================================
+// MergeOp
+// =============================================================================
+
+LogicalResult MergeOp::canonicalize(MergeOp op, PatternRewriter &rewriter) {
+  // Canonicalize away simple branch-to-merges
+  auto lhsDefiningOp = op.getFirst().getDefiningOp<BranchOp>();
+  auto rhsDefiningOp = op.getSecond().getDefiningOp<BranchOp>();
+  if (lhsDefiningOp && rhsDefiningOp && lhsDefiningOp == rhsDefiningOp) {
+    Value cond = lhsDefiningOp.getCondition();
+    if (op.getFirst() == lhsDefiningOp.getTrueToken() &&
+        op.getSecond() == lhsDefiningOp.getFalseToken()) {
+      rewriter.replaceOp(op, llvm::SmallVector<Value>{cond});
+      return success();
+    }
+    // We can use the condition value, but need to invert it.
+    // TODO: is it okay to add ops from other dialects here? would need add an
+    // arith op to invert.
+  }
+
+  return failure();
 }
 
 // =============================================================================

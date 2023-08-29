@@ -38,9 +38,11 @@ def DCTestSCFToDC : Pass<"dc-test-scf-to-dc", "mlir::ModuleOp"> {
     func.func-based conversion pass. It should not be used for anything but
     testing the conversion patterns, given its lack of handling anything but
     SCF ops.
+    The pass will convert a func.func into a hw.module solely to emit to something
+    that is a graph region.
   }];
-  let constructor = "circt::dc::createDCSCFToDCPass()";
-  let dependentDialects = ["dc::DCDialect", "scf::SCFDialect"];
+  let constructor = "circt::dc::createDCTestSCFToDCPass()";
+  let dependentDialects = ["dc::DCDialect", "mlir::scf::SCFDialect", "hw::HWDialect"];
 }
 
 #endif // CIRCT_DIALECT_DC_PASSES_TD

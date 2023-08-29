@@ -221,6 +221,7 @@ def MergeOp : DCOp<"merge"> {
   let arguments = (ins TokenType:$first, TokenType:$second);
   let results = (outs I1ValueType:$output);
   let assemblyFormat = "$first `,` $second attr-dict";
+  let hasCanonicalizeMethod = 1;
 }
 
 def ToESIOp : DCOp<"to_esi", [
