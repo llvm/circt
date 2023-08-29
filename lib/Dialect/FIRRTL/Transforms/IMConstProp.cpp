@@ -594,8 +594,14 @@ void IMConstPropPass::mergeOnlyChangedLatticeValue(Value dest, Value src,
     markOverdefined(src);
     return markOverdefined(dest);
   }
-
   FIRRTLBaseType baseType = getBaseType(destTypeFIRRTL);
+  if (!baseType) {
+    // If the dest has no base type, mark all overdefined.
+    // In the future, may be possible to propagate property constants.
+    markOverdefined(src);
+    return markOverdefined(dest);
+  }
+
 
   auto fieldRefSrc = getOrCacheFieldRefFromValue(src);
   auto fieldRefDest = getOrCacheFieldRefFromValue(dest);
@@ -623,6 +629,11 @@ void IMConstPropPass::visitConnectLike(FConnectLike connect,
   }
 
   FIRRTLBaseType baseType = getBaseType(destTypeFIRRTL);
+  if (!baseType) {
+    // If the dest has no base type, mark all overdefined.
+    markOverdefined(connect.getSrc());
+    return markOverdefined(connect.getDest());
+  }
 
   auto fieldRefSrc = getOrCacheFieldRefFromValue(connect.getSrc());
   auto fieldRefDest = getOrCacheFieldRefFromValue(connect.getDest());
@@ -938,13 +949,15 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
         // the aggregate value cannot be replaced. We can forward the constant
         // to its users, so IMDCE (or SV/HW canonicalizer) should remove the
         // aggregate if entire aggregate is dead.
-        if (auto type =
-                type_dyn_cast<FIRRTLType>(connect.getDest().getType())) {
-          if (getBaseType(type).isGround() &&
-              isDeletableWireOrRegOrNode(destOp) && !isOverdefined(fieldRef)) {
-            connect.erase();
-            ++numErasedOp;
-          }
+        auto type = type_dyn_cast<FIRRTLType>(connect.getDest().getType());
+        if (!type)
+          continue;
+        auto baseType = getBaseType(type);
+        if (!baseType || !baseType.isGround())
+          continue;
+        if (isDeletableWireOrRegOrNode(destOp) && !isOverdefined(fieldRef)) {
+          connect.erase();
+          ++numErasedOp;
         }
       }
       continue;
