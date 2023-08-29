@@ -779,11 +779,8 @@ FIRRTLBaseType FIRRTLBaseType::getWidthlessType() {
 /// type.
 int32_t FIRRTLBaseType::getBitWidthOrSentinel() {
   return TypeSwitch<FIRRTLBaseType, int32_t>(*this)
-      .Case<ClockType, ResetType, AsyncResetType>([](Type) { return 1; })
-      .Case<SIntType, UIntType>(
-          [&](IntType intType) { return intType.getWidthOrSentinel(); })
-      .Case<AnalogType>(
-          [](AnalogType analogType) { return analogType.getWidthOrSentinel(); })
+      .Case<PhysicalType>(
+          [](PhysicalType type) { return type.getWidthOrSentinel(); })
       .Case<BundleType, FVectorType, FEnumType>([](Type) { return -2; })
       .Case<BaseTypeAliasType>([](BaseTypeAliasType type) {
         // It's faster to use its anonymous type.
@@ -1293,11 +1290,7 @@ IntType IntType::get(MLIRContext *context, bool isSigned,
 }
 
 int32_t IntType::getWidthOrSentinel() {
-  if (auto sintType = type_dyn_cast<SIntType>(*this))
-    return sintType.getWidthOrSentinel();
-  if (auto uintType = type_dyn_cast<UIntType>(*this))
-    return uintType.getWidthOrSentinel();
-  return -1;
+  return cast<PhysicalType>().getWidthOrSentinel();
 }
 
 //===----------------------------------------------------------------------===//
@@ -2563,6 +2556,8 @@ ClockType ClockType::getConstType(bool isConst) {
   return get(getContext(), isConst);
 }
 
+int32_t ClockType::getWidthOrSentinel() const { return 1; }
+
 //===----------------------------------------------------------------------===//
 // ResetType
 //===----------------------------------------------------------------------===//
@@ -2573,6 +2568,8 @@ ResetType ResetType::getConstType(bool isConst) {
   return get(getContext(), isConst);
 }
 
+int32_t ResetType::getWidthOrSentinel() const { return 1; }
+
 //===----------------------------------------------------------------------===//
 // AsyncResetType
 //===----------------------------------------------------------------------===//
@@ -2582,6 +2579,8 @@ AsyncResetType AsyncResetType::getConstType(bool isConst) {
     return *this;
   return get(getContext(), isConst);
 }
+
+int32_t AsyncResetType::getWidthOrSentinel() const { return 1; }
 
 //===----------------------------------------------------------------------===//
 // InstanceType
@@ -2719,8 +2718,12 @@ std::optional<int64_t> firrtl::getBitWidth(FIRRTLBaseType type,
             return std::nullopt;
           return *w * vector.getNumElements();
         })
-        .Case<IntType>([&](IntType iType) { return iType.getWidth(); })
-        .Case<ClockType, ResetType, AsyncResetType>([](Type) { return 1; })
+        .Case<PhysicalType>([](PhysicalType type) -> std::optional<int64_t> {
+          auto w = type.getWidthOrSentinel();
+          if (w >= 0)
+            return w;
+          return std::nullopt;
+        })
         .Default([&](auto t) { return std::nullopt; });
   };
   return getWidth(type);

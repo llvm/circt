@@ -24,6 +24,12 @@ mlir_tablegen(FIRRTLOpInterfaces.cpp.inc -gen-op-interface-defs)
 add_public_tablegen_target(CIRCTFIRRTLOpInterfacesIncGen)
 add_dependencies(circt-headers CIRCTFIRRTLOpInterfacesIncGen)
 
+set(LLVM_TARGET_DEFINITIONS FIRRTLTypeInterfaces.td)
+mlir_tablegen(FIRRTLTypeInterfaces.h.inc -gen-type-interface-decls)
+mlir_tablegen(FIRRTLTypeInterfaces.cpp.inc -gen-type-interface-defs)
+add_public_tablegen_target(CIRCTFIRRTLTypeInterfacesIncGen)
+add_dependencies(circt-headers CIRCTFIRRTLTypeInterfacesIncGen)
+
 # Generate Dialect documentation.
 add_circt_doc(FIRRTLAttributes Dialects/FIRRTLAttributes -gen-attrdef-doc)
 add_circt_doc(FIRRTLStructure Dialects/FIRRTLStructureOps -gen-op-doc)
@@ -33,6 +39,7 @@ add_circt_doc(FIRRTLExpressions Dialects/FIRRTLExpressionOps -gen-op-doc)
 add_circt_doc(FIRRTLTypes Dialects/FIRRTLTypes -gen-typedef-doc)
 add_circt_doc(FIRRTLTypesImpl Dialects/FIRRTLTypesImpl -gen-typedef-doc)
 add_circt_doc(FIRRTLOpInterfaces Dialects/FIRRTLOpInterfaces -gen-op-interface-docs)
+add_circt_doc(FIRRTLTypeInterfaces Dialects/FIRRTLTypeInterfaces -gen-type-interface-docs)
 
 # Generate Pass documentation.
 add_circt_doc(Passes FIRRTLPasses -gen-pass-doc)

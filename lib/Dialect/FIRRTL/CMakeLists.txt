@@ -10,6 +10,7 @@ set(CIRCT_FIRRTL_Sources
   FIRRTLOpInterfaces.cpp
   FIRRTLOps.cpp
   FIRRTLTypes.cpp
+  FIRRTLTypeInterfaces.cpp
   FIRRTLUtils.cpp
   NLATable.cpp
 )
@@ -57,6 +58,7 @@ add_circt_library(CIRCTFIRRTLReductions
 
 add_dependencies(circt-headers
   MLIRFIRRTLIncGen
+  CIRCTFIRRTLTypeInterfacesIncGen
   CIRCTFIRRTLEnumsIncGen
   CIRCTFIRRTLCanonicalizationIncGen
   )
