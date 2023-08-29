@@ -179,30 +179,6 @@ def HWModuleOp : HWModuleOpBase<"module",
     /// Return the PortInfo for the specified output port.
     PortInfo getOutputPort(size_t i);
 
-    /// Append an input with a given name and type to the port list.
-    /// If the name is not unique, a unique name is created and returned.
-    std::pair<StringAttr, BlockArgument>
-    appendInput(const Twine &name, Type ty) {
-      return insertInput(getNumInOrInoutPorts(), name, ty);
-    }
-
-    std::pair<StringAttr, BlockArgument>
-    appendInput(StringAttr name, Type ty) {
-      return insertInput(getNumInOrInoutPorts(), name.getValue(), ty);
-    }
-
-    /// Prepend an input with a given name and type to the port list.
-    /// If the name is not unique, a unique name is created and returned.
-    std::pair<StringAttr, BlockArgument>
-    prependInput(const Twine &name, Type ty) {
-      return insertInput(0, name, ty);
-    }
-
-    std::pair<StringAttr, BlockArgument>
-    prependInput(StringAttr name, Type ty) {
-      return insertInput(0, name.getValue(), ty);
-    }
-
     /// Insert an input with a given name and type into the port list.
     /// The input is added at the specified index.
     std::pair<StringAttr, BlockArgument>
