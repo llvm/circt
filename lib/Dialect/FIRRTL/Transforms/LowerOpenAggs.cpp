@@ -656,9 +656,16 @@ FailureOr<PortMappingInfo> Visitor::mapPortType(Type type, Location errorLoc,
               return FVectorType::get(convert, ovTy.getNumElements(),
                                       ovTy.isConst());
             })
-            .template Case<RefType, PropertyType>([&](auto ref) {
-              // Do this better, don't re-serialize so much?
+            .template Case<RefType>([&](RefType ref) {
               auto f = NonHWField{ref, fieldID, flip, {}};
+              suffix.toVector(f.suffix);
+              pi.fields.emplace_back(std::move(f));
+              return FIRRTLBaseType{};
+            })
+            // This is identical to the RefType case above, but copied out
+            // to try to fix a bug when combining + auto w/MSVC.
+            .template Case<PropertyType>([&](PropertyType prop) {
+              auto f = NonHWField{prop, fieldID, flip, {}};
               suffix.toVector(f.suffix);
               pi.fields.emplace_back(std::move(f));
               return FIRRTLBaseType{};
