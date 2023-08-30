@@ -30,12 +30,9 @@ if(CapnProto_FOUND)
     CapnProto::capnp
     CapnProto::capnp-rpc)
 
-  set(ESI_RUNTIME_DIR "${CIRCT_BINARY_DIR}/include/circt/Dialect/ESI/runtime")
-  get_filename_component(SRC "CosimDpi.capnp" REALPATH)
   add_custom_command(TARGET EsiCosimCapnp PRE_BUILD
     COMMAND ${CMAKE_COMMAND} -E
-    copy "${SRC}" "${ESI_RUNTIME_DIR}/CosimDpi.capnp")
-  target_sources(EsiCosimCapnp PUBLIC FILE_SET HEADERS
-    BASE_DIRS "."
-    FILES "CosimDpi.capnp")
+    copy "${CMAKE_CURRENT_SOURCE_DIR}/CosimDpi.capnp" "CosimDpi.capnp")
+  target_sources(EsiCosimCapnp PUBLIC "CosimDpi.capnp")
+  install(FILES "CosimDpi.capnp" DESTINATION runtime)
 endif()

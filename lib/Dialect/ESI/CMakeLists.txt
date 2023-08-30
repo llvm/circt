@@ -29,7 +29,7 @@ set(srcs
   Passes/CPPAPI/CPPAPI.cpp
 )
 
-set(ESI_RUNTIME_DIR ${CIRCT_BINARY_DIR}/include/circt/Dialect/ESI)
+# set(ESI_RUNTIME_DIR ${CIRCT_BINARY_DIR}/include/circt/Dialect/ESI)
 
 set(ESI_LinkLibs
   CIRCTSupport
@@ -76,20 +76,7 @@ add_circt_dialect_library(CIRCTESI
 
 # Create a package of ESI collateral for any compiler to include with its
 # distribution.
-add_library(esi-collateral INTERFACE)
-
-# A function which copies a file from the source tree to the build tree.
-# This is an alternative to configure_file to ensure that the file is copied
-# on every build (not just during CMake configure).
-function(copy_esi_runtime FILENAME)
-  get_filename_component(SRC ${FILENAME} REALPATH)
-  add_custom_command(TARGET CIRCTESI PRE_BUILD
-    COMMAND ${CMAKE_COMMAND} -E
-    copy ${SRC} ${ESI_RUNTIME_DIR}/${FILENAME})
-  target_sources(esi-collateral PUBLIC FILE_SET HEADERS
-    BASE_DIRS "."
-    FILES "${FILENAME}")
-endfunction()
+add_custom_target(esi-collateral)
 
 set(ESI_RUNTIME_SRCS
   cosim/Cosim_DpiPkg.sv
@@ -109,18 +96,31 @@ set(ESI_RUNTIME_SRCS
   runtime/python/esi/main.cpp
 )
 
+# A function which copies a file from the source tree to the build tree.
+# This is an alternative to configure_file to ensure that the file is copied
+# on every build (not just during CMake configure).
+function(copy_esi_runtime FILENAME)
+  get_filename_component(SRC ${FILENAME} REALPATH)
+  add_custom_command(TARGET esi-collateral PRE_BUILD
+    COMMAND ${CMAKE_COMMAND} -E
+    copy ${SRC} "${CMAKE_CURRENT_BINARY_DIR}/${FILENAME}")
+  target_sources(esi-collateral PRIVATE "${FILENAME}")
+endfunction()
+
+foreach(SRC ${ESI_RUNTIME_SRCS})
+  copy_esi_runtime(${SRC})
+endforeach()
+
 if (ESI_CAPNP)
   install(FILES ${CapnProto_capnp_IMPORTED_LOCATION} DESTINATION lib)
   install(FILES ${CapnProto_capnpc_IMPORTED_LOCATION} DESTINATION lib)
   install(FILES ${CapnProto_kj_IMPORTED_LOCATION} DESTINATION lib)
   add_dependencies(esi-collateral EsiCosimCapnp)
 
-  # These are not Capnp files, but they use a feature from a newer version of
-  # CMake. Adding them here as a mitigation.
-  # TODO: Figure out what to do longer term.
-  foreach(SRC ${ESI_RUNTIME_SRCS})
-    copy_esi_runtime(${SRC})
-  endforeach()
+  add_custom_command(TARGET esi-collateral PRE_BUILD
+    COMMAND ${CMAKE_COMMAND} -E
+    copy "$<TARGET_PROPERTY:EsiCosimCapnp,BINARY_DIR>/CosimDpi.capnp"
+         "${CMAKE_CURRENT_BINARY_DIR}/runtime/CosimDpi.capnp")
 
   target_compile_definitions(obj.CIRCTESI PRIVATE CAPNP)
   target_link_libraries(obj.CIRCTESI CapnProto::capnp CapnProto::capnpc)

@@ -110,11 +110,17 @@ install(RUNTIME_DEPENDENCY_SET PyCDE_RUNTIME_DEPS
 )
 
 # Add necessary ESI collateral to the package.
-install(TARGETS esi-collateral
-  FILE_SET HEADERS
-  DESTINATION python_packages/pycde/collateral
-  COMPONENT PyCDE
-)
+set(CollateralPrefix "$<TARGET_PROPERTY:esi-collateral,BINARY_DIR>/")
+get_target_property(CollateralFiles esi-collateral SOURCES)
+foreach(CFile IN LISTS CollateralFiles)
+  get_filename_component(CDir ${CFile} DIRECTORY)
+  install(FILES
+    "${CollateralPrefix}/${CFile}"
+    DESTINATION "python_packages/pycde/collateral/${CDir}"
+    COMPONENT PyCDE
+  )
+endforeach()
+
 install(TARGETS circt-std-sim-drivers
   PUBLIC_HEADER DESTINATION python_packages/pycde/collateral
   COMPONENT PyCDE
@@ -137,8 +143,8 @@ if(ESI_COSIM)
     DESTINATION python_packages/pycde/collateral
     COMPONENT PyCDE
   )
-  install(TARGETS EsiCosimCapnp
-    FILE_SET HEADERS
+  install(FILES
+    "$<TARGET_PROPERTY:EsiCosimCapnp,BINARY_DIR>/CosimDpi.capnp"
     DESTINATION python_packages/pycde/collateral/runtime
     COMPONENT PyCDE
   )
