@@ -495,6 +495,7 @@ def InstanceOp : HWOp<"instance", [
 
     /// Return the value for a port in port order.
     Value getValue(size_t idx);
+    Value getValue(size_t idx, ModulePortInfo &mpi);
 
     //===------------------------------------------------------------------===//
     // SymbolOpInterface Methods
