@@ -472,13 +472,13 @@ static void populateTypeConverter(TypeConverter &converter) {
 
   // Convert FIRRTL Map type to OM Map type.
   converter.addConversion(
-      [&convertMapType](om::MapType type) -> std::optional<mlir::Type> {
+      [convertMapType](om::MapType type) -> std::optional<mlir::Type> {
         // Convert any om.map<firrtl, firrtl> -> om.map<om, om>
         return convertMapType(type);
       });
 
   converter.addConversion(
-      [&convertMapType](firrtl::MapType type) -> std::optional<mlir::Type> {
+      [convertMapType](firrtl::MapType type) -> std::optional<mlir::Type> {
         // Convert any firrtl.map<firrtl, firrtl> -> om.map<om, om>
         return convertMapType(type);
       });
