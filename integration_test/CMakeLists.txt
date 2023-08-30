@@ -7,6 +7,7 @@ set(CIRCT_INTEGRATION_TEST_DEPENDS
   circt-opt
   circt-translate
   circt-rtl-sim
+  esi-collateral
   firtool
   hlstool
   handshake-runner
@@ -24,6 +25,7 @@ if (TARGET EsiCosimDpiServer)
   get_property(ESI_COSIM_LIB_DIR TARGET EsiCosimDpiServer PROPERTY LIBRARY_OUTPUT_DIRECTORY)
   set(ESI_COSIM_PATH ${ESI_COSIM_LIB_DIR}/libEsiCosimDpiServer.so)
 endif()
+get_target_property(ESI_COLLATERAL_PATH esi-collateral BINARY_DIR)
 
 # Enable circt-lec tests if it is built.
 if(CIRCT_LEC_ENABLED)
