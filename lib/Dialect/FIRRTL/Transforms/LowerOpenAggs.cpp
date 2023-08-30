@@ -618,7 +618,7 @@ FailureOr<PortMappingInfo> Visitor::mapPortType(Type type, Location errorLoc,
                   return failure();
                 if (*base) {
                   hwElements.emplace_back(element.name, element.isFlip, *base);
-                  id += base->getMaxFieldID() + 1;
+                  id += hw::FieldIdImpl::getMaxFieldID(*base) + 1;
                 }
               }
 
@@ -645,7 +645,7 @@ FailureOr<PortMappingInfo> Visitor::mapPortType(Type type, Location errorLoc,
                        "expected same hw type for all elements");
                 convert = *hwElementType;
                 if (convert)
-                  id += convert.getMaxFieldID() + 1;
+                  id += hw::FieldIdImpl::getMaxFieldID(convert) + 1;
               }
 
               if (!convert) {

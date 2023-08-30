@@ -580,7 +580,8 @@ getFieldIDOffset(FieldRef changedFieldRef, FIRRTLBaseType connectionType,
     return {};
   if (changedFieldRef.getFieldID() >= connectedValueFieldRef.getFieldID() &&
       changedFieldRef.getFieldID() <=
-          connectionType.getMaxFieldID() + connectedValueFieldRef.getFieldID())
+          hw::FieldIdImpl::getMaxFieldID(connectionType) +
+              connectedValueFieldRef.getFieldID())
     return changedFieldRef.getFieldID() - connectedValueFieldRef.getFieldID();
   return {};
 }

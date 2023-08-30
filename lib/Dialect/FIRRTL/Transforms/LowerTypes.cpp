@@ -287,7 +287,8 @@ static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
           // `data` or `mask` sub-field to get the "real" fieldID.
           auto fieldID = field.fieldID + oldPortType.getFieldID(targetIndex);
           if (annoFieldID >= fieldID &&
-              annoFieldID <= fieldID + field.type.getMaxFieldID()) {
+              annoFieldID <=
+                  fieldID + hw::FieldIdImpl::getMaxFieldID(field.type)) {
             // Set the field ID of the new annotation.
             auto newFieldID =
                 annoFieldID - fieldID + portType.getFieldID(targetIndex);
@@ -536,7 +537,7 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(MLIRContext *ctxt,
     // Check whether the annotation falls into the range of the current field.
 
     if (fieldID < field.fieldID ||
-        fieldID > field.fieldID + field.type.getMaxFieldID())
+        fieldID > field.fieldID + hw::FieldIdImpl::getMaxFieldID(field.type))
       continue;
 
     // Add fieldID back if non-zero relative to this field.

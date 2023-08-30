@@ -183,16 +183,6 @@ class BaseVectorTypeImpl<string name, string ElementType, list<Trait> traits = [
     /// As well, rebase the fieldID to the element.
     std::pair<uint64_t, uint64_t> getIndexAndSubfieldID(uint64_t fieldID) const;
 
-    /// Get the maximum field ID in this vector.  This is helpful for
-    /// constructing field IDs when this VectorType is nested in another
-    /// aggregate type.
-    uint64_t getMaxFieldID();
-
-    /// Returns the effective field id when treating the index field as the root
-    /// of the type.  Essentially maps a fieldID to a fieldID after a subfield
-    /// op. Returns the new id and whether the id is in the given child.
-    std::pair<uint64_t, bool> rootChildFieldID(uint64_t fieldID, uint64_t index);
-
     /// Const support.
     bool isConst();
     ElementType getElementTypePreservingConst();

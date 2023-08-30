@@ -48,4 +48,12 @@ uint64_t circt::hw::FieldIdImpl::getMaxFieldID(Type type) {
   return 0;
 }
 
+std::pair<uint64_t, bool>
+circt::hw::FieldIdImpl::rootChildFieldID(Type type, uint64_t fieldID,
+                                         uint64_t index) {
+  if (auto ftype = dyn_cast<FieldIDTypeInterface>(type))
+    return ftype.rootChildFieldID(fieldID, index);
+  return {0, fieldID == 0};
+}
+
 #include "circt/Dialect/HW/HWTypeInterfaces.cpp.inc"
