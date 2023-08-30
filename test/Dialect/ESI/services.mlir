@@ -108,7 +108,11 @@ msft.module @MsLoopback {} (%clk: i1) -> () {
   msft.output
 }
 
-
+// CONN-LABEL: msft.module @MsProducer {} (%clk: i1, %loopback_in: !esi.channel<i8>) -> (int_out: !esi.channel<i8>)
+msft.module @MsProducer {} (%clk: i1) -> (int_out: !esi.channel<i8>) {
+  %0 = esi.service.req.to_client <@HostComms::@Recv>(["loopback_in"]) : !esi.channel<i8>
+  msft.output %0 : !esi.channel<i8>
+}
 
 // CONN-LABEL: msft.module @InOutTop {} (%clk: i1) -> (chksum: i8) {
 // CONN:          %0:2 = esi.service.impl_req svc @HostComms impl as "topComms"(%clk) : (i1) -> (i8, !esi.channel<i16>) {

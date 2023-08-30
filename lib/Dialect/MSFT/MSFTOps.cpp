@@ -680,23 +680,19 @@ LogicalResult MSFTModuleOp::verify() {
 }
 
 SmallVector<Location> MSFTModuleOp::getAllPortLocs() {
+  auto empty = UnknownLoc::get(getContext());
   SmallVector<Location> retval;
   if (auto locs = getArgLocs()) {
     for (auto l : locs)
       retval.push_back(cast<Location>(l));
-  } else {
-    auto empty = UnknownLoc::get(getContext());
-    for (unsigned i = 0, e = getNumInputPorts(); i < e; ++i)
-      retval.push_back(empty);
   }
+  retval.resize(getNumInputPorts(), empty);
+
   if (auto locs = getResultLocs()) {
     for (auto l : locs)
       retval.push_back(cast<Location>(l));
-  } else {
-    auto empty = UnknownLoc::get(getContext());
-    for (unsigned i = 0, e = getNumOutputPorts(); i < e; ++i)
-      retval.push_back(empty);
   }
+  retval.resize(getNumInputPorts() + getNumOutputPorts(), empty);
   return retval;
 }
 
@@ -741,12 +737,12 @@ void MSFTModuleOp::setHWModuleType(hw::ModuleType type) {
   auto argAttrs = getAllInputAttrs();
   auto resAttrs = getAllOutputAttrs();
   setFunctionTypeAttr(TypeAttr::get(type.getFuncType()));
-  auto argNames = type.getInputNames();
-  auto resultNames = type.getOutputNames();
-  setArgNamesAttr(ArrayAttr::get(getContext(), argNames));
-  setResultNamesAttr(ArrayAttr::get(getContext(), resultNames));
-  unsigned newNumArgs = getNumInputPorts();
-  unsigned newNumResults = getNumOutputPorts();
+
+  unsigned newNumArgs = type.getNumInputs();
+  unsigned newNumResults = type.getNumOutputs();
+
+  setArgNamesAttr(ArrayAttr::get(getContext(), type.getInputNames()));
+  setResultNamesAttr(ArrayAttr::get(getContext(), type.getOutputNames()));
 
   auto emptyDict = DictionaryAttr::get(getContext());
   argAttrs.resize(newNumArgs, emptyDict);
@@ -1088,6 +1084,7 @@ SmallVector<Attribute> MSFTModuleExternOp::getAllPortAttrs() {
   }
   return retval;
 }
+
 void MSFTModuleExternOp::setAllPortLocs(ArrayRef<Location> locs) {
   emitError("port locations not supported");
 }
