@@ -19,6 +19,17 @@ def FieldIDTypeInterface : TypeInterface<"FieldIDTypeInterface"> {
   let cppNamespace = "circt::hw";
   let description = [{
     Common methods for types which can be indexed by a FieldID.
+    FieldID is a depth-first numbering of the elements of a type.  For example:
+    ```
+    struct a  /* 0 */ {
+      int b; /* 1 */
+      struct c /* 2 */ {
+        int d; /* 3 */
+      }
+    }
+
+    int e; /* 0 */
+    ```
   }];
 
   let methods = [
