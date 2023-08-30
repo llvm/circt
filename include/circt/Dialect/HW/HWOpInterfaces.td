@@ -86,7 +86,12 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
 
     /// Return the region containing the body of this function.
     Region &getModuleBody() { return $_op->getRegion(0); }
-    Block *getBodyBlock() { return &getModuleBody().front(); }
+    Block *getBodyBlock() {
+      Region &body = getModuleBody();
+      if (body.empty())
+        return nullptr;
+      return &body.front();
+    }
 
     /// Returns the entry block argument at the given index.
     BlockArgument getArgumentForInput(unsigned idx) {
