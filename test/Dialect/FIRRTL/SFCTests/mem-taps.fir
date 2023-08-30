@@ -1,5 +1,6 @@
 ; RUN: firtool --verilog %s | FileCheck %s
 ; RUN: firtool --verilog -preserve-aggregate=1d-vec %s | FileCheck %s --check-prefix=AGGGREGATE
+; RUN: firtool --verilog -lower-annotations-no-ref-type-ports %s | FileCheck %s --check-prefix=NOREFS
 
 circuit Top : %[[
   {
@@ -72,3 +73,28 @@ circuit Top : %[[
 ; AGGGREGATE-NEXT:           {Top.dut.rf_ext.Memory[1]},
 ; AGGGREGATE-NEXT:           {Top.dut.rf_ext.Memory[0]}};
 ; CHECK:      endmodule
+
+; NOREFS:      module DUTModule(
+; NOREFS-NOT:  endmodule
+; NOREFS:        rf_8x8 rf_ext (
+; NOREFS:          .R1_data (memTap_7),
+; NOREFS-NEXT:     .R2_data (memTap_6),
+; NOREFS-NEXT:     .R3_data (memTap_5),
+; NOREFS-NEXT:     .R4_data (memTap_4),
+; NOREFS-NEXT:     .R5_data (memTap_3),
+; NOREFS-NEXT:     .R6_data (memTap_2),
+; NOREFS-NEXT:     .R7_data (memTap_1),
+; NOREFS-NEXT:     .R8_data (memTap_0)
+; NOREFS-NEXT:   )
+; NOREFS:      endmodule
+; NOREFS:      DUTModule dut (
+; NOREFS-NOT:  endmodule
+; NOREFS:        .memTap_0 (memTap_0),
+; NOREFS-NEXT:   .memTap_1 (memTap_1),
+; NOREFS-NEXT:   .memTap_2 (memTap_2),
+; NOREFS-NEXT:   .memTap_3 (memTap_3),
+; NOREFS-NEXT:   .memTap_4 (memTap_4),
+; NOREFS-NEXT:   .memTap_5 (memTap_5),
+; NOREFS-NEXT:   .memTap_6 (memTap_6),
+; NOREFS-NEXT:   .memTap_7 (memTap_7)
+; NOREFS-NEXT: )

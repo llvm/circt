@@ -777,6 +777,65 @@ LogicalResult circt::firrtl::applyGCTMemTaps(const AnnoPathValue &target,
   }
 
   ImplicitLocOpBuilder builder(combMem->getLoc(), combMem);
+
+  // Lower memory taps to real ports on the memory.  This is done if the taps
+  // are supposed to be synthesized.
+  if (state.noRefTypePorts) {
+    // Create new ports _after_ all other ports to avoid permuting existing
+    // ports.
+    builder.setInsertionPointToEnd(
+        combMem->getParentOfType<FModuleOp>().getBodyBlock());
+
+    // Determine the clock to use for the debug ports.  Error if the same clock
+    // is not used for all ports or if no clock port is found.
+    Value clock;
+    for (auto *portOp : combMem.getResult().getUsers()) {
+      for (auto result : portOp->getResults()) {
+        for (auto *user : result.getUsers()) {
+          auto accessOp = dyn_cast<chirrtl::MemoryPortAccessOp>(user);
+          if (!accessOp)
+            continue;
+          auto newClock = accessOp.getClock();
+          if (clock && clock != newClock)
+            return combMem.emitOpError(
+                "has different clocks on different ports (this is ambiguous "
+                "when compiling without reference types)");
+          clock = newClock;
+        }
+      }
+    }
+    if (!clock)
+      return combMem.emitOpError(
+          "does not have an access port to determine a clock connection (this "
+          "is necessary when compiling without reference types)");
+
+    // Add one port per memory address.
+    SmallVector<Value> data;
+    for (uint64_t i = 0, e = combMem.getType().getNumElements(); i != e; ++i) {
+      auto port = builder.create<chirrtl::MemoryPortOp>(
+          combMem.getType().getElementType(),
+          CMemoryPortType::get(builder.getContext()), combMem.getResult(),
+          MemDirAttr::Read, builder.getStringAttr("memTap_" + Twine(i)),
+          builder.getArrayAttr({}));
+      builder.create<chirrtl::MemoryPortAccessOp>(
+          port.getPort(), builder.create<ConstantOp>(APSInt::get(i)), clock);
+      data.push_back(port.getData());
+    }
+
+    // Package up all the reads into a vector.
+    auto sendVal = builder.create<VectorCreateOp>(
+        FVectorType::get(combMem.getType().getElementType(),
+                         combMem.getType().getNumElements()),
+        data);
+    auto sink = wireTarget->ref.getOp()->getResult(0);
+
+    // Add a wiring problem to hook up the vector to the destination wire.
+    state.wiringProblems.push_back(
+        {sendVal, sink, "memTap", WiringProblem::RefTypeUsage::Never});
+    return success();
+  }
+
+  // Normal memory handling.  Create a debug port.
   builder.setInsertionPointAfter(combMem);
   // Construct the type for the debug port.
   auto debugType = RefType::get(FVectorType::get(
