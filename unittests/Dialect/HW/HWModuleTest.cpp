@@ -47,32 +47,78 @@ TEST(HWModuleOpTest, AddOutputs) {
   insertPorts.emplace_back(builder.getStringAttr("c"), wireC);
   top.insertOutputs(1, insertPorts);
 
-  auto ports = top.getPortList();
-  ASSERT_EQ(ports.size(), 4u);
+  // Convenience methods.
+  auto wireF = builder.create<hw::ConstantOp>(APInt(2, 0));
+  top.appendOutput("f", wireF);
+  auto wireQ = builder.create<hw::ConstantOp>(APInt(2, 0));
+  top.prependOutput("q", wireQ);
 
-  EXPECT_EQ(ports.at(0).name, builder.getStringAttr("a"));
+  auto ports = top.getPortList();
+  ASSERT_EQ(ports.size(), 6u);
+
+  EXPECT_EQ(ports.at(0).name, builder.getStringAttr("q"));
   EXPECT_EQ(ports.at(0).dir, ModulePort::Direction::Output);
   EXPECT_EQ(ports.at(0).type, wireTy);
 
-  EXPECT_EQ(ports.at(1).name, builder.getStringAttr("b"));
+  EXPECT_EQ(ports.at(1).name, builder.getStringAttr("a"));
   EXPECT_EQ(ports.at(1).dir, ModulePort::Direction::Output);
   EXPECT_EQ(ports.at(1).type, wireTy);
 
-  EXPECT_EQ(ports.at(2).name, builder.getStringAttr("c"));
+  EXPECT_EQ(ports.at(2).name, builder.getStringAttr("b"));
   EXPECT_EQ(ports.at(2).dir, ModulePort::Direction::Output);
   EXPECT_EQ(ports.at(2).type, wireTy);
 
-  EXPECT_EQ(ports.at(3).name, builder.getStringAttr("d"));
+  EXPECT_EQ(ports.at(3).name, builder.getStringAttr("c"));
   EXPECT_EQ(ports.at(3).dir, ModulePort::Direction::Output);
   EXPECT_EQ(ports.at(3).type, wireTy);
 
-  auto output = cast<OutputOp>(top.getBodyBlock()->getTerminator());
-  ASSERT_EQ(output->getNumOperands(), 4u);
+  EXPECT_EQ(ports.at(4).name, builder.getStringAttr("d"));
+  EXPECT_EQ(ports.at(4).dir, ModulePort::Direction::Output);
+  EXPECT_EQ(ports.at(4).type, wireTy);
 
-  EXPECT_EQ(output->getOperand(0), wireA.getResult());
-  EXPECT_EQ(output->getOperand(1), wireB.getResult());
-  EXPECT_EQ(output->getOperand(2), wireC.getResult());
-  EXPECT_EQ(output->getOperand(3), wireD.getResult());
+  EXPECT_EQ(ports.at(5).name, builder.getStringAttr("f"));
+  EXPECT_EQ(ports.at(5).dir, ModulePort::Direction::Output);
+  EXPECT_EQ(ports.at(5).type, wireTy);
+
+  auto output = cast<OutputOp>(top.getBodyBlock()->getTerminator());
+  ASSERT_EQ(output->getNumOperands(), 6u);
+
+  EXPECT_EQ(output->getOperand(0), wireQ.getResult());
+  EXPECT_EQ(output->getOperand(1), wireA.getResult());
+  EXPECT_EQ(output->getOperand(2), wireB.getResult());
+  EXPECT_EQ(output->getOperand(3), wireC.getResult());
+  EXPECT_EQ(output->getOperand(4), wireD.getResult());
+  EXPECT_EQ(output->getOperand(5), wireF.getResult());
+}
+
+TEST(HWModuleOpTest, AddInputs) {
+  // Create a hw.module with no ports.
+  MLIRContext context;
+  context.loadDialect<HWDialect>();
+  LocationAttr loc = UnknownLoc::get(&context);
+  auto module = ModuleOp::create(loc);
+  auto builder = ImplicitLocOpBuilder::atBlockEnd(loc, module.getBody());
+  auto top = builder.create<HWModuleOp>(StringAttr::get(&context, "Top"),
+                                        ArrayRef<PortInfo>{});
+
+  builder.setInsertionPointToStart(top.getBodyBlock());
+
+  // Convenience methods.
+  auto tyF = builder.getIntegerType(6);
+  top.appendInput("f", tyF);
+  auto tyQ = builder.getIntegerType(1);
+  top.prependInput("q", tyQ);
+
+  auto ports = top.getPortList();
+  ASSERT_EQ(ports.size(), 2u);
+
+  EXPECT_EQ(ports.at(0).name, builder.getStringAttr("q"));
+  EXPECT_EQ(ports.at(0).dir, ModulePort::Direction::Input);
+  EXPECT_EQ(ports.at(0).type, tyQ);
+
+  EXPECT_EQ(ports.at(1).name, builder.getStringAttr("f"));
+  EXPECT_EQ(ports.at(1).dir, ModulePort::Direction::Input);
+  EXPECT_EQ(ports.at(1).type, tyF);
 }
 
 } // namespace
