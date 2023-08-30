@@ -77,8 +77,8 @@ void MSFTPassCommon::dedupOutputs(MSFTModuleOp mod) {
     }
   }
 
-  mod.removePorts(llvm::BitVector(mod.getNumArguments()), outputPortsToRemove);
-  updateInstances(mod, makeSequentialRange(mod.getNumResults()),
+  mod.removePorts(llvm::BitVector(mod.getNumInputPorts()), outputPortsToRemove);
+  updateInstances(mod, makeSequentialRange(mod.getNumOutputPorts()),
                   [&](InstanceOp newInst, InstanceOp oldInst,
                       SmallVectorImpl<Value> &newOperands) {
                     // Operands don't change.
