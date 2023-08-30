@@ -81,7 +81,7 @@ def UIntImpl : FIRRTLImplType<"UInt",
   }];
 }
 
-def ClockTypeImpl : FIRRTLImplType<"Clock", []> {
+def ClockTypeImpl : FIRRTLImplType<"Clock"> {
   let summary = "Clock signal";
   let parameters = (ins "bool":$isConst);
   let storageClass = "FIRRTLBaseTypeStorage";
@@ -95,7 +95,7 @@ def ClockTypeImpl : FIRRTLImplType<"Clock", []> {
   }];
 }
 
-def ResetTypeImpl : FIRRTLImplType<"Reset", []> {
+def ResetTypeImpl : FIRRTLImplType<"Reset"> {
   let summary = "Reset Signal";
   let parameters = (ins "bool":$isConst);
   let storageClass = "FIRRTLBaseTypeStorage";
@@ -109,7 +109,7 @@ def ResetTypeImpl : FIRRTLImplType<"Reset", []> {
   }];
 }
 
-def AsyncResetTypeImpl : FIRRTLImplType<"AsyncReset", []> {
+def AsyncResetTypeImpl : FIRRTLImplType<"AsyncReset"> {
   let summary = "AsyncReset signal";
   let parameters = (ins "bool":$isConst);
   let storageClass = "FIRRTLBaseTypeStorage";
@@ -193,7 +193,7 @@ class BaseVectorTypeImpl<string name, string ElementType, list<Trait> traits = [
   }] # firrtlExtraClassDeclaration;
 }
 
-def FVectorImpl : BaseVectorTypeImpl<"FVector","::circt::firrtl::FIRRTLBaseType", []> {
+def FVectorImpl : BaseVectorTypeImpl<"FVector","::circt::firrtl::FIRRTLBaseType"> {
   let firrtlExtraClassDeclaration = [{
     /// Return this type with any flip types recursively removed from itself.
     FIRRTLBaseType getPassiveType();
@@ -206,7 +206,7 @@ def FVectorImpl : BaseVectorTypeImpl<"FVector","::circt::firrtl::FIRRTLBaseType"
   }];
 }
 
-def OpenVectorImpl : BaseVectorTypeImpl<"OpenVector","::circt::firrtl::FIRRTLType", []> {
+def OpenVectorImpl : BaseVectorTypeImpl<"OpenVector","::circt::firrtl::FIRRTLType"> {
   let genVerifyDecl = 1;
 }
 
@@ -306,7 +306,7 @@ class BaseBundleTypeImpl<string name, string ElementType, list<Trait> traits = [
   }] # firrtlExtraClassDeclaration;
 }
 
-def BundleImpl : BaseBundleTypeImpl<"Bundle","::circt::firrtl::FIRRTLBaseType", []> {
+def BundleImpl : BaseBundleTypeImpl<"Bundle","::circt::firrtl::FIRRTLBaseType"> {
   let firrtlExtraClassDeclaration = [{
     /// Return this type with any flip types recursively removed from itself.
     FIRRTLBaseType getPassiveType();
@@ -319,7 +319,7 @@ def BundleImpl : BaseBundleTypeImpl<"Bundle","::circt::firrtl::FIRRTLBaseType", 
   }];
 }
 
-def OpenBundleImpl : BaseBundleTypeImpl<"OpenBundle","::circt::firrtl::FIRRTLType", []> {
+def OpenBundleImpl : BaseBundleTypeImpl<"OpenBundle","::circt::firrtl::FIRRTLType"> {
   let genVerifyDecl = 1;
 }
 
@@ -487,7 +487,7 @@ def BaseTypeAliasImpl : FIRRTLImplType<"BaseTypeAlias", [DeclareTypeInterfaceMet
 class PropImplType<string name,
                    list<Trait> traits = [],
                    string baseCppClass = "::circt::firrtl::FIRRTLType">
-  : FIRRTLImplType<name, traits # [ ], baseCppClass>;
+  : FIRRTLImplType<name, traits, baseCppClass>;
 
 def ClassImpl : PropImplType<"Class"> {
   let summary = [{

@@ -1012,6 +1012,7 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     result = it->second;
     break;
   }
+
   case FIRToken::kw_const: {
     consumeToken(FIRToken::kw_const);
     auto nextToken = getToken();

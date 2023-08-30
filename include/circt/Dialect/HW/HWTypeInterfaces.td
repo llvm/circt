@@ -41,9 +41,10 @@ def FieldIDTypeInterface : TypeInterface<"FieldIDTypeInterface"> {
       off a single layer of this type and return the sub-type and a field ID
       targeting the same field, but rebased on the sub-type.
 
-      The resultant type may not be a FieldIDTypeInterface if the resulting 
+      The resultant type *may* not be a FieldIDTypeInterface if the resulting 
       fieldID is zero.  This means that leaf types may be ground without 
-      implementing an interface.
+      implementing an interface.  An empty aggregate will also appear as a 
+      zero.
     }], "std::pair<::mlir::Type, uint64_t>",
     "getSubTypeByFieldID", (ins "uint64_t":$fieldID)>,
 

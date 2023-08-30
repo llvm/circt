@@ -21,12 +21,10 @@ Type circt::hw::FieldIdImpl::getFinalTypeByFieldID(Type type,
                                                    uint64_t fieldID) {
   std::pair<Type, uint64_t> pair(type, fieldID);
   while (pair.second) {
-    if (auto ftype = dyn_cast<FieldIDTypeInterface>(pair.first)) {
+    if (auto ftype = dyn_cast<FieldIDTypeInterface>(pair.first))
       pair = ftype.getSubTypeByFieldID(pair.second);
-    } else {
-      assert(0 && "fieldID indexing into a non-aggregate type");
-      abort();
-    }
+    else
+      llvm::report_fatal_error("fieldID indexing into a non-aggregate type");
   }
   return pair.first;
 }
@@ -38,8 +36,7 @@ circt::hw::FieldIdImpl::getSubTypeByFieldID(Type type, uint64_t fieldID) {
   if (auto ftype = dyn_cast<FieldIDTypeInterface>(type))
     return ftype.getSubTypeByFieldID(fieldID);
 
-  assert(0 && "fieldID indexing into a non-aggregate type");
-  abort();
+  llvm::report_fatal_error("fieldID indexing into a non-aggregate type");
 }
 
 uint64_t circt::hw::FieldIdImpl::getMaxFieldID(Type type) {
