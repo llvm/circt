@@ -92,13 +92,13 @@ firrtl.circuit "Component" {
 
   // CHECK-LABEL: om.class @MapTest
   firrtl.class @MapTest(in %s1: !firrtl.string,
-                         in %s2: !firrtl.string,
-                         in %c1: !firrtl.class<@ClassTest()>,
-                         in %c2: !firrtl.class<@ClassTest()>,
-                         out %out_strings: !firrtl.map<string, string>,
-                         out %out_empty: !firrtl.map<string, string>,
-                         out %out_nested: !firrtl.map<string, map<string, string>>,
-                         out %out_objs: !firrtl.map<string, class<@ClassTest()>>) {
+                        in %s2: !firrtl.string,
+                        in %c1: !firrtl.class<@ClassTest()>,
+                        in %c2: !firrtl.class<@ClassTest()>,
+                        out %out_strings: !firrtl.map<string, string>,
+                        out %out_empty: !firrtl.map<string, string>,
+                        out %out_nested: !firrtl.map<string, map<string, string>>,
+                        out %out_objs: !firrtl.map<string, class<@ClassTest()>>) {
     // Map of basic property types (strings)
     // CHECK-NEXT: %[[TUPLE1:.+]] = om.tuple_create %s1, %s1
     // CHECK-NEXT: %[[TUPLE2:.+]] = om.tuple_create %s2, %s2
