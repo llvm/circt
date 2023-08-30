@@ -92,6 +92,7 @@ add_mlir_python_modules(PyCDE
 
 add_dependencies(PyCDE
   PyCDE_CIRCTPythonModules
+  esi-collateral
 )
 add_dependencies(install-PyCDE
   install-PyCDE_CIRCTPythonModules
