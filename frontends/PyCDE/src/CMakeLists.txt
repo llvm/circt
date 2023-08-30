@@ -111,7 +111,7 @@ install(RUNTIME_DEPENDENCY_SET PyCDE_RUNTIME_DEPS
 )
 
 # Add necessary ESI collateral to the package.
-set(CollateralPrefix "$<TARGET_PROPERTY:esi-collateral,BINARY_DIR>/")
+get_target_property(CollateralPrefix esi-collateral BINARY_DIR)
 get_target_property(CollateralFiles esi-collateral SOURCES)
 foreach(CFile IN LISTS CollateralFiles)
   get_filename_component(CDir ${CFile} DIRECTORY)
