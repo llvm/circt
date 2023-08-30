@@ -334,9 +334,10 @@ struct ApplyState {
   using AddToWorklistFn = llvm::function_ref<void(DictionaryAttr)>;
   ApplyState(CircuitOp circuit, SymbolTable &symTbl,
              AddToWorklistFn addToWorklistFn,
-             InstancePathCache &instancePathCache)
+             InstancePathCache &instancePathCache, bool noRefTypePorts)
       : circuit(circuit), symTbl(symTbl), addToWorklistFn(addToWorklistFn),
-        instancePathCache(instancePathCache), hierPathCache(circuit, symTbl) {}
+        instancePathCache(instancePathCache), hierPathCache(circuit, symTbl),
+        noRefTypePorts(noRefTypePorts) {}
 
   CircuitOp circuit;
   SymbolTable &symTbl;
@@ -345,6 +346,9 @@ struct ApplyState {
   InstancePathCache &instancePathCache;
   HierPathCache hierPathCache;
   size_t numReusedHierPaths = 0;
+
+  // Options that control annotation lowering.
+  bool noRefTypePorts;
 
   DenseSet<InstanceOp> wiringProblemInstRefs;
   DenseMap<StringAttr, LegacyWiringProblem> legacyWiringProblems;
