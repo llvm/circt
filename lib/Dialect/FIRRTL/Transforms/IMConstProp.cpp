@@ -402,13 +402,11 @@ LatticeValue IMConstPropPass::getExtendedLatticeValue(FieldRef value,
 
   auto constant = result.getConstant();
 
-  // If this is a BoolAttr then we are dealing with a special constant.
-  if (auto boolAttr = dyn_cast<BoolAttr>(constant)) {
-    // No extOrTrunc necessary for clock or reset types.
+  // No extOrTrunc necessary for bools or strings.
+  if (auto boolAttr = dyn_cast<BoolAttr>(constant))
     return LatticeValue(boolAttr);
-  } else if (auto strAttr = dyn_cast<StringAttr>(constant)) {
+  if (auto strAttr = dyn_cast<StringAttr>(constant))
     return LatticeValue(strAttr);
-  }
 
   assert(result.getIntConstant());
 
@@ -434,6 +432,7 @@ LatticeValue IMConstPropPass::getExtendedLatticeValue(FieldRef value,
   return LatticeValue(IntegerAttr::get(destType.getContext(), resultConstant));
 }
 
+// NOLINTBEGIN(misc-no-recursion)
 /// Mark a block executable if it isn't already.  This does an initial scan of
 /// the block, processing nullary operations like wires, instances, and
 /// constants that only get processed once.
@@ -509,6 +508,7 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
     }
   }
 }
+// NOLINTEND(misc-no-recursion)
 
 void IMConstPropPass::markWireOp(WireOp wire) {
   auto type = type_dyn_cast<FIRRTLType>(wire.getResult().getType());
