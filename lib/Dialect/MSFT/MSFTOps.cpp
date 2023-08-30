@@ -302,12 +302,12 @@ static ParseResult parseModuleLikeOp(OpAsmParser &parser,
 }
 
 template <typename ModuleTy>
-static void printModuleLikeOp(mlir::FunctionOpInterface moduleLike,
-                              OpAsmPrinter &p, Attribute parameters = nullptr) {
+static void printModuleLikeOp(hw::HWModuleLike moduleLike, OpAsmPrinter &p,
+                              Attribute parameters = nullptr) {
   using namespace mlir::function_interface_impl;
 
-  auto argTypes = moduleLike.getArgumentTypes();
-  auto resultTypes = moduleLike.getResultTypes();
+  auto argTypes = moduleLike.getInputTypes();
+  auto resultTypes = moduleLike.getOutputTypes();
 
   // Print the operation and the function name.
   p << ' ';
@@ -340,7 +340,7 @@ static void printModuleLikeOp(mlir::FunctionOpInterface moduleLike,
   printFunctionAttributes(p, moduleLike, omittedAttrs);
 
   // Print the body if this is not an external function.
-  Region &mbody = moduleLike.getFunctionBody();
+  Region &mbody = moduleLike.getModuleBody();
   if (!mbody.empty()) {
     p << ' ';
     p.printRegion(mbody, /*printEntryBlockArgs=*/false,
@@ -515,20 +515,6 @@ hw::ModulePortInfo MSFTModuleOp::getPortList() {
   return hw::ModulePortInfo(inputs, outputs);
 }
 
-size_t MSFTModuleOp::getNumPorts() {
-  return getArgumentTypes().size() + getResultTypes().size();
-}
-
-size_t MSFTModuleOp::getNumInputPorts() { return getArgumentTypes().size(); }
-
-size_t MSFTModuleOp::getNumOutputPorts() { return getResultTypes().size(); }
-
-size_t MSFTModuleOp::getPortIdForInputId(size_t idx) { return idx; }
-
-size_t MSFTModuleOp::getPortIdForOutputId(size_t idx) {
-  return idx + getNumInputPorts();
-}
-
 SmallVector<BlockArgument>
 MSFTModuleOp::addPorts(ArrayRef<std::pair<StringAttr, Type>> inputs,
                        ArrayRef<std::pair<StringAttr, Value>> outputs) {
@@ -573,61 +559,37 @@ MSFTModuleOp::addPorts(ArrayRef<std::pair<StringAttr, Type>> inputs,
   terminator->setOperands(modifiedOutputs);
 
   // Finalize and return.
-  setType(FunctionType::get(ctxt, modifiedArgs, modifiedResults));
+  setFunctionType(FunctionType::get(ctxt, modifiedArgs, modifiedResults));
   return newBlockArgs;
 }
 
 // Remove the ports at the specified indexes.
 SmallVector<unsigned> MSFTModuleOp::removePorts(llvm::BitVector inputs,
                                                 llvm::BitVector outputs) {
-  MLIRContext *ctxt = getContext();
-  FunctionType ftype = getFunctionType();
   Block *body = getBodyBlock();
   Operation *terminator = body->getTerminator();
 
-  SmallVector<Type, 4> newInputTypes;
-  SmallVector<Attribute, 4> newArgNames;
-  SmallVector<Attribute, 4> newArgLocs;
-  unsigned originalNumArgs = ftype.getNumInputs();
-  ArrayRef<Attribute> origArgNames = getArgNamesAttr().getValue();
-  ArrayRef<Attribute> origArgLocs = getArgLocsAttr().getValue();
-  assert(origArgNames.size() == originalNumArgs);
-  for (size_t i = 0; i < originalNumArgs; ++i) {
-    if (!inputs.test(i)) {
-      newInputTypes.emplace_back(ftype.getInput(i));
-      newArgNames.emplace_back(origArgNames[i]);
-      newArgLocs.emplace_back(origArgLocs[i]);
-    }
+  SmallVector<unsigned> removeInputs;
+  unsigned originalNumArgs = getNumInputPorts();
+  for (unsigned i = 0; i < originalNumArgs; ++i) {
+    if (inputs.test(i))
+      removeInputs.push_back(i);
   }
 
-  SmallVector<Type, 4> newResultTypes;
-  SmallVector<Attribute, 4> newResultNames;
-  SmallVector<Attribute, 4> newResultLocs;
-  unsigned originalNumResults = getNumResults();
-  ArrayRef<Attribute> origResNames = getResultNamesAttr().getValue();
-  ArrayRef<Attribute> origResLocs = getResultLocsAttr().getValue();
-  assert(origResNames.size() == originalNumResults);
-  for (size_t i = 0; i < originalNumResults; ++i) {
-    if (!outputs.test(i)) {
-      newResultTypes.emplace_back(ftype.getResult(i));
-      newResultNames.emplace_back(origResNames[i]);
-      newResultLocs.emplace_back(origResLocs[i]);
-    }
+  SmallVector<unsigned> removeOutputs;
+  unsigned originalNumOutputs = getNumOutputPorts();
+  for (size_t i = 0; i < originalNumOutputs; ++i) {
+    if (outputs.test(i))
+      removeOutputs.push_back(i);
   }
-
-  setType(FunctionType::get(ctxt, newInputTypes, newResultTypes));
-  setResultNamesAttr(ArrayAttr::get(ctxt, newResultNames));
-  setResultLocsAttr(ArrayAttr::get(ctxt, newResultLocs));
-  setArgNamesAttr(ArrayAttr::get(ctxt, newArgNames));
-  setArgLocsAttr(ArrayAttr::get(ctxt, newArgLocs));
+  modifyPorts({}, {}, removeInputs, removeOutputs);
 
   // Build new operand list for output op. Construct an output mapping to
   // return as a side-effect.
-  unsigned numResults = ftype.getNumResults();
   SmallVector<Value> newOutputValues;
   SmallVector<unsigned> newToOldResultMap;
 
-  for (unsigned i = 0; i < numResults; ++i) {
+  for (unsigned i = 0; i < originalNumOutputs; ++i) {
     if (!outputs.test(i)) {
       newOutputValues.push_back(terminator->getOperand(i));
       newToOldResultMap.push_back(i);
@@ -706,7 +668,7 @@ LogicalResult MSFTModuleOp::verify() {
 
   // Verify that the block arguments match the op's attributes.
   for (auto [arg, type, loc] :
-       llvm::zip(getArguments(), type.getInputs(), getArgLocs())) {
+       llvm::zip(body.getArguments(), type.getInputs(), getArgLocs())) {
     if (arg.getType() != type)
       return emitOpError("block argument types should match signature types");
     if (arg.getLoc() != loc.cast<LocationAttr>())
@@ -771,8 +733,8 @@ void MSFTModuleOp::setAllPortAttrs(ArrayRef<Attribute> attrs) {
 }
 
 void MSFTModuleOp::removeAllPortAttrs() {
-  setArgAttrsAttr(nullptr);
-  setResAttrsAttr(nullptr);
+  removeArgAttrsAttr();
+  removeResAttrsAttr();
 }
 
 void MSFTModuleOp::setHWModuleType(hw::ModuleType type) {
@@ -1139,8 +1101,8 @@ void MSFTModuleExternOp::setAllPortAttrs(ArrayRef<Attribute> attrs) {
 }
 
 void MSFTModuleExternOp::removeAllPortAttrs() {
-  setArgAttrsAttr(nullptr);
-  setResAttrsAttr(nullptr);
+  removeArgAttrsAttr();
+  removeResAttrsAttr();
 }
 
 void MSFTModuleExternOp::setHWModuleType(hw::ModuleType type) {

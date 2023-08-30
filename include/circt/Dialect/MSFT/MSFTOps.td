@@ -58,8 +58,11 @@ def AppIDArrayAttr : TypedArrayAttrBase<AppIDAttr, "Array of AppIDs">;
 
 class MSFTModuleOpBase<string mnemonic, list<Trait> traits = []> :
     MSFTOp<mnemonic, traits # [
-      IsolatedFromAbove, Symbol, FunctionOpInterface, OpAsmOpInterface,
-      HasParent<"mlir::ModuleOp">, DeclareOpInterfaceMethods<HWModuleLike>
+      IsolatedFromAbove, Symbol, OpAsmOpInterface,
+      DeclareOpInterfaceMethods<PortList>,
+      DeclareOpInterfaceMethods<SymboledPortList>,
+      DeclareOpInterfaceMethods<HWModuleLike>,
+      HasParent<"mlir::ModuleOp">,
     ]> {
   /// Additional class declarations inside the module op.
   code extraModuleClassDeclaration = ?;
@@ -109,12 +112,11 @@ class MSFTModuleOpBase<string mnemonic, list<Trait> traits = []> :
   }];
 }
 
-def MSFTModuleOp : MSFTModuleOpBase<"module",
-      [RegionKindInterface, HasParent<"mlir::ModuleOp">,
-       SingleBlockImplicitTerminator<"OutputOp">,
-       DeclareOpInterfaceMethods<PortList>,
-       DeclareOpInterfaceMethods<SymboledPortList>,
-       DeclareOpInterfaceMethods<HWMutableModuleLike>]>{
+def MSFTModuleOp : MSFTModuleOpBase<"module", [
+      RegionKindInterface, HasParent<"mlir::ModuleOp">,
+      DeclareOpInterfaceMethods<HWMutableModuleLike>,
+      SingleBlockImplicitTerminator<"OutputOp">
+    ]>{
   let summary = "MSFT HW Module";
   let description = [{
     A lot like `hw.module`, but with a few differences:
@@ -143,9 +145,6 @@ def MSFTModuleOp : MSFTModuleOpBase<"module",
   ];
 
   let extraModuleClassDeclaration = [{
-    using mlir::detail::FunctionOpInterfaceTrait<MSFTModuleOp>::front;
-    using mlir::detail::FunctionOpInterfaceTrait<MSFTModuleOp>::getFunctionBody;
-
     // Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) {
       return RegionKind::Graph;
@@ -168,7 +167,7 @@ def MSFTModuleOp : MSFTModuleOpBase<"module",
     SmallVector<unsigned>
     removePorts(llvm::BitVector inputs, llvm::BitVector outputs);
 
-    Block *getBodyBlock() { return &getFunctionBody().front(); }
+    Block *getBodyBlock() { return &getBody().front(); }
   }];
 
   let extraClassDefinition = [{
@@ -177,13 +176,34 @@ def MSFTModuleOp : MSFTModuleOpBase<"module",
       return ::circt::hw::detail::fnToMod(getFunctionType(), getArgNames().getValue(), getResultNames().getValue());
     }
 
-    circt::hw::InnerSymAttr $cppClass::getPortSymbolAttr(size_t portIndex) {
-      for (NamedAttribute argAttr :
-           mlir::function_interface_impl::getArgAttrs(*this, portIndex))
-        if (auto sym = argAttr.getValue().dyn_cast<circt::hw::InnerSymAttr>())
-          return sym;
-      return circt::hw::InnerSymAttr();
+    ::circt::hw::InnerSymAttr $cppClass::getPortSymbolAttr(size_t portIndex) {
+      return {};
     }
+
+    size_t $cppClass::getNumPorts() {
+      auto fnty = getFunctionType();
+      return fnty.getNumInputs() + fnty.getNumResults();
+    }
+
+    size_t $cppClass::getNumInputPorts() {
+      auto fnty = getFunctionType();
+      return fnty.getNumInputs();
+    }
+
+    size_t $cppClass::getNumOutputPorts() {
+      auto fnty = getFunctionType();
+      return fnty.getNumResults();
+    }
+
+    size_t $cppClass::getPortIdForInputId(size_t idx) {
+      return idx;
+    }
+
+    size_t $cppClass::getPortIdForOutputId(size_t idx) {
+      return idx + getNumInputPorts();
+    }
+
+
   }];
 
   let hasCustomAssemblyFormat = 1;
@@ -191,7 +211,7 @@ def MSFTModuleOp : MSFTModuleOpBase<"module",
 }
 
 def MSFTModuleExternOp : MSFTOp<"module.extern",
-      [Symbol, FunctionOpInterface, HasParent<"mlir::ModuleOp">, 
+      [Symbol, HasParent<"mlir::ModuleOp">,
       DeclareOpInterfaceMethods<PortList>,
       DeclareOpInterfaceMethods<SymboledPortList>,
       DeclareOpInterfaceMethods<HWModuleLike>]> {
@@ -230,6 +250,9 @@ def MSFTModuleExternOp : MSFTOp<"module.extern",
 
     /// Returns the result types of this function.
     ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
+
+    Block *getBodyBlock() { return nullptr; }
+
   }];
 
   let extraClassDefinition = [{
