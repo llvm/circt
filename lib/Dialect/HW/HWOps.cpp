@@ -1463,8 +1463,8 @@ void HWModuleGeneratedOp::setAllPortAttrs(ArrayRef<Attribute> attrs) {
 
 template <typename ModTy>
 static void removeAllPortAttrs(ModTy &mod) {
-  mod.setArgAttrsAttr(nullptr);
-  mod.setResAttrsAttr(nullptr);
+  mod.setArgAttrsAttr(ArrayAttr::get(mod.getContext(), {}));
+  mod.setResAttrsAttr(ArrayAttr::get(mod.getContext(), {}));
 }
 
 void HWModuleOp::removeAllPortAttrs() { return ::removeAllPortAttrs(*this); }
