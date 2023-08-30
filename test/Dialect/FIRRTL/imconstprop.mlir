@@ -645,3 +645,41 @@ firrtl.circuit "Issue5722Value"  {
     firrtl.strictconnect %v, %c : !firrtl.uint<32>
   }
 }
+
+// -----
+
+// Check const prop of basic properties.
+
+// CHECK-LABEL: "PropPassthruTest"
+firrtl.circuit "PropPassthruTest" {
+  firrtl.module private @Passthru(in %intIn: !firrtl.integer,
+                                  out %intOut: !firrtl.integer,
+                                  in %boolIn: !firrtl.bool,
+                                  out %boolOut: !firrtl.bool,
+                                  in %strIn: !firrtl.string,
+                                  out %strOut: !firrtl.string) {
+    firrtl.propassign %intOut, %intIn : !firrtl.integer
+    firrtl.propassign %boolOut, %boolIn : !firrtl.bool
+    firrtl.propassign %strOut, %strIn : !firrtl.string
+  }
+  firrtl.module @PropPassthruTest(out %intOut: !firrtl.integer,
+                                  out %boolOut: !firrtl.bool,
+                                  out %strOut: !firrtl.string) {
+    // CHECK-DAG: %[[BOOL:.+]] = firrtl.bool true
+    // CHECK-DAG: %[[STRING:.+]] = firrtl.string "hello"
+    // CHECK-DAG: %[[INT:.+]] = firrtl.integer 123
+    %0 = firrtl.bool true
+    %1 = firrtl.string "hello"
+    %2 = firrtl.integer 123
+    %passthru_intIn, %passthru_intOut, %passthru_boolIn, %passthru_boolOut, %passthru_strIn, %passthru_strOut = firrtl.instance passthru @Passthru(in intIn: !firrtl.integer, out intOut: !firrtl.integer, in boolIn: !firrtl.bool, out boolOut: !firrtl.bool, in strIn: !firrtl.string, out strOut: !firrtl.string)
+    firrtl.propassign %passthru_intIn, %2 : !firrtl.integer
+    firrtl.propassign %passthru_strIn, %1 : !firrtl.string
+    firrtl.propassign %passthru_boolIn, %0 : !firrtl.bool
+    // CHECK-DAG: propassign %intOut, %[[INT]]
+    // CHECK-DAG: propassign %strOut, %[[STRING]]
+    // CHECK-DAG: propassign %boolOut, %[[BOOL]]
+    firrtl.propassign %intOut, %passthru_intOut : !firrtl.integer
+    firrtl.propassign %strOut, %passthru_strOut : !firrtl.string
+    firrtl.propassign %boolOut, %passthru_boolOut : !firrtl.bool
+  }
+}
