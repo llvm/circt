@@ -29,8 +29,6 @@ set(srcs
   Passes/CPPAPI/CPPAPI.cpp
 )
 
-# set(ESI_RUNTIME_DIR ${CIRCT_BINARY_DIR}/include/circt/Dialect/ESI)
-
 set(ESI_LinkLibs
   CIRCTSupport
   CIRCTComb
@@ -112,9 +110,6 @@ foreach(SRC ${ESI_RUNTIME_SRCS})
 endforeach()
 
 if (ESI_CAPNP)
-  install(FILES ${CapnProto_capnp_IMPORTED_LOCATION} DESTINATION lib)
-  install(FILES ${CapnProto_capnpc_IMPORTED_LOCATION} DESTINATION lib)
-  install(FILES ${CapnProto_kj_IMPORTED_LOCATION} DESTINATION lib)
   add_dependencies(esi-collateral EsiCosimCapnp)
 
   add_custom_command(TARGET esi-collateral PRE_BUILD

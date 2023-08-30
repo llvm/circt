@@ -434,17 +434,6 @@ else()
     message(STATUS "Found Cap'nProto at ${CapnProto_DIR}.")
     set(CMAKE_INSTALL_RPATH ${capnp_LIBDIR})
     set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
-
-    # Some of our CMake code which is only used in Capnp builds uses newer CMake
-    # features. Since most compilations are not capnp builds, only require the
-    # new version for those builds.
-    if(CMAKE_VERSION VERSION_LESS "3.23.0")
-      message(SEND_ERROR
-          "Building CIRCT with Cap'nProto features enabled uses CMake features "
-          "that require at least version 3.23. Recommend upgrading to 3.23+ "
-          "for full support. Detected current version: ${CMAKE_VERSION}. If you "
-          "do not need ESI cosim features, you can use the CAPNP_DISABLE option.")
-    endif()
   endif()
 endif()
 
