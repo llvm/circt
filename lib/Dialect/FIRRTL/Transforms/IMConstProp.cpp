@@ -410,22 +410,21 @@ LatticeValue IMConstPropPass::getExtendedLatticeValue(FieldRef value,
   if (result.isUnknown() || result.isOverdefined())
     return result;
 
+  // No extOrTrunc for property types.  Return what we have.
+  if (isa<PropertyType>(destType))
+    return result;
+
   auto constant = result.getConstant();
 
-  // No extOrTrunc necessary for bools or strings.
-  if (auto boolAttr = dyn_cast<BoolAttr>(constant))
-    return LatticeValue(boolAttr);
-  if (auto strAttr = dyn_cast<StringAttr>(constant))
-    return LatticeValue(strAttr);
-
+  // If not property, only support integers.
   auto intAttr = dyn_cast<IntegerAttr>(constant);
   assert(intAttr && "unsupported lattice attribute kind");
   if (!intAttr)
-    return LatticeValue::getOverdefined();
+    return result;
 
-  // No extOrTrunc for property types.
-  if (isa<PropertyType>(destType))
-    return LatticeValue(intAttr);
+  // No extOrTrunc necessary for bools.
+  if (auto boolAttr = dyn_cast<BoolAttr>(intAttr))
+    return result;
 
   // Non-base (or non-ref) types are overdefined.
   auto baseType = getBaseType(destType);
@@ -1008,11 +1007,8 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
       continue;
     }
 
-    // Don't "refold" constants.
-    // If you don't skip here, everything will crash mysteriously and
-    // inconsistently, and asan/ubsan cannot save you.  Here be dragons.
-    if (isa<ConstantOp, SpecialConstantOp, InvalidValueOp>(op) ||
-        op.hasTrait<mlir::OpTrait::ConstantLike>())
+    // Don't "refold" constants, especially those cached in the constant pool.
+    if (op.hasTrait<mlir::OpTrait::ConstantLike>())
       continue;
 
     // If the op had any constants folded, replace them.
