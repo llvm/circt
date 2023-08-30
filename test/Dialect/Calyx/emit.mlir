@@ -3,7 +3,7 @@
 module attributes {calyx.metadata = ["location1", "location2"], calyx.entrypoint = "main"} {
 
   // CHECK: import "primitives/core.futil";
-  // CHECK-LABEL: component A<"static"=1>(in: 32, @go go: 1, @clk clk: 1, @reset reset: 1) -> (out: 32, @done done: 1) {
+  // CHECK-LABEL: component A<"static"=1,>(in: 32, @go go: 1, @clk clk: 1, @reset reset: 1) -> (out: 32, @done done: 1) {
   calyx.component @A(%in: i32, %go: i1 {go = 1}, %clk: i1 {clk = 1}, %reset: i1 {reset = 1}) -> (%out: i32, %done: i1 {done = 1}) {
     %c1_1 = hw.constant 1 : i1
 
@@ -14,7 +14,7 @@ module attributes {calyx.metadata = ["location1", "location2"], calyx.entrypoint
     calyx.control {}
   } {static = 1}
 
-  // CHECK-LABEL: component B<"toplevel"=1>(in: 1, @go go: 1, @clk clk: 1, @reset reset: 1) -> (out: 1, @done done: 1) {
+  // CHECK-LABEL: component B<"precious"=1, "toplevel"=1,>(in: 1, @go go: 1, @clk clk: 1, @reset reset: 1) -> (out: 1, @done done: 1) {
   calyx.component @B(%in: i1, %go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%out: i1, %done: i1 {done}) {
     %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register @r : i1, i1, i1, i1, i1, i1
     %s1.in, %s1.write_en, %s1.clk, %s1.reset, %s1.out, %s1.done = calyx.register @s1 : i32, i1, i1, i1, i32, i1
@@ -82,11 +82,12 @@ module attributes {calyx.metadata = ["location1", "location2"], calyx.entrypoint
         calyx.enable @DivRemWrite
       }
     }
-  } {toplevel}
+  } {toplevel, precious}
 
   // CHECK-LABEL: component main(@go go: 1, @clk clk: 1, @reset reset: 1) -> (@done done: 1) {
   calyx.component @main(%go: i1 {go = 1}, %clk: i1 {clk = 1}, %reset: i1 {reset = 1}) -> (%done: i1 {done = 1}) {
     // CHECK-LABEL: cells {
+    // CHECK-NEXT:    @generated ud = undef(1);
     // CHECK-NEXT:    c0 = A();
     // CHECK-NEXT:    @precious c1 = B();
     // CHECK-NEXT:    r = std_reg(8);
@@ -95,6 +96,7 @@ module attributes {calyx.metadata = ["location1", "location2"], calyx.entrypoint
     // CHECK-NEXT:    @generated a0 = std_add(32);
     // CHECK-NEXT:    @generated s0 = std_slice(32, 8);
     // CHECK-NEXT:    @generated wire = std_wire(8);
+    %ud.out = calyx.undefined @ud {generated} : i1
     %c0.in, %c0.go, %c0.clk, %c0.reset, %c0.out, %c0.done = calyx.instance @c0 of @A : i32, i1, i1, i1, i32, i1
     %c1.in, %c1.go, %c1.clk, %c1.reset, %c1.out, %c1.done = calyx.instance @c1 of @B {not_calyx_attr="foo", precious} : i1, i1, i1, i1, i1, i1
     %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register @r : i8, i1, i1, i1, i8, i1
@@ -108,7 +110,7 @@ module attributes {calyx.metadata = ["location1", "location2"], calyx.entrypoint
     %c1_i32 = hw.constant 1 : i32
     // CHECK-LABEL: wires {
     calyx.wires {
-      // CHECK-NEXT: group Group1<"static"=1> {
+      // CHECK-NEXT: group Group1<"static"=1,> {
       // CHECK-NEXT:    s0.in = a0.out;
       // CHECK-NEXT:    m0.addr0 = 1'd1;
       // CHECK-NEXT:    a0.left = m0.read_data;
