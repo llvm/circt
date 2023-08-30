@@ -2234,3 +2234,21 @@ firrtl.circuit "InvalidBool" {
      %0 = firrtl.bool "invalid"
   }
 }
+
+// -----
+
+firrtl.circuit "InvalidInnerSymTooHigh" {
+  firrtl.module @InvalidInnerSymTooHigh () {
+    // expected-error @below {{field id:'1' is greater than the maximum field id:'0'}}
+    %w = firrtl.wire sym [<@"test",1,public>] : !firrtl.uint<5>
+  }
+}
+
+// -----
+
+firrtl.circuit "InvalidInnerSymDupe" {
+  firrtl.module @InvalidInnerSymDupe() {
+    // expected-error @below {{op cannot assign multiple symbol names to the field id:'0'}}
+    %w = firrtl.wire sym [<@"foo",0,public>,<@"bar",0,public>] : !firrtl.uint<5>
+  }
+}
