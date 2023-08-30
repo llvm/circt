@@ -12,4 +12,40 @@
 
 #include "circt/Dialect/HW/HWTypeInterfaces.h"
 
+using namespace mlir;
+using namespace circt;
+using namespace hw;
+using namespace FieldIdImpl;
+
+Type circt::hw::FieldIdImpl::getFinalTypeByFieldID(Type type,
+                                                   uint64_t fieldID) {
+  std::pair<Type, uint64_t> pair(type, fieldID);
+  while (pair.second) {
+    if (auto ftype = dyn_cast<FieldIDTypeInterface>(pair.first)) {
+      pair = ftype.getSubTypeByFieldID(pair.second);
+    } else {
+      assert(0 && "fieldID indexing into a non-aggregate type");
+      abort();
+    }
+  }
+  return pair.first;
+}
+
+std::pair<Type, uint64_t>
+circt::hw::FieldIdImpl::getSubTypeByFieldID(Type type, uint64_t fieldID) {
+  if (!fieldID)
+    return {type, 0};
+  if (auto ftype = dyn_cast<FieldIDTypeInterface>(type))
+    return ftype.getSubTypeByFieldID(fieldID);
+
+  assert(0 && "fieldID indexing into a non-aggregate type");
+  abort();
+}
+
+uint64_t circt::hw::FieldIdImpl::getMaxFieldID(Type type) {
+  if (auto ftype = dyn_cast<FieldIDTypeInterface>(type))
+    return ftype.getMaxFieldID();
+  return 0;
+}
+
 #include "circt/Dialect/HW/HWTypeInterfaces.cpp.inc"

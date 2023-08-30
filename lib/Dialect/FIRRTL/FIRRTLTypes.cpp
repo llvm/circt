@@ -820,10 +820,9 @@ uint64_t FIRRTLBaseType::getMaxFieldID() {
       });
 }
 
-std::pair<circt::hw::FieldIDTypeInterface, uint64_t>
+std::pair<Type, uint64_t>
 FIRRTLBaseType::getSubTypeByFieldID(uint64_t fieldID) {
-  return TypeSwitch<FIRRTLBaseType,
-                    std::pair<circt::hw::FieldIDTypeInterface, unsigned>>(*this)
+  return TypeSwitch<FIRRTLBaseType, std::pair<Type, unsigned>>(*this)
       .Case<AnalogType, ClockType, ResetType, AsyncResetType, SIntType,
             UIntType>([&](FIRRTLBaseType t) {
         assert(!fieldID && "non-aggregate types must have a field id of 0");
@@ -833,16 +832,8 @@ FIRRTLBaseType::getSubTypeByFieldID(uint64_t fieldID) {
           [&](auto type) { return type.getSubTypeByFieldID(fieldID); })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
-        return std::pair(circt::hw::FieldIDTypeInterface(), 0);
+        return std::pair(Type(), 0);
       });
-}
-
-circt::hw::FieldIDTypeInterface
-FIRRTLBaseType::getFinalTypeByFieldID(uint64_t fieldID) {
-  std::pair<circt::hw::FieldIDTypeInterface, uint64_t> pair(*this, fieldID);
-  while (pair.second)
-    pair = pair.first.getSubTypeByFieldID(pair.second);
-  return pair.first;
 }
 
 std::pair<uint64_t, bool> FIRRTLBaseType::rootChildFieldID(uint64_t fieldID,
@@ -1560,17 +1551,17 @@ FIRRTLBaseType BundleType::getElementType(StringRef name) {
   return element ? element->type : FIRRTLBaseType();
 }
 
-FIRRTLBaseType BundleType::getElementType(size_t index) {
+FIRRTLBaseType BundleType::getElementType(size_t index) const {
   assert(index < getNumElements() &&
          "index must be less than number of fields in bundle");
   return getElements()[index].type;
 }
 
-uint64_t BundleType::getFieldID(uint64_t index) {
+uint64_t BundleType::getFieldID(uint64_t index) const {
   return getImpl()->fieldIDs[index];
 }
 
-uint64_t BundleType::getIndexForFieldID(uint64_t fieldID) {
+uint64_t BundleType::getIndexForFieldID(uint64_t fieldID) const {
   assert(!getElements().empty() && "Bundle must have >0 fields");
   auto fieldIDs = getImpl()->fieldIDs;
   auto *it = std::prev(llvm::upper_bound(fieldIDs, fieldID));
@@ -1578,28 +1569,27 @@ uint64_t BundleType::getIndexForFieldID(uint64_t fieldID) {
 }
 
 std::pair<uint64_t, uint64_t>
-BundleType::getIndexAndSubfieldID(uint64_t fieldID) {
+BundleType::getIndexAndSubfieldID(uint64_t fieldID) const {
   auto index = getIndexForFieldID(fieldID);
   auto elementFieldID = getFieldID(index);
   return {index, fieldID - elementFieldID};
 }
 
-std::pair<circt::hw::FieldIDTypeInterface, uint64_t>
-BundleType::getSubTypeByFieldID(uint64_t fieldID) {
+std::pair<Type, uint64_t>
+BundleType::getSubTypeByFieldID(uint64_t fieldID) const {
   if (fieldID == 0)
     return {*this, 0};
   auto fieldIDs = getImpl()->fieldIDs;
   auto subfieldIndex = getIndexForFieldID(fieldID);
   auto subfieldType = getElementType(subfieldIndex);
   auto subfieldID = fieldID - getFieldID(subfieldIndex);
-  return {llvm::cast<circt::hw::FieldIDTypeInterface>(subfieldType),
-          subfieldID};
+  return {subfieldType, subfieldID};
 }
 
-uint64_t BundleType::getMaxFieldID() { return getImpl()->maxFieldID; }
+uint64_t BundleType::getMaxFieldID() const { return getImpl()->maxFieldID; }
 
 std::pair<uint64_t, bool> BundleType::rootChildFieldID(uint64_t fieldID,
-                                                       uint64_t index) {
+                                                       uint64_t index) const {
   auto childRoot = getFieldID(index);
   auto rangeEnd = index + 1 >= getNumElements() ? getMaxFieldID()
                                                 : (getFieldID(index + 1) - 1);
@@ -1670,7 +1660,7 @@ struct circt::firrtl::detail::OpenBundleTypeStorage : mlir::TypeStorage {
       fieldIDs.push_back(fieldID);
       // Increment the field ID for the next field by the number of subfields.
       // TODO: Maybe just have elementType be FieldIDTypeInterface ?
-      fieldID += cast<hw::FieldIDTypeInterface>(type).getMaxFieldID();
+      fieldID += hw::FieldIdImpl::getMaxFieldID(type);
     }
     maxFieldID = fieldID;
   }
@@ -1785,17 +1775,17 @@ OpenBundleType::ElementType OpenBundleType::getElementType(StringRef name) {
   return element ? element->type : FIRRTLBaseType();
 }
 
-OpenBundleType::ElementType OpenBundleType::getElementType(size_t index) {
+OpenBundleType::ElementType OpenBundleType::getElementType(size_t index) const {
   assert(index < getNumElements() &&
          "index must be less than number of fields in bundle");
   return getElements()[index].type;
 }
 
-uint64_t OpenBundleType::getFieldID(uint64_t index) {
+uint64_t OpenBundleType::getFieldID(uint64_t index) const {
   return getImpl()->fieldIDs[index];
 }
 
-uint64_t OpenBundleType::getIndexForFieldID(uint64_t fieldID) {
+uint64_t OpenBundleType::getIndexForFieldID(uint64_t fieldID) const {
   assert(!getElements().empty() && "Bundle must have >0 fields");
   auto fieldIDs = getImpl()->fieldIDs;
   auto *it = std::prev(llvm::upper_bound(fieldIDs, fieldID));
@@ -1803,41 +1793,32 @@ uint64_t OpenBundleType::getIndexForFieldID(uint64_t fieldID) {
 }
 
 std::pair<uint64_t, uint64_t>
-OpenBundleType::getIndexAndSubfieldID(uint64_t fieldID) {
+OpenBundleType::getIndexAndSubfieldID(uint64_t fieldID) const {
   auto index = getIndexForFieldID(fieldID);
   auto elementFieldID = getFieldID(index);
   return {index, fieldID - elementFieldID};
 }
 
-std::pair<circt::hw::FieldIDTypeInterface, uint64_t>
-OpenBundleType::getSubTypeByFieldID(uint64_t fieldID) {
+std::pair<Type, uint64_t>
+OpenBundleType::getSubTypeByFieldID(uint64_t fieldID) const {
   if (fieldID == 0)
     return {*this, 0};
   auto fieldIDs = getImpl()->fieldIDs;
   auto subfieldIndex = getIndexForFieldID(fieldID);
   auto subfieldType = getElementType(subfieldIndex);
   auto subfieldID = fieldID - getFieldID(subfieldIndex);
-  return {llvm::cast<circt::hw::FieldIDTypeInterface>(subfieldType),
-          subfieldID};
+  return {subfieldType, subfieldID};
 }
 
-uint64_t OpenBundleType::getMaxFieldID() { return getImpl()->maxFieldID; }
+uint64_t OpenBundleType::getMaxFieldID() const { return getImpl()->maxFieldID; }
 
-std::pair<uint64_t, bool> OpenBundleType::rootChildFieldID(uint64_t fieldID,
-                                                           uint64_t index) {
+std::pair<uint64_t, bool>
+OpenBundleType::rootChildFieldID(uint64_t fieldID, uint64_t index) const {
   auto childRoot = getFieldID(index);
   auto rangeEnd = index + 1 >= getNumElements() ? getMaxFieldID()
                                                 : (getFieldID(index + 1) - 1);
   return std::make_pair(fieldID - childRoot,
                         fieldID >= childRoot && fieldID <= rangeEnd);
-}
-
-circt::hw::FieldIDTypeInterface
-OpenBundleType::getFinalTypeByFieldID(uint64_t fieldID) const {
-  std::pair<circt::hw::FieldIDTypeInterface, uint64_t> pair(*this, fieldID);
-  while (pair.second)
-    pair = pair.first.getSubTypeByFieldID(pair.second);
-  return pair.first;
 }
 
 bool OpenBundleType::isConst() { return getImpl()->isConst; }
@@ -1857,11 +1838,6 @@ LogicalResult
 OpenBundleType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
                        ArrayRef<BundleElement> elements, bool isConst) {
   for (auto &element : elements) {
-    if (!type_isa<hw::FieldIDTypeInterface>(element.type))
-      return emitErrorFn()
-             << "bundle element " << element.name
-             << " has unsupported type that does not support fieldID's: "
-             << element.type;
     if (FIRRTLType(element.type).containsReference() && isConst)
       return emitErrorFn()
              << "'const' bundle cannot have references, but element "
@@ -1974,29 +1950,28 @@ FIRRTLBaseType FVectorType::getAnonymousType() {
   return anonymousType;
 }
 
-uint64_t FVectorType::getFieldID(uint64_t index) {
+uint64_t FVectorType::getFieldID(uint64_t index) const {
   return 1 + index * (getElementType().getMaxFieldID() + 1);
 }
 
-uint64_t FVectorType::getIndexForFieldID(uint64_t fieldID) {
+uint64_t FVectorType::getIndexForFieldID(uint64_t fieldID) const {
   assert(fieldID && "fieldID must be at least 1");
   // Divide the field ID by the number of fieldID's per element.
   return (fieldID - 1) / (getElementType().getMaxFieldID() + 1);
 }
 
 std::pair<uint64_t, uint64_t>
-FVectorType::getIndexAndSubfieldID(uint64_t fieldID) {
+FVectorType::getIndexAndSubfieldID(uint64_t fieldID) const {
   auto index = getIndexForFieldID(fieldID);
   auto elementFieldID = getFieldID(index);
   return {index, fieldID - elementFieldID};
 }
 
-std::pair<circt::hw::FieldIDTypeInterface, uint64_t>
-FVectorType::getSubTypeByFieldID(uint64_t fieldID) {
+std::pair<Type, uint64_t>
+FVectorType::getSubTypeByFieldID(uint64_t fieldID) const {
   if (fieldID == 0)
     return {*this, 0};
-  return {llvm::cast<circt::hw::FieldIDTypeInterface>(getElementType()),
-          getIndexAndSubfieldID(fieldID).second};
+  return {getElementType(), getIndexAndSubfieldID(fieldID).second};
 }
 
 uint64_t FVectorType::getMaxFieldID() {
@@ -2074,41 +2049,34 @@ OpenVectorType OpenVectorType::getConstType(bool isConst) {
   return get(getElementType(), getNumElements(), isConst);
 }
 
-uint64_t OpenVectorType::getFieldID(uint64_t index) {
-  return 1 + index * (llvm::cast<hw::FieldIDTypeInterface>(getElementType())
-                          .getMaxFieldID() +
-                      1);
+uint64_t OpenVectorType::getFieldID(uint64_t index) const {
+  return 1 + index * (hw::FieldIdImpl::getMaxFieldID(getElementType()) + 1);
 }
 
-uint64_t OpenVectorType::getIndexForFieldID(uint64_t fieldID) {
+uint64_t OpenVectorType::getIndexForFieldID(uint64_t fieldID) const {
   assert(fieldID && "fieldID must be at least 1");
   // Divide the field ID by the number of fieldID's per element.
-  return (fieldID - 1) / (llvm::cast<hw::FieldIDTypeInterface>(getElementType())
-                              .getMaxFieldID() +
-                          1);
+  return (fieldID - 1) / (hw::FieldIdImpl::getMaxFieldID(getElementType()) + 1);
 }
 
 std::pair<uint64_t, uint64_t>
-OpenVectorType::getIndexAndSubfieldID(uint64_t fieldID) {
+OpenVectorType::getIndexAndSubfieldID(uint64_t fieldID) const {
   auto index = getIndexForFieldID(fieldID);
   auto elementFieldID = getFieldID(index);
   return {index, fieldID - elementFieldID};
 }
 
-std::pair<circt::hw::FieldIDTypeInterface, uint64_t>
-OpenVectorType::getSubTypeByFieldID(uint64_t fieldID) {
+std::pair<Type, uint64_t>
+OpenVectorType::getSubTypeByFieldID(uint64_t fieldID) const {
   if (fieldID == 0)
     return {*this, 0};
-  return {llvm::cast<circt::hw::FieldIDTypeInterface>(getElementType()),
-          getIndexAndSubfieldID(fieldID).second};
+  return {getElementType(), getIndexAndSubfieldID(fieldID).second};
 }
 
 uint64_t OpenVectorType::getMaxFieldID() {
   // If this is requirement, make ODS constraint or actual elementType.
   return getNumElements() *
-         (llvm::cast<hw::FieldIDTypeInterface>(getElementType())
-              .getMaxFieldID() +
-          1);
+         (hw::FieldIdImpl::getMaxFieldID(getElementType()) + 1);
 }
 
 std::pair<uint64_t, bool> OpenVectorType::rootChildFieldID(uint64_t fieldID,
@@ -2118,14 +2086,6 @@ std::pair<uint64_t, bool> OpenVectorType::rootChildFieldID(uint64_t fieldID,
       index >= getNumElements() ? getMaxFieldID() : (getFieldID(index + 1) - 1);
   return std::make_pair(fieldID - childRoot,
                         fieldID >= childRoot && fieldID <= rangeEnd);
-}
-
-circt::hw::FieldIDTypeInterface
-OpenVectorType::getFinalTypeByFieldID(uint64_t fieldID) const {
-  std::pair<circt::hw::FieldIDTypeInterface, uint64_t> pair(*this, fieldID);
-  while (pair.second)
-    pair = pair.first.getSubTypeByFieldID(pair.second);
-  return pair.first;
 }
 
 bool OpenVectorType::isConst() { return getImpl()->isConst; }
@@ -2144,10 +2104,6 @@ LogicalResult
 OpenVectorType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
                        FIRRTLType elementType, size_t numElements,
                        bool isConst) {
-  if (!type_isa<hw::FieldIDTypeInterface>(elementType))
-    return emitErrorFn()
-           << "vector element type does not support fieldID's, type: "
-           << elementType;
   if (elementType.containsReference() && isConst)
     return emitErrorFn() << "vector cannot be const with references";
   return success();
@@ -2299,7 +2255,7 @@ FIRRTLBaseType FEnumType::getElementType(StringRef name) {
   return element ? element->type : FIRRTLBaseType();
 }
 
-FIRRTLBaseType FEnumType::getElementType(size_t index) {
+FIRRTLBaseType FEnumType::getElementType(size_t index) const {
   assert(index < getNumElements() &&
          "index must be less than number of fields in enum");
   return getElements()[index].type;
@@ -2310,11 +2266,11 @@ FIRRTLBaseType FEnumType::getElementTypePreservingConst(size_t index) {
   return type.getConstType(type.isConst() || isConst());
 }
 
-uint64_t FEnumType::getFieldID(uint64_t index) {
+uint64_t FEnumType::getFieldID(uint64_t index) const {
   return getImpl()->fieldIDs[index];
 }
 
-uint64_t FEnumType::getIndexForFieldID(uint64_t fieldID) {
+uint64_t FEnumType::getIndexForFieldID(uint64_t fieldID) const {
   assert(!getElements().empty() && "Enum must have >0 fields");
   auto fieldIDs = getImpl()->fieldIDs;
   auto *it = std::prev(llvm::upper_bound(fieldIDs, fieldID));
@@ -2322,28 +2278,27 @@ uint64_t FEnumType::getIndexForFieldID(uint64_t fieldID) {
 }
 
 std::pair<uint64_t, uint64_t>
-FEnumType::getIndexAndSubfieldID(uint64_t fieldID) {
+FEnumType::getIndexAndSubfieldID(uint64_t fieldID) const {
   auto index = getIndexForFieldID(fieldID);
   auto elementFieldID = getFieldID(index);
   return {index, fieldID - elementFieldID};
 }
 
-std::pair<circt::hw::FieldIDTypeInterface, uint64_t>
-FEnumType::getSubTypeByFieldID(uint64_t fieldID) {
+std::pair<Type, uint64_t>
+FEnumType::getSubTypeByFieldID(uint64_t fieldID) const {
   if (fieldID == 0)
     return {*this, 0};
   auto fieldIDs = getImpl()->fieldIDs;
   auto subfieldIndex = getIndexForFieldID(fieldID);
   auto subfieldType = getElementType(subfieldIndex);
   auto subfieldID = fieldID - getFieldID(subfieldIndex);
-  return {llvm::cast<circt::hw::FieldIDTypeInterface>(subfieldType),
-          subfieldID};
+  return {subfieldType, subfieldID};
 }
 
-uint64_t FEnumType::getMaxFieldID() { return getImpl()->maxFieldID; }
+uint64_t FEnumType::getMaxFieldID() const { return getImpl()->maxFieldID; }
 
 std::pair<uint64_t, bool> FEnumType::rootChildFieldID(uint64_t fieldID,
-                                                      uint64_t index) {
+                                                      uint64_t index) const {
   auto childRoot = getFieldID(index);
   auto rangeEnd = index + 1 >= getNumElements() ? getMaxFieldID()
                                                 : (getFieldID(index + 1) - 1);
@@ -2461,20 +2416,18 @@ FIRRTLBaseType BaseTypeAliasType::getConstType(bool isConst) {
   return getModifiedType(getInnerType().getConstType(isConst));
 }
 
-std::pair<circt::hw::FieldIDTypeInterface, uint64_t>
-BaseTypeAliasType::getSubTypeByFieldID(uint64_t fieldID) {
+std::pair<Type, uint64_t>
+BaseTypeAliasType::getSubTypeByFieldID(uint64_t fieldID) const {
   return getInnerType().getSubTypeByFieldID(fieldID);
 }
 
-uint64_t BaseTypeAliasType::getMaxFieldID() {
-  // We can use anonymous type.
-  return getAnonymousType().getMaxFieldID();
+uint64_t BaseTypeAliasType::getMaxFieldID() const {
+  return getInnerType().getMaxFieldID();
 }
 
-std::pair<uint64_t, bool> BaseTypeAliasType::rootChildFieldID(uint64_t fieldID,
-                                                              uint64_t index) {
-  // We can use anonymous type.
-  return getAnonymousType().rootChildFieldID(fieldID, index);
+std::pair<uint64_t, bool>
+BaseTypeAliasType::rootChildFieldID(uint64_t fieldID, uint64_t index) const {
+  return getInnerType().rootChildFieldID(fieldID, index);
 }
 
 //===----------------------------------------------------------------------===//

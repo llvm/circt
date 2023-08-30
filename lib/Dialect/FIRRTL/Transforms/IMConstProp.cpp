@@ -695,14 +695,15 @@ void IMConstPropPass::visitConnectLike(FConnectLike connect,
 
   if (auto srcOffset = getFieldIDOffset(changedFieldRef, baseType, fieldRefSrc))
     propagateElementLattice(
-        *srcOffset,
-        cast<FIRRTLBaseType>(baseType.getFinalTypeByFieldID(*srcOffset)));
+        *srcOffset, cast<FIRRTLBaseType>(hw::FieldIdImpl::getFinalTypeByFieldID(
+                        baseType, *srcOffset)));
 
   if (auto relativeDest =
           getFieldIDOffset(changedFieldRef, baseType, fieldRefDest))
     propagateElementLattice(
         *relativeDest,
-        cast<FIRRTLBaseType>(baseType.getFinalTypeByFieldID(*relativeDest)));
+        cast<FIRRTLBaseType>(
+            hw::FieldIdImpl::getFinalTypeByFieldID(baseType, *relativeDest)));
 }
 
 void IMConstPropPass::visitRefSend(RefSendOp send, FieldRef changedFieldRef) {

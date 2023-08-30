@@ -16,6 +16,21 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Types.h"
 
+namespace circt {
+namespace hw {
+namespace FieldIdImpl {
+uint64_t getMaxFieldID(Type);
+
+std::pair<::mlir::Type, uint64_t> getSubTypeByFieldID(Type, uint64_t fieldID);
+
+::mlir::Type getFinalTypeByFieldID(Type type, uint64_t fieldID);
+
+std::pair<uint64_t, bool> rootChildFieldID(Type, uint64_t fieldID,
+                                           uint64_t index);
+} // namespace FieldIdImpl
+} // namespace hw
+} // namespace circt
+
 #include "circt/Dialect/HW/HWTypeInterfaces.h.inc"
 
 #endif // CIRCT_DIALECT_HW_HWTYPEINTERFACES_H

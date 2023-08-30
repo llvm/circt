@@ -5442,11 +5442,8 @@ LogicalResult RWProbeOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
 
   auto checkFinalType = [&](auto type, Location loc) -> LogicalResult {
     // Determine final type.
-    mlir::Type fType = type;
-    if (auto fieldIDType = type_dyn_cast<hw::FieldIDTypeInterface>(type))
-      fType = fieldIDType.getFinalTypeByFieldID(target.getField());
-    else
-      assert(target.getField() == 0);
+    mlir::Type fType =
+        hw::FieldIdImpl::getFinalTypeByFieldID(type, target.getField());
     // Check.
     auto baseType = type_dyn_cast<FIRRTLBaseType>(fType);
     if (!baseType || baseType.getPassiveType() != getType().getType()) {
