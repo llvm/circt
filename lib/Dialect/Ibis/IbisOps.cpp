@@ -277,6 +277,8 @@ FailureOr<VarOp> GetVarOp::getTarget(SymbolTable *symbolTable) {
 
   // Lookup the variable inside the class scope.
   auto varName = getVarName();
+  // @teqdruid TODO: make this more efficient using
+  // innersymtablecollection when that's available to non-firrtl dialects.
   auto var = dyn_cast_or_null<VarOp>(
       symbolTable->lookupSymbolIn(targetClass.getOperation(), varName));
   if (!var)
