@@ -117,14 +117,16 @@ private:
 /// Tuple values.
 struct TupleValue : EvaluatorValue {
   using TupleElements = llvm::SmallVector<EvaluatorValuePtr>;
-  TupleValue(mlir::TupleType type, TupleElements tupleElements)
+  TupleValue(TupleType type, TupleElements tupleElements)
       : EvaluatorValue(Kind::Tuple), type(type),
         elements(std::move(tupleElements)) {}
 
+  /// Implement LLVM RTTI.
   static bool classof(const EvaluatorValue *e) {
     return e->getKind() == Kind::Tuple;
   }
 
+  /// Return the type of the value, which is a TupleType.
   TupleType getType() const { return type; }
 
   const TupleElements &getElements() const { return elements; }

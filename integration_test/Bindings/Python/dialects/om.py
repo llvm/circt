@@ -89,7 +89,14 @@ print(obj.child.foo)
 # CHECK: ('Root', 'x')
 print(obj.reference)
 # CHECK: 14
-print(obj.tuple[1])
+(fst, snd) = obj.tuple
+print(snd)
+
+try:
+  print(obj.tuple[3])
+except IndexError as e:
+  # CHECK: tuple index out of range
+  print(e)
 
 for (name, field) in obj:
   # CHECK: name: child, field: <circt.dialects.om.Object object

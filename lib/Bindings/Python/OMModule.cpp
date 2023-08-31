@@ -200,6 +200,9 @@ private:
 };
 
 PythonValue Tuple::getElement(intptr_t i) {
+  if (i < 0 || i >= omEvaluatorTupleGetNumElements(value))
+    throw std::out_of_range("tuple index out of range");
+
   return omEvaluatorValueToPythonValue(omEvaluatorTupleGetElement(value, i));
 }
 
