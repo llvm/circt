@@ -16,6 +16,12 @@ set(PYCDE_INTEGRATION_TEST_DEPENDS
   hlstool
   CIRCTPythonModules)
 
+if (TARGET esi-collateral)
+  list(APPEND PYCDE_INTEGRATION_TEST_DEPENDS
+    esi-collateral
+  )
+endif()
+
 # If ESI Cosim is available to build then enable its tests.
 if (TARGET EsiCosimDpiServer)
   list(APPEND PYCDE_INTEGRATION_TEST_DEPENDS
