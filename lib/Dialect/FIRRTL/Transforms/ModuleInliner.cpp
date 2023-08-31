@@ -405,11 +405,11 @@ static void mapResultsToWires(IRMapping &mapper, SmallVectorImpl<Value> &wires,
   }
 }
 
-/// Resolve RefType 'backedge' placeholder values.
+/// Resolve non-HW (RefType and PropertyType) 'backedge' placeholder values.
 /// These should have at most one driver that isn't self-connect,
 /// replace each with their driver and remove connections to them.
 /// Also clears out 'edges'.
-static void replaceRefEdges(SmallVectorImpl<Backedge> &edges) {
+static void replaceNonHWEdges(SmallVectorImpl<Backedge> &edges) {
   /// Find connections to `val` and:
   /// * Mark for removal.
   /// * Identify the single non-self-connect as driver, return it.
@@ -464,12 +464,12 @@ static void replaceRefEdges(SmallVectorImpl<Backedge> &edges) {
 
   for (auto &edge : edges) {
     Value v = edge;
-    assert(isa<RefType>(v.getType()));
+    assert((isa<RefType, PropertyType>(v.getType())));
 
     auto driver = getDriverAndRemoveConnects(v);
     if (!driver) {
       v.getDefiningOp()->emitError(
-          "unable to find driver for refty placeholder");
+          "unable to find driver for non-hw placeholder");
       continue;
     }
     if (!isa<BlockArgument>(driver))
@@ -583,7 +583,7 @@ private:
     /// Track back-edges to replace when done.
     BackedgeBuilder beb;
     SmallVector<Backedge> edges;
-    ~ModuleInliningContext() { replaceRefEdges(edges); }
+    ~ModuleInliningContext() { replaceNonHWEdges(edges); }
   };
 
   /// One inlining level, created for each instance inlined or flattened.
@@ -860,8 +860,9 @@ bool Inliner::renameInstance(
 /// module, create a wire, and assign a mapping from each module port to the
 /// wire. When the body of the module is cloned, the value of the wire will be
 /// used instead of the module's ports.
-/// Cannot have a RefType wire, so create backedge and put in 'edges' for
-/// resolution later.  Mapper and 'il.wires' will have the placeholder value.
+/// Cannot have a RefType or PropertyType wire, so create backedge and put in
+/// 'edges' for resolution later.  Mapper and 'il.wires' will have the
+/// placeholder value.
 void Inliner::mapPortsToWires(StringRef prefix, InliningLevel &il,
                               IRMapping &mapper,
                               const DenseSet<Attribute> &localSymbols) {
@@ -917,24 +918,25 @@ void Inliner::mapPortsToWires(StringRef prefix, InliningLevel &il,
                       /*forceable=*/UnitAttr{})
                   .getResult();
             })
-            .Case<RefType>([&](auto refty) {
+            .Case<RefType, PropertyType>([&](auto nonhwty) {
               // Symbols and annotations are not allowed, warn if dropping.
               if (oldSymAttr)
                 target.emitWarning("unexpected symbol ")
                     .append(oldSymAttr)
-                    .append(" on ref port ")
+                    .append(" on non-hw port ")
                     .append(target.getPortName(arg.getArgNumber()))
                     .append(" dropped during inlining")
                     .attachNote(arg.getLoc())
-                    .append("ref port with symbol here");
+                    .append("non-hw port with symbol here");
 
               if (!newAnnotations.empty())
-                target.emitWarning("unexpected annotations found on ref port ")
+                target
+                    .emitWarning("unexpected annotations found on non-hw port ")
                     .append(target.getPortName(arg.getArgNumber()))
                     .append(" dropped during inlining")
                     .attachNote(arg.getLoc())
-                    .append("ref port with annotations here");
-              il.mic.edges.push_back(il.mic.beb.get(refty, arg.getLoc()));
+                    .append("non-hw port with annotations here");
+              il.mic.edges.push_back(il.mic.beb.get(nonhwty, arg.getLoc()));
               return il.mic.edges.back();
             });
     il.wires.push_back(wire);
