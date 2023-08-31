@@ -1113,6 +1113,18 @@ hw.module @struct_extract1(%a0: i3, %a1: i5) -> (r0: i3) {
   hw.output %r0 : i3
 }
 
+// CHECK-LABEL: hw.module @struct_extract2() -> (r0: i3, r1: i7)
+// CHECK-NEXT:    %c3_i7 = hw.constant 3 : i7
+// CHECK-NEXT:    %c1_i3 = hw.constant 1 : i3
+// CHECK-NEXT:    hw.output %c1_i3, %c3_i7 : i3, i7
+hw.module @struct_extract2() -> (r0: i3, r1: i7) {
+  %s = hw.aggregate_constant [1 : i3, [3 : i7]] : !hw.struct<foo: i3, bar: !hw.struct<baz: i7>>
+  %r0 = hw.struct_extract %s["foo"] : !hw.struct<foo: i3, bar: !hw.struct<baz: i7>>
+  %nested =  hw.struct_extract %s["bar"] : !hw.struct<foo: i3, bar: !hw.struct<baz: i7>>
+  %r1 = hw.struct_extract %nested["baz"] : !hw.struct<baz: i7>
+  hw.output %r0, %r1 : i3, i7
+}
+
 // CHECK-LABEL: hw.module @struct_explode0(%a0: i3, %a1: i5) -> (r0: i2)
 // CHECK-NEXT:    %c0_i2 = hw.constant 0 : i2
 // CHECK-NEXT:    hw.output %c0_i2 : i2
