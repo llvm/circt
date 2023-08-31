@@ -333,14 +333,33 @@ StructType::getSubTypeByFieldID(uint64_t fieldID) const {
   return {subfieldType, subfieldID};
 }
 
-std::pair<uint64_t, bool> StructType::rootChildFieldID(uint64_t fieldID,
-                                                       uint64_t index) const {
+std::pair<uint64_t, bool>
+StructType::projectToChildFieldID(uint64_t fieldID, uint64_t index) const {
   auto [maxId, fieldIDs] = getFieldIDsStruct(*this);
   auto childRoot = fieldIDs[index];
   auto rangeEnd =
       index + 1 >= getElements().size() ? maxId : (fieldIDs[index + 1] - 1);
   return std::make_pair(fieldID - childRoot,
                         fieldID >= childRoot && fieldID <= rangeEnd);
+}
+
+uint64_t StructType::getFieldID(uint64_t index) const {
+  auto [maxId, fieldIDs] = getFieldIDsStruct(*this);
+  return fieldIDs[index];
+}
+
+uint64_t StructType::getIndexForFieldID(uint64_t fieldID) const {
+  assert(!getElements().empty() && "Bundle must have >0 fields");
+  auto [maxId, fieldIDs] = getFieldIDsStruct(*this);
+  auto *it = std::prev(llvm::upper_bound(fieldIDs, fieldID));
+  return std::distance(fieldIDs.begin(), it);
+}
+
+std::pair<uint64_t, uint64_t>
+StructType::getIndexAndSubfieldID(uint64_t fieldID) const {
+  auto index = getIndexForFieldID(fieldID);
+  auto elementFieldID = getFieldID(index);
+  return {index, fieldID - elementFieldID};
 }
 
 //===----------------------------------------------------------------------===//
@@ -511,6 +530,43 @@ LogicalResult ArrayType::verify(function_ref<InFlightDiagnostic()> emitError,
   return success();
 }
 
+uint64_t ArrayType::getMaxFieldID() const {
+  return getSize() * (hw::FieldIdImpl::getMaxFieldID(getElementType()) + 1);
+}
+
+std::pair<Type, uint64_t>
+ArrayType::getSubTypeByFieldID(uint64_t fieldID) const {
+  if (fieldID == 0)
+    return {*this, 0};
+  return {getElementType(), getIndexAndSubfieldID(fieldID).second};
+}
+
+std::pair<uint64_t, bool>
+ArrayType::projectToChildFieldID(uint64_t fieldID, uint64_t index) const {
+  auto childRoot = getFieldID(index);
+  auto rangeEnd =
+      index >= getSize() ? getMaxFieldID() : (getFieldID(index + 1) - 1);
+  return std::make_pair(fieldID - childRoot,
+                        fieldID >= childRoot && fieldID <= rangeEnd);
+}
+
+uint64_t ArrayType::getIndexForFieldID(uint64_t fieldID) const {
+  assert(fieldID && "fieldID must be at least 1");
+  // Divide the field ID by the number of fieldID's per element.
+  return (fieldID - 1) / (hw::FieldIdImpl::getMaxFieldID(getElementType()) + 1);
+}
+
+std::pair<uint64_t, uint64_t>
+ArrayType::getIndexAndSubfieldID(uint64_t fieldID) const {
+  auto index = getIndexForFieldID(fieldID);
+  auto elementFieldID = getFieldID(index);
+  return {index, fieldID - elementFieldID};
+}
+
+uint64_t ArrayType::getFieldID(uint64_t index) const {
+  return 1 + index * (hw::FieldIdImpl::getMaxFieldID(getElementType()) + 1);
+}
+
 //===----------------------------------------------------------------------===//
 // UnpackedArrayType
 //===----------------------------------------------------------------------===//
@@ -547,6 +603,44 @@ UnpackedArrayType::verify(function_ref<InFlightDiagnostic()> emitError,
 
 size_t UnpackedArrayType::getSize() const {
   return getSizeAttr().cast<IntegerAttr>().getInt();
+}
+
+uint64_t UnpackedArrayType::getMaxFieldID() const {
+  return getSize() * (hw::FieldIdImpl::getMaxFieldID(getElementType()) + 1);
+}
+
+std::pair<Type, uint64_t>
+UnpackedArrayType::getSubTypeByFieldID(uint64_t fieldID) const {
+  if (fieldID == 0)
+    return {*this, 0};
+  return {getElementType(), getIndexAndSubfieldID(fieldID).second};
+}
+
+std::pair<uint64_t, bool>
+UnpackedArrayType::projectToChildFieldID(uint64_t fieldID,
+                                         uint64_t index) const {
+  auto childRoot = getFieldID(index);
+  auto rangeEnd =
+      index >= getSize() ? getMaxFieldID() : (getFieldID(index + 1) - 1);
+  return std::make_pair(fieldID - childRoot,
+                        fieldID >= childRoot && fieldID <= rangeEnd);
+}
+
+uint64_t UnpackedArrayType::getIndexForFieldID(uint64_t fieldID) const {
+  assert(fieldID && "fieldID must be at least 1");
+  // Divide the field ID by the number of fieldID's per element.
+  return (fieldID - 1) / (hw::FieldIdImpl::getMaxFieldID(getElementType()) + 1);
+}
+
+std::pair<uint64_t, uint64_t>
+UnpackedArrayType::getIndexAndSubfieldID(uint64_t fieldID) const {
+  auto index = getIndexForFieldID(fieldID);
+  auto elementFieldID = getFieldID(index);
+  return {index, fieldID - elementFieldID};
+}
+
+uint64_t UnpackedArrayType::getFieldID(uint64_t index) const {
+  return 1 + index * (hw::FieldIdImpl::getMaxFieldID(getElementType()) + 1);
 }
 
 //===----------------------------------------------------------------------===//

@@ -169,20 +169,6 @@ class BaseVectorTypeImpl<string name, string ElementType, list<Trait> traits = [
     /// Return the recursive properties of the type.
     RecursiveTypeProperties getRecursiveTypeProperties() const;
 
-    /// Get an integer ID for the field. Field IDs start at 1, and are assigned
-    /// to each field in a vector in a recursive depth-first walk of all
-    /// elements. A field ID of 0 is used to reference the vector itself.
-    uint64_t getFieldID(uint64_t index) const;
-
-    /// Find the element index corresponding to the desired fieldID.  If the
-    /// fieldID corresponds to a field in nested under an element, it will
-    /// return the index of the parent element.
-    uint64_t getIndexForFieldID(uint64_t fieldID) const;
-
-    /// Find the index of the element that contains the given fieldID.
-    /// As well, rebase the fieldID to the element.
-    std::pair<uint64_t, uint64_t> getIndexAndSubfieldID(uint64_t fieldID) const;
-
     /// Const support.
     bool isConst();
     ElementType getElementTypePreservingConst();
@@ -275,22 +261,6 @@ class BaseBundleTypeImpl<string name, string ElementType, list<Trait> traits = [
 
     /// Return the recursive properties of the type.
     RecursiveTypeProperties getRecursiveTypeProperties() const;
-
-    /// Get an integer ID for the field. Field IDs start at 1, and are assigned
-    /// to each field in a bundle in a recursive pre-order walk of all fields,
-    /// visiting all nested bundle fields.  A field ID of 0 is used to reference
-    /// the bundle itself. The ID can be used to uniquely identify any specific
-    /// field in this bundle.
-    uint64_t getFieldID(uint64_t index) const;
-
-    /// Find the element index corresponding to the desired fieldID.  If the
-    /// fieldID corresponds to a field in a nested bundle, it will return the
-    /// index of the parent field.
-    uint64_t getIndexForFieldID(uint64_t fieldID) const;
-
-    /// Find the index of the element that contains the given fieldID.
-    /// As well, rebase the fieldID to the element.
-    std::pair<uint64_t, uint64_t> getIndexAndSubfieldID(uint64_t fieldID) const;
 
     using iterator = ArrayRef<BundleElement>::iterator;
     iterator begin() const { return getElements().begin(); }
@@ -390,22 +360,6 @@ def FEnumImpl : FIRRTLImplType<"FEnum", [DeclareTypeInterfaceMethods<FieldIDType
 
     /// Return the recursive properties of the type.
     RecursiveTypeProperties getRecursiveTypeProperties() const;
-
-    /// Get an integer ID for the field. Field IDs start at 1, and are assigned
-    /// to each field in a enum in a recursive pre-order walk of all fields,
-    /// visiting all nested enum fields.  A field ID of 0 is used to reference
-    /// the enum itself. The ID can be used to uniquely identify any specific
-    /// field in this enum.
-    uint64_t getFieldID(uint64_t index) const;
-
-    /// Find the element index corresponding to the desired fieldID.  If the
-    /// fieldID corresponds to a field in a nested enum, it will return the
-    /// index of the parent field.
-    uint64_t getIndexForFieldID(uint64_t fieldID) const;
-
-    /// Find the index of the element that contains the given fieldID.
-    /// As well, rebase the fieldID to the element.
-    std::pair<uint64_t, uint64_t> getIndexAndSubfieldID(uint64_t fieldID) const;
 
     using iterator = ArrayRef<EnumElement>::iterator;
     iterator begin() const { return getElements().begin(); }

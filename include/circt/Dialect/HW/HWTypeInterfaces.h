@@ -25,8 +25,16 @@ std::pair<::mlir::Type, uint64_t> getSubTypeByFieldID(Type, uint64_t fieldID);
 
 ::mlir::Type getFinalTypeByFieldID(Type type, uint64_t fieldID);
 
-std::pair<uint64_t, bool> rootChildFieldID(Type, uint64_t fieldID,
-                                           uint64_t index);
+std::pair<uint64_t, bool> projectToChildFieldID(Type, uint64_t fieldID,
+                                                uint64_t index);
+
+std::pair<uint64_t, uint64_t> getIndexAndSubfieldID(Type type,
+                                                    uint64_t fieldID);
+
+uint64_t getFieldID(Type type, uint64_t index);
+
+uint64_t getIndexForFieldID(Type type, uint64_t fieldID);
+
 } // namespace FieldIdImpl
 } // namespace hw
 } // namespace circt

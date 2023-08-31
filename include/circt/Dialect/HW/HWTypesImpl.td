@@ -49,7 +49,7 @@ def IntTypeImpl : HWType<"Int"> {
 }
 
 // A simple fixed size array. Declares the hw::ArrayType in C++.
-def ArrayTypeImpl : HWType<"Array"> {
+def ArrayTypeImpl : HWType<"Array", [DeclareTypeInterfaceMethods<FieldIDTypeInterface>]> {
   let summary = "fixed-sized array";
   let description = [{
     Fixed sized HW arrays are roughly similar to C arrays. On the wire (vs.
@@ -76,7 +76,7 @@ def ArrayTypeImpl : HWType<"Array"> {
 }
 
 // An 'unpacked' array of fixed size.
-def UnpackedArrayType : HWType<"UnpackedArray"> {
+def UnpackedArrayType : HWType<"UnpackedArray", [DeclareTypeInterfaceMethods<FieldIDTypeInterface>]> {
   let summary = "SystemVerilog 'unpacked' fixed-sized array";
   let description = [{
     Unpacked arrays are a more flexible array representation than packed arrays,

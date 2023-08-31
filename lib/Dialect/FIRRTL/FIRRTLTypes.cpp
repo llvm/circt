@@ -1547,8 +1547,8 @@ BundleType::getSubTypeByFieldID(uint64_t fieldID) const {
 
 uint64_t BundleType::getMaxFieldID() const { return getImpl()->maxFieldID; }
 
-std::pair<uint64_t, bool> BundleType::rootChildFieldID(uint64_t fieldID,
-                                                       uint64_t index) const {
+std::pair<uint64_t, bool>
+BundleType::projectToChildFieldID(uint64_t fieldID, uint64_t index) const {
   auto childRoot = getFieldID(index);
   auto rangeEnd = index + 1 >= getNumElements() ? getMaxFieldID()
                                                 : (getFieldID(index + 1) - 1);
@@ -1772,7 +1772,7 @@ OpenBundleType::getSubTypeByFieldID(uint64_t fieldID) const {
 uint64_t OpenBundleType::getMaxFieldID() const { return getImpl()->maxFieldID; }
 
 std::pair<uint64_t, bool>
-OpenBundleType::rootChildFieldID(uint64_t fieldID, uint64_t index) const {
+OpenBundleType::projectToChildFieldID(uint64_t fieldID, uint64_t index) const {
   auto childRoot = getFieldID(index);
   auto rangeEnd = index + 1 >= getNumElements() ? getMaxFieldID()
                                                 : (getFieldID(index + 1) - 1);
@@ -1938,8 +1938,8 @@ uint64_t FVectorType::getMaxFieldID() const {
          (hw::FieldIdImpl::getMaxFieldID(getElementType()) + 1);
 }
 
-std::pair<uint64_t, bool> FVectorType::rootChildFieldID(uint64_t fieldID,
-                                                        uint64_t index) const {
+std::pair<uint64_t, bool>
+FVectorType::projectToChildFieldID(uint64_t fieldID, uint64_t index) const {
   auto childRoot = getFieldID(index);
   auto rangeEnd =
       index >= getNumElements() ? getMaxFieldID() : (getFieldID(index + 1) - 1);
@@ -2040,7 +2040,7 @@ uint64_t OpenVectorType::getMaxFieldID() const {
 }
 
 std::pair<uint64_t, bool>
-OpenVectorType::rootChildFieldID(uint64_t fieldID, uint64_t index) const {
+OpenVectorType::projectToChildFieldID(uint64_t fieldID, uint64_t index) const {
   auto childRoot = getFieldID(index);
   auto rangeEnd =
       index >= getNumElements() ? getMaxFieldID() : (getFieldID(index + 1) - 1);
@@ -2257,8 +2257,8 @@ FEnumType::getSubTypeByFieldID(uint64_t fieldID) const {
 
 uint64_t FEnumType::getMaxFieldID() const { return getImpl()->maxFieldID; }
 
-std::pair<uint64_t, bool> FEnumType::rootChildFieldID(uint64_t fieldID,
-                                                      uint64_t index) const {
+std::pair<uint64_t, bool>
+FEnumType::projectToChildFieldID(uint64_t fieldID, uint64_t index) const {
   auto childRoot = getFieldID(index);
   auto rangeEnd = index + 1 >= getNumElements() ? getMaxFieldID()
                                                 : (getFieldID(index + 1) - 1);
@@ -2386,8 +2386,22 @@ uint64_t BaseTypeAliasType::getMaxFieldID() const {
 }
 
 std::pair<uint64_t, bool>
-BaseTypeAliasType::rootChildFieldID(uint64_t fieldID, uint64_t index) const {
-  return hw::FieldIdImpl::rootChildFieldID(getInnerType(), fieldID, index);
+BaseTypeAliasType::projectToChildFieldID(uint64_t fieldID,
+                                         uint64_t index) const {
+  return hw::FieldIdImpl::projectToChildFieldID(getInnerType(), fieldID, index);
+}
+
+uint64_t BaseTypeAliasType::getIndexForFieldID(uint64_t fieldID) const {
+  return hw::FieldIdImpl::getIndexForFieldID(getInnerType(), fieldID);
+}
+
+uint64_t BaseTypeAliasType::getFieldID(uint64_t index) const {
+  return hw::FieldIdImpl::getFieldID(getInnerType(), index);
+}
+
+std::pair<uint64_t, uint64_t>
+BaseTypeAliasType::getIndexAndSubfieldID(uint64_t fieldID) const {
+  return hw::FieldIdImpl::getIndexAndSubfieldID(getInnerType(), fieldID);
 }
 
 //===----------------------------------------------------------------------===//
