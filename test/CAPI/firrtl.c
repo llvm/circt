@@ -52,7 +52,7 @@ void testExport(MlirContext ctx) {
   // CHECK-NEXT:     connect out, and(in_1, in_2) @[- 6:5]
 }
 
-int main() {
+int main(void) {
   MlirContext ctx = mlirContextCreate();
   mlirDialectHandleLoadDialect(mlirGetDialectHandle__firrtl__(), ctx);
   testExport(ctx);
