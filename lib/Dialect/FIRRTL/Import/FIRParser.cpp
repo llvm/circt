@@ -3593,6 +3593,10 @@ ParseResult FIRStmtParser::parseInstance() {
               "use of undefined module name '" + moduleName + "' in instance");
     return failure();
   }
+  if (isa<ClassOp /* ClassLike */>(referencedModule))
+    return emitError(startTok.getLoc(), "cannot create instance of class '" +
+                                            moduleName +
+                                            "', did you mean object?");
 
   SmallVector<PortInfo> modulePorts = referencedModule.getPorts();
 
