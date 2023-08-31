@@ -29,8 +29,8 @@ def CombDialect : Dialect {
   let hasConstantMaterializer = 1;
   let cppNamespace = "::circt::comb";
 
-  // Opt-out of properties for now, must migrate by LLVM 19.  #5273.
-  let usePropertiesForAttributes = 0;
+  // This will be the default after next LLVM bump.
+  let usePropertiesForAttributes = 1;
 
 }
 
