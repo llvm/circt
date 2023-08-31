@@ -494,9 +494,9 @@ def InstanceOp : HWOp<"instance", [
     Operation *getReferencedModuleSlow();
 
     /// Return the values for the port in port order.
-    /// Note: The module ports maynot be input,output ordered. This computes
+    /// Note: The module ports may not be input, output ordered. This computes
     /// the port index to instance result/input Value mapping.
-    void  getValues(SmallVectorImpl<Value> &values, const ModulePortInfo &mpi);
+    void getValues(SmallVectorImpl<Value> &values, const ModulePortInfo &mpi);
 
     //===------------------------------------------------------------------===//
     // SymbolOpInterface Methods
