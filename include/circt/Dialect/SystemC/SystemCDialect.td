@@ -35,6 +35,9 @@ def SystemCDialect : Dialect {
   }];
 
   let useDefaultTypePrinterParser = 0;
+
+  // Opt-out of properties for now, must migrate by LLVM 19.  #5273.
+  let usePropertiesForAttributes = 0;
 }
 
 #endif // CIRCT_DIALECT_SYSTEMC_SYSTEMCDIALECT
