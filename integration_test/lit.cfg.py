@@ -40,6 +40,8 @@ config.substitutions.append(
 config.substitutions.append(
     ('%TCL_PATH%', config.circt_src_root + '/build/lib/Bindings/Tcl/'))
 config.substitutions.append(('%CIRCT_SOURCE%', config.circt_src_root))
+config.substitutions.append(
+    ('%ESI_COLLATERAL_PATH%', config.esi_collateral_path))
 
 llvm_config.with_system_environment(['HOME', 'INCLUDE', 'LIB', 'TMP', 'TEMP'])
 

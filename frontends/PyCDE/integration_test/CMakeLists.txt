@@ -11,6 +11,7 @@ set(PYCDE_INTEGRATION_TEST_DEPENDS
   FileCheck count not split-file
   circt-rtl-sim
   PyCDE
+  esi-collateral
   mlir-opt
   hlstool
   CIRCTPythonModules)

@@ -11,11 +11,11 @@
 # ===-----------------------------------------------------------------------===//
 
 if (TARGET EsiCosimDpiServer)
-  list(APPEND CIRCT_INTEGRATION_TEST_DEPENDS EsiCosimDpiServer CIRCTESI)
   get_property(ESI_COSIM_LIB_DIR TARGET EsiCosimDpiServer PROPERTY LIBRARY_OUTPUT_DIRECTORY)
   set(ESI_COSIM_PATH ${ESI_COSIM_LIB_DIR}/libEsiCosimDpiServer.so)
 endif()
 
+get_target_property(ESI_COLLATERAL_PATH esi-collateral BINARY_DIR)
 set(SOURCES esi-cosim-runner.py esi_cosim.py)
 foreach(file IN ITEMS ${SOURCES})
   configure_file(${file}.in ${CIRCT_TOOLS_DIR}/${file})
