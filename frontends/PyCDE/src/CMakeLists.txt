@@ -8,6 +8,10 @@
 
 include(AddMLIRPython)
 
+# Some of the PyCDE CMake code which is only used in Capnp builds uses newer
+# CMake features.
+cmake_minimum_required(VERSION 3.21.0)
+
 add_compile_definitions("MLIR_PYTHON_PACKAGE_PREFIX=pycde.circt.")
 
 declare_mlir_python_sources(PyCDESources
@@ -92,6 +96,7 @@ add_mlir_python_modules(PyCDE
 
 add_dependencies(PyCDE
   PyCDE_CIRCTPythonModules
+  esi-collateral
 )
 add_dependencies(install-PyCDE
   install-PyCDE_CIRCTPythonModules
@@ -110,11 +115,17 @@ install(RUNTIME_DEPENDENCY_SET PyCDE_RUNTIME_DEPS
 )
 
 # Add necessary ESI collateral to the package.
-install(TARGETS esi-collateral
-  FILE_SET HEADERS
-  DESTINATION python_packages/pycde/collateral
-  COMPONENT PyCDE
-)
+get_target_property(CollateralPrefix esi-collateral BINARY_DIR)
+get_target_property(CollateralFiles esi-collateral SOURCES)
+foreach(CFile IN LISTS CollateralFiles)
+  get_filename_component(CDir ${CFile} DIRECTORY)
+  install(FILES
+    "${CollateralPrefix}/${CFile}"
+    DESTINATION "python_packages/pycde/collateral/${CDir}"
+    COMPONENT PyCDE
+  )
+endforeach()
+
 install(TARGETS circt-std-sim-drivers
   PUBLIC_HEADER DESTINATION python_packages/pycde/collateral
   COMPONENT PyCDE
@@ -137,9 +148,9 @@ if(ESI_COSIM)
     DESTINATION python_packages/pycde/collateral
     COMPONENT PyCDE
   )
-  install(TARGETS EsiCosimCapnp
-    FILE_SET HEADERS
-    DESTINATION python_packages/pycde/collateral
+  install(FILES
+    "$<TARGET_PROPERTY:EsiCosimCapnp,BINARY_DIR>/CosimDpi.capnp"
+    DESTINATION python_packages/pycde/collateral/runtime
     COMPONENT PyCDE
   )
 endif()
