@@ -14,10 +14,12 @@
 #define CIRCT_DIALECT_HW_HWTYPESIMPL_TD
 
 include "circt/Dialect/HW/HWDialect.td"
+include "circt/Dialect/HW/HWTypeInterfaces.td"
 include "mlir/IR/AttrTypeBase.td"
 
 // Base class for other typedefs. Provides dialact-specific defaults.
-class HWType<string name> : TypeDef<HWDialect, name> { }
+class HWType<string name, list<Trait> traits = []>
+  : TypeDef<HWDialect, name, traits> { }
 
 //===----------------------------------------------------------------------===//
 // Type declarations
@@ -120,7 +122,7 @@ def InOutTypeImpl : HWType<"InOut"> {
 }
 
 // A packed struct. Declares the hw::StructType in C++.
-def StructTypeImpl : HWType<"Struct"> {
+def StructTypeImpl : HWType<"Struct", [DeclareTypeInterfaceMethods<FieldIDTypeInterface>]> {
   let summary = "HW struct type";
   let description = [{
     Represents a structure of name, value pairs.

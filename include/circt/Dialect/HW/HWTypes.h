@@ -15,6 +15,7 @@
 #define CIRCT_DIALECT_HW_TYPES_H
 
 #include "circt/Dialect/HW/HWDialect.h"
+#include "circt/Dialect/HW/HWTypeInterfaces.h"
 
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinTypes.h"

@@ -293,9 +293,54 @@ std::optional<unsigned> StructType::getFieldIndex(mlir::StringAttr fieldName) {
   return {};
 }
 
+static std::pair<uint64_t, SmallVector<uint64_t>>
+getFieldIDsStruct(const StructType &st) {
+  uint64_t fieldID = 0;
+  auto elements = st.getElements();
+  SmallVector<uint64_t> fieldIDs;
+  fieldIDs.reserve(elements.size());
+  for (auto &element : elements) {
+    auto type = element.type;
+    fieldID += 1;
+    fieldIDs.push_back(fieldID);
+    // Increment the field ID for the next field by the number of subfields.
+    fieldID += hw::FieldIdImpl::getMaxFieldID(type);
+  }
+  return {fieldID, fieldIDs};
+}
+
 void StructType::getInnerTypes(SmallVectorImpl<Type> &types) {
   for (const auto &field : getElements())
     types.push_back(field.type);
+}
+
+uint64_t StructType::getMaxFieldID() const {
+  uint64_t fieldID = 0;
+  for (const auto &field : getElements())
+    fieldID += 1 + hw::FieldIdImpl::getMaxFieldID(field.type);
+  return fieldID;
+}
+
+std::pair<Type, uint64_t>
+StructType::getSubTypeByFieldID(uint64_t fieldID) const {
+  if (fieldID == 0)
+    return {*this, 0};
+  auto [maxId, fieldIDs] = getFieldIDsStruct(*this);
+  auto *it = std::prev(llvm::upper_bound(fieldIDs, fieldID));
+  auto subfieldIndex = std::distance(fieldIDs.begin(), it);
+  auto subfieldType = getElements()[subfieldIndex].type;
+  auto subfieldID = fieldID - fieldIDs[subfieldIndex];
+  return {subfieldType, subfieldID};
+}
+
+std::pair<uint64_t, bool> StructType::rootChildFieldID(uint64_t fieldID,
+                                                       uint64_t index) const {
+  auto [maxId, fieldIDs] = getFieldIDsStruct(*this);
+  auto childRoot = fieldIDs[index];
+  auto rangeEnd =
+      index + 1 >= getElements().size() ? maxId : (fieldIDs[index + 1] - 1);
+  return std::make_pair(fieldID - childRoot,
+                        fieldID >= childRoot && fieldID <= rangeEnd);
 }
 
 //===----------------------------------------------------------------------===//

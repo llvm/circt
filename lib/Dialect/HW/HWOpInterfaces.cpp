@@ -46,12 +46,9 @@ LogicalResult hw::verifyInnerSymAttr(InnerSymbolOpInterface op) {
   // (there are no uses for this presently, but be open to this anyway.)
   if (!result)
     return success();
-  auto resultType = result.getType().dyn_cast<FieldIDTypeInterface>();
-  // If this type doesn't implement the FieldIDTypeInterface, then there is
-  // nothing additional we can check.
-  if (!resultType)
-    return success();
-  auto maxFields = resultType.getMaxFieldID();
+  auto resultType = result.getType();
+  resultType.dump();
+  auto maxFields = FieldIdImpl::getMaxFieldID(resultType);
   llvm::SmallBitVector indices(maxFields + 1);
   llvm::SmallPtrSet<Attribute, 8> symNames;
   // Ensure fieldID and symbol names are unique.
