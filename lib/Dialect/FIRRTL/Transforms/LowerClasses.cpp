@@ -649,22 +649,23 @@ static void populateTypeConverter(TypeConverter &converter) {
   });
 
   // Convert FIRRTL List type to OM List type.
+  auto convertListType = [&converter](auto type) -> std::optional<mlir::Type> {
+    auto elementType = converter.convertType(type.getElementType());
+    if (!elementType)
+      return {};
+    return om::ListType::get(elementType);
+  };
+
   converter.addConversion(
-      [&converter](om::ListType type) -> std::optional<mlir::Type> {
+      [convertListType](om::ListType type) -> std::optional<mlir::Type> {
         // Convert any om.list<firrtl> -> om.list<om>
-        auto elementType = converter.convertType(type.getElementType());
-        if (!elementType)
-          return {};
-        return om::ListType::get(elementType);
+        return convertListType(type);
       });
 
   converter.addConversion(
-      [&converter](firrtl::ListType type) -> std::optional<mlir::Type> {
+      [convertListType](firrtl::ListType type) -> std::optional<mlir::Type> {
         // Convert any firrtl.list<firrtl> -> om.list<om>
-        auto elementType = converter.convertType(type.getElementType());
-        if (!elementType)
-          return {};
-        return om::ListType::get(elementType);
+        return convertListType(type);
       });
 
   auto convertMapType = [&converter](auto type) -> std::optional<mlir::Type> {
