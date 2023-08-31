@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_FIRRTL_FIRRTLTYPESIMPL_TD
 
 include "FIRRTLDialect.td"
+include "FIRRTLTypeInterfaces.td"
 include "circt/Dialect/HW/HWTypeInterfaces.td"
 
 // Base class for other typedefs. Provides dialact-specific defaults.
@@ -32,19 +33,11 @@ class FIRRTLImplType<string name,
 }
 
 //===----------------------------------------------------------------------===//
-// Type Traits
-//===----------------------------------------------------------------------===//
-
-def WidthQualifiedTypeTrait : NativeTypeTrait<"WidthQualifiedTypeTrait"> {
-  let cppNamespace = "::circt::firrtl";
-}
-
-//===----------------------------------------------------------------------===//
 // Type Definitions
 //===----------------------------------------------------------------------===//
 
 def SIntImpl : FIRRTLImplType<"SInt",
-                              [WidthQualifiedTypeTrait, FieldIDTypeInterface],
+                              [WidthQualifiedTypeTrait, FieldIDTypeInterface, DeclareTypeInterfaceMethods<PhysicalType>],
                               "::circt::firrtl::IntType"> {
   let summary = "A signed integer type, whose width may not be known.";
   let parameters = (ins "int32_t":$widthOrSentinel, "bool":$isConst);
@@ -57,13 +50,12 @@ def SIntImpl : FIRRTLImplType<"SInt",
   let extraClassDeclaration = [{
     using WidthQualifiedTypeTrait<SIntType>::getWidth;
     using WidthQualifiedTypeTrait<SIntType>::hasWidth;
-    int32_t getWidthOrSentinel() const;
     SIntType getConstType(bool isConst);
   }];
 }
 
 def UIntImpl : FIRRTLImplType<"UInt",
-                              [WidthQualifiedTypeTrait, FieldIDTypeInterface],
+                              [WidthQualifiedTypeTrait, FieldIDTypeInterface, DeclareTypeInterfaceMethods<PhysicalType>],
                               "::circt::firrtl::IntType"> {
   let summary = "An unsigned integer type, whose width may not be known.";
   let parameters = (ins "int32_t":$widthOrSentinel, "bool":$isConst);
@@ -76,12 +68,11 @@ def UIntImpl : FIRRTLImplType<"UInt",
   let extraClassDeclaration = [{
     using WidthQualifiedTypeTrait<UIntType>::getWidth;
     using WidthQualifiedTypeTrait<UIntType>::hasWidth;
-    int32_t getWidthOrSentinel() const;
     UIntType getConstType(bool isConst);
   }];
 }
 
-def ClockTypeImpl : FIRRTLImplType<"Clock", [FieldIDTypeInterface]> {
+def ClockTypeImpl : FIRRTLImplType<"Clock", [FieldIDTypeInterface, DeclareTypeInterfaceMethods<PhysicalType>]> {
   let summary = "Clock signal";
   let parameters = (ins "bool":$isConst);
   let storageClass = "FIRRTLBaseTypeStorage";
@@ -95,7 +86,7 @@ def ClockTypeImpl : FIRRTLImplType<"Clock", [FieldIDTypeInterface]> {
   }];
 }
 
-def ResetTypeImpl : FIRRTLImplType<"Reset", [FieldIDTypeInterface]> {
+def ResetTypeImpl : FIRRTLImplType<"Reset", [FieldIDTypeInterface, DeclareTypeInterfaceMethods<PhysicalType>]> {
   let summary = "Reset Signal";
   let parameters = (ins "bool":$isConst);
   let storageClass = "FIRRTLBaseTypeStorage";
@@ -109,7 +100,7 @@ def ResetTypeImpl : FIRRTLImplType<"Reset", [FieldIDTypeInterface]> {
   }];
 }
 
-def AsyncResetTypeImpl : FIRRTLImplType<"AsyncReset", [FieldIDTypeInterface]> {
+def AsyncResetTypeImpl : FIRRTLImplType<"AsyncReset", [FieldIDTypeInterface, DeclareTypeInterfaceMethods<PhysicalType>]> {
   let summary = "AsyncReset signal";
   let parameters = (ins "bool":$isConst);
   let storageClass = "FIRRTLBaseTypeStorage";
@@ -124,7 +115,7 @@ def AsyncResetTypeImpl : FIRRTLImplType<"AsyncReset", [FieldIDTypeInterface]> {
 }
 
 def AnalogTypeImpl : FIRRTLImplType<"Analog",
-  [WidthQualifiedTypeTrait, FieldIDTypeInterface]> {
+  [WidthQualifiedTypeTrait, FieldIDTypeInterface, DeclareTypeInterfaceMethods<PhysicalType>]> {
   let summary = "Analog signal";
   let parameters = (ins "int32_t":$widthOrSentinel, "bool":$isConst);
   let storageClass = "WidthTypeStorage";
@@ -133,7 +124,6 @@ def AnalogTypeImpl : FIRRTLImplType<"Analog",
     TypeBuilder<(ins)>,
   ];
   let extraClassDeclaration = [{
-    int32_t getWidthOrSentinel() const;
     AnalogType getConstType(bool isConst);
   }];
   let genVerifyDecl = true;
