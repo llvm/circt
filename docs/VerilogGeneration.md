@@ -40,15 +40,15 @@ and use of the correct idioms is important.
 
 ## Baseline Assumptions
 
-Circt assumes, as a baseline, that tools support the subset of verilog specified 
-in IEEE 1364.1-2002 "IEEE Standard for Verilog Register Transfer Level 
-Synthesis".  Although this standard is deprecated and no replacement has been 
-created for System Verilog, it provides a reasonable, established, and defined 
-subset of the verilog specification which all tools should support.  Circt may 
-assume more features than specified in that document (e.g. system verilog 
-constructs), but should be willing to consider lowering to simpler 
-implementations when justified to support a major tool and when such lowering is 
-possible.  Supporting tools which do not meet this baseline will require 
+Circt assumes, as a baseline, that tools support the subset of verilog specified
+in IEEE 1364.1-2002 "IEEE Standard for Verilog Register Transfer Level
+Synthesis".  Although this standard is deprecated and no replacement has been
+created for System Verilog, it provides a reasonable, established, and defined
+subset of the verilog specification which all tools should support.  Circt may
+assume more features than specified in that document (e.g. system verilog
+constructs), but should be willing to consider lowering to simpler
+implementations when justified to support a major tool and when such lowering is
+possible.  Supporting tools which do not meet this baseline will require
 substantial justification.
 
 ## Controlling output style with `LoweringOptions`
@@ -83,7 +83,7 @@ The current set of "tool capability" Lowering Options is:
  * `disallowPackedArrays` (default=`false`).  If true, eliminate packed arrays
    for tools that don't support them (e.g. Yosys).
  * `disallowPackedStructAssignments` (default=`false`). If true, eliminate packed
-    struct assignments in favor of a wire + assignments to the individual fields.  
+    struct assignments in favor of a wire + assignments to the individual fields.
  * `disallowLocalVariables` (default=`false`).  If true, do not emit
    SystemVerilog locally scoped "automatic" or logic declarations - emit top
    level wire and reg's instead.
@@ -91,7 +91,7 @@ The current set of "tool capability" Lowering Options is:
    like `assert`, `assume`, and `cover` will always be emitted with a label. If
    the statement has no label in the IR, a generic one will be created. Some EDA
    tools require verification statements to be labeled.
-  
+
 The current set of "style" Lowering Options is:
 
  * `emittedLineLength` (default=`90`).  This is the target width of lines in an
@@ -178,7 +178,7 @@ required. Additionally, Yosys doesn't accept packed arrays, so we suggest using
 
 ### Specifying `LoweringOptions` in a front-end HDL tool
 
-The [`circt::LoweringOptions` struct itself](https://github.com/llvm/circt/blob/main/include/circt/Support/LoweringOptions.h) 
+The [`circt::LoweringOptions` struct itself](https://github.com/llvm/circt/blob/main/include/circt/Support/LoweringOptions.h)
 is very simple: it projects each of the lowering options as a boolean, integer
 or other property.  This allows C++ code to set up and query these properties
 with a natural and easy to use API.
