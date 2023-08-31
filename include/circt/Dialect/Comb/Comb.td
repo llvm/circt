@@ -28,6 +28,10 @@ def CombDialect : Dialect {
   }];
   let hasConstantMaterializer = 1;
   let cppNamespace = "::circt::comb";
+
+  // Opt-out of properties for now, must migrate by LLVM 19.  #5273.
+  let usePropertiesForAttributes = 0;
+
 }
 
 // Base class for the operation in this dialect.
