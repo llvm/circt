@@ -111,10 +111,12 @@ endforeach()
 
 if (ESI_CAPNP)
   add_dependencies(esi-collateral EsiCosimCapnp)
-
+  get_target_property(EsiCosimCapnp_bindir EsiCosimCapnp BINARY_DIR)
+  set(ESI_COSIM_SCHEMA "${EsiCosimCapnp_bindir}/CosimDpi.capnp")
+  set(CAPNPC_SRC_PREFIX "${EsiCosimCapnp_bindir}")
   add_custom_command(TARGET esi-collateral PRE_BUILD
     COMMAND ${CMAKE_COMMAND} -E
-    copy "$<TARGET_PROPERTY:EsiCosimCapnp,BINARY_DIR>/CosimDpi.capnp"
+    copy "${ESI_COSIM_SCHEMA}"
          "${CMAKE_CURRENT_BINARY_DIR}/runtime/CosimDpi.capnp")
 
   target_compile_definitions(obj.CIRCTESI PRIVATE CAPNP)
@@ -122,3 +124,7 @@ if (ESI_CAPNP)
 endif()
 
 add_subdirectory(cosim)
+
+# We include this directory as collateral, but we also need to have a compiled
+# version for testing.
+add_subdirectory(runtime)

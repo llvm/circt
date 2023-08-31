@@ -17,7 +17,7 @@
 ##===----------------------------------------------------------------------===//
 
 project(ESIRuntime)
-cmake_minimum_required(VERSION 3.23)
+cmake_minimum_required(VERSION 3.20)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
@@ -26,7 +26,6 @@ include_directories(cpp/include)
 
 set(ESIRuntimeSources
   cpp/lib/Accelerator.cpp
-  cpp/lib/backends/Cosim.cpp
 )
 set(ESIRuntimeLinkLibraries)
 
@@ -34,7 +33,7 @@ set(ESIRuntimeLinkLibraries)
 option(CAPNP_DISABLE "Disable Cap'nProto (needed for cosimulation).")
 if (CAPNP_DISABLE)
   message (STATUS "Disabling Cap'nProto (needed for cosimulation).")
-else()
+elseif(NOT CapnProto_FOUND) # Check if someone else already imported.
   if(DEFINED CAPNP_PATH)
     set(ENV{PKG_CONFIG_PATH}
       "${CAPNP_PATH}/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
@@ -44,33 +43,38 @@ else()
       "${CMAKE_CURRENT_SOURCE_DIR}/ext/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
     find_package(CapnProto CONFIG PATHS "${CMAKE_CURRENT_SOURCE_DIR}/ext")
   endif()
+endif()
 
-  if(CapnProto_FOUND)
-    message(STATUS "Found Cap'nProto at ${CapnProto_DIR}.")
-    set(CMAKE_INSTALL_RPATH ${capnp_LIBDIR})
-    set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+if(CapnProto_FOUND)
+  message(STATUS "Found Cap'nProto at ${CapnProto_DIR}.")
+  set(CMAKE_INSTALL_RPATH ${capnp_LIBDIR})
+  set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
-    add_definitions(${CAPNP_DEFINITIONS})
-    set(CAPNPC_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/cpp/include/backends)
-    include_directories(${CAPNPC_OUTPUT_DIR})
-    file(MAKE_DIRECTORY ${CAPNPC_OUTPUT_DIR})
+  add_definitions(${CAPNP_DEFINITIONS})
+  set(CAPNPC_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/cpp/include/backends)
+  include_directories(${CAPNPC_OUTPUT_DIR})
+  file(MAKE_DIRECTORY ${CAPNPC_OUTPUT_DIR})
 
-    capnp_generate_cpp(
-      COSIM_CAPNP_SRCS COSIM_CANPN_HDRS
-      CosimDpi.capnp
-    )
-    set(ESIRuntimeSources
-      ${ESIRuntimeSources}
-      ${COSIM_CAPNP_HDRS}
-      ${COSIM_CAPNP_SRCS}
-      ${COSIM_SCHEMA_HDR}
-    )
-    set(ESIRuntimeLinkLibraries
-      ${ESIRuntimeLinkLibraries}
-      CapnProto::capnp
-      CapnProto::capnp-rpc
-    )
+  if (NOT DEFINED ESI_COSIM_SCHEMA)
+    set(ESI_COSIM_SCHEMA CosimDpi.capnp)
   endif()
+
+  capnp_generate_cpp(
+    COSIM_CAPNP_SRCS COSIM_CANPN_HDRS
+    ${ESI_COSIM_SCHEMA}
+  )
+  set(ESIRuntimeSources
+    ${ESIRuntimeSources}
+    cpp/lib/backends/Cosim.cpp
+    ${COSIM_CAPNP_HDRS}
+    ${COSIM_CAPNP_SRCS}
+    ${COSIM_SCHEMA_HDR}
+  )
+  set(ESIRuntimeLinkLibraries
+    ${ESIRuntimeLinkLibraries}
+    CapnProto::capnp
+    CapnProto::capnp-rpc
+  )
 endif()
 
 add_library(ESIRuntime SHARED
