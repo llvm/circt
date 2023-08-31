@@ -22,6 +22,7 @@
 using namespace esi;
 
 int main(int argc, const char *argv[]) {
+  // TODO: find a command line parser library rather than doing this by hand.
   if (argc < 3) {
     std::cerr << "Expected usage: " << argv[0]
               << " <backend> <connection specifier> [command]" << std::endl;
@@ -37,6 +38,7 @@ int main(int argc, const char *argv[]) {
   std::unique_ptr<Accelerator> acc = Accelerator::connect(backend, conn);
   const SysInfo &info = acc->sysInfo();
 
+  // Only support the 'version' command.
   if (cmd == "version")
     std::cout << "ESI system version: " << info.esiVersion() << std::endl;
 

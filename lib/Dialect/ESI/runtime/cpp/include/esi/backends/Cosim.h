@@ -16,7 +16,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#pragma once
+// NOLINTNEXTLINE(llvm-header-guard)
+#ifndef ESI_BACKENDS_COSIM_H
+#define ESI_BACKENDS_COSIM_H
 
 #include "esi/Accelerator.h"
 
@@ -41,3 +43,5 @@ private:
 } // namespace cosim
 } // namespace backends
 } // namespace esi
+
+#endif // ESI_BACKENDS_COSIM_H

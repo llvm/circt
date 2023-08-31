@@ -84,7 +84,6 @@ set(ESI_RUNTIME_SRCS
 
   runtime/CMakeLists.txt
   runtime/cpp/include/esi/Accelerator.h
-  runtime/cpp/include/esi/StdServices.h
   runtime/cpp/include/esi/backends/Cosim.h
   runtime/cpp/include/esi/backends/capnp.h
   runtime/cpp/include/esi/esi.h

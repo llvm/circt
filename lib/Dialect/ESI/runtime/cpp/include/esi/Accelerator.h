@@ -31,7 +31,7 @@ class Accelerator {
 public:
   static std::unique_ptr<Accelerator> connect(std::string backend,
                                               std::string connection);
-  virtual ~Accelerator(){};
+  virtual ~Accelerator() = default;
 
   virtual const SysInfo &sysInfo() = 0;
 };
@@ -39,7 +39,7 @@ public:
 /// Information about the Accelerator system.
 class SysInfo {
 public:
-  virtual ~SysInfo(){};
+  virtual ~SysInfo() = default;
 
   /// Get the ESI version number to check version compatibility.
   virtual uint32_t esiVersion() const = 0;
@@ -48,6 +48,7 @@ public:
   virtual std::string rawJsonManifest() const = 0;
 };
 
+/// Backends can register themselves to be connected via a connection string.
 using BackendCreate = std::function<std::unique_ptr<Accelerator>(std::string)>;
 void registerBackend(std::string name, BackendCreate create);
 

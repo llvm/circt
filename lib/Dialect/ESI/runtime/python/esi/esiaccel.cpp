@@ -18,6 +18,7 @@ namespace py = pybind11;
 
 using namespace esi;
 
+// NOLINTNEXTLINE(readability-identifier-naming)
 PYBIND11_MODULE(esiaccel, m) {
   py::class_<Accelerator>(m, "Accelerator")
       .def_static("connect", &Accelerator::connect,

@@ -26,10 +26,11 @@ using namespace esi::backends::cosim;
 
 namespace esi::backends::cosim {
 
+/// Implement the SysInfo API for cosimulation.
 class CosimSysInfo final : public esi::SysInfo {
 private:
   friend class CosimAccelerator;
-  CosimSysInfo();
+  CosimSysInfo() = default;
 
 public:
   /// Get the ESI version number to check version compatibility.
@@ -40,10 +41,15 @@ public:
 };
 } // namespace esi::backends::cosim
 
-CosimSysInfo::CosimSysInfo() {}
+// For now, just return dummy values since these are not yet supported by the
+// hardware.
 uint32_t CosimSysInfo::esiVersion() const { return -1; }
 std::string CosimSysInfo::rawJsonManifest() const { return ""; }
 
+/// Parse the connection string and instantiate the accelerator. Support the
+/// traditional 'host:port' syntax and a path to 'cosim.cfg' which is output by
+/// the cosimulation when it starts (which is useful when it chooses its own
+/// port).
 std::unique_ptr<Accelerator>
 CosimAccelerator::connect(std::string connectionString) {
   std::string portStr;
@@ -74,6 +80,8 @@ CosimAccelerator::connect(std::string connectionString) {
   return std::make_unique<CosimAccelerator>(host, port);
 }
 
+/// Construct and connect to a cosim server.
+// TODO: Implement this.
 CosimAccelerator::CosimAccelerator(std::string hostname, uint16_t port)
     : info(nullptr) {
   std::cout << hostname << ":" << port << std::endl;
@@ -90,6 +98,7 @@ const SysInfo &CosimAccelerator::sysInfo() {
 }
 
 namespace {
+/// Register the cosim backend.
 struct InitCosim {
   InitCosim() {
     registerBackend("cosim", &backends::cosim::CosimAccelerator::connect);
