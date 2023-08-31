@@ -144,21 +144,29 @@ static void legalizeModuleLocalNames(HWModuleOp module,
   auto verilogNameAttr = StringAttr::get(ctxt, "hw.verilogName");
   // Legalize the port names.
   auto ports = module.getPortList();
-  auto setName = [&](size_t idx, Attribute name) {
-    if (name)
-      // If the verilogName exists, then set it un-conditionally.
-      return StringAttr::get(
-          ctxt, nameResolver.getLegalName(name.cast<StringAttr>()));
-
+  SmallVector<Attribute> newNames(ports.size());
+  bool updated = false;
+  for (auto [idx, port] : llvm::enumerate(ports)) {
+    auto verilogName = port.attrs.get(verilogNameAttr);
+    if (verilogName) {
+      auto newName = StringAttr::get(
+          ctxt, nameResolver.getLegalName(verilogName.cast<StringAttr>()));
+      newNames[idx] = newName;
+      if (verilogName != newName)
+        updated = true;
+      continue;
+    }
     auto oldName = ports.at(idx).name;
     auto newName = nameResolver.getLegalName(oldName);
-    StringAttr updatedAttr;
     // Set the verilogName attr only if the name is updated.
-    if (newName != oldName)
-      updatedAttr = StringAttr::get(ctxt, newName);
-    return updatedAttr;
-  };
-  module.setPortAttrs(verilogNameAttr, setName);
+    if (newName != oldName) {
+      newNames[idx] = StringAttr::get(ctxt, newName);
+      updated = true;
+    } else
+      newNames[idx] = {};
+  }
+  if (updated)
+    module.setPortAttrs(verilogNameAttr, newNames);
 
   SmallVector<std::pair<Operation *, StringAttr>> nameEntries;
   // Legalize the value names. We first mark existing hw.verilogName attrs as
