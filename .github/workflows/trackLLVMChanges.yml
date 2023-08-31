@@ -57,7 +57,7 @@ jobs:
         continue-on-error: true
         run: |
           cd llvm
-          git fetch origin main
+          git fetch --shallow-since="30 days ago" origin main
           git checkout --detach origin/main
           echo "sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
           cmake --build ../build --config Debug --target check-circt --target check-circt-unit -- -j$(nproc)
