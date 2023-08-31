@@ -80,4 +80,19 @@ def HWMemSimImpl : Pass<"hw-memory-sim", "ModuleOp"> {
    ];
 }
 
+def LowerSeqShiftReg : Pass<"lower-seq-shiftreg", "hw::HWModuleOp"> {
+  let summary = "Lower seq.shiftreg ops";
+  let description = [{
+    Default pass for lowering shift register operations. This will lower
+    into a chain of `seq.compreg.ce` operations.
+    Note that this is _not_ guaranteed to be a performant implementation,
+    but instead a default, fallback lowering path which is guaranteed to
+    provide a semantically valid path to verilog emissions.
+    Users are expected to provide a custom lowering pass to maps `seq.shiftreg`
+    operations to target-specific primitives.
+  }];
+  let constructor = "circt::seq::createLowerSeqShiftRegPass()";
+  let dependentDialects = ["circt::hw::HWDialect"];
+}
+
 #endif // CIRCT_DIALECT_SEQ_SEQPASSES

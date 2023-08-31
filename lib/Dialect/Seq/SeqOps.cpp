@@ -299,12 +299,29 @@ void CompRegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
     setNameFn(getResult(), *name);
 }
 
-std::optional<size_t> CompRegOp::getTargetResultIndex() { return 0; }
-
 LogicalResult CompRegOp::verify() {
   if ((getReset() == nullptr) ^ (getResetValue() == nullptr))
     return emitOpError(
         "either reset and resetValue or neither must be specified");
+  return success();
+}
+
+std::optional<size_t> CompRegOp::getTargetResultIndex() { return 0; }
+
+template <typename TOp>
+LogicalResult verifyResets(TOp op) {
+  if ((op.getReset() == nullptr) ^ (op.getResetValue() == nullptr))
+    return op->emitOpError(
+        "either reset and resetValue or neither must be specified");
+
+  // Verify reset value types.
+  Type inputType = op.getInput().getType();
+  Type resetType = op.getResetValue().getType();
+  if (inputType != resetType)
+    return op->emitOpError(
+               "reset value type must match input type. Input type was '")
+           << inputType << "', but reset value type was '" << resetType << "'";
+
   return success();
 }
 
@@ -321,9 +338,26 @@ std::optional<size_t> CompRegClockEnabledOp::getTargetResultIndex() {
 }
 
 LogicalResult CompRegClockEnabledOp::verify() {
-  if ((getReset() == nullptr) ^ (getResetValue() == nullptr))
-    return emitOpError(
-        "either reset and resetValue or neither must be specified");
+  if (failed(verifyResets(*this)))
+    return failure();
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// ShiftRegOp
+//===----------------------------------------------------------------------===//
+
+void ShiftRegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  // If the wire has an optional 'name' attribute, use it.
+  if (auto name = getName(); name.has_value())
+    setNameFn(getResult(), name.value());
+}
+
+std::optional<size_t> ShiftRegOp::getTargetResultIndex() { return 0; }
+
+LogicalResult ShiftRegOp::verify() {
+  if (failed(verifyResets(*this)))
+    return failure();
   return success();
 }
 
