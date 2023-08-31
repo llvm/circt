@@ -190,33 +190,6 @@ public:
 
   /// Return true if this is a valid "reset" type.
   bool isResetType();
-
-  //===--------------------------------------------------------------------===//
-  // hw::FieldIDTypeInterface
-  //===--------------------------------------------------------------------===//
-
-  /// Get the maximum field ID of this type.  For integers and other ground
-  /// types, there are no subfields and the maximum field ID is 0.  For bundle
-  /// types and vector types, each field is assigned a field ID in a depth-first
-  /// walk order. This function is used to calculate field IDs when this type is
-  /// nested under another type.
-  uint64_t getMaxFieldID();
-
-  /// Get the sub-type of a type for a field ID, and the subfield's ID. Strip
-  /// off a single layer of this type and return the sub-type and a field ID
-  /// targeting the same field, but rebased on the sub-type.
-  std::pair<circt::hw::FieldIDTypeInterface, uint64_t>
-  getSubTypeByFieldID(uint64_t fieldID);
-
-  /// Return the final type targeted by this field ID by recursively walking all
-  /// nested aggregate types. This is the identity function for ground types.
-  circt::hw::FieldIDTypeInterface getFinalTypeByFieldID(uint64_t fieldID);
-
-  /// Returns the effective field id when treating the index field as the
-  /// root of the type.  Essentially maps a fieldID to a fieldID after a
-  /// subfield op. Returns the new id and whether the id is in the given
-  /// child.
-  std::pair<uint64_t, bool> rootChildFieldID(uint64_t fieldID, uint64_t index);
 };
 
 /// Returns true if this is a 'const' type whose value is guaranteed to be

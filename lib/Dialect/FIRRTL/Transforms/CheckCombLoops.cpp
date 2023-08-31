@@ -333,7 +333,8 @@ public:
                   for (size_t index = 0; index < vecType.getNumElements();
                        ++index)
                     fields.push_back(subBase.getSubField(
-                        1 + index * (vecType.getElementType().getMaxFieldID() +
+                        1 + index * (hw::FieldIdImpl::getMaxFieldID(
+                                         vecType.getElementType()) +
                                      1)));
                   return success();
                 },

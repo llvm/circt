@@ -14,10 +14,12 @@
 #define CIRCT_DIALECT_HW_HWTYPESIMPL_TD
 
 include "circt/Dialect/HW/HWDialect.td"
+include "circt/Dialect/HW/HWTypeInterfaces.td"
 include "mlir/IR/AttrTypeBase.td"
 
 // Base class for other typedefs. Provides dialact-specific defaults.
-class HWType<string name> : TypeDef<HWDialect, name> { }
+class HWType<string name, list<Trait> traits = []>
+  : TypeDef<HWDialect, name, traits> { }
 
 //===----------------------------------------------------------------------===//
 // Type declarations
@@ -47,7 +49,7 @@ def IntTypeImpl : HWType<"Int"> {
 }
 
 // A simple fixed size array. Declares the hw::ArrayType in C++.
-def ArrayTypeImpl : HWType<"Array"> {
+def ArrayTypeImpl : HWType<"Array", [DeclareTypeInterfaceMethods<FieldIDTypeInterface>]> {
   let summary = "fixed-sized array";
   let description = [{
     Fixed sized HW arrays are roughly similar to C arrays. On the wire (vs.
@@ -74,7 +76,7 @@ def ArrayTypeImpl : HWType<"Array"> {
 }
 
 // An 'unpacked' array of fixed size.
-def UnpackedArrayType : HWType<"UnpackedArray"> {
+def UnpackedArrayType : HWType<"UnpackedArray", [DeclareTypeInterfaceMethods<FieldIDTypeInterface>]> {
   let summary = "SystemVerilog 'unpacked' fixed-sized array";
   let description = [{
     Unpacked arrays are a more flexible array representation than packed arrays,
@@ -120,7 +122,7 @@ def InOutTypeImpl : HWType<"InOut"> {
 }
 
 // A packed struct. Declares the hw::StructType in C++.
-def StructTypeImpl : HWType<"Struct"> {
+def StructTypeImpl : HWType<"Struct", [DeclareTypeInterfaceMethods<FieldIDTypeInterface>]> {
   let summary = "HW struct type";
   let description = [{
     Represents a structure of name, value pairs.

@@ -145,7 +145,7 @@ struct PathResolver {
       if (!baseType)
         return emitError(loc, "unable to target non-hardware type ")
                << targetType;
-      targetType = baseType.getFinalTypeByFieldID(fieldId);
+      targetType = hw::FieldIdImpl::getFinalTypeByFieldID(baseType, fieldId);
       if (isa<BundleType, FVectorType>(targetType))
         return emitError(loc, "unable to target aggregate type ") << targetType;
     }

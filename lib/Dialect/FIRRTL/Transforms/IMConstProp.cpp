@@ -48,21 +48,6 @@ static bool isDeletableWireOrRegOrNode(Operation *op) {
          !cast<Forceable>(op).isForceable();
 }
 
-/// Return the type as FieldIDTypeInterface.  For references gets inner type.
-static hw::FieldIDTypeInterface getAsFieldIDType(FIRRTLType type) {
-  if (auto fieldIDType = getBaseOfType<hw::FieldIDTypeInterface>(type))
-    return fieldIDType;
-  return type_dyn_cast<hw::FieldIDTypeInterface>(type);
-}
-
-/// Return the FieldIDTypeInterface for this type, rejecting if non-FIRRTL.
-static hw::FieldIDTypeInterface getAsFIRRTLFieldIDType(mlir::Type type) {
-  auto ftype = type_dyn_cast_or_null<FIRRTLType>(type);
-  if (!ftype)
-    return {};
-  return getAsFieldIDType(ftype);
-}
-
 //===----------------------------------------------------------------------===//
 // Pass Infrastructure
 //===----------------------------------------------------------------------===//
@@ -609,14 +594,14 @@ void IMConstPropPass::markInstanceOp(InstanceOp instance) {
 }
 
 static std::optional<uint64_t>
-getFieldIDOffset(FieldRef changedFieldRef,
-                 hw::FieldIDTypeInterface connectionType,
+getFieldIDOffset(FieldRef changedFieldRef, Type connectionType,
                  FieldRef connectedValueFieldRef) {
   if (changedFieldRef.getValue() != connectedValueFieldRef.getValue())
     return {};
   if (changedFieldRef.getFieldID() >= connectedValueFieldRef.getFieldID() &&
       changedFieldRef.getFieldID() <=
-          connectionType.getMaxFieldID() + connectedValueFieldRef.getFieldID())
+          hw::FieldIdImpl::getMaxFieldID(connectionType) +
+              connectedValueFieldRef.getFieldID())
     return changedFieldRef.getFieldID() - connectedValueFieldRef.getFieldID();
   return {};
 }
@@ -624,9 +609,8 @@ getFieldIDOffset(FieldRef changedFieldRef,
 void IMConstPropPass::mergeOnlyChangedLatticeValue(Value dest, Value src,
                                                    FieldRef changedFieldRef) {
 
-  auto destTypeFIRRTL = getAsFIRRTLFieldIDType(dest.getType());
-  if (!destTypeFIRRTL) {
-    // If the dest is not FIRRTL type (or not FieldIDType), conservatively mark
+  if (!isa<FIRRTLType>(dest.getType())) {
+    // If the dest is not FIRRTL type, conservatively mark
     // all of them overdefined.
     markOverdefined(src);
     return markOverdefined(dest);
@@ -638,14 +622,14 @@ void IMConstPropPass::mergeOnlyChangedLatticeValue(Value dest, Value src,
   // If a changed field ref is included the source value, find an offset in the
   // connection.
   if (auto srcOffset =
-          getFieldIDOffset(changedFieldRef, destTypeFIRRTL, fieldRefSrc))
+          getFieldIDOffset(changedFieldRef, dest.getType(), fieldRefSrc))
     mergeLatticeValue(fieldRefDest.getSubField(*srcOffset),
                       fieldRefSrc.getSubField(*srcOffset));
 
   // If a changed field ref is included the dest value, find an offset in the
   // connection.
   if (auto destOffset =
-          getFieldIDOffset(changedFieldRef, destTypeFIRRTL, fieldRefDest))
+          getFieldIDOffset(changedFieldRef, dest.getType(), fieldRefDest))
     mergeLatticeValue(fieldRefDest.getSubField(*destOffset),
                       fieldRefSrc.getSubField(*destOffset));
 }
@@ -653,8 +637,7 @@ void IMConstPropPass::mergeOnlyChangedLatticeValue(Value dest, Value src,
 void IMConstPropPass::visitConnectLike(FConnectLike connect,
                                        FieldRef changedFieldRef) {
   // Mark foreign types as overdefined.
-  auto destTypeFIRRTL = getAsFIRRTLFieldIDType(connect.getDest().getType());
-  if (!destTypeFIRRTL) {
+  if (!isa<FIRRTLType>(connect.getDest().getType())) {
     markOverdefined(connect.getSrc());
     return markOverdefined(connect.getDest());
   }
@@ -728,18 +711,19 @@ void IMConstPropPass::visitConnectLike(FConnectLike connect,
         << "connect destination is here";
   };
 
-  if (auto srcOffset =
-          getFieldIDOffset(changedFieldRef, destTypeFIRRTL, fieldRefSrc))
+  if (auto srcOffset = getFieldIDOffset(
+          changedFieldRef, connect.getDest().getType(), fieldRefSrc))
     propagateElementLattice(
-        *srcOffset, firrtl::type_cast<FIRRTLType>(
-                        destTypeFIRRTL.getFinalTypeByFieldID(*srcOffset)));
+        *srcOffset,
+        firrtl::type_cast<FIRRTLType>(hw::FieldIdImpl::getFinalTypeByFieldID(
+            connect.getDest().getType(), *srcOffset)));
 
-  if (auto relativeDest =
-          getFieldIDOffset(changedFieldRef, destTypeFIRRTL, fieldRefDest))
+  if (auto relativeDest = getFieldIDOffset(
+          changedFieldRef, connect.getDest().getType(), fieldRefDest))
     propagateElementLattice(
         *relativeDest,
-        firrtl::type_cast<FIRRTLType>(
-            destTypeFIRRTL.getFinalTypeByFieldID(*relativeDest)));
+        firrtl::type_cast<FIRRTLType>(hw::FieldIdImpl::getFinalTypeByFieldID(
+            connect.getDest().getType(), *relativeDest)));
 }
 
 void IMConstPropPass::visitRefSend(RefSendOp send, FieldRef changedFieldRef) {

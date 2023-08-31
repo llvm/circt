@@ -78,16 +78,13 @@ static FieldRef getRefForIST(const hw::InnerSymTarget &ist) {
 
 /// Calculate the "InferWidths-fieldID" equivalent for the given fieldID + type.
 static uint64_t convertFieldIDToOurVersion(uint64_t fieldID, FIRRTLType type) {
-  auto fType = getBaseOfType<hw::FieldIDTypeInterface>(type);
-  if (!fType)
-    return fieldID;
-
   uint64_t convertedFieldID = 0;
 
   auto curFID = fieldID;
-  auto curFType = fType;
+  Type curFType = type;
   while (curFID != 0) {
-    auto [child, subID] = curFType.getSubTypeByFieldID(curFID);
+    auto [child, subID] =
+        hw::FieldIdImpl::getSubTypeByFieldID(curFType, curFID);
     if (isa<FVectorType>(curFType))
       convertedFieldID++; // Vector fieldID is 1.
     else
