@@ -144,8 +144,14 @@ firrtl.module @TestNodeName(in %in1 : !firrtl.uint<8>) {
 }
 
 // Basic test for NLA operations.
-// CHECK: hw.hierpath private @nla [@Parent::@child, @Child]
-hw.hierpath private @nla [@Parent::@child, @Child]
+// CHECK: hw.hierpath private @nla0 [@Parent]
+// CHECK: hw.hierpath private @nla1 [@Parent::@child]
+// CHECK: hw.hierpath private @nla2 [@Parent::@child, @Child]
+// CHECK: hw.hierpath private @nla3 [@Parent::@child, @Child::@w]
+hw.hierpath private @nla0 [@Parent]
+hw.hierpath private @nla1 [@Parent::@child]
+hw.hierpath private @nla2 [@Parent::@child, @Child]
+hw.hierpath private @nla3 [@Parent::@child, @Child::@w]
 firrtl.module @Child() {
   %w = firrtl.wire sym @w : !firrtl.uint<1>
 }
@@ -294,7 +300,18 @@ firrtl.module @ListTest(in %s1: !firrtl.string,
 // CHECK-LABEL: MapTest
 // CHECK-SAME:  (in %in: !firrtl.map<integer, string>, out %out: !firrtl.map<integer, string>)
 firrtl.module @MapTest(in %in: !firrtl.map<integer, string>, out %out: !firrtl.map<integer, string>) {
+  // CHECK-NEXT: propassign %out, %in : !firrtl.map<integer, string>
   firrtl.propassign %out, %in : !firrtl.map<integer, string>
+
+  // CHECK-NEXT: %[[EMPTY:.+]] = firrtl.map.create : !firrtl.map<integer, string>
+  %empty = firrtl.map.create : !firrtl.map<integer, string>
+
+  // CHECK-NEXT: %[[HELLO:.+]] = firrtl.string "hello"
+  // CHECK-NEXT: %[[WORLD:.+]] = firrtl.string "world"
+  // CHECK-NEXT: %{{.+}} = firrtl.map.create (%in -> %[[HELLO]], %[[EMPTY]] -> %[[WORLD]]) : !firrtl.map<map<integer, string>, string>
+  %hello = firrtl.string "hello"
+  %world = firrtl.string "world"
+  %mapmap = firrtl.map.create (%in -> %hello, %empty -> %world) : !firrtl.map<map<integer, string>, string>
 }
 
 // CHECK-LABEL: PropertyNestedTest
@@ -314,6 +331,17 @@ firrtl.module @PathTest(in %in: !firrtl.path, out %out: !firrtl.path) {
   // CHECK: firrtl.path reference distinct[0]<>
   %0 = firrtl.path reference distinct[0]<>
   
+}
+
+// CHECK-LABEL: BoolTest
+// CHECK-SAME:  (in %in: !firrtl.bool, out %out: !firrtl.bool)
+firrtl.module @BoolTest(in %in: !firrtl.bool, out %out: !firrtl.bool) {
+  firrtl.propassign %out, %in : !firrtl.bool
+
+  // CHECK: %0 = firrtl.bool true
+  %0 = firrtl.bool true
+  // CHECK: %1 = firrtl.bool false
+  %1 = firrtl.bool false
 }
 
 // CHECK-LABEL: TypeAlias

@@ -39,4 +39,51 @@ def IbisTunneling : Pass<"ibis-tunneling", "mlir::ModuleOp"> {
   let constructor = "circt::ibis::createTunnelingPass()";
 }
 
+def IbisPortrefLowering : Pass<"ibis-lower-portrefs", "mlir::ModuleOp"> {
+  let summary = "Ibis portref lowering pass";
+  let description = [{
+    Lower `ibis.portref<portref <T>>` to T (i.e. portref resolution).
+
+    We do this by analyzing how a portref is used
+    inside a container, and then creating an in- or output port based on that.
+    That is:
+    - write to `portref<in portref<in, T>>` becomes `out T`
+        i.e this container wants to write to an input of another container, hence
+        it will produce an output value that will drive that input port.
+    - read from `portref<in portref<out, T>>` becomes `in T`
+        i.e. this container wants to read from an output of another container,
+        hence it will have an input port that will be driven by that output port.
+    - write to `portref<out portref<out, T>>` becomes `out T`
+        i.e. a port reference inside the module will be driven by a value from
+        the outside.
+    - read from `portref<out portref<in, T>>` becomes `in T`
+        i.e. a port reference inside the module will be driven by a value from
+        the outside.
+
+    A benefit of having portref lowering separate from portref tunneling is that
+    portref lowering can be done on an `ibis.container` granularity, allowing
+    for a bit of parallelism in the flow.
+  }];
+  let constructor = "circt::ibis::createPortrefLoweringPass()";
+}
+
+def IbisCleanSelfdrivers : Pass<"ibis-clean-selfdrivers", "ibis::ContainerOp"> {
+  let summary = "Ibis clean selfdrivers pass";
+  let description = [{
+    Removes `ibis.port.input`s which are driven by operations within the same
+    container.
+  }];
+
+  let constructor = "circt::ibis::createCleanSelfdriversPass()";
+}
+
+def IbisContainersToHW : Pass<"ibis-convert-containers-to-hw", "mlir::ModuleOp"> {
+  let summary = "Ibis containers to hw conversion pass";
+  let description = [{
+    Converts `ibis.container` ops to `hw.module` ops.
+  }];
+  let constructor = "circt::ibis::createContainersToHWPass()";
+  let dependentDialects = ["circt::hw::HWDialect"];
+}
+
 #endif // CIRCT_DIALECT_IBIS_PASSES_TD

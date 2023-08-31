@@ -713,7 +713,7 @@ def FinalizeIR : Pass<"firrtl-finalize-ir", "mlir::ModuleOp"> {
   let dependentDialects = ["hw::HWDialect", "sv::SVDialect"];
 }
 
-def LowerClasses : Pass<"firrtl-lower-classes", "mlir::ModuleOp"> {
+def LowerClasses : Pass<"firrtl-lower-classes", "firrtl::CircuitOp"> {
   let summary = "Lower FIRRTL classes and objects to OM classes and objects";
   let description = [{
     This pass walks all FIRRTL classes and creates OM classes. It also lowers

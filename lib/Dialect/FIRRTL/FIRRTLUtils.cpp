@@ -761,10 +761,10 @@ StringAttr circt::firrtl::getOrAddInnerSym(
 StringAttr circt::firrtl::getOrAddInnerSym(const hw::InnerSymTarget &target,
                                            GetNamespaceCallback getNamespace) {
   FModuleLike module;
-  if (target.isOpOnly())
-    module = target.getOp()->getParentOfType<FModuleOp>();
-  else
+  if (target.isPort())
     module = cast<FModuleLike>(target.getOp());
+  else
+    module = target.getOp()->getParentOfType<FModuleOp>();
   assert(module);
 
   return getOrAddInnerSym(target, [&]() -> hw::InnerSymbolNamespace & {

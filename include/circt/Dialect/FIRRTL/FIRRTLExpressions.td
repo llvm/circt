@@ -1170,6 +1170,40 @@ def ListCreateOp : FIRRTLOp<"list.create", [Pure, SameTypeOperands]> {
   let hasVerifier = 1;
 }
 
+def MapCreateOp : FIRRTLOp<"map.create", [Pure, SameVariadicOperandSize]> {
+  let summary = "Produce a map value";
+  let description = [{
+    Produces a value of map type containing the provided key/value elements.
+
+    Example:
+    ```mlir
+    %4 = firrtl.map.create (%0 -> %1, %2 -> %3) : !firrtl.map<string, integer>
+    ```
+  }];
+
+  let arguments = (ins Variadic<PropertyType>:$keys, Variadic<PropertyType>:$values);
+  let results = (outs MapType:$result);
+
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+}
+
+def BoolConstantOp : FIRRTLOp<"bool", [Pure, ConstantLike]> {
+  let summary = "Produce a constant boolean value";
+  let description = [{
+    Produces a constant value of boolean type.
+
+    Example:
+    ```mlir
+    %0 = firrtl.bool true
+    ```
+  }];
+  let arguments = (ins BoolAttr:$value);
+  let results = (outs BoolType:$result);
+  let hasFolder = 1;
+  let assemblyFormat = "$value attr-dict";
+}
+
 //===----------------------------------------------------------------------===//
 // RefOperations: Operations on the RefType.
 //

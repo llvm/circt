@@ -720,49 +720,17 @@ LogicalResult circt::firrtl::applyGCTMemTaps(const AnnoPathValue &target,
       tryGetAs<StringAttr>(anno, anno, "source", loc, memTapClass);
   if (!sourceAttr)
     return failure();
-  auto sourceTargetStr = canonicalizeTarget(sourceAttr.getValue());
 
-  Value memDbgPort;
+  auto sourceTargetStr = canonicalizeTarget(sourceAttr.getValue());
   std::optional<AnnoPathValue> srcTarget = resolvePath(
       sourceTargetStr, state.circuit, state.symTbl, state.targetCaches);
   if (!srcTarget)
     return mlir::emitError(loc, "cannot resolve source target path '")
            << sourceTargetStr << "'";
+
   auto tapsAttr = tryGetAs<ArrayAttr>(anno, anno, "sink", loc, memTapClass);
   if (!tapsAttr || tapsAttr.empty())
     return mlir::emitError(loc, "sink must have at least one entry");
-  if (auto combMem = dyn_cast<chirrtl::CombMemOp>(srcTarget->ref.getOp())) {
-    if (!combMem.getType().getElementType().isGround())
-      return combMem.emitOpError(
-          "cannot generate MemTap to a memory with aggregate data type");
-    ImplicitLocOpBuilder builder(combMem->getLoc(), combMem);
-    builder.setInsertionPointAfter(combMem);
-    // Construct the type for the debug port.
-    auto debugType =
-        RefType::get(FVectorType::get(combMem.getType().getElementType(),
-                                      combMem.getType().getNumElements()));
-
-    auto debugPort = builder.create<chirrtl::MemoryDebugPortOp>(
-        debugType, combMem,
-        state.getNamespace(srcTarget->ref.getModule()).newName("memTap"));
-
-    memDbgPort = debugPort.getResult();
-    if (srcTarget->instances.empty()) {
-      auto path = state.instancePathCache.getAbsolutePaths(
-          combMem->getParentOfType<FModuleOp>());
-      if (path.size() > 1)
-        return combMem.emitOpError(
-            "cannot be resolved as source for MemTap, multiple paths from top "
-            "exist and unique instance cannot be resolved");
-      srcTarget->instances.append(path.back().begin(), path.back().end());
-    }
-    if (tapsAttr.size() != combMem.getType().getNumElements())
-      return mlir::emitError(
-          loc, "sink cannot specify more taps than the depth of the memory");
-  } else
-    return srcTarget->ref.getOp()->emitOpError(
-        "unsupported operation, only CombMem can be used as the source of "
-        "MemTap");
 
   auto tap = tapsAttr[0].dyn_cast_or_null<StringAttr>();
   if (!tap) {
@@ -773,6 +741,7 @@ LogicalResult circt::firrtl::applyGCTMemTaps(const AnnoPathValue &target,
                .attachNote()
            << "The full Annotation is reprodcued here: " << anno << "\n";
   }
+
   auto wireTargetStr = canonicalizeTarget(tap.getValue());
   if (!tokenizePath(wireTargetStr))
     return failure();
@@ -785,6 +754,98 @@ LogicalResult circt::firrtl::applyGCTMemTaps(const AnnoPathValue &target,
                                     "' that cannot be resolved.")
                .attachNote()
            << "The full Annotation is reproduced here: " << anno << "\n";
+
+  auto combMem = dyn_cast<chirrtl::CombMemOp>(srcTarget->ref.getOp());
+  if (!combMem)
+    return srcTarget->ref.getOp()->emitOpError(
+        "unsupported operation, only CombMem can be used as the source of "
+        "MemTap");
+  if (!combMem.getType().getElementType().isGround())
+    return combMem.emitOpError(
+        "cannot generate MemTap to a memory with aggregate data type");
+  if (tapsAttr.size() != combMem.getType().getNumElements())
+    return mlir::emitError(
+        loc, "sink cannot specify more taps than the depth of the memory");
+  if (srcTarget->instances.empty()) {
+    auto path = state.instancePathCache.getAbsolutePaths(
+        combMem->getParentOfType<FModuleOp>());
+    if (path.size() > 1)
+      return combMem.emitOpError(
+          "cannot be resolved as source for MemTap, multiple paths from top "
+          "exist and unique instance cannot be resolved");
+    srcTarget->instances.append(path.back().begin(), path.back().end());
+  }
+
+  ImplicitLocOpBuilder builder(combMem->getLoc(), combMem);
+
+  // Lower memory taps to real ports on the memory.  This is done if the taps
+  // are supposed to be synthesized.
+  if (state.noRefTypePorts) {
+    // Create new ports _after_ all other ports to avoid permuting existing
+    // ports.
+    builder.setInsertionPointToEnd(
+        combMem->getParentOfType<FModuleOp>().getBodyBlock());
+
+    // Determine the clock to use for the debug ports.  Error if the same clock
+    // is not used for all ports or if no clock port is found.
+    Value clock;
+    for (auto *portOp : combMem.getResult().getUsers()) {
+      for (auto result : portOp->getResults()) {
+        for (auto *user : result.getUsers()) {
+          auto accessOp = dyn_cast<chirrtl::MemoryPortAccessOp>(user);
+          if (!accessOp)
+            continue;
+          auto newClock = accessOp.getClock();
+          if (clock && clock != newClock)
+            return combMem.emitOpError(
+                "has different clocks on different ports (this is ambiguous "
+                "when compiling without reference types)");
+          clock = newClock;
+        }
+      }
+    }
+    if (!clock)
+      return combMem.emitOpError(
+          "does not have an access port to determine a clock connection (this "
+          "is necessary when compiling without reference types)");
+
+    // Add one port per memory address.
+    SmallVector<Value> data;
+    for (uint64_t i = 0, e = combMem.getType().getNumElements(); i != e; ++i) {
+      auto port = builder.create<chirrtl::MemoryPortOp>(
+          combMem.getType().getElementType(),
+          CMemoryPortType::get(builder.getContext()), combMem.getResult(),
+          MemDirAttr::Read, builder.getStringAttr("memTap_" + Twine(i)),
+          builder.getArrayAttr({}));
+      builder.create<chirrtl::MemoryPortAccessOp>(
+          port.getPort(), builder.create<ConstantOp>(APSInt::get(i)), clock);
+      data.push_back(port.getData());
+    }
+
+    // Package up all the reads into a vector.
+    auto sendVal = builder.create<VectorCreateOp>(
+        FVectorType::get(combMem.getType().getElementType(),
+                         combMem.getType().getNumElements()),
+        data);
+    auto sink = wireTarget->ref.getOp()->getResult(0);
+
+    // Add a wiring problem to hook up the vector to the destination wire.
+    state.wiringProblems.push_back(
+        {sendVal, sink, "memTap", WiringProblem::RefTypeUsage::Never});
+    return success();
+  }
+
+  // Normal memory handling.  Create a debug port.
+  builder.setInsertionPointAfter(combMem);
+  // Construct the type for the debug port.
+  auto debugType = RefType::get(FVectorType::get(
+      combMem.getType().getElementType(), combMem.getType().getNumElements()));
+  Value memDbgPort =
+      builder
+          .create<chirrtl::MemoryDebugPortOp>(
+              debugType, combMem,
+              state.getNamespace(srcTarget->ref.getModule()).newName("memTap"))
+          .getResult();
 
   auto sendVal = memDbgPort;
   if (wireTarget->ref.getOp()->getResult(0).getType() !=

@@ -230,14 +230,15 @@ void copyInto(MSFTModuleOp mod, DenseMap<SymbolRefAttr, Block *> &perPartBlocks,
 
 void PartitionPass::partition(MSFTModuleOp mod) {
   auto modSymbol = SymbolTable::getSymbolName(mod);
+  Region &modRegion = mod.getBody();
 
   // Construct all the blocks we're going to need.
-  Block *nonLocal = mod.addBlock();
+  Block *nonLocal = &modRegion.emplaceBlock();
   DenseMap<SymbolRefAttr, Block *> perPartBlocks;
   mod.walk([&](DesignPartitionOp part) {
     SymbolRefAttr partRef =
         SymbolRefAttr::get(modSymbol, {SymbolRefAttr::get(part)});
-    perPartBlocks[partRef] = mod.addBlock();
+    perPartBlocks[partRef] = &modRegion.emplaceBlock();
   });
 
   // Sort the tagged ops into ops to hoist (bubble up) and per-partition blocks.
@@ -248,7 +249,7 @@ void PartitionPass::partition(MSFTModuleOp mod) {
     bubbleUp(mod, nonLocal);
   nonLocal->dropAllReferences();
   nonLocal->dropAllDefinedValueUses();
-  mod.getBlocks().remove(nonLocal);
+  modRegion.getBlocks().remove(nonLocal);
 
   // Sink all of the "locally-tagged" ops into new partition modules.
   for (auto part :
@@ -728,7 +729,7 @@ MSFTModuleOp PartitionPass::partition(DesignPartitionOp partOp,
           .create<MSFTModuleOp>(loc, partOp.getVerilogNameAttr(), modPortInfo,
                                 ArrayRef<NamedAttribute>{});
   partBlock->moveBefore(partMod.getBodyBlock());
-  partMod.getBlocks().back().erase();
+  partMod.getBodyRegion().getBlocks().back().erase();
 
   OpBuilder::atBlockEnd(partBlock).create<OutputOp>(partOp.getLoc(),
                                                     newOutputs);

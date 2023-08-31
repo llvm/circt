@@ -11,7 +11,7 @@
 // aggregate types with hardware aggregates, with non-hardware fields
 // expanded out as with LowerTypes.
 //
-// This pass is ref-specific for now.
+// This pass supports reference and property types.
 //
 //===----------------------------------------------------------------------===//
 
@@ -39,7 +39,7 @@ using namespace firrtl;
 
 namespace {
 
-/// Information on non-hw (ref) elements.
+/// Information on non-hw (ref/prop) elements.
 struct NonHWField {
   /// Type of the field, not a hardware type.
   FIRRTLType type;
@@ -176,7 +176,7 @@ public:
     if (!llvm::all_of(op->getOperandTypes(), notOpenAggType) ||
         !llvm::all_of(op->getResultTypes(), notOpenAggType))
       return op->emitOpError(
-          "unhandled use or producer of types containing references");
+          "unhandled use or producer of types containing non-hw types");
     return success();
   }
 
@@ -656,9 +656,16 @@ FailureOr<PortMappingInfo> Visitor::mapPortType(Type type, Location errorLoc,
               return FVectorType::get(convert, ovTy.getNumElements(),
                                       ovTy.isConst());
             })
-            .template Case<RefType>([&](auto ref) {
-              // Do this better, don't re-serialize so much?
+            .template Case<RefType>([&](RefType ref) {
               auto f = NonHWField{ref, fieldID, flip, {}};
+              suffix.toVector(f.suffix);
+              pi.fields.emplace_back(std::move(f));
+              return FIRRTLBaseType{};
+            })
+            // This is identical to the RefType case above, but copied out
+            // to try to fix a bug when combining + auto w/MSVC.
+            .template Case<PropertyType>([&](PropertyType prop) {
+              auto f = NonHWField{prop, fieldID, flip, {}};
               suffix.toVector(f.suffix);
               pi.fields.emplace_back(std::move(f));
               return FIRRTLBaseType{};

@@ -601,36 +601,6 @@ void hw::setModuleResultNames(Operation *module, ArrayRef<Attribute> names) {
   module->setAttr("resultNames", ArrayAttr::get(module->getContext(), names));
 }
 
-LocationAttr hw::getModuleArgumentLocAttr(Operation *module, size_t argNo) {
-  auto argumentLocs = module->getAttrOfType<ArrayAttr>("argLocs");
-  // Tolerate malformed IR here to enable debug printing etc.
-  if (argumentLocs && argNo < argumentLocs.size())
-    return argumentLocs[argNo].cast<LocationAttr>();
-  return LocationAttr();
-}
-
-LocationAttr hw::getModuleResultLocAttr(Operation *module, size_t resultNo) {
-  auto resultLocs = module->getAttrOfType<ArrayAttr>("resultLocs");
-  // Tolerate malformed IR here to enable debug printing etc.
-  if (resultLocs && resultNo < resultLocs.size())
-    return resultLocs[resultNo].cast<LocationAttr>();
-  return LocationAttr();
-}
-
-void hw::setModuleArgumentLocs(Operation *module, ArrayRef<Attribute> locs) {
-  assert(isAnyModule(module) && "Must be called on a module");
-  assert(getModuleType(module).getNumInputs() == locs.size() &&
-         "incorrect number of argument locations specified");
-  module->setAttr("argLocs", ArrayAttr::get(module->getContext(), locs));
-}
-
-void hw::setModuleResultLocs(Operation *module, ArrayRef<Attribute> locs) {
-  assert(isAnyModule(module) && "Must be called on a module");
-  assert(getModuleType(module).getNumResults() == locs.size() &&
-         "incorrect number of result locations specified");
-  module->setAttr("resultLocs", ArrayAttr::get(module->getContext(), locs));
-}
-
 // Flag for parsing different module types
 enum ExternModKind { PlainMod, ExternMod, GenMod };
 
@@ -709,7 +679,7 @@ static void modifyModuleArgs(
     ArrayRef<Type> oldArgTypes, ArrayRef<Attribute> oldArgAttrs,
     ArrayRef<Location> oldArgLocs, SmallVector<Attribute> &newArgNames,
     SmallVector<Type> &newArgTypes, SmallVector<Attribute> &newArgAttrs,
-    SmallVector<Attribute> &newArgLocs, Block *body = nullptr) {
+    SmallVector<Location> &newArgLocs, Block *body = nullptr) {
 
 #ifndef NDEBUG
   // Check that the `insertArgs` and `removeArgs` indices are in ascending
@@ -818,7 +788,7 @@ void hw::modifyModulePorts(
   SmallVector<Attribute> newArgNames, newResultNames;
   SmallVector<Type> newArgTypes, newResultTypes;
   SmallVector<Attribute> newArgAttrs, newResultAttrs;
-  SmallVector<Attribute> newArgLocs, newResultLocs;
+  SmallVector<Location> newArgLocs, newResultLocs;
 
   modifyModuleArgs(context, insertInputs, removeInputs, oldArgNames,
                    oldArgTypes, oldArgAttrs, oldArgLocs, newArgNames,
@@ -835,10 +805,10 @@ void hw::modifyModulePorts(
   moduleOp.setHWModuleType(modty);
   moduleOp->setAttr("argNames", ArrayAttr::get(context, newArgNames));
   moduleOp.setAllInputAttrs(newArgAttrs);
-  moduleOp->setAttr("argLocs", ArrayAttr::get(context, newArgLocs));
+  moduleOp.setInputLocs(newArgLocs);
   moduleOp->setAttr("resultNames", ArrayAttr::get(context, newResultNames));
   moduleOp.setAllOutputAttrs(newResultAttrs);
-  moduleOp->setAttr("resultLocs", ArrayAttr::get(context, newResultLocs));
+  moduleOp.setOutputLocs(newResultLocs);
 }
 
 void HWModuleOp::build(OpBuilder &builder, OperationState &result,
@@ -994,16 +964,14 @@ ModulePortInfo hw::getOperationPortList(Operation *op) {
   auto argTypes = getModuleType(op).getInputs();
   auto argLocs = op->getAttrOfType<ArrayAttr>("argLocs");
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
-    bool isInOut = false;
     auto type = argTypes[i];
+    auto direction = ModulePort::Direction::Input;
 
     if (auto inout = type.dyn_cast<InOutType>()) {
-      isInOut = true;
       type = inout.getElementType();
+      direction = ModulePort::Direction::InOut;
     }
 
-    auto direction =
-        isInOut ? ModulePort::Direction::InOut : ModulePort::Direction::Input;
     LocationAttr loc;
     if (argLocs)
       loc = argLocs[i].cast<LocationAttr>();
@@ -1035,49 +1003,6 @@ ModulePortInfo hw::getOperationPortList(Operation *op) {
                        loc});
   }
   return ModulePortInfo(inputs, outputs);
-}
-
-/// Return the PortInfo for the specified input or inout port.
-PortInfo hw::getModuleInOrInoutPort(Operation *op, size_t idx) {
-  auto argTypes = getModuleType(op).getInputs();
-  auto argNames = op->getAttrOfType<ArrayAttr>("argNames");
-  auto argLocs = op->getAttrOfType<ArrayAttr>("argLocs");
-  bool isInOut = false;
-  auto type = argTypes[idx];
-
-  if (auto inout = type.dyn_cast<InOutType>()) {
-    isInOut = true;
-    type = inout.getElementType();
-  }
-
-  DictionaryAttr attrs;
-  if (auto mi = dyn_cast<HWModuleLike>(op))
-    attrs = cast<DictionaryAttr>(mi.getInputAttrs(idx));
-
-  auto direction =
-      isInOut ? ModulePort::Direction::InOut : ModulePort::Direction::Input;
-  return {{argNames[idx].cast<StringAttr>(), type, direction},
-          idx,
-          getArgSym(op, idx),
-          attrs,
-          argLocs[idx].cast<LocationAttr>()};
-}
-
-/// Return the PortInfo for the specified output port.
-PortInfo hw::getModuleOutputPort(Operation *op, size_t idx) {
-  auto resultNames = op->getAttrOfType<ArrayAttr>("resultNames");
-  auto resultLocs = op->getAttrOfType<ArrayAttr>("resultLocs");
-  auto resultTypes = getModuleType(op).getResults();
-  assert(idx < resultNames.size() && "invalid result number");
-  DictionaryAttr attrs;
-  if (auto mi = dyn_cast<HWModuleLike>(op))
-    attrs = cast<DictionaryAttr>(mi.getOutputAttrs(idx));
-  return {{resultNames[idx].cast<StringAttr>(), resultTypes[idx],
-           ModulePort::Direction::Output},
-          idx,
-          getResultSym(op, idx),
-          attrs,
-          resultLocs[idx].cast<LocationAttr>()};
 }
 
 static bool hasAttribute(StringRef name, ArrayRef<NamedAttribute> attrs) {
@@ -1290,11 +1215,11 @@ static LogicalResult verifyModuleCommon(HWModuleLike module) {
   if (resultNames.size() != moduleType.getNumOutputs())
     return module->emitOpError("incorrect number of result names");
 
-  auto argLocs = module->getAttrOfType<ArrayAttr>("argLocs");
+  auto argLocs = module.getInputLocs();
   if (argLocs.size() != moduleType.getNumInputs())
     return module->emitOpError("incorrect number of argument locations");
 
-  auto resultLocs = module->getAttrOfType<ArrayAttr>("resultLocs");
+  auto resultLocs = module.getOutputLocs();
   if (resultLocs.size() != moduleType.getNumOutputs())
     return module->emitOpError("incorrect number of result locations");
 
@@ -1350,7 +1275,7 @@ LogicalResult HWModuleOp::verify() {
 
   // Verify that the block arguments match the op's attributes.
   for (auto [arg, type, loc] : llvm::zip(getBodyBlock()->getArguments(),
-                                         type.getInputs(), getArgLocs())) {
+                                         getInputTypes(), getInputLocs())) {
     if (arg.getType() != type)
       return emitOpError("block argument types should match signature types");
     if (arg.getLoc() != loc.cast<LocationAttr>())
@@ -1410,7 +1335,7 @@ void HWModuleOp::insertOutputs(unsigned index,
 }
 
 void HWModuleOp::appendOutputs(ArrayRef<std::pair<StringAttr, Value>> outputs) {
-  return insertOutputs(getResultTypes().size(), outputs);
+  return insertOutputs(getNumOutputPorts(), outputs);
 }
 
 void HWModuleOp::getAsmBlockArgumentNames(mlir::Region &region,
@@ -1435,46 +1360,54 @@ ModulePortInfo HWModuleGeneratedOp::getPortList() {
   return getOperationPortList(getOperation());
 }
 
-SmallVector<Location> HWModuleOp::getAllPortLocs() {
+template <typename ModTy>
+static SmallVector<Location> getAllPortLocs(ModTy module) {
   SmallVector<Location> retval;
-  auto empty = UnknownLoc::get(getContext());
-  auto locs = getArgLocs();
+  auto empty = UnknownLoc::get(module.getContext());
+  auto locs = module.getArgLocs();
   if (locs)
     for (auto l : locs)
       retval.push_back(cast<Location>(l));
-  retval.resize(getNumInputs(), empty);
-  locs = getResultLocs();
+  retval.resize(module.getNumInputPorts(), empty);
+  locs = module.getResultLocs();
   if (locs)
     for (auto l : locs)
       retval.push_back(cast<Location>(l));
-  retval.resize(getNumInputs() + getNumOutputs(), empty);
+  retval.resize(module.getNumInputPorts() + module.getNumOutputPorts(), empty);
   return retval;
 }
 
+SmallVector<Location> HWModuleOp::getAllPortLocs() {
+  return ::getAllPortLocs(*this);
+}
+
 SmallVector<Location> HWModuleExternOp::getAllPortLocs() {
-  return SmallVector<Location>(getNumInputs() + getNumOutputs(),
-                               UnknownLoc::get(getContext()));
+  return ::getAllPortLocs(*this);
 }
 
 SmallVector<Location> HWModuleGeneratedOp::getAllPortLocs() {
-  return SmallVector<Location>(getNumInputs() + getNumOutputs(),
-                               UnknownLoc::get(getContext()));
+  return ::getAllPortLocs(*this);
+}
+
+template <typename ModTy>
+static void setAllPortLocs(ArrayRef<Location> locs, ModTy module) {
+  auto numInputs = module.getNumInputPorts();
+  SmallVector<Attribute> argLocs(locs.begin(), locs.begin() + numInputs);
+  SmallVector<Attribute> resLocs(locs.begin() + numInputs, locs.end());
+  module.setArgLocsAttr(ArrayAttr::get(module.getContext(), argLocs));
+  module.setResultLocsAttr(ArrayAttr::get(module.getContext(), resLocs));
 }
 
 void HWModuleOp::setAllPortLocs(ArrayRef<Location> locs) {
-  auto numInputs = getNumInputs();
-  SmallVector<Attribute> argLocs(locs.begin(), locs.begin() + numInputs);
-  SmallVector<Attribute> resLocs(locs.begin() + numInputs, locs.end());
-  setArgLocsAttr(ArrayAttr::get(getContext(), argLocs));
-  setResultLocsAttr(ArrayAttr::get(getContext(), resLocs));
+  ::setAllPortLocs(locs, *this);
 }
 
 void HWModuleExternOp::setAllPortLocs(ArrayRef<Location> locs) {
-  emitError("Locations on external modules not supported");
+  ::setAllPortLocs(locs, *this);
 }
 
 void HWModuleGeneratedOp::setAllPortLocs(ArrayRef<Location> locs) {
-  emitError("Locations on external modules not supported");
+  ::setAllPortLocs(locs, *this);
 }
 
 template <typename ModTy>
@@ -1485,12 +1418,12 @@ static SmallVector<Attribute> getAllPortAttrs(ModTy &mod) {
   if (attrs)
     for (auto a : *attrs)
       retval.push_back(a);
-  retval.resize(mod.getNumInputs(), empty);
+  retval.resize(mod.getNumInputPorts(), empty);
   attrs = mod.getResAttrs();
   if (attrs)
     for (auto a : *attrs)
       retval.push_back(a);
-  retval.resize(mod.getNumInputs() + mod.getNumOutputs(), empty);
+  retval.resize(mod.getNumInputPorts() + mod.getNumOutputPorts(), empty);
   return retval;
 }
 
@@ -1508,7 +1441,7 @@ SmallVector<Attribute> HWModuleGeneratedOp::getAllPortAttrs() {
 
 template <typename ModTy>
 static void setAllPortAttrs(ModTy &mod, ArrayRef<Attribute> attrs) {
-  auto numInputs = mod.getNumInputs();
+  auto numInputs = mod.getNumInputPorts();
   SmallVector<Attribute> argAttrs(attrs.begin(), attrs.begin() + numInputs);
   SmallVector<Attribute> resAttrs(attrs.begin() + numInputs, attrs.end());
 
@@ -1530,8 +1463,8 @@ void HWModuleGeneratedOp::setAllPortAttrs(ArrayRef<Attribute> attrs) {
 
 template <typename ModTy>
 static void removeAllPortAttrs(ModTy &mod) {
-  mod.setArgAttrsAttr(nullptr);
-  mod.setResAttrsAttr(nullptr);
+  mod.setArgAttrsAttr(ArrayAttr::get(mod.getContext(), {}));
+  mod.setResAttrsAttr(ArrayAttr::get(mod.getContext(), {}));
 }
 
 void HWModuleOp::removeAllPortAttrs() { return ::removeAllPortAttrs(*this); }
@@ -1785,9 +1718,17 @@ void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 ModulePortInfo InstanceOp::getPortList() { return getOperationPortList(*this); }
 
 size_t InstanceOp::getNumPorts() {
-  SmallVector<Type> inputs(getOperandTypes());
-  SmallVector<Type> results(getResultTypes());
-  return inputs.size() + results.size();
+  return getNumInputPorts() + getNumOutputPorts();
+}
+
+size_t InstanceOp::getNumInputPorts() { return getNumOperands(); }
+
+size_t InstanceOp::getNumOutputPorts() { return getNumResults(); }
+
+size_t InstanceOp::getPortIdForInputId(size_t idx) { return idx; }
+
+size_t InstanceOp::getPortIdForOutputId(size_t idx) {
+  return idx + getNumInputPorts();
 }
 
 Value InstanceOp::getValue(size_t idx) {
@@ -3305,8 +3246,9 @@ LogicalResult HierPathOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
       return emitOpError() << "instance path is incorrect. Expected module: "
                            << expectedModuleName
                            << " instead found: " << innerRef.getModule();
-  } else if (expectedModuleName !=
-             leafRef.cast<FlatSymbolRefAttr>().getAttr()) {
+  } else if (expectedModuleName &&
+             expectedModuleName !=
+                 leafRef.cast<FlatSymbolRefAttr>().getAttr()) {
     // This is the case when the nla is applied to a module.
     return emitOpError() << "instance path is incorrect. Expected module: "
                          << expectedModuleName << " instead found: "
@@ -3553,6 +3495,20 @@ ModulePortInfo HWTestModuleOp::getPortList() {
 }
 
 size_t HWTestModuleOp::getNumPorts() { return getModuleType().getNumPorts(); }
+size_t HWTestModuleOp::getNumInputPorts() {
+  return getModuleType().getNumInputs();
+}
+size_t HWTestModuleOp::getNumOutputPorts() {
+  return getModuleType().getNumOutputs();
+}
+
+size_t HWTestModuleOp::getPortIdForInputId(size_t idx) {
+  return getModuleType().getPortIdForInputId(idx);
+}
+
+size_t HWTestModuleOp::getPortIdForOutputId(size_t idx) {
+  return getModuleType().getPortIdForOutputId(idx);
+}
 
 hw::InnerSymAttr HWTestModuleOp::getPortSymbolAttr(size_t portIndex) {
   auto pa = getPortAttrs();

@@ -55,6 +55,7 @@ class FIntegerType;
 class ListType;
 class MapType;
 class PathType;
+class BoolType;
 class BaseTypeAliasType;
 
 /// A collection of bits indicating the recursive properties of a type.
@@ -341,7 +342,7 @@ public:
   /// Support method to enable LLVM-style type casting.
   static bool classof(Type type) {
     return llvm::isa<ClassType, StringType, FIntegerType, ListType, MapType,
-                     PathType>(type);
+                     PathType, BoolType>(type);
   }
 
 protected:

@@ -140,7 +140,7 @@ static bool isLegalOp(Operation *op) {
 
   if (auto modOp = dyn_cast<hw::HWModuleLike>(op)) {
     return llvm::none_of(modOp.getPortTypes(), isSignednessType) &&
-           llvm::none_of(modOp.getBodyBlock()->getArgumentTypes(),
+           llvm::none_of(modOp.getModuleBody().getArgumentTypes(),
                          isSignednessType);
   }
 

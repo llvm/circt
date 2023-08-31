@@ -1355,6 +1355,35 @@ firrtl.circuit "MixedList" {
 
 // -----
 
+// Reject map.create with mixed key types.
+firrtl.circuit "MixedMapKeys" {
+  firrtl.module @MixedMapKeys(
+      in %s: !firrtl.string,
+      // expected-note @below {{prior use here}}
+      in %int: !firrtl.integer
+      ) {
+    // expected-error @below {{use of value '%int' expects different type than prior uses: '!firrtl.string' vs '!firrtl.integer'}}
+    firrtl.map.create (%s -> %int, %int -> %int) : !firrtl.map<string, integer>
+  }
+}
+
+// -----
+
+// Reject map.create with mixed value types.
+firrtl.circuit "MixedMapValues" {
+  firrtl.module @MixedMapValues(
+      in %s1: !firrtl.string,
+      // expected-note @below {{prior use here}}
+      in %s2: !firrtl.string,
+      in %int: !firrtl.integer
+      ) {
+    // expected-error @below {{use of value '%s2' expects different type than prior uses: '!firrtl.integer' vs '!firrtl.string'}}
+    firrtl.map.create (%s1 -> %int, %s2 -> %s2) : !firrtl.map<string, integer>
+  }
+}
+
+// -----
+
 // Reject list.create with elements of wrong type compared to result type.
 firrtl.circuit "ListCreateWrongType" {
   firrtl.module @ListCreateWrongType(
@@ -1363,6 +1392,19 @@ firrtl.circuit "ListCreateWrongType" {
       ) {
     // expected-error @below {{use of value '%int' expects different type than prior uses: '!firrtl.string' vs '!firrtl.integer'}}
     firrtl.list.create %int : !firrtl.list<string>
+  }
+}
+
+// -----
+
+// Reject map.create with consistent but wrong key/value elements.
+firrtl.circuit "MapCreateWrongType" {
+  firrtl.module @MapCreateWrongType(
+      // expected-note @below {{prior use here}}
+      in %int: !firrtl.integer
+      ) {
+    // expected-error @below {{use of value '%int' expects different type than prior uses: '!firrtl.string' vs '!firrtl.integer'}}
+    firrtl.map.create (%int -> %int) : !firrtl.map<integer, string>
   }
 }
 
@@ -1800,27 +1842,11 @@ firrtl.circuit "ConstOpenVector" {
 }
 
 // -----
-// Elements must support FieldID's.
-
-firrtl.circuit "OpenVectorNotFieldID" {
-  // expected-error @below {{vector element type does not support fieldID's, type: '!firrtl.string'}}
-  firrtl.extmodule @OpenVectorNotFieldID(out out : !firrtl.openvector<string, 2>)
-}
-
-// -----
 // No const with probes within.
 
 firrtl.circuit "ConstOpenBundle" {
   // expected-error @below {{'const' bundle cannot have references, but element "x" has type '!firrtl.probe<uint<1>>'}}
   firrtl.extmodule @ConstOpenBundle(out out : !firrtl.const.openbundle<x: probe<uint<1>>>)
-}
-
-// -----
-// Elements must support FieldID's.
-
-firrtl.circuit "OpenBundleNotFieldID" {
-  // expected-error @below {{bundle element "a" has unsupported type that does not support fieldID's: '!firrtl.string'}}
-  firrtl.extmodule @OpenBundleNotFieldID(out out : !firrtl.openbundle<a: string>)
 }
 
 // -----
@@ -2197,5 +2223,32 @@ firrtl.circuit "Top" {
     %value = firrtl.string "foo"
     // expected-error @below {{connect has invalid flow: the destination expression has no flow, expected sink or duplex flow}}
     firrtl.propassign %input, %value : !firrtl.string
+  }
+}
+
+// -----
+
+firrtl.circuit "InvalidBool" {
+  firrtl.module @InvalidBool() {
+     // expected-error @below {{invalid kind of attribute specified}}
+     %0 = firrtl.bool "invalid"
+  }
+}
+
+// -----
+
+firrtl.circuit "InvalidInnerSymTooHigh" {
+  firrtl.module @InvalidInnerSymTooHigh () {
+    // expected-error @below {{field id:'1' is greater than the maximum field id:'0'}}
+    %w = firrtl.wire sym [<@"test",1,public>] : !firrtl.uint<5>
+  }
+}
+
+// -----
+
+firrtl.circuit "InvalidInnerSymDupe" {
+  firrtl.module @InvalidInnerSymDupe() {
+    // expected-error @below {{op cannot assign multiple symbol names to the field id:'0'}}
+    %w = firrtl.wire sym [<@"foo",0,public>,<@"bar",0,public>] : !firrtl.uint<5>
   }
 }

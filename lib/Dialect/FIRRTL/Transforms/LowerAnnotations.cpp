@@ -558,11 +558,11 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
 /// Lookup a record for a given annotation class.  Optionally, returns the
 /// record for "circuit.missing" if the record doesn't exist.
 static const AnnoRecord *getAnnotationHandler(StringRef annoStr,
-                                              bool ignoreUnhandledAnno) {
+                                              bool ignoreAnnotationUnknown) {
   auto ii = annotationRecords.find(annoStr);
   if (ii != annotationRecords.end())
     return &ii->second;
-  if (ignoreUnhandledAnno)
+  if (ignoreAnnotationUnknown)
     return &annotationRecords.find("circt.missing")->second;
   return nullptr;
 }
@@ -583,9 +583,9 @@ struct LowerAnnotationsPass
   LogicalResult legacyToWiringProblems(ApplyState &state);
   LogicalResult solveWiringProblems(ApplyState &state);
 
-  bool ignoreUnhandledAnno = false;
-  bool ignoreClasslessAnno = false;
-  bool noRefTypePorts = false;
+  using LowerFIRRTLAnnotationsBase::ignoreAnnotationClassless;
+  using LowerFIRRTLAnnotationsBase::ignoreAnnotationUnknown;
+  using LowerFIRRTLAnnotationsBase::noRefTypePorts;
   SmallVector<DictionaryAttr> worklistAttrs;
 };
 } // end anonymous namespace
@@ -598,7 +598,7 @@ LogicalResult LowerAnnotationsPass::applyAnnotation(DictionaryAttr anno,
   StringRef annoClassVal;
   if (auto annoClass = anno.getNamed("class"))
     annoClassVal = cast<StringAttr>(annoClass->getValue()).getValue();
-  else if (ignoreClasslessAnno)
+  else if (ignoreAnnotationClassless)
     annoClassVal = "circt.missing";
   else
     return mlir::emitError(state.circuit.getLoc())
@@ -608,12 +608,12 @@ LogicalResult LowerAnnotationsPass::applyAnnotation(DictionaryAttr anno,
   auto *record = getAnnotationHandler(annoClassVal, false);
   if (!record) {
     ++numUnhandled;
-    if (!ignoreUnhandledAnno)
+    if (!ignoreAnnotationUnknown)
       return mlir::emitError(state.circuit.getLoc())
              << "Unhandled annotation: " << anno;
 
     // Try again, requesting the fallback handler.
-    record = getAnnotationHandler(annoClassVal, ignoreUnhandledAnno);
+    record = getAnnotationHandler(annoClassVal, ignoreAnnotationUnknown);
     assert(record);
   }
 
@@ -1069,7 +1069,8 @@ void LowerAnnotationsPass::runOnOperation() {
     worklistAttrs.push_back(anno);
   };
   InstancePathCache instancePathCache(getAnalysis<InstanceGraph>());
-  ApplyState state{circuit, modules, addToWorklist, instancePathCache};
+  ApplyState state{circuit, modules, addToWorklist, instancePathCache,
+                   noRefTypePorts};
   LLVM_DEBUG(llvm::dbgs() << "Processing annotations:\n");
   while (!worklistAttrs.empty()) {
     auto attr = worklistAttrs.pop_back_val();
@@ -1095,12 +1096,12 @@ void LowerAnnotationsPass::runOnOperation() {
 
 /// This is the pass constructor.
 std::unique_ptr<mlir::Pass>
-circt::firrtl::createLowerFIRRTLAnnotationsPass(bool ignoreUnhandledAnnotations,
-                                                bool ignoreClasslessAnnotations,
+circt::firrtl::createLowerFIRRTLAnnotationsPass(bool ignoreAnnotationUnknown,
+                                                bool ignoreAnnotationClassless,
                                                 bool noRefTypePorts) {
   auto pass = std::make_unique<LowerAnnotationsPass>();
-  pass->ignoreUnhandledAnno = ignoreUnhandledAnnotations;
-  pass->ignoreClasslessAnno = ignoreClasslessAnnotations;
+  pass->ignoreAnnotationUnknown = ignoreAnnotationUnknown;
+  pass->ignoreAnnotationClassless = ignoreAnnotationClassless;
   pass->noRefTypePorts = noRefTypePorts;
   return pass;
 }

@@ -135,7 +135,8 @@ getBackwardSlice(hw::HWModuleOp module,
   return getBackwardSlice(roots, filterFn);
 }
 
-static StringAttr getNameForPort(Value val, ArrayAttr modulePorts) {
+static StringAttr getNameForPort(Value val,
+                                 SmallVector<mlir::Attribute> modulePorts) {
   if (auto bv = val.dyn_cast<BlockArgument>())
     return modulePorts[bv.getArgNumber()].cast<StringAttr>();
 
@@ -200,7 +201,7 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
   // Construct the ports, this is just the input Values
   SmallVector<hw::PortInfo> ports;
   {
-    auto srcPorts = op.getArgNames();
+    auto srcPorts = op.getInputNames();
     for (auto port : llvm::enumerate(realInputs)) {
       auto name = getNameForPort(port.value(), srcPorts);
       ports.push_back(
@@ -340,7 +341,7 @@ inlineInputOnly(hw::HWModuleOp oldMod, hw::InstanceGraph &instanceGraph,
                 llvm::DenseSet<hw::InnerRefAttr> &innerRefUsedByNonBindOp) {
 
   // Check if the module only has inputs.
-  if (oldMod.getNumOutputs() != 0)
+  if (oldMod.getNumOutputPorts() != 0)
     return;
 
   // Check if it's ok to inline. We cannot inline the module if there exists a
@@ -405,7 +406,7 @@ inlineInputOnly(hw::HWModuleOp oldMod, hw::InstanceGraph &instanceGraph,
 
     // Build a mapping from module block arguments to instance inputs.
     IRMapping mapping;
-    assert(inst.getInputs().size() == oldMod.getNumInputs());
+    assert(inst.getInputs().size() == oldMod.getNumInputPorts());
     auto inputPorts = oldMod.getBodyBlock()->getArguments();
     for (size_t i = 0, e = inputPorts.size(); i < e; ++i)
       mapping.map(inputPorts[i], inst.getOperand(i));
@@ -792,7 +793,7 @@ void SVExtractTestCodeImplPass::runOnOperation() {
                    bindTable, opsToErase, opsInDesign);
 
       // If nothing is extracted and the module has an output, we are done.
-      if (!anyThingExtracted && rtlmod.getNumOutputs() != 0)
+      if (!anyThingExtracted && rtlmod.getNumOutputPorts() != 0)
         continue;
 
       // Here, erase extracted operations as well as dead operations.

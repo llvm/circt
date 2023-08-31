@@ -1694,6 +1694,19 @@ circuit BasicProps :
     ; CHECK: firrtl.propassign %a, %0 : !firrtl.integer
     propassign a, Integer(-10)
 
+  ; CHECK-LABEL: module private @Bool
+  module Bool :
+    ; CHECK-SAME: out %true: !firrtl.bool
+    ; CHECK-SAME: out %false: !firrtl.bool
+    output true : Bool
+    output false : Bool
+    ; CHECK-NEXT: %0 = firrtl.bool true
+    ; CHECK-NEXT: firrtl.propassign %true, %0 : !firrtl.bool
+    ; CHECK-NEXT: %1 = firrtl.bool false
+    ; CHECK-NEXT: firrtl.propassign %false, %1 : !firrtl.bool
+    propassign true, Bool(true)
+    propassign false, Bool(false)
+
   ; CHECK-LABEL: module private @String
   module String :
     ; CHECK-SAME: out %a: !firrtl.string
@@ -1762,4 +1775,60 @@ circuit BasicProps :
     ; CHECK-NEXT: %[[NESTED:.+]] = firrtl.list.create %[[EMPTY1]], %[[TESTLIST]], %[[EMPTY2]] : !firrtl.list<list<string>>
     ; CHECK-NEXT: firrtl.propassign %nested, %[[NESTED]]
     propassign nested, List<List<String>>(List<String>(), List<String>(String("test")), List<String>())
+
+  ; CHECK-LABEL: module private @Map
+  module Map :
+    ; CHECK-SAME: in %list: !firrtl.list<string>
+    input list : List<String>
+    ; CHECK-SAME: out %str2str: !firrtl.map<string, string>
+    ; CHECK-SAME: out %str2objs: !firrtl.map<string, class<@SimpleClass({{.*}})>>
+    ; CHECK-SAME: out %int2list: !firrtl.map<integer, list<string>>
+    ; CHECK-SAME: out %empty: !firrtl.map<integer, integer>
+    output str2str : Map<String, String>
+    output str2objs : Map<String, Inst<SimpleClass>>
+    output int2list : Map<Integer, List<String>>
+    output empty : Map<Integer, Integer>
+
+    ; CHECK-NEXT: %[[HELLO:.+]] = firrtl.string "hello"
+    ; CHECK-NEXT: %[[WORLD:.+]] = firrtl.string "world"
+    ; CHECK-NEXT: %[[STRINGS:.+]] = firrtl.map.create (%[[HELLO]] -> %[[WORLD]]) : !firrtl.map<string, string>
+    ; CHECK-NEXT: firrtl.propassign %str2str, %[[STRINGS]] : !firrtl.map<string, string>
+    propassign str2str, Map<String, String>(String("hello") -> String("world"))
+
+    ; CHECK-NEXT: %[[OBJ:.+]] = firrtl.object
+    ; CHECK-NEXT: %[[HELLO:.+]] = firrtl.string "hello"
+    ; CHECK-NEXT: %[[WORLD:.+]] = firrtl.string "world"
+    ; CHECK-NEXT: %[[OBJS:.+]] = firrtl.map.create (%[[HELLO]] -> %[[OBJ]], %[[WORLD]] -> %[[OBJ]]) : !firrtl.map<string, class<@SimpleClass({{.*}})>>
+    ; CHECK-NEXT: firrtl.propassign %str2objs, %[[OBJS]] : !firrtl.map<string, class
+    object obj of SimpleClass
+    propassign str2objs, Map<String, Inst<SimpleClass>>(String("hello") -> obj, String("world") -> obj)
+
+    ; CHECK-NEXT: %[[FIVE:.+]] = firrtl.integer 5
+    ; CHECK-NEXT: %[[EMPTY:.+]] = firrtl.list.create : !firrtl.list<string>
+    ; CHECK-NEXT: %[[TEN:.+]] = firrtl.integer 10
+    ; CHECK-NEXT: %[[INTLISTMAP:.+]] = firrtl.map.create (%[[FIVE]] -> %[[EMPTY]], %[[TEN]] -> %list) : !firrtl.map<integer, list<string>>
+    ; CHECK-NEXT: firrtl.propassign %int2list, %[[INTLISTMAP]]
+    propassign int2list, Map<Integer, List<String>>(Integer(5) -> List<String>(), Integer(10) -> list)
+
+    ; CHECK-NEXT: %[[EMPTY:.+]] = firrtl.map.create : !firrtl.map<integer, integer>
+    ; CHECK-NEXT: firrtl.propassign %empty, %[[EMPTY]]
+    propassign empty, Map<Integer, Integer>()
+
+;// -----
+FIRRTL version 3.1.0
+
+; CHECK-LABEL: circuit "BundleOfProps"
+circuit BundleOfProps:
+  module BundleOfProps:
+    input x : {a : String}
+    ; CHECK: openbundle<a: string>
+
+;// -----
+FIRRTL version 3.1.0
+
+; CHECK-LABEL: circuit "VecOfProps"
+circuit VecOfProps:
+  module VecOfProps:
+    input x : String[2]
+    ; CHECK: openvector<string, 2>
 

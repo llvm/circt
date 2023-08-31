@@ -273,14 +273,14 @@ static LogicalResult specializeModule(
   // Update the types of the source module ports based on evaluating any
   // parametric in/output ports.
   auto ports = source.getPortList();
-  for (auto in : llvm::enumerate(source.getFunctionType().getInputs())) {
+  for (auto in : llvm::enumerate(source.getInputTypes())) {
     FailureOr<Type> resType =
         evaluateParametricType(source.getLoc(), parameters, in.value());
     if (failed(resType))
       return failure();
     ports.atInput(in.index()).type = *resType;
   }
-  for (auto out : llvm::enumerate(source.getFunctionType().getResults())) {
+  for (auto out : llvm::enumerate(source.getOutputTypes())) {
     FailureOr<Type> resolvedType =
         evaluateParametricType(source.getLoc(), parameters, out.value());
     if (failed(resolvedType))

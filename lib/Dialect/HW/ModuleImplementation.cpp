@@ -90,13 +90,11 @@ void module_like_impl::printModuleSignature(OpAsmPrinter &p, Operation *op,
     if (auto args = funcOp.getAllArgAttrs())
       for (auto a : args.getValue())
         inputAttrs.push_back(a);
-    else
-      inputAttrs.resize(funcOp.getNumArguments());
+    inputAttrs.resize(funcOp.getNumArguments());
     if (auto results = funcOp.getAllResultAttrs())
       for (auto a : results.getValue())
         outputAttrs.push_back(a);
-    else
-      outputAttrs.resize(funcOp.getNumResults());
+    outputAttrs.resize(funcOp.getNumResults());
   } else {
     inputAttrs = modOp.getAllInputAttrs();
     outputAttrs = modOp.getAllOutputAttrs();
@@ -107,7 +105,7 @@ void module_like_impl::printModuleSignature(OpAsmPrinter &p, Operation *op,
     if (i > 0)
       p << ", ";
 
-    auto argName = getModuleArgumentName(op, i);
+    auto argName = modOp ? modOp.getInputName(i) : getModuleArgumentName(op, i);
 
     if (!isExternal) {
       // Get the printed format for the argument name.
@@ -134,9 +132,11 @@ void module_like_impl::printModuleSignature(OpAsmPrinter &p, Operation *op,
     // TODO: `printOptionalLocationSpecifier` will emit aliases for locations,
     // even if they are not printed.  This will have to be fixed upstream.  For
     // now, use what was specified on the command line.
-    if (flags.shouldPrintDebugInfo())
-      if (auto loc = getModuleArgumentLocAttr(op, i))
+    if (flags.shouldPrintDebugInfo()) {
+      auto loc = modOp.getInputLoc(i);
+      if (!isa<UnknownLoc>(loc))
         p.printOptionalLocationSpecifier(loc);
+    }
   }
 
   if (isVariadic) {
@@ -164,9 +164,11 @@ void module_like_impl::printModuleSignature(OpAsmPrinter &p, Operation *op,
       // TODO: `printOptionalLocationSpecifier` will emit aliases for locations,
       // even if they are not printed.  This will have to be fixed upstream. For
       // now, use what was specified on the command line.
-      if (flags.shouldPrintDebugInfo())
-        if (auto loc = getModuleResultLocAttr(op, i))
+      if (flags.shouldPrintDebugInfo()) {
+        auto loc = modOp.getOutputLoc(i);
+        if (!isa<UnknownLoc>(loc))
           p.printOptionalLocationSpecifier(loc);
+      }
     }
     p << ')';
   }

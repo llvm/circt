@@ -114,6 +114,7 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
       })
       .Case<StringType>([&](auto stringType) { os << "string"; })
       .Case<FIntegerType>([&](auto integerType) { os << "integer"; })
+      .Case<BoolType>([&](auto boolType) { os << "bool"; })
       .Case<ListType>([&](auto listType) {
         os << "list<";
         printNestedType(listType.getElementType(), os);
@@ -383,6 +384,14 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
       return failure();
     }
     result = FIntegerType::get(parser.getContext());
+    return success();
+  }
+  if (name.equals("bool")) {
+    if (isConst) {
+      parser.emitError(parser.getNameLoc(), "bools cannot be const");
+      return failure();
+    }
+    result = BoolType::get(parser.getContext());
     return success();
   }
   if (name.equals("list")) {
@@ -2486,28 +2495,6 @@ auto RefType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
   return success();
 }
 
-//- RefType implementations of FieldIDTypeInterface --------------------------//
-// Needs to be implemented to be used in a FIRRTL aggregate.
-
-uint64_t RefType::getMaxFieldID() const { return 0; }
-
-circt::hw::FieldIDTypeInterface
-RefType::getFinalTypeByFieldID(uint64_t fieldID) const {
-  assert(fieldID == 0);
-  return *this;
-}
-
-std::pair<circt::hw::FieldIDTypeInterface, uint64_t>
-RefType::getSubTypeByFieldID(uint64_t fieldID) const {
-  assert(fieldID == 0);
-  return {*this, 0};
-}
-
-std::pair<uint64_t, bool> RefType::rootChildFieldID(uint64_t fieldID,
-                                                    uint64_t index) const {
-  return {0, fieldID == 0};
-}
-
 RecursiveTypeProperties RefType::getRecursiveTypeProperties() const {
   auto rtp = getType().getRecursiveTypeProperties();
   rtp.containsReference = true;
@@ -2665,13 +2652,10 @@ ParseResult ClassType::parseInterface(AsmParser &parser, ClassType &result) {
 //===----------------------------------------------------------------------===//
 
 void FIRRTLDialect::registerTypes() {
-  addTypes<SIntType, UIntType, ClockType, ResetType, AsyncResetType, AnalogType,
-           // Derived Types
-           BundleType, FVectorType, FEnumType, BaseTypeAliasType,
-           // References and open aggregates
-           RefType, OpenBundleType, OpenVectorType,
-           // Non-Hardware types
-           ClassType, StringType, FIntegerType, ListType, MapType, PathType>();
+  addTypes<
+#define GET_TYPEDEF_LIST
+#include "circt/Dialect/FIRRTL/FIRRTLTypes.cpp.inc"
+      >();
 }
 
 // Get the bit width for this type, return None  if unknown. Unlike

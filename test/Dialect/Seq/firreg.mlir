@@ -742,3 +742,25 @@ hw.module @with_preset(%clock: i1, %reset: i1, %next32: i32, %next16: i16) -> ()
   // CHECK:   }
   // CHECK: }
 }
+
+// CHECK-LABEL: @reg_of_clock_type
+hw.module @reg_of_clock_type(%clk: i1, %rst: i1, %i: !seq.clock) -> (out: !seq.clock) {
+  // CHECK: [[REG0:%.+]] = sv.reg : !hw.inout<i1>
+  // CHECK: [[REG0_READ:%.+]] = sv.read_inout [[REG0]] : !hw.inout<i1>
+  %r0 = seq.firreg %i clock %clk : !seq.clock
+
+  // CHECK: [[WIRE:%.+]] = hw.wire [[REG0_READ]]  : i1
+  %r1 = hw.wire %r0 : !seq.clock
+
+  // CHECK: [[REG2:%.+]] = sv.reg : !hw.inout<i1>
+  // CHECK: [[REG2_READ:%.+]] = sv.read_inout [[REG2]] : !hw.inout<i1>
+  %r2 = seq.firreg %r1 clock %clk : !seq.clock
+
+  // CHECK: sv.always posedge %clk {
+  // CHECK:   sv.passign [[REG0]], %i : i1
+  // CHECK:   sv.passign [[REG2]], [[WIRE]] : i1
+  // CHECK: }
+  // CHECK: hw.output [[REG2_READ]] : i1
+
+  hw.output %r2 : !seq.clock
+}

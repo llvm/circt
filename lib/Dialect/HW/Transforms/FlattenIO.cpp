@@ -130,7 +130,7 @@ struct IOInfo {
   DenseMap<unsigned, hw::StructType> argStructs, resStructs;
 
   // Records of the original arg/res types.
-  TypeRange argTypes, resTypes;
+  SmallVector<Type> argTypes, resTypes;
 };
 
 class FlattenIOTypeConverter : public TypeConverter {
@@ -253,13 +253,13 @@ static void updateNameAttribute(Operation *op, StringRef attrName,
   op->setAttr(attrName, ArrayAttr::get(op->getContext(), newNames));
 }
 
-static void updateLocAttribute(Operation *op, StringRef attrName,
-                               DenseMap<unsigned, hw::StructType> &structMap,
-                               ArrayAttr oldLocs) {
-  llvm::SmallVector<Attribute> newLocs;
+static llvm::SmallVector<Location>
+updateLocAttribute(DenseMap<unsigned, hw::StructType> &structMap,
+                   ArrayAttr oldLocs) {
+  llvm::SmallVector<Location> newLocs;
   if (!oldLocs)
-    return;
-  for (auto [i, oldLoc] : llvm::enumerate(oldLocs)) {
+    return newLocs;
+  for (auto [i, oldLoc] : llvm::enumerate(oldLocs.getAsRange<Location>())) {
     // Was this arg/res index a struct?
     auto it = structMap.find(i);
     if (it == structMap.end()) {
@@ -272,7 +272,7 @@ static void updateLocAttribute(Operation *op, StringRef attrName,
     for (size_t i = 0, e = structType.getElements().size(); i < e; ++i)
       newLocs.push_back(oldLoc);
   }
-  op->setAttr(attrName, ArrayAttr::get(op->getContext(), newLocs));
+  return newLocs;
 }
 
 /// The conversion framework seems to throw away block argument locations.  We
@@ -294,8 +294,8 @@ static DenseMap<Operation *, IOInfo> populateIOInfoMap(mlir::ModuleOp module) {
   DenseMap<Operation *, IOInfo> ioInfoMap;
   for (auto op : module.getOps<T>()) {
     IOInfo ioInfo;
-    ioInfo.argTypes = op.getArgumentTypes();
-    ioInfo.resTypes = op.getResultTypes();
+    ioInfo.argTypes = op.getInputTypes();
+    ioInfo.resTypes = op.getOutputTypes();
     for (auto [i, arg] : llvm::enumerate(ioInfo.argTypes)) {
       if (auto structType = getStructType(arg))
         ioInfo.argStructs[i] = structType;
@@ -351,8 +351,8 @@ static LogicalResult flattenOpsOfType(ModuleOp module, bool recursive) {
     for (auto op : module.getOps<T>()) {
       oldArgNames[op] = op->template getAttrOfType<ArrayAttr>("argNames");
       oldResNames[op] = op->template getAttrOfType<ArrayAttr>("resultNames");
-      oldArgLocs[op] = op->template getAttrOfType<ArrayAttr>("argLocs");
-      oldResLocs[op] = op->template getAttrOfType<ArrayAttr>("resultLocs");
+      oldArgLocs[op] = op.getInputLocsAttr();
+      oldResLocs[op] = op.getOutputLocsAttr();
     }
 
     // Signature conversion and legalization patterns.
@@ -370,8 +370,8 @@ static LogicalResult flattenOpsOfType(ModuleOp module, bool recursive) {
       updateNameAttribute(
           op, "resultNames", ioInfo.resStructs,
           oldResNames[op].template getAsValueRange<StringAttr>());
-      updateLocAttribute(op, "argLocs", ioInfo.argStructs, oldArgLocs[op]);
-      updateLocAttribute(op, "resultLocs", ioInfo.resStructs, oldResLocs[op]);
+      op.setInputLocs(updateLocAttribute(ioInfo.argStructs, oldArgLocs[op]));
+      op.setOutputLocs(updateLocAttribute(ioInfo.resStructs, oldResLocs[op]));
       updateBlockLocations(op, "argLocs", ioInfo.argStructs);
     }
 

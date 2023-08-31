@@ -91,6 +91,44 @@ class FIRRTLModuleLike<string mnemonic, list<Trait> traits = []> :
     size_t $cppClass::getNumPorts() {
       return getPortTypesAttr().size();
     }
+
+    size_t $cppClass::getNumInputPorts() {
+      size_t count = 0;
+      for (unsigned i = 0, e = getNumPorts(); i < e; ++i)
+        if (getPortDirection(i) == Direction::In)
+          ++count;
+      return count;
+    }
+
+    size_t $cppClass::getNumOutputPorts() {
+      size_t count = 0;
+      for (unsigned i = 0, e = getNumPorts(); i < e; ++i)
+        if (getPortDirection(i) == Direction::Out)
+          ++count;
+      return count;
+    }
+
+    size_t $cppClass::getPortIdForInputId(size_t idx) {
+      for (unsigned i = 0, e = getNumPorts(); i < e; ++i)
+        if (getPortDirection(i) == Direction::In) {
+          if (!idx)
+            return i;
+          --idx;
+        }
+      assert(0 && "Out of bounds input port id");
+      return ~0ULL;
+    }
+
+    size_t $cppClass::getPortIdForOutputId(size_t idx) {
+      for (unsigned i = 0, e = getNumPorts(); i < e; ++i)
+        if (getPortDirection(i) == Direction::Out) {
+          if (!idx)
+            return i;
+          --idx;
+        }
+      assert(0 && "Out of bounds input port id");
+      return ~0ULL;
+    }
   }];
 
 }

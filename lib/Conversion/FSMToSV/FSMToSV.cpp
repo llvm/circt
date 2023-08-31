@@ -482,9 +482,10 @@ LogicalResult MachineOpConverter::dispatch() {
 
   // 4/5) Create next-state assignments for each output.
   llvm::SmallVector<CaseMuxItem, 4> outputCaseAssignments;
+  auto hwPortList = hwModuleOp.getPortList();
   for (size_t portIndex = 0; portIndex < machineOp.getNumResults();
        portIndex++) {
-    auto outputPort = hwModuleOp.getOutputPort(portIndex);
+    auto outputPort = hwPortList.atOutput(portIndex);
     auto outputPortType = outputPort.type;
     CaseMuxItem outputAssignment;
     outputAssignment.wire = b.create<sv::RegOp>(

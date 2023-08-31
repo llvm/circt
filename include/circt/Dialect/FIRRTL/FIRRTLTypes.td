@@ -217,6 +217,9 @@ def FIntegerType : FIRRTLDialectTypeHelper<"FIntegerType", "integer type">,
 def ListType : FIRRTLDialectTypeHelper<"ListType", "list type">;
 def MapType : FIRRTLDialectTypeHelper<"MapType", "map type">;
 
+def BoolType : FIRRTLDialectTypeHelper<"BoolType", "boolean type">,
+  BuildableType<"::circt::firrtl::BoolType::get($_builder.getContext())">;
+
 def PathType : FIRRTLDialectTypeHelper<"PathType", "path type">,
   BuildableType<"::circt::firrtl::PathType::get($_builder.getContext())">;
 

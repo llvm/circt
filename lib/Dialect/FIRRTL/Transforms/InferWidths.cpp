@@ -1375,6 +1375,10 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
   if (allWidthsKnown && !isa<FConnectLike, AttachOp>(op))
     return success();
 
+  /// Ignore property assignments, no widths to infer.
+  if (isa<PropAssignOp>(op))
+    return success();
+
   // Actually generate the necessary constraint expressions.
   bool mappingFailed = false;
   solver.setCurrentContextInfo(

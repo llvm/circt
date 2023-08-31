@@ -55,7 +55,7 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
     void setPortSymbolAttr(size_t portIndex, ::circt::hw::InnerSymAttr sym);
 
     StringAttr getArgName(size_t index) {
-      return dyn_cast<StringAttr>(getArgNames()[index]);
+      return getHWModuleType().getInputNameAttr(index);
     }
 
   }];
@@ -86,6 +86,25 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
       auto fnty = getFunctionType();
       return fnty.getNumInputs() + fnty.getNumResults();
     }
+
+    size_t $cppClass::getNumInputPorts() {
+      auto fnty = getFunctionType();
+      return fnty.getNumInputs();
+    }
+
+    size_t $cppClass::getNumOutputPorts() {
+      auto fnty = getFunctionType();
+      return fnty.getNumResults();
+    }
+
+    size_t $cppClass::getPortIdForInputId(size_t idx) {
+      return idx;
+    }
+
+    size_t $cppClass::getPortIdForOutputId(size_t idx) {
+      return idx + getNumInputPorts();
+    }
+
   }];
 
 }
@@ -97,7 +116,8 @@ def HWTestModuleOp : HWOp<"testmodule", [Symbol,
                                          HasParent<"mlir::ModuleOp">, 
                                          IsolatedFromAbove,
                                          SingleBlockImplicitTerminator<"OutputOp">]> {
-  let arguments = (ins TypeAttrOf<ModuleType>:$module_type,
+  let arguments = (ins SymbolNameAttr:$sym_name,
+                       TypeAttrOf<ModuleType>:$module_type,
                        OptionalAttr<DictArrayAttr>:$port_attrs,
                        OptionalAttr<LocationArrayAttr>:$port_locs,
                        ParamDeclArrayAttr:$parameters,
@@ -160,29 +180,16 @@ def HWModuleOp : HWModuleOpBase<"module",
     // Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph;}
 
-    /// Returns the number of in or inout ports.
-    size_t getNumInOrInoutPorts() { return getArgumentTypes().size(); }
-
-    /// Return the PortInfo for the specified input or inout port.
-    PortInfo getInOrInoutPort(size_t i) {
-      return getModuleInOrInoutPort(*this, i);
-    }
-
-    /// Return the PortInfo for the specified output port.
-    PortInfo getOutputPort(size_t i) {
-      return getModuleOutputPort(*this, i);
-    }
-
     /// Append an input with a given name and type to the port list.
     /// If the name is not unique, a unique name is created and returned.
     std::pair<StringAttr, BlockArgument>
     appendInput(const Twine &name, Type ty) {
-      return insertInput(getNumInOrInoutPorts(), name, ty);
+      return insertInput(getNumInputPorts(), name, ty);
     }
 
     std::pair<StringAttr, BlockArgument>
     appendInput(StringAttr name, Type ty) {
-      return insertInput(getNumInOrInoutPorts(), name.getValue(), ty);
+      return insertInput(getNumInputPorts(), name.getValue(), ty);
     }
 
     /// Prepend an input with a given name and type to the port list.
@@ -211,12 +218,12 @@ def HWModuleOp : HWModuleOpBase<"module",
     /// Append an output with a given name and type to the port list.
     /// If the name is not unique, a unique name is created.
     void appendOutput(StringAttr name, Value value) {
-      return insertOutputs(getResultTypes().size(), {{name, value}});
+      return insertOutputs(getNumOutputPorts(), {{name, value}});
     }
 
     void appendOutput(const Twine &name, Value value) {
       ::mlir::StringAttr nameAttr = ::mlir::StringAttr::get(getContext(), name);
-      return insertOutputs(getResultTypes().size(), {{nameAttr, value}});
+      return insertOutputs(getNumOutputPorts(), {{nameAttr, value}});
     }
 
     /// Prepend an output with a given name and type to the port list.
@@ -249,22 +256,6 @@ def HWModuleOp : HWModuleOpBase<"module",
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
 
-    /// Returns the argument types of this function.
-    ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
-
-    /// Returns the result types of this function.
-    ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
-
-    /// Verify the type attribute of this function. Returns failure and emits
-    /// an error if the attribute is invalid.
-    LogicalResult verifyType() {
-      auto type = getFunctionTypeAttr().getValue();
-      if (!type.isa<FunctionType>())
-        return emitOpError("requires '" + getFunctionTypeAttrName().getValue() +
-                           "' attribute of function type");
-      return success();
-    }
-
     /// Verifies the body of the function.
     LogicalResult verifyBody();
   }];
@@ -288,7 +279,10 @@ def HWModuleExternOp : HWModuleOpBase<"module.extern"> {
                        TypeAttrOf<FunctionType>:$function_type,
 		                   OptionalAttr<DictArrayAttr>:$arg_attrs,
                        OptionalAttr<DictArrayAttr>:$res_attrs,
-                       StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
+                       StrArrayAttr:$argNames,
+                       StrArrayAttr:$resultNames,
+                       LocationArrayAttr:$argLocs,
+                       LocationArrayAttr:$resultLocs,
                        ParamDeclArrayAttr:$parameters,
                        OptionalAttr<StrAttr>:$verilogName);
   let results = (outs);
@@ -307,16 +301,6 @@ def HWModuleExternOp : HWModuleOpBase<"module.extern"> {
   ];
 
   let extraModuleClassDeclaration = [{
-
-    /// Return the PortInfo for the specified input or inout port.
-    PortInfo getInOrInoutPort(size_t i) {
-      return getModuleInOrInoutPort(*this, i);
-    }
-
-    /// Return the PortInfo for the specified output port.
-    PortInfo getOutputPort(size_t i) {
-      return getModuleOutputPort(*this, i);
-    }
 
     /// Return the name to use for the Verilog module that we're referencing
     /// here.  This is typically the symbol, but can be overridden with the
@@ -344,21 +328,6 @@ def HWModuleExternOp : HWModuleOpBase<"module.extern"> {
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
 
-    /// Returns the argument types of this function.
-    ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
-
-    /// Returns the result types of this function.
-    ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
-
-    /// Verify the type attribute of this function. Returns failure and emits
-    /// an error if the attribute is invalid.
-    LogicalResult verifyType() {
-      auto type = getFunctionTypeAttr().getValue();
-      if (!type.isa<FunctionType>())
-        return emitOpError("requires '" + getFunctionTypeAttrName().getValue() +
-                           "' attribute of function type");
-      return success();
-    }
   }];
 
   let hasCustomAssemblyFormat = 1;
@@ -406,6 +375,8 @@ def HWModuleGeneratedOp : HWModuleOpBase<"module.generated", [
 		                   OptionalAttr<DictArrayAttr>:$arg_attrs,
                        OptionalAttr<DictArrayAttr>:$res_attrs,
                        StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
+                       LocationArrayAttr:$argLocs,
+                       LocationArrayAttr:$resultLocs,
                        ParamDeclArrayAttr:$parameters,
                        OptionalAttr<StrAttr>:$verilogName);
   let results = (outs);
@@ -445,23 +416,6 @@ def HWModuleGeneratedOp : HWModuleOpBase<"module.generated", [
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
 
-    /// Returns the argument types of this function.
-    ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
-
-    /// Returns the result types of this function.
-    ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
-
-    /// Verify the type attribute of this function. Returns failure and emits
-    /// an error if the attribute is invalid.
-    LogicalResult verifyType() {
-      auto type = getFunctionTypeAttr().getValue();
-      if (!type.isa<FunctionType>())
-        return emitOpError("requires '" + getFunctionTypeAttrName().getValue() +
-                           "' attribute of function type");
-      return success();
-    }
-
-    TypeAttr getTypeAttr();
   }];
 
   let hasCustomAssemblyFormat = 1;

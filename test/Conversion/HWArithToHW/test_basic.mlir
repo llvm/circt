@@ -329,6 +329,11 @@ msft.module.extern @externModule(%a: ui8, %b: ui8) -> (out: !hw.struct<foo: !hw.
 
 // -----
 
+// CHECK: hw.module.extern @externHWModule(%a: i8, %b: i8) -> (out: !hw.struct<foo: !hw.array<2xi8>>)
+hw.module.extern @externHWModule(%a: ui8, %b: ui8) -> (out: !hw.struct<foo: !hw.array<2xui8>>)
+
+// -----
+
 
 // CHECK-LABEL:   hw.module @backedges() {
 // CHECK-NEXT:      %[[VAL_0:.*]] = hw.constant false

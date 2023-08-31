@@ -91,6 +91,12 @@ circt::om::MapAttr::verify(function_ref<InFlightDiagnostic()> emitError,
   return success();
 }
 
+circt::om::PathAttr circt::om::PathAttr::get(mlir::StringAttr path) {
+  return om::PathAttr::get(path.getContext(), path);
+}
+
+Type circt::om::PathAttr::getType() { return PathType::get(getContext()); }
+
 void circt::om::OMDialect::registerAttributes() {
   addAttributes<
 #define GET_ATTRDEF_LIST

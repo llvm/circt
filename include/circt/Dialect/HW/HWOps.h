@@ -38,12 +38,6 @@ ModulePort::Direction flip(ModulePort::Direction direction);
 
 /// TODO: Move all these functions to a hw::ModuleLike interface.
 
-/// Return the PortInfo for the specified input or inout port.
-PortInfo getModuleInOrInoutPort(Operation *op, size_t idx);
-
-/// Return the PortInfo for the specified output port.
-PortInfo getModuleOutputPort(Operation *op, size_t idx);
-
 /// Return all the ports of a module or an instance.
 ModulePortInfo getOperationPortList(Operation *op);
 
@@ -106,19 +100,12 @@ static inline StringRef getModuleResultName(Operation *module,
   return attr ? attr.getValue() : StringRef();
 }
 
-/// Return the port location for the specified argument or result.  These can
-/// only return a null LocationAttr when the IR is invalid.
-LocationAttr getModuleArgumentLocAttr(Operation *module, size_t argNo);
-LocationAttr getModuleResultLocAttr(Operation *module, size_t resultNo);
-
 // Index width should be exactly clog2 (size of array), or either 0 or 1 if the
 // array is a singleton.
 bool isValidIndexBitWidth(Value index, Value array);
 
 void setModuleArgumentNames(Operation *module, ArrayRef<Attribute> names);
 void setModuleResultNames(Operation *module, ArrayRef<Attribute> names);
-void setModuleArgumentLocs(Operation *module, ArrayRef<Attribute> locs);
-void setModuleResultLocs(Operation *module, ArrayRef<Attribute> locs);
 
 /// Return true if the specified operation is a combinational logic op.
 bool isCombinational(Operation *op);

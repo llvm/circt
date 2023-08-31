@@ -173,7 +173,7 @@ LogicalResult HandshakeLowerExtmemToHWPass::wrapESI(
   // Create backedges for the results of the external module. These will be
   // replaced by the service instance requests if associated with a memory.
   llvm::SmallVector<Backedge> backedges;
-  for (auto resType : extMod.getResultTypes())
+  for (auto resType : extMod.getOutputTypes())
     backedges.push_back(bb.get(resType));
 
   // Maintain which index we're currently at in the lowered handshake module's
@@ -275,8 +275,9 @@ LogicalResult HandshakeLowerExtmemToHWPass::wrapESI(
   auto outputOp =
       cast<hw::OutputOp>(wrapperMod.getBodyBlock()->getTerminator());
   b.setInsertionPoint(outputOp);
-  b.create<hw::OutputOp>(outputOp.getLoc(), instance.getResults().take_front(
-                                                wrapperMod.getNumOutputs()));
+  b.create<hw::OutputOp>(
+      outputOp.getLoc(),
+      instance.getResults().take_front(wrapperMod.getNumOutputPorts()));
   outputOp.erase();
 
   return success();

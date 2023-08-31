@@ -24,8 +24,18 @@ def PortList : OpInterface<"PortList", []> {
     InterfaceMethod<"Get port list",
     "::circt::hw::ModulePortInfo", "getPortList", (ins)>,
 
+    InterfaceMethod<"Get the port a specific input",
+    "size_t", "getPortIdForInputId", (ins "size_t":$idx)>,
+
+    InterfaceMethod<"Get the port a specific output",
+    "size_t", "getPortIdForOutputId", (ins "size_t":$idx)>,
+
     InterfaceMethod<"Get the number of ports",
     "size_t", "getNumPorts", (ins)>,
+    InterfaceMethod<"Get the number of input ports",
+    "size_t", "getNumInputPorts", (ins)>,
+    InterfaceMethod<"Get the number of output ports",
+    "size_t", "getNumOutputPorts", (ins)>,
   ];
 }
 
@@ -76,7 +86,12 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
 
     /// Return the region containing the body of this function.
     Region &getModuleBody() { return $_op->getRegion(0); }
-    Block *getBodyBlock() { return &getModuleBody().front(); }
+    Block *getBodyBlock() {
+      Region &body = getModuleBody();
+      if (body.empty())
+        return nullptr;
+      return &body.front();
+    }
 
     /// Returns the entry block argument at the given index.
     BlockArgument getArgumentForInput(unsigned idx) {
@@ -86,16 +101,6 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
     /// Returns the entry block argument for the given port.  May be null.
     BlockArgument getArgumentForPort(unsigned idx) {
       return $_op.getModuleBody().getArgument($_op.getHWModuleType().getInputIdForPortId(idx));
-    }
-
-    /// Return the total number of input and inout ports in the module
-    size_t getNumInputs() {
-      return $_op.getHWModuleType().getNumInputs();
-    }
-
-    /// Return the total number of output ports in the module
-    size_t getNumOutputs() {
-      return $_op.getHWModuleType().getNumOutputs();
     }
 
     SmallVector<mlir::Type> getPortTypes() {
@@ -160,16 +165,18 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
     SmallVector<Attribute> getAllInputAttrs() {
       auto attrs = $_op.getAllPortAttrs();
       SmallVector<Attribute> retval;
-      for (unsigned x = 0, e = $_op.getNumInputs(); x < e; ++x)
-        retval.push_back(attrs[$_op.getHWModuleType().getPortIdForInputId(x)]);
+      auto modType = $_op.getHWModuleType();
+      for (unsigned x = 0, e = $_op.getNumInputPorts(); x < e; ++x)
+        retval.push_back(attrs[modType.getPortIdForInputId(x)]);
       return retval;
     }
 
     SmallVector<Attribute> getAllOutputAttrs() {
       auto attrs = $_op.getAllPortAttrs();
       SmallVector<Attribute> retval;
-      for (unsigned x = 0, e = $_op.getNumOutputs(); x < e; ++x)
-        retval.push_back(attrs[$_op.getHWModuleType().getPortIdForOutputId(x)]);
+      auto modType = $_op.getHWModuleType();
+      for (unsigned x = 0, e = $_op.getNumOutputPorts(); x < e; ++x)
+        retval.push_back(attrs[modType.getPortIdForOutputId(x)]);
       return retval;
     }
 
@@ -187,11 +194,11 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
     }
 
     Attribute getInputAttrs(size_t idx) {
-      return $_op.getAllPortAttrs()[$_op.getHWModuleType().getPortIdForInputId(idx)];
+      return $_op.getAllPortAttrs()[$_op.getPortIdForInputId(idx)];
     }
 
     Attribute getOutputAttrs(size_t idx) {
-      return $_op.getAllPortAttrs()[$_op.getHWModuleType().getPortIdForOutputId(idx)];
+      return $_op.getAllPortAttrs()[$_op.getPortIdForOutputId(idx)];
     }
 
     void setPortAttrs(size_t idx, DictionaryAttr attr) {
@@ -224,22 +231,63 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
       return $_op.setAllPortLocs(locs);
     }
 
+    Location getInputLoc(size_t idx) {
+      return $_op.getAllPortLocs()[$_op.getPortIdForInputId(idx)];
+    }
+
+    Location getOutputLoc(size_t idx) {
+      return $_op.getAllPortLocs()[$_op.getPortIdForOutputId(idx)];
+    }
+
     SmallVector<Location> getInputLocs() {
       auto locs = $_op.getAllPortLocs();
       SmallVector<Location> retval;
-      for (unsigned x = 0, e = $_op.getNumInputs(); x < e; ++x)
-        retval.push_back(locs[$_op.getHWModuleType().getPortIdForInputId(x)]);
+      for (unsigned x = 0, e = $_op.getNumInputPorts(); x < e; ++x)
+        retval.push_back(locs[$_op.getPortIdForInputId(x)]);
       return retval;
+    }
+
+    ArrayAttr getInputLocsAttr() {
+      auto locs = $_op.getAllPortLocs();
+      SmallVector<Attribute> retval;
+      for (unsigned x = 0, e = $_op.getNumInputPorts(); x < e; ++x)
+        retval.push_back(locs[$_op.getPortIdForInputId(x)]);
+      return ArrayAttr::get($_op->getContext(), retval);
+    }
+
+    void setInputLocs(ArrayRef<Location> inAttrs) {
+      assert(inAttrs.size() == $_op.getNumInputPorts());
+      auto outAttrs = getOutputLocs();
+      SmallVector<Location> attrs;
+      attrs.append(inAttrs.begin(), inAttrs.end());
+      attrs.append(outAttrs.begin(), outAttrs.end());
+      $_op.setAllPortLocs(attrs);
     }
 
     SmallVector<Location> getOutputLocs() {
       auto locs = $_op.getAllPortLocs();
       SmallVector<Location> retval;
-      for (unsigned x = 0, e = $_op.getNumOutputs(); x < e; ++x)
-        retval.push_back(locs[$_op.getHWModuleType().getPortIdForOutputId(x)]);
+      for (unsigned x = 0, e = $_op.getNumOutputPorts(); x < e; ++x)
+        retval.push_back(locs[$_op.getPortIdForOutputId(x)]);
       return retval;
     }
 
+    ArrayAttr getOutputLocsAttr() {
+      auto locs = $_op.getAllPortLocs();
+      SmallVector<Attribute> retval;
+      for (unsigned x = 0, e = $_op.getNumOutputPorts(); x < e; ++x)
+        retval.push_back(locs[$_op.getPortIdForOutputId(x)]);
+      return ArrayAttr::get($_op->getContext(), retval);
+    }
+
+    void setOutputLocs(ArrayRef<Location> outAttrs) {
+      assert(outAttrs.size() == $_op.getNumOutputPorts());
+      auto inAttrs = getInputLocs();
+      SmallVector<Location> attrs;
+      attrs.append(inAttrs.begin(), inAttrs.end());
+      attrs.append(outAttrs.begin(), outAttrs.end());
+      $_op.setAllPortLocs(attrs);
+    }
   }];
 
   let verify = [{

@@ -10,7 +10,6 @@
 set(PYCDE_INTEGRATION_TEST_DEPENDS
   FileCheck count not split-file
   circt-rtl-sim
-  esi-cosim-runner
   PyCDE
   mlir-opt
   hlstool
@@ -18,7 +17,10 @@ set(PYCDE_INTEGRATION_TEST_DEPENDS
 
 # If ESI Cosim is available to build then enable its tests.
 if (TARGET EsiCosimDpiServer)
-  list(APPEND PYCDE_INTEGRATION_TEST_DEPENDS EsiCosimDpiServer)
+  list(APPEND PYCDE_INTEGRATION_TEST_DEPENDS
+    EsiCosimDpiServer
+    esi-cosim-runner
+  )
   get_property(ESI_COSIM_LIB_DIR TARGET EsiCosimDpiServer PROPERTY LIBRARY_OUTPUT_DIRECTORY)
   set(ESI_COSIM_PATH ${ESI_COSIM_LIB_DIR}/libEsiCosimDpiServer.so)
 endif()

@@ -45,6 +45,8 @@ bool ExportVerilog::isSimpleReadOrPort(Value v) {
   auto vOp = v.getDefiningOp();
   if (!vOp)
     return false;
+  if (v.getType().isa<sv::InOutType>() && isa<sv::WireOp>(vOp))
+    return true;
   auto read = dyn_cast<ReadInOutOp>(vOp);
   if (!read)
     return false;

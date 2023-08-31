@@ -100,3 +100,23 @@ hw.module @top_ce(%clk: i1, %rst: i1, %ce: i1, %i: i32) {
   // ALWAYS:   }
   // ALWAYS: }
 }
+
+// SV-LABEL: @reg_of_clock_type
+hw.module @reg_of_clock_type(%clk: i1, %rst: i1, %i: !seq.clock) -> (out: !seq.clock) {
+  // SV: [[REG0:%.+]] = sv.reg : !hw.inout<i1>
+  // SV: [[REG0_VAL:%.+]] = sv.read_inout [[REG0]] : !hw.inout<i1>
+  // SV: sv.alwaysff(posedge %clk) {
+  // SV:   sv.passign [[REG0]], %i : i1
+  // SV: }
+  %r0 = seq.compreg %i, %clk : !seq.clock
+
+  // SV: [[REG1:%.+]] = sv.reg : !hw.inout<i1>
+  // SV: [[REG1_VAL:%.+]] = sv.read_inout [[REG1]] : !hw.inout<i1>
+  // SV: sv.alwaysff(posedge %clk) {
+  // SV:   sv.passign [[REG1]], [[REG0_VAL]] : i1
+  // SV: }
+  %r1 = seq.compreg %r0, %clk : !seq.clock
+
+  // SV: hw.output [[REG1_VAL]] : i1
+  hw.output %r1 : !seq.clock
+}

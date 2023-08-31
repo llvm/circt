@@ -459,15 +459,15 @@ def FEnumImpl : FIRRTLImplType<"FEnum", [FieldIDTypeInterface]> {
 }
 
 def RefImpl : FIRRTLImplType<"Ref",
-                             [DeclareTypeInterfaceMethods<FieldIDTypeInterface>],
+                             [AtomicFieldIDTypeInterface],
                              "::circt::firrtl::FIRRTLType"> {
-  let summary = [{
+  let summary = "A reference to a signal elsewhere.";
+  let description = [{
     A reference type, such as `firrtl.probe<uint<1>>` or `firrtl.rwprobe<uint<2>>`.
 
     Used for remote reads and writes of the wrapped base type.
 
-    Parameterized over the referenced base type,
-    which must be passive and for now must also be ground.
+    Parameterized over the referenced base type, with flips removed.
 
     Not a base type.
 
@@ -544,7 +544,12 @@ def BaseTypeAliasImpl : FIRRTLImplType<"BaseTypeAlias", [FieldIDTypeInterface],
 // Non-Hardware Type Definitions
 //===----------------------------------------------------------------------===//
 
-def ClassImpl : FIRRTLImplType<"Class", [], "circt::firrtl::FIRRTLType"> {
+class PropImplType<string name,
+                   list<Trait> traits = [],
+                   string baseCppClass = "::circt::firrtl::FIRRTLType">
+  : FIRRTLImplType<name, traits # [ AtomicFieldIDTypeInterface ], baseCppClass>;
+
+def ClassImpl : PropImplType<"Class"> {
   let summary = [{
     An instance of a class.
 
@@ -588,48 +593,44 @@ def ClassImpl : FIRRTLImplType<"Class", [], "circt::firrtl::FIRRTLType"> {
   }];
 }
 
-def StringImpl : FIRRTLImplType<"String", [], "circt::firrtl::FIRRTLType"> {
-  let summary = [{
-    An unlimited length string type. Not representable in hardware.
-  }];
+def StringImpl : PropImplType<"String"> {
+  let summary = "An unlimited length string type. Not representable in hardware.";
   let parameters = (ins);
   let genStorageClass = true;
 }
 
-def IntegerImpl : FIRRTLImplType<"FInteger", [], "circt::firrtl::FIRRTLType"> {
-  let summary = [{
-    An unlimited length signed integer type.  Not representable in hardware.
-  }];
+def IntegerImpl : PropImplType<"FInteger"> {
+  let summary = "An unlimited length signed integer type.  Not representable in hardware.";
   let parameters = (ins);
   let genStorageClass = true;
 }
 
-def ListImpl : FIRRTLImplType<"List", [], "circt::firrtl::FIRRTLType"> {
-  let summary = [{
-    A typed property list of any length.  Not representable in hardware.
-  }];
+def ListImpl : PropImplType<"List"> {
+  let summary = "A typed property list of any length.  Not representable in hardware.";
   let parameters = (ins TypeParameter<"circt::firrtl::PropertyType", "element type">:$elementType);
   let genStorageClass = true;
   let genAccessors = true;
 }
 
-def MapImpl : FIRRTLImplType<"Map", [], "circt::firrtl::FIRRTLType"> {
-  let summary = [{
-    A typed map of properties.  Not representable in hardware.
-  }];
+def MapImpl : PropImplType<"Map"> {
+  let summary = "A typed map of properties.  Not representable in hardware.";
   let parameters = (ins TypeParameter<"circt::firrtl::PropertyType", "key type">:$keyType,
                     TypeParameter<"circt::firrtl::PropertyType", "value type">:$valueType);
   let genStorageClass = true;
   let genAccessors = true;
 }
 
-def PathImpl : FIRRTLImplType<"Path", [], "circt::firrtl::FIRRTLType"> {
-  let summary = [{
-    A path to a hardware entity.  Not representable in hardware.
-  }];
+def PathImpl : PropImplType<"Path"> {
+  let summary = "A path to a hardware entity.  Not representable in hardware.";
   let parameters = (ins);
   let genStorageClass = true;
   let genAccessors = true;
+}
+
+def BoolImpl : PropImplType<"Bool"> {
+  let summary = "A boolean property.  Not representable in hardware.";
+  let parameters = (ins);
+  let genStorageClass = true;
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLTYPESIMPL_TD

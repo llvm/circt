@@ -4596,7 +4596,6 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
 
   ps << PP::nbsp << PPExtString(getSymOpName(op)) << " (";
 
-  auto instPortInfo = op.getPortList();
   auto modPortInfo =
       cast<PortList>(op.getReferencedModule(&state.symbolCache)).getPortList();
   // Get the max port name length so we can align the '('.
@@ -4614,7 +4613,9 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   bool isFirst = true; // True until we print a port.
   bool isZeroWidth = false;
 
-  for (size_t portNum = 0, portEnd = instPortInfo.size(); portNum < portEnd;
+  auto containingModule = cast<HWModuleOp>(emitter.currentModuleOp);
+  auto containingPortList = containingModule.getPortList();
+  for (size_t portNum = 0, portEnd = modPortInfo.size(); portNum < portEnd;
        ++portNum) {
     auto &modPort = modPortInfo.at(portNum);
     isZeroWidth = isZeroBitType(modPort.type);
@@ -4626,7 +4627,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
       bool shouldPrintComma = true;
       if (isZeroWidth) {
         shouldPrintComma = false;
-        for (size_t i = portNum + 1, e = instPortInfo.size(); i != e; ++i)
+        for (size_t i = portNum + 1, e = modPortInfo.size(); i != e; ++i)
           if (!isZeroBitType(modPortInfo.at(i).type)) {
             shouldPrintComma = true;
             break;
@@ -4679,9 +4680,8 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
           // Keep this synchronized with countStatements() and
           // visitStmt(OutputOp).
           size_t outputPortNo = portVal.getUses().begin()->getOperandNumber();
-          auto containingModule = cast<HWModuleOp>(emitter.currentModuleOp);
           ps << PPExtString(getPortVerilogName(
-              containingModule, containingModule.getOutputPort(outputPortNo)));
+              containingModule, containingPortList.atOutput(outputPortNo)));
         } else {
           portVal = getWireForValue(portVal);
           emitExpression(portVal, ops);
@@ -5148,6 +5148,7 @@ void ModuleEmitter::emitBind(BindOp op) {
   InstanceOp inst = op.getReferencedInstance(&state.symbolCache);
 
   HWModuleOp parentMod = inst->getParentOfType<hw::HWModuleOp>();
+  auto parentPortList = parentMod.getPortList();
   auto parentVerilogName = getVerilogModuleNameAttr(parentMod);
 
   Operation *childMod = inst.getReferencedModule(&state.symbolCache);
@@ -5220,7 +5221,7 @@ void ModuleEmitter::emitBind(BindOp op) {
           // module, just specify that directly.
           size_t outputPortNo = portVal.getUses().begin()->getOperandNumber();
           ps << PPExtString(getPortVerilogName(
-              parentMod, parentMod.getOutputPort(outputPortNo)));
+              parentMod, parentPortList.atOutput(outputPortNo)));
         } else {
           portVal = portVal.getUsers().begin()->getOperand(0);
           ExprEmitter(*this, ops).emitExpression(portVal, LowestPrecedence);

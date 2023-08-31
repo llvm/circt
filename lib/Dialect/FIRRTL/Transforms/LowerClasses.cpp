@@ -11,9 +11,12 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
+#include "circt/Dialect/HW/InnerSymbolNamespace.h"
+#include "circt/Dialect/OM/OMAttributes.h"
 #include "circt/Dialect/OM/OMOps.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/IRMapping.h"
@@ -30,6 +33,24 @@ using namespace circt::firrtl;
 using namespace circt::om;
 
 namespace {
+
+/// Helper class which holds a hierarchical path op reference and a pointer to
+/// to the targeted operation.
+struct PathInfo {
+  PathInfo() = default;
+  PathInfo(Operation *op, FlatSymbolRefAttr symRef) : op(op), symRef(symRef) {
+    assert(op && "op must not be null");
+    assert(symRef && "symRef must not be null");
+  }
+
+  operator bool() const { return op != nullptr; }
+
+  Operation *op = nullptr;
+  FlatSymbolRefAttr symRef = nullptr;
+};
+
+/// Maps a FIRRTL path id to the lowered PathInfo.
+using PathInfoTable = DenseMap<DistinctAttr, PathInfo>;
 
 /// Helper class to capture details about a property.
 struct Property {
@@ -49,6 +70,8 @@ struct LowerClassesPass : public LowerClassesBase<LowerClassesPass> {
   void runOnOperation() override;
 
 private:
+  LogicalResult lowerPaths(PathInfoTable &pathInfoTable);
+
   // Predicate to check if a module-like needs a Class to be created.
   bool shouldCreateClass(FModuleLike moduleLike);
 
@@ -62,26 +85,142 @@ private:
   void updateInstances(Operation *op);
 
   // Convert to OM ops and types in Classes or Modules.
-  LogicalResult dialectConversion(Operation *op);
+  LogicalResult dialectConversion(Operation *op,
+                                  const PathInfoTable &pathInfoTable);
 };
 
 } // namespace
+
+/// This pass removes the OMIR tracker annotations from operations, and ensures
+/// that each thing that was targeted has a hierarchical path targeting it. It
+/// builds a table which maps the OMIR tracker annotation IDs to the
+/// corresponding hierarchical paths. We use this table to convert FIRRTL path
+/// ops to OM. FIRRTL paths refer to their target using a target ID, while OM
+/// paths refer to their target using hierarchical paths.
+LogicalResult LowerClassesPass::lowerPaths(PathInfoTable &pathInfoTable) {
+  auto *context = &getContext();
+  auto circuit = getOperation();
+  auto &symbolTable = getAnalysis<SymbolTable>();
+  hw::InnerSymbolNamespaceCollection namespaces;
+  HierPathCache cache(circuit, symbolTable);
+
+  auto processPathTrackers = [&](AnnoTarget target) -> LogicalResult {
+    auto error = false;
+    auto annotations = target.getAnnotations();
+    auto *op = target.getOp();
+    FModuleLike module;
+    annotations.removeAnnotations([&](Annotation anno) {
+      // If there has been an error, just skip this annotation.
+      if (error)
+        return false;
+
+      // We are looking for OMIR tracker annotations.
+      if (!anno.isClass("circt.tracker"))
+        return false;
+
+      // The token must have a valid ID.
+      auto id = anno.getMember<DistinctAttr>("id");
+      if (!id) {
+        op->emitError("circt.tracker annotation missing id field");
+        error = true;
+        return false;
+      }
+
+      // Get the fieldID.  If there is none, it is assumed to be 0.
+      uint64_t fieldID = anno.getFieldID();
+
+      // Attach an inner sym to the operation.
+      Attribute targetSym;
+      if (auto portTarget = target.dyn_cast<PortAnnoTarget>()) {
+        targetSym = getInnerRefTo(
+            {portTarget.getPortNo(), portTarget.getOp(), fieldID},
+            [&](FModuleLike module) -> hw::InnerSymbolNamespace & {
+              return namespaces[module];
+            });
+      } else if (auto module = dyn_cast<FModuleLike>(op)) {
+        assert(!fieldID && "field not valid for modules");
+        targetSym = FlatSymbolRefAttr::get(module.getModuleNameAttr());
+      } else {
+        targetSym = getInnerRefTo(
+            {target.getOp(), fieldID},
+            [&](FModuleLike module) -> hw::InnerSymbolNamespace & {
+              return namespaces[module];
+            });
+      }
+
+      // Create the hierarchical path.
+      SmallVector<Attribute> path;
+      if (auto hierName = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal")) {
+        auto hierPathOp =
+            dyn_cast<hw::HierPathOp>(symbolTable.lookup(hierName.getAttr()));
+        if (!hierPathOp) {
+          op->emitError("annotation does not point at a HierPathOp");
+          error = true;
+          return false;
+        }
+        // Copy the old path, dropping the module name.
+        auto oldPath = hierPathOp.getNamepath().getValue();
+        llvm::append_range(path, oldPath.drop_back());
+      }
+      path.push_back(targetSym);
+
+      // Create the HierPathOp.
+      auto pathAttr = ArrayAttr::get(context, path);
+      auto &pathInfo = pathInfoTable[id];
+      if (pathInfo) {
+        auto diag =
+            emitError(pathInfo.op->getLoc(), "duplicate identifier found");
+        diag.attachNote(op->getLoc()) << "other identifier here";
+        error = true;
+        return false;
+      }
+
+      // Record the path operation associated with the path op.
+      pathInfo = {op, cache.getRefFor(pathAttr)};
+
+      // Remove this annotation from the operation.
+      return true;
+    });
+
+    if (error)
+      return failure();
+    target.setAnnotations(annotations);
+    return success();
+  };
+
+  for (auto module : circuit.getOps<FModuleLike>()) {
+    // Process the module annotations.
+    if (failed(processPathTrackers(OpAnnoTarget(module))))
+      return failure();
+    // Process module port annotations.
+    for (unsigned i = 0, e = module.getNumPorts(); i < e; ++i)
+      if (failed(processPathTrackers(PortAnnoTarget(module, i))))
+        return failure();
+    // Process ops in the module body.
+    auto result = module.walk([&](hw::InnerSymbolOpInterface op) {
+      if (failed(processPathTrackers(OpAnnoTarget(op))))
+        return WalkResult::interrupt();
+      return WalkResult::advance();
+    });
+    if (result.wasInterrupted())
+      return failure();
+  }
+  return success();
+}
 
 /// Lower FIRRTL Class and Object ops to OM Class and Object ops
 void LowerClassesPass::runOnOperation() {
   MLIRContext *ctx = &getContext();
 
   // Get the CircuitOp.
-  auto circuits = getOperation().getOps<CircuitOp>();
-  auto count = std::distance(circuits.begin(), circuits.end());
-  if (count == 0)
+  CircuitOp circuit = getOperation();
+
+  // Rewrite all path annotations into inner symbol targets.
+  PathInfoTable pathInfoTable;
+  if (failed(lowerPaths(pathInfoTable))) {
+    signalPassFailure();
     return;
-  if (count > 1) {
-    getOperation().emitError("expected exactly one CircuitOp, but found ")
-        << std::distance(circuits.begin(), circuits.end());
-    return signalPassFailure();
   }
-  CircuitOp circuit = *circuits.begin();
 
   // Create new OM Class ops serially.
   SmallVector<ClassLoweringState> loweringState;
@@ -101,19 +240,19 @@ void LowerClassesPass::runOnOperation() {
 
   // Collect ops where Objects can be instantiated.
   SmallVector<Operation *> objectContainers;
-  for (auto op : circuit.getOps<FModuleOp>())
-    objectContainers.push_back(op);
-  for (auto op : getOperation().getOps<om::ClassOp>())
-    objectContainers.push_back(op);
+  for (auto &op : circuit.getOps())
+    if (isa<FModuleOp, om::ClassOp>(op))
+      objectContainers.push_back(&op);
 
   // Update Object creation ops in Classes or Modules in parallel.
   mlir::parallelForEach(ctx, objectContainers,
                         [this](auto *op) { updateInstances(op); });
 
   // Convert to OM ops and types in Classes or Modules in parallel.
-  if (failed(mlir::failableParallelForEach(
-          ctx, objectContainers,
-          [this](auto *op) { return dialectConversion(op); })))
+  if (failed(
+          mlir::failableParallelForEach(ctx, objectContainers, [&](auto *op) {
+            return dialectConversion(op, pathInfoTable);
+          })))
     return signalPassFailure();
 }
 
@@ -139,7 +278,7 @@ ClassLoweringState LowerClassesPass::createClass(FModuleLike moduleLike) {
     if (port.isInput() && isa<PropertyType>(port.type))
       formalParamNames.push_back(port.name);
 
-  OpBuilder builder = OpBuilder::atBlockEnd(getOperation().getBody(0));
+  OpBuilder builder = OpBuilder::atBlockEnd(getOperation().getBodyBlock());
 
   // Take the name from the FIRRTL Class or Module to create the OM Class name.
   StringRef className = moduleLike.getName();
@@ -291,6 +430,18 @@ struct FIntegerConstantOpConversion
   }
 };
 
+struct BoolConstantOpConversion : public OpConversionPattern<BoolConstantOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(BoolConstantOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<om::ConstantOp>(
+        op, rewriter.getBoolAttr(adaptor.getValue()));
+    return success();
+  }
+};
+
 struct StringConstantOpConversion
     : public OpConversionPattern<StringConstantOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -319,6 +470,81 @@ struct ListCreateOpConversion
                                                   adaptor.getElements());
     return success();
   }
+};
+
+struct MapCreateOpConversion : public OpConversionPattern<firrtl::MapCreateOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(firrtl::MapCreateOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto mapType = getTypeConverter()->convertType<om::MapType>(op.getType());
+    if (!mapType)
+      return failure();
+    auto keys = adaptor.getKeys();
+    auto values = adaptor.getValues();
+    SmallVector<Value> tuples;
+    for (auto [key, value] : llvm::zip(keys, values))
+      tuples.push_back(rewriter.create<om::TupleCreateOp>(
+          op.getLoc(), ArrayRef<Value>{key, value}));
+    rewriter.replaceOpWithNewOp<om::MapCreateOp>(op, mapType, tuples);
+    return success();
+  }
+};
+
+struct PathOpConversion : public OpConversionPattern<firrtl::PathOp> {
+
+  PathOpConversion(TypeConverter &typeConverter, MLIRContext *context,
+                   const PathInfoTable &pathInfoTable,
+                   PatternBenefit benefit = 1)
+      : OpConversionPattern(typeConverter, context, benefit),
+        pathInfoTable(pathInfoTable) {}
+
+  LogicalResult
+  matchAndRewrite(firrtl::PathOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto *context = op->getContext();
+    auto pathType = om::PathType::get(context);
+    auto pathInfo = pathInfoTable.lookup(op.getTarget());
+
+    // If the target was optimized away, then replace the path operation with
+    // a deleted path.
+    if (!pathInfo) {
+      if (op.getTargetKind() == firrtl::TargetKind::DontTouch)
+        return emitError(op.getLoc(), "DontTouch target was deleted");
+      auto pathAttr = om::PathAttr::get(StringAttr::get(context, "OMDeleted"));
+      rewriter.replaceOpWithNewOp<om::ConstantOp>(op, pathAttr);
+      return success();
+    }
+
+    auto symbol = pathInfo.symRef;
+
+    // Convert the target kind to an OMIR target.  Member references are updated
+    // to reflect the current kind of reference.
+    om::TargetKind targetKind;
+    switch (op.getTargetKind()) {
+    case firrtl::TargetKind::DontTouch:
+      targetKind = om::TargetKind::DontTouch;
+      break;
+    case firrtl::TargetKind::Reference:
+      targetKind = om::TargetKind::Reference;
+      break;
+    case firrtl::TargetKind::MemberInstance:
+    case firrtl::TargetKind::MemberReference:
+      if (isa<InstanceOp, FModuleLike>(pathInfo.op))
+        targetKind = om::TargetKind::MemberInstance;
+      else
+        targetKind = om::TargetKind::MemberReference;
+      break;
+    }
+
+    rewriter.replaceOpWithNewOp<om::PathOp>(
+        op, pathType, om::TargetKindAttr::get(op.getContext(), targetKind),
+        symbol);
+    return success();
+  }
+
+  const PathInfoTable &pathInfoTable;
 };
 
 struct ClassFieldOpConversion : public OpConversionPattern<ClassFieldOp> {
@@ -410,6 +636,12 @@ static void populateTypeConverter(TypeConverter &converter) {
     return om::StringType::get(type.getContext());
   });
 
+  // Convert FIRRTL PathType to OM PathType.
+  converter.addConversion([](om::PathType type) { return type; });
+  converter.addConversion([](firrtl::PathType type) {
+    return om::PathType::get(type.getContext());
+  });
+
   // Convert FIRRTL Class type to OM Class type.
   converter.addConversion([](om::ClassType type) { return type; });
   converter.addConversion([](firrtl::ClassType type) {
@@ -417,23 +649,54 @@ static void populateTypeConverter(TypeConverter &converter) {
   });
 
   // Convert FIRRTL List type to OM List type.
+  auto convertListType = [&converter](auto type) -> std::optional<mlir::Type> {
+    auto elementType = converter.convertType(type.getElementType());
+    if (!elementType)
+      return {};
+    return om::ListType::get(elementType);
+  };
+
   converter.addConversion(
-      [&converter](om::ListType type) -> std::optional<mlir::Type> {
+      [convertListType](om::ListType type) -> std::optional<mlir::Type> {
         // Convert any om.list<firrtl> -> om.list<om>
-        auto elementType = converter.convertType(type.getElementType());
-        if (!elementType)
-          return {};
-        return om::ListType::get(elementType);
+        return convertListType(type);
       });
 
   converter.addConversion(
-      [&converter](firrtl::ListType type) -> std::optional<mlir::Type> {
+      [convertListType](firrtl::ListType type) -> std::optional<mlir::Type> {
         // Convert any firrtl.list<firrtl> -> om.list<om>
-        auto elementType = converter.convertType(type.getElementType());
-        if (!elementType)
-          return {};
-        return om::ListType::get(elementType);
+        return convertListType(type);
       });
+
+  auto convertMapType = [&converter](auto type) -> std::optional<mlir::Type> {
+    auto keyType = converter.convertType(type.getKeyType());
+    // Reject key types that are not string or integer.
+    if (!isa_and_nonnull<om::StringType, mlir::IntegerType>(keyType))
+      return {};
+
+    auto valueType = converter.convertType(type.getValueType());
+    if (!valueType)
+      return {};
+
+    return om::MapType::get(keyType, valueType);
+  };
+
+  // Convert FIRRTL Map type to OM Map type.
+  converter.addConversion(
+      [convertMapType](om::MapType type) -> std::optional<mlir::Type> {
+        // Convert any om.map<firrtl, firrtl> -> om.map<om, om>
+        return convertMapType(type);
+      });
+
+  converter.addConversion(
+      [convertMapType](firrtl::MapType type) -> std::optional<mlir::Type> {
+        // Convert any firrtl.map<firrtl, firrtl> -> om.map<om, om>
+        return convertMapType(type);
+      });
+
+  // Convert FIRRTL Bool type to OM
+  converter.addConversion(
+      [](BoolType type) { return IntegerType::get(type.getContext(), 1); });
 
   // Add a target materialization to fold away unrealized conversion casts.
   converter.addTargetMaterialization(
@@ -444,16 +707,23 @@ static void populateTypeConverter(TypeConverter &converter) {
 }
 
 static void populateRewritePatterns(RewritePatternSet &patterns,
-                                    TypeConverter &converter) {
+                                    TypeConverter &converter,
+                                    const PathInfoTable &pathInfoTable) {
   patterns.add<FIntegerConstantOpConversion>(converter, patterns.getContext());
   patterns.add<StringConstantOpConversion>(converter, patterns.getContext());
+  patterns.add<PathOpConversion>(converter, patterns.getContext(),
+                                 pathInfoTable);
   patterns.add<ClassFieldOpConversion>(converter, patterns.getContext());
   patterns.add<ClassOpSignatureConversion>(converter, patterns.getContext());
   patterns.add<ListCreateOpConversion>(converter, patterns.getContext());
+  patterns.add<MapCreateOpConversion>(converter, patterns.getContext());
+  patterns.add<BoolConstantOpConversion>(converter, patterns.getContext());
 }
 
 // Convert to OM ops and types in Classes or Modules.
-LogicalResult LowerClassesPass::dialectConversion(Operation *op) {
+LogicalResult
+LowerClassesPass::dialectConversion(Operation *op,
+                                    const PathInfoTable &pathInfoTable) {
   ConversionTarget target(getContext());
   populateConversionTarget(target);
 
@@ -461,7 +731,7 @@ LogicalResult LowerClassesPass::dialectConversion(Operation *op) {
   populateTypeConverter(typeConverter);
 
   RewritePatternSet patterns(&getContext());
-  populateRewritePatterns(patterns, typeConverter);
+  populateRewritePatterns(patterns, typeConverter, pathInfoTable);
 
   return applyPartialConversion(op, target, std::move(patterns));
 }
