@@ -91,7 +91,7 @@ set(ESI_RUNTIME_SRCS
   runtime/cpp/lib/Accelerator.cpp
   runtime/cpp/lib/backends/Cosim.cpp
   runtime/cpp/tools/esiquery.cpp
-  runtime/python/esi/main.cpp
+  runtime/python/esi/esiaccel.cpp
 )
 
 # A function which copies a file from the source tree to the build tree.
@@ -127,4 +127,8 @@ add_subdirectory(cosim)
 
 # We include this directory as collateral, but we also need to have a compiled
 # version for testing.
-add_subdirectory(runtime)
+option(ESI_RUNTIME "Build and test the ESI runtime" OFF)
+if (ESI_RUNTIME)
+  message(STATUS "Enabling ESI runtime build and testing")
+  add_subdirectory(runtime)
+endif()

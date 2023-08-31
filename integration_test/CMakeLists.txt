@@ -27,6 +27,13 @@ if (TARGET EsiCosimDpiServer)
 endif()
 get_target_property(ESI_COLLATERAL_PATH esi-collateral BINARY_DIR)
 
+if (ESI_RUNTIME)
+  list(APPEND CIRCT_INTEGRATION_TEST_DEPENDS
+    esiaccel
+    ESIRuntime
+  )
+endif()
+
 # Enable circt-lec tests if it is built.
 if(CIRCT_LEC_ENABLED)
   list(APPEND CIRCT_INTEGRATION_TEST_DEPENDS circt-lec)
