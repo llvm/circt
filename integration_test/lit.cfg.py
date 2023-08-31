@@ -180,6 +180,10 @@ if config.esi_cosim_path != "":
       ('%ESIINC%', f'{config.circt_include_dir}/circt/Dialect/ESI/'))
   config.substitutions.append(('%ESICOSIM%', f'{config.esi_cosim_path}'))
 
+# Enable ESI runtime tests.
+if config.esi_runtime:
+  config.available_features.add('esi-runtime')
+
 # Enable ESI's Capnp tests if they're supported.
 if config.esi_capnp != "":
   config.available_features.add('capnp')
