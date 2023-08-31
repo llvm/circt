@@ -69,7 +69,7 @@ config.test_exec_root = os.path.join(config.circt_obj_root, 'integration_test')
 llvm_config.with_environment('PATH', config.llvm_tools_dir, append_path=True)
 # Substitute '%l' with the path to the build lib dir.
 
-# Tweak the PYTHONPATH to include the lib dir.
+# Tweak the PYTHONPATH to include the lib dir. Some pybind11 modules live there.
 llvm_config.with_environment('PYTHONPATH', [config.llvm_lib_dir],
                              append_path=True)
 

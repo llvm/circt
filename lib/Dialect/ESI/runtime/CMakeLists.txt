@@ -6,9 +6,16 @@
 ##
 ##===----------------------------------------------------------------------===//
 ##
-## Compile definitions for the ESI runtime. Distributed with an ESI compiler and
-## becomes part of the ESI collateral.
+## Compile definitions for the ESI runtime. Distributed with an ESI compiler as
+## part of the ESI collateral. For now, we require that users compile this
+## themselves since it needs to be compiled for each Python version and OS then
+## packed together. Eventually, we'll just be distributing (lots of) binaries.
 ##
+## We require Python development package and pybind11 to compile the Python API.
+##
+## ESI cosimulation requires Cap'nProto as we use it for our RPC with the
+## simulator. It must be fetched separately, but is optional if you don't want
+## cosimulation.
 ##
 ## DO NOT EDIT!
 ## This file is distributed as part of an ESI package. The source for this file
@@ -29,7 +36,7 @@ set(ESIRuntimeSources
 )
 set(ESIRuntimeLinkLibraries)
 
-# If capnp hasn't been explicitly disabled, find it.
+# If Cap'nProto hasn't been explicitly disabled, find it.
 option(CAPNP_DISABLE "Disable Cap'nProto (needed for cosimulation).")
 if (CAPNP_DISABLE)
   message (STATUS "Disabling Cap'nProto (needed for cosimulation).")
@@ -45,6 +52,7 @@ elseif(NOT CapnProto_FOUND) # Check if someone else already imported.
   endif()
 endif()
 
+# If Cap'nProto has been found, generate the headers and definitions.
 if(CapnProto_FOUND)
   message(STATUS "Found Cap'nProto at ${CapnProto_DIR}.")
   set(CMAKE_INSTALL_RPATH ${capnp_LIBDIR})
@@ -77,35 +85,42 @@ if(CapnProto_FOUND)
   )
 endif()
 
+# The core API. For now, compile the backends into it directly.
+# TODO: make this a plugin architecture.
 add_library(ESIRuntime SHARED
   ${ESIRuntimeSources}
 )
 target_link_libraries(ESIRuntime PRIVATE ${ESIRuntimeLinkLibraries})
 
+# The esiquery tool is a simple wrapper around the SysInfo API.
 add_executable(esiquery
   cpp/tools/esiquery.cpp
 )
 target_link_libraries(esiquery PRIVATE ESIRuntime)
 
+# Pybind11 is used to wrap the ESIRuntime APIs.
 find_package(Python COMPONENTS Interpreter Development)
-if(pybind11_DIR)
-  message(STATUS "Using explicit pybind11 cmake directory: ${pybind11_DIR} (-Dpybind11_DIR to change)")
-else()
-  message(STATUS "Checking for pybind11 in python path...")
-  execute_process(
-    COMMAND "${Python_EXECUTABLE}"
-    -c "import pybind11;print(pybind11.get_cmake_dir(), end='')"
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    RESULT_VARIABLE STATUS
-    OUTPUT_VARIABLE PACKAGE_DIR
-    ERROR_QUIET)
-  if(NOT STATUS EQUAL "0")
+if(Python_FOUND)
+  if(pybind11_DIR)
+    message(STATUS "Using explicit pybind11 cmake directory: ${pybind11_DIR} (-Dpybind11_DIR to change)")
+  else()
+    message(STATUS "Checking for pybind11 in python path...")
+    execute_process(
+      COMMAND "${Python_EXECUTABLE}"
+      -c "import pybind11;print(pybind11.get_cmake_dir(), end='')"
+      WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+      RESULT_VARIABLE STATUS
+      OUTPUT_VARIABLE PACKAGE_DIR
+      ERROR_QUIET)
+    if(NOT STATUS EQUAL "0")
 
-    message(FATAL_ERROR "pybind11 not found (install via 'pip install pybind11' or set pybind11_DIR)")
+      message(FATAL_ERROR "pybind11 not found (install via 'pip install pybind11' or set pybind11_DIR)")
+    endif()
+    message(STATUS "found (${PACKAGE_DIR})")
+    set(pybind11_DIR "${PACKAGE_DIR}")
   endif()
-  message(STATUS "found (${PACKAGE_DIR})")
-  set(pybind11_DIR "${PACKAGE_DIR}")
 endif()
+
 
 find_package(pybind11 CONFIG REQUIRED)
 if (NOT pybind11_FOUND)

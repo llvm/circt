@@ -1,8 +1,19 @@
+//===- esiaccel.cpp - ESI runtime python bindings ---------------*- C++ -*-===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// Simply wrap the C++ API into a Python module called 'esiaccel'.
+//
+//===----------------------------------------------------------------------===//
+
 #include "esi/Accelerator.h"
 
 // pybind11 includes
 #include "pybind11/pybind11.h"
-#include "pybind11/stl.h"
 namespace py = pybind11;
 
 using namespace esi;
