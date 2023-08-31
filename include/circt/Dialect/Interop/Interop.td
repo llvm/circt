@@ -32,6 +32,10 @@ def InteropDialect : Dialect {
     solutions.
   }];
   let cppNamespace = "::circt::interop";
+
+  // Opt-out of properties for now, must migrate by LLVM 19.  #5273.
+  let usePropertiesForAttributes = 0;
+
 }
 
 //===----------------------------------------------------------------------===//
