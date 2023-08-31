@@ -166,6 +166,14 @@ circuit invalid_inst :
 
 ;// -----
 
+circuit class_inst :
+  class some_class :
+  module class_inst :
+    ; expected-error @below {{cannot create instance of class 'some_class', did you mean object?}}
+    inst xyz of some_class
+
+;// -----
+
 circuit MyParameterizedExtModule :
   extmodule MyParameterizedExtModule :
     parameter DEFAULT = 0
