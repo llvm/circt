@@ -8,6 +8,10 @@
 
 include(AddMLIRPython)
 
+# Some of the PyCDE CMake code which is only used in Capnp builds uses newer
+# CMake features.
+cmake_minimum_required(VERSION 3.21.0)
+
 add_compile_definitions("MLIR_PYTHON_PACKAGE_PREFIX=pycde.circt.")
 
 declare_mlir_python_sources(PyCDESources
