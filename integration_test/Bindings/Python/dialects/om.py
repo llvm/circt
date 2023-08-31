@@ -27,6 +27,9 @@ with Context() as ctx, Location.unknown():
       %list = om.constant #om.list<!om.string, ["X" : !om.string, "Y" : !om.string]> : !om.list<!om.string>
       om.class.field @list, %list : !om.list<!om.string>
 
+      %tuple = om.tuple_create %list, %c_14: !om.list<!om.string>, i64
+      om.class.field @tuple, %tuple : tuple<!om.list<!om.string>, i64>
+
       %c_15 = om.constant 15 : i64
       %1 = om.object @Child(%c_15) : (i64) -> !om.class.type<@Child>
       %list_child = om.list_create %0, %1: !om.class.type<@Child>
@@ -85,6 +88,15 @@ print(obj.field)
 print(obj.child.foo)
 # CHECK: ('Root', 'x')
 print(obj.reference)
+# CHECK: 14
+(fst, snd) = obj.tuple
+print(snd)
+
+try:
+  print(obj.tuple[3])
+except IndexError as e:
+  # CHECK: tuple index out of range
+  print(e)
 
 for (name, field) in obj:
   # CHECK: name: child, field: <circt.dialects.om.Object object

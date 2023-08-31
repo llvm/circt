@@ -1220,7 +1220,8 @@ class ModuleEmitter : public EmitterBase {
 public:
   explicit ModuleEmitter(VerilogEmitterState &state)
       : EmitterBase(state),
-        fieldNameResolver(FieldNameResolver(state.globalNames)) {}
+        fieldNameResolver(FieldNameResolver(state.globalNames, state.options)) {
+  }
   ~ModuleEmitter() {
     emitPendingNewlineIfNeeded();
     ps.eof();
@@ -3336,8 +3337,8 @@ class StmtEmitter : public EmitterBase,
 public:
   /// Create an ExprEmitter for the specified module emitter, and keeping track
   /// of any emitted expressions in the specified set.
-  StmtEmitter(ModuleEmitter &emitter)
-      : EmitterBase(emitter.state), emitter(emitter) {}
+  StmtEmitter(ModuleEmitter &emitter, const LoweringOptions &options)
+      : EmitterBase(emitter.state), emitter(emitter), options(options) {}
 
   void emitStatement(Operation *op);
   void emitStatementBlock(Block &body);
@@ -3469,6 +3470,8 @@ private:
   /// current statement scope.
   size_t maxDeclNameWidth = 0;
   size_t maxTypeWidth = 0;
+
+  const LoweringOptions &options;
 };
 
 } // end anonymous namespace
@@ -3988,7 +3991,8 @@ LogicalResult StmtEmitter::visitSV(GenerateCaseOp op) {
         });
 
       StringRef legalName =
-          legalizeName(caseNames[i].cast<StringAttr>().getValue(), nextGenIds);
+          legalizeName(caseNames[i].cast<StringAttr>().getValue(), nextGenIds,
+                       options.caseInsensitiveKeywords);
       ps << ": begin: " << PPExtString(legalName);
       setPendingNewline();
       emitStatementBlock(region.getBlocks().front());
@@ -5100,7 +5104,7 @@ void StmtEmitter::emitStatementBlock(Block &body) {
 // NOLINTEND(misc-no-recursion)
 
 void ModuleEmitter::emitStatement(Operation *op) {
-  StmtEmitter(*this).emitStatement(op);
+  StmtEmitter(*this, state.options).emitStatement(op);
 }
 
 /// Emit SystemVerilog attributes attached to the expression op as dialect
@@ -5528,7 +5532,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
   assert(state.pendingNewline);
 
   // Emit the body of the module.
-  StmtEmitter(*this).emitStatementBlock(*module.getBodyBlock());
+  StmtEmitter(*this, state.options).emitStatementBlock(*module.getBodyBlock());
   startStatement();
   ps << "endmodule" << PP::newline;
   setPendingNewline();
@@ -5552,7 +5556,7 @@ void ModuleEmitter::emitHWTestModule(HWTestModuleOp module) {
   assert(state.pendingNewline);
 
   // Emit the body of the module.
-  StmtEmitter(*this).emitStatementBlock(*module.getBodyBlock());
+  StmtEmitter(*this, state.options).emitStatementBlock(*module.getBodyBlock());
   startStatement();
   ps << "endmodule" << PP::newline;
   setPendingNewline();

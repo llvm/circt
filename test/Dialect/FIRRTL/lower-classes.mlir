@@ -131,3 +131,57 @@ firrtl.circuit "Component" {
     // CHECK-NEXT: om.class.field @out_objs, %[[OBJS]] : !om.map<!om.string, !om.class.type<@ClassTest>>
   }
 }
+
+// CHECK-LABEL: firrtl.circuit "PathModule"
+firrtl.circuit "PathModule" {
+  // CHECK: hw.hierpath private [[PORT_PATH:@.+]] [@PathModule::[[PORT_SYM:@.+]]]
+  // CHECK: hw.hierpath private [[WIRE_PATH:@.+]] [@PathModule::[[WIRE_SYM:@.+]]]
+  // CHECK: hw.hierpath private [[VECTOR_PATH:@.+]] [@PathModule::[[VECTOR_SYM:@.+]]]
+  // CHECK: hw.hierpath private [[INST_PATH:@.+]] [@PathModule::@child]
+  // CHECK: hw.hierpath private [[NONLOCAL_PATH:@.+]] [@PathModule::@child, @Child::[[NONLOCAL_SYM:@.+]]]
+
+  // CHECK: firrtl.module @PathModule(in %in: !firrtl.uint<1> sym [[PORT_SYM]]) {
+  firrtl.module @PathModule(in %in : !firrtl.uint<1> [{class = "circt.tracker", id = distinct[0]<>}]) {
+    // CHECK: %wire = firrtl.wire sym [[WIRE_SYM]] : !firrtl.uint<8>
+    %wire = firrtl.wire {annotations = [{class = "circt.tracker", id = distinct[1]<>}]} : !firrtl.uint<8>
+    // CHECK: %vector = firrtl.wire sym [<[[VECTOR_SYM]],1,public>] : !firrtl.vector<uint<8>, 1>
+    %vector = firrtl.wire {annotations = [{circt.fieldID = 1 : i32, class = "circt.tracker", id = distinct[2]<>}]} : !firrtl.vector<uint<8>, 1>
+    // CHECK: firrtl.instance child sym @child @Child()
+    firrtl.instance child sym @child {annotations = [{class = "circt.tracker", id = distinct[4]<>}]} @Child()
+  }
+  hw.hierpath @NonLocal [@PathModule::@child, @Child]
+  // CHECK: firrtl.module @Child() {
+  firrtl.module @Child() {
+    // CHECK: %non_local = firrtl.wire sym [[NONLOCAL_SYM]] : !firrtl.uint<8>
+    %non_local = firrtl.wire {annotations = [{circt.nonlocal = @NonLocal, class = "circt.tracker", id = distinct[3]<>}]} : !firrtl.uint<8>
+  }
+  // CHECK: om.class @PathTest
+  firrtl.class @PathTest() {
+    
+    // CHECK: om.path reference [[PORT_PATH]]
+    %port_path = firrtl.path reference distinct[0]<>
+
+    // CHECK: om.constant #om.path<"OMDeleted"> : !om.path
+    %deleted_path = firrtl.path reference distinct[99]<>
+
+    // CHECK: om.path reference [[WIRE_PATH]]
+    // CHECK: om.path member_reference [[WIRE_PATH]]
+    // CHECK: om.path member_reference [[WIRE_PATH]]
+    // CHECK: om.path dont_touch [[WIRE_PATH]]
+    %wire_reference = firrtl.path reference distinct[1]<>
+    %wire_member_instance = firrtl.path member_instance distinct[1]<>
+    %wire_member_reference = firrtl.path member_reference distinct[1]<>
+    %wire_dont_touch = firrtl.path dont_touch distinct[1]<>
+
+    // CHECK: om.path reference [[VECTOR_PATH]]
+    %vector_reference = firrtl.path reference distinct[2]<>
+
+    // CHECK: om.path reference [[NONLOCAL_PATH]]
+    %non_local_path = firrtl.path reference distinct[3]<>
+
+    // CHECK: om.path member_instance [[INST_PATH]]
+    // CHECK: om.path member_instance [[INST_PATH]]
+    %instance_member_instance = firrtl.path member_instance distinct[4]<>
+    %instance_member_reference = firrtl.path member_reference distinct[4]<>
+  }
+}

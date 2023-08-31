@@ -1973,6 +1973,12 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     return emitOpError("invalid symbol reference");
   }
 
+  // Check this is not a class.
+  if (isa<ClassOp /* ClassLike */>(referencedModule))
+    return emitOpError("must instantiate a module not a class")
+               .attachNote(referencedModule.getLoc())
+           << "class declared here";
+
   // Check that this instance doesn't recursively instantiate its wrapping
   // module.
   if (referencedModule == module) {
@@ -5442,11 +5448,8 @@ LogicalResult RWProbeOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
 
   auto checkFinalType = [&](auto type, Location loc) -> LogicalResult {
     // Determine final type.
-    mlir::Type fType = type;
-    if (auto fieldIDType = type_dyn_cast<hw::FieldIDTypeInterface>(type))
-      fType = fieldIDType.getFinalTypeByFieldID(target.getField());
-    else
-      assert(target.getField() == 0);
+    mlir::Type fType =
+        hw::FieldIdImpl::getFinalTypeByFieldID(type, target.getField());
     // Check.
     auto baseType = type_dyn_cast<FIRRTLBaseType>(fType);
     if (!baseType || baseType.getPassiveType() != getType().getType()) {

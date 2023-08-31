@@ -1408,9 +1408,8 @@ std::optional<TypeSum> GrandCentralPass::computeField(
             auto value = fieldRef.getValue();
             auto fieldID = fieldRef.getFieldID();
             auto tpe = firrtl::type_cast<FIRRTLBaseType>(
-                value.getType()
-                    .cast<circt::hw::FieldIDTypeInterface>()
-                    .getFinalTypeByFieldID(fieldID));
+                hw::FieldIdImpl::getFinalTypeByFieldID(value.getType(),
+                                                       fieldID));
             if (!tpe.isGround()) {
               value.getDefiningOp()->emitOpError()
                   << "cannot be added to interface with id '"

@@ -17,6 +17,9 @@ def VerifDialect : Dialect {
   // See `docs/Dialect/Verif.md` for detailed dialect documentation.
   let cppNamespace = "circt::verif";
   let hasConstantMaterializer = 1;
+
+  // This will be the default after next LLVM bump.
+  let usePropertiesForAttributes = 1;
 }
 
 #endif // CIRCT_DIALECT_VERIF_VERIFDIALECT_TD
