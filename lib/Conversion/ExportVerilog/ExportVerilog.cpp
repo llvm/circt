@@ -4619,11 +4619,13 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
 
   auto containingModule = cast<HWModuleOp>(emitter.currentModuleOp);
   auto containingPortList = containingModule.getPortList();
+  SmallVector<Value> instPortValues(modPortInfo.size());
+  op.getValues(instPortValues, modPortInfo);
   for (size_t portNum = 0, portEnd = modPortInfo.size(); portNum < portEnd;
        ++portNum) {
     auto &modPort = modPortInfo.at(portNum);
     isZeroWidth = isZeroBitType(modPort.type);
-    Value portVal = op.getValue(portNum, modPortInfo);
+    Value portVal = instPortValues[portNum];
 
     // Decide if we should print a comma.  We can't do this if we're the first
     // port or if all the subsequent ports are zero width.
@@ -5175,10 +5177,12 @@ void ModuleEmitter::emitBind(BindOp op) {
       maxNameLength = std::max(maxNameLength, elt.getName().size());
     }
 
+    SmallVector<Value> instPortValues(childPortInfo.size());
+    inst.getValues(instPortValues, childPortInfo);
     // Emit the argument and result ports.
     for (auto [idx, elt] : llvm::enumerate(childPortInfo)) {
       // Figure out which value we are emitting.
-      Value portVal = inst.getValue(idx, childPortInfo);
+      Value portVal = instPortValues[idx];
       bool isZeroWidth = isZeroBitType(elt.type);
 
       // Decide if we should print a comma.  We can't do this if we're the

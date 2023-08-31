@@ -14,7 +14,6 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/CustomDirectiveImpl.h"
 #include "circt/Dialect/HW/HWAttributes.h"
-#include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/HW/HWVisitors.h"
 #include "circt/Dialect/HW/InstanceImplementation.h"
@@ -1732,21 +1731,17 @@ size_t InstanceOp::getPortIdForOutputId(size_t idx) {
   return idx + getNumInputPorts();
 }
 
-Value InstanceOp::getValue(size_t idx) {
-  auto mpi = getPortList();
-  return getValue(idx, mpi);
-}
-
-Value InstanceOp::getValue(size_t idx, ModulePortInfo &mpi) {
-  size_t inputPort = 0, outputPort = 0;
-  for (size_t x = 0; x < idx; ++x)
-    if (mpi.at(x).isOutput())
-      ++outputPort;
+void InstanceOp::getValues(SmallVectorImpl<Value> &values,
+                           const ModulePortInfo &mpi) {
+  size_t inputPort = 0, resultPort = 0;
+  values.resize(mpi.size());
+  auto results = getResults();
+  auto inputs = getInputs();
+  for (auto [idx, port] : llvm::enumerate(mpi))
+    if (mpi.at(idx).isOutput())
+      values[idx] = results[resultPort++];
     else
-      ++inputPort;
-  if (mpi.at(idx).isOutput())
-    return getResults()[outputPort];
-  return getInputs()[inputPort];
+      values[idx] = inputs[inputPort++];
 }
 
 //===----------------------------------------------------------------------===//
