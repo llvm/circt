@@ -113,19 +113,18 @@ if(Python_FOUND)
       OUTPUT_VARIABLE PACKAGE_DIR
       ERROR_QUIET)
     if(NOT STATUS EQUAL "0")
-
       message(FATAL_ERROR "pybind11 not found (install via 'pip install pybind11' or set pybind11_DIR)")
     endif()
     message(STATUS "found (${PACKAGE_DIR})")
     set(pybind11_DIR "${PACKAGE_DIR}")
   endif()
-endif()
 
-
-find_package(pybind11 CONFIG REQUIRED)
-if (NOT pybind11_FOUND)
-  message (STATUS "Could not find pybind11. Disabling Python API.")
-else()
-  pybind11_add_module(esiaccel python/esi/esiaccel.cpp)
-  target_link_libraries(esiaccel PRIVATE ESIRuntime)
+  # Now, find pybind11.
+  find_package(pybind11 CONFIG)
+  if (NOT pybind11_FOUND)
+    message (STATUS "Could not find pybind11. Disabling Python API.")
+  else()
+    pybind11_add_module(esiaccel python/esi/esiaccel.cpp)
+    target_link_libraries(esiaccel PRIVATE ESIRuntime)
+  endif()
 endif()
