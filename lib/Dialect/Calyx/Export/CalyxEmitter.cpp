@@ -368,7 +368,7 @@ private:
   std::string getAttributes(Operation *op, bool atFormat,
                             DictionaryAttr attributes = nullptr) {
     bool isPort = attributes != nullptr;
-    bool at_least_one = false;
+    bool atLeastOne = false;
 
     if (!isPort)
       attributes = op->getAttrDictionary();
@@ -383,12 +383,12 @@ private:
       // If the output
       if (auto out = getAttribute(op, attr, isPort, atFormat); !out.empty()) {
         buf << out;
-        at_least_one = true;
+        atLeastOne = true;
         buf << (atFormat ? space() : comma());
       }
     }
 
-    if (at_least_one) {
+    if (atLeastOne) {
       auto out = buf.str();
       // Remove the last character which is an extra space or comma.
       out.pop_back();
