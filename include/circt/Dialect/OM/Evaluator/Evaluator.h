@@ -40,7 +40,7 @@ using ObjectFields = SmallDenseMap<StringAttr, EvaluatorValuePtr>;
 /// appropriate reference count.
 struct EvaluatorValue : std::enable_shared_from_this<EvaluatorValue> {
   // Implement LLVM RTTI.
-  enum class Kind { Attr, Object, List };
+  enum class Kind { Attr, Object, List, Tuple };
   EvaluatorValue(Kind kind) : kind(kind) {}
   Kind getKind() const { return kind; }
 
@@ -114,6 +114,28 @@ private:
   llvm::SmallDenseMap<StringAttr, EvaluatorValuePtr> fields;
 };
 
+/// Tuple values.
+struct TupleValue : EvaluatorValue {
+  using TupleElements = llvm::SmallVector<EvaluatorValuePtr>;
+  TupleValue(TupleType type, TupleElements tupleElements)
+      : EvaluatorValue(Kind::Tuple), type(type),
+        elements(std::move(tupleElements)) {}
+
+  /// Implement LLVM RTTI.
+  static bool classof(const EvaluatorValue *e) {
+    return e->getKind() == Kind::Tuple;
+  }
+
+  /// Return the type of the value, which is a TupleType.
+  TupleType getType() const { return type; }
+
+  const TupleElements &getElements() const { return elements; }
+
+private:
+  TupleType type;
+  TupleElements elements;
+};
+
 } // namespace evaluator
 
 using Object = evaluator::ObjectValue;
@@ -156,6 +178,11 @@ private:
                       ArrayRef<EvaluatorValuePtr> actualParams);
   FailureOr<EvaluatorValuePtr>
   evaluateListCreate(ListCreateOp op, ArrayRef<EvaluatorValuePtr> actualParams);
+  FailureOr<EvaluatorValuePtr>
+  evaluateTupleCreate(TupleCreateOp op,
+                      ArrayRef<EvaluatorValuePtr> actualParams);
+  FailureOr<EvaluatorValuePtr>
+  evaluateTupleGet(TupleGetOp op, ArrayRef<EvaluatorValuePtr> actualParams);
 
   /// The symbol table for the IR module the Evaluator was constructed with.
   /// Used to look up class definitions.

@@ -21,10 +21,11 @@ using namespace mlir::python::adaptors;
 
 namespace {
 
-struct Object;
 struct List;
+struct Object;
+struct Tuple;
 
-using PythonValue = std::variant<MlirAttribute, Object, List>;
+using PythonValue = std::variant<MlirAttribute, Object, List, Tuple>;
 
 /// Map an opaque OMEvaluatorValue into a python value.
 PythonValue omEvaluatorValueToPythonValue(OMEvaluatorValue result);
@@ -37,6 +38,21 @@ struct List {
 
   /// Return the number of elements.
   intptr_t getNumElements() { return omEvaluatorListGetNumElements(value); }
+
+  PythonValue getElement(intptr_t i);
+  OMEvaluatorValue getValue() const { return value; }
+
+private:
+  // The underlying CAPI value.
+  OMEvaluatorValue value;
+};
+
+struct Tuple {
+  // Instantiate a Tuple with a reference to the underlying OMEvaluatorValue.
+  Tuple(OMEvaluatorValue value) : value(value) {}
+
+  /// Return the number of elements.
+  intptr_t getNumElements() { return omEvaluatorTupleGetNumElements(value); }
 
   PythonValue getElement(intptr_t i);
   OMEvaluatorValue getValue() const { return value; }
@@ -183,6 +199,13 @@ private:
   intptr_t nextIndex = 0;
 };
 
+PythonValue Tuple::getElement(intptr_t i) {
+  if (i < 0 || i >= omEvaluatorTupleGetNumElements(value))
+    throw std::out_of_range("tuple index out of range");
+
+  return omEvaluatorValueToPythonValue(omEvaluatorTupleGetElement(value, i));
+}
+
 PythonValue omEvaluatorValueToPythonValue(OMEvaluatorValue result) {
   // If the result is null, something failed. Diagnostic handling is
   // implemented in pure Python, so nothing to do here besides throwing an
@@ -198,6 +221,10 @@ PythonValue omEvaluatorValueToPythonValue(OMEvaluatorValue result) {
   if (omEvaluatorValueIsAList(result))
     return List(result);
 
+  // If the field was a tuple, return a new Tuple.
+  if (omEvaluatorValueIsATuple(result))
+    return Tuple(result);
+
   // If the field was a primitive, return the Attribute.
   assert(omEvaluatorValueIsAPrimitive(result));
   return omEvaluatorValueGetPrimitive(result);
@@ -209,6 +236,9 @@ OMEvaluatorValue pythonValueToOMEvaluatorValue(PythonValue result) {
 
   if (auto *list = std::get_if<List>(&result))
     return list->getValue();
+
+  if (auto *tuple = std::get_if<Tuple>(&result))
+    return tuple->getValue();
 
   return std::get<Object>(result).getValue();
 }
@@ -232,6 +262,11 @@ void circt::python::populateDialectOMSubmodule(py::module &m) {
       .def(py::init<List>(), py::arg("list"))
       .def("__getitem__", &List::getElement)
       .def("__len__", &List::getNumElements);
+
+  py::class_<Tuple>(m, "Tuple")
+      .def(py::init<Tuple>(), py::arg("tuple"))
+      .def("__getitem__", &Tuple::getElement)
+      .def("__len__", &Tuple::getNumElements);
 
   // Add the Object class definition.
   py::class_<Object>(m, "Object")
