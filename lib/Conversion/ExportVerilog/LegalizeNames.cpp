@@ -118,6 +118,9 @@ private:
 
   GlobalNameResolver(const GlobalNameResolver &) = delete;
   void operator=(const GlobalNameResolver &) = delete;
+
+  // Handle to lowering options.
+  const LoweringOptions &options;
 };
 } // namespace ExportVerilog
 } // namespace circt
@@ -127,7 +130,7 @@ static void legalizeModuleLocalNames(HWModuleOp module,
                                      const LoweringOptions &options,
                                      const GlobalNameTable &globalNameTable) {
   // A resolver for a local name collison.
-  NameCollisionResolver nameResolver;
+  NameCollisionResolver nameResolver(options);
   // Register names used by parameters.
   for (auto param : module.getParameters())
     nameResolver.insertUsedName(globalNameTable.getParameterVerilogName(
@@ -199,7 +202,8 @@ static void legalizeModuleLocalNames(HWModuleOp module,
 /// Construct a GlobalNameResolver and do the initial scan to populate and
 /// unique the module/interfaces and port/parameter names.
 GlobalNameResolver::GlobalNameResolver(mlir::ModuleOp topLevel,
-                                       const LoweringOptions &options) {
+                                       const LoweringOptions &options)
+    : globalNameResolver(options), options(options) {
   // Register the names of external modules which we cannot rename. This has to
   // occur in a first pass separate from the modules and interfaces which we are
   // actually allowed to rename, in order to ensure that we don't accidentally
@@ -270,7 +274,7 @@ void GlobalNameResolver::legalizeModuleNames(HWModuleOp module) {
   if (newName != oldName)
     module->setAttr("verilogName", StringAttr::get(ctxt, newName));
 
-  NameCollisionResolver nameResolver;
+  NameCollisionResolver nameResolver(options);
   // Legalize the parameter names.
   for (auto param : module.getParameters()) {
     auto paramAttr = param.cast<ParamDeclAttr>();
@@ -287,7 +291,7 @@ void GlobalNameResolver::legalizeInterfaceNames(InterfaceOp interface) {
   if (newName != interface.getName())
     interface->setAttr(verilogNameAttr, StringAttr::get(ctxt, newName));
 
-  NameCollisionResolver localNames;
+  NameCollisionResolver localNames(options);
   // Rename signals and modports.
   for (auto &op : *interface.getBodyBlock()) {
     if (isa<InterfaceSignalOp, InterfaceModportOp>(op)) {
