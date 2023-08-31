@@ -48,7 +48,7 @@ struct LoweringOptionsOption
                 "locationInfoStyle={plain,wrapInAtSquareBracket,none}, "
                 "disallowPortDeclSharing, printDebugInfo, "
                 "disallowExpressionInliningInPorts, disallowMuxInlining, "
-                "emitWireInPort, emitBindComments"),
+                "emitWireInPort, emitBindComments, caseInsensitiveKeywords"),
             llvm::cl::cat(cat), llvm::cl::value_desc("option")} {}
 };
 

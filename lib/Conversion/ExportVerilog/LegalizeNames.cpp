@@ -31,7 +31,8 @@ using namespace ExportVerilog;
 /// Given a name that may have collisions or invalid symbols, return a
 /// replacement name to use, or null if the original name was ok.
 StringRef NameCollisionResolver::getLegalName(StringRef originalName) {
-  return legalizeName(originalName, nextGeneratedNameIDs);
+  return legalizeName(originalName, nextGeneratedNameIDs,
+                      options.caseInsensitiveKeywords);
 }
 
 //===----------------------------------------------------------------------===//
@@ -50,8 +51,9 @@ StringAttr FieldNameResolver::getRenamedFieldName(StringAttr fieldName) {
     return it->second;
 
   // If a field name is not verilog name or used already, we have to rename it.
-  bool hasToBeRenamed = !sv::isNameValid(fieldName.getValue()) ||
-                        nextGeneratedNameIDs.count(fieldName.getValue());
+  bool hasToBeRenamed =
+      !sv::isNameValid(fieldName.getValue(), options.caseInsensitiveKeywords) ||
+      nextGeneratedNameIDs.contains(fieldName.getValue());
 
   if (!hasToBeRenamed) {
     setRenamedFieldName(fieldName, fieldName);
@@ -59,7 +61,8 @@ StringAttr FieldNameResolver::getRenamedFieldName(StringAttr fieldName) {
   }
 
   StringRef newFieldName =
-      sv::legalizeName(fieldName.getValue(), nextGeneratedNameIDs);
+      sv::legalizeName(fieldName.getValue(), nextGeneratedNameIDs,
+                       options.caseInsensitiveKeywords);
 
   auto newFieldNameAttr = StringAttr::get(fieldName.getContext(), newFieldName);
 
@@ -213,7 +216,7 @@ GlobalNameResolver::GlobalNameResolver(mlir::ModuleOp topLevel,
     // correspond to the same verilog module with different parameters.
     if (isa<HWModuleExternOp>(op) || isa<HWModuleGeneratedOp>(op)) {
       auto name = getVerilogModuleNameAttr(&op).getValue();
-      if (!sv::isNameValid(name))
+      if (!sv::isNameValid(name, options.caseInsensitiveKeywords))
         op.emitError("name \"")
             << name << "\" is not allowed in Verilog output";
       globalNameResolver.insertUsedName(name);

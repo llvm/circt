@@ -1,10 +1,10 @@
 // RUN: circt-opt %s -test-apply-lowering-options='options=emitBindComments' -export-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
 
 
-hw.testmodule @NewStyle (input %a : i3, 
-                         output %b : i3, 
-                         input %c : i4, 
-                         output %d : i4, 
+hw.testmodule @NewStyle (input %a : i3,
+                         output %b : i3,
+                         input %c : i4,
+                         output %d : i4,
                          inout %e : i64 {hw.exportPort = #hw<innerSym@symA>}) {
   hw.output %a, %c : i3, i4
  }

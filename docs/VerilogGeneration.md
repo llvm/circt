@@ -132,6 +132,10 @@ The current set of "lint warnings fix" Lowering Options is:
  * `disallowExpressionInliningInPorts` (default=`false`).  If true, every expression
    passed to an instance port is driven by a wire. Some lint tools dislike expressions
    being inlined into input ports so this option avoids such warnings.
+ * `caseInsensitiveKeywords` (default=`false`).  If true, then check for
+   collisions with Verilog keywords insensitively.  E.g., this will treat a
+   variable called `WIRE` as a collision with the keyword and rename it to
+   `WIRE_0` (or similar).  When set to `false`, then `WIRE` will not be renamed.
 
 ## Recommended `LoweringOptions` by Target
 

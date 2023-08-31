@@ -70,14 +70,17 @@ static llvm::ManagedStatic<StringSet<>, ReservedWordsCreator> reservedWords;
 /// keyword or any other name in the set \p recordNames. Use the int \p
 /// nextGeneratedNameID as a counter for suffix. Update the \p recordNames with
 /// the generated name and return the StringRef.
-StringRef circt::sv::resolveKeywordConflict(
-    StringRef origName, llvm::StringMap<size_t> &nextGeneratedNameIDs) {
+StringRef
+circt::sv::resolveKeywordConflict(StringRef origName,
+                                  llvm::StringMap<size_t> &nextGeneratedNameIDs,
+                                  bool caseInsensitiveKeywords) {
   // Get the list of reserved words we need to avoid.  We could prepopulate this
   // into the used words cache, but it is large and immutable, so we just query
   // it when needed.
 
   // Fast path: name is valid
-  if (!reservedWords->count(origName)) {
+  if (!reservedWords->contains(caseInsensitiveKeywords ? origName.lower()
+                                                       : origName)) {
     auto itAndInserted = nextGeneratedNameIDs.insert({origName, 0});
     if (itAndInserted.second)
       return itAndInserted.first->getKey();
@@ -116,17 +119,20 @@ static bool isValidVerilogCharacter(char ch) {
 /// Legalize the specified name for use in SV output. Auto-uniquifies the name
 /// through \c resolveKeywordConflict if required. If the name is empty, a
 /// unique temp name is created.
-StringRef
-circt::sv::legalizeName(StringRef name,
-                        llvm::StringMap<size_t> &nextGeneratedNameIDs) {
+StringRef circt::sv::legalizeName(StringRef name,
+                                  llvm::StringMap<size_t> &nextGeneratedNameIDs,
+                                  bool caseInsensitiveKeywords) {
+
   // Fastest path: empty name.
   if (name.empty())
-    return resolveKeywordConflict("_GEN", nextGeneratedNameIDs);
+    return resolveKeywordConflict("_GEN", nextGeneratedNameIDs,
+                                  caseInsensitiveKeywords);
 
   // Check that the name is valid as the semi-fast path.
   if (llvm::all_of(name, isValidVerilogCharacter) &&
       isValidVerilogCharacterFirst(name.front()))
-    return resolveKeywordConflict(name, nextGeneratedNameIDs);
+    return resolveKeywordConflict(name, nextGeneratedNameIDs,
+                                  caseInsensitiveKeywords);
 
   // The name consists of at least one invalid character.  Escape it.
   SmallString<16> tmpName;
@@ -144,14 +150,15 @@ circt::sv::legalizeName(StringRef name,
   }
 
   // Make sure the new valid name does not conflict with any existing names.
-  return resolveKeywordConflict(tmpName, nextGeneratedNameIDs);
+  return resolveKeywordConflict(tmpName, nextGeneratedNameIDs,
+                                caseInsensitiveKeywords);
 }
 
 /// Check if a name is valid for use in SV output by only containing characters
 /// allowed in SV identifiers.
 ///
 /// Call \c legalizeName() to obtain a legalized version of the name.
-bool circt::sv::isNameValid(StringRef name) {
+bool circt::sv::isNameValid(StringRef name, bool caseInsensitiveKeywords) {
   if (name.empty())
     return false;
   if (!isValidVerilogCharacterFirst(name.front()))
@@ -160,5 +167,7 @@ bool circt::sv::isNameValid(StringRef name) {
     if (!isValidVerilogCharacter(ch))
       return false;
   }
-  return reservedWords->count(name) == 0;
+
+  return reservedWords->contains(caseInsensitiveKeywords ? name.lower()
+                                                         : name) == 0;
 }

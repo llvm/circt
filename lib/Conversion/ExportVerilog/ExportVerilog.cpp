@@ -3991,7 +3991,8 @@ LogicalResult StmtEmitter::visitSV(GenerateCaseOp op) {
         });
 
       StringRef legalName =
-          legalizeName(caseNames[i].cast<StringAttr>().getValue(), nextGenIds);
+          legalizeName(caseNames[i].cast<StringAttr>().getValue(), nextGenIds,
+                       options.caseInsensitiveKeywords);
       ps << ": begin: " << PPExtString(legalName);
       setPendingNewline();
       emitStatementBlock(region.getBlocks().front());
