@@ -13,7 +13,8 @@
 // CHECK:   %[[PADDED_WIRE:.*]] = sv.wire  : !hw.inout<i8>
 // CHECK:   sv.assign %[[PADDED_WIRE]], %[[PADDED]] : i8
 // CHECK:   %[[PADDED_WIRE_READ:.*]] = sv.read_inout %[[PADDED_WIRE]] : !hw.inout<i8>
-// CHECK:   sv.assign %[[IN_WIRE]], %in0 : i4
+// CHECK:   %[[UNDEF:.*]] = sv.constantX : i4
+// CHECK:   sv.assign %[[IN_WIRE]], %[[UNDEF]] : i4
 // CHECK:   sv.assign %out0, %[[PADDED_WIRE_READ]] : i8
 // CHECK:   sv.assign %done, %true : i1
 // CHECK:   hw.output %0, %1 : i8, i1
@@ -22,8 +23,9 @@ module attributes {calyx.entrypoint = "main"} {
   calyx.component @main(%in0: i4, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%out0: i8, %done: i1 {done}) {
     %true = hw.constant true
     %std_pad.in, %std_pad.out = calyx.std_pad @std_pad : i4, i8
+    %ud.out = calyx.undefined @ud : i4
     calyx.wires {
-      calyx.assign %std_pad.in = %in0 : i4
+      calyx.assign %std_pad.in = %ud.out : i4
       calyx.assign %out0 = %std_pad.out : i8
       calyx.assign %done = %true : i1
     }
