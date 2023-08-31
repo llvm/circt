@@ -222,7 +222,7 @@ struct Emitter {
   }
 
   // Component emission
-  void emitComponent(ComponentInterface op, StringRef entryPointName);
+  void emitComponent(ComponentInterface op);
   void emitComponentPorts(ComponentInterface op);
 
   // HWModuleExtern emission
@@ -306,20 +306,6 @@ private:
     return op->emitOpError(message);
   }
 
-  bool canEmitAttribute(NamedAttribute attr) {
-    std::optional<StringRef> identifierOpt = getCalyxAttrIdentifier(attr);
-    // Verify this is a Calyx attribute
-    if (!identifierOpt.has_value())
-      return false;
-
-    StringRef identifier = *identifierOpt;
-    // Verify this attribute is supported for emission.
-    if (!isValidCalyxAttribute(identifier))
-      return false;
-
-    return true;
-  }
-
   /// Calyx attributes are emitted in one of the two following formats:
   /// (1)  @<attribute-name>(<attribute-value>), e.g. `@go`, `@bound(5)`.
   /// (2)  <"<attribute-name>"=<attribute-value>>, e.g. `<"static"=1>`.
@@ -331,7 +317,7 @@ private:
   /// By default, this generates format (1) but can generate format (2) if
   /// `at_format` is false.
   std::string getAttribute(Operation *op, NamedAttribute attr, bool isPort,
-                           bool at_format) {
+                           bool atFormat) {
 
     std::optional<StringRef> identifierOpt = getCalyxAttrIdentifier(attr);
     // Verify this is a Calyx attribute
@@ -353,14 +339,14 @@ private:
     if (attr.getValue().isa<UnitAttr>()) {
       assert(isBooleanAttribute &&
              "Non-boolean attributes must provide an integer value.");
-      if (!at_format) {
+      if (!atFormat) {
         buffer << quote() << identifier << quote() << equals() << "1";
       } else {
         buffer << addressSymbol() << identifier;
       }
     } else if (auto intAttr = attr.getValue().dyn_cast<IntegerAttr>()) {
       APInt value = intAttr.getValue();
-      if (!at_format) {
+      if (!atFormat) {
         buffer << quote() << identifier << quote() << equals() << value;
       } else {
         buffer << addressSymbol() << identifier;
@@ -379,7 +365,7 @@ private:
 
   /// Emits the attributes of a dictionary. If the `attributes` dictionary is
   /// not nullptr, we assume this is for a port.
-  std::string getAttributes(Operation *op, bool at_format,
+  std::string getAttributes(Operation *op, bool atFormat,
                             DictionaryAttr attributes = nullptr) {
     bool isPort = attributes != nullptr;
     bool at_least_one = false;
@@ -390,15 +376,15 @@ private:
     std::string calyxAttributes;
     llvm::raw_string_ostream buf(calyxAttributes);
 
-    if (!at_format)
+    if (!atFormat)
       buf << LAngleBracket();
 
     for (auto &attr : attributes) {
       // If the output
-      if (auto out = getAttribute(op, attr, isPort, at_format); out != "") {
+      if (auto out = getAttribute(op, attr, isPort, atFormat); !out.empty()) {
         buf << out;
         at_least_one = true;
-        buf << (at_format ? space() : comma());
+        buf << (atFormat ? space() : comma());
       }
     }
 
@@ -406,10 +392,11 @@ private:
       auto out = buf.str();
       // Remove the last character which is an extra space or comma.
       out.pop_back();
-      out.append(at_format ? space() : RAngleBracket());
+      out.append(atFormat ? space() : RAngleBracket());
       return out;
-    } else
-      return "";
+    }
+
+    return "";
   }
 
   /// Helper function for emitting a Calyx section. It emits the body in the
@@ -627,10 +614,9 @@ LogicalResult Emitter::finalize() { return failure(encounteredError); }
 
 /// Emit an entire program.
 void Emitter::emitModule(ModuleOp op) {
-  StringRef entryPointName = op->getAttrOfType<StringAttr>("calyx.entrypoint");
   for (auto &bodyOp : *op.getBody()) {
     if (auto componentOp = dyn_cast<ComponentInterface>(bodyOp))
-      emitComponent(componentOp, entryPointName);
+      emitComponent(componentOp);
     else if (auto hwModuleExternOp = dyn_cast<hw::HWModuleExternOp>(bodyOp))
       emitPrimitiveExtern(hwModuleExternOp);
     else
@@ -639,9 +625,8 @@ void Emitter::emitModule(ModuleOp op) {
 }
 
 /// Emit a component.
-void Emitter::emitComponent(ComponentInterface op, StringRef entryPointName) {
+void Emitter::emitComponent(ComponentInterface op) {
   std::string combinationalPrefix = op.isComb() ? "comb " : "";
-  auto name = op.getName();
 
   indent() << combinationalPrefix << "component " << op.getName()
            << getAttributes(op, false, nullptr);
