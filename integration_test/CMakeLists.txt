@@ -28,6 +28,7 @@ endif()
 get_target_property(ESI_COLLATERAL_PATH esi-collateral BINARY_DIR)
 
 # If the ESI runtime build and test is enabled, require those components.
+llvm_canonicalize_cmake_booleans(ESI_RUNTIME)
 if (ESI_RUNTIME)
   list(APPEND CIRCT_INTEGRATION_TEST_DEPENDS
     esiaccel

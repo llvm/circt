@@ -126,7 +126,8 @@ add_subdirectory(cosim)
 
 # We include this directory as collateral, but we also need to have a compiled
 # version for testing.
-option(ESI_RUNTIME "Build and test the ESI runtime" OFF)
+option(ESI_RUNTIME "Build and test the ESI runtime")
+llvm_canonicalize_cmake_booleans(ESI_RUNTIME)
 if (ESI_RUNTIME)
   message(STATUS "Enabling ESI runtime build and testing")
   add_subdirectory(runtime)
