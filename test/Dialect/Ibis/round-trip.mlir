@@ -8,6 +8,11 @@
 // CHECK-NEXT:      %parent = ibis.path [#ibis.step<parent : !ibis.scoperef<@HighLevel>> : !ibis.scoperef<@HighLevel>]
 // CHECK-NEXT:      %single = ibis.get_var %parent, @single : !ibis.scoperef<@HighLevel> -> memref<i32>
 // CHECK-NEXT:      %array = ibis.get_var %parent, @array : !ibis.scoperef<@HighLevel> -> memref<10xi32>
+// CHECK-NEXT:      %alloca = memref.alloca() : memref<i32>
+// CHECK-NEXT:      ibis.schedule 1 {
+// CHECK-NEXT:        %0 = memref.load %alloca[] : memref<i32>
+// CHECK-NEXT:        memref.store %0, %alloca[] : memref<i32>
+// CHECK-NEXT:      }
 // CHECK-NEXT:      ibis.return
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }
@@ -23,6 +28,11 @@ ibis.class @HighLevel {
     ]
     %single = ibis.get_var %parent, @single : !ibis.scoperef<@HighLevel> -> memref<i32>
     %array = ibis.get_var %parent, @array : !ibis.scoperef<@HighLevel> -> memref<10xi32>
+    %local = memref.alloca() : memref<i32>
+    ibis.schedule 1 {
+      %v = memref.load %local[] : memref<i32>
+      memref.store %v, %local[] : memref<i32>
+    }
   }
 }
 

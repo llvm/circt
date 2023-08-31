@@ -139,6 +139,7 @@ def InstanceOp : InstanceOpBase<"instance"> {
 def MethodOp : IbisOp<"method", [
       IsolatedFromAbove, RegionKindInterface,
       Symbol, FunctionOpInterface,
+      AutomaticAllocationScope,
       DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmBlockArgumentNames"]>,
       SingleBlockImplicitTerminator<"ReturnOp">,
       HasParent<"ClassOp">]> {
@@ -187,6 +188,29 @@ def ReturnOp : IbisOp<"return", [
   let builders = [
     OpBuilder<(ins)>,
   ];
+}
+
+def ScheduleOp : IbisOp<"schedule", [
+  HasParent<"MethodOp">,
+  SingleBlock,
+  NoRegionArguments,
+  NoTerminator
+]> {
+  let summary = "Ibis scheduling constraint block";
+  let description = [{
+    The `ibis.schedule` operation defines a block wherein a group of operations
+    can be placed wherein a limited number of Ibis threads can execute at once.
+    The operation is isolated from above and has no return types. References
+    to external values should be performed through SSA dominance or memrefs.
+  }];
+
+  let arguments = (ins
+    ConfinedAttr<I32Attr, [IntMinValue<1>]>:$limit
+  );
+  let regions = (region SizedRegion<1>:$body);
+  let assemblyFormat = [{
+    $limit $body attr-dict
+  }];
 }
 
 def MemRefTypeAttr : TypeAttrBase<"MemRefType", "any memref type">;
