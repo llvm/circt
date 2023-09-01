@@ -264,7 +264,7 @@ static void getTypeDims(SmallVectorImpl<Attribute> &dims, Type type,
     return;
   }
   if (auto array = hw::type_dyn_cast<ArrayType>(type)) {
-    dims.push_back(getInt32Attr(type.getContext(), array.getSize()));
+    dims.push_back(getInt32Attr(type.getContext(), array.getNumElements()));
     getTypeDims(dims, array.getElementType(), loc);
 
     return;
@@ -304,9 +304,10 @@ bool ExportVerilog::isZeroBitType(Type type) {
   if (auto inout = type.dyn_cast<hw::InOutType>())
     return isZeroBitType(inout.getElementType());
   if (auto uarray = type.dyn_cast<hw::UnpackedArrayType>())
-    return uarray.getSize() == 0 || isZeroBitType(uarray.getElementType());
+    return uarray.getNumElements() == 0 ||
+           isZeroBitType(uarray.getElementType());
   if (auto array = type.dyn_cast<hw::ArrayType>())
-    return array.getSize() == 0 || isZeroBitType(array.getElementType());
+    return array.getNumElements() == 0 || isZeroBitType(array.getElementType());
   if (auto structType = type.dyn_cast<hw::StructType>())
     return llvm::all_of(structType.getElements(),
                         [](auto elem) { return isZeroBitType(elem.type); });
@@ -1537,7 +1538,7 @@ void ModuleEmitter::printUnpackedTypePostfix(Type type, raw_ostream &os) {
         printUnpackedTypePostfix(inoutType.getElementType(), os);
       })
       .Case<UnpackedArrayType>([&](UnpackedArrayType arrayType) {
-        os << "[0:" << (arrayType.getSize() - 1) << "]";
+        os << "[0:" << (arrayType.getNumElements() - 1) << "]";
         printUnpackedTypePostfix(arrayType.getElementType(), os);
       })
       .Case<InterfaceType>([&](auto) {
@@ -2639,7 +2640,7 @@ SubExprInfo ExprEmitter::visitTypeOp(ArraySliceOp op) {
 
   auto arrayPrec = emitSubExpr(op.getInput(), Selection);
 
-  unsigned dstWidth = type_cast<ArrayType>(op.getType()).getSize();
+  unsigned dstWidth = type_cast<ArrayType>(op.getType()).getNumElements();
   ps << "[";
   emitSubExpr(op.getLowIndex(), LowestPrecedence);
   ps << " +: ";

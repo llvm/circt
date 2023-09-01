@@ -92,7 +92,8 @@ StringAttr ESIHWBuilder::constructInterfaceName(ChannelType port) {
   llvm::raw_string_ostream nameOS(portTypeName);
   TypeSwitch<Type>(port.getInner())
       .Case([&](hw::ArrayType arr) {
-        nameOS << "ArrayOf" << arr.getSize() << 'x' << arr.getElementType();
+        nameOS << "ArrayOf" << arr.getNumElements() << 'x'
+               << arr.getElementType();
       })
       .Case([&](hw::StructType t) { nameOS << "Struct"; })
       .Default([&](Type t) { nameOS << port.getInner(); });

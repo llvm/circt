@@ -49,7 +49,7 @@ bool hw::isValidIndexBitWidth(Value index, Value array) {
       hw::getCanonicalType(array.getType()).dyn_cast<hw::ArrayType>();
   assert(arrayType && "expected array type");
   unsigned indexWidth = index.getType().getIntOrFloatBitWidth();
-  auto requiredWidth = llvm::Log2_64_Ceil(arrayType.getSize());
+  auto requiredWidth = llvm::Log2_64_Ceil(arrayType.getNumElements());
   return requiredWidth == 0 ? (indexWidth == 0 || indexWidth == 1)
                             : indexWidth == requiredWidth;
 }
@@ -1864,7 +1864,7 @@ static ParseResult parseSliceTypes(OpAsmParser &p, Type &srcType,
   if (!arrType)
     return p.emitError(p.getCurrentLocation(), "Expected !hw.array type");
   srcType = type;
-  unsigned idxWidth = llvm::Log2_64_Ceil(arrType.getSize());
+  unsigned idxWidth = llvm::Log2_64_Ceil(arrType.getNumElements());
   idxType = IntegerType::get(p.getBuilder().getContext(), idxWidth);
   return success();
 }
@@ -1914,7 +1914,7 @@ void ArrayCreateOp::build(OpBuilder &b, OperationState &state,
 }
 
 LogicalResult ArrayCreateOp::verify() {
-  unsigned returnSize = getType().cast<ArrayType>().getSize();
+  unsigned returnSize = getType().cast<ArrayType>().getNumElements();
   if (getInputs().size() != returnSize)
     return failure();
   return success();
@@ -1955,7 +1955,7 @@ static LogicalResult foldCreateToSlice(ArrayCreateOp op,
                                        PatternRewriter &rewriter) {
   // Do not canonicalize create of get into a slice.
   auto arrayTy = hw::type_cast<ArrayType>(op.getType());
-  if (arrayTy.getSize() <= 1)
+  if (arrayTy.getNumElements() <= 1)
     return failure();
   auto elemTy = arrayTy.getElementType();
 
@@ -1995,7 +1995,7 @@ static LogicalResult foldCreateToSlice(ArrayCreateOp op,
 
   // If the number of chunks is significantly less than the number of
   // elements, replace the create with a concat of the identified slices.
-  if (chunks.size() * 2 < arrayTy.getSize()) {
+  if (chunks.size() * 2 < arrayTy.getNumElements()) {
     SmallVector<Value> slices;
     for (auto &chunk : llvm::reverse(chunks)) {
       auto sliceTy = ArrayType::get(elemTy, chunk.size);
@@ -2033,7 +2033,8 @@ static std::optional<uint64_t> getUIntFromValue(Value value) {
 }
 
 LogicalResult ArraySliceOp::verify() {
-  unsigned inputSize = type_cast<ArrayType>(getInput().getType()).getSize();
+  unsigned inputSize =
+      type_cast<ArrayType>(getInput().getType()).getNumElements();
   if (llvm::Log2_64_Ceil(inputSize) !=
       getLowIndex().getType().getIntOrFloatBitWidth())
     return emitOpError(
@@ -2052,7 +2053,7 @@ LogicalResult ArraySliceOp::canonicalize(ArraySliceOp op,
                                          PatternRewriter &rewriter) {
   auto sliceTy = hw::type_cast<ArrayType>(op.getType());
   auto elemTy = sliceTy.getElementType();
-  uint64_t sliceSize = sliceTy.getSize();
+  uint64_t sliceSize = sliceTy.getNumElements();
   if (sliceSize == 0)
     return failure();
 
@@ -2104,7 +2105,8 @@ LogicalResult ArraySliceOp::canonicalize(ArraySliceOp op,
     uint64_t sliceStart = *offsetOpt;
     for (auto input : llvm::reverse(inputConcat.getInputs())) {
       // Check whether the input intersects with the slice.
-      uint64_t inputSize = hw::type_cast<ArrayType>(input.getType()).getSize();
+      uint64_t inputSize =
+          hw::type_cast<ArrayType>(input.getType()).getNumElements();
       if (inputSize == 0 || inputSize <= sliceStart) {
         sliceStart -= inputSize;
         continue;
@@ -2168,7 +2170,7 @@ static ParseResult parseArrayConcatTypes(OpAsmParser &p,
 
     elemType = arrTy.getElementType();
     inputTypes.push_back(ty);
-    resultSize += arrTy.getSize();
+    resultSize += arrTy.getNumElements();
     return success();
   };
 
@@ -2199,7 +2201,7 @@ void ArrayConcatOp::build(OpBuilder &b, OperationState &state,
 
   uint64_t resultSize = 0;
   for (Value val : values)
-    resultSize += val.getType().cast<ArrayType>().getSize();
+    resultSize += val.getType().cast<ArrayType>().getNumElements();
   build(b, state, ArrayType::get(elemTy, resultSize), values);
 }
 
@@ -2285,7 +2287,7 @@ static bool mergeConcatSlices(ArrayConcatOp op, PatternRewriter &rewriter) {
 
   for (auto item : llvm::reverse(op.getInputs())) {
     if (auto slice = item.getDefiningOp<ArraySliceOp>()) {
-      auto size = hw::type_cast<ArrayType>(slice.getType()).getSize();
+      auto size = hw::type_cast<ArrayType>(slice.getType()).getNumElements();
       append(item, slice.getInput(), slice.getLowIndex(), size);
       continue;
     }
@@ -2900,7 +2902,7 @@ LogicalResult ArrayGetOp::canonicalize(ArrayGetOp op,
     // get(concat(a0, a1, ...), m) -> get(an, m - s0 - s1 - ...)
     uint64_t elemIndex = *idxOpt;
     for (auto input : llvm::reverse(inputConcat.getInputs())) {
-      size_t size = hw::type_cast<ArrayType>(input.getType()).getSize();
+      size_t size = hw::type_cast<ArrayType>(input.getType()).getNumElements();
       if (elemIndex >= size) {
         elemIndex -= size;
         continue;

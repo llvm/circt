@@ -86,7 +86,7 @@ static void emitName(Type type, uint64_t id, llvm::raw_ostream &os) {
         os << intName;
       })
       .Case([&os](hw::ArrayType arrTy) {
-        os << "ArrayOf" << arrTy.getSize() << 'x';
+        os << "ArrayOf" << arrTy.getNumElements() << 'x';
         emitName(arrTy.getElementType(), 0, os);
       })
       .Case([&os](NoneType) { os << "None"; })
