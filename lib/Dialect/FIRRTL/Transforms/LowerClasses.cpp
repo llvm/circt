@@ -437,7 +437,8 @@ struct BoolConstantOpConversion : public OpConversionPattern<BoolConstantOp> {
   matchAndRewrite(BoolConstantOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     rewriter.replaceOpWithNewOp<om::ConstantOp>(
-        op, rewriter.getBoolAttr(adaptor.getValue()));
+        op, om::BoolAttr::get(op->getContext(),
+                              rewriter.getBoolAttr(adaptor.getValue())));
     return success();
   }
 };
@@ -695,8 +696,9 @@ static void populateTypeConverter(TypeConverter &converter) {
       });
 
   // Convert FIRRTL Bool type to OM
-  converter.addConversion(
-      [](BoolType type) { return IntegerType::get(type.getContext(), 1); });
+  converter.addConversion([](firrtl::BoolType type) {
+    return om::BoolType::get(type.getContext());
+  });
 
   // Add a target materialization to fold away unrealized conversion casts.
   converter.addTargetMaterialization(
