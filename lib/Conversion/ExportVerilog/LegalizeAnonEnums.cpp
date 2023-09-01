@@ -74,7 +74,7 @@ struct LegalizeAnonEnums : public LegalizeAnonEnumsBase<LegalizeAnonEnums> {
 
     if (auto arrayType = dyn_cast<ArrayType>(type)) {
       if (auto newElementType = processType(arrayType.getElementType()))
-        return ArrayType::get(newElementType, arrayType.getSize());
+        return ArrayType::get(newElementType, arrayType.getNumElements());
       return {};
     }
 

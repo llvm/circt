@@ -1207,11 +1207,11 @@ void SystolicArrayOp::print(OpAsmPrinter &p) {
       getColInputs().getType().cast<hw::ArrayType>();
   p << " [";
   p.printOperand(getRowInputs());
-  p << " : " << rowInputType.getSize() << " x ";
+  p << " : " << rowInputType.getNumElements() << " x ";
   p.printType(rowInputType.getElementType());
   p << "] [";
   p.printOperand(getColInputs());
-  p << " : " << columnInputType.getSize() << " x ";
+  p << " : " << columnInputType.getNumElements() << " x ";
   p.printType(columnInputType.getElementType());
 
   p << "] pe (";

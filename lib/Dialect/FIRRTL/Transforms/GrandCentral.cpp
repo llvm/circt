@@ -195,7 +195,7 @@ struct MappingContextTraits<DescribedSignal, Context> {
       // unwrapping happens in reverse order of the final representation.
       auto tpe = op.signal.getType();
       while (auto vector = tpe.dyn_cast<hw::UnpackedArrayType>()) {
-        dimensions.push_back(vector.getSize());
+        dimensions.push_back(vector.getNumElements());
         tpe = vector.getElementType();
       }
       dimensions = SmallVector<unsigned>(llvm::reverse(dimensions));

@@ -3861,7 +3861,7 @@ Value FIRRTLLowering::createValueWithMuxAnnotation(Operation *op, bool isMux2) {
 
 Value FIRRTLLowering::createArrayIndexing(Value array, Value index) {
 
-  auto size = hw::type_cast<hw::ArrayType>(array.getType()).getSize();
+  auto size = hw::type_cast<hw::ArrayType>(array.getType()).getNumElements();
   // Extend to power of 2.  FIRRTL semantics say out-of-bounds access result in
   // an indeterminate value.  Existing chisel code depends on this behavior
   // being "return index 0".  Ideally, we would tail extend the array to improve

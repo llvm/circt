@@ -1195,7 +1195,8 @@ struct ArraySlice {
             return std::nullopt;
           return ArraySlice{
               /*array=*/slice.getInput(), /*start=*/constant,
-              /*end=*/hw::type_cast<hw::ArrayType>(slice.getType()).getSize()};
+              /*end=*/
+              hw::type_cast<hw::ArrayType>(slice.getType()).getNumElements()};
         })
         .Case<sv::IndexedPartSelectInOutOp>(
             [](sv::IndexedPartSelectInOutOp index)
@@ -1665,14 +1666,14 @@ LogicalResult IndexedPartSelectInOutOp::verify() {
   if (auto i = inputElemTy.dyn_cast<IntegerType>())
     inputWidth = i.getWidth();
   else if (auto i = hw::type_cast<hw::ArrayType>(inputElemTy))
-    inputWidth = i.getSize();
+    inputWidth = i.getNumElements();
   else
     return emitError("input element type must be Integer or Array");
 
   if (auto resType = resultElemTy.dyn_cast<IntegerType>())
     resultWidth = resType.getWidth();
   else if (auto resType = hw::type_cast<hw::ArrayType>(resultElemTy))
-    resultWidth = resType.getSize();
+    resultWidth = resType.getNumElements();
   else
     return emitError("result element type must be Integer or Array");
 
