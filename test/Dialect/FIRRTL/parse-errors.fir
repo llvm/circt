@@ -669,12 +669,6 @@ circuit IllegalLiteral:
 
 ;// -----
 
-circuit WireProbe:
-  module WireProbe:
-    wire x : Probe<UInt<1>> ; expected-error {{wire must have base type}}
-
-;// -----
-
 circuit NodeProbe:
   extmodule Ref:
     output x : Probe<UInt<1>>

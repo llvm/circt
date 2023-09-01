@@ -1830,7 +1830,8 @@ FIRRTL version 3.1.0
 circuit BundleOfProps:
   module BundleOfProps:
     input x : {a : String}
-    ; CHECK: openbundle<a: string>
+    wire y : {a: String}
+    ; CHECK-COUNT-2: !firrtl.openbundle<a: string>
 
 ;// -----
 FIRRTL version 3.1.0
@@ -1839,5 +1840,5 @@ FIRRTL version 3.1.0
 circuit VecOfProps:
   module VecOfProps:
     input x : String[2]
-    ; CHECK: openvector<string, 2>
-
+    wire y : String[2]
+    ; CHECK-COUNT-2: openvector<string, 2>

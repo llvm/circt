@@ -3940,9 +3940,6 @@ ParseResult FIRStmtParser::parseWire() {
       parseType(type, "expected wire type") || parseOptionalInfo())
     return failure();
 
-  if (!type_isa<FIRRTLBaseType>(type))
-    return emitError(startTok.getLoc(), "wire must have base type");
-
   locationProcessor.setLoc(startTok.getLoc());
 
   auto annotations = getConstants().emptyArrayAttr;
