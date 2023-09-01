@@ -1,4 +1,4 @@
-//===- StdServices.h - ESI standard services C++ API ------------*- C++ -*-===//
+//===- Accelerator.h - Base ESI runtime API ---------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,7 +6,10 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Basic ESI APIs.
+// Basic ESI APIs. The 'Accelerator' class is the superclass for all accelerator
+// backends. It should (usually) provide enough functionality such that users do
+// not have to interact with the platform-specific backend implementation with
+// the exception of connecting to the accelerator.
 //
 // DO NOT EDIT!
 // This file is distributed as part of an ESI package. The source for this file
