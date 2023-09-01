@@ -356,11 +356,6 @@ def LatencyOp : Op<Pipeline_Dialect, "latency", [
   let regions = (region SizedRegion<1>:$body);
   let hasVerifier = 1;
 
-  let builders = [
-    OpBuilder<(ins "unsigned":$latency)>
-  ];
-  let skipDefaultBuilders = 1;
-
   let assemblyFormat = [{
     $latency `->` `(` type($results) `)` $body attr-dict
   }];
