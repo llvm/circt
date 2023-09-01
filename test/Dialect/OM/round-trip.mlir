@@ -192,17 +192,17 @@ om.class @RefecenceEachOthersField(%blue_1: i8, %green_1: i32) {
   %3 = om.object.field %2, [@green_1] : (!om.class.type<@Widget>) -> i32
 }
 // CHECK-LABEL: @Bool
-om.class @BoolConstant(%b0 : i1) {
-  // CHECK: %[[const1:.+]] = om.constant true
-  %1 = om.constant true
-  // CHECK: %[[const2:.+]] = om.constant false
-  %2 = om.constant false
+om.class @BoolConstant(%b0 : !om.bool) {
+  // CHECK: %[[const1:.+]] = om.constant #om.bool<true>
+  %1 = om.constant #om.bool<true> : !om.bool
+  // CHECK: %[[const2:.+]] = om.constant #om.bool<false>
+  %2 = om.constant #om.bool<false> : !om.bool
   // CHECK: om.class.field @bool, %b0
-  om.class.field @bool, %b0 : i1
-  // CHECK: om.class.field @bool2, %[[const1]]
-  om.class.field @bool2, %1 : i1
-  // CHECK: om.class.field @bool3, %[[const2]]
-  om.class.field @bool3, %2 : i1
+  om.class.field @bool, %b0 : !om.bool
+  // CHECK: om.class.field @bool2, %[[const1]] : !om.bool
+  om.class.field @bool2, %1 : !om.bool
+  // CHECK: om.class.field @bool3, %[[const2]] : !om.bool
+  om.class.field @bool3, %2 : !om.bool
 }
 
 // CHECK-LABEL: @Map
