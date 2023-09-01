@@ -969,7 +969,6 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
           if (parseFieldId(fieldName, "expected bundle field name") ||
               parseToken(FIRToken::colon, "expected ':' in bundle"))
             return failure();
-          auto loc = getToken().getLoc();
           if (parseType(type, "expected bundle field type"))
             return failure();
 
