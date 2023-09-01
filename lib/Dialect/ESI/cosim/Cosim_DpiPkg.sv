@@ -84,24 +84,24 @@ import "DPI-C" sv2cCosimserverMMIORegister =
 /// they were requested.
 import "DPI-C" sv2cCosimserverMMIOReadTryGet =
   function int cosim_mmio_read_tryget(
-    output int address
+    output int unsigned address
   );
 import "DPI-C" sv2cCosimserverMMIOReadRespond =
   function void cosim_mmio_read_respond(
-    input longint data,
-    input byte    error
+    input int unsigned data,
+    input byte         error
   );
 
 /// Write MMIO function pair. Assumes that write errors come back in the order
 /// in which the writes were issued.
 import "DPI-C" sv2cCosimserverMMIOWriteTryGet =
   function int cosim_mmio_write_tryget(
-    output int     address,
-    output longint data
+    output int unsigned address,
+    output int unsigned data
   );
 import "DPI-C" sv2cCosimserverMMIOWriteRespond =
   function void cosim_mmio_write_respond(
-    input byte    error
+    input byte  error
   );
 
 endpackage // Cosim_DpiPkg

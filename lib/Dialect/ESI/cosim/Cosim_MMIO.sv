@@ -27,7 +27,7 @@ module Cosim_MMIO
   // MMIO read: data response channel.
   input  logic        rvalid,
   output reg          rready,
-  input  logic [63:0] rdata,
+  input  logic [31:0] rdata,
   input  logic [1:0]  rresp,
 
   // MMIO write: address channel.
@@ -38,7 +38,7 @@ module Cosim_MMIO
   // MMIO write: data channel.
   output reg          wvalid,
   input  logic        wready,
-  output reg   [63:0] wdata,
+  output reg   [31:0] wdata,
 
   // MMIO write: write response channel.
   input  logic        bvalid,
