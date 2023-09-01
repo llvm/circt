@@ -158,6 +158,14 @@ om.class @ListCreate() {
   om.class.field @list_field, %list : !om.list<!om.class.type<@Widget>>
 }
 
+// CHECK-LABEL: @Integer
+om.class @IntegerConstant() {
+  // CHECK: %[[const1:.+]] = om.constant #om.integer<36755551979133953793 : i67> : !om.integer
+  %0 = om.constant #om.integer<36755551979133953793 : i67> : !om.integer
+  // CHECK: om.class.field @int, %[[const1]] : !om.integer
+  om.class.field @int, %0 : !om.integer
+}
+
 // CHECK-LABEL: @String
 om.class @StringConstant() {
   // CHECK: %[[const1:.+]] = om.constant "foo" : !om.string
