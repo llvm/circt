@@ -233,3 +233,79 @@ firrtl.circuit "BundleOfProps" {
     firrtl.strictconnect %y_a, %x_b : !firrtl.uint<5>
   }
 }
+
+
+// -----
+
+// CHECK-LABEL: circuit "WireProperties"
+firrtl.circuit "WireProperties" {
+  // CHECK-LABEL: module{{.*}} @WireProperties
+  firrtl.module @WireProperties() {
+    %0 = firrtl.string "hello world"
+
+    // CHECK:      %b_c = firrtl.wire : !firrtl.string
+    // CHECK-NEXT: firrtl.propassign %b_c, %0
+    %b = firrtl.wire : !firrtl.openbundle<c: string>
+    %b_c = firrtl.opensubfield %b[c] : !firrtl.openbundle<c: string>
+    firrtl.propassign %b_c, %0 : !firrtl.string
+
+    // CHECK-NEXT: %d_0 = firrtl.wire : !firrtl.string
+    // CHECK-NEXT: firrtl.propassign %d_0, %b_c
+    %d = firrtl.wire : !firrtl.openvector<string, 1>
+    %d_0 = firrtl.opensubindex %d[0] : !firrtl.openvector<string, 1>
+    firrtl.propassign %d_0, %b_c : !firrtl.string
+  }
+}
+
+// -----
+
+// CHECK-LABEL: circuit "WirePropertyFlip"
+firrtl.circuit "WirePropertyFlip" {
+  // CHECK-LABEL: module{{.*}} @WirePropertyFlip
+  firrtl.module @WirePropertyFlip(out %a: !firrtl.integer) {
+    %0 = firrtl.integer 1
+
+    // CHECK:      %b_c = firrtl.wire : !firrtl.integer
+    // CHECK-NEXT: firrtl.propassign %b_c, %0
+    // CHECK-NEXT: firrtl.propassign %a, %b_c
+    %b = firrtl.wire : !firrtl.openbundle<c flip: integer>
+    %b_c = firrtl.opensubfield %b[c] : !firrtl.openbundle<c flip: integer>
+    firrtl.propassign %b_c, %0 : !firrtl.integer
+    firrtl.propassign %a, %b_c : !firrtl.integer
+  }
+}
+
+// -----
+
+// CHECK-LABEL: circuit "WireProbes"
+firrtl.circuit "WireProbes" {
+  // CHECK-LABEL: module{{.*}} @WireProbes
+  firrtl.module @WireProbes() {
+    // CHECK:      %b_c = firrtl.wire : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: %b_d = firrtl.wire : !firrtl.rwprobe<uint<2>>
+    %b = firrtl.wire : !firrtl.openbundle<c: probe<uint<1>>, d: rwprobe<uint<2>>>
+    %b_c = firrtl.opensubfield %b[c] : !firrtl.openbundle<c: probe<uint<1>>, d: rwprobe<uint<2>>>
+    %b_d = firrtl.opensubfield %b[d] : !firrtl.openbundle<c: probe<uint<1>>, d: rwprobe<uint<2>>>
+
+    %x = firrtl.wire : !firrtl.uint<1>
+    %0 = firrtl.ref.send %x : !firrtl.uint<1>
+    // CHECK:      firrtl.ref.define %b_c, %0 : !firrtl.probe<uint<1>>
+    firrtl.ref.define %b_c, %0 : !firrtl.probe<uint<1>>
+
+    %y, %y_ref = firrtl.wire forceable : !firrtl.uint<2>, !firrtl.rwprobe<uint<2>>
+    // CHECK:      firrtl.ref.define %b_d, %y_ref : !firrtl.rwprobe<uint<2>>
+    firrtl.ref.define %b_d, %y_ref : !firrtl.rwprobe<uint<2>>
+  }
+}
+
+// -----
+
+// CHECK-LABEL: circuit "WireSymbols"
+firrtl.circuit "WireSymbols" {
+  // CHECK-LABEL: module{{.*}} @WireSymbols
+  firrtl.module @WireSymbols() {
+    // CHECk-NEXT: %a = firrtl.wire sym [<@sym_a_c, 1, public>] : !firrtl.bundle<c: uint<1>>
+    // CHECk-NEXT: %a_b = firrtl.wire : !firrtl.string
+    %a = firrtl.wire sym [<@sym_a_c, 2, public>] : !firrtl.openbundle<b: string, c: uint<1>>
+  }
+}

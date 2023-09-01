@@ -46,16 +46,12 @@ firrtl.circuit "MixedAnnotation" {
 }
 
 // -----
-// Reject unhandled ops w/open types in them.
+// As above, check that no annotations are seen.  This should never occur in
+// firtool.
 
-firrtl.circuit "UnhandledOp" {
-  firrtl.module @UnhandledOp(out %r : !firrtl.openbundle<p: probe<uint<1>>>) {
-    %zero = firrtl.constant 0 : !firrtl.uint<1>
-    %ref = firrtl.ref.send %zero : !firrtl.uint<1>
-    %r_p = firrtl.opensubfield %r[p] : !firrtl.openbundle<p: probe<uint<1>>>
-    firrtl.ref.define %r_p, %ref : !firrtl.probe<uint<1>>
-
-    // expected-error @below {{unhandled use or producer of types containing non-hw types}}
-    %x = firrtl.wire : !firrtl.openbundle<p : probe<uint<1>>>
+firrtl.circuit "WireAnnotations" {
+  firrtl.module @WireAnnotations() {
+    // expected-error @below {{annotations on open aggregates not handled yet}}
+    %a = firrtl.wire {annotations = [{class = "circt.test"}]} : !firrtl.openbundle<b: string, c: uint<1>>
   }
 }

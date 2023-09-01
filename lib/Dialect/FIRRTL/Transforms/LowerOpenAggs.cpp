@@ -165,6 +165,7 @@ public:
   using FIRRTLVisitor<Visitor, LogicalResult>::visitStmt;
 
   LogicalResult visitDecl(InstanceOp op);
+  LogicalResult visitDecl(WireOp op);
 
   LogicalResult visitExpr(OpenSubfieldOp op);
   LogicalResult visitExpr(OpenSubindexOp op);
@@ -575,6 +576,48 @@ LogicalResult Visitor::visitDecl(InstanceOp op) {
       });
   if (failed(mappingResult))
     return failure();
+
+  opsToErase.push_back(op);
+
+  return success();
+}
+
+LogicalResult Visitor::visitDecl(WireOp op) {
+  auto pmi =
+      mapPortType(op.getResultTypes()[0], op.getLoc(), op.getInnerSymAttr());
+  if (failed(pmi))
+    return failure();
+  PortMappingInfo portMapping = *pmi;
+
+  if (portMapping.identity)
+    return success();
+
+  ImplicitLocOpBuilder builder(op.getLoc(), op);
+
+  if (!op.getAnnotations().empty())
+    return mlir::emitError(op.getLoc())
+           << "annotations on open aggregates not handled yet";
+
+  // Create the new HW wire.
+  if (portMapping.hwType)
+    hwOnlyAggMap[op.getResult()] =
+        builder
+            .create<WireOp>(portMapping.hwType, op.getName(), op.getNameKind(),
+                            op.getAnnotations(), portMapping.newSym,
+                            op.getForceable())
+            .getResult();
+
+  // Create the non-HW wires.
+  for (auto &[type, fieldID, _, suffix] : portMapping.fields)
+    nonHWValues[FieldRef(op.getResult(), fieldID)] =
+        builder
+            .create<WireOp>(type,
+                            builder.getStringAttr(Twine(op.getName()) + suffix),
+                            op.getNameKind())
+            .getResult();
+
+  for (auto fieldID : portMapping.mapToNullInteriors)
+    nonHWValues[FieldRef(op.getResult(), fieldID)] = {};
 
   opsToErase.push_back(op);
 
