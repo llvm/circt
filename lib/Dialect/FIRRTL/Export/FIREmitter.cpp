@@ -239,11 +239,22 @@ struct Emitter {
 
   template <typename EachFn, typename Range>
   void emitLiteralExpression(Type type, const Range &r, EachFn eachFn) {
-    emitType(type);
-    ps << "(";
-    ps.scopedBox(PP::ibox0, [&]() {
+    // If need to break, indent two after the opening type, e.g.:
+    // LongTypeGoesHereLessLikelyToBreak(
+    //   e1, e2, ...
+    // )
+
+    // LongTypeGoesHereLessLikelyToBreak(
+    //   e1 that
+    //     breaks,
+    //   e2,
+    //   ...
+    // )
+    ps.scopedBox(PP::cbox2, [&]() {
+      emitType(type);
+      ps << "(" << PP::zerobreak;
       interleaveComma(r, eachFn);
-      ps << ")";
+      ps << BreakToken(0, -2) << ")";
     });
   }
 
