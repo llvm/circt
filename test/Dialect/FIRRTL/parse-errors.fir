@@ -988,14 +988,14 @@ FIRRTL version 3.0.0
 
 circuit Top:
   module Top:
-    ; expected-error @below {{Bools are a FIRRTL 3.1.0+ feature, but the specified FIRRTL version was 3.0.0}}
+    ; expected-error @below {{Bools are a FIRRTL 3.2.0+ feature, but the specified FIRRTL version was 3.0.0}}
     input in : Bool
     output out : Bool
     propassign out, in
 
 ;// -----
 ; Bool literal must be true or false.
-FIRRTL version 3.1.0
+FIRRTL version 3.2.0
 
 circuit Top:
   module Top:
@@ -1005,7 +1005,7 @@ circuit Top:
 
 ;// -----
 ; Properties can't be const.
-FIRRTL version 3.1.0
+FIRRTL version 3.2.0
 
 circuit Top:
   module Top:
