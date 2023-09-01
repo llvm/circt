@@ -69,6 +69,10 @@ config.test_exec_root = os.path.join(config.circt_obj_root, 'integration_test')
 llvm_config.with_environment('PATH', config.llvm_tools_dir, append_path=True)
 # Substitute '%l' with the path to the build lib dir.
 
+# Tweak the PYTHONPATH to include the lib dir. Some pybind11 modules there.
+llvm_config.with_environment('PYTHONPATH', [config.llvm_lib_dir],
+                             append_path=True)
+
 # Tweak the PYTHONPATH to include the binary dir.
 if config.bindings_python_enabled:
   llvm_config.with_environment(
@@ -175,6 +179,10 @@ if config.esi_cosim_path != "":
   config.substitutions.append(
       ('%ESIINC%', f'{config.circt_include_dir}/circt/Dialect/ESI/'))
   config.substitutions.append(('%ESICOSIM%', f'{config.esi_cosim_path}'))
+
+# Enable ESI runtime tests.
+if config.esi_runtime == "1":
+  config.available_features.add('esi-runtime')
 
 # Enable ESI's Capnp tests if they're supported.
 if config.esi_capnp != "":

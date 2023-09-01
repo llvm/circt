@@ -1,0 +1,130 @@
+##===- CMakeLists.txt - ESI runtime CMake ---------------------*- cmake -*-===//
+##
+## Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+## See https://llvm.org/LICENSE.txt for license information.
+## SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+##
+##===----------------------------------------------------------------------===//
+##
+## Compile definitions for the ESI runtime. Distributed with an ESI compiler as
+## part of the ESI collateral. For now, we require that users compile this
+## themselves since it needs to be compiled for each Python version and OS then
+## packed together. Eventually, we'll just be distributing (lots of) binaries.
+##
+## We require Python development package and pybind11 to compile the Python API.
+##
+## ESI cosimulation requires Cap'nProto as we use it for our RPC with the
+## simulator. It must be fetched separately, but is optional if you don't want
+## cosimulation.
+##
+## DO NOT EDIT!
+## This file is distributed as part of an ESI package. The source for this file
+## should always be modified within CIRCT.
+##
+##===----------------------------------------------------------------------===//
+
+project(ESIRuntime)
+cmake_minimum_required(VERSION 3.20)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED YES)
+
+include_directories(cpp/include)
+
+set(ESIRuntimeSources
+  cpp/lib/Accelerator.cpp
+)
+set(ESIRuntimeLinkLibraries)
+
+# If Cap'nProto hasn't been explicitly disabled, find it.
+option(CAPNP_DISABLE "Disable Cap'nProto (needed for cosimulation).")
+if (CAPNP_DISABLE)
+  message (STATUS "Disabling Cap'nProto (needed for cosimulation).")
+elseif(NOT CapnProto_FOUND) # Check if someone else already imported.
+  if(DEFINED CAPNP_PATH)
+    set(ENV{PKG_CONFIG_PATH}
+      "${CAPNP_PATH}/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
+    find_package(CapnProto CONFIG PATHS ${CAPNP_PATH})
+  else()
+    set(ENV{PKG_CONFIG_PATH}
+      "${CMAKE_CURRENT_SOURCE_DIR}/ext/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
+    find_package(CapnProto CONFIG PATHS "${CMAKE_CURRENT_SOURCE_DIR}/ext")
+  endif()
+endif()
+
+# If Cap'nProto has been found, generate the headers and definitions.
+if(CapnProto_FOUND)
+  message(STATUS "Found Cap'nProto at ${CapnProto_DIR}.")
+  set(CMAKE_INSTALL_RPATH ${capnp_LIBDIR})
+  set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+
+  add_definitions(${CAPNP_DEFINITIONS})
+  set(CAPNPC_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/cpp/include/backends)
+  include_directories(${CAPNPC_OUTPUT_DIR})
+  file(MAKE_DIRECTORY ${CAPNPC_OUTPUT_DIR})
+
+  if (NOT DEFINED ESI_COSIM_SCHEMA)
+    set(ESI_COSIM_SCHEMA CosimDpi.capnp)
+  endif()
+
+  capnp_generate_cpp(
+    COSIM_CAPNP_SRCS COSIM_CANPN_HDRS
+    ${ESI_COSIM_SCHEMA}
+  )
+  set(ESIRuntimeSources
+    ${ESIRuntimeSources}
+    cpp/lib/backends/Cosim.cpp
+    ${COSIM_CAPNP_HDRS}
+    ${COSIM_CAPNP_SRCS}
+    ${COSIM_SCHEMA_HDR}
+  )
+  set(ESIRuntimeLinkLibraries
+    ${ESIRuntimeLinkLibraries}
+    CapnProto::capnp
+    CapnProto::capnp-rpc
+  )
+endif()
+
+# The core API. For now, compile the backends into it directly.
+# TODO: make this a plugin architecture.
+add_library(ESIRuntime SHARED
+  ${ESIRuntimeSources}
+)
+target_link_libraries(ESIRuntime PRIVATE ${ESIRuntimeLinkLibraries})
+
+# The esiquery tool is a simple wrapper around the SysInfo API.
+add_executable(esiquery
+  cpp/tools/esiquery.cpp
+)
+target_link_libraries(esiquery PRIVATE ESIRuntime)
+
+# Pybind11 is used to wrap the ESIRuntime APIs.
+find_package(Python COMPONENTS Interpreter Development)
+if(Python_FOUND)
+  if(pybind11_DIR)
+    message(STATUS "Using explicit pybind11 cmake directory: ${pybind11_DIR} (-Dpybind11_DIR to change)")
+  else()
+    message(STATUS "Checking for pybind11 in python path...")
+    execute_process(
+      COMMAND "${Python_EXECUTABLE}"
+      -c "import pybind11;print(pybind11.get_cmake_dir(), end='')"
+      WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+      RESULT_VARIABLE STATUS
+      OUTPUT_VARIABLE PACKAGE_DIR
+      ERROR_QUIET)
+    if(NOT STATUS EQUAL "0")
+      message(FATAL_ERROR "pybind11 not found (install via 'pip install pybind11' or set pybind11_DIR)")
+    endif()
+    message(STATUS "found (${PACKAGE_DIR})")
+    set(pybind11_DIR "${PACKAGE_DIR}")
+  endif()
+
+  # Now, find pybind11.
+  find_package(pybind11 CONFIG)
+  if (NOT pybind11_FOUND)
+    message (STATUS "Could not find pybind11. Disabling Python API.")
+  else()
+    pybind11_add_module(esiaccel python/esi/esiaccel.cpp)
+    target_link_libraries(esiaccel PRIVATE ESIRuntime)
+  endif()
+endif()

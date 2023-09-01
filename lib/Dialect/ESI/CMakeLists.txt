@@ -81,6 +81,16 @@ set(ESI_RUNTIME_SRCS
   cosim/Cosim_Endpoint.sv
   cosim/Cosim_MMIO.sv
   ESIPrimitives.sv
+
+  runtime/CMakeLists.txt
+  runtime/cpp/include/esi/Accelerator.h
+  runtime/cpp/include/esi/backends/Cosim.h
+  runtime/cpp/include/esi/backends/capnp.h
+  runtime/cpp/include/esi/esi.h
+  runtime/cpp/lib/Accelerator.cpp
+  runtime/cpp/lib/backends/Cosim.cpp
+  runtime/cpp/tools/esiquery.cpp
+  runtime/python/esi/esiaccel.cpp
 )
 
 # A function which copies a file from the source tree to the build tree.
@@ -100,10 +110,12 @@ endforeach()
 
 if (ESI_CAPNP)
   add_dependencies(esi-collateral EsiCosimCapnp)
-
+  get_target_property(EsiCosimCapnp_bindir EsiCosimCapnp BINARY_DIR)
+  set(ESI_COSIM_SCHEMA "${EsiCosimCapnp_bindir}/CosimDpi.capnp")
+  set(CAPNPC_SRC_PREFIX "${EsiCosimCapnp_bindir}")
   add_custom_command(TARGET esi-collateral PRE_BUILD
     COMMAND ${CMAKE_COMMAND} -E
-    copy "$<TARGET_PROPERTY:EsiCosimCapnp,BINARY_DIR>/CosimDpi.capnp"
+    copy "${ESI_COSIM_SCHEMA}"
          "${CMAKE_CURRENT_BINARY_DIR}/runtime/CosimDpi.capnp")
 
   target_compile_definitions(obj.CIRCTESI PRIVATE CAPNP)
@@ -111,3 +123,12 @@ if (ESI_CAPNP)
 endif()
 
 add_subdirectory(cosim)
+
+# We include this directory as collateral, but we also need to have a compiled
+# version for testing.
+option(ESI_RUNTIME "Build and test the ESI runtime")
+llvm_canonicalize_cmake_booleans(ESI_RUNTIME)
+if (ESI_RUNTIME)
+  message(STATUS "Enabling ESI runtime build and testing")
+  add_subdirectory(runtime)
+endif()
