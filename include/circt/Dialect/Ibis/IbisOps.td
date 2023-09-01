@@ -200,7 +200,7 @@ def ScheduleOp : IbisOp<"schedule", [
   let description = [{
     The `ibis.schedule` operation defines a block wherein a group of operations
     can be placed wherein a limited number of Ibis threads can execute at once.
-    The operation is isolated from above and has no return types. References
+    The operation is not isolated from above and has no return types. References
     to external values should be performed through SSA dominance or memrefs.
   }];
 
