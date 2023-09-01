@@ -47,7 +47,6 @@ LogicalResult hw::verifyInnerSymAttr(InnerSymbolOpInterface op) {
   if (!result)
     return success();
   auto resultType = result.getType();
-  resultType.dump();
   auto maxFields = FieldIdImpl::getMaxFieldID(resultType);
   llvm::SmallBitVector indices(maxFields + 1);
   llvm::SmallPtrSet<Attribute, 8> symNames;
