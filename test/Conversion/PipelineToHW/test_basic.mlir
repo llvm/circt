@@ -225,3 +225,20 @@ hw.module @testWithStall(%arg0: i32, %go: i1, %stall : i1, %clk: i1, %rst: i1) -
   }
   hw.output %0#0, %0#1 : i32, i1
 }
+
+// -----
+
+hw.module @testStallability(%arg0: i32, %go: i1, %clk: i1, %rst: i1, %stall: i1) -> (out: i32) {
+  %out, %done = pipeline.scheduled "MyPipeline"(%a0 : i32 = %arg0)
+      stall(%s = %stall) clock(%c = %clk) reset(%r = %rst) go(%g = %go)
+      {stallability = [true, false, true]} -> (out : i32) {
+    pipeline.stage ^bb1 regs("a0" = %a0 : i32) 
+  ^bb1(%a0_0: i32, %s1_enable: i1):  // pred: ^bb0
+    pipeline.stage ^bb2 regs("a0" = %a0_0 : i32) 
+  ^bb2(%a0_1: i32, %s2_enable: i1):  // pred: ^bb1
+    pipeline.stage ^bb3 regs("a0" = %a0_1 : i32) 
+  ^bb3(%a0_2: i32, %s3_enable: i1):  // pred: ^bb2
+    pipeline.return %a0_2 : i32
+  }
+  hw.output %out : i32
+}

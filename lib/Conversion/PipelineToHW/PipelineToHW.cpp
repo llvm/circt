@@ -46,6 +46,7 @@ public:
     Value stall;
     Value clock;
     Value reset;
+    Value lnsEn;
   };
 
   // Arguments used for returning the results from a stage. These values must
@@ -54,6 +55,11 @@ public:
     llvm::SmallVector<Value> regs;
     llvm::SmallVector<Value> passthroughs;
     Value valid;
+
+    // In case this was the last register in a non-stallable register chain, the
+    // register will also return its enable signal to be used for LNS of
+    // downstream stages.
+    Value lnsEn;
   };
 
   virtual FailureOr<StageReturns>
@@ -89,6 +95,18 @@ public:
       }
     }
 
+    auto loc = terminator->getLoc();
+    Value notStalled;
+    auto getOrSetNotStalled = [&]() {
+      if (!notStalled) {
+        notStalled = comb::createOrFoldNot(loc, args.stall, builder);
+      }
+      return notStalled;
+    };
+
+    // Determine the stage kind. This will influence how the stage valid and
+    // enable signals are defined.
+    StageKind stageKind = pipeline.getStageKind(stageIndex);
     StageReturns rets;
     auto stageOp = dyn_cast<StageOp>(terminator);
     if (!stageOp) {
@@ -105,24 +123,40 @@ public:
            "register names and registers must be the same size");
 
     // Build data registers.
-    auto stageRegPrefix = getStageRegPrefix(stageIndex);
-    auto loc = stageOp->getLoc();
-
-    // Build the clock enable signal: enable && !stall (if applicable)
-    Value stageValidAndNotStalled = args.enable;
-    Value notStalled;
-    bool hasStall = static_cast<bool>(args.stall);
-    if (hasStall) {
-      notStalled = comb::createOrFoldNot(loc, args.stall, builder);
-      stageValidAndNotStalled =
-          builder.create<comb::AndOp>(loc, stageValidAndNotStalled, notStalled);
+    Value stageValid;
+    StringAttr validSignalName =
+        builder.getStringAttr(getStagePrefix(stageIndex).strref() + "_valid");
+    switch (stageKind) {
+    case StageKind::Continuous:
+      LLVM_FALLTHROUGH;
+    case StageKind::NonStallable:
+      stageValid =
+          builder.create<hw::WireOp>(loc, args.enable, validSignalName);
+      break;
+    case StageKind::Stallable:
+      stageValid =
+          builder.create<comb::AndOp>(loc, args.enable, getOrSetNotStalled());
+      stageValid.getDefiningOp()->setAttr("sv.namehint", validSignalName);
+      break;
+    case StageKind::Runoff:
+      assert(args.lnsEn && "Expected an LNS signal if this was a runoff stage");
+      Value lnsEn = builder.create<hw::WireOp>(
+          loc, args.lnsEn,
+          builder.getStringAttr(getStagePrefix(stageIndex).strref() +
+                                "_lns_in"));
+      stageValid = builder.create<comb::AndOp>(
+          loc, args.enable,
+          builder.create<comb::OrOp>(loc, lnsEn, getOrSetNotStalled()));
+      stageValid.getDefiningOp()->setAttr("sv.namehint", validSignalName);
+      break;
     }
 
+    bool isStallablePipeline = stageKind != StageKind::Continuous;
     Value notStalledClockGate;
     if (this->clockGateRegs) {
       // Create the top-level clock gate.
       notStalledClockGate = builder.create<seq::ClockGateOp>(
-          loc, args.clock, stageValidAndNotStalled, /*test_enable=*/Value(),
+          loc, args.clock, stageValid, /*test_enable=*/Value(),
           /*inner_sym=*/hw::InnerSymAttr());
     }
 
@@ -138,18 +172,19 @@ public:
         for (auto hierClockGateEnable : stageOp.getClockGatesForReg(regIdx)) {
           // Create clock gates for any hierarchically nested clock gates.
           currClockGate = builder.create<seq::ClockGateOp>(
-              loc, currClockGate, hierClockGateEnable, /*test_enable=*/Value(),
+              loc, currClockGate, hierClockGateEnable,
+              /*test_enable=*/Value(),
               /*inner_sym=*/hw::InnerSymAttr());
         }
         dataReg = builder.create<seq::CompRegOp>(stageOp->getLoc(), regIn,
                                                  currClockGate, regName);
       } else {
         // Only clock-enable the register if the pipeline is stallable.
-        // For non-stallable pipelines, a data register can always be clocked.
-        if (hasStall) {
+        // For non-stallable (continuous) pipelines, a data register can always
+        // be clocked.
+        if (isStallablePipeline) {
           dataReg = builder.create<seq::CompRegClockEnabledOp>(
-              stageOp->getLoc(), regIn, args.clock, stageValidAndNotStalled,
-              regName);
+              stageOp->getLoc(), regIn, args.clock, stageValid, regName);
         } else {
           dataReg = builder.create<seq::CompRegOp>(stageOp->getLoc(), regIn,
                                                    args.clock, regName);
@@ -158,38 +193,26 @@ public:
       rets.regs.push_back(dataReg);
     }
 
-    // Build valid register. The valid register is always reset to 0, and
-    // clock enabled when not stalling.
-    auto validRegName = (stageRegPrefix.strref() + "_valid").str();
-    Value validRegResetVal =
-        builder.create<hw::ConstantOp>(terminator->getLoc(), APInt(1, 0, false))
-            .getResult();
-    if (hasStall) {
-      rets.valid = builder.create<seq::CompRegClockEnabledOp>(
-          loc, args.enable, args.clock, notStalled, args.reset,
-          validRegResetVal, validRegName);
-    } else {
-      rets.valid = builder.create<seq::CompRegOp>(loc, args.enable, args.clock,
-                                                  args.reset, validRegResetVal,
-                                                  validRegName);
-    }
+    rets.valid = stageValid;
+    if (stageKind == StageKind::NonStallable)
+      rets.lnsEn = args.enable;
 
     rets.passthroughs = stageOp.getPassthroughs();
     return rets;
   }
 
   // A container carrying all-things stage output naming related.
-  // To avoid overloading 'output's to much (i'm trying to keep that reserved
-  // for "output" ports), this is named "egress".
+  // To avoid overloading 'output's to much (i'm trying to keep that
+  // reserved for "output" ports), this is named "egress".
   struct StageEgressNames {
     llvm::SmallVector<Attribute> regNames;
     llvm::SmallVector<Attribute> outNames;
     llvm::SmallVector<Attribute> inNames;
   };
 
-  // Returns a set of names for the output values of a given stage (registers
-  // and passthrough). If `withPipelinePrefix` is true, the names will be
-  // prefixed with the pipeline name.
+  // Returns a set of names for the output values of a given stage
+  // (registers and passthrough). If `withPipelinePrefix` is true, the names
+  // will be prefixed with the pipeline name.
   void getStageEgressNames(size_t stageIndex, Operation *stageTerminator,
                            bool withPipelinePrefix,
                            StageEgressNames &egressNames) {
@@ -243,15 +266,15 @@ public:
         egressNames.inNames.push_back(builder.getStringAttr(assignedInName));
       }
     } else {
-      // For the return op, we just inherit the names of the top-level pipeline
-      // as stage output names.
+      // For the return op, we just inherit the names of the top-level
+      // pipeline as stage output names.
       llvm::copy(pipeline.getOutputNames().getAsRange<StringAttr>(),
                  std::back_inserter(egressNames.outNames));
     }
   }
 
   // Returns a string to be used as a prefix for all stage registers.
-  virtual StringAttr getStageRegPrefix(size_t stageIdx) = 0;
+  virtual StringAttr getStagePrefix(size_t stageIdx) = 0;
 
 protected:
   // Determine a reasonable name for the pipeline. This will affect naming
@@ -288,7 +311,7 @@ class PipelineInlineLowering : public PipelineLowering {
 public:
   using PipelineLowering::PipelineLowering;
 
-  StringAttr getStageRegPrefix(size_t stageIdx) override {
+  StringAttr getStagePrefix(size_t stageIdx) override {
     return builder.getStringAttr(pipelineName.strref() + "_stage" +
                                  Twine(stageIdx));
   }
@@ -328,6 +351,8 @@ public:
   lowerStage(Block *stage, StageArgs args, size_t stageIndex,
              llvm::ArrayRef<Attribute> /*inputNames*/ = {}) override {
     OpBuilder::InsertionGuard guard(builder);
+    Operation *terminator = stage->getTerminator();
+    Location loc = terminator->getLoc();
 
     if (stage != pipeline.getEntryStage()) {
       // Replace the internal stage inputs with the provided arguments.
@@ -336,11 +361,47 @@ public:
         vInput.replaceAllUsesWith(vArg);
     }
 
+    // Build stage enable register. The enable register is always reset to 0.
+    // The stage enable register takes the previous-stage combinational valid
+    // output and determines whether this stage is active or not in the next
+    // cycle.
+    // A non-stallable stage always registers the incoming enable signal,
+    // whereas other stages register based on the current stall state.
+    StageKind stageKind = pipeline.getStageKind(stageIndex);
+    Value stageEnabled;
+    if (stageIndex == 0 || stageIndex == pipeline.getNumStages() - 1) {
+      stageEnabled = args.enable;
+    } else {
+      auto stageRegPrefix = getStagePrefix(stageIndex);
+      auto enableRegName = (stageRegPrefix.strref() + "_enable").str();
+      Value enableRegResetVal =
+          builder.create<hw::ConstantOp>(loc, APInt(1, 0, false)).getResult();
+
+      switch (stageKind) {
+      case StageKind::Continuous:
+        LLVM_FALLTHROUGH;
+      case StageKind::NonStallable:
+        stageEnabled = builder.create<seq::CompRegOp>(
+            loc, args.enable, args.clock, args.reset, enableRegResetVal,
+            enableRegName);
+        break;
+      case StageKind::Stallable:
+        LLVM_FALLTHROUGH;
+      case StageKind::Runoff:
+        stageEnabled = builder.create<seq::CompRegClockEnabledOp>(
+            loc, args.enable, args.clock,
+            comb::createOrFoldNot(loc, args.stall, builder), args.reset,
+            enableRegResetVal, enableRegName);
+        break;
+      }
+    }
+
     // Replace the stage valid signal.
-    pipeline.getStageEnableSignal(stage).replaceAllUsesWith(args.enable);
+    args.enable = stageEnabled;
+    pipeline.getStageEnableSignal(stage).replaceAllUsesWith(stageEnabled);
 
     // Determine stage egress info.
-    auto nextStage = dyn_cast<StageOp>(stage->getTerminator());
+    auto nextStage = dyn_cast<StageOp>(terminator);
     StageEgressNames egressNames;
     if (nextStage)
       getStageEgressNames(stageIndex, nextStage,
@@ -357,6 +418,11 @@ public:
       llvm::append_range(nextStageArgs, stageRets.regs);
       llvm::append_range(nextStageArgs, stageRets.passthroughs);
       args.enable = stageRets.valid;
+      if (stageRets.lnsEn) {
+        // Swap the lnsEn signal if the current stage lowering generated an
+        // lnsEn.
+        args.lnsEn = stageRets.lnsEn;
+      }
       args.data = nextStageArgs;
       return lowerStage(nextStage.getNextStage(), args, stageIndex + 1);
     }
@@ -382,8 +448,8 @@ struct PipelineToHWPass : public PipelineToHWBase<PipelineToHWPass> {
 
 private:
   // Lowers pipelines within HWModules. This pass is currently expecting that
-  // Pipelines are always nested with HWModule's but could be written to be more
-  // generic.
+  // Pipelines are always nested with HWModule's but could be written to be
+  // more generic.
   void runOnHWModule(hw::HWModuleOp mod);
 };
 
@@ -396,8 +462,8 @@ void PipelineToHWPass::runOnHWModule(hw::HWModuleOp mod) {
   OpBuilder builder(&getContext());
   // Iterate over each pipeline op in the module and convert.
   // Note: This pass matches on `hw::ModuleOp`s and not directly on the
-  // `ScheduledPipelineOp` due to the `ScheduledPipelineOp` being erased during
-  // this pass.
+  // `ScheduledPipelineOp` due to the `ScheduledPipelineOp` being erased
+  // during this pass.
   size_t pipelinesSeen = 0;
   for (auto pipeline :
        llvm::make_early_inc_range(mod.getOps<ScheduledPipelineOp>())) {
