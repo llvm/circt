@@ -15,6 +15,7 @@
 
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
+#include "circt/Dialect/FIRRTL/FIRRTLTypeInterfaces.h"
 #include "circt/Dialect/HW/HWTypeInterfaces.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/OpDefinition.h"
@@ -264,16 +265,16 @@ class WidthQualifiedTypeTrait
 public:
   /// Return an optional containing the width, if the width is known (or empty
   /// if width is unknown).
-  std::optional<int32_t> getWidth() {
-    auto width = static_cast<ConcreteType *>(this)->getWidthOrSentinel();
+  std::optional<int32_t> getWidth() const {
+    auto width = static_cast<const ConcreteType *>(this)->getWidthOrSentinel();
     if (width < 0)
       return std::nullopt;
     return width;
   }
 
   /// Return true if this integer type has a known width.
-  bool hasWidth() {
-    return 0 <= static_cast<ConcreteType *>(this)->getWidthOrSentinel();
+  bool hasWidth() const {
+    return 0 <= static_cast<const ConcreteType *>(this)->getWidthOrSentinel();
   }
 };
 
@@ -298,7 +299,7 @@ public:
   bool isUnsigned() { return isa<UIntType>(); }
 
   /// Return the width of this type, or -1 if it has none specified.
-  int32_t getWidthOrSentinel();
+  int32_t getWidthOrSentinel() const;
 
   /// Return a 'const' or non-'const' version of this type.
   IntType getConstType(bool isConst);
