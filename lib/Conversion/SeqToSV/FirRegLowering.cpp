@@ -471,7 +471,7 @@ void FirRegLowering::initializeRegisterElements(Location loc,
                                                       intTy.getWidth());
     builder.create<sv::BPAssignOp>(loc, reg, elem);
   } else if (auto array = hw::type_dyn_cast<hw::ArrayType>(type)) {
-    for (unsigned i = 0, e = array.getSize(); i < e; ++i) {
+    for (unsigned i = 0, e = array.getNumElements(); i < e; ++i) {
       auto index = getOrCreateConstant(loc, APInt(llvm::Log2_64_Ceil(e), i));
       initializeRegisterElements(
           loc, builder, builder.create<sv::ArrayIndexInOutOp>(loc, reg, index),

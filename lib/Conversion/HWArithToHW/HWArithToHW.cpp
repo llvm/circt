@@ -360,7 +360,7 @@ Type HWArithToHWTypeConverter::removeSignedness(Type type) {
           })
           .Case<hw::ArrayType>([this](auto type) {
             return hw::ArrayType::get(removeSignedness(type.getElementType()),
-                                      type.getSize());
+                                      type.getNumElements());
           })
           .Case<hw::StructType>([this](auto type) {
             // Recursively convert each element.

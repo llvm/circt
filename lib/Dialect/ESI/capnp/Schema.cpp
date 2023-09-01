@@ -194,7 +194,7 @@ static int64_t size(hw::ArrayType mType, capnp::schema::Field::Reader cField) {
   auto cType = cField.getSlot().getType();
   assert(cType.isList());
   size_t elementBits = bits(cType.getList().getElementType());
-  int64_t listBits = mType.getSize() * elementBits;
+  int64_t listBits = mType.getNumElements() * elementBits;
   return llvm::divideCeil(listBits, 64);
 }
 
@@ -462,7 +462,7 @@ public:
   Slice slice(int64_t lsb, int64_t size) const {
     hw::ArrayType dstTy = hw::ArrayType::get(type.getElementType(), size);
     IntegerType idxTy =
-        builder->getIntegerType(llvm::Log2_64_Ceil(type.getSize()));
+        builder->getIntegerType(llvm::Log2_64_Ceil(type.getNumElements()));
     Value lsbConst = builder->create<hw::ConstantOp>(loc(), idxTy, lsb);
     Value newSlice =
         builder->create<hw::ArraySliceOp>(loc(), dstTy, s, lsbConst);
@@ -475,7 +475,7 @@ public:
   Slice slice(Value lsb, int64_t size) const {
     assert(lsb.getType().isa<IntegerType>());
 
-    unsigned expIdxWidth = llvm::Log2_64_Ceil(type.getSize());
+    unsigned expIdxWidth = llvm::Log2_64_Ceil(type.getNumElements());
     int64_t lsbWidth = lsb.getType().getIntOrFloatBitWidth();
     if (lsbWidth > expIdxWidth)
       lsb = builder->create<comb::ExtractOp>(
@@ -505,7 +505,7 @@ public:
 
   GasketComponent operator[](size_t idx) const {
     IntegerType idxTy =
-        builder->getIntegerType(llvm::Log2_32_Ceil(type.getSize()));
+        builder->getIntegerType(llvm::Log2_32_Ceil(type.getNumElements()));
     auto idxVal = builder->create<hw::ConstantOp>(loc(), idxTy, idx);
     return GasketComponent(*builder,
                            builder->create<hw::ArrayGetOp>(loc(), s, idxVal));
@@ -527,7 +527,7 @@ public:
     return *offsetIntoParent + *parentOffset;
   }
 
-  uint64_t size() const { return type.getSize(); }
+  uint64_t size() const { return type.getNumElements(); }
 
 private:
   hw::ArrayType type;
@@ -596,8 +596,9 @@ public:
     auto valTy = veg.getValue().getType().dyn_cast<hw::ArrayType>();
     assert(valTy && valTy.getElementType() == veg.b().getIntegerType(1) &&
            "Can only compare ints and bit arrays");
-    assertPred(veg.cast(veg.b().getIntegerType(valTy.getSize())).getValue(),
-               pred, expected);
+    assertPred(
+        veg.cast(veg.b().getIntegerType(valTy.getNumElements())).getValue(),
+        pred, expected);
   }
 
   void assertEqual(GasketComponent s, int64_t expected) {
@@ -696,7 +697,7 @@ void CapnpSegmentBuilder::encodeFieldAt(uint64_t offset, GasketComponent val,
                GasketComponent::concat(
                    {constant(2, 1), constant(30, relativeOffset),
                     constant(3, bitsEncoding(type.getList().getElementType())),
-                    constant(29, arrTy.getSize())}));
+                    constant(29, arrTy.getNumElements())}));
       });
 }
 
@@ -705,13 +706,13 @@ uint64_t CapnpSegmentBuilder::buildList(Slice val,
   hw::ArrayType arrTy = val.getValue().getType().cast<hw::ArrayType>();
   auto elemType = type.getList().getElementType();
   size_t elemWidth = bits(elemType);
-  uint64_t listSize = elemWidth * arrTy.getSize();
+  uint64_t listSize = elemWidth * arrTy.getNumElements();
   uint64_t m;
   if ((m = listSize % 64) != 0)
     listSize += (64 - m);
   uint64_t listOffset = alloc(listSize);
 
-  for (size_t i = 0, e = arrTy.getSize(); i < e; ++i) {
+  for (size_t i = 0, e = arrTy.getNumElements(); i < e; ++i) {
     size_t elemNum = e - i - 1;
     encodeFieldAt(listOffset + (elemNum * elemWidth), val[i], elemType);
   }
@@ -908,7 +909,7 @@ static GasketComponent decodeList(hw::ArrayType type,
 
   // Assert that the length of the list (array) is at most the length of the
   // array.
-  asserts.assertPred(length, ICmpPredicate::ule, type.getSize());
+  asserts.assertPred(length, ICmpPredicate::ule, type.getNumElements());
 
   // Get the entire message slice, compute the offset into the list, then get
   // the list data in an ArrayType.
@@ -922,20 +923,22 @@ static GasketComponent decodeList(hw::ArrayType type,
                                gb.constant(36, *ptrOffset + 64), false));
   listOffset.name(field.getName(), "_listOffset");
   auto listSlice =
-      msg.slice(listOffset, type.getSize() * expectedElemSizeBits).name("list");
+      msg.slice(listOffset, type.getNumElements() * expectedElemSizeBits)
+          .name("list");
 
   // Cast to an array of capnp int elements.
   assert(type.getElementType().isa<IntegerType>() &&
          "DecodeList() only works on arrays of ints currently");
   Type capnpElemTy =
       b.getIntegerType(expectedElemSizeBits, IntegerType::Signless);
-  auto arrayOfElements = listSlice.castToSlice(capnpElemTy, type.getSize());
+  auto arrayOfElements =
+      listSlice.castToSlice(capnpElemTy, type.getNumElements());
   if (arrayOfElements.getValue().getType() == type)
     return arrayOfElements;
 
   // Collect the reduced elements.
   SmallVector<Value, 64> arrayValues;
-  for (size_t i = 0, e = type.getSize(); i < e; ++i) {
+  for (size_t i = 0, e = type.getNumElements(); i < e; ++i) {
     auto capnpElem = arrayOfElements[i].name(field.getName(), "_capnp_elem");
     auto esiElem = capnpElem.downcast(type.getElementType().cast<IntegerType>())
                        .name(field.getName(), "_elem");
@@ -1004,7 +1007,7 @@ hw::HWModuleOp CapnpTypeSchemaImpl::buildDecoder(Value clk, Value valid,
 
   size_t size = this->size();
   hw::ArrayType operandType = operandVal.getType().dyn_cast<hw::ArrayType>();
-  assert(operandType && operandType.getSize() == size &&
+  assert(operandType && operandType.getNumElements() == size &&
          "Operand type and length must match the type's capnp size.");
   (void)size;
   (void)operandType;

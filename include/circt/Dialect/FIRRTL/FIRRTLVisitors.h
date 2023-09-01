@@ -62,7 +62,8 @@ public:
             UninferredResetCastOp, ConstCastOp, RefCastOp,
             mlir::UnrealizedConversionCastOp,
             // Property expressions.
-            StringConstantOp, FIntegerConstantOp, BoolConstantOp, MapCreateOp>(
+            StringConstantOp, FIntegerConstantOp, BoolConstantOp, ListCreateOp,
+            MapCreateOp, UnresolvedPathOp, PathOp>(
             [&](auto expr) -> ResultType {
               return thisCast->visitExpr(expr, args...);
             })
@@ -205,7 +206,10 @@ public:
   HANDLE(StringConstantOp, Unhandled);
   HANDLE(FIntegerConstantOp, Unhandled);
   HANDLE(BoolConstantOp, Unhandled);
+  HANDLE(ListCreateOp, Unhandled);
   HANDLE(MapCreateOp, Unhandled);
+  HANDLE(PathOp, Unhandled);
+  HANDLE(UnresolvedPathOp, Unhandled);
 #undef HANDLE
 };
 

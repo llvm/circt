@@ -61,7 +61,7 @@ WindowType::verify(llvm::function_ref<InFlightDiagnostic()> emitError,
         if (!arrField)
           return emitError() << "cannot specify num items on non-array field "
                              << field.name;
-        if (numItems > arrField.getSize())
+        if (numItems > arrField.getNumElements())
           return emitError() << "num items is larger than array size in field "
                              << field.name;
         if (frame.getMembers().size() != 1)
@@ -118,7 +118,7 @@ hw::UnionType WindowType::getLoweredType() const {
 
         // If the array size is not a multiple of numItems, we need another
         // frame for the left overs.
-        size_t leftOver = array.getSize() % field.getNumItems();
+        size_t leftOver = array.getNumElements() % field.getNumItems();
         if (leftOver) {
           fields.push_back(
               {field.getFieldName(),

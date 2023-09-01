@@ -50,13 +50,13 @@ ibis.class @C2 {
     %res, %done = pipeline.scheduled(%a0 : i32 = %sibling_out) clock(%c = %clk) reset(%r = %rst) go(%g = %go) -> (out : i32) {
         %0 = comb.mul %a0, %a0 : i32
         pipeline.stage ^bb1
-      ^bb1(%s1_valid : i1):
+      ^bb1(%s1_enable : i1):
         %1 = comb.mul %0, %a0 : i32
         pipeline.stage ^bb2
-      ^bb2(%s2_valid : i1):
+      ^bb2(%s2_enable : i1):
         %2 = comb.sub %1, %0 : i32
         pipeline.stage ^bb3
-      ^bb3(%s3_valid : i1):
+      ^bb3(%s3_enable : i1):
         pipeline.return %2 : i32
     }
 

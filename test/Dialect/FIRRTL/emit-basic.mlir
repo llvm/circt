@@ -12,7 +12,7 @@
 // Check if printing with very short line length, removing info locators (@[...]), no line is longer than 5x line length.
 // RUN: circt-translate --export-firrtl %s --target-line-length=10 | sed -e 's/ @\[.*\]//' | FileCheck %s --implicit-check-not "{{^(.{50})}}" --check-prefix PRETTY
 
-// CHECK-LABEL: FIRRTL version 3.1.0
+// CHECK-LABEL: FIRRTL version 3.2.0
 // CHECK-LABEL: circuit Foo :
 // PRETTY-LABEL: circuit Foo :
 firrtl.circuit "Foo" {
@@ -39,6 +39,7 @@ firrtl.circuit "Foo" {
     // CHECK-NEXT: input integer : Integer
     // CHECK-NEXT: input bool : Bool
     // CHECK-NEXT: input path : Path
+    // CHECK-NEXT: input list : List<List<Path>>
     in %a00: !firrtl.clock,
     in %a01: !firrtl.reset,
     in %a02: !firrtl.asyncreset,
@@ -56,7 +57,8 @@ firrtl.circuit "Foo" {
     in %string: !firrtl.string,
     in %integer: !firrtl.integer,
     in %bool : !firrtl.bool,
-    in %path : !firrtl.path
+    in %path : !firrtl.path,
+    in %list : !firrtl.list<list<path>>
   ) {}
 
   // CHECK-LABEL: module Simple :
@@ -644,7 +646,9 @@ firrtl.circuit "Foo" {
   // CHECK-LABEL: module Properties :
   firrtl.module @Properties(out %string : !firrtl.string,
                             out %integer : !firrtl.integer,
-                            out %bool : !firrtl.bool) {
+                            out %bool : !firrtl.bool,
+                            out %path : !firrtl.path,
+                            out %list : !firrtl.list<list<string>>) {
     // CHECK: propassign string, String("hello")
     %0 = firrtl.string "hello"
     firrtl.propassign %string, %0 : !firrtl.string
@@ -656,6 +660,18 @@ firrtl.circuit "Foo" {
     // CHECK: propassign bool, Bool(true)
     %true = firrtl.bool true
     firrtl.propassign %bool, %true : !firrtl.bool
+
+    // CHECK: propassign path, path("OMDeleted")
+    %p = firrtl.unresolved_path "OMDeleted"
+    firrtl.propassign %path, %p : !firrtl.path
+
+    // CHECK:      propassign list,
+    // CHECK-NEXT:   List<List<String>>(List<String>(String("hello"), String("hello")),
+    // CHECK-NEXT:                      List<String>())
+    %strings = firrtl.list.create %0, %0 : !firrtl.list<string>
+    %empty = firrtl.list.create : !firrtl.list<string>
+    %strings_and_empty = firrtl.list.create %strings, %empty : !firrtl.list<list<string>>
+    firrtl.propassign %list, %strings_and_empty : !firrtl.list<list<string>>
   }
 
   // Test optional group declaration and definition emission.

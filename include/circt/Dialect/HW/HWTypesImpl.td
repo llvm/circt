@@ -71,7 +71,7 @@ def ArrayTypeImpl : HWType<"Array", [DeclareTypeInterfaceMethods<FieldIDTypeInte
       auto sizeAttr = ::mlir::IntegerAttr::get(intType, size);
       return ArrayType::get(ctx, elementType, sizeAttr);
     }
-    size_t getSize() const;
+    size_t getNumElements() const;
   }];
 }
 
@@ -96,7 +96,7 @@ def UnpackedArrayType : HWType<"UnpackedArray", [DeclareTypeInterfaceMethods<Fie
       auto sizeAttr = ::mlir::IntegerAttr::get(intType, size);
       return UnpackedArrayType::get(ctx, elementType, sizeAttr);
     }
-    size_t getSize() const;
+    size_t getNumElements() const;
   }];
 }
 

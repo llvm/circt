@@ -264,7 +264,7 @@ static void getTypeDims(SmallVectorImpl<Attribute> &dims, Type type,
     return;
   }
   if (auto array = hw::type_dyn_cast<ArrayType>(type)) {
-    dims.push_back(getInt32Attr(type.getContext(), array.getSize()));
+    dims.push_back(getInt32Attr(type.getContext(), array.getNumElements()));
     getTypeDims(dims, array.getElementType(), loc);
 
     return;
@@ -304,9 +304,10 @@ bool ExportVerilog::isZeroBitType(Type type) {
   if (auto inout = type.dyn_cast<hw::InOutType>())
     return isZeroBitType(inout.getElementType());
   if (auto uarray = type.dyn_cast<hw::UnpackedArrayType>())
-    return uarray.getSize() == 0 || isZeroBitType(uarray.getElementType());
+    return uarray.getNumElements() == 0 ||
+           isZeroBitType(uarray.getElementType());
   if (auto array = type.dyn_cast<hw::ArrayType>())
-    return array.getSize() == 0 || isZeroBitType(array.getElementType());
+    return array.getNumElements() == 0 || isZeroBitType(array.getElementType());
   if (auto structType = type.dyn_cast<hw::StructType>())
     return llvm::all_of(structType.getElements(),
                         [](auto elem) { return isZeroBitType(elem.type); });
@@ -1538,7 +1539,7 @@ void ModuleEmitter::printUnpackedTypePostfix(Type type, raw_ostream &os) {
         printUnpackedTypePostfix(inoutType.getElementType(), os);
       })
       .Case<UnpackedArrayType>([&](UnpackedArrayType arrayType) {
-        os << "[0:" << (arrayType.getSize() - 1) << "]";
+        os << "[0:" << (arrayType.getNumElements() - 1) << "]";
         printUnpackedTypePostfix(arrayType.getElementType(), os);
       })
       .Case<InterfaceType>([&](auto) {
@@ -2640,7 +2641,7 @@ SubExprInfo ExprEmitter::visitTypeOp(ArraySliceOp op) {
 
   auto arrayPrec = emitSubExpr(op.getInput(), Selection);
 
-  unsigned dstWidth = type_cast<ArrayType>(op.getType()).getSize();
+  unsigned dstWidth = type_cast<ArrayType>(op.getType()).getNumElements();
   ps << "[";
   emitSubExpr(op.getLowIndex(), LowestPrecedence);
   ps << " +: ";
@@ -4619,11 +4620,13 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
 
   auto containingModule = cast<HWModuleOp>(emitter.currentModuleOp);
   auto containingPortList = containingModule.getPortList();
+  SmallVector<Value> instPortValues(modPortInfo.size());
+  op.getValues(instPortValues, modPortInfo);
   for (size_t portNum = 0, portEnd = modPortInfo.size(); portNum < portEnd;
        ++portNum) {
     auto &modPort = modPortInfo.at(portNum);
     isZeroWidth = isZeroBitType(modPort.type);
-    Value portVal = op.getValue(portNum);
+    Value portVal = instPortValues[portNum];
 
     // Decide if we should print a comma.  We can't do this if we're the first
     // port or if all the subsequent ports are zero width.
@@ -5175,10 +5178,12 @@ void ModuleEmitter::emitBind(BindOp op) {
       maxNameLength = std::max(maxNameLength, elt.getName().size());
     }
 
+    SmallVector<Value> instPortValues(childPortInfo.size());
+    inst.getValues(instPortValues, childPortInfo);
     // Emit the argument and result ports.
     for (auto [idx, elt] : llvm::enumerate(childPortInfo)) {
       // Figure out which value we are emitting.
-      Value portVal = inst.getValue(idx);
+      Value portVal = instPortValues[idx];
       bool isZeroWidth = isZeroBitType(elt.type);
 
       // Decide if we should print a comma.  We can't do this if we're the

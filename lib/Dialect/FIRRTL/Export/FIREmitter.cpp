@@ -114,6 +114,8 @@ struct Emitter {
   void emitExpression(StringConstantOp op);
   void emitExpression(FIntegerConstantOp op);
   void emitExpression(BoolConstantOp op);
+  void emitExpression(ListCreateOp op);
+  void emitExpression(UnresolvedPathOp op);
 
   void emitPrimExpr(StringRef mnemonic, Operation *op,
                     ArrayRef<uint32_t> attrs = {});
@@ -231,6 +233,21 @@ struct Emitter {
       ps << ")";
     });
     emitLocationAndNewLine(op);
+  }
+
+  template <typename EachFn, typename Range>
+  void emitLiteralExpression(Type type, const Range &r, EachFn eachFn) {
+    emitType(type);
+    ps << "(";
+    ps.scopedBox(PP::ibox0, [&]() {
+      interleaveComma(r, eachFn);
+      ps << ")";
+    });
+  }
+
+  void emitLiteralExpression(Type type, ValueRange values) {
+    return emitLiteralExpression(type, values,
+                                 [&](Value v) { emitSubExprIBox2(v); });
   }
 
 private:
@@ -1022,7 +1039,7 @@ void Emitter::emitExpression(Value value) {
           // Miscellaneous
           BitsPrimOp, HeadPrimOp, TailPrimOp, PadPrimOp, MuxPrimOp, ShlPrimOp,
           ShrPrimOp, UninferredResetCastOp, ConstCastOp, StringConstantOp,
-          FIntegerConstantOp, BoolConstantOp,
+          FIntegerConstantOp, BoolConstantOp, ListCreateOp, UnresolvedPathOp,
           // Reference expressions
           RefSendOp, RefResolveOp, RefSubOp, RWProbeOp, RefCastOp>(
           [&](auto op) {
@@ -1188,6 +1205,16 @@ void Emitter::emitExpression(StringConstantOp op) {
   ps << ")";
 }
 
+void Emitter::emitExpression(ListCreateOp op) {
+  return emitLiteralExpression(op.getType(), op.getElements());
+}
+
+void Emitter::emitExpression(UnresolvedPathOp op) {
+  ps << "path(";
+  ps.writeQuotedEscaped(op.getTarget());
+  ps << ")";
+}
+
 void Emitter::emitExpression(ConstCastOp op) { emitExpression(op.getInput()); }
 
 void Emitter::emitPrimExpr(StringRef mnemonic, Operation *op,
@@ -1298,6 +1325,11 @@ void Emitter::emitType(Type type, bool includeConst) {
       .Case<FIntegerType>([&](FIntegerType type) { ps << "Integer"; })
       .Case<BoolType>([&](BoolType type) { ps << "Bool"; })
       .Case<PathType>([&](PathType type) { ps << "Path"; })
+      .Case<ListType>([&](ListType type) {
+        ps << "List<";
+        emitType(type.getElementType());
+        ps << ">";
+      })
       .Default([&](auto type) {
         llvm_unreachable("all types should be implemented");
       });

@@ -681,6 +681,13 @@ hw.module @BindEmission2() -> () {
   hw.output
 }
 
+hw.module @rename_port(%r: i1 {hw.verilogName = "w"}) {
+// CHECK-LABEL: module rename_port
+// CHECK:  input w
+// CHECK:  wire [3:0] w_0;
+    %w = sv.wire : !hw.inout<i4>
+    hw.output
+}
 
 hw.module @bind_rename_port(%.io_req_ready.output: i1, %reset: i1 { hw.verilogName = "resetSignalName" }, %clock: i1) {
   // CHECK-LABEL: module bind_rename_port

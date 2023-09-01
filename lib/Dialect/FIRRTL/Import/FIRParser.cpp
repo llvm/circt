@@ -969,7 +969,6 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
           if (parseFieldId(fieldName, "expected bundle field name") ||
               parseToken(FIRToken::colon, "expected ':' in bundle"))
             return failure();
-          auto loc = getToken().getLoc();
           if (parseType(type, "expected bundle field type"))
             return failure();
 
@@ -1046,7 +1045,7 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     result = FIntegerType::get(getContext());
     break;
   case FIRToken::kw_Bool:
-    if (requireFeature({3, 1, 0}, "Bools")) // Not really.
+    if (requireFeature({3, 2, 0}, "Bools"))
       return failure();
     consumeToken(FIRToken::kw_Bool);
     result = BoolType::get(getContext());
@@ -1840,7 +1839,7 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
     break;
   }
   case FIRToken::kw_Bool: {
-    if (requireFeature({3, 1, 0}, "Bools")) // Not really.
+    if (requireFeature({3, 2, 0}, "Bools"))
       return failure();
     locationProcessor.setLoc(getToken().getLoc());
     consumeToken(FIRToken::kw_Bool);
