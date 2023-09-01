@@ -103,4 +103,10 @@ def EnumType : TypeDef<OMDialect, "Enum", []> {
   }];
 }
 
+def OMBoolType : TypeDef<OMDialect, "Bool", []> {
+  let summary = "A boolean type.";
+
+  let mnemonic = "bool";
+}
+
 #endif // CIRCT_DIALECT_OM_OMTYPES_TD
