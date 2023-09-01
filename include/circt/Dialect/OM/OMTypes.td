@@ -76,6 +76,12 @@ def SymbolRefType : TypeDef<OMDialect, "SymbolRef", []> {
   let mnemonic = "sym_ref";
 }
 
+def OMIntegerType : TypeDef<OMDialect, "OMInteger", []> {
+  let summary = "A type that represents an arbitrary width integer.";
+
+  let mnemonic = "integer";
+}
+
 def StringType : TypeDef<OMDialect, "String", []> {
   let summary = "A type that represents a string.";
 

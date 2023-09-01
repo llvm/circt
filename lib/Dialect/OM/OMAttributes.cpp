@@ -97,6 +97,10 @@ circt::om::PathAttr circt::om::PathAttr::get(mlir::StringAttr path) {
 
 Type circt::om::PathAttr::getType() { return PathType::get(getContext()); }
 
+Type circt::om::IntegerAttr::getType() {
+  return OMIntegerType::get(getContext());
+}
+
 void circt::om::OMDialect::registerAttributes() {
   addAttributes<
 #define GET_ATTRDEF_LIST

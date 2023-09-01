@@ -121,4 +121,18 @@ def OMPathAttribute : AttrDef<OMDialect, "Path", [TypedAttrInterface]> {
   }];
 }
 
+def OMIntegerAttr : AttrDef<OMDialect, "Integer", [TypedAttrInterface]> {
+  let summary = "An attribute that represents an arbitrary integer";
+
+  let mnemonic = "integer";
+
+  let parameters = (ins "mlir::IntegerAttr":$value);
+
+  let assemblyFormat = " `<` $value `>` ";
+
+  let extraClassDeclaration = [{
+    mlir::Type getType();
+  }];
+}
+
 #endif // CIRCT_DIALECT_OM_OMATTRIBUTES_TD
