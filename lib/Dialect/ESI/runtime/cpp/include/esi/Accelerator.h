@@ -35,11 +35,10 @@ constexpr uint32_t MagicNumberLo = 0xE5100E51;
 constexpr uint32_t MagicNumberHi = 0x207D98E5;
 constexpr uint32_t ExpectedVersionNumber = 0;
 
-class SysInfo;
-
 namespace services {
 class Service {
 public:
+  using Type = const std::type_info &;
   virtual ~Service() = default;
 };
 } // namespace services
@@ -49,28 +48,16 @@ class Accelerator {
 public:
   virtual ~Accelerator() = default;
 
-  virtual const SysInfo &sysInfo() = 0;
-
   template <typename ServiceClass>
   ServiceClass *getService() {
     return dynamic_cast<ServiceClass *>(getServiceImpl(typeid(ServiceClass)));
   }
 
 protected:
-  virtual services::Service *getServiceImpl(const std::type_info &service) = 0;
-  std::map<const std::type_info *, services::Service *> serviceCache;
-};
-
-/// Information about the Accelerator system.
-class SysInfo {
-public:
-  virtual ~SysInfo() = default;
-
-  /// Get the ESI version number to check version compatibility.
-  virtual uint32_t esiVersion() const = 0;
-
-  /// Return the JSON-formatted system manifest.
-  virtual std::string rawJsonManifest() const = 0;
+  using Service = services::Service;
+  virtual Service *createService(Service::Type service) = 0;
+  virtual Service *getServiceImpl(Service::Type service);
+  std::map<const std::type_info *, std::unique_ptr<Service>> serviceCache;
 };
 
 namespace registry {

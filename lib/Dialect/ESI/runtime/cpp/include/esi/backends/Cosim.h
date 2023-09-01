@@ -32,18 +32,13 @@ namespace cosim {
 class CosimAccelerator : public esi::Accelerator {
 public:
   CosimAccelerator(std::string hostname, uint16_t port);
-  ~CosimAccelerator();
+  ~CosimAccelerator() = default;
   static std::unique_ptr<Accelerator> connect(std::string connectionString);
 
-  const SysInfo &sysInfo() override;
-
 protected:
-  virtual services::Service *
-  getServiceImpl(const std::type_info &service) override;
+  virtual Service *createService(Service::Type service) override;
 
 private:
-  SysInfo *info;
-
   struct Impl;
   std::unique_ptr<Impl> impl;
 };

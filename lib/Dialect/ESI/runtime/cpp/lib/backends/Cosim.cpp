@@ -77,18 +77,8 @@ struct esi::backends::cosim::CosimAccelerator::Impl {
 
 /// Construct and connect to a cosim server.
 // TODO: Implement this.
-CosimAccelerator::CosimAccelerator(std::string hostname, uint16_t port)
-    : info(nullptr) {
+CosimAccelerator::CosimAccelerator(std::string hostname, uint16_t port) {
   impl = std::make_unique<Impl>(hostname, port);
-}
-CosimAccelerator::~CosimAccelerator() {
-  if (info)
-    delete info;
-}
-const SysInfo &CosimAccelerator::sysInfo() {
-  if (info == nullptr)
-    info = new MMIOSysInfo(getService<MMIO>());
-  return *info;
 }
 
 namespace {
@@ -115,15 +105,12 @@ private:
 };
 } // namespace
 
-services::Service *
-CosimAccelerator::getServiceImpl(const std::type_info &svcType) {
-  Service *&cacheEntry = serviceCache[&svcType];
-  if (cacheEntry != nullptr)
-    return cacheEntry;
-
+Service *CosimAccelerator::createService(Service::Type svcType) {
   if (svcType == typeid(MMIO))
-    cacheEntry = new CosimMMIO(impl->lowLevel, impl->waitScope);
-  return cacheEntry;
+    return new CosimMMIO(impl->lowLevel, impl->waitScope);
+  else if (svcType == typeid(SysInfo))
+    return new MMIOSysInfo(getService<MMIO>());
+  return nullptr;
 }
 
 REGISTER_ACCELERATOR("cosim", backends::cosim::CosimAccelerator);

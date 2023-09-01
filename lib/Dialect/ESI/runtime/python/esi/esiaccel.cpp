@@ -18,13 +18,14 @@
 namespace py = pybind11;
 
 using namespace esi;
+using namespace esi::services;
 
 // NOLINTNEXTLINE(readability-identifier-naming)
 PYBIND11_MODULE(esiaccel, m) {
   py::class_<Accelerator>(m, "Accelerator")
       .def_static("connect", &registry::connect,
                   py::return_value_policy::take_ownership)
-      .def("sysinfo", &Accelerator::sysInfo,
+      .def("sysinfo", &Accelerator::getService<SysInfo>,
            py::return_value_policy::reference_internal)
       .def("get_service_mmio", &Accelerator::getService<services::MMIO>,
            py::return_value_policy::reference_internal);

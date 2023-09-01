@@ -27,6 +27,18 @@
 namespace esi {
 namespace services {
 
+/// Information about the Accelerator system.
+class SysInfo : public Service {
+public:
+  virtual ~SysInfo() = default;
+
+  /// Get the ESI version number to check version compatibility.
+  virtual uint32_t esiVersion() const = 0;
+
+  /// Return the JSON-formatted system manifest.
+  virtual std::string rawJsonManifest() const = 0;
+};
+
 class MMIO : public Service {
 public:
   virtual ~MMIO() = default;
