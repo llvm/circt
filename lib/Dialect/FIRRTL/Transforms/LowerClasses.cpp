@@ -476,7 +476,8 @@ struct FIntegerConstantOpConversion
   matchAndRewrite(FIntegerConstantOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     rewriter.replaceOpWithNewOp<om::ConstantOp>(
-        op, adaptor.getValueAttr().getType(), adaptor.getValueAttr());
+        op, om::OMIntegerType::get(op.getContext()),
+        om::IntegerAttr::get(op.getContext(), adaptor.getValueAttr()));
     return success();
   }
 };
@@ -725,12 +726,13 @@ static void populateConversionTarget(ConversionTarget &target) {
 
 static void populateTypeConverter(TypeConverter &converter) {
   // Convert FIntegerType to IntegerType.
-  converter.addConversion([](IntegerType type) { return type; });
+  converter.addConversion(
+      [](IntegerType type) { return OMIntegerType::get(type.getContext()); });
   converter.addConversion([](FIntegerType type) {
     // The actual width of the IntegerType doesn't actually get used; it will be
     // folded away by the dialect conversion infrastructure to the type of the
     // APSIntAttr used in the FIntegerConstantOp.
-    return IntegerType::get(type.getContext(), 64);
+    return OMIntegerType::get(type.getContext());
   });
 
   // Convert FIRRTL StringType to OM StringType.
