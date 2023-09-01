@@ -84,8 +84,8 @@ firrtl.circuit "Component" {
 
   // CHECK-LABEL: om.class @BoolTest()
   firrtl.class @BoolTest(out %b : !firrtl.bool) {
-    // CHECK-NEXT: %[[TRUE:.+]] = om.constant true
-    // CHECK-NEXT: om.class.field @b, %[[TRUE]] : i1
+    // CHECK-NEXT: %[[TRUE:.+]] = om.constant #om.bool<true> : !om.bool
+    // CHECK-NEXT: om.class.field @b, %[[TRUE]] : !om.bool
     %true = firrtl.bool true
     firrtl.propassign %b, %true : !firrtl.bool
   }
