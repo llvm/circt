@@ -56,7 +56,7 @@ struct UntypedData @0xac6e64291027d47a {
 # cases, hardware errors become exceptions.
 interface EsiLowLevel @0xae716100ef82f6d6 {
   # Write to an MMIO register.
-  writeMMIO @0 (address :UInt64, data :UInt64) -> ();
+  writeMMIO @0 (address :UInt32, data :UInt32) -> ();
   # Read from an MMIO register.
-  readMMIO  @1 (address :UInt64) -> (data :UInt64);
+  readMMIO  @1 (address :UInt32) -> (data :UInt32);
 }
