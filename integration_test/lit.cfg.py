@@ -181,7 +181,7 @@ if config.esi_cosim_path != "":
   config.substitutions.append(('%ESICOSIM%', f'{config.esi_cosim_path}'))
 
 # Enable ESI runtime tests.
-if config.esi_runtime != "":
+if config.esi_runtime == "1":
   config.available_features.add('esi-runtime')
 
 # Enable ESI's Capnp tests if they're supported.
