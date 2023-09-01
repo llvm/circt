@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file declares type interfaces for the FIRRTL Dialect.
+// This file declares type interfaces for the FIRRTL dialect.
 //
 //===----------------------------------------------------------------------===//
 
