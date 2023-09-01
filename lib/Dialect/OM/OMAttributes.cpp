@@ -103,3 +103,5 @@ void circt::om::OMDialect::registerAttributes() {
 #include "circt/Dialect/OM/OMAttributes.cpp.inc"
       >();
 }
+
+Type circt::om::BoolAttr::getType() { return BoolType::get(getContext()); }

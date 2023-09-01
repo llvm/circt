@@ -121,4 +121,18 @@ def OMPathAttribute : AttrDef<OMDialect, "Path", [TypedAttrInterface]> {
   }];
 }
 
+def OMBoolAttr : AttrDef<OMDialect, "Bool", [TypedAttrInterface]> {
+  let summary = "An attribute that represents a boolean value";
+
+  let mnemonic = "bool";
+
+  let parameters = (ins "mlir::BoolAttr":$value);
+
+  let assemblyFormat = " `<` $value `>` ";
+
+  let extraClassDeclaration = [{
+    mlir::Type getType();
+  }];
+}
+
 #endif // CIRCT_DIALECT_OM_OMATTRIBUTES_TD
