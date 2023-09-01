@@ -294,6 +294,7 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
   void markInvalidValueOp(InvalidValueOp invalid);
   void markAggregateConstantOp(AggregateConstantOp constant);
   void markInstanceOp(InstanceOp instance);
+  void markObjectOp(ObjectOp object);
   template <typename OpTy>
   void markConstantValueOp(OpTy op);
 
@@ -457,6 +458,7 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
         .Case<InvalidValueOp>(
             [&](auto invalid) { markInvalidValueOp(invalid); })
         .Case<InstanceOp>([&](auto instance) { markInstanceOp(instance); })
+        .Case<ObjectOp>([&](auto obj) { markObjectOp(obj); })
         .Case<MemOp>([&](auto mem) { markMemOp(mem); })
         .Default([&](auto _) {
           if (isa<mlir::UnrealizedConversionCastOp, VerbatimExprOp,
@@ -593,6 +595,11 @@ void IMConstPropPass::markInstanceOp(InstanceOp instance) {
   }
 }
 
+void IMConstPropPass::markObjectOp(ObjectOp obj) {
+  // Mark overdefined for now, not supported.
+  markOverdefined(obj);
+}
+
 static std::optional<uint64_t>
 getFieldIDOffset(FieldRef changedFieldRef, Type connectionType,
                  FieldRef connectedValueFieldRef) {
@@ -704,6 +711,10 @@ void IMConstPropPass::visitConnectLike(FConnectLike connect,
     // Driving a memory result is ignored because these are always treated
     // as overdefined.
     if (dest.getDefiningOp<MemOp>())
+      return;
+
+    // For now, don't support const prop into object fields.
+    if (isa_and_nonnull<ObjectSubfieldOp>(dest.getDefiningOp()))
       return;
 
     connect.emitError("connectlike operation unhandled by IMConstProp")

@@ -683,3 +683,36 @@ firrtl.circuit "PropPassthruTest" {
     firrtl.propassign %boolOut, %passthru_boolOut : !firrtl.bool
   }
 }
+
+// -----
+// Check assignments into object fields don't cause errors.
+
+// CHECK-LABEL: "ObjectSubfieldConnect"
+firrtl.circuit "ObjectSubfieldConnect" {
+  firrtl.class private @Test(in %in: !firrtl.integer) {
+  }
+  firrtl.module @ObjectSubfieldConnect(in %in: !firrtl.integer) {
+    %0 = firrtl.object @Test(in in: !firrtl.integer)
+    %1 = firrtl.object.subfield %0[in] : !firrtl.class<@Test(in in: !firrtl.integer)>
+    firrtl.propassign %1, %in : !firrtl.integer
+  }
+}
+
+// -----
+// Check assignments of objects themselves are handled.
+
+// CHECK-LABEL: "ObjectConnect"
+firrtl.circuit "ObjectConnect" {
+  firrtl.class private @Test() {}
+  firrtl.module @Passthru(in %in : !firrtl.class<@Test()>,
+                          out %out : !firrtl.class<@Test()>) {
+    firrtl.propassign %out, %in : !firrtl.class<@Test()>
+  }
+  firrtl.module @ObjectConnect(out %out : !firrtl.class<@Test()>) {
+    %c_in, %c_out = firrtl.instance c @Passthru(in in : !firrtl.class<@Test()>,
+                                                out out : !firrtl.class<@Test()>)
+    %obj = firrtl.object @Test()
+    firrtl.propassign %c_in, %obj : !firrtl.class<@Test()>
+    firrtl.propassign %out, %c_out : !firrtl.class<@Test()>
+  }
+}
