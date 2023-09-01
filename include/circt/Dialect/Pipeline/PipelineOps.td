@@ -140,7 +140,7 @@ def ScheduledPipelineOp : PipelineBase<"scheduled", [
     the clock-enable input of the stage-separating registers.
 
     The `go` input is used to start the pipeline. This value is fed through
-    the stages as the current stage valid/next stage enable signal.e
+    the stages as the current stage valid/next stage enable signal.
     Note: the op is currently only designed for pipelines with II=1. For
     pipelines with II>1, a user must themselves maintain state about when
     the pipeline is ready to accept new inputs. We plan to add support for
