@@ -2252,3 +2252,14 @@ firrtl.circuit "InvalidInnerSymDupe" {
     %w = firrtl.wire sym [<@"foo",0,public>,<@"bar",0,public>] : !firrtl.uint<5>
   }
 }
+
+// -----
+
+firrtl.circuit "InstanceOfClass" {
+  // expected-note @below {{class declared here}}
+  firrtl.class @A() {}
+  firrtl.module @InstanceOfClass() {
+    // expected-error @below {{op must instantiate a module not a class}}
+    firrtl.instance a @A()
+  }
+}

@@ -86,8 +86,6 @@ MlirAttribute firrtlAttrGetConvention(MlirContext ctx,
   case FIRRTL_CONVENTION_SCALARIZED:
     value = Convention::Scalarized;
     break;
-  default: // NOLINT(clang-diagnostic-covered-switch-default)
-    llvm_unreachable("unknown convention");
   }
 
   return wrap(ConventionAttr::get(unwrap(ctx), value));
@@ -122,8 +120,6 @@ MlirAttribute firrtlAttrGetNameKind(MlirContext ctx, FIRRTLNameKind nameKind) {
   case FIRRTL_NAME_KIND_INTERESTING_NAME:
     value = NameKindEnum::InterestingName;
     break;
-  default: // NOLINT(clang-diagnostic-covered-switch-default)
-    llvm_unreachable("unknown name kind");
   }
 
   return wrap(NameKindEnumAttr::get(unwrap(ctx), value));
@@ -142,8 +138,6 @@ MlirAttribute firrtlAttrGetRUW(MlirContext ctx, FIRRTLRUW ruw) {
   case FIRRTL_RUW_NEW:
     value = RUWAttr::New;
     break;
-  default: // NOLINT(clang-diagnostic-covered-switch-default)
-    llvm_unreachable("unknown ruw");
   }
 
   return wrap(RUWAttrAttr::get(unwrap(ctx), value));
@@ -171,8 +165,6 @@ MlirAttribute firrtlAttrGetMemDir(MlirContext ctx, FIRRTLMemDir dir) {
   case FIRRTL_MEM_DIR_READ_WRITE:
     value = MemDirAttr::ReadWrite;
     break;
-  default: // NOLINT(clang-diagnostic-covered-switch-default)
-    llvm_unreachable("unknown memory direction");
   }
 
   return wrap(MemDirAttrAttr::get(unwrap(ctx), value));
@@ -192,8 +184,6 @@ MlirAttribute firrtlAttrGetEventControl(MlirContext ctx,
   case FIRRTL_EVENT_CONTROL_AT_EDGE:
     value = EventControl::AtEdge;
     break;
-  default: // NOLINT(clang-diagnostic-covered-switch-default)
-    llvm_unreachable("unknown event control");
   }
 
   return wrap(EventControlAttr::get(unwrap(ctx), value));

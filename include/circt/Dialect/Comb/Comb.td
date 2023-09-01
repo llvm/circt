@@ -28,6 +28,10 @@ def CombDialect : Dialect {
   }];
   let hasConstantMaterializer = 1;
   let cppNamespace = "::circt::comb";
+
+  // This will be the default after next LLVM bump.
+  let usePropertiesForAttributes = 1;
+
 }
 
 // Base class for the operation in this dialect.

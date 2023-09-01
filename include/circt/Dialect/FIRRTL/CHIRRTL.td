@@ -38,6 +38,9 @@ def CHIRRTLDialect : Dialect {
   let dependentDialects = ["circt::firrtl::FIRRTLDialect"];
 
   let useDefaultTypePrinterParser = 1;
+
+  // Opt-out of properties for now, must migrate by LLVM 19.  #5273.
+  let usePropertiesForAttributes = 0;
 }
 
 //===----------------------------------------------------------------------===//

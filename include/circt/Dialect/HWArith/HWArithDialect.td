@@ -17,6 +17,9 @@ def HWArithDialect : Dialect {
   let name = "hwarith";
   let cppNamespace = "::circt::hwarith";
 
+  // This will be the default after next LLVM bump.
+  let usePropertiesForAttributes = 1;
+
   let summary = "Types and operations for the HWArith dialect";
   let description = [{
     This dialect defines the `HWArith` dialect, modeling bit-width aware

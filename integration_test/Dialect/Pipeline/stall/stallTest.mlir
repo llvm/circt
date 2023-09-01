@@ -25,11 +25,11 @@ hw.module @stallTest(%arg0 : i32, %arg1 : i32, %go : i1, %stall : i1, %clock : i
       %add0 = comb.add %a0, %a1 : i32
       pipeline.stage ^bb1
 
-    ^bb1(%s1_valid : i1):
+    ^bb1(%s1_enable : i1):
       %add1 = comb.add %add0, %a0 : i32
       pipeline.stage ^bb2
 
-    ^bb2(%s2_valid : i1):
+    ^bb2(%s2_enable : i1):
       %add2 = comb.add %add1, %add0 : i32
       pipeline.return %add2 : i32
   }

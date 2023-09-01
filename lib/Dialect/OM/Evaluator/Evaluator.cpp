@@ -77,6 +77,8 @@ circt::om::Evaluator::instantiate(
       actualParamType = object->getType();
     else if (auto *list = dyn_cast<evaluator::ListValue>(actualParam.get()))
       actualParamType = list->getType();
+    else if (auto *tuple = dyn_cast<evaluator::TupleValue>(actualParam.get()))
+      actualParamType = tuple->getType();
 
     if (!actualParamType)
       return cls.emitError("actual parameter for ")
@@ -134,6 +136,12 @@ FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::evaluateValue(
             })
             .Case([&](ListCreateOp op) {
               return evaluateListCreate(op, actualParams);
+            })
+            .Case([&](TupleCreateOp op) {
+              return evaluateTupleCreate(op, actualParams);
+            })
+            .Case([&](TupleGetOp op) {
+              return evaluateTupleGet(op, actualParams);
             })
             .Default([&](Operation *op) {
               auto error = op->emitError("unable to evaluate value");
@@ -231,6 +239,37 @@ circt::om::Evaluator::evaluateListCreate(
   // Return the list.
   evaluator::EvaluatorValuePtr result =
       std::make_shared<evaluator::ListValue>(op.getType(), std::move(values));
+  return result;
+}
+
+/// Evaluator dispatch function for Tuple creation.
+FailureOr<evaluator::EvaluatorValuePtr>
+circt::om::Evaluator::evaluateTupleCreate(
+    TupleCreateOp op, ArrayRef<evaluator::EvaluatorValuePtr> actualParams) {
+  SmallVector<evaluator::EvaluatorValuePtr> values;
+  for (auto operand : op.getOperands()) {
+    auto result = evaluateValue(operand, actualParams);
+    if (failed(result))
+      return result;
+    values.push_back(result.value());
+  }
+
+  // Return the tuple.
+  evaluator::EvaluatorValuePtr result = std::make_shared<evaluator::TupleValue>(
+      op.getType().cast<mlir::TupleType>(), std::move(values));
+
+  return result;
+}
+
+/// Evaluator dispatch function for List creation.
+FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::evaluateTupleGet(
+    TupleGetOp op, ArrayRef<evaluator::EvaluatorValuePtr> actualParams) {
+  auto tuple = evaluateValue(op.getInput(), actualParams);
+  if (failed(tuple))
+    return tuple;
+  evaluator::EvaluatorValuePtr result =
+      cast<evaluator::TupleValue>(tuple.value().get())
+          ->getElements()[op.getIndex()];
   return result;
 }
 

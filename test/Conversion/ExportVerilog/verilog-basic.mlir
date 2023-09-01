@@ -1,10 +1,10 @@
 // RUN: circt-opt %s -test-apply-lowering-options='options=emitBindComments' -export-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
 
 
-hw.testmodule @NewStyle (input %a : i3, 
-                         output %b : i3, 
-                         input %c : i4, 
-                         output %d : i4, 
+hw.testmodule @NewStyle (input %a : i3,
+                         output %b : i3,
+                         input %c : i4,
+                         output %d : i4,
                          inout %e : i64 {hw.exportPort = #hw<innerSym@symA>}) {
   hw.output %a, %c : i3, i4
  }
@@ -681,6 +681,13 @@ hw.module @BindEmission2() -> () {
   hw.output
 }
 
+hw.module @rename_port(%r: i1 {hw.verilogName = "w"}) {
+// CHECK-LABEL: module rename_port
+// CHECK:  input w
+// CHECK:  wire [3:0] w_0;
+    %w = sv.wire : !hw.inout<i4>
+    hw.output
+}
 
 hw.module @bind_rename_port(%.io_req_ready.output: i1, %reset: i1 { hw.verilogName = "resetSignalName" }, %clock: i1) {
   // CHECK-LABEL: module bind_rename_port

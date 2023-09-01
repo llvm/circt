@@ -16,6 +16,9 @@ def LoopSchedule_Dialect : Dialect {
   let name = "loopschedule";
   let cppNamespace = "::circt::loopschedule";
   let summary = "Representation of scheduled loops";
+
+  // Opt-out of properties for now, must migrate by LLVM 19.  #5273.
+  let usePropertiesForAttributes = 0;
 }
 
 include "circt/Dialect/LoopSchedule/LoopScheduleOps.td"

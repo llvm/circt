@@ -969,7 +969,6 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
           if (parseFieldId(fieldName, "expected bundle field name") ||
               parseToken(FIRToken::colon, "expected ':' in bundle"))
             return failure();
-          auto loc = getToken().getLoc();
           if (parseType(type, "expected bundle field type"))
             return failure();
 
@@ -3593,6 +3592,10 @@ ParseResult FIRStmtParser::parseInstance() {
               "use of undefined module name '" + moduleName + "' in instance");
     return failure();
   }
+  if (isa<ClassOp /* ClassLike */>(referencedModule))
+    return emitError(startTok.getLoc(), "cannot create instance of class '" +
+                                            moduleName +
+                                            "', did you mean object?");
 
   SmallVector<PortInfo> modulePorts = referencedModule.getPorts();
 

@@ -62,12 +62,21 @@ class LowLevelServer final : public EsiLowLevel::Server {
   // Queues to and from the simulation.
   LowLevel &bridge;
 
-  // Functions which poll for responses without blocking the main loop.
+  // Functions which poll for responses without blocking the main loop. Polling
+  // ain't great, but it's the only way (AFAICT) to do inter-thread
+  // communication between a libkj concurrent thread and other threads. There is
+  // a non-polling way to do it by setting up a queue over a OS-level pipe
+  // (since the libkj event loop uses 'select').
   kj::Promise<void> pollReadResp(ReadMMIOContext context);
   kj::Promise<void> pollWriteResp(WriteMMIOContext context);
 
 public:
   LowLevelServer(LowLevel &bridge);
+  /// Release the Endpoint should the client disconnect without properly closing
+  /// it.
+  ~LowLevelServer();
+  /// Disallow copying as the 'open' variable needs to track the endpoint.
+  LowLevelServer(const LowLevelServer &) = delete;
 
   // Implement the protocol methods.
   kj::Promise<void> readMMIO(ReadMMIOContext) override;
@@ -168,6 +177,7 @@ kj::Promise<void> EndpointServer::close(CloseContext context) {
 /// ------ LowLevelServer definitions.
 
 LowLevelServer::LowLevelServer(LowLevel &bridge) : bridge(bridge) {}
+LowLevelServer::~LowLevelServer() {}
 
 kj::Promise<void> LowLevelServer::pollReadResp(ReadMMIOContext context) {
   auto respMaybe = bridge.readResps.pop();

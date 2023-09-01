@@ -1973,6 +1973,12 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     return emitOpError("invalid symbol reference");
   }
 
+  // Check this is not a class.
+  if (isa<ClassOp /* ClassLike */>(referencedModule))
+    return emitOpError("must instantiate a module not a class")
+               .attachNote(referencedModule.getLoc())
+           << "class declared here";
+
   // Check that this instance doesn't recursively instantiate its wrapping
   // module.
   if (referencedModule == module) {

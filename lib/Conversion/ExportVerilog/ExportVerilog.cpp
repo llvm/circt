@@ -1221,7 +1221,8 @@ class ModuleEmitter : public EmitterBase {
 public:
   explicit ModuleEmitter(VerilogEmitterState &state)
       : EmitterBase(state),
-        fieldNameResolver(FieldNameResolver(state.globalNames)) {}
+        fieldNameResolver(FieldNameResolver(state.globalNames, state.options)) {
+  }
   ~ModuleEmitter() {
     emitPendingNewlineIfNeeded();
     ps.eof();
@@ -3337,8 +3338,8 @@ class StmtEmitter : public EmitterBase,
 public:
   /// Create an ExprEmitter for the specified module emitter, and keeping track
   /// of any emitted expressions in the specified set.
-  StmtEmitter(ModuleEmitter &emitter)
-      : EmitterBase(emitter.state), emitter(emitter) {}
+  StmtEmitter(ModuleEmitter &emitter, const LoweringOptions &options)
+      : EmitterBase(emitter.state), emitter(emitter), options(options) {}
 
   void emitStatement(Operation *op);
   void emitStatementBlock(Block &body);
@@ -3470,6 +3471,8 @@ private:
   /// current statement scope.
   size_t maxDeclNameWidth = 0;
   size_t maxTypeWidth = 0;
+
+  const LoweringOptions &options;
 };
 
 } // end anonymous namespace
@@ -3989,7 +3992,8 @@ LogicalResult StmtEmitter::visitSV(GenerateCaseOp op) {
         });
 
       StringRef legalName =
-          legalizeName(caseNames[i].cast<StringAttr>().getValue(), nextGenIds);
+          legalizeName(caseNames[i].cast<StringAttr>().getValue(), nextGenIds,
+                       options.caseInsensitiveKeywords);
       ps << ": begin: " << PPExtString(legalName);
       setPendingNewline();
       emitStatementBlock(region.getBlocks().front());
@@ -4616,11 +4620,13 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
 
   auto containingModule = cast<HWModuleOp>(emitter.currentModuleOp);
   auto containingPortList = containingModule.getPortList();
+  SmallVector<Value> instPortValues(modPortInfo.size());
+  op.getValues(instPortValues, modPortInfo);
   for (size_t portNum = 0, portEnd = modPortInfo.size(); portNum < portEnd;
        ++portNum) {
     auto &modPort = modPortInfo.at(portNum);
     isZeroWidth = isZeroBitType(modPort.type);
-    Value portVal = op.getValue(portNum);
+    Value portVal = instPortValues[portNum];
 
     // Decide if we should print a comma.  We can't do this if we're the first
     // port or if all the subsequent ports are zero width.
@@ -5101,7 +5107,7 @@ void StmtEmitter::emitStatementBlock(Block &body) {
 // NOLINTEND(misc-no-recursion)
 
 void ModuleEmitter::emitStatement(Operation *op) {
-  StmtEmitter(*this).emitStatement(op);
+  StmtEmitter(*this, state.options).emitStatement(op);
 }
 
 /// Emit SystemVerilog attributes attached to the expression op as dialect
@@ -5172,10 +5178,12 @@ void ModuleEmitter::emitBind(BindOp op) {
       maxNameLength = std::max(maxNameLength, elt.getName().size());
     }
 
+    SmallVector<Value> instPortValues(childPortInfo.size());
+    inst.getValues(instPortValues, childPortInfo);
     // Emit the argument and result ports.
     for (auto [idx, elt] : llvm::enumerate(childPortInfo)) {
       // Figure out which value we are emitting.
-      Value portVal = inst.getValue(idx);
+      Value portVal = instPortValues[idx];
       bool isZeroWidth = isZeroBitType(elt.type);
 
       // Decide if we should print a comma.  We can't do this if we're the
@@ -5529,7 +5537,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
   assert(state.pendingNewline);
 
   // Emit the body of the module.
-  StmtEmitter(*this).emitStatementBlock(*module.getBodyBlock());
+  StmtEmitter(*this, state.options).emitStatementBlock(*module.getBodyBlock());
   startStatement();
   ps << "endmodule" << PP::newline;
   setPendingNewline();
@@ -5553,7 +5561,7 @@ void ModuleEmitter::emitHWTestModule(HWTestModuleOp module) {
   assert(state.pendingNewline);
 
   // Emit the body of the module.
-  StmtEmitter(*this).emitStatementBlock(*module.getBodyBlock());
+  StmtEmitter(*this, state.options).emitStatementBlock(*module.getBodyBlock());
   startStatement();
   ps << "endmodule" << PP::newline;
   setPendingNewline();

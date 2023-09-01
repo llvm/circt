@@ -465,9 +465,9 @@ void ScheduledPipelineOp::getAsmBlockArgumentNames(
         setNameFn(arg, llvm::formatv("s{0}_pass{1}", i, passthroughI).str());
       }
 
-      // Last argument in any (non-entry) stage is the stage valid signal.
+      // Last argument in any (non-entry) stage is the stage enable signal.
       setNameFn(block.getArguments().back(),
-                llvm::formatv("s{0}_valid", i).str());
+                llvm::formatv("s{0}_enable", i).str());
     }
   }
 }

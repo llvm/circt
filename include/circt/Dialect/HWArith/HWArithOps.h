@@ -15,6 +15,7 @@
 
 #include "circt/Dialect/HWArith/HWArithDialect.h"
 #include "circt/Support/LLVM.h"
+#include "mlir/Bytecode/BytecodeOpInterface.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/Interfaces/InferTypeOpInterface.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"

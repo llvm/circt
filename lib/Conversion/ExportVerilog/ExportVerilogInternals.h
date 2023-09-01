@@ -80,7 +80,7 @@ private:
 //===----------------------------------------------------------------------===//
 
 struct NameCollisionResolver {
-  NameCollisionResolver() = default;
+  NameCollisionResolver(const LoweringOptions &options) : options(options){};
 
   /// Given a name that may have collisions or invalid symbols, return a
   /// replacement name to use, or the original name if it was ok.
@@ -93,6 +93,9 @@ struct NameCollisionResolver {
   void insertUsedName(StringRef name) {
     nextGeneratedNameIDs.insert({name, 0});
   }
+
+  /// Handle to LoweringOptions.
+  const LoweringOptions &options;
 
 private:
   /// A map from used names to numeric suffix used as uniquification agent when
@@ -108,8 +111,9 @@ private:
 //===----------------------------------------------------------------------===//
 
 struct FieldNameResolver {
-  FieldNameResolver(const GlobalNameTable &globalNames)
-      : globalNames(globalNames){};
+  FieldNameResolver(const GlobalNameTable &globalNames,
+                    const LoweringOptions &options)
+      : globalNames(globalNames), options(options){};
 
   StringAttr getRenamedFieldName(StringAttr fieldName);
 
@@ -133,6 +137,9 @@ private:
 
   // Handle to the global name table.
   const GlobalNameTable &globalNames;
+
+  // Handle to lowering options.
+  const LoweringOptions &options;
 };
 
 //===----------------------------------------------------------------------===//

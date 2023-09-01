@@ -25,22 +25,27 @@ namespace sv {
 /// Given string \p origName, generate a new name if it conflicts with any
 /// keyword or any other name in the map \p nextGeneratedNameIDs. Use the value
 /// of \p nextGeneratedNameIDs as a counter for suffix. Update the \p
-/// nextGeneratedNameIDs with the generated name and return the StringRef.
+/// nextGeneratedNameIDs with the generated name and return the StringRef.  If
+/// \p is true, then check against the reserved keywords in a case insensitive
+/// manner.
 llvm::StringRef
 resolveKeywordConflict(llvm::StringRef origName,
-                       llvm::StringMap<size_t> &nextGeneratedNameIDs);
+                       llvm::StringMap<size_t> &nextGeneratedNameIDs,
+                       bool caseInsensitiveKeywords);
 
 /// Legalize the specified name for use in SV output. Auto-uniquifies the name
 /// through \c resolveKeywordConflict if required. If the name is empty, a
 /// unique temp name is created.
 StringRef legalizeName(llvm::StringRef name,
-                       llvm::StringMap<size_t> &nextGeneratedNameIDs);
+                       llvm::StringMap<size_t> &nextGeneratedNameIDs,
+                       bool caseInsensitiveKeywords);
 
 /// Check if a name is valid for use in SV output by only containing characters
 /// allowed in SV identifiers.
 ///
-/// Call \c legalizeName() to obtain a legal version of the name.
-bool isNameValid(llvm::StringRef name);
+/// Call \c legalizeName() to obtain a legal version of the name.  If \p
+/// caseInsensitive is true, then the check will be done case insensitively.
+bool isNameValid(llvm::StringRef name, bool caseInsensitiveKeywords);
 
 } // namespace sv
 } // namespace circt
