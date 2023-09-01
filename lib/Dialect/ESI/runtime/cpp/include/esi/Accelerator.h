@@ -33,9 +33,12 @@ namespace esi {
 constexpr uint32_t MagicNumOffset = 16;
 constexpr uint32_t MagicNumberLo = 0xE5100E51;
 constexpr uint32_t MagicNumberHi = 0x207D98E5;
+constexpr uint32_t VersionNumberOffset = MagicNumOffset + 8;
 constexpr uint32_t ExpectedVersionNumber = 0;
 
 namespace services {
+/// Parent class of all APIs modeled as 'services'. May or may not map to a
+/// hardware side 'service'.
 class Service {
 public:
   using Type = const std::type_info &;

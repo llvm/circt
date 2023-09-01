@@ -27,7 +27,7 @@ uint32_t MMIOSysInfo::esiVersion() const {
   uint32_t lo = mmio->read(MagicNumOffset + 4);
   if (hi != MagicNumberHi || lo != MagicNumberLo)
     throw std::runtime_error("ESI magic number not found");
-  return mmio->read(MagicNumOffset + 8);
+  return mmio->read(VersionNumberOffset);
 }
 
 std::string MMIOSysInfo::rawJsonManifest() const { return ""; }

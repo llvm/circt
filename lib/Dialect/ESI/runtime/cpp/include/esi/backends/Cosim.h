@@ -32,7 +32,6 @@ namespace cosim {
 class CosimAccelerator : public esi::Accelerator {
 public:
   CosimAccelerator(std::string hostname, uint16_t port);
-  ~CosimAccelerator() = default;
   static std::unique_ptr<Accelerator> connect(std::string connectionString);
 
 protected:
