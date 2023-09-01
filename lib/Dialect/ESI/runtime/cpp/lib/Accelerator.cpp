@@ -19,20 +19,24 @@
 #include <stdexcept>
 
 namespace esi {
-static std::map<std::string, BackendCreate> backendRegistry;
+namespace registry {
+namespace internal {
 
+static std::map<std::string, BackendCreate> backendRegistry;
 void registerBackend(std::string name, BackendCreate create) {
   if (backendRegistry.count(name))
     throw std::runtime_error("Backend already exists in registry");
   backendRegistry[name] = create;
 }
+} // namespace internal
 
-std::unique_ptr<Accelerator> Accelerator::connect(std::string backend,
-                                                  std::string connection) {
-  auto f = backendRegistry.find(backend);
-  if (f == backendRegistry.end())
+std::unique_ptr<Accelerator> connect(std::string backend,
+                                     std::string connection) {
+  auto f = internal::backendRegistry.find(backend);
+  if (f == internal::backendRegistry.end())
     throw std::runtime_error("Backend not found");
   return f->second(connection);
 }
 
+} // namespace registry
 } // namespace esi

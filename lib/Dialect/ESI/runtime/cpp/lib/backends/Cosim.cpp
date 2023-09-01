@@ -97,12 +97,4 @@ const SysInfo &CosimAccelerator::sysInfo() {
   return *info;
 }
 
-namespace {
-/// Register the cosim backend.
-struct InitCosim {
-  InitCosim() {
-    registerBackend("cosim", &backends::cosim::CosimAccelerator::connect);
-  }
-};
-InitCosim initCosim;
-} // namespace
+REGISTER_ACCELERATOR("cosim", backends::cosim::CosimAccelerator);

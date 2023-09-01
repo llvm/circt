@@ -21,7 +21,7 @@ using namespace esi;
 // NOLINTNEXTLINE(readability-identifier-naming)
 PYBIND11_MODULE(esiaccel, m) {
   py::class_<Accelerator>(m, "Accelerator")
-      .def_static("connect", &Accelerator::connect,
+      .def_static("connect", &registry::connect,
                   py::return_value_policy::take_ownership)
       .def("sysinfo", &Accelerator::sysInfo,
            py::return_value_policy::reference_internal);

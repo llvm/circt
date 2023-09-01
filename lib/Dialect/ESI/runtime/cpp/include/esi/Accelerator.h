@@ -29,8 +29,6 @@ class SysInfo;
 /// An ESI accelerator system.
 class Accelerator {
 public:
-  static std::unique_ptr<Accelerator> connect(std::string backend,
-                                              std::string connection);
   virtual ~Accelerator() = default;
 
   virtual const SysInfo &sysInfo() = 0;
@@ -48,10 +46,33 @@ public:
   virtual std::string rawJsonManifest() const = 0;
 };
 
+namespace registry {
+
+// Connect to an ESI accelerator given a backend name and connection specifier.
+// Alternatively, instantiate the backend directly (if you're using C++).
+std::unique_ptr<Accelerator> connect(std::string backend,
+                                     std::string connection);
+
+namespace internal {
+
 /// Backends can register themselves to be connected via a connection string.
 using BackendCreate = std::function<std::unique_ptr<Accelerator>(std::string)>;
 void registerBackend(std::string name, BackendCreate create);
 
+// Helper struct to
+template <typename TAccelerator>
+struct RegisterAccelerator {
+  RegisterAccelerator(const char *name) {
+    registerBackend(name, &TAccelerator::connect);
+  }
+};
+
+#define REGISTER_ACCELERATOR(Name, TAccelerator)                               \
+  static ::esi::registry::internal::RegisterAccelerator<TAccelerator>          \
+  __register_accel____LINE__(Name)
+
+} // namespace internal
+} // namespace registry
 } // namespace esi
 
 #endif // ESI_ACCELERATOR_H
