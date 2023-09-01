@@ -116,6 +116,7 @@ struct Emitter {
   void emitExpression(BoolConstantOp op);
   void emitExpression(DoubleConstantOp op);
   void emitExpression(ListCreateOp op);
+  void emitExpression(MapCreateOp op);
   void emitExpression(UnresolvedPathOp op);
 
   void emitPrimExpr(StringRef mnemonic, Operation *op,
@@ -1041,7 +1042,7 @@ void Emitter::emitExpression(Value value) {
           BitsPrimOp, HeadPrimOp, TailPrimOp, PadPrimOp, MuxPrimOp, ShlPrimOp,
           ShrPrimOp, UninferredResetCastOp, ConstCastOp, StringConstantOp,
           FIntegerConstantOp, BoolConstantOp, DoubleConstantOp, ListCreateOp,
-          UnresolvedPathOp,
+          MapCreateOp, UnresolvedPathOp,
           // Reference expressions
           RefSendOp, RefResolveOp, RefSubOp, RWProbeOp, RefCastOp>(
           [&](auto op) {
@@ -1223,6 +1224,15 @@ void Emitter::emitExpression(ListCreateOp op) {
   return emitLiteralExpression(op.getType(), op.getElements());
 }
 
+void Emitter::emitExpression(MapCreateOp op) {
+  return emitLiteralExpression(
+      op.getType(), llvm::zip(op.getKeys(), op.getValues()), [&](auto kv) {
+        emitAssignLike([&]() { emitExpression(std::get<0>(kv)); },
+                       [&]() { emitExpression(std::get<1>(kv)); },
+                       PPExtString("->"));
+      });
+}
+
 void Emitter::emitExpression(UnresolvedPathOp op) {
   ps << "path(";
   ps.writeQuotedEscaped(op.getTarget());
@@ -1344,6 +1354,15 @@ void Emitter::emitType(Type type, bool includeConst) {
       .Case<ListType>([&](ListType type) {
         ps << "List<";
         emitType(type.getElementType());
+        ps << ">";
+      })
+      .Case<MapType>([&](MapType type) {
+        ps << "Map<";
+        ps.scopedBox(PP::cbox0, [&]() {
+          emitType(type.getKeyType());
+          ps << "," << PP::space;
+          emitType(type.getValueType());
+        });
         ps << ">";
       })
       .Default([&](auto type) {

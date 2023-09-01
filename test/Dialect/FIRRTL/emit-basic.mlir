@@ -42,6 +42,7 @@ firrtl.circuit "Foo" {
     // CHECK-NEXT: input double : Double
     // CHECK-NEXT: input path : Path
     // CHECK-NEXT: input list : List<List<Path>>
+    // CHECK-NEXT: input map : Map<String, List<Integer>>
     in %a00: !firrtl.clock,
     in %a01: !firrtl.reset,
     in %a02: !firrtl.asyncreset,
@@ -62,7 +63,8 @@ firrtl.circuit "Foo" {
     in %bool : !firrtl.bool,
     in %double : !firrtl.double,
     in %path : !firrtl.path,
-    in %list : !firrtl.list<list<path>>
+    in %list : !firrtl.list<list<path>>,
+    in %map : !firrtl.map<string, list<integer>>
   ) {}
 
   // CHECK-LABEL: module Simple :
@@ -653,7 +655,8 @@ firrtl.circuit "Foo" {
                             out %bool : !firrtl.bool,
                             out %double : !firrtl.double,
                             out %path : !firrtl.path,
-                            out %list : !firrtl.list<list<string>>) {
+                            out %list : !firrtl.list<list<string>>,
+                            out %map : !firrtl.map<string, list<string>>) {
     // CHECK: propassign string, String("hello")
     %0 = firrtl.string "hello"
     firrtl.propassign %string, %0 : !firrtl.string
@@ -674,6 +677,8 @@ firrtl.circuit "Foo" {
     %p = firrtl.unresolved_path "OMDeleted"
     firrtl.propassign %path, %p : !firrtl.path
 
+    // (80 cols is default, 2 for indent, 78 after)
+    //          -------------------------------------------------------------------------------V
     // CHECK:      propassign list,
     // CHECK-NEXT:   List<List<String>>(List<String>(String("hello"), String("hello")),
     // CHECK-NEXT:                      List<String>())
@@ -681,6 +686,16 @@ firrtl.circuit "Foo" {
     %empty = firrtl.list.create : !firrtl.list<string>
     %strings_and_empty = firrtl.list.create %strings, %empty : !firrtl.list<list<string>>
     firrtl.propassign %list, %strings_and_empty : !firrtl.list<list<string>>
+
+    // CHECK:      propassign map,
+    // CHECK-NEXT:   Map<String,
+    // CHECK-NEXT:       List<String>>(String("hello")
+    // CHECK-NEXT:                       -> List<String>(String("hello"), String("hello")),
+    // CHECK-NEXT:                     String("wooooooooooooooooooooooorld") -> List<String>())
+    //          -------------------------------------------------------------------------------^
+    %world = firrtl.string "wooooooooooooooooooooooorld"
+    %map_to_lists = firrtl.map.create ( %0 -> %strings, %world -> %empty ) : !firrtl.map<string, list<string>>
+    firrtl.propassign %map, %map_to_lists : !firrtl.map<string, list<string>>
   }
 
   // Test optional group declaration and definition emission.
