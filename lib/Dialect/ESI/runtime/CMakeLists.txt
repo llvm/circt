@@ -33,6 +33,7 @@ include_directories(cpp/include)
 
 set(ESIRuntimeSources
   cpp/lib/Accelerator.cpp
+  cpp/lib/StdServices.cpp
 )
 set(ESIRuntimeLinkLibraries)
 

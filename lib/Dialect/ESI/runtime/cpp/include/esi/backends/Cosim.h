@@ -22,10 +22,11 @@
 
 #include "esi/Accelerator.h"
 
+#include <memory>
+
 namespace esi {
 namespace backends {
 namespace cosim {
-class CosimSysInfo;
 
 /// Connect to an ESI simulation.
 class CosimAccelerator : public esi::Accelerator {
@@ -36,8 +37,15 @@ public:
 
   const SysInfo &sysInfo() override;
 
+protected:
+  virtual services::Service *
+  getServiceImpl(const std::type_info &service) override;
+
 private:
-  CosimSysInfo *info;
+  SysInfo *info;
+
+  struct Impl;
+  std::unique_ptr<Impl> impl;
 };
 
 } // namespace cosim

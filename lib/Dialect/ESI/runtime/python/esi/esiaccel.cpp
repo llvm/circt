@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "esi/Accelerator.h"
+#include "esi/StdServices.h"
 
 // pybind11 includes
 #include "pybind11/pybind11.h"
@@ -24,8 +25,15 @@ PYBIND11_MODULE(esiaccel, m) {
       .def_static("connect", &registry::connect,
                   py::return_value_policy::take_ownership)
       .def("sysinfo", &Accelerator::sysInfo,
+           py::return_value_policy::reference_internal)
+      .def("get_service_mmio", &Accelerator::getService<services::MMIO>,
            py::return_value_policy::reference_internal);
+
   py::class_<SysInfo>(m, "SysInfo")
       .def("esi_version", &SysInfo::esiVersion)
       .def("raw_json_manifest", &SysInfo::rawJsonManifest);
+
+  py::class_<services::MMIO>(m, "MMIO")
+      .def("read", &services::MMIO::read)
+      .def("write", &services::MMIO::write);
 }

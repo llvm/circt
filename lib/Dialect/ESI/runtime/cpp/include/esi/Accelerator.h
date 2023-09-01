@@ -23,11 +23,26 @@
 
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <memory>
 #include <string>
+#include <typeinfo>
 
 namespace esi {
+
+constexpr uint32_t MagicNumOffset = 16;
+constexpr uint32_t MagicNumberLo = 0xE5100E51;
+constexpr uint32_t MagicNumberHi = 0x207D98E5;
+constexpr uint32_t ExpectedVersionNumber = 0;
+
 class SysInfo;
+
+namespace services {
+class Service {
+public:
+  virtual ~Service() = default;
+};
+} // namespace services
 
 /// An ESI accelerator system.
 class Accelerator {
@@ -35,6 +50,15 @@ public:
   virtual ~Accelerator() = default;
 
   virtual const SysInfo &sysInfo() = 0;
+
+  template <typename ServiceClass>
+  ServiceClass *getService() {
+    return dynamic_cast<ServiceClass *>(getServiceImpl(typeid(ServiceClass)));
+  }
+
+protected:
+  virtual services::Service *getServiceImpl(const std::type_info &service) = 0;
+  std::map<const std::type_info *, services::Service *> serviceCache;
 };
 
 /// Information about the Accelerator system.
