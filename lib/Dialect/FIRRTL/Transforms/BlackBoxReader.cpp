@@ -265,7 +265,7 @@ bool BlackBoxReaderPass::runOnAnnotation(Operation *op, Annotation anno,
                << "Add black box source `" << name.getValue() << "` inline\n");
 
     // Skip this inline annotation if the target is already generated.
-    if (emittedFiles.count(name))
+    if (emittedFiles.contains(name))
       return true;
 
     // Create an IR node to hold the contents.  Use "unknown location" so that
@@ -311,7 +311,7 @@ VerbatimOp BlackBoxReaderPass::loadFile(Operation *op, StringRef inputPath,
 
   // Skip this annotation if the target is already loaded.
   auto fileNameAttr = builder.getStringAttr(fileName);
-  if (emittedFiles.count(fileNameAttr))
+  if (emittedFiles.contains(fileNameAttr))
     return {};
 
   // Open and read the input file.
@@ -370,7 +370,7 @@ void BlackBoxReaderPass::setOutputFile(VerbatimOp op, Operation *origOp,
   op->setAttr("output_file", outFileAttr);
 
   // Record that this file has been generated.
-  assert(!emittedFiles.count(fileNameAttr) &&
+  assert(!emittedFiles.contains(fileNameAttr) &&
          "Can't generate the same file twice.");
   emittedFiles.insert(fileNameAttr);
 
