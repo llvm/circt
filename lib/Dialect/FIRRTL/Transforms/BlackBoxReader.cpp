@@ -47,8 +47,10 @@ struct BlackBoxReaderPass : public BlackBoxReaderBase<BlackBoxReaderPass> {
   bool runOnAnnotation(Operation *op, Annotation anno, OpBuilder &builder,
                        bool isCover);
   VerbatimOp loadFile(Operation *op, StringRef inputPath, OpBuilder &builder);
-  void setOutputFile(VerbatimOp op, Operation *origOp, StringAttr fileNameAttr,
-                     bool isCover = false);
+  OutputFileAttr getOutputFile(Operation *origOp, StringAttr fileNameAttr,
+                               bool isCover = false);
+  void setOutputFile(VerbatimOp op, OutputFileAttr outputFile,
+                     StringAttr fileNameAttr);
   // Check if module or any of its parents in the InstanceGraph is a DUT.
   bool isDut(Operation *module);
 
@@ -271,7 +273,8 @@ bool BlackBoxReaderPass::runOnAnnotation(Operation *op, Annotation anno,
     // Create an IR node to hold the contents.  Use "unknown location" so that
     // no file info will unnecessarily print.
     auto verbatim = builder.create<VerbatimOp>(builder.getUnknownLoc(), text);
-    setOutputFile(verbatim, op, name, isCover);
+    auto outputFile = getOutputFile(op, name, isCover);
+    setOutputFile(verbatim, outputFile, name);
     return true;
   }
 
@@ -293,7 +296,8 @@ bool BlackBoxReaderPass::runOnAnnotation(Operation *op, Annotation anno,
       return false;
     }
     auto name = builder.getStringAttr(llvm::sys::path::filename(path));
-    setOutputFile(verbatim, op, name, isCover);
+    auto outputFile = getOutputFile(op, name, isCover);
+    setOutputFile(verbatim, outputFile, name);
     return true;
   }
 
@@ -326,23 +330,15 @@ VerbatimOp BlackBoxReaderPass::loadFile(Operation *op, StringRef inputPath,
                                     input->getBuffer());
 }
 
-/// This function is called for every file generated.  It does the following
-/// things:
-///  1. Attaches the output file attribute to the VerbatimOp.
-///  2. Record that the file has been generated to avoid duplicates.
-///  3. Add each file name to the generated "file list" file.
-void BlackBoxReaderPass::setOutputFile(VerbatimOp op, Operation *origOp,
-                                       StringAttr fileNameAttr, bool isCover) {
-  // If the output file was set on the original operation then either: (1) copy
-  // this to the new op if it is a filename or (2) use this directory (since it
-  // is a directory) as the lowest priority directory to put this file.
+/// Determine the output file for some operation.
+OutputFileAttr BlackBoxReaderPass::getOutputFile(Operation *origOp,
+                                                 StringAttr fileNameAttr,
+                                                 bool isCover) {
+  // If the original operation has a specified output file that is not a
+  // directory, then just use that.
   auto outputFile = origOp->getAttrOfType<OutputFileAttr>("output_file");
-  if (outputFile && !outputFile.isDirectory()) {
-    op->setAttr("output_file", outputFile);
-    if (!outputFile.getExcludeFromFilelist().getValue())
-      fileListFiles.push_back(outputFile.getFilename());
-    return;
-  }
+  if (outputFile && !outputFile.isDirectory())
+    return outputFile;
 
   // Exclude Verilog header files since we expect them to be included
   // explicitly by compiler directives in other source files.
@@ -367,16 +363,24 @@ void BlackBoxReaderPass::setOutputFile(VerbatimOp op, Operation *origOp,
   auto outFileAttr = OutputFileAttr::getFromDirectoryAndFilename(
       context, outDir, fileName,
       /*excludeFromFileList=*/exclude);
-  op->setAttr("output_file", outFileAttr);
+  return outFileAttr;
+}
 
-  // Record that this file has been generated.
+/// This function is called for every file generated.  It does the following
+/// things:
+///  1. Attaches the output file attribute to the VerbatimOp.
+///  2. Record that the file has been generated to avoid duplicates.
+///  3. Add each file name to the generated "file list" file.
+void BlackBoxReaderPass::setOutputFile(VerbatimOp op, OutputFileAttr outputFile,
+                                       StringAttr fileNameAttr) {
+  op->setAttr("output_file", outputFile);
   assert(!emittedFiles.contains(fileNameAttr) &&
          "Can't generate the same file twice.");
   emittedFiles.insert(fileNameAttr);
 
   // Append this file to the file list if its not excluded.
-  if (!exclude)
-    fileListFiles.push_back(outFileAttr.getFilename());
+  if (!outputFile.getExcludeFromFilelist().getValue())
+    fileListFiles.push_back(outputFile.getFilename());
 }
 
 /// Return true if module is in the DUT hierarchy.
