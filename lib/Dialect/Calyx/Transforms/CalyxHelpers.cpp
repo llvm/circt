@@ -49,7 +49,7 @@ calyx::InstanceOp createInstance(Location loc, OpBuilder &builder,
 
 std::string getInstanceName(mlir::func::CallOp callOp) {
   SmallVector<StringRef, 2> strVet = {callOp.getCallee(), "instance"};
-  return llvm::join(strVet, "_");
+  return llvm::join(strVet, /*separator=*/"_");
 }
 
 bool isControlLeafNode(Operation *op) { return isa<calyx::EnableOp>(op); }
