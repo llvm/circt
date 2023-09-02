@@ -11,6 +11,7 @@ from .types import Channel, Type, types, _FromCirctType
 
 from .circt import ir
 from .circt.dialects import esi as raw_esi, hw, msft
+from .circt.support import var_to_attribute
 
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -48,16 +49,17 @@ class ServiceDecl(_PyProxy):
       self._op = raw_esi.CustomServiceDeclOp
     for (attr_name, attr) in vars(cls).items():
       if isinstance(attr, InputChannel):
-        setattr(self, attr_name,
-                _RequestToServerConn(self, attr.type, None, attr_name))
+        req = _RequestToServerConn(self, attr.type, None, attr_name)
+        if len(attr.properties) > 0:
+          req.attributes["params"] = var_to_attribute(attr.properties)
+        setattr(self, attr_name, req)
       elif isinstance(attr, OutputChannel):
-        setattr(self, attr_name,
-                _RequestToClientConn(self, None, attr.type, attr_name))
+        req = _RequestToClientConn(self, None, attr.type, attr_name)
+        setattr(self, attr_name, req)
       elif isinstance(attr, ToFromServer):
-        setattr(
-            self, attr_name,
-            _RequestToFromServerConn(self, attr.to_server_type,
-                                     attr.to_client_type, attr_name))
+        req = _RequestToFromServerConn(self, attr.to_server_type,
+                                       attr.to_client_type, attr_name)
+        setattr(self, attr_name, req)
       elif isinstance(attr, (Input, Output)):
         raise TypeError(
             "Input and Output are not allowed in ESI service declarations. " +
@@ -133,11 +135,13 @@ class _RequestConnection:
 
 class _RequestToServerConn(_RequestConnection):
 
-  def __call__(self, chan: ChannelSignal, chan_name: str = ""):
+  def __call__(self, chan: ChannelSignal, chan_name: str = "", **kwargs):
     self.decl._materialize_service_decl()
-    raw_esi.RequestToServerConnectionOp(
+    req = raw_esi.RequestToServerConnectionOp(
         self.service_port, chan.value,
         ir.ArrayAttr.get([ir.StringAttr.get(chan_name)]))
+    if len(kwargs.items()) > 0:
+      req.attributes["args"] = (var_to_attribute(kwargs))
 
 
 class _RequestToClientConn(_RequestConnection):

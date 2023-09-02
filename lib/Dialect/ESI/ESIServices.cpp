@@ -435,15 +435,18 @@ static void emitServiceMetadata(ServiceImplementReqOp implReqOp) {
           assert(req.getToServerType());
           b.create<ServiceDeclInOutOp>(req.getServicePort().getName(),
                                        TypeAttr::get(req.getToServerType()),
-                                       TypeAttr::get(req.getToClientType()));
+                                       TypeAttr::get(req.getToClientType()),
+                                       DictionaryAttr());
         })
         .Case([&](RequestToClientConnectionOp) {
           b.create<ToClientOp>(req.getServicePort().getName(),
-                               TypeAttr::get(req.getToClientType()));
+                               TypeAttr::get(req.getToClientType()),
+                               DictionaryAttr());
         })
         .Case([&](RequestToServerConnectionOp) {
           b.create<ToServerOp>(req.getServicePort().getName(),
-                               TypeAttr::get(req.getToServerType()));
+                               TypeAttr::get(req.getToServerType()),
+                               DictionaryAttr());
         })
         .Default([](Operation *) {});
   }

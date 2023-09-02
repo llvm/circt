@@ -15,10 +15,11 @@ from functools import singledispatchmethod
 class ModuleDecl:
   """Represents an input or output port on a design module."""
 
-  __slots__ = ["name", "_type"]
+  __slots__ = ["name", "properties", "_type"]
 
-  def __init__(self, type: Type, name: str = None):
+  def __init__(self, type: Type, name: str = None, **kwargs):
     self.name: str = name
+    self.properties = kwargs
     self._type: Type = type
 
   @property
@@ -36,9 +37,10 @@ class OutputChannel(Output):
   def __init__(self,
                type: Type,
                signaling: int = ChannelSignaling.ValidReady,
-               name: str = None):
+               name: str = None,
+               **kwargs):
     type = Channel(type, signaling)
-    super().__init__(type, name)
+    super().__init__(type, name, **kwargs)
 
 
 class Input(ModuleDecl):
@@ -65,9 +67,10 @@ class InputChannel(Input):
   def __init__(self,
                type: Type,
                signaling: int = ChannelSignaling.ValidReady,
-               name: str = None):
+               name: str = None,
+               **kwargs):
     type = Channel(type, signaling)
-    super().__init__(type, name)
+    super().__init__(type, name, **kwargs)
 
 
 class AppID:

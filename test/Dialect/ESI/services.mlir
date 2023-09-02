@@ -2,10 +2,10 @@
 // RUN: circt-opt --esi-connect-services  %s | circt-opt | FileCheck %s --check-prefix=CONN
 
 // CHECK-LABEL: esi.service.decl @HostComms {
-// CHECK:         esi.service.to_server @Send : !esi.channel<!esi.any>
+// CHECK:         esi.service.to_server @Send({toHostNum = i4}) : !esi.channel<!esi.any>
 // CHECK:         esi.service.to_client @Recv : !esi.channel<i8>
 esi.service.decl @HostComms {
-  esi.service.to_server @Send : !esi.channel<!esi.any>
+  esi.service.to_server @Send ({toHostNum = i4}): !esi.channel<!esi.any>
   esi.service.to_client @Recv : !esi.channel<i8>
   esi.service.inout @ReqResp : !esi.channel<i8> -> !esi.channel<i16>
 }
@@ -40,8 +40,8 @@ hw.module @Loopback (%clk: i1) -> () {
 // CONN-DAG:       esi.service.req.to_client <@HostComms::@Recv>(["r1", "m1", "loopback_tohw"]) : !esi.channel<i8>
 // CONN-DAG:       esi.service.req.to_client <@HostComms::@Recv>(["r1", "c1", "consumingFromChan"]) : !esi.channel<i8>
 // CONN-DAG:       esi.service.req.to_server %r1.m1.loopback_fromhw -> <@HostComms::@Send>(["r1", "m1", "loopback_fromhw"]) : !esi.channel<i8>
-// CONN-DAG:       esi.service.req.to_server %r1.p1.producedMsgChan -> <@HostComms::@Send>(["r1", "p1", "producedMsgChan"]) : !esi.channel<i8>
-// CONN-DAG:       esi.service.req.to_server %r1.p2.producedMsgChan -> <@HostComms::@Send>(["r1", "p2", "producedMsgChan"]) : !esi.channel<i8>
+// CONN-DAG:       esi.service.req.to_server %r1.p1.producedMsgChan -> <@HostComms::@Send>(["r1", "p1", "producedMsgChan"]) ({toHostNum = 3 : i64}) : !esi.channel<i8>
+// CONN-DAG:       esi.service.req.to_server %r1.p2.producedMsgChan -> <@HostComms::@Send>(["r1", "p2", "producedMsgChan"]) ({toHostNum = 3 : i64}) : !esi.channel<i8>
 // CONN:         }
 // CONN:         %r1.m1.loopback_fromhw, %r1.p1.producedMsgChan, %r1.p2.producedMsgChan = hw.instance "r1" @Rec(clk: %clk: i1, m1.loopback_tohw: [[r0]]#1: !esi.channel<i8>, c1.consumingFromChan: [[r0]]#2: !esi.channel<i8>) -> (m1.loopback_fromhw: !esi.channel<i8>, p1.producedMsgChan: !esi.channel<i8>, p2.producedMsgChan: !esi.channel<i8>)
 // CONN:         hw.output [[r0]]#0 : i8
@@ -84,7 +84,7 @@ hw.module @Producer(%clk: i1) -> () {
   %data = hw.constant 0 : i8
   %valid = hw.constant 1 : i1
   %dataIn, %rdy = esi.wrap.vr %data, %valid : i8
-  esi.service.req.to_server %dataIn -> <@HostComms::@Send> (["producedMsgChan"]) : !esi.channel<i8>
+  esi.service.req.to_server %dataIn -> <@HostComms::@Send> (["producedMsgChan"]) ({toHostNum=3}): !esi.channel<i8>
 }
 
 // CONN-LABEL: msft.module @MsTop {} (%clk: i1) -> (chksum: i8)

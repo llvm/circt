@@ -210,7 +210,7 @@ LogicalResult HandshakeLowerExtmemToHWPass::wrapESI(
     for (unsigned i = 0; i < memType.loadPorts; ++i) {
       auto loadReq = b.create<esi::RequestInOutChannelOp>(
           loc, handshake::esiWrapper(dataType), loadServicePort,
-          backedges[resIdx], b.getArrayAttr({}));
+          backedges[resIdx], b.getArrayAttr({}), DictionaryAttr());
       instanceArgsFromThisMem.push_back(loadReq);
       ++resIdx;
     }
@@ -221,7 +221,7 @@ LogicalResult HandshakeLowerExtmemToHWPass::wrapESI(
     for (unsigned i = 0; i < memType.storePorts; ++i) {
       auto storeReq = b.create<esi::RequestInOutChannelOp>(
           loc, handshake::esiWrapper(b.getIntegerType(0)), storeServicePort,
-          backedges[resIdx], b.getArrayAttr({}));
+          backedges[resIdx], b.getArrayAttr({}), DictionaryAttr());
       instanceArgsFromThisMem.push_back(storeReq);
       ++resIdx;
     }

@@ -13,7 +13,7 @@ from pycde.signals import BitVectorSignal, ChannelSignal, Struct
 
 @esi.ServiceDecl
 class HostComms:
-  to_host = esi.ToServer(types.any)
+  to_host = esi.ToServer(types.any, toHostNum=Bits(4))
   from_host = esi.FromServer(types.any)
   req_resp = esi.ToFromServer(to_server_type=types.i16,
                               to_client_type=types.i32)
@@ -35,7 +35,7 @@ class Consumer(Module):
 
   @generator
   def construct(ports):
-    HostComms.to_host(ports.int_in, "loopback_out")
+    HostComms.to_host(ports.int_in, "loopback_out", toHostNum=4)
 
 
 # CHECK-LABEL: msft.module @LoopbackTop {} (%clk: i1, %rst: i1)
@@ -47,7 +47,7 @@ class Consumer(Module):
 # CHECK:         [[R0:%.+]] = esi.service.req.to_client <@HostComms::@from_host>(["loopback_in"]) : !esi.channel<i32>
 # CHECK:         msft.output [[R0]] : !esi.channel<i32>
 # CHECK-LABEL: msft.module @Consumer {} (%clk: i1, %int_in: !esi.channel<i32>)
-# CHECK:         esi.service.req.to_server %int_in -> <@HostComms::@to_host>(["loopback_out"]) : !esi.channel<i32>
+# CHECK:         esi.service.req.to_server %int_in -> <@HostComms::@to_host>(["loopback_out"]) ({toHostNum = 4 : i64}) : !esi.channel<i32>
 # CHECK:         msft.output
 # CHECK-LABEL: esi.service.decl @HostComms {
 # CHECK:         esi.service.to_server @to_host : !esi.channel<!esi.any>

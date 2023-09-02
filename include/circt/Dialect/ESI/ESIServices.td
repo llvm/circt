@@ -49,9 +49,10 @@ def ToServerOp : ESI_Op<"service.to_server",
                         [HasParent<"::circt::esi::CustomServiceDeclOp">]> {
   let summary = "An ESI service port headed to the service";
 
-  let arguments = (ins SymbolNameAttr:$inner_sym, TypeAttr:$toServerType);
+  let arguments = (ins SymbolNameAttr:$inner_sym, TypeAttr:$toServerType,
+                       OptionalAttr<DictionaryAttr>:$params);
   let assemblyFormat = [{
-    $inner_sym attr-dict `:` $toServerType
+    $inner_sym (`(` $params^ `)`)? attr-dict `:` $toServerType
   }];
 }
 
@@ -59,9 +60,10 @@ def ToClientOp : ESI_Op<"service.to_client",
                         [HasParent<"::circt::esi::CustomServiceDeclOp">]> {
   let summary = "An ESI service port headed to a particular client";
 
-  let arguments = (ins SymbolNameAttr:$inner_sym, TypeAttr:$toClientType);
+  let arguments = (ins SymbolNameAttr:$inner_sym, TypeAttr:$toClientType,
+                       OptionalAttr<DictionaryAttr>:$params);
   let assemblyFormat = [{
-    $inner_sym  attr-dict `:` $toClientType
+    $inner_sym (`(` $params^ `)`)? attr-dict `:` $toClientType
   }];
 }
 
@@ -70,9 +72,10 @@ def ServiceDeclInOutOp : ESI_Op<"service.inout",
   let summary = "An ESI service port which has both directions";
 
   let arguments = (ins SymbolNameAttr:$inner_sym,
-                       TypeAttr:$toServerType, TypeAttr:$toClientType);
+                       TypeAttr:$toServerType, TypeAttr:$toClientType,
+                       OptionalAttr<DictionaryAttr>:$params);
   let assemblyFormat = [{
-    $inner_sym attr-dict
+    $inner_sym (`(` $params^ `)`)? attr-dict
     `:` qualified($toServerType) `->` qualified($toClientType)
   }];
 }
@@ -158,9 +161,10 @@ def RequestToServerConnectionOp : ESI_Op<"service.req.to_server", [
   let summary = "Request a connection to send data";
 
   let arguments = (ins InnerRefAttr:$servicePort,
-                       ChannelType:$toServer, StrArrayAttr:$clientNamePath);
+                       ChannelType:$toServer, StrArrayAttr:$clientNamePath,
+                       OptionalAttr<DictionaryAttr>:$args);
   let assemblyFormat = [{
-    $toServer `->` $servicePort `(` $clientNamePath `)`
+    $toServer `->` $servicePort `(` $clientNamePath `)` (`(` $args^ `)`)?
       attr-dict `:` qualified(type($toServer))
   }];
 
@@ -179,10 +183,11 @@ def RequestToClientConnectionOp : ESI_Op<"service.req.to_client", [
   let summary = "Request a connection to receive data";
 
   let arguments = (ins InnerRefAttr:$servicePort,
-                       StrArrayAttr:$clientNamePath);
+                       StrArrayAttr:$clientNamePath,
+                       OptionalAttr<DictionaryAttr>:$args);
   let results = (outs ChannelType:$toClient);
   let assemblyFormat = [{
-    $servicePort `(` $clientNamePath `)`
+    $servicePort `(` $clientNamePath `)` (`(` $args^ `)`)?
       attr-dict `:` qualified(type($toClient))
   }];
 }
@@ -194,11 +199,12 @@ def RequestInOutChannelOp : ESI_Op<"service.req.inout", [
 
   let arguments = (ins InnerRefAttr:$servicePort,
                        ChannelType:$toServer,
-                       StrArrayAttr:$clientNamePath);
+                       StrArrayAttr:$clientNamePath,
+                       OptionalAttr<DictionaryAttr>:$args);
   let results = (outs ChannelType:$toClient);
 
   let assemblyFormat = [{
-    $toServer `->` $servicePort `(` $clientNamePath `)` attr-dict `:`
+    $toServer `->` $servicePort `(` $clientNamePath `)` (`(` $args^ `)`)? attr-dict `:`
       qualified(type($toServer)) `->` qualified(type($toClient))
   }];
 
