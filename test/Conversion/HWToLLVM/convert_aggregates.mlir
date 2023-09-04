@@ -141,7 +141,7 @@ func.func @convertConstStruct() {
   // CHECK-NEXT: [[V0:%.+]] = llvm.mlir.addressof @[[GLOB4]] : !llvm.ptr<struct<(i2, i32)>>
   // CHECK-NEXT: [[V1:%.+]] = llvm.load [[V0]] : !llvm.ptr<struct<(i2, i32)>>
   %0 = hw.aggregate_constant [0 : i32, 1 : i2] : !hw.struct<a: i32, b: i2>
-  // CHECK-NEXT: {{%.+}} = llvm.extractvalue [[V1]][1] : !llvm.struct<(i2, i32)>
+  // CHECK-NEXT: {{%.+}} = llvm.mlir.constant(0 : i32) : i32
   %1 = hw.struct_extract %0["a"] : !hw.struct<a: i32, b: i2>
   return
 }

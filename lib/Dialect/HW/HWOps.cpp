@@ -2608,7 +2608,15 @@ void StructExtractOp::build(OpBuilder &builder, OperationState &odsState,
   build(builder, odsState, resultType, input, fieldAttr);
 }
 
-OpFoldResult StructExtractOp::fold(FoldAdaptor) {
+OpFoldResult StructExtractOp::fold(FoldAdaptor adaptor) {
+  if (auto constOperand = adaptor.getInput()) {
+    // Fold extract from aggregate constant
+    auto operandType = type_cast<StructType>(getOperand().getType());
+    auto fieldIdx = operandType.getFieldIndex(getField());
+    auto operandAttr = llvm::cast<ArrayAttr>(constOperand);
+    return operandAttr.getValue()[*fieldIdx];
+  }
+
   if (auto foldResult =
           foldStructExtract(getInput().getDefiningOp(), getField()))
     return foldResult;
