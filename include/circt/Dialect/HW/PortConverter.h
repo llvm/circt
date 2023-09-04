@@ -56,7 +56,7 @@ public:
 
 protected:
   PortConverterImpl(igraph::InstanceGraphNode *moduleNode)
-      : moduleNode(moduleNode) {
+      : moduleNode(moduleNode), b(moduleNode->getModule()->getContext()) {
     mod = dyn_cast<hw::HWMutableModuleLike>(*moduleNode->getModule());
     assert(mod && "PortConverter only works on HWMutableModuleLike");
 
@@ -67,9 +67,6 @@ protected:
   std::unique_ptr<PortConversionBuilder> ssb;
 
 private:
-  /// Materializes/commits all of the recorded port changes to the module.
-  void materializeChanges();
-
   /// Updates an instance of the module. This is called after the module has
   /// been updated. It will update the instance to match the new port
   void updateInstance(hw::InstanceOp);
@@ -80,6 +77,7 @@ private:
 
   igraph::InstanceGraphNode *moduleNode;
   hw::HWMutableModuleLike mod;
+  OpBuilder b;
 
   // Keep around a reference to the specific port conversion classes to
   // facilitate updating the instance ops. Indexed by the original port
@@ -93,7 +91,12 @@ private:
   // this around for later use.
   SmallVector<std::pair<unsigned, hw::PortInfo>, 0> newInputs;
   SmallVector<std::pair<unsigned, hw::PortInfo>, 0> newOutputs;
-  SmallVector<Value, 0> newOutputValues;
+
+  // Maintain the set of new output values as temporary operations. We do this,
+  // as opposed to keeping the Value's in an array, to ensure that any value
+  // replacements performed by other port conversion patterns will get properly
+  // reflected in the set of new output values.
+  SmallVector<Operation *> newOutputValues;
 };
 
 /// Base class for the port conversion of a particular port. Abstracts the

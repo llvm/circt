@@ -69,3 +69,13 @@ hw.module @passthroughTwoLevels() {
   hw.instance "passthrough" @passthrough(a : %0 : !hw.inout<i42>) -> ()
 }
 
+// CHECK-LABEL:   hw.module @writeInput(
+// CHECK-SAME:                          %[[VAL_0:.*]]: i42) -> (a_wr: i42) {
+// CHECK:           hw.output %[[VAL_0]] : i42
+// CHECK:         }
+
+// Tests a bug where the inout was being eliminated which resulted in the
+// block argument list shifting, but the index of %in not being updated.
+hw.module @writeInput(%a: !hw.inout<i42>, %in : i42) {
+  sv.assign %a, %in : i42
+}

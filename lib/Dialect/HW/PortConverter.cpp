@@ -100,7 +100,17 @@ void PortConverterImpl::createNewOutput(PortInfo origPort, const Twine &suffix,
 
   if (!body)
     return;
-  newOutputValues.push_back(output);
+
+  OpBuilder::InsertionGuard g(b);
+  b.setInsertionPointToStart(body);
+
+  // Create a temporary operation to mark 'output' as a new output value.
+  // We create a temporary operation here as opposed to keeping 'output' in
+  // an array, to ensure that any replacement of 'output' by other conversion
+  // patterns get properly reflected in the set of new output values.
+  auto tmpOutputOp =
+      b.create<mlir::UnrealizedConversionCastOp>(origPort.loc, type, output);
+  newOutputValues.push_back(tmpOutputOp);
 }
 
 LogicalResult PortConverterImpl::run() {
@@ -147,10 +157,9 @@ LogicalResult PortConverterImpl::run() {
     lowering->lowerPort();
 
   // Set up vectors to erase _all_ the ports. It's easier to rebuild everything
-  // (including the non-ESI ports) than reason about interleaving the newly
-  // lowered ESI ports with the non-ESI ports. Also, the 'modifyPorts' method
-  // ends up rebuilding the port lists anyway, so this isn't nearly as expensive
-  // as it may seem.
+  // than reason about interleaving the newly lowered ports with the non lowered
+  // ports. Also, the 'modifyPorts' method ends up rebuilding the port lists
+  // anyway, so this isn't nearly as expensive as it may seem.
   SmallVector<unsigned> inputsToErase(mod.getNumInputPorts());
   std::iota(inputsToErase.begin(), inputsToErase.end(), 0);
   SmallVector<unsigned> outputsToErase(mod.getNumOutputPorts());
@@ -164,8 +173,14 @@ LogicalResult PortConverterImpl::run() {
     body->eraseArguments([&ports](BlockArgument arg) {
       return arg.getArgNumber() < ports.sizeInputs();
     });
-    // Set the new operands, overwriting the old ones.
-    body->getTerminator()->setOperands(newOutputValues);
+    // Set the new operands, overwriting the old ones - these are gathered from
+    // the set of temporary output ops.
+    llvm::SmallVector<Value> outputOperands;
+    llvm::transform(newOutputValues, std::back_inserter(outputOperands),
+                    [](Operation *op) { return op->getOperand(0); });
+    body->getTerminator()->setOperands(outputOperands);
+    for (auto op : llvm::make_early_inc_range(newOutputValues))
+      op->erase();
   }
 
   // Rewrite instances pointing to this module.
