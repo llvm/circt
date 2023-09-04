@@ -179,7 +179,7 @@ LogicalResult PortConverterImpl::run() {
     llvm::transform(newOutputValues, std::back_inserter(outputOperands),
                     [](Operation *op) { return op->getOperand(0); });
     body->getTerminator()->setOperands(outputOperands);
-    for (auto op : llvm::make_early_inc_range(newOutputValues))
+    for (auto *op : llvm::make_early_inc_range(newOutputValues))
       op->erase();
   }
 
