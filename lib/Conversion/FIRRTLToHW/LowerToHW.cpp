@@ -2973,9 +2973,29 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
   // Memories return multiple structs, one for each port, which means we
   // have two layers of type to split apart.
   for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
-    auto addInput = [&](StringRef field, size_t width) -> Value {
-      auto accesses = getAllFieldAccesses(op.getResult(i), field);
 
+    auto addOutput = [&](StringRef field, size_t width, Value value) {
+      for (auto &a : getAllFieldAccesses(op.getResult(i), field)) {
+        if (width > 0)
+          (void)setLowering(a, value);
+        else
+          a->eraseOperand(0);
+      }
+    };
+
+    auto addInput = [&](StringRef field, Value backedge) {
+      for (auto a : getAllFieldAccesses(op.getResult(i), field)) {
+        if (a.getType()
+                .cast<FIRRTLBaseType>()
+                .getPassiveType()
+                .getBitWidthOrSentinel() > 0)
+          (void)setLowering(a, backedge);
+        else
+          a->eraseOperand(0);
+      }
+    };
+
+    auto addInputPort = [&](StringRef field, size_t width) -> Value {
       // If the memory is 0-width, do not materialize any connections to it.
       // However, `seq.firmem` now requires a 1-bit input, so materialize
       // a dummy x value to provide it with.
@@ -2986,67 +3006,56 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
         auto portType = IntegerType::get(op.getContext(), width);
         backedge = portValue = createBackedge(builder.getLoc(), portType);
       }
-
-      for (auto a : accesses) {
-        if (a.getType()
-                .cast<FIRRTLBaseType>()
-                .getPassiveType()
-                .getBitWidthOrSentinel() > 0)
-          (void)setLowering(a, backedge);
-        else
-          a->eraseOperand(0);
-      }
+      addInput(field, backedge);
       return portValue;
     };
 
-    auto addOutput = [&](StringRef field, size_t width, Value value) {
-      auto accesses = getAllFieldAccesses(op.getResult(i), field);
-      for (auto &a : accesses) {
-        if (width > 0)
-          (void)setLowering(a, value);
-        else
-          a->eraseOperand(0);
-      }
+    auto addClock = [&](StringRef field) -> Value {
+      Type clockTy = IntegerType::get(op.getContext(), 1);
+      Value portValue = createBackedge(builder.getLoc(), clockTy);
+      addInput(field, portValue);
+      return portValue;
     };
 
     auto memportKind = op.getPortKind(i);
     if (memportKind == MemOp::PortKind::Read) {
-      auto addr = addInput("addr", op.getAddrBits());
-      auto en = addInput("en", 1);
-      auto clk = addInput("clk", 1);
+      auto addr = addInputPort("addr", op.getAddrBits());
+      auto en = addInputPort("en", 1);
+      auto clk = addClock("clk");
       auto data = builder.create<seq::FirMemReadOp>(memDecl, addr, clk, en);
       addOutput("data", memSummary.dataWidth, data);
     } else if (memportKind == MemOp::PortKind::ReadWrite) {
-      auto addr = addInput("addr", op.getAddrBits());
-      auto en = addInput("en", 1);
-      auto clk = addInput("clk", 1);
+      auto addr = addInputPort("addr", op.getAddrBits());
+      auto en = addInputPort("en", 1);
+      auto clk = addClock("clk");
       // If maskBits =1, then And the mask field with enable, and update the
       // enable. Else keep mask port.
-      auto mode = addInput("wmode", 1);
+      auto mode = addInputPort("wmode", 1);
       if (!memSummary.isMasked)
-        mode =
-            builder.createOrFold<comb::AndOp>(mode, addInput("wmask", 1), true);
-      auto wdata = addInput("wdata", memSummary.dataWidth);
+        mode = builder.createOrFold<comb::AndOp>(mode, addInputPort("wmask", 1),
+                                                 true);
+      auto wdata = addInputPort("wdata", memSummary.dataWidth);
       // Ignore mask port, if maskBits =1
       Value mask;
       if (memSummary.isMasked)
-        mask = addInput("wmask", memSummary.maskBits);
+        mask = addInputPort("wmask", memSummary.maskBits);
       auto rdata = builder.create<seq::FirMemReadWriteOp>(
           memDecl, addr, clk, en, wdata, mode, mask);
       addOutput("rdata", memSummary.dataWidth, rdata);
     } else {
-      auto addr = addInput("addr", op.getAddrBits());
+      auto addr = addInputPort("addr", op.getAddrBits());
       // If maskBits =1, then And the mask field with enable, and update the
       // enable. Else keep mask port.
-      auto en = addInput("en", 1);
+      auto en = addInputPort("en", 1);
       if (!memSummary.isMasked)
-        en = builder.createOrFold<comb::AndOp>(en, addInput("mask", 1), true);
-      auto clk = addInput("clk", 1);
-      auto data = addInput("data", memSummary.dataWidth);
+        en = builder.createOrFold<comb::AndOp>(en, addInputPort("mask", 1),
+                                               true);
+      auto clk = addClock("clk");
+      auto data = addInputPort("data", memSummary.dataWidth);
       // Ignore mask port, if maskBits =1
       Value mask;
       if (memSummary.isMasked)
-        mask = addInput("mask", memSummary.maskBits);
+        mask = addInputPort("mask", memSummary.maskBits);
       builder.create<seq::FirMemWriteOp>(memDecl, addr, clk, en, data, mask);
     }
   }
