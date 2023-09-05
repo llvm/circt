@@ -10,7 +10,7 @@ firrtl.circuit "Component" {
 
   // CHECK-LABEL: om.class @Class_1
   firrtl.class private @Class_1(out %someInt: !firrtl.integer) {
-    // CHECK: %[[C1:.+]] = om.constant 1 : si4
+    // CHECK: %[[C1:.+]] = om.constant #om.integer<1 : si4> : !om.integer
     %0 = firrtl.integer 1
     // CHECK: om.class.field @someInt, %[[C1]]
     firrtl.propassign %someInt, %0 : !firrtl.integer
@@ -188,5 +188,13 @@ firrtl.circuit "PathModule" {
     // CHECK: om.path member_instance [[INST_PATH]]
     %instance_member_instance = firrtl.path member_instance distinct[4]<>
     %instance_member_reference = firrtl.path member_reference distinct[4]<>
+  }
+  firrtl.module @ListCreate(in %propIn: !firrtl.integer, out %propOut: !firrtl.list<integer>) attributes {convention = #firrtl<convention scalarized>} {
+    %0 = firrtl.integer 123
+    %1 = firrtl.list.create %propIn, %0 : !firrtl.list<integer>
+    firrtl.propassign %propOut, %1 : !firrtl.list<integer>
+    // CHECK:  %[[c0:.+]] = om.constant #om.integer<123 : si12> : !om.integer
+    // CHECK:  %[[c1:.+]] = om.list_create %propIn, %[[c0]] : !om.integer
+    // CHECK:  om.class.field @propOut, %[[c1]] : !om.list<!om.integer>
   }
 }
