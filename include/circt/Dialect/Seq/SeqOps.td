@@ -47,7 +47,7 @@ def CompRegOp : SeqOp<"compreg",
       return build($_builder, $_state, input.getType(), input, clk, nameAttr,
                    Value(), Value(), hw::InnerSymAttr::get(nameAttr));
     }]>,
-    /// Create a register with a reset, with an inner_sym matching the 
+    /// Create a register with a reset, with an inner_sym matching the
     /// register's name.
     OpBuilder<(ins "Value":$input, "Value":$clk, "Value":$reset,
                    "Value":$rstValue, "StringRef":$name), [{
@@ -246,10 +246,10 @@ class HLMemTypeIndexingConstraint<string hlmemvalue, string addresses>
 def ReadPortOp : SeqOp<"read", [
     DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
     HLMemTypeIndexingConstraint<"memory", "addresses">,
-    AttrSizedOperandSegments     
+    AttrSizedOperandSegments
   ]> {
   let summary = "Structural read access to a seq.hlmem, with an optional read enable signal.";
-  let arguments = (ins 
+  let arguments = (ins
     HLMemType:$memory,
     Variadic<HWIntegerType>:$addresses,
     Optional<I1>:$rdEn,
@@ -331,8 +331,8 @@ def ClockGateOp : SeqOp<"clock_gate", [
 def ClockMuxOp : SeqOp<"clock_mux", [Pure]> {
   let summary = "Safely selects a clock based on a condition";
   let description = [{
-    The `seq.clock_mux` op selects a clock from two options. If `cond` is 
-    true, the first clock operand is selected to drive downstream logic. 
+    The `seq.clock_mux` op selects a clock from two options. If `cond` is
+    true, the first clock operand is selected to drive downstream logic.
     Otherwise, the second clock is used.
 
     ```
@@ -544,6 +544,7 @@ def ToClockOp : SeqOp<"to_clock", [Pure]> {
 
   let assemblyFormat = "$input attr-dict";
 
+  let hasFolder = 1;
   let hasCanonicalizeMethod = 1;
 }
 
@@ -555,5 +556,6 @@ def FromClockOp : SeqOp<"from_clock", [Pure]> {
 
   let assemblyFormat = "$input attr-dict";
 
+  let hasFolder = 1;
   let hasCanonicalizeMethod = 1;
 }
