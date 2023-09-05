@@ -240,6 +240,8 @@ struct PPSaveString {
 template <typename PPTy = PrettyPrinter>
 class TokenStream : public TokenBuilder<PPTy> {
   using Base = TokenBuilder<PPTy>;
+
+protected:
   TokenStringSaver &saver;
 
 public:
@@ -369,6 +371,21 @@ public:
   }
 };
 
+/// Wrap the TokenStream with a helper for CallbackTokens, to record the print
+/// events on the stream.
+template <typename CallableType, typename DataType,
+          typename PPTy = PrettyPrinter>
+class TokenStreamWithCallback : public TokenStream<PPTy> {
+  using Base = TokenStream<PPTy>;
+  PrintEventAndStorageListener<CallableType, DataType> &saver;
+
+public:
+  TokenStreamWithCallback(
+      PPTy &pp, PrintEventAndStorageListener<CallableType, DataType> &saver)
+      : TokenStream<PPTy>(pp, saver), saver(saver) {}
+  /// Add a Callback token.
+  void addCallback(DataType d) { Base::addToken(saver.getToken(d)); }
+};
 } // end namespace pretty
 } // end namespace circt
 
