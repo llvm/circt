@@ -29,26 +29,26 @@ hw.module @Ports(%clock: i1, %enable: i1, %address: i4, %data: i20, %mode: i1, %
   %mem2 = seq.firmem 0, 1, undefined, undefined : <12 x 20, mask 4>
 
   // Read ports
-  // CHECK-NEXT: [[R0:%.+]] = seq.firmem.read_port %mem[%address], clock %clock : <12 x 20>
-  // CHECK-NEXT: [[R1:%.+]] = seq.firmem.read_port %mem[%address], clock %clock enable %enable : <12 x 20>
-  %0 = seq.firmem.read_port %mem[%address], clock %clock : <12 x 20>
-  %1 = seq.firmem.read_port %mem[%address], clock %clock enable %enable : <12 x 20>
+  // CHECK-NEXT: [[R0:%.+]] = seq.firmem.read_port %mem[%address], clock %clock : <12 x 20>, i1
+  // CHECK-NEXT: [[R1:%.+]] = seq.firmem.read_port %mem[%address], clock %clock enable %enable : <12 x 20>, i1
+  %0 = seq.firmem.read_port %mem[%address], clock %clock : <12 x 20>, i1
+  %1 = seq.firmem.read_port %mem[%address], clock %clock enable %enable : <12 x 20>, i1
 
   // Write ports
-  // CHECK-NEXT: seq.firmem.write_port %mem[%address] = %data, clock %clock : <12 x 20>
-  // CHECK-NEXT: seq.firmem.write_port %mem[%address] = %data, clock %clock enable %enable : <12 x 20>
-  // CHECK-NEXT: seq.firmem.write_port %mem2[%address] = %data, clock %clock mask %mask : <12 x 20, mask 4>, i4
-  seq.firmem.write_port %mem[%address] = %data, clock %clock : <12 x 20>
-  seq.firmem.write_port %mem[%address] = %data, clock %clock enable %enable : <12 x 20>
-  seq.firmem.write_port %mem2[%address] = %data, clock %clock mask %mask : <12 x 20, mask 4>, i4
+  // CHECK-NEXT: seq.firmem.write_port %mem[%address] = %data, clock %clock : <12 x 20>, i1
+  // CHECK-NEXT: seq.firmem.write_port %mem[%address] = %data, clock %clock enable %enable : <12 x 20>, i1
+  // CHECK-NEXT: seq.firmem.write_port %mem2[%address] = %data, clock %clock mask %mask : <12 x 20, mask 4>, i1, i4
+  seq.firmem.write_port %mem[%address] = %data, clock %clock : <12 x 20>, i1
+  seq.firmem.write_port %mem[%address] = %data, clock %clock enable %enable : <12 x 20>, i1
+  seq.firmem.write_port %mem2[%address] = %data, clock %clock mask %mask : <12 x 20, mask 4>, i1, i4
 
   // Read-write ports
-  // CHECK-NEXT: [[R2:%.+]] = seq.firmem.read_write_port %mem[%address] = %data if %mode, clock %clock : <12 x 20>
-  // CHECK-NEXT: [[R3:%.+]] = seq.firmem.read_write_port %mem[%address] = %data if %mode, clock %clock enable %enable : <12 x 20>
-  // CHECK-NEXT: [[R4:%.+]] = seq.firmem.read_write_port %mem2[%address] = %data if %mode, clock %clock mask %mask : <12 x 20, mask 4>, i4
-  %2 = seq.firmem.read_write_port %mem[%address] = %data if %mode, clock %clock : <12 x 20>
-  %3 = seq.firmem.read_write_port %mem[%address] = %data if %mode, clock %clock enable %enable : <12 x 20>
-  %4 = seq.firmem.read_write_port %mem2[%address] = %data if %mode, clock %clock mask %mask : <12 x 20, mask 4>, i4
+  // CHECK-NEXT: [[R2:%.+]] = seq.firmem.read_write_port %mem[%address] = %data if %mode, clock %clock : <12 x 20>, i1
+  // CHECK-NEXT: [[R3:%.+]] = seq.firmem.read_write_port %mem[%address] = %data if %mode, clock %clock enable %enable : <12 x 20>, i1
+  // CHECK-NEXT: [[R4:%.+]] = seq.firmem.read_write_port %mem2[%address] = %data if %mode, clock %clock mask %mask : <12 x 20, mask 4>, i1, i4
+  %2 = seq.firmem.read_write_port %mem[%address] = %data if %mode, clock %clock : <12 x 20>, i1
+  %3 = seq.firmem.read_write_port %mem[%address] = %data if %mode, clock %clock enable %enable : <12 x 20>, i1
+  %4 = seq.firmem.read_write_port %mem2[%address] = %data if %mode, clock %clock mask %mask : <12 x 20, mask 4>, i1, i4
 
   // CHECK-NEXT: comb.xor [[R0]], [[R1]], [[R2]], [[R3]], [[R4]]
   comb.xor %0, %1, %2, %3, %4 : i20

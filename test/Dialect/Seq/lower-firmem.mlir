@@ -17,26 +17,26 @@ hw.module @Foo(%clk: i1, %en: i1, %addr: i4, %wdata: i42, %wmode: i1, %mask2: i2
   // CHECK-NEXT: comb.xor [[TMP0]], [[TMP1]]
   %m0_mem1A = seq.firmem 0, 1, undefined, port_order : <12 x 42>
   %m0_mem1B = seq.firmem 0, 1, undefined, port_order : <12 x 42>
-  %0 = seq.firmem.read_port %m0_mem1A[%addr], clock %clk enable %en : <12 x 42>
-  %1 = seq.firmem.read_port %m0_mem1B[%addr], clock %clk enable %en : <12 x 42>
+  %0 = seq.firmem.read_port %m0_mem1A[%addr], clock %clk enable %en : <12 x 42>, i1
+  %1 = seq.firmem.read_port %m0_mem1B[%addr], clock %clk enable %en : <12 x 42>, i1
   comb.xor %0, %1 : i42
 
   // CHECK-NEXT: hw.instance "m0_mem2_ext" @m0_mem2_12x42(W0_addr: %addr: i4, W0_en: %en: i1, W0_clk: %clk: i1, W0_data: %wdata: i42, W0_mask: %mask2: i2) -> ()
   %m0_mem2 = seq.firmem 0, 1, undefined, port_order : <12 x 42, mask 2>
-  seq.firmem.write_port %m0_mem2[%addr] = %wdata, clock %clk enable %en mask %mask2 : <12 x 42, mask 2>, i2
+  seq.firmem.write_port %m0_mem2[%addr] = %wdata, clock %clk enable %en mask %mask2 : <12 x 42, mask 2>, i1, i2
 
   // CHECK-NEXT: [[TMP:%.+]] = hw.instance "m0_mem3_ext" @m0_mem3_12x42(RW0_addr: %addr: i4, RW0_en: %en: i1, RW0_clk: %clk: i1, RW0_wmode: %wmode: i1, RW0_wdata: %wdata: i42, RW0_wmask: %mask3: i3) -> (RW0_rdata: i42)
   // CHECK-NEXT: comb.xor [[TMP]]
   %m0_mem3 = seq.firmem 0, 1, undefined, port_order : <12 x 42, mask 3>
-  %2 = seq.firmem.read_write_port %m0_mem3[%addr] = %wdata if %wmode, clock %clk enable %en mask %mask3 : <12 x 42, mask 3>, i3
+  %2 = seq.firmem.read_write_port %m0_mem3[%addr] = %wdata if %wmode, clock %clk enable %en mask %mask3 : <12 x 42, mask 3>, i1, i3
   comb.xor %2 : i42
 
   // CHECK-NEXT: [[TMP0:%.+]], [[TMP1:%.+]] = hw.instance "m0_mem4_ext" @m0_mem4_12x42(R0_addr: %addr: i4, R0_en: %en: i1, R0_clk: %clk: i1, RW0_addr: %addr: i4, RW0_en: %en: i1, RW0_clk: %clk: i1, RW0_wmode: %wmode: i1, RW0_wdata: %wdata: i42, RW0_wmask: %mask6: i6, W0_addr: %addr: i4, W0_en: %en: i1, W0_clk: %clk: i1, W0_data: %wdata: i42, W0_mask: %mask6: i6) -> (R0_data: i42, RW0_rdata: i42)
   // CHECK-NEXT: comb.xor [[TMP0]], [[TMP1]]
   %m0_mem4 = seq.firmem 0, 1, undefined, port_order : <12 x 42, mask 6>
-  %3 = seq.firmem.read_port %m0_mem4[%addr], clock %clk enable %en : <12 x 42, mask 6>
-  %4 = seq.firmem.read_write_port %m0_mem4[%addr] = %wdata if %wmode, clock %clk enable %en mask %mask6 : <12 x 42, mask 6>, i6
-  seq.firmem.write_port %m0_mem4[%addr] = %wdata, clock %clk enable %en mask %mask6 : <12 x 42, mask 6>, i6
+  %3 = seq.firmem.read_port %m0_mem4[%addr], clock %clk enable %en : <12 x 42, mask 6>, i1
+  %4 = seq.firmem.read_write_port %m0_mem4[%addr] = %wdata if %wmode, clock %clk enable %en mask %mask6 : <12 x 42, mask 6>, i1, i6
+  seq.firmem.write_port %m0_mem4[%addr] = %wdata, clock %clk enable %en mask %mask6 : <12 x 42, mask 6>, i1, i6
   comb.xor %3, %4 : i42
 }
 
@@ -84,16 +84,16 @@ hw.module @MemoryWritePortBehavior(%clock1: i1, %clock2: i1) {
   %m3_mem1 = seq.firmem 0, 1, undefined, port_order : <12 x 8>
   %cwire1 = hw.wire %clock1 : i1
   %cwire2 = hw.wire %clock1 : i1
-  seq.firmem.write_port %m3_mem1[%z_i4] = %z_i8, clock %cwire1 enable %z_i1 : <12 x 8>
-  seq.firmem.write_port %m3_mem1[%z_i4] = %z_i8, clock %cwire2 enable %z_i1 : <12 x 8>
+  seq.firmem.write_port %m3_mem1[%z_i4] = %z_i8, clock %cwire1 enable %z_i1 : <12 x 8>, i1
+  seq.firmem.write_port %m3_mem1[%z_i4] = %z_i8, clock %cwire2 enable %z_i1 : <12 x 8>, i1
 
   // This memory has different clocks for each write port. It should be
   // lowered to an "ab" memory.
   //
   // CHECK: hw.instance "m3_mem2_ext" @m3_mem2_12x8
   %m3_mem2 = seq.firmem 0, 1, undefined, port_order : <12 x 8>
-  seq.firmem.write_port %m3_mem2[%z_i4] = %z_i8, clock %clock1 enable %z_i1 : <12 x 8>
-  seq.firmem.write_port %m3_mem2[%z_i4] = %z_i8, clock %clock2 enable %z_i1 : <12 x 8>
+  seq.firmem.write_port %m3_mem2[%z_i4] = %z_i8, clock %clock1 enable %z_i1 : <12 x 8>, i1
+  seq.firmem.write_port %m3_mem2[%z_i4] = %z_i8, clock %clock2 enable %z_i1 : <12 x 8>, i1
 
   // This memory is the same as the first memory, but a node is used to alias
   // the second write port clock (e.g., this could be due to a dont touch
@@ -102,6 +102,6 @@ hw.module @MemoryWritePortBehavior(%clock1: i1, %clock2: i1) {
   //
   // CHECK: hw.instance "m3_mem3_ext" @m3_mem_12x8
   %m3_mem3 = seq.firmem 0, 1, undefined, port_order : <12 x 8>
-  seq.firmem.write_port %m3_mem3[%z_i4] = %z_i8, clock %clock1 enable %z_i1 : <12 x 8>
-  seq.firmem.write_port %m3_mem3[%z_i4] = %z_i8, clock %clock1 enable %z_i1 : <12 x 8>
+  seq.firmem.write_port %m3_mem3[%z_i4] = %z_i8, clock %clock1 enable %z_i1 : <12 x 8>, i1
+  seq.firmem.write_port %m3_mem3[%z_i4] = %z_i8, clock %clock1 enable %z_i1 : <12 x 8>, i1
 }
