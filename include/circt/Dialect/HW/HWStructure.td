@@ -66,7 +66,7 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
   let extraClassDefinition = extraModuleClassDefinition # [{
 
     ModuleType $cppClass::getHWModuleType() {
-      return detail::fnToMod(getFunctionType(), getArgNames().getValue(), getResultNames().getValue());
+      return getModuleType();
     }
 
     ::circt::hw::InnerSymAttr $cppClass::getPortSymbolAttr(size_t portIndex) {
@@ -83,26 +83,28 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
     }
 
     size_t $cppClass::getNumPorts() {
-      auto fnty = getFunctionType();
-      return fnty.getNumInputs() + fnty.getNumResults();
+      auto modty = getHWModuleType();
+      return modty.getNumPorts();
     }
 
     size_t $cppClass::getNumInputPorts() {
-      auto fnty = getFunctionType();
-      return fnty.getNumInputs();
+      auto modty = getHWModuleType();
+      return modty.getNumInputs();
     }
 
     size_t $cppClass::getNumOutputPorts() {
-      auto fnty = getFunctionType();
-      return fnty.getNumResults();
+      auto modty = getHWModuleType();
+      return modty.getNumOutputs();
     }
 
     size_t $cppClass::getPortIdForInputId(size_t idx) {
-      return idx;
+      auto modty = getHWModuleType();
+      return modty.getPortIdForInputId(idx);
     }
 
     size_t $cppClass::getPortIdForOutputId(size_t idx) {
-      return idx + getNumInputPorts();
+      auto modty = getHWModuleType();
+      return modty.getPortIdForOutputId(idx);
     }
 
   }];
@@ -145,7 +147,7 @@ def HWModuleOp : HWModuleOpBase<"module",
     connections within the module.
   }];
   let arguments = (ins SymbolNameAttr:$sym_name,
-                       TypeAttrOf<FunctionType>:$function_type,
+                       TypeAttrOf<ModuleType>:$module_type,
                        OptionalAttr<DictArrayAttr>:$arg_attrs,
                        OptionalAttr<DictArrayAttr>:$res_attrs,
                        StrArrayAttr:$argNames,
@@ -276,7 +278,7 @@ def HWModuleExternOp : HWModuleOpBase<"module.extern"> {
     parameterized types instead of just concrete types.
   }];
   let arguments = (ins SymbolNameAttr:$sym_name,
-                       TypeAttrOf<FunctionType>:$function_type,
+                       TypeAttrOf<ModuleType>:$module_type,
 		                   OptionalAttr<DictArrayAttr>:$arg_attrs,
                        OptionalAttr<DictArrayAttr>:$res_attrs,
                        StrArrayAttr:$argNames,
@@ -371,7 +373,7 @@ def HWModuleGeneratedOp : HWModuleOpBase<"module.generated", [
   }];
   let arguments = (ins SymbolNameAttr:$sym_name,
                        FlatSymbolRefAttr:$generatorKind,
-                       TypeAttrOf<FunctionType>:$function_type,
+                       TypeAttrOf<ModuleType>:$module_type,
 		                   OptionalAttr<DictArrayAttr>:$arg_attrs,
                        OptionalAttr<DictArrayAttr>:$res_attrs,
                        StrArrayAttr:$argNames, StrArrayAttr:$resultNames,

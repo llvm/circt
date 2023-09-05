@@ -615,37 +615,28 @@ buildModule(OpBuilder &builder, OperationState &result, StringAttr name,
   // Add an attribute for the name.
   result.addAttribute(SymbolTable::getSymbolAttrName(), name);
 
-  SmallVector<Attribute> argNames, resultNames;
-  SmallVector<Type, 4> argTypes, resultTypes;
-  SmallVector<Attribute> argAttrs, resultAttrs;
-  SmallVector<Attribute> argLocs, resultLocs;
+  SmallVector<Attribute> inputAttrs, outputAttrs;
+  SmallVector<Attribute> inputLocs, outputLocs;
+  SmallVector<Attribute> inputNames, outputNames;
+  SmallVector<ModulePort> portTypes;
   auto exportPortIdent = StringAttr::get(builder.getContext(), "hw.exportPort");
 
-  for (auto elt : ports.getInputs()) {
-    if (elt.dir == ModulePort::Direction::InOut &&
-        !elt.type.isa<hw::InOutType>())
-      elt.type = hw::InOutType::get(elt.type);
-    argTypes.push_back(elt.type);
-    argNames.push_back(elt.name);
-    argLocs.push_back(elt.loc ? elt.loc : unknownLoc);
+  for (auto elt : ports) {
+    portTypes.push_back(elt);
     Attribute attr;
     if (elt.sym && !elt.sym.empty())
       attr = builder.getDictionaryAttr({{exportPortIdent, elt.sym}});
     else
       attr = builder.getDictionaryAttr({});
-    argAttrs.push_back(attr);
-  }
-
-  for (auto elt : ports.getOutputs()) {
-    resultTypes.push_back(elt.type);
-    resultNames.push_back(elt.name);
-    resultLocs.push_back(elt.loc ? elt.loc : unknownLoc);
-    Attribute attr;
-    if (elt.sym && !elt.sym.empty())
-      attr = builder.getDictionaryAttr({{exportPortIdent, elt.sym}});
-    else
-      attr = builder.getDictionaryAttr({});
-    resultAttrs.push_back(attr);
+    if (elt.isOutput()) {
+      outputAttrs.push_back(attr);
+      outputLocs.push_back(elt.loc ? elt.loc : unknownLoc);
+      outputNames.push_back(elt.name);
+    } else {
+      inputAttrs.push_back(attr);
+      inputLocs.push_back(elt.loc ? elt.loc : unknownLoc);
+      inputNames.push_back(elt.name);
+    }
   }
 
   // Allow clients to pass in null for the parameters list.
@@ -653,17 +644,17 @@ buildModule(OpBuilder &builder, OperationState &result, StringAttr name,
     parameters = builder.getArrayAttr({});
 
   // Record the argument and result types as an attribute.
-  auto type = builder.getFunctionType(argTypes, resultTypes);
-  result.addAttribute(ModuleTy::getFunctionTypeAttrName(result.name),
+  auto type = ModuleType::get(builder.getContext(), portTypes);
+  result.addAttribute(ModuleTy::getModuleTypeAttrName(result.name),
                       TypeAttr::get(type));
-  result.addAttribute("argNames", builder.getArrayAttr(argNames));
-  result.addAttribute("resultNames", builder.getArrayAttr(resultNames));
-  result.addAttribute("argLocs", builder.getArrayAttr(argLocs));
-  result.addAttribute("resultLocs", builder.getArrayAttr(resultLocs));
+  result.addAttribute("argNames", builder.getArrayAttr(inputNames));
+  result.addAttribute("resultNames", builder.getArrayAttr(outputNames));
+  result.addAttribute("argLocs", builder.getArrayAttr(inputLocs));
+  result.addAttribute("resultLocs", builder.getArrayAttr(outputLocs));
   result.addAttribute(ModuleTy::getArgAttrsAttrName(result.name),
-                      builder.getArrayAttr(argAttrs));
+                      builder.getArrayAttr(inputAttrs));
   result.addAttribute(ModuleTy::getResAttrsAttrName(result.name),
-                      builder.getArrayAttr(resultAttrs));
+                      builder.getArrayAttr(outputAttrs));
   result.addAttribute("parameters", parameters);
   if (!comment)
     comment = builder.getStringAttr("");
@@ -1068,6 +1059,8 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
   }
 
   auto *context = result.getContext();
+  auto modType = detail::fnToMod(cast<FunctionType>(functionType.getValue()),
+                                 argNames, resultNames);
 
   // An explicit `argNames` attribute overrides the MLIR names.  This is how
   // we represent port names that aren't valid MLIR identifiers.  Result and
@@ -1081,8 +1074,8 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
   result.addAttribute("parameters", parameters);
   if (!hasAttribute("comment", result.attributes))
     result.addAttribute("comment", StringAttr::get(context, ""));
-  result.addAttribute(ModuleTy::getFunctionTypeAttrName(result.name),
-                      functionType);
+  result.addAttribute(ModuleTy::getModuleTypeAttrName(result.name),
+                      TypeAttr::get(modType));
 
   // Add the attributes to the function arguments.
   addArgAndResultAttrs(parser.getBuilder(), result, entryArgs, resultAttrs,
@@ -1164,7 +1157,7 @@ static void printModuleOp(OpAsmPrinter &p, ModuleTy mod,
     omittedAttrs.push_back("argNames");
   omittedAttrs.push_back("argLocs");
   omittedAttrs.push_back(
-      ModuleTy::getFunctionTypeAttrName(mod.getOperation()->getName()));
+      ModuleTy::getModuleTypeAttrName(mod.getOperation()->getName()));
   omittedAttrs.push_back(
       ModuleTy::getArgAttrsAttrName(mod.getOperation()->getName()));
   omittedAttrs.push_back(
@@ -1264,7 +1257,7 @@ LogicalResult HWModuleOp::verify() {
   if (failed(verifyModuleCommon(*this)))
     return failure();
 
-  auto type = getFunctionType();
+  auto type = getModuleType();
   auto *body = getBodyBlock();
 
   // Verify the number of block arguments.
@@ -1477,11 +1470,13 @@ void HWModuleGeneratedOp::removeAllPortAttrs() {
   return ::removeAllPortAttrs(*this);
 }
 
+// This probably does really unexpected stuff when you change the number of
+// ports.
 template <typename ModTy>
 static void setHWModuleType(ModTy &mod, ModuleType type) {
   auto argAttrs = mod.getAllInputAttrs();
   auto resAttrs = mod.getAllOutputAttrs();
-  mod.setFunctionTypeAttr(TypeAttr::get(type.getFuncType()));
+  mod.setModuleTypeAttr(TypeAttr::get(type));
   unsigned newNumArgs = type.getNumInputs();
   unsigned newNumResults = type.getNumOutputs();
 

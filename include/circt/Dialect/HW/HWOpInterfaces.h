@@ -57,10 +57,13 @@ struct ModulePortInfo {
                           ArrayRef<PortInfo> outputs) {
     ports.insert(ports.end(), inputs.begin(), inputs.end());
     ports.insert(ports.end(), outputs.begin(), outputs.end());
+    sanatizeInOut();
   }
 
   explicit ModulePortInfo(ArrayRef<PortInfo> mergedPorts)
-      : ports(mergedPorts.begin(), mergedPorts.end()) {}
+      : ports(mergedPorts.begin(), mergedPorts.end()) {
+    sanatizeInOut();
+  }
 
   using iterator = SmallVector<PortInfo>::iterator;
   using const_iterator = SmallVector<PortInfo>::const_iterator;
@@ -166,6 +169,15 @@ struct ModulePortInfo {
   }
 
 private:
+  // convert input inout<type> -> inout type
+  void sanatizeInOut() {
+    for (auto &p : ports)
+      if (auto inout = dyn_cast<hw::InOutType>(p.type)) {
+        p.type = inout.getElementType();
+        p.dir = ModulePort::Direction::InOut;
+      }
+  }
+
   /// This contains a list of all ports.  Input first.
   SmallVector<PortInfo> ports;
 };
