@@ -1734,9 +1734,9 @@ circuit BasicProps :
   ; CHECK-LABEL: firrtl.class private @Client(out %a: !firrtl.class<@SimpleClass(in a: !firrtl.string, out b: !firrtl.string)>)
   class Client:
     output a: Inst<SimpleClass>
-    ; CHECK-NEXT:  %0 = firrtl.object @SimpleClass(in a: !firrtl.string, out b: !firrtl.string)
+    ; CHECK-NEXT:  %b = firrtl.object @SimpleClass(in a: !firrtl.string, out b: !firrtl.string)
     object b of SimpleClass
-    ; CHECK-NEXT: firrtl.propassign %a, %0 : !firrtl.class<@SimpleClass(in a: !firrtl.string, out b: !firrtl.string)>
+    ; CHECK-NEXT: firrtl.propassign %a, %b : !firrtl.class<@SimpleClass(in a: !firrtl.string, out b: !firrtl.string)>
     propassign a, b
 
   ; CHECK-LABEL firrtl.class private @OtherClient(in %a: !firrtl.string, out %b: !firrtl.string)

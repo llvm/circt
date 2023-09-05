@@ -448,14 +448,14 @@ void LowerClassesPass::updateInstances(Operation *op) {
               actualParameters.push_back(propassign.getSrc());
 
     // Convert the FIRRTL Class type to an OM Class type.
-    auto classType =
-        om::ClassType::get(op->getContext(), firrtlObject.getClassNameAttr());
+    auto className = firrtlObject.getType().getNameAttr();
+    auto classType = om::ClassType::get(op->getContext(), className);
 
     // Create the new Object op.
     builder.setInsertionPoint(firrtlObject);
-    auto object = builder.create<om::ObjectOp>(
-        firrtlObject.getLoc(), classType,
-        firrtlObject.getClassNameAttr().getAttr(), actualParameters);
+    auto object =
+        builder.create<om::ObjectOp>(firrtlObject.getLoc(), classType,
+                                     className.getAttr(), actualParameters);
 
     // Replace uses of the FIRRTL Object with the OM Object. The later dialect
     // conversion will take care of converting the types.

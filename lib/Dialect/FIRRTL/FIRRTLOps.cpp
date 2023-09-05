@@ -2845,29 +2845,10 @@ void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 std::optional<size_t> WireOp::getTargetResultIndex() { return 0; }
 
-void ObjectOp::build(OpBuilder &builder, OperationState &state,
-                     ClassType type) {
-  build(builder, state, type, type.getNameAttr());
-}
-
-void ObjectOp::build(OpBuilder &builder, OperationState &state,
-                     ClassLike klass) {
-  build(builder, state, klass.getInstanceType());
-}
-
-ParseResult ObjectOp::parse(OpAsmParser &parser, OperationState &result) {
-  ClassType type;
-  if (ClassType::parseInterface(parser, type))
-    return failure();
-
-  result.addTypes(type);
-  result.addAttribute("className", type.getNameAttr());
-  return success();
-}
-
-void ObjectOp::print(OpAsmPrinter &p) {
-  p << " ";
-  getType().printInterface(p);
+void ObjectOp::build(OpBuilder &builder, OperationState &state, ClassLike klass,
+                     StringRef name) {
+  build(builder, state, klass.getInstanceType(),
+        StringAttr::get(builder.getContext(), name));
 }
 
 LogicalResult ObjectOp::verify() { return success(); }
@@ -2890,8 +2871,41 @@ LogicalResult ObjectOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   return success();
 }
 
+StringAttr ObjectOp::getClassNameAttr() {
+  return getType().getNameAttr().getAttr();
+}
+
+StringRef ObjectOp::getClassName() { return getType().getName(); }
+
 ClassLike ObjectOp::getReferencedClass(SymbolTable &symbolTable) {
-  return symbolTable.lookup<ClassLike>(getClassNameAttr().getLeafReference());
+  auto symRef = getType().getNameAttr();
+  return symbolTable.lookup<ClassLike>(symRef.getLeafReference());
+}
+
+Operation *ObjectOp::getReferencedModule(SymbolTable &symtbl) {
+  return getReferencedClass(symtbl);
+}
+
+Operation *ObjectOp::getReferencedModuleSlow() {
+  auto circuit = (*this)->getParentOfType<CircuitOp>();
+  if (!circuit)
+    return nullptr;
+
+  return circuit.lookupSymbol<ClassLike>(getClassNameAttr());
+}
+
+StringRef ObjectOp::getInstanceName() { return getName(); }
+
+StringAttr ObjectOp::getInstanceNameAttr() { return getNameAttr(); }
+
+StringRef ObjectOp::getReferencedModuleName() { return getClassName(); }
+
+StringAttr ObjectOp::getReferencedModuleNameAttr() {
+  return getClassNameAttr();
+}
+
+void ObjectOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getResult(), getName());
 }
 
 //===----------------------------------------------------------------------===//
@@ -5199,6 +5213,22 @@ static ParseResult parseMemOp(OpAsmParser &parser, NamedAttrList &resultAttrs) {
 static void printMemOp(OpAsmPrinter &p, Operation *op, DictionaryAttr attr) {
   // "ruw" and "inner_sym" is always elided.
   printElidePortAnnotations(p, op, attr, {"ruw", "inner_sym"});
+}
+
+//===----------------------------------------------------------------------===//
+// ClassInterface custom directive
+//===----------------------------------------------------------------------===//
+
+static ParseResult parseClassInterface(OpAsmParser &parser, Type &result) {
+  ClassType type;
+  if (ClassType::parseInterface(parser, type))
+    return failure();
+  result = type;
+  return success();
+}
+
+static void printClassInterface(OpAsmPrinter &p, Operation *, ClassType type) {
+  type.printInterface(p);
 }
 
 //===----------------------------------------------------------------------===//

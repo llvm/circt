@@ -594,6 +594,13 @@ def ClockGateIntrinsicOp : FIRRTLOp<"int.clock_gate", [Pure]> {
 def ObjectOp :  FIRRTLOp<"object", [
     ParentOneOf<["firrtl::FModuleOp, firrtl::ClassOp"]>,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+    DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface, [
+      "getReferencedModuleName",
+      "getReferencedModuleNameAttr"
+    ]>,
+    DeclareOpInterfaceMethods<OpAsmOpInterface, [
+      "getAsmResultNames"
+    ]>
 ]> {
   let summary = "Instantiate a class to produce an object";
   let description = [{
@@ -605,22 +612,22 @@ def ObjectOp :  FIRRTLOp<"object", [
     %0 = firrtl.object @Foo(in io: !firrtl.uint)
     ```
   }];
-  let arguments = (ins
-    // The className is so that SymbolUserOpInterface can find the referenced 
-    // symbol.
-    FlatSymbolRefAttr:$className
-  );
-  let results = (outs ClassType:$results);
-  let hasCustomAssemblyFormat = 1;
+  let arguments = (ins StrAttr:$name);
+  let results = (outs ClassType:$result);
   let hasVerifier = 1;
   let builders = [
-    OpBuilder<(ins "ClassType":$type)>,
-    OpBuilder<(ins "ClassLike":$klass)>
+    OpBuilder<(ins "ClassLike":$klass, "StringRef":$name)>
   ];
   let extraClassDeclaration = [{
     /// Lookup the module or extmodule for the symbol.  This returns null on
     /// invalid IR.
     ClassLike getReferencedClass(SymbolTable& symbolTable);
+
+    StringAttr getClassNameAttr();
+    StringRef getClassName();
+  }];
+  let assemblyFormat = [{
+    `` custom<ImplicitSSAName>(attr-dict) custom<ClassInterface>(type($result))
   }];
 }
 
