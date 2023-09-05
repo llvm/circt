@@ -401,7 +401,7 @@ z3::expr Solver::Circuit::fetchOrAllocateExpr(Value value) {
     // Technically allowed for the `hw` dialect but
     // disallowed for `comb` operations; should check separately.
     assert(width > 0 && "0-width integers are not supported"); // NOLINT
-    z3::expr expr = solver.context.bv_const(valueName.c_str(), width);
+    expr = solver.context.bv_const(valueName.c_str(), width);
     LLVM_DEBUG(lec::printExpr(expr));
     LLVM_DEBUG(lec::printValue(value));
     auto exprInsertion = exprTable.insert(std::pair(value, expr));
@@ -412,7 +412,6 @@ z3::expr Solver::Circuit::fetchOrAllocateExpr(Value value) {
     auto symInsertion = solver.symbolTable.insert(std::pair(symbol, value));
     (void)symInsertion; // Suppress Warning
     assert(symInsertion.second && "Value not inserted in symbol table");
-    return expr;
   }
   return expr;
 }
