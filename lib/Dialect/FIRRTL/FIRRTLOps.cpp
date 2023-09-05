@@ -1444,7 +1444,7 @@ static LogicalResult verifyPortSymbolUses(FModuleLike module,
 
     // verify that the class exists.
     auto className = classType.getNameAttr();
-    auto classOp = dyn_cast_or_null<ClassOp>(
+    auto classOp = dyn_cast_or_null<ClassLike>(
         symbolTable.lookupSymbolIn(circuitOp, className));
     if (!classOp)
       return module.emitOpError() << "references unknown class " << className;
@@ -1514,64 +1514,69 @@ ConventionAttr FMemModuleOp::getConventionAttr() {
 }
 
 //===----------------------------------------------------------------------===//
-// ClassOp
+// ClassLike Helpers
 //===----------------------------------------------------------------------===//
 
-void ClassOp::build(OpBuilder &builder, OperationState &result, StringAttr name,
-                    ArrayRef<PortInfo> ports) {
-  assert(
-      llvm::all_of(ports,
-                   [](const auto &port) { return port.annotations.empty(); }) &&
-      "class ports may not have annotations");
+LogicalResult firrtl::detail::verifyTypeAgainstClassLike(
+    ClassLike classOp, ClassType type,
+    function_ref<InFlightDiagnostic()> emitError) {
+  // This check is probably not required, but done for sanity.
+  auto name = type.getNameAttr().getAttr();
+  auto expectedName = classOp.getModuleNameAttr();
+  if (name != expectedName)
+    return emitError() << "type has wrong name, got " << name << ", expected "
+                       << expectedName;
 
-  buildModuleWithoutAnnos(builder, result, name, ports);
+  auto elements = type.getElements();
+  auto numElements = elements.size();
+  auto expectedNumElements = classOp.getNumPorts();
+  if (numElements != expectedNumElements)
+    return emitError() << "has wrong number of ports, got " << numElements
+                       << ", expected " << expectedNumElements;
 
-  // Create a region and a block for the body.
-  auto *bodyRegion = result.regions[0].get();
-  Block *body = new Block();
-  bodyRegion->push_back(body);
+  auto portNames = classOp.getPortNames();
+  auto portDirections = classOp.getPortDirections();
+  auto portTypes = classOp.getPortTypes();
 
-  // Add arguments to the body block.
-  for (auto &elt : ports)
-    body->addArgument(elt.type, elt.loc);
+  for (unsigned i = 0; i < numElements; ++i) {
+    auto element = elements[i];
+
+    auto name = element.name;
+    auto expectedName = portNames[i];
+    if (name != expectedName)
+      return emitError() << "port #" << i << " has wrong name, got " << name
+                         << ", expected " << expectedName;
+
+    auto direction = element.direction;
+    auto expectedDirection = Direction(portDirections[i]);
+    if (direction != expectedDirection)
+      return emitError() << "port " << name << " has wrong direction, got "
+                         << direction::toString(direction) << ", expected "
+                         << direction::toString(expectedDirection);
+
+    auto type = element.type;
+    auto expectedType = cast<TypeAttr>(portTypes[i]).getValue();
+    if (type != expectedType)
+      return emitError() << "port " << name << " has wrong type, got " << type
+                         << ", expected " << expectedType;
+  }
+
+  return success();
 }
 
-void ClassOp::print(OpAsmPrinter &p) {
-  p << " ";
-
-  // Print the visibility of the class.
-  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
-  if (auto visibility = (*this)->getAttrOfType<StringAttr>(visibilityAttrName))
-    p << visibility.getValue() << ' ';
-
-  // Print the class name.
-  p.printSymbolName(getName());
-
-  auto portDirections = direction::unpackAttribute(getPortDirectionsAttr());
-
-  auto needPortNamesAttr =
-      printModulePorts(p, getBodyBlock(), portDirections, getPortNames(),
-                       getPortTypes(), {}, getPortSyms(), getPortLocations());
-
-  // Print the attr-dict.
-  SmallVector<StringRef, 8> omittedAttrs = {
-      "sym_name", "portNames",     "portTypes",       "portDirections",
-      "portSyms", "portLocations", visibilityAttrName};
-
-  // We can omit the portNames if they were able to be printed as properly as
-  // block arguments.
-  if (!needPortNamesAttr)
-    omittedAttrs.push_back("portNames");
-
-  p.printOptionalAttrDictWithKeyword((*this)->getAttrs(), omittedAttrs);
-
-  p << " ";
-  // Print the body.
-  p.printRegion(getBody(), /*printEntryBlockArgs=*/false,
-                /*printBlockTerminators=*/true);
+ClassType firrtl::detail::getInstanceTypeForClassLike(ClassLike classOp) {
+  auto n = classOp.getNumPorts();
+  SmallVector<ClassElement> elements;
+  elements.reserve(n);
+  for (size_t i = 0; i < n; ++i)
+    elements.push_back({classOp.getPortNameAttr(i), classOp.getPortType(i),
+                        classOp.getPortDirection(i)});
+  auto name = FlatSymbolRefAttr::get(classOp.getNameAttr());
+  return ClassType::get(name, elements);
 }
 
-ParseResult ClassOp::parse(OpAsmParser &parser, OperationState &result) {
+static ParseResult parseClassLike(OpAsmParser &parser, OperationState &result,
+                                  bool hasSSAIdentifiers) {
   auto *context = result.getContext();
   auto &builder = parser.getBuilder();
 
@@ -1592,13 +1597,13 @@ ParseResult ClassOp::parse(OpAsmParser &parser, OperationState &result) {
   SmallVector<Attribute, 4> portAnnotations;
   SmallVector<Attribute, 4> portSyms;
   SmallVector<Attribute, 4> portLocs;
-  if (parseModulePorts(parser, /*hasSSAIdentifiers=*/true,
+  if (parseModulePorts(parser, hasSSAIdentifiers,
                        /*supportsSymbols=*/false, entryArgs, portDirections,
                        portNames, portTypes, portAnnotations, portSyms,
                        portLocs))
     return failure();
 
-  // Ports on ClassOp cannot have annotations
+  // Ports on ClassLike ops cannot have annotations
   for (auto annos : portAnnotations)
     if (!cast<ArrayAttr>(annos).empty())
       return failure();
@@ -1638,18 +1643,97 @@ ParseResult ClassOp::parse(OpAsmParser &parser, OperationState &result) {
   // Notably missing compared to other FModuleLike, we do not track port
   // annotations, nor port symbols, on classes.
 
-  // Parse the optional function body.
-  auto *body = result.addRegion();
-  if (parser.parseRegion(*body, entryArgs))
-    return failure();
-  if (body->empty())
-    body->push_back(new Block());
+  // Add the region (unused by extclass).
+  auto *bodyRegion = result.addRegion();
+
+  if (hasSSAIdentifiers) {
+    if (parser.parseRegion(*bodyRegion, entryArgs))
+      return failure();
+    if (bodyRegion->empty())
+      bodyRegion->push_back(new Block());
+  }
 
   return success();
 }
 
-LogicalResult ClassOp::verify() {
+static void printClassLike(OpAsmPrinter &p, ClassLike op) {
+  p << ' ';
 
+  // Print the visibility of the class.
+  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  if (auto visibility = op->getAttrOfType<StringAttr>(visibilityAttrName))
+    p << visibility.getValue() << ' ';
+
+  // Print the class name.
+  p.printSymbolName(op.getName());
+
+  // Both classes and external classes have a body, but it is always empty for
+  // external classes.
+  Region &region = op->getRegion(0);
+  Block *body = nullptr;
+  if (!region.empty())
+    body = &region.front();
+
+  auto portDirections = direction::unpackAttribute(op.getPortDirectionsAttr());
+
+  auto needPortNamesAttr = printModulePorts(
+      p, body, portDirections, op.getPortNames(), op.getPortTypes(), {},
+      op.getPortSymbols(), op.getPortLocations());
+
+  // Print the attr-dict.
+  SmallVector<StringRef, 8> omittedAttrs = {
+      "sym_name", "portNames",     "portTypes",       "portDirections",
+      "portSyms", "portLocations", visibilityAttrName};
+
+  // We can omit the portNames if they were able to be printed as properly as
+  // block arguments.
+  if (!needPortNamesAttr)
+    omittedAttrs.push_back("portNames");
+
+  p.printOptionalAttrDictWithKeyword(op->getAttrs(), omittedAttrs);
+
+  // print the body if it exists.
+  if (!region.empty()) {
+    p << " ";
+    auto printEntryBlockArgs = false;
+    auto printBlockTerminators = false;
+    p.printRegion(region, printEntryBlockArgs, printBlockTerminators);
+  }
+}
+
+//===----------------------------------------------------------------------===//
+// ClassOp
+//===----------------------------------------------------------------------===//
+
+void ClassOp::build(OpBuilder &builder, OperationState &result, StringAttr name,
+                    ArrayRef<PortInfo> ports) {
+  assert(
+      llvm::all_of(ports,
+                   [](const auto &port) { return port.annotations.empty(); }) &&
+      "class ports may not have annotations");
+
+  buildModuleWithoutAnnos(builder, result, name, ports);
+
+  // Create a region and a block for the body.
+  auto *bodyRegion = result.regions[0].get();
+  Block *body = new Block();
+  bodyRegion->push_back(body);
+
+  // Add arguments to the body block.
+  for (auto &elt : ports)
+    body->addArgument(elt.type, elt.loc);
+}
+
+void ClassOp::print(OpAsmPrinter &p) {
+  printClassLike(p, cast<ClassLike>(getOperation()));
+}
+
+ParseResult ClassOp::parse(OpAsmParser &parser, OperationState &result) {
+  auto hasSSAIdentifiers = true;
+  return parseClassLike(parser, result, hasSSAIdentifiers);
+}
+
+LogicalResult ClassOp::verify() {
   for (auto operand : getBodyBlock()->getArguments()) {
     auto type = operand.getType();
     if (!isa<PropertyType>(type)) {
@@ -1698,65 +1782,79 @@ ArrayAttr ClassOp::getPortAnnotationsAttr() {
 
 hw::ModulePortInfo ClassOp::getPortList() { return ::getPortListImpl(*this); }
 
-LogicalResult
-ClassOp::verifyType(ClassType type,
-                    function_ref<InFlightDiagnostic()> emitError) {
-  // This check is probably not required, but done for sanity.
-  auto name = type.getNameAttr().getAttr();
-  auto expectedName = getModuleNameAttr();
-  if (name != expectedName)
-    return emitError() << "type has wrong name, got " << name << ", expected "
-                       << expectedName;
-
-  auto elements = type.getElements();
-  auto numElements = elements.size();
-  auto expectedNumElements = getNumPorts();
-  if (numElements != expectedNumElements)
-    return emitError() << "has wrong number of ports, got " << numElements
-                       << ", expected " << expectedNumElements;
-
-  for (unsigned i = 0; i < numElements; ++i) {
-    auto element = elements[i];
-
-    auto name = element.name;
-    auto expectedName = getPortNameAttr(i);
-    if (name != expectedName)
-      return emitError() << "port #" << i << " has wrong name, got " << name
-                         << ", expected " << expectedName;
-
-    auto direction = element.direction;
-    auto expectedDirection = getPortDirection(i);
-    if (direction != expectedDirection)
-      return emitError() << "port " << name << " has wrong direction, got "
-                         << direction::toString(direction) << ", expected "
-                         << direction::toString(expectedDirection);
-
-    auto type = element.type;
-    auto expectedType = getPortType(i);
-    if (type != expectedType)
-      return emitError() << "port " << name << " has wrong type, got " << type
-                         << ", expected " << expectedType;
-  }
-
-  return success();
-}
-
-ClassType ClassOp::getInstanceType() {
-  auto n = getNumPorts();
-  SmallVector<ClassElement> elements;
-  elements.reserve(n);
-  for (size_t i = 0; i < n; ++i)
-    elements.push_back(
-        {getPortNameAttr(i), getPortType(i), getPortDirection(i)});
-  auto name = FlatSymbolRefAttr::get(getNameAttr());
-  return ClassType::get(name, elements);
-}
-
 BlockArgument ClassOp::getArgument(size_t portNumber) {
   return getBodyBlock()->getArgument(portNumber);
 }
 
 bool ClassOp::canDiscardOnUseEmpty() {
+  // ClassOps are referenced by ClassTypes, and these uses are not
+  // discoverable by the symbol infrastructure. Return false here to prevent
+  // passes like symbolDCE from removing our classes.
+  return false;
+}
+
+//===----------------------------------------------------------------------===//
+// ExtClassOp
+//===----------------------------------------------------------------------===//
+
+void ExtClassOp::build(OpBuilder &builder, OperationState &result,
+                       StringAttr name, ArrayRef<PortInfo> ports) {
+  assert(
+      llvm::all_of(ports,
+                   [](const auto &port) { return port.annotations.empty(); }) &&
+      "class ports may not have annotations");
+
+  buildModuleWithoutAnnos(builder, result, name, ports);
+}
+
+void ExtClassOp::print(OpAsmPrinter &p) {
+  printClassLike(p, cast<ClassLike>(getOperation()));
+}
+
+ParseResult ExtClassOp::parse(OpAsmParser &parser, OperationState &result) {
+  auto hasSSAIdentifiers = false;
+  return parseClassLike(parser, result, hasSSAIdentifiers);
+}
+
+LogicalResult
+ExtClassOp::verifySymbolUses(::mlir::SymbolTableCollection &symbolTable) {
+  return verifyPortSymbolUses(cast<FModuleLike>(getOperation()), symbolTable);
+}
+
+void ExtClassOp::getAsmBlockArgumentNames(mlir::Region &region,
+                                          mlir::OpAsmSetValueNameFn setNameFn) {
+  getAsmBlockArgumentNamesImpl(getOperation(), region, setNameFn);
+}
+
+SmallVector<PortInfo> ExtClassOp::getPorts() {
+  return ::getPortImpl(cast<FModuleLike>((Operation *)*this));
+}
+
+void ExtClassOp::erasePorts(const llvm::BitVector &portIndices) {
+  ::erasePorts(cast<FModuleLike>((Operation *)*this), portIndices);
+}
+
+void ExtClassOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
+  ::insertPorts(cast<FModuleLike>((Operation *)*this), ports);
+}
+
+Convention ExtClassOp::getConvention() { return Convention::Internal; }
+
+ConventionAttr ExtClassOp::getConventionAttr() {
+  return ConventionAttr::get(getContext(), getConvention());
+}
+
+ArrayAttr ExtClassOp::getParameters() { return {}; }
+
+ArrayAttr ExtClassOp::getPortAnnotationsAttr() {
+  return ArrayAttr::get(getContext(), {});
+}
+
+hw::ModulePortInfo ExtClassOp::getPortList() {
+  return ::getPortListImpl(*this);
+}
+
+bool ExtClassOp::canDiscardOnUseEmpty() {
   // ClassOps are referenced by ClassTypes, and these uses are not
   // discovereable by the symbol infrastructure. Return false here to prevent
   // passes like symbolDCE from removing our classes.
@@ -2752,7 +2850,8 @@ void ObjectOp::build(OpBuilder &builder, OperationState &state,
   build(builder, state, type, type.getNameAttr());
 }
 
-void ObjectOp::build(OpBuilder &builder, OperationState &state, ClassOp klass) {
+void ObjectOp::build(OpBuilder &builder, OperationState &state,
+                     ClassLike klass) {
   build(builder, state, klass.getInstanceType());
 }
 
@@ -2779,7 +2878,7 @@ LogicalResult ObjectOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto className = classType.getNameAttr();
 
   // verify that the class exists.
-  auto classOp = dyn_cast_or_null<ClassOp>(
+  auto classOp = dyn_cast_or_null<ClassLike>(
       symbolTable.lookupSymbolIn(circuitOp, className));
   if (!classOp)
     return emitOpError() << "references unknown class " << className;
@@ -2791,8 +2890,8 @@ LogicalResult ObjectOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   return success();
 }
 
-ClassOp ObjectOp::getReferencedClass(SymbolTable &symbolTable) {
-  return symbolTable.lookup<ClassOp>(getClassNameAttr().getLeafReference());
+ClassLike ObjectOp::getReferencedClass(SymbolTable &symbolTable) {
+  return symbolTable.lookup<ClassLike>(getClassNameAttr().getLeafReference());
 }
 
 //===----------------------------------------------------------------------===//

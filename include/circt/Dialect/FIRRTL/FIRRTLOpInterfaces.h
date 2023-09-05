@@ -34,6 +34,8 @@ namespace firrtl {
 
 class FIRRTLType;
 class Forceable;
+class ClassLike;
+class ClassType;
 
 /// This holds the name and type that describes the module's ports.
 struct PortInfo {
@@ -99,6 +101,20 @@ Forceable
 replaceWithNewForceability(Forceable op, bool forceable,
                            ::mlir::PatternRewriter *rewriter = nullptr);
 } // end namespace detail
+
+//===----------------------------------------------------------------------===//
+// ClassLike Helpers
+//===----------------------------------------------------------------------===//
+
+namespace detail {
+ClassType getInstanceTypeForClassLike(ClassLike classOp);
+
+/// Assuming that the classOp is the source of truth, verify that the type
+/// accurately matches the signature of the class.
+LogicalResult
+verifyTypeAgainstClassLike(ClassLike classOp, ClassType type,
+                           function_ref<InFlightDiagnostic()> emitError);
+} // namespace detail
 
 } // namespace firrtl
 } // namespace circt

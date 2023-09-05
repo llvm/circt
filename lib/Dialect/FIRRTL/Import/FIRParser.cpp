@@ -80,7 +80,7 @@ struct SharedParserConstants {
   llvm::StringMap<FIRRTLType> aliasMap;
 
   /// A map from identifiers to class ops.
-  llvm::DenseMap<StringRef, ClassOp> classMap;
+  llvm::DenseMap<StringRef, ClassLike> classMap;
 
   /// An empty array attribute.
   const ArrayAttr emptyArrayAttr;
@@ -3656,7 +3656,7 @@ ParseResult FIRStmtParser::parseObject() {
   // Look up the class that is being referenced.
   auto circuit =
       builder.getBlock()->getParentOp()->getParentOfType<CircuitOp>();
-  auto referencedClass = circuit.lookupSymbol<ClassOp>(className);
+  auto referencedClass = circuit.lookupSymbol<ClassLike>(className);
   if (!referencedClass)
     return emitError(startTok.getLoc(), "use of undefined class name '" +
                                             className + "' in object");
@@ -4126,6 +4126,7 @@ private:
   ParseResult parseToplevelDefinition(CircuitOp circuit, unsigned indent);
 
   ParseResult parseClass(CircuitOp circuit, unsigned indent);
+  ParseResult parseExtClass(CircuitOp circuit, unsigned indent);
   ParseResult parseExtModule(CircuitOp circuit, unsigned indent);
   ParseResult parseIntModule(CircuitOp circuit, unsigned indent);
   ParseResult parseModule(CircuitOp circuit, unsigned indent);
@@ -4405,6 +4406,7 @@ ParseResult FIRCircuitParser::skipToModuleEnd(unsigned indent) {
     // If we got to the next top-level declaration, then we're done.
     case FIRToken::kw_class:
     case FIRToken::kw_declgroup:
+    case FIRToken::kw_extclass:
     case FIRToken::kw_extmodule:
     case FIRToken::kw_intmodule:
     case FIRToken::kw_module:
@@ -4540,6 +4542,41 @@ ParseResult FIRCircuitParser::parseClass(CircuitOp circuit, unsigned indent) {
   return skipToModuleEnd(indent);
 }
 
+/// extclass ::= 'extclass' id ':' info? INDENT portlist DEDENT
+ParseResult FIRCircuitParser::parseExtClass(CircuitOp circuit,
+                                            unsigned indent) {
+  StringAttr name;
+  SmallVector<PortInfo, 8> portList;
+  SmallVector<SMLoc> portLocs;
+  LocWithInfo info(getToken().getLoc(), this);
+
+  if (requireFeature({3, 2, 0}, "classes"))
+    return failure();
+
+  consumeToken(FIRToken::kw_extclass);
+  if (parseId(name, "expected extclass name") ||
+      parseToken(FIRToken::colon, "expected ':' in extclass definition") ||
+      info.parseOptionalInfo() || parsePortList(portList, portLocs, indent))
+    return failure();
+
+  if (name == circuit.getName())
+    return mlir::emitError(info.getLoc(),
+                           "extclass cannot be the top of a circuit");
+
+  for (auto &portInfo : portList)
+    if (!isa<PropertyType>(portInfo.type))
+      return mlir::emitError(portInfo.loc,
+                             "ports on extclasses must be properties");
+
+  // Build it
+  auto builder = circuit.getBodyBuilder();
+  auto extClassOp = builder.create<ExtClassOp>(info.getLoc(), name, portList);
+
+  // Stash the class name -> op in the constants, so we can resolve Inst types.
+  getConstants().classMap[name.getValue()] = extClassOp;
+  return skipToModuleEnd(indent);
+}
+
 /// extmodule ::=
 ///        'extmodule' id ':' info?
 ///        INDENT portlist defname? parameter-list ref-list DEDENT
@@ -4659,6 +4696,8 @@ ParseResult FIRCircuitParser::parseToplevelDefinition(CircuitOp circuit,
     if (requireFeature({3, 1, 0}, "optional groups"))
       return failure();
     return parseGroupDecl(circuit);
+  case FIRToken::kw_extclass:
+    return parseExtClass(circuit, indent);
   case FIRToken::kw_extmodule:
     return parseExtModule(circuit, indent);
   case FIRToken::kw_intmodule:
@@ -4923,6 +4962,7 @@ ParseResult FIRCircuitParser::parseCircuit(
 
     case FIRToken::kw_class:
     case FIRToken::kw_declgroup:
+    case FIRToken::kw_extclass:
     case FIRToken::kw_extmodule:
     case FIRToken::kw_intmodule:
     case FIRToken::kw_module:

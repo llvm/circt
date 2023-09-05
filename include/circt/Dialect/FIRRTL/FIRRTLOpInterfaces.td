@@ -347,6 +347,32 @@ def FModuleLike : OpInterface<"FModuleLike", [Symbol, SymboledPortList, Instance
   }];
 }
 
+def ClassLike : OpInterface<"ClassLike", [FModuleLike]> {
+  let cppNamespace = "circt::firrtl";
+  let description = "Provide common class information.";
+  let methods = [
+    InterfaceMethod<
+      "Get the type for instances of this class",
+      "ClassType", "getInstanceType", (ins),
+      /*methodBody=*/[{}],
+      /*defaultImplementation=*/[{
+        return detail::getInstanceTypeForClassLike($_op);
+      }]
+    >,
+    InterfaceMethod<
+      "Verify that the given type agrees with this class",
+      "LogicalResult", "verifyType", (ins
+        "::circt::firrtl::ClassType":$type,
+        "::llvm::function_ref<::mlir::InFlightDiagnostic()>":$emitError
+      ),
+      /*methodBody=*/[{}],
+      /*defaultImplementation=*/[{
+        return detail::verifyTypeAgainstClassLike($_op, type, emitError);
+      }]
+    >
+  ];
+}
+
 def FConnectLike : OpInterface<"FConnectLike"> {
   let cppNamespace = "circt::firrtl";
   let description = "Provide common connection information.";

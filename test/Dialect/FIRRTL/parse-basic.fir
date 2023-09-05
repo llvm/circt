@@ -1747,6 +1747,19 @@ circuit BasicProps :
     ; TODO: This test needs to be fixed up once flow-checking for objects is implemented correctly.
     propassign b, o.b
 
+  ; CHECK-LABEL firrtl.extclass private @ExtClass(in in: !firrtl.string, out out: !firrtl.string)
+  extclass ExtClass:
+    input in : String
+    output out : String
+
+  ; CHECK-LABEL: firrtl.class private @UserOfExtClass(in %ext_object: !firrtl.class<@ExtClass(in in: !firrtl.string, out out: !firrtl.string)>, out %out: !firrtl.string)
+  class UserOfExtClass:
+    input ext_object : Inst<ExtClass>
+    output out : String
+    ; CHECK-NEXT: %0 = firrtl.object.subfield %ext_object[out] : !firrtl.class<@ExtClass(in in: !firrtl.string, out out: !firrtl.string)
+    ; CHECK-NEXT: firrtl.propassign %out, %0 : !firrtl.string
+    propassign out, ext_object.out
+
   ; CHECK-LABEL: module private @List
   module List :
     ; CHECK-SAME: out %strings: !firrtl.list<string>

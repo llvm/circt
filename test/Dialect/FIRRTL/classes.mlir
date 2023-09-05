@@ -75,4 +75,15 @@ firrtl.circuit "Classes" {
     %foo_out = firrtl.instance foo @ModuleWithOutputString(out out: !firrtl.string)
     firrtl.propassign %out, %foo_out : !firrtl.string
   }
+
+  // CHECK-LABEL: firrtl.extclass @MyExtClass(out val: !firrtl.string)
+  firrtl.extclass @MyExtClass(out val: !firrtl.string)
+
+  // CHECK-LABEL: firrtl.module @UserOfExtClass(out %port: !firrtl.class<@MyExtClass(out val: !firrtl.string)>) 
+  firrtl.module @UserOfExtClass(out %port: !firrtl.class<@MyExtClass(out val: !firrtl.string)>) {
+    // CHECK: %0 = firrtl.object @MyExtClass(out val: !firrtl.string)
+    // CHECK: firrtl.propassign %port, %0 : !firrtl.class<@MyExtClass(out val: !firrtl.string)>
+    %0 = firrtl.object @MyExtClass(out val: !firrtl.string)
+    firrtl.propassign %port, %0 : !firrtl.class<@MyExtClass(out val: !firrtl.string)>
+  }
 }
