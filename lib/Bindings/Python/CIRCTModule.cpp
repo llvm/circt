@@ -15,10 +15,12 @@
 #include "circt-c/Dialect/HW.h"
 #include "circt-c/Dialect/HWArith.h"
 #include "circt-c/Dialect/Handshake.h"
+#include "circt-c/Dialect/LTL.h"
 #include "circt-c/Dialect/MSFT.h"
 #include "circt-c/Dialect/OM.h"
 #include "circt-c/Dialect/SV.h"
 #include "circt-c/Dialect/Seq.h"
+#include "circt-c/Dialect/Verif.h"
 #include "circt-c/ExportVerilog.h"
 #include "mlir-c/Bindings/Python/Interop.h"
 #include "mlir-c/IR.h"
@@ -95,6 +97,14 @@ PYBIND11_MODULE(_circt, m) {
         MlirDialectHandle handshake = mlirGetDialectHandle__handshake__();
         mlirDialectHandleRegisterDialect(handshake, context);
         mlirDialectHandleLoadDialect(handshake, context);
+
+        MlirDialectHandle ltl = mlirGetDialectHandle__ltl__();
+        mlirDialectHandleRegisterDialect(ltl, context);
+        mlirDialectHandleLoadDialect(ltl, context);
+
+        MlirDialectHandle verif = mlirGetDialectHandle__verif__();
+        mlirDialectHandleRegisterDialect(verif, context);
+        mlirDialectHandleLoadDialect(verif, context);
       },
       "Register CIRCT dialects on a PyMlirContext.");
 
