@@ -204,6 +204,24 @@ struct SeqToSVTypeConverter : public TypeConverter {
     addConversion([](seq::ClockType type) {
       return IntegerType::get(type.getContext(), 1);
     });
+
+    addTargetMaterialization(
+        [&](mlir::OpBuilder &builder, mlir::Type resultType,
+            mlir::ValueRange inputs,
+            mlir::Location loc) -> std::optional<mlir::Value> {
+          if (inputs.size() != 1)
+            return std::nullopt;
+          return inputs[0];
+        });
+
+    addSourceMaterialization(
+        [&](mlir::OpBuilder &builder, mlir::Type resultType,
+            mlir::ValueRange inputs,
+            mlir::Location loc) -> std::optional<mlir::Value> {
+          if (inputs.size() != 1)
+            return std::nullopt;
+          return inputs[0];
+        });
   }
 };
 

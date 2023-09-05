@@ -38,3 +38,19 @@ hw.module private @inner(%clock: !seq.clock, %other: i1) -> (out: i32) {
   %cst = hw.constant 0 : i32
   hw.output %cst : i32
 }
+
+// CHECK-LABEL: hw.module private @SinkSource(%clock: i1) -> (out: i1)
+hw.module private @SinkSource(%clock: !seq.clock) -> (out: !seq.clock) {
+  // CHECK: hw.output %false : i1
+  %false = hw.constant 0 : i1
+  %out = seq.to_clock %false
+  hw.output %out : !seq.clock
+}
+
+// CHECK-LABEL: hw.module public @CrossReferences()
+hw.module public @CrossReferences() {
+  // CHECK: %a.out = hw.instance "a" @SinkSource(clock: %b.out: i1) -> (out: i1)
+  %a.out = hw.instance "a" @SinkSource(clock: %b.out: !seq.clock) -> (out: !seq.clock)
+  // CHECK: %b.out = hw.instance "b" @SinkSource(clock: %a.out: i1) -> (out: i1)
+  %b.out = hw.instance "b" @SinkSource(clock: %a.out: !seq.clock) -> (out: !seq.clock)
+}
