@@ -318,17 +318,6 @@ void FirMemLowering::lowerMemoriesInModule(
   };
   auto valueOrOne = [&](Value value) { return value ? value : constOne(); };
 
-  DenseMap<Value, Value> clocks;
-  auto mapClock = [&](Value clock) {
-    auto it = clocks.try_emplace(clock, Value{});
-    if (it.second) {
-      ImplicitLocOpBuilder builder(clock.getLoc(), clock.getContext());
-      builder.setInsertionPointAfterValue(clock);
-      it.first->second = builder.createOrFold<seq::ToClockOp>(clock);
-    }
-    return it.first->second;
-  };
-
   for (auto [config, genOp, memOp] : mems) {
     LLVM_DEBUG(llvm::dbgs() << "- Lowering " << memOp.getName() << "\n");
     SmallVector<Value> inputs;
@@ -344,7 +333,7 @@ void FirMemLowering::lowerMemoriesInModule(
         continue;
       addInput(port.getAddress());
       addInput(valueOrOne(port.getEnable()));
-      addInput(mapClock(port.getClock()));
+      addInput(port.getClock());
       addOutput(port.getData());
     }
 
@@ -355,7 +344,7 @@ void FirMemLowering::lowerMemoriesInModule(
         continue;
       addInput(port.getAddress());
       addInput(valueOrOne(port.getEnable()));
-      addInput(mapClock(port.getClock()));
+      addInput(port.getClock());
       addInput(port.getMode());
       addInput(port.getWriteData());
       addOutput(port.getReadData());
@@ -370,7 +359,7 @@ void FirMemLowering::lowerMemoriesInModule(
         continue;
       addInput(port.getAddress());
       addInput(valueOrOne(port.getEnable()));
-      addInput(mapClock(port.getClock()));
+      addInput(port.getClock());
       addInput(port.getData());
       if (config->maskBits > 1)
         addInput(valueOrOne(port.getMask()));
