@@ -40,7 +40,7 @@ using ObjectFields = SmallDenseMap<StringAttr, EvaluatorValuePtr>;
 /// appropriate reference count.
 struct EvaluatorValue : std::enable_shared_from_this<EvaluatorValue> {
   // Implement LLVM RTTI.
-  enum class Kind { Attr, Object, List, Tuple };
+  enum class Kind { Attr, Object, List, Tuple, Map };
   EvaluatorValue(Kind kind) : kind(kind) {}
   Kind getKind() const { return kind; }
 
@@ -82,6 +82,29 @@ struct ListValue : EvaluatorValue {
 private:
   om::ListType type;
   SmallVector<EvaluatorValuePtr> elements;
+};
+
+/// A Map value.
+struct MapValue : EvaluatorValue {
+  MapValue(om::MapType type, DenseMap<Attribute, EvaluatorValuePtr> elements)
+      : EvaluatorValue(Kind::Map), type(type), elements(std::move(elements)) {}
+
+  const auto &getElements() const { return elements; }
+
+  /// Return the type of the value, which is a MapType.
+  om::MapType getType() const { return type; }
+
+  /// Return an array of keys in the ascending order.
+  ArrayAttr getKeys();
+
+  /// Implement LLVM RTTI.
+  static bool classof(const EvaluatorValue *e) {
+    return e->getKind() == Kind::Map;
+  }
+
+private:
+  om::MapType type;
+  DenseMap<Attribute, EvaluatorValuePtr> elements;
 };
 
 /// A composite Object, which has a type and fields.
@@ -183,6 +206,9 @@ private:
                       ArrayRef<EvaluatorValuePtr> actualParams);
   FailureOr<EvaluatorValuePtr>
   evaluateTupleGet(TupleGetOp op, ArrayRef<EvaluatorValuePtr> actualParams);
+  FailureOr<evaluator::EvaluatorValuePtr>
+  evaluateMapCreate(MapCreateOp op,
+                    ArrayRef<evaluator::EvaluatorValuePtr> actualParams);
 
   /// The symbol table for the IR module the Evaluator was constructed with.
   /// Used to look up class definitions.
@@ -204,6 +230,8 @@ operator<<(mlir::Diagnostic &diag,
     diag << "Object(" << object->getType() << ")";
   else if (auto *list = llvm::dyn_cast<evaluator::ListValue>(&evaluatorValue))
     diag << "List(" << list->getType() << ")";
+  else if (auto *map = llvm::dyn_cast<evaluator::MapValue>(&evaluatorValue))
+    diag << "Map(" << map->getType() << ")";
   else
     assert(false && "unhandled evaluator value");
   return diag;

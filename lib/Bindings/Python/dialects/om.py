@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from ._om_ops_gen import *
-from .._mlir_libs._circt._om import Evaluator as BaseEvaluator, Object as BaseObject, List as BaseList, Tuple as BaseTuple, ClassType, ReferenceAttr, ListAttr, MapAttr
+from .._mlir_libs._circt._om import Evaluator as BaseEvaluator, Object as BaseObject, List as BaseList, Tuple as BaseTuple, Map as BaseMap, ClassType, ReferenceAttr, ListAttr, MapAttr
 
 from ..ir import Attribute, Diagnostic, DiagnosticSeverity, Module, StringAttr
 from ..support import attribute_to_var, var_to_attribute
@@ -31,6 +31,9 @@ def wrap_mlir_object(value):
   if isinstance(value, BaseTuple):
     return Tuple(value)
 
+  if isinstance(value, BaseMap):
+    return Map(value)
+
   # For objects, return an Object, wrapping the base implementation.
   assert isinstance(value, BaseObject)
   return Object(value)
@@ -48,6 +51,9 @@ def unwrap_python_object(value):
 
   if isinstance(value, Tuple):
     return BaseTuple(value)
+
+  if isinstance(value, Map):
+    return BaseMap(value)
 
   # Otherwise, it must be an Object. Cast to the mlir object.
   assert isinstance(value, Object)
@@ -82,6 +88,32 @@ class Tuple(BaseTuple):
   def __iter__(self):
     for i in range(0, self.__len__()):
       yield self.__getitem__(i)
+
+
+class Map(BaseMap):
+
+  def __init__(self, obj: BaseMap) -> None:
+    super().__init__(obj)
+
+  def __getitem__(self, key):
+    val = super().__getitem__(key)
+    return wrap_mlir_object(val)
+
+  def keys(self):
+    return [wrap_mlir_object(arg) for arg in super().keys()]
+
+  def items(self):
+    for i in self:
+      yield i
+
+  def values(self):
+    for (_, v) in self:
+      yield v
+
+  # Support iterating over a Map
+  def __iter__(self):
+    for i in super().keys():
+      yield (wrap_mlir_object(i), self.__getitem__(i))
 
 
 # Define the Object class by inheriting from the base implementation in C++.

@@ -121,6 +121,15 @@ MlirAttribute omEvaluatorObjectGetFieldNames(OMEvaluatorValue object) {
   return wrap(llvm::cast<Object>(unwrap(object).get())->getFieldNames());
 }
 
+MlirType omEvaluatorMapGetType(OMEvaluatorValue value) {
+  return wrap(llvm::cast<evaluator::MapValue>(unwrap(value).get())->getType());
+}
+
+/// Get an ArrayAttr with the keys in a Map.
+MlirAttribute omEvaluatorMapGetKeys(OMEvaluatorValue object) {
+  return wrap(llvm::cast<evaluator::MapValue>(unwrap(object).get())->getKeys());
+}
+
 /// Get a field from an Object, which must contain a field of that name.
 OMEvaluatorValue omEvaluatorObjectGetField(OMEvaluatorValue object,
                                            MlirAttribute name) {
@@ -219,6 +228,50 @@ OMEvaluatorValue omEvaluatorTupleGetElement(OMEvaluatorValue evaluatorValue,
                                             intptr_t pos) {
   return wrap(cast<evaluator::TupleValue>(unwrap(evaluatorValue).get())
                   ->getElements()[pos]);
+}
+
+/// Get an element of the Map.
+OMEvaluatorValue omEvaluatorMapGetElement(OMEvaluatorValue evaluatorValue,
+                                          MlirAttribute attr) {
+  const auto &elements =
+      cast<evaluator::MapValue>(unwrap(evaluatorValue).get())->getElements();
+  const auto &it = elements.find(unwrap(attr));
+  if (it != elements.end())
+    return wrap(it->second);
+  return OMEvaluatorValue{nullptr};
+}
+
+OMEvaluatorValue omEvaluatorMapGetElementByInt(OMEvaluatorValue evaluatorValue,
+                                               intptr_t attr) {
+  auto *ptr = cast<evaluator::MapValue>(unwrap(evaluatorValue).get());
+  auto keyType = ptr->getType().cast<MapType>().getKeyType();
+
+  // Reject if the key type is not integer.
+  if (!isa<IntegerType>(keyType))
+    return OMEvaluatorValue{nullptr};
+
+  auto keyAttr = mlir::IntegerAttr::get(keyType, attr);
+  const auto &it = ptr->getElements().find(keyAttr);
+  if (it != ptr->getElements().end())
+    return wrap(it->second);
+
+  return OMEvaluatorValue{nullptr};
+}
+
+OMEvaluatorValue omEvaluatorMapGetElementByStr(OMEvaluatorValue evaluatorValue,
+                                               MlirStringRef attr) {
+  auto *ptr = cast<evaluator::MapValue>(unwrap(evaluatorValue).get());
+  auto strType = StringType::get(ptr->getType().getContext());
+  const auto &it =
+      ptr->getElements().find(StringAttr::get(unwrap(attr), strType));
+  if (it != ptr->getElements().end())
+    return wrap(it->second);
+  return OMEvaluatorValue{nullptr};
+}
+
+/// Query if the EvaluatorValue is a map.
+bool omEvaluatorValueIsAMap(OMEvaluatorValue evaluatorValue) {
+  return isa<evaluator::MapValue>(unwrap(evaluatorValue).get());
 }
 
 //===----------------------------------------------------------------------===//

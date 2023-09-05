@@ -143,6 +143,9 @@ FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::evaluateValue(
             .Case([&](TupleGetOp op) {
               return evaluateTupleGet(op, actualParams);
             })
+            .Case([&](MapCreateOp op) {
+              return evaluateMapCreate(op, actualParams);
+            })
             .Default([&](Operation *op) {
               auto error = op->emitError("unable to evaluate value");
               error.attachNote() << "value: " << value;
@@ -273,6 +276,32 @@ FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::evaluateTupleGet(
   return result;
 }
 
+/// Evaluator dispatch function for Map creation.
+FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::evaluateMapCreate(
+    MapCreateOp op, ArrayRef<evaluator::EvaluatorValuePtr> actualParams) {
+  // Evaluate the Object itself, in case it hasn't been evaluated yet.
+  DenseMap<Attribute, evaluator::EvaluatorValuePtr> elements;
+  for (auto operand : op.getOperands()) {
+    auto result = evaluateValue(operand, actualParams);
+    if (failed(result))
+      return result;
+    // The result is a tuple.
+    auto &value = result.value();
+    const auto &element =
+        llvm::cast<evaluator::TupleValue>(value.get())->getElements();
+    assert(element.size() == 2);
+    auto attr =
+        llvm::cast<evaluator::AttributeValue>(element[0].get())->getAttr();
+    if (!elements.insert({attr, element[1]}).second)
+      return op.emitError() << "map contains duplicated keys";
+  }
+
+  // Return the Map.
+  evaluator::EvaluatorValuePtr result =
+      std::make_shared<evaluator::MapValue>(op.getType(), std::move(elements));
+  return result;
+}
+
 /// Get a field of the Object by name.
 FailureOr<EvaluatorValuePtr>
 circt::om::evaluator::ObjectValue::getField(StringAttr name) {
@@ -294,4 +323,27 @@ ArrayAttr circt::om::Object::getFieldNames() {
   });
 
   return ArrayAttr::get(cls.getContext(), fieldNames);
+}
+
+/// Return an array of keys in the ascending order.
+ArrayAttr circt::om::evaluator::MapValue::getKeys() {
+  auto context = type.getContext();
+  SmallVector<Attribute> attrs;
+  for (auto &[key, _] : elements)
+    attrs.push_back(key);
+
+  std::sort(attrs.begin(), attrs.end(), [](Attribute l, Attribute r) {
+    if (auto lInt = l.dyn_cast<IntegerAttr>())
+      if (auto rInt = r.dyn_cast<IntegerAttr>())
+        return lInt.getValue().ult(rInt.getValue());
+
+    if (auto lStr = l.dyn_cast<StringAttr>())
+      if (auto rStr = r.dyn_cast<StringAttr>())
+        return lStr.getValue() < rStr.getValue();
+
+    assert(false && "key type should be either integer or string");
+    return false;
+  });
+
+  return ArrayAttr::get(context, attrs);
 }

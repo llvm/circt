@@ -24,8 +24,9 @@ namespace {
 struct List;
 struct Object;
 struct Tuple;
+struct Map;
 
-using PythonValue = std::variant<MlirAttribute, Object, List, Tuple>;
+using PythonValue = std::variant<MlirAttribute, Object, List, Tuple, Map>;
 
 /// Map an opaque OMEvaluatorValue into a python value.
 PythonValue omEvaluatorValueToPythonValue(OMEvaluatorValue result);
@@ -55,6 +56,33 @@ struct Tuple {
   intptr_t getNumElements() { return omEvaluatorTupleGetNumElements(value); }
 
   PythonValue getElement(intptr_t i);
+  OMEvaluatorValue getValue() const { return value; }
+
+private:
+  // The underlying CAPI value.
+  OMEvaluatorValue value;
+};
+
+/// Provides a Map class by simply wrapping the OMObject CAPI.
+struct Map {
+  // Instantiate a Map with a reference to the underlying OMEvaluatorValue.
+  Map(OMEvaluatorValue value) : value(value) {}
+
+  /// Return the keys.
+  std::vector<MlirAttribute> getKeys() {
+    auto attr = omEvaluatorMapGetKeys(value);
+    intptr_t numFieldNames = mlirArrayAttrGetNumElements(attr);
+
+    std::vector<MlirAttribute> pyFieldNames;
+    for (intptr_t i = 0; i < numFieldNames; ++i)
+      pyFieldNames.emplace_back(mlirArrayAttrGetElement(attr, i));
+
+    return pyFieldNames;
+  }
+
+  /// Look up the value. Key is integer, string or attribute.
+  PythonValue lookup(std::variant<intptr_t, std::string, MlirAttribute> key);
+
   OMEvaluatorValue getValue() const { return value; }
 
 private:
@@ -206,6 +234,33 @@ PythonValue Tuple::getElement(intptr_t i) {
   return omEvaluatorValueToPythonValue(omEvaluatorTupleGetElement(value, i));
 }
 
+PythonValue
+Map::lookup(std::variant<intptr_t, std::string, MlirAttribute> key) {
+  OMEvaluatorValue result;
+  if (auto *i = std::get_if<intptr_t>(&key))
+    result = omEvaluatorMapGetElementByInt(value, *i);
+  else if (auto *str = std::get_if<std::string>(&key))
+    result = omEvaluatorMapGetElementByStr(
+        value, mlirStringRefCreateFromCString(str->c_str()));
+  else
+    result = omEvaluatorMapGetElement(value, std::get<MlirAttribute>(key));
+
+  // Return a fine grained error.
+  if (omEvaluatorValueIsNull(result)) {
+    std::string keyStr;
+    if (auto *i = std::get_if<intptr_t>(&key))
+      keyStr = std::to_string(*i);
+    else if (auto *str = std::get_if<std::string>(&key))
+      keyStr = *str;
+    else
+      keyStr = "attribute";
+
+    throw pybind11::key_error(keyStr + " not found");
+  }
+
+  return omEvaluatorValueToPythonValue(result);
+}
+
 PythonValue omEvaluatorValueToPythonValue(OMEvaluatorValue result) {
   // If the result is null, something failed. Diagnostic handling is
   // implemented in pure Python, so nothing to do here besides throwing an
@@ -224,6 +279,10 @@ PythonValue omEvaluatorValueToPythonValue(OMEvaluatorValue result) {
   // If the field was a tuple, return a new Tuple.
   if (omEvaluatorValueIsATuple(result))
     return Tuple(result);
+
+  // If the field was a list, return a new List.
+  if (omEvaluatorValueIsAMap(result))
+    return Map(result);
 
   // If the field was a primitive, return the Attribute.
   assert(omEvaluatorValueIsAPrimitive(result));
@@ -267,6 +326,12 @@ void circt::python::populateDialectOMSubmodule(py::module &m) {
       .def(py::init<Tuple>(), py::arg("tuple"))
       .def("__getitem__", &Tuple::getElement)
       .def("__len__", &Tuple::getNumElements);
+
+  // Add the Map class definition.
+  py::class_<Map>(m, "Map")
+      .def(py::init<Map>(), py::arg("map"))
+      .def("__getitem__", &Map::lookup)
+      .def("keys", &Map::getKeys);
 
   // Add the Object class definition.
   py::class_<Object>(m, "Object")

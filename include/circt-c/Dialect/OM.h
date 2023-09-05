@@ -144,6 +144,19 @@ omEvaluatorTupleGetNumElements(OMEvaluatorValue evaluatorValue);
 MLIR_CAPI_EXPORTED OMEvaluatorValue
 omEvaluatorTupleGetElement(OMEvaluatorValue evaluatorValue, intptr_t pos);
 
+/// Get an element of the map.
+MLIR_CAPI_EXPORTED OMEvaluatorValue
+omEvaluatorMapGetElement(OMEvaluatorValue evaluatorValue, MlirAttribute attr);
+MLIR_CAPI_EXPORTED OMEvaluatorValue
+omEvaluatorMapGetElementByInt(OMEvaluatorValue evaluatorValue, intptr_t attr);
+MLIR_CAPI_EXPORTED OMEvaluatorValue omEvaluatorMapGetElementByStr(
+    OMEvaluatorValue evaluatorValue, MlirStringRef attr);
+
+MLIR_CAPI_EXPORTED MlirAttribute omEvaluatorMapGetKeys(OMEvaluatorValue object);
+
+/// Query if the EvaluatorValue is a Map.
+MLIR_CAPI_EXPORTED bool omEvaluatorValueIsAMap(OMEvaluatorValue evaluatorValue);
+
 //===----------------------------------------------------------------------===//
 // ReferenceAttr API
 //===----------------------------------------------------------------------===//

@@ -38,6 +38,14 @@ with Context() as ctx, Location.unknown():
 
       %3 = om.constant #om.map<i64, {a = 42, b = 32}> : !om.map<!om.string, i64>
       om.class.field @map, %3 : !om.map<!om.string, i64>
+
+      %x = om.constant "X" : !om.string
+      %y = om.constant "Y" : !om.string
+      %entry1 = om.tuple_create %x, %c_14: !om.string, i64
+      %entry2 = om.tuple_create %y, %c_15: !om.string, i64
+
+      %map = om.map_create %entry1, %entry2: !om.string, i64
+      om.class.field @map_create, %map : !om.map<!om.string, i64>
     }
 
     om.class @Child(%0: i64) {
@@ -118,4 +126,22 @@ print(obj.map)
 for k, v in obj.map.items():
   # CHECK-NEXT: a 42
   # CHECK-NEXT: b 32
+  print(k, v)
+
+try:
+  print(obj.map_create[1])
+except KeyError as e:
+  # CHECK-NEXT: '1 not found'
+  print(e)
+try:
+  print(obj.map_create["INVALID"])
+except KeyError as e:
+  # CHECK-NEXT: 'INVALID not found'
+  print(e)
+# CHECK-NEXT: 14
+print(obj.map_create["X"])
+
+for k, v in obj.map_create.items():
+  # CHECK-NEXT: X 14
+  # CHECK-NEXT: Y 15
   print(k, v)
