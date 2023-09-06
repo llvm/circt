@@ -15,7 +15,7 @@
 // CHECK:           hw.output %[[VAL_6]] : i1
 // CHECK:         }
 hw.module @cg1(%clk : i1, %enable : i1) -> (gclk : i1) {
-    %0 = seq.clock_gate %clk, %enable
+    %0 = seq.clock_gate %clk, %enable : i1
     hw.output %0 : i1
 }
 
@@ -35,6 +35,6 @@ hw.module @cg1(%clk : i1, %enable : i1) -> (gclk : i1) {
 // CHECK:           hw.output %[[VAL_8]] : i1
 // CHECK:         }
 hw.module @cg2(%clk : i1, %enable : i1, %test_enable : i1) -> (gclk : i1) {
-    %0 = seq.clock_gate %clk, %enable, %test_enable
+    %0 = seq.clock_gate %clk, %enable, %test_enable : i1
     hw.output %0 : i1
 }

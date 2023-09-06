@@ -52,15 +52,15 @@ hw.module @ClockGate(%clock: i1, %enable: i1, %test_enable: i1) {
   // CHECK-NEXT: seq.clock_gate %clock, %enable
   // CHECK-NEXT: seq.clock_gate %clock, %enable, %test_enable
   // CHECK-NEXT: seq.clock_gate %clock, %enable, %test_enable sym @gate_sym
-  %cg0 = seq.clock_gate %clock, %enable
-  %cg1 = seq.clock_gate %clock, %enable, %test_enable
-  %cg2 = seq.clock_gate %clock, %enable, %test_enable sym @gate_sym
+  %cg0 = seq.clock_gate %clock, %enable : i1
+  %cg1 = seq.clock_gate %clock, %enable, %test_enable : i1
+  %cg2 = seq.clock_gate %clock, %enable, %test_enable sym @gate_sym : i1
 }
 
 // CHECK-LABEL: hw.module @ClockMux
-hw.module @ClockMux(%cond: i1, %trueClock: i1, %falseClock: i1) -> (clock: i1) {
+hw.module @ClockMux(%cond: i1, %trueClock: !seq.clock, %falseClock: !seq.clock) -> (clock: !seq.clock) {
   %clock = seq.clock_mux %cond, %trueClock, %falseClock
-  hw.output %clock : i1
+  hw.output %clock : !seq.clock
 }
 
 hw.module @fifo1(%clk : i1, %rst : i1, %in : i32, %rdEn : i1, %wrEn : i1) -> () {
@@ -79,7 +79,7 @@ hw.module @preset(%clock : i1, %reset : i1, %next : i32) -> () {
   %reg = seq.firreg %next clock %clock preset 0 : i32
 }
 
-hw.module @clock_dividers(%clock: i1) -> () {
+hw.module @clock_dividers(%clock: !seq.clock) -> () {
   // CHECK: seq.clock_div %clock by 1
   %by_2 = seq.clock_div %clock by 1
 }
