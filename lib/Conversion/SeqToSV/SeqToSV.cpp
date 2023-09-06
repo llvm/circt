@@ -57,12 +57,11 @@ namespace {
 template <typename OpTy>
 class CompRegLower : public OpConversionPattern<OpTy> {
 public:
-  CompRegLower(MLIRContext *context, TypeConverter &typeConverter,
+  CompRegLower(TypeConverter &typeConverter, MLIRContext *context,
                bool lowerToAlwaysFF)
-      : OpConversionPattern<OpTy>(context), typeConverter(typeConverter),
+      : OpConversionPattern<OpTy>(typeConverter, context),
         lowerToAlwaysFF(lowerToAlwaysFF) {}
 
-  using OpConversionPattern<OpTy>::OpConversionPattern;
   using OpAdaptor = typename OpConversionPattern<OpTy>::OpAdaptor;
 
   LogicalResult
@@ -70,7 +69,8 @@ public:
                   ConversionPatternRewriter &rewriter) const final {
     Location loc = reg.getLoc();
 
-    auto regTy = typeConverter.convertType(reg.getType());
+    auto regTy =
+        ConversionPattern::getTypeConverter()->convertType(reg.getType());
 
     auto svReg = rewriter.create<sv::RegOp>(loc, regTy, reg.getNameAttr(),
                                             reg.getInnerSymAttr());
@@ -119,7 +119,6 @@ public:
                     sv::RegOp svReg, OpAdaptor reg) const;
 
 private:
-  TypeConverter &typeConverter;
   bool lowerToAlwaysFF;
 };
 
@@ -347,15 +346,16 @@ void SeqToSVPass::runOnOperation() {
   target.markUnknownOpDynamicallyLegal(isLegalOp);
 
   RewritePatternSet patterns(context);
-  patterns.add<CompRegLower<CompRegOp>>(context, typeConverter,
+  patterns.add<CompRegLower<CompRegOp>>(typeConverter, context,
                                         lowerToAlwaysFF);
-  patterns.add<CompRegLower<CompRegClockEnabledOp>>(context, typeConverter,
+  patterns.add<CompRegLower<CompRegClockEnabledOp>>(typeConverter, context,
                                                     lowerToAlwaysFF);
-  patterns.add<ClockCastLowering<seq::FromClockOp>>(context);
-  patterns.add<ClockCastLowering<seq::ToClockOp>>(context);
-  patterns.add<ClockGateLowering>(context);
-  patterns.add<ClockMuxLowering>(context);
-  patterns.add<ClockDividerLowering>(context);
+
+  patterns.insert<ClockCastLowering<seq::FromClockOp>>(typeConverter, context);
+  patterns.add<ClockCastLowering<seq::ToClockOp>>(typeConverter, context);
+  patterns.add<ClockGateLowering>(typeConverter, context);
+  patterns.add<ClockMuxLowering>(typeConverter, context);
+  patterns.add<ClockDividerLowering>(typeConverter, context);
   patterns.add<TypeConversionPattern>(typeConverter, context);
 
   if (failed(applyPartialConversion(circuit, target, std::move(patterns))))
