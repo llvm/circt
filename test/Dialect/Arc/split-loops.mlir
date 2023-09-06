@@ -1,7 +1,7 @@
 // RUN: circt-opt %s --arc-split-loops | FileCheck %s
 
 // CHECK-LABEL: hw.module @Simple(
-hw.module @Simple(%a: i4, %b: i4) -> (x: i4, y: i4) {
+hw.module @Simple(%clock: !seq.clock, %a: i4, %b: i4) -> (x: i4, y: i4) {
   // CHECK-NEXT: %0 = arc.state @SimpleArc_split_0(%a, %b)
   // CHECK-NEXT: %1 = arc.state @SimpleArc_split_1(%0, %a)
   // CHECK-NEXT: %2 = arc.state @SimpleArc_split_2(%0, %b)

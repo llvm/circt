@@ -8,6 +8,7 @@
 
 #include "circt/Dialect/Arc/ArcTypes.h"
 #include "circt/Dialect/Arc/ArcDialect.h"
+#include "circt/Dialect/Seq/SeqTypes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "llvm/ADT/TypeSwitch.h"

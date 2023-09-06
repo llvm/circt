@@ -26,6 +26,7 @@ add_circt_dialect_library(CIRCTArc
 
   LINK_LIBS PUBLIC
   CIRCTHW
+  CIRCTSeq
   MLIRIR
   MLIRInferTypeOpInterface
   MLIRSideEffectInterfaces

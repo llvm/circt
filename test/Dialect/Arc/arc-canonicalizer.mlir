@@ -5,16 +5,16 @@
 //===----------------------------------------------------------------------===//
 
 // CHECK-LABEL: hw.module @passthoughChecks
-hw.module @passthoughChecks(%in0: i1, %in1: i1) -> (out0: i1, out1: i1, out2: i1, out3: i1, out4: i1, out5: i1, out6: i1, out7: i1, out8: i1, out9: i1) {
+hw.module @passthoughChecks(%clock: !seq.clock, %in0: i1, %in1: i1) -> (out0: i1, out1: i1, out2: i1, out3: i1, out4: i1, out5: i1, out6: i1, out7: i1, out8: i1, out9: i1) {
   %0:2 = arc.call @passthrough(%in0, %in1) : (i1, i1) -> (i1, i1)
   %1:2 = arc.call @noPassthrough(%in0, %in1) : (i1, i1) -> (i1, i1)
   %2:2 = arc.state @passthrough(%in0, %in1) lat 0 : (i1, i1) -> (i1, i1)
   %3:2 = arc.state @noPassthrough(%in0, %in1) lat 0 : (i1, i1) -> (i1, i1)
-  %4:2 = arc.state @passthrough(%in0, %in1) clock %in0 lat 1 : (i1, i1) -> (i1, i1)
+  %4:2 = arc.state @passthrough(%in0, %in1) clock %clock lat 1 : (i1, i1) -> (i1, i1)
   hw.output %0#0, %0#1, %1#0, %1#1, %2#0, %2#1, %3#0, %3#1, %4#0, %4#1 : i1, i1, i1, i1, i1, i1, i1, i1, i1, i1
   // CHECK-NEXT: [[V0:%.+]]:2 = arc.call @noPassthrough(%in0, %in1) :
   // CHECK-NEXT: [[V1:%.+]]:2 = arc.state @noPassthrough(%in0, %in1) lat 0 :
-  // CHECK-NEXT: [[V2:%.+]]:2 = arc.state @passthrough(%in0, %in1) clock %in0 lat 1 :
+  // CHECK-NEXT: [[V2:%.+]]:2 = arc.state @passthrough(%in0, %in1) clock %clock lat 1 :
   // CHECK-NEXT: hw.output %in0, %in1, [[V0]]#0, [[V0]]#1, %in0, %in1, [[V1]]#0, [[V1]]#1, [[V2]]#0, [[V2]]#1 :
 }
 arc.define @passthrough(%arg0: i1, %arg1: i1) -> (i1, i1) {
@@ -38,7 +38,7 @@ arc.define @memArcTrue(%arg0: i1, %arg1: i32) -> (i1, i32, i1) {
 }
 
 // CHECK-LABEL: hw.module @memoryWritePortCanonicalizations
-hw.module @memoryWritePortCanonicalizations(%clk: i1, %addr: i1, %data: i32) {
+hw.module @memoryWritePortCanonicalizations(%clk: !seq.clock, %addr: i1, %data: i32) {
   // CHECK-NEXT: [[MEM:%.+]] = arc.memory <2 x i32, i1>
   %mem = arc.memory <2 x i32, i1>
   arc.memory_write_port %mem, @memArcFalse(%addr, %data) clock %clk enable lat 1 : <2 x i32, i1>, i1, i32
@@ -150,7 +150,7 @@ arc.define @OneOfThreeUsed(%arg0: i1, %arg1: i1, %arg2: i1) -> i1 {
 }
 
 // CHECK: @test1
-hw.module @test1 (%arg0: i1, %arg1: i1, %arg2: i1, %clock: i1) -> (out0: i1, out1: i1) {
+hw.module @test1 (%arg0: i1, %arg1: i1, %arg2: i1, %clock: !seq.clock) -> (out0: i1, out1: i1) {
   // CHECK-NEXT: arc.state @OneOfThreeUsed(%arg1) clock %clock lat 1 : (i1) -> i1
   %0 = arc.state @OneOfThreeUsed(%arg0, %arg1, %arg2) clock %clock lat 1 : (i1, i1, i1) -> i1
   // CHECK-NEXT: arc.state @NestedCall(%arg1)
