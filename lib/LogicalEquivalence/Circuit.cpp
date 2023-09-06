@@ -16,6 +16,7 @@
 #include "circt/LogicalEquivalence/Solver.h"
 #include "circt/LogicalEquivalence/Utility.h"
 #include "mlir/IR/Builders.h"
+#include "llvm/ADT/STLExtras.h"
 
 #define DEBUG_TYPE "lec-circuit"
 
@@ -26,7 +27,7 @@ using namespace circt;
 void Solver::Circuit::addInput(Value value) {
   LLVM_DEBUG(lec::dbgs() << name << " addInput\n");
   lec::Scope indent;
-  z3::expr input = allocateValue(value);
+  z3::expr input = fetchOrAllocateExpr(value);
   inputs.insert(inputs.end(), input);
 }
 
@@ -34,7 +35,7 @@ void Solver::Circuit::addInput(Value value) {
 void Solver::Circuit::addOutput(Value value) {
   LLVM_DEBUG(lec::dbgs() << name << " addOutput\n");
   // Referenced value already assigned, fetching from expression table.
-  z3::expr output = fetchExpr(value);
+  z3::expr output = fetchOrAllocateExpr(value);
   outputs.insert(outputs.end(), output);
 }
 
@@ -79,7 +80,7 @@ void Solver::Circuit::addInstance(llvm::StringRef instanceName,
     auto *input = instance.inputs.begin();
     for (Value argument : arguments) {
       LLVM_DEBUG(lec::dbgs() << "input\n");
-      z3::expr argExpr = fetchExpr(argument);
+      z3::expr argExpr = fetchOrAllocateExpr(argument);
       solver.solver.add(argExpr == *input++);
     }
   }
@@ -88,7 +89,7 @@ void Solver::Circuit::addInstance(llvm::StringRef instanceName,
     lec::Scope indent;
     auto *output = instance.outputs.begin();
     for (circt::OpResult result : results) {
-      z3::expr resultExpr = allocateValue(result);
+      z3::expr resultExpr = fetchOrAllocateExpr(result);
       solver.solver.add(resultExpr == *output++);
     }
   }
@@ -123,9 +124,9 @@ void Solver::Circuit::performDivS(Value result, Value lhs, Value rhs) {
   LLVM_DEBUG(lec::dbgs() << name << " perform DivS\n");
   lec::Scope indent;
   LLVM_DEBUG(lec::dbgs() << "lhs:\n");
-  z3::expr lhsExpr = fetchExpr(lhs);
+  z3::expr lhsExpr = fetchOrAllocateExpr(lhs);
   LLVM_DEBUG(lec::dbgs() << "rhs:\n");
-  z3::expr rhsExpr = fetchExpr(rhs);
+  z3::expr rhsExpr = fetchOrAllocateExpr(rhs);
   z3::expr op = z3::operator/(lhsExpr, rhsExpr);
   constrainResult(result, op);
 }
@@ -134,9 +135,9 @@ void Solver::Circuit::performDivU(Value result, Value lhs, Value rhs) {
   LLVM_DEBUG(lec::dbgs() << name << " perform DivU\n");
   lec::Scope indent;
   LLVM_DEBUG(lec::dbgs() << "lhs:\n");
-  z3::expr lhsExpr = fetchExpr(lhs);
+  z3::expr lhsExpr = fetchOrAllocateExpr(lhs);
   LLVM_DEBUG(lec::dbgs() << "rhs:\n");
-  z3::expr rhsExpr = fetchExpr(rhs);
+  z3::expr rhsExpr = fetchOrAllocateExpr(rhs);
   z3::expr op = z3::udiv(lhsExpr, rhsExpr);
   constrainResult(result, op);
 }
@@ -146,7 +147,7 @@ void Solver::Circuit::performExtract(Value result, Value input,
   LLVM_DEBUG(lec::dbgs() << name << " performExtract\n");
   lec::Scope indent;
   LLVM_DEBUG(lec::dbgs() << "input:\n");
-  z3::expr inputExpr = fetchExpr(input);
+  z3::expr inputExpr = fetchOrAllocateExpr(input);
   unsigned width = result.getType().getIntOrFloatBitWidth();
   LLVM_DEBUG(lec::dbgs() << "width: " << width << "\n");
   z3::expr extract = inputExpr.extract(lowBit + width - 1, lowBit);
@@ -159,9 +160,9 @@ LogicalResult Solver::Circuit::performICmp(Value result,
   LLVM_DEBUG(lec::dbgs() << name << " performICmp\n");
   lec::Scope indent;
   LLVM_DEBUG(lec::dbgs() << "lhs:\n");
-  z3::expr lhsExpr = fetchExpr(lhs);
+  z3::expr lhsExpr = fetchOrAllocateExpr(lhs);
   LLVM_DEBUG(lec::dbgs() << "rhs:\n");
-  z3::expr rhsExpr = fetchExpr(rhs);
+  z3::expr rhsExpr = fetchOrAllocateExpr(rhs);
   z3::expr icmp(solver.context);
 
   switch (predicate) {
@@ -213,9 +214,9 @@ void Solver::Circuit::performModS(Value result, Value lhs, Value rhs) {
   LLVM_DEBUG(lec::dbgs() << name << " perform ModS\n");
   lec::Scope indent;
   LLVM_DEBUG(lec::dbgs() << "lhs:\n");
-  z3::expr lhsExpr = fetchExpr(lhs);
+  z3::expr lhsExpr = fetchOrAllocateExpr(lhs);
   LLVM_DEBUG(lec::dbgs() << "rhs:\n");
-  z3::expr rhsExpr = fetchExpr(rhs);
+  z3::expr rhsExpr = fetchOrAllocateExpr(rhs);
   z3::expr op = z3::smod(lhsExpr, rhsExpr);
   constrainResult(result, op);
 }
@@ -224,9 +225,9 @@ void Solver::Circuit::performModU(Value result, Value lhs, Value rhs) {
   LLVM_DEBUG(lec::dbgs() << name << " perform ModU\n");
   lec::Scope indent;
   LLVM_DEBUG(lec::dbgs() << "lhs:\n");
-  z3::expr lhsExpr = fetchExpr(lhs);
+  z3::expr lhsExpr = fetchOrAllocateExpr(lhs);
   LLVM_DEBUG(lec::dbgs() << "rhs:\n");
-  z3::expr rhsExpr = fetchExpr(rhs);
+  z3::expr rhsExpr = fetchOrAllocateExpr(rhs);
   z3::expr op = z3::urem(lhsExpr, rhsExpr);
   constrainResult(result, op);
 }
@@ -243,11 +244,11 @@ void Solver::Circuit::performMux(Value result, Value cond, Value trueValue,
   LLVM_DEBUG(lec::dbgs() << name << " performMux\n");
   lec::Scope indent;
   LLVM_DEBUG(lec::dbgs() << "cond:\n");
-  z3::expr condExpr = fetchExpr(cond);
+  z3::expr condExpr = fetchOrAllocateExpr(cond);
   LLVM_DEBUG(lec::dbgs() << "trueValue:\n");
-  z3::expr tvalue = fetchExpr(trueValue);
+  z3::expr tvalue = fetchOrAllocateExpr(trueValue);
   LLVM_DEBUG(lec::dbgs() << "falseValue:\n");
-  z3::expr fvalue = fetchExpr(falseValue);
+  z3::expr fvalue = fetchOrAllocateExpr(falseValue);
   // Conversion due to z3::ite requiring a bool rather than a bitvector.
   z3::expr mux = z3::ite(bvToBool(condExpr), tvalue, fvalue);
   constrainResult(result, mux);
@@ -264,7 +265,7 @@ void Solver::Circuit::performParity(Value result, Value input) {
   LLVM_DEBUG(lec::dbgs() << name << " performParity\n");
   lec::Scope indent;
   LLVM_DEBUG(lec::dbgs() << "input:\n");
-  z3::expr inputExpr = fetchExpr(input);
+  z3::expr inputExpr = fetchOrAllocateExpr(input);
 
   unsigned width = inputExpr.get_sort().bv_size();
 
@@ -282,7 +283,7 @@ void Solver::Circuit::performReplicate(Value result, Value input) {
   LLVM_DEBUG(lec::dbgs() << name << " performReplicate\n");
   lec::Scope indent;
   LLVM_DEBUG(lec::dbgs() << "input:\n");
-  z3::expr inputExpr = fetchExpr(input);
+  z3::expr inputExpr = fetchOrAllocateExpr(input);
 
   unsigned int final = result.getType().getIntOrFloatBitWidth();
   unsigned int initial = input.getType().getIntOrFloatBitWidth();
@@ -301,9 +302,9 @@ void Solver::Circuit::performShl(Value result, Value lhs, Value rhs) {
   LLVM_DEBUG(lec::dbgs() << name << " perform Shl\n");
   lec::Scope indent;
   LLVM_DEBUG(lec::dbgs() << "lhs:\n");
-  z3::expr lhsExpr = fetchExpr(lhs);
+  z3::expr lhsExpr = fetchOrAllocateExpr(lhs);
   LLVM_DEBUG(lec::dbgs() << "rhs:\n");
-  z3::expr rhsExpr = fetchExpr(rhs);
+  z3::expr rhsExpr = fetchOrAllocateExpr(rhs);
   z3::expr op = z3::shl(lhsExpr, rhsExpr);
   constrainResult(result, op);
 }
@@ -313,9 +314,9 @@ void Solver::Circuit::performShrS(Value result, Value lhs, Value rhs) {
   LLVM_DEBUG(lec::dbgs() << name << " perform ShrS\n");
   lec::Scope indent;
   LLVM_DEBUG(lec::dbgs() << "lhs:\n");
-  z3::expr lhsExpr = fetchExpr(lhs);
+  z3::expr lhsExpr = fetchOrAllocateExpr(lhs);
   LLVM_DEBUG(lec::dbgs() << "rhs:\n");
-  z3::expr rhsExpr = fetchExpr(rhs);
+  z3::expr rhsExpr = fetchOrAllocateExpr(rhs);
   z3::expr op = z3::ashr(lhsExpr, rhsExpr);
   constrainResult(result, op);
 }
@@ -325,9 +326,9 @@ void Solver::Circuit::performShrU(Value result, Value lhs, Value rhs) {
   LLVM_DEBUG(lec::dbgs() << name << " perform ShrU\n");
   lec::Scope indent;
   LLVM_DEBUG(lec::dbgs() << "lhs:\n");
-  z3::expr lhsExpr = fetchExpr(lhs);
+  z3::expr lhsExpr = fetchOrAllocateExpr(lhs);
   LLVM_DEBUG(lec::dbgs() << "rhs:\n");
-  z3::expr rhsExpr = fetchExpr(rhs);
+  z3::expr rhsExpr = fetchOrAllocateExpr(rhs);
   z3::expr op = z3::lshr(lhsExpr, rhsExpr);
   constrainResult(result, op);
 }
@@ -352,12 +353,13 @@ void Solver::Circuit::variadicOperation(
     Value result, OperandRange operands,
     llvm::function_ref<z3::expr(const z3::expr &, const z3::expr &)>
         operation) {
+  // Allocate operands if unallocated
   LLVM_DEBUG(lec::dbgs() << "variadic operation\n");
   lec::Scope indent;
   // Vacuous base case.
   auto it = operands.begin();
   Value operand = *it;
-  z3::expr varOp = exprTable.find(operand)->second;
+  z3::expr varOp = fetchOrAllocateExpr(operand);
   {
     LLVM_DEBUG(lec::dbgs() << "first operand:\n");
     lec::Scope indent;
@@ -367,40 +369,50 @@ void Solver::Circuit::variadicOperation(
   // Inductive step.
   while (it != operands.end()) {
     operand = *it;
-    varOp = operation(varOp, exprTable.find(operand)->second);
+    varOp = operation(varOp, fetchOrAllocateExpr(operand));
     {
       LLVM_DEBUG(lec::dbgs() << "next operand:\n");
       lec::Scope indent;
       LLVM_DEBUG(lec::printValue(operand));
     }
     ++it;
-  };
+  }
   constrainResult(result, varOp);
 }
 
 /// Allocates an IR value in the logical backend and returns its representing
 /// expression.
-z3::expr Solver::Circuit::allocateValue(Value value) {
-  std::string valueName = name + "%" + std::to_string(assignments++);
-  LLVM_DEBUG(lec::dbgs() << "allocating value:\n");
-  lec::Scope indent;
-  Type type = value.getType();
-  assert(type.isSignlessInteger() && "Unsupported type");
-  unsigned int width = type.getIntOrFloatBitWidth();
-  // Technically allowed for the `hw` dialect but
-  // disallowed for `comb` operations; should check separately.
-  assert(width > 0 && "0-width integers are not supported"); // NOLINT
-  z3::expr expr = solver.context.bv_const(valueName.c_str(), width);
-  LLVM_DEBUG(lec::printExpr(expr));
-  LLVM_DEBUG(lec::printValue(value));
-  auto exprInsertion = exprTable.insert(std::pair(value, expr));
-  (void)exprInsertion; // Suppress Warning
-  assert(exprInsertion.second && "Value not inserted in expression table");
-  Builder builder(solver.mlirCtx);
-  StringAttr symbol = builder.getStringAttr(valueName);
-  auto symInsertion = solver.symbolTable.insert(std::pair(symbol, value));
-  (void)symInsertion; // Suppress Warning
-  assert(symInsertion.second && "Value not inserted in symbol table");
+z3::expr Solver::Circuit::fetchOrAllocateExpr(Value value) {
+  z3::expr expr(solver.context);
+  auto exprPair = exprTable.find(value);
+  if (exprPair != exprTable.end()) {
+    LLVM_DEBUG(lec::dbgs() << "value already allocated:\n");
+    lec::Scope indent;
+    expr = exprPair->second;
+    LLVM_DEBUG(lec::printExpr(expr));
+    LLVM_DEBUG(lec::printValue(value));
+  } else {
+    std::string valueName = name + "%" + std::to_string(assignments++);
+    LLVM_DEBUG(lec::dbgs() << "allocating value:\n");
+    lec::Scope indent;
+    Type type = value.getType();
+    assert(type.isSignlessInteger() && "Unsupported type");
+    unsigned int width = type.getIntOrFloatBitWidth();
+    // Technically allowed for the `hw` dialect but
+    // disallowed for `comb` operations; should check separately.
+    assert(width > 0 && "0-width integers are not supported"); // NOLINT
+    expr = solver.context.bv_const(valueName.c_str(), width);
+    LLVM_DEBUG(lec::printExpr(expr));
+    LLVM_DEBUG(lec::printValue(value));
+    auto exprInsertion = exprTable.insert(std::pair(value, expr));
+    (void)exprInsertion; // Suppress Warning
+    assert(exprInsertion.second && "Value not inserted in expression table");
+    Builder builder(solver.mlirCtx);
+    StringAttr symbol = builder.getStringAttr(valueName);
+    auto symInsertion = solver.symbolTable.insert(std::pair(symbol, value));
+    (void)symInsertion; // Suppress Warning
+    assert(symInsertion.second && "Value not inserted in symbol table");
+  }
   return expr;
 }
 
@@ -411,20 +423,25 @@ void Solver::Circuit::allocateConstant(Value result, const APInt &value) {
   //  of standard integer type without a sign`
   const z3::expr constant =
       solver.context.bv_val(value.getZExtValue(), value.getBitWidth());
-  auto insertion = exprTable.insert(std::pair(result, constant));
-  (void)insertion; // suppress warning
-  assert(insertion.second && "Constant not inserted in expression table");
-  LLVM_DEBUG(lec::printExpr(constant));
-  LLVM_DEBUG(lec::printValue(result));
-}
-
-/// Fetches the corresponding logical expression for a given IR value.
-z3::expr Solver::Circuit::fetchExpr(Value &value) {
-  z3::expr expr = exprTable.find(value)->second;
-  lec::Scope indent;
-  LLVM_DEBUG(lec::printExpr(expr));
-  LLVM_DEBUG(lec::printValue(value));
-  return expr;
+  //  Check whether the constant has been pre-allocated
+  auto allocatedPair = exprTable.find(result);
+  if (allocatedPair == exprTable.end()) {
+    // If not, then allocate
+    auto insertion = exprTable.insert(std::pair(result, constant));
+    (void)insertion; // suppress warning
+    assert(insertion.second && "Constant not inserted in expression table");
+    LLVM_DEBUG(lec::printExpr(constant));
+    LLVM_DEBUG(lec::printValue(result));
+  } else {
+    // If it has, then we force equivalence to the constant (we cannot just
+    // overwrite in the table as when it was allocated, a constraint was already
+    // formed using the symbolic form).
+    solver.solver.add(allocatedPair->second == constant);
+    LLVM_DEBUG(lec::dbgs() << "constraining symbolic value to constant:\n");
+    lec::Scope indent;
+    LLVM_DEBUG(lec::printExpr(constant));
+    LLVM_DEBUG(lec::printValue(result));
+  }
 }
 
 /// Constrains the result of a MLIR operation to be equal a given logical
@@ -437,7 +454,7 @@ void Solver::Circuit::constrainResult(Value &result, z3::expr &expr) {
     lec::Scope indent;
     LLVM_DEBUG(lec::printExpr(expr));
   }
-  z3::expr resExpr = allocateValue(result);
+  z3::expr resExpr = fetchOrAllocateExpr(result);
   z3::expr constraint = resExpr == expr;
   {
     LLVM_DEBUG(lec::dbgs() << "adding constraint:\n");

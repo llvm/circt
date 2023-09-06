@@ -41,7 +41,6 @@ hw.module @notnot(%in: i1) -> (out: i1) {
 //  RUN: circt-lec %s -c1=basic -c2=basic -v=false | FileCheck %s --check-prefix=HW_OUTPUT
 //  HW_OUTPUT: c1 == c2
 
-
 hw.module @constZeroZero(%in: i1) -> (o1: i1, o2: i1) {
   %zero = hw.constant 0 : i1
   hw.output %zero, %zero : i1, i1
@@ -65,3 +64,15 @@ hw.module @constZeroOne(%in: i1) -> (o1: i1, o2: i1) {
 // Modules with one equivalent and one non-equivalent output
 //  RUN: not circt-lec %s -c1=constZeroZero -c2=constZeroOne -v=false | FileCheck %s --check-prefix=TWOOUTPUTSFAIL
 //  TWOOUTPUTSFAIL: c1 != c2
+
+hw.module @onePlusTwoNonSSA() -> (out: i2) {
+  %three = comb.add bin %one, %two : i2
+  %one = hw.constant 1 : i2
+  %two = hw.constant 2 : i2
+  hw.output %three : i2
+}
+
+// hw.module graph region check
+//  RUN: circt-lec %s -c1=onePlusTwo -c2=onePlusTwoNonSSA -v=false | FileCheck %s --check-prefix=HW_MODULE_GRAPH
+//  HW_MODULE_GRAPH: c1 == c2
+
