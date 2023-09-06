@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_OM_EVALUATOR_EVALUATOR_H
 #define CIRCT_DIALECT_OM_EVALUATOR_EVALUATOR_H
 
+#include "circt/Dialect/OM/OMAttributes.h"
 #include "circt/Dialect/OM/OMOps.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -40,7 +41,7 @@ using ObjectFields = SmallDenseMap<StringAttr, EvaluatorValuePtr>;
 /// appropriate reference count.
 struct EvaluatorValue : std::enable_shared_from_this<EvaluatorValue> {
   // Implement LLVM RTTI.
-  enum class Kind { Attr, Object, List, Tuple };
+  enum class Kind { Attr, Integer, Object, List, Tuple };
   EvaluatorValue(Kind kind) : kind(kind) {}
   Kind getKind() const { return kind; }
 
@@ -62,6 +63,21 @@ struct AttributeValue : EvaluatorValue {
 
 private:
   Attribute attr;
+};
+
+struct IntegerValue : EvaluatorValue {
+  IntegerValue(om::IntegerAttr attr)
+      : EvaluatorValue(Kind::Integer), attr(attr) {}
+  om::IntegerAttr getValue() { return attr; }
+  om::OMIntegerType getType() {
+    return attr.getType().cast<om::OMIntegerType>();
+  }
+  static bool classof(const EvaluatorValue *e) {
+    return e->getKind() == Kind::Integer;
+  }
+
+private:
+  om::IntegerAttr attr;
 };
 
 /// A List which contains variadic length of elements with the same type.

@@ -153,6 +153,14 @@ MLIR_CAPI_EXPORTED bool omAttrIsAReferenceAttr(MlirAttribute attr);
 MLIR_CAPI_EXPORTED MlirAttribute omReferenceAttrGetInnerRef(MlirAttribute attr);
 
 //===----------------------------------------------------------------------===//
+// IntegerAttr API
+//===----------------------------------------------------------------------===//
+
+MLIR_CAPI_EXPORTED bool omAttrIsAIntegerAttr(MlirAttribute attr);
+
+MLIR_CAPI_EXPORTED MlirAttribute omIntegerAttrGetAttr(MlirAttribute attr);
+
+//===----------------------------------------------------------------------===//
 // ListAttr API
 //===----------------------------------------------------------------------===//
 

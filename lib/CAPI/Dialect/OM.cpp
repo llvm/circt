@@ -171,13 +171,21 @@ MlirAttribute omEvaluatorValueGetPrimitive(OMEvaluatorValue evaluatorValue) {
 
 /// Get the Primitive from an EvaluatorValue, which must contain a Primitive.
 OMEvaluatorValue omEvaluatorValueFromPrimitive(MlirAttribute primitive) {
+  auto attr = unwrap(primitive);
+  // Create om::IntegerAttr for any mlir::IntegerAttr.
+  if (auto intAttr = llvm::dyn_cast_or_null<mlir::IntegerAttr>(attr))
+    attr = circt::om::IntegerAttr::get(attr.getContext(), intAttr);
   // Assert the Attribute is non-null, and return it.
-  return wrap(std::make_shared<evaluator::AttributeValue>(unwrap(primitive)));
+  return wrap(std::make_shared<evaluator::AttributeValue>(attr));
 }
 
 /// Query if the EvaluatorValue is a List.
 bool omEvaluatorValueIsAList(OMEvaluatorValue evaluatorValue) {
   return isa<evaluator::ListValue>(unwrap(evaluatorValue).get());
+}
+
+bool omEvaluatorValueIsAInteger(OMEvaluatorValue evaluatorValue) {
+  return isa<evaluator::IntegerValue>(unwrap(evaluatorValue).get());
 }
 
 /// Get the List from an EvaluatorValue, which must contain a List.
@@ -232,6 +240,19 @@ bool omAttrIsAReferenceAttr(MlirAttribute attr) {
 MlirAttribute omReferenceAttrGetInnerRef(MlirAttribute referenceAttr) {
   return wrap(
       (Attribute)unwrap(referenceAttr).cast<ReferenceAttr>().getInnerRef());
+}
+
+//===----------------------------------------------------------------------===//
+// IntegerAttr API.
+//===----------------------------------------------------------------------===//
+
+bool omAttrIsAIntegerAttr(MlirAttribute attr) {
+  return unwrap(attr).isa<circt::om::IntegerAttr>();
+}
+
+MlirAttribute omIntegerAttrGetAttr(MlirAttribute attr) {
+  return wrap(
+      (Attribute)unwrap(attr).cast<circt::om::IntegerAttr>().getValue());
 }
 
 //===----------------------------------------------------------------------===//
