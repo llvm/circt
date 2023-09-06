@@ -20,6 +20,7 @@
 #include "circt/Dialect/Seq/SeqPasses.h"
 #include "circt/InitAllDialects.h"
 #include "circt/InitAllPasses.h"
+#include "circt/Support/Passes.h"
 #include "circt/Support/Version.h"
 #include "mlir/Bytecode/BytecodeReader.h"
 #include "mlir/Bytecode/BytecodeWriter.h"
@@ -119,6 +120,11 @@ static cl::opt<bool>
                       cl::init(false), cl::Hidden, cl::cat(mainCategory));
 
 static cl::opt<bool>
+    verbosePassExecutions("verbose-pass-executions",
+                          cl::desc("Log executions of toplevel module passes"),
+                          cl::init(false), cl::cat(mainCategory));
+
+static cl::opt<bool>
     splitInputFile("split-input-file",
                    cl::desc("Split the input file into pieces and process each "
                             "chunk independently"),
@@ -171,6 +177,11 @@ static void populatePipeline(PassManager &pm) {
   auto untilReached = [](Until until) {
     return until >= runUntilBefore || until > runUntilAfter;
   };
+
+  if (verbosePassExecutions)
+    pm.addInstrumentation(
+        std::make_unique<VerbosePassInstrumentation<mlir::ModuleOp>>(
+            "fiarcilatorrtool"));
 
   // Pre-process the input such that it no longer contains any SV dialect ops
   // and external modules that are relevant to the arc transformation are
