@@ -15,10 +15,9 @@ using namespace circt::hw;
 
 std::pair<ArrayAttr, ArrayAttr>
 instance_like_impl::getHWModuleArgAndResultNames(Operation *module) {
-  assert(isAnyModule(module) && "Can only reference a module");
-
-  return {module->getAttrOfType<ArrayAttr>("argNames"),
-          module->getAttrOfType<ArrayAttr>("resultNames")};
+  auto mod = cast<HWModuleLike>(module);
+  return {ArrayAttr::get(module->getContext(), mod.getInputNames()),
+          ArrayAttr::get(module->getContext(), mod.getOutputNames())};
 }
 
 Operation *
@@ -42,7 +41,7 @@ LogicalResult instance_like_impl::verifyReferencedModule(
            << moduleName.getValue() << "'";
 
   // It must be some sort of module.
-  if (!hw::isAnyModule(module))
+  if (!isa<HWModuleLike>(module))
     return instanceOp->emitError("symbol reference '")
            << moduleName.getValue() << "' isn't a module";
 

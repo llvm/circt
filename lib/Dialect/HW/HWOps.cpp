@@ -498,14 +498,9 @@ OpFoldResult ParamValueOp::fold(FoldAdaptor adaptor) {
 // HWModuleOp
 //===----------------------------------------------------------------------===/
 
-/// Return true if this is an hw.module, external module, generated module etc.
-bool hw::isAnyModule(Operation *module) {
-  return isa<HWModuleOp, HWModuleExternOp, HWModuleGeneratedOp>(module);
-}
-
 /// Return true if isAnyModule or instance.
 bool hw::isAnyModuleOrInstance(Operation *moduleOrInstance) {
-  return isAnyModule(moduleOrInstance) || isa<InstanceOp>(moduleOrInstance);
+  return isa<HWModuleLike, InstanceOp>(moduleOrInstance);
 }
 
 /// Return the signature for a module as a function type from the module itself
@@ -523,8 +518,6 @@ FunctionType hw::getModuleType(Operation *moduleOrInstance) {
   if (auto mod = dyn_cast<HWModuleLike>(moduleOrInstance))
     return mod.getHWModuleType().getFuncType();
 
-  assert(isAnyModule(moduleOrInstance) &&
-         "must be called on instance or module");
   return cast<mlir::FunctionOpInterface>(moduleOrInstance)
       .getFunctionType()
       .cast<FunctionType>();
@@ -1149,7 +1142,7 @@ void HWModuleOp::print(OpAsmPrinter &p) {
 }
 
 static LogicalResult verifyModuleCommon(HWModuleLike module) {
-  assert(isAnyModule(module) &&
+  assert(isa<HWModuleLike>(module) &&
          "verifier hook should only be called on modules");
 
   auto moduleType = module.getHWModuleType();

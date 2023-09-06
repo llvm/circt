@@ -14,11 +14,6 @@ using namespace mlir;
 using namespace circt;
 using namespace msft;
 
-bool circt::msft::isAnyModule(Operation *module) {
-  return isa<MSFTModuleOp, MSFTModuleExternOp>(module) ||
-         hw::isAnyModule(module);
-}
-
 SmallVector<unsigned> circt::msft::makeSequentialRange(unsigned size) {
   SmallVector<unsigned> seq;
   for (size_t i = 0; i < size; ++i)
@@ -32,7 +27,7 @@ StringRef circt::msft::getValueName(Value v, const SymbolCache &syms,
   if (auto inst = dyn_cast_or_null<InstanceOp>(defOp)) {
     Operation *modOp = syms.getDefinition(inst.getModuleNameAttr());
     if (modOp) { // If modOp isn't in the cache, it's probably a new module;
-      assert(isAnyModule(modOp) && "Instance must point to a module");
+      assert(isa<hw::HWModuleLike>(modOp) && "Instance must point to a module");
       OpResult instResult = v.cast<OpResult>();
       auto mod = cast<hw::HWModuleLike>(modOp);
       buff.clear();
@@ -73,7 +68,7 @@ void PassCommon::getAndSortModules(ModuleOp topMod,
 LogicalResult PassCommon::verifyInstances(mlir::ModuleOp mod) {
   WalkResult r = mod.walk([&](InstanceOp inst) {
     Operation *modOp = topLevelSyms.getDefinition(inst.getModuleNameAttr());
-    if (!isAnyModule(modOp))
+    if (!isa<hw::HWModuleLike>(modOp))
       return WalkResult::interrupt();
 
     hw::ModulePortInfo ports = cast<hw::PortList>(modOp).getPortList();

@@ -53,7 +53,7 @@ InstanceOpLowering::matchAndRewrite(InstanceOp msftInst, OpAdaptor adaptor,
   if (!referencedModule)
     return rewriter.notifyMatchFailure(msftInst,
                                        "Could not find referenced module");
-  if (!hw::isAnyModule(referencedModule))
+  if (!isa<hw::HWModuleLike>(referencedModule))
     return rewriter.notifyMatchFailure(
         msftInst, "Referenced module was not an HW module");
 

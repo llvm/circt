@@ -390,8 +390,7 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
            << getModuleName() << "'";
 
   // It must be some sort of module.
-  if (!hw::isAnyModule(module) &&
-      !isa<MSFTModuleOp, MSFTModuleExternOp>(module))
+  if (!isa<hw::HWModuleLike>(module))
     return emitError("symbol reference '")
            << getModuleName() << "' isn't a module";
   return success();
