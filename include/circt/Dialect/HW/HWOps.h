@@ -135,14 +135,6 @@ LogicalResult checkParameterInContext(
         &instanceError,
     bool disallowParamRefs = false);
 
-/// Return the symbol (if exists, else null) on the corresponding input port
-/// argument.
-InnerSymAttr getArgSym(Operation *op, unsigned i);
-
-/// Return the symbol (if any, else null) on the corresponding output port
-/// argument.
-InnerSymAttr getResultSym(Operation *op, unsigned i);
-
 // Check whether an integer value is an offset from a base.
 bool isOffset(Value base, Value index, uint64_t offset);
 

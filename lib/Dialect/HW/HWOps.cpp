@@ -226,36 +226,6 @@ StringAttr getResAttrsName(MLIRContext *context) {
       mlir::OperationName(HWModuleOp::getOperationName(), context));
 }
 
-/// Return the symbol (if any, else null) on the corresponding input port
-/// argument.
-InnerSymAttr hw::getArgSym(Operation *op, unsigned i) {
-  assert(isAnyModuleOrInstance(op) &&
-         "Can only get module ports from an instance or module");
-  InnerSymAttr sym = {};
-  auto argAttrs =
-      op->getAttrOfType<ArrayAttr>(getArgAttrsName(op->getContext()));
-  if (argAttrs && (i < argAttrs.size()))
-    if (auto s = argAttrs[i].cast<DictionaryAttr>())
-      if (auto symRef = s.get("hw.exportPort"))
-        sym = symRef.cast<InnerSymAttr>();
-  return sym;
-}
-
-/// Return the symbol (if any, else null) on the corresponding output port
-/// argument.
-InnerSymAttr hw::getResultSym(Operation *op, unsigned i) {
-  assert(isAnyModuleOrInstance(op) &&
-         "Can only get module ports from an instance or module");
-  InnerSymAttr sym = {};
-  auto resAttrs =
-      op->getAttrOfType<ArrayAttr>(getResAttrsName(op->getContext()));
-  if (resAttrs && (i < resAttrs.size()))
-    if (auto s = resAttrs[i].cast<DictionaryAttr>())
-      if (auto symRef = s.get("hw.exportPort"))
-        sym = symRef.cast<InnerSymAttr>();
-  return sym;
-}
-
 HWModulePortAccessor::HWModulePortAccessor(Location loc,
                                            const ModulePortInfo &info,
                                            Region &bodyRegion)
@@ -954,6 +924,13 @@ void HWModuleGeneratedOp::modifyPorts(
 void HWModuleGeneratedOp::appendOutputs(
     ArrayRef<std::pair<StringAttr, Value>> outputs) {}
 
+static InnerSymAttr extractSym(DictionaryAttr attrs) {
+  if (attrs)
+    if (auto symRef = attrs.get("hw.exportPort"))
+      return symRef.cast<InnerSymAttr>();
+  return {};
+}
+
 /// Return an encapsulated set of information about input and output ports of
 /// the specified module or instance.  The input ports always come before the
 /// output ports in the list.
@@ -982,7 +959,7 @@ ModulePortInfo hw::getOperationPortList(Operation *op) {
       attrs = cast<DictionaryAttr>(mi.getInputAttrs(i));
     inputs.push_back({{argNames[i].cast<StringAttr>(), type, direction},
                       i,
-                      getArgSym(op, i),
+                      extractSym(attrs),
                       attrs,
                       loc});
   }
@@ -1000,7 +977,7 @@ ModulePortInfo hw::getOperationPortList(Operation *op) {
     outputs.push_back({{resultNames[i].cast<StringAttr>(), resultTypes[i],
                         ModulePort::Direction::Output},
                        i,
-                       getResultSym(op, i),
+                       extractSym(attrs),
                        attrs,
                        loc});
   }
