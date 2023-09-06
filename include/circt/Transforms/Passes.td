@@ -53,6 +53,25 @@ def StripDebugInfoWithPred : Pass<"strip-debuginfo-with-pred", "::mlir::ModuleOp
            "intended to be used for testing."> ];
 }
 
+def StateStructGenerate : Pass<"state-struct-generate", "::mlir::ModuleOp"> {
+  let summary = "Generate struct to store signals and reg states";
+  let description = [{
+    This pass collects elements: output reg of module, local reg / mem  in
+    current module and signal with attribute of trigger. Form a struct with these
+    elements and their clone member which will be used to represent previous one
+    of the member state. The struct will be stored in the global variable and the
+    pointer of the struct will be passed to the module. The module will be
+    overrided with the new struct pointer.
+  }];
+  
+  let dependentDialects = ["mlir::LLVM::LLVMDialect"];
+  let constructor = "circt::createStateStructGeneratePass()";
+  let options = [
+    Option<"emitNoneInfo", "emit-none-info", "bool", "false",
+            "Not emit port & reg Info to generated struct">
+  ];
+}
+
 def MapArithToCombPass : InterfacePass<"map-arith-to-comb", "circt::hw::HWModuleLike"> {
   let summary = "Map arith ops to combinational logic";
   let description = [{

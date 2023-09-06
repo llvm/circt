@@ -1,4 +1,5 @@
 add_circt_library(CIRCTTransforms
+  GenStateStruct.cpp
   FlattenMemRefs.cpp
   StripDebugInfoWithPred.cpp
   MapArithToComb.cpp
@@ -9,9 +10,11 @@ add_circt_library(CIRCTTransforms
   LINK_LIBS PUBLIC
   CIRCTComb
   CIRCTHW
+  CIRCTSV
   MLIRArithDialect
   MLIRControlFlowDialect
   MLIRFuncDialect
+  MLIRLLVMDialect
   MLIRIR
   MLIRMemRefDialect
   MLIRSupport
