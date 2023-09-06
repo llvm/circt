@@ -716,3 +716,19 @@ firrtl.circuit "ObjectConnect" {
     firrtl.propassign %out, %c_out : !firrtl.class<@Test()>
   }
 }
+
+// -----
+
+// Preserve forceable decl that is dead other than its rwprobe result.
+// CHECK-LABEL: "KeepForceable"
+firrtl.circuit "KeepForceable" {
+  firrtl.module @KeepForceable(out %a: !firrtl.rwprobe<uint<1>>) attributes {convention = #firrtl<convention scalarized>} {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %b_c = firrtl.wire : !firrtl.rwprobe<uint<1>>
+    %d, %d_ref = firrtl.wire forceable : !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>
+    firrtl.strictconnect %d, %c0_ui1 : !firrtl.uint<1>
+    // CHECK-COUNT-2: ref.define
+    firrtl.ref.define %b_c, %d_ref : !firrtl.rwprobe<uint<1>>
+    firrtl.ref.define %a, %b_c : !firrtl.rwprobe<uint<1>>
+  }
+}
