@@ -589,14 +589,16 @@ StringAttr hw::getModuleResultNameAttr(Operation *module, size_t resultNo) {
 
 void hw::setModuleArgumentNames(Operation *module, ArrayRef<Attribute> names) {
   assert(isAnyModule(module) && "Must be called on a module");
-  assert(getModuleType(module).getNumInputs() == names.size() &&
+  assert(isa<HWModuleLike>(module) &&
+         cast<HWModuleLike>(module).getNumInputPorts() == names.size() &&
          "incorrect number of argument names specified");
   module->setAttr("argNames", ArrayAttr::get(module->getContext(), names));
 }
 
 void hw::setModuleResultNames(Operation *module, ArrayRef<Attribute> names) {
   assert(isAnyModule(module) && "Must be called on a module");
-  assert(getModuleType(module).getNumResults() == names.size() &&
+  assert(isa<HWModuleLike>(module) &&
+         cast<HWModuleLike>(module).getNumOutputPorts() == names.size() &&
          "incorrect number of argument names specified");
   module->setAttr("resultNames", ArrayAttr::get(module->getContext(), names));
 }
@@ -1574,7 +1576,8 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
 
   auto [argNames, resultNames] =
       instance_like_impl::getHWModuleArgAndResultNames(module);
-  FunctionType modType = getModuleType(module);
+  FunctionType modType =
+      cast<HWModuleLike>(module).getHWModuleType().getFuncType();
   build(builder, result, modType.getResults(), name,
         FlatSymbolRefAttr::get(SymbolTable::getSymbolName(module)), inputs,
         argNames, resultNames, parameters, innerSym);
@@ -1752,9 +1755,16 @@ void InstanceOp::getValues(SmallVectorImpl<Value> &values,
 LogicalResult OutputOp::verify() {
   // Check that the we (hw.output) have the same number of operands as our
   // region has results.
-  auto *opParent = (*this)->getParentOp();
-  FunctionType modType = getModuleType(opParent);
-  ArrayRef<Type> modResults = modType.getResults();
+  ModuleType modType;
+  if (auto mod = dyn_cast<HWModuleOp>((*this)->getParentOp()))
+    modType = mod.getHWModuleType();
+  else if (auto mod = dyn_cast<HWTestModuleOp>((*this)->getParentOp()))
+    modType = mod.getModuleType();
+  else {
+    emitOpError("must have a module parent");
+    return failure();
+  }
+  auto modResults = modType.getOutputTypes();
   OperandRange outputValues = getOperands();
   if (modResults.size() != outputValues.size()) {
     emitOpError("must have same number of operands as region results.");
