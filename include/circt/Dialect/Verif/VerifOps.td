@@ -62,7 +62,7 @@ def FormatVerilogStringOp : VerifOp<"format_verilog_string", [
   let arguments = (ins
     StrAttr:$formatString,
     Variadic<AnyType>:$substitutions);
-  
+
   let results = (outs HWStringType:$str);
   let assemblyFormat = [{
     $formatString `(` $substitutions `)` `:` type($substitutions) attr-dict

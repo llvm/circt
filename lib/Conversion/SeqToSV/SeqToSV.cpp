@@ -350,8 +350,7 @@ void SeqToSVPass::runOnOperation() {
                                         lowerToAlwaysFF);
   patterns.add<CompRegLower<CompRegClockEnabledOp>>(typeConverter, context,
                                                     lowerToAlwaysFF);
-
-  patterns.insert<ClockCastLowering<seq::FromClockOp>>(typeConverter, context);
+  patterns.add<ClockCastLowering<seq::FromClockOp>>(typeConverter, context);
   patterns.add<ClockCastLowering<seq::ToClockOp>>(typeConverter, context);
   patterns.add<ClockGateLowering>(typeConverter, context);
   patterns.add<ClockMuxLowering>(typeConverter, context);
