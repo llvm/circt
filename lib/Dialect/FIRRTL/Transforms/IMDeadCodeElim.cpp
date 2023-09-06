@@ -451,7 +451,8 @@ void IMDeadCodeElimPass::runOnOperation() {
       op.erase();
 
   for (auto module : modules)
-    eraseEmptyModule(module);
+    if (module != circuit.getMainModule())
+      eraseEmptyModule(module);
 
   // Clean up data structures.
   executableBlocks.clear();
