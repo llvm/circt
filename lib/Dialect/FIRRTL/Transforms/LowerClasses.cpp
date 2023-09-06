@@ -599,6 +599,31 @@ struct PathOpConversion : public OpConversionPattern<firrtl::PathOp> {
   const PathInfoTable &pathInfoTable;
 };
 
+struct WireOpConversion : public OpConversionPattern<WireOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(WireOp wireOp, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto wireValue = dyn_cast<FIRRTLPropertyValue>(wireOp.getResult());
+
+    // If the wire isn't a Property, not much we can do here.
+    if (!wireValue)
+      return failure();
+
+    // Find the assignment to the wire.
+    PropAssignOp propAssign = getPropertyAssignment(wireValue);
+
+    // Use the source of the assignment instead of the wire.
+    rewriter.replaceOp(wireOp, propAssign.getSrc());
+
+    // Erase the source of the assignment.
+    rewriter.eraseOp(propAssign);
+
+    return success();
+  }
+};
+
 struct ClassFieldOpConversion : public OpConversionPattern<ClassFieldOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -818,6 +843,7 @@ static void populateRewritePatterns(RewritePatternSet &patterns,
   patterns.add<StringConstantOpConversion>(converter, patterns.getContext());
   patterns.add<PathOpConversion>(converter, patterns.getContext(),
                                  pathInfoTable);
+  patterns.add<WireOpConversion>(converter, patterns.getContext());
   patterns.add<ClassFieldOpConversion>(converter, patterns.getContext());
   patterns.add<ClassExternFieldOpConversion>(converter, patterns.getContext());
   patterns.add<ClassOpSignatureConversion>(converter, patterns.getContext());
