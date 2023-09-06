@@ -22,11 +22,32 @@
 
 #include "ESIDialect.h"
 
+namespace circt {
+namespace esi {
+struct BundledChannel;
+} // namespace esi
+} // namespace circt
+
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/ESI/ESITypes.h.inc"
 
 namespace circt {
 namespace esi {
+
+struct BundledChannel {
+  StringAttr name;
+  ChannelDirection direction;
+  ChannelType type;
+
+  int operator==(const BundledChannel &that) const {
+    return name == that.name && direction == that.direction &&
+           type == that.type;
+  }
+};
+
+inline llvm::hash_code hash_value(const BundledChannel channel) {
+  return llvm::hash_combine(channel.name, channel.direction, channel.type);
+}
 
 // If 'type' is an esi:ChannelType, will return the inner type of said channel.
 // Else, returns 'type'.

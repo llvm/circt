@@ -198,6 +198,78 @@ def UnwrapSVInterfaceOp : ESI_Op<"unwrap.iface", [
 }
 
 //===----------------------------------------------------------------------===//
+// Channel bundles
+//===----------------------------------------------------------------------===//
+
+// Used to indicate the presence of a keyword in asm. Should be used within
+// optional parens in the declarative assembly format.
+// Upstreaming: https://github.com/llvm/llvm-project/pull/65438
+def UnitParameter : AttrOrTypeParameter<"::mlir::UnitAttr", "boolean flag"> {
+  let printer = "";
+  let parser = "::mlir::UnitAttr::get($_parser.getContext())";
+  let defaultValue = "::mlir::UnitAttr()";
+}
+
+def ChannelDirection : I32EnumAttr<"ChannelDirection",
+  "Direction of channel", [
+    I32EnumAttrCase<"to", 1>,
+    I32EnumAttrCase<"from", 2>,
+  ]>;
+
+def ChannelBundleImpl : ESI_Type<"ChannelBundle"> {
+  let summary = "a group of related channels";
+
+  let description = [{
+    A channel bundle (sometimes referred to as just "bundle") is a set of
+    channels of associated signals, along with per-channel names and directions.
+    The prototypical example for a bundle is a request-response channel pair.
+
+    The direction terminology is a bit confusing. Let us designate the module
+    which is outputting the bundle as the "sender" module and a module which has
+    a bundle as an input as the "receiver". The directions "from" and "to" are
+    from the senders perspective. So, the "to" direction means that channel is
+    transmitting messages from the sender to the receiver. Then, "from" means
+    that the sender is getting messages from the receiver (typically responses).
+
+    When requesting a bundle from a service, the client is always considered the
+    sender. So the "to" direction is for the client to send messages to the
+    service.
+  }];
+
+  let mnemonic = "bundle";
+  let parameters = (ins ArrayRefParameter<"BundledChannel">:$channels,
+                        UnitParameter:$resettable);
+  let assemblyFormat = [{
+    `<` `[` $channels `]` (`reset` $resettable^)? `>`
+  }];
+}
+
+
+def PackBundleOp : ESI_Op<"bundle.pack", []> {
+  let summary = "pack channels into a bundle";
+
+  let arguments = (ins Variadic<ChannelType>:$toChannels);
+  let results =  (outs ChannelBundleImpl:$bundle,
+                       Variadic<ChannelType>:$fromChannels);
+  let assemblyFormat = [{
+    `to` $toChannels attr-dict `:` custom<UnPackBundleType>(
+      type($toChannels), type($fromChannels), type($bundle))
+  }];
+}
+
+def UnpackBundleOp : ESI_Op<"bundle.unpack", []> {
+  let summary = "unpack channels from a bundle";
+
+  let arguments = (ins ChannelBundleImpl:$bundle,
+                       Variadic<ChannelType>:$fromChannels);
+  let results =  (outs Variadic<ChannelType>:$toChannels);
+  let assemblyFormat = [{
+    $bundle `from` $fromChannels attr-dict `:` custom<UnPackBundleType>(
+      type($toChannels), type($fromChannels), type($bundle))
+  }];
+}
+
+//===----------------------------------------------------------------------===//
 // Data windows
 //===----------------------------------------------------------------------===//
 
