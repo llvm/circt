@@ -349,8 +349,9 @@ static LogicalResult flattenOpsOfType(ModuleOp module, bool recursive) {
     DenseMap<Operation *, ArrayAttr> oldArgNames, oldResNames, oldArgLocs,
         oldResLocs;
     for (auto op : module.getOps<T>()) {
-      oldArgNames[op] = op->template getAttrOfType<ArrayAttr>("argNames");
-      oldResNames[op] = op->template getAttrOfType<ArrayAttr>("resultNames");
+      oldArgNames[op] = ArrayAttr::get(module.getContext(), op.getInputNames());
+      oldResNames[op] =
+          ArrayAttr::get(module.getContext(), op.getOutputNames());
       oldArgLocs[op] = op.getInputLocsAttr();
       oldResLocs[op] = op.getOutputLocsAttr();
     }
