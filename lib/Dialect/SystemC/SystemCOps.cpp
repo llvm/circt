@@ -727,10 +727,10 @@ LogicalResult VariableOp::verify() {
 void InteropVerilatedOp::build(OpBuilder &odsBuilder, OperationState &odsState,
                                Operation *module, StringAttr name,
                                ArrayRef<Value> inputs) {
-  auto [argNames, resultNames] =
-      hw::instance_like_impl::getHWModuleArgAndResultNames(module);
-  build(odsBuilder, odsState,
-        cast<hw::HWModuleLike>(module).getHWModuleType().getOutputTypes(), name,
+  auto mod = cast<hw::HWModuleLike>(module);
+  auto argNames = odsBuilder.getArrayAttr(mod.getInputNames());
+  auto resultNames = odsBuilder.getArrayAttr(mod.getOutputNames());
+  build(odsBuilder, odsState, mod.getHWModuleType().getOutputTypes(), name,
         FlatSymbolRefAttr::get(SymbolTable::getSymbolName(module)), argNames,
         resultNames, inputs);
 }

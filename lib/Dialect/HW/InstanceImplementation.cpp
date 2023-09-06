@@ -13,14 +13,6 @@
 using namespace circt;
 using namespace circt::hw;
 
-std::pair<ArrayAttr, ArrayAttr>
-instance_like_impl::getHWModuleArgAndResultNames(Operation *module) {
-  assert(isAnyModule(module) && "Can only reference a module");
-
-  return {module->getAttrOfType<ArrayAttr>("argNames"),
-          module->getAttrOfType<ArrayAttr>("resultNames")};
-}
-
 Operation *
 instance_like_impl::getReferencedModule(const HWSymbolCache *cache,
                                         Operation *instanceOp,
@@ -240,8 +232,11 @@ LogicalResult instance_like_impl::verifyInstanceOfHWModule(
       };
 
   // Check that input types are consistent with the referenced module.
-  auto [modArgNames, modResultNames] =
-      instance_like_impl::getHWModuleArgAndResultNames(module);
+  auto mod = cast<HWModuleLike>(module);
+  auto modArgNames =
+      ArrayAttr::get(instance->getContext(), mod.getInputNames());
+  auto modResultNames =
+      ArrayAttr::get(instance->getContext(), mod.getOutputNames());
 
   ArrayRef<Type> resolvedModInputTypesRef = getModuleType(module).getInputs();
   SmallVector<Type> resolvedModInputTypes;

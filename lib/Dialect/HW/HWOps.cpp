@@ -1454,10 +1454,10 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
   if (!parameters)
     parameters = builder.getArrayAttr({});
 
-  auto [argNames, resultNames] =
-      instance_like_impl::getHWModuleArgAndResultNames(module);
-  FunctionType modType =
-      cast<HWModuleLike>(module).getHWModuleType().getFuncType();
+  auto mod = cast<hw::HWModuleLike>(module);
+  auto argNames = builder.getArrayAttr(mod.getInputNames());
+  auto resultNames = builder.getArrayAttr(mod.getOutputNames());
+  FunctionType modType = mod.getHWModuleType().getFuncType();
   build(builder, result, modType.getResults(), name,
         FlatSymbolRefAttr::get(SymbolTable::getSymbolName(module)), inputs,
         argNames, resultNames, parameters, innerSym);
