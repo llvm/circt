@@ -1333,3 +1333,34 @@ firrtl.circuit "InnerSym" {
   // CHECK-SAME: in %x_a_y: !firrtl.uint<2> sym @y
   firrtl.module @InnerSymMore(in %x: !firrtl.bundle<a: bundle<x: vector<uint<3>, 2>, y: uint<2>>, b: uint<3>> sym [<@y,5, public>,<@x_1,4,public>]) { }
 }
+
+// Check handling of wire of probe-aggregate.
+// COMMON-LABEL: "WireProbe"
+firrtl.circuit "WireProbe" {
+  // (Read-only probes are unconditionally split as workaround for 4479)
+  // COMMON-LABEL: module private @SPassthrough
+  // COMMON-SAME: in %in_a: !firrtl.probe<uint<5>>
+  // COMMON-SAME: in %in_b: !firrtl.probe<uint<5>>
+  firrtl.module private @SPassthrough(in %in: !firrtl.probe<bundle<a: uint<5>, b: uint<5>>>,
+                                      out %y: !firrtl.probe<uint<5>>,
+                                      out %z: !firrtl.probe<uint<5>>) {
+    // COMMON-NEXT: %w_a = firrtl.wire
+    // COMMON-NEXT: %w_b = firrtl.wire
+    // COMMON-NOT: firrtl.ref.sub
+    // COMMON: }
+    %w = firrtl.wire : !firrtl.probe<bundle<a: uint<5>, b: uint<5>>>
+    %0 = firrtl.ref.sub %w[1] : !firrtl.probe<bundle<a: uint<5>, b: uint<5>>>
+    %1 = firrtl.ref.sub %w[0] : !firrtl.probe<bundle<a: uint<5>, b: uint<5>>>
+    firrtl.ref.define %y, %1 : !firrtl.probe<uint<5>>
+    firrtl.ref.define %z, %0 : !firrtl.probe<uint<5>>
+  }
+  firrtl.module @WireProbe(in %x: !firrtl.bundle<a: uint<5>, b: uint<5>>,
+                           out %y: !firrtl.probe<uint<5>>,
+                           out %z: !firrtl.probe<uint<5>>) {
+    %sp_in, %sp_y, %sp_z = firrtl.instance sp @SPassthrough(in in: !firrtl.probe<bundle<a: uint<5>, b: uint<5>>>, out y: !firrtl.probe<uint<5>>, out z: !firrtl.probe<uint<5>>)
+    %0 = firrtl.ref.send %x : !firrtl.bundle<a: uint<5>, b: uint<5>>
+    firrtl.ref.define %sp_in, %0 : !firrtl.probe<bundle<a: uint<5>, b: uint<5>>>
+    firrtl.ref.define %y, %sp_y : !firrtl.probe<uint<5>>
+    firrtl.ref.define %z, %sp_z : !firrtl.probe<uint<5>>
+  }
+}
