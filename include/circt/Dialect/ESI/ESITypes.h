@@ -45,6 +45,7 @@ struct BundledChannel {
   }
 };
 
+// NOLINTNEXTLINE(readability-identifier-naming)
 inline llvm::hash_code hash_value(const BundledChannel channel) {
   return llvm::hash_combine(channel.name, channel.direction, channel.type);
 }
