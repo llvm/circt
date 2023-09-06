@@ -72,6 +72,17 @@ PortConversionBuilder::build(hw::PortInfo port) {
   return {std::make_unique<UntouchedPortConversion>(converter, port)};
 }
 
+PortConverterImpl::PortConverterImpl(igraph::InstanceGraphNode *moduleNode)
+    : moduleNode(moduleNode), b(moduleNode->getModule()->getContext()) {
+  mod = dyn_cast<hw::HWMutableModuleLike>(*moduleNode->getModule());
+  assert(mod && "PortConverter only works on HWMutableModuleLike");
+
+  if (mod->getNumRegions() == 1 && mod->getRegion(0).hasOneBlock()) {
+    body = &mod->getRegion(0).front();
+    terminator = body->getTerminator();
+  }
+}
+
 Value PortConverterImpl::createNewInput(PortInfo origPort, const Twine &suffix,
                                         Type type, PortInfo &newPort) {
   newPort = PortInfo{
@@ -100,7 +111,10 @@ void PortConverterImpl::createNewOutput(PortInfo origPort, const Twine &suffix,
 
   if (!body)
     return;
-  newOutputValues.push_back(output);
+
+  OpBuilder::InsertionGuard g(b);
+  b.setInsertionPointToStart(body);
+  terminator->insertOperands(terminator->getNumOperands(), output);
 }
 
 LogicalResult PortConverterImpl::run() {
@@ -147,10 +161,9 @@ LogicalResult PortConverterImpl::run() {
     lowering->lowerPort();
 
   // Set up vectors to erase _all_ the ports. It's easier to rebuild everything
-  // (including the non-ESI ports) than reason about interleaving the newly
-  // lowered ESI ports with the non-ESI ports. Also, the 'modifyPorts' method
-  // ends up rebuilding the port lists anyway, so this isn't nearly as expensive
-  // as it may seem.
+  // than reason about interleaving the newly lowered ports with the non lowered
+  // ports. Also, the 'modifyPorts' method ends up rebuilding the port lists
+  // anyway, so this isn't nearly as expensive as it may seem.
   SmallVector<unsigned> inputsToErase(mod.getNumInputPorts());
   std::iota(inputsToErase.begin(), inputsToErase.end(), 0);
   SmallVector<unsigned> outputsToErase(mod.getNumOutputPorts());
@@ -159,13 +172,14 @@ LogicalResult PortConverterImpl::run() {
   mod.modifyPorts(newInputs, newOutputs, inputsToErase, outputsToErase);
 
   if (body) {
-    // We should only erase the original arguments. New ones were appended with
-    // the `createInput` method call.
+    // We should only erase the original arguments. New ones were appended
+    // with the `createInput` method call.
     body->eraseArguments([&ports](BlockArgument arg) {
       return arg.getArgNumber() < ports.sizeInputs();
     });
-    // Set the new operands, overwriting the old ones.
-    body->getTerminator()->setOperands(newOutputValues);
+
+    // And erase the first ports.sizeOutputs operands from the terminator.
+    terminator->eraseOperands(0, ports.sizeOutputs());
   }
 
   // Rewrite instances pointing to this module.
@@ -186,7 +200,6 @@ LogicalResult PortConverterImpl::run() {
   // Memory optimization -- we don't need these anymore.
   newInputs.clear();
   newOutputs.clear();
-  newOutputValues.clear();
   return success();
 }
 
