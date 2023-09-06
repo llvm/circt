@@ -729,7 +729,8 @@ void InteropVerilatedOp::build(OpBuilder &odsBuilder, OperationState &odsState,
                                ArrayRef<Value> inputs) {
   auto [argNames, resultNames] =
       hw::instance_like_impl::getHWModuleArgAndResultNames(module);
-  build(odsBuilder, odsState, hw::getModuleType(module).getResults(), name,
+  build(odsBuilder, odsState,
+        cast<hw::HWModuleLike>(module).getHWModuleType().getOutputTypes(), name,
         FlatSymbolRefAttr::get(SymbolTable::getSymbolName(module)), argNames,
         resultNames, inputs);
 }
