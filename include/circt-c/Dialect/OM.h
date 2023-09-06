@@ -185,6 +185,19 @@ MLIR_CAPI_EXPORTED bool omAttrIsAReferenceAttr(MlirAttribute attr);
 MLIR_CAPI_EXPORTED MlirAttribute omReferenceAttrGetInnerRef(MlirAttribute attr);
 
 //===----------------------------------------------------------------------===//
+// IntegerAttr API
+//===----------------------------------------------------------------------===//
+
+MLIR_CAPI_EXPORTED bool omAttrIsAIntegerAttr(MlirAttribute attr);
+
+/// Given an om::IntegerAttr, return the mlir::IntegerAttr.
+MLIR_CAPI_EXPORTED MlirAttribute omIntegerAttrGetInt(MlirAttribute attr);
+
+/// If `attr` is an mlir::IntegerAttr, create and return the om::IntegerAttr,
+/// else return `attr` as is.
+MLIR_CAPI_EXPORTED MlirAttribute omCastIntAttrIfValid(MlirAttribute attr);
+
+//===----------------------------------------------------------------------===//
 // ListAttr API
 //===----------------------------------------------------------------------===//
 

@@ -308,7 +308,7 @@ PythonValue omEvaluatorValueToPythonValue(OMEvaluatorValue result) {
 
 OMEvaluatorValue pythonValueToOMEvaluatorValue(PythonValue result) {
   if (auto *attr = std::get_if<MlirAttribute>(&result))
-    return omEvaluatorValueFromPrimitive(*attr);
+    return omEvaluatorValueFromPrimitive(omCastIntAttrIfValid(*attr));
 
   if (auto *list = std::get_if<List>(&result))
     return list->getValue();
@@ -368,6 +368,12 @@ void circt::python::populateDialectOMSubmodule(py::module &m) {
   mlir_attribute_subclass(m, "ReferenceAttr", omAttrIsAReferenceAttr)
       .def_property_readonly("inner_ref", [](MlirAttribute self) {
         return omReferenceAttrGetInnerRef(self);
+      });
+
+  // Add the IntegerAttr definition
+  mlir_attribute_subclass(m, "OMIntegerAttr", omAttrIsAIntegerAttr)
+      .def_property_readonly("integer", [](MlirAttribute self) {
+        return omIntegerAttrGetInt(self);
       });
 
   // Add the OMListAttr definition

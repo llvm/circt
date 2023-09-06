@@ -16,6 +16,7 @@
 #include "circt/Dialect/OM/OMDialect.h"
 #include "mlir/CAPI/Registration.h"
 #include "mlir/CAPI/Wrap.h"
+#include "llvm/Support/Casting.h"
 
 using namespace mlir;
 using namespace circt::om;
@@ -285,6 +286,26 @@ bool omAttrIsAReferenceAttr(MlirAttribute attr) {
 MlirAttribute omReferenceAttrGetInnerRef(MlirAttribute referenceAttr) {
   return wrap(
       (Attribute)unwrap(referenceAttr).cast<ReferenceAttr>().getInnerRef());
+}
+
+//===----------------------------------------------------------------------===//
+// IntegerAttr API.
+//===----------------------------------------------------------------------===//
+
+bool omAttrIsAIntegerAttr(MlirAttribute attr) {
+  return unwrap(attr).isa<circt::om::IntegerAttr>();
+}
+
+MlirAttribute omIntegerAttrGetInt(MlirAttribute attr) {
+  return wrap(
+      (Attribute)unwrap(attr).cast<circt::om::IntegerAttr>().getValue());
+}
+
+MlirAttribute omCastIntAttrIfValid(MlirAttribute attr) {
+  if (auto integerAttr = llvm::dyn_cast<mlir::IntegerAttr>(unwrap(attr)))
+    return wrap(
+        circt::om::IntegerAttr::get(integerAttr.getContext(), integerAttr));
+  return attr;
 }
 
 //===----------------------------------------------------------------------===//
