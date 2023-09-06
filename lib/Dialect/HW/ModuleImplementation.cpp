@@ -68,6 +68,23 @@ parseFunctionResultList(OpAsmParser &parser,
                                         parseElt);
 }
 
+/// Return the port name for the specified argument or result.
+static StringRef getModuleArgumentName(Operation *module, size_t argNo) {
+  auto argNames = module->getAttrOfType<ArrayAttr>("argNames");
+  // Tolerate malformed IR here to enable debug printing etc.
+  if (argNames && argNo < argNames.size())
+    return argNames[argNo].cast<StringAttr>().getValue();
+  return StringRef();
+}
+
+static StringRef getModuleResultName(Operation *module, size_t resultNo) {
+  auto resultNames = module->getAttrOfType<ArrayAttr>("resultNames");
+  // Tolerate malformed IR here to enable debug printing etc.
+  if (resultNames && resultNo < resultNames.size())
+    return resultNames[resultNo].cast<StringAttr>().getValue();
+  return StringRef();
+}
+
 void module_like_impl::printModuleSignature(OpAsmPrinter &p, Operation *op,
                                             ArrayRef<Type> argTypes,
                                             bool isVariadic,
@@ -153,7 +170,7 @@ void module_like_impl::printModuleSignature(OpAsmPrinter &p, Operation *op,
     for (size_t i = 0, e = resultTypes.size(); i < e; ++i) {
       if (i != 0)
         p << ", ";
-      p.printKeywordOrString(getModuleResultNameAttr(op, i).getValue());
+      p.printKeywordOrString(getModuleResultName(op, i));
       p << ": ";
       p.printType(resultTypes[i]);
       auto outputAttr = outputAttrs[i];

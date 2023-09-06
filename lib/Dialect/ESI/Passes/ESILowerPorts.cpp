@@ -421,8 +421,8 @@ bool ESIPortsPass::updateFunc(HWModuleExternOp mod) {
 static StringRef getOperandName(Value operand) {
   if (BlockArgument arg = operand.dyn_cast<BlockArgument>()) {
     auto *op = arg.getParentBlock()->getParentOp();
-    if (op && hw::isAnyModule(op))
-      return hw::getModuleArgumentName(op, arg.getArgNumber());
+    if (HWModuleLike mod = dyn_cast_or_null<HWModuleLike>(op))
+      return mod.getInputName(arg.getArgNumber());
   } else {
     auto *srcOp = operand.getDefiningOp();
     if (auto instOp = dyn_cast<InstanceOp>(srcOp))

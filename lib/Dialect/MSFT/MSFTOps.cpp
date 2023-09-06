@@ -413,10 +413,15 @@ hw::ModulePortInfo InstanceOp::getPortList() {
 }
 
 StringAttr InstanceOp::getResultName(size_t idx) {
-  if (auto *refMod = getReferencedModuleSlow())
-    return hw::getModuleResultNameAttr(refMod, idx);
+  if (auto *refMod = getReferencedModuleSlow()) {
+    if (auto mod = dyn_cast<hw::HWModuleLike>(refMod)) {
+      return mod.getOutputNameAttr(idx);
+    }
+    llvm::report_fatal_error("Instance not of Module");
+  }
   return StringAttr();
 }
+
 /// Instance name is the same as the symbol name. This may change in the
 /// future.
 mlir::StringAttr InstanceOp::getInstanceNameAttr() {

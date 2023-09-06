@@ -89,11 +89,12 @@ static void getAsmBlockArgumentNamesImpl(mlir::Region &region,
   if (region.empty())
     return;
   // Assign port names to the bbargs.
-  auto *module = region.getParentOp();
+  //  auto *module = region.getParentOp();
+  auto module = cast<HWModuleOp>(region.getParentOp());
 
   auto *block = &region.front();
   for (size_t i = 0, e = block->getNumArguments(); i != e; ++i) {
-    auto name = getModuleArgumentName(module, i);
+    auto name = module.getInputName(i);
     if (!name.empty())
       setNameFn(block->getArgument(i), name);
   }
@@ -538,23 +539,6 @@ StringAttr hw::getVerilogModuleNameAttr(Operation *module) {
     return nameAttr;
 
   return module->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName());
-}
-
-/// Return the port name for the specified argument or result.
-StringAttr hw::getModuleArgumentNameAttr(Operation *module, size_t argNo) {
-  auto argNames = module->getAttrOfType<ArrayAttr>("argNames");
-  // Tolerate malformed IR here to enable debug printing etc.
-  if (argNames && argNo < argNames.size())
-    return argNames[argNo].cast<StringAttr>();
-  return StringAttr();
-}
-
-StringAttr hw::getModuleResultNameAttr(Operation *module, size_t resultNo) {
-  auto resultNames = module->getAttrOfType<ArrayAttr>("resultNames");
-  // Tolerate malformed IR here to enable debug printing etc.
-  if (resultNames && resultNo < resultNames.size())
-    return resultNames[resultNo].cast<StringAttr>();
-  return StringAttr();
 }
 
 void hw::setModuleArgumentNames(Operation *module, ArrayRef<Attribute> names) {
