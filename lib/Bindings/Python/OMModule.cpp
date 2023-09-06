@@ -21,12 +21,11 @@ using namespace mlir::python::adaptors;
 
 namespace {
 
-struct Integer;
 struct List;
 struct Object;
 struct Tuple;
 
-using PythonValue = std::variant<MlirAttribute, Integer, Object, List, Tuple>;
+using PythonValue = std::variant<MlirAttribute, Object, List, Tuple>;
 
 /// Map an opaque OMEvaluatorValue into a python value.
 PythonValue omEvaluatorValueToPythonValue(OMEvaluatorValue result);
@@ -41,16 +40,6 @@ struct List {
   intptr_t getNumElements() { return omEvaluatorListGetNumElements(value); }
 
   PythonValue getElement(intptr_t i);
-  OMEvaluatorValue getValue() const { return value; }
-
-private:
-  // The underlying CAPI value.
-  OMEvaluatorValue value;
-};
-
-struct Integer {
-  Integer(OMEvaluatorValue value) : value(value) {}
-
   OMEvaluatorValue getValue() const { return value; }
 
 private:
@@ -242,9 +231,6 @@ PythonValue omEvaluatorValueToPythonValue(OMEvaluatorValue result) {
 }
 
 OMEvaluatorValue pythonValueToOMEvaluatorValue(PythonValue result) {
-
-  if (auto *attr = std::get_if<Integer>(&result))
-    return attr->getValue();
   if (auto *attr = std::get_if<MlirAttribute>(&result))
     return omEvaluatorValueFromPrimitive(*attr);
 

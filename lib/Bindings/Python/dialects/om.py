@@ -22,8 +22,6 @@ if TYPE_CHECKING:
 # Wrap a base mlir object with high-level object.
 def wrap_mlir_object(value):
   # For primitives, return a Python value.
-  if isinstance(value, int):
-      return OMIntegerAttr.get(value)
   if isinstance(value, Attribute):
     return attribute_to_var(value)
 
