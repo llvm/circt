@@ -87,6 +87,7 @@ struct PortInfoWithIP {
 
 } // end anonymous namespace
 
+// NOLINTBEGIN(misc-no-recursion)
 /// Return true if the type has more than zero bitwidth.
 static bool hasZeroBitWidth(FIRRTLType type) {
   return FIRRTLTypeSwitch<FIRRTLType, bool>(type)
@@ -109,6 +110,7 @@ static bool hasZeroBitWidth(FIRRTLType type) {
       .Case<RefType>([](auto ref) { return hasZeroBitWidth(ref.getType()); })
       .Default([](auto) { return false; });
 }
+// NOLINTEND(misc-no-recursion)
 
 /// Return true if the type is a 1d vector type or ground type.
 static bool isOneDimVectorType(FIRRTLType type) {
@@ -122,6 +124,7 @@ static bool isOneDimVectorType(FIRRTLType type) {
       .Default([](auto groundType) { return true; });
 }
 
+// NOLINTBEGIN(misc-no-recursion)
 /// Return true if the type has a bundle type as subtype.
 static bool containsBundleType(FIRRTLType type) {
   return FIRRTLTypeSwitch<FIRRTLType, bool>(type)
@@ -131,6 +134,7 @@ static bool containsBundleType(FIRRTLType type) {
       })
       .Default([](auto groundType) { return false; });
 }
+// NOLINTEND(misc-no-recursion)
 
 /// Return true if we can preserve the type.
 static bool isPreservableAggregateType(Type type,
@@ -355,8 +359,8 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
                 SmallVectorImpl<Value> &lowering);
   std::pair<Value, PortInfoWithIP>
   addArg(Operation *module, unsigned insertPt, unsigned insertPtOffset,
-         FIRRTLType srcType, FlatBundleFieldEntry field, PortInfoWithIP &oldArg,
-         hw::InnerSymAttr newSym);
+         FIRRTLType srcType, const FlatBundleFieldEntry &field,
+         PortInfoWithIP &oldArg, hw::InnerSymAttr newSym);
 
   // Helpers to manage state.
   bool visitDecl(FExtModuleOp op);
@@ -765,8 +769,8 @@ void TypeLoweringVisitor::lowerModule(FModuleLike op) {
 std::pair<Value, PortInfoWithIP>
 TypeLoweringVisitor::addArg(Operation *module, unsigned insertPt,
                             unsigned insertPtOffset, FIRRTLType srcType,
-                            FlatBundleFieldEntry field, PortInfoWithIP &oldArg,
-                            hw::InnerSymAttr newSym) {
+                            const FlatBundleFieldEntry &field,
+                            PortInfoWithIP &oldArg, hw::InnerSymAttr newSym) {
   Value newValue;
   FIRRTLType fieldType = mapBaseType(srcType, [&](auto) { return field.type; });
   if (auto mod = llvm::dyn_cast<FModuleOp>(module)) {
