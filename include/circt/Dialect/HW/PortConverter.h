@@ -55,14 +55,7 @@ public:
                        Value output, hw::PortInfo &newPort);
 
 protected:
-  PortConverterImpl(igraph::InstanceGraphNode *moduleNode)
-      : moduleNode(moduleNode), b(moduleNode->getModule()->getContext()) {
-    mod = dyn_cast<hw::HWMutableModuleLike>(*moduleNode->getModule());
-    assert(mod && "PortConverter only works on HWMutableModuleLike");
-
-    if (mod->getNumRegions() == 1 && mod->getRegion(0).hasOneBlock())
-      body = &mod->getRegion(0).front();
-  }
+  PortConverterImpl(igraph::InstanceGraphNode *moduleNode);
 
   std::unique_ptr<PortConversionBuilder> ssb;
 
@@ -92,11 +85,10 @@ private:
   SmallVector<std::pair<unsigned, hw::PortInfo>, 0> newInputs;
   SmallVector<std::pair<unsigned, hw::PortInfo>, 0> newOutputs;
 
-  // Maintain the set of new output values as temporary operations. We do this,
-  // as opposed to keeping the Value's in an array, to ensure that any value
-  // replacements performed by other port conversion patterns will get properly
-  // reflected in the set of new output values.
-  SmallVector<Operation *> newOutputValues;
+  // Maintain a handle to the terminator of the body, if any. This will get
+  // continuously updated during port conversion whenever a new output is added
+  // to the module.
+  Operation *terminator = nullptr;
 };
 
 /// Base class for the port conversion of a particular port. Abstracts the

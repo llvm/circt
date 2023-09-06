@@ -72,6 +72,17 @@ PortConversionBuilder::build(hw::PortInfo port) {
   return {std::make_unique<UntouchedPortConversion>(converter, port)};
 }
 
+PortConverterImpl::PortConverterImpl(igraph::InstanceGraphNode *moduleNode)
+    : moduleNode(moduleNode), b(moduleNode->getModule()->getContext()) {
+  mod = dyn_cast<hw::HWMutableModuleLike>(*moduleNode->getModule());
+  assert(mod && "PortConverter only works on HWMutableModuleLike");
+
+  if (mod->getNumRegions() == 1 && mod->getRegion(0).hasOneBlock()) {
+    body = &mod->getRegion(0).front();
+    terminator = body->getTerminator();
+  }
+}
+
 Value PortConverterImpl::createNewInput(PortInfo origPort, const Twine &suffix,
                                         Type type, PortInfo &newPort) {
   newPort = PortInfo{
@@ -103,14 +114,7 @@ void PortConverterImpl::createNewOutput(PortInfo origPort, const Twine &suffix,
 
   OpBuilder::InsertionGuard g(b);
   b.setInsertionPointToStart(body);
-
-  // Create a temporary operation to mark 'output' as a new output value.
-  // We create a temporary operation here as opposed to keeping 'output' in
-  // an array, to ensure that any replacement of 'output' by other conversion
-  // patterns get properly reflected in the set of new output values.
-  auto tmpOutputOp =
-      b.create<mlir::UnrealizedConversionCastOp>(origPort.loc, type, output);
-  newOutputValues.push_back(tmpOutputOp);
+  terminator->insertOperands(terminator->getNumOperands(), output);
 }
 
 LogicalResult PortConverterImpl::run() {
@@ -168,19 +172,14 @@ LogicalResult PortConverterImpl::run() {
   mod.modifyPorts(newInputs, newOutputs, inputsToErase, outputsToErase);
 
   if (body) {
-    // We should only erase the original arguments. New ones were appended with
-    // the `createInput` method call.
+    // We should only erase the original arguments. New ones were appended
+    // with the `createInput` method call.
     body->eraseArguments([&ports](BlockArgument arg) {
       return arg.getArgNumber() < ports.sizeInputs();
     });
-    // Set the new operands, overwriting the old ones - these are gathered from
-    // the set of temporary output ops.
-    llvm::SmallVector<Value> outputOperands;
-    llvm::transform(newOutputValues, std::back_inserter(outputOperands),
-                    [](Operation *op) { return op->getOperand(0); });
-    body->getTerminator()->setOperands(outputOperands);
-    for (auto *op : llvm::make_early_inc_range(newOutputValues))
-      op->erase();
+
+    // And erase the first ports.sizeOutputs operands from the terminator.
+    terminator->eraseOperands(0, ports.sizeOutputs());
   }
 
   // Rewrite instances pointing to this module.
@@ -201,7 +200,6 @@ LogicalResult PortConverterImpl::run() {
   // Memory optimization -- we don't need these anymore.
   newInputs.clear();
   newOutputs.clear();
-  newOutputValues.clear();
   return success();
 }
 
