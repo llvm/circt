@@ -899,59 +899,6 @@ static InnerSymAttr extractSym(DictionaryAttr attrs) {
   return {};
 }
 
-/// Return an encapsulated set of information about input and output ports of
-/// the specified module or instance.  The input ports always come before the
-/// output ports in the list.
-ModulePortInfo hw::getOperationPortList(Operation *op) {
-  assert((isa<HWModuleLike>(op) || isa<HWInstanceLike>(op)) &&
-         "Can only get module ports from an instance or module");
-
-  SmallVector<PortInfo> inputs, outputs;
-  auto argNames = op->getAttrOfType<ArrayAttr>("argNames");
-  auto argTypes = getModuleType(op).getInputs();
-  auto argLocs = op->getAttrOfType<ArrayAttr>("argLocs");
-  for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
-    auto type = argTypes[i];
-    auto direction = ModulePort::Direction::Input;
-
-    if (auto inout = type.dyn_cast<InOutType>()) {
-      type = inout.getElementType();
-      direction = ModulePort::Direction::InOut;
-    }
-
-    LocationAttr loc;
-    if (argLocs)
-      loc = argLocs[i].cast<LocationAttr>();
-    DictionaryAttr attrs;
-    if (auto mi = dyn_cast<HWModuleLike>(op))
-      attrs = cast<DictionaryAttr>(mi.getInputAttrs(i));
-    inputs.push_back({{argNames[i].cast<StringAttr>(), type, direction},
-                      i,
-                      extractSym(attrs),
-                      attrs,
-                      loc});
-  }
-
-  auto resultNames = op->getAttrOfType<ArrayAttr>("resultNames");
-  auto resultTypes = getModuleType(op).getResults();
-  auto resultLocs = op->getAttrOfType<ArrayAttr>("resultLocs");
-  for (unsigned i = 0, e = resultTypes.size(); i < e; ++i) {
-    LocationAttr loc;
-    if (resultLocs)
-      loc = resultLocs[i].cast<LocationAttr>();
-    DictionaryAttr attrs;
-    if (auto mi = dyn_cast<HWModuleLike>(op))
-      attrs = cast<DictionaryAttr>(mi.getOutputAttrs(i));
-    outputs.push_back({{resultNames[i].cast<StringAttr>(), resultTypes[i],
-                        ModulePort::Direction::Output},
-                       i,
-                       extractSym(attrs),
-                       attrs,
-                       loc});
-  }
-  return ModulePortInfo(inputs, outputs);
-}
-
 static bool hasAttribute(StringRef name, ArrayRef<NamedAttribute> attrs) {
   for (auto &argAttr : attrs)
     if (argAttr.getName() == name)
@@ -1293,18 +1240,6 @@ void HWModuleOp::getAsmBlockArgumentNames(mlir::Region &region,
 void HWModuleExternOp::getAsmBlockArgumentNames(
     mlir::Region &region, mlir::OpAsmSetValueNameFn setNameFn) {
   getAsmBlockArgumentNamesImpl(region, setNameFn);
-}
-
-ModulePortInfo HWModuleOp::getPortList() {
-  return getOperationPortList(getOperation());
-}
-
-ModulePortInfo HWModuleExternOp::getPortList() {
-  return getOperationPortList(getOperation());
-}
-
-ModulePortInfo HWModuleGeneratedOp::getPortList() {
-  return getOperationPortList(getOperation());
 }
 
 template <typename ModTy>
@@ -1663,7 +1598,47 @@ void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
                                         getResultNames(), getResults());
 }
 
-ModulePortInfo InstanceOp::getPortList() { return getOperationPortList(*this); }
+ModulePortInfo InstanceOp::getPortList() {
+  SmallVector<PortInfo> inputs, outputs;
+  auto emptyDict = DictionaryAttr::get(getContext());
+  auto argNames = (*this)->getAttrOfType<ArrayAttr>("argNames");
+  auto argTypes = getModuleType(*this).getInputs();
+  auto argLocs = (*this)->getAttrOfType<ArrayAttr>("argLocs");
+  for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
+    auto type = argTypes[i];
+    auto direction = ModulePort::Direction::Input;
+
+    if (auto inout = type.dyn_cast<InOutType>()) {
+      type = inout.getElementType();
+      direction = ModulePort::Direction::InOut;
+    }
+
+    LocationAttr loc;
+    if (argLocs)
+      loc = argLocs[i].cast<LocationAttr>();
+    inputs.push_back({{argNames[i].cast<StringAttr>(), type, direction},
+                      i,
+                      {},
+                      emptyDict,
+                      loc});
+  }
+
+  auto resultNames = (*this)->getAttrOfType<ArrayAttr>("resultNames");
+  auto resultTypes = getModuleType(*this).getResults();
+  auto resultLocs = (*this)->getAttrOfType<ArrayAttr>("resultLocs");
+  for (unsigned i = 0, e = resultTypes.size(); i < e; ++i) {
+    LocationAttr loc;
+    if (resultLocs)
+      loc = resultLocs[i].cast<LocationAttr>();
+    outputs.push_back({{resultNames[i].cast<StringAttr>(), resultTypes[i],
+                        ModulePort::Direction::Output},
+                       i,
+                       {},
+                       emptyDict,
+                       loc});
+  }
+  return ModulePortInfo(inputs, outputs);
+}
 
 size_t InstanceOp::getNumPorts() {
   return getNumInputPorts() + getNumOutputPorts();

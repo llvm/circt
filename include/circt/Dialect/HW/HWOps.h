@@ -38,9 +38,6 @@ ModulePort::Direction flip(ModulePort::Direction direction);
 
 /// TODO: Move all these functions to a hw::ModuleLike interface.
 
-/// Return all the ports of a module or an instance.
-ModulePortInfo getOperationPortList(Operation *op);
-
 /// Insert and remove ports of a module. The insertion and removal indices must
 /// be in ascending order. The indices refer to the port positions before any
 /// insertion or removal occurs. Ports inserted at the same index will appear in
