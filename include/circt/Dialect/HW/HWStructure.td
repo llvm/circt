@@ -83,26 +83,28 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
     }
 
     size_t $cppClass::getNumPorts() {
-      auto fnty = getFunctionType();
-      return fnty.getNumInputs() + fnty.getNumResults();
+      auto modty = getHWModuleType();
+      return modty.getNumPorts();
     }
 
     size_t $cppClass::getNumInputPorts() {
-      auto fnty = getFunctionType();
-      return fnty.getNumInputs();
+      auto modty = getHWModuleType();
+      return modty.getNumInputs();
     }
 
     size_t $cppClass::getNumOutputPorts() {
-      auto fnty = getFunctionType();
-      return fnty.getNumResults();
+      auto modty = getHWModuleType();
+      return modty.getNumOutputs();
     }
 
     size_t $cppClass::getPortIdForInputId(size_t idx) {
-      return idx;
+      auto modty = getHWModuleType();
+      return modty.getPortIdForInputId(idx);
     }
 
     size_t $cppClass::getPortIdForOutputId(size_t idx) {
-      return idx + getNumInputPorts();
+      auto modty = getHWModuleType();
+      return modty.getPortIdForOutputId(idx);
     }
 
   }];
