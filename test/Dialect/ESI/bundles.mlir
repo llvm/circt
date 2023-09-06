@@ -6,19 +6,19 @@
 
 // CHECK-LABEL: hw.module @Receiver(%foo: !esi.bundle<[!esi.channel<i8> to "data", !esi.channel<none> from "ack"]>) {
 // CHECK-NEXT:     [[R0:%.+]] = esi.null : !esi.channel<none>
-// CHECK-NEXT:     [[R1:%.+]] = esi.bundle.unpack %foo from [[R0]] : !esi.bundle<[!esi.channel<i8> to "data", !esi.channel<none> from "ack"]>
+// CHECK-NEXT:     [[R1:%.+]] = esi.bundle.unpack [[R0]] from %foo : !esi.bundle<[!esi.channel<i8> to "data", !esi.channel<none> from "ack"]>
 hw.module @Receiver(%foo: !bundleType) {
   %ack = esi.null : !esi.channel<none>
-  %data = esi.bundle.unpack %foo from %ack : !bundleType
+  %data = esi.bundle.unpack %ack from %foo : !bundleType
 }
 
 // CHECK-LABEL:  hw.module @Sender() -> (foo: !esi.bundle<[!esi.channel<i8> to "data", !esi.channel<none> from "ack"]>) {
 // CHECK-NEXT:     [[R0:%.+]] = esi.null : !esi.channel<i8>
-// CHECK-NEXT:     %bundle, %fromChannels = esi.bundle.pack to [[R0]] : !esi.bundle<[!esi.channel<i8> to "data", !esi.channel<none> from "ack"]>
+// CHECK-NEXT:     %bundle, %fromChannels = esi.bundle.pack [[R0]] : !esi.bundle<[!esi.channel<i8> to "data", !esi.channel<none> from "ack"]>
 // CHECK-NEXT:     hw.output %bundle : !esi.bundle<[!esi.channel<i8> to "data", !esi.channel<none> from "ack"]>
 hw.module @Sender() -> (foo: !bundleType) {
   %data = esi.null : !esi.channel<i8>
-  %bundle, %ack = esi.bundle.pack to %data : !bundleType
+  %bundle, %ack = esi.bundle.pack %data : !bundleType
   hw.output %bundle : !bundleType
 }
 

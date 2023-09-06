@@ -252,7 +252,7 @@ def PackBundleOp : ESI_Op<"bundle.pack", []> {
   let results =  (outs ChannelBundleImpl:$bundle,
                        Variadic<ChannelType>:$fromChannels);
   let assemblyFormat = [{
-    `to` $toChannels attr-dict `:` custom<UnPackBundleType>(
+    $toChannels attr-dict `:` custom<UnPackBundleType>(
       type($toChannels), type($fromChannels), type($bundle))
   }];
 }
@@ -264,7 +264,7 @@ def UnpackBundleOp : ESI_Op<"bundle.unpack", []> {
                        Variadic<ChannelType>:$fromChannels);
   let results =  (outs Variadic<ChannelType>:$toChannels);
   let assemblyFormat = [{
-    $bundle `from` $fromChannels attr-dict `:` custom<UnPackBundleType>(
+    $fromChannels `from` $bundle attr-dict `:` custom<UnPackBundleType>(
       type($toChannels), type($fromChannels), type($bundle))
   }];
 }

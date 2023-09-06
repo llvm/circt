@@ -493,68 +493,6 @@ static void printUnPackBundleType(OpAsmPrinter &p, Operation *, T3, T4,
   p.printType(bundleType);
 }
 
-// static ParseResult parseUnPackBundleType(
-//     OpAsmParser &parser, OperationState &result,
-//     SmallVectorImpl<OpAsmParser::UnresolvedOperand> &operandChannels,
-//     SmallVectorImpl<Type> &toChannelTypes,
-//     SmallVectorImpl<Type> &fromChannelTypes, ChannelBundleType &bundleType) {
-
-//   if (parser.parseOperandList(operandChannels) ||
-//       parser.parseOptionalAttrDict(result.attributes) ||
-//       parser.parseColonType(bundleType))
-//     return failure();
-
-//   for (BundledChannel ch : bundleType.getChannels())
-//     if (ch.direction == ChannelDirection::to)
-//       toChannelTypes.push_back(ch.type);
-//     else if (ch.direction == ChannelDirection::from)
-//       fromChannelTypes.push_back(ch.type);
-//     else
-//       assert(false && "Channel direction invalid");
-//   return success();
-// }
-
-// ParseResult PackBundleOp::parse(OpAsmParser &parser, OperationState &result)
-// {
-//   SmallVector<OpAsmParser::UnresolvedOperand, 4> toChannels;
-//   ChannelBundleType bundleType;
-//   SmallVector<Type, 4> toChannelTypes, fromChannelTypes;
-
-//   if (parser.parseKeyword("to") ||
-//       parseUnPackBundleType(parser, result, toChannels, toChannelTypes,
-//                             fromChannelTypes, bundleType))
-//     return failure();
-
-//   if (parser.resolveOperands(toChannels, toChannelTypes,
-//                              parser.getCurrentLocation(), result.operands))
-//     return failure();
-//   result.addTypes(bundleType);
-//   result.addTypes(fromChannelTypes);
-//   return success();
-// }
-// void PackBundleOp::print(OpAsmPrinter &p) {}
-
-// ParseResult UnpackBundleOp::parse(OpAsmParser &parser, OperationState
-// &result) {
-//   OpAsmParser::UnresolvedOperand bundle;
-//   SmallVector<OpAsmParser::UnresolvedOperand, 4> fromChannels;
-//   ChannelBundleType bundleType;
-//   SmallVector<Type, 4> toChannelTypes, fromChannelTypes;
-
-//   if (parser.parseOperand(bundle) || parser.parseKeyword("from") ||
-//       parseUnPackBundleType(parser, result, fromChannels, toChannelTypes,
-//                             fromChannelTypes, bundleType))
-//     return failure();
-
-//   result.addTypes(bundleType);
-//   if (parser.resolveOperands(fromChannels, fromChannelTypes,
-//                              parser.getCurrentLocation(), result.operands))
-//     return failure();
-//   result.addTypes(fromChannelTypes);
-//   return success();
-// }
-// void UnpackBundleOp::print(OpAsmPrinter &p) {}
-
 //===----------------------------------------------------------------------===//
 // Structural ops.
 //===----------------------------------------------------------------------===//
