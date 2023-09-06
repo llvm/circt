@@ -23,6 +23,11 @@ def StateType : ArcTypeDef<"State"> {
       return $_get(type.getContext(), type);
     }]>
   ];
+
+  let extraClassDeclaration = [{
+    unsigned getBitWidth() { return getType().getWidth(); }
+    unsigned getByteWidth() { return (getBitWidth() + 7) / 8; }
+  }];
 }
 
 def MemoryType : ArcTypeDef<"Memory"> {

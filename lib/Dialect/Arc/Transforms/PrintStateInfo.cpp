@@ -162,8 +162,7 @@ PrintStateInfoPass::collectStates(Value storage, unsigned offset,
       }
       stateInfo.name = opName;
       stateInfo.offset = opOffset.getValue().getZExtValue() + offset;
-      stateInfo.numBits =
-          result.getType().cast<StateType>().getType().getWidth();
+      stateInfo.numBits = result.getType().cast<StateType>().getBitWidth();
       continue;
     }
     if (auto memOp = dyn_cast<AllocMemoryOp>(op)) {
