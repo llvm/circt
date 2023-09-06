@@ -260,3 +260,65 @@ firrtl.circuit "WireProp" {
     firrtl.propassign %out, %s : !firrtl.string
   }
 }
+
+// CHECK-LABEL: firrtl.circuit "PublicModule"
+firrtl.circuit "PublicModule" {
+  // CHECK-NOT: om.class @PrivateModule
+  firrtl.module private @PrivateModule() {}
+
+  // CHECK-NOT: om.class @PrivateExtModule
+  firrtl.extmodule private @PrivateExtModule()
+
+  // CHECK: om.class @PublicModule
+  firrtl.module @PublicModule() {}
+
+  // CHECK: om.class.extern @PublicExtModule
+  firrtl.extmodule @PublicExtModule()
+}
+
+// CHECK-LABEL: firrtl.circuit "ModuleInstances"
+firrtl.circuit "ModuleInstances" {
+  // CHECK: firrtl.extmodule private @ExtModule(in inputWire: !firrtl.uint<1>, out outputWire: !firrtl.uint<1>)
+  firrtl.extmodule private @ExtModule(in inputWire: !firrtl.uint<1>, in inputProp: !firrtl.string, out outputWire: !firrtl.uint<1>, out outputProp: !firrtl.string)
+
+  // CHECK: firrtl.module private @Module(in %[[IN_WIRE0:.+]]: !firrtl.uint<1>, out %[[OUT_WIRE0:.+]]: !firrtl.uint<1>)
+  firrtl.module private @Module(in %inputWire: !firrtl.uint<1>, in %inputProp: !firrtl.string, out %outputWire: !firrtl.uint<1>, out %outputProp: !firrtl.string) {
+    // CHECK: firrtl.strictconnect %[[OUT_WIRE0]], %[[IN_WIRE0]]
+    firrtl.strictconnect %outputWire, %inputWire : !firrtl.uint<1>
+    // CHECK-NEXT: }
+    firrtl.propassign %outputProp, %inputProp : !firrtl.string
+  }
+
+  // CHECK: firrtl.module @ModuleInstances(in %[[IN_WIRE1:.+]]: !firrtl.uint<1>, out %[[OUT_WIRE1:.+]]: !firrtl.uint<1>)
+  firrtl.module @ModuleInstances(in %inputWire: !firrtl.uint<1>, in %inputProp: !firrtl.string, out %outputWire: !firrtl.uint<1>, out %outputProp: !firrtl.string) {
+    // CHECK: %[[EXT_IN_WIRE:.+]], %[[EXT_OUT_WIRE:.+]] = firrtl.instance ext @ExtModule
+    %ext.inputWire, %ext.inputProp, %ext.outputWire, %ext.outputProp = firrtl.instance ext @ExtModule(in inputWire: !firrtl.uint<1>, in inputProp: !firrtl.string, out outputWire: !firrtl.uint<1>, out outputProp: !firrtl.string)
+    // CHECK: %[[MOD_IN_WIRE:.+]], %[[MOD_OUT_WIRE:.+]] = firrtl.instance mod @Module
+    %mod.inputWire, %mod.inputProp, %mod.outputWire, %mod.outputProp = firrtl.instance mod @Module(in inputWire: !firrtl.uint<1>, in inputProp: !firrtl.string, out outputWire: !firrtl.uint<1>, out outputProp: !firrtl.string)
+
+    // CHECK: firrtl.strictconnect %[[EXT_IN_WIRE]], %[[IN_WIRE1]]
+    firrtl.strictconnect %ext.inputWire, %inputWire : !firrtl.uint<1>
+    // CHECK: firrtl.strictconnect %[[MOD_IN_WIRE]], %[[EXT_OUT_WIRE]]
+    firrtl.strictconnect %mod.inputWire, %ext.outputWire : !firrtl.uint<1>
+    // CHECK: firrtl.strictconnect %[[OUT_WIRE1]], %[[MOD_OUT_WIRE]]
+    firrtl.strictconnect %outputWire, %mod.outputWire : !firrtl.uint<1>
+
+    // CHECK-NEXT: }
+    firrtl.propassign %ext.inputProp, %inputProp : !firrtl.string
+    firrtl.propassign %mod.inputProp, %ext.outputProp : !firrtl.string
+    firrtl.propassign %outputProp, %mod.outputProp : !firrtl.string
+  }
+
+  // CHECK: om.class.extern @ExtModule_Class(%inputProp: !om.string)
+  // CHECK:   om.class.extern.field @outputProp : !om.string
+
+  // CHECK: om.class @Module_Class(%[[IN_PROP0:.+]]: !om.string)
+  // CHECK:   om.class.field @outputProp, %[[IN_PROP0]] : !om.string
+
+  // CHECK: om.class @ModuleInstances_Class(%[[IN_PROP1:.+]]: !om.string)
+  // CHECK:   %[[O0:.+]] = om.object @ExtModule_Class(%[[IN_PROP1]])
+  // CHECK:   %[[F0:.+]] = om.object.field %[[O0]], [@outputProp]
+  // CHECK:   %[[O1:.+]] = om.object @Module_Class(%[[F0]])
+  // CHECK:   %[[F1:.+]] = om.object.field %[[O1]], [@outputProp]
+  // CHECK:   om.class.field @outputProp, %[[F1]]
+}
