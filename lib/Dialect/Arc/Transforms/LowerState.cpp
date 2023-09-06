@@ -10,6 +10,7 @@
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Support/BackedgeBuilder.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMAttrs.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
@@ -50,6 +51,8 @@ struct Statistics {
 struct ClockLowering {
   /// The root clock this lowering is for.
   Value clock;
+  /// The new clock.
+  Backedge newClock;
   /// A `ClockTreeOp` or `PassThroughOp`.
   Operation *treeOp;
   /// Pass statistics.
@@ -61,8 +64,10 @@ struct ClockLowering {
   /// A cache of AND gates created for aggregating enable conditions.
   DenseMap<std::pair<Value, Value>, Value> andCache;
 
-  ClockLowering(Value clock, Operation *treeOp, Statistics &stats)
-      : clock(clock), treeOp(treeOp), stats(stats), builder(treeOp) {
+  ClockLowering(Value clock, Backedge &&newClock, Operation *treeOp,
+                Statistics &stats)
+      : clock(clock), newClock(std::move(newClock)), treeOp(treeOp),
+        stats(stats), builder(treeOp) {
     assert((isa<ClockTreeOp, PassThroughOp>(treeOp)));
     builder.setInsertionPointToStart(&treeOp->getRegion(0).front());
   }
@@ -90,13 +95,14 @@ struct ModuleLowering {
 
   ModuleLowering(HWModuleOp moduleOp, Statistics &stats)
       : moduleOp(moduleOp), stats(stats), context(moduleOp.getContext()),
-        builder(moduleOp) {
+        builder(moduleOp), edgeBuilder(moduleOp),
+        backedgeBuilder(edgeBuilder, moduleOp.getLoc()) {
     builder.setInsertionPointToStart(moduleOp.getBodyBlock());
   }
 
   GatedClockLowering getOrCreateClockLowering(Value clock);
   ClockLowering &getOrCreatePassThrough();
-  void replaceValueWithStateRead(Value value, Value state);
+  Value replaceValueWithStateRead(Value value, Value state);
 
   void addStorageArg();
   LogicalResult lowerPrimaryInputs();
@@ -113,6 +119,8 @@ struct ModuleLowering {
 
 private:
   OpBuilder builder;
+  OpBuilder edgeBuilder;
+  BackedgeBuilder backedgeBuilder;
   SmallVector<StateReadOp, 0> readsToSink;
 };
 } // namespace
@@ -255,9 +263,11 @@ GatedClockLowering ModuleLowering::getOrCreateClockLowering(Value clock) {
   // Create the `ClockTreeOp` that corresponds to this ungated clock.
   auto &slot = clockLowerings[clock];
   if (!slot) {
-    auto treeOp = builder.create<ClockTreeOp>(clock.getLoc(), clock);
+    auto backedge = backedgeBuilder.get(builder.getIntegerType(1));
+    auto treeOp = builder.create<ClockTreeOp>(clock.getLoc(), backedge);
     treeOp.getBody().emplaceBlock();
-    slot = std::make_unique<ClockLowering>(clock, treeOp, stats);
+    slot = std::make_unique<ClockLowering>(clock, std::move(backedge), treeOp,
+                                           stats);
   }
   return GatedClockLowering{*slot, Value{}};
 }
@@ -267,18 +277,19 @@ ClockLowering &ModuleLowering::getOrCreatePassThrough() {
   if (!slot) {
     auto treeOp = builder.create<PassThroughOp>(moduleOp.getLoc());
     treeOp.getBody().emplaceBlock();
-    slot = std::make_unique<ClockLowering>(Value{}, treeOp, stats);
+    slot = std::make_unique<ClockLowering>(Value{}, Backedge{}, treeOp, stats);
   }
   return *slot;
 }
 
 /// Replace all uses of a value with a `StateReadOp` on a state.
-void ModuleLowering::replaceValueWithStateRead(Value value, Value state) {
+Value ModuleLowering::replaceValueWithStateRead(Value value, Value state) {
   OpBuilder builder(state.getContext());
   builder.setInsertionPointAfterValue(state);
   auto readOp = builder.create<StateReadOp>(value.getLoc(), state);
   value.replaceAllUsesWith(readOp);
   readsToSink.push_back(readOp);
+  return readOp;
 }
 
 /// Add the global state as an argument to the module's body block.
@@ -302,7 +313,10 @@ LogicalResult ModuleLowering::lowerPrimaryInputs() {
              << name << " is of non-integer type " << blockArg.getType();
     auto state = builder.create<RootInputOp>(
         blockArg.getLoc(), StateType::get(intType), name, storageArg);
-    replaceValueWithStateRead(blockArg, state);
+    Value readOp = replaceValueWithStateRead(blockArg, state);
+    // Presently all clocks must be arguments, so they can be resolved here.
+    if (auto it = clockLowerings.find(blockArg); it != clockLowerings.end())
+      it->second->newClock.setValue(readOp);
   }
   return success();
 }
@@ -751,12 +765,15 @@ LogicalResult LowerStatePass::runOnModule(HWModuleOp moduleOp,
 
   // Since we don't yet support derived clocks, simply delete all clock trees
   // that are not driven by a primary input and emit a warning.
-  for (auto clockTreeOp :
-       llvm::make_early_inc_range(moduleOp.getOps<ClockTreeOp>())) {
-    if (clockTreeOp.getClock().isa<BlockArgument>())
+  for (auto &[clock, clockLowering] : lowering.clockLowerings) {
+    auto clockTreeOp = dyn_cast<ClockTreeOp>(clockLowering->treeOp);
+    if (!clockTreeOp)
       continue;
-    auto d = mlir::emitWarning(clockTreeOp.getClock().getLoc(),
-                               "unsupported derived clock ignored");
+
+    if (clock.isa<BlockArgument>())
+      continue;
+    auto d =
+        mlir::emitWarning(clock.getLoc(), "unsupported derived clock ignored");
     d.attachNote()
         << "only clocks through a top-level input are supported at the moment";
     clockTreeOp.erase();
