@@ -34,7 +34,7 @@ LogicalResult instance_like_impl::verifyReferencedModule(
            << moduleName.getValue() << "'";
 
   // It must be some sort of module.
-  if (!hw::isAnyModule(module))
+  if (!isa<HWModuleLike>(module))
     return instanceOp->emitError("symbol reference '")
            << moduleName.getValue() << "' isn't a module";
 

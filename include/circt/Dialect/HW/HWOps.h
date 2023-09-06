@@ -52,9 +52,6 @@ void modifyModulePorts(Operation *op,
 
 // Helpers for working with modules.
 
-/// Return true if this is an hw.module, external module, generated module etc.
-bool isAnyModule(Operation *module);
-
 /// Return true if isAnyModule or instance.
 bool isAnyModuleOrInstance(Operation *module);
 

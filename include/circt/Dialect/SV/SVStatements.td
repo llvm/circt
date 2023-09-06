@@ -13,20 +13,6 @@
 include "mlir/IR/EnumAttr.td"
 include "mlir/IR/OpAsmInterface.td"
 
-/// Ensure symbol is one of the hw module.* types
-def isModuleSymbol : AttrConstraint<
-  CPred<
-    "hw::isAnyModule(::mlir::SymbolTable::lookupNearestSymbolFrom("
-      "&$_op, $_self.cast<::mlir::FlatSymbolRefAttr>().getValue()))"
-  >, "is module like">;
-
-/// Ensure symbol is one of the sv macro.* types
-def isMacroSymbol : AttrConstraint<
-  CPred<
-    "sv::isAnyMacro(::mlir::SymbolTable::lookupNearestSymbolFrom("
-      "&$_op, $_self.cast<::mlir::FlatSymbolRefAttr>().getValue()))"
-  >, "is macro like">;
-
 //===----------------------------------------------------------------------===//
 // Control flow like-operations
 //===----------------------------------------------------------------------===//

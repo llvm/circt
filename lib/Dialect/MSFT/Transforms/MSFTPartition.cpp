@@ -305,7 +305,7 @@ static StringRef getOperandName(OpOperand &oper, const SymbolCache &syms,
   if (auto inst = dyn_cast<InstanceOp>(op)) {
     Operation *modOp = syms.getDefinition(inst.getModuleNameAttr());
     if (modOp) { // If modOp isn't in the cache, it's probably a new module;
-      assert(isAnyModule(modOp) && "Instance must point to a module");
+      assert(isa<hw::HWModuleLike>(modOp) && "Instance must point to a module");
       auto mod = cast<hw::HWModuleLike>(modOp);
       return mod.getInputName(oper.getOperandNumber());
     }
