@@ -327,7 +327,6 @@ ArrayAttr circt::om::Object::getFieldNames() {
 
 /// Return an array of keys in the ascending order.
 ArrayAttr circt::om::evaluator::MapValue::getKeys() {
-  auto context = type.getContext();
   SmallVector<Attribute> attrs;
   for (auto &[key, _] : elements)
     attrs.push_back(key);
@@ -345,5 +344,5 @@ ArrayAttr circt::om::evaluator::MapValue::getKeys() {
     return false;
   });
 
-  return ArrayAttr::get(context, attrs);
+  return ArrayAttr::get(type.getContext(), attrs);
 }
