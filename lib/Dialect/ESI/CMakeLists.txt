@@ -84,10 +84,12 @@ set(ESI_RUNTIME_SRCS
 
   runtime/CMakeLists.txt
   runtime/cpp/include/esi/Accelerator.h
+  runtime/cpp/include/esi/StdServices.h
   runtime/cpp/include/esi/backends/Cosim.h
   runtime/cpp/include/esi/backends/capnp.h
   runtime/cpp/include/esi/esi.h
   runtime/cpp/lib/Accelerator.cpp
+  runtime/cpp/lib/StdServices.cpp
   runtime/cpp/lib/backends/Cosim.cpp
   runtime/cpp/tools/esiquery.cpp
   runtime/python/esi/esiaccel.cpp

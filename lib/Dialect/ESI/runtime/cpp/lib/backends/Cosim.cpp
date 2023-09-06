@@ -14,6 +14,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "esi/backends/Cosim.h"
+#include "esi/StdServices.h"
 
 #include "CosimDpi.capnp.h"
 #include <capnp/ez-rpc.h>
@@ -22,29 +23,8 @@
 #include <iostream>
 
 using namespace esi;
+using namespace esi::services;
 using namespace esi::backends::cosim;
-
-namespace esi::backends::cosim {
-
-/// Implement the SysInfo API for cosimulation.
-class CosimSysInfo final : public esi::SysInfo {
-private:
-  friend class CosimAccelerator;
-  CosimSysInfo() = default;
-
-public:
-  /// Get the ESI version number to check version compatibility.
-  uint32_t esiVersion() const override;
-
-  /// Return the JSON-formatted system manifest.
-  std::string rawJsonManifest() const override;
-};
-} // namespace esi::backends::cosim
-
-// For now, just return dummy values since these are not yet supported by the
-// hardware.
-uint32_t CosimSysInfo::esiVersion() const { return -1; }
-std::string CosimSysInfo::rawJsonManifest() const { return ""; }
 
 /// Parse the connection string and instantiate the accelerator. Support the
 /// traditional 'host:port' syntax and a path to 'cosim.cfg' which is output by
@@ -80,21 +60,57 @@ CosimAccelerator::connect(std::string connectionString) {
   return std::make_unique<CosimAccelerator>(host, port);
 }
 
+struct esi::backends::cosim::CosimAccelerator::Impl {
+  capnp::EzRpcClient rpcClient;
+  kj::WaitScope &waitScope;
+  CosimDpiServer::Client cosim;
+  EsiLowLevel::Client lowLevel;
+
+  Impl(std::string hostname, uint16_t port)
+      : rpcClient(hostname, port), waitScope(rpcClient.getWaitScope()),
+        cosim(rpcClient.getMain<CosimDpiServer>()), lowLevel(nullptr) {
+    auto llReq = cosim.openLowLevelRequest();
+    auto llPromise = llReq.send();
+    lowLevel = llPromise.wait(waitScope).getLowLevel();
+  }
+};
+
 /// Construct and connect to a cosim server.
 // TODO: Implement this.
-CosimAccelerator::CosimAccelerator(std::string hostname, uint16_t port)
-    : info(nullptr) {
-  std::cout << hostname << ":" << port << std::endl;
-}
-CosimAccelerator::~CosimAccelerator() {
-  if (info)
-    delete info;
+CosimAccelerator::CosimAccelerator(std::string hostname, uint16_t port) {
+  impl = std::make_unique<Impl>(hostname, port);
 }
 
-const SysInfo &CosimAccelerator::sysInfo() {
-  if (info == nullptr)
-    info = new CosimSysInfo();
-  return *info;
+namespace {
+class CosimMMIO : public MMIO {
+public:
+  CosimMMIO(EsiLowLevel::Client &llClient, kj::WaitScope &waitScope)
+      : llClient(llClient), waitScope(waitScope) {}
+
+  uint64_t read(uint32_t addr) const override {
+    auto req = llClient.readMMIORequest();
+    req.setAddress(addr);
+    return req.send().wait(waitScope).getData();
+  }
+  void write(uint32_t addr, uint64_t data) override {
+    auto req = llClient.writeMMIORequest();
+    req.setAddress(addr);
+    req.setData(data);
+    req.send().wait(waitScope);
+  }
+
+private:
+  EsiLowLevel::Client &llClient;
+  kj::WaitScope &waitScope;
+};
+} // namespace
+
+Service *CosimAccelerator::createService(Service::Type svcType) {
+  if (svcType == typeid(MMIO))
+    return new CosimMMIO(impl->lowLevel, impl->waitScope);
+  else if (svcType == typeid(SysInfo))
+    return new MMIOSysInfo(getService<MMIO>());
+  return nullptr;
 }
 
 REGISTER_ACCELERATOR("cosim", backends::cosim::CosimAccelerator);

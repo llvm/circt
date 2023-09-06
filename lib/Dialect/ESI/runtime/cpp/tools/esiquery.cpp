@@ -14,6 +14,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "esi/Accelerator.h"
+#include "esi/StdServices.h"
 
 #include <iostream>
 #include <map>
