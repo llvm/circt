@@ -28,6 +28,7 @@
 #include "mlir/IR/Visitors.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/FormatAdapters.h"
 #include "llvm/Support/FormatVariadic.h"
 
 #include <vector>
@@ -51,7 +52,7 @@ struct NonHWField {
   SmallString<16> suffix;
 
   /// Print this structure to the specified stream.
-  void print(raw_ostream &os) const;
+  void print(raw_ostream &os, unsigned indent = 0) const;
 
 #if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
   /// Print this structure to llvm::errs().
@@ -88,7 +89,7 @@ struct MappingInfo {
   }
 
   /// Print this structure to the specified stream.
-  void print(raw_ostream &os) const;
+  void print(raw_ostream &os, unsigned indent = 0) const;
 
 #if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
   /// Print this structure to llvm::errs().
@@ -96,45 +97,43 @@ struct MappingInfo {
 #endif
 };
 
-inline llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
-                                     const NonHWField &field) {
-  field.print(os);
-  return os;
-}
-
-inline llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
-                                     const MappingInfo &pmi) {
-  pmi.print(os);
-  return os;
-}
-
 } // namespace
 
-void NonHWField::print(llvm::raw_ostream &os) const {
-  os << llvm::formatv("non-HW(type={0}, fieldID={1}, isFlip={2}, suffix={3})",
-                      type, fieldID, isFlip, suffix);
+void NonHWField::print(llvm::raw_ostream &os, unsigned indent) const {
+  os << llvm::formatv("{0}- type: {2}\n"
+                      "{1}fieldID: {3}\n"
+                      "{1}isFlip: {4}\n"
+                      "{1}suffix: \"{5}\"\n",
+                      llvm::fmt_pad("", indent, 0),
+                      llvm::fmt_pad("", indent + 2, 0), type, fieldID, isFlip,
+                      suffix);
 }
-void MappingInfo::print(llvm::raw_ostream &os) const {
+void MappingInfo::print(llvm::raw_ostream &os, unsigned indent) const {
   if (identity) {
-    os << "(identity)";
+    os << "<identity>";
     return;
   }
 
-  os << "[[hw portion: ";
+  os.indent(indent) << "hardware: ";
   if (hwType)
     os << hwType;
   else
-    os << "(none)";
-  os << ", fields: <";
-  llvm::interleaveComma(fields, os);
-  os << ">, mappedToNull: <";
-  llvm::interleaveComma(mapToNullInteriors, os);
-  os << ">, sym: ";
+    os << "<none>";
+  os << "\n";
+
+  os.indent(indent) << "non-hardware:\n";
+  for (auto &field : fields)
+    field.print(os, indent + 2);
+
+  os.indent(indent) << "mappedToNull:\n";
+  for (auto &null : mapToNullInteriors)
+    os.indent(indent + 2) << "- " << null << "\n";
+
+  os.indent(indent) << "newSym: ";
   if (newSym)
     os << newSym;
   else
-    os << "()";
-  os << " ]]";
+    os << "<empty>";
 }
 
 template <typename Range>
@@ -231,14 +230,22 @@ LogicalResult Visitor::visit(FModuleLike mod) {
   BitVector portsToErase(countWithErased);
 
   /// Go through each port mapping, gathering information about all new ports.
-  LLVM_DEBUG(llvm::dbgs() << "Ports for "
-                          << cast<mlir::SymbolOpInterface>(*mod).getName()
-                          << ":\n");
+  LLVM_DEBUG({
+    llvm::dbgs().indent(2) << "- name: "
+                           << cast<mlir::SymbolOpInterface>(*mod).getNameAttr()
+                           << "\n";
+    llvm::dbgs().indent(4) << "ports:\n";
+  });
   auto result = walkMappings(
       portMappings, /*includeErased=*/true,
       [&](auto index, auto &pmi, auto newIndex) -> LogicalResult {
-        LLVM_DEBUG(llvm::dbgs() << "\t" << ports[index].name << " : "
-                                << ports[index].type << " => " << pmi << "\n");
+        LLVM_DEBUG({
+          llvm::dbgs().indent(6) << "- name: " << ports[index].name << "\n";
+          llvm::dbgs().indent(8) << "type: " << ports[index].type << "\n";
+          llvm::dbgs().indent(8) << "mapping:\n";
+          pmi.print(llvm::dbgs(), /*indent=*/10);
+          llvm::dbgs() << "\n";
+        });
         // Index for inserting new points next to this point.
         // (Immediately after current port's index).
         auto idxOfInsertPoint = index + 1;
@@ -337,6 +344,7 @@ LogicalResult Visitor::visit(FModuleLike mod) {
       return failure();
 
     // Walk the module.
+    LLVM_DEBUG(llvm::dbgs().indent(4) << "body:\n");
     if (block
             ->walk<mlir::WalkOrder::PreOrder>([&](Operation *op) -> WalkResult {
               return dispatchVisitor(op);
@@ -481,12 +489,23 @@ LogicalResult Visitor::visitDecl(InstanceOp op) {
   BitVector portsToErase(countWithErased);
 
   /// Go through each port mapping, gathering information about all new ports.
-  LLVM_DEBUG(llvm::dbgs() << "Ports for " << op << ":\n");
+  LLVM_DEBUG({
+    llvm::dbgs().indent(6) << "- instance:\n";
+    llvm::dbgs().indent(10) << "name: " << op.getInstanceNameAttr() << "\n";
+    llvm::dbgs().indent(10) << "module: " << op.getModuleNameAttr() << "\n";
+    llvm::dbgs().indent(10) << "ports:\n";
+  });
   auto result = walkMappings(
       portMappings, /*includeErased=*/true,
       [&](auto index, auto &pmi, auto newIndex) -> LogicalResult {
-        LLVM_DEBUG(llvm::dbgs() << "\t" << op.getPortName(index) << " : "
-                                << op.getType(index) << " => " << pmi << "\n");
+        LLVM_DEBUG({
+          llvm::dbgs().indent(12)
+              << "- name: " << op.getPortName(index) << "\n";
+          llvm::dbgs().indent(14) << "type: " << op.getType(index) << "\n";
+          llvm::dbgs().indent(14) << "mapping:\n";
+          pmi.print(llvm::dbgs(), /*indent=*/16);
+          llvm::dbgs() << "\n";
+        });
         // Index for inserting new points next to this point.
         // (Immediately after current port's index).
         auto idxOfInsertPoint = index + 1;
@@ -589,6 +608,15 @@ LogicalResult Visitor::visitDecl(WireOp op) {
   if (failed(pmi))
     return failure();
   MappingInfo mappings = *pmi;
+
+  LLVM_DEBUG({
+    llvm::dbgs().indent(6) << "- wire:\n";
+    llvm::dbgs().indent(10) << "name: " << op.getNameAttr() << "\n";
+    llvm::dbgs().indent(10) << "type: " << op.getType(0) << "\n";
+    llvm::dbgs().indent(12) << "mapping:\n";
+    mappings.print(llvm::dbgs(), 14);
+    llvm::dbgs() << "\n";
+  });
 
   if (mappings.identity)
     return success();
@@ -770,11 +798,11 @@ struct LowerOpenAggsPass : public LowerOpenAggsBase<LowerOpenAggsPass> {
 
 // This is the main entrypoint for the lowering pass.
 void LowerOpenAggsPass::runOnOperation() {
-  LLVM_DEBUG(
-      llvm::dbgs() << "===- Running Lower Open Aggregates Pass "
-                      "------------------------------------------------===\n");
+  LLVM_DEBUG(llvm::dbgs() << "===- Running Lower Open Aggregates Pass "
+                             "-------------------------------------===\n");
   SmallVector<Operation *, 0> ops(getOperation().getOps<FModuleLike>());
 
+  LLVM_DEBUG(llvm::dbgs() << "Visiting modules:\n");
   auto result = failableParallelForEach(&getContext(), ops, [&](Operation *op) {
     Visitor visitor(&getContext());
     return visitor.visit(cast<FModuleLike>(op));
