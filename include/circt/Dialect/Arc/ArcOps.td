@@ -11,6 +11,7 @@
 
 include "circt/Dialect/Arc/ArcDialect.td"
 include "circt/Dialect/Arc/ArcTypes.td"
+include "circt/Dialect/Seq/SeqTypes.td"
 include "circt/Dialect/Arc/ArcInterfaces.td"
 include "mlir/IR/EnumAttr.td"
 include "mlir/IR/FunctionInterfaces.td"
@@ -53,7 +54,7 @@ def DefineOp : ArcOp<"define", [
       build($_builder, $_state, sym_name, function_type, mlir::ArrayAttr(),
             mlir::ArrayAttr());
     }]>,
-    OpBuilder<(ins "mlir::StringRef":$sym_name, 
+    OpBuilder<(ins "mlir::StringRef":$sym_name,
                    "mlir::FunctionType":$function_type), [{
       build($_builder, $_state, sym_name, function_type, mlir::ArrayAttr(),
             mlir::ArrayAttr());
@@ -141,7 +142,7 @@ def StateOp : ArcOp<"state", [
 
   let arguments = (ins
     FlatSymbolRefAttr:$arc,
-    Optional<I1>:$clock,
+    Optional<ClockType>:$clock,
     Optional<I1>:$enable,
     Optional<I1>:$reset,
     I32Attr:$latency,
@@ -265,8 +266,8 @@ def CallOp : ArcOp<"call", [
 
 def ClockGateOp : ArcOp<"clock_gate", [Pure]> {
   let summary = "Clock gate";
-  let arguments = (ins I1:$input, I1:$enable);
-  let results = (outs I1:$output);
+  let arguments = (ins ClockType:$input, I1:$enable);
+  let results = (outs ClockType:$output);
   let assemblyFormat = [{
     $input `,` $enable attr-dict
   }];
@@ -322,7 +323,7 @@ def MemoryWritePortOp : ArcOp<"memory_write_port", [
     MemoryType:$memory,
     FlatSymbolRefAttr:$arc,
     Variadic<AnyType>:$inputs,
-    Optional<I1>:$clock,
+    Optional<ClockType>:$clock,
     UnitAttr:$enable,
     UnitAttr:$mask,
     DefaultValuedAttr<I32Attr, "1">:$latency
@@ -412,7 +413,7 @@ def ClockDomainOp : ArcOp<"clock_domain", [
 ]> {
   let summary = "a clock domain";
 
-  let arguments = (ins Variadic<AnyType>:$inputs, I1:$clock);
+  let arguments = (ins Variadic<AnyType>:$inputs, ClockType:$clock);
   let results = (outs Variadic<AnyType>:$outputs);
   let regions = (region SizedRegion<1>:$body);
 
