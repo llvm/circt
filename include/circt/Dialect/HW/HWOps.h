@@ -75,9 +75,6 @@ inline StringRef getVerilogModuleName(Operation *module) {
 // array is a singleton.
 bool isValidIndexBitWidth(Value index, Value array);
 
-void setModuleArgumentNames(Operation *module, ArrayRef<Attribute> names);
-void setModuleResultNames(Operation *module, ArrayRef<Attribute> names);
-
 /// Return true if the specified operation is a combinational logic op.
 bool isCombinational(Operation *op);
 

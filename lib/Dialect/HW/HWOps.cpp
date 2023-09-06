@@ -541,22 +541,6 @@ StringAttr hw::getVerilogModuleNameAttr(Operation *module) {
   return module->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName());
 }
 
-void hw::setModuleArgumentNames(Operation *module, ArrayRef<Attribute> names) {
-  assert(isAnyModule(module) && "Must be called on a module");
-  assert(isa<HWModuleLike>(module) &&
-         cast<HWModuleLike>(module).getNumInputPorts() == names.size() &&
-         "incorrect number of argument names specified");
-  module->setAttr("argNames", ArrayAttr::get(module->getContext(), names));
-}
-
-void hw::setModuleResultNames(Operation *module, ArrayRef<Attribute> names) {
-  assert(isAnyModule(module) && "Must be called on a module");
-  assert(isa<HWModuleLike>(module) &&
-         cast<HWModuleLike>(module).getNumOutputPorts() == names.size() &&
-         "incorrect number of argument names specified");
-  module->setAttr("resultNames", ArrayAttr::get(module->getContext(), names));
-}
-
 // Flag for parsing different module types
 enum ExternModKind { PlainMod, ExternMod, GenMod };
 
