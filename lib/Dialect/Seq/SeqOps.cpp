@@ -311,18 +311,25 @@ static ParseResult parseCompReg(OpAsmParser &parser, OperationState &result) {
     return parser.emitError(loc, "too many operands");
   }
 
-  Type ty;
+  Type i1 = IntegerType::get(result.getContext(), 1);
+
+  Type ty, clkTy;
   if (parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
       parser.parseType(ty))
     return failure();
+  if (succeeded(parser.parseOptionalComma())) {
+    if (parser.parseType(clkTy))
+      return failure();
+  } else {
+    clkTy = i1;
+  }
 
   setNameFromResult(parser, result);
 
   result.addTypes({ty});
 
-  Type i1 = IntegerType::get(result.getContext(), 1);
   SmallVector<Type, 5> operandTypes;
-  operandTypes.append({ty, i1});
+  operandTypes.append({ty, clkTy});
   if constexpr (ClockEnabled)
     operandTypes.push_back(i1);
   if (operands.size() > 2 + ceOperandOffset)
@@ -356,7 +363,7 @@ static void printCompReg(::mlir::OpAsmPrinter &p, Op op) {
     elidedAttrs.push_back("name");
 
   p.printOptionalAttrDict(op->getAttrs(), elidedAttrs);
-  p << " : " << op.getInput().getType();
+  p << " : " << op.getInput().getType() << ", " << op.getClk().getType();
 }
 
 /// Suggest a name for each result value based on the saved result names
