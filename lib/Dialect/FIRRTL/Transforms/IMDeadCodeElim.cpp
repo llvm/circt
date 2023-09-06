@@ -43,7 +43,7 @@ static bool isDeletableDeclaration(Operation *op) {
   if (auto name = dyn_cast<FNamableOp>(op))
     if (!name.hasDroppableName())
       return false;
-  return !hasDontTouch(op);
+  return !hasDontTouch(op) && AnnotationSet(op).empty();
 }
 
 /// Return true if the annotation is ok to drop when the target is dead.
