@@ -11,7 +11,7 @@
 extern "C" {
 #endif
 
-MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(Ltl, ltl);
+MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(LTL, ltl);
 
 #ifdef __cplusplus
 }

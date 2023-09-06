@@ -11,4 +11,4 @@
 
 #include "mlir/CAPI/Registration.h"
 
-MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(Ltl, ltl, circt::ltl::LTLDialect)
+MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(LTL, ltl, circt::ltl::LTLDialect)
