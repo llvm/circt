@@ -151,7 +151,7 @@ def FirRegOp : SeqOp<"firreg",
 
   let arguments = (ins
     AnyType:$next,
-    I1:$clk,
+    ClockType:$clk,
     StrAttr:$name,
     OptionalAttr<InnerSymAttr>:$inner_sym,
     OptionalAttr<APIntAttr>:$preset,
@@ -463,14 +463,14 @@ def FirMemReadOp : SeqOp<"firmem.read_port", [
   let arguments = (ins
     FirMemType:$memory,
     AnySignlessInteger:$address,
-    ClockOrI1Type:$clock,
+    ClockType:$clock,
     Optional<I1>:$enable
   );
   let results = (outs AnySignlessInteger:$data);
   let assemblyFormat = [{
     $memory `[` $address `]` `,` `clock` $clock
     (`enable` $enable^)?
-    attr-dict `:` type($memory) `,` type($clock)
+    attr-dict `:` type($memory)
   }];
   let hasCanonicalizeMethod = 1;
 }
@@ -496,7 +496,7 @@ def FirMemWriteOp : SeqOp<"firmem.write_port", [
   let arguments = (ins
     FirMemType:$memory,
     AnySignlessInteger:$address,
-    ClockOrI1Type:$clock,
+    ClockType:$clock,
     Optional<I1>:$enable,
     AnySignlessInteger:$data,
     Optional<AnySignlessInteger>:$mask
@@ -504,7 +504,7 @@ def FirMemWriteOp : SeqOp<"firmem.write_port", [
   let assemblyFormat = [{
     $memory `[` $address `]` `=` $data `,` `clock` $clock
     (`enable` $enable^)? (`mask` $mask^)?
-    attr-dict `:` type($memory) `,` type($clock) (`,` type($mask)^)?
+    attr-dict `:` type($memory) (`,` type($mask)^)?
   }];
   let hasVerifier = 1;
   let hasCanonicalizeMethod = 1;
@@ -533,7 +533,7 @@ def FirMemReadWriteOp : SeqOp<"firmem.read_write_port", [
   let arguments = (ins
     FirMemType:$memory,
     AnySignlessInteger:$address,
-    ClockOrI1Type:$clock,
+    ClockType:$clock,
     Optional<I1>:$enable,
     AnySignlessInteger:$writeData,
     I1:$mode,
@@ -543,7 +543,7 @@ def FirMemReadWriteOp : SeqOp<"firmem.read_write_port", [
   let assemblyFormat = [{
     $memory `[` $address `]` `=` $writeData `if` $mode `,` `clock` $clock
     (`enable` $enable^)? (`mask` $mask^)?
-    attr-dict `:` type($memory) `,` type($clock) (`,` type($mask)^)?
+    attr-dict `:` type($memory) (`,` type($mask)^)?
   }];
   let hasVerifier = 1;
   let hasCanonicalizeMethod = 1;

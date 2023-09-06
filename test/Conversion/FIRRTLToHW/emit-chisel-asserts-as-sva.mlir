@@ -8,12 +8,13 @@ firrtl.circuit "ifElseFatalToSVA" {
     in %enable: !firrtl.uint<1>
   ) {
     firrtl.assert %clock, %cond, %enable, "assert0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {isConcurrent = true, format = "ifElseFatal"}
+    // CHECK-NEXT: [[CLK:%.+]] = seq.from_clock %clock
     // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
     // CHECK-NEXT: [[TMP1:%.+]] = comb.xor bin %enable, [[TRUE]]
     // CHECK-NEXT: [[TMP2:%.+]] = comb.or bin [[TMP1]], %cond
-    // CHECK-NEXT: sv.assert.concurrent posedge %clock, [[TMP2]] message "assert0"
+    // CHECK-NEXT: sv.assert.concurrent posedge [[CLK]], [[TMP2]] message "assert0"
     // CHECK-NEXT: sv.ifdef "USE_PROPERTY_AS_CONSTRAINT" {
-    // CHECK-NEXT:   sv.assume.concurrent posedge %clock, [[TMP2]]
+    // CHECK-NEXT:   sv.assume.concurrent posedge [[CLK]], [[TMP2]]
     // CHECK-NEXT: }
   }
 
