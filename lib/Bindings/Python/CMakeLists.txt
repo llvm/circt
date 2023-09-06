@@ -32,6 +32,8 @@ declare_mlir_python_extension(CIRCTBindingsPythonExtension
     CIRCTCAPIExportVerilog
     CIRCTCAPIFSM
     CIRCTCAPIHandshake
+    CIRCTCAPILTL
+    CIRCTCAPIVerif
     CIRCTCAPIConversion
     MLIRCAPITransforms
   PRIVATE_LINK_LIBS
@@ -139,6 +141,22 @@ declare_mlir_dialect_python_bindings(
     dialects/hwarith.py
     dialects/_hwarith_ops_ext.py
   DIALECT_NAME hwarith)
+
+declare_mlir_dialect_python_bindings(
+  ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
+  ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
+  TD_FILE dialects/LTLOps.td
+  SOURCES
+    dialects/ltl.py
+  DIALECT_NAME ltl)
+
+declare_mlir_dialect_python_bindings(
+  ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
+  ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
+  TD_FILE dialects/VerifOps.td
+  SOURCES
+    dialects/verif.py
+  DIALECT_NAME verif)
 
 ################################################################################
 # Build composite binaries

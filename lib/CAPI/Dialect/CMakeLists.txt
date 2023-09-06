@@ -8,12 +8,14 @@ set(LLVM_OPTIONAL_SOURCES
   HW.cpp
   HWArith.cpp
   LLHD.cpp
+  LTL.cpp
   Moore.cpp
   OM.cpp
   Seq.cpp
   SV.cpp
   FSM.cpp
   Handshake.cpp
+  Verif.cpp
 )
 
 add_mlir_public_c_api_library(CIRCTCAPIComb
@@ -140,4 +142,21 @@ add_mlir_public_c_api_library(CIRCTCAPIHWArith
   MLIRCAPIIR
   CIRCTHWArith
   CIRCTHWArithToHW
+)
+
+add_mlir_public_c_api_library(CIRCTCAPIVerif
+  Verif.cpp
+
+  LINK_LIBS PUBLIC
+  MLIRCAPIIR
+  CIRCTVerif
+  CIRCTVerifToSV
+)
+
+add_mlir_public_c_api_library(CIRCTCAPILTL
+  LTL.cpp
+
+  LINK_LIBS PUBLIC
+  MLIRCAPIIR
+  CIRCTLTL
 )
