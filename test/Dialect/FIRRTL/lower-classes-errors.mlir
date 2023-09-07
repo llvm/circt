@@ -8,6 +8,17 @@ firrtl.circuit "Component" {
 
 // -----
 
+firrtl.circuit "UnassignedInputPort" {
+  firrtl.class @Class(in %input: !firrtl.string) {}
+
+  firrtl.module @UnassignedInputPort() {
+    // expected-error @below {{uninitialized input port "input"}}
+    %obj = firrtl.object @Class(in input: !firrtl.string)
+  }
+}
+
+// -----
+
 firrtl.circuit "PathNoID" {
   firrtl.module @PathNoID() {
     // expected-error @below {{circt.tracker annotation missing id field}}

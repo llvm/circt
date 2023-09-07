@@ -84,11 +84,12 @@ private:
   void lowerClassExtern(ClassExternOp classExternOp, FModuleLike moduleLike);
 
   // Update Object instantiations in a FIRRTL Module or OM Class.
-  void updateInstances(Operation *op);
+  LogicalResult updateInstances(Operation *op);
 
   // Convert to OM ops and types in Classes or Modules.
-  LogicalResult dialectConversion(Operation *op,
-                                  const PathInfoTable &pathInfoTable);
+  LogicalResult dialectConversion(
+      Operation *op, const PathInfoTable &pathInfoTable,
+      const DenseMap<StringAttr, firrtl::ClassType> &classTypeTable);
 };
 
 } // namespace
@@ -225,10 +226,16 @@ void LowerClassesPass::runOnOperation() {
   }
 
   // Create new OM Class ops serially.
+  DenseMap<StringAttr, firrtl::ClassType> classTypeTable;
   SmallVector<ClassLoweringState> loweringState;
-  for (auto moduleLike : circuit.getOps<FModuleLike>())
-    if (shouldCreateClass(moduleLike))
+  for (auto moduleLike : circuit.getOps<FModuleLike>()) {
+    if (shouldCreateClass(moduleLike)) {
       loweringState.push_back(createClass(moduleLike));
+      if (auto classLike =
+              dyn_cast<firrtl::ClassLike>(moduleLike.getOperation()))
+        classTypeTable[classLike.getNameAttr()] = classLike.getInstanceType();
+    }
+  }
 
   // Move ops from FIRRTL Class to OM Class in parallel.
   mlir::parallelForEach(ctx, loweringState,
@@ -247,13 +254,15 @@ void LowerClassesPass::runOnOperation() {
       objectContainers.push_back(&op);
 
   // Update Object creation ops in Classes or Modules in parallel.
-  mlir::parallelForEach(ctx, objectContainers,
-                        [this](auto *op) { updateInstances(op); });
+  if (failed(mlir::failableParallelForEach(
+          ctx, objectContainers,
+          [this](auto *op) { return updateInstances(op); })))
+    return signalPassFailure();
 
   // Convert to OM ops and types in Classes or Modules in parallel.
   if (failed(
           mlir::failableParallelForEach(ctx, objectContainers, [&](auto *op) {
-            return dialectConversion(op, pathInfoTable);
+            return dialectConversion(op, pathInfoTable, classTypeTable);
           })))
     return signalPassFailure();
 }
@@ -432,20 +441,71 @@ void LowerClassesPass::lowerClassExtern(ClassExternOp classExternOp,
 }
 
 // Update Object instantiations in a FIRRTL Module or OM Class.
-void LowerClassesPass::updateInstances(Operation *op) {
+LogicalResult LowerClassesPass::updateInstances(Operation *op) {
   OpBuilder builder(op);
   // For each Object instance.
   for (auto firrtlObject : llvm::make_early_inc_range(
            op->getRegion(0).getOps<firrtl::ObjectOp>())) {
+
+    // build a table mapping the indices of input ports to their position in the
+    // om class's parameter list.
+    auto firrtlClassType = firrtlObject.getType();
+    auto numElements = firrtlClassType.getNumElements();
+    llvm::SmallVector<unsigned> argIndexTable;
+    argIndexTable.resize(numElements);
+
+    unsigned nextArgIndex = 0;
+    for (unsigned i = 0; i < numElements; ++i) {
+      auto direction = firrtlClassType.getElement(i).direction;
+      if (direction == Direction::In)
+        argIndexTable[i] = nextArgIndex++;
+    }
+
     // Collect its input actual parameters by finding any subfield ops that are
     // assigned to. Take the source of the assignment as the actual parameter.
-    SmallVector<Value> actualParameters;
-    for (auto *user : firrtlObject->getUsers())
-      if (auto subfield = dyn_cast<ObjectSubfieldOp>(user))
-        for (auto *subfieldUser : subfield->getUsers())
-          if (auto propassign = dyn_cast<PropAssignOp>(subfieldUser))
-            if (propassign.getDest() == subfield.getResult())
-              actualParameters.push_back(propassign.getSrc());
+
+    llvm::SmallVector<Value> args;
+    args.resize(nextArgIndex);
+
+    for (auto *user : firrtlObject->getUsers()) {
+      if (auto subfield = dyn_cast<ObjectSubfieldOp>(user)) {
+        auto index = subfield.getIndex();
+        auto direction = firrtlClassType.getElement(index).direction;
+
+        // We only lower "writes to input ports" here. Reads from output
+        // ports will be handled using the conversion framework.
+        if (direction == Direction::Out)
+          continue;
+
+        for (auto *subfieldUser : subfield->getUsers()) {
+          if (auto propassign = dyn_cast<PropAssignOp>(subfieldUser)) {
+            // the operands of the propassign may have already been converted to
+            // om. Use the generic operand getters to get the operands as
+            // untyped values.
+            auto dst = propassign.getOperand(0);
+            auto src = propassign.getOperand(1);
+            if (dst == subfield.getResult()) {
+              args[argIndexTable[subfield.getIndex()]] = src;
+              propassign->erase();
+            }
+          }
+        }
+
+        subfield->erase();
+      }
+    }
+
+    // Check that all input ports have been initialized.
+    for (unsigned i = 0; i < numElements; ++i) {
+      auto element = firrtlClassType.getElement(i);
+      if (element.direction == Direction::Out)
+        continue;
+
+      auto argIndex = argIndexTable[i];
+      if (!args[argIndex])
+        return emitError(firrtlObject.getLoc())
+               << "uninitialized input port " << element.name;
+    }
 
     // Convert the FIRRTL Class type to an OM Class type.
     auto className = firrtlObject.getType().getNameAttr();
@@ -455,7 +515,7 @@ void LowerClassesPass::updateInstances(Operation *op) {
     builder.setInsertionPoint(firrtlObject);
     auto object =
         builder.create<om::ObjectOp>(firrtlObject.getLoc(), classType,
-                                     className.getAttr(), actualParameters);
+                                     firrtlObject.getClassNameAttr(), args);
 
     // Replace uses of the FIRRTL Object with the OM Object. The later dialect
     // conversion will take care of converting the types.
@@ -464,6 +524,8 @@ void LowerClassesPass::updateInstances(Operation *op) {
     // Erase the original Object, now that we're done with it.
     firrtlObject.erase();
   }
+
+  return success();
 }
 
 // Pattern rewriters for dialect conversion.
@@ -599,6 +661,46 @@ struct PathOpConversion : public OpConversionPattern<firrtl::PathOp> {
   const PathInfoTable &pathInfoTable;
 };
 
+struct ObjectSubfieldOpConversion
+    : public OpConversionPattern<firrtl::ObjectSubfieldOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  ObjectSubfieldOpConversion(
+      const TypeConverter &typeConverter, MLIRContext *context,
+      const DenseMap<StringAttr, firrtl::ClassType> &classTypeTable)
+      : OpConversionPattern(typeConverter, context),
+        classTypeTable(classTypeTable) {}
+
+  LogicalResult
+  matchAndRewrite(firrtl::ObjectSubfieldOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto omClassType = dyn_cast<om::ClassType>(adaptor.getInput().getType());
+    if (!omClassType)
+      return failure();
+
+    // Convert the field-index used by the firrtl implementation, to a symbol,
+    // as used by the om implementation.
+    auto firrtlClassType =
+        classTypeTable.lookup(omClassType.getClassName().getAttr());
+    if (!firrtlClassType)
+      return failure();
+
+    const auto &element = firrtlClassType.getElement(op.getIndex());
+    // We cannot convert input ports to fields.
+    if (element.direction == Direction::In)
+      return failure();
+
+    auto field = FlatSymbolRefAttr::get(element.name);
+    auto path = rewriter.getArrayAttr({field});
+    auto type = typeConverter->convertType(element.type);
+    rewriter.replaceOpWithNewOp<om::ObjectFieldOp>(op, type, adaptor.getInput(),
+                                                   path);
+    return success();
+  }
+
+  const DenseMap<StringAttr, firrtl::ClassType> &classTypeTable;
+};
+
 struct ClassFieldOpConversion : public OpConversionPattern<ClassFieldOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -623,6 +725,21 @@ struct ClassExternFieldOpConversion
       return failure();
     rewriter.replaceOpWithNewOp<ClassExternFieldOp>(
         op, adaptor.getSymNameAttr(), type);
+    return success();
+  }
+};
+
+struct ObjectOpConversion : public OpConversionPattern<om::ObjectOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(om::ObjectOp objectOp, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.updateRootInPlace(objectOp, [&] {
+      auto operands = adaptor.getOperands();
+      for (unsigned i = 0, e = objectOp->getNumOperands(); i < e; ++i)
+        objectOp->setOperand(i, operands[i]);
+    });
     return success();
   }
 };
@@ -811,27 +928,31 @@ static void populateTypeConverter(TypeConverter &converter) {
       });
 }
 
-static void populateRewritePatterns(RewritePatternSet &patterns,
-                                    TypeConverter &converter,
-                                    const PathInfoTable &pathInfoTable) {
+static void populateRewritePatterns(
+    RewritePatternSet &patterns, TypeConverter &converter,
+    const PathInfoTable &pathInfoTable,
+    const DenseMap<StringAttr, firrtl::ClassType> &classTypeTable) {
   patterns.add<FIntegerConstantOpConversion>(converter, patterns.getContext());
   patterns.add<StringConstantOpConversion>(converter, patterns.getContext());
   patterns.add<PathOpConversion>(converter, patterns.getContext(),
                                  pathInfoTable);
+  patterns.add<ObjectSubfieldOpConversion>(converter, patterns.getContext(),
+                                           classTypeTable);
   patterns.add<ClassFieldOpConversion>(converter, patterns.getContext());
   patterns.add<ClassExternFieldOpConversion>(converter, patterns.getContext());
   patterns.add<ClassOpSignatureConversion>(converter, patterns.getContext());
   patterns.add<ClassExternOpSignatureConversion>(converter,
                                                  patterns.getContext());
+  patterns.add<ObjectOpConversion>(converter, patterns.getContext());
   patterns.add<ListCreateOpConversion>(converter, patterns.getContext());
   patterns.add<MapCreateOpConversion>(converter, patterns.getContext());
   patterns.add<BoolConstantOpConversion>(converter, patterns.getContext());
 }
 
 // Convert to OM ops and types in Classes or Modules.
-LogicalResult
-LowerClassesPass::dialectConversion(Operation *op,
-                                    const PathInfoTable &pathInfoTable) {
+LogicalResult LowerClassesPass::dialectConversion(
+    Operation *op, const PathInfoTable &pathInfoTable,
+    const DenseMap<StringAttr, firrtl::ClassType> &classTypeTable) {
   ConversionTarget target(getContext());
   populateConversionTarget(target);
 
@@ -839,7 +960,8 @@ LowerClassesPass::dialectConversion(Operation *op,
   populateTypeConverter(typeConverter);
 
   RewritePatternSet patterns(&getContext());
-  populateRewritePatterns(patterns, typeConverter, pathInfoTable);
+  populateRewritePatterns(patterns, typeConverter, pathInfoTable,
+                          classTypeTable);
 
   return applyPartialConversion(op, target, std::move(patterns));
 }

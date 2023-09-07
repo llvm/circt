@@ -32,11 +32,59 @@ firrtl.circuit "Component" {
   // CHECK-LABEL: om.class @ClassEntrypoint
   firrtl.class private @ClassEntrypoint(out %obj_0_out: !firrtl.class<@Class_1(out someInt: !firrtl.integer)>) {
     // CHECK: %[[OBJ1:.+]] = om.object @Class_1() : () -> !om.class.type<@Class_1>
-    %0 = firrtl.object @Class_1(out someInt: !firrtl.integer)
-    // CHECK: om.class.field @obj_0_out, %[[OBJ1]]
-    firrtl.propassign %obj_0_out, %0 : !firrtl.class<@Class_1(out someInt: !firrtl.integer)>
+    %obj1 = firrtl.object @Class_1(out someInt: !firrtl.integer)
 
-    // TODO: instantiate Class_0 and pass the reference to Class_1 in once object subfield flows are sorted.
+    // CHECK: %[[OBJ0:.+]] = om.object @Class_0(%[[OBJ1]]) : (!om.class.type<@Class_1>) -> !om.class.type<@Class_0>
+    %obj0 = firrtl.object @Class_0(in someReference_in: !firrtl.class<@Class_1(out someInt: !firrtl.integer)>, out someReference: !firrtl.class<@Class_1(out someInt: !firrtl.integer)>)
+    %obj0_someReference_in = firrtl.object.subfield %obj0[someReference_in] : !firrtl.class<@Class_0(in someReference_in: !firrtl.class<@Class_1(out someInt: !firrtl.integer)>, out someReference: !firrtl.class<@Class_1(out someInt: !firrtl.integer)>)>
+    firrtl.propassign %obj0_someReference_in, %obj1 : !firrtl.class<@Class_1(out someInt: !firrtl.integer)>
+
+    // CHECK: %[[REF:.+]] = om.object.field %[[OBJ0]], [@someReference] : (!om.class.type<@Class_0>) -> !om.class.type<@Class_1>
+    // CHECK: om.class.field @obj_0_out, %[[REF]] : !om.class.type<@Class_1>
+    %obj0_someReference = firrtl.object.subfield %obj0[someReference] : !firrtl.class<@Class_0(in someReference_in: !firrtl.class<@Class_1(out someInt: !firrtl.integer)>, out someReference: !firrtl.class<@Class_1(out someInt: !firrtl.integer)>)>
+    firrtl.propassign %obj_0_out, %obj0_someReference: !firrtl.class<@Class_1(out someInt: !firrtl.integer)>
+  }
+
+  // CHECK-LABEL: om.class @ReadOutputPort()
+  firrtl.class @ReadOutputPort(out %output : !firrtl.integer) {
+    // CHECK: %[[OBJ:.+]] = om.object @Class_1() : () -> !om.class.type<@Class_1>
+    // CHECK: %[[FIELD:.+]] = om.object.field %[[OBJ]], [@someInt] : (!om.class.type<@Class_1>) -> !om.integer
+    // CHECK: om.class.field @output, %[[FIELD]] : !om.integer
+    %obj = firrtl.object @Class_1(out someInt: !firrtl.integer)
+    %0 = firrtl.object.subfield %obj[someInt] : !firrtl.class<@Class_1(out someInt: !firrtl.integer)>
+    firrtl.propassign %output, %0 : !firrtl.integer
+  }
+
+  firrtl.class @TwoInputs(in %a: !firrtl.integer, in %b: !firrtl.integer) { }
+
+  firrtl.class @AssignInputsInOrder() {
+    // CHECK: %0 = om.constant #om.integer<123 : si12> : !om.integer
+    // CHECK: %1 = om.constant #om.integer<456 : si12> : !om.integer
+    // CHECK: %2 = om.object @TwoInputs(%0, %1) : (!om.integer, !om.integer) -> !om.class.type<@TwoInputs>
+    %x = firrtl.integer 123
+    %y = firrtl.integer 456
+    %obj = firrtl.object @TwoInputs(in a: !firrtl.integer, in b: !firrtl.integer)
+
+    %obj_a = firrtl.object.subfield %obj[a] : !firrtl.class<@TwoInputs(in a: !firrtl.integer, in b: !firrtl.integer)>
+    firrtl.propassign %obj_a, %x : !firrtl.integer
+
+    %obj_b = firrtl.object.subfield %obj[b] : !firrtl.class<@TwoInputs(in a: !firrtl.integer, in b: !firrtl.integer)>
+    firrtl.propassign %obj_b, %y : !firrtl.integer
+  }
+
+  firrtl.class @AssignInputsOutOfOrder() {
+    // CHECK: %0 = om.constant #om.integer<123 : si12> : !om.integer
+    // CHECK: %1 = om.constant #om.integer<456 : si12> : !om.integer
+    // CHECK: %2 = om.object @TwoInputs(%0, %1) : (!om.integer, !om.integer) -> !om.class.type<@TwoInputs>
+    %x = firrtl.integer 123
+    %y = firrtl.integer 456
+    %obj = firrtl.object @TwoInputs(in a: !firrtl.integer, in b: !firrtl.integer)
+
+    %obj_b = firrtl.object.subfield %obj[b] : !firrtl.class<@TwoInputs(in a: !firrtl.integer, in b: !firrtl.integer)>
+    firrtl.propassign %obj_b, %y : !firrtl.integer
+
+    %obj_a = firrtl.object.subfield %obj[a] : !firrtl.class<@TwoInputs(in a: !firrtl.integer, in b: !firrtl.integer)>
+    firrtl.propassign %obj_a, %x : !firrtl.integer
   }
 
   firrtl.module @Component(in %input: !firrtl.uint<1>, out %output: !firrtl.uint<1>, out %omir_out: !firrtl.class<@ClassEntrypoint(out obj_0_out: !firrtl.class<@Class_1(out someInt: !firrtl.integer)>)>) attributes {convention = #firrtl<convention scalarized>} {
