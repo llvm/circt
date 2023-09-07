@@ -191,6 +191,7 @@ firrtl.circuit "PathModule" {
   // CHECK: hw.hierpath private [[WIRE_PATH:@.+]] [@PathModule::[[WIRE_SYM:@.+]]]
   // CHECK: hw.hierpath private [[VECTOR_PATH:@.+]] [@PathModule::[[VECTOR_SYM:@.+]]]
   // CHECK: hw.hierpath private [[INST_PATH:@.+]] [@PathModule::@child]
+  // CHECK: hw.hierpath private [[MODULE_PATH:@.+]] [@Child]
   // CHECK: hw.hierpath private [[NONLOCAL_PATH:@.+]] [@PathModule::@child, @Child::[[NONLOCAL_SYM:@.+]]]
 
   // CHECK: firrtl.module @PathModule(in %in: !firrtl.uint<1> sym [[PORT_SYM]]) {
@@ -204,7 +205,7 @@ firrtl.circuit "PathModule" {
   }
   hw.hierpath @NonLocal [@PathModule::@child, @Child]
   // CHECK: firrtl.module @Child() {
-  firrtl.module @Child() {
+  firrtl.module @Child() attributes {annotations = [{class = "circt.tracker", id = distinct[5]<>}]} {
     // CHECK: %non_local = firrtl.wire sym [[NONLOCAL_SYM]] : !firrtl.uint<8>
     %non_local = firrtl.wire {annotations = [{circt.nonlocal = @NonLocal, class = "circt.tracker", id = distinct[3]<>}]} : !firrtl.uint<8>
   }
@@ -236,6 +237,9 @@ firrtl.circuit "PathModule" {
     // CHECK: om.path member_instance [[INST_PATH]]
     %instance_member_instance = firrtl.path member_instance distinct[4]<>
     %instance_member_reference = firrtl.path member_reference distinct[4]<>
+
+    // CHECK: om.path reference [[MODULE_PATH]]
+    %module_path = firrtl.path reference distinct[5]<>
   }
   firrtl.module @ListCreate(in %propIn: !firrtl.integer, out %propOut: !firrtl.list<integer>) attributes {convention = #firrtl<convention scalarized>} {
     %0 = firrtl.integer 123
