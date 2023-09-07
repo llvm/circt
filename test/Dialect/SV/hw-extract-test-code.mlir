@@ -526,3 +526,29 @@ module {
   // CHECK-NEXT:  sv.bind <@Top::@__ETC_Assert_assert_1>
   // CHECK-NEXT:  sv.bind <@AssertWrapper::@__ETC_Assert_assert>
 }
+
+
+// -----
+
+// Check that the port order is [%clock, %in] and not the reverse.  This is
+// trying to guarantee taht the generated port order is stable with additions or
+// deletions of internal operations.  The critical thing in this test is the
+// existence of the `%0 = seq.from_clock %clock` operation.  This operation was
+// added and it caused the port order to become [%in, %clock].  This shouldn't
+// happen.
+//
+// See: https://github.com/llvm/circt/issues/6072
+
+module {
+  // CHECK-LABEL: hw.module @PortOrder_6072
+  hw.module @PortOrder_6072(%clock: !seq.clock, %in: i1) {
+    hw.instance "dut" @Foo(clock: %clock: !seq.clock, in: %in: i1) -> ()
+    hw.output
+  }
+  // CHECK: hw.module @Foo_cover(%clock: !seq.clock, %in: i1)
+  hw.module private @Foo(%clock: !seq.clock, %in: i1) {
+    %0 = seq.from_clock %clock
+    sv.cover.concurrent posedge %0, %in label "cover__hello"
+    hw.output
+  }
+}
