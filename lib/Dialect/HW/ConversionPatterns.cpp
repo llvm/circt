@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Support/ConversionPatterns.h"
+#include "circt/Dialect/HW/ConversionPatterns.h"
 #include "circt/Dialect/HW/HWTypes.h"
 
 using namespace circt;
