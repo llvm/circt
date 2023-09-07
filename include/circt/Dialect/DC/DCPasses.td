@@ -31,18 +31,18 @@ def DCDematerializeForksSinks : InterfacePass<"dc-dematerialize-forks-sinks", "m
   let dependentDialects = ["dc::DCDialect"];
 }
 
-def DCTestSCFToDC : Pass<"dc-test-scf-to-dc", "mlir::ModuleOp"> {
-  let summary = "Test SCF to DC conversion patterns.";
+def DCTestCFToDC : Pass<"dc-test-cf-to-dc", "mlir::ModuleOp"> {
+  let summary = "Test CF to DC conversion patterns.";
   let description = [{
-    This pass tests the SCF to DC conversion patterns by defining a simple
+    This pass tests the CF to DC conversion patterns by defining a simple
     func.func-based conversion pass. It should not be used for anything but
     testing the conversion patterns, given its lack of handling anything but
     SCF ops.
     The pass will convert a func.func into a hw.module solely to emit to something
     that is a graph region.
   }];
-  let constructor = "circt::dc::createDCTestSCFToDCPass()";
-  let dependentDialects = ["dc::DCDialect", "mlir::scf::SCFDialect", "hw::HWDialect"];
+  let constructor = "circt::dc::createDCTestCFToDCPass()";
+  let dependentDialects = ["dc::DCDialect", "mlir::cf::CFDialect", "hw::HWDialect"];
 }
 
 #endif // CIRCT_DIALECT_DC_PASSES_TD
