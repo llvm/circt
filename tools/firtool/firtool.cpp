@@ -26,6 +26,7 @@
 #include "circt/Dialect/LTL/LTLDialect.h"
 #include "circt/Dialect/OM/OMDialect.h"
 #include "circt/Dialect/OM/OMOps.h"
+#include "circt/Dialect/OM/OMPasses.h"
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
@@ -405,8 +406,10 @@ static LogicalResult processBuffer(
 
     // Run final IR mutations to clean it up after ExportVerilog and before
     // emitting the final MLIR.
-    if (!mlirOutFile.empty())
+    if (!mlirOutFile.empty()) {
       pm.addPass(firrtl::createFinalizeIRPass());
+      pm.addPass(om::createFreezePathsPass());
+    }
   }
 
   if (failed(pm.run(module.get())))
