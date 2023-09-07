@@ -1,0 +1,317 @@
+[
+    {
+        "id": "OMID:0",
+        "fields": [
+            {
+                "name": "OmirOut",
+                "value": "OMReference:1"
+            },
+            {
+                "name": "inst1OmirOut",
+                "value": "OMReference:2"
+            },
+            {
+                "name": "inst2OmirOut",
+                "value": "OMReference:3"
+            },
+            {
+                "name": "propOut",
+                "value": 456
+            }
+        ]
+    },
+    {
+        "id": "OMID:1",
+        "fields": [
+            {
+                "name": "node0_out",
+                "value": "OMReference:4"
+            }
+        ]
+    },
+    {
+        "id": "OMID:2",
+        "fields": [
+            {
+                "name": "node0_out",
+                "value": "OMReference:5"
+            },
+            {
+                "name": "node1_out",
+                "value": "OMReference:6"
+            },
+            {
+                "name": "node2_out",
+                "value": "OMReference:7"
+            },
+            {
+                "name": "node3_out",
+                "value": "OMReference:8"
+            }
+        ]
+    },
+    {
+        "id": "OMID:3",
+        "fields": [
+            {
+                "name": "node0_out",
+                "value": "OMReference:9"
+            },
+            {
+                "name": "node1_out",
+                "value": "OMReference:10"
+            },
+            {
+                "name": "node2_out",
+                "value": "OMReference:11"
+            },
+            {
+                "name": "node3_out",
+                "value": "OMReference:12"
+            }
+        ]
+    },
+    {
+        "id": "OMID:4",
+        "fields": [
+            {
+                "name": "field1",
+                "value": 456
+            },
+            {
+                "name": "field2",
+                "value": "OMReference:13"
+            },
+            {
+                "name": "field3",
+                "value": "OMReference:14"
+            }
+        ]
+    },
+    {
+        "id": "OMID:5",
+        "fields": [
+            {
+                "name": "field1",
+                "value": 0
+            },
+            {
+                "name": "field2",
+                "value": "Component.inst1.foo"
+            },
+            {
+                "name": "omType",
+                "value": [
+                    "MyThing"
+                ]
+            }
+        ]
+    },
+    {
+        "id": "OMID:6",
+        "fields": [
+            {
+                "name": "field1",
+                "value": "OMReference:15"
+            },
+            {
+                "name": "field2",
+                "value": 123
+            },
+            {
+                "name": "omType",
+                "value": [
+                    "MyThing"
+                ]
+            }
+        ]
+    },
+    {
+        "id": "OMID:7",
+        "fields": [
+            {
+                "name": "field1",
+                "value": "blah"
+            }
+        ]
+    },
+    {
+        "id": "OMID:8",
+        "fields": [
+            {
+                "name": "field1",
+                "value": "blah"
+            }
+        ]
+    },
+    {
+        "id": "OMID:9",
+        "fields": [
+            {
+                "name": "field1",
+                "value": 0
+            },
+            {
+                "name": "field2",
+                "value": "Component.inst1.foo"
+            },
+            {
+                "name": "omType",
+                "value": [
+                    "MyThing"
+                ]
+            }
+        ]
+    },
+    {
+        "id": "OMID:10",
+        "fields": [
+            {
+                "name": "field1",
+                "value": "OMReference:16"
+            },
+            {
+                "name": "field2",
+                "value": 123
+            },
+            {
+                "name": "omType",
+                "value": [
+                    "MyThing"
+                ]
+            }
+        ]
+    },
+    {
+        "id": "OMID:11",
+        "fields": [
+            {
+                "name": "field1",
+                "value": "blah"
+            }
+        ]
+    },
+    {
+        "id": "OMID:12",
+        "fields": [
+            {
+                "name": "field1",
+                "value": "blah"
+            }
+        ]
+    },
+    {
+        "id": "OMID:13",
+        "fields": [
+            {
+                "name": "field1",
+                "value": "OMReference:17"
+            },
+            {
+                "name": "field2",
+                "value": 123
+            },
+            {
+                "name": "omType",
+                "value": [
+                    "MyThing"
+                ]
+            }
+        ]
+    },
+    {
+        "id": "OMID:14",
+        "fields": [
+            {
+                "name": "field1",
+                "value": "OMReference:18"
+            },
+            {
+                "name": "field2",
+                "value": 123
+            },
+            {
+                "name": "omType",
+                "value": [
+                    "MyThing"
+                ]
+            }
+        ]
+    },
+    {
+        "id": "OMID:15",
+        "fields": [
+            {
+                "name": "field1",
+                "value": 0
+            },
+            {
+                "name": "field2",
+                "value": "Component.inst1.foo"
+            },
+            {
+                "name": "omType",
+                "value": [
+                    "MyThing"
+                ]
+            }
+        ]
+    },
+    {
+        "id": "OMID:16",
+        "fields": [
+            {
+                "name": "field1",
+                "value": 0
+            },
+            {
+                "name": "field2",
+                "value": "Component.inst1.foo"
+            },
+            {
+                "name": "omType",
+                "value": [
+                    "MyThing"
+                ]
+            }
+        ]
+    },
+    {
+        "id": "OMID:17",
+        "fields": [
+            {
+                "name": "field1",
+                "value": 0
+            },
+            {
+                "name": "field2",
+                "value": "Component.inst1.foo"
+            },
+            {
+                "name": "omType",
+                "value": [
+                    "MyThing"
+                ]
+            }
+        ]
+    },
+    {
+        "id": "OMID:18",
+        "fields": [
+            {
+                "name": "field1",
+                "value": 0
+            },
+            {
+                "name": "field2",
+                "value": "Component.inst1.foo"
+            },
+            {
+                "name": "omType",
+                "value": [
+                    "MyThing"
+                ]
+            }
+        ]
+    }
+]
