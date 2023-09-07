@@ -25,13 +25,13 @@
 ;
 ; CHECK-LABEL: module DUT
 ;
-; CHECK: FILE "gct{{/|\\\\}}Foo.sv"
-; CHECK: FILE ".{{/|\\\\}}Bar.sv"
-; CHECK: FILE ".{{/|\\\\}}Baz.sv"
-; CHECK: FILE "testbench{{/|\\\\}}Qux.sv"
-; CHECK: FILE "gct{{/|\\\\}}Quz.sv"
-; CHECK: FILE ".{{/|\\\\}}Corge.sv"
-; CHECK: FILE ".{{/|\\\\}}Grault.sv"
+; CHECK: FILE "gct{{[/\]}}Foo.sv"
+; CHECK: FILE ".{{[/\]}}Bar.sv"
+; CHECK: FILE ".{{[/\]}}Baz.sv"
+; CHECK: FILE "testbench{{[/\]}}Qux.sv"
+; CHECK: FILE "gct{{[/\]}}Quz.sv"
+; CHECK: FILE ".{{[/\]}}Corge.sv"
+; CHECK: FILE ".{{[/\]}}Grault.sv"
 
 FIRRTL version 3.0.0
 circuit TestHarness: %[[
