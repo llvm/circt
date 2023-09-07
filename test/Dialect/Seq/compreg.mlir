@@ -52,7 +52,7 @@ hw.module @top(%clk: i1, %rst: i1, %i: i32, %s: !hw.struct<foo: i32>) {
   // SV:   sv.passign [[REG4]], %s : !hw.struct<foo: i32>
   // SV: }
   // ALWAYS: [[FOO_NEXT:%.+]] = hw.struct_create ([[R0_VAL]]) : !hw.struct<foo: i32>
-  // ALWAYS: %foo = sv.reg {sv.attributes = [#sv.attribute<"dont_merge">]} : !hw.inout<struct<foo: i32>> 
+  // ALWAYS: %foo = sv.reg {sv.attributes = [#sv.attribute<"dont_merge">]} : !hw.inout<struct<foo: i32>>
   // ALWAYS: sv.always posedge %clk {
   // ALWAYS:   sv.if %rst {
   // ALWAYS:     sv.passign %foo, [[FOO_NEXT]] : !hw.struct<foo: i32>
@@ -119,4 +119,10 @@ hw.module @reg_of_clock_type(%clk: i1, %rst: i1, %i: !seq.clock) -> (out: !seq.c
 
   // SV: hw.output [[REG1_VAL]] : i1
   hw.output %r1 : !seq.clock
+}
+
+hw.module @with_clock(%clock: !seq.clock, %rst: i1, %i: i32) {
+  %rv = hw.constant 0 : i32
+  // CHECK: seq.compreg %i, %clock, %rst, %c0_i32 : i32, !seq.clock
+  seq.compreg %i, %clock, %rst, %rv : i32, !seq.clock
 }

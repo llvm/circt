@@ -467,3 +467,13 @@ firrtl.circuit "Issue5898" {
     firrtl.ref.define %p, %w_ref : !firrtl.rwprobe<uint<5>>
   }
 }
+
+// -----
+// Test that annotations keep declarations alive.
+// CHECK-LABEL: "AnnoAlive"
+firrtl.circuit "AnnoAlive" {
+  firrtl.module @AnnoAlive() {
+     // CHECK: firrtl.wire
+     firrtl.wire {annotations = [{class = "circt.test"}]} : !firrtl.uint
+  }
+}

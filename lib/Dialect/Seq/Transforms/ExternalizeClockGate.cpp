@@ -70,6 +70,7 @@ void ExternalizeClockGatePass::runOnOperation() {
   // Replace all clock gates with an instance of the external module.
   SmallVector<Value, 4> instPorts;
   for (auto &[module, clockGatesToReplace] : gatesInModule) {
+    DenseMap<Value, Value> fromClocks;
     Value cstFalse;
     for (auto ckgOp : clockGatesToReplace) {
       ImplicitLocOpBuilder builder(ckgOp.getLoc(), ckgOp);
@@ -93,7 +94,18 @@ void ExternalizeClockGatePass::runOnOperation() {
         testEnable = {};
       }
 
-      instPorts.push_back(ckgOp.getInput());
+      Value input = ckgOp.getInput();
+      if (hw::type_isa<seq::ClockType>(input.getType())) {
+        auto it = fromClocks.try_emplace(input, Value{});
+        if (it.second) {
+          ImplicitLocOpBuilder builder(input.getLoc(), &getContext());
+          builder.setInsertionPointAfterValue(input);
+          it.first->second = builder.create<seq::FromClockOp>(input);
+        }
+        instPorts.push_back(it.first->second);
+      } else {
+        instPorts.push_back(input);
+      }
       instPorts.push_back(enable);
       if (testEnable)
         instPorts.push_back(testEnable);
@@ -102,7 +114,10 @@ void ExternalizeClockGatePass::runOnOperation() {
           externModuleOp, builder.getStringAttr(instName), instPorts,
           builder.getArrayAttr({}), ckgOp.getInnerSymAttr());
 
-      ckgOp.replaceAllUsesWith(instOp);
+      Value output = instOp.getResult(0);
+      if (hw::type_isa<seq::ClockType>(input.getType()))
+        output = builder.create<seq::ToClockOp>(output);
+      ckgOp.replaceAllUsesWith(output);
       ckgOp.erase();
 
       instPorts.clear();

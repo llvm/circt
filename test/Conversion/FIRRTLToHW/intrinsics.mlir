@@ -4,10 +4,11 @@ firrtl.circuit "Intrinsics" {
   // CHECK-LABEL: hw.module @Intrinsics
   firrtl.module @Intrinsics(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>) {
     // CHECK-NEXT: %c0_i32 = hw.constant 0 : i32
-    // CHECK-NEXT: %false = hw.constant false 
+    // CHECK-NEXT: %false = hw.constant false
+    // CHECK-NEXT: [[CLK:%.+]] = seq.from_clock %clk
     // CHECK-NEXT: %x_i1 = sv.constantX : i1
     // CHECK-NEXT: [[T0:%.+]] = comb.icmp bin ceq %a, %x_i1
-    // CHECK-NEXT: [[T1:%.+]] = comb.icmp bin ceq %clk, %x_i1
+    // CHECK-NEXT: [[T1:%.+]] = comb.icmp bin ceq [[CLK]], %x_i1
     // CHECK-NEXT: %x0 = hw.wire [[T0]]
     // CHECK-NEXT: %x1 = hw.wire [[T1]]
     %0 = firrtl.int.isX %a : !firrtl.uint<1>
@@ -65,6 +66,7 @@ firrtl.circuit "Intrinsics" {
 
   // CHECK-LABEL: hw.module @LTLAndVerif
   firrtl.module @LTLAndVerif(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>) {
+    // CHECK-NEXT: [[CLK:%.+]] = seq.from_clock %clk
     // CHECK-NEXT: [[D0:%.+]] = ltl.delay %a, 42 : i1
     // CHECK-NEXT: [[D1:%.+]] = ltl.delay %b, 42, 1337 : i1
     %d0 = firrtl.int.ltl.delay %a, 42 : (!firrtl.uint<1>) -> !firrtl.uint<1>
@@ -87,7 +89,7 @@ firrtl.circuit "Intrinsics" {
     // CHECK-NEXT: [[E0:%.+]] = ltl.eventually [[I0]] : !ltl.property
     %e0 = firrtl.int.ltl.eventually %i0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
 
-    // CHECK-NEXT: [[K0:%.+]] = ltl.clock [[I0]], posedge %clk : !ltl.property
+    // CHECK-NEXT: [[K0:%.+]] = ltl.clock [[I0]], posedge [[CLK]] : !ltl.property
     %k0 = firrtl.int.ltl.clock %i0, %clk : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
 
     // CHECK-NEXT: [[D2:%.+]] = ltl.disable [[K0]] if %b : !ltl.property
@@ -161,8 +163,9 @@ firrtl.circuit "Intrinsics" {
     out %hbr1: !firrtl.uint<1>,
     out %hbr2: !firrtl.uint<1>
   ) {
-    // CHECK-NEXT: [[TMP1:%.+]] = verif.has_been_reset %clock, sync %reset1
-    // CHECK-NEXT: [[TMP2:%.+]] = verif.has_been_reset %clock, async %reset2
+    // CHECK-NEXT: [[CLK:%.+]] = seq.from_clock %clock
+    // CHECK-NEXT: [[TMP1:%.+]] = verif.has_been_reset [[CLK]], sync %reset1
+    // CHECK-NEXT: [[TMP2:%.+]] = verif.has_been_reset [[CLK]], async %reset2
     // CHECK-NEXT: hw.output [[TMP1]], [[TMP2]]
     %0 = firrtl.int.has_been_reset %clock, %reset1 : !firrtl.uint<1>
     %1 = firrtl.int.has_been_reset %clock, %reset2 : !firrtl.asyncreset

@@ -1030,3 +1030,21 @@ firrtl.circuit "RefSubOutputPort" {
     firrtl.ref.define %outElem, %0 : !firrtl.rwprobe<uint<1>>
   }
 }
+
+// -----
+// Test that wires of refs are resolved through and deleted.
+
+// CHECK-LABEL: "WireProbe"
+firrtl.circuit "WireProbe" {
+  // CHECK: hierpath {{.*}} [@WireProbe::@[[SYM:[^ ]+]]]
+  // CHECK: @WireProbe(in %x: !firrtl.uint<5>) {
+  // CHECK-NEXT: firrtl.node sym @[[SYM]]
+  // CHECK-NEXT: }
+  firrtl.module @WireProbe(in %x: !firrtl.uint<5>, out %p: !firrtl.probe<uint<5>>) {
+    // CHECK-NOT: firrtl.wire
+    %0 = firrtl.ref.send %x : !firrtl.uint<5>
+    %w = firrtl.wire : !firrtl.probe<uint<5>>
+    firrtl.ref.define %w, %0 : !firrtl.probe<uint<5>>
+    firrtl.ref.define %p, %w : !firrtl.probe<uint<5>>
+  }
+}

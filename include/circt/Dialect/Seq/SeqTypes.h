@@ -23,4 +23,13 @@
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/Seq/SeqTypes.h.inc"
 
+namespace circt {
+namespace seq {
+
+/// Returns true if the type is `i1` or `seq.clock`
+bool isClockOrI1Type(Type ty);
+
+} // namespace seq
+} // namespace circt
+
 #endif // CIRCT_DIALECT_SEQ_SEQTYPES_H

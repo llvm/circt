@@ -13,7 +13,7 @@ arc.define @SimpleB(%arg0: i4, %arg1: i4) -> i4 {
 }
 
 // CHECK-LABEL: hw.module @Simple
-hw.module @Simple(%x: i4, %y: i4) {
+hw.module @Simple(%x: i4, %y: i4, %clock: !seq.clock) {
   // CHECK-NEXT: arc.state @SimpleA(%x, %y)
   // CHECK-NEXT: arc.state @SimpleA(%y, %x)
   %0 = arc.state @SimpleA(%x, %y) lat 0 : (i4, i4) -> i4

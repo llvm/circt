@@ -13,7 +13,7 @@ arc.define @Bar(%arg0: i42) -> i42 {
 }
 
 // CHECK-LABEL: hw.module @Module
-hw.module @Module(%clock: i1, %enable: i1, %a: i42, %b: i9) {
+hw.module @Module(%clock: !seq.clock, %enable: i1, %a: i42, %b: i9) {
   // CHECK: arc.state @Foo(%a, %b) clock %clock lat 1 : (i42, i9) -> (i42, i9)
   arc.state @Foo(%a, %b) clock %clock lat 1 : (i42, i9) -> (i42, i9)
 
@@ -90,7 +90,7 @@ arc.define @dummyCallee2() {
 }
 
 // CHECK-LABEL: hw.module @clockDomainTest
-hw.module @clockDomainTest(%clk: i1, %in0: i32, %in1: i16) {
+hw.module @clockDomainTest(%clk: !seq.clock, %in0: i32, %in1: i16) {
   // CHECK-NEXT: %{{.+}} = arc.clock_domain (%in0, %in1) clock %clk {someattr} : (i32, i16) -> i32 {
   %0 = arc.clock_domain (%in0, %in1) clock %clk {someattr} : (i32, i16) -> i32 {
   // CHECK-NEXT: ^bb0(%arg0: i32, %arg1: i16):
@@ -108,7 +108,7 @@ hw.module @clockDomainTest(%clk: i1, %in0: i32, %in1: i16) {
 }
 
 // CHECK-LABEL: hw.module @memoryOps
-hw.module @memoryOps(%clk: i1, %en: i1, %mask: i32) {
+hw.module @memoryOps(%clk: !seq.clock, %en: i1, %mask: i32, %arg: i1) {
   %c0_i32 = hw.constant 0 : i32
   // CHECK: [[MEM:%.+]] = arc.memory <4 x i32, i32>
   %mem = arc.memory <4 x i32, i32>
@@ -125,7 +125,7 @@ hw.module @memoryOps(%clk: i1, %en: i1, %mask: i32) {
   arc.memory_write_port %mem, @identity(%c0_i32, %c0_i32) clock %clk lat 4 : <4 x i32, i32>, i32, i32
 
   // CHECK-NEXT: arc.clock_domain
-  arc.clock_domain (%clk) clock %clk : (i1) -> () {
+  arc.clock_domain (%arg) clock %clk : (i1) -> () {
   ^bb0(%arg0: i1):
     %c1_i32 = hw.constant 1 : i32
     // CHECK: [[MEM2:%.+]] = arc.memory <4 x i32, i32>

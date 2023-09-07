@@ -198,6 +198,7 @@ FirMemLowering::createMemoryModule(FirMemConfig &mem,
   SmallVector<hw::PortInfo> ports;
 
   // Common types used for memory ports.
+  Type clkType = ClockType::get(context);
   Type bitType = IntegerType::get(context, 1);
   Type dataType = IntegerType::get(context, std::max((size_t)1, mem.dataWidth));
   Type maskType = IntegerType::get(context, mem.maskBits);
@@ -226,7 +227,7 @@ FirMemLowering::createMemoryModule(FirMemConfig &mem,
   auto addCommonPorts = [&](StringRef prefix, size_t idx) {
     addInput(prefix, idx, "_addr", addrType);
     addInput(prefix, idx, "_en", bitType);
-    addInput(prefix, idx, "_clk", bitType);
+    addInput(prefix, idx, "_clk", clkType);
   };
 
   // Add the read ports.

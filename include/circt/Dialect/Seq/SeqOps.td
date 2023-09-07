@@ -33,9 +33,14 @@ def CompRegOp : SeqOp<"compreg",
   let summary = "Register a value, storing it for one cycle";
   let description = "See the Seq dialect rationale for a longer description";
 
-  let arguments = (ins AnyType:$input, I1:$clk, StrAttr:$name,
-    Optional<I1>:$reset, Optional<AnyType>:$resetValue,
-    OptionalAttr<InnerSymAttr>:$inner_sym);
+  let arguments = (ins
+    AnyType:$input,
+    ClockOrI1Type:$clk,
+    StrAttr:$name,
+    Optional<I1>:$reset,
+    Optional<AnyType>:$resetValue,
+    OptionalAttr<InnerSymAttr>:$inner_sym
+  );
   let results = (outs AnyType:$data);
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
@@ -69,9 +74,15 @@ def CompRegClockEnabledOp : SeqOp<"compreg.ce",
   let summary = "When enabled, register a value";
   let description = "See the Seq dialect rationale for a longer description";
 
-  let arguments = (ins AnyType:$input, I1:$clk, I1:$clockEnable, StrAttr:$name,
-    Optional<I1>:$reset, Optional<AnyType>:$resetValue,
-    OptionalAttr<InnerSymAttr>:$inner_sym);
+  let arguments = (ins
+    AnyType:$input,
+    ClockOrI1Type:$clk,
+    I1:$clockEnable,
+    StrAttr:$name,
+    Optional<I1>:$reset,
+    Optional<AnyType>:$resetValue,
+    OptionalAttr<InnerSymAttr>:$inner_sym
+  );
   let results = (outs AnyType:$data);
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
@@ -138,11 +149,15 @@ def FirRegOp : SeqOp<"firreg",
     ```
   }];
 
-  let arguments = (ins AnyType:$next, I1:$clk, StrAttr:$name,
-                       OptionalAttr<InnerSymAttr>:$inner_sym,
-                       OptionalAttr<APIntAttr>:$preset,
-                       Optional<I1>:$reset, Optional<AnyType>:$resetValue,
-                       UnitAttr:$isAsync);
+  let arguments = (ins
+    AnyType:$next,
+    ClockType:$clk,
+    StrAttr:$name,
+    OptionalAttr<InnerSymAttr>:$inner_sym,
+    OptionalAttr<APIntAttr>:$preset,
+    Optional<I1>:$reset, Optional<AnyType>:$resetValue,
+    UnitAttr:$isAsync
+  );
   let results = (outs AnyType:$data);
 
   let skipDefaultBuilders = 1;
@@ -284,7 +299,8 @@ def WritePortOp : SeqOp<"write", [
 
 def ClockGateOp : SeqOp<"clock_gate", [
   Pure,
-  DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>
+  DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>,
+  AllTypesMatch<["input", "output"]>
 ]> {
   let summary = "Safely gates a clock with an enable signal";
   let description = [{
@@ -310,17 +326,18 @@ def ClockGateOp : SeqOp<"clock_gate", [
   }];
 
   let arguments = (ins
-    I1:$input,
+    ClockOrI1Type:$input,
     I1:$enable,
     Optional<I1>:$test_enable,
     OptionalAttr<InnerSymAttr>:$inner_sym
   );
 
-  let results = (outs I1:$output);
+  let results = (outs ClockOrI1Type:$output);
   let hasFolder = 1;
   let hasCanonicalizeMethod = 1;
   let assemblyFormat = [{
-    $input `,` $enable (`,` $test_enable^)? (`sym` $inner_sym^)? attr-dict
+    $input `,` $enable (`,` $test_enable^)? (`sym` $inner_sym^)?
+      attr-dict `:` qualified(type($output))
   }];
 }
 
@@ -340,8 +357,8 @@ def ClockMuxOp : SeqOp<"clock_mux", [Pure]> {
     ```
   }];
 
-  let arguments = (ins I1:$cond, I1:$trueClock, I1:$falseClock);
-  let results = (outs I1:$result);
+  let arguments = (ins I1:$cond, ClockType:$trueClock, ClockType:$falseClock);
+  let results = (outs ClockType:$result);
 
   let hasFolder = 1;
 
@@ -364,8 +381,8 @@ def ClockDivider : SeqOp<"clock_div", [Pure]> {
     ```
   }];
 
-  let arguments = (ins I1:$clockIn, I8Attr:$pow2);
-  let results = (outs I1:$clockOut);
+  let arguments = (ins ClockType:$clockIn, I8Attr:$pow2);
+  let results = (outs ClockType:$clockOut);
 
   let assemblyFormat = [{
     $clockIn `by` $pow2 attr-dict
@@ -446,7 +463,7 @@ def FirMemReadOp : SeqOp<"firmem.read_port", [
   let arguments = (ins
     FirMemType:$memory,
     AnySignlessInteger:$address,
-    I1:$clock,
+    ClockType:$clock,
     Optional<I1>:$enable
   );
   let results = (outs AnySignlessInteger:$data);
@@ -479,7 +496,7 @@ def FirMemWriteOp : SeqOp<"firmem.write_port", [
   let arguments = (ins
     FirMemType:$memory,
     AnySignlessInteger:$address,
-    I1:$clock,
+    ClockType:$clock,
     Optional<I1>:$enable,
     AnySignlessInteger:$data,
     Optional<AnySignlessInteger>:$mask
@@ -516,7 +533,7 @@ def FirMemReadWriteOp : SeqOp<"firmem.read_write_port", [
   let arguments = (ins
     FirMemType:$memory,
     AnySignlessInteger:$address,
-    I1:$clock,
+    ClockType:$clock,
     Optional<I1>:$enable,
     AnySignlessInteger:$writeData,
     I1:$mode,

@@ -3,17 +3,17 @@
 
 // VERILOG-LABEL: module divide_by_0
 // CHECK-LABEL: @divide_by_0
-hw.module @divide_by_0(%clock: i1) -> (by_2: i1) {
+hw.module @divide_by_0(%clock: !seq.clock) -> (by_2: !seq.clock) {
 
   // CHECK: hw.output %clock : i1
   %by_2 = seq.clock_div %clock by 0
-  hw.output %by_2 : i1
+  hw.output %by_2 : !seq.clock
 }
 
 
 // VERILOG-LABEL: module divide_by_2
 // CHECK-LABEL: @divide_by_2
-hw.module @divide_by_2(%clock: i1) -> (by_2: i1) {
+hw.module @divide_by_2(%clock: !seq.clock) -> (by_2: !seq.clock) {
 
   // CHECK: [[REGISTER:%.+]] = sv.reg
   // CHECK: sv.always posedge %clock {
@@ -33,12 +33,12 @@ hw.module @divide_by_2(%clock: i1) -> (by_2: i1) {
   // VERILOG: assign by_2 = clock_out_0;
 
   %by_2 = seq.clock_div %clock by 1
-  hw.output %by_2 : i1
+  hw.output %by_2 : !seq.clock
 }
 
 // VERILOG-LABEL: module divide_by_8
 // CHECK-LABEL: @divide_by_8
-hw.module @divide_by_8(%clock: i1) -> (by_8: i1) {
+hw.module @divide_by_8(%clock: !seq.clock) -> (by_8: !seq.clock) {
   // CHECK: [[REGISTER_0:%.+]] = sv.reg : !hw.inout<i1>
   // CHECK: sv.always posedge %clock {
   // CHECK:   [[REGISTER_0_READ:%.+]] = sv.read_inout [[REGISTER_0]] : !hw.inout<i1>
@@ -84,6 +84,6 @@ hw.module @divide_by_8(%clock: i1) -> (by_8: i1) {
   // VERILOG: assign by_8 = clock_out_2;
 
   %by_8 = seq.clock_div %clock by 3
-  hw.output %by_8 : i1
+  hw.output %by_8 : !seq.clock
 }
 

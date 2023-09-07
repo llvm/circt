@@ -11,7 +11,7 @@
 sv.macro.decl @INIT_RANDOM_PROLOG_
 sv.macro.def @INIT_RANDOM_PROLOG_ ""
 
-hw.module @top(%clk: i1, %rst: i1) {
+hw.module @top(%clk: !seq.clock, %rst: i1) {
   %cst0 = hw.constant 0 : i32
   %cst1 = hw.constant 1 : i32
 
@@ -25,7 +25,8 @@ hw.module @top(%clk: i1, %rst: i1) {
   %nextB = comb.add %rB, %rA : i32
   %nextC = comb.add %rC, %rB : i32
 
-  sv.alwaysff(posedge %clk) {
+  %clock = seq.from_clock %clk
+  sv.alwaysff(posedge %clock) {
     %fd = hw.constant 0x80000002 : i32
     sv.fwrite %fd, "%d %d %d\n"(%rA, %rB, %rC) : i32, i32, i32
   }

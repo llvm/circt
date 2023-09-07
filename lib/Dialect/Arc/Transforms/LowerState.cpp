@@ -307,12 +307,18 @@ LogicalResult ModuleLowering::lowerPrimaryInputs() {
     if (blockArg == storageArg)
       continue;
     auto name = moduleOp.getArgName(blockArg.getArgNumber());
-    auto intType = blockArg.getType().dyn_cast<IntegerType>();
-    if (!intType)
+    auto argTy = blockArg.getType();
+    IntegerType innerTy;
+    if (argTy.isa<seq::ClockType>()) {
+      innerTy = IntegerType::get(context, 1);
+    } else if (auto intType = argTy.dyn_cast<IntegerType>()) {
+      innerTy = intType;
+    } else {
       return mlir::emitError(blockArg.getLoc(), "input ")
              << name << " is of non-integer type " << blockArg.getType();
+    }
     auto state = builder.create<RootInputOp>(
-        blockArg.getLoc(), StateType::get(intType), name, storageArg);
+        blockArg.getLoc(), StateType::get(innerTy), name, storageArg);
     Value readOp = replaceValueWithStateRead(blockArg, state);
     // Presently all clocks must be arguments, so they can be resolved here.
     if (auto it = clockLowerings.find(blockArg); it != clockLowerings.end())
@@ -799,6 +805,7 @@ LogicalResult LowerStatePass::runOnModule(HWModuleOp moduleOp,
       builder.create<ModelOp>(moduleOp.getLoc(), moduleOp.getModuleNameAttr());
   modelOp.getBody().takeBody(moduleOp.getBody());
   moduleOp->erase();
+
   return success();
 }
 

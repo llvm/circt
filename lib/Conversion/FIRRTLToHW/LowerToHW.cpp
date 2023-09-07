@@ -1437,6 +1437,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   Value getOrCreateZConstant(Type type);
   Value getPossiblyInoutLoweredValue(Value value);
   Value getLoweredValue(Value value);
+  Value getLoweredNonClockValue(Value value);
   Value getLoweredAndExtendedValue(Value value, Type destType);
   Value getLoweredAndExtOrTruncValue(Value value, Type destType);
   LogicalResult setLowering(Value orig, Value result);
@@ -1535,9 +1536,9 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
 
   // Unary Ops.
   LogicalResult lowerNoopCast(Operation *op);
-  LogicalResult visitExpr(AsSIntPrimOp op) { return lowerNoopCast(op); }
-  LogicalResult visitExpr(AsUIntPrimOp op) { return lowerNoopCast(op); }
-  LogicalResult visitExpr(AsClockPrimOp op) { return lowerNoopCast(op); }
+  LogicalResult visitExpr(AsSIntPrimOp op);
+  LogicalResult visitExpr(AsUIntPrimOp op);
+  LogicalResult visitExpr(AsClockPrimOp op);
   LogicalResult visitExpr(AsAsyncResetPrimOp op) { return lowerNoopCast(op); }
 
   LogicalResult visitExpr(HWStructCastOp op);
@@ -1708,6 +1709,10 @@ private:
   /// The key should have a FIRRTL type, the result will have an HW dialect
   /// type.
   DenseMap<Value, Value> valueMapping;
+
+  /// Mapping from clock values to corresponding non-clock values converted
+  /// via a deduped `seq.from_clock` op.
+  DenseMap<Value, Value> fromClockMapping;
 
   /// This keeps track of constants that we have created so we can reuse them.
   /// This is populated by the getOrCreateIntConstant method.
@@ -2000,6 +2005,25 @@ Value FIRRTLLowering::getLoweredValue(Value value) {
   return result;
 }
 
+/// Return the lowered value, converting `seq.clock` to `i1.
+Value FIRRTLLowering::getLoweredNonClockValue(Value value) {
+  auto result = getLoweredValue(value);
+  if (!result)
+    return result;
+
+  if (hw::type_isa<seq::ClockType>(result.getType())) {
+    auto it = fromClockMapping.try_emplace(result, Value{});
+    if (it.second) {
+      ImplicitLocOpBuilder builder(result.getLoc(), result.getContext());
+      builder.setInsertionPointAfterValue(result);
+      it.first->second = builder.create<seq::FromClockOp>(result);
+    }
+    return it.first->second;
+  }
+
+  return result;
+}
+
 /// Return the lowered aggregate value whose type is converted into
 /// `destType`. We have to care about the extension/truncation/signedness of
 /// each element.
@@ -2130,6 +2154,7 @@ Value FIRRTLLowering::getLoweredAndExtendedValue(Value value, Type destType) {
     // always produces a zero value in the destination width.
     return getOrCreateIntConstant(destWidth, 0);
   }
+
   if (destWidth ==
       cast<FIRRTLBaseType>(value.getType()).getBitWidthOrSentinel()) {
     // Lookup the lowered type of dest.
@@ -2150,6 +2175,14 @@ Value FIRRTLLowering::getLoweredAndExtendedValue(Value value, Type destType) {
         result, type_cast<FIRRTLBaseType>(value.getType()),
         type_cast<FIRRTLBaseType>(destType),
         /* allowTruncate */ false);
+  }
+
+  if (result.getType().isa<seq::ClockType>()) {
+    // Types already match.
+    if (destType == value.getType())
+      return result;
+    builder.emitError("cannot use clock type as an integer");
+    return {};
   }
 
   auto intResultType = dyn_cast<IntegerType>(result.getType());
@@ -2584,8 +2617,10 @@ LogicalResult FIRRTLLowering::visitExpr(ConstantOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitExpr(SpecialConstantOp op) {
-  return setLowering(
-      op, getOrCreateIntConstant(APInt(/*bitWidth*/ 1, op.getValue())));
+  auto cst = getOrCreateIntConstant(APInt(/*bitWidth*/ 1, op.getValue()));
+  if (op.getType().isa<ClockType>())
+    return setLoweringTo<seq::ToClockOp>(op, cst);
+  return setLowering(op, cst);
 }
 
 FailureOr<Value> FIRRTLLowering::lowerSubindex(SubindexOp op, Value input) {
@@ -3011,7 +3046,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
     };
 
     auto addClock = [&](StringRef field) -> Value {
-      Type clockTy = IntegerType::get(op.getContext(), 1);
+      Type clockTy = seq::ClockType::get(op.getContext());
       Value portValue = createBackedge(builder.getLoc(), clockTy);
       addInput(field, portValue);
       return portValue;
@@ -3206,6 +3241,24 @@ LogicalResult FIRRTLLowering::lowerNoopCast(Operation *op) {
 
   // Noop cast.
   return setLowering(op->getResult(0), operand);
+}
+
+LogicalResult FIRRTLLowering::visitExpr(AsSIntPrimOp op) {
+  if (isa<ClockType>(op.getInput().getType()))
+    return setLowering(op->getResult(0),
+                       getLoweredNonClockValue(op.getInput()));
+  return lowerNoopCast(op);
+}
+
+LogicalResult FIRRTLLowering::visitExpr(AsUIntPrimOp op) {
+  if (isa<ClockType>(op.getInput().getType()))
+    return setLowering(op->getResult(0),
+                       getLoweredNonClockValue(op.getInput()));
+  return lowerNoopCast(op);
+}
+
+LogicalResult FIRRTLLowering::visitExpr(AsClockPrimOp op) {
+  return setLoweringTo<seq::ToClockOp>(op, getLoweredValue(op.getInput()));
 }
 
 LogicalResult FIRRTLLowering::visitExpr(mlir::UnrealizedConversionCastOp op) {
@@ -3511,7 +3564,7 @@ LogicalResult FIRRTLLowering::visitExpr(CatPrimOp op) {
 //===----------------------------------------------------------------------===//
 
 LogicalResult FIRRTLLowering::visitExpr(IsXIntrinsicOp op) {
-  auto input = getLoweredValue(op.getArg());
+  auto input = getLoweredNonClockValue(op.getArg());
   if (!input)
     return failure();
 
@@ -3622,7 +3675,7 @@ LogicalResult FIRRTLLowering::visitExpr(LTLEventuallyIntrinsicOp op) {
 LogicalResult FIRRTLLowering::visitExpr(LTLClockIntrinsicOp op) {
   return setLoweringToLTL<ltl::ClockOp>(op, getLoweredValue(op.getInput()),
                                         ltl::ClockEdge::Pos,
-                                        getLoweredValue(op.getClock()));
+                                        getLoweredNonClockValue(op.getClock()));
 }
 
 LogicalResult FIRRTLLowering::visitExpr(LTLDisableIntrinsicOp op) {
@@ -3650,7 +3703,7 @@ LogicalResult FIRRTLLowering::visitStmt(VerifCoverIntrinsicOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitExpr(HasBeenResetIntrinsicOp op) {
-  auto clock = getLoweredValue(op.getClock());
+  auto clock = getLoweredNonClockValue(op.getClock());
   auto reset = getLoweredValue(op.getReset());
   if (!clock || !reset)
     return failure();
@@ -3788,6 +3841,8 @@ LogicalResult FIRRTLLowering::visitExpr(MuxPrimOp op) {
   if (!cond || !ifTrue || !ifFalse)
     return failure();
 
+  if (op.getType().isa<ClockType>())
+    return setLoweringTo<seq::ClockMuxOp>(op, cond, ifTrue, ifFalse);
   return setLoweringTo<comb::MuxOp>(op, ifTrue.getType(), cond, ifTrue, ifFalse,
                                     true);
 }
@@ -4055,7 +4110,7 @@ LogicalResult FIRRTLLowering::visitStmt(ForceOp op) {
 
 LogicalResult FIRRTLLowering::visitStmt(RefForceOp op) {
   auto src = getLoweredValue(op.getSrc());
-  auto clock = getLoweredValue(op.getClock());
+  auto clock = getLoweredNonClockValue(op.getClock());
   auto pred = getLoweredValue(op.getPredicate());
   if (!src || !clock || !pred)
     return failure();
@@ -4093,7 +4148,7 @@ LogicalResult FIRRTLLowering::visitStmt(RefForceInitialOp op) {
   return success();
 }
 LogicalResult FIRRTLLowering::visitStmt(RefReleaseOp op) {
-  auto clock = getLoweredValue(op.getClock());
+  auto clock = getLoweredNonClockValue(op.getClock());
   auto pred = getLoweredValue(op.getPredicate());
   if (!clock || !pred)
     return failure();
@@ -4130,7 +4185,7 @@ LogicalResult FIRRTLLowering::visitStmt(RefReleaseInitialOp op) {
 // Printf is a macro op that lowers to an sv.ifdef.procedural, an sv.if,
 // and an sv.fwrite all nested together.
 LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
-  auto clock = getLoweredValue(op.getClock());
+  auto clock = getLoweredNonClockValue(op.getClock());
   auto cond = getLoweredValue(op.getCond());
   if (!clock || !cond)
     return failure();
@@ -4171,7 +4226,7 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
 // Stop lowers into a nested series of behavioral statements plus $fatal
 // or $finish.
 LogicalResult FIRRTLLowering::visitStmt(StopOp op) {
-  auto clock = getLoweredValue(op.getClock());
+  auto clock = getLoweredNonClockValue(op.getClock());
   auto cond = getLoweredValue(op.getCond());
   if (!clock || !cond)
     return failure();
@@ -4270,7 +4325,7 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
     return strAttr && strAttr.getValue() == "USE_UNR_ONLY_CONSTRAINTS";
   });
 
-  auto clock = getLoweredValue(opClock);
+  auto clock = getLoweredNonClockValue(opClock);
   auto enable = getLoweredValue(opEnable);
   auto predicate = getLoweredValue(opPredicate);
   if (!clock || !enable || !predicate)

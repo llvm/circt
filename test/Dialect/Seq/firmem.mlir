@@ -22,7 +22,7 @@ hw.module @Basic() {
 }
 
 // CHECK-LABEL: hw.module @Ports
-hw.module @Ports(%clock: i1, %enable: i1, %address: i4, %data: i20, %mode: i1, %mask: i4) {
+hw.module @Ports(%clock: !seq.clock, %enable: i1, %address: i4, %data: i20, %mode: i1, %mask: i4) {
   // CHECK-NEXT: %mem = seq.firmem 0, 1, undefined, undefined : <12 x 20>
   // CHECK-NEXT: %mem2 = seq.firmem 0, 1, undefined, undefined : <12 x 20, mask 4>
   %mem = seq.firmem 0, 1, undefined, undefined : <12 x 20>

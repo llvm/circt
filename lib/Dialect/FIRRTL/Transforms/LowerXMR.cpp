@@ -222,6 +222,13 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
             return success();
           })
           .Case<Forceable>([&](Forceable op) {
+            // Handle declarations containing refs as "data".
+            if (type_isa<RefType>(op.getDataRaw().getType())) {
+              markForRemoval(op);
+              return success();
+            }
+
+            // Otherwise, if forceable track the rwprobe result.
             if (!op.isForceable() || op.getDataRef().use_empty() ||
                 isZeroWidth(op.getDataType()))
               return success();

@@ -311,18 +311,25 @@ static ParseResult parseCompReg(OpAsmParser &parser, OperationState &result) {
     return parser.emitError(loc, "too many operands");
   }
 
-  Type ty;
+  Type i1 = IntegerType::get(result.getContext(), 1);
+
+  Type ty, clkTy;
   if (parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
       parser.parseType(ty))
     return failure();
+  if (succeeded(parser.parseOptionalComma())) {
+    if (parser.parseType(clkTy))
+      return failure();
+  } else {
+    clkTy = i1;
+  }
 
   setNameFromResult(parser, result);
 
   result.addTypes({ty});
 
-  Type i1 = IntegerType::get(result.getContext(), 1);
   SmallVector<Type, 5> operandTypes;
-  operandTypes.append({ty, i1});
+  operandTypes.append({ty, clkTy});
   if constexpr (ClockEnabled)
     operandTypes.push_back(i1);
   if (operands.size() > 2 + ceOperandOffset)
@@ -356,7 +363,7 @@ static void printCompReg(::mlir::OpAsmPrinter &p, Op op) {
     elidedAttrs.push_back("name");
 
   p.printOptionalAttrDict(op->getAttrs(), elidedAttrs);
-  p << " : " << op.getInput().getType();
+  p << " : " << op.getInput().getType() << ", " << op.getClk().getType();
 }
 
 /// Suggest a name for each result value based on the saved result names
@@ -504,12 +511,15 @@ ParseResult FirRegOp::parse(OpAsmParser &parser, OperationState &result) {
 
   setNameFromResult(parser, result);
 
-  Type i1 = IntegerType::get(result.getContext(), 1);
-  if (parser.resolveOperand(next, ty, result.operands) ||
-      parser.resolveOperand(clk, i1, result.operands))
+  if (parser.resolveOperand(next, ty, result.operands))
+    return failure();
+
+  Type clkTy = ClockType::get(result.getContext());
+  if (parser.resolveOperand(clk, clkTy, result.operands))
     return failure();
 
   if (resetAndValue) {
+    Type i1 = IntegerType::get(result.getContext(), 1);
     if (parser.resolveOperand(resetAndValue->first, i1, result.operands) ||
         parser.resolveOperand(resetAndValue->second, ty, result.operands))
       return failure();
@@ -593,17 +603,23 @@ LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
   // constant zero.
   // TODO: Once HW aggregate constant values are supported, move this
   // canonicalization to the folder.
-  if (op.getNext() == op.getResult() ||
-      op.getClk().getDefiningOp<hw::ConstantOp>()) {
-    // If the register has a reset value, we can replace it with that.
-    if (auto resetValue = op.getResetValue()) {
-      rewriter.replaceOp(op, resetValue);
-      return success();
-    }
+  auto isConstant = [&]() -> bool {
+    if (op.getNext() == op.getResult())
+      return true;
+    if (auto clk = op.getClk().getDefiningOp<seq::ToClockOp>())
+      return clk.getInput().getDefiningOp<hw::ConstantOp>();
+    return false;
+  };
 
-    auto constant = rewriter.create<hw::ConstantOp>(
-        op.getLoc(), APInt::getZero(hw::getBitWidth(op.getType())));
-    rewriter.replaceOpWithNewOp<hw::BitcastOp>(op, op.getType(), constant);
+  if (isConstant()) {
+    if (auto resetValue = op.getResetValue()) {
+      // If the register has a reset value, we can replace it with that.
+      rewriter.replaceOp(op, resetValue);
+    } else {
+      auto constant = rewriter.create<hw::ConstantOp>(
+          op.getLoc(), APInt::getZero(hw::getBitWidth(op.getType())));
+      rewriter.replaceOpWithNewOp<hw::BitcastOp>(op, op.getType(), constant);
+    }
     return success();
   }
 
@@ -797,10 +813,13 @@ static LogicalResult verifyFirMemMask(Op op) {
 LogicalResult FirMemWriteOp::verify() { return verifyFirMemMask(*this); }
 LogicalResult FirMemReadWriteOp::verify() { return verifyFirMemMask(*this); }
 
-static bool isConst(Value value) {
-  if (value)
-    return value.getDefiningOp<hw::ConstantOp>();
-  return false;
+static bool isConstClock(Value value) {
+  if (!value)
+    return false;
+  auto cast = value.getDefiningOp<seq::ToClockOp>();
+  if (!cast)
+    return false;
+  return cast.getInput().getDefiningOp<hw::ConstantOp>();
 }
 
 static bool isConstZero(Value value) {
@@ -831,7 +850,7 @@ LogicalResult FirMemWriteOp::canonicalize(FirMemWriteOp op,
                                           PatternRewriter &rewriter) {
   // Remove the write port if it is trivially dead.
   if (isConstZero(op.getEnable()) || isConstZero(op.getMask()) ||
-      isConst(op.getClock())) {
+      isConstClock(op.getClock())) {
     rewriter.eraseOp(op);
     return success();
   }
@@ -857,7 +876,7 @@ LogicalResult FirMemReadWriteOp::canonicalize(FirMemReadWriteOp op,
   // Replace the read-write port with a read port if the write behavior is
   // trivially disabled.
   if (isConstZero(op.getEnable()) || isConstZero(op.getMask()) ||
-      isConst(op.getClock()) || isConstZero(op.getMode())) {
+      isConstClock(op.getClock()) || isConstZero(op.getMode())) {
     auto opAttrs = op->getAttrs();
     auto opAttrNames = op.getAttributeNames();
     auto newOp = rewriter.replaceOpWithNewOp<FirMemReadOp>(

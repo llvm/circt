@@ -4,7 +4,7 @@
 // RUN: circt-opt %t/default --arc-inline | FileCheck %t/default
 
 // CHECK-LABEL: func.func @Simple
-func.func @Simple(%arg0: i4, %arg1: i1) -> (i4, i4) {
+func.func @Simple(%arg0: i4, %arg1: !seq.clock) -> (i4, i4) {
   // CHECK-NEXT: %0 = comb.and %arg0, %arg0
   // CHECK-NEXT: %1 = arc.state @SimpleB(%arg0) clock %arg1 lat 1
   // CHECK-NEXT: return %0, %1
@@ -101,7 +101,7 @@ arc.define @sub5(%arg0: index, %arg1: i4) -> i4 {
 // CHECK-NEXT: hw.output [[RES]] : i4
 
 // CHECK-LABEL: hw.module @TopLevel
-hw.module @TopLevel(%clk: i1, %arg0: i32, %arg1: i32) -> (out0: i32, out1: i32, out2: i32, out3: i32) {
+hw.module @TopLevel(%clk: !seq.clock, %arg0: i32, %arg1: i32) -> (out0: i32, out1: i32, out2: i32, out3: i32) {
   %0:2 = arc.state @inlineIntoArc(%arg0, %arg1) clock %clk lat 1 : (i32, i32) -> (i32, i32)
   %1:2 = arc.state @inlineIntoArc2(%arg0, %arg1) clock %clk lat 1 : (i32, i32) -> (i32, i32)
   hw.output %0#0, %0#1, %1#0, %1#1 : i32, i32, i32, i32
@@ -168,7 +168,7 @@ arc.define @ToBeRemoved3(%arg0: i32) -> i32 {
 // RUN: circt-opt %t/onlyIntoArcs --arc-inline=into-arcs-only=1 | FileCheck %t/onlyIntoArcs
 
 // CHECK-LABEL: hw.module @onlyIntoArcs
-hw.module @onlyIntoArcs(%arg0: i4, %arg1: i4) -> (out0: i4) {
+hw.module @onlyIntoArcs(%arg0: i4, %arg1: i4, %arg2: !seq.clock) -> (out0: i4) {
   %0 = arc.state @sub1(%arg0, %arg1) lat 0 : (i4, i4) -> i4
   hw.output %0 : i4
 }
