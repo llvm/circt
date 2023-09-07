@@ -589,6 +589,41 @@ LogicalResult OutputWireOp::canonicalize(OutputWireOp op,
 }
 
 //===----------------------------------------------------------------------===//
+// BlockOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult BlockOp::verify() {
+  if (getInputs().size() != getBodyBlock()->getNumArguments())
+    return emitOpError("number of inputs must match number of block arguments");
+
+  for (auto [arg, barg] :
+       llvm::zip(getInputs(), getBodyBlock()->getArguments())) {
+    if (arg.getType() != barg.getType())
+      return emitOpError("block argument type must match input type");
+  }
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// BlockReturnOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult BlockReturnOp::verify() {
+  BlockOp parent = cast<BlockOp>(getOperation()->getParentOp());
+
+  if (getNumOperands() != parent.getOutputs().size())
+    return emitOpError("number of operands must match number of block outputs");
+
+  for (auto [op, out] : llvm::zip(getOperands(), parent.getOutputs())) {
+    if (op.getType() != out.getType())
+      return emitOpError("operand type must match block output type");
+  }
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic
 //===----------------------------------------------------------------------===//
 
