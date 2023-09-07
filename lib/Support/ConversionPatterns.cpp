@@ -24,16 +24,6 @@ static FunctionType convertFunctionType(const TypeConverter &typeConverter,
   return FunctionType::get(type.getContext(), arg, res);
 }
 
-// Converts a function type wrt. the given type converter.
-static hw::ModuleType convertModuleType(const TypeConverter &typeConverter,
-                                        hw::ModuleType type) {
-  // Convert the original function types.
-  SmallVector<hw::ModulePort> ports(type.getPorts());
-  for (auto &p : ports)
-    p.type = typeConverter.convertType(p.type);
-  return hw::ModuleType::get(type.getContext(), ports);
-}
-
 LogicalResult TypeConversionPattern::matchAndRewrite(
     Operation *op, ArrayRef<Value> operands,
     ConversionPatternRewriter &rewriter) const {
@@ -47,8 +37,9 @@ LogicalResult TypeConversionPattern::matchAndRewrite(
       // handle them manually.
       if (auto funcType = innerType.dyn_cast<FunctionType>())
         innerType = convertFunctionType(*getTypeConverter(), funcType);
-      else if (auto modType = innerType.dyn_cast<hw::ModuleType>())
-        innerType = convertModuleType(*getTypeConverter(), modType);
+      else if (auto modType = circt::hw::detail::tryConvertModuleType(
+                   getTypeConverter(), innerType))
+        innerType = modType;
       else
         innerType = getTypeConverter()->convertType(innerType);
       newAttrs.emplace_back(attr.getName(), TypeAttr::get(innerType));

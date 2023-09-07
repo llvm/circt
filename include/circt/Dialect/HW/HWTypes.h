@@ -38,6 +38,9 @@ class ModuleType;
 
 namespace detail {
 
+// Converts a function type wrt. the given type converter.
+Type tryConvertModuleType(const TypeConverter *typeConverter, Type type);
+
 ModuleType fnToMod(Operation *op, ArrayRef<Attribute> inputNames,
                    ArrayRef<Attribute> outputNames);
 ModuleType fnToMod(FunctionType fn, ArrayRef<Attribute> inputNames,
