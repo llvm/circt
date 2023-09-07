@@ -611,6 +611,15 @@ struct WireOpConversion : public OpConversionPattern<WireOp> {
     if (!wireValue)
       return failure();
 
+    // If the wire isn't inside a graph region, we can't trivially remove it. In
+    // practice, this pattern does run for wires in graph regions, so this check
+    // should pass and we can proceed with the trivial rewrite.
+    auto regionKindInterface = wireOp->getParentOfType<RegionKindInterface>();
+    if (!regionKindInterface)
+      return failure();
+    if (regionKindInterface.getRegionKind(0) != RegionKind::Graph)
+      return failure();
+
     // Find the assignment to the wire.
     PropAssignOp propAssign = getPropertyAssignment(wireValue);
 
