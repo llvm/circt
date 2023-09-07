@@ -1274,3 +1274,35 @@ firrtl.circuit "Top" {
   // CHECK: firrtl.class private @MyClass()
   firrtl.class private @MyClass() {}
 }
+
+// -----
+// Issue #5941.
+
+// Test for U-Turn in property ports. The inlined module propassign's and uses the property.
+// CHECK-LABEL: firrtl.circuit "PropertyUTurn"
+firrtl.circuit "PropertyUTurn" {
+  // CHECK: module @PropertyUTurn
+  firrtl.module @PropertyUTurn() {
+    %c_in, %c_out = firrtl.instance child @Child(in in: !firrtl.string, out out: !firrtl.string)
+    firrtl.propassign %c_in, %c_out : !firrtl.string
+    // CHECK-NEXT: %child_in = firrtl.wire : !firrtl.string
+    // CHECK-NEXT: %child_out = firrtl.wire : !firrtl.string
+    // CHECK-NEXT: %child_s_out = firrtl.instance child_s sym @Out @OutStr(out out: !firrtl.string)
+    // CHECK-NEXT: firrtl.propassign %child_out, %child_s_out : !firrtl.string
+    // CHECK-NEXT: %child_c_in = firrtl.instance child_c sym @C @Consume(in in: !firrtl.string)
+    // CHECK-NEXT: firrtl.propassign %child_c_in, %child_in : !firrtl.string
+    // CHECK-NEXT: firrtl.propassign %child_in, %child_out : !firrtl.string
+  }
+  firrtl.module @Child(in %in: !firrtl.string, out %out: !firrtl.string) attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
+    %s_out = firrtl.instance s sym @Out @OutStr(out out: !firrtl.string)
+    firrtl.propassign %out, %s_out : !firrtl.string
+
+    %c_in = firrtl.instance c sym @C @Consume(in in : !firrtl.string)
+    firrtl.propassign %c_in, %in : !firrtl.string
+  }
+  firrtl.module @OutStr(out %out : !firrtl.string) {
+    %str = firrtl.string "hello"
+    firrtl.propassign %out, %str : !firrtl.string
+  }
+  firrtl.extmodule @Consume(in in : !firrtl.string)
+}

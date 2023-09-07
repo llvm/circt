@@ -905,7 +905,7 @@ void Inliner::mapPortsToWires(StringRef prefix, InliningLevel &il,
 
     Value wire =
         TypeSwitch<FIRRTLType, Value>(type)
-            .Case<FIRRTLBaseType>([&](auto base) {
+            .Case<FIRRTLBaseType, PropertyType>([&](auto base) {
               return il.mic.b
                   .create<WireOp>(
                       target.getLoc(), base,
