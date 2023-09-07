@@ -230,9 +230,9 @@ static DenseMap<Operation *, IOTypes> populateIOMap(mlir::ModuleOp module) {
 }
 
 template <typename ModTy, typename T>
-static llvm::SmallVector<Attribute> updateNameAttribute(ModTy op, StringRef attrName,
-                                DenseMap<unsigned, hw::StructType> &structMap,
-                                T oldNames) {
+static llvm::SmallVector<Attribute>
+updateNameAttribute(ModTy op, StringRef attrName,
+                    DenseMap<unsigned, hw::StructType> &structMap, T oldNames) {
   llvm::SmallVector<Attribute> newNames;
   for (auto [i, oldName] : llvm::enumerate(oldNames)) {
     // Was this arg/res index a struct?
@@ -381,14 +381,17 @@ static LogicalResult flattenOpsOfType(ModuleOp module, bool recursive) {
     // And likewise with the converted instance ops.
     for (auto instanceOp : convertedInstances) {
       Operation *targetModule = instanceOp.getReferencedModuleSlow();
-      instanceOp.dump();
       auto ioInfo = ioInfoMap[targetModule];
-      instanceOp.setInputNames(ArrayAttr::get(instanceOp.getContext(), updateNameAttribute(
-          instanceOp, "argNames", ioInfo.argStructs,
-          oldArgNames[targetModule].template getAsValueRange<StringAttr>())));
-      instanceOp.setOutputNames(ArrayAttr::get(instanceOp.getContext(), updateNameAttribute(
-          instanceOp, "resultNames", ioInfo.resStructs,
-          oldResNames[targetModule].template getAsValueRange<StringAttr>())));
+      instanceOp.setInputNames(ArrayAttr::get(
+          instanceOp.getContext(),
+          updateNameAttribute(instanceOp, "argNames", ioInfo.argStructs,
+                              oldArgNames[targetModule]
+                                  .template getAsValueRange<StringAttr>())));
+      instanceOp.setOutputNames(ArrayAttr::get(
+          instanceOp.getContext(),
+          updateNameAttribute(instanceOp, "resultNames", ioInfo.resStructs,
+                              oldResNames[targetModule]
+                                  .template getAsValueRange<StringAttr>())));
       instanceOp.dump();
     }
 

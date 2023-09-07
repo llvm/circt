@@ -967,9 +967,9 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
   auto *context = result.getContext();
   // prefer the attribute over the ssa values
   auto attr = getAttribute("argNames", result.attributes);
-  auto modType = detail::fnToMod(cast<FunctionType>(functionType.getValue()),
-                                 attr ? cast<ArrayAttr>(attr).getValue(): argNames, 
-                                 resultNames);
+  auto modType = detail::fnToMod(
+      cast<FunctionType>(functionType.getValue()),
+      attr ? cast<ArrayAttr>(attr).getValue() : argNames, resultNames);
 
   // An explicit `argNames` attribute overrides the MLIR names.  This is how
   // we represent port names that aren't valid MLIR identifiers.  Result and
@@ -1028,6 +1028,7 @@ template <typename ModuleTy>
 static void printModuleOp(OpAsmPrinter &p, ModuleTy mod,
                           ExternModKind modKind) {
   using namespace mlir::function_interface_impl;
+
   FunctionType fnType = mod.getHWModuleType().getFuncType();
   auto argTypes = fnType.getInputs();
   auto resultTypes = fnType.getResults();
@@ -1306,6 +1307,13 @@ static void setAllPortNames(ArrayRef<Attribute> names, ModTy module) {
   SmallVector<Attribute> resNames(names.begin() + numInputs, names.end());
   module.setArgNamesAttr(ArrayAttr::get(module.getContext(), argNames));
   module.setResultNamesAttr(ArrayAttr::get(module.getContext(), resNames));
+  auto oldType = module.getModuleType();
+  SmallVector<ModulePort> newPorts(oldType.getPorts().begin(),
+                                   oldType.getPorts().end());
+  for (auto i = 0UL, e = newPorts.size(); i != e; ++i)
+    newPorts[i].name = cast<StringAttr>(names[i]);
+  auto newType = ModuleType::get(module.getContext(), newPorts);
+  module.setModuleType(newType);
 }
 
 void HWModuleOp::setAllPortNames(ArrayRef<Attribute> names) {

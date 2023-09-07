@@ -236,9 +236,9 @@ def ModuleTypeImpl : HWType<"Module"> {
     Module types have ports.
   }];
   let parameters = (ins ArrayRefParameter<"::circt::hw::ModulePort", "port list">:$ports);
-  let assemblyFormat = "`(` $ports `)`";
+  let hasCustomAssemblyFormat = 1;
   let genVerifyDecl = 1;
-  let mnemonic = "module";
+  let mnemonic = "modty";
 
   let extraClassDeclaration = [{
     // Many of these are transitional and will be removed when modules and instances
