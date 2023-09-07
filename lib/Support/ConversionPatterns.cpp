@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Support/ConversionPatterns.h"
+#include "circt/Dialect/HW/HWTypes.h"
 
 using namespace circt;
 
@@ -23,6 +24,16 @@ static FunctionType convertFunctionType(const TypeConverter &typeConverter,
   return FunctionType::get(type.getContext(), arg, res);
 }
 
+// Converts a function type wrt. the given type converter.
+static hw::ModuleType convertModuleType(const TypeConverter &typeConverter,
+                                        hw::ModuleType type) {
+  // Convert the original function types.
+  SmallVector<hw::ModulePort> ports(type.getPorts());
+  for (auto &p : ports)
+    p.type = typeConverter.convertType(p.type);
+  return hw::ModuleType::get(type.getContext(), ports);
+}
+
 LogicalResult TypeConversionPattern::matchAndRewrite(
     Operation *op, ArrayRef<Value> operands,
     ConversionPatternRewriter &rewriter) const {
@@ -34,8 +45,10 @@ LogicalResult TypeConversionPattern::matchAndRewrite(
       auto innerType = typeAttr.getValue();
       // TypeConvert::convertType doesn't handle function types, so we need to
       // handle them manually.
-      if (auto funcType = innerType.dyn_cast<FunctionType>(); innerType)
+      if (auto funcType = innerType.dyn_cast<FunctionType>())
         innerType = convertFunctionType(*getTypeConverter(), funcType);
+      else if (auto modType = innerType.dyn_cast<hw::ModuleType>())
+        innerType = convertModuleType(*getTypeConverter(), modType);
       else
         innerType = getTypeConverter()->convertType(innerType);
       newAttrs.emplace_back(attr.getName(), TypeAttr::get(innerType));

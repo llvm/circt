@@ -76,6 +76,9 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
     InterfaceMethod<"Set the module type (and port names)",
     "void", "setHWModuleType", (ins "::circt::hw::ModuleType":$type)>,
 
+    InterfaceMethod<"Set the port names",
+    "void", "setAllPortNames", (ins "ArrayRef<Attribute>":$names)>,
+
   ];
 
   let extraSharedClassDeclaration = [{
@@ -134,7 +137,20 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
     SmallVector<Attribute> getOutputNames() {
       return $_op.getHWModuleType().getOutputNames();
     }
-    
+
+    void setInputNames(ArrayRef<Attribute> names) {
+      SmallVector<Attribute> newNames(names.begin(), names.end());
+      auto resNames = $_op.getOutputNames();
+      newNames.append(resNames.begin(), resNames.end());
+      $_op.setAllPortNames(newNames);
+    }
+
+    void setOutputNames(ArrayRef<Attribute> names) {
+      SmallVector<Attribute> newNames = $_op.getInputNames();
+      newNames.append(names.begin(), names.end());
+      $_op.setAllPortNames(newNames);
+    }
+
     // Get the name for the specified input or inout port
     StringRef getPortName(size_t idx) {
       return $_op.getHWModuleType().getPortName(idx);

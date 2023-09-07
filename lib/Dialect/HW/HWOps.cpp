@@ -552,9 +552,11 @@ buildModule(OpBuilder &builder, OperationState &result, StringAttr name,
   SmallVector<Type, 4> argTypes, resultTypes;
   SmallVector<Attribute> argAttrs, resultAttrs;
   SmallVector<Attribute> argLocs, resultLocs;
+  SmallVector<ModulePort> portTypes;
   auto exportPortIdent = StringAttr::get(builder.getContext(), "hw.exportPort");
 
   for (auto elt : ports.getInputs()) {
+    portTypes.push_back(elt);
     if (elt.dir == ModulePort::Direction::InOut &&
         !elt.type.isa<hw::InOutType>())
       elt.type = hw::InOutType::get(elt.type);
@@ -570,6 +572,7 @@ buildModule(OpBuilder &builder, OperationState &result, StringAttr name,
   }
 
   for (auto elt : ports.getOutputs()) {
+    portTypes.push_back(elt);
     resultTypes.push_back(elt.type);
     resultNames.push_back(elt.name);
     resultLocs.push_back(elt.loc ? elt.loc : unknownLoc);
@@ -586,8 +589,8 @@ buildModule(OpBuilder &builder, OperationState &result, StringAttr name,
     parameters = builder.getArrayAttr({});
 
   // Record the argument and result types as an attribute.
-  auto type = builder.getFunctionType(argTypes, resultTypes);
-  result.addAttribute(ModuleTy::getFunctionTypeAttrName(result.name),
+  auto type = ModuleType::get(builder.getContext(), portTypes);
+  result.addAttribute(ModuleTy::getModuleTypeAttrName(result.name),
                       TypeAttr::get(type));
   result.addAttribute("argNames", builder.getArrayAttr(argNames));
   result.addAttribute("resultNames", builder.getArrayAttr(resultNames));
@@ -899,6 +902,13 @@ static bool hasAttribute(StringRef name, ArrayRef<NamedAttribute> attrs) {
   return false;
 }
 
+static Attribute getAttribute(StringRef name, ArrayRef<NamedAttribute> attrs) {
+  for (auto &argAttr : attrs)
+    if (argAttr.getName() == name)
+      return argAttr.getValue();
+  return {};
+}
+
 template <typename ModuleTy>
 static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
                                    ExternModKind modKind = PlainMod) {
@@ -955,6 +965,11 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
   }
 
   auto *context = result.getContext();
+  // prefer the attribute over the ssa values
+  auto attr = getAttribute("argNames", result.attributes);
+  auto modType = detail::fnToMod(cast<FunctionType>(functionType.getValue()),
+                                 attr ? cast<ArrayAttr>(attr).getValue(): argNames, 
+                                 resultNames);
 
   // An explicit `argNames` attribute overrides the MLIR names.  This is how
   // we represent port names that aren't valid MLIR identifiers.  Result and
@@ -968,8 +983,8 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
   result.addAttribute("parameters", parameters);
   if (!hasAttribute("comment", result.attributes))
     result.addAttribute("comment", StringAttr::get(context, ""));
-  result.addAttribute(ModuleTy::getFunctionTypeAttrName(result.name),
-                      functionType);
+  result.addAttribute(ModuleTy::getModuleTypeAttrName(result.name),
+                      TypeAttr::get(modType));
 
   // Add the attributes to the function arguments.
   addArgAndResultAttrs(parser.getBuilder(), result, entryArgs, resultAttrs,
@@ -1013,7 +1028,6 @@ template <typename ModuleTy>
 static void printModuleOp(OpAsmPrinter &p, ModuleTy mod,
                           ExternModKind modKind) {
   using namespace mlir::function_interface_impl;
-
   FunctionType fnType = mod.getHWModuleType().getFuncType();
   auto argTypes = fnType.getInputs();
   auto resultTypes = fnType.getResults();
@@ -1051,7 +1065,7 @@ static void printModuleOp(OpAsmPrinter &p, ModuleTy mod,
     omittedAttrs.push_back("argNames");
   omittedAttrs.push_back("argLocs");
   omittedAttrs.push_back(
-      ModuleTy::getFunctionTypeAttrName(mod.getOperation()->getName()));
+      ModuleTy::getModuleTypeAttrName(mod.getOperation()->getName()));
   omittedAttrs.push_back(
       ModuleTy::getArgAttrsAttrName(mod.getOperation()->getName()));
   omittedAttrs.push_back(
@@ -1151,7 +1165,7 @@ LogicalResult HWModuleOp::verify() {
   if (failed(verifyModuleCommon(*this)))
     return failure();
 
-  auto type = getFunctionType();
+  auto type = getModuleType();
   auto *body = getBodyBlock();
 
   // Verify the number of block arguments.
@@ -1286,6 +1300,27 @@ void HWModuleGeneratedOp::setAllPortLocs(ArrayRef<Location> locs) {
 }
 
 template <typename ModTy>
+static void setAllPortNames(ArrayRef<Attribute> names, ModTy module) {
+  auto numInputs = module.getNumInputPorts();
+  SmallVector<Attribute> argNames(names.begin(), names.begin() + numInputs);
+  SmallVector<Attribute> resNames(names.begin() + numInputs, names.end());
+  module.setArgNamesAttr(ArrayAttr::get(module.getContext(), argNames));
+  module.setResultNamesAttr(ArrayAttr::get(module.getContext(), resNames));
+}
+
+void HWModuleOp::setAllPortNames(ArrayRef<Attribute> names) {
+  ::setAllPortNames(names, *this);
+}
+
+void HWModuleExternOp::setAllPortNames(ArrayRef<Attribute> names) {
+  ::setAllPortNames(names, *this);
+}
+
+void HWModuleGeneratedOp::setAllPortNames(ArrayRef<Attribute> names) {
+  ::setAllPortNames(names, *this);
+}
+
+template <typename ModTy>
 static SmallVector<Attribute> getAllPortAttrs(ModTy &mod) {
   SmallVector<Attribute> retval;
   auto empty = DictionaryAttr::get(mod.getContext());
@@ -1352,11 +1387,13 @@ void HWModuleGeneratedOp::removeAllPortAttrs() {
   return ::removeAllPortAttrs(*this);
 }
 
+// This probably does really unexpected stuff when you change the number of
+
 template <typename ModTy>
 static void setHWModuleType(ModTy &mod, ModuleType type) {
   auto argAttrs = mod.getAllInputAttrs();
   auto resAttrs = mod.getAllOutputAttrs();
-  mod.setFunctionTypeAttr(TypeAttr::get(type.getFuncType()));
+  mod.setModuleTypeAttr(TypeAttr::get(type));
   unsigned newNumArgs = type.getNumInputs();
   unsigned newNumResults = type.getNumOutputs();
 
@@ -1576,12 +1613,12 @@ StringAttr InstanceOp::getResultName(size_t idx) {
 
 /// Change the name of the specified input port.
 void InstanceOp::setArgumentName(size_t i, StringAttr name) {
-  setArgumentNames(instance_like_impl::updateName(getArgNames(), i, name));
+  setInputNames(instance_like_impl::updateName(getArgNames(), i, name));
 }
 
 /// Change the name of the specified output port.
 void InstanceOp::setResultName(size_t i, StringAttr name) {
-  setResultNames(instance_like_impl::updateName(getResultNames(), i, name));
+  setOutputNames(instance_like_impl::updateName(getResultNames(), i, name));
 }
 
 /// Suggest a name for each result value based on the saved result names

@@ -564,6 +564,10 @@ void ESIPureModuleOp::setAllPortLocs(ArrayRef<Location> locs) {
   emitError("No ports for port locations");
 }
 
+void ESIPureModuleOp::setAllPortNames(ArrayRef<Attribute> names) {
+  emitError("No ports for port naming");
+}
+
 void ESIPureModuleOp::setAllPortAttrs(ArrayRef<Attribute> attrs) {
   emitError("No ports for port attributes");
 }

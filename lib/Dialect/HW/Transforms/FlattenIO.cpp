@@ -229,8 +229,8 @@ static DenseMap<Operation *, IOTypes> populateIOMap(mlir::ModuleOp module) {
   return ioMap;
 }
 
-template <typename T>
-static void updateNameAttribute(Operation *op, StringRef attrName,
+template <typename ModTy, typename T>
+static llvm::SmallVector<Attribute> updateNameAttribute(ModTy op, StringRef attrName,
                                 DenseMap<unsigned, hw::StructType> &structMap,
                                 T oldNames) {
   llvm::SmallVector<Attribute> newNames;
@@ -250,7 +250,7 @@ static void updateNameAttribute(Operation *op, StringRef attrName,
       newNames.push_back(
           StringAttr::get(op->getContext(), oldName + "." + field.name.str()));
   }
-  op->setAttr(attrName, ArrayAttr::get(op->getContext(), newNames));
+  return newNames;
 }
 
 static llvm::SmallVector<Location>
@@ -365,12 +365,14 @@ static LogicalResult flattenOpsOfType(ModuleOp module, bool recursive) {
     // Update the arg/res names of the module.
     for (auto op : module.getOps<T>()) {
       auto ioInfo = ioInfoMap[op];
-      updateNameAttribute(
+      auto newArgNames = updateNameAttribute(
           op, "argNames", ioInfo.argStructs,
           oldArgNames[op].template getAsValueRange<StringAttr>());
-      updateNameAttribute(
+      auto newResNames = updateNameAttribute(
           op, "resultNames", ioInfo.resStructs,
           oldResNames[op].template getAsValueRange<StringAttr>());
+      newArgNames.append(newResNames.begin(), newResNames.end());
+      op.setAllPortNames(newArgNames);
       op.setInputLocs(updateLocAttribute(ioInfo.argStructs, oldArgLocs[op]));
       op.setOutputLocs(updateLocAttribute(ioInfo.resStructs, oldResLocs[op]));
       updateBlockLocations(op, "argLocs", ioInfo.argStructs);
@@ -379,13 +381,15 @@ static LogicalResult flattenOpsOfType(ModuleOp module, bool recursive) {
     // And likewise with the converted instance ops.
     for (auto instanceOp : convertedInstances) {
       Operation *targetModule = instanceOp.getReferencedModuleSlow();
+      instanceOp.dump();
       auto ioInfo = ioInfoMap[targetModule];
-      updateNameAttribute(
+      instanceOp.setInputNames(ArrayAttr::get(instanceOp.getContext(), updateNameAttribute(
           instanceOp, "argNames", ioInfo.argStructs,
-          oldArgNames[targetModule].template getAsValueRange<StringAttr>());
-      updateNameAttribute(
+          oldArgNames[targetModule].template getAsValueRange<StringAttr>())));
+      instanceOp.setOutputNames(ArrayAttr::get(instanceOp.getContext(), updateNameAttribute(
           instanceOp, "resultNames", ioInfo.resStructs,
-          oldResNames[targetModule].template getAsValueRange<StringAttr>());
+          oldResNames[targetModule].template getAsValueRange<StringAttr>())));
+      instanceOp.dump();
     }
 
     // Break if we've only lowering a single level of structs.
