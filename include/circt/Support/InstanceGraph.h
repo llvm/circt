@@ -319,7 +319,7 @@ public:
 
 private:
   // Only the path cache is allowed to create paths.
-  friend struct InstancePathCache;
+  friend class InstancePathCache;
   InstancePath(ArrayRef<InstanceOpInterface> path) : path(path) {}
 
   ArrayRef<InstanceOpInterface> path;

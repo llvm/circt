@@ -15,7 +15,6 @@
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWSymCache.h"
-#include "circt/Support/ConversionPatterns.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -962,22 +961,8 @@ static bool operator==(const ModulePort &a, const ModulePort &b) {
 static llvm::hash_code hash_value(const ModulePort &port) {
   return llvm::hash_combine(port.dir, port.name, port.type);
 }
-
 } // namespace hw
 } // namespace circt
-
-// Converts a function type wrt. the given type converter.
-Type circt::hw::detail::tryConvertModuleType(const TypeConverter *typeConverter,
-                                             Type type) {
-  auto mod = dyn_cast<ModuleType>(type);
-  if (!mod)
-    return {};
-  // Convert the original function types.
-  SmallVector<hw::ModulePort> ports(mod.getPorts());
-  for (auto &p : ports)
-    p.type = typeConverter->convertType(p.type);
-  return hw::ModuleType::get(type.getContext(), ports);
-}
 
 ModuleType circt::hw::detail::fnToMod(Operation *op,
                                       ArrayRef<Attribute> inputNames,
