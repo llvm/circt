@@ -222,15 +222,15 @@ InstanceGraph::getInferredTopLevelNodes() {
   return {inferredTopLevelNodes};
 }
 
+static InstancePath empty{};
+
 // NOLINTBEGIN(misc-no-recursion)
 ArrayRef<InstancePath>
 InstancePathCache::getAbsolutePaths(ModuleOpInterface op) {
   InstanceGraphNode *node = instanceGraph[op];
 
-  // If we have reached the circuit root, we're done.
   if (node == instanceGraph.getTopLevelNode()) {
-    static InstancePath empty{};
-    return empty; // array with single empty path
+    return empty;
   }
 
   // Fast path: hit the cache.
@@ -249,6 +249,8 @@ InstancePathCache::getAbsolutePaths(ModuleOpInterface op) {
         extendedPaths.push_back(appendInstance(
             path, cast<InstanceOpInterface>(*inst->getInstance())));
       }
+    } else {
+      extendedPaths.emplace_back(empty);
     }
   }
 
@@ -270,7 +272,16 @@ InstancePath InstancePathCache::appendInstance(InstancePath path,
   auto *newPath = allocator.Allocate<InstanceOpInterface>(n);
   std::copy(path.begin(), path.end(), newPath);
   newPath[path.size()] = inst;
-  return InstancePath(newPath, n);
+  return InstancePath(ArrayRef(newPath, n));
+}
+
+InstancePath InstancePathCache::prependInstance(InstanceOpInterface inst,
+                                                InstancePath path) {
+  size_t n = path.size() + 1;
+  auto *newPath = allocator.Allocate<InstanceOpInterface>(n);
+  std::copy(path.begin(), path.end(), newPath + 1);
+  newPath[0] = inst;
+  return InstancePath(ArrayRef(newPath, n));
 }
 
 void InstancePathCache::replaceInstance(InstanceOpInterface oldOp,
@@ -300,7 +311,7 @@ void InstancePathCache::replaceInstance(InstanceOpInterface oldOp,
       auto *newPath = allocator.Allocate<InstanceOpInterface>(path.size());
       llvm::copy(path, newPath);
       newPath[iter - path.begin()] = newOp;
-      updatedPaths.push_back(InstancePath(newPath, path.size()));
+      updatedPaths.push_back(InstancePath(ArrayRef(newPath, path.size())));
     }
     // Move the list of paths into the bump allocator for later quick
     // retrieval.
