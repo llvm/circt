@@ -64,12 +64,12 @@ class InstanceBuilder(support.NamedValueOpView):
         ArrayAttr.get(inst_param_array)
     ]
     if results is None:
-      results = module.type.results
+      results = module.type.output_types
 
     if not isinstance(module, hw.HWModuleExternOp):
       input_name_type_lookup = {
           name: support.type_to_pytype(ty)
-          for name, ty in zip(self.operand_names(), module.type.inputs)
+          for name, ty in zip(self.operand_names(), module.type.input_types)
       }
       for input_name, input_value in input_port_mapping.items():
         if input_name not in input_name_type_lookup:
@@ -90,7 +90,7 @@ class InstanceBuilder(support.NamedValueOpView):
                      ip=ip)
 
   def create_default_value(self, index, data_type, arg_name):
-    type = self.module.type.inputs[index]
+    type = self.module.type.input_types[index]
     return support.BackedgeBuilder.create(type,
                                           arg_name,
                                           self,
@@ -143,13 +143,16 @@ class ModuleLike:
     results = []
     attributes["sym_name"] = StringAttr.get(str(name))
 
-    input_types = []
+    module_ports = []
     input_names = []
     input_locs = []
     unknownLoc = Location.unknown().attr
     for (i, (port_name, port_type)) in enumerate(input_ports):
-      input_types.append(port_type)
-      input_names.append(StringAttr.get(str(port_name)))
+      input_name = StringAttr.get(str(port_name))
+      input_dir = hw.ModulePortDirection.INPUT
+      input_port = hw.ModulePort(input_name, port_type, input_dir)
+      module_ports.append(input_port)
+      input_names.append(input_name)
       input_locs.append(unknownLoc)
     attributes["argNames"] = ArrayAttr.get(input_names)
     attributes["argLocs"] = ArrayAttr.get(input_locs)
@@ -158,8 +161,11 @@ class ModuleLike:
     output_names = []
     output_locs = []
     for (i, (port_name, port_type)) in enumerate(output_ports):
-      output_types.append(port_type)
-      output_names.append(StringAttr.get(str(port_name)))
+      output_name = StringAttr.get(str(port_name))
+      output_dir = hw.ModulePortDirection.OUTPUT
+      output_port = hw.ModulePort(output_name, port_type, output_dir)
+      module_ports.append(output_port)
+      output_names.append(output_name)
       output_locs.append(unknownLoc)
     attributes["resultNames"] = ArrayAttr.get(output_names)
     attributes["resultLocs"] = ArrayAttr.get(output_locs)
@@ -168,7 +174,7 @@ class ModuleLike:
       attributes["parameters"] = ArrayAttr.get(parameters)
 
     attributes["module_type"] = TypeAttr.get(
-        ModuleType.get(inputs=input_types, results=output_types, input_names=input_names, output_names=output_names))
+        hw.ModuleType.get(module_ports))
 
     super().__init__(
         self.build_generic(attributes=attributes,
@@ -187,7 +193,7 @@ class ModuleLike:
 
   @property
   def type(self):
-    return Moduletype(TypeAttr(self.attributes["module_type"]).value)
+    return hw.ModuleType(TypeAttr(self.attributes["module_type"]).value)
 
   @property
   def name(self):
@@ -347,13 +353,13 @@ class HWModuleOp(ModuleLike):
         StringAttr(name).value
         for name in ArrayAttr(self.attributes["resultNames"])
     ]
-    result_types = self.type.results
+    result_types = self.type.output_types
     return dict(zip(result_names, result_types))
 
   def add_entry_block(self):
     if not self.is_external:
       raise IndexError('The module already has an entry block')
-    self.body.blocks.append(*self.type.inputs)
+    self.body.blocks.append(*self.type.input_types)
     return self.body.blocks[0]
 
 
