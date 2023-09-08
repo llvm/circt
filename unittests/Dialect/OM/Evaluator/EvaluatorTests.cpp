@@ -411,4 +411,43 @@ TEST(EvaluatorTests, InstantiateObjectWithChildObjectMemoized) {
   ASSERT_EQ(field1Value, field2Value);
 }
 
+TEST(EvaluatorTests, AnyCastObject) {
+  DialectRegistry registry;
+  registry.insert<OMDialect>();
+
+  MLIRContext context(registry);
+  context.getOrLoadDialect<OMDialect>();
+
+  Location loc(UnknownLoc::get(&context));
+
+  ImplicitLocOpBuilder builder(loc, &context);
+
+  auto mod = builder.create<ModuleOp>(loc);
+
+  builder.setInsertionPointToStart(&mod.getBodyRegion().front());
+  auto innerCls = builder.create<ClassOp>("MyInnerClass");
+  innerCls.getBody().emplaceBlock();
+
+  builder.setInsertionPointToStart(&mod.getBodyRegion().front());
+  auto cls = builder.create<ClassOp>("MyClass");
+  auto &body = cls.getBody().emplaceBlock();
+  builder.setInsertionPointToStart(&body);
+  auto object = builder.create<ObjectOp>(innerCls, body.getArguments());
+  auto cast = builder.create<AnyCastOp>(object);
+  builder.create<ClassFieldOp>("field", cast);
+
+  Evaluator evaluator(mod);
+
+  auto result = evaluator.instantiate(builder.getStringAttr("MyClass"), {});
+
+  ASSERT_TRUE(succeeded(result));
+
+  auto *fieldValue = llvm::cast<evaluator::ObjectValue>(
+      result.value()->getField(builder.getStringAttr("field")).value().get());
+
+  ASSERT_TRUE(fieldValue);
+
+  ASSERT_EQ(fieldValue->getClassOp(), innerCls);
+}
+
 } // namespace

@@ -143,6 +143,9 @@ FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::evaluateValue(
             .Case([&](TupleGetOp op) {
               return evaluateTupleGet(op, actualParams);
             })
+            .Case([&](AnyCastOp op) {
+              return evaluateValue(op.getInput(), actualParams);
+            })
             .Default([&](Operation *op) {
               auto error = op->emitError("unable to evaluate value");
               error.attachNote() << "value: " << value;
