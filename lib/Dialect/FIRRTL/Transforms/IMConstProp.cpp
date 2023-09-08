@@ -952,7 +952,7 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
     // Cannot materialize constants for certain types.
     // TODO: Let materializeConstant tell us what it supports instead of this.
     // Presently it asserts on unsupported combinations, so check this here.
-    if (!type_isa<FIRRTLBaseType, FIntegerType, StringType, BoolType>(
+    if (!type_isa<FIRRTLBaseType, RefType, FIntegerType, StringType, BoolType>(
             value.getType()))
       return false;
 
@@ -1011,8 +1011,8 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
         auto type = type_dyn_cast<FIRRTLType>(connect.getDest().getType());
         if (!type)
           continue;
-        auto baseType = getBaseType(type);
-        if (!baseType || !baseType.isGround())
+        auto baseType = type_dyn_cast<FIRRTLBaseType>(type);
+        if (baseType && !baseType.isGround())
           continue;
         if (isDeletableWireOrRegOrNode(destOp) && !isOverdefined(fieldRef)) {
           connect.erase();

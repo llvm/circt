@@ -732,3 +732,42 @@ firrtl.circuit "KeepForceable" {
     firrtl.ref.define %a, %b_c : !firrtl.rwprobe<uint<1>>
   }
 }
+
+// -----
+
+// Fix partly deleting non-hw dataflow.
+// Issue #6076.
+
+// CHECK-LABEL: "WireProbe"
+firrtl.circuit "WireProbe" {
+  // CHECK: module @WireProbe
+  firrtl.module @WireProbe(out %p : !firrtl.probe<uint<5>>) {
+    // CHECK-NEXT: %[[ZERO:.+]] = firrtl.constant 0
+    // CHECK-NEXT: %[[REF:.+]] = firrtl.ref.send %[[ZERO]]
+    // CHECK-NEXT: firrtl.ref.define %p, %[[REF]]
+    // CHECK-NEXT: }
+    %x = firrtl.constant 0: !firrtl.uint<5>
+    %0 = firrtl.ref.send %x : !firrtl.uint<5>
+    %w = firrtl.wire : !firrtl.probe<uint<5>>
+    firrtl.ref.define %w, %0: !firrtl.probe<uint<5>>
+    firrtl.ref.define %p, %w : !firrtl.probe<uint<5>>
+  }
+}
+
+// -----
+
+// Also for properties that we const-prop.
+// Drop connections to, and wires, that are not overdefined.
+
+// CHECK-LABEL: firrtl.circuit "WireProp"
+firrtl.circuit "WireProp" {
+  // CHECK-NOT: firrtl.wire
+  firrtl.module @WireProp(out %s : !firrtl.string) {
+    %x = firrtl.string "hello"
+    %w = firrtl.wire : !firrtl.string
+    %w2 = firrtl.wire : !firrtl.string
+    firrtl.propassign %w, %x: !firrtl.string
+    firrtl.propassign %w2, %w: !firrtl.string
+    firrtl.propassign %s, %w : !firrtl.string
+  }
+}
