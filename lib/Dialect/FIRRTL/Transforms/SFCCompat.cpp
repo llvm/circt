@@ -79,7 +79,8 @@ void SFCCompatPass::runOnOperation() {
     if (walkDrivers(
             reg.getResetValue(), true, true, true,
             [&](FieldRef dst, FieldRef src) {
-              if (src.isa<ConstantOp, InvalidValueOp, SpecialConstantOp>())
+              if (src.isa<ConstantOp, InvalidValueOp, SpecialConstantOp,
+                          AggregateConstantOp>())
                 return true;
               auto diag = emitError(reg.getLoc());
               auto [fieldName, rootKnown] = getFieldName(dst);
