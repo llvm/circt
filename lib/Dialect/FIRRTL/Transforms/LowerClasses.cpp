@@ -860,6 +860,17 @@ struct WireOpConversion : public OpConversionPattern<WireOp> {
   }
 };
 
+struct AnyCastOpConversion : public OpConversionPattern<ObjectAnyRefCastOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ObjectAnyRefCastOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<AnyCastOp>(op, adaptor.getInput());
+    return success();
+  }
+};
+
 struct ObjectSubfieldOpConversion
     : public OpConversionPattern<firrtl::ObjectSubfieldOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -1088,6 +1099,12 @@ static void populateTypeConverter(TypeConverter &converter) {
     return om::ClassType::get(type.getContext(), type.getNameAttr());
   });
 
+  // Convert FIRRTL AnyRef type to OM Any type.
+  converter.addConversion([](om::AnyType type) { return type; });
+  converter.addConversion([](firrtl::AnyRefType type) {
+    return om::AnyType::get(type.getContext());
+  });
+
   // Convert FIRRTL List type to OM List type.
   auto convertListType = [&converter](auto type) -> std::optional<mlir::Type> {
     auto elementType = converter.convertType(type.getElementType());
@@ -1162,6 +1179,7 @@ static void populateRewritePatterns(
   patterns.add<PathOpConversion>(converter, patterns.getContext(),
                                  pathInfoTable);
   patterns.add<WireOpConversion>(converter, patterns.getContext());
+  patterns.add<AnyCastOpConversion>(converter, patterns.getContext());
   patterns.add<ObjectSubfieldOpConversion>(converter, patterns.getContext(),
                                            classTypeTable);
   patterns.add<ClassFieldOpConversion>(converter, patterns.getContext());
