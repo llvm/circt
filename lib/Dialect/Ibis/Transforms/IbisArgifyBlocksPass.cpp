@@ -74,7 +74,7 @@ void ArgifyBlocksPass::runOnOperation() {
   target.addDynamicallyLegalOp<BlockOp>([](BlockOp op) {
     ValueMapping mapping;
     getExternallyDefinedOperands(op, mapping);
-    return mapping.size() == 0;
+    return mapping.empty();
   });
 
   RewritePatternSet patterns(ctx);
