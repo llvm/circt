@@ -1780,10 +1780,10 @@ static LogicalResult canonicalizeSingleSetConnect(StrictConnectOp op,
   // Ok, we know we are doing the transformation.
 
   auto replacement = op.getSrc();
-    // This will be replaced with the constant source.  First, make sure the
-    // constant dominates all users.
-    if (srcValueOp && srcValueOp != &declBlock->front())
-      srcValueOp->moveBefore(&declBlock->front());
+  // This will be replaced with the constant source.  First, make sure the
+  // constant dominates all users.
+  if (srcValueOp && srcValueOp != &declBlock->front())
+    srcValueOp->moveBefore(&declBlock->front());
 
   // Replace all things *using* the decl with the constant/port, and
   // remove the declaration.
