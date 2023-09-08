@@ -1,4 +1,4 @@
-// REQUIRES: esi-cosim
+// REQUIRES: esi-cosim, capnp
 // RUN: esi-cosim-runner.py %s %s
 // PY: import loopback as test
 // PY: rpc = test.LoopbackTester(rpcschemapath, simhostport)

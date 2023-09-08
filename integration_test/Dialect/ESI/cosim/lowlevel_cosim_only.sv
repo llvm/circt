@@ -1,4 +1,4 @@
-// REQUIRES: esi-cosim
+// REQUIRES: esi-cosim, capnp
 // RUN: esi-cosim-runner.py --exec %s.py %s
 
 // Test the low level cosim MMIO functionality. This test has 1024 32-bit
