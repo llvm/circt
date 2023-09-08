@@ -605,6 +605,50 @@ LogicalResult BlockOp::verify() {
   return success();
 }
 
+ParseResult BlockOp::parse(OpAsmParser &parser, OperationState &result) {
+  // Parse the argument initializer list.
+  llvm::SmallVector<OpAsmParser::UnresolvedOperand> inputOperands;
+  llvm::SmallVector<OpAsmParser::Argument> inputArguments;
+  llvm::SmallVector<Type> inputTypes;
+  ArrayAttr inputNames;
+  if (parsing_util::parseInitializerList(parser, inputArguments, inputOperands,
+                                         inputTypes, inputNames))
+    return failure();
+
+  // Parse the result types.
+  llvm::SmallVector<Type> resultTypes;
+  if (parser.parseOptionalArrowTypeList(resultTypes))
+    return failure();
+  result.addTypes(resultTypes);
+
+  // Parse the attribute dict.
+  if (failed(parser.parseOptionalAttrDictWithKeyword(result.attributes)))
+    return failure();
+
+  // All operands have been parsed - resolve.
+  if (parser.resolveOperands(inputOperands, inputTypes, parser.getNameLoc(),
+                             result.operands))
+    return failure();
+
+  // Parse the body region.
+  Region *body = result.addRegion();
+  if (parser.parseRegion(*body, inputArguments))
+    return failure();
+
+  ensureTerminator(*body, parser.getBuilder(), result.location);
+  return success();
+}
+
+void BlockOp::print(OpAsmPrinter &p) {
+  p << ' ';
+  parsing_util::printInitializerList(p, getInputs(),
+                                     getBodyBlock()->getArguments());
+  p.printOptionalArrowTypeList(getResultTypes());
+  p.printOptionalAttrDictWithKeyword(getOperation()->getAttrs(),
+                                     getAttributeNames());
+  p.printRegion(getBody(), /*printEntryBlockArgs=*/false);
+}
+
 //===----------------------------------------------------------------------===//
 // BlockReturnOp
 //===----------------------------------------------------------------------===//

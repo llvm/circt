@@ -135,3 +135,15 @@ ibis.class @InvalidGetVar2 {
     %var = ibis.get_var %parent, @var : !ibis.scoperef<@InvalidGetVar2> -> memref<i1>
   }
 }
+
+// -----
+
+ibis.class @InvalidReturn {
+  %this = ibis.this @InvalidReturn
+  ibis.method @foo() {
+    %c = hw.constant 1 : i32
+    // expected-error @+1 {{'ibis.block.return' op number of operands must match number of block outputs}}
+    %ret = ibis.block() -> i32 {
+    }
+  }
+}

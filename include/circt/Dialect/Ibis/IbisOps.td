@@ -215,9 +215,7 @@ def BlockOp : IbisOp<"block", [
   );
   let results = (outs Variadic<AnyType>:$outputs);
   let regions = (region SizedRegion<1>:$body);
-  let assemblyFormat = [{
-   `(` $inputs `)` `:` functional-type($inputs, $outputs) $body attr-dict
-  }];
+  let hasCustomAssemblyFormat = 1;
 
   let extraClassDeclaration = [{
     // Return the body of this block.

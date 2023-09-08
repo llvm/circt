@@ -10,12 +10,11 @@
 // CHECK-NEXT:      %array = ibis.get_var %parent, @array : !ibis.scoperef<@HighLevel> -> memref<10xi32>
 // CHECK-NEXT:      %alloca = memref.alloca() : memref<i32>
 // CHECK-NEXT:      %c32_i32 = hw.constant 32 : i32
-// CHECK-NEXT:      %0 = ibis.block(%c32_i32) : (i32) -> i32 {
-// CHECK-NEXT:      ^bb0(%arg0: i32):
+// CHECK-NEXT:      %0:2 = ibis.block (%arg0 : i32 = %c32_i32) -> (i32, i32) attributes {schedule = 1 : i64}{
 // CHECK-NEXT:        %1 = memref.load %alloca[] : memref<i32>
 // CHECK-NEXT:        memref.store %arg0, %alloca[] : memref<i32>
-// CHECK-NEXT:        ibis.block.return %1 : i32
-// CHECK-NEXT:      } {schedule = 1 : i64}
+// CHECK-NEXT:        ibis.block.return %1, %1 : i32, i32
+// CHECK-NEXT:      }
 // CHECK-NEXT:      ibis.return
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }
@@ -33,12 +32,11 @@ ibis.class @HighLevel {
     %array = ibis.get_var %parent, @array : !ibis.scoperef<@HighLevel> -> memref<10xi32>
     %local = memref.alloca() : memref<i32>
     %c32 = hw.constant 32 : i32
-    %res = ibis.block(%c32) : (i32) -> (i32) {
-      ^bb0(%arg : i32):
+    %out1, %out2 = ibis.block(%arg : i32 = %c32) -> (i32, i32) attributes {schedule = 1} {
       %v = memref.load %local[] : memref<i32>
       memref.store %arg, %local[] : memref<i32>
-      ibis.block.return %v : i32
-    } {schedule = 1}
+      ibis.block.return %v, %v : i32, i32
+    } 
   }
 }
 
