@@ -70,7 +70,7 @@ func.func private @arrayDims(%a: !hw.array<3 x 4 x i5>) { }
 // -----
 
 // expected-error @+1 {{invalid element for hw.inout type}}
-func.func private @invalidInout(%arg0: !hw.inout<tensor<*xf32>>) { }
+func.func private @invalidInout(%arg0: !hw.inout<!hw.inout<i32>>) { }
 
 // -----
 

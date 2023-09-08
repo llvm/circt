@@ -54,3 +54,9 @@ hw.module public @CrossReferences() {
   // CHECK: %b.out = hw.instance "b" @SinkSource(clock: %a.out: i1) -> (out: i1)
   %b.out = hw.instance "b" @SinkSource(clock: %a.out: !seq.clock) -> (out: !seq.clock)
 }
+
+// CHECK-LABEL: hw.module public @InOutTy()
+hw.module public @InOutTy() -> () {
+  // CHECK: %wire = sv.wire : !hw.inout<i1>
+  %wire = sv.wire : !hw.inout<!seq.clock>
+}

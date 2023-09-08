@@ -17,6 +17,7 @@
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/BuiltinDialect.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/DialectImplementation.h"
@@ -88,6 +89,10 @@ bool circt::hw::isHWValueType(Type type) {
 
   if (auto t = type.dyn_cast<TypeAliasType>())
     return isHWValueType(t.getCanonicalType());
+
+  // Allow types from other dialects and leave verification up to them.
+  if (!isa<mlir::BuiltinDialect, HWDialect>(type.getDialect()))
+    return true;
 
   return false;
 }

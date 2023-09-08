@@ -203,6 +203,11 @@ struct SeqToSVTypeConverter : public TypeConverter {
     addConversion([](seq::ClockType type) {
       return IntegerType::get(type.getContext(), 1);
     });
+    addConversion([](hw::InOutType type) {
+      if (!type.getElementType().isa<seq::ClockType>())
+        return type;
+      return hw::InOutType::get(IntegerType::get(type.getContext(), 1));
+    });
 
     addTargetMaterialization(
         [&](mlir::OpBuilder &builder, mlir::Type resultType,
@@ -290,17 +295,24 @@ public:
 
 } // namespace
 
+// NOLINTBEGIN(misc-no-recursion)
+static bool isLegalType(Type ty) {
+  if (auto inOutTy = hw::type_dyn_cast<hw::InOutType>(ty))
+    return isLegalType(inOutTy.getElementType());
+  return !hw::type_isa<seq::ClockType>(ty);
+}
+// NOLINTEND(misc-no-recursion)
+
 static bool isLegalOp(Operation *op) {
   if (auto module = dyn_cast<hw::HWModuleLike>(op)) {
     return llvm::all_of(module.getPortList(), [](hw::PortInfo port) {
-      return !hw::type_isa<seq::ClockType>(port.type);
+      return isLegalType(port.type);
     });
   }
-  bool allOperandsLowered = llvm::all_of(op->getOperands(), [](auto op) {
-    return !hw::type_isa<seq::ClockType>(op.getType());
-  });
+  bool allOperandsLowered = llvm::all_of(
+      op->getOperands(), [](auto op) { return isLegalType(op.getType()); });
   bool allResultsLowered = llvm::all_of(op->getResults(), [](auto result) {
-    return !hw::type_isa<seq::ClockType>(result.getType());
+    return isLegalType(result.getType());
   });
   return allOperandsLowered && allResultsLowered;
 }
