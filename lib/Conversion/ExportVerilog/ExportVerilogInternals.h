@@ -217,6 +217,8 @@ public:
   /// are recorded in the map.
   void updateIRwithLoc(unsigned lineOffset, StringAttr fileName,
                        MLIRContext *context) {
+    if (map.empty())
+      return;
     if (!verilogLineAttr) {
       verilogLineAttr = StringAttr::get(context, "verilogLocations");
       metadataAttr = StringAttr::get(context, "Range");

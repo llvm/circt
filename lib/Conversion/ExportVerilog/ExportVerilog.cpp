@@ -910,7 +910,8 @@ public:
   TokenStreamWithCallback<OpLocMap, CallbackDataTy> ps;
 
   explicit EmitterBase(VerilogEmitterState &state)
-      : state(state), ps(state.pp, state.saver) {}
+      : state(state),
+        ps(state.pp, state.saver, state.options.emitVerilogLocations) {}
 
   InFlightDiagnostic emitError(Operation *op, const Twine &message) {
     state.encounteredError = true;
@@ -1822,7 +1823,8 @@ public:
               SmallPtrSetImpl<Operation *> &emittedExprs,
               BufferingPP::BufferVec &tokens)
       : EmitterBase(emitter.state), emitter(emitter),
-        emittedExprs(emittedExprs), buffer(tokens), ps(buffer, state.saver) {
+        emittedExprs(emittedExprs), buffer(tokens),
+        ps(buffer, state.saver, state.options.emitVerilogLocations) {
     assert(state.pp.getListener() == &state.saver);
   }
 
@@ -3041,7 +3043,8 @@ public:
                   SmallPtrSetImpl<Operation *> &emittedOps,
                   BufferingPP::BufferVec &tokens)
       : EmitterBase(emitter.state), emitter(emitter), emittedOps(emittedOps),
-        buffer(tokens), ps(buffer, state.saver) {
+        buffer(tokens),
+        ps(buffer, state.saver, state.options.emitVerilogLocations) {
     assert(state.pp.getListener() == &state.saver);
   }
 

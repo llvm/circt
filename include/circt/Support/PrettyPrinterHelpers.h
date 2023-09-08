@@ -379,12 +379,19 @@ class TokenStreamWithCallback : public TokenStream<PPTy> {
   using Base = TokenStream<PPTy>;
   PrintEventAndStorageListener<CallableType, DataType> &saver;
 
+  const bool enableCallback;
+
 public:
   TokenStreamWithCallback(
-      PPTy &pp, PrintEventAndStorageListener<CallableType, DataType> &saver)
-      : TokenStream<PPTy>(pp, saver), saver(saver) {}
+      PPTy &pp, PrintEventAndStorageListener<CallableType, DataType> &saver,
+      bool enableCallback)
+      : TokenStream<PPTy>(pp, saver), saver(saver),
+        enableCallback(enableCallback) {}
   /// Add a Callback token.
-  void addCallback(DataType d) { Base::addToken(saver.getToken(d)); }
+  void addCallback(DataType d) {
+    if (enableCallback)
+      Base::addToken(saver.getToken(d));
+  }
 };
 } // end namespace pretty
 } // end namespace circt
