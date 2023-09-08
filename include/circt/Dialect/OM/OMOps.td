@@ -320,4 +320,22 @@ def PathOp : OMOp<"path", [Pure,
   let assemblyFormat = "$targetKind $target attr-dict";
 }
 
+def AnyCastOp : OMOp<"any_cast", [Pure]> {
+  let summary = "Cast any value to any type.";
+
+  let description = [{
+    Casts any value to AnyType. This is useful for situations where a value of
+    AnyType is needed, but a value of some concrete type is known.
+
+    In the evaluator, this is a noop, and the value of concrete type is used.
+  }];
+
+  let arguments = (ins AnyType:$input);
+
+  let results = (outs OMAnyType:$result);
+
+  let assemblyFormat =
+     "$input attr-dict `:` functional-type($input, $result)";
+}
+
 #endif // CIRCT_DIALECT_OM_OMOPS_TD
