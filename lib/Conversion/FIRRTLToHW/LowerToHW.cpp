@@ -1663,6 +1663,8 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitExpr(Mux4CellIntrinsicOp op);
   LogicalResult visitExpr(MultibitMuxOp op);
   LogicalResult visitExpr(VerbatimExprOp op);
+  LogicalResult visitExpr(XMRRefOp op);
+  LogicalResult visitExpr(XMRDerefOp op);
 
   // Statements
   LogicalResult lowerVerificationStatement(
@@ -3991,6 +3993,39 @@ LogicalResult FIRRTLLowering::visitExpr(VerbatimExprOp op) {
 
   return setLoweringTo<sv::VerbatimExprOp>(op, resultTy, op.getTextAttr(),
                                            operands, symbols);
+}
+
+LogicalResult FIRRTLLowering::visitExpr(XMRRefOp op) {
+  // This XMR is accessed solely by FIRRTL statements that mutate the probe.
+  // To avoid the use of clock wires, create an `i1` wire and ensure that
+  // all connections are also of the `i1` type.
+  Type baseType = op.getType().getType();
+
+  Type xmrType;
+  if (isa<ClockType>(baseType))
+    xmrType = builder.getIntegerType(1);
+  else
+    xmrType = lowerType(baseType);
+
+  return setLoweringTo<sv::XMRRefOp>(op, sv::InOutType::get(xmrType),
+                                     op.getRef(), op.getVerbatimSuffixAttr());
+}
+
+LogicalResult FIRRTLLowering::visitExpr(XMRDerefOp op) {
+  // When an XMR targets a clock wire, replace it with an `i1` wire, but
+  // introduce a clock-typed read op into the design afterwards.
+  Type xmrType;
+  if (isa<ClockType>(op.getType()))
+    xmrType = builder.getIntegerType(1);
+  else
+    xmrType = lowerType(op.getType());
+
+  auto xmr = builder.create<sv::XMRRefOp>(
+      sv::InOutType::get(xmrType), op.getRef(), op.getVerbatimSuffixAttr());
+  auto readXmr = getReadValue(xmr);
+  if (!isa<ClockType>(op.getType()))
+    return setLowering(op, readXmr);
+  return setLoweringTo<seq::ToClockOp>(op, readXmr);
 }
 
 //===----------------------------------------------------------------------===//

@@ -57,7 +57,7 @@ public:
             // Miscellaneous.
             BitsPrimOp, HeadPrimOp, MuxPrimOp, PadPrimOp, ShlPrimOp, ShrPrimOp,
             TailPrimOp, VerbatimExprOp, HWStructCastOp, BitCastOp, RefSendOp,
-            RefResolveOp, RefSubOp, RWProbeOp,
+            RefResolveOp, RefSubOp, RWProbeOp, XMRRefOp, XMRDerefOp,
             // Casts to deal with weird stuff
             UninferredResetCastOp, ConstCastOp, RefCastOp,
             mlir::UnrealizedConversionCastOp,
@@ -193,6 +193,8 @@ public:
   HANDLE(RefResolveOp, Unhandled);
   HANDLE(RefSubOp, Unhandled);
   HANDLE(RWProbeOp, Unhandled);
+  HANDLE(XMRRefOp, Unhandled);
+  HANDLE(XMRDerefOp, Unhandled);
 
   // Conversions.
   HANDLE(HWStructCastOp, Unhandled);

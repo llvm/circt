@@ -72,7 +72,6 @@ llvm::raw_ostream &operator<<(llvm::raw_ostream &os, const XMRNode &node) {
 class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
 
   void runOnOperation() override {
-
     // Populate a CircuitNamespace that can be used to generate unique
     // circuit-level symbols.
     CircuitNamespace ns(getOperation());
@@ -440,31 +439,18 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
   }
 
   LogicalResult resolveReference(mlir::TypedValue<RefType> refVal,
-                                 Type desiredType, Location loc,
-                                 Operation *insertBefore, Value &out) {
+                                 ImplicitLocOpBuilder &builder,
+                                 FlatSymbolRefAttr &ref, StringAttr &xmrAttr) {
     auto remoteOpPath = getRemoteRefSend(refVal);
     if (!remoteOpPath)
       return failure();
 
-    ImplicitLocOpBuilder builder(loc, insertBefore);
-    mlir::FlatSymbolRefAttr ref;
     SmallString<128> xmrString;
     if (failed(resolveReferencePath(refVal, builder, ref, xmrString)))
       return failure();
+    xmrAttr =
+        xmrString.empty() ? StringAttr{} : builder.getStringAttr(xmrString);
 
-    // Create the XMR op and convert it to the referenced FIRRTL type.
-    auto referentType = refVal.getType().getType();
-    Value xmrResult;
-    auto xmrType = sv::InOutType::get(lowerType(referentType));
-    xmrResult = builder
-                    .create<sv::XMRRefOp>(
-                        xmrType, ref,
-                        xmrString.empty() ? StringAttr{}
-                                          : builder.getStringAttr(xmrString))
-                    .getResult();
-    out =
-        builder.create<mlir::UnrealizedConversionCastOp>(desiredType, xmrResult)
-            .getResult(0);
     return success();
   }
 
@@ -474,15 +460,20 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
         .Case<RefForceOp, RefForceInitialOp, RefReleaseOp, RefReleaseInitialOp>(
             [&](auto op) {
               // Drop if zero-width target.
-              if (isZeroWidth(op.getDest().getType().getType())) {
+              auto destType = op.getDest().getType();
+              if (isZeroWidth(destType.getType())) {
                 op.erase();
                 return success();
               }
-              Value ref;
-              if (failed(resolveReference(op.getDest(), op.getDest().getType(),
-                                          op.getLoc(), op, ref)))
+
+              ImplicitLocOpBuilder builder(op.getLoc(), op);
+              FlatSymbolRefAttr ref;
+              StringAttr str;
+              if (failed(resolveReference(op.getDest(), builder, ref, str)))
                 return failure();
-              op.getDestMutable().assign(ref);
+
+              Value xmr = builder.create<XMRRefOp>(destType, ref, str);
+              op.getDestMutable().assign(xmr);
               return success();
             })
         .Default([](auto *op) {
@@ -503,10 +494,14 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
       resolve.getResult().replaceAllUsesWith(zeroC);
       return success();
     }
-    Value result;
-    if (failed(resolveReference(resolve.getRef(), resolve.getType(),
-                                resolve.getLoc(), resolve, result)))
+
+    FlatSymbolRefAttr ref;
+    StringAttr str;
+    ImplicitLocOpBuilder builder(resolve.getLoc(), resolve);
+    if (failed(resolveReference(resolve.getRef(), builder, ref, str)))
       return failure();
+
+    Value result = builder.create<XMRDerefOp>(resolve.getType(), ref, str);
     resolve.getResult().replaceAllUsesWith(result);
     return success();
   }
