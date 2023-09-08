@@ -913,7 +913,8 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
   // Unique constants per <Const,Type> pair, inserted at entry
   DenseMap<std::pair<Attribute, Type>, Operation *> constPool;
 
-  auto getConst = [&](Attribute constantValue, Type type, Location loc) {
+  std::function<Value(Attribute, Type, Location)> getConst =
+      [&](Attribute constantValue, Type type, Location loc) -> Value {
     auto constIt = constPool.find({constantValue, type});
     if (constIt != constPool.end()) {
       auto *cst = constIt->second;
@@ -923,8 +924,19 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
     }
     OpBuilder::InsertionGuard x(builder);
     builder.setInsertionPoint(cursor);
-    auto *cst = module->getDialect()->materializeConstant(
-        builder, constantValue, type, loc);
+
+    // Materialize reftype "constants" by materializing the constant
+    // and probing it.
+    Operation *cst;
+    if (auto refType = type_dyn_cast<RefType>(type)) {
+      assert(!type_cast<RefType>(type).getForceable() &&
+             "Attempting to materialize rwprobe of constant, shouldn't happen");
+      auto inner = getConst(constantValue, refType.getType(), loc);
+      assert(inner);
+      cst = builder.create<RefSendOp>(loc, inner);
+    } else
+      cst = module->getDialect()->materializeConstant(builder, constantValue,
+                                                      type, loc);
     assert(cst && "all FIRRTL constants can be materialized");
     constPool.insert({{constantValue, type}, cst});
     return cst->getResult(0);

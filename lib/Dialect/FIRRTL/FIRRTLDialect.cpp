@@ -48,18 +48,6 @@ void FIRRTLDialect::initialize() {
 Operation *FIRRTLDialect::materializeConstant(OpBuilder &builder,
                                               Attribute value, Type type,
                                               Location loc) {
-  // Materialize reftype "constants" by materializing the constant
-  // and probing it.
-  if (auto refType = type_dyn_cast<RefType>(type)) {
-    assert(!type_cast<RefType>(type).getForceable() &&
-           "Attempting to materialize rwprobe of constant, shouldn't happen");
-    auto *constantValue =
-        materializeConstant(builder, value, refType.getType(), loc);
-    if (!constantValue)
-      return nullptr;
-    assert(constantValue->getNumResults() == 1);
-    return builder.create<RefSendOp>(loc, constantValue->getResult(0));
-  }
 
   // Boolean constants. Boolean attributes are always a special constant type
   // like ClockType and ResetType.  Since BoolAttrs are also IntegerAttrs, its
