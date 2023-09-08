@@ -173,8 +173,7 @@ class ModuleLike:
     if len(parameters) > 0 or "parameters" not in attributes:
       attributes["parameters"] = ArrayAttr.get(parameters)
 
-    attributes["module_type"] = TypeAttr.get(
-        hw.ModuleType.get(module_ports))
+    attributes["module_type"] = TypeAttr.get(hw.ModuleType.get(module_ports))
 
     super().__init__(
         self.build_generic(attributes=attributes,
