@@ -38,7 +38,7 @@ module {
       om.class.extern.field @a: i1
     }
     om.class @Conflict() {
-      %0 = om.constant 0 : i1 
+      %0 = om.constant 0 : i1
       om.class.field @c, %0: i1
     }
     om.class @UseConflict() {
@@ -49,7 +49,7 @@ module {
   }
   module {
     om.class @Conflict() {
-      %0 = om.constant 0 : i1 
+      %0 = om.constant 0 : i1
       om.class.field @c, %0: i1
     }
     om.class @UseConflict() {
