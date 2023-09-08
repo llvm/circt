@@ -148,6 +148,9 @@ FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::evaluateValue(
             .Case([&](MapCreateOp op) {
               return evaluateMapCreate(op, actualParams);
             })
+            .Case([&](AnyCastOp op) {
+              return evaluateValue(op.getInput(), actualParams);
+            })
             .Default([&](Operation *op) {
               auto error = op->emitError("unable to evaluate value");
               error.attachNote() << "value: " << value;
