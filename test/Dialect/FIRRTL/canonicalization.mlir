@@ -2360,6 +2360,18 @@ firrtl.module @constReg(in %clock: !firrtl.clock,
   // CHECK:  firrtl.strictconnect %out, %[[C11]]
 }
 
+// CHECK-LABEL: firrtl.module @SingleConnectInWhen
+firrtl.module @SingleConnectInWhen(in %p1: !firrtl.uint<8>, in %p2: !firrtl.uint<1>, out %out: !firrtl.uint<8>) {
+  %w = firrtl.wire : !firrtl.uint<8>
+  // CHECK: firrtl.when
+  // CHECK-NEXT: firrtl.strictconnect %w, %p1
+  // CHECK: firrtl.strictconnect %out, %w
+  firrtl.when %p2 : !firrtl.uint<1> {
+    firrtl.strictconnect %w, %p1 : !firrtl.uint<8>
+  }
+  firrtl.strictconnect %out, %w : !firrtl.uint<8>
+}
+
 // CHECK-LABEL: firrtl.module @constReg
 firrtl.module @constReg2(in %clock: !firrtl.clock,
               in %en: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
@@ -2512,6 +2524,19 @@ firrtl.module @MergeAgg(out %o: !firrtl.vector<bundle<valid: uint<1>, ready: uin
 // CHECK-NEXT: %a = firrtl.wire   : !firrtl.vector<bundle<valid: uint<1>, ready: uint<1>>, 3>
 // CHECK-NEXT: firrtl.strictconnect %o, %a : !firrtl.vector<bundle<valid: uint<1>, ready: uint<1>>, 3>
 // CHECK-NEXT: firrtl.strictconnect %a, %0 : !firrtl.vector<bundle<valid: uint<1>, ready: uint<1>>, 3>
+}
+
+// Don't collect connections in a when block.
+// CHECK-LABEL: firrtl.module @DontMergeVector
+firrtl.module @DontMergeVector(out %o:!firrtl.vector<uint<1>, 1>, in %i:!firrtl.uint<1> ) {
+  %a = firrtl.wire : !firrtl.vector<uint<1>, 1>
+  %0 = firrtl.subindex %a[0] : !firrtl.vector<uint<1>, 1>
+  firrtl.when %i : !firrtl.uint<1> {
+    firrtl.connect %0, %i : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+  firrtl.strictconnect %o, %a : !firrtl.vector<uint<1>, 1>
+  // CHECK:      firrtl.when %i
+  // CHECK-NEXT: firrtl.strictconnect %0, %i
 }
 
 // TODO: Move to an apporpriate place

@@ -1725,8 +1725,10 @@ StrictConnectOp firrtl::getSingleConnectUserOf(Value value) {
     if (auto aConnect = dyn_cast<FConnectLike>(user))
       if (aConnect.getDest() == value) {
         auto strictConnect = dyn_cast<StrictConnectOp>(*aConnect);
-        // If this is not a strict connect, or a second strict connect, fail.
-        if (!strictConnect || (connect && connect != strictConnect))
+        // If this is not a strict connect, a second strict connect or in a
+        // different block, fail.
+        if (!strictConnect || (connect && connect != strictConnect) ||
+            strictConnect->getBlock() != value.getParentBlock())
           return {};
         else
           connect = strictConnect;
@@ -1974,7 +1976,8 @@ struct AggOneShot : public mlir::RewritePattern {
 
   SmallVector<Value> getCompleteWrite(Operation *lhs) const {
     auto lhsTy = lhs->getResult(0).getType();
-    if (!isa<BundleType, FVectorType>(lhsTy))
+    if (!type_isa<BundleType, FVectorType>(lhsTy) ||
+        !type_cast<FIRRTLBaseType>(lhsTy).isPassive())
       return {};
 
     DenseMap<uint32_t, Value> fields;
@@ -1988,6 +1991,8 @@ struct AggOneShot : public mlir::RewritePattern {
         for (Operation *subuser : subField.getResult().getUsers()) {
           if (auto aConnect = dyn_cast<StrictConnectOp>(subuser)) {
             if (aConnect.getDest() == subField) {
+              if (subuser->getParentOp() != lhs->getParentOp())
+                return {};
               if (fields.count(subField.getFieldIndex())) // duplicate write
                 return {};
               fields[subField.getFieldIndex()] = aConnect.getSrc();
@@ -2000,6 +2005,8 @@ struct AggOneShot : public mlir::RewritePattern {
         for (Operation *subuser : subIndex.getResult().getUsers()) {
           if (auto aConnect = dyn_cast<StrictConnectOp>(subuser)) {
             if (aConnect.getDest() == subIndex) {
+              if (subuser->getParentOp() != lhs->getParentOp())
+                return {};
               if (fields.count(subIndex.getIndex())) // duplicate write
                 return {};
               fields[subIndex.getIndex()] = aConnect.getSrc();
