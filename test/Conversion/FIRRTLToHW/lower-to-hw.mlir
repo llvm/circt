@@ -1341,18 +1341,14 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-LABEL: hw.module @ForceRelease(
   firrtl.module @ForceRelease(in %c: !firrtl.uint<1>, in %clock: !firrtl.clock, in %x: !firrtl.uint<4>) {
     firrtl.instance r sym @xmr_sym @RefMe()
-    %0 = sv.xmr.ref @xmrPath : !hw.inout<i4>
-    %1 = builtin.unrealized_conversion_cast %0 : !hw.inout<i4> to !firrtl.rwprobe<uint<4>>
-    firrtl.ref.force %clock, %c, %1, %x : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<4>
-    %2 = sv.xmr.ref @xmrPath : !hw.inout<i4>
-    %3 = builtin.unrealized_conversion_cast %2 : !hw.inout<i4> to !firrtl.rwprobe<uint<4>>
-    firrtl.ref.force_initial %c, %3, %x : !firrtl.uint<1>, !firrtl.uint<4>
-    %4 = sv.xmr.ref @xmrPath : !hw.inout<i4>
-    %5 = builtin.unrealized_conversion_cast %4 : !hw.inout<i4> to !firrtl.rwprobe<uint<4>>
-    firrtl.ref.release %clock, %c, %5 : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>
-    %6 = sv.xmr.ref @xmrPath : !hw.inout<i4>
-    %7 = builtin.unrealized_conversion_cast %6 : !hw.inout<i4> to !firrtl.rwprobe<uint<4>>
-    firrtl.ref.release_initial %c, %7 : !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>
+    %0 = firrtl.xmr.ref @xmrPath : !firrtl.rwprobe<uint<4>>
+    firrtl.ref.force %clock, %c, %0, %x : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<4>
+    %1 = firrtl.xmr.ref @xmrPath : !firrtl.rwprobe<uint<4>>
+    firrtl.ref.force_initial %c, %1, %x : !firrtl.uint<1>, !firrtl.uint<4>
+    %2 = firrtl.xmr.ref @xmrPath : !firrtl.rwprobe<uint<4>>
+    firrtl.ref.release %clock, %c, %2 : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>
+    %3 = firrtl.xmr.ref @xmrPath : !firrtl.rwprobe<uint<4>>
+    firrtl.ref.release_initial %c, %3 : !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>
   }
   // CHECK-NEXT:  [[CLOCK:%.+]] = seq.from_clock %clock
   // CHECK-NEXT:  hw.instance "r" sym @xmr_sym @RefMe() -> ()
@@ -1551,4 +1547,17 @@ firrtl.circuit "ClockMuxLowering" {
     %0 = firrtl.mux(%cond, %clockTrue, %clockFalse) : (!firrtl.uint<1>, !firrtl.clock, !firrtl.clock) -> !firrtl.clock
     firrtl.strictconnect %out, %0 : !firrtl.clock
   }
+}
+
+// -----
+
+firrtl.circuit "RefXMRLowering" {
+  hw.hierpath private @path [@RefXMRLowering::@dummy]
+
+  firrtl.module @RefXMRLowering() {
+    // CHECK: sv.xmr.ref @path "test" : !hw.inout<i3>
+    firrtl.wire sym @dummy : !firrtl.uint<1>
+    firrtl.xmr.ref @path, "test" : !firrtl.rwprobe<uint<3>>
+  }
+
 }
