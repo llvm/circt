@@ -68,6 +68,12 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createWireDFTPass());
 
+  // Run canonicalizer before LowerTypes to prevent constant subaccess from
+  // causing IR size explosion.
+  if (!opt.disableOptimization)
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+        createSimpleCanonicalizerPass());
+
   if (opt.vbToBV) {
     pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass(
         firrtl::PreserveAggregate::All, firrtl::PreserveAggregate::All));
