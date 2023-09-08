@@ -208,8 +208,8 @@ void MergeMethodArgs::rewrite(MethodOp func, OpAdaptor adaptor,
   if (func->getNumRegions() > 0) {
     // Create a body block with a struct explode to the arg struct into the
     // original arguments.
-    Block *b = rewriter.createBlock(&newMethod.getBodyRegion(), {}, {argStruct},
-                                    {argLoc});
+    Block *b =
+        rewriter.createBlock(&newMethod.getRegion(), {}, {argStruct}, {argLoc});
     rewriter.setInsertionPointToStart(b);
     auto replacementArgs =
         rewriter.create<hw::StructExplodeOp>(loc, b->getArgument(0));

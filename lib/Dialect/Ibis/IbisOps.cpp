@@ -15,7 +15,6 @@
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Interfaces/FunctionImplementation.h"
 #include "llvm/ADT/TypeSwitch.h"
-
 using namespace mlir;
 using namespace circt;
 using namespace ibis;
@@ -176,7 +175,6 @@ ParseResult MethodOp::parse(OpAsmParser &parser, OperationState &result) {
   if (parser.parseRegion(*body, args))
     return failure();
 
-  ensureTerminator(*body, parser.getBuilder(), result.location);
   return success();
 }
 

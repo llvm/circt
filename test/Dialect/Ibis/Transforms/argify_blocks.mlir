@@ -22,6 +22,7 @@ ibis.class @Argify {
       %c31 = hw.constant 31 : i32
       %res = arith.addi %c31, %c32 : i32
       ibis.block.return %res, %c32 : i32, i32
-    } 
+    }
+    ibis.return
   }
 }

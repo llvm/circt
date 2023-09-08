@@ -36,7 +36,8 @@ ibis.class @HighLevel {
       %v = memref.load %local[] : memref<i32>
       memref.store %arg, %local[] : memref<i32>
       ibis.block.return %v, %v : i32, i32
-    } 
+    }
+    ibis.return
   }
 }
 
