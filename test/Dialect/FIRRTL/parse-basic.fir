@@ -1844,10 +1844,20 @@ circuit VecOfProps:
     ; CHECK-COUNT-2: openvector<string, 2>
 
 ;// -----
-FIRRTL version 3.1.0
+FIRRTL version 3.2.0
 
 ; CHECK-LABEL: circuit "AnyRef"
 circuit AnyRef:
+  class Foo:
+    skip
   module AnyRef:
     input x : AnyRef
     ; CHECK: !firrtl.anyref
+    output y : AnyRef
+    ; CHECK: !firrtl.anyref
+
+    object foo of Foo
+    propassign y, foo
+    ; CHECK: %[[OBJ:.+]] = firrtl.object
+    ; CHECK: %[[CAST:.+]] = firrtl.object.anyref_cast %[[OBJ]]
+    ; CHECK: firrtl.propassign %y, %[[CAST]]

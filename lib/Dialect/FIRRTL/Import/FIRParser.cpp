@@ -3447,10 +3447,15 @@ ParseResult FIRStmtParser::parsePropAssign() {
   auto rhsType = type_dyn_cast<PropertyType>(rhs.getType());
   if (!lhsType || !rhsType)
     return emitError(loc, "can only propassign property types");
-  if (lhsType != rhsType)
-    return emitError(loc, "cannot propassign non-equivalent type ")
-           << rhsType << " to " << lhsType;
   locationProcessor.setLoc(loc);
+  if (lhsType != rhsType) {
+    // If the lhs is anyref, and the rhs is a ClassType, insert a cast.
+    if (isa<AnyRefType>(lhsType) && isa<ClassType>(rhsType))
+      rhs = builder.create<ObjectAnyRefCastOp>(rhs);
+    else
+      return emitError(loc, "cannot propassign non-equivalent type ")
+             << rhsType << " to " << lhsType;
+  }
   builder.create<PropAssignOp>(lhs, rhs);
   return success();
 }
