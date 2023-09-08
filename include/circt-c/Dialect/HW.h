@@ -29,12 +29,15 @@ struct HWStructFieldInfo {
 };
 typedef struct HWStructFieldInfo HWStructFieldInfo;
 
+enum HWModulePortDirection { Input, Output, InOut };
+typedef enum HWModulePortDirection HWModulePortDirection;
+
 struct HWModulePort {
-  enum Direction { Input, Output, InOut };
   MlirAttribute name;
   MlirType type;
-  Direction dir;
+  HWModulePortDirection dir;
 };
+typedef struct HWModulePort HWModulePort;
 
 //===----------------------------------------------------------------------===//
 // Dialect API.

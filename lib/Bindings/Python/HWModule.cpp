@@ -51,14 +51,14 @@ void circt::python::populateDialectHWSubmodule(py::module &m) {
       .def_property_readonly(
           "size", [](MlirType self) { return hwArrayTypeGetSize(self); });
 
-  py::enum_<HWModulePort::Direction>(m, "ModulePortDirection")
-      .value("INPUT", HWModulePort::Direction::Input)
-      .value("OUTPUT", HWModulePort::Direction::Output)
-      .value("INOUT", HWModulePort::Direction::InOut)
+  py::enum_<HWModulePortDirection>(m, "ModulePortDirection")
+      .value("INPUT", HWModulePortDirection::Input)
+      .value("OUTPUT", HWModulePortDirection::Output)
+      .value("INOUT", HWModulePortDirection::InOut)
       .export_values();
 
   py::class_<HWModulePort>(m, "ModulePort")
-      .def(py::init<MlirAttribute, MlirType, HWModulePort::Direction>());
+      .def(py::init<MlirAttribute, MlirType, HWModulePortDirection>());
 
   mlir_type_subclass(m, "ModuleType", hwTypeIsAModuleType)
       .def_classmethod(

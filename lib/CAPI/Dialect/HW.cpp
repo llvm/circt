@@ -82,13 +82,13 @@ MlirType hwModuleTypeGet(MlirContext ctx, intptr_t numPorts,
 
     ModulePort::Direction dir;
     switch (port.dir) {
-    case HWModulePort::Input:
+    case HWModulePortDirection::Input:
       dir = ModulePort::Direction::Input;
       break;
-    case HWModulePort::Output:
+    case HWModulePortDirection::Output:
       dir = ModulePort::Direction::Output;
       break;
-    case HWModulePort::InOut:
+    case HWModulePortDirection::InOut:
       dir = ModulePort::Direction::InOut;
       break;
     }
