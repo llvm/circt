@@ -1,8 +1,10 @@
 // RUN: circt-opt %s -export-verilog -verify-diagnostics --mlir-print-debuginfo --split-input-file | FileCheck %s --strict-whitespace
 
+module attributes {circt.loweringOptions = "emitVerilogLocations"} {
 hw.module @MultiUseExpr(%a: i4) -> (b0: i1) {
   %0 = comb.parity %a : i4
   hw.output %0 : i1
+}
 }
 // Line 2: module MultiUseExpr(
 //   input  [3:0] a,
@@ -38,7 +40,7 @@ hw.module @MultiUseExpr(%a: i4) -> (b0: i1) {
 
 // -----
 
-module attributes {circt.loweringOptions = "locationInfoStyle=none"} {
+module attributes {circt.loweringOptions = "locationInfoStyle=none,emitVerilogLocations"} {
 hw.module @SimpleConstPrintReset(%clock: i1, %reset: i1, %in4: i4) -> () {
   %w = sv.wire : !hw.inout<i4>
   %q = sv.reg : !hw.inout<i4>
@@ -140,6 +142,7 @@ hw.module @SimpleConstPrintReset(%clock: i1, %reset: i1, %in4: i4) -> () {
 
 // -----
 
+module attributes {circt.loweringOptions = "emitVerilogLocations"} {
 hw.module @InlineDeclAssignment(%a: i1) {
   %b = sv.wire : !hw.inout<i1>
   sv.assign %b, %a : i1
@@ -147,6 +150,7 @@ hw.module @InlineDeclAssignment(%a: i1) {
   %0 = comb.add %a, %a : i1
   %c = sv.wire : !hw.inout<i1>
   sv.assign %c, %0 : i1
+}
 }
 
 // module InlineDeclAssignment(
@@ -197,9 +201,10 @@ hw.module @InlineDeclAssignment(%a: i1) {
 // -----
 
 
+module attributes {circt.loweringOptions = "emitVerilogLocations"} {
 hw.module.extern @MyExtModule()
 hw.module.extern @AParameterizedExtModule<CFG: none>()
-
+}
 // CHECK:   hw.module.extern @MyExtModule() loc(#loc11)
 // CHECK:   hw.module.extern @AParameterizedExtModule<CFG: none>() loc(#loc12)
 
