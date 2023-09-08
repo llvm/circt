@@ -87,6 +87,19 @@ struct PortInfoWithIP {
 
 } // end anonymous namespace
 
+/// Return fieldType or fieldType as same ref as type.
+static FIRRTLType mapLoweredType(FIRRTLType type, FIRRTLBaseType fieldType) {
+  return mapBaseType(type, [&](auto) { return fieldType; });
+}
+
+/// Return fieldType or fieldType as same ref as type.
+static Type mapLoweredType(Type type, FIRRTLBaseType fieldType) {
+  auto ftype = type_dyn_cast<FIRRTLType>(type);
+  if (!ftype)
+    return type;
+  return mapLoweredType(ftype, fieldType);
+}
+
 // NOLINTBEGIN(misc-no-recursion)
 /// Return true if the type has more than zero bitwidth.
 static bool hasZeroBitWidth(FIRRTLType type) {
@@ -772,7 +785,7 @@ TypeLoweringVisitor::addArg(Operation *module, unsigned insertPt,
                             const FlatBundleFieldEntry &field,
                             PortInfoWithIP &oldArg, hw::InnerSymAttr newSym) {
   Value newValue;
-  FIRRTLType fieldType = mapBaseType(srcType, [&](auto) { return field.type; });
+  FIRRTLType fieldType = mapLoweredType(srcType, field.type);
   if (auto mod = llvm::dyn_cast<FModuleOp>(module)) {
     Block *body = mod.getBodyBlock();
     // Append the new argument.
@@ -1215,8 +1228,8 @@ bool TypeLoweringVisitor::visitDecl(WireOp op) {
   auto clone = [&](const FlatBundleFieldEntry &field,
                    ArrayAttr attrs) -> Value {
     return builder
-        ->create<WireOp>(field.type, "", NameKindEnum::DroppableName, attrs,
-                         StringAttr{})
+        ->create<WireOp>(mapLoweredType(op.getDataRaw().getType(), field.type),
+                         "", NameKindEnum::DroppableName, attrs, StringAttr{})
         .getResult();
   };
   return lowerProducer(op, clone);
@@ -1448,8 +1461,7 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
       for (const auto &field : fieldTypes) {
         newDirs.push_back(direction::get((unsigned)oldDir ^ field.isOutput));
         newNames.push_back(builder->getStringAttr(oldName + field.suffix));
-        resultTypes.push_back(
-            mapBaseType(srcType, [&](auto base) { return field.type; }));
+        resultTypes.push_back(mapLoweredType(srcType, field.type));
         auto annos = filterAnnotations(
             context, oldPortAnno[i].dyn_cast_or_null<ArrayAttr>(), srcType,
             field);
