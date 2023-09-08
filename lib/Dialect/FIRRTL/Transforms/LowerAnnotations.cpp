@@ -841,12 +841,12 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
     auto sources = sourcePaths[0];
     auto sinks = sinkPaths[0];
     while (!sources.empty() && !sinks.empty()) {
-      if (sources[0] != sinks[0])
+      if (sources.top() != sinks.top())
         break;
-      auto newLCA = sources[0];
+      auto newLCA = sources.top();
       lca = cast<FModuleOp>(instanceGraph.getReferencedModule(newLCA));
-      sources = sources.drop_front();
-      sinks = sinks.drop_front();
+      sources = sources.dropFront();
+      sinks = sinks.dropFront();
     }
 
     LLVM_DEBUG({
@@ -917,8 +917,8 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
              << "\" must be passive (no flips) when using references";
 
     // Record module modifications related to adding ports to modules.
-    auto addPorts = [&](ArrayRef<igraph::InstanceOpInterface> insts, Value val,
-                        Type tpe, Direction dir) {
+    auto addPorts = [&](igraph::InstancePath insts, Value val, Type tpe,
+                        Direction dir) {
       StringRef name, instName;
       for (auto inst : llvm::reverse(insts)) {
         auto mod = instanceGraph.getReferencedModule<FModuleOp>(inst);

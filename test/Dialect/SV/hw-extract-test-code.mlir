@@ -429,7 +429,7 @@ module {
   // CHECK: %symbol = seq.firreg
   // CHECK: %designAndTestCode = seq.firreg
   // CHECK-NOT: seq.firreg
-  hw.module @RegExtracted(%clock: i1, %reset: i1, %in: i1) -> (out: i1) {
+  hw.module @RegExtracted(%clock: !seq.clock, %reset: i1, %in: i1) -> (out: i1) {
     %muxed = comb.mux bin %reset, %in, %testCode1 : i1
     %testCode1 = seq.firreg %muxed clock %clock : i1
     %testCode2 = seq.firreg %testCode1 clock %clock : i1
@@ -437,7 +437,8 @@ module {
     %designAndTestCode = seq.firreg %in clock %clock : i1
     %deadReg = seq.firreg %testCode1 clock %clock : i1
 
-    sv.always posedge %clock {
+    %clk = seq.from_clock %clock
+    sv.always posedge %clk {
       sv.cover %testCode1, immediate
       sv.cover %testCode2, immediate
       sv.cover %designAndTestCode, immediate

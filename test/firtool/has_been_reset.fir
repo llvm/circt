@@ -30,6 +30,7 @@ circuit Foo:
     hbr[1] <= int2.out
 
 ; CHECK-LABEL: hw.module @Foo
-; CHECK-NEXT: verif.has_been_reset %clock, sync %reset1
-; CHECK-NEXT: verif.has_been_reset %clock, async %reset2
+; CHECK-NEXT: [[CLOCK:%.+]] = seq.from_clock %clock
+; CHECK-NEXT: verif.has_been_reset [[CLOCK]], sync %reset1
+; CHECK-NEXT: verif.has_been_reset [[CLOCK]], async %reset2
 ; CHECK-NEXT: hw.output

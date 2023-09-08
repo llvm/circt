@@ -51,7 +51,7 @@ LogicalResult circt::firrtl::applyWiring(const AnnoPathValue &target,
               << target.ref;
           return failure();
         }
-        inst = cast<InstanceOp>(paths[0].back());
+        inst = cast<InstanceOp>(paths[0].leaf());
       } else {
         inst = cast<InstanceOp>(target.instances.back());
       }

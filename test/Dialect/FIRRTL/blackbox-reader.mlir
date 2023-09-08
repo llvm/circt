@@ -22,9 +22,8 @@ firrtl.circuit "Foo" attributes {annotations = [
   // CHECK-NOT: class = "firrtl.transforms.BlackBoxInlineAnno"
   firrtl.extmodule @ExtFoo3() attributes {annotations = [{class = "firrtl.transforms.BlackBoxInlineAnno", name = "hello3.v", text = "// world"}, {class = "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation"}]}
   // CHECK-LABEL: firrtl.module @DUTBlackboxes
-  // CHECK-NOT: class = "firrtl.transforms.BlackBoxInlineAnno"
   firrtl.module @DUTBlackboxes() attributes {annotations = [
-      {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}, {class = "firrtl.transforms.BlackBoxInlineAnno", name = "hello_dut.v", text = "// world"}]} {
+      {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
       firrtl.instance foo2  @ExtFoo2()
       firrtl.instance bar @Bar()
       firrtl.instance baz @Baz()
@@ -40,13 +39,11 @@ firrtl.circuit "Foo" attributes {annotations = [
   // CHECK: sv.verbatim "// world" {output_file = #hw.output_file<"..{{/|\\\\}}testbench{{/|\\\\}}hello.v">}
   // CHECK: sv.verbatim "// world" {output_file = #hw.output_file<"cover{{/|\\\\}}hello2.v">}
   // CHECK: sv.verbatim "// world" {output_file = #hw.output_file<"..{{/|\\\\}}testbench{{/|\\\\}}hello3.v">}
-  // CHECK: sv.verbatim "// world" {output_file = #hw.output_file<".{{/|\\\\}}hello_dut.v">}
   // CHECK: sv.verbatim "/* Bar */\0A" {output_file = #hw.output_file<"bar{{/|\\\\}}Bar.v">}
   // CHECK: sv.verbatim "/* Baz */{{(\\0D)?}}\0A" {output_file = #hw.output_file<"baz{{/|\\\\}}Baz.sv">}
   // CHECK: sv.verbatim "/* Qux */\0A" {output_file = #hw.output_file<"qux{{/|\\\\}}NotQux.jpeg">}
   // CHECK: sv.verbatim "..{{/|\\\\}}testbench{{/|\\\\}}hello.v\0A
   // CHECK-SAME:         ..{{/|\\\\}}testbench{{/|\\\\}}hello3.v\0A
-  // CHECK-SAME:         hello_dut.v\0A
   // CHECK-SAME:         bar{{/|\\\\}}Bar.v\0A
   // CHECK-SAME:         baz{{/|\\\\}}Baz.sv\0A
   // CHECK-SAME:         cover{{/|\\\\}}hello2.v\0A

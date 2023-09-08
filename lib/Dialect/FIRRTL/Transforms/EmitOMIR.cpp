@@ -739,7 +739,7 @@ void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
     diag.attachNote(tracker.op->getLoc())
         << "may refer to the following paths:";
     for (auto path : paths)
-      formatInstancePath(diag.attachNote(tracker.op->getLoc()) << "- ", path);
+      path.print(diag.attachNote(tracker.op->getLoc()) << "- ");
     anyFailures = true;
     return;
   }

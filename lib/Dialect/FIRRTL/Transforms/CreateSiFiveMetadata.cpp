@@ -315,12 +315,12 @@ CreateSiFiveMetadataPass::emitMemoryMetadata(ObjectModelIR &omir) {
         for (auto p : paths) {
           if (p.empty())
             continue;
-          auto top = p.front();
+          auto top = p.top();
           std::string hierName =
               addSymbolToVerbatimOp(top->getParentOfType<FModuleOp>(),
                                     jsonSymbols)
                   .c_str();
-          auto finalInst = p.back();
+          auto finalInst = p.leaf();
           for (auto inst : llvm::drop_end(p)) {
             auto parentModule = inst->getParentOfType<FModuleOp>();
             if (dutMod == parentModule)
