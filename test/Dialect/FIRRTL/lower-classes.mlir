@@ -246,3 +246,17 @@ firrtl.circuit "PathModule" {
     // CHECK:  om.class.field @propOut, %[[c1]] : !om.list<!om.integer>
   }
 }
+
+// CHECK-LABEL: firrtl.circuit "WireProp"
+firrtl.circuit "WireProp" {
+  // CHECK: om.class @WireProp
+  // CHECK-SAME: %[[IN:.+]]: !om.string
+  firrtl.module @WireProp(in %in: !firrtl.string, out %out: !firrtl.string) attributes {convention = #firrtl<convention scalarized>} {
+    // CHECK-NOT: firrtl.wire
+    // CHECK-NOT: firrtl.propassign
+    // CHECK: om.class.field @out, %[[IN]] : !om.string
+    %s = firrtl.wire : !firrtl.string
+    firrtl.propassign %s, %in : !firrtl.string
+    firrtl.propassign %out, %s : !firrtl.string
+  }
+}

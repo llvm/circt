@@ -662,6 +662,40 @@ struct PathOpConversion : public OpConversionPattern<firrtl::PathOp> {
   const PathInfoTable &pathInfoTable;
 };
 
+struct WireOpConversion : public OpConversionPattern<WireOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(WireOp wireOp, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto wireValue = dyn_cast<FIRRTLPropertyValue>(wireOp.getResult());
+
+    // If the wire isn't a Property, not much we can do here.
+    if (!wireValue)
+      return failure();
+
+    // If the wire isn't inside a graph region, we can't trivially remove it. In
+    // practice, this pattern does run for wires in graph regions, so this check
+    // should pass and we can proceed with the trivial rewrite.
+    auto regionKindInterface = wireOp->getParentOfType<RegionKindInterface>();
+    if (!regionKindInterface)
+      return failure();
+    if (regionKindInterface.getRegionKind(0) != RegionKind::Graph)
+      return failure();
+
+    // Find the assignment to the wire.
+    PropAssignOp propAssign = getPropertyAssignment(wireValue);
+
+    // Use the source of the assignment instead of the wire.
+    rewriter.replaceOp(wireOp, propAssign.getSrc());
+
+    // Erase the source of the assignment.
+    rewriter.eraseOp(propAssign);
+
+    return success();
+  }
+};
+
 struct ObjectSubfieldOpConversion
     : public OpConversionPattern<firrtl::ObjectSubfieldOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -937,6 +971,7 @@ static void populateRewritePatterns(
   patterns.add<StringConstantOpConversion>(converter, patterns.getContext());
   patterns.add<PathOpConversion>(converter, patterns.getContext(),
                                  pathInfoTable);
+  patterns.add<WireOpConversion>(converter, patterns.getContext());
   patterns.add<ObjectSubfieldOpConversion>(converter, patterns.getContext(),
                                            classTypeTable);
   patterns.add<ClassFieldOpConversion>(converter, patterns.getContext());
