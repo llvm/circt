@@ -1,7 +1,5 @@
 add_circt_library(CIRCTCFToHandshake
   CFToHandshake.cpp
-  InsertMergeBlocks.cpp
-  MaximizeSSA.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${MLIR_MAIN_INCLUDE_DIR}/mlir/Conversion/CFToHandshake
@@ -22,4 +20,4 @@ add_circt_library(CIRCTCFToHandshake
   MLIRSupport
   MLIRTransforms
   MLIRAffineToStandard
-  )
+)
