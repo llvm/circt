@@ -50,11 +50,32 @@ class GenOmir:
       nodeOmir["fields"] = nodeFields
       return nodeOmir
 
+  def get_objects_from_container(self, obj: Object) -> list[Object]:
+      """Implement the "abi" for OMNode objects.
+
+      For the top level container, look for fields that are an object of class
+      OMIR. The linker may have mangled names, so just check if OMIR is in the
+      class name at all, which is sketchy but works.
+
+      Each of those object fields will themselves have object fields
+      representing every OMNode. Collect and return those objects.
+      """
+      objects = []
+      for (field_name, data) in obj:
+          if not isinstance(data, Object):
+            continue
+          if not "OMIR" in str(data.type):
+            continue
+          for (_, om_node) in data:
+            if not isinstance(om_node, Object):
+              continue
+            self.nodeList.put(om_node)
+
   def run(self, path: Path, mainClass: String, args: [Any]):
     module = self.load_module_from_file(path)
     evaluator = Evaluator(module)
     root  = evaluator.instantiate(mainClass, *args)
-    self.objectModelList.append(self.addDataForObj(root))
+    self.get_objects_from_container(root)
     while not self.nodeList.empty():
         node = self.nodeList.get()
         self.objectModelList.append(self.addDataForObj(node))
