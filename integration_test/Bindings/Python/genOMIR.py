@@ -80,7 +80,7 @@ if __name__ == "__main__":
     path_argument = args.path_argument
 
     obj = GenOmir()
-    omJson = obj.run(path_argument, args.mainModule, args.mainArgs)
+    omJson = obj.run(path_argument, args.mainClass, args.mainArgs)
 
     output_file_path = args.output_json
 
