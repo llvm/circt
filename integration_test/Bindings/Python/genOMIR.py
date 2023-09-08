@@ -50,10 +50,10 @@ class GenOmir:
       nodeOmir["fields"] = nodeFields
       return nodeOmir
 
-  def run(self, path: Path):
+  def run(self, path: Path, mainClass: String, args: [Any]):
     module = self.load_module_from_file(path)
     evaluator = Evaluator(module)
-    root  = evaluator.instantiate("Client", 456)
+    root  = evaluator.instantiate(mainClass, *args)
     self.objectModelList.append(self.addDataForObj(root))
     while not self.nodeList.empty():
         node = self.nodeList.get()
@@ -66,12 +66,21 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('path_argument', type=Path, help='The mlir file path to process.')
     parser.add_argument('output_json', type=Path, help='The output omir json file path.')
+    parser.add_argument('--main', help='The name of the main OM class',
+                        required=True,
+                        dest='mainClass')
+    parser.add_argument('--args',
+                        help='Arguments to pass to instantiate the main OM class',
+                        required=False,
+                        dest='mainArgs',
+                        action='append',
+                        default=[])
 
     args = parser.parse_args()
     path_argument = args.path_argument
 
     obj = GenOmir()
-    omJson = obj.run(path_argument)
+    omJson = obj.run(path_argument, args.mainModule, args.mainArgs)
 
     output_file_path = args.output_json
 
