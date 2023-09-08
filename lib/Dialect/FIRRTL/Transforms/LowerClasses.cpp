@@ -467,7 +467,7 @@ LogicalResult LowerClassesPass::updateInstances(Operation *op) {
     llvm::SmallVector<Value> args;
     args.resize(nextArgIndex);
 
-    for (auto *user : firrtlObject->getUsers()) {
+    for (auto *user : llvm::make_early_inc_range(firrtlObject->getUsers())) {
       if (auto subfield = dyn_cast<ObjectSubfieldOp>(user)) {
         auto index = subfield.getIndex();
         auto direction = firrtlClassType.getElement(index).direction;
@@ -477,7 +477,8 @@ LogicalResult LowerClassesPass::updateInstances(Operation *op) {
         if (direction == Direction::Out)
           continue;
 
-        for (auto *subfieldUser : subfield->getUsers()) {
+        for (auto *subfieldUser :
+             llvm::make_early_inc_range(subfield->getUsers())) {
           if (auto propassign = dyn_cast<PropAssignOp>(subfieldUser)) {
             // the operands of the propassign may have already been converted to
             // om. Use the generic operand getters to get the operands as
@@ -485,7 +486,7 @@ LogicalResult LowerClassesPass::updateInstances(Operation *op) {
             auto dst = propassign.getOperand(0);
             auto src = propassign.getOperand(1);
             if (dst == subfield.getResult()) {
-              args[argIndexTable[subfield.getIndex()]] = src;
+              args[argIndexTable[index]] = src;
               propassign->erase();
             }
           }
