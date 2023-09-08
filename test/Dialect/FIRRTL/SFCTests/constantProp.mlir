@@ -283,8 +283,8 @@ firrtl.circuit "ConstPropReductionTester"   {
     firrtl.connect %out2, %1 : !firrtl.uint<1>, !firrtl.uint<1>
     %2 = firrtl.orr %c-1_si2 : (!firrtl.sint<2>) -> !firrtl.uint<1>
     firrtl.connect %out3, %2 : !firrtl.uint<1>, !firrtl.uint<1>
-    // CHECK:  %[[C16:.+]] = firrtl.constant 0
-    // CHECK:  %[[C17:.+]] = firrtl.constant 1
+    // CHECK-DAG:  %[[C16:.+]] = firrtl.constant 0
+    // CHECK-DAG:  %[[C17:.+]] = firrtl.constant 1
     // CHECK:  firrtl.strictconnect %out1, %[[C16]]
     // CHECK:  firrtl.strictconnect %out2, %[[C17]]
     // CHECK:  firrtl.strictconnect %out3, %[[C17]]

@@ -905,8 +905,14 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
 
   auto builder = OpBuilder::atBlockBegin(body);
 
+  // Separate the constants we insert from the instructions we are folding and
+  // processing. Leave these as-is until we're done.
+  auto cursor = builder.create<firrtl::ConstantOp>(module.getLoc(), APSInt(1));
+  builder.setInsertionPoint(cursor);
+
   // Unique constants per <Const,Type> pair, inserted at entry
   DenseMap<std::pair<Attribute, Type>, Operation *> constPool;
+
   auto getConst = [&](Attribute constantValue, Type type, Location loc) {
     auto constIt = constPool.find({constantValue, type});
     if (constIt != constPool.end()) {
@@ -915,11 +921,10 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
       cst->setLoc(builder.getFusedLoc({cst->getLoc(), loc}));
       return cst->getResult(0);
     }
-    auto savedIP = builder.saveInsertionPoint();
-    builder.setInsertionPointToStart(body);
+    OpBuilder::InsertionGuard x(builder);
+    builder.setInsertionPoint(cursor);
     auto *cst = module->getDialect()->materializeConstant(
         builder, constantValue, type, loc);
-    builder.restoreInsertionPoint(savedIP);
     assert(cst && "all FIRRTL constants can be materialized");
     constPool.insert({{constantValue, type}, cst});
     return cst->getResult(0);
@@ -968,7 +973,32 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
   // operations into constants, which make the intermediate nodes dead.  Going
   // bottom up eliminates the users of the intermediate ops, allowing us to
   // aggressively delete them.
+  bool aboveCursor = false;
   for (auto &op : llvm::make_early_inc_range(llvm::reverse(*body))) {
+    auto dropIfDead = [&](Operation &op, const Twine &debugPrefix) {
+      if (op.use_empty() &&
+          (wouldOpBeTriviallyDead(&op) || isDeletableWireOrRegOrNode(&op))) {
+        LLVM_DEBUG(
+            { logger.getOStream() << debugPrefix << " : " << op << "\n"; });
+        ++numErasedOp;
+        op.erase();
+        return true;
+      }
+      return false;
+    };
+
+    if (aboveCursor) {
+      // Drop dead constants we materialized.
+      dropIfDead(op, "Trivially dead materialized constant");
+      continue;
+    }
+    // Stop once hit the generated constants.
+    if (&op == cursor) {
+      cursor.erase();
+      aboveCursor = true;
+      continue;
+    }
+
     // Connects to values that we found to be constant can be dropped.
     if (auto connect = dyn_cast<FConnectLike>(op)) {
       if (auto *destOp = connect.getDest().getDefiningOp()) {
@@ -998,14 +1028,11 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
       continue;
 
     // If this operation is already dead, then go ahead and remove it.
-    if (op.use_empty() &&
-        (wouldOpBeTriviallyDead(&op) || isDeletableWireOrRegOrNode(&op))) {
-      LLVM_DEBUG({ logger.getOStream() << "Trivially dead : " << op << "\n"; });
-      op.erase();
+    if (dropIfDead(op, "Trivially dead"))
       continue;
-    }
 
-    // Don't "refold" constants, especially those cached in the constant pool.
+    // Don't "fold" constants (into equivalent), also because they
+    // may have name hints we'd like to preserve.
     if (op.hasTrait<mlir::OpTrait::ConstantLike>())
       continue;
 
@@ -1019,13 +1046,8 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
       ++numFoldedOp;
 
     // If the operation folded to a constant then we can probably nuke it.
-    if (foldedAny && op.use_empty() &&
-        (wouldOpBeTriviallyDead(&op) || isDeletableWireOrRegOrNode(&op))) {
-      LLVM_DEBUG({ logger.getOStream() << "Made dead : " << op << "\n"; });
-      op.erase();
-      ++numErasedOp;
+    if (foldedAny && dropIfDead(op, "Made dead"))
       continue;
-    }
   }
 }
 
