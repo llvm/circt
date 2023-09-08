@@ -1718,8 +1718,8 @@ LogicalResult MultibitMuxOp::canonicalize(MultibitMuxOp op,
 StrictConnectOp firrtl::getSingleConnectUserOf(Value value) {
   StrictConnectOp connect;
   for (Operation *user : value.getUsers()) {
-    // If we see an attach, just conservatively fail.
-    if (isa<AttachOp>(user))
+    // If we see an attach or aggregate sublements, just conservatively fail.
+    if (isa<AttachOp, SubfieldOp, SubaccessOp, SubindexOp>(user))
       return {};
 
     if (auto aConnect = dyn_cast<FConnectLike>(user))
