@@ -748,7 +748,7 @@ firrtl.circuit "WireProbe" {
     // CHECK-NEXT: }
     %x = firrtl.constant 0: !firrtl.uint<5>
     %0 = firrtl.ref.send %x : !firrtl.uint<5>
-    %w = firrtl.wire : !firrtl.probe<uint<5>>
+    %w = firrtl.wire interesting_name : !firrtl.probe<uint<5>>
     firrtl.ref.define %w, %0: !firrtl.probe<uint<5>>
     firrtl.ref.define %p, %w : !firrtl.probe<uint<5>>
   }

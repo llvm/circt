@@ -43,9 +43,16 @@ static bool isAggregate(Operation *op) {
 
 /// Return true if this is a wire or register we're allowed to delete.
 static bool isDeletableWireOrRegOrNode(Operation *op) {
-  return (isWireOrReg(op) || isa<NodeOp>(op)) && AnnotationSet(op).empty() &&
-         !hasDontTouch(op) && hasDroppableName(op) &&
-         !cast<Forceable>(op).isForceable();
+  if (!isWireOrReg(op) && !isa<NodeOp>(op))
+    return false;
+
+  // Always allow deleting wires of probe-type.
+  if (type_isa<RefType>(op->getResult(0).getType()))
+    return true;
+
+  // Otherwise, don't delete if has anything keeping it around or unknown.
+  return AnnotationSet(op).empty() && !hasDontTouch(op) &&
+         hasDroppableName(op) && !cast<Forceable>(op).isForceable();
 }
 
 //===----------------------------------------------------------------------===//
