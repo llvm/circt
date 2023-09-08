@@ -37,6 +37,7 @@ struct OpenBundleTypeStorage;
 struct OpenVectorTypeStorage;
 } // namespace detail.
 
+class AnyRefType;
 class ClassType;
 class ClockType;
 class ResetType;
@@ -315,8 +316,8 @@ class PropertyType : public FIRRTLType {
 public:
   /// Support method to enable LLVM-style type casting.
   static bool classof(Type type) {
-    return llvm::isa<ClassType, StringType, FIntegerType, ListType, MapType,
-                     PathType, BoolType>(type);
+    return llvm::isa<AnyRefType, ClassType, StringType, FIntegerType, ListType,
+                     MapType, PathType, BoolType>(type);
   }
 
 protected:
