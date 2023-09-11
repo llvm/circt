@@ -63,8 +63,10 @@ class InstanceBuilder(support.NamedValueOpView):
     arg_name_attrs = map(_ir.StringAttr, arg_names)
     return list(map(lambda s: s.value, arg_name_attrs))
 
+
 class MSFTModuleLike:
   """Custom Python base class for module-like operations."""
+
   def __init__(
       self,
       name,
@@ -138,19 +140,23 @@ class MSFTModuleLike:
 
   @property
   def type(self):
-    return _ir.FunctionType(_ir.TypeAttr(self.attributes["function_type"]).value)
+    return _ir.FunctionType(
+        _ir.TypeAttr(self.attributes["function_type"]).value)
 
   @property
   def name(self):
     return self.attributes["sym_name"]
+
   @property
   def is_external(self):
     return len(self.regions[0].blocks) == 0
+
   @property
   def parameters(self) -> list[hw.ParamDeclAttr]:
     return [
         hw.ParamDeclAttr(a) for a in ArrayAttr(self.attributes["parameters"])
     ]
+
   def instantiate(self,
                   name: str,
                   parameters: Dict[str, object] = {},
@@ -165,6 +171,8 @@ class MSFTModuleLike:
                            results=results,
                            loc=loc,
                            ip=ip)
+
+
 def _create_output_op(cls_name, output_ports, entry_block, bb_ret):
   """Create the hw.OutputOp from the body_builder return."""
   # Determine if the body already has an output op.
