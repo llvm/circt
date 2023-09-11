@@ -950,8 +950,8 @@ Type ModuleType::parse(AsmParser &odsParser) {
   return get(odsParser.getContext(), ports);
 }
 
-void ModuleType::print(AsmPrinter &odsParser) const {
-  printPorts(odsParser, getPorts());
+void ModuleType::print(AsmPrinter &odsPrinter) const {
+  printPorts(odsPrinter, getPorts());
 }
 
 namespace circt {
