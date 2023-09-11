@@ -785,8 +785,8 @@ firrtl.circuit "ConstPropAnno" {
     %w = firrtl.wire {annotations = [{class = "circt.test"}]} : !firrtl.uint<3>
     // CHECK-NOT: firrtl.wire
     %w2 = firrtl.wire : !firrtl.uint<3>
-    firrtl.strictconnect %w, %w2 : !firrtl.uint<3>
     firrtl.strictconnect %w2, %zero : !firrtl.uint<3>
+    firrtl.strictconnect %w, %w2 : !firrtl.uint<3>
     firrtl.strictconnect %val, %w : !firrtl.uint<3>
 
     // CHECK: firrtl.node %[[ZERO]]
