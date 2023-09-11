@@ -123,13 +123,11 @@ void module_like_impl::printModuleSignature(OpAsmPrinter &p, Operation *op,
       p << ", ";
 
     auto argName = modOp ? modOp.getInputName(i) : getModuleArgumentName(op, i);
-
     if (!isExternal) {
       // Get the printed format for the argument name.
       resultNameStr.clear();
       llvm::raw_svector_ostream tmpStream(resultNameStr);
       p.printOperand(body.front().getArgument(i), tmpStream);
-
       // If the name wasn't printable in a way that agreed with argName, make
       // sure to print out an explicit argNames attribute.
       if (tmpStream.str().drop_front() != argName)

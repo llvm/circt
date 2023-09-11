@@ -70,6 +70,54 @@ MlirType hwInOutTypeGetElementType(MlirType type) {
 
 bool hwTypeIsAInOut(MlirType type) { return unwrap(type).isa<InOutType>(); }
 
+bool hwTypeIsAModuleType(MlirType type) {
+  return isa<ModuleType>(unwrap(type));
+}
+
+MlirType hwModuleTypeGet(MlirContext ctx, intptr_t numPorts,
+                         HWModulePort const *ports) {
+  SmallVector<ModulePort> modulePorts;
+  for (intptr_t i = 0; i < numPorts; ++i) {
+    HWModulePort port = ports[i];
+
+    ModulePort::Direction dir;
+    switch (port.dir) {
+    case HWModulePortDirection::Input:
+      dir = ModulePort::Direction::Input;
+      break;
+    case HWModulePortDirection::Output:
+      dir = ModulePort::Direction::Output;
+      break;
+    case HWModulePortDirection::InOut:
+      dir = ModulePort::Direction::InOut;
+      break;
+    }
+
+    StringAttr name = cast<StringAttr>(unwrap(port.name));
+    Type type = unwrap(port.type);
+
+    modulePorts.push_back(ModulePort{name, type, dir});
+  }
+
+  return wrap(ModuleType::get(unwrap(ctx), modulePorts));
+}
+
+intptr_t hwModuleTypeGetNumInputs(MlirType type) {
+  return cast<ModuleType>(unwrap(type)).getNumInputs();
+}
+
+MlirType hwModuleTypeGetInputType(MlirType type, intptr_t index) {
+  return wrap(cast<ModuleType>(unwrap(type)).getInputType(index));
+}
+
+intptr_t hwModuleTypeGetNumOutputs(MlirType type) {
+  return cast<ModuleType>(unwrap(type)).getNumOutputs();
+}
+
+MlirType hwModuleTypeGetOutputType(MlirType type, intptr_t index) {
+  return wrap(cast<ModuleType>(unwrap(type)).getOutputType(index));
+}
+
 bool hwTypeIsAStructType(MlirType type) {
   return unwrap(type).isa<StructType>();
 }

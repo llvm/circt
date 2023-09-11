@@ -29,6 +29,16 @@ struct HWStructFieldInfo {
 };
 typedef struct HWStructFieldInfo HWStructFieldInfo;
 
+enum HWModulePortDirection { Input, Output, InOut };
+typedef enum HWModulePortDirection HWModulePortDirection;
+
+struct HWModulePort {
+  MlirAttribute name;
+  MlirType type;
+  HWModulePortDirection dir;
+};
+typedef struct HWModulePort HWModulePort;
+
 //===----------------------------------------------------------------------===//
 // Dialect API.
 //===----------------------------------------------------------------------===//
@@ -58,6 +68,9 @@ MLIR_CAPI_EXPORTED bool hwTypeIsAArrayType(MlirType);
 /// If the type is an HW inout.
 MLIR_CAPI_EXPORTED bool hwTypeIsAInOut(MlirType type);
 
+/// If the type is an HW module type.
+MLIR_CAPI_EXPORTED bool hwTypeIsAModuleType(MlirType type);
+
 /// If the type is an HW struct.
 MLIR_CAPI_EXPORTED bool hwTypeIsAStructType(MlirType);
 
@@ -81,6 +94,24 @@ MLIR_CAPI_EXPORTED MlirType hwInOutTypeGet(MlirType element);
 
 /// Returns the element type of an inout type.
 MLIR_CAPI_EXPORTED MlirType hwInOutTypeGetElementType(MlirType);
+
+/// Creates an HW module type.
+MLIR_CAPI_EXPORTED MlirType hwModuleTypeGet(MlirContext ctx, intptr_t numPorts,
+                                            HWModulePort const *ports);
+
+/// Get an HW module type's number of inputs.
+MLIR_CAPI_EXPORTED intptr_t hwModuleTypeGetNumInputs(MlirType type);
+
+/// Get an HW module type's input type at a specific index.
+MLIR_CAPI_EXPORTED MlirType hwModuleTypeGetInputType(MlirType type,
+                                                     intptr_t index);
+
+/// Get an HW module type's number of outputs.
+MLIR_CAPI_EXPORTED intptr_t hwModuleTypeGetNumOutputs(MlirType type);
+
+/// Get an HW module type's output type at a specific index.
+MLIR_CAPI_EXPORTED MlirType hwModuleTypeGetOutputType(MlirType type,
+                                                      intptr_t index);
 
 /// Creates an HW struct type in the context associated with the elements.
 MLIR_CAPI_EXPORTED MlirType hwStructTypeGet(MlirContext ctx,

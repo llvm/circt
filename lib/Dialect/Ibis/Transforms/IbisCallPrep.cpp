@@ -13,9 +13,9 @@
 #include "circt/Dialect/Ibis/IbisPasses.h"
 #include "circt/Dialect/Ibis/IbisTypes.h"
 
+#include "circt/Dialect/HW/ConversionPatterns.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Support/BackedgeBuilder.h"
-#include "circt/Support/ConversionPatterns.h"
 
 #include "mlir/Transforms/DialectConversion.h"
 

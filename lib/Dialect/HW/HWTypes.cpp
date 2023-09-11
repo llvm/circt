@@ -894,49 +894,69 @@ FunctionType ModuleType::getFuncType() {
   return FunctionType::get(getContext(), inputs, outputs);
 }
 
-namespace mlir {
-template <>
-struct FieldParser<circt::hw::ModulePort> {
-  static FailureOr<circt::hw::ModulePort> parse(AsmParser &parser) {
-    StringRef dir, name;
-    Type type;
-    if (parser.parseKeyword(&dir) || parser.parseKeyword(&name) ||
-        parser.parseColon() || parser.parseType(type))
-      return failure();
-    circt::hw::ModulePort::Direction d;
-    if (dir == "input")
-      d = circt::hw::ModulePort::Input;
-    else if (dir == "output")
-      d = circt::hw::ModulePort::Output;
-    else if (dir == "inout")
-      d = circt::hw::ModulePort::InOut;
-    else
-      return failure();
-    return circt::hw::ModulePort{parser.getBuilder().getStringAttr(name), type,
-                                 d};
+static StringRef dirToStr(ModulePort::Direction dir) {
+  switch (dir) {
+  case ModulePort::Direction::Input:
+    return "input";
+  case ModulePort::Direction::Output:
+    return "output";
+  case ModulePort::Direction::InOut:
+    return "inout";
   }
-};
-} // namespace mlir
+}
+
+static ModulePort::Direction strToDir(StringRef str) {
+  if (str == "input")
+    return circt::hw::ModulePort::Input;
+  else if (str == "output")
+    return circt::hw::ModulePort::Output;
+  else if (str == "inout")
+    return circt::hw::ModulePort::InOut;
+  llvm::report_fatal_error("invalid direction");
+}
+
+/// Parse a list of field names and types within <>. E.g.:
+/// <foo: i7, bar: i8>
+static ParseResult parsePorts(AsmParser &p,
+                              SmallVectorImpl<ModulePort> &ports) {
+  return p.parseCommaSeparatedList(
+      mlir::AsmParser::Delimiter::LessGreater, [&]() -> ParseResult {
+        StringRef dir;
+        StringRef name;
+        Type type;
+        if (p.parseKeyword(&dir) || p.parseKeyword(&name) || p.parseColon() ||
+            p.parseType(type))
+          return failure();
+        ports.push_back(
+            {StringAttr::get(p.getContext(), name), type, strToDir(dir)});
+        return success();
+      });
+}
+
+/// Print out a list of named fields surrounded by <>.
+static void printPorts(AsmPrinter &p, ArrayRef<ModulePort> ports) {
+  p << '<';
+  llvm::interleaveComma(ports, p, [&](const ModulePort &port) {
+    p << dirToStr(port.dir) << " " << port.name.getValue() << " : "
+      << port.type;
+  });
+  p << ">";
+}
+
+Type ModuleType::parse(AsmParser &odsParser) {
+  llvm::SmallVector<ModulePort, 4> ports;
+  if (parsePorts(odsParser, ports))
+    return Type();
+  return get(odsParser.getContext(), ports);
+}
+
+void ModuleType::print(AsmPrinter &odsPrinter) const {
+  printPorts(odsPrinter, getPorts());
+}
 
 namespace circt {
 namespace hw {
 
-static raw_ostream &operator<<(raw_ostream &printer, ModulePort port) {
-  StringRef dirstr;
-  switch (port.dir) {
-  case ModulePort::Direction::Input:
-    dirstr = "input";
-    break;
-  case ModulePort::Direction::Output:
-    dirstr = "output";
-    break;
-  case ModulePort::Direction::InOut:
-    dirstr = "inout";
-    break;
-  }
-  printer << dirstr << " " << port.name << " : " << port.type;
-  return printer;
-}
 static bool operator==(const ModulePort &a, const ModulePort &b) {
   return a.dir == b.dir && a.name == b.name && a.type == b.type;
 }

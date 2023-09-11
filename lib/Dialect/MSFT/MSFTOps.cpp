@@ -737,6 +737,14 @@ void MSFTModuleOp::removeAllPortAttrs() {
   removeResAttrsAttr();
 }
 
+void MSFTModuleOp::setAllPortNames(ArrayRef<Attribute> names) {
+  auto numInputs = getNumInputPorts();
+  SmallVector<Attribute> argNames(names.begin(), names.begin() + numInputs);
+  SmallVector<Attribute> resNames(names.begin() + numInputs, names.end());
+  setArgNamesAttr(ArrayAttr::get(getContext(), argNames));
+  setResultNamesAttr(ArrayAttr::get(getContext(), resNames));
+}
+
 void MSFTModuleOp::setHWModuleType(hw::ModuleType type) {
   auto argAttrs = getAllInputAttrs();
   auto resAttrs = getAllOutputAttrs();
@@ -1104,6 +1112,14 @@ void MSFTModuleExternOp::setAllPortAttrs(ArrayRef<Attribute> attrs) {
 void MSFTModuleExternOp::removeAllPortAttrs() {
   removeArgAttrsAttr();
   removeResAttrsAttr();
+}
+
+void MSFTModuleExternOp::setAllPortNames(ArrayRef<Attribute> names) {
+  auto numInputs = getNumInputPorts();
+  SmallVector<Attribute> argNames(names.begin(), names.begin() + numInputs);
+  SmallVector<Attribute> resNames(names.begin() + numInputs, names.end());
+  setArgNamesAttr(ArrayAttr::get(getContext(), argNames));
+  setResultNamesAttr(ArrayAttr::get(getContext(), resNames));
 }
 
 void MSFTModuleExternOp::setHWModuleType(hw::ModuleType type) {

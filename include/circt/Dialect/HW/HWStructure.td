@@ -66,7 +66,7 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
   let extraClassDefinition = extraModuleClassDefinition # [{
 
     ModuleType $cppClass::getHWModuleType() {
-      return detail::fnToMod(getFunctionType(), getArgNames().getValue(), getResultNames().getValue());
+      return getModuleType();
     }
 
     ::circt::hw::InnerSymAttr $cppClass::getPortSymbolAttr(size_t portIndex) {
@@ -196,7 +196,7 @@ def HWModuleOp : HWModuleOpBase<"module",
     connections within the module.
   }];
   let arguments = (ins SymbolNameAttr:$sym_name,
-                       TypeAttrOf<FunctionType>:$function_type,
+                       TypeAttrOf<ModuleType>:$module_type,
                        OptionalAttr<DictArrayAttr>:$arg_attrs,
                        OptionalAttr<DictArrayAttr>:$res_attrs,
                        StrArrayAttr:$argNames,
@@ -327,7 +327,7 @@ def HWModuleExternOp : HWModuleOpBase<"module.extern"> {
     parameterized types instead of just concrete types.
   }];
   let arguments = (ins SymbolNameAttr:$sym_name,
-                       TypeAttrOf<FunctionType>:$function_type,
+                       TypeAttrOf<ModuleType>:$module_type,
 		                   OptionalAttr<DictArrayAttr>:$arg_attrs,
                        OptionalAttr<DictArrayAttr>:$res_attrs,
                        StrArrayAttr:$argNames,
@@ -422,7 +422,7 @@ def HWModuleGeneratedOp : HWModuleOpBase<"module.generated", [
   }];
   let arguments = (ins SymbolNameAttr:$sym_name,
                        FlatSymbolRefAttr:$generatorKind,
-                       TypeAttrOf<FunctionType>:$function_type,
+                       TypeAttrOf<ModuleType>:$module_type,
 		                   OptionalAttr<DictArrayAttr>:$arg_attrs,
                        OptionalAttr<DictArrayAttr>:$res_attrs,
                        StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
@@ -529,12 +529,12 @@ def InstanceOp : HWOp<"instance", [
     void setResultName(size_t i, StringAttr name);
 
     /// Change the names of all the input ports.
-    void setArgumentNames(ArrayAttr names) {
+    void setInputNames(ArrayAttr names) {
       setArgNamesAttr(names);
     }
 
     /// Change the names of all the result ports.
-    void setResultNames(ArrayAttr names) {
+    void setOutputNames(ArrayAttr names) {
       setResultNamesAttr(names);
     }
 

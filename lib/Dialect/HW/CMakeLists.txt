@@ -1,4 +1,5 @@
 set(CIRCT_HW_Sources
+  ConversionPatterns.cpp
   CustomDirectiveImpl.cpp
   HWAttributes.cpp
   HWDialect.cpp
