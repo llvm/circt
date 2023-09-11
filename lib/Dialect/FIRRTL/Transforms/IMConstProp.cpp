@@ -759,12 +759,7 @@ void IMConstPropPass::visitRefResolve(RefResolveOp resolve,
 }
 
 void IMConstPropPass::visitNode(NodeOp node, FieldRef changedFieldRef) {
-
-  // Nodes don't fold if they have interesting names, but they should still
-  // propagate values.
-  if (hasDontTouch(node.getResult()) ||
-      (node.getAnnotationsAttr() && !node.getAnnotationsAttr().empty()) ||
-      node.isForceable()) {
+  if (hasDontTouch(node.getResult()) || node.isForceable()) {
     for (auto result : node.getResults())
       markOverdefined(result);
     return;
