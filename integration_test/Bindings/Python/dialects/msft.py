@@ -1,4 +1,5 @@
 # REQUIRES: bindings_python
+# RUN: %PYTHON% %s
 # RUN: %PYTHON% %s 2> %t | FileCheck %s
 # RUN: cat %t | FileCheck --check-prefix=ERR %s
 
