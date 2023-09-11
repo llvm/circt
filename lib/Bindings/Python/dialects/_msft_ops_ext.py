@@ -32,7 +32,7 @@ class InstanceBuilder(support.NamedValueOpView):
     else:
       parameters = []
     post_args = []
-    results = module.type.output_types
+    results = module.type.results
 
     super().__init__(
         _msft.InstanceOp,
@@ -47,7 +47,7 @@ class InstanceBuilder(support.NamedValueOpView):
     )
 
   def create_default_value(self, index, data_type, arg_name):
-    type = self.module.type.input_types[index]
+    type = self.module.type.inputs[index]
     return support.BackedgeBuilder.create(type,
                                           arg_name,
                                           self,
@@ -266,7 +266,7 @@ class MSFTModuleOp(MSFTModuleLike):
     return InstanceBuilder(self, name, kwargs, loc=loc, ip=ip)
 
   def add_entry_block(self):
-    self.body.blocks.append(*self.type.input_types)
+    self.body.blocks.append(*self.type.inputs)
     return self.body.blocks[0]
 
   @property
