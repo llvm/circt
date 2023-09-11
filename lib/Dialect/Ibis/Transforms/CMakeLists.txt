@@ -16,10 +16,8 @@ add_circt_dialect_library(CIRCTIbisTransforms
   CIRCTIbis
   CIRCTHW
   CIRCTSupport
+  CIRCTTransforms
   MLIRIR
   MLIRPass
   MLIRTransformUtils
-
-  # TODO: change me
-  CIRCTCFToHandshake
 )

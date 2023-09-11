@@ -13,10 +13,9 @@
 #include "circt/Dialect/Ibis/IbisPasses.h"
 #include "circt/Dialect/Ibis/IbisTypes.h"
 
+#include "circt/Transforms/Passes.h"
 #include "mlir/Transforms/DialectConversion.h"
 
-// TODO: change once maximize ssa is moved to transforms
-#include "circt/Conversion/CFToHandshake.h"
 #include <iterator>
 
 using namespace circt;
