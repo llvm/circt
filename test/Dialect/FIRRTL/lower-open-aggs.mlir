@@ -312,24 +312,15 @@ firrtl.circuit "WireSymbols" {
 
 // -----
 
-// CHECK-LABEL: circuit "WireMixedProbes"
-firrtl.circuit "WireMixedProbes" {
-  // CHECK-LABEL: module @WireMixedProbes
-  firrtl.module @WireMixedProbes() {
+// Check that created wires for non-hw have droppable names.
+// Ensure name for hw-only portion preserves namekind.
+
+// CHECK-LABEL: circuit "NonHWWiresHaveDroppableNames"
+firrtl.circuit "NonHWWiresHaveDroppableNames" {
+  // CHECK-LABEL: module @NonHWWiresHaveDroppableNames
+  firrtl.module @NonHWWiresHaveDroppableNames() {
     // CHECK:      %w = firrtl.wire interesting_name : !firrtl.bundle<a: uint<1>>
     // CHECK-NEXT: %w_b = firrtl.wire : !firrtl.probe<uint<1>>
     %w = firrtl.wire interesting_name : !firrtl.openbundle<a: uint<1>, b: probe<uint<1>>>
-    // CHECK:      %[[W_A:.+]] = firrtl.subfield %w[a]
-    %w_a = firrtl.opensubfield %w[a] : !firrtl.openbundle<a: uint<1>, b: probe<uint<1>>>
-    %w_b = firrtl.opensubfield %w[b] : !firrtl.openbundle<a: uint<1>, b: probe<uint<1>>>
-
-    // CHECK-NEXT: %[[ZERO:.+]] = firrtl.constant 0
-    %zero = firrtl.constant 0 : !firrtl.uint<1>
-    // CHECK-NEXT: firrtl.strictconnect %[[W_A]], %[[ZERO]] : !firrtl.uint<1>
-    firrtl.strictconnect %w_a, %zero : !firrtl.uint<1>
-    // CHECK-NEXT: %[[REF:.+]] = firrtl.ref.send %[[ZERO]]
-    %ref = firrtl.ref.send %zero : !firrtl.uint<1>
-    // CHECK:      firrtl.ref.define %w_b, %[[REF]] : !firrtl.probe<uint<1>>
-    firrtl.ref.define %w_b, %ref : !firrtl.probe<uint<1>>
   }
 }
