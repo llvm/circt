@@ -17,6 +17,7 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Diagnostics.h"
+#include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Support/LogicalResult.h"
 
@@ -41,16 +42,19 @@ using ObjectFields = SmallDenseMap<StringAttr, EvaluatorValuePtr>;
 struct EvaluatorValue : std::enable_shared_from_this<EvaluatorValue> {
   // Implement LLVM RTTI.
   enum class Kind { Attr, Object, List, Tuple, Map };
-  EvaluatorValue(Kind kind) : kind(kind) {}
+  EvaluatorValue(MLIRContext *ctx, Kind kind) : kind(kind) {}
   Kind getKind() const { return kind; }
+  MLIRContext *getContext() const { return ctx; }
 
 private:
   const Kind kind;
+  MLIRContext *ctx;
 };
 
 /// Values which can be directly representable by MLIR attributes.
 struct AttributeValue : EvaluatorValue {
-  AttributeValue(Attribute attr) : EvaluatorValue(Kind::Attr), attr(attr) {}
+  AttributeValue(Attribute attr)
+      : EvaluatorValue(attr.getContext(), Kind::Attr), attr(attr) {}
   Attribute getAttr() const { return attr; }
   template <typename AttrTy>
   AttrTy getAs() const {
@@ -67,7 +71,8 @@ private:
 /// A List which contains variadic length of elements with the same type.
 struct ListValue : EvaluatorValue {
   ListValue(om::ListType type, SmallVector<EvaluatorValuePtr> elements)
-      : EvaluatorValue(Kind::List), type(type), elements(std::move(elements)) {}
+      : EvaluatorValue(type.getContext(), Kind::List), type(type),
+        elements(std::move(elements)) {}
 
   const auto &getElements() const { return elements; }
 
@@ -87,7 +92,8 @@ private:
 /// A Map value.
 struct MapValue : EvaluatorValue {
   MapValue(om::MapType type, DenseMap<Attribute, EvaluatorValuePtr> elements)
-      : EvaluatorValue(Kind::Map), type(type), elements(std::move(elements)) {}
+      : EvaluatorValue(type.getContext(), Kind::Map), type(type),
+        elements(std::move(elements)) {}
 
   const auto &getElements() const { return elements; }
 
@@ -110,7 +116,8 @@ private:
 /// A composite Object, which has a type and fields.
 struct ObjectValue : EvaluatorValue {
   ObjectValue(om::ClassOp cls, ObjectFields fields)
-      : EvaluatorValue(Kind::Object), cls(cls), fields(std::move(fields)) {}
+      : EvaluatorValue(cls.getContext(), Kind::Object), cls(cls),
+        fields(std::move(fields)) {}
   om::ClassOp getClassOp() const { return cls; }
   const auto &getFields() const { return fields; }
 
@@ -141,7 +148,7 @@ private:
 struct TupleValue : EvaluatorValue {
   using TupleElements = llvm::SmallVector<EvaluatorValuePtr>;
   TupleValue(TupleType type, TupleElements tupleElements)
-      : EvaluatorValue(Kind::Tuple), type(type),
+      : EvaluatorValue(type.getContext(), Kind::Tuple), type(type),
         elements(std::move(tupleElements)) {}
 
   /// Implement LLVM RTTI.
@@ -165,7 +172,8 @@ using Object = evaluator::ObjectValue;
 using EvaluatorValuePtr = evaluator::EvaluatorValuePtr;
 
 SmallVector<EvaluatorValuePtr>
-getEvaluatorValuesFromAttributes(ArrayRef<Attribute> attributes);
+getEvaluatorValuesFromAttributes(MLIRContext *context,
+                                 ArrayRef<Attribute> attributes);
 
 /// An Evaluator, which is constructed with an IR module and can instantiate
 /// Objects. Further refinement is expected.

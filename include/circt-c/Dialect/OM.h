@@ -36,6 +36,15 @@ MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(OM, om);
 /// Is the Type a ClassType.
 MLIR_CAPI_EXPORTED bool omTypeIsAClassType(MlirType type);
 
+/// Is the Type a MapType.
+MLIR_CAPI_EXPORTED bool omTypeIsAMapType(MlirType type);
+
+// Return a key type of a MapType.
+MLIR_CAPI_EXPORTED MlirType omMapTypeGetKeyType(MlirType type);
+
+/// Is the Type a StringType.
+MLIR_CAPI_EXPORTED bool omTypeIsAStringType(MlirType type);
+
 //===----------------------------------------------------------------------===//
 // Evaluator data structures.
 //===----------------------------------------------------------------------===//
@@ -101,6 +110,10 @@ omEvaluatorObjectGetFieldNames(OMEvaluatorValue object);
 // EvaluatorValue API.
 //===----------------------------------------------------------------------===//
 
+// Get a context from an EvaluatorValue.
+MLIR_CAPI_EXPORTED MlirContext
+omEvaluatorValueGetContext(OMEvaluatorValue evaluatorValue);
+
 // Query if the EvaluatorValue is null.
 MLIR_CAPI_EXPORTED bool omEvaluatorValueIsNull(OMEvaluatorValue evaluatorValue);
 
@@ -147,15 +160,15 @@ omEvaluatorTupleGetElement(OMEvaluatorValue evaluatorValue, intptr_t pos);
 /// Get an element of the map.
 MLIR_CAPI_EXPORTED OMEvaluatorValue
 omEvaluatorMapGetElement(OMEvaluatorValue evaluatorValue, MlirAttribute attr);
-MLIR_CAPI_EXPORTED OMEvaluatorValue
-omEvaluatorMapGetElementByInt(OMEvaluatorValue evaluatorValue, intptr_t attr);
-MLIR_CAPI_EXPORTED OMEvaluatorValue omEvaluatorMapGetElementByStr(
-    OMEvaluatorValue evaluatorValue, MlirStringRef attr);
 
 MLIR_CAPI_EXPORTED MlirAttribute omEvaluatorMapGetKeys(OMEvaluatorValue object);
 
 /// Query if the EvaluatorValue is a Map.
 MLIR_CAPI_EXPORTED bool omEvaluatorValueIsAMap(OMEvaluatorValue evaluatorValue);
+
+/// Get the Type from a Map, which will be a MapType.
+MLIR_CAPI_EXPORTED MlirType
+omEvaluatorMapGetType(OMEvaluatorValue evaluatorValue);
 
 //===----------------------------------------------------------------------===//
 // ReferenceAttr API

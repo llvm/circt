@@ -110,8 +110,7 @@ TEST(EvaluatorTests, InstantiateNullParam) {
   });
 
   auto result =
-      evaluator.instantiate(builder.getStringAttr("MyClass"),
-                            getEvaluatorValuesFromAttributes({IntegerAttr()}));
+      evaluator.instantiate(builder.getStringAttr("MyClass"), {nullptr});
 
   ASSERT_FALSE(succeeded(result));
 }
@@ -141,9 +140,10 @@ TEST(EvaluatorTests, InstantiateInvalidParamType) {
     ASSERT_EQ(diag.str(), "actual parameter for \"param\" has invalid type");
   });
 
-  auto result = evaluator.instantiate(
-      builder.getStringAttr("MyClass"),
-      getEvaluatorValuesFromAttributes({builder.getF32FloatAttr(42)}));
+  auto result =
+      evaluator.instantiate(builder.getStringAttr("MyClass"),
+                            getEvaluatorValuesFromAttributes(
+                                &context, {builder.getF32FloatAttr(42)}));
 
   ASSERT_FALSE(succeeded(result));
 }
@@ -203,9 +203,10 @@ TEST(EvaluatorTests, InstantiateObjectWithParamField) {
 
   Evaluator evaluator(mod);
 
-  auto result = evaluator.instantiate(
-      builder.getStringAttr("MyClass"),
-      getEvaluatorValuesFromAttributes({builder.getI32IntegerAttr(42)}));
+  auto result =
+      evaluator.instantiate(builder.getStringAttr("MyClass"),
+                            getEvaluatorValuesFromAttributes(
+                                &context, {builder.getI32IntegerAttr(42)}));
 
   ASSERT_TRUE(succeeded(result));
 

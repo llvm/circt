@@ -27,7 +27,8 @@ ModuleOp circt::om::Evaluator::getModule() {
 }
 
 SmallVector<evaluator::EvaluatorValuePtr>
-circt::om::getEvaluatorValuesFromAttributes(ArrayRef<Attribute> attributes) {
+circt::om::getEvaluatorValuesFromAttributes(MLIRContext *context,
+                                            ArrayRef<Attribute> attributes) {
   SmallVector<evaluator::EvaluatorValuePtr> values;
   values.reserve(attributes.size());
   for (auto attr : attributes)
@@ -68,6 +69,9 @@ circt::om::Evaluator::instantiate(
   // Verify the actual parameter types match.
   for (auto [actualParam, formalParamName, formalParamType] :
        llvm::zip(actualParams, formalParamNames, formalParamTypes)) {
+    if (!actualParam || !actualParam.get())
+      return cls.emitError("actual parameter for ")
+             << formalParamName << " is null";
     Type actualParamType;
     if (auto *attr = dyn_cast<evaluator::AttributeValue>(actualParam.get())) {
       if (auto typedActualParam = attr->getAttr().dyn_cast_or_null<TypedAttr>())
@@ -80,9 +84,7 @@ circt::om::Evaluator::instantiate(
     else if (auto *tuple = dyn_cast<evaluator::TupleValue>(actualParam.get()))
       actualParamType = tuple->getType();
 
-    if (!actualParamType)
-      return cls.emitError("actual parameter for ")
-             << formalParamName << " is null";
+    assert(actualParamType && "actualParamType must be non-null!");
 
     if (actualParamType != formalParamType) {
       auto error = cls.emitError("actual parameter for ")
@@ -332,16 +334,13 @@ ArrayAttr circt::om::evaluator::MapValue::getKeys() {
     attrs.push_back(key);
 
   std::sort(attrs.begin(), attrs.end(), [](Attribute l, Attribute r) {
-    if (auto lInt = l.dyn_cast<IntegerAttr>())
-      if (auto rInt = r.dyn_cast<IntegerAttr>())
+    if (auto lInt = dyn_cast<IntegerAttr>(l))
+      if (auto rInt = dyn_cast<IntegerAttr>(r))
         return lInt.getValue().ult(rInt.getValue());
 
-    if (auto lStr = l.dyn_cast<StringAttr>())
-      if (auto rStr = r.dyn_cast<StringAttr>())
-        return lStr.getValue() < rStr.getValue();
-
-    assert(false && "key type should be either integer or string");
-    return false;
+    assert(isa<StringAttr>(l) && isa<StringAttr>(r) &&
+           "key type should be integer or string");
+    return cast<StringAttr>(l).getValue() < cast<StringAttr>(r).getValue();
   });
 
   return ArrayAttr::get(type.getContext(), attrs);

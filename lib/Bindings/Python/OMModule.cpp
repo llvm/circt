@@ -9,6 +9,7 @@
 #include "DialectModules.h"
 #include "circt-c/Dialect/OM.h"
 #include "mlir-c/BuiltinAttributes.h"
+#include "mlir-c/BuiltinTypes.h"
 #include "mlir-c/IR.h"
 #include "mlir/Bindings/Python/PybindAdaptors.h"
 #include <pybind11/pybind11.h>
@@ -80,10 +81,18 @@ struct Map {
     return pyFieldNames;
   }
 
-  /// Look up the value. Key is integer, string or attribute.
-  PythonValue lookup(std::variant<intptr_t, std::string, MlirAttribute> key);
+  /// Look up the value. A key is an integer, string or attribute.
+  PythonValue dunderGetItemAttr(MlirAttribute key);
+  PythonValue dunderGetItemNamed(const std::string &key);
+  PythonValue dunderGetItemIndexed(intptr_t key);
+  PythonValue
+  dunderGetItem(std::variant<intptr_t, std::string, MlirAttribute> key);
+
+  /// Return a context from an underlying value.
+  MlirContext getContext() const { return omEvaluatorValueGetContext(value); }
 
   OMEvaluatorValue getValue() const { return value; }
+  MlirType getType() { return omEvaluatorMapGetType(value); }
 
 private:
   // The underlying CAPI value.
@@ -234,31 +243,39 @@ PythonValue Tuple::getElement(intptr_t i) {
   return omEvaluatorValueToPythonValue(omEvaluatorTupleGetElement(value, i));
 }
 
-PythonValue
-Map::lookup(std::variant<intptr_t, std::string, MlirAttribute> key) {
-  OMEvaluatorValue result;
-  if (auto *i = std::get_if<intptr_t>(&key))
-    result = omEvaluatorMapGetElementByInt(value, *i);
-  else if (auto *str = std::get_if<std::string>(&key))
-    result = omEvaluatorMapGetElementByStr(
-        value, mlirStringRefCreateFromCString(str->c_str()));
-  else
-    result = omEvaluatorMapGetElement(value, std::get<MlirAttribute>(key));
+PythonValue Map::dunderGetItemNamed(const std::string &key) {
+  MlirType type = omMapTypeGetKeyType(omEvaluatorMapGetType(value));
+  if (!omTypeIsAStringType(type))
+    throw pybind11::key_error("key is not string");
+  MlirAttribute attr =
+      mlirStringAttrTypedGet(type, mlirStringRefCreateFromCString(key.c_str()));
+  return dunderGetItemAttr(attr);
+}
 
-  // Return a fine grained error.
-  if (omEvaluatorValueIsNull(result)) {
-    std::string keyStr;
-    if (auto *i = std::get_if<intptr_t>(&key))
-      keyStr = std::to_string(*i);
-    else if (auto *str = std::get_if<std::string>(&key))
-      keyStr = *str;
-    else
-      keyStr = "attribute";
+PythonValue Map::dunderGetItemIndexed(intptr_t i) {
+  MlirType type = omMapTypeGetKeyType(omEvaluatorMapGetType(value));
+  if (!mlirTypeIsAInteger(type))
+    throw pybind11::key_error("key is not integer");
+  MlirAttribute attr = mlirIntegerAttrGet(type, i);
+  return dunderGetItemAttr(attr);
+}
 
-    throw pybind11::key_error(keyStr + " not found");
-  }
+PythonValue Map::dunderGetItemAttr(MlirAttribute key) {
+  OMEvaluatorValue result = omEvaluatorMapGetElement(value, key);
+
+  if (omEvaluatorValueIsNull(result))
+    throw pybind11::key_error("key not found");
 
   return omEvaluatorValueToPythonValue(result);
+}
+
+PythonValue
+Map::dunderGetItem(std::variant<intptr_t, std::string, MlirAttribute> key) {
+  if (auto *i = std::get_if<intptr_t>(&key))
+    return dunderGetItemIndexed(*i);
+  else if (auto *str = std::get_if<std::string>(&key))
+    return dunderGetItemNamed(*str);
+  return dunderGetItemAttr(std::get<MlirAttribute>(key));
 }
 
 PythonValue omEvaluatorValueToPythonValue(OMEvaluatorValue result) {
@@ -280,7 +297,7 @@ PythonValue omEvaluatorValueToPythonValue(OMEvaluatorValue result) {
   if (omEvaluatorValueIsATuple(result))
     return Tuple(result);
 
-  // If the field was a list, return a new List.
+  // If the field was a map, return a new Map.
   if (omEvaluatorValueIsAMap(result))
     return Map(result);
 
@@ -330,8 +347,9 @@ void circt::python::populateDialectOMSubmodule(py::module &m) {
   // Add the Map class definition.
   py::class_<Map>(m, "Map")
       .def(py::init<Map>(), py::arg("map"))
-      .def("__getitem__", &Map::lookup)
-      .def("keys", &Map::getKeys);
+      .def("__getitem__", &Map::dunderGetItem)
+      .def("keys", &Map::getKeys)
+      .def_property_readonly("type", &Map::getType, "The Type of the Map");
 
   // Add the Object class definition.
   py::class_<Object>(m, "Object")

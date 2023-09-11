@@ -131,12 +131,12 @@ for k, v in obj.map.items():
 try:
   print(obj.map_create[1])
 except KeyError as e:
-  # CHECK-NEXT: '1 not found'
+  # CHECK-NEXT: 'key is not integer'
   print(e)
 try:
   print(obj.map_create["INVALID"])
 except KeyError as e:
-  # CHECK-NEXT: 'INVALID not found'
+  # CHECK-NEXT: 'key not found'
   print(e)
 # CHECK-NEXT: 14
 print(obj.map_create["X"])
