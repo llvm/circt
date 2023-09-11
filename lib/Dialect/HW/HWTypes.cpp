@@ -943,14 +943,16 @@ static void printPorts(AsmPrinter &p, ArrayRef<ModulePort> ports) {
   p << ">";
 }
 
-Type ModuleType::parse(AsmParser &p) {
+Type ModuleType::parse(AsmParser &odsParser) {
   llvm::SmallVector<ModulePort, 4> ports;
-  if (parsePorts(p, ports))
+  if (parsePorts(odsParser, ports))
     return Type();
-  return get(p.getContext(), ports);
+  return get(odsParser.getContext(), ports);
 }
 
-void ModuleType::print(AsmPrinter &p) const { printPorts(p, getPorts()); }
+void ModuleType::print(AsmPrinter &odsParser) const {
+  printPorts(odsParser, getPorts());
+}
 
 namespace circt {
 namespace hw {
