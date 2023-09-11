@@ -262,3 +262,12 @@ om.class @Path() {
 om.class @Enum(%e : !om.enum<a: !om.string, b: i64>) {
   om.class.field @map_i64, %e : !om.enum<a: !om.string, b: i64>
 }
+
+// CHECK-LABEL: @Any
+// CHECK-SAME: %[[IN:.+]]: !om.class.type
+om.class @Any(%in: !om.class.type<@Empty>) {
+  // CHECK: %[[CAST:.+]] = om.any_cast %[[IN]]
+  %0 = om.any_cast %in : (!om.class.type<@Empty>) -> !om.any
+  // CHECK: om.class.field @field, %[[CAST]]
+  om.class.field @field, %0 : !om.any
+}
