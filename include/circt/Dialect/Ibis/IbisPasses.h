@@ -23,6 +23,7 @@ std::unique_ptr<Pass> createTunnelingPass();
 std::unique_ptr<Pass> createPortrefLoweringPass();
 std::unique_ptr<Pass> createCleanSelfdriversPass();
 std::unique_ptr<Pass> createContainersToHWPass();
+std::unique_ptr<Pass> createArgifyBlocksPass();
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
