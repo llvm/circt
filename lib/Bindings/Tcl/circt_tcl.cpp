@@ -60,7 +60,7 @@ static int loadFirMlirFile(mlir::MLIRContext *context, Tcl_Interp *interp,
 
   MlirOperation module;
   if (!strcmp(Tcl_GetString(objv[1]), "MLIR"))
-    module = wrap(mlir::parseSourceFile<ModuleOp>(sourceMgr, context)
+    module = wrap(mlir::parseSourceFile<mlir::ModuleOp>(sourceMgr, context)
                       .release()
                       .getOperation());
   else if (!strcmp(Tcl_GetString(objv[1]), "FIR"))
