@@ -1844,7 +1844,7 @@ circuit VecOfProps:
     ; CHECK-COUNT-2: openvector<string, 2>
 
 ;// -----
-FIRRTL version 3.1.0
+FIRRTL version 3.2.0
 
 ; CHECK-LABEL: circuit "AnyRef"
 circuit AnyRef:
