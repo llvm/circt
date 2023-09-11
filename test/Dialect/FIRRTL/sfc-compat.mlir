@@ -142,6 +142,10 @@ firrtl.circuit "SFCCompatTests" {
     %c0_asyncreset = firrtl.asAsyncReset %c0_clock : (!firrtl.clock) -> !firrtl.asyncreset
     %r3_init = firrtl.asUInt %c0_asyncreset : (!firrtl.asyncreset) -> !firrtl.uint<1>
     %r3 = firrtl.regreset %clock, %reset, %r3_init : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
+
+    %agg_const = firrtl.aggregateconstant [1, 2, 1] : !firrtl.bundle<a: uint<8>, b: uint<5>, c: uint<1>>
+    %subfield = firrtl.subfield %agg_const[c] : !firrtl.bundle<a: uint<8>, b: uint<5>, c: uint<1>>
+    %r4 = firrtl.regreset %clock, %reset, %subfield : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
   }
 
   // CHECK-LABEL: firrtl.module @TailPrimOp
