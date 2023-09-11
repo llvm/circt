@@ -191,7 +191,6 @@ def ReturnOp : IbisOp<"return", [
 }
 
 def BlockOp : IbisOp<"block", [
-  SingleBlock,
   SingleBlockImplicitTerminator<"BlockReturnOp">,
   AutomaticAllocationScope
 ]> {
