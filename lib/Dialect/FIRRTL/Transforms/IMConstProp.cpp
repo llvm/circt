@@ -752,12 +752,6 @@ void IMConstPropPass::visitRefResolve(RefResolveOp resolve,
 }
 
 void IMConstPropPass::visitNode(NodeOp node, FieldRef changedFieldRef) {
-
-  // Nodes don't fold if they have interesting names, but they should still
-  // propagate values.
-  // This is handled by isDeletableWireOrRegOrNode.
-
-  // Propagate if able, otherwise mark overdefined.
   if (hasDontTouch(node.getResult()) || node.isForceable()) {
     for (auto result : node.getResults())
       markOverdefined(result);
