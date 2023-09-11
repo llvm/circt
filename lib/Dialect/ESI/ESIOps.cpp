@@ -493,6 +493,22 @@ static void printUnPackBundleType(OpAsmPrinter &p, Operation *, T3, T4,
   p.printType(bundleType);
 }
 
+void PackBundleOp::getAsmResultNames(::mlir::OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getResult(0), "bundle");
+  for (auto [idx, from] : llvm::enumerate(llvm::make_filter_range(
+           getBundle().getType().getChannels(), [](BundledChannel ch) {
+             return ch.direction == ChannelDirection::from;
+           })))
+    setNameFn(getResult(idx + 1), from.name.getValue());
+}
+
+void UnpackBundleOp::getAsmResultNames(::mlir::OpAsmSetValueNameFn setNameFn) {
+  for (auto [idx, to] : llvm::enumerate(llvm::make_filter_range(
+           getBundle().getType().getChannels(), [](BundledChannel ch) {
+             return ch.direction == ChannelDirection::to;
+           })))
+    setNameFn(getResult(idx), to.name.getValue());
+}
 //===----------------------------------------------------------------------===//
 // Structural ops.
 //===----------------------------------------------------------------------===//

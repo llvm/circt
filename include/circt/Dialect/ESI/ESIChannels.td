@@ -15,6 +15,7 @@
 
 include "mlir/IR/AttrTypeBase.td"
 include "mlir/IR/EnumAttr.td"
+include "mlir/IR/OpAsmInterface.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 
 include "circt/Dialect/HW/HWTypes.td"
@@ -211,7 +212,7 @@ def UnitParameter : AttrOrTypeParameter<"::mlir::UnitAttr", "boolean flag"> {
 }
 
 def ChannelDirection : I32EnumAttr<"ChannelDirection",
-  "Direction of channel", [
+  "Direction of channel (see ChannelBundleImpl for details)", [
     I32EnumAttrCase<"to", 1>,
     I32EnumAttrCase<"from", 2>,
   ]>;
@@ -245,7 +246,9 @@ def ChannelBundleImpl : ESI_Type<"ChannelBundle"> {
 }
 
 
-def PackBundleOp : ESI_Op<"bundle.pack", []> {
+def PackBundleOp : ESI_Op<"bundle.pack", [
+      DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>
+    ]> {
   let summary = "pack channels into a bundle";
 
   let arguments = (ins Variadic<ChannelType>:$toChannels);
@@ -257,7 +260,9 @@ def PackBundleOp : ESI_Op<"bundle.pack", []> {
   }];
 }
 
-def UnpackBundleOp : ESI_Op<"bundle.unpack", []> {
+def UnpackBundleOp : ESI_Op<"bundle.unpack", [
+      DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>
+    ]> {
   let summary = "unpack channels from a bundle";
 
   let arguments = (ins ChannelBundleImpl:$bundle,
