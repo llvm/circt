@@ -1,5 +1,4 @@
 // REQUIRES: esi-cosim
-// REQUIRES: capnp
 // RUN: rm -rf %t6 && mkdir %t6 && cd %t6
 // RUN: circt-opt %s --esi-connect-services --esi-emit-collateral=schema-file=%t2.capnp --esi-clean-metadata > %t4.mlir
 // RUN: circt-opt %t4.mlir --lower-esi-to-physical --lower-esi-ports --lower-esi-to-hw --export-split-verilog -o %t3.mlir
