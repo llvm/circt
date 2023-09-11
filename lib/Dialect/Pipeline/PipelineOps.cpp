@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Pipeline/PipelineOps.h"
+#include "circt/Support/ParsingUtils.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
@@ -21,6 +22,7 @@
 using namespace mlir;
 using namespace circt;
 using namespace circt::pipeline;
+using namespace circt::parsing_util;
 
 #include "circt/Dialect/Pipeline/PipelineDialect.cpp.inc"
 
@@ -77,48 +79,6 @@ Block *circt::pipeline::getParentStageInPipeline(ScheduledPipelineOp pipeline,
 //===----------------------------------------------------------------------===//
 // Fancy pipeline-like op printer/parser functions.
 //===----------------------------------------------------------------------===//
-
-// An initializer list is a list of operands, types and names on the format:
-//  (%arg = %input : type, ...)
-static ParseResult parseInitializerList(
-    OpAsmParser &parser,
-    llvm::SmallVector<OpAsmParser::Argument> &inputArguments,
-    llvm::SmallVector<OpAsmParser::UnresolvedOperand> &inputOperands,
-    llvm::SmallVector<Type> &inputTypes, ArrayAttr &inputNames) {
-
-  llvm::SmallVector<Attribute> names;
-  if (failed(parser.parseCommaSeparatedList(
-          OpAsmParser::Delimiter::Paren, [&]() -> ParseResult {
-            OpAsmParser::UnresolvedOperand inputOperand;
-            Type type;
-            auto &arg = inputArguments.emplace_back();
-            if (parser.parseArgument(arg) || parser.parseColonType(type) ||
-                parser.parseEqual() || parser.parseOperand(inputOperand))
-              return failure();
-
-            inputOperands.push_back(inputOperand);
-            inputTypes.push_back(type);
-            arg.type = type;
-            names.push_back(StringAttr::get(
-                parser.getContext(),
-                /*drop leading %*/ arg.ssaName.name.drop_front()));
-            return success();
-          })))
-    return failure();
-
-  inputNames = ArrayAttr::get(parser.getContext(), names);
-  return success();
-}
-
-static void printInitializerList(OpAsmPrinter &p, ValueRange ins,
-                                 ArrayRef<BlockArgument> args) {
-  p << "(";
-  llvm::interleaveComma(llvm::zip(ins, args), p, [&](auto it) {
-    auto [in, arg] = it;
-    p << arg << " : " << in.getType() << " = " << in;
-  });
-  p << ")";
-}
 
 // Parses a list of operands on the format:
 //   (name : type, ...)
