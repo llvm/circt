@@ -32,11 +32,59 @@ firrtl.circuit "Component" {
   // CHECK-LABEL: om.class @ClassEntrypoint
   firrtl.class private @ClassEntrypoint(out %obj_0_out: !firrtl.class<@Class_1(out someInt: !firrtl.integer)>) {
     // CHECK: %[[OBJ1:.+]] = om.object @Class_1() : () -> !om.class.type<@Class_1>
-    %0 = firrtl.object @Class_1(out someInt: !firrtl.integer)
-    // CHECK: om.class.field @obj_0_out, %[[OBJ1]]
-    firrtl.propassign %obj_0_out, %0 : !firrtl.class<@Class_1(out someInt: !firrtl.integer)>
+    %obj1 = firrtl.object @Class_1(out someInt: !firrtl.integer)
 
-    // TODO: instantiate Class_0 and pass the reference to Class_1 in once object subfield flows are sorted.
+    // CHECK: %[[OBJ0:.+]] = om.object @Class_0(%[[OBJ1]]) : (!om.class.type<@Class_1>) -> !om.class.type<@Class_0>
+    %obj0 = firrtl.object @Class_0(in someReference_in: !firrtl.class<@Class_1(out someInt: !firrtl.integer)>, out someReference: !firrtl.class<@Class_1(out someInt: !firrtl.integer)>)
+    %obj0_someReference_in = firrtl.object.subfield %obj0[someReference_in] : !firrtl.class<@Class_0(in someReference_in: !firrtl.class<@Class_1(out someInt: !firrtl.integer)>, out someReference: !firrtl.class<@Class_1(out someInt: !firrtl.integer)>)>
+    firrtl.propassign %obj0_someReference_in, %obj1 : !firrtl.class<@Class_1(out someInt: !firrtl.integer)>
+
+    // CHECK: %[[REF:.+]] = om.object.field %[[OBJ0]], [@someReference] : (!om.class.type<@Class_0>) -> !om.class.type<@Class_1>
+    // CHECK: om.class.field @obj_0_out, %[[REF]] : !om.class.type<@Class_1>
+    %obj0_someReference = firrtl.object.subfield %obj0[someReference] : !firrtl.class<@Class_0(in someReference_in: !firrtl.class<@Class_1(out someInt: !firrtl.integer)>, out someReference: !firrtl.class<@Class_1(out someInt: !firrtl.integer)>)>
+    firrtl.propassign %obj_0_out, %obj0_someReference: !firrtl.class<@Class_1(out someInt: !firrtl.integer)>
+  }
+
+  // CHECK-LABEL: om.class @ReadOutputPort()
+  firrtl.class @ReadOutputPort(out %output : !firrtl.integer) {
+    // CHECK: %[[OBJ:.+]] = om.object @Class_1() : () -> !om.class.type<@Class_1>
+    // CHECK: %[[FIELD:.+]] = om.object.field %[[OBJ]], [@someInt] : (!om.class.type<@Class_1>) -> !om.integer
+    // CHECK: om.class.field @output, %[[FIELD]] : !om.integer
+    %obj = firrtl.object @Class_1(out someInt: !firrtl.integer)
+    %0 = firrtl.object.subfield %obj[someInt] : !firrtl.class<@Class_1(out someInt: !firrtl.integer)>
+    firrtl.propassign %output, %0 : !firrtl.integer
+  }
+
+  firrtl.class @TwoInputs(in %a: !firrtl.integer, in %b: !firrtl.integer) { }
+
+  firrtl.class @AssignInputsInOrder() {
+    // CHECK: %0 = om.constant #om.integer<123 : si12> : !om.integer
+    // CHECK: %1 = om.constant #om.integer<456 : si12> : !om.integer
+    // CHECK: %2 = om.object @TwoInputs(%0, %1) : (!om.integer, !om.integer) -> !om.class.type<@TwoInputs>
+    %x = firrtl.integer 123
+    %y = firrtl.integer 456
+    %obj = firrtl.object @TwoInputs(in a: !firrtl.integer, in b: !firrtl.integer)
+
+    %obj_a = firrtl.object.subfield %obj[a] : !firrtl.class<@TwoInputs(in a: !firrtl.integer, in b: !firrtl.integer)>
+    firrtl.propassign %obj_a, %x : !firrtl.integer
+
+    %obj_b = firrtl.object.subfield %obj[b] : !firrtl.class<@TwoInputs(in a: !firrtl.integer, in b: !firrtl.integer)>
+    firrtl.propassign %obj_b, %y : !firrtl.integer
+  }
+
+  firrtl.class @AssignInputsOutOfOrder() {
+    // CHECK: %0 = om.constant #om.integer<123 : si12> : !om.integer
+    // CHECK: %1 = om.constant #om.integer<456 : si12> : !om.integer
+    // CHECK: %2 = om.object @TwoInputs(%0, %1) : (!om.integer, !om.integer) -> !om.class.type<@TwoInputs>
+    %x = firrtl.integer 123
+    %y = firrtl.integer 456
+    %obj = firrtl.object @TwoInputs(in a: !firrtl.integer, in b: !firrtl.integer)
+
+    %obj_b = firrtl.object.subfield %obj[b] : !firrtl.class<@TwoInputs(in a: !firrtl.integer, in b: !firrtl.integer)>
+    firrtl.propassign %obj_b, %y : !firrtl.integer
+
+    %obj_a = firrtl.object.subfield %obj[a] : !firrtl.class<@TwoInputs(in a: !firrtl.integer, in b: !firrtl.integer)>
+    firrtl.propassign %obj_a, %x : !firrtl.integer
   }
 
   firrtl.module @Component(in %input: !firrtl.uint<1>, out %output: !firrtl.uint<1>, out %omir_out: !firrtl.class<@ClassEntrypoint(out obj_0_out: !firrtl.class<@Class_1(out someInt: !firrtl.integer)>)>) attributes {convention = #firrtl<convention scalarized>} {
@@ -197,4 +245,80 @@ firrtl.circuit "PathModule" {
     // CHECK:  %[[c1:.+]] = om.list_create %propIn, %[[c0]] : !om.integer
     // CHECK:  om.class.field @propOut, %[[c1]] : !om.list<!om.integer>
   }
+}
+
+// CHECK-LABEL: firrtl.circuit "WireProp"
+firrtl.circuit "WireProp" {
+  // CHECK: om.class @WireProp
+  // CHECK-SAME: %[[IN:.+]]: !om.string
+  firrtl.module @WireProp(in %in: !firrtl.string, out %out: !firrtl.string) attributes {convention = #firrtl<convention scalarized>} {
+    // CHECK-NOT: firrtl.wire
+    // CHECK-NOT: firrtl.propassign
+    // CHECK: om.class.field @out, %[[IN]] : !om.string
+    %s = firrtl.wire : !firrtl.string
+    firrtl.propassign %s, %in : !firrtl.string
+    firrtl.propassign %out, %s : !firrtl.string
+  }
+}
+
+// CHECK-LABEL: firrtl.circuit "PublicModule"
+firrtl.circuit "PublicModule" {
+  // CHECK-NOT: om.class @PrivateModule
+  firrtl.module private @PrivateModule() {}
+
+  // CHECK-NOT: om.class @PrivateExtModule
+  firrtl.extmodule private @PrivateExtModule()
+
+  // CHECK: om.class @PublicModule
+  firrtl.module @PublicModule() {}
+
+  // CHECK: om.class.extern @PublicExtModule
+  firrtl.extmodule @PublicExtModule()
+}
+
+// CHECK-LABEL: firrtl.circuit "ModuleInstances"
+firrtl.circuit "ModuleInstances" {
+  // CHECK: firrtl.extmodule private @ExtModule(in inputWire: !firrtl.uint<1>, out outputWire: !firrtl.uint<1>)
+  firrtl.extmodule private @ExtModule(in inputWire: !firrtl.uint<1>, in inputProp: !firrtl.string, out outputWire: !firrtl.uint<1>, out outputProp: !firrtl.string)
+
+  // CHECK: firrtl.module private @Module(in %[[IN_WIRE0:.+]]: !firrtl.uint<1>, out %[[OUT_WIRE0:.+]]: !firrtl.uint<1>)
+  firrtl.module private @Module(in %inputWire: !firrtl.uint<1>, in %inputProp: !firrtl.string, out %outputWire: !firrtl.uint<1>, out %outputProp: !firrtl.string) {
+    // CHECK: firrtl.strictconnect %[[OUT_WIRE0]], %[[IN_WIRE0]]
+    firrtl.strictconnect %outputWire, %inputWire : !firrtl.uint<1>
+    // CHECK-NEXT: }
+    firrtl.propassign %outputProp, %inputProp : !firrtl.string
+  }
+
+  // CHECK: firrtl.module @ModuleInstances(in %[[IN_WIRE1:.+]]: !firrtl.uint<1>, out %[[OUT_WIRE1:.+]]: !firrtl.uint<1>)
+  firrtl.module @ModuleInstances(in %inputWire: !firrtl.uint<1>, in %inputProp: !firrtl.string, out %outputWire: !firrtl.uint<1>, out %outputProp: !firrtl.string) {
+    // CHECK: %[[EXT_IN_WIRE:.+]], %[[EXT_OUT_WIRE:.+]] = firrtl.instance ext @ExtModule
+    %ext.inputWire, %ext.inputProp, %ext.outputWire, %ext.outputProp = firrtl.instance ext @ExtModule(in inputWire: !firrtl.uint<1>, in inputProp: !firrtl.string, out outputWire: !firrtl.uint<1>, out outputProp: !firrtl.string)
+    // CHECK: %[[MOD_IN_WIRE:.+]], %[[MOD_OUT_WIRE:.+]] = firrtl.instance mod @Module
+    %mod.inputWire, %mod.inputProp, %mod.outputWire, %mod.outputProp = firrtl.instance mod @Module(in inputWire: !firrtl.uint<1>, in inputProp: !firrtl.string, out outputWire: !firrtl.uint<1>, out outputProp: !firrtl.string)
+
+    // CHECK: firrtl.strictconnect %[[EXT_IN_WIRE]], %[[IN_WIRE1]]
+    firrtl.strictconnect %ext.inputWire, %inputWire : !firrtl.uint<1>
+    // CHECK: firrtl.strictconnect %[[MOD_IN_WIRE]], %[[EXT_OUT_WIRE]]
+    firrtl.strictconnect %mod.inputWire, %ext.outputWire : !firrtl.uint<1>
+    // CHECK: firrtl.strictconnect %[[OUT_WIRE1]], %[[MOD_OUT_WIRE]]
+    firrtl.strictconnect %outputWire, %mod.outputWire : !firrtl.uint<1>
+
+    // CHECK-NEXT: }
+    firrtl.propassign %ext.inputProp, %inputProp : !firrtl.string
+    firrtl.propassign %mod.inputProp, %ext.outputProp : !firrtl.string
+    firrtl.propassign %outputProp, %mod.outputProp : !firrtl.string
+  }
+
+  // CHECK: om.class.extern @ExtModule_Class(%inputProp: !om.string)
+  // CHECK:   om.class.extern.field @outputProp : !om.string
+
+  // CHECK: om.class @Module_Class(%[[IN_PROP0:.+]]: !om.string)
+  // CHECK:   om.class.field @outputProp, %[[IN_PROP0]] : !om.string
+
+  // CHECK: om.class @ModuleInstances_Class(%[[IN_PROP1:.+]]: !om.string)
+  // CHECK:   %[[O0:.+]] = om.object @ExtModule_Class(%[[IN_PROP1]])
+  // CHECK:   %[[F0:.+]] = om.object.field %[[O0]], [@outputProp]
+  // CHECK:   %[[O1:.+]] = om.object @Module_Class(%[[F0]])
+  // CHECK:   %[[F1:.+]] = om.object.field %[[O1]], [@outputProp]
+  // CHECK:   om.class.field @outputProp, %[[F1]]
 }

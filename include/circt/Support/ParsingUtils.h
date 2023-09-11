@@ -13,16 +13,16 @@
 #ifndef CIRCT_SUPPORT_PARSINGUTILS_H
 #define CIRCT_SUPPORT_PARSINGUTILS_H
 
-#include "mlir/IR/BuiltinAttributes.h"
-
 #include "circt/Support/LLVM.h"
+#include "mlir/IR/BuiltinAttributes.h"
+#include "mlir/IR/OpImplementation.h"
 
 namespace circt {
 namespace parsing_util {
 
 /// Get a name from an SSA value string, if said value name is not a
 /// number.
-static StringAttr getNameFromSSA(MLIRContext *context, StringRef name) {
+static inline StringAttr getNameFromSSA(MLIRContext *context, StringRef name) {
   if (!name.empty()) {
     // Ignore numeric names like %42
     assert(name.size() > 1 && name[0] == '%' && "Unknown MLIR name");
@@ -33,6 +33,23 @@ static StringAttr getNameFromSSA(MLIRContext *context, StringRef name) {
   }
   return StringAttr::get(context, name);
 }
+
+//===----------------------------------------------------------------------===//
+// Initializer lists
+//===----------------------------------------------------------------------===//
+
+/// Parses an initializer.
+/// An initializer list is a list of operands, types and names on the format:
+///  (%arg = %input : type, ...)
+ParseResult parseInitializerList(
+    mlir::OpAsmParser &parser,
+    llvm::SmallVector<mlir::OpAsmParser::Argument> &inputArguments,
+    llvm::SmallVector<mlir::OpAsmParser::UnresolvedOperand> &inputOperands,
+    llvm::SmallVector<Type> &inputTypes, ArrayAttr &inputNames);
+
+// Prints an initializer list.
+void printInitializerList(OpAsmPrinter &p, ValueRange ins,
+                          ArrayRef<BlockArgument> args);
 
 } // namespace parsing_util
 } // namespace circt

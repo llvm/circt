@@ -38,47 +38,48 @@ using BindTable = DenseMap<StringAttr, SmallDenseMap<StringAttr, sv::BindOp>>;
 //===----------------------------------------------------------------------===//
 
 // Reimplemented from SliceAnalysis to use a worklist rather than recursion and
-// non-insert ordered set.
+// non-insert ordered set.  Implement this as a DFS and not a BFS so that the
+// order is stable across changes to intermediary operations.  (It is then
+// necessary to use the _operands_ as a worklist and not the _operations_.)
 static void
 getBackwardSliceSimple(Operation *rootOp, SetVector<Operation *> &backwardSlice,
                        llvm::function_ref<bool(Operation *)> filter) {
-  SmallVector<Operation *> worklist;
-  worklist.push_back(rootOp);
+  SmallVector<Value> worklist(rootOp->getOperands());
 
   while (!worklist.empty()) {
-    Operation *op = worklist.back();
-    worklist.pop_back();
+    Value operand = worklist.pop_back_val();
+    Operation *definingOp = operand.getDefiningOp();
 
-    if (!op || op->hasTrait<mlir::OpTrait::IsIsolatedFromAbove>())
+    if (!definingOp ||
+        definingOp->hasTrait<mlir::OpTrait::IsIsolatedFromAbove>())
       continue;
 
     // Evaluate whether we should keep this def.
     // This is useful in particular to implement scoping; i.e. return the
     // transitive backwardSlice in the current scope.
-    if (filter && !filter(op))
+    if (filter && !filter(definingOp))
       continue;
 
-    for (auto en : llvm::enumerate(op->getOperands())) {
-      auto operand = en.value();
-      if (auto *definingOp = operand.getDefiningOp()) {
-        if (!backwardSlice.contains(definingOp))
-          worklist.push_back(definingOp);
-      } else if (auto blockArg = operand.dyn_cast<BlockArgument>()) {
-        Block *block = blockArg.getOwner();
-        Operation *parentOp = block->getParentOp();
-        // TODO: determine whether we want to recurse backward into the other
-        // blocks of parentOp, which are not technically backward unless they
-        // flow into us. For now, just bail.
-        assert(parentOp->getNumRegions() == 1 &&
-               parentOp->getRegion(0).getBlocks().size() == 1);
-        if (!backwardSlice.contains(parentOp))
-          worklist.push_back(parentOp);
-      } else {
-        llvm_unreachable("No definingOp and not a block argument.");
-      }
+    if (definingOp) {
+      if (!backwardSlice.contains(definingOp))
+        for (auto newOperand : llvm::reverse(definingOp->getOperands()))
+          worklist.push_back(newOperand);
+    } else if (auto blockArg = operand.dyn_cast<BlockArgument>()) {
+      Block *block = blockArg.getOwner();
+      Operation *parentOp = block->getParentOp();
+      // TODO: determine whether we want to recurse backward into the other
+      // blocks of parentOp, which are not technically backward unless they
+      // flow into us. For now, just bail.
+      assert(parentOp->getNumRegions() == 1 &&
+             parentOp->getRegion(0).getBlocks().size() == 1);
+      if (!backwardSlice.contains(parentOp))
+        for (auto newOperand : llvm::reverse(parentOp->getOperands()))
+          worklist.push_back(newOperand);
+    } else {
+      llvm_unreachable("No definingOp and not a block argument.");
     }
 
-    backwardSlice.insert(op);
+    backwardSlice.insert(definingOp);
   }
 }
 

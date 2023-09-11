@@ -1086,3 +1086,11 @@ circuit ConstMap:
   module ConstMap:
     ; expected-error @below {{only hardware types can be 'const'}}
     output m: const Map<String, String>
+
+;// -----
+; AnyRef not yet supported.
+FIRRTL version 3.1.0
+circuit AnyRef:
+   module AnyRef:
+     ; expected-error @below {{AnyRef types are a FIRRTL 3.2.0+ feature}}
+     output a : AnyRef

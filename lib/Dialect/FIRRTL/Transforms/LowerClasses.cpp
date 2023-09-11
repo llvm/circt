@@ -52,6 +52,9 @@ struct PathInfo {
 /// Maps a FIRRTL path id to the lowered PathInfo.
 using PathInfoTable = DenseMap<DistinctAttr, PathInfo>;
 
+/// The suffix to append to lowered module names.
+static constexpr StringRef kClassNameSuffix = "_Class";
+
 /// Helper class to capture details about a property.
 struct Property {
   size_t index;
@@ -84,11 +87,12 @@ private:
   void lowerClassExtern(ClassExternOp classExternOp, FModuleLike moduleLike);
 
   // Update Object instantiations in a FIRRTL Module or OM Class.
-  void updateInstances(Operation *op);
+  LogicalResult updateInstances(Operation *op, InstanceGraph &instanceGraph);
 
   // Convert to OM ops and types in Classes or Modules.
-  LogicalResult dialectConversion(Operation *op,
-                                  const PathInfoTable &pathInfoTable);
+  LogicalResult dialectConversion(
+      Operation *op, const PathInfoTable &pathInfoTable,
+      const DenseMap<StringAttr, firrtl::ClassType> &classTypeTable);
 };
 
 } // namespace
@@ -217,6 +221,9 @@ void LowerClassesPass::runOnOperation() {
   // Get the CircuitOp.
   CircuitOp circuit = getOperation();
 
+  // Get the InstanceGraph.
+  InstanceGraph &instanceGraph = getAnalysis<InstanceGraph>();
+
   // Rewrite all path annotations into inner symbol targets.
   PathInfoTable pathInfoTable;
   if (failed(lowerPaths(pathInfoTable))) {
@@ -225,10 +232,16 @@ void LowerClassesPass::runOnOperation() {
   }
 
   // Create new OM Class ops serially.
+  DenseMap<StringAttr, firrtl::ClassType> classTypeTable;
   SmallVector<ClassLoweringState> loweringState;
-  for (auto moduleLike : circuit.getOps<FModuleLike>())
-    if (shouldCreateClass(moduleLike))
+  for (auto moduleLike : circuit.getOps<FModuleLike>()) {
+    if (shouldCreateClass(moduleLike)) {
       loweringState.push_back(createClass(moduleLike));
+      if (auto classLike =
+              dyn_cast<firrtl::ClassLike>(moduleLike.getOperation()))
+        classTypeTable[classLike.getNameAttr()] = classLike.getInstanceType();
+    }
+  }
 
   // Move ops from FIRRTL Class to OM Class in parallel.
   mlir::parallelForEach(ctx, loweringState,
@@ -247,15 +260,21 @@ void LowerClassesPass::runOnOperation() {
       objectContainers.push_back(&op);
 
   // Update Object creation ops in Classes or Modules in parallel.
-  mlir::parallelForEach(ctx, objectContainers,
-                        [this](auto *op) { updateInstances(op); });
+  if (failed(mlir::failableParallelForEach(
+          ctx, objectContainers, [this, &instanceGraph](auto *op) {
+            return updateInstances(op, instanceGraph);
+          })))
+    return signalPassFailure();
 
   // Convert to OM ops and types in Classes or Modules in parallel.
   if (failed(
           mlir::failableParallelForEach(ctx, objectContainers, [&](auto *op) {
-            return dialectConversion(op, pathInfoTable);
+            return dialectConversion(op, pathInfoTable, classTypeTable);
           })))
     return signalPassFailure();
+
+  // We keep the instance graph up to date, so mark that analysis preserved.
+  markAnalysesPreserved<InstanceGraph>();
 }
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createLowerClassesPass() {
@@ -265,6 +284,10 @@ std::unique_ptr<mlir::Pass> circt::firrtl::createLowerClassesPass() {
 // Predicate to check if a module-like needs a Class to be created.
 bool LowerClassesPass::shouldCreateClass(FModuleLike moduleLike) {
   if (isa<firrtl::ClassLike>(moduleLike.getOperation()))
+    return true;
+
+  // Always create a class for public modules.
+  if (moduleLike.isPublic())
     return true;
 
   return llvm::any_of(moduleLike.getPorts(), [](PortInfo port) {
@@ -285,13 +308,14 @@ ClassLoweringState LowerClassesPass::createClass(FModuleLike moduleLike) {
   // Take the name from the FIRRTL Class or Module to create the OM Class name.
   StringRef className = moduleLike.getName();
 
-  // If the op is a Module, the OM Class would conflict with the HW Module, so
-  // give it a suffix. There is no formal ABI for this yet.
-  StringRef suffix = isa<FModuleOp>(moduleLike) ? "_Class" : "";
+  // If the op is a Module or ExtModule, the OM Class would conflict with the HW
+  // Module, so give it a suffix. There is no formal ABI for this yet.
+  StringRef suffix =
+      isa<FModuleOp, FExtModuleOp>(moduleLike) ? kClassNameSuffix : "";
 
   // Construct the OM Class with the FIRRTL Class name and parameter names.
   om::ClassLike loweredClassOp;
-  if (isa<firrtl::ExtClassOp>(moduleLike.getOperation()))
+  if (isa<firrtl::ExtClassOp, firrtl::FExtModuleOp>(moduleLike.getOperation()))
     loweredClassOp = builder.create<om::ClassExternOp>(
         moduleLike.getLoc(), className + suffix, formalParamNames);
   else
@@ -366,8 +390,10 @@ void LowerClassesPass::lowerClass(om::ClassOp classOp, FModuleLike moduleLike) {
     // Actually clone the op over to the OM Class.
     builder.clone(op, mapping);
 
-    // In case this is a Module, remember to erase this op.
-    opsToErase.push_back(&op);
+    // In case this is a Module, remember to erase this op, unless it is an
+    // instance. Instances are handled later in updateInstances.
+    if (!isa<InstanceOp>(op))
+      opsToErase.push_back(&op);
   }
 
   // Convert any output property assignments to Field ops.
@@ -431,39 +457,240 @@ void LowerClassesPass::lowerClassExtern(ClassExternOp classExternOp,
   }
 }
 
-// Update Object instantiations in a FIRRTL Module or OM Class.
-void LowerClassesPass::updateInstances(Operation *op) {
-  OpBuilder builder(op);
-  // For each Object instance.
-  for (auto firrtlObject : llvm::make_early_inc_range(
-           op->getRegion(0).getOps<firrtl::ObjectOp>())) {
-    // Collect its input actual parameters by finding any subfield ops that are
-    // assigned to. Take the source of the assignment as the actual parameter.
-    SmallVector<Value> actualParameters;
-    for (auto *user : firrtlObject->getUsers())
-      if (auto subfield = dyn_cast<ObjectSubfieldOp>(user))
-        for (auto *subfieldUser : subfield->getUsers())
-          if (auto propassign = dyn_cast<PropAssignOp>(subfieldUser))
-            if (propassign.getDest() == subfield.getResult())
-              actualParameters.push_back(propassign.getSrc());
+// Helper to update an Object instantiation. FIRRTL Object instances are
+// converted to OM Object instances.
+static LogicalResult
+updateObjectInstance(firrtl::ObjectOp firrtlObject, OpBuilder &builder,
+                     SmallVectorImpl<Operation *> &opsToErase) {
+  // build a table mapping the indices of input ports to their position in the
+  // om class's parameter list.
+  auto firrtlClassType = firrtlObject.getType();
+  auto numElements = firrtlClassType.getNumElements();
+  llvm::SmallVector<unsigned> argIndexTable;
+  argIndexTable.resize(numElements);
 
-    // Convert the FIRRTL Class type to an OM Class type.
-    auto className = firrtlObject.getType().getNameAttr();
-    auto classType = om::ClassType::get(op->getContext(), className);
-
-    // Create the new Object op.
-    builder.setInsertionPoint(firrtlObject);
-    auto object =
-        builder.create<om::ObjectOp>(firrtlObject.getLoc(), classType,
-                                     className.getAttr(), actualParameters);
-
-    // Replace uses of the FIRRTL Object with the OM Object. The later dialect
-    // conversion will take care of converting the types.
-    firrtlObject.replaceAllUsesWith(object.getResult());
-
-    // Erase the original Object, now that we're done with it.
-    firrtlObject.erase();
+  unsigned nextArgIndex = 0;
+  for (unsigned i = 0; i < numElements; ++i) {
+    auto direction = firrtlClassType.getElement(i).direction;
+    if (direction == Direction::In)
+      argIndexTable[i] = nextArgIndex++;
   }
+
+  // Collect its input actual parameters by finding any subfield ops that are
+  // assigned to. Take the source of the assignment as the actual parameter.
+
+  llvm::SmallVector<Value> args;
+  args.resize(nextArgIndex);
+
+  for (auto *user : llvm::make_early_inc_range(firrtlObject->getUsers())) {
+    if (auto subfield = dyn_cast<ObjectSubfieldOp>(user)) {
+      auto index = subfield.getIndex();
+      auto direction = firrtlClassType.getElement(index).direction;
+
+      // We only lower "writes to input ports" here. Reads from output
+      // ports will be handled using the conversion framework.
+      if (direction == Direction::Out)
+        continue;
+
+      for (auto *subfieldUser :
+           llvm::make_early_inc_range(subfield->getUsers())) {
+        if (auto propassign = dyn_cast<PropAssignOp>(subfieldUser)) {
+          // the operands of the propassign may have already been converted to
+          // om. Use the generic operand getters to get the operands as
+          // untyped values.
+          auto dst = propassign.getOperand(0);
+          auto src = propassign.getOperand(1);
+          if (dst == subfield.getResult()) {
+            args[argIndexTable[index]] = src;
+            opsToErase.push_back(propassign);
+          }
+        }
+      }
+
+      opsToErase.push_back(subfield);
+    }
+  }
+
+  // Check that all input ports have been initialized.
+  for (unsigned i = 0; i < numElements; ++i) {
+    auto element = firrtlClassType.getElement(i);
+    if (element.direction == Direction::Out)
+      continue;
+
+    auto argIndex = argIndexTable[i];
+    if (!args[argIndex])
+      return emitError(firrtlObject.getLoc())
+             << "uninitialized input port " << element.name;
+  }
+
+  // Convert the FIRRTL Class type to an OM Class type.
+  auto className = firrtlObject.getType().getNameAttr();
+  auto classType = om::ClassType::get(firrtlObject->getContext(), className);
+
+  // Create the new Object op.
+  builder.setInsertionPoint(firrtlObject);
+  auto object = builder.create<om::ObjectOp>(
+      firrtlObject.getLoc(), classType, firrtlObject.getClassNameAttr(), args);
+
+  // Replace uses of the FIRRTL Object with the OM Object. The later dialect
+  // conversion will take care of converting the types.
+  firrtlObject.replaceAllUsesWith(object.getResult());
+
+  // Erase the original Object, now that we're done with it.
+  opsToErase.push_back(firrtlObject);
+
+  return success();
+}
+
+// Helper to update a Module instantiation in a Class. Module instances within a
+// Class are converted to OM Object instances of the Class derived from the
+// Module.
+static LogicalResult
+updateModuleInstanceClass(InstanceOp firrtlInstance, OpBuilder &builder,
+                          SmallVectorImpl<Operation *> &opsToErase) {
+  // Collect the FIRRTL instance inputs to form the Object instance actual
+  // parameters. The order of the SmallVector needs to match the order the
+  // formal parameters are declared on the corresponding Class.
+  SmallVector<Value> actualParameters;
+  for (auto result : firrtlInstance.getResults()) {
+    // If the port is an output, continue.
+    if (firrtlInstance.getPortDirection(result.getResultNumber()) ==
+        Direction::Out)
+      continue;
+
+    // If the port is not a property type, continue.
+    auto propertyResult = dyn_cast<FIRRTLPropertyValue>(result);
+    if (!propertyResult)
+      continue;
+
+    // Get the property assignment to the input, and track the assigned
+    // Value as an actual parameter to the Object instance.
+    auto propertyAssignment = getPropertyAssignment(propertyResult);
+    assert(propertyAssignment && "properties require single assignment");
+    actualParameters.push_back(propertyAssignment.getSrc());
+
+    // Erase the property assignment.
+    opsToErase.push_back(propertyAssignment);
+  }
+
+  // Convert the FIRRTL Module name to an OM Class type.
+  auto className = FlatSymbolRefAttr::get(
+      builder.getStringAttr(firrtlInstance.getModuleName() + kClassNameSuffix));
+  auto classType = om::ClassType::get(firrtlInstance->getContext(), className);
+
+  // Create the new Object op.
+  builder.setInsertionPoint(firrtlInstance);
+  auto object =
+      builder.create<om::ObjectOp>(firrtlInstance.getLoc(), classType,
+                                   className.getAttr(), actualParameters);
+
+  // Replace uses of the FIRRTL instance outputs with field access into
+  // the OM Object. The later dialect conversion will take care of
+  // converting the types.
+  for (auto result : firrtlInstance.getResults()) {
+    // If the port isn't an output, continue.
+    if (firrtlInstance.getPortDirection(result.getResultNumber()) !=
+        Direction::Out)
+      continue;
+
+    // If the port is not a property type, continue.
+    if (!isa<PropertyType>(result.getType()))
+      continue;
+
+    // The path to the field is just this output's name.
+    auto objectFieldPath = builder.getArrayAttr({FlatSymbolRefAttr::get(
+        firrtlInstance.getPortName(result.getResultNumber()))});
+
+    // Create the field access.
+    auto objectField = builder.create<ObjectFieldOp>(
+        object.getLoc(), result.getType(), object, objectFieldPath);
+
+    result.replaceAllUsesWith(objectField);
+  }
+
+  // Erase the original instance, now that we're done with it.
+  opsToErase.push_back(firrtlInstance);
+
+  return success();
+}
+
+// Helper to update a Module instantiation in a Module. Module instances within
+// a Module are updated to remove the property typed ports.
+static LogicalResult
+updateModuleInstanceModule(InstanceOp firrtlInstance, OpBuilder &builder,
+                           SmallVectorImpl<Operation *> &opsToErase,
+                           InstanceGraph &instanceGraph) {
+  // Collect property typed ports to erase.
+  BitVector portsToErase(firrtlInstance.getNumResults());
+  for (auto result : firrtlInstance.getResults())
+    if (isa<PropertyType>(result.getType()))
+      portsToErase.set(result.getResultNumber());
+
+  // If there are none, nothing to do.
+  if (portsToErase.none())
+    return success();
+
+  // Create a new instance with the property ports removed.
+  builder.setInsertionPoint(firrtlInstance);
+  InstanceOp newInstance = firrtlInstance.erasePorts(builder, portsToErase);
+
+  // Replace the instance in the instance graph. This is called from multiple
+  // threads, but because the instance graph data structure is not mutated, and
+  // only one thread ever sets the instance pointer for a given instance, this
+  // should be safe.
+  instanceGraph.replaceInstance(firrtlInstance, newInstance);
+
+  // Erase the original instance, which is now replaced.
+  opsToErase.push_back(firrtlInstance);
+
+  return success();
+}
+
+// Update Object or Module instantiations in a FIRRTL Module or OM Class.
+LogicalResult LowerClassesPass::updateInstances(Operation *op,
+                                                InstanceGraph &instanceGraph) {
+  OpBuilder builder(op);
+
+  // Track ops to erase at the end. We can't do this eagerly, since we want to
+  // loop over each op in the container's body, and we may end up removing some
+  // ops later in the body when we visit instances earlier in the body.
+  SmallVector<Operation *> opsToErase;
+
+  // Dispatch on each Object or Module instance.
+  for (auto &instance : llvm::make_early_inc_range(op->getRegion(0).getOps())) {
+    LogicalResult result =
+        TypeSwitch<Operation *, LogicalResult>(&instance)
+            .Case([&](firrtl::ObjectOp firrtlObject) {
+              // Convert FIRRTL Object instance to OM Object instance.
+              return updateObjectInstance(firrtlObject, builder, opsToErase);
+            })
+            .Case([&](InstanceOp firrtlInstance) {
+              return TypeSwitch<Operation *, LogicalResult>(op)
+                  .Case([&](om::ClassLike) {
+                    // Convert FIRRTL Module instance within a Class to OM
+                    // Object instance.
+                    return updateModuleInstanceClass(firrtlInstance, builder,
+                                                     opsToErase);
+                  })
+                  .Case([&](FModuleOp) {
+                    // Convert FIRRTL Module instance within a Module to remove
+                    // property ports if necessary.
+                    return updateModuleInstanceModule(
+                        firrtlInstance, builder, opsToErase, instanceGraph);
+                  })
+                  .Default([](auto *op) { return success(); });
+            })
+            .Default([](auto *op) { return success(); });
+
+    if (failed(result))
+      return result;
+  }
+
+  // Erase the ops marked to be erased.
+  for (auto *op : opsToErase)
+    op->erase();
+
+  return success();
 }
 
 // Pattern rewriters for dialect conversion.
@@ -599,6 +826,80 @@ struct PathOpConversion : public OpConversionPattern<firrtl::PathOp> {
   const PathInfoTable &pathInfoTable;
 };
 
+struct WireOpConversion : public OpConversionPattern<WireOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(WireOp wireOp, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto wireValue = dyn_cast<FIRRTLPropertyValue>(wireOp.getResult());
+
+    // If the wire isn't a Property, not much we can do here.
+    if (!wireValue)
+      return failure();
+
+    // If the wire isn't inside a graph region, we can't trivially remove it. In
+    // practice, this pattern does run for wires in graph regions, so this check
+    // should pass and we can proceed with the trivial rewrite.
+    auto regionKindInterface = wireOp->getParentOfType<RegionKindInterface>();
+    if (!regionKindInterface)
+      return failure();
+    if (regionKindInterface.getRegionKind(0) != RegionKind::Graph)
+      return failure();
+
+    // Find the assignment to the wire.
+    PropAssignOp propAssign = getPropertyAssignment(wireValue);
+
+    // Use the source of the assignment instead of the wire.
+    rewriter.replaceOp(wireOp, propAssign.getSrc());
+
+    // Erase the source of the assignment.
+    rewriter.eraseOp(propAssign);
+
+    return success();
+  }
+};
+
+struct ObjectSubfieldOpConversion
+    : public OpConversionPattern<firrtl::ObjectSubfieldOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  ObjectSubfieldOpConversion(
+      const TypeConverter &typeConverter, MLIRContext *context,
+      const DenseMap<StringAttr, firrtl::ClassType> &classTypeTable)
+      : OpConversionPattern(typeConverter, context),
+        classTypeTable(classTypeTable) {}
+
+  LogicalResult
+  matchAndRewrite(firrtl::ObjectSubfieldOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto omClassType = dyn_cast<om::ClassType>(adaptor.getInput().getType());
+    if (!omClassType)
+      return failure();
+
+    // Convert the field-index used by the firrtl implementation, to a symbol,
+    // as used by the om implementation.
+    auto firrtlClassType =
+        classTypeTable.lookup(omClassType.getClassName().getAttr());
+    if (!firrtlClassType)
+      return failure();
+
+    const auto &element = firrtlClassType.getElement(op.getIndex());
+    // We cannot convert input ports to fields.
+    if (element.direction == Direction::In)
+      return failure();
+
+    auto field = FlatSymbolRefAttr::get(element.name);
+    auto path = rewriter.getArrayAttr({field});
+    auto type = typeConverter->convertType(element.type);
+    rewriter.replaceOpWithNewOp<om::ObjectFieldOp>(op, type, adaptor.getInput(),
+                                                   path);
+    return success();
+  }
+
+  const DenseMap<StringAttr, firrtl::ClassType> &classTypeTable;
+};
+
 struct ClassFieldOpConversion : public OpConversionPattern<ClassFieldOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -623,6 +924,21 @@ struct ClassExternFieldOpConversion
       return failure();
     rewriter.replaceOpWithNewOp<ClassExternFieldOp>(
         op, adaptor.getSymNameAttr(), type);
+    return success();
+  }
+};
+
+struct ObjectOpConversion : public OpConversionPattern<om::ObjectOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(om::ObjectOp objectOp, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // Replace the object with a new object using the converted actual parameter
+    // types from the adaptor.
+    rewriter.replaceOpWithNewOp<om::ObjectOp>(objectOp, objectOp.getType(),
+                                              adaptor.getClassNameAttr(),
+                                              adaptor.getActualParams());
     return success();
   }
 };
@@ -673,6 +989,25 @@ struct ClassExternOpSignatureConversion
       return failure();
 
     rewriter.updateRootInPlace(classOp, []() {});
+
+    return success();
+  }
+};
+
+struct ObjectFieldOpConversion : public OpConversionPattern<ObjectFieldOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ObjectFieldOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // Replace the object field with a new object field of the appropriate
+    // result type based on the type converter.
+    auto type = typeConverter->convertType(op.getType());
+    if (!type)
+      return failure();
+
+    rewriter.replaceOpWithNewOp<ObjectFieldOp>(op, type, adaptor.getObject(),
+                                               adaptor.getFieldPathAttr());
 
     return success();
   }
@@ -809,29 +1144,42 @@ static void populateTypeConverter(TypeConverter &converter) {
         assert(values.size() == 1);
         return values[0];
       });
+
+  // Add a source materialization to fold away unrealized conversion casts.
+  converter.addSourceMaterialization(
+      [](OpBuilder &builder, Type type, ValueRange values, Location loc) {
+        assert(values.size() == 1);
+        return values[0];
+      });
 }
 
-static void populateRewritePatterns(RewritePatternSet &patterns,
-                                    TypeConverter &converter,
-                                    const PathInfoTable &pathInfoTable) {
+static void populateRewritePatterns(
+    RewritePatternSet &patterns, TypeConverter &converter,
+    const PathInfoTable &pathInfoTable,
+    const DenseMap<StringAttr, firrtl::ClassType> &classTypeTable) {
   patterns.add<FIntegerConstantOpConversion>(converter, patterns.getContext());
   patterns.add<StringConstantOpConversion>(converter, patterns.getContext());
   patterns.add<PathOpConversion>(converter, patterns.getContext(),
                                  pathInfoTable);
+  patterns.add<WireOpConversion>(converter, patterns.getContext());
+  patterns.add<ObjectSubfieldOpConversion>(converter, patterns.getContext(),
+                                           classTypeTable);
   patterns.add<ClassFieldOpConversion>(converter, patterns.getContext());
   patterns.add<ClassExternFieldOpConversion>(converter, patterns.getContext());
   patterns.add<ClassOpSignatureConversion>(converter, patterns.getContext());
   patterns.add<ClassExternOpSignatureConversion>(converter,
                                                  patterns.getContext());
+  patterns.add<ObjectOpConversion>(converter, patterns.getContext());
+  patterns.add<ObjectFieldOpConversion>(converter, patterns.getContext());
   patterns.add<ListCreateOpConversion>(converter, patterns.getContext());
   patterns.add<MapCreateOpConversion>(converter, patterns.getContext());
   patterns.add<BoolConstantOpConversion>(converter, patterns.getContext());
 }
 
 // Convert to OM ops and types in Classes or Modules.
-LogicalResult
-LowerClassesPass::dialectConversion(Operation *op,
-                                    const PathInfoTable &pathInfoTable) {
+LogicalResult LowerClassesPass::dialectConversion(
+    Operation *op, const PathInfoTable &pathInfoTable,
+    const DenseMap<StringAttr, firrtl::ClassType> &classTypeTable) {
   ConversionTarget target(getContext());
   populateConversionTarget(target);
 
@@ -839,7 +1187,8 @@ LowerClassesPass::dialectConversion(Operation *op,
   populateTypeConverter(typeConverter);
 
   RewritePatternSet patterns(&getContext());
-  populateRewritePatterns(patterns, typeConverter, pathInfoTable);
+  populateRewritePatterns(patterns, typeConverter, pathInfoTable,
+                          classTypeTable);
 
   return applyPartialConversion(op, target, std::move(patterns));
 }

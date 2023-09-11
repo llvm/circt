@@ -636,13 +636,13 @@ LogicalResult Visitor::visitDecl(WireOp op) {
                             op.getForceable())
             .getResult();
 
-  // Create the non-HW wires.
+  // Create the non-HW wires.  Non-HW wire names are always droppable.
   for (auto &[type, fieldID, _, suffix] : mappings.fields)
     nonHWValues[FieldRef(op.getResult(), fieldID)] =
         builder
             .create<WireOp>(type,
                             builder.getStringAttr(Twine(op.getName()) + suffix),
-                            op.getNameKind())
+                            NameKindEnum::DroppableName)
             .getResult();
 
   for (auto fieldID : mappings.mapToNullInteriors)

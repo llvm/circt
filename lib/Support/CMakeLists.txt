@@ -16,6 +16,7 @@ add_circt_library(CIRCTSupport
   Path.cpp
   PrettyPrinter.cpp
   PrettyPrinterHelpers.cpp
+  ParsingUtils.cpp
   SymCache.cpp
   ValueMapper.cpp
   InstanceGraph.cpp

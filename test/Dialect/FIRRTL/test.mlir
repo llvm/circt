@@ -344,6 +344,13 @@ firrtl.module @BoolTest(in %in: !firrtl.bool, out %out: !firrtl.bool) {
   %1 = firrtl.bool false
 }
 
+// CHECK-LABEL: AnyRefTest
+// CHECK-SAME: (in %in: !firrtl.anyref, out %out: !firrtl.anyref)
+firrtl.module @AnyRefTest(in %in: !firrtl.anyref, out %out: !firrtl.anyref) {
+  // CHECK: firrtl.propassign %out, %in : !firrtl.anyref
+  firrtl.propassign %out, %in : !firrtl.anyref
+}
+
 // CHECK-LABEL: TypeAlias
 // CHECK-SAME: %in: !firrtl.alias<bar, uint<1>>
 // CHECK-SAME: %const: !firrtl.const.alias<baz, const.uint<1>>

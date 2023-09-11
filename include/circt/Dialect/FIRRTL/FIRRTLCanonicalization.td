@@ -504,12 +504,13 @@ def BitsOfPad : Pat<
   (AsUIntPrimOp $x),
   [(KnownWidth $x), (EqualIntSize $old, $x), (AttrIsZero $oLow)]>;
 
+def IndexInBound : Constraint<CPred<"cast<IntegerAttr>($0).getAPSInt().getExtValue() < static_cast<int64_t>(type_cast<FVectorType>($1.getType()).getNumElements())">>;
+
 // subaccess a, cst -> subindex a, cst
-// TODO: only enable if cst is inside a.  Subaccess and subindex behave differently for out-of-bounds indexes.
 def SubaccessOfConstant : Pat<
   (SubaccessOp:$old $array, (ConstantOp $cst)),
   (MoveNameHint $old, (SubindexOp $array, (NativeCodeCall<"$_builder.getI32IntegerAttr(cast<IntegerAttr>($0).getAPSInt().getExtValue())"> $cst))),
-  []>;
+  [(IndexInBound $cst, $array)]>;
 
 // mux(cond, 0, 1) -> ~cond
 def MuxNot : Pat<

@@ -109,4 +109,10 @@ def EnumType : TypeDef<OMDialect, "Enum", []> {
   }];
 }
 
+def OMAnyType : TypeDef<OMDialect, "Any", []> {
+  let summary = "A type that represents any valid OM type.";
+
+  let mnemonic = "any";
+}
+
 #endif // CIRCT_DIALECT_OM_OMTYPES_TD

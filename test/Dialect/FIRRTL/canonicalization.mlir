@@ -835,6 +835,10 @@ firrtl.module @subaccess(out %result: !firrtl.uint<8>, in %vec0: !firrtl.vector<
   %c11_ui8 = firrtl.constant 11 : !firrtl.uint<8>
   %0 = firrtl.subaccess %vec0[%c11_ui8] : !firrtl.vector<uint<8>, 16>, !firrtl.uint<8>
   firrtl.connect %result, %0 :!firrtl.uint<8>, !firrtl.uint<8>
+  // CHECK: firrtl.subaccess
+  %c16_ui8 = firrtl.constant 16 : !firrtl.uint<8>
+  %1 = firrtl.subaccess %vec0[%c16_ui8] : !firrtl.vector<uint<8>, 16>, !firrtl.uint<8>
+  firrtl.connect %result, %1 :!firrtl.uint<8>, !firrtl.uint<8>
 }
 
 // CHECK-LABEL: firrtl.module @subindex

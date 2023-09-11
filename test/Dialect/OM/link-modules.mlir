@@ -1,4 +1,4 @@
-// RUN: circt-opt %s --verify-diagnostics -pass-pipeline='builtin.module(om-link-modules)' --split-input-file | FileCheck %s
+// RUN: circt-opt %s --verify-diagnostics -pass-pipeline='builtin.module(om-link-modules)' --split-input-file -allow-unregistered-dialect | FileCheck %s
 
 module {
   // CHECK-LABEL: module
@@ -38,7 +38,7 @@ module {
       om.class.extern.field @a: i1
     }
     om.class @Conflict() {
-      %0 = om.constant 0 : i1 
+      %0 = om.constant 0 : i1
       om.class.field @c, %0: i1
     }
     om.class @UseConflict() {
@@ -49,12 +49,29 @@ module {
   }
   module {
     om.class @Conflict() {
-      %0 = om.constant 0 : i1 
+      %0 = om.constant 0 : i1
       om.class.field @c, %0: i1
     }
     om.class @UseConflict() {
      %0 = om.object @Conflict() : () -> !om.class.type<@Conflict>
      %1 = om.object.field %0, [@c] : (!om.class.type<@Conflict>) -> i1
     }
+  }
+}
+
+// -----
+
+// Check that OM ops are deleted.  Make the "delete-me" op a landmine that will
+// cause a symbol collision if it is _not_ deleted.
+module {
+  module {
+    // CHECK-NOT: delete-me
+    "delete-me"() {sym_name = "Bar"} : () -> ()
+    om.class @Foo() {
+   }
+  }
+  module {
+    om.class @Bar() {
+   }
   }
 }
