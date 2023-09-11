@@ -309,3 +309,18 @@ firrtl.circuit "WireSymbols" {
     %a = firrtl.wire sym [<@sym_a_c, 2, public>] : !firrtl.openbundle<b: string, c: uint<1>>
   }
 }
+
+// -----
+
+// Check that created wires for non-hw have droppable names.
+// Ensure name for hw-only portion preserves namekind.
+
+// CHECK-LABEL: circuit "NonHWWiresHaveDroppableNames"
+firrtl.circuit "NonHWWiresHaveDroppableNames" {
+  // CHECK-LABEL: module @NonHWWiresHaveDroppableNames
+  firrtl.module @NonHWWiresHaveDroppableNames() {
+    // CHECK:      %w = firrtl.wire interesting_name : !firrtl.bundle<a: uint<1>>
+    // CHECK-NEXT: %w_b = firrtl.wire : !firrtl.probe<uint<1>>
+    %w = firrtl.wire interesting_name : !firrtl.openbundle<a: uint<1>, b: probe<uint<1>>>
+  }
+}
