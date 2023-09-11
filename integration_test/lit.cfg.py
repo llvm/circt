@@ -38,7 +38,7 @@ config.substitutions.append(('%INC%', config.circt_include_dir))
 config.substitutions.append(
     ('%BININC%', os.path.join(config.circt_obj_root, "include")))
 config.substitutions.append(
-    ('%TCL_PATH%', config.circt_src_root + '/build/lib/Bindings/Tcl/'))
+    ('%TCL_PATH%', config.circt_src_root + '/build/lib/'))
 config.substitutions.append(('%CIRCT_SOURCE%', config.circt_src_root))
 config.substitutions.append(
     ('%ESI_COLLATERAL_PATH%', config.esi_collateral_path))
