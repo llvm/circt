@@ -5,7 +5,6 @@ add_circt_dialect_library(CIRCTMSFTTransforms
   MSFTWireCleanup.cpp
   MSFTDiscoverAppIDs.cpp
   MSFTLowerConstructs.cpp
-  MSFTPartition.cpp
   MSFTPassCommon.h
   MSFTToHW.cpp
   PassCommon.cpp
