@@ -771,3 +771,29 @@ firrtl.circuit "WireProp" {
     firrtl.propassign %s, %w : !firrtl.string
   }
 }
+
+// -----
+
+// Check ability to const-prop through declarations (wires, nodes)
+// with annotations, but keep them around.
+firrtl.circuit "ConstPropAnno" {
+  firrtl.module @ConstPropAnno(out %val : !firrtl.uint<3>,
+                               out %val2 : !firrtl.uint<3>) {
+    // CHECK: %[[ZERO:.+]] = firrtl.constant 0
+    %zero = firrtl.constant 0 : !firrtl.uint<3>
+    // CHECK: %w = firrtl.wire
+    %w = firrtl.wire {annotations = [{class = "circt.test"}]} : !firrtl.uint<3>
+    // CHECK-NOT: firrtl.wire
+    %w2 = firrtl.wire : !firrtl.uint<3>
+    firrtl.strictconnect %w, %w2 : !firrtl.uint<3>
+    firrtl.strictconnect %w2, %zero : !firrtl.uint<3>
+    firrtl.strictconnect %val, %w : !firrtl.uint<3>
+
+    // CHECK: firrtl.node %[[ZERO]]
+    %n = firrtl.node %w2 {annotations = [{class = "circt.test"}]} : !firrtl.uint<3>
+    // CHECK-NOT: firrtl.wire
+    %w3 = firrtl.wire : !firrtl.uint<3>
+    firrtl.strictconnect %w3, %n : !firrtl.uint<3>
+    firrtl.strictconnect %val2, %w3 : !firrtl.uint<3>
+  }
+}
