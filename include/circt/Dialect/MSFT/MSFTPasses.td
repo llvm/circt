@@ -31,12 +31,6 @@ def ExportTcl: Pass<"msft-export-tcl", "mlir::ModuleOp"> {
   ];
 }
 
-def Partition: Pass<"msft-partition", "mlir::ModuleOp"> {
-  let summary = "Move the entities targeted for a design partition";
-  let constructor = "circt::msft::createPartitionPass()";
-  let dependentDialects = ["circt::hw::HWDialect"];
-}
-
 def WireCleanup: Pass<"msft-wire-cleanup", "mlir::ModuleOp"> {
   let summary = "Cleanup unnecessary ports and wires";
   let constructor = "circt::msft::createWireCleanupPass()";
