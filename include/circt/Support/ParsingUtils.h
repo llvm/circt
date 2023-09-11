@@ -22,7 +22,7 @@ namespace parsing_util {
 
 /// Get a name from an SSA value string, if said value name is not a
 /// number.
-static StringAttr getNameFromSSA(MLIRContext *context, StringRef name) {
+static inline StringAttr getNameFromSSA(MLIRContext *context, StringRef name) {
   if (!name.empty()) {
     // Ignore numeric names like %42
     assert(name.size() > 1 && name[0] == '%' && "Unknown MLIR name");
