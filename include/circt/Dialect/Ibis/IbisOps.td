@@ -190,27 +190,51 @@ def ReturnOp : IbisOp<"return", [
   ];
 }
 
-def ScheduleOp : IbisOp<"schedule", [
-  HasParent<"MethodOp">,
+def BlockOp : IbisOp<"block", [
   SingleBlock,
-  NoRegionArguments,
-  NoTerminator
+  SingleBlockImplicitTerminator<"BlockReturnOp">,
+  AutomaticAllocationScope
 ]> {
-  let summary = "Ibis scheduling constraint block";
+  let summary = "Ibis block";
   let description = [{
-    The `ibis.schedule` operation defines a block wherein a group of operations
-    can be placed wherein a limited number of Ibis threads can execute at once.
-    The operation is not isolated from above and has no return types. References
-    to external values should be performed through SSA dominance or memrefs.
+    The `ibis.block` operation defines a block wherein a group of operations
+    are expected to be statically scheduleable.
+    The operation is not isolated from above to facilitate ease of construction.
+    However, once a program has been constructed and lowered to a sufficient
+    level, the user may run `--ibis-argify-blocks` to effectively isolate the
+    block from above, by converting SSA values referenced through dominanes into
+    arguments of the block
+
+    The block may contain additional attributes to specify constraints on
+    the block further down the compilation pipeline.
   }];
 
   let arguments = (ins
-    ConfinedAttr<I32Attr, [IntMinValue<1>]>:$limit
+    Variadic<AnyType>:$inputs,
+    OptionalAttr<ConfinedAttr<I32Attr, [IntMinValue<1>]>>:$maxThreads
   );
+  let results = (outs Variadic<AnyType>:$outputs);
   let regions = (region SizedRegion<1>:$body);
-  let assemblyFormat = [{
-    $limit $body attr-dict
+  let hasCustomAssemblyFormat = 1;
+
+  let extraClassDeclaration = [{
+    // Return the body of this block.
+    Block* getBodyBlock() { return &getBody().front(); }
   }];
+  let hasVerifier = 1;
+}
+
+def BlockReturnOp : IbisOp<"block.return", [
+  Pure, ReturnLike, Terminator, HasParent<"BlockOp">]> {
+  let summary = "Ibis block terminator";
+
+  let arguments = (ins Variadic<AnyType>:$retValues);
+  let assemblyFormat = "($retValues^)? attr-dict (`:` type($retValues)^)?";
+  let hasVerifier = 1;
+
+  let builders = [
+    OpBuilder<(ins), "/*no-op*/">
+  ];
 }
 
 def MemRefTypeAttr : TypeAttrBase<"MemRefType", "any memref type">;
