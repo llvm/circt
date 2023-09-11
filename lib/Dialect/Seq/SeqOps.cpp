@@ -313,14 +313,9 @@ LogicalResult verifyResets(TOp op) {
   if ((op.getReset() == nullptr) ^ (op.getResetValue() == nullptr))
     return op->emitOpError(
         "either reset and resetValue or neither must be specified");
-
-  // Verify reset value types.
-  Type inputType = op.getInput().getType();
-  Type resetType = op.getResetValue().getType();
-  if (inputType != resetType)
-    return op->emitOpError(
-               "reset value type must match input type. Input type was '")
-           << inputType << "', but reset value type was '" << resetType << "'";
+  bool hasReset = op.getReset() != nullptr;
+  if (hasReset && op.getResetValue().getType() != op.getInput().getType())
+    return op->emitOpError("reset value must be the same type as the input");
 
   return success();
 }
