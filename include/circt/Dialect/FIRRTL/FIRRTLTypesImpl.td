@@ -480,6 +480,17 @@ def ClassImpl : PropImplType<"Class"> {
   }];
 }
 
+def AnyRefImpl : PropImplType<"AnyRef"> {
+  let summary = "A reference to an instance of any class.";
+  let description = [{
+    A reference of type AnyRef can be used in ports, property assignments, and
+    any other Property "plumbing" ops. But it is opaque, and references to
+    objects of AnyRef type cannot be "dereferenced". There is no information
+    about the referred to object's fields, so subfield access, etc. is illegal.
+  }];
+  let genStorageClass = true;
+}
+
 def StringImpl : PropImplType<"String"> {
   let summary = "An unlimited length string type. Not representable in hardware.";
   let parameters = (ins);

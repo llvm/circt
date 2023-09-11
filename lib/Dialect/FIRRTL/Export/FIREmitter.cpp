@@ -1321,6 +1321,7 @@ void Emitter::emitType(Type type, bool includeConst) {
         emitType(type.getType());
         ps << ">";
       })
+      .Case<AnyRefType>([&](AnyRefType type) { ps << "AnyRef"; })
       .Case<StringType>([&](StringType type) { ps << "String"; })
       .Case<FIntegerType>([&](FIntegerType type) { ps << "Integer"; })
       .Case<BoolType>([&](BoolType type) { ps << "Bool"; })

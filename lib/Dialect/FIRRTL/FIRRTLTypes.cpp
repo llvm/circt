@@ -138,6 +138,7 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
         type.printInterface(os);
         os << ">";
       })
+      .Case<AnyRefType>([&](AnyRefType type) { os << "anyref"; })
       .Default([&](auto) { anyFailed = true; });
   return failure(anyFailed);
 }
@@ -368,6 +369,13 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
         parser.parseGreater())
       return failure();
     result = classType;
+    return success();
+  }
+  if (name.equals("anyref")) {
+    if (isConst)
+      return parser.emitError(parser.getNameLoc(), "any refs cannot be const");
+
+    result = AnyRefType::get(parser.getContext());
     return success();
   }
   if (name.equals("string")) {

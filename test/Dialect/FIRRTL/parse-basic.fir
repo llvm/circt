@@ -1842,3 +1842,12 @@ circuit VecOfProps:
     input x : String[2]
     wire y : String[2]
     ; CHECK-COUNT-2: openvector<string, 2>
+
+;// -----
+FIRRTL version 3.2.0
+
+; CHECK-LABEL: circuit "AnyRef"
+circuit AnyRef:
+  module AnyRef:
+    input x : AnyRef
+    ; CHECK: !firrtl.anyref

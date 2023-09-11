@@ -896,6 +896,15 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     break;
   }
 
+  case FIRToken::kw_AnyRef: {
+    if (requireFeature({3, 2, 0}, "AnyRef types"))
+      return failure();
+
+    consumeToken(FIRToken::kw_AnyRef);
+    result = AnyRefType::get(getContext());
+    break;
+  }
+
   case FIRToken::kw_Reset:
     consumeToken(FIRToken::kw_Reset);
     result = ResetType::get(getContext());
