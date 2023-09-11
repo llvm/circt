@@ -589,6 +589,85 @@ LogicalResult OutputWireOp::canonicalize(OutputWireOp op,
 }
 
 //===----------------------------------------------------------------------===//
+// BlockOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult BlockOp::verify() {
+  if (getInputs().size() != getBodyBlock()->getNumArguments())
+    return emitOpError("number of inputs must match number of block arguments");
+
+  for (auto [arg, barg] :
+       llvm::zip(getInputs(), getBodyBlock()->getArguments())) {
+    if (arg.getType() != barg.getType())
+      return emitOpError("block argument type must match input type");
+  }
+
+  return success();
+}
+
+ParseResult BlockOp::parse(OpAsmParser &parser, OperationState &result) {
+  // Parse the argument initializer list.
+  llvm::SmallVector<OpAsmParser::UnresolvedOperand> inputOperands;
+  llvm::SmallVector<OpAsmParser::Argument> inputArguments;
+  llvm::SmallVector<Type> inputTypes;
+  ArrayAttr inputNames;
+  if (parsing_util::parseInitializerList(parser, inputArguments, inputOperands,
+                                         inputTypes, inputNames))
+    return failure();
+
+  // Parse the result types.
+  llvm::SmallVector<Type> resultTypes;
+  if (parser.parseOptionalArrowTypeList(resultTypes))
+    return failure();
+  result.addTypes(resultTypes);
+
+  // Parse the attribute dict.
+  if (failed(parser.parseOptionalAttrDictWithKeyword(result.attributes)))
+    return failure();
+
+  // All operands have been parsed - resolve.
+  if (parser.resolveOperands(inputOperands, inputTypes, parser.getNameLoc(),
+                             result.operands))
+    return failure();
+
+  // Parse the body region.
+  Region *body = result.addRegion();
+  if (parser.parseRegion(*body, inputArguments))
+    return failure();
+
+  ensureTerminator(*body, parser.getBuilder(), result.location);
+  return success();
+}
+
+void BlockOp::print(OpAsmPrinter &p) {
+  p << ' ';
+  parsing_util::printInitializerList(p, getInputs(),
+                                     getBodyBlock()->getArguments());
+  p.printOptionalArrowTypeList(getResultTypes());
+  p.printOptionalAttrDictWithKeyword(getOperation()->getAttrs(),
+                                     getAttributeNames());
+  p.printRegion(getBody(), /*printEntryBlockArgs=*/false);
+}
+
+//===----------------------------------------------------------------------===//
+// BlockReturnOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult BlockReturnOp::verify() {
+  BlockOp parent = cast<BlockOp>(getOperation()->getParentOp());
+
+  if (getNumOperands() != parent.getOutputs().size())
+    return emitOpError("number of operands must match number of block outputs");
+
+  for (auto [op, out] : llvm::zip(getOperands(), parent.getOutputs())) {
+    if (op.getType() != out.getType())
+      return emitOpError("operand type must match block output type");
+  }
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic
 //===----------------------------------------------------------------------===//
 

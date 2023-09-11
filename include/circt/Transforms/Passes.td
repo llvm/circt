@@ -70,4 +70,34 @@ def MapArithToCombPass : InterfacePass<"map-arith-to-comb", "circt::hw::HWModule
   let dependentDialects = ["circt::hw::HWDialect, mlir::arith::ArithDialect, circt::comb::CombDialect"];
 }
 
+def InsertMergeBlocks : Pass<"insert-merge-blocks", "::mlir::ModuleOp"> {
+  let summary = "Insert explicit merge blocks";
+  let description = [{
+    This pass inserts additional merge blocks for each block with more than
+    two successors. A merge block is a block that only contains one operation,
+    a terminator, and has two predecessors.
+    The order successors are merged together mirrors the order different control
+    paths are created. Thus, each block with two successors will have a corresponding
+    merge block.
+
+    This pass brings the CFG into a canonical form for further transformations.
+
+    Treats loops and sub-CFGs with irregular control flow like single blocks.
+  }];
+  let constructor = "circt::createInsertMergeBlocksPass()";
+  let dependentDialects = ["mlir::cf::ControlFlowDialect", "mlir::func::FuncDialect"];
+}
+
+def MaximizeSSA : Pass<"maximize-ssa", "::mlir::ModuleOp"> {
+  let summary = "Convert every function in the module into maximal SSA form";
+  let description = [{
+    Convert the region within every function into maximal SSA form. This
+    ensures that every value used within a block is also defined within the
+    block, making dataflow explicit and removing block dominance-based dataflow
+    semantics. The pass achieves this by adding block arguments wherever
+    necessary to forward values to the block(s) where they are used.
+  }];
+  let constructor = "circt::createMaximizeSSAPass()";
+}
+
 #endif // CIRCT_TRANSFORMS_PASSES

@@ -86,4 +86,13 @@ def IbisContainersToHW : Pass<"ibis-convert-containers-to-hw", "mlir::ModuleOp">
   let dependentDialects = ["circt::hw::HWDialect"];
 }
 
+def IbisArgifyBlocks : Pass<"ibis-argify-blocks"> {
+  let summary = "Add arguments to ibis blocks";
+  let description = [{
+    Analyses `ibis.block` operations and converts any SSA value defined outside
+    the `ibis.block` to a block argument.
+  }];
+  let constructor = "circt::ibis::createArgifyBlocksPass()";
+}
+
 #endif // CIRCT_DIALECT_IBIS_PASSES_TD

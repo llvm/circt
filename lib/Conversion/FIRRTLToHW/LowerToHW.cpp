@@ -1482,6 +1482,8 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
 
   /// Return a read value for the specified inout value, auto-uniquing them.
   Value getReadValue(Value v);
+  /// Return an `i1` value for the specified value, auto-uniqueing them.
+  Value getNonClockValue(Value v);
 
   void addToAlwaysBlock(sv::EventControl clockEdge, Value clock,
                         ::ResetType resetStyle, sv::EventControl resetEdge,
@@ -1661,6 +1663,8 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitExpr(Mux4CellIntrinsicOp op);
   LogicalResult visitExpr(MultibitMuxOp op);
   LogicalResult visitExpr(VerbatimExprOp op);
+  LogicalResult visitExpr(XMRRefOp op);
+  LogicalResult visitExpr(XMRDerefOp op);
 
   // Statements
   LogicalResult lowerVerificationStatement(
@@ -2011,15 +2015,8 @@ Value FIRRTLLowering::getLoweredNonClockValue(Value value) {
   if (!result)
     return result;
 
-  if (hw::type_isa<seq::ClockType>(result.getType())) {
-    auto it = fromClockMapping.try_emplace(result, Value{});
-    if (it.second) {
-      ImplicitLocOpBuilder builder(result.getLoc(), result.getContext());
-      builder.setInsertionPointAfterValue(result);
-      it.first->second = builder.create<seq::FromClockOp>(result);
-    }
-    return it.first->second;
-  }
+  if (hw::type_isa<seq::ClockType>(result.getType()))
+    return getNonClockValue(result);
 
   return result;
 }
@@ -2441,6 +2438,16 @@ Value FIRRTLLowering::getReadValue(Value v) {
   builder.restoreInsertionPoint(oldIP);
   readInOutCreated.insert({v, result});
   return result;
+}
+
+Value FIRRTLLowering::getNonClockValue(Value v) {
+  auto it = fromClockMapping.try_emplace(v, Value{});
+  if (it.second) {
+    ImplicitLocOpBuilder builder(v.getLoc(), v.getContext());
+    builder.setInsertionPointAfterValue(v);
+    it.first->second = builder.create<seq::FromClockOp>(v);
+  }
+  return it.first->second;
 }
 
 void FIRRTLLowering::addToAlwaysBlock(sv::EventControl clockEdge, Value clock,
@@ -3988,6 +3995,39 @@ LogicalResult FIRRTLLowering::visitExpr(VerbatimExprOp op) {
                                            operands, symbols);
 }
 
+LogicalResult FIRRTLLowering::visitExpr(XMRRefOp op) {
+  // This XMR is accessed solely by FIRRTL statements that mutate the probe.
+  // To avoid the use of clock wires, create an `i1` wire and ensure that
+  // all connections are also of the `i1` type.
+  Type baseType = op.getType().getType();
+
+  Type xmrType;
+  if (isa<ClockType>(baseType))
+    xmrType = builder.getIntegerType(1);
+  else
+    xmrType = lowerType(baseType);
+
+  return setLoweringTo<sv::XMRRefOp>(op, sv::InOutType::get(xmrType),
+                                     op.getRef(), op.getVerbatimSuffixAttr());
+}
+
+LogicalResult FIRRTLLowering::visitExpr(XMRDerefOp op) {
+  // When an XMR targets a clock wire, replace it with an `i1` wire, but
+  // introduce a clock-typed read op into the design afterwards.
+  Type xmrType;
+  if (isa<ClockType>(op.getType()))
+    xmrType = builder.getIntegerType(1);
+  else
+    xmrType = lowerType(op.getType());
+
+  auto xmr = builder.create<sv::XMRRefOp>(
+      sv::InOutType::get(xmrType), op.getRef(), op.getVerbatimSuffixAttr());
+  auto readXmr = getReadValue(xmr);
+  if (!isa<ClockType>(op.getType()))
+    return setLowering(op, readXmr);
+  return setLoweringTo<seq::ToClockOp>(op, readXmr);
+}
+
 //===----------------------------------------------------------------------===//
 // Statements
 //===----------------------------------------------------------------------===//
@@ -4109,7 +4149,7 @@ LogicalResult FIRRTLLowering::visitStmt(ForceOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitStmt(RefForceOp op) {
-  auto src = getLoweredValue(op.getSrc());
+  auto src = getLoweredNonClockValue(op.getSrc());
   auto clock = getLoweredNonClockValue(op.getClock());
   auto pred = getLoweredValue(op.getPredicate());
   if (!src || !clock || !pred)
@@ -4129,7 +4169,7 @@ LogicalResult FIRRTLLowering::visitStmt(RefForceOp op) {
   return success();
 }
 LogicalResult FIRRTLLowering::visitStmt(RefForceInitialOp op) {
-  auto src = getLoweredValue(op.getSrc());
+  auto src = getLoweredNonClockValue(op.getSrc());
   auto pred = getLoweredValue(op.getPredicate());
   if (!src || !pred)
     return failure();

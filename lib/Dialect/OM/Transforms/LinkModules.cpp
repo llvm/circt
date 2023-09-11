@@ -54,11 +54,11 @@ struct LinkModulesPass : public LinkModulesBase<LinkModulesPass> {
 } // namespace
 
 LogicalResult ModuleInfo::initialize() {
-  for (auto &op : module.getOps()) {
+  for (auto &op : llvm::make_early_inc_range(module.getOps())) {
     if (auto classLike = dyn_cast<ClassLike>(op))
       symbolToClasses.insert({classLike.getSymNameAttr(), classLike});
     else
-      return op.emitError() << "unhandled top-level operation";
+      op.erase();
   }
   return success();
 }
