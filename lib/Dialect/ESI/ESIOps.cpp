@@ -465,6 +465,51 @@ LogicalResult ServiceHierarchyMetadataOp::verifySymbolUses(
 }
 
 //===----------------------------------------------------------------------===//
+// Bundle ops.
+//===----------------------------------------------------------------------===//
+
+static ParseResult
+parseUnPackBundleType(OpAsmParser &parser,
+                      SmallVectorImpl<Type> &toChannelTypes,
+                      SmallVectorImpl<Type> &fromChannelTypes, Type &type) {
+
+  ChannelBundleType bundleType;
+  if (parser.parseType(bundleType))
+    return failure();
+  type = bundleType;
+
+  for (BundledChannel ch : bundleType.getChannels())
+    if (ch.direction == ChannelDirection::to)
+      toChannelTypes.push_back(ch.type);
+    else if (ch.direction == ChannelDirection::from)
+      fromChannelTypes.push_back(ch.type);
+    else
+      assert(false && "Channel direction invalid");
+  return success();
+}
+template <typename T3, typename T4>
+static void printUnPackBundleType(OpAsmPrinter &p, Operation *, T3, T4,
+                                  Type bundleType) {
+  p.printType(bundleType);
+}
+
+void PackBundleOp::getAsmResultNames(::mlir::OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getResult(0), "bundle");
+  for (auto [idx, from] : llvm::enumerate(llvm::make_filter_range(
+           getBundle().getType().getChannels(), [](BundledChannel ch) {
+             return ch.direction == ChannelDirection::from;
+           })))
+    setNameFn(getResult(idx + 1), from.name.getValue());
+}
+
+void UnpackBundleOp::getAsmResultNames(::mlir::OpAsmSetValueNameFn setNameFn) {
+  for (auto [idx, to] : llvm::enumerate(llvm::make_filter_range(
+           getBundle().getType().getChannels(), [](BundledChannel ch) {
+             return ch.direction == ChannelDirection::to;
+           })))
+    setNameFn(getResult(idx), to.name.getValue());
+}
+//===----------------------------------------------------------------------===//
 // Structural ops.
 //===----------------------------------------------------------------------===//
 

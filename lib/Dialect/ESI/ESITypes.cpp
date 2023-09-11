@@ -22,9 +22,6 @@
 using namespace circt;
 using namespace circt::esi;
 
-#define GET_TYPEDEF_CLASSES
-#include "circt/Dialect/ESI/ESITypes.cpp.inc"
-
 AnyType AnyType::get(MLIRContext *context) { return Base::get(context); }
 
 LogicalResult
@@ -140,6 +137,35 @@ hw::UnionType WindowType::getLoweredType() const {
 
   return hw::UnionType::get(getContext(), unionFields);
 }
+
+namespace mlir {
+template <>
+struct FieldParser<::BundledChannel, ::BundledChannel> {
+  static FailureOr<::BundledChannel> parse(AsmParser &p) {
+    ChannelType type;
+    std::string name;
+    if (p.parseType(type))
+      return failure();
+    auto dir = FieldParser<::ChannelDirection>::parse(p);
+    if (failed(dir))
+      return failure();
+    if (p.parseKeywordOrString(&name))
+      return failure();
+    return BundledChannel{StringAttr::get(p.getContext(), name), *dir, type};
+  }
+};
+} // namespace mlir
+
+namespace llvm {
+inline ::llvm::raw_ostream &operator<<(::llvm::raw_ostream &p,
+                                       ::BundledChannel channel) {
+  p << channel.type << " " << channel.direction << " " << channel.name;
+  return p;
+}
+} // namespace llvm
+
+#define GET_TYPEDEF_CLASSES
+#include "circt/Dialect/ESI/ESITypes.cpp.inc"
 
 void ESIDialect::registerTypes() {
   addTypes<
