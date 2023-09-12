@@ -15,9 +15,9 @@
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/HW/ModuleImplementation.h"
 #include "circt/Support/CustomDirectiveImpl.h"
-#include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/Interfaces/FunctionImplementation.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/TypeSwitch.h"
 
@@ -130,18 +130,6 @@ hw::ModulePortInfo SCModuleOp::getPortList() {
 
 mlir::Region *SCModuleOp::getCallableRegion() { return &getBody(); }
 
-ArrayRef<mlir::Type> SCModuleOp::getCallableResults() {
-  return getResultTypes();
-}
-
-ArrayAttr SCModuleOp::getCallableArgAttrs() {
-  return getArgAttrs().value_or(nullptr);
-}
-
-ArrayAttr SCModuleOp::getCallableResAttrs() {
-  return getResAttrs().value_or(nullptr);
-}
-
 StringRef SCModuleOp::getModuleName() {
   return (*this)
       ->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName())
@@ -219,6 +207,16 @@ void SCModuleOp::print(OpAsmPrinter &p) {
 
   p << ' ';
   p.printRegion(getBody(), false, false);
+}
+
+/// Returns the argument types of this function.
+ArrayRef<Type> SCModuleOp::getArgumentTypes() {
+  return getFunctionType().getInputs();
+}
+
+/// Returns the result types of this function.
+ArrayRef<Type> SCModuleOp::getResultTypes() {
+  return getFunctionType().getResults();
 }
 
 static Type wrapPortType(Type type, hw::ModulePort::Direction direction) {

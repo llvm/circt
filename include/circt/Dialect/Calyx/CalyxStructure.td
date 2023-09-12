@@ -95,6 +95,11 @@ def ComponentOp : CalyxOp<"component", [
       /// Returns the result types of this function.
       ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
 
+      /// Returns the region on the current operation that is callable.
+      ::mlir::Region *getCallableRegion() {
+        return &getBody();
+      }
+
       /// Verify the type attribute of this function. Returns failure and emits
       /// an error if the attribute is invalid.
       LogicalResult verifyType() {
@@ -200,6 +205,11 @@ def CombComponentOp : CalyxOp<"comb_component", [
 
       /// Returns the result types of this function.
       ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
+
+      /// Returns the region on the current operation that is callable.
+      ::mlir::Region *getCallableRegion() {
+        return &getBody();
+      }
 
       /// Verify the type attribute of this function. Returns failure and emits
       /// an error if the attribute is invalid.

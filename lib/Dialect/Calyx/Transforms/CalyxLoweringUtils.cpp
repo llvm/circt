@@ -113,7 +113,7 @@ getCiderSourceLocationMetadata(calyx::ComponentOp component,
 }
 
 bool matchConstantOp(Operation *op, APInt &value) {
-  return mlir::detail::constant_int_op_binder(&value).match(op);
+  return mlir::detail::constant_int_value_binder(&value).match(op);
 }
 
 bool singleLoadFromMemory(Value memoryReference) {

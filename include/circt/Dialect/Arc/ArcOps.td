@@ -14,7 +14,7 @@ include "circt/Dialect/Arc/ArcTypes.td"
 include "circt/Dialect/Seq/SeqTypes.td"
 include "circt/Dialect/Arc/ArcInterfaces.td"
 include "mlir/IR/EnumAttr.td"
-include "mlir/IR/FunctionInterfaces.td"
+include "mlir/Interfaces/FunctionInterfaces.td"
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/RegionKindInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
@@ -108,9 +108,6 @@ def DefineOp : ArcOp<"define", [
     //===------------------------------------------------------------------===//
 
     mlir::Region *getCallableRegion() { return &getBody(); }
-    ArrayRef<mlir::Type> getCallableResults() { return getResultTypes(); }
-    mlir::ArrayAttr getCallableArgAttrs() { return nullptr; }
-    mlir::ArrayAttr getCallableResAttrs() { return nullptr; }
   }];
 }
 
