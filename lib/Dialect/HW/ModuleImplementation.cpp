@@ -70,6 +70,11 @@ parseFunctionResultList(OpAsmParser &parser,
 
 /// Return the port name for the specified argument or result.
 static StringRef getModuleArgumentName(Operation *module, size_t argNo) {
+  if (auto mod = dyn_cast<HWModuleLike>(module)) {
+    if (argNo < mod.getNumInputPorts())
+      return mod.getInputName(argNo);
+    return StringRef();
+  }
   auto argNames = module->getAttrOfType<ArrayAttr>("argNames");
   // Tolerate malformed IR here to enable debug printing etc.
   if (argNames && argNo < argNames.size())
@@ -78,6 +83,11 @@ static StringRef getModuleArgumentName(Operation *module, size_t argNo) {
 }
 
 static StringRef getModuleResultName(Operation *module, size_t resultNo) {
+  if (auto mod = dyn_cast<HWModuleLike>(module)) {
+    if (resultNo < mod.getNumOutputPorts())
+      return mod.getOutputName(resultNo);
+    return StringRef();
+  }
   auto resultNames = module->getAttrOfType<ArrayAttr>("resultNames");
   // Tolerate malformed IR here to enable debug printing etc.
   if (resultNames && resultNo < resultNames.size())

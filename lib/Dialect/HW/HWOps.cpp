@@ -592,8 +592,6 @@ buildModule(OpBuilder &builder, OperationState &result, StringAttr name,
   auto type = ModuleType::get(builder.getContext(), portTypes);
   result.addAttribute(ModuleTy::getModuleTypeAttrName(result.name),
                       TypeAttr::get(type));
-  result.addAttribute("argNames", builder.getArrayAttr(argNames));
-  result.addAttribute("resultNames", builder.getArrayAttr(resultNames));
   result.addAttribute("argLocs", builder.getArrayAttr(argLocs));
   result.addAttribute("resultLocs", builder.getArrayAttr(resultLocs));
   result.addAttribute(ModuleTy::getArgAttrsAttrName(result.name),
@@ -739,10 +737,8 @@ void hw::modifyModulePorts(
   auto fnty = FunctionType::get(context, newArgTypes, newResultTypes);
   auto modty = detail::fnToMod(fnty, newArgNames, newResultNames);
   moduleOp.setHWModuleType(modty);
-  moduleOp->setAttr("argNames", ArrayAttr::get(context, newArgNames));
   moduleOp.setAllInputAttrs(newArgAttrs);
   moduleOp.setInputLocs(newArgLocs);
-  moduleOp->setAttr("resultNames", ArrayAttr::get(context, newResultNames));
   moduleOp.setAllOutputAttrs(newResultAttrs);
   moduleOp.setOutputLocs(newResultLocs);
 }
@@ -970,15 +966,8 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
   auto modType = detail::fnToMod(
       cast<FunctionType>(functionType.getValue()),
       attr ? cast<ArrayAttr>(attr).getValue() : argNames, resultNames);
-
-  // An explicit `argNames` attribute overrides the MLIR names.  This is how
-  // we represent port names that aren't valid MLIR identifiers.  Result and
-  // parameter names are printed quoted when they aren't valid identifiers, so
-  // they don't need this affordance.
-  if (!hasAttribute("argNames", result.attributes))
-    result.addAttribute("argNames", ArrayAttr::get(context, argNames));
+  result.attributes.erase("argNames");
   result.addAttribute("argLocs", ArrayAttr::get(context, argLocs));
-  result.addAttribute("resultNames", ArrayAttr::get(context, resultNames));
   result.addAttribute("resultLocs", ArrayAttr::get(context, resultLocs));
   result.addAttribute("parameters", parameters);
   if (!hasAttribute("comment", result.attributes))
@@ -1075,13 +1064,19 @@ static void printModuleOp(OpAsmPrinter &p, ModuleTy mod,
   omittedAttrs.push_back("resultLocs");
   omittedAttrs.push_back("parameters");
   omittedAttrs.push_back(visibilityAttrName);
+  omittedAttrs.push_back(SymbolTable::getSymbolAttrName());
   if (mod.getOperation()
           ->template getAttrOfType<StringAttr>("comment")
           .getValue()
           .empty())
     omittedAttrs.push_back("comment");
-
-  printFunctionAttributes(p, mod.getOperation(), omittedAttrs);
+  // inject argNames
+  auto attrs = mod->getAttrs();
+  SmallVector<NamedAttribute> realAttrs(attrs.begin(), attrs.end());
+  realAttrs.push_back(
+      NamedAttribute(StringAttr::get(mod.getContext(), "argNames"),
+                     ArrayAttr::get(mod.getContext(), mod.getInputNames())));
+  p.printOptionalAttrDictWithKeyword(realAttrs, omittedAttrs);
 }
 
 void HWModuleExternOp::print(OpAsmPrinter &p) {
@@ -1108,14 +1103,6 @@ static LogicalResult verifyModuleCommon(HWModuleLike module) {
          "verifier hook should only be called on modules");
 
   auto moduleType = module.getHWModuleType();
-
-  auto argNames = module->getAttrOfType<ArrayAttr>("argNames");
-  if (argNames.size() != moduleType.getNumInputs())
-    return module->emitOpError("incorrect number of argument names");
-
-  auto resultNames = module->getAttrOfType<ArrayAttr>("resultNames");
-  if (resultNames.size() != moduleType.getNumOutputs())
-    return module->emitOpError("incorrect number of result names");
 
   auto argLocs = module.getInputLocs();
   if (argLocs.size() != moduleType.getNumInputs())
@@ -1305,8 +1292,6 @@ static void setAllPortNames(ArrayRef<Attribute> names, ModTy module) {
   auto numInputs = module.getNumInputPorts();
   SmallVector<Attribute> argNames(names.begin(), names.begin() + numInputs);
   SmallVector<Attribute> resNames(names.begin() + numInputs, names.end());
-  module.setArgNamesAttr(ArrayAttr::get(module.getContext(), argNames));
-  module.setResultNamesAttr(ArrayAttr::get(module.getContext(), resNames));
   auto oldType = module.getModuleType();
   SmallVector<ModulePort> newPorts(oldType.getPorts().begin(),
                                    oldType.getPorts().end());
@@ -1404,10 +1389,6 @@ static void setHWModuleType(ModTy &mod, ModuleType type) {
   mod.setModuleTypeAttr(TypeAttr::get(type));
   unsigned newNumArgs = type.getNumInputs();
   unsigned newNumResults = type.getNumOutputs();
-
-  mod.setArgNamesAttr(ArrayAttr::get(mod.getContext(), type.getInputNames()));
-  mod.setResultNamesAttr(
-      ArrayAttr::get(mod.getContext(), type.getOutputNames()));
 
   auto emptyDict = DictionaryAttr::get(mod.getContext());
   argAttrs.resize(newNumArgs, emptyDict);
