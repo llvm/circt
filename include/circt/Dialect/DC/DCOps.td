@@ -20,7 +20,6 @@ include "mlir/Interfaces/CallInterfaces.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/IR/BuiltinAttributes.td"
-include "mlir/Interfaces/FunctionInterfaces.td"
 include "circt/Dialect/ESI/ESITypes.td"
 
 class DCOp<string mnemonic, list<Trait> traits = []> :
