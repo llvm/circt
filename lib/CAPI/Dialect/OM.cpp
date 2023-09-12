@@ -36,6 +36,11 @@ bool omTypeIsAClassType(MlirType type) { return unwrap(type).isa<ClassType>(); }
 /// Get the TypeID for a ClassType.
 MlirTypeID omClassTypeGetTypeID() { return wrap(ClassType::getTypeID()); }
 
+/// Get the name for a ClassType.
+MlirIdentifier omClassTypeGetName(MlirType type) {
+  return wrap(cast<ClassType>(unwrap(type)).getClassName().getAttr());
+}
+
 /// Is the Type a StringType.
 bool omTypeIsAStringType(MlirType type) {
   return unwrap(type).isa<StringType>();

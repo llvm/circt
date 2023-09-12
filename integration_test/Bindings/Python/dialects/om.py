@@ -92,6 +92,9 @@ obj = evaluator.instantiate("Test", 42)
 
 assert isinstance(obj.type, om.ClassType)
 
+# CHECK: Test
+print(obj.type.name)
+
 # CHECK: 42
 print(obj.field)
 # CHECK: 14

@@ -39,6 +39,9 @@ MLIR_CAPI_EXPORTED bool omTypeIsAClassType(MlirType type);
 /// Get the TypeID for a ClassType.
 MLIR_CAPI_EXPORTED MlirTypeID omClassTypeGetTypeID();
 
+/// Get the name for a ClassType.
+MLIR_CAPI_EXPORTED MlirIdentifier omClassTypeGetName(MlirType type);
+
 /// Is the Type a MapType.
 MLIR_CAPI_EXPORTED bool omTypeIsAMapType(MlirType type);
 
