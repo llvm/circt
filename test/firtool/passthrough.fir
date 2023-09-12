@@ -1,5 +1,6 @@
 ; RUN: firtool %s | FileCheck %s --implicit-check-not module
 ; RUN: firtool -disable-opt %s | FileCheck %s --check-prefix=DISABLE
+; RUN: firtool -disable-hoisting-hw-passthrough %s | FileCheck %s --check-prefix=DISABLE
 
 ; Check passthrough modules are elided.
 ; CHECK:       module HWMultiLevel
