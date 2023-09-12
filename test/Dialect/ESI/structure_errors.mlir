@@ -1,26 +1,24 @@
 // RUN: circt-opt %s -split-input-file --verify-diagnostics
 
-msft.module @Foo {} (%in0: i1) -> (out: i1)
+hw.module.extern @Foo (%in0: i1) -> (out: i1)
 esi.pure_module @top {
-  // expected-error @+1 {{'msft.instance' op instances in ESI pure modules can only contain channel ports}}
-  %loopback = msft.instance @foo @Foo(%loopback) : (i1) -> (i1)
+  // expected-error @+1 {{'hw.instance' op instances in ESI pure modules can only contain channel ports}}
+  %loopback = hw.instance "foo" @Foo(in0: %loopback: i1) -> (out: i1)
 }
 
 // -----
 
-msft.module @Foo{} () -> (out: i1)
+hw.module.extern @Foo () -> (out: i1)
 
 esi.pure_module @top {
-  // expected-error @+1 {{'msft.instance' op instances in ESI pure modules can only contain channel ports}}
-  msft.instance @foo @Foo() : () -> (i1)
+  // expected-error @+1 {{'hw.instance' op instances in ESI pure modules can only contain channel ports}}
+  hw.instance "foo" @Foo() -> (out: i1)
 }
 
 // -----
 
-msft.module @Foo {} (%in0 : !esi.channel<i1>) -> (out: !esi.channel<i1>)
-
 esi.pure_module @top {
-  %loopback = msft.instance @foo @Foo(%loopbackDouble) : (!esi.channel<i1>) -> (!esi.channel<i1>)
+  %loopback = esi.null : !esi.channel<i1>
   %data, %valid = esi.unwrap.vr %loopback, %ready : i1
   // expected-error @+1 {{'comb.add' op operation not allowed in ESI pure modules}}
   %double = comb.add %data, %data : i1
