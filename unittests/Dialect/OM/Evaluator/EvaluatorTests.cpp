@@ -451,4 +451,54 @@ TEST(EvaluatorTests, AnyCastObject) {
   ASSERT_EQ(fieldValue->getClassOp(), innerCls);
 }
 
+TEST(EvaluatorTests, AnyCastParam) {
+  DialectRegistry registry;
+  registry.insert<OMDialect>();
+
+  MLIRContext context(registry);
+  context.getOrLoadDialect<OMDialect>();
+
+  Location loc(UnknownLoc::get(&context));
+
+  ImplicitLocOpBuilder builder(loc, &context);
+
+  auto mod = builder.create<ModuleOp>(loc);
+
+  builder.setInsertionPointToStart(&mod.getBodyRegion().front());
+  auto innerCls = ClassOp::buildSimpleClassOp(
+      builder, builder.getLoc(), "MyInnerClass", {"param"}, {"field"},
+      {AnyType::get(&context)});
+
+  auto i64 = builder.getIntegerType(64);
+  builder.setInsertionPointToStart(&mod.getBodyRegion().front());
+  StringRef params[] = {"param"};
+  auto cls = builder.create<ClassOp>("MyClass", params);
+  auto &body = cls.getBody().emplaceBlock();
+  body.addArguments({i64}, {builder.getLoc()});
+  builder.setInsertionPointToStart(&body);
+  auto cast = builder.create<AnyCastOp>(body.getArgument(0));
+  SmallVector<Value> objectParams = {cast};
+  auto object = builder.create<ObjectOp>(innerCls, objectParams);
+  builder.create<ClassFieldOp>("field", object);
+
+  Evaluator evaluator(mod);
+
+  auto result =
+      evaluator.instantiate(builder.getStringAttr("MyClass"),
+                            getEvaluatorValuesFromAttributes(
+                                &context, {builder.getIntegerAttr(i64, 42)}));
+
+  ASSERT_TRUE(succeeded(result));
+
+  auto *fieldValue = llvm::cast<evaluator::ObjectValue>(
+      result.value()->getField(builder.getStringAttr("field")).value().get());
+
+  ASSERT_TRUE(fieldValue);
+
+  auto *innerFieldValue = llvm::cast<evaluator::AttributeValue>(
+      fieldValue->getField(builder.getStringAttr("field")).value().get());
+
+  ASSERT_EQ(innerFieldValue->getAs<IntegerAttr>().getValue(), 42);
+}
+
 } // namespace
