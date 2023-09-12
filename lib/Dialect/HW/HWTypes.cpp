@@ -907,11 +907,11 @@ static StringRef dirToStr(ModulePort::Direction dir) {
 
 static ModulePort::Direction strToDir(StringRef str) {
   if (str == "input")
-    return circt::hw::ModulePort::Input;
-  else if (str == "output")
-    return circt::hw::ModulePort::Output;
-  else if (str == "inout")
-    return circt::hw::ModulePort::InOut;
+    return ModulePort::Direction::Input;
+  if (str == "output")
+    return ModulePort::Direction::Output;
+  if (str == "inout")
+    return ModulePort::Direction::InOut;
   llvm::report_fatal_error("invalid direction");
 }
 

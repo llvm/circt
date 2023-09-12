@@ -1310,7 +1310,7 @@ static void setAllPortNames(ArrayRef<Attribute> names, ModTy module) {
   auto oldType = module.getModuleType();
   SmallVector<ModulePort> newPorts(oldType.getPorts().begin(),
                                    oldType.getPorts().end());
-  for (auto i = 0UL, e = newPorts.size(); i != e; ++i)
+  for (size_t i = 0UL, e = newPorts.size(); i != e; ++i)
     newPorts[i].name = cast<StringAttr>(names[i]);
   auto newType = ModuleType::get(module.getContext(), newPorts);
   module.setModuleType(newType);
