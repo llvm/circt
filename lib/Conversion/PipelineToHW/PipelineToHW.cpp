@@ -107,22 +107,6 @@ public:
     // Determine the stage kind. This will influence how the stage valid and
     // enable signals are defined.
     StageKind stageKind = pipeline.getStageKind(stageIndex);
-    StageReturns rets;
-    auto stageOp = dyn_cast<StageOp>(terminator);
-    if (!stageOp) {
-      assert(isa<ReturnOp>(terminator) && "expected ReturnOp");
-      // This was the pipeline return op - the return op/last stage doesn't
-      // register its operands, hence, all return operands are passthrough
-      // and the valid signal is equal to the unregistered enable signal.
-      rets.passthroughs = terminator->getOperands();
-      rets.valid = args.enable;
-      return rets;
-    }
-
-    assert(registerNames.size() == stageOp.getRegisters().size() &&
-           "register names and registers must be the same size");
-
-    // Build data registers.
     Value stageValid;
     StringAttr validSignalName =
         builder.getStringAttr(getStagePrefix(stageIndex).strref() + "_valid");
@@ -130,8 +114,7 @@ public:
     case StageKind::Continuous:
       LLVM_FALLTHROUGH;
     case StageKind::NonStallable:
-      stageValid =
-          builder.create<hw::WireOp>(loc, args.enable, validSignalName);
+      stageValid = args.enable;
       break;
     case StageKind::Stallable:
       stageValid =
@@ -140,16 +123,27 @@ public:
       break;
     case StageKind::Runoff:
       assert(args.lnsEn && "Expected an LNS signal if this was a runoff stage");
-      Value lnsEn = builder.create<hw::WireOp>(
-          loc, args.lnsEn,
-          builder.getStringAttr(getStagePrefix(stageIndex).strref() +
-                                "_lns_in"));
       stageValid = builder.create<comb::AndOp>(
           loc, args.enable,
-          builder.create<comb::OrOp>(loc, lnsEn, getOrSetNotStalled()));
+          builder.create<comb::OrOp>(loc, args.lnsEn, getOrSetNotStalled()));
       stageValid.getDefiningOp()->setAttr("sv.namehint", validSignalName);
       break;
     }
+
+    StageReturns rets;
+    auto stageOp = dyn_cast<StageOp>(terminator);
+    if (!stageOp) {
+      assert(isa<ReturnOp>(terminator) && "expected ReturnOp");
+      // This was the pipeline return op - the return op/last stage doesn't
+      // register its operands, hence, all return operands are passthrough
+      // and the valid signal is equal to the unregistered enable signal.
+      rets.passthroughs = terminator->getOperands();
+      rets.valid = stageValid;
+      return rets;
+    }
+
+    assert(registerNames.size() == stageOp.getRegisters().size() &&
+           "register names and registers must be the same size");
 
     bool isStallablePipeline = stageKind != StageKind::Continuous;
     Value notStalledClockGate;
@@ -369,7 +363,7 @@ public:
     // whereas other stages register based on the current stall state.
     StageKind stageKind = pipeline.getStageKind(stageIndex);
     Value stageEnabled;
-    if (stageIndex == 0 || stageIndex == pipeline.getNumStages() - 1) {
+    if (stageIndex == 0) {
       stageEnabled = args.enable;
     } else {
       auto stageRegPrefix = getStagePrefix(stageIndex);
@@ -386,12 +380,20 @@ public:
             enableRegName);
         break;
       case StageKind::Stallable:
-        LLVM_FALLTHROUGH;
-      case StageKind::Runoff:
         stageEnabled = builder.create<seq::CompRegClockEnabledOp>(
             loc, args.enable, args.clock,
             comb::createOrFoldNot(loc, args.stall, builder), args.reset,
             enableRegResetVal, enableRegName);
+        break;
+      case StageKind::Runoff:
+        assert(args.lnsEn &&
+               "Expected an LNS signal if this was a runoff stage");
+        stageEnabled = builder.create<seq::CompRegClockEnabledOp>(
+            loc, args.enable, args.clock,
+            builder.create<comb::OrOp>(
+                loc, args.lnsEn,
+                comb::createOrFoldNot(loc, args.stall, builder)),
+            args.reset, enableRegResetVal, enableRegName);
         break;
       }
     }
@@ -432,7 +434,7 @@ public:
     llvm::SmallVector<Value> pipelineReturns;
     llvm::append_range(pipelineReturns, returnOp.getInputs());
     // The last stage valid signal is the 'done' output of the pipeline.
-    pipelineReturns.push_back(args.enable);
+    pipelineReturns.push_back(stageRets.valid);
     pipeline.replaceAllUsesWith(pipelineReturns);
     return stageRets;
   }

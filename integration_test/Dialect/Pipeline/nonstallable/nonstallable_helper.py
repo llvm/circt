@@ -1,6 +1,7 @@
 import cocotb
 from cocotb.triggers import Timer
 import cocotb.clock
+import random
 
 v = 1
 
@@ -26,7 +27,7 @@ async def initDut(dut):
   await clock(dut)
 
 
-async def nonstallable_test(dut, nStages, nonStallableStageIdxs):
+async def nonstallable_test(dut, stageStallability):
   """
   Runs a test of a non-stallable pipeline.
 
@@ -34,40 +35,49 @@ async def nonstallable_test(dut, nStages, nonStallableStageIdxs):
   stages, the test will:
 
   1. for NStallCycles : range(0 to nStages - 1):
-    1. fill the pipeline with valid tokens
-    2. raise the stall signal
-    3. wait for NStallCycles
-    4. While doing so, check that len(nonStallableStageIdxs) dut.done assertions
-        occur
-    5. deassert stall
-    6. check that bubbles exit the pipeline in the order that nonStallableStageIdxs
-       occured in the pipeline.
+    1. for fillCycles : range(0 to nStages - 1):
+      1. fill the pipeline with $fillCycles valid tokens
+      2. raise the stall signal
+      3. wait for NStallCycles
+      4. While doing so, check that len(nonStallableStageIdxs) dut.done assertions
+          occur
+      5. deassert stall
+      6. check that the expected amount of bubbles exit the pipeline
   """
-  numNonstallableStages = len(nonStallableStageIdxs)
-  dut.go.value = 0
-  dut.stall.value = 0
-  dut.arg0.value = 42
-  await initDut(dut)
-  dut.go.value = 1
+  nStages = len(stageStallability)
+  numNonstallableStages = sum([1 if not stallable else 0 for stallable in stageStallability])
 
+  for nStallCycles in range(0, nStages*2):
+    for fillCycles in range (0, nStages + 1):
+      print(f"nStallCycles: {nStallCycles}, fillCycles: {fillCycles}")
+      # Reset the dut
+      dut.go.value = 0
+      dut.stall.value = 0
+      dut.arg0.value = 42
+      await initDut(dut)
+      dut.stall.value = 0
 
-  for nStallCycles in range(1, nStages*2):
-    dut.stall.value = 0
-    # Fill the pipeline with valid tokens
-    for i in range(2 * nStages):
-      await clock(dut)
+      # Fill the pipeline with fillCycles valid tokens
+      dut.go.value = 1
+      for i in range(fillCycles):
+        await clock(dut)
+      dut.go.value = 0
 
-    nBufferedTokensExpected = min(numNonstallableStages, nStallCycles)
-    nBubblesExpected = nBufferedTokensExpected
+      nBufferedTokensExpected = min(numNonstallableStages, nStallCycles, fillCycles)
+      nBubblesExpected = nBufferedTokensExpected
 
-    # Raise the stall signal. We now expect that numNonStallableStages dut.done
-    # assertions will occur in a row.
-    dut.stall.value = 1
-    for stallCycle in range(nStallCycles):
-      if nBufferedTokensExpected > 0:
-        assert dut.done == 1, f"expected dut.done to be asserted in stall cycle {stallCycle}"
-        nBufferedTokensExpected -= 1
-      else:
-        assert dut.done == 0, f"expected dut.done to be deasserted in stall cycle {stallCycle}"
-      await clock(dut)
+      # Raise the stall signal. We now expect that numNonStallableStages dut.done
+      # assertions will occur in a row.
+      sequence = []
+      dut.stall.value = 1
+      for cycle in range(nStallCycles + nStages):
+        if cycle > nStallCycles:
+          dut.stall.value = 0
+        
+        await Timer(1, units='ns')
+        sequence.append(int(dut.done))
+        await clock(dut)
 
+      # Check that exactly fill_cycles tokens exited the pipeline
+      nTokensExited = sum(sequence)
+      assert nTokensExited == fillCycles, f"Expected {fillCycles} tokens to exit the pipeline, but {nTokensExited} did"

@@ -6,5 +6,6 @@ from nonstallable_helper import nonstallable_test
 
 
 @cocotb.test()
-async def test2(dut):
-  await nonstallable_test(dut, 5, [1, 3])
+async def test1(dut):
+  await nonstallable_test(dut, [0, 1, 0, 1, 0])
+
