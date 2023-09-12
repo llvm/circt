@@ -122,10 +122,10 @@ circt::om::Evaluator::instantiate(
 }
 
 bool hasOMTarget(StringRef path) {
-  return (path.find("OMDontTouchedReferenceTarget") == 0 ||
-          path.find("OMMemberInstanceTarget") == 0 ||
-          path.find("OMMemberReferenceTarget") == 0 ||
-          path.find("OMReferenceTarget") == 0);
+  return (path.startswith("OMDontTouchedReferenceTarget") ||
+          path.startswith("OMMemberInstanceTarget") ||
+          path.startswith("OMMemberReferenceTarget") ||
+          path.startswith("OMReferenceTarget"));
 }
 
 /// Parse origTarget and prepend the root path.
@@ -193,14 +193,12 @@ FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::evaluateValue(
               auto rootVal = evaluateValue(op.getRoot(), actualParams);
               auto suffixVal = evaluateValue(op.getPath(), actualParams);
               auto rootPath = cast<evaluator::AttributeValue>(rootVal->get())
-                                  ->getAttr()
-                                  .cast<om::PathAttr>()
+                                  ->getAs<om::PathAttr>()
                                   .getPath()
                                   .getValue();
               auto suffixPath =
                   cast<evaluator::AttributeValue>(suffixVal->get())
-                      ->getAttr()
-                      .cast<om::PathAttr>()
+                      ->getAs<om::PathAttr>()
                       .getPath()
                       .getValue();
               if (suffixPath.empty())
@@ -400,8 +398,8 @@ ArrayAttr circt::om::evaluator::MapValue::getKeys() {
     attrs.push_back(key);
 
   std::sort(attrs.begin(), attrs.end(), [](Attribute l, Attribute r) {
-    if (auto lInt = dyn_cast<IntegerAttr>(l))
-      if (auto rInt = dyn_cast<IntegerAttr>(r))
+    if (auto lInt = dyn_cast<mlir::IntegerAttr>(l))
+      if (auto rInt = dyn_cast<mlir::IntegerAttr>(r))
         return lInt.getValue().ult(rInt.getValue());
 
     assert(isa<StringAttr>(l) && isa<StringAttr>(r) &&
