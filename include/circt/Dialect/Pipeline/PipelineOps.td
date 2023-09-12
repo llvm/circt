@@ -157,7 +157,8 @@ def ScheduledPipelineOp : PipelineBase<"scheduled", [
       A bit set to 1 indicates that the stage is stallable, and 0 indicates that
       the stage is not stallable.
 
-    The exit (non-registered) stage of a pipeline is never stallable.
+    The exit (non-registered) stage of a pipeline cannot be non-stallable, and
+    will always follow the stallability of the parent pipeline.
 
     For more information about non-stallable stages, and how these are lowered,
     please refer to the Pipeline dialect rationale.
