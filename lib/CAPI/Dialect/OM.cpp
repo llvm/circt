@@ -33,6 +33,9 @@ MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(OM, om, OMDialect)
 /// Is the Type a ClassType.
 bool omTypeIsAClassType(MlirType type) { return unwrap(type).isa<ClassType>(); }
 
+/// Get the TypeID for a ClassType.
+MlirTypeID omClassTypeGetTypeID() { return wrap(ClassType::getTypeID()); }
+
 /// Is the Type a StringType.
 bool omTypeIsAStringType(MlirType type) {
   return unwrap(type).isa<StringType>();

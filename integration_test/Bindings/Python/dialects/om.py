@@ -90,6 +90,8 @@ except ValueError as e:
 
 obj = evaluator.instantiate("Test", 42)
 
+assert isinstance(obj.type, om.ClassType)
+
 # CHECK: 42
 print(obj.field)
 # CHECK: 14
