@@ -925,7 +925,9 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
         if (name.empty()) {
           if (problem.newNameHint.empty())
             name = state.getNamespace(mod).newName(
-                getFieldName(getFieldRefFromValue(val), /*nameSafe=*/true)
+                getFieldName(
+                    getFieldRefFromValue(val, /*lookThroughCasts=*/true),
+                    /*nameSafe=*/true)
                     .first +
                 "__bore");
           else

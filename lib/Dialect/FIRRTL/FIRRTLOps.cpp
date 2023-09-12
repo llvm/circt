@@ -2941,7 +2941,7 @@ static LogicalResult checkConnectFlow(Operation *connect) {
     // A sink that is a port output or instance input used as a source is okay.
     auto kind = getDeclarationKind(src);
     if (kind != DeclKind::Port && kind != DeclKind::Instance) {
-      auto srcRef = getFieldRefFromValue(src);
+      auto srcRef = getFieldRefFromValue(src, /*lookThroughCasts=*/true);
       auto [srcName, rootKnown] = getFieldName(srcRef);
       auto diag = emitError(connect->getLoc());
       diag << "connect has invalid flow: the source expression ";
@@ -2954,7 +2954,7 @@ static LogicalResult checkConnectFlow(Operation *connect) {
 
   auto dstFlow = foldFlow(dst);
   if (!isValidDst(dstFlow)) {
-    auto dstRef = getFieldRefFromValue(dst);
+    auto dstRef = getFieldRefFromValue(dst, /*lookThroughCasts=*/true);
     auto [dstName, rootKnown] = getFieldName(dstRef);
     auto diag = emitError(connect->getLoc());
     diag << "connect has invalid flow: the destination expression ";
