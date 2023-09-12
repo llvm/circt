@@ -1095,7 +1095,7 @@ def ObjectAnyRefCastOp : FIRRTLOp<"object.anyref_cast", [Pure]> {
 
     Example
     ```
-      %0= firrtl.object.anyref_cast %object : (!firrtl.class<@Foo()>) -> !firrtl.anyref
+      %0= firrtl.object.anyref_cast %object : !firrtl.class<@Foo()>
     ```
     }];
 
@@ -1103,14 +1103,7 @@ def ObjectAnyRefCastOp : FIRRTLOp<"object.anyref_cast", [Pure]> {
   let results = (outs AnyRefType:$result);
 
   let assemblyFormat =
-     "$input attr-dict `:` functional-type($input, $result)";
-
-  let builders = [
-    OpBuilder<(ins "Value":$input), [{
-      auto resultType = AnyRefType::get($_builder.getContext());
-      return build($_builder, $_state, resultType, input);
-    }]>
-  ];
+     "$input attr-dict `:` type($input)";
 }
 
 def StringConstantOp : FIRRTLOp<"string", [Pure, ConstantLike]> {

@@ -352,7 +352,7 @@ firrtl.module @AnyRefTest(in %in: !firrtl.anyref, out %out: !firrtl.anyref, in %
 
   // CHECK: %[[CAST:.+]] = firrtl.object.anyref_cast %[[REF]]
   // CHECK: firrtl.propassign %[[REF_OUT]], %[[CAST]]
-  %0 = firrtl.object.anyref_cast %ref : (!firrtl.class<@ClassTest()>) -> !firrtl.anyref
+  %0 = firrtl.object.anyref_cast %ref : !firrtl.class<@ClassTest()>
   firrtl.propassign %anyref, %0 : !firrtl.anyref
 }
 
