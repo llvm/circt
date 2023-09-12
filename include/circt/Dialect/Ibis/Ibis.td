@@ -11,7 +11,7 @@
 
 include "mlir/IR/AttrTypeBase.td"
 include "mlir/IR/OpBase.td"
-include "mlir/IR/FunctionInterfaces.td"
+include "mlir/Interfaces/FunctionInterfaces.td"
 
 include "circt/Dialect/Ibis/IbisDialect.td"
 include "circt/Dialect/Ibis/IbisTypes.td"

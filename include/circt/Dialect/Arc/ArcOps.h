@@ -9,7 +9,7 @@
 #ifndef CIRCT_DIALECT_ARC_ARCOPS_H
 #define CIRCT_DIALECT_ARC_ARCOPS_H
 
-#include "mlir/IR/FunctionInterfaces.h"
+#include "mlir/Interfaces/FunctionInterfaces.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/RegionKindInterface.h"
 #include "mlir/IR/SymbolTable.h"
