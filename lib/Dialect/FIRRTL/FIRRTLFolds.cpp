@@ -1976,8 +1976,7 @@ struct AggOneShot : public mlir::RewritePattern {
 
   SmallVector<Value> getCompleteWrite(Operation *lhs) const {
     auto lhsTy = lhs->getResult(0).getType();
-    if (!type_isa<BundleType, FVectorType>(lhsTy) ||
-        !type_cast<FIRRTLBaseType>(lhsTy).isPassive())
+    if (!type_isa<BundleType, FVectorType>(lhsTy))
       return {};
 
     DenseMap<uint32_t, Value> fields;
