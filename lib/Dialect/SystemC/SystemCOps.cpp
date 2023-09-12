@@ -210,10 +210,14 @@ void SCModuleOp::print(OpAsmPrinter &p) {
 }
 
 /// Returns the argument types of this function.
-ArrayRef<Type> SCModuleOp::getArgumentTypes() { return getFunctionType().getInputs(); }
+ArrayRef<Type> SCModuleOp::getArgumentTypes() {
+  return getFunctionType().getInputs();
+}
 
 /// Returns the result types of this function.
-ArrayRef<Type> SCModuleOp::getResultTypes() { return getFunctionType().getResults(); }
+ArrayRef<Type> SCModuleOp::getResultTypes() {
+  return getFunctionType().getResults();
+}
 
 static Type wrapPortType(Type type, hw::ModulePort::Direction direction) {
   if (auto inoutTy = type.dyn_cast<hw::InOutType>())

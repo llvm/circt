@@ -530,11 +530,14 @@ LogicalResult circt::llhd::EntityOp::verifyBody() {
 }
 
 /// Returns the argument types of this function.
-ArrayRef<Type> llhd::EntityOp::getArgumentTypes() { return getFunctionType().getInputs(); }
+ArrayRef<Type> llhd::EntityOp::getArgumentTypes() {
+  return getFunctionType().getInputs();
+}
 
 /// Returns the result types of this function.
-ArrayRef<Type> llhd::EntityOp::getResultTypes() { return getFunctionType().getResults(); }
-
+ArrayRef<Type> llhd::EntityOp::getResultTypes() {
+  return getFunctionType().getResults();
+}
 
 Region *llhd::EntityOp::getCallableRegion() {
   return isExternal() ? nullptr : &getBody();
@@ -563,10 +566,14 @@ LogicalResult circt::llhd::ProcOp::verifyType() {
 }
 
 /// Returns the argument types of this function.
-ArrayRef<Type> llhd::ProcOp::getArgumentTypes() { return getFunctionType().getInputs(); }
+ArrayRef<Type> llhd::ProcOp::getArgumentTypes() {
+  return getFunctionType().getInputs();
+}
 
 /// Returns the result types of this function.
-ArrayRef<Type> llhd::ProcOp::getResultTypes() { return getFunctionType().getResults(); }
+ArrayRef<Type> llhd::ProcOp::getResultTypes() {
+  return getFunctionType().getResults();
+}
 
 LogicalResult circt::llhd::ProcOp::verifyBody() { return success(); }
 
