@@ -27,7 +27,8 @@ ModuleOp circt::om::Evaluator::getModule() {
 }
 
 SmallVector<evaluator::EvaluatorValuePtr>
-circt::om::getEvaluatorValuesFromAttributes(ArrayRef<Attribute> attributes) {
+circt::om::getEvaluatorValuesFromAttributes(MLIRContext *context,
+                                            ArrayRef<Attribute> attributes) {
   SmallVector<evaluator::EvaluatorValuePtr> values;
   values.reserve(attributes.size());
   for (auto attr : attributes)
@@ -68,6 +69,9 @@ circt::om::Evaluator::instantiate(
   // Verify the actual parameter types match.
   for (auto [actualParam, formalParamName, formalParamType] :
        llvm::zip(actualParams, formalParamNames, formalParamTypes)) {
+    if (!actualParam || !actualParam.get())
+      return cls.emitError("actual parameter for ")
+             << formalParamName << " is null";
     Type actualParamType;
     if (auto *attr = dyn_cast<evaluator::AttributeValue>(actualParam.get())) {
       if (auto typedActualParam = attr->getAttr().dyn_cast_or_null<TypedAttr>())
@@ -80,9 +84,7 @@ circt::om::Evaluator::instantiate(
     else if (auto *tuple = dyn_cast<evaluator::TupleValue>(actualParam.get()))
       actualParamType = tuple->getType();
 
-    if (!actualParamType)
-      return cls.emitError("actual parameter for ")
-             << formalParamName << " is null";
+    assert(actualParamType && "actualParamType must be non-null!");
 
     if (actualParamType != formalParamType) {
       auto error = cls.emitError("actual parameter for ")
@@ -142,6 +144,9 @@ FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::evaluateValue(
             })
             .Case([&](TupleGetOp op) {
               return evaluateTupleGet(op, actualParams);
+            })
+            .Case([&](MapCreateOp op) {
+              return evaluateMapCreate(op, actualParams);
             })
             .Default([&](Operation *op) {
               auto error = op->emitError("unable to evaluate value");
@@ -273,6 +278,32 @@ FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::evaluateTupleGet(
   return result;
 }
 
+/// Evaluator dispatch function for Map creation.
+FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::evaluateMapCreate(
+    MapCreateOp op, ArrayRef<evaluator::EvaluatorValuePtr> actualParams) {
+  // Evaluate the Object itself, in case it hasn't been evaluated yet.
+  DenseMap<Attribute, evaluator::EvaluatorValuePtr> elements;
+  for (auto operand : op.getOperands()) {
+    auto result = evaluateValue(operand, actualParams);
+    if (failed(result))
+      return result;
+    // The result is a tuple.
+    auto &value = result.value();
+    const auto &element =
+        llvm::cast<evaluator::TupleValue>(value.get())->getElements();
+    assert(element.size() == 2);
+    auto attr =
+        llvm::cast<evaluator::AttributeValue>(element[0].get())->getAttr();
+    if (!elements.insert({attr, element[1]}).second)
+      return op.emitError() << "map contains duplicated keys";
+  }
+
+  // Return the Map.
+  evaluator::EvaluatorValuePtr result =
+      std::make_shared<evaluator::MapValue>(op.getType(), std::move(elements));
+  return result;
+}
+
 /// Get a field of the Object by name.
 FailureOr<EvaluatorValuePtr>
 circt::om::evaluator::ObjectValue::getField(StringAttr name) {
@@ -294,4 +325,23 @@ ArrayAttr circt::om::Object::getFieldNames() {
   });
 
   return ArrayAttr::get(cls.getContext(), fieldNames);
+}
+
+/// Return an array of keys in the ascending order.
+ArrayAttr circt::om::evaluator::MapValue::getKeys() {
+  SmallVector<Attribute> attrs;
+  for (auto &[key, _] : elements)
+    attrs.push_back(key);
+
+  std::sort(attrs.begin(), attrs.end(), [](Attribute l, Attribute r) {
+    if (auto lInt = dyn_cast<IntegerAttr>(l))
+      if (auto rInt = dyn_cast<IntegerAttr>(r))
+        return lInt.getValue().ult(rInt.getValue());
+
+    assert(isa<StringAttr>(l) && isa<StringAttr>(r) &&
+           "key type should be integer or string");
+    return cast<StringAttr>(l).getValue() < cast<StringAttr>(r).getValue();
+  });
+
+  return ArrayAttr::get(type.getContext(), attrs);
 }

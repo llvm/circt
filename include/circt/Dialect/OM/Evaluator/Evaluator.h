@@ -17,6 +17,7 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Diagnostics.h"
+#include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Support/LogicalResult.h"
 
@@ -40,17 +41,20 @@ using ObjectFields = SmallDenseMap<StringAttr, EvaluatorValuePtr>;
 /// appropriate reference count.
 struct EvaluatorValue : std::enable_shared_from_this<EvaluatorValue> {
   // Implement LLVM RTTI.
-  enum class Kind { Attr, Object, List, Tuple };
-  EvaluatorValue(Kind kind) : kind(kind) {}
+  enum class Kind { Attr, Object, List, Tuple, Map };
+  EvaluatorValue(MLIRContext *ctx, Kind kind) : kind(kind) {}
   Kind getKind() const { return kind; }
+  MLIRContext *getContext() const { return ctx; }
 
 private:
   const Kind kind;
+  MLIRContext *ctx;
 };
 
 /// Values which can be directly representable by MLIR attributes.
 struct AttributeValue : EvaluatorValue {
-  AttributeValue(Attribute attr) : EvaluatorValue(Kind::Attr), attr(attr) {}
+  AttributeValue(Attribute attr)
+      : EvaluatorValue(attr.getContext(), Kind::Attr), attr(attr) {}
   Attribute getAttr() const { return attr; }
   template <typename AttrTy>
   AttrTy getAs() const {
@@ -67,7 +71,8 @@ private:
 /// A List which contains variadic length of elements with the same type.
 struct ListValue : EvaluatorValue {
   ListValue(om::ListType type, SmallVector<EvaluatorValuePtr> elements)
-      : EvaluatorValue(Kind::List), type(type), elements(std::move(elements)) {}
+      : EvaluatorValue(type.getContext(), Kind::List), type(type),
+        elements(std::move(elements)) {}
 
   const auto &getElements() const { return elements; }
 
@@ -84,10 +89,35 @@ private:
   SmallVector<EvaluatorValuePtr> elements;
 };
 
+/// A Map value.
+struct MapValue : EvaluatorValue {
+  MapValue(om::MapType type, DenseMap<Attribute, EvaluatorValuePtr> elements)
+      : EvaluatorValue(type.getContext(), Kind::Map), type(type),
+        elements(std::move(elements)) {}
+
+  const auto &getElements() const { return elements; }
+
+  /// Return the type of the value, which is a MapType.
+  om::MapType getType() const { return type; }
+
+  /// Return an array of keys in the ascending order.
+  ArrayAttr getKeys();
+
+  /// Implement LLVM RTTI.
+  static bool classof(const EvaluatorValue *e) {
+    return e->getKind() == Kind::Map;
+  }
+
+private:
+  om::MapType type;
+  DenseMap<Attribute, EvaluatorValuePtr> elements;
+};
+
 /// A composite Object, which has a type and fields.
 struct ObjectValue : EvaluatorValue {
   ObjectValue(om::ClassOp cls, ObjectFields fields)
-      : EvaluatorValue(Kind::Object), cls(cls), fields(std::move(fields)) {}
+      : EvaluatorValue(cls.getContext(), Kind::Object), cls(cls),
+        fields(std::move(fields)) {}
   om::ClassOp getClassOp() const { return cls; }
   const auto &getFields() const { return fields; }
 
@@ -118,7 +148,7 @@ private:
 struct TupleValue : EvaluatorValue {
   using TupleElements = llvm::SmallVector<EvaluatorValuePtr>;
   TupleValue(TupleType type, TupleElements tupleElements)
-      : EvaluatorValue(Kind::Tuple), type(type),
+      : EvaluatorValue(type.getContext(), Kind::Tuple), type(type),
         elements(std::move(tupleElements)) {}
 
   /// Implement LLVM RTTI.
@@ -142,7 +172,8 @@ using Object = evaluator::ObjectValue;
 using EvaluatorValuePtr = evaluator::EvaluatorValuePtr;
 
 SmallVector<EvaluatorValuePtr>
-getEvaluatorValuesFromAttributes(ArrayRef<Attribute> attributes);
+getEvaluatorValuesFromAttributes(MLIRContext *context,
+                                 ArrayRef<Attribute> attributes);
 
 /// An Evaluator, which is constructed with an IR module and can instantiate
 /// Objects. Further refinement is expected.
@@ -183,6 +214,9 @@ private:
                       ArrayRef<EvaluatorValuePtr> actualParams);
   FailureOr<EvaluatorValuePtr>
   evaluateTupleGet(TupleGetOp op, ArrayRef<EvaluatorValuePtr> actualParams);
+  FailureOr<evaluator::EvaluatorValuePtr>
+  evaluateMapCreate(MapCreateOp op,
+                    ArrayRef<evaluator::EvaluatorValuePtr> actualParams);
 
   /// The symbol table for the IR module the Evaluator was constructed with.
   /// Used to look up class definitions.
@@ -204,6 +238,8 @@ operator<<(mlir::Diagnostic &diag,
     diag << "Object(" << object->getType() << ")";
   else if (auto *list = llvm::dyn_cast<evaluator::ListValue>(&evaluatorValue))
     diag << "List(" << list->getType() << ")";
+  else if (auto *map = llvm::dyn_cast<evaluator::MapValue>(&evaluatorValue))
+    diag << "Map(" << map->getType() << ")";
   else
     assert(false && "unhandled evaluator value");
   return diag;
