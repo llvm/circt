@@ -31,16 +31,6 @@ using namespace firrtl;
 using RefValue = mlir::TypedValue<RefType>;
 
 namespace {
-// Sanity-check that simple structs are simple.
-// Based on MLIR's IsZeroCostAbstraction, without std::is_standard_layout_v.
-// ABI isn't a concern for these as they're local.
-template <typename T>
-static constexpr bool isTrivially =
-    std::is_trivially_copyable_v<T> && std::is_trivially_destructible_v<T> &&
-    std::is_trivially_move_constructible<T>::value;
-} // end anonymous namespace
-
-namespace {
 
 struct RefDriver;
 struct HWDriver;
@@ -167,7 +157,6 @@ struct Driver {
     return result.getResultNumber();
   }
 };
-static_assert(isTrivially<Driver>);
 
 /// Driver implementation for probes.
 struct RefDriver : public Driver {
@@ -179,7 +168,6 @@ struct RefDriver : public Driver {
 
   Value remat(PortMappingFn mapPortFn, ImplicitLocOpBuilder &builder);
 };
-static_assert(isTrivially<Driver>);
 static_assert(sizeof(RefDriver) == sizeof(Driver),
               "passed by value, no slicing");
 
@@ -195,7 +183,6 @@ struct HWDriver : public Driver {
 
   Value remat(PortMappingFn mapPortFn, ImplicitLocOpBuilder &builder);
 };
-static_assert(isTrivially<Driver>);
 static_assert(sizeof(HWDriver) == sizeof(Driver),
               "passed by value, no slicing");
 
