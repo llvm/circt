@@ -158,7 +158,7 @@ jobs:
     # much.
     # If individual jobs fail due to timeouts or disconnects, please report to
     # John and re-run the job.
-    runs-on: ["self-hosted", "1ES.Pool=1ES-CIRCT-builds"]
+    runs-on: ["self-hosted", "1ES.Pool=1ES-CIRCT-builds", "linux"]
     container:
       image: ghcr.io/circt/images/circt-ci-build:20230126201226
       volumes:
