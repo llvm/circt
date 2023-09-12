@@ -57,6 +57,11 @@ def FuncOp : Op<Handshake_Dialect, "func", [
     /// Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
 
+    /// Returns the region on the current operation that is callable.
+    ::mlir::Region *getCallableRegion() {
+      return &getBody();
+    }
+
     /// Returns the argument types of this function.
     ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
 

@@ -108,9 +108,6 @@ def DefineOp : ArcOp<"define", [
     //===------------------------------------------------------------------===//
 
     mlir::Region *getCallableRegion() { return &getBody(); }
-    ArrayRef<mlir::Type> getCallableResults() { return getResultTypes(); }
-    mlir::ArrayAttr getCallableArgAttrs() { return nullptr; }
-    mlir::ArrayAttr getCallableResAttrs() { return nullptr; }
   }];
 }
 
