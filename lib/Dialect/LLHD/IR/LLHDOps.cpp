@@ -122,7 +122,7 @@ namespace {
 struct constant_int_all_ones_matcher {
   bool match(Operation *op) {
     APInt value;
-    return mlir::detail::constant_int_op_binder(&value).match(op) &&
+    return mlir::detail::constant_int_value_binder(&value).match(op) &&
            value.isAllOnes();
   }
 };
