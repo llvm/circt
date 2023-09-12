@@ -217,8 +217,6 @@ def PipelineToHW : Pass<"lower-pipeline-to-hw", "mlir::ModuleOp"> {
     "hw::HWDialect", "comb::CombDialect", "seq::SeqDialect"
   ];
   let options = [
-    Option<"outlineStages", "outline-stages", "bool", "false",
-      "Outline each stage to a separate `hw.module`.">,
     Option<"clockGateRegs", "clock-gate-regs", "bool", "false",
       "Clock gate each register instead of (default) input muxing  (ASIC optimization).">
   ];
