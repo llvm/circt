@@ -37,8 +37,6 @@ protected:
   DenseMap<Operation *, SmallVector<igraph::InstanceOpInterface, 1>>
       moduleInstantiations;
 
-  LogicalResult verifyInstances(ModuleOp topMod);
-
   // Find all the modules and use the partial order of the instantiation DAG
   // to sort them. If we use this order when "bubbling" up operations, we
   // guarantee one-pass completeness. As a side-effect, populate the module to

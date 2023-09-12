@@ -8,16 +8,6 @@
 
 include "mlir/Pass/PassBase.td"
 
-def LowerToHW: Pass<"lower-msft-to-hw", "mlir::ModuleOp"> {
-  let summary = "Lower MSFT ops to hw ops";
-  let constructor = "circt::msft::createLowerToHWPass()";
-  let dependentDialects = ["circt::sv::SVDialect", "circt::hw::HWDialect"];
-  let options = [
-    Option<"verilogFile", "verilog-file", "std::string",
-           "", "File to output Verilog into">,
-  ];
-}
-
 def ExportTcl: Pass<"msft-export-tcl", "mlir::ModuleOp"> {
   let summary = "Create tcl ops";
   let constructor = "circt::msft::createExportTclPass()";
@@ -29,12 +19,6 @@ def ExportTcl: Pass<"msft-export-tcl", "mlir::ModuleOp"> {
     Option<"tclFile", "tcl-file", "std::string",
            "", "File to output Tcl into">
   ];
-}
-
-def WireCleanup: Pass<"msft-wire-cleanup", "mlir::ModuleOp"> {
-  let summary = "Cleanup unnecessary ports and wires";
-  let constructor = "circt::msft::createWireCleanupPass()";
-  let dependentDialects = [];
 }
 
 def LowerInstances: Pass<"msft-lower-instances", "mlir::ModuleOp"> {

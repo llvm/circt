@@ -324,11 +324,6 @@ hw.module @structAndArrays(%a: ui8, %b: ui8) -> (out: !hw.struct<foo: !hw.array<
 
 // -----
 
-// CHECK: msft.module.extern @externModule(%a: i8, %b: i8) -> (out: !hw.struct<foo: !hw.array<2xi8>>)
-msft.module.extern @externModule(%a: ui8, %b: ui8) -> (out: !hw.struct<foo: !hw.array<2xui8>>) 
-
-// -----
-
 // CHECK: hw.module.extern @externHWModule(%a: i8, %b: i8) -> (out: !hw.struct<foo: !hw.array<2xi8>>)
 hw.module.extern @externHWModule(%a: ui8, %b: ui8) -> (out: !hw.struct<foo: !hw.array<2xui8>>)
 
