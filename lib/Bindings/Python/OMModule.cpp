@@ -316,6 +316,9 @@ OMEvaluatorValue pythonValueToOMEvaluatorValue(PythonValue result) {
   if (auto *tuple = std::get_if<Tuple>(&result))
     return tuple->getValue();
 
+  if (auto *map = std::get_if<Map>(&result))
+    return map->getValue();
+
   return std::get<Object>(result).getValue();
 }
 
