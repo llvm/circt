@@ -39,7 +39,7 @@ hw::ConstantOp createConstant(Location loc, OpBuilder &builder,
 calyx::InstanceOp createInstance(Location loc, OpBuilder &builder,
                                  ComponentOp component,
                                  SmallVectorImpl<Type> &resultTypes,
-                                 std::string &instanceName,
+                                 StringRef instanceName,
                                  StringRef componentName) {
   OpBuilder::InsertionGuard g(builder);
   builder.setInsertionPointToStart(component.getBodyBlock());
