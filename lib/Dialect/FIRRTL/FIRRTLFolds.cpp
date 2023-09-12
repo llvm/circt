@@ -3053,8 +3053,9 @@ static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
   if (!constOp)
     return failure();
 
-  // reset should be a module port (heuristic to limit to intended reset lines).
-  if (!isa<BlockArgument>(mux.getSel()))
+  // For a non-constant register, reset should be a module port (heuristic to
+  // limit to intended reset lines). Replace the register anyway if constant.
+  if (!isa<BlockArgument>(mux.getSel()) && !constReg)
     return failure();
 
   // Check all types should be typed by now
