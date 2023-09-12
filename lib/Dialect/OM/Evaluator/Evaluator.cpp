@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/OM/Evaluator/Evaluator.h"
+#include "circt/Dialect/OM/OMAttributes.h"
 #include "mlir/IR/BuiltinAttributeInterfaces.h"
 #include "mlir/IR/SymbolTable.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -120,6 +121,37 @@ circt::om::Evaluator::instantiate(
   return success(std::shared_ptr<evaluator::ObjectValue>(object));
 }
 
+bool hasOMTarget(StringRef path) {
+  return (path.find("OMDontTouchedReferenceTarget") == 0 ||
+          path.find("OMMemberInstanceTarget") == 0 ||
+          path.find("OMMemberReferenceTarget") == 0 ||
+          path.find("OMReferenceTarget") == 0);
+}
+
+/// Parse origTarget and prepend the root path.
+std::string addPathPrefix(StringRef origTarget, StringRef rootPath) {
+  //  target ::= “~” (circuit) (“|” (module) (“/” (instance)
+  //  “:” (module) )* (“>” (ref) )?)?
+
+  // An empty string is not a legal target.
+  if (origTarget.empty())
+    return {};
+  StringRef target = origTarget, circuit;
+  std::string prefix = rootPath.str() + "|";
+  std::string retval = origTarget.str();
+  std::tie(circuit, target) = target.split('|');
+  if (!circuit.empty() && circuit[0] == '~') {
+    // replace circuit prefix with root.
+    retval.replace(retval.find(circuit), circuit.size() + 1, prefix);
+  } else if (hasOMTarget(origTarget)) {
+    // No circuit prefix, just add the root after the OM target string.
+    retval.replace(retval.find(':'), 1, ":" + prefix);
+  } else // Simply prepend the root.
+    retval.replace(0, 0, prefix);
+
+  return retval;
+}
+
 /// Evaluate a Value in a Class body according to the semantics of the IR. The
 /// actual parameters are the values supplied at the current instantiation of
 /// the Class being evaluated.
@@ -155,6 +187,32 @@ FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::evaluateValue(
             })
             .Case([&](AnyCastOp op) {
               return evaluateValue(op.getInput(), actualParams);
+            })
+            .Case([&](PathAppendOp op)
+                      -> FailureOr<evaluator::EvaluatorValuePtr> {
+              auto rootVal = evaluateValue(op.getRoot(), actualParams);
+              auto suffixVal = evaluateValue(op.getPath(), actualParams);
+              auto rootPath = cast<evaluator::AttributeValue>(rootVal->get())
+                                  ->getAttr()
+                                  .cast<om::PathAttr>()
+                                  .getPath()
+                                  .getValue();
+              auto suffixPath =
+                  cast<evaluator::AttributeValue>(suffixVal->get())
+                      ->getAttr()
+                      .cast<om::PathAttr>()
+                      .getPath()
+                      .getValue();
+              if (suffixPath.empty())
+                return op.emitError(
+                    "path operand must evaluate to a non empty path ");
+              if (hasOMTarget(rootPath))
+                return op.emitError("root path cannot have a OM Target");
+              std::string finalPath = addPathPrefix(suffixPath, rootPath);
+              return success(
+                  std::make_shared<circt::om::evaluator::AttributeValue>(
+                      om::PathAttr::get(
+                          StringAttr::get(op.getContext(), finalPath))));
             })
             .Default([&](Operation *op) {
               auto error = op->emitError("unable to evaluate value");

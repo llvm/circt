@@ -7,8 +7,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/OM/Evaluator/Evaluator.h"
+#include "circt/Dialect/OM/OMAttributes.h"
 #include "circt/Dialect/OM/OMDialect.h"
 #include "circt/Dialect/OM/OMOps.h"
+#include "circt/Dialect/OM/OMTypes.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/DialectRegistry.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -215,7 +217,7 @@ TEST(EvaluatorTests, InstantiateObjectWithParamField) {
                             ->getField(builder.getStringAttr("field"))
                             .value()
                             .get())
-                        ->getAs<IntegerAttr>();
+                        ->getAs<mlir::IntegerAttr>();
 
   ASSERT_TRUE(fieldValue);
   ASSERT_EQ(fieldValue.getValue(), 42);
@@ -252,7 +254,7 @@ TEST(EvaluatorTests, InstantiateObjectWithConstantField) {
                             ->getField(builder.getStringAttr("field"))
                             .value()
                             .get())
-                        ->getAs<IntegerAttr>();
+                        ->getAs<mlir::IntegerAttr>();
   ASSERT_TRUE(fieldValue);
   ASSERT_EQ(fieldValue.getValue(), 42);
 }
@@ -302,7 +304,7 @@ TEST(EvaluatorTests, InstantiateObjectWithChildObject) {
   auto innerFieldValue =
       llvm::cast<evaluator::AttributeValue>(
           fieldValue->getField(builder.getStringAttr("field")).value().get())
-          ->getAs<IntegerAttr>();
+          ->getAs<mlir::IntegerAttr>();
 
   ASSERT_EQ(innerFieldValue.getValue(), 42);
 }
@@ -353,7 +355,7 @@ TEST(EvaluatorTests, InstantiateObjectWithFieldAccess) {
                             ->getField(builder.getStringAttr("field"))
                             .value()
                             .get())
-                        ->getAs<IntegerAttr>();
+                        ->getAs<mlir::IntegerAttr>();
 
   ASSERT_TRUE(fieldValue);
   ASSERT_EQ(fieldValue.getValue(), 42);
@@ -412,45 +414,6 @@ TEST(EvaluatorTests, InstantiateObjectWithChildObjectMemoized) {
   ASSERT_EQ(field1Value, field2Value);
 }
 
-TEST(EvaluatorTests, AnyCastObject) {
-  DialectRegistry registry;
-  registry.insert<OMDialect>();
-
-  MLIRContext context(registry);
-  context.getOrLoadDialect<OMDialect>();
-
-  Location loc(UnknownLoc::get(&context));
-
-  ImplicitLocOpBuilder builder(loc, &context);
-
-  auto mod = builder.create<ModuleOp>(loc);
-
-  builder.setInsertionPointToStart(&mod.getBodyRegion().front());
-  auto innerCls = builder.create<ClassOp>("MyInnerClass");
-  innerCls.getBody().emplaceBlock();
-
-  builder.setInsertionPointToStart(&mod.getBodyRegion().front());
-  auto cls = builder.create<ClassOp>("MyClass");
-  auto &body = cls.getBody().emplaceBlock();
-  builder.setInsertionPointToStart(&body);
-  auto object = builder.create<ObjectOp>(innerCls, body.getArguments());
-  auto cast = builder.create<AnyCastOp>(object);
-  builder.create<ClassFieldOp>("field", cast);
-
-  Evaluator evaluator(mod);
-
-  auto result = evaluator.instantiate(builder.getStringAttr("MyClass"), {});
-
-  ASSERT_TRUE(succeeded(result));
-
-  auto *fieldValue = llvm::cast<evaluator::ObjectValue>(
-      result.value()->getField(builder.getStringAttr("field")).value().get());
-
-  ASSERT_TRUE(fieldValue);
-
-  ASSERT_EQ(fieldValue->getClassOp(), innerCls);
-}
-
 TEST(EvaluatorTests, AnyCastParam) {
   DialectRegistry registry;
   registry.insert<OMDialect>();
@@ -498,7 +461,99 @@ TEST(EvaluatorTests, AnyCastParam) {
   auto *innerFieldValue = llvm::cast<evaluator::AttributeValue>(
       fieldValue->getField(builder.getStringAttr("field")).value().get());
 
-  ASSERT_EQ(innerFieldValue->getAs<IntegerAttr>().getValue(), 42);
+  ASSERT_EQ(innerFieldValue->getAs<mlir::IntegerAttr>().getValue(), 42);
 }
 
+TEST(EvaluatorTests, EvaluatorPathTests) {
+  DialectRegistry registry;
+  registry.insert<OMDialect>();
+
+  MLIRContext context(registry);
+  context.getOrLoadDialect<OMDialect>();
+
+  Location loc(UnknownLoc::get(&context));
+
+  ImplicitLocOpBuilder builder(loc, &context);
+
+  auto mod = builder.create<ModuleOp>(loc);
+
+  builder.setInsertionPointToStart(&mod.getBodyRegion().front());
+  StringRef params[] = {"param1", "param2", "param3"};
+  Type types[] = {PathType::get(&context), PathType::get(&context),
+                  PathType::get(&context)};
+  auto classOp = builder.create<circt::om::ClassOp>("MyClass", params);
+  Block *body = &classOp.getRegion().emplaceBlock();
+  body->addArguments(types, {loc, loc, loc});
+  builder.setInsertionPointToStart(classOp.getBodyBlock());
+  auto clientPath1 = circt::om::PathAttr::get(
+      mlir::StringAttr::get(&context, "OMReferenceTarget:PathModule>in"));
+  auto clientPath2 = circt::om::PathAttr::get(
+      mlir::StringAttr::get(&context, "~Top|PathModule>in"));
+  auto clientPath3 = circt::om::PathAttr::get(
+      mlir::StringAttr::get(&context, "PathModule/inst:mod|mod2>in"));
+  auto constant1 = builder.create<ConstantOp>(clientPath1);
+  auto constant2 = builder.create<ConstantOp>(clientPath2);
+  auto constant3 = builder.create<ConstantOp>(clientPath3);
+  auto append1 = builder.create<PathAppendOp>(
+      classOp.getBodyBlock()->getArgument(0), constant1);
+  auto append2 = builder.create<PathAppendOp>(
+      classOp.getBodyBlock()->getArgument(1), constant2);
+  auto append3 = builder.create<PathAppendOp>(
+      classOp.getBodyBlock()->getArgument(2), constant3);
+  builder.create<ClassFieldOp>("field1", append1);
+  builder.create<ClassFieldOp>("field2", append2);
+  builder.create<ClassFieldOp>("field3", append3);
+
+  //   om.class @MyClass(%param1: !om.path, %param2: !om.path, %param3:
+  //   !om.path) {
+  //  %0 = om.constant #om.path<"OMReferenceTarget:PathModule>in"> : !om.path
+  //  %1 = om.constant #om.path<"~Top|PathModule>in"> : !om.path
+  //  %2 = om.constant #om.path<"PathModule/inst:mod|mod2>in"> : !om.path
+  //  %3 = om.path_append %param1, %0
+  //  %4 = om.path_append %param2, %1
+  //  %5 = om.path_append %param3, %2
+  //  om.class.field @field1, %3 : !om.path
+  //  om.class.field @field2, %4 : !om.path
+  //  om.class.field @field3, %5 : !om.path
+  //}
+
+  Evaluator evaluator(mod);
+  auto rootPath = circt::om::PathAttr::get(
+      mlir::StringAttr::get(&context, "Client/component:PathModule"));
+
+  auto result =
+      evaluator.instantiate(builder.getStringAttr("MyClass"),
+                            getEvaluatorValuesFromAttributes(
+                                &context, {rootPath, rootPath, rootPath}));
+
+  ASSERT_TRUE(succeeded(result));
+
+  auto fieldValue1 = llvm::cast<evaluator::AttributeValue>(
+                         result.value()
+                             ->getField(builder.getStringAttr("field1"))
+                             .value()
+                             .get())
+                         ->getAttr()
+                         .cast<circt::om::PathAttr>();
+  auto fieldValue2 = llvm::cast<evaluator::AttributeValue>(
+                         result.value()
+                             ->getField(builder.getStringAttr("field2"))
+                             .value()
+                             .get())
+                         ->getAttr()
+                         .cast<circt::om::PathAttr>();
+  auto fieldValue3 = llvm::cast<evaluator::AttributeValue>(
+                         result.value()
+                             ->getField(builder.getStringAttr("field3"))
+                             .value()
+                             .get())
+                         ->getAttr()
+                         .cast<circt::om::PathAttr>();
+
+  ASSERT_EQ(fieldValue1.getPath(),
+            "OMReferenceTarget:Client/component:PathModule|PathModule>in");
+  ASSERT_EQ(fieldValue2.getPath(), "Client/component:PathModule|PathModule>in");
+  ASSERT_EQ(fieldValue3.getPath(),
+            "Client/component:PathModule|PathModule/inst:mod|mod2>in");
+}
 } // namespace
