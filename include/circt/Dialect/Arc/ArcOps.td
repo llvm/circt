@@ -29,7 +29,6 @@ class ArcOp<string mnemonic, list<Trait> traits = []> :
 def DefineOp : ArcOp<"define", [
   IsolatedFromAbove,
   FunctionOpInterface,
-  CallableOpInterface,
   Symbol,
   RegionKindInterface,
   SingleBlockImplicitTerminator<"arc::OutputOp">,

@@ -302,7 +302,6 @@ def DestructorOp : SystemCOp<"cpp.destructor", [
 
 def FuncOp : SystemCOp<"cpp.func", [
   AutomaticAllocationScope,
-  CallableOpInterface,
   FunctionOpInterface,
   IsolatedFromAbove,
   OpAsmOpInterface,
