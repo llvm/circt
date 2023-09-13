@@ -3,7 +3,8 @@
 FIRRTL version 3.0.0
 circuit FooUser:
   ; Invalid, per spec
-  ; expected-error @+3 {{input probes cannot be used}}
+  ; expected-error @+7 {{input probes cannot be used}}
+  ; expected-note @+3 {{input probe here}}
   ; SPEC EXAMPLE BEGIN
   module Foo:
      input in : Probe<UInt>
