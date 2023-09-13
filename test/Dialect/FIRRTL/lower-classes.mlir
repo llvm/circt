@@ -331,7 +331,7 @@ firrtl.circuit "AnyCast" {
     // CHECK: %[[OBJ:.+]] = om.object @Foo
     %fooObject = firrtl.object @Foo()
     // CHECK: %[[CAST:.+]] = om.any_cast %[[OBJ]]
-    %0 = firrtl.object.anyref_cast %fooObject : (!firrtl.class<@Foo()>) -> !firrtl.anyref
+    %0 = firrtl.object.anyref_cast %fooObject : !firrtl.class<@Foo()>
     // CHECK: om.class.field @foo, %[[CAST]]
     firrtl.propassign %foo, %0 : !firrtl.anyref
   }
