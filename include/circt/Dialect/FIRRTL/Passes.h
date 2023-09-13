@@ -101,6 +101,8 @@ std::unique_ptr<mlir::Pass> createLowerMemoryPass();
 std::unique_ptr<mlir::Pass>
 createHoistPassthroughPass(bool hoistHWDrivers = true);
 
+std::unique_ptr<mlir::Pass> createProbeDCEPass();
+
 std::unique_ptr<mlir::Pass>
 createMemToRegOfVecPass(bool replSeqMem = false, bool ignoreReadEnable = false);
 
