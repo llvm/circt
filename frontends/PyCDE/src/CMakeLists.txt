@@ -14,6 +14,16 @@ cmake_minimum_required(VERSION 3.21.0)
 
 add_compile_definitions("MLIR_PYTHON_PACKAGE_PREFIX=pycde.circt.")
 
+declare_mlir_python_extension(PyCDEPythonExtension
+  MODULE_NAME _pycde
+  SOURCES
+    PyCDEModule.cpp
+  EMBED_CAPI_LINK_LIBS
+    CIRCTCAPIMSFT
+  PRIVATE_LINK_LIBS
+    LLVMSupport
+)
+
 declare_mlir_python_sources(PyCDESources
   ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
   SOURCES
@@ -90,6 +100,7 @@ add_mlir_python_modules(PyCDE
   INSTALL_PREFIX "python_packages/pycde"
   DECLARED_SOURCES
     PyCDESources
+    PyCDEPythonExtension
   COMMON_CAPI_LINK_LIBS
     PyCDE_CIRCTPythonCAPI
 )
