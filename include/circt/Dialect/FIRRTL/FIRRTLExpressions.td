@@ -1087,6 +1087,25 @@ def ObjectSubfieldOp : FIRRTLOp<"object.subfield",
   }];
 }
 
+def ObjectAnyRefCastOp : FIRRTLOp<"object.anyref_cast", [Pure]> {
+  let summary = "Cast object reference to anyref.";
+  let description = [{
+    Cast any object reference to AnyRef type. This is needed for passing objects
+    of a known class to sinks that accept any reference.
+
+    Example
+    ```
+      %0= firrtl.object.anyref_cast %object : !firrtl.class<@Foo()>
+    ```
+    }];
+
+  let arguments = (ins ClassType:$input);
+  let results = (outs AnyRefType:$result);
+
+  let assemblyFormat =
+     "$input attr-dict `:` type($input)";
+}
+
 def StringConstantOp : FIRRTLOp<"string", [Pure, ConstantLike]> {
   let summary = "Produce a constant string value";
   let description = [{

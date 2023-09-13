@@ -208,7 +208,8 @@ def PropertyType : FIRRTLDialectTypeHelper<
 
 def ClassType : FIRRTLDialectTypeHelper<"ClassType", "class type">;
 
-def AnyRefType : FIRRTLDialectTypeHelper<"AnyRefType", "any reference type">;
+def AnyRefType : FIRRTLDialectTypeHelper<"AnyRefType", "any reference type">,
+  BuildableType<"::circt::firrtl::AnyRefType::get($_builder.getContext())">;
 
 def StringType : FIRRTLDialectTypeHelper<"StringType", "string type">,
   BuildableType<"::circt::firrtl::StringType::get($_builder.getContext())">;
