@@ -1,9 +1,11 @@
 import cocotb
 from cocotb.triggers import Timer
 import cocotb.clock
-import random
 
+# Value that will be adjusted and assigned to the dut input argument, every
+# clock cycle. This is mainly to assist manual verification of the VCD trace/
 v = 1
+
 
 async def clock(dut):
   global v
@@ -45,10 +47,11 @@ async def nonstallable_test(dut, stageStallability):
       6. check that the expected amount of bubbles exit the pipeline
   """
   nStages = len(stageStallability)
-  numNonstallableStages = sum([1 if not stallable else 0 for stallable in stageStallability])
+  numNonstallableStages = sum(
+      [1 if not stallable else 0 for stallable in stageStallability])
 
-  for nStallCycles in range(0, nStages*2):
-    for fillCycles in range (0, nStages + 1):
+  for nStallCycles in range(0, nStages * 2):
+    for fillCycles in range(0, nStages + 1):
       print(f"nStallCycles: {nStallCycles}, fillCycles: {fillCycles}")
       # Reset the dut
       dut.go.value = 0
@@ -63,7 +66,8 @@ async def nonstallable_test(dut, stageStallability):
         await clock(dut)
       dut.go.value = 0
 
-      nBufferedTokensExpected = min(numNonstallableStages, nStallCycles, fillCycles)
+      nBufferedTokensExpected = min(numNonstallableStages, nStallCycles,
+                                    fillCycles)
       nBubblesExpected = nBufferedTokensExpected
 
       # Raise the stall signal. We now expect that numNonStallableStages dut.done
@@ -73,7 +77,7 @@ async def nonstallable_test(dut, stageStallability):
       for cycle in range(nStallCycles + nStages):
         if cycle > nStallCycles:
           dut.stall.value = 0
-        
+
         await Timer(1, units='ns')
         sequence.append(int(dut.done))
         await clock(dut)
