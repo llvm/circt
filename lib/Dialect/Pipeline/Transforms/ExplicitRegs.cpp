@@ -267,7 +267,7 @@ void ExplicitRegsPass::runOnPipeline(ScheduledPipelineOp pipeline) {
         Value origValue = origToActualValue.first;
         stage->insertArgument(argIdx, origValue.getType(),
                               UnknownLoc::get(ctx));
-        auto backedgeIt = regOrPassMap.find(origValue);
+        auto *backedgeIt = regOrPassMap.find(origValue);
         assert(backedgeIt != regOrPassMap.end() &&
                "Expected to find backedge for value");
         backedgeIt->second.v.setValue(stage->getArgument(argIdx));
