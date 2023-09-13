@@ -322,3 +322,17 @@ firrtl.circuit "ModuleInstances" {
   // CHECK:   %[[F1:.+]] = om.object.field %[[O1]], [@outputProp]
   // CHECK:   om.class.field @outputProp, %[[F1]]
 }
+
+// CHECK-LABEL: firrtl.circuit "AnyCast"
+firrtl.circuit "AnyCast" {
+  firrtl.class private @Foo() {}
+
+  firrtl.module @AnyCast(out %foo: !firrtl.anyref) {
+    // CHECK: %[[OBJ:.+]] = om.object @Foo
+    %fooObject = firrtl.object @Foo()
+    // CHECK: %[[CAST:.+]] = om.any_cast %[[OBJ]]
+    %0 = firrtl.object.anyref_cast %fooObject : !firrtl.class<@Foo()>
+    // CHECK: om.class.field @foo, %[[CAST]]
+    firrtl.propassign %foo, %0 : !firrtl.anyref
+  }
+}
