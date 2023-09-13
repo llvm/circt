@@ -339,6 +339,65 @@ OpFoldResult ConstantOp::fold(FoldAdaptor adaptor) {
 }
 
 //===----------------------------------------------------------------------===//
+// LogicConstantOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult LogicConstantOp::verify() {
+  // If the result type has a bitwidth, then the attribute must match its width.
+  if (getValue().getType() != getType())
+    return emitError("hw.constant attribute type doesn't match return type");
+
+  return success();
+}
+
+OpFoldResult LogicConstantOp::fold(FoldAdaptor adaptor) {
+  assert(adaptor.getOperands().empty() && "constant has no operands");
+  return getValueAttr();
+}
+
+LogicalResult LogicConstantOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
+    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
+  auto valueAttr = attrs.getAs<LogicLiteralAttr>("value");
+  if (!hw::type_isa<LogicType, IntegerType>(valueAttr.getType()))
+    return failure();
+  results.push_back(valueAttr.getType());
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// LogicCastOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult LogicCastOp::verify() {
+  // Ensure widths of input and result are identical
+  std::optional<unsigned> resultWidth = getLogicBitWidth(getResult().getType());
+  std::optional<unsigned> inputWidth = getLogicBitWidth(getInput().getType());
+
+  if (resultWidth && inputWidth && (*resultWidth == *inputWidth))
+    return success();
+  else if (!resultWidth && !inputWidth) {
+    // Input and result are parameterized-width logic type
+    auto logResult = hw::type_cast<LogicType>(getResult().getType());
+    auto logInput = hw::type_cast<LogicType>(getInput().getType());
+    if (logResult.getWidthAttr() == logInput.getWidthAttr())
+      return success();
+  }
+
+  emitError("width of cast input and result must be equal");
+  return failure();
+}
+
+OpFoldResult LogicCastOp::fold(FoldAdaptor adaptor) {
+  // Remove casts to same type
+  if (getCanonicalType(getInput().getType()) ==
+      getCanonicalType(getResult().getType()))
+    return getInput();
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
 // WireOp
 //===----------------------------------------------------------------------===//
 

@@ -55,6 +55,46 @@ def ConstantOp
   let hasVerifier = 1;
 }
 
+def LogicConstantOp 
+ : HWOp<"logconst", [Pure, ConstantLike, FirstAttrDerivedResultType, InferTypeOpInterface]> {
+  let summary = "Produce a constant n-valued logic value";
+  let description = [{TODO
+      e.g.: hw.logconst <SV:"1X0ZX">
+  }];
+
+  let assemblyFormat = "$value attr-dict";
+
+  let arguments = (ins LogicLiteralAttr:$value);
+  let results = (outs HWIntegerType:$result);
+
+  let hasFolder = true;
+  let hasVerifier = true;
+
+  let extraClassDeclaration = [{
+    static LogicalResult inferReturnTypes(MLIRContext *context,
+                                          std::optional<Location> loc,
+                                          ValueRange operands,
+                                          DictionaryAttr attrs,
+                                          mlir::OpaqueProperties properties,
+                                          mlir::RegionRange regions,
+                                          SmallVectorImpl<Type> &results);
+  }];
+}
+
+def LogicCastOp
+  : HWOp<"logcast", [Pure]> {
+
+  let summary = "TODO";
+  let description = "TODO";
+
+  let arguments = (ins HWIntegerType:$input);
+  let results = (outs HWIntegerType:$result);
+  let assemblyFormat = "$input attr-dict `:` functional-type($input, $result)";
+
+  let hasFolder = true;
+  let hasVerifier = true;  
+}
+
 def WireOp : HWOp<"wire", [
     SameOperandsAndResultType,
     DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,

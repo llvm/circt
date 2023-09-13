@@ -24,8 +24,8 @@ include "mlir/IR/AttrTypeBase.td"
 // known, non-directional type.
 def HWIntegerType : DialectType<HWDialect,
     CPred<"::circt::hw::isHWIntegerType($_self)">,
-    "a signless integer bitvector",
-    "::circt::hw::TypeVariant<::mlir::IntegerType, ::circt::hw::IntType>">;
+    "a signless integer or logic bitvector",
+    "::circt::hw::TypeVariant<::mlir::IntegerType, ::circt::hw::IntType, ::circt::hw::LogicType>">;
 
 // Type constraint that indicates that an operand/result may only be a valid,
 // known, non-directional type.

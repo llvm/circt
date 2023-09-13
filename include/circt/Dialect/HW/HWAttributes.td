@@ -306,4 +306,23 @@ def EnumFieldAttr : AttrDef<HWDialect, "EnumField"> {
   }];
 }
 
+def LogicLiteralAttr : AttrDef<HWDialect, "LogicLiteral", [TypedAttrInterface]> {
+  let summary = "TODO";
+  let description = "TODO";
+
+  let parameters = (ins "circt::hw::LogicKind":$kind, "::mlir::StringAttr":$literal,  AttributeSelfTypeParameter<"">:$type);
+
+  let mnemonic = "loglit";
+  let assemblyFormat = " `<`$kind`:`$literal`>` ";
+
+  let genVerifyDecl = true;
+  let skipDefaultBuilders = true;
+
+  let builders = [
+    AttrBuilder<(ins "circt::hw::LogicKind":$kind, "::mlir::StringAttr":$literal, "::mlir::Type":$type)>
+  ];
+
+ 
+}
+
 #endif // CIRCT_DIALECT_HW_HWATTRIBUTES_TD

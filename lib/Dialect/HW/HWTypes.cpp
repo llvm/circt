@@ -22,6 +22,7 @@
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/StorageUniquerSupport.h"
 #include "mlir/IR/Types.h"
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 
@@ -47,17 +48,15 @@ mlir::Type circt::hw::getCanonicalType(mlir::Type type) {
 
 /// Return true if the specified type is a value HW Integer type.  This checks
 /// that it is a signless standard dialect type or a hw::IntType.
+//  HACK: Also LogicType
 bool circt::hw::isHWIntegerType(mlir::Type type) {
   Type canonicalType = getCanonicalType(type);
 
-  if (canonicalType.isa<hw::IntType>())
+  if (canonicalType.isa<hw::IntType, hw::LogicType>())
     return true;
 
   auto intType = canonicalType.dyn_cast<IntegerType>();
-  if (!intType || !intType.isSignless())
-    return false;
-
-  return true;
+  return intType && intType.isSignless();
 }
 
 bool circt::hw::isHWEnumType(mlir::Type type) {
@@ -69,7 +68,7 @@ bool circt::hw::isHWEnumType(mlir::Type type) {
 /// hardware but not marker types like InOutType.
 bool circt::hw::isHWValueType(Type type) {
   // Signless and signed integer types are both valid.
-  if (type.isa<IntegerType, IntType, EnumType>())
+  if (type.isa<IntegerType, IntType, EnumType, LogicType>())
     return true;
 
   if (auto array = type.dyn_cast<ArrayType>())
@@ -101,6 +100,11 @@ int64_t circt::hw::getBitWidth(mlir::Type type) {
   return llvm::TypeSwitch<::mlir::Type, size_t>(type)
       .Case<IntegerType>(
           [](IntegerType t) { return t.getIntOrFloatBitWidth(); })
+      .Case<LogicType>([](LogicType t) {
+        if (auto width = t.getWidth())
+          return static_cast<int64_t>(*width);
+        return static_cast<int64_t>(-1L);
+      })
       .Case<ArrayType, UnpackedArrayType>([](auto a) {
         int64_t elementBitWidth = getBitWidth(a.getElementType());
         if (elementBitWidth < 0)
@@ -170,7 +174,7 @@ static ParseResult parseHWElementType(Type &result, AsmParser &p) {
   if (typeString.startswith("array<") || typeString.startswith("inout<") ||
       typeString.startswith("uarray<") || typeString.startswith("struct<") ||
       typeString.startswith("typealias<") || typeString.startswith("int<") ||
-      typeString.startswith("enum<")) {
+      typeString.startswith("log<") || typeString.startswith("enum<")) {
     llvm::StringRef mnemonic;
     auto parseResult = generatedTypeParser(p, &mnemonic, result);
     return parseResult.has_value() ? success() : failure();
@@ -183,6 +187,56 @@ static void printHWElementType(Type element, AsmPrinter &p) {
   if (succeeded(generatedTypePrinter(element, p)))
     return;
   p.printType(element);
+}
+
+size_t LogicType::checkLiteral(const std::string &lit,
+                               circt::hw::LogicKind kind) {
+
+  // Construct set of valid atomic literals for logic kind
+  std::string atomicVals =
+      LogicType::kindAtomicValues[static_cast<int64_t>(kind)].str();
+  llvm::SmallSet<char, 9> atomicsSet;
+  atomicsSet.insert(atomicVals.begin(), atomicVals.end());
+
+  for (size_t i = 0; i < lit.size(); i++) {
+    if (!atomicsSet.contains(lit[i]))
+      return i;
+  }
+
+  return lit.size();
+}
+
+bool circt::hw::isNBitWideLogicType(mlir::Type type,
+                                    std::optional<unsigned> width) {
+  auto canonicalType = getCanonicalType(type);
+  if (auto baseInt = llvm::dyn_cast<IntegerType>(canonicalType)) {
+    return (!width) || (baseInt.getIntOrFloatBitWidth() == *width);
+  }
+
+  if (auto logType = llvm::dyn_cast<LogicType>(canonicalType)) {
+    if (auto typeWidth = logType.getWidth())
+      return (!width) || (*typeWidth == *width);
+  }
+
+  return false;
+}
+
+bool circt::hw::isTwoStateLogicType(Type type) {
+  auto canonicalType = getCanonicalType(type);
+  if (llvm::isa<IntegerType>(canonicalType))
+    return true;
+  if (auto logType = llvm::dyn_cast<LogicType>(canonicalType))
+    return logType.getKind() == LogicKind::Two;
+  return false;
+}
+
+std::optional<unsigned> circt::hw::getLogicBitWidth(mlir::Type type) {
+  auto canonicalType = getCanonicalType(type);
+  if (auto intType = llvm::dyn_cast<IntegerType>(canonicalType))
+    return intType.getIntOrFloatBitWidth();
+  if (auto logType = llvm::dyn_cast<LogicType>(canonicalType))
+    return logType.getWidth();
+  return {};
 }
 
 //===----------------------------------------------------------------------===//
@@ -217,6 +271,77 @@ void IntType::print(AsmPrinter &p) const {
   p << "<";
   p.printAttributeWithoutType(getWidth());
   p << '>';
+}
+
+//===----------------------------------------------------------------------===//
+// Logic Type
+//===----------------------------------------------------------------------===//
+
+Type LogicType::get(::circt::hw::LogicKind kind, ::mlir::TypedAttr widthAttr) {
+  if (auto cstWidth = widthAttr.dyn_cast<IntegerAttr>()) {
+    // Construct an integer type for fixed-width logic of kind 2
+    if (kind == LogicKind::Two)
+      return IntegerType::get(widthAttr.getContext(),
+                              cstWidth.getValue().getZExtValue());
+  } else {
+    auto widthWidth = widthAttr.getType().dyn_cast<IntegerType>();
+    assert(widthWidth && widthWidth.getWidth() == 32 &&
+           "!hw.log width must be 32-bits");
+    (void)widthWidth;
+  }
+
+  return Base::get(widthAttr.getContext(), kind, widthAttr);
+}
+
+// Examples:
+// !hw.log<SV:8>          8 digit SystemVerilog four valued logic
+// !hw.log<T>             Single digit three valued logic
+// !hw.log<B:3>           3 bit binary logic, will yield 'i3' type
+//
+// !hw.log<B:#hw.param.decl.ref<"p">>    Binary logic of parameterized width 'p'
+// !hw.log<VH:#hw.param.decl.ref<"p">>   9-valued VHDL logic of parameterized
+// width 'p'
+
+Type LogicType::parse(::mlir::AsmParser &odsParser) {
+  if (odsParser.parseLess())
+    return Type();
+
+  // Parse logic kind
+  auto kindParse = mlir::FieldParser<LogicKind>::parse(odsParser);
+  if (failed(kindParse))
+    return Type();
+
+  // Optionally parse width from integer literal or attribute, defaults to 1 if
+  // missing.
+  bool hasFixedWidth = true;
+  unsigned fixedWidth = 1;
+  TypedAttr widthAttr;
+
+  if (odsParser.parseOptionalColon().succeeded()) {
+    auto widthIntParse = odsParser.parseOptionalInteger(fixedWidth);
+    if (widthIntParse.has_value() && failed(*widthIntParse))
+      return Type();
+    if (!widthIntParse.has_value()) {
+      // Try to parse width from attribute
+      hasFixedWidth = false;
+      auto int32Type = odsParser.getBuilder().getIntegerType(32);
+      if (odsParser.parseAttribute(widthAttr, int32Type))
+        return Type();
+    }
+  }
+
+  if (odsParser.parseGreater())
+    return Type();
+
+  if (hasFixedWidth)
+    return LogicType::get(odsParser.getContext(), *kindParse, fixedWidth);
+  return LogicType::get(*kindParse, widthAttr);
+}
+
+void LogicType::print(::mlir::AsmPrinter &odsPrinter) const {
+  odsPrinter << "<" << stringifyLogicKind(getKind()) << ":";
+  odsPrinter.printAttributeWithoutType(getWidthAttr());
+  odsPrinter << ">";
 }
 
 //===----------------------------------------------------------------------===//

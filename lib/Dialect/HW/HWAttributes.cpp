@@ -13,6 +13,7 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/DialectImplementation.h"
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -1019,6 +1020,14 @@ FailureOr<Type> hw::evaluateParametricType(Location loc, ArrayAttr parameters,
         // Otherwise parameter references are still involved
         return hw::IntType::get(evaluatedWidth->cast<TypedAttr>());
       })
+      .Case<hw::LogicType>([&](hw::LogicType t) -> FailureOr<Type> {
+        auto evaluatedWidth =
+            evaluateParametricAttr(loc, parameters, t.getWidthAttr());
+        if (failed(evaluatedWidth))
+          return {failure()};
+
+        return LogicType::get(t.getKind(), *evaluatedWidth);
+      })
       .Case<hw::ArrayType>([&](hw::ArrayType arrayType) -> FailureOr<Type> {
         auto size =
             evaluateParametricAttr(loc, parameters, arrayType.getSizeAttr());
@@ -1063,4 +1072,71 @@ bool hw::isParametricType(mlir::Type t) {
                isParamAttrWithParamRef(arrayType.getSizeAttr());
       })
       .Default([](auto) { return false; });
+}
+
+// -----------------
+// LogicLiteralAttr
+// -----------------
+
+LogicLiteralAttr LogicLiteralAttr::get(MLIRContext *context, LogicKind kind,
+                                       StringAttr literal, Type type) {
+  if (type == NoneType::get(context)) {
+    type = LogicType::get(literal.getContext(), kind, literal.size());
+  }
+  return Base::get(context, kind, literal, type);
+}
+
+LogicLiteralAttr LogicLiteralAttr::getChecked(
+    ::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError,
+    MLIRContext *context, LogicKind kind, StringAttr literal, Type type) {
+  if (type == NoneType::get(context)) {
+    type = LogicType::get(literal.getContext(), kind, literal.size());
+  }
+  return Base::getChecked(emitError, context, kind, literal, type);
+}
+
+LogicalResult LogicLiteralAttr::verify(
+    ::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError,
+    circt::hw::LogicKind kind, ::mlir::StringAttr literal, ::mlir::Type type) {
+  auto width = literal.size();
+
+  if (width == 0) {
+    emitError() << "zero width logic literals not allowed";
+    return failure();
+  }
+
+  if (auto logType = hw::type_dyn_cast<LogicType>(type)) {
+    if (logType.getKind() != kind) {
+      emitError() << "logic kind of specified type ("
+                  << stringifyLogicKind(logType.getKind())
+                  << ") does not match kind of literal ("
+                  << stringifyLogicKind(kind) << ")";
+      return failure();
+    }
+    if (auto fixedWidth = logType.getWidth()) {
+      if (*fixedWidth != width) {
+        emitError() << "width of specified type (" << *fixedWidth
+                    << ") does not match width of literal (" << width << ")";
+        return failure();
+      }
+    } else {
+      emitError() << "width of logic literal self-type must be a known integer";
+      return failure();
+    }
+  } else {
+    // Binary literals fall back to IntegerType
+    if (!hw::type_isa<IntegerType>(type)) {
+      emitError() << "speciifed type of logic literal must be LogicType";
+      return failure();
+    }
+  }
+
+  auto matchLen = LogicType::checkLiteral(literal.str(), kind);
+  if (matchLen != width) {
+    emitError() << "logic literal contains invalid character at index "
+                << matchLen;
+    return failure();
+  }
+
+  return success();
 }
