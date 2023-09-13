@@ -24,6 +24,24 @@ namespace pipeline {
 class StageOp;
 class ScheduledPipelineOp;
 
+// StageKind defines the control semantics of a pipeline stages.
+enum class StageKind {
+  // All stages in a pipeline without a stall signal is a continuous stage.
+  Continuous,
+  // Stallable stages are any stages which appear **before** the first
+  // non-stallable stage in the pipeline.
+  Stallable,
+  // Non-stallable stages are the stages explicitly marked as non-stallable by
+  // the user.
+  NonStallable,
+  // Runoff stages and stages that appear **after** (and by extension,
+  // **between** non-stallable stages). Runoff stages consider their own
+  // enablement wrt. the stall signal, as well as the enablement of the **last
+  // non-stallable register** (LNS) wrt. the runoff stage's position in the
+  // pipeline.
+  Runoff
+};
+
 namespace detail {
 
 // Returns the set of values defined outside of the given region, and the

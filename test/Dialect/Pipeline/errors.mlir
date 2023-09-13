@@ -180,3 +180,39 @@ hw.module @invalid_clock_gate(%arg : i32, %go : i1, %clk : i1, %rst : i1) -> () 
   }
   hw.output
 }
+
+// -----
+
+hw.module @noStallSignalWithStallability(%arg0 : i32, %go : i1, %clk : i1, %rst : i1) -> (out: i32) {
+  // expected-error @+1 {{'pipeline.scheduled' op cannot specify stallability without a stall signal.}}
+  %0:2 = pipeline.scheduled "MyPipeline"(%a0 : i32 = %arg0) clock(%c = %clk) reset(%r = %rst) go(%g = %go)
+    {stallability = [true, false, true]}
+   -> (out: i32) {
+    pipeline.stage ^bb1
+   ^bb1(%s1_enable : i1):
+    pipeline.stage ^bb2
+   ^bb2(%s2_enable : i1):
+    pipeline.stage ^bb3
+   ^bb3(%s3_enable : i1):
+    pipeline.return %a0 : i32
+  }
+  hw.output %0 : i32
+}
+
+// -----
+
+hw.module @incorrectStallabilitySize(%arg0 : i32, %go : i1, %clk : i1, %rst : i1, %stall : i1) -> (out: i32) {
+  // expected-error @+1 {{'pipeline.scheduled' op stallability array must be the same length as the number of stages. Pipeline has 3 stages but array had 2 elements.}}
+  %0:2 = pipeline.scheduled "MyPipeline"(%a0 : i32 = %arg0) stall(%s = %stall) clock(%c = %clk) reset(%r = %rst) go(%g = %go)
+    {stallability = [true, false]}
+   -> (out: i32) {
+    pipeline.stage ^bb1
+   ^bb1(%s1_enable : i1):
+    pipeline.stage ^bb2
+   ^bb2(%s2_enable : i1):
+    pipeline.stage ^bb3
+   ^bb3(%s3_enable : i1):
+    pipeline.return %a0 : i32
+  }
+  hw.output %0 : i32
+}
