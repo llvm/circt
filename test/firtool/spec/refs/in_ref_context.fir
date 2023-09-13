@@ -19,7 +19,7 @@ circuit Top:
 
   module UpDown:
     input in : UInt<4>
-    ; expected-error @below {{input probes not yet supported}}
+    ; expected-error @below {{input probes cannot be used}}
     input in_ref : Probe<UInt<4>>
     output r1 : Probe<UInt<4>>
     output r2 : Probe<UInt<4>>
