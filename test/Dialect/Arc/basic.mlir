@@ -1,4 +1,4 @@
-// RUN: circt-opt %s --verify-diagnostics | circt-opt | FileCheck %s
+// RUN: circt-opt %s --verify-diagnostics -split-input-file | circt-opt | FileCheck %s
 
 // CHECK-LABEL: arc.define @Foo
 arc.define @Foo(%arg0: i42, %arg1: i9) -> (i42, i9) {
@@ -158,3 +158,193 @@ arc.define @identity2(%arg0: i32, %arg1: i32, %arg2: i1, %arg3: i32) -> (i32, i3
 arc.define @identity3(%arg0: i32, %arg1: i32, %arg2: i32) -> (i32, i32, i32) {
   arc.output %arg0, %arg1, %arg2 : i32, i32, i32
 }
+
+// -----
+
+hw.module @vectorize_in_clock_domain(%in0: i2, %in1: i2, %in2: i1, %in3: i1, %clk: !seq.clock) -> (out0: i1, out1: i1) {
+  %0:2 = arc.clock_domain (%in0, %in1, %in2, %in3) clock %clk : (i2, i2, i1, i1) -> (i1, i1) {
+    ^bb0(%arg0: i2, %arg1: i2, %arg2: i1, %arg3: i1):
+    %1:2 = arc.vectorize (%arg0, %arg1), (%arg2, %arg3) : (i2, i2, i1, i1) -> (i1, i1) {
+    ^bb0(%arg4: i2, %arg5: i1):
+      %2 = arc.state @vectorizable(%arg4, %arg5) lat 1 : (i2, i1) -> i1
+      arc.vectorize.return %2 : i1
+    }
+    arc.output %1#0, %1#1 : i1, i1
+  }
+  hw.output %0#0, %0#1 : i1, i1
+}
+arc.define @vectorizable(%arg0: i2, %arg1: i1) -> i1 {
+  %0 = comb.extract %arg0 from 0 : (i2) -> i1
+  %1 = comb.and %0, %arg1 : i1
+  arc.output %0 : i1
+}
+
+// CHECK-LABEL: hw.module @vectorize_in_clock_domain
+//       CHECK: arc.clock_domain
+//       CHECK: %{{.+}}:2 = arc.vectorize ({{.*}}, {{.*}}), ({{.*}}, {{.*}}) : (i2, i2, i1, i1) -> (i1, i1) {
+//       CHECK: ^bb0([[A:%.+]]: i2, [[B:%.+]]: i1):
+//       CHECK:   [[V1:%.+]] = arc.state @vectorizable([[A]], [[B]]) lat 1 : (i2, i1) -> i1
+//       CHECK:   arc.vectorize.return [[V1]] : i1
+//       CHECK: }
+
+// -----
+
+hw.module @vectorize(%in0: i1, %in1: i1, %in2: i1, %in3: i1) -> (out0: i1, out1: i1, out2: i1) {
+  %0:2 = arc.vectorize (%in0, %in1), (%in2, %in3) : (i1, i1, i1, i1) -> (i1, i1) {
+  ^bb0(%arg0: i1, %arg1: i1):
+    %1 = comb.and %arg0, %arg1 : i1
+    arc.vectorize.return %1 : i1
+  }
+  %1 = arc.vectorize (%in0), (%in2) : (i1, i1) -> i1 {
+  ^bb0(%arg0: i1, %arg1: i1):
+    %1 = comb.and %arg0, %arg1 : i1
+    arc.vectorize.return %1 : i1
+  }
+  hw.output %0#0, %0#1, %1 : i1, i1, i1
+}
+
+// CHECK-LABEL: hw.module @vectorize
+//  CHECK-SAME: ([[IN0:%.+]]: i1, [[IN1:%.+]]: i1, [[IN2:%.+]]: i1, [[IN3:%.+]]: i1) ->
+//       CHECK: [[V0:%.+]]:2 = arc.vectorize ([[IN0]], [[IN1]]), ([[IN2]], [[IN3]]) : (i1, i1, i1, i1) -> (i1, i1) {
+//       CHECK: ^bb0([[A:%.+]]: i1, [[B:%.+]]: i1):
+//       CHECK:   [[V1:%.+]] = comb.and [[A]], [[B]]
+//       CHECK:   arc.vectorize.return [[V1]] : i1
+//       CHECK: }
+//       CHECK: [[V2:%.+]] = arc.vectorize ([[IN0]]), ([[IN2]]) : (i1, i1) -> i1 {
+//       CHECK: ^bb0([[A:%.+]]: i1, [[B:%.+]]: i1):
+//       CHECK:   [[V3:%.+]] = comb.and [[A]], [[B]]
+//       CHECK:   arc.vectorize.return [[V3]] : i1
+//       CHECK: }
+//       CHECK: hw.output [[V0]]#0, [[V0]]#1, [[V2]] :
+
+// -----
+
+hw.module @vectorize_body_lowered(%in0: i1, %in1: i1, %in2: i1, %in3: i1) -> (out0: i1, out1: i1, out2: i1, out3: i1) {
+  %0:2 = arc.vectorize (%in0, %in1), (%in2, %in2) : (i1, i1, i1, i1) -> (i1, i1) {
+  ^bb0(%arg0: i2, %arg1: i2):
+    %1 = arith.andi %arg0, %arg1 : i2
+    arc.vectorize.return %1 : i2
+  }
+
+  %1:2 = arc.vectorize (%in0, %in1), (%in2, %in3) : (i1, i1, i1, i1) -> (i1, i1) {
+  ^bb0(%arg0: vector<2xi1>, %arg1: vector<2xi1>):
+    %1 = arith.andi %arg0, %arg1 : vector<2xi1>
+    arc.vectorize.return %1 : vector<2xi1>
+  }
+
+  hw.output %0#0, %0#1, %1#0, %1#1 : i1, i1, i1, i1
+}
+
+// CHECK-LABEL: hw.module @vectorize_body_lowered
+//  CHECK-SAME: ([[IN0:%.+]]: i1, [[IN1:%.+]]: i1, [[IN2:%.+]]: i1, [[IN3:%.+]]: i1) ->
+//       CHECK: [[V0:%.+]]:2 = arc.vectorize ([[IN0]], [[IN1]]), ([[IN2]], [[IN2]]) : (i1, i1, i1, i1) -> (i1, i1) {
+//       CHECK: ^bb0([[A:%.+]]: i2, [[B:%.+]]: i2):
+//       CHECK:   [[V1:%.+]] = arith.andi [[A]], [[B]]
+//       CHECK:   arc.vectorize.return [[V1]] : i2
+//       CHECK: }
+//       CHECK: [[V2:%.+]]:2 = arc.vectorize ([[IN0]], [[IN1]]), ([[IN2]], [[IN3]]) : (i1, i1, i1, i1) -> (i1, i1) {
+//       CHECK: ^bb0([[A:%.+]]: vector<2xi1>, [[B:%.+]]: vector<2xi1>):
+//       CHECK:   [[V3:%.+]] = arith.andi [[A]], [[B]]
+//       CHECK:   arc.vectorize.return [[V3]] : vector<2xi1>
+//       CHECK: }
+//       CHECK: hw.output [[V0]]#0, [[V0]]#1, [[V2]]#0, [[V2]]#1 :
+
+// -----
+
+hw.module @vectorize_boundary_lowered(%in0: i1, %in1: i1, %in2: i1, %in3: i1) -> (out0: i1, out1: i1, out2: i1, out3: i1) {
+  %0 = comb.concat %in0, %in1 : i1, i1
+  %1 = comb.replicate %in2 : (i1) -> i2
+  %2 = arc.vectorize (%0), (%1) : (i2, i2) -> i2 {
+  ^bb0(%arg0: i1, %arg1: i1):
+    %3 = arith.andi %arg0, %arg1 : i1
+    arc.vectorize.return %3 : i1
+  }
+  %3 = comb.extract %2 from 1 : (i2) -> i1
+  %4 = comb.extract %2 from 0 : (i2) -> i1
+
+  %cst = arith.constant dense<0> : vector<2xi1>
+  %5 = vector.insert %in0, %cst[0] : i1 into vector<2xi1>
+  %6 = vector.insert %in1, %5[1] : i1 into vector<2xi1>
+  %7 = vector.broadcast %in2 : i1 to vector<2xi1>
+  %8 = arc.vectorize (%6), (%7) : (vector<2xi1>, vector<2xi1>) -> vector<2xi1> {
+  ^bb0(%arg0: i1, %arg1: i1):
+    %9 = arith.andi %arg0, %arg1 : i1
+    arc.vectorize.return %9 : i1
+  }
+  %9 = vector.extract %8[0] : vector<2xi1>
+  %10 = vector.extract %8[1] : vector<2xi1>
+
+  hw.output %3, %4, %9, %10 : i1, i1, i1, i1
+}
+
+// CHECK-LABEL: hw.module @vectorize_boundary_lowered
+//       CHECK: [[V0:%.+]] = comb.concat
+//       CHECK: [[V1:%.+]] = comb.replicate
+//       CHECK: [[V2:%.+]] = arc.vectorize ([[V0]]), ([[V1]]) : (i2, i2) -> i2 {
+//       CHECK: ^bb0([[A:%.+]]: i1, [[B:%.+]]: i1):
+//       CHECK:   [[V3:%.+]] = arith.andi [[A]], [[B]]
+//       CHECK:   arc.vectorize.return [[V3]] : i1
+//       CHECK: }
+//       CHECK: [[V3:%.+]] = comb.extract [[V2]] from 1
+//       CHECK: [[V4:%.+]] = comb.extract [[V2]] from 0
+//       CHECK: vector.insert
+//       CHECK: [[V5:%.+]] = vector.insert
+//       CHECK: [[V6:%.+]] = vector.broadcast
+//       CHECK: [[V7:%.+]] = arc.vectorize ([[V5]]), ([[V6]]) : (vector<2xi1>, vector<2xi1>) -> vector<2xi1> {
+//       CHECK: ^bb0([[A:%.+]]: i1, [[B:%.+]]: i1):
+//       CHECK:   [[V8:%.+]] = arith.andi [[A]], [[B]]
+//       CHECK:   arc.vectorize.return [[V8]] : i1
+//       CHECK: }
+//       CHECK: [[V8:%.+]] = vector.extract [[V7]][0]
+//       CHECK: [[V9:%.+]] = vector.extract [[V7]][1]
+//       CHECK: hw.output [[V3]], [[V4]], [[V8]], [[V9]] :
+
+// -----
+
+hw.module @vectorize_both_sides_lowered(%in0: i1, %in1: i1, %in2: i1, %in3: i1) -> (out0: i1, out1: i1, out2: i1, out3: i1) {
+  %0 = comb.concat %in0, %in1 : i1, i1
+  %1 = comb.replicate %in2 : (i1) -> i2
+  %2 = arc.vectorize (%0), (%1) : (i2, i2) -> i2 {
+  ^bb0(%arg0: i2, %arg1: i2):
+    %3 = arith.andi %arg0, %arg1 : i2
+    arc.vectorize.return %3 : i2
+  }
+  %3 = comb.extract %2 from 1 : (i2) -> i1
+  %4 = comb.extract %2 from 0 : (i2) -> i1
+
+  %cst = arith.constant dense<0> : vector<2xi1>
+  %5 = vector.insert %in0, %cst[0] : i1 into vector<2xi1>
+  %6 = vector.insert %in1, %5[1] : i1 into vector<2xi1>
+  %7 = vector.broadcast %in2 : i1 to vector<2xi1>
+  %8 = arc.vectorize (%6), (%7) : (vector<2xi1>, vector<2xi1>) -> vector<2xi1> {
+  ^bb0(%arg0: vector<2xi1>, %arg1: vector<2xi1>):
+    %9 = arith.andi %arg0, %arg1 : vector<2xi1>
+    arc.vectorize.return %9 : vector<2xi1>
+  }
+  %9 = vector.extract %8[0] : vector<2xi1>
+  %10 = vector.extract %8[1] : vector<2xi1>
+
+  hw.output %3, %4, %9, %10 : i1, i1, i1, i1
+}
+
+// CHECK-LABEL: hw.module @vectorize_both_sides_lowered
+//       CHECK: [[V0:%.+]] = comb.concat
+//       CHECK: [[V1:%.+]] = comb.replicate
+//       CHECK: [[V2:%.+]] = arc.vectorize ([[V0]]), ([[V1]]) : (i2, i2) -> i2 {
+//       CHECK: ^bb0([[A:%.+]]: i2, [[B:%.+]]: i2):
+//       CHECK:   [[V3:%.+]] = arith.andi [[A]], [[B]]
+//       CHECK:   arc.vectorize.return [[V3]] : i2
+//       CHECK: }
+//       CHECK: [[V3:%.+]] = comb.extract [[V2]] from 1
+//       CHECK: [[V4:%.+]] = comb.extract [[V2]] from 0
+//       CHECK: vector.insert
+//       CHECK: [[V5:%.+]] = vector.insert
+//       CHECK: [[V6:%.+]] = vector.broadcast
+//       CHECK: [[V7:%.+]] = arc.vectorize ([[V5]]), ([[V6]]) : (vector<2xi1>, vector<2xi1>) -> vector<2xi1> {
+//       CHECK: ^bb0([[A:%.+]]: vector<2xi1>, [[B:%.+]]: vector<2xi1>):
+//       CHECK:   [[V8:%.+]] = arith.andi [[A]], [[B]]
+//       CHECK:   arc.vectorize.return [[V8]] : vector<2xi1>
+//       CHECK: }
+//       CHECK: [[V8:%.+]] = vector.extract [[V7]][0]
+//       CHECK: [[V9:%.+]] = vector.extract [[V7]][1]
+//       CHECK: hw.output [[V3]], [[V4]], [[V8]], [[V9]] :

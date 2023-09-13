@@ -646,4 +646,150 @@ def ZeroCountOp : ArcOp<"zero_count", [Pure, SameOperandsAndResultType]> {
   let assemblyFormat = "$predicate $input attr-dict `:` type($input)";
 }
 
+def IntOr1DVectorOfInt : AnyTypeOf<[
+  AnySignlessInteger,
+  VectorOfRankAndType<[1], [AnySignlessInteger]>
+]>;
+
+def VectorizeOp : ArcOp<"vectorize", [
+    IsolatedFromAbove, RecursiveMemoryEffects
+  ]> {
+  let summary = "isolated subgraph of operations to be vectorized";
+  let description = [{
+    This operation represents a vectorized computation DAG. It places a
+    convenient boundary between the subgraph to be vectorized and the
+    surrounding non-vectorizable parts of the original graph.
+
+    This allows us to split the vectorization transformations into multiple
+    parts/passes:
+      * Finding an initial set of operations to be vectorized
+      * Optimizing this set by pulling in more operations into the nested block,
+        splitting it such that the vector width does not exceed a given limit,
+        applying a cost model and potentially reverting the decision to
+        vectorize this subgraph (e.g., because not enough ops could be pulled
+        in)
+      * Performing the actual vectorization by lowering this operation. This
+        operation allows to perform the lowering of the boundary and the body
+        separately and either via 1D `vector` types for SIMD vectorization or
+        plain integers for manual vectorization within a scalar register.
+
+    For each block argument of the nested block, there is a list of operands
+    that represent the elements of the vector. If the boundary is already
+    vectorized each list will only contain a single SSA value of either vector
+    type or an integer representing the concatenation of all original operands
+    of that vector.
+    Only integer types can be vectorized, no arrays or structs are allowed.
+
+    Example:
+
+    Given the following two AND operations in the IR
+    ```mlir
+    %0 = arith.and %in0, %in1 : i1
+    %1 = arith.and %in2, %in2 : i1
+    ```
+    they could be vectorized by putting one such AND operation in the body block
+    of the `arc.vectorize` operation and forwarding the operands accordingly.
+    ```mlir
+    %0:2 = arc.vectorize (%in0, %in1), (%in2, %in2) :
+      (i1, i1, i1, i1) -> (i1, i1) {
+    ^bb0(%arg0: i1, %arg1: i1):
+      %1 = arith.and %arg0, %arg1 : i1
+      arc.output %1 : i1
+    }
+    ```
+    In a next step, the boundary could be lowered/vectorized. This can happen
+    in terms of integers for vectorization within scalar registers:
+    ```mlir
+    %0 = comb.concat %in0, %in1 : i1, i1
+    %1 = comb.replicate %in2 : (i1) -> i2
+    %2 = arc.vectorize (%0), (%1) : (i2, i2) -> (i2) {
+    ^bb0(%arg0: i1, %arg1: i1):
+      %1 = arith.and %arg0, %arg1 : i1
+      arc.output %1 : i1
+    }
+    %3 = comb.extract %2 from 1 : (i2) -> i1
+    %4 = comb.extract %2 from 0 : (i2) -> i1
+    ```
+    Or via `vector` types for SIMD vectorization:
+    ```mlir
+    %cst = arith.constant dense<0> : vector<2xi1>
+    %0 = vector.insert %in0, %cst[0] : i1 into vector<2xi1>
+    %1 = vector.insert %in1, %0[1] : i1 into vector<2xi1>
+    %2 = vector.broadcast %in2 : i1 to vector<2xi1>
+    %3 = arc.vectorize (%1), (%2) :
+      (vector<2xi1>, vector<2xi1>) -> (vector<2xi1>) {
+    ^bb0(%arg0: i1, %arg1: i1):
+      %1 = arith.and %arg0, %arg1 : i1
+      arc.output %1 : i1
+    }
+    %4 = vector.extract %2[0] : vector<2xi1>
+    %5 = vector.extract %2[1] : vector<2xi1>
+    ```
+    Alternatively, the body could be vectorized first. Again, as integers
+    ```mlir
+    %0:2 = arc.vectorize (%in0, %in1), (%in2, %in2) :
+      (i1, i1, i1, i1) -> (i1, i1) {
+    ^bb0(%arg0: i2, %arg1: i2):
+      %1 = arith.and %arg0, %arg1 : i2
+      arc.output %1 : i2
+    }
+    ```
+    or SIMD vectors.
+    ```mlir
+    %0:2 = arc.vectorize (%in0, %in1), (%in2, %in3) : 
+      (i1, i1, i1, i1) -> (i1, i1) {
+    ^bb0(%arg0: vector<2xi1>, %arg1: vector<2xi1>):
+      %1 = arith.and %arg0, %arg1 : vector<2xi1>
+      arc.output %1 : vector<2xi1>
+    }
+    ```
+    Once both sides are lowered, the `arc.vectorize` op simply becomes a
+    passthrough for the operands and can be removed by inlining the nested
+    block. The integer based vectorization would then look like the following:
+    ```mlir
+    %0 = comb.concat %in0, %in1 : i1, i1
+    %1 = comb.replicate %in2 : (i1) -> i2
+    %2 = arith.and %0, %1 : i2
+    %3 = comb.extract %2 from 1 : (i2) -> i1
+    %4 = comb.extract %2 from 0 : (i2) -> i1
+    ```
+    The SIMD vector based lowering would result in the following IR:
+    ```mlir
+    %cst = arith.constant dense<0> : vector<2xi1>
+    %0 = vector.insert %in0, %cst[0] : i1 into vector<2xi1>
+    %1 = vector.insert %in1, %0[1] : i1 into vector<2xi1>
+    %2 = vector.broadcast %in2 : i1 to vector<2xi1>
+    %3 = arith.and %1, %2 : vector<2xi1>
+    %4 = vector.extract %3[0] : vector<2xi1>
+    %5 = vector.extract %3[1] : vector<2xi1>
+    ```
+  }];
+
+  let arguments = (ins
+    VariadicOfVariadic<IntOr1DVectorOfInt, "inputOperandSegments">:$inputs,
+    DenseI32ArrayAttr:$inputOperandSegments);
+  let results = (outs Variadic<IntOr1DVectorOfInt>:$results);
+  let regions = (region SizedRegion<1>:$body);
+
+  let assemblyFormat = [{
+    $inputs attr-dict `:` functional-type($inputs, $results) $body
+  }];
+
+  let extraClassDeclaration = [{
+    bool isBoundaryVectorized();
+    bool isBodyVectorized();
+  }];
+
+  let hasVerifier = 1;
+  let hasRegionVerifier = 1;
+}
+
+def VectorizeReturnOp : ArcOp<"vectorize.return", [
+  HasParent<"VectorizeOp">, Pure, ReturnLike, Terminator
+]> {
+  let summary = "arc.vectorized terminator";
+  let arguments = (ins IntOr1DVectorOfInt:$value);
+  let assemblyFormat = "operands attr-dict `:` qualified(type(operands))";
+}
+
 #endif // CIRCT_DIALECT_ARC_ARCOPS_TD
