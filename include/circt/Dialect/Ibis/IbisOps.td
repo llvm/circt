@@ -137,11 +137,10 @@ def InstanceOp : InstanceOpBase<"instance"> {
 }
 
 def MethodOp : IbisOp<"method", [
-      IsolatedFromAbove, RegionKindInterface,
+      IsolatedFromAbove,
       Symbol, FunctionOpInterface,
       AutomaticAllocationScope,
       DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmBlockArgumentNames"]>,
-      SingleBlockImplicitTerminator<"ReturnOp">,
       HasParent<"ClassOp">]> {
 
   let summary = "Ibis method";
@@ -157,14 +156,11 @@ def MethodOp : IbisOp<"method", [
                        ArrayAttr:$argNames,
                        OptionalAttr<DictArrayAttr>:$arg_attrs,
                        OptionalAttr<DictArrayAttr>:$res_attrs);
-  let regions = (region SizedRegion<1>:$body);
+  let regions = (region AnyRegion:$body);
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
 
   let extraClassDeclaration = [{
-    // Implement RegionKindInterface.
-    static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph;}
-
     //===------------------------------------------------------------------===//
     // FunctionOpInterface Methods
     //===------------------------------------------------------------------===//
@@ -228,6 +224,19 @@ def BlockOp : IbisOp<"block", [
     Block* getBodyBlock() { return &getBody().front(); }
   }];
   let hasVerifier = 1;
+  let skipDefaultBuilders = 1;
+    let builders = [
+    OpBuilder<(ins "TypeRange":$outputs, "ValueRange":$inputs,
+        CArg<"IntegerAttr", "{}">:$maxThreads), [{
+      $_state.addOperands(inputs);
+      if (maxThreads) {
+        $_state.addAttribute(getMaxThreadsAttrName($_state.name), maxThreads);
+      }
+      auto* region = $_state.addRegion();
+      $_state.addTypes(outputs);
+      ensureTerminator(*region, $_builder, $_state.location);
+    }]>
+  ];
 }
 
 def BlockReturnOp : IbisOp<"block.return", [
