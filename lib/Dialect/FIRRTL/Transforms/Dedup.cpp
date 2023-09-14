@@ -1512,6 +1512,11 @@ class DedupPass : public DedupBase<DedupPass> {
               }))
             return success();
 
+          // Only dedup extmodule's with defname.
+          if (auto ext = dyn_cast<FExtModuleOp>(*module);
+              ext && !ext.getDefname().has_value())
+            return success();
+
           llvm::SmallSetVector<StringAttr, 1> groups;
           for (auto annotation : annotations) {
             if (annotation.getClass() == dedupGroupClass)
