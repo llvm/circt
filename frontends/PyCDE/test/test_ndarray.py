@@ -163,7 +163,7 @@ class M1(Module):
 
 # -----
 
-# CHECK-LABEL:   msft.module @M1 {} () -> (out: !hw.array<3xarray<3xi32>>) attributes {fileName = "M1.sv"} {
+# CHECK-LABEL:   hw.module @M1() -> (out: !hw.array<3xarray<3xi32>>) attributes {output_file = #hw.output_file<"M1.sv", includeReplicatedOps>} {
 # CHECK:           %[[VAL_0:.*]] = hw.constant 0 : i32
 # CHECK:           %[[VAL_1:.*]] = hw.constant 1 : i32
 # CHECK:           %[[VAL_2:.*]] = hw.constant 2 : i32
@@ -180,7 +180,7 @@ class M1(Module):
 # CHECK:           %[[VAL_13:.*]] = sv.wire  : !hw.inout<array<3xarray<3xi32>>>
 # CHECK:           sv.assign %[[VAL_13]], %[[VAL_12]] : !hw.array<3xarray<3xi32>>
 # CHECK:           %[[VAL_14:.*]] = sv.read_inout %[[VAL_13]] : !hw.inout<array<3xarray<3xi32>>>
-# CHECK:           msft.output %[[VAL_14]] : !hw.array<3xarray<3xi32>>
+# CHECK:           hw.output %[[VAL_14]] : !hw.array<3xarray<3xi32>>
 # CHECK:         }
 
 

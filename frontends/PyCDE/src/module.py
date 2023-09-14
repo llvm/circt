@@ -12,7 +12,7 @@ from .signals import ClockSignal, Signal, _FromCirctValue
 from .types import ClockType
 
 from .circt import ir, support
-from .circt.dialects import hw, msft
+from .circt.dialects import hw
 from .circt.support import BackedgeBuilder, attribute_to_var
 
 import builtins
@@ -202,7 +202,11 @@ class ModuleLikeBuilderBase(_PyProxy):
     self.generators = None
     self.generator_port_proxy = None
     self.parameters = None
-    self.attributes: Dict = {}
+    self.attributes: Dict = {
+        "output_file":
+            hw.OutputFileAttr.get_from_filename(
+                ir.StringAttr.get(f"{cls.__name__}.sv"), False, True)
+    }
 
   def go(self):
     """Execute the analysis and mutation to make a `ModuleLike` class operate
@@ -273,13 +277,10 @@ class ModuleLikeBuilderBase(_PyProxy):
     output_port_lookup: Dict[str, int] = {}
     for idx, (name, port_type) in enumerate(self.outputs):
 
-      def fget(self, idx=idx):
-        self._get_output(idx)
-
       def fset(self, val, idx=idx):
         self._set_output(idx, val)
 
-      proxy_attrs[name] = property(fget=fget, fset=fset)
+      proxy_attrs[name] = property(fget=None, fset=fset)
       output_port_lookup[name] = idx
     proxy_attrs["_output_port_lookup"] = output_port_lookup
 
@@ -300,7 +301,7 @@ class ModuleLikeBuilderBase(_PyProxy):
     for idx, (name, port_type) in enumerate(self.outputs):
 
       def fget(self, idx=idx):
-        return _FromCirctValue(self.inst.results[idx])
+        return _FromCirctValue(self.inst.operation.results[idx])
 
       named_outputs[name] = fget
       setattr(self.modcls, name, property(fget=fget))
@@ -399,12 +400,13 @@ class ModuleBuilder(ModuleLikeBuilderBase):
     """Callback for creating a module op."""
 
     if len(self.generators) > 0:
+      if hasattr(self, "parameters") and self.parameters is not None:
+        self.attributes["pycde.parameters"] = self.parameters
       # If this Module has a generator, it's a real module.
-      return msft.MSFTModuleOp(
+      return hw.HWModuleOp(
           symbol,
           [(n, t._type) for (n, t) in self.inputs],
           [(n, t._type) for (n, t) in self.outputs],
-          self.parameters if hasattr(self, "parameters") else None,
           attributes=self.attributes,
           loc=self.loc,
           ip=sys._get_ip(),
@@ -419,10 +421,15 @@ class ModuleBuilder(ModuleLikeBuilderBase):
           for i in self.parameters
       ]
     self.attributes["verilogName"] = ir.StringAttr.get(self.name)
-    return msft.MSFTModuleExternOp(
+    self.attributes: Dict = {
+        "output_file":
+            hw.OutputFileAttr.get_from_filename(
+                ir.StringAttr.get("external_modules.sv"), False, True)
+    }
+    return hw.HWModuleExternOp(
         symbol,
-        [(n, t._type) for (n, t) in self.inputs],
-        [(n, t._type) for (n, t) in self.outputs],
+        input_ports=[(n, t._type) for (n, t) in self.inputs],
+        output_ports=[(n, t._type) for (n, t) in self.outputs],
         parameters=paramdecl_list,
         attributes=self.attributes,
         loc=self.loc,
@@ -432,54 +439,49 @@ class ModuleBuilder(ModuleLikeBuilderBase):
   def instantiate(self, module_inst, instance_name: str, **inputs):
     """"Instantiate this Module. Check that the input types match expectations."""
 
-    from .circt.dialects import _hw_ops_ext as hwext
-    input_lookup = {
-        name: (idx, ptype) for idx, (name, ptype) in enumerate(self.inputs)
-    }
-    input_values: List[Optional[Signal]] = [None] * len(self.inputs)
-
+    port_input_lookup = {name: ptype for name, ptype in self.inputs}
+    circt_inputs = {}
     for name, signal in inputs.items():
-      if name not in input_lookup:
+      if name not in port_input_lookup:
         raise PortError(f"Input port {name} not found in module")
-      idx, ptype = input_lookup[name]
-      if signal is None:
+      ptype = port_input_lookup[name]
+      if isinstance(signal, Signal):
+        # If the input is a signal, the types must match.
+        if signal.type._type != ptype._type:
+          raise ValueError(
+              f"Wrong type on input signal '{name}'. Got '{signal.type}',"
+              f" expected '{type}'")
+        circt_inputs[name] = signal.value
+      elif signal is None:
         if len(self.generators) > 0:
           raise PortError(
               f"Port {name} cannot be None (disconnected ports only allowed "
               "on extern mods.")
-        signal = create_const_zero(ptype)
-      if isinstance(signal, Signal):
-        # If the input is a signal, the types must match.
-        if ptype._type != signal.type._type:
-          raise PortError(
-              f"Input port {name} expected type {ptype}, not {signal.type}")
+        circt_inputs[name] = create_const_zero(ptype)
       else:
         # If it's not a signal, assume the user wants to specify a constant and
         # try to convert it to a hardware constant.
-        signal = ptype(signal)
-      input_values[idx] = signal
-      del input_lookup[name]
+        circt_inputs[name] = ptype(signal).value
 
-    if len(input_lookup) > 0:
-      missing = ", ".join(list(input_lookup.keys()))
-      raise ValueError(f"Missing input signals for ports: {missing}")
+    missing = list(
+        filter(lambda name: name not in circt_inputs, port_input_lookup.keys()))
+    if len(missing) > 0:
+      raise ValueError(f"Missing input signals for ports: {', '.join(missing)}")
 
     circt_mod = self.circt_mod
-    parameters = None
+    parameters = {}
     # If this is a parameterized external module, the parameters must be
     # supplied.
     if len(self.generators) == 0 and self.parameters is not None:
-      parameters = ir.ArrayAttr.get(
-          hwext.create_parameters(self.parameters, circt_mod))
-    inst = msft.InstanceOp(
-        circt_mod.type.results,
-        hw.InnerSymAttr.get(ir.StringAttr.get(instance_name)),
-        ir.FlatSymbolRefAttr.get(
-            ir.StringAttr(circt_mod.attributes["sym_name"]).value),
-        [sig.value for sig in input_values],
-        parameters=parameters,
-        loc=get_user_loc())
-    inst.verify()
+      parameters = self.parameters
+    from .circt.dialects import _hw_ops_ext as hwext
+    inst = hwext.InstanceBuilder(circt_mod,
+                                 instance_name,
+                                 circt_inputs,
+                                 parameters=parameters,
+                                 sym_name=instance_name,
+                                 loc=get_user_loc())
+    inst.operation.verify()
     return inst
 
   def generate(self):
@@ -496,7 +498,7 @@ class ModuleBuilder(ModuleLikeBuilderBase):
         raise ValueError("Generators must not return a value")
 
       ports._check_unconnected_outputs()
-      msft.OutputOp([o.value for o in ports._output_values])
+      hw.OutputOp([o.value for o in ports._output_values])
 
 
 class Module(metaclass=ModuleLikeType):

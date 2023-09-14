@@ -6,7 +6,7 @@ from pycde.constructs import ControlReg, NamedWire, Reg, Wire, SystolicArray
 from pycde.dialects import comb
 from pycde.testing import unittestmodule
 
-# CHECK-LABEL: msft.module @WireAndRegTest {} (%In: i8, %InCE: i1, %clk: i1, %rst: i1) -> (Out: i8, OutReg: i8, OutRegRst: i8, OutRegCE: i8)
+# CHECK-LABEL: hw.module @WireAndRegTest(%In: i8, %InCE: i1, %clk: i1, %rst: i1) -> (Out: i8, OutReg: i8, OutRegRst: i8, OutRegCE: i8)
 # CHECK:         [[r0:%.+]] = comb.extract %In from 0 {sv.namehint = "In_0upto7"} : (i8) -> i7
 # CHECK:         [[r1:%.+]] = comb.extract %In from 7 {sv.namehint = "In_7upto8"} : (i8) -> i1
 # CHECK:         [[r2:%.+]] = comb.concat [[r1]], [[r0]] {sv.namehint = "w1"} : i1, i7
@@ -17,7 +17,7 @@ from pycde.testing import unittestmodule
 # CHECK:         %c0_i8{{.*}} = hw.constant 0 : i8
 # CHECK:         [[r5:%.+]] = seq.compreg %In, %clk, %rst, %c0_i8{{.*}}  : i8
 # CHECK:         [[r6:%.+]] = seq.compreg.ce %In, %clk, %InCE : i8
-# CHECK:         msft.output [[r2]], [[r1]], [[r5]], [[r6]] : i8, i8, i8, i8
+# CHECK:         hw.output [[r2]], [[r1]], [[r5]], [[r6]] : i8, i8, i8, i8
 
 
 @unittestmodule()
@@ -59,7 +59,7 @@ class WireAndRegTest(Module):
 # CHECK:         msft.pe.output [[SUMR]] : i8
 
 
-# CHECK-LABEL: hw.module @SystolicArrayTest<__INST_HIER: none = "INSTANTIATE_WITH_INSTANCE_PATH">(%clk: i1, %col_data: !hw.array<2xi8>, %row_data: !hw.array<3xi8>) -> (out: !hw.array<3xarray<2xi8>>)
+# CHECK-LABEL: hw.module @SystolicArrayTest(%clk: i1, %col_data: !hw.array<2xi8>, %row_data: !hw.array<3xi8>) -> (out: !hw.array<3xarray<2xi8>>)
 # CHECK:         %sum__reg1_0_0 = sv.reg sym @sum__reg1  : !hw.inout<i8>
 # CHECK:         sv.read_inout %sum__reg1_0_0 : !hw.inout<i8>
 @unittestmodule(print=True, run_passes=True, print_after_passes=True)
@@ -86,7 +86,7 @@ class SystolicArrayTest(Module):
     ports.out = pe_outputs
 
 
-# CHECK-LABEL:  msft.module @ControlReg_num_asserts2_num_resets1
+# CHECK-LABEL:  hw.module @ControlReg_num_asserts2_num_resets1
 # CHECK:          [[r0:%.+]] = hw.array_get %asserts[%false]
 # CHECK:          [[r1:%.+]] = hw.array_get %asserts[%true]
 # CHECK:          [[r2:%.+]] = comb.or bin [[r0]], [[r1]]
@@ -95,7 +95,7 @@ class SystolicArrayTest(Module):
 # CHECK:          %state = seq.compreg [[r6]], %clk, %rst, %false{{.*}}
 # CHECK:          [[r5:%.+]] = comb.mux bin [[r4]], %false{{.*}}, %state
 # CHECK:          [[r6:%.+]] = comb.mux bin [[r2]], %true{{.*}}, [[r5]]
-# CHECK:          msft.output %state
+# CHECK:          hw.output %state
 @unittestmodule()
 class ControlRegTest(Module):
   clk = Clock()

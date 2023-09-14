@@ -38,17 +38,17 @@ class Consumer(Module):
     HostComms.to_host(ports.int_in, "loopback_out")
 
 
-# CHECK-LABEL: msft.module @LoopbackTop {} (%clk: i1, %rst: i1)
-# CHECK:         %Producer.int_out = msft.instance @Producer @Producer(%clk)  : (i1) -> !esi.channel<i32>
-# CHECK:         msft.instance @Consumer @Consumer(%clk, %Producer.int_out)  : (i1, !esi.channel<i32>) -> ()
+# CHECK-LABEL: hw.module @LoopbackTop(%clk: i1, %rst: i1)
+# CHECK:         %Producer.int_out = hw.instance "Producer" sym @Producer @Producer(clk: %clk: i1) -> (int_out: !esi.channel<i32>)
+# CHECK:         hw.instance "Consumer" sym @Consumer @Consumer(clk: %clk: i1, int_in: %Producer.int_out: !esi.channel<i32>) -> (
 # CHECK:         esi.service.instance svc @HostComms impl as "cosim"(%clk, %rst) : (i1, i1) -> ()
-# CHECK:         msft.output
-# CHECK-LABEL: msft.module @Producer {} (%clk: i1) -> (int_out: !esi.channel<i32>)
+# CHECK:         hw.output
+# CHECK-LABEL: hw.module @Producer(%clk: i1) -> (int_out: !esi.channel<i32>)
 # CHECK:         [[R0:%.+]] = esi.service.req.to_client <@HostComms::@from_host>(["loopback_in"]) : !esi.channel<i32>
-# CHECK:         msft.output [[R0]] : !esi.channel<i32>
-# CHECK-LABEL: msft.module @Consumer {} (%clk: i1, %int_in: !esi.channel<i32>)
+# CHECK:         hw.output [[R0]] : !esi.channel<i32>
+# CHECK-LABEL: hw.module @Consumer(%clk: i1, %int_in: !esi.channel<i32>)
 # CHECK:         esi.service.req.to_server %int_in -> <@HostComms::@to_host>(["loopback_out"]) : !esi.channel<i32>
-# CHECK:         msft.output
+# CHECK:         hw.output
 # CHECK-LABEL: esi.service.decl @HostComms {
 # CHECK:         esi.service.to_server @to_host : !esi.channel<!esi.any>
 # CHECK:         esi.service.to_client @from_host : !esi.channel<!esi.any>
@@ -67,13 +67,13 @@ class LoopbackTop(Module):
     esi.Cosim(HostComms, ports.clk, ports.rst)
 
 
-# CHECK-LABEL: msft.module @LoopbackInOutTop {} (%clk: i1, %rst: i1)
+# CHECK-LABEL: hw.module @LoopbackInOutTop(%clk: i1, %rst: i1)
 # CHECK:         esi.service.instance svc @HostComms impl as "cosim"(%clk, %rst) : (i1, i1) -> ()
 # CHECK:         %0 = esi.service.req.inout %chanOutput -> <@HostComms::@req_resp>(["loopback_inout"]) : !esi.channel<i16> -> !esi.channel<i32>
 # CHECK:         %rawOutput, %valid = esi.unwrap.vr %0, %ready : i32
 # CHECK:         %1 = comb.extract %rawOutput from 0 : (i32) -> i16
 # CHECK:         %chanOutput, %ready = esi.wrap.vr %1, %valid : i16
-# CHECK:         msft.output
+# CHECK:         hw.output
 @unittestmodule(print=True)
 class LoopbackInOutTop(Module):
   clk = Clock(types.i1)
@@ -94,7 +94,7 @@ class LoopbackInOutTop(Module):
     loopback.assign(data_chan)
 
 
-# CHECK-LABEL:  esi.pure_module @LoopbackInOutPure {
+# CHECK-LABEL:  esi.pure_module @LoopbackInOutPure
 # CHECK:          [[r0:%.+]] = esi.service.req.to_client <@HostComms::@from_host>(["loopback_in"]) : !esi.channel<i16>
 # CHECK:          esi.service.req.to_server [[r0]] -> <@HostComms::@to_host>(["loopback"]) : !esi.channel<i16>
 @unittestmodule(print=True)
@@ -227,10 +227,10 @@ class PureTest(esi.PureModule):
     esi.PureModule.param("STR")
 
 
-# CHECK-LABEL:  msft.module @FIFOSignalingMod {} (%a: !esi.channel<i32, FIFO0>) -> (x: !esi.channel<i32, FIFO0>)
+# CHECK-LABEL:  hw.module @FIFOSignalingMod(%a: !esi.channel<i32, FIFO0>) -> (x: !esi.channel<i32, FIFO0>)
 # CHECK-NEXT:     %data, %empty = esi.unwrap.fifo %a, %rden : !esi.channel<i32, FIFO0>
 # CHECK-NEXT:     %chanOutput, %rden = esi.wrap.fifo %data, %empty : !esi.channel<i32, FIFO0>
-# CHECK-NEXT:     msft.output %chanOutput : !esi.channel<i32, FIFO0>
+# CHECK-NEXT:     hw.output %chanOutput : !esi.channel<i32, FIFO0>
 @unittestmodule(print=True)
 class FIFOSignalingMod(Module):
   a = InputChannel(Bits(32), ChannelSignaling.FIFO0)

@@ -26,7 +26,7 @@ sys = System([WireNames], output_directory=sys.argv[1])
 sys.generate()
 sys.run_passes()
 sys.print()
-# CHECK-LABEL:  hw.module @WireNames<__INST_HIER: none = "INSTANTIATE_WITH_INSTANCE_PATH">(%clk: i1, %data_in: !hw.array<3xi32>, %sel: i2) -> (a: i32, b: i32) {{.*}} {
+# CHECK-LABEL:  hw.module @WireNames(%clk: i1, %data_in: !hw.array<3xi32>, %sel: i2) -> (a: i32, b: i32) {{.*}} {
 # CHECK:    %foo__reg1 = sv.reg sym @foo__reg1 : !hw.inout<i32>
 # CHECK:    %foo__reg2 = sv.reg sym @foo__reg2 : !hw.inout<i32>
 # CHECK:    %{{.+}} = sv.read_inout %foo__reg2 : !hw.inout<i32>
