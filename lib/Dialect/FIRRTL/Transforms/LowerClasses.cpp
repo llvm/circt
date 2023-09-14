@@ -791,6 +791,8 @@ struct PathOpConversion : public OpConversionPattern<firrtl::PathOp> {
     if (!pathInfo) {
       if (op.getTargetKind() == firrtl::TargetKind::DontTouch)
         return emitError(op.getLoc(), "DontTouch target was deleted");
+      if (op.getTargetKind() == firrtl::TargetKind::Instance)
+        return emitError(op.getLoc(), "Instance target was deleted");
       auto pathAttr = om::PathAttr::get(StringAttr::get(context, "OMDeleted"));
       rewriter.replaceOpWithNewOp<om::ConstantOp>(op, pathAttr);
       return success();
@@ -807,6 +809,13 @@ struct PathOpConversion : public OpConversionPattern<firrtl::PathOp> {
       break;
     case firrtl::TargetKind::Reference:
       targetKind = om::TargetKind::Reference;
+      break;
+    case firrtl::TargetKind::Instance:
+      if (!isa<InstanceOp, FModuleLike>(pathInfo.op))
+        return emitError(op.getLoc(), "invalid target for instance path")
+                   .attachNote(pathInfo.op->getLoc())
+               << "target not instance or module";
+      targetKind = om::TargetKind::Instance;
       break;
     case firrtl::TargetKind::MemberInstance:
     case firrtl::TargetKind::MemberReference:

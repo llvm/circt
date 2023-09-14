@@ -235,8 +235,10 @@ firrtl.circuit "PathModule" {
 
     // CHECK: om.path member_instance [[INST_PATH]]
     // CHECK: om.path member_instance [[INST_PATH]]
+    // CHECK: om.path instance [[INST_PATH]]
     %instance_member_instance = firrtl.path member_instance distinct[4]<>
     %instance_member_reference = firrtl.path member_reference distinct[4]<>
+    %instance = firrtl.path instance distinct[4]<>
 
     // CHECK: om.path reference [[MODULE_PATH]]
     %module_path = firrtl.path reference distinct[5]<>
