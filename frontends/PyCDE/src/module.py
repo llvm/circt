@@ -626,7 +626,10 @@ def import_hw_module(hw_module: hw.HWModuleOp):
   """Import a CIRCT module into PyCDE. Returns a standard Module subclass which
   operates just like an external PyCDE module.
 
-  For now, the imported module name MUST NOT conflict with any other modules."""
+  For now, the imported module name MUST NOT conflict with any other modules.
+  
+  THIS IS BROKEN: https://github.com/llvm/circt/issues/6130"""
+  # TODO: fix me
 
   # Get the module name to use in the generated class and as the external name.
   name = ir.StringAttr(hw_module.name).value

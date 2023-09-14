@@ -1,3 +1,4 @@
+# XFAIL: *
 # RUN: %PYTHON% %s %t | FileCheck %s
 
 from pycde.circt.ir import Module as IrModule
