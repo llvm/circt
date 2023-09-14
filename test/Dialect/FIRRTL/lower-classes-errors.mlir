@@ -60,6 +60,17 @@ firrtl.circuit "PathDontTouchDeleted" {
 
 // -----
 
+firrtl.circuit "PathInstanceDeleted" {
+  firrtl.module @PathInstanceDeleted() {}
+  firrtl.class @Class() {
+    // expected-error @+2 {{Instance target was deleted}}
+    // expected-error @+1 {{failed to legalize operation 'firrtl.path' that was explicitly marked illegal}}
+    %0 = firrtl.path instance distinct[0]<>
+  }
+}
+
+// -----
+
 firrtl.circuit "NotInstance" {
   firrtl.module @NotInstance() {
     // expected-note @below {{target not instance or module}}
