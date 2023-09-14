@@ -338,4 +338,21 @@ def AnyCastOp : OMOp<"any_cast", [Pure]> {
      "$input attr-dict `:` functional-type($input, $result)";
 }
 
+def PathAppendOp : OMOp<"path_append", [Pure]> {
+  let summary = "Append two path value";
+  let description = [{
+    Appends the path to the root path. The root path must not have a component.
+    The appended path must begin where the root path ends.
+
+    Example:
+    ```mlir
+    %root = om.constant #om.path<"Foo/bar:Bar">
+    %path = om.constant #om.path<"Bar/baz:Baz>output">
+    %0 = om.path_append %root, %path
+    ```
+  }];
+  let arguments = (ins PathType:$root, PathType:$path);
+  let results = (outs PathType:$result);
+  let assemblyFormat = "$root `,` $path attr-dict";
+}
 #endif // CIRCT_DIALECT_OM_OMOPS_TD
