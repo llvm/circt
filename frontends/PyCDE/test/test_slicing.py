@@ -3,10 +3,10 @@
 from pycde import System, Input, Output, generator, Module
 from pycde.types import dim
 
-# CHECK-LABEL: msft.module @MyMod {} (%in_port: i8) -> (out0: i5, out1: i5) attributes {fileName = "MyMod.sv"} {
+# CHECK-LABEL: hw.module @MyMod(%in_port: i8) -> (out0: i5, out1: i5)
 # CHECK:         %0 = comb.extract %in_port from 3 {sv.namehint = "in_port_3upto8"} : (i8) -> i5
 # CHECK:         %1 = comb.extract %in_port from 0 {sv.namehint = "in_port_0upto5"} : (i8) -> i5
-# CHECK:         msft.output %0, %1 : i5, i5
+# CHECK:         hw.output %0, %1 : i5, i5
 # CHECK:       }
 
 

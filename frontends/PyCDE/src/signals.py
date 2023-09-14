@@ -134,9 +134,8 @@ class Signal:
     if hasattr(owner,
                "attributes") and self._namehint_attrname in owner.attributes:
       return ir.StringAttr(owner.attributes[self._namehint_attrname]).value
-    from .circt.dialects import msft
-    if isinstance(owner, ir.Block) and isinstance(owner.owner,
-                                                  msft.MSFTModuleOp):
+    from .circt.dialects import hw
+    if isinstance(owner, ir.Block) and isinstance(owner.owner, hw.HWModuleOp):
       block_arg = ir.BlockArgument(self.value)
       mod = owner.owner
       return ir.StringAttr(
@@ -248,7 +247,10 @@ class BitVectorSignal(Signal):
 
     if isinstance(self, targetValueType) and width == self.type.width:
       return self
-    return hwarith.CastOp(self.value, type_getter(width))
+    cast = hwarith.CastOp(self.value, type_getter(width))
+    if self.name is not None:
+      cast.name = self.name
+    return cast
 
   def as_bits(self, width: int = None):
     """

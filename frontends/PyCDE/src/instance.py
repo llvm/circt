@@ -125,7 +125,7 @@ class ModuleInstance(Instance):
     with self.root.system:
       circt_mod = self.tgt_mod.circt_mod
     if not isinstance(circt_mod,
-                      msft.MSFTModuleOp) or circt_mod.childAppIDBases is None:
+                      hw.HWModuleOp) or circt_mod.childAppIDBases is None:
       return
     for name in [n.value for n in circt_mod.childAppIDBases]:
       if hasattr(self, name):

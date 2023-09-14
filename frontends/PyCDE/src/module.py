@@ -12,7 +12,7 @@ from .signals import ClockSignal, Signal, _FromCirctValue
 from .types import ClockType
 
 from .circt import ir, support
-from .circt.dialects import hw, msft
+from .circt.dialects import hw
 from .circt.support import BackedgeBuilder, attribute_to_var
 
 import builtins
@@ -451,7 +451,7 @@ class ModuleBuilder(ModuleLikeBuilderBase):
       ptype = port_input_lookup[name]
       if isinstance(signal, Signal):
         # If the input is a signal, the types must match.
-        if signal.type != ptype:
+        if signal.type._type != ptype._type:
           raise ValueError(
               f"Wrong type on input signal '{name}'. Got '{signal.type}',"
               f" expected '{type}'")
