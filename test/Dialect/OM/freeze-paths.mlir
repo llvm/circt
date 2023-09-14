@@ -42,9 +42,12 @@ om.class @PathTest() {
   // CHECK: om.constant #om.path<"OMReferenceTarget:PathModule/child:Child>non_local"> : !om.path
   %7 = om.path reference @nla_5
 
+  // CHECK: om.constant #om.path<"OMInstanceTarget:PathModule/child:Child"> : !om.path
+  %8 = om.path instance @nla_3
+
   // CHECK: om.constant #om.path<"OMMemberInstanceTarget:PathModule/child:Child"> : !om.path
-  %8 = om.path member_instance @nla_3
+  %9 = om.path member_instance @nla_3
 
   // CHECK: om.constant #om.path<"OMReferenceTarget:PathModule/child:Child"> : !om.path
-  %9 = om.path reference @nla_4
+  %10 = om.path reference @nla_4
 }

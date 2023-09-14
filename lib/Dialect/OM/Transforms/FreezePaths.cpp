@@ -68,6 +68,9 @@ LogicalResult PathVisitor::processPath(PathOp path) {
   case TargetKind::DontTouch:
     targetKind = "OMDontTouchedReferenceTarget";
     break;
+  case TargetKind::Instance:
+    targetKind = "OMInstanceTarget";
+    break;
   case TargetKind::Reference:
     targetKind = "OMReferenceTarget";
     break;
