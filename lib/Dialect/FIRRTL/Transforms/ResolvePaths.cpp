@@ -109,6 +109,8 @@ struct PathResolver {
     TargetKind targetKind;
     if (target.consume_front("OMDontTouchedReferenceTarget")) {
       targetKind = TargetKind::DontTouch;
+    } else if (target.consume_front("OMInstanceTarget")) {
+      targetKind = TargetKind::Instance;
     } else if (target.consume_front("OMMemberInstanceTarget")) {
       targetKind = TargetKind::MemberInstance;
     } else if (target.consume_front("OMMemberReferenceTarget")) {
