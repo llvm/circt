@@ -193,13 +193,13 @@ def ReturnOp : IbisOp<"return", [
   ];
 }
 
-def BlockOp : IbisOp<"block", [
+def StaticBlockOp : IbisOp<"sblock", [
   SingleBlockImplicitTerminator<"BlockReturnOp">,
   AutomaticAllocationScope
 ]> {
   let summary = "Ibis block";
   let description = [{
-    The `ibis.block` operation defines a block wherein a group of operations
+    The `ibis.sblock` operation defines a block wherein a group of operations
     are expected to be statically scheduleable.
     The operation is not isolated from above to facilitate ease of construction.
     However, once a program has been constructed and lowered to a sufficient
@@ -239,9 +239,9 @@ def BlockOp : IbisOp<"block", [
   ];
 }
 
-def BlockReturnOp : IbisOp<"block.return", [
-  Pure, ReturnLike, Terminator, HasParent<"BlockOp">]> {
-  let summary = "Ibis block terminator";
+def BlockReturnOp : IbisOp<"sblock.return", [
+  Pure, ReturnLike, Terminator, HasParent<"StaticBlockOp">]> {
+  let summary = "Ibis static block terminator";
 
   let arguments = (ins Variadic<AnyType>:$retValues);
   let assemblyFormat = "($retValues^)? attr-dict (`:` type($retValues)^)?";

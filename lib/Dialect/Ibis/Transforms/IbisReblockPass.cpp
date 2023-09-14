@@ -35,7 +35,7 @@ void ReblockPass::runOnOperation() {
   auto &region = parent.getRegion();
   // Fetch the 'ibis.blockinfo' attribute from the parent operation. This will
   // contain information tagged to each MLIR block which needs to be propagated
-  // to the corresponding ibis.block operations.
+  // to the corresponding ibis.sblock operations.
   auto blockInfoAttr = parent->getAttrOfType<DictionaryAttr>("ibis.blockinfo");
 
   if (!blockInfoAttr) {
@@ -121,9 +121,9 @@ LogicalResult ReblockPass::reblock(mlir::Block &block,
     block.getParentOp()->emitError("missing 'loc' attribute for block");
     return failure();
   }
-  auto ibisBlock = b.create<BlockOp>(loc, blockRetTypes, ValueRange{});
+  auto ibisBlock = b.create<StaticBlockOp>(loc, blockRetTypes, ValueRange{});
 
-  // Move operations into the `ibis.block` op.
+  // Move operations into the `ibis.sblock` op.
   BlockReturnOp blockReturn =
       cast<BlockReturnOp>(ibisBlock.getBodyBlock()->getTerminator());
 

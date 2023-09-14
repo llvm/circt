@@ -144,8 +144,8 @@ ibis.class @InvalidReturn {
   %this = ibis.this @InvalidReturn
   ibis.method @foo() {
     %c = hw.constant 1 : i32
-    // expected-error @+1 {{'ibis.block.return' op number of operands must match number of block outputs}}
-    %ret = ibis.block() -> i32 {
+    // expected-error @+1 {{'ibis.sblock.return' op number of operands must match number of block outputs}}
+    %ret = ibis.sblock() -> i32 {
     }
     ibis.return
   }

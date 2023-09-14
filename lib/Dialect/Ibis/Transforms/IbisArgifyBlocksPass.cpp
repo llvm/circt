@@ -26,7 +26,7 @@ using ValueMapping = llvm::MapVector<Value, llvm::SmallVector<OpOperand *>>;
 
 // Returns a map of values to op operands, of values that are defined
 // outside of the block op.
-static void getExternallyDefinedOperands(BlockOp blockOp,
+static void getExternallyDefinedOperands(StaticBlockOp blockOp,
                                          ValueMapping &mapping) {
   Block *blockBodyBlock = blockOp.getBodyBlock();
   for (Operation &op : *blockBodyBlock) {
@@ -38,11 +38,11 @@ static void getExternallyDefinedOperands(BlockOp blockOp,
   }
 }
 
-struct BlockConversionPattern : public OpConversionPattern<BlockOp> {
-  using OpConversionPattern<BlockOp>::OpConversionPattern;
+struct BlockConversionPattern : public OpConversionPattern<StaticBlockOp> {
+  using OpConversionPattern<StaticBlockOp>::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(BlockOp blockOp, OpAdaptor adaptor,
+  matchAndRewrite(StaticBlockOp blockOp, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     ValueMapping mapping;
     getExternallyDefinedOperands(blockOp, mapping);
@@ -71,7 +71,7 @@ struct ArgifyBlocksPass : public IbisArgifyBlocksBase<ArgifyBlocksPass> {
 void ArgifyBlocksPass::runOnOperation() {
   auto *ctx = &getContext();
   ConversionTarget target(*ctx);
-  target.addDynamicallyLegalOp<BlockOp>([](BlockOp op) {
+  target.addDynamicallyLegalOp<StaticBlockOp>([](StaticBlockOp op) {
     ValueMapping mapping;
     getExternallyDefinedOperands(op, mapping);
     return mapping.empty();

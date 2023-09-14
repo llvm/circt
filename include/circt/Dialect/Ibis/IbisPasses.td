@@ -89,16 +89,16 @@ def IbisContainersToHW : Pass<"ibis-convert-containers-to-hw", "mlir::ModuleOp">
 def IbisArgifyBlocks : Pass<"ibis-argify-blocks"> {
   let summary = "Add arguments to ibis blocks";
   let description = [{
-    Analyses `ibis.block` operations and converts any SSA value defined outside
-    the `ibis.block` to a block argument.
+    Analyses `ibis.sblock` operations and converts any SSA value defined outside
+    the `ibis.sblock` to a block argument.
   }];
   let constructor = "circt::ibis::createArgifyBlocksPass()";
 }
 
 def IbisReblock : Pass<"ibis-reblock", "ibis::MethodOp"> {
-  let summary = "Recreates `ibis.block` operations from a CFG";
+  let summary = "Recreates `ibis.sblock` operations from a CFG";
   let description = [{
-    Recreates `ibis.block` operations from a CFG. Any `ibis.block.attributes`
+    Recreates `ibis.sblock` operations from a CFG. Any `ibis.block.attributes`
     operations at the parent operation will be added to the resulting blocks.
 
     The IR is expected to be in maximal SSA form prior to this pass, given that
@@ -122,10 +122,10 @@ def IbisReblock : Pass<"ibis-reblock", "ibis::MethodOp"> {
     becomes
     ```mlir
     ^bb_foo(%arg0 : i32, %arg1 : i32):
-      %v_outer = ibis.block(%a0 : i32 = %arg0, %a1 : i32 = %arg1) -> (i32) {
+      %v_outer = ibis.sblock(%a0 : i32 = %arg0, %a1 : i32 = %arg1) -> (i32) {
         %res = arith.addi %arg0, %arg1 : i32
         %v = ...
-        ibis.block.return %v : i32
+        ibis.sblock.return %v : i32
       }
       cf.br ^bb_bar(%v_outer : i32)
     ```
