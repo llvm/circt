@@ -36,16 +36,16 @@ with Context() as ctx, Location.unknown():
       %2 = om.object @Nest(%list_child) : (!om.list<!om.class.type<@Child>>) -> !om.class.type<@Nest>
       om.class.field @nest, %2 : !om.class.type<@Nest>
 
-      %3 = om.constant #om.map<i64, {a = 42, b = 32}> : !om.map<!om.string, i64>
-      om.class.field @map, %3 : !om.map<!om.string, i64>
+      %3 = om.constant #om.map<!om.integer, {a = #om.integer<42>, b = #om.integer<32>}> : !om.map<!om.string, !om.integer>
+      om.class.field @map, %3 : !om.map<!om.string, !om.integer>
 
       %x = om.constant "X" : !om.string
       %y = om.constant "Y" : !om.string
-      %entry1 = om.tuple_create %x, %c_14: !om.string, i64
-      %entry2 = om.tuple_create %y, %c_15: !om.string, i64
+      %entry1 = om.tuple_create %x, %c_14: !om.string, !om.integer
+      %entry2 = om.tuple_create %y, %c_15: !om.string, !om.integer
 
-      %map = om.map_create %entry1, %entry2: !om.string, i64
-      om.class.field @map_create, %map : !om.map<!om.string, i64>
+      %map = om.map_create %entry1, %entry2: !om.string, !om.integer
+      om.class.field @map_create, %map : !om.map<!om.string, !om.integer>
     }
 
     om.class @Child(%0: !om.integer) {

@@ -205,10 +205,11 @@ TEST(EvaluatorTests, InstantiateObjectWithParamField) {
 
   Evaluator evaluator(mod);
 
-  auto result =
-      evaluator.instantiate(builder.getStringAttr("MyClass"),
-                            getEvaluatorValuesFromAttributes(
-                                &context, {builder.getI32IntegerAttr(42)}));
+  auto result = evaluator.instantiate(
+      builder.getStringAttr("MyClass"),
+      getEvaluatorValuesFromAttributes(
+          &context, {circt::om::IntegerAttr::get(
+                        &context, builder.getI32IntegerAttr(42))}));
 
   ASSERT_TRUE(succeeded(result));
 
@@ -501,7 +502,7 @@ TEST(EvaluatorTests, AnyCastParam) {
   auto *innerFieldValue = llvm::cast<evaluator::AttributeValue>(
       fieldValue->getField(builder.getStringAttr("field")).value().get());
 
-  ASSERT_EQ(innerFieldValue->getAs<IntegerAttr>().getValue(), 42);
+  ASSERT_EQ(innerFieldValue->getAs<mlir::IntegerAttr>().getValue(), 42);
 }
 
 } // namespace
