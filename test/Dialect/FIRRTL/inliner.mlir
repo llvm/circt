@@ -827,66 +827,80 @@ firrtl.circuit "CollidingSymbolsMultiInline" {
 // -----
 
 // Test proper hierarchical inlining of RefType
-// CHECK-LABEL: firrtl.circuit "Top" {
-firrtl.circuit "Top" {
+// CHECK-LABEL: firrtl.circuit "HierarchicalRefType" {
+firrtl.circuit "HierarchicalRefType" {
   firrtl.module @XmrSrcMod(out %_a: !firrtl.probe<uint<1>>) attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     %1 = firrtl.ref.send %zero : !firrtl.uint<1>
     firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
   }
+  // CHECK: module @Bar(
   firrtl.module @Bar(out %_a: !firrtl.probe<uint<1>>) attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
     %xmr   = firrtl.instance bar sym @barXMR @XmrSrcMod(out _a: !firrtl.probe<uint<1>>)
     firrtl.ref.define %_a, %xmr   : !firrtl.probe<uint<1>>
-    // CHECK:  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    // CHECK:  %0 = firrtl.ref.send %c0_ui1 : !firrtl.uint<1>
-    // CHECK:  firrtl.ref.define %_a, %0 : !firrtl.probe<uint<1>>
+    // CHECK:      %bar__a = firrtl.wire : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    // CHECK-NEXT: %0 = firrtl.ref.send %c0_ui1 : !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.ref.define %bar__a, %0 : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: firrtl.ref.define %_a, %bar__a : !firrtl.probe<uint<1>>
   }
-  firrtl.module @Top() {
+  // CHECK: module @HierarchicalRefType(
+  firrtl.module @HierarchicalRefType() {
     %bar_a = firrtl.instance bar sym @bar  @Bar(out _a: !firrtl.probe<uint<1>>)
     %a = firrtl.wire : !firrtl.uint<1>
     %0 = firrtl.ref.resolve %bar_a : !firrtl.probe<uint<1>>
     firrtl.strictconnect %a, %0 : !firrtl.uint<1>
-    // CHECK:  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    // CHECK:  %0 = firrtl.ref.send %c0_ui1 : !firrtl.uint<1>
-    // CHECK:  %a = firrtl.wire   : !firrtl.uint<1>
-    // CHECK:  %1 = firrtl.ref.resolve %0 : !firrtl.probe<uint<1>>
-    // CHECK:  firrtl.strictconnect %a, %1 : !firrtl.uint<1>
+    // CHECK:       %bar__a = firrtl.wire : !firrtl.probe<uint<1>>
+    // CHECK-NEXT:  %bar_bar__a = firrtl.wire : !firrtl.probe<uint<1>>
+    // CHECK-NEXT:  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    // CHECK-NEXT:  %0 = firrtl.ref.send %c0_ui1 : !firrtl.uint<1>
+    // CHECK-NEXT:  firrtl.ref.define %bar_bar__a, %0 : !firrtl.probe<uint<1>>
+    // CHECK-NEXT:  firrtl.ref.define %bar__a, %bar_bar__a : !firrtl.probe<uint<1>>
+    // CHECK-NEXT:  %a = firrtl.wire : !firrtl.uint<1>
+    // CHECK-NEXT:  %1 = firrtl.ref.resolve %bar__a : !firrtl.probe<uint<1>>
+    // CHECK-NEXT:  firrtl.strictconnect %a, %1 : !firrtl.uint<1>
   }
 }
 
 // -----
 
 // Test proper inlining of RefSend to Ports of RefType
-// CHECK-LABEL: firrtl.circuit "Top" {
-firrtl.circuit "Top" {
+// CHECK-LABEL: firrtl.circuit "InlineRefSend" {
+firrtl.circuit "InlineRefSend" {
   firrtl.module @XmrSrcMod(in %pa: !firrtl.uint<1>, out %_a: !firrtl.probe<uint<1>>) attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
     %1 = firrtl.ref.send %pa : !firrtl.uint<1>
     firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
   }
   firrtl.module @Bar(out %_a: !firrtl.probe<uint<1>>)  attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
     %pa, %xmr   = firrtl.instance bar sym @barXMR @XmrSrcMod(in pa: !firrtl.uint<1>, out _a: !firrtl.probe<uint<1>>)
-    // CHECK:  %bar_pa = firrtl.wire   : !firrtl.uint<1>
-    // CHECK:  %0 = firrtl.ref.send %bar_pa : !firrtl.uint<1>
-    // CHECK:  firrtl.ref.define %_a, %0 : !firrtl.probe<uint<1>>
+    // CHECK:      %bar_pa = firrtl.wire : !firrtl.uint<1>
+    // CHECK-NEXT: %bar__a = firrtl.wire : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: %0 = firrtl.ref.send %bar_pa : !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.ref.define %bar__a, %0 : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: firrtl.ref.define %_a, %bar__a : !firrtl.probe<uint<1>>
     firrtl.ref.define %_a, %xmr   : !firrtl.probe<uint<1>>
   }
-  firrtl.module @Top() {
+  firrtl.module @InlineRefSend() {
     %bar_a = firrtl.instance bar sym @bar  @Bar(out _a: !firrtl.probe<uint<1>>)
     %a = firrtl.wire : !firrtl.uint<1>
     %0 = firrtl.ref.resolve %bar_a : !firrtl.probe<uint<1>>
     firrtl.strictconnect %a, %0 : !firrtl.uint<1>
-    // CHECK:  %bar_bar_pa = firrtl.wire   : !firrtl.uint<1>
-    // CHECK:  %0 = firrtl.ref.send %bar_bar_pa : !firrtl.uint<1>
-    // CHECK:  %a = firrtl.wire   : !firrtl.uint<1>
-    // CHECK:  %1 = firrtl.ref.resolve %0 : !firrtl.probe<uint<1>>
+    // CHECK:      %bar__a = firrtl.wire : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: %bar_bar_pa = firrtl.wire : !firrtl.uint<1>
+    // CHECK-NEXT: %bar_bar__a = firrtl.wire : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: %0 = firrtl.ref.send %bar_bar_pa : !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.ref.define %bar_bar__a, %0 : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: firrtl.ref.define %bar__a, %bar_bar__a : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: %a = firrtl.wire : !firrtl.uint<1>
+    // CHECK-NEXT: %1 = firrtl.ref.resolve %bar__a : !firrtl.probe<uint<1>>
   }
 }
 
 // -----
 
 // Test for multiple readers and multiple instances of RefType
-// CHECK-LABEL: firrtl.circuit "Top" {
-firrtl.circuit "Top" {
+// CHECK-LABEL: firrtl.circuit "MultReadInstRefType" {
+firrtl.circuit "MultReadInstRefType" {
   firrtl.module @XmrSrcMod(out %_a: !firrtl.probe<uint<1>>) {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     %1 = firrtl.ref.send %zero : !firrtl.uint<1>
@@ -906,31 +920,44 @@ firrtl.circuit "Top" {
     %a = firrtl.wire : !firrtl.uint<1>
     firrtl.strictconnect %a, %0 : !firrtl.uint<1>
   }
-  firrtl.module @Top() attributes {annotations = [{class = "firrtl.transforms.FlattenAnnotation"}]}{
+  firrtl.module @MultReadInstRefType() attributes {annotations = [{class = "firrtl.transforms.FlattenAnnotation"}]}{
     %bar_a = firrtl.instance bar sym @bar  @Bar(out _a: !firrtl.probe<uint<1>>)
-    // CHECK:  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    // CHECK:  %0 = firrtl.ref.send %c0_ui1 : !firrtl.uint<1>
-    // CHECK:  %1 = firrtl.ref.resolve %0 : !firrtl.probe<uint<1>>
-    // CHECK:  %bar_a = firrtl.wire   : !firrtl.uint<1>
-    // CHECK:  firrtl.strictconnect %bar_a, %1 : !firrtl.uint<1>
+    // CHECK:      %bar__a = firrtl.wire : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: %bar_bar__a = firrtl.wire : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    // CHECK-NEXT: %0 = firrtl.ref.send %c0_ui1 : !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.ref.define %bar_bar__a, %0 : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: firrtl.ref.define %bar__a, %bar_bar__a : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: %1 = firrtl.ref.resolve %bar_bar__a : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: %bar_a = firrtl.wire : !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.strictconnect %bar_a, %1 : !firrtl.uint<1>
     %foo_a = firrtl.instance foo sym @foo @Foo(out _a: !firrtl.probe<uint<1>>)
-    // CHECK:  %c0_ui1_0 = firrtl.constant 0 : !firrtl.uint<1>
-    // CHECK:  %2 = firrtl.ref.send %c0_ui1_0 : !firrtl.uint<1>
-    // CHECK:  %3 = firrtl.ref.resolve %2 : !firrtl.probe<uint<1>>
-    // CHECK:  %foo_a = firrtl.wire   : !firrtl.uint<1>
-    // CHECK:  firrtl.strictconnect %foo_a, %3 : !firrtl.uint<1>
+    // CHECK-NEXT: %foo__a = firrtl.wire : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: %foo_bar__a = firrtl.wire : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: %c0_ui1_0 = firrtl.constant 0 : !firrtl.uint<1>
+    // CHECK-NEXT: %2 = firrtl.ref.send %c0_ui1_0 : !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.ref.define %foo_bar__a, %2 : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: firrtl.ref.define %foo__a, %foo_bar__a : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: %3 = firrtl.ref.resolve %foo_bar__a : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: %foo_a = firrtl.wire : !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.strictconnect %foo_a, %3 : !firrtl.uint<1>
     %xmr_a = firrtl.instance xmr sym @xmr @XmrSrcMod(out _a: !firrtl.probe<uint<1>>)
-    // CHECK:  %c0_ui1_1 = firrtl.constant 0 : !firrtl.uint<1>
-    // CHECK:  %4 = firrtl.ref.send %c0_ui1_1 : !firrtl.uint<1>
+    // CHECK-NEXT: %xmr__a = firrtl.wire : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: %c0_ui1_1 = firrtl.constant 0 : !firrtl.uint<1>
+    // CHECK-NEXT: %4 = firrtl.ref.send %c0_ui1_1 : !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.ref.define %xmr__a, %4 : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: %a = firrtl.wire : !firrtl.uint<1>
+    // CHECK-NEXT: %b = firrtl.wire : !firrtl.uint<1>
+    // CHECK-NEXT: %c = firrtl.wire : !firrtl.uint<1>
     %a = firrtl.wire : !firrtl.uint<1>
     %b = firrtl.wire : !firrtl.uint<1>
     %c = firrtl.wire : !firrtl.uint<1>
     %0 = firrtl.ref.resolve %bar_a : !firrtl.probe<uint<1>>
     %1 = firrtl.ref.resolve %foo_a : !firrtl.probe<uint<1>>
     %2 = firrtl.ref.resolve %xmr_a : !firrtl.probe<uint<1>>
-    // CHECK:  %5 = firrtl.ref.resolve %0 : !firrtl.probe<uint<1>>
-    // CHECK:  %6 = firrtl.ref.resolve %2 : !firrtl.probe<uint<1>>
-    // CHECK:  %7 = firrtl.ref.resolve %4 : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: %5 = firrtl.ref.resolve %bar__a : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: %6 = firrtl.ref.resolve %foo__a : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: %7 = firrtl.ref.resolve %xmr__a : !firrtl.probe<uint<1>>
     firrtl.strictconnect %a, %0 : !firrtl.uint<1>
     firrtl.strictconnect %b, %1 : !firrtl.uint<1>
     firrtl.strictconnect %c, %2 : !firrtl.uint<1>
@@ -943,24 +970,28 @@ firrtl.circuit "Top" {
 // -----
 
 // Test for inlining module with RefType input port.
-// CHECK-LABEL: firrtl.circuit "Top" {
-firrtl.circuit "Top" {
+// CHECK-LABEL: firrtl.circuit "InlineInputProbe" {
+firrtl.circuit "InlineInputProbe" {
   firrtl.module @XmrSrcMod(out %_a: !firrtl.probe<uint<1>>) {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     %1 = firrtl.ref.send %zero : !firrtl.uint<1>
     firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
   }
-  firrtl.module @Top() {
+  // CHECK: module @InlineInputProbe
+  firrtl.module @InlineInputProbe() {
     %xmr = firrtl.instance xmr sym @TopXMR @XmrSrcMod(out _a: !firrtl.probe<uint<1>>)
     %a = firrtl.wire : !firrtl.uint<1>
     %0 = firrtl.ref.resolve %xmr : !firrtl.probe<uint<1>>
     firrtl.strictconnect %a, %0 : !firrtl.uint<1>
     %c_a = firrtl.instance child @Child(in  _a: !firrtl.probe<uint<1>>)
     firrtl.ref.define %c_a, %xmr : !firrtl.probe<uint<1>>
-    // CHECK:  %1 = firrtl.ref.resolve %xmr__a : !firrtl.probe<uint<1>>
-    // CHECK:  %child_child__a = firrtl.instance child_child  @Child2(in _a: !firrtl.probe<uint<1>>)
-    // CHECK:  firrtl.ref.define %child_child__a, %xmr__a : !firrtl.probe<uint<1>>
+    // CHECK:      %child__a = firrtl.wire : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: %1 = firrtl.ref.resolve %child__a : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: %child_child__a = firrtl.instance child_child @Child2(in _a: !firrtl.probe<uint<1>>)
+    // CHECK-NEXT: firrtl.ref.define %child_child__a, %child__a : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: firrtl.ref.define %child__a, %xmr__a : !firrtl.probe<uint<1>>
   }
+  // CHECK: module @Child
   firrtl.module @Child(in  %_a: !firrtl.probe<uint<1>>)  attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
     %0 = firrtl.ref.resolve %_a : !firrtl.probe<uint<1>>
     %c_a = firrtl.instance child @Child2(in  _a: !firrtl.probe<uint<1>>)
@@ -974,23 +1005,29 @@ firrtl.circuit "Top" {
 // -----
 
 // Test for inlining module with RefType input port.
-// CHECK-LABEL: firrtl.circuit "Top" {
-firrtl.circuit "Top" {
+// CHECK-LABEL: firrtl.circuit "InlineInputProbe2" {
+firrtl.circuit "InlineInputProbe2" {
   firrtl.module @XmrSrcMod(out %_a: !firrtl.probe<uint<1>>) {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     %1 = firrtl.ref.send %zero : !firrtl.uint<1>
     firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
   }
-  firrtl.module @Top() {
+  // CHECK: module @InlineInputProbe2
+  firrtl.module @InlineInputProbe2() {
     %xmr = firrtl.instance xmr sym @TopXMR @XmrSrcMod(out _a: !firrtl.probe<uint<1>>)
     %a = firrtl.wire : !firrtl.uint<1>
     %0 = firrtl.ref.resolve %xmr : !firrtl.probe<uint<1>>
     firrtl.strictconnect %a, %0 : !firrtl.uint<1>
     %c_a = firrtl.instance child @Child(in  _a: !firrtl.probe<uint<1>>)
     firrtl.ref.define %c_a, %xmr : !firrtl.probe<uint<1>>
-    // CHECK:  %1 = firrtl.ref.resolve %xmr__a : !firrtl.probe<uint<1>>
-    // CHECK:  %2 = firrtl.ref.resolve %xmr__a : !firrtl.probe<uint<1>>
+    // CHECK:      %child__a = firrtl.wire : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: %1 = firrtl.ref.resolve %child__a : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: %child_child__a = firrtl.wire : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: %2 = firrtl.ref.resolve %child_child__a : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: firrtl.ref.define %child_child__a, %child__a : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: firrtl.ref.define %child__a, %xmr__a : !firrtl.probe<uint<1>>
   }
+  // CHECK: module @Child
   firrtl.module @Child(in  %_a: !firrtl.probe<uint<1>>)  attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
     %0 = firrtl.ref.resolve %_a : !firrtl.probe<uint<1>>
     %c_a = firrtl.instance child @Child2(in  _a: !firrtl.probe<uint<1>>)
@@ -1004,30 +1041,48 @@ firrtl.circuit "Top" {
 // -----
 
 // Test for recursive inlining of modules with RefType input port.
-// CHECK-LABEL: firrtl.circuit "Top" {
-firrtl.circuit "Top" {
+// CHECK-LABEL: firrtl.circuit "RecursiveInlineInputProbe" {
+firrtl.circuit "RecursiveInlineInputProbe" {
   firrtl.module @XmrSrcMod(out %_a: !firrtl.probe<uint<1>>) {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     %1 = firrtl.ref.send %zero : !firrtl.uint<1>
     firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
   }
-  firrtl.module @Top() {
+  // CHECK: module @RecursiveInlineInputProbe
+  firrtl.module @RecursiveInlineInputProbe() {
     %xmr = firrtl.instance xmr sym @TopXMR @XmrSrcMod(out _a: !firrtl.probe<uint<1>>)
     %a = firrtl.wire : !firrtl.uint<1>
     %xmr2 = firrtl.ref.send %a : !firrtl.uint<1>
     %c_a1, %c_a2  = firrtl.instance child @Child(in  _a1: !firrtl.probe<uint<1>>, in  _a2: !firrtl.probe<uint<1>>)
     firrtl.ref.define %c_a1, %xmr : !firrtl.probe<uint<1>>
     firrtl.ref.define %c_a2, %xmr2 : !firrtl.probe<uint<1>>
-    // CHECK:  %1 = firrtl.ref.resolve %xmr__a : !firrtl.probe<uint<1>>
-    // CHECK:  %2 = firrtl.ref.resolve %xmr__a : !firrtl.probe<uint<1>>
-    // CHECK:  %3 = firrtl.ref.resolve %0 : !firrtl.probe<uint<1>>
-    // CHECK:  %child_cw = firrtl.wire   : !firrtl.uint<1>
-    // CHECK:  firrtl.strictconnect %child_cw, %3 : !firrtl.uint<1>
+    // CHECK:      %child__a1 = firrtl.wire : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: %child__a2 = firrtl.wire : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: %child_child__a = firrtl.wire : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: %1 = firrtl.ref.resolve %child_child__a : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: %child_child_child__b = firrtl.wire : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: %2 = firrtl.ref.resolve %child_child_child__b : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: firrtl.ref.define %child_child_child__b, %child_child__a : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: firrtl.ref.define %child_child__a, %child__a1 : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: %3 = firrtl.ref.resolve %child__a2 : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: %child_cw = firrtl.wire : !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.strictconnect %child_cw, %3 : !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.ref.define %child__a1, %xmr__a : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: firrtl.ref.define %child__a2, %0 : !firrtl.probe<uint<1>>
   }
+  // CHECK: module @Child
   firrtl.module @Child(in  %_a1: !firrtl.probe<uint<1>>, in  %_a2: !firrtl.probe<uint<1>>)  attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
     %c_a = firrtl.instance child @Child2(in  _a: !firrtl.probe<uint<1>>)
-    // CHECK:  %0 = firrtl.ref.resolve %_a1 : !firrtl.probe<uint<1>>
-    // CHECK:  %1 = firrtl.ref.resolve %_a1 : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: %child__a = firrtl.wire : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: %0 = firrtl.ref.resolve %child__a : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: %child_child__b = firrtl.wire : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: %1 = firrtl.ref.resolve %child_child__b : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: firrtl.ref.define %child_child__b, %child__a : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: firrtl.ref.define %child__a, %_a1 : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: %2 = firrtl.ref.resolve %_a2 : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: %cw = firrtl.wire : !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.strictconnect %cw, %2 : !firrtl.uint<1>
+    // CHECK-NEXT: }
     firrtl.ref.define %c_a, %_a1 : !firrtl.probe<uint<1>>
     %0 = firrtl.ref.resolve %_a2 : !firrtl.probe<uint<1>>
     %cw = firrtl.wire : !firrtl.uint<1>
@@ -1045,32 +1100,44 @@ firrtl.circuit "Top" {
 
 // -----
 
-// Test for flatten annotation, and remove unused port wires
-// CHECK-LABEL: firrtl.circuit "Top"
-firrtl.circuit "Top" {
+// Test for flatten annotation and wires.
+// CHECK-LABEL: firrtl.circuit "FlattenProbe"
+firrtl.circuit "FlattenProbe" {
   firrtl.module @XmrSrcMod(out %_a: !firrtl.probe<uint<1>>) {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     %1 = firrtl.ref.send %zero : !firrtl.uint<1>
     firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
   }
-  firrtl.module @Top() attributes {annotations = [{class = "firrtl.transforms.FlattenAnnotation"}]}{
+  // CHECK: module @FlattenProbe
+  firrtl.module @FlattenProbe() attributes {annotations = [{class = "firrtl.transforms.FlattenAnnotation"}]}{
     %xmr = firrtl.instance xmr sym @TopXMR @XmrSrcMod(out _a: !firrtl.probe<uint<1>>)
-    // CHECK:  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    // CHECK:  %0 = firrtl.ref.send %c0_ui1 : !firrtl.uint<1>
+    // CHECK-NEXT: %xmr__a = firrtl.wire : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    // CHECK-NEXT: %0 = firrtl.ref.send %c0_ui1 : !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.ref.define %xmr__a, %0 : !firrtl.probe<uint<1>>
     %a = firrtl.wire : !firrtl.uint<1>
     %xmr2 = firrtl.ref.send %a : !firrtl.uint<1>
     %0 = firrtl.ref.resolve %xmr : !firrtl.probe<uint<1>>
-    // CHECK:  %2 = firrtl.ref.resolve %0 : !firrtl.probe<uint<1>>
+    // CHECK:      %2 = firrtl.ref.resolve %xmr__a : !firrtl.probe<uint<1>>
     firrtl.strictconnect %a, %0 : !firrtl.uint<1>
     %c_a1, %c_a2  = firrtl.instance child @Child(in  _a1: !firrtl.probe<uint<1>>, in  _a2: !firrtl.probe<uint<1>>)
-    // CHECK:  %3 = firrtl.ref.resolve %0 : !firrtl.probe<uint<1>>
-    // CHECK:  %4 = firrtl.ref.resolve %0 : !firrtl.probe<uint<1>>
-    // CHECK:  %5 = firrtl.ref.resolve %1 : !firrtl.probe<uint<1>>
-    // CHECK:  %child_cw = firrtl.wire   : !firrtl.uint<1>
-    // CHECK:  firrtl.strictconnect %child_cw, %5 : !firrtl.uint<1>
+    // CHECK:      %child__a1 = firrtl.wire : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: %child__a2 = firrtl.wire : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: %child_child__a = firrtl.wire : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: %3 = firrtl.ref.resolve %child_child__a : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: %child_child_child__b = firrtl.wire : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: %4 = firrtl.ref.resolve %child_child_child__b : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: firrtl.ref.define %child_child_child__b, %child_child__a : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: firrtl.ref.define %child_child__a, %child__a1 : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: %5 = firrtl.ref.resolve %child__a2 : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: %child_cw = firrtl.wire : !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.strictconnect %child_cw, %5 : !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.ref.define %child__a1, %xmr__a : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: firrtl.ref.define %child__a2, %1 : !firrtl.probe<uint<1>>
     firrtl.ref.define %c_a1, %xmr : !firrtl.probe<uint<1>>
     firrtl.ref.define %c_a2, %xmr2 : !firrtl.probe<uint<1>>
   }
+  // CHECK: module @Child
   firrtl.module @Child(in  %_a1: !firrtl.probe<uint<1>>, in  %_a2: !firrtl.probe<uint<1>>)  {
     %c_a = firrtl.instance child @Child2(in  _a: !firrtl.probe<uint<1>>)
     firrtl.ref.define %c_a, %_a1 : !firrtl.probe<uint<1>>
@@ -1091,13 +1158,18 @@ firrtl.circuit "Top" {
 // -----
 
 // Test for U-Turn in ref ports. The inlined module defines and uses the RefPort.
-// CHECK-LABEL: firrtl.circuit "Top"
-firrtl.circuit "Top" {
-  firrtl.module @Top() {
+// CHECK-LABEL: firrtl.circuit "UTurn"
+firrtl.circuit "UTurn" {
+  // CHECK: module @UTurn
+  firrtl.module @UTurn() {
     %c_a, %c_o = firrtl.instance child @Child(in  _a: !firrtl.probe<uint<1>>, out  o_a: !firrtl.probe<uint<1>>)
     firrtl.ref.define %c_a, %c_o : !firrtl.probe<uint<1>>
-    // CHECK:  %child_bar__a = firrtl.instance child_bar sym @bar  @Bar(out _a: !firrtl.probe<uint<1>>)
-    // CHECK:  %0 = firrtl.ref.resolve %child_bar__a : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: %child__a = firrtl.wire : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: %child_o_a = firrtl.wire : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: %0 = firrtl.ref.resolve %child__a : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: %child_bar__a = firrtl.instance child_bar sym @bar @Bar(out _a: !firrtl.probe<uint<1>>)
+    // CHECK-NEXT: firrtl.ref.define %child_o_a, %child_bar__a : !firrtl.probe<uint<1>>
+    // CHECK-NEXT: firrtl.ref.define %child__a, %child_o_a : !firrtl.probe<uint<1>>
   }
   firrtl.module @Child(in  %_a: !firrtl.probe<uint<1>>, out  %o_a: !firrtl.probe<uint<1>>)   attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
     %0 = firrtl.ref.resolve %_a : !firrtl.probe<uint<1>>
@@ -1210,10 +1282,15 @@ firrtl.circuit "RWProbePort" {
                              in %in_1: !firrtl.uint<1>,
                              out %p_0: !firrtl.rwprobe<uint<1>>,
                              out %p_1: !firrtl.rwprobe<uint<1>>) attributes {convention = #firrtl<convention scalarized>} {
+
     // CHECK-NEXT: %[[C1_IN:.+]] = firrtl.wire sym [<@[[C1_IN_SYM:.+]],2,public>]
+    // CHECK-NEXT: %[[C1_P_WIRE:.+]] = firrtl.wire : !firrtl.rwprobe<uint<1>>
     // CHECK-NEXT: %[[C1_P:.+]] = firrtl.ref.rwprobe <@RWProbePort::@[[C1_IN_SYM]]>
+    // CHECK-NEXT: firrtl.ref.define %c1_p, %0 : !firrtl.rwprobe<uint<1>>
     // CHECK-NEXT: %[[C2_IN:.+]] = firrtl.wire sym [<@[[C2_IN_SYM:.+]],2,public>]
+    // CHECK-NEXT: %[[C2_P_WIRE:.+]] = firrtl.wire : !firrtl.rwprobe<uint<1>>
     // CHECK-NEXT: %[[C2_P:.+]] = firrtl.ref.rwprobe <@RWProbePort::@[[C2_IN_SYM]]>
+    // CHECK-NEXT: firrtl.ref.define %c2_p, %1 : !firrtl.rwprobe<uint<1>>
     // CHECK-NOT: firrtl.instance
     %c1_in, %c1_p = firrtl.instance c1 @Child(in in: !firrtl.vector<uint<1>, 2>, out p: !firrtl.rwprobe<uint<1>>)
     %c2_in, %c2_p = firrtl.instance c2 @Child(in in: !firrtl.vector<uint<1>, 2>, out p: !firrtl.rwprobe<uint<1>>)
@@ -1225,9 +1302,9 @@ firrtl.circuit "RWProbePort" {
     firrtl.strictconnect %2, %in_0 : !firrtl.uint<1>
     %3 = firrtl.subindex %c2_in[1] : !firrtl.vector<uint<1>, 2>
     firrtl.strictconnect %3, %in_1 : !firrtl.uint<1>
-    // CHECK: firrtl.ref.define %p_0, %[[C1_P]]
+    // CHECK: firrtl.ref.define %p_0, %[[C1_P_WIRE]]
     firrtl.ref.define %p_0, %c1_p : !firrtl.rwprobe<uint<1>>
-    // CHECK: firrtl.ref.define %p_1, %[[C2_P]]
+    // CHECK: firrtl.ref.define %p_1, %[[C2_P_WIRE]]
     firrtl.ref.define %p_1, %c2_p : !firrtl.rwprobe<uint<1>>
   }
 }
@@ -1273,6 +1350,29 @@ firrtl.circuit "Top" {
   firrtl.module @Top () {}
   // CHECK: firrtl.class private @MyClass()
   firrtl.class private @MyClass() {}
+}
+
+// -----
+// Test this doesn't crash.
+
+firrtl.circuit "InlinerRefs" {
+  firrtl.module private @ChildOut(in %in: !firrtl.bundle<a: uint<1>, b: uint<2>>, out %out: !firrtl.probe<bundle<a: uint<1>, b: uint<2>>>) attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    %0 = firrtl.subfield %in[a] : !firrtl.bundle<a: uint<1>, b: uint<2>>
+    firrtl.when %0 : !firrtl.uint<1> {
+      %1 = firrtl.ref.send %in : !firrtl.bundle<a: uint<1>, b: uint<2>>
+      firrtl.ref.define %out, %1 : !firrtl.probe<bundle<a: uint<1>, b: uint<2>>>
+    }
+  }
+  firrtl.module @InlinerRefs(in %in: !firrtl.bundle<a: uint<1>, b: uint<2>>, out %out: !firrtl.uint<1>) {
+    %0 = firrtl.subfield %in[a] : !firrtl.bundle<a: uint<1>, b: uint<2>>
+    %co_in, %co_out = firrtl.instance co interesting_name @ChildOut(in in: !firrtl.bundle<a: uint<1>, b: uint<2>>, out out: !firrtl.probe<bundle<a: uint<1>, b: uint<2>>>)
+    %1 = firrtl.ref.sub %co_out[0] : !firrtl.probe<bundle<a: uint<1>, b: uint<2>>>
+    firrtl.strictconnect %co_in, %in : !firrtl.bundle<a: uint<1>, b: uint<2>>
+    firrtl.when %0 : !firrtl.uint<1> {
+      %2 = firrtl.ref.resolve %1 : !firrtl.probe<uint<1>>
+      firrtl.strictconnect %out, %2 : !firrtl.uint<1>
+    }
+  }
 }
 
 // -----
