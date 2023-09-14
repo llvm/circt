@@ -95,6 +95,11 @@ with Context() as ctx, Location.unknown():
   # CHECK: #hw.param.verbatim<"this is verbatim">
   print(pverbatim)
 
+  outfile = hw.OutputFileAttr.get_from_filename(StringAttr.get("file.txt"),
+                                                True, True)
+  print(outfile)
+  # CHECK: #hw.output_file<"file.txt", excludeFromFileList, includeReplicatedOps>
+
   inner_sym = hw.InnerSymAttr.get(StringAttr.get("some_sym"))
   # CHECK: #hw<innerSym@some_sym>
   print(inner_sym)
