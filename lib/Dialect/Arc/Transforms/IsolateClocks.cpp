@@ -16,6 +16,8 @@
 using namespace circt;
 using namespace arc;
 
+using llvm::SmallSetVector;
+
 //===----------------------------------------------------------------------===//
 // Datastructures
 //===----------------------------------------------------------------------===//
@@ -36,6 +38,9 @@ public:
   /// Moves all non-clocked fan-in operations that are not also used outside the
   /// clock domain into the clock domain.
   void sinkFanIn(SmallVectorImpl<Value> &);
+  /// Moves all operations into this clock domain that have all their operands
+  /// produced by ops in this domain.
+  void sinkFanOut(SmallSetVector<Operation *, 16> &);
   /// Computes all values used from outside this clock domain and all values
   /// defined in this clock domain that are used outside.
   void computeCrossingValues(SmallVectorImpl<Value> &inputs,
@@ -68,6 +73,8 @@ bool ClockDomain::moveToDomain(Operation *op) {
 }
 
 void ClockDomain::sinkFanIn(SmallVectorImpl<Value> &worklist) {
+  SmallSetVector<Operation *, 8> constantWorklist;
+
   while (!worklist.empty()) {
     auto *op = worklist.pop_back_val().getDefiningOp();
     // Ignore block arguments
@@ -89,11 +96,46 @@ void ClockDomain::sinkFanIn(SmallVectorImpl<Value> &worklist) {
     // storage slots later on.
     if (llvm::any_of(op->getUsers(), [&](auto *user) {
           return user->getBlock() != domainBlock.get();
-        }))
+        })) {
+      if (op->hasTrait<OpTrait::ConstantLike>())
+        constantWorklist.insert(op);
       continue;
+    }
 
     if (moveToDomain(op))
       worklist.append(op->getOperands().begin(), op->getOperands().end());
+  }
+
+  builder.setInsertionPointToStart(domainBlock.get());
+  for (auto *op : constantWorklist) {
+    if (op->getBlock() == domainBlock.get())
+      continue;
+    LLVM_DEBUG(llvm::dbgs() << "- Cloning constant " << *op << "\n");
+    auto *clone = builder.clone(*op);
+    op->replaceUsesWithIf(clone, [&](OpOperand &operand) {
+      return operand.getOwner()->getBlock() == domainBlock.get();
+    });
+    if (op->use_empty())
+      op->erase();
+  }
+}
+
+void ClockDomain::sinkFanOut(SmallSetVector<Operation *, 16> &worklist) {
+  while (!worklist.empty()) {
+    auto *op = worklist.pop_back_val();
+    if (isa<ClockDomainOp>(op))
+      continue;
+    if (auto clockedOp = dyn_cast<ClockedOpInterface>(op);
+        clockedOp && clockedOp.isClocked())
+      continue;
+    if (llvm::any_of(op->getOperands(), [&](Value operand) {
+          return operand.getParentBlock() != domainBlock.get();
+        }))
+      continue;
+    if (moveToDomain(op)) {
+      LLVM_DEBUG(llvm::dbgs() << "- Sinking " << *op << "\n");
+      worklist.insert(op->user_begin(), op->user_end());
+    }
   }
 }
 
@@ -187,6 +229,8 @@ LogicalResult IsolateClocksPass::runOnModule(hw::HWModuleOp module) {
   }
 
   SmallVector<Value> worklist;
+  SmallSetVector<Operation *, 16> opWorklist;
+
   // Construct the domains clock by clock. This makes handling of
   // inter-clock-domain connections considerably easier.
   for (auto [clock, clockedOps] : clocks) {
@@ -197,10 +241,13 @@ LogicalResult IsolateClocksPass::runOnModule(hw::HWModuleOp module) {
     // domain.
     for (auto op : clockedOps) {
       worklist.clear();
+      opWorklist.clear();
       if (domain.moveToDomain(op)) {
         op.eraseClock();
         worklist.append(op->getOperands().begin(), op->getOperands().end());
         domain.sinkFanIn(worklist);
+        opWorklist.insert(op->user_begin(), op->user_end());
+        domain.sinkFanOut(opWorklist);
       }
     }
 
