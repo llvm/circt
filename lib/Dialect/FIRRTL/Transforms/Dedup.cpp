@@ -1393,7 +1393,10 @@ void fixupAllModules(InstanceGraph &instanceGraph) {
   for (auto *node : instanceGraph) {
     auto module = cast<FModuleLike>(*node->getModule());
     for (auto *instRec : node->uses()) {
-      auto inst = cast<InstanceOp>(instRec->getInstance());
+      auto inst = instRec->getInstance<InstanceOp>();
+      // Only handle module instantiations for now.
+      if (!inst)
+        continue;
       ImplicitLocOpBuilder builder(inst.getLoc(), inst->getContext());
       builder.setInsertionPointAfter(inst);
       for (unsigned i = 0, e = getNumPorts(module); i < e; ++i) {
@@ -1512,10 +1515,21 @@ class DedupPass : public DedupBase<DedupPass> {
               }))
             return success();
 
-          // Only dedup extmodule's with defname.
-          if (auto ext = dyn_cast<FExtModuleOp>(*module);
-              ext && !ext.getDefname().has_value())
+          if (auto ext = dyn_cast<FExtModuleOp>(*module)) {
+            // Only dedup extmodule's with defname.
+            if (!ext.getDefname().has_value())
+              return success();
+          } else if (!module.isPrivate() || !module.canDiscardOnUseEmpty()) {
+            // If module has symbol (name) that must be preserved even if
+            // unused, skip it. All symbol uses must be supported, which is not
+            // true if public.
             return success();
+          } else if (isa<ClassLike>(*module)) {
+            // Explicitly skip class-like modules.  This is presently
+            // unreachable due to above and current implementation but check
+            // anyway as dedup code does not handle these or object operations.
+            return success();
+          }
 
           llvm::SmallSetVector<StringAttr, 1> groups;
           for (auto annotation : annotations) {
