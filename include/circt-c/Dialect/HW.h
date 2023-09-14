@@ -175,6 +175,10 @@ MLIR_CAPI_EXPORTED MlirType hwParamDeclRefAttrGetType(MlirAttribute decl);
 MLIR_CAPI_EXPORTED bool hwAttrIsAParamVerbatimAttr(MlirAttribute);
 MLIR_CAPI_EXPORTED MlirAttribute hwParamVerbatimAttrGet(MlirAttribute text);
 
+MLIR_CAPI_EXPORTED bool hwAttrIsAOutputFileAttr(MlirAttribute);
+MLIR_CAPI_EXPORTED MlirAttribute hwOutputFileGetFromFileName(
+    MlirAttribute text, bool excludeFromFileList, bool includeReplicatedOp);
+
 #ifdef __cplusplus
 }
 #endif
