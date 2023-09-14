@@ -12,3 +12,8 @@ msft.physical_region @region1, [
 
 // CHECK: #msft.appid<"foo"[4]>
 "dummy.op" () {"appid" = #msft.appid<"foo"[4]> } : () -> ()
+
+hw.module @Foo() {}
+
+// CHECK: #msft.appid_path<@Foo[<"foo"[0]>]>
+"dummy.op" () {"appid_path" = #msft.appid_path<@Foo [#msft.appid<"foo"[0]>]> } : () -> ()

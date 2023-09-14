@@ -10,3 +10,9 @@
 
 using namespace circt;
 using namespace msft;
+
+AppIDIndex::AppIDIndex(Operation *root) : root(root) {}
+
+DynamicInstanceOp AppIDIndex::getInstance(AppIDPathAttr path) {
+  return nullptr;
+}

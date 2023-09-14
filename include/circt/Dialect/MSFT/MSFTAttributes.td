@@ -87,3 +87,18 @@ def AppIDAttr : MSFT_Attr<"AppID"> {
     `<` $name `[` $index `]` `>`
   }];
 }
+
+def AppIDPathAttr : MSFT_Attr<"AppIDPath"> {
+  let summary = "An application-specific hierarchical path through a design";
+  let description = [{
+    A list of AppID components which specifies a specific dynamic instance
+    in the design.
+  }];
+
+  let parameters = (ins "FlatSymbolRefAttr":$root,
+                        ArrayRefParameter<"AppIDAttr">:$path);
+  let mnemonic = "appid_path";
+  let assemblyFormat = [{
+    `<` $root `[` $path `]` `>`
+  }];
+}

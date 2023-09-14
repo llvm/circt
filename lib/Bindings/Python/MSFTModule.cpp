@@ -145,6 +145,21 @@ private:
   MlirAttribute attr;
   intptr_t nextIndex = 0;
 };
+
+class PyAppIDIndex {
+public:
+  PyAppIDIndex(MlirOperation root) { index = circtMSFTAppIDIndexGet(root); }
+  PyAppIDIndex(const PyAppIDIndex &) = delete;
+  ~PyAppIDIndex() { circtMSFTAppIDIndexFree(index); }
+
+  MlirOperation getInstance(MlirAttribute appidPath) {
+    return circtMSFTAppIDIndexGetInstance(index, appidPath);
+  }
+
+private:
+  CirctMSFTAppIDIndex index;
+};
+
 /// Populate the msft python module.
 void circt::python::populateDialectMSFTSubmodule(py::module &m) {
   mlirMSFTRegisterPasses();
@@ -295,4 +310,24 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
       .def_property_readonly("index", [](MlirAttribute self) {
         return circtMSFTAppIDAttrGetIndex(self);
       });
+
+  mlir_attribute_subclass(m, "AppIDPathAttr",
+                          circtMSFTAttributeIsAnAppIDPathAttr)
+      .def_classmethod(
+          "get",
+          [](py::object cls, MlirAttribute root,
+             std::vector<MlirAttribute> path, MlirContext ctxt) {
+            return cls(circtMSFTAppIDAttrPathGet(ctxt, root, path.size(),
+                                                 path.data()));
+          },
+          "Create an AppIDPath attribute", py::arg("cls"), py::arg("root"),
+          py::arg("path"), py::arg("context") = py::none())
+      .def_property_readonly("root", &circtMSFTAppIDAttrPathGetRoot)
+      .def("__len__", &circtMSFTAppIDAttrPathGetNumComponents)
+      .def("__getitem__", &circtMSFTAppIDAttrPathGetComponent);
+
+  py::class_<PyAppIDIndex>(m, "AppIDIndex")
+      .def(py::init<MlirOperation>(), py::arg("root"))
+      .def("get_instance", &PyAppIDIndex::getInstance,
+           "Get the dynamic instance for an appid path.", py::arg("appid"));
 }
