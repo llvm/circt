@@ -253,15 +253,14 @@ hw.module @PathModule() {
 }
 // CHECK-LABEL: @Path
 om.class @Path(%p: !om.path, %p2: !om.path) {
-  // CHECK: %0 = om.path reference @HierPath
+  // CHECK: %[[v0:.+]] = om.path reference @HierPath
   %0 = om.path reference @HierPath
-  // CHECK:  om.path_append %p, %0
+  // CHECK:  om.path_append %p, %[[v0]]
   %1 = om.path_append %p, %0
   %2 = om.path_append %p, %p2
   om.class.field @path1, %2 : !om.path
-  //CHECK:  %2 = om.path_append %p, %p2
-  //CHECK:  om.class.field @path1, %2 : !om.path
-
+  // CHECK:  %[[v2:.+]] = om.path_append %p, %p2
+  // CHECK:  om.class.field @path1, %[[v2]] : !om.path
 }
 
 // CHECK-LABEL: @Enum
