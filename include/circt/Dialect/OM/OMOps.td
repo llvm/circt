@@ -345,11 +345,11 @@ def PathAppendOp : OMOp<"path_append", [Pure]> {
     The appended path must begin where the root path ends.
 
     Example:
-    ` ` `mlir
+    ```mlir
     %root = om.constant #om.path<"Foo/bar:Bar">
     %path = om.constant #om.path<"Bar/baz:Baz>output">
     %0 = om.path_append %root, %path
-    ` ` `
+    ```
   }];
   let arguments = (ins PathType:$root, PathType:$path);
   let results = (outs PathType:$result);
