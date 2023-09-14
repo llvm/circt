@@ -587,10 +587,10 @@ LogicalResult OutputWireOp::canonicalize(OutputWireOp op,
 }
 
 //===----------------------------------------------------------------------===//
-// BlockOp
+// StaticBlockOp
 //===----------------------------------------------------------------------===//
 
-LogicalResult BlockOp::verify() {
+LogicalResult StaticBlockOp::verify() {
   if (getInputs().size() != getBodyBlock()->getNumArguments())
     return emitOpError("number of inputs must match number of block arguments");
 
@@ -603,7 +603,7 @@ LogicalResult BlockOp::verify() {
   return success();
 }
 
-ParseResult BlockOp::parse(OpAsmParser &parser, OperationState &result) {
+ParseResult StaticBlockOp::parse(OpAsmParser &parser, OperationState &result) {
   // Parse the argument initializer list.
   llvm::SmallVector<OpAsmParser::UnresolvedOperand> inputOperands;
   llvm::SmallVector<OpAsmParser::Argument> inputArguments;
@@ -637,7 +637,7 @@ ParseResult BlockOp::parse(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
-void BlockOp::print(OpAsmPrinter &p) {
+void StaticBlockOp::print(OpAsmPrinter &p) {
   p << ' ';
   parsing_util::printInitializerList(p, getInputs(),
                                      getBodyBlock()->getArguments());
@@ -652,7 +652,7 @@ void BlockOp::print(OpAsmPrinter &p) {
 //===----------------------------------------------------------------------===//
 
 LogicalResult BlockReturnOp::verify() {
-  BlockOp parent = cast<BlockOp>(getOperation()->getParentOp());
+  auto parent = cast<StaticBlockOp>(getOperation()->getParentOp());
 
   if (getNumOperands() != parent.getOutputs().size())
     return emitOpError("number of operands must match number of block outputs");
