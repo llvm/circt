@@ -115,6 +115,9 @@ class PolynomialSystem(Module):
 poly = pycde.System([PolynomialSystem],
                     name="PolynomialSystem",
                     output_directory=sys.argv[1])
+
+# TODO: before generating all the modules, the IR doesn't verify since the
+#       hw.instances don't resolve. Fix this.
 # poly.print()
 
 print("Generating rest...")

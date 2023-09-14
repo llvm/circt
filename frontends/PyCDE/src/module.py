@@ -277,10 +277,6 @@ class ModuleLikeBuilderBase(_PyProxy):
     output_port_lookup: Dict[str, int] = {}
     for idx, (name, port_type) in enumerate(self.outputs):
 
-      # def fget(self, idx=idx):
-      #   asse
-      #   self._get_output(idx)
-
       def fset(self, val, idx=idx):
         self._set_output(idx, val)
 
