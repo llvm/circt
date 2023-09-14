@@ -152,8 +152,7 @@ def HWModuleOp : HWModuleOpBase<"module",
   }];
   let arguments = (ins SymbolNameAttr:$sym_name,
                        TypeAttrOf<ModuleType>:$module_type,
-                       OptionalAttr<DictArrayAttr>:$arg_attrs,
-                       OptionalAttr<DictArrayAttr>:$res_attrs,
+                       DictArrayAttr:$per_port_attrs,
                        LocationArrayAttr:$portLocs,
                        ParamDeclArrayAttr:$parameters,
                        StrAttr:$comment);
@@ -280,8 +279,7 @@ def HWModuleExternOp : HWModuleOpBase<"module.extern"> {
   }];
   let arguments = (ins SymbolNameAttr:$sym_name,
                        TypeAttrOf<ModuleType>:$module_type,
-		                   OptionalAttr<DictArrayAttr>:$arg_attrs,
-                       OptionalAttr<DictArrayAttr>:$res_attrs,
+                       DictArrayAttr:$per_port_attrs,
                        LocationArrayAttr:$portLocs,
                        ParamDeclArrayAttr:$parameters,
                        OptionalAttr<StrAttr>:$verilogName);
@@ -372,8 +370,7 @@ def HWModuleGeneratedOp : HWModuleOpBase<"module.generated", [
   let arguments = (ins SymbolNameAttr:$sym_name,
                        FlatSymbolRefAttr:$generatorKind,
                        TypeAttrOf<ModuleType>:$module_type,
-		                   OptionalAttr<DictArrayAttr>:$arg_attrs,
-                       OptionalAttr<DictArrayAttr>:$res_attrs,
+                       DictArrayAttr:$per_port_attrs,
                        LocationArrayAttr:$portLocs,
                        ParamDeclArrayAttr:$parameters,
                        OptionalAttr<StrAttr>:$verilogName);
