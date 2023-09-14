@@ -60,20 +60,25 @@ def RegOp : SVOp<"reg", [
      Declare a SystemVerilog Variable Declaration of 'reg' type.
      See SV Spec 6.8, pp100.
    }];
-  let arguments = (ins StrAttr:$name, OptionalAttr<InnerSymAttr>:$inner_sym);
+  let arguments = (ins
+    StrAttr:$name,
+    Optional<AnyType>:$init,
+    OptionalAttr<InnerSymAttr>:$inner_sym);
   let results = (outs InOutType:$result);
 
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType,
                     CArg<"StringAttr", "StringAttr()">:$name,
-                    CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym)>
+                    CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym,
+                    CArg<"mlir::Value", "{}">:$init)>
   ];
 
   // We handle the name in a custom way, so we use a customer parser/printer.
   let assemblyFormat = [{
-    (`sym` $inner_sym^)? `` custom<ImplicitSSAName>($name) attr-dict
+    (`init` $init^)? (`sym` $inner_sym^)? `` custom<ImplicitSSAName>($name) attr-dict
     `:` qualified(type($result))
+    custom<ImplicitInitType>(ref(type($result)),ref($init), type($init))
   }];
   let hasCanonicalizeMethod = true;
 

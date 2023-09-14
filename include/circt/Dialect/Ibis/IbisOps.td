@@ -137,11 +137,10 @@ def InstanceOp : InstanceOpBase<"instance"> {
 }
 
 def MethodOp : IbisOp<"method", [
-      IsolatedFromAbove, RegionKindInterface,
+      IsolatedFromAbove,
       Symbol, FunctionOpInterface,
       AutomaticAllocationScope,
       DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmBlockArgumentNames"]>,
-      SingleBlockImplicitTerminator<"ReturnOp">,
       HasParent<"ClassOp">]> {
 
   let summary = "Ibis method";
@@ -157,14 +156,11 @@ def MethodOp : IbisOp<"method", [
                        ArrayAttr:$argNames,
                        OptionalAttr<DictArrayAttr>:$arg_attrs,
                        OptionalAttr<DictArrayAttr>:$res_attrs);
-  let regions = (region SizedRegion<1>:$body);
+  let regions = (region AnyRegion:$body);
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
 
   let extraClassDeclaration = [{
-    // Implement RegionKindInterface.
-    static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph;}
-
     //===------------------------------------------------------------------===//
     // FunctionOpInterface Methods
     //===------------------------------------------------------------------===//
@@ -197,13 +193,13 @@ def ReturnOp : IbisOp<"return", [
   ];
 }
 
-def BlockOp : IbisOp<"block", [
+def StaticBlockOp : IbisOp<"sblock", [
   SingleBlockImplicitTerminator<"BlockReturnOp">,
   AutomaticAllocationScope
 ]> {
   let summary = "Ibis block";
   let description = [{
-    The `ibis.block` operation defines a block wherein a group of operations
+    The `ibis.sblock` operation defines a block wherein a group of operations
     are expected to be statically scheduleable.
     The operation is not isolated from above to facilitate ease of construction.
     However, once a program has been constructed and lowered to a sufficient
@@ -228,11 +224,24 @@ def BlockOp : IbisOp<"block", [
     Block* getBodyBlock() { return &getBody().front(); }
   }];
   let hasVerifier = 1;
+  let skipDefaultBuilders = 1;
+    let builders = [
+    OpBuilder<(ins "TypeRange":$outputs, "ValueRange":$inputs,
+        CArg<"IntegerAttr", "{}">:$maxThreads), [{
+      $_state.addOperands(inputs);
+      if (maxThreads) {
+        $_state.addAttribute(getMaxThreadsAttrName($_state.name), maxThreads);
+      }
+      auto* region = $_state.addRegion();
+      $_state.addTypes(outputs);
+      ensureTerminator(*region, $_builder, $_state.location);
+    }]>
+  ];
 }
 
-def BlockReturnOp : IbisOp<"block.return", [
-  Pure, ReturnLike, Terminator, HasParent<"BlockOp">]> {
-  let summary = "Ibis block terminator";
+def BlockReturnOp : IbisOp<"sblock.return", [
+  Pure, ReturnLike, Terminator, HasParent<"StaticBlockOp">]> {
+  let summary = "Ibis static block terminator";
 
   let arguments = (ins Variadic<AnyType>:$retValues);
   let assemblyFormat = "($retValues^)? attr-dict (`:` type($retValues)^)?";

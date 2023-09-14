@@ -15,15 +15,15 @@ hw.module @testBasic(%arg0: i1, %clk: i1, %rst: i1) -> (out: i1) {
 // CHECK-SAME:            %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: i1, %[[VAL_4:.*]]: i1) -> (out: i32, done: i1) {
 // CHECK:           %[[VAL_5:.*]] = comb.add %[[VAL_0]], %[[VAL_0]] : i32
 // CHECK:           %[[VAL_6:.*]] = hw.constant false
-// CHECK:           %[[VAL_7:.*]] = seq.compreg sym @p0_stage0_valid %[[VAL_2]], %[[VAL_3]], %[[VAL_4]], %[[VAL_6]]  : i1
+// CHECK:           %[[VAL_7:.*]] = seq.compreg sym @p0_stage1_enable %[[VAL_2]], %[[VAL_3]], %[[VAL_4]], %[[VAL_6]]  : i1
 // CHECK:           %[[VAL_8:.*]] = hw.constant false
-// CHECK:           %[[VAL_9:.*]] = seq.compreg sym @p0_stage1_valid %[[VAL_7]], %[[VAL_3]], %[[VAL_4]], %[[VAL_8]]  : i1
+// CHECK:           %[[VAL_9:.*]] = seq.compreg sym @p0_stage2_enable %[[VAL_7]], %[[VAL_3]], %[[VAL_4]], %[[VAL_8]]  : i1
 // CHECK:           %[[VAL_10:.*]] = seq.compreg sym @p0_stage2_reg0 %[[VAL_5]], %[[VAL_3]] : i32
 // CHECK:           %[[VAL_11:.*]] = hw.constant false
-// CHECK:           %[[VAL_12:.*]] = seq.compreg sym @p0_stage2_valid %[[VAL_9]], %[[VAL_3]], %[[VAL_4]], %[[VAL_11]]  : i1
+// CHECK:           %[[VAL_12:.*]] = seq.compreg sym @p0_stage3_enable %[[VAL_9]], %[[VAL_3]], %[[VAL_4]], %[[VAL_11]]  : i1
 // CHECK:           %[[VAL_13:.*]] = seq.compreg sym @p0_stage3_reg0 %[[VAL_10]], %[[VAL_3]] : i32
 // CHECK:           %[[VAL_14:.*]] = hw.constant false
-// CHECK:           %[[VAL_15:.*]] = seq.compreg sym @p0_stage3_valid %[[VAL_12]], %[[VAL_3]], %[[VAL_4]], %[[VAL_14]]  : i1
+// CHECK:           %[[VAL_15:.*]] = seq.compreg sym @p0_stage4_enable %[[VAL_12]], %[[VAL_3]], %[[VAL_4]], %[[VAL_14]]  : i1
 // CHECK:           hw.output %[[VAL_13]], %[[VAL_15]] : i32, i1
 // CHECK:         }
 hw.module @testLatency1(%arg0: i32, %arg1: i32, %go: i1, %clk: i1, %rst: i1) -> (out: i32, done: i1) {
@@ -51,7 +51,7 @@ hw.module @testLatency1(%arg0: i32, %arg1: i32, %go: i1, %clk: i1, %rst: i1) -> 
 // CHECK:           %[[VAL_6:.*]] = seq.compreg sym @p0_stage0_reg0 %[[VAL_5]], %[[VAL_3]] : i32
 // CHECK:           %[[VAL_7:.*]] = seq.compreg sym @p0_stage0_reg1 %[[VAL_0]], %[[VAL_3]] : i32
 // CHECK:           %[[VAL_8:.*]] = hw.constant false
-// CHECK:           %[[VAL_9:.*]] = seq.compreg sym @p0_stage0_valid %[[VAL_2]], %[[VAL_3]], %[[VAL_4]], %[[VAL_8]]  : i1
+// CHECK:           %[[VAL_9:.*]] = seq.compreg sym @p0_stage1_enable %[[VAL_2]], %[[VAL_3]], %[[VAL_4]], %[[VAL_8]]  : i1
 // CHECK:           %[[VAL_10:.*]] = comb.add %[[VAL_6]], %[[VAL_7]] : i32
 // CHECK:           hw.output %[[VAL_10]], %[[VAL_9]] : i32, i1
 // CHECK:         }
@@ -72,23 +72,23 @@ hw.module @testSingle(%arg0: i32, %arg1: i32, %go: i1, %clk: i1, %rst: i1) -> (o
 // CHECK:           %[[VAL_6:.*]] = seq.compreg sym @p0_stage0_reg0 %[[VAL_5]], %[[VAL_3]] : i32
 // CHECK:           %[[VAL_7:.*]] = seq.compreg sym @p0_stage0_reg1 %[[VAL_0]], %[[VAL_3]] : i32
 // CHECK:           %[[VAL_8:.*]] = hw.constant false
-// CHECK:           %[[VAL_9:.*]] = seq.compreg sym @p0_stage0_valid %[[VAL_2]], %[[VAL_3]], %[[VAL_4]], %[[VAL_8]]  : i1
+// CHECK:           %[[VAL_9:.*]] = seq.compreg sym @p0_stage1_enable %[[VAL_2]], %[[VAL_3]], %[[VAL_4]], %[[VAL_8]]  : i1
 // CHECK:           %[[VAL_10:.*]] = comb.add %[[VAL_6]], %[[VAL_7]] : i32
 // CHECK:           %[[VAL_11:.*]] = seq.compreg sym @p0_stage1_reg0 %[[VAL_10]], %[[VAL_3]] : i32
 // CHECK:           %[[VAL_12:.*]] = seq.compreg sym @p0_stage1_reg1 %[[VAL_6]], %[[VAL_3]] : i32
 // CHECK:           %[[VAL_13:.*]] = hw.constant false
-// CHECK:           %[[VAL_14:.*]] = seq.compreg sym @p0_stage1_valid %[[VAL_9]], %[[VAL_3]], %[[VAL_4]], %[[VAL_13]]  : i1
+// CHECK:           %[[VAL_14:.*]] = seq.compreg sym @p0_stage2_enable %[[VAL_9]], %[[VAL_3]], %[[VAL_4]], %[[VAL_13]]  : i1
 // CHECK:           %[[VAL_15:.*]] = comb.mul %[[VAL_11]], %[[VAL_12]] : i32
 // CHECK:           %[[VAL_16:.*]] = comb.sub %[[VAL_15]], %[[VAL_1]] : i32
 // CHECK:           %[[VAL_17:.*]] = seq.compreg sym @p1_stage0_reg0 %[[VAL_16]], %[[VAL_3]] : i32
 // CHECK:           %[[VAL_18:.*]] = seq.compreg sym @p1_stage0_reg1 %[[VAL_15]], %[[VAL_3]] : i32
 // CHECK:           %[[VAL_19:.*]] = hw.constant false
-// CHECK:           %[[VAL_20:.*]] = seq.compreg sym @p1_stage0_valid %[[VAL_2]], %[[VAL_3]], %[[VAL_4]], %[[VAL_19]]  : i1
+// CHECK:           %[[VAL_20:.*]] = seq.compreg sym @p1_stage1_enable %[[VAL_2]], %[[VAL_3]], %[[VAL_4]], %[[VAL_19]]  : i1
 // CHECK:           %[[VAL_21:.*]] = comb.add %[[VAL_17]], %[[VAL_18]] : i32
 // CHECK:           %[[VAL_22:.*]] = seq.compreg sym @p1_stage1_reg0 %[[VAL_21]], %[[VAL_3]] : i32
 // CHECK:           %[[VAL_23:.*]] = seq.compreg sym @p1_stage1_reg1 %[[VAL_17]], %[[VAL_3]] : i32
 // CHECK:           %[[VAL_24:.*]] = hw.constant false
-// CHECK:           %[[VAL_25:.*]] = seq.compreg sym @p1_stage1_valid %[[VAL_20]], %[[VAL_3]], %[[VAL_4]], %[[VAL_24]]  : i1
+// CHECK:           %[[VAL_25:.*]] = seq.compreg sym @p1_stage2_enable %[[VAL_20]], %[[VAL_3]], %[[VAL_4]], %[[VAL_24]]  : i1
 // CHECK:           %[[VAL_26:.*]] = comb.mul %[[VAL_22]], %[[VAL_23]] : i32
 // CHECK:           hw.output %[[VAL_15]], %[[VAL_14]] : i32, i1
 // CHECK:         }
@@ -124,11 +124,11 @@ hw.module @testMultiple(%arg0: i32, %arg1: i32, %go: i1, %clk: i1, %rst: i1) -> 
 // CHECK:           %[[VAL_6:.*]] = comb.sub %[[VAL_0]], %[[VAL_0]] : i32
 // CHECK:           %[[VAL_7:.*]] = seq.compreg sym @p0_stage0_reg0 %[[VAL_6]], %[[VAL_3]] : i32
 // CHECK:           %[[VAL_8:.*]] = hw.constant false
-// CHECK:           %[[VAL_9:.*]] = seq.compreg sym @p0_stage0_valid %[[VAL_2]], %[[VAL_3]], %[[VAL_4]], %[[VAL_8]]  : i1
+// CHECK:           %[[VAL_9:.*]] = seq.compreg sym @p0_stage1_enable %[[VAL_2]], %[[VAL_3]], %[[VAL_4]], %[[VAL_8]]  : i1
 // CHECK:           %[[VAL_10:.*]] = comb.add %[[VAL_7]], %[[VAL_1]] : i32
 // CHECK:           %[[VAL_11:.*]] = seq.compreg sym @p0_stage1_reg0 %[[VAL_10]], %[[VAL_3]] : i32
 // CHECK:           %[[VAL_12:.*]] = hw.constant false
-// CHECK:           %[[VAL_13:.*]] = seq.compreg sym @p0_stage1_valid %[[VAL_9]], %[[VAL_3]], %[[VAL_4]], %[[VAL_12]]  : i1
+// CHECK:           %[[VAL_13:.*]] = seq.compreg sym @p0_stage2_enable %[[VAL_9]], %[[VAL_3]], %[[VAL_4]], %[[VAL_12]]  : i1
 // CHECK:           hw.output %[[VAL_11]], %[[VAL_1]] : i32, i32
 // CHECK:         }
 hw.module @testSingleWithExt(%arg0: i32, %ext1: i32, %go : i1, %clk: i1, %rst: i1) -> (out0: i32, out1: i32) {
@@ -159,7 +159,7 @@ hw.module @testSingleWithExt(%arg0: i32, %ext1: i32, %go : i1, %clk: i1, %rst: i
 // CHECK:           sv.assign %[[VAL_5]], %[[VAL_8]] : i32
 // CHECK:           %[[VAL_9:.*]] = seq.compreg sym @p0_stage0_reg0 %[[VAL_8]], %[[VAL_2]] : i32
 // CHECK:           %[[VAL_10:.*]] = hw.constant false
-// CHECK:           %[[VAL_11:.*]] = seq.compreg sym @p0_stage0_valid %[[VAL_1]], %[[VAL_2]], %[[VAL_3]], %[[VAL_10]]  : i1
+// CHECK:           %[[VAL_11:.*]] = seq.compreg sym @p0_stage1_enable %[[VAL_1]], %[[VAL_2]], %[[VAL_3]], %[[VAL_10]]  : i1
 // CHECK:           %[[VAL_12:.*]] = sv.wire : !hw.inout<i32>
 // CHECK:           %[[VAL_13:.*]] = sv.read_inout %[[VAL_12]] : !hw.inout<i32>
 // CHECK:           %[[VAL_14:.*]] = comb.add %[[VAL_13]], %[[VAL_9]] : i32
@@ -167,7 +167,7 @@ hw.module @testSingleWithExt(%arg0: i32, %ext1: i32, %go : i1, %clk: i1, %rst: i
 // CHECK:           sv.assign %[[VAL_12]], %[[VAL_15]] : i32
 // CHECK:           %[[VAL_16:.*]] = seq.compreg sym @p0_stage1_reg0 %[[VAL_15]], %[[VAL_2]] : i32
 // CHECK:           %[[VAL_17:.*]] = hw.constant false
-// CHECK:           %[[VAL_18:.*]] = seq.compreg sym @p0_stage1_valid %[[VAL_11]], %[[VAL_2]], %[[VAL_3]], %[[VAL_17]]  : i1
+// CHECK:           %[[VAL_18:.*]] = seq.compreg sym @p0_stage2_enable %[[VAL_11]], %[[VAL_2]], %[[VAL_3]], %[[VAL_17]]  : i1
 // CHECK:           %[[VAL_19:.*]] = sv.wire : !hw.inout<i32>
 // CHECK:           %[[VAL_20:.*]] = sv.read_inout %[[VAL_19]] : !hw.inout<i32>
 // CHECK:           %[[VAL_21:.*]] = comb.add %[[VAL_20]], %[[VAL_16]] : i32
@@ -211,11 +211,16 @@ hw.module @testControlUsage(%arg0: i32, %go : i1, %clk: i1, %rst: i1) -> (out0: 
 // CHECK-SAME:            %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i1, %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: i1, %[[VAL_4:.*]]: i1) -> (out0: i32, out1: i1) {
 // CHECK:           %[[VAL_5:.*]] = hw.constant true
 // CHECK:           %[[VAL_6:.*]] = comb.xor %[[VAL_2]], %[[VAL_5]] : i1
-// CHECK:           %[[VAL_7:.*]] = comb.and %[[VAL_1]], %[[VAL_6]] : i1
-// CHECK:           %[[VAL_8:.*]] = seq.compreg.ce sym @p0_stage0_reg0 %[[VAL_0]], %[[VAL_3]], %[[VAL_7]] : i32
+// CHECK:           %[[VAL_7:.*]] = comb.and %[[VAL_1]], %[[VAL_6]]
+// CHECK:           %[[VAL_8:.*]] = seq.compreg.ce sym @p0_stage0_reg0 %[[VAL_0]], %[[VAL_3]], %[[VAL_7]] : i32, i1
 // CHECK:           %[[VAL_9:.*]] = hw.constant false
-// CHECK:           %[[VAL_10:.*]] = seq.compreg.ce sym @p0_stage0_valid %[[VAL_1]], %[[VAL_3]], %[[VAL_6]], %[[VAL_4]], %[[VAL_9]]  : i1
-// CHECK:           hw.output %[[VAL_8]], %[[VAL_10]] : i32, i1
+// CHECK:           %[[VAL_10:.*]] = hw.constant true
+// CHECK:           %[[VAL_11:.*]] = comb.xor %[[VAL_2]], %[[VAL_10]] : i1
+// CHECK:           %[[VAL_12:.*]] = seq.compreg.ce sym @p0_stage1_enable %[[VAL_7]], %[[VAL_3]], %[[VAL_11]], %[[VAL_4]], %[[VAL_9]]  : i1, i1
+// CHECK:           %[[VAL_13:.*]] = hw.constant true
+// CHECK:           %[[VAL_14:.*]] = comb.xor %[[VAL_2]], %[[VAL_13]] : i1
+// CHECK:           %[[VAL_15:.*]] = comb.and %[[VAL_12]], %[[VAL_14]]
+// CHECK:           hw.output %[[VAL_8]], %[[VAL_15]] : i32, i1
 // CHECK:         }
 hw.module @testWithStall(%arg0: i32, %go: i1, %stall : i1, %clk: i1, %rst: i1) -> (out0: i32, out1: i1) {
   %0:2 = pipeline.scheduled(%a0 : i32 = %arg0) stall(%s = %stall) clock(%c = %clk) reset(%r = %rst) go(%g = %go) -> (out: i32) {
@@ -224,4 +229,52 @@ hw.module @testWithStall(%arg0: i32, %go: i1, %stall : i1, %clk: i1, %rst: i1) -
     pipeline.return %1 : i32
   }
   hw.output %0#0, %0#1 : i32, i1
+}
+
+// -----
+
+// CHECK-LABEL:   hw.module @testStallability(
+// CHECK-SAME:           %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i1, %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: i1, %[[VAL_4:.*]]: i1) -> (out: i32) {
+// CHECK:           %[[VAL_5:.*]] = hw.constant true
+// CHECK:           %[[VAL_6:.*]] = comb.xor %[[VAL_4]], %[[VAL_5]] : i1
+// CHECK:           %[[VAL_7:.*]] = comb.and %[[VAL_1]], %[[VAL_6]]
+// CHECK:           %[[VAL_8:.*]] = seq.compreg.ce sym @MyPipeline_a0 %[[VAL_0]], %[[VAL_2]], %[[VAL_7]] : i32, i1
+// CHECK:           %[[VAL_9:.*]] = hw.constant false
+// CHECK:           %[[VAL_10:.*]] = seq.compreg sym @MyPipeline_stage1_enable %[[VAL_7]], %[[VAL_2]], %[[VAL_3]], %[[VAL_9]]  : i1, i1
+// CHECK:           %[[VAL_11:.*]] = seq.compreg.ce sym @MyPipeline_a0 %[[VAL_8]], %[[VAL_2]], %[[VAL_10]] {name = "MyPipeline_a0"} : i32, i1
+// CHECK:           %[[VAL_12:.*]] = hw.constant false
+// CHECK:           %[[VAL_13:.*]] = hw.constant true
+// CHECK:           %[[VAL_14:.*]] = comb.xor %[[VAL_4]], %[[VAL_13]] : i1
+// CHECK:           %[[VAL_15:.*]] = comb.or %[[VAL_10]], %[[VAL_14]] : i1
+// CHECK:           %[[VAL_16:.*]] = seq.compreg.ce sym @MyPipeline_stage2_enable %[[VAL_10]], %[[VAL_2]], %[[VAL_15]], %[[VAL_3]], %[[VAL_12]]  : i1, i1
+// CHECK:           %[[VAL_17:.*]] = hw.constant true
+// CHECK:           %[[VAL_18:.*]] = comb.xor %[[VAL_4]], %[[VAL_17]] : i1
+// CHECK:           %[[VAL_19:.*]] = comb.or %[[VAL_10]], %[[VAL_18]] : i1
+// CHECK:           %[[VAL_20:.*]] = comb.and %[[VAL_16]], %[[VAL_19]]
+// CHECK:           %[[VAL_21:.*]] = seq.compreg.ce sym @MyPipeline_a0 %[[VAL_11]], %[[VAL_2]], %[[VAL_20]] {name = "MyPipeline_a0"} : i32, i1
+// CHECK:           %[[VAL_22:.*]] = hw.constant false
+// CHECK:           %[[VAL_23:.*]] = hw.constant true
+// CHECK:           %[[VAL_24:.*]] = comb.xor %[[VAL_4]], %[[VAL_23]] : i1
+// CHECK:           %[[VAL_25:.*]] = comb.or %[[VAL_10]], %[[VAL_24]] : i1
+// CHECK:           %[[VAL_26:.*]] = seq.compreg.ce sym @MyPipeline_stage3_enable %[[VAL_20]], %[[VAL_2]], %[[VAL_25]], %[[VAL_3]], %[[VAL_22]]  : i1, i1
+// CHECK:           %[[VAL_27:.*]] = hw.constant true
+// CHECK:           %[[VAL_28:.*]] = comb.xor %[[VAL_4]], %[[VAL_27]] : i1
+// CHECK:           %[[VAL_29:.*]] = comb.or %[[VAL_10]], %[[VAL_28]] : i1
+// CHECK:           %[[VAL_30:.*]] = comb.and %[[VAL_26]], %[[VAL_29]]
+// CHECK:           hw.output %[[VAL_21]] : i32
+// CHECK:         }
+
+hw.module @testStallability(%arg0: i32, %go: i1, %clk: i1, %rst: i1, %stall: i1) -> (out: i32) {
+  %out, %done = pipeline.scheduled "MyPipeline"(%a0 : i32 = %arg0)
+      stall(%s = %stall) clock(%c = %clk) reset(%r = %rst) go(%g = %go)
+      {stallability = [true, false, true]} -> (out : i32) {
+    pipeline.stage ^bb1 regs("a0" = %a0 : i32) 
+  ^bb1(%a0_0: i32, %s1_enable: i1):  // pred: ^bb0
+    pipeline.stage ^bb2 regs("a0" = %a0_0 : i32) 
+  ^bb2(%a0_1: i32, %s2_enable: i1):  // pred: ^bb1
+    pipeline.stage ^bb3 regs("a0" = %a0_1 : i32) 
+  ^bb3(%a0_2: i32, %s3_enable: i1):  // pred: ^bb2
+    pipeline.return %a0_2 : i32
+  }
+  hw.output %out : i32
 }

@@ -23,7 +23,6 @@
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
-#include "circt/Support/BackedgeBuilder.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/IRMapping.h"
 #include "llvm/ADT/BitVector.h"
@@ -405,82 +404,6 @@ static void mapResultsToWires(IRMapping &mapper, SmallVectorImpl<Value> &wires,
   }
 }
 
-/// Resolve RefType 'backedge' placeholder values.
-/// These should have at most one driver that isn't self-connect,
-/// replace each with their driver and remove connections to them.
-/// Also clears out 'edges'.
-static void replaceRefEdges(SmallVectorImpl<Backedge> &edges) {
-  /// Find connections to `val` and:
-  /// * Mark for removal.
-  /// * Identify the single non-self-connect as driver, return it.
-  /// * Check for other drivers and error.
-  auto getDriverAndRemoveConnects = [&](Value val) -> Value {
-    Value driver;
-    llvm::SmallPtrSet<Operation *, 16> toRemove;
-    for (Operation *use : val.getUsers())
-      if (auto connect = dyn_cast<FConnectLike>(use))
-        if (connect.getDest() == val) {
-          auto newdriver = connect.getSrc();
-
-          // Mark for removal all connections to the placeholder value.
-          toRemove.insert(connect);
-
-          // Self-connections are not drivers.
-          if (newdriver == val)
-            continue;
-          if (driver) {
-            auto diag = val.getDefiningOp()->emitError(
-                "refty should not have multiple drivers");
-            diag.attachNote(driver.getLoc()) << "first driver here";
-            diag.attachNote(newdriver.getLoc()) << "second driver here";
-            diag.attachNote(connect.getLoc()) << "second driver connected here";
-          }
-          assert(!driver && "unable to resolve through multiple drivers");
-          driver = newdriver;
-        }
-
-    // Drop connections to placeholder values.
-    for (auto *op : toRemove)
-      op->erase();
-
-    return driver;
-  };
-
-  // Ensure that all users of the `opToRemove` are defined after the driver.
-  // This is required to ensure the driver dominates the users.
-  // XXX: This is fragile and incomplete and known to be broken.
-  // 1) If there are when's (or multiple blocks), this strategy is dead.
-  //    Inliner doesn't presently work before ExpandWhen's, however.
-  // 2) Even today this could be wrong as we have no place to put references
-  //    and inlining instances removes ref "storage" points, such that use
-  //    and defs cannot be maintained by moving things around.
-  // 3) This assumes you can freely move the user(s) which may depend on other
-  //    users or otherwise be unsafe to move (side-effects).
-  auto moveUseAfterDef = [&](Operation *opToRemove, Operation *driver) {
-    for (Operation *user : opToRemove->getUsers())
-      if (user->isBeforeInBlock(driver))
-        user->moveAfter(driver);
-  };
-
-  for (auto &edge : edges) {
-    Value v = edge;
-    assert(isa<RefType>(v.getType()));
-
-    auto driver = getDriverAndRemoveConnects(v);
-    if (!driver) {
-      v.getDefiningOp()->emitError(
-          "unable to find driver for refty placeholder");
-      continue;
-    }
-    if (!isa<BlockArgument>(driver))
-      moveUseAfterDef(v.getDefiningOp(), driver.getDefiningOp());
-    // Resolve the edge (RAUW to driver).
-    edge.setValue(driver);
-  }
-
-  edges.clear();
-}
-
 /// Process each operation, updating InnerRefAttr's using the specified map
 /// and the given name as the containing IST of the mapped-to sym names.
 static void replaceInnerRefUsers(ArrayRef<Operation *> newOps,
@@ -572,18 +495,13 @@ private:
   /// Cleans up backedges on destruction.
   struct ModuleInliningContext {
     ModuleInliningContext(FModuleOp module)
-        : module(module), modNamespace(module), b(module.getContext()),
-          beb(b, module.getLoc()) {}
+        : module(module), modNamespace(module), b(module.getContext()) {}
     /// Top-level module for current inlining task.
     FModuleOp module;
     /// Namespace for generating new names in `module`.
     hw::InnerSymbolNamespace modNamespace;
     /// Builder, insertion point into module.
     OpBuilder b;
-    /// Track back-edges to replace when done.
-    BackedgeBuilder beb;
-    SmallVector<Backedge> edges;
-    ~ModuleInliningContext() { replaceRefEdges(edges); }
   };
 
   /// One inlining level, created for each instance inlined or flattened.
@@ -860,8 +778,6 @@ bool Inliner::renameInstance(
 /// module, create a wire, and assign a mapping from each module port to the
 /// wire. When the body of the module is cloned, the value of the wire will be
 /// used instead of the module's ports.
-/// Cannot have a RefType wire, so create backedge and put in 'edges' for
-/// resolution later.  Mapper and 'il.wires' will have the placeholder value.
 void Inliner::mapPortsToWires(StringRef prefix, InliningLevel &il,
                               IRMapping &mapper,
                               const DenseSet<Attribute> &localSymbols) {
@@ -904,39 +820,14 @@ void Inliner::mapPortsToWires(StringRef prefix, InliningLevel &il,
     }
 
     Value wire =
-        TypeSwitch<FIRRTLType, Value>(type)
-            .Case<FIRRTLBaseType, PropertyType>([&](auto base) {
-              return il.mic.b
-                  .create<WireOp>(
-                      target.getLoc(), base,
-                      StringAttr::get(context,
-                                      (prefix + portInfo[i].getName())),
-                      NameKindEnumAttr::get(context,
-                                            NameKindEnum::DroppableName),
-                      ArrayAttr::get(context, newAnnotations), newSymAttr,
-                      /*forceable=*/UnitAttr{})
-                  .getResult();
-            })
-            .Case<RefType>([&](auto refty) {
-              // Symbols and annotations are not allowed, warn if dropping.
-              if (oldSymAttr)
-                target.emitWarning("unexpected symbol ")
-                    .append(oldSymAttr)
-                    .append(" on ref port ")
-                    .append(target.getPortName(arg.getArgNumber()))
-                    .append(" dropped during inlining")
-                    .attachNote(arg.getLoc())
-                    .append("ref port with symbol here");
-
-              if (!newAnnotations.empty())
-                target.emitWarning("unexpected annotations found on ref port ")
-                    .append(target.getPortName(arg.getArgNumber()))
-                    .append(" dropped during inlining")
-                    .attachNote(arg.getLoc())
-                    .append("ref port with annotations here");
-              il.mic.edges.push_back(il.mic.beb.get(refty, arg.getLoc()));
-              return il.mic.edges.back();
-            });
+        il.mic.b
+            .create<WireOp>(
+                target.getLoc(), type,
+                StringAttr::get(context, (prefix + portInfo[i].getName())),
+                NameKindEnumAttr::get(context, NameKindEnum::DroppableName),
+                ArrayAttr::get(context, newAnnotations), newSymAttr,
+                /*forceable=*/UnitAttr{})
+            .getResult();
     il.wires.push_back(wire);
     mapper.map(arg, wire);
   }

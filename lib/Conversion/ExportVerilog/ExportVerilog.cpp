@@ -5019,6 +5019,14 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
       });
     }
 
+    if (auto regOp = dyn_cast<RegOp>(op)) {
+      if (auto initValue = regOp.getInit()) {
+        ps << PP::space << "=" << PP::space;
+        ps.scopedBox(PP::ibox0,
+                     [&]() { emitExpression(initValue, opsForLocation); });
+      }
+    }
+
     // Try inlining an assignment into declarations.
     if (isa<sv::WireOp, LogicOp>(op) &&
         !op->getParentOp()->hasTrait<ProceduralRegion>()) {

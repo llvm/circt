@@ -281,3 +281,15 @@ MLIR_CAPI_EXPORTED MlirAttribute hwParamVerbatimAttrGet(MlirAttribute text) {
   auto type = NoneType::get(ctx);
   return wrap(ParamVerbatimAttr::get(ctx, textAttr, type));
 }
+
+MLIR_CAPI_EXPORTED bool hwAttrIsAOutputFileAttr(MlirAttribute attr) {
+  return unwrap(attr).isa<OutputFileAttr>();
+}
+MLIR_CAPI_EXPORTED MlirAttribute
+hwOutputFileGetFromFileName(MlirAttribute fileName, bool excludeFromFileList,
+                            bool includeReplicatedOp) {
+  auto fileNameStrAttr = unwrap(fileName).cast<StringAttr>();
+  return wrap(OutputFileAttr::getFromFilename(
+      fileNameStrAttr.getContext(), fileNameStrAttr.getValue(),
+      excludeFromFileList, includeReplicatedOp));
+}

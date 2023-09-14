@@ -56,13 +56,12 @@ private:
 
     operator NamedValue() { return NamedValue{v, name}; }
   };
-  // A mapping storing whether a given stage register constains a registerred
+  // A mapping storing whether a given stage register constains a registered
   // version of a given value. The registered version will be a backedge during
-  // pipeline body analysis. Once the entire body has been analyzed, the
-  // pipeline.stage operations will be replaced with pipeline.ss.reg
-  // operations containing the requested regs, and the backedge will be
-  // replaced. MapVector ensures deterministic iteration order, which in turn
-  // ensures determinism during stage op IR emission.
+  // pipeline body analysis. Once the entire body has been analyzed, `regs`
+  // operands will be added to the pipeline.stage operation, and the backedge
+  // will be replaced. MapVector ensures deterministic iteration order, which in
+  // turn ensures determinism during stage op IR emission.
   DenseMap<Block *, llvm::MapVector<Value, RoutedValue>> stageRegOrPassMap;
 
   // A mapping between stages and their index in the pipeline.
@@ -199,17 +198,22 @@ void ExplicitRegsPass::runOnPipeline(ScheduledPipelineOp pipeline) {
 
   auto *ctx = &getContext();
 
-  // All values have been recorded through the stages. Now, add registers to the
-  // stage blocks.
-  for (auto &[stage, regMap] : stageRegOrPassMap) {
+  // All values have been recorded through the stages.
+  // Now
+  // 1. Add 'regs' and 'pass' operands to the `pipeline.stage` operations
+  // 2. Add the corresponding block arguments to the stage blocks.
+  for (auto &it : stageRegOrPassMap) {
+    Block *stage = it.first;
+    auto &regOrPassMap = it.second;
+
     // Gather register inputs to this stage, either from a predecessor stage
     // or from the original op.
-    llvm::SmallVector<Value> regIns, passIns;
+    llvm::MapVector<Value, Value> regInsMap, passInsMap;
     llvm::SmallVector<Attribute> regNames, passNames;
     Block *predecessorStage = stage->getSinglePredecessor();
     auto predStageRegOrPassMap = stageRegOrPassMap.find(predecessorStage);
     assert(predecessorStage && "Stage should always have a single predecessor");
-    for (auto &[value, backedge] : regMap) {
+    for (auto &[value, backedge] : regOrPassMap) {
       if (backedge.isReg)
         regNames.push_back(backedge.name);
       else
@@ -221,9 +225,9 @@ void ExplicitRegsPass::runOnPipeline(ScheduledPipelineOp pipeline) {
         auto predRegIt = predStageRegOrPassMap->second.find(value);
         if (predRegIt != predStageRegOrPassMap->second.end()) {
           if (backedge.isReg) {
-            regIns.push_back(predRegIt->second.v);
+            regInsMap[value] = predRegIt->second.v;
           } else {
-            passIns.push_back(predRegIt->second.v);
+            passInsMap[value] = predRegIt->second.v;
           }
           continue;
         }
@@ -231,13 +235,19 @@ void ExplicitRegsPass::runOnPipeline(ScheduledPipelineOp pipeline) {
 
       // Not passed through the stage - must be the original value.
       if (backedge.isReg)
-        regIns.push_back(value);
+        regInsMap[value] = value;
       else
-        passIns.push_back(value);
+        passInsMap[value] = value;
     }
 
     // Replace the predecessor stage terminator, which feeds this stage, with
     // a new terminator that has materialized arguments.
+    llvm::SmallVector<Value> regIns, passIns;
+    llvm::transform(regInsMap, std::back_inserter(regIns),
+                    [](auto &pair) { return pair.second; });
+    llvm::transform(passInsMap, std::back_inserter(passIns),
+                    [](auto &pair) { return pair.second; });
+
     StageOp terminator = cast<StageOp>(predecessorStage->getTerminator());
     b.setInsertionPoint(terminator);
     llvm::SmallVector<llvm::SmallVector<Value>> clockGates;
@@ -246,19 +256,26 @@ void ExplicitRegsPass::runOnPipeline(ScheduledPipelineOp pipeline) {
                       b.getArrayAttr(passNames));
     terminator.erase();
 
-    // ... add arguments to the next stage. Registers first, then passthroughs.
-    llvm::SmallVector<Type> regAndPassTypes;
-    llvm::append_range(regAndPassTypes, ValueRange(regIns).getTypes());
-    llvm::append_range(regAndPassTypes, ValueRange(passIns).getTypes());
-    for (auto [i, type] : llvm::enumerate(regAndPassTypes))
-      stage->insertArgument(i, type, UnknownLoc::get(ctx));
-
-    // Replace backedges for the next stage with the new arguments.
-    for (auto it : llvm::enumerate(regMap)) {
-      auto index = it.index();
-      auto &[value, backedge] = it.value();
-      backedge.v.setValue(stage->getArgument(index));
-    }
+    // ... and add arguments to the next stage. Registers first, then
+    // passthroughs.
+    // While doing so, replace for the next stage arguments with the new
+    // arguments. Doing so wrt. regInsMap ensures that we preserve the
+    // order of operands in the StageOp and the target block.
+    size_t argIdx = 0;
+    auto addArgAndRewriteBE = [&](llvm::MapVector<Value, Value> &map) {
+      for (auto origToActualValue : map) {
+        Value origValue = origToActualValue.first;
+        stage->insertArgument(argIdx, origValue.getType(),
+                              UnknownLoc::get(ctx));
+        auto *backedgeIt = regOrPassMap.find(origValue);
+        assert(backedgeIt != regOrPassMap.end() &&
+               "Expected to find backedge for value");
+        backedgeIt->second.v.setValue(stage->getArgument(argIdx));
+        ++argIdx;
+      }
+    };
+    addArgAndRewriteBE(regInsMap);
+    addArgAndRewriteBE(passInsMap);
   }
 
   // Clear internal state. See https://github.com/llvm/circt/issues/3235

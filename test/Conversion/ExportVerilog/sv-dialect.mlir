@@ -536,6 +536,17 @@ hw.module @reg_1(%in4: i4, %in8: i8) -> (a : i3, b : i5) {
   hw.output %c, %d : i3,i5
 }
 
+// CHECK-LABEL: module regWithInit(
+// CHECK:     reg        reg1 = 1'h0; 
+// CHECK:     reg [31:0] reg2 = 32'(arg + arg);
+hw.module @regWithInit(%arg : i32) {
+  %c0_i1 = hw.constant 0 : i1
+  %reg1 = sv.reg init %c0_i1 : !hw.inout<i1>
+  
+  %init = comb.add %arg, %arg : i32
+  %reg2 = sv.reg init %init : !hw.inout<i32>
+}
+
 // CHECK-LABEL: module struct_field_inout1(
 // CHECK-NEXT:   inout struct packed {logic b; } a
 // CHECK-NEXT:  );

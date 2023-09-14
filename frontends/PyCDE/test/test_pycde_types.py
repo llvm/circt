@@ -63,7 +63,7 @@ class ExStruct(Struct):
 print(ExStruct)
 
 
-# CHECK-LABEL:  msft.module @TestStruct {} (%inp1: !hw.typealias<@pycde::@ExStruct, !hw.struct<a: i4, b: ui32>>) -> (out1: ui33, out2: !hw.typealias<@pycde::@ExStruct, !hw.struct<a: i4, b: ui32>>)
+# CHECK-LABEL:  hw.module @TestStruct(%inp1: !hw.typealias<@pycde::@ExStruct, !hw.struct<a: i4, b: ui32>>) -> (out1: ui33, out2: !hw.typealias<@pycde::@ExStruct, !hw.struct<a: i4, b: ui32>>)
 # CHECK-NEXT:     %b = hw.struct_extract %inp1["b"] {sv.namehint = "inp1__b"} : !hw.typealias<@pycde::@ExStruct, !hw.struct<a: i4, b: ui32>>
 # CHECK-NEXT:     [[r0:%.+]] = hwarith.constant 1 : ui1
 # CHECK-NEXT:     [[r1:%.+]] = hwarith.add %b, [[r0]] : (ui32, ui1) -> ui33
@@ -73,7 +73,7 @@ print(ExStruct)
 # CHECK-NEXT:     [[r3:%.+]] = hwarith.add %b_0, [[r2]] : (ui32, ui1) -> ui33
 # CHECK-NEXT:     [[r4:%.+]] = hwarith.cast [[r3]] : (ui33) -> ui32
 # CHECK-NEXT:     [[r5:%.+]] = hw.struct_create (%a, [[r4]]) : !hw.typealias<@pycde::@ExStruct, !hw.struct<a: i4, b: ui32>>
-# CHECK-NEXT:     msft.output [[r1]], [[r5]] : ui33, !hw.typealias<@pycde::@ExStruct, !hw.struct<a: i4, b: ui32>>
+# CHECK-NEXT:     hw.output [[r1]], [[r5]] : ui33, !hw.typealias<@pycde::@ExStruct, !hw.struct<a: i4, b: ui32>>
 @unittestmodule()
 class TestStruct(Module):
   inp1 = Input(ExStruct)

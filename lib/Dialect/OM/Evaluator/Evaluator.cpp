@@ -72,6 +72,11 @@ circt::om::Evaluator::instantiate(
     if (!actualParam || !actualParam.get())
       return cls.emitError("actual parameter for ")
              << formalParamName << " is null";
+
+    // Subtyping: if formal param is any type, any actual param may be passed.
+    if (isa<AnyType>(formalParamType))
+      continue;
+
     Type actualParamType;
     if (auto *attr = dyn_cast<evaluator::AttributeValue>(actualParam.get())) {
       if (auto typedActualParam = attr->getAttr().dyn_cast_or_null<TypedAttr>())
@@ -147,6 +152,9 @@ FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::evaluateValue(
             })
             .Case([&](MapCreateOp op) {
               return evaluateMapCreate(op, actualParams);
+            })
+            .Case([&](AnyCastOp op) {
+              return evaluateValue(op.getInput(), actualParams);
             })
             .Default([&](Operation *op) {
               auto error = op->emitError("unable to evaluate value");

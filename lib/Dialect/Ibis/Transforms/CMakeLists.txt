@@ -6,6 +6,7 @@ add_circt_dialect_library(CIRCTIbisTransforms
   IbisCleanSelfdrivers.cpp
   IbisContainersToHW.cpp
   IbisArgifyBlocksPass.cpp
+  IbisReblockPass.cpp
 
   DEPENDS
   CIRCTIbisTransformsIncGen
@@ -15,6 +16,7 @@ add_circt_dialect_library(CIRCTIbisTransforms
   CIRCTIbis
   CIRCTHW
   CIRCTSupport
+  CIRCTTransforms
   MLIRIR
   MLIRPass
   MLIRTransformUtils

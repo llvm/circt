@@ -21,13 +21,21 @@ jobs:
           - os: ubuntu-20.04
             cibw_build: cp38-manylinux_x86_64
           - os: ubuntu-20.04
+            cibw_build: cp39-manylinux_x86_64
+          - os: ubuntu-20.04
             cibw_build: cp310-manylinux_x86_64
+          - os: ubuntu-20.04
+            cibw_build: cp311-manylinux_x86_64
           - os: macos-latest
-            cibw_build: cp37-macosx_x86_64
+            cibw_build: cp37-macosx_universal2
           - os: macos-latest
-            cibw_build: cp38-macosx_x86_64
+            cibw_build: cp38-macosx_universal2
           - os: macos-latest
-            cibw_build: cp310-macosx_x86_64
+            cibw_build: cp39-macosx_universal2
+          - os: macos-latest
+            cibw_build: cp310-macosx_universal2
+          - os: macos-latest
+            cibw_build: cp311-macosx_universal2
 
     steps:
       - name: Get CIRCT
@@ -53,6 +61,8 @@ jobs:
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
           CIBW_BUILD_FRONTEND: build
           SETUPTOOLS_SCM_DEBUG: True
+          CIBW_ARCHS_MACOS: universal2
+          CIBW_TEST_SKIP: '*universal2:arm64'
 
       - name: Upload (stage) wheels as artifacts
         uses: actions/upload-artifact@v3

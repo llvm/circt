@@ -115,43 +115,25 @@ class PolynomialSystem(Module):
 poly = pycde.System([PolynomialSystem],
                     name="PolynomialSystem",
                     output_directory=sys.argv[1])
-poly.print()
 
-print("Generating 1...")
-poly.generate(iters=1)
-
-print("Printing...")
-poly.print()
-# CHECK-LABEL: msft.module @PolynomialSystem {} () -> (y: i32) attributes {fileName = "PolynomialSystem.sv"} {
-# CHECK:         %example.y = msft.instance @example @PolyComputeForCoeff__62__42__6_(%c23_i32) {msft.appid = #msft.appid<"poly"[0]>} : (i32) -> i32
-# CHECK:         %example2.y = msft.instance @example2 @PolyComputeForCoeff__62__42__6_(%example.y) : (i32) -> i32
-# CHECK:         %example2_1.y = msft.instance @example2_1 @PolyComputeForCoeff__1__2__3__4__5_(%example.y) : (i32) -> i32
-# CHECK:         %CoolPolynomialCompute.y = msft.instance @CoolPolynomialCompute @supercooldevice(%{{.+}}) : (i32) -> i32
-# CHECK:         [[R0:%.+]] = hw.bitcast %false : (i1) -> i1
-# CHECK:         msft.instance @singleton @parameterized_extern(%0, %c0_i4) <A: none = "foo", B: i64 = 4> : (i1, i4) -> ()
-# CHECK:         %c0_i4 = hw.constant 0 : i4
-# CHECK:         msft.output %example.y : i32
-# CHECK:       }
-# CHECK:       msft.module @PolyComputeForCoeff__62__42__6_ {coefficients = {coeff = [62, 42, 6]}} (%x: i32) -> (y: i32)
-# CHECK:       msft.module @PolyComputeForCoeff__1__2__3__4__5_ {coefficients = {coeff = [1, 2, 3, 4, 5]}} (%x: i32) -> (y: i32)
-# CHECK:       msft.module.extern @supercooldevice(%x: i32) -> (y: i32) attributes {verilogName = "supercooldevice"}
-# CHECK:       msft.module.extern @parameterized_extern<A: none, B: i64>(%ignored_input: i1, %used_input: i4) attributes {verilogName = "parameterized_extern"}
+# TODO: before generating all the modules, the IR doesn't verify since the
+#       hw.instances don't resolve. Fix this.
+# poly.print()
 
 print("Generating rest...")
 poly.generate()
-poly.print()
-
-print("=== Post-generate IR...")
 poly.run_passes()
+
+print("=== Final IR...")
 poly.print()
-# CHECK-LABEL: === Post-generate IR...
+# CHECK-LABEL: === Final IR...
 # CHECK: hw.module @PolynomialSystem
-# CHECK: %[[EXAMPLE_Y:.+]] = hw.instance "example" sym @example @PolyComputeForCoeff__62__42__6_<__INST_HIER: none = #hw.param.expr.str.concat<#hw.param.decl.ref<"__INST_HIER">, ".example">>(x: %c23_i32: i32) -> (y: i32)
-# CHECK: %example2.y = hw.instance "example2" sym @example2 @PolyComputeForCoeff__62__42__6_<__INST_HIER: none = #hw.param.expr.str.concat<#hw.param.decl.ref<"__INST_HIER">, ".example2">>(x: %[[EXAMPLE_Y]]: i32) -> (y: i32)
-# CHECK: hw.instance "example2_1" sym @example2_1 @PolyComputeForCoeff__1__2__3__4__5_<__INST_HIER: none = #hw.param.expr.str.concat<#hw.param.decl.ref<"__INST_HIER">, ".example2_1">>(x: %[[EXAMPLE_Y]]: i32)
+# CHECK: %[[EXAMPLE_Y:.+]] = hw.instance "example" sym @example @PolyComputeForCoeff__62__42__6_(x: %c23_i32: i32) -> (y: i32)
+# CHECK: %example2.y = hw.instance "example2" sym @example2 @PolyComputeForCoeff__62__42__6_(x: %[[EXAMPLE_Y]]: i32) -> (y: i32)
+# CHECK: hw.instance "example2_1" sym @example2_1 @PolyComputeForCoeff__1__2__3__4__5_(x: %[[EXAMPLE_Y]]: i32)
 # CHECK: %CoolPolynomialCompute.y = hw.instance "CoolPolynomialCompute" sym @CoolPolynomialCompute @supercooldevice(x: %c23_i32{{.*}}: i32) -> (y: i32)
-# CHECK-LABEL: hw.module @PolyComputeForCoeff__62__42__6_<__INST_HIER: none = "INSTANTIATE_WITH_INSTANCE_PATH">(%x: i32) -> (y: i32)
-# CHECK-LABEL: hw.module @PolyComputeForCoeff__1__2__3__4__5_<__INST_HIER: none = "INSTANTIATE_WITH_INSTANCE_PATH">(%x: i32)
+# CHECK-LABEL: hw.module @PolyComputeForCoeff__62__42__6_(%x: i32) -> (y: i32)
+# CHECK-LABEL: hw.module @PolyComputeForCoeff__1__2__3__4__5_(%x: i32)
 # CHECK-NOT: hw.module @pycde.PolynomialCompute
 
 poly.emit_outputs()

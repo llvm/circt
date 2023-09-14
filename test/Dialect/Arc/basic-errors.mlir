@@ -337,3 +337,229 @@ arc.define @outputOpVerifier () -> i32 {
   // expected-note @+1 {{actual type: 'i16'}}
   arc.output %0 : i16
 }
+
+// -----
+
+hw.module @operand_type_mismatch(%in0: i2, %in1: i1, %in2: i1, %in3: i1) -> (out0: i1, out1: i1) {
+  // expected-error @below {{all input vector lane types must match}}
+  %0:2 = arc.vectorize (%in0, %in1), (%in2, %in3) : (i2, i1, i1, i1) -> (i1, i1) {
+  ^bb0(%arg0: i1, %arg1: i1):
+    %1 = comb.and %arg0, %arg1 : i1
+    arc.vectorize.return %1 : i1
+  }
+  hw.output %0#0, %0#1 : i1, i1
+}
+
+// -----
+
+hw.module @number_results_does_not_match_way(%in0: i1, %in1: i1, %in2: i1, %in3: i1) -> (out0: i1) {
+  // expected-error @below {{number results must match input vector size}}
+  %0 = arc.vectorize (%in0, %in1), (%in2, %in3) : (i1, i1, i1, i1) -> i1 {
+  ^bb0(%arg0: i1, %arg1: i1):
+    %1 = comb.and %arg0, %arg1 : i1
+    arc.vectorize.return %1 : i1
+  }
+  hw.output %0#0 : i1
+}
+
+// -----
+
+hw.module @result_type_mismatch(%in0: i1, %in1: i1, %in2: i1, %in3: i1) -> (out0: i1, out1: i2) {
+  // expected-error @below {{all result types must match}}
+  %0:2 = arc.vectorize (%in0, %in1), (%in2, %in3) : (i1, i1, i1, i1) -> (i1, i2) {
+  ^bb0(%arg0: i1, %arg1: i1):
+    %1 = comb.and %arg0, %arg1 : i1
+    arc.vectorize.return %1 : i1
+  }
+  hw.output %0#0, %0#1 : i1, i2
+}
+
+// -----
+
+hw.module @vectorized_block_arg_type_mismatch(%in0: i1, %in1: i1, %in2: i1, %in3: i1) -> (out0: i1, out1: i1) {
+  // expected-error @below {{if terminator type matches result type the argument types must match the input types}}
+  %0:2 = arc.vectorize (%in0, %in1), (%in2, %in3) : (i1, i1, i1, i1) -> (i1, i1) {
+  ^bb0(%arg0: i2, %arg1: i1):
+    %0 = comb.extract %arg0 from 0 : (i2) -> i1
+    %1 = comb.and %0, %arg1 : i1
+    arc.vectorize.return %1 : i1
+  }
+  hw.output %0#0, %0#1 : i1, i1
+}
+
+// -----
+
+hw.module @number_vectorized_block_args_mismatch(%in0: i1, %in1: i1, %in2: i1, %in3: i1) -> (out0: i1, out1: i1) {
+  // expected-error @below {{number of block arguments must match number of input vectors}}
+  %0:2 = arc.vectorize (%in0, %in1), (%in2, %in3) : (i1, i1, i1, i1) -> (i1, i1) {
+  ^bb0(%arg0: i1):
+    arc.vectorize.return %arg0 : i1
+  }
+  hw.output %0#0, %0#1 : i1, i1
+}
+
+// -----
+
+hw.module @only_one_block_allowed(%in0: i1, %in1: i1, %in2: i1, %in3: i1) -> (out0: i1, out1: i1) {
+  // expected-error @below {{region #0 ('body') failed to verify constraint: region with 1 blocks}}
+  %0:2 = arc.vectorize (%in0, %in1), (%in2, %in3) : (i1, i1, i1, i1) -> (i1, i1) {
+  ^bb0(%arg0: i1, %arg1: i1):
+    %1 = comb.and %arg0, %arg1 : i1
+    cf.br ^bb1(%1 : i1)
+  ^bb1(%arg2: i1):
+    arc.vectorize.return %arg2 : i1
+  }
+  hw.output %0#0, %0#1 : i1, i1
+}
+
+// -----
+
+hw.module @only_one_block_allowed(%in0: i1, %in1: i1, %in2: i1, %in3: i1) -> (out0: i1, out1: i1) {
+  // expected-error @below {{region #0 ('body') failed to verify constraint: region with 1 blocks}}
+  %0:2 = arc.vectorize (%in0, %in1), (%in2, %in3) : (i1, i1, i1, i1) -> (i1, i1) {}
+  hw.output %0#0, %0#1 : i1, i1
+}
+
+// -----
+
+hw.module @invalid_input_type(%in0: vector<2xi1>, %in1: vector<2xi1>, %in2: vector<2xi1>, %in3: vector<2xi1>) -> (out0: i1, out1: i1) {
+  // expected-error @below {{input vector element type must be a signless integer}}
+  %0:2 = arc.vectorize (%in0, %in1), (%in2, %in3) : (vector<2xi1>, vector<2xi1>, vector<2xi1>, vector<2xi1>) -> (i1, i1) {
+  ^bb0(%arg0: vector<2xi1>, %arg1: vector<2xi1>):
+    %1 = vector.extract %arg0[0] : vector<2xi1>
+    arc.vectorize.return %1 : i1
+  }
+  hw.output %0#0, %0#1 : i1, i1
+}
+
+// -----
+
+hw.module @invalid_result_type(%in0: i1, %in1: i1, %in2: i1, %in3: i1) -> (out0: vector<2xi1>, out1: vector<2xi1>) {
+  // expected-error @below {{may only return a vector type if boundary is already vectorized}}
+  %0:2 = arc.vectorize (%in0, %in1), (%in2, %in3) : (i1, i1, i1, i1) -> (vector<2xi1>, vector<2xi1>) {
+  ^bb0(%arg0: i1, %arg1: i1):
+    %cst = arith.constant dense<0> : vector<2xi1>
+    arc.vectorize.return %cst : vector<2xi1>
+  }
+  hw.output %0#0, %0#1 : vector<2xi1>, vector<2xi1>
+}
+
+// -----
+
+hw.module @input_operand_list_not_empty() -> (out0: i1, out1: i1) {
+  // expected-error @below {{there has to be at least one input vector}}
+  %0:2 = arc.vectorize : () -> (i1, i1) {
+  ^bb0:
+    %1 = arith.constant false
+    arc.vectorize.return %1 : i1
+  }
+  hw.output %0#0, %0#1 : i1, i1
+}
+
+// -----
+
+hw.module @input_vector_sizes_must_match(%in0: i1, %in1: i1, %in2: i1) -> (out0: i1, out1: i1) {
+  // expected-error @below {{all input vectors must have the same size}}
+  %0:2 = arc.vectorize (%in0, %in1), (%in2) : (i1, i1, i1) -> (i1, i1) {
+  ^bb0(%arg0: i1, %arg1: i1):
+    %1 = comb.and %arg0, %arg1 : i1
+    arc.vectorize.return %1 : i1
+  }
+  hw.output %0#0, %0#1 : i1, i1
+}
+
+// -----
+
+hw.module @input_vector_not_empty() -> (out0: i1, out1: i1) {
+  // expected-error @below {{input vector must have at least one element}}
+  %0:2 = arc.vectorize () : () -> (i1, i1) {
+  ^bb0:
+    %1 = arith.constant false
+    arc.vectorize.return %1 : i1
+  }
+  hw.output %0#0, %0#1 : i1, i1
+}
+
+// -----
+
+hw.module @at_least_one_result(%in0: i1, %in1: i1, %in2: i1, %in3: i1) {
+  // expected-error @below {{op must have at least one result}}
+  arc.vectorize (%in0, %in1), (%in2, %in3) : (i1, i1, i1, i1) -> () {
+  ^bb0(%arg0: i1, %arg1: i1):
+    %1 = comb.and %arg0, %arg1 : i1
+    arc.vectorize.return %1 : i1
+  }
+  hw.output
+}
+
+// -----
+
+hw.module @not_divisible_width(%in0: i4, %in1: i4) -> (out0: i4) {
+  %0 = arc.vectorize (%in0), (%in1) : (i4, i4) -> i4 {
+  ^bb0(%arg0: i3, %arg1: i3):
+    %1 = comb.and %arg0, %arg1 : i3
+    // expected-error @below {{operand type must match parent op's result value or be a vectorized or non-vectorized variant of it}}
+    arc.vectorize.return %1 : i3
+  }
+  hw.output %0 : i4
+}
+
+// -----
+
+hw.module @body_vector_size_must_match_vector_operand_number(%in0: i1, %in1: i1, %in2: i1, %in3: i1) -> (out0: i1, out1: i1) {
+  // expected-error @below {{when boundary not vectorized the number of vector element operands must match the width of the vectorized body}}
+  %0:2 = arc.vectorize (%in0, %in1), (%in2, %in3) : (i1, i1, i1, i1) -> (i1, i1) {
+  ^bb0(%arg0: i3, %arg1: i3):
+    %1 = comb.and %arg0, %arg1 : i3
+    arc.vectorize.return %1 : i3
+  }
+  hw.output %0#0, %0#1 : i1, i1
+}
+
+// -----
+
+hw.module @vectorize(%in0: i1, %in1: i1, %in2: i1, %in3: i1) -> (out0: i1, out1: i1) {
+  // expected-error @below {{input and output vector width must match}}
+  %0:2 = arc.vectorize (%in0, %in1), (%in2, %in3) : (i1, i1, i1, i1) -> (i1, i1) {
+  ^bb0(%arg0: i1, %arg1: i1):
+    %1 = comb.concat %arg0, %arg1 : i1, i1
+    arc.vectorize.return %1 : i2
+  }
+  hw.output %0#0, %0#1 : i1, i1
+}
+
+// -----
+
+hw.module @vectorize(%in0: i2, %in1: i2) -> (out0: i2) {
+  // expected-error @below {{block argument must be a vectorized variant of the operand}}
+  %0 = arc.vectorize (%in0), (%in1) : (i2, i2) -> (i2) {
+  ^bb0(%arg0: i1, %arg1: i1):
+    %1 = comb.concat %arg0, %arg1, %arg1, %arg0 : i1, i1, i1, i1
+    arc.vectorize.return %1 : i4
+  }
+  hw.output %0 : i2
+}
+
+// -----
+
+hw.module @vectorize(%in0: i2, %in1: i2) -> (out0: i2) {
+  // expected-error @below {{input and output vector width must match}}
+  %0 = arc.vectorize (%in0), (%in1) : (i2, i2) -> (i2) {
+  ^bb0(%arg0: i2, %arg1: i2):
+    %1 = arith.constant false
+    arc.vectorize.return %1 : i1
+  }
+  hw.output %0 : i2
+}
+
+// -----
+
+hw.module @vectorize(%in0: i4, %in1: i4) -> (out0: i4) {
+  // expected-error @below {{block argument must be a scalar variant of the vectorized operand}}
+  %0 = arc.vectorize (%in0), (%in1) : (i4, i4) -> (i4) {
+  ^bb0(%arg0: i8, %arg1: i8):
+    %1 = arith.constant 0 : i2
+    arc.vectorize.return %1 : i2
+  }
+  hw.output %0 : i4
+}

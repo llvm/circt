@@ -1844,10 +1844,30 @@ circuit VecOfProps:
     ; CHECK-COUNT-2: openvector<string, 2>
 
 ;// -----
+; Test parsing of wires of probes, wires of agg of probes, and namekinds.
+; CHECK-LABEL: circuit "WireOfProbesAndNames"
+circuit WireOfProbesAndNames:
+  module WireOfProbesAndNames:
+    ; CHECK: %mixed = firrtl.wire interesting_name : !firrtl.openbundle
+    wire mixed : { a : UInt<3>, b : Probe<UInt<3>> }
+    ; CHECK: %probe = firrtl.wire : !firrtl.probe
+    wire probe : Probe<UInt<1>>
+
+;// -----
 FIRRTL version 3.2.0
 
 ; CHECK-LABEL: circuit "AnyRef"
 circuit AnyRef:
+  class Foo:
+    skip
   module AnyRef:
     input x : AnyRef
     ; CHECK: !firrtl.anyref
+    output y : AnyRef
+    ; CHECK: !firrtl.anyref
+
+    object foo of Foo
+    propassign y, foo
+    ; CHECK: %[[OBJ:.+]] = firrtl.object
+    ; CHECK: %[[CAST:.+]] = firrtl.object.anyref_cast %[[OBJ]]
+    ; CHECK: firrtl.propassign %y, %[[CAST]]

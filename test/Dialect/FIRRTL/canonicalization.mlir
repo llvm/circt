@@ -2462,6 +2462,20 @@ firrtl.module @constReg8(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, o
   firrtl.connect %out2, %r2 : !firrtl.uint<1>, !firrtl.uint<1>
 }
 
+// CHeck that a register that is only driven by constant and itself
+// is canonicalized into a constant regardless of its reset signal.
+// CHECK-LABEL: @constReg9
+firrtl.module @constReg9(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %en_0: !firrtl.uint<1>, in %en_1: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
+  // CHECK-NOT: firrtl.reg
+  // CHECK: firrtl.strictconnect %out, %c0_ui1
+  %r = firrtl.reg %clock {firrtl.random_init_start = 0 : ui64} : !firrtl.clock, !firrtl.uint<1>
+  %0 = firrtl.and %en_0, %en_1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+  %1 = firrtl.mux(%0, %c0_ui1, %r) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  firrtl.connect %r, %1 : !firrtl.uint<1>, !firrtl.uint<1>
+  firrtl.strictconnect %out, %r : !firrtl.uint<1>
+}
+
 firrtl.module @BitCast(out %o:!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<1>> ) {
   %a = firrtl.wire : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<1>>
   %b = firrtl.bitcast %a : (!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<1>>) -> (!firrtl.uint<3>)

@@ -113,11 +113,19 @@ firrtl.circuit "TargetInstance" {
 // CHECK: firrtl.module @TargetInstance() {
 firrtl.module @TargetInstance() {
     // CHECK: %0 = firrtl.path reference distinct[0]<>
+    // CHECK: %1 = firrtl.path instance distinct[1]<>
+    // CHECK: %2 = firrtl.path member_instance distinct[2]<>
     // CHECK: firrtl.instance child @Child()
     %0 = firrtl.unresolved_path "OMReferenceTarget:~TargetInstance|TargetInstance/child:Child"
+    %1 = firrtl.unresolved_path "OMInstanceTarget:~TargetInstance|TargetInstance/child:Child"
+    %2 = firrtl.unresolved_path "OMMemberInstanceTarget:~TargetInstance|TargetInstance/child:Child"
     firrtl.instance child @Child()
 }
-// CHECK: firrtl.module @Child() attributes {annotations = [{class = "circt.tracker", id = distinct[0]<>}]}
+// CHECK: firrtl.module @Child() attributes {annotations = [
+// CHECK-SAME: {class = "circt.tracker", id = distinct[0]<>},
+// CHECK-SAME: {class = "circt.tracker", id = distinct[1]<>},
+// CHECK-SAME: {class = "circt.tracker", id = distinct[2]<>}
+// CHECK-SAME: ]}
 firrtl.module @Child() { }
 }
 
