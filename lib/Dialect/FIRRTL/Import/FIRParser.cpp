@@ -3960,8 +3960,13 @@ ParseResult FIRStmtParser::parseWire() {
   StringAttr sym = {};
 
   bool forceable = !!firrtl::detail::getForceableResultType(true, type);
-  auto result = builder.create<WireOp>(type, id, NameKindEnum::InterestingName,
-                                       annotations, sym, forceable);
+  // Names of only-nonHW should be droppable.
+  auto namekind = isa<PropertyType, RefType>(type)
+                      ? NameKindEnum::DroppableName
+                      : NameKindEnum::InterestingName;
+
+  auto result =
+      builder.create<WireOp>(type, id, namekind, annotations, sym, forceable);
   return moduleContext.addSymbolEntry(id, result.getResult(),
                                       startTok.getLoc());
 }
