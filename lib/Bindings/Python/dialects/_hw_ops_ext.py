@@ -145,7 +145,7 @@ class ModuleLike:
 
     module_ports = []
     input_names = []
-    input_locs = []
+    port_locs = []
     unknownLoc = Location.unknown().attr
     for (i, (port_name, port_type)) in enumerate(input_ports):
       input_name = StringAttr.get(str(port_name))
@@ -153,22 +153,21 @@ class ModuleLike:
       input_port = hw.ModulePort(input_name, port_type, input_dir)
       module_ports.append(input_port)
       input_names.append(input_name)
-      input_locs.append(unknownLoc)
+      port_locs.append(unknownLoc)
     attributes["argNames"] = ArrayAttr.get(input_names)
-    attributes["argLocs"] = ArrayAttr.get(input_locs)
 
     output_types = []
     output_names = []
-    output_locs = []
     for (i, (port_name, port_type)) in enumerate(output_ports):
       output_name = StringAttr.get(str(port_name))
       output_dir = hw.ModulePortDirection.OUTPUT
       output_port = hw.ModulePort(output_name, port_type, output_dir)
       module_ports.append(output_port)
       output_names.append(output_name)
-      output_locs.append(unknownLoc)
+      port_locs.append(unknownLoc)
     attributes["resultNames"] = ArrayAttr.get(output_names)
-    attributes["resultLocs"] = ArrayAttr.get(output_locs)
+    attributes["portLocs"] = ArrayAttr.get(port_locs)
+    attributes["per_port_attrs"] = ArrayAttr.get([])
 
     if len(parameters) > 0 or "parameters" not in attributes:
       attributes["parameters"] = ArrayAttr.get(parameters)
