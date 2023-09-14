@@ -278,3 +278,50 @@ hw.module @testNaming(%myArg : i32, %go : i1, %clk : i1, %rst : i1) -> (out: i32
   }
   hw.output %out#0 : i32
 }
+
+// CHECK-LABEL:   hw.module @pipelineLatencyCrashRepro(
+// CHECK-SAME:            %[[VAL_0:.*]]: i1, %[[VAL_1:.*]]: i1, %[[VAL_2:.*]]: i1) {
+// CHECK:           %[[VAL_3:.*]], %[[VAL_4:.*]] = pipeline.scheduled() clock(%[[VAL_5:.*]] = %[[VAL_0]]) reset(%[[VAL_6:.*]] = %[[VAL_1]]) go(%[[VAL_7:.*]] = %[[VAL_2]]) -> (pipeline_done : i128) {
+// CHECK:             %[[VAL_8:.*]] = "dummy.op"() : () -> i128
+// CHECK:             pipeline.stage ^bb1 regs(%[[VAL_8]] : i128)
+// CHECK:           ^bb1(%[[VAL_9:.*]]: i128, %[[VAL_10:.*]]: i1):
+// CHECK:             %[[VAL_11:.*]] = pipeline.latency 2 -> (i54) {
+// CHECK:               %[[VAL_12:.*]] = "dummy.op"() : () -> i54
+// CHECK:               pipeline.latency.return %[[VAL_12]] : i54
+// CHECK:             }
+// CHECK:             pipeline.stage ^bb2 regs(%[[VAL_9]] : i128) pass(%[[VAL_11]] : i54)
+// CHECK:           ^bb2(%[[VAL_13:.*]]: i128, %[[VAL_14:.*]]: i54, %[[VAL_15:.*]]: i1):
+// CHECK:             pipeline.stage ^bb3 regs(%[[VAL_13]] : i128) pass(%[[VAL_14]] : i54)
+// CHECK:           ^bb3(%[[VAL_16:.*]]: i128, %[[VAL_17:.*]]: i54, %[[VAL_18:.*]]: i1):
+// CHECK:             "dummy.op"(%[[VAL_17]]) : (i54) -> ()
+// CHECK:             pipeline.stage ^bb4 regs(%[[VAL_16]] : i128)
+// CHECK:           ^bb4(%[[VAL_19:.*]]: i128, %[[VAL_20:.*]]: i1):
+// CHECK:             pipeline.return %[[VAL_19]] : i128
+// CHECK:           }
+// CHECK:           hw.output
+// CHECK:         }
+
+// Tests an issue wherein the order of pass and reg operands was incorrect in
+// between the order that block arguments were added to a stage, and the order
+// that said block arguments were used to replace backedges within a block.
+
+hw.module @pipelineLatencyCrashRepro(%clk: i1, %rst: i1, %go: i1) {
+  %pipeline_done, %done = pipeline.scheduled() clock(%c = %clk) reset(%r = %rst) go(%g = %go) -> (pipeline_done : i128) {
+    %0 = "dummy.op"() : () -> i128
+    pipeline.stage ^bb1  
+  ^bb1(%s1_enable: i1):  // pred: ^bb0
+    %1 = pipeline.latency 2 -> (i54) {
+      %2 = "dummy.op"() : () -> i54
+      pipeline.latency.return %2 : i54
+    }
+    pipeline.stage ^bb2  
+  ^bb2(%s2_enable: i1):  // pred: ^bb1
+    pipeline.stage ^bb3  
+  ^bb3(%s3_enable: i1):  // pred: ^bb2
+    "dummy.op"(%1) : (i54) -> ()
+    pipeline.stage ^bb4  
+  ^bb4(%s4_enable: i1):  // pred: ^bb3
+    pipeline.return %0 : i128
+  }
+  hw.output
+}
