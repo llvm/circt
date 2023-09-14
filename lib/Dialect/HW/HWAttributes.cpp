@@ -1002,6 +1002,29 @@ FailureOr<TypedAttr> hw::evaluateParametricAttr(Location loc,
   return TypedAttr();
 }
 
+template <typename TArray>
+FailureOr<Type> evaluateParametricArrayType(Location loc, ArrayAttr parameters,
+                                            TArray arrayType) {
+  auto size = evaluateParametricAttr(loc, parameters, arrayType.getSizeAttr());
+  if (failed(size))
+    return failure();
+  auto elementType =
+      evaluateParametricType(loc, parameters, arrayType.getElementType());
+  if (failed(elementType))
+    return failure();
+
+  // If the size was evaluated to a constant, use a 64-bit integer
+  // attribute version of it
+  if (auto intAttr = size->template dyn_cast<IntegerAttr>())
+    return TArray::get(
+        arrayType.getContext(), *elementType,
+        IntegerAttr::get(IntegerType::get(arrayType.getContext(), 64),
+                         intAttr.getValue().getSExtValue()));
+
+  // Otherwise parameter references are still involved
+  return TArray::get(arrayType.getContext(), *elementType, *size);
+}
+
 FailureOr<Type> hw::evaluateParametricType(Location loc, ArrayAttr parameters,
                                            Type type) {
   return llvm::TypeSwitch<Type, FailureOr<Type>>(type)
@@ -1019,27 +1042,10 @@ FailureOr<Type> hw::evaluateParametricType(Location loc, ArrayAttr parameters,
         // Otherwise parameter references are still involved
         return hw::IntType::get(evaluatedWidth->cast<TypedAttr>());
       })
-      .Case<hw::ArrayType>([&](hw::ArrayType arrayType) -> FailureOr<Type> {
-        auto size =
-            evaluateParametricAttr(loc, parameters, arrayType.getSizeAttr());
-        if (failed(size))
-          return failure();
-        auto elementType =
-            evaluateParametricType(loc, parameters, arrayType.getElementType());
-        if (failed(elementType))
-          return failure();
-
-        // If the size was evaluated to a constant, use a 64-bit integer
-        // attribute version of it
-        if (auto intAttr = size->dyn_cast<IntegerAttr>())
-          return hw::ArrayType::get(
-              arrayType.getContext(), *elementType,
-              IntegerAttr::get(IntegerType::get(type.getContext(), 64),
-                               intAttr.getValue().getSExtValue()));
-
-        // Otherwise parameter references are still involved
-        return hw::ArrayType::get(arrayType.getContext(), *elementType, *size);
-      })
+      .Case<hw::ArrayType, hw::UnpackedArrayType>(
+          [&](auto arrayType) -> FailureOr<Type> {
+            return evaluateParametricArrayType(loc, parameters, arrayType);
+          })
       .Default([&](auto) { return type; });
 }
 
@@ -1058,7 +1064,7 @@ bool hw::isParametricType(mlir::Type t) {
   return llvm::TypeSwitch<Type, bool>(t)
       .Case<hw::IntType>(
           [&](hw::IntType t) { return isParamAttrWithParamRef(t.getWidth()); })
-      .Case<hw::ArrayType>([&](hw::ArrayType arrayType) {
+      .Case<hw::ArrayType, hw::UnpackedArrayType>([&](auto arrayType) {
         return isParametricType(arrayType.getElementType()) ||
                isParamAttrWithParamRef(arrayType.getSizeAttr());
       })

@@ -32,20 +32,32 @@ module {
     hw.output %0 : !hw.int<#hw.param.decl.ref<"X">>
   }
 
+// CHECK-LABEL:   hw.module @uArrayUser_N_5_X_9(
+// CHECK-SAME:                                  %[[VAL_0:.*]]: !hw.uarray<5xi9>) {
+// CHECK:           hw.output
+// CHECK:         }
+  hw.module @uArrayUser<N: i32, X: i32>(
+      %vec : !hw.uarray<#hw.param.decl.ref<"N"> x !hw.int<#hw.param.decl.ref<"X">>>) -> (){
+  }
+
 // CHECK-LABEL:   hw.module @top(
-// CHECK-SAME:        %[[VAL_0:.*]]: !hw.array<4xi8>, %[[VAL_1:.*]]: i8, %[[VAL_2:.*]]: !hw.array<5xi9>, %[[VAL_3:.*]]: i9) -> (out1: i8, out2: i9) {
-// CHECK:           %[[VAL_4:.*]] = hw.instance "inst1" @addToFirst_N_4_X_8(vec: %[[VAL_0]]: !hw.array<4xi8>, a: %[[VAL_1]]: i8) -> (out: i8)
-// CHECK:           %[[VAL_5:.*]] = hw.instance "inst2" @addToFirst_N_5_X_9(vec: %[[VAL_2]]: !hw.array<5xi9>, a: %[[VAL_3]]: i9) -> (out: i9)
-// CHECK:           hw.output %[[VAL_4]], %[[VAL_5]] : i8, i9
+// CHECK-SAME:          %[[VAL_0:.*]]: !hw.array<4xi8>, %[[VAL_1:.*]]: i8, %[[VAL_2:.*]]: !hw.array<5xi9>, %[[VAL_3:.*]]: i9, %[[VAL_4:.*]]: !hw.uarray<5xi9>) -> (out1: i8, out2: i9) {
+// CHECK:           %[[VAL_5:.*]] = hw.instance "inst1" @addToFirst_N_4_X_8(vec: %[[VAL_0]]: !hw.array<4xi8>, a: %[[VAL_1]]: i8) -> (out: i8)
+// CHECK:           %[[VAL_6:.*]] = hw.instance "inst2" @addToFirst_N_5_X_9(vec: %[[VAL_2]]: !hw.array<5xi9>, a: %[[VAL_3]]: i9) -> (out: i9)
+// CHECK:           hw.instance "inst3" @uArrayUser_N_5_X_9(vec: %[[VAL_4]]: !hw.uarray<5xi9>) -> ()
+// CHECK:           hw.output %[[VAL_5]], %[[VAL_6]] : i8, i9
 // CHECK:         }
   hw.module @top(
       %vec1 : !hw.array<4 x !hw.int<8>>, %a1 : !hw.int<8>,
-      %vec2 : !hw.array<5 x !hw.int<9>>, %a2 : !hw.int<9>) ->
+      %vec2 : !hw.array<5 x !hw.int<9>>, %a2 : !hw.int<9>,
+      %vec3 : !hw.uarray<5 x !hw.int<9>>) ->
       (out1: !hw.int<8>, out2: !hw.int<9>) {
     %0 = hw.instance "inst1" @addToFirst<N: i32 = 4, X: i32 = 8>
       (vec: %vec1 : !hw.array<4 x !hw.int<8>>, a: %a1 : !hw.int<8>) -> (out: !hw.int<8>)
     %1 = hw.instance "inst2" @addToFirst<N: i32 = 5, X: i32 = 9>
       (vec: %vec2 : !hw.array<5 x !hw.int<9>>, a: %a2 : !hw.int<9>) -> (out: !hw.int<9>)
+    hw.instance "inst3" @uArrayUser<N: i32 = 5, X: i32 = 9>
+      (vec: %vec3 : !hw.uarray<5 x !hw.int<9>>) -> ()
     hw.output %0, %1 : i8, i9
   }
 }
