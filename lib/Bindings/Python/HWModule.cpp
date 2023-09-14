@@ -210,6 +210,15 @@ void circt::python::populateDialectHWSubmodule(py::module &m) {
         return cls(hwParamVerbatimAttrGet(text));
       });
 
+  mlir_attribute_subclass(m, "OutputFileAttr", hwAttrIsAOutputFileAttr)
+      .def_classmethod("get_from_filename", [](py::object cls,
+                                               MlirAttribute fileName,
+                                               bool excludeFromFileList,
+                                               bool includeReplicatedOp) {
+        return cls(hwOutputFileGetFromFileName(fileName, excludeFromFileList,
+                                               includeReplicatedOp));
+      });
+
   mlir_attribute_subclass(m, "InnerSymAttr", hwAttrIsAInnerSymAttr)
       .def_classmethod("get",
                        [](py::object cls, MlirAttribute symName) {
