@@ -70,6 +70,18 @@ MlirAttribute circtMSFTAppIDAttrGet(MlirContext, MlirStringRef name,
 MLIR_CAPI_EXPORTED MlirStringRef circtMSFTAppIDAttrGetName(MlirAttribute attr);
 MLIR_CAPI_EXPORTED uint64_t circtMSFTAppIDAttrGetIndex(MlirAttribute attr);
 
+MLIR_CAPI_EXPORTED bool circtMSFTAttributeIsAnAppIDPathAttr(MlirAttribute);
+MLIR_CAPI_EXPORTED
+MlirAttribute circtMSFTAppIDAttrPathGet(MlirContext, MlirAttribute root,
+                                        intptr_t numElements,
+                                        MlirAttribute const *elements);
+MLIR_CAPI_EXPORTED MlirAttribute
+circtMSFTAppIDAttrPathGetRoot(MlirAttribute attr);
+MLIR_CAPI_EXPORTED uint64_t
+circtMSFTAppIDAttrPathGetNumComponents(MlirAttribute attr);
+MLIR_CAPI_EXPORTED MlirAttribute
+circtMSFTAppIDAttrPathGetComponent(MlirAttribute attr, uint64_t index);
+
 //===----------------------------------------------------------------------===//
 // PrimitiveDB.
 //===----------------------------------------------------------------------===//

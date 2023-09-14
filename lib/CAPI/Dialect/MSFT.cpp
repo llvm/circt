@@ -247,3 +247,27 @@ MlirStringRef circtMSFTAppIDAttrGetName(MlirAttribute attr) {
 uint64_t circtMSFTAppIDAttrGetIndex(MlirAttribute attr) {
   return unwrap(attr).cast<AppIDAttr>().getIndex();
 }
+
+bool circtMSFTAttributeIsAnAppIDPathAttr(MlirAttribute attr) {
+  return isa<AppIDPathAttr>(unwrap(attr));
+}
+
+MlirAttribute circtMSFTAppIDAttrPathGet(MlirContext ctxt, MlirAttribute root,
+                                        intptr_t numElements,
+                                        MlirAttribute const *cElements) {
+  SmallVector<AppIDAttr, 8> elements;
+  for (intptr_t i = 0; i < numElements; ++i)
+    elements.push_back(cast<AppIDAttr>(unwrap(cElements[i])));
+  return wrap(AppIDPathAttr::get(
+      unwrap(ctxt), cast<FlatSymbolRefAttr>(unwrap(root)), elements));
+}
+MlirAttribute circtMSFTAppIDAttrPathGetRoot(MlirAttribute attr) {
+  return wrap(cast<AppIDPathAttr>(unwrap(attr)).getRoot());
+}
+uint64_t circtMSFTAppIDAttrPathGetNumComponents(MlirAttribute attr) {
+  return cast<AppIDPathAttr>(unwrap(attr)).getPath().size();
+}
+MlirAttribute circtMSFTAppIDAttrPathGetComponent(MlirAttribute attr,
+                                                 uint64_t index) {
+  return wrap(cast<AppIDPathAttr>(unwrap(attr)).getPath()[index]);
+}

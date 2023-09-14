@@ -265,3 +265,9 @@ with ir.Context() as ctx, ir.Location.unknown():
   appid1 = msft.AppIDAttr.get("foo", 4)
   # CHECK: appid1: #msft.appid<"foo"[4]>, foo, 4
   print(f"appid1: {appid1}, {appid1.name}, {appid1.index}")
+
+  appid_path1 = msft.AppIDPathAttr.get(ir.FlatSymbolRefAttr.get("Foo"),
+                                       [appid1])
+  # CHECK: appid_path1: #msft.appid_path<@Foo[<"foo"[4]>]>, @Foo, 1, #msft.appid<"foo"[4]>
+  print(f"appid_path1: {appid_path1}, {appid_path1.root}, "
+        f"{len(appid_path1)}, {appid_path1[0]}")
