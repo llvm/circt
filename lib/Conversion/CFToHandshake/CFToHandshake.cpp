@@ -575,7 +575,7 @@ HandshakeLowering::feedForwardRewriting(ConversionPatternRewriter &rewriter) {
   return FeedForwardNetworkRewriter(*this, rewriter).apply();
 }
 
-static bool loopsHaveSingleExit(CFGLoopInfo &loopInfo) {
+[[maybe_unused]] static bool loopsHaveSingleExit(CFGLoopInfo &loopInfo) {
   for (CFGLoop *loop : loopInfo.getTopLevelLoops())
     if (!loop->getExitBlock())
       return false;
