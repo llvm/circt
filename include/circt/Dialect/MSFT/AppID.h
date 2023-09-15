@@ -20,42 +20,52 @@
 #include "llvm/ADT/DenseMap.h"
 
 namespace circt {
+namespace igraph {
+class InstanceGraph;
+}
+
 namespace msft {
 
 class AppIDIndex {
 public:
-  AppIDIndex(Operation *root);
+  AppIDIndex(Operation *mlirTop);
 
   /// Get the dynamic instance for a particular appid path.
   DynamicInstanceOp getInstance(AppIDPathAttr path);
 
 private:
   class ChildAppIDs {
-    friend class AppIDIndex;
-    hw::HWModuleLike mod;
+  public:
+    ChildAppIDs() : processed(false) {}
 
-    using InstancePath = SmallVector<hw::InnerRefAttr, 2>;
-    // Contains paths to all of our child AppIDs. Necessary because AppIDs can
-    // skip levels in the instance hierarchy. InstancePaths are relative to
-    // 'mod'.
-    DenseMap<AppIDAttr, InstancePath> childAppIDPaths;
+    LogicalResult addChildAppID(AppIDAttr id, Operation *op);
+    LogicalResult process(hw::HWModuleLike modToProcess,
+                          igraph::InstanceGraph &);
+
+  private:
+    hw::HWModuleLike mod;
+    bool processed;
+
+    // The operation involved in an appid.
+    DenseMap<AppIDAttr, Operation *> childAppIDPaths;
   };
 
-  /// Get the index for a module. Reference is valid for the lifetime of this
-  /// class instance.
-  const ChildAppIDs &lookup(hw::HWModuleLike mod);
-
   /// Get the subinstance (relative to 'submod') for the subpath.
-  DynamicInstanceOp getSubInstance(hw::HWModuleLike submod,
+  DynamicInstanceOp getSubInstance(hw::HWModuleLike mod,
+                                   InstanceHierarchyOp inst,
                                    ArrayRef<AppIDAttr> subpath);
 
   // The 'top' MLIR module. Not necessarily a `mlir::ModuleOp` since this will
   // eventually be replaced by `hw::DesignOp`.
-  Operation *root;
+  Operation *mlirTop;
 
-  // Map modules to their cached child app ID indexes. Use pointers to make
-  // movement within the map cheaper.
-  DenseMap<hw::HWModuleLike, std::unique_ptr<ChildAppIDs>> containerAppIDs;
+  // Map modules to their cached child app ID indexes.
+  DenseMap<hw::HWModuleLike, ChildAppIDs> containerAppIDs;
+
+  hw::HWSymbolCache symCache;
+  DenseMap<SymbolRefAttr, InstanceHierarchyOp> dynHierRoots;
+  DenseMap<DynamicInstanceOp, DenseMap<hw::InnerRefAttr, DynamicInstanceOp>>
+      childIndex;
 };
 
 } // namespace msft
