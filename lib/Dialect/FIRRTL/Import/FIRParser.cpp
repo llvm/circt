@@ -2317,10 +2317,14 @@ ParseResult FIRStmtParser::parseListExp(Value &result) {
         if (parseExp(operand, "expected expression in List expression"))
           return failure();
 
-        if (operand.getType() != elementType)
-          return emitError(loc, "unexpected expression of type ")
-                 << operand.getType() << " in List expression of type "
-                 << elementType;
+        if (operand.getType() != elementType) {
+          if (!isa<AnyRefType>(elementType) ||
+              !isa<ClassType>(operand.getType()))
+            return emitError(loc, "unexpected expression of type ")
+                   << operand.getType() << " in List expression of type "
+                   << elementType;
+          operand = builder.create<ObjectAnyRefCastOp>(operand);
+        }
 
         operands.push_back(operand);
         return success();
@@ -2356,14 +2360,20 @@ ParseResult FIRStmtParser::parseMapExp(Value &result) {
             parseExp(value, "expected value expression in Map expression"))
           return failure();
 
-        if (key.getType() != keyType)
-          return emitError(loc, "unexpected expression of type ")
-                 << key.getType() << " for key in Map expression, expected "
-                 << keyType;
-        if (value.getType() != valueType)
-          return emitError(loc, "unexpected expression of type ")
-                 << value.getType() << " for value in Map expression, expected "
-                 << valueType;
+        if (key.getType() != keyType) {
+          if (!isa<AnyRefType>(keyType) || !isa<ClassType>(key.getType()))
+            return emitError(loc, "unexpected expression of type ")
+                   << key.getType() << " for key in Map expression, expected "
+                   << keyType;
+          key = builder.create<ObjectAnyRefCastOp>(key);
+        }
+        if (value.getType() != valueType) {
+          if (!isa<AnyRefType>(valueType) || !isa<ClassType>(value.getType()))
+            return emitError(loc, "unexpected expression of type ")
+                   << value.getType()
+                   << " for value in Map expression, expected " << valueType;
+          value = builder.create<ObjectAnyRefCastOp>(value);
+        }
 
         keys.push_back(key);
         values.push_back(value);
