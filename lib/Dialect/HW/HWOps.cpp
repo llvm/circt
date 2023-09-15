@@ -903,25 +903,12 @@ static Attribute getAttribute(StringRef name, ArrayRef<NamedAttribute> attrs) {
 static void addArgAndResultAttrsHW(Builder &builder, OperationState &result,
                                    ArrayRef<DictionaryAttr> argAttrs,
                                    ArrayRef<DictionaryAttr> resultAttrs) {
-  auto nonEmptyAttrsFn = [](DictionaryAttr attrs) {
-    return attrs && !attrs.empty();
-  };
-  // Convert the specified array of dictionary attrs (which may have null
-  // entries) to an ArrayAttr of dictionaries.
-  auto getArrayAttr = [&](ArrayRef<DictionaryAttr> dictAttrs) {
-    SmallVector<Attribute> attrs;
-    for (auto &dict : dictAttrs)
-      attrs.push_back(dict ? dict : builder.getDictionaryAttr({}));
-    return builder.getArrayAttr(attrs);
-  };
-
-  SmallVector<Attribute> portAttrs;
-  portAttrs.append(argAttrs.begin(), argAttrs.end());
-  portAttrs.append(resultAttrs.begin(), resultAttrs.end());
-
   // Add the attributes to the function arguments.
-  result.addAttribute("per_port_attrs",
-                      arrayOrEmpty(builder.getContext(), portAttrs));
+  result.addAttribute(
+      "per_port_attrs",
+      arrayOrEmpty(builder.getContext(),
+                   llvm::to_vector(
+                       llvm::concat<const Attribute>(argAttrs, resultAttrs))));
 }
 
 static void addArgAndResultAttrsHW(Builder &builder, OperationState &result,
