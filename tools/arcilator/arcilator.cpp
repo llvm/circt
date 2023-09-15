@@ -395,10 +395,21 @@ static LogicalResult executeArcilator(MLIRContext &context) {
 
   // Register our dialects.
   DialectRegistry registry;
-  registry.insert<hw::HWDialect, comb::CombDialect, seq::SeqDialect,
-                  sv::SVDialect, arc::ArcDialect, mlir::arith::ArithDialect,
-                  mlir::scf::SCFDialect, mlir::func::FuncDialect,
-                  mlir::cf::ControlFlowDialect, mlir::LLVM::LLVMDialect>();
+  // clang-format off
+  registry.insert<
+    arc::ArcDialect,
+    comb::CombDialect,
+    hw::HWDialect,
+    mlir::LLVM::LLVMDialect,
+    mlir::arith::ArithDialect,
+    mlir::cf::ControlFlowDialect,
+    mlir::func::FuncDialect,
+    mlir::scf::SCFDialect,
+    om::OMDialect,
+    seq::SeqDialect,
+    sv::SVDialect
+  >();
+  // clang-format on
 
   arc::initAllExternalInterfaces(registry);
 
