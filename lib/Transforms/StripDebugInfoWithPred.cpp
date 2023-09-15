@@ -89,6 +89,7 @@ void StripDebugInfoWithPred::runOnOperation() {
           updateLocIfChanged(op, getStrippedLoc(op->getLoc()));
           updateLocArray(op, "argLocs");
           updateLocArray(op, "resultLocs");
+          updateLocArray(op, "portLocs");
           // Strip block arguments debug info.
           for (Region &region : op->getRegions())
             for (Block &block : region.getBlocks())

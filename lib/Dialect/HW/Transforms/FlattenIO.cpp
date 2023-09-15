@@ -253,10 +253,10 @@ updateNameAttribute(ModTy op, StringRef attrName,
   return newNames;
 }
 
-static llvm::SmallVector<Location>
+static llvm::SmallVector<Attribute>
 updateLocAttribute(DenseMap<unsigned, hw::StructType> &structMap,
                    ArrayAttr oldLocs) {
-  llvm::SmallVector<Location> newLocs;
+  llvm::SmallVector<Attribute> newLocs;
   if (!oldLocs)
     return newLocs;
   for (auto [i, oldLoc] : llvm::enumerate(oldLocs.getAsRange<Location>())) {
@@ -279,13 +279,12 @@ updateLocAttribute(DenseMap<unsigned, hw::StructType> &structMap,
 /// use this function to copy the location from the original argument to the
 /// set of flattened arguments.
 static void
-updateBlockLocations(hw::HWModuleLike op, StringRef attrName,
+updateBlockLocations(hw::HWModuleLike op,
                      DenseMap<unsigned, hw::StructType> &structMap) {
-  auto locs = op.getOperation()->getAttrOfType<ArrayAttr>(attrName);
-  if (!locs || op.getModuleBody().empty())
+  auto locs = op.getInputLocs();
+  if (locs.empty() || op.getModuleBody().empty())
     return;
-  for (auto [arg, loc] : llvm::zip(op.getBodyBlock()->getArguments(),
-                                   locs.getAsRange<LocationAttr>()))
+  for (auto [arg, loc] : llvm::zip(op.getBodyBlock()->getArguments(), locs))
     arg.setLoc(loc);
 }
 
@@ -373,9 +372,11 @@ static LogicalResult flattenOpsOfType(ModuleOp module, bool recursive) {
           oldResNames[op].template getAsValueRange<StringAttr>());
       newArgNames.append(newResNames.begin(), newResNames.end());
       op.setAllPortNames(newArgNames);
-      op.setInputLocs(updateLocAttribute(ioInfo.argStructs, oldArgLocs[op]));
-      op.setOutputLocs(updateLocAttribute(ioInfo.resStructs, oldResLocs[op]));
-      updateBlockLocations(op, "argLocs", ioInfo.argStructs);
+      auto newArgLocs = updateLocAttribute(ioInfo.argStructs, oldArgLocs[op]);
+      auto newResLocs = updateLocAttribute(ioInfo.resStructs, oldResLocs[op]);
+      newArgLocs.append(newResLocs.begin(), newResLocs.end());
+      op.setPortLocsAttr(ArrayAttr::get(op.getContext(), newArgLocs));
+      updateBlockLocations(op, ioInfo.argStructs);
     }
 
     // And likewise with the converted instance ops.
