@@ -61,6 +61,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-DAG: hw.constant 2 : i3
     %c2_si3 = firrtl.constant 2 : !firrtl.sint<3>
 
+    // CHECK-DAG: [[CLOCK_LOW:%.+]] = seq.const_clock  low
 
     // CHECK: %out4 = hw.wire [[OUT4_VAL:%.+]] sym @{{.*}} : i4
     %out4 = firrtl.wire {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<4>
@@ -72,8 +73,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK: %dntnode = hw.wire %in1 sym @{{.+}}
     %dntnode = firrtl.node %in1 {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<4>
 
-    // CHECK: [[CLOCK:%.+]] = seq.to_clock %false
-    // CHECK: %clockWire = hw.wire [[CLOCK]] : !seq.clock
+    // CHECK: %clockWire = hw.wire [[CLOCK_LOW]] : !seq.clock
     %c0_clock = firrtl.specialconstant 0 : !firrtl.clock
     %clockWire = firrtl.wire : !firrtl.clock
     firrtl.connect %clockWire, %c0_clock : !firrtl.clock, !firrtl.clock
