@@ -2,12 +2,12 @@
 
 // CHECK-LABEL: firrtl.circuit "Empty"
 firrtl.circuit "Empty" {
-  // CHECK: firrtl.module @Empty0
-  firrtl.module @Empty0(in %i0: !firrtl.uint<1>) { }
-  // CHECK-NOT: firrtl.module @Empty1
-  firrtl.module @Empty1(in %i1: !firrtl.uint<1>) { }
-  // CHECK-NOT: firrtl.module @Empty2
-  firrtl.module @Empty2(in %i2: !firrtl.uint<1>) { }
+  // CHECK: firrtl.module private @Empty0
+  firrtl.module private @Empty0(in %i0: !firrtl.uint<1>) { }
+  // CHECK-NOT: firrtl.module private @Empty1
+  firrtl.module private @Empty1(in %i1: !firrtl.uint<1>) { }
+  // CHECK-NOT: firrtl.module private @Empty2
+  firrtl.module private @Empty2(in %i2: !firrtl.uint<1>) { }
   firrtl.module @Empty() {
     // CHECK: %e0_i0 = firrtl.instance e0  @Empty0
     // CHECK: %e1_i0 = firrtl.instance e1  @Empty0
@@ -21,12 +21,12 @@ firrtl.circuit "Empty" {
 
 // CHECK-LABEL: firrtl.circuit "Simple"
 firrtl.circuit "Simple" {
-  // CHECK: firrtl.module @Simple0
-  firrtl.module @Simple0() {
+  // CHECK: firrtl.module private @Simple0
+  firrtl.module private @Simple0() {
     %a = firrtl.wire: !firrtl.bundle<a: uint<1>>
   }
-  // CHECK-NOT: firrtl.module @Simple1
-  firrtl.module @Simple1() {
+  // CHECK-NOT: firrtl.module private @Simple1
+  firrtl.module private @Simple1() {
     %b = firrtl.wire: !firrtl.bundle<b: uint<1>>
   }
   firrtl.module @Simple() {
@@ -39,16 +39,16 @@ firrtl.circuit "Simple" {
 
 // CHECK-LABEL: firrtl.circuit "PrimOps"
 firrtl.circuit "PrimOps" {
-  // CHECK: firrtl.module @PrimOps0
-  firrtl.module @PrimOps0(in %a: !firrtl.bundle<a: uint<2>, b: uint<2>, c flip: uint<2>>) {
+  // CHECK: firrtl.module private @PrimOps0
+  firrtl.module private @PrimOps0(in %a: !firrtl.bundle<a: uint<2>, b: uint<2>, c flip: uint<2>>) {
     %a_a = firrtl.subfield %a[a] : !firrtl.bundle<a: uint<2>, b: uint<2>, c flip: uint<2>>
     %a_b = firrtl.subfield %a[b] : !firrtl.bundle<a: uint<2>, b: uint<2>, c flip: uint<2>>
     %a_c = firrtl.subfield %a[c] : !firrtl.bundle<a: uint<2>, b: uint<2>, c flip: uint<2>>
     %0 = firrtl.xor %a_a, %a_b: (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
     firrtl.connect %a_c, %a_b: !firrtl.uint<2>, !firrtl.uint<2>
   }
-  // CHECK-NOT: firrtl.module @PrimOps1
-  firrtl.module @PrimOps1(in %b: !firrtl.bundle<a: uint<2>, b: uint<2>, c flip: uint<2>>) {
+  // CHECK-NOT: firrtl.module private @PrimOps1
+  firrtl.module private @PrimOps1(in %b: !firrtl.bundle<a: uint<2>, b: uint<2>, c flip: uint<2>>) {
     %b_a = firrtl.subfield %b[a] : !firrtl.bundle<a: uint<2>, b: uint<2>, c flip: uint<2>>
     %b_b = firrtl.subfield %b[b] : !firrtl.bundle<a: uint<2>, b: uint<2>, c flip: uint<2>>
     %b_c = firrtl.subfield %b[c] : !firrtl.bundle<a: uint<2>, b: uint<2>, c flip: uint<2>>
@@ -66,8 +66,8 @@ firrtl.circuit "PrimOps" {
 // Check that when operations are recursively merged.
 // CHECK-LABEL: firrtl.circuit "WhenOps"
 firrtl.circuit "WhenOps" {
-  // CHECK: firrtl.module @WhenOps0
-  firrtl.module @WhenOps0(in %p : !firrtl.uint<1>) {
+  // CHECK: firrtl.module private @WhenOps0
+  firrtl.module private @WhenOps0(in %p : !firrtl.uint<1>) {
     // CHECK: firrtl.when %p : !firrtl.uint<1> {
     // CHECK:  %w = firrtl.wire : !firrtl.uint<8>
     // CHECK: }
@@ -75,8 +75,8 @@ firrtl.circuit "WhenOps" {
       %w = firrtl.wire : !firrtl.uint<8>
     }
   }
-  // CHECK-NOT: firrtl.module @PrimOps1
-  firrtl.module @WhenOps1(in %p : !firrtl.uint<1>) {
+  // CHECK-NOT: firrtl.module private @WhenOps1
+  firrtl.module private @WhenOps1(in %p : !firrtl.uint<1>) {
     firrtl.when %p : !firrtl.uint<1> {
       %w = firrtl.wire : !firrtl.uint<8>
     }
@@ -99,8 +99,8 @@ firrtl.circuit "Annotations" {
   // CHECK: hw.hierpath private @annos_nla2 [@Annotations::@annotations0, @Annotations0]
   hw.hierpath private @annos_nla2 [@Annotations::@annotations0, @Annotations0]
 
-  // CHECK: firrtl.module @Annotations0() attributes {annotations = [{circt.nonlocal = [[NLA0]], class = "one"}]}
-  firrtl.module @Annotations0() {
+  // CHECK: firrtl.module private @Annotations0() attributes {annotations = [{circt.nonlocal = [[NLA0]], class = "one"}]}
+  firrtl.module private @Annotations0() {
     // Annotation from other module becomes non-local.
     // CHECK: %a = firrtl.wire {annotations = [{circt.nonlocal = [[NLA0]], class = "one"}]}
     %a = firrtl.wire : !firrtl.uint<1>
@@ -129,8 +129,8 @@ firrtl.circuit "Annotations" {
     // CHECK: %g = firrtl.wire {annotations = [{circt.fieldID = 1 : i32, circt.nonlocal = @annos_nla2, class = "subanno"}]}
     %g = firrtl.wire {annotations = [{circt.fieldID = 1 : i32, class = "subanno"}]} : !firrtl.bundle<a: uint<1>>
   }
-  // CHECK-NOT: firrtl.module @Annotations1
-  firrtl.module @Annotations1() attributes {annotations = [{class = "one"}]} {
+  // CHECK-NOT: firrtl.module private @Annotations1
+  firrtl.module private @Annotations1() attributes {annotations = [{class = "one"}]} {
     %h = firrtl.wire {annotations = [{class = "one"}]} : !firrtl.uint<1>
     %i = firrtl.wire : !firrtl.uint<1>
     %j = firrtl.wire sym @j {annotations = [{circt.nonlocal = @annos_nla1, class = "NonLocal"}]} : !firrtl.uint<1>
@@ -177,18 +177,18 @@ firrtl.module private @Baz(out %auto: !firrtl.bundle<a: uint<1>, b: uint<1>> sym
 firrtl.circuit "PortAnnotations" {
   // CHECK: hw.hierpath private [[NLA1:@nla.*]] [@PortAnnotations::@[[PORTANNOS_1:.+]], @PortAnnotations0]
   // CHECK: hw.hierpath private [[NLA0:@nla.*]] [@PortAnnotations::@[[PORTANNOS_0:.+]], @PortAnnotations0]
-  // CHECK: firrtl.module @PortAnnotations0(in %a: !firrtl.uint<1> [
+  // CHECK: firrtl.module private @PortAnnotations0(in %a: !firrtl.uint<1> [
   // CHECK-SAME: {circt.nonlocal = [[NLA0]], class = "port0"},
   // CHECK-SAME: {circt.nonlocal = [[NLA1]], class = "port1"}]) {
-  firrtl.module @PortAnnotations0(in %a : !firrtl.uint<1> [{class = "port0"}]) {
+  firrtl.module private @PortAnnotations0(in %a : !firrtl.uint<1> [{class = "port0"}]) {
     // CHECK: %bar_r = firrtl.mem
     // CHECK-SAME: portAnnotations =
     // CHECK-SAME:  {circt.nonlocal = [[NLA0]], class = "mem0"},
     // CHECK-SAME:  {circt.nonlocal = [[NLA1]], class = "mem1"}
     %bar_r = firrtl.mem Undefined  {depth = 16 : i64, name = "bar", portAnnotations = [[{class = "mem0"}]], portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>
   }
-  // CHECK-NOT: firrtl.module @PortAnnotations1
-  firrtl.module @PortAnnotations1(in %b : !firrtl.uint<1> [{class = "port1"}])  {
+  // CHECK-NOT: firrtl.module private @PortAnnotations1
+  firrtl.module private @PortAnnotations1(in %b : !firrtl.uint<1> [{class = "port1"}])  {
     %bar_r = firrtl.mem Undefined  {depth = 16 : i64, name = "bar", portAnnotations = [[{class = "mem1"}]], portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>
   }
   // CHECK: firrtl.module @PortAnnotations
@@ -214,20 +214,20 @@ firrtl.circuit "Breadcrumb" {
   hw.hierpath private @breadcrumb_nla2 [@Breadcrumb::@breadcrumb0, @Breadcrumb0::@crumb0, @Crumb::@w]
   // CHECK:  @breadcrumb_nla3 [@Breadcrumb::@breadcrumb1, @Breadcrumb0::@crumb0, @Crumb::@w]
   hw.hierpath private @breadcrumb_nla3 [@Breadcrumb::@breadcrumb1, @Breadcrumb1::@crumb1, @Crumb::@w]
-  firrtl.module @Crumb(in %in: !firrtl.uint<1> sym @in [
+  firrtl.module private @Crumb(in %in: !firrtl.uint<1> sym @in [
       {circt.nonlocal = @breadcrumb_nla0, class = "port0"},
       {circt.nonlocal = @breadcrumb_nla1, class = "port1"}]) {
     %w = firrtl.wire sym @w {annotations = [
       {circt.nonlocal = @breadcrumb_nla2, class = "wire0"},
       {circt.nonlocal = @breadcrumb_nla3, class = "wire1"}]}: !firrtl.uint<1>
   }
-  // CHECK: firrtl.module @Breadcrumb0()
-  firrtl.module @Breadcrumb0() {
+  // CHECK: firrtl.module private @Breadcrumb0()
+  firrtl.module private @Breadcrumb0() {
     // CHECK: %crumb0_in = firrtl.instance crumb0 sym @crumb0
     %crumb_in = firrtl.instance crumb0 sym @crumb0 @Crumb(in in : !firrtl.uint<1>)
   }
-  // CHECK-NOT: firrtl.module @Breadcrumb1()
-  firrtl.module @Breadcrumb1() {
+  // CHECK-NOT: firrtl.module private @Breadcrumb1()
+  firrtl.module private @Breadcrumb1() {
     %crumb_in = firrtl.instance crumb1 sym @crumb1 @Crumb(in in : !firrtl.uint<1>)
   }
   // CHECK: firrtl.module @Breadcrumb()
@@ -255,10 +255,10 @@ firrtl.circuit "Context" {
   hw.hierpath private @context_nla2 [@Context1::@c1, @ContextLeaf::@in]
   hw.hierpath private @context_nla3 [@Context1::@c1, @ContextLeaf::@w]
 
-  // CHECK: firrtl.module @ContextLeaf(in %in: !firrtl.uint<1> sym @in [
+  // CHECK: firrtl.module private @ContextLeaf(in %in: !firrtl.uint<1> sym @in [
   // CHECK-SAME: {circt.nonlocal = [[NLA0]], class = "port0"},
   // CHECK-SAME: {circt.nonlocal = [[NLA1]], class = "port1"}]
-  firrtl.module @ContextLeaf(in %in : !firrtl.uint<1> sym @in [
+  firrtl.module private @ContextLeaf(in %in : !firrtl.uint<1> sym @in [
       {circt.nonlocal = @context_nla0, class = "port0"},
       {circt.nonlocal = @context_nla2, class = "port1"}
     ]) {
@@ -270,12 +270,12 @@ firrtl.circuit "Context" {
       {circt.nonlocal = @context_nla1, class = "fake0"},
       {circt.nonlocal = @context_nla3, class = "fake1"}]}: !firrtl.uint<3>
   }
-  firrtl.module @Context0() {
+  firrtl.module private @Context0() {
     // CHECK: %leaf_in = firrtl.instance leaf sym @c0
     %leaf_in = firrtl.instance leaf sym @c0 @ContextLeaf(in in : !firrtl.uint<1>)
   }
-  // CHECK-NOT: firrtl.module @Context1()
-  firrtl.module @Context1() {
+  // CHECK-NOT: firrtl.module private @Context1()
+  firrtl.module private @Context1() {
     %leaf_in = firrtl.instance leaf sym @c1 @ContextLeaf(in in : !firrtl.uint<1>)
   }
   firrtl.module @Context() {
@@ -302,8 +302,8 @@ firrtl.circuit "Context" {
   // CHECK: hw.hierpath private [[NLA0:@.+]] [@Context::@[[CONTEXT1:.+]], @Context0::@leaf0, @ContextLeaf0::@w0]
   // CHECK: hw.hierpath private [[NLA1:@.+]] [@Context::@[[CONTEXT0:.+]], @Context0::@leaf0, @ContextLeaf0::@w0]
 
-  // CHECK: firrtl.module @ContextLeaf0()
-  firrtl.module @ContextLeaf0() {
+  // CHECK: firrtl.module private @ContextLeaf0()
+  firrtl.module private @ContextLeaf0() {
     // CHECK: %w0 = firrtl.wire sym @w0  {annotations = [
     // CHECK-SAME: {circt.nonlocal = [[NLA1]], class = "fake0"}
     // CHECK-SAME: {circt.nonlocal = [[NLA0]], class = "fake1"}]}
@@ -311,16 +311,16 @@ firrtl.circuit "Context" {
       {circt.nonlocal = @nla0, class = "fake0"}]}: !firrtl.uint<3>
   }
 
-  firrtl.module @ContextLeaf1() {
+  firrtl.module private @ContextLeaf1() {
     %w1 = firrtl.wire sym @w1 {annotations = [
       {circt.nonlocal = @nla1, class = "fake1"}]}: !firrtl.uint<3>
   }
 
-  firrtl.module @Context0() {
+  firrtl.module private @Context0() {
     firrtl.instance leaf0 sym @leaf0 @ContextLeaf0()
   }
 
-  firrtl.module @Context1() {
+  firrtl.module private @Context1() {
     firrtl.instance leaf1 sym @leaf1 @ContextLeaf1()
   }
 
@@ -393,10 +393,10 @@ firrtl.circuit "DuplicateNLAs" {
 firrtl.circuit "ExtModuleTest" {
   // CHECK: hw.hierpath private @ext_nla [@ExtModuleTest::@e1, @ExtMod0]
   hw.hierpath private @ext_nla [@ExtModuleTest::@e1, @ExtMod1]
-  // CHECK: firrtl.extmodule @ExtMod0() attributes {annotations = [{circt.nonlocal = @ext_nla}], defname = "a"}
-  firrtl.extmodule @ExtMod0() attributes {defname = "a"}
-  // CHECK-NOT: firrtl.extmodule @ExtMod1()
-  firrtl.extmodule @ExtMod1() attributes {annotations = [{circt.nonlocal = @ext_nla}], defname = "a"}
+  // CHECK: firrtl.extmodule private @ExtMod0() attributes {annotations = [{circt.nonlocal = @ext_nla}], defname = "a"}
+  firrtl.extmodule private @ExtMod0() attributes {defname = "a"}
+  // CHECK-NOT: firrtl.extmodule private @ExtMod1()
+  firrtl.extmodule private @ExtMod1() attributes {annotations = [{circt.nonlocal = @ext_nla}], defname = "a"}
   firrtl.module @ExtModuleTest() {
     // CHECK: firrtl.instance e0  @ExtMod0()
     firrtl.instance e0 @ExtMod0()
@@ -411,9 +411,9 @@ firrtl.circuit "ExtModuleTest" {
 firrtl.circuit "Foo"  {
   // CHECK: hw.hierpath private @nla_1 [@Foo::@b, @A::@a]
   hw.hierpath private @nla_1 [@Foo::@b, @B::@b]
-  // CHECK: firrtl.extmodule @A(out a: !firrtl.clock sym @a [{circt.nonlocal = @nla_1}])
-  firrtl.extmodule @A(out a: !firrtl.clock) attributes {defname = "a"}
-  firrtl.extmodule @B(out a: !firrtl.clock sym @b [{circt.nonlocal = @nla_1}]) attributes {defname = "a"}
+  // CHECK: firrtl.extmodule private @A(out a: !firrtl.clock sym @a [{circt.nonlocal = @nla_1}])
+  firrtl.extmodule private @A(out a: !firrtl.clock) attributes {defname = "a"}
+  firrtl.extmodule private @B(out a: !firrtl.clock sym @b [{circt.nonlocal = @nla_1}]) attributes {defname = "a"}
   firrtl.module @Foo() {
     %b0_out = firrtl.instance a @A(out a: !firrtl.clock)
     // CHECK: firrtl.instance b sym @b  @A(out a: !firrtl.clock)
@@ -426,11 +426,11 @@ firrtl.circuit "Foo"  {
 // (without same defname they will not dedup as well, and can't have same defname w/diff ports)
 // CHECK-LABEL: firrtl.circuit "Foo"
 firrtl.circuit "Foo"  {
-  // CHECK: firrtl.extmodule @Bar
-  firrtl.extmodule @Bar(
+  // CHECK: firrtl.extmodule private @Bar
+  firrtl.extmodule private @Bar(
     in clock: !firrtl.clock, out io: !firrtl.bundle<a: clock>)
-  // CHECK: firrtl.extmodule @Baz
-  firrtl.extmodule @Baz(
+  // CHECK: firrtl.extmodule private @Baz
+  firrtl.extmodule private @Baz(
     in clock: !firrtl.clock, out io: !firrtl.bundle<a flip: uint<1>, b flip: uint<16>, c: uint<1>>)
   firrtl.module @Foo() {
     %bar_clock, %bar_io = firrtl.instance bar @Bar(
@@ -445,28 +445,28 @@ firrtl.circuit "Foo"  {
 firrtl.circuit "Chain" {
   // CHECK: hw.hierpath private [[NLA1:@nla.*]] [@Chain::@[[CHAINB1:.+]], @ChainB0::@[[CHAINA0:.+]], @ChainA0::@[[EXTCHAIN0:.+]], @ExtChain0]
   // CHECK: hw.hierpath private [[NLA0:@nla.*]] [@Chain::@[[CHAINB0:.+]], @ChainB0::@[[CHAINA0:.+]], @ChainA0::@[[EXTCHAIN0:.+]], @ExtChain0]
-  // CHECK: firrtl.module @ChainB0()
-  firrtl.module @ChainB0() {
+  // CHECK: firrtl.module private @ChainB0()
+  firrtl.module private @ChainB0() {
     // CHECK: firrtl.instance chainA0 sym @[[CHAINA0]]
     firrtl.instance chainA0 @ChainA0()
   }
-  // CHECK: firrtl.extmodule @ExtChain0() attributes {annotations = [
+  // CHECK: firrtl.extmodule private @ExtChain0() attributes {annotations = [
   // CHECK-SAME:  {circt.nonlocal = [[NLA0]], class = "0"},
   // CHECK-SAME:  {circt.nonlocal = [[NLA1]], class = "1"}], defname = "ExtChain"}
-  firrtl.extmodule @ExtChain0() attributes {annotations = [{class = "0"}], defname = "ExtChain"}
-  // CHECK-NOT: firrtl.extmodule @ExtChain1()
-  firrtl.extmodule @ExtChain1() attributes {annotations = [{class = "1"}], defname = "ExtChain"}
-  // CHECK: firrtl.module @ChainA0()
-  firrtl.module @ChainA0()  {
+  firrtl.extmodule private @ExtChain0() attributes {annotations = [{class = "0"}], defname = "ExtChain"}
+  // CHECK-NOT: firrtl.extmodule private @ExtChain1()
+  firrtl.extmodule private @ExtChain1() attributes {annotations = [{class = "1"}], defname = "ExtChain"}
+  // CHECK: firrtl.module private @ChainA0()
+  firrtl.module private @ChainA0()  {
     // CHECK: instance extchain0 sym @[[EXTCHAIN0]]
     firrtl.instance extchain0 @ExtChain0()
   }
-  // CHECK-NOT: firrtl.module @ChainB1()
-  firrtl.module @ChainB1() {
+  // CHECK-NOT: firrtl.module private @ChainB1()
+  firrtl.module private @ChainB1() {
     firrtl.instance chainA1 @ChainA1()
   }
-  // CHECK-NOT: firrtl.module @ChainA1()
-  firrtl.module @ChainA1()  {
+  // CHECK-NOT: firrtl.module private @ChainA1()
+  firrtl.module private @ChainA1()  {
     firrtl.instance extchain1 @ExtChain1()
   }
   firrtl.module @Chain() {
@@ -482,10 +482,10 @@ firrtl.circuit "Chain" {
 // instance op starts returning a different bundle type.
 // CHECK-LABEL: firrtl.circuit "Bundle"
 firrtl.circuit "Bundle" {
-  // CHECK: firrtl.module @Bundle0
-  firrtl.module @Bundle0(out %a: !firrtl.bundle<b: bundle<c flip: uint<1>, d: uint<1>>>) { }
-  // CHECK-NOT: firrtl.module @Bundle1
-  firrtl.module @Bundle1(out %e: !firrtl.bundle<f: bundle<g flip: uint<1>, h: uint<1>>>) { }
+  // CHECK: firrtl.module private @Bundle0
+  firrtl.module private @Bundle0(out %a: !firrtl.bundle<b: bundle<c flip: uint<1>, d: uint<1>>>) { }
+  // CHECK-NOT: firrtl.module private @Bundle1
+  firrtl.module private @Bundle1(out %e: !firrtl.bundle<f: bundle<g flip: uint<1>, h: uint<1>>>) { }
   firrtl.module @Bundle() {
     // CHECK: firrtl.instance bundle0  @Bundle0
     %a = firrtl.instance bundle0 @Bundle0(out a: !firrtl.bundle<b: bundle<c flip: uint<1>, d: uint<1>>>)
@@ -518,11 +518,11 @@ firrtl.circuit "Bundle" {
 
 // CHECK-LABEL: firrtl.circuit "MuxBundle"
 firrtl.circuit "MuxBundle" {
-  firrtl.module @Bar0(out %o: !firrtl.bundle<a: uint<1>>) {
+  firrtl.module private @Bar0(out %o: !firrtl.bundle<a: uint<1>>) {
     %invalid = firrtl.invalidvalue : !firrtl.bundle<a: uint<1>>
     firrtl.strictconnect %o, %invalid : !firrtl.bundle<a: uint<1>>
   }
-  firrtl.module @Bar1(out %o: !firrtl.bundle<b: uint<1>>) {
+  firrtl.module private @Bar1(out %o: !firrtl.bundle<b: uint<1>>) {
     %invalid = firrtl.invalidvalue : !firrtl.bundle<b: uint<1>>
     firrtl.strictconnect %o, %invalid : !firrtl.bundle<b: uint<1>>
   }
@@ -548,12 +548,12 @@ firrtl.circuit "MuxBundle" {
 // verification checking.
 // CHECK-LABEL: firrtl.circuit "Flip"
 firrtl.circuit "Flip" {
-  firrtl.module @Flip0(out %io: !firrtl.bundle<foo flip: uint<1>, fuzz: uint<1>>) {
+  firrtl.module private @Flip0(out %io: !firrtl.bundle<foo flip: uint<1>, fuzz: uint<1>>) {
     %0 = firrtl.subfield %io[foo] : !firrtl.bundle<foo flip: uint<1>, fuzz: uint<1>>
     %1 = firrtl.subfield %io[fuzz] : !firrtl.bundle<foo flip: uint<1>, fuzz: uint<1>>
     firrtl.connect %1, %0 : !firrtl.uint<1>, !firrtl.uint<1>
   }
-  firrtl.module @Flip1(out %io: !firrtl.bundle<bar flip: uint<1>, buzz: uint<1>>) {
+  firrtl.module private @Flip1(out %io: !firrtl.bundle<bar flip: uint<1>, buzz: uint<1>>) {
     %0 = firrtl.subfield %io[bar] : !firrtl.bundle<bar flip: uint<1>, buzz: uint<1>>
     %1 = firrtl.subfield %io[buzz] : !firrtl.bundle<bar flip: uint<1>, buzz: uint<1>>
     firrtl.connect %1, %0 : !firrtl.uint<1>, !firrtl.uint<1>
@@ -572,27 +572,27 @@ firrtl.circuit "Flip" {
 // block the deduplication of parent modules.
 // CHECK-LABEL: firrtl.circuit "DelayedFixup"
 firrtl.circuit "DelayedFixup"  {
-  // CHECK: firrtl.module @Foo
-  firrtl.module @Foo(out %a: !firrtl.bundle<a: uint<1>>) {
+  // CHECK: firrtl.module private @Foo
+  firrtl.module private @Foo(out %a: !firrtl.bundle<a: uint<1>>) {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     %a_a = firrtl.subfield %a[a] : !firrtl.bundle<a: uint<1>>
     firrtl.strictconnect %a_a, %zero : !firrtl.uint<1>
   }
-  // CHECK-NOT: firrtl.module @Bar
-  firrtl.module @Bar(out %b: !firrtl.bundle<b: uint<1>>) {
+  // CHECK-NOT: @Bar
+  firrtl.module private @Bar(out %b: !firrtl.bundle<b: uint<1>>) {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     %b_b = firrtl.subfield %b[b] : !firrtl.bundle<b: uint<1>>
     firrtl.strictconnect %b_b, %zero : !firrtl.uint<1>
   }
-  // CHECK: firrtl.module @Parent0
-  firrtl.module @Parent0(out %a: !firrtl.bundle<a: uint<1>>, out %b: !firrtl.bundle<b: uint<1>>) {
+  // CHECK: firrtl.module private @Parent0
+  firrtl.module private @Parent0(out %a: !firrtl.bundle<a: uint<1>>, out %b: !firrtl.bundle<b: uint<1>>) {
     %foo_a = firrtl.instance foo  @Foo(out a: !firrtl.bundle<a: uint<1>>)
     firrtl.connect %a, %foo_a : !firrtl.bundle<a: uint<1>>, !firrtl.bundle<a: uint<1>>
     %bar_b = firrtl.instance bar  @Bar(out b: !firrtl.bundle<b: uint<1>>)
     firrtl.connect %b, %bar_b : !firrtl.bundle<b: uint<1>>, !firrtl.bundle<b: uint<1>>
   }
-  // CHECK-NOT: firrtl.module @Parent1
-  firrtl.module @Parent1(out %a: !firrtl.bundle<a: uint<1>>, out %b: !firrtl.bundle<b: uint<1>>) {
+  // CHECK-NOT: @Parent1
+  firrtl.module private @Parent1(out %a: !firrtl.bundle<a: uint<1>>, out %b: !firrtl.bundle<b: uint<1>>) {
     %foo_a = firrtl.instance foo  @Foo(out a: !firrtl.bundle<a: uint<1>>)
     firrtl.connect %a, %foo_a : !firrtl.bundle<a: uint<1>>, !firrtl.bundle<a: uint<1>>
     %bar_b = firrtl.instance bar  @Bar(out b: !firrtl.bundle<b: uint<1>>)
@@ -610,13 +610,13 @@ firrtl.circuit "DelayedFixup"  {
 // CHECK-LABEL: firrtl.circuit "NoEmptyAnnos"
 firrtl.circuit "NoEmptyAnnos" {
   // CHECK-LABEL: @NoEmptyAnnos0()
-  firrtl.module @NoEmptyAnnos0() {
+  firrtl.module private @NoEmptyAnnos0() {
     // CHECK: %w = firrtl.wire  : !firrtl.bundle<a: uint<1>>
     // CHECK: %0 = firrtl.subfield %w[a] : !firrtl.bundle<a: uint<1>>
     %w = firrtl.wire : !firrtl.bundle<a: uint<1>>
     %0 = firrtl.subfield %w[a] : !firrtl.bundle<a: uint<1>>
   }
-  firrtl.module @NoEmptyAnnos1() {
+  firrtl.module private @NoEmptyAnnos1() {
     %w = firrtl.wire : !firrtl.bundle<a: uint<1>>
     %0 = firrtl.subfield %w[a] : !firrtl.bundle<a: uint<1>>
   }
@@ -630,8 +630,8 @@ firrtl.circuit "NoEmptyAnnos" {
 // Don't deduplicate modules with NoDedup.
 // CHECK-LABEL: firrtl.circuit "NoDedup"
 firrtl.circuit "NoDedup" {
-  firrtl.module @Simple0() { }
-  firrtl.module @Simple1() attributes {annotations = [{class = "firrtl.transforms.NoDedupAnnotation"}]} { }
+  firrtl.module private @Simple0() { }
+  firrtl.module private @Simple1() attributes {annotations = [{class = "firrtl.transforms.NoDedupAnnotation"}]} { }
   // CHECK: firrtl.module @NoDedup
   firrtl.module @NoDedup() {
     firrtl.instance simple0 @Simple0()
@@ -643,8 +643,8 @@ firrtl.circuit "NoDedup" {
 // CHECK-LABEL:   firrtl.circuit "InputRefTypePorts"
 // CHECK-COUNT-3: firrtl.module
 firrtl.circuit "InputRefTypePorts" {
-  firrtl.module @Foo(in %a: !firrtl.probe<uint<1>>) {}
-  firrtl.module @Bar(in %a: !firrtl.probe<uint<1>>) {}
+  firrtl.module private @Foo(in %a: !firrtl.probe<uint<1>>) {}
+  firrtl.module private @Bar(in %a: !firrtl.probe<uint<1>>) {}
   firrtl.module @InputRefTypePorts() {
     %foo_a = firrtl.instance foo @Foo(in a: !firrtl.probe<uint<1>>)
     %bar_a = firrtl.instance bar @Bar(in a: !firrtl.probe<uint<1>>)
@@ -660,9 +660,9 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
     modules = ["~MustDedup|Simple0", "~MustDedup|Simple1"]}]
    } {
   // CHECK: @Simple0
-  firrtl.module @Simple0() { }
+  firrtl.module private @Simple0() { }
   // CHECK-NOT: @Simple1
-  firrtl.module @Simple1() { }
+  firrtl.module private @Simple1() { }
   // CHECK: firrtl.module @MustDedup
   firrtl.module @MustDedup() {
     firrtl.instance simple0 @Simple0()
@@ -686,21 +686,21 @@ firrtl.circuit "Foo"  {
 // CHECK-LABEL: firrtl.circuit "DedupGroup"
 firrtl.circuit "DedupGroup" {
   // CHECK: @Foo0
-  firrtl.module @Foo0() attributes {annotations = [{
+  firrtl.module private @Foo0() attributes {annotations = [{
     // CHECK-NOT: class = "firrtl.transforms.DedupGroupAnnotation"
     class = "firrtl.transforms.DedupGroupAnnotation",
     group = "foo"
   }]} { }
 
   // CHECK-NOT: @Foo1
-  firrtl.module @Foo1() attributes {annotations = [{
+  firrtl.module private @Foo1() attributes {annotations = [{
     // CHECK-NOT: class = "firrtl.transforms.DedupGroupAnnotation"
     class = "firrtl.transforms.DedupGroupAnnotation",
     group = "foo"
   }]} { }
 
   // CHECK: @Bar
-  firrtl.module @Bar() { }
+  firrtl.module private @Bar() { }
 
   // CHECK: firrtl.module @DedupGroup
   firrtl.module @DedupGroup() {
@@ -712,13 +712,13 @@ firrtl.circuit "DedupGroup" {
 
 // CHECK-LABEL: firrtl.circuit "InnerSymOpTarget"
 firrtl.circuit "InnerSymOpTarget" {
-  firrtl.module @Foo0() {
+  firrtl.module private @Foo0() {
     %w0 = firrtl.wire sym [<@sym0, 1, private>, <@sym1, 2, private>]: !firrtl.vector<uint<1>, 2>
     %0 = firrtl.ref.rwprobe <@Foo0::@sym0> : !firrtl.rwprobe<uint<1>>
     %1 = firrtl.ref.rwprobe <@Foo0::@sym1> : !firrtl.rwprobe<uint<1>>
   }
-  // CHECK-NOT: firrtl.module @Foo1
-  firrtl.module @Foo1() {
+  // CHECK-NOT: firrtl.module private @Foo1
+  firrtl.module private @Foo1() {
     %w1 = firrtl.wire sym [<@sym0, 2, private>, <@sym1, 1, private>]: !firrtl.vector<uint<1>, 2>
     %0 = firrtl.ref.rwprobe <@Foo1::@sym1> : !firrtl.rwprobe<uint<1>>
     %1 = firrtl.ref.rwprobe <@Foo1::@sym0> : !firrtl.rwprobe<uint<1>>
@@ -732,11 +732,11 @@ firrtl.circuit "InnerSymOpTarget" {
 
 // CHECK-LABEL: firrtl.circuit "InnerSymPortTarget"
 firrtl.circuit "InnerSymPortTarget" {
-  firrtl.module @Foo0(in %in : !firrtl.uint<1> sym @sym) {
+  firrtl.module private @Foo0(in %in : !firrtl.uint<1> sym @sym) {
     %0 = firrtl.ref.rwprobe <@Foo0::@sym> : !firrtl.rwprobe<uint<1>>
   }
-  // CHECK-NOT: firrtl.module @Foo1
-  firrtl.module @Foo1(in %in : !firrtl.uint<1> sym @sym) {
+  // CHECK-NOT: firrtl.module private @Foo1
+  firrtl.module private @Foo1(in %in : !firrtl.uint<1> sym @sym) {
     %0 = firrtl.ref.rwprobe <@Foo1::@sym>: !firrtl.rwprobe<uint<1>>
   }
   firrtl.module @InnerSymPortTarget() {
@@ -746,14 +746,42 @@ firrtl.circuit "InnerSymPortTarget" {
   }
 }
 
+// CHECK-LABEL: "Issue6061"
+// Don't crash on classes.
+firrtl.circuit "Issue6061" {
+ firrtl.class private @Class1(in %in: !firrtl.integer, out %out: !firrtl.integer) {
+   firrtl.propassign %out, %in : !firrtl.integer
+ }
+ firrtl.class private @Class2(in %in: !firrtl.integer, out %out: !firrtl.integer) {
+   firrtl.propassign %out, %in : !firrtl.integer
+ }
+ firrtl.module @Issue6061() {
+   %obj1 = firrtl.object @Class1(in in: !firrtl.integer, out out: !firrtl.integer)
+   %obj2 = firrtl.object @Class2(in in: !firrtl.integer, out out: !firrtl.integer)
+ }
+}
+
 // CHECK-LABEL: "NoDedupExtWithoutDefname"
 firrtl.circuit "NoDedupExtWithoutDefname" {
-  firrtl.extmodule @A()
-  firrtl.extmodule @B()
+  firrtl.extmodule private @A()
+  firrtl.extmodule private @B()
   firrtl.module @NoDedupExtWithoutDefname() {
     // CHECK: instance a @A
     firrtl.instance a @A()
     // CHECK: instance b @B
     firrtl.instance b @B()
   }
+}
+
+// CHECK-LABEL: "NoDedupPublic"
+// Public modules may be referenced externally, preserve.
+firrtl.circuit "NoDedupPublic" {
+  firrtl.module @NoDedupPublic() {
+    // CHECK: @DUTLike()
+    firrtl.instance dut @DUTLike()
+    // CHECK: @NotDUT()
+    firrtl.instance not_dut @NotDUT()
+  }
+  firrtl.module @DUTLike() {}
+  firrtl.module @NotDUT() {}
 }
