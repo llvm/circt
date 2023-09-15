@@ -1515,19 +1515,22 @@ class DedupPass : public DedupBase<DedupPass> {
               }))
             return success();
 
-          if (auto ext = dyn_cast<FExtModuleOp>(*module)) {
-            // Only dedup extmodule's with defname.
-            if (!ext.getDefname().has_value())
-              return success();
-          } else if (!module.isPrivate() || !module.canDiscardOnUseEmpty()) {
-            // If module has symbol (name) that must be preserved even if
-            // unused, skip it. All symbol uses must be supported, which is not
-            // true if public.
+          // Only dedup extmodule's with defname.
+          if (auto ext = dyn_cast<FExtModuleOp>(*module);
+              ext && !ext.getDefname().has_value())
             return success();
-          } else if (isa<ClassLike>(*module)) {
-            // Explicitly skip class-like modules.  This is presently
-            // unreachable due to above and current implementation but check
-            // anyway as dedup code does not handle these or object operations.
+
+          // If module has symbol (name) that must be preserved even if unused,
+          // skip it. All symbol uses must be supported, which is not true if
+          // non-private.
+          if (!module.isPrivate() || !module.canDiscardOnUseEmpty()) {
+            return success();
+          }
+
+          // Explicitly skip class-like modules.  This is presently unreachable
+          // due to above and current implementation but check anyway as dedup
+          // code does not handle these or object operations.
+          if (isa<ClassLike>(*module)) {
             return success();
           }
 

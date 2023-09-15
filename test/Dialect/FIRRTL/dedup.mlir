@@ -393,10 +393,10 @@ firrtl.circuit "DuplicateNLAs" {
 firrtl.circuit "ExtModuleTest" {
   // CHECK: hw.hierpath private @ext_nla [@ExtModuleTest::@e1, @ExtMod0]
   hw.hierpath private @ext_nla [@ExtModuleTest::@e1, @ExtMod1]
-  // CHECK: firrtl.extmodule @ExtMod0() attributes {annotations = [{circt.nonlocal = @ext_nla}], defname = "a"}
-  firrtl.extmodule @ExtMod0() attributes {defname = "a"}
-  // CHECK-NOT: firrtl.extmodule @ExtMod1()
-  firrtl.extmodule @ExtMod1() attributes {annotations = [{circt.nonlocal = @ext_nla}], defname = "a"}
+  // CHECK: firrtl.extmodule private @ExtMod0() attributes {annotations = [{circt.nonlocal = @ext_nla}], defname = "a"}
+  firrtl.extmodule private @ExtMod0() attributes {defname = "a"}
+  // CHECK-NOT: firrtl.extmodule private @ExtMod1()
+  firrtl.extmodule private @ExtMod1() attributes {annotations = [{circt.nonlocal = @ext_nla}], defname = "a"}
   firrtl.module @ExtModuleTest() {
     // CHECK: firrtl.instance e0  @ExtMod0()
     firrtl.instance e0 @ExtMod0()
@@ -411,9 +411,9 @@ firrtl.circuit "ExtModuleTest" {
 firrtl.circuit "Foo"  {
   // CHECK: hw.hierpath private @nla_1 [@Foo::@b, @A::@a]
   hw.hierpath private @nla_1 [@Foo::@b, @B::@b]
-  // CHECK: firrtl.extmodule @A(out a: !firrtl.clock sym @a [{circt.nonlocal = @nla_1}])
-  firrtl.extmodule @A(out a: !firrtl.clock) attributes {defname = "a"}
-  firrtl.extmodule @B(out a: !firrtl.clock sym @b [{circt.nonlocal = @nla_1}]) attributes {defname = "a"}
+  // CHECK: firrtl.extmodule private @A(out a: !firrtl.clock sym @a [{circt.nonlocal = @nla_1}])
+  firrtl.extmodule private @A(out a: !firrtl.clock) attributes {defname = "a"}
+  firrtl.extmodule private @B(out a: !firrtl.clock sym @b [{circt.nonlocal = @nla_1}]) attributes {defname = "a"}
   firrtl.module @Foo() {
     %b0_out = firrtl.instance a @A(out a: !firrtl.clock)
     // CHECK: firrtl.instance b sym @b  @A(out a: !firrtl.clock)
@@ -426,11 +426,11 @@ firrtl.circuit "Foo"  {
 // (without same defname they will not dedup as well, and can't have same defname w/diff ports)
 // CHECK-LABEL: firrtl.circuit "Foo"
 firrtl.circuit "Foo"  {
-  // CHECK: firrtl.extmodule @Bar
-  firrtl.extmodule @Bar(
+  // CHECK: firrtl.extmodule private @Bar
+  firrtl.extmodule private @Bar(
     in clock: !firrtl.clock, out io: !firrtl.bundle<a: clock>)
-  // CHECK: firrtl.extmodule @Baz
-  firrtl.extmodule @Baz(
+  // CHECK: firrtl.extmodule private @Baz
+  firrtl.extmodule private @Baz(
     in clock: !firrtl.clock, out io: !firrtl.bundle<a flip: uint<1>, b flip: uint<16>, c: uint<1>>)
   firrtl.module @Foo() {
     %bar_clock, %bar_io = firrtl.instance bar @Bar(
@@ -450,12 +450,12 @@ firrtl.circuit "Chain" {
     // CHECK: firrtl.instance chainA0 sym @[[CHAINA0]]
     firrtl.instance chainA0 @ChainA0()
   }
-  // CHECK: firrtl.extmodule @ExtChain0() attributes {annotations = [
+  // CHECK: firrtl.extmodule private @ExtChain0() attributes {annotations = [
   // CHECK-SAME:  {circt.nonlocal = [[NLA0]], class = "0"},
   // CHECK-SAME:  {circt.nonlocal = [[NLA1]], class = "1"}], defname = "ExtChain"}
-  firrtl.extmodule @ExtChain0() attributes {annotations = [{class = "0"}], defname = "ExtChain"}
-  // CHECK-NOT: firrtl.extmodule @ExtChain1()
-  firrtl.extmodule @ExtChain1() attributes {annotations = [{class = "1"}], defname = "ExtChain"}
+  firrtl.extmodule private @ExtChain0() attributes {annotations = [{class = "0"}], defname = "ExtChain"}
+  // CHECK-NOT: firrtl.extmodule private @ExtChain1()
+  firrtl.extmodule private @ExtChain1() attributes {annotations = [{class = "1"}], defname = "ExtChain"}
   // CHECK: firrtl.module private @ChainA0()
   firrtl.module private @ChainA0()  {
     // CHECK: instance extchain0 sym @[[EXTCHAIN0]]
@@ -763,8 +763,8 @@ firrtl.circuit "Issue6061" {
 
 // CHECK-LABEL: "NoDedupExtWithoutDefname"
 firrtl.circuit "NoDedupExtWithoutDefname" {
-  firrtl.extmodule @A()
-  firrtl.extmodule @B()
+  firrtl.extmodule private @A()
+  firrtl.extmodule private @B()
   firrtl.module @NoDedupExtWithoutDefname() {
     // CHECK: instance a @A
     firrtl.instance a @A()
