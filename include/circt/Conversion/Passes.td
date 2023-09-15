@@ -372,7 +372,12 @@ def CalyxRemoveGroupsFromFSM : Pass<"calyx-remove-groups-fsm", "calyx::Component
     }
     ```
   }];
-  let dependentDialects = ["fsm::FSMDialect", "comb::CombDialect", "hw::HWDialect"];
+  let dependentDialects = [
+      "fsm::FSMDialect",
+      "comb::CombDialect",
+      "hw::HWDialect",
+      "seq::SeqDialect"
+  ];
   let constructor = "circt::createRemoveGroupsFromFSMPass()";
 }
 

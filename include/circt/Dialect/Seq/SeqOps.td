@@ -35,7 +35,7 @@ def CompRegOp : SeqOp<"compreg",
 
   let arguments = (ins
     AnyType:$input,
-    ClockOrI1Type:$clk,
+    ClockType:$clk,
     StrAttr:$name,
     Optional<I1>:$reset,
     Optional<AnyType>:$resetValue,
@@ -76,7 +76,7 @@ def CompRegClockEnabledOp : SeqOp<"compreg.ce",
 
   let arguments = (ins
     AnyType:$input,
-    ClockOrI1Type:$clk,
+    ClockType:$clk,
     I1:$clockEnable,
     StrAttr:$name,
     Optional<I1>:$reset,
@@ -207,7 +207,7 @@ def FIFOOp : SeqOp<"fifo", [
   }];
 
   let arguments = (ins
-    HWIntegerType:$input, I1:$rdEn, I1:$wrEn, I1:$clk, I1:$rst,
+    HWIntegerType:$input, I1:$rdEn, I1:$wrEn, ClockType:$clk, I1:$rst,
     ConfinedAttr<I64Attr, [IntMinValue<1>]>:$depth,
     OptionalAttr<ConfinedAttr<I64Attr, [IntMinValue<0>]>>:$almostFullThreshold,
     OptionalAttr<ConfinedAttr<I64Attr, [IntMinValue<0>]>>:$almostEmptyThreshold
@@ -234,7 +234,7 @@ def HLMemOp : SeqOp<"hlmem", [
   let summary = "Instantiate a high-level memory.";
   let description = "See the Seq dialect rationale for a longer description";
 
-  let arguments = (ins I1:$clk, I1:$rst, SymbolNameAttr:$sym_name);
+  let arguments = (ins ClockType:$clk, I1:$rst, SymbolNameAttr:$sym_name);
   let results = (outs HLMemType:$handle);
 
   let extraClassDeclaration = [{

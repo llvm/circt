@@ -5,6 +5,7 @@
 from ._seq_ops_gen import *
 
 from .seq import CompRegOp
+from .._mlir_libs._circt._seq import *
 
 
 # Create a computational register whose input is the given value, and is clocked

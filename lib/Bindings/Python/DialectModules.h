@@ -22,6 +22,7 @@ void populateDialectESISubmodule(pybind11::module &m);
 void populateDialectHWSubmodule(pybind11::module &m);
 void populateDialectMSFTSubmodule(pybind11::module &m);
 void populateDialectOMSubmodule(pybind11::module &m);
+void populateDialectSeqSubmodule(pybind11::module &m);
 void populateDialectSVSubmodule(pybind11::module &m);
 
 } // namespace python

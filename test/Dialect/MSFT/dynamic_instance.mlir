@@ -78,7 +78,7 @@ msft.module @deeper {} () -> () {
   msft.output
 }
 
-msft.module @reg {} (%input : i4, %clk : i1) -> () {
+msft.module @reg {} (%input : i4, %clk : !seq.clock) -> () {
   %reg = seq.compreg sym @reg %input, %clk  : i4
   msft.output
 }

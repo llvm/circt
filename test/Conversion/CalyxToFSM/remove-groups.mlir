@@ -44,7 +44,8 @@
 // CHECK-SAME:                          %[[VAL_2:.*]]: i1 {clk}) -> (
 // CHECK-SAME:                          %[[VAL_3:.*]]: i1 {done}) {
 // CHECK:           %[[VAL_4:.*]], %[[VAL_5:.*]] = calyx.std_wire @C_done : i1, i1
-// CHECK:           %[[VAL_6:.*]]:4 = fsm.hw_instance "controller" @control(%[[VAL_5]], %[[VAL_7:.*]], %[[VAL_8:.*]], %[[VAL_0]], %[[VAL_9:.*]], %[[VAL_10:.*]]), clock %[[VAL_2]], reset %[[VAL_1]] : (i1, i1, i1, i1, i8, i8) -> (i1, i1, i1, i1)
+// CHECK:           %[[CLOCK:.*]] = seq.to_clock %[[VAL_2]]
+// CHECK:           %[[VAL_6:.*]]:4 = fsm.hw_instance "controller" @control(%[[VAL_5]], %[[VAL_7:.*]], %[[VAL_8:.*]], %[[VAL_0]], %[[VAL_9:.*]], %[[VAL_10:.*]]), clock %[[CLOCK]], reset %[[VAL_1]] : (i1, i1, i1, i1, i8, i8) -> (i1, i1, i1, i1)
 // CHECK:           %[[VAL_11:.*]], %[[VAL_7]] = calyx.std_wire @B_done : i1, i1
 // CHECK:           %[[VAL_12:.*]], %[[VAL_8]] = calyx.std_wire @A_done : i1, i1
 // CHECK:           %[[VAL_13:.*]] = hw.constant 2 : i8

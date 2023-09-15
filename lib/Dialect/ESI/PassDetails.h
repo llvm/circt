@@ -75,6 +75,8 @@ private:
   /// taken in the symbol table.
   StringAttr constructInterfaceName(ChannelType);
 
+  Type getClockType();
+
   llvm::DenseMap<Type, hw::HWModuleExternOp> declaredStage;
   llvm::DenseMap<std::pair<Type, Type>, hw::HWModuleExternOp>
       declaredCosimEndpointOp;

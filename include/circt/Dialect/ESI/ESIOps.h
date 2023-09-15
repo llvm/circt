@@ -17,6 +17,7 @@
 #include "circt/Dialect/ESI/ESITypes.h"
 
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/Seq/SeqTypes.h"
 
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/Interfaces/InferTypeOpInterface.h"
