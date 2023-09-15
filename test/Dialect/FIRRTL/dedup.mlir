@@ -412,16 +412,18 @@ firrtl.circuit "Foo"  {
   // CHECK: hw.hierpath private @nla_1 [@Foo::@b, @A::@a]
   hw.hierpath private @nla_1 [@Foo::@b, @B::@b]
   // CHECK: firrtl.extmodule @A(out a: !firrtl.clock sym @a [{circt.nonlocal = @nla_1}])
-  firrtl.extmodule @A(out a: !firrtl.clock)
-  firrtl.extmodule @B(out b: !firrtl.clock sym @b [{circt.nonlocal = @nla_1}])
+  firrtl.extmodule @A(out a: !firrtl.clock) attributes {defname = "a"}
+  firrtl.extmodule @B(out a: !firrtl.clock sym @b [{circt.nonlocal = @nla_1}]) attributes {defname = "a"}
   firrtl.module @Foo() {
     %b0_out = firrtl.instance a @A(out a: !firrtl.clock)
     // CHECK: firrtl.instance b sym @b  @A(out a: !firrtl.clock)
-    %b1_out = firrtl.instance b sym @b @B(out b: !firrtl.clock)
+    %b1_out = firrtl.instance b sym @b @B(out a: !firrtl.clock)
   }
 }
 
 // Extmodules should properly hash port types and not dedup when they differ.
+// https://github.com/llvm/circt/issues/2719
+// (without same defname they will not dedup as well, and can't have same defname w/diff ports)
 // CHECK-LABEL: firrtl.circuit "Foo"
 firrtl.circuit "Foo"  {
   // CHECK: firrtl.extmodule @Bar
@@ -570,10 +572,18 @@ firrtl.circuit "Flip" {
 // block the deduplication of parent modules.
 // CHECK-LABEL: firrtl.circuit "DelayedFixup"
 firrtl.circuit "DelayedFixup"  {
-  // CHECK: firrtl.extmodule @Foo
-  firrtl.extmodule @Foo(out a: !firrtl.bundle<a: uint<1>>)
-  // CHECK-NOT: firrtl.extmodule @Bar
-  firrtl.extmodule @Bar(out b: !firrtl.bundle<b: uint<1>>)
+  // CHECK: firrtl.module @Foo
+  firrtl.module @Foo(out %a: !firrtl.bundle<a: uint<1>>) {
+    %zero = firrtl.constant 0 : !firrtl.uint<1>
+    %a_a = firrtl.subfield %a[a] : !firrtl.bundle<a: uint<1>>
+    firrtl.strictconnect %a_a, %zero : !firrtl.uint<1>
+  }
+  // CHECK-NOT: firrtl.module @Bar
+  firrtl.module @Bar(out %b: !firrtl.bundle<b: uint<1>>) {
+    %zero = firrtl.constant 0 : !firrtl.uint<1>
+    %b_b = firrtl.subfield %b[b] : !firrtl.bundle<b: uint<1>>
+    firrtl.strictconnect %b_b, %zero : !firrtl.uint<1>
+  }
   // CHECK: firrtl.module @Parent0
   firrtl.module @Parent0(out %a: !firrtl.bundle<a: uint<1>>, out %b: !firrtl.bundle<b: uint<1>>) {
     %foo_a = firrtl.instance foo  @Foo(out a: !firrtl.bundle<a: uint<1>>)
@@ -733,5 +743,17 @@ firrtl.circuit "InnerSymPortTarget" {
     firrtl.instance foo0 @Foo0(in in : !firrtl.uint<1>)
     // CHECK: firrtl.instance foo1 @Foo0(in in: !firrtl.uint<1>)
     firrtl.instance foo1 @Foo1(in in : !firrtl.uint<1>)
+  }
+}
+
+// CHECK-LABEL: "NoDedupExtWithoutDefname"
+firrtl.circuit "NoDedupExtWithoutDefname" {
+  firrtl.extmodule @A()
+  firrtl.extmodule @B()
+  firrtl.module @NoDedupExtWithoutDefname() {
+    // CHECK: instance a @A
+    firrtl.instance a @A()
+    // CHECK: instance b @B
+    firrtl.instance b @B()
   }
 }
