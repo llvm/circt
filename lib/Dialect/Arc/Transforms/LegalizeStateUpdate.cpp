@@ -6,18 +6,27 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/Arc/ArcOps.h"
+#include "circt/Dialect/Arc/ArcPasses.h"
 #include "mlir/Analysis/DataFlow/DenseAnalysis.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/Dominance.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Visitors.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Support/IndentedOstream.h"
 #include "llvm/ADT/PointerIntPair.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "arc-legalize-state-update"
+
+namespace circt {
+namespace arc {
+#define GEN_PASS_DEF_LEGALIZESTATEUPDATE
+#include "circt/Dialect/Arc/ArcPasses.h.inc"
+} // namespace arc
+} // namespace circt
 
 using namespace mlir;
 using namespace mlir::dataflow;
@@ -534,7 +543,7 @@ moveMemoryWritesAfterLastRead(Region &region, const DenseSet<Value> &memories,
 
 namespace {
 struct LegalizeStateUpdatePass
-    : public LegalizeStateUpdateBase<LegalizeStateUpdatePass> {
+    : public arc::impl::LegalizeStateUpdateBase<LegalizeStateUpdatePass> {
   LegalizeStateUpdatePass() = default;
   LegalizeStateUpdatePass(const LegalizeStateUpdatePass &pass)
       : LegalizeStateUpdatePass() {}

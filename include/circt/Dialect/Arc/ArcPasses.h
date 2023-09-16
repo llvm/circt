@@ -20,6 +20,9 @@ class Pass;
 namespace circt {
 namespace arc {
 
+#define GEN_PASS_DECL
+#include "circt/Dialect/Arc/ArcPasses.h.inc"
+
 std::unique_ptr<mlir::Pass>
 createAddTapsPass(std::optional<bool> tapPorts = {},
                   std::optional<bool> tapWires = {},

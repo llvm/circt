@@ -6,14 +6,23 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
+#include "circt/Dialect/Arc/ArcOps.h"
+#include "circt/Dialect/Arc/ArcPasses.h"
 #include "circt/Support/Namespace.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "arc-split-loops"
+
+namespace circt {
+namespace arc {
+#define GEN_PASS_DEF_SPLITLOOPS
+#include "circt/Dialect/Arc/ArcPasses.h.inc"
+} // namespace arc
+} // namespace circt
 
 using namespace circt;
 using namespace arc;
@@ -172,7 +181,7 @@ Split &Splitter::getSplit(const APInt &color) {
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct SplitLoopsPass : public SplitLoopsBase<SplitLoopsPass> {
+struct SplitLoopsPass : public arc::impl::SplitLoopsBase<SplitLoopsPass> {
   void runOnOperation() override;
   void splitArc(Namespace &arcNamespace, DefineOp defOp,
                 ArrayRef<StateOp> arcUses);

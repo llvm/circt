@@ -6,12 +6,21 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
+#include "circt/Dialect/Arc/ArcOps.h"
+#include "circt/Dialect/Arc/ArcPasses.h"
 #include "mlir/IR/IRMapping.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/InliningUtils.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "arc-inline"
+
+namespace circt {
+namespace arc {
+#define GEN_PASS_DEF_INLINEARCS
+#include "circt/Dialect/Arc/ArcPasses.h.inc"
+} // namespace arc
+} // namespace circt
 
 using namespace circt;
 using namespace arc;
@@ -19,7 +28,7 @@ using mlir::InlinerInterface;
 
 namespace {
 
-struct InlineArcsPass : public InlineArcsBase<InlineArcsPass> {
+struct InlineArcsPass : public arc::impl::InlineArcsBase<InlineArcsPass> {
   InlineArcsPass() = default;
   InlineArcsPass(bool intoArcsOnly, unsigned maxNonTrivialOpsInBody)
       : InlineArcsPass() {

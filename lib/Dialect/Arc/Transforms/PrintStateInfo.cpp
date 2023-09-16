@@ -6,12 +6,21 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
+#include "circt/Dialect/Arc/ArcOps.h"
+#include "circt/Dialect/Arc/ArcPasses.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/JSON.h"
 #include "llvm/Support/ToolOutputFile.h"
 
 #define DEBUG_TYPE "arc-print-state-info"
+
+namespace circt {
+namespace arc {
+#define GEN_PASS_DEF_PRINTSTATEINFO
+#include "circt/Dialect/Arc/ArcPasses.h.inc"
+} // namespace arc
+} // namespace circt
 
 using namespace mlir;
 using namespace circt;
@@ -37,13 +46,14 @@ struct ModelInfo {
   std::vector<StateInfo> states;
 };
 
-struct PrintStateInfoPass : public PrintStateInfoBase<PrintStateInfoPass> {
+struct PrintStateInfoPass
+    : public arc::impl::PrintStateInfoBase<PrintStateInfoPass> {
   void runOnOperation() override;
   LogicalResult runOnOperation(llvm::raw_ostream &outputStream);
   LogicalResult collectStates(Value storage, unsigned offset,
                               std::vector<StateInfo> &stateInfos);
 
-  using PrintStateInfoBase::stateFile;
+  using arc::impl::PrintStateInfoBase<PrintStateInfoPass>::stateFile;
 };
 } // namespace
 

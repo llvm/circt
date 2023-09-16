@@ -6,13 +6,22 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
+#include "circt/Dialect/Arc/ArcOps.h"
+#include "circt/Dialect/Arc/ArcPasses.h"
 #include "mlir/IR/BuiltinAttributes.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/SHA256.h"
 
 #define DEBUG_TYPE "arc-dedup"
+
+namespace circt {
+namespace arc {
+#define GEN_PASS_DEF_DEDUP
+#include "circt/Dialect/Arc/ArcPasses.h.inc"
+} // namespace arc
+} // namespace circt
 
 using namespace circt;
 using namespace arc;
@@ -351,7 +360,7 @@ static bool isOutlinable(OpOperand &operand) {
 }
 
 namespace {
-struct DedupPass : public DedupBase<DedupPass> {
+struct DedupPass : public arc::impl::DedupBase<DedupPass> {
   void runOnOperation() override;
   void replaceArcWith(DefineOp oldArc, DefineOp newArc);
 
