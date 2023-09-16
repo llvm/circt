@@ -6,21 +6,30 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/Arc/ArcOps.h"
+#include "circt/Dialect/Arc/ArcPasses.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/BackedgeBuilder.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMAttrs.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/SymbolTable.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "arc-lower-state"
+
+namespace circt {
+namespace arc {
+#define GEN_PASS_DEF_LOWERSTATE
+#include "circt/Dialect/Arc/ArcPasses.h.inc"
+} // namespace arc
+} // namespace circt
 
 using namespace circt;
 using namespace arc;
@@ -683,7 +692,7 @@ LogicalResult ModuleLowering::cleanup() {
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct LowerStatePass : public LowerStateBase<LowerStatePass> {
+struct LowerStatePass : public arc::impl::LowerStateBase<LowerStatePass> {
   LowerStatePass() = default;
   LowerStatePass(const LowerStatePass &pass) : LowerStatePass() {}
 

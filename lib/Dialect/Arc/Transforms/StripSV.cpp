@@ -6,21 +6,30 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
+#include "circt/Dialect/Arc/ArcOps.h"
+#include "circt/Dialect/Arc/ArcPasses.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/Support/Debug.h"
 #include <variant>
 
 #define DEBUG_TYPE "arc-strip-sv"
 
+namespace circt {
+namespace arc {
+#define GEN_PASS_DEF_STRIPSV
+#include "circt/Dialect/Arc/ArcPasses.h.inc"
+} // namespace arc
+} // namespace circt
+
 using namespace circt;
 using namespace arc;
 
 namespace {
-struct StripSVPass : public StripSVBase<StripSVPass> {
+struct StripSVPass : public arc::impl::StripSVBase<StripSVPass> {
   void runOnOperation() override;
   SmallVector<Operation *> opsToDelete;
   SmallPtrSet<StringAttr, 4> clockGateModuleNames;

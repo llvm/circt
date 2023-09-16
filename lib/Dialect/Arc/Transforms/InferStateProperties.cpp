@@ -6,11 +6,21 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
+#include "circt/Dialect/Arc/ArcOps.h"
+#include "circt/Dialect/Arc/ArcPasses.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/LLVM.h"
+#include "mlir/Pass/Pass.h"
 
 #define DEBUG_TYPE "arc-infer-state-properties"
+
+namespace circt {
+namespace arc {
+#define GEN_PASS_DEF_INFERSTATEPROPERTIES
+#include "circt/Dialect/Arc/ArcPasses.h.inc"
+} // namespace arc
+} // namespace circt
 
 using namespace circt;
 using namespace arc;
@@ -370,7 +380,7 @@ EnableInfo computeEnableInfoFromPattern(OpOperand &output, StateOp stateOp) {
 
 namespace {
 struct InferStatePropertiesPass
-    : public InferStatePropertiesBase<InferStatePropertiesPass> {
+    : public arc::impl::InferStatePropertiesBase<InferStatePropertiesPass> {
   InferStatePropertiesPass() = default;
   InferStatePropertiesPass(const InferStatePropertiesPass &pass)
       : InferStatePropertiesPass() {}

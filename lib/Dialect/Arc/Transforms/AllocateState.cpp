@@ -6,10 +6,20 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
+#include "circt/Dialect/Arc/ArcOps.h"
+#include "circt/Dialect/Arc/ArcPasses.h"
+#include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "arc-allocate-state"
+
+namespace circt {
+namespace arc {
+#define GEN_PASS_DEF_ALLOCATESTATE
+#include "circt/Dialect/Arc/ArcPasses.h.inc"
+} // namespace arc
+} // namespace circt
 
 using namespace mlir;
 using namespace circt;
@@ -22,7 +32,8 @@ using llvm::SmallMapVector;
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct AllocateStatePass : public AllocateStateBase<AllocateStatePass> {
+struct AllocateStatePass
+    : public arc::impl::AllocateStateBase<AllocateStatePass> {
   void runOnOperation() override;
   void allocateBlock(Block *block);
   void allocateOps(Value storage, Block *block, ArrayRef<Operation *> ops);
