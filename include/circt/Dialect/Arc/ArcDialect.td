@@ -17,6 +17,7 @@ def ArcDialect : Dialect {
     in a circuit.
   }];
   let cppNamespace = "circt::arc";
+  let dependentDialects = ["circt::hw::HWDialect", "circt::seq::SeqDialect"];
 
   let hasConstantMaterializer = 1;
   let useDefaultTypePrinterParser = 1;

@@ -9,6 +9,7 @@
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/Arc/ArcPasses.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/OM/OMDialect.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -55,17 +56,15 @@ void StripSVPass::runOnOperation() {
           !llvm::equal(extModOp.getOutputNames(), expectedClockGateOutputs)) {
         extModOp.emitError("clock gate module `")
             << extModOp.getModuleName() << "` has incompatible port names "
-            << extModOp.getInputNames() << " -> "
-            << extModOp.getOutputNames();
+            << extModOp.getInputNames() << " -> " << extModOp.getOutputNames();
         return signalPassFailure();
       }
       if (!llvm::equal(extModOp.getInputTypes(),
-              ArrayRef<Type>{i1Type, i1Type, i1Type}) ||
+                       ArrayRef<Type>{i1Type, i1Type, i1Type}) ||
           !llvm::equal(extModOp.getOutputTypes(), ArrayRef<Type>{i1Type})) {
         extModOp.emitError("clock gate module `")
             << extModOp.getModuleName() << "` has incompatible port types "
-            << extModOp.getInputTypes() << " -> "
-            << extModOp.getOutputTypes();
+            << extModOp.getInputTypes() << " -> " << extModOp.getOutputTypes();
         return signalPassFailure();
       }
       clockGateModuleNames.insert(extModOp.getModuleNameAttr());
@@ -75,6 +74,11 @@ void StripSVPass::runOnOperation() {
   }
   LLVM_DEBUG(llvm::dbgs() << "Found " << clockGateModuleNames.size()
                           << " clock gates\n");
+
+  // Remove OM dialect nodes.
+  for (auto &op : llvm::make_early_inc_range(*mlirModule.getBody()))
+    if (isa<om::OMDialect>(op.getDialect()))
+      op.erase();
 
   // Remove `sv.*` operation attributes.
   mlirModule.walk([](Operation *op) {
