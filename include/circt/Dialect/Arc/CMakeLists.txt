@@ -3,6 +3,8 @@ add_circt_dialect_doc(Arc arc)
 
 set(LLVM_TARGET_DEFINITIONS ArcPasses.td)
 mlir_tablegen(ArcPasses.h.inc -gen-pass-decls)
+mlir_tablegen(ArcPassesEnums.h.inc -gen-enum-decls)
+mlir_tablegen(ArcPassesEnums.cpp.inc -gen-enum-defs)
 add_public_tablegen_target(CIRCTArcTransformsIncGen)
 add_circt_doc(ArcPasses ArcPasses -gen-pass-doc)
 

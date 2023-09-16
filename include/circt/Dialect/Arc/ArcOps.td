@@ -776,7 +776,16 @@ def VectorizeOp : ArcOp<"vectorize", [
   }];
 
   let extraClassDeclaration = [{
+    /// Returns whether the `arc.vectorize` boundary is already vectorized.
+    /// The boundary is vectorized if each input vector has only one element
+    /// (either of integer or vector type), i.e., the vector itself.
     bool isBoundaryVectorized();
+
+    /// Returns whether the body block of the `arc.vectorize` is already
+    /// vectorized. The body is vectorized if the boundary is vectorized and
+    /// the body's argument and result types match those of the boundary, or
+    /// they are a vectorized version of the boundary types (i.e., a matching
+    /// vector type or integer with summed-up bitwidth).
     bool isBodyVectorized();
   }];
 
