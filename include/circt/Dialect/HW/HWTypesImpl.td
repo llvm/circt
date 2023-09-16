@@ -189,7 +189,7 @@ def UnionTypeImpl : HWType<"Union"> {
     using FieldInfo = ::circt::hw::detail::OffsetFieldInfo;
 
     FieldInfo getFieldInfo(::mlir::StringRef fieldName);
-    
+
     ::mlir::Type getFieldType(::mlir::StringRef fieldName);
   }];
 }
