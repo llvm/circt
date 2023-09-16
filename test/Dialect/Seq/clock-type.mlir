@@ -64,3 +64,24 @@ hw.module public @CrossReferences() {
   // CHECK: %b.out = hw.instance "b" @SinkSource(clock: %a.out: i1) -> (out: i1)
   %b.out = hw.instance "b" @SinkSource(clock: %a.out: !seq.clock) -> (out: !seq.clock)
 }
+
+// CHECK-LABEL: hw.module @ClockAgg(%c: !hw.struct<clock: i1>) -> (oc: !hw.struct<clock: i1>)
+// CHECK: [[CLOCK:%.+]] = hw.struct_extract %c["clock"] : !hw.struct<clock: i1>
+// CHECK: [[STRUCT:%.+]] = hw.struct_create ([[CLOCK]]) : !hw.struct<clock: i1>
+// CHECL: hw.output [[STRUCT]] : !hw.struct<clock: i1>
+hw.module @ClockAgg(%c: !hw.struct<clock: !seq.clock>) -> (oc: !hw.struct<clock: !seq.clock>) {
+  %clock = hw.struct_extract %c["clock"] : !hw.struct<clock: !seq.clock>
+  %0 = hw.struct_create (%clock) : !hw.struct<clock: !seq.clock>
+  hw.output %0 : !hw.struct<clock: !seq.clock>
+}
+
+// CHECK-LABEL: hw.module @ClockArray(%c: !hw.array<1xi1>) -> (oc: !hw.array<1xi1>) {
+// CHECK: [[CLOCK:%.+]] = hw.array_get %c[%false] : !hw.array<1xi1>, i1
+// CHECK: [[ARRAY:%.+]] = hw.array_create [[CLOCK]] : i1
+// CHECK: hw.output [[ARRAY]] : !hw.array<1xi1>
+hw.module @ClockArray(%c: !hw.array<1x!seq.clock>) -> (oc: !hw.array<1x!seq.clock>) {
+  %idx = hw.constant 0 : i1
+  %clock = hw.array_get %c[%idx] : !hw.array<1x!seq.clock>, i1
+  %0 = hw.array_create %clock : !seq.clock
+  hw.output %0 : !hw.array<1x!seq.clock>
+}
