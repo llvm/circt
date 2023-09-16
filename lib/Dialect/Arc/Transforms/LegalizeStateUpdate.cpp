@@ -8,13 +8,9 @@
 
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/Arc/ArcPasses.h"
-#include "mlir/Analysis/DataFlow/DenseAnalysis.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/Dominance.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
-#include "mlir/IR/Visitors.h"
-#include "mlir/Pass/Pass.h"
-#include "mlir/Support/IndentedOstream.h"
 #include "llvm/ADT/PointerIntPair.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
@@ -29,104 +25,68 @@ namespace arc {
 } // namespace circt
 
 using namespace mlir;
-using namespace mlir::dataflow;
 using namespace circt;
 using namespace arc;
-using namespace hw;
-using llvm::PointerIntPair;
-
-//===----------------------------------------------------------------------===//
-// Data Flow Analysis
-//===----------------------------------------------------------------------===//
-
-/// Check if a type is interesting in terms of state accesses.
-static bool isTypeInteresting(Type type) { return type.isa<StateType>(); }
 
 /// Check if an operation partakes in state accesses.
 static bool isOpInteresting(Operation *op) {
-  if (isa<StateReadOp, StateWriteOp>(op))
+  if (isa<StateReadOp, StateWriteOp, CallOpInterface, CallableOpInterface>(op))
     return true;
-  if (auto callOp = dyn_cast<CallOpInterface>(op))
-    return llvm::any_of(callOp.getArgOperands(), [](auto arg) {
-      return isTypeInteresting(arg.getType());
-    });
-  if (auto callableOp = dyn_cast<CallableOpInterface>(op))
-    if (auto *region = callableOp.getCallableRegion())
-      return llvm::any_of(region->getArguments(), [](auto arg) {
-        return isTypeInteresting(arg.getType());
-      });
   if (op->getNumRegions() > 0)
     return true;
   return false;
 }
 
+//===----------------------------------------------------------------------===//
+// Access Analysis
+//===----------------------------------------------------------------------===//
+
 namespace {
-struct AccessState : public AnalysisState {
-  using AnalysisState::AnalysisState;
-  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(AccessState)
 
-  enum AccessType { Read = 0, Write = 1 };
-  using Access = PointerIntPair<Value, 1, AccessType>;
+enum class AccessType { Read = 0, Write = 1 };
 
-  void print(raw_ostream &os) const override {
-    if (accesses.empty()) {
-      os << "no accesses\n";
-      return;
-    }
-    for (auto access : accesses) {
-      os << "- " << (access.getInt() == Read ? "read" : "write") << " "
-         << access.getPointer() << "\n";
-    }
-  }
+/// A read or write access to a state value.
+using Access = llvm::PointerIntPair<Value, 1, AccessType>;
 
-  ChangeResult join(const AccessState &other) {
-    auto result = ChangeResult::NoChange;
-    for (auto access : other.accesses)
-      if (accesses.insert(access).second)
-        result = ChangeResult::Change;
-    return result;
-  }
+struct BlockAccesses;
+struct OpAccesses;
 
-  ChangeResult add(Value state, AccessType type) {
-    return add(Access(state, type));
-  }
+/// A block's access analysis information and graph edges.
+struct BlockAccesses {
+  BlockAccesses(Block *block) : block(block) {}
 
-  ChangeResult add(Access access) {
-    if (accesses.insert(access).second)
-      return ChangeResult::Change;
-    return ChangeResult::NoChange;
-  }
+  /// The block.
+  Block *const block;
+  /// The parent op lattice node.
+  OpAccesses *parent = nullptr;
+  /// The accesses from ops within this block to the block arguments.
+  SmallPtrSet<Access, 1> argAccesses;
+  /// The accesses from ops within this block to values defined outside the
+  /// block.
+  SmallPtrSet<Access, 1> aboveAccesses;
+};
 
-  ChangeResult remove(Value state, AccessType type) {
-    return remove(Access(state, type));
-  }
+/// An operation's access analysis information and graph edges.
+struct OpAccesses {
+  OpAccesses(Operation *op) : op(op) {}
 
-  ChangeResult remove(Access access) {
-    if (accesses.erase(access))
-      return ChangeResult::Change;
-    return ChangeResult::NoChange;
-  }
-
+  /// The operation.
+  Operation *const op;
+  /// The parent block lattice node.
+  BlockAccesses *parent = nullptr;
+  /// If this is a callable op, `callers` is the set of ops calling it.
+  SmallPtrSet<OpAccesses *, 1> callers;
+  /// The accesses performed by this op.
   SmallPtrSet<Access, 1> accesses;
 };
 
-struct ArgumentAccessState : public AccessState {
-  using AccessState::AccessState;
-  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(ArgumentAccessState)
-};
-
-struct AccessAnalysis : public DataFlowAnalysis {
-  using DataFlowAnalysis::DataFlowAnalysis;
-
-  LogicalResult initialize(Operation *top) override;
-  LogicalResult visit(ProgramPoint point) override;
-
-  void visitBlock(Block *block);
-  void visitOperation(Operation *op);
-
-  void recordState(Value value) {
-    stateOrder.insert({value, stateOrder.size()});
-  }
+/// An analysis that determines states read and written by operations and
+/// blocks. Looks through calls and handles nested operations properly. Does not
+/// follow state values returned from functions and modified by operations.
+struct AccessAnalysis {
+  LogicalResult analyze(Operation *op);
+  OpAccesses *lookup(Operation *op);
+  BlockAccesses *lookup(Block *block);
 
   /// A global order assigned to state values. These allow us to not care about
   /// ordering during the access analysis and only establish a determinstic
@@ -135,129 +95,173 @@ struct AccessAnalysis : public DataFlowAnalysis {
 
   /// A symbol table cache.
   SymbolTableCollection symbolTable;
+
+private:
+  llvm::SpecificBumpPtrAllocator<OpAccesses> opAlloc;
+  llvm::SpecificBumpPtrAllocator<BlockAccesses> blockAlloc;
+
+  DenseMap<Operation *, OpAccesses *> opAccesses;
+  DenseMap<Block *, BlockAccesses *> blockAccesses;
+
+  SetVector<OpAccesses *> opWorklist;
+  bool anyInvalidStateAccesses = false;
+
+  // Get the node for an operation, creating one if necessary.
+  OpAccesses &get(Operation *op) {
+    auto &slot = opAccesses[op];
+    if (!slot)
+      slot = new (opAlloc.Allocate()) OpAccesses(op);
+    return *slot;
+  }
+
+  // Get the node for a block, creating one if necessary.
+  BlockAccesses &get(Block *block) {
+    auto &slot = blockAccesses[block];
+    if (!slot)
+      slot = new (blockAlloc.Allocate()) BlockAccesses(block);
+    return *slot;
+  }
+
+  // NOLINTBEGIN(misc-no-recursion)
+  void addOpAccess(OpAccesses &op, Access access);
+  void addBlockAccess(BlockAccesses &block, Access access);
+  // NOLINTEND(misc-no-recursion)
 };
 } // namespace
 
-LogicalResult AccessAnalysis::initialize(Operation *top) {
-  top->walk([&](Block *block) {
-    visitBlock(block);
-    for (Operation &op : *block)
-      if (isOpInteresting(&op))
-        visitOperation(&op);
-  });
-  LLVM_DEBUG(llvm::dbgs() << "Initialized\n");
-  return success();
-}
+LogicalResult AccessAnalysis::analyze(Operation *op) {
+  LLVM_DEBUG(llvm::dbgs() << "Analyzing accesses in " << op->getName() << "\n");
 
-LogicalResult AccessAnalysis::visit(ProgramPoint point) {
-  if (auto *op = point.dyn_cast<Operation *>()) {
-    visitOperation(op);
-    return success();
-  }
-  if (auto *block = point.dyn_cast<Block *>()) {
-    visitBlock(block);
-    return success();
-  }
-  return emitError(point.getLoc(), "unknown point kind");
-}
+  // Create the lattice nodes for all blocks and operations.
+  llvm::SmallSetVector<OpAccesses *, 16> initWorklist;
+  initWorklist.insert(&get(op));
+  while (!initWorklist.empty()) {
+    OpAccesses &opNode = *initWorklist.pop_back_val();
 
-void AccessAnalysis::visitBlock(Block *block) {
-  // LLVM_DEBUG(llvm::dbgs() << "Visit block " << block << "\n");
-  for (auto arg : block->getArguments())
-    if (isTypeInteresting(arg.getType()))
-      recordState(arg);
-
-  // Aggregate the accesses performed by the operations in this block.
-  SmallPtrSet<Value, 4> localState;
-  AccessState innerAccesses(block);
-  for (Operation &op : *block) {
-    if (isa<AllocStateOp>(&op)) {
-      localState.insert(op.getResult(0));
-      recordState(op.getResult(0));
-    }
-    if (!isOpInteresting(&op))
-      continue;
-    innerAccesses.join(*getOrCreateFor<AccessState>(block, &op));
-  }
-
-  // Remove any information about locally-defined state which we cannot access
-  // outside the current block. This prevents significant blow-up of the access
-  // sets, since local state accesses don't get transported to parent ops where
-  // they have no meaning.
-  for (auto state : localState) {
-    innerAccesses.remove(state, AccessState::Read);
-    innerAccesses.remove(state, AccessState::Write);
-  }
-
-  // Track block argument accesses in a separate analysis state.
-  auto *argAccesses = getOrCreate<ArgumentAccessState>(block);
-  auto result = ChangeResult::NoChange;
-  for (auto arg : block->getArguments()) {
-    if (innerAccesses.remove(arg, AccessState::Read) == ChangeResult::Change)
-      result |= argAccesses->add(arg, AccessState::Read);
-    if (innerAccesses.remove(arg, AccessState::Write) == ChangeResult::Change)
-      result |= argAccesses->add(arg, AccessState::Write);
-  }
-  propagateIfChanged(argAccesses, result);
-
-  // Update the block's access list.
-  auto *blockAccesses = getOrCreate<AccessState>(block);
-  result = blockAccesses->join(innerAccesses);
-  propagateIfChanged(blockAccesses, result);
-}
-
-void AccessAnalysis::visitOperation(Operation *op) {
-  auto result = ChangeResult::NoChange;
-  auto *accesses = getOrCreate<AccessState>(op);
-
-  TypeSwitch<Operation *>(op)
-      .Case<StateReadOp>([&](auto readOp) {
-        result |= accesses->add(readOp.getState(), AccessState::Read);
-      })
-      .Case<StateWriteOp>([&](auto writeOp) {
-        result |= accesses->add(writeOp.getState(), AccessState::Write);
-      })
-      .Case<CallableOpInterface>([&](auto callableOp) {
-        if (auto *region = callableOp.getCallableRegion()) {
-          auto argResult = ChangeResult::NoChange;
-          auto *argAccesses = getOrCreate<ArgumentAccessState>(op);
-          for (auto &block : *region) {
-            argResult |= argAccesses->join(
-                *getOrCreateFor<ArgumentAccessState>(op, &block));
-          }
-          propagateIfChanged(argAccesses, argResult);
-        }
-      })
-      .Case<CallOpInterface>([&](auto callOp) {
-        auto calleeOp = dyn_cast_or_null<CallableOpInterface>(
-            callOp.resolveCallable(&symbolTable));
-        if (!calleeOp)
-          return;
-        auto operands = callOp.getArgOperands();
-        const auto *calleeArgAccesses =
-            getOrCreateFor<ArgumentAccessState>(callOp, calleeOp);
-        for (auto access : calleeArgAccesses->accesses) {
-          auto arg =
-              access.getPointer().template dyn_cast_or_null<BlockArgument>();
-          if (arg)
-            result |=
-                accesses->add(operands[arg.getArgNumber()], access.getInt());
-        }
-      });
-
-  // Don't propagate inner state accesses through models, clock trees, and
-  // passthrough ops.
-  if (!isa<ModelOp, ClockTreeOp, PassThroughOp>(op)) {
-    for (auto &region : op->getRegions()) {
+    // First create lattice nodes for all nested blocks and operations.
+    for (auto &region : opNode.op->getRegions()) {
       for (auto &block : region) {
-        const auto *blockAccesses = getOrCreateFor<AccessState>(op, &block);
-        result |= accesses->join(*blockAccesses);
+        BlockAccesses &blockNode = get(&block);
+        blockNode.parent = &opNode;
+        for (auto &subOp : block) {
+          if (!isOpInteresting(&subOp))
+            continue;
+          OpAccesses &subOpNode = get(&subOp);
+          if (!subOp.hasTrait<OpTrait::IsIsolatedFromAbove>()) {
+            subOpNode.parent = &blockNode;
+          }
+          initWorklist.insert(&subOpNode);
+        }
+      }
+    }
+
+    // Track the relationship between callers and callees.
+    if (auto callOp = dyn_cast<CallOpInterface>(opNode.op))
+      if (auto *calleeOp = callOp.resolveCallable(&symbolTable))
+        get(calleeOp).callers.insert(&opNode);
+
+    // Create the seed accesses.
+    if (auto readOp = dyn_cast<StateReadOp>(opNode.op))
+      addOpAccess(opNode, Access(readOp.getState(), AccessType::Read));
+    else if (auto writeOp = dyn_cast<StateWriteOp>(opNode.op))
+      addOpAccess(opNode, Access(writeOp.getState(), AccessType::Write));
+  }
+  LLVM_DEBUG(llvm::dbgs() << "- Prepared " << blockAccesses.size()
+                          << " block and " << opAccesses.size()
+                          << " op lattice nodes\n");
+  LLVM_DEBUG(llvm::dbgs() << "- Worklist has " << opWorklist.size()
+                          << " initial ops\n");
+
+  // Propagate accesses through calls.
+  while (!opWorklist.empty()) {
+    if (anyInvalidStateAccesses)
+      return failure();
+    auto &opNode = *opWorklist.pop_back_val();
+    if (opNode.callers.empty())
+      continue;
+    auto calleeOp = dyn_cast<CallableOpInterface>(opNode.op);
+    if (!calleeOp)
+      return opNode.op->emitOpError(
+          "does not implement CallableOpInterface but has callers");
+    LLVM_DEBUG(llvm::dbgs() << "- Updating callable " << opNode.op->getName()
+                            << " " << opNode.op->getAttr("sym_name") << "\n");
+
+    auto &calleeRegion = *calleeOp.getCallableRegion();
+    auto *blockNode = lookup(&calleeRegion.front());
+    if (!blockNode)
+      continue;
+    auto calleeArgs = blockNode->block->getArguments();
+
+    for (auto *callOpNode : opNode.callers) {
+      LLVM_DEBUG(llvm::dbgs() << "  - Updating " << *callOpNode->op << "\n");
+      auto callArgs = cast<CallOpInterface>(callOpNode->op).getArgOperands();
+      for (auto [calleeArg, callArg] : llvm::zip(calleeArgs, callArgs)) {
+        if (blockNode->argAccesses.contains({calleeArg, AccessType::Read}))
+          addOpAccess(*callOpNode, {callArg, AccessType::Read});
+        if (blockNode->argAccesses.contains({calleeArg, AccessType::Write}))
+          addOpAccess(*callOpNode, {callArg, AccessType::Write});
       }
     }
   }
 
-  propagateIfChanged(accesses, result);
+  return failure(anyInvalidStateAccesses);
 }
+
+OpAccesses *AccessAnalysis::lookup(Operation *op) {
+  return opAccesses.lookup(op);
+}
+
+BlockAccesses *AccessAnalysis::lookup(Block *block) {
+  return blockAccesses.lookup(block);
+}
+
+// NOLINTBEGIN(misc-no-recursion)
+void AccessAnalysis::addOpAccess(OpAccesses &op, Access access) {
+  // We don't support state pointers flowing among ops and blocks. Check that
+  // the accessed state is either directly passed down through a block argument
+  // (no defining op), or is trivially a local state allocation.
+  auto *defOp = access.getPointer().getDefiningOp();
+  if (defOp && !isa<AllocStateOp, RootInputOp, RootOutputOp>(defOp)) {
+    auto d = op.op->emitOpError("accesses non-trivial state value defined by `")
+             << defOp->getName()
+             << "`; only block arguments and `arc.alloc_state` results are "
+                "supported";
+    d.attachNote(defOp->getLoc()) << "state defined here";
+    anyInvalidStateAccesses = true;
+  }
+
+  // Propagate to the parent block and operation if the access escapes the block
+  // or targets a block argument.
+  if (op.accesses.insert(access).second && op.parent) {
+    stateOrder.insert({access.getPointer(), stateOrder.size()});
+    addBlockAccess(*op.parent, access);
+  }
+}
+
+void AccessAnalysis::addBlockAccess(BlockAccesses &block, Access access) {
+  Value value = access.getPointer();
+
+  // If the accessed value is defined outside the block, add it to the set of
+  // outside accesses.
+  if (value.getParentBlock() != block.block) {
+    if (block.aboveAccesses.insert(access).second)
+      addOpAccess(*block.parent, access);
+    return;
+  }
+
+  // If the accessed value is defined within the block, and it is a block
+  // argument, add it to the list of block argument accesses.
+  if (auto blockArg = dyn_cast<BlockArgument>(value)) {
+    assert(blockArg.getOwner() == block.block);
+    if (!block.argAccesses.insert(access).second)
+      return;
+
+    // Adding block argument accesses affects calls to the surrounding ops. Add
+    // the op to the worklist such that the access can propagate to callers.
+    opWorklist.insert(block.parent);
+  }
+}
+// NOLINTEND(misc-no-recursion)
 
 //===----------------------------------------------------------------------===//
 // Legalization
@@ -265,12 +269,10 @@ void AccessAnalysis::visitOperation(Operation *op) {
 
 namespace {
 struct Legalizer {
-  Legalizer(DataFlowSolver &solver, AccessAnalysis &analysis)
-      : solver(solver), analysis(analysis) {}
+  Legalizer(AccessAnalysis &analysis) : analysis(analysis) {}
   LogicalResult run(MutableArrayRef<Region> regions);
   LogicalResult visitBlock(Block *block);
 
-  DataFlowSolver &solver;
   AccessAnalysis &analysis;
 
   unsigned numLegalizedWrites = 0;
@@ -293,12 +295,25 @@ LogicalResult Legalizer::run(MutableArrayRef<Region> regions) {
 }
 
 LogicalResult Legalizer::visitBlock(Block *block) {
+  // Do not legalize ops directly in the `arc.model` body.
+  // NOTE: Once we switch to an eval-based implementation of `arc.model`, we'll
+  // want to propagate state accesses through all operations such that the eval
+  // function can also be properly ordered and legalized.
+  if (isa<ModelOp>(block->getParentOp())) {
+    for (auto &op : *block)
+      for (auto &region : op.getRegions())
+        for (auto &block : region)
+          if (failed(visitBlock(&block)))
+            return failure();
+    return success();
+  }
+
   // In a first reverse pass over the block, find the first write that occurs
   // before the last read of a state, if any.
   SmallPtrSet<Value, 4> readStates;
   DenseMap<Value, Operation *> illegallyWrittenStates;
   for (Operation &op : llvm::reverse(*block)) {
-    const auto *accesses = solver.lookupState<AccessState>(&op);
+    const auto *accesses = analysis.lookup(&op);
     if (!accesses)
       continue;
 
@@ -306,7 +321,7 @@ LogicalResult Legalizer::visitBlock(Block *block) {
     // read earlier. These writes need to be legalized.
     SmallVector<Value, 1> affectedStates;
     for (auto access : accesses->accesses)
-      if (access.getInt() == AccessState::Write)
+      if (access.getInt() == AccessType::Write)
         if (readStates.contains(access.getPointer()))
           illegallyWrittenStates[access.getPointer()] = &op;
 
@@ -315,7 +330,7 @@ LogicalResult Legalizer::visitBlock(Block *block) {
     // doesn't mark itself as illegal. Instead, we will descend into that block
     // further down and do a more fine-grained legalization.
     for (auto access : accesses->accesses)
-      if (access.getInt() == AccessState::Read)
+      if (access.getInt() == AccessType::Read)
         readStates.insert(access.getPointer());
   }
 
@@ -341,7 +356,7 @@ LogicalResult Legalizer::visitBlock(Block *block) {
     // during the access analysis. Without this the exact order in which states
     // were moved into a temporary would be non-deterministic.
     llvm::sort(states, [&](Value a, Value b) {
-      return analysis.stateOrder[a] < analysis.stateOrder[b];
+      return analysis.stateOrder.lookup(a) < analysis.stateOrder.lookup(b);
     });
 
     // Legalize each state individually.
@@ -390,11 +405,11 @@ LogicalResult Legalizer::visitBlock(Block *block) {
     // HACKY FIX: Assume that there is ever only a single write to a state. In
     // that case it is safe to assume that when an op is marked as writing a
     // state it wants the original state, not the temporary one for reads.
-    const auto *accesses = solver.lookupState<AccessState>(&op);
+    const auto *accesses = analysis.lookup(&op);
     for (auto &operand : op.getOpOperands()) {
       if (accesses &&
-          accesses->accesses.contains({operand.get(), AccessState::Read}) &&
-          accesses->accesses.contains({operand.get(), AccessState::Write})) {
+          accesses->accesses.contains({operand.get(), AccessType::Read}) &&
+          accesses->accesses.contains({operand.get(), AccessType::Write})) {
         auto d = op.emitWarning("operation reads and writes state; "
                                 "legalization may be insufficient");
         d.attachNote()
@@ -404,7 +419,7 @@ LogicalResult Legalizer::visitBlock(Block *block) {
         d.attachNote(operand.get().getLoc()) << "state defined here:";
       }
       if (!accesses ||
-          !accesses->accesses.contains({operand.get(), AccessState::Write})) {
+          !accesses->accesses.contains({operand.get(), AccessType::Write})) {
         if (auto tmpState = legalizedStates.lookup(operand.get())) {
           operand.set(tmpState);
           ++numUpdatedReads;
@@ -571,12 +586,11 @@ void LegalizeStateUpdatePass::runOnOperation() {
         return signalPassFailure();
   }
 
-  DataFlowSolver solver;
-  auto &analysis = *solver.load<AccessAnalysis>();
-  if (failed(solver.initializeAndRun(module)))
+  AccessAnalysis analysis;
+  if (failed(analysis.analyze(module)))
     return signalPassFailure();
 
-  Legalizer legalizer(solver, analysis);
+  Legalizer legalizer(analysis);
   if (failed(legalizer.run(module->getRegions())))
     return signalPassFailure();
   numLegalizedWrites += legalizer.numLegalizedWrites;

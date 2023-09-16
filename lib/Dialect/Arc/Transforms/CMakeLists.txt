@@ -29,6 +29,7 @@ add_circt_dialect_library(CIRCTArcTransforms
   CIRCTArcExternalInterfaces
   CIRCTComb
   CIRCTHW
+  CIRCTOM
   CIRCTSV
   CIRCTSeq
   CIRCTSupport
