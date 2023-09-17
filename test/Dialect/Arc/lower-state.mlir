@@ -11,19 +11,20 @@ hw.module @InputsAndOutputs(%a: i42, %b: i17) -> (c: i42, d: i17) {
   %0 = comb.add %a, %a : i42
   %1 = comb.add %b, %b : i17
   hw.output %0, %1 : i42, i17
-  // CHECK-NEXT: ([[PTR:%.+]]: !arc.storage):
-  // CHECK-NEXT: [[INA:%.+]] = arc.root_input "a", [[PTR]] : (!arc.storage) -> !arc.state<i42>
-  // CHECK-NEXT: [[INB:%.+]] = arc.root_input "b", [[PTR]] : (!arc.storage) -> !arc.state<i17>
+  // CHECK-NEXT: (%arg0: !arc.storage):
+  // CHECK-NEXT: [[INA:%.+]] = arc.root_input "a", %arg0 : (!arc.storage) -> !arc.state<i42>
+  // CHECK-NEXT: [[INB:%.+]] = arc.root_input "b", %arg0 : (!arc.storage) -> !arc.state<i17>
+  // CHECK-NEXT: [[OUTA:%.+]] = arc.root_output "c", %arg0 : (!arc.storage) -> !arc.state<i42>
+  // CHECK-NEXT: [[OUTB:%.+]] = arc.root_output "d", %arg0 : (!arc.storage) -> !arc.state<i17>
+
   // CHECK-NEXT: arc.passthrough {
   // CHECK-NEXT:   [[A:%.+]] = arc.state_read [[INA]] : <i42>
   // CHECK-NEXT:   [[TMP:%.+]] = comb.add [[A]], [[A]] : i42
-  // CHECK-NEXT:   arc.state_write [[OUTA:%.+]] = [[TMP]] : <i42>
+  // CHECK-NEXT:   arc.state_write [[OUTA]] = [[TMP]] : <i42>
   // CHECK-NEXT:   [[B:%.+]] = arc.state_read [[INB]] : <i17>
   // CHECK-NEXT:   [[TMP:%.+]] = comb.add [[B]], [[B]] : i17
-  // CHECK-NEXT:   arc.state_write [[OUTB:%.+]] = [[TMP]] : <i17>
+  // CHECK-NEXT:   arc.state_write [[OUTB]] = [[TMP]] : <i17>
   // CHECK-NEXT: }
-  // CHECK-NEXT: [[OUTA]] = arc.root_output "c", [[PTR]] : (!arc.storage) -> !arc.state<i42>
-  // CHECK-NEXT: [[OUTB]] = arc.root_output "d", [[PTR]] : (!arc.storage) -> !arc.state<i17>
 }
 
 // CHECK-LABEL: arc.model "State" {
@@ -33,33 +34,49 @@ hw.module @State(%clk: !seq.clock, %en: i1) {
   %4 = arc.state @DummyArc(%5) clock %gclk lat 1 : (i42) -> i42
   %5 = comb.add %3, %3 : i42
   %6 = comb.add %4, %4 : i42
-  // CHECK-NEXT: ([[PTR:%.+]]: !arc.storage):
-  // CHECK-NEXT: [[INCLK:%.+]] = arc.root_input "clk", [[PTR]] : (!arc.storage) -> !arc.state<i1>
-  // CHECK-NEXT: [[INEN:%.+]] = arc.root_input "en", [[PTR]] : (!arc.storage) -> !arc.state<i1>
-  // CHECK-NEXT: [[CLK:%.+]] = arc.state_read [[INCLK]] : <i1>
-  // CHECK-NEXT: arc.clock_tree [[CLK]] {
-  // CHECK-NEXT:   [[TMP0:%.+]] = arc.state_read [[S1:%.+]] : <i42>
+  // CHECK-NEXT: (%arg0: !arc.storage):
+  // CHECK-NEXT: [[CLK_OLD:%.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i1>
+  // CHECK-NEXT: [[S0:%.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i42>
+  // CHECK-NEXT: [[S1:%.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i42>
+  // CHECK-NEXT: [[INCLK:%.+]] = arc.root_input "clk", %arg0 : (!arc.storage) -> !arc.state<i1>
+  // CHECK-NEXT: [[INEN:%.+]] = arc.root_input "en", %arg0 : (!arc.storage) -> !arc.state<i1>
+
+  // CHECK-NEXT: [[TMP2:%.+]] = arc.state_read [[INCLK]] : <i1>
+  // CHECK-NEXT: arc.state_write [[CLK_OLD]] = [[TMP2]] : <i1>
+  // CHECK-NEXT: [[TMP1:%.+]] = arc.state_read [[CLK_OLD]] : <i1>
+  // CHECK-NEXT: [[TMP3:%.+]] = comb.icmp ne [[TMP1]], [[TMP2]] : i1
+  // CHECK-NEXT: [[TMP4:%.+]] = comb.and [[TMP3]], [[TMP2]] : i1
+
+  // CHECK-NEXT: arc.clock_tree [[TMP4]] {
+  // CHECK-NEXT:   [[TMP0:%.+]] = arc.state_read [[S1]] : <i42>
   // CHECK-NEXT:   [[TMP1:%.+]] = comb.add [[TMP0]], [[TMP0]]
   // CHECK-NEXT:   [[TMP2:%.+]] = arc.state @DummyArc([[TMP1]]) lat 0 : (i42) -> i42
-  // CHECK-NEXT:   arc.state_write [[S0:%.+]] = [[TMP2]] : <i42>
+  // CHECK-NEXT:   arc.state_write [[S0]] = [[TMP2]] : <i42>
   // CHECK-NEXT:   [[TMP0:%.+]] = arc.state_read [[S0]] : <i42>
   // CHECK-NEXT:   [[TMP1:%.+]] = comb.add [[TMP0]], [[TMP0]]
   // CHECK-NEXT:   [[TMP2:%.+]] = arc.state @DummyArc([[TMP1]]) lat 0 : (i42) -> i42
   // CHECK-NEXT:   [[EN:%.+]] = arc.state_read [[INEN]] : <i1>
   // CHECK-NEXT:   arc.state_write [[S1]] = [[TMP2]] if [[EN]] : <i42>
   // CHECK-NEXT: }
-  // CHECK-NEXT: [[S0]] = arc.alloc_state [[PTR]] : (!arc.storage) -> !arc.state<i42>
-  // CHECK-NEXT: [[S1]] = arc.alloc_state [[PTR]] : (!arc.storage) -> !arc.state<i42>
 }
 
 // CHECK-LABEL: arc.model "State2" {
 hw.module @State2(%clk: !seq.clock) {
   %3 = arc.state @DummyArc(%3) clock %clk lat 1 : (i42) -> i42
   %4 = arc.state @DummyArc(%4) clock %clk lat 1 : (i42) -> i42
-  // CHECK-NEXT: ^bb
-  // CHECK-NEXT: %in_clk = arc.root_input "clk", %arg0 : (!arc.storage) -> !arc.state<i1>
-  // CHECK-NEXT: [[CLK:%.+]] = arc.state_read %in_clk : <i1>
-  // CHECK-NEXT: arc.clock_tree [[CLK]] {
+  // CHECK-NEXT: (%arg0: !arc.storage):
+  // CHECK-NEXT: [[CLK_OLD:%.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i1>
+  // CHECK-NEXT: [[S0]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i42>
+  // CHECK-NEXT: [[S1]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i42>
+  // CHECK-NEXT: [[INCLK:%.+]] = arc.root_input "clk", %arg0 : (!arc.storage) -> !arc.state<i1>
+
+  // CHECK-NEXT: [[TMP2:%.+]] = arc.state_read [[INCLK]] : <i1>
+  // CHECK-NEXT: arc.state_write [[CLK_OLD]] = [[TMP2]] : <i1>
+  // CHECK-NEXT: [[TMP1:%.+]] = arc.state_read [[CLK_OLD]] : <i1>
+  // CHECK-NEXT: [[TMP3:%.+]] = comb.icmp ne [[TMP1]], [[TMP2]] : i1
+  // CHECK-NEXT: [[TMP4:%.+]] = comb.and [[TMP3]], [[TMP2]] : i1
+
+  // CHECK-NEXT: arc.clock_tree [[TMP4]] {
   // CHECK-NEXT:   [[TMP0:%.+]] = arc.state_read [[S0:%.+]] : <i42>
   // CHECK-NEXT:   [[TMP1:%.+]] = arc.state @DummyArc([[TMP0]]) lat 0 : (i42) -> i42
   // CHECK-NEXT:   arc.state_write [[S0]] = [[TMP1]] : <i42>
@@ -67,8 +84,6 @@ hw.module @State2(%clk: !seq.clock) {
   // CHECK-NEXT:   [[TMP3:%.+]] = arc.state @DummyArc([[TMP2]]) lat 0 : (i42) -> i42
   // CHECK-NEXT:   arc.state_write [[S1]] = [[TMP3]] : <i42>
   // CHECK-NEXT: }
-  // CHECK-NEXT: [[S0]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i42>
-  // CHECK-NEXT: [[S1]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i42>
 }
 
 arc.define @DummyArc(%arg0: i42) -> i42 {
@@ -82,11 +97,18 @@ hw.module @NonMaskedMemoryWrite(%clk0: !seq.clock) {
   %mem = arc.memory <4 x i42, i2>
   arc.memory_write_port %mem, @identity(%c0_i2, %c9001_i42) clock %clk0 lat 1 : <4 x i42, i2>, i2, i42
 
-  // CHECK-NEXT: ([[PTR:%.+]]: !arc.storage):
-  // CHECK-NEXT: [[INCLK0:%.+]] = arc.root_input "clk0", [[PTR]] : (!arc.storage) -> !arc.state<i1>
-  // CHECK-NEXT: [[MEM:%.+]] = arc.alloc_memory [[PTR]] : (!arc.storage) -> !arc.memory<4 x i42, i2>
-  // CHECK-NEXT: [[CLK0:%.+]] = arc.state_read [[INCLK0]] : <i1>
-  // CHECK-NEXT: arc.clock_tree [[CLK0]] {
+  // CHECK-NEXT: (%arg0: !arc.storage):
+  // CHECK-NEXT: [[MEM:%.+]] = arc.alloc_memory %arg0 : (!arc.storage) -> !arc.memory<4 x i42, i2>
+  // CHECK-NEXT: [[CLK_OLD:%.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i1>
+  // CHECK-NEXT: [[INCLK:%.+]] = arc.root_input "clk0", %arg0 : (!arc.storage) -> !arc.state<i1>
+
+  // CHECK-NEXT: [[TMP2:%.+]] = arc.state_read [[INCLK]] : <i1>
+  // CHECK-NEXT: arc.state_write [[CLK_OLD]] = [[TMP2]] : <i1>
+  // CHECK-NEXT: [[TMP1:%.+]] = arc.state_read [[CLK_OLD]] : <i1>
+  // CHECK-NEXT: [[TMP3:%.+]] = comb.icmp ne [[TMP1]], [[TMP2]] : i1
+  // CHECK-NEXT: [[TMP4:%.+]] = comb.and [[TMP3]], [[TMP2]] : i1
+
+  // CHECK-NEXT: arc.clock_tree [[TMP4]] {
   // CHECK:        [[RES:%.+]]:2 = arc.call @identity(%c0_i2, %c9001_i42) : (i2, i42) -> (i2, i42)
   // CHECK:        arc.memory_write [[MEM]][[[RES]]#0], [[RES]]#1 : <4 x i42, i2>
   // CHECK-NEXT: }
@@ -158,20 +180,10 @@ hw.module @MaterializeOpsWithRegions(%clk0: !seq.clock, %clk1: !seq.clock) -> (z
     %c42_i42 = hw.constant 42 : i42
     scf.yield %c42_i42 : i42
   }
-  // CHECK:      arc.passthrough {
-  // CHECK-NEXT:   %true = hw.constant true
-  // CHECK-NEXT:   %c19_i42 = hw.constant 19
-  // CHECK-NEXT:   [[TMP:%.+]] = scf.if %true -> (i42) {
-  // CHECK-NEXT:     scf.yield %c19_i42
-  // CHECK-NEXT:   } else {
-  // CHECK-NEXT:     %c42_i42 = hw.constant 42
-  // CHECK-NEXT:     scf.yield %c42_i42
-  // CHECK-NEXT:   }
-  // CHECK-NEXT:   arc.state_write
-  // CHECK-NEXT: }
 
   // CHECK:      [[CLK0:%.+]] = arc.state_read %in_clk0
-  // CHECK-NEXT: arc.clock_tree [[CLK0]] {
+  // CHECK:      [[TMP:%.+]] = comb.and {{%.+}}, [[CLK0]]
+  // CHECK-NEXT: arc.clock_tree [[TMP]] {
   // CHECK-NEXT:   %true = hw.constant true
   // CHECK-NEXT:   %c19_i42 = hw.constant 19
   // CHECK-NEXT:   [[TMP:%.+]] = scf.if %true -> (i42) {
@@ -185,7 +197,8 @@ hw.module @MaterializeOpsWithRegions(%clk0: !seq.clock, %clk1: !seq.clock) -> (z
   // CHECK-NEXT: }
 
   // CHECK:      [[CLK1:%.+]] = arc.state_read %in_clk1
-  // CHECK-NEXT: arc.clock_tree [[CLK1]] {
+  // CHECK:      [[TMP:%.+]] = comb.and {{%.+}}, [[CLK1]]
+  // CHECK-NEXT: arc.clock_tree [[TMP]] {
   // CHECK-NEXT:   %true = hw.constant true
   // CHECK-NEXT:   %c19_i42 = hw.constant 19
   // CHECK-NEXT:   [[TMP:%.+]] = scf.if %true -> (i42) {
@@ -195,6 +208,18 @@ hw.module @MaterializeOpsWithRegions(%clk0: !seq.clock, %clk1: !seq.clock) -> (z
   // CHECK-NEXT:     scf.yield %c42_i42
   // CHECK-NEXT:   }
   // CHECK-NEXT:   arc.state @DummyArc([[TMP]]) lat 0
+  // CHECK-NEXT:   arc.state_write
+  // CHECK-NEXT: }
+
+  // CHECK:      arc.passthrough {
+  // CHECK-NEXT:   %true = hw.constant true
+  // CHECK-NEXT:   %c19_i42 = hw.constant 19
+  // CHECK-NEXT:   [[TMP:%.+]] = scf.if %true -> (i42) {
+  // CHECK-NEXT:     scf.yield %c19_i42
+  // CHECK-NEXT:   } else {
+  // CHECK-NEXT:     %c42_i42 = hw.constant 42
+  // CHECK-NEXT:     scf.yield %c42_i42
+  // CHECK-NEXT:   }
   // CHECK-NEXT:   arc.state_write
   // CHECK-NEXT: }
 
@@ -218,13 +243,15 @@ hw.module @stateReset(%clk: !seq.clock, %arg0: i42, %rst: i1) -> (out0: i42, out
   hw.output %2, %3 : i42, i42
 }
 // CHECK-LABEL: arc.model "stateReset"
+// CHECK: [[ALLOC1:%.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i42>
+// CHECK: [[ALLOC2:%.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i42>
 // CHECK: arc.clock_tree %{{.*}} {
 // CHECK:   [[IN_RST:%.+]] = arc.state_read %in_rst : <i1>
 // CHECK:   [[EN:%.+]] = arc.state @i1Identity([[IN_RST]]) lat 0 : (i1) -> i1
 // CHECK:   [[RST:%.+]] = arc.state @i1Identity([[IN_RST]]) lat 0 : (i1) -> i1
 // CHECK:   scf.if [[RST]] {
-// CHECK:     arc.state_write [[ALLOC1:%.+]] = %c0_i42{{.*}} : <i42>
-// CHECK:     arc.state_write [[ALLOC2:%.+]] = %c0_i42{{.*}} : <i42>
+// CHECK:     arc.state_write [[ALLOC1]] = %c0_i42{{.*}} : <i42>
+// CHECK:     arc.state_write [[ALLOC2]] = %c0_i42{{.*}} : <i42>
 // CHECK:   } else {
 // CHECK:     [[ARG:%.+]] = arc.state_read %in_arg0 : <i42>
 // CHECK:     [[STATE:%.+]]:2 = arc.state @DummyArc2([[ARG]]) lat 0 : (i42) -> (i42, i42)
@@ -232,8 +259,6 @@ hw.module @stateReset(%clk: !seq.clock, %arg0: i42, %rst: i1) -> (out0: i42, out
 // CHECK:     arc.state_write [[ALLOC2]] = [[STATE]]#1 if [[EN]] : <i42>
 // CHECK:   }
 // CHECK: }
-// CHECK: [[ALLOC1]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i42>
-// CHECK: [[ALLOC2]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i42>
 
 hw.module @SeparateResets(%clock: !seq.clock, %i0: i42, %rst1: i1, %rst2: i1) -> (out1: i42, out2: i42) {
   %0 = arc.state @DummyArc(%i0) clock %clock reset %rst1 lat 1 {names = ["foo"]} : (i42) -> i42
@@ -242,11 +267,13 @@ hw.module @SeparateResets(%clock: !seq.clock, %i0: i42, %rst1: i1, %rst2: i1) ->
 }
 
 // CHECK-LABEL: arc.model "SeparateResets"
+// CHECK: [[FOO_ALLOC:%.+]] = arc.alloc_state %arg0 {name = "foo"} : (!arc.storage) -> !arc.state<i42>
+// CHECK: [[BAR_ALLOC:%.+]] = arc.alloc_state %arg0 {name = "bar"} : (!arc.storage) -> !arc.state<i42>
 // CHECK: arc.clock_tree %{{.*}} {
 // CHECK:   [[IN_RST1:%.+]] = arc.state_read %in_rst1 : <i1>
 // CHECK:   scf.if [[IN_RST1]] {
 // CHECK:     %c0_i42{{.*}} = hw.constant 0 : i42
-// CHECK:     arc.state_write [[FOO_ALLOC:%.+]] = %c0_i42{{.*}} : <i42>
+// CHECK:     arc.state_write [[FOO_ALLOC]] = %c0_i42{{.*}} : <i42>
 // CHECK:   } else {
 // CHECK:     [[IN_I0:%.+]] = arc.state_read %in_i0 : <i42>
 // CHECK:     [[STATE:%.+]] = arc.state @DummyArc([[IN_I0]]) lat 0 : (i42) -> i42
@@ -255,14 +282,12 @@ hw.module @SeparateResets(%clock: !seq.clock, %i0: i42, %rst1: i1, %rst2: i1) ->
 // CHECK:   [[IN_RST2:%.+]] = arc.state_read %in_rst2 : <i1>
 // CHECK:   scf.if [[IN_RST2]] {
 // CHECK:     %c0_i42{{.*}} = hw.constant 0 : i42
-// CHECK:     arc.state_write [[BAR_ALLOC:%.+]] = %c0_i42{{.*}} : <i42>
+// CHECK:     arc.state_write [[BAR_ALLOC]] = %c0_i42{{.*}} : <i42>
 // CHECK:   } else {
 // CHECK:     [[IN_I0_2:%.+]] = arc.state_read %in_i0 : <i42>
 // CHECK:     [[STATE_2:%.+]] = arc.state @DummyArc([[IN_I0_2]]) lat 0 : (i42) -> i42
 // CHECK:     arc.state_write [[BAR_ALLOC]] = [[STATE_2]] : <i42>
 // CHECK:   }
-// CHECK: [[FOO_ALLOC]] = arc.alloc_state %arg0 {name = "foo"} : (!arc.storage) -> !arc.state<i42>
-// CHECK: [[BAR_ALLOC]] = arc.alloc_state %arg0 {name = "bar"} : (!arc.storage) -> !arc.state<i42>
 
 // Regression check on worklist producing false positive comb loop errors.
 // CHECK-LABEL: @CombLoopRegression
@@ -308,7 +333,7 @@ hw.module @BlackBox(%clk: !seq.clock) {
   // CHECK-DAG: [[EXT_B:%.+]] = arc.alloc_state %arg0 {name = "ext/b"}
   // CHECK-DAG: [[EXT_C:%.+]] = arc.alloc_state %arg0 {name = "ext/c"}
   // CHECK-DAG: [[EXT_D:%.+]] = arc.alloc_state %arg0 {name = "ext/d"}
-  // CHECK-DAG: [[STATE:%.+]] = arc.alloc_state %arg0 :
+  // CHECK-DAG: [[STATE:%.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i42>
 
   // Clock Tree
   // CHECK-DAG: [[TMP1:%.+]] = arc.state_read [[EXT_C]]

@@ -19,6 +19,7 @@
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Pass/Pass.h"
+#include "mlir/Transforms/TopologicalSortUtils.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
 
@@ -73,10 +74,10 @@ struct ClockLowering {
   /// A cache of AND gates created for aggregating enable conditions.
   DenseMap<std::pair<Value, Value>, Value> andCache;
 
-  ClockLowering(Value clock, Backedge &&newClock, Operation *treeOp,
+  ClockLowering(Value clock, Backedge newClock, Operation *treeOp,
                 Statistics &stats)
-      : clock(clock), newClock(std::move(newClock)), treeOp(treeOp),
-        stats(stats), builder(treeOp) {
+      : clock(clock), newClock(newClock), treeOp(treeOp), stats(stats),
+        builder(treeOp) {
     assert((isa<ClockTreeOp, PassThroughOp>(treeOp)));
     builder.setInsertionPointToStart(&treeOp->getRegion(0).front());
   }
@@ -101,13 +102,13 @@ struct ModuleLowering {
   DenseMap<Value, std::unique_ptr<ClockLowering>> clockLowerings;
   DenseMap<Value, GatedClockLowering> gatedClockLowerings;
   Value storageArg;
+  OpBuilder clockBuilder;
+  OpBuilder stateBuilder;
 
   ModuleLowering(HWModuleOp moduleOp, Statistics &stats)
       : moduleOp(moduleOp), stats(stats), context(moduleOp.getContext()),
-        builder(moduleOp), edgeBuilder(moduleOp),
-        backedgeBuilder(edgeBuilder, moduleOp.getLoc()) {
-    builder.setInsertionPointToStart(moduleOp.getBodyBlock());
-  }
+        clockBuilder(moduleOp), stateBuilder(moduleOp), edgeBuilder(moduleOp),
+        backedgeBuilder(edgeBuilder, moduleOp.getLoc()) {}
 
   GatedClockLowering getOrCreateClockLowering(Value clock);
   ClockLowering &getOrCreatePassThrough();
@@ -127,10 +128,8 @@ struct ModuleLowering {
   LogicalResult cleanup();
 
 private:
-  OpBuilder builder;
   OpBuilder edgeBuilder;
   BackedgeBuilder backedgeBuilder;
-  SmallVector<StateReadOp, 0> readsToSink;
 };
 } // namespace
 
@@ -169,10 +168,10 @@ static bool shouldMaterialize(Value value) {
 Value ClockLowering::materializeValue(Value value) {
   if (!value)
     return {};
-  if (!shouldMaterialize(value))
-    return value;
   if (auto mapped = materializedValues.lookupOrNull(value))
     return mapped;
+  if (!shouldMaterialize(value))
+    return value;
 
   struct WorkItem {
     Operation *op;
@@ -272,11 +271,24 @@ GatedClockLowering ModuleLowering::getOrCreateClockLowering(Value clock) {
   // Create the `ClockTreeOp` that corresponds to this ungated clock.
   auto &slot = clockLowerings[clock];
   if (!slot) {
-    auto backedge = backedgeBuilder.get(builder.getIntegerType(1));
-    auto treeOp = builder.create<ClockTreeOp>(clock.getLoc(), backedge);
+    auto newClock = backedgeBuilder.get(stateBuilder.getI1Type());
+
+    // Detect a rising edge on the clock, as `(old != new) & new`.
+    auto oldClockStorage = stateBuilder.create<AllocStateOp>(
+        clock.getLoc(), StateType::get(stateBuilder.getI1Type()), storageArg);
+    auto oldClock =
+        clockBuilder.create<StateReadOp>(clock.getLoc(), oldClockStorage);
+    clockBuilder.create<StateWriteOp>(clock.getLoc(), oldClockStorage, newClock,
+                                      Value{});
+    Value trigger = clockBuilder.create<comb::ICmpOp>(
+        clock.getLoc(), comb::ICmpPredicate::ne, oldClock, newClock);
+    trigger =
+        clockBuilder.create<comb::AndOp>(clock.getLoc(), trigger, newClock);
+
+    // Create the tree op.
+    auto treeOp = clockBuilder.create<ClockTreeOp>(clock.getLoc(), trigger);
     treeOp.getBody().emplaceBlock();
-    slot = std::make_unique<ClockLowering>(clock, std::move(backedge), treeOp,
-                                           stats);
+    slot = std::make_unique<ClockLowering>(clock, newClock, treeOp, stats);
   }
   return GatedClockLowering{*slot, Value{}};
 }
@@ -284,7 +296,7 @@ GatedClockLowering ModuleLowering::getOrCreateClockLowering(Value clock) {
 ClockLowering &ModuleLowering::getOrCreatePassThrough() {
   auto &slot = clockLowerings[Value{}];
   if (!slot) {
-    auto treeOp = builder.create<PassThroughOp>(moduleOp.getLoc());
+    auto treeOp = clockBuilder.create<PassThroughOp>(moduleOp.getLoc());
     treeOp.getBody().emplaceBlock();
     slot = std::make_unique<ClockLowering>(Value{}, Backedge{}, treeOp, stats);
   }
@@ -297,7 +309,6 @@ Value ModuleLowering::replaceValueWithStateRead(Value value, Value state) {
   builder.setInsertionPointAfterValue(state);
   auto readOp = builder.create<StateReadOp>(value.getLoc(), state);
   value.replaceAllUsesWith(readOp);
-  readsToSink.push_back(readOp);
   return readOp;
 }
 
@@ -311,7 +322,6 @@ void ModuleLowering::addStorageArg() {
 /// Lower the primary inputs of the module to dedicated ops that allocate the
 /// inputs in the model's storage.
 LogicalResult ModuleLowering::lowerPrimaryInputs() {
-  builder.setInsertionPointToStart(moduleOp.getBodyBlock());
   for (auto blockArg : moduleOp.getBodyBlock()->getArguments()) {
     if (blockArg == storageArg)
       continue;
@@ -326,7 +336,7 @@ LogicalResult ModuleLowering::lowerPrimaryInputs() {
       return mlir::emitError(blockArg.getLoc(), "input ")
              << name << " is of non-integer type " << blockArg.getType();
     }
-    auto state = builder.create<RootInputOp>(
+    auto state = stateBuilder.create<RootInputOp>(
         blockArg.getLoc(), StateType::get(innerTy), name, storageArg);
     Value readOp = replaceValueWithStateRead(blockArg, state);
     // Presently all clocks must be arguments, so they can be resolved here.
@@ -341,27 +351,39 @@ LogicalResult ModuleLowering::lowerPrimaryInputs() {
 LogicalResult ModuleLowering::lowerPrimaryOutputs() {
   auto outputOp = cast<hw::OutputOp>(moduleOp.getBodyBlock()->getTerminator());
   if (outputOp.getNumOperands() > 0) {
+    auto outputOperands = SmallVector<Value>(outputOp.getOperands());
+    outputOp->dropAllReferences();
     auto &passThrough = getOrCreatePassThrough();
     for (auto [value, name] :
-         llvm::zip(outputOp.getOperands(), moduleOp.getOutputNames())) {
+         llvm::zip(outputOperands, moduleOp.getOutputNames())) {
       auto intType = value.getType().dyn_cast<IntegerType>();
       if (!intType)
         return mlir::emitError(outputOp.getLoc(), "output ")
                << name << " is of non-integer type " << value.getType();
       auto materializedValue = passThrough.materializeValue(value);
-      auto state = builder.create<RootOutputOp>(
+      auto state = stateBuilder.create<RootOutputOp>(
           outputOp.getLoc(), StateType::get(intType), name.cast<StringAttr>(),
           storageArg);
       passThrough.builder.create<StateWriteOp>(outputOp.getLoc(), state,
                                                materializedValue, Value{});
     }
   }
+  outputOp.erase();
   return success();
 }
 
 LogicalResult ModuleLowering::lowerStates() {
-  for (auto &op : llvm::make_early_inc_range(*moduleOp.getBodyBlock())) {
-    auto result = TypeSwitch<Operation *, LogicalResult>(&op)
+  SmallVector<Operation *> opsToLower;
+  for (auto &op : *moduleOp.getBodyBlock()) {
+    auto stateOp = dyn_cast<StateOp>(&op);
+    if ((stateOp && stateOp.getLatency() > 0) ||
+        isa<MemoryOp, MemoryWritePortOp, TapOp>(&op))
+      opsToLower.push_back(&op);
+  }
+
+  for (auto *op : opsToLower) {
+    LLVM_DEBUG(llvm::dbgs() << "- Lowering " << *op << "\n");
+    auto result = TypeSwitch<Operation *, LogicalResult>(op)
                       .Case<StateOp, MemoryOp, MemoryWritePortOp, TapOp>(
                           [&](auto op) { return lowerState(op); })
                       .Default(success());
@@ -381,13 +403,21 @@ LogicalResult ModuleLowering::lowerState(StateOp stateOp) {
   if (stateOp.getLatency() > 1)
     return stateOp.emitError("state with latency > 1 not supported");
 
+  // Grab all operands from the state op and make it drop all its references.
+  // This allows `materializeValue` to move an operation if this state was the
+  // last user.
+  auto stateClock = stateOp.getClock();
+  auto stateEnable = stateOp.getEnable();
+  auto stateReset = stateOp.getReset();
+  auto stateInputs = SmallVector<Value>(stateOp.getInputs());
+  stateOp->dropAllReferences();
+
   // Get the clock tree and enable condition for this state's clock. If this arc
   // carries an explicit enable condition, fold that into the enable provided by
   // the clock gates in the arc's clock tree.
-  auto info = getOrCreateClockLowering(stateOp.getClock());
+  auto info = getOrCreateClockLowering(stateClock);
   info.enable = info.clock.getOrCreateAnd(
-      info.enable, info.clock.materializeValue(stateOp.getEnable()),
-      stateOp.getLoc());
+      info.enable, info.clock.materializeValue(stateEnable), stateOp.getLoc());
 
   // Allocate the necessary state within the model.
   SmallVector<Value> allocatedStates;
@@ -399,8 +429,8 @@ LogicalResult ModuleLowering::lowerState(StateOp stateOp) {
              << stateIdx << " has non-integer type " << type
              << "; only integer types are supported";
     auto stateType = StateType::get(intType);
-    auto state =
-        builder.create<AllocStateOp>(stateOp.getLoc(), stateType, storageArg);
+    auto state = stateBuilder.create<AllocStateOp>(stateOp.getLoc(), stateType,
+                                                   storageArg);
     if (auto names = stateOp->getAttrOfType<ArrayAttr>("names"))
       state->setAttr("name", names[stateIdx]);
     allocatedStates.push_back(state);
@@ -410,15 +440,14 @@ LogicalResult ModuleLowering::lowerState(StateOp stateOp) {
   // the computation of the arc's transfer function, while the latency is
   // implemented through read and write functions.
   SmallVector<Value> materializedOperands;
-  materializedOperands.reserve(stateOp.getInputs().size());
-  SmallVector<Value> inputs(stateOp.getInputs());
+  materializedOperands.reserve(stateInputs.size());
 
-  for (auto input : inputs)
+  for (auto input : stateInputs)
     materializedOperands.push_back(info.clock.materializeValue(input));
 
   OpBuilder nonResetBuilder = info.clock.builder;
-  if (stateOp.getReset()) {
-    auto materializedReset = info.clock.materializeValue(stateOp.getReset());
+  if (stateReset) {
+    auto materializedReset = info.clock.materializeValue(stateReset);
     auto ifOp = info.clock.builder.create<scf::IfOp>(stateOp.getLoc(),
                                                      materializedReset, true);
 
@@ -437,8 +466,6 @@ LogicalResult ModuleLowering::lowerState(StateOp stateOp) {
     nonResetBuilder = ifOp.getElseBodyBuilder();
   }
 
-  stateOp->dropAllReferences();
-
   auto newStateOp = nonResetBuilder.create<StateOp>(
       stateOp.getLoc(), stateOp.getArcAttr(), stateOp.getResultTypes(), Value{},
       Value{}, 0, materializedOperands);
@@ -453,18 +480,14 @@ LogicalResult ModuleLowering::lowerState(StateOp stateOp) {
   // Replace all uses of the arc with reads from the allocated state.
   for (auto [alloc, result] : llvm::zip(allocatedStates, stateOp.getResults()))
     replaceValueWithStateRead(result, alloc);
-  if (&*builder.getInsertionPoint() == stateOp)
-    builder.setInsertionPointAfter(stateOp);
   stateOp.erase();
   return success();
 }
 
 LogicalResult ModuleLowering::lowerState(MemoryOp memOp) {
-  auto allocMemOp = builder.create<AllocMemoryOp>(
+  auto allocMemOp = stateBuilder.create<AllocMemoryOp>(
       memOp.getLoc(), memOp.getType(), storageArg, memOp->getAttrs());
   memOp.replaceAllUsesWith(allocMemOp.getResult());
-  if (&*builder.getInsertionPoint() == memOp)
-    builder.setInsertionPointAfter(memOp);
   memOp.erase();
   return success();
 }
@@ -478,12 +501,20 @@ LogicalResult ModuleLowering::lowerState(MemoryWritePortOp memWriteOp) {
   // provided by the clock gates in the port's clock tree.
   auto info = getOrCreateClockLowering(memWriteOp.getClock());
 
+  // Grab all operands from the op and make it drop all its references. This
+  // allows `materializeValue` to move an operation if this op was the last
+  // user.
+  auto writeMemory = memWriteOp.getMemory();
+  auto writeInputs = SmallVector<Value>(memWriteOp.getInputs());
+  auto arcResultTypes = memWriteOp.getArcResultTypes();
+  memWriteOp->dropAllReferences();
+
   SmallVector<Value> materializedInputs;
-  for (auto input : memWriteOp.getInputs())
+  for (auto input : writeInputs)
     materializedInputs.push_back(info.clock.materializeValue(input));
   ValueRange results =
       info.clock.builder
-          .create<CallOp>(memWriteOp.getLoc(), memWriteOp.getArcResultTypes(),
+          .create<CallOp>(memWriteOp.getLoc(), arcResultTypes,
                           memWriteOp.getArc(), materializedInputs)
           ->getResults();
 
@@ -499,7 +530,7 @@ LogicalResult ModuleLowering::lowerState(MemoryWritePortOp memWriteOp) {
   if (memWriteOp.getMask()) {
     Value mask = results[memWriteOp.getMaskIdx(static_cast<bool>(enable))];
     Value oldData = info.clock.builder.create<arc::MemoryReadOp>(
-        mask.getLoc(), data.getType(), memWriteOp.getMemory(), address);
+        mask.getLoc(), data.getType(), writeMemory, address);
     Value allOnes = info.clock.builder.create<hw::ConstantOp>(
         mask.getLoc(), oldData.getType(), -1);
     Value negatedMask = info.clock.builder.create<comb::XorOp>(
@@ -511,37 +542,8 @@ LogicalResult ModuleLowering::lowerState(MemoryWritePortOp memWriteOp) {
     data = info.clock.builder.create<comb::OrOp>(mask.getLoc(), maskedOldData,
                                                  maskedNewData, true);
   }
-
-  // Filter the list of reads such that they only contain read ports within the
-  // same clock domain.
-  // TODO: This really needs to go now that we have the `LegalizeStateUpdates`
-  // pass. Instead, we should just have memory read and write accesses all over
-  // the place, then lower them into proper reads and writes, and let the
-  // legalization pass insert any necessary temporaries.
-  // SmallVector<Value> newReads;
-  // for (auto read : memWriteOp.getReads()) {
-  //   if (auto readOp = read.getDefiningOp<MemoryReadPortOp>())
-  //     // HACK: This check for a constant clock is ugly. The read ops should
-  //     // instead be replicated for every clock domain that they are used in,
-  //     // and then dependencies should be tracked between reads and writes
-  //     // within that clock domain. Lack of a clock (comb mem) should be
-  //     // handled properly as well. Presence of a clock should group the read
-  //     // under that clock as expected, and write to a "read buffer" that can
-  //     // be read again by actual uses in different clock domains. LLVM
-  //     // lowering already has such a read buffer. Just need to formalize it.
-  //     if (!readOp.getClock().getDefiningOp<hw::ConstantOp>() &&
-  //         getOrCreateClockLowering(readOp.getClock()).clock.clock !=
-  //             info.clock.clock)
-  //       continue;
-  //   newReads.push_back(info.clock.materializeValue(read));
-  // }
-  // TODO: This just creates a write without any reads. Instead, there should be
-  // a separate memory write op that we can lower to here which doesn't need to
-  // track its reads, but will get legalized by the LegalizeStateUpdate pass.
-  info.clock.builder.create<MemoryWriteOp>(
-      memWriteOp.getLoc(), memWriteOp.getMemory(), address, info.enable, data);
-  if (&*builder.getInsertionPoint() == memWriteOp)
-    builder.setInsertionPointAfter(memWriteOp);
+  info.clock.builder.create<MemoryWriteOp>(memWriteOp.getLoc(), writeMemory,
+                                           address, info.enable, data);
   memWriteOp.erase();
   return success();
 }
@@ -553,15 +555,19 @@ LogicalResult ModuleLowering::lowerState(TapOp tapOp) {
     return mlir::emitError(tapOp.getLoc(), "tapped value ")
            << tapOp.getNameAttr() << " is of non-integer type "
            << tapOp.getValue().getType();
+
+  // Grab what we need from the tap op and then make it drop all its references.
+  // This will allow `materializeValue` to move ops instead of cloning them.
+  auto tapValue = tapOp.getValue();
+  tapOp->dropAllReferences();
+
   auto &passThrough = getOrCreatePassThrough();
-  auto materializedValue = passThrough.materializeValue(tapOp.getValue());
-  auto state = builder.create<AllocStateOp>(
+  auto materializedValue = passThrough.materializeValue(tapValue);
+  auto state = stateBuilder.create<AllocStateOp>(
       tapOp.getLoc(), StateType::get(intType), storageArg, true);
   state->setAttr("name", tapOp.getNameAttr());
   passThrough.builder.create<StateWriteOp>(tapOp.getLoc(), state,
                                            materializedValue, Value{});
-  if (&*builder.getInsertionPoint() == tapOp)
-    builder.setInsertionPointAfter(tapOp);
   tapOp.erase();
   return success();
 }
@@ -569,7 +575,8 @@ LogicalResult ModuleLowering::lowerState(TapOp tapOp) {
 /// Lower all instances of external modules to internal inputs/outputs to be
 /// driven from outside of the design.
 LogicalResult ModuleLowering::lowerExtModules(SymbolTable &symtbl) {
-  for (auto op : llvm::make_early_inc_range(moduleOp.getOps<InstanceOp>()))
+  auto instOps = SmallVector<InstanceOp>(moduleOp.getOps<InstanceOp>());
+  for (auto op : instOps)
     if (isa<HWModuleExternOp>(symtbl.lookup(op.getModuleNameAttr().getAttr())))
       if (failed(lowerExtModule(op)))
         return failure();
@@ -598,9 +605,9 @@ LogicalResult ModuleLowering::lowerExtModule(InstanceOp instOp) {
     baseName += '/';
     baseName += cast<StringAttr>(name).getValue();
     auto &passThrough = getOrCreatePassThrough();
-    auto state = builder.create<AllocStateOp>(
+    auto state = stateBuilder.create<AllocStateOp>(
         instOp.getLoc(), StateType::get(intType), storageArg);
-    state->setAttr("name", builder.getStringAttr(baseName));
+    state->setAttr("name", stateBuilder.getStringAttr(baseName));
     passThrough.builder.create<StateWriteOp>(
         instOp.getLoc(), state, passThrough.materializeValue(operand), Value{});
   }
@@ -619,26 +626,55 @@ LogicalResult ModuleLowering::lowerExtModule(InstanceOp instOp) {
     baseName.resize(baseNameLen);
     baseName += '/';
     baseName += cast<StringAttr>(name).getValue();
-    auto state = builder.create<AllocStateOp>(
+    auto state = stateBuilder.create<AllocStateOp>(
         result.getLoc(), StateType::get(intType), storageArg);
-    state->setAttr("name", builder.getStringAttr(baseName));
+    state->setAttr("name", stateBuilder.getStringAttr(baseName));
     replaceValueWithStateRead(result, state);
   }
 
-  if (&*builder.getInsertionPoint() == instOp)
-    builder.setInsertionPointAfter(instOp);
   instOp.erase();
   return success();
 }
 
 LogicalResult ModuleLowering::cleanup() {
+  // Clean up dead ops in the model.
+  SetVector<Operation *> erasureWorklist;
+  auto isDead = [](Operation *op) {
+    if (isOpTriviallyDead(op))
+      return true;
+    if (!op->use_empty())
+      return false;
+    if (auto stateOp = dyn_cast<StateOp>(op))
+      return stateOp.getLatency() == 0;
+    return false;
+  };
+  for (auto &op : *moduleOp.getBodyBlock())
+    if (isDead(&op))
+      erasureWorklist.insert(&op);
+  while (!erasureWorklist.empty()) {
+    auto *op = erasureWorklist.pop_back_val();
+    if (!isDead(op))
+      continue;
+    op->walk([&](Operation *innerOp) {
+      for (auto operand : innerOp->getOperands())
+        if (auto *defOp = operand.getDefiningOp())
+          if (!op->isProperAncestor(defOp))
+            erasureWorklist.insert(defOp);
+    });
+    op->erase();
+  }
 
   // Establish an order among all operations (to avoid an O(n²) pathological
   // pattern with `moveBefore`) and replicate read operations into the blocks
   // where they have uses. The established order is used to create the read
   // operation as late in the block as possible, just before the first use.
   DenseMap<Operation *, unsigned> opOrder;
-  moduleOp.walk([&](Operation *op) { opOrder.insert({op, opOrder.size()}); });
+  SmallVector<StateReadOp, 0> readsToSink;
+  moduleOp.walk([&](Operation *op) {
+    opOrder.insert({op, opOrder.size()});
+    if (auto readOp = dyn_cast<StateReadOp>(op))
+      readsToSink.push_back(readOp);
+  });
   for (auto readToSink : readsToSink) {
     SmallDenseMap<Block *, std::pair<StateReadOp, unsigned>> readsByBlock;
     for (auto &use : llvm::make_early_inc_range(readToSink->getUses())) {
@@ -646,7 +682,12 @@ LogicalResult ModuleLowering::cleanup() {
       auto userOrder = opOrder.lookup(user);
       auto &localRead = readsByBlock[user->getBlock()];
       if (!localRead.first) {
-        localRead.first = OpBuilder(user).cloneWithoutRegions(readToSink);
+        if (user->getBlock() == readToSink->getBlock()) {
+          localRead.first = readToSink;
+          readToSink->moveBefore(user);
+        } else {
+          localRead.first = OpBuilder(user).cloneWithoutRegions(readToSink);
+        }
         localRead.second = userOrder;
       } else if (userOrder < localRead.second) {
         localRead.first->moveBefore(user);
@@ -654,35 +695,8 @@ LogicalResult ModuleLowering::cleanup() {
       }
       use.set(localRead.first);
     }
-    readToSink.erase();
-  }
-
-  // For each operation left in the module body, make sure that all uses are in
-  // the module body as well, not inside any clock trees. The clock trees should
-  // have created copies of the operations that they need for computation.
-  for (auto &op : llvm::make_early_inc_range(*moduleOp.getBodyBlock())) {
-    if (!shouldMaterialize(&op) || isa<hw::OutputOp>(&op))
-      continue;
-    for (auto *user : op.getUsers()) {
-      auto *clockParent = user->getParentOp();
-      while (clockParent && !isa<ClockTreeOp, PassThroughOp>(clockParent))
-        clockParent = clockParent->getParentOp();
-      if (!clockParent)
-        continue;
-      auto d = op.emitError(
-          "has uses in clock trees but has been left outside the clock tree");
-      d.attachNote(user->getLoc()) << "use is here";
-      return failure();
-    }
-
-    // Delete ops as we go.
-    if (!llvm::any_of(op.getUsers(),
-                      [&](auto *user) { return isa<ClockTreeOp>(user); })) {
-      op.dropAllReferences();
-      op.dropAllUses();
-      op.erase();
-      ++stats.opsPruned;
-    }
+    if (readToSink.use_empty())
+      readToSink.erase();
   }
   return success();
 }
@@ -772,28 +786,23 @@ LogicalResult LowerStatePass::runOnModule(HWModuleOp moduleOp,
   LLVM_DEBUG(llvm::dbgs() << "Lowering state in `" << moduleOp.getModuleName()
                           << "`\n");
   ModuleLowering lowering(moduleOp, stats);
+
+  // Add sentinel ops to separate state allocations from clock trees.
+  lowering.stateBuilder.setInsertionPointToStart(moduleOp.getBodyBlock());
+
+  Operation *stateSentinel =
+      lowering.stateBuilder.create<hw::OutputOp>(moduleOp.getLoc());
+  Operation *clockSentinel =
+      lowering.stateBuilder.create<hw::OutputOp>(moduleOp.getLoc());
+
+  lowering.stateBuilder.setInsertionPoint(stateSentinel);
+  lowering.clockBuilder.setInsertionPoint(clockSentinel);
+
   lowering.addStorageArg();
   if (failed(lowering.lowerStates()))
     return failure();
   if (failed(lowering.lowerExtModules(symtbl)))
     return failure();
-
-  // Since we don't yet support derived clocks, simply delete all clock trees
-  // that are not driven by a primary input and emit a warning.
-  for (auto &[clock, clockLowering] : lowering.clockLowerings) {
-    auto clockTreeOp = dyn_cast<ClockTreeOp>(clockLowering->treeOp);
-    if (!clockTreeOp)
-      continue;
-
-    if (clock.isa<BlockArgument>())
-      continue;
-    auto d =
-        mlir::emitWarning(clock.getLoc(), "unsupported derived clock ignored");
-    d.attachNote()
-        << "only clocks through a top-level input are supported at the moment";
-    clockTreeOp.erase();
-  }
-
   if (failed(lowering.lowerPrimaryInputs()))
     return failure();
   if (failed(lowering.lowerPrimaryOutputs()))
@@ -805,15 +814,19 @@ LogicalResult LowerStatePass::runOnModule(HWModuleOp moduleOp,
   if (failed(lowering.cleanup()))
     return failure();
 
+  // Erase the sentinel ops.
+  stateSentinel->erase();
+  clockSentinel->erase();
+
   // Replace the `HWModuleOp` with a `ModelOp`.
   moduleOp.getBodyBlock()->eraseArguments(
       [&](auto arg) { return arg != lowering.storageArg; });
-  moduleOp.getBodyBlock()->getTerminator()->erase();
   ImplicitLocOpBuilder builder(moduleOp.getLoc(), moduleOp);
   auto modelOp =
       builder.create<ModelOp>(moduleOp.getLoc(), moduleOp.getModuleNameAttr());
   modelOp.getBody().takeBody(moduleOp.getBody());
   moduleOp->erase();
+  sortTopologically(&modelOp.getBodyBlock());
 
   return success();
 }
