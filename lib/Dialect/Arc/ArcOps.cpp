@@ -419,8 +419,12 @@ bool VectorizeOp::isBodyVectorized() {
       returnOp.getValue().getType() == getResultTypes().front())
     return true;
 
-  return succeeded(
-      getVectorWidth(getResultTypes().front(), returnOp.getValue().getType()));
+  if (auto width = getVectorWidth(getResultTypes().front(),
+                                  returnOp.getValue().getType());
+      succeeded(width))
+    return *width > 1;
+
+  return false;
 }
 
 #include "circt/Dialect/Arc/ArcInterfaces.cpp.inc"
