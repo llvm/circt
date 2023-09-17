@@ -158,7 +158,7 @@ def LowerState : Pass<"arc-lower-state", "mlir::ModuleOp"> {
   let constructor = "circt::arc::createLowerStatePass()";
   let dependentDialects = [
     "arc::ArcDialect", "mlir::scf::SCFDialect", "mlir::func::FuncDialect",
-    "mlir::LLVM::LLVMDialect"
+    "mlir::LLVM::LLVMDialect", "comb::CombDialect"
   ];
 }
 
