@@ -15,6 +15,7 @@
 
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/OpDefinition.h"
+#include "mlir/IR/SymbolTable.h"
 
 /// The InstanceGraph op interface, see InstanceGraphInterface.td for more
 /// details.
