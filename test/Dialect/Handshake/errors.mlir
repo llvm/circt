@@ -259,3 +259,10 @@ handshake.func @invalid_sost_op_wrong_operands(%arg0 : i64, %arg1 : i32, %ctrl :
   return %0, %ctrl : i64, none
 }
 
+// -----
+
+func.func @handshake_op_inside_non_finegrained_dataflow_region(%arg0 : none) -> (none) {
+  // expected-error @+1{{op expects parent op to be of the interface parent type required by the given op type}}
+  %0 = handshake.join %arg0 : none
+  return %0 : none
+}

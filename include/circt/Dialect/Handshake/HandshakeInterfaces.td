@@ -15,6 +15,15 @@
 
 include "mlir/IR/OpBase.td"
 
+def FineGrainedDataflowRegionOpInterface : OpInterface<"FineGrainedDataflowRegionOpInterface"> {
+  let description = [{
+    An interface for describing operations that define fine-grained dataflow regions.
+    The interface doesn't provide any methods, but is instead used to ensure
+    that users of handshake ops explicitly acknowledge that a given region has
+    fine-grained dataflow semantics.
+  }];
+}
+
 def SOSTInterface : OpInterface<"SOSTInterface"> {
   let description = [{
       Sized Operation with Single Type (SOST).
