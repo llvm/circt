@@ -127,7 +127,7 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
     SmallVector<StringAttr> getOutputNamesStr() {
       return $_op.getHWModuleType().getOutputNamesStr();
     }
-    
+
     /// Return the set of names on input and inout ports
     SmallVector<Attribute> getInputNames() {
       return $_op.getHWModuleType().getInputNames();
@@ -397,6 +397,17 @@ def HWInstanceLike : OpInterface<"HWInstanceLike", [
     PortList, InstanceGraphInstanceOpInterface]> {
   let cppNamespace = "circt::hw";
   let description = "Provide common  module information.";
+
+  let methods = [
+    InterfaceMethod<"Get the referenced module via a HW symbol cache.",
+    "::mlir::Operation *", "getReferencedModuleCached", (ins
+      "const ::circt::hw::HWSymbolCache *":$cache),
+    /*methodBody=*/[{}],
+    /*defaultImplementation=*/[{
+      return hw::instance_like_impl::getReferencedModule(
+          cache, $_op, $_op.getModuleNameAttr());
+    }]>,
+  ];
 }
 
 def InnerRefNamespace : NativeOpTrait<"InnerRefNamespace">;

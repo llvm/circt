@@ -403,10 +403,6 @@ Operation *InstanceOp::getReferencedModuleSlow() {
   return topLevelModuleOp.lookupSymbol(getModuleName());
 }
 
-Operation *InstanceOp::getReferencedModule(SymbolTable &symtbl) {
-  return symtbl.lookup(getModuleNameAttr().getValue());
-}
-
 hw::ModulePortInfo InstanceOp::getPortList() {
   return cast<hw::PortList>(getReferencedModuleSlow()).getPortList();
 }

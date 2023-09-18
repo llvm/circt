@@ -1879,10 +1879,6 @@ hw::ModulePortInfo InstanceOp::getPortList() {
   return cast<hw::PortList>(getReferencedModuleSlow()).getPortList();
 }
 
-Operation *InstanceOp::getReferencedModule(SymbolTable &symbolTable) {
-  return symbolTable.lookup(getModuleNameAttr().getLeafReference());
-}
-
 void InstanceOp::build(OpBuilder &builder, OperationState &result,
                        TypeRange resultTypes, StringRef moduleName,
                        StringRef name, NameKindEnum nameKind,

@@ -1480,19 +1480,8 @@ std::optional<size_t> InstanceOp::getTargetResultIndex() {
   return std::nullopt;
 }
 
-/// Lookup the module or extmodule for the symbol.  This returns null on
-/// invalid IR.
-Operation *InstanceOp::getReferencedModule(const HWSymbolCache *cache) {
-  return instance_like_impl::getReferencedModule(cache, *this,
-                                                 getModuleNameAttr());
-}
-
-Operation *InstanceOp::getReferencedModule(SymbolTable &symtbl) {
-  return symtbl.lookup(getModuleNameAttr().getValue());
-}
-
 Operation *InstanceOp::getReferencedModuleSlow() {
-  return getReferencedModule(/*cache=*/nullptr);
+  return getReferencedModuleCached(/*cache=*/nullptr);
 }
 
 LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {

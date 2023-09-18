@@ -118,8 +118,8 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
 def HWTestModuleOp : HWOp<"testmodule", [Symbol,
                                          DeclareOpInterfaceMethods<PortList>,
                                          DeclareOpInterfaceMethods<SymboledPortList>,
-                                         OpAsmOpInterface, 
-                                         HasParent<"mlir::ModuleOp">, 
+                                         OpAsmOpInterface,
+                                         HasParent<"mlir::ModuleOp">,
                                          IsolatedFromAbove,
                                          SingleBlockImplicitTerminator<"OutputOp">]> {
   let arguments = (ins SymbolNameAttr:$sym_name,
@@ -484,8 +484,6 @@ def InstanceOp : HWOp<"instance", [
 
     /// Lookup the module or extmodule for the symbol.  This returns null on
     /// invalid IR.
-    Operation *getReferencedModule(const HWSymbolCache *cache);
-    Operation *getReferencedModule(SymbolTable& tbl);
     Operation *getReferencedModuleSlow();
 
     /// Return the values for the port in port order.

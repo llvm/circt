@@ -131,7 +131,7 @@ def InstanceDeclOp : SystemCOp<"instance.decl", [
     }
 
     /// Lookup the module for the symbol. This returns null on invalid IR.
-    Operation *getReferencedModule(const hw::HWSymbolCache *cache);
+    Operation *getReferencedModuleCached(const hw::HWSymbolCache *cache);
 
     //===------------------------------------------------------------------===//
     // SymbolOpInterface Methods
@@ -333,7 +333,7 @@ def CallOp : SystemCOp<"cpp.call", [
 
   let extraClassDeclaration = [{
     FunctionType getCalleeType();
-    
+
     MutableOperandRange getArgOperandsMutable() {
       return getCalleeOperandsMutable();
     }
