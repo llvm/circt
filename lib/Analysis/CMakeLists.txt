@@ -1,4 +1,5 @@
 set(LLVM_OPTIONAL_SOURCES
+  DebugInfo.cpp
   DependenceAnalysis.cpp
   SchedulingAnalysis.cpp
   TestPasses.cpp
@@ -32,3 +33,11 @@ add_circt_library(CIRCTAnalysisTestPasses
   CIRCTHW
   MLIRPass
   )
+
+add_circt_library(CIRCTDebugInfoAnalysis
+  DebugInfo.cpp
+
+  LINK_LIBS PUBLIC
+  CIRCTHW
+  MLIRIR
+)
