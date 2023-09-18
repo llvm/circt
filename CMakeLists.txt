@@ -601,7 +601,7 @@ if (NOT LLVM_ENABLE_IDE)
                            COMPONENT circt-headers)
 endif()
 
-# Custom target to install all mlir libraries
+# Custom target to install all circt libraries
 add_custom_target(circt-libraries)
 set_target_properties(circt-libraries PROPERTIES FOLDER "Misc")
 
