@@ -18,6 +18,7 @@
 #include "circt/Dialect/HW/ConversionPatterns.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
@@ -199,9 +200,33 @@ public:
 /// Map `seq.clock` to `i1`.
 struct SeqToSVTypeConverter : public TypeConverter {
   SeqToSVTypeConverter() {
-    addConversion([](Type type) { return type; });
-    addConversion([](seq::ClockType type) {
+    addConversion([&](Type type) { return type; });
+    addConversion([&](seq::ClockType type) {
       return IntegerType::get(type.getContext(), 1);
+    });
+    addConversion([&](hw::StructType structTy) {
+      bool changed = false;
+
+      SmallVector<hw::StructType::FieldInfo> newFields;
+      for (auto field : structTy.getElements()) {
+        auto &newField = newFields.emplace_back();
+        newField.name = field.name;
+        newField.type = convertType(field.type);
+        if (field.type != newField.type)
+          changed = true;
+      }
+
+      if (!changed)
+        return structTy;
+
+      return hw::StructType::get(structTy.getContext(), newFields);
+    });
+    addConversion([&](hw::ArrayType arrayTy) {
+      auto elementTy = arrayTy.getElementType();
+      auto newElementTy = convertType(elementTy);
+      if (elementTy != newElementTy)
+        return hw::ArrayType::get(newElementTy, arrayTy.getNumElements());
+      return arrayTy;
     });
 
     addTargetMaterialization(
@@ -306,17 +331,35 @@ public:
 
 } // namespace
 
+// NOLINTBEGIN(misc-no-recursion)
+static bool isLegalType(Type ty) {
+  if (hw::type_isa<ClockType>(ty))
+    return false;
+
+  if (auto arrayTy = hw::type_dyn_cast<hw::ArrayType>(ty))
+    return isLegalType(arrayTy.getElementType());
+
+  if (auto structTy = hw::type_dyn_cast<hw::StructType>(ty)) {
+    for (auto field : structTy.getElements())
+      if (!isLegalType(field.type))
+        return false;
+    return true;
+  }
+
+  return true;
+}
+// NOLINTEND(misc-no-recursion)
+
 static bool isLegalOp(Operation *op) {
   if (auto module = dyn_cast<hw::HWModuleLike>(op)) {
     return llvm::all_of(module.getPortList(), [](hw::PortInfo port) {
-      return !hw::type_isa<seq::ClockType>(port.type);
+      return isLegalType(port.type);
     });
   }
-  bool allOperandsLowered = llvm::all_of(op->getOperands(), [](auto op) {
-    return !hw::type_isa<seq::ClockType>(op.getType());
-  });
+  bool allOperandsLowered = llvm::all_of(
+      op->getOperands(), [](auto op) { return isLegalType(op.getType()); });
   bool allResultsLowered = llvm::all_of(op->getResults(), [](auto result) {
-    return !hw::type_isa<seq::ClockType>(result.getType());
+    return isLegalType(result.getType());
   });
   return allOperandsLowered && allResultsLowered;
 }
