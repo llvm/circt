@@ -8,8 +8,18 @@ hw.module.generated @generated, @Some_schema(%clock: !seq.clock, %other: i1) -> 
 // CHECK-LABEL: hw.module.extern @extern(%clock: i1, %other: i1) -> (out: i32)
 hw.module.extern @extern(%clock: !seq.clock, %other: i1) -> (out: i32)
 
+// CHECK-LABEL: @const_clock
+hw.module @const_clock() -> () {
+  // CHECK: hw.constant false
+  seq.const_clock low
+
+  // CHECK: hw.constant true
+  seq.const_clock high
+}
+
 // CHECK-LABEL: hw.module @top(%clock: i1, %other: i1, %wire: i1) -> (out: i1)
 hw.module @top(%clock: !seq.clock, %other: i1, %wire: i1) -> (out: !seq.clock) {
+
 
   // CHECK: %tap_generated = hw.wire %clock  : i1
   %tap_generated = hw.wire %clock : !seq.clock
@@ -23,7 +33,8 @@ hw.module @top(%clock: !seq.clock, %other: i1, %wire: i1) -> (out: !seq.clock) {
   // CHECK: %inner.out = hw.instance "inner" @inner(clock: %clock: i1, other: %other: i1) -> (out: i32)
   %out_inner = hw.instance "inner" @inner(clock: %clock: !seq.clock, other: %other: i1) -> (out: i32)
 
-  // CHECK: [[NEGATED:%.+]] = comb.xor %clock, %true : i1
+  // CHECK: [[TRUE:%.+]] = hw.constant true
+  // CHECK: [[NEGATED:%.+]] = comb.xor %clock, [[TRUE]] : i1
   %clock_wire = seq.from_clock %clock
   %one = hw.constant 1 : i1
   %tmp = comb.xor %clock_wire, %one : i1
@@ -42,8 +53,7 @@ hw.module private @inner(%clock: !seq.clock, %other: i1) -> (out: i32) {
 // CHECK-LABEL: hw.module private @SinkSource(%clock: i1) -> (out: i1)
 hw.module private @SinkSource(%clock: !seq.clock) -> (out: !seq.clock) {
   // CHECK: hw.output %false : i1
-  %false = hw.constant 0 : i1
-  %out = seq.to_clock %false
+  %out = seq.const_clock low
   hw.output %out : !seq.clock
 }
 

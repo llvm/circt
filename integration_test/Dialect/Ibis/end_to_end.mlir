@@ -17,7 +17,7 @@ ibis.class @C2 {
   %this = ibis.this @C2
 
   %go_port = ibis.port.input @go : i1
-  %clk_port = ibis.port.input @clk : i1
+  %clk_port = ibis.port.input @clk : !seq.clock
   %rst_port = ibis.port.input @rst : i1
   %done_port = ibis.port.output @done : i1
   %out_port = ibis.port.output @out : i32
@@ -33,8 +33,8 @@ ibis.class @C2 {
     ]
     %go_ref = ibis.get_port %parent, @go : !ibis.scoperef<@C2> -> !ibis.portref<out i1>
     %go = ibis.port.read %go_ref : !ibis.portref<out i1>
-    %clk_ref = ibis.get_port %parent, @clk : !ibis.scoperef<@C2> -> !ibis.portref<out i1>
-    %clk = ibis.port.read %clk_ref : !ibis.portref<out i1>
+    %clk_ref = ibis.get_port %parent, @clk : !ibis.scoperef<@C2> -> !ibis.portref<out !seq.clock>
+    %clk = ibis.port.read %clk_ref : !ibis.portref<out !seq.clock>
     %rst_ref = ibis.get_port %parent, @rst : !ibis.scoperef<@C2> -> !ibis.portref<out i1>
     %rst = ibis.port.read %rst_ref : !ibis.portref<out i1>
 
@@ -74,7 +74,7 @@ ibis.class @Parent {
   %c2 = ibis.instance @c2, @C2
 
   %go = ibis.port.input @go : i1
-  %clk = ibis.port.input @clk : i1
+  %clk = ibis.port.input @clk : !seq.clock
   %rst = ibis.port.input @rst : i1
 
   %done = ibis.port.output @done : i1
@@ -85,9 +85,9 @@ ibis.class @Parent {
   %go_val = ibis.port.read %go : !ibis.portref<in i1>
   ibis.port.write %go_ref, %go_val : !ibis.portref<in i1>
 
-  %clk_ref = ibis.get_port %c2, @clk : !ibis.scoperef<@C2> -> !ibis.portref<in i1>
-  %clk_val = ibis.port.read %clk : !ibis.portref<in i1>
-  ibis.port.write %clk_ref, %clk_val : !ibis.portref<in i1>
+  %clk_ref = ibis.get_port %c2, @clk : !ibis.scoperef<@C2> -> !ibis.portref<in !seq.clock>
+  %clk_val = ibis.port.read %clk : !ibis.portref<in !seq.clock>
+  ibis.port.write %clk_ref, %clk_val : !ibis.portref<in !seq.clock>
 
   %rst_ref = ibis.get_port %c2, @rst : !ibis.scoperef<@C2> -> !ibis.portref<in i1>
   %rst_val = ibis.port.read %rst : !ibis.portref<in i1>

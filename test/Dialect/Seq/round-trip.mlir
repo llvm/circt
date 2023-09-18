@@ -48,13 +48,13 @@ hw.module @d0(%clk : i1, %rst : i1) -> () {
 }
 
 // CHECK-LABEL: hw.module @ClockGate
-hw.module @ClockGate(%clock: i1, %enable: i1, %test_enable: i1) {
+hw.module @ClockGate(%clock: !seq.clock, %enable: i1, %test_enable: i1) {
   // CHECK-NEXT: seq.clock_gate %clock, %enable
   // CHECK-NEXT: seq.clock_gate %clock, %enable, %test_enable
   // CHECK-NEXT: seq.clock_gate %clock, %enable, %test_enable sym @gate_sym
-  %cg0 = seq.clock_gate %clock, %enable : i1
-  %cg1 = seq.clock_gate %clock, %enable, %test_enable : i1
-  %cg2 = seq.clock_gate %clock, %enable, %test_enable sym @gate_sym : i1
+  %cg0 = seq.clock_gate %clock, %enable
+  %cg1 = seq.clock_gate %clock, %enable, %test_enable
+  %cg2 = seq.clock_gate %clock, %enable, %test_enable sym @gate_sym
 }
 
 // CHECK-LABEL: hw.module @ClockMux
@@ -82,4 +82,11 @@ hw.module @preset(%clock : !seq.clock, %reset : i1, %next : i32) -> () {
 hw.module @clock_dividers(%clock: !seq.clock) -> () {
   // CHECK: seq.clock_div %clock by 1
   %by_2 = seq.clock_div %clock by 1
+}
+
+hw.module @clock_const() -> () {
+  // CHECK: seq.const_clock high
+  %high = seq.const_clock high
+  // CHECK: seq.const_clock low
+  %low = seq.const_clock low
 }

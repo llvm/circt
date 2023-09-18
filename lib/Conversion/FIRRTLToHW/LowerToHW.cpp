@@ -1427,6 +1427,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult run();
 
   // Helpers.
+  Value getOrCreateClockConstant(seq::ClockConst clock);
   Value getOrCreateIntConstant(const APInt &value);
   Value getOrCreateIntConstant(unsigned numBits, uint64_t val,
                                bool isSigned = false) {
@@ -1890,6 +1891,19 @@ LogicalResult FIRRTLLowering::run() {
 //===----------------------------------------------------------------------===//
 // Helpers
 //===----------------------------------------------------------------------===//
+
+/// Create uniqued constant clocks.
+Value FIRRTLLowering::getOrCreateClockConstant(seq::ClockConst clock) {
+  auto attr = seq::ClockConstAttr::get(theModule.getContext(), clock);
+
+  auto &entry = hwConstantMap[attr];
+  if (entry)
+    return entry;
+
+  OpBuilder entryBuilder(&theModule.getBodyBlock()->front());
+  entry = entryBuilder.create<seq::ConstClockOp>(builder.getLoc(), attr);
+  return entry;
+}
 
 /// Check to see if we've already lowered the specified constant.  If so,
 /// return it.  Otherwise create it and put it in the entry block for reuse.
@@ -2624,9 +2638,13 @@ LogicalResult FIRRTLLowering::visitExpr(ConstantOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitExpr(SpecialConstantOp op) {
-  auto cst = getOrCreateIntConstant(APInt(/*bitWidth*/ 1, op.getValue()));
-  if (op.getType().isa<ClockType>())
-    return setLoweringTo<seq::ToClockOp>(op, cst);
+  Value cst;
+  if (op.getType().isa<ClockType>()) {
+    cst = getOrCreateClockConstant(op.getValue() ? seq::ClockConst::High
+                                                 : seq::ClockConst::Low);
+  } else {
+    cst = getOrCreateIntConstant(APInt(/*bitWidth*/ 1, op.getValue()));
+  }
   return setLowering(op, cst);
 }
 

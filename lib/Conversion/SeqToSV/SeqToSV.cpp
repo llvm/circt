@@ -238,6 +238,22 @@ public:
   }
 };
 
+// Lower seq.const_clock to `hw.constant`
+//
+class ClockConstLowering : public OpConversionPattern<ConstClockOp> {
+public:
+  using OpConversionPattern<ConstClockOp>::OpConversionPattern;
+  using OpConversionPattern<ConstClockOp>::OpAdaptor;
+
+  LogicalResult
+  matchAndRewrite(ConstClockOp clockConst, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    rewriter.replaceOpWithNewOp<hw::ConstantOp>(
+        clockConst, APInt(1, clockConst.getValue() == ClockConst::High));
+    return success();
+  }
+};
+
 /// Lower `seq.clock_div` to a behavioural clock divider
 ///
 class ClockDividerLowering : public OpConversionPattern<ClockDivider> {
@@ -355,6 +371,7 @@ void SeqToSVPass::runOnOperation() {
   patterns.add<ClockGateLowering>(typeConverter, context);
   patterns.add<ClockMuxLowering>(typeConverter, context);
   patterns.add<ClockDividerLowering>(typeConverter, context);
+  patterns.add<ClockConstLowering>(typeConverter, context);
   patterns.add<TypeConversionPattern>(typeConverter, context);
 
   if (failed(applyPartialConversion(circuit, target, std::move(patterns))))
