@@ -1094,3 +1094,65 @@ circuit AnyRef:
    module AnyRef:
      ; expected-error @below {{AnyRef types are a FIRRTL 3.2.0+ feature}}
      output a : AnyRef
+
+;// -----
+; Only objects are valid as AnyRef
+FIRRTL version 3.2.0
+circuit AnyRef:
+  module AnyRef:
+    output out : AnyRef
+    ; expected-error @below {{cannot propassign non-equivalent type '!firrtl.integer' to '!firrtl.anyref'}}
+    propassign out, Integer(5)
+
+;// -----
+; Only objects are valid as AnyRef in Lists
+FIRRTL version 3.2.0
+circuit AnyRefList:
+  module AnyRefList:
+    output list : List<AnyRef>
+    ; expected-error @below {{unexpected expression of type '!firrtl.integer' in List expression of type '!firrtl.anyref'}}
+    propassign list, List<AnyRef>(Integer(5))
+
+;// -----
+; Only objects are valid as AnyRef in Maps (keys)
+FIRRTL version 3.2.0
+circuit MapFromAnyRef:
+  module MapFromAnyRef:
+    output mapFrom : Map<AnyRef, Integer>
+    ; expected-error @below {{unexpected expression of type '!firrtl.integer' for key in Map expression, expected '!firrtl.anyref'}}
+    propassign mapFrom, Map<AnyRef, Integer>(Integer(3) -> Integer(5))
+
+;// -----
+; Only objects are valid as AnyRef in Maps (values)
+FIRRTL version 3.2.0
+circuit MapToAnyRef:
+  module MapToAnyRef:
+    output mapTo: Map<Integer, AnyRef>
+    ; expected-error @below {{unexpected expression of type '!firrtl.integer' for value in Map expression, expected '!firrtl.anyref'}}
+    propassign mapTo, Map<Integer, AnyRef>(Integer(3) -> Integer(5))
+
+;// -----
+; Not Covariant.
+FIRRTL version 3.2.0
+circuit NotCovariant:
+  class Class:
+
+  module NotCovariant:
+    output list : List<AnyRef>
+
+    object obj of Class
+    ; expected-error @below {{cannot propassign non-equivalent type '!firrtl.list<class<@Class()>>' to '!firrtl.list<anyref>'}}
+    propassign list, List<Inst<Class>>(obj)
+
+;// -----
+; Not Contravariant.
+FIRRTL version 3.2.0
+circuit NotContravariant:
+  class Class:
+
+  module NotContravariant:
+    output list : List<Inst<Class>>
+
+    object obj of Class
+    ; expected-error @below {{cannot propassign non-equivalent type '!firrtl.list<anyref>' to '!firrtl.list<class<@Class()>>'}}
+    propassign list, List<AnyRef>(obj)
