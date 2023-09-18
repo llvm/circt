@@ -21,6 +21,11 @@
 using namespace circt;
 using namespace ibis;
 
+size_t circt::ibis::blockID(mlir::Block *block) {
+  return std::distance(block->getParent()->front().getIterator(),
+                       block->getIterator());
+}
+
 namespace {
 
 struct ReblockPass : public IbisReblockBase<ReblockPass> {
@@ -48,17 +53,13 @@ void ReblockPass::runOnOperation() {
     return signalPassFailure();
   }
 
-  auto blockID = [&](Block &block) {
-    return std::distance(region.front().getIterator(), block.getIterator());
-  };
-
   for (Block &block : region.getBlocks()) {
     DictionaryAttr blockInfo =
-        blockInfoAttr.getAs<DictionaryAttr>(Twine(blockID(block)).str());
+        blockInfoAttr.getAs<DictionaryAttr>(Twine(blockID(&block)).str());
 
     if (!blockInfo) {
       parent->emitOpError("missing 'ibis.blockinfo' attribute for block " +
-                          Twine(blockID(block)));
+                          Twine(blockID(&block)));
       return signalPassFailure();
     }
 

@@ -9,6 +9,7 @@
 #ifndef CIRCT_DIALECT_IBIS_IBISPASSES_H
 #define CIRCT_DIALECT_IBIS_IBISPASSES_H
 
+#include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassRegistry.h"
 #include <memory>
@@ -25,10 +26,14 @@ std::unique_ptr<Pass> createCleanSelfdriversPass();
 std::unique_ptr<Pass> createContainersToHWPass();
 std::unique_ptr<Pass> createArgifyBlocksPass();
 std::unique_ptr<Pass> createReblockPass();
+std::unique_ptr<Pass> createInlineSBlocksPass();
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/Ibis/IbisPasses.h.inc"
+
+// Returns an ID of an MLIR block, used during the sblock inline/reblock phase.
+size_t blockID(mlir::Block *block);
 
 } // namespace ibis
 } // namespace circt

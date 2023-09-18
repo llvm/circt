@@ -213,7 +213,7 @@ def StaticBlockOp : IbisOp<"sblock", [
 
   let arguments = (ins
     Variadic<AnyType>:$inputs,
-    OptionalAttr<ConfinedAttr<I32Attr, [IntMinValue<1>]>>:$maxThreads
+    OptionalAttr<ConfinedAttr<I64Attr, [IntMinValue<1>]>>:$maxThreads
   );
   let results = (outs Variadic<AnyType>:$outputs);
   let regions = (region SizedRegion<1>:$body);
