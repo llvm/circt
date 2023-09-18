@@ -37,6 +37,10 @@ def Handshake_Dialect : Dialect {
 
   // Opt-out of properties for now, must migrate by LLVM 19.  #5273.
   let usePropertiesForAttributes = 0;
+
+  let dependentDialects = [
+    "circt::seq::SeqDialect"
+  ];
 }
 
 include "circt/Dialect/Handshake/HandshakeOps.td"

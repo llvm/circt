@@ -1,6 +1,6 @@
 // RUN: circt-opt %s | circt-opt | FileCheck %s
 
-hw.module @d1(%clk : i1, %rst : i1) -> () {
+hw.module @d1(%clk : !seq.clock, %rst : i1) -> () {
 // CHECK: %myMemory = seq.hlmem @myMemory %clk, %rst : <4xi32>
   %myMemory = seq.hlmem @myMemory %clk, %rst : <4xi32>
 
@@ -16,7 +16,7 @@ hw.module @d1(%clk : i1, %rst : i1) -> () {
   hw.output
 }
 
-hw.module @d2(%clk : i1, %rst : i1) -> () {
+hw.module @d2(%clk : !seq.clock, %rst : i1) -> () {
 // CHECK: %myMemory = seq.hlmem @myMemory %clk, %rst : <4x8xi32>
   %myMemory = seq.hlmem @myMemory %clk, %rst : <4x8xi32>
 
@@ -33,7 +33,7 @@ hw.module @d2(%clk : i1, %rst : i1) -> () {
   hw.output
 }
 
-hw.module @d0(%clk : i1, %rst : i1) -> () {
+hw.module @d0(%clk : !seq.clock, %rst : i1) -> () {
 // CHECK: %myMemory = seq.hlmem @myMemory %clk, %rst : <1xi32>
   %myMemory = seq.hlmem @myMemory %clk, %rst : <1xi32>
 
@@ -63,12 +63,12 @@ hw.module @ClockMux(%cond: i1, %trueClock: !seq.clock, %falseClock: !seq.clock) 
   hw.output %clock : !seq.clock
 }
 
-hw.module @fifo1(%clk : i1, %rst : i1, %in : i32, %rdEn : i1, %wrEn : i1) -> () {
+hw.module @fifo1(%clk : !seq.clock, %rst : i1, %in : i32, %rdEn : i1, %wrEn : i1) -> () {
   // CHECK: %out, %full, %empty = seq.fifo depth 3 in %in rdEn %rdEn wrEn %wrEn clk %clk rst %rst : i32
   %out, %full, %empty = seq.fifo depth 3 in %in rdEn %rdEn wrEn %wrEn clk %clk rst %rst : i32
 }
 
-hw.module @fifo2(%clk : i1, %rst : i1, %in : i32, %rdEn : i1, %wrEn : i1) -> () {
+hw.module @fifo2(%clk : !seq.clock, %rst : i1, %in : i32, %rdEn : i1, %wrEn : i1) -> () {
   // CHECK: %out, %full, %empty, %almostFull, %almostEmpty = seq.fifo depth 3 almost_full 2 almost_empty 1 in %in rdEn %rdEn wrEn %wrEn clk %clk rst %rst : i32
   %out, %full, %empty, %almostFull, %almostEmpty = seq.fifo depth 3 almost_full 2 almost_empty 1 in %in rdEn %rdEn wrEn %wrEn clk %clk rst %rst : i32
 }

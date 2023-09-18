@@ -181,7 +181,7 @@ hw.module @testControlUsage(%arg0: i32, %go : i1, %clk: !seq.clock, %rst: i1) ->
     %reg_out_wire = sv.wire : !hw.inout<i32>
     %reg_out = sv.read_inout %reg_out_wire : !hw.inout<i32>
     %add0 = comb.add %reg_out, %a0 : i32
-    %out = seq.compreg.ce %add0, %c, %g, %r, %zero : i32, !seq.clock
+    %out = seq.compreg.ce %add0, %c, %g, %r, %zero : i32
     sv.assign %reg_out_wire, %out : i32
     pipeline.stage ^bb1 regs(%out : i32)
 
@@ -189,7 +189,7 @@ hw.module @testControlUsage(%arg0: i32, %go : i1, %clk: !seq.clock, %rst: i1) ->
     %reg1_out_wire = sv.wire : !hw.inout<i32>
     %reg1_out = sv.read_inout %reg1_out_wire : !hw.inout<i32>
     %add1 = comb.add %reg1_out, %6 : i32
-    %out1 = seq.compreg.ce %add1, %c, %s1_enable, %r, %zero : i32, !seq.clock
+    %out1 = seq.compreg.ce %add1, %c, %s1_enable, %r, %zero : i32
     sv.assign %reg1_out_wire, %out1 : i32
 
     pipeline.stage ^bb2 regs(%out1 : i32)
@@ -198,7 +198,7 @@ hw.module @testControlUsage(%arg0: i32, %go : i1, %clk: !seq.clock, %rst: i1) ->
     %reg2_out_wire = sv.wire : !hw.inout<i32>
     %reg2_out = sv.read_inout %reg2_out_wire : !hw.inout<i32>
     %add2 = comb.add %reg2_out, %9 : i32
-    %out2 = seq.compreg.ce %add2, %c, %s2_enable, %r, %zero : i32, !seq.clock
+    %out2 = seq.compreg.ce %add2, %c, %s2_enable, %r, %zero : i32
     sv.assign %reg2_out_wire, %out2 : i32
     pipeline.return %out2  : i32
   }
@@ -212,11 +212,11 @@ hw.module @testControlUsage(%arg0: i32, %go : i1, %clk: !seq.clock, %rst: i1) ->
 // CHECK:           %[[VAL_5:.*]] = hw.constant true
 // CHECK:           %[[VAL_6:.*]] = comb.xor %[[VAL_2]], %[[VAL_5]] : i1
 // CHECK:           %[[VAL_7:.*]] = comb.and %[[VAL_1]], %[[VAL_6]]
-// CHECK:           %[[VAL_8:.*]] = seq.compreg.ce sym @p0_stage0_reg0 %[[VAL_0]], %[[CLOCK]], %[[VAL_7]] : i32, !seq.clock
+// CHECK:           %[[VAL_8:.*]] = seq.compreg.ce sym @p0_stage0_reg0 %[[VAL_0]], %[[CLOCK]], %[[VAL_7]] : i32
 // CHECK:           %[[VAL_9:.*]] = hw.constant false
 // CHECK:           %[[VAL_10:.*]] = hw.constant true
 // CHECK:           %[[VAL_11:.*]] = comb.xor %[[VAL_2]], %[[VAL_10]] : i1
-// CHECK:           %[[VAL_12:.*]] = seq.compreg.ce sym @p0_stage1_enable %[[VAL_7]], %[[CLOCK]], %[[VAL_11]], %[[VAL_4]], %[[VAL_9]]  : i1, !seq.clock
+// CHECK:           %[[VAL_12:.*]] = seq.compreg.ce sym @p0_stage1_enable %[[VAL_7]], %[[CLOCK]], %[[VAL_11]], %[[VAL_4]], %[[VAL_9]]  : i1
 // CHECK:           %[[VAL_13:.*]] = hw.constant true
 // CHECK:           %[[VAL_14:.*]] = comb.xor %[[VAL_2]], %[[VAL_13]] : i1
 // CHECK:           %[[VAL_15:.*]] = comb.and %[[VAL_12]], %[[VAL_14]]
@@ -238,25 +238,25 @@ hw.module @testWithStall(%arg0: i32, %go: i1, %stall : i1, %clk: !seq.clock, %rs
 // CHECK:           %[[VAL_5:.*]] = hw.constant true
 // CHECK:           %[[VAL_6:.*]] = comb.xor %[[VAL_4]], %[[VAL_5]] : i1
 // CHECK:           %[[VAL_7:.*]] = comb.and %[[VAL_1]], %[[VAL_6]]
-// CHECK:           %[[VAL_8:.*]] = seq.compreg.ce sym @MyPipeline_a0 %[[VAL_0]], %[[CLOCK]], %[[VAL_7]] : i32, !seq.clock
+// CHECK:           %[[VAL_8:.*]] = seq.compreg.ce sym @MyPipeline_a0 %[[VAL_0]], %[[CLOCK]], %[[VAL_7]] : i32
 // CHECK:           %[[VAL_9:.*]] = hw.constant false
-// CHECK:           %[[VAL_10:.*]] = seq.compreg sym @MyPipeline_stage1_enable %[[VAL_7]], %[[CLOCK]], %[[VAL_3]], %[[VAL_9]]  : i1, !seq.clock
-// CHECK:           %[[VAL_11:.*]] = seq.compreg.ce sym @MyPipeline_a0 %[[VAL_8]], %[[CLOCK]], %[[VAL_10]] {name = "MyPipeline_a0"} : i32, !seq.clock
+// CHECK:           %[[VAL_10:.*]] = seq.compreg sym @MyPipeline_stage1_enable %[[VAL_7]], %[[CLOCK]], %[[VAL_3]], %[[VAL_9]]  : i1
+// CHECK:           %[[VAL_11:.*]] = seq.compreg.ce sym @MyPipeline_a0 %[[VAL_8]], %[[CLOCK]], %[[VAL_10]] {name = "MyPipeline_a0"} : i32
 // CHECK:           %[[VAL_12:.*]] = hw.constant false
 // CHECK:           %[[VAL_13:.*]] = hw.constant true
 // CHECK:           %[[VAL_14:.*]] = comb.xor %[[VAL_4]], %[[VAL_13]] : i1
 // CHECK:           %[[VAL_15:.*]] = comb.or %[[VAL_10]], %[[VAL_14]] : i1
-// CHECK:           %[[VAL_16:.*]] = seq.compreg.ce sym @MyPipeline_stage2_enable %[[VAL_10]], %[[CLOCK]], %[[VAL_15]], %[[VAL_3]], %[[VAL_12]]  : i1, !seq.clock
+// CHECK:           %[[VAL_16:.*]] = seq.compreg.ce sym @MyPipeline_stage2_enable %[[VAL_10]], %[[CLOCK]], %[[VAL_15]], %[[VAL_3]], %[[VAL_12]]  : i1
 // CHECK:           %[[VAL_17:.*]] = hw.constant true
 // CHECK:           %[[VAL_18:.*]] = comb.xor %[[VAL_4]], %[[VAL_17]] : i1
 // CHECK:           %[[VAL_19:.*]] = comb.or %[[VAL_10]], %[[VAL_18]] : i1
 // CHECK:           %[[VAL_20:.*]] = comb.and %[[VAL_16]], %[[VAL_19]]
-// CHECK:           %[[VAL_21:.*]] = seq.compreg.ce sym @MyPipeline_a0 %[[VAL_11]], %[[CLOCK]], %[[VAL_20]] {name = "MyPipeline_a0"} : i32, !seq.clock
+// CHECK:           %[[VAL_21:.*]] = seq.compreg.ce sym @MyPipeline_a0 %[[VAL_11]], %[[CLOCK]], %[[VAL_20]] {name = "MyPipeline_a0"} : i32
 // CHECK:           %[[VAL_22:.*]] = hw.constant false
 // CHECK:           %[[VAL_23:.*]] = hw.constant true
 // CHECK:           %[[VAL_24:.*]] = comb.xor %[[VAL_4]], %[[VAL_23]] : i1
 // CHECK:           %[[VAL_25:.*]] = comb.or %[[VAL_10]], %[[VAL_24]] : i1
-// CHECK:           %[[VAL_26:.*]] = seq.compreg.ce sym @MyPipeline_stage3_enable %[[VAL_20]], %[[CLOCK]], %[[VAL_25]], %[[VAL_3]], %[[VAL_22]]  : i1, !seq.clock
+// CHECK:           %[[VAL_26:.*]] = seq.compreg.ce sym @MyPipeline_stage3_enable %[[VAL_20]], %[[CLOCK]], %[[VAL_25]], %[[VAL_3]], %[[VAL_22]]  : i1
 // CHECK:           %[[VAL_27:.*]] = hw.constant true
 // CHECK:           %[[VAL_28:.*]] = comb.xor %[[VAL_4]], %[[VAL_27]] : i1
 // CHECK:           %[[VAL_29:.*]] = comb.or %[[VAL_10]], %[[VAL_28]] : i1

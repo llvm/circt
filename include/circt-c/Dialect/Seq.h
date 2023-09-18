@@ -20,6 +20,12 @@ extern "C" {
 MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(Sequential, seq);
 MLIR_CAPI_EXPORTED void registerSeqPasses(void);
 
+/// If the type is an clock type
+MLIR_CAPI_EXPORTED bool seqTypeIsAClock(MlirType type);
+
+/// Creates an seq clock type
+MLIR_CAPI_EXPORTED MlirType seqClockTypeGet(MlirContext ctx);
+
 #ifdef __cplusplus
 }
 #endif

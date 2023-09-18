@@ -13,6 +13,7 @@ from circt.passmanager import PassManager
 with Context() as ctx, Location.unknown():
   circt.register_dialects(ctx)
 
+  clk = seq.ClockType.get(ctx)
   i1 = IntegerType.get_signless(1)
   i32 = IntegerType.get_signless(32)
 
@@ -68,7 +69,7 @@ with Context() as ctx, Location.unknown():
       hw.OutputOp([reg.data])
 
     hw.HWModuleOp(name="top",
-                  input_ports=[("clk", i1), ("rst", i1)],
+                  input_ports=[("clk", clk), ("rst", i1)],
                   output_ports=[("result", i32)],
                   body_builder=top)
 
