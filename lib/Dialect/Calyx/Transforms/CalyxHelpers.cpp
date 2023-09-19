@@ -36,6 +36,22 @@ hw::ConstantOp createConstant(Location loc, OpBuilder &builder,
                                         APInt(width, value, /*unsigned=*/true));
 }
 
+calyx::InstanceOp createInstance(Location loc, OpBuilder &builder,
+                                 ComponentOp component,
+                                 SmallVectorImpl<Type> &resultTypes,
+                                 StringRef instanceName,
+                                 StringRef componentName) {
+  OpBuilder::InsertionGuard g(builder);
+  builder.setInsertionPointToStart(component.getBodyBlock());
+  return builder.create<InstanceOp>(loc, resultTypes, instanceName,
+                                    componentName);
+}
+
+std::string getInstanceName(mlir::func::CallOp callOp) {
+  SmallVector<StringRef, 2> strVet = {callOp.getCallee(), "instance"};
+  return llvm::join(strVet, /*separator=*/"_");
+}
+
 bool isControlLeafNode(Operation *op) { return isa<calyx::EnableOp>(op); }
 
 DictionaryAttr getMandatoryPortAttr(MLIRContext *ctx, StringRef name) {

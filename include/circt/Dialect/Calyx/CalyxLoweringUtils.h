@@ -394,6 +394,12 @@ public:
   /// the original function maps to.
   unsigned getFuncOpResultMapping(unsigned funcReturnIdx);
 
+  /// The instance is obtained from the name of the callee.
+  InstanceOp getInstance(StringRef calleeName);
+
+  /// Put the name of the callee and the instance of the call into map.
+  void addInstance(StringRef calleeName, InstanceOp instanceOp);
+
   /// Return the group which evaluates the value v. Optionally, caller may
   /// specify the expected type of the group.
   template <typename TGroupOp = calyx::GroupInterface>
@@ -452,6 +458,9 @@ private:
   /// A mapping between the source funcOp result indices and the corresponding
   /// output port indices of this componentOp.
   DenseMap<unsigned, unsigned> funcOpResultMapping;
+
+  /// A mapping between the callee and the instance.
+  llvm::StringMap<calyx::InstanceOp> instanceMap;
 };
 
 /// An interface for conversion passes that lower Calyx programs. This handles
@@ -732,6 +741,17 @@ class BuildReturnRegs : public calyx::FuncOpPartialLoweringPattern {
   LogicalResult
   partiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
                            PatternRewriter &rewriter) const override;
+};
+
+/// Builds instance for the calyx.invoke and calyx.group in order to initialize
+/// the instance.
+class BuildCallInstance : public calyx::FuncOpPartialLoweringPattern {
+  using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
+
+  LogicalResult
+  partiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
+                           PatternRewriter &rewriter) const override;
+  ComponentOp getCallComponent(mlir::func::CallOp callOp) const;
 };
 
 } // namespace calyx
