@@ -295,9 +295,10 @@ MLIR_CAPI_EXPORTED void circtMSFTAppIDIndexFree(CirctMSFTAppIDIndex index) {
 
 /// Lookup a DynamicInstanceOp from an appid path.
 MLIR_CAPI_EXPORTED MlirOperation circtMSFTAppIDIndexGetInstance(
-    CirctMSFTAppIDIndex index, MlirAttribute appIDPath) {
-  FailureOr<DynamicInstanceOp> dynInst =
-      unwrap(index)->getInstance(cast<AppIDPathAttr>(unwrap(appIDPath)));
+    CirctMSFTAppIDIndex index, MlirAttribute appIDPath,
+    MlirLocation querySite) {
+  FailureOr<DynamicInstanceOp> dynInst = unwrap(index)->getInstance(
+      cast<AppIDPathAttr>(unwrap(appIDPath)), unwrap(querySite));
   if (failed(dynInst))
     return MlirOperation{nullptr};
   return wrap(*dynInst);

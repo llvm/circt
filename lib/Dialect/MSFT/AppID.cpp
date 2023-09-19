@@ -34,49 +34,46 @@ AppIDIndex::AppIDIndex(Operation *mlirTop) : valid(true), mlirTop(mlirTop) {
     }
 }
 
-FailureOr<DynamicInstanceOp> AppIDIndex::getInstance(AppIDPathAttr path) const {
-  MLIRContext *ctxt = path.getContext();
+FailureOr<DynamicInstanceOp> AppIDIndex::getInstance(AppIDPathAttr path,
+                                                     Location loc) const {
   FlatSymbolRefAttr rootSym = path.getRoot();
   auto rootMod =
       dyn_cast_or_null<hw::HWModuleLike>(symCache.getDefinition(rootSym));
   if (!rootMod)
-    return mlir::emitError(UnknownLoc::get(path.getContext()),
-                           "could not find module '")
-           << rootSym << "'";
+    return emitError(loc, "could not find module '") << rootSym << "'";
 
   auto &dynHierRoot = dynHierRoots[rootSym];
   if (dynHierRoot == nullptr) {
     dynHierRoot = OpBuilder::atBlockEnd(&mlirTop->getRegion(0).front())
-                      .create<InstanceHierarchyOp>(UnknownLoc::get(ctxt),
-                                                   rootSym, StringAttr());
+                      .create<InstanceHierarchyOp>(loc, rootSym, StringAttr());
     dynHierRoot->getRegion(0).emplaceBlock();
   }
-  return getSubInstance(rootMod, dynHierRoot, path.getPath());
+  return getSubInstance(rootMod, dynHierRoot, path.getPath(), loc);
 }
 
 DynamicInstanceOp AppIDIndex::getOrCreate(Operation *parent,
-                                          hw::InnerRefAttr name) const {
+                                          hw::InnerRefAttr name,
+                                          Location loc) const {
   NamedChildren &children = dynInstChildLookup[parent];
   DynamicInstanceOp &child = children[name];
   if (child)
     return child;
   auto dyninst = OpBuilder::atBlockEnd(&parent->getRegion(0).front())
-                     .create<DynamicInstanceOp>(
-                         UnknownLoc::get(parent->getContext()), name);
+                     .create<DynamicInstanceOp>(loc, name);
   dyninst->getRegion(0).emplaceBlock();
   return dyninst;
 }
 
 FailureOr<std::pair<DynamicInstanceOp, hw::InnerSymbolOpInterface>>
 AppIDIndex::getSubInstance(hw::HWModuleLike parentTgtMod, Operation *parent,
-                           AppIDAttr appid) const {
+                           AppIDAttr appid, Location loc) const {
   do {
     auto fChildAppID = containerAppIDs.find(parentTgtMod);
     if (fChildAppID == containerAppIDs.end())
-      return parentTgtMod.emitOpError("Could not find child appid '")
-             << appid << "'";
+      return emitError(loc, "Could not find child appid '") << appid << "'";
     const ChildAppIDs *cAppIDs = fChildAppID->getSecond();
-    FailureOr<Operation *> appidOpOrFail = cAppIDs->lookup(parentTgtMod, appid);
+    FailureOr<Operation *> appidOpOrFail =
+        cAppIDs->lookup(parentTgtMod, appid, loc);
     if (failed(appidOpOrFail))
       return failure();
 
@@ -86,34 +83,33 @@ AppIDIndex::getSubInstance(hw::HWModuleLike parentTgtMod, Operation *parent,
     if (auto opAppid =
             appidOp->getAttrOfType<AppIDAttr>(AppIDAttr::AppIDAttrName)) {
       if (opAppid != appid)
-        return appidOp->emitOpError("Wrong appid '")
+        return emitError(loc, "Wrong appid '")
                << opAppid << "'. Expected '" << appid << "'.";
 
-      return std::make_pair(getOrCreate(parent, innerRef), appidOp);
+      return std::make_pair(getOrCreate(parent, innerRef, loc), appidOp);
     }
 
     if (auto inst = dyn_cast<hw::HWInstanceLike>(appidOp.getOperation())) {
       parentTgtMod = cast<hw::HWModuleLike>(
           symCache.getDefinition(inst.getReferencedModuleNameAttr()));
-      parent = getOrCreate(parent, innerRef);
+      parent = getOrCreate(parent, innerRef, loc);
     } else {
-      return parentTgtMod.emitError("could not find appid '") << appid << "'";
+      return emitError(loc, "could not find appid '") << appid << "'";
     }
   } while (true);
 }
 
 FailureOr<DynamicInstanceOp>
 AppIDIndex::getSubInstance(hw::HWModuleLike mod, Operation *dynInstParent,
-                           ArrayRef<AppIDAttr> subpath) const {
+                           ArrayRef<AppIDAttr> subpath, Location loc) const {
 
   FailureOr<std::pair<DynamicInstanceOp, hw::InnerSymbolOpInterface>>
       instOpFail;
   for (auto component : subpath) {
     if (!mod)
-      return dynInstParent->emitError("Could not find appid '")
-             << component << "'";
+      return emitError(loc, "could not find appid '") << component << "'";
 
-    instOpFail = getSubInstance(mod, dynInstParent, component);
+    instOpFail = getSubInstance(mod, dynInstParent, component, loc);
     if (failed(instOpFail))
       return failure();
 
@@ -148,10 +144,11 @@ LogicalResult AppIDIndex::ChildAppIDs::add(AppIDAttr id, Operation *op,
 }
 
 FailureOr<Operation *> AppIDIndex::ChildAppIDs::lookup(Operation *op,
-                                                       AppIDAttr id) const {
+                                                       AppIDAttr id,
+                                                       Location loc) const {
   auto f = childAppIDPaths.find(id);
   if (f == childAppIDPaths.end())
-    return op->emitError("could not find appid '") << id << "'";
+    return emitError(loc, "could not find appid '") << id << "'";
   return f->second;
 }
 

@@ -154,8 +154,8 @@ circtMSFTAppIDIndexGet(MlirOperation root);
 MLIR_CAPI_EXPORTED void circtMSFTAppIDIndexFree(CirctMSFTAppIDIndex);
 
 /// Lookup a DynamicInstanceOp from an appid path.
-MLIR_CAPI_EXPORTED MlirOperation
-circtMSFTAppIDIndexGetInstance(CirctMSFTAppIDIndex, MlirAttribute appIDPath);
+MLIR_CAPI_EXPORTED MlirOperation circtMSFTAppIDIndexGetInstance(
+    CirctMSFTAppIDIndex, MlirAttribute appIDPath, MlirLocation querySite);
 
 #ifdef __cplusplus
 }

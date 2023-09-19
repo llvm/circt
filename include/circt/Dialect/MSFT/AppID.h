@@ -33,7 +33,8 @@ public:
   bool isValid() const { return valid; }
 
   /// Get the dynamic instance for a particular appid path.
-  FailureOr<DynamicInstanceOp> getInstance(AppIDPathAttr path) const;
+  FailureOr<DynamicInstanceOp> getInstance(AppIDPathAttr path,
+                                           Location loc) const;
 
 private:
   class ChildAppIDs {
@@ -41,7 +42,8 @@ private:
     ChildAppIDs() {}
 
     LogicalResult add(AppIDAttr id, Operation *op, bool inherited);
-    FailureOr<Operation *> lookup(Operation *, AppIDAttr id) const;
+    FailureOr<Operation *> lookup(Operation *, AppIDAttr id,
+                                  Location loc) const;
     auto getAppIDs() const { return llvm::make_first_range(childAppIDPaths); }
 
   private:
@@ -50,12 +52,15 @@ private:
   };
 
   /// Get the subinstance (relative to 'submod') for the subpath.
-  FailureOr<DynamicInstanceOp>
-  getSubInstance(hw::HWModuleLike mod, Operation *dynInstParent,
-                 ArrayRef<AppIDAttr> subpath) const;
+  FailureOr<DynamicInstanceOp> getSubInstance(hw::HWModuleLike mod,
+                                              Operation *dynInstParent,
+                                              ArrayRef<AppIDAttr> subpath,
+                                              Location loc) const;
   FailureOr<std::pair<DynamicInstanceOp, hw::InnerSymbolOpInterface>>
-  getSubInstance(hw::HWModuleLike mod, Operation *inst, AppIDAttr appid) const;
-  DynamicInstanceOp getOrCreate(Operation *parent, hw::InnerRefAttr name) const;
+  getSubInstance(hw::HWModuleLike mod, Operation *inst, AppIDAttr appid,
+                 Location loc) const;
+  DynamicInstanceOp getOrCreate(Operation *parent, hw::InnerRefAttr name,
+                                Location) const;
 
   FailureOr<const ChildAppIDs *> process(hw::HWModuleLike modToProcess);
 
