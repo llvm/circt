@@ -148,11 +148,7 @@ private:
 
 class PyAppIDIndex {
 public:
-  PyAppIDIndex(MlirOperation root) {
-    index = circtMSFTAppIDIndexGet(root);
-    if (index.ptr == nullptr)
-      throw std::runtime_error("AppIDIndex failed to build");
-  }
+  PyAppIDIndex(MlirOperation root) { index = circtMSFTAppIDIndexGet(root); }
   PyAppIDIndex(const PyAppIDIndex &) = delete;
   ~PyAppIDIndex() { circtMSFTAppIDIndexFree(index); }
 
@@ -333,6 +329,7 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
   py::class_<PyAppIDIndex>(m, "AppIDIndex")
       .def(py::init<MlirOperation>(), py::arg("root"))
       .def("get_instance", &PyAppIDIndex::getInstance,
-           "Get the dynamic instance for an appid path.", py::arg("appid"),
-           py::arg("query_site"));
+           "Get the dynamic instance for an appid path. Creates one if one "
+           "doesn't already exist.",
+           py::arg("appid"), py::arg("query_site"));
 }

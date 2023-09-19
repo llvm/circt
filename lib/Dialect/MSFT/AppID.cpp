@@ -82,10 +82,7 @@ AppIDIndex::getSubInstance(hw::HWModuleLike parentTgtMod, Operation *parent,
                                           appidOp.getInnerNameAttr());
     if (auto opAppid =
             appidOp->getAttrOfType<AppIDAttr>(AppIDAttr::AppIDAttrName)) {
-      if (opAppid != appid)
-        return emitError(loc, "Wrong appid '")
-               << opAppid << "'. Expected '" << appid << "'.";
-
+      assert(opAppid == appid && "Wrong appid");
       return std::make_pair(getOrCreate(parent, innerRef, loc), appidOp);
     }
 
@@ -121,7 +118,7 @@ AppIDIndex::getSubInstance(hw::HWModuleLike mod, Operation *dynInstParent,
       mod = nullptr;
     dynInstParent = dyninst;
   }
-  return (*instOpFail).first;
+  return instOpFail->first;
 }
 
 LogicalResult AppIDIndex::ChildAppIDs::add(AppIDAttr id, Operation *op,
