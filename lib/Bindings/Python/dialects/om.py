@@ -7,7 +7,7 @@ from __future__ import annotations
 from ._om_ops_gen import *
 from .._mlir_libs._circt._om import Evaluator as BaseEvaluator, Object as BaseObject, List as BaseList, Tuple as BaseTuple, Map as BaseMap, ClassType, ReferenceAttr, ListAttr, MapAttr, OMIntegerAttr
 
-from ..ir import Attribute, Diagnostic, DiagnosticSeverity, Module, StringAttr
+from ..ir import Attribute, Diagnostic, DiagnosticSeverity, Module, StringAttr, IntegerAttr, IntegerType
 from ..support import attribute_to_var, var_to_attribute
 
 import sys
@@ -38,11 +38,16 @@ def wrap_mlir_object(value):
   assert isinstance(value, BaseObject)
   return Object(value)
 
+def om_var_to_attribute(obj, none_on_fail: bool = False) -> ir.Attrbute:
+  if isinstance(obj, int):
+    return OMIntegerAttr.get(IntegerAttr.get(IntegerType.get_signless(64), obj))
+  return var_to_attribute(obj, none_on_fail)
+
 
 def unwrap_python_object(value):
   # Check if the value is a Primitive.
   try:
-    return var_to_attribute(value)
+    return om_var_to_attribute(value)
   except:
     pass
 
