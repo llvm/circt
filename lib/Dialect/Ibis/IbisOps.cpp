@@ -142,13 +142,9 @@ ParseResult MethodOp::parse(OpAsmParser &parser, OperationState &result) {
                                /*allowType=*/true, /*allowAttrs=*/false))
     return failure();
 
-  // Parse the result type.
-  if (succeeded(parser.parseOptionalArrow())) {
-    Type resultType;
-    if (parser.parseType(resultType))
-      return failure();
-    resultTypes.push_back(resultType);
-  }
+  // Parse the result types
+  if (parser.parseOptionalArrowTypeList(resultTypes))
+    return failure();
 
   // Process the ssa args for the information we're looking for.
   SmallVector<Type> argTypes;
@@ -208,38 +204,22 @@ void MethodOp::getAsmBlockArgumentNames(mlir::Region &region,
       setNameFn(block->getArgument(idx), argName);
 }
 
-LogicalResult MethodOp::verify() {
-  // Check that we have only one return value.
-  if (getFunctionType().getNumResults() > 1)
-    return failure();
-  return success();
-}
-
 void ReturnOp::build(OpBuilder &odsBuilder, OperationState &odsState) {}
 
 LogicalResult ReturnOp::verify() {
   // Check that the return operand type matches the function return type.
   auto func = cast<MethodOp>((*this)->getParentOp());
   ArrayRef<Type> resTypes = func.getResultTypes();
-  assert(resTypes.size() <= 1);
-  assert(getNumOperands() <= 1);
 
-  if (resTypes.empty()) {
-    if (getNumOperands() != 0)
-      return emitOpError(
-          "cannot return a value from a function with no result type");
-    return success();
-  }
+  if (getNumOperands() != resTypes.size())
+    return emitOpError(
+        "must have the same number of operands as the method has results");
 
-  Value retValue = getRetValue();
-  if (!retValue)
-    return emitOpError("must return a value");
-
-  Type retType = retValue.getType();
-  if (retType != resTypes.front())
-    return emitOpError("return type (")
-           << retType << ") must match function return type ("
-           << resTypes.front() << ")";
+  for (auto [arg, resType] : llvm::zip(getOperands(), resTypes))
+    if (arg.getType() != resType)
+      return emitOpError("operand type (")
+             << arg.getType() << ") must match function return type ("
+             << resType << ")";
 
   return success();
 }

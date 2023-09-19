@@ -4,7 +4,7 @@
 // CHECK-NEXT:    %this = ibis.this @HighLevel 
 // CHECK-NEXT:    ibis.var @single : memref<i32>
 // CHECK-NEXT:    ibis.var @array : memref<10xi32>
-// CHECK-NEXT:    ibis.method @foo() {
+// CHECK-NEXT:    ibis.method @foo() -> (i32, i32) {
 // CHECK-NEXT:      %parent = ibis.path [#ibis.step<parent : !ibis.scoperef<@HighLevel>> : !ibis.scoperef<@HighLevel>]
 // CHECK-NEXT:      %single = ibis.get_var %parent, @single : !ibis.scoperef<@HighLevel> -> memref<i32>
 // CHECK-NEXT:      %array = ibis.get_var %parent, @array : !ibis.scoperef<@HighLevel> -> memref<10xi32>
@@ -15,7 +15,7 @@
 // CHECK-NEXT:        memref.store %arg0, %alloca[] : memref<i32>
 // CHECK-NEXT:        ibis.sblock.return %1, %1 : i32, i32
 // CHECK-NEXT:      }
-// CHECK-NEXT:      ibis.return
+// CHECK-NEXT:      ibis.return %0#0, %0#1 : i32, i32
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }
 
@@ -24,7 +24,7 @@ ibis.class @HighLevel {
   ibis.var @single : memref<i32>
   ibis.var @array : memref<10xi32>
 
-  ibis.method @foo()  {
+  ibis.method @foo() -> (i32, i32)  {
     %parent = ibis.path [
       #ibis.step<parent : !ibis.scoperef<@HighLevel>>
     ]
@@ -37,7 +37,7 @@ ibis.class @HighLevel {
       memref.store %arg, %local[] : memref<i32>
       ibis.sblock.return %v, %v : i32, i32
     }
-    ibis.return
+    ibis.return %out1, %out2 : i32, i32
   }
 }
 

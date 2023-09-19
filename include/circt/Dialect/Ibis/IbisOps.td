@@ -146,7 +146,7 @@ def MethodOp : IbisOp<"method", [
   let summary = "Ibis method";
   let description = [{
     Ibis functions are a lot like software functions: a list of named arguments
-    and one unnamed return value.
+    and unnamed return values.
 
     Can only live inside of classes.
   }];
@@ -158,7 +158,6 @@ def MethodOp : IbisOp<"method", [
                        OptionalAttr<DictArrayAttr>:$res_attrs);
   let regions = (region AnyRegion:$body);
   let hasCustomAssemblyFormat = 1;
-  let hasVerifier = 1;
 
   let extraClassDeclaration = [{
     //===------------------------------------------------------------------===//
@@ -182,10 +181,10 @@ def MethodOp : IbisOp<"method", [
 
 def ReturnOp : IbisOp<"return", [
       Pure, ReturnLike, Terminator, HasParent<"MethodOp">]> {
-  let summary = "Ibis function terminator";
+  let summary = "Ibis method terminator";
 
-  let arguments = (ins Optional<AnyType>:$retValue);
-  let assemblyFormat = "($retValue^)? attr-dict (`:` type($retValue)^)?";
+  let arguments = (ins Variadic<AnyType>:$retValues);
+  let assemblyFormat = "($retValues^)? attr-dict (`:` type($retValues)^)?";
   let hasVerifier = 1;
 
   let builders = [
