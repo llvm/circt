@@ -26,6 +26,7 @@ struct List;
 struct Object;
 struct Tuple;
 struct Map;
+
 using PythonValue = std::variant<MlirAttribute, Object, List, Tuple, Map>;
 
 /// Map an opaque OMEvaluatorValue into a python value.
@@ -373,7 +374,7 @@ void circt::python::populateDialectOMSubmodule(py::module &m) {
   mlir_attribute_subclass(m, "OMIntegerAttr", omAttrIsAIntegerAttr)
       .def_classmethod("get",
                        [](py::object cls, MlirAttribute intVal) {
-                         return cls(omCastIntAttrIfValid(intVal));
+                         return cls(omIntegerAttrGet(intVal));
                        })
       .def_property_readonly("integer", [](MlirAttribute self) {
         return omIntegerAttrGetInt(self);

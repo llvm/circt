@@ -57,7 +57,7 @@ void testEvaluator(MlirContext ctx) {
   // Test instantiation success.
 
   OMEvaluatorValue actualParam = omEvaluatorValueFromPrimitive(
-      omCastIntAttrIfValid(mlirIntegerAttrGet(mlirIntegerTypeGet(ctx, 8), 42)));
+      omIntegerAttrGet(mlirIntegerAttrGet(mlirIntegerTypeGet(ctx, 8), 42)));
 
   OMEvaluatorValue object =
       omEvaluatorInstantiate(evaluator, className, 1, &actualParam);

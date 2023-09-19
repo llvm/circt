@@ -38,6 +38,7 @@ def wrap_mlir_object(value):
   assert isinstance(value, BaseObject)
   return Object(value)
 
+
 def om_var_to_attribute(obj, none_on_fail: bool = False) -> ir.Attrbute:
   if isinstance(obj, int):
     return OMIntegerAttr.get(IntegerAttr.get(IntegerType.get_signless(64), obj))
