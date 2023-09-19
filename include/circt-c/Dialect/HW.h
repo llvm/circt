@@ -106,6 +106,10 @@ MLIR_CAPI_EXPORTED intptr_t hwModuleTypeGetNumInputs(MlirType type);
 MLIR_CAPI_EXPORTED MlirType hwModuleTypeGetInputType(MlirType type,
                                                      intptr_t index);
 
+/// Get an HW module type's input name at a specific index.
+MLIR_CAPI_EXPORTED MlirStringRef hwModuleTypeGetInputName(MlirType type,
+                                                          intptr_t index);
+
 /// Get an HW module type's number of outputs.
 MLIR_CAPI_EXPORTED intptr_t hwModuleTypeGetNumOutputs(MlirType type);
 
@@ -113,6 +117,9 @@ MLIR_CAPI_EXPORTED intptr_t hwModuleTypeGetNumOutputs(MlirType type);
 MLIR_CAPI_EXPORTED MlirType hwModuleTypeGetOutputType(MlirType type,
                                                       intptr_t index);
 
+/// Get an HW module type's output name at a specific index.
+MLIR_CAPI_EXPORTED MlirStringRef hwModuleTypeGetOutputName(MlirType type,
+                                                           intptr_t index);
 /// Creates an HW struct type in the context associated with the elements.
 MLIR_CAPI_EXPORTED MlirType hwStructTypeGet(MlirContext ctx,
                                             intptr_t numElements,
