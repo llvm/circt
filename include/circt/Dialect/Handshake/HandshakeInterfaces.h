@@ -10,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_HANDSHAKE_HANDSHAKEINTERFACES_H_
-#define CIRCT_HANDSHAKE_HANDSHAKEINTERFACES_H_
+#ifndef CIRCT_DIALECT_HANDSHAKE_HANDSHAKEINTERFACES_H
+#define CIRCT_DIALECT_HANDSHAKE_HANDSHAKEINTERFACES_H
 
 #include "circt/Dialect/Handshake/HandshakeDialect.h"
 #include "circt/Support/LLVM.h"
@@ -52,4 +52,4 @@ bool isControlOpImpl(Operation *op);
 
 #include "circt/Dialect/Handshake/HandshakeInterfaces.h.inc"
 
-#endif // CIRCT_HANDSHAKE_HANDSHAKEINTERFACES_H_
+#endif // CIRCT_DIALECT_HANDSHAKE_HANDSHAKEINTERFACES_H
