@@ -15,8 +15,8 @@ hw.module @MultiUseExpr(%a: i4) -> (b0: i1) {
 // endmodule
 
 // CHECK:   hw.module @MultiUseExpr
-// CHECK:     %0 = comb.parity %a : i4 loc(#loc19)
-// CHECK:     hw.output %0 : i1 loc(#loc20)
+// CHECK:     %[[v0:.+]] = comb.parity %a : i4 loc(#loc19)
+// CHECK:     hw.output %[[v0]] : i1 loc(#loc20)
 // CHECK:   } loc(#loc18)
 // CHECK: #loc = loc("{{.+}}verilog-locations.mlir{{.*}})
 // CHECK: #loc1 = loc("{{.+}}verilog-locations.mlir{{.*}})
@@ -73,7 +73,7 @@ hw.module @SimpleConstPrintReset(%clock: i1, %reset: i1, %in4: i4) -> () {
 // endmodule
 // CHECK:   hw.module @SimpleConstPrintReset
 // CHECK:     %w = sv.wire {hw.verilogName = "w"} : !hw.inout<i4> loc(#loc49)
-// CHECK:     %q = sv.reg {hw.verilogName = "q"} : !hw.inout<i4> loc(#loc50)
+// CHECK:     %q = sv.reg {hw.verilogName = "q"} : !hw.inout<i4>  loc(#loc50)
 // CHECK:     %c1_i4 = hw.constant 1 : i4 loc(#loc51)
 // CHECK:     sv.assign %w, %c1_i4 : i4 loc(#loc18)
 // CHECK:     sv.always posedge %clock, posedge %reset {
@@ -164,9 +164,9 @@ hw.module @InlineDeclAssignment(%a: i1) {
 // CHECK:   hw.module @InlineDeclAssignment
 // CHECK:     %b = sv.wire {hw.verilogName = "b"} : !hw.inout<i1> loc(#loc25)
 // CHECK:     sv.assign %b, %a : i1 loc(#loc8)
-// CHECK:     %0 = comb.add %a, %a : i1 loc(#loc26)
+// CHECK:     %[[v0:.+]] = comb.add %a, %a : i1 loc(#loc26)
 // CHECK:     %c = sv.wire {hw.verilogName = "c"} : !hw.inout<i1> loc(#loc27)
-// CHECK:     sv.assign %c, %0 : i1 loc(#loc15)
+// CHECK:     sv.assign %c, %[[v0]] : i1 loc(#loc15)
 // CHECK:     hw.output loc(#loc1)
 // CHECK:   } loc(#loc24)
 

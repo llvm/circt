@@ -880,7 +880,7 @@ public:
   /// all the line numbers, this is required when the modules are exported in
   /// parallel.
   void addVerilogLocToOps(unsigned int lineOffset, StringAttr fileName) {
-    verilogLocMap.updateIRwithLoc(lineOffset, fileName,
+    verilogLocMap.updateIRWithLoc(lineOffset, fileName,
                                   shared.designOp->getContext());
     verilogLocMap.clear();
   }
@@ -6021,7 +6021,7 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit,
       // Ensure the line numbers are offset properly in the map. Each `entry`
       // was exported in parallel onto independent string streams, hence the
       // line numbers need to be updated with the offset in the current stream.
-      entry.verilogLocs.updateIRwithLoc(lineOffset, fileName, context);
+      entry.verilogLocs.updateIRWithLoc(lineOffset, fileName, context);
       continue;
     }
     entry.verilogLocs.setStream(os);

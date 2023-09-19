@@ -215,7 +215,7 @@ public:
 
   /// Called after the verilog has been exported and the corresponding locations
   /// are recorded in the map.
-  void updateIRwithLoc(unsigned lineOffset, StringAttr fileName,
+  void updateIRWithLoc(unsigned lineOffset, StringAttr fileName,
                        MLIRContext *context) {
     if (map.empty())
       return;
