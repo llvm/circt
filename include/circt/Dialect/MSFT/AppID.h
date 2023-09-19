@@ -23,58 +23,66 @@ namespace circt {
 
 namespace msft {
 
+/// An index for resolving AppIDPaths to dynamic instances.
 class AppIDIndex {
 public:
   AppIDIndex(Operation *mlirTop);
-  ~AppIDIndex() {
-    for (auto [appId, childAppIDs] : containerAppIDs)
-      delete childAppIDs;
-  }
+  ~AppIDIndex();
+
+  // If invalid, construction failed for some reason (which was emitted via an
+  // error). Since we want to be able to call this class as an analysis, all of
+  // the index construction occurs in the constructor, which doesn't allow for
+  // a LogicalResult return. (This is where exceptions would be useful.)
   bool isValid() const { return valid; }
 
-  /// Get the dynamic instance for a particular appid path.
+  /// Get the dynamic instance for a particular appid path. If one doesn't
+  /// already exist, if will be created.
   FailureOr<DynamicInstanceOp> getInstance(AppIDPathAttr path,
                                            Location loc) const;
 
 private:
-  class ChildAppIDs {
-  public:
-    ChildAppIDs() {}
+  //===--------------------------------------------------------------------===//
+  // Query method helpers.
+  //===--------------------------------------------------------------------===//
 
-    LogicalResult add(AppIDAttr id, Operation *op, bool inherited);
-    FailureOr<Operation *> lookup(Operation *, AppIDAttr id,
-                                  Location loc) const;
-    auto getAppIDs() const { return llvm::make_first_range(childAppIDPaths); }
-
-  private:
-    // The operation involved in an appid.
-    DenseMap<AppIDAttr, Operation *> childAppIDPaths;
-  };
-
-  /// Get the subinstance (relative to 'submod') for the subpath.
+  /// Resolve the appid path once the root InstanceHierarchy has been resolved.
   FailureOr<DynamicInstanceOp> getSubInstance(hw::HWModuleLike mod,
-                                              Operation *dynInstParent,
+                                              InstanceHierarchyOp dynInstRoot,
                                               ArrayRef<AppIDAttr> subpath,
                                               Location loc) const;
+
+  /// Get the instance (relative to 'mod') for the AppID component. String a
+  /// bunch of calls to this (one call per path component) together to do the
+  /// full resolution. Also return the inner named (static) operation to which
+  /// the dynamic instance points.
   FailureOr<std::pair<DynamicInstanceOp, hw::InnerSymbolOpInterface>>
   getSubInstance(hw::HWModuleLike mod, Operation *inst, AppIDAttr appid,
                  Location loc) const;
+
+  /// Get or create (if it doesn't exist) the dynamic instance for inner name
+  /// 'name' under 'parent'.
   DynamicInstanceOp getOrCreate(Operation *parent, hw::InnerRefAttr name,
                                 Location) const;
 
-  FailureOr<const ChildAppIDs *> process(hw::HWModuleLike modToProcess);
-
-  // Map modules to their cached child app ID indexes.
-  DenseMap<hw::HWModuleLike, ChildAppIDs *> containerAppIDs;
-
-  hw::HWSymbolCache symCache;
-  bool valid;
-  Operation *mlirTop;
-
-  // Caches
+  // Dynamic instance hierarchy caches to avoid a bunch of linear scans.
   mutable DenseMap<SymbolRefAttr, InstanceHierarchyOp> dynHierRoots;
   using NamedChildren = DenseMap<hw::InnerRefAttr, DynamicInstanceOp>;
   mutable DenseMap<Operation *, NamedChildren> dynInstChildLookup;
+
+  //===--------------------------------------------------------------------===//
+  // Index construction and storage.
+  //===--------------------------------------------------------------------===//
+  class ModuleAppIDs;
+
+  /// Construct the index for a module.
+  FailureOr<const ModuleAppIDs *> buildIndexFor(hw::HWModuleLike modToProcess);
+
+  // Map modules to their cached child app ID indexes.
+  DenseMap<hw::HWModuleLike, ModuleAppIDs *> containerAppIDs;
+
+  bool valid;
+  hw::HWSymbolCache symCache;
+  Operation *mlirTop;
 };
 
 } // namespace msft
