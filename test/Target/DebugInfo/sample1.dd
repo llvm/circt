@@ -1,0 +1,221 @@
+{
+  "HGLDD": {
+    "version": "1.0",
+    "file_info": [],
+    "hdl_file_index": 42
+  },
+  "objects": [
+    {
+      "kind": "module",
+      "obj_name": "Bob",
+      "module_name": "Bob",
+      "hgl_loc": {
+        "file": "sample1.scala",
+        "begin_line": 21,
+        "end_line": 21,
+        "begin_column": 7,
+        "end_column": 7
+      },
+      "port_vars": [
+        {
+          "var_name": "x",
+          "hgl_loc": {
+            "file": "sample1.scala",
+            "begin_line": 26,
+            "end_line": 26,
+            "begin_column": 11,
+            "end_column": 11
+          },
+          "type_name": "logic",
+          "packed_range": [
+            15,
+            0
+          ],
+          "value": {
+            "sig_name": "x"
+          }
+        },
+        {
+          "var_name": "in",
+          "hgl_loc": {
+            "file": "sample1.scala",
+            "begin_line": 22,
+            "end_line": 22,
+            "begin_column": 7,
+            "end_column": 7
+          },
+          "type_name": "logic",
+          "packed_range": [
+            15,
+            0
+          ],
+          "value": {
+            "sig_name": "in"
+          }
+        },
+        {
+          "var_name": "out",
+          "hgl_loc": {
+            "file": "sample1.scala",
+            "begin_line": 23,
+            "end_line": 23,
+            "begin_column": 7,
+            "end_column": 7
+          },
+          "type_name": "logic",
+          "packed_range": [
+            15,
+            0
+          ],
+          "value": {
+            "sig_name": "x"
+          }
+        }
+      ],
+      "children": []
+    },
+    {
+      "kind": "module",
+      "obj_name": "Bob_1",
+      "module_name": "Bob_1",
+      "hgl_loc": {
+        "file": "sample1.scala",
+        "begin_line": 21,
+        "end_line": 21,
+        "begin_column": 7,
+        "end_column": 7
+      },
+      "port_vars": [
+        {
+          "var_name": "x",
+          "hgl_loc": {
+            "file": "sample1.scala",
+            "begin_line": 26,
+            "end_line": 26,
+            "begin_column": 11,
+            "end_column": 11
+          },
+          "type_name": "logic",
+          "packed_range": [
+            15,
+            0
+          ],
+          "value": {
+            "sig_name": "x"
+          }
+        },
+        {
+          "var_name": "in",
+          "hgl_loc": {
+            "file": "sample1.scala",
+            "begin_line": 22,
+            "end_line": 22,
+            "begin_column": 7,
+            "end_column": 7
+          },
+          "type_name": "logic",
+          "packed_range": [
+            15,
+            0
+          ],
+          "value": {
+            "sig_name": "in"
+          }
+        },
+        {
+          "var_name": "out",
+          "hgl_loc": {
+            "file": "sample1.scala",
+            "begin_line": 23,
+            "end_line": 23,
+            "begin_column": 7,
+            "end_column": 7
+          },
+          "type_name": "logic",
+          "packed_range": [
+            15,
+            0
+          ],
+          "value": {
+            "sig_name": "x"
+          }
+        }
+      ],
+      "children": []
+    },
+    {
+      "kind": "module",
+      "obj_name": "Top",
+      "module_name": "Top",
+      "hgl_loc": {
+        "file": "sample1.scala",
+        "begin_line": 3,
+        "end_line": 3,
+        "begin_column": 7,
+        "end_column": 7
+      },
+      "port_vars": [
+        {
+          "var_name": "in",
+          "hgl_loc": {
+            "file": "sample1.scala",
+            "begin_line": 4,
+            "end_line": 4,
+            "begin_column": 7,
+            "end_column": 7
+          },
+          "type_name": "logic",
+          "packed_range": [
+            15,
+            0
+          ],
+          "value": {
+            "sig_name": "in"
+          }
+        },
+        {
+          "var_name": "out",
+          "hgl_loc": {
+            "file": "sample1.scala",
+            "begin_line": 5,
+            "end_line": 5,
+            "begin_column": 7,
+            "end_column": 7
+          },
+          "type_name": "logic",
+          "packed_range": [
+            15,
+            0
+          ],
+          "value": {
+            "sig_name": "out"
+          }
+        }
+      ],
+      "children": [
+        {
+          "module_name": "Bob",
+          "inst_name": "b0",
+          "hgl_loc": {
+            "file": "sample1.scala",
+            "begin_line": 19,
+            "end_line": 19,
+            "begin_column": 17,
+            "end_column": 17
+          }
+        },
+        {
+          "module_name": "Bob_1",
+          "inst_name": "b1",
+          "hgl_loc": {
+            "file": "sample1.scala",
+            "begin_line": 19,
+            "end_line": 19,
+            "begin_column": 17,
+            "end_column": 17
+          }
+        }
+      ]
+    }
+  ]
+}
