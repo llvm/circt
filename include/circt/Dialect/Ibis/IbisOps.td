@@ -213,7 +213,7 @@ def StaticBlockOp : IbisOp<"sblock", [
 
   let arguments = (ins
     Variadic<AnyType>:$inputs,
-    OptionalAttr<ConfinedAttr<I32Attr, [IntMinValue<1>]>>:$maxThreads
+    OptionalAttr<ConfinedAttr<I64Attr, [IntMinValue<1>]>>:$maxThreads
   );
   let results = (outs Variadic<AnyType>:$outputs);
   let regions = (region SizedRegion<1>:$body);
@@ -237,6 +237,48 @@ def StaticBlockOp : IbisOp<"sblock", [
       ensureTerminator(*region, $_builder, $_state.location);
     }]>
   ];
+}
+
+def InlineStaticBlockBeginOp : IbisOp<"sblock.inline.begin", [
+  HasParent<"MethodOp">
+]> {
+  let summary = "Ibis inline static block begin marker";
+  let description = [{
+    The `ibis.sblock.inline.begin` operation is a marker that indicates the
+    begin of an inline static block.
+    The operation is used to maintain `ibis.sblocks` while in the Ibis inline
+    phase (to facilitate e.g. mem2reg).
+
+    The operation:
+    1. denotes the begin of the sblock
+    2. carries whatever attributes that the source `ibis.sblock` carried.
+    3. is considered side-effectfull.
+  }];
+
+  let assemblyFormat = "attr-dict";
+  let extraClassDeclaration = [{
+    /// Return the `InlineStaticBlockEndOp` that this operation is referencing.
+    InlineStaticBlockEndOp getEndOp();
+  }];
+}
+
+def InlineStaticBlockEndOp : IbisOp<"sblock.inline.end", [
+  HasParent<"MethodOp">
+]> {
+  let summary = "Ibis inline static block end marker";
+  let description = [{
+    The `ibis.sblock.inline.end` operation is a marker that indicates the
+    end of an inline static block.
+    The operation is used to maintain `ibis.sblocks` while in the Ibis inline
+    phase (to facilitate e.g. mem2reg).
+  }];
+
+  let assemblyFormat = "attr-dict";
+
+  let extraClassDeclaration = [{
+    /// Return the `InlineStaticBlockBeginOp` that this operation is referencing.
+    InlineStaticBlockBeginOp getBeginOp();
+  }];
 }
 
 def BlockReturnOp : IbisOp<"sblock.return", [
