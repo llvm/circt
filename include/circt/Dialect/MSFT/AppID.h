@@ -20,52 +20,56 @@
 #include "llvm/ADT/DenseMap.h"
 
 namespace circt {
-namespace igraph {
-class InstanceGraph;
-}
 
 namespace msft {
 
 class AppIDIndex {
 public:
   AppIDIndex(Operation *mlirTop);
+  ~AppIDIndex() {
+    for (auto [appId, childAppIDs] : containerAppIDs)
+      delete childAppIDs;
+  }
+  bool isValid() const { return valid; }
 
   /// Get the dynamic instance for a particular appid path.
-  DynamicInstanceOp getInstance(AppIDPathAttr path);
+  FailureOr<DynamicInstanceOp> getInstance(AppIDPathAttr path) const;
 
 private:
   class ChildAppIDs {
   public:
-    ChildAppIDs() : processed(false) {}
+    ChildAppIDs() {}
 
-    LogicalResult addChildAppID(AppIDAttr id, Operation *op);
-    LogicalResult process(hw::HWModuleLike modToProcess,
-                          igraph::InstanceGraph &);
+    LogicalResult add(AppIDAttr id, Operation *op, bool inherited);
+    FailureOr<Operation *> lookup(Operation *, AppIDAttr id) const;
+    auto getAppIDs() const { return llvm::make_first_range(childAppIDPaths); }
 
   private:
-    hw::HWModuleLike mod;
-    bool processed;
-
     // The operation involved in an appid.
     DenseMap<AppIDAttr, Operation *> childAppIDPaths;
   };
 
   /// Get the subinstance (relative to 'submod') for the subpath.
-  DynamicInstanceOp getSubInstance(hw::HWModuleLike mod,
-                                   InstanceHierarchyOp inst,
-                                   ArrayRef<AppIDAttr> subpath);
+  FailureOr<DynamicInstanceOp>
+  getSubInstance(hw::HWModuleLike mod, Operation *dynInstParent,
+                 ArrayRef<AppIDAttr> subpath) const;
+  FailureOr<std::pair<DynamicInstanceOp, hw::InnerSymbolOpInterface>>
+  getSubInstance(hw::HWModuleLike mod, Operation *inst, AppIDAttr appid) const;
+  DynamicInstanceOp getOrCreate(Operation *parent, hw::InnerRefAttr name) const;
 
-  // The 'top' MLIR module. Not necessarily a `mlir::ModuleOp` since this will
-  // eventually be replaced by `hw::DesignOp`.
-  Operation *mlirTop;
+  FailureOr<const ChildAppIDs *> process(hw::HWModuleLike modToProcess);
 
   // Map modules to their cached child app ID indexes.
-  DenseMap<hw::HWModuleLike, ChildAppIDs> containerAppIDs;
+  DenseMap<hw::HWModuleLike, ChildAppIDs *> containerAppIDs;
 
   hw::HWSymbolCache symCache;
-  DenseMap<SymbolRefAttr, InstanceHierarchyOp> dynHierRoots;
-  DenseMap<DynamicInstanceOp, DenseMap<hw::InnerRefAttr, DynamicInstanceOp>>
-      childIndex;
+  bool valid;
+  Operation *mlirTop;
+
+  // Caches
+  mutable DenseMap<SymbolRefAttr, InstanceHierarchyOp> dynHierRoots;
+  using NamedChildren = DenseMap<hw::InnerRefAttr, DynamicInstanceOp>;
+  mutable DenseMap<Operation *, NamedChildren> dynInstChildLookup;
 };
 
 } // namespace msft

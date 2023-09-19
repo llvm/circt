@@ -230,11 +230,18 @@ Attribute InnerRefAttr::parse(AsmParser &p, Type type) {
   return InnerRefAttr::get(attr.getRootReference(), attr.getLeafReference());
 }
 
+static void printSymbolName(AsmPrinter &p, StringAttr sym) {
+  if (sym)
+    p.printSymbolName(sym.getValue());
+  else
+    p.printSymbolName({});
+}
+
 void InnerRefAttr::print(AsmPrinter &p) const {
   p << "<";
-  p.printSymbolName(getModule().getValue());
+  printSymbolName(p, getModule());
   p << "::";
-  p.printSymbolName(getName().getValue());
+  printSymbolName(p, getName());
   p << ">";
 }
 

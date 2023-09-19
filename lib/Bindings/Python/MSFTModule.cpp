@@ -148,7 +148,11 @@ private:
 
 class PyAppIDIndex {
 public:
-  PyAppIDIndex(MlirOperation root) { index = circtMSFTAppIDIndexGet(root); }
+  PyAppIDIndex(MlirOperation root) {
+    index = circtMSFTAppIDIndexGet(root);
+    if (index.ptr == nullptr)
+      throw std::runtime_error("AppIDIndex failed to build");
+  }
   PyAppIDIndex(const PyAppIDIndex &) = delete;
   ~PyAppIDIndex() { circtMSFTAppIDIndexFree(index); }
 

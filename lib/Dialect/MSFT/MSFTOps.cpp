@@ -170,8 +170,14 @@ static ParseResult parseImplicitInnerRef(OpAsmParser &p,
 }
 void printImplicitInnerRef(OpAsmPrinter &p, Operation *,
                            hw::InnerRefAttr innerRef) {
-  p << SymbolRefAttr::get(innerRef.getModule(),
-                          {FlatSymbolRefAttr::get(innerRef.getName())});
+  MLIRContext *ctxt = innerRef.getContext();
+  StringRef innerRefNameStr, moduleStr;
+  if (innerRef.getName())
+    innerRefNameStr = innerRef.getName().getValue();
+  if (innerRef.getModule())
+    moduleStr = innerRef.getModule().getValue();
+  p << SymbolRefAttr::get(ctxt, moduleStr,
+                          {FlatSymbolRefAttr::get(ctxt, innerRefNameStr)});
 }
 
 /// Parse an parameter list if present. Same format as HW dialect.

@@ -282,7 +282,10 @@ DEFINE_C_API_PTR_METHODS(CirctMSFTAppIDIndex, circt::msft::AppIDIndex)
 /// Create an index of appids through which to do appid lookups efficiently.
 MLIR_CAPI_EXPORTED CirctMSFTAppIDIndex
 circtMSFTAppIDIndexGet(MlirOperation root) {
-  return wrap(new AppIDIndex(unwrap(root)));
+  auto idx = new AppIDIndex(unwrap(root));
+  if (idx->isValid())
+    return wrap(idx);
+  return CirctMSFTAppIDIndex{nullptr};
 }
 
 /// Free an AppIDIndex.
@@ -293,6 +296,9 @@ MLIR_CAPI_EXPORTED void circtMSFTAppIDIndexFree(CirctMSFTAppIDIndex index) {
 /// Lookup a DynamicInstanceOp from an appid path.
 MLIR_CAPI_EXPORTED MlirOperation circtMSFTAppIDIndexGetInstance(
     CirctMSFTAppIDIndex index, MlirAttribute appIDPath) {
-  return wrap(
-      unwrap(index)->getInstance(cast<AppIDPathAttr>(unwrap(appIDPath))));
+  FailureOr<DynamicInstanceOp> dynInst =
+      unwrap(index)->getInstance(cast<AppIDPathAttr>(unwrap(appIDPath)));
+  if (failed(dynInst))
+    return MlirOperation{nullptr};
+  return wrap(*dynInst);
 }

@@ -294,13 +294,13 @@ with ir.Context() as ctx, ir.Location.unknown():
 
     top = hw.HWModuleOp(name='Top', input_ports=[], output_ports=[])
     with ir.InsertionPoint(top.add_entry_block()):
-      inst = mymod.instantiate("myMod", sym_name="myMod")
+      inst = mymod.instantiate("myMod")
       hw.OutputOp([])
 
   appid_idx = msft.AppIDIndex(mod.operation)
   dyn_inst = appid_idx.get_instance(
-      msft.AppIDPathAttr.get(ir.FlatSymbolRefAttr.get("MyMod"),
+      msft.AppIDPathAttr.get(ir.FlatSymbolRefAttr.get("Top"),
                              [msft.AppIDAttr.get("bar", 2)]))
-  print(dyn_inst)
-  print(mod.operation.verify())
+  print(dyn_inst.verify())
+  # print(mod.operation.verify())
   print(mod)

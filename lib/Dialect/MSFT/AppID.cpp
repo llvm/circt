@@ -13,7 +13,7 @@
 using namespace circt;
 using namespace msft;
 
-AppIDIndex::AppIDIndex(Operation *mlirTop) : mlirTop(mlirTop) {
+AppIDIndex::AppIDIndex(Operation *mlirTop) : valid(true), mlirTop(mlirTop) {
   Block &topBlock = mlirTop->getRegion(0).front();
   symCache.addDefinitions(mlirTop);
   symCache.freeze();
@@ -21,19 +21,28 @@ AppIDIndex::AppIDIndex(Operation *mlirTop) : mlirTop(mlirTop) {
   for (auto instHierOp : topBlock.getOps<InstanceHierarchyOp>()) {
     dynHierRoots[instHierOp.getTopModuleRefAttr()] = instHierOp;
     instHierOp.walk([this](DynamicInstanceOp dyninst) {
-      auto &childInsts = childIndex[dyninst];
+      auto &childInsts = dynInstChildLookup[dyninst];
       for (auto child : dyninst.getOps<DynamicInstanceOp>())
         childInsts[child.getInstanceRefAttr()] = child;
     });
   }
 
-  igraph::InstanceGraph graph(mlirTop);
+  for (auto mod : topBlock.getOps<hw::HWModuleLike>())
+    if (failed(process(mod))) {
+      valid = false;
+      break;
+    }
 }
 
-DynamicInstanceOp AppIDIndex::getInstance(AppIDPathAttr path) {
+FailureOr<DynamicInstanceOp> AppIDIndex::getInstance(AppIDPathAttr path) const {
   MLIRContext *ctxt = path.getContext();
   FlatSymbolRefAttr rootSym = path.getRoot();
-  auto rootMod = dyn_cast<hw::HWModuleLike>(symCache.getDefinition(rootSym));
+  auto rootMod =
+      dyn_cast_or_null<hw::HWModuleLike>(symCache.getDefinition(rootSym));
+  if (!rootMod)
+    return mlir::emitError(UnknownLoc::get(path.getContext()),
+                           "could not find module '")
+           << rootSym << "'";
 
   auto &dynHierRoot = dynHierRoots[rootSym];
   if (dynHierRoot == nullptr) {
@@ -45,51 +54,137 @@ DynamicInstanceOp AppIDIndex::getInstance(AppIDPathAttr path) {
   return getSubInstance(rootMod, dynHierRoot, path.getPath());
 }
 
-DynamicInstanceOp AppIDIndex::getSubInstance(hw::HWModuleLike submod,
-                                             InstanceHierarchyOp inst,
-                                             ArrayRef<AppIDAttr> subpath) {
-  return nullptr;
+DynamicInstanceOp AppIDIndex::getOrCreate(Operation *parent,
+                                          hw::InnerRefAttr name) const {
+  NamedChildren &children = dynInstChildLookup[parent];
+  DynamicInstanceOp &child = children[name];
+  if (child)
+    return child;
+  auto dyninst = OpBuilder::atBlockEnd(&parent->getRegion(0).front())
+                     .create<DynamicInstanceOp>(
+                         UnknownLoc::get(parent->getContext()), name);
+  dyninst->getRegion(0).emplaceBlock();
+  return dyninst;
 }
 
-LogicalResult AppIDIndex::ChildAppIDs::addChildAppID(AppIDAttr id,
-                                                     Operation *op) {
-  hw::HWModuleLike owner = op->getParentOfType<hw::HWModuleLike>();
-  if (!mod)
-    mod = owner;
-  assert(mod == owner && "Owner doesn't match");
+FailureOr<std::pair<DynamicInstanceOp, hw::InnerSymbolOpInterface>>
+AppIDIndex::getSubInstance(hw::HWModuleLike parentTgtMod, Operation *parent,
+                           AppIDAttr appid) const {
+  do {
+    auto fChildAppID = containerAppIDs.find(parentTgtMod);
+    if (fChildAppID == containerAppIDs.end())
+      return parentTgtMod.emitOpError("Could not find child appid '")
+             << appid << "'";
+    const ChildAppIDs *cAppIDs = fChildAppID->getSecond();
+    FailureOr<Operation *> appidOpOrFail = cAppIDs->lookup(parentTgtMod, appid);
+    if (failed(appidOpOrFail))
+      return failure();
+
+    auto appidOp = cast<hw::InnerSymbolOpInterface>(*appidOpOrFail);
+    auto innerRef = hw::InnerRefAttr::get(parentTgtMod.getModuleNameAttr(),
+                                          appidOp.getInnerNameAttr());
+    if (auto opAppid =
+            appidOp->getAttrOfType<AppIDAttr>(AppIDAttr::AppIDAttrName)) {
+      if (opAppid != appid)
+        return appidOp->emitOpError("Wrong appid '")
+               << opAppid << "'. Expected '" << appid << "'.";
+
+      return std::make_pair(getOrCreate(parent, innerRef), appidOp);
+    }
+
+    if (auto inst = dyn_cast<hw::HWInstanceLike>(appidOp.getOperation())) {
+      parentTgtMod = cast<hw::HWModuleLike>(
+          symCache.getDefinition(inst.getReferencedModuleNameAttr()));
+      parent = getOrCreate(parent, innerRef);
+    } else {
+      return parentTgtMod.emitError("could not find appid '") << appid << "'";
+    }
+  } while (true);
 }
 
-LogicalResult
-AppIDIndex::ChildAppIDs::process(hw::HWModuleLike modToProcess,
-                                 igraph::InstanceGraph &instLookup) {
-  if (!mod)
-    mod = modToProcess;
-  assert(mod == modToProcess && "Process mod doesn't match");
-  assert(!processed && "Already processed");
+FailureOr<DynamicInstanceOp>
+AppIDIndex::getSubInstance(hw::HWModuleLike mod, Operation *dynInstParent,
+                           ArrayRef<AppIDAttr> subpath) const {
 
-  mod.walk([&](Operation *op) {
-    // If an operation has an "appid" dialect attribute
-    // "local" appid.
+  FailureOr<std::pair<DynamicInstanceOp, hw::InnerSymbolOpInterface>>
+      instOpFail;
+  for (auto component : subpath) {
+    if (!mod)
+      return dynInstParent->emitError("Could not find appid '")
+             << component << "'";
+
+    instOpFail = getSubInstance(mod, dynInstParent, component);
+    if (failed(instOpFail))
+      return failure();
+
+    auto [dyninst, op] = *instOpFail;
+    if (auto inst = dyn_cast<hw::HWInstanceLike>(op.getOperation()))
+      mod = dyn_cast<hw::HWModuleLike>(
+          symCache.getDefinition(inst.getReferencedModuleNameAttr()));
+    else
+      mod = nullptr;
+    dynInstParent = dyninst;
+  }
+  return (*instOpFail).first;
+}
+
+LogicalResult AppIDIndex::ChildAppIDs::add(AppIDAttr id, Operation *op,
+                                           bool inherited) {
+  auto innerSym = dyn_cast<hw::InnerSymbolOpInterface>(op);
+  if (!innerSym || !innerSym.getInnerName())
+    return op->emitOpError(
+        "to carry an appid, this op must have an inner symbol");
+
+  if (childAppIDPaths.find(id) != childAppIDPaths.end()) {
+    return op->emitOpError("Found multiple identical AppIDs in same module")
+               .attachNote(childAppIDPaths[id]->getLoc())
+           << "first AppID located here."
+           << (inherited ? " Must insert appid to differentiate one instance "
+                           "branch from the other."
+                         : "");
+  }
+  childAppIDPaths[id] = op;
+  return success();
+}
+
+FailureOr<Operation *> AppIDIndex::ChildAppIDs::lookup(Operation *op,
+                                                       AppIDAttr id) const {
+  auto f = childAppIDPaths.find(id);
+  if (f == childAppIDPaths.end())
+    return op->emitError("could not find appid '") << id << "'";
+  return f->second;
+}
+
+FailureOr<const AppIDIndex::ChildAppIDs *>
+AppIDIndex::process(hw::HWModuleLike mod) {
+  ChildAppIDs *&appIDs = containerAppIDs[mod];
+  if (appIDs != nullptr)
+    return appIDs;
+  appIDs = new ChildAppIDs();
+
+  auto done = mod.walk([&](Operation *op) {
     if (auto appid = op->getAttrOfType<AppIDAttr>(AppIDAttr::AppIDAttrName)) {
-      if (localAppIDs.find(appid) != localAppIDs.end()) {
-        op->emitOpError("Found multiple identical AppIDs in same module")
-                .attachNote(localAppIDs[appid]->getLoc())
-            << "first AppID located here";
-      } else {
-        localAppIDs[appid] = op;
-      }
-      localAppIDBases.insert(appid.getName());
+      if (failed(appIDs->add(appid, op, false)))
+        return WalkResult::interrupt();
+      return WalkResult::advance();
     }
 
-    // Instance ops should expose their module's AppIDs recursively. Track
-    // the number of instances which contain a base name.
-    if (auto inst = dyn_cast<InstanceOp>(op)) {
-      auto targetMod = dyn_cast<MSFTModuleOp>(
-          topLevelSyms.getDefinition(inst.getModuleNameAttr()));
-      if (targetMod && targetMod.getChildAppIDBases())
-        for (auto base :
-             targetMod.getChildAppIDBasesAttr().getAsRange<StringAttr>())
-          appBaseCounts[base] += 1;
+    if (auto inst = dyn_cast<hw::HWInstanceLike>(op)) {
+      auto tgtMod = dyn_cast<hw::HWModuleLike>(
+          symCache.getDefinition(inst.getReferencedModuleNameAttr()));
+      assert(tgtMod && "invalid module reference");
+      FailureOr<const ChildAppIDs *> childIds = process(tgtMod);
+      if (failed(childIds))
+        return WalkResult::interrupt();
+
+      for (AppIDAttr appid : (*childIds)->getAppIDs())
+        if (failed(appIDs->add(appid, inst, true)))
+          return WalkResult::interrupt();
     }
+    return WalkResult::advance();
   });
+
+  if (done.wasInterrupted())
+    return failure();
+  return appIDs;
 }
