@@ -133,4 +133,22 @@ def IbisReblock : Pass<"ibis-reblock", "ibis::MethodOp"> {
   let constructor = "circt::ibis::createReblockPass()";
 }
 
+def IbisInlineSBlocks : Pass<"ibis-inline-sblocks", "ibis::MethodOp"> {
+  let summary = "Inlines `ibis.sblock` operations as MLIR blocks";
+  let description = [{
+    Inlines `ibis.sblock` operations, by creating MLIR blocks and `cf`
+    operations, while adding attributes to the parent operation about
+    `sblock`-specific attributes.
+
+    The parent attributes are located under the `ibis.blockinfo` identifier as
+    a dictionary attribute.
+    Each entry in the dictionary consists of:
+    - Key: an ID (numerical) string identifying the block.
+    - Value: a dictionary of attributes. As a minimum this will contain a
+      `loc`-keyed attribute specifying the location of the block.
+  }];
+  let constructor = "circt::ibis::createInlineSBlocksPass()";
+  let dependentDialects = ["mlir::cf::ControlFlowDialect"];
+}
+
 #endif // CIRCT_DIALECT_IBIS_PASSES_TD

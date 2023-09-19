@@ -4,14 +4,14 @@ hw.module.extern @Foo()
 
 hw.module @Top() {
   // expected-error @+1 {{Unknown device type 'WACKY'}}
-  hw.instance "foo1" @Foo() -> () {"loc:" = #msft.physloc<WACKY, 0, 0, 0> } 
+  hw.instance "foo1" @Foo() -> () {"loc:" = #msft.physloc<WACKY, 0, 0, 0> }
 }
 
 // -----
 
 module {
   // expected-error @+1 {{unknown attribute `foo` in dialect `msft`}}
-  hw.instance "foo1" @Foo() -> () {"loc:" = #msft.foo<""> } 
+  hw.instance "foo1" @Foo() -> () {"loc:" = #msft.foo<""> }
 }
 
 // -----
@@ -48,11 +48,11 @@ msft.module @M {} (%x : i32) {
 
 // -----
 
-msft.module @foo {} (%in0 : i32, %clk : i1) -> (out: i32) {
+msft.module @foo {} (%in0 : i32, %clk : !seq.clock) -> (out: i32) {
 // expected-error @+1 {{'msft.hlc.linear' op expected only hw, comb, and msft dialect ops inside the datapath.}}
   %0 = msft.hlc.linear clock %clk : i32 {
-    %c1_i1 = hw.constant 1 : i1
-    %0 = seq.compreg %in0, %c1_i1 : i32
+    %clk_high = seq.const_clock high
+    %0 = seq.compreg %in0, %clk_high : i32
     msft.output %0 : i32
   }
   msft.output %0 : i32

@@ -6,13 +6,22 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
+#include "circt/Dialect/Arc/ArcOps.h"
+#include "circt/Dialect/Arc/ArcPasses.h"
 #include "circt/Support/LLVM.h"
 #include "circt/Support/SymCache.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
 #define DEBUG_TYPE "arc-latency-retiming"
+
+namespace circt {
+namespace arc {
+#define GEN_PASS_DEF_LATENCYRETIMING
+#include "circt/Dialect/Arc/ArcPasses.h.inc"
+} // namespace arc
+} // namespace circt
 
 using namespace circt;
 using namespace arc;
@@ -112,7 +121,8 @@ LatencyRetimingPattern::matchAndRewrite(StateOp op,
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct LatencyRetimingPass : LatencyRetimingBase<LatencyRetimingPass> {
+struct LatencyRetimingPass
+    : arc::impl::LatencyRetimingBase<LatencyRetimingPass> {
   void runOnOperation() override;
 };
 } // namespace

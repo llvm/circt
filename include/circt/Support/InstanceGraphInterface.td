@@ -41,13 +41,17 @@ def InstanceGraphInstanceOpInterface : OpInterface<"InstanceOpInterface"> {
     /*defaultImplementation=*/[{ return $_op.getModuleNameAttr().getAttr(); }]>,
 
     InterfaceMethod<[{
-      Get the referenced module (slow, unsafe).  This function directly accesses 
+      Get the referenced module (slow, unsafe).  This function directly accesses
       the parent operation to lookup a symbol, which is unsafe in many contexts.
     }],
     "::mlir::Operation *", "getReferencedModuleSlow", (ins)>,
 
     InterfaceMethod<"Get the referenced module via a symbol table.",
-    "::mlir::Operation *", "getReferencedModule", (ins "SymbolTable&":$symtbl)>,
+    "::mlir::Operation *", "getReferencedModule", (ins "SymbolTable&":$symtbl),
+    /*methodBody=*/[{}],
+    /*defaultImplementation=*/[{
+      return symtbl.lookup(getReferencedModuleName());
+    }]>,
   ];
 }
 
@@ -68,7 +72,7 @@ def InstanceGraphModuleOpInterface : OpInterface<"ModuleOpInterface"> {
     /*methodBody=*/[{}],
     /*defaultImplementation=*/[{ return $_op.getNameAttr(); }]>,
   ];
-  
+
 }
 
 #endif // CIRCT_SUPPORT_INSTANCEGRAPH_INSTANCEGRAPHINTERFACE_TD

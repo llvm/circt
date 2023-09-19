@@ -26,12 +26,12 @@ hw.module.extern @NoArg<param: i42>()
 // CHECK-LABEL: hw.module @UseParameters<p1: i42>() {
 hw.module @UseParameters<p1: i42>() {
   // CHECK: hw.instance "verbatimparam" @NoArg<param: i42 =
-  // CHECK-SAME: #hw.param.verbatim<"\22FOO\22">>() -> () 
+  // CHECK-SAME: #hw.param.verbatim<"\22FOO\22">>() -> ()
   hw.instance "verbatimparam" @NoArg<param: i42 = #hw.param.verbatim<"\"FOO\"">>() -> ()
 
   // CHECK: hw.instance "verbatimparam" @NoArg<param: i42 =
-  // CHECK-SAME: #hw.param.expr.add<#hw.param.verbatim<"xxx">, 17>>() -> () 
-  hw.instance "verbatimparam" @NoArg<param: i42 = #hw.param.expr.add<#hw.param.verbatim<"xxx">, 17>>() -> () 
+  // CHECK-SAME: #hw.param.expr.add<#hw.param.verbatim<"xxx">, 17>>() -> ()
+  hw.instance "verbatimparam" @NoArg<param: i42 = #hw.param.expr.add<#hw.param.verbatim<"xxx">, 17>>() -> ()
   hw.output
 }
 
@@ -53,7 +53,7 @@ hw.module @affineCanonicalization<p1: i4, p2: i4>()
   // CHECK-NEXT: %4 = hw.param.value i4 =
   // CHECK-SAME:     #hw.param.expr.add<#hw.param.expr.mul<#hw.param.decl.ref<"p1">, 2>, 4>
   %4 = hw.param.value i4 = #hw.param.expr.add<#hw.param.expr.add<#hw.param.decl.ref<"p1">, 4>, #hw.param.decl.ref<"p1">>
- 
+
   // CHECK-NEXT: %5 = hw.param.value i4 = #hw.param.decl.ref<"p1">
   %5 = hw.param.value i4 = #hw.param.expr.add<8, #hw.param.decl.ref<"p1">, 8>
 
@@ -64,7 +64,7 @@ hw.module @affineCanonicalization<p1: i4, p2: i4>()
   // CHECK-SAME: #hw.param.expr.mul<#hw.param.decl.ref<"p1">, 4>
   %7 = hw.param.value i4 = #hw.param.expr.shl<#hw.param.decl.ref<"p1">, 2>
 
-  // CHECK-NEXT: %8 = hw.param.value i4 = 
+  // CHECK-NEXT: %8 = hw.param.value i4 =
   // CHECK-SAME: #hw.param.expr.add<#hw.param.expr.mul<#hw.param.decl.ref<"p1">, #hw.param.decl.ref<"p2">, 2>,
   // CHECK-SAME:                    #hw.param.expr.mul<#hw.param.decl.ref<"p2">, 6>>
   %8 = hw.param.value i4 = #hw.param.expr.mul<#hw.param.expr.add<#hw.param.decl.ref<"p1">, 3>, 2, #hw.param.decl.ref<"p2">>
@@ -127,7 +127,7 @@ hw.module @associativeOrdering<p1: i4, p2: i4>()
   // CHECK-NEXT: %4 = hw.param.value i4 =
   // CHECK-SAME:     add<#hw.param.expr.mul<{{.*}}>, #hw.param.verbatim<"xxx">>
   %4 = hw.param.value i4 = #hw.param.expr.add<#hw.param.verbatim<"xxx">, #hw.param.expr.mul<#hw.param.decl.ref<"p1">, 4>>
- 
+
   // Expressions sorted by opcode.
   // CHECK-NEXT: %5 = {{.*add<#hw.param.expr.mul<.*>, #hw.param.expr.xor<.*>>}}
   %5 = hw.param.value i4 =
@@ -183,7 +183,7 @@ hw.module @parameterizedTypesInstance
 hw.module @parameterizedCombSeq<param: i32>
 // CHECK-SAME: %a: !hw.int<#hw.param.decl.ref<"param">>
   (%a: !hw.int<#hw.param.decl.ref<"param">>,
-    %clk : i1) {
+    %clk : !seq.clock) {
 
   // CHECK: %0 = comb.add %a, %a : !hw.int<#hw.param.decl.ref<"param">>
   %0 = comb.add %a, %a : !hw.int<#hw.param.decl.ref<"param">>

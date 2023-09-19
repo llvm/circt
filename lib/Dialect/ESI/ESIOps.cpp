@@ -46,9 +46,10 @@ ParseResult ChannelBufferOp::parse(OpAsmParser &parser,
       ChannelType::get(parser.getBuilder().getContext(), innerOutputType);
   result.addTypes({outputType});
 
+  auto clkTy = seq::ClockType::get(result.getContext());
   auto i1 = IntegerType::get(result.getContext(), 1);
-  if (parser.resolveOperands(operands, {i1, i1, outputType}, inputOperandsLoc,
-                             result.operands))
+  if (parser.resolveOperands(operands, {clkTy, i1, outputType},
+                             inputOperandsLoc, result.operands))
     return failure();
   return success();
 }
@@ -81,8 +82,9 @@ ParseResult PipelineStageOp::parse(OpAsmParser &parser,
       ChannelType::get(parser.getBuilder().getContext(), innerOutputType);
   result.addTypes({type});
 
+  auto clkTy = seq::ClockType::get(result.getContext());
   auto i1 = IntegerType::get(result.getContext(), 1);
-  if (parser.resolveOperands(operands, {i1, i1, type}, inputOperandsLoc,
+  if (parser.resolveOperands(operands, {clkTy, i1, type}, inputOperandsLoc,
                              result.operands))
     return failure();
   return success();

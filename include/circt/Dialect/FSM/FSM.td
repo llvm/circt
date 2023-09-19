@@ -27,6 +27,10 @@ def FSMDialect : Dialect {
 
   // Opt-out of properties for now, must migrate by LLVM 19.  #5273.
   let usePropertiesForAttributes = 0;
+
+  let dependentDialects = [
+    "circt::seq::SeqDialect"
+  ];
 }
 
 // Base class for the types in this dialect.

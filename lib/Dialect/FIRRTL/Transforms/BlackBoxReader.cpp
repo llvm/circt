@@ -373,8 +373,8 @@ bool BlackBoxReaderPass::runOnAnnotation(Operation *op, Annotation anno,
 /// directory.
 StringAttr BlackBoxReaderPass::loadFile(Operation *op, StringRef inputPath,
                                         OpBuilder &builder) {
-  auto fileName = llvm::sys::path::filename(inputPath);
-  LLVM_DEBUG(llvm::dbgs() << "Add black box source  `" << fileName << "` from `"
+  LLVM_DEBUG(llvm::dbgs() << "Add black box source  `"
+                          << llvm::sys::path::filename(inputPath) << "` from `"
                           << inputPath << "`\n");
 
   // Open and read the input file.

@@ -457,7 +457,8 @@ void InstanceDeclOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 StringRef InstanceDeclOp::getInstanceName() { return getName(); }
 StringAttr InstanceDeclOp::getInstanceNameAttr() { return getNameAttr(); }
 
-Operation *InstanceDeclOp::getReferencedModule(const hw::HWSymbolCache *cache) {
+Operation *
+InstanceDeclOp::getReferencedModuleCached(const hw::HWSymbolCache *cache) {
   if (cache)
     if (auto *result = cache->getDefinition(getModuleNameAttr()))
       return result;
@@ -466,12 +467,9 @@ Operation *InstanceDeclOp::getReferencedModule(const hw::HWSymbolCache *cache) {
   return topLevelModuleOp.lookupSymbol(getModuleName());
 }
 
-Operation *InstanceDeclOp::getReferencedModule(SymbolTable &symtbl) {
-  return symtbl.lookup(getModuleNameAttr().getValue());
-}
-
 Operation *InstanceDeclOp::getReferencedModuleSlow() {
-  return getReferencedModule(/*cache=*/nullptr);
+  auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
+  return topLevelModuleOp.lookupSymbol(getModuleName());
 }
 
 LogicalResult

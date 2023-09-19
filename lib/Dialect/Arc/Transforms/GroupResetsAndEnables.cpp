@@ -6,17 +6,25 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/Arc/ArcOps.h"
+#include "circt/Dialect/Arc/ArcPasses.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/Dominance.h"
 #include "mlir/IR/OpDefinition.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "arc-group-resets-and-enables"
+
+namespace circt {
+namespace arc {
+#define GEN_PASS_DEF_GROUPRESETSANDENABLES
+#include "circt/Dialect/Arc/ArcPasses.h.inc"
+} // namespace arc
+} // namespace circt
 
 using namespace circt;
 using namespace arc;
@@ -182,7 +190,7 @@ struct GroupAssignmentsInIfPattern : public OpRewritePattern<scf::IfOp> {
 
 namespace {
 struct GroupResetsAndEnablesPass
-    : public GroupResetsAndEnablesBase<GroupResetsAndEnablesPass> {
+    : public arc::impl::GroupResetsAndEnablesBase<GroupResetsAndEnablesPass> {
 
   void runOnOperation() override;
   LogicalResult runOnModel(ModelOp modelOp);

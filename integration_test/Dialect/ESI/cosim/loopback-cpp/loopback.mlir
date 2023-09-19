@@ -1,7 +1,7 @@
 // REQUIRES: esi-cosim
 // RUN: rm -rf %t && mkdir %t && cd %t
 // RUN: circt-opt %s --esi-connect-services --esi-emit-cpp-api="output-file=ESISystem.h" --esi-emit-collateral=schema-file=%t/schema.capnp --esi-clean-metadata > %t/4.mlir
-// RUN: circt-opt %t/4.mlir --lower-esi-to-physical --lower-esi-ports --lower-esi-to-hw --export-split-verilog -o %t/3.mlir
+// RUN: circt-opt %t/4.mlir --lower-esi-to-physical --lower-esi-ports --lower-esi-to-hw --lower-seq-to-sv --export-split-verilog -o %t/3.mlir
 // RUN: circt-translate %t/4.mlir -export-esi-capnp -verify-diagnostics > %t/schema.capnp
 
 // Build the project using the CMakeLists.txt from this directory. Just move
@@ -35,13 +35,13 @@
 //   - ./loopback_test localhost:$port ../hw/schema.capn
 
 
-hw.module @intLoopback(%clk:i1, %rst:i1) -> () {
+hw.module @intLoopback(%clk: !seq.clock, %rst:i1) -> () {
   %cosimRecv = esi.cosim %clk, %rst, %bufferedResp, "IntTestEP" {name_ext="loopback"} : !esi.channel<i32> -> !esi.channel<i32>
   %bufferedResp = esi.buffer %clk, %rst, %cosimRecv {stages=1} : i32
 }
 
 !KeyText = !hw.struct<text: !hw.array<6xi14>, key: !hw.array<4xi8>>
-hw.module @twoListLoopback(%clk:i1, %rst:i1) -> () {
+hw.module @twoListLoopback(%clk: !seq.clock, %rst:i1) -> () {
   %cosim = esi.cosim %clk, %rst, %resp, "KeyTextEP" : !esi.channel<!KeyText> -> !esi.channel<!KeyText>
   %resp = esi.buffer %clk, %rst, %cosim {stages=4} : !KeyText
 }
@@ -51,15 +51,15 @@ esi.service.decl @HostComms {
   esi.service.to_client @Recv : !esi.channel<i8>
 }
 
-hw.module @TwoChanLoopback(%clk: i1) -> () {
+hw.module @TwoChanLoopback(%clk: !seq.clock) -> () {
   %dataIn = esi.service.req.to_client <@HostComms::@Recv> (["loopback_tohw"]) : !esi.channel<i8>
   esi.service.req.to_server %dataIn -> <@HostComms::@Send> (["loopback_fromhw"]) : !esi.channel<i8>
 }
 
-hw.module @top(%clk:i1, %rst:i1) -> () {
-  hw.instance "intLoopbackInst" @intLoopback(clk: %clk: i1, rst: %rst: i1) -> ()
-  hw.instance "twoListLoopbackInst" @twoListLoopback(clk: %clk: i1, rst: %rst: i1) -> ()
+hw.module @top(%clk: !seq.clock, %rst:i1) -> () {
+  hw.instance "intLoopbackInst" @intLoopback(clk: %clk: !seq.clock, rst: %rst: i1) -> ()
+  hw.instance "twoListLoopbackInst" @twoListLoopback(clk: %clk: !seq.clock, rst: %rst: i1) -> ()
 
-  esi.service.instance svc @HostComms impl as  "cosim" (%clk, %rst) : (i1, i1) -> ()
-  hw.instance "TwoChanLoopback" @TwoChanLoopback(clk: %clk: i1) -> ()
+  esi.service.instance svc @HostComms impl as  "cosim" (%clk, %rst) : (!seq.clock, i1) -> ()
+  hw.instance "TwoChanLoopback" @TwoChanLoopback(clk: %clk: !seq.clock) -> ()
 }

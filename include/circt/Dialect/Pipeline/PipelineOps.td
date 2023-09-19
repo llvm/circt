@@ -20,9 +20,10 @@ include "mlir/IR/EnumAttr.td"
 include "mlir/IR/OpAsmInterface.td"
 
 include "circt/Dialect/Pipeline/PipelineDialect.td"
+include "circt/Dialect/Seq/SeqTypes.td"
 
 
-class PipelineBase<string mnemonic, list<Trait> traits = []> : 
+class PipelineBase<string mnemonic, list<Trait> traits = []> :
   Op<Pipeline_Dialect, mnemonic, !listconcat(traits, [
       Pure,
       RegionKindInterface,
@@ -98,7 +99,7 @@ def UnscheduledPipelineOp : PipelineBase<"unscheduled", [
     HasOnlyGraphRegion,
     SingleBlockImplicitTerminator<"ReturnOp">
   ]> {
-  
+
   let summary = "unscheduled pipeline operation";
   let description = [{
     The "pipeline.unscheduled" operation represents a pipeline that has not yet
@@ -113,7 +114,7 @@ def UnscheduledPipelineOp : PipelineBase<"unscheduled", [
 
   let arguments = (ins
     OptionalAttr<StrAttr>:$name, Variadic<AnyType>:$inputs, Optional<I1>:$stall,
-    I1:$clock, I1:$reset, I1:$go, StrArrayAttr:$inputNames,
+    ClockType:$clock, I1:$reset, I1:$go, StrArrayAttr:$inputNames,
     StrArrayAttr:$outputNames
   );
   let regions = (region SizedRegion<1>: $body);
@@ -169,7 +170,7 @@ def ScheduledPipelineOp : PipelineBase<"scheduled", [
     OptionalAttr<StrAttr>:$name,
     Variadic<AnyType>:$inputs,
     Optional<I1>:$stall,
-    I1:$clock, I1:$reset, I1:$go,
+    ClockType:$clock, I1:$reset, I1:$go,
     StrArrayAttr:$inputNames, StrArrayAttr:$outputNames,
     OptionalAttr<BoolArrayAttr>:$stallability
   );
@@ -307,7 +308,7 @@ def StageOp : Op<Pipeline_Dialect, "stage", [
   let assemblyFormat = [{
     $nextStage
     custom<StageRegisters>($registers, type($registers), $clockGates, $clockGatesPerRegister, $registerNames)
-    custom<Passthroughs>($passthroughs, type($passthroughs), $passthroughNames)  
+    custom<Passthroughs>($passthroughs, type($passthroughs), $passthroughNames)
     attr-dict
   }];
 
@@ -375,7 +376,7 @@ def LatencyOp : Op<Pipeline_Dialect, "latency", [
     HasOnlyGraphRegion,
     ParentOneOf<["UnscheduledPipelineOp", "ScheduledPipelineOp"]>
   ]> {
-  
+
   let summary = "Pipeline dialect latency operation.";
   let description = [{
     The `pipeline.latency` operation represents an operation for wrapping

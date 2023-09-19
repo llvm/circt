@@ -103,9 +103,16 @@ struct ForScheduleable {
   uint64_t bound;
 };
 
+struct CallScheduleable {
+  /// Instance for invoking.
+  calyx::InstanceOp instanceOp;
+  // CallOp for getting the arguments.
+  func::CallOp callOp;
+};
+
 /// A variant of types representing scheduleable operations.
-using Scheduleable =
-    std::variant<calyx::GroupOp, WhileScheduleable, ForScheduleable>;
+using Scheduleable = std::variant<calyx::GroupOp, WhileScheduleable,
+                                  ForScheduleable, CallScheduleable>;
 
 class WhileLoopLoweringStateInterface
     : calyx::LoopLoweringStateInterface<ScfWhileOp> {
@@ -210,7 +217,7 @@ class BuildOpGroups : public calyx::FuncOpPartialLoweringPattern {
                              AddIOp, SubIOp, CmpIOp, ShLIOp, ShRUIOp, ShRSIOp,
                              AndIOp, XOrIOp, OrIOp, ExtUIOp, ExtSIOp, TruncIOp,
                              MulIOp, DivUIOp, DivSIOp, RemUIOp, RemSIOp,
-                             SelectOp, IndexCastOp>(
+                             SelectOp, IndexCastOp, CallOp>(
                   [&](auto op) { return buildOp(rewriter, op).succeeded(); })
               .template Case<FuncOp, scf::ConditionOp>([&](auto) {
                 /// Skip: these special cases will be handled separately.
@@ -261,6 +268,7 @@ private:
   LogicalResult buildOp(PatternRewriter &rewriter, memref::StoreOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, scf::WhileOp whileOp) const;
   LogicalResult buildOp(PatternRewriter &rewriter, scf::ForOp forOp) const;
+  LogicalResult buildOp(PatternRewriter &rewriter, CallOp callOp) const;
 
   /// buildLibraryOp will build a TCalyxLibOp inside a TGroupOp based on the
   /// source operation TSrcOp.
@@ -899,6 +907,29 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   return success();
 }
 
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     CallOp callOp) const {
+  std::string instanceName = calyx::getInstanceName(callOp);
+  calyx::InstanceOp instanceOp =
+      getState<ComponentLoweringState>().getInstance(instanceName);
+  SmallVector<Value, 4> outputPorts;
+  auto portInfos = instanceOp.getReferencedComponent().getPortInfo();
+  for (auto [idx, portInfo] : enumerate(portInfos)) {
+    if (portInfo.direction == calyx::Direction::Output)
+      outputPorts.push_back(instanceOp.getResult(idx));
+  }
+
+  // Replacing a CallOp results in the out port of the instance.
+  for (auto [idx, result] : llvm::enumerate(callOp.getResults()))
+    rewriter.replaceAllUsesWith(result, outputPorts[idx]);
+
+  // CallScheduleanle requires an instance, while CallOp can be used to get the
+  // input ports.
+  getState<ComponentLoweringState>().addBlockScheduleable(
+      callOp.getOperation()->getBlock(), CallScheduleable{instanceOp, callOp});
+  return success();
+}
+
 /// Inlines Calyx ExecuteRegionOp operations within their parent blocks.
 /// An execution region op (ERO) is inlined by:
 ///  i  : add a sink basic block for all yield operations inside the
@@ -1026,6 +1057,9 @@ struct FuncOpConversion : public calyx::FuncOpPartialLoweringPattern {
     /// Create a calyx::ComponentOp corresponding to the to-be-lowered function.
     auto compOp = rewriter.create<calyx::ComponentOp>(
         funcOp.getLoc(), rewriter.getStringAttr(funcOp.getSymName()), ports);
+
+    std::string funcName = "func_" + funcOp.getSymName().str();
+    rewriter.updateRootInPlace(funcOp, [&]() { funcOp.setSymName(funcName); });
 
     /// Mark this component as the toplevel.
     compOp->setAttr("toplevel", rewriter.getUnitAttr());
@@ -1313,6 +1347,21 @@ private:
                                          forLatchGroup.getName());
         if (res.failed())
           return res;
+      } else if (auto *callSchedPtr = std::get_if<CallScheduleable>(&group)) {
+        auto instanceOp = callSchedPtr->instanceOp;
+        OpBuilder::InsertionGuard g(rewriter);
+        auto callBody = rewriter.create<calyx::SeqOp>(instanceOp.getLoc());
+        rewriter.setInsertionPointToStart(callBody.getBodyBlock());
+        std::string initGroupName = "init_" + instanceOp.getSymName().str();
+        rewriter.create<calyx::EnableOp>(instanceOp.getLoc(), initGroupName);
+        SmallVector<Value, 4> instancePorts;
+        auto inputPorts = callSchedPtr->callOp.getOperands();
+        llvm::copy(instanceOp.getResults().take_front(inputPorts.size()),
+                   std::back_inserter(instancePorts));
+        rewriter.create<calyx::InvokeOp>(
+            instanceOp.getLoc(), instanceOp.getSymName(), instancePorts,
+            inputPorts, ArrayAttr::get(rewriter.getContext(), {}),
+            ArrayAttr::get(rewriter.getContext(), {}));
       } else
         llvm_unreachable("Unknown scheduleable");
     }
@@ -1571,7 +1620,7 @@ public:
                       ShRSIOp, AndIOp, XOrIOp, OrIOp, ExtUIOp, TruncIOp,
                       CondBranchOp, BranchOp, MulIOp, DivUIOp, DivSIOp, RemUIOp,
                       RemSIOp, ReturnOp, arith::ConstantOp, IndexCastOp, FuncOp,
-                      ExtSIOp>();
+                      ExtSIOp, CallOp>();
 
     RewritePatternSet legalizePatterns(&getContext());
     legalizePatterns.add<DummyPattern>(&getContext());
@@ -1677,6 +1726,9 @@ void SCFToCalyxPass::runOnOperation() {
   /// This pattern creates registers for all basic-block arguments.
   addOncePattern<calyx::BuildBasicBlockRegs>(loweringPatterns, patternState,
                                              funcMap, *loweringState);
+
+  addOncePattern<calyx::BuildCallInstance>(loweringPatterns, patternState,
+                                           funcMap, *loweringState);
 
   /// This pattern creates registers for the function return values.
   addOncePattern<calyx::BuildReturnRegs>(loweringPatterns, patternState,

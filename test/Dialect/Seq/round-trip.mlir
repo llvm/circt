@@ -1,6 +1,6 @@
 // RUN: circt-opt %s | circt-opt | FileCheck %s
 
-hw.module @d1(%clk : i1, %rst : i1) -> () {
+hw.module @d1(%clk : !seq.clock, %rst : i1) -> () {
 // CHECK: %myMemory = seq.hlmem @myMemory %clk, %rst : <4xi32>
   %myMemory = seq.hlmem @myMemory %clk, %rst : <4xi32>
 
@@ -16,7 +16,7 @@ hw.module @d1(%clk : i1, %rst : i1) -> () {
   hw.output
 }
 
-hw.module @d2(%clk : i1, %rst : i1) -> () {
+hw.module @d2(%clk : !seq.clock, %rst : i1) -> () {
 // CHECK: %myMemory = seq.hlmem @myMemory %clk, %rst : <4x8xi32>
   %myMemory = seq.hlmem @myMemory %clk, %rst : <4x8xi32>
 
@@ -33,7 +33,7 @@ hw.module @d2(%clk : i1, %rst : i1) -> () {
   hw.output
 }
 
-hw.module @d0(%clk : i1, %rst : i1) -> () {
+hw.module @d0(%clk : !seq.clock, %rst : i1) -> () {
 // CHECK: %myMemory = seq.hlmem @myMemory %clk, %rst : <1xi32>
   %myMemory = seq.hlmem @myMemory %clk, %rst : <1xi32>
 
@@ -48,13 +48,13 @@ hw.module @d0(%clk : i1, %rst : i1) -> () {
 }
 
 // CHECK-LABEL: hw.module @ClockGate
-hw.module @ClockGate(%clock: i1, %enable: i1, %test_enable: i1) {
+hw.module @ClockGate(%clock: !seq.clock, %enable: i1, %test_enable: i1) {
   // CHECK-NEXT: seq.clock_gate %clock, %enable
   // CHECK-NEXT: seq.clock_gate %clock, %enable, %test_enable
   // CHECK-NEXT: seq.clock_gate %clock, %enable, %test_enable sym @gate_sym
-  %cg0 = seq.clock_gate %clock, %enable : i1
-  %cg1 = seq.clock_gate %clock, %enable, %test_enable : i1
-  %cg2 = seq.clock_gate %clock, %enable, %test_enable sym @gate_sym : i1
+  %cg0 = seq.clock_gate %clock, %enable
+  %cg1 = seq.clock_gate %clock, %enable, %test_enable
+  %cg2 = seq.clock_gate %clock, %enable, %test_enable sym @gate_sym
 }
 
 // CHECK-LABEL: hw.module @ClockMux
@@ -63,12 +63,12 @@ hw.module @ClockMux(%cond: i1, %trueClock: !seq.clock, %falseClock: !seq.clock) 
   hw.output %clock : !seq.clock
 }
 
-hw.module @fifo1(%clk : i1, %rst : i1, %in : i32, %rdEn : i1, %wrEn : i1) -> () {
+hw.module @fifo1(%clk : !seq.clock, %rst : i1, %in : i32, %rdEn : i1, %wrEn : i1) -> () {
   // CHECK: %out, %full, %empty = seq.fifo depth 3 in %in rdEn %rdEn wrEn %wrEn clk %clk rst %rst : i32
   %out, %full, %empty = seq.fifo depth 3 in %in rdEn %rdEn wrEn %wrEn clk %clk rst %rst : i32
 }
 
-hw.module @fifo2(%clk : i1, %rst : i1, %in : i32, %rdEn : i1, %wrEn : i1) -> () {
+hw.module @fifo2(%clk : !seq.clock, %rst : i1, %in : i32, %rdEn : i1, %wrEn : i1) -> () {
   // CHECK: %out, %full, %empty, %almostFull, %almostEmpty = seq.fifo depth 3 almost_full 2 almost_empty 1 in %in rdEn %rdEn wrEn %wrEn clk %clk rst %rst : i32
   %out, %full, %empty, %almostFull, %almostEmpty = seq.fifo depth 3 almost_full 2 almost_empty 1 in %in rdEn %rdEn wrEn %wrEn clk %clk rst %rst : i32
 }
@@ -82,4 +82,11 @@ hw.module @preset(%clock : !seq.clock, %reset : i1, %next : i32) -> () {
 hw.module @clock_dividers(%clock: !seq.clock) -> () {
   // CHECK: seq.clock_div %clock by 1
   %by_2 = seq.clock_div %clock by 1
+}
+
+hw.module @clock_const() -> () {
+  // CHECK: seq.const_clock high
+  %high = seq.const_clock high
+  // CHECK: seq.const_clock low
+  %low = seq.const_clock low
 }

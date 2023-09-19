@@ -10,7 +10,7 @@
 // CHECK: ** TEST
 // CHECK: ** TESTS=[[N:.*]] PASS=[[N]] FAIL=0 SKIP=0
 
-hw.module @nonstallable_test2(%arg0: i32, %go: i1, %clock: i1, %reset: i1, %stall: i1) -> (out: i32, done : i1) {
+hw.module @nonstallable_test2(%arg0: i32, %go: i1, %clock: !seq.clock, %reset: i1, %stall: i1) -> (out: i32, done : i1) {
   %out, %done = pipeline.scheduled "nonstallable_test2"(%a0 : i32 = %arg0)
       stall(%s = %stall) clock(%c = %clock) reset(%r = %reset) go(%g = %go)
         {stallability = [true, false, true, false, true]} -> (out : i32) {

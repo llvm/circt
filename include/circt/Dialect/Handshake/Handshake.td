@@ -37,14 +37,10 @@ def Handshake_Dialect : Dialect {
 
   // Opt-out of properties for now, must migrate by LLVM 19.  #5273.
   let usePropertiesForAttributes = 0;
-}
 
-// Base class for Handshake dialect ops.
-class Handshake_Op<string mnemonic, list<Trait> traits = []>
-    : Op<Handshake_Dialect, mnemonic,
-         traits #[HasParent<"handshake::FuncOp">,
-         DeclareOpInterfaceMethods<NamedIOInterface>,
-         DeclareOpInterfaceMethods<ControlInterface>]> {
+  let dependentDialects = [
+    "circt::seq::SeqDialect"
+  ];
 }
 
 include "circt/Dialect/Handshake/HandshakeOps.td"

@@ -155,6 +155,7 @@ static ParseResult parsePipelineOp(mlir::OpAsmParser &parser,
   result.addAttribute("inputNames", inputNames);
 
   Type i1 = parser.getBuilder().getI1Type();
+  Type clk = seq::ClockType::get(parser.getContext());
   // Parse optional 'stall %innerStall = %stallArg'
   OpAsmParser::Argument stallArg;
   OpAsmParser::UnresolvedOperand stallOperand;
@@ -168,7 +169,7 @@ static ParseResult parsePipelineOp(mlir::OpAsmParser &parser,
   // Parse clock, reset, and go.
   OpAsmParser::Argument clockArg, resetArg, goArg;
   OpAsmParser::UnresolvedOperand clockOperand, resetOperand, goOperand;
-  if (parseKeywordArgAssignment(parser, "clock", clockArg, clockOperand, i1) ||
+  if (parseKeywordArgAssignment(parser, "clock", clockArg, clockOperand, clk) ||
       parseKeywordArgAssignment(parser, "reset", resetArg, resetOperand, i1) ||
       parseKeywordArgAssignment(parser, "go", goArg, goOperand, i1))
     return failure();
@@ -189,22 +190,21 @@ static ParseResult parsePipelineOp(mlir::OpAsmParser &parser,
   result.addAttribute("outputNames", outputNames);
 
   // And the implicit 'done' output.
-  result.addTypes({parser.getBuilder().getI1Type()});
+  result.addTypes({i1});
 
   // All operands have been parsed - resolve.
   if (parser.resolveOperands(inputOperands, inputTypes, parser.getNameLoc(),
                              result.operands))
     return failure();
 
-  Type i1Type = parser.getBuilder().getI1Type();
   if (withStall) {
-    if (parser.resolveOperand(stallOperand, i1Type, result.operands))
+    if (parser.resolveOperand(stallOperand, i1, result.operands))
       return failure();
   }
 
-  if (parser.resolveOperand(clockOperand, i1Type, result.operands) ||
-      parser.resolveOperand(resetOperand, i1Type, result.operands) ||
-      parser.resolveOperand(goOperand, i1Type, result.operands))
+  if (parser.resolveOperand(clockOperand, clk, result.operands) ||
+      parser.resolveOperand(resetOperand, i1, result.operands) ||
+      parser.resolveOperand(goOperand, i1, result.operands))
     return failure();
 
   // Assemble the body region block arguments - this is where the magic happens

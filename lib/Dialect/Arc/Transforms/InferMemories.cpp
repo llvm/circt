@@ -6,21 +6,32 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
+#include "circt/Dialect/Arc/ArcOps.h"
+#include "circt/Dialect/Arc/ArcPasses.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Support/Namespace.h"
 #include "circt/Support/SymCache.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "arc-infer-memories"
+
+namespace circt {
+namespace arc {
+#define GEN_PASS_DEF_INFERMEMORIES
+#include "circt/Dialect/Arc/ArcPasses.h.inc"
+} // namespace arc
+} // namespace circt
 
 using namespace circt;
 using namespace arc;
 
 namespace {
-struct InferMemoriesPass : public InferMemoriesBase<InferMemoriesPass> {
+struct InferMemoriesPass
+    : public arc::impl::InferMemoriesBase<InferMemoriesPass> {
   void runOnOperation() override;
 
   SmallVector<Operation *> opsToDelete;

@@ -15,6 +15,7 @@
 #include "circt/Dialect/ESI/ESIOps.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/Handshake/HandshakePasses.h"
+#include "circt/Dialect/Seq/SeqTypes.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -262,6 +263,7 @@ hw::ModulePortInfo getPortInfoForOpTypes(Operation *op, TypeRange inputs,
   auto *ctx = op->getContext();
 
   Type i1Type = IntegerType::get(ctx, 1);
+  Type clkType = seq::ClockType::get(ctx);
 
   // Add all inputs of funcOp.
   unsigned inIdx = 0;
@@ -285,7 +287,7 @@ hw::ModulePortInfo getPortInfoForOpTypes(Operation *op, TypeRange inputs,
 
   // Add clock and reset signals.
   if (op->hasTrait<mlir::OpTrait::HasClock>()) {
-    pinputs.push_back({{StringAttr::get(ctx, "clock"), i1Type,
+    pinputs.push_back({{StringAttr::get(ctx, "clock"), clkType,
                         hw::ModulePort::Direction::Input},
                        inIdx++,
                        hw::InnerSymAttr{}});

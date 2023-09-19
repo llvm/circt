@@ -14,9 +14,9 @@
 // CHECK:           %[[VAL_6:.*]] = comb.and %[[VAL_0]], %[[VAL_5]] : i1
 // CHECK:           hw.output %[[VAL_6]] : i1
 // CHECK:         }
-hw.module @cg1(%clk : i1, %enable : i1) -> (gclk : i1) {
-    %0 = seq.clock_gate %clk, %enable : i1
-    hw.output %0 : i1
+hw.module @cg1(%clk : !seq.clock, %enable : i1) -> (gclk : !seq.clock) {
+    %0 = seq.clock_gate %clk, %enable
+    hw.output %0 : !seq.clock
 }
 
 // CHECK-LABEL:   hw.module @cg2(
@@ -34,7 +34,7 @@ hw.module @cg1(%clk : i1, %enable : i1) -> (gclk : i1) {
 // CHECK:           %[[VAL_8:.*]] = comb.and %[[VAL_0]], %[[VAL_7]] : i1
 // CHECK:           hw.output %[[VAL_8]] : i1
 // CHECK:         }
-hw.module @cg2(%clk : i1, %enable : i1, %test_enable : i1) -> (gclk : i1) {
-    %0 = seq.clock_gate %clk, %enable, %test_enable : i1
-    hw.output %0 : i1
+hw.module @cg2(%clk : !seq.clock, %enable : i1, %test_enable : i1) -> (gclk : !seq.clock) {
+    %0 = seq.clock_gate %clk, %enable, %test_enable
+    hw.output %0 : !seq.clock
 }

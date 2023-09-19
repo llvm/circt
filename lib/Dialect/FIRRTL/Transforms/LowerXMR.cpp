@@ -56,7 +56,8 @@ struct XMRNode {
   SymOrIndexOp info;
   NextNodeOnPath next;
 };
-llvm::raw_ostream &operator<<(llvm::raw_ostream &os, const XMRNode &node) {
+[[maybe_unused]] llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
+                                               const XMRNode &node) {
   os << "node(";
   if (auto attr = dyn_cast<Attribute>(node.info))
     os << "path=" << attr;

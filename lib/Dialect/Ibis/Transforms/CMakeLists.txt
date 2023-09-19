@@ -7,6 +7,7 @@ add_circt_dialect_library(CIRCTIbisTransforms
   IbisContainersToHW.cpp
   IbisArgifyBlocksPass.cpp
   IbisReblockPass.cpp
+  IbisInlineSBlocksPass.cpp
 
   DEPENDS
   CIRCTIbisTransformsIncGen

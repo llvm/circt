@@ -94,50 +94,51 @@ hw.module @UninitializedArrayElement(%a: i1, %clock: !seq.clock) -> (b: !hw.arra
 }
 
 // CHECK-LABEL: hw.module @ClockGate
-hw.module @ClockGate(%clock: i1, %enable: i1, %enable2 : i1, %testEnable: i1) {
-  // CHECK-NEXT: hw.constant false
+hw.module @ClockGate(%clock: !seq.clock, %enable: i1, %enable2 : i1, %testEnable: i1) {
   %false = hw.constant false
   %true = hw.constant true
+  // CHECK-NEXT: [[CLOCK_LOW:%.+]] = seq.const_clock low
+  %falseClock = seq.const_clock low
 
-  // CHECK-NEXT: %zeroClock = hw.wire %false sym @zeroClock
-  %0 = seq.clock_gate %false, %enable : i1
-  %zeroClock = hw.wire %0 sym @zeroClock : i1
+  // CHECK-NEXT: %zeroClock = hw.wire [[CLOCK_LOW]] sym @zeroClock
+  %0 = seq.clock_gate %falseClock, %enable
+  %zeroClock = hw.wire %0 sym @zeroClock : !seq.clock
 
-  // CHECK-NEXT: %alwaysOff1 = hw.wire %false sym @alwaysOff1
-  // CHECK-NEXT: %alwaysOff2 = hw.wire %false sym @alwaysOff2
-  %1 = seq.clock_gate %clock, %false : i1
-  %2 = seq.clock_gate %clock, %false, %false : i1
-  %alwaysOff1 = hw.wire %1 sym @alwaysOff1 : i1
-  %alwaysOff2 = hw.wire %2 sym @alwaysOff2 : i1
+  // CHECK-NEXT: %alwaysOff1 = hw.wire [[CLOCK_LOW]] sym @alwaysOff1
+  // CHECK-NEXT: %alwaysOff2 = hw.wire [[CLOCK_LOW]] sym @alwaysOff2
+  %1 = seq.clock_gate %clock, %false
+  %2 = seq.clock_gate %clock, %false, %false
+  %alwaysOff1 = hw.wire %1 sym @alwaysOff1 : !seq.clock
+  %alwaysOff2 = hw.wire %2 sym @alwaysOff2 : !seq.clock
 
   // CHECK-NEXT: %alwaysOn1 = hw.wire %clock sym @alwaysOn1
   // CHECK-NEXT: %alwaysOn2 = hw.wire %clock sym @alwaysOn2
   // CHECK-NEXT: %alwaysOn3 = hw.wire %clock sym @alwaysOn3
-  %3 = seq.clock_gate %clock, %true : i1
-  %4 = seq.clock_gate %clock, %true, %testEnable : i1
-  %5 = seq.clock_gate %clock, %enable, %true : i1
-  %alwaysOn1 = hw.wire %3 sym @alwaysOn1 : i1
-  %alwaysOn2 = hw.wire %4 sym @alwaysOn2 : i1
-  %alwaysOn3 = hw.wire %5 sym @alwaysOn3 : i1
+  %3 = seq.clock_gate %clock, %true
+  %4 = seq.clock_gate %clock, %true, %testEnable
+  %5 = seq.clock_gate %clock, %enable, %true
+  %alwaysOn1 = hw.wire %3 sym @alwaysOn1 : !seq.clock
+  %alwaysOn2 = hw.wire %4 sym @alwaysOn2 : !seq.clock
+  %alwaysOn3 = hw.wire %5 sym @alwaysOn3 : !seq.clock
 
   // CHECK-NEXT: [[TMP:%.+]] = seq.clock_gate %clock, %enable
   // CHECK-NEXT: %dropTestEnable = hw.wire [[TMP]] sym @dropTestEnable
-  %6 = seq.clock_gate %clock, %enable, %false : i1
-  %dropTestEnable = hw.wire %6 sym @dropTestEnable : i1
+  %6 = seq.clock_gate %clock, %enable, %false
+  %dropTestEnable = hw.wire %6 sym @dropTestEnable : !seq.clock
 
   // CHECK-NEXT: [[TCG1:%.+]] = seq.clock_gate %clock, %enable
-  // CHECK-NEXT: %transitiveClock1 = hw.wire [[TCG1]] sym @transitiveClock1  : i1
-  %7 = seq.clock_gate %clock, %enable : i1
-  %8 = seq.clock_gate %clock, %enable : i1
-  %transitiveClock1 = hw.wire %7 sym @transitiveClock1 : i1
+  // CHECK-NEXT: %transitiveClock1 = hw.wire [[TCG1]] sym @transitiveClock1  : !seq.clock
+  %7 = seq.clock_gate %clock, %enable
+  %8 = seq.clock_gate %clock, %enable
+  %transitiveClock1 = hw.wire %7 sym @transitiveClock1 : !seq.clock
 
   // CHECK-NEXT: [[TCG2:%.+]] = seq.clock_gate %clock, %enable, %testEnable
   // CHECK-NEXT: [[TCG3:%.+]] = seq.clock_gate [[TCG2]], %enable
-  // CHECK-NEXT: %transitiveClock2 = hw.wire [[TCG3]] sym @transitiveClock2  : i1
-  %9 = seq.clock_gate %clock, %enable, %testEnable : i1
-  %10 = seq.clock_gate %9, %enable2 : i1
-  %11 = seq.clock_gate %10, %enable, %testEnable : i1
-  %transitiveClock2 = hw.wire %11 sym @transitiveClock2 : i1
+  // CHECK-NEXT: %transitiveClock2 = hw.wire [[TCG3]] sym @transitiveClock2  : !seq.clock
+  %9 = seq.clock_gate %clock, %enable, %testEnable
+  %10 = seq.clock_gate %9, %enable2
+  %11 = seq.clock_gate %10, %enable, %testEnable
+  %transitiveClock2 = hw.wire %11 sym @transitiveClock2 : !seq.clock
 }
 
 // CHECK-LABEL: hw.module @ClockMux
@@ -157,10 +158,10 @@ hw.module @FirMem(%addr: i4, %clock: !seq.clock, %data: i42) -> (out: i42) {
   %c0_i3 = hw.constant 0 : i3
   %c-1_i3 = hw.constant -1 : i3
 
-  // CHECK: [[CLK_TRUE:%.+]] = seq.to_clock %true
-  %clk_true = seq.to_clock %true
-  // CHECK: [[CLK_FALSE:%.+]] = seq.to_clock %false
+  // CHECK: [[CLK_TRUE:%.+]] = seq.const_clock high
+  // CHECK: [[CLK_FALSE:%.+]] = seq.const_clock low
   %clk_false = seq.to_clock %false
+  %clk_true = seq.to_clock %true
 
   // CHECK: [[MEM:%.+]] = seq.firmem
   %0 = seq.firmem 0, 1, undefined, undefined : <12 x 42, mask 3>
@@ -214,4 +215,19 @@ hw.module @through_wire(%clock: i1) -> (out: i1) {
   %tmp = seq.to_clock %clock
   %out = seq.from_clock %tmp
   hw.output %out : i1
+}
+
+// CHECK-LABEL: @const_clock
+hw.module @const_clock() -> (clock_true: !seq.clock, clock_false: !seq.clock) {
+  // CHECK: [[CLOCK_FALSE:%.+]] = seq.const_clock low
+  // CHECK: [[CLOCK_TRUE:%.+]] = seq.const_clock high
+
+  %true = hw.constant 1 : i1
+  %clock_true = seq.to_clock %true
+
+  %false = hw.constant 0 : i1
+  %clock_false = seq.to_clock %false
+
+  // CHECK: hw.output [[CLOCK_FALSE]], [[CLOCK_TRUE]]
+  hw.output %clock_false, %clock_true : !seq.clock, !seq.clock
 }

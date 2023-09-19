@@ -81,12 +81,34 @@ void circt::python::populateDialectHWSubmodule(py::module &m) {
               inputTypes.append(hwModuleTypeGetInputType(self, i));
             return inputTypes;
           })
-      .def_property_readonly("output_types", [](MlirType self) {
-        py::list outputTypes;
+      .def_property_readonly(
+          "input_names",
+          [](MlirType self) {
+            std::vector<std::string> inputNames;
+            intptr_t numInputs = hwModuleTypeGetNumInputs(self);
+            for (intptr_t i = 0; i < numInputs; ++i) {
+              auto name = hwModuleTypeGetInputName(self, i);
+              inputNames.emplace_back(name.data, name.length);
+            }
+            return inputNames;
+          })
+      .def_property_readonly(
+          "output_types",
+          [](MlirType self) {
+            py::list outputTypes;
+            intptr_t numOutputs = hwModuleTypeGetNumOutputs(self);
+            for (intptr_t i = 0; i < numOutputs; ++i)
+              outputTypes.append(hwModuleTypeGetOutputType(self, i));
+            return outputTypes;
+          })
+      .def_property_readonly("output_names", [](MlirType self) {
+        std::vector<std::string> outputNames;
         intptr_t numOutputs = hwModuleTypeGetNumOutputs(self);
-        for (intptr_t i = 0; i < numOutputs; ++i)
-          outputTypes.append(hwModuleTypeGetOutputType(self, i));
-        return outputTypes;
+        for (intptr_t i = 0; i < numOutputs; ++i) {
+          auto name = hwModuleTypeGetOutputName(self, i);
+          outputNames.emplace_back(name.data, name.length);
+        }
+        return outputNames;
       });
 
   mlir_type_subclass(m, "ParamIntType", hwTypeIsAIntType)

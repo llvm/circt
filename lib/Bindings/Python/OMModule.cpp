@@ -370,6 +370,16 @@ void circt::python::populateDialectOMSubmodule(py::module &m) {
         return omReferenceAttrGetInnerRef(self);
       });
 
+  // Add the IntegerAttr definition
+  mlir_attribute_subclass(m, "OMIntegerAttr", omAttrIsAIntegerAttr)
+      .def_classmethod("get",
+                       [](py::object cls, MlirAttribute intVal) {
+                         return cls(omIntegerAttrGet(intVal));
+                       })
+      .def_property_readonly("integer", [](MlirAttribute self) {
+        return omIntegerAttrGetInt(self);
+      });
+
   // Add the OMListAttr definition
   mlir_attribute_subclass(m, "ListAttr", omAttrIsAListAttr)
       .def("__getitem__", &omListAttrGetElement)

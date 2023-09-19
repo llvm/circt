@@ -67,6 +67,27 @@ namespace mlir {
 namespace OpTrait {
 template <typename ConcreteType>
 class HasClock : public TraitBase<ConcreteType, HasClock> {};
+
+template <typename InterfaceType>
+class HasParentInterface {
+public:
+  template <typename ConcreteType>
+  class Impl : public TraitBase<ConcreteType,
+                                HasParentInterface<InterfaceType>::Impl> {
+  public:
+    static LogicalResult verifyTrait(Operation *op) {
+      if (llvm::isa_and_nonnull<InterfaceType>(op->getParentOp()))
+        return success();
+
+      // @mortbopet: What a horrible error message - however, there's no way to
+      // report the interface name without going in and adjusting the tablegen
+      // backend to also emit string literal names for interfaces.
+      return op->emitOpError() << "expects parent op to be of the interface "
+                                  "parent type required by the given op type";
+    }
+  };
+};
+
 } // namespace OpTrait
 } // namespace mlir
 

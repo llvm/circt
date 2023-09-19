@@ -110,12 +110,20 @@ MlirType hwModuleTypeGetInputType(MlirType type, intptr_t index) {
   return wrap(cast<ModuleType>(unwrap(type)).getInputType(index));
 }
 
+MlirStringRef hwModuleTypeGetInputName(MlirType type, intptr_t index) {
+  return wrap(cast<ModuleType>(unwrap(type)).getInputName(index));
+}
+
 intptr_t hwModuleTypeGetNumOutputs(MlirType type) {
   return cast<ModuleType>(unwrap(type)).getNumOutputs();
 }
 
 MlirType hwModuleTypeGetOutputType(MlirType type, intptr_t index) {
   return wrap(cast<ModuleType>(unwrap(type)).getOutputType(index));
+}
+
+MlirStringRef hwModuleTypeGetOutputName(MlirType type, intptr_t index) {
+  return wrap(cast<ModuleType>(unwrap(type)).getOutputName(index));
 }
 
 bool hwTypeIsAStructType(MlirType type) {

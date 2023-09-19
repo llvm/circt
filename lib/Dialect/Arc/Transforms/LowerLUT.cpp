@@ -6,12 +6,22 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
+#include "circt/Dialect/Arc/ArcOps.h"
+#include "circt/Dialect/Arc/ArcPasses.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/HW/HWOps.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "arc-lower-lut"
+
+namespace circt {
+namespace arc {
+#define GEN_PASS_DEF_LOWERLUT
+#include "circt/Dialect/Arc/ArcPasses.h.inc"
+} // namespace arc
+} // namespace circt
 
 using namespace circt;
 using namespace arc;
@@ -341,7 +351,7 @@ struct LutToArray : LutLoweringPattern {
 namespace {
 
 /// Lower LutOp operations to comb and hw operations.
-struct LowerLUTPass : public LowerLUTBase<LowerLUTPass> {
+struct LowerLUTPass : public arc::impl::LowerLUTBase<LowerLUTPass> {
   void runOnOperation() override;
 };
 

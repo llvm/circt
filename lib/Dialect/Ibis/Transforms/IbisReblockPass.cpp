@@ -16,8 +16,6 @@
 #include "circt/Transforms/Passes.h"
 #include "mlir/Transforms/DialectConversion.h"
 
-#include <iterator>
-
 using namespace circt;
 using namespace ibis;
 
@@ -26,120 +24,88 @@ namespace {
 struct ReblockPass : public IbisReblockBase<ReblockPass> {
   void runOnOperation() override;
 
-  LogicalResult reblock(Block &block, DictionaryAttr blockInfo);
+  // Transforms an `ibis.sblock.inline.begin/end` scope into an `ibis.sblock`.
+  LogicalResult reblock(ibis::InlineStaticBlockBeginOp);
 };
 } // anonymous namespace
 
 void ReblockPass::runOnOperation() {
   MethodOp parent = getOperation();
-  auto &region = parent.getRegion();
-  // Fetch the 'ibis.blockinfo' attribute from the parent operation. This will
-  // contain information tagged to each MLIR block which needs to be propagated
-  // to the corresponding ibis.sblock operations.
-  auto blockInfoAttr = parent->getAttrOfType<DictionaryAttr>("ibis.blockinfo");
+  Region &region = parent.getRegion();
 
-  if (!blockInfoAttr) {
-    parent->emitOpError("missing 'ibis.blockinfo' attribute");
-    return signalPassFailure();
-  }
-
-  if (!isRegionSSAMaximized(region)) {
-    parent->emitOpError() << "region is not in maximal SSA form";
-    return signalPassFailure();
-  }
-
-  auto blockID = [&](Block &block) {
-    return std::distance(region.front().getIterator(), block.getIterator());
-  };
-
-  for (Block &block : region.getBlocks()) {
-    DictionaryAttr blockInfo =
-        blockInfoAttr.getAs<DictionaryAttr>(Twine(blockID(block)).str());
-
-    if (!blockInfo) {
-      parent->emitOpError("missing 'ibis.blockinfo' attribute for block " +
-                          Twine(blockID(block)));
-      return signalPassFailure();
-    }
-
-    if (failed(reblock(block, blockInfo)))
+  for (auto blockBeginOp : llvm::make_early_inc_range(
+           parent.getOps<ibis::InlineStaticBlockBeginOp>())) {
+    if (failed(reblock(blockBeginOp)))
       return signalPassFailure();
   }
 }
 
-LogicalResult ReblockPass::reblock(mlir::Block &block,
-                                   DictionaryAttr blockInfo) {
-  // Record whether an ibis.call was found in this block
-  bool hadCall = false;
-  llvm::SmallVector<Operation *> blockOps;
-  Operation *terminator = block.getTerminator();
-  for (Operation &op : block.getOperations()) {
-    if (&op == terminator)
-      continue;
+LogicalResult ReblockPass::reblock(ibis::InlineStaticBlockBeginOp beginOp) {
+  // Determine which values we need to return from within the block scope.
+  // This is done by collecting all values defined within the start/end scope,
+  // and recording uses that exist outside of the scope.
+  ibis::InlineStaticBlockEndOp endOp = beginOp.getEndOp();
+  assert(endOp);
 
-    hadCall |= isa<CallOp>(op);
-    blockOps.push_back(&op);
+  auto startIt = beginOp->getIterator();
+  auto endIt = endOp->getIterator();
+  Block *sblockParentBlock = beginOp->getBlock();
+
+  auto usedOutsideBlock = [&](OpOperand &use) {
+    Operation *owner = use.getOwner();
+    Block *useBlock = owner->getBlock();
+    if (useBlock != sblockParentBlock)
+      return true;
+    bool isBefore = owner->isBeforeInBlock(beginOp);
+    bool isAfter = isBefore ? false : endOp->isBeforeInBlock(owner);
+    return isBefore || isAfter;
+  };
+
+  llvm::MapVector<Value, llvm::SmallVector<OpOperand *>> returnValueUses;
+  for (auto &op : llvm::make_range(startIt, endIt)) {
+    for (Value result : op.getResults()) {
+      for (OpOperand &use : result.getUses())
+        if (usedOutsideBlock(use))
+          returnValueUses[result].push_back(&use);
+    }
   }
 
-  if (hadCall && blockOps.size() > 1)
-    return block.getParentOp()->emitError(
-        "a block has both calls and other ops");
-
-  if (hadCall) {
-    // Nothing to do - call ops are themselves considered control-passing
-    // operations.
-    return success();
-  }
-
-  // Given that we're in maximum SSA form, the only values we need to return
-  // from within the block are values used by the terminator, if they're not
-  // already block arguments.
-
-  // Maintain a mapping between the value used by the terminator and the
-  // OpOperands that holds said value.
-  llvm::MapVector<Value, llvm::SmallVector<OpOperand *>> terminatorOperands;
-  for (auto &operand : terminator->getOpOperands()) {
-    if (operand.get().isa<BlockArgument>())
-      continue;
-    terminatorOperands[operand.get()].push_back(&operand);
-  }
-
-  // The above de-aliased multiple-returns of the same value. We now gather
-  // the set of types that needs to be returned from within the block.
+  // Gather the set of types that needs to be returned from within the block.
   llvm::SmallVector<Type> blockRetTypes;
-  llvm::SmallVector<Value> blockReturnValues;
-  for (auto &[v, _] : terminatorOperands) {
-    blockReturnValues.push_back(v);
+  llvm::SmallVector<Value> blockRetValues;
+  for (auto &[v, _] : returnValueUses) {
     blockRetTypes.push_back(v.getType());
+    blockRetValues.push_back(v);
   }
 
-  auto b = OpBuilder::atBlockBegin(&block);
+  auto b = OpBuilder(beginOp);
+  auto ibisBlock =
+      b.create<StaticBlockOp>(beginOp.getLoc(), blockRetTypes, ValueRange{});
 
-  // Lookup block location from the block info.
-  auto loc = blockInfo.getAs<LocationAttr>("loc");
-  if (!loc) {
-    block.getParentOp()->emitError("missing 'loc' attribute for block");
-    return failure();
-  }
-  auto ibisBlock = b.create<StaticBlockOp>(loc, blockRetTypes, ValueRange{});
+  // The new `ibis.sblock` should inherit the attributes of the block begin op.
+  ibisBlock->setAttrs(beginOp->getAttrs());
 
   // Move operations into the `ibis.sblock` op.
   BlockReturnOp blockReturn =
       cast<BlockReturnOp>(ibisBlock.getBodyBlock()->getTerminator());
 
-  for (auto *op : blockOps)
-    op->moveBefore(blockReturn);
+  for (auto &op : llvm::make_early_inc_range(llvm::make_range(startIt, endIt)))
+    op.moveBefore(blockReturn);
 
   // Append the terminator operands to the block return.
-  blockReturn->setOperands(blockReturnValues);
+  blockReturn->setOperands(blockRetValues);
 
-  // Replace the basic block terminator operands with the block return values.
-  for (auto [blockRet, termOperands] :
-       llvm::zip(ibisBlock.getResults(), terminatorOperands)) {
-    for (auto *termOperand : termOperands.second)
-      termOperand->set(blockRet);
+  // Replace the uses of the returned values outside of the block with the
+  // block return values.
+  for (auto [blockRet, innerDefAndUses] :
+       llvm::zip(ibisBlock.getResults(), returnValueUses)) {
+    auto &uses = std::get<1>(innerDefAndUses);
+    for (OpOperand *use : uses)
+      use->set(blockRet);
   }
-
+  // Erase the start/end ops.
+  beginOp.erase();
+  endOp.erase();
   return success();
 }
 

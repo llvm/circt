@@ -768,6 +768,26 @@ size_t ModuleType::getPortIdForOutputId(size_t idx) {
   return ~0UL;
 }
 
+size_t ModuleType::getInputIdForPortId(size_t idx) {
+  auto ports = getPorts();
+  assert(ports[idx].dir != ModulePort::Direction::Output);
+  size_t retval = 0;
+  for (size_t i = 0; i < idx; ++i)
+    if (ports[i].dir != ModulePort::Direction::Output)
+      ++retval;
+  return retval;
+}
+
+size_t ModuleType::getOutputIdForPortId(size_t idx) {
+  auto ports = getPorts();
+  assert(ports[idx].dir == ModulePort::Direction::Output);
+  size_t retval = 0;
+  for (size_t i = 0; i < idx; ++i)
+    if (ports[i].dir == ModulePort::Direction::Output)
+      ++retval;
+  return retval;
+}
+
 size_t ModuleType::getNumInputs() {
   return std::count_if(getPorts().begin(), getPorts().end(), [](auto &p) {
     return p.dir != ModulePort::Direction::Output;
@@ -880,6 +900,11 @@ StringRef ModuleType::getOutputName(size_t idx) {
   if (sa)
     return sa.getValue();
   return {};
+}
+
+bool ModuleType::isOutput(size_t idx) {
+  auto &p = getPorts()[idx];
+  return p.dir == ModulePort::Direction::Output;
 }
 
 FunctionType ModuleType::getFuncType() {

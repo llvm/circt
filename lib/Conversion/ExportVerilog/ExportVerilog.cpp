@@ -4557,7 +4557,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   ops.insert(op);
 
   // Use the specified name or the symbol name as appropriate.
-  auto *moduleOp = op.getReferencedModule(&state.symbolCache);
+  auto *moduleOp = op.getReferencedModuleCached(&state.symbolCache);
   assert(moduleOp && "Invalid IR");
   ps << PPExtString(getVerilogModuleName(moduleOp));
 
@@ -4601,8 +4601,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
 
   ps << PP::nbsp << PPExtString(getSymOpName(op)) << " (";
 
-  auto modPortInfo =
-      cast<PortList>(op.getReferencedModule(&state.symbolCache)).getPortList();
+  auto modPortInfo = cast<PortList>(moduleOp).getPortList();
   // Get the max port name length so we can align the '('.
   size_t maxNameLength = 0;
   for (auto &elt : modPortInfo) {
@@ -5166,7 +5165,7 @@ void ModuleEmitter::emitBind(BindOp op) {
   auto parentPortList = parentMod.getPortList();
   auto parentVerilogName = getVerilogModuleNameAttr(parentMod);
 
-  Operation *childMod = inst.getReferencedModule(&state.symbolCache);
+  Operation *childMod = inst.getReferencedModuleCached(&state.symbolCache);
   auto childVerilogName = getVerilogModuleNameAttr(childMod);
 
   startStatement();

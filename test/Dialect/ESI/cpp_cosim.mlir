@@ -7,7 +7,7 @@ esi.service.decl @BSP {
   esi.service.to_server @Send : !esi.channel<i8>
 }
 
-hw.module @Top(%clk: i1, %rst: i1) {
+hw.module @Top(%clk: !seq.clock, %rst: i1) {
   %0 = esi.null : !esi.channel<i1>
   %1 = esi.cosim %clk, %rst, %0, "m1.loopback_tohw" : !esi.channel<i1> -> !esi.channel<i8>
   %2 = esi.cosim %clk, %rst, %m1.loopback_fromhw, "m1.loopback_fromhw" : !esi.channel<i8> -> !esi.channel<i1>
@@ -15,11 +15,11 @@ hw.module @Top(%clk: i1, %rst: i1) {
     clients [
       {client_name = ["m1", "loopback_tohw"], port = #hw.innerNameRef<@BSP::@Recv>, to_client_type = !esi.channel<i8>},
       {client_name = ["m1", "loopback_fromhw"], port = #hw.innerNameRef<@BSP::@Send>, to_server_type = !TWrite}]
-  %m1.loopback_fromhw = hw.instance "m1" @Loopback(clk: %clk: i1, loopback_tohw: %1: !esi.channel<i8>) -> (loopback_fromhw: !esi.channel<i8>)
+  %m1.loopback_fromhw = hw.instance "m1" @Loopback(clk: %clk: !seq.clock, loopback_tohw: %1: !esi.channel<i8>) -> (loopback_fromhw: !esi.channel<i8>)
   hw.output
 }
 
-hw.module @Loopback(%clk: i1, %loopback_tohw: !esi.channel<i8>) -> (loopback_fromhw: !esi.channel<i8>) {
+hw.module @Loopback(%clk: !seq.clock, %loopback_tohw: !esi.channel<i8>) -> (loopback_fromhw: !esi.channel<i8>) {
   hw.output %loopback_tohw : !esi.channel<i8>
 }
 
@@ -121,11 +121,11 @@ hw.module @Loopback(%clk: i1, %loopback_tohw: !esi.channel<i8>) -> (loopback_fro
 // =============================================================================
 
 // CHECK: REFL_AUTO (
-// CHECK:   type(esi::runtime::ESITypes::I8)  
+// CHECK:   type(esi::runtime::ESITypes::I8)
 // CHECK: , field(i)
 // CHECK: )
 // CHECK: REFL_AUTO (
-// CHECK:   type(esi::runtime::ESITypes::Struct17656501409672388976)  
-// CHECK: , field(addr)  
+// CHECK:   type(esi::runtime::ESITypes::Struct17656501409672388976)
+// CHECK: , field(addr)
 // CHECK: , field(data)
 // CHECK: )

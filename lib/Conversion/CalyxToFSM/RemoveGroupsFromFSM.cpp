@@ -15,6 +15,7 @@
 #include "circt/Dialect/Calyx/CalyxHelpers.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/FSM/FSMGraph.h"
+#include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Support/BackedgeBuilder.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -256,10 +257,11 @@ LogicalResult CalyxRemoveGroupsFromFSM::outlineMachine() {
   }
 
   // Instantiate the FSM.
+  auto clkPort = componentOp.getClkPort();
+  auto clk = b->create<seq::ToClockOp>(clkPort.getLoc(), clkPort);
   auto fsmInstance = b->create<fsm::HWInstanceOp>(
       machineOp.getLoc(), machineOutputTypes, b->getStringAttr("controller"),
-      machineOp.getSymNameAttr(), fsmInputs, componentOp.getClkPort(),
-      componentOp.getResetPort());
+      machineOp.getSymNameAttr(), fsmInputs, clk, componentOp.getResetPort());
 
   // Record the FSM output group go signals.
   for (auto namedAttr : groupGoOutputsAttr.getValue()) {
