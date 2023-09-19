@@ -24,7 +24,7 @@ class HasParentInterface<string interface>
 // Base class for Handshake dialect ops.
 class Handshake_Op<string mnemonic, list<Trait> traits = []>
     : Op<Handshake_Dialect, mnemonic,
-         traits #[HasParentInterface<"circt::handshake::FineGrainedDataflowRegionOpInterface">,
+         traits #[HasParentInterface<"FineGrainedDataflowRegionOpInterface">,
          DeclareOpInterfaceMethods<NamedIOInterface>,
          DeclareOpInterfaceMethods<ControlInterface>]> {
 }
