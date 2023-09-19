@@ -32,9 +32,6 @@ std::unique_ptr<Pass> createInlineSBlocksPass();
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/Ibis/IbisPasses.h.inc"
 
-// Returns an ID of an MLIR block, used during the sblock inline/reblock phase.
-size_t blockID(mlir::Block *block);
-
 } // namespace ibis
 } // namespace circt
 

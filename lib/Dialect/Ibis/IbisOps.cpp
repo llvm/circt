@@ -642,8 +642,8 @@ void StaticBlockOp::print(OpAsmPrinter &p) {
   parsing_util::printInitializerList(p, getInputs(),
                                      getBodyBlock()->getArguments());
   p.printOptionalArrowTypeList(getResultTypes());
-  p.printOptionalAttrDictWithKeyword(getOperation()->getAttrs(),
-                                     getAttributeNames());
+  p.printOptionalAttrDictWithKeyword(getOperation()->getAttrs());
+  p << ' ';
   p.printRegion(getBody(), /*printEntryBlockArgs=*/false);
 }
 
@@ -663,6 +663,39 @@ LogicalResult BlockReturnOp::verify() {
   }
 
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// InlineStaticBlockEndOp
+//===----------------------------------------------------------------------===//
+
+InlineStaticBlockBeginOp InlineStaticBlockEndOp::getBeginOp() {
+  auto curr = getOperation()->getReverseIterator();
+  Operation *firstOp = &getOperation()->getBlock()->front();
+  while (true) {
+    if (auto beginOp = dyn_cast<InlineStaticBlockBeginOp>(*curr))
+      return beginOp;
+    if (curr.getNodePtr() == firstOp)
+      break;
+    ++curr;
+  }
+  return nullptr;
+}
+
+//===----------------------------------------------------------------------===//
+// InlineStaticBlockBeginOp
+//===----------------------------------------------------------------------===//
+
+InlineStaticBlockEndOp InlineStaticBlockBeginOp::getEndOp() {
+  auto curr = getOperation()->getIterator();
+  auto end = getOperation()->getBlock()->end();
+  while (curr != end) {
+    if (auto endOp = dyn_cast<InlineStaticBlockEndOp>(*curr))
+      return endOp;
+
+    ++curr;
+  }
+  return nullptr;
 }
 
 //===----------------------------------------------------------------------===//

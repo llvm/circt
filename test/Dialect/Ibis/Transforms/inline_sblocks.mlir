@@ -1,12 +1,11 @@
 // RUN: circt-opt %s --pass-pipeline='builtin.module(ibis.class(ibis.method(ibis-inline-sblocks)))' --allow-unregistered-dialect | FileCheck %s
 
-// CHECK: #[[$ATTR_0:.+]] = loc("foo")
-// CHECK: #[[$ATTR_1:.+]] = loc("bar")
-
 // CHECK-LABEL:   ibis.class @Inline1 {
 // CHECK:           %[[VAL_0:.*]] = ibis.this @Inline1
-// CHECK:           ibis.method @foo(%[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i32) attributes {ibis.blockinfo = {"0" = {loc = #[[$ATTR_0]], maxThreads = 1 : i64}}} {
+// CHECK:           ibis.method @foo(%[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i32) {
+// CHECK:             ibis.sblock.inline.begin {maxThreads = 1 : i64}
 // CHECK:             %[[VAL_3:.*]] = "foo.op1"(%[[VAL_1]], %[[VAL_2]]) : (i32, i32) -> i32
+// CHECK:             ibis.sblock.inline.end
 // CHECK:             ibis.return
 // CHECK:           }
 // CHECK:         }
@@ -17,18 +16,22 @@ ibis.class @Inline1 {
     %0 = ibis.sblock() -> (i32) attributes {maxThreads = 1} {
       %res = "foo.op1"(%a, %b) : (i32, i32) -> i32
       ibis.sblock.return %res : i32
-    } loc("foo")
+    }
     ibis.return
   }
 }
 
 // CHECK-LABEL:   ibis.class @Inline2 {
 // CHECK:           %[[VAL_0:.*]] = ibis.this @Inline2
-// CHECK:           ibis.method @foo(%[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i32) attributes {ibis.blockinfo = {"0" = {loc = #[[$ATTR_0]], maxThreads = 1 : i64}, "1" = {loc = #[[$ATTR_1]]}}} {
+// CHECK:           ibis.method @foo(%[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i32) {
+// CHECK:             ibis.sblock.inline.begin {maxThreads = 1 : i64}
 // CHECK:             %[[VAL_3:.*]] = "foo.op1"(%[[VAL_1]], %[[VAL_2]]) : (i32, i32) -> i32
+// CHECK:             ibis.sblock.inline.end
 // CHECK:             cf.br ^bb1
 // CHECK:           ^bb1:
+// CHECK:             ibis.sblock.inline.begin
 // CHECK:             %[[VAL_4:.*]] = "foo.op2"(%[[VAL_3]], %[[VAL_1]]) : (i32, i32) -> i32
+// CHECK:             ibis.sblock.inline.end
 // CHECK:             ibis.return
 // CHECK:           }
 // CHECK:         }
@@ -41,13 +44,13 @@ ibis.class @Inline2 {
     %0 = ibis.sblock() -> (i32) attributes {maxThreads = 1} {
       %res = "foo.op1"(%a, %b) : (i32, i32) -> i32
       ibis.sblock.return %res : i32
-    } loc("foo")
+    }
     cf.br ^bb1
   ^bb1:
     %1 = ibis.sblock() -> (i32) {
       %res = "foo.op2"(%0, %a) : (i32, i32) -> i32
       ibis.sblock.return %res : i32
-    } loc("bar")
+    }
     ibis.return
   }
 }
@@ -55,22 +58,18 @@ ibis.class @Inline2 {
 
 // CHECK-LABEL:   ibis.class @Inline3 {
 // CHECK:           %[[VAL_0:.*]] = ibis.this @Inline3
-// CHECK:           ibis.method @foo(%[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i32) attributes {ibis.blockinfo = {"1" = {loc = #[[$ATTR_0]], maxThreads = 1 : i64}, "4" = {loc = #[[$ATTR_1]]}}} {
+// CHECK:           ibis.method @foo(%[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i32) {
 // CHECK:             "foo.unused1"() : () -> ()
+// CHECK:             ibis.sblock.inline.begin {maxThreads = 1 : i64}
+// CHECK:             %[[VAL_3:.*]] = "foo.op1"(%[[VAL_1]], %[[VAL_2]]) : (i32, i32) -> i32
+// CHECK:             ibis.sblock.inline.end
+// CHECK:             "foo.unused2"() : () -> ()
 // CHECK:             cf.br ^bb1
 // CHECK:           ^bb1:
-// CHECK:             %[[VAL_3:.*]] = "foo.op1"(%[[VAL_1]], %[[VAL_2]]) : (i32, i32) -> i32
-// CHECK:             cf.br ^bb2
-// CHECK:           ^bb2:
-// CHECK:             "foo.unused2"() : () -> ()
-// CHECK:             cf.br ^bb3
-// CHECK:           ^bb3:
 // CHECK:             "foo.unused3"() : () -> ()
-// CHECK:             cf.br ^bb4
-// CHECK:           ^bb4:
+// CHECK:             ibis.sblock.inline.begin
 // CHECK:             %[[VAL_4:.*]] = "foo.op2"(%[[VAL_3]], %[[VAL_1]]) : (i32, i32) -> i32
-// CHECK:             cf.br ^bb5
-// CHECK:           ^bb5:
+// CHECK:             ibis.sblock.inline.end
 // CHECK:             "foo.unused4"() : () -> ()
 // CHECK:             ibis.return
 // CHECK:           }
@@ -85,7 +84,7 @@ ibis.class @Inline3 {
     %0 = ibis.sblock() -> (i32) attributes {maxThreads = 1} {
       %res = "foo.op1"(%a, %b) : (i32, i32) -> i32
       ibis.sblock.return %res : i32
-    } loc("foo")
+    }
     "foo.unused2"() : () -> ()
     cf.br ^bb1
   ^bb1:
@@ -93,7 +92,7 @@ ibis.class @Inline3 {
     %1 = ibis.sblock() -> (i32) {
       %res = "foo.op2"(%0, %a) : (i32, i32) -> i32
       ibis.sblock.return %res : i32
-    } loc("bar")
+    }
     "foo.unused4"() : () -> ()
     ibis.return
   }
