@@ -24,6 +24,28 @@ namespace firtool {
 struct FirtoolOptions {
   llvm::cl::OptionCategory &category;
 
+  llvm::cl::opt<std::string> outputFilename{
+      "o", llvm::cl::desc("Output filename, or directory for split output"),
+      llvm::cl::value_desc("filename"), llvm::cl::init("-"),
+      llvm::cl::cat(category)};
+
+  llvm::cl::opt<bool> disableAnnotationsUnknown{
+      "disable-annotation-unknown",
+      llvm::cl::desc("Ignore unknown annotations when parsing"),
+      llvm::cl::init(false), llvm::cl::cat(category)};
+
+  llvm::cl::opt<bool> disableAnnotationsClassless{
+      "disable-annotation-classless",
+      llvm::cl::desc("Ignore annotations without a class when parsing"),
+      llvm::cl::init(false), llvm::cl::cat(category)};
+
+  llvm::cl::opt<bool> lowerAnnotationsNoRefTypePorts{
+      "lower-annotations-no-ref-type-ports",
+      llvm::cl::desc(
+          "Create real ports instead of ref type ports when resolving "
+          "wiring problems inside the LowerAnnotations pass"),
+      llvm::cl::init(false), llvm::cl::Hidden, llvm::cl::cat(category)};
+
   llvm::cl::opt<circt::firrtl::PreserveAggregate::PreserveMode>
       preserveAggregate{
           "preserve-aggregate", llvm::cl::desc("Specify input file format:"),
@@ -241,6 +263,22 @@ struct FirtoolOptions {
       llvm::cl::location(clockGateOpts.testEnableName),
       llvm::cl::init("test_en"), llvm::cl::cat(category)};
 
+  llvm::cl::opt<bool> exportModuleHierarchy{
+      "export-module-hierarchy",
+      llvm::cl::desc("Export module and instance hierarchy as JSON"),
+      llvm::cl::init(false), llvm::cl::cat(category)};
+
+  llvm::cl::opt<bool> stripFirDebugInfo{
+      "strip-fir-debug-info",
+      llvm::cl::desc(
+          "Disable source fir locator information in output Verilog"),
+      llvm::cl::init(true), llvm::cl::cat(category)};
+
+  llvm::cl::opt<bool> stripDebugInfo{
+      "strip-debug-info",
+      llvm::cl::desc("Disable source locator information in output Verilog"),
+      llvm::cl::init(false), llvm::cl::cat(category)};
+
   bool isRandomEnabled(RandomKind kind) const {
     return disableRandom != RandomKind::All && disableRandom != kind;
   }
@@ -260,6 +298,9 @@ struct FirtoolOptions {
   FirtoolOptions(llvm::cl::OptionCategory &category) : category(category) {}
 };
 
+LogicalResult populatePreprocessTransforms(mlir::PassManager &pm,
+                                           const FirtoolOptions &opt);
+
 LogicalResult populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
                                          const FirtoolOptions &opt,
                                          ModuleOp module,
@@ -269,6 +310,17 @@ LogicalResult populateLowFIRRTLToHW(mlir::PassManager &pm,
                                     const FirtoolOptions &opt);
 
 LogicalResult populateHWToSV(mlir::PassManager &pm, const FirtoolOptions &opt);
+
+LogicalResult populateExportVerilog(mlir::PassManager &pm,
+                                    const FirtoolOptions &opt,
+                                    llvm::raw_ostream &os);
+
+LogicalResult populateExportSplitVerilog(mlir::PassManager &pm,
+                                         const FirtoolOptions &opt,
+                                         llvm::StringRef directory);
+
+LogicalResult populateFinalizeIR(mlir::PassManager &pm,
+                                 const FirtoolOptions &opt);
 
 } // namespace firtool
 } // namespace circt

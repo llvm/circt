@@ -81,10 +81,6 @@ static cl::opt<std::string> inputFilename(cl::Positional,
                                           cl::desc("<input file>"),
                                           cl::init("-"), cl::cat(mainCategory));
 
-static cl::opt<std::string> outputFilename(
-    "o", cl::desc("Output filename, or directory for split output"),
-    cl::value_desc("filename"), cl::init("-"), cl::cat(mainCategory));
-
 static cl::opt<bool>
     splitInputFile("split-input-file",
                    cl::desc("Split the input file into pieces and process each "
@@ -107,22 +103,6 @@ static cl::opt<bool>
                                "expected-* lines on the corresponding line"),
                       cl::init(false), cl::Hidden, cl::cat(mainCategory));
 
-static cl::opt<bool> disableAnnotationsClassless(
-    "disable-annotation-classless",
-    cl::desc("Ignore annotations without a class when parsing"),
-    cl::init(false), cl::cat(mainCategory));
-
-static cl::opt<bool> disableAnnotationsUnknown(
-    "disable-annotation-unknown",
-    cl::desc("Ignore unknown annotations when parsing"), cl::init(false),
-    cl::cat(mainCategory));
-
-static cl::opt<bool> lowerAnnotationsNoRefTypePorts(
-    "lower-annotations-no-ref-type-ports",
-    cl::desc("Create real ports instead of ref type ports when resolving "
-             "wiring problems inside the LowerAnnotations pass"),
-    cl::init(false), cl::Hidden, cl::cat(mainCategory));
-
 using InfoLocHandling = firrtl::FIRParserOptions::InfoLocHandling;
 static cl::opt<InfoLocHandling> infoLocHandling(
     cl::desc("Location tracking:"),
@@ -135,11 +115,6 @@ static cl::opt<InfoLocHandling> infoLocHandling(
             InfoLocHandling::PreferInfo, "prefer-info-locators",
             "Use @info locations when present, fallback to .fir locations")),
     cl::init(InfoLocHandling::PreferInfo), cl::cat(mainCategory));
-
-static cl::opt<bool> exportModuleHierarchy(
-    "export-module-hierarchy",
-    cl::desc("Export module and instance hierarchy as JSON"), cl::init(false),
-    cl::cat(mainCategory));
 
 static cl::opt<bool>
     scalarizeTopModule("scalarize-top-module",
@@ -214,16 +189,6 @@ static cl::opt<bool>
     verbosePassExecutions("verbose-pass-executions",
                           cl::desc("Log executions of toplevel module passes"),
                           cl::init(false), cl::cat(mainCategory));
-
-static cl::opt<bool> stripFirDebugInfo(
-    "strip-fir-debug-info",
-    cl::desc("Disable source fir locator information in output Verilog"),
-    cl::init(true), cl::cat(mainCategory));
-
-static cl::opt<bool> stripDebugInfo(
-    "strip-debug-info",
-    cl::desc("Disable source locator information in output Verilog"),
-    cl::init(false), cl::cat(mainCategory));
 
 static LoweringOptionsOption loweringOptions(mainCategory);
 
@@ -324,14 +289,8 @@ static LogicalResult processBuffer(
   if (failed(applyPassManagerCLOptions(pm)))
     return failure();
 
-  // Legalize away "open" aggregates to hw-only versions.
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerOpenAggsPass());
-
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createResolvePathsPass());
-
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerFIRRTLAnnotationsPass(
-      disableAnnotationsUnknown, disableAnnotationsClassless,
-      lowerAnnotationsNoRefTypePorts));
+  if (failed(firtool::populatePreprocessTransforms(pm, firtoolOptions)))
+    return failure();
 
   // If the user asked for --parse-only, stop after running LowerAnnotations.
   if (outputFormat == OutputParseOnly) {
@@ -362,54 +321,34 @@ static LogicalResult processBuffer(
   // Add passes specific to Verilog emission if we're going there.
   if (outputFormat == OutputVerilog || outputFormat == OutputSplitVerilog ||
       outputFormat == OutputIRVerilog) {
-    // Legalize unsupported operations within the modules.
-    pm.nest<hw::HWModuleOp>().addPass(sv::createHWLegalizeModulesPass());
-
-    // Tidy up the IR to improve verilog emission quality.
-    if (!firtoolOptions.disableOptimization)
-      pm.nest<hw::HWModuleOp>().addPass(sv::createPrettifyVerilogPass());
-
-    if (stripFirDebugInfo)
-      pm.addPass(
-          circt::createStripDebugInfoWithPredPass([](mlir::Location loc) {
-            if (auto fileLoc = loc.dyn_cast<FileLineColLoc>())
-              return fileLoc.getFilename().getValue().endswith(".fir");
-            return false;
-          }));
-
-    if (stripDebugInfo)
-      pm.addPass(circt::createStripDebugInfoWithPredPass(
-          [](mlir::Location loc) { return true; }));
-
-    // Emit module and testbench hierarchy JSON files.
-    if (exportModuleHierarchy)
-      pm.addPass(sv::createHWExportModuleHierarchyPass(outputFilename));
-
-    // Check inner symbols and inner refs.
-    pm.addPass(hw::createVerifyInnerRefNamespacePass());
 
     // Emit a single file or multiple files depending on the output format.
     switch (outputFormat) {
     default:
       llvm_unreachable("can't reach this");
     case OutputVerilog:
-      pm.addPass(createExportVerilogPass((*outputFile)->os()));
+      if (failed(firtool::populateExportVerilog(pm, firtoolOptions,
+                                                (*outputFile)->os())))
+        return failure();
       break;
     case OutputSplitVerilog:
-      pm.addPass(createExportSplitVerilogPass(outputFilename));
+      if (failed(firtool::populateExportSplitVerilog(
+              pm, firtoolOptions, firtoolOptions.outputFilename)))
+        return failure();
       break;
     case OutputIRVerilog:
       // Run the ExportVerilog pass to get its lowering, but discard the output.
-      pm.addPass(createExportVerilogPass(llvm::nulls()));
+      if (failed(firtool::populateExportVerilog(pm, firtoolOptions,
+                                                llvm::nulls())))
+        return failure();
       break;
     }
 
     // Run final IR mutations to clean it up after ExportVerilog and before
     // emitting the final MLIR.
-    if (!mlirOutFile.empty()) {
-      pm.addPass(firrtl::createFinalizeIRPass());
-      pm.addPass(om::createFreezePathsPass());
-    }
+    if (!mlirOutFile.empty())
+      if (failed(firtool::populateFinalizeIR(pm, firtoolOptions)))
+        return failure();
   }
 
   if (failed(pm.run(module.get())))
@@ -559,21 +498,25 @@ static LogicalResult executeFirtool(MLIRContext &context) {
   std::optional<std::unique_ptr<llvm::ToolOutputFile>> outputFile;
   if (outputFormat != OutputSplitVerilog) {
     // Create an output file.
-    outputFile.emplace(openOutputFile(outputFilename, &errorMessage));
+    outputFile.emplace(
+        openOutputFile(firtoolOptions.outputFilename, &errorMessage));
     if (!(*outputFile)) {
       llvm::errs() << errorMessage << "\n";
       return failure();
     }
   } else {
     // Create an output directory.
-    if (outputFilename.isDefaultOption() || outputFilename == "-") {
+    if (firtoolOptions.outputFilename.isDefaultOption() ||
+        firtoolOptions.outputFilename == "-") {
       llvm::errs() << "missing output directory: specify with -o=<dir>\n";
       return failure();
     }
-    auto error = llvm::sys::fs::create_directories(outputFilename);
+    auto error =
+        llvm::sys::fs::create_directories(firtoolOptions.outputFilename);
     if (error) {
-      llvm::errs() << "cannot create output directory '" << outputFilename
-                   << "': " << error.message() << "\n";
+      llvm::errs() << "cannot create output directory '"
+                   << firtoolOptions.outputFilename << "': " << error.message()
+                   << "\n";
       return failure();
     }
   }
