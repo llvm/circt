@@ -270,6 +270,9 @@ struct Visitor : public hw::StmtVisitor<Visitor, LogicalResult>,
             .Case<circt::seq::FirRegOp>([&](circt::seq::FirRegOp &op) {
               return visitSeqOp(op, circuit);
             })
+            .Case<circt::seq::FromClockOp>([&](circt::seq::FromClockOp &op) {
+              return visitSeqOp(op, circuit);
+            })
             .Default([&](mlir::Operation *op) { return visitUnhandledOp(op); });
     return outcome;
   }
@@ -294,6 +297,15 @@ struct Visitor : public hw::StmtVisitor<Visitor, LogicalResult>,
     mlir::Value reset = op.getReset();
     mlir::Value resetValue = op.getResetValue();
     circuit->performCompReg(next, clk, data, reset, resetValue);
+    return mlir::success();
+  }
+
+  mlir::LogicalResult visitSeqOp(circt::seq::FromClockOp &op,
+                                 Solver::Circuit *circuit) {
+    mlir::Value result = op.getResult();
+    mlir::Value input = op.getInput();
+    // circuit->performCompReg(next, clk, data, reset, resetValue);
+    circuit->performFromClock(result, input);
     return mlir::success();
   }
 };

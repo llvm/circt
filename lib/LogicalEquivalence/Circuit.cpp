@@ -486,8 +486,9 @@ z3::expr Solver::Circuit::fetchOrAllocateExpr(Value value) {
     auto nameInsertion = nameTable.insert(std::pair(value, valueName));
     assert(nameInsertion.second && "Name not inserted in state table");
     Type type = value.getType();
-    assert(type.isSignlessInteger() && "Unsupported type");
-    unsigned int width = type.getIntOrFloatBitWidth();
+    auto isClockType = hw::type_isa<seq::ClockType>(type);
+    assert((type.isSignlessInteger() || isClockType) && "Unsupported type");
+    unsigned int width = isClockType ? 1 : type.getIntOrFloatBitWidth();
     // Technically allowed for the `hw` dialect but
     // disallowed for `comb` operations; should check separately.
     assert(width > 0 && "0-width integers are not supported"); // NOLINT
@@ -843,6 +844,15 @@ void Solver::Circuit::performFirReg(mlir::Value next, mlir::Value clk,
   reg.resetValue = resetValue;
   regs.push_back(reg);
   addClk(clk);
+}
+
+void Solver::Circuit::performFromClock(mlir::Value result, mlir::Value input) {
+  z3::expr resultState = fetchOrAllocateExpr(result);
+  z3::expr inputState = fetchOrAllocateExpr(input);
+  // Constrain the result directly to the input's value
+  constrainResult(result, inputState);
+  combTransformTable.insert(std::pair(
+      result, std::pair(std::make_tuple(input), [](auto op1) { return op1; })));
 }
 
 //===----------------------------------------------------------------------===//

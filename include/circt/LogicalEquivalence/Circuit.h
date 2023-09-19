@@ -85,6 +85,7 @@ public:
                       mlir::Value reset, mlir::Value resetValue);
   void performFirReg(mlir::Value next, mlir::Value clk, mlir::Value data,
                      mlir::Value reset, mlir::Value resetValue);
+  void performFromClock(mlir::Value result, mlir::Value input);
 
   // `verif` dialect operations.
   void performAssert(mlir::Value property);
