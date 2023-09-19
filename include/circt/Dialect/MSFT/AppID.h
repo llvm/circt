@@ -20,7 +20,6 @@
 #include "llvm/ADT/DenseMap.h"
 
 namespace circt {
-
 namespace msft {
 
 /// An index for resolving AppIDPaths to dynamic instances.
