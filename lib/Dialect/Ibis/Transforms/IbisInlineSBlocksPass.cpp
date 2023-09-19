@@ -29,13 +29,6 @@ namespace {
 
 struct InlineSBlocksPass : public IbisInlineSBlocksBase<InlineSBlocksPass> {
   void runOnOperation() override;
-
-  // Inlines an ibis.sblock into the CFG of the parent block.
-  // Will attempt to reduce the number of empty blocks (i.e. blocks only
-  // containing branches to other blocks) - this is imperative, since region
-  // simplification is not allowed to run after this pass.
-  void inlineSBlock(OpBuilder &b, ibis::StaticBlockOp op,
-                    DenseMap<Block *, DictionaryAttr> &blockAttrMap);
 };
 
 class InlineSBlocksPattern : public OpConversionPattern<ibis::StaticBlockOp> {

@@ -24,6 +24,7 @@ namespace {
 struct ReblockPass : public IbisReblockBase<ReblockPass> {
   void runOnOperation() override;
 
+  // Transforms an `ibis.sblock.inline.begin/end` scope into an `ibis.sblock`.
   LogicalResult reblock(ibis::InlineStaticBlockBeginOp);
 };
 } // anonymous namespace
@@ -31,11 +32,6 @@ struct ReblockPass : public IbisReblockBase<ReblockPass> {
 void ReblockPass::runOnOperation() {
   MethodOp parent = getOperation();
   Region &region = parent.getRegion();
-
-  if (!isRegionSSAMaximized(region)) {
-    parent->emitOpError() << "region is not in maximal SSA form";
-    return signalPassFailure();
-  }
 
   for (auto blockBeginOp : llvm::make_early_inc_range(
            parent.getOps<ibis::InlineStaticBlockBeginOp>())) {
@@ -53,9 +49,13 @@ LogicalResult ReblockPass::reblock(ibis::InlineStaticBlockBeginOp beginOp) {
 
   auto startIt = beginOp->getIterator();
   auto endIt = endOp->getIterator();
+  Block *sblockParentBlock = beginOp->getBlock();
 
   auto usedOutsideBlock = [&](OpOperand &use) {
     Operation *owner = use.getOwner();
+    Block *useBlock = owner->getBlock();
+    if (useBlock != sblockParentBlock)
+      return true;
     bool isBefore = owner->isBeforeInBlock(beginOp);
     bool isAfter = isBefore ? false : endOp->isBeforeInBlock(owner);
     return isBefore || isAfter;
@@ -79,8 +79,6 @@ LogicalResult ReblockPass::reblock(ibis::InlineStaticBlockBeginOp beginOp) {
   }
 
   auto b = OpBuilder(beginOp);
-
-  // Lookup block location from the block info.
   auto ibisBlock =
       b.create<StaticBlockOp>(beginOp.getLoc(), blockRetTypes, ValueRange{});
 
