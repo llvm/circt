@@ -512,6 +512,12 @@ printFileLineColSetInfo(llvm::raw_string_ostream &sstr,
   }
 }
 
+//===----------------------------------------------------------------------===//
+// Location comparison
+//===----------------------------------------------------------------------===//
+
+// NOLINTBEGIN(misc-no-recursion)
+
 static int compareLocs(Location lhs, Location rhs);
 
 // NameLoc comparator - compare names, then child locations.
@@ -549,10 +555,12 @@ FailureOr<int> dispatchCompareLocations(Location lhs, Location rhs) {
   if (lhsT && rhsT) {
     // Both are of the target location type, compare them directly.
     return compareLocsImpl(lhsT, rhsT);
-  } else if (lhsT) {
+  }
+  if (lhsT) {
     // lhs is TTargetLoc => it comes before rhs.
     return -1;
-  } else if (rhsT) {
+  }
+  if (rhsT) {
     // rhs is TTargetLoc => it comes before lhs.
     return 1;
   }
@@ -587,6 +595,8 @@ static int compareLocs(Location lhs, Location rhs) {
   // Anything else...
   return 0;
 }
+
+// NOLINTEND(misc-no-recursion)
 
 // Sorts a vector of locations in-place.
 template <typename TVector>
