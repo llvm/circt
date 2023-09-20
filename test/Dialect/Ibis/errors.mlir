@@ -2,20 +2,9 @@
 
 ibis.class @C {
   %this = ibis.this @C
-  ibis.method @typeMismatch1() -> ui32 {
-    // expected-error @+1 {{must return a value}}
+  ibis.method @typeMismatch1() -> (ui32, i32) {
+    // expected-error @+1 {{'ibis.return' op must have the same number of operands as the method has results}}
     ibis.return
-  }
-}
-
-// -----
-
-ibis.class @C {
-  %this = ibis.this @C
-  ibis.method @typeMismatch2() {
-    %c = hw.constant 1 : i8
-    // expected-error @+1 {{cannot return a value from a function with no result type}}
-    ibis.return %c : i8
   }
 }
 
@@ -24,7 +13,7 @@ ibis.class @C {
   %this = ibis.this @C
   ibis.method @typeMismatch3() -> ui32 {
     %c = hw.constant 1 : i8
-    // expected-error @+1 {{return type ('i8') must match function return type ('ui32')}}
+    // expected-error @+1 {{'ibis.return' op operand type ('i8') must match function return type ('ui32')}}
     ibis.return %c : i8
   }
 }
