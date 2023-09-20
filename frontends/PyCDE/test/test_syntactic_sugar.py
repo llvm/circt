@@ -1,6 +1,6 @@
 # RUN: %PYTHON% %s | FileCheck %s
 
-from pycde import (Output, Input, generator, types, dim, Module)
+from pycde import (Clock, Output, Input, generator, types, dim, Module)
 from pycde.testing import unittestmodule
 
 # CHECK-LABEL:  hw.module @Top()
@@ -49,7 +49,7 @@ class Top(Module):
 
 # -----
 
-# CHECK:  hw.module @ComplexPorts(%clk: i1, %data_in: !hw.array<3xi32>, %sel: i2, %struct_data_in: !hw.struct<foo: i36>) -> (a: i32, b: i32, c: i32)
+# CHECK:  hw.module @ComplexPorts(%clk: !seq.clock, %data_in: !hw.array<3xi32>, %sel: i2, %struct_data_in: !hw.struct<foo: i36>) -> (a: i32, b: i32, c: i32)
 # CHECK:    %c0_i2 = hw.constant 0 : i2
 # CHECK:    [[REG0:%.+]] = hw.array_get %data_in[%c0_i2] {sv.namehint = "data_in__0"} : !hw.array<3xi32>
 # CHECK:    [[REGR1:%data_in__0__reg1]] = seq.compreg sym @data_in__0__reg1 [[REG0]], %clk : i32
@@ -62,7 +62,7 @@ class Top(Module):
 
 @unittestmodule()
 class ComplexPorts(Module):
-  clk = Input(types.i1)
+  clk = Clock()
   data_in = Input(dim(32, 3))
   sel = Input(types.i2)
   struct_data_in = Input(types.struct({"foo": types.i36}))

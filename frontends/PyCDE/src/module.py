@@ -219,7 +219,6 @@ class ModuleLikeBuilderBase(_PyProxy):
   def scan_cls(self):
     """Scan the class for input/output ports and generators. (Most `ModuleLike`
     will use these.) Store the results for later use."""
-    from .types import Bits
 
     input_ports = []
     output_ports = []
@@ -245,10 +244,10 @@ class ModuleLikeBuilderBase(_PyProxy):
 
       if isinstance(attr, Clock):
         clock_ports.add(len(input_ports))
-        input_ports.append((attr_name, Bits(1)))
+        input_ports.append((attr_name, attr.type))
       elif isinstance(attr, Reset):
         reset_ports.add(len(input_ports))
-        input_ports.append((attr_name, Bits(1)))
+        input_ports.append((attr_name, attr.type))
       elif isinstance(attr, Input):
         input_ports.append((attr_name, attr.type))
       elif isinstance(attr, Output):

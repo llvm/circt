@@ -27,7 +27,10 @@ void circt::python::populateDialectSeqSubmodule(py::module &m) {
   m.doc() = "Seq dialect Python native extension";
 
   mlir_type_subclass(m, "ClockType", seqTypeIsAClock)
-      .def_classmethod("get", [](py::object cls, MlirContext ctx) {
-        return cls(seqClockTypeGet(ctx));
-      });
+      .def_classmethod(
+          "get",
+          [](py::object cls, MlirContext ctx) {
+            return cls(seqClockTypeGet(ctx));
+          },
+          py::arg("cls"), py::arg("context") = py::none());
 }

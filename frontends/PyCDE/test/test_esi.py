@@ -6,7 +6,7 @@ from pycde import (Clock, Input, InputChannel, OutputChannel, Module, generator,
 from pycde import esi
 from pycde.common import Output
 from pycde.constructs import Wire
-from pycde.types import Bits, Channel, ChannelSignaling, UInt
+from pycde.types import Bits, Channel, ChannelSignaling, UInt, ClockType
 from pycde.testing import unittestmodule
 from pycde.signals import BitVectorSignal, ChannelSignal, Struct
 
@@ -20,7 +20,7 @@ class HostComms:
 
 
 class Producer(Module):
-  clk = Input(types.i1)
+  clk = Clock()
   int_out = OutputChannel(types.i32)
 
   @generator
@@ -30,7 +30,7 @@ class Producer(Module):
 
 
 class Consumer(Module):
-  clk = Input(types.i1)
+  clk = Clock()
   int_in = InputChannel(types.i32)
 
   @generator
@@ -38,15 +38,15 @@ class Consumer(Module):
     HostComms.to_host(ports.int_in, "loopback_out")
 
 
-# CHECK-LABEL: hw.module @LoopbackTop(%clk: i1, %rst: i1)
-# CHECK:         %Producer.int_out = hw.instance "Producer" sym @Producer @Producer(clk: %clk: i1) -> (int_out: !esi.channel<i32>)
-# CHECK:         hw.instance "Consumer" sym @Consumer @Consumer(clk: %clk: i1, int_in: %Producer.int_out: !esi.channel<i32>) -> (
-# CHECK:         esi.service.instance svc @HostComms impl as "cosim"(%clk, %rst) : (i1, i1) -> ()
+# CHECK-LABEL: hw.module @LoopbackTop(%clk: !seq.clock, %rst: i1)
+# CHECK:         %Producer.int_out = hw.instance "Producer" sym @Producer @Producer(clk: %clk: !seq.clock) -> (int_out: !esi.channel<i32>)
+# CHECK:         hw.instance "Consumer" sym @Consumer @Consumer(clk: %clk: !seq.clock, int_in: %Producer.int_out: !esi.channel<i32>) -> (
+# CHECK:         esi.service.instance svc @HostComms impl as "cosim"(%clk, %rst) : (!seq.clock, i1) -> ()
 # CHECK:         hw.output
-# CHECK-LABEL: hw.module @Producer(%clk: i1) -> (int_out: !esi.channel<i32>)
+# CHECK-LABEL: hw.module @Producer(%clk: !seq.clock) -> (int_out: !esi.channel<i32>)
 # CHECK:         [[R0:%.+]] = esi.service.req.to_client <@HostComms::@from_host>(["loopback_in"]) : !esi.channel<i32>
 # CHECK:         hw.output [[R0]] : !esi.channel<i32>
-# CHECK-LABEL: hw.module @Consumer(%clk: i1, %int_in: !esi.channel<i32>)
+# CHECK-LABEL: hw.module @Consumer(%clk: !seq.clock, %int_in: !esi.channel<i32>)
 # CHECK:         esi.service.req.to_server %int_in -> <@HostComms::@to_host>(["loopback_out"]) : !esi.channel<i32>
 # CHECK:         hw.output
 # CHECK-LABEL: esi.service.decl @HostComms {
@@ -56,7 +56,7 @@ class Consumer(Module):
 
 @unittestmodule(print=True)
 class LoopbackTop(Module):
-  clk = Clock(types.i1)
+  clk = Clock()
   rst = Input(types.i1)
 
   @generator
@@ -67,8 +67,8 @@ class LoopbackTop(Module):
     esi.Cosim(HostComms, ports.clk, ports.rst)
 
 
-# CHECK-LABEL: hw.module @LoopbackInOutTop(%clk: i1, %rst: i1)
-# CHECK:         esi.service.instance svc @HostComms impl as "cosim"(%clk, %rst) : (i1, i1) -> ()
+# CHECK-LABEL: hw.module @LoopbackInOutTop(%clk: !seq.clock, %rst: i1)
+# CHECK:         esi.service.instance svc @HostComms impl as "cosim"(%clk, %rst) : (!seq.clock, i1) -> ()
 # CHECK:         %0 = esi.service.req.inout %chanOutput -> <@HostComms::@req_resp>(["loopback_inout"]) : !esi.channel<i16> -> !esi.channel<i32>
 # CHECK:         %rawOutput, %valid = esi.unwrap.vr %0, %ready : i32
 # CHECK:         %1 = comb.extract %rawOutput from 0 : (i32) -> i16
@@ -76,7 +76,7 @@ class LoopbackTop(Module):
 # CHECK:         hw.output
 @unittestmodule(print=True)
 class LoopbackInOutTop(Module):
-  clk = Clock(types.i1)
+  clk = Clock()
   rst = Input(types.i1)
 
   @generator
@@ -152,7 +152,7 @@ class MultiplexerService(esi.ServiceImplementation):
     ports.trunk_out_valid = valid
 
 
-# CHECK-LABEL: hw.module @MultiplexerTop{{.*}}(%clk: i1, %rst: i1, %trunk_in: i256, %trunk_in_valid: i1, %trunk_out_ready: i1) -> (trunk_in_ready: i1, trunk_out: i256, trunk_out_valid: i1)
+# CHECK-LABEL: hw.module @MultiplexerTop{{.*}}(%clk: !seq.clock, %rst: i1, %trunk_in: i256, %trunk_in_valid: i1, %trunk_out_ready: i1) -> (trunk_in_ready: i1, trunk_out: i256, trunk_out_valid: i1)
 # CHECK:         %c0_i224 = hw.constant 0 : i224
 # CHECK:         [[r0:%.+]] = comb.concat %c0_i224, %Consumer.loopback_out : i224, i32
 # CHECK:         [[r1:%.+]] = comb.extract %trunk_in from 0 {sv.namehint = "trunk_in_0upto32"} : (i256) -> i32
@@ -167,7 +167,7 @@ class MultiplexerService(esi.ServiceImplementation):
 
 @unittestmodule(run_passes=True, print_after_passes=True, emit_outputs=True)
 class MultiplexerTop(Module):
-  clk = Clock(types.i1)
+  clk = Clock()
   rst = Input(types.i1)
 
   trunk_in = Input(types.i256)
@@ -218,7 +218,7 @@ class PureTest(esi.PureModule):
   def construct(ports):
     PassUpService(None)
 
-    clk = esi.PureModule.input_port("clk", types.i1)
+    clk = esi.PureModule.input_port("clk", ClockType())
     p = Producer(clk=clk)
     Consumer(clk=clk, int_in=p.int_out)
     p2 = Producer(clk=clk, instance_name="prod2")

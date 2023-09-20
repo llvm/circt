@@ -86,7 +86,7 @@ def type_to_pytype(t) -> ir.Type:
   if t.__class__ != ir.Type:
     return t
 
-  from .dialects import esi, hw
+  from .dialects import esi, hw, seq
   try:
     return ir.IntegerType(t)
   except ValueError:
@@ -109,6 +109,10 @@ def type_to_pytype(t) -> ir.Type:
     pass
   try:
     return hw.InOutType(t)
+  except ValueError:
+    pass
+  try:
+    return seq.ClockType(t)
   except ValueError:
     pass
   try:

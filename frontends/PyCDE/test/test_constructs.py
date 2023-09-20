@@ -6,7 +6,7 @@ from pycde.constructs import ControlReg, NamedWire, Reg, Wire, SystolicArray
 from pycde.dialects import comb
 from pycde.testing import unittestmodule
 
-# CHECK-LABEL: hw.module @WireAndRegTest(%In: i8, %InCE: i1, %clk: i1, %rst: i1) -> (Out: i8, OutReg: i8, OutRegRst: i8, OutRegCE: i8)
+# CHECK-LABEL: hw.module @WireAndRegTest(%In: i8, %InCE: i1, %clk: !seq.clock, %rst: i1) -> (Out: i8, OutReg: i8, OutRegRst: i8, OutRegCE: i8)
 # CHECK:         [[r0:%.+]] = comb.extract %In from 0 {sv.namehint = "In_0upto7"} : (i8) -> i7
 # CHECK:         [[r1:%.+]] = comb.extract %In from 7 {sv.namehint = "In_7upto8"} : (i8) -> i1
 # CHECK:         [[r2:%.+]] = comb.concat [[r1]], [[r0]] {sv.namehint = "w1"} : i1, i7
@@ -64,7 +64,7 @@ class WireAndRegTest(Module):
 # CHECK:         sv.read_inout %sum__reg1_0_0 : !hw.inout<i8>
 @unittestmodule(print=True, run_passes=True, print_after_passes=True)
 class SystolicArrayTest(Module):
-  clk = Input(types.i1)
+  clk = Clock()
   col_data = Input(dim(8, 2))
   row_data = Input(dim(8, 3))
   out = Output(dim(8, 2, 3))

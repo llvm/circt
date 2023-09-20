@@ -109,8 +109,10 @@ class MachineModuleBuilder(ModuleLikeBuilderBase):
               f"Multiple initial states specified ({name}, {initial_state}).")
         initial_state = name
 
+    from .types import ClockType
     for name, v in self.inputs:
-      if v.width != 1:
+      if not (isinstance(v, ClockType) or
+              (hasattr(v, "width") and v.width == 1)):
         raise ValueError(
             f"Input port {name} has width {v.width}. For now, FSMs only "
             "support i1 inputs.")

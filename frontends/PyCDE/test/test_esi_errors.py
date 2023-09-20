@@ -14,7 +14,7 @@ class HostComms:
 
 
 class Producer(Module):
-  clk = Input(types.i1)
+  clk = Clock()
   int_out = OutputChannel(types.i32)
 
   @generator
@@ -24,7 +24,7 @@ class Producer(Module):
 
 
 class Consumer(Module):
-  clk = Input(types.i1)
+  clk = Clock()
   int_in = InputChannel(types.i32)
 
   @generator
@@ -34,7 +34,7 @@ class Consumer(Module):
 
 @unittestmodule(print=True)
 class LoopbackTop(Module):
-  clk = Clock(types.i1)
+  clk = Clock()
   rst = Input(types.i1)
 
   @generator
@@ -75,7 +75,7 @@ class MultiplexerService(esi.ServiceImplementation):
 
 @unittestmodule(run_passes=True, print_after_passes=True)
 class MultiplexerTop(Module):
-  clk = Clock(types.i1)
+  clk = Clock()
   rst = Input(types.i1)
 
   @generator
@@ -105,7 +105,7 @@ class BrokenService(esi.ServiceImplementation):
 
 @unittestmodule(run_passes=True, print_after_passes=True)
 class BrokenTop(Module):
-  clk = Clock(types.i1)
+  clk = Clock()
   rst = Input(types.i1)
 
   @generator
