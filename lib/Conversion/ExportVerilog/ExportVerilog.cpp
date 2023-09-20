@@ -3507,13 +3507,7 @@ void NameCollector::collectNames(Block &block) {
     if (isa<ltl::LTLDialect>(op.getDialect()))
       continue;
 
-    bool isExpr = isVerilogExpression(&op);
-    assert((!isExpr ||
-            isExpressionEmittedInline(&op, moduleEmitter.state.options)) &&
-           "If 'op' is a verilog expression, the expression must be inlinable. "
-           "Otherwise, it is a bug of PrepareForEmission");
-
-    if (!isExpr) {
+    if (!isVerilogExpression(&op)) {
       for (auto result : op.getResults()) {
         StringRef declName =
             getVerilogDeclWord(&op, moduleEmitter.state.options);
@@ -3538,14 +3532,6 @@ void NameCollector::collectNames(Block &block) {
         if (!region.empty())
           collectNames(region.front());
       }
-      continue;
-    }
-
-    // Recursively process any expressions in else blocks that can be emitted
-    // as `else if`.
-    if (auto ifOp = dyn_cast<IfOp>(op)) {
-      if (ifOp.hasElse() && findNestedElseIf(ifOp.getElseBlock()))
-        collectNames(*ifOp.getElseBlock());
       continue;
     }
   }
@@ -5253,8 +5239,11 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
     if (!isZeroBit) {
       if (!word.empty())
         ps << PPExtString(word);
+      unsigned spaces = 0;
+      if (word.size() < maxDeclNameWidth)
+        spaces += maxDeclNameWidth - word.size();
       auto extraIndent = word.empty() ? 0 : 1;
-      ps.spaces(maxDeclNameWidth - word.size() + extraIndent);
+      ps.spaces(spaces + extraIndent);
     } else {
       ps << "// Zero width: " << PPExtString(word) << PP::space;
     }
