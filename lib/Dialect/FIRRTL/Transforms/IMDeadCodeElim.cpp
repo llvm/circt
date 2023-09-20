@@ -96,6 +96,7 @@ struct IMDeadCodeElimPass : public IMDeadCodeElimBase<IMDeadCodeElimPass> {
 
   void markDeclaration(Operation *op);
   void markInstanceOp(InstanceOp instanceOp);
+  void markObjectOp(ObjectOp objectOp);
   void markUnknownSideEffectOp(Operation *op);
   void visitInstanceOp(InstanceOp instance);
   void visitHierPathOp(hw::HierPathOp hierpath);
@@ -202,7 +203,7 @@ void IMDeadCodeElimPass::visitUser(Operation *op) {
   LLVM_DEBUG(llvm::dbgs() << "Visit: " << *op << "\n");
   if (auto connectOp = dyn_cast<FConnectLike>(op))
     return visitConnect(connectOp);
-  if (isa<SubfieldOp, SubindexOp, SubaccessOp>(op))
+  if (isa<SubfieldOp, SubindexOp, SubaccessOp, ObjectSubfieldOp>(op))
     return visitSubelement(op);
 }
 
@@ -232,6 +233,11 @@ void IMDeadCodeElimPass::markInstanceOp(InstanceOp instance) {
   markBlockExecutable(fModule.getBodyBlock());
 }
 
+void IMDeadCodeElimPass::markObjectOp(ObjectOp object) {
+  // unconditionally keep all objects alive.
+  markAlive(object);
+}
+
 void IMDeadCodeElimPass::markBlockExecutable(Block *block) {
   if (!executableBlocks.insert(block).second)
     return; // Already executable.
@@ -252,6 +258,8 @@ void IMDeadCodeElimPass::markBlockExecutable(Block *block) {
       markDeclaration(&op);
     else if (auto instance = dyn_cast<InstanceOp>(op))
       markInstanceOp(instance);
+    else if (auto object = dyn_cast<ObjectOp>(op))
+      markObjectOp(object);
     else if (isa<FConnectLike>(op))
       // Skip connect op.
       continue;

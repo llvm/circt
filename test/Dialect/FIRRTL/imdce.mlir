@@ -453,6 +453,78 @@ firrtl.circuit "Test" {
 }
 
 // -----
+// Test that empty classes and objects are kept alive.
+
+firrtl.circuit "Test" {
+  // CHECK: firrtl.class private @Empty()
+  firrtl.class private @Empty() {}
+
+  // CHECK: firrtl.class private @UnusedAndEmpty()
+  firrtl.class private @UnusedAndEmpty() {}
+
+  // CHECK: firrtl.module @Test()
+  firrtl.module @Test() {
+    // CHECK: %obj = firrtl.object @Empty()
+    %obj = firrtl.object @Empty()
+  }
+}
+
+// -----
+// Test that instances of classes are kept alive.
+
+firrtl.circuit "Test" {
+  // Both the input and the output of this class are ignored, but preserved by
+  // IMDCE.
+  // CHECK: firrtl.class private @Class(in %in: !firrtl.integer, out %out: !firrtl.integer)
+  firrtl.class private @Class(in %in: !firrtl.integer, out %out: !firrtl.integer) {
+    // CHECK:   %0 = firrtl.integer 123
+    // CHECK:   firrtl.propassign %out, %0 : !firrtl.integer
+    %0 = firrtl.integer 123
+    firrtl.propassign %out, %0 : !firrtl.integer
+  }
+
+  // The write to %o's "in" port is preserved by IMDCE, even though the input
+  // is unused by the class.
+  // CHECK: firrtl.module @Test() attributes {convention = #firrtl<convention scalarized>}
+  firrtl.module @Test() attributes {convention = #firrtl<convention scalarized>} {
+    // CHECK: %0 = firrtl.integer 456
+    // CHECK: %o = firrtl.object @Class(in in: !firrtl.integer, out out: !firrtl.integer)
+    // CHECK: %1 = firrtl.object.subfield %o[in] : !firrtl.class<@Class(in in: !firrtl.integer, out out: !firrtl.integer)>
+    // CHECK: firrtl.propassign %1, %0 : !firrtl.integer
+    %0 = firrtl.integer 456
+    %o = firrtl.object @Class(in in: !firrtl.integer, out out: !firrtl.integer)
+    %1 = firrtl.object.subfield %o[in] : !firrtl.class<@Class(in in: !firrtl.integer, out out: !firrtl.integer)>
+    firrtl.propassign %1, %0 : !firrtl.integer
+  }
+}
+
+// -----
+// Test that instances of extclasses are kept alive.
+
+module {
+  firrtl.circuit "Test" {
+    // CHECK: firrtl.extclass private @Class(out out_str: !firrtl.string, in in_str: !firrtl.string)
+    firrtl.extclass private @Class(out out_str: !firrtl.string, in in_str: !firrtl.string)
+
+    // CHECK: firrtl.module @Test(out %out_str: !firrtl.string) attributes {convention = #firrtl<convention scalarized>}
+    firrtl.module @Test(out %out_str: !firrtl.string) attributes {convention = #firrtl<convention scalarized>} {
+      // CHECK: %0 = firrtl.string "whatever"
+      // CHECK: %obj = firrtl.object @Class(out out_str: !firrtl.string, in in_str: !firrtl.string)
+      // CHECK: %1 = firrtl.object.subfield %obj[out_str] : !firrtl.class<@Class(out out_str: !firrtl.string, in in_str: !firrtl.string)>
+      // CHECK: %2 = firrtl.object.subfield %obj[in_str] : !firrtl.class<@Class(out out_str: !firrtl.string, in in_str: !firrtl.string)>
+      // CHECK: firrtl.propassign %2, %0 : !firrtl.string
+      // CHECK: firrtl.propassign %out_str, %1 : !firrtl.string
+      %0 = firrtl.string "whatever"
+      %obj = firrtl.object @Class(out out_str: !firrtl.string, in in_str: !firrtl.string)
+      %1 = firrtl.object.subfield %obj[out_str] : !firrtl.class<@Class(out out_str: !firrtl.string, in in_str: !firrtl.string)>
+      %2 = firrtl.object.subfield %obj[in_str] : !firrtl.class<@Class(out out_str: !firrtl.string, in in_str: !firrtl.string)>
+      firrtl.propassign %2, %0 : !firrtl.string
+      firrtl.propassign %out_str, %1 : !firrtl.string
+    }
+  }
+}
+
+// -----
 // Test that a live use of a forceable declaration keeps it alive.
 // https://github.com/llvm/circt/issues/5898
 
