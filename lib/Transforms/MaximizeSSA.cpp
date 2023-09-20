@@ -195,18 +195,20 @@ LogicalResult circt::maximizeSSA(Region &region,
 
 namespace {
 
-struct FuncOpMaxSSAConversion : public OpConversionPattern<func::FuncOp> {
-
-  FuncOpMaxSSAConversion(MLIRContext *ctx) : OpConversionPattern(ctx) {}
-
+struct MaxSSAConversion : public ConversionPattern {
+public:
+  MaxSSAConversion(MLIRContext *context)
+      : ConversionPattern(MatchAnyOpTypeTag(), 1, context) {}
   LogicalResult
-  matchAndRewrite(func::FuncOp op, OpAdaptor adaptor,
+  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override {
     LogicalResult conversionStatus = success();
     rewriter.updateRootInPlace(op, [&] {
-      SSAMaximizationStrategy strategy;
-      if (failed(maximizeSSA(op.getRegion(), strategy, rewriter)))
-        conversionStatus = failure();
+      for (auto &region : op->getRegions()) {
+        SSAMaximizationStrategy strategy;
+        if (failed(maximizeSSA(region, strategy, rewriter)))
+          conversionStatus = failure();
+      }
     });
     return conversionStatus;
   }
@@ -218,18 +220,16 @@ public:
     auto *ctx = &getContext();
 
     RewritePatternSet patterns{ctx};
-    patterns.add<FuncOpMaxSSAConversion>(ctx);
+    patterns.add<MaxSSAConversion>(ctx);
     ConversionTarget target(*ctx);
 
-    // Check that the function is correctly SSA-maximized after the pattern has
-    // been applied
-    target.addDynamicallyLegalOp<func::FuncOp>([&](func::FuncOp func) {
-      return isRegionSSAMaximized(func.getBody());
+    // SSA maximization should apply to all region-defining ops.
+    target.markUnknownOpDynamicallyLegal([](Operation *op) {
+      return llvm::all_of(op->getRegions(), isRegionSSAMaximized);
     });
 
-    // Each function in the module is turned into maximal SSA form
-    // independently of the others. Function signatures are never modified
-    // by SSA maximization
+    // Each region is turned into maximal SSA form independently of the
+    // others. Function signatures are never modified by SSA maximization
     if (failed(applyPartialConversion(getOperation(), target,
                                       std::move(patterns))))
       signalPassFailure();
