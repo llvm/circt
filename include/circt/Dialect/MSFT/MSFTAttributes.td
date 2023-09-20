@@ -86,6 +86,10 @@ def AppIDAttr : MSFT_Attr<"AppID"> {
   let assemblyFormat = [{
     `<` $name `[` $index `]` `>`
   }];
+
+  let extraClassDeclaration = [{
+    static constexpr StringRef AppIDAttrName = "msft.appid";
+  }];
 }
 
 def AppIDPathAttr : MSFT_Attr<"AppIDPath"> {

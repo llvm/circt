@@ -211,6 +211,7 @@ class ModuleLike:
                   name: str,
                   parameters: Dict[str, object] = {},
                   results=None,
+                  sym_name=None,
                   loc=None,
                   ip=None,
                   **kwargs):
@@ -219,6 +220,7 @@ class ModuleLike:
                            kwargs,
                            parameters=parameters,
                            results=results,
+                           sym_name=sym_name,
                            loc=loc,
                            ip=ip)
 
