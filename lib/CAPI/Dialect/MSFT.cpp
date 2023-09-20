@@ -282,7 +282,7 @@ DEFINE_C_API_PTR_METHODS(CirctMSFTAppIDIndex, circt::msft::AppIDIndex)
 /// Create an index of appids through which to do appid lookups efficiently.
 MLIR_CAPI_EXPORTED CirctMSFTAppIDIndex
 circtMSFTAppIDIndexGet(MlirOperation root) {
-  auto idx = new AppIDIndex(unwrap(root));
+  auto *idx = new AppIDIndex(unwrap(root));
   if (idx->isValid())
     return wrap(idx);
   return CirctMSFTAppIDIndex{nullptr};

@@ -55,7 +55,7 @@ private:
   /// full resolution. Also return the inner named (static) operation to which
   /// the dynamic instance points.
   FailureOr<std::pair<DynamicInstanceOp, hw::InnerSymbolOpInterface>>
-  getSubInstance(hw::HWModuleLike mod, Operation *inst, AppIDAttr appid,
+  getSubInstance(hw::HWModuleLike mod, Operation *parent, AppIDAttr appid,
                  Location loc) const;
 
   /// Get or create (if it doesn't exist) the dynamic instance for inner name

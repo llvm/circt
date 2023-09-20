@@ -142,6 +142,7 @@ MLIR_CAPI_EXPORTED void circtMSFTPlacementDBWalkPlacements(
 // AppID
 //===----------------------------------------------------------------------===//
 
+// NOLINTNEXTLINE(modernize-use-using)
 typedef struct {
   void *ptr;
 } CirctMSFTAppIDIndex;
