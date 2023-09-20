@@ -17,6 +17,32 @@ using namespace circt;
 using namespace debug;
 using namespace mlir;
 
+static bool canOpBeOutlinedIntoDebugInfo(Operation *op) {
+  auto *dialect = op->getDialect();
+
+  // Debug operations can always be outlined.
+  if (isa<debug::DebugDialect>(dialect))
+    return true;
+
+  // Plain old constants can be materialized in DI.
+  if (isa<hw::ConstantOp>(op))
+    return true;
+
+  // Basic comb operations can be materialized in DI.
+  if (isa<comb::ExtractOp, comb::ConcatOp, comb::AndOp, comb::OrOp, comb::XorOp,
+          comb::AddOp, comb::SubOp, comb::MulOp, comb::DivSOp, comb::DivUOp,
+          comb::ModSOp, comb::ModUOp, comb::ShlOp, comb::ShrSOp, comb::ShrUOp>(
+          op))
+    return true;
+
+  // Simple wires can be materialized in DI.
+  if (auto wireOp = dyn_cast<hw::WireOp>(op); wireOp && !wireOp.getInnerSym())
+    return true;
+
+  // Everything else cannot be outlined.
+  return false;
+}
+
 namespace {
 struct DebugAnalysisBuilder {
   DebugAnalysisBuilder(Operation *rootOp) : rootOp(rootOp) {}
@@ -64,9 +90,7 @@ void DebugAnalysisBuilder::run() {
     // configurable, since certain forms of debug info extraction would be able
     // to pull entire state machines out of the design. For now this just
     // represents the common denominator across all debug infos.
-    if (!isa<hw::HWDialect, comb::CombDialect>(op->getDialect()))
-      continue;
-    if (op->hasAttr("name"))
+    if (!canOpBeOutlinedIntoDebugInfo(op))
       continue;
 
     if (op->getNumResults() > 0) {

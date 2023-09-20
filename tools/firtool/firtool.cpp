@@ -234,6 +234,11 @@ static cl::opt<bool> hglddOnlyExistingFileLocs(
     cl::init(false), cl::cat(mainCategory));
 
 static cl::opt<bool>
+    extractDebugViews("extract-debug-views",
+                      cl::desc("Generate debug view modules alongside design"),
+                      cl::init(false), cl::cat(mainCategory));
+
+static cl::opt<bool>
     emitBytecode("emit-bytecode",
                  cl::desc("Emit bytecode when generating MLIR output"),
                  cl::init(false), cl::cat(mainCategory));
@@ -408,6 +413,8 @@ static LogicalResult processBuffer(
     if (!hwPassPlugin.empty())
       if (failed(parsePassPipeline(StringRef(hwPassPlugin), pm)))
         return failure();
+    if (extractDebugViews)
+      pm.addPass(sv::createSVExtractDebugViewsPass());
     if (outputFormat != OutputIRHW)
       if (failed(firtool::populateHWToSV(pm, firtoolOptions)))
         return failure();

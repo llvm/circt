@@ -4,6 +4,7 @@ add_circt_dialect_library(CIRCTSVTransforms
   HWStubExternalModules.cpp
   HWLegalizeModules.cpp
   PrettifyVerilog.cpp
+  SVExtractDebugViews.cpp
   SVExtractTestCode.cpp
   HWExportModuleHierarchy.cpp
   SVTraceIVerilog.cpp
@@ -15,6 +16,8 @@ add_circt_dialect_library(CIRCTSVTransforms
   LINK_LIBS PUBLIC
   CIRCTComb
   CIRCTEmit
+  CIRCTDebug
+  CIRCTDebugAnalysis
   CIRCTHW
   CIRCTSeq
   CIRCTSupport

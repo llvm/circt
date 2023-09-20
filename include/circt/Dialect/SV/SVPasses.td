@@ -163,4 +163,16 @@ def HWEliminateInOutPorts : Pass<"hw-eliminate-inout-ports",
   ];
 }
 
+def SVExtractDebugViews : Pass<"sv-extract-debug-views", "ModuleOp"> {
+  let summary = "Materialize debug info as a separate module hierarchy";
+  let description = [{
+    This pass extracts the debug information into a separate module hierarchy.
+    The debug view hierarchy will closely match the structure of the debug
+    information, and will use cross-module references to extract signal values
+    from the actual design.
+  }];
+  let constructor = "circt::sv::createSVExtractDebugViewsPass()";
+  let dependentDialects = ["circt::sv::SVDialect", "circt::hw::HWDialect"];
+}
+
 #endif // CIRCT_DIALECT_SV_SVPASSES
