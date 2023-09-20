@@ -247,9 +247,9 @@ static void populatePipeline(PassManager &pm) {
   }
 
   pm.addPass(arc::createGroupResetsAndEnablesPass());
+  pm.addPass(arc::createLegalizeStateUpdatePass());
   pm.addPass(createCSEPass());
   pm.addPass(arc::createArcCanonicalizerPass());
-  pm.addPass(arc::createLegalizeStateUpdatePass());
 
   // Allocate states.
   if (untilReached(UntilStateAlloc))
