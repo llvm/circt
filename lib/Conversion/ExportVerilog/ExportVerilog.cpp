@@ -37,6 +37,7 @@
 #include "circt/Support/Version.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/IR/Location.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Interfaces/FunctionImplementation.h"
 #include "mlir/Pass/PassManager.h"
@@ -410,62 +411,64 @@ static StringRef getVerilogDeclWord(Operation *op,
                                                    : "automatic logic";
 }
 
-/// Pull any FileLineCol locs out of the specified location and add it to the
-/// specified set.
+/// Pull apart any fused locations into the location set, such that they are
+/// uniqued. Any other location type will be added as-is.
 // NOLINTBEGIN(misc-no-recursion)
-static void collectFileLineColLocs(Location loc,
-                                   SmallPtrSetImpl<Attribute> &locationSet) {
-  if (auto fileLoc = loc.dyn_cast<FileLineColLoc>())
-    locationSet.insert(fileLoc);
-
-  if (auto fusedLoc = loc.dyn_cast<FusedLoc>())
-    for (auto loc : fusedLoc.getLocations())
-      collectFileLineColLocs(loc, locationSet);
+static void collectAndUniqueLocations(Location loc,
+                                      SmallPtrSetImpl<Attribute> &locationSet) {
+  llvm::TypeSwitch<Location, void>(loc)
+      .Case<FusedLoc>([&](auto fusedLoc) {
+        for (auto subLoc : fusedLoc.getLocations())
+          collectAndUniqueLocations(subLoc, locationSet);
+      })
+      .Default([&](auto loc) { locationSet.insert(loc); });
 }
 // NOLINTEND(misc-no-recursion)
 
-/// Return the location information as a (potentially empty) string.
-static std::string
-getLocationInfoAsStringImpl(const SmallPtrSetImpl<Attribute> &locationSet) {
-  std::string resultStr;
-  llvm::raw_string_ostream sstr(resultStr);
+// Base-case location printer.
+static void emitLocationInfo(llvm::raw_string_ostream &os, Location loc,
+                             LoweringOptions::LocationInfoStyle style);
 
-  auto printLoc = [&](FileLineColLoc loc) {
-    sstr << loc.getFilename().getValue();
-    if (auto line = loc.getLine()) {
-      sstr << ':' << line;
-      if (auto col = loc.getColumn())
-        sstr << ':' << col;
-    }
-  };
+// Emit CallSiteLocs.
+static void emitLocationInfo(llvm::raw_string_ostream &os,
+                             mlir::CallSiteLoc loc,
+                             LoweringOptions::LocationInfoStyle style) {
+  os << "{";
+  emitLocationInfo(os, loc.getCallee(), style);
+  os << " <- ";
+  emitLocationInfo(os, loc.getCaller(), style);
+  os << "}";
+}
 
-  // Fast pass some common cases.
-  switch (locationSet.size()) {
-  case 1:
-    printLoc((*locationSet.begin()).cast<FileLineColLoc>());
-    [[fallthrough]];
-  case 0:
-    return sstr.str();
-  default:
-    break;
+// Emit NameLocs.
+static void emitLocationInfo(llvm::raw_string_ostream &os, mlir::NameLoc loc,
+                             LoweringOptions::LocationInfoStyle style) {
+  bool withName = !loc.getName().empty();
+  if (withName)
+    os << "'" << loc.getName().strref() << "'(";
+  emitLocationInfo(os, loc.getChildLoc(), style);
+
+  if (withName)
+    os << ")";
+}
+
+// Emit FileLineColLocs.
+static void emitLocationInfo(llvm::raw_string_ostream &os, FileLineColLoc loc,
+                             LoweringOptions::LocationInfoStyle style) {
+  os << loc.getFilename().getValue();
+  if (auto line = loc.getLine()) {
+    os << ':' << line;
+    if (auto col = loc.getColumn())
+      os << ':' << col;
   }
+}
 
-  // Sort the entries.
-  SmallVector<FileLineColLoc, 8> locVector;
-  locVector.reserve(locationSet.size());
-  for (auto loc : locationSet)
-    locVector.push_back(loc.cast<FileLineColLoc>());
-
-  llvm::array_pod_sort(
-      locVector.begin(), locVector.end(),
-      [](const FileLineColLoc *lhs, const FileLineColLoc *rhs) -> int {
-        if (auto fn = lhs->getFilename().compare(rhs->getFilename()))
-          return fn;
-        if (lhs->getLine() != rhs->getLine())
-          return lhs->getLine() < rhs->getLine() ? -1 : 1;
-        return lhs->getColumn() < rhs->getColumn() ? -1 : 1;
-      });
-
+// Generates a string representation of a set of FileLineColLocs.
+// The entries are sorted by filename, line, col.  Try to merge together
+// entries to reduce verbosity on the column info.
+static void
+printFileLineColSetInfo(llvm::raw_string_ostream &sstr,
+                        llvm::SmallVector<FileLineColLoc, 8> locVector) {
   // The entries are sorted by filename, line, col.  Try to merge together
   // entries to reduce verbosity on the column info.
   StringRef lastFileName;
@@ -507,30 +510,215 @@ getLocationInfoAsStringImpl(const SmallPtrSetImpl<Attribute> &locationSet) {
     }
     sstr << '}';
   }
-  return sstr.str();
 }
 
-static std::string
-getLocationInfoAsStringImpl(const SmallPtrSetImpl<Attribute> &locationSet,
-                            LoweringOptions::LocationInfoStyle style) {
+//===----------------------------------------------------------------------===//
+// Location comparison
+//===----------------------------------------------------------------------===//
 
+// NOLINTBEGIN(misc-no-recursion)
+
+static int compareLocs(Location lhs, Location rhs);
+
+// NameLoc comparator - compare names, then child locations.
+static int compareLocsImpl(mlir::NameLoc lhs, mlir::NameLoc rhs) {
+  if (auto name = lhs.getName().compare(rhs.getName()))
+    return name;
+  return compareLocs(lhs.getChildLoc(), rhs.getChildLoc());
+}
+
+// FileLineColLoc comparator.
+static int compareLocsImpl(mlir::FileLineColLoc lhs, mlir::FileLineColLoc rhs) {
+  if (auto fn = lhs.getFilename().compare(rhs.getFilename()))
+    return fn;
+  if (lhs.getLine() != rhs.getLine())
+    return lhs.getLine() < rhs.getLine() ? -1 : 1;
+  return lhs.getColumn() < rhs.getColumn() ? -1 : 1;
+}
+
+// CallSiteLoc comparator. Compare first on the callee, then on the caller.
+static int compareLocsImpl(mlir::CallSiteLoc lhs, mlir::CallSiteLoc rhs) {
+  Location lhsCallee = lhs.getCallee();
+  Location rhsCallee = rhs.getCallee();
+  if (auto res = compareLocs(lhsCallee, rhsCallee))
+    return res;
+
+  Location lhsCaller = lhs.getCaller();
+  Location rhsCaller = rhs.getCaller();
+  return compareLocs(lhsCaller, rhsCaller);
+}
+
+template <typename TTargetLoc>
+FailureOr<int> dispatchCompareLocations(Location lhs, Location rhs) {
+  auto lhsT = dyn_cast<TTargetLoc>(lhs);
+  auto rhsT = dyn_cast<TTargetLoc>(rhs);
+  if (lhsT && rhsT) {
+    // Both are of the target location type, compare them directly.
+    return compareLocsImpl(lhsT, rhsT);
+  }
+  if (lhsT) {
+    // lhs is TTargetLoc => it comes before rhs.
+    return -1;
+  }
+  if (rhsT) {
+    // rhs is TTargetLoc => it comes before lhs.
+    return 1;
+  }
+
+  return failure();
+}
+
+// Top-level comparator for two arbitrarily typed locations.
+// First order comparison by location type:
+// 1. FileLineColLoc
+// 2. NameLoc
+// 3. CallSiteLoc
+// 4. Anything else...
+// Intra-location type comparison is delegated to the corresponding
+// compareLocsImpl() function.
+static int compareLocs(Location lhs, Location rhs) {
+  // FileLineColLoc
+  if (auto res = dispatchCompareLocations<mlir::FileLineColLoc>(lhs, rhs);
+      succeeded(res))
+    return *res;
+
+  // NameLoc
+  if (auto res = dispatchCompareLocations<mlir::NameLoc>(lhs, rhs);
+      succeeded(res))
+    return *res;
+
+  // CallSiteLoc
+  if (auto res = dispatchCompareLocations<mlir::CallSiteLoc>(lhs, rhs);
+      succeeded(res))
+    return *res;
+
+  // Anything else...
+  return 0;
+}
+
+// NOLINTEND(misc-no-recursion)
+
+// Sorts a vector of locations in-place.
+template <typename TVector>
+static void sortLocationVector(TVector &vec) {
+  llvm::array_pod_sort(
+      vec.begin(), vec.end(), [](const auto *lhs, const auto *rhs) -> int {
+        return compareLocs(cast<Location>(*lhs), cast<Location>(*rhs));
+      });
+}
+
+/// Emit the location information of `locationSet` to `sstr`. The emitted string
+/// may potentially be an empty string given the contents of the `locationSet`.
+static void
+emitLocationSetInfoImpl(llvm::raw_string_ostream &sstr,
+                        const SmallPtrSetImpl<Attribute> &locationSet,
+                        LoweringOptions::LocationInfoStyle style) {
+  // Fast pass some common cases.
+  switch (locationSet.size()) {
+  case 1:
+    emitLocationInfo(sstr, cast<LocationAttr>(*locationSet.begin()), style);
+    [[fallthrough]];
+  case 0:
+    return;
+  default:
+    break;
+  }
+
+  // Sort the entries into distinct location printing kinds.
+  SmallVector<FileLineColLoc, 8> flcLocs;
+  SmallVector<Attribute, 8> otherLocs;
+  flcLocs.reserve(locationSet.size());
+  otherLocs.reserve(locationSet.size());
+  for (Attribute loc : locationSet) {
+    if (auto flcLoc = loc.dyn_cast<FileLineColLoc>())
+      flcLocs.push_back(flcLoc);
+    else
+      otherLocs.push_back(loc);
+  }
+
+  // SmallPtrSet iteration is non-deterministic, so sort the location vectors to
+  // ensure deterministic output.
+  sortLocationVector(otherLocs);
+  sortLocationVector(flcLocs);
+
+  // To detect whether something actually got emitted, we inspect the stream for
+  // size changes. This is due to the possiblity of locations which are not
+  // supposed to be emitted (e.g. `loc("")`).
+  size_t sstrSize = sstr.tell();
+  bool emittedAnything = false;
+  auto recheckEmittedSomething = [&]() {
+    size_t currSize = sstr.tell();
+    bool emittedSomethingSinceLastCheck = currSize != sstrSize;
+    emittedAnything |= emittedSomethingSinceLastCheck;
+    sstrSize = currSize;
+    return emittedSomethingSinceLastCheck;
+  };
+
+  // First, emit the other locations through the generic location dispatch
+  // function.
+  llvm::interleave(
+      otherLocs,
+      [&](Attribute loc) {
+        emitLocationInfo(sstr, cast<LocationAttr>(loc), style);
+      },
+      [&] {
+        if (recheckEmittedSomething()) {
+          sstr << ", ";
+          recheckEmittedSomething(); // reset detector to reflect the comma.
+        }
+      });
+
+  // If we emitted anything, and we have FileLineColLocs, then emit a
+  // location-separating comma.
+  if (emittedAnything && !flcLocs.empty())
+    sstr << ", ";
+  // Then, emit the FileLineColLocs.
+  printFileLineColSetInfo(sstr, flcLocs);
+}
+
+static void emitLocationSetInfo(llvm::raw_string_ostream &os,
+                                const SmallPtrSetImpl<Attribute> &locationSet,
+                                LoweringOptions::LocationInfoStyle style) {
   if (style == LoweringOptions::LocationInfoStyle::None)
-    return "";
-  auto str = getLocationInfoAsStringImpl(locationSet);
-  if (str.empty() || style == LoweringOptions::LocationInfoStyle::Plain)
-    return str;
+    return;
+  std::string resstr;
+  llvm::raw_string_ostream sstr(resstr);
+  emitLocationSetInfoImpl(sstr, locationSet, style);
+  if (resstr.empty() || style == LoweringOptions::LocationInfoStyle::Plain) {
+    os << resstr;
+    return;
+  }
   assert(style == LoweringOptions::LocationInfoStyle::WrapInAtSquareBracket &&
          "other styles must be already handled");
-  return "@[" + str + "]";
+  os << "@[" << resstr << "]";
 }
 
-/// Return the location information in the specified style.
+/// Return the location information in the specified style. This is the main
+/// dispatch function for calling the location-specific routines.
+static void emitLocationInfo(llvm::raw_string_ostream &os, Location loc,
+                             LoweringOptions::LocationInfoStyle style) {
+  llvm::TypeSwitch<Location, void>(loc)
+      .Case<mlir::CallSiteLoc, mlir::NameLoc, mlir::FileLineColLoc>(
+          [&](auto loc) { emitLocationInfo(os, loc, style); })
+      .Case<mlir::FusedLoc>([&](auto loc) {
+        SmallPtrSet<Attribute, 8> locationSet;
+        collectAndUniqueLocations(loc, locationSet);
+        emitLocationSetInfo(os, locationSet, style);
+      })
+      .Default([&](auto loc) {
+        // Don't print anything for unhandled locations.
+      });
+}
+
 static std::string
 getLocationInfoAsString(Location loc,
                         LoweringOptions::LocationInfoStyle style) {
+  std::string s;
+  llvm::raw_string_ostream os(s);
   SmallPtrSet<Attribute, 8> locationSet;
-  collectFileLineColLocs(loc, locationSet);
-  return getLocationInfoAsStringImpl(locationSet, style);
+  locationSet.insert(loc);
+  emitLocationSetInfo(os, locationSet, style);
+  return s;
 }
 
 /// Return the location information in the specified style.
@@ -541,8 +729,11 @@ getLocationInfoAsString(const SmallPtrSetImpl<Operation *> &ops,
   // location info.  Unique it now.
   SmallPtrSet<Attribute, 8> locationSet;
   for (auto *op : ops)
-    collectFileLineColLocs(op->getLoc(), locationSet);
-  return getLocationInfoAsStringImpl(locationSet, style);
+    collectAndUniqueLocations(op->getLoc(), locationSet);
+  std::string s;
+  llvm::raw_string_ostream os(s);
+  emitLocationSetInfo(os, locationSet, style);
+  return s;
 }
 
 /// Most expressions are invalid to bit-select from in Verilog, but some
