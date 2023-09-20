@@ -22,6 +22,7 @@ include  "circt/Dialect/Handshake/HandshakeInterfaces.td"
 include "circt/Dialect/HW/HWOpInterfaces.td"
 include "circt/Dialect/Ibis/IbisInterfaces.td"
 include "circt/Dialect/Ibis/IbisTypes.td"
+include "circt/Dialect/Handshake/HandshakeInterfaces.td"
 
 include "circt/Support/InstanceGraphInterface.td"
 
@@ -170,6 +171,9 @@ class MethodOpBase<string mnemonic, list<Trait> traits = []> :
     ::mlir::Region *getCallableRegion() {
       return &getBody();
     }
+
+    /// Returns the entry block of the function.
+    Block* getBodyBlock() { return &getBody().front(); }
   }];
 }
 

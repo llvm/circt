@@ -27,6 +27,7 @@ std::unique_ptr<Pass> createContainersToHWPass();
 std::unique_ptr<Pass> createArgifyBlocksPass();
 std::unique_ptr<Pass> createReblockPass();
 std::unique_ptr<Pass> createInlineSBlocksPass();
+std::unique_ptr<Pass> createConvertCFToHandshakePass();
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
