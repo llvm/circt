@@ -163,6 +163,9 @@ struct LoweringOptions {
   /// This is used to avoid stricter lint warnings which, e.g., treat "REG" as a
   /// Verilog keyword.
   bool caseInsensitiveKeywords = false;
+
+  /// If true, then update the the mlir to include output verilog locations.
+  bool emitVerilogLocations = false;
 };
 } // namespace circt
 
