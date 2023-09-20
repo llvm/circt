@@ -429,7 +429,7 @@ static void collectAndUniqueLocations(Location loc,
 static void emitLocationInfo(llvm::raw_string_ostream &os, Location loc,
                              LoweringOptions::LocationInfoStyle style);
 
-// Print CallSiteLocs.
+// Emit CallSiteLocs.
 static void emitLocationInfo(llvm::raw_string_ostream &os,
                              mlir::CallSiteLoc loc,
                              LoweringOptions::LocationInfoStyle style) {
@@ -440,7 +440,7 @@ static void emitLocationInfo(llvm::raw_string_ostream &os,
   os << "}";
 }
 
-// Print NameLocs.
+// Emit NameLocs.
 static void emitLocationInfo(llvm::raw_string_ostream &os, mlir::NameLoc loc,
                              LoweringOptions::LocationInfoStyle style) {
   bool withName = !loc.getName().empty();
@@ -452,7 +452,7 @@ static void emitLocationInfo(llvm::raw_string_ostream &os, mlir::NameLoc loc,
     os << ")";
 }
 
-// Print FileLineColLocs.
+// Emit FileLineColLocs.
 static void emitLocationInfo(llvm::raw_string_ostream &os, FileLineColLoc loc,
                              LoweringOptions::LocationInfoStyle style) {
   os << loc.getFilename().getValue();
@@ -469,16 +469,6 @@ static void emitLocationInfo(llvm::raw_string_ostream &os, FileLineColLoc loc,
 static void
 printFileLineColSetInfo(llvm::raw_string_ostream &sstr,
                         llvm::SmallVector<FileLineColLoc, 8> locVector) {
-  llvm::array_pod_sort(
-      locVector.begin(), locVector.end(),
-      [](const FileLineColLoc *lhs, const FileLineColLoc *rhs) -> int {
-        if (auto fn = lhs->getFilename().compare(rhs->getFilename()))
-          return fn;
-        if (lhs->getLine() != rhs->getLine())
-          return lhs->getLine() < rhs->getLine() ? -1 : 1;
-        return lhs->getColumn() < rhs->getColumn() ? -1 : 1;
-      });
-
   // The entries are sorted by filename, line, col.  Try to merge together
   // entries to reduce verbosity on the column info.
   StringRef lastFileName;
@@ -522,7 +512,93 @@ printFileLineColSetInfo(llvm::raw_string_ostream &sstr,
   }
 }
 
-/// Return the location information as a (potentially empty) string.
+static int compareLocs(Location lhs, Location rhs);
+
+// NameLoc comparator - compare names, then child locations.
+static int compareLocsImpl(mlir::NameLoc lhs, mlir::NameLoc rhs) {
+  if (auto name = lhs.getName().compare(rhs.getName()))
+    return name;
+  return compareLocs(lhs.getChildLoc(), rhs.getChildLoc());
+}
+
+// FileLineColLoc comparator.
+static int compareLocsImpl(mlir::FileLineColLoc lhs, mlir::FileLineColLoc rhs) {
+  if (auto fn = lhs.getFilename().compare(rhs.getFilename()))
+    return fn;
+  if (lhs.getLine() != rhs.getLine())
+    return lhs.getLine() < rhs.getLine() ? -1 : 1;
+  return lhs.getColumn() < rhs.getColumn() ? -1 : 1;
+}
+
+// CallSiteLoc comparator. Compare first on the callee, then on the caller.
+static int compareLocsImpl(mlir::CallSiteLoc lhs, mlir::CallSiteLoc rhs) {
+  Location lhsCallee = lhs.getCallee();
+  Location rhsCallee = rhs.getCallee();
+  if (auto res = compareLocs(lhsCallee, rhsCallee))
+    return res;
+
+  Location lhsCaller = lhs.getCaller();
+  Location rhsCaller = rhs.getCaller();
+  return compareLocs(lhsCaller, rhsCaller);
+}
+
+template <typename TTargetLoc>
+FailureOr<int> dispatchCompareLocations(Location lhs, Location rhs) {
+  auto lhsT = dyn_cast<TTargetLoc>(lhs);
+  auto rhsT = dyn_cast<TTargetLoc>(rhs);
+  if (lhsT && rhsT) {
+    // Both are of the target location type, compare them directly.
+    return compareLocsImpl(lhsT, rhsT);
+  } else if (lhsT) {
+    // lhs is TTargetLoc => it comes before rhs.
+    return -1;
+  } else if (rhsT) {
+    // rhs is TTargetLoc => it comes before lhs.
+    return 1;
+  }
+
+  return failure();
+}
+
+// Top-level comparator for two arbitrarily typed locations.
+// First order comparison by location type:
+// 1. FileLineColLoc
+// 2. NameLoc
+// 3. CallSiteLoc
+// 4. Anything else...
+// Intra-location type comparison is delegated to the corresponding
+// compareLocsImpl() function.
+static int compareLocs(Location lhs, Location rhs) {
+  // FileLineColLoc
+  if (auto res = dispatchCompareLocations<mlir::FileLineColLoc>(lhs, rhs);
+      succeeded(res))
+    return *res;
+
+  // NameLoc
+  if (auto res = dispatchCompareLocations<mlir::NameLoc>(lhs, rhs);
+      succeeded(res))
+    return *res;
+
+  // CallSiteLoc
+  if (auto res = dispatchCompareLocations<mlir::CallSiteLoc>(lhs, rhs);
+      succeeded(res))
+    return *res;
+
+  // Anything else...
+  return 0;
+}
+
+// Sorts a vector of locations in-place.
+template <typename TVector>
+static void sortLocationVector(TVector &vec) {
+  llvm::array_pod_sort(
+      vec.begin(), vec.end(), [](const auto *lhs, const auto *rhs) -> int {
+        return compareLocs(cast<Location>(*lhs), cast<Location>(*rhs));
+      });
+}
+
+/// Emit the location information of `locationSet` to `sstr`. The emitted string
+/// may potentially be an empty string given the contents of the `locationSet`.
 static void
 emitLocationSetInfoImpl(llvm::raw_string_ostream &sstr,
                         const SmallPtrSetImpl<Attribute> &locationSet,
@@ -549,6 +625,11 @@ emitLocationSetInfoImpl(llvm::raw_string_ostream &sstr,
     else
       otherLocs.push_back(loc);
   }
+
+  // SmallPtrSet iteration is non-deterministic, so sort the location vectors to
+  // ensure deterministic output.
+  sortLocationVector(otherLocs);
+  sortLocationVector(flcLocs);
 
   // To detect whether something actually got emitted, we inspect the stream for
   // size changes. This is due to the possiblity of locations which are not
