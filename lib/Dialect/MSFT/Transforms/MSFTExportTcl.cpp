@@ -89,11 +89,10 @@ void ExportTclPass::runOnOperation() {
   if (failed(applyPartialConversion(top, target, std::move(patterns))))
     signalPassFailure();
 
-  target.addDynamicallyLegalOp<hw::GlobalRefOp>([&](hw::GlobalRefOp ref) {
-    return !emitter.getRefsUsed().contains(ref);
-  });
+  target.addDynamicallyLegalOp<hw::HierPathOp>(
+      [&](hw::HierPathOp ref) { return !emitter.getRefsUsed().contains(ref); });
   patterns.clear();
-  patterns.insert<RemoveOpLowering<hw::GlobalRefOp>>(ctxt);
+  patterns.insert<RemoveOpLowering<hw::HierPathOp>>(ctxt);
   if (failed(applyPartialConversion(top, target, std::move(patterns))))
     signalPassFailure();
 }

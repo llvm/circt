@@ -12,7 +12,7 @@ msft.instance.hierarchy @deeper {
     }
   }
 }
-// CHECK: hw.globalRef @instref [#hw.innerNameRef<@deeper::@branch>, #hw.innerNameRef<@shallow::@leaf>, #hw.innerNameRef<@leaf::@module>]
+// CHECK: hw.hierpath @instref [@deeper::@branch, @shallow::@leaf, @leaf::@module]
 // CHECK: msft.pd.location @instref M20K x: 15 y: 9 n: 3 path : "|memBank2"
 
 msft.instance.hierarchy @shallow {
@@ -22,7 +22,7 @@ msft.instance.hierarchy @shallow {
     }
   }
 }
-// CHECK: hw.globalRef @instref_1 [#hw.innerNameRef<@shallow::@leaf>, #hw.innerNameRef<@leaf::@module>]
+// CHECK: hw.hierpath @instref_1 [@shallow::@leaf, @leaf::@module]
 // CHECK: msft.pd.location @instref_1 M20K x: 8 y: 19 n: 1 path : "|memBank2"
 
 msft.instance.hierarchy @reg "foo" {
@@ -35,9 +35,9 @@ msft.instance.hierarchy @reg "bar" {
     msft.pd.reg_location i4 [<3,4,5>, *, *, *]
   }
 }
-// CHECK: hw.globalRef @instref_2 [#hw.innerNameRef<@reg::@reg>]
+// CHECK: hw.hierpath @instref_2 [@reg::@reg]
 // CHECK-DAG: msft.pd.reg_location ref @instref_2 i4 [*, <1, 2, 3>, <1, 2, 4>, <1, 2, 5>]
-// CHECK: hw.globalRef @instref_3 [#hw.innerNameRef<@reg::@reg>]
+// CHECK: hw.hierpath @instref_3 [@reg::@reg]
 // CHECK-DAG: msft.pd.reg_location ref @instref_3 i4 [<3, 4, 5>, *, *, *]
 
 
