@@ -498,9 +498,8 @@ void HoistPassthroughPass::runOnOperation() {
       std::optional<size_t> deadPort;
       {
         auto destArg = driver.getDestBlockArg();
-        auto mod = cast<firrtl::FModuleLike>(destArg.getOwner()->getParentOp());
         auto index = destArg.getArgNumber();
-        auto *igNode = instanceGraph.lookup(mod);
+        auto *igNode = instanceGraph.lookup(module);
 
         // Replace dest in all instantiations.
         for (auto *record : igNode->uses()) {
