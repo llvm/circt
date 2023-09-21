@@ -211,15 +211,4 @@ def InternalPathAttr : AttrDef<FIRRTLDialect, "InternalPath"> {
 def InternalPathArrayAttr
   : TypedArrayAttrBase<InternalPathAttr, "InternalPath array attribute">;
 
-
-def DoubleAttr : Attr<And<[CPred<"$_self.isa<::mlir::FloatAttr>()">,
-                           CPred<"cast<::mlir::FloatAttr>($_self).getType().isF64()">]>,
-                      "double-precision float"> {
-  let storageType = [{ ::mlir::FloatAttr }];
-  let returnType = [{ double }];
-  let constBuilderCall = "FloatAttr::get($_builder.getF64Type(), $0)";
-  let convertFromStorage = "$_self.getValueAsDouble()";
-}
-
-
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLATTRIBUTES_TD
