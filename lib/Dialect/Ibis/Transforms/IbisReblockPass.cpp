@@ -31,7 +31,6 @@ struct ReblockPass : public IbisReblockBase<ReblockPass> {
 
 void ReblockPass::runOnOperation() {
   MethodOp parent = getOperation();
-  Region &region = parent.getRegion();
 
   for (auto blockBeginOp : llvm::make_early_inc_range(
            parent.getOps<ibis::InlineStaticBlockBeginOp>())) {
