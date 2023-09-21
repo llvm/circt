@@ -88,13 +88,6 @@ void ExportTclPass::runOnOperation() {
   patterns.insert<RemoveOpLowering<DeclPhysicalRegionOp>>(ctxt);
   if (failed(applyPartialConversion(top, target, std::move(patterns))))
     signalPassFailure();
-
-  target.addDynamicallyLegalOp<hw::HierPathOp>(
-      [&](hw::HierPathOp ref) { return !emitter.getRefsUsed().contains(ref); });
-  patterns.clear();
-  patterns.insert<RemoveOpLowering<hw::HierPathOp>>(ctxt);
-  if (failed(applyPartialConversion(top, target, std::move(patterns))))
-    signalPassFailure();
 }
 
 std::unique_ptr<Pass> circt::msft::createExportTclPass() {

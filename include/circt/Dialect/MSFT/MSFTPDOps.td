@@ -21,16 +21,6 @@ def DeclPhysicalRegionOp : MSFTOp<"physical_region",
   }];
 }
 
-def EntityExternOp : MSFTOp<"entity.extern",
-    [Symbol, HasParent<"mlir::ModuleOp">]> {
-  let arguments = (ins
-    SymbolNameAttr:$sym_name,
-    AnyAttr:$metadata);
-  let assemblyFormat = [{
-    $sym_name $metadata attr-dict
-  }];
-}
-
 def PDPhysLocationOp : MSFTOp<"pd.location",
       [DeclareOpInterfaceMethods<DynInstDataOpInterface>]> {
   let summary = "Specify a location for an instance";

@@ -46,7 +46,7 @@ def PEOutputOp: MSFTOp<"pe.output", [Terminator]> {
 }
 
 def ChannelOp: MSFTOp<"constructs.channel",
-    [Pure, Symbol, HasParent<"MSFTModuleOp">,
+    [Pure, Symbol,
      AllTypesMatch<["input", "output"]>]> {
 
   let summary = "A pipeline-able connection";
@@ -101,4 +101,16 @@ def LinearOp : MSFTOp<"hlc.linear", [
 
   let hasVerifier = 1;
   let assemblyFormat = [{ `clock` $clock attr-dict `:` type($outs) $datapath }];
+}
+
+def OutputOp : MSFTOp<"output", [Terminator,
+                                Pure, ReturnLike]> {
+  let summary = "termination operation";
+
+  let arguments = (ins Variadic<AnyType>:$operands);
+  let builders = [
+    OpBuilder<(ins)>
+  ];
+
+  let assemblyFormat = "attr-dict ($operands^ `:` qualified(type($operands)))?";
 }
