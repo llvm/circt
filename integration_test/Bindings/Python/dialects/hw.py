@@ -124,16 +124,17 @@ with Context() as ctx, Location.unknown():
   ports = [
       hw.ModulePort(StringAttr.get("out"), i1, hw.ModulePortDirection.OUTPUT),
       hw.ModulePort(StringAttr.get("in1"), i2, hw.ModulePortDirection.INPUT),
-      hw.ModulePort(StringAttr.get("in2"), i32, hw.ModulePortDirection.INPUT)
+      hw.ModulePort(StringAttr.get("in2"), i32, hw.ModulePortDirection.INPUT),
+      hw.ModulePort(StringAttr.get("in3"), i32, hw.ModulePortDirection.INOUT)
   ]
   module_type = hw.ModuleType.get(ports)
-  # CHECK: !hw.modty<output out : i1, input in1 : i2, input in2 : i32>
+  # CHECK: !hw.modty<output out : i1, input in1 : i2, input in2 : i32, inout in3 : i32>
   print(module_type)
-  # CHECK-NEXT:  [IntegerType(i2), IntegerType(i32)]
+  # CHECK-NEXT:  [IntegerType(i2), IntegerType(i32), Type(!hw.inout<i32>)]
   print(module_type.input_types)
   # CHECK-NEXT:  [IntegerType(i1)]
   print(module_type.output_types)
-  # CHECK-NEXT:  ['in1', 'in2']
+  # CHECK-NEXT:  ['in1', 'in2', 'in3']
   print(module_type.input_names)
   # CHECK-NEXT:  ['out']
   print(module_type.output_names)
