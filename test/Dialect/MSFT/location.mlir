@@ -16,10 +16,6 @@ msft.pd.location @ref4 FF x: 0 y: 0 n: 0
 
 hw.module.extern @Foo()
 
-// msft.entity.extern @entity1 "some tag"
-
-// msft.entity.extern @entity2 {name = "foo", number = 1 : i64}
-
 // CHECK-LABEL: hw.module @leaf
 // LOWER-LABEL: hw.module @leaf
 hw.module @leaf() -> () {
