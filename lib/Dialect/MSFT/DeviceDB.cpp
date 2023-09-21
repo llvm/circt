@@ -123,8 +123,7 @@ LogicalResult PlacementDB::insertPlacement(DynInstDataOpInterface op,
   if (leaf->locOp != nullptr)
     return op->emitOpError("Could not apply placement ")
            << loc << ". Position already occupied by "
-           << cast<DynamicInstanceOp>(leaf->locOp->getParentOp())
-                  .globalRefPath();
+           << cast<DynamicInstanceOp>(leaf->locOp->getParentOp()).getPath();
 
   leaf->locOp = op;
   return success();
@@ -279,8 +278,7 @@ LogicalResult PlacementDB::movePlacementCheck(DynInstDataOpInterface op,
   if (newLeaf->locOp)
     return op.emitError(
                "cannot move to new location since location is occupied by ")
-           << cast<DynamicInstanceOp>(newLeaf->locOp->getParentOp())
-                  .globalRefPath();
+           << cast<DynamicInstanceOp>(newLeaf->locOp->getParentOp()).getPath();
   return success();
 }
 

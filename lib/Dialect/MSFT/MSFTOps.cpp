@@ -358,7 +358,7 @@ static void printModuleLikeOp(hw::HWModuleLike moduleLike, OpAsmPrinter &p,
 // DynamicInstanceOp
 //===----------------------------------------------------------------------===//
 
-ArrayAttr DynamicInstanceOp::globalRefPath() {
+ArrayAttr DynamicInstanceOp::getPath() {
   SmallVector<Attribute, 16> path;
   DynamicInstanceOp next = *this;
   do {
