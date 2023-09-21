@@ -294,6 +294,14 @@ populatePrepareForExportVerilog(mlir::PassManager &pm,
 }
 } // namespace detail
 
+LogicalResult
+firtool::populateExportVerilog(mlir::PassManager &pm, const FirtoolOptions &opt,
+                               std::unique_ptr<llvm::raw_ostream> os) {
+  pm.addPass(createExportVerilogPass(std::move(os)));
+
+  return success();
+}
+
 LogicalResult firtool::populateExportVerilog(mlir::PassManager &pm,
                                              const FirtoolOptions &opt,
                                              llvm::raw_ostream &os) {
