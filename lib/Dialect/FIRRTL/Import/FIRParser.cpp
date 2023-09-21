@@ -1879,24 +1879,16 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
     consumeToken(FIRToken::kw_Double);
     if (parseToken(FIRToken::l_paren, "expected '(' in Double expression"))
       return failure();
-    double d;
-    switch (getToken().getKind()) {
-    // NaN, INF, exponent?
-    // radix_specified_integer (hex) ?
-    case FIRToken::integer:
-    case FIRToken::signed_integer:
-    case FIRToken::floatingpoint:
-      // This uses `strtod` internally, FWIW.  See `man 3 strtod`.
-      if (!llvm::to_float(getTokenSpelling(), d))
-        return emitError("invalid double");
-      consumeToken();
-      break;
-    default:
-      return emitError(
-          "expected floating point or integer in Double expression");
-    }
-    if (parseToken(FIRToken::r_paren, "expected ')' in Double expression"))
+    auto spelling = getTokenSpelling();
+    if (parseToken(FIRToken::floatingpoint,
+                   "expected floating point in Double expression") ||
+        parseToken(FIRToken::r_paren, "expected ')' in Double expression"))
       return failure();
+    // NaN, INF, exponent, hex, integer?
+    // This uses `strtod` internally, FWIW.  See `man 3 strtod`.
+    double d;
+    if (!llvm::to_float(spelling, d))
+      return emitError("invalid double");
     result = builder.create<DoubleConstantOp>(builder.getF64FloatAttr(d));
     break;
   }

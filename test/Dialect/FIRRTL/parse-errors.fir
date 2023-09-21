@@ -1167,12 +1167,30 @@ circuit DoubleNegPeriod:
     propassign d, Double(-.5)
 
 ;// -----
+; Double: must have digit after point.
+FIRRTL version 3.2.0
+circuit DoublePeriodEnd:
+  module DoublePeriodEnd:
+    output d : Double
+    ; expected-error @below {{expected floating point in Double expression}}
+    propassign d, Double(0.)
+
+;// -----
+; Double: Not an integer.
+FIRRTL version 3.2.0
+circuit DoubleInteger:
+  module DoubleInteger:
+    output d : Double
+    ; expected-error @below {{expected floating point in Double expression}}
+    propassign d, Double(0)
+
+;// -----
 ; Double: don't support NaN or inf.
 FIRRTL version 3.2.0
 circuit DoubleNaN:
   module DoubleNaN:
     output d : Double
-    ; expected-error @below {{expected floating point or integer in Double expression}}
+    ; expected-error @below {{expected floating point in Double expression}}
     propassign d, Double(NaN)
 
 ;// -----
@@ -1181,7 +1199,7 @@ FIRRTL version 3.2.0
 circuit DoubleHex:
   module DoubleHex:
     output d : Double
-    ; expected-error @below {{expected ')' in Double expression}}
+    ; expected-error @below {{expected floating point in Double expression}}
     propassign d, Double(0x0)
 
 ;// -----
@@ -1190,5 +1208,5 @@ FIRRTL version 3.2.0
 circuit DoubleRadix:
   module DoubleRadix:
     output d : Double
-    ; expected-error @below {{expected floating point or integer in Double expression}}
+    ; expected-error @below {{expected floating point in Double expression}}
     propassign d, Double(0hABC)
