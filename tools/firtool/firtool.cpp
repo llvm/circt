@@ -126,6 +126,11 @@ static cl::opt<bool>
                         cl::desc("Scalarize the ports of any external modules"),
                         cl::init(true), cl::cat(mainCategory));
 
+static cl::opt<bool>
+    scalarizePublicModules("scalarize-pub-modules",
+                           cl::desc("Scalarize the ports of any public module"),
+                           cl::init(true), cl::cat(mainCategory));
+
 static firtool::FirtoolOptions firtoolOptions(mainCategory);
 
 enum OutputFormatKind {
@@ -260,6 +265,7 @@ static LogicalResult processBuffer(
     options.numAnnotationFiles = numAnnotationFiles;
     options.scalarizeTopModule = scalarizeTopModule;
     options.scalarizeExtModules = scalarizeExtModules;
+    options.scalarizePublicModules = scalarizePublicModules;
     module = importFIRFile(sourceMgr, &context, parserTimer, options);
   } else {
     auto parserTimer = ts.nest("MLIR Parser");

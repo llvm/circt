@@ -4728,6 +4728,8 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit, unsigned indent,
   auto convention = Convention::Internal;
   if (isMainModule && getConstants().options.scalarizeTopModule)
     convention = Convention::Scalarized;
+  else if (isPublic && getConstants().options.scalarizePublicModules)
+    convention = Convention::Scalarized;
   auto conventionAttr = ConventionAttr::get(getContext(), convention);
   auto builder = circuit.getBodyBuilder();
   auto moduleOp = builder.create<FModuleOp>(info.getLoc(), name, conventionAttr,

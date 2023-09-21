@@ -48,6 +48,7 @@ struct FIRParserOptions {
   unsigned numAnnotationFiles;
   bool scalarizeTopModule = false;
   bool scalarizeExtModules = false;
+  bool scalarizePublicModules = false;
 };
 
 mlir::OwningOpRef<mlir::ModuleOp> importFIRFile(llvm::SourceMgr &sourceMgr,
