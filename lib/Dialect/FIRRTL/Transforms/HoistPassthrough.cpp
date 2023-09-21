@@ -478,6 +478,9 @@ void HoistPassthroughPass::runOnOperation() {
     // Hoisted drivers of output ports will be deleted.
     BitVector deadPorts(module.getNumPorts());
 
+    // Instance graph node, for walking instances of this module.
+    auto *igNode = instanceGraph.lookup(module);
+
     // Analyze all ports using current IR.
     driverAnalysis.clear();
     driverAnalysis.run(module);
@@ -499,7 +502,6 @@ void HoistPassthroughPass::runOnOperation() {
       {
         auto destArg = driver.getDestBlockArg();
         auto index = destArg.getArgNumber();
-        auto *igNode = instanceGraph.lookup(module);
 
         // Replace dest in all instantiations.
         for (auto *record : igNode->uses()) {
@@ -542,7 +544,6 @@ void HoistPassthroughPass::runOnOperation() {
     // 4. Delete newly dead ports.
 
     // Drop dead ports at instantiation sites.
-    auto *igNode = instanceGraph.lookup(module);
     for (auto *record : llvm::make_early_inc_range(igNode->uses())) {
       auto inst = cast<InstanceOp>(record->getInstance());
       ImplicitLocOpBuilder builder(inst.getLoc(), inst);
