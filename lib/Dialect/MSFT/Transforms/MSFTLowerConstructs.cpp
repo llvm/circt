@@ -34,8 +34,7 @@ using namespace msft;
 
 namespace {
 
-struct LowerConstructsPass : public LowerConstructsBase<LowerConstructsPass>,
-                             PassCommon {
+struct LowerConstructsPass : public LowerConstructsBase<LowerConstructsPass> {
   void runOnOperation() override;
 
   /// For naming purposes, get the inner Namespace for a module, building it
