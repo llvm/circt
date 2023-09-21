@@ -219,29 +219,34 @@ void HandshakeLowering::setBlockEntryControl(Block *block, Value v) {
 }
 
 void handshake::removeBasicBlocks(Region &r) {
-  auto &entryBlock = r.front().getOperations();
-
-  // Now that basic blocks are going to be removed, we can erase all cf-dialect
-  // branches, and move ReturnOp to the entry block's end
-  for (auto &block : r) {
-    Operation &termOp = block.back();
-    if (isa<mlir::cf::CondBranchOp, mlir::cf::BranchOp>(termOp))
-      termOp.erase();
-    else if (isa<handshake::ReturnOp>(termOp))
-      entryBlock.splice(entryBlock.end(), block.getOperations(), termOp);
-  }
+  Block *entryBlock = &r.front();
+  auto &entryBlockOps = entryBlock->getOperations();
 
   // Move all operations to entry block and erase other blocks.
-  for (auto &block : llvm::make_early_inc_range(llvm::drop_begin(r, 1))) {
-    entryBlock.splice(--entryBlock.end(), block.getOperations());
-  }
-  for (auto &block : llvm::make_early_inc_range(llvm::drop_begin(r, 1))) {
+  for (Block &block : llvm::make_early_inc_range(llvm::drop_begin(r, 1))) {
+    entryBlockOps.splice(entryBlockOps.end(), block.getOperations());
+
     block.clear();
     block.dropAllDefinedValueUses();
     for (size_t i = 0; i < block.getNumArguments(); i++) {
       block.eraseArgument(i);
     }
     block.erase();
+  }
+
+  // Remove any control flow operations, and move the non-control flow
+  // terminator op to the end of the entry block.
+  for (Operation &terminatorLike : llvm::make_early_inc_range(*entryBlock)) {
+    if (!terminatorLike.hasTrait<OpTrait::IsTerminator>())
+      continue;
+
+    if (isa<mlir::cf::CondBranchOp, mlir::cf::BranchOp>(terminatorLike)) {
+      terminatorLike.erase();
+      continue;
+    }
+
+    // Else, assume that this is a return-like terminator op.
+    terminatorLike.moveBefore(entryBlock, entryBlock->end());
   }
 }
 
@@ -1694,8 +1699,11 @@ static LogicalResult lowerFuncOp(func::FuncOp funcOp, MLIRContext *ctx,
             funcOp.getLoc(), funcOp.getName(), func_type, attributes);
         rewriter.inlineRegionBefore(funcOp.getBody(), newFuncOp.getBody(),
                                     newFuncOp.end());
-        if (!newFuncOp.isExternal())
+        if (!newFuncOp.isExternal()) {
+          newFuncOp.getBodyBlock()->addArgument(rewriter.getNoneType(),
+                                                funcOp.getLoc());
           newFuncOp.resolveArgAndResNames();
+        }
         rewriter.eraseOp(funcOp);
         return success();
       },
@@ -1706,9 +1714,12 @@ static LogicalResult lowerFuncOp(func::FuncOp funcOp, MLIRContext *ctx,
       partiallyLowerRegion(maximizeSSANoMem, ctx, newFuncOp.getBody()));
 
   if (!newFuncOp.isExternal()) {
+    Block *bodyBlock = newFuncOp.getBodyBlock();
+    Value entryCtrl = bodyBlock->getArguments().back();
     HandshakeLowering fol(newFuncOp.getBody());
-    returnOnError(lowerRegion<func::ReturnOp>(fol, sourceConstants,
-                                              disableTaskPipelining));
+    if (failed(lowerRegion<func::ReturnOp, handshake::ReturnOp>(
+            fol, sourceConstants, disableTaskPipelining, entryCtrl)))
+      return failure();
   }
 
   return success();
@@ -1736,11 +1747,6 @@ struct CFToHandshakePass : public CFToHandshakeBase<CFToHandshakePass> {
         return;
       }
     }
-
-    // Legalize the resulting regions, removing basic blocks and performing
-    // any simple conversions.
-    for (auto func : m.getOps<handshake::FuncOp>())
-      removeBasicBlocks(func);
   }
 };
 

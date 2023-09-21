@@ -69,23 +69,22 @@ public:
   LogicalResult addBranchOps(ConversionPatternRewriter &rewriter);
   LogicalResult replaceCallOps(ConversionPatternRewriter &rewriter);
 
-  template <typename TTerm>
-  LogicalResult setControlOnlyPath(ConversionPatternRewriter &rewriter) {
+  template <typename TSrcTerm, typename TDstTerm>
+  LogicalResult setControlOnlyPath(ConversionPatternRewriter &rewriter,
+                                   Value entryCtrl) {
+    assert(entryCtrl.getType().isa<NoneType>() &&
+           "Expected NoneType for entry control value");
     // Creates start and end points of the control-only path
-
-    // Add start point of the control-only path to the entry block's arguments
     Block *entryBlock = &r.front();
-    startCtrl = entryBlock->addArgument(rewriter.getNoneType(),
-                                        rewriter.getUnknownLoc());
-    setBlockEntryControl(entryBlock, startCtrl);
+    setBlockEntryControl(entryBlock, entryCtrl);
 
     // Replace original return ops with new returns with additional control
     // input
-    for (auto retOp : llvm::make_early_inc_range(r.getOps<TTerm>())) {
+    for (auto retOp : llvm::make_early_inc_range(r.getOps<TSrcTerm>())) {
       rewriter.setInsertionPoint(retOp);
       SmallVector<Value, 8> operands(retOp->getOperands());
-      operands.push_back(startCtrl);
-      rewriter.replaceOpWithNewOp<handshake::ReturnOp>(retOp, operands);
+      operands.push_back(entryCtrl);
+      rewriter.replaceOpWithNewOp<TDstTerm>(retOp, operands);
     }
 
     // Store the number of block arguments in each block
@@ -96,7 +95,7 @@ public:
     // Apply SSA maximization on the newly added entry block argument to
     // propagate it explicitly between the start-point of the control-only
     // network and the function's terminators
-    if (failed(maximizeSSA(startCtrl, rewriter)))
+    if (failed(maximizeSSA(entryCtrl, rewriter)))
       return failure();
 
     // Identify all block arguments belonging to the control-only network
@@ -170,13 +169,19 @@ LogicalResult runPartialLowering(
       instance.getContext(), instance.getRegion());
 }
 
+/// Remove basic blocks inside the given region. This allows the result to be
+/// a valid graph region, since multi-basic block regions are not allowed to
+/// be graph regions currently.
+void removeBasicBlocks(Region &r);
+
 // Helper to check the validity of the dataflow conversion
 // Driver that applies the partial lowerings expressed in HandshakeLowering to
 // the region encapsulated in it. The region is assumed to have a terminator of
-// type TTerm. See HandshakeLowering for the different lowering steps.
-template <typename TTerm>
+// type TSrcTerm, and will replace it with TDstTerm. See HandshakeLowering for
+// the different lowering steps.
+template <typename TSrcTerm, typename TDstTerm>
 LogicalResult lowerRegion(HandshakeLowering &hl, bool sourceConstants,
-                          bool disableTaskPipelining) {
+                          bool disableTaskPipelining, Value entryCtrl) {
   //  Perform initial dataflow conversion. This process allows for the use of
   //  non-deterministic merge-like operations.
   HandshakeLowering::MemRefToMemoryAccessOp memOps;
@@ -184,8 +189,9 @@ LogicalResult lowerRegion(HandshakeLowering &hl, bool sourceConstants,
   if (failed(
           runPartialLowering(hl, &HandshakeLowering::replaceMemoryOps, memOps)))
     return failure();
-  if (failed(runPartialLowering(hl,
-                                &HandshakeLowering::setControlOnlyPath<TTerm>)))
+  if (failed(runPartialLowering(
+          hl, &HandshakeLowering::setControlOnlyPath<TSrcTerm, TDstTerm>,
+          entryCtrl)))
     return failure();
   if (failed(runPartialLowering(hl, &HandshakeLowering::addMergeOps)))
     return failure();
@@ -215,13 +221,12 @@ LogicalResult lowerRegion(HandshakeLowering &hl, bool sourceConstants,
                                 lsq)))
     return failure();
 
+  // Legalize the resulting regions, removing basic blocks and performing
+  // any simple conversions.
+  removeBasicBlocks(hl.getRegion());
+
   return success();
 }
-
-/// Remove basic blocks inside the given region. This allows the result to be
-/// a valid graph region, since multi-basic block regions are not allowed to
-/// be graph regions currently.
-void removeBasicBlocks(Region &r);
 
 /// Lowers the mlir operations into handshake that are not part of the dataflow
 /// conversion.

@@ -120,6 +120,11 @@ def FuncOp : Op<Handshake_Dialect, "func", [
       return success();
     }
 
+    /// Returns the body block of the function.
+    Block* getBodyBlock() {
+      return &getBody().front();
+    }
+
     //===------------------------------------------------------------------===//
     // OpAsmOpInterface Methods
     //===------------------------------------------------------------------===//
