@@ -115,6 +115,7 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
       .Case<StringType>([&](auto stringType) { os << "string"; })
       .Case<FIntegerType>([&](auto integerType) { os << "integer"; })
       .Case<BoolType>([&](auto boolType) { os << "bool"; })
+      .Case<DoubleType>([&](auto doubleType) { os << "double"; })
       .Case<ListType>([&](auto listType) {
         os << "list<";
         printNestedType(listType.getElementType(), os);
@@ -400,6 +401,14 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
       return failure();
     }
     result = BoolType::get(parser.getContext());
+    return success();
+  }
+  if (name.equals("double")) {
+    if (isConst) {
+      parser.emitError(parser.getNameLoc(), "doubles cannot be const");
+      return failure();
+    }
+    result = DoubleType::get(parser.getContext());
     return success();
   }
   if (name.equals("list")) {

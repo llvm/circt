@@ -531,4 +531,10 @@ def BoolImpl : PropImplType<"Bool"> {
   let genStorageClass = true;
 }
 
+def DoubleImpl : PropImplType<"Double"> {
+  let summary = "A double property.  Not representable in hardware.";
+  let parameters = (ins);
+  let genStorageClass = true;
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLTYPESIMPL_TD

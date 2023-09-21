@@ -1059,6 +1059,12 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     consumeToken(FIRToken::kw_Bool);
     result = BoolType::get(getContext());
     break;
+  case FIRToken::kw_Double:
+    if (requireFeature({3, 2, 0}, "Doubles"))
+      return failure();
+    consumeToken(FIRToken::kw_Double);
+    result = DoubleType::get(getContext());
+    break;
   case FIRToken::kw_Path:
     if (requireFeature({3, 1, 0}, "Paths"))
       return failure();
@@ -1864,6 +1870,34 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
     if (parseToken(FIRToken::r_paren, "expected ')' in Bool expression"))
       return failure();
     result = builder.create<BoolConstantOp>(value);
+    break;
+  }
+  case FIRToken::kw_Double: {
+    if (requireFeature({3, 2, 0}, "Doubles"))
+      return failure();
+    locationProcessor.setLoc(getToken().getLoc());
+    consumeToken(FIRToken::kw_Double);
+    if (parseToken(FIRToken::l_paren, "expected '(' in Double expression"))
+      return failure();
+    double d;
+    switch (getToken().getKind()) {
+    // NaN, INF, exponent?
+    // radix_specified_integer (hex) ?
+    case FIRToken::integer:
+    case FIRToken::signed_integer:
+    case FIRToken::floatingpoint:
+      // This uses `strtod` internally, FWIW.  See `man 3 strtod`.
+      if (!llvm::to_float(getTokenSpelling(), d))
+        return emitError("invalid double");
+      consumeToken();
+      break;
+    default:
+      return emitError(
+          "expected floating point or integer in Double expression");
+    }
+    if (parseToken(FIRToken::r_paren, "expected ')' in Double expression"))
+      return failure();
+    result = builder.create<DoubleConstantOp>(builder.getF64FloatAttr(d));
     break;
   }
   case FIRToken::kw_List: {

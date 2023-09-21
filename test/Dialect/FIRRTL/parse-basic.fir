@@ -1703,6 +1703,34 @@ circuit BasicProps :
     propassign true, Bool(true)
     propassign false, Bool(false)
 
+  ; CHECK-LABEL: module private @Double
+  module Double :
+     ; CHECK-SAME: out %x: !firrtl.double
+     ; CHECK-SAME: out %y: !firrtl.double
+     ; CHECK-SAME: out %z: !firrtl.double
+     ; CHECK-SAME: out %negzero: !firrtl.double
+     ; CHECK-SAME: out %twoTo64: !firrtl.double
+     output x : Double
+     output y : Double
+     output z : Double
+     output negzero : Double
+     output twoTo64 : Double
+     ; TODO: investigate/test this further...
+     ; CHECK-NEXT: firrtl.double  0.1111111111111111 : f64
+     ; CHECK: propassign
+     propassign x, Double(0.1111111111111111111111111111111111111111)
+     ; CHECK: firrtl.double 1.{{0*}}e+00
+     propassign z, Double(1)
+     ; CHECK: firrtl.double -0.{{0+}}e+00
+     propassign negzero, Double(-0.0)
+     ; CHECK: firrtl.double 1.844674407370955{{[0-9]*}}E+
+     propassign twoTo64, Double(18446744073709551616)
+
+   ; ERRORS:
+     ; propassign y, Double(-.5) ; nope
+     ; propassign y, Double(Nan) ; nope
+     ; propassign y, Double(0x23434) ; nope
+
   ; CHECK-LABEL: module private @String
   module String :
     ; CHECK-SAME: out %a: !firrtl.string
