@@ -546,8 +546,7 @@ hw.module @TestZeroStruct(in %structZero: !hw.struct<>, in %structZeroNest: !hw.
 hw.module @zeroElements(in %in0: i0, in %in1: i32, out out0: !hw.struct<z1: i0, a: i32, z2: i0, b: i32, c: !hw.struct<z: i0>, d: !hw.struct<d1:i32, z:i0>>) {
   // CHECK:      // Zero width: wire /*Zero Width*/
   // CHECK-SAME: _GEN = '{};
-  // CHECK-NEXT: wire struct packed {logic [31:0] d1; /*z: Zero Width;*/ }
-  // CHECK-NEXT:   _GEN_0 = '{d1: in1};
+  // CHECK-NEXT: wire struct packed {logic [31:0] d1; /*z: Zero Width;*/ } _GEN_0 = '{d1: in1};
   //      CHECK: wire
   // CHECK-NEXT:   struct packed {/*z1: Zero Width;*/ logic [31:0] a; /*z2: Zero Width;*/ logic [31:0] b; /*c: Zero Width;*/ struct packed {logic [31:0] d1; /*z: Zero Width;*/ } d; } 
   // CHECK-NEXT:   _GEN_1 = '{a: in1, b: in1, d: _GEN_0};
