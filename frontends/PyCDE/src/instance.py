@@ -122,16 +122,22 @@ class ModuleInstance(Instance):
   def _add_appids(self):
     """Implicitly add members for each AppID which is contained by this
     instance."""
+
     with self.root.system:
       circt_mod = self.tgt_mod.circt_mod
-    if not isinstance(circt_mod,
-                      hw.HWModuleOp) or circt_mod.childAppIDBases is None:
-      return
-    for name in [n.value for n in circt_mod.childAppIDBases]:
+      child_appids = ir.ArrayAttr(
+          self.root.system._appid_index.get_child_appids_of(circt_mod))
+    child_appid_names = {}
+    for id in [msft.AppIDAttr(id) for id in child_appids]:
+      if id.name not in child_appid_names:
+        child_appid_names[id.name] = {}
+      child_appid_names[id.name][id.index] = id
+
+    for (name, ids) in child_appid_names.items():
       if hasattr(self, name):
         continue
       self.__slots__.append(name)
-      setattr(self, name, _AppIDInstance(self, name))
+      setattr(self, name, _AppIDInstance(self, circt_mod, name, ids))
 
   def _create_instance(self, static_op: ir.Operation) -> Instance:
     """Create a new `Instance` which is a child of `parent` in the instance
@@ -139,7 +145,7 @@ class ModuleInstance(Instance):
     operation need not be a module instantiation."""
 
     inner_sym = static_op.attributes["inner_sym"]
-    if isinstance(static_op, msft.InstanceOp):
+    if isinstance(static_op, hw.InstanceOp):
       tgt_mod = self._op_cache.get_symbol_pyproxy(static_op.moduleName)
       return ModuleInstance(self,
                             instance_sym=inner_sym,
@@ -216,47 +222,30 @@ class ModuleInstance(Instance):
 class _AppIDInstance:
   """Helper class to provide accessors to AppID'd instances."""
 
-  __slots__ = ["owner_instance", "appid_name"]
+  __slots__ = ["owner_instance", "appid_name", "appids", "circt_mod"]
 
-  def __init__(self, owner_instance: ModuleInstance, appid_name: str):
+  def __init__(self, owner_instance: ModuleInstance, circt_mod, appid_name: str,
+               appids: Dict[int, msft.AppIDAttr]):
     self.owner_instance = owner_instance
+    self.circt_mod = circt_mod
     self.appid_name = appid_name
-
-  def _search(self) -> Iterator[AppID, Instance]:
-    inner_sym_ops = self.owner_instance._op_cache.get_inner_sym_ops_in_module(
-        self.owner_instance.tgt_mod)
-    for child in self.owner_instance._children().values():
-      # "Look through" instance hierarchy levels if the child has an AppID
-      # accessor for our name.
-      if hasattr(child, self.appid_name):
-        child_appid_inst = getattr(child, self.appid_name)
-        if not isinstance(child_appid_inst, _AppIDInstance):
-          continue
-        for c in child_appid_inst._search():
-          yield c
-
-      # Check if the AppID is local, then return the instance if it is.
-      instance_op = inner_sym_ops[child.symbol]
-      if AppID.AttributeName in instance_op.attributes:
-        try:
-          # This is the only way to test that a certain attribute is a certain
-          # attribute type. *Sigh*.
-          appid = msft.AppIDAttr(instance_op.attributes[AppID.AttributeName])
-          if appid.name == self.appid_name:
-            yield (appid, child)
-        except ValueError:
-          pass
+    self.appids = appids
 
   def __getitem__(self, index: int) -> Instance:
-    for (appid, child) in self._search():
-      if appid.index == index:
-        return child
-
-    raise IndexError(f"{self.appid_name}[{index}] not found")
+    if index not in self.appids:
+      raise IndexError(f"{self.appid_name}[{index}] not found")
+    appid = self.appids[index]
+    path = ir.ArrayAttr(
+        self.owner_instance.root.system._appid_index.get_appid_path(
+            self.circt_mod, appid))
+    ret = self.owner_instance
+    for inst_ref in path:
+      ret = ret[ir.StringAttr(hw.InnerRefAttr(inst_ref).name).value]
+    return ret
 
   def __iter__(self) -> Iterator[Instance]:
-    for (_, child) in self._search():
-      yield child
+    for appid in self.appids.values():
+      yield self[appid.index]
 
 
 class RegInstance(Instance):
