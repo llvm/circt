@@ -402,8 +402,9 @@ def CallOp : IbisOp<"call", [CallOpInterface]> {
 
 def PathDirection : I32EnumAttr<"PathDirection", "path direction", [
   I32EnumAttrCase<"Parent", 0, "parent">,
-  I32EnumAttrCase<"Child", 1, "child">
-]>;
+  I32EnumAttrCase<"Child", 1, "child">]> {
+  let cppNamespace = "::circt::ibis";
+}
 
 def PathStepAttr : AttrDef<IbisDialect, "PathStep", [TypedAttrInterface]> {
   let description = "Used to describe a single step in a path";
