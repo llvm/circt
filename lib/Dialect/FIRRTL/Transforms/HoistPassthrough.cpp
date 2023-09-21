@@ -84,7 +84,7 @@ struct Driver {
   FieldRef source;
 
   //-- Constructors ---------------------------------------------------------//
-  Driver(Value dest = nullptr) {}
+  Driver() = default;
   Driver(FConnectLike connect, FieldRef source)
       : drivingConnect(connect), source(source) {
     assert((isa<RefDriver, HWDriver>(*this)));
