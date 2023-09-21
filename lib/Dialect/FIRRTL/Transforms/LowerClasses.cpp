@@ -721,6 +721,18 @@ struct BoolConstantOpConversion : public OpConversionPattern<BoolConstantOp> {
   }
 };
 
+struct DoubleConstantOpConversion
+    : public OpConversionPattern<DoubleConstantOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(DoubleConstantOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<om::ConstantOp>(op, adaptor.getValue());
+    return success();
+  }
+};
+
 struct StringConstantOpConversion
     : public OpConversionPattern<StringConstantOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -1164,6 +1176,10 @@ static void populateTypeConverter(TypeConverter &converter) {
   converter.addConversion(
       [](BoolType type) { return IntegerType::get(type.getContext(), 1); });
 
+  // Convert FIRRTL double type to OM.
+  converter.addConversion(
+      [](DoubleType type) { return FloatType::getF64(type.getContext()); });
+
   // Add a target materialization to fold away unrealized conversion casts.
   converter.addTargetMaterialization(
       [](OpBuilder &builder, Type type, ValueRange values, Location loc) {
@@ -1201,6 +1217,7 @@ static void populateRewritePatterns(
   patterns.add<ListCreateOpConversion>(converter, patterns.getContext());
   patterns.add<MapCreateOpConversion>(converter, patterns.getContext());
   patterns.add<BoolConstantOpConversion>(converter, patterns.getContext());
+  patterns.add<DoubleConstantOpConversion>(converter, patterns.getContext());
 }
 
 // Convert to OM ops and types in Classes or Modules.
