@@ -6025,9 +6025,6 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
         .Case<HWGeneratorSchemaOp>([&](HWGeneratorSchemaOp schemaOp) {
           symbolCache.addDefinition(schemaOp.getNameAttr(), schemaOp);
         })
-        .Case<GlobalRefOp>([&](GlobalRefOp globalRefOp) {
-          symbolCache.addDefinition(globalRefOp.getSymNameAttr(), globalRefOp);
-        })
         .Case<HierPathOp>([&](HierPathOp hierPathOp) {
           symbolCache.addDefinition(hierPathOp.getSymNameAttr(), hierPathOp);
         })
@@ -6118,7 +6115,7 @@ static void emitOperation(VerilogEmitterState &state, Operation *op) {
           [&](auto op) { ModuleEmitter(state).emitHWExternModule(op); })
       .Case<HWModuleGeneratedOp>(
           [&](auto op) { ModuleEmitter(state).emitHWGeneratedModule(op); })
-      .Case<HWGeneratorSchemaOp, hw::GlobalRefOp>([&](auto op) { /* Empty */ })
+      .Case<HWGeneratorSchemaOp>([&](auto op) { /* Empty */ })
       .Case<BindOp>([&](auto op) { ModuleEmitter(state).emitBind(op); })
       .Case<BindInterfaceOp>(
           [&](auto op) { ModuleEmitter(state).emitBindInterface(op); })

@@ -46,25 +46,4 @@ def InnerRefAttr : AttrDef<HWDialect, "InnerRef"> {
   }];
 }
 
-def GlobalRefAttr : AttrDef<HWDialect, "GlobalRef"> {
-  let summary = "Refer to a non-local symbol";
-  let description = [{
-    This works like a symbol reference, but to a global symbol with a possible
-    unique instance path.
-  }];
-  let mnemonic = "globalNameRef";
-  let parameters = (ins "::mlir::FlatSymbolRefAttr":$glblSym);
-  let builders = [
-    AttrBuilderWithInferredContext<(ins "::circt::hw::GlobalRefOp":$ref),[{
-      return get(ref.getContext(), SymbolRefAttr::get(ref));
-    }]>,
-  ];
-
-  let assemblyFormat = "`<` $glblSym `>`";
-
-  let extraClassDeclaration = [{
-    static constexpr char DialectAttrName[] = "circt.globalRef";
-  }];
-}
-
 #endif // CIRCT_DIALECT_HW_HWATTRIBUTESNAMING

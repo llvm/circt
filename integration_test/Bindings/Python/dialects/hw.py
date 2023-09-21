@@ -117,10 +117,6 @@ with Context() as ctx, Location.unknown():
   # CHECK: "some_instance"
   print(inner_ref.name)
 
-  global_ref = hw.GlobalRefAttr.get(StringAttr.get("foo"))
-  # CHECK: #hw.globalNameRef<@foo>
-  print(global_ref)
-
   ports = [
       hw.ModulePort(StringAttr.get("out"), i1, hw.ModulePortDirection.OUTPUT),
       hw.ModulePort(StringAttr.get("in1"), i2, hw.ModulePortDirection.INPUT),
