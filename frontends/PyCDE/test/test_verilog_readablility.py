@@ -1,12 +1,12 @@
 # RUN: %PYTHON% %s %t | FileCheck %s
 
-from pycde import (Output, Input, Module, generator, types, dim, System)
+from pycde import (Clock, Output, Input, Module, generator, types, dim, System)
 
 import sys
 
 
 class WireNames(Module):
-  clk = Input(types.i1)
+  clk = Clock()
   data_in = Input(dim(32, 3))
   sel = Input(types.i2)
 
