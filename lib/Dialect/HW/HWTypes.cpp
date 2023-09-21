@@ -830,7 +830,10 @@ SmallVector<Type> ModuleType::getPortTypes() {
 }
 
 Type ModuleType::getInputType(size_t idx) {
-  return getPorts()[getPortIdForInputId(idx)].type;
+  const auto &portInfo = getPorts()[getPortIdForInputId(idx)];
+  if (portInfo.dir != ModulePort::InOut)
+    return portInfo.type;
+  return InOutType::get(portInfo.type);
 }
 
 Type ModuleType::getOutputType(size_t idx) {
