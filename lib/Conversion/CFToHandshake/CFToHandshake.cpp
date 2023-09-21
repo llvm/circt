@@ -1717,8 +1717,8 @@ static LogicalResult lowerFuncOp(func::FuncOp funcOp, MLIRContext *ctx,
     Block *bodyBlock = newFuncOp.getBodyBlock();
     Value entryCtrl = bodyBlock->getArguments().back();
     HandshakeLowering fol(newFuncOp.getBody());
-    if (failed((lowerRegion<func::ReturnOp, handshake::ReturnOp>(
-            fol, sourceConstants, disableTaskPipelining, entryCtrl))))
+    if (failed(lowerRegion<func::ReturnOp, handshake::ReturnOp>(
+            fol, sourceConstants, disableTaskPipelining, entryCtrl)))
       return failure();
   }
 

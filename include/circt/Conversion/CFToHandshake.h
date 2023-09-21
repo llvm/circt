@@ -72,9 +72,8 @@ public:
   template <typename TSrcTerm, typename TDstTerm>
   LogicalResult setControlOnlyPath(ConversionPatternRewriter &rewriter,
                                    Value entryCtrl) {
-    if (!entryCtrl.getType().isa<NoneType>())
-      return emitError(entryCtrl.getLoc())
-             << "Expected NoneType for entry control value";
+    assert(entryCtrl.getType().isa<NoneType>() &&
+           "Expected NoneType for entry control value");
     // Creates start and end points of the control-only path
     Block *entryBlock = &r.front();
     setBlockEntryControl(entryBlock, entryCtrl);
@@ -162,7 +161,7 @@ template <typename T, typename... TArgs, typename... TArgs2>
 LogicalResult runPartialLowering(
     T &instance,
     LogicalResult (T::*memberFunc)(ConversionPatternRewriter &, TArgs2...),
-    TArgs &... args) {
+    TArgs &...args) {
   return partiallyLowerRegion(
       [&](Region &, ConversionPatternRewriter &rewriter) -> LogicalResult {
         return (instance.*memberFunc)(rewriter, args...);
