@@ -121,7 +121,8 @@ LogicalResult circt::ibis::detail::verifyScopeOpInterface(Operation *op) {
 // MethodOp
 //===----------------------------------------------------------------------===//
 
-ParseResult MethodOp::parse(OpAsmParser &parser, OperationState &result) {
+template <typename TOp>
+ParseResult parseMethodLikeOp(OpAsmParser &parser, OperationState &result) {
   // Parse the name as a symbol.
   StringAttr nameAttr;
   if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(),
@@ -163,8 +164,7 @@ ParseResult MethodOp::parse(OpAsmParser &parser, OperationState &result) {
     return failure();
 
   result.addAttribute("argNames", ArrayAttr::get(context, argNames));
-  result.addAttribute(MethodOp::getFunctionTypeAttrName(result.name),
-                      functionType);
+  result.addAttribute(TOp::getFunctionTypeAttrName(result.name), functionType);
 
   // Parse the function body.
   auto *body = result.addRegion();
@@ -174,21 +174,28 @@ ParseResult MethodOp::parse(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
-void MethodOp::print(OpAsmPrinter &p) {
-  FunctionType funcTy = getFunctionType();
+template <typename TOp>
+void printMethodLikeOp(TOp op, OpAsmPrinter &p) {
+  FunctionType funcTy = op.getFunctionType();
   p << ' ';
-  p.printSymbolName(getSymName());
+  p.printSymbolName(op.getSymName());
   function_interface_impl::printFunctionSignature(
-      p, *this, funcTy.getInputs(), /*isVariadic=*/false, funcTy.getResults());
-  p.printOptionalAttrDictWithKeyword(getOperation()->getAttrs(),
-                                     getAttributeNames());
-  Region &body = getBody();
+      p, op, funcTy.getInputs(), /*isVariadic=*/false, funcTy.getResults());
+  p.printOptionalAttrDictWithKeyword(op.getOperation()->getAttrs(),
+                                     op.getAttributeNames());
+  Region &body = op.getBody();
   if (!body.empty()) {
     p << ' ';
     p.printRegion(body, /*printEntryBlockArgs=*/false,
                   /*printBlockTerminators=*/true);
   }
 }
+
+ParseResult MethodOp::parse(OpAsmParser &parser, OperationState &result) {
+  return parseMethodLikeOp<MethodOp>(parser, result);
+}
+
+void MethodOp::print(OpAsmPrinter &p) { return printMethodLikeOp(*this, p); }
 
 void MethodOp::getAsmBlockArgumentNames(mlir::Region &region,
                                         OpAsmSetValueNameFn setNameFn) {
@@ -204,11 +211,28 @@ void MethodOp::getAsmBlockArgumentNames(mlir::Region &region,
       setNameFn(block->getArgument(idx), argName);
 }
 
+//===----------------------------------------------------------------------===//
+// DataflowMethodOp
+//===----------------------------------------------------------------------===//
+
+ParseResult DataflowMethodOp::parse(OpAsmParser &parser,
+                                    OperationState &result) {
+  return parseMethodLikeOp<DataflowMethodOp>(parser, result);
+}
+
+void DataflowMethodOp::print(OpAsmPrinter &p) {
+  return printMethodLikeOp(*this, p);
+}
+
+//===----------------------------------------------------------------------===//
+// ReturnOp
+//===----------------------------------------------------------------------===//
+
 void ReturnOp::build(OpBuilder &odsBuilder, OperationState &odsState) {}
 
 LogicalResult ReturnOp::verify() {
   // Check that the return operand type matches the function return type.
-  auto func = cast<MethodOp>((*this)->getParentOp());
+  auto func = cast<FunctionOpInterface>((*this)->getParentOp());
   ArrayRef<Type> resTypes = func.getResultTypes();
 
   if (getNumOperands() != resTypes.size())
