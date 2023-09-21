@@ -17,6 +17,10 @@
 // CHECK-NEXT:      }
 // CHECK-NEXT:      ibis.return %0#0, %0#1 : i32, i32
 // CHECK-NEXT:    }
+// CHECK-NEXT:    ibis.method.df @bar(%arg0: none) -> none {
+// CHECK-NEXT:      %0 = handshake.join %arg0 : none
+// CHECK-NEXT:      ibis.return %0 : none
+// CHECK-NEXT:    }
 // CHECK-NEXT:  }
 
 ibis.class @HighLevel {
@@ -38,6 +42,11 @@ ibis.class @HighLevel {
       ibis.sblock.return %v, %v : i32, i32
     }
     ibis.return %out1, %out2 : i32, i32
+  }
+
+  ibis.method.df @bar(%arg0 : none) -> (none) {
+    %0 = handshake.join %arg0 : none
+    ibis.return %0 : none
   }
 }
 
