@@ -17,27 +17,23 @@ with ir.Context() as ctx, ir.Location.unknown():
 
   mod = ir.Module.create()
   with ir.InsertionPoint(mod.body):
-    extmod = msft.MSFTModuleExternOp(name='MyExternMod',
-                                     input_ports=[],
-                                     output_ports=[])
+    extmod = hw.HWModuleExternOp(name='MyExternMod',
+                                 input_ports=[],
+                                 output_ports=[])
 
     entity_extern = msft.EntityExternOp.create("tag", "extra details")
 
-    op = msft.MSFTModuleOp(name='MyWidget', input_ports=[], output_ports=[])
+    op = hw.HWModuleOp(name='MyWidget', input_ports=[], output_ports=[])
     with ir.InsertionPoint(op.add_entry_block()):
-      msft.OutputOp([])
+      hw.OutputOp([])
 
-    top = msft.MSFTModuleOp(name='top', input_ports=[], output_ports=[])
+    top = hw.HWModuleOp(name='top', input_ports=[], output_ports=[])
     with ir.InsertionPoint(top.add_entry_block()):
-      msft.OutputOp([])
+      hw.OutputOp([])
 
-    msft_mod = msft.MSFTModuleOp(name='msft_mod',
-                                 input_ports=[],
-                                 output_ports=[],
-                                 parameters=ir.DictAttr.get(
-                                     {"WIDTH": ir.IntegerAttr.get(i32, 8)}))
+    msft_mod = hw.HWModuleOp(name='msft_mod', input_ports=[], output_ports=[])
     with ir.InsertionPoint(msft_mod.add_entry_block()):
-      msft.OutputOp([])
+      hw.OutputOp([])
 
   with ir.InsertionPoint.at_block_terminator(op.body.blocks[0]):
     ext_inst = extmod.instantiate("ext1")
@@ -65,6 +61,7 @@ with ir.Context() as ctx, ir.Location.unknown():
   # CHECK: msft.module @MyWidget {} ()
   # CHECK:   msft.output
   # CHECK: msft.module @msft_mod {WIDTH = 8 : i32} ()
+  mod.operation.verify()
   mod.operation.print()
 
   db = msft.PlacementDB(mod)
@@ -257,8 +254,7 @@ with ir.Context() as ctx, ir.Location.unknown():
   # CHECK:   set_location_assignment M20K_X2_Y6_N1 -to $parent|inst1|ext1|foo_subpath
   print(mod)
   pm = circt.passmanager.PassManager.parse(
-      "builtin.module(msft-lower-instances,lower-msft-to-hw,msft-export-tcl{tops=top})"
-  )
+      "builtin.module(msft-lower-instances,msft-export-tcl{tops=top})")
   pm.run(mod.operation)
   circt.export_verilog(mod, sys.stdout)
 
