@@ -152,8 +152,22 @@ public:
   PyAppIDIndex(const PyAppIDIndex &) = delete;
   ~PyAppIDIndex() { circtMSFTAppIDIndexFree(index); }
 
-  MlirOperation getInstance(MlirAttribute appidPath, MlirLocation loc) {
+  /// Returns the DynamicInstanceOp associated with appidPath.
+  MlirOperation getInstance(MlirAttribute appidPath, MlirLocation loc) const {
     return circtMSFTAppIDIndexGetInstance(index, appidPath, loc);
+  }
+
+  MlirAttribute getChildAppIDsOf(MlirOperation op) const {
+    return circtMSFTAppIDIndexGetChildAppIDsOf(index, op);
+  }
+
+  py::object getAppIDPathAttr(MlirOperation fromMod, MlirAttribute appid,
+                              MlirLocation loc) const {
+    MlirAttribute path =
+        circtMSFTAppIDIndexGetAppIDPath(index, fromMod, appid, loc);
+    if (path.ptr == nullptr)
+      return py::none();
+    return py::cast(path);
   }
 
 private:
@@ -331,5 +345,15 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
       .def("get_instance", &PyAppIDIndex::getInstance,
            "Get the dynamic instance for an appid path. Creates one if one "
            "doesn't already exist.",
-           py::arg("appid"), py::arg("query_site"));
+           py::arg("appid"), py::arg("query_site"))
+      .def("get_child_appids_of", &PyAppIDIndex::getChildAppIDsOf,
+           "Return a dictionary of AppIDAttrs to ArrayAttr of InnerRefAttrs "
+           "containing the relative paths to the leaf of the particular "
+           "AppIDAttr. Argument MUST be HWModuleLike.",
+           py::arg("mod"))
+      .def("get_appid_path", &PyAppIDIndex::getAppIDPathAttr,
+           "Return an array of InnerNameRefAttrs representing the relative "
+           "path to 'appid' from 'fromMod'.",
+           py::arg("from_mod"), py::arg("appid"),
+           py::arg("query_site") = py::none());
 }

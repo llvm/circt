@@ -158,6 +158,14 @@ MLIR_CAPI_EXPORTED void circtMSFTAppIDIndexFree(CirctMSFTAppIDIndex);
 MLIR_CAPI_EXPORTED MlirOperation circtMSFTAppIDIndexGetInstance(
     CirctMSFTAppIDIndex, MlirAttribute appIDPath, MlirLocation querySite);
 
+MLIR_CAPI_EXPORTED MlirAttribute
+    circtMSFTAppIDIndexGetChildAppIDsOf(CirctMSFTAppIDIndex, MlirOperation);
+
+MLIR_CAPI_EXPORTED
+MlirAttribute circtMSFTAppIDIndexGetAppIDPath(CirctMSFTAppIDIndex,
+                                              MlirOperation fromMod,
+                                              MlirAttribute appid,
+                                              MlirLocation loc);
 #ifdef __cplusplus
 }
 #endif

@@ -333,6 +333,13 @@ with ir.Context() as ctx, ir.Location.unknown():
   # CHECK:        msft.instance.dynamic @Top::@ext_inst1 {
   print(mod)
 
+  appids = appid_idx.get_child_appids_of(top)
+  # CHECK: [#msft.appid<"ext"[0]>, #msft.appid<"bar"[2]>]
+  print(appids)
+  path = appid_idx.get_appid_path(top, msft.AppIDAttr.get("bar", 2), unknown)
+  # CHECK: [#hw.innerNameRef<@Top::@myMod>, #hw.innerNameRef<@MyMod::@inst1>]
+  print(path)
+
   # Invalid appid queries
   # ERR:      error: could not find module '@Nonsense'
   # ERR:      error: could not find appid '#msft.appid<"NoExist"[2]>'
