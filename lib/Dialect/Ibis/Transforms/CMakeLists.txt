@@ -10,6 +10,7 @@ add_circt_dialect_library(CIRCTIbisTransforms
   IbisInlineSBlocksPass.cpp
   IbisConvertCFToHandshake.cpp
   IbisPassPipelines.cpp
+  IbisPrepareScheduling.cpp
 
   DEPENDS
   CIRCTIbisTransformsIncGen
@@ -17,6 +18,7 @@ add_circt_dialect_library(CIRCTIbisTransforms
   LINK_LIBS PUBLIC
   CIRCTDC
   CIRCTHandshake
+  CIRCTPipelineOps
   CIRCTCFToHandshake
   CIRCTIbis
   CIRCTHW
