@@ -387,8 +387,8 @@ public:
   void run(FModuleOp mod) {
     SmallVector<Value, 64> worklist(mod.getArguments());
 
-    DenseSet<Value> processed;
-    processed.insert(worklist.begin(), worklist.end());
+    DenseSet<Value> enqueued;
+    enqueued.insert(worklist.begin(), worklist.end());
     while (!worklist.empty()) {
       auto val = worklist.pop_back_val();
       auto driver = ignoreHWDrivers ? RefDriver::get(val) : Driver::get(val);
@@ -399,7 +399,7 @@ public:
       auto sourceVal = driver.source.getValue();
 
       // If already enqueued, ignore.
-      if (!processed.insert(sourceVal).second)
+      if (!enqueued.insert(sourceVal).second)
         continue;
 
       // Only chase through atomic values for now.
