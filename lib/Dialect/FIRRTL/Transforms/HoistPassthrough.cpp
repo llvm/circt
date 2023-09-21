@@ -274,6 +274,22 @@ Value RefDriver::remat(PortMappingFn mapPortFn, ImplicitLocOpBuilder &builder) {
 // HWDriver implementation.
 //===----------------------------------------------------------------------===//
 
+static bool hasDontTouchOrInnerSymOnResult(Operation *op) {
+  if (AnnotationSet::hasDontTouch(op))
+    return true;
+  auto symOp = dyn_cast<hw::InnerSymbolOpInterface>(op);
+  return symOp && symOp.getTargetResultIndex() && symOp.getInnerSymAttr();
+}
+
+static bool hasDontTouchOrInnerSymOnResult(Value value) {
+  if (auto *op = value.getDefiningOp())
+    return hasDontTouchOrInnerSymOnResult(op);
+  auto arg = dyn_cast<BlockArgument>(value);
+  auto module = cast<FModuleOp>(arg.getOwner()->getParentOp());
+  return (module.getPortSymbolAttr(arg.getArgNumber())) ||
+         AnnotationSet::forPort(module, arg.getArgNumber()).hasDontTouch();
+}
+
 HWDriver HWDriver::get(Value v) {
   auto baseValue = dyn_cast<FIRRTLBaseValue>(v);
   if (!baseValue)
@@ -298,7 +314,10 @@ HWDriver HWDriver::get(Value v) {
     return {};
 
   // Reject if cannot reason through this.
-  if (hasDontTouch(v) || hasDontTouch(ref.getValue()))
+  // Use local "hasDontTouch" to distinguish inner symbols on results
+  // vs on the operation itself (like an instance).
+  if (hasDontTouchOrInnerSymOnResult(v) ||
+      hasDontTouchOrInnerSymOnResult(ref.getValue()))
     return {};
   if (auto fop = ref.getValue().getDefiningOp<Forceable>();
       fop && fop.isForceable())

@@ -397,6 +397,50 @@ firrtl.circuit "SymIntermediate" {
 
 // -----
 
+// Symbol on instance means keep symbol, not dontTouch its ports.
+
+// CHECK-LABEL: SymInstance
+firrtl.circuit "SymInstance" {
+  firrtl.module private @Sink(in %in: !firrtl.uint<1>) {}
+  // CHECK: @UWire(in %in: !firrtl.uint<1>)
+  firrtl.module private @UWire(in %in: !firrtl.uint<1>,
+                               out %out : !firrtl.uint<1>) {
+    %sink_in = firrtl.instance sink sym @blocker @Sink(in in: !firrtl.uint<1>)
+    firrtl.strictconnect %sink_in, %in : !firrtl.uint<1>
+    firrtl.strictconnect %out, %sink_in : !firrtl.uint<1>
+  }
+  firrtl.module @SymInstance(in %in : !firrtl.uint<1>, out %out : !firrtl.uint<1>) {
+    %u_in, %u_out = firrtl.instance u @UWire(in in : !firrtl.uint<1>,
+                                             out out : !firrtl.uint<1>)
+    firrtl.strictconnect %u_in, %in : !firrtl.uint<1>
+    firrtl.strictconnect %out, %u_out : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// Through instance input port.
+
+// CHECK-LABEL: "Instance"
+firrtl.circuit "Instance" {
+  firrtl.module private @Sink(in %in: !firrtl.uint<1>) {}
+  // CHECK: @UWire(in %in: !firrtl.uint<1>) {
+  firrtl.module private @UWire(in %in: !firrtl.uint<1>,
+                               out %out : !firrtl.uint<1>) {
+    %sink_in = firrtl.instance sink @Sink(in in: !firrtl.uint<1>)
+    firrtl.strictconnect %sink_in, %in : !firrtl.uint<1>
+    firrtl.strictconnect %out, %sink_in : !firrtl.uint<1>
+  }
+  firrtl.module @Instance(in %in : !firrtl.uint<1>, out %out : !firrtl.uint<1>) {
+    %u_in, %u_out = firrtl.instance u @UWire(in in : !firrtl.uint<1>,
+                                             out out : !firrtl.uint<1>)
+    firrtl.strictconnect %u_in, %in : !firrtl.uint<1>
+    firrtl.strictconnect %out, %u_out : !firrtl.uint<1>
+  }
+}
+
+// -----
+
 // Reject non-passive source.
 
 // CHECK-LABEL: "NonPassiveSource"
