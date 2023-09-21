@@ -6309,7 +6309,22 @@ struct ExportVerilogPass : public ExportVerilogBase<ExportVerilogPass> {
 private:
   raw_ostream &os;
 };
+
+struct ExportVerilogStreamOwnedPass : public ExportVerilogPass {
+  ExportVerilogStreamOwnedPass(std::unique_ptr<llvm::raw_ostream> os)
+      : ExportVerilogPass{*os} {
+    owned = std::move(os);
+  }
+
+private:
+  std::unique_ptr<llvm::raw_ostream> owned;
+};
 } // end anonymous namespace
+
+std::unique_ptr<mlir::Pass>
+circt::createExportVerilogPass(std::unique_ptr<llvm::raw_ostream> os) {
+  return std::make_unique<ExportVerilogStreamOwnedPass>(std::move(os));
+}
 
 std::unique_ptr<mlir::Pass>
 circt::createExportVerilogPass(llvm::raw_ostream &os) {
