@@ -2,9 +2,7 @@
 ; RUN: firtool %s -extract-test-code -etc-disable-instance-extraction | FileCheck %s --check-prefix=DISABLEINSTANCE
 ; RUN: firtool %s -extract-test-code -etc-disable-module-inlining | FileCheck %s --check-prefix=DISABLEMODULE
 
-circuit Top: %[[
-{"class": "firrtl.transforms.DontTouchAnnotation", "target": "~Top|Foo>b"}
-]]
+circuit Top:
   module Foo:
     input a : UInt<1>
     output b : UInt<1>
@@ -15,7 +13,7 @@ circuit Top: %[[
   ; CHECK: Foo foo
 
   ; Ensure foo is not extracted when disabled.
-  ; DISABLEINSTANCE-LABEL: module Top(
+  ; DISABLEINSTANCE-LABEL: module InstanceExtracted(
   ; DISABLEINSTANCE: Foo foo
 
   module InstanceExtracted:
