@@ -18,6 +18,7 @@ include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/IR/BuiltinAttributeInterfaces.td"
 
+include  "circt/Dialect/Handshake/HandshakeInterfaces.td"
 include "circt/Dialect/HW/HWOpInterfaces.td"
 include "circt/Dialect/Ibis/IbisInterfaces.td"
 include "circt/Dialect/Ibis/IbisTypes.td"
@@ -136,30 +137,23 @@ def InstanceOp : InstanceOpBase<"instance"> {
   }];
 }
 
-def MethodOp : IbisOp<"method", [
+
+class MethodOpBase<string mnemonic, list<Trait> traits = []> :
+    IbisOp<mnemonic, !listconcat(traits, [
       IsolatedFromAbove,
       Symbol, FunctionOpInterface,
-      AutomaticAllocationScope,
-      DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmBlockArgumentNames"]>,
-      HasParent<"ClassOp">]> {
-
-  let summary = "Ibis method";
-  let description = [{
-    Ibis functions are a lot like software functions: a list of named arguments
-    and unnamed return values.
-
-    Can only live inside of classes.
-  }];
+      HasParent<"ClassOp">
+  ])> {
 
   let arguments = (ins SymbolNameAttr:$sym_name,
                        TypeAttrOf<FunctionType>:$function_type,
                        ArrayAttr:$argNames,
                        OptionalAttr<DictArrayAttr>:$arg_attrs,
                        OptionalAttr<DictArrayAttr>:$res_attrs);
-  let regions = (region AnyRegion:$body);
   let hasCustomAssemblyFormat = 1;
 
-  let extraClassDeclaration = [{
+  code extraMethodClassDeclaration = "";
+  let extraClassDeclaration = extraMethodClassDeclaration # [{
     //===------------------------------------------------------------------===//
     // FunctionOpInterface Methods
     //===------------------------------------------------------------------===//
@@ -179,8 +173,43 @@ def MethodOp : IbisOp<"method", [
   }];
 }
 
+def MethodOp : MethodOpBase<"method", [
+      AutomaticAllocationScope,
+      DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmBlockArgumentNames"]>
+  ]> {
+
+  let summary = "Ibis method";
+  let description = [{
+    Ibis methods are a lot like software functions: a list of named arguments
+    and unnamed return values with imperative control flow.
+  }];
+
+  let regions = (region AnyRegion:$body);
+}
+
+def DataflowMethodOp : MethodOpBase<"method.df", [
+      SingleBlockImplicitTerminator<"ibis::ReturnOp">,
+      RegionKindInterface,
+      FineGrainedDataflowRegionOpInterface
+  ]> {
+
+  let summary = "Ibis dataflow method";
+  let description = [{
+    Ibis dataflow methods share the same interface as an `ibis.method` but
+    without imperative CFG-based control flow. Instead, this method implements a
+    graph region, and control flow is expected to be defined by dataflow operations.
+  }];
+  let regions = (region SizedRegion<1>:$body);
+
+  let extraMethodClassDeclaration = [{
+    // Implement RegionKindInterface.
+    static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
+  }];
+}
+
 def ReturnOp : IbisOp<"return", [
-      Pure, ReturnLike, Terminator, HasParent<"MethodOp">]> {
+      Pure, ReturnLike, Terminator,
+      ParentOneOf<["MethodOp", "DataflowMethodOp"]>]> {
   let summary = "Ibis method terminator";
 
   let arguments = (ins Variadic<AnyType>:$retValues);

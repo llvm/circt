@@ -37,43 +37,19 @@ struct LowerInstancesPass : public LowerInstancesBase<LowerInstancesPass> {
   LogicalResult lower(DynamicInstanceOp inst, InstanceHierarchyOp hier,
                       OpBuilder &b);
 
-  // Aggregation of the global ref attributes populated as a side-effect of the
-  // conversion.
-  DenseMap<Operation *, SmallVector<hw::GlobalRefAttr, 0>> globalRefsToApply;
-
   // Cache the top-level symbols. Insert the new ones we're creating for new
-  // global ref ops.
+  // HierPathOps.
   SymbolCache topSyms;
-
-  // In order to be efficient, cache the "symbols" in each module.
-  DenseMap<hw::HWModuleLike, SymbolCache> perModSyms;
-  // Accessor for `perModSyms` which lazily constructs each cache.
-  const SymbolCache &getSyms(hw::HWModuleLike mod);
 };
 } // anonymous namespace
-
-const SymbolCache &LowerInstancesPass::getSyms(hw::HWModuleLike mod) {
-  auto symsFound = perModSyms.find(mod);
-  if (symsFound != perModSyms.end())
-    return symsFound->getSecond();
-
-  // Build the cache.
-  SymbolCache &syms = perModSyms[mod];
-  hw::InnerSymbolTable::walkSymbols(
-      mod, [&](StringAttr symName, hw::InnerSymTarget target) {
-        if (!target.isPort())
-          syms.addDefinition(symName, target.getOp());
-      });
-  return syms;
-}
 
 LogicalResult LowerInstancesPass::lower(DynamicInstanceOp inst,
                                         InstanceHierarchyOp hier,
                                         OpBuilder &b) {
 
-  hw::GlobalRefOp ref = nullptr;
+  hw::HierPathOp ref = nullptr;
 
-  // If 'inst' doesn't contain any ops which use a global ref op, don't create
+  // If 'inst' doesn't contain any ops which use a hierpath op, don't create
   // one.
   if (llvm::any_of(inst.getOps(), [](Operation &op) {
         return isa<DynInstDataOpInterface>(op);
@@ -87,40 +63,12 @@ LogicalResult LowerInstancesPass::lower(DynamicInstanceOp inst,
       refSym = StringAttr::get(&getContext(),
                                origRefSym.getValue() + "_" + Twine(++ctr));
 
-    // Create a global ref to replace us.
-    ArrayAttr globalRefPath = inst.globalRefPath();
-    ref = b.create<hw::GlobalRefOp>(inst.getLoc(), refSym, globalRefPath);
-    auto refAttr = hw::GlobalRefAttr::get(ref);
+    // Create a hierpath to replace us.
+    ArrayAttr hierPath = inst.getPath();
+    ref = b.create<hw::HierPathOp>(inst.getLoc(), refSym, hierPath);
 
     // Add the new symbol to the symbol cache.
     topSyms.addDefinition(refSym, ref);
-
-    // For each level of `globalRef`, find the static operation which needs a
-    // back reference to the global ref which is replacing us.
-    bool symNotFound = false;
-    for (auto innerRef : globalRefPath.getAsRange<hw::InnerRefAttr>()) {
-      auto mod =
-          cast<hw::HWModuleLike>(topSyms.getDefinition(innerRef.getModule()));
-      const SymbolCache &modSyms = getSyms(mod);
-      Operation *tgtOp = modSyms.getDefinition(innerRef.getName());
-      if (!tgtOp) {
-        symNotFound = true;
-        inst.emitOpError("Could not find ")
-            << innerRef.getName() << " in module " << innerRef.getModule();
-        continue;
-      }
-      // Add the backref to the list of attributes to apply.
-      globalRefsToApply[tgtOp].push_back(refAttr);
-
-      // Since GlobalRefOp uses the `inner_sym` attribute, assign the
-      // 'inner_sym' attribute if it's not already assigned.
-      if (!tgtOp->hasAttr("inner_sym")) {
-        tgtOp->setAttr("inner_sym", hw::InnerSymAttr::get(innerRef.getName()));
-      }
-    }
-    if (symNotFound)
-      return inst.emitOpError(
-          "Could not find operation corresponding to instance reference");
   }
 
   // Relocate all my children.
@@ -134,7 +82,7 @@ LogicalResult LowerInstancesPass::lower(DynamicInstanceOp inst,
     // Assign a ref for ops which need it.
     if (auto specOp = dyn_cast<DynInstDataOpInterface>(op)) {
       assert(ref);
-      specOp.setGlobalRef(ref);
+      specOp.setPathOp(ref);
     }
   }
 
@@ -166,21 +114,6 @@ void LowerInstancesPass::runOnOperation() {
   }
   if (numFailed)
     signalPassFailure();
-
-  // Since applying a large number of attributes is very expensive in MLIR (both
-  // in terms of time and memory), bulk-apply the attributes necessary for
-  // `hw.globalref`s.
-  for (auto opRefPair : globalRefsToApply) {
-    ArrayRef<hw::GlobalRefAttr> refArr = opRefPair.getSecond();
-    SmallVector<Attribute> newGlobalRefs(
-        llvm::map_range(refArr, [](hw::GlobalRefAttr ref) { return ref; }));
-    Operation *op = opRefPair.getFirst();
-    if (auto refArr =
-            op->getAttrOfType<ArrayAttr>(hw::GlobalRefAttr::DialectAttrName))
-      newGlobalRefs.append(refArr.getValue().begin(), refArr.getValue().end());
-    op->setAttr(hw::GlobalRefAttr::DialectAttrName,
-                ArrayAttr::get(ctxt, newGlobalRefs));
-  }
 }
 
 namespace circt {

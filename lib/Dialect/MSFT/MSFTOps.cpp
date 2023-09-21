@@ -300,7 +300,7 @@ void printImplicitInnerRef(OpAsmPrinter &p, Operation *,
 // DynamicInstanceOp
 //===----------------------------------------------------------------------===//
 
-ArrayAttr DynamicInstanceOp::globalRefPath() {
+ArrayAttr DynamicInstanceOp::getPath() {
   SmallVector<Attribute, 16> path;
   DynamicInstanceOp next = *this;
   do {

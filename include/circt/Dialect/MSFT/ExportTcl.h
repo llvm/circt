@@ -32,8 +32,8 @@ public:
   LogicalResult emit(Operation *hwMod, StringRef outputFile);
 
   Operation *getDefinition(FlatSymbolRefAttr);
-  const DenseSet<hw::GlobalRefOp> &getRefsUsed() { return refsUsed; }
-  void usedRef(hw::GlobalRefOp ref) { refsUsed.insert(ref); }
+  const DenseSet<hw::HierPathOp> &getRefsUsed() { return refsUsed; }
+  void usedRef(hw::HierPathOp ref) { refsUsed.insert(ref); }
 
 private:
   mlir::ModuleOp topLevel;
@@ -46,7 +46,7 @@ private:
   DenseMap<Operation *,
            llvm::MapVector<StringAttr, SmallVector<DynInstDataOpInterface, 0>>>
       tclOpsForModInstance;
-  DenseSet<hw::GlobalRefOp> refsUsed;
+  DenseSet<hw::HierPathOp> refsUsed;
 
   LogicalResult populate();
 };
