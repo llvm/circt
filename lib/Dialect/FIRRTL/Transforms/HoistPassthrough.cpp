@@ -221,7 +221,11 @@ void Driver::finalize(ImplicitLocOpBuilder &builder) {
   auto dest = getDest();
   assert(immSource.getType() == dest.getType() &&
          "final connect must be strict");
-  if (isa<BlockArgument>(immSource) || dest.hasOneUse()) {
+  if (dest.hasOneUse()) {
+    // Only use is the connect, just drop it.
+    drivingConnect.erase();
+  } else if (isa<BlockArgument>(immSource)) {
+    // Block argument dominates all, so drop connect and RAUW to it.
     drivingConnect.erase();
     dest.replaceAllUsesWith(immSource);
   } else {
