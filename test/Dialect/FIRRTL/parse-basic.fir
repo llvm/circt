@@ -1918,3 +1918,26 @@ circuit AnyRef:
     ; CHECK-NEXT: %[[CAST:.+]] = firrtl.object.anyref_cast %[[OBJ]]
     ; CHECK-NEXT: %[[MAPFROM:.+]] = firrtl.map.create (%[[CAST]] -> %[[FIVE]])
     ; CHECK-NEXT: propassign %mapFromAny, %[[MAPFROM]]
+
+;// -----
+FIRRTL version 4.0.0
+; CHECK-LABEL "TestPublic"
+circuit TestPublic:
+  ; CHECK: module @Qux
+  public module Qux:
+
+  ; CHECK: module private @Baz
+  module Baz:
+    inst qux of Qux
+
+  ; CHECK: module @Bar
+  public module Bar:
+    inst baz of Baz
+
+  ; CHECK: module @t_TestPublic
+  public module t_TestPublic:
+    inst foo of TestPublic
+
+  ; CHECK: module @TestPublic
+  module TestPublic:
+    inst bar of Bar

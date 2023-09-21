@@ -4181,7 +4181,8 @@ private:
   ParseResult parseExtClass(CircuitOp circuit, unsigned indent);
   ParseResult parseExtModule(CircuitOp circuit, unsigned indent);
   ParseResult parseIntModule(CircuitOp circuit, unsigned indent);
-  ParseResult parseModule(CircuitOp circuit, unsigned indent);
+  ParseResult parseModule(CircuitOp circuit, unsigned indent,
+                          bool isPublic = false);
 
   ParseResult parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
                             SmallVectorImpl<SMLoc> &resultPortLocs,
@@ -4462,6 +4463,7 @@ ParseResult FIRCircuitParser::skipToModuleEnd(unsigned indent) {
     case FIRToken::kw_extmodule:
     case FIRToken::kw_intmodule:
     case FIRToken::kw_module:
+    case FIRToken::kw_public:
     case FIRToken::kw_type:
       // All module declarations should have the same indentation
       // level. Use this fact to differentiate between module
@@ -4708,7 +4710,8 @@ ParseResult FIRCircuitParser::parseIntModule(CircuitOp circuit,
 }
 
 /// module ::= 'module' id ':' info? INDENT portlist simple_stmt_block DEDENT
-ParseResult FIRCircuitParser::parseModule(CircuitOp circuit, unsigned indent) {
+ParseResult FIRCircuitParser::parseModule(CircuitOp circuit, unsigned indent,
+                                          bool isPublic) {
   StringAttr name;
   SmallVector<PortInfo, 8> portList;
   SmallVector<SMLoc> portLocs;
@@ -4729,8 +4732,9 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit, unsigned indent) {
   auto builder = circuit.getBodyBuilder();
   auto moduleOp = builder.create<FModuleOp>(info.getLoc(), name, conventionAttr,
                                             portList, annotations);
-  auto visibility = isMainModule ? SymbolTable::Visibility::Public
-                                 : SymbolTable::Visibility::Private;
+  auto visibility = (isMainModule || isPublic)
+                        ? SymbolTable::Visibility::Public
+                        : SymbolTable::Visibility::Private;
   SymbolTable::setSymbolVisibility(moduleOp, visibility);
 
   // Parse the body of this module after all prototypes have been parsed. This
@@ -4758,6 +4762,11 @@ ParseResult FIRCircuitParser::parseToplevelDefinition(CircuitOp circuit,
     return parseExtModule(circuit, indent);
   case FIRToken::kw_intmodule:
     return parseIntModule(circuit, indent);
+  case FIRToken::kw_public:
+    consumeToken(FIRToken::kw_public);
+    if (getToken().getKind() == FIRToken::kw_module)
+      return parseModule(circuit, indent, true);
+    return emitError(getToken().getLoc(), "only modules may be public");
   case FIRToken::kw_module:
     return parseModule(circuit, indent);
   case FIRToken::kw_type:
@@ -5022,6 +5031,7 @@ ParseResult FIRCircuitParser::parseCircuit(
     case FIRToken::kw_extmodule:
     case FIRToken::kw_intmodule:
     case FIRToken::kw_module:
+    case FIRToken::kw_public:
     case FIRToken::kw_type: {
       auto indent = getIndentation();
       if (!indent.has_value())
@@ -5074,16 +5084,17 @@ DoneParsing:
   }
 
   // If the circuit has an entry point that is not an external module, set the
-  // visibility of all non-main modules to private.
+  // visibility of all non-main modules to private.  Skip FModuleOp's that have
+  // visibility set appropriately when created.
   if (auto mainMod = dyn_cast<FModuleOp>(*main)) {
-    for (auto mod : circuit.getOps<FModuleLike>()) {
-      if (mod != main)
-        SymbolTable::setSymbolVisibility(mod, SymbolTable::Visibility::Private);
-    }
+    for (auto mod : circuit.getOps<FModuleLike>())
+      if (mod != main && !isa<FModuleOp>(mod))
+        mod.setPrivate();
+
     // Reject if main module has input ref-type ports.
     // This should be checked in verifier for all public FModuleLike's but
     // they're used internally so check this here.
-    for (auto &pi : mainMod.getPorts()) {
+    for (auto &pi : main.getPorts()) {
       if (!pi.isOutput() && type_isa<RefType>(pi.type))
         return mlir::emitError(pi.loc)
                << "main module may not contain input references";
