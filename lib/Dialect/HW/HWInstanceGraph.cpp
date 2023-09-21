@@ -13,9 +13,15 @@ using namespace hw;
 
 InstanceGraph::InstanceGraph(Operation *operation)
     : igraph::InstanceGraph(operation) {
-  for (auto &node : nodes)
-    if (cast<HWModuleLike>(node.getModule().getOperation()).isPublic())
+  for (auto &node : nodes) {
+    // Note: we dyn_cast here because we cannot assume that _all_ nodes are
+    // HWModuleLike - there may be cases where hw.module's are mixed with
+    // other ops that implement the igraph::ModuleOpInterface.
+    auto hwModuleLikeNode =
+        dyn_cast<HWModuleLike>(node.getModule().getOperation());
+    if (hwModuleLikeNode && hwModuleLikeNode.isPublic())
       entry.addInstance({}, &node);
+  }
 }
 
 igraph::InstanceGraphNode *InstanceGraph::addHWModule(HWModuleLike module) {

@@ -89,10 +89,66 @@ def IbisContainersToHW : Pass<"ibis-convert-containers-to-hw", "mlir::ModuleOp">
 def IbisArgifyBlocks : Pass<"ibis-argify-blocks"> {
   let summary = "Add arguments to ibis blocks";
   let description = [{
-    Analyses `ibis.block` operations and converts any SSA value defined outside
-    the `ibis.block` to a block argument.
+    Analyses `ibis.sblock` operations and converts any SSA value defined outside
+    the `ibis.sblock` to a block argument.
   }];
   let constructor = "circt::ibis::createArgifyBlocksPass()";
+}
+
+def IbisReblock : Pass<"ibis-reblock", "ibis::MethodOp"> {
+  let summary = "Recreates `ibis.sblock` operations from a CFG";
+  let description = [{
+    Recreates `ibis.sblock` operations from a CFG. Any `ibis.block.attributes`
+    operations at the parent operation will be added to the resulting blocks.
+
+    The IR is expected to be in maximal SSA form prior to this pass, given that
+    the pass will only inspect the terminator operation of a block for any
+    values that are generated within the block. Maximum SSA form thus ensures
+    that any value defined within the block is never used outside of the block.
+
+    It is expected that `ibis.call` operations have been isolated into
+    their own basic blocks before this pass is run. This implies that all
+    operations within a block (except for the terminator operation) can be
+    statically scheduled with each other.
+
+    e.g.
+    ```mlir
+    ^bb_foo(%arg0 : i32, %arg1 : i32):
+      %res = arith.addi %arg0, %arg1 : i32
+      %v = ...
+      cf.br ^bb_bar(%v : i32)
+    ```
+
+    becomes
+    ```mlir
+    ^bb_foo(%arg0 : i32, %arg1 : i32):
+      %v_outer = ibis.sblock(%a0 : i32 = %arg0, %a1 : i32 = %arg1) -> (i32) {
+        %res = arith.addi %arg0, %arg1 : i32
+        %v = ...
+        ibis.sblock.return %v : i32
+      }
+      cf.br ^bb_bar(%v_outer : i32)
+    ```
+  }];
+  let constructor = "circt::ibis::createReblockPass()";
+}
+
+def IbisInlineSBlocks : Pass<"ibis-inline-sblocks", "ibis::MethodOp"> {
+  let summary = "Inlines `ibis.sblock` operations as MLIR blocks";
+  let description = [{
+    Inlines `ibis.sblock` operations, by creating MLIR blocks and `cf`
+    operations, while adding attributes to the parent operation about
+    `sblock`-specific attributes.
+
+    The parent attributes are located under the `ibis.blockinfo` identifier as
+    a dictionary attribute.
+    Each entry in the dictionary consists of:
+    - Key: an ID (numerical) string identifying the block.
+    - Value: a dictionary of attributes. As a minimum this will contain a
+      `loc`-keyed attribute specifying the location of the block.
+  }];
+  let constructor = "circt::ibis::createInlineSBlocksPass()";
+  let dependentDialects = ["mlir::cf::ControlFlowDialect"];
 }
 
 #endif // CIRCT_DIALECT_IBIS_PASSES_TD

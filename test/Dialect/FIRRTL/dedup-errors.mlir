@@ -25,8 +25,8 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
       modules = ["~MustDedup|Test0", "~MustDedup|Test1"]
     }]} {
   // expected-note@below {{module marked NoDedup}}
-  firrtl.module @Test0() attributes {annotations = [{class = "firrtl.transforms.NoDedupAnnotation"}]} { }
-  firrtl.module @Test1() { }
+  firrtl.module private @Test0() attributes {annotations = [{class = "firrtl.transforms.NoDedupAnnotation"}]} { }
+  firrtl.module private @Test1() { }
   firrtl.module @MustDedup() {
     firrtl.instance test0 @Test0()
     firrtl.instance test1 @Test1()
@@ -44,11 +44,11 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
     firrtl.instance test0 @Test0()
     firrtl.instance test1 @Test1()
   }
-  firrtl.module @Test0() {
+  firrtl.module private @Test0() {
     // expected-note@below {{first operation is a firrtl.wire}}
     %w = firrtl.wire : !firrtl.uint<8>
   }
-  firrtl.module @Test1() {
+  firrtl.module private @Test1() {
     // expected-note@below {{second operation is a firrtl.constant}}
     %c1_ui8 = firrtl.constant 1 : !firrtl.uint<8>
   }
@@ -66,17 +66,17 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
     firrtl.instance mid0 @Mid0()
     firrtl.instance mid1 @Mid1()
   }
-  firrtl.module @Mid0() {
+  firrtl.module private @Mid0() {
     firrtl.instance test0 @Test0()
   }
-  firrtl.module @Mid1() {
+  firrtl.module private @Mid1() {
     firrtl.instance test1 @Test1()
   }
-  firrtl.module @Test0() {
+  firrtl.module private @Test0() {
     // expected-note@below {{first operation is a firrtl.wire}}
     %w = firrtl.wire : !firrtl.uint<8>
   }
-  firrtl.module @Test1() {
+  firrtl.module private @Test1() {
     // expected-note@below {{second operation is a firrtl.constant}}
     %c1_ui8 = firrtl.constant 1 : !firrtl.uint<8>
   }
@@ -89,11 +89,11 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
       class = "firrtl.transforms.MustDeduplicateAnnotation",
       modules = ["~MustDedup|Test0", "~MustDedup|Test1"]
     }]} {
-  firrtl.module @Test0() {
+  firrtl.module private @Test0() {
     // expected-note@below {{operations have different number of results}}
     "test"() : () -> ()
   }
-  firrtl.module @Test1() {
+  firrtl.module private @Test1() {
     // expected-note@below {{second operation here}}
     %0 = "test"() : () -> (i32)
   }
@@ -110,11 +110,11 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
       class = "firrtl.transforms.MustDeduplicateAnnotation",
       modules = ["~MustDedup|Test0", "~MustDedup|Test1"]
     }]} {
-  firrtl.module @Test0() {
+  firrtl.module private @Test0() {
     // expected-note@below {{operation result types don't match, first type is '!firrtl.uint<1>'}}
     %w = firrtl.wire : !firrtl.uint<1>
   }
-  firrtl.module @Test1() {
+  firrtl.module private @Test1() {
     // expected-note@below {{second type is '!firrtl.uint<2>'}}
     %w = firrtl.wire : !firrtl.uint<2>
   }
@@ -131,11 +131,11 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
       class = "firrtl.transforms.MustDeduplicateAnnotation",
       modules = ["~MustDedup|Test0", "~MustDedup|Test1"]
     }]} {
-  firrtl.module @Test0() {
+  firrtl.module private @Test0() {
     // expected-note@below {{operation result bundle type has different number of elements}}
     %w = firrtl.wire : !firrtl.bundle<a : uint<1>>
   }
-  firrtl.module @Test1() {
+  firrtl.module private @Test1() {
     // expected-note@below {{second operation here}}
     %w = firrtl.wire : !firrtl.bundle<>
   }
@@ -152,11 +152,11 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
       class = "firrtl.transforms.MustDeduplicateAnnotation",
       modules = ["~MustDedup|Test0", "~MustDedup|Test1"]
     }]} {
-  firrtl.module @Test0() {
+  firrtl.module private @Test0() {
     // expected-note@below {{operation result bundle element "a" flip does not match}}
     %w = firrtl.wire : !firrtl.bundle<a : uint<1>>
   }
-  firrtl.module @Test1() {
+  firrtl.module private @Test1() {
     // expected-note@below {{second operation here}}
     %w = firrtl.wire : !firrtl.bundle<a flip : uint<1>>
   }
@@ -172,11 +172,11 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
       class = "firrtl.transforms.MustDeduplicateAnnotation",
       modules = ["~MustDedup|Test0", "~MustDedup|Test1"]
     }]} {
-  firrtl.module @Test0() {
+  firrtl.module private @Test0() {
     // expected-note@below {{bundle element 'a' types don't match, first type is '!firrtl.uint<1>'}}
     %w = firrtl.wire : !firrtl.bundle<a : uint<1>>
   }
-  firrtl.module @Test1() {
+  firrtl.module private @Test1() {
     // expected-note@below {{second type is '!firrtl.uint<2>'}}
     %w = firrtl.wire : !firrtl.bundle<b : uint<2>>
   }
@@ -193,11 +193,11 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
       class = "firrtl.transforms.MustDeduplicateAnnotation",
       modules = ["~MustDedup|Test0", "~MustDedup|Test1"]
     }]} {
-  firrtl.module @Test0(in %a : !firrtl.uint<1>) {
+  firrtl.module private @Test0(in %a : !firrtl.uint<1>) {
     // expected-note@below {{operations have different number of operands}}
     "test"(%a) : (!firrtl.uint<1>) -> ()
   }
-  firrtl.module @Test1(in %a : !firrtl.uint<1>) {
+  firrtl.module private @Test1(in %a : !firrtl.uint<1>) {
     // expected-note@below {{second operation here}}
     "test"() : () -> ()
   }
@@ -214,11 +214,11 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
       class = "firrtl.transforms.MustDeduplicateAnnotation",
       modules = ["~MustDedup|Test0", "~MustDedup|Test1"]
     }]} {
-  firrtl.module @Test0(in %a : !firrtl.uint<1>, in %b : !firrtl.uint<1>) {
+  firrtl.module private @Test0(in %a : !firrtl.uint<1>, in %b : !firrtl.uint<1>) {
     // expected-note@below {{operations use different operands, first operand is 'a'}}
     %n = firrtl.node %a : !firrtl.uint<1>
   }
-  firrtl.module @Test1(in %c : !firrtl.uint<1>, in %d : !firrtl.uint<1>) {
+  firrtl.module private @Test1(in %c : !firrtl.uint<1>, in %d : !firrtl.uint<1>) {
     // expected-note@below {{second operand is 'd', but should have been 'c'}}
     %n = firrtl.node %d : !firrtl.uint<1>
   }
@@ -235,11 +235,11 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
       class = "firrtl.transforms.MustDeduplicateAnnotation",
       modules = ["~MustDedup|Test0", "~MustDedup|Test1"]
     }]} {
-  firrtl.module @Test0(in %a : !firrtl.uint<1>) {
+  firrtl.module private @Test0(in %a : !firrtl.uint<1>) {
     // expected-note@below {{operations have different number of regions}}
     "test"()({}) : () -> ()
   }
-  firrtl.module @Test1(in %a : !firrtl.uint<1>) {
+  firrtl.module private @Test1(in %a : !firrtl.uint<1>) {
     // expected-note@below {{second operation here}}
     "test"() : () -> ()
   }
@@ -256,14 +256,14 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
       class = "firrtl.transforms.MustDeduplicateAnnotation",
       modules = ["~MustDedup|Test0", "~MustDedup|Test1"]
     }]} {
-  firrtl.module @Test0(in %a : !firrtl.uint<1>) {
+  firrtl.module private @Test0(in %a : !firrtl.uint<1>) {
     // expected-note@below {{operation regions have different number of blocks}}
     "test"()({
       ^bb0:
         "return"() : () -> ()
     }) : () -> ()
   }
-  firrtl.module @Test1(in %a : !firrtl.uint<1>) {
+  firrtl.module private @Test1(in %a : !firrtl.uint<1>) {
     // expected-note@below {{second operation here}}
     "test"() ({
       ^bb0:
@@ -286,9 +286,9 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
       modules = ["~MustDedup|Test0", "~MustDedup|Test1"]
     }]} {
   // expected-note@below {{port 'a' only exists in one of the modules}}
-  firrtl.module @Test0(in %a : !firrtl.uint<1>) { }
+  firrtl.module private @Test0(in %a : !firrtl.uint<1>) { }
   // expected-note@below {{second module to be deduped that does not have the port}}
-  firrtl.module @Test1() { }
+  firrtl.module private @Test1() { }
   firrtl.module @MustDedup() {
     firrtl.instance test0 @Test0(in a : !firrtl.uint<1>)
     firrtl.instance test1 @Test1()
@@ -303,9 +303,9 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
       modules = ["~MustDedup|Test0", "~MustDedup|Test1"]
     }]} {
   // expected-note@below {{module port 'a' types don't match, first type is '!firrtl.uint<1>'}}
-  firrtl.module @Test0(in %a : !firrtl.uint<1>) { }
+  firrtl.module private @Test0(in %a : !firrtl.uint<1>) { }
   // expected-note@below {{second type is '!firrtl.uint<2>'}}
-  firrtl.module @Test1(in %a : !firrtl.uint<2>) { }
+  firrtl.module private @Test1(in %a : !firrtl.uint<2>) { }
   firrtl.module @MustDedup() {
     firrtl.instance test0 @Test0(in a : !firrtl.uint<1>)
     firrtl.instance test1 @Test1(in a : !firrtl.uint<2>)
@@ -320,9 +320,9 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
       modules = ["~MustDedup|Test0", "~MustDedup|Test1"]
     }]} {
   // expected-note@below {{module port 'a' directions don't match, first direction is 'in'}}
-  firrtl.module @Test0(in %a : !firrtl.uint<1>) { }
+  firrtl.module private @Test0(in %a : !firrtl.uint<1>) { }
   // expected-note@below {{second direction is 'out'}}
-  firrtl.module @Test1(out %a : !firrtl.uint<1>) { }
+  firrtl.module private @Test1(out %a : !firrtl.uint<1>) { }
   firrtl.module @MustDedup() {
     firrtl.instance test0 @Test0(in a : !firrtl.uint<1>)
     firrtl.instance test1 @Test1(out a : !firrtl.uint<1>)
@@ -336,12 +336,12 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
       class = "firrtl.transforms.MustDeduplicateAnnotation",
       modules = ["~MustDedup|Test0", "~MustDedup|Test1"]
     }]} {
-  firrtl.module @Test0() {
+  firrtl.module private @Test0() {
     // expected-note@below {{first block has more operations}}
     %w = firrtl.wire : !firrtl.uint<8>
   }
   // expected-note@below {{second block here}}
-  firrtl.module @Test1() { }
+  firrtl.module private @Test1() { }
   firrtl.module @MustDedup() {
     firrtl.instance test0 @Test0()
     firrtl.instance test1 @Test1()
@@ -356,8 +356,8 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
       modules = ["~MustDedup|Test0", "~MustDedup|Test1"]
     }]} {
   // expected-note@below {{first block here}}
-  firrtl.module @Test0() { }
-  firrtl.module @Test1() {
+  firrtl.module private @Test0() { }
+  firrtl.module private @Test1() {
     // expected-note@below {{second block has more operations}}
     %w = firrtl.wire : !firrtl.uint<8>
   }
@@ -375,9 +375,9 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
       modules = ["~MustDedup|Test0", "~MustDedup|Test1"]
     }]} {
   // expected-note@below {{second operation is missing attribute "test1"}}
-  firrtl.module @Test0() attributes {test1} { }
+  firrtl.module private @Test0() attributes {test1} { }
   // expected-note@below {{second operation here}}
-  firrtl.module @Test1() attributes {} { }
+  firrtl.module private @Test1() attributes {} { }
   firrtl.module @MustDedup() {
     firrtl.instance test0 @Test0()
     firrtl.instance test1 @Test1()
@@ -392,9 +392,9 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
       modules = ["~MustDedup|Test0", "~MustDedup|Test1"]
     }]} {
   // expected-note@below {{first operation has attribute 'test' with value "a"}}
-  firrtl.module @Test0() attributes {test = "a"} { }
+  firrtl.module private @Test0() attributes {test = "a"} { }
   // expected-note@below {{second operation has value "b"}}
-  firrtl.module @Test1() attributes {test = "b"} { }
+  firrtl.module private @Test1() attributes {test = "b"} { }
   firrtl.module @MustDedup() {
     firrtl.instance test0 @Test0()
     firrtl.instance test1 @Test1()
@@ -409,9 +409,9 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
       modules = ["~MustDedup|Test0", "~MustDedup|Test1"]
     }]} {
   // expected-note@below {{first operation has attribute 'test' with value 0x21}}
-  firrtl.module @Test0() attributes {test = 33 : i8} { }
+  firrtl.module private @Test0() attributes {test = 33 : i8} { }
   // expected-note@below {{second operation has value 0x20}}
-  firrtl.module @Test1() attributes {test = 32 : i8} { }
+  firrtl.module private @Test1() attributes {test = 32 : i8} { }
   firrtl.module @MustDedup() {
     firrtl.instance test0 @Test0()
     firrtl.instance test1 @Test1()
@@ -430,11 +430,11 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
     }]} {
   
   // expected-note@below {{first operation has attribute 'test' with value "a"}}
-  firrtl.module @Test0() attributes {test = "a"} { }
-  firrtl.module @Test1() attributes {test = "a"} { }
+  firrtl.module private @Test0() attributes {test = "a"} { }
+  firrtl.module private @Test1() attributes {test = "a"} { }
   // expected-note@below {{second operation has value "b"}}
-  firrtl.module @Test2() attributes {test = "b"} { }
-  firrtl.module @Test3() attributes {test = "b"} { }
+  firrtl.module private @Test2() attributes {test = "b"} { }
+  firrtl.module private @Test3() attributes {test = "b"} { }
   firrtl.module @MustDedup() {
     firrtl.instance test0 @Test0()
     firrtl.instance test1 @Test1()
@@ -451,9 +451,9 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
       modules = ["~MustDedup|Test0", "~MustDedup|Test1"]
     }]} {
   // expected-note@below {{module port 'a', has a RefType with a different base type '!firrtl.uint<1>' in the same position of the two modules marked as 'must dedup'. (This may be due to Grand Central Taps or Views being different between the two modules.)}}
-  firrtl.module @Test0(in %a : !firrtl.probe<uint<1>>, in %b : !firrtl.probe<uint<2>>) { }
+  firrtl.module private @Test0(in %a : !firrtl.probe<uint<1>>, in %b : !firrtl.probe<uint<2>>) { }
   // expected-note@below {{the second module has a different base type '!firrtl.uint<2>'}}
-  firrtl.module @Test1(in %a : !firrtl.probe<uint<2>>, in %b : !firrtl.probe<uint<1>>) { }
+  firrtl.module private @Test1(in %a : !firrtl.probe<uint<2>>, in %b : !firrtl.probe<uint<1>>) { }
   firrtl.module @MustDedup() {
     firrtl.instance test0 @Test0(in a : !firrtl.probe<uint<1>>, in b : !firrtl.probe<uint<2>>)
     firrtl.instance test1 @Test1(in a : !firrtl.probe<uint<2>>, in b : !firrtl.probe<uint<1>>)
@@ -468,9 +468,9 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
       modules = ["~MustDedup|Test0", "~MustDedup|Test1"]
     }]} {
   // expected-note@below {{contains a RefType port named 'b' that only exists in one of the modules (can be due to difference in Grand Central Tap or View of two modules marked with must dedup)}}
-  firrtl.module @Test0(in %a : !firrtl.probe<uint<1>>, in %b : !firrtl.probe<uint<2>>) { }
+  firrtl.module private @Test0(in %a : !firrtl.probe<uint<1>>, in %b : !firrtl.probe<uint<2>>) { }
   // expected-note@below {{second module to be deduped that does not have the RefType port}}
-  firrtl.module @Test1(in %a : !firrtl.probe<uint<1>>) { }
+  firrtl.module private @Test1(in %a : !firrtl.probe<uint<1>>) { }
   firrtl.module @MustDedup() {
     firrtl.instance test0 @Test0(in a : !firrtl.probe<uint<1>>, in b : !firrtl.probe<uint<2>>)
     firrtl.instance test1 @Test1(in a : !firrtl.probe<uint<1>>)
@@ -485,9 +485,9 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
       modules = ["~MustDedup|Test0", "~MustDedup|Test1"]
     }]} {
   // expected-note@below {{contains a RefType port named 'b' that only exists in one of the modules (can be due to difference in Grand Central Tap or View of two modules marked with must dedup)}}
-  firrtl.module @Test1(in %a : !firrtl.probe<uint<1>>, in %b : !firrtl.probe<uint<2>>) { }
+  firrtl.module private @Test1(in %a : !firrtl.probe<uint<1>>, in %b : !firrtl.probe<uint<2>>) { }
   // expected-note@below {{second module to be deduped that does not have the RefType port}}
-  firrtl.module @Test0(in %a : !firrtl.probe<uint<1>>) { }
+  firrtl.module private @Test0(in %a : !firrtl.probe<uint<1>>) { }
   firrtl.module @MustDedup() {
     firrtl.instance test0 @Test1(in a : !firrtl.probe<uint<1>>, in b : !firrtl.probe<uint<2>>)
     firrtl.instance test1 @Test0(in a : !firrtl.probe<uint<1>>)
@@ -503,13 +503,13 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
     }]} {
 
   // expected-note@below {{module is in dedup group 'foo'}}
-  firrtl.module @Foo() attributes {annotations = [{
+  firrtl.module private @Foo() attributes {annotations = [{
     class = "firrtl.transforms.DedupGroupAnnotation",
     group = "foo"
   }]} { }
 
   // expected-note@below {{module is not part of a dedup group}}
-  firrtl.module @Bar() { }
+  firrtl.module private @Bar() { }
 
   firrtl.module @MustDedup() {
     firrtl.instance foo @Foo()
@@ -522,7 +522,7 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
 firrtl.circuit "MustDedup" attributes {} {
 
   // expected-error@below {{module belongs to multiple dedup groups: "foo", "bar"}}
-  firrtl.module @MustDedup() attributes {annotations = [
+  firrtl.module private @Child() attributes {annotations = [
     {
       class = "firrtl.transforms.DedupGroupAnnotation",
       group = "foo"
@@ -532,6 +532,10 @@ firrtl.circuit "MustDedup" attributes {} {
       group = "bar"
     }
   ]} { }
+
+  firrtl.module @MustDedup() {
+    firrtl.instance c @Child()
+  }
 }
 
 // -----
@@ -541,12 +545,12 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
       class = "firrtl.transforms.MustDeduplicateAnnotation",
       modules = ["~MustDedup|Test0", "~MustDedup|Test1"]
     }]} {
-  firrtl.module @Test0() {
+  firrtl.module private @Test0() {
     %w0 = firrtl.wire sym [<@sym, 1, private>]: !firrtl.vector<uint<1>, 2>
     // expected-note @below {{operations have different targets, first operation has field 1 of op %w0 = firrtl.wire sym [<@sym,1,private>] : !firrtl.vector<uint<1>, 2>}}
     %1 = firrtl.ref.rwprobe <@Test0::@sym> : !firrtl.rwprobe<uint<1>>
   }
-  firrtl.module @Test1() {
+  firrtl.module private @Test1() {
     %w1 = firrtl.wire sym [<@sym, 2, private>]: !firrtl.vector<uint<1>, 2>
     // expected-note @below {{second operation has field 2 of op %w1 = firrtl.wire sym [<@sym,2,private>] : !firrtl.vector<uint<1>, 2>}}
     %0 = firrtl.ref.rwprobe <@Test1::@sym> : !firrtl.rwprobe<uint<1>>
@@ -564,11 +568,11 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
       class = "firrtl.transforms.MustDeduplicateAnnotation",
       modules = ["~MustDedup|Test0", "~MustDedup|Test1"]
     }]} {
-  firrtl.module @Test0(in %in : !firrtl.vector<uint<1>, 2> sym [<@sym, 1, private>]) {
+  firrtl.module private @Test0(in %in : !firrtl.vector<uint<1>, 2> sym [<@sym, 1, private>]) {
     // expected-note @below {{operations have different targets, first operation has field 1 of port 0 on @Test0}}
     %0 = firrtl.ref.rwprobe <@Test0::@sym> : !firrtl.rwprobe<uint<1>>
   }
-  firrtl.module @Test1(in %in : !firrtl.vector<uint<1>, 2> sym [<@sym, 2, private>]) {
+  firrtl.module private @Test1(in %in : !firrtl.vector<uint<1>, 2> sym [<@sym, 2, private>]) {
     // expected-note @below {{second operation has field 2 of port 0 on @Test1}}
     %0 = firrtl.ref.rwprobe <@Test1::@sym>: !firrtl.rwprobe<uint<1>>
   }

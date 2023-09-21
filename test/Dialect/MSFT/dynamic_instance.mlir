@@ -74,7 +74,7 @@ hw.module @deeper () -> () {
   // TCL: set_instance_assignment -name RESERVE_PLACE_REGION OFF -to $parent|branch|leaf|module_0|memBank2
 }
 
-hw.module @reg (%input : i4, %clk : i1) -> () {
+hw.module @reg (%input : i4, %clk : !seq.clock) -> () {
   %reg = seq.compreg sym @reg %input, %clk  : i4
 }
 // TCL-LABEL: proc reg_0_foo_config

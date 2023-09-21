@@ -73,7 +73,7 @@ msft.module @regions {} () -> () {
 }
 
 // TCL-LABEL: proc reg_0_config
-msft.module @reg {} (%input : i8, %clk : i1) -> () {
+msft.module @reg {} (%input : i8, %clk : !seq.clock) -> () {
   %reg = seq.compreg sym @reg %input, %clk { circt.globalRef = [#hw.globalNameRef<@ref4>] } : i8
   // TCL: set_location_assignment FF_X0_Y0_N0 -to $parent|reg_0
   msft.output

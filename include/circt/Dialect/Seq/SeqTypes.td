@@ -93,8 +93,4 @@ def ClockType : SeqType<"Clock"> {
   let mnemonic = "clock";
 }
 
-// Transitional type to allow both `i1` and `seq.clock` to be used as a clock.
-def ClockOrI1Type : DialectType<SeqDialect,
-    CPred<"::circt::seq::isClockOrI1Type($_self)">, "a clock type">;
-
 #endif // CIRCT_DIALECT_SEQ_SEQTYPES

@@ -244,9 +244,28 @@ LogicalResult LocalParamOp::verify() {
 // RegOp
 //===----------------------------------------------------------------------===//
 
+static ParseResult
+parseImplicitInitType(OpAsmParser &p, mlir::Type regType,
+                      std::optional<OpAsmParser::UnresolvedOperand> &initValue,
+                      mlir::Type &initType) {
+  if (!initValue.has_value())
+    return success();
+
+  hw::InOutType ioType = regType.dyn_cast<hw::InOutType>();
+  if (!ioType)
+    return p.emitError(p.getCurrentLocation(), "expected inout type for reg");
+
+  initType = ioType.getElementType();
+  return success();
+}
+
+static void printImplicitInitType(OpAsmPrinter &p, Operation *op,
+                                  mlir::Type regType, mlir::Value initValue,
+                                  mlir::Type initType) {}
+
 void RegOp::build(OpBuilder &builder, OperationState &odsState,
-                  Type elementType, StringAttr name,
-                  hw::InnerSymAttr innerSym) {
+                  Type elementType, StringAttr name, hw::InnerSymAttr innerSym,
+                  mlir::Value initValue) {
   if (!name)
     name = builder.getStringAttr("");
   odsState.addAttribute("name", name);
@@ -254,6 +273,8 @@ void RegOp::build(OpBuilder &builder, OperationState &odsState,
     odsState.addAttribute(hw::InnerSymbolTable::getInnerSymbolAttrName(),
                           innerSym);
   odsState.addTypes(hw::InOutType::get(elementType));
+  if (initValue)
+    odsState.addOperands(initValue);
 }
 
 /// Suggest a name for each result value based on the saved result names

@@ -252,9 +252,13 @@ hw.module @PathModule() {
   %wire = hw.wire %wire sym @wire : i1
 }
 // CHECK-LABEL: @Path
-om.class @Path() {
-  // CHECK: %0 = om.path reference @HierPath
+om.class @Path(%p: !om.path) {
+  // CHECK: %[[v0:.+]] = om.path reference @HierPath
   %0 = om.path reference @HierPath
+  // CHECK: %[[v1:.+]] = om.path_append %p, %[[v0]]
+  %1 = om.path_append %p, %0
+  // CHECK: om.class.field @path1, %[[v1]] : !om.path
+  om.class.field @path1, %1 : !om.path
 }
 
 // CHECK-LABEL: @Enum

@@ -19,6 +19,7 @@ include "mlir/IR/OpAsmInterface.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 
 include "circt/Dialect/HW/HWTypes.td"
+include "circt/Dialect/Seq/SeqTypes.td"
 
 include "circt/Dialect/ESI/ESIDialect.td"
 include "circt/Dialect/ESI/ESIInterfaces.td"
@@ -65,7 +66,7 @@ def ChannelTypeImpl : ESI_Type<"Channel"> {
         "::circt::esi::ChannelSignaling::ValidReady">:$signaling);
 
   let assemblyFormat = "`<` $inner (`,` $signaling^)? `>`";
- 
+
   let builders = [
     TypeBuilder<(ins "Type":$type), [{
         return Base::get(type.getContext(), type,
@@ -405,7 +406,7 @@ def ChannelBufferOp : ESI_Abstract_Op<"buffer", [
     ```
   }];
 
-  let arguments = (ins I1:$clk, I1:$rst, ChannelType:$input,
+  let arguments = (ins ClockType:$clk, I1:$rst, ChannelType:$input,
     OptionalAttr<ConfinedAttr<I64Attr, [IntMinValue<1>]>>:$stages,
     OptionalAttr<StrAttr>:$name);
   let results = (outs ChannelType:$output);
@@ -424,7 +425,7 @@ def PipelineStageOp : ESI_Physical_Op<"stage", [
     late-pass latency balancing.
   }];
 
-  let arguments = (ins I1:$clk, I1:$rst, ChannelType:$input);
+  let arguments = (ins ClockType:$clk, I1:$rst, ChannelType:$input);
   let results = (outs ChannelType:$output);
   let hasCustomAssemblyFormat = 1;
 }
@@ -451,7 +452,7 @@ def CosimEndpointOp : ESI_Physical_Op<"cosim", []> {
     supported by the specific protocol.
   }];
 
-  let arguments = (ins I1:$clk, I1:$rst, ChannelType:$send, StrAttr:$name);
+  let arguments = (ins ClockType:$clk, I1:$rst, ChannelType:$send, StrAttr:$name);
   let results = (outs ChannelType:$recv);
 
   let assemblyFormat = [{
@@ -467,7 +468,7 @@ def RtlBitArrayType : Type<CPred<"$_self.isa<::circt::hw::ArrayType>()"
 def CapnpDecodeOp : ESI_Physical_Op<"decode.capnp", [Pure]> {
   let summary = "Translate bits in Cap'nProto messages to HW typed data";
 
-  let arguments = (ins I1:$clk, I1:$valid, RtlBitArrayType:$capnpBits);
+  let arguments = (ins ClockType:$clk, I1:$valid, RtlBitArrayType:$capnpBits);
   let results = (outs AnyType:$decodedData);
 
   let assemblyFormat = [{
@@ -479,7 +480,7 @@ def CapnpDecodeOp : ESI_Physical_Op<"decode.capnp", [Pure]> {
 def CapnpEncodeOp : ESI_Physical_Op<"encode.capnp", [Pure]> {
   let summary = "Translate HW typed data to Cap'nProto";
 
-  let arguments = (ins I1:$clk, I1:$valid, AnyType:$dataToEncode);
+  let arguments = (ins ClockType:$clk, I1:$valid, AnyType:$dataToEncode);
   let results = (outs RtlBitArrayType:$capnpBits);
 
   let assemblyFormat = [{

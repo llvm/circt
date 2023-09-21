@@ -169,3 +169,64 @@ pipeline.stage ^bb4 regs(%out_s3 : i32)
 ^bb4(%out_s4 : i32):
 foo.bar %out_s4 : i32
 ```
+
+## Non-stallable Pipeline Stages
+
+**Note:** the following is only valid for pipelines with a stall signal.
+
+An option of the Pipeline abstraction presented in this dialect is the ability
+to have _non-stallable stages_ (NS). NS stages are used whereever a pipeline
+access resources that are not able to stop on a dime, and thus require a fixed
+amount of cycles to complete. 
+
+Non-stallable stages are marked as an attribute of the pipeline operations,
+wherein a bitvector is provided (by the user) to indicate which stage(s) are
+non-stallable.
+
+To see how non-stallable stages are implemented, consider the following. For
+every stage, we define two signals - `S_{N,en}` is the signal that indicates
+that the stage currently has valid contents (i.e. not a bubble). `S_{N,valid}`
+is the signal that is used as a clock-enable for the output registers of a
+stage.
+
+Stages can be grouped into three distinct types based on how their valid signal
+is defined: stallable stages, non-stallable stages and runoff stages.
+
+<img title="Stage control" src="includes/img/Pipeline/stage_control.png"/>
+
+1. Stallable stages are any stages which appear **before** the first
+   non-stallable stage in the pipeline.
+2. Non-stallable stages are the stages explicitly marked as non-stallable by the
+   user.
+3. Runoff stages and stages that appear **after** (and by extension, **between**
+   non-stallable stages). Runoff stages consider their own enablement wrt. the
+   stall signal, as well as the enablement of the **last non-stallable
+   register** (LNS) wrt. the runoff stage's position in the pipeline.
+
+The purpose of the runoff stages is to ensure that they are able to pass through
+as many pipeline cycles as there are upstream non-stallable stages, such that
+the contents of the non-stallable stages is not discarded.  
+An important implication of this is that pipelines with non-stallable stages
+**must** be connected to some buffer mechanism that is able to hold as many
+pipeline output value cycles as there are non-stallable stages in the pipeline.
+
+As an example, the following 6 stage pipeline will have the following valid
+signals: <img title="Stage control" src="includes/img/Pipeline/ns_ex1.png"/>
+
+
+### Example 1:
+In this example, we have two NS stages followed by three runoff stages:
+
+<img title="Stage control" src="includes/img/Pipeline/ns_ex2.png"/>
+
+In this example we see that, as expected, two cycles are output from the
+pipeline after the stall signal goes high, corresponding to the two NS stages.
+
+### Example 2:
+In this example, we have two NS stages, then one runoff stage, then one NS
+stage, and finally one runoff stage:
+
+<img title="Stage control" src="includes/img/Pipeline/ns_ex3.png"/>
+
+In this example we see that, as expected, three cycles are output from the
+pipeline after the stall signal goes high, corresponding to the three NS stages.

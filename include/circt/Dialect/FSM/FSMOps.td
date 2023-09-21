@@ -12,6 +12,7 @@
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
+include "circt/Dialect/Seq/SeqTypes.td"
 include "circt/Support/InstanceGraphInterface.td"
 
 def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>;
@@ -60,6 +61,13 @@ def MachineOp : FSMOp<"machine", [
 
     /// Returns the result types of this function.
     ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
+
+    /// Returns the region on the current operation that is callable. This may
+    /// return null in the case of an external callable object, e.g. an external
+    /// function.
+    ::mlir::Region *getCallableRegion() {
+      return &getBody();
+    }
 
     /// Verify the type attribute of this function. Returns failure and emits
     /// an error if the attribute is invalid.
@@ -149,7 +157,7 @@ def HWInstanceOp : FSMOp<"hw_instance", [
   }];
 
   let arguments = (ins StrAttr:$sym_name, FlatSymbolRefAttr:$machine,
-                       Variadic<AnyType>:$inputs, I1:$clock, I1:$reset);
+                       Variadic<AnyType>:$inputs, ClockType:$clock, I1:$reset);
   let results = (outs Variadic<AnyType>:$outputs);
 
   let assemblyFormat = [{

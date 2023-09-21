@@ -1937,7 +1937,7 @@ void InferenceMapping::constrainTypes(Expr *larger, Expr *smaller,
   // If the larger expr is a free variable, create a `expr >= x` constraint for
   // it that we can try to satisfy with the smallest width.
   if (auto largerVar = dyn_cast<VarExpr>(larger)) {
-    LLVM_ATTRIBUTE_UNUSED auto *c = solver.addGeqConstraint(largerVar, smaller);
+    [[maybe_unused]] auto *c = solver.addGeqConstraint(largerVar, smaller);
     LLVM_DEBUG(llvm::dbgs()
                << "Constrained " << *largerVar << " >= " << *c << "\n");
     // If we're constraining larger == smaller, add the LEQ contraint as well.
@@ -1946,8 +1946,7 @@ void InferenceMapping::constrainTypes(Expr *larger, Expr *smaller,
     // widths should be inferred strictly in one direction but are required to
     // also be equal for correctness.
     if (equal) {
-      LLVM_ATTRIBUTE_UNUSED auto *leq =
-          solver.addLeqConstraint(largerVar, smaller);
+      [[maybe_unused]] auto *leq = solver.addLeqConstraint(largerVar, smaller);
       LLVM_DEBUG(llvm::dbgs()
                  << "Constrained " << *largerVar << " <= " << *leq << "\n");
     }
@@ -1961,8 +1960,7 @@ void InferenceMapping::constrainTypes(Expr *larger, Expr *smaller,
   // besides indicating that a width is unsatisfiable.
   if (auto *smallerVar = dyn_cast<VarExpr>(smaller)) {
     if (imposeUpperBounds || equal) {
-      LLVM_ATTRIBUTE_UNUSED auto *c =
-          solver.addLeqConstraint(smallerVar, larger);
+      [[maybe_unused]] auto *c = solver.addLeqConstraint(smallerVar, larger);
       LLVM_DEBUG(llvm::dbgs()
                  << "Constrained " << *smallerVar << " <= " << *c << "\n");
     }

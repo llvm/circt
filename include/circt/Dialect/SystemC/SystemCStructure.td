@@ -60,16 +60,6 @@ def SCModuleOp : SystemCOp<"module", [
       return RegionKind::Graph;
     }
 
-    /// Returns the argument types of this function.
-    ArrayRef<mlir::Type> getArgumentTypes() {
-      return getFunctionType().getInputs();
-    }
-
-    /// Returns the result types of this function.
-    ArrayRef<mlir::Type> getResultTypes() {
-      return getFunctionType().getResults();
-    }
-
     // Use FunctionOpInterface traits's getFunctionBody method.
     using mlir::detail::FunctionOpInterfaceTrait<SCModuleOp>::getFunctionBody;
 
@@ -312,7 +302,6 @@ def DestructorOp : SystemCOp<"cpp.destructor", [
 
 def FuncOp : SystemCOp<"cpp.func", [
   AutomaticAllocationScope,
-  CallableOpInterface,
   FunctionOpInterface,
   IsolatedFromAbove,
   OpAsmOpInterface,
@@ -406,30 +395,8 @@ def FuncOp : SystemCOp<"cpp.func", [
     /// return null in the case of an external callable object, e.g. an external
     /// function.
     ::mlir::Region *getCallableRegion() {
-      return isExternal() ? nullptr : &getBody();
+      return &getBody();
     }
-
-    /// Returns the results types that the callable region produces when
-    /// executed.
-    ArrayRef<Type> getCallableResults() {
-      return getFunctionType().getResults();
-    }
-
-    /// Returns the argument attributes for all callable region arguments or
-    /// null if there are none.
-    ArrayAttr getCallableArgAttrs() {
-      return getArgAttrs().value_or(nullptr);
-    }
-
-    /// Returns the result attributes for all callable region results or
-    /// null if there are none.
-    ArrayAttr getCallableResAttrs() {
-      return getResAttrs().value_or(nullptr);
-    }
-
-    //===------------------------------------------------------------------===//
-    // FunctionOpInterface Methods
-    //===------------------------------------------------------------------===//
 
     /// Returns the argument types of this function.
     ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }

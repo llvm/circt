@@ -137,17 +137,16 @@ def InstanceOp : InstanceOpBase<"instance"> {
 }
 
 def MethodOp : IbisOp<"method", [
-      IsolatedFromAbove, RegionKindInterface,
+      IsolatedFromAbove,
       Symbol, FunctionOpInterface,
       AutomaticAllocationScope,
       DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmBlockArgumentNames"]>,
-      SingleBlockImplicitTerminator<"ReturnOp">,
       HasParent<"ClassOp">]> {
 
   let summary = "Ibis method";
   let description = [{
     Ibis functions are a lot like software functions: a list of named arguments
-    and one unnamed return value.
+    and unnamed return values.
 
     Can only live inside of classes.
   }];
@@ -157,14 +156,10 @@ def MethodOp : IbisOp<"method", [
                        ArrayAttr:$argNames,
                        OptionalAttr<DictArrayAttr>:$arg_attrs,
                        OptionalAttr<DictArrayAttr>:$res_attrs);
-  let regions = (region SizedRegion<1>:$body);
+  let regions = (region AnyRegion:$body);
   let hasCustomAssemblyFormat = 1;
-  let hasVerifier = 1;
 
   let extraClassDeclaration = [{
-    // Implement RegionKindInterface.
-    static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph;}
-
     //===------------------------------------------------------------------===//
     // FunctionOpInterface Methods
     //===------------------------------------------------------------------===//
@@ -174,15 +169,22 @@ def MethodOp : IbisOp<"method", [
 
     /// Returns the result types of this function.
     ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
+
+    /// Returns the region on the current operation that is callable. This may
+    /// return null in the case of an external callable object, e.g. an external
+    /// function.
+    ::mlir::Region *getCallableRegion() {
+      return &getBody();
+    }
   }];
 }
 
 def ReturnOp : IbisOp<"return", [
       Pure, ReturnLike, Terminator, HasParent<"MethodOp">]> {
-  let summary = "Ibis function terminator";
+  let summary = "Ibis method terminator";
 
-  let arguments = (ins Optional<AnyType>:$retValue);
-  let assemblyFormat = "($retValue^)? attr-dict (`:` type($retValue)^)?";
+  let arguments = (ins Variadic<AnyType>:$retValues);
+  let assemblyFormat = "($retValues^)? attr-dict (`:` type($retValues)^)?";
   let hasVerifier = 1;
 
   let builders = [
@@ -190,13 +192,13 @@ def ReturnOp : IbisOp<"return", [
   ];
 }
 
-def BlockOp : IbisOp<"block", [
+def StaticBlockOp : IbisOp<"sblock", [
   SingleBlockImplicitTerminator<"BlockReturnOp">,
   AutomaticAllocationScope
 ]> {
   let summary = "Ibis block";
   let description = [{
-    The `ibis.block` operation defines a block wherein a group of operations
+    The `ibis.sblock` operation defines a block wherein a group of operations
     are expected to be statically scheduleable.
     The operation is not isolated from above to facilitate ease of construction.
     However, once a program has been constructed and lowered to a sufficient
@@ -210,7 +212,7 @@ def BlockOp : IbisOp<"block", [
 
   let arguments = (ins
     Variadic<AnyType>:$inputs,
-    OptionalAttr<ConfinedAttr<I32Attr, [IntMinValue<1>]>>:$maxThreads
+    OptionalAttr<ConfinedAttr<I64Attr, [IntMinValue<1>]>>:$maxThreads
   );
   let results = (outs Variadic<AnyType>:$outputs);
   let regions = (region SizedRegion<1>:$body);
@@ -221,11 +223,66 @@ def BlockOp : IbisOp<"block", [
     Block* getBodyBlock() { return &getBody().front(); }
   }];
   let hasVerifier = 1;
+  let skipDefaultBuilders = 1;
+    let builders = [
+    OpBuilder<(ins "TypeRange":$outputs, "ValueRange":$inputs,
+        CArg<"IntegerAttr", "{}">:$maxThreads), [{
+      $_state.addOperands(inputs);
+      if (maxThreads) {
+        $_state.addAttribute(getMaxThreadsAttrName($_state.name), maxThreads);
+      }
+      auto* region = $_state.addRegion();
+      $_state.addTypes(outputs);
+      ensureTerminator(*region, $_builder, $_state.location);
+    }]>
+  ];
 }
 
-def BlockReturnOp : IbisOp<"block.return", [
-  Pure, ReturnLike, Terminator, HasParent<"BlockOp">]> {
-  let summary = "Ibis block terminator";
+def InlineStaticBlockBeginOp : IbisOp<"sblock.inline.begin", [
+  HasParent<"MethodOp">
+]> {
+  let summary = "Ibis inline static block begin marker";
+  let description = [{
+    The `ibis.sblock.inline.begin` operation is a marker that indicates the
+    begin of an inline static block.
+    The operation is used to maintain `ibis.sblocks` while in the Ibis inline
+    phase (to facilitate e.g. mem2reg).
+
+    The operation:
+    1. denotes the begin of the sblock
+    2. carries whatever attributes that the source `ibis.sblock` carried.
+    3. is considered side-effectfull.
+  }];
+
+  let assemblyFormat = "attr-dict";
+  let extraClassDeclaration = [{
+    /// Return the `InlineStaticBlockEndOp` that this operation is referencing.
+    InlineStaticBlockEndOp getEndOp();
+  }];
+}
+
+def InlineStaticBlockEndOp : IbisOp<"sblock.inline.end", [
+  HasParent<"MethodOp">
+]> {
+  let summary = "Ibis inline static block end marker";
+  let description = [{
+    The `ibis.sblock.inline.end` operation is a marker that indicates the
+    end of an inline static block.
+    The operation is used to maintain `ibis.sblocks` while in the Ibis inline
+    phase (to facilitate e.g. mem2reg).
+  }];
+
+  let assemblyFormat = "attr-dict";
+
+  let extraClassDeclaration = [{
+    /// Return the `InlineStaticBlockBeginOp` that this operation is referencing.
+    InlineStaticBlockBeginOp getBeginOp();
+  }];
+}
+
+def BlockReturnOp : IbisOp<"sblock.return", [
+  Pure, ReturnLike, Terminator, HasParent<"StaticBlockOp">]> {
+  let summary = "Ibis static block terminator";
 
   let arguments = (ins Variadic<AnyType>:$retValues);
   let assemblyFormat = "($retValues^)? attr-dict (`:` type($retValues)^)?";

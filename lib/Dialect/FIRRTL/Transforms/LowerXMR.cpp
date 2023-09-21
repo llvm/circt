@@ -56,7 +56,8 @@ struct XMRNode {
   SymOrIndexOp info;
   NextNodeOnPath next;
 };
-llvm::raw_ostream &operator<<(llvm::raw_ostream &os, const XMRNode &node) {
+[[maybe_unused]] llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
+                                               const XMRNode &node) {
   os << "node(";
   if (auto attr = dyn_cast<Attribute>(node.info))
     os << "path=" << attr;
@@ -120,7 +121,8 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
             auto nameKind = NameKindEnum::DroppableName;
 
             if (auto [name, rootKnown] = getFieldName(
-                    getFieldRefFromValue(xmrDef), /*nameSafe=*/true);
+                    getFieldRefFromValue(xmrDef, /*lookThroughCasts=*/true),
+                    /*nameSafe=*/true);
                 rootKnown) {
               opName = name + "_probe";
               nameKind = NameKindEnum::InterestingName;

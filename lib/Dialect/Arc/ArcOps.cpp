@@ -8,10 +8,10 @@
 
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "mlir/IR/Builders.h"
-#include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/SymbolTable.h"
+#include "mlir/Interfaces/FunctionImplementation.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
 using namespace circt;
@@ -283,6 +283,148 @@ LogicalResult LutOp::verify() {
            << "first operation with side-effects here";
 
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// VectorizeOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult VectorizeOp::verify() {
+  if (getInputs().empty())
+    return emitOpError("there has to be at least one input vector");
+
+  if (!llvm::all_equal(llvm::map_range(
+          getInputs(), [](OperandRange range) { return range.size(); })))
+    return emitOpError("all input vectors must have the same size");
+
+  for (OperandRange range : getInputs()) {
+    if (!llvm::all_equal(range.getTypes()))
+      return emitOpError("all input vector lane types must match");
+
+    if (range.empty())
+      return emitOpError("input vector must have at least one element");
+  }
+
+  if (getInputs().front().size() > 1 &&
+      !isa<IntegerType>(getInputs().front().front().getType()))
+    return emitOpError("input vector element type must be a signless integer");
+
+  if (getResults().empty())
+    return emitOpError("must have at least one result");
+
+  if (!llvm::all_equal(getResults().getTypes()))
+    return emitOpError("all result types must match");
+
+  if (getResults().size() != getInputs().front().size())
+    return emitOpError("number results must match input vector size");
+
+  if (getResults().size() > 1 &&
+      !isa<IntegerType>(getResults().front().getType()))
+    return emitError(
+        "may only return a vector type if boundary is already vectorized");
+
+  return success();
+}
+
+static FailureOr<unsigned> getVectorWidth(Type base, Type vectorized) {
+  if (isa<VectorType>(base))
+    return failure();
+
+  if (auto vectorTy = dyn_cast<VectorType>(vectorized)) {
+    if (vectorTy.getElementType() != base)
+      return failure();
+
+    return vectorTy.getDimSize(0);
+  }
+
+  if (vectorized.getIntOrFloatBitWidth() < base.getIntOrFloatBitWidth())
+    return failure();
+
+  if (vectorized.getIntOrFloatBitWidth() % base.getIntOrFloatBitWidth() == 0)
+    return vectorized.getIntOrFloatBitWidth() / base.getIntOrFloatBitWidth();
+
+  return failure();
+}
+
+LogicalResult VectorizeOp::verifyRegions() {
+  auto returnOp = cast<VectorizeReturnOp>(getBody().front().getTerminator());
+  TypeRange bodyArgTypes = getBody().front().getArgumentTypes();
+
+  if (bodyArgTypes.size() != getInputs().size())
+    return emitOpError(
+        "number of block arguments must match number of input vectors");
+
+  // Boundary and body are vectorized, or both are not vectorized
+  if (returnOp.getValue().getType() == getResultTypes().front()) {
+    for (auto [i, argTy] : llvm::enumerate(bodyArgTypes))
+      if (argTy != getInputs()[i].getTypes().front())
+        return emitOpError("if terminator type matches result type the "
+                           "argument types must match the input types");
+
+    return success();
+  }
+
+  // Boundary is vectorized, body is not
+  if (auto width = getVectorWidth(returnOp.getValue().getType(),
+                                  getResultTypes().front());
+      succeeded(width)) {
+    for (auto [i, argTy] : llvm::enumerate(bodyArgTypes)) {
+      Type inputTy = getInputs()[i].getTypes().front();
+      FailureOr<unsigned> argWidth = getVectorWidth(argTy, inputTy);
+      if (failed(argWidth))
+        return emitOpError("block argument must be a scalar variant of the "
+                           "vectorized operand");
+
+      if (*argWidth != width)
+        return emitOpError("input and output vector width must match");
+    }
+
+    return success();
+  }
+
+  // Body is vectorized, boundary is not
+  if (auto width = getVectorWidth(getResultTypes().front(),
+                                  returnOp.getValue().getType());
+      succeeded(width)) {
+    for (auto [i, argTy] : llvm::enumerate(bodyArgTypes)) {
+      Type inputTy = getInputs()[i].getTypes().front();
+      FailureOr<unsigned> argWidth = getVectorWidth(inputTy, argTy);
+      if (failed(argWidth))
+        return emitOpError(
+            "block argument must be a vectorized variant of the operand");
+
+      if (*argWidth != width)
+        return emitOpError("input and output vector width must match");
+
+      if (getInputs()[i].size() > 1 && argWidth != getInputs()[i].size())
+        return emitOpError(
+            "when boundary not vectorized the number of vector element "
+            "operands must match the width of the vectorized body");
+    }
+
+    return success();
+  }
+
+  return returnOp.emitOpError(
+      "operand type must match parent op's result value or be a vectorized or "
+      "non-vectorized variant of it");
+}
+
+bool VectorizeOp::isBoundaryVectorized() {
+  return getInputs().front().size() == 1;
+}
+bool VectorizeOp::isBodyVectorized() {
+  auto returnOp = cast<VectorizeReturnOp>(getBody().front().getTerminator());
+  if (isBoundaryVectorized() &&
+      returnOp.getValue().getType() == getResultTypes().front())
+    return true;
+
+  if (auto width = getVectorWidth(getResultTypes().front(),
+                                  returnOp.getValue().getType());
+      succeeded(width))
+    return *width > 1;
+
+  return false;
 }
 
 #include "circt/Dialect/Arc/ArcInterfaces.cpp.inc"

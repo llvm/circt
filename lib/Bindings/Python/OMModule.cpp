@@ -9,6 +9,7 @@
 #include "DialectModules.h"
 #include "circt-c/Dialect/OM.h"
 #include "mlir-c/BuiltinAttributes.h"
+#include "mlir-c/BuiltinTypes.h"
 #include "mlir-c/IR.h"
 #include "mlir/Bindings/Python/PybindAdaptors.h"
 #include <pybind11/pybind11.h>
@@ -24,8 +25,9 @@ namespace {
 struct List;
 struct Object;
 struct Tuple;
+struct Map;
 
-using PythonValue = std::variant<MlirAttribute, Object, List, Tuple>;
+using PythonValue = std::variant<MlirAttribute, Object, List, Tuple, Map>;
 
 /// Map an opaque OMEvaluatorValue into a python value.
 PythonValue omEvaluatorValueToPythonValue(OMEvaluatorValue result);
@@ -56,6 +58,41 @@ struct Tuple {
 
   PythonValue getElement(intptr_t i);
   OMEvaluatorValue getValue() const { return value; }
+
+private:
+  // The underlying CAPI value.
+  OMEvaluatorValue value;
+};
+
+/// Provides a Map class by simply wrapping the OMObject CAPI.
+struct Map {
+  // Instantiate a Map with a reference to the underlying OMEvaluatorValue.
+  Map(OMEvaluatorValue value) : value(value) {}
+
+  /// Return the keys.
+  std::vector<MlirAttribute> getKeys() {
+    auto attr = omEvaluatorMapGetKeys(value);
+    intptr_t numFieldNames = mlirArrayAttrGetNumElements(attr);
+
+    std::vector<MlirAttribute> pyFieldNames;
+    for (intptr_t i = 0; i < numFieldNames; ++i)
+      pyFieldNames.emplace_back(mlirArrayAttrGetElement(attr, i));
+
+    return pyFieldNames;
+  }
+
+  /// Look up the value. A key is an integer, string or attribute.
+  PythonValue dunderGetItemAttr(MlirAttribute key);
+  PythonValue dunderGetItemNamed(const std::string &key);
+  PythonValue dunderGetItemIndexed(intptr_t key);
+  PythonValue
+  dunderGetItem(std::variant<intptr_t, std::string, MlirAttribute> key);
+
+  /// Return a context from an underlying value.
+  MlirContext getContext() const { return omEvaluatorValueGetContext(value); }
+
+  OMEvaluatorValue getValue() const { return value; }
+  MlirType getType() { return omEvaluatorMapGetType(value); }
 
 private:
   // The underlying CAPI value.
@@ -206,6 +243,41 @@ PythonValue Tuple::getElement(intptr_t i) {
   return omEvaluatorValueToPythonValue(omEvaluatorTupleGetElement(value, i));
 }
 
+PythonValue Map::dunderGetItemNamed(const std::string &key) {
+  MlirType type = omMapTypeGetKeyType(omEvaluatorMapGetType(value));
+  if (!omTypeIsAStringType(type))
+    throw pybind11::key_error("key is not string");
+  MlirAttribute attr =
+      mlirStringAttrTypedGet(type, mlirStringRefCreateFromCString(key.c_str()));
+  return dunderGetItemAttr(attr);
+}
+
+PythonValue Map::dunderGetItemIndexed(intptr_t i) {
+  MlirType type = omMapTypeGetKeyType(omEvaluatorMapGetType(value));
+  if (!mlirTypeIsAInteger(type))
+    throw pybind11::key_error("key is not integer");
+  MlirAttribute attr = mlirIntegerAttrGet(type, i);
+  return dunderGetItemAttr(attr);
+}
+
+PythonValue Map::dunderGetItemAttr(MlirAttribute key) {
+  OMEvaluatorValue result = omEvaluatorMapGetElement(value, key);
+
+  if (omEvaluatorValueIsNull(result))
+    throw pybind11::key_error("key not found");
+
+  return omEvaluatorValueToPythonValue(result);
+}
+
+PythonValue
+Map::dunderGetItem(std::variant<intptr_t, std::string, MlirAttribute> key) {
+  if (auto *i = std::get_if<intptr_t>(&key))
+    return dunderGetItemIndexed(*i);
+  else if (auto *str = std::get_if<std::string>(&key))
+    return dunderGetItemNamed(*str);
+  return dunderGetItemAttr(std::get<MlirAttribute>(key));
+}
+
 PythonValue omEvaluatorValueToPythonValue(OMEvaluatorValue result) {
   // If the result is null, something failed. Diagnostic handling is
   // implemented in pure Python, so nothing to do here besides throwing an
@@ -225,6 +297,10 @@ PythonValue omEvaluatorValueToPythonValue(OMEvaluatorValue result) {
   if (omEvaluatorValueIsATuple(result))
     return Tuple(result);
 
+  // If the field was a map, return a new Map.
+  if (omEvaluatorValueIsAMap(result))
+    return Map(result);
+
   // If the field was a primitive, return the Attribute.
   assert(omEvaluatorValueIsAPrimitive(result));
   return omEvaluatorValueGetPrimitive(result);
@@ -239,6 +315,9 @@ OMEvaluatorValue pythonValueToOMEvaluatorValue(PythonValue result) {
 
   if (auto *tuple = std::get_if<Tuple>(&result))
     return tuple->getValue();
+
+  if (auto *map = std::get_if<Map>(&result))
+    return map->getValue();
 
   return std::get<Object>(result).getValue();
 }
@@ -268,6 +347,13 @@ void circt::python::populateDialectOMSubmodule(py::module &m) {
       .def("__getitem__", &Tuple::getElement)
       .def("__len__", &Tuple::getNumElements);
 
+  // Add the Map class definition.
+  py::class_<Map>(m, "Map")
+      .def(py::init<Map>(), py::arg("map"))
+      .def("__getitem__", &Map::dunderGetItem)
+      .def("keys", &Map::getKeys)
+      .def_property_readonly("type", &Map::getType, "The Type of the Map");
+
   // Add the Object class definition.
   py::class_<Object>(m, "Object")
       .def(py::init<Object>(), py::arg("object"))
@@ -284,6 +370,16 @@ void circt::python::populateDialectOMSubmodule(py::module &m) {
         return omReferenceAttrGetInnerRef(self);
       });
 
+  // Add the IntegerAttr definition
+  mlir_attribute_subclass(m, "OMIntegerAttr", omAttrIsAIntegerAttr)
+      .def_classmethod("get",
+                       [](py::object cls, MlirAttribute intVal) {
+                         return cls(omIntegerAttrGet(intVal));
+                       })
+      .def_property_readonly("integer", [](MlirAttribute self) {
+        return omIntegerAttrGetInt(self);
+      });
+
   // Add the OMListAttr definition
   mlir_attribute_subclass(m, "ListAttr", omAttrIsAListAttr)
       .def("__getitem__", &omListAttrGetElement)
@@ -298,5 +394,9 @@ void circt::python::populateDialectOMSubmodule(py::module &m) {
   PyMapAttrIterator::bind(m);
 
   // Add the ClassType class definition.
-  mlir_type_subclass(m, "ClassType", omTypeIsAClassType);
+  mlir_type_subclass(m, "ClassType", omTypeIsAClassType, omClassTypeGetTypeID)
+      .def_property_readonly("name", [](MlirType type) {
+        MlirStringRef name = mlirIdentifierStr(omClassTypeGetName(type));
+        return std::string(name.data, name.length);
+      });
 }

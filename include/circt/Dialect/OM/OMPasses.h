@@ -20,6 +20,7 @@ namespace circt {
 namespace om {
 
 std::unique_ptr<mlir::Pass> createOMLinkModulesPass();
+std::unique_ptr<mlir::Pass> createFreezePathsPass();
 
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/OM/OMPasses.h.inc"

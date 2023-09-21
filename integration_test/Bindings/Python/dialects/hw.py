@@ -95,6 +95,11 @@ with Context() as ctx, Location.unknown():
   # CHECK: #hw.param.verbatim<"this is verbatim">
   print(pverbatim)
 
+  outfile = hw.OutputFileAttr.get_from_filename(StringAttr.get("file.txt"),
+                                                True, True)
+  print(outfile)
+  # CHECK: #hw.output_file<"file.txt", excludeFromFileList, includeReplicatedOps>
+
   inner_sym = hw.InnerSymAttr.get(StringAttr.get("some_sym"))
   # CHECK: #hw<innerSym@some_sym>
   print(inner_sym)
@@ -115,3 +120,20 @@ with Context() as ctx, Location.unknown():
   global_ref = hw.GlobalRefAttr.get(StringAttr.get("foo"))
   # CHECK: #hw.globalNameRef<@foo>
   print(global_ref)
+
+  ports = [
+      hw.ModulePort(StringAttr.get("out"), i1, hw.ModulePortDirection.OUTPUT),
+      hw.ModulePort(StringAttr.get("in1"), i2, hw.ModulePortDirection.INPUT),
+      hw.ModulePort(StringAttr.get("in2"), i32, hw.ModulePortDirection.INPUT)
+  ]
+  module_type = hw.ModuleType.get(ports)
+  # CHECK: !hw.modty<output out : i1, input in1 : i2, input in2 : i32>
+  print(module_type)
+  # CHECK-NEXT:  [IntegerType(i2), IntegerType(i32)]
+  print(module_type.input_types)
+  # CHECK-NEXT:  [IntegerType(i1)]
+  print(module_type.output_types)
+  # CHECK-NEXT:  ['in1', 'in2']
+  print(module_type.input_names)
+  # CHECK-NEXT:  ['out']
+  print(module_type.output_names)

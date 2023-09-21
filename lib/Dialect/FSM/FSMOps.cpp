@@ -11,8 +11,8 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/DialectImplementation.h"
-#include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/Interfaces/FunctionImplementation.h"
 #include "llvm/Support/FormatVariadic.h"
 
 using namespace mlir;
@@ -286,10 +286,6 @@ LogicalResult TriggerOp::verify() { return verifyCallerTypes(*this); }
 
 // InstanceOpInterface interface
 Operation *HWInstanceOp::getReferencedModuleSlow() { return getMachineOp(); }
-
-Operation *HWInstanceOp::getReferencedModule(SymbolTable &symtbl) {
-  return symtbl.lookup(getMachineAttr().getValue());
-}
 
 /// Lookup the machine for the symbol.  This returns null on invalid IR.
 MachineOp HWInstanceOp::getMachineOp() {

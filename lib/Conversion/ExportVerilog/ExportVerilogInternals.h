@@ -15,8 +15,10 @@
 #include "circt/Dialect/HW/HWVisitors.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/SV/SVVisitors.h"
+#include "mlir/IR/Location.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/Support/FormattedStream.h"
 #include <atomic>
 
 namespace circt {
@@ -176,6 +178,100 @@ struct FileInfo {
   bool isVerilog = true;
 };
 
+/// Track the output verilog line,column number information for every op.
+class OpLocMap {
+  /// Record the output location from where the op begins to print.
+  void addBeginLoc(Operation *op) {
+    map[op].emplace_back(LocationRange(LineColPair(*fStream)));
+  }
+  /// Record the output location where the op ends to print.
+  void addEndLoc(Operation *op) {
+    assert(!map[op].empty());
+    assert(map[op].back().begin.isValid());
+    assert(!map[op].back().end.isValid());
+    map[op].back().end = LineColPair(*fStream);
+  }
+
+public:
+  /// Data that is unique to each callback. The op and whether its a begin or
+  /// end location.
+  using DataType = std::pair<Operation *, bool>;
+
+  OpLocMap(llvm::formatted_raw_ostream &fStream) : fStream(&fStream) {}
+  OpLocMap() = default;
+
+  /// Set the output stream.
+  void setStream(llvm::formatted_raw_ostream &f) { fStream = &f; }
+  /// Callback operator, invoked on the print events indicated by `data`.
+  void operator()(DataType data) {
+    assert(fStream);
+    auto beginPrint = data.second;
+    auto *op = data.first;
+    if (beginPrint)
+      addBeginLoc(op);
+    else
+      addEndLoc(op);
+  }
+
+  /// Called after the verilog has been exported and the corresponding locations
+  /// are recorded in the map.
+  void updateIRWithLoc(unsigned lineOffset, StringAttr fileName,
+                       MLIRContext *context) {
+    if (map.empty())
+      return;
+    if (!verilogLineAttr) {
+      verilogLineAttr = StringAttr::get(context, "verilogLocations");
+      metadataAttr = StringAttr::get(context, "Range");
+    }
+    for (auto &[op, locations] : map) {
+      // An operation can have multiple verilog locations.
+      SmallVector<Location> verilogLocs;
+      for (auto &loc : locations) {
+        // Create a location range attribute.
+        SmallVector<Location, 2> beginEndPair;
+        assert(loc.begin.isValid() && loc.end.isValid());
+        beginEndPair.emplace_back(mlir::FileLineColLoc::get(
+            fileName, loc.begin.line + lineOffset, loc.begin.col));
+        beginEndPair.emplace_back(mlir::FileLineColLoc::get(
+            fileName, loc.end.line + lineOffset, loc.end.col));
+        // Add it to the verilog locations of the op.
+        verilogLocs.emplace_back(
+            mlir::FusedLoc::get(context, beginEndPair, metadataAttr));
+      }
+      // Update the location attribute with a fused loc of the original location
+      // and verilog locations.
+      op->setLoc(mlir::FusedLoc::get(
+          context, {op->getLoc(), mlir::FusedLoc::get(context, verilogLocs,
+                                                      verilogLineAttr)}));
+    }
+  }
+  void clear() { map.clear(); }
+
+private:
+  struct LineColPair {
+    unsigned line = ~0U;
+    unsigned col = ~0U;
+    LineColPair() = default;
+    /// Given an output stream, store the current offset.
+    LineColPair(llvm::formatted_raw_ostream &s)
+        : line(s.getLine()), col(s.getColumn()) {}
+    bool isValid() { return (line != -1U && col != -1U); }
+  };
+  struct LocationRange {
+    LineColPair begin;
+    LineColPair end;
+    LocationRange(LineColPair begin) : begin(begin) {}
+  };
+  using Locations = SmallVector<LocationRange, 2>;
+  /// Map to store the verilog locations for each op.
+  DenseMap<Operation *, Locations> map;
+  /// The corresponding output stream, which provides the current print location
+  /// on the stream.
+  llvm::formatted_raw_ostream *fStream;
+  /// Cache to store string attributes.
+  StringAttr verilogLineAttr, metadataAttr;
+};
+
 /// This class wraps an operation or a fixed string that should be emitted.
 class StringOrOpToEmit {
 public:
@@ -217,6 +313,10 @@ public:
       : pointerData(rhs.pointerData), length(rhs.length) {
     rhs.pointerData = (Operation *)nullptr;
   }
+
+  /// Verilog output location information for entry. This is
+  /// required since each entry can be emitted in parallel.
+  OpLocMap verilogLocs;
 
 private:
   StringOrOpToEmit(const StringOrOpToEmit &) = delete;
@@ -273,7 +373,8 @@ struct SharedEmitterState {
 
   void collectOpsForFile(const FileInfo &fileInfo, EmissionList &thingsToEmit,
                          bool emitHeader = false);
-  void emitOps(EmissionList &thingsToEmit, raw_ostream &os, bool parallelize);
+  void emitOps(EmissionList &thingsToEmit, llvm::formatted_raw_ostream &os,
+               StringAttr fileName, bool parallelize);
 };
 
 //===----------------------------------------------------------------------===//

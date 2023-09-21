@@ -127,7 +127,7 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
     SmallVector<StringAttr> getOutputNamesStr() {
       return $_op.getHWModuleType().getOutputNamesStr();
     }
-    
+
     /// Return the set of names on input and inout ports
     SmallVector<Attribute> getInputNames() {
       return $_op.getHWModuleType().getInputNames();
@@ -180,19 +180,21 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
 
     SmallVector<Attribute> getAllInputAttrs() {
       auto attrs = $_op.getAllPortAttrs();
-      SmallVector<Attribute> retval;
+      auto num = $_op.getNumInputPorts();
+      SmallVector<Attribute> retval(num);
       auto modType = $_op.getHWModuleType();
-      for (unsigned x = 0, e = $_op.getNumInputPorts(); x < e; ++x)
-        retval.push_back(attrs[modType.getPortIdForInputId(x)]);
+      for (unsigned x = 0; x < num; ++x)
+        retval[x] = attrs[modType.getPortIdForInputId(x)];
       return retval;
     }
 
     SmallVector<Attribute> getAllOutputAttrs() {
       auto attrs = $_op.getAllPortAttrs();
-      SmallVector<Attribute> retval;
+      auto num = $_op.getNumOutputPorts();
+      SmallVector<Attribute> retval(num);
       auto modType = $_op.getHWModuleType();
-      for (unsigned x = 0, e = $_op.getNumOutputPorts(); x < e; ++x)
-        retval.push_back(attrs[modType.getPortIdForOutputId(x)]);
+      for (unsigned x = 0; x < num; ++x)
+        retval[x] = attrs[modType.getPortIdForOutputId(x)];
       return retval;
     }
 
@@ -242,7 +244,7 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
       auto ctxt = $_op.getContext();
       assert(newAttrs.size() == attrs.size());
       for (size_t idx = 0, e = attrs.size(); idx != e; ++idx) {
-        NamedAttrList pattr(cast<mlir::DictionaryAttr>(attrs[idx]));
+        NamedAttrList pattr(cast_or_null<mlir::DictionaryAttr>(attrs[idx]));
         auto newAttr = newAttrs[idx];
         if (newAttr)
           pattr.set(attrName, newAttr);
@@ -395,6 +397,17 @@ def HWInstanceLike : OpInterface<"HWInstanceLike", [
     PortList, InstanceGraphInstanceOpInterface]> {
   let cppNamespace = "circt::hw";
   let description = "Provide common  module information.";
+
+  let methods = [
+    InterfaceMethod<"Get the referenced module via a HW symbol cache.",
+    "::mlir::Operation *", "getReferencedModuleCached", (ins
+      "const ::circt::hw::HWSymbolCache *":$cache),
+    /*methodBody=*/[{}],
+    /*defaultImplementation=*/[{
+      return hw::instance_like_impl::getReferencedModule(
+          cache, $_op, $_op.getModuleNameAttr());
+    }]>,
+  ];
 }
 
 def InnerRefNamespace : NativeOpTrait<"InnerRefNamespace">;

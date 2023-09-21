@@ -6,12 +6,21 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/Arc/ArcOps.h"
+#include "circt/Dialect/Arc/ArcPasses.h"
+#include "circt/Dialect/HW/HWOps.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "arc-isolate-clocks"
+
+namespace circt {
+namespace arc {
+#define GEN_PASS_DEF_ISOLATECLOCKS
+#include "circt/Dialect/Arc/ArcPasses.h.inc"
+} // namespace arc
+} // namespace circt
 
 using namespace circt;
 using namespace arc;
@@ -156,7 +165,8 @@ void ClockDomain::computeCrossingValues(SmallVectorImpl<Value> &inputs,
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct IsolateClocksPass : public IsolateClocksBase<IsolateClocksPass> {
+struct IsolateClocksPass
+    : public arc::impl::IsolateClocksBase<IsolateClocksPass> {
   void runOnOperation() override;
   LogicalResult runOnModule(hw::HWModuleOp module);
 };

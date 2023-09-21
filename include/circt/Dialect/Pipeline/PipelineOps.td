@@ -20,19 +20,14 @@ include "mlir/IR/EnumAttr.td"
 include "mlir/IR/OpAsmInterface.td"
 
 include "circt/Dialect/Pipeline/PipelineDialect.td"
+include "circt/Dialect/Seq/SeqTypes.td"
 
 
-class PipelineBase<string mnemonic, list<Trait> traits = []> : 
+class PipelineBase<string mnemonic, list<Trait> traits = []> :
   Op<Pipeline_Dialect, mnemonic, !listconcat(traits, [
       Pure,
       RegionKindInterface,
       AttrSizedOperandSegments])> {
-
-  let arguments = (ins
-    OptionalAttr<StrAttr>:$name, Variadic<AnyType>:$inputs, Optional<I1>:$stall,
-    I1:$clock, I1:$reset, I1:$go, StrArrayAttr:$inputNames,
-    StrArrayAttr:$outputNames
-  );
   let results = (outs Variadic<AnyType>:$dataOutputs, I1:$done);
   let hasCustomAssemblyFormat = 1;
 
@@ -104,7 +99,7 @@ def UnscheduledPipelineOp : PipelineBase<"unscheduled", [
     HasOnlyGraphRegion,
     SingleBlockImplicitTerminator<"ReturnOp">
   ]> {
-  
+
   let summary = "unscheduled pipeline operation";
   let description = [{
     The "pipeline.unscheduled" operation represents a pipeline that has not yet
@@ -117,6 +112,11 @@ def UnscheduledPipelineOp : PipelineBase<"unscheduled", [
     about the interface signals.
   }];
 
+  let arguments = (ins
+    OptionalAttr<StrAttr>:$name, Variadic<AnyType>:$inputs, Optional<I1>:$stall,
+    ClockType:$clock, I1:$reset, I1:$go, StrArrayAttr:$inputNames,
+    StrArrayAttr:$outputNames
+  );
   let regions = (region SizedRegion<1>: $body);
   let extraModuleClassDeclaration = "";
 }
@@ -148,18 +148,47 @@ def ScheduledPipelineOp : PipelineBase<"scheduled", [
 
     Any value defined outside the pipeline is considered an external input. An
     external input will _not_ be registered.
+
+    The pipeline may optionally be provided with an array of bits `stallability`
+    which is used to determine which stages are stallable.
+    - If not provided and the pipeline has a stall signal, all stages are stallable.
+    - If provided, and the pipeline has a stall signal, the number of bits must
+      match the number of stages in the pipeline. Each bit represents a stage,
+      in the order of which the stages appear wrt. the `pipeline.stage` operations.
+      A bit set to 1 indicates that the stage is stallable, and 0 indicates that
+      the stage is not stallable.
+
+    The exit (non-registered) stage of a pipeline cannot be non-stallable, and
+    will always follow the stallability of the parent pipeline.
+
+    For more information about non-stallable stages, and how these are lowered,
+    please refer to the Pipeline dialect rationale.
   }];
 
+
+  let arguments = (ins
+    OptionalAttr<StrAttr>:$name,
+    Variadic<AnyType>:$inputs,
+    Optional<I1>:$stall,
+    ClockType:$clock, I1:$reset, I1:$go,
+    StrArrayAttr:$inputNames, StrArrayAttr:$outputNames,
+    OptionalAttr<BoolArrayAttr>:$stallability
+  );
   let regions = (region AnyRegion:$body);
   let hasVerifier = 1;
   let skipDefaultBuilders = 1;
 
   let builders = [
-    OpBuilder<(ins "TypeRange":$dataOutputs, "ValueRange":$inputs,
+    OpBuilder<(ins
+      "TypeRange":$dataOutputs,
+      "ValueRange":$inputs,
       "ArrayAttr":$inputNames, "ArrayAttr":$outputNames,
-      "Value":$clock, "Value":$reset, "Value":$go, CArg<"Value", "{}">:$stall, CArg<"StringAttr", "{}">:$name)>
+      "Value":$clock, "Value":$reset, "Value":$go,
+      CArg<"Value", "{}">:$stall,
+      CArg<"StringAttr", "{}">:$name,
+      CArg<"ArrayAttr", "{}">:$stallability
+      )>
   ];
-
 
   code extraModuleClassDeclaration = [{
     static mlir::RegionKind getRegionKind(unsigned index) {
@@ -169,6 +198,10 @@ def ScheduledPipelineOp : PipelineBase<"scheduled", [
     // Returns all of the stages in this pipeline.
     llvm::iplist<mlir::Block>& getStages() {
       return getRegion().getBlocks();
+    }
+
+    size_t getNumStages() {
+      return getStages().size();
     }
 
     void getAsmBlockArgumentNames(mlir::Region &region,
@@ -227,6 +260,9 @@ def ScheduledPipelineOp : PipelineBase<"scheduled", [
         return stage->getArguments().back();
       return getInnerGo();
     }
+
+    // Returns the stage kind of the given stage index.
+    StageKind getStageKind(size_t stageIdx);
   }];
 }
 
@@ -272,7 +308,7 @@ def StageOp : Op<Pipeline_Dialect, "stage", [
   let assemblyFormat = [{
     $nextStage
     custom<StageRegisters>($registers, type($registers), $clockGates, $clockGatesPerRegister, $registerNames)
-    custom<Passthroughs>($passthroughs, type($passthroughs), $passthroughNames)  
+    custom<Passthroughs>($passthroughs, type($passthroughs), $passthroughNames)
     attr-dict
   }];
 
@@ -340,7 +376,7 @@ def LatencyOp : Op<Pipeline_Dialect, "latency", [
     HasOnlyGraphRegion,
     ParentOneOf<["UnscheduledPipelineOp", "ScheduledPipelineOp"]>
   ]> {
-  
+
   let summary = "Pipeline dialect latency operation.";
   let description = [{
     The `pipeline.latency` operation represents an operation for wrapping

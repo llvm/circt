@@ -2360,6 +2360,18 @@ firrtl.module @constReg(in %clock: !firrtl.clock,
   // CHECK:  firrtl.strictconnect %out, %[[C11]]
 }
 
+// CHECK-LABEL: firrtl.module @SingleConnectInWhen
+firrtl.module @SingleConnectInWhen(in %p1: !firrtl.uint<8>, in %p2: !firrtl.uint<1>, out %out: !firrtl.uint<8>) {
+  %w = firrtl.wire : !firrtl.uint<8>
+  // CHECK: firrtl.when
+  // CHECK-NEXT: firrtl.strictconnect %w, %p1
+  // CHECK: firrtl.strictconnect %out, %w
+  firrtl.when %p2 : !firrtl.uint<1> {
+    firrtl.strictconnect %w, %p1 : !firrtl.uint<8>
+  }
+  firrtl.strictconnect %out, %w : !firrtl.uint<8>
+}
+
 // CHECK-LABEL: firrtl.module @constReg
 firrtl.module @constReg2(in %clock: !firrtl.clock,
               in %en: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
@@ -2450,6 +2462,20 @@ firrtl.module @constReg8(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, o
   firrtl.connect %out2, %r2 : !firrtl.uint<1>, !firrtl.uint<1>
 }
 
+// CHeck that a register that is only driven by constant and itself
+// is canonicalized into a constant regardless of its reset signal.
+// CHECK-LABEL: @constReg9
+firrtl.module @constReg9(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %en_0: !firrtl.uint<1>, in %en_1: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
+  // CHECK-NOT: firrtl.reg
+  // CHECK: firrtl.strictconnect %out, %c0_ui1
+  %r = firrtl.reg %clock {firrtl.random_init_start = 0 : ui64} : !firrtl.clock, !firrtl.uint<1>
+  %0 = firrtl.and %en_0, %en_1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+  %1 = firrtl.mux(%0, %c0_ui1, %r) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  firrtl.connect %r, %1 : !firrtl.uint<1>, !firrtl.uint<1>
+  firrtl.strictconnect %out, %r : !firrtl.uint<1>
+}
+
 firrtl.module @BitCast(out %o:!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<1>> ) {
   %a = firrtl.wire : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<1>>
   %b = firrtl.bitcast %a : (!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<1>>) -> (!firrtl.uint<3>)
@@ -2512,6 +2538,19 @@ firrtl.module @MergeAgg(out %o: !firrtl.vector<bundle<valid: uint<1>, ready: uin
 // CHECK-NEXT: %a = firrtl.wire   : !firrtl.vector<bundle<valid: uint<1>, ready: uint<1>>, 3>
 // CHECK-NEXT: firrtl.strictconnect %o, %a : !firrtl.vector<bundle<valid: uint<1>, ready: uint<1>>, 3>
 // CHECK-NEXT: firrtl.strictconnect %a, %0 : !firrtl.vector<bundle<valid: uint<1>, ready: uint<1>>, 3>
+}
+
+// Don't collect connections in a when block.
+// CHECK-LABEL: firrtl.module @DontMergeVector
+firrtl.module @DontMergeVector(out %o:!firrtl.vector<uint<1>, 1>, in %i:!firrtl.uint<1> ) {
+  %a = firrtl.wire : !firrtl.vector<uint<1>, 1>
+  %0 = firrtl.subindex %a[0] : !firrtl.vector<uint<1>, 1>
+  firrtl.when %i : !firrtl.uint<1> {
+    firrtl.connect %0, %i : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+  firrtl.strictconnect %o, %a : !firrtl.vector<uint<1>, 1>
+  // CHECK:      firrtl.when %i
+  // CHECK-NEXT: firrtl.strictconnect %0, %i
 }
 
 // TODO: Move to an apporpriate place

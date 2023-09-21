@@ -11,7 +11,7 @@
 
 include "mlir/IR/AttrTypeBase.td"
 include "mlir/IR/OpBase.td"
-include "mlir/IR/FunctionInterfaces.td"
+include "mlir/Interfaces/FunctionInterfaces.td"
 
 def FSMDialect : Dialect {
   let name = "fsm";
@@ -27,6 +27,10 @@ def FSMDialect : Dialect {
 
   // Opt-out of properties for now, must migrate by LLVM 19.  #5273.
   let usePropertiesForAttributes = 0;
+
+  let dependentDialects = [
+    "circt::seq::SeqDialect"
+  ];
 }
 
 // Base class for the types in this dialect.

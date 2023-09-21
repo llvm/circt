@@ -93,4 +93,5 @@ target_link_libraries(circt-opt
   MLIRSCFDialect
   MLIREmitCDialect
   MLIRFuncInlinerExtension
+  MLIRVectorDialect
 )

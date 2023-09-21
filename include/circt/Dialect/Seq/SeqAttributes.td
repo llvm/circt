@@ -15,6 +15,15 @@ include "mlir/IR/BuiltinAttributeInterfaces.td"
 
 let cppNamespace = "circt::seq" in {
 
+// Constant clock values.
+def ClockLow : I32EnumAttrCase<"Low", 0, "low">;
+def ClockHigh : I32EnumAttrCase<"High", 1, "high">;
+def ClockConstAttrImpl: I32EnumAttr<"ClockConst", "clock constant",
+                                [ClockLow, ClockHigh]> {
+  let genSpecializedAttr = 0;
+}
+def ClockConstAttr : EnumAttr<SeqDialect, ClockConstAttrImpl, "clock constant">;
+
 // Read-under-write behavior
 def RUW_Undefined : I32EnumAttrCase<"Undefined", 0, "undefined">;
 def RUW_Old : I32EnumAttrCase<"Old", 1, "old">;

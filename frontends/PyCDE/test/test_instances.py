@@ -59,9 +59,9 @@ class Test(Module):
 t = pycde.System([Test], name="Test", output_directory=sys.argv[1])
 t.generate(["construct"])
 t.print()
-# CHECK: <pycde.Module: Test inputs: [('clk', Bits<1>)] outputs: []>
+# CHECK: <pycde.Module: Test inputs: [('clk', Clk)] outputs: []>
 Test.print()
-# CHECK: <pycde.Module: UnParameterized inputs: [('clk', Bits<1>), ('x', Bits<1>)] outputs: [('y', Bits<1>)]>
+# CHECK: <pycde.Module: UnParameterized inputs: [('clk', Clk), ('x', Bits<1>)] outputs: [('y', Bits<1>)]>
 UnParameterized.print()
 
 print(PhysLocation(PrimitiveType.DSP, 39, 25))
@@ -184,9 +184,11 @@ print(f"{loc} has {t.placedb.get_instance_at(loc)}")
 foo_inst = t.get_instance(Test, "foo_inst")
 foo_inst["UnParameterized"]["Nothing"].place(PrimitiveType.DSP, 39, 90, 0)
 
+print()
 print("=== Pre-pass mlir dump")
 t.print()
 
+print()
 print("=== Running passes")
 t.run_passes()
 

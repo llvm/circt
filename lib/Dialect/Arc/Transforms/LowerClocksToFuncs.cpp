@@ -6,11 +6,20 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
+#include "circt/Dialect/Arc/ArcOps.h"
+#include "circt/Dialect/Arc/ArcPasses.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "arc-lower-clocks-to-funcs"
+
+namespace circt {
+namespace arc {
+#define GEN_PASS_DEF_LOWERCLOCKSTOFUNCS
+#include "circt/Dialect/Arc/ArcPasses.h.inc"
+} // namespace arc
+} // namespace circt
 
 using namespace mlir;
 using namespace circt;
@@ -24,7 +33,7 @@ using mlir::OpTrait::ConstantLike;
 
 namespace {
 struct LowerClocksToFuncsPass
-    : public LowerClocksToFuncsBase<LowerClocksToFuncsPass> {
+    : public arc::impl::LowerClocksToFuncsBase<LowerClocksToFuncsPass> {
   LowerClocksToFuncsPass() = default;
   LowerClocksToFuncsPass(const LowerClocksToFuncsPass &pass)
       : LowerClocksToFuncsPass() {}

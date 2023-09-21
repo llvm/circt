@@ -1,6 +1,6 @@
 // REQUIRES: capnp
 // RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
-// RUN: circt-opt %s --esi-emit-collateral=schema-file=%t1.capnp --lower-esi-ports --lower-esi-to-hw --export-verilog -verify-diagnostics | FileCheck --check-prefix=COSIM %s
+// RUN: circt-opt %s --esi-emit-collateral=schema-file=%t1.capnp --lower-esi-ports --lower-esi-to-hw --lower-seq-to-sv --export-verilog -verify-diagnostics | FileCheck --check-prefix=COSIM %s
 
 hw.module.extern @Sender() -> (x: !esi.channel<si14>)
 hw.module.extern @Reciever(%a: !esi.channel<i32>)
@@ -10,7 +10,7 @@ hw.module.extern @ArrReciever(%x: !esi.channel<!hw.array<4xsi64>>)
 // CHECK-LABEL: hw.module.extern @Reciever(%a: !esi.channel<i32>)
 // CHECK-LABEL: hw.module.extern @ArrReciever(%x: !esi.channel<!hw.array<4xsi64>>)
 
-hw.module @top(%clk:i1, %rst:i1) -> () {
+hw.module @top(%clk: !seq.clock, %rst: i1) -> () {
   hw.instance "recv" @Reciever (a: %cosimRecv: !esi.channel<i32>) -> ()
   // CHECK:  hw.instance "recv" @Reciever(a: %0: !esi.channel<i32>) -> ()
 

@@ -15,11 +15,11 @@ with Context() as ctx, Location.unknown():
   module {
     %sym = om.constant #om.ref<<@Root::@x>> : !om.ref
 
-    om.class @Test(%param: i64) {
-      om.class.field @field, %param : i64
+    om.class @Test(%param: !om.integer) {
+      om.class.field @field, %param : !om.integer
 
-      %c_14 = om.constant 14 : i64
-      %0 = om.object @Child(%c_14) : (i64) -> !om.class.type<@Child>
+      %c_14 = om.constant #om.integer<14> : !om.integer
+      %0 = om.object @Child(%c_14) : (!om.integer) -> !om.class.type<@Child>
       om.class.field @child, %0 : !om.class.type<@Child>
 
       om.class.field @reference, %sym : !om.ref
@@ -27,21 +27,29 @@ with Context() as ctx, Location.unknown():
       %list = om.constant #om.list<!om.string, ["X" : !om.string, "Y" : !om.string]> : !om.list<!om.string>
       om.class.field @list, %list : !om.list<!om.string>
 
-      %tuple = om.tuple_create %list, %c_14: !om.list<!om.string>, i64
-      om.class.field @tuple, %tuple : tuple<!om.list<!om.string>, i64>
+      %tuple = om.tuple_create %list, %c_14: !om.list<!om.string>, !om.integer
+      om.class.field @tuple, %tuple : tuple<!om.list<!om.string>, !om.integer>
 
-      %c_15 = om.constant 15 : i64
-      %1 = om.object @Child(%c_15) : (i64) -> !om.class.type<@Child>
+      %c_15 = om.constant #om.integer<15> : !om.integer
+      %1 = om.object @Child(%c_15) : (!om.integer) -> !om.class.type<@Child>
       %list_child = om.list_create %0, %1: !om.class.type<@Child>
       %2 = om.object @Nest(%list_child) : (!om.list<!om.class.type<@Child>>) -> !om.class.type<@Nest>
       om.class.field @nest, %2 : !om.class.type<@Nest>
 
-      %3 = om.constant #om.map<i64, {a = 42, b = 32}> : !om.map<!om.string, i64>
-      om.class.field @map, %3 : !om.map<!om.string, i64>
+      %3 = om.constant #om.map<!om.integer, {a = #om.integer<42>, b = #om.integer<32>}> : !om.map<!om.string, !om.integer>
+      om.class.field @map, %3 : !om.map<!om.string, !om.integer>
+
+      %x = om.constant "X" : !om.string
+      %y = om.constant "Y" : !om.string
+      %entry1 = om.tuple_create %x, %c_14: !om.string, !om.integer
+      %entry2 = om.tuple_create %y, %c_15: !om.string, !om.integer
+
+      %map = om.map_create %entry1, %entry2: !om.string, !om.integer
+      om.class.field @map_create, %map : !om.map<!om.string, !om.integer>
     }
 
-    om.class @Child(%0: i64) {
-      om.class.field @foo, %0 : i64
+    om.class @Child(%0: !om.integer) {
+      om.class.field @foo, %0 : !om.integer
     }
 
     om.class @Nest(%0: !om.list<!om.class.type<@Child>>) {
@@ -82,6 +90,11 @@ except ValueError as e:
 
 obj = evaluator.instantiate("Test", 42)
 
+assert isinstance(obj.type, om.ClassType)
+
+# CHECK: Test
+print(obj.type.name)
+
 # CHECK: 42
 print(obj.field)
 # CHECK: 14
@@ -118,4 +131,22 @@ print(obj.map)
 for k, v in obj.map.items():
   # CHECK-NEXT: a 42
   # CHECK-NEXT: b 32
+  print(k, v)
+
+try:
+  print(obj.map_create[1])
+except KeyError as e:
+  # CHECK-NEXT: 'key is not integer'
+  print(e)
+try:
+  print(obj.map_create["INVALID"])
+except KeyError as e:
+  # CHECK-NEXT: 'key not found'
+  print(e)
+# CHECK-NEXT: 14
+print(obj.map_create["X"])
+
+for k, v in obj.map_create.items():
+  # CHECK-NEXT: X 14
+  # CHECK-NEXT: Y 15
   print(k, v)

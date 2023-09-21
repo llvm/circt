@@ -1844,10 +1844,52 @@ circuit VecOfProps:
     ; CHECK-COUNT-2: openvector<string, 2>
 
 ;// -----
+; Test parsing of wires of probes, wires of agg of probes, and namekinds.
+; CHECK-LABEL: circuit "WireOfProbesAndNames"
+circuit WireOfProbesAndNames:
+  module WireOfProbesAndNames:
+    ; CHECK: %mixed = firrtl.wire interesting_name : !firrtl.openbundle
+    wire mixed : { a : UInt<3>, b : Probe<UInt<3>> }
+    ; CHECK: %probe = firrtl.wire : !firrtl.probe
+    wire probe : Probe<UInt<1>>
+
+;// -----
 FIRRTL version 3.2.0
 
 ; CHECK-LABEL: circuit "AnyRef"
 circuit AnyRef:
+  class Foo:
+    skip
   module AnyRef:
     input x : AnyRef
     ; CHECK: !firrtl.anyref
+    output y : AnyRef
+    ; CHECK: !firrtl.anyref
+    output listOfAny : List<AnyRef>
+    ; CHECK: !firrtl.list<anyref>
+    output mapToAny : Map<Integer, AnyRef>
+    ; CHECK: !firrtl.map<integer, anyref>
+    output mapFromAny : Map<AnyRef, Integer>
+    ; CHECK: !firrtl.map<anyref, integer>
+
+    object foo of Foo
+    propassign y, foo
+    ; CHECK: %[[OBJ:.+]] = firrtl.object
+    ; CHECK: %[[CAST:.+]] = firrtl.object.anyref_cast %[[OBJ]]
+    ; CHECK: firrtl.propassign %y, %[[CAST]]
+
+    propassign listOfAny, List<AnyRef>(foo, x)
+    ; CHECK-NEXT: %[[CAST:.+]] = firrtl.object.anyref_cast %[[OBJ]]
+    ; CHECK-NEXT: %[[LIST:.+]] = firrtl.list.create %[[CAST]], %x
+    ; CHECK-NEXT: propassign %listOfAny, %[[LIST]]
+
+    propassign mapToAny, Map<Integer, AnyRef>(Integer(2) -> foo)
+    ; CHECK-NEXT: %[[TWO:.+]] = firrtl.integer 2
+    ; CHECK-NEXT: %[[CAST:.+]] = firrtl.object.anyref_cast %[[OBJ]]
+    ; CHECK-NEXT: %[[MAPTO:.+]] = firrtl.map.create (%[[TWO]] -> %[[CAST]])
+    ; CHECK-NEXT: propassign %mapToAny, %[[MAPTO]]
+    propassign mapFromAny, Map<AnyRef, Integer>(foo -> Integer(5))
+    ; CHECK-NEXT: %[[FIVE:.+]] = firrtl.integer 5
+    ; CHECK-NEXT: %[[CAST:.+]] = firrtl.object.anyref_cast %[[OBJ]]
+    ; CHECK-NEXT: %[[MAPFROM:.+]] = firrtl.map.create (%[[CAST]] -> %[[FIVE]])
+    ; CHECK-NEXT: propassign %mapFromAny, %[[MAPFROM]]

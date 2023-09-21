@@ -10,18 +10,26 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/Arc/ArcOps.h"
+#include "circt/Dialect/Arc/ArcPasses.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/Namespace.h"
 #include "circt/Support/SymCache.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "arc-canonicalizer"
+
+namespace circt {
+namespace arc {
+#define GEN_PASS_DEF_ARCCANONICALIZER
+#include "circt/Dialect/Arc/ArcPasses.h.inc"
+} // namespace arc
+} // namespace circt
 
 using namespace circt;
 using namespace arc;
@@ -486,7 +494,7 @@ SinkArcInputsPattern::matchAndRewrite(DefineOp op,
 
 namespace {
 struct ArcCanonicalizerPass
-    : public ArcCanonicalizerBase<ArcCanonicalizerPass> {
+    : public arc::impl::ArcCanonicalizerBase<ArcCanonicalizerPass> {
   void runOnOperation() override;
 };
 } // namespace

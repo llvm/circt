@@ -17,7 +17,7 @@ include "circt/Dialect/HW/HWAttributes.td"
 include "circt/Dialect/HW/HWDialect.td"
 include "circt/Dialect/HW/HWOpInterfaces.td"
 include "circt/Dialect/HW/HWTypes.td"
-include "mlir/IR/FunctionInterfaces.td"
+include "mlir/Interfaces/FunctionInterfaces.td"
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/OpBase.td"
 include "mlir/IR/RegionKindInterface.td"
@@ -108,52 +108,7 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
     }
 
     ModulePortInfo $cppClass::getPortList() {
-      auto modTy = getHWModuleType();
-      SmallVector<PortInfo> inputs, outputs;
-      auto emptyDict = DictionaryAttr::get(getContext());
-      auto argTypes = modTy.getInputTypes();
-      auto argNames = modTy.getInputNames();
-      auto argLocs = getArgLocs();
-      auto argAttrs = getArgAttrs();
-      for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
-        auto type = argTypes[i];
-        auto direction = ModulePort::Direction::Input;
-        if (auto inout = type.dyn_cast<InOutType>()) {
-          type = inout.getElementType();
-          direction = ModulePort::Direction::InOut;
-        }
-        LocationAttr loc;
-        if (argLocs)
-          loc = argLocs[i].cast<LocationAttr>();
-        DictionaryAttr attrs = emptyDict;
-        if (argAttrs && (*argAttrs)[i])
-          attrs = cast<DictionaryAttr>((*argAttrs)[i]);
-        inputs.push_back({{cast<StringAttr>(argNames[i]), type, direction},
-                          i,
-                          extractSym(attrs),
-                          attrs,
-                          loc});
-      }
-
-      auto resultNames = modTy.getOutputNames();
-      auto resultTypes = modTy.getOutputTypes();
-      auto resultLocs = getResultLocs();
-      auto resultAttrs = getResAttrs();
-      for (unsigned i = 0, e = resultTypes.size(); i < e; ++i) {
-        LocationAttr loc;
-        if (resultLocs)
-          loc = resultLocs[i].cast<LocationAttr>();
-        DictionaryAttr attrs = emptyDict;
-        if (resultAttrs && (*resultAttrs)[i])
-          attrs = cast<DictionaryAttr>((*resultAttrs)[i]);
-        outputs.push_back({{cast<StringAttr>(resultNames[i]), resultTypes[i],
-                            ModulePort::Direction::Output},
-                          i,
-                          extractSym(attrs),
-                          attrs,
-                          loc});
-      }
-      return ModulePortInfo(inputs, outputs);
+      return ::getPortList(*this);
     }
 
   }];
@@ -163,8 +118,8 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
 def HWTestModuleOp : HWOp<"testmodule", [Symbol,
                                          DeclareOpInterfaceMethods<PortList>,
                                          DeclareOpInterfaceMethods<SymboledPortList>,
-                                         OpAsmOpInterface, 
-                                         HasParent<"mlir::ModuleOp">, 
+                                         OpAsmOpInterface,
+                                         HasParent<"mlir::ModuleOp">,
                                          IsolatedFromAbove,
                                          SingleBlockImplicitTerminator<"OutputOp">]> {
   let arguments = (ins SymbolNameAttr:$sym_name,
@@ -197,12 +152,8 @@ def HWModuleOp : HWModuleOpBase<"module",
   }];
   let arguments = (ins SymbolNameAttr:$sym_name,
                        TypeAttrOf<ModuleType>:$module_type,
-                       OptionalAttr<DictArrayAttr>:$arg_attrs,
-                       OptionalAttr<DictArrayAttr>:$res_attrs,
-                       StrArrayAttr:$argNames,
-                       StrArrayAttr:$resultNames,
-                       LocationArrayAttr:$argLocs,
-                       LocationArrayAttr:$resultLocs,
+                       DictArrayAttr:$per_port_attrs,
+                       LocationArrayAttr:$portLocs,
                        ParamDeclArrayAttr:$parameters,
                        StrAttr:$comment);
   let results = (outs);
@@ -328,12 +279,8 @@ def HWModuleExternOp : HWModuleOpBase<"module.extern"> {
   }];
   let arguments = (ins SymbolNameAttr:$sym_name,
                        TypeAttrOf<ModuleType>:$module_type,
-		                   OptionalAttr<DictArrayAttr>:$arg_attrs,
-                       OptionalAttr<DictArrayAttr>:$res_attrs,
-                       StrArrayAttr:$argNames,
-                       StrArrayAttr:$resultNames,
-                       LocationArrayAttr:$argLocs,
-                       LocationArrayAttr:$resultLocs,
+                       DictArrayAttr:$per_port_attrs,
+                       LocationArrayAttr:$portLocs,
                        ParamDeclArrayAttr:$parameters,
                        OptionalAttr<StrAttr>:$verilogName);
   let results = (outs);
@@ -423,11 +370,8 @@ def HWModuleGeneratedOp : HWModuleOpBase<"module.generated", [
   let arguments = (ins SymbolNameAttr:$sym_name,
                        FlatSymbolRefAttr:$generatorKind,
                        TypeAttrOf<ModuleType>:$module_type,
-		                   OptionalAttr<DictArrayAttr>:$arg_attrs,
-                       OptionalAttr<DictArrayAttr>:$res_attrs,
-                       StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
-                       LocationArrayAttr:$argLocs,
-                       LocationArrayAttr:$resultLocs,
+                       DictArrayAttr:$per_port_attrs,
+                       LocationArrayAttr:$portLocs,
                        ParamDeclArrayAttr:$parameters,
                        OptionalAttr<StrAttr>:$verilogName);
   let results = (outs);
@@ -540,8 +484,6 @@ def InstanceOp : HWOp<"instance", [
 
     /// Lookup the module or extmodule for the symbol.  This returns null on
     /// invalid IR.
-    Operation *getReferencedModule(const HWSymbolCache *cache);
-    Operation *getReferencedModule(SymbolTable& tbl);
     Operation *getReferencedModuleSlow();
 
     /// Return the values for the port in port order.

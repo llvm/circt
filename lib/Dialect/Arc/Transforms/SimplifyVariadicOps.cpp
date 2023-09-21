@@ -6,10 +6,20 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
+#include "circt/Dialect/Arc/ArcOps.h"
+#include "circt/Dialect/Arc/ArcPasses.h"
+#include "mlir/Interfaces/SideEffectInterfaces.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "arc-simplify-variadic-ops"
+
+namespace circt {
+namespace arc {
+#define GEN_PASS_DEF_SIMPLIFYVARIADICOPS
+#include "circt/Dialect/Arc/ArcPasses.h.inc"
+} // namespace arc
+} // namespace circt
 
 using namespace mlir;
 using namespace circt;
@@ -18,7 +28,7 @@ using namespace hw;
 
 namespace {
 struct SimplifyVariadicOpsPass
-    : public SimplifyVariadicOpsBase<SimplifyVariadicOpsPass> {
+    : public arc::impl::SimplifyVariadicOpsBase<SimplifyVariadicOpsPass> {
   SimplifyVariadicOpsPass() = default;
   SimplifyVariadicOpsPass(const SimplifyVariadicOpsPass &pass)
       : SimplifyVariadicOpsPass() {}

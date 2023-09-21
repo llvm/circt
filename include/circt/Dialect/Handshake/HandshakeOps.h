@@ -14,13 +14,13 @@
 #define CIRCT_HANDSHAKEOPS_OPS_H_
 
 #include "circt/Dialect/Handshake/HandshakeDialect.h"
+#include "circt/Dialect/Handshake/HandshakeInterfaces.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Dialect.h"
-#include "mlir/IR/FunctionInterfaces.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/Operation.h"
@@ -28,45 +28,37 @@
 #include "mlir/IR/TypeSupport.h"
 #include "mlir/IR/Types.h"
 #include "mlir/Interfaces/CallInterfaces.h"
+#include "mlir/Interfaces/FunctionInterfaces.h"
 #include "mlir/Interfaces/InferTypeOpInterface.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/Any.h"
 
-namespace circt {
-namespace handshake {
-
-struct MemLoadInterface {
-  unsigned index;
-  mlir::Value addressIn;
-  mlir::Value dataOut;
-  mlir::Value doneOut;
-};
-
-struct MemStoreInterface {
-  unsigned index;
-  mlir::Value addressIn;
-  mlir::Value dataIn;
-  mlir::Value doneOut;
-};
-
-/// Default implementation for checking whether an operation is a control
-/// operation. This function cannot be defined within ControlInterface
-/// because its implementation attempts to cast the operation to an
-/// SOSTInterface, which may not be declared at the point where the default
-/// trait's method is defined. Therefore, the default implementation of
-/// ControlInterface's isControl method simply calls this function.
-bool isControlOpImpl(Operation *op);
-
-#include "circt/Dialect/Handshake/HandshakeInterfaces.h.inc"
-
-} // end namespace handshake
-} // end namespace circt
-
 namespace mlir {
 namespace OpTrait {
 template <typename ConcreteType>
 class HasClock : public TraitBase<ConcreteType, HasClock> {};
+
+template <typename InterfaceType>
+class HasParentInterface {
+public:
+  template <typename ConcreteType>
+  class Impl : public TraitBase<ConcreteType,
+                                HasParentInterface<InterfaceType>::Impl> {
+  public:
+    static LogicalResult verifyTrait(Operation *op) {
+      if (llvm::isa_and_nonnull<InterfaceType>(op->getParentOp()))
+        return success();
+
+      // @mortbopet: What a horrible error message - however, there's no way to
+      // report the interface name without going in and adjusting the tablegen
+      // backend to also emit string literal names for interfaces.
+      return op->emitOpError() << "expects parent op to be of the interface "
+                                  "parent type required by the given op type";
+    }
+  };
+};
+
 } // namespace OpTrait
 } // namespace mlir
 

@@ -36,6 +36,21 @@ MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(OM, om);
 /// Is the Type a ClassType.
 MLIR_CAPI_EXPORTED bool omTypeIsAClassType(MlirType type);
 
+/// Get the TypeID for a ClassType.
+MLIR_CAPI_EXPORTED MlirTypeID omClassTypeGetTypeID();
+
+/// Get the name for a ClassType.
+MLIR_CAPI_EXPORTED MlirIdentifier omClassTypeGetName(MlirType type);
+
+/// Is the Type a MapType.
+MLIR_CAPI_EXPORTED bool omTypeIsAMapType(MlirType type);
+
+// Return a key type of a MapType.
+MLIR_CAPI_EXPORTED MlirType omMapTypeGetKeyType(MlirType type);
+
+/// Is the Type a StringType.
+MLIR_CAPI_EXPORTED bool omTypeIsAStringType(MlirType type);
+
 //===----------------------------------------------------------------------===//
 // Evaluator data structures.
 //===----------------------------------------------------------------------===//
@@ -101,6 +116,10 @@ omEvaluatorObjectGetFieldNames(OMEvaluatorValue object);
 // EvaluatorValue API.
 //===----------------------------------------------------------------------===//
 
+// Get a context from an EvaluatorValue.
+MLIR_CAPI_EXPORTED MlirContext
+omEvaluatorValueGetContext(OMEvaluatorValue evaluatorValue);
+
 // Query if the EvaluatorValue is null.
 MLIR_CAPI_EXPORTED bool omEvaluatorValueIsNull(OMEvaluatorValue evaluatorValue);
 
@@ -144,6 +163,19 @@ omEvaluatorTupleGetNumElements(OMEvaluatorValue evaluatorValue);
 MLIR_CAPI_EXPORTED OMEvaluatorValue
 omEvaluatorTupleGetElement(OMEvaluatorValue evaluatorValue, intptr_t pos);
 
+/// Get an element of the map.
+MLIR_CAPI_EXPORTED OMEvaluatorValue
+omEvaluatorMapGetElement(OMEvaluatorValue evaluatorValue, MlirAttribute attr);
+
+MLIR_CAPI_EXPORTED MlirAttribute omEvaluatorMapGetKeys(OMEvaluatorValue object);
+
+/// Query if the EvaluatorValue is a Map.
+MLIR_CAPI_EXPORTED bool omEvaluatorValueIsAMap(OMEvaluatorValue evaluatorValue);
+
+/// Get the Type from a Map, which will be a MapType.
+MLIR_CAPI_EXPORTED MlirType
+omEvaluatorMapGetType(OMEvaluatorValue evaluatorValue);
+
 //===----------------------------------------------------------------------===//
 // ReferenceAttr API
 //===----------------------------------------------------------------------===//
@@ -151,6 +183,18 @@ omEvaluatorTupleGetElement(OMEvaluatorValue evaluatorValue, intptr_t pos);
 MLIR_CAPI_EXPORTED bool omAttrIsAReferenceAttr(MlirAttribute attr);
 
 MLIR_CAPI_EXPORTED MlirAttribute omReferenceAttrGetInnerRef(MlirAttribute attr);
+
+//===----------------------------------------------------------------------===//
+// IntegerAttr API
+//===----------------------------------------------------------------------===//
+
+MLIR_CAPI_EXPORTED bool omAttrIsAIntegerAttr(MlirAttribute attr);
+
+/// Given an om::IntegerAttr, return the mlir::IntegerAttr.
+MLIR_CAPI_EXPORTED MlirAttribute omIntegerAttrGetInt(MlirAttribute attr);
+
+/// Get an om::IntegerAttr from mlir::IntegerAttr.
+MLIR_CAPI_EXPORTED MlirAttribute omIntegerAttrGet(MlirAttribute attr);
 
 //===----------------------------------------------------------------------===//
 // ListAttr API

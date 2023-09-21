@@ -6,15 +6,24 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
+#include "circt/Dialect/Arc/ArcOps.h"
+#include "circt/Dialect/Arc/ArcPasses.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "mlir/Pass/Pass.h"
+
+namespace circt {
+namespace arc {
+#define GEN_PASS_DEF_ADDTAPS
+#include "circt/Dialect/Arc/ArcPasses.h.inc"
+} // namespace arc
+} // namespace circt
 
 using namespace circt;
 using namespace arc;
 using namespace hw;
 
 namespace {
-struct AddTapsPass : public AddTapsBase<AddTapsPass> {
+struct AddTapsPass : public arc::impl::AddTapsBase<AddTapsPass> {
   void runOnOperation() override {
     getOperation().walk([&](Operation *op) {
       TypeSwitch<Operation *>(op)

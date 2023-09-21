@@ -7,7 +7,7 @@ from collections import OrderedDict
 from .support import get_user_loc
 
 from .circt import ir, support
-from .circt.dialects import esi, hw, sv
+from .circt.dialects import esi, hw, seq, sv
 from .circt.dialects.esi import ChannelSignaling
 
 import typing
@@ -147,6 +147,8 @@ def _FromCirctType(type: typing.Union[ir.Type, Type]) -> Type:
       return Type.__new__(UInt, type)
     else:
       return Type.__new__(Bits, type)
+  if isinstance(type, seq.ClockType):
+    return Type.__new__(ClockType, type)
   if isinstance(type, esi.AnyType):
     return Type.__new__(Any, type)
   if isinstance(type, esi.ChannelType):
@@ -476,16 +478,12 @@ class UInt(BitVectorType):
     return hwarith.ConstantOp(circt_type, x)
 
 
-class ClockType(Bits):
+class ClockType(Type):
   """A special single bit to represent a clock. Can't do any special operations
   on it, except enter it as a implicit clock block."""
 
-  # TODO: the 'clock' type isn't represented in CIRCT IR. It may be useful to
-  # have it there if for no other reason than being able to round trip this
-  # type.
-
   def __new__(cls):
-    return super(ClockType, cls).__new__(cls, 1)
+    return super(ClockType, cls).__new__(cls, seq.ClockType.get())
 
   def _get_value_class(self):
     from .signals import ClockSignal

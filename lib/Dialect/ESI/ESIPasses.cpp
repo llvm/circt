@@ -136,7 +136,7 @@ HWModuleExternOp ESIHWBuilder::declareStage(Operation *symTable,
   size_t argn = 0;
   size_t resn = 0;
   llvm::SmallVector<PortInfo> ports = {
-      {{clk, getI1Type(), ModulePort::Direction::Input}, argn++},
+      {{clk, getClockType(), ModulePort::Direction::Input}, argn++},
       {{rst, getI1Type(), ModulePort::Direction::Input}, argn++}};
 
   ports.push_back({{a, dataType, ModulePort::Direction::Input}, argn++});
@@ -172,7 +172,7 @@ HWModuleExternOp ESIHWBuilder::declareCosimEndpointOp(Operation *symTable,
   // Will be refining this when we decide how to better handle parameterized
   // types and ops.
   PortInfo ports[] = {
-      {{clk, getI1Type(), ModulePort::Direction::Input}, 0},
+      {{clk, getClockType(), ModulePort::Direction::Input}, 0},
       {{rst, getI1Type(), ModulePort::Direction::Input}, 1},
       {{dataOutValid, getI1Type(), ModulePort::Direction::Output}, 0},
       {{dataOutReady, getI1Type(), ModulePort::Direction::Input}, 2},
@@ -222,5 +222,7 @@ InterfaceOp ESIHWBuilder::constructInterface(ChannelType chan) {
                                /*outputs=*/ArrayRef<StringRef>{readyStr});
   });
 }
+
+Type ESIHWBuilder::getClockType() { return seq::ClockType::get(getContext()); }
 
 void circt::esi::registerESIPasses() { registerPasses(); }

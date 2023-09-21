@@ -1,9 +1,9 @@
 // REQUIRES: capnp
-// RUN: circt-opt %s --esi-connect-services --esi-emit-collateral=tops=LoopbackCosimTopWrapper,LoopbackCosimBSP --esi-clean-metadata --lower-esi-to-physical --lower-esi-ports --lower-esi-to-hw  --export-verilog -o %t1.mlir  | FileCheck %s
+// RUN: circt-opt %s --esi-connect-services --esi-emit-collateral=tops=LoopbackCosimTopWrapper,LoopbackCosimBSP --esi-clean-metadata --lower-esi-to-physical --lower-esi-ports --lower-esi-to-hw --lower-seq-to-sv --export-verilog -o %t1.mlir  | FileCheck %s
 
 // CHECK-LABEL: // ----- 8< ----- FILE "services.json" ----- 8< -----
 
-// CHECK-LABEL: "declarations": [ 
+// CHECK-LABEL: "declarations": [
 
 // CHECK-LABEL:    "name": "HostComms",
 // CHECK-NEXT:     "ports": [
@@ -275,7 +275,7 @@ esi.service.decl @HostComms {
   esi.service.inout @ReqResp : !esi.channel<i8> -> !esi.channel<i16>
 }
 
-hw.module @SendStruct (%clk: i1) -> () {
+hw.module @SendStruct (%clk: !seq.clock) -> () {
   %c2_i3 = hw.constant 2 : i3
   %s = hw.struct_create (%c2_i3) : !hw.struct<foo: i3>
   %c1_i1 = hw.constant 1 : i1
@@ -283,24 +283,24 @@ hw.module @SendStruct (%clk: i1) -> () {
   esi.service.req.to_server %schan -> <@HostComms::@Send> ([]): !esi.channel<!hw.struct<foo: i3>>
 }
 
-hw.module @InOutLoopback (%clk: i1) -> () {
+hw.module @InOutLoopback (%clk: !seq.clock) -> () {
   %dataIn = esi.service.req.inout %dataTrunc -> <@HostComms::@ReqResp> (["loopback_inout"]) : !esi.channel<i8> -> !esi.channel<i16>
   %unwrap, %valid = esi.unwrap.vr %dataIn, %rdy: i16
   %trunc = comb.extract %unwrap from 0 : (i16) -> (i8)
   %dataTrunc, %rdy = esi.wrap.vr %trunc, %valid : i8
 }
 
-hw.module @LoopbackCosimTop (%clk: i1, %rst: i1) {
-  esi.service.instance svc @HostComms impl as "cosim" (%clk, %rst) : (i1, i1) -> ()
-  hw.instance "m1" @InOutLoopback(clk: %clk: i1) -> ()
-  hw.instance "m2" @SendStruct(clk: %clk: i1) -> ()
+hw.module @LoopbackCosimTop (%clk: !seq.clock, %rst: i1) {
+  esi.service.instance svc @HostComms impl as "cosim" (%clk, %rst) : (!seq.clock, i1) -> ()
+  hw.instance "m1" @InOutLoopback(clk: %clk: !seq.clock) -> ()
+  hw.instance "m2" @SendStruct(clk: %clk: !seq.clock) -> ()
 }
-hw.module @LoopbackCosimTopWrapper (%clk: i1, %rst: i1) {
-  hw.instance "top" @LoopbackCosimTop(clk: %clk: i1, rst: %rst: i1) -> ()
+hw.module @LoopbackCosimTopWrapper (%clk: !seq.clock, %rst: i1) {
+  hw.instance "top" @LoopbackCosimTop(clk: %clk: !seq.clock, rst: %rst: i1) -> ()
 }
 
-hw.module @LoopbackCosimBSP (%clk: i1, %rst: i1) {
-  esi.service.instance impl as "cosim" (%clk, %rst) : (i1, i1) -> ()
-  hw.instance "m1" @InOutLoopback(clk: %clk: i1) -> ()
-  hw.instance "m2" @SendStruct(clk: %clk: i1) -> ()
+hw.module @LoopbackCosimBSP (%clk: !seq.clock, %rst: i1) {
+  esi.service.instance impl as "cosim" (%clk, %rst) : (!seq.clock, i1) -> ()
+  hw.instance "m1" @InOutLoopback(clk: %clk: !seq.clock) -> ()
+  hw.instance "m2" @SendStruct(clk: %clk: !seq.clock) -> ()
 }

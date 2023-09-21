@@ -1,4 +1,5 @@
 add_circt_dialect_library(CIRCTOMTransforms
+  FreezePaths.cpp
   LinkModules.cpp
 
   DEPENDS
@@ -6,6 +7,7 @@ add_circt_dialect_library(CIRCTOMTransforms
 
   LINK_LIBS PUBLIC
   CIRCTOM
+  CIRCTHW
   CIRCTSupport
   MLIRIR
   MLIRPass

@@ -313,23 +313,17 @@ static ParseResult parseCompReg(OpAsmParser &parser, OperationState &result) {
 
   Type i1 = IntegerType::get(result.getContext(), 1);
 
-  Type ty, clkTy;
+  Type ty;
   if (parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
       parser.parseType(ty))
     return failure();
-  if (succeeded(parser.parseOptionalComma())) {
-    if (parser.parseType(clkTy))
-      return failure();
-  } else {
-    clkTy = i1;
-  }
 
   setNameFromResult(parser, result);
 
   result.addTypes({ty});
 
   SmallVector<Type, 5> operandTypes;
-  operandTypes.append({ty, clkTy});
+  operandTypes.append({ty, ClockType::get(result.getContext())});
   if constexpr (ClockEnabled)
     operandTypes.push_back(i1);
   if (operands.size() > 2 + ceOperandOffset)
@@ -363,7 +357,7 @@ static void printCompReg(::mlir::OpAsmPrinter &p, Op op) {
     elidedAttrs.push_back("name");
 
   p.printOptionalAttrDict(op->getAttrs(), elidedAttrs);
-  p << " : " << op.getInput().getType() << ", " << op.getClk().getType();
+  p << " : " << op.getInput().getType();
 }
 
 /// Suggest a name for each result value based on the saved result names
@@ -731,11 +725,12 @@ OpFoldResult ClockGateOp::fold(FoldAdaptor adaptor) {
   // Fold to a constant zero clock if the enables are always false.
   if (isConstantZero(adaptor.getEnable()) &&
       (!getTestEnable() || isConstantZero(adaptor.getTestEnable())))
-    return IntegerAttr::get(IntegerType::get(getContext(), 1), 0);
+    return ClockConstAttr::get(getContext(), ClockConst::Low);
 
   // Forward constant zero clocks.
-  if (isConstantZero(adaptor.getInput()))
-    return IntegerAttr::get(IntegerType::get(getContext(), 1), 0);
+  if (auto clockAttr = dyn_cast_or_null<ClockConstAttr>(adaptor.getInput()))
+    if (clockAttr.getValue() == ClockConst::Low)
+      return ClockConstAttr::get(getContext(), ClockConst::Low);
 
   // Transitive clock gating - eliminate clock gates that are driven by an
   // identical enable signal somewhere higher in the clock gate hierarchy.
@@ -816,10 +811,7 @@ LogicalResult FirMemReadWriteOp::verify() { return verifyFirMemMask(*this); }
 static bool isConstClock(Value value) {
   if (!value)
     return false;
-  auto cast = value.getDefiningOp<seq::ToClockOp>();
-  if (!cast)
-    return false;
-  return cast.getInput().getDefiningOp<hw::ConstantOp>();
+  return value.getDefiningOp<seq::ConstClockOp>();
 }
 
 static bool isConstZero(Value value) {
@@ -904,6 +896,14 @@ LogicalResult FirMemReadWriteOp::canonicalize(FirMemReadWriteOp op,
 }
 
 //===----------------------------------------------------------------------===//
+// ConstClockOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult ConstClockOp::fold(FoldAdaptor adaptor) {
+  return ClockConstAttr::get(getContext(), getValue());
+}
+
+//===----------------------------------------------------------------------===//
 // ToClockOp/FromClockOp
 //===----------------------------------------------------------------------===//
 
@@ -918,6 +918,11 @@ LogicalResult ToClockOp::canonicalize(ToClockOp op, PatternRewriter &rewriter) {
 OpFoldResult ToClockOp::fold(FoldAdaptor adaptor) {
   if (auto fromClock = getInput().getDefiningOp<FromClockOp>())
     return fromClock.getInput();
+  if (auto intAttr = dyn_cast_or_null<IntegerAttr>(adaptor.getInput())) {
+    auto value =
+        intAttr.getValue().isZero() ? ClockConst::Low : ClockConst::High;
+    return ClockConstAttr::get(getContext(), value);
+  }
   return {};
 }
 
@@ -933,6 +938,10 @@ LogicalResult FromClockOp::canonicalize(FromClockOp op,
 OpFoldResult FromClockOp::fold(FoldAdaptor adaptor) {
   if (auto toClock = getInput().getDefiningOp<ToClockOp>())
     return toClock.getInput();
+  if (auto clockAttr = dyn_cast_or_null<ClockConstAttr>(adaptor.getInput())) {
+    auto ty = IntegerType::get(getContext(), 1);
+    return IntegerAttr::get(ty, clockAttr.getValue() == ClockConst::High);
+  }
   return {};
 }
 

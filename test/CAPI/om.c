@@ -20,8 +20,8 @@
 void testEvaluator(MlirContext ctx) {
   const char *testIR =
       "module {"
-      "  om.class @Test(%param: i8) {"
-      "    om.class.field @field, %param : i8"
+      "  om.class @Test(%param: !om.integer) {"
+      "    om.class.field @field, %param : !om.integer"
       "    %0 = om.object @Child() : () -> !om.class.type<@Child>"
       "    om.class.field @child, %0 : !om.class.type<@Child>"
       "  }"
@@ -57,7 +57,7 @@ void testEvaluator(MlirContext ctx) {
   // Test instantiation success.
 
   OMEvaluatorValue actualParam = omEvaluatorValueFromPrimitive(
-      mlirIntegerAttrGet(mlirIntegerTypeGet(ctx, 8), 42));
+      omIntegerAttrGet(mlirIntegerAttrGet(mlirIntegerTypeGet(ctx, 8), 42)));
 
   OMEvaluatorValue object =
       omEvaluatorInstantiate(evaluator, className, 1, &actualParam);
@@ -101,7 +101,7 @@ void testEvaluator(MlirContext ctx) {
 
   MlirAttribute fieldValue = omEvaluatorValueGetPrimitive(field);
 
-  // CHECK: 42 : i8
+  // CHECK: #om.integer<42 : i8> : !om.integer
   mlirAttributeDump(fieldValue);
 
   // Test get field success for child object.

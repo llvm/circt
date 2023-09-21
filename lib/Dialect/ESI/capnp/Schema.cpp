@@ -16,6 +16,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Dialect/Seq/SeqOps.h"
 #include "mlir/Support/IndentedOstream.h"
 
 // NOLINTNEXTLINE(clang-diagnostic-error)
@@ -1015,7 +1016,9 @@ hw::HWModuleOp CapnpTypeSchemaImpl::buildDecoder(Value clk, Value valid,
   Slice operand(b, operandVal);
   operand.setLoc(loc);
 
-  auto alwaysAt = b.create<sv::AlwaysOp>(loc, sv::EventControl::AtPosEdge, clk);
+  auto hwClk = b.create<seq::FromClockOp>(clk.getLoc(), clk).getResult();
+  auto alwaysAt =
+      b.create<sv::AlwaysOp>(loc, sv::EventControl::AtPosEdge, hwClk);
   auto ifValid =
       OpBuilder(alwaysAt.getBodyRegion()).create<sv::IfOp>(loc, valid);
   AssertBuilder asserts(loc, ifValid.getBodyRegion());

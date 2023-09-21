@@ -797,3 +797,86 @@ firrtl.circuit "ConstPropAnno" {
     firrtl.strictconnect %val2, %w3 : !firrtl.uint<3>
   }
 }
+
+// -----
+
+// RefSubOp: preserve.
+
+// CHECK-LABEL: "RefSubOp"
+firrtl.circuit "RefSubOp" {
+  firrtl.extmodule private @Ext(out p : !firrtl.probe<vector<uint<32>, 31>>)
+  firrtl.module @RefSubOp(out %p : !firrtl.probe<uint<32>>) {
+   // CHECK: firrtl.wire
+   // CHECK: ref.sub
+   // CHECK-COUNT-2: firrtl.ref.define
+   %ext_vec_ref = firrtl.instance e @Ext(out p : !firrtl.probe<vector<uint<32>, 31>>)
+   %w = firrtl.wire { name = "tap" } : !firrtl.probe<uint<32>>
+   %ref = firrtl.ref.sub %ext_vec_ref[5] : !firrtl.probe<vector<uint<32>, 31>>
+   firrtl.ref.define %w, %ref : !firrtl.probe<uint<32>>
+   firrtl.ref.define %p, %w: !firrtl.probe<uint<32>>
+  }
+}
+
+// -----
+
+// RefSubOp: prop.
+
+// CHECK-LABEL: "RefSubOpPropagate"
+firrtl.circuit "RefSubOpPropagate" {
+  firrtl.module private @Child(out %p : !firrtl.probe<vector<uint<32>, 2>>,
+                               out %w0 : !firrtl.probe<uint<32>>,
+                               out %w1 : !firrtl.probe<uint<32>>) {
+    // Vector initialized to 123, 321
+    %w = firrtl.wire : !firrtl.vector<uint<32>, 2>
+    %v0 = firrtl.subindex %w[0] : !firrtl.vector<uint<32>, 2>
+    %v1 = firrtl.subindex %w[1] : !firrtl.vector<uint<32>, 2>
+    %val0 = firrtl.constant 123 : !firrtl.uint<32>
+    %val1 = firrtl.constant 321 : !firrtl.uint<32>
+    firrtl.strictconnect %v0, %val0 : !firrtl.uint<32>
+    firrtl.strictconnect %v1, %val1 : !firrtl.uint<32>
+
+    // Send out probe of entire vector.
+    %vec_ref = firrtl.ref.send %w : !firrtl.vector<uint<32>, 2>
+    firrtl.ref.define %p, %vec_ref : !firrtl.probe<vector<uint<32>, 2>>
+
+    // Send out probe of individual elements.
+    %w0_ref = firrtl.ref.sub %vec_ref[0] : !firrtl.probe<vector<uint<32>, 2>>
+    %w1_ref = firrtl.ref.sub %vec_ref[1] : !firrtl.probe<vector<uint<32>, 2>>
+    firrtl.ref.define %w0, %w0_ref : !firrtl.probe<uint<32>>
+    firrtl.ref.define %w1, %w1_ref : !firrtl.probe<uint<32>>
+  }
+
+   // CHECK: module @RefSubOpPropagate
+  firrtl.module @RefSubOpPropagate(out %p : !firrtl.probe<uint<32>>,
+                                   out %w1_via_p : !firrtl.uint<32>,
+                                   out %w0 : !firrtl.uint<32>,
+                                   out %w1 : !firrtl.uint<32>) {
+   // Constant pool
+   // CHECK-DAG: %[[C123:.+]] = firrtl.constant 123
+   // CHECK-DAG: %[[C321:.+]] = firrtl.constant 321
+   // CHECK-DAG: %[[P321:.+]] = firrtl.ref.send %[[C321]]
+   // CHECK: firrtl.instance
+   %c_vec_ref, %c_w0, %c_w1 = firrtl.instance c @Child(out p : !firrtl.probe<vector<uint<32>, 2>>,
+                                                       out w0 : !firrtl.probe<uint<32>>,
+                                                       out w1 : !firrtl.probe<uint<32>>)
+
+   // 'p' should be probe of second element.
+   // CHECK-NEXT: firrtl.ref.define %p, %[[P321]]
+   %w = firrtl.wire : !firrtl.probe<uint<32>>
+   %ref = firrtl.ref.sub %c_vec_ref[1] : !firrtl.probe<vector<uint<32>, 2>>
+   firrtl.ref.define %w, %ref : !firrtl.probe<uint<32>>
+   firrtl.ref.define %p, %w: !firrtl.probe<uint<32>>
+
+   // CHECK-NEXT: firrtl.strictconnect %w1_via_p, %[[C321]]
+   %p_read = firrtl.ref.resolve %ref : !firrtl.probe<uint<32>>
+   firrtl.strictconnect %w1_via_p, %p_read : !firrtl.uint<32>
+
+   // CHECK-NEXT: firrtl.strictconnect %w0, %[[C123]]
+   // CHECK-NEXT: firrtl.strictconnect %w1, %[[C321]]
+   %w0_read = firrtl.ref.resolve %c_w0 : !firrtl.probe<uint<32>>
+   %w1_read = firrtl.ref.resolve %c_w1 : !firrtl.probe<uint<32>>
+   firrtl.strictconnect %w0, %w0_read : !firrtl.uint<32>
+   firrtl.strictconnect %w1, %w1_read : !firrtl.uint<32>
+   // CHECK-NEXT: }
+  }
+}

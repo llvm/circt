@@ -2,7 +2,7 @@
 
 // Test 1: default lowering (input muxing)
 
-// RUN: circt-opt %s -pipeline-explicit-regs -lower-pipeline-to-hw="outline-stages" -lower-seq-to-sv -sv-trace-iverilog -export-verilog \
+// RUN: circt-opt %s -pipeline-explicit-regs -lower-pipeline-to-hw -lower-seq-to-sv -sv-trace-iverilog -export-verilog \
 // RUN:     -o %t.mlir > %t.sv
 
 // RUN: circt-cocotb-driver.py --objdir=%T --topLevel=stallTest \
@@ -10,7 +10,7 @@
 
 // Test 2: Clock-gate implementation
 
-// RUN: circt-opt %s -pipeline-explicit-regs -lower-pipeline-to-hw="outline-stages clock-gate-regs" -lower-seq-to-sv -sv-trace-iverilog -export-verilog \
+// RUN: circt-opt %s -pipeline-explicit-regs -lower-pipeline-to-hw="clock-gate-regs" -lower-seq-to-sv -sv-trace-iverilog -export-verilog \
 // RUN:     -o %t_clockgated.mlir > %t.sv
 
 // RUN: circt-cocotb-driver.py --objdir=%T --topLevel=stallTest \
@@ -20,7 +20,7 @@
 // CHECK: ** TEST
 // CHECK: ** TESTS=[[N:.*]] PASS=[[N]] FAIL=0 SKIP=0
 
-hw.module @stallTest(%arg0 : i32, %arg1 : i32, %go : i1, %stall : i1, %clock : i1, %reset : i1) -> (out: i32, done : i1) {
+hw.module @stallTest(%arg0 : i32, %arg1 : i32, %go : i1, %stall : i1, %clock : !seq.clock, %reset : i1) -> (out: i32, done : i1) {
   %out, %done = pipeline.scheduled(%a0 : i32 = %arg0, %a1 : i32 = %arg1) stall(%s = %stall) clock(%c = %clock) reset(%r = %reset) go(%g = %go) -> (out: i32) {
       %add0 = comb.add %a0, %a1 : i32
       pipeline.stage ^bb1

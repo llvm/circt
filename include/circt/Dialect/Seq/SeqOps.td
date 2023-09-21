@@ -35,7 +35,7 @@ def CompRegOp : SeqOp<"compreg",
 
   let arguments = (ins
     AnyType:$input,
-    ClockOrI1Type:$clk,
+    ClockType:$clk,
     StrAttr:$name,
     Optional<I1>:$reset,
     Optional<AnyType>:$resetValue,
@@ -76,7 +76,7 @@ def CompRegClockEnabledOp : SeqOp<"compreg.ce",
 
   let arguments = (ins
     AnyType:$input,
-    ClockOrI1Type:$clk,
+    ClockType:$clk,
     I1:$clockEnable,
     StrAttr:$name,
     Optional<I1>:$reset,
@@ -207,7 +207,7 @@ def FIFOOp : SeqOp<"fifo", [
   }];
 
   let arguments = (ins
-    HWIntegerType:$input, I1:$rdEn, I1:$wrEn, I1:$clk, I1:$rst,
+    HWIntegerType:$input, I1:$rdEn, I1:$wrEn, ClockType:$clk, I1:$rst,
     ConfinedAttr<I64Attr, [IntMinValue<1>]>:$depth,
     OptionalAttr<ConfinedAttr<I64Attr, [IntMinValue<0>]>>:$almostFullThreshold,
     OptionalAttr<ConfinedAttr<I64Attr, [IntMinValue<0>]>>:$almostEmptyThreshold
@@ -234,7 +234,7 @@ def HLMemOp : SeqOp<"hlmem", [
   let summary = "Instantiate a high-level memory.";
   let description = "See the Seq dialect rationale for a longer description";
 
-  let arguments = (ins I1:$clk, I1:$rst, SymbolNameAttr:$sym_name);
+  let arguments = (ins ClockType:$clk, I1:$rst, SymbolNameAttr:$sym_name);
   let results = (outs HLMemType:$handle);
 
   let extraClassDeclaration = [{
@@ -320,24 +320,23 @@ def ClockGateOp : SeqOp<"clock_gate", [
     symbol will target the instance to the external module it lowers to.
 
     ```
-    %gatedClock = seq.clock_gate %clock, %enable : i1
-    %gatedClock = seq.clock_gate %clock, %enable, %test_enable : i1, i1
+    %gatedClock = seq.clock_gate %clock, %enable
+    %gatedClock = seq.clock_gate %clock, %enable, %test_enable
     ```
   }];
 
   let arguments = (ins
-    ClockOrI1Type:$input,
+    ClockType:$input,
     I1:$enable,
     Optional<I1>:$test_enable,
     OptionalAttr<InnerSymAttr>:$inner_sym
   );
 
-  let results = (outs ClockOrI1Type:$output);
+  let results = (outs ClockType:$output);
   let hasFolder = 1;
   let hasCanonicalizeMethod = 1;
   let assemblyFormat = [{
-    $input `,` $enable (`,` $test_enable^)? (`sym` $inner_sym^)?
-      attr-dict `:` qualified(type($output))
+    $input `,` $enable (`,` $test_enable^)? (`sym` $inner_sym^)? attr-dict
   }];
 }
 
@@ -547,6 +546,27 @@ def FirMemReadWriteOp : SeqOp<"firmem.read_write_port", [
   }];
   let hasVerifier = 1;
   let hasCanonicalizeMethod = 1;
+}
+
+//===----------------------------------------------------------------------===//
+// Tied-off clock
+//===----------------------------------------------------------------------===//
+
+def ConstClockOp : SeqOp<"const_clock", [Pure, ConstantLike]> {
+  let summary = "Produce constant clock value";
+  let description = [{
+    The constant operation produces a constant clock value.
+    ```
+      %clock = seq.const_clock low
+    ```
+  }];
+
+  let arguments = (ins ClockConstAttr:$value);
+  let results = (outs ClockType:$result);
+
+  let assemblyFormat = "$value attr-dict";
+
+  let hasFolder = 1;
 }
 
 //===----------------------------------------------------------------------===//

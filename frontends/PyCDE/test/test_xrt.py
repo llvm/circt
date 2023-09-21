@@ -42,8 +42,7 @@ s.run_passes(debug=True)
 s.compile()
 s.package()
 
-# TOP-LABEL: module top
-# TOP:         #(parameter __INST_HIER = "INSTANTIATE_WITH_INSTANCE_PATH") (
+# TOP-LABEL: module top(
 # TOP:         input         ap_clk,
 # TOP:                       ap_resetn,
 # TOP:                       s_axi_control_AWVALID,
@@ -64,16 +63,14 @@ s.package()
 # TOP:         output        s_axi_control_BVALID,
 # TOP:         output [1:0]  s_axi_control_BRESP
 
-# TOP:         XrtService #(
-# TOP:         ) XrtService (
+# TOP:         XrtService XrtService (
 # TOP:           .clk      (ap_clk),
 # TOP:           .rst      (~ap_resetn),
 # TOP:           .axil_in  (_GEN),
 # TOP:           .axil_out (_XrtService_axil_out)
 # TOP:         );
 
-# TOP:         Main #(
-# TOP:         ) Main (
+# TOP:         Main Main (
 # TOP:           .clk (ap_clk),
 # TOP:           .rst (~ap_resetn)
 # TOP:         );

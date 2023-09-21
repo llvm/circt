@@ -11,11 +11,10 @@
 
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/DialectImplementation.h"
-#include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/SymbolTable.h"
+#include "mlir/Interfaces/FunctionImplementation.h"
 #include "llvm/ADT/TypeSwitch.h"
-
 using namespace mlir;
 using namespace circt;
 using namespace ibis;
@@ -143,13 +142,9 @@ ParseResult MethodOp::parse(OpAsmParser &parser, OperationState &result) {
                                /*allowType=*/true, /*allowAttrs=*/false))
     return failure();
 
-  // Parse the result type.
-  if (succeeded(parser.parseOptionalArrow())) {
-    Type resultType;
-    if (parser.parseType(resultType))
-      return failure();
-    resultTypes.push_back(resultType);
-  }
+  // Parse the result types
+  if (parser.parseOptionalArrowTypeList(resultTypes))
+    return failure();
 
   // Process the ssa args for the information we're looking for.
   SmallVector<Type> argTypes;
@@ -176,7 +171,6 @@ ParseResult MethodOp::parse(OpAsmParser &parser, OperationState &result) {
   if (parser.parseRegion(*body, args))
     return failure();
 
-  ensureTerminator(*body, parser.getBuilder(), result.location);
   return success();
 }
 
@@ -210,38 +204,22 @@ void MethodOp::getAsmBlockArgumentNames(mlir::Region &region,
       setNameFn(block->getArgument(idx), argName);
 }
 
-LogicalResult MethodOp::verify() {
-  // Check that we have only one return value.
-  if (getFunctionType().getNumResults() > 1)
-    return failure();
-  return success();
-}
-
 void ReturnOp::build(OpBuilder &odsBuilder, OperationState &odsState) {}
 
 LogicalResult ReturnOp::verify() {
   // Check that the return operand type matches the function return type.
   auto func = cast<MethodOp>((*this)->getParentOp());
   ArrayRef<Type> resTypes = func.getResultTypes();
-  assert(resTypes.size() <= 1);
-  assert(getNumOperands() <= 1);
 
-  if (resTypes.empty()) {
-    if (getNumOperands() != 0)
-      return emitOpError(
-          "cannot return a value from a function with no result type");
-    return success();
-  }
+  if (getNumOperands() != resTypes.size())
+    return emitOpError(
+        "must have the same number of operands as the method has results");
 
-  Value retValue = getRetValue();
-  if (!retValue)
-    return emitOpError("must return a value");
-
-  Type retType = retValue.getType();
-  if (retType != resTypes.front())
-    return emitOpError("return type (")
-           << retType << ") must match function return type ("
-           << resTypes.front() << ")";
+  for (auto [arg, resType] : llvm::zip(getOperands(), resTypes))
+    if (arg.getType() != resType)
+      return emitOpError("operand type (")
+             << arg.getType() << ") must match function return type ("
+             << resType << ")";
 
   return success();
 }
@@ -589,10 +567,10 @@ LogicalResult OutputWireOp::canonicalize(OutputWireOp op,
 }
 
 //===----------------------------------------------------------------------===//
-// BlockOp
+// StaticBlockOp
 //===----------------------------------------------------------------------===//
 
-LogicalResult BlockOp::verify() {
+LogicalResult StaticBlockOp::verify() {
   if (getInputs().size() != getBodyBlock()->getNumArguments())
     return emitOpError("number of inputs must match number of block arguments");
 
@@ -605,7 +583,7 @@ LogicalResult BlockOp::verify() {
   return success();
 }
 
-ParseResult BlockOp::parse(OpAsmParser &parser, OperationState &result) {
+ParseResult StaticBlockOp::parse(OpAsmParser &parser, OperationState &result) {
   // Parse the argument initializer list.
   llvm::SmallVector<OpAsmParser::UnresolvedOperand> inputOperands;
   llvm::SmallVector<OpAsmParser::Argument> inputArguments;
@@ -639,13 +617,13 @@ ParseResult BlockOp::parse(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
-void BlockOp::print(OpAsmPrinter &p) {
+void StaticBlockOp::print(OpAsmPrinter &p) {
   p << ' ';
   parsing_util::printInitializerList(p, getInputs(),
                                      getBodyBlock()->getArguments());
   p.printOptionalArrowTypeList(getResultTypes());
-  p.printOptionalAttrDictWithKeyword(getOperation()->getAttrs(),
-                                     getAttributeNames());
+  p.printOptionalAttrDictWithKeyword(getOperation()->getAttrs());
+  p << ' ';
   p.printRegion(getBody(), /*printEntryBlockArgs=*/false);
 }
 
@@ -654,7 +632,7 @@ void BlockOp::print(OpAsmPrinter &p) {
 //===----------------------------------------------------------------------===//
 
 LogicalResult BlockReturnOp::verify() {
-  BlockOp parent = cast<BlockOp>(getOperation()->getParentOp());
+  auto parent = cast<StaticBlockOp>(getOperation()->getParentOp());
 
   if (getNumOperands() != parent.getOutputs().size())
     return emitOpError("number of operands must match number of block outputs");
@@ -665,6 +643,39 @@ LogicalResult BlockReturnOp::verify() {
   }
 
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// InlineStaticBlockEndOp
+//===----------------------------------------------------------------------===//
+
+InlineStaticBlockBeginOp InlineStaticBlockEndOp::getBeginOp() {
+  auto curr = getOperation()->getReverseIterator();
+  Operation *firstOp = &getOperation()->getBlock()->front();
+  while (true) {
+    if (auto beginOp = dyn_cast<InlineStaticBlockBeginOp>(*curr))
+      return beginOp;
+    if (curr.getNodePtr() == firstOp)
+      break;
+    ++curr;
+  }
+  return nullptr;
+}
+
+//===----------------------------------------------------------------------===//
+// InlineStaticBlockBeginOp
+//===----------------------------------------------------------------------===//
+
+InlineStaticBlockEndOp InlineStaticBlockBeginOp::getEndOp() {
+  auto curr = getOperation()->getIterator();
+  auto end = getOperation()->getBlock()->end();
+  while (curr != end) {
+    if (auto endOp = dyn_cast<InlineStaticBlockEndOp>(*curr))
+      return endOp;
+
+    ++curr;
+  }
+  return nullptr;
 }
 
 //===----------------------------------------------------------------------===//

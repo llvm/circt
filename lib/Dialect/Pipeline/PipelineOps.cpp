@@ -15,7 +15,7 @@
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
-#include "mlir/IR/FunctionImplementation.h"
+#include "mlir/Interfaces/FunctionImplementation.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/FormatVariadic.h"
 
@@ -155,6 +155,7 @@ static ParseResult parsePipelineOp(mlir::OpAsmParser &parser,
   result.addAttribute("inputNames", inputNames);
 
   Type i1 = parser.getBuilder().getI1Type();
+  Type clk = seq::ClockType::get(parser.getContext());
   // Parse optional 'stall %innerStall = %stallArg'
   OpAsmParser::Argument stallArg;
   OpAsmParser::UnresolvedOperand stallOperand;
@@ -168,7 +169,7 @@ static ParseResult parsePipelineOp(mlir::OpAsmParser &parser,
   // Parse clock, reset, and go.
   OpAsmParser::Argument clockArg, resetArg, goArg;
   OpAsmParser::UnresolvedOperand clockOperand, resetOperand, goOperand;
-  if (parseKeywordArgAssignment(parser, "clock", clockArg, clockOperand, i1) ||
+  if (parseKeywordArgAssignment(parser, "clock", clockArg, clockOperand, clk) ||
       parseKeywordArgAssignment(parser, "reset", resetArg, resetOperand, i1) ||
       parseKeywordArgAssignment(parser, "go", goArg, goOperand, i1))
     return failure();
@@ -189,22 +190,21 @@ static ParseResult parsePipelineOp(mlir::OpAsmParser &parser,
   result.addAttribute("outputNames", outputNames);
 
   // And the implicit 'done' output.
-  result.addTypes({parser.getBuilder().getI1Type()});
+  result.addTypes({i1});
 
   // All operands have been parsed - resolve.
   if (parser.resolveOperands(inputOperands, inputTypes, parser.getNameLoc(),
                              result.operands))
     return failure();
 
-  Type i1Type = parser.getBuilder().getI1Type();
   if (withStall) {
-    if (parser.resolveOperand(stallOperand, i1Type, result.operands))
+    if (parser.resolveOperand(stallOperand, i1, result.operands))
       return failure();
   }
 
-  if (parser.resolveOperand(clockOperand, i1Type, result.operands) ||
-      parser.resolveOperand(resetOperand, i1Type, result.operands) ||
-      parser.resolveOperand(goOperand, i1Type, result.operands))
+  if (parser.resolveOperand(clockOperand, clk, result.operands) ||
+      parser.resolveOperand(resetOperand, i1, result.operands) ||
+      parser.resolveOperand(goOperand, i1, result.operands))
     return failure();
 
   // Assemble the body region block arguments - this is where the magic happens
@@ -269,15 +269,15 @@ static void printPipelineOp(OpAsmPrinter &p, TPipelineOp op) {
   printKeywordAssignment(p, "reset", op.getInnerReset(), op.getReset());
   p << " ";
   printKeywordAssignment(p, "go", op.getInnerGo(), op.getGo());
+  // Print the optional attribute dict.
+  p.printOptionalAttrDict(op->getAttrs(),
+                          /*elidedAttrs=*/{"name", "operandSegmentSizes",
+                                           "outputNames", "inputNames"});
   p << " -> ";
 
   // Print the output list.
   printOutputList(p, op.getDataOutputs().getTypes(), op.getOutputNames());
 
-  // Print the optional attribute dict.
-  p.printOptionalAttrDict(op->getAttrs(),
-                          /*elidedAttrs=*/{"name", "operandSegmentSizes",
-                                           "outputNames", "inputNames"});
   p << " ";
 
   // Print the inner region, eliding the entry block arguments - we've already
@@ -314,7 +314,7 @@ void ScheduledPipelineOp::build(OpBuilder &odsBuilder, OperationState &odsState,
                                 TypeRange dataOutputs, ValueRange inputs,
                                 ArrayAttr inputNames, ArrayAttr outputNames,
                                 Value clock, Value reset, Value go, Value stall,
-                                StringAttr name) {
+                                StringAttr name, ArrayAttr stallability) {
   odsState.addOperands(inputs);
   if (stall)
     odsState.addOperands(stall);
@@ -359,6 +359,9 @@ void ScheduledPipelineOp::build(OpBuilder &odsBuilder, OperationState &odsState,
 
   // entry stage valid signal.
   entryBlock.addArgument(i1, odsState.location);
+
+  if (stallability)
+    odsState.addAttribute("stallability", stallability);
 }
 
 Block *ScheduledPipelineOp::addStage() {
@@ -558,7 +561,59 @@ LogicalResult ScheduledPipelineOp::verify() {
     }
   }
 
+  if (auto stallability = getStallability()) {
+    // Only allow specifying stallability if there is a stall signal.
+    if (!hasStall())
+      return emitOpError("cannot specify stallability without a stall signal.");
+
+    // Ensure that the # of stages is equal to the length of the stallability
+    // array - the exit stage is never stallable.
+    size_t nRegisterStages = stages.size() - 1;
+    if (stallability->size() != nRegisterStages)
+      return emitOpError("stallability array must be the same length as the "
+                         "number of stages. Pipeline has ")
+             << nRegisterStages << " stages but array had "
+             << stallability->size() << " elements.";
+  }
+
   return success();
+}
+
+StageKind ScheduledPipelineOp::getStageKind(size_t stageIndex) {
+  size_t nStages = getNumStages();
+  assert(stageIndex < nStages && "invalid stage index");
+
+  if (!hasStall())
+    return StageKind::Continuous;
+
+  // There is a stall signal - also check whether stage-level stallability is
+  // specified.
+  std::optional<ArrayAttr> stallability = getStallability();
+  if (!stallability) {
+    // All stages are stallable.
+    return StageKind::Stallable;
+  }
+
+  if (stageIndex < stallability->size()) {
+    bool stageIsStallable =
+        (*stallability)[stageIndex].cast<BoolAttr>().getValue();
+    if (!stageIsStallable) {
+      // This is a non-stallable stage.
+      return StageKind::NonStallable;
+    }
+  }
+
+  // Walk backwards from this stage to see if any non-stallable stage exists.
+  // If so, this is a runoff stage.
+  // TODO: This should be a pre-computed property.
+  if (stageIndex == 0)
+    return StageKind::Stallable;
+
+  for (size_t i = stageIndex - 1; i > 0; --i) {
+    if (getStageKind(i) == StageKind::NonStallable)
+      return StageKind::Runoff;
+  }
+  return StageKind::Stallable;
 }
 
 //===----------------------------------------------------------------------===//

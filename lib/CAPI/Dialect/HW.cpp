@@ -110,12 +110,20 @@ MlirType hwModuleTypeGetInputType(MlirType type, intptr_t index) {
   return wrap(cast<ModuleType>(unwrap(type)).getInputType(index));
 }
 
+MlirStringRef hwModuleTypeGetInputName(MlirType type, intptr_t index) {
+  return wrap(cast<ModuleType>(unwrap(type)).getInputName(index));
+}
+
 intptr_t hwModuleTypeGetNumOutputs(MlirType type) {
   return cast<ModuleType>(unwrap(type)).getNumOutputs();
 }
 
 MlirType hwModuleTypeGetOutputType(MlirType type, intptr_t index) {
   return wrap(cast<ModuleType>(unwrap(type)).getOutputType(index));
+}
+
+MlirStringRef hwModuleTypeGetOutputName(MlirType type, intptr_t index) {
+  return wrap(cast<ModuleType>(unwrap(type)).getOutputName(index));
 }
 
 bool hwTypeIsAStructType(MlirType type) {
@@ -280,4 +288,16 @@ MLIR_CAPI_EXPORTED MlirAttribute hwParamVerbatimAttrGet(MlirAttribute text) {
   MLIRContext *ctx = textAttr.getContext();
   auto type = NoneType::get(ctx);
   return wrap(ParamVerbatimAttr::get(ctx, textAttr, type));
+}
+
+MLIR_CAPI_EXPORTED bool hwAttrIsAOutputFileAttr(MlirAttribute attr) {
+  return unwrap(attr).isa<OutputFileAttr>();
+}
+MLIR_CAPI_EXPORTED MlirAttribute
+hwOutputFileGetFromFileName(MlirAttribute fileName, bool excludeFromFileList,
+                            bool includeReplicatedOp) {
+  auto fileNameStrAttr = unwrap(fileName).cast<StringAttr>();
+  return wrap(OutputFileAttr::getFromFilename(
+      fileNameStrAttr.getContext(), fileNameStrAttr.getValue(),
+      excludeFromFileList, includeReplicatedOp));
 }

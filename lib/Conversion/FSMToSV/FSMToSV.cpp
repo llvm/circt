@@ -41,7 +41,7 @@ static ClkRstIdxs getMachinePortInfo(SmallVectorImpl<hw::PortInfo> &ports,
   hw::PortInfo clock;
   clock.name = b.getStringAttr("clk");
   clock.dir = hw::ModulePort::Direction::Input;
-  clock.type = b.getI1Type();
+  clock.type = seq::ClockType::get(b.getContext());
   clock.argNum = machine.getNumArguments();
   ports.push_back(clock);
   specialPorts.clockIdx = clock.argNum;

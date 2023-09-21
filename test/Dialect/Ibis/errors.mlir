@@ -2,20 +2,9 @@
 
 ibis.class @C {
   %this = ibis.this @C
-  ibis.method @typeMismatch1() -> ui32 {
-    // expected-error @+1 {{must return a value}}
+  ibis.method @typeMismatch1() -> (ui32, i32) {
+    // expected-error @+1 {{'ibis.return' op must have the same number of operands as the method has results}}
     ibis.return
-  }
-}
-
-// -----
-
-ibis.class @C {
-  %this = ibis.this @C
-  ibis.method @typeMismatch2() {
-    %c = hw.constant 1 : i8
-    // expected-error @+1 {{cannot return a value from a function with no result type}}
-    ibis.return %c : i8
   }
 }
 
@@ -24,7 +13,7 @@ ibis.class @C {
   %this = ibis.this @C
   ibis.method @typeMismatch3() -> ui32 {
     %c = hw.constant 1 : i8
-    // expected-error @+1 {{return type ('i8') must match function return type ('ui32')}}
+    // expected-error @+1 {{'ibis.return' op operand type ('i8') must match function return type ('ui32')}}
     ibis.return %c : i8
   }
 }
@@ -119,6 +108,7 @@ ibis.class @InvalidGetVar {
     ]
     // expected-error @+1 {{'ibis.get_var' op result #0 must be memref of any type values, but got 'i32'}}
     %var = ibis.get_var %parent, @var : !ibis.scoperef<@InvalidGetVar> -> i32
+    ibis.return
   }
 }
 
@@ -133,6 +123,7 @@ ibis.class @InvalidGetVar2 {
     ]
     // expected-error @+1 {{'ibis.get_var' op dereferenced type ('memref<i1>') must match variable type ('memref<i32>')}}
     %var = ibis.get_var %parent, @var : !ibis.scoperef<@InvalidGetVar2> -> memref<i1>
+    ibis.return
   }
 }
 
@@ -142,8 +133,9 @@ ibis.class @InvalidReturn {
   %this = ibis.this @InvalidReturn
   ibis.method @foo() {
     %c = hw.constant 1 : i32
-    // expected-error @+1 {{'ibis.block.return' op number of operands must match number of block outputs}}
-    %ret = ibis.block() -> i32 {
+    // expected-error @+1 {{'ibis.sblock.return' op number of operands must match number of block outputs}}
+    %ret = ibis.sblock() -> i32 {
     }
+    ibis.return
   }
 }

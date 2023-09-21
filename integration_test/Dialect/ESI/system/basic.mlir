@@ -1,14 +1,14 @@
 // REQUIRES: rtl-sim
-// RUN: circt-opt %s --lower-esi-to-physical --lower-esi-ports --lower-esi-to-hw -verify-diagnostics > %t1.mlir
+// RUN: circt-opt %s --lower-esi-to-physical --lower-esi-ports --lower-esi-to-hw --lower-seq-to-sv -verify-diagnostics > %t1.mlir
 // RUN: circt-opt %t1.mlir -export-verilog -verify-diagnostics -o t3.mlir > %t2.sv
 // RUN: circt-rtl-sim.py %t2.sv %ESI_COLLATERAL_PATH%/ESIPrimitives.sv %S/../supplements/integers.sv --cycles 150 | FileCheck %s
 
-hw.module.extern @IntCountProd(%clk: i1, %rst: i1) -> (ints: !esi.channel<i32>) attributes {esi.bundle}
-hw.module.extern @IntAcc(%clk: i1, %rst: i1, %ints: !esi.channel<i32>) -> (totalOut: i32) attributes {esi.bundle}
-hw.module @top(%clk: i1, %rst: i1) -> (totalOut: i32) {
-  %intStream = hw.instance "prod" @IntCountProd(clk: %clk: i1, rst: %rst: i1) -> (ints: !esi.channel<i32>)
+hw.module.extern @IntCountProd(%clk: !seq.clock, %rst: i1) -> (ints: !esi.channel<i32>) attributes {esi.bundle}
+hw.module.extern @IntAcc(%clk: !seq.clock, %rst: i1, %ints: !esi.channel<i32>) -> (totalOut: i32) attributes {esi.bundle}
+hw.module @top(%clk: !seq.clock, %rst: i1) -> (totalOut: i32) {
+  %intStream = hw.instance "prod" @IntCountProd(clk: %clk: !seq.clock, rst: %rst: i1) -> (ints: !esi.channel<i32>)
   %intStreamBuffered = esi.buffer %clk, %rst, %intStream {stages=2, name="intChan"} : i32
-  %totalOut = hw.instance "acc" @IntAcc(clk: %clk: i1, rst: %rst: i1, ints: %intStreamBuffered: !esi.channel<i32>) -> (totalOut: i32)
+  %totalOut = hw.instance "acc" @IntAcc(clk: %clk: !seq.clock, rst: %rst: i1, ints: %intStreamBuffered: !esi.channel<i32>) -> (totalOut: i32)
   hw.output %totalOut : i32
 }
 // CHECK:      [driver] Starting simulation

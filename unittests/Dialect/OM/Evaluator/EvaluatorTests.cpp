@@ -7,8 +7,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/OM/Evaluator/Evaluator.h"
+#include "circt/Dialect/OM/OMAttributes.h"
 #include "circt/Dialect/OM/OMDialect.h"
 #include "circt/Dialect/OM/OMOps.h"
+#include "circt/Dialect/OM/OMTypes.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/DialectRegistry.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -67,8 +69,8 @@ TEST(EvaluatorTests, InstantiateInvalidParamSize) {
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   StringRef params[] = {"param"};
   auto cls = builder.create<ClassOp>("MyClass", params);
-  cls.getBody().emplaceBlock().addArgument(builder.getIntegerType(32),
-                                           cls.getLoc());
+  cls.getBody().emplaceBlock().addArgument(
+      circt::om::OMIntegerType::get(&context), cls.getLoc());
 
   Evaluator evaluator(mod);
 
@@ -100,8 +102,8 @@ TEST(EvaluatorTests, InstantiateNullParam) {
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   StringRef params[] = {"param"};
   auto cls = builder.create<ClassOp>("MyClass", params);
-  cls.getBody().emplaceBlock().addArgument(builder.getIntegerType(32),
-                                           cls.getLoc());
+  cls.getBody().emplaceBlock().addArgument(
+      circt::om::OMIntegerType::get(&context), cls.getLoc());
 
   Evaluator evaluator(mod);
 
@@ -110,8 +112,7 @@ TEST(EvaluatorTests, InstantiateNullParam) {
   });
 
   auto result =
-      evaluator.instantiate(builder.getStringAttr("MyClass"),
-                            getEvaluatorValuesFromAttributes({IntegerAttr()}));
+      evaluator.instantiate(builder.getStringAttr("MyClass"), {nullptr});
 
   ASSERT_FALSE(succeeded(result));
 }
@@ -132,8 +133,8 @@ TEST(EvaluatorTests, InstantiateInvalidParamType) {
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   StringRef params[] = {"param"};
   auto cls = builder.create<ClassOp>("MyClass", params);
-  cls.getBody().emplaceBlock().addArgument(builder.getIntegerType(32),
-                                           cls.getLoc());
+  cls.getBody().emplaceBlock().addArgument(
+      circt::om::OMIntegerType::get(&context), cls.getLoc());
 
   Evaluator evaluator(mod);
 
@@ -141,9 +142,10 @@ TEST(EvaluatorTests, InstantiateInvalidParamType) {
     ASSERT_EQ(diag.str(), "actual parameter for \"param\" has invalid type");
   });
 
-  auto result = evaluator.instantiate(
-      builder.getStringAttr("MyClass"),
-      getEvaluatorValuesFromAttributes({builder.getF32FloatAttr(42)}));
+  auto result =
+      evaluator.instantiate(builder.getStringAttr("MyClass"),
+                            getEvaluatorValuesFromAttributes(
+                                &context, {builder.getF32FloatAttr(42)}));
 
   ASSERT_FALSE(succeeded(result));
 }
@@ -198,14 +200,16 @@ TEST(EvaluatorTests, InstantiateObjectWithParamField) {
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   StringRef params[] = {"param"};
   StringRef fields[] = {"field"};
-  Type types[] = {builder.getIntegerType(32)};
+  Type types[] = {circt::om::OMIntegerType::get(&context)};
   ClassOp::buildSimpleClassOp(builder, loc, "MyClass", params, fields, types);
 
   Evaluator evaluator(mod);
 
   auto result = evaluator.instantiate(
       builder.getStringAttr("MyClass"),
-      getEvaluatorValuesFromAttributes({builder.getI32IntegerAttr(42)}));
+      getEvaluatorValuesFromAttributes(
+          &context, {circt::om::IntegerAttr::get(
+                        &context, builder.getI32IntegerAttr(42))}));
 
   ASSERT_TRUE(succeeded(result));
 
@@ -214,10 +218,10 @@ TEST(EvaluatorTests, InstantiateObjectWithParamField) {
                             ->getField(builder.getStringAttr("field"))
                             .value()
                             .get())
-                        ->getAs<IntegerAttr>();
+                        ->getAs<circt::om::IntegerAttr>();
 
   ASSERT_TRUE(fieldValue);
-  ASSERT_EQ(fieldValue.getValue(), 42);
+  ASSERT_EQ(fieldValue.getValue().getValue(), 42);
 }
 
 TEST(EvaluatorTests, InstantiateObjectWithConstantField) {
@@ -237,7 +241,8 @@ TEST(EvaluatorTests, InstantiateObjectWithConstantField) {
   auto cls = builder.create<ClassOp>("MyClass");
   auto &body = cls.getBody().emplaceBlock();
   builder.setInsertionPointToStart(&body);
-  auto constant = builder.create<ConstantOp>(builder.getI32IntegerAttr(42));
+  auto constant = builder.create<ConstantOp>(
+      circt::om::IntegerAttr::get(&context, builder.getI32IntegerAttr(42)));
   builder.create<ClassFieldOp>("field", constant);
 
   Evaluator evaluator(mod);
@@ -251,9 +256,9 @@ TEST(EvaluatorTests, InstantiateObjectWithConstantField) {
                             ->getField(builder.getStringAttr("field"))
                             .value()
                             .get())
-                        ->getAs<IntegerAttr>();
+                        ->getAs<circt::om::IntegerAttr>();
   ASSERT_TRUE(fieldValue);
-  ASSERT_EQ(fieldValue.getValue(), 42);
+  ASSERT_EQ(fieldValue.getValue().getValue(), 42);
 }
 
 TEST(EvaluatorTests, InstantiateObjectWithChildObject) {
@@ -272,24 +277,24 @@ TEST(EvaluatorTests, InstantiateObjectWithChildObject) {
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   StringRef params[] = {"param"};
   StringRef fields[] = {"field"};
-  Type types[] = {builder.getIntegerType(32)};
+  Type types[] = {circt::om::OMIntegerType::get(&context)};
   auto innerCls = ClassOp::buildSimpleClassOp(builder, loc, "MyInnerClass",
                                               params, fields, types);
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   auto cls = builder.create<ClassOp>("MyClass", params);
   auto &body = cls.getBody().emplaceBlock();
-  body.addArgument(builder.getIntegerType(32), cls.getLoc());
+  body.addArgument(circt::om::OMIntegerType::get(&context), cls.getLoc());
   builder.setInsertionPointToStart(&body);
   auto object = builder.create<ObjectOp>(innerCls, body.getArguments());
   builder.create<ClassFieldOp>("field", object);
 
   Evaluator evaluator(mod);
 
-  auto result =
-      evaluator.instantiate(builder.getStringAttr("MyClass"),
-                            {std::make_shared<evaluator::AttributeValue>(
-                                builder.getI32IntegerAttr(42))});
+  auto result = evaluator.instantiate(
+      builder.getStringAttr("MyClass"),
+      {std::make_shared<evaluator::AttributeValue>(circt::om::IntegerAttr::get(
+          &context, builder.getI32IntegerAttr(42)))});
 
   ASSERT_TRUE(succeeded(result));
 
@@ -301,9 +306,9 @@ TEST(EvaluatorTests, InstantiateObjectWithChildObject) {
   auto innerFieldValue =
       llvm::cast<evaluator::AttributeValue>(
           fieldValue->getField(builder.getStringAttr("field")).value().get())
-          ->getAs<IntegerAttr>();
+          ->getAs<circt::om::IntegerAttr>();
 
-  ASSERT_EQ(innerFieldValue.getValue(), 42);
+  ASSERT_EQ(innerFieldValue.getValue().getValue(), 42);
 }
 
 TEST(EvaluatorTests, InstantiateObjectWithFieldAccess) {
@@ -322,14 +327,14 @@ TEST(EvaluatorTests, InstantiateObjectWithFieldAccess) {
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   StringRef params[] = {"param"};
   StringRef fields[] = {"field"};
-  Type types[] = {builder.getIntegerType(32)};
+  Type types[] = {circt::om::OMIntegerType::get(&context)};
   auto innerCls = ClassOp::buildSimpleClassOp(builder, loc, "MyInnerClass",
                                               params, fields, types);
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   auto cls = builder.create<ClassOp>("MyClass", params);
   auto &body = cls.getBody().emplaceBlock();
-  body.addArgument(builder.getIntegerType(32), cls.getLoc());
+  body.addArgument(circt::om::OMIntegerType::get(&context), cls.getLoc());
   builder.setInsertionPointToStart(&body);
   auto object = builder.create<ObjectOp>(innerCls, body.getArguments());
   auto field =
@@ -340,10 +345,10 @@ TEST(EvaluatorTests, InstantiateObjectWithFieldAccess) {
 
   Evaluator evaluator(mod);
 
-  auto result =
-      evaluator.instantiate(builder.getStringAttr("MyClass"),
-                            {std::make_shared<evaluator::AttributeValue>(
-                                builder.getI32IntegerAttr(42))});
+  auto result = evaluator.instantiate(
+      builder.getStringAttr("MyClass"),
+      {std::make_shared<evaluator::AttributeValue>(circt::om::IntegerAttr::get(
+          &context, builder.getI32IntegerAttr(42)))});
 
   ASSERT_TRUE(succeeded(result));
 
@@ -352,10 +357,10 @@ TEST(EvaluatorTests, InstantiateObjectWithFieldAccess) {
                             ->getField(builder.getStringAttr("field"))
                             .value()
                             .get())
-                        ->getAs<IntegerAttr>();
+                        ->getAs<circt::om::IntegerAttr>();
 
   ASSERT_TRUE(fieldValue);
-  ASSERT_EQ(fieldValue.getValue(), 42);
+  ASSERT_EQ(fieldValue.getValue().getValue(), 42);
 }
 
 TEST(EvaluatorTests, InstantiateObjectWithChildObjectMemoized) {
@@ -409,6 +414,95 @@ TEST(EvaluatorTests, InstantiateObjectWithChildObjectMemoized) {
   ASSERT_TRUE(field2Value);
 
   ASSERT_EQ(field1Value, field2Value);
+}
+
+TEST(EvaluatorTests, AnyCastObject) {
+  DialectRegistry registry;
+  registry.insert<OMDialect>();
+
+  MLIRContext context(registry);
+  context.getOrLoadDialect<OMDialect>();
+
+  Location loc(UnknownLoc::get(&context));
+
+  ImplicitLocOpBuilder builder(loc, &context);
+
+  auto mod = builder.create<ModuleOp>(loc);
+
+  builder.setInsertionPointToStart(&mod.getBodyRegion().front());
+  auto innerCls = builder.create<ClassOp>("MyInnerClass");
+  innerCls.getBody().emplaceBlock();
+
+  builder.setInsertionPointToStart(&mod.getBodyRegion().front());
+  auto cls = builder.create<ClassOp>("MyClass");
+  auto &body = cls.getBody().emplaceBlock();
+  builder.setInsertionPointToStart(&body);
+  auto object = builder.create<ObjectOp>(innerCls, body.getArguments());
+  auto cast = builder.create<AnyCastOp>(object);
+  builder.create<ClassFieldOp>("field", cast);
+
+  Evaluator evaluator(mod);
+
+  auto result = evaluator.instantiate(builder.getStringAttr("MyClass"), {});
+
+  ASSERT_TRUE(succeeded(result));
+
+  auto *fieldValue = llvm::cast<evaluator::ObjectValue>(
+      result.value()->getField(builder.getStringAttr("field")).value().get());
+
+  ASSERT_TRUE(fieldValue);
+
+  ASSERT_EQ(fieldValue->getClassOp(), innerCls);
+}
+
+TEST(EvaluatorTests, AnyCastParam) {
+  DialectRegistry registry;
+  registry.insert<OMDialect>();
+
+  MLIRContext context(registry);
+  context.getOrLoadDialect<OMDialect>();
+
+  Location loc(UnknownLoc::get(&context));
+
+  ImplicitLocOpBuilder builder(loc, &context);
+
+  auto mod = builder.create<ModuleOp>(loc);
+
+  builder.setInsertionPointToStart(&mod.getBodyRegion().front());
+  auto innerCls = ClassOp::buildSimpleClassOp(
+      builder, builder.getLoc(), "MyInnerClass", {"param"}, {"field"},
+      {AnyType::get(&context)});
+
+  auto i64 = builder.getIntegerType(64);
+  builder.setInsertionPointToStart(&mod.getBodyRegion().front());
+  StringRef params[] = {"param"};
+  auto cls = builder.create<ClassOp>("MyClass", params);
+  auto &body = cls.getBody().emplaceBlock();
+  body.addArguments({i64}, {builder.getLoc()});
+  builder.setInsertionPointToStart(&body);
+  auto cast = builder.create<AnyCastOp>(body.getArgument(0));
+  SmallVector<Value> objectParams = {cast};
+  auto object = builder.create<ObjectOp>(innerCls, objectParams);
+  builder.create<ClassFieldOp>("field", object);
+
+  Evaluator evaluator(mod);
+
+  auto result =
+      evaluator.instantiate(builder.getStringAttr("MyClass"),
+                            getEvaluatorValuesFromAttributes(
+                                &context, {builder.getIntegerAttr(i64, 42)}));
+
+  ASSERT_TRUE(succeeded(result));
+
+  auto *fieldValue = llvm::cast<evaluator::ObjectValue>(
+      result.value()->getField(builder.getStringAttr("field")).value().get());
+
+  ASSERT_TRUE(fieldValue);
+
+  auto *innerFieldValue = llvm::cast<evaluator::AttributeValue>(
+      fieldValue->getField(builder.getStringAttr("field")).value().get());
+
+  ASSERT_EQ(innerFieldValue->getAs<mlir::IntegerAttr>().getValue(), 42);
 }
 
 } // namespace

@@ -83,12 +83,12 @@ func.func @NestedBlocks(%arg0: !arc.storage, %arg1: i4) -> i4 {
 
   // CHECK-NEXT: scf.execute_region
   %10 = scf.execute_region -> i4 {
-    // CHECK-NEXT: [[TMP0:%.+]] = arc.alloc_state
-    // CHECK-NEXT: [[CURRENT:%.+]] = arc.state_read [[S0]]
-    // CHECK-NEXT: arc.state_write [[TMP0]] = [[CURRENT]]
     // CHECK-NEXT: [[TMP1:%.+]] = arc.alloc_state
     // CHECK-NEXT: [[CURRENT:%.+]] = arc.state_read [[S1]]
     // CHECK-NEXT: arc.state_write [[TMP1]] = [[CURRENT]]
+    // CHECK-NEXT: [[TMP0:%.+]] = arc.alloc_state
+    // CHECK-NEXT: [[CURRENT:%.+]] = arc.state_read [[S0]]
+    // CHECK-NEXT: arc.state_write [[TMP0]] = [[CURRENT]]
     // CHECK-NEXT: scf.execute_region
     %3 = scf.execute_region -> i4 {
       // CHECK-NEXT: scf.execute_region

@@ -28,6 +28,10 @@ def ESI_Dialect : Dialect {
     /// Register all ESI types.
     void registerTypes();
   }];
+
+  let dependentDialects = [
+    "circt::seq::SeqDialect"
+  ];
 }
 
 class ESI_Op<string mnemonic, list<Trait> traits = []> :

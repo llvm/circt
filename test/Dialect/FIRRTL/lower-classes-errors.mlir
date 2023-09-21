@@ -57,3 +57,28 @@ firrtl.circuit "PathDontTouchDeleted" {
     %0 = firrtl.path dont_touch distinct[0]<>
   }
 }
+
+// -----
+
+firrtl.circuit "PathInstanceDeleted" {
+  firrtl.module @PathInstanceDeleted() {}
+  firrtl.class @Class() {
+    // expected-error @+2 {{Instance target was deleted}}
+    // expected-error @+1 {{failed to legalize operation 'firrtl.path' that was explicitly marked illegal}}
+    %0 = firrtl.path instance distinct[0]<>
+  }
+}
+
+// -----
+
+firrtl.circuit "NotInstance" {
+  firrtl.module @NotInstance() {
+    // expected-note @below {{target not instance or module}}
+    firrtl.wire {annotations = [{class = "circt.tracker", id = distinct[0]<>}]} : !firrtl.uint<8>
+  }
+  firrtl.class @Class() {
+    // expected-error @below {{invalid target for instance path}}
+    // expected-error @below {{failed to legalize operation 'firrtl.path' that was explicitly marked illegal}}
+    %0 = firrtl.path instance distinct[0]<>
+  }
+}

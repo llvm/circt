@@ -1237,12 +1237,14 @@ firrtl.circuit "NoDefineIntoRefSub" {
 // Can't define into a ref.cast.
 
 firrtl.circuit "NoDefineIntoRefCast" {
-  firrtl.module @NoDefineIntoRefCast(out %r: !firrtl.probe<uint<1>>) {
+  firrtl.module @NoDefineIntoRefCast(
     // expected-note @below {{the destination was defined here}}
+      out %r: !firrtl.probe<uint<1>>
+      ) {
     %dest_cast = firrtl.ref.cast %r : (!firrtl.probe<uint<1>>) -> !firrtl.probe<uint>
     %x = firrtl.wire : !firrtl.uint
     %xref = firrtl.ref.send %x : !firrtl.uint
-    // expected-error @below {{has invalid flow: the destination expression has source flow, expected sink or duplex flow}}
+    // expected-error @below {{has invalid flow: the destination expression "r" has source flow, expected sink or duplex flow}}
     firrtl.ref.define %dest_cast, %xref : !firrtl.probe<uint>
   }
 }

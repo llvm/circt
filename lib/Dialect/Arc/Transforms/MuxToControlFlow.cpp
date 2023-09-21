@@ -12,14 +12,23 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/Arc/ArcInterfaces.h"
+#include "circt/Dialect/Arc/ArcOps.h"
+#include "circt/Dialect/Arc/ArcPasses.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "arc-mux-to-control-flow"
+
+namespace circt {
+namespace arc {
+#define GEN_PASS_DEF_MUXTOCONTROLFLOW
+#include "circt/Dialect/Arc/ArcPasses.h.inc"
+} // namespace arc
+} // namespace circt
 
 using namespace circt;
 using namespace arc;
@@ -32,7 +41,7 @@ namespace {
 
 /// Convert muxes to if-statements.
 struct MuxToControlFlowPass
-    : public MuxToControlFlowBase<MuxToControlFlowPass> {
+    : public arc::impl::MuxToControlFlowBase<MuxToControlFlowPass> {
   MuxToControlFlowPass() = default;
   MuxToControlFlowPass(const MuxToControlFlowPass &pass)
       : MuxToControlFlowPass() {}

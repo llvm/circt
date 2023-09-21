@@ -8,6 +8,16 @@
 
 include "mlir/Pass/PassBase.td"
 
+def FreezePaths: Pass<"om-freeze-paths", "mlir::ModuleOp"> {
+  let summary = "Hard code all path information";
+  let description = [{
+    Replaces paths to hardware with hard-coded string paths.  This pass should
+    only run once the hierarchy will no longer change, and the final names for
+    objects have been decided.
+  }];
+  let constructor = "circt::om::createFreezePathsPass()";
+}
+
 def LinkModules: Pass<"om-link-modules", "mlir::ModuleOp"> {
   let summary = "Link separated OM modules into a single module";
   let description = [{

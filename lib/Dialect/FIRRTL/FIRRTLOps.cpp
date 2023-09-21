@@ -23,9 +23,9 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/DialectImplementation.h"
-#include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/SymbolTable.h"
+#include "mlir/Interfaces/FunctionImplementation.h"
 #include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
@@ -1879,10 +1879,6 @@ hw::ModulePortInfo InstanceOp::getPortList() {
   return cast<hw::PortList>(getReferencedModuleSlow()).getPortList();
 }
 
-Operation *InstanceOp::getReferencedModule(SymbolTable &symbolTable) {
-  return symbolTable.lookup(getModuleNameAttr().getLeafReference());
-}
-
 void InstanceOp::build(OpBuilder &builder, OperationState &result,
                        TypeRange resultTypes, StringRef moduleName,
                        StringRef name, NameKindEnum nameKind,
@@ -2941,7 +2937,7 @@ static LogicalResult checkConnectFlow(Operation *connect) {
     // A sink that is a port output or instance input used as a source is okay.
     auto kind = getDeclarationKind(src);
     if (kind != DeclKind::Port && kind != DeclKind::Instance) {
-      auto srcRef = getFieldRefFromValue(src);
+      auto srcRef = getFieldRefFromValue(src, /*lookThroughCasts=*/true);
       auto [srcName, rootKnown] = getFieldName(srcRef);
       auto diag = emitError(connect->getLoc());
       diag << "connect has invalid flow: the source expression ";
@@ -2954,7 +2950,7 @@ static LogicalResult checkConnectFlow(Operation *connect) {
 
   auto dstFlow = foldFlow(dst);
   if (!isValidDst(dstFlow)) {
-    auto dstRef = getFieldRefFromValue(dst);
+    auto dstRef = getFieldRefFromValue(dst, /*lookThroughCasts=*/true);
     auto [dstName, rootKnown] = getFieldName(dstRef);
     auto diag = emitError(connect->getLoc());
     diag << "connect has invalid flow: the destination expression ";

@@ -473,7 +473,8 @@ bool circt::firrtl::walkDrivers(FIRRTLBaseValue value, bool lookThroughWires,
 // FieldRef helpers
 //===----------------------------------------------------------------------===//
 
-FieldRef circt::firrtl::getFieldRefFromValue(Value value) {
+FieldRef circt::firrtl::getFieldRefFromValue(Value value,
+                                             bool lookThroughCasts) {
   // This code walks upwards from the subfield and calculates the field ID at
   // each level. At each stage, it must take the current id, and re-index it as
   // a nested bundle under the parent field.. This is accomplished by using the
@@ -488,6 +489,12 @@ FieldRef circt::firrtl::getFieldRefFromValue(Value value) {
 
     auto handled =
         TypeSwitch<Operation *, bool>(op)
+            .Case<RefCastOp, ConstCastOp, UninferredResetCastOp>([&](auto op) {
+              if (!lookThroughCasts)
+                return false;
+              value = op.getInput();
+              return true;
+            })
             .Case<SubfieldOp, OpenSubfieldOp>([&](auto subfieldOp) {
               value = subfieldOp.getInput();
               typename decltype(subfieldOp)::InputType bundleType =

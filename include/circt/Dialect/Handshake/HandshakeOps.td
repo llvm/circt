@@ -16,6 +16,19 @@ include "mlir/IR/BuiltinTypes.td"
 include "mlir/IR/BuiltinAttributeInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 
+// @mortbopet: some kind of support for interfaces as parent ops is currently
+// being tracked here: https://github.com/llvm/llvm-project/pull/66196
+class HasParentInterface<string interface>
+    : ParamNativeOpTrait<"HasParentInterface", interface>, StructuralOpTrait {}
+
+// Base class for Handshake dialect ops.
+class Handshake_Op<string mnemonic, list<Trait> traits = []>
+    : Op<Handshake_Dialect, mnemonic,
+         traits #[HasParentInterface<"FineGrainedDataflowRegionOpInterface">,
+         DeclareOpInterfaceMethods<NamedIOInterface>,
+         DeclareOpInterfaceMethods<ControlInterface>]> {
+}
+
 // This is almost exactly like a standard FuncOp, except that it has some
 // extra verification conditions.  In particular, each Value must
 // only have a single use.  Also, it defines a Dominance-Free Scope
@@ -25,7 +38,8 @@ def FuncOp : Op<Handshake_Dialect, "func", [
    Symbol,
    RegionKindInterface,
    OpAsmOpInterface,
-   HasClock
+   HasClock,
+   FineGrainedDataflowRegionOpInterface
 ]> {
   let summary = "Handshake dialect function.";
   let description = [{
@@ -56,6 +70,11 @@ def FuncOp : Op<Handshake_Dialect, "func", [
 
     /// Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
+
+    /// Returns the region on the current operation that is callable.
+    ::mlir::Region *getCallableRegion() {
+      return &getBody();
+    }
 
     /// Returns the argument types of this function.
     ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }

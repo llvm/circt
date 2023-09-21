@@ -12,7 +12,7 @@
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "circt/Dialect/DC/DCDialect.td"
 include "circt/Dialect/DC/DCTypes.td"
-include "mlir/IR/FunctionInterfaces.td"
+include "mlir/Interfaces/FunctionInterfaces.td"
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/RegionKindInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
@@ -20,7 +20,6 @@ include "mlir/Interfaces/CallInterfaces.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/IR/BuiltinAttributes.td"
-include "mlir/IR/FunctionInterfaces.td"
 include "circt/Dialect/ESI/ESITypes.td"
 
 class DCOp<string mnemonic, list<Trait> traits = []> :

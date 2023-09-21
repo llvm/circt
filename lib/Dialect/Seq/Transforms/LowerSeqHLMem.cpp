@@ -91,8 +91,9 @@ public:
       rewriter.eraseOp(writeOp);
     }
 
+    auto hwClk = rewriter.create<seq::FromClockOp>(clk.getLoc(), clk);
     rewriter.create<sv::AlwaysFFOp>(
-        mem.getLoc(), sv::EventControl::AtPosEdge, clk, ResetType::SyncReset,
+        mem.getLoc(), sv::EventControl::AtPosEdge, hwClk, ResetType::SyncReset,
         sv::EventControl::AtPosEdge, rst, [&] {
           for (auto [loc, address, data, en] : writeTuples) {
             Value a = address, d = data; // So the lambda can capture.

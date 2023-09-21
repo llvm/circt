@@ -345,10 +345,15 @@ firrtl.module @BoolTest(in %in: !firrtl.bool, out %out: !firrtl.bool) {
 }
 
 // CHECK-LABEL: AnyRefTest
-// CHECK-SAME: (in %in: !firrtl.anyref, out %out: !firrtl.anyref)
-firrtl.module @AnyRefTest(in %in: !firrtl.anyref, out %out: !firrtl.anyref) {
+// CHECK-SAME: (in %in: !firrtl.anyref, out %out: !firrtl.anyref, in %[[REF:.+]]: !firrtl.class<@ClassTest()>, out %[[REF_OUT:.+]]: !firrtl.anyref)
+firrtl.module @AnyRefTest(in %in: !firrtl.anyref, out %out: !firrtl.anyref, in %ref: !firrtl.class<@ClassTest()>, out %anyref: !firrtl.anyref) {
   // CHECK: firrtl.propassign %out, %in : !firrtl.anyref
   firrtl.propassign %out, %in : !firrtl.anyref
+
+  // CHECK: %[[CAST:.+]] = firrtl.object.anyref_cast %[[REF]]
+  // CHECK: firrtl.propassign %[[REF_OUT]], %[[CAST]]
+  %0 = firrtl.object.anyref_cast %ref : !firrtl.class<@ClassTest()>
+  firrtl.propassign %anyref, %0 : !firrtl.anyref
 }
 
 // CHECK-LABEL: TypeAlias
