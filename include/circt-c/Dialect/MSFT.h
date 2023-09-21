@@ -21,7 +21,7 @@ extern "C" {
 
 MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(MSFT, msft);
 
-MLIR_CAPI_EXPORTED void mlirMSFTRegisterPasses();
+MLIR_CAPI_EXPORTED void mlirMSFTRegisterPasses(void);
 
 // Values represented in `MSFT.td`.
 typedef int32_t CirctMSFTPrimitiveType;

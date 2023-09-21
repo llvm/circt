@@ -12,7 +12,7 @@ extern "C" {
 #endif
 
 MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(Handshake, handshake);
-MLIR_CAPI_EXPORTED void registerHandshakePasses();
+MLIR_CAPI_EXPORTED void registerHandshakePasses(void);
 
 #ifdef __cplusplus
 }

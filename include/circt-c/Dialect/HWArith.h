@@ -18,7 +18,7 @@ extern "C" {
 #endif
 
 MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(HWArith, hwarith);
-MLIR_CAPI_EXPORTED void registerHWArithPasses();
+MLIR_CAPI_EXPORTED void registerHWArithPasses(void);
 
 #ifdef __cplusplus
 }

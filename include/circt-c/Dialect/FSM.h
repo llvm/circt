@@ -18,7 +18,7 @@ extern "C" {
 #endif
 
 MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(FSM, fsm);
-MLIR_CAPI_EXPORTED void registerFSMPasses();
+MLIR_CAPI_EXPORTED void registerFSMPasses(void);
 
 #ifdef __cplusplus
 }
