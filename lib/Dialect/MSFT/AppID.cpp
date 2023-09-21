@@ -82,11 +82,23 @@ AppIDIndex::~AppIDIndex() {
 }
 
 ArrayAttr AppIDIndex::getChildAppIDsOf(hw::HWModuleLike fromMod) const {
-  const ModuleAppIDs *fromModIdx = containerAppIDs.find(fromMod)->getSecond();
-  SmallVector<Attribute, 8> appids;
+  auto f = containerAppIDs.find(fromMod);
+  if (f == containerAppIDs.end())
+    return ArrayAttr::get(fromMod.getContext(), {});
+
+  const ModuleAppIDs *fromModIdx = f->getSecond();
+  SmallVector<AppIDAttr, 8> appids;
   for (AppIDAttr childID : fromModIdx->getAppIDs())
     appids.push_back(childID);
-  return ArrayAttr::get(fromMod.getContext(), appids);
+  llvm::sort(appids, [](const AppIDAttr a, const AppIDAttr b) {
+    if (a.getName() == b.getName())
+      return a.getIndex() < b.getIndex();
+    return a.getName().compare(b.getName()) > 0;
+  });
+
+  SmallVector<Attribute, 8> attrs(
+      llvm::map_range(appids, [](AppIDAttr a) -> Attribute { return a; }));
+  return ArrayAttr::get(fromMod.getContext(), attrs);
 }
 
 FailureOr<ArrayAttr> AppIDIndex::getAppIDPathAttr(hw::HWModuleLike fromMod,

@@ -354,5 +354,6 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
       .def("get_appid_path", &PyAppIDIndex::getAppIDPathAttr,
            "Return an array of InnerNameRefAttrs representing the relative "
            "path to 'appid' from 'fromMod'.",
-           py::arg("from_mod"), py::arg("appid"), py::arg("loc") = py::none());
+           py::arg("from_mod"), py::arg("appid"),
+           py::arg("query_site") = py::none());
 }
