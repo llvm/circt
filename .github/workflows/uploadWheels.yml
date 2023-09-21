@@ -61,8 +61,6 @@ jobs:
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
           CIBW_BUILD_FRONTEND: build
           SETUPTOOLS_SCM_DEBUG: True
-          CIBW_ARCHS_MACOS: universal2
-          CIBW_TEST_SKIP: '*universal2:arm64'
 
       - name: Upload (stage) wheels as artifacts
         uses: actions/upload-artifact@v3
