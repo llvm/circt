@@ -1707,13 +1707,11 @@ circuit BasicProps :
   module Double :
      ; CHECK-SAME: out %x: !firrtl.double
      ; CHECK-SAME: out %y: !firrtl.double
-     ; CHECK-SAME: out %z: !firrtl.double
      ; CHECK-SAME: out %negzero: !firrtl.double
      ; CHECK-SAME: out %twoTo64: !firrtl.double
      ; CHECK-SAME: out %exp: !firrtl.double
      output x : Double
      output y : Double
-     output z : Double
      output negzero : Double
      output twoTo64 : Double
      output exp : Double
@@ -1722,18 +1720,13 @@ circuit BasicProps :
      ; CHECK: propassign
      propassign x, Double(0.1111111111111111111111111111111111111111)
      ; CHECK: firrtl.double 1.{{0*[eE]}}+00
-     propassign z, Double(1.0)
+     propassign y, Double(1.0)
      ; CHECK: firrtl.double -0.{{0+[eE]}}+00
      propassign negzero, Double(-0.0)
      ; CHECK: firrtl.double 1.844674407370955{{[0-9]*[eE]}}+
      propassign twoTo64, Double(18446744073709551616.0)
      ; CHECK: firrtl.double 1.2{{.+[eE]}}+30
      propassign exp, Double(1.2E+30)
-
-   ; ERRORS:
-     ; propassign y, Double(-.5) ; nope
-     ; propassign y, Double(Nan) ; nope
-     ; propassign y, Double(0x23434) ; nope
 
   ; CHECK-LABEL: module private @String
   module String :
