@@ -425,6 +425,31 @@ firrtl.circuit "NonPassiveSource" {
 
 // -----
 
+// Non-ground source: HW.
+
+// CHECK-LABEL: "AggSourceHW"
+firrtl.circuit "AggSourceHW" {
+  // CHECK:      @Select
+  // CHECK-NOT: out %out
+  // CHECK-NEXT:   firrtl.subindex
+  // CHECK-NEXT: }
+  firrtl.module private @Select(in %in: !firrtl.vector<uint<1>, 5>,
+                               out %out : !firrtl.uint<1>) {
+    %sel = firrtl.subindex %in[3] : !firrtl.vector<uint<1>, 5>
+    firrtl.strictconnect %out, %sel : !firrtl.uint<1>
+  }
+  // CHECK: @AggSourceHW
+  firrtl.module @AggSourceHW(in %in : !firrtl.vector<uint<1>, 5>, out %out : !firrtl.uint<1>) {
+    %s_in, %s_out = firrtl.instance s @Select(in in : !firrtl.vector<uint<1>, 5>,
+                                              out out : !firrtl.uint<1>)
+    // CHECK: firrtl.subindex
+    firrtl.strictconnect %s_in, %in : !firrtl.vector<uint<1>, 5>
+    firrtl.strictconnect %out, %s_out : !firrtl.uint<1>
+  }
+}
+
+// -----
+
 // Reject non-ground dest (for now).
 
 // CHECK-LABEL: "AggHW"
@@ -531,5 +556,69 @@ firrtl.circuit "HWForceable" {
                                              out out : !firrtl.uint<1>)
     firrtl.strictconnect %u_in, %in : !firrtl.uint<1>
     firrtl.strictconnect %out, %u_out : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// Multiple layers of probe aggregate.
+
+// CHECK-LABEL: "AggAgg"
+firrtl.circuit "AggAgg" {
+  // CHECK-NOT: out %out
+  firrtl.module private @IndexIndex(in %in : !firrtl.probe<vector<vector<uint<1>, 5>, 5>>, out %out : !firrtl.probe<uint<1>>) {
+    %vec_sel = firrtl.ref.sub %in[1] : !firrtl.probe<vector<vector<uint<1>, 5>, 5>>
+    %vec_wire = firrtl.wire : !firrtl.probe<vector<uint<1>, 5>>
+    firrtl.ref.define %vec_wire, %vec_sel: !firrtl.probe<vector<uint<1>, 5>>
+    %sel = firrtl.ref.sub %vec_wire[3] : !firrtl.probe<vector<uint<1>, 5>>
+    firrtl.ref.define %out, %sel : !firrtl.probe<uint<1>>
+  }
+  // CHECK: @AggAgg
+  firrtl.module @AggAgg(in %in : !firrtl.vector<vector<uint<1>, 5>, 5>, out %out : !firrtl.uint<1>) {
+    %ref = firrtl.ref.send %in : !firrtl.vector<vector<uint<1>, 5>, 5>
+    // CHECK: %[[IN:.+]] = firrtl.instance
+    %ii_in, %ii_out = firrtl.instance ii @IndexIndex(in in : !firrtl.probe<vector<vector<uint<1>, 5>, 5>>, out out : !firrtl.probe<uint<1>>)
+    firrtl.ref.define %ii_in, %ref : !firrtl.probe<vector<vector<uint<1>, 5>, 5>>
+    // CHECK: %[[IN_1:.+]] = firrtl.ref.sub %[[IN]][1]
+    // CHECK: %[[IN_1_3:.+]] = firrtl.ref.sub %[[IN_1]][3]
+    // CHECK: ref.resolve %[[IN_1_3]]
+    %read = firrtl.ref.resolve %ii_out : !firrtl.probe<uint<1>>
+    firrtl.strictconnect %out, %read : !firrtl.uint<1>
+  }
+}
+
+// -----
+// Leave property signals as-is, for now.
+
+// CHECK-LABEL: "SimpleProp"
+firrtl.circuit "SimpleProp" {
+  // CHECK:      module private @UTurn(in %in: !firrtl.string, out %out
+  firrtl.module private @UTurn(in %in: !firrtl.string,
+                               out %out : !firrtl.string) {
+    firrtl.propassign %out, %in : !firrtl.string
+  }
+  firrtl.module @SimpleProp(in %in : !firrtl.string, out %out : !firrtl.string) {
+    %u_in, %u_out = firrtl.instance u @UTurn(in in : !firrtl.string,
+                                             out out : !firrtl.string)
+    firrtl.propassign %u_in, %in : !firrtl.string
+    firrtl.propassign %out, %u_out : !firrtl.string
+  }
+}
+
+// -----
+// Leave foreign types as-is, for now.
+
+// CHECK-LABEL: "SimpleForeign"
+firrtl.circuit "SimpleForeign" {
+  // CHECK:      module private @UTurn(in %in: i1, out %out: i1)
+  firrtl.module private @UTurn(in %in: i1,
+                               out %out : i1) {
+    firrtl.strictconnect %out, %in : i1
+  }
+  firrtl.module @SimpleForeign(in %in : i1, out %out : i1) {
+    %u_in, %u_out = firrtl.instance u @UTurn(in in : i1,
+                                             out out : i1)
+    firrtl.strictconnect %u_in, %in : i1
+    firrtl.strictconnect %out, %u_out : i1
   }
 }
