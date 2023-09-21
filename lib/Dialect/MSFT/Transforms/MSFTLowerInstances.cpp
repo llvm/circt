@@ -46,13 +46,13 @@ struct LowerInstancesPass : public LowerInstancesBase<LowerInstancesPass> {
   SymbolCache topSyms;
 
   // In order to be efficient, cache the "symbols" in each module.
-  DenseMap<MSFTModuleOp, SymbolCache> perModSyms;
+  DenseMap<hw::HWModuleLike, SymbolCache> perModSyms;
   // Accessor for `perModSyms` which lazily constructs each cache.
-  const SymbolCache &getSyms(MSFTModuleOp mod);
+  const SymbolCache &getSyms(hw::HWModuleLike mod);
 };
 } // anonymous namespace
 
-const SymbolCache &LowerInstancesPass::getSyms(MSFTModuleOp mod) {
+const SymbolCache &LowerInstancesPass::getSyms(hw::HWModuleLike mod) {
   auto symsFound = perModSyms.find(mod);
   if (symsFound != perModSyms.end())
     return symsFound->getSecond();
@@ -99,8 +99,8 @@ LogicalResult LowerInstancesPass::lower(DynamicInstanceOp inst,
     // back reference to the global ref which is replacing us.
     bool symNotFound = false;
     for (auto innerRef : globalRefPath.getAsRange<hw::InnerRefAttr>()) {
-      MSFTModuleOp mod =
-          cast<MSFTModuleOp>(topSyms.getDefinition(innerRef.getModule()));
+      auto mod =
+          cast<hw::HWModuleLike>(topSyms.getDefinition(innerRef.getModule()));
       const SymbolCache &modSyms = getSyms(mod);
       Operation *tgtOp = modSyms.getDefinition(innerRef.getName());
       if (!tgtOp) {

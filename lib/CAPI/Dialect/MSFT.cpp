@@ -303,3 +303,23 @@ MLIR_CAPI_EXPORTED MlirOperation circtMSFTAppIDIndexGetInstance(
     return MlirOperation{nullptr};
   return wrap(*dynInst);
 }
+
+MLIR_CAPI_EXPORTED MlirAttribute
+circtMSFTAppIDIndexGetChildAppIDsOf(CirctMSFTAppIDIndex idx, MlirOperation op) {
+  auto mod = cast<hw::HWModuleLike>(unwrap(op));
+  return wrap(unwrap(idx)->getChildAppIDsOf(mod));
+}
+
+MLIR_CAPI_EXPORTED
+MlirAttribute circtMSFTAppIDIndexGetAppIDPath(CirctMSFTAppIDIndex idx,
+                                              MlirOperation fromMod,
+                                              MlirAttribute appid,
+                                              MlirLocation loc) {
+  auto mod = cast<hw::HWModuleLike>(unwrap(fromMod));
+  auto path = cast<msft::AppIDAttr>(unwrap(appid));
+  FailureOr<ArrayAttr> instPath =
+      unwrap(idx)->getAppIDPathAttr(mod, path, unwrap(loc));
+  if (failed(instPath))
+    return MlirAttribute{nullptr};
+  return wrap(*instPath);
+}

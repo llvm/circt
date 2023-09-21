@@ -34,6 +34,14 @@ public:
   // a LogicalResult return. (This is where exceptions would be useful.)
   bool isValid() const { return valid; }
 
+  // Return an array of AppIDAttrs which are contained in the module.
+  ArrayAttr getChildAppIDsOf(hw::HWModuleLike) const;
+
+  /// Return an array of InnerNameRefAttrs representing the relative path to
+  /// 'appid' from 'fromMod'.
+  FailureOr<ArrayAttr> getAppIDPathAttr(hw::HWModuleLike fromMod,
+                                        AppIDAttr appid, Location loc) const;
+
   /// Get the dynamic instance for a particular appid path. If one doesn't
   /// already exist, if will be created.
   FailureOr<DynamicInstanceOp> getInstance(AppIDPathAttr path,

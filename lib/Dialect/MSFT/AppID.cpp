@@ -81,6 +81,42 @@ AppIDIndex::~AppIDIndex() {
     delete childAppIDs;
 }
 
+ArrayAttr AppIDIndex::getChildAppIDsOf(hw::HWModuleLike fromMod) const {
+  const ModuleAppIDs *fromModIdx = containerAppIDs.find(fromMod)->getSecond();
+  SmallVector<Attribute, 8> appids;
+  for (AppIDAttr childID : fromModIdx->getAppIDs())
+    appids.push_back(childID);
+  return ArrayAttr::get(fromMod.getContext(), appids);
+}
+
+FailureOr<ArrayAttr> AppIDIndex::getAppIDPathAttr(hw::HWModuleLike fromMod,
+                                                  AppIDAttr appid,
+                                                  Location loc) const {
+  SmallVector<Attribute, 8> path;
+  do {
+    auto f = containerAppIDs.find(fromMod);
+    if (f == containerAppIDs.end())
+      return emitError(loc, "Could not find appid index for module '")
+             << fromMod.getName() << "'";
+
+    const ModuleAppIDs *modIDs = f->getSecond();
+    FailureOr<hw::InnerSymbolOpInterface> op = modIDs->lookup(appid, loc);
+    if (failed(op))
+      return failure();
+    path.push_back(op->getInnerRef());
+
+    if (op->getOperation()->hasAttr(AppIDAttr::AppIDAttrName))
+      break;
+
+    if (auto inst = dyn_cast<hw::HWInstanceLike>(op->getOperation()))
+      fromMod = cast<hw::HWModuleLike>(
+          symCache.getDefinition(inst.getReferencedModuleNameAttr()));
+    else
+      assert(false && "Search bottomed out");
+  } while (true);
+  return ArrayAttr::get(fromMod.getContext(), path);
+}
+
 FailureOr<DynamicInstanceOp> AppIDIndex::getInstance(AppIDPathAttr path,
                                                      Location loc) const {
   // Resolve the module at the root of the path.
