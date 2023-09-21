@@ -64,6 +64,14 @@ class CMakeBuild(build_py):
     llvm_dir = os.getenv("CIRCT_LLVM_DIR")
     if not llvm_dir:
       llvm_dir = os.path.join(circt_dir, "llvm", "llvm")
+
+    # Use Ninja if available.
+    exist_ninja = shutil.which("ninja") is not None
+    cmake_generator = ["-G", "Ninja"] if exist_ninja else []
+
+    # Use lld if available.
+    exist_lld = shutil.which("lld") is not None
+    cmake_linker = ["-DLLVM_USE_LINKER=lld"] if exist_lld else []
     cmake_args = [
         "-DCMAKE_BUILD_TYPE=Release",  # not used on MSVC, but no harm
         "-DCMAKE_INSTALL_PREFIX={}".format(os.path.abspath(cmake_install_dir)),
@@ -76,8 +84,8 @@ class CMakeBuild(build_py):
         "-DMLIR_ENABLE_BINDINGS_PYTHON=ON",
         "-DCIRCT_BINDINGS_PYTHON_ENABLED=ON",
         "-DCIRCT_RELEASE_TAG_ENABLED=ON",
-        "-DCIRCT_RELEASE_TAG=firtool",
-    ]
+        "-DCIRCT_RELEASE_TAG=firtool"
+    ] + cmake_linker + cmake_generator
 
     # HACK: CMake fails to auto-detect static linked Python installations, which
     # happens to be what exists on manylinux. We detect this and give it a dummy
