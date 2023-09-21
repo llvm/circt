@@ -1,7 +1,6 @@
 add_circt_dialect_library(CIRCTMSFTTransforms
   MSFTExportTcl.cpp
   MSFTLowerInstances.cpp
-  MSFTDiscoverAppIDs.cpp
   MSFTLowerConstructs.cpp
   PassCommon.cpp
 
