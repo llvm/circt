@@ -28,7 +28,7 @@ instance_like_impl::getReferencedModule(const HWSymbolCache *cache,
 LogicalResult instance_like_impl::verifyReferencedModule(
     Operation *instanceOp, SymbolTableCollection &symbolTable,
     mlir::FlatSymbolRefAttr moduleName, Operation *&module) {
-  module = symbolTable.lookupNearestSymbolFrom(instanceOp, moduleName);
+  module = getReferencedModule(nullptr, instanceOp, moduleName);
   if (module == nullptr)
     return instanceOp->emitError("Cannot find module definition '")
            << moduleName.getValue() << "'";
