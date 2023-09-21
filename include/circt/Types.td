@@ -43,4 +43,19 @@ def DistinctAttr : Attr<CPred<"$_self.isa<::mlir::DistinctAttr>()">,
   let convertFromStorage = "$_self";
 }
 
+def FloatAttr : Attr<CPred<"$_self.isa<::mlir::FloatAttr>()">,
+                      "float attribute"> {
+  let storageType = [{ ::mlir::FloatAttr }];
+  let returnType = [{ ::mlir::FloatAttr }];
+  let convertFromStorage = "$_self";
+}
+
+def DoubleAttr : Attr<And<[CPred<"$_self.isa<::mlir::FloatAttr>()">,
+                           CPred<"cast<::mlir::FloatAttr>($_self).getType().isF64()">]>,
+                      "double-precision float"> {
+  let storageType = [{ ::mlir::FloatAttr }];
+  let returnType = [{ ::mlir::FloatAttr }];
+  let convertFromStorage = "$_self";
+}
+
 #endif // CIRCT_TYPES

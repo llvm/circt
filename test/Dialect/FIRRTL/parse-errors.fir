@@ -1156,3 +1156,57 @@ circuit NotContravariant:
     object obj of Class
     ; expected-error @below {{cannot propassign non-equivalent type '!firrtl.list<anyref>' to '!firrtl.list<class<@Class()>>'}}
     propassign list, List<AnyRef>(obj)
+
+;// -----
+; Double: must have digit before point.
+FIRRTL version 3.2.0
+circuit DoubleNegPeriod:
+  module DoubleNegPeriod:
+    output d : Double
+    ; expected-error @below {{unexpected character after sign}}
+    propassign d, Double(-.5)
+
+;// -----
+; Double: must have digit after point.
+FIRRTL version 3.2.0
+circuit DoublePeriodEnd:
+  module DoublePeriodEnd:
+    output d : Double
+    ; expected-error @below {{expected floating point in Double expression}}
+    propassign d, Double(0.)
+
+;// -----
+; Double: Not an integer.
+FIRRTL version 3.2.0
+circuit DoubleInteger:
+  module DoubleInteger:
+    output d : Double
+    ; expected-error @below {{expected floating point in Double expression}}
+    propassign d, Double(0)
+
+;// -----
+; Double: don't support NaN or inf.
+FIRRTL version 3.2.0
+circuit DoubleNaN:
+  module DoubleNaN:
+    output d : Double
+    ; expected-error @below {{expected floating point in Double expression}}
+    propassign d, Double(NaN)
+
+;// -----
+; Double: Don't suuport hex.
+FIRRTL version 3.2.0
+circuit DoubleHex:
+  module DoubleHex:
+    output d : Double
+    ; expected-error @below {{expected floating point in Double expression}}
+    propassign d, Double(0x0)
+
+;// -----
+; Double: Don't suuport FIRRTL-y radix.
+FIRRTL version 3.2.0
+circuit DoubleRadix:
+  module DoubleRadix:
+    output d : Double
+    ; expected-error @below {{expected floating point in Double expression}}
+    propassign d, Double(0hABC)

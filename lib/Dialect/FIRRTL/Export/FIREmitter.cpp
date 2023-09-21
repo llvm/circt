@@ -114,6 +114,7 @@ struct Emitter {
   void emitExpression(StringConstantOp op);
   void emitExpression(FIntegerConstantOp op);
   void emitExpression(BoolConstantOp op);
+  void emitExpression(DoubleConstantOp op);
   void emitExpression(ListCreateOp op);
   void emitExpression(UnresolvedPathOp op);
 
@@ -1039,7 +1040,8 @@ void Emitter::emitExpression(Value value) {
           // Miscellaneous
           BitsPrimOp, HeadPrimOp, TailPrimOp, PadPrimOp, MuxPrimOp, ShlPrimOp,
           ShrPrimOp, UninferredResetCastOp, ConstCastOp, StringConstantOp,
-          FIntegerConstantOp, BoolConstantOp, ListCreateOp, UnresolvedPathOp,
+          FIntegerConstantOp, BoolConstantOp, DoubleConstantOp, ListCreateOp,
+          UnresolvedPathOp,
           // Reference expressions
           RefSendOp, RefResolveOp, RefSubOp, RWProbeOp, RefCastOp>(
           [&](auto op) {
@@ -1199,6 +1201,18 @@ void Emitter::emitExpression(BoolConstantOp op) {
   ps << "Bool(" << (op.getValue() ? "true" : "false") << ")";
 }
 
+void Emitter::emitExpression(DoubleConstantOp op) {
+  ps << "Double(";
+  // Use APFloat::toString.
+  // Printing as double is not what we want,
+  // and this at least handles the basic cases in a way
+  // that will round-trip.
+  SmallString<16> str;
+  op.getValueAttr().getValue().toString(str);
+  ps << str;
+  ps << ")";
+}
+
 void Emitter::emitExpression(StringConstantOp op) {
   ps << "String(";
   ps.writeQuotedEscaped(op.getValue());
@@ -1325,6 +1339,7 @@ void Emitter::emitType(Type type, bool includeConst) {
       .Case<StringType>([&](StringType type) { ps << "String"; })
       .Case<FIntegerType>([&](FIntegerType type) { ps << "Integer"; })
       .Case<BoolType>([&](BoolType type) { ps << "Bool"; })
+      .Case<DoubleType>([&](DoubleType type) { ps << "Double"; })
       .Case<PathType>([&](PathType type) { ps << "Path"; })
       .Case<ListType>([&](ListType type) {
         ps << "List<";

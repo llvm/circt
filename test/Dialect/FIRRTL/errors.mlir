@@ -2239,6 +2239,15 @@ firrtl.circuit "InvalidBool" {
 
 // -----
 
+firrtl.circuit "InvalidDouble" {
+  firrtl.module @InvalidDouble() {
+     // expected-error @below {{invalid kind of attribute specified}}
+     %0 = firrtl.double "invalid"
+  }
+}
+
+// -----
+
 firrtl.circuit "InvalidInnerSymTooHigh" {
   firrtl.module @InvalidInnerSymTooHigh () {
     // expected-error @below {{field id:'1' is greater than the maximum field id:'0'}}

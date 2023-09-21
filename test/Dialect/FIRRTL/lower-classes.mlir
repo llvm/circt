@@ -143,6 +143,14 @@ firrtl.circuit "Component" {
     firrtl.propassign %b, %true : !firrtl.bool
   }
 
+  // CHECK-LABEL: om.class @DoubleTest()
+  firrtl.class @DoubleTest(out %d : !firrtl.double) {
+    // CHECK-NEXT: %[[DBL:.+]] = om.constant 4.0{{0*[eE]}}-01 : f64
+    // CHECK-NEXT: om.class.field @d, %[[DBL]] : f64
+    %dbl = firrtl.double 0.4
+    firrtl.propassign %d, %dbl: !firrtl.double
+  }
+
   // CHECK-LABEL: om.class @MapTest
   firrtl.class @MapTest(in %s1: !firrtl.string,
                         in %s2: !firrtl.string,

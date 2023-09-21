@@ -39,6 +39,7 @@ firrtl.circuit "Foo" {
     // CHECK-NEXT: input string : String
     // CHECK-NEXT: input integer : Integer
     // CHECK-NEXT: input bool : Bool
+    // CHECK-NEXT: input double : Double
     // CHECK-NEXT: input path : Path
     // CHECK-NEXT: input list : List<List<Path>>
     in %a00: !firrtl.clock,
@@ -59,6 +60,7 @@ firrtl.circuit "Foo" {
     in %string: !firrtl.string,
     in %integer: !firrtl.integer,
     in %bool : !firrtl.bool,
+    in %double : !firrtl.double,
     in %path : !firrtl.path,
     in %list : !firrtl.list<list<path>>
   ) {}
@@ -649,6 +651,7 @@ firrtl.circuit "Foo" {
   firrtl.module @Properties(out %string : !firrtl.string,
                             out %integer : !firrtl.integer,
                             out %bool : !firrtl.bool,
+                            out %double : !firrtl.double,
                             out %path : !firrtl.path,
                             out %list : !firrtl.list<list<string>>) {
     // CHECK: propassign string, String("hello")
@@ -662,6 +665,10 @@ firrtl.circuit "Foo" {
     // CHECK: propassign bool, Bool(true)
     %true = firrtl.bool true
     firrtl.propassign %bool, %true : !firrtl.bool
+
+    // CHECK: propassign double, Double(0.3333{{[0-9]*}})
+    %d = firrtl.double 0.333333333333333333333333333333333333333
+    firrtl.propassign %double, %d : !firrtl.double
 
     // CHECK: propassign path, path("OMDeleted")
     %p = firrtl.unresolved_path "OMDeleted"
