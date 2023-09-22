@@ -123,6 +123,11 @@ struct FirtoolOptions {
           "connections into bulk connections)"),
       llvm::cl::init(false), llvm::cl::cat(category)};
 
+  llvm::cl::opt<bool> disableHoistingHWPassthrough{
+      "disable-hoisting-hw-passthrough",
+      llvm::cl::desc("Disable hoisting HW passthrough signals"),
+      llvm::cl::init(true), llvm::cl::Hidden, llvm::cl::cat(category)};
+
   llvm::cl::opt<bool> emitOMIR{
       "emit-omir", llvm::cl::desc("Emit OMIR annotations to a JSON file"),
       llvm::cl::init(true), llvm::cl::cat(category)};

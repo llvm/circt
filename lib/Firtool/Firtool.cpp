@@ -79,6 +79,10 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createDropConstPass());
 
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createHoistPassthroughPass(
+      /*hoistHWDrivers=*/!opt.disableOptimization &&
+      !opt.disableHoistingHWPassthrough));
+
   if (opt.dedup)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createDedupPass());
 
@@ -131,8 +135,15 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createPrefixModulesPass());
 
-  if (!opt.disableOptimization)
+  if (!opt.disableOptimization) {
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createIMConstPropPass());
+
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createHoistPassthroughPass(
+        /*hoistHWDrivers=*/!opt.disableOptimization &&
+        !opt.disableHoistingHWPassthrough));
+    // Cleanup after hoisting passthroughs, for separation-of-concerns.
+    pm.addPass(firrtl::createIMDeadCodeElimPass());
+  }
 
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createAddSeqMemPortsPass());
 

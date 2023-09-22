@@ -737,4 +737,24 @@ def LowerGroups : Pass<"firrtl-lower-groups", "firrtl::CircuitOp"> {
   let dependentDialects = ["sv::SVDialect"];
 }
 
+def HoistPassthrough : Pass<"firrtl-hoist-passthrough", "firrtl::CircuitOp"> {
+  let summary = "Hoist passthrough logic";
+  let description = [{
+    This pass hoists simple passthrough connections up.
+  }];
+  let constructor = "circt::firrtl::createHoistPassthroughPass()";
+  let options = [
+    Option<"hoistHWDrivers", "hoist-hw", "bool", "true",
+      "Hoist HW drivers.">
+  ];
+  let statistics = [
+    Statistic<"numUTurnsHoisted", "num-u-turns",
+      "Number of u-turns hoisted">,
+    Statistic<"numRefDrivers", "num-ref-drivers",
+      "Number of ref-type drivers processed">,
+    Statistic<"numHWDrivers", "num-hw-drivers",
+      "Number of hw-type drivers processed">
+  ];
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD
