@@ -352,13 +352,14 @@ LogicalResult GetPortOp::canonicalize(GetPortOp op, PatternRewriter &rewriter) {
   // Canonicalize away get_port on %this in favor of using the port SSA value
   // directly.
   // get_port(%this, @P) -> ibis.port.#
-  auto parentScope = cast<ScopeOpInterface>(op->getParentOp());
-  auto scopeThis = parentScope.getThis();
-
-  if (op.getInstance() == scopeThis) {
-    auto definingPort = parentScope.lookupPort(op.getPortSymbol());
-    rewriter.replaceOp(op, {definingPort.getPort()});
-    return success();
+  auto parentScope = dyn_cast<ScopeOpInterface>(op->getParentOp());
+  if (parentScope) {
+    auto scopeThis = parentScope.getThis();
+    if (op.getInstance() == scopeThis) {
+      auto definingPort = parentScope.lookupPort(op.getPortSymbol());
+      rewriter.replaceOp(op, {definingPort.getPort()});
+      return success();
+    }
   }
 
   return failure();
