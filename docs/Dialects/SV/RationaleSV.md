@@ -151,6 +151,7 @@ in the path. Defaults to '.'.
 Example:
 
 ```
+hw.hierpath @instref_1 [@TopModule::@foo, @FooModule::@bar, @BarModule::@leaf]
 sv.verbatim "hierpath {{0:|}}" {symbols = [@instref_1]}
 // Produces: "hierpath foo|bar|leaf"
 ```
