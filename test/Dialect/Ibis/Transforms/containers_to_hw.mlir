@@ -43,3 +43,29 @@ ibis.container @Parent {
   %b.out.ref = ibis.get_port %b, @out : !ibis.scoperef<@B> -> !ibis.portref<out i1>
   %b.in.ref = ibis.get_port %b, @in : !ibis.scoperef<@B> -> !ibis.portref<in i1>
 }
+
+// Test that we can instantiate and get ports of a container from a hw.module.
+
+// CHECK:  hw.module @C(%in: i1) -> (out: i1) {
+// CHECK:    hw.output %in : i1
+// CHECK:  }
+// CHECK:  hw.module @Top() {
+// CHECK:    %c.out = hw.instance "c" @C(in: %c.out: i1) -> (out: i1)
+// CHECK:    hw.output
+// CHECK:  }
+
+ibis.container @C {
+  %this = ibis.this @C
+  %in = ibis.port.input @in : i1
+  %out = ibis.port.output @out : i1
+  %v = ibis.port.read %in : !ibis.portref<in i1>
+  ibis.port.write %out, %v : !ibis.portref<out i1>
+}
+
+hw.module @Top() -> () {
+  %c = ibis.container.instance @c, @C
+  %in = ibis.get_port %c, @in : !ibis.scoperef<@C> -> !ibis.portref<in i1>
+  %out = ibis.get_port %c, @out : !ibis.scoperef<@C> -> !ibis.portref<out i1>
+  %v = ibis.port.read %out : !ibis.portref<out i1>
+  ibis.port.write %in, %v : !ibis.portref<in i1>
+}
