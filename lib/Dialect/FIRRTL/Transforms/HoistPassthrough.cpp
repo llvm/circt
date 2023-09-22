@@ -465,6 +465,8 @@ void HoistPassthroughPass::runOnOperation() {
   MustDrivenBy driverAnalysis;
   driverAnalysis.setIgnoreHWDrivers(!hoistHWDrivers);
 
+  bool anyChanged = false;
+
   // For each module (PO)...
   for (auto module : modules) {
     // TODO: Public means can't reason down into, or remove ports.
@@ -493,6 +495,12 @@ void HoistPassthroughPass::runOnOperation() {
                           return driverAnalysis.getCombinedDriverFor(val);
                         }),
         notNullAndCanHoist));
+
+    // If no hoistable drivers found, nothing to do.  Onwards!
+    if (drivers.empty())
+      continue;
+
+    anyChanged = true;
 
     // 2. Rematerialize must-driven ports at instantiation sites.
 
@@ -537,10 +545,6 @@ void HoistPassthroughPass::runOnOperation() {
       driver.finalize(builder);
     }
 
-    // If no ports were dropped, nothing to update.  Onwards!
-    if (deadPorts.none())
-      continue;
-
     // 4. Delete newly dead ports.
 
     // Drop dead ports at instantiation sites.
@@ -560,6 +564,9 @@ void HoistPassthroughPass::runOnOperation() {
     numUTurnsHoisted += deadPorts.count();
   }
   markAnalysesPreserved<InstanceGraph>();
+
+  if (!anyChanged)
+    markAllAnalysesPreserved();
 }
 
 /// This is the pass constructor.
