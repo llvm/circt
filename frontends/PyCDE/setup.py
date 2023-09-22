@@ -99,17 +99,11 @@ class NoopBuildExtension(build_ext):
 
 
 setup(name="pycde",
-      version="0.0.1",
-      author="John Demme",
-      author_email="John.Demme@microsoft.com",
-      description="Python CIRCT Design Entry",
-      long_description="",
       include_package_data=True,
       ext_modules=[
           CMakeExtension("pycde.circt._mlir_libs._mlir"),
           CMakeExtension("pycde.circt._mlir_libs._circt"),
       ],
-      install_requires=["numpy", "jinja2"],
       cmdclass={
           "build": CustomBuild,
           "built_ext": NoopBuildExtension,
