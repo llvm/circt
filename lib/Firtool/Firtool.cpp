@@ -84,7 +84,12 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
       !opt.disableHoistingHWPassthrough));
 
   if (opt.dedup)
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createDedupPass());
+    emitWarning(UnknownLoc::get(pm.getContext()),
+                "option -dedup is deprecated since firtool 1.57.0, has no "
+                "effect (deduplication is always enabled), and will be removed "
+                "in firtool 1.58.0");
+
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createDedupPass());
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createWireDFTPass());
 
