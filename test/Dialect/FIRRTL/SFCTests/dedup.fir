@@ -912,4 +912,3 @@ circuit Top : %[[
     x <= b
 
 ; CHECK-NOT: firrtl.module private @A_
-
