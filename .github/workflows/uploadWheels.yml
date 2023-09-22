@@ -17,8 +17,6 @@ jobs:
       matrix:
         config:
           - os: ubuntu-20.04
-            cibw_build: cp37-manylinux_x86_64
-          - os: ubuntu-20.04
             cibw_build: cp38-manylinux_x86_64
           - os: ubuntu-20.04
             cibw_build: cp39-manylinux_x86_64
@@ -26,8 +24,6 @@ jobs:
             cibw_build: cp310-manylinux_x86_64
           - os: ubuntu-20.04
             cibw_build: cp311-manylinux_x86_64
-          - os: macos-latest
-            cibw_build: cp37-macosx_x86_64
           - os: macos-latest
             cibw_build: cp38-macosx_x86_64
           - os: macos-latest
