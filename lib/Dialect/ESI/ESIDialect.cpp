@@ -29,6 +29,7 @@ using namespace circt;
 using namespace circt::esi;
 
 void ESIDialect::initialize() {
+  registerAttributes();
   registerTypes();
   addOperations<
 #define GET_OP_LIST

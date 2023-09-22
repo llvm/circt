@@ -7,7 +7,7 @@ from __future__ import annotations
 from .devicedb import LocationVector
 from .module import AppID
 
-from .circt.dialects import hw, msft, seq
+from .circt.dialects import esi, hw, msft, seq
 from .circt import ir
 
 from typing import Dict, Iterator, List, Optional, Tuple, Union
@@ -128,7 +128,7 @@ class ModuleInstance(Instance):
       child_appids = ir.ArrayAttr(
           self.root.system._appid_index.get_child_appids_of(circt_mod))
     child_appid_names = {}
-    for id in [msft.AppIDAttr(id) for id in child_appids]:
+    for id in [esi.AppIDAttr(id) for id in child_appids]:
       if id.name not in child_appid_names:
         child_appid_names[id.name] = {}
       child_appid_names[id.name][id.index] = id
@@ -225,7 +225,7 @@ class _AppIDInstance:
   __slots__ = ["owner_instance", "appid_name", "appids", "circt_mod"]
 
   def __init__(self, owner_instance: ModuleInstance, circt_mod, appid_name: str,
-               appids: Dict[int, msft.AppIDAttr]):
+               appids: Dict[int, esi.AppIDAttr]):
     self.owner_instance = owner_instance
     self.circt_mod = circt_mod
     self.appid_name = appid_name
