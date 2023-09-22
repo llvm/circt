@@ -78,6 +78,10 @@ class CMakeBuild(build_py):
         "-DCIRCT_RELEASE_TAG_ENABLED=ON",
         "-DCIRCT_RELEASE_TAG=firtool",
     ]
+    if 'macosx_arm64' in os.getenv('CIBW_BUILD', ''):
+        archs = re.findall(r"-arch (\S+)", os.getenv("ARCHFLAGS", ""))
+        if archs:
+            cmake_args.append(f"-DCMAKE_OSX_ARCHITECTURES={archs}")
 
     # HACK: CMake fails to auto-detect static linked Python installations, which
     # happens to be what exists on manylinux. We detect this and give it a dummy

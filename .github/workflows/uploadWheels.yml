@@ -32,6 +32,14 @@ jobs:
             cibw_build: cp310-macosx_x86_64
           - os: macos-latest
             cibw_build: cp311-macosx_x86_64
+          - os: macos-latest
+            cibw_build: cp38-macosx_arm64
+          - os: macos-latest
+            cibw_build: cp39-macosx_arm64
+          - os: macos-latest
+            cibw_build: cp310-macosx_arm64
+          - os: macos-latest
+            cibw_build: cp311-macosx_arm64
 
     steps:
       - name: Get CIRCT
@@ -57,6 +65,7 @@ jobs:
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
           CIBW_BUILD_FRONTEND: build
           SETUPTOOLS_SCM_DEBUG: True
+          CIBW_TEST_SKIP: "*-macosx_arm64"
 
       - name: Upload (stage) wheels as artifacts
         uses: actions/upload-artifact@v3
