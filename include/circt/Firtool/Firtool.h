@@ -111,10 +111,6 @@ struct FirtoolOptions {
       llvm::cl::desc("Transform vectors of bundles to bundles of vectors"),
       llvm::cl::init(false), llvm::cl::cat(category)};
 
-  llvm::cl::opt<bool> dedup{
-      "dedup", llvm::cl::desc("Deduplicate structurally identical modules"),
-      llvm::cl::init(false), llvm::cl::cat(category)};
-
   llvm::cl::opt<bool> noDedup{
       "no-dedup",
       llvm::cl::desc("Disable deduplication of structurally identical modules"),
