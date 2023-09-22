@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from .circt.dialects import msft
+from .circt.dialects import esi
 from .circt import ir
 
 from .types import Type, Channel, ChannelSignaling, ClockType, Bits
@@ -71,15 +71,15 @@ class InputChannel(Input):
 
 
 class AppID:
-  AttributeName = "msft.appid"
+  AttributeName = "esi.appid"
 
   @singledispatchmethod
   def __init__(self, name: str, idx: int):
-    self._appid = msft.AppIDAttr.get(name, idx)
+    self._appid = esi.AppIDAttr.get(name, idx)
 
   @__init__.register(ir.Attribute)
   def __init__mlir_attr(self, attr: ir.Attribute):
-    self._appid = msft.AppIDAttr(attr)
+    self._appid = esi.AppIDAttr(attr)
 
   @property
   def name(self) -> str:

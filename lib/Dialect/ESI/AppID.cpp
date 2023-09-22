@@ -6,12 +6,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/MSFT/AppID.h"
+#include "circt/Dialect/ESI/AppID.h"
 
 #include "circt/Support/InstanceGraph.h"
 
 using namespace circt;
-using namespace msft;
+using namespace esi;
 
 /// Helper class constructed on a per-HWModuleLike basis. Contains a map for
 /// fast lookups to the operation involved in an appid component.
@@ -54,20 +54,10 @@ private:
   DenseMap<AppIDAttr, hw::InnerSymbolOpInterface> childAppIDPaths;
 };
 
-AppIDIndex::AppIDIndex(Operation *mlirTop) : valid(true), mlirTop(mlirTop) {
+AppIDIndex::AppIDIndex(Operation *mlirTop) : valid(true) {
   Block &topBlock = mlirTop->getRegion(0).front();
   symCache.addDefinitions(mlirTop);
   symCache.freeze();
-
-  // Build a cache for the existing dynamic instance hierarchy.
-  for (auto instHierOp : topBlock.getOps<InstanceHierarchyOp>()) {
-    dynHierRoots[instHierOp.getTopModuleRefAttr()] = instHierOp;
-    instHierOp.walk([this](DynamicInstanceOp dyninst) {
-      auto &childInsts = dynInstChildLookup[dyninst];
-      for (auto child : dyninst.getOps<DynamicInstanceOp>())
-        childInsts[child.getInstanceRefAttr()] = child;
-    });
-  }
 
   // Build the per-module cache.
   for (auto mod : topBlock.getOps<hw::HWModuleLike>())
@@ -127,118 +117,6 @@ FailureOr<ArrayAttr> AppIDIndex::getAppIDPathAttr(hw::HWModuleLike fromMod,
       assert(false && "Search bottomed out");
   } while (true);
   return ArrayAttr::get(fromMod.getContext(), path);
-}
-
-FailureOr<DynamicInstanceOp> AppIDIndex::getInstance(AppIDPathAttr path,
-                                                     Location loc) const {
-  // Resolve the module at the root of the path.
-  FlatSymbolRefAttr rootSym = path.getRoot();
-  auto rootMod =
-      dyn_cast_or_null<hw::HWModuleLike>(symCache.getDefinition(rootSym));
-  if (!rootMod)
-    return emitError(loc, "could not find module '") << rootSym << "'";
-
-  // Get or create.
-  auto &dynHierRoot = dynHierRoots[rootSym];
-  if (dynHierRoot == nullptr) {
-    dynHierRoot = OpBuilder::atBlockEnd(&mlirTop->getRegion(0).front())
-                      .create<InstanceHierarchyOp>(loc, rootSym, StringAttr());
-    dynHierRoot->getRegion(0).emplaceBlock();
-  }
-
-  // Resolve the rest of the path.
-  return getSubInstance(rootMod, dynHierRoot, path.getPath(), loc);
-}
-
-DynamicInstanceOp AppIDIndex::getOrCreate(Operation *parent,
-                                          hw::InnerRefAttr name,
-                                          Location loc) const {
-  NamedChildren &children = dynInstChildLookup[parent];
-  DynamicInstanceOp &child = children[name];
-  if (child)
-    return child;
-  auto dyninst = OpBuilder::atBlockEnd(&parent->getRegion(0).front())
-                     .create<DynamicInstanceOp>(loc, name);
-  dyninst->getRegion(0).emplaceBlock();
-  return dyninst;
-}
-
-FailureOr<DynamicInstanceOp>
-AppIDIndex::getSubInstance(hw::HWModuleLike rootMod,
-                           InstanceHierarchyOp dynInstRoot,
-                           ArrayRef<AppIDAttr> subpath, Location loc) const {
-
-  // Loop-carried iteration variables.
-  Operation *dynInst = dynInstRoot;
-  hw::HWModuleLike mod = rootMod;
-  assert(mod && "The first iteration assumes mod to be non-null.");
-  hw::InnerSymbolOpInterface op;
-
-  // Iterate through the components, resolving them one at a time and chaining
-  // the results together.
-  for (auto component : subpath) {
-    if (!mod)
-      return (emitError(loc, "could not find appid '") << component << "'")
-                 .attachNote(op.getLoc())
-             << "bottomed out instance hierarchy here";
-
-    // Resolve the component.
-    auto instOpFail = getSubInstance(mod, dynInst, component, loc);
-    if (failed(instOpFail))
-      return failure();
-
-    std::tie(dynInst, op) = *instOpFail;
-    if (auto inst = dyn_cast<hw::HWInstanceLike>(op.getOperation()))
-      // If it points to an instance, setup the next iteration.
-      mod = dyn_cast<hw::HWModuleLike>(
-          symCache.getDefinition(inst.getReferencedModuleNameAttr()));
-    else
-      // Otherwise we've bottomed out.
-      mod = nullptr;
-  }
-  return cast<DynamicInstanceOp>(dynInst);
-}
-
-FailureOr<std::pair<DynamicInstanceOp, hw::InnerSymbolOpInterface>>
-AppIDIndex::getSubInstance(hw::HWModuleLike parentTgtMod, Operation *parent,
-                           AppIDAttr appid, Location loc) const {
-  // The exit and increments are not succinct enough to fit in a typical loop.
-  // The reality is that this is better modeled as a recursive function, but
-  // since it would be tail-recursive we unroll it here so as to not violate
-  // clang-tidy rules.
-  while (true) {
-    // Find the the index for the target module and lookup the appid operation
-    // within.
-    auto fChildAppID = containerAppIDs.find(parentTgtMod);
-    if (fChildAppID == containerAppIDs.end())
-      return emitError(loc, "Could not find child appid '") << appid << "'";
-    const ModuleAppIDs *cAppIDs = fChildAppID->getSecond();
-    FailureOr<hw::InnerSymbolOpInterface> appidOpOrFail =
-        cAppIDs->lookup(appid, loc);
-    if (failed(appidOpOrFail))
-      return failure();
-
-    hw::InnerSymbolOpInterface appidOp = *appidOpOrFail;
-    auto innerRef = hw::InnerRefAttr::get(parentTgtMod.getModuleNameAttr(),
-                                          appidOp.getInnerNameAttr());
-
-    // If the op has an appid itself, return the dynamic instance for it.
-    if (auto opAppid =
-            appidOp->getAttrOfType<AppIDAttr>(AppIDAttr::AppIDAttrName)) {
-      assert(opAppid == appid && "Wrong appid");
-      return std::make_pair(getOrCreate(parent, innerRef, loc), appidOp);
-    }
-
-    if (auto inst = dyn_cast<hw::HWInstanceLike>(appidOp.getOperation())) {
-      // If 'op' is an instantiantion, continue the search down.
-      parentTgtMod = cast<hw::HWModuleLike>(
-          symCache.getDefinition(inst.getReferencedModuleNameAttr()));
-      parent = getOrCreate(parent, innerRef, loc);
-    } else {
-      // Otherwise, fail.
-      return emitError(loc, "could not find appid '") << appid << "'";
-    }
-  }
 }
 
 /// Do a DFS of the instance hierarchy, 'bubbling up' appids.

@@ -48,6 +48,49 @@ typedef MlirLogicalResult (*CirctESIServiceGeneratorFunc)(
 MLIR_CAPI_EXPORTED void circtESIRegisterGlobalServiceGenerator(
     MlirStringRef impl_type, CirctESIServiceGeneratorFunc, void *userData);
 
+//===----------------------------------------------------------------------===//
+// AppID
+//===----------------------------------------------------------------------===//
+
+MLIR_CAPI_EXPORTED bool circtESIAttributeIsAnAppIDAttr(MlirAttribute);
+MLIR_CAPI_EXPORTED
+MlirAttribute circtESIAppIDAttrGet(MlirContext, MlirStringRef name,
+                                   uint64_t index);
+MLIR_CAPI_EXPORTED MlirStringRef circtESIAppIDAttrGetName(MlirAttribute attr);
+MLIR_CAPI_EXPORTED uint64_t circtESIAppIDAttrGetIndex(MlirAttribute attr);
+
+MLIR_CAPI_EXPORTED bool circtESIAttributeIsAnAppIDPathAttr(MlirAttribute);
+MLIR_CAPI_EXPORTED
+MlirAttribute circtESIAppIDAttrPathGet(MlirContext, MlirAttribute root,
+                                       intptr_t numElements,
+                                       MlirAttribute const *elements);
+MLIR_CAPI_EXPORTED MlirAttribute
+circtESIAppIDAttrPathGetRoot(MlirAttribute attr);
+MLIR_CAPI_EXPORTED uint64_t
+circtESIAppIDAttrPathGetNumComponents(MlirAttribute attr);
+MLIR_CAPI_EXPORTED MlirAttribute
+circtESIAppIDAttrPathGetComponent(MlirAttribute attr, uint64_t index);
+
+// NOLINTNEXTLINE(modernize-use-using)
+typedef struct {
+  void *ptr;
+} CirctESIAppIDIndex;
+
+/// Create an index of appids through which to do appid lookups efficiently.
+MLIR_CAPI_EXPORTED CirctESIAppIDIndex circtESIAppIDIndexGet(MlirOperation root);
+
+/// Free an AppIDIndex.
+MLIR_CAPI_EXPORTED void circtESIAppIDIndexFree(CirctESIAppIDIndex);
+
+MLIR_CAPI_EXPORTED MlirAttribute
+    circtESIAppIDIndexGetChildAppIDsOf(CirctESIAppIDIndex, MlirOperation);
+
+MLIR_CAPI_EXPORTED
+MlirAttribute circtESIAppIDIndexGetAppIDPath(CirctESIAppIDIndex,
+                                             MlirOperation fromMod,
+                                             MlirAttribute appid,
+                                             MlirLocation loc);
+
 #ifdef __cplusplus
 }
 #endif

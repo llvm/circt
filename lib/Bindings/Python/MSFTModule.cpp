@@ -20,8 +20,8 @@
 #include <pybind11/stl.h>
 namespace py = pybind11;
 
-using namespace circt;
-using namespace circt::msft;
+// using namespace circt;
+// using namespace circt::msft;
 using namespace mlir::python::adaptors;
 
 static py::handle getPhysLocationAttr(MlirAttribute attr) {
@@ -144,34 +144,6 @@ public:
 private:
   MlirAttribute attr;
   intptr_t nextIndex = 0;
-};
-
-class PyAppIDIndex {
-public:
-  PyAppIDIndex(MlirOperation root) { index = circtMSFTAppIDIndexGet(root); }
-  PyAppIDIndex(const PyAppIDIndex &) = delete;
-  ~PyAppIDIndex() { circtMSFTAppIDIndexFree(index); }
-
-  /// Returns the DynamicInstanceOp associated with appidPath.
-  MlirOperation getInstance(MlirAttribute appidPath, MlirLocation loc) const {
-    return circtMSFTAppIDIndexGetInstance(index, appidPath, loc);
-  }
-
-  MlirAttribute getChildAppIDsOf(MlirOperation op) const {
-    return circtMSFTAppIDIndexGetChildAppIDsOf(index, op);
-  }
-
-  py::object getAppIDPathAttr(MlirOperation fromMod, MlirAttribute appid,
-                              MlirLocation loc) const {
-    MlirAttribute path =
-        circtMSFTAppIDIndexGetAppIDPath(index, fromMod, appid, loc);
-    if (path.ptr == nullptr)
-      return py::none();
-    return py::cast(path);
-  }
-
-private:
-  CirctMSFTAppIDIndex index;
 };
 
 /// Populate the msft python module.
@@ -305,55 +277,4 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
       .def(py::init<CirctMSFTDirection, CirctMSFTDirection>(),
            py::arg("columns") = CirctMSFTDirection::NONE,
            py::arg("rows") = CirctMSFTDirection::NONE);
-
-  mlir_attribute_subclass(m, "AppIDAttr", circtMSFTAttributeIsAnAppIDAttr)
-      .def_classmethod(
-          "get",
-          [](py::object cls, std::string name, uint64_t index,
-             MlirContext ctxt) {
-            return cls(circtMSFTAppIDAttrGet(ctxt, wrap(name), index));
-          },
-          "Create an AppID attribute", py::arg("cls"), py::arg("name"),
-          py::arg("index"), py::arg("context") = py::none())
-      .def_property_readonly("name",
-                             [](MlirAttribute self) {
-                               StringRef name =
-                                   unwrap(circtMSFTAppIDAttrGetName(self));
-                               return std::string(name.data(), name.size());
-                             })
-      .def_property_readonly("index", [](MlirAttribute self) {
-        return circtMSFTAppIDAttrGetIndex(self);
-      });
-
-  mlir_attribute_subclass(m, "AppIDPathAttr",
-                          circtMSFTAttributeIsAnAppIDPathAttr)
-      .def_classmethod(
-          "get",
-          [](py::object cls, MlirAttribute root,
-             std::vector<MlirAttribute> path, MlirContext ctxt) {
-            return cls(circtMSFTAppIDAttrPathGet(ctxt, root, path.size(),
-                                                 path.data()));
-          },
-          "Create an AppIDPath attribute", py::arg("cls"), py::arg("root"),
-          py::arg("path"), py::arg("context") = py::none())
-      .def_property_readonly("root", &circtMSFTAppIDAttrPathGetRoot)
-      .def("__len__", &circtMSFTAppIDAttrPathGetNumComponents)
-      .def("__getitem__", &circtMSFTAppIDAttrPathGetComponent);
-
-  py::class_<PyAppIDIndex>(m, "AppIDIndex")
-      .def(py::init<MlirOperation>(), py::arg("root"))
-      .def("get_instance", &PyAppIDIndex::getInstance,
-           "Get the dynamic instance for an appid path. Creates one if one "
-           "doesn't already exist.",
-           py::arg("appid"), py::arg("query_site"))
-      .def("get_child_appids_of", &PyAppIDIndex::getChildAppIDsOf,
-           "Return a dictionary of AppIDAttrs to ArrayAttr of InnerRefAttrs "
-           "containing the relative paths to the leaf of the particular "
-           "AppIDAttr. Argument MUST be HWModuleLike.",
-           py::arg("mod"))
-      .def("get_appid_path", &PyAppIDIndex::getAppIDPathAttr,
-           "Return an array of InnerNameRefAttrs representing the relative "
-           "path to 'appid' from 'fromMod'.",
-           py::arg("from_mod"), py::arg("appid"),
-           py::arg("query_site") = py::none());
 }

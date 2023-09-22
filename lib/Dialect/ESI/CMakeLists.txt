@@ -6,6 +6,8 @@
 ##===----------------------------------------------------------------------===//
 
 set(srcs
+  AppID.cpp
+  ESIAttributes.cpp
   ESIDialect.cpp
   ESIFolds.cpp
   ESIOps.cpp
