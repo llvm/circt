@@ -1,4 +1,4 @@
-; RUN: firtool -dedup %s | FileCheck %s
+; RUN: firtool %s | FileCheck %s
 
 ; This test is checking that FIRRTL external modules which have BlackBoxInline
 ; annotations want to write to the same file write to the proper output

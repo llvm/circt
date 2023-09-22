@@ -86,7 +86,7 @@ circuit Foo : %[[
     ; SIM-FIR-SAME:   prefix = "prefix2_"
     ; SIM-HW:       hw.instance "mem_ext" @prefix2_mem
     mem mem :
-      data-type => UInt<1>
+      data-type => UInt<2>
       depth => 8
       read-latency => 1
       write-latency => 1

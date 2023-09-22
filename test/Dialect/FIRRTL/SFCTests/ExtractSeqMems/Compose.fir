@@ -1,7 +1,7 @@
 ; UNSUPPORTED: system-windows
 ;   See https://github.com/llvm/circt/issues/4128
 ; RUN: rm -rf %t
-; RUN: firtool --repl-seq-mem --repl-seq-mem-file=mems.conf --split-verilog --dedup --emit-omir -o=%t %s
+; RUN: firtool --repl-seq-mem --repl-seq-mem-file=mems.conf --split-verilog --emit-omir -o=%t %s
 ; RUN: FileCheck %s --check-prefix=TESTHARNESS < %t/TestHarness.sv
 ; RUN: FileCheck %s --check-prefix=DUTMODULE < %t/Prefix_DUTModule.sv
 ; RUN: FileCheck %s --check-prefix=SEQMEMSGROUP < %t/Prefix_SeqMemsGroup.sv
