@@ -141,6 +141,20 @@ sv.verbatim "MACRO({{0}}, {{1}} reg={{4}}, {{3}})"
             {symRefs = [@reg1, @Module1, @instance1]}
 ```
 
+Substitions also allow format specifier after a ':'. The meaning of said options
+depends on the of the operand or symbol. So far, the follow format specifiers
+are supported:
+
+- Symbol refering to a `hw.hierpath`: the separation character for joining names
+in the path. Defaults to '.'.
+
+Example:
+
+```
+sv.verbatim "hierpath {{0:|}}" {symbols = [@instref_1]}
+// Produces: "hierpath foo|bar|leaf"
+```
+
 ## Cost Model
 
 The SV dialect is primarily designed for human consumption, not machines.  As
