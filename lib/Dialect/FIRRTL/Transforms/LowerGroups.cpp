@@ -326,6 +326,10 @@ void LowerGroupsPass::runOnOperation() {
     });
   });
 
+  // Early exit if no work to do.
+  if (moduleNames.empty())
+    return markAllAnalysesPreserved();
+
   // Lower the groups of each module.
   SmallVector<FModuleOp> modules(circuitOp.getBodyBlock()->getOps<FModuleOp>());
   llvm::parallelForEach(modules,
