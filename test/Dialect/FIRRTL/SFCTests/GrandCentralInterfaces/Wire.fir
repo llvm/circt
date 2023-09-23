@@ -487,4 +487,3 @@ circuit Top :
     ; EXTRACT:          BlackBox_DUT.v
     ; EXTRACT-NEXT:     BlackBox_DUTAndGCT.v
     ; EXTRACT-NEXT:     Wire{{[/\]}}firrtl{{[/\]}}gct{{[/\]}}BlackBox_GCT.v
-

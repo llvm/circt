@@ -76,4 +76,3 @@ circuit Bundle :
    out6 <= read(p.nohw.x[1].p)
    out7.a <= p.mixed.a
    out7.b <= p.mixed.b
-
