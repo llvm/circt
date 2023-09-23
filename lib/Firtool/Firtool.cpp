@@ -89,7 +89,8 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
                 "effect (deduplication is always enabled), and will be removed "
                 "in firtool 1.58.0");
 
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createDedupPass());
+  if (!opt.noDedup)
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createDedupPass());
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createWireDFTPass());
 
