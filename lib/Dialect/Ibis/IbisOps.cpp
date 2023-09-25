@@ -56,7 +56,7 @@ static llvm::raw_string_ostream &genValueName(llvm::raw_string_ostream &os,
       .Case<ThisOp>([&](auto op) { os << "this"; })
       .Case<InstanceOp, ContainerInstanceOp>(
           [&](auto op) { os << op.getInstanceNameAttr().strref(); })
-      .Case<PortOpInterface>([&](auto op) { os << op.getPortName(); })
+      .Case<PortOpInterface>([&](auto op) { os << op.getPortName().strref(); })
       .Case<PathOp>([&](auto op) {
         llvm::interleave(
             op.getPathAsRange(), os,
