@@ -219,19 +219,42 @@ Value Tunneler::portForwardIfNeeded(PortOpInterface actualPort,
   return wireOp.getPort();
 }
 
+// Lookup an instance in the parent op. If the parent op is a symbol table, will
+// use that - else, scan the ibis.container.instance operations in the parent.
+static FailureOr<ContainerInstanceOp> locateInstanceIn(Operation *parentOp,
+                                                       FlatSymbolRefAttr name) {
+  if (parentOp->hasTrait<OpTrait::SymbolTable>()) {
+    auto *tunnelInstanceOp = SymbolTable::lookupSymbolIn(parentOp, name);
+    if (!tunnelInstanceOp)
+      return failure();
+    return cast<ContainerInstanceOp>(tunnelInstanceOp);
+  }
+
+  // Default: scan the container instances.
+  for (auto instanceOp : parentOp->getRegion(0).getOps<ContainerInstanceOp>()) {
+    if (instanceOp.getName() == name.getValue())
+      return instanceOp;
+  }
+
+  return failure();
+}
+
 // NOLINTNEXTLINE(misc-no-recursion)
 LogicalResult Tunneler::tunnelDown(InstanceGraphNode *currentContainer,
                                    FlatSymbolRefAttr tunnelInto,
                                    llvm::ArrayRef<PathStepAttr> path,
                                    PortRefMapping &portMapping) {
   // Locate the instance that we're tunneling into
-  auto scopeOp = currentContainer->getModule<ScopeOpInterface>();
-  auto *tunnelInstanceOp = SymbolTable::lookupSymbolIn(scopeOp, tunnelInto);
-  if (!tunnelInstanceOp)
+  Operation *parentOp = currentContainer->getModule().getOperation();
+  auto parentSymbolOp = dyn_cast<SymbolOpInterface>(parentOp);
+  assert(parentSymbolOp && "expected current container to be a symbol op");
+  FailureOr<ContainerInstanceOp> locateRes =
+      locateInstanceIn(parentOp, tunnelInto);
+  if (failed(locateRes))
     return op->emitOpError()
            << "expected an instance named " << tunnelInto << " in "
-           << scopeOp.getScopeName() << " but found none";
-  auto tunnelInstance = cast<ContainerInstanceOp>(tunnelInstanceOp);
+           << parentSymbolOp.getNameAttr() << " but found none";
+  ContainerInstanceOp tunnelInstance = *locateRes;
 
   if (path.empty()) {
     // Tunneling ended with a 'child' step - create get_ports of all of the
