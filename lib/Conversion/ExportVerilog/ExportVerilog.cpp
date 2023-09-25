@@ -1270,6 +1270,7 @@ void EmitterBase::emitTextWithSubstitutions(
             if (auto globalRef = dyn_cast<HierPathOp>(symOp)) {
               auto namepath = globalRef.getNamepathAttr().getValue();
               for (auto [index, sym] : llvm::enumerate(namepath)) {
+                // Emit the seperator string.
                 if (index > 0)
                   ps << (fmtOptsStr.empty() ? "." : fmtOptsStr);
 

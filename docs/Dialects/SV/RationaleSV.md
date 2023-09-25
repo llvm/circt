@@ -117,7 +117,7 @@ The verbatim operation produces a typed value expressed by a string of
 SystemVerilog.  This can be used to access macros and other values that are
 only sensible as Verilog text. There are three kinds of verbatim operations:
 
- 1. VerbatimOp(`sv.verbatim`, the statement form
+ 1. VerbatimOp(`sv.verbatim`), the statement form
  2. VerbatimExprOp(`sv.verbatim.expr`), the expression form.
  3. VerbatimExprSEOp(`sv.verbatim.expr.se`), the effectful expression form.
 
@@ -142,11 +142,11 @@ sv.verbatim "MACRO({{0}}, {{1}} reg={{4}}, {{3}})"
 ```
 
 Substitions also allow format specifier after a ':'. The meaning of said options
-depends on the of the operand or symbol. So far, the follow format specifiers
-are supported:
+depends on the operand type or the operation pointed to by the symbol. So far,
+the following format specifiers are supported:
 
-- Symbol refering to a `hw.hierpath`: the separation character for joining names
-in the path. Defaults to '.'.
+- Symbol refering to a `hw.hierpath`: the separation string for joining names
+in the path. Defaults to ".".
 
 Example:
 
