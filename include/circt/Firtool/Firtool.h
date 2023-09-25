@@ -107,6 +107,11 @@ struct FirtoolOptions {
       "dedup", llvm::cl::desc("Deduplicate structurally identical modules"),
       llvm::cl::init(false), llvm::cl::cat(category)};
 
+  llvm::cl::opt<bool> noDedup{
+      "no-dedup",
+      llvm::cl::desc("Disable deduplication of structurally identical modules"),
+      llvm::cl::init(false), llvm::cl::cat(category)};
+
   llvm::cl::opt<bool> grandCentralInstantiateCompanionOnly{
       "grand-central-instantiate-companion",
       llvm::cl::desc("Run Grand Central in a mode where the companion module "

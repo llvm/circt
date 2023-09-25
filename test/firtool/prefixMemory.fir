@@ -1,7 +1,7 @@
-; RUN: firtool %s --ir-fir | FileCheck %s --check-prefix=SIM-FIR --check-prefix=CHECK-FIR
-; RUN: firtool %s --ir-sv | FileCheck %s --check-prefix=SIM-HW --check-prefix=CHECK-HW
-; RUN: firtool %s --repl-seq-mem --repl-seq-mem-file=test.txt --ir-fir | FileCheck %s --check-prefix=REPL-FIR --check-prefix=CHECK-FIR
-; RUN: firtool %s --repl-seq-mem --repl-seq-mem-file=test.txt --ir-sv | FileCheck %s --check-prefix=REPL-HW --check-prefix=CHECK-HW
+; RUN: firtool --no-dedup %s --ir-fir | FileCheck %s --check-prefix=SIM-FIR --check-prefix=CHECK-FIR
+; RUN: firtool --no-dedup %s --ir-sv | FileCheck %s --check-prefix=SIM-HW --check-prefix=CHECK-HW
+; RUN: firtool --no-dedup %s --repl-seq-mem --repl-seq-mem-file=test.txt --ir-fir | FileCheck %s --check-prefix=REPL-FIR --check-prefix=CHECK-FIR
+; RUN: firtool --no-dedup %s --repl-seq-mem --repl-seq-mem-file=test.txt --ir-sv | FileCheck %s --check-prefix=REPL-HW --check-prefix=CHECK-HW
 
 circuit Foo : %[[
   {

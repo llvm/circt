@@ -1,4 +1,4 @@
-; RUN: firtool --split-input-file %s | FileCheck %s
+; RUN: firtool --no-dedup --split-input-file %s | FileCheck %s
 
 ; A number of tests use an invalidated wire with a DontTouchAnnotation to block
 ; constant sinking into the XMR.  This is to ensure that the test can check a

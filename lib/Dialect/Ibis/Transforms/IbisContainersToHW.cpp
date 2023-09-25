@@ -112,7 +112,8 @@ struct ContainerOpConversionPattern : public OpConversionPattern<ContainerOp> {
       if (nUsers != 1)
         return outputPort->emitOpError()
                << "expected exactly one ibis.port.write op of the output "
-                  "port";
+                  "port: "
+               << output.name.str() << " found: " << nUsers;
       auto writer = cast<PortWriteOp>(*users.begin());
       outputValues.push_back(writer.getValue());
       rewriter.eraseOp(outputPort);

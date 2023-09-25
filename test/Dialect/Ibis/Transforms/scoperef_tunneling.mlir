@@ -189,3 +189,27 @@ ibis.container @Parent {
   %out = ibis.port.output @out : i1
   %c = ibis.container.instance @c, @AccessParent
 }
+
+// -----
+
+ibis.container @C {
+  %this = ibis.this @C
+  %in = ibis.port.input @in : i1
+  %out = ibis.port.output @out : i1
+}
+
+// CHECK-LABEL:   hw.module @AccessChildFromHW() {
+// CHECK:           %[[VAL_0:.*]] = ibis.container.instance @c, @C
+// CHECK:           %[[VAL_1:.*]] = ibis.get_port %[[VAL_0]], @out : !ibis.scoperef<@C> -> !ibis.portref<out i1>
+// CHECK:           %[[VAL_2:.*]] = ibis.get_port %[[VAL_0]], @in : !ibis.scoperef<@C> -> !ibis.portref<in i1>
+// CHECK:           hw.output
+// CHECK:         }
+
+hw.module @AccessChildFromHW() -> () {
+  %c = ibis.container.instance @c, @C
+  %c_ref = ibis.path [
+    #ibis.step<child , @c : !ibis.scoperef<@C>>
+  ]
+  %c_in = ibis.get_port %c_ref, @in : !ibis.scoperef<@C> -> !ibis.portref<in i1>
+  %c_out = ibis.get_port %c_ref, @out : !ibis.scoperef<@C> -> !ibis.portref<out i1>
+}
