@@ -330,12 +330,6 @@ public:
     if (failed(lowerStage(pipeline.getEntryStage(), args, 0)))
       return failure();
 
-    // Replace uses of clock, reset, and stall.
-    pipeline.getInnerClock().replaceAllUsesWith(pipeline.getClock());
-    pipeline.getInnerReset().replaceAllUsesWith(pipeline.getReset());
-    if (auto stall = pipeline.getStall())
-      pipeline.getInnerStall().replaceAllUsesWith(stall);
-
     pipeline.erase();
     return success();
   }

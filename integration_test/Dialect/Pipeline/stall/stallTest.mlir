@@ -21,7 +21,7 @@
 // CHECK: ** TESTS=[[N:.*]] PASS=[[N]] FAIL=0 SKIP=0
 
 hw.module @stallTest(%arg0 : i32, %arg1 : i32, %go : i1, %stall : i1, %clock : !seq.clock, %reset : i1) -> (out: i32, done : i1) {
-  %out, %done = pipeline.scheduled(%a0 : i32 = %arg0, %a1 : i32 = %arg1) stall(%s = %stall) clock(%c = %clock) reset(%r = %reset) go(%g = %go) -> (out: i32) {
+  %out, %done = pipeline.scheduled(%a0 : i32 = %arg0, %a1 : i32 = %arg1) stall(%stall) clock(%clock) reset(%reset) go(%go) entryEn(%s0_enable) -> (out: i32) {
       %add0 = comb.add %a0, %a1 : i32
       pipeline.stage ^bb1
 
