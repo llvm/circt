@@ -33,7 +33,11 @@ class FieldRefCache {
 #endif
 
 public:
+  /// Caching version of getFieldRefFromValue.
   FieldRef getFieldRefFromValue(Value value, bool lookThroughCasts = false);
+
+  /// Drop all cached entries.
+  void clear() { refs.clear(); }
 
 #ifndef NDEBUG
   void printStats(llvm::raw_ostream &os) const;
