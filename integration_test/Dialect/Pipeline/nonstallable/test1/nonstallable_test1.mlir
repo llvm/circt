@@ -12,7 +12,7 @@
 
 hw.module @nonstallable_test1(%arg0: i32, %go: i1, %clock: !seq.clock, %reset: i1, %stall: i1) -> (out: i32, done: i1) {
   %out, %done = pipeline.scheduled "nonstallable_test1"(%a0 : i32 = %arg0)
-      stall(%s = %stall) clock(%c = %clock) reset(%r = %reset) go(%g = %go)
+      stall(%stall) clock(%clock) reset(%reset) go(%go) entryEn(%s0_enable)
         {stallability = [true, false, false, true, true]} -> (out : i32) {
     pipeline.stage ^bb1
   ^bb1(%s1_enable: i1):

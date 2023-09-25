@@ -114,30 +114,17 @@ static void printOutputList(OpAsmPrinter &p, TypeRange types, ArrayAttr names) {
   p << ")";
 }
 
-// Parses `(` %arg `=` %input `)`
-static ParseResult parseArgAssignment(OpAsmParser &p,
-                                      OpAsmParser::Argument &arg,
-                                      OpAsmParser::UnresolvedOperand &operand,
-                                      Type type) {
-  if (p.parseLParen() || p.parseOperand(arg.ssaName) || p.parseEqual() ||
-      p.parseOperand(operand) || p.parseRParen())
+static ParseResult parseKeywordAndOperand(OpAsmParser &p, StringRef keyword,
+                                          OpAsmParser::UnresolvedOperand &op) {
+  if (p.parseKeyword(keyword) || p.parseLParen() || p.parseOperand(op) ||
+      p.parseRParen())
     return failure();
-  arg.type = type;
   return success();
 }
 
-static ParseResult
-parseKeywordArgAssignment(OpAsmParser &p, StringRef keyword,
-                          OpAsmParser::Argument &arg,
-                          OpAsmParser::UnresolvedOperand &operand, Type type) {
-  if (p.parseKeyword(keyword))
-    return failure();
-  return parseArgAssignment(p, arg, operand, type);
-}
-
 // Assembly format is roughly:
-// ( $name )? initializer-list (%stall = $stall)?
-//   ($clock = %clock) ($reset = %reset) ($valid = %valid) {
+// ( $name )? initializer-list stall (%stall = $stall)?
+//   clock (%clock) reset (%reset) go(%go) entryEnable(%en) {
 //   --- elided inner block ---
 static ParseResult parsePipelineOp(mlir::OpAsmParser &parser,
                                    mlir::OperationState &result) {
@@ -155,23 +142,29 @@ static ParseResult parsePipelineOp(mlir::OpAsmParser &parser,
   result.addAttribute("inputNames", inputNames);
 
   Type i1 = parser.getBuilder().getI1Type();
-  Type clk = seq::ClockType::get(parser.getContext());
-  // Parse optional 'stall %innerStall = %stallArg'
+  // Parse optional 'stall (%stallArg)'
   OpAsmParser::Argument stallArg;
   OpAsmParser::UnresolvedOperand stallOperand;
   bool withStall = false;
   if (succeeded(parser.parseOptionalKeyword("stall"))) {
-    if (parseArgAssignment(parser, stallArg, stallOperand, i1))
+    if (parser.parseLParen() || parser.parseOperand(stallOperand) ||
+        parser.parseRParen())
       return failure();
     withStall = true;
   }
 
   // Parse clock, reset, and go.
-  OpAsmParser::Argument clockArg, resetArg, goArg;
   OpAsmParser::UnresolvedOperand clockOperand, resetOperand, goOperand;
-  if (parseKeywordArgAssignment(parser, "clock", clockArg, clockOperand, clk) ||
-      parseKeywordArgAssignment(parser, "reset", resetArg, resetOperand, i1) ||
-      parseKeywordArgAssignment(parser, "go", goArg, goOperand, i1))
+  if (parseKeywordAndOperand(parser, "clock", clockOperand) ||
+      parseKeywordAndOperand(parser, "reset", resetOperand) ||
+      parseKeywordAndOperand(parser, "go", goOperand))
+    return failure();
+
+  // Parse entry stage enable block argument.
+  OpAsmParser::Argument entryEnable;
+  entryEnable.type = i1;
+  if (parser.parseKeyword("entryEn") || parser.parseLParen() ||
+      parser.parseArgument(entryEnable) || parser.parseRParen())
     return failure();
 
   // Optional attribute dict
@@ -202,7 +195,8 @@ static ParseResult parsePipelineOp(mlir::OpAsmParser &parser,
       return failure();
   }
 
-  if (parser.resolveOperand(clockOperand, clk, result.operands) ||
+  Type clkType = seq::ClockType::get(parser.getContext());
+  if (parser.resolveOperand(clockOperand, clkType, result.operands) ||
       parser.resolveOperand(resetOperand, i1, result.operands) ||
       parser.resolveOperand(goOperand, i1, result.operands))
     return failure();
@@ -214,13 +208,8 @@ static ParseResult parsePipelineOp(mlir::OpAsmParser &parser,
 
   // First we add the input arguments.
   llvm::append_range(regionArgs, inputArguments);
-
-  // then the optional stall argument.
-  if (withStall)
-    regionArgs.push_back(stallArg);
-  // Then the clock, reset, and go arguments.
-  llvm::append_range(regionArgs, SmallVector<OpAsmParser::Argument>{
-                                     clockArg, resetArg, goArg});
+  // Then the internal entry stage enable block argument.
+  regionArgs.push_back(entryEnable);
 
   // Parse the body region.
   Region *body = result.addRegion();
@@ -238,11 +227,9 @@ static ParseResult parsePipelineOp(mlir::OpAsmParser &parser,
   return success();
 }
 
-static void printKeywordAssignment(OpAsmPrinter &p, StringRef keyword,
-                                   BlockArgument arg, Value value) {
+static void printKeywordOperand(OpAsmPrinter &p, StringRef keyword,
+                                Value value) {
   p << keyword << "(";
-  p.printOperand(arg);
-  p << " = ";
   p.printOperand(value);
   p << ")";
 }
@@ -259,16 +246,26 @@ static void printPipelineOp(OpAsmPrinter &p, TPipelineOp op) {
 
   // Print the optional stall.
   if (op.hasStall()) {
-    printKeywordAssignment(p, "stall", op.getInnerStall(), op.getStall());
-    p << " ";
+    p << "stall(";
+    p.printOperand(op.getStall());
+    p << ") ";
   }
 
   // Print the clock, reset, and go.
-  printKeywordAssignment(p, "clock", op.getInnerClock(), op.getClock());
+  printKeywordOperand(p, "clock", op.getClock());
   p << " ";
-  printKeywordAssignment(p, "reset", op.getInnerReset(), op.getReset());
+  printKeywordOperand(p, "reset", op.getReset());
   p << " ";
-  printKeywordAssignment(p, "go", op.getInnerGo(), op.getGo());
+  printKeywordOperand(p, "go", op.getGo());
+  p << " ";
+
+  // Print the entry enable block argument.
+  p << "entryEn(";
+  p.printRegionArgument(
+      cast<BlockArgument>(op.getStageEnableSignal(static_cast<size_t>(0))), {},
+      /*omitType*/ true);
+  p << ") ";
+
   // Print the optional attribute dict.
   p.printOptionalAttrDict(op->getAttrs(),
                           /*elidedAttrs=*/{"name", "operandSegmentSizes",
@@ -290,6 +287,75 @@ static void printPipelineOp(OpAsmPrinter &p, TPipelineOp op) {
 // UnscheduledPipelineOp
 //===----------------------------------------------------------------------===//
 
+template <typename TPipelineOp>
+static void getPipelineAsmResultNames(TPipelineOp op,
+                                      OpAsmSetValueNameFn setNameFn) {
+  for (auto [res, name] :
+       llvm::zip(op.getDataOutputs(),
+                 op.getOutputNames().template getAsValueRange<StringAttr>()))
+    setNameFn(res, name);
+  setNameFn(op.getDone(), "done");
+}
+
+template <typename TPipelineOp>
+static void
+getPipelineAsmBlockArgumentNames(TPipelineOp op, mlir::Region &region,
+                                 mlir::OpAsmSetValueNameFn setNameFn) {
+  for (auto [i, block] : llvm::enumerate(op.getRegion())) {
+    if (Block *predBlock = block.getSinglePredecessor()) {
+      // Predecessor stageOp might have register and passthrough names
+      // specified, which we can use to name the block arguments.
+      auto predStageOp = cast<StageOp>(predBlock->getTerminator());
+      size_t nRegs = predStageOp.getRegisters().size();
+      auto nPassthrough = predStageOp.getPassthroughs().size();
+
+      auto regNames = predStageOp.getRegisterNames();
+      auto passthroughNames = predStageOp.getPassthroughNames();
+
+      // Register naming...
+      for (size_t regI = 0; regI < nRegs; ++regI) {
+        auto arg = block.getArguments()[regI];
+
+        if (regNames) {
+          auto nameAttr = (*regNames)[regI].dyn_cast<StringAttr>();
+          if (nameAttr && !nameAttr.strref().empty()) {
+            setNameFn(arg, nameAttr);
+            continue;
+          }
+        }
+        setNameFn(arg, llvm::formatv("s{0}_reg{1}", i, regI).str());
+      }
+
+      // Passthrough naming...
+      for (size_t passthroughI = 0; passthroughI < nPassthrough;
+           ++passthroughI) {
+        auto arg = block.getArguments()[nRegs + passthroughI];
+
+        if (passthroughNames) {
+          auto nameAttr =
+              (*passthroughNames)[passthroughI].dyn_cast<StringAttr>();
+          if (nameAttr && !nameAttr.strref().empty()) {
+            setNameFn(arg, nameAttr);
+            continue;
+          }
+        }
+        setNameFn(arg, llvm::formatv("s{0}_pass{1}", i, passthroughI).str());
+      }
+    } else {
+      // This is the entry stage - name the arguments according to the input
+      // names.
+      for (auto [inputArg, inputName] :
+           llvm::zip(op.getInnerInputs(),
+                     op.getInputNames().template getAsValueRange<StringAttr>()))
+        setNameFn(inputArg, inputName);
+    }
+
+    // Last argument in any stage is the stage enable signal.
+    setNameFn(block.getArguments().back(),
+              llvm::formatv("s{0}_enable", i).str());
+  }
+}
+
 void UnscheduledPipelineOp::print(OpAsmPrinter &p) {
   printPipelineOp(p, *this);
 }
@@ -297,6 +363,15 @@ void UnscheduledPipelineOp::print(OpAsmPrinter &p) {
 ParseResult UnscheduledPipelineOp::parse(OpAsmParser &parser,
                                          OperationState &result) {
   return parsePipelineOp(parser, result);
+}
+
+void UnscheduledPipelineOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  getPipelineAsmResultNames(*this, setNameFn);
+}
+
+void UnscheduledPipelineOp::getAsmBlockArgumentNames(
+    mlir::Region &region, mlir::OpAsmSetValueNameFn setNameFn) {
+  getPipelineAsmBlockArgumentNames(*this, region, setNameFn);
 }
 
 //===----------------------------------------------------------------------===//
@@ -375,70 +450,11 @@ Block *ScheduledPipelineOp::addStage() {
 
 void ScheduledPipelineOp::getAsmBlockArgumentNames(
     mlir::Region &region, mlir::OpAsmSetValueNameFn setNameFn) {
-  for (auto [i, block] : llvm::enumerate(getRegion())) {
-    if (&block == getEntryStage()) {
-      for (auto [inputArg, inputName] : llvm::zip(
-               getInnerInputs(), getInputNames().getAsValueRange<StringAttr>()))
-        setNameFn(inputArg, inputName);
-
-      if (hasStall())
-        setNameFn(getInnerStall(), "s");
-      setNameFn(getInnerClock(), "c");
-      setNameFn(getInnerReset(), "r");
-      setNameFn(getInnerGo(), "g");
-
-    } else {
-      // Predecessor stageOp might have register and passthrough names
-      // specified, which we can use to name the block arguments.
-      auto predStageOp =
-          cast<StageOp>(block.getSinglePredecessor()->getTerminator());
-      size_t nRegs = predStageOp.getRegisters().size();
-      auto nPassthrough = predStageOp.getPassthroughs().size();
-
-      auto regNames = predStageOp.getRegisterNames();
-      auto passthroughNames = predStageOp.getPassthroughNames();
-
-      // Register naming...
-      for (size_t regI = 0; regI < nRegs; ++regI) {
-        auto arg = block.getArguments()[regI];
-
-        if (regNames) {
-          auto nameAttr = (*regNames)[regI].dyn_cast<StringAttr>();
-          if (nameAttr && !nameAttr.strref().empty()) {
-            setNameFn(arg, nameAttr);
-            continue;
-          }
-        }
-        setNameFn(arg, llvm::formatv("s{0}_reg{1}", i, regI).str());
-      }
-
-      // Passthrough naming...
-      for (size_t passthroughI = 0; passthroughI < nPassthrough;
-           ++passthroughI) {
-        auto arg = block.getArguments()[nRegs + passthroughI];
-
-        if (passthroughNames) {
-          auto nameAttr =
-              (*passthroughNames)[passthroughI].dyn_cast<StringAttr>();
-          if (nameAttr && !nameAttr.strref().empty()) {
-            setNameFn(arg, nameAttr);
-            continue;
-          }
-        }
-        setNameFn(arg, llvm::formatv("s{0}_pass{1}", i, passthroughI).str());
-      }
-
-      // Last argument in any (non-entry) stage is the stage enable signal.
-      setNameFn(block.getArguments().back(),
-                llvm::formatv("s{0}_enable", i).str());
-    }
-  }
+  getPipelineAsmBlockArgumentNames(*this, region, setNameFn);
 }
+
 void ScheduledPipelineOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  for (auto [res, name] : llvm::zip(
-           getDataOutputs(), getOutputNames().getAsValueRange<StringAttr>()))
-    setNameFn(res, name);
-  setNameFn(getDone(), "done");
+  getPipelineAsmResultNames(*this, setNameFn);
 }
 
 // Implementation of getOrderedStages which also produces an error if
@@ -522,10 +538,10 @@ LogicalResult ScheduledPipelineOp::verify() {
   for (auto extInput : getExtInputs())
     extLikeInputs.insert(extInput);
 
-  extLikeInputs.insert(getInnerClock());
-  extLikeInputs.insert(getInnerReset());
+  extLikeInputs.insert(getClock());
+  extLikeInputs.insert(getReset());
   if (hasStall())
-    extLikeInputs.insert(getInnerStall());
+    extLikeInputs.insert(getStall());
 
   // Phase invariant - if any block has arguments apart from the stage valid
   // argument, we are in register materialized mode. Check that all values
