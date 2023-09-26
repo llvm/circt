@@ -35,13 +35,12 @@ static void getForwardSliceSimple(Operation *root,
     for (Region &region : op->getRegions())
       for (Block &block : region)
         for (Operation &blockOp : block)
-          if (!forwardSlice.contains(&blockOp))
+          if (forwardSlice.insert(&blockOp).second)
             worklist.push_back(&blockOp);
-    for (Value result : op->getResults()) {
+    for (Value result : op->getResults())
       for (Operation *userOp : result.getUsers())
-        if (!forwardSlice.contains(userOp))
+        if (forwardSlice.insert(userOp).second)
           worklist.push_back(userOp);
-    }
 
     forwardSlice.insert(op);
   }
