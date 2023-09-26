@@ -13,12 +13,14 @@
 #include "circt/Dialect/Ibis/IbisOps.h"
 #include "circt/Dialect/Ibis/IbisPasses.h"
 #include "circt/Dialect/Ibis/IbisTypes.h"
+#include "circt/Support/InstanceGraph.h"
 
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
 using namespace ibis;
+using namespace circt::igraph;
 
 // Returns true if the given input port is self-driven, i.e. there exists
 // a PortWriteOp that writes to it.
@@ -32,7 +34,8 @@ static bool isSelfDriven(InputPortOp op) {
 namespace {
 
 struct InputPortOpConversionPattern : public OpConversionPattern<InputPortOp> {
-  using OpConversionPattern<InputPortOp>::OpConversionPattern;
+  InputPortOpConversionPattern(MLIRContext *context, InstanceGraph &ig)
+      : OpConversionPattern<InputPortOp>(context), ig(ig) {}
 
   LogicalResult
   matchAndRewrite(InputPortOp op, OpAdaptor adaptor,
@@ -72,10 +75,37 @@ struct InputPortOpConversionPattern : public OpConversionPattern<InputPortOp> {
     for (auto reader : readers)
       rewriter.replaceOp(reader, wire);
 
+    // Since Ibis allows for input ports to be read from outside the container,
+    // we need to check the instance graph to see whether this is the case.
+    // If so, we need to add an output port to the container and connect it to
+    // the assigned value.
+    auto parentModuleOp = dyn_cast<ModuleOpInterface>(op->getParentOp());
+    if (parentModuleOp) {
+      InstanceGraphNode *node = ig.lookup(parentModuleOp);
+      bool anyOutsideReads = llvm::any_of(node->uses(), [&](auto use) {
+        Block *userBlock = use->getInstance()->getBlock();
+        for (auto getPortOp : userBlock->getOps<GetPortOp>()) {
+          if (getPortOp.getPortSymbol() == op.getPortName())
+            return true;
+        }
+        return false;
+      });
+
+      if (anyOutsideReads) {
+        auto outputPort = rewriter.create<OutputPortOp>(
+            op.getLoc(), op.getSymName(), op.getType());
+        rewriter.create<PortWriteOp>(op.getLoc(), outputPort, wire);
+      }
+    }
+
+    // Finally, erase the writer and input port.
     rewriter.eraseOp(op);
     rewriter.eraseOp(writer);
     return success();
   }
+
+protected:
+  InstanceGraph &ig;
 };
 
 struct CleanSelfdriversPass
@@ -87,14 +117,14 @@ struct CleanSelfdriversPass
 void CleanSelfdriversPass::runOnOperation() {
   auto *ctx = &getContext();
   ConversionTarget target(*ctx);
-  target.addIllegalOp<InputPortOp>();
+  target.addLegalDialect<IbisDialect>();
   target.addLegalOp<hw::WireOp>();
-
   target.addDynamicallyLegalOp<InputPortOp>(
       [](InputPortOp op) { return !isSelfDriven(op); });
 
+  auto &ig = getAnalysis<InstanceGraph>();
   RewritePatternSet patterns(ctx);
-  patterns.add<InputPortOpConversionPattern>(ctx);
+  patterns.add<InputPortOpConversionPattern>(ctx, ig);
 
   if (failed(
           applyPartialConversion(getOperation(), target, std::move(patterns))))
