@@ -19,16 +19,52 @@
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Dialect/Seq/SeqPasses.h"
+#include "mlir/Analysis/SliceAnalysis.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/IntervalMap.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
 using namespace seq;
+
+// Reimplemented from SliceAnalysis to use a worklist rather than recursion and
+// non-insert ordered set.
+static void getForwardSliceSimple(Operation *root,
+                                  SmallPtrSetImpl<Operation *> &forwardSlice,
+                                  mlir::TransitiveFilter filter = nullptr) {
+  SmallVector<Operation *> worklist({root});
+
+  while (!worklist.empty()) {
+    Operation *op = worklist.pop_back_val();
+
+    if (!op)
+      continue;
+
+    // Evaluate whether we should keep this use.
+    // This is useful in particular to implement scoping; i.e. return the
+    // transitive forwardSlice in the current scope.
+    if (filter && !filter(op))
+      continue;
+
+    for (Region &region : op->getRegions())
+      for (Block &block : region)
+        for (Operation &blockOp : block)
+          if (forwardSlice.count(&blockOp) == 0)
+            worklist.push_back(&blockOp);
+    for (Value result : op->getResults()) {
+      for (Operation *userOp : result.getUsers())
+        if (forwardSlice.count(userOp) == 0)
+          worklist.push_back(userOp);
+    }
+
+    forwardSlice.insert(op);
+  }
+}
 
 namespace {
 struct SeqToSVPass : public impl::LowerSeqToSVBase<SeqToSVPass> {
@@ -134,7 +170,8 @@ private:
   void initializeRegisterElements(Location loc, OpBuilder &builder, Value reg,
                                   Value rand, unsigned &pos);
 
-  void createTree(OpBuilder &builder, Value reg, Value term, Value next);
+  void createTree(OpBuilder &builder, Value reg, Value term, Value next,
+                  SmallPtrSetImpl<Operation *> &regMuxFanout);
   std::optional<std::tuple<Value, Value, Value>>
   tryRestoringSubaccess(OpBuilder &builder, Value reg, Value term,
                         hw::ArrayCreateOp nextArray);
@@ -431,17 +468,22 @@ FirRegLower::tryRestoringSubaccess(OpBuilder &builder, Value reg, Value term,
 }
 
 void FirRegLower::createTree(OpBuilder &builder, Value reg, Value term,
-                             Value next) {
+                             Value next,
+                             SmallPtrSetImpl<Operation *> &regMuxFanout) {
   // If term and next values are equivalent, we don't have to create an
   // assignment.
   if (areEquivalentValues(term, next))
     return;
   auto mux = next.getDefiningOp<comb::MuxOp>();
-  if (mux && mux.getTwoState()) {
+  if (mux && mux.getTwoState() && regMuxFanout.contains(mux)) {
     addToIfBlock(
         builder, mux.getCond(),
-        [&]() { createTree(builder, reg, term, mux.getTrueValue()); },
-        [&]() { createTree(builder, reg, term, mux.getFalseValue()); });
+        [&]() {
+          createTree(builder, reg, term, mux.getTrueValue(), regMuxFanout);
+        },
+        [&]() {
+          createTree(builder, reg, term, mux.getFalseValue(), regMuxFanout);
+        });
   } else {
     // If the next value is an array creation, split the value into
     // invidial elements and construct trees recursively.
@@ -458,7 +500,8 @@ void FirRegLower::createTree(OpBuilder &builder, Value reg, Value term,
                                                                    reg, index);
               auto termElement =
                   builder.create<hw::ArrayGetOp>(term.getLoc(), term, index);
-              createTree(builder, nextReg, termElement, trueValue);
+              createTree(builder, nextReg, termElement, trueValue,
+                         regMuxFanout);
               termElement.erase();
             },
             []() {});
@@ -487,7 +530,7 @@ void FirRegLower::createTree(OpBuilder &builder, Value reg, Value term,
 
         auto termElement =
             builder.create<hw::ArrayGetOp>(term.getLoc(), term, idxVal);
-        createTree(builder, index, termElement, value);
+        createTree(builder, index, termElement, value, regMuxFanout);
         // This value was used to check the equivalence of elements so useless
         // anymore.
         termElement.erase();
@@ -531,6 +574,11 @@ FirRegLower::RegLowerInfo FirRegLower::lower(FirRegOp reg) {
 
   auto regVal = builder.create<sv::ReadInOutOp>(loc, svReg.reg);
 
+  SmallPtrSet<Operation *, 16> regMuxFanout;
+  getForwardSliceSimple(reg, regMuxFanout, [&](Operation *op) {
+    return op == reg || isa<comb::MuxOp>(op);
+  });
+
   if (reg.hasReset()) {
     addToAlwaysBlock(
         module.getBodyBlock(), sv::EventControl::AtPosEdge, reg.getClk(),
@@ -540,7 +588,7 @@ FirRegLower::RegLowerInfo FirRegLower::lower(FirRegOp reg) {
           if (reg.getIsAsync() && areEquivalentValues(reg, reg.getNext()))
             b.create<sv::PAssignOp>(reg.getLoc(), svReg.reg, reg);
           else
-            createTree(b, svReg.reg, reg, reg.getNext());
+            createTree(b, svReg.reg, reg, reg.getNext(), regMuxFanout);
         },
         reg.getIsAsync() ? ResetType::AsyncReset : ResetType::SyncReset,
         sv::EventControl::AtPosEdge, reg.getReset(),
@@ -552,9 +600,11 @@ FirRegLower::RegLowerInfo FirRegLower::lower(FirRegOp reg) {
       svReg.asyncResetValue = reg.getResetValue();
     }
   } else {
-    addToAlwaysBlock(
-        module.getBodyBlock(), sv::EventControl::AtPosEdge, reg.getClk(),
-        [&](OpBuilder &b) { createTree(b, svReg.reg, reg, reg.getNext()); });
+    addToAlwaysBlock(module.getBodyBlock(), sv::EventControl::AtPosEdge,
+                     reg.getClk(), [&](OpBuilder &b) {
+                       createTree(b, svReg.reg, reg, reg.getNext(),
+                                  regMuxFanout);
+                     });
   }
 
   reg.replaceAllUsesWith(regVal.getResult());
