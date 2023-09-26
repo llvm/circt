@@ -1226,6 +1226,16 @@ void EmitterBase::emitTextWithSubstitutions(
         next--;
         continue;
       }
+      size_t operandNoLength = next - start;
+
+      // Format string options follow a ':'.
+      StringRef fmtOptsStr;
+      if (string[next] == ':') {
+        size_t startFmtOpts = next + 1;
+        while (next < string.size() && string[next] != '}')
+          ++next;
+        fmtOptsStr = string.substr(startFmtOpts, next - startFmtOpts);
+      }
 
       // We must have a }} right after the digits.
       if (!string.substr(next).startswith("}}"))
@@ -1234,7 +1244,7 @@ void EmitterBase::emitTextWithSubstitutions(
       // We must be able to decode the integer into an unsigned.
       unsigned operandNo = 0;
       if (string.drop_front(start)
-              .take_front(next - start)
+              .take_front(operandNoLength)
               .getAsInteger(10, operandNo)) {
         emitError(op, "operand substitution too large");
         continue;
@@ -1260,8 +1270,9 @@ void EmitterBase::emitTextWithSubstitutions(
             if (auto globalRef = dyn_cast<HierPathOp>(symOp)) {
               auto namepath = globalRef.getNamepathAttr().getValue();
               for (auto [index, sym] : llvm::enumerate(namepath)) {
+                // Emit the seperator string.
                 if (index > 0)
-                  ps << ".";
+                  ps << (fmtOptsStr.empty() ? "." : fmtOptsStr);
 
                 auto innerRef = cast<InnerRefAttr>(sym);
                 auto ref = state.symbolCache.getInnerDefinition(

@@ -131,16 +131,8 @@ void TclOutputState::emitInnerRefPart(hw::InnerRefAttr innerRef) {
 
 void TclOutputState::emitPath(hw::HierPathOp ref,
                               std::optional<StringRef> subpath) {
-  // Traverse each part of the path.
-  auto parts = ref.getNamepathAttr().getAsRange<hw::InnerRefAttr>();
-  auto lastPart = std::prev(parts.end());
-  for (auto part : parts) {
-    emitInnerRefPart(part);
-    if (part != *lastPart)
-      os << '|';
-  }
-
-  // Some placements don't require subpaths.
+  os << "{{" << symbolRefs.size() << ":|}}";
+  symbolRefs.push_back(FlatSymbolRefAttr::get(ref));
   if (subpath)
     os << subpath;
 }

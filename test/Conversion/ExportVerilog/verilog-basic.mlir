@@ -577,6 +577,9 @@ hw.module @ReadMemXMRHierPath() {
   }
 }
 
+// CHECK: // VERB: hierpath ReadMemXMR|ReadMem|mem
+sv.verbatim "// VERB: hierpath {{0:|}}" {symbols = [@ReadMem_path]}
+
 // CHECK-LABEL: module UninitReg1(
 hw.module @UninitReg1(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
   %c-1_i2 = hw.constant -1 : i2
