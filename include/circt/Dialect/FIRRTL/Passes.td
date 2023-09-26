@@ -772,7 +772,8 @@ def ProbeDCE : Pass<"firrtl-probe-dce", "firrtl::CircuitOp"> {
   let summary = "Delete dead probe ports and operations.";
   let description = [{
     Simple pass to delete dead probe ports and operations.
-    Needed until IMDCE can run earlier in pipeline.
+    Diagnoses illegal or unsupported input probe uses.
+    Post-condition: no input probe ports.
   }];
   let constructor = "circt::firrtl::createProbeDCEPass()";
   let statistics = [
