@@ -57,7 +57,7 @@ firrtl.module @Casts(in %ui1 : !firrtl.uint<1>, in %si1 : !firrtl.sint<1>,
   %11 = firrtl.asSInt %ui1 : (!firrtl.uint<1>) -> !firrtl.sint<1>
   %12 = firrtl.asUInt %11 : (!firrtl.sint<1>) -> !firrtl.uint<1>
   firrtl.strictconnect %out2_ui1, %12 : !firrtl.uint<1>
-  // CHECK: firrtl.strictconnect %out2_si1, %si1 
+  // CHECK: firrtl.strictconnect %out2_si1, %si1
   %13 = firrtl.cvt %si1 : (!firrtl.sint<1>) -> !firrtl.sint<1>
   firrtl.strictconnect %out2_si1, %13 : !firrtl.sint<1>
 }
@@ -681,7 +681,7 @@ firrtl.module @Tail(in %in4u: !firrtl.uint<4>,
 firrtl.module @Andr(in %in0 : !firrtl.uint<0>, in %in1 : !firrtl.sint<2>,
                     out %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>,
                     out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>,
-                    out %e: !firrtl.uint<1>, out %f: !firrtl.uint<1>, 
+                    out %e: !firrtl.uint<1>, out %f: !firrtl.uint<1>,
                     out %g: !firrtl.uint<1>, in %h : !firrtl.uint<64>,
                     out %i: !firrtl.uint<1>) {
   %invalid_ui2 = firrtl.invalidvalue : !firrtl.uint<2>
@@ -736,7 +736,7 @@ firrtl.module @Andr(in %in0 : !firrtl.uint<0>, in %in1 : !firrtl.sint<2>,
 firrtl.module @Orr(in %in0 : !firrtl.uint<0>,
                    out %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>,
                    out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>,
-                   out %e: !firrtl.uint<1>, out %f: !firrtl.uint<1>, 
+                   out %e: !firrtl.uint<1>, out %f: !firrtl.uint<1>,
                    out %g: !firrtl.uint<1>, in %h : !firrtl.uint<64>) {
   %invalid_ui2 = firrtl.invalidvalue : !firrtl.uint<2>
   %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
@@ -767,7 +767,7 @@ firrtl.module @Orr(in %in0 : !firrtl.uint<0>,
   %6 = firrtl.asUInt %5 : (!firrtl.sint<64>) -> !firrtl.uint<64>
   %7 = firrtl.cat %6, %c0_ui2 : (!firrtl.uint<64>, !firrtl.uint<2>) -> !firrtl.uint<66>
   %8 = firrtl.cat %c0_ui2, %7 : (!firrtl.uint<2>, !firrtl.uint<66>) -> !firrtl.uint<68>
-  %9 = firrtl.cvt %8 : (!firrtl.uint<68>) -> !firrtl.sint<69>  
+  %9 = firrtl.cvt %8 : (!firrtl.uint<68>) -> !firrtl.sint<69>
   %10 = firrtl.orr %9 : (!firrtl.sint<69>) -> !firrtl.uint<1>
   firrtl.strictconnect %g, %10 : !firrtl.uint<1>
 }
@@ -776,7 +776,7 @@ firrtl.module @Orr(in %in0 : !firrtl.uint<0>,
 firrtl.module @Xorr(in %in0 : !firrtl.uint<0>,
                     out %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>,
                     out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>,
-                    out %e: !firrtl.uint<1>, out %f: !firrtl.uint<1>, 
+                    out %e: !firrtl.uint<1>, out %f: !firrtl.uint<1>,
                     out %g: !firrtl.uint<1>, in %h : !firrtl.uint<64>) {
   %invalid_ui2 = firrtl.invalidvalue : !firrtl.uint<2>
   %c3_ui2 = firrtl.constant 3 : !firrtl.uint<2>
@@ -808,7 +808,7 @@ firrtl.module @Xorr(in %in0 : !firrtl.uint<0>,
   %6 = firrtl.asUInt %5 : (!firrtl.sint<64>) -> !firrtl.uint<64>
   %7 = firrtl.cat %6, %c0_ui2 : (!firrtl.uint<64>, !firrtl.uint<2>) -> !firrtl.uint<66>
   %8 = firrtl.cat %c0_ui2, %7 : (!firrtl.uint<2>, !firrtl.uint<66>) -> !firrtl.uint<68>
-  %9 = firrtl.cvt %8 : (!firrtl.uint<68>) -> !firrtl.sint<69>  
+  %9 = firrtl.cvt %8 : (!firrtl.uint<68>) -> !firrtl.sint<69>
   %10 = firrtl.xorr %9 : (!firrtl.sint<69>) -> !firrtl.uint<1>
   firrtl.strictconnect %g, %10 : !firrtl.uint<1>
 }
