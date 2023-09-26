@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
@@ -34,7 +35,11 @@ struct ProbeDCEPass : public ProbeDCEBase<ProbeDCEPass> {
   using ProbeDCEBase::ProbeDCEBase;
   void runOnOperation() override;
 
-  LogicalResult process(FModuleLike mod);
+  /// Process the specified module, instance graph only used to
+  /// keep it up-to-date if specified.
+  LogicalResult
+  process(FModuleLike mod,
+          std::optional<std::reference_wrapper<InstanceGraph>> ig);
 };
 } // end anonymous namespace
 
@@ -45,12 +50,17 @@ void ProbeDCEPass::runOnOperation() {
 
   SmallVector<Operation *, 0> ops(getOperation().getOps<FModuleLike>());
 
+  auto ig = getCachedAnalysis<InstanceGraph>();
+
   auto result = failableParallelForEach(&getContext(), ops, [&](Operation *op) {
-    return process(cast<FModuleLike>(op));
+    return process(cast<FModuleLike>(op), ig);
   });
 
   if (result.failed())
     signalPassFailure();
+
+  if (ig)
+    markAnalysesPreserved<InstanceGraph>();
 }
 
 /// This is the pass constructor.
@@ -62,7 +72,9 @@ std::unique_ptr<mlir::Pass> circt::firrtl::createProbeDCEPass() {
 // Per-module input probe removal.
 //===----------------------------------------------------------------------===//
 
-LogicalResult ProbeDCEPass::process(FModuleLike mod) {
+LogicalResult
+ProbeDCEPass::process(FModuleLike mod,
+                      std::optional<std::reference_wrapper<InstanceGraph>> ig) {
   SmallVector<size_t> probePortIndices;
 
   // Find input probes.
@@ -210,7 +222,11 @@ LogicalResult ProbeDCEPass::process(FModuleLike mod) {
         }
         if (instPortsToErase.none())
           return;
-        inst.erasePorts(builder, instPortsToErase);
+        auto newInst = inst.erasePorts(builder, instPortsToErase);
+        // Keep InstanceGraph up-to-date if available.  Assumes safe to update
+        // distinct entries from multiple threads.
+        if (ig)
+          ig->get().replaceInstance(inst, newInst);
         inst.erase();
       });
 
