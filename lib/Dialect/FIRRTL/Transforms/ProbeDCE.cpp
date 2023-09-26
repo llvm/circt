@@ -37,7 +37,8 @@ struct ProbeDCEPass : public ProbeDCEBase<ProbeDCEPass> {
 
   /// Process the specified module, instance graph only used to
   /// keep it up-to-date if specified.
-  LogicalResult
+  /// Returns true if changes were made (or reports failure).
+  FailureOr<bool>
   process(FModuleLike mod,
           std::optional<std::reference_wrapper<InstanceGraph>> ig);
 };
@@ -52,8 +53,15 @@ void ProbeDCEPass::runOnOperation() {
 
   auto ig = getCachedAnalysis<InstanceGraph>();
 
+  std::atomic<bool> anyChanges;
   auto result = failableParallelForEach(&getContext(), ops, [&](Operation *op) {
-    return process(cast<FModuleLike>(op), ig);
+    auto failOrChanged = process(cast<FModuleLike>(op), ig);
+    if (failed(failOrChanged))
+      return failure();
+    auto changed = *failOrChanged;
+    if (changed)
+      anyChanges = true;
+    return success();
   });
 
   if (result.failed())
@@ -61,6 +69,8 @@ void ProbeDCEPass::runOnOperation() {
 
   if (ig)
     markAnalysesPreserved<InstanceGraph>();
+  if (!anyChanges)
+    markAllAnalysesPreserved();
 }
 
 /// This is the pass constructor.
@@ -72,7 +82,7 @@ std::unique_ptr<mlir::Pass> circt::firrtl::createProbeDCEPass() {
 // Per-module input probe removal.
 //===----------------------------------------------------------------------===//
 
-LogicalResult
+FailureOr<bool>
 ProbeDCEPass::process(FModuleLike mod,
                       std::optional<std::reference_wrapper<InstanceGraph>> ig) {
   SmallVector<size_t> probePortIndices;
@@ -97,7 +107,8 @@ ProbeDCEPass::process(FModuleLike mod,
       return mlir::emitError(mod.getPortLocation(idx),
                              "input probe not allowed on this module kind");
     }
-    return success();
+    // No changes made.
+    return false;
   }
 
   SmallVector<BlockArgument> args;
@@ -184,6 +195,9 @@ ProbeDCEPass::process(FModuleLike mod,
     }
   }
 
+  // Track whether any changes were made.
+  bool changes = portsToErase.any();
+
   // Walk the module, removing all operations in forward slice from input probes
   // and updating all instances to reflect no more input probes anywhere.
   // Walk post-order, reverse, so can erase as we encounter operations.
@@ -194,6 +208,7 @@ ProbeDCEPass::process(FModuleLike mod,
         if (!inst) {
           if (toRemoveIfNotInst.contains(op)) {
             ++numErasedOps;
+            changes = true;
             op->erase();
           }
           return;
@@ -222,6 +237,7 @@ ProbeDCEPass::process(FModuleLike mod,
         }
         if (instPortsToErase.none())
           return;
+        changes = true;
         auto newInst = inst.erasePorts(builder, instPortsToErase);
         // Keep InstanceGraph up-to-date if available.  Assumes safe to update
         // distinct entries from multiple threads.
@@ -233,5 +249,5 @@ ProbeDCEPass::process(FModuleLike mod,
   numErasedPorts += portsToErase.count();
   mod.erasePorts(portsToErase);
 
-  return success();
+  return changes;
 }
