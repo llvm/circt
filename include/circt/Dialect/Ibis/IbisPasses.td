@@ -75,6 +75,7 @@ def IbisCleanSelfdrivers : Pass<"ibis-clean-selfdrivers", "ibis::ContainerOp"> {
   }];
 
   let constructor = "circt::ibis::createCleanSelfdriversPass()";
+  let dependentDialects = ["circt::hw::HWDialect"];
 }
 
 def IbisContainersToHW : Pass<"ibis-convert-containers-to-hw", "mlir::ModuleOp"> {
