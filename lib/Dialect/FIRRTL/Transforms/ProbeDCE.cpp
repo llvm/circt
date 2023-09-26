@@ -115,7 +115,7 @@ ProbeDCEPass::process(FModuleLike mod,
   BitVector portsToErase(mod.getNumPorts());
 
   // Forward slice over users of each.
-  // Build cumulatively, for diagnostic specificity.
+  // Build cumulatively, slice individually for diagnostic specificity.
   DenseSet<Operation *> toRemoveIfNotInst;
   SmallVector<Operation *> worklist;
   for (auto idx : probePortIndices) {
