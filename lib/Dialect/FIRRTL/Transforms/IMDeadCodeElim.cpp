@@ -43,7 +43,7 @@ static bool isDeletableDeclaration(Operation *op) {
   if (auto name = dyn_cast<FNamableOp>(op))
     if (!name.hasDroppableName())
       return false;
-  return !hasDontTouch(op) && AnnotationSet(op).empty();
+  return !hasDontTouch(op) && AnnotationSet(op).canBeDeleted();
 }
 
 namespace {

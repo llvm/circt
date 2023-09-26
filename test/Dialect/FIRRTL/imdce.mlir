@@ -561,3 +561,57 @@ firrtl.circuit "DeadPublic" {
      firrtl.instance pdc @PublicDeadChild()
   }
 }
+
+// -----
+// OMIR annotation should not block removal.
+//   - See: https://github.com/llvm/circt/issues/6199
+//
+// CHECK-LABEL: firrtl.circuit "OMIRRemoval"
+firrtl.circuit "OMIRRemoval" {
+  firrtl.module @OMIRRemoval() {
+    // CHECK-NOT: %tmp_0
+    %tmp_0 = firrtl.wire {
+      annotations = [
+        {
+           class = "freechips.rocketchip.objectmodel.OMIRTracker",
+           id = 0 : i64,
+           type = "OMReferenceTarget"
+        }
+      ]} : !firrtl.uint<1>
+
+    // CHECK-NOT: %tmp_1
+    %tmp_1 = firrtl.wire {
+      annotations = [
+        {
+           class = "freechips.rocketchip.objectmodel.OMIRTracker",
+           id = 1 : i64,
+           type = "OMMemberReferenceTarget"
+        }
+      ]} : !firrtl.uint<2>
+
+    // CHECK-NOT: %tmp_2
+    %tmp_2 = firrtl.wire {
+      annotations = [
+        {
+           class = "freechips.rocketchip.objectmodel.OMIRTracker",
+           id = 3 : i64,
+           type = "OMMemberInstanceTarget"
+        }
+      ]} : !firrtl.uint<3>
+
+    // Adding one additional annotation will block removal.
+    //
+    // CHECK: %tmp_3
+    %tmp_3 = firrtl.wire {
+      annotations = [
+        {
+           class = "freechips.rocketchip.objectmodel.OMIRTracker",
+           id = 4 : i64,
+           type = "OMMemberInstanceTarget"
+        },
+        {
+           class = "circt.test"
+        }
+      ]} : !firrtl.uint<4>
+  }
+}
