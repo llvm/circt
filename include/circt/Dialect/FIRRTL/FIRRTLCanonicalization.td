@@ -119,6 +119,8 @@ def MoveNameHint : NativeCodeCall<"moveNameHint($0, $1)">;
 def GetEmptyString : NativeCodeCall<
   "StringAttr::get($_builder.getContext(), {}) ">;
 
+def hasOneUse : Constraint<CPred<"$0.hasOneUse()">>;
+
 // leq(const, x) -> geq(x, const)
 def LEQWithConstLHS : Pat<
   (LEQPrimOp:$old $lhs, $rhs),
@@ -283,6 +285,23 @@ def SubOfPadR : Pat <
   (SubPrimOp:$old $b, (PadPrimOp $a, $m)),
   (MoveNameHint $old, (PadPrimOp (SubPrimOp $b, $a), (TypeWidth32 $old))),
   [(KnownWidth $a), (KnownWidth $b)]>;
+
+// bitwise(cat(a, b), const) where cat has a single use -> cat(bitwise(a, high(const)), bitwise(b, low(const)))
+def getHighBit: NativeCodeCall<"extractConst<true>($_builder, $1.getLoc(), $0.getType(), $1.getDefiningOp<ConstantOp>().getValue())">;
+def getLowBit: NativeCodeCall<"extractConst<false>($_builder, $1.getLoc(), $0.getType(), $1.getDefiningOp<ConstantOp>().getValue())">;
+class BitwiseCatAndConst<Op bitwiseOp> : Pat<
+  (bitwiseOp:$old (CatPrimOp:$cat $a, $b), (ConstantOp:$cstOp $cst)),
+  (MoveNameHint $cat, (CatPrimOp
+    (bitwiseOp $a, (getHighBit $a, $cstOp)),
+    (bitwiseOp $b, (getLowBit $b, $cstOp))
+  )),
+  [(KnownWidth $old), (KnownWidth $cat), (KnownWidth $cstOp),
+   (EqualIntSize $old, $cat), (EqualIntSize $old, $cstOp), (hasOneUse $cat)]
+>;
+
+foreach i = [AndPrimOp, OrPrimOp, XorPrimOp] in {
+  def i#OfCatAndConst : BitwiseCatAndConst<i>;
+}
 
 // and(x, 0) -> 0, fold can't handle all cases
 def AndOfZero : Pat <
