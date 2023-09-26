@@ -9,17 +9,17 @@
 // PY: rpc.testVectorSum(25)
 // PY: rpc.testCrypto(25)
 
-hw.module.extern @IntAccNoBP(%clk: !seq.clock, %rst: i1, %ints: !esi.channel<i32>) -> (totalOut: !esi.channel<i32>) attributes {esi.bundle}
-hw.module.extern @IntArrSum(%clk: !seq.clock, %rst: i1, %arr: !esi.channel<!hw.array<4 x si13>>) -> (totalOut: !esi.channel<!hw.array<2 x ui24>>) attributes {esi.bundle}
+hw.module.extern @IntAccNoBP(input %clk: !seq.clock, input %rst: i1, input %ints: !esi.channel<i32>, output %totalOut: !esi.channel<i32>) attributes {esi.bundle}
+hw.module.extern @IntArrSum(input %clk: !seq.clock, input %rst: i1, input %arr: !esi.channel<!hw.array<4 x si13>>, output %totalOut: !esi.channel<!hw.array<2 x ui24>>) attributes {esi.bundle}
 
-hw.module @ints(%clk: !seq.clock, %rst: i1) {
+hw.module @ints(input %clk: !seq.clock, input %rst: i1) {
   %intsIn = esi.cosim %clk, %rst, %intsTotalBuffered, "TestEP" : !esi.channel<i32> -> !esi.channel<i32>
   %intsInBuffered = esi.buffer %clk, %rst, %intsIn {stages=2, name="intChan"} : i32
   %intsTotal = hw.instance "acc" @IntAccNoBP(clk: %clk: !seq.clock, rst: %rst: i1, ints: %intsInBuffered: !esi.channel<i32>) -> (totalOut: !esi.channel<i32>)
   %intsTotalBuffered = esi.buffer %clk, %rst, %intsTotal {stages=2, name="totalChan"} : i32
 }
 
-hw.module @array(%clk: !seq.clock, %rst: i1) {
+hw.module @array(input %clk: !seq.clock, input %rst: i1) {
   %arrIn = esi.cosim %clk, %rst, %arrTotalBuffered, "TestEP" : !esi.channel<!hw.array<2 x ui24>> -> !esi.channel<!hw.array<4 x si13>>
   %arrInBuffered = esi.buffer %clk, %rst, %arrIn {stages=2, name="arrChan"} : !hw.array<4 x si13>
   %arrTotal = hw.instance "acc" @IntArrSum(clk: %clk: !seq.clock, rst: %rst: i1, arr: %arrInBuffered: !esi.channel<!hw.array<4 x si13>>) -> (totalOut: !esi.channel<!hw.array<2 x ui24>>)
@@ -31,9 +31,9 @@ hw.module @array(%clk: !seq.clock, %rst: i1) {
 !Config  = !hw.struct<encrypt:   i1, otp:  !hw.array<32 x i8>>
 !cfgChan = !esi.channel<!Config>
 
-hw.module.extern @Encryptor(%clk: !seq.clock, %rst: i1, %in: !pktChan, %cfg: !cfgChan) -> (x: !pktChan) attributes {esi.bundle}
+hw.module.extern @Encryptor(input %clk: !seq.clock, input %rst: i1, input %in: !pktChan, input %cfg: !cfgChan, output %x: !pktChan) attributes {esi.bundle}
 
-hw.module @structs(%clk:!seq.clock, %rst:i1) -> () {
+hw.module @structs(input %clk:!seq.clock, input %rst:i1) {
   %compressedData = hw.instance "otpCryptor" @Encryptor(clk: %clk: !seq.clock, rst: %rst: i1, in: %inputData: !pktChan, cfg: %cfg: !cfgChan) -> (x: !pktChan)
   %inputData = esi.cosim %clk, %rst, %compressedData, "CryptoData" : !pktChan -> !pktChan
   %c0 = hw.constant 0 : i1
@@ -41,7 +41,7 @@ hw.module @structs(%clk:!seq.clock, %rst:i1) -> () {
   %cfg = esi.cosim %clk, %rst, %null, "CryptoConfig" : !esi.channel<i1> -> !cfgChan
 }
 
-hw.module @top(%clk: !seq.clock, %rst: i1) {
+hw.module @top(input %clk: !seq.clock, input %rst: i1) {
   hw.instance "ints" @ints (clk: %clk: !seq.clock, rst: %rst: i1) -> ()
   hw.instance "array" @array(clk: %clk: !seq.clock, rst: %rst: i1) -> ()
   hw.instance "structs" @structs(clk: %clk: !seq.clock, rst: %rst: i1) -> ()

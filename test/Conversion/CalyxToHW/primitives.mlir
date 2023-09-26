@@ -1,6 +1,6 @@
 // RUN: circt-opt --split-input-file -lower-calyx-to-hw %s | FileCheck %s
 
-// CHECK: hw.module @main(%in0: i4, %clk: i1, %reset: i1, %go: i1) -> (out0: i8, done: i1) {
+// CHECK: hw.module @main(input %in0 : i4, input %clk : i1, input %reset : i1, input %go : i1, output %out0 : i8, output %done : i1) {
 // CHECK:   %out0 = sv.wire  : !hw.inout<i8>
 // CHECK:   %0 = sv.read_inout %out0 : !hw.inout<i8>
 // CHECK:   %done = sv.wire  : !hw.inout<i1>
@@ -33,7 +33,7 @@ module attributes {calyx.entrypoint = "main"} {
 
 // -----
 
-// CHECK: hw.module @main(%in0: i4, %clk: i1, %reset: i1, %go: i1) -> (out0: i8, done: i1) {
+// CHECK: hw.module @main(input %in0 : i4, input %clk : i1, input %reset : i1, input %go : i1, output %out0 : i8, output %done : i1) {
 // CHECK:   %out0 = sv.wire  : !hw.inout<i8>
 // CHECK:   %0 = sv.read_inout %out0 : !hw.inout<i8>
 // CHECK:   %done = sv.wire  : !hw.inout<i1>
@@ -67,7 +67,7 @@ module attributes {calyx.entrypoint = "main"} {
 
 // -----
 
-// CHECK: hw.module @main(%in0: i8, %in1: i8, %cond0: i1, %cond1: i1, %clk: i1, %reset: i1, %go: i1) -> (out: i8, done: i1) {
+// CHECK: hw.module @main(input %in0 : i8, input %in1 : i8, input %cond0 : i1, input %cond1 : i1, input %clk : i1, input %reset : i1, input %go : i1, output %out : i8, output %done : i1) {
 // CHECK:   %out = sv.wire  : !hw.inout<i8>
 // CHECK:   %0 = sv.read_inout %out : !hw.inout<i8>
 // CHECK:   %done = sv.wire  : !hw.inout<i1>

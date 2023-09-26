@@ -154,11 +154,11 @@ systemc.module @member_access () {
   }
 }
 
-hw.module.extern @inst() -> ()
-hw.module.extern @instWithArgs(%a: i32, %b: i8) -> (c: i32, d: i8)
+hw.module.extern @inst()
+hw.module.extern @instWithArgs(input %a: i32, input %b: i8, output %c: i32, output %d: i8)
 
 // CHECK-LABEL: @verilatorInteropInHwModule
-hw.module @verilatorInteropInHwModule(%arg0: i32, %arg1: i8) -> () {
+hw.module @verilatorInteropInHwModule(input %arg0: i32, input %arg1: i8) {
   // CHECK-NEXT: %verilated.c, %verilated.d = systemc.interop.verilated "verilated" @instWithArgs (a: %arg0: i32, b: %arg1: i8) -> (c: i32, d: i8)
   %verilated.c, %verilated.d = systemc.interop.verilated "verilated" @instWithArgs (a: %arg0: i32, b: %arg1: i8) -> (c: i32, d: i8)
 }

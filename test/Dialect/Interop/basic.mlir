@@ -1,7 +1,7 @@
 // RUN: circt-opt %s | circt-opt | FileCheck %s
 
 // CHECK-LABEL: @basic
-hw.module @basic (%arg0: i32, %arg1: i8) -> () {
+hw.module @basic (input %arg0: i32, input %arg1: i8) {
   // CHECK-NEXT: interop.procedural.alloc cpp
   interop.procedural.alloc cpp
 

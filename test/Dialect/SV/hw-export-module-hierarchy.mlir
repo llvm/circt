@@ -1,8 +1,8 @@
 // RUN: circt-opt -pass-pipeline='builtin.module(hw-export-module-hierarchy)' %s | FileCheck %s
 
-hw.module @InnerModule() -> () {}
+hw.module @InnerModule() {}
 
-hw.module @MainDesign() -> () {
+hw.module @MainDesign() {
   hw.instance "inner" @InnerModule() -> ()
 }
 

@@ -1,9 +1,9 @@
 // RUN: circt-opt -split-input-file -hw-legalize-modules -verify-diagnostics %s | FileCheck %s
 
 module attributes {circt.loweringOptions = "disallowPackedArrays"} {
-hw.module @reject_arrays(%arg0: i8, %arg1: i8, %arg2: i8,
-                         %arg3: i8, %sel: i2, %clock: i1)
-   -> (a: !hw.array<4xi8>) {
+hw.module @reject_arrays(input %arg0: i8, input %arg1: i8, input %arg2: i8,
+                         input %arg3: i8, input %sel: i2, input %clock: i1,
+                         output %a: !hw.array<4xi8>) {
   // This needs full-on "legalize types" for the HW dialect.
   
   %reg = sv.reg  : !hw.inout<array<4xi8>>
@@ -22,9 +22,8 @@ hw.module @reject_arrays(%arg0: i8, %arg1: i8, %arg2: i8,
 // -----
 module attributes {circt.loweringOptions = "disallowPackedArrays"} {
 // CHECK-LABEL: hw.module @array_create_get_comb
-hw.module @array_create_get_comb(%arg0: i8, %arg1: i8, %arg2: i8, %arg3: i8,
-                                 %sel: i2)
-   -> (a: i8) {
+hw.module @array_create_get_comb(input %arg0: i8, input %arg1: i8, input %arg2: i8, input %arg3: i8,
+                                 input %sel: i2, output %a: i8) {
   // CHECK: %casez_tmp = sv.reg  : !hw.inout<i8>
   // CHECK: sv.alwayscomb  {
   // CHECK:   sv.case casez %sel : i2
@@ -51,8 +50,8 @@ hw.module @array_create_get_comb(%arg0: i8, %arg1: i8, %arg2: i8, %arg3: i8,
 }
 
 // CHECK-LABEL: hw.module @array_create_get_default
-hw.module @array_create_get_default(%arg0: i8, %arg1: i8, %arg2: i8, %arg3: i8,
-                            %sel: i2) {
+hw.module @array_create_get_default(input %arg0: i8, input %arg1: i8, input %arg2: i8, input %arg3: i8,
+                            input %sel: i2) {
   // CHECK: %casez_tmp = sv.reg  : !hw.inout<i8>
   // CHECK: sv.initial  {
   sv.initial {
@@ -85,8 +84,7 @@ hw.module @array_create_get_default(%arg0: i8, %arg1: i8, %arg2: i8, %arg3: i8,
 }
 
 // CHECK-LABEL: hw.module @array_constant_get_comb
-hw.module @array_constant_get_comb(%sel: i2)
-   -> (a: i8) {
+hw.module @array_constant_get_comb(input %sel: i2, output %a: i8) {
   // CHECK: %casez_tmp = sv.reg  : !hw.inout<i8>
   // CHECK: sv.alwayscomb  {
   // CHECK:   sv.case casez %sel : i2

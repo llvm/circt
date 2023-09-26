@@ -1,7 +1,6 @@
 // RUN: circt-opt --lower-seq-to-sv %s | FileCheck %s
 
-// CHECK-LABEL:   hw.module @cg1(
-// CHECK-SAME:          %[[VAL_0:.*]]: i1, %[[VAL_1:.*]]: i1) -> (gclk: i1) {
+// CHECK:   hw.module @cg1(input %[[VAL_0:.*]] : i1, input %[[VAL_1:.*]] : i1, output %gclk : i1) {
 // CHECK:           %[[VAL_2:.*]] = sv.reg : !hw.inout<i1>
 // CHECK:           sv.always  {
 // CHECK:             %[[VAL_3:.*]] = hw.constant true
@@ -14,13 +13,12 @@
 // CHECK:           %[[VAL_6:.*]] = comb.and %[[VAL_0]], %[[VAL_5]] : i1
 // CHECK:           hw.output %[[VAL_6]] : i1
 // CHECK:         }
-hw.module @cg1(%clk : !seq.clock, %enable : i1) -> (gclk : !seq.clock) {
+hw.module @cg1(input %clk : !seq.clock, input %enable : i1, output %gclk : !seq.clock) {
     %0 = seq.clock_gate %clk, %enable
     hw.output %0 : !seq.clock
 }
 
-// CHECK-LABEL:   hw.module @cg2(
-// CHECK-SAME:            %[[VAL_0:.*]]: i1, %[[VAL_1:.*]]: i1, %[[VAL_2:.*]]: i1) -> (gclk: i1) {
+// CHECK:   hw.module @cg2(input %[[VAL_0:.*]] : i1, input %[[VAL_1:.*]] : i1, input %[[VAL_2:.*]] : i1, output %gclk : i1) {
 // CHECK:           %[[VAL_3:.*]] = comb.or %[[VAL_1]], %[[VAL_2]] : i1
 // CHECK:           %[[VAL_4:.*]] = sv.reg : !hw.inout<i1>
 // CHECK:           sv.always  {
@@ -34,7 +32,7 @@ hw.module @cg1(%clk : !seq.clock, %enable : i1) -> (gclk : !seq.clock) {
 // CHECK:           %[[VAL_8:.*]] = comb.and %[[VAL_0]], %[[VAL_7]] : i1
 // CHECK:           hw.output %[[VAL_8]] : i1
 // CHECK:         }
-hw.module @cg2(%clk : !seq.clock, %enable : i1, %test_enable : i1) -> (gclk : !seq.clock) {
+hw.module @cg2(input %clk : !seq.clock, input %enable : i1, input %test_enable : i1, output %gclk : !seq.clock) {
     %0 = seq.clock_gate %clk, %enable, %test_enable
     hw.output %0 : !seq.clock
 }

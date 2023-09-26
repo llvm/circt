@@ -20,7 +20,7 @@ sv.verbatim "File2 should not include header" {output_file = #hw.output_file<"fi
 
 // FOO: `include "circt_header.svh"
 // FOO-NEXT: module Foo
-hw.module @Foo() -> () {
+hw.module @Foo() {
   hw.output
 }
 }

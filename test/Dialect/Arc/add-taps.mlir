@@ -1,7 +1,7 @@
 // RUN: circt-opt %s --arc-add-taps | FileCheck %s
 
 // CHECK-LABEL: hw.module @ObservePorts
-hw.module @ObservePorts(%x: i4, %y: i4) -> (u: i4, v: i4) {
+hw.module @ObservePorts(input %x: i4, input %y: i4, output %u: i4, output %v: i4) {
   // CHECK-NEXT: arc.tap %x {name = "x"} : i4
   // CHECK-NEXT: arc.tap %y {name = "y"} : i4
   // CHECK-NEXT: %0 = comb.add

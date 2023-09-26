@@ -1,6 +1,6 @@
 // RUN: circt-opt %s --arc-lower-vectorizations=mode=inline-body --split-input-file --verify-diagnostics | FileCheck %s
 
-hw.module @inline_body(%in0: i1, %in1: i1, %in2: i1, %in3: i1) -> (out0: i1, out1: i1, out2: i1, out3: i1) {
+hw.module @inline_body(input %in0: i1, input %in1: i1, input %in2: i1, input %in3: i1, output %out0: i1, output %out1: i1, output %out2: i1, output %out3: i1) {
   %0 = comb.concat %in0, %in1 : i1, i1
   %1 = comb.concat %in2, %in2 : i1, i1
 
@@ -32,7 +32,7 @@ hw.module @inline_body(%in0: i1, %in1: i1, %in2: i1, %in3: i1) -> (out0: i1, out
 }
 
 // CHECK-LABEL: hw.module @inline_body
-//  CHECK-SAME: ([[IN0:%.+]]: i1, [[IN1:%.+]]: i1, [[IN2:%.+]]: i1, [[IN3:%.+]]: i1) ->
+//  CHECK-SAME: (input [[IN0:%.+]] : i1, input [[IN1:%.+]] : i1, input [[IN2:%.+]] : i1, input [[IN3:%.+]]: i1,
 //       CHECK: [[V0:%.+]] = comb.concat [[IN0]], [[IN1]] :
 //       CHECK: [[V1:%.+]] = comb.concat [[IN2]], [[IN2]] :
 //       CHECK: [[V2:%.+]] = arith.andi [[V0]], [[V1]]
@@ -51,7 +51,7 @@ hw.module @inline_body(%in0: i1, %in1: i1, %in2: i1, %in3: i1) -> (out0: i1, out
 
 // -----
 
-hw.module @vectorize(%in0: i1, %in1: i1, %in2: i1, %in3: i1) -> (out0: i1, out1: i1) {
+hw.module @vectorize(input %in0: i1, input %in1: i1, input %in2: i1, input %in3: i1, output %out0: i1, output %out1: i1) {
   // expected-error @below {{can only inline body if boundary and body are already vectorized}}
   %0:2 = arc.vectorize (%in0, %in1), (%in2, %in3) : (i1, i1, i1, i1) -> (i1, i1) {
   ^bb0(%arg0: i1, %arg1: i1):

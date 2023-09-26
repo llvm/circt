@@ -4,7 +4,7 @@ hw.generator.schema @FIRRTLMem, "FIRRTL_Memory", ["depth", "numReadPorts", "numW
 
 
 // CHECK-LABEL: hw.module @TestWOMemory(
-hw.module @TestWOMemory(%clock: !seq.clock, %addr: i10, %enable: i1, %data: i8) {
+hw.module @TestWOMemory(input %clock: !seq.clock, input %addr: i10, input %enable: i1, input %data: i8) {
   // CHECK-NOT: hw.instance
   // CHECK-NEXT: [[FOO:%.+]] = arc.memory <1024 x i8, i10> {name = "foo"}
   // CHECK-NEXT: arc.memory_write_port [[FOO]], @mem_write{{.*}}(%addr, %data, %enable) clock %clock enable lat 1 : <1024 x i8, i10>, i10, i8, i1
@@ -13,11 +13,11 @@ hw.module @TestWOMemory(%clock: !seq.clock, %addr: i10, %enable: i1, %data: i8) 
 }
 // CHECK-NEXT: }
 // CHECK-NOT: hw.module.generated @WOMemory, @FIRRTLMem
-hw.module.generated @WOMemory, @FIRRTLMem(%W0_addr: i10, %W0_en: i1, %W0_clk: !seq.clock, %W0_data: i8) attributes {depth = 1024 : i64, maskGran = 8 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, readUnderWrite = 0 : ui32, width = 8 : ui32, writeClockIDs = [], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
+hw.module.generated @WOMemory, @FIRRTLMem(input %W0_addr: i10, input %W0_en: i1, input %W0_clk: !seq.clock, input %W0_data: i8) attributes {depth = 1024 : i64, maskGran = 8 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, readUnderWrite = 0 : ui32, width = 8 : ui32, writeClockIDs = [], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
 
 
 // CHECK-LABEL: hw.module @TestWOMemoryWithMask(
-hw.module @TestWOMemoryWithMask(%clock: !seq.clock, %addr: i10, %enable: i1, %data: i16, %mask: i2) {
+hw.module @TestWOMemoryWithMask(input %clock: !seq.clock, input %addr: i10, input %enable: i1, input %data: i16, input %mask: i2) {
   // CHECK-NOT: hw.instance
   // CHECK-NEXT: [[FOO:%.+]] = arc.memory <1024 x i16, i10> {name = "foo"}
   // CHECK-NEXT: [[MASK_BIT0:%.+]] = comb.extract %mask from 0 : (i2) -> i1
@@ -31,11 +31,11 @@ hw.module @TestWOMemoryWithMask(%clock: !seq.clock, %addr: i10, %enable: i1, %da
 }
 // CHECK-NEXT: }
 // CHECK-NOT: hw.module.generated @WOMemoryWithMask, @FIRRTLMem
-hw.module.generated @WOMemoryWithMask, @FIRRTLMem(%W0_addr: i10, %W0_en: i1, %W0_clk: !seq.clock, %W0_data: i16, %W0_mask: i2) attributes {depth = 1024 : i64, maskGran = 8 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, readUnderWrite = 0 : ui32, width = 16 : ui32, writeClockIDs = [], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
+hw.module.generated @WOMemoryWithMask, @FIRRTLMem(input %W0_addr: i10, input %W0_en: i1, input %W0_clk: !seq.clock, input %W0_data: i16, input %W0_mask: i2) attributes {depth = 1024 : i64, maskGran = 8 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, readUnderWrite = 0 : ui32, width = 16 : ui32, writeClockIDs = [], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
 
 
 // CHECK-LABEL: hw.module @TestROMemory(
-hw.module @TestROMemory(%clock: !seq.clock, %addr: i10, %enable: i1) -> (data: i8) {
+hw.module @TestROMemory(input %clock: !seq.clock, input %addr: i10, input %enable: i1, output %data: i8) {
   // CHECK-NOT: hw.instance
   // CHECK-NEXT: [[FOO:%.+]] = arc.memory <1024 x i8, i10> {name = "foo"}
   // CHECK-NEXT: [[RDATA:%.+]] = arc.memory_read_port [[FOO]][%addr] : <1024 x i8, i10>
@@ -47,11 +47,11 @@ hw.module @TestROMemory(%clock: !seq.clock, %addr: i10, %enable: i1) -> (data: i
 }
 // CHECK-NEXT: }
 // CHECK-NOT: hw.module.generated @ROMemory, @FIRRTLMem
-hw.module.generated @ROMemory, @FIRRTLMem(%R0_addr: i10, %R0_en: i1, %R0_clk: !seq.clock) -> (R0_data: i8) attributes {depth = 1024 : i64, maskGran = 8 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 0 : ui32, readLatency = 0 : ui32, readUnderWrite = 0 : ui32, width = 8 : ui32, writeClockIDs = [], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
+hw.module.generated @ROMemory, @FIRRTLMem(input %R0_addr: i10, input %R0_en: i1, input %R0_clk: !seq.clock, output %R0_data: i8) attributes {depth = 1024 : i64, maskGran = 8 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 0 : ui32, readLatency = 0 : ui32, readUnderWrite = 0 : ui32, width = 8 : ui32, writeClockIDs = [], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
 
 
 // CHECK-LABEL: hw.module @TestROMemoryWithLatency(
-hw.module @TestROMemoryWithLatency(%clock: !seq.clock, %addr: i10, %enable: i1) -> (data: i8) {
+hw.module @TestROMemoryWithLatency(input %clock: !seq.clock, input %addr: i10, input %enable: i1, output %data: i8) {
   // CHECK-NOT: hw.instance
   // CHECK-NEXT: [[FOO:%.+]] = arc.memory <1024 x i8, i10> {name = "foo"}
   // CHECK-NEXT: [[ADDR0:%.+]] = seq.compreg %addr, %clock
@@ -69,11 +69,11 @@ hw.module @TestROMemoryWithLatency(%clock: !seq.clock, %addr: i10, %enable: i1) 
 }
 // CHECK-NEXT: }
 // CHECK-NOT: hw.module.generated @ROMemoryWithLatency, @FIRRTLMem
-hw.module.generated @ROMemoryWithLatency, @FIRRTLMem(%R0_addr: i10, %R0_en: i1, %R0_clk: !seq.clock) -> (R0_data: i8) attributes {depth = 1024 : i64, maskGran = 8 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 0 : ui32, readLatency = 3 : ui32, readUnderWrite = 0 : ui32, width = 8 : ui32, writeClockIDs = [], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
+hw.module.generated @ROMemoryWithLatency, @FIRRTLMem(input %R0_addr: i10, input %R0_en: i1, input %R0_clk: !seq.clock, output %R0_data: i8) attributes {depth = 1024 : i64, maskGran = 8 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 0 : ui32, readLatency = 3 : ui32, readUnderWrite = 0 : ui32, width = 8 : ui32, writeClockIDs = [], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
 
 
 // CHECK-LABEL: hw.module @TestRWMemory(
-hw.module @TestRWMemory(%clock: !seq.clock, %addr: i10, %enable: i1, %wmode: i1, %wdata: i8) -> (rdata: i8) {
+hw.module @TestRWMemory(input %clock: !seq.clock, input %addr: i10, input %enable: i1, input %wmode: i1, input %wdata: i8, output %rdata: i8) {
   // CHECK-NOT: hw.instance
   // CHECK-NEXT: [[FOO:%.+]] = arc.memory <1024 x i8, i10> {name = "foo"}
   // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
@@ -90,4 +90,4 @@ hw.module @TestRWMemory(%clock: !seq.clock, %addr: i10, %enable: i1, %wmode: i1,
 }
 // CHECK-NEXT: }
 // CHECK-NOT: hw.module.generated @RWMemory, @FIRRTLMem
-hw.module.generated @RWMemory, @FIRRTLMem(%RW0_addr: i10, %RW0_en: i1, %RW0_clk: !seq.clock, %RW0_wmode: i1, %RW0_wdata: i8) -> (RW0_rdata: i8) attributes {depth = 1024 : i64, maskGran = 8 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 1 : ui32, numWritePorts = 0 : ui32, readLatency = 0 : ui32, readUnderWrite = 0 : ui32, width = 8 : ui32, writeClockIDs = [], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
+hw.module.generated @RWMemory, @FIRRTLMem(input %RW0_addr: i10, input %RW0_en: i1, input %RW0_clk: !seq.clock, input %RW0_wmode: i1, input %RW0_wdata: i8, output %RW0_rdata: i8) attributes {depth = 1024 : i64, maskGran = 8 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 1 : ui32, numWritePorts = 0 : ui32, readLatency = 0 : ui32, readUnderWrite = 0 : ui32, width = 8 : ui32, writeClockIDs = [], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}

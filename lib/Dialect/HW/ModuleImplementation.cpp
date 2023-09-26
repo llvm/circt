@@ -256,18 +256,22 @@ static ParseResult parseDirection(OpAsmParser &p, ModulePort::Direction &dir) {
            << key << "'";
   return success();
 }
+  /// Parses a quoted string token if present.
+  ParseResult parseTruelyOptionalString(OpAsmParser &p, std::string *string) {
+    p.parseOptionalString(string);
+    return success();
+  }
 
 /// Parse a single argument with the following syntax:
 ///
-///   direction `%ssaname : !type { optionalAttrDict} loc(optionalSourceLoc)`
+///   direction ssaname (id|string) : !type { optionalAttrDict} loc(optionalSourceLoc)`
 ///
-/// If `allowType` is false or `allowAttrs` are false then the respective
-/// parts of the grammar are not parsed.
 static ParseResult parsePort(OpAsmParser &p,
                              module_like_impl::PortParse &result) {
   NamedAttrList attrs;
-  if (parseDirection(p, result.direction) ||
+  if (parseDirection(p, result.direction) || 
       p.parseOperand(result.ssaName, /*allowResultNumber=*/false) ||
+        parseTruelyOptionalString(p, &result.rawName) ||
       p.parseColonType(result.type) || p.parseOptionalAttrDict(attrs) ||
       p.parseOptionalLocationSpecifier(result.sourceLoc))
     return failure();
@@ -299,6 +303,9 @@ ParseResult module_like_impl::parseModuleSignature(
   for (auto &arg : args) {
     ports.push_back({parsing_util::getNameFromSSA(context, arg.ssaName.name),
                      arg.type, arg.direction});
+    //rewrite type AFTER constructing ports.  This will be used in block args.
+    if (arg.direction == ModulePort::InOut)
+      arg.type = InOutType::get(arg.type);
     if (!arg.sourceLoc)
       arg.sourceLoc = parser.getEncodedSourceLoc(arg.ssaName.location);
   }
@@ -325,7 +332,7 @@ void module_like_impl::printModuleSignatureNew(OpAsmPrinter &p, Operation *op) {
 
   auto typeAttr = op->getAttrOfType<TypeAttr>("module_type");
   auto modType = cast<ModuleType>(typeAttr.getValue());
-  auto portAttrs = op->getAttrOfType<ArrayAttr>("port_attrs");
+  auto portAttrs = op->getAttrOfType<ArrayAttr>("per_port_attrs");
   auto locAttrs = op->getAttrOfType<ArrayAttr>("port_locs");
 
   p << '(';
@@ -337,15 +344,17 @@ void module_like_impl::printModuleSignatureNew(OpAsmPrinter &p, Operation *op) {
     p.printKeywordOrString(port.name);
     p << " : ";
     p.printType(port.type);
-    if (auto attr = dyn_cast<DictionaryAttr>(portAttrs[i]))
-      p.printOptionalAttrDict(attr.getValue());
+    if (portAttrs && !portAttrs.empty())
+      if (auto attr = dyn_cast<DictionaryAttr>(portAttrs[i]))
+        p.printOptionalAttrDict(attr.getValue());
 
     // TODO: `printOptionalLocationSpecifier` will emit aliases for locations,
     // even if they are not printed.  This will have to be fixed upstream.  For
     // now, use what was specified on the command line.
-    if (flags.shouldPrintDebugInfo())
+    if (flags.shouldPrintDebugInfo() && locAttrs)
       if (auto loc = locAttrs[i])
-        p.printOptionalLocationSpecifier(cast<Location>(loc));
+        if (!isa<UnknownLoc>(loc))
+          p.printOptionalLocationSpecifier(cast<Location>(loc));
   }
 
   p << ')';

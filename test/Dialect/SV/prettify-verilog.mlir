@@ -2,8 +2,8 @@
 // RUN: circt-opt -prettify-verilog %s | circt-opt --export-verilog | FileCheck %s --check-prefix=VERILOG
 
 // CHECK-LABEL: hw.module @unary_ops
-hw.module @unary_ops(%arg0: i8, %arg1: i8, %arg2: i8, %arg3: i1)
-   -> (a: i8, b: i8, c: i1) {
+hw.module @unary_ops(input %arg0: i8, input %arg1: i8, input %arg2: i8, input %arg3: i1,
+   output %a: i8, output %b: i8, output %c: i1) {
   %c-1_i8 = hw.constant -1 : i8
 
   // CHECK: [[XOR1:%.+]] = comb.xor %arg0
@@ -43,7 +43,7 @@ hw.module @unary_ops(%arg0: i8, %arg1: i8, %arg2: i8, %arg3: i1)
 /// The pass should sink constants in to the block where they are used.
 // CHECK-LABEL: @sink_constants
 // VERILOG-LABEL: sink_constants
-hw.module @sink_constants(%clock :i1) -> (out : i1){
+hw.module @sink_constants(input %clock :i1, output %out : i1){
   // CHECK: %false = hw.constant false
   %false = hw.constant false
 
@@ -95,7 +95,7 @@ hw.module @sink_constants(%clock :i1) -> (out : i1){
 // Prettify should always sink ReadInOut to its usage.
 // CHECK-LABEL: @sinkReadInOut
 // VERILOG-LABEL: sinkReadInOut
-hw.module @sinkReadInOut(%clk: i1) {
+hw.module @sinkReadInOut(input %clk: i1) {
   %myreg = sv.reg  : !hw.inout<array<1xstruct<a: i48, b: i48>>>
   %false = hw.constant false
   %0 = sv.array_index_inout %myreg[%false]: !hw.inout<array<1xstruct<a: i48, b: i48>>>, i1
@@ -119,7 +119,7 @@ hw.module @sinkReadInOut(%clk: i1) {
 
 // CHECK-LABEL: @sink_expression
 // VERILOG-LABEL: sink_expression
-hw.module @sink_expression(%clock: i1, %a: i1, %a2: i1, %a3: i1, %a4: i1) {
+hw.module @sink_expression(input %clock: i1, input %a: i1, input %a2: i1, input %a3: i1, input %a4: i1) {
   // This or is used in one place.
   %0 = comb.or %a2, %a3 : i1
   // This and/xor chain is used in two.  Both should be sunk.
@@ -152,7 +152,7 @@ hw.module @sink_expression(%clock: i1, %a: i1, %a2: i1, %a3: i1, %a4: i1) {
 }
 
 // CHECK-LABEL: @dont_sink_se_expression
-hw.module @dont_sink_se_expression(%clock: i1, %a: i1, %a2: i1, %a3: i1, %a4: i1) {
+hw.module @dont_sink_se_expression(input %clock: i1, input %a: i1, input %a2: i1, input %a3: i1, input %a4: i1) {
 
   // CHECK: [[DONT_TOUCH:%.*]] = sv.verbatim.expr.se "DONT_TOUCH"
   %0 = sv.verbatim.expr "SINK_ME" : () -> i1
@@ -174,11 +174,11 @@ hw.module @dont_sink_se_expression(%clock: i1, %a: i1, %a2: i1, %a3: i1, %a4: i1
   hw.output
 }
 
-hw.module.extern @MyExtModule(%in: i8)
+hw.module.extern @MyExtModule(input %in: i8)
 
 // CHECK-LABEL: hw.module @MoveInstances
 // VERILOG-LABEL: module MoveInstances
-hw.module @MoveInstances(%a_in: i8) {
+hw.module @MoveInstances(input %a_in: i8) {
   // CHECK: %0 = comb.add %a_in, %a_in : i8
   // CHECK: hw.instance "xyz3" @MyExtModule(in: %0: i8)
   // VERILOG: MyExtModule xyz3 (
@@ -191,7 +191,7 @@ hw.module @MoveInstances(%a_in: i8) {
 
 
 // CHECK-LABEL: hw.module @unary_sink_crash
-hw.module @unary_sink_crash(%arg0: i1) {
+hw.module @unary_sink_crash(input %arg0: i1) {
   %true = hw.constant true
   %c = comb.xor %arg0, %true : i1
   // CHECK-NOT: hw.constant
@@ -217,7 +217,7 @@ hw.module @unary_sink_crash(%arg0: i1) {
 
 // CHECK-LABEL: hw.module @unary_sink_no_duplicate
 // https://github.com/llvm/circt/issues/2097
-hw.module @unary_sink_no_duplicate(%arg0: i4) -> (result: i4) {
+hw.module @unary_sink_no_duplicate(input %arg0: i4, output %result: i4) {
   %ones = hw.constant 15: i4
 
   // CHECK-NOT: comb.xor
@@ -243,7 +243,7 @@ hw.module @unary_sink_no_duplicate(%arg0: i4) -> (result: i4) {
 }
 
 // CHECK-LABEL: hw.module private @ConnectToAllFields
-hw.module private @ConnectToAllFields(%clock: i1, %reset: i1, %value: i2, %base: !hw.inout<!hw.struct<a: i2>>) -> () {
+hw.module private @ConnectToAllFields(input %clock: i1, input %reset: i1, input %value: i2, inout %base: !hw.struct<a: i2>) {
   %r = sv.reg : !hw.inout<!hw.struct<a: i2>>
   %val = sv.read_inout %r : !hw.inout<!hw.struct<a: i2>>
   sv.always posedge %clock {
@@ -262,7 +262,7 @@ hw.module private @ConnectToAllFields(%clock: i1, %reset: i1, %value: i2, %base:
 }
 
 // CHECK-LABEL: hw.module private @ConnectSubfield
-hw.module private @ConnectSubfield(%clock: i1, %reset: i1, %value: i2) -> () {
+hw.module private @ConnectSubfield(input %clock: i1, input %reset: i1, input %value: i2) {
   %r = sv.reg : !hw.inout<!hw.struct<a: i2>>
   %val = sv.read_inout %r : !hw.inout<!hw.struct<a: i2>>
   sv.always posedge %clock {
@@ -280,7 +280,7 @@ hw.module private @ConnectSubfield(%clock: i1, %reset: i1, %value: i2) -> () {
 }
 
 // CHECK-LABEL: hw.module private @ConnectSubfields
-hw.module private @ConnectSubfields(%clock: i1, %reset: i1, %value2: i2, %value3: i3) -> () {
+hw.module private @ConnectSubfields(input %clock: i1, input %reset: i1, input %value2: i2, input %value3: i3) {
   %r = sv.reg : !hw.inout<!hw.struct<a: i2, b: i3>>
   %val = sv.read_inout %r : !hw.inout<!hw.struct<a: i2, b: i3>>
   sv.always posedge %clock {
@@ -303,7 +303,7 @@ hw.module private @ConnectSubfields(%clock: i1, %reset: i1, %value2: i2, %value3
 }
 
 // CHECK-LABEL: hw.module private @ConnectSubfieldOverwrite
-hw.module private @ConnectSubfieldOverwrite(%clock: i1, %reset: i1, %value2: i2, %value3: i2) -> () {
+hw.module private @ConnectSubfieldOverwrite(input %clock: i1, input %reset: i1, input %value2: i2, input %value3: i2) {
   %r = sv.reg : !hw.inout<!hw.struct<a: i2, b: i3>>
   %val = sv.read_inout %r : !hw.inout<!hw.struct<a: i2, b: i3>>
   sv.always posedge %clock {
@@ -322,7 +322,7 @@ hw.module private @ConnectSubfieldOverwrite(%clock: i1, %reset: i1, %value2: i2,
 }
 
 // CHECK-LABEL: hw.module private @ConnectNestedSubfield
-hw.module private @ConnectNestedSubfield(%clock: i1, %reset: i1, %value: i2) -> () {
+hw.module private @ConnectNestedSubfield(input %clock: i1, input %reset: i1, input %value: i2) {
   %r = sv.reg : !hw.inout<!hw.struct<a: !hw.struct<b: i2>>>
   %val = sv.read_inout %r : !hw.inout<!hw.struct<a: !hw.struct<b: i2>>>
   sv.always posedge %clock {
@@ -344,7 +344,7 @@ hw.module private @ConnectNestedSubfield(%clock: i1, %reset: i1, %value: i2) -> 
 
 
 // CHECK-LABEL: hw.module private @ConnectSubindexMid
-hw.module private @ConnectSubindexMid(%clock: i1, %reset: i1, %value: i2) -> () {
+hw.module private @ConnectSubindexMid(input %clock: i1, input %reset: i1, input %value: i2) {
   %c0_i2 = hw.constant 0 : i2
   %c-2_i2 = hw.constant -2 : i2
   %r = sv.reg : !hw.inout<!hw.array<3xi2>>
@@ -367,7 +367,7 @@ hw.module private @ConnectSubindexMid(%clock: i1, %reset: i1, %value: i2) -> () 
 }
 
 // CHECK-LABEL: hw.module private @ConnectSubindexSingleton
-hw.module private @ConnectSubindexSingleton(%clock: i1, %reset: i1, %value: i2) -> () {
+hw.module private @ConnectSubindexSingleton(input %clock: i1, input %reset: i1, input %value: i2) {
   %none = hw.constant 0 : i0
   %r = sv.reg : !hw.inout<!hw.array<1xi2>>
   %val = sv.read_inout %r : !hw.inout<!hw.array<1xi2>>
@@ -382,7 +382,7 @@ hw.module private @ConnectSubindexSingleton(%clock: i1, %reset: i1, %value: i2) 
 }
 
 // CHECK-LABEL: hw.module private @ConnectSubindexLeft
-hw.module private @ConnectSubindexLeft(%clock: i1, %reset: i1, %value: i2) -> () {
+hw.module private @ConnectSubindexLeft(input %clock: i1, input %reset: i1, input %value: i2) {
   %c0_i2 = hw.constant 0 : i2
 
   %r = sv.reg : !hw.inout<!hw.array<3xi2>>
@@ -404,7 +404,7 @@ hw.module private @ConnectSubindexLeft(%clock: i1, %reset: i1, %value: i2) -> ()
 }
 
 // CHECK-LABEL: hw.module private @ConnectSubindexRight
-hw.module private @ConnectSubindexRight(%clock: i1, %reset: i1, %value: i2) -> () {
+hw.module private @ConnectSubindexRight(input %clock: i1, input %reset: i1, input %value: i2) {
   %c1_i2 = hw.constant 1 : i2
   %r = sv.reg : !hw.inout<!hw.array<3xi2>>
   %val = sv.read_inout %r : !hw.inout<!hw.array<3xi2>>
@@ -425,7 +425,7 @@ hw.module private @ConnectSubindexRight(%clock: i1, %reset: i1, %value: i2) -> (
 }
 
 // CHECK-LABEL: hw.module private @ConnectSubindices
-hw.module private @ConnectSubindices(%clock: i1, %reset: i1, %value: i2) -> () {
+hw.module private @ConnectSubindices(input %clock: i1, input %reset: i1, input %value: i2) {
   %c0_i3 = hw.constant 0 : i3
   %c2_i3 = hw.constant 2 : i3
   %c3_i3 = hw.constant 3 : i3
@@ -462,7 +462,7 @@ hw.module private @ConnectSubindices(%clock: i1, %reset: i1, %value: i2) -> () {
 }
 
 // CHECK-LABEL: hw.module private @ConnectSubindicesOverwrite
-hw.module private @ConnectSubindicesOverwrite(%clock: i1, %reset: i1, %value: i2, %value2: i2) -> () {
+hw.module private @ConnectSubindicesOverwrite(input %clock: i1, input %reset: i1, input %value: i2, input %value2: i2) {
   %c0_i3 = hw.constant 0 : i3
   %c2_i3 = hw.constant 2 : i3
   %r = sv.reg : !hw.inout<!hw.array<5xi2>>
@@ -493,7 +493,7 @@ hw.module private @ConnectSubindicesOverwrite(%clock: i1, %reset: i1, %value: i2
 }
 
 // CHECK-LABEL: hw.module private @ConnectNestedSubindex
-hw.module private @ConnectNestedSubindex(%clock: i1, %reset: i1, %value: i2) -> () {
+hw.module private @ConnectNestedSubindex(input %clock: i1, input %reset: i1, input %value: i2) {
   %c1_i2 = hw.constant 1 : i2
   %c0_i2 = hw.constant 0 : i2
   %c-2_i2 = hw.constant -2 : i2
@@ -523,7 +523,7 @@ hw.module private @ConnectNestedSubindex(%clock: i1, %reset: i1, %value: i2) -> 
 }
 
 // CHECK-LABEL: hw.module private @ConnectNestedFieldsAndIndices
-hw.module private @ConnectNestedFieldsAndIndices(%clock: i1, %reset: i1, %value: i2) -> () {
+hw.module private @ConnectNestedFieldsAndIndices(input %clock: i1, input %reset: i1, input %value: i2) {
   %c2_i3 = hw.constant 2 : i3
   %c0_i3 = hw.constant 0 : i3
   %c-2_i2 = hw.constant -2 : i2
@@ -567,7 +567,7 @@ hw.module private @ConnectNestedFieldsAndIndices(%clock: i1, %reset: i1, %value:
 
 
 // CHECK-LABEL: hw.module private @SelfConnect
-hw.module private @SelfConnect(%clock: i1, %reset: i1) -> () {
+hw.module private @SelfConnect(input %clock: i1, input %reset: i1) {
   %r = sv.reg : !hw.inout<i2>
   %val = sv.read_inout %r : !hw.inout<i2>
   sv.always posedge %clock {
@@ -586,7 +586,7 @@ hw.module private @SelfConnect(%clock: i1, %reset: i1) -> () {
 }
 
 // CHECK-LABEL: Issue4030
-hw.module @Issue4030(%a: i1, %clock: i1, %in1: !hw.array<2xi1>) -> (b: !hw.array<5xi1>) {
+hw.module @Issue4030(input %a: i1, input %clock: i1, input %in1: !hw.array<2xi1>, output %b: !hw.array<5xi1>) {
   %c0_i3 = hw.constant 0 : i3
   %false = hw.constant false
   %0 = hw.array_get %in1[%false] : !hw.array<2xi1>, i1

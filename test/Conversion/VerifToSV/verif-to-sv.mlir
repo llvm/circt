@@ -1,7 +1,7 @@
 // RUN: circt-opt --lower-verif-to-sv %s | FileCheck %s
 
 // CHECK-LABEL: hw.module @HasBeenResetAsync
-hw.module @HasBeenResetAsync(%clock: i1, %reset: i1) -> (out: i1) {
+hw.module @HasBeenResetAsync(input %clock: i1, input %reset: i1, output %out: i1) {
   %0 = verif.has_been_reset %clock, async %reset
   hw.output %0 : i1
 
@@ -29,7 +29,7 @@ hw.module @HasBeenResetAsync(%clock: i1, %reset: i1) -> (out: i1) {
 }
 
 // CHECK-LABEL: hw.module @HasBeenResetSync
-hw.module @HasBeenResetSync(%clock: i1, %reset: i1) -> (out: i1) {
+hw.module @HasBeenResetSync(input %clock: i1, input %reset: i1, output %out: i1) {
   %0 = verif.has_been_reset %clock, sync %reset
   hw.output %0 : i1
 

@@ -16,7 +16,7 @@
 // RUN: verilator --lint-only +1800-2012ext+sv %t1.2012.sv
 // RUN: verilator --lint-only +1800-2017ext+sv %t1.2017.sv
 
-hw.module @top(%clock : i1, %reset: i1,
+hw.module @top(input %clock : i1, input %reset: i1,
                 %a: i4, 
                 %s: !hw.struct<foo: i2, bar: i4>,
                 %parray: !hw.array<10xi4>,

@@ -23,7 +23,7 @@ sv.interface @IValidReady_Struct  {
 // CHECK-NEXT:          _GEN_1,
 // CHECK-NEXT:          _GEN_0,
 // CHECK-NEXT:          _GEN_0})};{{.*}}
-hw.module @structs(%clk: i1, %rstn: i1) {
+hw.module @structs(input %clk: i1, input %rstn: i1) {
   %0 = sv.interface.instance name "iface" : !sv.interface<@IValidReady_Struct>
   sv.interface.signal.assign %0(@IValidReady_Struct::@data) = %s : !hw.struct<foo: !hw.array<72xi1>, bar: !hw.array<128xi1>, baz: !hw.array<224xi1>>
   %c0 = hw.constant 0 : i8
@@ -40,8 +40,8 @@ hw.module @structs(%clk: i1, %rstn: i1) {
 
 // CHECK-LABEL:module CoverAssert({{.*}}
 hw.module @CoverAssert(
-  %clock: i1, %reset: i1,
-  %eeeeee_fffff_gggggg_hhh_i_jjjjj_kkkkkkkkk_lllllll_mmmmmmmmm_nnnnnnnn_0: i4) {
+  input %clock: i1, input %reset: i1,
+  input %eeeeee_fffff_gggggg_hhh_i_jjjjj_kkkkkkkkk_lllllll_mmmmmmmmm_nnnnnnnn_0: i4) {
     %c0_i4 = hw.constant 0 : i4
     %true = hw.constant true
 
@@ -67,7 +67,7 @@ hw.module @CoverAssert(
     sv.assert.concurrent posedge %clock, %5 label "assert__label" message "assert failed"
 }
 
-hw.module @MuxChain(%a_0: i1, %a_1: i1, %a_2: i1, %c_0: i1, %c_1: i1, %c_2: i1) -> (out: i1) {
+hw.module @MuxChain(input %a_0: i1, input %a_1: i1, input %a_2: i1, input %c_0: i1, input %c_1: i1, input %c_2: i1, output %out: i1) {
   %0 = comb.mux bin %a_1, %c_1, %c_0 : i1
   %1 = comb.mux bin %a_0, %0, %c_2 : i1
   %2 = comb.mux bin %a_2, %1, %c_1 : i1
@@ -240,7 +240,7 @@ hw.module @svattrs() {
 sv.macro.decl @RANDOM
 
 // CHECK-LABEL:module ForStatement{{.*}}
-hw.module @ForStatement(%aaaaaaaaaaa: i5, %xxxxxxxxxxxxxxx : i2, %yyyyyyyyyyyyyyy : i2, %zzzzzzzzzzzzzzz : i2) -> () {
+hw.module @ForStatement(input %aaaaaaaaaaa: i5, input %xxxxxxxxxxxxxxx : i2, input %yyyyyyyyyyyyyyy : i2, input %zzzzzzzzzzzzzzz : i2) {
   %_RANDOM = sv.logic : !hw.inout<uarray<3xi32>>
   sv.initial {
     %x_and_y = comb.and %xxxxxxxxxxxxxxx, %yyyyyyyyyyyyyyy : i2

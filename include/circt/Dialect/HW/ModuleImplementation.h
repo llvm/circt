@@ -26,6 +26,7 @@ namespace module_like_impl {
 
 struct PortParse : OpAsmParser::Argument {
   ModulePort::Direction direction;
+  std::string rawName; // may be different from ssaName
 };
 
 /// This is a variant of mlir::parseFunctionSignature that allows names on

@@ -166,7 +166,7 @@ class ModuleLike:
       output_names.append(output_name)
       port_locs.append(unknownLoc)
     attributes["resultNames"] = ArrayAttr.get(output_names)
-    attributes["portLocs"] = ArrayAttr.get(port_locs)
+    attributes["port_locs"] = ArrayAttr.get(port_locs)
     attributes["per_port_attrs"] = ArrayAttr.get([])
 
     if len(parameters) > 0 or "parameters" not in attributes:

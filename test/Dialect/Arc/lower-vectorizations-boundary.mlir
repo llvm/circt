@@ -1,6 +1,6 @@
 // RUN: circt-opt %s --arc-lower-vectorizations=mode=boundary -split-input-file | FileCheck %s
 
-hw.module @vectorize(%in0: i1, %in1: i1, %in2: i1, %in3: i1, %in4: i64, %in5: i64, %in6: i32, %in7: i32) -> (out0: i1, out1: i1, out2: i64, out3: i64) {
+hw.module @vectorize(input %in0: i1, input %in1: i1, input %in2: i1, input %in3: i1, input %in4: i64, input %in5: i64, input %in6: i32, input %in7: i32, output %out0: i1, output %out1: i1, output %out2: i64, output %out3: i64) {
   %0:2 = arc.vectorize (%in0, %in1), (%in2, %in3) : (i1, i1, i1, i1) -> (i1, i1) {
   ^bb0(%arg0: i1, %arg1: i1):
     %1 = comb.and %arg0, %arg1 : i1
@@ -17,7 +17,7 @@ hw.module @vectorize(%in0: i1, %in1: i1, %in2: i1, %in3: i1, %in4: i64, %in5: i6
 }
 
 // CHECK-LABEL: hw.module @vectorize
-//  CHECK-SAME: ([[IN0:%.+]]: i1, [[IN1:%.+]]: i1, [[IN2:%.+]]: i1, [[IN3:%.+]]: i1, [[IN4:%.+]]: i64, [[IN5:%.+]]: i64, [[IN6:%.+]]: i32, [[IN7:%.+]]: i32) ->
+//  CHECK-SAME: (input [[IN0:%.+]] : i1, input [[IN1:%.+]] : i1, input [[IN2:%.+]] : i1, input [[IN3:%.+]] : i1, input [[IN4:%.+]] : i64, input [[IN5:%.+]] : i64, input [[IN6:%.+]] : i32, input [[IN7:%.+]] : i32,
 //       CHECK: [[V0:%.+]] = comb.concat [[IN0]], [[IN1]] :
 //       CHECK: [[V1:%.+]] = comb.concat [[IN2]], [[IN3]] :
 //       CHECK: [[V2:%.+]] = arc.vectorize ([[V0]]), ([[V1]])
@@ -38,7 +38,7 @@ hw.module @vectorize(%in0: i1, %in1: i1, %in2: i1, %in3: i1, %in4: i64, %in5: i6
 
 // -----
 
-hw.module @vectorize_body_already_lowered(%in0: i1, %in1: i1, %in2: i1, %in3: i1) -> (out0: i1, out1: i1, out2: i1, out3: i1) {
+hw.module @vectorize_body_already_lowered(input %in0: i1, input %in1: i1, input %in2: i1, input %in3: i1, output %out0: i1, output %out1: i1, output %out2: i1, output %out3: i1) {
   %0:2 = arc.vectorize (%in0, %in1), (%in2, %in2) : (i1, i1, i1, i1) -> (i1, i1) {
   ^bb0(%arg0: i2, %arg1: i2):
     %1 = arith.andi %arg0, %arg1 : i2
@@ -55,7 +55,7 @@ hw.module @vectorize_body_already_lowered(%in0: i1, %in1: i1, %in2: i1, %in3: i1
 }
 
 // CHECK-LABEL: hw.module @vectorize_body_already_lowered
-//  CHECK-SAME: ([[IN0:%.+]]: i1, [[IN1:%.+]]: i1, [[IN2:%.+]]: i1, [[IN3:%.+]]: i1) ->
+//  CHECK-SAME: (input [[IN0:%.+]] : i1, input [[IN1:%.+]] : i1, input [[IN2:%.+]] : i1, input [[IN3:%.+]] : i1,
 //       CHECK: [[V0:%.+]] = comb.concat [[IN0]], [[IN1]] :
 //       CHECK: [[V1:%.+]] = comb.concat [[IN2]], [[IN2]] :
 //       CHECK: [[V2:%.+]] = arc.vectorize ([[V0]]), ([[V1]])
@@ -78,7 +78,7 @@ hw.module @vectorize_body_already_lowered(%in0: i1, %in1: i1, %in2: i1, %in3: i1
 
 // -----
 
-hw.module @boundary_already_vectorized(%in0: i1, %in1: i1, %in2: i1) -> (out0: i1, out1: i1) {
+hw.module @boundary_already_vectorized(input %in0: i1, input %in1: i1, input %in2: i1, output %out0: i1, output %out1: i1) {
   %cst = arith.constant dense<0> : vector<2xi1>
   %0 = vector.insert %in0, %cst[0] : i1 into vector<2xi1>
   %1 = vector.insert %in1, %0[1] : i1 into vector<2xi1>
@@ -95,7 +95,7 @@ hw.module @boundary_already_vectorized(%in0: i1, %in1: i1, %in2: i1) -> (out0: i
 }
 
 // CHECK-LABEL: hw.module @boundary_already_vectorized
-//  CHECK-SAME: ([[IN0:%.+]]: i1, [[IN1:%.+]]: i1, [[IN2:%.+]]: i1) ->
+//  CHECK-SAME: (input [[IN0:%.+]] : i1, input [[IN1:%.+]] : i1, input [[IN2:%.+]] : i1,
 //       CHECK:  [[CST:%.+]] = arith.constant dense<false>
 //       CHECK:  [[V0:%.+]] = vector.insert [[IN0]], [[CST]] [0]
 //       CHECK:  [[V1:%.+]] = vector.insert [[IN1]], [[V0]] [1]
