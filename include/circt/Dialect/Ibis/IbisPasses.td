@@ -70,7 +70,9 @@ def IbisPortrefLowering : Pass<"ibis-lower-portrefs", "mlir::ModuleOp"> {
 def IbisCleanSelfdrivers : Pass<"ibis-clean-selfdrivers", "mlir::ModuleOp"> {
   let summary = "Ibis clean selfdrivers pass";
   let description = [{
-    Removes `ibis.port.input`s which are driven by operations within the same
+    - Removes `ibis.port.input`s which are driven by operations within the same
+    container.
+    - Removes reads of instance ports which are also written to within the same
     container.
   }];
 

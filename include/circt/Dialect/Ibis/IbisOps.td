@@ -606,6 +606,12 @@ def GetPortOp : IbisOp<"get_port", [
   ];
 
   let hasCanonicalizeMethod = 1;
+  let extraClassDeclaration = [{
+    // Returns the direction requested by this get_port op.
+    ibis::Direction getDirection() {
+      return getPort().getType().cast<PortRefType>().getDirection();
+    }
+  }];
 }
 
 class PortLikeOp<string mnemonic, list<Trait> traits = []> :
