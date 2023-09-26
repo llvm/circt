@@ -576,7 +576,8 @@ FirRegLower::RegLowerInfo FirRegLower::lower(FirRegOp reg) {
 
   SmallPtrSet<Operation *, 16> regMuxFanout;
   getForwardSliceSimple(reg, regMuxFanout, [&](Operation *op) {
-    return op == reg || isa<comb::MuxOp>(op);
+    return op == reg || isa<hw::ArrayGetOp>(op) || isa<hw::ArrayCreateOp>(op) ||
+           isa<comb::MuxOp>(op);
   });
 
   if (reg.hasReset()) {
