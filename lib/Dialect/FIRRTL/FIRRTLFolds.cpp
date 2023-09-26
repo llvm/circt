@@ -1909,7 +1909,7 @@ struct FoldNodeName : public mlir::RewritePattern {
     auto node = cast<NodeOp>(op);
     auto name = node.getNameAttr();
     if (!node.hasDroppableName() || node.getInnerSym() ||
-        !node.getAnnotations().empty() || node.isForceable())
+        !AnnotationSet(node).canBeDeleted() || node.isForceable())
       return failure();
     auto *newOp = node.getInput().getDefiningOp();
     // Best effort, do not rename InstanceOp
@@ -1927,7 +1927,7 @@ struct NodeBypass : public mlir::RewritePattern {
   LogicalResult matchAndRewrite(Operation *op,
                                 PatternRewriter &rewriter) const override {
     auto node = cast<NodeOp>(op);
-    if (node.getInnerSym() || !node.getAnnotations().empty() ||
+    if (node.getInnerSym() || !AnnotationSet(node).canBeDeleted() ||
         node.use_empty() || node.isForceable())
       return failure();
     rewriter.startRootUpdate(node);
@@ -1956,7 +1956,8 @@ LogicalResult NodeOp::fold(FoldAdaptor adaptor,
     return failure();
   if (hasDontTouch(getResult())) // handles inner symbols
     return failure();
-  if (getAnnotationsAttr() && !getAnnotationsAttr().empty())
+  if (getAnnotationsAttr() &&
+      !AnnotationSet(getAnnotationsAttr()).canBeDeleted())
     return failure();
   if (isForceable())
     return failure();
@@ -2183,7 +2184,7 @@ struct FoldResetMux : public mlir::RewritePattern {
     auto reset =
         dyn_cast_or_null<ConstantOp>(reg.getResetValue().getDefiningOp());
     if (!reset || hasDontTouch(reg.getOperation()) ||
-        !reg.getAnnotations().empty() || reg.isForceable())
+        !AnnotationSet(reg).canBeDeleted() || reg.isForceable())
       return failure();
     // Find the one true connect, or bail
     auto con = getSingleConnectUserOf(reg.getResult());
