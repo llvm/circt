@@ -107,6 +107,13 @@ MLIR_CAPI_EXPORTED MlirType omEvaluatorObjectGetType(OMEvaluatorValue object);
 MLIR_CAPI_EXPORTED OMEvaluatorValue
 omEvaluatorObjectGetField(OMEvaluatorValue object, MlirAttribute name);
 
+/// Get the object hash.
+MLIR_CAPI_EXPORTED unsigned omEvaluatorObjectGetHash(OMEvaluatorValue object);
+
+/// Check equality of two objects.
+MLIR_CAPI_EXPORTED bool omEvaluatorObjectIsEq(OMEvaluatorValue object,
+                                              OMEvaluatorValue other);
+
 /// Get all the field names from an Object, can be empty if object has no
 /// fields.
 MLIR_CAPI_EXPORTED MlirAttribute

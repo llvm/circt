@@ -140,6 +140,17 @@ MlirType omEvaluatorObjectGetType(OMEvaluatorValue object) {
   return wrap(llvm::cast<Object>(unwrap(object).get())->getType());
 }
 
+/// Get the hash for the object.
+unsigned omEvaluatorObjectGetHash(OMEvaluatorValue object) {
+  return llvm::cast<Object>(unwrap(object).get())->getHash();
+}
+
+/// Check if two objects are same.
+bool omEvaluatorObjectIsEq(OMEvaluatorValue object, OMEvaluatorValue other) {
+  return llvm::cast<Object>(unwrap(object).get()) ==
+         llvm::cast<Object>(unwrap(other).get());
+}
+
 /// Get an ArrayAttr with the names of the fields in an Object.
 MlirAttribute omEvaluatorObjectGetFieldNames(OMEvaluatorValue object) {
   return wrap(llvm::cast<Object>(unwrap(object).get())->getFieldNames());
