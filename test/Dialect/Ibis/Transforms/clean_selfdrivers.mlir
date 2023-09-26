@@ -1,4 +1,4 @@
-// RUN: circt-opt --ibis-clean-selfdrivers %s | FileCheck %s
+// RUN: circt-opt --split-input-file --ibis-clean-selfdrivers %s | FileCheck %s
 
 // CHECK-LABEL:   ibis.container @C {
 // CHECK:           %[[VAL_0:.*]] = ibis.this @C
@@ -15,4 +15,35 @@ ibis.container @C {
     ibis.port.write %in, %true : !ibis.portref<in i1>
     %v = ibis.port.read %in : !ibis.portref<in i1>
     ibis.port.write %out, %v : !ibis.portref<out i1>
+}
+
+// ----
+
+// CHECK-LABEL:   ibis.container @Selfdriver {
+// CHECK:           %[[VAL_0:.*]] = ibis.this @Selfdriver
+// CHECK:           %[[VAL_1:.*]] = hw.wire %[[VAL_2:.*]]  : i1
+// CHECK:           %[[VAL_3:.*]] = ibis.port.output @in : i1
+// CHECK:           ibis.port.write %[[VAL_3]], %[[VAL_1]] : !ibis.portref<out i1>
+// CHECK:           %[[VAL_2]] = hw.constant true
+// CHECK:         }
+
+// CHECK-LABEL:   ibis.container @ParentReader {
+// CHECK:           %[[VAL_0:.*]] = ibis.this @ParentReader
+// CHECK:           %[[VAL_1:.*]] = ibis.container.instance @selfdriver, @Selfdriver
+// CHECK:           %[[VAL_2:.*]] = ibis.get_port %[[VAL_1]], @in : !ibis.scoperef<@Selfdriver> -> !ibis.portref<out i1>
+// CHECK:           %[[VAL_3:.*]] = ibis.port.read %[[VAL_2]] : !ibis.portref<out i1>
+// CHECK:         }
+
+ibis.container @Selfdriver {
+  %this = ibis.this @Selfdriver
+  %in = ibis.port.input @in : i1
+  %true = hw.constant 1 : i1
+  ibis.port.write %in, %true : !ibis.portref<in i1>
+}
+
+ibis.container @ParentReader {
+  %this = ibis.this @ParentReader
+  %selfdriver = ibis.container.instance @selfdriver, @Selfdriver
+  %in_ref = ibis.get_port %selfdriver, @in : !ibis.scoperef<@Selfdriver> -> !ibis.portref<out i1>
+  %in = ibis.port.read %in_ref : !ibis.portref<out i1>
 }
