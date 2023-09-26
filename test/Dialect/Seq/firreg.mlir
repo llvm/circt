@@ -513,7 +513,7 @@ hw.module @issue1594(%clock: !seq.clock, %reset: i1, %a: i1) -> (b: i1) {
 
 // Check that deeply nested if statement creation doesn't cause any issue.
 // COMMON-LABEL: @DeeplyNestedIfs
-// CHECK-COUNT-17: sv.if
+// CHECK-COUNT-1: sv.if
 hw.module @DeeplyNestedIfs(%a_0: i1, %a_1: i1, %a_2: i1, %c_0_0: i1, %c_0_1: i1, %c_1_0: i1, %c_1_1: i1, %c_2_0: i1, %c_2_1: i1, %clock: !seq.clock) -> (out_0: i1, out_1: i1) {
   %r_0 = seq.firreg %25 clock %clock {firrtl.random_init_start = 0 : ui64} : i1
   %r_1 = seq.firreg %51 clock %clock {firrtl.random_init_start = 1 : ui64} : i1
@@ -763,4 +763,50 @@ hw.module @reg_of_clock_type(%clk: !seq.clock, %rst: i1, %i: !seq.clock) -> (out
   // CHECK: hw.output [[REG2_READ]] : i1
 
   hw.output %r2 : !seq.clock
+}
+
+// Check if/else structure for register enable inference is maintained, without
+// pulling unnecessary muxes into if/else structures. The following testcase is
+// generated from:
+//   reg r1 : UInt<8>, clock
+//   reg r2 : UInt<8>, clock
+//   wire value : UInt<8>
+//   when a :
+//     connect value, foo
+//   else :
+//     connect value, bar
+//   when b :
+//     connect r1, fizz
+//     connect r2, value
+//   when c :
+//     connect r1, value
+//     connect r2, buzz
+// CHECK-LABEL: @RegMuxInlining
+hw.module @RegMuxInlining(%clock: !seq.clock, %reset: i1, %a: i1, %b: i1, %c: i1, %foo: i8, %bar: i8, %fizz: i8, %buzz: i8) -> (out: i8) {
+  // CHECK: [[REG0:%.+]] = sv.reg : !hw.inout<i8>
+  %r1 = seq.firreg %3 clock %clock : i8
+
+  // CHECK: [[REG1:%.+]] = sv.reg : !hw.inout<i8>
+  %r2 = seq.firreg %4 clock %clock : i8
+
+  // CHECK: [[VALUE:%.+]] = comb.mux bin %a, %foo, %bar
+  %0 = comb.mux bin %a, %foo, %bar {sv.namehint = "value"} : i8
+
+  // CHECK: sv.always posedge %clock {
+  // CHECK:   sv.if %c {
+  // CHECK:     sv.passign [[REG0]], [[VALUE]]
+  // CHECK:     sv.passign [[REG1]], %buzz
+  // CHECK:   } else {
+  // CHECK:     sv.if %b {
+  // CHECK:       sv.passign [[REG0]], %fizz
+  // CHECK:       sv.passign [[REG1]], [[VALUE]]
+  // CHECK:     }
+  // CHECK:   }
+  // CHECK: }
+  %1 = comb.mux bin %b, %fizz, %r1 : i8
+  %2 = comb.mux bin %b, %0, %r2 : i8
+  %3 = comb.mux bin %c, %0, %1 : i8
+  %4 = comb.mux bin %c, %buzz, %2 : i8
+  %5 = comb.add %r1, %r2 {sv.namehint = "_out_T"} : i8
+  hw.output %5 : i8
 }
