@@ -3197,4 +3197,71 @@ firrtl.module @HasBeenReset(in %clock: !firrtl.clock, in %reset1: !firrtl.uint<1
   %constClockR1 = firrtl.node sym @constClockR1 %c5 : !firrtl.uint<1>
 }
 
+// OMIR annotations should not block removal.
+//   - See: https://github.com/llvm/circt/issues/6199
+//
+// CHECK-LABEL: firrtl.module @OMIRRemoval
+firrtl.module @OMIRRemoval(in %source : !firrtl.uint<1>) {
+  // CHECK-NOT: %tmp_0
+  %tmp_0 = firrtl.wire {
+    annotations = [
+      {
+         class = "freechips.rocketchip.objectmodel.OMIRTracker",
+         id = 0 : i64,
+         type = "OMReferenceTarget"
+      }
+    ]} : !firrtl.uint<1>
+  %a = firrtl.wire : !firrtl.uint<1>
+  firrtl.strictconnect %tmp_0, %source : !firrtl.uint<1>
+  // CHECK: firrtl.strictconnect %a, %source
+  firrtl.strictconnect %a, %tmp_0 : !firrtl.uint<1>
+
+  // CHECK-NOT: %tmp_1
+  %tmp_1 = firrtl.wire {
+    annotations = [
+      {
+         class = "freechips.rocketchip.objectmodel.OMIRTracker",
+         id = 1 : i64,
+         type = "OMMemberReferenceTarget"
+      }
+    ]} : !firrtl.uint<1>
+  %b = firrtl.wire : !firrtl.uint<1>
+  firrtl.strictconnect %tmp_1, %source : !firrtl.uint<1>
+  // CHECK: firrtl.strictconnect %b, %source
+  firrtl.strictconnect %b, %tmp_1 : !firrtl.uint<1>
+
+  // CHECK-NOT: %tmp_2
+  %tmp_2 = firrtl.wire {
+    annotations = [
+      {
+         class = "freechips.rocketchip.objectmodel.OMIRTracker",
+         id = 2 : i64,
+         type = "OMMemberInstanceTarget"
+      }
+    ]} : !firrtl.uint<1>
+  %c = firrtl.wire : !firrtl.uint<1>
+  firrtl.strictconnect %tmp_2, %source : !firrtl.uint<1>
+  // CHECK: firrtl.strictconnect %c, %source
+  firrtl.strictconnect %c, %tmp_2 : !firrtl.uint<1>
+
+  // Adding one additional annotation will block removal.
+  //
+  // CHECK: %tmp_3
+  %tmp_3 = firrtl.wire {
+    annotations = [
+      {
+         class = "freechips.rocketchip.objectmodel.OMIRTracker",
+         id = 0 : i64,
+         type = "OMReferenceTarget"
+      },
+      {
+         class = "circt.test"
+      }
+    ]} : !firrtl.uint<1>
+  %d = firrtl.wire : !firrtl.uint<1>
+  firrtl.strictconnect %tmp_3, %source : !firrtl.uint<1>
+  // CHECK: firrtl.strictconnect %d, %tmp_3
+  firrtl.strictconnect %d, %tmp_3 : !firrtl.uint<1>
+}
+
 }

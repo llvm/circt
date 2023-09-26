@@ -1754,7 +1754,8 @@ static LogicalResult canonicalizeSingleSetConnect(StrictConnectOp op,
   // Only support wire and reg for now.
   if (!isa<WireOp>(connectedDecl) && !isa<RegOp>(connectedDecl))
     return failure();
-  if (hasDontTouch(connectedDecl) || !AnnotationSet(connectedDecl).empty() ||
+  if (hasDontTouch(connectedDecl) ||
+      !AnnotationSet(connectedDecl).canBeDeleted() ||
       !hasDroppableName(connectedDecl) ||
       cast<Forceable>(connectedDecl).isForceable())
     return failure();
