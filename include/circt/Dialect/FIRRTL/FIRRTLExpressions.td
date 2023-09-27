@@ -1084,6 +1084,15 @@ def ObjectSubfieldOp : FIRRTLOp<"object.subfield",
     static Type inferReturnType(ValueRange operands,
                                 ArrayRef<NamedAttribute> attrs,
                                 std::optional<Location> loc);
+
+    /// Return a `FieldRef` to the accessed field.
+    FieldRef getAccessedField() {
+      auto input = getInput();
+      auto index = getIndex();
+      auto inputType = input.getType();
+      auto fieldID = inputType.getFieldID(index);
+      return FieldRef(input, fieldID);
+    }
   }];
 }
 
