@@ -23,6 +23,10 @@ using namespace circt::ibis;
 using namespace circt::igraph;
 
 namespace {
+
+#define GEN_PASS_DEF_IBISTUNNELING
+#include "circt/Dialect/Ibis/IbisPasses.h.inc"
+
 // The PortInfo struct is used to keep track of the get_port ops that
 // specify which ports needs to be tunneled through the hierarchy.
 struct PortInfo {
@@ -36,17 +40,18 @@ struct PortInfo {
     return getPortOp.getPort().getType().cast<PortRefType>();
   }
   Type getInnerType() { return getType().getPortType(); }
-  Direction requestedDirection() { return getType().getDirection(); }
+  Direction getRequestedDirection() { return getType().getDirection(); }
 };
 
 struct Tunneler {
 public:
-  Tunneler(PathOp op, ConversionPatternRewriter &rewriter, InstanceGraph &ig);
+  Tunneler(const IbisTunnelingOptions &options, PathOp op,
+           ConversionPatternRewriter &rewriter, InstanceGraph &ig);
 
   // A mapping between requested port names from a ScopeRef and the actual
   // portref SSA values that are used to replace the get_port ops.
   // MapVector to ensure determinism.
-  using PortRefMapping = llvm::MapVector<StringAttr, Value>;
+  using PortRefMapping = llvm::MapVector<PortInfo *, Value>;
 
   // Launch the tunneling process.
   LogicalResult go();
@@ -81,16 +86,17 @@ private:
                            PortRefMapping &portMapping);
 
   // Generates names for the port refs to be created.
-  void genPortNames(llvm::MapVector<StringAttr, PortInfo> &portInfos);
+  void genPortNames(llvm::SmallVectorImpl<PortInfo> &portInfos);
 
   PathOp op;
   ConversionPatternRewriter &rewriter;
   InstanceGraph &ig;
+  const IbisTunnelingOptions &options;
   mlir::StringAttr pathName;
   llvm::SmallVector<PathStepAttr> path;
 
   // MapVector to ensure determinism.
-  llvm::MapVector<StringAttr, PortInfo> portInfos;
+  llvm::SmallVector<PortInfo> portInfos;
 
   // "Target" refers to the last step in the path which is the scoperef that
   // all port requests are tunneling towards.
@@ -98,9 +104,9 @@ private:
   FlatSymbolRefAttr targetName;
 };
 
-Tunneler::Tunneler(PathOp op, ConversionPatternRewriter &rewriter,
-                   InstanceGraph &ig)
-    : op(op), rewriter(rewriter), ig(ig) {
+Tunneler::Tunneler(const IbisTunnelingOptions &options, PathOp op,
+                   ConversionPatternRewriter &rewriter, InstanceGraph &ig)
+    : op(op), rewriter(rewriter), ig(ig), options(options) {
   llvm::copy(op.getPathAsRange(), std::back_inserter(path));
   assert(!path.empty() &&
          "empty paths should never occur - illegal for ibis.path ops");
@@ -108,7 +114,7 @@ Tunneler::Tunneler(PathOp op, ConversionPatternRewriter &rewriter,
   targetName = target.getChild();
 }
 
-void Tunneler::genPortNames(llvm::MapVector<StringAttr, PortInfo> &pis) {
+void Tunneler::genPortNames(llvm::SmallVectorImpl<PortInfo> &portInfos) {
   std::string pathName;
   llvm::raw_string_ostream ss(pathName);
   llvm::interleave(
@@ -121,8 +127,15 @@ void Tunneler::genPortNames(llvm::MapVector<StringAttr, PortInfo> &pis) {
       },
       "_");
 
-  for (auto &[sym, portInfo] : pis)
-    portInfo.portName = rewriter.getStringAttr(pathName + "_" + sym.getValue());
+  for (PortInfo &pi : portInfos) {
+    // Suffix the ports by the intended usage (read/write). This also de-aliases
+    // cases where one both reads and writes from the same input port.
+    std::string suffix = pi.getRequestedDirection() == Direction::Input
+                             ? options.writeSuffix
+                             : options.readSuffix;
+    pi.portName = rewriter.getStringAttr(pathName + "_" +
+                                         pi.portName.getValue() + suffix);
+  }
 }
 
 LogicalResult Tunneler::go() {
@@ -132,7 +145,8 @@ LogicalResult Tunneler::go() {
     if (!getPortOp)
       return user->emitOpError() << "unknown user of a PathOp result - "
                                     "tunneling only supports ibis.get_port";
-    portInfos[getPortOp.getPortSymbolAttr().getAttr()].getPortOp = getPortOp;
+    portInfos.push_back(
+        PortInfo{getPortOp.getPortSymbolAttr().getAttr(), getPortOp});
   }
   genPortNames(portInfos);
 
@@ -144,11 +158,11 @@ LogicalResult Tunneler::go() {
     return failure();
 
   // Replace the get_port ops with the target value.
-  for (auto [sym, portInfo] : portInfos) {
-    auto *it = mapping.find(sym);
+  for (PortInfo &pi : portInfos) {
+    auto *it = mapping.find(&pi);
     assert(it != mapping.end() &&
            "expected to find a portref mapping for all get_port ops");
-    rewriter.replaceOp(portInfo.getPortOp, it->second);
+    rewriter.replaceOp(pi.getPortOp, it->second);
   }
 
   // And finally erase the path.
@@ -181,7 +195,7 @@ Value Tunneler::portForwardIfNeeded(PortOpInterface actualPort,
                                     PortInfo &portInfo) {
   Direction actualDir =
       actualPort.getPort().getType().cast<PortRefType>().getDirection();
-  Direction requestedDir = portInfo.requestedDirection();
+  Direction requestedDir = portInfo.getRequestedDirection();
 
   // Match - just return the port itself.
   if (actualDir == requestedDir)
@@ -219,28 +233,52 @@ Value Tunneler::portForwardIfNeeded(PortOpInterface actualPort,
   return wireOp.getPort();
 }
 
+// Lookup an instance in the parent op. If the parent op is a symbol table, will
+// use that - else, scan the ibis.container.instance operations in the parent.
+static FailureOr<ContainerInstanceOp> locateInstanceIn(Operation *parentOp,
+                                                       FlatSymbolRefAttr name) {
+  if (parentOp->hasTrait<OpTrait::SymbolTable>()) {
+    auto *tunnelInstanceOp = SymbolTable::lookupSymbolIn(parentOp, name);
+    if (!tunnelInstanceOp)
+      return failure();
+    return cast<ContainerInstanceOp>(tunnelInstanceOp);
+  }
+
+  // Default: scan the container instances.
+  for (auto instanceOp : parentOp->getRegion(0).getOps<ContainerInstanceOp>()) {
+    if (instanceOp.getName() == name.getValue())
+      return instanceOp;
+  }
+
+  return failure();
+}
+
 // NOLINTNEXTLINE(misc-no-recursion)
 LogicalResult Tunneler::tunnelDown(InstanceGraphNode *currentContainer,
                                    FlatSymbolRefAttr tunnelInto,
                                    llvm::ArrayRef<PathStepAttr> path,
                                    PortRefMapping &portMapping) {
   // Locate the instance that we're tunneling into
-  auto scopeOp = currentContainer->getModule<ScopeOpInterface>();
-  auto *tunnelInstanceOp = SymbolTable::lookupSymbolIn(scopeOp, tunnelInto);
-  if (!tunnelInstanceOp)
+  Operation *parentOp = currentContainer->getModule().getOperation();
+  auto parentSymbolOp = dyn_cast<SymbolOpInterface>(parentOp);
+  assert(parentSymbolOp && "expected current container to be a symbol op");
+  FailureOr<ContainerInstanceOp> locateRes =
+      locateInstanceIn(parentOp, tunnelInto);
+  if (failed(locateRes))
     return op->emitOpError()
            << "expected an instance named " << tunnelInto << " in "
-           << scopeOp.getScopeName() << " but found none";
-  auto tunnelInstance = cast<ContainerInstanceOp>(tunnelInstanceOp);
+           << parentSymbolOp.getNameAttr() << " but found none";
+  ContainerInstanceOp tunnelInstance = *locateRes;
 
   if (path.empty()) {
     // Tunneling ended with a 'child' step - create get_ports of all of the
     // requested ports.
     rewriter.setInsertionPointAfter(tunnelInstance);
-    for (auto [sym, portInfo] : portInfos) {
-      auto targetGetPortOp = rewriter.create<GetPortOp>(
-          op.getLoc(), portInfo.getType(), tunnelInstance, sym);
-      portMapping[sym] = targetGetPortOp.getResult();
+    for (PortInfo &pi : portInfos) {
+      auto targetGetPortOp =
+          rewriter.create<GetPortOp>(op.getLoc(), pi.getType(), tunnelInstance,
+                                     pi.getPortOp.getPortSymbol());
+      portMapping[&pi] = targetGetPortOp.getResult();
     }
     return success();
   }
@@ -253,9 +291,9 @@ LogicalResult Tunneler::tunnelDown(InstanceGraphNode *currentContainer,
 
   rewriter.setInsertionPointToEnd(tunnelScope.getBodyBlock());
   llvm::DenseMap<StringAttr, OutputPortOp> outputPortOps;
-  for (auto [sym, portInfo] : portInfos) {
-    outputPortOps[sym] = rewriter.create<OutputPortOp>(
-        op.getLoc(), portInfo.portName, portInfo.getType());
+  for (PortInfo &pi : portInfos) {
+    outputPortOps[pi.portName] =
+        rewriter.create<OutputPortOp>(op.getLoc(), pi.portName, pi.getType());
   }
 
   // Recurse into the tunnel instance container.
@@ -263,12 +301,13 @@ LogicalResult Tunneler::tunnelDown(InstanceGraphNode *currentContainer,
   if (failed(tunnelDispatch(tunnelScopeNode, path, childMapping)))
     return failure();
 
-  for (auto [sym, res] : childMapping) {
-    auto &portInfo = portInfos[sym];
+  for (auto [pi, res] : childMapping) {
+    PortInfo &portInfo = *pi;
 
     // Write the target value to the output port.
     rewriter.setInsertionPointToEnd(tunnelScope.getBodyBlock());
-    rewriter.create<PortWriteOp>(op.getLoc(), outputPortOps[sym], res);
+    rewriter.create<PortWriteOp>(op.getLoc(), outputPortOps[portInfo.portName],
+                                 res);
 
     // Back in the current container, read the new output port of the child
     // instance and assign it to the port mapping.
@@ -276,7 +315,7 @@ LogicalResult Tunneler::tunnelDown(InstanceGraphNode *currentContainer,
     auto getPortOp = rewriter.create<GetPortOp>(
         op.getLoc(), tunnelInstance, portInfo.portName, portInfo.getType(),
         Direction::Output);
-    portMapping[sym] =
+    portMapping[pi] =
         rewriter.create<PortReadOp>(op.getLoc(), getPortOp).getResult();
   }
 
@@ -301,15 +340,16 @@ LogicalResult Tunneler::tunnelUp(InstanceGraphNode *currentContainer,
     if (path.empty()) {
       // Tunneling ended with a 'parent' step - all of the requested ports
       // should be available right here in the parent scope.
-      for (auto [sym, portInfo] : portInfos) {
-        PortOpInterface portLikeOp = parentScope.lookupPort(sym.strref());
+      for (PortInfo &pi : portInfos) {
+        StringRef targetPortName = pi.getPortOp.getPortSymbol();
+        PortOpInterface portLikeOp = parentScope.lookupPort(targetPortName);
         if (!portLikeOp)
           return op->emitOpError()
-                 << "expected a port named " << sym << " in "
+                 << "expected a port named " << targetPortName << " in "
                  << parentScope.getScopeName() << " but found none";
 
         // "Port forwarding" check - see comment in portForwardIfNeeded.
-        targetPortMapping[sym] = portForwardIfNeeded(portLikeOp, portInfo);
+        targetPortMapping[&pi] = portForwardIfNeeded(portLikeOp, pi);
       }
     } else {
       // recurse into the parents, which will define the target value that
@@ -320,24 +360,22 @@ LogicalResult Tunneler::tunnelUp(InstanceGraphNode *currentContainer,
 
     auto instance = use->getInstance<ContainerInstanceOp>();
     rewriter.setInsertionPointAfter(instance);
-    for (auto [sym, portInfo] : portInfos) {
-
-      auto getPortOp =
-          rewriter.create<GetPortOp>(op.getLoc(), instance, portInfo.portName,
-                                     portInfo.getType(), Direction::Input);
+    for (PortInfo &pi : portInfos) {
+      auto getPortOp = rewriter.create<GetPortOp>(
+          op.getLoc(), instance, pi.portName, pi.getType(), Direction::Input);
       rewriter.create<PortWriteOp>(op.getLoc(), getPortOp,
-                                   targetPortMapping[sym]);
+                                   targetPortMapping[&pi]);
     }
   }
 
   // Create input ports for the requested portrefs.
   rewriter.setInsertionPointToEnd(scopeOp.getBodyBlock());
-  for (auto [sym, portInfo] : portInfos) {
-    auto inputPort = rewriter.create<InputPortOp>(
-        op.getLoc(), portInfo.portName, portInfo.getType());
+  for (PortInfo &pi : portInfos) {
+    auto inputPort =
+        rewriter.create<InputPortOp>(op.getLoc(), pi.portName, pi.getType());
     // Read the input port of the current container to forward the portref.
 
-    portMapping[sym] =
+    portMapping[&pi] =
         rewriter.create<PortReadOp>(op.getLoc(), inputPort.getResult())
             .getResult();
   }
@@ -347,20 +385,24 @@ LogicalResult Tunneler::tunnelUp(InstanceGraphNode *currentContainer,
 
 class TunnelingConversionPattern : public OpConversionPattern<PathOp> {
 public:
-  TunnelingConversionPattern(MLIRContext *context, InstanceGraph &ig)
-      : OpConversionPattern<PathOp>(context), ig(ig) {}
+  TunnelingConversionPattern(MLIRContext *context, InstanceGraph &ig,
+                             IbisTunnelingOptions options)
+      : OpConversionPattern<PathOp>(context), ig(ig),
+        options(std::move(options)) {}
 
   LogicalResult
   matchAndRewrite(PathOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    return Tunneler(op, rewriter, ig).go();
+    return Tunneler(options, op, rewriter, ig).go();
   }
 
 protected:
   InstanceGraph &ig;
+  IbisTunnelingOptions options;
 };
 
-struct TunnelingPass : public IbisTunnelingBase<TunnelingPass> {
+struct TunnelingPass : public impl::IbisTunnelingBase<TunnelingPass> {
+  using IbisTunnelingBase<TunnelingPass>::IbisTunnelingBase;
   void runOnOperation() override;
 };
 
@@ -375,13 +417,15 @@ void TunnelingPass::runOnOperation() {
                     GetPortOp, InputWireOp, OutputWireOp>();
 
   RewritePatternSet patterns(ctx);
-  patterns.add<TunnelingConversionPattern>(ctx, ig);
+  patterns.add<TunnelingConversionPattern>(
+      ctx, ig, IbisTunnelingOptions{readSuffix, writeSuffix});
 
   if (failed(
           applyPartialConversion(getOperation(), target, std::move(patterns))))
     signalPassFailure();
 }
 
-std::unique_ptr<Pass> circt::ibis::createTunnelingPass() {
-  return std::make_unique<TunnelingPass>();
+std::unique_ptr<Pass>
+circt::ibis::createTunnelingPass(const IbisTunnelingOptions &options) {
+  return std::make_unique<TunnelingPass>(options);
 }

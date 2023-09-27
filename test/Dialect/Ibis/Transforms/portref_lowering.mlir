@@ -169,13 +169,16 @@ ibis.container @P1 {
 // CHECK:           %[[VAL_1:.*]] = ibis.container.instance @p1, @P1
 // CHECK:           %[[VAL_2:.*]] = ibis.get_port %[[VAL_1]], @parent_parent_c2_c3_in : !ibis.scoperef<@P1> -> !ibis.portref<out i1>
 // CHECK:           %[[VAL_3:.*]] = ibis.port.read %[[VAL_2]] : !ibis.portref<out i1>
-// CHECK:           %[[VAL_4:.*]] = ibis.get_port %[[VAL_1]], @parent_parent_c2_c3_out : !ibis.scoperef<@P1> -> !ibis.portref<in i1>
-// CHECK:           %[[VAL_5:.*]] = ibis.port.read %[[VAL_6:.*]] : !ibis.portref<out i1>
-// CHECK:           ibis.port.write %[[VAL_4]], %[[VAL_5]] : !ibis.portref<in i1>
-// CHECK:           %[[VAL_7:.*]] = ibis.container.instance @c2, @C2
-// CHECK:           %[[VAL_6]] = ibis.get_port %[[VAL_7]], @parent_parent_c2_c3_out : !ibis.scoperef<@C2> -> !ibis.portref<out i1>
-// CHECK:           %[[VAL_8:.*]] = ibis.get_port %[[VAL_7]], @parent_parent_c2_c3_in : !ibis.scoperef<@C2> -> !ibis.portref<in i1>
-// CHECK:           ibis.port.write %[[VAL_8]], %[[VAL_3]] : !ibis.portref<in i1>
+// CHECK:           ibis.port.write %[[VAL_4:.*]], %[[VAL_3]] : !ibis.portref<in i1>
+// CHECK:           %[[VAL_5:.*]] = ibis.get_port %[[VAL_1]], @parent_parent_c2_c3_out : !ibis.scoperef<@P1> -> !ibis.portref<in i1>
+// CHECK:           %[[VAL_6:.*]] = ibis.port.read %[[VAL_7:.*]] : !ibis.portref<out i1>
+// CHECK:           ibis.port.write %[[VAL_5]], %[[VAL_6]] : !ibis.portref<in i1>
+// CHECK:           %[[VAL_8:.*]] = ibis.container.instance @c2, @C2
+// CHECK:           %[[VAL_7]] = ibis.get_port %[[VAL_8]], @parent_parent_c2_c3_out : !ibis.scoperef<@C2> -> !ibis.portref<out i1>
+// CHECK:           %[[VAL_4]] = ibis.port.input @parent_parent_c2_c3_in_fw : i1
+// CHECK:           %[[VAL_9:.*]] = ibis.port.read %[[VAL_4]] : !ibis.portref<in i1>
+// CHECK:           %[[VAL_10:.*]] = ibis.get_port %[[VAL_8]], @parent_parent_c2_c3_in : !ibis.scoperef<@C2> -> !ibis.portref<in i1>
+// CHECK:           ibis.port.write %[[VAL_10]], %[[VAL_9]] : !ibis.portref<in i1>
 // CHECK:         }
 ibis.container @P2 {
   %this = ibis.this @P2 

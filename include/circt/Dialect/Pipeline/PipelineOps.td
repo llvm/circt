@@ -27,7 +27,11 @@ class PipelineBase<string mnemonic, list<Trait> traits = []> :
   Op<Pipeline_Dialect, mnemonic, !listconcat(traits, [
       Pure,
       RegionKindInterface,
-      AttrSizedOperandSegments])> {
+      AttrSizedOperandSegments,
+      DeclareOpInterfaceMethods<OpAsmOpInterface, [
+        "getAsmResultNames",
+        "getAsmBlockArgumentNames"]>
+      ])> {
   let results = (outs Variadic<AnyType>:$dataOutputs, I1:$done);
   let hasCustomAssemblyFormat = 1;
 
@@ -50,34 +54,9 @@ class PipelineBase<string mnemonic, list<Trait> traits = []> :
       return &region->front();
     }
 
-    // Returns the inner clock signal argument of this pipeline.
-    BlockArgument getInnerClock() {
-      Block* entryStage = getEntryStage();
-      return entryStage->getArgument(entryStage->getNumArguments() - 3);
-    }
-
-    // Returns the inner reset signal argument of this pipeline.
-    BlockArgument getInnerReset() {
-      Block* entryStage = getEntryStage();
-      return getEntryStage()->getArgument(entryStage->getNumArguments() - 2);
-    }
-
-    // Returns the inner go signal argument of this pipeline.
-    BlockArgument getInnerGo() {
-      Block* entryStage = getEntryStage();
-      return getEntryStage()->getArgument(entryStage->getNumArguments() - 1);
-    }
-
     // Returns true if this pipeline has a stall signal.
     bool hasStall() {
       return static_cast<bool>(getStall());
-    }
-
-    // Returns the stall signal argument of this pipeline, if it exists.
-    BlockArgument getInnerStall() {
-      assert(hasStall() && "pipeline has no stall signal");
-      Block* entryStage = getEntryStage();
-      return getEntryStage()->getArgument(entryStage->getNumArguments() - 4);
     }
 
     llvm::ArrayRef<BlockArgument> getInnerInputs() {
@@ -90,6 +69,25 @@ class PipelineBase<string mnemonic, list<Trait> traits = []> :
     // result if it is used multiple times.
     llvm::SmallVector<Value> getExtInputs() {
       return detail::getValuesDefinedOutsideRegion(getRegion());
+    }
+
+    // Gets the n'th stage of this pipeline
+    Block* getStage(unsigned n) {
+      auto& blocks = getRegion().getBlocks();
+      assert(n < blocks.size() && "Stage index out of bounds");
+      return &*std::next(blocks.begin(), n);
+    }
+
+    // Returns the enable signal of the given pipeline stage. This is always
+    // the last block argument of a stage for anything but the entry stage.
+    Value getStageEnableSignal(size_t stageIdx) {
+      return getStageEnableSignal(getStage(stageIdx));
+    }
+
+    // Returns the enable signal for the given stage. The enable signal is always
+    // the last signal in the stage argument list.
+    Value getStageEnableSignal(Block* stage) {
+      return stage->getArguments().back();
     }
   }];
 }
@@ -121,9 +119,7 @@ def UnscheduledPipelineOp : PipelineBase<"unscheduled", [
   let extraModuleClassDeclaration = "";
 }
 
-def ScheduledPipelineOp : PipelineBase<"scheduled", [
-    DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>
-  ]> {
+def ScheduledPipelineOp : PipelineBase<"scheduled"> {
   let summary = "Scheduled pipeline operation";
   let description = [{
     The `pipeline.scheduled` operation represents a scheduled pipeline.
@@ -204,9 +200,6 @@ def ScheduledPipelineOp : PipelineBase<"scheduled", [
       return getStages().size();
     }
 
-    void getAsmBlockArgumentNames(mlir::Region &region,
-                        mlir::OpAsmSetValueNameFn setNameFn);
-
     // Returns all of the stages in this pipeline. The stages are ordered
     // with respect to their position in the pipeline as determined by the
     // control flow of `pipeline.stage` operations.
@@ -216,13 +209,6 @@ def ScheduledPipelineOp : PipelineBase<"scheduled", [
     // Returns a map of stages to their index in the pipeline - this is
     // with respect to 'getOrderedStages'.
     llvm::DenseMap<Block*, unsigned> getStageMap();
-
-    // Gets the n'th stage of this pipeline
-    Block* getStage(unsigned n) {
-      auto& blocks = getRegion().getBlocks();
-      assert(n < blocks.size() && "Stage index out of bounds");
-      return &*std::next(blocks.begin(), n);
-    }
 
     // Returns the last stage in the pipeline.
     Block* getLastStage();
@@ -245,20 +231,6 @@ def ScheduledPipelineOp : PipelineBase<"scheduled", [
       // Data arguments for all non-entry stages are all block arguments
       // except for the last block arguments (which is the stage enable signal).
       return stage->getArguments().drop_back();
-    }
-
-    // Returns the enable signal of the given pipeline stage. This is always
-    // the last block argument of a stage for anything but the entry stage.
-    Value getStageEnableSignal(size_t stageIdx) {
-      return getStageEnableSignal(getStage(stageIdx));
-    }
-
-    // Returns the enable signal for the given stage. The enable signal is always
-    // the last signal in the stage argument list.
-    Value getStageEnableSignal(Block* stage) {
-      if(stage != getEntryStage())
-        return stage->getArguments().back();
-      return getInnerGo();
     }
 
     // Returns the stage kind of the given stage index.

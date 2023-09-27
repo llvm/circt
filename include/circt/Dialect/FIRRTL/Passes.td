@@ -737,6 +737,17 @@ def LowerGroups : Pass<"firrtl-lower-groups", "firrtl::CircuitOp"> {
   let dependentDialects = ["sv::SVDialect"];
 }
 
+def GroupSink : Pass<"firrtl-group-sink", "firrtl::FModuleOp"> {
+  let summary = "Sink operations into FIRRTL optional groups";
+  let description = [{
+
+  }];
+  let constructor = "::circt::firrtl::createGroupSinkPass()";
+  let statistics = [
+    Statistic<"numSunk", "num-sunk", "Number of operations sunk">,
+  ];
+}
+
 def HoistPassthrough : Pass<"firrtl-hoist-passthrough", "firrtl::CircuitOp"> {
   let summary = "Hoist passthrough logic";
   let description = [{

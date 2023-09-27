@@ -166,10 +166,10 @@ void ExplicitRegsPass::runOnPipeline(ScheduledPipelineOp pipeline) {
   llvm::DenseSet<Value> extLikeInputs;
   for (auto extInput : pipeline.getExtInputs())
     extLikeInputs.insert(extInput);
-  extLikeInputs.insert(pipeline.getInnerClock());
-  extLikeInputs.insert(pipeline.getInnerReset());
+  extLikeInputs.insert(pipeline.getClock());
+  extLikeInputs.insert(pipeline.getReset());
   if (pipeline.hasStall())
-    extLikeInputs.insert(pipeline.getInnerStall());
+    extLikeInputs.insert(pipeline.getStall());
 
   // Iterate over the pipeline body in-order (!).
   stageMap = pipeline.getStageMap();

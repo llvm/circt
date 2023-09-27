@@ -13,7 +13,7 @@
 // CHECK:         }
 
 hw.module @testSingle(input %arg0: i32, input %arg1: i32, input %go: i1, input %clk: !seq.clock, input %rst: i1, output out0: i32, output out1: i1) {
-  %0:2 = pipeline.scheduled(%a0 : i32 = %arg0, %a1 : i32 = %arg1) clock(%c = %clk) reset(%r = %rst) go(%g = %go) -> (out: i32){
+  %0:2 = pipeline.scheduled(%a0 : i32 = %arg0, %a1 : i32 = %arg1) clock(%clk) reset(%rst) go(%go) entryEn(%s0_enable) -> (out: i32){
     %1 = comb.sub %a0,%a1 : i32
     pipeline.stage ^bb1 regs(%1 : i32, %a0 : i32)
   ^bb1(%6: i32, %7: i32, %s1_enable : i1):  // pred: ^bb1

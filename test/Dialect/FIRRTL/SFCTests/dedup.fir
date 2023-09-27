@@ -1,4 +1,4 @@
-; RUN: firtool -dedup -split-input-file -ir-fir --preserve-aggregate=all -disable-opt %s | FileCheck %s
+; RUN: firtool -split-input-file -ir-fir --preserve-aggregate=all -disable-opt %s | FileCheck %s
 ; Tests extracted from:
 ;   - test/scala/firrtlTests/transforms/DedupTests.scala
 ; The following tests are not included:
@@ -912,4 +912,3 @@ circuit Top : %[[
     x <= b
 
 ; CHECK-NOT: firrtl.module private @A_
-

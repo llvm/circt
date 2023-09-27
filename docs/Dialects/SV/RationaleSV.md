@@ -117,7 +117,7 @@ The verbatim operation produces a typed value expressed by a string of
 SystemVerilog.  This can be used to access macros and other values that are
 only sensible as Verilog text. There are three kinds of verbatim operations:
 
- 1. VerbatimOp(`sv.verbatim`, the statement form
+ 1. VerbatimOp(`sv.verbatim`), the statement form
  2. VerbatimExprOp(`sv.verbatim.expr`), the expression form.
  3. VerbatimExprSEOp(`sv.verbatim.expr.se`), the effectful expression form.
 
@@ -139,6 +139,21 @@ Example,
 sv.verbatim "MACRO({{0}}, {{1}} reg={{4}}, {{3}})" 
             (%add, %xor) : i8, i8
             {symRefs = [@reg1, @Module1, @instance1]}
+```
+
+Substitions also allow format specifier after a ':'. The meaning of said options
+depends on the operand type or the operation pointed to by the symbol. So far,
+the following format specifiers are supported:
+
+- Symbol refering to a `hw.hierpath`: the separation string for joining names
+in the path. Defaults to ".".
+
+Example:
+
+```
+hw.hierpath @instref_1 [@TopModule::@foo, @FooModule::@bar, @BarModule::@leaf]
+sv.verbatim "hierpath {{0:|}}" {symbols = [@instref_1]}
+// Produces: "hierpath foo|bar|leaf"
 ```
 
 ## Cost Model

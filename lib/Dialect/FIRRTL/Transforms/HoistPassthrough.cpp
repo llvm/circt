@@ -16,12 +16,14 @@
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
+#include "circt/Dialect/FIRRTL/FieldRefCache.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWTypeInterfaces.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/FormatVariadic.h"
 
 #define DEBUG_TYPE "firrtl-hoist-passthrough"
 
@@ -95,7 +97,7 @@ struct Driver {
   // "Virtual" methods, either commonly defined or dispatched appropriately.
 
   /// Determine direct driver for the given value, empty Driver otherwise.
-  static Driver get(Value v);
+  static Driver get(Value v, FieldRefCache &refs);
 
   /// Whether this can be rematerialized up through an instantiation.
   bool canHoist() const { return isa<BlockArgument>(source.getValue()); }
@@ -164,7 +166,7 @@ struct RefDriver : public Driver {
 
   static bool classof(const Driver *t) { return isa<RefValue>(t->getDest()); }
 
-  static RefDriver get(Value v);
+  static RefDriver get(Value v, FieldRefCache &refs);
 
   Value remat(PortMappingFn mapPortFn, ImplicitLocOpBuilder &builder);
 };
@@ -179,7 +181,7 @@ struct HWDriver : public Driver {
 
   static bool classof(const Driver *t) { return !isa<RefValue>(t->getDest()); }
 
-  static HWDriver get(Value v);
+  static HWDriver get(Value v, FieldRefCache &refs);
 
   Value remat(PortMappingFn mapPortFn, ImplicitLocOpBuilder &builder);
 };
@@ -201,10 +203,10 @@ static inline T &operator<<(T &os, Driver &d) {
 // Driver implementation.
 //===----------------------------------------------------------------------===//
 
-Driver Driver::get(Value v) {
-  if (auto refDriver = RefDriver::get(v))
+Driver Driver::get(Value v, FieldRefCache &refs) {
+  if (auto refDriver = RefDriver::get(v, refs))
     return refDriver;
-  if (auto hwDriver = HWDriver::get(v))
+  if (auto hwDriver = HWDriver::get(v, refs))
     return hwDriver;
   return {};
 }
@@ -249,7 +251,7 @@ static RefDefineOp getRefDefine(Value result) {
   return {};
 }
 
-RefDriver RefDriver::get(Value v) {
+RefDriver RefDriver::get(Value v, FieldRefCache &refs) {
   auto refVal = dyn_cast<RefValue>(v);
   if (!refVal)
     return {};
@@ -258,7 +260,7 @@ RefDriver RefDriver::get(Value v) {
   if (!rd)
     return {};
 
-  auto ref = getFieldRefFromValue(rd.getSrc(), true);
+  auto ref = refs.getFieldRefFromValue(rd.getSrc(), true);
   if (!ref)
     return {};
 
@@ -294,7 +296,7 @@ static bool hasDontTouchOrInnerSymOnResult(Value value) {
          AnnotationSet::forPort(module, arg.getArgNumber()).hasDontTouch();
 }
 
-HWDriver HWDriver::get(Value v) {
+HWDriver HWDriver::get(Value v, FieldRefCache &refs) {
   auto baseValue = dyn_cast<FIRRTLBaseValue>(v);
   if (!baseValue)
     return {};
@@ -308,7 +310,8 @@ HWDriver HWDriver::get(Value v) {
   auto connect = getSingleConnectUserOf(v);
   if (!connect)
     return {};
-  auto ref = getFieldRefFromValue(connect.getSrc());
+
+  auto ref = refs.getFieldRefFromValue(connect.getSrc());
   if (!ref)
     return {};
 
@@ -393,9 +396,11 @@ public:
 
     DenseSet<Value> enqueued;
     enqueued.insert(worklist.begin(), worklist.end());
+    FieldRefCache refs;
     while (!worklist.empty()) {
       auto val = worklist.pop_back_val();
-      auto driver = ignoreHWDrivers ? RefDriver::get(val) : Driver::get(val);
+      auto driver =
+          ignoreHWDrivers ? RefDriver::get(val, refs) : Driver::get(val, refs);
       driverMap.insert({val, driver});
       if (!driver)
         continue;
@@ -420,6 +425,14 @@ public:
 
       worklist.push_back(sourceVal);
     }
+
+    refs.verify();
+
+    LLVM_DEBUG({
+      llvm::dbgs() << "Analyzed " << mod.getModuleName() << " and found "
+                   << driverMap.size() << " drivers.\n";
+      refs.printStats(llvm::dbgs());
+    });
   }
 
   /// Clear out analysis results and storage.
@@ -465,6 +478,8 @@ void HoistPassthroughPass::runOnOperation() {
   MustDrivenBy driverAnalysis;
   driverAnalysis.setIgnoreHWDrivers(!hoistHWDrivers);
 
+  bool anyChanged = false;
+
   // For each module (PO)...
   for (auto module : modules) {
     // TODO: Public means can't reason down into, or remove ports.
@@ -493,6 +508,12 @@ void HoistPassthroughPass::runOnOperation() {
                           return driverAnalysis.getCombinedDriverFor(val);
                         }),
         notNullAndCanHoist));
+
+    // If no hoistable drivers found, nothing to do.  Onwards!
+    if (drivers.empty())
+      continue;
+
+    anyChanged = true;
 
     // 2. Rematerialize must-driven ports at instantiation sites.
 
@@ -537,10 +558,6 @@ void HoistPassthroughPass::runOnOperation() {
       driver.finalize(builder);
     }
 
-    // If no ports were dropped, nothing to update.  Onwards!
-    if (deadPorts.none())
-      continue;
-
     // 4. Delete newly dead ports.
 
     // Drop dead ports at instantiation sites.
@@ -560,6 +577,9 @@ void HoistPassthroughPass::runOnOperation() {
     numUTurnsHoisted += deadPorts.count();
   }
   markAnalysesPreserved<InstanceGraph>();
+
+  if (!anyChanged)
+    markAllAnalysesPreserved();
 }
 
 /// This is the pass constructor.
