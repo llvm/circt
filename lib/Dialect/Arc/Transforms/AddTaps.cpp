@@ -9,6 +9,7 @@
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/Arc/ArcPasses.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Dialect/Seq/SeqOps.h"
 #include "mlir/Pass/Pass.h"
 
 namespace circt {
@@ -43,13 +44,13 @@ struct AddTapsPass : public arc::impl::AddTapsBase<AddTapsPass> {
     auto builder = OpBuilder::atBlockBegin(moduleOp.getBodyBlock());
     for (auto [port, arg] :
          llvm::zip(ports.getInputs(), moduleOp.getBodyBlock()->getArguments()))
-      builder.create<arc::TapOp>(arg.getLoc(), arg, port.getName());
+      buildTap(builder, arg.getLoc(), arg, port.getName());
 
     // Add taps to outputs.
     builder.setInsertionPoint(outputOp);
     for (auto [port, result] :
          llvm::zip(ports.getOutputs(), outputOp->getOperands()))
-      builder.create<arc::TapOp>(result.getLoc(), result, port.getName());
+      buildTap(builder, result.getLoc(), result, port.getName());
   }
 
   // Add taps for SV wires.
@@ -64,7 +65,7 @@ struct AddTapsPass : public arc::impl::AddTapsBase<AddTapsPass> {
     OpBuilder builder(wireOp);
     if (!readOp)
       readOp = builder.create<sv::ReadInOutOp>(wireOp.getLoc(), wireOp);
-    builder.create<arc::TapOp>(readOp.getLoc(), readOp, wireOp.getName());
+    buildTap(builder, readOp.getLoc(), readOp, wireOp.getName());
   }
 
   // Add taps for HW wires.
@@ -73,7 +74,7 @@ struct AddTapsPass : public arc::impl::AddTapsBase<AddTapsPass> {
       return;
     if (auto name = wireOp.getName()) {
       OpBuilder builder(wireOp);
-      builder.create<arc::TapOp>(wireOp.getLoc(), wireOp, *name);
+      buildTap(builder, wireOp.getLoc(), wireOp, *name);
     }
   }
 
@@ -83,8 +84,16 @@ struct AddTapsPass : public arc::impl::AddTapsBase<AddTapsPass> {
       return;
     if (auto name = op->getAttrOfType<StringAttr>("sv.namehint")) {
       OpBuilder builder(op);
-      builder.create<arc::TapOp>(op->getLoc(), op->getResult(0), name);
+      buildTap(builder, op->getLoc(), op->getResult(0), name);
     }
+  }
+
+  void buildTap(OpBuilder &builder, Location loc, Value value, StringRef name) {
+    if (name.empty())
+      return;
+    if (isa<seq::ClockType>(value.getType()))
+      value = builder.createOrFold<seq::FromClockOp>(loc, value);
+    builder.create<arc::TapOp>(loc, value, name);
   }
 
   using AddTapsBase::tapNamedValues;

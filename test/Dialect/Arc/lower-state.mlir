@@ -35,11 +35,11 @@ hw.module @State(%clk: !seq.clock, %en: i1) {
   %5 = comb.add %3, %3 : i42
   %6 = comb.add %4, %4 : i42
   // CHECK-NEXT: (%arg0: !arc.storage):
+  // CHECK-NEXT: [[INCLK:%.+]] = arc.root_input "clk", %arg0 : (!arc.storage) -> !arc.state<i1>
+  // CHECK-NEXT: [[INEN:%.+]] = arc.root_input "en", %arg0 : (!arc.storage) -> !arc.state<i1>
   // CHECK-NEXT: [[CLK_OLD:%.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i1>
   // CHECK-NEXT: [[S0:%.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i42>
   // CHECK-NEXT: [[S1:%.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i42>
-  // CHECK-NEXT: [[INCLK:%.+]] = arc.root_input "clk", %arg0 : (!arc.storage) -> !arc.state<i1>
-  // CHECK-NEXT: [[INEN:%.+]] = arc.root_input "en", %arg0 : (!arc.storage) -> !arc.state<i1>
 
   // CHECK-NEXT: [[TMP2:%.+]] = arc.state_read [[INCLK]] : <i1>
   // CHECK-NEXT: arc.state_write [[CLK_OLD]] = [[TMP2]] : <i1>
@@ -65,10 +65,10 @@ hw.module @State2(%clk: !seq.clock) {
   %3 = arc.state @DummyArc(%3) clock %clk lat 1 : (i42) -> i42
   %4 = arc.state @DummyArc(%4) clock %clk lat 1 : (i42) -> i42
   // CHECK-NEXT: (%arg0: !arc.storage):
+  // CHECK-NEXT: [[INCLK:%.+]] = arc.root_input "clk", %arg0 : (!arc.storage) -> !arc.state<i1>
   // CHECK-NEXT: [[CLK_OLD:%.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i1>
   // CHECK-NEXT: [[S0]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i42>
   // CHECK-NEXT: [[S1]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i42>
-  // CHECK-NEXT: [[INCLK:%.+]] = arc.root_input "clk", %arg0 : (!arc.storage) -> !arc.state<i1>
 
   // CHECK-NEXT: [[TMP2:%.+]] = arc.state_read [[INCLK]] : <i1>
   // CHECK-NEXT: arc.state_write [[CLK_OLD]] = [[TMP2]] : <i1>
@@ -98,9 +98,9 @@ hw.module @NonMaskedMemoryWrite(%clk0: !seq.clock) {
   arc.memory_write_port %mem, @identity(%c0_i2, %c9001_i42) clock %clk0 lat 1 : <4 x i42, i2>, i2, i42
 
   // CHECK-NEXT: (%arg0: !arc.storage):
+  // CHECK-NEXT: [[INCLK:%.+]] = arc.root_input "clk0", %arg0 : (!arc.storage) -> !arc.state<i1>
   // CHECK-NEXT: [[MEM:%.+]] = arc.alloc_memory %arg0 : (!arc.storage) -> !arc.memory<4 x i42, i2>
   // CHECK-NEXT: [[CLK_OLD:%.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i1>
-  // CHECK-NEXT: [[INCLK:%.+]] = arc.root_input "clk0", %arg0 : (!arc.storage) -> !arc.state<i1>
 
   // CHECK-NEXT: [[TMP2:%.+]] = arc.state_read [[INCLK]] : <i1>
   // CHECK-NEXT: arc.state_write [[CLK_OLD]] = [[TMP2]] : <i1>
@@ -181,6 +181,18 @@ hw.module @MaterializeOpsWithRegions(%clk0: !seq.clock, %clk1: !seq.clock) -> (z
     scf.yield %c42_i42 : i42
   }
 
+  // CHECK:      arc.passthrough {
+  // CHECK-NEXT:   %true = hw.constant true
+  // CHECK-NEXT:   %c19_i42 = hw.constant 19
+  // CHECK-NEXT:   [[TMP:%.+]] = scf.if %true -> (i42) {
+  // CHECK-NEXT:     scf.yield %c19_i42
+  // CHECK-NEXT:   } else {
+  // CHECK-NEXT:     %c42_i42 = hw.constant 42
+  // CHECK-NEXT:     scf.yield %c42_i42
+  // CHECK-NEXT:   }
+  // CHECK-NEXT:   arc.state_write
+  // CHECK-NEXT: }
+
   // CHECK:      [[CLK0:%.+]] = arc.state_read %in_clk0
   // CHECK:      [[TMP:%.+]] = comb.and {{%.+}}, [[CLK0]]
   // CHECK-NEXT: arc.clock_tree [[TMP]] {
@@ -208,18 +220,6 @@ hw.module @MaterializeOpsWithRegions(%clk0: !seq.clock, %clk1: !seq.clock) -> (z
   // CHECK-NEXT:     scf.yield %c42_i42
   // CHECK-NEXT:   }
   // CHECK-NEXT:   arc.state @DummyArc([[TMP]]) lat 0
-  // CHECK-NEXT:   arc.state_write
-  // CHECK-NEXT: }
-
-  // CHECK:      arc.passthrough {
-  // CHECK-NEXT:   %true = hw.constant true
-  // CHECK-NEXT:   %c19_i42 = hw.constant 19
-  // CHECK-NEXT:   [[TMP:%.+]] = scf.if %true -> (i42) {
-  // CHECK-NEXT:     scf.yield %c19_i42
-  // CHECK-NEXT:   } else {
-  // CHECK-NEXT:     %c42_i42 = hw.constant 42
-  // CHECK-NEXT:     scf.yield %c42_i42
-  // CHECK-NEXT:   }
   // CHECK-NEXT:   arc.state_write
   // CHECK-NEXT: }
 

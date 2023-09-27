@@ -39,3 +39,8 @@ hw.module @ObserveWires() {
 }
 // CHECK-NEXT: }
 
+// CHECK-LABEL: hw.module @Clocks
+hw.module @Clocks(%clk: !seq.clock) {
+  // CHECK-NEXT: [[CAST:%.+]] = seq.from_clock %clk
+  // CHECK-NEXT: arc.tap [[CAST]] {name = "clk"} : i1
+}

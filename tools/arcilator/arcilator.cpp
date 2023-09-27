@@ -269,13 +269,14 @@ static void populatePipeline(PassManager &pm) {
   pm.nest<arc::ModelOp>().addPass(arc::createAllocateStatePass());
   if (!stateFile.empty())
     pm.addPass(arc::createPrintStateInfoPass(stateFile));
+  pm.addPass(arc::createLowerClocksToFuncsPass()); // no CSE between state alloc
+                                                   // and clock func lowering
   pm.addPass(createCSEPass());
   pm.addPass(arc::createArcCanonicalizerPass());
 
   // Lower the arcs and update functions to LLVM.
   if (untilReached(UntilLLVMLowering))
     return;
-  pm.addPass(arc::createLowerClocksToFuncsPass());
   pm.addPass(createConvertCombToArithPass());
   pm.addPass(createLowerArcToLLVMPass());
   pm.addPass(createCSEPass());
