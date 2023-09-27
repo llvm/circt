@@ -55,25 +55,7 @@ FieldRef firrtl::FieldRefCache::getFieldRefFromValue(Value value,
     ++computed;
 #endif
 
-    Operation *op = value.getDefiningOp();
-
-    // If this is a block argument, we are done.
-    if (!op) {
-      indexing.emplace_back(value, 0);
-      break;
-    }
-
-    auto deltaRef =
-        TypeSwitch<Operation *, FieldRef>(op)
-            .Case<RefCastOp, ConstCastOp, UninferredResetCastOp>([&](auto op) {
-              if (!lookThroughCasts)
-                return FieldRef();
-              return FieldRef(op.getInput(), 0);
-            })
-            .Case<SubindexOp, OpenSubindexOp, SubfieldOp, OpenSubfieldOp,
-                  RefSubOp>(
-                [&](auto subOp) { return subOp.getAccessedField(); })
-            .Default(FieldRef());
+    auto deltaRef = getDeltaRef(value, lookThroughCasts);
     indexing.emplace_back(value, deltaRef.getFieldID());
     value = deltaRef.getValue();
   }
