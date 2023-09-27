@@ -26,14 +26,6 @@ using namespace ibis;
 
 namespace {
 
-// Prints an operation in generic form, for debugging purposes. Generic form is
-// chosen to avoid triggering op verification.
-static void debugPrintOp(Twine msg, Operation *op) {
-  llvm::dbgs() << msg << ": ";
-  op->print(llvm::dbgs(), OpPrintingFlags().printGenericOpForm());
-  llvm::dbgs() << "\n";
-}
-
 class InputPortConversionPattern : public OpConversionPattern<InputPortOp> {
 public:
   using OpConversionPattern::OpConversionPattern;
@@ -209,7 +201,7 @@ class GetPortConversionPattern : public OpConversionPattern<GetPortOp> {
         return rewriter.notifyMatchFailure(
             op, "expected an ibis.port.write to wrap the get_port result");
       wrapper = getPortWrapper;
-      LLVM_DEBUG(debugPrintOp("Found wrapper: ", wrapper));
+      LLVM_DEBUG(llvm::dbgs() << "Found wrapper: " << *wrapper);
       if (innerDirection == Direction::Input) {
         // The portref<in portref<in T>> is now an output port.
         auto newGetPort =
@@ -244,7 +236,7 @@ class GetPortConversionPattern : public OpConversionPattern<GetPortOp> {
             op, "expected an ibis.port.read to unwrap the get_port result");
       wrapper = getPortUnwrapper;
 
-      LLVM_DEBUG(debugPrintOp("Found unwrapper: ", wrapper));
+      LLVM_DEBUG(llvm::dbgs() << "Found unwrapper: " << *wrapper);
       if (innerDirection == Direction::Input) {
         // In this situation, we're retrieving an input port that is sent as an
         // output of the container: %rr = ibis.get_port %c %c_in :
@@ -275,15 +267,15 @@ class GetPortConversionPattern : public OpConversionPattern<GetPortOp> {
                   op, "expected a single ibis.port.write to use the unwrapped "
                       "get_port result, but found multiple");
             portForwardingDriver = writeOp;
-            LLVM_DEBUG(debugPrintOp("Found forwarding driver: ",
-                                    portForwardingDriver));
+            LLVM_DEBUG(llvm::dbgs()
+                       << "Found forwarding driver: " << *portForwardingDriver);
           } else {
             if (portDriver)
               return rewriter.notifyMatchFailure(
                   op, "expected a single ibis.port.write to use the unwrapped "
                       "get_port result, but found multiple");
             portDriver = writeOp;
-            LLVM_DEBUG(debugPrintOp("Found driver: ", portDriver));
+            LLVM_DEBUG(llvm::dbgs() << "Found driver: " << *portDriver);
           }
         }
 

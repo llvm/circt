@@ -23,6 +23,10 @@ using namespace circt::ibis;
 using namespace circt::igraph;
 
 namespace {
+
+#define GEN_PASS_DEF_IBISTUNNELING
+#include "circt/Dialect/Ibis/IbisPasses.h.inc"
+
 // The PortInfo struct is used to keep track of the get_port ops that
 // specify which ports needs to be tunneled through the hierarchy.
 struct PortInfo {
@@ -41,7 +45,8 @@ struct PortInfo {
 
 struct Tunneler {
 public:
-  Tunneler(PathOp op, ConversionPatternRewriter &rewriter, InstanceGraph &ig);
+  Tunneler(IbisTunnelingOptions options, PathOp op,
+           ConversionPatternRewriter &rewriter, InstanceGraph &ig);
 
   // A mapping between requested port names from a ScopeRef and the actual
   // portref SSA values that are used to replace the get_port ops.
@@ -86,6 +91,7 @@ private:
   PathOp op;
   ConversionPatternRewriter &rewriter;
   InstanceGraph &ig;
+  IbisTunnelingOptions options;
   mlir::StringAttr pathName;
   llvm::SmallVector<PathStepAttr> path;
 
@@ -98,9 +104,9 @@ private:
   FlatSymbolRefAttr targetName;
 };
 
-Tunneler::Tunneler(PathOp op, ConversionPatternRewriter &rewriter,
-                   InstanceGraph &ig)
-    : op(op), rewriter(rewriter), ig(ig) {
+Tunneler::Tunneler(IbisTunnelingOptions options, PathOp op,
+                   ConversionPatternRewriter &rewriter, InstanceGraph &ig)
+    : op(op), rewriter(rewriter), ig(ig), options(options) {
   llvm::copy(op.getPathAsRange(), std::back_inserter(path));
   assert(!path.empty() &&
          "empty paths should never occur - illegal for ibis.path ops");
@@ -124,8 +130,9 @@ void Tunneler::genPortNames(llvm::SmallVectorImpl<PortInfo> &portInfos) {
   for (PortInfo &pi : portInfos) {
     // Suffix the ports by the intended usage (read/write). This also de-aliases
     // cases where one both reads and writes from the same input port.
-    std::string suffix =
-        pi.getRequestedDirection() == Direction::Input ? ".wr" : ".rd";
+    std::string suffix = pi.getRequestedDirection() == Direction::Input
+                             ? options.writeSuffix
+                             : options.readSuffix;
     pi.portName = rewriter.getStringAttr(pathName + "_" +
                                          pi.portName.getValue() + suffix);
   }
@@ -378,20 +385,23 @@ LogicalResult Tunneler::tunnelUp(InstanceGraphNode *currentContainer,
 
 class TunnelingConversionPattern : public OpConversionPattern<PathOp> {
 public:
-  TunnelingConversionPattern(MLIRContext *context, InstanceGraph &ig)
-      : OpConversionPattern<PathOp>(context), ig(ig) {}
+  TunnelingConversionPattern(MLIRContext *context, InstanceGraph &ig,
+                             IbisTunnelingOptions options)
+      : OpConversionPattern<PathOp>(context), ig(ig), options(options) {}
 
   LogicalResult
   matchAndRewrite(PathOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    return Tunneler(op, rewriter, ig).go();
+    return Tunneler(options, op, rewriter, ig).go();
   }
 
 protected:
   InstanceGraph &ig;
+  IbisTunnelingOptions options;
 };
 
-struct TunnelingPass : public IbisTunnelingBase<TunnelingPass> {
+struct TunnelingPass : public impl::IbisTunnelingBase<TunnelingPass> {
+  using IbisTunnelingBase<TunnelingPass>::IbisTunnelingBase;
   void runOnOperation() override;
 };
 
@@ -406,13 +416,15 @@ void TunnelingPass::runOnOperation() {
                     GetPortOp, InputWireOp, OutputWireOp>();
 
   RewritePatternSet patterns(ctx);
-  patterns.add<TunnelingConversionPattern>(ctx, ig);
+  patterns.add<TunnelingConversionPattern>(
+      ctx, ig, IbisTunnelingOptions{readSuffix, writeSuffix});
 
   if (failed(
           applyPartialConversion(getOperation(), target, std::move(patterns))))
     signalPassFailure();
 }
 
-std::unique_ptr<Pass> circt::ibis::createTunnelingPass() {
+std::unique_ptr<Pass>
+circt::ibis::createTunnelingPass(const IbisTunnelingOptions &options) {
   return std::make_unique<TunnelingPass>();
 }
