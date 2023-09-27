@@ -78,7 +78,7 @@ llhd.entity @convert_prb (%sI1 : !llhd.sig<i1>, %sArr : !llhd.sig<!hw.array<3xi5
 // CHECK:           llvm.call @driveSignal(%[[VAL_0]], %[[VAL_4]], %[[VAL_17]], %[[VAL_14]], %[[VAL_18]], %[[VAL_19]], %[[VAL_20]]) : (!llvm.ptr, !llvm.ptr<struct<(ptr, i64, i64, i64)>>, !llvm.ptr, i64, i64, i64, i64) -> ()
 // CHECK:           %[[VAL_21:.*]] = llvm.mlir.constant(1 : i32) : i32
 // CHECK:           %[[VAL_22:.*]] = llvm.mlir.constant(8 : i64) : i64
-// CHECK:           %[[VAL_23:.*]] = llvm.mlir.null : !llvm.ptr<array<3 x i5>>
+// CHECK:           %[[VAL_23:.*]] = llvm.mlir.zero : !llvm.ptr<array<3 x i5>>
 // CHECK:           %[[VAL_24:.*]] = llvm.getelementptr %[[VAL_23]]{{\[}}%[[VAL_21]]] : (!llvm.ptr<array<3 x i5>>, i32) -> !llvm.ptr<array<3 x i5>>
 // CHECK:           %[[VAL_25:.*]] = llvm.ptrtoint %[[VAL_24]] : !llvm.ptr<array<3 x i5>> to i64
 // CHECK:           %[[VAL_26:.*]] = llvm.mul %[[VAL_25]], %[[VAL_22]]  : i64
