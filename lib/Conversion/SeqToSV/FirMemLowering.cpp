@@ -308,15 +308,17 @@ void FirMemLowering::lowerMemoriesInModule(
                           << module.getName() << "\n");
 
   hw::ConstantOp constOneOp;
-  auto constOne = [&] {
+  auto constOne = [&](unsigned width = 1) {
     if (!constOneOp) {
       auto builder = OpBuilder::atBlockBegin(module.getBodyBlock());
-      constOneOp = builder.create<hw::ConstantOp>(module.getLoc(),
-                                                  builder.getI1Type(), 1);
+      constOneOp = builder.create<hw::ConstantOp>(
+          module.getLoc(), builder.getIntegerType(width), 1);
     }
     return constOneOp;
   };
-  auto valueOrOne = [&](Value value) { return value ? value : constOne(); };
+  auto valueOrOne = [&](Value value, unsigned width = 1) {
+    return value ? value : constOne(width);
+  };
 
   for (auto [config, genOp, memOp] : mems) {
     LLVM_DEBUG(llvm::dbgs() << "- Lowering " << memOp.getName() << "\n");
@@ -349,7 +351,7 @@ void FirMemLowering::lowerMemoriesInModule(
       addInput(port.getWriteData());
       addOutput(port.getReadData());
       if (config->maskBits > 1)
-        addInput(valueOrOne(port.getMask()));
+        addInput(valueOrOne(port.getMask(), config->maskBits));
     }
 
     // Add the write ports.
@@ -362,7 +364,7 @@ void FirMemLowering::lowerMemoriesInModule(
       addInput(port.getClock());
       addInput(port.getData());
       if (config->maskBits > 1)
-        addInput(valueOrOne(port.getMask()));
+        addInput(valueOrOne(port.getMask(), config->maskBits));
     }
 
     // Create the module instance.
