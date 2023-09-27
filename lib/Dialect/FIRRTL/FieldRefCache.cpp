@@ -22,11 +22,10 @@ using namespace firrtl;
 
 FieldRef firrtl::FieldRefCache::getFieldRefFromValue(Value value,
                                                      bool lookThroughCasts) {
-  using Info = std::pair<Value, size_t>;
-  // Vector of values and delta to next entry.
+  // Vector of values and delta to next entry, as FieldRef's.
   // Last will be root (delta == 0), so walking backwards constructs
-  // FieldRef's for all visited operations.
-  SmallVector<Info> indexing;
+  // FieldRef's relative to root for all visited operations.
+  SmallVector<FieldRef> indexing;
   // Ignore null value for simplicity.
   if (!value)
     return FieldRef();
@@ -64,49 +63,31 @@ FieldRef firrtl::FieldRefCache::getFieldRefFromValue(Value value,
       break;
     }
 
-    auto [newValue, adj] =
-        TypeSwitch<Operation *, Info>(op)
+    auto deltaRef =
+        TypeSwitch<Operation *, FieldRef>(op)
             .Case<RefCastOp, ConstCastOp, UninferredResetCastOp>([&](auto op) {
               if (!lookThroughCasts)
-                return Info{};
-              return Info{op.getInput(), 0};
+                return FieldRef();
+              return FieldRef(op.getInput(), 0);
             })
-            .Case<SubfieldOp, OpenSubfieldOp>([&](auto subfieldOp) {
-              typename decltype(subfieldOp)::InputType bundleType =
-                  subfieldOp.getInput().getType();
-              return Info{subfieldOp.getInput(),
-                          bundleType.getFieldID(subfieldOp.getFieldIndex())};
-            })
-            .Case<SubindexOp, OpenSubindexOp>([&](auto subindexOp) {
-              typename decltype(subindexOp)::InputType vecType =
-                  subindexOp.getInput().getType();
-              return Info{subindexOp.getInput(),
-                          vecType.getFieldID(subindexOp.getIndex())};
-            })
-            .Case<RefSubOp>([&](RefSubOp refSubOp) {
-              auto refInputType = refSubOp.getInput().getType();
-              size_t delta = FIRRTLTypeSwitch<FIRRTLBaseType, size_t>(
-                                 refInputType.getType())
-                                 .Case<FVectorType, BundleType>([&](auto type) {
-                                   return type.getFieldID(refSubOp.getIndex());
-                                 });
-              return Info{refSubOp.getInput(), delta};
-            })
-            .Default(Info{});
-    indexing.emplace_back(value, adj); // adj is zero in 'unhandled' case.
-    value = newValue;
+            .Case<SubindexOp, OpenSubindexOp, SubfieldOp, OpenSubfieldOp,
+                  RefSubOp>(
+                [&](auto subOp) { return subOp.getAccessedField(); })
+            .Default(FieldRef());
+    indexing.emplace_back(value, deltaRef.getFieldID());
+    value = deltaRef.getValue();
   }
   // Last entry in indexing is the root.
   assert(!indexing.empty());
-  assert(indexing.back().second == 0);
+  assert(indexing.back().getFieldID() == 0);
 
-  auto root = indexing.back().first;
+  auto root = indexing.back().getValue();
   size_t id = 0;
   FieldRef cur(root, 0);
   for (auto &info : llvm::reverse(indexing)) {
-    id += info.second;
+    id += info.getFieldID();
     cur = FieldRef(root, id);
-    refs.try_emplace({info.first, lookThroughCasts}, cur);
+    refs.try_emplace({info.getValue(), lookThroughCasts}, cur);
   }
   return cur;
 }
