@@ -20,7 +20,7 @@ hw.module.extern @explicitResultName(output FOO: i1)
 
 hw.module.extern @D_ATTR(input %a: i1, output "": i1, output "": i1) attributes {filename = "test.v", p = {DEFAULT = 0 : i64}}
 
-// CHECK-LABEL: hw.module.extern @D_ATTR(input %a : i1, output foo1 "" : i1, output foo2 "" : i1) attributes {filename = "test.v", p = {DEFAULT = 0 : i64}}
+// CHECK-LABEL: hw.module.extern @D_ATTR(input %a : i1, output "" : i1, output "" : i1) attributes {filename = "test.v", p = {DEFAULT = 0 : i64}}
 // CHECK-NOT: {
 
 hw.module @A(input %d: i1, inout %e: i1, output "": i1, output "": i1) {
@@ -38,7 +38,7 @@ hw.module @A(input %d: i1, inout %e: i1, output "": i1, output "": i1) {
 // CHECK-NEXT:  %c1.0, %c1.1 = hw.instance "c1" sym @E @C(nameOfPortInSV: %d: i1) -> ("": i1, "": i1)
 
 hw.module @AnyType1(input %a: vector< 3 x i8 >) { }
-// CHECK-LABEL: hw.module @AnyType1(input %a: vector<3xi8>)
+// CHECK-LABEL: hw.module @AnyType1(input %a : vector<3xi8>)
 
 // CHECK-LABEL: hw.module @AnyTypeInstance()
 hw.module @AnyTypeInstance() {
@@ -52,4 +52,4 @@ hw.module @AnyTypeInstance() {
 hw.generator.schema @MEMORY, "Simple-Memory", ["ports", "write_latency", "read_latency"]
 hw.module.generated @genmod1, @MEMORY(output FOOBAR: i1) attributes {write_latency=1, read_latency=1, ports=["read","write"]}
 // CHECK-LABEL: hw.generator.schema @MEMORY, "Simple-Memory", ["ports", "write_latency", "read_latency"]
-// CHECK-NEXT: hw.module.generated @genmod1, @MEMORY(output FOOBAR: i1) attributes {ports = ["read", "write"], read_latency = 1 : i64, write_latency = 1 : i64}
+// CHECK-NEXT: hw.module.generated @genmod1, @MEMORY(output FOOBAR : i1) attributes {ports = ["read", "write"], read_latency = 1 : i64, write_latency = 1 : i64}

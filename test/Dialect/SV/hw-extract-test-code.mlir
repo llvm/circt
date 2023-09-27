@@ -505,7 +505,7 @@ module {
     hw.instance "a4" @Assert(clock: %clock: i1, a: %a: i1) -> ()
   }
 
-  // CHECK-LABEL: hw.module @Top(input %clock: i1, input %a: i1, input %b: i1) {
+  // CHECK-LABEL: hw.module @Top(input %clock : i1, input %a : i1, input %b : i1) {
   // CHECK-NEXT:  hw.instance "Assert_assert" sym @__ETC_Assert_assert_0 @Assert_assert
   // CHECK-SAME:  doNotPrint = true
   // CHECK-NEXT:  hw.instance "Assert_assert" sym @__ETC_Assert_assert @Assert_assert
@@ -541,11 +541,11 @@ module {
 
 module {
   // CHECK-LABEL: hw.module @PortOrder_6072
-  hw.module @PortOrder_6072(input %clock: !seq.clock, input %in: i1) {
+  hw.module @PortOrder_6072(input %clock : !seq.clock, input %in : i1) {
     hw.instance "dut" @Foo(clock: %clock: !seq.clock, in: %in: i1) -> ()
     hw.output
   }
-  // CHECK: hw.module @Foo_cover(input %clock: !seq.clock, input %in: i1)
+  // CHECK: hw.module @Foo_cover(input %clock : !seq.clock, input %in : i1)
   hw.module private @Foo(input %clock: !seq.clock, input %in: i1) {
     %0 = seq.from_clock %clock
     sv.cover.concurrent posedge %0, %in label "cover__hello"

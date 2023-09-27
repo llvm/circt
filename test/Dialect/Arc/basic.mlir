@@ -209,7 +209,7 @@ hw.module @vectorize(input %in0: i1, input %in1: i1, input %in2: i1, input %in3:
 //       CHECK:   [[V1:%.+]] = comb.and [[A]], [[B]]
 //       CHECK:   arc.vectorize.return [[V1]] : i1
 //       CHECK: }
-//       CHECK: [[V2:%.+]] = arc.vectorize (%in1), (%in2) : (i1, i1) -> i1 {
+//       CHECK: [[V2:%.+]] = arc.vectorize (%in0), (%in2) : (i1, i1) -> i1 {
 //       CHECK: ^bb0([[A:%.+]]: i1, [[B:%.+]]: i1):
 //       CHECK:   [[V3:%.+]] = comb.and [[A]], [[B]]
 //       CHECK:   arc.vectorize.return [[V3]] : i1
