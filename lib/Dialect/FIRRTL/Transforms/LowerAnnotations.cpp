@@ -330,6 +330,8 @@ static LogicalResult applyConventionAnno(const AnnoPathValue &target,
 
   if (auto moduleOp = dyn_cast<FModuleOp>(op)) {
     moduleOp.setConvention(convention);
+    // Dirty hack--scalarized modules are given public visibility to identify units of interest.
+    SymbolTable::setSymbolVisibility(moduleOp, SymbolTable::Visibility::Public);
     return success();
   }
 

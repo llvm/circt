@@ -154,15 +154,21 @@ LogicalResult PathVisitor::processPath(PathOp path) {
   assert(topModule && "must have something?");
   auto *node = instanceGraph.lookup(topModule);
   while (!node->noUses()) {
-    auto module = node->getModule();
+    auto module = node->getModule<hw::HWModuleLike>();
+
+    // Dirty hack--scalarized modules are given public visibility to identify units of interest.
+    if (module.getVisibility() == SymbolTable::Visibility::Public)
+      break;
+
     if (!node->hasOneUse()) {
       auto diag = path->emitError() << "unable to uniquely resolve target "
                                        "due to multiple instantiation";
+      diag.attachNote(path->getLoc()) << "the path is " << namepath << '\n';
       for (auto *use : node->uses()) {
         if (auto *op = use->getInstance<Operation *>())
           diag.attachNote(op->getLoc()) << "instance here";
         else
-          diag.attachNote(module->getLoc()) << "module marked public";
+          diag.attachNote(module->getLoc()) << "module marked public " << module.getModuleName();
       }
       return diag;
     }
