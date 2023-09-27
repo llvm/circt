@@ -5,7 +5,7 @@
 // CHECK: typedef enum bit [0:0] {enum2_U} enum2;
 // CHECK-LABEL: module EnumCheck
 hw.module @EnumCheck(input %a : !hw.enum<T>, input %b: !hw.enum<>, input %c : !hw.enum<U>,
-    output %d : !hw.enum<T>, output %e: !hw.enum<>, output %f: !hw.enum<U>) {
+    output d : !hw.enum<T>, output e: !hw.enum<>, output f: !hw.enum<U>) {
   // CHECK: assign d = a;
   // CHECK: // Zero width: assign e = b;
   // CHECK: assign f = c;
@@ -22,7 +22,7 @@ hw.module @EnumCheck(input %a : !hw.enum<T>, input %b: !hw.enum<>, input %c : !h
 // CHECK-EMPTY:
 // CHECK-NEXT:   assign result = test == enum0_A;
 // CHECK-NEXT: endmodule
-hw.module @EnumCmp(input %test: !hw.enum<A, B>, output %result: i1) {
+hw.module @EnumCmp(input %test: !hw.enum<A, B>, output result: i1) {
   %A = hw.enum.constant A : !hw.enum<A, B>
   %0 = hw.enum.cmp %test, %A : !hw.enum<A, B>, !hw.enum<A, B>
   hw.output %0 : i1

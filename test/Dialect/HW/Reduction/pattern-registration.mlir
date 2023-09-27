@@ -15,6 +15,6 @@
 // CHECK-NEXT: hw-operand2-forwarder
 // CHECK-NEXT: operation-pruner
 // CHECK-EMPTY:
-hw.module @Foo(input %in : i1, output %out : i1) {
+hw.module @Foo(input %in : i1, output out : i1) {
   hw.output %in : i1
 }

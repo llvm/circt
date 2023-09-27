@@ -1,6 +1,6 @@
 // RUN: circt-opt -lower-handshake-to-hw -split-input-file %s | FileCheck %s
 
-// CHECK:   hw.module @handshake_fork_1ins_2outs_ctrl(input %[[VAL_0:.*]] : !esi.channel<i0>, input %[[CLOCK:.*]] : !seq.clock, input %[[VAL_2:.*]] : i1, output %out0 : !esi.channel<i0>, output %out1 : !esi.channel<i0>) {
+// CHECK:   hw.module @handshake_fork_1ins_2outs_ctrl(input %[[VAL_0:.*]] : !esi.channel<i0>, input %[[CLOCK:.*]] : !seq.clock, input %[[VAL_2:.*]] : i1, output out0 : !esi.channel<i0>, output out1 : !esi.channel<i0>) {
 // CHECK:           %[[VAL_3:.*]], %[[VAL_4:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_5:.*]] : i0
 // CHECK:           %[[VAL_6:.*]], %[[VAL_7:.*]] = esi.wrap.vr %[[VAL_3]], %[[VAL_8:.*]] : i0
 // CHECK:           %[[VAL_9:.*]], %[[VAL_10:.*]] = esi.wrap.vr %[[VAL_3]], %[[VAL_11:.*]] : i0
@@ -31,7 +31,7 @@ handshake.func @test_fork(%arg0: none, %arg1: none, ...) -> (none, none, none) {
 
 // -----
 
-// CHECK:   hw.module @handshake_fork_in_ui64_out_ui64_ui64(input %[[VAL_0:.*]] : !esi.channel<i64>, input %[[CLOCK:.*]] : !seq.clock, input %[[VAL_2:.*]] : i1, output %out0 : !esi.channel<i64>, output %out1 : !esi.channel<i64>) {
+// CHECK:   hw.module @handshake_fork_in_ui64_out_ui64_ui64(input %[[VAL_0:.*]] : !esi.channel<i64>, input %[[CLOCK:.*]] : !seq.clock, input %[[VAL_2:.*]] : i1, output out0 : !esi.channel<i64>, output out1 : !esi.channel<i64>) {
 // CHECK:           %[[VAL_3:.*]], %[[VAL_4:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_5:.*]] : i64
 // CHECK:           %[[VAL_6:.*]], %[[VAL_7:.*]] = esi.wrap.vr %[[VAL_3]], %[[VAL_8:.*]] : i64
 // CHECK:           %[[VAL_9:.*]], %[[VAL_10:.*]] = esi.wrap.vr %[[VAL_3]], %[[VAL_11:.*]] : i64

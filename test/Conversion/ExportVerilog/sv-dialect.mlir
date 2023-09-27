@@ -470,7 +470,7 @@ hw.module @Aliasing(inout %a : i42, inout %b : i42, inout %c : i42) {
   sv.alias %a, %b, %c : !hw.inout<i42>, !hw.inout<i42>, !hw.inout<i42>
 }
 
-hw.module @reg_0(input %in4: i4, input %in8: i8, output %a: i8, output %b: i8) {
+hw.module @reg_0(input %in4: i4, input %in8: i8, output a: i8, output b: i8) {
   // CHECK-LABEL: module reg_0(
   // CHECK-NEXT:   input  [3:0] in4, //
   // CHECK-NEXT:   input  [7:0] in8, //
@@ -512,7 +512,7 @@ hw.module @reg_0(input %in4: i4, input %in8: i8, output %a: i8, output %b: i8) {
   hw.output %regout, %memout : i8, i8
 }
 
-hw.module @reg_1(input %in4: i4, input %in8: i8, output %a : i3, output %b : i5) {
+hw.module @reg_1(input %in4: i4, input %in8: i8, output a : i3, output b : i5) {
   // CHECK-LABEL: module reg_1(
 
   // CHECK: reg [17:0] myReg2
@@ -580,8 +580,8 @@ hw.module @PartSelectInoutInline(input %v:i40) {
 }
 
 // CHECK-LABEL: module AggregateConstantXZ(
-hw.module @AggregateConstantXZ(output %res1: !hw.struct<foo: i2, bar: !hw.array<3xi4>>,
-                                     res2: !hw.struct<foo: i2, bar: !hw.array<3xi4>>) {
+hw.module @AggregateConstantXZ(output res1: !hw.struct<foo: i2, bar: !hw.array<3xi4>>,
+                               output res2 : !hw.struct<foo: i2, bar: !hw.array<3xi4>>) {
   %0 = sv.constantX : !hw.struct<foo: i2, bar: !hw.array<3xi4>>
   %1 = sv.constantZ : !hw.struct<foo: i2, bar: !hw.array<3xi4>>
   // CHECK: assign res1 = 14'bx
@@ -590,7 +590,7 @@ hw.module @AggregateConstantXZ(output %res1: !hw.struct<foo: i2, bar: !hw.array<
 }
 
 // CHECK-LABEL: module AggregateVerbatim(
-hw.module @AggregateVerbatim(output %res1: !hw.struct<a: i1>, res2: !hw.array<1xi1>, res3: !hw.array<1xi1>) {
+hw.module @AggregateVerbatim(output res1: !hw.struct<a: i1>, output res2: !hw.array<1xi1>, output res3: !hw.array<1xi1>) {
   %a = sv.verbatim.expr "STRUCT_A_" : () -> !hw.struct<a: i1>
   %b = sv.verbatim.expr "ARRAY_" : () -> !hw.array<1xi1>
   %c = sv.verbatim.expr "MACRO({{0}}, {{1}})" (%a, %b) : (!hw.struct<a: i1>, !hw.array<1xi1>) -> !hw.array<1xi1>
@@ -697,7 +697,7 @@ hw.module @issue595_variant2_checkRedunctionAnd(input %arr: !hw.array<128xi1>) {
 
 // CHECK-LABEL: module slice_inline_ports
 hw.module @slice_inline_ports(input %arr: !hw.array<128xi1>, input %x: i3, input %y: i7,
- output %o1: !hw.array<2xi3>, output %o2: !hw.array<64xi1>, output %o3: !hw.array<64xi1>) {
+ output o1: !hw.array<2xi3>, output o2: !hw.array<64xi1>, output o3: !hw.array<64xi1>) {
 
   // array_create cannot be inlined into the slice.
   %c1_i2 = hw.constant 1 : i2
@@ -884,7 +884,7 @@ hw.module @issue728ifdef(input %clock: i1, input %asdfasdfasdfasdfafa: i1, input
 }
 
 // CHECK-LABEL: module alwayscombTest(
-hw.module @alwayscombTest(input %a: i1, output %x: i1) {
+hw.module @alwayscombTest(input %a: i1, output x: i1) {
   // CHECK: reg combWire;
   %combWire = sv.reg : !hw.inout<i1>
   // CHECK: always_comb
@@ -921,7 +921,7 @@ hw.module @inlineProceduralWiresWithLongNames(input %clock: i1, input %in: i1) {
 
 // https://github.com/llvm/circt/issues/859
 // CHECK-LABEL: module oooReg(
-hw.module @oooReg(input %in: i1, output %result: i1) {
+hw.module @oooReg(input %in: i1, output result: i1) {
   // CHECK: wire abc = in;
   %0 = sv.read_inout %abc : !hw.inout<i1>
 
@@ -945,7 +945,7 @@ hw.module @ifdef_beginend(input %clock: i1, input %cond: i1, input %val: i8) {
 
 // https://github.com/llvm/circt/issues/884
 // CHECK-LABEL: module ConstResetValueMustBeInlined(
-hw.module @ConstResetValueMustBeInlined(input %clock: i1, input %reset: i1, input %d: i42, output %q: i42) {
+hw.module @ConstResetValueMustBeInlined(input %clock: i1, input %reset: i1, input %d: i42, output q: i42) {
   %c0_i42 = hw.constant 0 : i42
   %tmp = sv.reg : !hw.inout<i42>
   // CHECK: always_ff @(posedge clock or posedge reset) begin
@@ -1043,7 +1043,7 @@ hw.module @RegisterOfStructOrArrayOfStruct() {
 
 // CHECK-LABEL: module MultiUseReadInOut(
 // Issue #1564
-hw.module @MultiUseReadInOut(input %auto_in_ar_bits_id : i2, output %aa: i3, output %bb: i3){
+hw.module @MultiUseReadInOut(input %auto_in_ar_bits_id : i2, output aa: i3, output bb: i3){
   %a = sv.reg  : !hw.inout<i3>
   %b = sv.reg  : !hw.inout<i3>
   %c = sv.reg  : !hw.inout<i3>
@@ -1249,7 +1249,7 @@ hw.module @AggregateTemporay(input %clock: i1, input %foo: i1, input %bar: i25) 
 //CHECK-LABEL: module XMR_src
 //CHECK: assign $root.a.b.c = a;
 //CHECK-NEXT: assign aa = d.e.f;
-hw.module @XMR_src(input %a : i23, output %aa: i3) {
+hw.module @XMR_src(input %a : i23, output aa: i3) {
   %xmr1 = sv.xmr isRooted a,b,c : !hw.inout<i23>
   %xmr2 = sv.xmr "d",e,f : !hw.inout<i3>
   %r = sv.read_inout %xmr2 : !hw.inout<i3>
@@ -1293,11 +1293,11 @@ hw.module @wait_order() {
 }
 
 hw.module.extern @MyExtModule(input %in: i8)
-hw.module.extern @ExtModule(input %in: i8, output %out: i8)
+hw.module.extern @ExtModule(input %in: i8, output out: i8)
 
 // CHECK-LABEL: module InlineBind
 // CHEC:        output wire_0
-hw.module @InlineBind(input %a_in: i8, output %wire: i8){
+hw.module @InlineBind(input %a_in: i8, output wire: i8){
   // CHECK:      wire [7:0] _ext1_out;
   // CHECK-NEXT: wire [7:0] _GEN;
   // CHECK-NEXT: /* This instance is elsewhere emitted as a bind statement.
@@ -1321,7 +1321,7 @@ hw.module @InlineBind(input %a_in: i8, output %wire: i8){
 }
 
 // CHECK-LABEL: module MoveInstances
-hw.module @MoveInstances(input %a_in: i8, output %outc : i8){
+hw.module @MoveInstances(input %a_in: i8, output outc : i8){
   // CHECK: MyExtModule xyz3 (
   // CHECK:   .in (8'(a_in + a_in))
   // CHECK: );
@@ -1513,7 +1513,7 @@ hw.module @ElseIfLocations(input %clock: i1, input %flag1 : i1, input %flag2: i1
 // CHECK:        [[INPUT:[:alnum:]+]], //
 // CHECK: output [[OUTPUT:.+]] //
 // CHECK: );
-hw.module @ReuseExistingInOut(input %clock: i1, input %a: i1, output %out1: i1) {
+hw.module @ReuseExistingInOut(input %clock: i1, input %a: i1, output out1: i1) {
   %expr1 = comb.or %a, %a : i1
   %expr2 = comb.and %a, %a : i1
 
@@ -1542,7 +1542,7 @@ hw.module @ReuseExistingInOut(input %clock: i1, input %a: i1, output %out1: i1) 
 }
 
 // CHECK-LABEL: ProhibitReuseOfExistingInOut
-hw.module @ProhibitReuseOfExistingInOut(input %a: i1, output %out1: i1) {
+hw.module @ProhibitReuseOfExistingInOut(input %a: i1, output out1: i1) {
   // CHECK-DAG:   wire [[GEN:.+]] = a | a;
   // CHECK-DAG:   wire mywire;
   // CHECK:       `ifdef FOO
@@ -1566,9 +1566,10 @@ hw.module @ProhibitReuseOfExistingInOut(input %a: i1, output %out1: i1) {
 
 // CHECK: assign out = {[[GEN0]], [[GEN1]]}
 hw.module @Verilator3405(
-  %0: i1, input %1: i1, input %2: i1, input %3: i1, input %4: i1, input %5: i1, input %6: i1, input %7: i1, input %8: i1,
-  %9: i1, input %10: i1, input %11: i1, input %12: i1, input %13: i1, input %14: i1, input %15: i1, input %16: i1,
-  %17: i1, input %18: i1, input %19: i1, input %20: i1, input %21: i1, input %22: i1) -> (out: i2) {
+  input %0: i1, input %1: i1, input %2: i1, input %3: i1, input %4: i1, input %5: i1, input %6: i1, input %7: i1, input %8: i1,
+  input %9: i1, input %10: i1, input %11: i1, input %12: i1, input %13: i1, input %14: i1, input %15: i1, input %16: i1,
+  input %17: i1, input %18: i1, input %19: i1, input %20: i1, input %21: i1, input %22: i1,
+  output out: i2) {
 
   %lhs = comb.or %0, %1, %2, %3, %4, %5, %6, %7, %8, %9, %10 : i1
   %rhs = comb.or %11, %12, %13, %14, %15, %16, %17, %18, %19, %20, %21 : i1
@@ -1595,7 +1596,7 @@ hw.module @prohiditInline(input %a:i4, input %b:i1, input %c:i1, input %d: i4) {
 }
 
 // CHECK-LABEL: module CollectNamesOrder
-hw.module @CollectNamesOrder(input %in: i1, output %out: i1) {
+hw.module @CollectNamesOrder(input %in: i1, output out: i1) {
   // CHECK: wire _GEN_0 = in | in;
   // CHECK: wire _GEN;
   %0 = comb.or %in, %in : i1
@@ -1646,7 +1647,7 @@ hw.module @IndexPartSelectInoutArray(input %a: !hw.array<2xi1>, input %c: i1, in
   hw.output
 }
 
-hw.module @IndexPartSelect(, output %a : i3) {
+hw.module @IndexPartSelect(output a : i3) {
   // CHECK-LABEL: module IndexPartSelect(
   // CHECK: wire [17:0] _GEN = 18'h3;
   // CHECK-NEXT: assign a = _GEN[4'h3 +: 3];
@@ -1693,7 +1694,7 @@ hw.module @ForStatement(input %a: i5) {
 }
 
 // CHECK-LABEL: module intrinsic
-hw.module @intrinsic(input %clk: i1, output %io1: i1, io2: i1, io3: i1, io4: i5) {
+hw.module @intrinsic(input %clk: i1, output io1: i1, output io2: i1, output io3: i1, output io4: i5) {
   // CHECK: wire [4:0] [[tmp:.*]];
 
   %x_i1 = sv.constantX : i1
@@ -1755,7 +1756,7 @@ hw.module @NastyPortParent() {
   %false = hw.constant false
   %0 = hw.instance "foo" sym @foo @NastyPort(".lots$of.dots": %false: i1) -> (".more.dots": i1) {doNotPrint = true}
 }
-hw.module @NastyPort(input %.lots$of.dots: i1, output %".more.dots": i1) {
+hw.module @NastyPort(input %.lots$of.dots: i1, output ".more.dots": i1) {
   %false = hw.constant false
   hw.output %false : i1
 }
@@ -1780,7 +1781,7 @@ sv.bind #hw.innerNameRef<@InlineBind::@foo2>
 // CHECK:     sv.wire  {hw.verilogName = "_GEN"} : !hw.inout<i32>
 
 // CHECK-LABEL: hw.module @extInst2
-// CHECK-SAME: (%signed: i1 {hw.verilogName = "signed_0"}
+// CHECK-SAME: (input %signed : i1 {hw.verilogName = "signed_0"}
 
 // CHECK-LABEL:  hw.module @remoteInstDut
 // CHECK:    %signed = sv.wire  {hw.verilogName = "signed_0"} : !hw.inout<i1>

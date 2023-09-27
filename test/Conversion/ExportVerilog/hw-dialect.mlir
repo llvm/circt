@@ -11,20 +11,20 @@ hw.module @TESTSIMPLE(input %a: i4, input %b: i4, input %c: i2, input %cond: i1,
                         input %structA: !hw.struct<foo: i2, bar:i4>,
                         input %arrOfStructA: !hw.array<5 x struct<foo: i2>>,
                         input %array1: !hw.array<1xi1>,
-  output %r0: i4, output %r2: i4, output %r4: i4, output %r6: i4, output %r7: i4, 
-  output %r8: i4, output %r9: i4, output %r10: i4, output %r11: i4,
-  output %r12: i4, output %r13: i4, output %r14: i4, output %r15: i4, 
-  output %r16: i1, output %r17: i1, output %r18: i1, output %r19: i1,
-  output %r20: i1, output %r21: i1, output %r22: i1, output %r23: i1, 
-  output %r24: i1, output %r25: i1, output %r26: i1, output %r27: i1,
-  output %r28: i1, output %r29: i12, output %r30: i2, output %r31: i9, 
-  output %r33: i4, output %r34: i4, output %r35: !hw.array<3xi4>,
-  output %r36: !hw.array<6xi4>, output %r37: i4, output %r38: i12, 
-  output %r39: !hw.struct<a: i1, b: i1>, output %r40: !hw.array<4xi2>, 
-  output %r41: !hw.uarray<1xi1>, output %r42: !hw.struct<a: !hw.array<1xi1>>, 
-  output %r43: i4, output %r44: !hw.struct<foo: i2, bar: i4>, 
-  output %r45: !hw.struct<foo: i2, bar: i4>, 
-  output %r46: !hw.struct<foo: i2, bar: i4>, output %r47: i1
+  output r0: i4, output r2: i4, output r4: i4, output r6: i4, output r7: i4, 
+  output r8: i4, output r9: i4, output r10: i4, output r11: i4,
+  output r12: i4, output r13: i4, output r14: i4, output r15: i4, 
+  output r16: i1, output r17: i1, output r18: i1, output r19: i1,
+  output r20: i1, output r21: i1, output r22: i1, output r23: i1, 
+  output r24: i1, output r25: i1, output r26: i1, output r27: i1,
+  output r28: i1, output r29: i12, output r30: i2, output r31: i9, 
+  output r33: i4, output r34: i4, output r35: !hw.array<3xi4>,
+  output r36: !hw.array<6xi4>, output r37: i4, output r38: i12, 
+  output r39: !hw.struct<a: i1, b: i1>, output r40: !hw.array<4xi2>, 
+  output r41: !hw.uarray<1xi1>, output r42: !hw.struct<a: !hw.array<1xi1>>, 
+  output r43: i4, output r44: !hw.struct<foo: i2, bar: i4>, 
+  output r45: !hw.struct<foo: i2, bar: i4>, 
+  output r46: !hw.struct<foo: i2, bar: i4>, output r47: i1
   ) attributes {sv.attributes = [#sv.attribute<"svAttr">]} {
 
   %0 = comb.add %a, %b : i4
@@ -229,7 +229,7 @@ hw.module @i0Module(input %arg1: i0) {}
 // CHECK-EMPTY:
 // CHECK-NEXT:  endmodule
 
-hw.module @B(input %a: i1, output %b: i1, output %c: i1) {
+hw.module @B(input %a: i1, output b: i1, output c: i1) {
   %0 = comb.or %a, %a : i1
   %1 = comb.and %a, %a : i1
   hw.output %0, %1 : i1, i1
@@ -244,7 +244,7 @@ hw.module @B(input %a: i1, output %b: i1, output %c: i1) {
 // CHECK-NEXT:   assign c = a & a;
 // CHECK-NEXT: endmodule
 
-hw.module @A(input %d: i1, input %e: i1, output %f: i1) {
+hw.module @A(input %d: i1, input %e: i1, output f: i1) {
   %1 = comb.mux %d, %d, %e : i1
   hw.output %1 : i1
 }
@@ -257,7 +257,7 @@ hw.module @A(input %d: i1, input %e: i1, output %f: i1) {
 // CHECK-NEXT:  assign f = d ? d : e;
 // CHECK-NEXT: endmodule
 
-hw.module @AAA(input %d: i1, input %e: i1, output %f: i1) {
+hw.module @AAA(input %d: i1, input %e: i1, output f: i1) {
   %z = hw.constant 0 : i1
   hw.output %z : i1
 }
@@ -273,13 +273,13 @@ hw.module @AAA(input %d: i1, input %e: i1, output %f: i1) {
 
 /// TODO: Specify parameter declarations.
 hw.module.extern @EXT_W_PARAMS<DEFAULT: i64, DEPTH: f64, FORMAT: none,
-     WIDTH: i8>(input %a: i1, input %b: i0, output %out: i1)
+     WIDTH: i8>(input %a: i1, input %b: i0, output out: i1)
   attributes { verilogName="FooModule" }
 
-hw.module.extern @EXT_W_PARAMS2<DEFAULT: i32>(input %a: i2, output %out: i1)
+hw.module.extern @EXT_W_PARAMS2<DEFAULT: i32>(input %a: i2, output out: i1)
   attributes { verilogName="FooModule" }
 
-hw.module @AB(input %w: i1, input %x: i1, input %i2: i2, input %i3: i0, output %y: i1, output %z: i1, output %p: i1, output %p2: i1) {
+hw.module @AB(input %w: i1, input %x: i1, input %i2: i2, input %i3: i0, output y: i1, output z: i1, output p: i1, output p2: i1) {
   %w2 = hw.instance "a1" @AAA(d: %w: i1, e: %w1: i1) -> (f: i1)
   %w1, %y = hw.instance "b1" @B(a: %w2: i1) -> (b: i1, c: i1)
 
@@ -336,7 +336,7 @@ hw.module @AB(input %w: i1, input %x: i1, input %i2: i2, input %i3: i0, output %
 
 
 
-hw.module @shl(input %a: i1, output %b: i1) {
+hw.module @shl(input %a: i1, output b: i1) {
   %0 = comb.shl %a, %a : i1
   hw.output %0 : i1
 }
@@ -349,7 +349,7 @@ hw.module @shl(input %a: i1, output %b: i1) {
 // CHECK-NEXT: endmodule
 
 
-hw.module @inout_0(inout %a: i42, output %out: i42) {
+hw.module @inout_0(inout %a: i42, output out: i42) {
   %aget = sv.read_inout %a: !hw.inout<i42>
   hw.output %aget : i42
 }
@@ -370,14 +370,14 @@ hw.module @inout_0(inout %a: i42, output %out: i42) {
 
 // https://github.com/llvm/circt/issues/318
 // This shouldn't generate invalid Verilog
-hw.module @extract_all(input %tmp85: i1, output %tmp106: i1) {
+hw.module @extract_all(input %tmp85: i1, output tmp106: i1) {
   %1 = comb.extract %tmp85 from 0 : (i1) -> i1
   hw.output %1 : i1
 }
 // CHECK-LABEL: module extract_all
 // CHECK:  assign tmp106 = tmp85;
 
-hw.module @wires(input %in4: i4, input %in8: i8, output %a: i4, output %b: i8, output %c: i8) {
+hw.module @wires(input %in4: i4, input %in8: i8, output a: i4, output b: i8, output c: i8) {
   // CHECK-LABEL: module wires( //
   // CHECK-NEXT:   input  [3:0] in4, //
   // CHECK-NEXT:   input  [7:0] in8, //
@@ -473,7 +473,7 @@ hw.module @signs(input %in1: i4, input %in2: i4, input %in3: i4, input %in4: i4)
 // CHECK-NEXT: output [6:0]      r1,
 // CHECK-NEXT: output [31:0]     r2
 // CHECK-NEXT: );
-hw.module @casts(input %in1: i7, input %in2: !hw.array<8xi4>, output %r1: !hw.array<7xi1>, output %r2: i32) {
+hw.module @casts(input %in1: i7, input %in2: !hw.array<8xi4>, output r1: !hw.array<7xi1>, output r2: i32) {
   // CHECK-EMPTY:
   %r1 = hw.bitcast %in1 : (i7) -> !hw.array<7xi1>
   %r2 = hw.bitcast %in2 : (!hw.array<8xi4>) -> i32
@@ -493,7 +493,7 @@ hw.module @casts(input %in1: i7, input %in2: !hw.array<8xi4>, output %r1: !hw.ar
 // CHECK-NEXT:   );
 // CHECK-EMPTY:
 hw.module @TestZero(input %a: i4, input %zeroBit: i0, input %arrZero: !hw.array<3xi0>,
-  output %r0: i4, output %rZero: i0, output %arrZero_0: !hw.array<3xi0>) {
+  output r0: i4, output rZero: i0, output arrZero_0: !hw.array<3xi0>) {
 
   %b = comb.add %a, %a : i4
   hw.output %b, %zeroBit, %arrZero : i4, i0, !hw.array<3xi0>
@@ -506,7 +506,7 @@ hw.module @TestZero(input %a: i4, input %zeroBit: i0, input %arrZero: !hw.array<
 
 // CHECK-LABEL: TestZeroInstance
 hw.module @TestZeroInstance(input %aa: i4, input %azeroBit: i0, input %aarrZero: !hw.array<3xi0>,
-  output %r0: i4, output %rZero: i0, output %arrZero_0: !hw.array<3xi0>) {
+  output r0: i4, output rZero: i0, output arrZero_0: !hw.array<3xi0>) {
 
 // CHECK:  TestZero iii (
 // CHECK-NEXT:    .a         (aa),
@@ -530,7 +530,7 @@ hw.module @TestZeroInstance(input %aa: i4, input %azeroBit: i0, input %aarrZero:
 // CHECK-NEXT:  // output /*Zero Width*/ structZeroNest_0
 // CHECK-NEXT: );
 hw.module @TestZeroStruct(input %structZero: !hw.struct<>, input %structZeroNest: !hw.struct<a: !hw.struct<>>,
-  output %structZero_0: !hw.struct<>, output %structZeroNest_0: !hw.struct<a: !hw.struct<>>) {
+  output structZero_0: !hw.struct<>, output structZeroNest_0: !hw.struct<a: !hw.struct<>>) {
 
   hw.output %structZero, %structZeroNest : !hw.struct<>, !hw.struct<a: !hw.struct<>>
   // CHECK:      // Zero width: assign structZero_0 = structZero;
@@ -543,7 +543,7 @@ hw.module @TestZeroStruct(input %structZero: !hw.struct<>, input %structZeroNest
 // CHECK-NEXT:      input  [31:0]                                                                                                      in1,
 // CHECK-NEXT:      output struct packed {/*z1: Zero Width;*/ logic [31:0] a; /*z2: Zero Width;*/ logic [31:0] b; /*c: Zero Width;*/ struct packed {logic [31:0] d1; /*z: Zero Width;*/ } d; } out0
 // CHECK-NEXT:  );
-hw.module @zeroElements(input %in0: i0, input %in1: i32, output %out0: !hw.struct<z1: i0, a: i32, z2: i0, b: i32, c: !hw.struct<z: i0>, d: !hw.struct<d1:i32, z:i0>>) {
+hw.module @zeroElements(input %in0: i0, input %in1: i32, output out0: !hw.struct<z1: i0, a: i32, z2: i0, b: i32, c: !hw.struct<z: i0>, d: !hw.struct<d1:i32, z:i0>>) {
   // CHECK:      // Zero width: wire /*Zero Width*/
   // CHECK-SAME: _GEN = '{};
   // CHECK-NEXT: wire struct packed {logic [31:0] d1; /*z: Zero Width;*/ }
@@ -561,7 +561,7 @@ hw.module @zeroElements(input %in0: i0, input %in1: i32, output %out0: !hw.struc
 
 // CHECK-LABEL: TestZeroStructInstance
 hw.module @TestZeroStructInstance(input %structZero: !hw.struct<>, input %structZeroNest: !hw.struct<a: !hw.struct<>>,
-  output %structZero_0: !hw.struct<>, output %structZeroNest_0: !hw.struct<a: !hw.struct<>>) {
+  output structZero_0: !hw.struct<>, output structZeroNest_0: !hw.struct<a: !hw.struct<>>) {
 
 // CHECK: TestZeroStruct iii (
 // CHECK-NEXT:  //.structZero       (structZero)
@@ -588,7 +588,7 @@ hw.module @TestZeroStructInstance(input %structZero: !hw.struct<>, input %struct
 // CHECK-NEXT:   assign out1 = arg1[/*Zero width*/ 1'b0];	
 // CHECK-NEXT:   // Zero width: assign out2 = arg0;	
 
-hw.module @testZeroArrayGet(input %arg0: i0, input %arg1 : !hw.array<1xi32>, output %out: i32, output %out1: i32, output %out2: i0) {
+hw.module @testZeroArrayGet(input %arg0: i0, input %arg1 : !hw.array<1xi32>, output out: i32, output out1: i32, output out2: i0) {
   // Using an expression as index.
   %idx = comb.add %arg0, %arg0 : i0
   %0 = hw.array_get %arg1[%idx] : !hw.array<1xi32>, i0
@@ -600,7 +600,7 @@ hw.module @testZeroArrayGet(input %arg0: i0, input %arg1 : !hw.array<1xi32>, out
 
 // https://github.com/llvm/circt/issues/438
 // CHECK-LABEL: module cyclic
-hw.module @cyclic(input %a: i1, output %b: i1) {
+hw.module @cyclic(input %a: i1, output b: i1) {
   // CHECK: wire _GEN;
 
   // CHECK: wire _GEN_0 = _GEN + _GEN;
@@ -615,7 +615,7 @@ hw.module @cyclic(input %a: i1, output %b: i1) {
 
 // https://github.com/llvm/circt/issues/668
 // CHECK-LABEL: module longExpressions
-hw.module @longExpressions(input %a: i8, input %a2: i8, output %b: i8) {
+hw.module @longExpressions(input %a: i8, input %a2: i8, output b: i8) {
   // CHECK:      assign b =
   // CHECK-NEXT:   (a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a)
   // CHECK-NEXT:   * (a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a)
@@ -634,7 +634,7 @@ hw.module @longExpressions(input %a: i8, input %a2: i8, output %b: i8) {
 
 // https://github.com/llvm/circt/issues/668
 // CHECK-LABEL: module longvariadic
-hw.module @longvariadic(input %a: i8, output %b: i8) {
+hw.module @longvariadic(input %a: i8, output b: i8) {
   // CHECK:          assign b =
   // CHECK-NEXT:       a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a
   // CHECK-COUNT-9:    + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a
@@ -670,7 +670,7 @@ hw.module @longvariadic(input %a: i8, output %b: i8) {
 // CHECK-NEXT: );
 // CHECK-EMPTY:
 // CHECK-NEXT: assign r = a == c == (d == e);
-  hw.module @eqIssue(input %a: i9, input %c :i9, input %d: i4, input %e: i4, output %r : i1){
+  hw.module @eqIssue(input %a: i9, input %c :i9, input %d: i4, input %e: i4, output r : i1){
     %1 = comb.icmp eq %a, %c : i9
     %2 = comb.icmp eq %d, %e : i4
     %4 = comb.icmp eq %1, %2 : i1
@@ -720,7 +720,7 @@ hw.module @noTemporaryIfReadInOutIsAfterUse(input %clock: i1, input %x: i1) {
 }
 
 // CHECK-LABEL: module largeConstant
-hw.module @largeConstant(input %a: i100000, input %b: i16, output %x: i100000, output %y: i16) {
+hw.module @largeConstant(input %a: i100000, input %b: i16, output x: i100000, output y: i16) {
   // Large constant is inlined on multiple lines.
 
   // CHECK:      assign x =
@@ -744,7 +744,7 @@ hw.module @largeConstant(input %a: i100000, input %b: i16, output %x: i100000, o
   hw.output %1, %2 : i100000, i16
 }
 // CHECK-LABEL: StructExtractExtract
-hw.module @StructExtractExtract(input %a: !hw.struct<b: i4>, output %r: i2) {
+hw.module @StructExtractExtract(input %a: !hw.struct<b: i4>, output r: i2) {
   %0 = hw.struct_extract %a["b"] : !hw.struct<b: i4>
   %1 = comb.extract %0 from 1 : (i4) -> i2
   // CHECK: assign r = a.b[2:1];
@@ -752,7 +752,7 @@ hw.module @StructExtractExtract(input %a: !hw.struct<b: i4>, output %r: i2) {
 }
 
 // CHECK-LABEL: StrurctExtractInline
-hw.module @StrurctExtractInline(input %a: !hw.struct<v: i1>, output %b: i1, output %c: i1) {
+hw.module @StrurctExtractInline(input %a: !hw.struct<v: i1>, output b: i1, output c: i1) {
   %0 = hw.struct_extract %a["v"] : !hw.struct<v: i1>
   // CHECK:      assign b = a.v;
   // CHECK-NEXT: assign c = a.v;
@@ -767,25 +767,25 @@ hw.module @NoExtraTemporaryWireForAssign(input %a: i2, input %b: i4) {
   sv.assign %1, %0: !hw.struct<foo: i2, bar: i4>
 }
 
-hw.module.extern @DifferentResultMod(output %out1: i1, output %out2: i2)
+hw.module.extern @DifferentResultMod(output out1: i1, output out2: i2)
 
 // CHECK-LABEL: module out_of_order_multi_result(
-hw.module @out_of_order_multi_result(output %b: i1, output %c: i2) {
+hw.module @out_of_order_multi_result(output b: i1, output c: i2) {
   // CHECK: wire       _b1_out1;
   // CHECK: wire [1:0] _b1_out2;
   %b = comb.add %out1, %out1 : i1
   %c = comb.add %out2, %out2 : i2
 
-  %out1, %out2 = hw.instance "b1" @DifferentResultMod(%out1: i1, %out2: i2)
+  %out1, %out2 = hw.instance "b1" @DifferentResultMod() -> (out1: i1, out2: i2)
 
   // CHECK: assign b = _b1_out1 + _b1_out1;
   // CHECK: assign c = _b1_out2 + _b1_out2;
   hw.output %b, %c : i1, i2
 }
 
-hw.module.extern @single_result(output %res: i3)
+hw.module.extern @single_result(output res: i3)
 // CHECK-LABEL: module instance_result_reuse_wires(
-hw.module @instance_result_reuse_wires(output %b: i3) {
+hw.module @instance_result_reuse_wires(output b: i3) {
   // CHECK:       wire {{.*}} some_wire;
   // CHECK:       single_result b1 (
   // CHECK-NEXT:  .res (some_wire)
@@ -800,10 +800,10 @@ hw.module @instance_result_reuse_wires(output %b: i3) {
   hw.output %read : i3
 }
 
-hw.module.extern @ExternDestMod(input %a: i1, input %b: i2, output %c: i3, output %d: i4)
+hw.module.extern @ExternDestMod(input %a: i1, input %b: i2, output c: i3, output d: i4)
 hw.module @InternalDestMod(input %a: i1, input %b: i3, input %c: i1) {}
 // CHECK-LABEL: module ABC
-hw.module @ABC(input %a: i1, input %b: i2, output %c: i4) {
+hw.module @ABC(input %a: i1, input %b: i2, output c: i4) {
   %0,%1 = hw.instance "whatever" sym @a1 @ExternDestMod(a: %a: i1, b: %b: i2) -> (c: i3, d: i4) {doNotPrint=1}
   %2 = sv.xmr "whatever", "a" : !hw.inout<i1>
   %3 = sv.read_inout %2: !hw.inout<i1>
@@ -830,11 +830,11 @@ hw.module @ABC(input %a: i1, input %b: i2, output %c: i4) {
 // CHECK-NEXT: endmodule
 
 
-hw.module.extern @Uwu(, output %uwu_output : i32)
+hw.module.extern @Uwu(output uwu_output : i32)
 hw.module.extern @Owo(input %owo_in : i32)
 
 // CHECK-LABEL: module Nya(
-hw.module @Nya(output %nya_output : i32) {
+hw.module @Nya(output nya_output : i32) {
   %0 = hw.instance "uwu" @Uwu() -> (uwu_output: i32)
   // CHECK: wire [31:0] _uwu_uwu_output;
   // CHECK: Uwu uwu (
@@ -852,7 +852,7 @@ hw.module @Nya(output %nya_output : i32) {
 }
 
 // CHECK-LABEL: module Nya2(
-hw.module @Nya2(output %nya2_output : i32) {
+hw.module @Nya2(output nya2_output : i32) {
   %0 = hw.instance "uwu" @Uwu() -> (uwu_output: i32)
   // CHECK: Uwu uwu (
   // CHECK: .uwu_output (nya2_output)
@@ -862,11 +862,11 @@ hw.module @Nya2(output %nya2_output : i32) {
   // CHECK: endmodule
 }
 
-hw.module.extern @Ni(output %ni_output : i0)
+hw.module.extern @Ni(output ni_output : i0)
 hw.module.extern @San(input %san_input : i0)
 
 // CHECK-LABEL: module Ichi(
-hw.module @Ichi(output %Ichi_output : i0) {
+hw.module @Ichi(output Ichi_output : i0) {
   %0 = hw.instance "ni" @Ni() -> (ni_output: i0)
   // CHECK: Ni ni (
   // CHECK: //.ni_output (Ichi_output)
@@ -877,7 +877,7 @@ hw.module @Ichi(output %Ichi_output : i0) {
 }
 
 // CHECK-LABEL: module Chi(
-hw.module @Chi(output %Chi_output : i0) {
+hw.module @Chi(output Chi_output : i0) {
   %0 = hw.instance "ni" @Ni() -> (ni_output: i0)
   // CHECK: Ni ni (
   // CHECK: //.ni_output (_ni_ni_output)
@@ -894,7 +894,7 @@ hw.module @Chi(output %Chi_output : i0) {
 }
 
 // CHECK-LABEL: module Choochoo(
-hw.module @Choochoo(output %out : i0) {
+hw.module @Choochoo(output out : i0) {
   %0 = hw.constant 0 : i0
   // CHECK: // Zero width: assign out = /*Zero width*/;
   hw.output %0 : i0
@@ -924,7 +924,7 @@ hw.module @Choochoo(output %out : i0) {
    >() attributes {verilogName = "RealBar"}
 
 // CHECK-LABEL: module Issue1563(
-hw.module @Issue1563(input %a: i32, output %out : i32) {
+hw.module @Issue1563(input %a: i32, output out : i32) {
   // CHECK: assign out = a + a;{{.*}}//{{.*}}XX.scala:123:19, YY.haskell:309:14, ZZ.swift:3:4
   %0 = comb.add %a, %a : i32 loc(fused["XX.scala":123:19, "YY.haskell":309:14, "ZZ.swift":3:4])
   hw.output %0 : i32
@@ -933,7 +933,7 @@ hw.module @Issue1563(input %a: i32, output %out : i32) {
 
 // CHECK-LABEL: module Foo1587
 // Issue #1587: https://github.com/llvm/circt/issues/1587
-hw.module @Foo1587(input %idx: i2, input %a_0: i4, input %a_1: i4, input %a_2: i4, input %a_3: i4, output %b: i4) {
+hw.module @Foo1587(input %idx: i2, input %a_0: i4, input %a_1: i4, input %a_2: i4, input %a_3: i4, output b: i4) {
   %0 = hw.array_create %a_0, %a_1, %a_2, %a_3 : i4
   %1 = hw.array_get %0[%idx] : !hw.array<4xi4>, i2
   hw.output %1 : i4
@@ -943,7 +943,7 @@ hw.module @Foo1587(input %idx: i2, input %a_0: i4, input %a_1: i4, input %a_2: i
 
 // CHECK-LABEL:   module AddNegLiteral(
 // Issue #1324: https://github.com/llvm/circt/issues/1324
-hw.module @AddNegLiteral(input %a: i8, input %x: i8, input %y: i8, output %o1: i8, output %o2: i8) {
+hw.module @AddNegLiteral(input %a: i8, input %x: i8, input %y: i8, output o1: i8, output o2: i8) {
 
   // CHECK: assign o1 = a - 8'h4;
   %c = hw.constant -4 : i8
@@ -958,8 +958,8 @@ hw.module @AddNegLiteral(input %a: i8, input %x: i8, input %y: i8, output %o1: i
 
 // CHECK-LABEL:   module ShiftAmountZext(
 // Issue #1569: https://github.com/llvm/circt/issues/1569
-hw.module @ShiftAmountZext(input %a: i8, input %b1: i4, input %b2: i4, input %b3: i4)
- -> (o1: i8, o2: i8, o3: i8) {
+hw.module @ShiftAmountZext(input %a: i8, input %b1: i4, input %b2: i4, input %b3: i4,
+ output o1: i8, output o2: i8, output o3: i8) {
 
   %c = hw.constant 0 : i4
   %B1 = comb.concat %c, %b1 : i4, i4
@@ -985,7 +985,7 @@ hw.module @ModuleWithLocInfo()  {
 
 // CHECK-LABEL: module SignedshiftResultSign
 // Issue #1681: https://github.com/llvm/circt/issues/1681
-hw.module @SignedshiftResultSign(input %a: i18, output %b: i18) {
+hw.module @SignedshiftResultSign(input %a: i18, output b: i18) {
   // CHECK: assign b = $signed($signed(a) >>> a[6:0]) ^ 18'hB28;
   %c2856_i18 = hw.constant 2856 : i18
   %c0_i11 = hw.constant 0 : i11
@@ -996,7 +996,7 @@ hw.module @SignedshiftResultSign(input %a: i18, output %b: i18) {
   hw.output %3 : i18
 }
 // CHECK-LABEL: module SignedShiftRightPrecendence
-hw.module @SignedShiftRightPrecendence(input %p: i1, input %x: i45, output %o: i45) {
+hw.module @SignedShiftRightPrecendence(input %p: i1, input %x: i45, output o: i45) {
   // CHECK: assign o = $signed($signed(x) >>> (p ? 45'h5 : 45'h8))
   %c5_i45 = hw.constant 5 : i45
   %c8_i45 = hw.constant 8 : i45
@@ -1006,7 +1006,7 @@ hw.module @SignedShiftRightPrecendence(input %p: i1, input %x: i45, output %o: i
 }
 
 // CHECK-LABEL: structExtractChain
-hw.module @structExtractChain(input %cond: i1, input %a: !hw.struct<c: !hw.struct<d:i1>>, output %out: i1) {
+hw.module @structExtractChain(input %cond: i1, input %a: !hw.struct<c: !hw.struct<d:i1>>, output out: i1) {
     %1 = hw.struct_extract %a["c"] : !hw.struct<c: !hw.struct<d:i1>>
     %2 = hw.struct_extract %1["d"] : !hw.struct<d:i1>
     // CHECK: assign out = a.c.d;
@@ -1014,7 +1014,7 @@ hw.module @structExtractChain(input %cond: i1, input %a: !hw.struct<c: !hw.struc
 }
 
 // CHECK-LABEL: structExtractFromTemporary
-hw.module @structExtractFromTemporary(input %cond: i1, input %a: !hw.struct<c: i1>, input %b: !hw.struct<c: i1>, output %out: i1) {
+hw.module @structExtractFromTemporary(input %cond: i1, input %a: !hw.struct<c: i1>, input %b: !hw.struct<c: i1>, output out: i1) {
     %0 = comb.mux %cond, %a, %b : !hw.struct<c: i1>
     %1 = hw.struct_extract %0["c"] : !hw.struct<c: i1>
     // CHECK: wire struct packed {logic c; } _GEN = cond ? a : b;
@@ -1025,7 +1025,7 @@ hw.module @structExtractFromTemporary(input %cond: i1, input %a: !hw.struct<c: i
 // CHECK-LABEL: module unionCreateNoPadding(
 // CHECK-NEXT:    input [1:0] in,
 // CHECK-NEXT:    output union packed { struct packed {logic a; logic [0:0] __post_padding_a;} a;logic [1:0] b;} out
-hw.module @unionCreateNoPadding(input %in: i2, output %out: !hw.union<a: i1, b: i2>) {
+hw.module @unionCreateNoPadding(input %in: i2, output out: !hw.union<a: i1, b: i2>) {
   // CHECK: assign out = in + in;
   %add = comb.add %in, %in : i2
   %0 = hw.union_create "b", %add : !hw.union<a: i1, b: i2>
@@ -1035,7 +1035,7 @@ hw.module @unionCreateNoPadding(input %in: i2, output %out: !hw.union<a: i1, b: 
 // CHECK-LABEL: module unionCreatePadding(
 // CHECK-NEXT:    input in,
 // CHECK-NEXT:    output union packed { struct packed {logic a; logic [0:0] __post_padding_a;} a;logic [1:0] b;} out
-hw.module @unionCreatePadding(input %in: i1, output %out: !hw.union<a: i1, b: i2>) {
+hw.module @unionCreatePadding(input %in: i1, output out: !hw.union<a: i1, b: i2>) {
   // CHECK: assign out = {in, 1'h0};
   %0 = hw.union_create "a", %in : !hw.union<a: i1, b: i2>
   hw.output %0 : !hw.union<a: i1, b: i2>
@@ -1044,14 +1044,14 @@ hw.module @unionCreatePadding(input %in: i1, output %out: !hw.union<a: i1, b: i2
 // CHECK-LABEL: module unionCreateZeroWidthElement(
 // CHECK-NEXT:    // input /*Zero Width*/ in,
 // CHECK-NEXT:    output union packed {/*a: Zero Width;*/ logic [1:0] b;} out
-hw.module @unionCreateZeroWidthElement(input %in: i0, output %out: !hw.union<a: i0, b: i2>) {
+hw.module @unionCreateZeroWidthElement(input %in: i0, output out: !hw.union<a: i0, b: i2>) {
   // CHECK: assign out = 2'h0;
   %0 = hw.union_create "a", %in : !hw.union<a: i0, b: i2>
   hw.output %0 : !hw.union<a: i0, b: i2>
 }
 
 // CHECK-LABEL: unionExtractFromTemporary
-hw.module @unionExtractFromTemporary(input %cond: i1, input %a: !hw.union<c: i1>, input %b: !hw.union<c: i1>, output %out: i1) {
+hw.module @unionExtractFromTemporary(input %cond: i1, input %a: !hw.union<c: i1>, input %b: !hw.union<c: i1>, output out: i1) {
     %0 = comb.mux %cond, %a, %b : !hw.union<c: i1>
     %1 = hw.union_extract %0["c"] : !hw.union<c: i1>
     // CHECK: wire union packed {logic c;} _GEN = cond ? a : b;
@@ -1060,7 +1060,7 @@ hw.module @unionExtractFromTemporary(input %cond: i1, input %a: !hw.union<c: i1>
 }
 
 // CHECK-LABEL: structExplodeLowering
-hw.module @structExplodeLowering(input %a: !hw.struct<a: i1, b: i1>, output %outA: i1, output %outB: i1) {
+hw.module @structExplodeLowering(input %a: !hw.struct<a: i1, b: i1>, output outA: i1, output outB: i1) {
   // CHECK: assign outA = a.a;
   // CHECK: assign outB = a.b;
   %0:2 = hw.struct_explode %a : !hw.struct<a: i1, b: i1>
@@ -1073,7 +1073,7 @@ hw.module @structExplodeLowering(input %a: !hw.struct<a: i1, b: i1>, output %out
 // CHECK-NEXT:  input  struct packed {logic repeat_0; logic repeat_0_0; } a,
 // CHECK-NEXT:  output struct packed {logic repeat_0; logic repeat_0_0; } r1
 // CHECK-NEXT:  );
-hw.module @renameKeyword(input %a: !hw.struct<repeat: i1, repeat_0: i1>, output %r1: !hw.struct<repeat: i1, repeat_0: i1>){
+hw.module @renameKeyword(input %a: !hw.struct<repeat: i1, repeat_0: i1>, output r1: !hw.struct<repeat: i1, repeat_0: i1>){
   hw.output %a : !hw.struct<repeat: i1, repeat_0: i1>
 }
 
@@ -1084,7 +1084,7 @@ hw.module @renameKeyword(input %a: !hw.struct<repeat: i1, repeat_0: i1>, output 
 // CHECK-NEXT:  output struct packed {logic repeat_0; logic repeat_0_0; } r3, 
 // CHECK-NEXT:                                                            r4
 // CHECK-NEXT:  );
-hw.module @useRenamedStruct(inout %a: struct<repeat: i1, repeat_0: i1>, output %r1: i1, output %r2: i1, output %r3: !hw.struct<repeat: i1, repeat_0: i1>, output %r4: !hw.struct<repeat: i1, repeat_0: i1>) {
+hw.module @useRenamedStruct(inout %a: !hw.struct<repeat: i1, repeat_0: i1>, output r1: i1, output r2: i1, output r3: !hw.struct<repeat: i1, repeat_0: i1>, output r4: !hw.struct<repeat: i1, repeat_0: i1>) {
   %read = sv.read_inout %a : !hw.inout<struct<repeat: i1, repeat_0: i1>>
 
   %i0 = hw.instance "inst1" @renameKeyword(a: %read: !hw.struct<repeat: i1, repeat_0: i1>) -> (r1: !hw.struct<repeat: i1, repeat_0: i1>)
@@ -1106,7 +1106,7 @@ hw.module @useRenamedStruct(inout %a: struct<repeat: i1, repeat_0: i1>, output %
 
 
 // CHECK-LABEL: module replicate
-hw.module @replicate(input %arg0: i7, input %arg1: i1, output %r1: i21, output %r2: i9, output %r3: i16, output %r4: i16) {
+hw.module @replicate(input %arg0: i7, input %arg1: i1, output r1: i21, output r2: i9, output r3: i16, output r4: i16) {
   // CHECK: assign r1 = {3{arg0}};
   %r1 = comb.replicate %arg0 : (i7) -> i21
 
@@ -1126,7 +1126,7 @@ hw.module @replicate(input %arg0: i7, input %arg1: i1, output %r1: i21, output %
 }
 
 // CHECK-LABEL: module addParenthesesToSuccessiveOperators
-hw.module @addParenthesesToSuccessiveOperators(input %a: i4, input %b: i1, input %c: i4, output %o1:i1, output %o2:i1, output %o3:i1) {
+hw.module @addParenthesesToSuccessiveOperators(input %a: i4, input %b: i1, input %c: i4, output o1:i1, output o2:i1, output o3:i1) {
   %one4 = hw.constant -1 : i4
   %zero4 = hw.constant 0 : i4
   // CHECK: wire [[GEN:.+]] = &c;
@@ -1154,7 +1154,7 @@ hw.module @addParenthesesToSuccessiveOperators(input %a: i4, input %b: i1, input
 // CHECK-NEXT: #(parameter [41:0] p1 = 42'd17
 // CHECK-NEXT:   parameter [0:0]  p2) (
 // CHECK-NEXT: input  [7:0] arg0,
-hw.module @parameters<p1: i42 = 17, p2: i1>(input %arg0: i8, output %out: i8) {
+hw.module @parameters<p1: i42 = 17, p2: i1>(input %arg0: i8, output out: i8) {
   // Local values should not conflict with output or parameter names.
   // CHECK: wire [3:0] p1_0;
   %p1 = sv.wire : !hw.inout<i4>
@@ -1164,7 +1164,7 @@ hw.module @parameters<p1: i42 = 17, p2: i1>(input %arg0: i8, output %out: i8) {
   hw.output %arg0 : i8
 }
 
-hw.module.extern @parameters2<p1: i42 = 17, p2: i1 = 0>(input %arg0: i8, output %out: i8)
+hw.module.extern @parameters2<p1: i42 = 17, p2: i1 = 0>(input %arg0: i8, output out: i8)
 
 // CHECK-LABEL: module parameters3
 // CHECK-NEXT:   #(parameter [41:0] p1 = 42'd17) (
@@ -1172,12 +1172,12 @@ hw.module.extern @parameters2<p1: i42 = 17, p2: i1 = 0>(input %arg0: i8, output 
 // CHECK-NEXT:   output [p1 - 1:0] out
 // CHECK-NEXT:  );
 // CHECK:   assign out = arg0;
-hw.module @parameters3<p1: i42 = 17>(input %arg0: !hw.int<#hw.param.decl.ref<"p1">>, output %out: !hw.int<#hw.param.decl.ref<"p1">>) {
+hw.module @parameters3<p1: i42 = 17>(input %arg0: !hw.int<#hw.param.decl.ref<"p1">>, output out: !hw.int<#hw.param.decl.ref<"p1">>) {
   hw.output %arg0 : !hw.int<#hw.param.decl.ref<"p1">>
 }
 
 // CHECK-LABEL: module UseParameterized(
-hw.module @UseParameterized(input %a: i8, output %ww: i8, output %xx: i8, output %yy: i8, output %zz: i8, output %qq: i8) {
+hw.module @UseParameterized(input %a: i8, output ww: i8, output xx: i8, output yy: i8, output zz: i8, output qq: i8) {
   // Two parameters.
   // CHECK:      parameters #(
   // CHECK-NEXT:   .p1(42'd4),
@@ -1228,7 +1228,7 @@ hw.module @UseParameterized(input %a: i8, output %ww: i8, output %xx: i8, output
 
 // CHECK-LABEL: module UseParameterValue
 hw.module @UseParameterValue<xx: i42>(input %arg0: i8,
-  output %out1: i8, output %out2: i8, output %out3: i8, output %out4: i42) {
+  output out1: i8, output out2: i8, output out3: i8, output out4: i42) {
   // CHECK-NEXT: #(parameter [41:0] xx) (
 
   // CHECK:      parameters2 #(
@@ -1299,7 +1299,7 @@ hw.module @moduleWithComment()
 
 // CHECK-LABEL: module Foo(
 // https://github.com/llvm/circt/issues/2363
-hw.module @Foo(input %a: i1, input %b: i1, output %r1: i1, output %r2: i1) {
+hw.module @Foo(input %a: i1, input %b: i1, output r1: i1, output r2: i1) {
   // Make sure the temporary wire is indented correctly.
   // CHECK: {{^  wire _GEN = a == b;}}
   %0 = comb.icmp eq %a, %b : i1
@@ -1316,7 +1316,7 @@ hw.module @Foo(input %a: i1, input %b: i1, output %r1: i1, output %r2: i1) {
 hw.module @parameterizedArrays<param: i32, N: i32>
   (input %a: !hw.array<42x!hw.int<#hw.param.decl.ref<"param">>>,
    input %b: !hw.array<#hw.param.decl.ref<"N"> x !hw.int<#hw.param.decl.ref<"param">>>,
-   output %c: !hw.array<#hw.param.decl.ref<"N"> x !hw.int<#hw.param.decl.ref<"param">>>) {
+   output c: !hw.array<#hw.param.decl.ref<"N"> x !hw.int<#hw.param.decl.ref<"param">>>) {
   hw.output %b : !hw.array<#hw.param.decl.ref<"N"> x !hw.int<#hw.param.decl.ref<"param">>>
 }
 
@@ -1325,7 +1325,7 @@ hw.module @parameterizedArrays<param: i32, N: i32>
 // CHECK-NEXT: input [23:0][11:0] b
 // CHECK-NEXT: output [23:0][11:0] c
 // CHECK-NEXT: );
-hw.module @UseParameterizedArrays(input %a: !hw.array<42xint<12>>, input %b: !hw.array<24xint<12>>, output %c: !hw.array<24xint<12>>) {
+hw.module @UseParameterizedArrays(input %a: !hw.array<42xint<12>>, input %b: !hw.array<24xint<12>>, output c: !hw.array<24xint<12>>) {
 // CHECK:  parameterizedArrays #(
 // CHECK-NEXT:    .param(12),
 // CHECK-NEXT:    .N(24)
@@ -1356,7 +1356,7 @@ hw.module @ParamConcatInst<name: none = "top">() {
 }
 
 // CHECK-LABEL: module ParamsParensPrecedence
-hw.module @ParamsParensPrecedence<param: i32>(output %a:i32, output %b:i32, output %c:i32) {
+hw.module @ParamsParensPrecedence<param: i32>(output a:i32, output b:i32, output c:i32) {
   // CHECK: = $clog2($unsigned(param));
   %1 = hw.param.value i32 = #hw.param.expr.clog2<#hw.param.decl.ref<"param">>
 
@@ -1370,7 +1370,7 @@ hw.module @ParamsParensPrecedence<param: i32>(output %a:i32, output %b:i32, outp
 
 // CHECK-LABEL: module ArrayGetInline
 hw.module @ArrayGetInline(input %a: !hw.array<4xstruct<a: i32>>, input %b: !hw.array<4xi1>, input %idx: i2, inout %idx_port: i2,
-                          output %out: i32, output %out2: i1, output %out3: i1, output %out4: i1, output %out5: i1) {
+                          output out: i32, output out2: i1, output out3: i1, output out4: i1, output out5: i1) {
   %c0_i2 = hw.constant 0 : i2
   %x = hw.array_get %a[%c0_i2] : !hw.array<4xstruct<a: i32>>, i2
   %y = hw.struct_extract %x["a"] : !hw.struct<a: i32>
@@ -1386,7 +1386,7 @@ hw.module @ArrayGetInline(input %a: !hw.array<4xstruct<a: i32>>, input %b: !hw.a
 }
 
 // CHECK-LABEL: module UniformArrayCreate
-hw.module @UniformArrayCreate(output %arr: !hw.array<5xi8>) {
+hw.module @UniformArrayCreate(output arr: !hw.array<5xi8>) {
   %c0_i8 = hw.constant 0 : i8
   %arr = hw.array_create %c0_i8, %c0_i8, %c0_i8, %c0_i8, %c0_i8 : i8
   // CHECK: assign arr = {5{8'h0}};
@@ -1413,7 +1413,7 @@ hw.module @Issue4485(input %in: i4) {
 // CHECK-EMPTY:
 // CHECK-NEXT:    assign out = {in1, /*cast(bit[31:0])*/in2};
 // CHECK-NEXT:  endmodule
-hw.module @inline_bitcast_in_concat(input %in1: i7, input %in2: !hw.array<8xi4>, output %out: i39) {
+hw.module @inline_bitcast_in_concat(input %in1: i7, input %in2: !hw.array<8xi4>, output out: i39) {
   %r2 = hw.bitcast %in2 : (!hw.array<8xi4>) -> i32
   %0 = comb.concat %in1, %r2: i7, i32
   hw.output %0 : i39
@@ -1440,7 +1440,7 @@ hw.module @DontInlineAggregateConstantIntoPorts() {
 // CHECK-NEXT:    assign b = test.b.b;
 // CHECK-NEXT:  endmodule
 !unionA = !hw.union<a: i16, b: i10>
-hw.module @FooA(input %test: !unionA, output %a: i16, output %b: i10) {
+hw.module @FooA(input %test: !unionA, output a: i16, output b: i10) {
   %0 = hw.union_extract %test["a"] : !unionA
   %1 = hw.union_extract %test["b"] : !unionA
   hw.output %0, %1 : i16, i10
@@ -1456,7 +1456,7 @@ hw.module @FooA(input %test: !unionA, output %a: i16, output %b: i10) {
 // CHECK-NEXT:    assign b = test.b.b;
 // CHECK-NEXT:  endmodule
 !unionB = !hw.union<a: i16, b: i14 offset 2>
-hw.module @FooB(input %test: !unionB, output %a: i16, output %b: i14) {
+hw.module @FooB(input %test: !unionB, output a: i16, output b: i14) {
   %0 = hw.union_extract %test["a"] : !unionB
   %1 = hw.union_extract %test["b"] : !unionB
   hw.output %0, %1 : i16, i14

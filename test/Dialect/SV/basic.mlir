@@ -313,7 +313,7 @@ hw.module @XMR_src(input %a : i23) {
   sv.assign %xmr1, %a : i23
 }
 
-  hw.module @part_select(input %in4 : i4, input %in8 : i8, output %a : i3, output %b : i5) {
+  hw.module @part_select(input %in4 : i4, input %in8 : i8, output a : i3, output b : i5) {
   // CHECK-LABEL: hw.module @part_select
 
     %myReg2 = sv.reg : !hw.inout<i18>

@@ -6,7 +6,7 @@ hw.module @Baz(
   input %a4: i1, input %a5: i1, input %a6: i1, input %a7: i1,
   input %b0: i1, input %b1: i1, input %b2: i1, input %b3: i1,
   input %b4: i1, input %b5: i1, input %b6: i1, input %b7: i1,
-  output %c: i1) {
+  output c: i1) {
   %0 = comb.and %a0, %b0 : i1
   %1 = comb.and %a1, %b1 : i1
   %2 = comb.and %a2, %b2 : i1

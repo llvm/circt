@@ -6,7 +6,7 @@
 
 // CHECK-LABEL: module side_effect_expr
 // DISALLOW-LABEL: module side_effect_expr
-hw.module @side_effect_expr(input %clock: i1, output %a: i1, output %a2: i1) {
+hw.module @side_effect_expr(input %clock: i1, output a: i1, output a2: i1) {
 
   // CHECK: `ifdef FOO_MACRO
   // DISALLOW: `ifdef FOO_MACRO
@@ -102,7 +102,7 @@ hw.module @hoist_expressions(input %clock: i1, input %x: i8, input %y: i8, input
 // CHECK-LABEL: module always_inline_expr
 // DISALLOW-LABEL: module always_inline_expr
 // https://github.com/llvm/circt/issues/1705
-hw.module @always_inline_expr(input %ro_clock_0: i1, input %ro_en_0: i1, input %ro_addr_0: i1, input %wo_clock_0: i1, input %wo_en_0: i1, input %wo_addr_0: i1, input %wo_mask_0: i1, input %wo_data_0: i5, output %ro_data_0: i5) {
+hw.module @always_inline_expr(input %ro_clock_0: i1, input %ro_en_0: i1, input %ro_addr_0: i1, input %wo_clock_0: i1, input %wo_en_0: i1, input %wo_addr_0: i1, input %wo_mask_0: i1, input %wo_data_0: i5, output ro_data_0: i5) {
   %Memory = sv.reg  : !hw.inout<uarray<2xi5>>
   %0 = sv.array_index_inout %Memory[%ro_addr_0] : !hw.inout<uarray<2xi5>>, i1
   %1 = sv.read_inout %0 : !hw.inout<i5>
@@ -193,7 +193,7 @@ hw.module @DefinedInDifferentBlock(input %a: i1, input %b: i1) {
 
 // CHECK-LABEL: module TemporaryWireAtDifferentBlock(
 // DISALLOW-LABEL: module TemporaryWireAtDifferentBlock(
-hw.module @TemporaryWireAtDifferentBlock(input %a: i1, output %b: i1) {
+hw.module @TemporaryWireAtDifferentBlock(input %a: i1, output b: i1) {
   // Check that %0 and %1 are not inlined.
   // CHECK:      wire [[GEN1:.+]];
   // CHECK:      wire [[GEN2:.+]] = [[GEN1]] + [[GEN1]];

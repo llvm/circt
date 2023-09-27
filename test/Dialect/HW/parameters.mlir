@@ -1,12 +1,12 @@
 // RUN: circt-opt %s -verify-diagnostics | circt-opt | FileCheck %s
 
-// CHECK-LABEL: hw.module @parameters<p1: i42 = 17, p2: i1>(input %arg0 : i8, output %out : i8) {
-hw.module @parameters<p1: i42 = 17, p2: i1>(input %arg0: i8, output %out: i8) {
+// CHECK-LABEL: hw.module @parameters<p1: i42 = 17, p2: i1>(input %arg0 : i8, output out : i8) {
+hw.module @parameters<p1: i42 = 17, p2: i1>(input %arg0: i8, output out: i8) {
   hw.output %arg0 : i8
 }
 
 // CHECK-LABEL: hw.module @UseParameterized(
-hw.module @UseParameterized(input %a: i8, output %xx: i8, output %yy: i8, output %zz: i8) {
+hw.module @UseParameterized(input %a: i8, output xx: i8, output yy: i8, output zz: i8) {
   // CHECK: %inst1.out = hw.instance "inst1" @parameters<p1: i42 = 4, p2: i1 = false>(arg0:
   %r0 = hw.instance "inst1" @parameters<p1: i42 = 4, p2: i1 = 0>(arg0: %a: i8) -> (out: i8)
 
@@ -37,7 +37,7 @@ hw.module @UseParameters<p1: i42>() {
 
 // CHECK-LABEL: hw.module @affineCanonicalization
 hw.module @affineCanonicalization<p1: i4, p2: i4>(
-  output %o: i4, output %o: i4, output %o: i4, output %o: i4, output %o: i4, output %o: i4, output %o: i4, output %o: i4, output %o: i4, output %o: i4, output %o: i4, output %o: i4, output %o: i4, output %o: i4, output %o: i4, output %o: i4) {
+  output o: i4, output o: i4, output o: i4, output o: i4, output o: i4, output o: i4, output o: i4, output o: i4, output o: i4, output o: i4, output o: i4, output o: i4, output o: i4, output o: i4, output o: i4, output o: i4) {
   // CHECK-NEXT: %0 = hw.param.value i4 = 6
   %0 = hw.param.value i4 = #hw.param.expr.add<1, 2, 3>
   // CHECK-NEXT: %1 = hw.param.value i4 =
@@ -99,7 +99,7 @@ hw.module @affineCanonicalization<p1: i4, p2: i4>(
 
 // CHECK-LABEL: hw.module @associativeOrdering
 hw.module @associativeOrdering<p1: i4, p2: i4>(
-  output %o: i4, output %o: i4, output %o: i4, output %o: i4, output %o: i4, output %o: i4, output %o: i4, output %o: i4) {
+  output o: i4, output o: i4, output o: i4, output o: i4, output o: i4, output o: i4, output o: i4, output o: i4) {
   // Declrefs before constants.
   // CHECK-NEXT: %0 = hw.param.value i4 =
   // CHECK-SAME:     #hw.param.expr.add<#hw.param.decl.ref<"p1">, 4>
@@ -159,8 +159,8 @@ hw.module @parameterizedTypes<param: i32>
   (input %a: !hw.int<17>,
 // CHECK-SAME: input %b : !hw.int<#hw.param.decl.ref<"param">>,
    input %b: !hw.int<#hw.param.decl.ref<"param">>, 
-// CHECK-SAME: output %c : !hw.int<#hw.param.decl.ref<"param">>)
-  output %c: !hw.int<#hw.param.decl.ref<"param">>) {
+// CHECK-SAME: output c : !hw.int<#hw.param.decl.ref<"param">>)
+  output c: !hw.int<#hw.param.decl.ref<"param">>) {
 
   // CHECK: %paramWire = sv.wire : !hw.inout<int<#hw.param.decl.ref<"param">>>
   %paramWire = sv.wire : !hw.inout<!hw.int<#hw.param.decl.ref<"param">>>
@@ -215,8 +215,8 @@ hw.module @parameterizedArrays<param: i32, N: i32>
   (input %a : !hw.array<42x!hw.int<#hw.param.decl.ref<"param">>>,
 // CHECK-SAME: %b : !hw.array<#hw.param.decl.ref<"N">xint<#hw.param.decl.ref<"param">>>,
    input %b : !hw.array<#hw.param.decl.ref<"N"> x !hw.int<#hw.param.decl.ref<"param">>>,
-// CHECK-SAME: output %c : !hw.array<#hw.param.decl.ref<"N">xint<#hw.param.decl.ref<"param">>>
-   output %c : !hw.array<#hw.param.decl.ref<"N"> x !hw.int<#hw.param.decl.ref<"param">>>) {
+// CHECK-SAME: output c : !hw.array<#hw.param.decl.ref<"N">xint<#hw.param.decl.ref<"param">>>
+   output c : !hw.array<#hw.param.decl.ref<"N"> x !hw.int<#hw.param.decl.ref<"param">>>) {
   hw.output %b : !hw.array<#hw.param.decl.ref<"N"> x !hw.int<#hw.param.decl.ref<"param">>>
 }
 

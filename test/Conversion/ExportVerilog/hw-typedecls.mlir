@@ -59,7 +59,7 @@ hw.module @testTypeAlias(
   // CHECK: input  myEnum   enumArg,
   input %enumArg: !hw.typealias<@__hw_typedecls::@myEnum,!hw.enum<A, B, C>>,
   // CHECK: output foo      out
-  output %out: !hw.typealias<@__hw_typedecls::@foo, i1>) {
+  output out: !hw.typealias<@__hw_typedecls::@foo, i1>) {
   // CHECK: out = arg0 + arg1
   %0 = comb.add %arg0, %arg1 : !hw.typealias<@__hw_typedecls::@foo, i1>
   hw.output %0 : !hw.typealias<@__hw_typedecls::@foo, i1>
@@ -74,7 +74,7 @@ hw.module @testRegOp() {
 }
 
 // CHECK-LABEL: module testAggregateCreate
-hw.module @testAggregateCreate(input %i: i1, output %out1: i1, output %out2: i1) {
+hw.module @testAggregateCreate(input %i: i1, output out1: i1, output out2: i1) {
   // CHECK: wire bar [[NAME:.+]] = {{.+}};
   %0 = hw.struct_create(%i, %i) : !hw.typealias<@__hw_typedecls::@bar,!hw.struct<a: i1, b: i1>>
   // CHECK: [[NAME]].a
@@ -89,7 +89,7 @@ hw.module @testNestedAlias(input %i: !hw.typealias<@__hw_typedecls::@nest2, !hw.
 }
 
 // CHECK-LABEL: module testAggregateInout
-hw.module @testAggregateInout(input %i: i1, output %out1: i8, output %out2: i1) {
+hw.module @testAggregateInout(input %i: i1, output out1: i8, output out2: i1) {
   // CHECK:      wire arr array;
   // CHECK-NEXT: wire bar str;
   // CHECK-NEXT: assign out1 = array[4'h0];
@@ -105,7 +105,7 @@ hw.module @testAggregateInout(input %i: i1, output %out1: i8, output %out2: i1) 
 }
 
 // CHECK-LABEL: module testEnumOps
-hw.module @testEnumOps(output %out1: !hw.typealias<@__hw_typedecls::@myEnum,!hw.enum<A, B, C>>) {
+hw.module @testEnumOps(output out1: !hw.typealias<@__hw_typedecls::@myEnum,!hw.enum<A, B, C>>) {
   // CHECK: assign out1 = myEnum_A;
   %0 = hw.enum.constant A : !hw.typealias<@__hw_typedecls::@myEnum,!hw.enum<A, B, C>>
   hw.output %0 : !hw.typealias<@__hw_typedecls::@myEnum,!hw.enum<A, B, C>>

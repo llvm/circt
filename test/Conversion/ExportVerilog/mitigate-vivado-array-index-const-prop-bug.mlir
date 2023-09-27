@@ -3,7 +3,7 @@
 
 // CHECK-LABEL: module Simple(
 // FIXED-LABEL: module Simple(
-hw.module @Simple(input %a : !hw.array<16xi1>, input %b : i4, output %c: i1) {
+hw.module @Simple(input %a : !hw.array<16xi1>, input %b : i4, output c: i1) {
   // CHECK: assign c = a[b + 4'h1];
 
   // FIXED:      (* keep = "true" *)
@@ -21,7 +21,7 @@ hw.module @Simple(input %a : !hw.array<16xi1>, input %b : i4, output %c: i1) {
 
 // CHECK-LABEL: module ExistingWire(
 // FIXED-LABEL: module ExistingWire(
-hw.module @ExistingWire(input %a: !hw.array<16xi1>, input %b : i4, output %c: i1) {
+hw.module @ExistingWire(input %a: !hw.array<16xi1>, input %b : i4, output c: i1) {
   // CHECK:      wire [3:0] existingWire = b + 4'h3;
   // CHECK-NEXT: assign c = a[existingWire];
 

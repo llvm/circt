@@ -1,7 +1,7 @@
 // RUN: circt-opt --canonicalize %s | FileCheck %s
 
 // CHECK-LABEL: hw.module @stateOpCanonicalizer
-hw.module @stateOpCanonicalizer(input %clk: !seq.clock, input %in: i32, input %en: i1, input %rst: i1, output %out0: i32, output %out1: i32, output %out2: i32, output %out3: i32, output %out4: i32, output %out5: i32, output %out6: i32, output %out7: i32, output %out8: i32, output %out9: i32, output %out10: i32, output %out11: i32, output %out12: i32, output %out13: i32, output %out14: i32, output %out15: i32) {
+hw.module @stateOpCanonicalizer(input %clk: !seq.clock, input %in: i32, input %en: i1, input %rst: i1, output out0: i32, output out1: i32, output out2: i32, output out3: i32, output out4: i32, output out5: i32, output out6: i32, output out7: i32, output out8: i32, output out9: i32, output out10: i32, output out11: i32, output out12: i32, output out13: i32, output out14: i32, output out15: i32) {
   // CHECK-NEXT: %c0_i32 = hw.constant 0 : i32
   // CHECK-NEXT: %true = hw.constant true
   // CHECK-NEXT: %false = hw.constant false
@@ -77,7 +77,7 @@ hw.module @memoryOps(input %clk: i1, input %mem: !arc.memory<4 x i32, i32>, inpu
 }
 
 // CHECK-LABEL: hw.module @clockDomainCanonicalizer
-hw.module @clockDomainCanonicalizer(input %clk: !seq.clock, input %data: i32, output %out0: i32, output %out1: i1, output %out2: i32, output %out3: i32, output %out4: i32) {
+hw.module @clockDomainCanonicalizer(input %clk: !seq.clock, input %data: i32, output out0: i32, output out1: i1, output out2: i32, output out3: i32, output out4: i32) {
   %c0_i32 = hw.constant 0 : i32
   %true = hw.constant true
   %mem = arc.memory <4 x i32, i32>

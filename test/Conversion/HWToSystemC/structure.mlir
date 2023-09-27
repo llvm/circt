@@ -9,7 +9,7 @@ hw.module @emptyModule () {}
 hw.module @onlyInputs (input %a: i32, input %b: i256, input %c: i1024, input %d: i1) {}
 
 // CHECK-LABEL: systemc.module @onlyOutputs (%sum: !systemc.out<!systemc.uint<32>>)
-hw.module @onlyOutputs (output %sum: i32) {
+hw.module @onlyOutputs (output sum: i32) {
   // CHECK-NEXT: systemc.ctor {
   // CHECK-NEXT:   systemc.method %innerLogic
   // CHECK-NEXT: }
@@ -23,7 +23,7 @@ hw.module @onlyOutputs (output %sum: i32) {
 }
 
 // CHECK-LABEL: systemc.module @adder (%a: !systemc.in<!systemc.uint<32>>, %b: !systemc.in<!systemc.uint<32>>, %sum: !systemc.out<!systemc.uint<32>>)
-hw.module @adder (input %a: i32, input %b: i32, output %sum: i32) {
+hw.module @adder (input %a: i32, input %b: i32, output sum: i32) {
   // CHECK-NEXT: systemc.ctor {
   // CHECK-NEXT:   systemc.method %innerLogic
   // CHECK-NEXT:   systemc.sensitive %a, %b : !systemc.in<!systemc.uint<32>>, !systemc.in<!systemc.uint<32>>
@@ -46,25 +46,25 @@ hw.module @adder (input %a: i32, input %b: i32, output %sum: i32) {
 hw.module private @moduleVisibility () {}
 
 // CHECK-LABEL: systemc.module @argAttrs (%port0: !systemc.in<!systemc.uint<32>> {hw.attrname = "sometext"}, %port1: !systemc.in<!systemc.uint<32>>, %out0: !systemc.out<!systemc.uint<32>>)
-hw.module @argAttrs (input %port0: i32 {hw.attrname = "sometext"}, input %port1: i32, output %out0: i32) {
+hw.module @argAttrs (input %port0: i32 {hw.attrname = "sometext"}, input %port1: i32, output out0: i32) {
   %0 = hw.constant 0 : i32
   hw.output %0 : i32
 }
 
 // CHECK-LABEL: systemc.module @resultAttrs (%port0: !systemc.in<!systemc.uint<32>>, %out0: !systemc.out<!systemc.uint<32>> {hw.attrname = "sometext"})
-hw.module @resultAttrs (input %port0: i32, output %out0: i32 {hw.attrname = "sometext"}) {
+hw.module @resultAttrs (input %port0: i32, output out0: i32 {hw.attrname = "sometext"}) {
   %0 = hw.constant 0 : i32
   hw.output %0 : i32
 }
 
 // CHECK-LABEL: systemc.module @submodule
-hw.module @submodule (input %in0: i16, input %in1: i32, output %out0: i16, output %out1: i32, output %out2: i64) {
+hw.module @submodule (input %in0: i16, input %in1: i32, output out0: i16, output out1: i32, output out2: i64) {
   %0 = hw.constant 0 : i64
   hw.output %in0, %in1, %0 : i16, i32, i64
 }
 
 // CHECK-LABEL:  systemc.module @instanceLowering (%port0: !systemc.in<!systemc.uint<32>>, %out0: !systemc.out<!systemc.uint<16>>, %out1: !systemc.out<!systemc.uint<32>>, %out2: !systemc.out<!systemc.uint<64>>) {
-hw.module @instanceLowering (input %port0: i32, output %out0: i16, output %out1: i32, output %out2: i64) {
+hw.module @instanceLowering (input %port0: i32, output out0: i16, output out1: i32, output out2: i64) {
 // CHECK-NEXT:    %inst1 = systemc.instance.decl  @submodule : !systemc.module<submodule(in0: !systemc.in<!systemc.uint<16>>, in1: !systemc.in<!systemc.uint<32>>, out0: !systemc.out<!systemc.uint<16>>, out1: !systemc.out<!systemc.uint<32>>, out2: !systemc.out<!systemc.uint<64>>)>
 // CHECK-NEXT:    %inst1_in0 = systemc.signal  : !systemc.signal<!systemc.uint<16>>
 // CHECK-NEXT:    %inst1_in1 = systemc.signal  : !systemc.signal<!systemc.uint<32>>

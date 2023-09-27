@@ -20,7 +20,7 @@
 // CHECK-NOT: hw.module @Top
 // CHECK-LABEL: arc.model "Top" {
 // CHECK-NEXT: ^bb0(%arg0: !arc.storage<7>):
-hw.module @Top(input %clock : !seq.clock, input %i0 : i4, input %i1 : i4, output %out : i4) {
+hw.module @Top(input %clock : !seq.clock, input %i0 : i4, input %i1 : i4, output out : i4) {
   // CHECK-DAG: arc.alloc_state %arg0 {offset = 0 : i32} {{.+}} !arc.state<i1>
   // CHECK-DAG: arc.alloc_state %arg0 {name = "foo", offset = 1 : i32} {{.+}} !arc.state<i4>
   // CHECK-DAG: arc.alloc_state %arg0 {name = "bar", offset = 2 : i32} {{.+}} !arc.state<i4>

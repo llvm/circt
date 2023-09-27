@@ -53,7 +53,7 @@ llhd.entity @moduleTypeMismatch(%arg0: !llhd.sig<i3>) -> () {
 
 // -----
 
-hw.module @module(output %arg0: i2) {
+hw.module @module(output arg0: i2) {
   %0 = hw.constant 0 : i2
   hw.output %0 : i2
 }

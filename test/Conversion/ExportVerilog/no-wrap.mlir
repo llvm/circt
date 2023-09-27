@@ -26,7 +26,7 @@ hw.module @VerbatimWrapping(input %clock : i1, input %cond : i1, input %val : i8
 // CHECK-SAME: ;
 // CHECK-NEXT: endmodule
 hw.module @TestZero(input %a: i4, input %zeroBitWithAVeryLongNameWhichMightSeemUnlikelyButHappensAllTheTime: i0, input %arrZero: !hw.array<3xi0>,
-  output %r0: i4, output %rZeroOutputWithAVeryLongName_YepThisToo_LongNamesAreTheWay_MoreText_GoGoGoGoGo: i0, output %arrZero_0: !hw.array<3xi0>) {
+  output r0: i4, output rZeroOutputWithAVeryLongName_YepThisToo_LongNamesAreTheWay_MoreText_GoGoGoGoGo: i0, output arrZero_0: !hw.array<3xi0>) {
 
   %b = comb.add %a, %a : i4
   %c = comb.add %zeroBitWithAVeryLongNameWhichMightSeemUnlikelyButHappensAllTheTime, %zeroBitWithAVeryLongNameWhichMightSeemUnlikelyButHappensAllTheTime : i0
@@ -51,7 +51,7 @@ hw.module @TestZero(input %a: i4, input %zeroBitWithAVeryLongNameWhichMightSeemU
 // CHECK-SAME: ;
 // CHECK-NEXT: endmodule
 hw.module @TestZeroInstance(input %aa: i4, input %azeroBit: i0, input %aarrZero: !hw.array<3xi0>,
-  output %r0: i4, output %rZeroOutputWithAVeryLongNameYepThisToo: i0, output %arrZero_0: !hw.array<3xi0>) {
+  output r0: i4, output rZeroOutputWithAVeryLongNameYepThisToo: i0, output arrZero_0: !hw.array<3xi0>) {
 
 
   %o1, %o2, %o3 = hw.instance "iii" @TestZero(a: %aa: i4, zeroBitWithAVeryLongNameWhichMightSeemUnlikelyButHappensAllTheTime: %azeroBit: i0, arrZero: %aarrZero: !hw.array<3xi0>) -> (r0: i4, rZeroOutputWithAVeryLongName_YepThisToo_LongNamesAreTheWay_MoreText_GoGoGoGoGo: i0, arrZero_0: !hw.array<3xi0>)

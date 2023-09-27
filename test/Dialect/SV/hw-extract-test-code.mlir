@@ -6,7 +6,7 @@
 // CHECK-NOT: attributes
 // CHECK-NEXT: hw.module.extern @foo_assert
 // CHECK-NOT: attributes
-// CHECK: hw.module @issue1246_assert(input %clock: i1) attributes {comment = "VCS coverage exclude_file", output_file = #hw.output_file<"dir3{{/|\\\\}}", excludeFromFileList, includeReplicatedOps>}
+// CHECK: hw.module @issue1246_assert(input %clock : i1) attributes {comment = "VCS coverage exclude_file", output_file = #hw.output_file<"dir3{{/|\\\\}}", excludeFromFileList, includeReplicatedOps>}
 // CHECK: sv.assert
 // CHECK: sv.error "Assertion failed"
 // CHECK: sv.error "assert:"
@@ -14,11 +14,11 @@
 // CHECK: sv.error "check [verif-library-assert] is included"
 // CHECK: sv.fatal 1
 // CHECK: foo_assert
-// CHECK: hw.module @issue1246_assume(input %clock: i1)
+// CHECK: hw.module @issue1246_assume(input %clock : i1)
 // CHECK-SAME: attributes {comment = "VCS coverage exclude_file"}
 // CHECK: sv.assume
 // CHECK: foo_assume
-// CHECK: hw.module @issue1246_cover(input %clock: i1)
+// CHECK: hw.module @issue1246_cover(input %clock : i1)
 // CHECK-SAME: attributes {comment = "VCS coverage exclude_file"}
 // CHECK: sv.cover
 // CHECK: foo_cover
@@ -139,7 +139,7 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
 // CHECK-LABEL: @InstResult(
 // CHECK: hw.instance "[[name:.+]]_cover"  sym @{{[^ ]+}} @[[name]]_cover(mem.result_name: %{{[^ ]+}}: i1, mem.1: %{{[^ ]+}}: i1, clock: %clock: i1)
 module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>} {
-  hw.module @Mem(output %result_name: i1, output %foo "": i1) {
+  hw.module @Mem(output result_name: i1, output "": i1) {
     %reg = sv.reg : !hw.inout<i1>
     %0 = sv.read_inout %reg : !hw.inout<i1>
     hw.output %0, %0 : i1, i1
@@ -214,7 +214,7 @@ module {
     }
   }
 
-  hw.module @Top(input %clock: i1, input %cond: i1, output %foo: i1) {
+  hw.module @Top(input %clock: i1, input %cond: i1, output foo: i1) {
     hw.instance "input_only" @InputOnly(clock: %clock: i1, cond: %cond: i1) -> ()
     hw.instance "input_only_sym" sym @foo @InputOnlySym(clock: %clock: i1, cond: %cond: i1) -> ()
     hw.instance "input_only_cycle" @InputOnlyCycle(clock: %clock: i1, cond: %cond: i1) -> ()
@@ -265,7 +265,7 @@ module {
 // CHECK-LABEL: @MultiResultExtracted_cover
 // CHECK: hw.instance "qux"
 // CHECK-LABEL: @MultiResultExtracted
-// CHECK-SAME: (%[[clock:.+]]: i1, %[[in:.+]]: i1)
+// CHECK-SAME: (input %[[clock:.+]] : i1, input %[[in:.+]] : i1)
 // CHECK: hw.instance {{.+}} @MultiResultExtracted_cover([[in]]: %[[in]]: i1, [[clock]]: %[[clock]]: i1)
 
 // In SymNotExtracted, instance foo should not be extracted because it has a sym.
@@ -292,17 +292,17 @@ module {
 // CHECK: hw.instance "non_testcode_and_instance1"
 
 module {
-  hw.module private @Foo(input %a: i1, output %b: i1) {
+  hw.module private @Foo(input %a: i1, output b: i1) {
     hw.output %a : i1
   }
 
-  hw.module.extern private @Bar(input %a: i1, output %b: i1)
+  hw.module.extern private @Bar(input %a: i1, output b: i1)
 
-  hw.module.extern private @Baz(input %a: i1, output %b: i1)
+  hw.module.extern private @Baz(input %a: i1, output b: i1)
 
-  hw.module.extern private @Qux(input %a: i1, output %b: i1, output %c: i1)
+  hw.module.extern private @Qux(input %a: i1, output b: i1, output c: i1)
 
-  hw.module.extern private @Bozo(input %a: i1, output %b: i1)
+  hw.module.extern private @Bozo(input %a: i1, output b: i1)
 
   hw.module @AllExtracted(input %clock: i1, input %in: i1) {
     %foo.b = hw.instance "foo" @Foo(a: %in: i1) -> (b: i1)
@@ -319,7 +319,7 @@ module {
     }
   }
 
-  hw.module @SomeExtracted(input %clock: i1, input %in: i1, output %out0: i1, output %out1: i1) {
+  hw.module @SomeExtracted(input %clock: i1, input %in: i1, output out0: i1, output out1: i1) {
     %foo.b = hw.instance "foo" @Foo(a: %in: i1) -> (b: i1)
     %bar.b = hw.instance "bar" @Bar(a: %in: i1) -> (b: i1)
     %baz.b = hw.instance "baz" @Baz(a: %in: i1) -> (b: i1)
@@ -393,11 +393,11 @@ module {
     }
   }
 
-  hw.module private @Passthrough(input %in: i1, output %out: i1) {
+  hw.module private @Passthrough(input %in: i1, output out: i1) {
     hw.output %in : i1
   }
 
-  hw.module @InstancesWithCycles(input %clock: i1, input %in: i1, output %out: i1) {
+  hw.module @InstancesWithCycles(input %clock: i1, input %in: i1, output out: i1) {
     %0 = hw.instance "non_testcode_and_instance0" @Passthrough(in: %1: i1) -> (out: i1)
     %1 = hw.instance "non_testcode_and_instance1" @Passthrough(in: %0: i1) -> (out: i1)
 
@@ -429,7 +429,7 @@ module {
   // CHECK: %symbol = seq.firreg
   // CHECK: %designAndTestCode = seq.firreg
   // CHECK-NOT: seq.firreg
-  hw.module @RegExtracted(input %clock: !seq.clock, input %reset: i1, input %in: i1, output %out: i1) {
+  hw.module @RegExtracted(input %clock: !seq.clock, input %reset: i1, input %in: i1, output out: i1) {
     %muxed = comb.mux bin %reset, %in, %testCode1 : i1
     %testCode1 = seq.firreg %muxed clock %clock : i1
     %testCode2 = seq.firreg %testCode1 clock %clock : i1
@@ -452,10 +452,10 @@ module {
 // Check that constants are cloned freely.
 
 module {
-  // CHECK-LABEL: @ConstantCloned_cover(%in: i1, %clock: i1)
+  // CHECK-LABEL: @ConstantCloned_cover(input %in : i1, input %clock : i1)
   // CHECK-NEXT:   %true = hw.constant true
   // CHECK-NEXT:   comb.xor bin %in, %true : i1
-  hw.module @ConstantCloned(input %clock: i1, input %in: i1, output %out: i1) {
+  hw.module @ConstantCloned(input %clock: i1, input %in: i1, output out: i1) {
     %true = hw.constant true
     %not = comb.xor bin %in, %true : i1
 
@@ -492,10 +492,10 @@ module {
     hw.output
   }
 
-  // CHECK-LABEL: hw.module private @AssertWrapper(input %clock: i1, input %a: i1, output %b: i1) {
+  // CHECK-LABEL: hw.module private @AssertWrapper(input %clock : i1, input %a : i1, output b : i1) {
   // CHECK-NEXT:  hw.instance "Assert_assert" sym @__ETC_Assert_assert @Assert_assert
   // CHECK-SAME:  doNotPrint = true
-  hw.module private @AssertWrapper(input %clock: i1, input %a: i1, output %b: i1) {
+  hw.module private @AssertWrapper(input %clock: i1, input %a: i1, output b: i1) {
     hw.instance "a3" @Assert(clock: %clock: i1, a: %a: i1) -> ()
     hw.output %a: i1
   }

@@ -11,9 +11,9 @@
 // CHECK-SAME: input %argCtrl : !esi.channel<i0>, 
 // CHECK-SAME: input %clock : !seq.clock, 
 // CHECK-SAME: input %reset : i1, 
-// CHECK-SAME: output %out0 : !esi.channel<i0>, 
-// CHECK-SAME: output %mem_ld0.addr : !esi.channel<i4>, 
-// CHECK-SAME: output %mem_st0 : !esi.channel<!hw.struct<address: i4, data: i32>>
+// CHECK-SAME: output out0 : !esi.channel<i0>, 
+// CHECK-SAME: output mem_ld0.addr : !esi.channel<i4>, 
+// CHECK-SAME: output mem_st0 : !esi.channel<!hw.struct<address: i4, data: i32>>
 // CHECK-SAME: )
 
 //CHECK-LABEL: esi.mem.ram @mem i32 x 10
@@ -25,7 +25,7 @@
 // CHECK-SAME: input %argCtrl : !esi.channel<i0>, 
 // CHECK-SAME: input %clock : !seq.clock, 
 // CHECK-SAME: input %reset : i1,
-// CHECK-SAME: output %out0 : !esi.channel<i0>
+// CHECK-SAME: output out0 : !esi.channel<i0>
 // CHECK-SAME: ) {
 //CHECK-NEXT:   %0 = esi.service.req.inout %main.mem_ld0.addr -> <@mem::@read>([]) : !esi.channel<i4> -> !esi.channel<i32>
 //CHECK-NEXT:   %1 = esi.service.req.inout %main.mem_st0 -> <@mem::@write>([]) : !esi.channel<!hw.struct<address: i4, data: i32>> -> !esi.channel<i0>

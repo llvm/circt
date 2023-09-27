@@ -1,7 +1,7 @@
 // RUN: circt-opt --lower-pipeline-to-hw="clock-gate-regs" %s | FileCheck %s
 
 
-// CHECK:   hw.module @testSingle(input %[[VAL_0:.*]] : i32, input %[[VAL_1:.*]] : i32, input %[[VAL_2:.*]] : i1, input %[[CLOCK:.*]] : !seq.clock, input %[[VAL_4:.*]] : i1, output %out0 : i32, output %out1 : i1) {
+// CHECK:   hw.module @testSingle(input %[[VAL_0:.*]] : i32, input %[[VAL_1:.*]] : i32, input %[[VAL_2:.*]] : i1, input %[[CLOCK:.*]] : !seq.clock, input %[[VAL_4:.*]] : i1, output out0 : i32, output out1 : i1) {
 // CHECK:           %[[VAL_5:.*]] = comb.sub %[[VAL_0]], %[[VAL_1]] : i32
 // CHECK:           %[[VAL_6:.*]] = seq.clock_gate %[[CLOCK]], %[[VAL_2]]
 // CHECK:           %[[VAL_7:.*]] = seq.compreg sym @p0_stage0_reg0 %[[VAL_5]], %[[VAL_6]] : i32
@@ -12,7 +12,7 @@
 // CHECK:           hw.output %[[VAL_11]], %[[VAL_10]] : i32, i1
 // CHECK:         }
 
-hw.module @testSingle(input %arg0: i32, input %arg1: i32, input %go: i1, input %clk: !seq.clock, input %rst: i1, output %out0: i32, output %out1: i1) {
+hw.module @testSingle(input %arg0: i32, input %arg1: i32, input %go: i1, input %clk: !seq.clock, input %rst: i1, output out0: i32, output out1: i1) {
   %0:2 = pipeline.scheduled(%a0 : i32 = %arg0, %a1 : i32 = %arg1) clock(%c = %clk) reset(%r = %rst) go(%g = %go) -> (out: i32){
     %1 = comb.sub %a0,%a1 : i32
     pipeline.stage ^bb1 regs(%1 : i32, %a0 : i32)

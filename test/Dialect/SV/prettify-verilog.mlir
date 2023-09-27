@@ -3,7 +3,7 @@
 
 // CHECK-LABEL: hw.module @unary_ops
 hw.module @unary_ops(input %arg0: i8, input %arg1: i8, input %arg2: i8, input %arg3: i1,
-   output %a: i8, output %b: i8, output %c: i1) {
+   output a: i8, output b: i8, output c: i1) {
   %c-1_i8 = hw.constant -1 : i8
 
   // CHECK: [[XOR1:%.+]] = comb.xor %arg0
@@ -43,7 +43,7 @@ hw.module @unary_ops(input %arg0: i8, input %arg1: i8, input %arg2: i8, input %a
 /// The pass should sink constants in to the block where they are used.
 // CHECK-LABEL: @sink_constants
 // VERILOG-LABEL: sink_constants
-hw.module @sink_constants(input %clock :i1, output %out : i1){
+hw.module @sink_constants(input %clock :i1, output out : i1){
   // CHECK: %false = hw.constant false
   %false = hw.constant false
 
@@ -217,7 +217,7 @@ hw.module @unary_sink_crash(input %arg0: i1) {
 
 // CHECK-LABEL: hw.module @unary_sink_no_duplicate
 // https://github.com/llvm/circt/issues/2097
-hw.module @unary_sink_no_duplicate(input %arg0: i4, output %result: i4) {
+hw.module @unary_sink_no_duplicate(input %arg0: i4, output result: i4) {
   %ones = hw.constant 15: i4
 
   // CHECK-NOT: comb.xor
@@ -586,7 +586,7 @@ hw.module private @SelfConnect(input %clock: i1, input %reset: i1) {
 }
 
 // CHECK-LABEL: Issue4030
-hw.module @Issue4030(input %a: i1, input %clock: i1, input %in1: !hw.array<2xi1>, output %b: !hw.array<5xi1>) {
+hw.module @Issue4030(input %a: i1, input %clock: i1, input %in1: !hw.array<2xi1>, output b: !hw.array<5xi1>) {
   %c0_i3 = hw.constant 0 : i3
   %false = hw.constant false
   %0 = hw.array_get %in1[%false] : !hw.array<2xi1>, i1

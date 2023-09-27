@@ -155,7 +155,7 @@ systemc.module @member_access () {
 }
 
 hw.module.extern @inst()
-hw.module.extern @instWithArgs(input %a: i32, input %b: i8, output %c: i32, output %d: i8)
+hw.module.extern @instWithArgs(input %a: i32, input %b: i8, output c: i32, output d: i8)
 
 // CHECK-LABEL: @verilatorInteropInHwModule
 hw.module @verilatorInteropInHwModule(input %arg0: i32, input %arg1: i8) {

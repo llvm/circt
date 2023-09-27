@@ -4,7 +4,7 @@
 // CHECK: input  [3:0] casex_0,
 // CHECK: output [3:0] if_0
 // CHECK: );
-hw.module @namechange(input %casex: i4, output %if: i4) {
+hw.module @namechange(input %casex: i4, output if: i4) {
   // CHECK: assign if_0 = casex_0;
   hw.output %casex : i4
 }
@@ -65,7 +65,7 @@ hw.module @useParametersNameConflict(input %xxx: i8) {
 // CHECK:         input  inout_0,
 // CHECK:         output output_0
 // CHECK:       );
-hw.module @inout(input %inout: i1, output %output: i1) {
+hw.module @inout(input %inout: i1, output output: i1) {
 // CHECK:       assign output_0 = inout_0;
   hw.output %inout : i1
 }
@@ -85,7 +85,7 @@ hw.module @inout_inst(input %a: i1) {
 // CHECK-NEXT:    input  inout_0,
 // CHECK-NEXT:    output output_0
 // CHECK-NEXT:  );
-hw.module @reg(input %inout: i1, output %output: i1) {
+hw.module @reg(input %inout: i1, output output: i1) {
   // CHECK: assign output_0 = inout_0;
   hw.output %inout : i1
 }
@@ -96,7 +96,7 @@ hw.module @reg(input %inout: i1, output %output: i1) {
 // CHECK-NEXT:                 else_0,
 // CHECK-NEXT:    output [1:0] casex_0
 // CHECK-NEXT:  );
-hw.module @issue525(input %struct: i2, input %else: i2, output %casex: i2) {
+hw.module @issue525(input %struct: i2, input %else: i2, output casex: i2) {
   // CHECK: assign casex_0 = struct_0 + else_0;
   %2 = comb.add %struct, %else : i2
   hw.output %2 : i2

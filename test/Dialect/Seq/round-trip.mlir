@@ -58,7 +58,7 @@ hw.module @ClockGate(input %clock: !seq.clock, input %enable: i1, input %test_en
 }
 
 // CHECK-LABEL: hw.module @ClockMux
-hw.module @ClockMux(input %cond: i1, input %trueClock: !seq.clock, input %falseClock: !seq.clock, output %clock: !seq.clock) {
+hw.module @ClockMux(input %cond: i1, input %trueClock: !seq.clock, input %falseClock: !seq.clock, output clock: !seq.clock) {
   %clock = seq.clock_mux %cond, %trueClock, %falseClock
   hw.output %clock : !seq.clock
 }

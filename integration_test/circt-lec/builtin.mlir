@@ -5,6 +5,6 @@
 //  RUN: circt-lec %s -v=false | FileCheck %s --check-prefix=BUILTIN_MODULE
 //  BUILTIN_MODULE: c1 == c2
 
-hw.module @basic(input %in: i1, output %out: i1) {
+hw.module @basic(input %in: i1, output out: i1) {
   hw.output %in : i1
 }

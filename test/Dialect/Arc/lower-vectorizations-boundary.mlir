@@ -1,6 +1,6 @@
 // RUN: circt-opt %s --arc-lower-vectorizations=mode=boundary -split-input-file | FileCheck %s
 
-hw.module @vectorize(input %in0: i1, input %in1: i1, input %in2: i1, input %in3: i1, input %in4: i64, input %in5: i64, input %in6: i32, input %in7: i32, output %out0: i1, output %out1: i1, output %out2: i64, output %out3: i64) {
+hw.module @vectorize(input %in0: i1, input %in1: i1, input %in2: i1, input %in3: i1, input %in4: i64, input %in5: i64, input %in6: i32, input %in7: i32, output out0: i1, output out1: i1, output out2: i64, output out3: i64) {
   %0:2 = arc.vectorize (%in0, %in1), (%in2, %in3) : (i1, i1, i1, i1) -> (i1, i1) {
   ^bb0(%arg0: i1, %arg1: i1):
     %1 = comb.and %arg0, %arg1 : i1
@@ -38,7 +38,7 @@ hw.module @vectorize(input %in0: i1, input %in1: i1, input %in2: i1, input %in3:
 
 // -----
 
-hw.module @vectorize_body_already_lowered(input %in0: i1, input %in1: i1, input %in2: i1, input %in3: i1, output %out0: i1, output %out1: i1, output %out2: i1, output %out3: i1) {
+hw.module @vectorize_body_already_lowered(input %in0: i1, input %in1: i1, input %in2: i1, input %in3: i1, output out0: i1, output out1: i1, output out2: i1, output out3: i1) {
   %0:2 = arc.vectorize (%in0, %in1), (%in2, %in2) : (i1, i1, i1, i1) -> (i1, i1) {
   ^bb0(%arg0: i2, %arg1: i2):
     %1 = arith.andi %arg0, %arg1 : i2
@@ -55,20 +55,19 @@ hw.module @vectorize_body_already_lowered(input %in0: i1, input %in1: i1, input 
 }
 
 // CHECK-LABEL: hw.module @vectorize_body_already_lowered
-//  CHECK-SAME: (input [[IN0:%.+]] : i1, input [[IN1:%.+]] : i1, input [[IN2:%.+]] : i1, input [[IN3:%.+]] : i1,
-//       CHECK: [[V0:%.+]] = comb.concat [[IN0]], [[IN1]] :
-//       CHECK: [[V1:%.+]] = comb.concat [[IN2]], [[IN2]] :
+//       CHECK: [[V0:%.+]] = comb.concat %in0, %in1 :
+//       CHECK: [[V1:%.+]] = comb.concat %in2, %in2 :
 //       CHECK: [[V2:%.+]] = arc.vectorize ([[V0]]), ([[V1]])
 //       CHECK: ^bb0({{.*}}: i2, {{.*}}: i2):
 //       CHECK: arc.vectorize.return {{.*}} : i2
 //       CHECK: [[V3:%.+]] = comb.extract [[V2]] from 0
 //       CHECK: [[V4:%.+]] = comb.extract [[V2]] from 1
 //       CHECK: [[CST:%.+]] = arith.constant dense<false>
-//       CHECK: [[V5:%.+]] = vector.insert [[IN0]], [[CST]] [0]
-//       CHECK: [[V6:%.+]] = vector.insert [[IN1]], [[V5]] [1]
+//       CHECK: [[V5:%.+]] = vector.insert %in0, [[CST]] [0]
+//       CHECK: [[V6:%.+]] = vector.insert %in1, [[V5]] [1]
 //       CHECK: [[CST:%.+]] = arith.constant dense<false>
-//       CHECK: [[V7:%.+]] = vector.insert [[IN2]], [[CST]] [0]
-//       CHECK: [[V8:%.+]] = vector.insert [[IN3]], [[V7]] [1]
+//       CHECK: [[V7:%.+]] = vector.insert %in2, [[CST]] [0]
+//       CHECK: [[V8:%.+]] = vector.insert %in3, [[V7]] [1]
 //       CHECK: [[V9:%.+]] = arc.vectorize ([[V6]]), ([[V8]])
 //       CHECK: ^bb0({{.*}}: vector<2xi1>, {{.*}}: vector<2xi1>):
 //       CHECK: arc.vectorize.return {{.*}} : vector<2xi1>
@@ -78,7 +77,7 @@ hw.module @vectorize_body_already_lowered(input %in0: i1, input %in1: i1, input 
 
 // -----
 
-hw.module @boundary_already_vectorized(input %in0: i1, input %in1: i1, input %in2: i1, output %out0: i1, output %out1: i1) {
+hw.module @boundary_already_vectorized(input %in0: i1, input %in1: i1, input %in2: i1, output out0: i1, output out1: i1) {
   %cst = arith.constant dense<0> : vector<2xi1>
   %0 = vector.insert %in0, %cst[0] : i1 into vector<2xi1>
   %1 = vector.insert %in1, %0[1] : i1 into vector<2xi1>
@@ -95,11 +94,10 @@ hw.module @boundary_already_vectorized(input %in0: i1, input %in1: i1, input %in
 }
 
 // CHECK-LABEL: hw.module @boundary_already_vectorized
-//  CHECK-SAME: (input [[IN0:%.+]] : i1, input [[IN1:%.+]] : i1, input [[IN2:%.+]] : i1,
 //       CHECK:  [[CST:%.+]] = arith.constant dense<false>
-//       CHECK:  [[V0:%.+]] = vector.insert [[IN0]], [[CST]] [0]
-//       CHECK:  [[V1:%.+]] = vector.insert [[IN1]], [[V0]] [1]
-//       CHECK:  [[V2:%.+]] = vector.broadcast [[IN2]]
+//       CHECK:  [[V0:%.+]] = vector.insert %in0, [[CST]] [0]
+//       CHECK:  [[V1:%.+]] = vector.insert %in1, [[V0]] [1]
+//       CHECK:  [[V2:%.+]] = vector.broadcast %in2
 //       CHECK:  [[V3:%.+]] = arc.vectorize ([[V1]]), ([[V2]]) :
 //       CHECK:  [[V4:%.+]] = vector.extract [[V2]][0]
 //       CHECK:  [[V5:%.+]] = vector.extract [[V2]][1]

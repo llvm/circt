@@ -161,7 +161,7 @@ arc.define @identity3(%arg0: i32, %arg1: i32, %arg2: i32) -> (i32, i32, i32) {
 
 // -----
 
-hw.module @vectorize_in_clock_domain(input %in0: i2, input %in1: i2, input %in2: i1, input %in3: i1, input %clk: !seq.clock, output %out0: i1, output %out1: i1) {
+hw.module @vectorize_in_clock_domain(input %in0: i2, input %in1: i2, input %in2: i1, input %in3: i1, input %clk: !seq.clock, output out0: i1, output out1: i1) {
   %0:2 = arc.clock_domain (%in0, %in1, %in2, %in3) clock %clk : (i2, i2, i1, i1) -> (i1, i1) {
     ^bb0(%arg0: i2, %arg1: i2, %arg2: i1, %arg3: i1):
     %1:2 = arc.vectorize (%arg0, %arg1), (%arg2, %arg3) : (i2, i2, i1, i1) -> (i1, i1) {
@@ -189,7 +189,7 @@ arc.define @vectorizable(%arg0: i2, %arg1: i1) -> i1 {
 
 // -----
 
-hw.module @vectorize(input %in0: i1, input %in1: i1, input %in2: i1, input %in3: i1, output %out0: i1, output %out1: i1, output %out2: i1) {
+hw.module @vectorize(input %in0: i1, input %in1: i1, input %in2: i1, input %in3: i1, output out0: i1, output out1: i1, output out2: i1) {
   %0:2 = arc.vectorize (%in0, %in1), (%in2, %in3) : (i1, i1, i1, i1) -> (i1, i1) {
   ^bb0(%arg0: i1, %arg1: i1):
     %1 = comb.and %arg0, %arg1 : i1
@@ -204,13 +204,12 @@ hw.module @vectorize(input %in0: i1, input %in1: i1, input %in2: i1, input %in3:
 }
 
 // CHECK-LABEL: hw.module @vectorize
-//  CHECK-SAME: (input [[IN0:%.+]] : i1, input [[IN1:%.+]] : i1, input [[IN2:%.+]] : i1, input [[IN3:%.+]] : i1, 
-//       CHECK: [[V0:%.+]]:2 = arc.vectorize ([[IN0]], [[IN1]]), ([[IN2]], [[IN3]]) : (i1, i1, i1, i1) -> (i1, i1) {
+//       CHECK: [[V0:%.+]]:2 = arc.vectorize (%in0, %in1), (%in2, %in3) : (i1, i1, i1, i1) -> (i1, i1) {
 //       CHECK: ^bb0([[A:%.+]]: i1, [[B:%.+]]: i1):
 //       CHECK:   [[V1:%.+]] = comb.and [[A]], [[B]]
 //       CHECK:   arc.vectorize.return [[V1]] : i1
 //       CHECK: }
-//       CHECK: [[V2:%.+]] = arc.vectorize ([[IN0]]), ([[IN2]]) : (i1, i1) -> i1 {
+//       CHECK: [[V2:%.+]] = arc.vectorize (%in1), (%in2) : (i1, i1) -> i1 {
 //       CHECK: ^bb0([[A:%.+]]: i1, [[B:%.+]]: i1):
 //       CHECK:   [[V3:%.+]] = comb.and [[A]], [[B]]
 //       CHECK:   arc.vectorize.return [[V3]] : i1
@@ -219,7 +218,7 @@ hw.module @vectorize(input %in0: i1, input %in1: i1, input %in2: i1, input %in3:
 
 // -----
 
-hw.module @vectorize_body_lowered(input %in0: i1, input %in1: i1, input %in2: i1, input %in3: i1, output %out0: i1, output %out1: i1, output %out2: i1, output %out3: i1) {
+hw.module @vectorize_body_lowered(input %in0: i1, input %in1: i1, input %in2: i1, input %in3: i1, output out0: i1, output out1: i1, output out2: i1, output out3: i1) {
   %0:2 = arc.vectorize (%in0, %in1), (%in2, %in2) : (i1, i1, i1, i1) -> (i1, i1) {
   ^bb0(%arg0: i2, %arg1: i2):
     %1 = arith.andi %arg0, %arg1 : i2
@@ -242,7 +241,7 @@ hw.module @vectorize_body_lowered(input %in0: i1, input %in1: i1, input %in2: i1
 //       CHECK:   [[V1:%.+]] = arith.andi [[A]], [[B]]
 //       CHECK:   arc.vectorize.return [[V1]] : i2
 //       CHECK: }
-//       CHECK: [[V2:%.+]]:2 = arc.vectorize ([[IN0]], [[IN1]]), ([[IN2]], [[IN3]]) : (i1, i1, i1, i1) -> (i1, i1) {
+//       CHECK: [[V2:%.+]]:2 = arc.vectorize (%in0, %in1), (%in2, %in3) : (i1, i1, i1, i1) -> (i1, i1) {
 //       CHECK: ^bb0([[A:%.+]]: vector<2xi1>, [[B:%.+]]: vector<2xi1>):
 //       CHECK:   [[V3:%.+]] = arith.andi [[A]], [[B]]
 //       CHECK:   arc.vectorize.return [[V3]] : vector<2xi1>
@@ -251,7 +250,7 @@ hw.module @vectorize_body_lowered(input %in0: i1, input %in1: i1, input %in2: i1
 
 // -----
 
-hw.module @vectorize_boundary_lowered(input %in0: i1, input %in1: i1, input %in2: i1, input %in3: i1, output %out0: i1, output %out1: i1, output %out2: i1, output %out3: i1) {
+hw.module @vectorize_boundary_lowered(input %in0: i1, input %in1: i1, input %in2: i1, input %in3: i1, output out0: i1, output out1: i1, output out2: i1, output out3: i1) {
   %0 = comb.concat %in0, %in1 : i1, i1
   %1 = comb.replicate %in2 : (i1) -> i2
   %2 = arc.vectorize (%0), (%1) : (i2, i2) -> i2 {
@@ -301,7 +300,7 @@ hw.module @vectorize_boundary_lowered(input %in0: i1, input %in1: i1, input %in2
 
 // -----
 
-hw.module @vectorize_both_sides_lowered(input %in0: i1, input %in1: i1, input %in2: i1, input %in3: i1, output %out0: i1, output %out1: i1, output %out2: i1, output %out3: i1) {
+hw.module @vectorize_both_sides_lowered(input %in0: i1, input %in1: i1, input %in2: i1, input %in3: i1, output out0: i1, output out1: i1, output out2: i1, output out3: i1) {
   %0 = comb.concat %in0, %in1 : i1, i1
   %1 = comb.replicate %in2 : (i1) -> i2
   %2 = arc.vectorize (%0), (%1) : (i2, i2) -> i2 {

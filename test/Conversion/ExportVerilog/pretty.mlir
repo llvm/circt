@@ -67,7 +67,7 @@ hw.module @CoverAssert(
     sv.assert.concurrent posedge %clock, %5 label "assert__label" message "assert failed"
 }
 
-hw.module @MuxChain(input %a_0: i1, input %a_1: i1, input %a_2: i1, input %c_0: i1, input %c_1: i1, input %c_2: i1, output %out: i1) {
+hw.module @MuxChain(input %a_0: i1, input %a_1: i1, input %a_2: i1, input %c_0: i1, input %c_1: i1, input %c_2: i1, output out: i1) {
   %0 = comb.mux bin %a_1, %c_1, %c_0 : i1
   %1 = comb.mux bin %a_0, %0, %c_2 : i1
   %2 = comb.mux bin %a_2, %1, %c_1 : i1

@@ -1,15 +1,15 @@
 // RUN: circt-opt --hw-eliminate-inout-ports %s | FileCheck %s
 
 // CHECK-LABEL:   hw.module @read(
-// CHECK-SAME:                    input %[[VAL_0:.*]] : i42, output %out : i42) {
+// CHECK-SAME:                    input %[[VAL_0:.*]] : i42, output out : i42) {
 // CHECK:           hw.output %[[VAL_0]] : i42
 // CHECK:         }
-hw.module @read(inout %a: i42, output %out: i42) {
+hw.module @read(inout %a: i42, output out: i42) {
   %aget = sv.read_inout %a: !hw.inout<i42>
   hw.output %aget : i42
 }
 
-// CHECK-LABEL:   hw.module @write(output %a_wr : i42) {
+// CHECK-LABEL:   hw.module @write(output a_wr : i42) {
 // CHECK:           %[[VAL_0:.*]] = hw.constant 0 : i42
 // CHECK:           hw.output %[[VAL_0]] : i42
 // CHECK:         }
@@ -19,10 +19,10 @@ hw.module @write(inout %a: i42) {
 }
 
 // CHECK-LABEL:   hw.module @read_write(
-// CHECK-SAME:                          input %[[VAL_0:.*]] : i42, output %a_wr : i42, output %out : i42) {
+// CHECK-SAME:                          input %[[VAL_0:.*]] : i42, output a_wr : i42, output out : i42) {
 // CHECK:           hw.output %[[VAL_0]], %[[VAL_0]] : i42, i42
 // CHECK:         }
-hw.module @read_write(inout %a: i42, output %out: i42) {
+hw.module @read_write(inout %a: i42, output out: i42) {
   %aget = sv.read_inout %a: !hw.inout<i42>
   sv.assign %a, %aget : i42
   hw.output %aget : i42
@@ -50,7 +50,7 @@ hw.module @oneLevel() {
 }
 
 
-// CHECK-LABEL:   hw.module @passthrough(output %a_wr : i42) {
+// CHECK-LABEL:   hw.module @passthrough(output a_wr : i42) {
 // CHECK:           %[[VAL_0:.*]] = hw.instance "write" @write() -> (a_wr: i42)
 // CHECK:           hw.output %[[VAL_0]] : i42
 // CHECK:         }
@@ -70,7 +70,7 @@ hw.module @passthroughTwoLevels() {
 }
 
 // CHECK-LABEL:   hw.module @writeInput(
-// CHECK-SAME:                          input %[[VAL_0:.*]] : i42, output %a_wr : i42) {
+// CHECK-SAME:                          input %[[VAL_0:.*]] : i42, output a_wr : i42) {
 // CHECK:           hw.output %[[VAL_0]] : i42
 // CHECK:         }
 

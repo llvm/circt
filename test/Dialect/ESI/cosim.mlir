@@ -2,11 +2,11 @@
 // RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
 // RUN: circt-opt %s --esi-emit-collateral=schema-file=%t1.capnp --lower-esi-ports --lower-esi-to-hw --lower-seq-to-sv --export-verilog -verify-diagnostics | FileCheck --check-prefix=COSIM %s
 
-hw.module.extern @Sender(output %x: !esi.channel<si14>)
+hw.module.extern @Sender(output x: !esi.channel<si14>)
 hw.module.extern @Reciever(input %a: !esi.channel<i32>)
 hw.module.extern @ArrReciever(input %x: !esi.channel<!hw.array<4xsi64>>)
 
-// CHECK-LABEL: hw.module.extern @Sender(output %x : !esi.channel<si14>)
+// CHECK-LABEL: hw.module.extern @Sender(output x : !esi.channel<si14>)
 // CHECK-LABEL: hw.module.extern @Reciever(input %a : !esi.channel<i32>)
 // CHECK-LABEL: hw.module.extern @ArrReciever(input %x : !esi.channel<!hw.array<4xsi64>>)
 

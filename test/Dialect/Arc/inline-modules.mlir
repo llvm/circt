@@ -2,7 +2,7 @@
 
 
 // CHECK-LABEL: hw.module @SimpleA
-hw.module @SimpleA(input %x: i4, output %y: i4) {
+hw.module @SimpleA(input %x: i4, output y: i4) {
   // CHECK-NOT: hw.instance
   // CHECK-NEXT: %0 = comb.add %x, %x
   // CHECK-NEXT: %1 = comb.mul %0, %x
@@ -15,7 +15,7 @@ hw.module @SimpleA(input %x: i4, output %y: i4) {
 }
 // CHECK-NEXT: }
 // CHECK-NOT: hw.module private @SimpleB
-hw.module private @SimpleB(input %x: i4, output %y: i4) {
+hw.module private @SimpleB(input %x: i4, output y: i4) {
   %0 = comb.add %x, %x : i4
   %1 = comb.mul %0, %x : i4
   hw.output %1 : i4
@@ -23,12 +23,12 @@ hw.module private @SimpleB(input %x: i4, output %y: i4) {
 
 
 // CHECK-LABEL: hw.module @DontInlinePublicA
-hw.module @DontInlinePublicA(input %x: i4, output %y: i4) {
+hw.module @DontInlinePublicA(input %x: i4, output y: i4) {
   // CHECK-NEXT: hw.instance "b" @DontInlinePublicB
   %0 = hw.instance "b" @DontInlinePublicB(x: %x: i4) -> (y: i4)
   hw.output %0 : i4
 }
-hw.module @DontInlinePublicB(input %x: i4, output %y: i4) {
+hw.module @DontInlinePublicB(input %x: i4, output y: i4) {
   %0 = comb.add %x, %x : i4
   hw.output %0 : i4
 }

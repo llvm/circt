@@ -4,7 +4,7 @@
 // CHECK:         [[R0:%.+]] = comb.mux %b, %true, %false : i1
 // CHECK:         [[R1:%.+]] = comb.mux %b, %false, %true : i1
 // CHECK:         [[R2:%.+]] = comb.mux %a, [[R0]], [[R1]] {sv.namehint = "lut1"} : i1
-hw.module @ex2in(input %a: i1, input %b: i1, output %x: i1) {
+hw.module @ex2in(input %a: i1, input %b: i1, output x: i1) {
   %0 = comb.truth_table %a, %b -> [true, false, false, true] {sv.namehint="lut1"}
   hw.output %0 : i1
 }
@@ -13,7 +13,7 @@ hw.module @ex2in(input %a: i1, input %b: i1, output %x: i1) {
 // CHECK-NEXT:    [[R0:%.+]] = hw.constant true {sv.namehint = "lut1"}
 // CHECK-NEXT:    [[R1:%.+]] = hw.constant false
 // CHECK-NEXT:    hw.output [[R0]] : i1
-hw.module @ex0in(output %x: i1) {
+hw.module @ex0in(output x: i1) {
   %0 = comb.truth_table -> [true] {sv.namehint="lut1"}
   hw.output %0 : i1
 }

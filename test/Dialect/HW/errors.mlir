@@ -48,19 +48,19 @@ hw.module @A(input %arg0: i1) {
 
 hw.generator.schema @S, "Test Schema", ["test"]
 // expected-error @+1 {{Cannot find generator definition 'S2'}}
-hw.module.generated @A, @S2(input %arg0: i1, output %a: i1) attributes { test = 1 }
+hw.module.generated @A, @S2(input %arg0: i1, output a: i1) attributes { test = 1 }
 
 // -----
 
 hw.module @S() { }
 // expected-error @+1 {{which is not a HWGeneratorSchemaOp}}
-hw.module.generated @A, @S(input %arg0: i1, output %a: i1) attributes { test = 1 }
+hw.module.generated @A, @S(input %arg0: i1, output a: i1) attributes { test = 1 }
 
 
 // -----
 
 // expected-error @+1 {{'hw.output' op must have same number of operands as region results}}
-hw.module @A(output %t "": i1) { }
+hw.module @A(output "": i1) { }
 
 // -----
 
@@ -151,7 +151,7 @@ hw.module @test() {
 // -----
 
 // expected-note @+1 {{module declared here}}
-hw.module @f(output %a: i2) {
+hw.module @f(output a: i2) {
   %a = hw.constant 1 : i2
   hw.output %a : i2
 }
@@ -205,9 +205,9 @@ hw.module @test(input %a: i1) {
 // -----
 
 // expected-note @+1 {{module declared here}}
-hw.module.extern @p<p1: i42 = 17, p2: i1>(input %arg0: i8, output %out: i8)
+hw.module.extern @p<p1: i42 = 17, p2: i1>(input %arg0: i8, output out: i8)
 
-hw.module @Use(input %a: i8, output %xx: i8) {
+hw.module @Use(input %a: i8, output xx: i8) {
   // expected-error @+1 {{op expected 2 parameters but had 1}}
   %r0 = hw.instance "inst1" @p<p1: i42 = 4>(arg0: %a: i8) -> (out: i8)
   hw.output %r0: i8
@@ -216,9 +216,9 @@ hw.module @Use(input %a: i8, output %xx: i8) {
 // -----
 
 // expected-note @+1 {{module declared here}}
-hw.module.extern @p<p1: i42 = 17, p2: i1>(input %arg0: i8, output %out: i8)
+hw.module.extern @p<p1: i42 = 17, p2: i1>(input %arg0: i8, output out: i8)
 
-hw.module @Use(input %a: i8, output %xx: i8) {
+hw.module @Use(input %a: i8, output xx: i8) {
   // expected-error @+1 {{op parameter #1 should have name "p2" but has name "p3"}}
   %r0 = hw.instance "inst1" @p<p1: i42 = 4, p3: i1 = 0>(arg0: %a: i8) -> (out: i8)
   hw.output %r0: i8
@@ -227,9 +227,9 @@ hw.module @Use(input %a: i8, output %xx: i8) {
 // -----
 
 // expected-note @+1 {{module declared here}}
-hw.module.extern @p<p1: i42 = 17, p2: i1>(input %arg0: i8, output %out: i8)
+hw.module.extern @p<p1: i42 = 17, p2: i1>(input %arg0: i8, output out: i8)
 
-hw.module @Use(input %a: i8, output %xx: i8) {
+hw.module @Use(input %a: i8, output xx: i8) {
   // expected-error @+1 {{op parameter "p2" should have type 'i1' but has type 'i2'}}
   %r0 = hw.instance "inst1" @p<p1: i42 = 4, p2: i2 = 0>(arg0: %a: i8) -> (out: i8)
   hw.output %r0: i8
@@ -237,9 +237,9 @@ hw.module @Use(input %a: i8, output %xx: i8) {
 
 // -----
 
-hw.module.extern @p<p1: i42 = 17, p2: i1>(input %arg0: i8, output %out: i8)
+hw.module.extern @p<p1: i42 = 17, p2: i1>(input %arg0: i8, output out: i8)
 
-hw.module @Use(input %a: i8, output %xx: i8) {
+hw.module @Use(input %a: i8, output xx: i8) {
   // expected-error @+1 {{op parameter "p2" must have a value}}
   %r0 = hw.instance "inst1" @p<p1: i42 = 4, p2: i1>(arg0: %a: i8) -> (out: i8)
   hw.output %r0: i8
@@ -300,31 +300,31 @@ hw.module @Use<xx: none, xx: none>() {}
 // -----
 
 module {
-  hw.module @A(input %a : !hw.int<41>, output %out: !hw.int<42>) {
+  hw.module @A(input %a : !hw.int<41>, output out: !hw.int<42>) {
 // expected-error @+1 {{'hw.instance' op operand type #0 must be 'i42', but got 'i41'}}
     %r0 = hw.instance "inst1" @parameters<p1: i42 = 42>(arg0: %a: !hw.int<41>) -> (out: !hw.int<42>)
     hw.output %r0: !hw.int<42>
   }
 // expected-note @+1 {{module declared here}}
-  hw.module.extern @parameters<p1: i42>(input %arg0: !hw.int<#hw.param.decl.ref<"p1">>, output %out: !hw.int<#hw.param.decl.ref<"p1">>)
+  hw.module.extern @parameters<p1: i42>(input %arg0: !hw.int<#hw.param.decl.ref<"p1">>, output out: !hw.int<#hw.param.decl.ref<"p1">>)
 }
 
 // -----
 
 module {
-  hw.module @A(input %a : !hw.int<42>, output %out: !hw.int<41>) {
+  hw.module @A(input %a : !hw.int<42>, output out: !hw.int<41>) {
 // expected-error @+1 {{'hw.instance' op result type #0 must be 'i42', but got 'i41'}}
     %r0 = hw.instance "inst1" @parameters<p1: i42 = 42>(arg0: %a: !hw.int<42>) -> (out: !hw.int<41>)
     hw.output %r0: !hw.int<41>
   }
 // expected-note @+1 {{module declared here}}
-  hw.module.extern @parameters<p1: i42>(input %arg0: !hw.int<#hw.param.decl.ref<"p1">>, output %out: !hw.int<#hw.param.decl.ref<"p1">>)
+  hw.module.extern @parameters<p1: i42>(input %arg0: !hw.int<#hw.param.decl.ref<"p1">>, output out: !hw.int<#hw.param.decl.ref<"p1">>)
 }
 
 // -----
 
 // expected-note @+1 {{module declared here}}
-hw.module.extern @submodule (output %out0: i32)
+hw.module.extern @submodule (output out0: i32)
 
 hw.module @wrongResultLabel() {
   // expected-error @+1 {{result label #0 must be "out0", but got "o"}}
@@ -334,7 +334,7 @@ hw.module @wrongResultLabel() {
 // -----
 
 // expected-note @+1 {{module declared here}}
-hw.module.extern @submodule (output %out0: i32)
+hw.module.extern @submodule (output out0: i32)
 
 hw.module @wrongNumberOfResultNames() {
   // expected-error @+1 {{has a wrong number of results port labels; expected 1 but got 0}}

@@ -1,6 +1,6 @@
 // RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
 
-hw.module @Sender(output %x: !esi.channel<i1>) {
+hw.module @Sender(output x: !esi.channel<i1>) {
   %0 = arith.constant 0 : i1
   // Don't transmit any data.
   %ch, %rcvrRdy = esi.wrap.vr %0, %0 : i1
@@ -18,7 +18,7 @@ hw.module @StructRcvr(input %a: !esi.channel<!FooStruct>) {
   %data, %valid = esi.unwrap.vr %a, %rdy : !FooStruct
 }
 
-// CHECK-LABEL: hw.module @Sender(output %x : !esi.channel<i1>) {
+// CHECK-LABEL: hw.module @Sender(output x : !esi.channel<i1>) {
 // CHECK:        %chanOutput, %ready = esi.wrap.vr %false, %false : i1
 // CHECK-LABEL: hw.module @Reciever(input %a : !esi.channel<i1>) {
 // CHECK:        %rawOutput, %valid = esi.unwrap.vr %a, %true : i1
@@ -83,7 +83,7 @@ hw.module @testIfaceWrap() {
   // CHECK-NEXT:     esi.unwrap.iface %2 into %4 : (!esi.channel<i32>, !sv.modport<@IData::@Source>)
 }
 
-// CHECK-LABEL: hw.module @i0Typed(input %a : !esi.channel<i0>, input %clk : !seq.clock, input %rst : i1, output %x : !esi.channel<i0>) {
+// CHECK-LABEL: hw.module @i0Typed(input %a : !esi.channel<i0>, input %clk : !seq.clock, input %rst : i1, output x : !esi.channel<i0>) {
 // CHECK-NEXT:    %0 = esi.buffer %clk, %rst, %a  : i0
 // CHECK-NEXT:    %1 = esi.stage %clk, %rst, %0  : i0
 // CHECK-NEXT:    %rawOutput, %valid = esi.unwrap.vr %1, %ready : i0
@@ -91,7 +91,7 @@ hw.module @testIfaceWrap() {
 // CHECK-NEXT:    hw.output %chanOutput : !esi.channel<i0>
 // CHECK-NEXT:  }
 
-hw.module @i0Typed(input %a: !esi.channel<i0>, input %clk : !seq.clock, input %rst : i1, output %x: !esi.channel<i0>) {
+hw.module @i0Typed(input %a: !esi.channel<i0>, input %clk : !seq.clock, input %rst : i1, output x: !esi.channel<i0>) {
   %bufferedA = esi.buffer %clk, %rst, %a : i0
   %stagedA = esi.stage %clk, %rst, %bufferedA : i0
   %rawOutput, %valid = esi.unwrap.vr %stagedA, %rcvrRdy : i0
@@ -99,7 +99,7 @@ hw.module @i0Typed(input %a: !esi.channel<i0>, input %clk : !seq.clock, input %r
   hw.output %ch : !esi.channel<i0>
 }
 
-hw.module.extern @i1Fifo0(input %in: !esi.channel<i1, FIFO0>, output %out: !esi.channel<i1, FIFO0>)
+hw.module.extern @i1Fifo0(input %in: !esi.channel<i1, FIFO0>, output out: !esi.channel<i1, FIFO0>)
 
 // CHECK-LABEL:  hw.module @fifo0WrapUnwrap()
 // CHECK-NEXT:     %chanOutput, %rden = esi.wrap.fifo %data, %empty : !esi.channel<i1, FIFO0>

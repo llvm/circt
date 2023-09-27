@@ -1,7 +1,7 @@
 // RUN: circt-opt %s -export-verilog -verify-diagnostics --mlir-print-debuginfo --split-input-file | FileCheck %s --strict-whitespace
 
 module attributes {circt.loweringOptions = "emitVerilogLocations"} {
-hw.module @MultiUseExpr(input %a: i4, output %b0: i1) {
+hw.module @MultiUseExpr(input %a: i4, output b0: i1) {
   %0 = comb.parity %a : i4
   hw.output %0 : i1
 }

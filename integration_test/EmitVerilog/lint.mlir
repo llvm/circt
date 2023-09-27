@@ -8,29 +8,29 @@
 // RUN: verilator --lint-only --top-module exprInlineTestIssue439 %t1.sv
 // RUN: verilator --lint-only --top-module StructDecls %t1.sv
 
-hw.module @B(input %a: i1, output %b: i1, c: i1) {
+hw.module @B(input %a: i1, output b: i1, c: i1) {
   %0 = comb.or %a, %a : i1
   %1 = comb.and %a, %a : i1
   hw.output %0, %1 : i1, i1
 }
 
-hw.module @A(input %d: i1, input %e: i1, output %f: i1) {
+hw.module @A(input %d: i1, input %e: i1, output f: i1) {
   %1 = comb.mux %d, %d, %e : i1
   hw.output %1 : i1
 }
 
-hw.module @AAA(input %d: i1, input %e: i1, output %f: i1) {
+hw.module @AAA(input %d: i1, input %e: i1, output f: i1) {
   %z = hw.constant 0 : i1
   hw.output %z : i1
 }
 
-hw.module @AB(input %w: i1, input %x: i1, output %y: i1, z: i1) {
+hw.module @AB(input %w: i1, input %x: i1, output y: i1, z: i1) {
   %w2 = hw.instance "a1" @AAA(d: %w: i1, e: %w1: i1) -> (f: i1)
   %w1, %y = hw.instance "b1" @B(a: %w2: i1) -> (b: i1, c: i1)
   hw.output %y, %x : i1, i1
 }
 
-hw.module @shl(input %a: i1, output %b: i1) {
+hw.module @shl(input %a: i1, output b: i1) {
   %0 = comb.shl %a, %a : i1
   hw.output %0 : i1
 }
@@ -102,7 +102,7 @@ hw.module @exprInlineTestIssue439(input %clk: i1) {
   }
 }
 
-hw.module @casts(input %in1: i64, output %r1: !hw.array<5xi8>) {
+hw.module @casts(input %in1: i64, output r1: !hw.array<5xi8>) {
   %bits = hw.bitcast %in1 : (i64) -> !hw.array<64xi1>
   %idx = hw.constant 10 : i6
   %midBits = hw.array_slice %bits[%idx] : (!hw.array<64xi1>) -> !hw.array<40xi1>
@@ -115,7 +115,7 @@ hw.module @StructDecls() {
   %reg2 = sv.reg : !hw.inout<array<8xstruct<a: i1, b: i1>>>
 }
 
-hw.module @UniformArrayCreate(, output %arr: !hw.array<5xi8>) {
+hw.module @UniformArrayCreate(, output arr: !hw.array<5xi8>) {
   %c0_i8 = hw.constant 0 : i8
   %arr = hw.array_create %c0_i8, %c0_i8, %c0_i8, %c0_i8, %c0_i8 : i8
   hw.output %arr : !hw.array<5xi8>

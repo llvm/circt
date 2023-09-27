@@ -14,12 +14,12 @@ module {
     }
   }
 
-  hw.module @AAA(, output %f: i1) {
+  hw.module @AAA(, output f: i1) {
     %z = hw.constant 1 : i1
     hw.output %z : i1
   }
 
-  hw.module @shl(input %a: i1, output %b: i1) {
+  hw.module @shl(input %a: i1, output b: i1) {
     %0 = comb.shl %a, %a : i1
     hw.output %0 : i1
   }

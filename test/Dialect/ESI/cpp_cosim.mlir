@@ -19,7 +19,7 @@ hw.module @Top(input %clk: !seq.clock, input %rst: i1) {
   hw.output
 }
 
-hw.module @Loopback(input %clk: !seq.clock, input %loopback_tohw: !esi.channel<i8>, output %loopback_fromhw: !esi.channel<i8>) {
+hw.module @Loopback(input %clk: !seq.clock, input %loopback_tohw: !esi.channel<i8>, output loopback_fromhw: !esi.channel<i8>) {
   hw.output %loopback_tohw : !esi.channel<i8>
 }
 

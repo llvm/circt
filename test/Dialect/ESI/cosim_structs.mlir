@@ -5,7 +5,7 @@
 !DataPkt = !hw.struct<encrypted: i1, compressionLevel: ui4, blob: !hw.array<32 x i8>>
 !pktChan = !esi.channel<!DataPkt>
 
-hw.module.extern @Compressor(input %in : !esi.channel<i1>, output %x : !pktChan)
+hw.module.extern @Compressor(input %in : !esi.channel<i1>, output x : !pktChan)
 
 hw.module @top(input %clk : !seq.clock, input %rst : i1) {
   %compressedData = hw.instance "compressor" @Compressor(in: %inputData: !esi.channel<i1>) -> (x: !pktChan)
@@ -19,4 +19,4 @@ hw.module @top(input %clk : !seq.clock, input %rst : i1) {
 
 // COSIM-DAG: hw.instance "encodeStruct{{.+}}Inst" @encodeStruct{{.+}}(clk: %clk: !seq.clock, valid: %{{.+}}: i1, unencodedInput: %{{.+}}: !hw.struct<encrypted: i1, compressionLevel: ui4, blob: !hw.array<32xi8>>) -> (encoded: !hw.array<448xi1>)
 // COSIM-DAG: hw.instance "Compressor" @Cosim_Endpoint<ENDPOINT_ID_EXT: none = "", SEND_TYPE_ID: ui64 = 11116741711825659895, SEND_TYPE_SIZE_BITS: i32 = 448, RECV_TYPE_ID: ui64 = 17519082812652290511, RECV_TYPE_SIZE_BITS: i32 = 128>(clk: %clk: !seq.clock, rst: %rst: i1, {{.+}}, {{.+}}, {{.+}}) -> ({{.+}})
-// COSIM-DAG: hw.module @encode{{.+}}(input %clk : !seq.clock, input %valid : i1, input %unencodedInput : !hw.struct<encrypted: i1, compressionLevel: ui4, blob: !hw.array<32xi8>>, output %encoded : !hw.array<448xi1>)
+// COSIM-DAG: hw.module @encode{{.+}}(input %clk : !seq.clock, input %valid : i1, input %unencodedInput : !hw.struct<encrypted: i1, compressionLevel: ui4, blob: !hw.array<32xi8>>, output encoded : !hw.array<448xi1>)

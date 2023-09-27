@@ -281,7 +281,7 @@ hw.module @case_stmt(input %arg: i3) {
   }
 
 // CHECK-LABEL: MergeAssignments
-hw.module @MergeAssignments(input %a: !hw.array<4xi1>, input %clock: i1, output %d: !hw.array<4xi1>) {
+hw.module @MergeAssignments(input %a: !hw.array<4xi1>, input %clock: i1, output d: !hw.array<4xi1>) {
   %c-1_i2 = hw.constant -1 : i2
   %c-2_i2 = hw.constant -2 : i2
   %c1_i2 = hw.constant 1 : i2

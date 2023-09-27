@@ -30,7 +30,7 @@ msft.pd.location FF x: 0 y: 0 n: 0
 
 // -----
 
-hw.module @foo(input %in0 : i32, input %clk : !seq.clock, output %out: i32) {
+hw.module @foo(input %in0 : i32, input %clk : !seq.clock, output out: i32) {
 // expected-error @+1 {{'msft.hlc.linear' op expected only hw, comb, and msft dialect ops inside the datapath.}}
   %0 = msft.hlc.linear clock %clk : i32 {
     %0 = seq.compreg %in0, %clk: i32
