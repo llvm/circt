@@ -190,20 +190,45 @@ public:
 
   /// For every leaf field in the sink, record that it exists and should be
   /// initialized.
-  void declareSinks(Value value, Flow flow) {
+  void declareSinks(Value value, Flow flow, bool local = false) {
     auto type = value.getType();
     unsigned id = 0;
 
     // Recurse through a bundle and declare each leaf sink node.
-    std::function<void(Type, Flow)> declare = [&](Type type, Flow flow) {
+    std::function<void(Type, Flow, bool)> declare = [&](Type type, Flow flow,
+                                                        bool local) {
+      // If this is a class type, recurse to each of the fields.
+      if (auto classType = type_dyn_cast<ClassType>(type)) {
+        if (local) {
+          // If this is a local object declaration, then we are responsible for
+          // initializing its input ports.
+          for (auto &element : classType.getElements()) {
+            id++;
+            if (element.direction == Direction::Out)
+              declare(element.type, flow, false);
+            else
+              declare(element.type, swapFlow(flow), false);
+          }
+        } else {
+          // If this is a remote object, then the object itself is potentially
+          // a sink.
+          if (flow != Flow::Source)
+            driverMap[{value, id}] = nullptr;
+          // skip over its subfields--we are not responsible for initializing
+          // the object here.
+          id += classType.getMaxFieldID();
+        }
+        return;
+      }
+
       // If this is a bundle type, recurse to each of the fields.
       if (auto bundleType = type_dyn_cast<BundleType>(type)) {
         for (auto &element : bundleType.getElements()) {
           id++;
           if (element.isFlip)
-            declare(element.type, swapFlow(flow));
+            declare(element.type, swapFlow(flow), false);
           else
-            declare(element.type, flow);
+            declare(element.type, flow, false);
         }
         return;
       }
@@ -212,7 +237,7 @@ public:
       if (auto vectorType = type_dyn_cast<FVectorType>(type)) {
         for (unsigned i = 0; i < vectorType.getNumElements(); ++i) {
           id++;
-          declare(vectorType.getElementType(), flow);
+          declare(vectorType.getElementType(), flow, false);
         }
         return;
       }
@@ -226,7 +251,8 @@ public:
       if (flow != Flow::Source)
         driverMap[{value, id}] = nullptr;
     };
-    declare(type, flow);
+
+    declare(type, flow, local);
   }
 
   /// Take two connection operations and merge them into a new connect under a
@@ -312,6 +338,10 @@ public:
         declareSinks(result.value(), Flow::Source);
       else
         declareSinks(result.value(), Flow::Sink);
+  }
+
+  void visitDecl(ObjectOp op) {
+    declareSinks(op, Flow::Source, /*local=*/true);
   }
 
   void visitDecl(MemOp op) {
@@ -629,7 +659,7 @@ public:
   void visitStmt(StrictConnectOp connectOp);
   void visitStmt(GroupOp groupOp);
 
-  bool run(FModuleOp op);
+  bool run(FModuleLike op);
   LogicalResult checkInitialization();
 
 private:
@@ -644,19 +674,26 @@ private:
 /// Run expand whens on the Module.  This will emit an error for each
 /// incomplete initialization found. If an initialiazation error was detected,
 /// this will return failure and leave the IR in an inconsistent state.
-bool ModuleVisitor::run(FModuleOp op) {
-  // Track any results (flipped arguments) of the module for init coverage.
-  for (const auto &it : llvm::enumerate(op.getArguments())) {
-    auto flow = op.getPortDirection(it.index()) == Direction::In
-                    ? Flow::Source
-                    : Flow::Sink;
-    declareSinks(it.value(), flow);
+bool ModuleVisitor::run(FModuleLike op) {
+  // We only lower whens inside of fmodule ops or class ops.
+  if (!isa<FModuleOp, ClassOp>(op))
+    return anythingChanged;
+
+  for (auto &region : op->getRegions()) {
+    for (auto &block : region.getBlocks()) {
+      // Track any results (flipped arguments) of the module for init coverage.
+      for (const auto &[index, value] : llvm::enumerate(block.getArguments())) {
+        auto direction = op.getPortDirection(index);
+        auto flow = direction == Direction::In ? Flow::Source : Flow::Sink;
+        declareSinks(value, flow);
+      }
+
+      // Process the body of the module.
+      for (auto &op : llvm::make_early_inc_range(block))
+        dispatchVisitor(&op);
+    }
   }
 
-  // Process the body of the module.
-  for (auto &op : llvm::make_early_inc_range(*op.getBodyBlock())) {
-    dispatchVisitor(&op);
-  }
   return anythingChanged;
 }
 
@@ -696,12 +733,12 @@ LogicalResult ModuleVisitor::checkInitialization() {
     auto *definingOp = dest.getDefiningOp();
     if (auto mod = dyn_cast<FModuleLike>(definingOp))
       mlir::emitError(loc) << "port \"" << getFieldName(dest).first
-                           << "\" not fully initialized in module \""
+                           << "\" not fully initialized in \""
                            << mod.getModuleName() << "\"";
     else
       mlir::emitError(loc)
           << "sink \"" << getFieldName(dest).first
-          << "\" not fully initialized in module \""
+          << "\" not fully initialized in \""
           << definingOp->getParentOfType<FModuleLike>().getModuleName() << "\"";
     failed = true;
   }

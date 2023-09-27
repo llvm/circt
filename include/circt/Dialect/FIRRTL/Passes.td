@@ -275,7 +275,7 @@ def LowerMatches : Pass<"firrtl-lower-matches", "firrtl::FModuleOp"> {
   let constructor = "circt::firrtl::createLowerMatchesPass()";
 }
 
-def ExpandWhens : Pass<"firrtl-expand-whens", "firrtl::FModuleOp"> {
+def ExpandWhens : InterfacePass<"firrtl-expand-whens", "firrtl::FModuleLike"> {
   let summary = "Remove all when conditional blocks.";
   let description = [{
     This pass will:

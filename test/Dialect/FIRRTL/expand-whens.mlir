@@ -1,4 +1,4 @@
-// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl.module(firrtl-expand-whens)))' %s | FileCheck %s
+// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(any(firrtl-expand-whens)))' %s | FileCheck %s
 firrtl.circuit "ExpandWhens" {
 firrtl.module @ExpandWhens () {}
 
@@ -581,6 +581,53 @@ firrtl.module @WhenInGroup(in %cond : !firrtl.uint<1>) {
       firrtl.strictconnect %a, %c1_ui1 : !firrtl.uint<1>
     }
   }
+}
+
+// CHECK: firrtl.class @ClassWithInput(in %in: !firrtl.string)
+firrtl.class @ClassWithInput(in %in: !firrtl.string) {}
+
+// Check that no error is emitted for unintialized input ports on remote objects.
+// Our input port "in" is a remote object. We are not responsible for
+// assigning its input ports.
+// CHECK: firrtl.module @ModuleWithInputObject(in %in: !firrtl.class<@ClassWithInput(in in: !firrtl.string)>)
+firrtl.module @ModuleWithInputObject(in %in: !firrtl.class<@ClassWithInput(in in: !firrtl.string)>) {}
+
+// Check that no error is emitted for uninitialized input ports on output ports.
+// Our output port "out" is technically a remote object. We are not responsible
+// for assigning its input ports (we assign to the local object, then assign
+// the entire object to the port).
+// CHECK: firrtl.module @ModuleWithOutputObject(out %out: !firrtl.class<@ClassWithInput(in in: !firrtl.string)>) {
+// CHECK:   %obj = firrtl.object @ClassWithInput(in in: !firrtl.string)
+// CHECK:   %0 = firrtl.object.subfield %obj[in] : !firrtl.class<@ClassWithInput(in in: !firrtl.string)>
+// CHECK:   %1 = firrtl.string "whatever"
+// CHECK:   firrtl.propassign %0, %1 : !firrtl.string
+// CHECK:   firrtl.propassign %out, %obj : !firrtl.class<@ClassWithInput(in in: !firrtl.string)>
+// CHECK: }
+firrtl.module @ModuleWithOutputObject(out %out: !firrtl.class<@ClassWithInput(in in: !firrtl.string)>) {
+  %obj = firrtl.object @ClassWithInput(in in: !firrtl.string)
+  %0 = firrtl.object.subfield %obj[in] : !firrtl.class<@ClassWithInput(in in: !firrtl.string)>
+  %1 = firrtl.string "whatever"
+  firrtl.propassign %0, %1 : !firrtl.string
+  firrtl.propassign %out, %obj : !firrtl.class<@ClassWithInput(in in: !firrtl.string)>
+}
+
+// Check that no error is emitted for uninitialized input ports on objects that
+// are themselves a port on an instance.
+// CHECK: firrtl.module @ModuleThatInstantiatesModuleWithOutputObject() {
+// CHECK:   %mod_out = firrtl.instance mod @ModuleWithOutputObject(out out: !firrtl.class<@ClassWithInput(in in: !firrtl.string)>)
+// CHECK: }
+firrtl.module @ModuleThatInstantiatesModuleWithOutputObject() {
+  %mod_out = firrtl.instance mod @ModuleWithOutputObject(out out: !firrtl.class<@ClassWithInput(in in: !firrtl.string)>)
+}
+
+// Check that no error is emitted for uninitialized input ports on remote object in wires.
+// CHECK: firrtl.module @ModuleWithObjectWire(in %in: !firrtl.class<@ClassWithInput(in in: !firrtl.string)>) {
+// CHECK:   %0 = firrtl.wire : !firrtl.class<@ClassWithInput(in in: !firrtl.string)>
+// CHECK:   firrtl.propassign %0, %in : !firrtl.class<@ClassWithInput(in in: !firrtl.string)>
+// CHECK: }
+firrtl.module @ModuleWithObjectWire(in %in: !firrtl.class<@ClassWithInput(in in: !firrtl.string)>) {
+  %0 = firrtl.wire : !firrtl.class<@ClassWithInput(in in: !firrtl.string)>
+  firrtl.propassign %0, %in : !firrtl.class<@ClassWithInput(in in: !firrtl.string)>
 }
 
 }
