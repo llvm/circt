@@ -45,7 +45,7 @@ struct PortInfo {
 
 struct Tunneler {
 public:
-  Tunneler(IbisTunnelingOptions options, PathOp op,
+  Tunneler(const IbisTunnelingOptions &options, PathOp op,
            ConversionPatternRewriter &rewriter, InstanceGraph &ig);
 
   // A mapping between requested port names from a ScopeRef and the actual
@@ -91,7 +91,7 @@ private:
   PathOp op;
   ConversionPatternRewriter &rewriter;
   InstanceGraph &ig;
-  IbisTunnelingOptions options;
+  const IbisTunnelingOptions &options;
   mlir::StringAttr pathName;
   llvm::SmallVector<PathStepAttr> path;
 
@@ -104,7 +104,7 @@ private:
   FlatSymbolRefAttr targetName;
 };
 
-Tunneler::Tunneler(IbisTunnelingOptions options, PathOp op,
+Tunneler::Tunneler(const IbisTunnelingOptions &options, PathOp op,
                    ConversionPatternRewriter &rewriter, InstanceGraph &ig)
     : op(op), rewriter(rewriter), ig(ig), options(options) {
   llvm::copy(op.getPathAsRange(), std::back_inserter(path));
@@ -387,7 +387,8 @@ class TunnelingConversionPattern : public OpConversionPattern<PathOp> {
 public:
   TunnelingConversionPattern(MLIRContext *context, InstanceGraph &ig,
                              IbisTunnelingOptions options)
-      : OpConversionPattern<PathOp>(context), ig(ig), options(options) {}
+      : OpConversionPattern<PathOp>(context), ig(ig),
+        options(std::move(options)) {}
 
   LogicalResult
   matchAndRewrite(PathOp op, OpAdaptor adaptor,
