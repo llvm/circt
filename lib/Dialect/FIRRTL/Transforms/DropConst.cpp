@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
@@ -85,6 +86,8 @@ class DropConstPass : public DropConstBase<DropConstPass> {
             module->setAttr(FModuleLike::getPortTypesAttrName(),
                             ArrayAttr::get(module.getContext(), portTypes));
         });
+
+    markAnalysesPreserved<InstanceGraph>();
   }
 };
 } // namespace

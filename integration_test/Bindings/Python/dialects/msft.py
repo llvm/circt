@@ -10,6 +10,12 @@ import circt.ir as ir
 import circt.passmanager
 import sys
 
+# CHECK-LABEL: === pd ===
+# ERR-LABEL:   === pd errors ===
+print("=== pd ===")
+print("=== pd errors ===", file=sys.stderr)
+sys.stderr.flush()
+
 with ir.Context() as ctx, ir.Location.unknown():
   circt.register_dialects(ctx)
   i32 = ir.IntegerType.get_signless(32)
@@ -17,34 +23,28 @@ with ir.Context() as ctx, ir.Location.unknown():
 
   mod = ir.Module.create()
   with ir.InsertionPoint(mod.body):
-    extmod = msft.MSFTModuleExternOp(name='MyExternMod',
-                                     input_ports=[],
-                                     output_ports=[])
-
-    entity_extern = msft.EntityExternOp.create("tag", "extra details")
-
-    op = msft.MSFTModuleOp(name='MyWidget', input_ports=[], output_ports=[])
-    with ir.InsertionPoint(op.add_entry_block()):
-      msft.OutputOp([])
-
-    top = msft.MSFTModuleOp(name='top', input_ports=[], output_ports=[])
-    with ir.InsertionPoint(top.add_entry_block()):
-      msft.OutputOp([])
-
-    msft_mod = msft.MSFTModuleOp(name='msft_mod',
+    extmod = hw.HWModuleExternOp(name='MyExternMod',
                                  input_ports=[],
-                                 output_ports=[],
-                                 parameters=ir.DictAttr.get(
-                                     {"WIDTH": ir.IntegerAttr.get(i32, 8)}))
+                                 output_ports=[])
+
+    op = hw.HWModuleOp(name='MyWidget', input_ports=[], output_ports=[])
+    with ir.InsertionPoint(op.add_entry_block()):
+      hw.OutputOp([])
+
+    top = hw.HWModuleOp(name='top', input_ports=[], output_ports=[])
+    with ir.InsertionPoint(top.add_entry_block()):
+      hw.OutputOp([])
+
+    msft_mod = hw.HWModuleOp(name='msft_mod', input_ports=[], output_ports=[])
     with ir.InsertionPoint(msft_mod.add_entry_block()):
-      msft.OutputOp([])
+      hw.OutputOp([])
 
   with ir.InsertionPoint.at_block_terminator(op.body.blocks[0]):
-    ext_inst = extmod.instantiate("ext1")
+    ext_inst = extmod.instantiate("ext1", sym_name="ext1")
 
   with ir.InsertionPoint.at_block_terminator(top.body.blocks[0]):
-    path = op.instantiate("inst1")
-    minst = msft_mod.instantiate("minst")
+    path = op.instantiate("inst1", sym_name="inst1")
+    minst = msft_mod.instantiate("minst", sym_name="minst")
 
   # CHECK: #msft.physloc<M20K, 2, 6, 1>
   physAttr = msft.PhysLocationAttr.get(msft.M20K, x=2, y=6, num=1)
@@ -62,9 +62,9 @@ with ir.Context() as ctx, ir.Location.unknown():
   print(path)
   # CHECK-NEXT: [#hw.innerNameRef<@top::@inst1>, #hw.innerNameRef<@MyWidget::@ext1>]
 
-  # CHECK: msft.module @MyWidget {} ()
-  # CHECK:   msft.output
-  # CHECK: msft.module @msft_mod {WIDTH = 8 : i32} ()
+  # CHECK: hw.module @MyWidget()
+  # CHECK: hw.module @msft_mod()
+  mod.operation.verify()
   mod.operation.print()
 
   db = msft.PlacementDB(mod)
@@ -109,11 +109,6 @@ with ir.Context() as ctx, ir.Location.unknown():
 
   rc = seeded_pdb.place(dyn_inst, physAttr, "|foo_subpath", ir.Location.current)
   assert rc
-  # Temporarily ditch support for external entities
-  # external_path = ir.ArrayAttr.get(
-  #     [ir.FlatSymbolRefAttr.get(entity_extern.sym_name.value)])
-  # rc = seeded_pdb.add_placement(physAttr2, external_path, "", entity_extern)
-  # assert rc
 
   nearest = seeded_pdb.get_nearest_free_in_column(msft.M20K, 2, 4)
   assert isinstance(nearest, msft.PhysLocationAttr)
@@ -257,160 +252,6 @@ with ir.Context() as ctx, ir.Location.unknown():
   # CHECK:   set_location_assignment M20K_X2_Y6_N1 -to $parent|inst1|ext1|foo_subpath
   print(mod)
   pm = circt.passmanager.PassManager.parse(
-      "builtin.module(msft-lower-instances,lower-msft-to-hw,msft-export-tcl{tops=top})"
-  )
+      "builtin.module(msft-lower-instances,msft-export-tcl{tops=top})")
   pm.run(mod.operation)
   circt.export_verilog(mod, sys.stdout)
-
-################################################################################
-# AppID tests
-################################################################################
-
-print()
-# CHECK-LABEL: === appid ===
-# ERR-LABEL:   === appid errors ===
-print("=== appid ===")
-print("=== appid errors ===", file=sys.stderr)
-sys.stderr.flush()
-
-with ir.Context() as ctx, ir.Location.unknown():
-  circt.register_dialects(ctx)
-  unknown = ir.Location.unknown()
-
-  appid1 = msft.AppIDAttr.get("foo", 4)
-  # CHECK: appid1: #msft.appid<"foo"[4]>, foo, 4
-  print(f"appid1: {appid1}, {appid1.name}, {appid1.index}")
-
-  appid_path1 = msft.AppIDPathAttr.get(ir.FlatSymbolRefAttr.get("Foo"),
-                                       [appid1])
-  # CHECK: appid_path1: #msft.appid_path<@Foo[<"foo"[4]>]>, @Foo, 1, #msft.appid<"foo"[4]>
-  print(f"appid_path1: {appid_path1}, {appid_path1.root}, "
-        f"{len(appid_path1)}, {appid_path1[0]}")
-
-  # Valid appid tree.
-  mod = ir.Module.create()
-  with ir.InsertionPoint(mod.body):
-    extmod = hw.HWModuleExternOp(name='ExternModA',
-                                 input_ports=[],
-                                 output_ports=[])
-
-    mymod = hw.HWModuleOp(name='MyMod', input_ports=[], output_ports=[])
-    with ir.InsertionPoint(mymod.add_entry_block()):
-      inst = extmod.instantiate("inst1", sym_name="inst1")
-      inst.operation.attributes["msft.appid"] = msft.AppIDAttr.get("bar", 2)
-      hw.OutputOp([])
-
-    top = hw.HWModuleOp(name='Top', input_ports=[], output_ports=[])
-    with ir.InsertionPoint(top.add_entry_block()):
-      mymod.instantiate("myMod", sym_name="myMod")
-      ext_inst = extmod.instantiate("ext_inst1", sym_name="ext_inst1")
-      ext_inst.operation.attributes["msft.appid"] = msft.AppIDAttr.get("ext", 0)
-      hw.OutputOp([])
-  appid_idx = msft.AppIDIndex(mod.operation)
-
-  # Valid appid queries.
-  dyn_inst = appid_idx.get_instance(
-      msft.AppIDPathAttr.get(ir.FlatSymbolRefAttr.get("Top"),
-                             [msft.AppIDAttr.get("bar", 2)]),
-      ir.Location.file("msft.py", 12, 0))
-  # CHECK:      msft.instance.dynamic @MyMod::@inst1 {
-  print(dyn_inst)
-  dyn_inst = appid_idx.get_instance(
-      msft.AppIDPathAttr.get(ir.FlatSymbolRefAttr.get("Top"),
-                             [msft.AppIDAttr.get("ext", 0)]),
-      ir.Location.file("msft.py", 12, 0))
-  # CHECK:      msft.instance.dynamic @Top::@ext_inst1 {
-  print(dyn_inst)
-  # CHECK:      hw.module.extern @ExternModA()
-  # CHECK:      hw.module @MyMod() {
-  # CHECK:        hw.instance "inst1" sym @inst1 @ExternModA() -> () {msft.appid = #msft.appid<"bar"[2]>}
-  # CHECK:      hw.module @Top() {
-  # CHECK:        hw.instance "myMod" sym @myMod @MyMod() -> ()
-  # CHECK:        hw.instance "ext_inst1" sym @ext_inst1 @ExternModA() -> () {msft.appid = #msft.appid<"ext"[0]>}
-  # CHECK:      msft.instance.hierarchy @Top {
-  # CHECK:        msft.instance.dynamic @Top::@myMod {
-  # CHECK:          msft.instance.dynamic @MyMod::@inst1 {
-  # CHECK:        msft.instance.dynamic @Top::@ext_inst1 {
-  print(mod)
-
-  appids = appid_idx.get_child_appids_of(top)
-  # CHECK: [#msft.appid<"ext"[0]>, #msft.appid<"bar"[2]>]
-  print(appids)
-  path = appid_idx.get_appid_path(top, msft.AppIDAttr.get("bar", 2), unknown)
-  # CHECK: [#hw.innerNameRef<@Top::@myMod>, #hw.innerNameRef<@MyMod::@inst1>]
-  print(path)
-
-  # Invalid appid queries
-  # ERR:      error: could not find module '@Nonsense'
-  # ERR:      error: could not find appid '#msft.appid<"NoExist"[2]>'
-  dyn_inst = appid_idx.get_instance(
-      msft.AppIDPathAttr.get(ir.FlatSymbolRefAttr.get("Nonsense"),
-                             [msft.AppIDAttr.get("bar", 2)]), unknown)
-  assert dyn_inst is None
-
-  dyn_inst = appid_idx.get_instance(
-      msft.AppIDPathAttr.get(ir.FlatSymbolRefAttr.get("Top"),
-                             [msft.AppIDAttr.get("NoExist", 2)]), unknown)
-  assert dyn_inst is None
-
-  # Shallow valid appid tree
-  mod3 = ir.Module.create()
-  with ir.InsertionPoint(mod3.body):
-    extmod = hw.HWModuleExternOp(name='ExternModA',
-                                 input_ports=[],
-                                 output_ports=[])
-
-    top = hw.HWModuleOp(name='Top', input_ports=[], output_ports=[])
-    with ir.InsertionPoint(top.add_entry_block()):
-      ext_inst = extmod.instantiate("ext_inst1", sym_name="ext_inst1")
-      ext_inst.operation.attributes["msft.appid"] = msft.AppIDAttr.get("ext", 0)
-      hw.OutputOp([])
-  appid_idx = msft.AppIDIndex(mod3.operation)
-
-  # Valid appid queries.
-  dyn_inst = appid_idx.get_instance(
-      msft.AppIDPathAttr.get(ir.FlatSymbolRefAttr.get("Top"),
-                             [msft.AppIDAttr.get("ext", 0)]),
-      ir.Location.file("msft.py", 12, 0))
-  # CHECK:      msft.instance.dynamic @Top::@ext_inst1 {
-  print(dyn_inst)
-  # CHECK:      hw.module.extern @ExternModA()
-  # CHECK:      hw.module @MyMod() {
-  # CHECK:        hw.instance "inst1" sym @inst1 @ExternModA() -> () {msft.appid = #msft.appid<"bar"[2]>}
-  # CHECK:      hw.module @Top() {
-  # CHECK:        hw.instance "myMod" sym @myMod @MyMod() -> ()
-  # CHECK:        hw.instance "ext_inst1" sym @ext_inst1 @ExternModA() -> () {msft.appid = #msft.appid<"ext"[0]>}
-  # CHECK:      msft.instance.hierarchy @Top {
-  # CHECK:        msft.instance.dynamic @Top::@myMod {
-  # CHECK:          msft.instance.dynamic @MyMod::@inst1 {
-  # CHECK:        msft.instance.dynamic @Top::@ext_inst1 {
-  print(mod)
-
-  # Invalid appid queries
-  # ERR:        error: could not find appid '#msft.appid<"bar"[2]>'
-  dyn_inst = appid_idx.get_instance(
-      msft.AppIDPathAttr.get(ir.FlatSymbolRefAttr.get("Top"),
-                             [msft.AppIDAttr.get("bar", 2)]), unknown)
-  assert dyn_inst is None
-
-  # Invalid appid tree.
-  mod2 = ir.Module.create()
-  with ir.InsertionPoint(mod2.body):
-    extmod = hw.HWModuleExternOp(name='ExternModA',
-                                 input_ports=[],
-                                 output_ports=[])
-
-    mymod = hw.HWModuleOp(name='MyMod', input_ports=[], output_ports=[])
-    with ir.InsertionPoint(mymod.add_entry_block()):
-      inst = extmod.instantiate("inst1", sym_name="inst1")
-      inst.operation.attributes["msft.appid"] = msft.AppIDAttr.get("bar", 2)
-      hw.OutputOp([])
-
-    top = hw.HWModuleOp(name='Top', input_ports=[], output_ports=[])
-    with ir.InsertionPoint(top.add_entry_block()):
-      mymod.instantiate("myMod1", sym_name="myMod1")
-      mymod.instantiate("myMod2", sym_name="myMod2")
-      hw.OutputOp([])
-
-  # ERR:        error: 'hw.instance' op Found multiple identical AppIDs in same module
-  appid_idx = msft.AppIDIndex(mod2.operation)

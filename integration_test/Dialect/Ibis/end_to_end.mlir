@@ -47,7 +47,7 @@ ibis.class @C2 {
     %sibling_out_ref = ibis.get_port %sibling, @out : !ibis.scoperef<@C1> -> !ibis.portref<out i32>
     %sibling_out = ibis.port.read %sibling_out_ref : !ibis.portref<out i32>
 
-    %res, %done = pipeline.scheduled(%a0 : i32 = %sibling_out) clock(%c = %clk) reset(%r = %rst) go(%g = %go) -> (out : i32) {
+    %res, %done = pipeline.scheduled(%a0 : i32 = %sibling_out) clock(%clk) reset(%rst) go(%go) entryEn(%s0_enable) -> (out : i32) {
         %0 = comb.mul %a0, %a0 : i32
         pipeline.stage ^bb1
       ^bb1(%s1_enable : i1):

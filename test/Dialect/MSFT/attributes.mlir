@@ -9,11 +9,3 @@ msft.physical_region @region1, [
 
 // CHECK: #msft.location_vec<i3, [*, <1, 2, 3>, #msft.physloc<DSP, 4, 5, 6>]>
 "dummy.op" () {"vec" = #msft.location_vec<i3, [*, <1, 2, 3>, #msft.physloc<DSP, 4, 5, 6>]>} : () -> ()
-
-// CHECK: #msft.appid<"foo"[4]>
-"dummy.op" () {"appid" = #msft.appid<"foo"[4]> } : () -> ()
-
-hw.module @Foo() {}
-
-// CHECK: #msft.appid_path<@Foo[<"foo"[0]>]>
-"dummy.op" () {"appid_path" = #msft.appid_path<@Foo [#msft.appid<"foo"[0]>]> } : () -> ()

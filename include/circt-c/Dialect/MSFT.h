@@ -21,7 +21,7 @@ extern "C" {
 
 MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(MSFT, msft);
 
-MLIR_CAPI_EXPORTED void mlirMSFTRegisterPasses();
+MLIR_CAPI_EXPORTED void mlirMSFTRegisterPasses(void);
 
 // Values represented in `MSFT.td`.
 typedef int32_t CirctMSFTPrimitiveType;
@@ -63,25 +63,6 @@ intptr_t circtMSFTLocationVectorAttrGetNumElements(MlirAttribute);
 MLIR_CAPI_EXPORTED MlirAttribute
 circtMSFTLocationVectorAttrGetElement(MlirAttribute attr, intptr_t pos);
 
-MLIR_CAPI_EXPORTED bool circtMSFTAttributeIsAnAppIDAttr(MlirAttribute);
-MLIR_CAPI_EXPORTED
-MlirAttribute circtMSFTAppIDAttrGet(MlirContext, MlirStringRef name,
-                                    uint64_t index);
-MLIR_CAPI_EXPORTED MlirStringRef circtMSFTAppIDAttrGetName(MlirAttribute attr);
-MLIR_CAPI_EXPORTED uint64_t circtMSFTAppIDAttrGetIndex(MlirAttribute attr);
-
-MLIR_CAPI_EXPORTED bool circtMSFTAttributeIsAnAppIDPathAttr(MlirAttribute);
-MLIR_CAPI_EXPORTED
-MlirAttribute circtMSFTAppIDAttrPathGet(MlirContext, MlirAttribute root,
-                                        intptr_t numElements,
-                                        MlirAttribute const *elements);
-MLIR_CAPI_EXPORTED MlirAttribute
-circtMSFTAppIDAttrPathGetRoot(MlirAttribute attr);
-MLIR_CAPI_EXPORTED uint64_t
-circtMSFTAppIDAttrPathGetNumComponents(MlirAttribute attr);
-MLIR_CAPI_EXPORTED MlirAttribute
-circtMSFTAppIDAttrPathGetComponent(MlirAttribute attr, uint64_t index);
-
 //===----------------------------------------------------------------------===//
 // PrimitiveDB.
 //===----------------------------------------------------------------------===//
@@ -115,7 +96,6 @@ typedef struct {
 MLIR_CAPI_EXPORTED CirctMSFTPlacementDB
 circtMSFTCreatePlacementDB(MlirModule top, CirctMSFTPrimitiveDB seed);
 MLIR_CAPI_EXPORTED void circtMSFTDeletePlacementDB(CirctMSFTPlacementDB self);
-MLIR_CAPI_EXPORTED
 MLIR_CAPI_EXPORTED MlirOperation circtMSFTPlacementDBPlace(
     CirctMSFTPlacementDB, MlirOperation inst, MlirAttribute loc,
     MlirStringRef subpath, MlirLocation srcLoc);
@@ -138,34 +118,6 @@ MLIR_CAPI_EXPORTED void circtMSFTPlacementDBWalkPlacements(
     CirctMSFTPrimitiveType primTypeFilter, CirctMSFTWalkOrder walkOrder,
     void *userData);
 
-//===----------------------------------------------------------------------===//
-// AppID
-//===----------------------------------------------------------------------===//
-
-// NOLINTNEXTLINE(modernize-use-using)
-typedef struct {
-  void *ptr;
-} CirctMSFTAppIDIndex;
-
-/// Create an index of appids through which to do appid lookups efficiently.
-MLIR_CAPI_EXPORTED CirctMSFTAppIDIndex
-circtMSFTAppIDIndexGet(MlirOperation root);
-
-/// Free an AppIDIndex.
-MLIR_CAPI_EXPORTED void circtMSFTAppIDIndexFree(CirctMSFTAppIDIndex);
-
-/// Lookup a DynamicInstanceOp from an appid path.
-MLIR_CAPI_EXPORTED MlirOperation circtMSFTAppIDIndexGetInstance(
-    CirctMSFTAppIDIndex, MlirAttribute appIDPath, MlirLocation querySite);
-
-MLIR_CAPI_EXPORTED MlirAttribute
-    circtMSFTAppIDIndexGetChildAppIDsOf(CirctMSFTAppIDIndex, MlirOperation);
-
-MLIR_CAPI_EXPORTED
-MlirAttribute circtMSFTAppIDIndexGetAppIDPath(CirctMSFTAppIDIndex,
-                                              MlirOperation fromMod,
-                                              MlirAttribute appid,
-                                              MlirLocation loc);
 #ifdef __cplusplus
 }
 #endif

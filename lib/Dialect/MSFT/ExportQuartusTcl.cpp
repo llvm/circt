@@ -103,19 +103,18 @@ struct TclOutputState {
   LogicalResult emit(PDRegPhysLocationOp);
   LogicalResult emit(DynamicInstanceVerbatimAttrOp attr);
 
-  void emitPath(hw::GlobalRefOp ref, std::optional<StringRef> subpath);
+  void emitPath(hw::HierPathOp ref, std::optional<StringRef> subpath);
   void emitInnerRefPart(hw::InnerRefAttr innerRef);
 
-  /// Get the GlobalRefOp to which the given operation is pointing. Add it to
+  /// Get the HierPathOp to which the given operation is pointing. Add it to
   /// the set of used global refs.
-  GlobalRefOp getRefOp(DynInstDataOpInterface op) {
-    auto ref = dyn_cast_or_null<hw::GlobalRefOp>(
-        emitter.getDefinition(op.getGlobalRefSym()));
+  HierPathOp getRefOp(DynInstDataOpInterface op) {
+    auto ref = dyn_cast_or_null<hw::HierPathOp>(
+        emitter.getDefinition(op.getPathSym()));
     if (ref)
       emitter.usedRef(ref);
     else
-      op.emitOpError("could not find hw.globalRef named ")
-          << op.getGlobalRefSym();
+      op.emitOpError("could not find hw.hierpath named ") << op.getPathSym();
     return ref;
   }
 };
@@ -130,18 +129,10 @@ void TclOutputState::emitInnerRefPart(hw::InnerRefAttr innerRef) {
   symbolRefs.push_back(innerRef);
 }
 
-void TclOutputState::emitPath(hw::GlobalRefOp ref,
+void TclOutputState::emitPath(hw::HierPathOp ref,
                               std::optional<StringRef> subpath) {
-  // Traverse each part of the path.
-  auto parts = ref.getNamepathAttr().getAsRange<hw::InnerRefAttr>();
-  auto lastPart = std::prev(parts.end());
-  for (auto part : parts) {
-    emitInnerRefPart(part);
-    if (part != *lastPart)
-      os << '|';
-  }
-
-  // Some placements don't require subpaths.
+  os << "{{" << symbolRefs.size() << ":|}}";
+  symbolRefs.push_back(FlatSymbolRefAttr::get(ref));
   if (subpath)
     os << subpath;
 }
@@ -211,7 +202,7 @@ LogicalResult TclOutputState::emit(PDRegPhysLocationOp locs) {
 /// Emit tcl in the form of:
 /// "set_global_assignment -name NAME VALUE -to $parent|fooInst|entityName"
 LogicalResult TclOutputState::emit(DynamicInstanceVerbatimAttrOp attr) {
-  GlobalRefOp ref = getRefOp(attr);
+  HierPathOp ref = getRefOp(attr);
   indent() << "set_instance_assignment -name " << attr.getName() << " "
            << attr.getValue();
 
@@ -228,7 +219,7 @@ LogicalResult TclOutputState::emit(DynamicInstanceVerbatimAttrOp attr) {
 /// set_instance_assignment -name CORE_ONLY_PLACE_REGION ON -to $parent|a|b|c
 /// set_instance_assignment -name REGION_NAME test_region -to $parent|a|b|c
 LogicalResult TclOutputState::emit(PDPhysRegionOp region) {
-  GlobalRefOp ref = getRefOp(region);
+  HierPathOp ref = getRefOp(region);
 
   auto physicalRegion = dyn_cast_or_null<DeclPhysicalRegionOp>(
       emitter.getDefinition(region.getPhysRegionRefAttr()));

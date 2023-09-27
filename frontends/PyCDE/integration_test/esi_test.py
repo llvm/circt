@@ -24,7 +24,7 @@ class HostComms:
 
 
 class Producer(Module):
-  clk = Input(types.i1)
+  clk = Clock()
   int_out = OutputChannel(types.i32)
 
   @generator
@@ -34,7 +34,7 @@ class Producer(Module):
 
 
 class Consumer(Module):
-  clk = Input(types.i1)
+  clk = Clock()
   int_in = InputChannel(types.i32)
 
   @generator
@@ -57,7 +57,7 @@ class LoopbackInOutAdd7(Module):
 
 
 class Mid(Module):
-  clk = Clock(types.i1)
+  clk = Clock()
   rst = Input(types.i1)
 
   @generator
@@ -69,7 +69,7 @@ class Mid(Module):
 
 
 class Top(Module):
-  clk = Clock(types.i1)
+  clk = Clock()
   rst = Input(types.i1)
 
   @generator

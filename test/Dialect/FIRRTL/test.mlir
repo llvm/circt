@@ -344,6 +344,19 @@ firrtl.module @BoolTest(in %in: !firrtl.bool, out %out: !firrtl.bool) {
   %1 = firrtl.bool false
 }
 
+// CHECK-LABEL: DoubleTest 
+// CHECK-SAME:  (in %in: !firrtl.double, out %out: !firrtl.double)
+firrtl.module @DoubleTest(in %in: !firrtl.double, out %out: !firrtl.double) {
+  firrtl.propassign %out, %in : !firrtl.double
+
+  // CHECK: firrtl.double 0.
+  firrtl.double 0. : f64
+  // CHECK: firrtl.double -0.
+  firrtl.double -0.
+  // CHECK: firrtl.double 1.23456
+  firrtl.double 123.456
+}
+
 // CHECK-LABEL: AnyRefTest
 // CHECK-SAME: (in %in: !firrtl.anyref, out %out: !firrtl.anyref, in %[[REF:.+]]: !firrtl.class<@ClassTest()>, out %[[REF_OUT:.+]]: !firrtl.anyref)
 firrtl.module @AnyRefTest(in %in: !firrtl.anyref, out %out: !firrtl.anyref, in %ref: !firrtl.class<@ClassTest()>, out %anyref: !firrtl.anyref) {

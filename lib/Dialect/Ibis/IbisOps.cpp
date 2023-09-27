@@ -56,7 +56,7 @@ static llvm::raw_string_ostream &genValueName(llvm::raw_string_ostream &os,
       .Case<ThisOp>([&](auto op) { os << "this"; })
       .Case<InstanceOp, ContainerInstanceOp>(
           [&](auto op) { os << op.getInstanceNameAttr().strref(); })
-      .Case<PortOpInterface>([&](auto op) { os << op.getPortName(); })
+      .Case<PortOpInterface>([&](auto op) { os << op.getPortName().strref(); })
       .Case<PathOp>([&](auto op) {
         llvm::interleave(
             op.getPathAsRange(), os,
@@ -352,13 +352,14 @@ LogicalResult GetPortOp::canonicalize(GetPortOp op, PatternRewriter &rewriter) {
   // Canonicalize away get_port on %this in favor of using the port SSA value
   // directly.
   // get_port(%this, @P) -> ibis.port.#
-  auto parentScope = cast<ScopeOpInterface>(op->getParentOp());
-  auto scopeThis = parentScope.getThis();
-
-  if (op.getInstance() == scopeThis) {
-    auto definingPort = parentScope.lookupPort(op.getPortSymbol());
-    rewriter.replaceOp(op, {definingPort.getPort()});
-    return success();
+  auto parentScope = dyn_cast<ScopeOpInterface>(op->getParentOp());
+  if (parentScope) {
+    auto scopeThis = parentScope.getThis();
+    if (op.getInstance() == scopeThis) {
+      auto definingPort = parentScope.lookupPort(op.getPortSymbol());
+      rewriter.replaceOp(op, {definingPort.getPort()});
+      return success();
+    }
   }
 
   return failure();

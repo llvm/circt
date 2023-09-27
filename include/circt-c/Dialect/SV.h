@@ -18,7 +18,7 @@ extern "C" {
 #endif
 
 MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(SystemVerilog, sv);
-MLIR_CAPI_EXPORTED void registerSVPasses();
+MLIR_CAPI_EXPORTED void registerSVPasses(void);
 
 //===----------------------------------------------------------------------===//
 // Attribute API.

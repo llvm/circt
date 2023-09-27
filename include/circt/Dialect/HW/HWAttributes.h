@@ -19,9 +19,6 @@ class PEOAttr;
 class EnumType;
 enum class PEO : uint32_t;
 
-// Forward declaration.
-class GlobalRefOp;
-
 /// Returns a resolved version of 'type' wherein any parameter reference
 /// has been evaluated based on the set of provided 'parameters'.
 mlir::FailureOr<mlir::Type> evaluateParametricType(mlir::Location loc,

@@ -34,8 +34,7 @@ using namespace msft;
 
 namespace {
 
-struct LowerConstructsPass : public LowerConstructsBase<LowerConstructsPass>,
-                             PassCommon {
+struct LowerConstructsPass : public LowerConstructsBase<LowerConstructsPass> {
   void runOnOperation() override;
 
   /// For naming purposes, get the inner Namespace for a module, building it
@@ -169,7 +168,7 @@ public:
   matchAndRewrite(ChannelOp chan, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
     Location loc = chan.getLoc();
-    Operation *mod = chan->getParentOfType<MSFTModuleOp>();
+    Operation *mod = chan->getParentOfType<hw::HWModuleLike>();
     assert(mod && "ChannelOp must be contained by module");
     Namespace &ns = pass.getNamespaceFor(mod);
     Value clk = chan.getClk();

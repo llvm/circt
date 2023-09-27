@@ -22,13 +22,9 @@ class Pass;
 namespace circt {
 namespace msft {
 
-std::unique_ptr<mlir::Pass> createWireCleanupPass();
-std::unique_ptr<mlir::Pass> createPartitionPass();
-std::unique_ptr<mlir::Pass> createLowerToHWPass();
 std::unique_ptr<mlir::Pass> createLowerInstancesPass();
 std::unique_ptr<mlir::Pass> createLowerConstructsPass();
 std::unique_ptr<mlir::Pass> createExportTclPass();
-std::unique_ptr<mlir::Pass> createDiscoverAppIDsPass();
 
 /// A set of methods which are broadly useful in a number of dialects.
 struct PassCommon {
@@ -36,8 +32,6 @@ protected:
   SymbolCache topLevelSyms;
   DenseMap<Operation *, SmallVector<igraph::InstanceOpInterface, 1>>
       moduleInstantiations;
-
-  LogicalResult verifyInstances(ModuleOp topMod);
 
   // Find all the modules and use the partial order of the instantiation DAG
   // to sort them. If we use this order when "bubbling" up operations, we

@@ -7,6 +7,7 @@ from ..constructs import ControlReg, Wire
 from ..module import Module, generator
 from ..system import System
 from ..types import bit, types, Bits
+from .. import esi
 
 import glob
 from io import FileIO
@@ -221,6 +222,7 @@ def XrtBSP(user_module):
 
       # Copy additional sources
       sys: System = System.current()
+      sys.add_packaging_step(esi.package)
       sys.add_packaging_step(top.package)
 
     @staticmethod

@@ -6,6 +6,8 @@
 ##===----------------------------------------------------------------------===//
 
 set(srcs
+  AppID.cpp
+  ESIAttributes.cpp
   ESIDialect.cpp
   ESIFolds.cpp
   ESIOps.cpp
@@ -112,7 +114,7 @@ endforeach()
 
 if (ESI_CAPNP)
   add_dependencies(esi-collateral EsiCosimCapnp)
-  get_target_property(EsiCosimCapnp_bindir EsiCosimCapnp BINARY_DIR)
+  get_target_property(EsiCosimCapnp_bindir EsiCosimCapnp SOURCE_DIR)
   set(ESI_COSIM_SCHEMA "${EsiCosimCapnp_bindir}/CosimDpi.capnp")
   set(CAPNPC_SRC_PREFIX "${EsiCosimCapnp_bindir}")
   add_custom_command(TARGET esi-collateral PRE_BUILD

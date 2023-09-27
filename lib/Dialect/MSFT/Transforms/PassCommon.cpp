@@ -24,7 +24,7 @@ SmallVector<unsigned> circt::msft::makeSequentialRange(unsigned size) {
 StringRef circt::msft::getValueName(Value v, const SymbolCache &syms,
                                     std::string &buff) {
   Operation *defOp = v.getDefiningOp();
-  if (auto inst = dyn_cast_or_null<InstanceOp>(defOp)) {
+  if (auto inst = dyn_cast_or_null<hw::InstanceOp>(defOp)) {
     Operation *modOp = syms.getDefinition(inst.getModuleNameAttr());
     if (modOp) { // If modOp isn't in the cache, it's probably a new module;
       assert(isa<hw::HWModuleLike>(modOp) && "Instance must point to a module");
@@ -63,20 +63,6 @@ void PassCommon::getAndSortModules(ModuleOp topMod,
   topMod.walk([&](hw::HWModuleLike mod) {
     getAndSortModulesVisitor(mod, mods, modsSeen);
   });
-}
-
-LogicalResult PassCommon::verifyInstances(mlir::ModuleOp mod) {
-  WalkResult r = mod.walk([&](InstanceOp inst) {
-    Operation *modOp = topLevelSyms.getDefinition(inst.getModuleNameAttr());
-    if (!isa<hw::HWModuleLike>(modOp))
-      return WalkResult::interrupt();
-
-    hw::ModulePortInfo ports = cast<hw::PortList>(modOp).getPortList();
-    return succeeded(inst.verifySignatureMatch(ports))
-               ? WalkResult::advance()
-               : WalkResult::interrupt();
-  });
-  return failure(r.wasInterrupted());
 }
 
 // Run a post-order DFS.

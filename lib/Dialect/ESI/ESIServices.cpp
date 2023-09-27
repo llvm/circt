@@ -297,10 +297,6 @@ private:
 void ESIConnectServicesPass::runOnOperation() {
   ModuleOp outerMod = getOperation();
   topLevelSyms.addDefinitions(outerMod);
-  if (failed(verifyInstances(outerMod))) {
-    signalPassFailure();
-    return;
-  }
 
   // Get a partially-ordered list of modules based on the instantiation DAG.
   // It's _very_ important that we process modules before their instantiations

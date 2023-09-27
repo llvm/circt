@@ -184,12 +184,21 @@ public:
 
   LogicalResult visitInvalidOp(Operation *op) { return visitUnhandledOp(op); }
 
+  /// Whether any changes were made.
+  bool madeChanges() const { return changesMade; }
+
 private:
   /// Convert a type to its HW-only projection, adjusting symbols.  Gather
   /// non-hw elements encountered and their names / positions.  Returns a
   /// MappingInfo with its findings.
   FailureOr<MappingInfo> mapType(Type type, Location errorLoc,
                                  hw::InnerSymAttr sym = {});
+
+  /// Helper to record changes that may have been made.
+  void recordChanges(bool changed) {
+    if (changed)
+      changesMade = true;
+  }
 
   MLIRContext *context;
 
@@ -203,6 +212,9 @@ private:
 
   /// List of operations to erase at the end.
   SmallVector<Operation *> opsToErase;
+
+  /// Whether IR was changed.
+  bool changesMade = false;
 };
 } // namespace
 
@@ -296,6 +308,7 @@ LogicalResult Visitor::visit(FModuleLike mod) {
 
   // Insert the new ports!
   mod.insertPorts(newPorts);
+  recordChanges(!newPorts.empty());
 
   assert(mod->getNumRegions() == 1);
 
@@ -352,6 +365,8 @@ LogicalResult Visitor::visit(FModuleLike mod) {
             .wasInterrupted())
       return failure();
 
+    assert(opsToErase.empty() || madeChanges());
+
     // Cleanup dead operations.
     for (auto &op : llvm::reverse(opsToErase))
       op->erase();
@@ -359,11 +374,15 @@ LogicalResult Visitor::visit(FModuleLike mod) {
 
   // Drop dead ports.
   mod.erasePorts(portsToErase);
+  recordChanges(portsToErase.any());
 
   return success();
 }
 
 LogicalResult Visitor::visitExpr(OpenSubfieldOp op) {
+  // Changes will be made.
+  recordChanges(true);
+
   // We're indexing into an OpenBundle, which contains some non-hw elements and
   // may contain hw elements.
 
@@ -429,6 +448,8 @@ LogicalResult Visitor::visitExpr(OpenSubfieldOp op) {
 }
 
 LogicalResult Visitor::visitExpr(OpenSubindexOp op) {
+  // Changes will be made.
+  recordChanges(true);
 
   // In all cases, this operation will be dead and should be removed.
   opsToErase.push_back(op);
@@ -556,6 +577,9 @@ LogicalResult Visitor::visitDecl(InstanceOp op) {
   if (newPorts.empty())
     return success();
 
+  // Changes will be made.
+  recordChanges(true);
+
   // Create new instance op with desired ports.
 
   // TODO: add and erase ports without intermediate + various array attributes.
@@ -620,6 +644,9 @@ LogicalResult Visitor::visitDecl(WireOp op) {
 
   if (mappings.identity)
     return success();
+
+  // Changes will be made.
+  recordChanges(true);
 
   ImplicitLocOpBuilder builder(op.getLoc(), op);
 
@@ -803,13 +830,19 @@ void LowerOpenAggsPass::runOnOperation() {
   SmallVector<Operation *, 0> ops(getOperation().getOps<FModuleLike>());
 
   LLVM_DEBUG(llvm::dbgs() << "Visiting modules:\n");
+  std::atomic<bool> madeChanges = false;
   auto result = failableParallelForEach(&getContext(), ops, [&](Operation *op) {
     Visitor visitor(&getContext());
-    return visitor.visit(cast<FModuleLike>(op));
+    auto result = visitor.visit(cast<FModuleLike>(op));
+    if (visitor.madeChanges())
+      madeChanges = true;
+    return result;
   });
 
   if (result.failed())
     signalPassFailure();
+  if (!madeChanges)
+    markAllAnalysesPreserved();
 }
 
 /// This is the pass constructor.

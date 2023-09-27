@@ -1223,6 +1223,22 @@ def BoolConstantOp : FIRRTLOp<"bool", [Pure, ConstantLike]> {
   let assemblyFormat = "$value attr-dict";
 }
 
+def DoubleConstantOp : FIRRTLOp<"double", [Pure, ConstantLike]> {
+  let summary = "Produce a constant double value";
+  let description = [{
+    Produces a constant value of double type.
+
+    Example:
+    ```mlir
+    %0 = firrtl.double 3.2
+    ```
+  }];
+  let arguments = (ins DoubleAttr:$value);
+  let results = (outs DoubleType:$result);
+  let hasFolder = 1;
+  let assemblyFormat = "$value attr-dict";
+}
+
 //===----------------------------------------------------------------------===//
 // RefOperations: Operations on the RefType.
 //

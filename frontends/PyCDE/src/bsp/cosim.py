@@ -6,6 +6,7 @@ from ..common import Clock, Input
 from ..module import Module, generator
 from ..system import System
 from ..types import types
+from .. import esi
 
 from ..circt import ir
 from ..circt.dialects import esi as raw_esi
@@ -32,6 +33,7 @@ def CosimBSP(user_module):
                                 impl_type=ir.StringAttr.get("cosim"),
                                 inputs=[ports.clk.value, ports.rst.value])
 
+      System.current().add_packaging_step(esi.package)
       System.current().add_packaging_step(top.package)
 
     @staticmethod
@@ -40,37 +42,32 @@ def CosimBSP(user_module):
 
       # When pycde is installed through a proper install, all of the collateral
       # files are under a dir called "collateral".
+      hw_src = sys.hw_output_dir
       collateral_dir = __root_dir__ / "collateral"
       if collateral_dir.exists():
         bin_dir = collateral_dir
         lib_dir = collateral_dir
-        esi_inc_dir = collateral_dir
+        esi_lib_dir = collateral_dir
       else:
         # Build we also want to allow pycde to work in-tree for developers. The
         # necessary files are screwn around the build tree.
         build_dir = __root_dir__.parents[4]
         bin_dir = build_dir / "bin"
         lib_dir = build_dir / "lib"
-        circt_inc_dir = build_dir / "tools" / "circt" / "include" / "circt"
-        esi_inc_dir = circt_inc_dir / "Dialect" / "ESI"
+        circt_lib_dir = build_dir / "tools" / "circt" / "lib"
+        esi_lib_dir = circt_lib_dir / "Dialect" / "ESI"
 
-      hw_src = sys.hw_output_dir
+        shutil.copy(bin_dir / "driver.cpp", hw_src)
+        shutil.copy(bin_dir / "driver.sv", hw_src)
+        shutil.copy(esi_lib_dir / "cosim" / "Cosim_DpiPkg.sv", hw_src)
+        shutil.copy(esi_lib_dir / "cosim" / "Cosim_Endpoint.sv", hw_src)
+
       for f in lib_dir.glob("*.so"):
         shutil.copy(f, hw_src)
       for f in lib_dir.glob("*.dll"):
         shutil.copy(f, hw_src)
 
-      if not collateral_dir.exists():
-        shutil.copy(bin_dir / "driver.cpp", hw_src)
-        shutil.copy(bin_dir / "driver.sv", hw_src)
-        shutil.copy(esi_inc_dir / "ESIPrimitives.sv", hw_src)
-        shutil.copy(esi_inc_dir / "cosim" / "Cosim_DpiPkg.sv", hw_src)
-        shutil.copy(esi_inc_dir / "cosim" / "Cosim_Endpoint.sv", hw_src)
-
       shutil.copy(__root_dir__ / "Makefile.cosim", sys.output_directory)
       shutil.copy(sys.hw_output_dir / "schema.capnp", sys.runtime_output_dir)
-
-      # Copy everything from the 'runtime' directory
-      shutil.copytree(esi_inc_dir, sys.runtime_output_dir, dirs_exist_ok=True)
 
   return top

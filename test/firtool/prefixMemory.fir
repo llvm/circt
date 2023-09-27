@@ -1,7 +1,7 @@
-; RUN: firtool %s --ir-fir | FileCheck %s --check-prefix=SIM-FIR --check-prefix=CHECK-FIR
-; RUN: firtool %s --ir-sv | FileCheck %s --check-prefix=SIM-HW --check-prefix=CHECK-HW
-; RUN: firtool %s --repl-seq-mem --repl-seq-mem-file=test.txt --ir-fir | FileCheck %s --check-prefix=REPL-FIR --check-prefix=CHECK-FIR
-; RUN: firtool %s --repl-seq-mem --repl-seq-mem-file=test.txt --ir-sv | FileCheck %s --check-prefix=REPL-HW --check-prefix=CHECK-HW
+; RUN: firtool --no-dedup %s --ir-fir | FileCheck %s --check-prefix=SIM-FIR --check-prefix=CHECK-FIR
+; RUN: firtool --no-dedup %s --ir-sv | FileCheck %s --check-prefix=SIM-HW --check-prefix=CHECK-HW
+; RUN: firtool --no-dedup %s --repl-seq-mem --repl-seq-mem-file=test.txt --ir-fir | FileCheck %s --check-prefix=REPL-FIR --check-prefix=CHECK-FIR
+; RUN: firtool --no-dedup %s --repl-seq-mem --repl-seq-mem-file=test.txt --ir-sv | FileCheck %s --check-prefix=REPL-HW --check-prefix=CHECK-HW
 
 circuit Foo : %[[
   {
@@ -86,7 +86,7 @@ circuit Foo : %[[
     ; SIM-FIR-SAME:   prefix = "prefix2_"
     ; SIM-HW:       hw.instance "mem_ext" @prefix2_mem
     mem mem :
-      data-type => UInt<1>
+      data-type => UInt<2>
       depth => 8
       read-latency => 1
       write-latency => 1

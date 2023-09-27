@@ -35,8 +35,21 @@ def IbisTunneling : Pass<"ibis-tunneling", "mlir::ModuleOp"> {
     ports of `!ibis.portref<...>` type are created.
     After this pass, `get_port` ops should only exist at the same scope of
     container instantiations.
+
+    The user may provide options for `readSuffix` and `writeSuffix`, respectively,
+    which is to be used to generate the name of the ports that are tunneled
+    through the hierarchy, with respect to how the port was requested to be accessed.
+    Suffixes must be provided in cases where a port is tunneled for both read and
+    write accesses, and the suffixes must be different (in this case, the suffixes
+    will be appended to the target port name, and thus de-alias the resulting ports).
   }];
   let constructor = "circt::ibis::createTunnelingPass()";
+  let options = [
+    Option<"readSuffix", "read-suffix", "std::string", "\".rd\"",
+           "Suffix to be used for the port when a port is tunneled for read access">,
+    Option<"writeSuffix", "write-suffix", "std::string", "\".wr\"",
+            "Suffix to be used for the port when a port is tunneled for write access">
+  ];
 }
 
 def IbisPortrefLowering : Pass<"ibis-lower-portrefs", "mlir::ModuleOp"> {
@@ -67,14 +80,17 @@ def IbisPortrefLowering : Pass<"ibis-lower-portrefs", "mlir::ModuleOp"> {
   let constructor = "circt::ibis::createPortrefLoweringPass()";
 }
 
-def IbisCleanSelfdrivers : Pass<"ibis-clean-selfdrivers", "ibis::ContainerOp"> {
+def IbisCleanSelfdrivers : Pass<"ibis-clean-selfdrivers", "mlir::ModuleOp"> {
   let summary = "Ibis clean selfdrivers pass";
   let description = [{
-    Removes `ibis.port.input`s which are driven by operations within the same
+    - Removes `ibis.port.input`s which are driven by operations within the same
+    container.
+    - Removes reads of instance ports which are also written to within the same
     container.
   }];
 
   let constructor = "circt::ibis::createCleanSelfdriversPass()";
+  let dependentDialects = ["circt::hw::HWDialect"];
 }
 
 def IbisContainersToHW : Pass<"ibis-convert-containers-to-hw", "mlir::ModuleOp"> {
@@ -149,6 +165,18 @@ def IbisInlineSBlocks : Pass<"ibis-inline-sblocks", "ibis::MethodOp"> {
   }];
   let constructor = "circt::ibis::createInlineSBlocksPass()";
   let dependentDialects = ["mlir::cf::ControlFlowDialect"];
+}
+
+def IbisConvertCFToHandshake : Pass<"ibis-convert-cf-to-handshake", "ibis::ClassOp"> {
+  let summary = "Converts an `ibis.method` to `ibis.method.df`";
+  let description = [{
+    Converts an `ibis.method` from using `cf` operations and MLIR blocks to
+    an `ibis.method.df` operation, using the `handshake` dialect to represent
+    control flow through the `handshake` fine grained dataflow operations.
+  }];
+
+  let constructor = "circt::ibis::createConvertCFToHandshakePass()";
+  let dependentDialects = ["circt::handshake::HandshakeDialect", "mlir::cf::ControlFlowDialect"];
 }
 
 #endif // CIRCT_DIALECT_IBIS_PASSES_TD

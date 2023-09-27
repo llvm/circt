@@ -20,11 +20,14 @@ def ESI_Dialect : Dialect {
 
   let hasConstantMaterializer = 1;
   let useDefaultTypePrinterParser = 1;
+  let useDefaultAttributePrinterParser = 1;
 
   // Opt-out of properties for now, must migrate by LLVM 19.  #5273.
   let usePropertiesForAttributes = 0;
 
   let extraClassDeclaration = [{
+    /// Register all ESI attributes.
+    void registerAttributes();
     /// Register all ESI types.
     void registerTypes();
   }];
@@ -49,5 +52,11 @@ class ESI_Physical_Op<string mnemonic, list<Trait> traits = []> :
     ESI_Op<mnemonic, traits>;
 
 class ESI_Type<string name> : TypeDef<ESI_Dialect, name> { }
+
+class ESI_Attr<string name, list<Trait> traits = [],
+                string baseCppClass = "::mlir::Attribute">
+    : AttrDef<ESI_Dialect, name, traits, baseCppClass> {
+  let mnemonic = ?;
+}
 
 #endif // CIRCT_DIALECT_ESI_DIALECT_TD

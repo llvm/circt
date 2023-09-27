@@ -282,6 +282,16 @@ bool AnnotationSet::removeDontTouch(Operation *op) {
   return changed;
 }
 
+bool AnnotationSet::canBeDeleted() const {
+  return llvm::all_of(annotations, [](Attribute attr) {
+    return Annotation(attr).canBeDeleted();
+  });
+}
+
+bool AnnotationSet::canBeDeleted(Operation *op) {
+  return AnnotationSet(op).canBeDeleted();
+}
+
 /// Add more annotations to this AttributeSet.
 void AnnotationSet::addAnnotations(ArrayRef<Annotation> newAnnotations) {
   if (newAnnotations.empty())
@@ -518,6 +528,18 @@ void Annotation::removeMember(StringRef name) {
     attributes.push_back(field);
   // Commit the dictionary.
   setDict(DictionaryAttr::getWithSorted(dict.getContext(), attributes));
+}
+
+bool Annotation::canBeDeleted() {
+
+  // The only annotations which can be deleted are OM-affiliated.
+  if (!isClass(omirTrackerAnnoClass))
+    return false;
+
+  auto tpe = getMember<StringAttr>("type");
+  return tpe &&
+         (tpe == "OMReferenceTarget" || tpe == "OMMemberReferenceTarget" ||
+          tpe == "OMMemberInstanceTarget");
 }
 
 void Annotation::dump() { attr.dump(); }

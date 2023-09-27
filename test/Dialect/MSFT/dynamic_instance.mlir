@@ -1,6 +1,6 @@
 // RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics
 // RUN: circt-opt %s --msft-lower-instances --verify-each | FileCheck %s
-// RUN: circt-opt %s --msft-lower-instances --lower-msft-to-hw --lower-seq-to-sv --msft-export-tcl=tops=shallow,deeper,reg --export-verilog -o %t.mlir | FileCheck %s --check-prefix=TCL
+// RUN: circt-opt %s --msft-lower-instances --lower-seq-to-sv --msft-export-tcl=tops=shallow,deeper,reg --export-verilog -o %t.mlir | FileCheck %s --check-prefix=TCL
 
 msft.instance.hierarchy @deeper {
   msft.instance.dynamic @deeper::@branch {
@@ -12,7 +12,7 @@ msft.instance.hierarchy @deeper {
     }
   }
 }
-// CHECK: hw.globalRef @instref [#hw.innerNameRef<@deeper::@branch>, #hw.innerNameRef<@shallow::@leaf>, #hw.innerNameRef<@leaf::@module>]
+// CHECK: hw.hierpath @instref [@deeper::@branch, @shallow::@leaf, @leaf::@module]
 // CHECK: msft.pd.location @instref M20K x: 15 y: 9 n: 3 path : "|memBank2"
 
 msft.instance.hierarchy @shallow {
@@ -22,7 +22,7 @@ msft.instance.hierarchy @shallow {
     }
   }
 }
-// CHECK: hw.globalRef @instref_1 [#hw.innerNameRef<@shallow::@leaf>, #hw.innerNameRef<@leaf::@module>]
+// CHECK: hw.hierpath @instref_1 [@shallow::@leaf, @leaf::@module]
 // CHECK: msft.pd.location @instref_1 M20K x: 8 y: 19 n: 1 path : "|memBank2"
 
 msft.instance.hierarchy @reg "foo" {
@@ -35,26 +35,25 @@ msft.instance.hierarchy @reg "bar" {
     msft.pd.reg_location i4 [<3,4,5>, *, *, *]
   }
 }
-// CHECK: hw.globalRef @instref_2 [#hw.innerNameRef<@reg::@reg>]
+// CHECK: hw.hierpath @instref_2 [@reg::@reg]
 // CHECK-DAG: msft.pd.reg_location ref @instref_2 i4 [*, <1, 2, 3>, <1, 2, 4>, <1, 2, 5>]
-// CHECK: hw.globalRef @instref_3 [#hw.innerNameRef<@reg::@reg>]
+// CHECK: hw.hierpath @instref_3 [@reg::@reg]
 // CHECK-DAG: msft.pd.reg_location ref @instref_3 i4 [<3, 4, 5>, *, *, *]
 
 
 
 hw.module.extern @Foo()
 
-// CHECK-LABEL: msft.module @leaf
+// CHECK-LABEL: hw.module @leaf
 // LOWER-LABEL: hw.module @leaf
-msft.module @leaf {} () -> () {
-  // CHECK: msft.instance @module @Foo()
+hw.module @leaf () -> () {
+  // CHECK: hw.instance "module" sym @module @Foo() -> ()
   // LOWER: hw.instance "module" sym @module @Foo() -> ()
   // LOWER-NOT: #msft.switch.inst
-  msft.instance @module @Foo() : () -> ()
+  hw.instance "module" sym @module @Foo() -> ()
   // LOWER{LITERAL}: sv.verbatim "proc {{0}}_config
   // LOWER{LITERAL}: sv.verbatim "proc {{0}}_config
   // LOWER{LITERAL}: sv.verbatim "proc {{0}}_config
-  msft.output
 }
 
 // TCL: Foo module_0
@@ -62,25 +61,21 @@ msft.module @leaf {} () -> () {
 // TCL-NOT: proc leaf_config
 
 // TCL-LABEL: proc shallow_config
-msft.module @shallow {} () -> () {
-  msft.instance @leaf @leaf() : () -> ()
+hw.module @shallow () -> () {
+  hw.instance "leaf" sym @leaf @leaf() -> ()
   // TCL: set_location_assignment M20K_X8_Y19_N1 -to $parent|leaf|module_0|memBank2
-  msft.output
 }
 
 // TCL-LABEL: proc deeper_config
-msft.module @deeper {} () -> () {
-  msft.instance @branch @shallow()  : () -> ()
-  msft.instance @leaf @leaf() : () -> ()
+hw.module @deeper () -> () {
+  hw.instance "branch" sym @branch @shallow() -> ()
+  hw.instance "leaf" sym @leaf @leaf() -> ()
   // TCL: set_location_assignment M20K_X15_Y9_N3 -to $parent|branch|leaf|module_0|memBank2
   // TCL: set_instance_assignment -name RESERVE_PLACE_REGION OFF -to $parent|branch|leaf|module_0|memBank2
-
-  msft.output
 }
 
-msft.module @reg {} (%input : i4, %clk : !seq.clock) -> () {
+hw.module @reg (%input : i4, %clk : !seq.clock) -> () {
   %reg = seq.compreg sym @reg %input, %clk  : i4
-  msft.output
 }
 // TCL-LABEL: proc reg_0_foo_config
 // TCL: set_location_assignment FF_X1_Y2_N3 -to $parent|reg_0[1]

@@ -1,6 +1,6 @@
 ; Check this design makes it through firtool.
-; RUN: firtool %s
-; RUN: firtool %s --preserve-aggregate=all --scalarize-top-module=false
+; RUN: firtool %s --no-dedup
+; RUN: firtool %s --no-dedup --preserve-aggregate=all --scalarize-top-module=false
 
 ; Check parsing into open aggregates.
 ; RUN: circt-translate -import-firrtl -verify-diagnostics -split-input-file %s | circt-opt | FileCheck %s
@@ -76,4 +76,3 @@ circuit Bundle :
    out6 <= read(p.nohw.x[1].p)
    out7.a <= p.mixed.a
    out7.b <= p.mixed.b
-

@@ -21,16 +21,6 @@ def DeclPhysicalRegionOp : MSFTOp<"physical_region",
   }];
 }
 
-def EntityExternOp : MSFTOp<"entity.extern",
-    [Symbol, HasParent<"mlir::ModuleOp">]> {
-  let arguments = (ins
-    SymbolNameAttr:$sym_name,
-    AnyAttr:$metadata);
-  let assemblyFormat = [{
-    $sym_name $metadata attr-dict
-  }];
-}
-
 def PDPhysLocationOp : MSFTOp<"pd.location",
       [DeclareOpInterfaceMethods<DynInstDataOpInterface>]> {
   let summary = "Specify a location for an instance";
@@ -39,7 +29,7 @@ def PDPhysLocationOp : MSFTOp<"pd.location",
     Supports specifying the location of a subpath for extern modules and device
     primitives. Intended to live as a child of `instance.dynamic` initially
     without the `ref` field. The dynamic instance lowering will fill in `ref`
-    with the symol of the `hw.globalref` op corresponding to the lowered dynamic
+    with the symol of the `hw.hierpath` op corresponding to the lowered dynamic
     instance.
   }];
   let arguments = (ins PhysLocation:$loc,
@@ -110,14 +100,14 @@ def DynamicInstanceOp : MSFTOp<"instance.dynamic",
     Represents an instance (as in instance in the instance hierarchy) referred
     to henceforth as a dynamic instance. Specified with a path through the
     instance hierarchy (which in the future will be replaced with an AppID).
-    Lowers to a `hw.globalref` but unlike a global ref, does not require all of
-    the ops participating in the globalref to contain a back pointer attribute.
+    Lowers to a `hw.hierpath` but unlike a global ref, does not require all of
+    the ops participating in the hierpath to contain a back pointer attribute.
     Allows users to efficiently add placements to a large number of dynamic
     instances which happen to map to a small number of static instances by
-    bulk-adding the necessary `hw.globalref` attributes.
+    bulk-adding the necessary `hw.hierpath` attributes.
 
     During the lowering, moves the operations in the body to the top level and
-    gives them the symbol of the globalref which was created to replace the
+    gives them the symbol of the hierpath which was created to replace the
     dynamic instance.
   }];
   let arguments = (ins InnerRefAttr:$instanceRef);
@@ -128,7 +118,7 @@ def DynamicInstanceOp : MSFTOp<"instance.dynamic",
   }];
 
   let extraClassDeclaration = [{
-    ::mlir::ArrayAttr globalRefPath();
+    ::mlir::ArrayAttr getPath();
   }];
 }
 

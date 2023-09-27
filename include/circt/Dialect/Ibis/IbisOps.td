@@ -22,6 +22,7 @@ include  "circt/Dialect/Handshake/HandshakeInterfaces.td"
 include "circt/Dialect/HW/HWOpInterfaces.td"
 include "circt/Dialect/Ibis/IbisInterfaces.td"
 include "circt/Dialect/Ibis/IbisTypes.td"
+include "circt/Dialect/Handshake/HandshakeInterfaces.td"
 
 include "circt/Support/InstanceGraphInterface.td"
 
@@ -170,6 +171,9 @@ class MethodOpBase<string mnemonic, list<Trait> traits = []> :
     ::mlir::Region *getCallableRegion() {
       return &getBody();
     }
+
+    /// Returns the entry block of the function.
+    Block* getBodyBlock() { return &getBody().front(); }
   }];
 }
 
@@ -402,8 +406,9 @@ def CallOp : IbisOp<"call", [CallOpInterface]> {
 
 def PathDirection : I32EnumAttr<"PathDirection", "path direction", [
   I32EnumAttrCase<"Parent", 0, "parent">,
-  I32EnumAttrCase<"Child", 1, "child">
-]>;
+  I32EnumAttrCase<"Child", 1, "child">]> {
+  let cppNamespace = "::circt::ibis";
+}
 
 def PathStepAttr : AttrDef<IbisDialect, "PathStep", [TypedAttrInterface]> {
   let description = "Used to describe a single step in a path";
@@ -601,6 +606,12 @@ def GetPortOp : IbisOp<"get_port", [
   ];
 
   let hasCanonicalizeMethod = 1;
+  let extraClassDeclaration = [{
+    // Returns the direction requested by this get_port op.
+    ibis::Direction getDirection() {
+      return getPort().getType().cast<PortRefType>().getDirection();
+    }
+  }];
 }
 
 class PortLikeOp<string mnemonic, list<Trait> traits = []> :

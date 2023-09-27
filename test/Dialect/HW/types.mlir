@@ -17,8 +17,8 @@ module {
     return
   }
 
-  // CHECK-LABEL: func @structType(%arg0: !hw.struct<>, %arg1: !hw.struct<foo: i32, bar: i4, baz: !hw.struct<foo: i7>>) {
-  func.func @structType(%SE: !hw.struct<>, %SF: !hw.struct<foo: i32, bar: i4, baz: !hw.struct<foo: i7>>) {
+  // CHECK-LABEL: func @structType(%arg0: !hw.struct<>, %arg1: !hw.struct<foo: i32, bar: i4, baz: !hw.struct<foo: i7>, "123": i42>) {
+  func.func @structType(%SE: !hw.struct<>, %SF: !hw.struct<foo: i32, bar: i4, baz: !hw.struct<foo: i7>, "123": i42>) {
     return
   }
 

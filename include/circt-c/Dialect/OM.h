@@ -37,7 +37,7 @@ MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(OM, om);
 MLIR_CAPI_EXPORTED bool omTypeIsAClassType(MlirType type);
 
 /// Get the TypeID for a ClassType.
-MLIR_CAPI_EXPORTED MlirTypeID omClassTypeGetTypeID();
+MLIR_CAPI_EXPORTED MlirTypeID omClassTypeGetTypeID(void);
 
 /// Get the name for a ClassType.
 MLIR_CAPI_EXPORTED MlirIdentifier omClassTypeGetName(MlirType type);

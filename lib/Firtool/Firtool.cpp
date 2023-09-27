@@ -79,7 +79,17 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createDropConstPass());
 
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createHoistPassthroughPass(
+      /*hoistHWDrivers=*/!opt.disableOptimization &&
+      !opt.disableHoistingHWPassthrough));
+
   if (opt.dedup)
+    emitWarning(UnknownLoc::get(pm.getContext()),
+                "option -dedup is deprecated since firtool 1.57.0, has no "
+                "effect (deduplication is always enabled), and will be removed "
+                "in firtool 1.58.0");
+
+  if (!opt.noDedup)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createDedupPass());
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createWireDFTPass());
@@ -102,6 +112,9 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
   modulePM.addPass(firrtl::createExpandWhensPass());
   modulePM.addPass(firrtl::createSFCCompatPass());
+  modulePM.addPass(firrtl::createGroupSinkPass());
+
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerGroupsPass());
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInlinerPass());
 
@@ -131,8 +144,15 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createPrefixModulesPass());
 
-  if (!opt.disableOptimization)
+  if (!opt.disableOptimization) {
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createIMConstPropPass());
+
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createHoistPassthroughPass(
+        /*hoistHWDrivers=*/!opt.disableOptimization &&
+        !opt.disableHoistingHWPassthrough));
+    // Cleanup after hoisting passthroughs, for separation-of-concerns.
+    pm.addPass(firrtl::createIMDeadCodeElimPass());
+  }
 
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createAddSeqMemPortsPass());
 

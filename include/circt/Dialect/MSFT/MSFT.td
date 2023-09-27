@@ -53,7 +53,6 @@ class MSFTOp<string mnemonic, list<Trait> traits = []> :
 
 include "circt/Dialect/MSFT/MSFTAttributes.td"
 include "circt/Dialect/MSFT/MSFTOpInterfaces.td"
-include "circt/Dialect/MSFT/MSFTOps.td"
 include "circt/Dialect/MSFT/MSFTPDOps.td"
 include "circt/Dialect/MSFT/MSFTConstructs.td"
 include "circt/Dialect/MSFT/MSFTPasses.td"

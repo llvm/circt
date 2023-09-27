@@ -1059,6 +1059,12 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     consumeToken(FIRToken::kw_Bool);
     result = BoolType::get(getContext());
     break;
+  case FIRToken::kw_Double:
+    if (requireFeature({3, 2, 0}, "Doubles"))
+      return failure();
+    consumeToken(FIRToken::kw_Double);
+    result = DoubleType::get(getContext());
+    break;
   case FIRToken::kw_Path:
     if (requireFeature({3, 1, 0}, "Paths"))
       return failure();
@@ -1864,6 +1870,26 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
     if (parseToken(FIRToken::r_paren, "expected ')' in Bool expression"))
       return failure();
     result = builder.create<BoolConstantOp>(value);
+    break;
+  }
+  case FIRToken::kw_Double: {
+    if (requireFeature({3, 2, 0}, "Doubles"))
+      return failure();
+    locationProcessor.setLoc(getToken().getLoc());
+    consumeToken(FIRToken::kw_Double);
+    if (parseToken(FIRToken::l_paren, "expected '(' in Double expression"))
+      return failure();
+    auto spelling = getTokenSpelling();
+    if (parseToken(FIRToken::floatingpoint,
+                   "expected floating point in Double expression") ||
+        parseToken(FIRToken::r_paren, "expected ')' in Double expression"))
+      return failure();
+    // NaN, INF, exponent, hex, integer?
+    // This uses `strtod` internally, FWIW.  See `man 3 strtod`.
+    double d;
+    if (!llvm::to_float(spelling, d))
+      return emitError("invalid double");
+    result = builder.create<DoubleConstantOp>(builder.getF64FloatAttr(d));
     break;
   }
   case FIRToken::kw_List: {

@@ -242,9 +242,10 @@ static ParseResult parseFields(AsmParser &p,
                                SmallVectorImpl<FieldInfo> &parameters) {
   return p.parseCommaSeparatedList(
       mlir::AsmParser::Delimiter::LessGreater, [&]() -> ParseResult {
-        StringRef name;
+        std::string name;
         Type type;
-        if (p.parseKeyword(&name) || p.parseColon() || p.parseType(type))
+        if (p.parseKeywordOrString(&name) || p.parseColon() ||
+            p.parseType(type))
           return failure();
         parameters.push_back(
             FieldInfo{StringAttr::get(p.getContext(), name), type});
@@ -256,7 +257,8 @@ static ParseResult parseFields(AsmParser &p,
 static void printFields(AsmPrinter &p, ArrayRef<FieldInfo> fields) {
   p << '<';
   llvm::interleaveComma(fields, p, [&](const FieldInfo &field) {
-    p << field.name.getValue() << ": " << field.type;
+    p.printKeywordOrString(field.name.getValue());
+    p << ": " << field.type;
   });
   p << ">";
 }
@@ -830,7 +832,10 @@ SmallVector<Type> ModuleType::getPortTypes() {
 }
 
 Type ModuleType::getInputType(size_t idx) {
-  return getPorts()[getPortIdForInputId(idx)].type;
+  const auto &portInfo = getPorts()[getPortIdForInputId(idx)];
+  if (portInfo.dir != ModulePort::InOut)
+    return portInfo.type;
+  return InOutType::get(portInfo.type);
 }
 
 Type ModuleType::getOutputType(size_t idx) {

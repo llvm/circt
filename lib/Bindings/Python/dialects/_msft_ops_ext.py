@@ -2,7 +2,7 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from typing import Dict, Type
+from typing import Dict, List, Type
 
 from . import hw, msft as _msft
 from . import _hw_ops_ext as _hw_ext
@@ -152,7 +152,7 @@ class MSFTModuleLike:
     return len(self.regions[0].blocks) == 0
 
   @property
-  def parameters(self) -> list[hw.ParamDeclAttr]:
+  def parameters(self) -> List[hw.ParamDeclAttr]:
     return [
         hw.ParamDeclAttr(a) for a in ArrayAttr(self.attributes["parameters"])
     ]

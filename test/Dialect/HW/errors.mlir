@@ -299,19 +299,6 @@ hw.module @Use<xx: none, xx: none>() {}
 
 // -----
 
-module  {
-// expected-error @+1 {{'inst_1' in module:'A' does not contain a reference to 'glbl_D_M1'}}
-  hw.globalRef @glbl_D_M1 [#hw.innerNameRef<@A::@inst_1>]
-  hw.module @C() -> () {
-  }
-  hw.module @A() -> () {
-    hw.instance "h2" sym @inst_1 @C() -> () {circt.globalRef = []}
-    hw.instance "h2" sym @inst_0 @C() -> () {circt.globalRef = [#hw.globalNameRef<@glbl_D_M1>]}
-  }
-}
-
-// -----
-
 module {
   hw.module @A(%a : !hw.int<41>) -> (out: !hw.int<42>) {
 // expected-error @+1 {{'hw.instance' op operand type #0 must be 'i42', but got 'i41'}}

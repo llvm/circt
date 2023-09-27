@@ -57,7 +57,7 @@ firrtl.module @Casts(in %ui1 : !firrtl.uint<1>, in %si1 : !firrtl.sint<1>,
   %11 = firrtl.asSInt %ui1 : (!firrtl.uint<1>) -> !firrtl.sint<1>
   %12 = firrtl.asUInt %11 : (!firrtl.sint<1>) -> !firrtl.uint<1>
   firrtl.strictconnect %out2_ui1, %12 : !firrtl.uint<1>
-  // CHECK: firrtl.strictconnect %out2_si1, %si1 
+  // CHECK: firrtl.strictconnect %out2_si1, %si1
   %13 = firrtl.cvt %si1 : (!firrtl.sint<1>) -> !firrtl.sint<1>
   firrtl.strictconnect %out2_si1, %13 : !firrtl.sint<1>
 }
@@ -681,7 +681,7 @@ firrtl.module @Tail(in %in4u: !firrtl.uint<4>,
 firrtl.module @Andr(in %in0 : !firrtl.uint<0>, in %in1 : !firrtl.sint<2>,
                     out %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>,
                     out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>,
-                    out %e: !firrtl.uint<1>, out %f: !firrtl.uint<1>, 
+                    out %e: !firrtl.uint<1>, out %f: !firrtl.uint<1>,
                     out %g: !firrtl.uint<1>, in %h : !firrtl.uint<64>,
                     out %i: !firrtl.uint<1>) {
   %invalid_ui2 = firrtl.invalidvalue : !firrtl.uint<2>
@@ -736,7 +736,7 @@ firrtl.module @Andr(in %in0 : !firrtl.uint<0>, in %in1 : !firrtl.sint<2>,
 firrtl.module @Orr(in %in0 : !firrtl.uint<0>,
                    out %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>,
                    out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>,
-                   out %e: !firrtl.uint<1>, out %f: !firrtl.uint<1>, 
+                   out %e: !firrtl.uint<1>, out %f: !firrtl.uint<1>,
                    out %g: !firrtl.uint<1>, in %h : !firrtl.uint<64>) {
   %invalid_ui2 = firrtl.invalidvalue : !firrtl.uint<2>
   %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
@@ -767,7 +767,7 @@ firrtl.module @Orr(in %in0 : !firrtl.uint<0>,
   %6 = firrtl.asUInt %5 : (!firrtl.sint<64>) -> !firrtl.uint<64>
   %7 = firrtl.cat %6, %c0_ui2 : (!firrtl.uint<64>, !firrtl.uint<2>) -> !firrtl.uint<66>
   %8 = firrtl.cat %c0_ui2, %7 : (!firrtl.uint<2>, !firrtl.uint<66>) -> !firrtl.uint<68>
-  %9 = firrtl.cvt %8 : (!firrtl.uint<68>) -> !firrtl.sint<69>  
+  %9 = firrtl.cvt %8 : (!firrtl.uint<68>) -> !firrtl.sint<69>
   %10 = firrtl.orr %9 : (!firrtl.sint<69>) -> !firrtl.uint<1>
   firrtl.strictconnect %g, %10 : !firrtl.uint<1>
 }
@@ -776,7 +776,7 @@ firrtl.module @Orr(in %in0 : !firrtl.uint<0>,
 firrtl.module @Xorr(in %in0 : !firrtl.uint<0>,
                     out %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>,
                     out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>,
-                    out %e: !firrtl.uint<1>, out %f: !firrtl.uint<1>, 
+                    out %e: !firrtl.uint<1>, out %f: !firrtl.uint<1>,
                     out %g: !firrtl.uint<1>, in %h : !firrtl.uint<64>) {
   %invalid_ui2 = firrtl.invalidvalue : !firrtl.uint<2>
   %c3_ui2 = firrtl.constant 3 : !firrtl.uint<2>
@@ -808,7 +808,7 @@ firrtl.module @Xorr(in %in0 : !firrtl.uint<0>,
   %6 = firrtl.asUInt %5 : (!firrtl.sint<64>) -> !firrtl.uint<64>
   %7 = firrtl.cat %6, %c0_ui2 : (!firrtl.uint<64>, !firrtl.uint<2>) -> !firrtl.uint<66>
   %8 = firrtl.cat %c0_ui2, %7 : (!firrtl.uint<2>, !firrtl.uint<66>) -> !firrtl.uint<68>
-  %9 = firrtl.cvt %8 : (!firrtl.uint<68>) -> !firrtl.sint<69>  
+  %9 = firrtl.cvt %8 : (!firrtl.uint<68>) -> !firrtl.sint<69>
   %10 = firrtl.xorr %9 : (!firrtl.sint<69>) -> !firrtl.uint<1>
   firrtl.strictconnect %g, %10 : !firrtl.uint<1>
 }
@@ -3195,6 +3195,73 @@ firrtl.module @HasBeenReset(in %clock: !firrtl.clock, in %reset1: !firrtl.uint<1
   %constClockA1 = firrtl.node sym @constClockA1 %c3 : !firrtl.uint<1>
   %constClockR0 = firrtl.node sym @constClockR0 %c4 : !firrtl.uint<1>
   %constClockR1 = firrtl.node sym @constClockR1 %c5 : !firrtl.uint<1>
+}
+
+// OMIR annotations should not block removal.
+//   - See: https://github.com/llvm/circt/issues/6199
+//
+// CHECK-LABEL: firrtl.module @OMIRRemoval
+firrtl.module @OMIRRemoval(in %source : !firrtl.uint<1>) {
+  // CHECK-NOT: %tmp_0
+  %tmp_0 = firrtl.wire {
+    annotations = [
+      {
+         class = "freechips.rocketchip.objectmodel.OMIRTracker",
+         id = 0 : i64,
+         type = "OMReferenceTarget"
+      }
+    ]} : !firrtl.uint<1>
+  %a = firrtl.wire : !firrtl.uint<1>
+  firrtl.strictconnect %tmp_0, %source : !firrtl.uint<1>
+  // CHECK: firrtl.strictconnect %a, %source
+  firrtl.strictconnect %a, %tmp_0 : !firrtl.uint<1>
+
+  // CHECK-NOT: %tmp_1
+  %tmp_1 = firrtl.wire {
+    annotations = [
+      {
+         class = "freechips.rocketchip.objectmodel.OMIRTracker",
+         id = 1 : i64,
+         type = "OMMemberReferenceTarget"
+      }
+    ]} : !firrtl.uint<1>
+  %b = firrtl.wire : !firrtl.uint<1>
+  firrtl.strictconnect %tmp_1, %source : !firrtl.uint<1>
+  // CHECK: firrtl.strictconnect %b, %source
+  firrtl.strictconnect %b, %tmp_1 : !firrtl.uint<1>
+
+  // CHECK-NOT: %tmp_2
+  %tmp_2 = firrtl.wire {
+    annotations = [
+      {
+         class = "freechips.rocketchip.objectmodel.OMIRTracker",
+         id = 2 : i64,
+         type = "OMMemberInstanceTarget"
+      }
+    ]} : !firrtl.uint<1>
+  %c = firrtl.wire : !firrtl.uint<1>
+  firrtl.strictconnect %tmp_2, %source : !firrtl.uint<1>
+  // CHECK: firrtl.strictconnect %c, %source
+  firrtl.strictconnect %c, %tmp_2 : !firrtl.uint<1>
+
+  // Adding one additional annotation will block removal.
+  //
+  // CHECK: %tmp_3
+  %tmp_3 = firrtl.wire {
+    annotations = [
+      {
+         class = "freechips.rocketchip.objectmodel.OMIRTracker",
+         id = 0 : i64,
+         type = "OMReferenceTarget"
+      },
+      {
+         class = "circt.test"
+      }
+    ]} : !firrtl.uint<1>
+  %d = firrtl.wire : !firrtl.uint<1>
+  firrtl.strictconnect %tmp_3, %source : !firrtl.uint<1>
+  // CHECK: firrtl.strictconnect %d, %tmp_3
+  firrtl.strictconnect %d, %tmp_3 : !firrtl.uint<1>
 }
 
 }

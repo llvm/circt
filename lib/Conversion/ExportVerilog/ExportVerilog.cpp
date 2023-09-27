@@ -1226,6 +1226,16 @@ void EmitterBase::emitTextWithSubstitutions(
         next--;
         continue;
       }
+      size_t operandNoLength = next - start;
+
+      // Format string options follow a ':'.
+      StringRef fmtOptsStr;
+      if (string[next] == ':') {
+        size_t startFmtOpts = next + 1;
+        while (next < string.size() && string[next] != '}')
+          ++next;
+        fmtOptsStr = string.substr(startFmtOpts, next - startFmtOpts);
+      }
 
       // We must have a }} right after the digits.
       if (!string.substr(next).startswith("}}"))
@@ -1234,7 +1244,7 @@ void EmitterBase::emitTextWithSubstitutions(
       // We must be able to decode the integer into an unsigned.
       unsigned operandNo = 0;
       if (string.drop_front(start)
-              .take_front(next - start)
+              .take_front(operandNoLength)
               .getAsInteger(10, operandNo)) {
         emitError(op, "operand substitution too large");
         continue;
@@ -1260,8 +1270,9 @@ void EmitterBase::emitTextWithSubstitutions(
             if (auto globalRef = dyn_cast<HierPathOp>(symOp)) {
               auto namepath = globalRef.getNamepathAttr().getValue();
               for (auto [index, sym] : llvm::enumerate(namepath)) {
+                // Emit the seperator string.
                 if (index > 0)
-                  ps << ".";
+                  ps << (fmtOptsStr.empty() ? "." : fmtOptsStr);
 
                 auto innerRef = cast<InnerRefAttr>(sym);
                 auto ref = state.symbolCache.getInnerDefinition(
@@ -6025,9 +6036,6 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
         .Case<HWGeneratorSchemaOp>([&](HWGeneratorSchemaOp schemaOp) {
           symbolCache.addDefinition(schemaOp.getNameAttr(), schemaOp);
         })
-        .Case<GlobalRefOp>([&](GlobalRefOp globalRefOp) {
-          symbolCache.addDefinition(globalRefOp.getSymNameAttr(), globalRefOp);
-        })
         .Case<HierPathOp>([&](HierPathOp hierPathOp) {
           symbolCache.addDefinition(hierPathOp.getSymNameAttr(), hierPathOp);
         })
@@ -6118,7 +6126,7 @@ static void emitOperation(VerilogEmitterState &state, Operation *op) {
           [&](auto op) { ModuleEmitter(state).emitHWExternModule(op); })
       .Case<HWModuleGeneratedOp>(
           [&](auto op) { ModuleEmitter(state).emitHWGeneratedModule(op); })
-      .Case<HWGeneratorSchemaOp, hw::GlobalRefOp>([&](auto op) { /* Empty */ })
+      .Case<HWGeneratorSchemaOp>([&](auto op) { /* Empty */ })
       .Case<BindOp>([&](auto op) { ModuleEmitter(state).emitBind(op); })
       .Case<BindInterfaceOp>(
           [&](auto op) { ModuleEmitter(state).emitBindInterface(op); })

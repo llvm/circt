@@ -501,3 +501,37 @@ class PureModule(Module):
     else:
       type_attr = ir.TypeAttr.get(type._type)
     esi.ESIPureModuleParamOp(name, type_attr)
+
+
+def package(sys: System):
+  """Package all ESI collateral."""
+
+  import os
+  import shutil
+  __root_dir__ = Path(__file__).parent
+
+  # When pycde is installed through a proper install, all of the collateral
+  # files are under a dir called "collateral".
+  collateral_dir = __root_dir__ / "collateral"
+  if collateral_dir.exists():
+    esi_lib_dir = collateral_dir
+  else:
+    # Build we also want to allow pycde to work in-tree for developers. The
+    # necessary files are screwn around the build tree.
+    build_dir = __root_dir__.parents[4]
+    circt_lib_dir = build_dir / "tools" / "circt" / "lib"
+    esi_lib_dir = circt_lib_dir / "Dialect" / "ESI"
+    shutil.copy(esi_lib_dir / "ESIPrimitives.sv", sys.hw_output_dir)
+
+  # Copy everything from the 'runtime' directory
+  for root, dir, files in os.walk(esi_lib_dir / "runtime"):
+    if ".dir" in dir:
+      continue
+    for file in files:
+      if ".cmake" in file or file.endswith(".o"):
+        continue
+      to_dir = sys.runtime_output_dir
+      if len(dir) > 0:
+        to_dir = to_dir / os.path.join(*dir)
+      to_dir.mkdir(parents=True, exist_ok=True)
+      shutil.copyfile(os.path.join(root, file), to_dir / file)

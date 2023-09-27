@@ -3,6 +3,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt-c/Dialect/ESI.h"
+#include "circt/Dialect/ESI/AppID.h"
 #include "circt/Dialect/ESI/ESIServices.h"
 #include "circt/Dialect/ESI/ESITypes.h"
 #include "mlir/CAPI/IR.h"
@@ -14,8 +15,8 @@
 #include "mlir/Parser/Parser.h"
 #include "mlir/Support/FileUtilities.h"
 
+using namespace circt;
 using namespace circt::esi;
-using namespace mlir;
 
 MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(ESI, esi, circt::esi::ESIDialect)
 
@@ -70,7 +71,7 @@ MlirType circtESIListTypeGetElementType(MlirType list) {
 void circtESIAppendMlirFile(MlirModule cMod, MlirStringRef filename) {
   ModuleOp modOp = unwrap(cMod);
   auto loadedMod =
-      parseSourceFile<ModuleOp>(unwrap(filename), modOp.getContext());
+      mlir::parseSourceFile<ModuleOp>(unwrap(filename), modOp.getContext());
   Block *loadedBlock = loadedMod->getBody();
   assert(!modOp->getRegions().empty());
   if (modOp.getBodyRegion().empty()) {
@@ -92,4 +93,84 @@ void circtESIRegisterGlobalServiceGenerator(
                                              ServiceDeclOpInterface decl) {
         return unwrap(genFunc(wrap(req), wrap(decl.getOperation()), userData));
       });
+}
+
+//===----------------------------------------------------------------------===//
+// AppID
+//===----------------------------------------------------------------------===//
+
+bool circtESIAttributeIsAnAppIDAttr(MlirAttribute attr) {
+  return unwrap(attr).isa<AppIDAttr>();
+}
+
+MlirAttribute circtESIAppIDAttrGet(MlirContext ctxt, MlirStringRef name,
+                                   uint64_t index) {
+  return wrap(AppIDAttr::get(
+      unwrap(ctxt), StringAttr::get(unwrap(ctxt), unwrap(name)), index));
+}
+MlirStringRef circtESIAppIDAttrGetName(MlirAttribute attr) {
+  return wrap(unwrap(attr).cast<AppIDAttr>().getName().getValue());
+}
+uint64_t circtESIAppIDAttrGetIndex(MlirAttribute attr) {
+  return unwrap(attr).cast<AppIDAttr>().getIndex();
+}
+
+bool circtESIAttributeIsAnAppIDPathAttr(MlirAttribute attr) {
+  return isa<AppIDPathAttr>(unwrap(attr));
+}
+
+MlirAttribute circtESIAppIDAttrPathGet(MlirContext ctxt, MlirAttribute root,
+                                       intptr_t numElements,
+                                       MlirAttribute const *cElements) {
+  SmallVector<AppIDAttr, 8> elements;
+  for (intptr_t i = 0; i < numElements; ++i)
+    elements.push_back(cast<AppIDAttr>(unwrap(cElements[i])));
+  return wrap(AppIDPathAttr::get(
+      unwrap(ctxt), cast<FlatSymbolRefAttr>(unwrap(root)), elements));
+}
+MlirAttribute circtESIAppIDAttrPathGetRoot(MlirAttribute attr) {
+  return wrap(cast<AppIDPathAttr>(unwrap(attr)).getRoot());
+}
+uint64_t circtESIAppIDAttrPathGetNumComponents(MlirAttribute attr) {
+  return cast<AppIDPathAttr>(unwrap(attr)).getPath().size();
+}
+MlirAttribute circtESIAppIDAttrPathGetComponent(MlirAttribute attr,
+                                                uint64_t index) {
+  return wrap(cast<AppIDPathAttr>(unwrap(attr)).getPath()[index]);
+}
+
+DEFINE_C_API_PTR_METHODS(CirctESIAppIDIndex, circt::esi::AppIDIndex)
+
+/// Create an index of appids through which to do appid lookups efficiently.
+MLIR_CAPI_EXPORTED CirctESIAppIDIndex
+circtESIAppIDIndexGet(MlirOperation root) {
+  auto *idx = new AppIDIndex(unwrap(root));
+  if (idx->isValid())
+    return wrap(idx);
+  return CirctESIAppIDIndex{nullptr};
+}
+
+/// Free an AppIDIndex.
+MLIR_CAPI_EXPORTED void circtESIAppIDIndexFree(CirctESIAppIDIndex index) {
+  delete unwrap(index);
+}
+
+MLIR_CAPI_EXPORTED MlirAttribute
+circtESIAppIDIndexGetChildAppIDsOf(CirctESIAppIDIndex idx, MlirOperation op) {
+  auto mod = cast<hw::HWModuleLike>(unwrap(op));
+  return wrap(unwrap(idx)->getChildAppIDsOf(mod));
+}
+
+MLIR_CAPI_EXPORTED
+MlirAttribute circtESIAppIDIndexGetAppIDPath(CirctESIAppIDIndex idx,
+                                             MlirOperation fromMod,
+                                             MlirAttribute appid,
+                                             MlirLocation loc) {
+  auto mod = cast<hw::HWModuleLike>(unwrap(fromMod));
+  auto path = cast<AppIDAttr>(unwrap(appid));
+  FailureOr<ArrayAttr> instPath =
+      unwrap(idx)->getAppIDPathAttr(mod, path, unwrap(loc));
+  if (failed(instPath))
+    return MlirAttribute{nullptr};
+  return wrap(*instPath);
 }
