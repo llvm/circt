@@ -71,3 +71,47 @@ OpFoldResult UnwrapWindow::fold(FoldAdaptor) {
     return wrap.getFrame();
   return {};
 }
+
+LogicalResult PackBundleOp::canonicalize(PackBundleOp pack,
+                                         PatternRewriter &rewriter) {
+  Value bundle = pack.getBundle();
+  if (!bundle.hasOneUse())
+    return rewriter.notifyMatchFailure(pack, "bundle has more than one user");
+
+  auto unpack = dyn_cast<UnpackBundleOp>(*bundle.getUsers().begin());
+  if (unpack) {
+    for (auto [a, b] :
+         llvm::zip_equal(pack.getToChannels(), unpack.getToChannels()))
+      rewriter.replaceAllUsesWith(b, a);
+    for (auto [a, b] :
+         llvm::zip_equal(unpack.getFromChannels(), pack.getFromChannels()))
+      rewriter.replaceAllUsesWith(b, a);
+    rewriter.eraseOp(unpack);
+    rewriter.eraseOp(pack);
+    return success();
+  }
+  return rewriter.notifyMatchFailure(pack,
+                                     "could not find corresponding unpack");
+}
+
+LogicalResult UnpackBundleOp::canonicalize(UnpackBundleOp unpack,
+                                           PatternRewriter &rewriter) {
+  Value bundle = unpack.getBundle();
+  if (!bundle.hasOneUse())
+    return rewriter.notifyMatchFailure(unpack, "bundle has more than one user");
+
+  auto pack = dyn_cast<PackBundleOp>(bundle.getDefiningOp());
+  if (pack) {
+    for (auto [a, b] :
+         llvm::zip_equal(pack.getToChannels(), unpack.getToChannels()))
+      rewriter.replaceAllUsesWith(b, a);
+    for (auto [a, b] :
+         llvm::zip_equal(unpack.getFromChannels(), pack.getFromChannels()))
+      rewriter.replaceAllUsesWith(b, a);
+    rewriter.eraseOp(unpack);
+    rewriter.eraseOp(pack);
+    return success();
+  }
+  return rewriter.notifyMatchFailure(unpack,
+                                     "could not find corresponding pack");
+}

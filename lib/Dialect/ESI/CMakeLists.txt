@@ -18,6 +18,7 @@ set(srcs
   ESITypes.cpp
   Passes/ESIEmitCollateral.cpp
   Passes/ESILowerPhysical.cpp
+  Passes/ESILowerBundles.cpp
   Passes/ESILowerPorts.cpp
   Passes/ESILowerToHW.cpp
   Passes/ESILowerTypes.cpp

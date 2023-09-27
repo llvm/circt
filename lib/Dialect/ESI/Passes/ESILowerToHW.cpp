@@ -473,6 +473,18 @@ void ESItoHWPass::runOnOperation() {
   auto top = getOperation();
   auto *ctxt = &getContext();
 
+  ConversionTarget noBundlesTarget(*ctxt);
+  noBundlesTarget.markUnknownOpDynamicallyLegal(
+      [](Operation *) { return true; });
+  noBundlesTarget.addIllegalOp<PackBundleOp>();
+  noBundlesTarget.addIllegalOp<UnpackBundleOp>();
+  RewritePatternSet bundlePatterns(&getContext());
+  bundlePatterns.add<CanonicalizerOpLowering<PackBundleOp>>(&getContext());
+  bundlePatterns.add<CanonicalizerOpLowering<UnpackBundleOp>>(&getContext());
+  if (failed(applyPartialConversion(getOperation(), noBundlesTarget,
+                                    std::move(bundlePatterns))))
+    signalPassFailure();
+
   // Set up a conversion and give it a set of laws.
   ConversionTarget pass1Target(*ctxt);
   pass1Target.addLegalDialect<comb::CombDialect>();
