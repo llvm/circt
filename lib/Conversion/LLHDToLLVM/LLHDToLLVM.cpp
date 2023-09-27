@@ -1087,7 +1087,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
       auto oneC = initBuilder.create<LLVM::ConstantOp>(
           op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(1));
       auto regNull =
-          initBuilder.create<LLVM::NullOp>(op->getLoc(), regStatePtrTy);
+          initBuilder.create<LLVM::ZeroOp>(op->getLoc(), regStatePtrTy);
       auto regGep = initBuilder.create<LLVM::GEPOp>(
           op->getLoc(), regStatePtrTy, regNull, ArrayRef<Value>({oneC}));
       auto regSize =
@@ -1157,7 +1157,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
             op.getLoc(), i32Ty, rewriter.getI32IntegerAttr(1));
         auto twoC = initBuilder.create<LLVM::ConstantOp>(
             op.getLoc(), i64Ty, rewriter.getI32IntegerAttr(2));
-        auto nullPtr = initBuilder.create<LLVM::NullOp>(
+        auto nullPtr = initBuilder.create<LLVM::ZeroOp>(
             op.getLoc(), LLVM::LLVMPointerType::get(underlyingTy));
         auto sizeGep = initBuilder.create<LLVM::GEPOp>(
             op.getLoc(), LLVM::LLVMPointerType::get(underlyingTy), nullPtr,
@@ -1210,7 +1210,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
               rewriter.getI32IntegerAttr(arrayTy.getNumElements()));
 
           // Get element size.
-          auto null = initBuilder.create<LLVM::NullOp>(
+          auto null = initBuilder.create<LLVM::ZeroOp>(
               op.getLoc(), LLVM::LLVMPointerType::get(arrayTy));
           auto gepFirst = initBuilder.create<LLVM::GEPOp>(
               op.getLoc(), LLVM::LLVMPointerType::get(arrayTy.getElementType()),
@@ -1227,7 +1227,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
           auto zeroC = initBuilder.create<LLVM::ConstantOp>(
               op.getLoc(), i32Ty, rewriter.getI32IntegerAttr(0));
 
-          auto null = initBuilder.create<LLVM::NullOp>(
+          auto null = initBuilder.create<LLVM::ZeroOp>(
               op.getLoc(), LLVM::LLVMPointerType::get(structTy));
           for (size_t i = 0, e = structTy.getBody().size(); i < e; ++i) {
             auto oneC = initBuilder.create<LLVM::ConstantOp>(
@@ -1243,7 +1243,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
                 op.getLoc(), i32Ty, gepElem);
 
             // Get element size.
-            auto elemNull = initBuilder.create<LLVM::NullOp>(
+            auto elemNull = initBuilder.create<LLVM::ZeroOp>(
                 op.getLoc(), LLVM::LLVMPointerType::get(structTy.getBody()[i]));
             auto gepElemSize = initBuilder.create<LLVM::GEPOp>(
                 op.getLoc(), LLVM::LLVMPointerType::get(structTy.getBody()[i]),
@@ -1283,7 +1283,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
 
       // Malloc space for the process state.
       auto procStateNullPtr =
-          initBuilder.create<LLVM::NullOp>(op->getLoc(), procStatePtrTy);
+          initBuilder.create<LLVM::ZeroOp>(op->getLoc(), procStatePtrTy);
       auto procStateGep = initBuilder.create<LLVM::GEPOp>(
           op->getLoc(), procStatePtrTy, procStateNullPtr,
           ArrayRef<Value>({oneC}));
@@ -1307,7 +1307,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
 
       // Malloc space for the senses table.
       auto sensesNullPtr =
-          initBuilder.create<LLVM::NullOp>(op->getLoc(), sensesPtrTy);
+          initBuilder.create<LLVM::ZeroOp>(op->getLoc(), sensesPtrTy);
       auto sensesGep = initBuilder.create<LLVM::GEPOp>(
           op->getLoc(), sensesPtrTy, sensesNullPtr, ArrayRef<Value>({oneC}));
       auto sensesSize =
@@ -1512,7 +1512,7 @@ struct DrvOpConversion : public ConvertToLLVMPattern {
           op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(1));
       auto eightC = rewriter.create<LLVM::ConstantOp>(
           op->getLoc(), i64Ty, rewriter.getI64IntegerAttr(8));
-      auto nullPtr = rewriter.create<LLVM::NullOp>(op->getLoc(), llvmPtrTy);
+      auto nullPtr = rewriter.create<LLVM::ZeroOp>(op->getLoc(), llvmPtrTy);
       auto gepOne = rewriter.create<LLVM::GEPOp>(
           op->getLoc(), llvmPtrTy, nullPtr, ArrayRef<Value>(oneC));
       auto toInt =

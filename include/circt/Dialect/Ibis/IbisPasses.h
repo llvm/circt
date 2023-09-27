@@ -18,9 +18,12 @@
 namespace circt {
 namespace ibis {
 
+#define GEN_PASS_DECL_IBISTUNNELING
+#include "circt/Dialect/Ibis/IbisPasses.h.inc"
+
 std::unique_ptr<Pass> createCallPrepPass();
 std::unique_ptr<Pass> createContainerizePass();
-std::unique_ptr<Pass> createTunnelingPass();
+std::unique_ptr<Pass> createTunnelingPass(const IbisTunnelingOptions & = {});
 std::unique_ptr<Pass> createPortrefLoweringPass();
 std::unique_ptr<Pass> createCleanSelfdriversPass();
 std::unique_ptr<Pass> createContainersToHWPass();

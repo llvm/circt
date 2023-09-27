@@ -73,11 +73,11 @@ public:
   explicit ScfForOp(scf::ForOp op) : calyx::RepeatOpInterface<scf::ForOp>(op) {}
 
   Block::BlockArgListType getBodyArgs() override {
-    return getOperation().getLoopBody().getArguments();
+    return getOperation().getRegion().getArguments();
   }
 
   Block *getBodyBlock() override {
-    return &getOperation().getLoopBody().getBlocks().front();
+    return &getOperation().getRegion().getBlocks().front();
   }
 
   std::optional<int64_t> getBound() override {

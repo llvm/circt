@@ -473,61 +473,48 @@ bool circt::firrtl::walkDrivers(FIRRTLBaseValue value, bool lookThroughWires,
 // FieldRef helpers
 //===----------------------------------------------------------------------===//
 
+/// Get the delta indexing from a value, as a FieldRef.
+FieldRef circt::firrtl::getDeltaRef(Value value, bool lookThroughCasts) {
+  // Handle bad input.
+  if (LLVM_UNLIKELY(!value))
+    return FieldRef();
+
+  // Block arguments are not index results, empty delta.
+  auto *op = value.getDefiningOp();
+  if (!op)
+    return FieldRef();
+
+  // Otherwise, optionally look through casts (delta of 0),
+  // dispatch to index operations' getAccesssedField(),
+  // or return no delta.
+  return TypeSwitch<Operation *, FieldRef>(op)
+      .Case<RefCastOp, ConstCastOp, UninferredResetCastOp>(
+          [lookThroughCasts](auto op) {
+            if (!lookThroughCasts)
+              return FieldRef();
+            return FieldRef(op.getInput(), 0);
+          })
+      .Case<SubfieldOp, OpenSubfieldOp, SubindexOp, OpenSubindexOp, RefSubOp>(
+          [](auto subOp) { return subOp.getAccessedField(); })
+      .Default(FieldRef());
+}
+
 FieldRef circt::firrtl::getFieldRefFromValue(Value value,
                                              bool lookThroughCasts) {
-  // This code walks upwards from the subfield and calculates the field ID at
-  // each level. At each stage, it must take the current id, and re-index it as
-  // a nested bundle under the parent field.. This is accomplished by using the
-  // parent field's ID as a base, and adding the field ID of the child.
+  if (LLVM_UNLIKELY(!value))
+    return {value, 0};
+
+  // Walk through indexing operations, and optionally through casts.
   unsigned id = 0;
-  while (value) {
-    Operation *op = value.getDefiningOp();
-
-    // If this is a block argument, we are done.
-    if (!op)
-      break;
-
-    auto handled =
-        TypeSwitch<Operation *, bool>(op)
-            .Case<RefCastOp, ConstCastOp, UninferredResetCastOp>([&](auto op) {
-              if (!lookThroughCasts)
-                return false;
-              value = op.getInput();
-              return true;
-            })
-            .Case<SubfieldOp, OpenSubfieldOp>([&](auto subfieldOp) {
-              value = subfieldOp.getInput();
-              typename decltype(subfieldOp)::InputType bundleType =
-                  subfieldOp.getInput().getType();
-              // Rebase the current index on the parent field's
-              // index.
-              id += bundleType.getFieldID(subfieldOp.getFieldIndex());
-              return true;
-            })
-            .Case<SubindexOp, OpenSubindexOp>([&](auto subindexOp) {
-              value = subindexOp.getInput();
-              typename decltype(subindexOp)::InputType vecType =
-                  subindexOp.getInput().getType();
-              // Rebase the current index on the parent field's
-              // index.
-              id += vecType.getFieldID(subindexOp.getIndex());
-              return true;
-            })
-            .Case<RefSubOp>([&](RefSubOp refSubOp) {
-              value = refSubOp.getInput();
-              auto refInputType = refSubOp.getInput().getType();
-              id += FIRRTLTypeSwitch<FIRRTLBaseType, size_t>(
-                        refInputType.getType())
-                        .Case<FVectorType, BundleType>([&](auto type) {
-                          return type.getFieldID(refSubOp.getIndex());
-                        });
-              return true;
-            })
-            .Default(false);
-    if (!handled)
-      break;
+  while (true) {
+    auto deltaRef = getDeltaRef(value, lookThroughCasts);
+    if (!deltaRef)
+      return {value, id};
+    // Update total fieldID.
+    id = deltaRef.getSubField(id).getFieldID();
+    // Chase to next value.
+    value = deltaRef.getValue();
   }
-  return {value, id};
 }
 
 /// Get the string name of a value which is a direct child of a declaration op.

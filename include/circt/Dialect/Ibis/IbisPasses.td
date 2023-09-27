@@ -35,8 +35,21 @@ def IbisTunneling : Pass<"ibis-tunneling", "mlir::ModuleOp"> {
     ports of `!ibis.portref<...>` type are created.
     After this pass, `get_port` ops should only exist at the same scope of
     container instantiations.
+
+    The user may provide options for `readSuffix` and `writeSuffix`, respectively,
+    which is to be used to generate the name of the ports that are tunneled
+    through the hierarchy, with respect to how the port was requested to be accessed.
+    Suffixes must be provided in cases where a port is tunneled for both read and
+    write accesses, and the suffixes must be different (in this case, the suffixes
+    will be appended to the target port name, and thus de-alias the resulting ports).
   }];
   let constructor = "circt::ibis::createTunnelingPass()";
+  let options = [
+    Option<"readSuffix", "read-suffix", "std::string", "\".rd\"",
+           "Suffix to be used for the port when a port is tunneled for read access">,
+    Option<"writeSuffix", "write-suffix", "std::string", "\".wr\"",
+            "Suffix to be used for the port when a port is tunneled for write access">
+  ];
 }
 
 def IbisPortrefLowering : Pass<"ibis-lower-portrefs", "mlir::ModuleOp"> {

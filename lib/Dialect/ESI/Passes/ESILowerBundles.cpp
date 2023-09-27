@@ -22,16 +22,6 @@ using namespace circt::esi;
 using namespace circt::esi::detail;
 using namespace circt::hw;
 
-// Returns either the string dialect attr stored in 'op' going by the name
-// 'attrName' or 'def' if the attribute doesn't exist in 'op'.
-inline static StringRef getStringAttributeOr(Operation *op, StringRef attrName,
-                                             StringRef def) {
-  auto attr = op->getAttrOfType<StringAttr>(attrName);
-  if (attr)
-    return attr.getValue();
-  return def;
-}
-
 namespace {
 
 /// Implement the Valid/Ready signaling standard.
@@ -73,11 +63,48 @@ public:
 
 void BundlePort::mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
                                  SmallVectorImpl<Value> &newOperands,
-                                 ArrayRef<Backedge> newResults) {}
+                                 ArrayRef<Backedge> newResults) {
+
+  SmallVector<Value, 4> unpackOperands;
+  unpackOperands.push_back(inst->getOperand(origPort.argNum));
+  llvm::append_range(unpackOperands,
+                     llvm::map_range(newOutputChannels, [&](hw::PortInfo port) {
+                       return newResults[port.argNum];
+                     }));
+  SmallVector<Type, 5> unpackResults(llvm::map_range(
+      newOutputChannels, [](hw::PortInfo port) { return port.type; }));
+
+  auto unpack = OpBuilder(inst).create<UnpackBundleOp>(
+      origPort.loc, unpackResults, unpackOperands);
+
+  for (auto [idx, inPort] : llvm::enumerate(newInputChannels))
+    newOperands[inPort.argNum] = unpack.getResult(idx);
+}
+
 void BundlePort::mapOutputSignals(OpBuilder &b, Operation *inst,
                                   Value instValue,
                                   SmallVectorImpl<Value> &newOperands,
-                                  ArrayRef<Backedge> newResults) {}
+                                  ArrayRef<Backedge> newResults) {
+  auto bundleType = cast<ChannelBundleType>(origPort.type);
+
+  SmallVector<Value, 4> packOperands(
+      llvm::map_range(newInputChannels, [&](hw::PortInfo port) {
+        return newResults[port.argNum];
+      }));
+  SmallVector<Type, 5> packResults;
+  packResults.push_back(bundleType);
+  llvm::append_range(packResults,
+                     llvm::map_range(newOutputChannels, [](hw::PortInfo port) {
+                       return port.type;
+                     }));
+
+  auto pack = OpBuilder(inst).create<PackBundleOp>(origPort.loc, packResults,
+                                                   packOperands);
+
+  for (auto [idx, inPort] : llvm::enumerate(newInputChannels))
+    newOperands[inPort.argNum] = pack.getFromChannels()[idx];
+  inst->getResult(origPort.argNum).replaceAllUsesWith(pack.getBundle());
+}
 
 void BundlePort::buildInputSignals() {
   auto bundleType = cast<ChannelBundleType>(origPort.type);

@@ -136,6 +136,12 @@ struct Object {
     return pyFieldNames;
   }
 
+  // Get the hash of the object
+  unsigned getHash() { return omEvaluatorObjectGetHash(value); }
+
+  // Check the equality of the underlying values.
+  bool eq(Object &other) { return omEvaluatorObjectIsEq(value, other.value); }
+
   OMEvaluatorValue getValue() const { return value; }
 
 private:
@@ -361,8 +367,9 @@ void circt::python::populateDialectOMSubmodule(py::module &m) {
            py::arg("name"))
       .def_property_readonly("field_names", &Object::getFieldNames,
                              "Get field names from an Object")
-      .def_property_readonly("type", &Object::getType,
-                             "The Type of the Object");
+      .def_property_readonly("type", &Object::getType, "The Type of the Object")
+      .def("__hash__", &Object::getHash, "Get object hash")
+      .def("__eq__", &Object::eq, "Check if two objects are same");
 
   // Add the ReferenceAttr definition
   mlir_attribute_subclass(m, "ReferenceAttr", omAttrIsAReferenceAttr)

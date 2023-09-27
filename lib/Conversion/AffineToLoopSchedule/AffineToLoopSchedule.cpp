@@ -423,8 +423,7 @@ LogicalResult AffineToLoopSchedule::createLoopSchedulePipeline(
 
   SmallVector<Value> iterArgs;
   iterArgs.push_back(lowerBound);
-  iterArgs.append(innerLoop.getIterOperands().begin(),
-                  innerLoop.getIterOperands().end());
+  iterArgs.append(innerLoop.getInits().begin(), innerLoop.getInits().end());
 
   // If possible, attach a constant trip count attribute. This could be
   // generalized to support non-constant trip counts by supporting an AffineMap.
