@@ -1555,7 +1555,6 @@ std::pair<Type, uint64_t>
 BundleType::getSubTypeByFieldID(uint64_t fieldID) const {
   if (fieldID == 0)
     return {*this, 0};
-  auto fieldIDs = getImpl()->fieldIDs;
   auto subfieldIndex = getIndexForFieldID(fieldID);
   auto subfieldType = getElementType(subfieldIndex);
   auto subfieldID = fieldID - getFieldID(subfieldIndex);
@@ -1779,7 +1778,6 @@ std::pair<Type, uint64_t>
 OpenBundleType::getSubTypeByFieldID(uint64_t fieldID) const {
   if (fieldID == 0)
     return {*this, 0};
-  auto fieldIDs = getImpl()->fieldIDs;
   auto subfieldIndex = getIndexForFieldID(fieldID);
   auto subfieldType = getElementType(subfieldIndex);
   auto subfieldID = fieldID - getFieldID(subfieldIndex);
@@ -2265,7 +2263,6 @@ std::pair<Type, uint64_t>
 FEnumType::getSubTypeByFieldID(uint64_t fieldID) const {
   if (fieldID == 0)
     return {*this, 0};
-  auto fieldIDs = getImpl()->fieldIDs;
   auto subfieldIndex = getIndexForFieldID(fieldID);
   auto subfieldType = getElementType(subfieldIndex);
   auto subfieldID = fieldID - getFieldID(subfieldIndex);
