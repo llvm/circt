@@ -473,6 +473,32 @@ bool circt::firrtl::walkDrivers(FIRRTLBaseValue value, bool lookThroughWires,
 // FieldRef helpers
 //===----------------------------------------------------------------------===//
 
+/// Get the delta indexing from a value, as a FieldRef.
+FieldRef circt::firrtl::getDeltaRef(Value value, bool lookThroughCasts) {
+  // Handle bad input.
+  if (LLVM_UNLIKELY(!value))
+    return FieldRef();
+
+  // Block arguments are not index results, empty delta.
+  auto *op = value.getDefiningOp();
+  if (!op)
+    return FieldRef();
+
+  // Otherwise, optionally look through casts (delta of 0),
+  // dispatch to index operations' getAccesssedField(),
+  // or return no delta.
+  return TypeSwitch<Operation *, FieldRef>(op)
+      .Case<RefCastOp, ConstCastOp, UninferredResetCastOp>(
+          [lookThroughCasts](auto op) {
+            if (!lookThroughCasts)
+              return FieldRef();
+            return FieldRef(op.getInput(), 0);
+          })
+      .Case<SubfieldOp, OpenSubfieldOp, SubindexOp, OpenSubindexOp, RefSubOp>(
+          [](auto subOp) { return subOp.getAccessedField(); })
+      .Default(FieldRef());
+}
+
 FieldRef circt::firrtl::getFieldRefFromValue(Value value,
                                              bool lookThroughCasts) {
   if (LLVM_UNLIKELY(!value))
@@ -481,31 +507,13 @@ FieldRef circt::firrtl::getFieldRefFromValue(Value value,
   // Walk through indexing operations, and optionally through casts.
   unsigned id = 0;
   while (true) {
-    Operation *op = value.getDefiningOp();
-
-    // If this is a block argument, we are done.
-    if (!op)
+    auto deltaRef = getDeltaRef(value, lookThroughCasts);
+    if (!deltaRef)
       return {value, id};
-
-    auto deltaRef =
-        TypeSwitch<Operation *, FieldRef>(op)
-            .Case<RefCastOp, ConstCastOp, UninferredResetCastOp>(
-                [lookThroughCasts](auto op) {
-                  if (!lookThroughCasts)
-                    return FieldRef();
-                  return FieldRef(op.getInput(), 0);
-                })
-            .Case<SubfieldOp, OpenSubfieldOp, SubindexOp, OpenSubindexOp,
-                  RefSubOp>([](auto subOp) { return subOp.getAccessedField(); })
-            .Default(FieldRef());
-    auto next = deltaRef.getValue();
-    if (!next)
-      return {value, id};
-
     // Update total fieldID.
     id = deltaRef.getSubField(id).getFieldID();
     // Chase to next value.
-    value = next;
+    value = deltaRef.getValue();
   }
 }
 
