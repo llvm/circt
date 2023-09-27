@@ -1,6 +1,6 @@
 // RUN: circt-opt %s | circt-opt | FileCheck %s
 
-// CHECK:       hw.module @foo(input %arg0: !dc.token, input %arg1: !dc.value<i1>, input %arg2: i32) {
+// CHECK:       hw.module @foo(input %arg0 : !dc.token, input %arg1 : !dc.value<i1>, input %arg2 : i32) {
 // CHECK-NEXT:    %0 = dc.buffer[2] %arg0 : !dc.token
 // CHECK-NEXT:    %1 = dc.buffer[2] %arg1 [1, 2] : !dc.value<i1>
 // CHECK-NEXT:    %2:2 = dc.fork [2] %arg0 

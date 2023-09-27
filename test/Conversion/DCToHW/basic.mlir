@@ -1,10 +1,10 @@
 // RUN: circt-opt --lower-dc-to-hw %s | FileCheck %s
 
 // CHECK-LABEL:   hw.module @simple(
-// CHECK: input %[[VAL_0:.*]] : !esi.channel<i0>, input %[[VAL_1:.*]] : !esi.channel<i64>, input %[[VAL_2:.*]] : i1, input %[[VAL_3:.*]] : !esi.channel<i1>, output out0 : !esi.channel<i0>, output out1 : !esi.channel<i64>,  output out2 : i1, output out3 : !esi.channel<i1>) attributes {argNames = ["", "", "", ""]} {
+// CHECK: input %[[VAL_0:.*]] "" : !esi.channel<i0>, input %[[VAL_1:.*]] "" : !esi.channel<i64>, input %[[VAL_2:.*]] "" : i1, input %[[VAL_3:.*]] "" : !esi.channel<i1>, output out0 : !esi.channel<i0>, output out1 : !esi.channel<i64>,  output out2 : i1, output out3 : !esi.channel<i1>) {
 // CHECK:           hw.output %[[VAL_0]], %[[VAL_1]], %[[VAL_2]], %[[VAL_3]] : !esi.channel<i0>, !esi.channel<i64>, i1, !esi.channel<i1>
 // CHECK:         }
-hw.module @simple(input %0 : !dc.token, input %1 : !dc.value<i64>, input %2 : i1, input %3 : !dc.value<i1>,
+hw.module @simple(input %0 "" : !dc.token, input %1 "" : !dc.value<i64>, input %2 "" : i1, input %3 : !dc.value<i1>,
         output out0: !dc.token, output out1: !dc.value<i64>, output out2: i1, output out3: !dc.value<i1>) {
     hw.output %0, %1, %2, %3 : !dc.token, !dc.value<i64>, i1, !dc.value<i1>
 }
@@ -77,7 +77,7 @@ hw.module @fork(input %t : !dc.token, input %clk : !seq.clock {"dc.clock"}, inpu
 }
 
 // CHECK-LABEL:   hw.module @bufferToken(
-// CHECK:              input %[[VAL_0:.*]] : !esi.channel<i0>, input %[[VAL_1:.*]] : !seq.clock {dc.clock}, input %[[VAL_2:.*]] : i1 {dc.reset}, output out0: !esi.channel<i0>) {
+// CHECK:              input %[[VAL_0:.*]] : !esi.channel<i0>, input %[[VAL_1:.*]] : !seq.clock {dc.clock}, input %[[VAL_2:.*]] : i1 {dc.reset}, output out0 : !esi.channel<i0>) {
 // CHECK:           %[[VAL_3:.*]] = esi.buffer %[[VAL_1]], %[[VAL_2]], %[[VAL_0]] {stages = 2 : i64} : i0
 // CHECK:           hw.output %[[VAL_3]] : !esi.channel<i0>
 // CHECK:         }
@@ -100,7 +100,7 @@ hw.module @bufferValue(input %v1 : !dc.value<i64>, input %clk : !seq.clock {"dc.
 }
 
 // CHECK-LABEL:   hw.module @branch(
-// CHECK:                      input %[[VAL_0:.*]]: !esi.channel<i1>, output out0 : !esi.channel<i0>, output out1 : !esi.channel<i0>) {
+// CHECK:                      input %[[VAL_0:.*]] : !esi.channel<i1>, output out0 : !esi.channel<i0>, output out1 : !esi.channel<i0>) {
 // CHECK:           %[[VAL_1:.*]], %[[VAL_2:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_3:.*]] : i1
 // CHECK:           %[[VAL_4:.*]] = hw.constant 0 : i0
 // CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]] = esi.wrap.vr %[[VAL_4]], %[[VAL_7:.*]] : i0

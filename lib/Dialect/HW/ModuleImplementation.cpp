@@ -241,6 +241,21 @@ ParseResult module_like_impl::parseModuleFunctionSignature(
 // New Style
 ////////////////////////////////////////////////////////////////////////////////
 
+/// Parse an optional keyword or string and set instance into 'result'.`
+ParseResult parseOptionalKeywordOrOptionalString(OpAsmParser &p,
+                                                 std::string *result) {
+  StringRef keyword;
+  if (succeeded(p.parseOptionalKeyword(&keyword))) {
+    *result = keyword.str();
+    return success();
+  }
+
+  // Just as easy to make the required return check happy this way.
+  if (succeeded(p.parseOptionalString(result)))
+    return success();
+  return success();
+}
+
 static ParseResult parseDirection(OpAsmParser &p, ModulePort::Direction &dir) {
   StringRef key;
   if (failed(p.parseKeyword(&key)))
@@ -257,45 +272,51 @@ static ParseResult parseDirection(OpAsmParser &p, ModulePort::Direction &dir) {
   return success();
 }
 
-static ParseResult parseInputPort(OpAsmParser& parser, module_like_impl::PortParse& result) {
-      if (parser.parseOperand(result.ssaName, /*allowResultNumber=*/false))
-      return failure();
-    NamedAttrList attrs;
-  if (    
-      parser.parseColonType(result.type) || parser.parseOptionalAttrDict(attrs) ||
+static ParseResult parseInputPort(OpAsmParser &parser,
+                                  module_like_impl::PortParse &result) {
+  if (parser.parseOperand(result.ssaName, /*allowResultNumber=*/false))
+    return failure();
+  NamedAttrList attrs;
+
+  // Parse the result name.
+  if (parseOptionalKeywordOrOptionalString(parser, &result.rawName))
+    return failure();
+
+  if (parser.parseColonType(result.type) ||
+      parser.parseOptionalAttrDict(attrs) ||
       parser.parseOptionalLocationSpecifier(result.sourceLoc))
     return failure();
   result.attrs = attrs.getDictionary(parser.getContext());
   return success();
 }
 
-static ParseResult parseOutputPort(OpAsmParser& parser, module_like_impl::PortParse& result) {
-    // Stash the current location parser location.
-    auto irLoc = parser.getCurrentLocation();
+static ParseResult parseOutputPort(OpAsmParser &parser,
+                                   module_like_impl::PortParse &result) {
+  // Stash the current location parser location.
+  auto irLoc = parser.getCurrentLocation();
 
-    // Parse the result name.
-    if (parser.parseKeywordOrString(&result.rawName))
-      return failure();
+  // Parse the result name.
+  if (parser.parseKeywordOrString(&result.rawName))
+    return failure();
 
-    // Parse the results type.
-    if (parser.parseColonType(result.type))
-      return failure();
+  // Parse the results type.
+  if (parser.parseColonType(result.type))
+    return failure();
 
-    // Parse the result attributes.
-    NamedAttrList attrs;
-    if (failed(parser.parseOptionalAttrDict(attrs)))
-      return failure();
-    result.attrs = attrs.getDictionary(parser.getContext());
+  // Parse the result attributes.
+  NamedAttrList attrs;
+  if (failed(parser.parseOptionalAttrDict(attrs)))
+    return failure();
+  result.attrs = attrs.getDictionary(parser.getContext());
 
-    // Parse the result location.
-    std::optional<Location> maybeLoc;
-    if (failed(parser.parseOptionalLocationSpecifier(maybeLoc)))
-      return failure();
-    result.sourceLoc = maybeLoc ? *maybeLoc : parser.getEncodedSourceLoc(irLoc);
-    
-    return success();
-  }
+  // Parse the result location.
+  std::optional<Location> maybeLoc;
+  if (failed(parser.parseOptionalLocationSpecifier(maybeLoc)))
+    return failure();
+  result.sourceLoc = maybeLoc ? *maybeLoc : parser.getEncodedSourceLoc(irLoc);
 
+  return success();
+}
 
 /// Parse a single argument with the following syntax:
 ///
@@ -337,9 +358,8 @@ ParseResult module_like_impl::parseModuleSignature(
     std::string name = arg.rawName;
     if (arg.direction != ModulePort::Output)
       name = parsing_util::getNameFromSSA(context, arg.ssaName.name).str();
-    ports.push_back({StringAttr::get(context, name),
-                     arg.type, arg.direction});
-    //rewrite type AFTER constructing ports.  This will be used in block args.
+    ports.push_back({StringAttr::get(context, name), arg.type, arg.direction});
+    // rewrite type AFTER constructing ports.  This will be used in block args.
     if (arg.direction == ModulePort::InOut)
       arg.type = InOutType::get(arg.type);
     if (!arg.sourceLoc)
@@ -364,7 +384,11 @@ static const char *directionAsString(ModulePort::Direction dir) {
 
 void module_like_impl::printModuleSignatureNew(OpAsmPrinter &p, Operation *op) {
 
+  Region &body = op->getRegion(0);
+  bool isExternal = body.empty();
+  SmallString<32> resultNameStr;
   mlir::OpPrintingFlags flags;
+  unsigned curArg = 0;
 
   auto typeAttr = op->getAttrOfType<TypeAttr>("module_type");
   auto modType = cast<ModuleType>(typeAttr.getValue());
@@ -380,8 +404,22 @@ void module_like_impl::printModuleSignatureNew(OpAsmPrinter &p, Operation *op) {
       p << " ";
       p.printKeywordOrString(port.name);
     } else {
-    p << " %";
-    p.printKeywordOrString(port.name);
+      if (!isExternal) {
+      // Get the printed format for the argument name.
+      resultNameStr.clear();
+      llvm::raw_svector_ostream tmpStream(resultNameStr);
+      p.printOperand(body.front().getArgument(curArg), tmpStream);
+      p << " " << tmpStream.str();
+      // If the name wasn't printable in a way that agreed with argName, make
+      // sure to print out an explicit argNames attribute.
+      if (tmpStream.str().drop_front() != port.name) {
+        p << " ";
+        p.printKeywordOrString(port.name);
+      }
+      } else {
+        p << " %" << port.name.getValue();
+      }
+      ++curArg;
     }
     p << " : ";
     p.printType(port.type);
