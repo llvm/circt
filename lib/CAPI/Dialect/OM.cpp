@@ -16,6 +16,7 @@
 #include "circt/Dialect/OM/OMDialect.h"
 #include "mlir/CAPI/Registration.h"
 #include "mlir/CAPI/Wrap.h"
+#include "llvm/ADT/Hashing.h"
 #include "llvm/Support/Casting.h"
 
 using namespace mlir;
@@ -138,6 +139,17 @@ bool omEvaluatorObjectIsNull(OMEvaluatorValue object) {
 /// Get the Type from an Object, which will be a ClassType.
 MlirType omEvaluatorObjectGetType(OMEvaluatorValue object) {
   return wrap(llvm::cast<Object>(unwrap(object).get())->getType());
+}
+
+/// Get the hash for the object.
+unsigned omEvaluatorObjectGetHash(OMEvaluatorValue object) {
+  return llvm::hash_value(llvm::cast<Object>(unwrap(object).get()));
+}
+
+/// Check if two objects are same.
+bool omEvaluatorObjectIsEq(OMEvaluatorValue object, OMEvaluatorValue other) {
+  return llvm::cast<Object>(unwrap(object).get()) ==
+         llvm::cast<Object>(unwrap(other).get());
 }
 
 /// Get an ArrayAttr with the names of the fields in an Object.
