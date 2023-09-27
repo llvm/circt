@@ -21,6 +21,7 @@
 
 namespace circt {
 namespace firtool {
+// Remember to sync changes to C-API
 struct FirtoolOptions {
   llvm::cl::OptionCategory &category;
 
