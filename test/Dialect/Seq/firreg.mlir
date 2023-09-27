@@ -846,3 +846,32 @@ hw.module @RegMuxInlining2(%clock: !seq.clock, %reset: i1, %a: i1, %b: i1, %c: i
   %2 = comb.mux bin %a, %1, %z : i8
   hw.output %r1 : i8
 }
+
+// The following testcase is generated from:
+//   reg r1 : UInt<2>, clock
+//   reg r2 : UInt<2>, clock
+//   reg r3 : UInt<2>, clock
+//   r1 <= mux(c, r2, r3)
+//   r2 <= r1
+//   r3 <= r1
+// CHECK-LABEL: @RegMuxInlining3
+hw.module @RegMuxInlining3(%clock: !seq.clock, %c: i1) -> (out: i8) {
+  // CHECK: [[REG0:%.+]] = sv.reg : !hw.inout<i8>
+  // CHECK: [[REG0_READ:%.+]] = sv.read_inout [[REG0]]
+  %r1 = seq.firreg %0 clock %clock : i8
+
+  // CHECK: [[REG1:%.+]] = sv.reg : !hw.inout<i8>
+  %r2 = seq.firreg %r1 clock %clock : i8
+
+  // CHECK: [[REG2:%.+]] = sv.reg : !hw.inout<i8>
+  %r3 = seq.firreg %r1 clock %clock : i8
+
+  // CHECK: [[MUX:%.+]] = comb.mux
+  // CHECK: sv.always posedge %clock {
+  // CHECK:   sv.passign [[REG0]], [[MUX]]
+  // CHECK:   sv.passign [[REG1]], [[REG0_READ]]
+  // CHECK:   sv.passign [[REG2]], [[REG0_READ]]
+  // CHECK: }
+  %0 = comb.mux bin %c, %r2, %r3 : i8
+  hw.output %r1 : i8
+}
