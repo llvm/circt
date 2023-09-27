@@ -6171,9 +6171,10 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit,
         // the verilog location. This also clears the map, so that the map only
         // contains the current iteration's ops.
         state.addVerilogLocToOps(lineOffset, fileName);
-      } else
+      } else {
         os << entry.getStringData();
-      ++lineOffset;
+        ++lineOffset;
+      }
     }
 
     if (state.encounteredError)
