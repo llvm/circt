@@ -10,7 +10,7 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Transforms/DialectConversion.h"
-#include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/Support/Debug.h"
 
 using namespace circt;
@@ -22,14 +22,19 @@ using llvm::MapVector;
 
 // Reimplemented from SliceAnalysis to use a worklist rather than recursion and
 // non-insert ordered set.
-static void getForwardSliceSimple(Operation *root,
-                                  SmallPtrSetImpl<Operation *> &forwardSlice) {
+static void
+getForwardSliceSimple(Operation *root,
+                      llvm::DenseSet<Operation *> &forwardSlice,
+                      llvm::function_ref<bool(Operation *)> filter = nullptr) {
   SmallVector<Operation *> worklist({root});
 
   while (!worklist.empty()) {
     Operation *op = worklist.pop_back_val();
 
     if (!op)
+      continue;
+
+    if (filter && !filter(op))
       continue;
 
     for (Region &region : op->getRegions())
@@ -343,8 +348,10 @@ void FirRegLowering::createTree(OpBuilder &builder, Value reg, Value term,
   // want to create if/else structure for logic unrelated to the register's
   // enable.
   auto firReg = term.getDefiningOp<seq::FirRegOp>();
-  SmallPtrSet<Operation *, 16> regMuxFanout;
-  getForwardSliceSimple(firReg, regMuxFanout);
+  DenseSet<Operation *> regMuxFanout;
+  getForwardSliceSimple(firReg, regMuxFanout, [&](Operation *op) {
+    return op == firReg || !isa<sv::RegOp, seq::FirRegOp>(op);
+  });
 
   SmallVector<std::tuple<Block *, Value, Value, Value>> worklist;
   auto addToWorklist = [&](Value reg, Value term, Value next) {
