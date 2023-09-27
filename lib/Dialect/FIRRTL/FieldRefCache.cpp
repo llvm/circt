@@ -129,8 +129,7 @@ void firrtl::FieldRefCache::addToTotals(size_t &totalHits,
 
 void firrtl::FieldRefCache::verifyImpl() const {
   // (Guarding under EXPENSIVE_CHECKS may be appropriate.)
-  for (auto &[key, ref] : refs) {
+  for (auto &[key, ref] : refs)
     assert(ref == firrtl::getFieldRefFromValue(key.getPointer(), key.getInt()));
-  }
 }
 #endif // NDEBUG
