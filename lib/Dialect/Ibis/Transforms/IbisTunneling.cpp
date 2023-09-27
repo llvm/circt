@@ -427,5 +427,5 @@ void TunnelingPass::runOnOperation() {
 
 std::unique_ptr<Pass>
 circt::ibis::createTunnelingPass(const IbisTunnelingOptions &options) {
-  return std::make_unique<TunnelingPass>();
+  return std::make_unique<TunnelingPass>(options);
 }
