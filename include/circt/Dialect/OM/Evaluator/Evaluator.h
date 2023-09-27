@@ -45,7 +45,6 @@ struct EvaluatorValue : std::enable_shared_from_this<EvaluatorValue> {
   EvaluatorValue(MLIRContext *ctx, Kind kind) : kind(kind) {}
   Kind getKind() const { return kind; }
   MLIRContext *getContext() const { return ctx; }
-  llvm::hash_code getHash() { return 0; };
 
 private:
   const Kind kind;
@@ -64,7 +63,6 @@ struct AttributeValue : EvaluatorValue {
   static bool classof(const EvaluatorValue *e) {
     return e->getKind() == Kind::Attr;
   }
-  llvm::hash_code getHash() { return mlir::hash_value(attr); }
 
 private:
   Attribute attr;
@@ -84,14 +82,6 @@ struct ListValue : EvaluatorValue {
   /// Implement LLVM RTTI.
   static bool classof(const EvaluatorValue *e) {
     return e->getKind() == Kind::List;
-  }
-
-  llvm::hash_code getHash() {
-    llvm::hash_code res = mlir::hash_value(type);
-    for (const auto &elem : elements) {
-      res = llvm::hash_combine(res, elem->getHash());
-    }
-    return res;
   }
 
 private:
@@ -116,14 +106,6 @@ struct MapValue : EvaluatorValue {
   /// Implement LLVM RTTI.
   static bool classof(const EvaluatorValue *e) {
     return e->getKind() == Kind::Map;
-  }
-
-  llvm::hash_code getHash() {
-    llvm::hash_code res = mlir::hash_value(type);
-    for (const auto &elem : elements) {
-      res = llvm::hash_combine(res, elem.second->getHash());
-    }
-    return res;
   }
 
 private:
@@ -157,14 +139,6 @@ struct ObjectValue : EvaluatorValue {
   /// Get all the field names of the Object.
   ArrayAttr getFieldNames();
 
-  llvm::hash_code getHash() {
-    llvm::hash_code hashResult = mlir::hash_value(cls.getNameAttr());
-    for (auto iter : fields)
-      hashResult = llvm::hash_combine(mlir::hash_value(iter.getFirst()),
-                                      iter.second->getHash(), hashResult);
-    return hashResult;
-  }
-
 private:
   om::ClassOp cls;
   llvm::SmallDenseMap<StringAttr, EvaluatorValuePtr> fields;
@@ -186,13 +160,6 @@ struct TupleValue : EvaluatorValue {
   TupleType getType() const { return type; }
 
   const TupleElements &getElements() const { return elements; }
-
-  llvm::hash_code getHash() {
-    auto hashRes = mlir::hash_value(type);
-    for (const auto &e : elements)
-      hashRes = llvm::hash_combine(hashRes, e->getHash());
-    return hashRes;
-  }
 
 private:
   TupleType type;
