@@ -1194,7 +1194,7 @@ circuit DoubleNaN:
     propassign d, Double(NaN)
 
 ;// -----
-; Double: Don't suuport hex.
+; Double: Don't support hex.
 FIRRTL version 3.2.0
 circuit DoubleHex:
   module DoubleHex:
@@ -1203,7 +1203,7 @@ circuit DoubleHex:
     propassign d, Double(0x0)
 
 ;// -----
-; Double: Don't suuport FIRRTL-y radix.
+; Double: Don't support FIRRTL-y radix.
 FIRRTL version 3.2.0
 circuit DoubleRadix:
   module DoubleRadix:
