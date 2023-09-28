@@ -10,7 +10,7 @@ hw.module @nya(input %nya_input : i32) {
   hw.instance "uwu1" @uwu() -> ()
 }
 
-hw.module @test(, output test_result : i32) {
+hw.module @test(output test_result : i32) {
   %myArray1 = sv.wire : !hw.inout<array<42 x i8>>
   %0 = hw.instance "owo1" @owo() -> ("owo_result" : i32)
   hw.instance "nya1" @nya("nya_input": %0 : i32) -> ()

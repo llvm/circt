@@ -16,7 +16,7 @@ hw.module @onePlusTwo(output out: i2) {
   hw.output %three : i2
 }
 
-hw.module @three(, output out: i2) {
+hw.module @three(output out: i2) {
   %three = hw.constant 3 : i2
   hw.output %three : i2
 }
