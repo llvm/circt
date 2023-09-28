@@ -229,7 +229,9 @@ static void loadLowLevelPassPipeline(
 static void loadIbisHiFlow(
     PassManager &pm, ModuleOp module,
     std::optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
-  llvm::errs() << "Running high-level Ibis flow\n";
+  if (verbosePassExecutions)
+    llvm::errs() << "[ibistool] Will run high-level Ibis flow\n";
+
   loadHighLevelControlflowTransformsPipeline(pm);
   loadIbisHighLevelPassPipeline(pm);
   if (outputFormat != OutputLoweredIbis) {
@@ -243,6 +245,8 @@ static void loadIbisHiFlow(
 static void loadIbisLoFlow(
     PassManager &pm, ModuleOp module,
     std::optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
+  if (verbosePassExecutions)
+    llvm::errs() << "[ibistool] Will run low-level Ibis flow\n";
   loadIbisLowLevelPassPipeline(pm);
 
   if (outputFormat != OutputLoweredIbis)
