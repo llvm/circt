@@ -12,6 +12,7 @@
 #include "circt/Dialect/Handshake/HandshakeInterfaces.h"
 #include "circt/Dialect/Ibis/IbisDialect.h"
 #include "circt/Dialect/Ibis/IbisTypes.h"
+#include "circt/Dialect/Seq/SeqTypes.h"
 #include "circt/Support/InstanceGraphInterface.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Builders.h"
