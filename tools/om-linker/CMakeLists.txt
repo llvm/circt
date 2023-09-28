@@ -7,8 +7,11 @@ add_circt_tool(om-linker
 )
 llvm_update_compile_flags(om-linker)
 target_link_libraries(om-linker PRIVATE
+  CIRCTComb
+  CIRCTHW
   CIRCTOM
   CIRCTOMTransforms
+  CIRCTSV
   CIRCTSupport
 
   MLIRBytecodeReader
