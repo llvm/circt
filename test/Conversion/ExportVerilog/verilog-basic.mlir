@@ -1,10 +1,10 @@
 // RUN: circt-opt %s -test-apply-lowering-options='options=emitBindComments' -export-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
 
 
-hw.testmodule @NewStyle (input %a : i3,
-                         output %b : i3,
-                         input %c : i4,
-                         output %d : i4,
+hw.testmodule @NewStyle (in %a : i3,
+                         out b : i3,
+                         in %c : i4,
+                         out d : i4,
                          inout %e : i64 {hw.exportPort = #hw<innerSym@symA>}) {
   hw.output %a, %c : i3, i4
  }
@@ -13,7 +13,7 @@ hw.testmodule @NewStyle (input %a : i3,
 // CHECK-NEXT:   input a,{{.*}}
 // CHECK-NEXT:         b
 // CHECK-NEXT:  );
-hw.module @inputs_only(%a: i1, %b: i1) {
+hw.module @inputs_only(in %a: i1, in %b: i1) {
   hw.output
 }
 
@@ -40,9 +40,11 @@ hw.module @no_ports() {
 // CHECK-NEXT:    output [1:0]  orvout
 // CHECK-NEXT:  );
 
-hw.module @Expressions(%in4: i4, %clock: i1) ->
-  (out1a: i1, out1b: i1, out1c: i1, out1d: i1, out1e: i1, out1f: i1, out1g: i1,
-   out4: i4, out4s: i4, out16: i16, out16s: i16, sext17: i17, orvout: i2) {
+hw.module @Expressions(in %in4: i4, in %clock: i1, 
+  out out1a: i1, out out1b: i1, out out1c: i1, 
+  out out1d: i1, out out1e: i1, out out1f: i1, out out1g: i1,
+   out out4: i4, out out4s: i4, out out16: i16, out out16s: i16, 
+   out sext17: i17, out orvout: i2) {
   %c1_i4 = hw.constant 1 : i4
   %c2_i4 = hw.constant 2 : i4
   %c3_i4 = hw.constant 3 : i4
@@ -157,7 +159,7 @@ hw.module @Expressions(%in4: i4, %clock: i1) ->
 }
 
 // CHECK-LABEL: module Precedence(
-hw.module @Precedence(%a: i4, %b: i4, %c: i4) -> (out1: i1, out: i10) {
+hw.module @Precedence(in %a: i4, in %b: i4, in %c: i4, out out1: i1, out out: i10) {
   %false = hw.constant false
   %c0_i2 = hw.constant 0 : i2
   %c0_i4 = hw.constant 0 : i4
@@ -256,9 +258,11 @@ hw.module @Precedence(%a: i4, %b: i4, %c: i4) -> (out1: i1, out: i10) {
 }
 
 // CHECK-LABEL: module CmpSign(
-hw.module @CmpSign(%a: i4, %b: i4, %c: i4, %d: i4) ->
- (o0: i1, o1: i1, o2: i1, o3: i1, o4: i1, o5: i1, o6: i1, o7: i1,
-  o8: i1, o9: i1, o10: i1, o11: i1, o12: i1, o13: i1, o14: i1, o15: i1) {
+hw.module @CmpSign(in %a: i4, in %b: i4, in %c: i4, in %d: i4,
+  out o0: i1, out o1: i1, out o2: i1, out o3: i1, 
+  out o4: i1, out o5: i1, out o6: i1, out o7: i1,
+  out o8: i1, out o9: i1, out o10: i1, out o11: i1, 
+  out o12: i1, out o13: i1, out o14: i1, out o15: i1) {
   // CHECK: assign o0 = a < b;
   %0 = comb.icmp ult %a, %b : i4
   // CHECK-NEXT: assign o1 = $signed(c) < $signed(d);
@@ -297,7 +301,7 @@ hw.module @CmpSign(%a: i4, %b: i4, %c: i4, %d: i4) ->
 
 // CHECK-LABEL: module Wires(
 hw.hierpath @myWirePath [@Wires::@myWire]
-hw.module @Wires(%a: i4) -> (x: i4, y: i4) {
+hw.module @Wires(in %a: i4, out x: i4, out y: i4) {
   // CHECK-DAG: wire [3:0] wire1 = a;
   // CHECK-DAG: assign x = wire1;
   %wire1 = hw.wire %a : i4
@@ -333,7 +337,7 @@ hw.module @Wires(%a: i4) -> (x: i4, y: i4) {
 }
 
 // CHECK-LABEL: module MultiUseExpr
-hw.module @MultiUseExpr(%a: i4) -> (b0: i1, b1: i1, b2: i1, b3: i1, b4: i2) {
+hw.module @MultiUseExpr(in %a: i4, out b0: i1, out b1: i1, out b2: i1, out b3: i1, out b4: i2) {
   %false = hw.constant false
   %c1_i5 = hw.constant 1 : i5
   %c-1_i5 = hw.constant -1 : i5
@@ -366,7 +370,7 @@ hw.module @MultiUseExpr(%a: i4) -> (b0: i1, b1: i1, b2: i1, b3: i1, b4: i2) {
 // CHECK:  wire [3:0] w = 4'h1;
 // CHECK:  assign out4 = in4 + 4'h1;
 // CHECK-NEXT: endmodule
-hw.module @SimpleConstPrint(%in4: i4) -> (out4: i4) {
+hw.module @SimpleConstPrint(in %in4: i4, out out4: i4) {
   %w = sv.wire : !hw.inout<i4>
   %c1_i4 = hw.constant 1 : i4
   sv.assign %w, %c1_i4 : i4
@@ -377,7 +381,7 @@ hw.module @SimpleConstPrint(%in4: i4) -> (out4: i4) {
 // Use constants, don't fold them into wires
 // CHECK-LABEL: module SimpleConstPrintReset(
 // CHECK:  q <= 4'h1;
-hw.module @SimpleConstPrintReset(%clock: i1, %reset: i1, %in4: i4) -> () {
+hw.module @SimpleConstPrintReset(in %clock: i1, in %reset: i1, in %in4: i4) {
   %w = sv.wire : !hw.inout<i4>
   %q = sv.reg : !hw.inout<i4>
   %c1_i4 = hw.constant 1 : i4
@@ -394,7 +398,7 @@ hw.module @SimpleConstPrintReset(%clock: i1, %reset: i1, %in4: i4) -> () {
 }
 
 // CHECK-LABEL: module InlineDeclAssignment
-hw.module @InlineDeclAssignment(%a: i1) {
+hw.module @InlineDeclAssignment(in %a: i1) {
   // CHECK: wire b = a;
   %b = sv.wire : !hw.inout<i1>
   sv.assign %b, %a : i1
@@ -409,7 +413,7 @@ hw.module @InlineDeclAssignment(%a: i1) {
 // CHECK-NEXT: input a
 // CHECK-NEXT: );
 // CHECK-EMPTY:
-hw.module @ordered_region(%a: i1) {
+hw.module @ordered_region(in %a: i1) {
   sv.ordered {
     // CHECK-NEXT: `ifdef foo
     sv.ifdef "foo" {
@@ -429,11 +433,11 @@ hw.module @ordered_region(%a: i1) {
 }
 
 
-hw.module.extern @MyExtModule(%in: i8) -> (out: i1) attributes {verilogName = "FooExtModule"}
-hw.module.extern @AParameterizedExtModule<CFG: none>(%in: i8) -> (out: i1)
+hw.module.extern @MyExtModule(in %in: i8, out out: i1) attributes {verilogName = "FooExtModule"}
+hw.module.extern @AParameterizedExtModule<CFG: none>(in %in: i8, out out: i1)
 
 // CHECK-LABEL: module ExternMods
-hw.module @ExternMods(%a_in: i8) {
+hw.module @ExternMods(in %a_in: i8) {
   // CHECK: AParameterizedExtModule #(
   // CHECK:   .CFG(FOO)
   // CHECK: ) xyz2
@@ -445,10 +449,10 @@ hw.module @ExternMods(%a_in: i8) {
 }
 
 hw.module.extern @MyParameterizedExtModule<DEFAULT: i32, DEPTH: f64, FORMAT: none,
-     WIDTH: i8>(%in: i8) -> (out: i1)
+     WIDTH: i8>(in %in: i8, out out: i1)
 
 // CHECK-LABEL: module UseInstances
-hw.module @UseInstances(%a_in: i8) -> (a_out1: i1, a_out2: i1) {
+hw.module @UseInstances(in %a_in: i8, out a_out1: i1, out a_out2: i1) {
   // CHECK: FooExtModule xyz (
   // CHECK:   .in  (a_in),
   // CHECK:   .out (a_out1)
@@ -472,10 +476,10 @@ hw.module @UseInstances(%a_in: i8) -> (a_out1: i1, a_out2: i1) {
 
 // Instantiate a parametric module using parameters from its parent module
 hw.module.extern @ExternParametricWidth<width: i32>
-  (%in: !hw.int<#hw.param.decl.ref<"width">>) -> (out: !hw.int<#hw.param.decl.ref<"width">>)
+  (in %in: !hw.int<#hw.param.decl.ref<"width">>, out out: !hw.int<#hw.param.decl.ref<"width">>)
 // CHECK-LABEL: module NestedParameterUsage
 hw.module @NestedParameterUsage<param: i32>(
-  %in: !hw.int<#hw.param.decl.ref<"param">>) -> (out: !hw.int<#hw.param.decl.ref<"param">>) {
+  in %in: !hw.int<#hw.param.decl.ref<"param">>, out out: !hw.int<#hw.param.decl.ref<"param">>) {
   // CHECK: #(parameter /*integer*/ param) (
   // CHECK: input  [param - 1:0] in,
   // CHECK: output [param - 1:0] out
@@ -494,7 +498,7 @@ hw.module @NestedParameterUsage<param: i32>(
 }
 
 // CHECK-LABEL: module Stop(
-hw.module @Stop(%clock: i1, %reset: i1) {
+hw.module @Stop(in %clock: i1, in %reset: i1) {
   // CHECK: always @(posedge clock) begin
   // CHECK:   `ifndef SYNTHESIS
   // CHECK:     if (`STOP_COND_ & reset)
@@ -517,7 +521,7 @@ hw.module @Stop(%clock: i1, %reset: i1) {
 sv.macro.decl @PRINTF_COND_
 
 // CHECK-LABEL: module Print
-hw.module @Print(%clock: i1, %reset: i1, %a: i4, %b: i4) {
+hw.module @Print(in %clock: i1, in %reset: i1, in %a: i4, in %b: i4) {
   %fd = hw.constant 0x80000002 : i32
   %false = hw.constant false
   %c1_i5 = hw.constant 1 : i5
@@ -581,7 +585,7 @@ hw.module @ReadMemXMRHierPath() {
 sv.verbatim "// VERB: hierpath {{0:|}}" {symbols = [@ReadMem_path]}
 
 // CHECK-LABEL: module UninitReg1(
-hw.module @UninitReg1(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
+hw.module @UninitReg1(in %clock: i1, in %reset: i1, in %cond: i1, in %value: i2) {
   %c-1_i2 = hw.constant -1 : i2
   %count = sv.reg  : !hw.inout<i2>
 
@@ -601,7 +605,7 @@ hw.module @UninitReg1(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
 
 // https://github.com/llvm/circt/issues/2168
 // CHECK-LABEL: module shrs_parens(
-hw.module @shrs_parens(%a: i18, %b: i18, %c: i1) -> (o: i18) {
+hw.module @shrs_parens(in %a: i18, in %b: i18, in %c: i1, out o: i18) {
   // CHECK: assign o = a + $signed($signed(b) >>> c);
   %c0_i17 = hw.constant 0 : i17
   %0 = comb.concat %c0_i17, %c : i17, i1
@@ -613,7 +617,7 @@ hw.module @shrs_parens(%a: i18, %b: i18, %c: i1) -> (o: i18) {
 // https://github.com/llvm/circt/issues/755
 // CHECK-LABEL: module UnaryParensIssue755(
 // CHECK: assign b = |(~a);
-hw.module @UnaryParensIssue755(%a: i8) -> (b: i1) {
+hw.module @UnaryParensIssue755(in %a: i8, out b: i1) {
   %c-1_i8 = hw.constant -1 : i8
   %c0_i8 = hw.constant 0 : i8
   %0 = comb.xor %a, %c-1_i8 : i8
@@ -623,11 +627,11 @@ hw.module @UnaryParensIssue755(%a: i8) -> (b: i1) {
 
 // Inner name references to ports which are renamed to avoid collisions with
 // reserved Verilog keywords.
-hw.module.extern @VerbatimModuleExtern(%foo: i1 {hw.exportPort = #hw<innerSym@symA>}) -> (bar: i1 {hw.exportPort = #hw<innerSym@symB>})
+hw.module.extern @VerbatimModuleExtern(in %foo: i1 {hw.exportPort = #hw<innerSym@symA>}, out bar: i1 {hw.exportPort = #hw<innerSym@symB>})
 // CHECK-LABEL: module VerbatimModule(
 // CHECK-NEXT:    input  signed_0
 // CHECK-NEXT:    output unsigned_0
-hw.module @VerbatimModule(%signed: i1 {hw.exportPort = #hw<innerSym@symA>}) -> (unsigned: i1 {hw.exportPort = #hw<innerSym@symB>}) {
+hw.module @VerbatimModule(in %signed: i1 {hw.exportPort = #hw<innerSym@symA>}, out unsigned: i1 {hw.exportPort = #hw<innerSym@symB>}) {
   %parameter = sv.wire sym @symC : !hw.inout<i4>
   %localparam = sv.reg sym @symD : !hw.inout<i4>
   %shortint = sv.interface.instance sym @symE : !sv.interface<@Interface>
@@ -665,7 +669,7 @@ hw.module @BindEmissionInstance() {
   hw.output
 }
 // CHECK-LABEL: module BindEmission()
-hw.module @BindEmission() -> () {
+hw.module @BindEmission() {
   // CHECK-NEXT: /* This instance is elsewhere emitted as a bind statement
   // CHECK-NEXT:    BindEmissionInstance BindEmissionInstance ();
   // CHECK-NEXT: */
@@ -676,7 +680,7 @@ hw.module @BindEmission() -> () {
 // Check for instance name matching module name
 sv.bind #hw.innerNameRef<@BindEmission2::@BindEmissionInstance> {output_file = #hw.output_file<"BindTest/BindEmissionInstance2.sv", excludeFromFileList>}
 // CHECK-LABEL: module BindEmission2()
-hw.module @BindEmission2() -> () {
+hw.module @BindEmission2() {
   // CHECK-NEXT: /* This instance is elsewhere emitted as a bind statement
   // CHECK-NEXT:    BindEmissionInstance BindEmissionInstance ();
   // CHECK-NEXT: */
@@ -684,7 +688,7 @@ hw.module @BindEmission2() -> () {
   hw.output
 }
 
-hw.module @rename_port(%r: i1 {hw.verilogName = "w"}) {
+hw.module @rename_port(in %r: i1 {hw.verilogName = "w"}) {
 // CHECK-LABEL: module rename_port
 // CHECK:  input w
 // CHECK:  wire [3:0] w_0;
@@ -692,7 +696,7 @@ hw.module @rename_port(%r: i1 {hw.verilogName = "w"}) {
     hw.output
 }
 
-hw.module @bind_rename_port(%.io_req_ready.output: i1, %reset: i1 { hw.verilogName = "resetSignalName" }, %clock: i1) {
+hw.module @bind_rename_port(in %.io_req_ready.output: i1, in %reset: i1 { hw.verilogName = "resetSignalName" }, in %clock: i1) {
   // CHECK-LABEL: module bind_rename_port
   // CHECK-NEXT: input _io_req_ready_output,
   // CHECK-NEXT:       resetSignalName,
@@ -701,7 +705,7 @@ hw.module @bind_rename_port(%.io_req_ready.output: i1, %reset: i1 { hw.verilogNa
 }
 
 // CHECK-LABEL: module SiFive_MulDiv
-hw.module @SiFive_MulDiv(%clock: i1, %reset: i1) -> (io_req_ready: i1) {
+hw.module @SiFive_MulDiv(in %clock: i1, in %reset: i1, out io_req_ready: i1) {
   %false = hw.constant false
   hw.instance "InvisibleBind_assert" sym @__ETC_SiFive_MulDiv_assert @bind_rename_port(".io_req_ready.output": %false: i1, reset: %reset: i1, clock: %clock: i1) -> () {doNotPrint = true}
   hw.output %false : i1
@@ -718,8 +722,8 @@ sv.interface @Interface {
   sv.interface.signal @b : i1
 }
 
-  hw.module.extern @W422_Bar() -> (clock: i1, reset: i1)
-  hw.module.extern @W422_Baz() -> (q: i1)
+  hw.module.extern @W422_Bar(out clock: i1, out reset: i1)
+  hw.module.extern @W422_Baz(out q: i1)
 // CHECK-LABEL: module W422_Foo
 // CHECK-NOT: GEN
   hw.module @W422_Foo() {
@@ -737,7 +741,7 @@ sv.interface @Interface {
     hw.output
   }
 
-hw.module @BindInterface() -> () {
+hw.module @BindInterface() {
   %bar = sv.interface.instance sym @__Interface__ {doNotPrint = true} : !sv.interface<@Interface>
   hw.output
 }

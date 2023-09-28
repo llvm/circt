@@ -1,7 +1,7 @@
 // RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
 // RUN: circt-opt %s -verify-diagnostics --lower-seq-to-sv | circt-opt -verify-diagnostics | FileCheck %s --check-prefix=SV
 // RUN: circt-opt %s -verify-diagnostics --lower-seq-to-sv='lower-to-always-ff=false' | FileCheck %s --check-prefix=ALWAYS
-hw.module @top(%clk: !seq.clock, %rst: i1, %i: i32, %s: !hw.struct<foo: i32>) {
+hw.module @top(in %clk: !seq.clock, in %rst: i1, in %i: i32, in %s: !hw.struct<foo: i32>) {
   %rv = hw.constant 0 : i32
 
   %r0 = seq.compreg %i, %clk, %rst, %rv : i32
@@ -74,7 +74,7 @@ hw.module @top(%clk: !seq.clock, %rst: i1, %i: i32, %s: !hw.struct<foo: i32>) {
   // SV: sv.reg sym @reg2
 }
 
-hw.module @top_ce(%clk: !seq.clock, %rst: i1, %ce: i1, %i: i32) {
+hw.module @top_ce(in %clk: !seq.clock, in %rst: i1, in %ce: i1, in %i: i32) {
   %rv = hw.constant 0 : i32
 
   %r0 = seq.compreg.ce %i, %clk, %ce, %rst, %rv : i32
@@ -102,7 +102,7 @@ hw.module @top_ce(%clk: !seq.clock, %rst: i1, %ce: i1, %i: i32) {
 }
 
 // SV-LABEL: @reg_of_clock_type
-hw.module @reg_of_clock_type(%clk: !seq.clock, %rst: i1, %i: !seq.clock) -> (out: !seq.clock) {
+hw.module @reg_of_clock_type(in %clk: !seq.clock, in %rst: i1, in %i: !seq.clock, out out: !seq.clock) {
   // SV: [[REG0:%.+]] = sv.reg : !hw.inout<i1>
   // SV: [[REG0_VAL:%.+]] = sv.read_inout [[REG0]] : !hw.inout<i1>
   // SV: sv.alwaysff(posedge %clk) {

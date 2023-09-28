@@ -3,7 +3,7 @@
 
 // CHECK-LABEL: module Simple(
 // FIXED-LABEL: module Simple(
-hw.module @Simple(%a: !hw.array<16xi1>, %b : i4) -> (c: i1) {
+hw.module @Simple(in %a : !hw.array<16xi1>, in %b : i4, out c: i1) {
   // CHECK: assign c = a[b + 4'h1];
 
   // FIXED:      (* keep = "true" *)
@@ -21,7 +21,7 @@ hw.module @Simple(%a: !hw.array<16xi1>, %b : i4) -> (c: i1) {
 
 // CHECK-LABEL: module ExistingWire(
 // FIXED-LABEL: module ExistingWire(
-hw.module @ExistingWire(%a: !hw.array<16xi1>, %b : i4) -> (c: i1) {
+hw.module @ExistingWire(in %a: !hw.array<16xi1>, in %b : i4, out c: i1) {
   // CHECK:      wire [3:0] existingWire = b + 4'h3;
   // CHECK-NEXT: assign c = a[existingWire];
 
@@ -43,7 +43,7 @@ hw.module @ExistingWire(%a: !hw.array<16xi1>, %b : i4) -> (c: i1) {
 
 // CHECK-LABEL: module ProceduralRegion(
 // FIXED-LABEL: module ProceduralRegion(
-hw.module @ProceduralRegion(%a: !hw.array<16xi1>, %b : i4) {
+hw.module @ProceduralRegion(in %a: !hw.array<16xi1>, in %b : i4) {
   // CHECK:      magic(a[b + 4'h1]);
 
   // FIXED:      initial begin

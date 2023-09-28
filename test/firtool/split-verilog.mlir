@@ -21,10 +21,10 @@ hw.type_scope @__hw_typedecls {
   hw.typedecl @foo : i1
 }
 
-hw.module @foo(%a: i1) -> (b: i1) {
+hw.module @foo(in %a: i1, out b : i1) {
   hw.output %a : i1
 }
-hw.module @bar(%x: i1) -> (y: i1) {
+hw.module @bar(in %x : i1, out y : i1) {
   hw.output %x : i1
 }
 sv.interface @usb {
@@ -33,15 +33,15 @@ sv.interface @usb {
 }
 hw.module.extern @pll ()
 
-hw.module @inout(%inout: i1) -> (output: i1) {
+hw.module @inout(in %inout: i1, out out : i1) {
   hw.output %inout : i1
 }
 
 // This is made to collide with the first renaming attempt of the `@inout`
 // module above.
-hw.module.extern @inout_0 () -> ()
-hw.module.extern @inout_1 () -> ()
-hw.module.extern @inout_2 () -> ()
+hw.module.extern @inout_0 ()
+hw.module.extern @inout_1 ()
+hw.module.extern @inout_2 ()
 
 sv.verbatim "// Foo" {output_file = #hw.output_file<"custom1.sv">}
 sv.verbatim "// Bar" {output_file = #hw.output_file<"custom2.sv", excludeFromFileList>}

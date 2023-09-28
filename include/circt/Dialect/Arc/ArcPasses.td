@@ -15,7 +15,7 @@ include "mlir/Pass/PassBase.td"
 def AddTaps : Pass<"arc-add-taps", "mlir::ModuleOp"> {
   let summary = "Add taps to ports and wires such that they remain observable";
   let constructor = "circt::arc::createAddTapsPass()";
-  let dependentDialects = ["arc::ArcDialect"];
+  let dependentDialects = ["arc::ArcDialect", "seq::SeqDialect"];
   let options = [
     Option<"tapPorts", "ports", "bool", "true", "Make module ports observable">,
     Option<"tapWires", "wires", "bool", "true", "Make wires observable">,
@@ -158,7 +158,7 @@ def LowerState : Pass<"arc-lower-state", "mlir::ModuleOp"> {
   let constructor = "circt::arc::createLowerStatePass()";
   let dependentDialects = [
     "arc::ArcDialect", "mlir::scf::SCFDialect", "mlir::func::FuncDialect",
-    "mlir::LLVM::LLVMDialect", "comb::CombDialect"
+    "mlir::LLVM::LLVMDialect", "comb::CombDialect", "seq::SeqDialect"
   ];
 }
 

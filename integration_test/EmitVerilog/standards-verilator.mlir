@@ -16,12 +16,13 @@
 // RUN: verilator --lint-only +1800-2012ext+sv %t1.2012.sv
 // RUN: verilator --lint-only +1800-2017ext+sv %t1.2017.sv
 
-hw.module @top(%clock : i1, %reset: i1,
-                %a: i4, 
-                %s: !hw.struct<foo: i2, bar: i4>,
-                %parray: !hw.array<10xi4>,
-                %uarray: !hw.uarray<16xi8>)
-                 -> (r0: i4, r1: i4) {
+hw.module @top(in %clock : i1, in %reset: i1,
+                in %a: i4, 
+                in %s: !hw.struct<foo: i2, bar: i4>,
+                in %parray: !hw.array<10xi4>,
+                in %uarray: !hw.uarray<16xi8>,
+                out r0: i4, 
+                out r1: i4) {
   %0 = comb.or %a, %a : i4
   %1 = comb.and %a, %a : i4
 

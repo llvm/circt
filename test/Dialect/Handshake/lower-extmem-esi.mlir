@@ -2,11 +2,31 @@
 // RUN: circt-opt -split-input-file -handshake-lower-extmem-to-hw="wrap-esi=true" -handshake-materialize-forks-sinks -lower-handshake-to-hw %s | FileCheck %s --check-prefix=LOWERED
 
 
-//CHECK-LABEL: hw.module.extern @__main_hw(%arg0: !esi.channel<i64>, %arg1: !esi.channel<i64>, %v: !esi.channel<i32>, %mem_ld0.data: !esi.channel<i32>, %mem_st0.done: !esi.channel<i0>, %argCtrl: !esi.channel<i0>, %clock: !seq.clock, %reset: i1) -> (out0: !esi.channel<i0>, mem_ld0.addr: !esi.channel<i4>, mem_st0: !esi.channel<!hw.struct<address: i4, data: i32>>)
+//CHECK-LABEL: hw.module.extern @__main_hw(
+// CHECK-SAME: in %arg0 : !esi.channel<i64>, 
+// CHECK-SAME: in %arg1 : !esi.channel<i64>, 
+// CHECK-SAME: in %v : !esi.channel<i32>, 
+// CHECK-SAME: in %mem_ld0.data : !esi.channel<i32>, 
+// CHECK-SAME: in %mem_st0.done : !esi.channel<i0>, 
+// CHECK-SAME: in %argCtrl : !esi.channel<i0>, 
+// CHECK-SAME: in %clock : !seq.clock, 
+// CHECK-SAME: in %reset : i1, 
+// CHECK-SAME: out out0 : !esi.channel<i0>, 
+// CHECK-SAME: out mem_ld0.addr : !esi.channel<i4>, 
+// CHECK-SAME: out mem_st0 : !esi.channel<!hw.struct<address: i4, data: i32>>
+// CHECK-SAME: )
 
 //CHECK-LABEL: esi.mem.ram @mem i32 x 10
 
-//CHECK-LABEL: hw.module @main_esi_wrapper(%arg0: !esi.channel<i64>, %arg1: !esi.channel<i64>, %v: !esi.channel<i32>, %argCtrl: !esi.channel<i0>, %clock: !seq.clock, %reset: i1) -> (out0: !esi.channel<i0>) {
+//CHECK-LABEL: hw.module @main_esi_wrapper(
+// CHECK-SAME: in %arg0 : !esi.channel<i64>, 
+// CHECK-SAME: in %arg1 : !esi.channel<i64>, 
+// CHECK-SAME: in %v : !esi.channel<i32>, 
+// CHECK-SAME: in %argCtrl : !esi.channel<i0>, 
+// CHECK-SAME: in %clock : !seq.clock, 
+// CHECK-SAME: in %reset : i1,
+// CHECK-SAME: out out0 : !esi.channel<i0>
+// CHECK-SAME: ) {
 //CHECK-NEXT:   %0 = esi.service.req.inout %main.mem_ld0.addr -> <@mem::@read>([]) : !esi.channel<i4> -> !esi.channel<i32>
 //CHECK-NEXT:   %1 = esi.service.req.inout %main.mem_st0 -> <@mem::@write>([]) : !esi.channel<!hw.struct<address: i4, data: i32>> -> !esi.channel<i0>
 //CHECK-NEXT:   %main.out0, %main.mem_ld0.addr, %main.mem_st0 = hw.instance "main" @__main_hw(arg0: %arg0: !esi.channel<i64>, arg1: %arg1: !esi.channel<i64>, v: %v: !esi.channel<i32>, mem_ld0.data: %0: !esi.channel<i32>, mem_st0.done: %1: !esi.channel<i0>, argCtrl: %argCtrl: !esi.channel<i0>, clock: %clock: !seq.clock, reset: %reset: i1) -> (out0: !esi.channel<i0>, mem_ld0.addr: !esi.channel<i4>, mem_st0: !esi.channel<!hw.struct<address: i4, data: i32>>)

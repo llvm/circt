@@ -1,7 +1,7 @@
 // RUN: circt-opt %s --arc-isolate-clocks | FileCheck %s
 
 // CHECK-LABEL: hw.module @basics
-hw.module @basics(%clk0: !seq.clock, %clk1: !seq.clock, %clk2: !seq.clock, %c0: i1, %c1: i1, %in: i32) -> (out0: i32, out1: i32) {
+hw.module @basics(in %clk0: !seq.clock, in %clk1: !seq.clock, in %clk2: !seq.clock, in %c0: i1, in %c1: i1, in %in: i32, out out0: i32, out out1: i32) {
   // COM: check the basic things: clocked ops are grouped properly, lat 0 states
   // COM: are not considered clocked, clock domain materialization
   %0 = comb.and %c0, %c1 : i1
@@ -45,7 +45,7 @@ arc.define @identity(%arg0: i1, %arg1: i32) -> (i1, i32) {
 }
 
 // CHECK-LABEL: hw.module @preexistingClockDomain
-hw.module @preexistingClockDomain(%clk0: !seq.clock, %clk1: !seq.clock, %in: i32) -> (out0: i32, out1: i32) {
+hw.module @preexistingClockDomain(in %clk0: !seq.clock, in %clk1: !seq.clock, in %in: i32, out out0: i32, out out1: i32) {
   // COM: the pass also works when there are already clock domains present, but
   // COM: it creates new clock domain ops for all clocks of clocked operations
   // COM: outside of the existing domains instead of merging them.

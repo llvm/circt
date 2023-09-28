@@ -3,7 +3,7 @@
 // RUN: circt-reduce %s --test /usr/bin/env --test-arg grep --test-arg -q --test-arg "hw.module @Foo" --keep-best=0 --include hw-operand0-forwarder | FileCheck %s
 
 // CHECK-LABEL: hw.module @Foo
-hw.module @Foo(%arg0: i32, %arg1: i32) -> (out: i32) {
+hw.module @Foo(in %arg0: i32, in %arg1: i32, out out: i32) {
   // COM: operand 0 is forwarded here
   %0 = comb.and %arg0, %arg1 : i32
   // CHECK-NEXT: [[V0:%.+]] = comb.and [[V0]], %arg0 : i32

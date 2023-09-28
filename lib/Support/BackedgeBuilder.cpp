@@ -38,8 +38,8 @@ LogicalResult BackedgeBuilder::clearOrEmitError() {
   unsigned numInUse = 0;
   for (Operation *op : edges) {
     if (!op->use_empty()) {
-      auto diag = op->emitError("backedge of type `")
-                  << op->getResult(0).getType() << "`still in use";
+      auto diag = op->emitError("backedge of type ")
+                  << op->getResult(0).getType() << " still in use";
       for (auto user : op->getUsers())
         diag.attachNote(user->getLoc()) << "used by " << *user;
       ++numInUse;

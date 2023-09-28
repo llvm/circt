@@ -4,7 +4,7 @@
 
 // COMMON-LABEL: hw.module @lowering
 // SEPARATE-LABEL: hw.module @lowering
-hw.module @lowering(%clk: !seq.clock, %rst: i1, %in: i32) -> (a: i32, b: i32, c: i32, d: i32, e: i32, f: i32) {
+hw.module @lowering(in %clk : !seq.clock, in %rst : i1, in %in : i32, out a : i32, out b : i32, out c : i32, out d : i32, out e : i32, out f : i32) {
   %cst0 = hw.constant 0 : i32
 
   // CHECK: %rA = sv.reg sym @regA : !hw.inout<i32>
@@ -160,8 +160,8 @@ hw.module @lowering(%clk: !seq.clock, %rst: i1, %in: i32) -> (a: i32, b: i32, c:
   hw.output %rA, %rB, %rC, %rD, %rE, %rF : i32, i32, i32, i32, i32, i32
 }
 
-// COMMON-LABEL: hw.module private @UninitReg1(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
-hw.module private @UninitReg1(%clock: !seq.clock, %reset: i1, %cond: i1, %value: i2) {
+// COMMON-LABEL: hw.module private @UninitReg1(in %clock : i1, in %reset : i1, in %cond : i1, in %value : i2) {
+hw.module private @UninitReg1(in %clock : !seq.clock, in %reset : i1, in %cond : i1, in %value : i2) {
   // CHECK: %c0_i2 = hw.constant 0 : i2
   %c0_i2 = hw.constant 0 : i2
   // CHECK-NEXT: %count = sv.reg sym @count : !hw.inout<i2>
@@ -215,8 +215,8 @@ hw.module private @UninitReg1(%clock: !seq.clock, %reset: i1, %cond: i1, %value:
   // CHECK: hw.output
   hw.output
 }
-// COMMON-LABEL: hw.module private @UninitReg1_nonbin(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
-hw.module private @UninitReg1_nonbin(%clock: !seq.clock, %reset: i1, %cond: i1, %value: i2) {
+// COMMON-LABEL: hw.module private @UninitReg1_nonbin(in %clock : i1, in %reset : i1, in %cond : i1, in %value : i2) {
+hw.module private @UninitReg1_nonbin(in %clock : !seq.clock, in %reset : i1, in %cond : i1, in %value : i2) {
   // CHECK: %c0_i2 = hw.constant 0 : i2
   %c0_i2 = hw.constant 0 : i2
   // CHECK-NEXT: %count = sv.reg sym @count : !hw.inout<i2>
@@ -249,7 +249,7 @@ hw.module private @UninitReg1_nonbin(%clock: !seq.clock, %reset: i1, %cond: i1, 
 //     reg <= mux(io_en, io_d, reg)
 
 // COMMON-LABEL: hw.module private @InitReg1(
-hw.module private @InitReg1(%clock: !seq.clock, %reset: i1, %io_d: i32, %io_en: i1) -> (io_q: i32) {
+hw.module private @InitReg1(in %clock: !seq.clock, in %reset: i1, in %io_d: i32, in %io_en: i1, out io_q: i32) {
   %false = hw.constant false
   %c1_i32 = hw.constant 1 : i32
   %c0_i32 = hw.constant 0 : i32
@@ -332,8 +332,8 @@ hw.module private @InitReg1(%clock: !seq.clock, %reset: i1, %io_d: i32, %io_en: 
   hw.output %reg : i32
 }
 
-// COMMON-LABEL: hw.module private @UninitReg42(%clock: i1, %reset: i1, %cond: i1, %value: i42) {
-hw.module private @UninitReg42(%clock: !seq.clock, %reset: i1, %cond: i1, %value: i42) {
+// COMMON-LABEL: hw.module private @UninitReg42(in %clock : i1, in %reset : i1, in %cond : i1, in %value : i42) {
+hw.module private @UninitReg42(in %clock: !seq.clock, in %reset: i1, in %cond: i1, in %value: i42) {
   %c0_i42 = hw.constant 0 : i42
   %count = seq.firreg %1 clock %clock sym @count : i42
   %0 = comb.mux %cond, %value, %count : i42
@@ -376,7 +376,7 @@ hw.module private @UninitReg42(%clock: !seq.clock, %reset: i1, %cond: i1, %value
 }
 
 // COMMON-LABEL: hw.module private @init1DVector
-hw.module private @init1DVector(%clock: !seq.clock, %a: !hw.array<2xi1>) -> (b: !hw.array<2xi1>) {
+hw.module private @init1DVector(in %clock: !seq.clock, in %a: !hw.array<2xi1>, out b: !hw.array<2xi1>) {
   %r = seq.firreg %a clock %clock sym @__r__ : !hw.array<2xi1>
 
   // CHECK:      %r = sv.reg sym @[[r_sym:[_A-Za-z0-9]+]]
@@ -425,7 +425,7 @@ hw.module private @init1DVector(%clock: !seq.clock, %a: !hw.array<2xi1>) -> (b: 
 }
 
 // COMMON-LABEL: hw.module private @init2DVector
-hw.module private @init2DVector(%clock: !seq.clock, %a: !hw.array<1xarray<1xi1>>) -> (b: !hw.array<1xarray<1xi1>>) {
+hw.module private @init2DVector(in %clock: !seq.clock, in %a: !hw.array<1xarray<1xi1>>, out b: !hw.array<1xarray<1xi1>>) {
   %r = seq.firreg %a clock %clock sym @__r__ : !hw.array<1xarray<1xi1>>
 
   // CHECK:      sv.always posedge %clock  {
@@ -467,7 +467,7 @@ hw.module private @init2DVector(%clock: !seq.clock, %a: !hw.array<1xarray<1xi1>>
 }
 
 // COMMON-LABEL: hw.module private @initStruct
-hw.module private @initStruct(%clock: !seq.clock) {
+hw.module private @initStruct(in %clock: !seq.clock) {
   %r = seq.firreg %r clock %clock sym @__r__ : !hw.struct<a: i1>
 
   // CHECK:      %r = sv.reg sym @[[r_sym:[_A-Za-z0-9]+]]
@@ -497,7 +497,7 @@ hw.module private @initStruct(%clock: !seq.clock) {
 
 // COMMON-LABEL: issue1594
 // Make sure LowerToHW's merging of always blocks kicks in for this example.
-hw.module @issue1594(%clock: !seq.clock, %reset: i1, %a: i1) -> (b: i1) {
+hw.module @issue1594(in %clock: !seq.clock, in %reset: i1, in %a: i1, out b: i1) {
   %true = hw.constant true
   %false = hw.constant false
   %reset_n = sv.wire sym @__issue1594__reset_n  : !hw.inout<i1>
@@ -514,7 +514,7 @@ hw.module @issue1594(%clock: !seq.clock, %reset: i1, %a: i1) -> (b: i1) {
 // Check that deeply nested if statement creation doesn't cause any issue.
 // COMMON-LABEL: @DeeplyNestedIfs
 // CHECK-COUNT-17: sv.if
-hw.module @DeeplyNestedIfs(%a_0: i1, %a_1: i1, %a_2: i1, %c_0_0: i1, %c_0_1: i1, %c_1_0: i1, %c_1_1: i1, %c_2_0: i1, %c_2_1: i1, %clock: !seq.clock) -> (out_0: i1, out_1: i1) {
+hw.module @DeeplyNestedIfs(in %a_0: i1, in %a_1: i1, in %a_2: i1, in %c_0_0: i1, in %c_0_1: i1, in %c_1_0: i1, in %c_1_1: i1, in %c_2_0: i1, in %c_2_1: i1, in %clock: !seq.clock, out out_0: i1, out out_1: i1) {
   %r_0 = seq.firreg %25 clock %clock {firrtl.random_init_start = 0 : ui64} : i1
   %r_1 = seq.firreg %51 clock %clock {firrtl.random_init_start = 1 : ui64} : i1
   %0 = comb.mux bin %a_1, %c_1_0, %c_0_0 : i1
@@ -573,7 +573,7 @@ hw.module @DeeplyNestedIfs(%a_0: i1, %a_1: i1, %a_2: i1, %c_0_0: i1, %c_0_1: i1,
 }
 
 // COMMON-LABEL: @ArrayElements
-hw.module @ArrayElements(%a: !hw.array<2xi1>, %clock: !seq.clock, %cond: i1) -> (b: !hw.array<2xi1>) {
+hw.module @ArrayElements(in %a: !hw.array<2xi1>, in %clock: !seq.clock, in %cond: i1, out b: !hw.array<2xi1>) {
   %false = hw.constant false
   %true = hw.constant true
   %0 = hw.array_get %a[%true] : !hw.array<2xi1>, i1
@@ -601,7 +601,7 @@ hw.module @ArrayElements(%a: !hw.array<2xi1>, %clock: !seq.clock, %cond: i1) -> 
 // inferred latches that would otherwise happen.
 //
 // COMMON-LABEL: @AsyncResetUndriven
-hw.module @AsyncResetUndriven(%clock: !seq.clock, %reset: i1) -> (q: i32) {
+hw.module @AsyncResetUndriven(in %clock: !seq.clock, in %reset: i1, out q: i32) {
   %c0_i32 = hw.constant 0 : i32
   %r = seq.firreg %r clock %clock sym @r reset async %reset, %c0_i32 {firrtl.random_init_start = 0 : ui64} : i32
   hw.output %r : i32
@@ -614,7 +614,7 @@ hw.module @AsyncResetUndriven(%clock: !seq.clock, %reset: i1) -> (q: i32) {
 }
 
 // CHECK-LABEL: @Subaccess
-hw.module @Subaccess(%clock: !seq.clock, %en: i1, %addr: i2, %data: i32) -> (out: !hw.array<3xi32>) {
+hw.module @Subaccess(in %clock: !seq.clock, in %en: i1, in %addr: i2, in %data: i32, out out: !hw.array<3xi32>) {
   %c0_i2 = hw.constant 0 : i2
   %c1_i2 = hw.constant 1 : i2
   %c-2_i2 = hw.constant -2 : i2
@@ -655,7 +655,7 @@ hw.module @Subaccess(%clock: !seq.clock, %en: i1, %addr: i2, %data: i32) -> (out
 //  else:
 //    r[addr_3] <= data_3
 //
-hw.module @NestedSubaccess(%clock: !seq.clock, %en_0: i1, %en_1: i1, %en_2: i1, %addr_0: i2, %addr_1: i2, %addr_2: i2, %addr_3: i2, %data_0: i32, %data_1: i32, %data_2: i32, %data_3: i32) -> () {
+hw.module @NestedSubaccess(in %clock: !seq.clock, in %en_0: i1, in %en_1: i1, in %en_2: i1, in %addr_0: i2, in %addr_1: i2, in %addr_2: i2, in %addr_3: i2, in %data_0: i32, in %data_1: i32, in %data_2: i32, in %data_3: i32) {
   %c0_i2 = hw.constant 0 : i2
   %c1_i2 = hw.constant 1 : i2
   %c-2_i2 = hw.constant -2 : i2
@@ -729,7 +729,7 @@ hw.module @NestedSubaccess(%clock: !seq.clock, %en_0: i1, %en_1: i1, %en_2: i1, 
 }
 
 // CHECK-LABEL: @with_preset
-hw.module @with_preset(%clock: !seq.clock, %reset: i1, %next32: i32, %next16: i16) -> () {
+hw.module @with_preset(in %clock: !seq.clock, in %reset: i1, in %next32: i32, in %next16: i16) {
   %preset_0 = seq.firreg %next32 clock %clock preset 0 : i32
   %preset_42 = seq.firreg %next16 clock %clock preset 42 : i16
 
@@ -744,7 +744,7 @@ hw.module @with_preset(%clock: !seq.clock, %reset: i1, %next32: i32, %next16: i1
 }
 
 // CHECK-LABEL: @reg_of_clock_type
-hw.module @reg_of_clock_type(%clk: !seq.clock, %rst: i1, %i: !seq.clock) -> (out: !seq.clock) {
+hw.module @reg_of_clock_type(in %clk: !seq.clock, in %rst: i1, in %i: !seq.clock, out out: !seq.clock) {
   // CHECK: [[REG0:%.+]] = sv.reg : !hw.inout<i1>
   // CHECK: [[REG0_READ:%.+]] = sv.read_inout [[REG0]] : !hw.inout<i1>
   %r0 = seq.firreg %i clock %clk : !seq.clock

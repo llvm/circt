@@ -97,14 +97,10 @@ class InstanceBuilder(support.NamedValueOpView):
                                           instance_of=self.module)
 
   def operand_names(self):
-    arg_names = ArrayAttr(self.module.attributes["argNames"])
-    arg_name_attrs = map(StringAttr, arg_names)
-    return list(map(lambda s: s.value, arg_name_attrs))
+    return self.module.type.input_names
 
   def result_names(self):
-    arg_names = ArrayAttr(self.module.attributes["resultNames"])
-    arg_name_attrs = map(StringAttr, arg_names)
-    return list(map(lambda s: s.value, arg_name_attrs))
+    return self.module.type.output_names
 
 
 class ModuleLike:
@@ -154,7 +150,6 @@ class ModuleLike:
       module_ports.append(input_port)
       input_names.append(input_name)
       port_locs.append(unknownLoc)
-    attributes["argNames"] = ArrayAttr.get(input_names)
 
     output_types = []
     output_names = []
@@ -165,8 +160,7 @@ class ModuleLike:
       module_ports.append(output_port)
       output_names.append(output_name)
       port_locs.append(unknownLoc)
-    attributes["resultNames"] = ArrayAttr.get(output_names)
-    attributes["portLocs"] = ArrayAttr.get(port_locs)
+    attributes["port_locs"] = ArrayAttr.get(port_locs)
     attributes["per_port_attrs"] = ArrayAttr.get([])
 
     if len(parameters) > 0 or "parameters" not in attributes:
@@ -329,10 +323,9 @@ class HWModuleOp(ModuleLike):
   @property
   def input_indices(self):
     indices: dict[int, str] = {}
-    op_names = ArrayAttr(self.attributes["argNames"])
+    op_names = self.type.input_names
     for idx, name in enumerate(op_names):
-      str_name = StringAttr(name).value
-      indices[str_name] = idx
+      indices[name] = idx
     return indices
 
   # Support attribute access to block arguments by name
@@ -349,10 +342,7 @@ class HWModuleOp(ModuleLike):
     return ret
 
   def outputs(self) -> dict[str:Type]:
-    result_names = [
-        StringAttr(name).value
-        for name in ArrayAttr(self.attributes["resultNames"])
-    ]
+    result_names = self.type.output_names
     result_types = self.type.output_types
     return dict(zip(result_names, result_types))
 

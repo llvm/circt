@@ -1,5 +1,4 @@
 //===- LowerOpenAggs.cpp - Lower Open Aggregate Types -----------*- C++ -*-===//
-
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -21,6 +20,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
+#include "circt/Dialect/FIRRTL/FieldRefCache.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -213,6 +213,10 @@ private:
   /// List of operations to erase at the end.
   SmallVector<Operation *> opsToErase;
 
+  /// FieldRef cache.  Be careful to only use this for operations
+  /// in the original IR / not mutated.
+  FieldRefCache refs;
+
   /// Whether IR was changed.
   bool changesMade = false;
 };
@@ -376,6 +380,8 @@ LogicalResult Visitor::visit(FModuleLike mod) {
   mod.erasePorts(portsToErase);
   recordChanges(portsToErase.any());
 
+  LLVM_DEBUG(refs.printStats(llvm::dbgs()));
+
   return success();
 }
 
@@ -410,7 +416,7 @@ LogicalResult Visitor::visitExpr(OpenSubfieldOp op) {
   // Chase this to its original root.
   // If the FieldRef for this selection has a new home,
   // RAUW to that value and this op is dead.
-  auto resultRef = getFieldRefFromValue(op.getResult());
+  auto resultRef = refs.getFieldRefFromValue(op.getResult());
   auto nonHWForResult = nonHWValues.find(resultRef);
   if (nonHWForResult != nonHWValues.end()) {
     // If has nonHW portion, RAUW to it.
@@ -457,7 +463,7 @@ LogicalResult Visitor::visitExpr(OpenSubindexOp op) {
   // Chase this to its original root.
   // If the FieldRef for this selection has a new home,
   // RAUW to that value and this op is dead.
-  auto resultRef = getFieldRefFromValue(op.getResult());
+  auto resultRef = refs.getFieldRefFromValue(op.getResult());
   auto nonHWForResult = nonHWValues.find(resultRef);
   if (nonHWForResult != nonHWValues.end()) {
     // If has nonHW portion, RAUW to it.

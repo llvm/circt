@@ -22,8 +22,8 @@ sv.interface @foo {
 
 // -----
 
-hw.module @Aliasing(%a : !hw.inout<i42>, %b : !hw.inout<i42>,
-                      %c : !hw.inout<i42>) {
+hw.module @Aliasing(inout %a : i42, inout %b : i42,
+                      inout %c : i42) {
 
   // ok
   sv.alias %a, %b     : !hw.inout<i42>, !hw.inout<i42>
@@ -40,35 +40,35 @@ hw.module @Fwrite() {
 }
 
 // -----
-hw.module @Bpassign(%arg0: i1) {
+hw.module @Bpassign(in %arg0: i1) {
   %reg = sv.reg : !hw.inout<i1>
   // expected-error @+1 {{sv.bpassign should be in a procedural region}}
   sv.bpassign %reg, %arg0 : i1
 }
 
 // -----
-hw.module @Passign(%arg0: i1) {
+hw.module @Passign(in %arg0: i1) {
   %reg = sv.reg : !hw.inout<i1>
   // expected-error @+1 {{sv.passign should be in a procedural region}}
   sv.passign %reg, %arg0 : i1
 }
 
 // -----
-hw.module @ForcePassign(%arg0: i1) {
+hw.module @ForcePassign(in %arg0: i1) {
   %reg = sv.reg : !hw.inout<i1>
   // expected-error @+1 {{sv.force should be in a procedural region}}
   sv.force %reg, %arg0 : i1
 }
 
 // -----
-hw.module @ReleasePassign(%arg0: i1) {
+hw.module @ReleasePassign(in %arg0: i1) {
   %reg = sv.reg : !hw.inout<i1>
   // expected-error @+1 {{sv.release should be in a procedural region}}
   sv.release %reg : !hw.inout<i1>
 }
 
 // -----
-hw.module @IfOp(%arg0: i1) {
+hw.module @IfOp(in %arg0: i1) {
   %fd = hw.constant 0x80000002 : i32
   // expected-error @+1 {{sv.if should be in a procedural region}}
   sv.if %arg0 {
@@ -89,7 +89,7 @@ hw.module @Finish() {
 }
 
 // -----
-hw.module @CaseZ(%arg8: i8) {
+hw.module @CaseZ(in %arg8: i8) {
   %fd = hw.constant 0x80000002 : i32
   // expected-error @+1 {{sv.case should be in a procedural region}}
   sv.case %arg8 : i8
@@ -118,7 +118,7 @@ hw.module @IfDef() {
 }
 
 // -----
-hw.module @Always(%arg0: i1) {
+hw.module @Always(in %arg0: i1) {
   sv.initial {
     // expected-error @+1 {{sv.always should be in a non-procedural region}}
     sv.always posedge %arg0 {}
@@ -126,7 +126,7 @@ hw.module @Always(%arg0: i1) {
 }
 
 // -----
-hw.module @AlwaysFF(%arg0: i1) {
+hw.module @AlwaysFF(in %arg0: i1) {
   sv.initial {
     // expected-error @+1 {{sv.alwaysff should be in a non-procedural region}}
     sv.alwaysff (posedge %arg0) {}
@@ -142,19 +142,19 @@ hw.module @Wire() {
 }
 
 // -----
-hw.module @Assert(%arg0: i1) {
+hw.module @Assert(in %arg0: i1) {
   // expected-error @+1 {{sv.assert should be in a procedural region}}
   sv.assert %arg0, immediate
 }
 
 // -----
-hw.module @Assume(%arg0: i1) {
+hw.module @Assume(in %arg0: i1) {
   // expected-error @+1 {{sv.assume should be in a procedural region}}
   sv.assume %arg0, immediate
 }
 
 // -----
-hw.module @Cover(%arg0: i1) {
+hw.module @Cover(in %arg0: i1) {
   // expected-error @+1 {{sv.cover should be in a procedural region}}
   sv.cover %arg0, immediate
 }
@@ -232,7 +232,7 @@ hw.module @CaseEnum() {
 
 // -----
 
-hw.module @NoMessage(%clock: i1, %value : i4) -> () {
+hw.module @NoMessage(in %clock: i1, in %value : i4) {
   sv.always posedge %clock {
     // expected-error @below {{failed to verify that has message if has substitutions}}
    "sv.assert"(%clock, %value) { defer = 0 : i32 } : (i1, i4) -> ()

@@ -1,7 +1,7 @@
 // RUN: circt-opt --canonicalize %s | FileCheck %s
 
 // CHECK-LABEL: @HasBeenReset
-hw.module @HasBeenReset(%clock: i1, %reset: i1) {
+hw.module @HasBeenReset(in %clock: i1, in %reset: i1) {
   // CHECK-NEXT: %false = hw.constant false
   // CHECK-NEXT: %true = hw.constant true
   %false = hw.constant false

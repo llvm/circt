@@ -589,7 +589,7 @@ buildModule(OpBuilder &builder, OperationState &result, StringAttr name,
   auto type = ModuleType::get(builder.getContext(), portTypes);
   result.addAttribute(ModuleTy::getModuleTypeAttrName(result.name),
                       TypeAttr::get(type));
-  result.addAttribute("portLocs", builder.getArrayAttr(portLocs));
+  result.addAttribute("port_locs", builder.getArrayAttr(portLocs));
   result.addAttribute("per_port_attrs",
                       arrayOrEmpty(builder.getContext(), portAttrs));
   result.addAttribute("parameters", parameters);
@@ -920,6 +920,35 @@ static void addArgAndResultAttrsHW(Builder &builder, OperationState &result,
   addArgAndResultAttrsHW(builder, result, argAttrs, resultAttrs);
 }
 
+static void
+addPortAttrsAndLocs(Builder &builder, OperationState &result,
+                    SmallVectorImpl<module_like_impl::PortParse> &ports,
+                    StringAttr portAttrsName, StringAttr portLocsName) {
+  auto unknownLoc = builder.getUnknownLoc();
+  auto nonEmptyAttrsFn = [](Attribute attr) {
+    return attr && !cast<DictionaryAttr>(attr).empty();
+  };
+  auto nonEmptyLocsFn = [unknownLoc](Attribute attr) {
+    return attr && cast<Location>(attr) != unknownLoc;
+  };
+
+  // Convert the specified array of dictionary attrs (which may have null
+  // entries) to an ArrayAttr of dictionaries.
+  SmallVector<Attribute> attrs;
+  SmallVector<Attribute> locs;
+  for (auto &port : ports) {
+    attrs.push_back(port.attrs ? port.attrs : builder.getDictionaryAttr({}));
+    locs.push_back(port.sourceLoc ? Location(*port.sourceLoc) : unknownLoc);
+  }
+
+  // Add the attributes to the ports.
+  if (llvm::any_of(attrs, nonEmptyAttrsFn))
+    result.addAttribute(portAttrsName, builder.getArrayAttr(attrs));
+
+  if (llvm::any_of(locs, nonEmptyLocsFn))
+    result.addAttribute(portLocsName, builder.getArrayAttr(locs));
+}
+
 template <typename ModuleTy>
 static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
                                    ExternModKind modKind = PlainMod) {
@@ -950,51 +979,30 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
   if (parseOptionalParameterList(parser, parameters))
     return failure();
 
-  // Parse the function signature.
-  bool isVariadic = false;
-  SmallVector<OpAsmParser::Argument, 4> entryArgs;
-  SmallVector<Attribute> argNames;
-  SmallVector<Attribute> argLocs;
-  SmallVector<Attribute> resultNames;
-  SmallVector<DictionaryAttr> resultAttrs;
-  SmallVector<Attribute> resultLocs;
-  TypeAttr functionType;
-  if (failed(module_like_impl::parseModuleFunctionSignature(
-          parser, isVariadic, entryArgs, argNames, argLocs, resultNames,
-          resultAttrs, resultLocs, functionType)))
+  SmallVector<module_like_impl::PortParse> ports;
+  TypeAttr modType;
+  if (failed(module_like_impl::parseModuleSignature(parser, ports, modType)))
     return failure();
 
   // Parse the attribute dict.
   if (failed(parser.parseOptionalAttrDictWithKeyword(result.attributes)))
     return failure();
 
-  if (hasAttribute("resultNames", result.attributes) ||
-      hasAttribute("parameters", result.attributes)) {
-    parser.emitError(
-        loc, "explicit `resultNames` / `parameters` attributes not allowed");
+  if (hasAttribute("parameters", result.attributes)) {
+    parser.emitError(loc, "explicit `parameters` attributes not allowed");
     return failure();
   }
 
-  SmallVector<Attribute> portLocs;
-  portLocs.append(argLocs.begin(), argLocs.end());
-  portLocs.append(resultLocs.begin(), resultLocs.end());
-
-  auto *context = result.getContext();
-  // prefer the attribute over the ssa values
-  auto attr = getAttribute("argNames", result.attributes);
-  auto modType = detail::fnToMod(
-      cast<FunctionType>(functionType.getValue()),
-      attr ? cast<ArrayAttr>(attr).getValue() : argNames, resultNames);
-  result.attributes.erase("argNames");
-  result.addAttribute("portLocs", ArrayAttr::get(context, portLocs));
   result.addAttribute("parameters", parameters);
-  if (!hasAttribute("comment", result.attributes))
-    result.addAttribute("comment", StringAttr::get(context, ""));
-  result.addAttribute(ModuleTy::getModuleTypeAttrName(result.name),
-                      TypeAttr::get(modType));
+  result.addAttribute(ModuleTy::getModuleTypeAttrName(result.name), modType);
+  addPortAttrsAndLocs(parser.getBuilder(), result, ports,
+                      ModuleTy::getPerPortAttrsAttrName(result.name),
+                      ModuleTy::getPortLocsAttrName(result.name));
 
-  // Add the attributes to the function arguments.
-  addArgAndResultAttrsHW(parser.getBuilder(), result, entryArgs, resultAttrs);
+  SmallVector<OpAsmParser::Argument, 4> entryArgs;
+  for (auto &port : ports)
+    if (port.direction != ModulePort::Direction::Output)
+      entryArgs.push_back(port);
 
   // Parse the optional function body.
   auto *body = result.addRegion();
@@ -1031,14 +1039,7 @@ FunctionType getHWModuleOpType(Operation *op) {
 
 template <typename ModuleTy>
 static void printModuleOp(OpAsmPrinter &p, ModuleTy mod) {
-  using namespace mlir::function_interface_impl;
-
-  FunctionType fnType = mod.getHWModuleType().getFuncType();
-  auto argTypes = fnType.getInputs();
-  auto resultTypes = fnType.getResults();
-
   p << ' ';
-
   // Print the visibility of the module.
   StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
   if (auto visibility = mod.getOperation()->template getAttrOfType<StringAttr>(
@@ -1053,40 +1054,25 @@ static void printModuleOp(OpAsmPrinter &p, ModuleTy mod) {
   }
 
   // Print the parameter list if present.
-  printOptionalParameterList(
-      p, mod.getOperation(),
-      mod.getOperation()->template getAttrOfType<ArrayAttr>("parameters"));
+  printOptionalParameterList(p, mod.getOperation(), mod.getParameters());
 
-  bool needArgNamesAttr = false;
-  module_like_impl::printModuleSignature(p, mod.getOperation(), argTypes,
-                                         /*isVariadic=*/false, resultTypes,
-                                         needArgNamesAttr);
+  module_like_impl::printModuleSignatureNew(p, mod.getOperation());
 
   SmallVector<StringRef, 3> omittedAttrs;
   if (isa<HWModuleGeneratedOp>(mod.getOperation()))
     omittedAttrs.push_back("generatorKind");
-  if (!needArgNamesAttr)
-    omittedAttrs.push_back("argNames");
-  omittedAttrs.push_back("portLocs");
-  omittedAttrs.push_back(
-      ModuleTy::getModuleTypeAttrName(mod.getOperation()->getName()));
-  omittedAttrs.push_back("per_port_attrs");
-  omittedAttrs.push_back("resultNames");
-  omittedAttrs.push_back("parameters");
+  omittedAttrs.push_back(mod.getPortLocsAttrName());
+  omittedAttrs.push_back(mod.getModuleTypeAttrName());
+  omittedAttrs.push_back(mod.getPerPortAttrsAttrName());
+  omittedAttrs.push_back(mod.getParametersAttrName());
   omittedAttrs.push_back(visibilityAttrName);
-  omittedAttrs.push_back(SymbolTable::getSymbolAttrName());
-  if (mod.getOperation()
-          ->template getAttrOfType<StringAttr>("comment")
-          .getValue()
-          .empty())
-    omittedAttrs.push_back("comment");
-  // inject argNames
-  auto attrs = mod->getAttrs();
-  SmallVector<NamedAttribute> realAttrs(attrs.begin(), attrs.end());
-  realAttrs.push_back(
-      NamedAttribute(StringAttr::get(mod.getContext(), "argNames"),
-                     ArrayAttr::get(mod.getContext(), mod.getInputNames())));
-  p.printOptionalAttrDictWithKeyword(realAttrs, omittedAttrs);
+  if (auto cmt =
+          mod.getOperation()->template getAttrOfType<StringAttr>("comment"))
+    if (cmt.getValue().empty())
+      omittedAttrs.push_back("comment");
+
+  mlir::function_interface_impl::printFunctionAttributes(p, mod.getOperation(),
+                                                         omittedAttrs);
 }
 
 void HWModuleExternOp::print(OpAsmPrinter &p) { printModuleOp(p, *this); }
@@ -1247,9 +1233,12 @@ template <typename ModTy>
 static SmallVector<Location> getAllPortLocs(ModTy module) {
   SmallVector<Location> retval;
   auto locs = module.getPortLocs();
-  for (auto l : locs)
-    retval.push_back(cast<Location>(l));
-  assert(!locs.size() || locs.size() == module.getNumPorts());
+  if (locs) {
+    for (auto l : *locs)
+      retval.push_back(cast<Location>(l));
+    // Either we have a length of 0 or the correct length
+    assert(!locs->size() || locs->size() == module.getNumPorts());
+  }
   return retval;
 }
 
@@ -1311,22 +1300,22 @@ void HWModuleGeneratedOp::setAllPortNames(ArrayRef<Attribute> names) {
 
 SmallVector<Attribute> HWModuleOp::getAllPortAttrs() {
   auto attrs = getPerPortAttrs();
-  if (attrs && !attrs.empty())
-    return {attrs.getValue().begin(), attrs.getValue().end()};
+  if (attrs && !attrs->empty())
+    return {attrs->getValue().begin(), attrs->getValue().end()};
   return SmallVector<Attribute>(getNumPorts());
 }
 
 SmallVector<Attribute> HWModuleExternOp::getAllPortAttrs() {
   auto attrs = getPerPortAttrs();
-  if (attrs && !attrs.empty())
-    return {attrs.getValue().begin(), attrs.getValue().end()};
+  if (attrs && !attrs->empty())
+    return {attrs->getValue().begin(), attrs->getValue().end()};
   return SmallVector<Attribute>(getNumPorts());
 }
 
 SmallVector<Attribute> HWModuleGeneratedOp::getAllPortAttrs() {
   auto attrs = getPerPortAttrs();
-  if (attrs && !attrs.empty())
-    return {attrs.getValue().begin(), attrs.getValue().end()};
+  if (attrs && !attrs->empty())
+    return {attrs->getValue().begin(), attrs->getValue().end()};
   return SmallVector<Attribute>(getNumPorts());
 }
 
@@ -3213,35 +3202,6 @@ void TriggeredOp::build(OpBuilder &builder, OperationState &odsState,
 //===----------------------------------------------------------------------===//
 // Temporary test module
 //===----------------------------------------------------------------------===//
-
-static void
-addPortAttrsAndLocs(Builder &builder, OperationState &result,
-                    SmallVectorImpl<module_like_impl::PortParse> &ports,
-                    StringAttr portAttrsName, StringAttr portLocsName) {
-  auto unknownLoc = builder.getUnknownLoc();
-  auto nonEmptyAttrsFn = [](Attribute attr) {
-    return attr && !cast<DictionaryAttr>(attr).empty();
-  };
-  auto nonEmptyLocsFn = [unknownLoc](Attribute attr) {
-    return attr && cast<Location>(attr) != unknownLoc;
-  };
-
-  // Convert the specified array of dictionary attrs (which may have null
-  // entries) to an ArrayAttr of dictionaries.
-  SmallVector<Attribute> attrs;
-  SmallVector<Attribute> locs;
-  for (auto &port : ports) {
-    attrs.push_back(port.attrs ? port.attrs : builder.getDictionaryAttr({}));
-    locs.push_back(port.sourceLoc ? Location(*port.sourceLoc) : unknownLoc);
-  }
-
-  // Add the attributes to the ports.
-  if (llvm::any_of(attrs, nonEmptyAttrsFn))
-    result.addAttribute(portAttrsName, builder.getArrayAttr(attrs));
-
-  if (llvm::any_of(locs, nonEmptyLocsFn))
-    result.addAttribute(portLocsName, builder.getArrayAttr(locs));
-}
 
 void HWTestModuleOp::print(OpAsmPrinter &p) {
   p << ' ';

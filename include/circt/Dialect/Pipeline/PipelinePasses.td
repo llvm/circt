@@ -25,13 +25,10 @@ def ExplicitRegs : Pass<"pipeline-explicit-regs"> {
   let constructor = "circt::pipeline::createExplicitRegsPass()";
 }
 
-def ScheduleLinearPipeline : InterfacePass<"pipeline-schedule-linear", "circt::hw::HWModuleLike"> {
+def ScheduleLinearPipeline : Pass<"pipeline-schedule-linear"> {
   let summary = "Schedules `pipeline.unscheduled` operations.";
   let description = [{
     Schedules `pipeline.unscheduled` operations based on operator latencies.
-    This pass runs with `HWModuleLike` granularity, since it is necessary to
-    erase the `pipeline.unscheduled` operation in favor of creating a
-    `pipeline.scheduled` operation.
   }];
   let dependentDialects = ["hw::HWDialect"];
   let constructor = "circt::pipeline::createScheduleLinearPipelinePass()";

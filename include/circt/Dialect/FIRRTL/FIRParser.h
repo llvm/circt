@@ -107,7 +107,8 @@ struct FIRVersion {
 };
 
 constexpr FIRVersion minimumFIRVersion(0, 2, 0);
-constexpr FIRVersion latestFIRVersion(3, 2, 0);
+constexpr FIRVersion nextFIRVersion(3, 3, 0);
+constexpr FIRVersion exportFIRVersion = nextFIRVersion;
 constexpr FIRVersion defaultFIRVersion(1, 0, 0);
 
 template <typename T>

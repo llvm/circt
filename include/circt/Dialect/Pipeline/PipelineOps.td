@@ -35,6 +35,20 @@ class PipelineBase<string mnemonic, list<Trait> traits = []> :
   let results = (outs Variadic<AnyType>:$dataOutputs, I1:$done);
   let hasCustomAssemblyFormat = 1;
 
+  let skipDefaultBuilders = 1;
+
+  let builders = [
+    OpBuilder<(ins
+      "TypeRange":$dataOutputs,
+      "ValueRange":$inputs,
+      "ArrayAttr":$inputNames, "ArrayAttr":$outputNames,
+      "Value":$clock, "Value":$reset, "Value":$go,
+      CArg<"Value", "{}">:$stall,
+      CArg<"StringAttr", "{}">:$name,
+      CArg<"ArrayAttr", "{}">:$stallability
+      )>
+  ];
+
   /// Additional class declarations inside the pipeline op.
   code extraModuleClassDeclaration = ?;
 
@@ -172,19 +186,6 @@ def ScheduledPipelineOp : PipelineBase<"scheduled"> {
   );
   let regions = (region AnyRegion:$body);
   let hasVerifier = 1;
-  let skipDefaultBuilders = 1;
-
-  let builders = [
-    OpBuilder<(ins
-      "TypeRange":$dataOutputs,
-      "ValueRange":$inputs,
-      "ArrayAttr":$inputNames, "ArrayAttr":$outputNames,
-      "Value":$clock, "Value":$reset, "Value":$go,
-      CArg<"Value", "{}">:$stall,
-      CArg<"StringAttr", "{}">:$name,
-      CArg<"ArrayAttr", "{}">:$stallability
-      )>
-  ];
 
   code extraModuleClassDeclaration = [{
     static mlir::RegionKind getRegionKind(unsigned index) {

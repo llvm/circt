@@ -4,8 +4,8 @@
 sv.macro.decl @RANDOM
 sv.macro.decl @PRINTF_COND_
 
-// CHECK-LABEL: hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
-hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
+// CHECK-LABEL: hw.module @test1(in %arg0 : i1, in %arg1 : i1, in %arg8 : i8) {
+hw.module @test1(in %arg0: i1, in %arg1: i1, in %arg8: i8) {
   // CHECK: [[FD:%.*]] = hw.constant -2147483646 : i32
   %fd = hw.constant 0x80000002 : i32
 
@@ -292,19 +292,19 @@ sv.bind <@AB::@a1>
 sv.bind <@AB::@b1>
 
 
-hw.module.extern @ExternDestMod(%a: i1, %b: i2)
-hw.module @InternalDestMod(%a: i1, %b: i2) {}
-//CHECK-LABEL: hw.module @AB(%a: i1, %b: i2) {
+hw.module.extern @ExternDestMod(in %a: i1, in %b: i2)
+hw.module @InternalDestMod(in %a: i1, in %b: i2) {}
+//CHECK-LABEL: hw.module @AB(in %a : i1, in %b : i2) {
 //CHECK-NEXT:   hw.instance "whatever" sym @a1 @ExternDestMod(a: %a: i1, b: %b: i2) -> () {doNotPrint = 1 : i64}
 //CHECK-NEXT:   hw.instance "yo" sym @b1 @InternalDestMod(a: %a: i1, b: %b: i2) -> () {doNotPrint = 1 : i64}
 
-hw.module @AB(%a: i1, %b: i2) {
+hw.module @AB(in %a: i1, in %b: i2) {
   hw.instance "whatever" sym @a1 @ExternDestMod(a: %a: i1, b: %b: i2) -> () {doNotPrint=1}
   hw.instance "yo" sym @b1 @InternalDestMod(a: %a: i1, b: %b: i2) -> () {doNotPrint=1}
 }
 
 //CHECK-LABEL: hw.module @XMR_src
-hw.module @XMR_src(%a : i23) {
+hw.module @XMR_src(in %a : i23) {
   //CHECK-NEXT:   sv.xmr isRooted "a", "b", "c" : !hw.inout<i23>
   %xmr1 = sv.xmr isRooted a,b,c : !hw.inout<i23>
   //CHECK-NEXT:   sv.xmr "a", "b", "c" : !hw.inout<i3>
@@ -313,7 +313,7 @@ hw.module @XMR_src(%a : i23) {
   sv.assign %xmr1, %a : i23
 }
 
-  hw.module @part_select(%in4 : i4, %in8 : i8) -> (a : i3, b : i5) {
+  hw.module @part_select(in %in4 : i4, in %in8 : i8, out a : i3, out b : i5) {
   // CHECK-LABEL: hw.module @part_select
 
     %myReg2 = sv.reg : !hw.inout<i18>
@@ -337,7 +337,7 @@ hw.module @XMR_src(%a : i23) {
 }
 
 // CHECK-LABEL: hw.module @nested_wire
-hw.module @nested_wire(%a: i1) {
+hw.module @nested_wire(in %a: i1) {
   // CHECK: sv.ifdef "foo"
   sv.ifdef "foo" {
     // CHECK: sv.wire
@@ -349,7 +349,7 @@ hw.module @nested_wire(%a: i1) {
 
 
 // CHECK-LABEL: hw.module @ordered_region
-hw.module @ordered_region(%a: i1) {
+hw.module @ordered_region(in %a: i1) {
   // CHECK: sv.ordered
   sv.ordered {
     // CHECK: sv.ifdef "foo"

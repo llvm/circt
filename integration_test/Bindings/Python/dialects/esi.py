@@ -42,13 +42,13 @@ esi.service.decl @HostComms {
   esi.service.to_client @Recv : !esi.channel<i8>
 }
 
-hw.module @MsTop (%clk: i1) -> (chksum: i8) {
+hw.module @MsTop (in %clk : i1, out chksum : i8) {
   %c = esi.service.instance svc @HostComms impl as  "test" (%clk) : (i1) -> (i8)
   hw.instance "m1" @MsLoopback (clk: %clk: i1) -> ()
   hw.output %c : i8
 }
 
-hw.module @MsLoopback (%clk: i1) -> () {
+hw.module @MsLoopback (in %clk : i1) {
   %dataIn = esi.service.req.to_client <@HostComms::@Recv> (["loopback_tohw"]) : !esi.channel<i8>
   esi.service.req.to_server %dataIn -> <@HostComms::@Send> (["loopback_fromhw"]) : !esi.channel<i8>
 }

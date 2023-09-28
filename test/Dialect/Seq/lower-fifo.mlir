@@ -4,8 +4,7 @@
 // RUN: circt-opt --lower-seq-fifo --canonicalize %s | FileCheck %s --implicit-check-not=seq.fifo
 
 
-// CHECK-LABEL:   hw.module @fifo1(
-// CHECK-SAME:            %[[CLOCK:.*]]: !seq.clock, %[[VAL_1:.*]]: i1, %[[VAL_2:.*]]: i32, %[[VAL_3:.*]]: i1, %[[VAL_4:.*]]: i1) -> (out: i32) {
+// CHECK:   hw.module @fifo1(in %[[CLOCK:.*]] : !seq.clock, in %[[VAL_1:.*]] : i1, in %[[VAL_2:.*]] : i32, in %[[VAL_3:.*]] : i1, in %[[VAL_4:.*]] : i1, out out : i32) {
 // CHECK:           %[[VAL_5:.*]] = hw.constant true
 // CHECK:           %[[VAL_6:.*]] = hw.constant -1 : i2
 // CHECK:           %[[VAL_7:.*]] = hw.constant -2 : i2
@@ -42,14 +41,13 @@
 // CHECK:           %[[VAL_14]] = comb.mux %[[VAL_36]], %[[VAL_37]], %[[VAL_13]] {sv.namehint = "fifo_rd_addr_next"} : i2
 // CHECK:           hw.output %[[VAL_17]] : i32
 // CHECK:         }
-hw.module @fifo1(%clk : !seq.clock, %rst : i1, %in : i32, %rdEn : i1, %wrEn : i1) -> (out: i32) {
+hw.module @fifo1(in %clk : !seq.clock, in %rst : i1, in %in : i32, in %rdEn : i1, in %wrEn : i1, out out : i32) {
   %out, %full, %empty = seq.fifo depth 3 in %in rdEn %rdEn wrEn %wrEn clk %clk rst %rst : i32
   hw.output %out : i32
 }
 
 
-// CHECK-LABEL:   hw.module @fifo2(
-// CHECK-SAME:             %[[CLOCK:.*]]: !seq.clock, %[[VAL_1:.*]]: i1, %[[VAL_2:.*]]: i32, %[[VAL_3:.*]]: i1, %[[VAL_4:.*]]: i1) -> (out: i32, empty: i1, full: i1, almost_empty: i1, almost_full: i1) {
+// CHECK:   hw.module @fifo2(in %[[CLOCK:.*]] : !seq.clock, in %[[VAL_1:.*]] : i1, in %[[VAL_2:.*]] : i32, in %[[VAL_3:.*]] : i1, in %[[VAL_4:.*]] : i1, out out : i32, out empty : i1, out full : i1, out almost_empty : i1, out almost_full : i1) {
 // CHECK:           %[[VAL_5:.*]] = hw.constant 2 : i3
 // CHECK:           %[[VAL_6:.*]] = hw.constant 0 : i2
 // CHECK:           %[[VAL_7:.*]] = hw.constant true
@@ -94,7 +92,7 @@ hw.module @fifo1(%clk : !seq.clock, %rst : i1, %in : i32, %rdEn : i1, %wrEn : i1
 // CHECK:           %[[VAL_45:.*]] = comb.icmp ult %[[VAL_13]], %[[VAL_5]] {sv.namehint = "fifo_almost_empty"} : i3
 // CHECK:           hw.output %[[VAL_20]], %[[VAL_22]], %[[VAL_21]], %[[VAL_45]], %[[VAL_44]] : i32, i1, i1, i1, i1
 // CHECK:         }
-hw.module @fifo2(%clk : !seq.clock, %rst : i1, %in : i32, %rdEn : i1, %wrEn : i1) -> (out: i32, empty: i1, full: i1, almost_empty : i1, almost_full : i1) {
+hw.module @fifo2(in %clk : !seq.clock, in %rst : i1, in %in : i32, in %rdEn : i1, in %wrEn : i1, out out: i32, out empty: i1, out full: i1, out almost_empty : i1, out almost_full : i1) {
   %out, %full, %empty, %almostFull, %almostEmpty = seq.fifo depth 4 almost_full 2 almost_empty 1 in %in rdEn %rdEn wrEn %wrEn clk %clk rst %rst : i32
   hw.output %out, %empty, %full, %almostEmpty, %almostFull : i32, i1, i1, i1, i1
 }

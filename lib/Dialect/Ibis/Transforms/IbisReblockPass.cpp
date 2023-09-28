@@ -25,29 +25,60 @@ struct ReblockPass : public IbisReblockBase<ReblockPass> {
   void runOnOperation() override;
 
   // Transforms an `ibis.sblock.inline.begin/end` scope into an `ibis.sblock`.
-  LogicalResult reblock(ibis::InlineStaticBlockBeginOp);
+  LogicalResult reblock(ArrayRef<Operation *> ops, Operation *blockTerminator);
+
+  /// Track ops that should be erased.
+  SmallVector<Operation *> opsToErase;
 };
+
+// Returns true if the given op signal that the existing set of sblock
+// operations should be closed.
+static bool isSBlockTerminator(Operation *op) {
+  return op->hasTrait<OpTrait::IsTerminator>() ||
+         isa<ibis::InlineStaticBlockEndOp, InlineStaticBlockBeginOp>(op);
+}
+
 } // anonymous namespace
 
 void ReblockPass::runOnOperation() {
   MethodOp parent = getOperation();
 
-  for (auto blockBeginOp : llvm::make_early_inc_range(
-           parent.getOps<ibis::InlineStaticBlockBeginOp>())) {
-    if (failed(reblock(blockBeginOp)))
-      return signalPassFailure();
+  llvm::SmallVector<Operation *> opsToBlock;
+  for (Block &block : parent.getRegion()) {
+    for (Operation &op : llvm::make_early_inc_range(block)) {
+      if (isSBlockTerminator(&op)) {
+        if (opsToBlock.empty())
+          continue;
+        if (failed(reblock(opsToBlock, &op)))
+          return signalPassFailure();
+        opsToBlock.clear();
+        if (isa<InlineStaticBlockBeginOp>(op))
+          opsToBlock.push_back(&op);
+      } else
+        opsToBlock.push_back(&op);
+    }
   }
+
+  llvm::for_each(opsToErase, [](Operation *op) { op->erase(); });
 }
 
-LogicalResult ReblockPass::reblock(ibis::InlineStaticBlockBeginOp beginOp) {
+LogicalResult ReblockPass::reblock(ArrayRef<Operation *> ops,
+                                   Operation *blockTerminator) {
   // Determine which values we need to return from within the block scope.
   // This is done by collecting all values defined within the start/end scope,
   // and recording uses that exist outside of the scope.
-  ibis::InlineStaticBlockEndOp endOp = beginOp.getEndOp();
-  assert(endOp);
+  ibis::InlineStaticBlockBeginOp blockBeginOp;
+  if (isa<InlineStaticBlockEndOp>(blockTerminator)) {
+    blockBeginOp = dyn_cast<InlineStaticBlockBeginOp>(ops.front());
+    assert(blockBeginOp &&
+           "Expected block begin op when a block end block was provided");
+    ops = ops.drop_front();
+  }
 
-  auto startIt = beginOp->getIterator();
-  auto endIt = endOp->getIterator();
+  Operation *beginOp = ops.front();
+  auto startIt = ops.front()->getIterator();
+  Operation *endOp = ops.back();
+  auto terminatorIt = blockTerminator->getIterator();
   Block *sblockParentBlock = beginOp->getBlock();
 
   auto usedOutsideBlock = [&](OpOperand &use) {
@@ -61,7 +92,7 @@ LogicalResult ReblockPass::reblock(ibis::InlineStaticBlockBeginOp beginOp) {
   };
 
   llvm::MapVector<Value, llvm::SmallVector<OpOperand *>> returnValueUses;
-  for (auto &op : llvm::make_range(startIt, endIt)) {
+  for (auto &op : llvm::make_range(startIt, terminatorIt)) {
     for (Value result : op.getResults()) {
       for (OpOperand &use : result.getUses())
         if (usedOutsideBlock(use))
@@ -79,16 +110,19 @@ LogicalResult ReblockPass::reblock(ibis::InlineStaticBlockBeginOp beginOp) {
 
   auto b = OpBuilder(beginOp);
   auto ibisBlock =
-      b.create<StaticBlockOp>(beginOp.getLoc(), blockRetTypes, ValueRange{});
+      b.create<StaticBlockOp>(beginOp->getLoc(), blockRetTypes, ValueRange{});
 
-  // The new `ibis.sblock` should inherit the attributes of the block begin op.
-  ibisBlock->setAttrs(beginOp->getAttrs());
+  // The new `ibis.sblock` should inherit the attributes of the block begin op,
+  // if provided.
+  if (blockBeginOp)
+    ibisBlock->setAttrs(blockBeginOp->getAttrs());
 
   // Move operations into the `ibis.sblock` op.
   BlockReturnOp blockReturn =
       cast<BlockReturnOp>(ibisBlock.getBodyBlock()->getTerminator());
 
-  for (auto &op : llvm::make_early_inc_range(llvm::make_range(startIt, endIt)))
+  for (auto &op :
+       llvm::make_early_inc_range(llvm::make_range(startIt, terminatorIt)))
     op.moveBefore(blockReturn);
 
   // Append the terminator operands to the block return.
@@ -102,9 +136,13 @@ LogicalResult ReblockPass::reblock(ibis::InlineStaticBlockBeginOp beginOp) {
     for (OpOperand *use : uses)
       use->set(blockRet);
   }
-  // Erase the start/end ops.
-  beginOp.erase();
-  endOp.erase();
+
+  // If this was an explicit sblock, erase the markers.
+  if (blockBeginOp) {
+    opsToErase.push_back(blockBeginOp);
+    opsToErase.push_back(blockTerminator);
+  }
+
   return success();
 }
 

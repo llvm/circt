@@ -4,8 +4,8 @@
 // CHECK: // typedef enum bit [0:0] {} enum1;
 // CHECK: typedef enum bit [0:0] {enum2_U} enum2;
 // CHECK-LABEL: module EnumCheck
-hw.module @EnumCheck(%a : !hw.enum<T>, %b: !hw.enum<>, %c : !hw.enum<U>)
-    -> (d : !hw.enum<T>, e: !hw.enum<>, f: !hw.enum<U>) {
+hw.module @EnumCheck(in %a : !hw.enum<T>, in %b: !hw.enum<>, in %c : !hw.enum<U>,
+    out d : !hw.enum<T>, out e: !hw.enum<>, out f: !hw.enum<U>) {
   // CHECK: assign d = a;
   // CHECK: // Zero width: assign e = b;
   // CHECK: assign f = c;
@@ -22,7 +22,7 @@ hw.module @EnumCheck(%a : !hw.enum<T>, %b: !hw.enum<>, %c : !hw.enum<U>)
 // CHECK-EMPTY:
 // CHECK-NEXT:   assign result = test == enum0_A;
 // CHECK-NEXT: endmodule
-hw.module @EnumCmp(%test: !hw.enum<A, B>) -> (result: i1) {
+hw.module @EnumCmp(in %test: !hw.enum<A, B>, out result: i1) {
   %A = hw.enum.constant A : !hw.enum<A, B>
   %0 = hw.enum.cmp %test, %A : !hw.enum<A, B>, !hw.enum<A, B>
   hw.output %0 : i1
@@ -78,7 +78,7 @@ hw.type_scope @__AnFSMTypedecl {
   hw.typedecl @_state2 : !hw.enum<A, B>
 }
 
-hw.module @AnFSM(%clock : i1) {
+hw.module @AnFSM(in %clock : i1) {
   // Anonymous enum
   %reg = sv.reg : !hw.inout<!hw.enum<A, B>>
   %reg_read = sv.read_inout %reg : !hw.inout<!hw.enum<A, B>>

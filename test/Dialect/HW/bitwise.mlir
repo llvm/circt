@@ -1,7 +1,7 @@
 // RUN: circt-opt %s | FileCheck %s
 
-// CHECK-LABEL: hw.module @bitwise(%arg0: i7, %arg1: i7) -> (r: i21) {
-hw.module @bitwise(%arg0: i7, %arg1: i7) -> (r: i21) {
+// CHECK-LABEL: hw.module @bitwise(in %arg0 : i7, in %arg1 : i7, out r : i21) {
+hw.module @bitwise(in %arg0: i7, in %arg1: i7, out r: i21) {
 // CHECK-NEXT:    [[RES0:%[0-9]+]] = comb.xor %arg0 : i7
 // CHECK-NEXT:    [[RES1:%[0-9]+]] = comb.or  %arg0, %arg1 : i7
 // CHECK-NEXT:    [[RES2:%[0-9]+]] = comb.and %arg0, %arg1, %arg0 : i7
@@ -15,24 +15,24 @@ hw.module @bitwise(%arg0: i7, %arg1: i7) -> (r: i21) {
   hw.output %result : i21
 }
 
-// CHECK-LABEL: hw.module @shl_op(%a: i7, %b: i7) -> (r: i7) {
-hw.module @shl_op(%a: i7, %b: i7) -> (r: i7) {
+// CHECK-LABEL: hw.module @shl_op(in %a : i7, in %b : i7, out r : i7) {
+hw.module @shl_op(in %a: i7, in %b: i7, out r: i7) {
 // CHECK-NEXT:    [[RES:%[0-9]+]] = comb.shl  %a, %b : i7
   %0  = comb.shl  %a, %b : i7
 // CHECK-NEXT:    hw.output [[RES]]
   hw.output %0 : i7
 }
 
-// CHECK-LABEL: hw.module @shr_op(%a: i7, %b: i7) -> (r0: i7) {
-hw.module @shr_op(%a: i7, %b: i7) -> (r0: i7) {
+// CHECK-LABEL: hw.module @shr_op(in %a : i7, in %b : i7, out r0 : i7) {
+hw.module @shr_op(in %a: i7, in %b: i7, out r0: i7) {
 // CHECK-NEXT:    [[RES:%[0-9]+]] = comb.shru %a, %b : i7
   %0  = comb.shru %a, %b : i7
 // CHECK-NEXT:    hw.output [[RES]]
   hw.output %0 : i7
 }
 
-// CHECK-LABEL: hw.module @casts(%in1: i7) -> (x: !hw.struct<int: i7>)
-hw.module @casts(%in1: i7) -> (x: !hw.struct<int: i7>) {
+// CHECK-LABEL: hw.module @casts(in %in1 : i7, out x : !hw.struct<int: i7>)
+hw.module @casts(in %in1: i7, out x: !hw.struct<int: i7>) {
   // CHECK-NEXT: %0 = hw.bitcast %in1 : (i7) -> !hw.array<7xi1>
   // CHECK-NEXT: %1 = hw.bitcast %0 : (!hw.array<7xi1>) -> !hw.struct<int: i7>
   %bits = hw.bitcast %in1 : (i7) -> !hw.array<7xi1>

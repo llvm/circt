@@ -3,7 +3,7 @@
 module {
 // CHECK-LABEL: Generated
 // CHECK-NEXT: module Foo(
-hw.module @Foo(%a: i1 loc("")) -> () {
+hw.module @Foo(in %a: i1 loc("")) {
   hw.output
 }
 }
@@ -13,7 +13,7 @@ hw.module @Foo(%a: i1 loc("")) -> () {
 module attributes {circt.loweringOptions = "omitVersionComment"}{
 // CHECK-NOT: Generated
 // CHECK-LABEL: module Bar(
-hw.module @Bar() -> () {
+hw.module @Bar() {
   hw.output
 }
 }
