@@ -23,7 +23,7 @@ include "circt/Dialect/HW/HWOpInterfaces.td"
 include "circt/Dialect/Ibis/IbisInterfaces.td"
 include "circt/Dialect/Ibis/IbisTypes.td"
 include "circt/Dialect/Handshake/HandshakeInterfaces.td"
-
+include "circt/Dialect/Seq/SeqTypes.td"
 include "circt/Support/InstanceGraphInterface.td"
 
 class IbisOp<string mnemonic, list<Trait> traits = []> :
@@ -812,6 +812,22 @@ def PortWriteOp : IbisOp<"port.write", [
   let assemblyFormat = [{
     $port `,` $value attr-dict `:` qualified(type($port))
   }];
+}
+
+def PipelineHeaderOp : IbisOp<"pipeline.header", [
+  Pure
+]> {
+  let summary = "Ibis pipeline header operation";
+  let description = [{
+    This operation defines the hardware-like values used to drive a pipeline,
+    such as clock and reset.
+    This is an intermediate operation, meaning that it's strictly used to
+    facilitate progressive lowering of ibis static blocks to scheduled pipelines.
+  }];
+
+  let arguments = (ins);
+  let results = (outs ClockType:$clock, I1:$reset, I1:$go, I1:$stall);
+  let assemblyFormat = "attr-dict";
 }
 
 #endif // CIRCT_DIALECT_IBIS_IBISOPS_TD

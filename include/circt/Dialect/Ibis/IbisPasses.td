@@ -179,4 +179,16 @@ def IbisConvertCFToHandshake : Pass<"ibis-convert-cf-to-handshake", "ibis::Class
   let dependentDialects = ["circt::handshake::HandshakeDialect", "mlir::cf::ControlFlowDialect"];
 }
 
+def IbisPrepareScheduling : Pass<"ibis-prepare-scheduling", "ibis::DataflowMethodOp"> {
+  let summary = "Prepare `ibis.sblock` operations for scheduling";
+  let description = [{
+    Prepares `ibis.sblock` operations for scheduling by:
+    - creating an `ibis.pipleine.header` operation
+    - moving operations of an `ibis.sblock` into a `pipeline.unscheduled`
+      operation, which is connected to the pipeline header.
+  }];
+  let constructor = "circt::ibis::createPrepareSchedulingPass()";
+  let dependentDialects = ["circt::pipeline::PipelineDialect"];
+}
+
 #endif // CIRCT_DIALECT_IBIS_PASSES_TD

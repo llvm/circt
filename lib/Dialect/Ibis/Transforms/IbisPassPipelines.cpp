@@ -65,4 +65,8 @@ void circt::ibis::loadIbisHighLevelPassPipeline(mlir::PassManager &pm) {
   // Canonicalize - necessary after handshake conversion to clean up a lot of
   // stuff e.g. simple branches.
   pm.addPass(createSimpleCanonicalizerPass());
+
+  // Now we're ready to schedule our pipelines.
+  pm.nest<ibis::ClassOp>().nest<ibis::DataflowMethodOp>().addPass(
+      ibis::createPrepareSchedulingPass());
 }

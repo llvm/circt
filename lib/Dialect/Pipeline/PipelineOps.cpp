@@ -287,6 +287,60 @@ static void printPipelineOp(OpAsmPrinter &p, TPipelineOp op) {
 // UnscheduledPipelineOp
 //===----------------------------------------------------------------------===//
 
+static void buildPipelineLikeOp(OpBuilder &odsBuilder, OperationState &odsState,
+                                TypeRange dataOutputs, ValueRange inputs,
+                                ArrayAttr inputNames, ArrayAttr outputNames,
+                                Value clock, Value reset, Value go, Value stall,
+                                StringAttr name, ArrayAttr stallability) {
+  odsState.addOperands(inputs);
+  if (stall)
+    odsState.addOperands(stall);
+  odsState.addOperands(clock);
+  odsState.addOperands(reset);
+  odsState.addOperands(go);
+  if (name)
+    odsState.addAttribute("name", name);
+
+  odsState.addAttribute(
+      "operandSegmentSizes",
+      odsBuilder.getDenseI32ArrayAttr(
+          {static_cast<int32_t>(inputs.size()),
+           static_cast<int32_t>(stall ? 1 : 0), static_cast<int32_t>(1),
+           static_cast<int32_t>(1), static_cast<int32_t>(1)}));
+
+  odsState.addAttribute("inputNames", inputNames);
+  odsState.addAttribute("outputNames", outputNames);
+
+  auto *region = odsState.addRegion();
+  odsState.addTypes(dataOutputs);
+
+  // Add the implicit done output signal.
+  Type i1 = odsBuilder.getIntegerType(1);
+  odsState.addTypes({i1});
+
+  // Add the entry stage - arguments order:
+  // 1. Inputs
+  // 2. Stall (opt)
+  // 3. Clock
+  // 4. Reset
+  // 5. Go
+  auto &entryBlock = region->emplaceBlock();
+  llvm::SmallVector<Location> entryArgLocs(inputs.size(), odsState.location);
+  entryBlock.addArguments(
+      inputs.getTypes(),
+      llvm::SmallVector<Location>(inputs.size(), odsState.location));
+  if (stall)
+    entryBlock.addArgument(i1, odsState.location);
+  entryBlock.addArgument(i1, odsState.location);
+  entryBlock.addArgument(i1, odsState.location);
+
+  // entry stage valid signal.
+  entryBlock.addArgument(i1, odsState.location);
+
+  if (stallability)
+    odsState.addAttribute("stallability", stallability);
+}
+
 template <typename TPipelineOp>
 static void getPipelineAsmResultNames(TPipelineOp op,
                                       OpAsmSetValueNameFn setNameFn) {
@@ -374,6 +428,17 @@ void UnscheduledPipelineOp::getAsmBlockArgumentNames(
   getPipelineAsmBlockArgumentNames(*this, region, setNameFn);
 }
 
+void UnscheduledPipelineOp::build(OpBuilder &odsBuilder,
+                                  OperationState &odsState,
+                                  TypeRange dataOutputs, ValueRange inputs,
+                                  ArrayAttr inputNames, ArrayAttr outputNames,
+                                  Value clock, Value reset, Value go,
+                                  Value stall, StringAttr name,
+                                  ArrayAttr stallability) {
+  buildPipelineLikeOp(odsBuilder, odsState, dataOutputs, inputs, inputNames,
+                      outputNames, clock, reset, go, stall, name, stallability);
+}
+
 //===----------------------------------------------------------------------===//
 // ScheduledPipelineOp
 //===----------------------------------------------------------------------===//
@@ -390,53 +455,8 @@ void ScheduledPipelineOp::build(OpBuilder &odsBuilder, OperationState &odsState,
                                 ArrayAttr inputNames, ArrayAttr outputNames,
                                 Value clock, Value reset, Value go, Value stall,
                                 StringAttr name, ArrayAttr stallability) {
-  odsState.addOperands(inputs);
-  if (stall)
-    odsState.addOperands(stall);
-  odsState.addOperands(clock);
-  odsState.addOperands(reset);
-  odsState.addOperands(go);
-  if (name)
-    odsState.addAttribute("name", name);
-
-  odsState.addAttribute(
-      "operandSegmentSizes",
-      odsBuilder.getDenseI32ArrayAttr(
-          {static_cast<int32_t>(inputs.size()),
-           static_cast<int32_t>(stall ? 1 : 0), static_cast<int32_t>(1),
-           static_cast<int32_t>(1), static_cast<int32_t>(1)}));
-
-  odsState.addAttribute("inputNames", inputNames);
-  odsState.addAttribute("outputNames", outputNames);
-
-  auto *region = odsState.addRegion();
-  odsState.addTypes(dataOutputs);
-
-  // Add the implicit done output signal.
-  Type i1 = odsBuilder.getIntegerType(1);
-  odsState.addTypes({i1});
-
-  // Add the entry stage - arguments order:
-  // 1. Inputs
-  // 2. Stall (opt)
-  // 3. Clock
-  // 4. Reset
-  // 5. Go
-  auto &entryBlock = region->emplaceBlock();
-  llvm::SmallVector<Location> entryArgLocs(inputs.size(), odsState.location);
-  entryBlock.addArguments(
-      inputs.getTypes(),
-      llvm::SmallVector<Location>(inputs.size(), odsState.location));
-  if (stall)
-    entryBlock.addArgument(i1, odsState.location);
-  entryBlock.addArgument(i1, odsState.location);
-  entryBlock.addArgument(i1, odsState.location);
-
-  // entry stage valid signal.
-  entryBlock.addArgument(i1, odsState.location);
-
-  if (stallability)
-    odsState.addAttribute("stallability", stallability);
+  buildPipelineLikeOp(odsBuilder, odsState, dataOutputs, inputs, inputNames,
+                      outputNames, clock, reset, go, stall, name, stallability);
 }
 
 Block *ScheduledPipelineOp::addStage() {
