@@ -6,7 +6,7 @@ module attributes {circt.loweringOptions = "locationInfoStyle=wrapInAtSquareBrac
 // CHECK-NEXT:    input a
 // CHECK-NOT:     //
 // CHECK:       endmodule
-hw.module @Foo(input %a: i1 loc("")) {
+hw.module @Foo(in %a: i1 loc("")) {
   hw.output
 } loc("dummy":1:1)
 }

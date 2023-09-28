@@ -1,9 +1,9 @@
 // RUN: circt-opt -canonicalize %s | FileCheck %s
 
-hw.module.extern @Observe(input %x : i32)
+hw.module.extern @Observe(in %x : i32)
 
 // CHECK-LABEL: @FirReg
-hw.module @FirReg(input %clk : !seq.clock, input %in : i32) {
+hw.module @FirReg(in %clk : !seq.clock, in %in : i32) {
   %false = hw.constant false
   %true = hw.constant true
 
@@ -26,7 +26,7 @@ hw.module @FirReg(input %clk : !seq.clock, input %in : i32) {
 
 // Should not optimize away the register if it has a symbol.
 // CHECK-LABEL: @FirRegSymbol
-hw.module @FirRegSymbol(input %clk : !seq.clock, output out : i32) {
+hw.module @FirRegSymbol(in %clk : !seq.clock, out out : i32) {
   // CHECK: %reg = seq.firreg %reg clock %clk sym @reg : i32
   // CHECK: hw.output %reg : i32
   %reg = seq.firreg %reg clock %clk sym @reg : i32
@@ -34,7 +34,7 @@ hw.module @FirRegSymbol(input %clk : !seq.clock, output out : i32) {
 }
 
 // CHECK-LABEL: @FirRegReset
-hw.module @FirRegReset(input %clk : !seq.clock, input %in : i32, input %r : i1, input %v : i32) {
+hw.module @FirRegReset(in %clk : !seq.clock, in %in : i32, in %r : i1, in %v : i32) {
   %false = hw.constant false
   %true = hw.constant true
 
@@ -71,7 +71,7 @@ hw.module @FirRegReset(input %clk : !seq.clock, input %in : i32, input %r : i1, 
 }
 
 // CHECK-LABEL: @FirRegAggregate
-hw.module @FirRegAggregate(input %clk : !seq.clock, output out : !hw.struct<foo: i32>) {
+hw.module @FirRegAggregate(in %clk : !seq.clock, out out : !hw.struct<foo: i32>) {
   // TODO: Use constant aggregate attribute once supported.
   // CHECK:      %c0_i32 = hw.constant 0 : i32
   // CHECK-NEXT: %0 = hw.bitcast %c0_i32 : (i32) -> !hw.struct<foo: i32>
@@ -81,7 +81,7 @@ hw.module @FirRegAggregate(input %clk : !seq.clock, output out : !hw.struct<foo:
 }
 
 // CHECK-LABEL: @UninitializedArrayElement
-hw.module @UninitializedArrayElement(input %a : i1, input %clock : !seq.clock, output b: !hw.array<2xi1>) {
+hw.module @UninitializedArrayElement(in %a : i1, in %clock : !seq.clock, out b: !hw.array<2xi1>) {
   // CHECK:      %false = hw.constant false
   // CHECK-NEXT: %0 = hw.array_create %false, %a : i1
   // CHECK-NEXT: %r = seq.firreg %0 clock %clock : !hw.array<2xi1>
@@ -94,7 +94,7 @@ hw.module @UninitializedArrayElement(input %a : i1, input %clock : !seq.clock, o
 }
 
 // CHECK-LABEL: hw.module @ClockGate
-hw.module @ClockGate(input %clock : !seq.clock, input %enable : i1, input %enable2 : i1, input %testEnable : i1) {
+hw.module @ClockGate(in %clock : !seq.clock, in %enable : i1, in %enable2 : i1, in %testEnable : i1) {
   %false = hw.constant false
   %true = hw.constant true
   // CHECK-NEXT: [[CLOCK_LOW:%.+]] = seq.const_clock low
@@ -142,7 +142,7 @@ hw.module @ClockGate(input %clock : !seq.clock, input %enable : i1, input %enabl
 }
 
 // CHECK-LABEL: hw.module @ClockMux
-hw.module @ClockMux(input %cond : i1, input %trueClock : !seq.clock, input %falseClock : !seq.clock, output clk0 : !seq.clock, output clk1 : !seq.clock){
+hw.module @ClockMux(in %cond : i1, in %trueClock : !seq.clock, in %falseClock : !seq.clock, out clk0 : !seq.clock, out clk1 : !seq.clock){
   %false = hw.constant false
   %true = hw.constant true
   %clock_true = seq.clock_mux %true, %trueClock, %falseClock
@@ -152,7 +152,7 @@ hw.module @ClockMux(input %cond : i1, input %trueClock : !seq.clock, input %fals
 }
 
 // CHECK-LABEL: @FirMem
-hw.module @FirMem(input %addr : i4, input %clock : !seq.clock, input %data : i42, output out: i42) {
+hw.module @FirMem(in %addr : i4, in %clock : !seq.clock, in %data : i42, out out: i42) {
   %true = hw.constant true
   %false = hw.constant false
   %c0_i3 = hw.constant 0 : i3
@@ -202,7 +202,7 @@ hw.module @FirMem(input %addr : i4, input %clock : !seq.clock, input %data : i42
 }
 
 // CHECK-LABEL: @through_clock
-hw.module @through_clock(input %clock : !seq.clock, output out : !seq.clock) {
+hw.module @through_clock(in %clock : !seq.clock, out out : !seq.clock) {
   // CHECK: hw.output %clock : !seq.clock
   %tmp = seq.from_clock %clock
   %out = seq.to_clock %tmp
@@ -210,7 +210,7 @@ hw.module @through_clock(input %clock : !seq.clock, output out : !seq.clock) {
 }
 
 // CHECK-LABEL: @through_wire
-hw.module @through_wire(input %clock : i1, output out: i1) {
+hw.module @through_wire(in %clock : i1, out out: i1) {
   // CHECK: hw.output %clock : i1
   %tmp = seq.to_clock %clock
   %out = seq.from_clock %tmp
@@ -218,7 +218,7 @@ hw.module @through_wire(input %clock : i1, output out: i1) {
 }
 
 // CHECK-LABEL: @const_clock
-hw.module @const_clock(output clock_true : !seq.clock, output clock_false : !seq.clock) {
+hw.module @const_clock(out clock_true : !seq.clock, out clock_false : !seq.clock) {
   // CHECK: [[CLOCK_FALSE:%.+]] = seq.const_clock low
   // CHECK: [[CLOCK_TRUE:%.+]] = seq.const_clock high
 

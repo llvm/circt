@@ -1,10 +1,10 @@
 // RUN: circt-opt --split-input-file --ibis-convert-containers-to-hw %s | FileCheck %s
 
 
-// CHECK:  hw.module @B(input %in : i1, output out : i1) {
+// CHECK:  hw.module @B(in %in : i1, out out : i1) {
 // CHECK:    hw.output %in : i1
 // CHECK:  }
-// CHECK:  hw.module @AccessSibling(input %p_b_out : i1, output p_b_in : i1) {
+// CHECK:  hw.module @AccessSibling(in %p_b_out : i1, out p_b_in : i1) {
 // CHECK:    hw.output %p_b_out : i1
 // CHECK:  }
 // CHECK:  hw.module @Parent() {
@@ -46,7 +46,7 @@ ibis.container @Parent {
 
 // Test that we can instantiate and get ports of a container from a hw.module.
 
-// CHECK:  hw.module @C(input %in : i1, output out : i1) {
+// CHECK:  hw.module @C(in %in : i1, out out : i1) {
 // CHECK:    hw.output %in : i1
 // CHECK:  }
 // CHECK:  hw.module @Top() {

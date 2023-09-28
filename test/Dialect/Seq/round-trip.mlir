@@ -1,6 +1,6 @@
 // RUN: circt-opt %s | circt-opt | FileCheck %s
 
-hw.module @d1(input %clk : !seq.clock, input %rst : i1) {
+hw.module @d1(in %clk : !seq.clock, in %rst : i1) {
 // CHECK: %myMemory = seq.hlmem @myMemory %clk, %rst : <4xi32>
   %myMemory = seq.hlmem @myMemory %clk, %rst : <4xi32>
 
@@ -16,7 +16,7 @@ hw.module @d1(input %clk : !seq.clock, input %rst : i1) {
   hw.output
 }
 
-hw.module @d2(input %clk : !seq.clock, input %rst : i1) {
+hw.module @d2(in %clk : !seq.clock, in %rst : i1) {
 // CHECK: %myMemory = seq.hlmem @myMemory %clk, %rst : <4x8xi32>
   %myMemory = seq.hlmem @myMemory %clk, %rst : <4x8xi32>
 
@@ -33,7 +33,7 @@ hw.module @d2(input %clk : !seq.clock, input %rst : i1) {
   hw.output
 }
 
-hw.module @d0(input %clk : !seq.clock, input %rst : i1) {
+hw.module @d0(in %clk : !seq.clock, in %rst : i1) {
 // CHECK: %myMemory = seq.hlmem @myMemory %clk, %rst : <1xi32>
   %myMemory = seq.hlmem @myMemory %clk, %rst : <1xi32>
 
@@ -48,7 +48,7 @@ hw.module @d0(input %clk : !seq.clock, input %rst : i1) {
 }
 
 // CHECK-LABEL: hw.module @ClockGate
-hw.module @ClockGate(input %clock: !seq.clock, input %enable: i1, input %test_enable: i1) {
+hw.module @ClockGate(in %clock: !seq.clock, in %enable: i1, in %test_enable: i1) {
   // CHECK-NEXT: seq.clock_gate %clock, %enable
   // CHECK-NEXT: seq.clock_gate %clock, %enable, %test_enable
   // CHECK-NEXT: seq.clock_gate %clock, %enable, %test_enable sym @gate_sym
@@ -58,28 +58,28 @@ hw.module @ClockGate(input %clock: !seq.clock, input %enable: i1, input %test_en
 }
 
 // CHECK-LABEL: hw.module @ClockMux
-hw.module @ClockMux(input %cond: i1, input %trueClock: !seq.clock, input %falseClock: !seq.clock, output clock: !seq.clock) {
+hw.module @ClockMux(in %cond: i1, in %trueClock: !seq.clock, in %falseClock: !seq.clock, out clock: !seq.clock) {
   %clock = seq.clock_mux %cond, %trueClock, %falseClock
   hw.output %clock : !seq.clock
 }
 
-hw.module @fifo1(input %clk : !seq.clock, input %rst : i1, input %in : i32, input %rdEn : i1, input %wrEn : i1) {
+hw.module @fifo1(in %clk : !seq.clock, in %rst : i1, in %in : i32, in %rdEn : i1, in %wrEn : i1) {
   // CHECK: %out, %full, %empty = seq.fifo depth 3 in %in rdEn %rdEn wrEn %wrEn clk %clk rst %rst : i32
   %out, %full, %empty = seq.fifo depth 3 in %in rdEn %rdEn wrEn %wrEn clk %clk rst %rst : i32
 }
 
-hw.module @fifo2(input %clk : !seq.clock, input %rst : i1, input %in : i32, input %rdEn : i1, input %wrEn : i1) {
+hw.module @fifo2(in %clk : !seq.clock, in %rst : i1, in %in : i32, in %rdEn : i1, in %wrEn : i1) {
   // CHECK: %out, %full, %empty, %almostFull, %almostEmpty = seq.fifo depth 3 almost_full 2 almost_empty 1 in %in rdEn %rdEn wrEn %wrEn clk %clk rst %rst : i32
   %out, %full, %empty, %almostFull, %almostEmpty = seq.fifo depth 3 almost_full 2 almost_empty 1 in %in rdEn %rdEn wrEn %wrEn clk %clk rst %rst : i32
 }
 
 
-hw.module @preset(input %clock : !seq.clock, input %reset : i1, input %next : i32) {
+hw.module @preset(in %clock : !seq.clock, in %reset : i1, in %next : i32) {
   // CHECK: %reg = seq.firreg %next clock %clock preset 0 : i32
   %reg = seq.firreg %next clock %clock preset 0 : i32
 }
 
-hw.module @clock_dividers(input %clock: !seq.clock) {
+hw.module @clock_dividers(in %clock: !seq.clock) {
   // CHECK: seq.clock_div %clock by 1
   %by_2 = seq.clock_div %clock by 1
 }

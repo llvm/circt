@@ -6,7 +6,7 @@ module attributes {circt.loweringOptions = "locationInfoStyle=wrapInAtSquareBrac
 // CHECK-SAME:    // @[{'foo'(fooSource.x:10:8) <- {'bar'(barSource.x:20:8) <- 'baz'(bazSource.x:30:8)}}]
 
 // Emulate a callstack-like location info.
-hw.module @Callstack(input %a: i1 loc("")) {
+hw.module @Callstack(in %a: i1 loc("")) {
   hw.output
 } loc(callsite(
     "foo"("fooSource.x":10:8)
@@ -17,7 +17,7 @@ hw.module @Callstack(input %a: i1 loc("")) {
 // Check location merging logic.
 
 // CHECK-LABEL: module MergedLocations(
-hw.module @MergedLocations(input %clock: i1, input %flag1 : i1, input %flag2: i1, input %flag3: i1) {
+hw.module @MergedLocations(in %clock: i1, in %flag1 : i1, in %flag2: i1, in %flag3: i1) {
   %true = hw.constant 1 : i1 loc("")
   %false = hw.constant 0 : i1
   %r1 = sv.reg : !hw.inout<i1>

@@ -10,7 +10,7 @@
 // CHECK-NEXT:    }
 // CHECK-NEXT:    hw.output %out : i32
 // CHECK-NEXT:  }
-hw.module @unscheduled1(input %arg0 : i32, input %arg1 : i32, input %go : i1, input %clk : !seq.clock, input %rst : i1, output out: i32) {
+hw.module @unscheduled1(in %arg0 : i32, in %arg1 : i32, in %go : i1, in %clk : !seq.clock, in %rst : i1, out out: i32) {
   %0:2 = pipeline.unscheduled(%a0 : i32 = %arg0, %a1 : i32 = %arg1) clock(%clk) reset(%rst) go(%go) entryEn(%s0_enable) -> (out: i32){
     %0 = pipeline.latency 2 -> (i32) {
       %1 = comb.add %a0, %a1 : i32
@@ -30,7 +30,7 @@ hw.module @unscheduled1(input %arg0 : i32, input %arg1 : i32, input %go : i1, in
 // CHECK-NEXT:    }
 // CHECK-NEXT:    hw.output %out : i32
 // CHECK-NEXT:  }
-hw.module @scheduled1(input %arg0 : i32, input %arg1 : i32, input %go : i1, input %clk : !seq.clock, input %rst : i1, output out: i32) {
+hw.module @scheduled1(in %arg0 : i32, in %arg1 : i32, in %go : i1, in %clk : !seq.clock, in %rst : i1, out out: i32) {
   %0:2 = pipeline.scheduled(%a0 : i32 = %arg0, %a1 : i32 = %arg1) clock(%clk) reset(%rst) go(%go) entryEn(%s0_enable) -> (out: i32){
     %0 = comb.add %a0, %a1 : i32
     pipeline.stage ^bb1
@@ -51,7 +51,7 @@ hw.module @scheduled1(input %arg0 : i32, input %arg1 : i32, input %go : i1, inpu
 // CHECK-NEXT:    }
 // CHECK-NEXT:    hw.output %out : i32
 // CHECK-NEXT:  }
-hw.module @scheduled2(input %arg0 : i32, input %arg1 : i32, input %go : i1, input %clk : !seq.clock, input %rst : i1, output out: i32) {
+hw.module @scheduled2(in %arg0 : i32, in %arg1 : i32, in %go : i1, in %clk : !seq.clock, in %rst : i1, out out: i32) {
   %0:2 = pipeline.scheduled(%a0 : i32 = %arg0, %a1 : i32 = %arg1) clock(%clk) reset(%rst) go(%go) entryEn(%s0_enable) -> (out: i32) {
     %0 = comb.add %a0, %a1 : i32
     pipeline.stage ^bb1 regs(%0 : i32)
@@ -71,7 +71,7 @@ hw.module @scheduled2(input %arg0 : i32, input %arg1 : i32, input %go : i1, inpu
 // CHECK-NEXT:    }
 // CHECK-NEXT:    hw.output %out0 : i32
 // CHECK-NEXT:  }
-hw.module @scheduledWithPassthrough(input %arg0 : i32, input %arg1 : i32, input %go : i1, input %clk : !seq.clock, input %rst : i1, output out: i32) {
+hw.module @scheduledWithPassthrough(in %arg0 : i32, in %arg1 : i32, in %go : i1, in %clk : !seq.clock, in %rst : i1, out out: i32) {
   %0:3 = pipeline.scheduled(%a0 : i32 = %arg0, %a1 : i32 = %arg1) clock(%clk) reset(%rst) go(%go) entryEn(%s0_enable) -> (out0: i32, out1: i32) {
     %0 = comb.add %a0, %a1 : i32
     pipeline.stage ^bb1 regs(%0 : i32) pass(%a1 : i32)
@@ -88,7 +88,7 @@ hw.module @scheduledWithPassthrough(input %arg0 : i32, input %arg1 : i32, input 
 // CHECK-NEXT:    }
 // CHECK-NEXT:    hw.output %out : i32
 // CHECK-NEXT:  }
-hw.module @withStall(input %arg0 : i32, input %stall : i1, input %go : i1, input %clk : !seq.clock, input %rst : i1, output out: i32) {
+hw.module @withStall(in %arg0 : i32, in %stall : i1, in %go : i1, in %clk : !seq.clock, in %rst : i1, out out: i32) {
   %0:2 = pipeline.scheduled(%a0 : i32 = %arg0) stall(%stall) clock(%clk) reset(%rst) go(%go) entryEn(%s0_enable) -> (out: i32) {
     pipeline.return %a0 : i32
   }
@@ -103,7 +103,7 @@ hw.module @withStall(input %arg0 : i32, input %stall : i1, input %go : i1, input
 // CHECK-NEXT:    }
 // CHECK-NEXT:    hw.output %out : i32
 // CHECK-NEXT:  }
-hw.module @withMultipleRegs(input %arg0 : i32, input %stall : i1, input %go : i1, input %clk : !seq.clock, input %rst : i1, output out: i32) {
+hw.module @withMultipleRegs(in %arg0 : i32, in %stall : i1, in %go : i1, in %clk : !seq.clock, in %rst : i1, out out: i32) {
   %0:2 = pipeline.scheduled(%a0 : i32 = %arg0) stall(%stall) clock(%clk) reset(%rst) go(%go) entryEn(%s0_enable) -> (out: i32) {
     pipeline.stage ^bb1 regs(%a0 : i32, %a0 : i32)
 
@@ -124,7 +124,7 @@ hw.module @withMultipleRegs(input %arg0 : i32, input %stall : i1, input %go : i1
 // CHECK-NEXT:    }
 // CHECK-NEXT:    hw.output %out : i32
 // CHECK-NEXT:  }
-hw.module @withClockGates(input %arg0 : i32, input %stall : i1, input %go : i1, input %clk : !seq.clock, input %rst : i1, output out: i32) {
+hw.module @withClockGates(in %arg0 : i32, in %stall : i1, in %go : i1, in %clk : !seq.clock, in %rst : i1, out out: i32) {
   %0:2 = pipeline.scheduled(%a0 : i32 = %arg0) stall(%stall) clock(%clk) reset(%rst) go(%go) entryEn(%s0_enable) -> (out: i32) {
     %true1 = hw.constant true
     %true2 = hw.constant true
@@ -146,7 +146,7 @@ hw.module @withClockGates(input %arg0 : i32, input %stall : i1, input %go : i1, 
 // CHECK-NEXT:    }
 // CHECK-NEXT:    hw.output %out : i32
 // CHECK-NEXT:  }
-hw.module @withNames(input %arg0 : i32, input %arg1 : i32, input %go : i1, input %clk : !seq.clock, input %rst : i1, output out: i32) {
+hw.module @withNames(in %arg0 : i32, in %arg1 : i32, in %go : i1, in %clk : !seq.clock, in %rst : i1, out out: i32) {
   %0:2 = pipeline.scheduled "MyPipeline"(%a0 : i32 = %arg0, %a1 : i32 = %arg1) clock(%clk) reset(%rst) go(%go) entryEn(%s0_enable) -> (out: i32){
     %0 = comb.add %a0, %a1 : i32
     pipeline.stage ^bb1 regs("myAdd" = %0 : i32, %0 : i32, "myOtherAdd" = %0 : i32)
@@ -159,7 +159,7 @@ hw.module @withNames(input %arg0 : i32, input %arg1 : i32, input %go : i1, input
 
 // CHECK-LABEL:   hw.module @withStallability
 // CHECK:           %out, %done = pipeline.scheduled "MyPipeline"(%a0 : i32 = %arg0) stall(%stall) clock(%clk) reset(%rst) go(%go) entryEn(%s0_enable) {stallability = [true, false, true]} -> (out : i32)
-hw.module @withStallability(input %arg0 : i32, input %go : i1, input %clk : !seq.clock, input %rst : i1, input %stall : i1, output out: i32) {
+hw.module @withStallability(in %arg0 : i32, in %go : i1, in %clk : !seq.clock, in %rst : i1, in %stall : i1, out out: i32) {
   %0:2 = pipeline.scheduled "MyPipeline"(%a0 : i32 = %arg0) stall(%stall) clock(%clk) reset(%rst) go(%go) entryEn(%s0_enable)
     {stallability = [true, false, true]}
    -> (out: i32) {

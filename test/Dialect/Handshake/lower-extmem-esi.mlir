@@ -3,29 +3,29 @@
 
 
 //CHECK-LABEL: hw.module.extern @__main_hw(
-// CHECK-SAME: input %arg0 : !esi.channel<i64>, 
-// CHECK-SAME: input %arg1 : !esi.channel<i64>, 
-// CHECK-SAME: input %v : !esi.channel<i32>, 
-// CHECK-SAME: input %mem_ld0.data : !esi.channel<i32>, 
-// CHECK-SAME: input %mem_st0.done : !esi.channel<i0>, 
-// CHECK-SAME: input %argCtrl : !esi.channel<i0>, 
-// CHECK-SAME: input %clock : !seq.clock, 
-// CHECK-SAME: input %reset : i1, 
-// CHECK-SAME: output out0 : !esi.channel<i0>, 
-// CHECK-SAME: output mem_ld0.addr : !esi.channel<i4>, 
-// CHECK-SAME: output mem_st0 : !esi.channel<!hw.struct<address: i4, data: i32>>
+// CHECK-SAME: in %arg0 : !esi.channel<i64>, 
+// CHECK-SAME: in %arg1 : !esi.channel<i64>, 
+// CHECK-SAME: in %v : !esi.channel<i32>, 
+// CHECK-SAME: in %mem_ld0.data : !esi.channel<i32>, 
+// CHECK-SAME: in %mem_st0.done : !esi.channel<i0>, 
+// CHECK-SAME: in %argCtrl : !esi.channel<i0>, 
+// CHECK-SAME: in %clock : !seq.clock, 
+// CHECK-SAME: in %reset : i1, 
+// CHECK-SAME: out out0 : !esi.channel<i0>, 
+// CHECK-SAME: out mem_ld0.addr : !esi.channel<i4>, 
+// CHECK-SAME: out mem_st0 : !esi.channel<!hw.struct<address: i4, data: i32>>
 // CHECK-SAME: )
 
 //CHECK-LABEL: esi.mem.ram @mem i32 x 10
 
 //CHECK-LABEL: hw.module @main_esi_wrapper(
-// CHECK-SAME: input %arg0 : !esi.channel<i64>, 
-// CHECK-SAME: input %arg1 : !esi.channel<i64>, 
-// CHECK-SAME: input %v : !esi.channel<i32>, 
-// CHECK-SAME: input %argCtrl : !esi.channel<i0>, 
-// CHECK-SAME: input %clock : !seq.clock, 
-// CHECK-SAME: input %reset : i1,
-// CHECK-SAME: output out0 : !esi.channel<i0>
+// CHECK-SAME: in %arg0 : !esi.channel<i64>, 
+// CHECK-SAME: in %arg1 : !esi.channel<i64>, 
+// CHECK-SAME: in %v : !esi.channel<i32>, 
+// CHECK-SAME: in %argCtrl : !esi.channel<i0>, 
+// CHECK-SAME: in %clock : !seq.clock, 
+// CHECK-SAME: in %reset : i1,
+// CHECK-SAME: out out0 : !esi.channel<i0>
 // CHECK-SAME: ) {
 //CHECK-NEXT:   %0 = esi.service.req.inout %main.mem_ld0.addr -> <@mem::@read>([]) : !esi.channel<i4> -> !esi.channel<i32>
 //CHECK-NEXT:   %1 = esi.service.req.inout %main.mem_st0 -> <@mem::@write>([]) : !esi.channel<!hw.struct<address: i4, data: i32>> -> !esi.channel<i0>

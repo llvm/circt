@@ -1,7 +1,7 @@
 // RUN: circt-opt --pass-pipeline='builtin.module(any(pipeline-schedule-linear))' %s | FileCheck %s
 
 // CHECK-LABEL:   hw.module @pipeline(
-// CHECK-SAME:          input %[[VAL_0:.*]] : i32, input %[[VAL_1:.*]] : i32, input %[[GO:.*]] : i1, input %[[CLOCK:.*]] : !seq.clock, input %[[RESET:.*]] : i1, output out : i32) {
+// CHECK-SAME:          in %[[VAL_0:.*]] : i32, in %[[VAL_1:.*]] : i32, in %[[GO:.*]] : i1, in %[[CLOCK:.*]] : !seq.clock, in %[[RESET:.*]] : i1, out out : i32) {
 // CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]] = pipeline.scheduled(%[[VAL_7:.*]] : i32 = %[[VAL_0]], %[[VAL_8:.*]] : i32 = %[[VAL_1]]) clock(%[[CLOCK]]) reset(%[[RESET]]) go(%[[GO]]) entryEn(%[[VAL_9:.*]]) -> (out : i32) {
 // CHECK:             %[[VAL_10:.*]] = comb.add %[[VAL_7]], %[[VAL_8]] {ssp.operator_type = @add1} : i32
 // CHECK:             %[[VAL_11:.*]] = comb.add %[[VAL_8]], %[[VAL_7]] {ssp.operator_type = @add1} : i32
@@ -32,7 +32,7 @@ module {
     operator_type @mul2 [latency<3>]
   }
 
-  hw.module @pipeline(input %arg0 : i32, input %arg1 : i32, input %go : i1, input %clk : !seq.clock, input %rst : i1, output out: i32) {
+  hw.module @pipeline(in %arg0 : i32, in %arg1 : i32, in %go : i1, in %clk : !seq.clock, in %rst : i1, out out: i32) {
     %0:2 = pipeline.unscheduled(%a0 : i32 = %arg0, %a1 : i32 = %arg1) clock(%clk) reset(%rst) go(%go) entryEn(%s0_enable)
       {operator_lib = @lib} -> (out: i32) {
       %0 = comb.add %a0, %a1 {ssp.operator_type = @add1} : i32

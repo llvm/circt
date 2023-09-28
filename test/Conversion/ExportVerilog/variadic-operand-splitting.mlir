@@ -2,11 +2,11 @@
 // RUN: circt-opt -test-apply-lowering-options='options=maximumNumberOfTermsPerExpression=2' -export-verilog %s | FileCheck %s -check-prefixes=CHECK,MAX_4
 
 hw.module @Baz(
-  input %a0: i1, input %a1: i1, input %a2: i1, input %a3: i1,
-  input %a4: i1, input %a5: i1, input %a6: i1, input %a7: i1,
-  input %b0: i1, input %b1: i1, input %b2: i1, input %b3: i1,
-  input %b4: i1, input %b5: i1, input %b6: i1, input %b7: i1,
-  output c: i1) {
+  in %a0: i1, in %a1: i1, in %a2: i1, in %a3: i1,
+  in %a4: i1, in %a5: i1, in %a6: i1, in %a7: i1,
+  in %b0: i1, in %b1: i1, in %b2: i1, in %b3: i1,
+  in %b4: i1, in %b5: i1, in %b6: i1, in %b7: i1,
+  out c: i1) {
   %0 = comb.and %a0, %b0 : i1
   %1 = comb.and %a1, %b1 : i1
   %2 = comb.and %a2, %b2 : i1

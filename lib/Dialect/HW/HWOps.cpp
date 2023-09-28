@@ -1073,7 +1073,6 @@ static void printModuleOp(OpAsmPrinter &p, ModuleTy mod) {
 
   mlir::function_interface_impl::printFunctionAttributes(p, mod.getOperation(),
                                                          omittedAttrs);
-  // p.printOptionalAttrDictWithKeyword(realAttrs, omittedAttrs);
 }
 
 void HWModuleExternOp::print(OpAsmPrinter &p) { printModuleOp(p, *this); }

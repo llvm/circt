@@ -1,7 +1,7 @@
 // RUN: circt-opt %s --arc-latency-retiming | FileCheck %s
 
 // CHECK-LABEL: hw.module @Foo
-hw.module @Foo(input %clk: !seq.clock, input %clk2: !seq.clock, input %en: i1, input %rst: i1, input %arg0: i32, input %arg1: i32, output out0 : i32, output out1 : i32, output out2: i32, output out3: i32, output out4: i32, output out5: i32, output out6: i32, output out7: i32, output out8: i32, output out9: i32, output out10: i32, output out11: i32) {
+hw.module @Foo(in %clk: !seq.clock, in %clk2: !seq.clock, in %en: i1, in %rst: i1, in %arg0: i32, in %arg1: i32, out out0 : i32, out out1 : i32, out out2: i32, out out3: i32, out out4: i32, out out5: i32, out out6: i32, out out7: i32, out out8: i32, out out9: i32, out out10: i32, out out11: i32) {
   // COM: simple shift-register of depth 3 is merged to one arc.state
   %0 = arc.state @Bar(%arg0) clock %clk lat 1 : (i32) -> i32
   %1 = arc.state @Bar(%0) clock %clk lat 1 : (i32) -> i32

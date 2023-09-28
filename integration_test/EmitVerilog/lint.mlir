@@ -8,35 +8,35 @@
 // RUN: verilator --lint-only --top-module exprInlineTestIssue439 %t1.sv
 // RUN: verilator --lint-only --top-module StructDecls %t1.sv
 
-hw.module @B(input %a: i1, output b: i1, output c: i1) {
+hw.module @B(in %a: i1, out b: i1, out c: i1) {
   %0 = comb.or %a, %a : i1
   %1 = comb.and %a, %a : i1
   hw.output %0, %1 : i1, i1
 }
 
-hw.module @A(input %d: i1, input %e: i1, output f: i1) {
+hw.module @A(in %d: i1, in %e: i1, out f: i1) {
   %1 = comb.mux %d, %d, %e : i1
   hw.output %1 : i1
 }
 
-hw.module @AAA(input %d: i1, input %e: i1, output f: i1) {
+hw.module @AAA(in %d: i1, in %e: i1, out f: i1) {
   %z = hw.constant 0 : i1
   hw.output %z : i1
 }
 
-hw.module @AB(input %w: i1, input %x: i1, output y: i1, output z: i1) {
+hw.module @AB(in %w: i1, in %x: i1, out y: i1, out z: i1) {
   %w2 = hw.instance "a1" @AAA(d: %w: i1, e: %w1: i1) -> (f: i1)
   %w1, %y = hw.instance "b1" @B(a: %w2: i1) -> (b: i1, c: i1)
   hw.output %y, %x : i1, i1
 }
 
-hw.module @shl(input %a: i1, output b: i1) {
+hw.module @shl(in %a: i1, out b: i1) {
   %0 = comb.shl %a, %a : i1
   hw.output %0 : i1
 }
 
-hw.module @TESTSIMPLE(input %a: i4, input %b: i4, input %cond: i1, input %array: !hw.array<10xi4>,
-                        input %uarray: !hw.uarray<16xi8>,
+hw.module @TESTSIMPLE(in %a: i4, in %b: i4, in %cond: i1, in %array: !hw.array<10xi4>,
+                        in %uarray: !hw.uarray<16xi8>,
   output r0: i4, output r1: i4, output r2: i4, output r3: i4,
   output r4: i4, output r5: i4, output r6: i4, output r7: i4,
   output r8: i4, output r9: i4, output r10: i4, output r11: i4,
@@ -91,7 +91,7 @@ hw.module @TESTSIMPLE(input %a: i4, input %b: i4, input %cond: i1, input %array:
     i12,i2, i4, i4, !hw.array<3xi4>
 }
 
-hw.module @exprInlineTestIssue439(input %clk: i1) {
+hw.module @exprInlineTestIssue439(in %clk: i1) {
   %c = hw.constant 0 : i32
 
   sv.always posedge %clk {
@@ -102,7 +102,7 @@ hw.module @exprInlineTestIssue439(input %clk: i1) {
   }
 }
 
-hw.module @casts(input %in1: i64, output r1: !hw.array<5xi8>) {
+hw.module @casts(in %in1: i64, out r1: !hw.array<5xi8>) {
   %bits = hw.bitcast %in1 : (i64) -> !hw.array<64xi1>
   %idx = hw.constant 10 : i6
   %midBits = hw.array_slice %bits[%idx] : (!hw.array<64xi1>) -> !hw.array<40xi1>

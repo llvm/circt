@@ -1,6 +1,6 @@
 // RUN: circt-opt %s --arc-lower-vectorizations=mode=full -split-input-file | FileCheck %s
 
-hw.module @vectorize_body_already_lowered(input %in0: i1, input %in1: i1, input %in2: i1, input %in3: i1, output out0: i1, output out1: i1, output out2: i1, output out3: i1) {
+hw.module @vectorize_body_already_lowered(in %in0: i1, in %in1: i1, in %in2: i1, in %in3: i1, out out0: i1, out out1: i1, out out2: i1, out out3: i1) {
   %0:2 = arc.vectorize (%in0, %in1), (%in2, %in2) : (i1, i1, i1, i1) -> (i1, i1) {
   ^bb0(%arg0: i2, %arg1: i2):
     %1 = arith.andi %arg0, %arg1 : i2

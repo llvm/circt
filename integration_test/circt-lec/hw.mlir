@@ -1,7 +1,7 @@
 // These tests will be only enabled if circt-lec is built.
 // REQUIRES: circt-lec
 
-hw.module @basic(input %in: i1, output out: i1) {
+hw.module @basic(in %in: i1, out out: i1) {
   hw.output %in : i1
 }
 
@@ -25,13 +25,13 @@ hw.module @three(output out: i2) {
 //  RUN: circt-lec %s -c1=basic -c2=notnot -v=false | FileCheck %s --check-prefix=HW_INSTANCE
 //  HW_INSTANCE: c1 == c2
 
-hw.module @not(input %in: i1, output out: i1) {
+hw.module @not(in %in: i1, out out: i1) {
   %true = hw.constant true
   %out = comb.xor bin %in, %true : i1
   hw.output %out : i1
 }
 
-hw.module @notnot(input %in: i1, output out: i1) {
+hw.module @notnot(in %in: i1, out out: i1) {
   %n = hw.instance "n" @not(in: %in: i1) -> (out: i1)
   %nn = hw.instance "nn" @not(in: %n: i1) -> (out: i1)
   hw.output %nn : i1
@@ -41,17 +41,17 @@ hw.module @notnot(input %in: i1, output out: i1) {
 //  RUN: circt-lec %s -c1=basic -c2=basic -v=false | FileCheck %s --check-prefix=HW_OUTPUT
 //  HW_OUTPUT: c1 == c2
 
-hw.module @constZeroZero(input %in: i1, output o1: i1, output o2: i1) {
+hw.module @constZeroZero(in %in: i1, out o1: i1, out o2: i1) {
   %zero = hw.constant 0 : i1
   hw.output %zero, %zero : i1, i1
 }
 
-hw.module @xorZeroZero(input %in: i1, output o1: i1, output o2: i1) {
+hw.module @xorZeroZero(in %in: i1, out o1: i1, out o2: i1) {
   %zero = comb.xor bin %in, %in : i1
   hw.output %zero, %zero : i1, i1
 }
 
-hw.module @constZeroOne(input %in: i1, output o1: i1, output o2: i1) {
+hw.module @constZeroOne(in %in: i1, out o1: i1, out o2: i1) {
   %zero = hw.constant 0 : i1
   %one  = hw.constant 1 : i1
   hw.output %zero, %one : i1, i1

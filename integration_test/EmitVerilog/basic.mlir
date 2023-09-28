@@ -5,7 +5,7 @@
 module {
   // The HW dialect doesn't have any sequential constructs yet. So don't do
   // much.
-  hw.module @top(input %clk: i1, input %rst: i1) {
+  hw.module @top(in %clk: i1, in %rst: i1) {
     %c1 = hw.instance "aaa" @AAA () -> (f: i1)
     %c1Shl = hw.instance "shl" @shl (a: %c1: i1) -> (b: i1)
     sv.always posedge %clk {
@@ -19,7 +19,7 @@ module {
     hw.output %z : i1
   }
 
-  hw.module @shl(input %a: i1, output b: i1) {
+  hw.module @shl(in %a: i1, out b: i1) {
     %0 = comb.shl %a, %a : i1
     hw.output %0 : i1
   }

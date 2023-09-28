@@ -12,7 +12,7 @@ hw.module @someModule(inout %in0: i32) {}
 
 // -----
 
-hw.module @graphRegionToSSACFG(input %in0: i32) {
+hw.module @graphRegionToSSACFG(in %in0: i32) {
     // expected-error @+1 {{operand #1 does not dominate this use}}
     %0 = comb.add %in0, %1 : i32
     // expected-note @+1 {{operand defined here (op in the same block)}}

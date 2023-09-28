@@ -3,7 +3,7 @@
 module {
 // CHECK-LABEL: Generated
 // CHECK-NEXT: module Foo(
-hw.module @Foo(input %a: i1 loc("")) {
+hw.module @Foo(in %a: i1 loc("")) {
   hw.output
 }
 }

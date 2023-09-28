@@ -258,9 +258,9 @@ static ParseResult parseDirection(OpAsmParser &p, ModulePort::Direction &dir) {
   StringRef key;
   if (failed(p.parseKeyword(&key)))
     return p.emitError(p.getCurrentLocation(), "expected port direction");
-  if (key == "input")
+  if (key == "in")
     dir = ModulePort::Direction::Input;
-  else if (key == "output")
+  else if (key == "out")
     dir = ModulePort::Direction::Output;
   else if (key == "inout")
     dir = ModulePort::Direction::InOut;
@@ -370,9 +370,9 @@ ParseResult module_like_impl::parseModuleSignature(
 
 static const char *directionAsString(ModulePort::Direction dir) {
   if (dir == ModulePort::Direction::Input)
-    return "input";
+    return "in";
   if (dir == ModulePort::Direction::Output)
-    return "output";
+    return "out";
   if (dir == ModulePort::Direction::InOut)
     return "inout";
   assert(0 && "Unknown port direction");

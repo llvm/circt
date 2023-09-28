@@ -11,7 +11,7 @@ firrtl.circuit "Simple" {
 
    // CHECK-LABEL: hw.module.extern private @MyParameterizedExtModule
    // CHECK-SAME: <DEFAULT: i64, DEPTH: f64, FORMAT: none, WIDTH: i8>
-   // CHECK-SAME: (input %in : i1, output out : i8)
+   // CHECK-SAME: (in %in : i1, out out : i8)
    // CHECK: attributes {verilogName = "name_thing"}
    firrtl.extmodule private @MyParameterizedExtModule
      <DEFAULT: i64 = 0,
@@ -21,7 +21,7 @@ firrtl.circuit "Simple" {
     (in in: !firrtl.uint<1>, out out: !firrtl.uint<8>)
     attributes {defname = "name_thing"}
 
-   // CHECK-LABEL: hw.module @Simple(input %in1 : i4, input %in2 : i2, input %in3 : i8, output out4 : i4)
+   // CHECK-LABEL: hw.module @Simple(in %in1 : i4, in %in2 : i2, in %in3 : i8, out out4 : i4)
    firrtl.module @Simple(in %in1: !firrtl.uint<4>,
                          in %in2: !firrtl.uint<2>,
                          in %in3: !firrtl.sint<8>,
@@ -80,7 +80,7 @@ firrtl.circuit "Simple" {
     firrtl.printf %clock, %reset, "Something interesting! %x"(%myext#1) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<8>
   }
 
-  // CHECK-LABEL: hw.module private @OutputFirst(input %in1 : i1, input %in4 : i4, output out4 : i4) {
+  // CHECK-LABEL: hw.module private @OutputFirst(in %in1 : i1, in %in4 : i4, out out4 : i4) {
   firrtl.module private @OutputFirst(out %out4: !firrtl.uint<4>,
                              in %in1: !firrtl.uint<1>,
                              in %in4: !firrtl.uint<4>) {
@@ -90,8 +90,8 @@ firrtl.circuit "Simple" {
   }
 
   // CHECK-LABEL: hw.module private @PortMadness(
-  // CHECK: input %inA : i4, input %inB : i4, input %inC : i4, input %inE : i3,
-  // CHECK: output outA : i4, output outB : i4, output outC : i4, output outD : i4, output outE : i4) {
+  // CHECK: in %inA : i4, in %inB : i4, in %inC : i4, in %inE : i3,
+  // CHECK: out outA : i4, out outB : i4, out outC : i4, out outD : i4, out outE : i4) {
   firrtl.module private @PortMadness(in %inA: !firrtl.uint<4>,
                              in %inB: !firrtl.uint<4>,
                              in %inC: !firrtl.uint<4>,
@@ -135,7 +135,7 @@ firrtl.circuit "Simple" {
     firrtl.connect %ip1_in, %in : !firrtl.uint<1>, !firrtl.uint<1>
   }
 
-  // CHECK-LABEL: hw.module private @Analog(inout %a1 : i1, output outClock : !seq.clock) {
+  // CHECK-LABEL: hw.module private @Analog(inout %a1 : i1, out outClock : !seq.clock) {
   // CHECK-NEXT:    [[READ:%.+]] = sv.read_inout %a1 : !hw.inout<i1>
   // CHECK-NEXT:    [[CLK:%.+]] = seq.to_clock [[READ]]
   // CHECK-NEXT:    hw.output [[CLK]] : !seq.clock
@@ -184,7 +184,7 @@ firrtl.circuit "Simple" {
     firrtl.connect %myext#0, %11 : !firrtl.uint<1>, !firrtl.uint<1>
   }
 
-  // CHECK-LABEL: hw.module private @ZeroWidthPorts(input %inA : i4, output outa : i4) {
+  // CHECK-LABEL: hw.module private @ZeroWidthPorts(in %inA : i4, out outa : i4) {
   firrtl.module private @ZeroWidthPorts(in %inA: !firrtl.uint<4>,
                                 in %inB: !firrtl.uint<0>,
                                 in %inC: !firrtl.analog<0>,
@@ -236,7 +236,7 @@ firrtl.circuit "Simple" {
     // CHECK: hw.output %myinst.outa
   }
 
-  // CHECK-LABEL: hw.module private @SimpleStruct(input %source : !hw.struct<valid: i1, ready: i1, data: i64>, output sink : !hw.struct<valid: i1, ready: i1, data: i64>) {
+  // CHECK-LABEL: hw.module private @SimpleStruct(in %source : !hw.struct<valid: i1, ready: i1, data: i64>, out sink : !hw.struct<valid: i1, ready: i1, data: i64>) {
   // CHECK-NEXT:    hw.output %source : !hw.struct<valid: i1, ready: i1, data: i64>
   firrtl.module private @SimpleStruct(in %source: !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>,
                               out %sink: !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>) {
@@ -277,7 +277,7 @@ firrtl.circuit "Simple" {
   }
 
   // Memory modules are lowered to plain external modules.
-  // CHECK: hw.module.extern @MRead_ext(input %R0_addr : i4, input %R0_en : i1, input %R0_clk : i1, output R0_data : i42) attributes {verilogName = "MRead_ext"}
+  // CHECK: hw.module.extern @MRead_ext(in %R0_addr : i4, in %R0_en : i1, in %R0_clk : i1, out R0_data : i42) attributes {verilogName = "MRead_ext"}
   firrtl.memmodule @MRead_ext(in R0_addr: !firrtl.uint<4>, in R0_en: !firrtl.uint<1>, in R0_clk: !firrtl.uint<1>, out R0_data: !firrtl.uint<42>) attributes {dataWidth = 42 : ui32, depth = 12 : ui64, extraPorts = [], maskBits = 0 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 0 : ui32, readLatency = 0 : ui32, writeLatency = 1 : ui32}
 
   // The following operations should be passed through without an error.
@@ -286,8 +286,8 @@ firrtl.circuit "Simple" {
 
   // DontTouch on ports becomes symbol.
   // CHECK-LABEL: hw.module.extern private @PortDT
-  // CHECK-SAME: (input %a : i1 {hw.exportPort = #hw<innerSym@__PortDT__a>}, input %hassym : i1 {hw.exportPort = #hw<innerSym@hassym>},
-  // CHECK-SAME: output b : i2 {hw.exportPort = #hw<innerSym@__PortDT__b>})
+  // CHECK-SAME: (in %a : i1 {hw.exportPort = #hw<innerSym@__PortDT__a>}, in %hassym : i1 {hw.exportPort = #hw<innerSym@hassym>},
+  // CHECK-SAME: out b : i2 {hw.exportPort = #hw<innerSym@__PortDT__b>})
   firrtl.extmodule private @PortDT(
     in a: !firrtl.uint<1> [{class = "firrtl.transforms.DontTouchAnnotation"}],
     in hassym: !firrtl.uint<1> sym @hassym [{class = "firrtl.transforms.DontTouchAnnotation"}],

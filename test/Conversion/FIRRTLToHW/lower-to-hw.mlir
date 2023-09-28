@@ -593,7 +593,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-NOT: output_file
   // CHECK-NEXT: sv.bind <@bindTest::@[[quxSymbol:.+]]> {
   // CHECK-SAME: output_file = #hw.output_file<"bindings.sv", excludeFromFileList>
-  // CHECK-NEXT: hw.module private @bindTest(input %dummy : i1)
+  // CHECK-NEXT: hw.module private @bindTest(in %dummy : i1)
   firrtl.module private @bindTest(in %dummy: !firrtl.uint<1>) {
     // CHECK: hw.instance "baz" sym @[[bazSymbol]] @bar
     %baz = firrtl.instance baz {lowerToBind} @bar(in io_cpu_flush: !firrtl.uint<1>)
@@ -636,7 +636,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   }
 
   // CHECK-LABEL: hw.module private @Analog(inout %a1 : i1, inout %b1 : i1,
-  // CHECK:                          inout %c1 : i1, output outClock : !seq.clock) {
+  // CHECK:                          inout %c1 : i1, out outClock : !seq.clock) {
   // CHECK-NEXT:   %0 = sv.read_inout %c1 : !hw.inout<i1>
   // CHECK-NEXT:   %1 = sv.read_inout %b1 : !hw.inout<i1>
   // CHECK-NEXT:   %2 = sv.read_inout %a1 : !hw.inout<i1>
@@ -664,7 +664,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.connect %outClock, %1 : !firrtl.clock, !firrtl.clock
   }
 
-  // CHECK-LABEL: hw.module private @top_modx(output tmp27 : i23) {
+  // CHECK-LABEL: hw.module private @top_modx(out tmp27 : i23) {
   // CHECK-NEXT:    %c0_i23 = hw.constant 0 : i23
   // CHECK-NEXT:    %c42_i23 = hw.constant 42 : i23
   // CHECK-NEXT:    hw.output %c0_i23 : i23
@@ -679,7 +679,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.connect %tmp27, %3 : !firrtl.uint<23>, !firrtl.uint<23>
   }
 
-  // CHECK-LABEL: hw.module private @SimpleStruct(input %source : !hw.struct<valid: i1, ready: i1, data: i64>, output fldout : i64) {
+  // CHECK-LABEL: hw.module private @SimpleStruct(in %source : !hw.struct<valid: i1, ready: i1, data: i64>, out fldout : i64) {
   // CHECK-NEXT:    %data = hw.struct_extract %source["data"] : !hw.struct<valid: i1, ready: i1, data: i64>
   // CHECK-NEXT:    hw.output %data : i64
   // CHECK-NEXT:  }
@@ -689,7 +689,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.connect %fldout, %2 : !firrtl.uint<64>, !firrtl.uint<64>
   }
 
-  // CHECK-LABEL: hw.module private @SimpleEnum(input %source : !hw.enum<valid, ready, data>, output sink : !hw.enum<valid, ready, data>) {
+  // CHECK-LABEL: hw.module private @SimpleEnum(in %source : !hw.enum<valid, ready, data>, out sink : !hw.enum<valid, ready, data>) {
   // CHECK-NEXT:    %valid = hw.enum.constant valid : !hw.enum<valid, ready, data
   // CHECK-NEXT:    %0 = hw.enum.cmp %source, %valid : !hw.enum<valid, ready, data>, !hw.enum<valid, ready, data>
   // CHECK-NEXT:    hw.output %source : !hw.enum<valid, ready, data>
@@ -701,7 +701,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.strictconnect %sink, %source : !firrtl.enum<valid: uint<0>, ready: uint<0>, data: uint<0>>
   }
 
-  // CHECK-LABEL: hw.module private @SimpleEnumCreate(output sink : !hw.enum<a, b, c>) {
+  // CHECK-LABEL: hw.module private @SimpleEnumCreate(out sink : !hw.enum<a, b, c>) {
   // CHECK-NEXT:   %a = hw.enum.constant a : !hw.enum<a, b, c>
   // CHECK-NEXT:   hw.output %a : !hw.enum<a, b, c>
   // CHECK-NEXT: }
@@ -711,7 +711,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.strictconnect %sink, %0 : !firrtl.enum<a: uint<0>, b: uint<0>, c: uint<0>>
   }
 
-  // CHECK-LABEL:  hw.module private @DataEnum(input %source : !hw.struct<tag: !hw.enum<a, b, c>, body: !hw.union<a: i2, b: i1, c: i32>>, output sink : !hw.struct<tag: !hw.enum<a, b, c>, body: !hw.union<a: i2, b: i1, c: i32>>) {
+  // CHECK-LABEL:  hw.module private @DataEnum(in %source : !hw.struct<tag: !hw.enum<a, b, c>, body: !hw.union<a: i2, b: i1, c: i32>>, out sink : !hw.struct<tag: !hw.enum<a, b, c>, body: !hw.union<a: i2, b: i1, c: i32>>) {
   // CHECK-NEXT:    %tag = hw.struct_extract %source["tag"] : !hw.struct<tag: !hw.enum<a, b, c>, body: !hw.union<a: i2, b: i1, c: i32>>
   // CHECK-NEXT:    %a = hw.enum.constant a : !hw.enum<a, b, c>
   // CHECK-NEXT:    %0 = hw.enum.cmp %tag, %a : !hw.enum<a, b, c>, !hw.enum<a, b, c>
@@ -726,7 +726,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.strictconnect %sink, %source : !firrtl.enum<a: uint<2>, b: uint<1>, c: uint<32>>
   }
 
-  // CHECK-LABEL: hw.module private @DataEnumCreate(input %input : i2, output sink : !hw.struct<tag: !hw.enum<a, b, c>, body: !hw.union<a: i2, b: i1, c: i32>>) {
+  // CHECK-LABEL: hw.module private @DataEnumCreate(in %input : i2, out sink : !hw.struct<tag: !hw.enum<a, b, c>, body: !hw.union<a: i2, b: i1, c: i32>>) {
   // CHECK-NEXT:   %a = hw.enum.constant a : !hw.enum<a, b, c>
   // CHECK-NEXT:   %0 = hw.union_create "a", %input : !hw.union<a: i2, b: i1, c: i32>
   // CHECK-NEXT:   %1 = hw.struct_create (%a, %0) : !hw.struct<tag: !hw.enum<a, b, c>, body: !hw.union<a: i2, b: i1, c: i32>>
@@ -775,7 +775,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %widx_widx_bin = firrtl.regreset %clock, %reset, %c0_ui1 {name = "widx_widx_bin"} : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<4>
   }
 
-  // CHECK-LABEL: hw.module private @Struct0bits(input %source : !hw.struct<valid: i1, ready: i1, data: i0>) {
+  // CHECK-LABEL: hw.module private @Struct0bits(in %source : !hw.struct<valid: i1, ready: i1, data: i0>) {
   // CHECK-NEXT:    hw.output
   // CHECK-NEXT:  }
   firrtl.module private @Struct0bits(in %source: !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<0>>) {
@@ -809,18 +809,18 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
   firrtl.extmodule @chkcoverAnno(in clock: !firrtl.clock) attributes {annotations = [{class = "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation"}]}
   // chckcoverAnno is extracted because it is instantiated inside the DUT.
-  // CHECK-LABEL: hw.module.extern @chkcoverAnno(input %clock : !seq.clock)
+  // CHECK-LABEL: hw.module.extern @chkcoverAnno(in %clock : !seq.clock)
   // CHECK-SAME: attributes {firrtl.extract.cover.extra}
 
   firrtl.extmodule @chkcoverAnno2(in clock: !firrtl.clock) attributes {annotations = [{class = "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation"}]}
   // checkcoverAnno2 is NOT extracted because it is not instantiated under the
   // DUT.
-  // CHECK-LABEL: hw.module.extern @chkcoverAnno2(input %clock : !seq.clock)
+  // CHECK-LABEL: hw.module.extern @chkcoverAnno2(in %clock : !seq.clock)
   // CHECK-NOT: attributes {firrtl.extract.cover.extra}
 
   // CHECK-LABEL: hw.module.extern @InnerNamesExt
-  // CHECK:    input %clockIn : !seq.clock {hw.exportPort = #hw<innerSym@extClockInSym>}
-  // CHECK:    output clockOut : !seq.clock {hw.exportPort = #hw<innerSym@extClockOutSym>}
+  // CHECK:    in %clockIn : !seq.clock {hw.exportPort = #hw<innerSym@extClockInSym>}
+  // CHECK:    out clockOut : !seq.clock {hw.exportPort = #hw<innerSym@extClockOutSym>}
   firrtl.extmodule @InnerNamesExt(
     in clockIn: !firrtl.clock sym @extClockInSym,
     out clockOut: !firrtl.clock sym @extClockOutSym
@@ -882,10 +882,10 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
   // CHECK-LABEL: hw.module private @InnerNames
   // CHECK-SAME:  (
-  // CHECK-SAME:    input %value : i42 {hw.exportPort = #hw<innerSym@portValueSym>}
-  // CHECK-SAME:    input %clock : !seq.clock {hw.exportPort = #hw<innerSym@portClockSym>}
-  // CHECK-SAME:    input %reset : i1 {hw.exportPort = #hw<innerSym@portResetSym>}
-  // CHECK-SAME:    output out : i1 {hw.exportPort = #hw<innerSym@portOutSym>}
+  // CHECK-SAME:    in %value : i42 {hw.exportPort = #hw<innerSym@portValueSym>}
+  // CHECK-SAME:    in %clock : !seq.clock {hw.exportPort = #hw<innerSym@portClockSym>}
+  // CHECK-SAME:    in %reset : i1 {hw.exportPort = #hw<innerSym@portResetSym>}
+  // CHECK-SAME:    out out : i1 {hw.exportPort = #hw<innerSym@portOutSym>}
   // CHECK-SAME:  )
   firrtl.module private @InnerNames(
     in %value: !firrtl.uint<42> sym @portValueSym,
@@ -1055,7 +1055,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %bar = firrtl.dshl %a, %b {name = "anothername"} : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
   }
 
-  // CHECK-LABEL: hw.module private @MultibitMux(input %source_0 : i1, input %source_1 : i1, input %source_2 : i1, input %index : i2, output sink : i1) {
+  // CHECK-LABEL: hw.module private @MultibitMux(in %source_0 : i1, in %source_1 : i1, in %source_2 : i1, in %index : i2, out sink : i1) {
   firrtl.module private @MultibitMux(in %source_0: !firrtl.uint<1>, in %source_1: !firrtl.uint<1>, in %source_2: !firrtl.uint<1>, out %sink: !firrtl.uint<1>, in %index: !firrtl.uint<2>) {
     %0 = firrtl.multibit_mux %index, %source_2, %source_1, %source_0 : !firrtl.uint<2>, !firrtl.uint<1>
     firrtl.connect %sink, %0 : !firrtl.uint<1>, !firrtl.uint<1>
@@ -1128,7 +1128,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.strictconnect %out, %b_inst : !firrtl.uint<1>
   }
 
-  // CHECK-LABEL: hw.module @LowerToFirReg(input %clock : !seq.clock, input %reset : i1, input %value : i2)
+  // CHECK-LABEL: hw.module @LowerToFirReg(in %clock : !seq.clock, in %reset : i1, in %value : i2)
   firrtl.module @LowerToFirReg(
     in %clock: !firrtl.clock,
     in %reset: !firrtl.uint<1>,
@@ -1142,7 +1142,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: %regB = seq.firreg %value clock %clock reset sync %reset, %value : i2
   }
 
-  // CHECK-LABEL: hw.module @SyncReset(input %clock : !seq.clock, input %reset : i1, input %value : i2, output result : i2)
+  // CHECK-LABEL: hw.module @SyncReset(in %clock : !seq.clock, in %reset : i1, in %value : i2, out result : i2)
   firrtl.module @SyncReset(in %clock: !firrtl.clock,
                            in %reset: !firrtl.uint<1>,
                            in %value: !firrtl.uint<2>,
@@ -1155,7 +1155,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.strictconnect %result, %count : !firrtl.uint<2>
   }
 
-  // CHECK-LABEL: hw.module @AsyncReset(input %clock : !seq.clock, input %reset : i1, input %value : i2, output result : i2)
+  // CHECK-LABEL: hw.module @AsyncReset(in %clock : !seq.clock, in %reset : i1, in %value : i2, out result : i2)
   firrtl.module @AsyncReset(in %clock: !firrtl.clock,
                            in %reset: !firrtl.asyncreset,
                            in %value: !firrtl.uint<2>,
@@ -1169,7 +1169,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.strictconnect %result, %count : !firrtl.uint<2>
   }
 
-  // CHECK-LABEL: hw.module @NoConnect(input %clock : !seq.clock, input %reset : i1, output result : i2)
+  // CHECK-LABEL: hw.module @NoConnect(in %clock : !seq.clock, in %reset : i1, out result : i2)
   firrtl.module @NoConnect(in %clock: !firrtl.clock,
                      in %reset: !firrtl.uint<1>,
                      out %result: !firrtl.uint<2>) {
@@ -1181,13 +1181,13 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK: hw.output %count : i2
   }
   // CHECK-LABEL: hw.module @passThroughForeignTypes
-  // CHECK-SAME:      (input %inOpaque : index, output outOpaque : index) {
+  // CHECK-SAME:      (in %inOpaque : index, out outOpaque : index) {
   // CHECK-NEXT:    %sub2.bar = hw.instance "sub2" @moreForeignTypes(foo: %sub1.bar: index) -> (bar: index)
   // CHECK-NEXT:    %sub1.bar = hw.instance "sub1" @moreForeignTypes(foo: %inOpaque: index) -> (bar: index)
   // CHECK-NEXT:    hw.output %sub2.bar : index
   // CHECK-NEXT:  }
   // CHECK-LABEL: hw.module @moreForeignTypes
-  // CHECK-SAME:      (input %foo : index, output bar : index) {
+  // CHECK-SAME:      (in %foo : index, out bar : index) {
   // CHECK-NEXT:    hw.output %foo : index
   // CHECK-NEXT:  }
   firrtl.module @passThroughForeignTypes(in %inOpaque: index, out %outOpaque: index) {
@@ -1203,7 +1203,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   }
 
   // CHECK-LABEL: hw.module @foreignOpsOnForeignTypes
-  // CHECK-SAME:      (input %x : f32, output y : f32) {
+  // CHECK-SAME:      (in %x : f32, out y : f32) {
   // CHECK-NEXT:    [[TMP:%.+]] = arith.addf %x, %x : f32
   // CHECK-NEXT:    hw.output [[TMP]] : f32
   // CHECK-NEXT:  }
@@ -1213,7 +1213,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   }
 
   // CHECK-LABEL: hw.module @wiresWithForeignTypes
-  // CHECK-SAME:      (input %in : f32, output out : f32) {
+  // CHECK-SAME:      (in %in : f32, out out : f32) {
   // CHECK-NEXT:    [[ADD1:%.+]] = arith.addf [[ADD2:%.+]], [[ADD2]] : f32
   // CHECK-NEXT:    [[ADD2]] = arith.addf %in, [[ADD2]] : f32
   // CHECK-NEXT:    hw.output [[ADD1]] : f32
@@ -1447,10 +1447,10 @@ firrtl.circuit "TypeAlias" {
 // CHECK:    hw.typedecl @bar_0 : i64
 // CHECK:  }
 // CHECK:  hw.module @TypeAlias(
-// CHECK-SAME: input %in : !hw.typealias<@TypeAlias__TYPESCOPE_::@A, i1>
-// CHECK-SAME: input %const : !hw.typealias<@TypeAlias__TYPESCOPE_::@B, i1>
-// CHECK-SAME: output out : !hw.typealias<@TypeAlias__TYPESCOPE_::@C, !hw.typealias<@TypeAlias__TYPESCOPE_::@baz, i1>>
-// CHECK-SAME: output out2 : !hw.typealias<@TypeAlias__TYPESCOPE_::@D, i1>)
+// CHECK-SAME: in %in : !hw.typealias<@TypeAlias__TYPESCOPE_::@A, i1>
+// CHECK-SAME: in %const : !hw.typealias<@TypeAlias__TYPESCOPE_::@B, i1>
+// CHECK-SAME: out out : !hw.typealias<@TypeAlias__TYPESCOPE_::@C, !hw.typealias<@TypeAlias__TYPESCOPE_::@baz, i1>>
+// CHECK-SAME: out out2 : !hw.typealias<@TypeAlias__TYPESCOPE_::@D, i1>)
 // CHECK:    %wire = hw.wire %0  : !hw.typealias<@TypeAlias__TYPESCOPE_::@baz, i1>
 // CHECK:    %0 = hw.bitcast %in : (!hw.typealias<@TypeAlias__TYPESCOPE_::@A, i1>) -> !hw.typealias<@TypeAlias__TYPESCOPE_::@baz, i1>
 // CHECK:    %wire2 = hw.wire %1  : !hw.typealias<@TypeAlias__TYPESCOPE_::@baf, i1>
@@ -1461,8 +1461,8 @@ firrtl.circuit "TypeAlias" {
 // CHECK:  }
 
 // CHECK:  hw.module private @SimpleStruct(
-// CHECK-SAME: input %source : !hw.typealias<@TypeAlias__TYPESCOPE_::@bar, !hw.struct<valid: i1, ready: i1, data: i64>>
-// CHECK-SAME: output fldout : !hw.typealias<@TypeAlias__TYPESCOPE_::@bar_0, i64>
+// CHECK-SAME: in %source : !hw.typealias<@TypeAlias__TYPESCOPE_::@bar, !hw.struct<valid: i1, ready: i1, data: i64>>
+// CHECK-SAME: out fldout : !hw.typealias<@TypeAlias__TYPESCOPE_::@bar_0, i64>
 // CHECK:    %wire = hw.wire %0  : !hw.struct<valid: i1, ready: i1, data: i64>
 // CHECK:    %0 = hw.bitcast %source : (!hw.typealias<@TypeAlias__TYPESCOPE_::@bar, !hw.struct<valid: i1, ready: i1, data: i64>>) -> !hw.struct<valid: i1, ready: i1, data: i64>
 // CHECK:    %data = hw.struct_extract %wire["data"] : !hw.struct<valid: i1, ready: i1, data: i64>

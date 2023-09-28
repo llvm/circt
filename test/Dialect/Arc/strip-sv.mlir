@@ -8,7 +8,7 @@ sv.ifdef  "RANDOMIZE_REG_INIT" {
 }
 
 // CHECK-LABEL: hw.module @Foo(
-hw.module @Foo(input %clock: !seq.clock, input %a: i4, output z: i4) {
+hw.module @Foo(in %clock: !seq.clock, in %a: i4, out z: i4) {
   // CHECK-NEXT: [[REG:%.+]] = seq.compreg %a, %clock
   %0 = seq.firreg %a clock %clock : i4
   %1 = sv.wire : !hw.inout<i4>
@@ -20,7 +20,7 @@ hw.module @Foo(input %clock: !seq.clock, input %a: i4, output z: i4) {
 // CHECK-NEXT: }
 
 // CHECK-LABEL: hw.module.extern @PeripheryBus
-hw.module.extern @PeripheryBus(output clock: !seq.clock, output reset: i1)
+hw.module.extern @PeripheryBus(out clock: !seq.clock, out reset: i1)
 // CHECK: hw.module @Top
 hw.module @Top() {
   %c0_i7 = hw.constant 0 : i7

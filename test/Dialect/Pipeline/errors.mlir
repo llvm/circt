@@ -1,7 +1,7 @@
 // RUN: circt-opt -split-input-file -verify-diagnostics %s
 
 
-hw.module @res_argn(input %arg0 : i32, input %arg1 : i32, input %go : i1, input %clk : !seq.clock, input %rst : i1, output out: i32) {
+hw.module @res_argn(in %arg0 : i32, in %arg1 : i32, in %go : i1, in %clk : !seq.clock, in %rst : i1, out out: i32) {
   %0:2 = pipeline.unscheduled(%a0 : i32 = %arg0, %a1 : i32 = %arg1) clock(%clk) reset(%rst) go(%go) entryEn(%s0_enable) -> (out: i32){
     // expected-error @+1 {{'pipeline.return' op expected 1 return values, got 0.}}
     pipeline.return
@@ -11,7 +11,7 @@ hw.module @res_argn(input %arg0 : i32, input %arg1 : i32, input %go : i1, input 
 
 // -----
 
-hw.module @res_argtype(input %arg0 : i32, input %arg1 : i32, input %go : i1, input %clk : !seq.clock, input %rst : i1, output out: i31) {
+hw.module @res_argtype(in %arg0 : i32, in %arg1 : i32, in %go : i1, in %clk : !seq.clock, in %rst : i1, out out: i31) {
   %0:2 = pipeline.unscheduled(%a0 : i32 = %arg0, %a1 : i32 = %arg1) clock(%clk) reset(%rst) go(%go) entryEn(%s0_enable) -> (out: i31) {
     // expected-error @+1 {{'pipeline.return' op expected return value of type 'i31', got 'i32'.}}
     pipeline.return %a0 : i32
@@ -21,7 +21,7 @@ hw.module @res_argtype(input %arg0 : i32, input %arg1 : i32, input %go : i1, inp
 
 // -----
 
-hw.module @unterminated(input %arg0 : i32, input %arg1 : i32, input %go : i1, input %clk : !seq.clock, input %rst : i1, output out: i32) {
+hw.module @unterminated(in %arg0 : i32, in %arg1 : i32, in %go : i1, in %clk : !seq.clock, in %rst : i1, out out: i32) {
   // expected-error @+1 {{'pipeline.scheduled' op all blocks must be terminated with a `pipeline.stage` or `pipeline.return` op.}}
   %0:2 = pipeline.scheduled(%a0 : i32 = %arg0, %a1 : i32 = %arg1) clock(%clk) reset(%rst) go(%go) entryEn(%s0_enable) -> (out: i32){
     %0 = comb.add %a0, %a1 : i32
@@ -37,7 +37,7 @@ hw.module @unterminated(input %arg0 : i32, input %arg1 : i32, input %go : i1, in
 
 // -----
 
-hw.module @mixed_stages(input %arg0 : i32, input %arg1 : i32, input %go : i1, input %clk : !seq.clock, input %rst : i1, output out: i32) {
+hw.module @mixed_stages(in %arg0 : i32, in %arg1 : i32, in %go : i1, in %clk : !seq.clock, in %rst : i1, out out: i32) {
   %0:2 = pipeline.scheduled(%a0 : i32 = %arg0, %a1 : i32 = %arg1) clock(%clk) reset(%rst) go(%go) entryEn(%s0_enable) -> (out: i32){
     %0 = comb.add %a0, %a1 : i32
     pipeline.stage ^bb1
@@ -54,7 +54,7 @@ hw.module @mixed_stages(input %arg0 : i32, input %arg1 : i32, input %go : i1, in
 
 // -----
 
-hw.module @cycle_pipeline1(input %arg0 : i32, input %arg1 : i32, input %go : i1, input %clk : !seq.clock, input %rst : i1, output out: i32) {
+hw.module @cycle_pipeline1(in %arg0 : i32, in %arg1 : i32, in %go : i1, in %clk : !seq.clock, in %rst : i1, out out: i32) {
   // expected-error @+1 {{'pipeline.scheduled' op pipeline contains a cycle.}}
   %0:2 = pipeline.scheduled(%a0 : i32 = %arg0, %a1 : i32 = %arg1) clock(%clk) reset(%rst) go(%go) entryEn(%s0_enable) -> (out: i32){
     %0 = comb.add %a0, %a1 : i32
@@ -74,7 +74,7 @@ hw.module @cycle_pipeline1(input %arg0 : i32, input %arg1 : i32, input %go : i1,
 
 // -----
 
-hw.module @cycle_pipeline2(input %arg0 : i32, input %arg1 : i32, input %go : i1, input %clk : !seq.clock, input %rst : i1, output out: i32) {
+hw.module @cycle_pipeline2(in %arg0 : i32, in %arg1 : i32, in %go : i1, in %clk : !seq.clock, in %rst : i1, out out: i32) {
   // expected-error @+1 {{'pipeline.scheduled' op pipeline contains a cycle.}}
   %0:2 = pipeline.scheduled(%a0 : i32 = %arg0, %a1 : i32 = %arg1) clock(%clk) reset(%rst) go(%go) entryEn(%s0_enable) -> (out: i32){
     %0 = comb.add %a0, %a1 : i32
@@ -91,7 +91,7 @@ hw.module @cycle_pipeline2(input %arg0 : i32, input %arg1 : i32, input %go : i1,
 
 // -----
 
-hw.module @earlyAccess(input %arg0: i32, input %arg1: i32, input %go: i1, input %clk : !seq.clock, input %rst: i1, output out: i32) {
+hw.module @earlyAccess(in %arg0: i32, in %arg1: i32, in %go: i1, in %clk : !seq.clock, in %rst: i1, out out: i32) {
   %0:2 = pipeline.scheduled(%a0 : i32 = %arg0) clock(%clk) reset(%rst) go(%go) entryEn(%s0_enable) -> (out: i32) {
     // expected-error @+1 {{'pipeline.latency' op result 0 is used before it is available.}}
     %1 = pipeline.latency 2 -> (i32) {
@@ -110,7 +110,7 @@ hw.module @earlyAccess(input %arg0: i32, input %arg1: i32, input %go: i1, input 
 
 // Test which verifies that the values referenced within the body of a
 // latency operation also adhere to the latency constraints.
-hw.module @earlyAccess2(input %arg0: i32, input %arg1: i32, input %go: i1, input %clk : !seq.clock, input %rst: i1, output out: i32) {
+hw.module @earlyAccess2(in %arg0: i32, in %arg1: i32, in %go: i1, in %clk : !seq.clock, in %rst: i1, out out: i32) {
   %0:2 = pipeline.scheduled(%a0 : i32 = %arg0) clock(%clk) reset(%rst) go(%go) entryEn(%s0_enable) -> (out: i32) {
     // expected-error @+1 {{'pipeline.latency' op result 0 is used before it is available.}}
     %1 = pipeline.latency 2 -> (i32) {
@@ -140,7 +140,7 @@ hw.module @earlyAccess2(input %arg0: i32, input %arg1: i32, input %go: i1, input
 // -----
 
 
-hw.module @registeredPass(input %arg0: i32, input %arg1: i32, input %go: i1, input %clk : !seq.clock, input %rst: i1, output out: i32) {
+hw.module @registeredPass(in %arg0: i32, in %arg1: i32, in %go: i1, in %clk : !seq.clock, in %rst: i1, out out: i32) {
   %0:2 = pipeline.scheduled(%a0 : i32 = %arg0) clock(%clk) reset(%rst) go(%go) entryEn(%s0_enable) -> (out: i32) {
     // expected-error @+1 {{'pipeline.latency' op result 0 is used before it is available.}}
     %1 = pipeline.latency 2 -> (i32) {
@@ -157,7 +157,7 @@ hw.module @registeredPass(input %arg0: i32, input %arg1: i32, input %go: i1, inp
 
 // -----
 
-hw.module @missing_valid_entry3(input %arg : i32, input %go : i1, input %clk : !seq.clock, input %rst : i1) {
+hw.module @missing_valid_entry3(in %arg : i32, in %go : i1, in %clk : !seq.clock, in %rst : i1) {
   // expected-error @+1 {{'pipeline.scheduled' op block 1 must have an i1 argument as the last block argument (stage valid signal).}}
   %done = pipeline.scheduled(%a0 : i32 = %arg) clock(%clk) reset(%rst) go(%go) entryEn(%s0_enable) -> () {
      pipeline.stage ^bb1
@@ -169,7 +169,7 @@ hw.module @missing_valid_entry3(input %arg : i32, input %go : i1, input %clk : !
 
 // -----
 
-hw.module @invalid_clock_gate(input %arg : i32, input %go : i1, input %clk : !seq.clock, input %rst : i1) {
+hw.module @invalid_clock_gate(in %arg : i32, in %go : i1, in %clk : !seq.clock, in %rst : i1) {
   %done = pipeline.scheduled(%a0 : i32 = %arg) clock(%clk) reset(%rst) go(%go) entryEn(%s0_enable) -> () {
      // expected-note@+1 {{prior use here}}
      %c0_i2 = hw.constant 0 : i2
@@ -183,7 +183,7 @@ hw.module @invalid_clock_gate(input %arg : i32, input %go : i1, input %clk : !se
 
 // -----
 
-hw.module @noStallSignalWithStallability(input %arg0 : i32, input %go : i1, input %clk : !seq.clock, input %rst : i1, output out: i32) {
+hw.module @noStallSignalWithStallability(in %arg0 : i32, in %go : i1, in %clk : !seq.clock, in %rst : i1, out out: i32) {
   // expected-error @+1 {{'pipeline.scheduled' op cannot specify stallability without a stall signal.}}
   %0:2 = pipeline.scheduled "MyPipeline"(%a0 : i32 = %arg0) clock(%clk) reset(%rst) go(%go) entryEn(%s0_enable)
     {stallability = [true, false, true]}
@@ -201,7 +201,7 @@ hw.module @noStallSignalWithStallability(input %arg0 : i32, input %go : i1, inpu
 
 // -----
 
-hw.module @incorrectStallabilitySize(input %arg0 : i32, input %go : i1, input %clk : !seq.clock, input %rst : i1, input %stall : i1, output out: i32) {
+hw.module @incorrectStallabilitySize(in %arg0 : i32, in %go : i1, in %clk : !seq.clock, in %rst : i1, in %stall : i1, out out: i32) {
   // expected-error @+1 {{'pipeline.scheduled' op stallability array must be the same length as the number of stages. Pipeline has 3 stages but array had 2 elements.}}
   %0:2 = pipeline.scheduled "MyPipeline"(%a0 : i32 = %arg0) stall(%stall) clock(%clk) reset(%rst) go(%go) entryEn(%s0_enable)
     {stallability = [true, false]}

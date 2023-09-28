@@ -1,6 +1,6 @@
 // RUN: circt-opt %s --arc-lower-vectorizations=mode=inline-body --split-input-file --verify-diagnostics | FileCheck %s
 
-hw.module @inline_body(input %in0: i1, input %in1: i1, input %in2: i1, input %in3: i1, output out0: i1, output out1: i1, output out2: i1, output out3: i1) {
+hw.module @inline_body(in %in0: i1, in %in1: i1, in %in2: i1, in %in3: i1, out out0: i1, out out1: i1, out out2: i1, out out3: i1) {
   %0 = comb.concat %in0, %in1 : i1, i1
   %1 = comb.concat %in2, %in2 : i1, i1
 
@@ -50,7 +50,7 @@ hw.module @inline_body(input %in0: i1, input %in1: i1, input %in2: i1, input %in
 
 // -----
 
-hw.module @vectorize(input %in0: i1, input %in1: i1, input %in2: i1, input %in3: i1, output out0: i1, output out1: i1) {
+hw.module @vectorize(in %in0: i1, in %in1: i1, in %in2: i1, in %in3: i1, out out0: i1, out out1: i1) {
   // expected-error @below {{can only inline body if boundary and body are already vectorized}}
   %0:2 = arc.vectorize (%in0, %in1), (%in2, %in3) : (i1, i1, i1, i1) -> (i1, i1) {
   ^bb0(%arg0: i1, %arg1: i1):

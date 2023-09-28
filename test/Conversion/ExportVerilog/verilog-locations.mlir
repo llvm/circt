@@ -1,7 +1,7 @@
 // RUN: circt-opt %s -export-verilog -verify-diagnostics --mlir-print-debuginfo --split-input-file | FileCheck %s --strict-whitespace
 
 module attributes {circt.loweringOptions = "emitVerilogLocations"} {
-hw.module @MultiUseExpr(input %a: i4, output b0: i1) {
+hw.module @MultiUseExpr(in %a: i4, out b0: i1) {
   %0 = comb.parity %a : i4
   hw.output %0 : i1
 }
@@ -41,7 +41,7 @@ hw.module @MultiUseExpr(input %a: i4, output b0: i1) {
 // -----
 
 module attributes {circt.loweringOptions = "locationInfoStyle=none,emitVerilogLocations"} {
-hw.module @SimpleConstPrintReset(input %clock: i1, input %reset: i1, input %in4: i4) {
+hw.module @SimpleConstPrintReset(in %clock: i1, in %reset: i1, in %in4: i4) {
   %w = sv.wire : !hw.inout<i4>
   %q = sv.reg : !hw.inout<i4>
   %c1_i4 = hw.constant 1 : i4
@@ -143,7 +143,7 @@ hw.module @SimpleConstPrintReset(input %clock: i1, input %reset: i1, input %in4:
 // -----
 
 module attributes {circt.loweringOptions = "emitVerilogLocations"} {
-hw.module @InlineDeclAssignment(input %a: i1) {
+hw.module @InlineDeclAssignment(in %a: i1) {
   %b = sv.wire : !hw.inout<i1>
   sv.assign %b, %a : i1
 

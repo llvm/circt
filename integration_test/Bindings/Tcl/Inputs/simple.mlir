@@ -1,4 +1,4 @@
-hw.module.extern @ichi(input %a: i2, input %b: i3, output c: i4, output d: i5)
+hw.module.extern @ichi(in %a: i2, in %b: i3, out c: i4, out d: i5)
 
 hw.module @owo(output owo_result : i32) {
   %0 = hw.constant 3 : i32
@@ -6,7 +6,7 @@ hw.module @owo(output owo_result : i32) {
 }
 hw.module @uwu() { }
 
-hw.module @nya(input %nya_input : i32) {
+hw.module @nya(in %nya_input : i32) {
   hw.instance "uwu1" @uwu() -> ()
 }
 

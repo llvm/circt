@@ -4,7 +4,7 @@
 // CHECK: input  [3:0] casex_0,
 // CHECK: output [3:0] if_0
 // CHECK: );
-hw.module @namechange(input %casex: i4, output if: i4) {
+hw.module @namechange(in %casex: i4, out if: i4) {
   // CHECK: assign if_0 = casex_0;
   hw.output %casex : i4
 }
@@ -16,7 +16,7 @@ hw.module.extern @module_with_bool<bparam: i1>()
 // CHECK-NEXT:      parameter [0:0]  wire_0) (
 // CHECK-NEXT:    input [7:0] p1
 // CHECK-NEXT: );
-hw.module @parametersNameConflict<p2: i42 = 17, wire: i1>(input %p1: i8) {
+hw.module @parametersNameConflict<p2: i42 = 17, wire: i1>(in %p1: i8) {
   %myWire = sv.wire : !hw.inout<i1>
 
   // CHECK: `ifdef SOMEMACRO
@@ -43,7 +43,7 @@ hw.module @parametersNameConflict<p2: i42 = 17, wire: i1>(input %p1: i8) {
 }
 
 // CHECK-LABEL: module useParametersNameConflict(
-hw.module @useParametersNameConflict(input %xxx: i8) {
+hw.module @useParametersNameConflict(in %xxx: i8) {
   // CHECK: parametersNameConflict #(
   // CHECK:  .p2(42'd27),
   // CHECK:  .wire_0(0)
@@ -65,13 +65,13 @@ hw.module @useParametersNameConflict(input %xxx: i8) {
 // CHECK:         input  inout_0,
 // CHECK:         output output_0
 // CHECK:       );
-hw.module @inout(input %inout: i1, output output: i1) {
+hw.module @inout(in %inout: i1, out output: i1) {
 // CHECK:       assign output_0 = inout_0;
   hw.output %inout : i1
 }
 
 // CHECK-LABEL: module inout_inst(
-hw.module @inout_inst(input %a: i1) {
+hw.module @inout_inst(in %a: i1) {
   // CHECK: inout_0 foo (
   // CHECK:   .inout_0  (a),
   // CHECK:   .output_0 (/* unused */)
@@ -85,7 +85,7 @@ hw.module @inout_inst(input %a: i1) {
 // CHECK-NEXT:    input  inout_0,
 // CHECK-NEXT:    output output_0
 // CHECK-NEXT:  );
-hw.module @reg(input %inout: i1, output output: i1) {
+hw.module @reg(in %inout: i1, out output: i1) {
   // CHECK: assign output_0 = inout_0;
   hw.output %inout : i1
 }
@@ -96,17 +96,17 @@ hw.module @reg(input %inout: i1, output output: i1) {
 // CHECK-NEXT:                 else_0,
 // CHECK-NEXT:    output [1:0] casex_0
 // CHECK-NEXT:  );
-hw.module @issue525(input %struct: i2, input %else: i2, output casex: i2) {
+hw.module @issue525(in %struct: i2, in %else: i2, out casex: i2) {
   // CHECK: assign casex_0 = struct_0 + else_0;
   %2 = comb.add %struct, %else : i2
   hw.output %2 : i2
 }
 
-hw.module @B(input %a: i1) {
+hw.module @B(in %a: i1) {
 }
 
 // CHECK-LABEL: module TestDupInstanceName(
-hw.module @TestDupInstanceName(input %a: i1) {
+hw.module @TestDupInstanceName(in %a: i1) {
   // CHECK: B name (
   hw.instance "name" @B(a: %a: i1) -> ()
   // CHECK: B name_0 (
@@ -114,7 +114,7 @@ hw.module @TestDupInstanceName(input %a: i1) {
 }
 
 // CHECK-LABEL: module TestEmptyInstanceName(
-hw.module @TestEmptyInstanceName(input %a: i1) {
+hw.module @TestEmptyInstanceName(in %a: i1) {
   // CHECK: B _GEN (
   hw.instance "" @B(a: %a: i1) -> ()
   // CHECK: B _GEN_0 (
@@ -122,7 +122,7 @@ hw.module @TestEmptyInstanceName(input %a: i1) {
 }
 
 // CHECK-LABEL: module TestInstanceNameValueConflict(
-hw.module @TestInstanceNameValueConflict(input %a: i1) {
+hw.module @TestInstanceNameValueConflict(in %a: i1) {
   // CHECK:  wire name;
   %name = sv.wire : !hw.inout<i1>
   // CHECK:  wire output_0;
@@ -135,13 +135,13 @@ hw.module @TestInstanceNameValueConflict(input %a: i1) {
 
 // https://github.com/llvm/circt/issues/855
 // CHECK-LABEL: module nameless_reg(
-hw.module @nameless_reg(input %a: i1) {
+hw.module @nameless_reg(in %a: i1) {
   // CHECK: reg [3:0] _GEN;
   %661 = sv.reg : !hw.inout<i4>
 }
 
 // CHECK-LABEL: module verif_renames(
-hw.module @verif_renames(input %cond: i1) {
+hw.module @verif_renames(in %cond: i1) {
   // CHECK: initial
   sv.initial {
     // CHECK:   assert_0: assert(cond);
@@ -150,7 +150,7 @@ hw.module @verif_renames(input %cond: i1) {
 }
 
 // CHECK-LABEL: module verbatim_renames(
-hw.module @verbatim_renames(input %a: i1 {hw.exportPort = #hw<innerSym@asym>}) {
+hw.module @verbatim_renames(in %a: i1 {hw.exportPort = #hw<innerSym@asym>}) {
   // CHECK: // VERB Module : reg_0 inout_0
   // CHECK: wire wire_0;
   sv.verbatim "// VERB Module : {{0}} {{1}}" {symbols = [@reg, @inout]}

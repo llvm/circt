@@ -1,7 +1,7 @@
 // RUN: circt-opt %s --arc-add-taps | FileCheck %s
 
 // CHECK-LABEL: hw.module @ObservePorts
-hw.module @ObservePorts(input %x: i4, input %y: i4, output u: i4, output v: i4) {
+hw.module @ObservePorts(in %x: i4, in %y: i4, out u: i4, out v: i4) {
   // CHECK-NEXT: arc.tap %x {name = "x"} : i4
   // CHECK-NEXT: arc.tap %y {name = "y"} : i4
   // CHECK-NEXT: %0 = comb.add
@@ -40,7 +40,7 @@ hw.module @ObserveWires() {
 // CHECK-NEXT: }
 
 // CHECK-LABEL: hw.module @Clocks
-hw.module @Clocks(input %clk: !seq.clock) {
+hw.module @Clocks(in %clk: !seq.clock) {
   // CHECK-NEXT: [[CAST:%.+]] = seq.from_clock %clk
   // CHECK-NEXT: arc.tap [[CAST]] {name = "clk"} : i1
 }
