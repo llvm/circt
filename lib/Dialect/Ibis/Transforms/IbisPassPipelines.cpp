@@ -39,7 +39,8 @@ void circt::ibis::loadIbisLowLevelPassPipeline(mlir::PassManager &pm) {
 }
 
 void circt::ibis::loadIbisHighLevelPassPipeline(mlir::PassManager &pm) {
-  pm.nest<ibis::MethodOp>().addPass(ibis::createInlineSBlocksPass());
+  pm.nest<ibis::ClassOp>().nest<ibis::MethodOp>().addPass(
+      ibis::createInlineSBlocksPass());
   pm.addPass(mlir::createMem2Reg());
 
   // TODO @mortbopet: Add a verification pass to ensure that there are no more
@@ -51,7 +52,8 @@ void circt::ibis::loadIbisHighLevelPassPipeline(mlir::PassManager &pm) {
   pm.addPass(circt::createMaximizeSSAPass());
 
   // SSA maximal form achieved. Reconstruct the Ibis sblocks.
-  pm.nest<ibis::MethodOp>().addPass(ibis::createReblockPass());
+  pm.nest<ibis::ClassOp>().nest<ibis::MethodOp>().addPass(
+      ibis::createReblockPass());
   pm.addPass(ibis::createArgifyBlocksPass());
   pm.addPass(createSimpleCanonicalizerPass());
 
