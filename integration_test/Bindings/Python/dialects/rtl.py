@@ -101,7 +101,7 @@ with Context() as ctx, Location.unknown():
     instance_builder_tests = hw.HWModuleOp(name="instance_builder_tests",
                                            body_builder=instance_builder_body)
 
-    # CHECK: hw.module @block_args_test(%[[PORT_NAME:.+]]: i32) ->
+    # CHECK: hw.module @block_args_test(input %[[PORT_NAME:.+]] : i32, output
     # CHECK: hw.output %[[PORT_NAME]]
     hw.HWModuleOp(name="block_args_test",
                   input_ports=[("foo", i32)],
