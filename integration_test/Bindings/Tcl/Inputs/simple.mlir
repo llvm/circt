@@ -26,4 +26,3 @@ hw.module @always() {
   }
   hw.output
 }
-
