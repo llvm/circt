@@ -405,17 +405,17 @@ void module_like_impl::printModuleSignatureNew(OpAsmPrinter &p, Operation *op) {
       p.printKeywordOrString(port.name);
     } else {
       if (!isExternal) {
-      // Get the printed format for the argument name.
-      resultNameStr.clear();
-      llvm::raw_svector_ostream tmpStream(resultNameStr);
-      p.printOperand(body.front().getArgument(curArg), tmpStream);
-      p << " " << tmpStream.str();
-      // If the name wasn't printable in a way that agreed with argName, make
-      // sure to print out an explicit argNames attribute.
-      if (tmpStream.str().drop_front() != port.name) {
-        p << " ";
-        p.printKeywordOrString(port.name);
-      }
+        // Get the printed format for the argument name.
+        resultNameStr.clear();
+        llvm::raw_svector_ostream tmpStream(resultNameStr);
+        p.printOperand(body.front().getArgument(curArg), tmpStream);
+        p << " " << tmpStream.str();
+        // If the name wasn't printable in a way that agreed with argName, make
+        // sure to print out an explicit argNames attribute.
+        if (tmpStream.str().drop_front() != port.name) {
+          p << " ";
+          p.printKeywordOrString(port.name);
+        }
       } else {
         p << " %" << port.name.getValue();
       }

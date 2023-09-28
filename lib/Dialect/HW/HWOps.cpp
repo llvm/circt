@@ -988,10 +988,8 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
   if (failed(parser.parseOptionalAttrDictWithKeyword(result.attributes)))
     return failure();
 
-  if (
-      hasAttribute("parameters", result.attributes)) {
-    parser.emitError(
-        loc, "explicit `parameters` attributes not allowed");
+  if (hasAttribute("parameters", result.attributes)) {
+    parser.emitError(loc, "explicit `parameters` attributes not allowed");
     return failure();
   }
 
@@ -1056,9 +1054,7 @@ static void printModuleOp(OpAsmPrinter &p, ModuleTy mod) {
   }
 
   // Print the parameter list if present.
-  printOptionalParameterList(
-      p, mod.getOperation(),
-      mod.getParameters());
+  printOptionalParameterList(p, mod.getOperation(), mod.getParameters());
 
   module_like_impl::printModuleSignatureNew(p, mod.getOperation());
 
@@ -1070,13 +1066,14 @@ static void printModuleOp(OpAsmPrinter &p, ModuleTy mod) {
   omittedAttrs.push_back(mod.getPerPortAttrsAttrName());
   omittedAttrs.push_back(mod.getParametersAttrName());
   omittedAttrs.push_back(visibilityAttrName);
-  if (auto cmt = mod.getOperation()->template getAttrOfType<StringAttr>("comment"))
+  if (auto cmt =
+          mod.getOperation()->template getAttrOfType<StringAttr>("comment"))
     if (cmt.getValue().empty())
       omittedAttrs.push_back("comment");
 
   mlir::function_interface_impl::printFunctionAttributes(p, mod.getOperation(),
                                                          omittedAttrs);
-  //p.printOptionalAttrDictWithKeyword(realAttrs, omittedAttrs);
+  // p.printOptionalAttrDictWithKeyword(realAttrs, omittedAttrs);
 }
 
 void HWModuleExternOp::print(OpAsmPrinter &p) { printModuleOp(p, *this); }
