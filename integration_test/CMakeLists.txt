@@ -10,7 +10,7 @@ set(CIRCT_INTEGRATION_TEST_DEPENDS
   esi-collateral
   firtool
   hlstool
-  hlstool
+  ibistool
   handshake-runner
   )
 
