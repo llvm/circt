@@ -105,52 +105,7 @@ struct StateOpLowering : public OpConversionPattern<arc::StateOp> {
   }
 };
 
-struct ReturnOpLowering : public OpConversionPattern<func::ReturnOp> {
-  using OpConversionPattern::OpConversionPattern;
-  LogicalResult
-  matchAndRewrite(func::ReturnOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<func::ReturnOp>(op, adaptor.getOperands());
-    return success();
-  }
-};
-
-struct FuncCallOpLowering : public OpConversionPattern<func::CallOp> {
-  using OpConversionPattern::OpConversionPattern;
-  LogicalResult
-  matchAndRewrite(func::CallOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    SmallVector<Type> newResultTypes;
-    if (failed(
-            typeConverter->convertTypes(op->getResultTypes(), newResultTypes)))
-      return failure();
-    rewriter.replaceOpWithNewOp<func::CallOp>(
-        op, op.getCalleeAttr(), newResultTypes, adaptor.getOperands());
-    return success();
-  }
-};
-
 } // namespace
-
-static bool isArcType(Type type) {
-  return type.isa<StorageType>() || type.isa<MemoryType>() ||
-         type.isa<StateType>();
-}
-
-static bool hasArcType(TypeRange types) {
-  return llvm::any_of(types, isArcType);
-}
-
-static bool hasArcType(ValueRange values) {
-  return hasArcType(values.getTypes());
-}
-
-template <typename Op>
-static void addGenericLegality(ConversionTarget &target) {
-  target.addDynamicallyLegalOp<Op>([](Op op) {
-    return !hasArcType(op->getOperands()) && !hasArcType(op->getResults());
-  });
-}
 
 static void populateLegality(ConversionTarget &target) {
   target.addLegalDialect<mlir::BuiltinDialect>();
@@ -163,16 +118,6 @@ static void populateLegality(ConversionTarget &target) {
   target.addIllegalOp<arc::DefineOp>();
   target.addIllegalOp<arc::OutputOp>();
   target.addIllegalOp<arc::StateOp>();
-
-  target.addDynamicallyLegalOp<func::FuncOp>([](func::FuncOp op) {
-    auto argsConverted = llvm::none_of(op.getBlocks(), [](auto &block) {
-      return hasArcType(block.getArguments());
-    });
-    auto resultsConverted = !hasArcType(op.getResultTypes());
-    return argsConverted && resultsConverted;
-  });
-  addGenericLegality<func::ReturnOp>(target);
-  addGenericLegality<func::CallOp>(target);
 }
 
 static void populateOpConversion(RewritePatternSet &patterns,
@@ -183,8 +128,6 @@ static void populateOpConversion(RewritePatternSet &patterns,
     CallOpLowering,
     DefineOpLowering,
     OutputOpLowering,
-    FuncCallOpLowering,
-    ReturnOpLowering,
     StateOpLowering
   >(typeConverter, context);
   // clang-format on
@@ -197,10 +140,6 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
   typeConverter.addConversion([&](StorageType type) {
     return LLVM::LLVMPointerType::get(IntegerType::get(type.getContext(), 8));
   });
-  typeConverter.addConversion([&](MemoryType type) {
-    return LLVM::LLVMPointerType::get(
-        IntegerType::get(type.getContext(), type.getStride() * 8));
-  });
   typeConverter.addConversion([&](StateType type) {
     return LLVM::LLVMPointerType::get(
         typeConverter.convertType(type.getType()));
@@ -210,9 +149,8 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
 }
 
 
-/// Perform the lowering to Func and SCF.
 LogicalResult LowerArcsToFuncsPass::lowerToFuncs() {
-  LLVM_DEBUG(llvm::dbgs() << "Lowering arcs to Func/SCF dialects\n");
+  LLVM_DEBUG(llvm::dbgs() << "Lowering arcs to funcs\n");
   ConversionTarget target(getContext());
   TypeConverter converter;
   RewritePatternSet patterns(&getContext());
