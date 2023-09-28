@@ -26,4 +26,4 @@ void loadIbisHighLevelPassPipeline(mlir::PassManager &pm);
 } // namespace ibis
 } // namespace circt
 
-#endif // CIRCT_DIALECT_IBIS_IBISPASSES_H
+#endif // CIRCT_DIALECT_IBIS_IBISPASSPIPELINES_H
