@@ -47,7 +47,7 @@ sv.macro.decl @SomeMacro
 // CHECK-SAME: ) attributes {depth = 12 : i64, initFilename = "", initIsBinary = false, initIsInline = false, maskGran = 7 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 1 : ui32, numWritePorts = 1 : ui32, readLatency = 0 : ui32, readUnderWrite = 0 : i32, width = 42 : ui32, writeClockIDs = [0 : i32, 0 : i32], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
 
 // CHECK-LABEL: hw.module @Foo
-hw.module @Foo(%clk: !seq.clock, %en: i1, %addr: i4, %wdata: i42, %wmode: i1, %mask2: i2, %mask3: i3, %mask6: i6) {
+hw.module @Foo(input %clk: !seq.clock, input %en: i1, input %addr: i4, input %wdata: i42, input %wmode: i1, input %mask2: i2, input %mask3: i3, input %mask6: i6) {
   // CHECK-NEXT: %[[c1_i2:.+]] = hw.constant 1 : i2
   // CHECK-NEXT: [[TMP0:%.+]] = hw.instance "m0_mem1A_ext" @m0_mem1_12x42(R0_addr: %addr: i4, R0_en: %en: i1, R0_clk: %clk: !seq.clock) -> (R0_data: i42)
   // CHECK-NEXT: [[TMP1:%.+]] = hw.instance "m0_mem1B_ext" @m0_mem1_12x42(R0_addr: %addr: i4, R0_en: %en: i1, R0_clk: %clk: !seq.clock) -> (R0_data: i42)

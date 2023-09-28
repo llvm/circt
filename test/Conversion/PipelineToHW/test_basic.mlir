@@ -3,7 +3,7 @@
 // CHECK:   hw.module @testBasic(input %[[VAL_0:.*]] : i1, input %[[CLOCK:.*]] : !seq.clock, input %[[VAL_2:.*]] : i1, output out : i1) {
 // CHECK:           hw.output %[[VAL_0]] : i1
 // CHECK:         }
-hw.module @testBasic(input %arg0: i1, input %clk: !seq.clock, input %rst: i1) -> (out: i1) {
+hw.module @testBasic(input %arg0: i1, input %clk: !seq.clock, input %rst: i1, output out : i1) {
   %0:2 = pipeline.scheduled(%a0 : i1 = %arg0) clock(%clk) reset(%rst) go(%arg0) entryEn(%s0_enable) -> (out : i1) {
     pipeline.return %a0 : i1
   }
@@ -88,7 +88,7 @@ hw.module @testSingle(input %arg0: i32, input %arg1: i32, input %go: i1, input %
 // CHECK:           %[[VAL_26:.*]] = comb.mul %[[VAL_22]], %[[VAL_23]] : i32
 // CHECK:           hw.output %[[VAL_15]], %[[VAL_14]] : i32, i1
 // CHECK:         }
-hw.module @testMultiple(input %arg0: i32, input %arg1: i32, input %go: i1, input %clk: !seq.clock, input %rst: i1m output out0: i32, output out1: i1) {
+hw.module @testMultiple(input %arg0: i32, input %arg1: i32, input %go: i1, input %clk: !seq.clock, input %rst: i1, output out0: i32, output out1: i1) {
   %0:2 = pipeline.scheduled(%a0 : i32 = %arg0, %a1 : i32 = %arg1) clock(%clk) reset(%rst) go(%go) entryEn(%s0_enable) -> (out: i32){
     %1 = comb.sub %a0,%a1 : i32
     pipeline.stage ^bb1 regs(%1 : i32, %a0 : i32)

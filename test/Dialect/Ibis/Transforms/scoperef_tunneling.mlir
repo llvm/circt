@@ -205,7 +205,7 @@ ibis.container @C {
 // CHECK:           hw.output
 // CHECK:         }
 
-hw.module @AccessChildFromHW() -> () {
+hw.module @AccessChildFromHW() {
   %c = ibis.container.instance @c, @C
   %c_ref = ibis.path [
     #ibis.step<child , @c : !ibis.scoperef<@C>>
