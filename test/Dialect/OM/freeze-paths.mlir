@@ -6,7 +6,7 @@ hw.hierpath private @nla_2 [@PathModule::@sym_2]
 hw.hierpath private @nla_3 [@PathModule::@child]
 hw.hierpath private @nla_4 [@Child]
 hw.hierpath private @nla_5 [@PathModule::@child, @Child::@sym]
-hw.module @PathModule(%in: i1 {hw.exportPort = #hw<innerSym@sym>}) {
+hw.module @PathModule(in %in: i1 {hw.exportPort = #hw<innerSym@sym>}) {
   %wire = hw.wire %wire sym @sym_0 {hw.verilogName = "wire"} : i8
   %array = hw.wire %array sym [<@sym_1,1,public>] {hw.verilogName = "array"}: !hw.array<1xi8>
   %struct = hw.wire %struct sym [<@sym_2,1,public>] {hw.verilogName = "struct"}: !hw.struct<a: i8>

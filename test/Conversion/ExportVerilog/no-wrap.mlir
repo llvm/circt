@@ -5,7 +5,7 @@
 
 // CHECK{LITERAL}: //  {{
 // CHECK-NEXT: endmodule
-hw.module @VerbatimWrapping(%clock : i1, %cond : i1, %val : i8, %a : i3, %b : i3) {
+hw.module @VerbatimWrapping(in %clock : i1, in %cond : i1, in %val : i8, in %a : i3, in %b : i3) {
       %x = comb.add %a, %b : i3
       %y = comb.xor %a, %b : i3
       %arr = hw.array_create %x, %y, %x, %y, %x, %y, %x, %y, %x, %y, %x, %y : i3
@@ -25,8 +25,8 @@ hw.module @VerbatimWrapping(%clock : i1, %cond : i1, %val : i8, %a : i3, %b : i3
 // CHECK-NEXT: // Zero width: assign
 // CHECK-SAME: ;
 // CHECK-NEXT: endmodule
-hw.module @TestZero(%a: i4, %zeroBitWithAVeryLongNameWhichMightSeemUnlikelyButHappensAllTheTime: i0, %arrZero: !hw.array<3xi0>)
-  -> (r0: i4, rZeroOutputWithAVeryLongName_YepThisToo_LongNamesAreTheWay_MoreText_GoGoGoGoGo: i0, arrZero_0: !hw.array<3xi0>) {
+hw.module @TestZero(in %a: i4, in %zeroBitWithAVeryLongNameWhichMightSeemUnlikelyButHappensAllTheTime: i0, in %arrZero: !hw.array<3xi0>,
+  out r0: i4, out rZeroOutputWithAVeryLongName_YepThisToo_LongNamesAreTheWay_MoreText_GoGoGoGoGo: i0, out arrZero_0: !hw.array<3xi0>) {
 
   %b = comb.add %a, %a : i4
   %c = comb.add %zeroBitWithAVeryLongNameWhichMightSeemUnlikelyButHappensAllTheTime, %zeroBitWithAVeryLongNameWhichMightSeemUnlikelyButHappensAllTheTime : i0
@@ -50,8 +50,8 @@ hw.module @TestZero(%a: i4, %zeroBitWithAVeryLongNameWhichMightSeemUnlikelyButHa
 // CHECK: // Zero width: assign
 // CHECK-SAME: ;
 // CHECK-NEXT: endmodule
-hw.module @TestZeroInstance(%aa: i4, %azeroBit: i0, %aarrZero: !hw.array<3xi0>)
-  -> (r0: i4, rZeroOutputWithAVeryLongNameYepThisToo: i0, arrZero_0: !hw.array<3xi0>) {
+hw.module @TestZeroInstance(in %aa: i4, in %azeroBit: i0, in %aarrZero: !hw.array<3xi0>,
+  out r0: i4, out rZeroOutputWithAVeryLongNameYepThisToo: i0, out arrZero_0: !hw.array<3xi0>) {
 
 
   %o1, %o2, %o3 = hw.instance "iii" @TestZero(a: %aa: i4, zeroBitWithAVeryLongNameWhichMightSeemUnlikelyButHappensAllTheTime: %azeroBit: i0, arrZero: %aarrZero: !hw.array<3xi0>) -> (r0: i4, rZeroOutputWithAVeryLongName_YepThisToo_LongNamesAreTheWay_MoreText_GoGoGoGoGo: i0, arrZero_0: !hw.array<3xi0>)

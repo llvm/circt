@@ -1,6 +1,6 @@
 // RUN: circt-opt %s | circt-opt | FileCheck %s
 
-// CHECK:       hw.module @foo(%arg0: !dc.token, %arg1: !dc.value<i1>, %arg2: i32) attributes {argNames = ["", "", ""]} {
+// CHECK:       hw.module @foo(in %arg0 : !dc.token, in %arg1 : !dc.value<i1>, in %arg2 : i32) {
 // CHECK-NEXT:    %0 = dc.buffer[2] %arg0 : !dc.token
 // CHECK-NEXT:    %1 = dc.buffer[2] %arg1 [1, 2] : !dc.value<i1>
 // CHECK-NEXT:    %2:2 = dc.fork [2] %arg0 
@@ -14,7 +14,7 @@
 // CHECK-NEXT:    hw.output
 // CHECK-NEXT:  }
 
-hw.module @foo(%0 : !dc.token, %1 : !dc.value<i1>, %2 : i32) {
+hw.module @foo(in %0 : !dc.token, in %1 : !dc.value<i1>, in %2 : i32) {
   %buffer = dc.buffer [2] %0 : !dc.token
   %bufferInit = dc.buffer [2] %1 [1, 2] : !dc.value<i1>
   %f1, %f2 = dc.fork [2] %0

@@ -25,7 +25,7 @@ arc.define @SimpleB(%arg0: i4) -> i4 {
 }
 
 
-hw.module @nestedRegionTest(%arg0: i4, %arg1: i4) -> (out0: i4) {
+hw.module @nestedRegionTest(in %arg0: i4, in %arg1: i4, out out0: i4) {
   %0 = arc.state @sub3(%arg0, %arg1) lat 0 : (i4, i4) -> i4
   hw.output %0 : i4
 }
@@ -53,7 +53,7 @@ arc.define @sub3(%arg0: i4, %arg1: i4) -> i4 {
 // CHECK-NEXT: }
 // CHECK-NEXT: hw.output [[IFRES]] : i4
 
-hw.module @opsInNestedRegionsAreAlsoCounted(%arg0: i4, %arg1: i4) -> (out0: i4, out1: i4) {
+hw.module @opsInNestedRegionsAreAlsoCounted(in %arg0: i4, in %arg1: i4, out out0: i4, out out1: i4) {
   %0 = arc.state @sub4(%arg0, %arg1) lat 0 : (i4, i4) -> i4
   %1 = arc.state @sub4(%arg0, %arg1) lat 0 : (i4, i4) -> i4
   hw.output %0, %1 : i4, i4
@@ -78,7 +78,7 @@ arc.define @sub4(%arg0: i4, %arg1: i4) -> i4 {
 // CHECK-NEXT:   [[STATERES2:%.+]] = arc.state @sub4(%arg0, %arg1) lat 0 : (i4, i4) -> i4
 // CHECK-NEXT:   hw.output [[STATERES1]], [[STATERES2]] : i4, i4
 
-hw.module @nestedBlockArgumentsTest(%arg0: index, %arg1: i4) -> (out0: i4) {
+hw.module @nestedBlockArgumentsTest(in %arg0: index, in %arg1: i4, out out0: i4) {
   %0 = arc.state @sub5(%arg0, %arg1) lat 0 : (index, i4) -> i4
   hw.output %0 : i4
 }
@@ -101,7 +101,7 @@ arc.define @sub5(%arg0: index, %arg1: i4) -> i4 {
 // CHECK-NEXT: hw.output [[RES]] : i4
 
 // CHECK-LABEL: hw.module @TopLevel
-hw.module @TopLevel(%clk: !seq.clock, %arg0: i32, %arg1: i32) -> (out0: i32, out1: i32, out2: i32, out3: i32) {
+hw.module @TopLevel(in %clk: !seq.clock, in %arg0: i32, in %arg1: i32, out out0: i32, out out1: i32, out out2: i32, out out3: i32) {
   %0:2 = arc.state @inlineIntoArc(%arg0, %arg1) clock %clk lat 1 : (i32, i32) -> (i32, i32)
   %1:2 = arc.state @inlineIntoArc2(%arg0, %arg1) clock %clk lat 1 : (i32, i32) -> (i32, i32)
   hw.output %0#0, %0#1, %1#0, %1#1 : i32, i32, i32, i32
@@ -168,7 +168,7 @@ arc.define @ToBeRemoved3(%arg0: i32) -> i32 {
 // RUN: circt-opt %t/onlyIntoArcs --arc-inline=into-arcs-only=1 | FileCheck %t/onlyIntoArcs
 
 // CHECK-LABEL: hw.module @onlyIntoArcs
-hw.module @onlyIntoArcs(%arg0: i4, %arg1: i4, %arg2: !seq.clock) -> (out0: i4) {
+hw.module @onlyIntoArcs(in %arg0: i4, in %arg1: i4, in %arg2: !seq.clock, out out0: i4) {
   %0 = arc.state @sub1(%arg0, %arg1) lat 0 : (i4, i4) -> i4
   hw.output %0 : i4
 }

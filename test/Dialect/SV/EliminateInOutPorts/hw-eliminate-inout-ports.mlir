@@ -1,28 +1,28 @@
 // RUN: circt-opt --hw-eliminate-inout-ports %s | FileCheck %s
 
 // CHECK-LABEL:   hw.module @read(
-// CHECK-SAME:                    %[[VAL_0:.*]]: i42) -> (out: i42) {
+// CHECK-SAME:                    in %[[VAL_0:.*]] : i42, out out : i42) {
 // CHECK:           hw.output %[[VAL_0]] : i42
 // CHECK:         }
-hw.module @read(%a: !hw.inout<i42>) -> (out: i42) {
+hw.module @read(inout %a: i42, out out: i42) {
   %aget = sv.read_inout %a: !hw.inout<i42>
   hw.output %aget : i42
 }
 
-// CHECK-LABEL:   hw.module @write() -> (a_wr: i42) {
+// CHECK-LABEL:   hw.module @write(out a_wr : i42) {
 // CHECK:           %[[VAL_0:.*]] = hw.constant 0 : i42
 // CHECK:           hw.output %[[VAL_0]] : i42
 // CHECK:         }
-hw.module @write(%a: !hw.inout<i42>) {
+hw.module @write(inout %a: i42) {
   %0 = hw.constant 0 : i42
   sv.assign %a, %0 : i42
 }
 
 // CHECK-LABEL:   hw.module @read_write(
-// CHECK-SAME:                          %[[VAL_0:.*]]: i42) -> (a_wr: i42, out: i42) {
+// CHECK-SAME:                          in %[[VAL_0:.*]] : i42, out a_wr : i42, out out : i42) {
 // CHECK:           hw.output %[[VAL_0]], %[[VAL_0]] : i42, i42
 // CHECK:         }
-hw.module @read_write(%a: !hw.inout<i42>) -> (out: i42) {
+hw.module @read_write(inout %a: i42, out out: i42) {
   %aget = sv.read_inout %a: !hw.inout<i42>
   sv.assign %a, %aget : i42
   hw.output %aget : i42
@@ -50,11 +50,11 @@ hw.module @oneLevel() {
 }
 
 
-// CHECK-LABEL:   hw.module @passthrough() -> (a_wr: i42) {
+// CHECK-LABEL:   hw.module @passthrough(out a_wr : i42) {
 // CHECK:           %[[VAL_0:.*]] = hw.instance "write" @write() -> (a_wr: i42)
 // CHECK:           hw.output %[[VAL_0]] : i42
 // CHECK:         }
-hw.module @passthrough(%a : !hw.inout<i42>) -> () {
+hw.module @passthrough(inout %a : i42) {
   hw.instance "write" @write(a : %a : !hw.inout<i42>) -> ()
 }
 
@@ -70,12 +70,12 @@ hw.module @passthroughTwoLevels() {
 }
 
 // CHECK-LABEL:   hw.module @writeInput(
-// CHECK-SAME:                          %[[VAL_0:.*]]: i42) -> (a_wr: i42) {
+// CHECK-SAME:                          in %[[VAL_0:.*]] : i42, out a_wr : i42) {
 // CHECK:           hw.output %[[VAL_0]] : i42
 // CHECK:         }
 
 // Tests a bug where the inout was being eliminated which resulted in the
 // block argument list shifting, but the index of %in not being updated.
-hw.module @writeInput(%a: !hw.inout<i42>, %in : i42) {
+hw.module @writeInput(inout %a: i42, in %in : i42) {
   sv.assign %a, %in : i42
 }

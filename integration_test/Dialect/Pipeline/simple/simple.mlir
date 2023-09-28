@@ -20,7 +20,7 @@
 // CHECK: ** TEST
 // CHECK: ** TESTS=[[N:.*]] PASS=[[N]] FAIL=0 SKIP=0
 
-hw.module @simple(%arg0 : i32, %arg1 : i32, %go : i1, %clock : !seq.clock, %reset : i1) -> (out: i32, done : i1) {
+hw.module @simple(in %arg0 : i32, in %arg1 : i32, in %go : i1, in %clock : !seq.clock, in %reset : i1, out out: i32, out done : i1) {
   %out, %done = pipeline.scheduled(%a0 : i32 = %arg0, %a1 : i32 = %arg1) clock(%clock) reset(%reset) go(%go) entryEn(%s0_enable) -> (out: i32) {
       %add0 = comb.add %a0, %a1 : i32
       pipeline.stage ^bb1

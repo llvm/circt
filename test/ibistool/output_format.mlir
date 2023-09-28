@@ -3,19 +3,19 @@
 // RUN: ibistool %s --lo --verilog | FileCheck %s --check-prefix=CHECK-VERILOG
 
 // CHECK-POST-IBIS-LABEL:   hw.module @A_B(
-// CHECK-POST-IBIS-SAME:            %[[VAL_0:.*]]: !seq.clock, %[[VAL_1:.*]]: i1) -> (p_out: i1) {
+// CHECK-POST-IBIS-SAME:            in %[[VAL_0:.*]] : !seq.clock, in %[[VAL_1:.*]] : i1, out p_out : i1) {
 // CHECK-POST-IBIS:           %[[VAL_2:.*]] = seq.compreg %[[VAL_1]], %[[VAL_0]] : i1
 // CHECK-POST-IBIS:           hw.output %[[VAL_2]] : i1
 // CHECK-POST-IBIS:         }
 
 // CHECK-POST-IBIS-LABEL:   hw.module @A(
-// CHECK-POST-IBIS-SAME:           %[[VAL_0:.*]]: i1, %[[VAL_1:.*]]: !seq.clock) -> (out: i1) {
+// CHECK-POST-IBIS-SAME:           in %[[VAL_0:.*]] : i1, in %[[VAL_1:.*]] : !seq.clock, out out : i1) {
 // CHECK-POST-IBIS:           %[[VAL_2:.*]] = hw.instance "A_B" @A_B(p_clk: %[[VAL_1]]: !seq.clock, p_in: %[[VAL_0]]: i1) -> (p_out: i1)
 // CHECK-POST-IBIS:           hw.output %[[VAL_2]] : i1
 // CHECK-POST-IBIS:         }
 
 // CHECK-IR-LABEL:   hw.module @A_B(
-// CHECK-IR-SAME:              %[[VAL_0:.*]]: i1, %[[VAL_1:.*]]: i1) -> (p_out: i1) {
+// CHECK-IR-SAME:              in %[[VAL_0:.*]] : i1, in %[[VAL_1:.*]] : i1, out p_out : i1) {
 // CHECK-IR:           %[[VAL_2:.*]] = sv.reg : !hw.inout<i1>
 // CHECK-IR:           %[[VAL_3:.*]] = sv.read_inout %[[VAL_2]] : !hw.inout<i1>
 // CHECK-IR:           sv.alwaysff(posedge %[[VAL_0]]) {
@@ -25,7 +25,7 @@
 // CHECK-IR:         }
 
 // CHECK-IR-LABEL:   hw.module @A(
-// CHECK-IR-SAME:            %[[VAL_0:.*]]: i1, %[[VAL_1:.*]]: i1) -> (out: i1) {
+// CHECK-IR-SAME:            in %[[VAL_0:.*]] : i1, in %[[VAL_1:.*]] : i1, out out : i1) {
 // CHECK-IR:           %[[VAL_2:.*]] = hw.instance "A_B" @A_B(p_clk: %[[VAL_1]]: i1, p_in: %[[VAL_0]]: i1) -> (p_out: i1)
 // CHECK-IR:           hw.output %[[VAL_2]] : i1
 // CHECK-IR:         }

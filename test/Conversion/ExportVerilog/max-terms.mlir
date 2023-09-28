@@ -1,7 +1,7 @@
 // RUN: circt-opt -test-apply-lowering-options='options=maximumNumberOfTermsPerExpression=4,disallowLocalVariables' --export-verilog %s | FileCheck %s
 
 // CHECK-LABEL: module large_use_in_procedural
-hw.module @large_use_in_procedural(%clock: i1, %a: i1) {
+hw.module @large_use_in_procedural(in %clock: i1, in %a: i1) {
   // CHECK: wire [[GEN_1:long_concat]] = a + a + a + a + a;
 
   // CHECK: always
@@ -40,7 +40,7 @@ hw.module @large_use_in_procedural(%clock: i1, %a: i1) {
 }
 
 // CHECK-LABEL: module large_use_in_procedural_successive
-hw.module @large_use_in_procedural_successive(%clock: i1, %a: i1) {
+hw.module @large_use_in_procedural_successive(in %clock: i1, in %a: i1) {
   sv.always posedge %clock {
     %0 = comb.and %a, %a, %a, %a, %a : i1
     %1 = comb.and %a, %a, %a, %a, %a : i1
@@ -56,7 +56,7 @@ hw.module @large_use_in_procedural_successive(%clock: i1, %a: i1) {
 }
 
 // CHECK-LABEL: module dont_spill_to_procedural_regions
-hw.module @dont_spill_to_procedural_regions(%z: i10) -> () {
+hw.module @dont_spill_to_procedural_regions(in %z: i10) {
   %r1 = sv.reg : !hw.inout<i1>
   %r2 = sv.reg : !hw.inout<i10>
   // CHECK: wire [9:0] _GEN = r2 + r2 + r2 + r2 + r2;

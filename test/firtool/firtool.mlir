@@ -33,6 +33,6 @@ firrtl.circuit "Top" {
 
 // VERILOG-WITH-MLIR-OUT-NOT: sv.verbatim{{.*}}output_file = {{.*}}meta.omir.json
 
-// VERILOG-WITH-MLIR-OUT-LABEL: hw.module @Top(%in: i8) -> (out: i8) {
+// VERILOG-WITH-MLIR-OUT-LABEL: hw.module @Top(in %in : i8, out out : i8) {
 // VERILOG-WITH-MLIR-OUT-NEXT:    hw.output %in : i8
 // VERILOG-WITH-MLIR-OUT-NEXT:  }

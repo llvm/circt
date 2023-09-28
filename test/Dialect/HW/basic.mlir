@@ -1,7 +1,7 @@
 // RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
 
-// CHECK-LABEL: hw.module @test1(%arg0: i3, %arg1: i1, %arg2: !hw.array<1000xi8>) -> (result: i50) {
-hw.module @test1(%arg0: i3, %arg1: i1, %arg2: !hw.array<1000xi8>) -> (result: i50) {
+// CHECK-LABEL: hw.module @test1(in %arg0 : i3, in %arg1 : i1, in %arg2 : !hw.array<1000xi8>, out result : i50) {
+hw.module @test1(in %arg0: i3, in %arg1: i1, in %arg2: !hw.array<1000xi8>, out result: i50) {
   // CHECK-NEXT:    %c42_i12 = hw.constant 42 : i12
   // CHECK-NEXT:    [[RES0:%[0-9]+]] = comb.add %c42_i12, %c42_i12 : i12
   // CHECK-NEXT:    [[RES1:%[0-9]+]] = comb.mul %c42_i12, [[RES0]] : i12
@@ -145,19 +145,19 @@ hw.module @test1(%arg0: i3, %arg1: i1, %arg2: !hw.array<1000xi8>) -> (result: i5
 }
 // CHECK-NEXT:  }
 
-hw.module @UnionOps(%a: !hw.union<foo: i1, bar: i3>) -> (x: i3, z: !hw.union<bar: i3, baz: i8>) {
+hw.module @UnionOps(in %a: !hw.union<foo: i1, bar: i3>, out x: i3, out z: !hw.union<bar: i3, baz: i8>) {
   %x = hw.union_extract %a["bar"] : !hw.union<foo: i1, bar: i3>
   %z = hw.union_create "bar", %x : !hw.union<bar: i3, baz: i8>
   hw.output %x, %z : i3, !hw.union<bar: i3, baz: i8>
 }
-// CHECK-LABEL: hw.module @UnionOps(%a: !hw.union<foo: i1, bar: i3>) -> (x: i3, z: !hw.union<bar: i3, baz: i8>) {
+// CHECK-LABEL: hw.module @UnionOps(in %a : !hw.union<foo: i1, bar: i3>, out x : i3, out z : !hw.union<bar: i3, baz: i8>) {
 // CHECK-NEXT:    [[I3REG:%.+]] = hw.union_extract %a["bar"] : !hw.union<foo: i1, bar: i3>
 // CHECK-NEXT:    [[UREG:%.+]] = hw.union_create "bar", [[I3REG]] : !hw.union<bar: i3, baz: i8>
 // CHECK-NEXT:    hw.output [[I3REG]], [[UREG]] : i3, !hw.union<bar: i3, baz: i8>
 
 // https://github.com/llvm/circt/issues/863
 // CHECK-LABEL: hw.module @signed_arrays
-hw.module @signed_arrays(%arg0: si8) -> (out: !hw.array<2xsi8>) {
+hw.module @signed_arrays(in %arg0: si8, out out: !hw.array<2xsi8>) {
   // CHECK-NEXT:  %wireArray = sv.wire  : !hw.inout<array<2xsi8>>
   %wireArray = sv.wire : !hw.inout<!hw.array<2xsi8>>
 
@@ -173,8 +173,8 @@ hw.module @signed_arrays(%arg0: si8) -> (out: !hw.array<2xsi8>) {
 
 // Check that we pass the verifier that the module's function type matches
 // the block argument types when using InOutTypes.
-// CHECK: hw.module @InOutPort(%arg0: !hw.inout<i1>)
-hw.module @InOutPort(%arg0: !hw.inout<i1>) -> () { }
+// CHECK: hw.module @InOutPort(inout %arg0 : i1)
+hw.module @InOutPort(inout %arg0: i1) { }
 
 /// Port names that aren't valid MLIR identifiers are handled with `argNames`
 /// attribute being explicitly printed.
@@ -182,10 +182,10 @@ hw.module @InOutPort(%arg0: !hw.inout<i1>) -> () { }
 
 // CHECK-LABEL: hw.module @argRenames
 // CHECK-SAME: attributes {argNames = [""]}
-hw.module @argRenames(%arg1: i32) attributes {argNames = [""]} {
+hw.module @argRenames(in %arg1: i32) attributes {argNames = [""]} {
 }
 
-hw.module @fileListTest(%arg1: i32) attributes {output_filelist = #hw.output_filelist<"foo.f">} {
+hw.module @fileListTest(in %arg1: i32) attributes {output_filelist = #hw.output_filelist<"foo.f">} {
 }
 
 // CHECK-LABEL: hw.module @commentModule
@@ -193,7 +193,7 @@ hw.module @fileListTest(%arg1: i32) attributes {output_filelist = #hw.output_fil
 hw.module @commentModule() attributes {comment = "hello world"} {}
 
 module {
-  hw.testmodule @NewStyle (input %a : i3, output %b : i3, inout %c : i64 {hw.exportPort = #hw<innerSym@symA>}) {
+  hw.testmodule @NewStyle (in %a : i3, out b : i3, inout %c : i64 {hw.exportPort = #hw<innerSym@symA>}) {
     hw.output %a : i3
   }
 }

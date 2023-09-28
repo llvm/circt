@@ -46,10 +46,10 @@ module {
     sv.interface.modport @data_out (output @data, output @valid, input @ready)
   }
 
-  hw.module.extern @Rcvr (%m: !sv.modport<@data_vr::@data_in>)
+  hw.module.extern @Rcvr (in %m: !sv.modport<@data_vr::@data_in>)
 
   // CHECK-LABEL: module Top
-  hw.module @Top (%clk: i1) {
+  hw.module @Top (in %clk: i1) {
     // CHECK: data_vr [[IFACE:.+]]();
     %iface = sv.interface.instance : !sv.interface<@data_vr>
     // CHECK: MACRO-Interface:data_vr
@@ -97,9 +97,9 @@ module {
 // NOTE(fschuiki): Extern modules should trigger an error diagnostic if they
 // would cause a rename, but since the user supplies the module externally we
 // can't just rename it.
-  hw.module.extern @regStuff (%m: !sv.modport<@data_vr::@data_in>)
+  hw.module.extern @regStuff (in %m: !sv.modport<@data_vr::@data_in>)
   // CHECK-LABEL: module Top2
-  hw.module @Top2 (%clk: i1) {
+  hw.module @Top2 (in %clk: i1) {
     // CHECK: data_vr [[IFACE:.+]]();{{.*}}//{{.+}}
     %iface = sv.interface.instance : !sv.interface<@data_vr>
 
@@ -125,7 +125,7 @@ module {
   // CHECK-NOT: wire [383:0] _tmp =
   // CHECK: wire struct packed {logic [383:0] foo; } _GEN
   // CHECK: endmodule
-  hw.module @structs(%clk: i1, %rstn: i1) {
+  hw.module @structs(in %clk: i1, in %rstn: i1) {
     %0 = sv.interface.instance name "iface" : !sv.interface<@IValidReady_Struct>
     sv.interface.signal.assign %0(@IValidReady_Struct::@data) = %s : !hw.struct<foo: !hw.array<384xi1>>
     %c0 = hw.constant 0 : i8

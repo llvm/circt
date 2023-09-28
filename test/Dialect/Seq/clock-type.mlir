@@ -2,14 +2,14 @@
 
 hw.generator.schema @Some_schema, "Some_schema", ["dummy"]
 
-// CHECK-LABEL: hw.module.generated @generated, @Some_schema(%clock: i1, %other: i1) -> (out: i32)
-hw.module.generated @generated, @Some_schema(%clock: !seq.clock, %other: i1) -> (out: i32) attributes { dummy = 1 : i32 }
+// CHECK-LABEL: hw.module.generated @generated, @Some_schema(in %clock : i1, in %other : i1, out out : i32)
+hw.module.generated @generated, @Some_schema(in %clock: !seq.clock, in %other: i1, out out: i32) attributes { dummy = 1 : i32 }
 
-// CHECK-LABEL: hw.module.extern @extern(%clock: i1, %other: i1) -> (out: i32)
-hw.module.extern @extern(%clock: !seq.clock, %other: i1) -> (out: i32)
+// CHECK-LABEL: hw.module.extern @extern(in %clock : i1, in %other : i1, out out : i32)
+hw.module.extern @extern(in %clock: !seq.clock, in %other: i1, out out: i32)
 
 // CHECK-LABEL: @const_clock
-hw.module @const_clock() -> () {
+hw.module @const_clock() {
   // CHECK: hw.constant false
   seq.const_clock low
 
@@ -17,8 +17,8 @@ hw.module @const_clock() -> () {
   seq.const_clock high
 }
 
-// CHECK-LABEL: hw.module @top(%clock: i1, %other: i1, %wire: i1) -> (out: i1)
-hw.module @top(%clock: !seq.clock, %other: i1, %wire: i1) -> (out: !seq.clock) {
+// CHECK-LABEL: hw.module @top(in %clock : i1, in %other : i1, in %wire : i1, out out : i1)
+hw.module @top(in %clock: !seq.clock, in %other: i1, in %wire: i1, out out: !seq.clock) {
 
 
   // CHECK: %tap_generated = hw.wire %clock  : i1
@@ -44,14 +44,14 @@ hw.module @top(%clock: !seq.clock, %other: i1, %wire: i1) -> (out: !seq.clock) {
   hw.output %negated : !seq.clock
 }
 
-// CHECK-LABEL: hw.module private @inner(%clock: i1, %other: i1) -> (out: i32)
-hw.module private @inner(%clock: !seq.clock, %other: i1) -> (out: i32) {
+// CHECK-LABEL: hw.module private @inner(in %clock : i1, in %other : i1, out out : i32)
+hw.module private @inner(in %clock: !seq.clock, in %other: i1, out out: i32) {
   %cst = hw.constant 0 : i32
   hw.output %cst : i32
 }
 
-// CHECK-LABEL: hw.module private @SinkSource(%clock: i1) -> (out: i1)
-hw.module private @SinkSource(%clock: !seq.clock) -> (out: !seq.clock) {
+// CHECK-LABEL: hw.module private @SinkSource(in %clock : i1, out out : i1)
+hw.module private @SinkSource(in %clock: !seq.clock, out out: !seq.clock) {
   // CHECK: hw.output %false : i1
   %out = seq.const_clock low
   hw.output %out : !seq.clock
@@ -65,21 +65,21 @@ hw.module public @CrossReferences() {
   %b.out = hw.instance "b" @SinkSource(clock: %a.out: !seq.clock) -> (out: !seq.clock)
 }
 
-// CHECK-LABEL: hw.module @ClockAgg(%c: !hw.struct<clock: i1>) -> (oc: !hw.struct<clock: i1>)
+// CHECK-LABEL: hw.module @ClockAgg(in %c : !hw.struct<clock: i1>, out oc : !hw.struct<clock: i1>)
 // CHECK: [[CLOCK:%.+]] = hw.struct_extract %c["clock"] : !hw.struct<clock: i1>
 // CHECK: [[STRUCT:%.+]] = hw.struct_create ([[CLOCK]]) : !hw.struct<clock: i1>
 // CHECL: hw.output [[STRUCT]] : !hw.struct<clock: i1>
-hw.module @ClockAgg(%c: !hw.struct<clock: !seq.clock>) -> (oc: !hw.struct<clock: !seq.clock>) {
+hw.module @ClockAgg(in %c: !hw.struct<clock: !seq.clock>, out oc: !hw.struct<clock: !seq.clock>) {
   %clock = hw.struct_extract %c["clock"] : !hw.struct<clock: !seq.clock>
   %0 = hw.struct_create (%clock) : !hw.struct<clock: !seq.clock>
   hw.output %0 : !hw.struct<clock: !seq.clock>
 }
 
-// CHECK-LABEL: hw.module @ClockArray(%c: !hw.array<1xi1>) -> (oc: !hw.array<1xi1>) {
+// CHECK-LABEL: hw.module @ClockArray(in %c : !hw.array<1xi1>, out oc : !hw.array<1xi1>) {
 // CHECK: [[CLOCK:%.+]] = hw.array_get %c[%false] : !hw.array<1xi1>, i1
 // CHECK: [[ARRAY:%.+]] = hw.array_create [[CLOCK]] : i1
 // CHECK: hw.output [[ARRAY]] : !hw.array<1xi1>
-hw.module @ClockArray(%c: !hw.array<1x!seq.clock>) -> (oc: !hw.array<1x!seq.clock>) {
+hw.module @ClockArray(in %c: !hw.array<1x!seq.clock>, out oc: !hw.array<1x!seq.clock>) {
   %idx = hw.constant 0 : i1
   %clock = hw.array_get %c[%idx] : !hw.array<1x!seq.clock>, i1
   %0 = hw.array_create %clock : !seq.clock

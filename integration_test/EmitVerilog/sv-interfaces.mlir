@@ -14,10 +14,10 @@ module {
 
   // TODO: This ugly bit is because we don't yet have ExportVerilog support
   // for modports as module port declarations.
-  hw.module.extern @Rcvr (%m: !sv.modport<@data_vr::@data_in>)
+  hw.module.extern @Rcvr (in %m: !sv.modport<@data_vr::@data_in>)
   sv.verbatim "module Rcvr (data_vr.data_in m);\nendmodule"
 
-  hw.module @top (%clk: i1, %rst: i1) {
+  hw.module @top (in %clk: i1, in %rst: i1) {
     %iface = sv.interface.instance : !sv.interface<@data_vr>
 
     %ifaceInPort = sv.modport.get %iface @data_in :

@@ -20,7 +20,7 @@
 // CHECK-NEXT: ** TESTS=2 PASS=2 FAIL=0 SKIP=0
 // CHECK-NEXT: ********************************
 
-hw.module @top(%in0: !dc.value<i64>, %in1: !dc.value<i64>, %in2: !dc.value<i64>, %in3: !dc.value<i64>, %in4: !dc.value<i64>, %in5: !dc.value<i64>, %in6: !dc.value<i64>, %in7: !dc.value<i64>, %in8: !dc.token, %clock : i1, %reset : i1) -> (out0: !dc.value<i64>, out1: !dc.token) {
+hw.module @top(in %in0: !dc.value<i64>, in %in1: !dc.value<i64>, in %in2: !dc.value<i64>, in %in3: !dc.value<i64>, in %in4: !dc.value<i64>, in %in5: !dc.value<i64>, in %in6: !dc.value<i64>, in %in7: !dc.value<i64>, in %in8: !dc.token, in %clock : i1, in %reset : i1, out out0: !dc.value<i64>, out out1: !dc.token) {
   %token, %outputs = dc.unpack %in0 : !dc.value<i64>
   %token_0, %outputs_1 = dc.unpack %in1 : !dc.value<i64>
   %token_2, %outputs_3 = dc.unpack %in2 : !dc.value<i64>

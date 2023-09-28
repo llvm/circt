@@ -2,8 +2,7 @@
 
 // Test a control merge that is control only.
 
-// CHECK-LABEL:   hw.module @handshake_control_merge_out_ui64_2ins_2outs_ctrl(
-// CHECK-SAME:              %[[VAL_0:.*]]: !esi.channel<i0>, %[[VAL_1:.*]]: !esi.channel<i0>, %[[CLOCK:.*]]: !seq.clock, %[[VAL_3:.*]]: i1) -> (dataOut: !esi.channel<i0>, index: !esi.channel<i64>) {
+// CHECK:   hw.module @handshake_control_merge_out_ui64_2ins_2outs_ctrl(in %[[VAL_0:.*]] : !esi.channel<i0>, in %[[VAL_1:.*]] : !esi.channel<i0>, in %[[CLOCK:.*]] : !seq.clock, in %[[VAL_3:.*]] : i1, out dataOut : !esi.channel<i0>, out index : !esi.channel<i64>) {
 // CHECK:           %[[VAL_4:.*]], %[[VAL_5:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_6:.*]] : i0
 // CHECK:           %[[VAL_7:.*]], %[[VAL_8:.*]] = esi.unwrap.vr %[[VAL_1]], %[[VAL_9:.*]] : i0
 // CHECK:           %[[VAL_10:.*]], %[[VAL_11:.*]] = esi.wrap.vr %[[VAL_12:.*]], %[[VAL_13:.*]] : i0
@@ -59,8 +58,7 @@ handshake.func @test_cmerge(%arg0: none, %arg1: none, %arg2: none, ...) -> (none
 
 // Test a control merge that also outputs the selected input's data.
 
-// CHECK-LABEL:   hw.module @handshake_control_merge_in_ui64_ui64_ui64_out_ui64_ui64(
-// CHECK-SAME:                 %[[VAL_0:.*]]: !esi.channel<i64>, %[[VAL_1:.*]]: !esi.channel<i64>, %[[VAL_2:.*]]: !esi.channel<i64>, %[[CLOCK:.*]]: !seq.clock, %[[VAL_4:.*]]: i1) -> (dataOut: !esi.channel<i64>, index: !esi.channel<i64>) {
+// CHECK:   hw.module @handshake_control_merge_in_ui64_ui64_ui64_out_ui64_ui64(in %[[VAL_0:.*]] : !esi.channel<i64>, in %[[VAL_1:.*]] : !esi.channel<i64>, in %[[VAL_2:.*]] : !esi.channel<i64>, in %[[CLOCK:.*]] : !seq.clock, in %[[VAL_4:.*]] : i1, out dataOut : !esi.channel<i64>, out index : !esi.channel<i64>) {
 // CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_7:.*]] : i64
 // CHECK:           %[[VAL_8:.*]], %[[VAL_9:.*]] = esi.unwrap.vr %[[VAL_1]], %[[VAL_10:.*]] : i64
 // CHECK:           %[[VAL_11:.*]], %[[VAL_12:.*]] = esi.unwrap.vr %[[VAL_2]], %[[VAL_13:.*]] : i64

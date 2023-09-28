@@ -50,9 +50,9 @@ with ir.Context() as ctx, ir.Location.unknown():
   appid_idx = esi.AppIDIndex(mainmod.operation)
 
   # CHECK:      hw.module.extern @ExternModA()
-  # CHECK:      hw.module @MyMod() {
+  # CHECK:      hw.module @MyMod()
   # CHECK:        hw.instance "inst1" sym @inst1 @ExternModA() -> () {esi.appid = #esi.appid<"bar"[2]>}
-  # CHECK:      hw.module @Top() {
+  # CHECK:      hw.module @Top()
   # CHECK:        hw.instance "myMod" sym @myMod @MyMod() -> ()
   # CHECK:        hw.instance "ext_inst1" sym @ext_inst1 @ExternModA() -> () {esi.appid = #esi.appid<"ext"[0]>}
   print(mainmod)

@@ -8,11 +8,11 @@
 //  CHECK: c1 == c2
 
 //--- first.mlir
-hw.module @basic(%in: i1) -> (out: i1) {
+hw.module @basic(in %in: i1, out out: i1) {
   hw.output %in : i1
 }
 
 //--- second.mlir
-hw.module @basic(%in: i1) -> (out: i1) {
+hw.module @basic(in %in: i1, out out: i1) {
   hw.output %in : i1
 }

@@ -31,7 +31,7 @@ with Context() as ctx, Location.unknown():
 
   m = Module.create()
   with InsertionPoint(m.body):
-    # CHECK: hw.module @MyWidget(%my_input: i32) -> (my_output: i32)
+    # CHECK: hw.module @MyWidget(in %my_input : i32, out my_output : i32)
     # CHECK:   hw.output %my_input : i32
     op = hw.HWModuleOp(
         name='MyWidget',
@@ -39,7 +39,7 @@ with Context() as ctx, Location.unknown():
         output_ports=[('my_output', i32)],
         body_builder=lambda module: hw.OutputOp([module.my_input]))
 
-    # CHECK: hw.module.extern @FancyThing(%input0: i32) -> (output0: i32)
+    # CHECK: hw.module.extern @FancyThing(in %input0 : i32, out output0 : i32)
     extern = hw.HWModuleExternOp(name="FancyThing",
                                  input_ports=[("input0", i32)],
                                  output_ports=[("output0", i32)])
@@ -101,7 +101,7 @@ with Context() as ctx, Location.unknown():
     instance_builder_tests = hw.HWModuleOp(name="instance_builder_tests",
                                            body_builder=instance_builder_body)
 
-    # CHECK: hw.module @block_args_test(%[[PORT_NAME:.+]]: i32) ->
+    # CHECK: hw.module @block_args_test(in %[[PORT_NAME:.+]] : i32, out
     # CHECK: hw.output %[[PORT_NAME]]
     hw.HWModuleOp(name="block_args_test",
                   input_ports=[("foo", i32)],

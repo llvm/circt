@@ -1,6 +1,6 @@
 // RUN: circt-opt %s -export-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
 
-hw.module @top(%clock : i1, %reset: i1) -> () {
+hw.module @top(in %clock : i1, in %reset: i1) {
   sv.alwaysff(posedge %clock) {
     %0 = hw.constant 0x80000001 : i32
     %1 = hw.constant 0x80000002 : i32

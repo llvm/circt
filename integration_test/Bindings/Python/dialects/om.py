@@ -78,7 +78,7 @@ with Context() as ctx, Location.unknown():
       om.class.field @list_child, %0 : !om.list<!om.class.type<@Child>>
     }
 
-    hw.module @Root(%clock: i1) -> () {
+    hw.module @Root(in %clock: i1) {
       %0 = sv.wire sym @x : !hw.inout<i1>
     }
   }

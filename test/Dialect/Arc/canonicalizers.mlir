@@ -1,7 +1,7 @@
 // RUN: circt-opt --canonicalize %s | FileCheck %s
 
 // CHECK-LABEL: hw.module @stateOpCanonicalizer
-hw.module @stateOpCanonicalizer(%clk: !seq.clock, %in: i32, %en: i1, %rst: i1) -> (out0: i32, out1: i32, out2: i32, out3: i32, out4: i32, out5: i32, out6: i32, out7: i32, out8: i32, out9: i32, out10: i32, out11: i32, out12: i32, out13: i32, out14: i32, out15: i32) {
+hw.module @stateOpCanonicalizer(in %clk: !seq.clock, in %in: i32, in %en: i1, in %rst: i1, out out0: i32, out out1: i32, out out2: i32, out out3: i32, out out4: i32, out out5: i32, out out6: i32, out out7: i32, out out8: i32, out out9: i32, out out10: i32, out out11: i32, out out12: i32, out out13: i32, out out14: i32, out out15: i32) {
   // CHECK-NEXT: %c0_i32 = hw.constant 0 : i32
   // CHECK-NEXT: %true = hw.constant true
   // CHECK-NEXT: %false = hw.constant false
@@ -58,7 +58,7 @@ arc.define @Passthrough2(%arg0: i32, %arg1: i32) -> (i32, i32) {
 }
 
 // CHECK-LABEL: hw.module @clockDomainDCE
-hw.module @clockDomainDCE(%clk: !seq.clock) {
+hw.module @clockDomainDCE(in %clk: !seq.clock) {
   // CHECK-NOT: arc.clock_domain
   arc.clock_domain () clock %clk : () -> () {
   ^bb0:
@@ -67,7 +67,7 @@ hw.module @clockDomainDCE(%clk: !seq.clock) {
 }
 
 // CHECK-LABEL: hw.module @memoryOps
-hw.module @memoryOps(%clk: i1, %mem: !arc.memory<4 x i32, i32>, %addr: i32, %data: i32) {
+hw.module @memoryOps(in %clk: i1, in %mem: !arc.memory<4 x i32, i32>, in %addr: i32, in %data: i32) {
   %true = hw.constant true
   // CHECK-NEXT: arc.memory_write %mem[%addr], %data : <4 x i32, i32>
   arc.memory_write %mem[%addr], %data if %true : <4 x i32, i32>
@@ -77,7 +77,7 @@ hw.module @memoryOps(%clk: i1, %mem: !arc.memory<4 x i32, i32>, %addr: i32, %dat
 }
 
 // CHECK-LABEL: hw.module @clockDomainCanonicalizer
-hw.module @clockDomainCanonicalizer(%clk: !seq.clock, %data: i32) -> (out0: i32, out1: i1, out2: i32, out3: i32, out4: i32) {
+hw.module @clockDomainCanonicalizer(in %clk: !seq.clock, in %data: i32, out out0: i32, out out1: i1, out out2: i32, out out3: i32, out out4: i32) {
   %c0_i32 = hw.constant 0 : i32
   %true = hw.constant true
   %mem = arc.memory <4 x i32, i32>

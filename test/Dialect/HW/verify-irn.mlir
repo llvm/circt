@@ -6,7 +6,7 @@
 // #3526
 hw.module @B() {}
 
-hw.module @A() -> () {
+hw.module @A() {
   // expected-note @below {{see existing inner symbol definition here}}
   hw.instance "h" sym @A @B() -> () 
   // expected-error @below {{redefinition of inner symbol named 'A'}}
@@ -18,5 +18,5 @@ hw.module @A() -> () {
 // expected-error @below {{operation with symbol: #hw.innerNameRef<@A::@invalid> was not found}}
 hw.hierpath private @test [@A::@invalid]
 
-hw.module @A() -> () {
+hw.module @A() {
 }

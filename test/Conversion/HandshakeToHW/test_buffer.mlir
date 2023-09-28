@@ -1,7 +1,11 @@
 // RUN: circt-opt -lower-handshake-to-hw --split-input-file %s | FileCheck %s
 
 // CHECK-LABEL:   hw.module @handshake_buffer_3slots_seq_1ins_1outs_ctrl(
-// CHECK-SAME:          %[[VAL_0:.*]]: !esi.channel<i0>, %[[CLOCK:.*]]: !seq.clock, %[[VAL_2:.*]]: i1) -> (out0: !esi.channel<i0>) {
+// CHECK-SAME:          in %[[VAL_0:.*]] : !esi.channel<i0>, 
+// CHECK-SAME:          in %[[CLOCK:.*]] : !seq.clock, 
+// CHECK-SAME:          in %[[VAL_2:.*]] : i1,
+// CHECK-SAME:          out out0 : !esi.channel<i0>
+// CHECK-SAME:    ) {
 // CHECK:           %[[VAL_3:.*]], %[[VAL_4:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_5:.*]] : i0
 // CHECK:           %[[VAL_6:.*]], %[[VAL_7:.*]] = esi.wrap.vr %[[VAL_8:.*]], %[[VAL_9:.*]] : i0
 // CHECK:           %[[VAL_10:.*]] = hw.constant 0 : i0
@@ -74,7 +78,11 @@ handshake.func @test_buffer_none(%arg0: none, %arg1: none, ...) -> (none, none) 
 // -----
 
 // CHECK-LABEL:   hw.module @handshake_buffer_in_ui64_out_ui64_2slots_seq(
-// CHECK-SAME:           %[[VAL_0:.*]]: !esi.channel<i64>, %[[CLOCK:.*]]: !seq.clock, %[[VAL_2:.*]]: i1) -> (out0: !esi.channel<i64>) {
+// CHECK-SAME:           in %[[VAL_0:.*]] : !esi.channel<i64>, 
+// CHECK-SAME:           in %[[CLOCK:.*]] : !seq.clock, 
+// CHECK-SAME:           in %[[VAL_2:.*]] : i1,
+// CHECK-SAME:           out out0 : !esi.channel<i64>
+// CHECK-SAME:    ) {
 // CHECK:           %[[VAL_3:.*]], %[[VAL_4:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_5:.*]] : i64
 // CHECK:           %[[VAL_6:.*]], %[[VAL_7:.*]] = esi.wrap.vr %[[VAL_8:.*]], %[[VAL_9:.*]] : i64
 // CHECK:           %[[VAL_10:.*]] = hw.constant 0 : i64
@@ -126,7 +134,12 @@ handshake.func @test_buffer_data(%arg0: index, %arg1: none, ...) -> (index, none
 
 // -----
 
-// CHECK-LABEL: hw.module @handshake_buffer_in_tuple_ui32_ui32_out_tuple_ui32_ui32_2slots_seq(%in0: !esi.channel<!hw.struct<field0: i32, field1: i32>>, %clock: !seq.clock, %reset: i1) -> (out0: !esi.channel<!hw.struct<field0: i32, field1: i32>>) {
+// CHECK-LABEL: hw.module @handshake_buffer_in_tuple_ui32_ui32_out_tuple_ui32_ui32_2slots_seq(
+// CHECK-SAME: in %in0 : !esi.channel<!hw.struct<field0: i32, field1: i32>>, 
+// CHECK-SAME: in %clock : !seq.clock, 
+// CHECK-SAME: in %reset : i1,
+// CHECK-SAME: out out0 : !esi.channel<!hw.struct<field0: i32, field1: i32>>
+// CHECK-SAME: ) {
 // CHECK:         %[[CZERO:.*]] = hw.struct_create (%c0_i32, %c0_i32) : !hw.struct<field0: i32, field1: i32>
 // CHECK:         %data0_reg = seq.compreg %4, %clock, %reset, %[[CZERO]]  : !hw.struct<field0: i32, field1: i32>
 

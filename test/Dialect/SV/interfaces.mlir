@@ -42,8 +42,8 @@ module {
   // CHECK-NEXT:   sv.interface.modport @dataflow_out (output @data, output @valid, input @ready)
   // CHECK-NEXT: }
 
-  hw.module.extern @Rcvr (%m: !sv.modport<@handshake_example::@dataflow_in>)
-  // CHECK-LABEL: hw.module.extern @Rcvr(%m: !sv.modport<@handshake_example::@dataflow_in>)
+  hw.module.extern @Rcvr (in %m: !sv.modport<@handshake_example::@dataflow_in>)
+  // CHECK-LABEL: hw.module.extern @Rcvr(in %m : !sv.modport<@handshake_example::@dataflow_in>)
 
   hw.module @Top () {
     %iface = sv.interface.instance : !sv.interface<@handshake_example>

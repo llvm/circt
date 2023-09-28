@@ -15,11 +15,11 @@ fsm.machine @FSM(%arg0: i1, %arg1: i1) -> (i8) attributes {initialState = "A"} {
   }
 }
 
-// CHECK: hw.module @top(%arg0: i1, %arg1: i1, %clk: !seq.clock, %rst: i1) -> (out: i8) {
+// CHECK: hw.module @top(in %arg0 : i1, in %arg1 : i1, in %clk : !seq.clock, in %rst : i1, out out : i8) {
 // CHECK:   %fsm_inst.out0 = hw.instance "fsm_inst" @FSM(in0: %arg0: i1, in1: %arg1: i1, clk: %clk: !seq.clock, rst: %rst: i1) -> (out0: i8)
 // CHECK:   hw.output %fsm_inst.out0 : i8
 // CHECK: }
-hw.module @top(%arg0: i1, %arg1: i1, %clk : !seq.clock, %rst : i1) -> (out: i8) {
+hw.module @top(in %arg0: i1, in %arg1: i1, in %clk : !seq.clock, in %rst : i1, out out: i8) {
     %out = fsm.hw_instance "fsm_inst" @FSM(%arg0, %arg1), clock %clk, reset %rst : (i1, i1) -> (i8)
     hw.output %out : i8
 }
@@ -30,7 +30,7 @@ hw.module @top(%arg0: i1, %arg1: i1, %clk : !seq.clock, %rst : i1) -> (out: i8) 
 // CHECK-NEXT:     hw.typedecl @top_state_t : !hw.enum<A, B>
 // CHECK-NEXT:   }
 
-// CHECK-LABEL:  hw.module @top(%a0: i1, %a1: i1, %clk: !seq.clock, %rst: i1) -> (r0: i8, r1: i8) {
+// CHECK-LABEL:  hw.module @top(in %a0 : i1, in %a1 : i1, in %clk : !seq.clock, in %rst : i1, out r0 : i8, out r1 : i8) {
 // CHECK-NEXT:    %A = hw.enum.constant A : !hw.typealias<@fsm_enum_typedecls::@top_state_t, !hw.enum<A, B>>
 // CHECK-NEXT:    %to_A = sv.reg sym @A  : !hw.inout<typealias<@fsm_enum_typedecls::@top_state_t, !hw.enum<A, B>>>
 // CHECK-NEXT:    sv.assign %to_A, %A : !hw.typealias<@fsm_enum_typedecls::@top_state_t, !hw.enum<A, B>>

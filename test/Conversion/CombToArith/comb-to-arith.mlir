@@ -1,7 +1,7 @@
 // RUN: circt-opt %s --convert-comb-to-arith | FileCheck %s
 
 // CHECK-LABEL: @test
-hw.module @test(%arg0: i32, %arg1: i32, %arg2: i32, %arg3: i32, %arg4: i1) -> () {
+hw.module @test(in %arg0: i32, in %arg1: i32, in %arg2: i32, in %arg3: i32, in %arg4: i1) {
   // CHECK-NEXT: %c42_i32 = arith.constant 42 : i32
   %c42_i32 = hw.constant 42 : i32
 

@@ -1,10 +1,10 @@
 // RUN: circt-opt --split-input-file --ibis-convert-containers-to-hw %s | FileCheck %s
 
 
-// CHECK:  hw.module @B(%in: i1) -> (out: i1) {
+// CHECK:  hw.module @B(in %in : i1, out out : i1) {
 // CHECK:    hw.output %in : i1
 // CHECK:  }
-// CHECK:  hw.module @AccessSibling(%p_b_out: i1) -> (p_b_in: i1) {
+// CHECK:  hw.module @AccessSibling(in %p_b_out : i1, out p_b_in : i1) {
 // CHECK:    hw.output %p_b_out : i1
 // CHECK:  }
 // CHECK:  hw.module @Parent() {
@@ -46,7 +46,7 @@ ibis.container @Parent {
 
 // Test that we can instantiate and get ports of a container from a hw.module.
 
-// CHECK:  hw.module @C(%in: i1) -> (out: i1) {
+// CHECK:  hw.module @C(in %in : i1, out out : i1) {
 // CHECK:    hw.output %in : i1
 // CHECK:  }
 // CHECK:  hw.module @Top() {
@@ -62,7 +62,7 @@ ibis.container @C {
   ibis.port.write %out, %v : !ibis.portref<out i1>
 }
 
-hw.module @Top() -> () {
+hw.module @Top() {
   %c = ibis.container.instance @c, @C
   %in = ibis.get_port %c, @in : !ibis.scoperef<@C> -> !ibis.portref<in i1>
   %out = ibis.get_port %c, @out : !ibis.scoperef<@C> -> !ibis.portref<out i1>

@@ -138,11 +138,11 @@ module attributes {calyx.entrypoint = "main"} {
 // -----
 // CHECK: module attributes {calyx.entrypoint = "A"} {
 module attributes {calyx.entrypoint = "A"} {
-  // CHECK: hw.module.extern @prim(%in: i32) -> (out: i32) attributes {filename = "test.v"}
-  hw.module.extern @prim(%in: i32) -> (out: i32) attributes {filename = "test.v"}
+  // CHECK: hw.module.extern @prim(in %in : i32, out out : i32) attributes {filename = "test.v"}
+  hw.module.extern @prim(in %in : i32, out out : i32) attributes {filename = "test.v"}
 
-  // CHECK: hw.module.extern @params<WIDTH: i32>(%in: !hw.int<#hw.param.decl.ref<"WIDTH">>) -> (out: !hw.int<#hw.param.decl.ref<"WIDTH">>) attributes {filename = "test.v"}
-  hw.module.extern @params<WIDTH: i32>(%in: !hw.int<#hw.param.decl.ref<"WIDTH">>) -> (out: !hw.int<#hw.param.decl.ref<"WIDTH">>) attributes {filename = "test.v"}
+  // CHECK: hw.module.extern @params<WIDTH: i32>(in %in : !hw.int<#hw.param.decl.ref<"WIDTH">>, out out : !hw.int<#hw.param.decl.ref<"WIDTH">>) attributes {filename = "test.v"}
+  hw.module.extern @params<WIDTH: i32>(in %in : !hw.int<#hw.param.decl.ref<"WIDTH">>, out out : !hw.int<#hw.param.decl.ref<"WIDTH">>) attributes {filename = "test.v"}
 
   // CHECK-LABEL: calyx.component @A(%in_0: i32, %in_1: i32, %go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%out_0: i32, %out_1: i32, %done: i1 {done})
   calyx.component @A(%in_0: i32, %in_1: i32, %go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%out_0: i32, %out_1: i32, %done: i1 {done}) {
@@ -172,8 +172,8 @@ module attributes {calyx.entrypoint = "A"} {
 // -----
 // CHECK: module attributes {calyx.entrypoint = "A"} {
 module attributes {calyx.entrypoint = "A"} {
-  // CHECK: hw.module.extern @params<WIDTH: i32>(%in: !hw.int<#hw.param.decl.ref<"WIDTH">>, %clk: i1 {calyx.clk}, %go: i1 {calyx.go}) -> (out: !hw.int<#hw.param.decl.ref<"WIDTH">>, done: i1 {calyx.done}) attributes {filename = "test.v"}
-  hw.module.extern @params<WIDTH: i32>(%in: !hw.int<#hw.param.decl.ref<"WIDTH">>, %clk: i1 {calyx.clk}, %go: i1 {calyx.go}) -> (out: !hw.int<#hw.param.decl.ref<"WIDTH">>, done: i1 {calyx.done}) attributes {filename = "test.v"}
+  // CHECK: hw.module.extern @params<WIDTH: i32>(in %in : !hw.int<#hw.param.decl.ref<"WIDTH">>, in %clk : i1 {calyx.clk}, in %go : i1 {calyx.go}, out out : !hw.int<#hw.param.decl.ref<"WIDTH">>, out done : i1 {calyx.done}) attributes {filename = "test.v"}
+  hw.module.extern @params<WIDTH: i32>(in %in : !hw.int<#hw.param.decl.ref<"WIDTH">>, in %clk : i1 {calyx.clk}, in %go : i1 {calyx.go}, out out : !hw.int<#hw.param.decl.ref<"WIDTH">>, out done: i1 {calyx.done}) attributes {filename = "test.v"}
 
   // CHECK-LABEL: calyx.component @A(%in_0: i32, %in_1: i32, %go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%out_0: i32, %out_1: i32, %done: i1 {done})
   calyx.component @A(%in_0: i32, %in_1: i32, %go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%out_0: i32, %out_1: i32, %done: i1 {done}) {

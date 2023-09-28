@@ -6,6 +6,6 @@ hw.hierpath @ref [@top::@foo1]
 // expected-error @+1 {{'msft.pd.physregion' op could not find physical region declaration named @region1}}
 msft.pd.physregion @ref @region1
 
-hw.module @top() -> () {
+hw.module @top() {
   hw.instance "foo1" sym @foo1 @Foo() -> ()
 }

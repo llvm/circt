@@ -2,14 +2,14 @@
 // RUN: circt-opt %s | circt-opt | FileCheck %s
 // RUN: circt-opt %s --export-verilog -o %t.mlir | FileCheck %s --check-prefix=SV
 
-hw.module @PrintPath<> () -> () {
+hw.module @PrintPath<> () {
   %fd = hw.constant 0x80000002 : i32
   sv.initial {
     sv.fwrite %fd, "%m\n"
   }
 }
 
-hw.module @Case1<NUM : i8> () -> () {
+hw.module @Case1<NUM : i8> () {
   %fd = hw.constant 0x80000002 : i32
   sv.generate "foo_case": {
     sv.generate.case #hw.param.decl.ref<"NUM"> : i8 [
@@ -66,7 +66,7 @@ hw.module @Case1<NUM : i8> () -> () {
 // SV:         endgenerate
 // SV:       endmodule
 
-hw.module @CaseNoDefault<NUM : i8> () -> () {
+hw.module @CaseNoDefault<NUM : i8> () {
   sv.generate "bar": {
     sv.generate.case #hw.param.decl.ref<"NUM"> : i8 [
       case (0 : i64, "bar0") { }

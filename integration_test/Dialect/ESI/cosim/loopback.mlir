@@ -7,13 +7,13 @@
 // RUN: esi-cosim-runner.py --schema %t2.capnp --exec %S/loopback.py %t6/*.sv
 
 
-hw.module @intLoopback(%clk: !seq.clock, %rst:i1) -> () {
+hw.module @intLoopback(in %clk: !seq.clock, in %rst:i1) {
   %cosimRecv = esi.cosim %clk, %rst, %bufferedResp, "IntTestEP" {name_ext="loopback"} : !esi.channel<i32> -> !esi.channel<i32>
   %bufferedResp = esi.buffer %clk, %rst, %cosimRecv {stages=1} : i32
 }
 
 !KeyText = !hw.struct<text: !hw.array<6xi14>, key: !hw.array<4xi8>>
-hw.module @twoListLoopback(%clk: !seq.clock, %rst:i1) -> () {
+hw.module @twoListLoopback(in %clk: !seq.clock, in %rst:i1) {
   %cosim = esi.cosim %clk, %rst, %resp, "KeyTextEP" : !esi.channel<!KeyText> -> !esi.channel<!KeyText>
   %resp = esi.buffer %clk, %rst, %cosim {stages=4} : !KeyText
 }
@@ -23,12 +23,12 @@ esi.service.decl @HostComms {
   esi.service.to_client @Recv : !esi.channel<i8>
 }
 
-hw.module @TwoChanLoopback(%clk: !seq.clock) -> () {
+hw.module @TwoChanLoopback(in %clk: !seq.clock) {
   %dataIn = esi.service.req.to_client <@HostComms::@Recv> (["loopback_tohw"]) : !esi.channel<i8>
   esi.service.req.to_server %dataIn -> <@HostComms::@Send> (["loopback_fromhw"]) : !esi.channel<i8>
 }
 
-hw.module @top(%clk: !seq.clock, %rst:i1) -> () {
+hw.module @top(in %clk: !seq.clock, in %rst:i1) {
   hw.instance "intLoopbackInst" @intLoopback(clk: %clk: !seq.clock, rst: %rst: i1) -> ()
   hw.instance "twoListLoopbackInst" @twoListLoopback(clk: %clk: !seq.clock, rst: %rst: i1) -> ()
 

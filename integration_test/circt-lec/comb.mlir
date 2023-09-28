@@ -1,11 +1,11 @@
 // These tests will be only enabled if circt-lec is built.
 // REQUIRES: circt-lec
 
-hw.module @basic(%in: i1) -> (out: i1) {
+hw.module @basic(in %in: i1, out out: i1) {
   hw.output %in : i1
 }
 
-hw.module @not(%in: i1) -> (out: i1) {
+hw.module @not(in %in: i1, out out: i1) {
   %true = hw.constant true
   %out = comb.xor bin %in, %true : i1
   hw.output %out : i1
@@ -15,18 +15,18 @@ hw.module @not(%in: i1) -> (out: i1) {
 //  RUN: circt-lec %s -c1=adder -c2=completeAdder -v=false | FileCheck %s --check-prefix=COMB_ADD
 //  COMB_ADD: c1 == c2
 
-hw.module @adder(%in1: i2, %in2: i2) -> (out: i2) {
+hw.module @adder(in %in1: i2, in %in2: i2, out out: i2) {
   %sum = comb.add bin %in1, %in2 : i2
   hw.output %sum : i2
 }
 
-hw.module @halfAdder(%in1: i1, %in2: i1) -> (carry: i1, sum: i1) {
+hw.module @halfAdder(in %in1: i1, in %in2: i1, out carry: i1, out sum: i1) {
   %sum = comb.xor bin %in1, %in2 : i1
   %carry = comb.and bin %in1, %in2 : i1
   hw.output %carry, %sum: i1, i1
 }
 
-hw.module @completeAdder(%in1: i2, %in2 : i2) -> (out: i2) {
+hw.module @completeAdder(in %in1: i2, in %in2 : i2, out out: i2) {
   %in1_0 = comb.extract %in1 from 0 : (i2) -> i1
   %in1_1 = comb.extract %in1 from 1 : (i2) -> i1
   %in2_0 = comb.extract %in2 from 0 : (i2) -> i1
@@ -42,12 +42,12 @@ hw.module @completeAdder(%in1: i2, %in2 : i2) -> (out: i2) {
 //  RUN: circt-lec %s -c1=and -c2=decomposedAnd -v=false | FileCheck %s --check-prefix=COMB_AND
 //  COMB_AND: c1 == c2
 
-hw.module @and(%in1: i1, %in2: i1) -> (out: i1) {
+hw.module @and(in %in1: i1, in %in2: i1, out out: i1) {
   %out = comb.and bin %in1, %in2 : i1
   hw.output %out : i1
 }
 
-hw.module @decomposedAnd(%in1: i1, %in2: i1) -> (out: i1) {
+hw.module @decomposedAnd(in %in1: i1, in %in2: i1, out out: i1) {
   %not_in1 = hw.instance "n_in1" @not(in: %in1: i1) -> (out: i1)
   %not_in2 = hw.instance "n_in2" @not(in: %in2: i1) -> (out: i1)
   %not_and = comb.or bin %not_in1, %not_in2 : i1
@@ -80,13 +80,13 @@ hw.module @decomposedAnd(%in1: i1, %in2: i1) -> (out: i1) {
 //  RUN: circt-lec %s -c1=mulBy2 -c2=addTwice -v=false | FileCheck %s --check-prefix=COMB_MUL
 //  COMB_MUL: c1 == c2
 
-hw.module @mulBy2(%in: i2) -> (out: i2) {
+hw.module @mulBy2(in %in: i2, out out: i2) {
   %two = hw.constant 2 : i2
   %res = comb.mul bin %in, %two : i2
   hw.output %res : i2
 }
 
-hw.module @addTwice(%in: i2) -> (out: i2) {
+hw.module @addTwice(in %in: i2, out out: i2) {
   %res = comb.add bin %in, %in : i2
   hw.output %res : i2
 }
@@ -95,12 +95,12 @@ hw.module @addTwice(%in: i2) -> (out: i2) {
 //  RUN: circt-lec %s -c1=mux -c2=decomposedMux -v=false | FileCheck %s --check-prefix=COMB_MUX
 //  COMB_MUX: c1 == c2
 
-hw.module @mux(%cond: i1, %tvalue: i8, %fvalue: i8) -> (out: i8) {
+hw.module @mux(in %cond: i1, in %tvalue: i8, in %fvalue: i8, out out: i8) {
   %res = comb.mux bin %cond, %tvalue, %fvalue : i8
   hw.output %res : i8
 }
 
-hw.module @decomposedMux(%cond: i1, %tvalue: i8, %fvalue: i8) -> (out: i8) {
+hw.module @decomposedMux(in %cond: i1, in %tvalue: i8, in %fvalue: i8, out out: i8) {
   %cond_bar = hw.instance "n" @not(in: %cond: i1) -> (out: i1)
   %lead_0 = hw.constant 0 : i7
   %c_t = comb.concat %lead_0, %cond : i7, i1
@@ -115,12 +115,12 @@ hw.module @decomposedMux(%cond: i1, %tvalue: i8, %fvalue: i8) -> (out: i8) {
 //  RUN: circt-lec %s -c1=or -c2=decomposedOr -v=false | FileCheck %s --check-prefix=COMB_OR
 //  COMB_OR: c1 == c2
 
-hw.module @or(%in1: i1, %in2: i1) -> (out: i1) {
+hw.module @or(in %in1: i1, in %in2: i1, out out: i1) {
   %out = comb.or bin %in1, %in2 : i1
   hw.output %out : i1
 }
 
-hw.module @decomposedOr(%in1: i1, %in2: i1) -> (out: i1) {
+hw.module @decomposedOr(in %in1: i1, in %in2: i1, out out: i1) {
   %not_in1 = hw.instance "n_in1" @not(in: %in1: i1) -> (out: i1)
   %not_in2 = hw.instance "n_in2" @not(in: %in2: i1) -> (out: i1)
   %not_or = comb.and bin %not_in1, %not_in2 : i1
@@ -132,12 +132,12 @@ hw.module @decomposedOr(%in1: i1, %in2: i1) -> (out: i1) {
 //  RUN: circt-lec %s -c1=parity -c2=decomposedParity -v=false | FileCheck %s --check-prefix=COMB_PARITY
 //  COMB_PARITY: c1 == c2
 
-hw.module @parity(%in: i8) -> (out: i1) {
+hw.module @parity(in %in: i8, out out: i1) {
   %res = comb.parity bin %in : i8
   hw.output %res : i1
 }
 
-hw.module @decomposedParity(%in: i8) -> (out: i1) {
+hw.module @decomposedParity(in %in: i8, out out: i1) {
   %b0 = comb.extract %in from 0 : (i8) -> i1
   %b1 = comb.extract %in from 1 : (i8) -> i1
   %b2 = comb.extract %in from 2 : (i8) -> i1
@@ -154,12 +154,12 @@ hw.module @decomposedParity(%in: i8) -> (out: i1) {
 //  RUN: circt-lec %s -c1=replicate -c2=decomposedReplicate -v=false | FileCheck %s --check-prefix=COMB_REPLICATE
 //  COMB_REPLICATE: c1 == c2
 
-hw.module @replicate(%in: i2) -> (out: i8) {
+hw.module @replicate(in %in: i2, out out: i8) {
   %res = comb.replicate %in : (i2) -> i8
   hw.output %res : i8
 }
 
-hw.module @decomposedReplicate(%in: i2) -> (out: i8) {
+hw.module @decomposedReplicate(in %in: i2, out out: i8) {
   %res = comb.concat %in, %in, %in, %in : i2, i2, i2, i2
   hw.output %res : i8
 }
@@ -168,12 +168,12 @@ hw.module @decomposedReplicate(%in: i2) -> (out: i8) {
 //  RUN: circt-lec %s -c1=shl -c2=decomposedShl -v=false | FileCheck %s --check-prefix=COMB_SHL
 //  COMB_SHL: c1 == c2
 
-hw.module @shl(%in1: i2, %in2: i2) -> (out: i2) {
+hw.module @shl(in %in1: i2, in %in2: i2, out out: i2) {
   %res = comb.shl bin %in1, %in2 : i2
   hw.output %res : i2
 }
 
-hw.module @decomposedShl(%in1: i2, %in2: i2) -> (out: i2) {
+hw.module @decomposedShl(in %in1: i2, in %in2: i2, out out: i2) {
   %zero = hw.constant 0 : i2
   %one = hw.constant 1 : i2
   %two = hw.constant 2 : i2
@@ -202,26 +202,26 @@ hw.module @decomposedShl(%in1: i2, %in2: i2) -> (out: i2) {
 //  RUN: circt-lec %s -c1=subtractor -c2=completeSubtractor -v=false | FileCheck %s --check-prefix=COMB_SUB
 //  COMB_SUB: c1 == c2
 
-hw.module @subtractor(%in1: i8, %in2: i8) -> (out: i8) {
+hw.module @subtractor(in %in1: i8, in %in2: i8, out out: i8) {
   %diff = comb.sub bin %in1, %in2 : i8
   hw.output %diff : i8
 }
 
-hw.module @halfSubtractor(%in1: i1, %in2: i1) -> (borrow: i1, diff: i1) {
+hw.module @halfSubtractor(in %in1: i1, in %in2: i1, out borrow: i1, out diff: i1) {
   %diff = comb.xor bin %in1, %in2 : i1
   %not_in1 = hw.instance "n_in1" @not(in: %in1: i1) -> (out: i1)
   %borrow = comb.and bin %not_in1, %in2 : i1
   hw.output %borrow, %diff: i1, i1
 }
 
-hw.module @fullSubtractor(%in1: i1, %in2: i1, %b_in: i1) -> (borrow: i1, diff: i1) {
+hw.module @fullSubtractor(in %in1: i1, in %in2: i1, in %b_in: i1, out borrow: i1, out diff: i1) {
   %b1, %d1 = hw.instance "s1" @halfSubtractor(in1: %in1: i1, in2: %in2: i1) -> (borrow: i1, diff: i1)
   %b2, %d_out = hw.instance "s2" @halfSubtractor(in1: %d1: i1, in2: %b_in: i1) -> (borrow: i1, diff: i1)
   %b_out = comb.or bin %b1, %b2 : i1
   hw.output %b_out, %d_out: i1, i1
 }
 
-hw.module @completeSubtractor(%in1: i8, %in2 : i8) -> (out: i8) {
+hw.module @completeSubtractor(in %in1: i8, in %in2 : i8, out out: i8) {
   %in1_0 = comb.extract %in1 from 0 : (i8) -> i1
   %in1_1 = comb.extract %in1 from 1 : (i8) -> i1
   %in1_2 = comb.extract %in1 from 2 : (i8) -> i1

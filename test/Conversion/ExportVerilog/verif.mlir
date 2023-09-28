@@ -1,7 +1,7 @@
 // RUN: circt-opt %s --test-apply-lowering-options="options=emittedLineLength=9001,verifLabels" --export-verilog --verify-diagnostics | FileCheck %s
 
 // CHECK-LABEL: module Labels
-hw.module @Labels(%a: i1) {
+hw.module @Labels(in %a: i1) {
   // CHECK: foo1: assert property (a);
   // CHECK: foo2: assume property (a);
   // CHECK: foo3: cover property (a);
@@ -16,7 +16,7 @@ hw.module @Labels(%a: i1) {
 }
 
 // CHECK-LABEL: module BasicEmissionNonTemporal
-hw.module @BasicEmissionNonTemporal(%a: i1, %b: i1) {
+hw.module @BasicEmissionNonTemporal(in %a: i1, in %b: i1) {
   %0 = comb.and %a, %b : i1
   %1 = comb.or %a, %b : i1
   // CHECK: assert property (a);
@@ -40,7 +40,7 @@ hw.module @BasicEmissionNonTemporal(%a: i1, %b: i1) {
 }
 
 // CHECK-LABEL: module BasicEmissionTemporal
-hw.module @BasicEmissionTemporal(%a: i1) {
+hw.module @BasicEmissionTemporal(in %a: i1) {
   %p = ltl.not %a : i1
   // CHECK: assert property (not a);
   // CHECK: assume property (not a);
@@ -61,7 +61,7 @@ hw.module @BasicEmissionTemporal(%a: i1) {
 }
 
 // CHECK-LABEL: module Sequences
-hw.module @Sequences(%clk: i1, %a: i1, %b: i1) {
+hw.module @Sequences(in %clk: i1, in %a: i1, in %b: i1) {
   // CHECK: assert property (##0 a);
   // CHECK: assert property (##4 a);
   // CHECK: assert property (##[5:6] a);
@@ -125,7 +125,7 @@ hw.module @Sequences(%clk: i1, %a: i1, %b: i1) {
 }
 
 // CHECK-LABEL: module Properties
-hw.module @Properties(%clk: i1, %a: i1, %b: i1) {
+hw.module @Properties(in %clk: i1, in %a: i1, in %b: i1) {
   %true = hw.constant true
 
   // CHECK: assert property (not a);
@@ -170,7 +170,7 @@ hw.module @Properties(%clk: i1, %a: i1, %b: i1) {
 }
 
 // CHECK-LABEL: module Precedence
-hw.module @Precedence(%a: i1, %b: i1) {
+hw.module @Precedence(in %a: i1, in %b: i1) {
   // CHECK: assert property ((a or b) and b);
   %a0 = ltl.or %a, %b : i1, i1
   %a1 = ltl.and %a0, %b : !ltl.sequence, i1
@@ -199,7 +199,7 @@ hw.module @Precedence(%a: i1, %b: i1) {
 }
 
 // CHECK-LABEL: module SystemVerilogSpecExamples
-hw.module @SystemVerilogSpecExamples(%clk: i1, %a: i1, %b: i1, %c: i1, %d: i1, %e: i1) {
+hw.module @SystemVerilogSpecExamples(in %clk: i1, in %a: i1, in %b: i1, in %c: i1, in %d: i1, in %e: i1) {
   // Section 16.7 "Sequences"
 
   // CHECK: assert property (a ##1 b ##0 c ##1 d);
@@ -233,7 +233,7 @@ hw.module @SystemVerilogSpecExamples(%clk: i1, %a: i1, %b: i1, %c: i1, %d: i1, %
 }
 
 // CHECK-LABEL: module LivenessExample
-hw.module @LivenessExample(%clock: i1, %reset: i1, %isLive: i1) {
+hw.module @LivenessExample(in %clock: i1, in %reset: i1, in %isLive: i1) {
   %true = hw.constant true
 
   // CHECK: wire _GEN = ~isLive;
@@ -262,7 +262,7 @@ hw.module @LivenessExample(%clock: i1, %reset: i1, %isLive: i1) {
 
 // https://github.com/llvm/circt/issues/5763
 // CHECK-LABEL: module Issue5763
-hw.module @Issue5763(%a: i3) {
+hw.module @Issue5763(in %a: i3) {
   // CHECK: assert property ((&a) & a[0]);
   %c-1_i3 = hw.constant -1 : i3
   %0 = comb.extract %a from 0 : (i3) -> i1

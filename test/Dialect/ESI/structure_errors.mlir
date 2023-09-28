@@ -1,6 +1,6 @@
 // RUN: circt-opt %s -split-input-file --verify-diagnostics
 
-hw.module.extern @Foo (%in0: i1) -> (out: i1)
+hw.module.extern @Foo (in %in0: i1, out out: i1)
 esi.pure_module @top {
   // expected-error @+1 {{'hw.instance' op instances in ESI pure modules can only contain channel ports}}
   %loopback = hw.instance "foo" @Foo(in0: %loopback: i1) -> (out: i1)
@@ -8,7 +8,7 @@ esi.pure_module @top {
 
 // -----
 
-hw.module.extern @Foo () -> (out: i1)
+hw.module.extern @Foo (out out: i1)
 
 esi.pure_module @top {
   // expected-error @+1 {{'hw.instance' op instances in ESI pure modules can only contain channel ports}}

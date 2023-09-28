@@ -44,7 +44,7 @@ llhd.entity @test_uniqueness() -> () {
 
 // -----
 
-hw.module @module(%arg0: i2) -> () {}
+hw.module @module(in %arg0: i2) {}
 
 llhd.entity @moduleTypeMismatch(%arg0: !llhd.sig<i3>) -> () {
   // expected-error @+1 {{input type mismatch}}
@@ -53,7 +53,7 @@ llhd.entity @moduleTypeMismatch(%arg0: !llhd.sig<i3>) -> () {
 
 // -----
 
-hw.module @module() -> (arg0: i2) {
+hw.module @module(out arg0: i2) {
   %0 = hw.constant 0 : i2
   hw.output %0 : i2
 }

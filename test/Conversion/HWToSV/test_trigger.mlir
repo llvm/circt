@@ -1,6 +1,6 @@
 // RUN: circt-opt --lower-hw-to-sv --allow-unregistered-dialect %s | FileCheck %s
 
-hw.module @foo(%trigger : i1, %in : i32) {
+hw.module @foo(in %trigger : i1, in %in : i32) {
   // CHECK:       sv.always posedge %trigger {
   // CHECK-NEXT:    "some.user"(%in) : (i32) -> ()
   // CHECK-NEXT:  }

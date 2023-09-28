@@ -10,32 +10,32 @@ esi.service.decl @HostComms {
   esi.service.inout @ReqResp : !esi.channel<i8> -> !esi.channel<i16>
 }
 
-// CHECK-LABEL: hw.module @Top(%clk: !seq.clock, %rst: i1) {
+// CHECK-LABEL: hw.module @Top(in %clk : !seq.clock, in %rst : i1) {
 // CHECK:         esi.service.instance impl as "cosim"(%clk, %rst) : (!seq.clock, i1) -> ()
 // CHECK:         hw.instance "m1" @Loopback(clk: %clk: !seq.clock) -> ()
 
-// CONN-LABEL: hw.module @Top(%clk: !seq.clock, %rst: i1) {
+// CONN-LABEL: hw.module @Top(in %clk : !seq.clock, in %rst : i1) {
 // CONN-DAG:     [[R2:%.+]] = esi.cosim %clk, %rst, %m1.loopback_fromhw, "m1.loopback_fromhw" : !esi.channel<i8> -> !esi.channel<i1>
 // CONN-DAG:     [[R0:%.+]] = esi.null : !esi.channel<i1>
 // CONN-DAG:     [[R1:%.+]] = esi.cosim %clk, %rst, [[R0]], "m1.loopback_tohw" : !esi.channel<i1> -> !esi.channel<i8>
 // CONN:         %m1.loopback_fromhw = hw.instance "m1" @Loopback(clk: %clk: !seq.clock, loopback_tohw: [[R1]]: !esi.channel<i8>) -> (loopback_fromhw: !esi.channel<i8>)
-hw.module @Top (%clk: !seq.clock, %rst: i1) {
+hw.module @Top (in %clk: !seq.clock, in %rst: i1) {
   esi.service.instance impl as  "cosim" (%clk, %rst) : (!seq.clock, i1) -> ()
   hw.instance "m1" @Loopback (clk: %clk: !seq.clock) -> ()
 }
 
-// CHECK-LABEL: hw.module @Loopback(%clk: !seq.clock) {
+// CHECK-LABEL: hw.module @Loopback(in %clk : !seq.clock) {
 // CHECK:         %0 = esi.service.req.to_client <@HostComms::@Recv>(["loopback_tohw"]) : !esi.channel<i8>
 // CHECK:         esi.service.req.to_server %0 -> <@HostComms::@Send>(["loopback_fromhw"]) : !esi.channel<i8>
 
-// CONN-LABEL: hw.module @Loopback(%clk: !seq.clock, %loopback_tohw: !esi.channel<i8>) -> (loopback_fromhw: !esi.channel<i8>) {
+// CONN-LABEL: hw.module @Loopback(in %clk : !seq.clock, in %loopback_tohw : !esi.channel<i8>, out loopback_fromhw : !esi.channel<i8>) {
 // CONN:         hw.output %loopback_tohw : !esi.channel<i8>
-hw.module @Loopback (%clk: !seq.clock) -> () {
+hw.module @Loopback (in %clk: !seq.clock) {
   %dataIn = esi.service.req.to_client <@HostComms::@Recv> (["loopback_tohw"]) : !esi.channel<i8>
   esi.service.req.to_server %dataIn -> <@HostComms::@Send> (["loopback_fromhw"]) : !esi.channel<i8>
 }
 
-// CONN-LABEL: hw.module @Top2(%clk: !seq.clock) -> (chksum: i8) {
+// CONN-LABEL: hw.module @Top2(in %clk : !seq.clock, out chksum : i8) {
 // CONN:         [[r0:%.+]]:3 = esi.service.impl_req svc @HostComms impl as "topComms2"(%clk) : (!seq.clock) -> (i8, !esi.channel<i8>, !esi.channel<i8>) {
 // CONN-DAG:       esi.service.req.to_client <@HostComms::@Recv>(["r1", "m1", "loopback_tohw"]) : !esi.channel<i8>
 // CONN-DAG:       esi.service.req.to_client <@HostComms::@Recv>(["r1", "c1", "consumingFromChan"]) : !esi.channel<i8>
@@ -45,54 +45,54 @@ hw.module @Loopback (%clk: !seq.clock) -> () {
 // CONN:         }
 // CONN:         %r1.m1.loopback_fromhw, %r1.p1.producedMsgChan, %r1.p2.producedMsgChan = hw.instance "r1" @Rec(clk: %clk: !seq.clock, m1.loopback_tohw: [[r0]]#1: !esi.channel<i8>, c1.consumingFromChan: [[r0]]#2: !esi.channel<i8>) -> (m1.loopback_fromhw: !esi.channel<i8>, p1.producedMsgChan: !esi.channel<i8>, p2.producedMsgChan: !esi.channel<i8>)
 // CONN:         hw.output [[r0]]#0 : i8
-hw.module @Top2 (%clk: !seq.clock) -> (chksum: i8) {
+hw.module @Top2 (in %clk: !seq.clock, out chksum: i8) {
   %c = esi.service.instance svc @HostComms impl as  "topComms2" (%clk) : (!seq.clock) -> (i8)
   hw.instance "r1" @Rec(clk: %clk: !seq.clock) -> ()
   hw.output %c : i8
 }
 
-// CONN-LABEL: hw.module @Rec(%clk: !seq.clock, %m1.loopback_tohw: !esi.channel<i8>, %c1.consumingFromChan: !esi.channel<i8>) -> (m1.loopback_fromhw: !esi.channel<i8>, p1.producedMsgChan: !esi.channel<i8>, p2.producedMsgChan: !esi.channel<i8>) {
+// CONN-LABEL: hw.module @Rec(in %clk : !seq.clock, in %m1.loopback_tohw : !esi.channel<i8>, in %c1.consumingFromChan : !esi.channel<i8>, out m1.loopback_fromhw : !esi.channel<i8>, out p1.producedMsgChan : !esi.channel<i8>, out p2.producedMsgChan : !esi.channel<i8>) {
 // CONN:         %m1.loopback_fromhw = hw.instance "m1" @Loopback(clk: %clk: !seq.clock, loopback_tohw: %m1.loopback_tohw: !esi.channel<i8>) -> (loopback_fromhw: !esi.channel<i8>)
 // CONN:         %c1.rawData = hw.instance "c1" @Consumer(clk: %clk: !seq.clock, consumingFromChan: %c1.consumingFromChan: !esi.channel<i8>) -> (rawData: i8)
 // CONN:         %p1.producedMsgChan = hw.instance "p1" @Producer(clk: %clk: !seq.clock) -> (producedMsgChan: !esi.channel<i8>)
 // CONN:         %p2.producedMsgChan = hw.instance "p2" @Producer(clk: %clk: !seq.clock) -> (producedMsgChan: !esi.channel<i8>)
 // CONN:         hw.output %m1.loopback_fromhw, %p1.producedMsgChan, %p2.producedMsgChan : !esi.channel<i8>, !esi.channel<i8>, !esi.channel<i8>
-hw.module @Rec(%clk: !seq.clock) -> () {
+hw.module @Rec(in %clk: !seq.clock) {
   hw.instance "m1" @Loopback (clk: %clk: !seq.clock) -> ()
   hw.instance "c1" @Consumer(clk: %clk: !seq.clock) -> (rawData: i8)
   hw.instance "p1" @Producer(clk: %clk: !seq.clock) -> ()
   hw.instance "p2" @Producer(clk: %clk: !seq.clock) -> ()
 }
 
-// CONN-LABEL: hw.module @Consumer(%clk: !seq.clock, %consumingFromChan: !esi.channel<i8>) -> (rawData: i8) {
+// CONN-LABEL: hw.module @Consumer(in %clk : !seq.clock, in %consumingFromChan : !esi.channel<i8>, out rawData : i8) {
 // CONN:         %true = hw.constant true
 // CONN:         %rawOutput, %valid = esi.unwrap.vr %consumingFromChan, %true : i8
 // CONN:         hw.output %rawOutput : i8
-hw.module @Consumer(%clk: !seq.clock) -> (rawData: i8) {
+hw.module @Consumer(in %clk: !seq.clock, out rawData: i8) {
   %dataIn = esi.service.req.to_client <@HostComms::@Recv> (["consumingFromChan"]) : !esi.channel<i8>
   %rdy = hw.constant 1 : i1
   %rawData, %valid = esi.unwrap.vr %dataIn, %rdy: i8
   hw.output %rawData : i8
 }
 
-// CONN-LABEL: hw.module @Producer(%clk: !seq.clock) -> (producedMsgChan: !esi.channel<i8>) {
+// CONN-LABEL: hw.module @Producer(in %clk : !seq.clock, out producedMsgChan : !esi.channel<i8>) {
 // CONN:         %c0_i8 = hw.constant 0 : i8
 // CONN:         %true = hw.constant true
 // CONN:         %chanOutput, %ready = esi.wrap.vr %c0_i8, %true : i8
 // CONN:         hw.output %chanOutput : !esi.channel<i8>
-hw.module @Producer(%clk: !seq.clock) -> () {
+hw.module @Producer(in %clk: !seq.clock) {
   %data = hw.constant 0 : i8
   %valid = hw.constant 1 : i1
   %dataIn, %rdy = esi.wrap.vr %data, %valid : i8
   esi.service.req.to_server %dataIn -> <@HostComms::@Send> (["producedMsgChan"]) : !esi.channel<i8>
 }
 
-// CONN-LABEL: hw.module @InOutLoopback(%clk: !seq.clock, %loopback_inout: !esi.channel<i16>) -> (loopback_inout: !esi.channel<i8>) {
+// CONN-LABEL: hw.module @InOutLoopback(in %clk : !seq.clock, in %loopback_inout : !esi.channel<i16>, out loopback_inout : !esi.channel<i8>) {
 // CONN:          %rawOutput, %valid = esi.unwrap.vr %loopback_inout, %ready : i16
 // CONN:          %0 = comb.extract %rawOutput from 0 : (i16) -> i8
 // CONN:          %chanOutput, %ready = esi.wrap.vr %0, %valid : i8
 // CONN:          hw.output %chanOutput : !esi.channel<i8>
-hw.module @InOutLoopback (%clk: !seq.clock) -> () {
+hw.module @InOutLoopback (in %clk: !seq.clock) {
   %dataIn = esi.service.req.inout %dataTrunc -> <@HostComms::@ReqResp> (["loopback_inout"]) : !esi.channel<i8> -> !esi.channel<i16>
   %unwrap, %valid = esi.unwrap.vr %dataIn, %rdy: i16
   %trunc = comb.extract %unwrap from 0 : (i16) -> (i8)
@@ -114,14 +114,14 @@ esi.pure_module @LoopbackCosimPure {
 }
 
 // CHECK-LABEL: esi.mem.ram @MemA i64 x 20
-// CHECK-LABEL: hw.module @MemoryAccess1(%clk: !seq.clock, %rst: i1, %write: !esi.channel<!hw.struct<address: i5, data: i64>>, %readAddress: !esi.channel<i5>) -> (readData: !esi.channel<i64>, writeDone: !esi.channel<i0>) {
+// CHECK-LABEL: hw.module @MemoryAccess1(in %clk : !seq.clock, in %rst : i1, in %write : !esi.channel<!hw.struct<address: i5, data: i64>>, in %readAddress : !esi.channel<i5>, out readData : !esi.channel<i64>, out writeDone : !esi.channel<i0>) {
 // CHECK:         esi.service.instance svc @MemA impl as "sv_mem"(%clk, %rst) : (!seq.clock, i1) -> ()
 // CHECK:         [[DONE:%.+]] = esi.service.req.inout %write -> <@MemA::@write>([]) : !esi.channel<!hw.struct<address: i5, data: i64>> -> !esi.channel<i0>
 // CHECK:         [[READ_DATA:%.+]] = esi.service.req.inout %readAddress -> <@MemA::@read>([]) : !esi.channel<i5> -> !esi.channel<i64>
 // CHECK:         hw.output [[READ_DATA]], [[DONE]] : !esi.channel<i64>, !esi.channel<i0>
 
 // CONN-LABEL: esi.mem.ram @MemA i64 x 20
-// CONN-LABEL: hw.module @MemoryAccess1(%clk: !seq.clock, %rst: i1, %write: !esi.channel<!hw.struct<address: i5, data: i64>>, %readAddress: !esi.channel<i5>) -> (readData: !esi.channel<i64>, writeDone: !esi.channel<i0>) {
+// CONN-LABEL: hw.module @MemoryAccess1(in %clk : !seq.clock, in %rst : i1, in %write : !esi.channel<!hw.struct<address: i5, data: i64>>, in %readAddress : !esi.channel<i5>, out readData : !esi.channel<i64>, out writeDone : !esi.channel<i0>) {
 // CONN:         %MemA = sv.reg  : !hw.inout<uarray<20xi64>>
 // CONN:         %chanOutput, %ready = esi.wrap.vr %c0_i0, %write_done : i0
 // CONN:         %rawOutput, %valid = esi.unwrap.vr %write, %ready : !hw.struct<address: i5, data: i64>
@@ -145,19 +145,19 @@ esi.pure_module @LoopbackCosimPure {
 
 esi.mem.ram @MemA i64 x 20
 !write = !hw.struct<address: i5, data: i64>
-hw.module @MemoryAccess1(%clk: !seq.clock, %rst: i1, %write: !esi.channel<!write>, %readAddress: !esi.channel<i5>) -> (readData: !esi.channel<i64>, writeDone: !esi.channel<i0>) {
+hw.module @MemoryAccess1(in %clk : !seq.clock, in %rst : i1, in %write : !esi.channel<!write>, in %readAddress : !esi.channel<i5>, out readData : !esi.channel<i64>, out writeDone : !esi.channel<i0>) {
   esi.service.instance svc @MemA impl as "sv_mem" (%clk, %rst) : (!seq.clock, i1) -> ()
   %done = esi.service.req.inout %write -> <@MemA::@write> ([]) : !esi.channel<!write> -> !esi.channel<i0>
   %readData = esi.service.req.inout %readAddress -> <@MemA::@read> ([]) : !esi.channel<i5> -> !esi.channel<i64>
   hw.output %readData, %done : !esi.channel<i64>, !esi.channel<i0>
 }
 
-// CONN-LABEL: hw.module @MemoryAccess2Read(%clk: !seq.clock, %rst: i1, %write: !esi.channel<!hw.struct<address: i5, data: i64>>, %readAddress: !esi.channel<i5>, %readAddress2: !esi.channel<i5>) -> (readData: !esi.channel<i64>, readData2: !esi.channel<i64>, writeDone: !esi.channel<i0>) {
+// CONN-LABEL: hw.module @MemoryAccess2Read(in %clk : !seq.clock, in %rst : i1, in %write : !esi.channel<!hw.struct<address: i5, data: i64>>, in %readAddress : !esi.channel<i5>, in %readAddress2 : !esi.channel<i5>, out readData : !esi.channel<i64>, out readData2 : !esi.channel<i64>, out writeDone : !esi.channel<i0>) {
 // CONN:         %MemA = sv.reg : !hw.inout<uarray<20xi64>>
 // CONN:         esi.service.hierarchy.metadata path [] implementing @MemA impl as "sv_mem" clients [{client_name = [], port = #hw.innerNameRef<@MemA::@write>, to_client_type = !esi.channel<i0>, to_server_type = !esi.channel<!hw.struct<address: i5, data: i64>>}, {client_name = [], port = #hw.innerNameRef<@MemA::@read>, to_client_type = !esi.channel<i64>, to_server_type = !esi.channel<i5>}, {client_name = [], port = #hw.innerNameRef<@MemA::@read>, to_client_type = !esi.channel<i64>, to_server_type = !esi.channel<i5>}]
 // CONN:         hw.output %chanOutput_0, %chanOutput_4, %chanOutput : !esi.channel<i64>, !esi.channel<i64>, !esi.channel<i0>
 
-hw.module @MemoryAccess2Read(%clk: !seq.clock, %rst: i1, %write: !esi.channel<!write>, %readAddress: !esi.channel<i5>, %readAddress2: !esi.channel<i5>) -> (readData: !esi.channel<i64>, readData2: !esi.channel<i64>, writeDone: !esi.channel<i0>) {
+hw.module @MemoryAccess2Read(in %clk: !seq.clock, in %rst: i1, in %write: !esi.channel<!write>, in %readAddress: !esi.channel<i5>, in %readAddress2: !esi.channel<i5>, out readData: !esi.channel<i64>, out readData2: !esi.channel<i64>, out writeDone: !esi.channel<i0>) {
   esi.service.instance svc @MemA impl as "sv_mem" (%clk, %rst) : (!seq.clock, i1) -> ()
   %done = esi.service.req.inout %write -> <@MemA::@write> ([]) : !esi.channel<!write> -> !esi.channel<i0>
   %readData = esi.service.req.inout %readAddress -> <@MemA::@read> ([]) : !esi.channel<i5> -> !esi.channel<i64>

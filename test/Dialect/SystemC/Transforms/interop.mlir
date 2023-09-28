@@ -1,10 +1,10 @@
 // RUN: circt-opt --systemc-lower-instance-interop %s | FileCheck %s
 
-hw.module.extern @Bar (%a: i32, %b: i32) -> (c: i32)
-hw.module.extern @Empty () -> ()
+hw.module.extern @Bar (in %a : i32, in %b : i32, out c: i32)
+hw.module.extern @Empty ()
 
 // CHECK-LABEL: @Foo
-hw.module @Foo (%x: i32) -> (y: i32) {
+hw.module @Foo (in %x: i32, out y: i32) {
   // CHECK-NEXT: [[STATE:%.+]] = interop.procedural.alloc cpp : !emitc.ptr<!emitc.opaque<"VBar">>
   // CHECK-NEXT: interop.procedural.init cpp [[STATE]] : !emitc.ptr<!emitc.opaque<"VBar">> {
   // CHECK-NEXT:   [[V1:%.+]] = systemc.cpp.new() : () -> !emitc.ptr<!emitc.opaque<"VBar">>

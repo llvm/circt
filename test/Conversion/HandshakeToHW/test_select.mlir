@@ -1,12 +1,9 @@
 // RUN: circt-opt -lower-handshake-to-hw -split-input-file %s | FileCheck %s
 
-// CHECK-LABEL:   hw.module @arith_select_in_ui1_ui32_ui32_out_ui32(
-// CHECK-SAME:                                                      %[[VAL_0:.*]]: !esi.channel<i1>,
-// CHECK-SAME:                                                      %[[VAL_1:.*]]: !esi.channel<i32>,
-// CHECK-SAME:                                                      %[[VAL_2:.*]]: !esi.channel<i32>) -> (out0: !esi.channel<i32>) {
+// CHECK:   hw.module @arith_select_in_ui1_ui32_ui32_out_ui32(in %[[VAL_0:.*]] : !esi.channel<i1>, in %[[VAL_1:.*]] : !esi.channel<i32>, in %[[VAL_2:.*]] : !esi.channel<i32>, out out0 : !esi.channel<i32>) {
 // CHECK:           %[[VAL_3:.*]], %[[VAL_4:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_5:.*]] : i1
 // CHECK:           %[[VAL_6:.*]], %[[VAL_7:.*]] = esi.unwrap.vr %[[VAL_1]], %[[VAL_5]] : i32
-// CHECK:           %[[VAL_8:.*]], %[[VAL_9:.*]] = esi.unwrap.vr %[[VAL_2]], %[[VAL_5]] : i32
+// CHECK:            %[[VAL_8:.*]], %[[VAL_9:.*]] = esi.unwrap.vr %[[VAL_2]], %[[VAL_5]] : i32
 // CHECK:           %[[VAL_10:.*]], %[[VAL_11:.*]] = esi.wrap.vr %[[VAL_12:.*]], %[[VAL_13:.*]] : i32
 // CHECK:           %[[VAL_13]] = comb.and %[[VAL_4]], %[[VAL_7]], %[[VAL_9]] : i1
 // CHECK:           %[[VAL_5]] = comb.and %[[VAL_11]], %[[VAL_13]] : i1

@@ -1,7 +1,7 @@
 // RUN: circt-opt %s --arc-split-loops | FileCheck %s
 
 // CHECK-LABEL: hw.module @Simple(
-hw.module @Simple(%clock: !seq.clock, %a: i4, %b: i4) -> (x: i4, y: i4) {
+hw.module @Simple(in %clock: !seq.clock, in %a: i4, in %b: i4, out x: i4, out y: i4) {
   // CHECK-NEXT: %0 = arc.state @SimpleArc_split_0(%a, %b)
   // CHECK-NEXT: %1 = arc.state @SimpleArc_split_1(%0, %a)
   // CHECK-NEXT: %2 = arc.state @SimpleArc_split_2(%0, %b)
@@ -34,7 +34,7 @@ arc.define @SimpleArc(%arg0: i4, %arg1: i4) -> (i4, i4) {
 //===----------------------------------------------------------------------===//
 
 // CHECK-LABEL: hw.module @Unchanged(
-hw.module @Unchanged(%a: i4) -> (x: i4, y0: i4, y1: i4) {
+hw.module @Unchanged(in %a: i4, out x: i4, out y0: i4, out y1: i4) {
   // CHECK-NEXT: %0 = arc.state @UnchangedArc1(%a)
   // CHECK-NEXT: %1:2 = arc.state @UnchangedArc2(%a)
   // CHECK-NEXT: hw.output %0, %1#0, %1#1
@@ -64,7 +64,7 @@ arc.define @UnchangedArc2(%arg0: i4) -> (i4, i4) {
 //===----------------------------------------------------------------------===//
 
 // CHECK-LABEL: hw.module @Passthrough(
-hw.module @Passthrough(%a: i4, %b: i4) -> (x0: i4, x1: i4, y0: i4, y1: i4) {
+hw.module @Passthrough(in %a: i4, in %b: i4, out x0: i4, out x1: i4, out y0: i4, out y1: i4) {
   // CHECK-NEXT: %0 = arc.state @PassthroughArc2(%a)
   // CHECK-NEXT: hw.output %a, %b, %0, %b
   %0:2 = arc.state @PassthroughArc1(%a, %b) lat 0 : (i4, i4) -> (i4, i4)
@@ -90,7 +90,7 @@ arc.define @PassthroughArc2(%arg0: i4, %arg1: i4) -> (i4, i4) {
 //===----------------------------------------------------------------------===//
 
 // CHECK-LABEL: hw.module @NestedRegions(
-hw.module @NestedRegions(%a: i4, %b: i4, %c: i4) -> (x: i4, y: i4) {
+hw.module @NestedRegions(in %a: i4, in %b: i4, in %c: i4, out x: i4, out y: i4) {
   // CHECK-NEXT: %0:3 = arc.state @NestedRegionsArc_split_0(%a, %b, %c)
   // CHECK-NEXT: %1 = arc.state @NestedRegionsArc_split_1(%0#0, %0#1)
   // CHECK-NEXT: %2 = arc.state @NestedRegionsArc_split_2(%0#2)
@@ -133,7 +133,7 @@ arc.define @NestedRegionsArc(%arg0: i4, %arg1: i4, %arg2: i4) -> (i4, i4) {
 //===----------------------------------------------------------------------===//
 
 // CHECK-LABEL: hw.module @BreakFalseLoops(
-hw.module @BreakFalseLoops(%a: i4) -> (x: i4, y: i4) {
+hw.module @BreakFalseLoops(in %a: i4, out x: i4, out y: i4) {
   // CHECK-NEXT: %0 = arc.state @BreakFalseLoopsArc_split_0(%a)
   // CHECK-NEXT: %1 = arc.state @BreakFalseLoopsArc_split_1(%0)
   // CHECK-NEXT: %2 = arc.state @BreakFalseLoopsArc_split_0(%3)
@@ -164,7 +164,7 @@ arc.define @BreakFalseLoopsArc(%arg0: i4, %arg1: i4) -> (i4, i4) {
 // COM: https://github.com/llvm/circt/issues/4862
 
 // CHECK-LABEL: @SplitDependencyModule
-hw.module @SplitDependencyModule(%a: i1) -> (x: i1, y: i1) {
+hw.module @SplitDependencyModule(in %a: i1, out x: i1, out y: i1) {
   // CHECK-NEXT: %0 = arc.state @SplitDependency_split_1(%a, %a) lat 0 : (i1, i1) -> i1
   // CHECK-NEXT: %1 = arc.state @SplitDependency_split_0(%a, %a, %0) lat 0 : (i1, i1, i1) -> i1
   // CHECK-NEXT: hw.output %0, %1 : i1, i1

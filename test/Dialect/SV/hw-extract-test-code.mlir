@@ -6,7 +6,7 @@
 // CHECK-NOT: attributes
 // CHECK-NEXT: hw.module.extern @foo_assert
 // CHECK-NOT: attributes
-// CHECK: hw.module @issue1246_assert(%clock: i1) attributes {comment = "VCS coverage exclude_file", output_file = #hw.output_file<"dir3{{/|\\\\}}", excludeFromFileList, includeReplicatedOps>}
+// CHECK: hw.module @issue1246_assert(in %clock : i1) attributes {comment = "VCS coverage exclude_file", output_file = #hw.output_file<"dir3{{/|\\\\}}", excludeFromFileList, includeReplicatedOps>}
 // CHECK: sv.assert
 // CHECK: sv.error "Assertion failed"
 // CHECK: sv.error "assert:"
@@ -14,11 +14,11 @@
 // CHECK: sv.error "check [verif-library-assert] is included"
 // CHECK: sv.fatal 1
 // CHECK: foo_assert
-// CHECK: hw.module @issue1246_assume(%clock: i1)
+// CHECK: hw.module @issue1246_assume(in %clock : i1)
 // CHECK-SAME: attributes {comment = "VCS coverage exclude_file"}
 // CHECK: sv.assume
 // CHECK: foo_assume
-// CHECK: hw.module @issue1246_cover(%clock: i1)
+// CHECK: hw.module @issue1246_cover(in %clock : i1)
 // CHECK-SAME: attributes {comment = "VCS coverage exclude_file"}
 // CHECK: sv.cover
 // CHECK: foo_cover
@@ -33,10 +33,10 @@
 // CHECK: sv.bind <@issue1246::@__ETC_issue1246_assume> {output_file = #hw.output_file<"file4", excludeFromFileList>}
 // CHECK: sv.bind <@issue1246::@__ETC_issue1246_cover>
 module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>, firrtl.extract.assume.bindfile = #hw.output_file<"file4", excludeFromFileList>} {
-  hw.module.extern @foo_cover(%a : i1) attributes {"firrtl.extract.cover.extra"}
-  hw.module.extern @foo_assume(%a : i1) attributes {"firrtl.extract.assume.extra"}
-  hw.module.extern @foo_assert(%a : i1) attributes {"firrtl.extract.assert.extra"}
-  hw.module @issue1246(%clock: i1) -> () {
+  hw.module.extern @foo_cover(in %a : i1) attributes {"firrtl.extract.cover.extra"}
+  hw.module.extern @foo_assume(in %a : i1) attributes {"firrtl.extract.assume.extra"}
+  hw.module.extern @foo_assert(in %a : i1) attributes {"firrtl.extract.assert.extra"}
+  hw.module @issue1246(in %clock: i1) {
     sv.always posedge %clock  {
       sv.ifdef.procedural "SYNTHESIS"  {
       } else  {
@@ -71,12 +71,12 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
 // CHECK-COUNT-1: doNotPrint
 // CHECK-NOT:     doNotPrint
 module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>} {
-  hw.module @AlreadyExtracted(%clock: i1) -> () {
+  hw.module @AlreadyExtracted(in %clock: i1) {
     sv.always posedge %clock  {
       sv.assert %clock, immediate
     }
   }
-  hw.module @Top(%clock: i1) -> () {
+  hw.module @Top(in %clock: i1) {
     hw.instance "submodule" @AlreadyExtracted(clock: %clock: i1) -> () {doNotPrint = true}
   }
 }
@@ -88,7 +88,7 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
 // CHECK-NOT:  hw.module @ModuleInTestHarness_assert
 // CHECK-NOT:  firrtl.extract.do_not_extract
 module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>} {
-  hw.module @ModuleInTestHarness(%clock: i1) -> () attributes {"firrtl.extract.do_not_extract"} {
+  hw.module @ModuleInTestHarness(in %clock: i1) attributes {"firrtl.extract.do_not_extract"} {
     sv.always posedge %clock  {
       sv.assert %clock, immediate
     }
@@ -103,7 +103,7 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
 // CHECK-NEXT: hw.instance "[[name:.+]]_assume" sym @{{[^ ]+}} @[[name]]_assume
 // CHECK-NEXT: hw.instance "[[name:.+]]_cover"  sym @{{[^ ]+}} @[[name]]_cover
 module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>} {
-  hw.module @InstanceName(%clock: i1, %cond: i1, %cond2: i1) -> () {
+  hw.module @InstanceName(in %clock: i1, in %cond: i1, in %cond2: i1) {
     sv.always posedge %clock  {
       sv.assert %cond, immediate
       sv.assume %cond, immediate
@@ -119,7 +119,7 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
 // CHECK-LABEL: @MultiRead(
 // CHECK: hw.instance "[[name:.+]]_cover"  sym @{{[^ ]+}} @[[name]]_cover(foo: %0: i1, clock: %clock: i1)
 module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>} {
-  hw.module @MultiRead(%clock: i1, %cond: i1) -> () {
+  hw.module @MultiRead(in %clock: i1, in %cond: i1) {
     %foo = sv.wire : !hw.inout<i1>
     sv.assign %foo, %cond : i1
     %cond1 = sv.read_inout %foo : !hw.inout<i1>
@@ -139,14 +139,14 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
 // CHECK-LABEL: @InstResult(
 // CHECK: hw.instance "[[name:.+]]_cover"  sym @{{[^ ]+}} @[[name]]_cover(mem.result_name: %{{[^ ]+}}: i1, mem.1: %{{[^ ]+}}: i1, clock: %clock: i1)
 module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>} {
-  hw.module @Mem() -> (result_name: i1, "": i1) {
+  hw.module @Mem(out result_name: i1, out "": i1) {
     %reg = sv.reg : !hw.inout<i1>
     %0 = sv.read_inout %reg : !hw.inout<i1>
     hw.output %0, %0 : i1, i1
   }
   // Dummy is needed to prevent the instance itself being extracted
-  hw.module @Dummy(%in1: i1, %in2: i1) -> () {}
-  hw.module @InstResult(%clock: i1) -> () {
+  hw.module @Dummy(in %in1: i1, in %in2: i1) {}
+  hw.module @InstResult(in %clock: i1) {
     %0, %1 = hw.instance "mem" @Mem() -> (result_name: i1, "": i1)
     hw.instance "dummy" sym @keep @Dummy(in1: %0 : i1, in2: %1 : i1) -> ()
     %2 = comb.and bin %0, %1 : i1
@@ -180,22 +180,22 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
 // CHECK-DAG: sv.bind <@InputOnlySym::@[[input_only_sym_cover]]>
 // CHECK-DAG: sv.bind <@Top::@[[already_bound]]>
 module {
-  hw.module private @AlreadyBound() -> () {}
+  hw.module private @AlreadyBound() {}
 
-  hw.module private @InputOnly(%clock: i1, %cond: i1) -> () {
+  hw.module private @InputOnly(in %clock: i1, in %cond: i1) {
     sv.always posedge %clock  {
       sv.cover %cond, immediate
       sv.assert %cond, immediate
     }
   }
 
-  hw.module private @InputOnlySym(%clock: i1, %cond: i1) -> () {
+  hw.module private @InputOnlySym(in %clock: i1, in %cond: i1) {
     sv.always posedge %clock  {
       sv.cover %cond, immediate
     }
   }
 
-  hw.module private @InputOnlyCycle(%clock: i1, %cond: i1) -> () {
+  hw.module private @InputOnlyCycle(in %clock: i1, in %cond: i1) {
     // Arbitrary code that won't be extracted, should be dead in the input only module.
     // Make sure to delete them.
     %0 = comb.and %1 : i1
@@ -206,7 +206,7 @@ module {
     }
   }
 
-  hw.module private @InputOnlyBind(%clock: i1, %cond: i1) -> () {
+  hw.module private @InputOnlyBind(in %clock: i1, in %cond: i1) {
     hw.instance "already_bound" sym @already_bound @AlreadyBound() -> () {doNotPrint = true}
     sv.always posedge %clock  {
       sv.cover %cond, immediate
@@ -214,7 +214,7 @@ module {
     }
   }
 
-  hw.module @Top(%clock: i1, %cond: i1) -> (foo: i1) {
+  hw.module @Top(in %clock: i1, in %cond: i1, out foo: i1) {
     hw.instance "input_only" @InputOnly(clock: %clock: i1, cond: %cond: i1) -> ()
     hw.instance "input_only_sym" sym @foo @InputOnlySym(clock: %clock: i1, cond: %cond: i1) -> ()
     hw.instance "input_only_cycle" @InputOnlyCycle(clock: %clock: i1, cond: %cond: i1) -> ()
@@ -265,7 +265,7 @@ module {
 // CHECK-LABEL: @MultiResultExtracted_cover
 // CHECK: hw.instance "qux"
 // CHECK-LABEL: @MultiResultExtracted
-// CHECK-SAME: (%[[clock:.+]]: i1, %[[in:.+]]: i1)
+// CHECK-SAME: (in %[[clock:.+]] : i1, in %[[in:.+]] : i1)
 // CHECK: hw.instance {{.+}} @MultiResultExtracted_cover([[in]]: %[[in]]: i1, [[clock]]: %[[clock]]: i1)
 
 // In SymNotExtracted, instance foo should not be extracted because it has a sym.
@@ -292,19 +292,19 @@ module {
 // CHECK: hw.instance "non_testcode_and_instance1"
 
 module {
-  hw.module private @Foo(%a: i1) -> (b: i1) {
+  hw.module private @Foo(in %a: i1, out b: i1) {
     hw.output %a : i1
   }
 
-  hw.module.extern private @Bar(%a: i1) -> (b: i1)
+  hw.module.extern private @Bar(in %a: i1, out b: i1)
 
-  hw.module.extern private @Baz(%a: i1) -> (b: i1)
+  hw.module.extern private @Baz(in %a: i1, out b: i1)
 
-  hw.module.extern private @Qux(%a: i1) -> (b: i1, c: i1)
+  hw.module.extern private @Qux(in %a: i1, out b: i1, out c: i1)
 
-  hw.module.extern private @Bozo(%a: i1) -> (b: i1)
+  hw.module.extern private @Bozo(in %a: i1, out b: i1)
 
-  hw.module @AllExtracted(%clock: i1, %in: i1) {
+  hw.module @AllExtracted(in %clock: i1, in %in: i1) {
     %foo.b = hw.instance "foo" @Foo(a: %in: i1) -> (b: i1)
     %bar.b = hw.instance "bar" @Bar(a: %in: i1) -> (b: i1)
     %baz.b = hw.instance "baz" @Baz(a: %in: i1) -> (b: i1)
@@ -319,7 +319,7 @@ module {
     }
   }
 
-  hw.module @SomeExtracted(%clock: i1, %in: i1) -> (out0: i1, out1: i1) {
+  hw.module @SomeExtracted(in %clock: i1, in %in: i1, out out0: i1, out out1: i1) {
     %foo.b = hw.instance "foo" @Foo(a: %in: i1) -> (b: i1)
     %bar.b = hw.instance "bar" @Bar(a: %in: i1) -> (b: i1)
     %baz.b = hw.instance "baz" @Baz(a: %in: i1) -> (b: i1)
@@ -334,7 +334,7 @@ module {
     hw.output %foo.b, %bar.b : i1, i1
   }
 
-  hw.module @CycleExtracted(%clock: i1, %in: i1) {
+  hw.module @CycleExtracted(in %clock: i1, in %in: i1) {
     %foo.b = hw.instance "foo" @Foo(a: %in: i1) -> (b: i1)
     %0 = comb.or %0, %foo.b : i1
     sv.always posedge %clock {
@@ -342,14 +342,14 @@ module {
     }
   }
 
-  hw.module private @ShouldBeInlined(%clock: i1, %in: i1) {
+  hw.module private @ShouldBeInlined(in %clock: i1, in %in: i1) {
     %foo.b = hw.instance "foo" @Foo(a: %in: i1) -> (b: i1)
     sv.always posedge %clock {
       sv.cover %foo.b, immediate
     }
   }
 
-  hw.module private @ShouldBeInlined2(%clock: i1, %in: i1) {
+  hw.module private @ShouldBeInlined2(in %clock: i1, in %in: i1) {
     %bozo.b = hw.instance "bozo" @Bozo(a: %in: i1) -> (b: i1)
     sv.ifdef "SYNTHESIS" {
     } else {
@@ -361,15 +361,15 @@ module {
     }
   }
 
-  hw.module @ChildShouldInline(%clock: i1, %in: i1) {
+  hw.module @ChildShouldInline(in %clock: i1, in %in: i1) {
     hw.instance "child" @ShouldBeInlined(clock: %clock: i1, in: %in: i1) -> ()
   }
 
-  hw.module @ChildShouldInline2(%clock: i1, %in: i1) {
+  hw.module @ChildShouldInline2(in %clock: i1, in %in: i1) {
     hw.instance "child" @ShouldBeInlined2(clock: %clock: i1, in: %in: i1) -> ()
   }
 
-  hw.module @MultiResultExtracted(%clock: i1, %in: i1) {
+  hw.module @MultiResultExtracted(in %clock: i1, in %in: i1) {
     %qux.b, %qux.c = hw.instance "qux" @Qux(a: %in: i1) -> (b: i1, c: i1)
     sv.always posedge %clock {
       sv.cover %qux.b, immediate
@@ -377,14 +377,14 @@ module {
     }
   }
 
-  hw.module @SymNotExtracted(%clock: i1, %in: i1) {
+  hw.module @SymNotExtracted(in %clock: i1, in %in: i1) {
     %foo.b = hw.instance "foo" sym @foo @Foo(a: %in: i1) -> (b: i1)
     sv.always posedge %clock {
       sv.cover %foo.b, immediate
     }
   }
 
-  hw.module @NoExtraInput(%clock: i1, %in: i1) {
+  hw.module @NoExtraInput(in %clock: i1, in %in: i1) {
     %0 = comb.or %in, %in : i1
     %foo.b = hw.instance "foo" @Foo(a: %0: i1) -> (b: i1)
     sv.always posedge %clock {
@@ -393,11 +393,11 @@ module {
     }
   }
 
-  hw.module private @Passthrough(%in: i1) -> (out: i1) {
+  hw.module private @Passthrough(in %in: i1, out out: i1) {
     hw.output %in : i1
   }
 
-  hw.module @InstancesWithCycles(%clock: i1, %in: i1) -> (out: i1) {
+  hw.module @InstancesWithCycles(in %clock: i1, in %in: i1, out out: i1) {
     %0 = hw.instance "non_testcode_and_instance0" @Passthrough(in: %1: i1) -> (out: i1)
     %1 = hw.instance "non_testcode_and_instance1" @Passthrough(in: %0: i1) -> (out: i1)
 
@@ -429,7 +429,7 @@ module {
   // CHECK: %symbol = seq.firreg
   // CHECK: %designAndTestCode = seq.firreg
   // CHECK-NOT: seq.firreg
-  hw.module @RegExtracted(%clock: !seq.clock, %reset: i1, %in: i1) -> (out: i1) {
+  hw.module @RegExtracted(in %clock: !seq.clock, in %reset: i1, in %in: i1, out out: i1) {
     %muxed = comb.mux bin %reset, %in, %testCode1 : i1
     %testCode1 = seq.firreg %muxed clock %clock : i1
     %testCode2 = seq.firreg %testCode1 clock %clock : i1
@@ -452,10 +452,10 @@ module {
 // Check that constants are cloned freely.
 
 module {
-  // CHECK-LABEL: @ConstantCloned_cover(%in: i1, %clock: i1)
+  // CHECK-LABEL: @ConstantCloned_cover(in %in : i1, in %clock : i1)
   // CHECK-NEXT:   %true = hw.constant true
   // CHECK-NEXT:   comb.xor bin %in, %true : i1
-  hw.module @ConstantCloned(%clock: i1, %in: i1) -> (out: i1) {
+  hw.module @ConstantCloned(in %clock: i1, in %in: i1, out out: i1) {
     %true = hw.constant true
     %not = comb.xor bin %in, %true : i1
 
@@ -474,7 +474,7 @@ module {
   // @ShouldNotBeInlined cannot be inlined because there is a wire with an inner sym
   // that is referred by hierpath op.
   hw.hierpath private @Foo [@ShouldNotBeInlined::@foo]
-  hw.module private @ShouldNotBeInlined(%clock: i1, %a: i1) {
+  hw.module private @ShouldNotBeInlined(in %clock: i1, in %a: i1) {
     %w = sv.wire sym @foo: !hw.inout<i1>
     sv.always posedge %clock {
       sv.if %a {
@@ -483,7 +483,7 @@ module {
     }
     hw.output
   }
-  hw.module private @Assert(%clock: i1, %a: i1) {
+  hw.module private @Assert(in %clock: i1, in %a: i1) {
     sv.always posedge %clock {
       sv.if %a {
         sv.assert %a, immediate message "foo"
@@ -492,20 +492,20 @@ module {
     hw.output
   }
 
-  // CHECK-LABEL: hw.module private @AssertWrapper(%clock: i1, %a: i1) -> (b: i1) {
+  // CHECK-LABEL: hw.module private @AssertWrapper(in %clock : i1, in %a : i1, out b : i1) {
   // CHECK-NEXT:  hw.instance "Assert_assert" sym @__ETC_Assert_assert @Assert_assert
   // CHECK-SAME:  doNotPrint = true
-  hw.module private @AssertWrapper(%clock: i1, %a: i1) -> (b: i1) {
+  hw.module private @AssertWrapper(in %clock: i1, in %a: i1, out b: i1) {
     hw.instance "a3" @Assert(clock: %clock: i1, a: %a: i1) -> ()
     hw.output %a: i1
   }
 
   // CHECK-NOT: @InputOnly
-  hw.module private @InputOnly(%clock: i1, %a: i1) -> () {
+  hw.module private @InputOnly(in %clock: i1, in %a: i1) {
     hw.instance "a4" @Assert(clock: %clock: i1, a: %a: i1) -> ()
   }
 
-  // CHECK-LABEL: hw.module @Top(%clock: i1, %a: i1, %b: i1) {
+  // CHECK-LABEL: hw.module @Top(in %clock : i1, in %a : i1, in %b : i1) {
   // CHECK-NEXT:  hw.instance "Assert_assert" sym @__ETC_Assert_assert_0 @Assert_assert
   // CHECK-SAME:  doNotPrint = true
   // CHECK-NEXT:  hw.instance "Assert_assert" sym @__ETC_Assert_assert @Assert_assert
@@ -514,7 +514,7 @@ module {
   // CHECK-SAME:  doNotPrint = true
   // CHECK-NEXT:  hw.instance "should_not_be_inlined" @ShouldNotBeInlined
   // CHECK-NOT: doNotPrint
-  hw.module @Top(%clock: i1, %a: i1, %b: i1) {
+  hw.module @Top(in %clock: i1, in %a: i1, in %b: i1) {
     hw.instance "a1" @Assert(clock: %clock: i1, a: %a: i1) -> ()
     hw.instance "a2" @Assert(clock: %clock: i1, a: %b: i1) -> ()
     hw.instance "a3" @InputOnly(clock: %clock: i1, a: %b: i1) -> ()
@@ -541,12 +541,12 @@ module {
 
 module {
   // CHECK-LABEL: hw.module @PortOrder_6072
-  hw.module @PortOrder_6072(%clock: !seq.clock, %in: i1) {
+  hw.module @PortOrder_6072(in %clock : !seq.clock, in %in : i1) {
     hw.instance "dut" @Foo(clock: %clock: !seq.clock, in: %in: i1) -> ()
     hw.output
   }
-  // CHECK: hw.module @Foo_cover(%clock: !seq.clock, %in: i1)
-  hw.module private @Foo(%clock: !seq.clock, %in: i1) {
+  // CHECK: hw.module @Foo_cover(in %clock : !seq.clock, in %in : i1)
+  hw.module private @Foo(in %clock: !seq.clock, in %in: i1) {
     %0 = seq.from_clock %clock
     sv.cover.concurrent posedge %0, %in label "cover__hello"
     hw.output

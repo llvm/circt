@@ -8,10 +8,10 @@ hw.module @Empty() {
 
 
 // CHECK-LABEL: hw.module @Passthrough(
-// CHECK-SAME:    [[TMP:%.+]]: i4) -> (z: i4) {
+// CHECK-SAME:    in [[TMP:%.+]] : i4, out z : i4) {
 // CHECK-NEXT:    hw.output [[TMP]]
 // CHECK-NEXT:  }
-hw.module @Passthrough(%a: i4) -> (z: i4) {
+hw.module @Passthrough(in %a: i4, out z: i4) {
   hw.output %a : i4
 }
 
@@ -25,7 +25,7 @@ hw.module @Passthrough(%a: i4) -> (z: i4) {
 // CHECK-NEXT:  }
 
 // CHECK-LABEL: hw.module @CombOnly
-hw.module @CombOnly(%i0: i4, %i1: i4) -> (z: i4) {
+hw.module @CombOnly(in %i0: i4, in %i1: i4, out z: i4) {
   // CHECK-NEXT: [[TMP:%.+]] = arc.state @CombOnly_arc(%i0, %i1) lat 0
   // CHECK-NEXT: hw.output [[TMP]]
   %0 = comb.add %i0, %i1 : i4
@@ -43,7 +43,7 @@ hw.module @CombOnly(%i0: i4, %i1: i4) -> (z: i4) {
 // CHECK-NEXT:  }
 
 // CHECK-LABEL: hw.module @SplitAtConstants
-hw.module @SplitAtConstants() -> (z: i4) {
+hw.module @SplitAtConstants(out z: i4) {
   // CHECK-NEXT: %c1_i4 = hw.constant 1
   // CHECK-NEXT: [[TMP:%.+]] = arc.state @SplitAtConstants_arc(%c1_i4) lat 0
   // CHECK-NEXT: hw.output [[TMP]]
@@ -70,7 +70,7 @@ hw.module @SplitAtConstants() -> (z: i4) {
 // CHECK-NEXT:  }
 
 // CHECK-LABEL: hw.module @Pipeline
-hw.module @Pipeline(%clock: !seq.clock, %i0: i4, %i1: i4) -> (z: i4) {
+hw.module @Pipeline(in %clock: !seq.clock, in %i0: i4, in %i1: i4, out z: i4) {
   // CHECK-NEXT: [[S0:%.+]] = arc.state @Pipeline_arc(%i0, %i1) clock %clock lat 1
   // CHECK-NEXT: [[S1:%.+]] = arc.state @Pipeline_arc_0([[S0]], %i0) clock %clock lat 1
   // CHECK-NEXT: [[S2:%.+]] = arc.state @Pipeline_arc_1([[S1]], %i1) lat 0
@@ -94,7 +94,7 @@ hw.module @Pipeline(%clock: !seq.clock, %i0: i4, %i1: i4) -> (z: i4) {
 // CHECK-NEXT:  }
 
 // CHECK-LABEL: hw.module @Reshuffling
-hw.module @Reshuffling(%clockA: !seq.clock, %clockB: !seq.clock) -> (z0: i4, z1: i4, z2: i4, z3: i4) {
+hw.module @Reshuffling(in %clockA: !seq.clock, in %clockB: !seq.clock, out z0: i4, out z1: i4, out z2: i4, out z3: i4) {
   // CHECK-NEXT: hw.instance "x" @Reshuffling2()
   // CHECK-NEXT: arc.state @Reshuffling_arc(%x.z0, %x.z1) clock %clockA lat 1
   // CHECK-NEXT: arc.state @Reshuffling_arc_0(%x.z2, %x.z3) clock %clockB lat 1
@@ -108,7 +108,7 @@ hw.module @Reshuffling(%clockA: !seq.clock, %clockB: !seq.clock) -> (z0: i4, z1:
 }
 // CHECK-NEXT: }
 
-hw.module.extern private @Reshuffling2() -> (z0: i4, z1: i4, z2: i4, z3: i4)
+hw.module.extern private @Reshuffling2(out z0: i4, out z1: i4, out z2: i4, out z3: i4)
 
 
 // CHECK-LABEL: arc.define @FactorOutCommonOps_arc(
@@ -127,7 +127,7 @@ hw.module.extern private @Reshuffling2() -> (z0: i4, z1: i4, z2: i4, z3: i4)
 // CHECK-NEXT:  }
 
 // CHECK-LABEL: hw.module @FactorOutCommonOps
-hw.module @FactorOutCommonOps(%clock: !seq.clock, %i0: i4, %i1: i4) -> (o0: i4, o1: i4) {
+hw.module @FactorOutCommonOps(in %clock: !seq.clock, in %i0: i4, in %i1: i4, out o0: i4, out o1: i4) {
   // CHECK-DAG: [[T0:%.+]] = arc.state @FactorOutCommonOps_arc_1(%i0, %i1) lat 0
   %0 = comb.add %i0, %i1 : i4
   // CHECK-DAG: [[T1:%.+]] = arc.state @FactorOutCommonOps_arc([[T0]], %i0) clock %clock lat 1
@@ -153,7 +153,7 @@ hw.module @FactorOutCommonOps(%clock: !seq.clock, %i0: i4, %i1: i4) -> (o0: i4, 
 // CHECK-NEXT:  }
 
 // CHECK-LABEL: hw.module @SplitAtInstance(
-hw.module @SplitAtInstance(%a: i4) -> (z: i4) {
+hw.module @SplitAtInstance(in %a: i4, out z: i4) {
   // CHECK-DAG: [[T0:%.+]] = arc.state @SplitAtInstance_arc(%a) lat 0
   // CHECK-DAG: [[T1:%.+]] = hw.instance "x" @SplitAtInstance2(a: [[T0]]: i4)
   // CHECK-DAG: [[T2:%.+]] = arc.state @SplitAtInstance_arc_0([[T1]]) lat 0
@@ -165,11 +165,11 @@ hw.module @SplitAtInstance(%a: i4) -> (z: i4) {
 }
 // CHECK-NEXT: }
 
-hw.module.extern private @SplitAtInstance2(%a: i4) -> (z: i4)
+hw.module.extern private @SplitAtInstance2(in %a: i4, out z: i4)
 
 
 // CHECK-LABEL: hw.module @AbsorbNames
-hw.module @AbsorbNames(%clock: !seq.clock) -> () {
+hw.module @AbsorbNames(in %clock: !seq.clock) {
   // CHECK-NEXT: %x.z0, %x.z1 = hw.instance "x" @AbsorbNames2()
   // CHECK-NEXT: arc.state @AbsorbNames_arc(%x.z0, %x.z1) clock %clock lat 1
   // CHECK-SAME:   {names = ["myRegA", "myRegB"]}
@@ -180,14 +180,14 @@ hw.module @AbsorbNames(%clock: !seq.clock) -> () {
 }
 // CHECK-NEXT: }
 
-hw.module.extern @AbsorbNames2() -> (z0: i4, z1: i4)
+hw.module.extern @AbsorbNames2(out z0: i4, out z1: i4)
 
 // CHECK:   arc.define @[[TRIVIAL_ARC:.+]]([[ARG0:%.+]]: i4)
 // CHECK-NEXT:     arc.output [[ARG0]]
 // CHECK-NEXT:  }
 
 // CHECK-LABEL: hw.module @Trivial(
-hw.module @Trivial(%clock: !seq.clock, %i0: i4, %reset: i1) -> (out: i4) {
+hw.module @Trivial(in %clock: !seq.clock, in %i0: i4, in %reset: i1, out out: i4) {
   // CHECK: [[RES0:%.+]] = arc.state @[[TRIVIAL_ARC]](%i0) clock %clock reset %reset lat 1 {names = ["foo"]
   // CHECK-NEXT: hw.output [[RES0:%.+]]
   %0 = hw.constant 0 : i4
@@ -205,7 +205,7 @@ hw.module @Trivial(%clock: !seq.clock, %i0: i4, %reset: i1) -> (out: i4) {
 // CHECK-NEXT:  }
 
 // CHECK-LABEL: hw.module @NonTrivial(
-hw.module @NonTrivial(%clock: !seq.clock, %i0: i4, %reset1: i1, %reset2: i1) -> (out1: i4, out2: i4) {
+hw.module @NonTrivial(in %clock: !seq.clock, in %i0: i4, in %reset1: i1, in %reset2: i1, out out1: i4, out out2: i4) {
   // CHECK: [[RES2:%.+]] = arc.state @[[NONTRIVIAL_ARC_0]](%i0) clock %clock reset %reset1 lat 1 {names = ["foo"]
   // CHECK-NEXT: [[RES3:%.+]] = arc.state @[[NONTRIVIAL_ARC_1]](%i0) clock %clock reset %reset2 lat 1 {names = ["bar"]
   // CHECK-NEXT: hw.output [[RES2]], [[RES3]]

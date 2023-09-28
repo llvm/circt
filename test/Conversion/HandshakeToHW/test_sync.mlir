@@ -1,7 +1,6 @@
 // RUN: circt-opt -lower-handshake-to-hw -split-input-file %s | FileCheck %s
 
-// CHECK-LABEL:   hw.module @handshake_sync_in_ui32_out_ui32(
-// CHECK-SAME:                                               %[[VAL_0:.*]]: !esi.channel<i0>, %[[VAL_1:.*]]: !esi.channel<i32>, %[[CLOCK:.*]]: !seq.clock, %[[VAL_3:.*]]: i1) -> (out0: !esi.channel<i0>, out1: !esi.channel<i32>) {
+// CHECK:   hw.module @handshake_sync_in_ui32_out_ui32(in %[[VAL_0:.*]] : !esi.channel<i0>, in %[[VAL_1:.*]] : !esi.channel<i32>, in %[[CLOCK:.*]] : !seq.clock, in %[[VAL_3:.*]] : i1, out out0 : !esi.channel<i0>, out out1 : !esi.channel<i32>) {
 // CHECK:           %[[VAL_4:.*]], %[[VAL_5:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_6:.*]] : i0
 // CHECK:           %[[VAL_7:.*]], %[[VAL_8:.*]] = esi.unwrap.vr %[[VAL_1]], %[[VAL_6]] : i32
 // CHECK:           %[[VAL_9:.*]], %[[VAL_10:.*]] = esi.wrap.vr %[[VAL_4]], %[[VAL_11:.*]] : i0
