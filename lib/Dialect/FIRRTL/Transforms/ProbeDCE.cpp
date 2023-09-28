@@ -20,6 +20,7 @@
 #include "mlir/IR/Iterators.h"
 #include "mlir/IR/Threading.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/SaveAndRestore.h"
 
 #define DEBUG_TYPE "firrtl-probe-dce"
 
@@ -82,6 +83,102 @@ std::unique_ptr<mlir::Pass> circt::firrtl::createProbeDCEPass() {
 // Per-module input probe removal.
 //===----------------------------------------------------------------------===//
 
+/// Forward slice of input probes.
+class InputProbeForwardSlicer {
+  // Build cumulatively, slice individually for diagnostic specificity.
+  DenseSet<Operation *> slice;
+
+  // Current slice source, only valid while slicing.
+  BlockArgument arg;
+
+  /// Operation is in forward slice, add.
+  void chase(SmallVectorImpl<Operation *> &worklist, Operation *op) {
+    if (!slice.insert(op).second)
+      return;
+    worklist.push_back(op);
+  }
+
+  /// Forward slice through value -> users.
+  void chaseUsers(SmallVectorImpl<Operation *> &worklist, Value v) {
+    for (auto *user : v.getUsers())
+      chase(worklist, user);
+  }
+
+  /// Upwards chase for connect, and chase all users.
+  LogicalResult chaseVal(SmallVectorImpl<Operation *> &worklist, Value v) {
+    if (auto depArg = dyn_cast<BlockArgument>(v)) {
+      // Input probe flows to different argument?
+      // With current (valid) IR this should not be possible.
+      if (depArg != arg)
+        return emitError(depArg.getLoc(), "argument depends on input probe")
+                   .attachNote(arg.getLoc())
+               << "input probe";
+      // Shouldn't happen either, but safe to ignore.
+      return success();
+    }
+    auto *op = v.getDefiningOp();
+    assert(op);
+    chase(worklist, op);
+    chaseUsers(worklist, v);
+    return success();
+  }
+
+public:
+  bool contains(Operation *op) const { return slice.contains(op); }
+  bool empty() const { return slice.empty(); }
+  size_t size() const { return slice.size(); }
+
+  const DenseSet<Operation *> &get() const { return slice; }
+
+  /// Forward slice through the given input probe argument, diagnosing
+  /// illegal/unsupported uses if encountered.
+  LogicalResult add(BlockArgument arg) {
+    llvm::SaveAndRestore<BlockArgument> x(this->arg, arg);
+    SmallVector<Operation *> worklist;
+
+    // Start with all users of the input probe.
+    chaseUsers(worklist, arg);
+
+    while (!worklist.empty()) {
+      auto *op = worklist.pop_back_val();
+
+      // Generally just walk users.  Only "backwards" chasing is for connect,
+      // which only flows to the destination which must not be a refsub or cast.
+      auto result =
+          TypeSwitch<Operation *, LogicalResult>(op)
+              .Case([&](InstanceOp inst) {
+                // Ignore, only reachable via connect which also chases users
+                // for us.  Don't chase results not in slice.
+                return success();
+              })
+              .Case([&](FConnectLike connect) {
+                return chaseVal(worklist, connect.getDest());
+              })
+              .Case([&](RefSubOp op) {
+                chaseUsers(worklist, op.getResult());
+                return success();
+              })
+              .Case([&](RefCastOp op) {
+                chaseUsers(worklist, op.getResult());
+                return success();
+              })
+              .Case([&](WireOp op) {
+                // Ignore, only reachable via connect which also chases users
+                // for us.
+                return success();
+              })
+              .Default([&](auto *op) -> LogicalResult {
+                return emitError(op->getLoc(), "input probes cannot be used")
+                           .attachNote(arg.getLoc())
+                       << "input probe here";
+              });
+      if (failed(result))
+        return result;
+    }
+    return success();
+  }
+};
+
 FailureOr<bool>
 ProbeDCEPass::process(FModuleLike mod,
                       std::optional<std::reference_wrapper<InstanceGraph>> ig) {
@@ -111,88 +208,15 @@ ProbeDCEPass::process(FModuleLike mod,
     return false;
   }
 
-  SmallVector<BlockArgument> args;
   BitVector portsToErase(mod.getNumPorts());
 
   // Forward slice over users of each.
   // Build cumulatively, slice individually for diagnostic specificity.
-  DenseSet<Operation *> toRemoveIfNotInst;
-  SmallVector<Operation *> worklist;
+  InputProbeForwardSlicer slice;
   for (auto idx : probePortIndices) {
-    worklist.clear();
-
-    auto arg = modOp.getArgument(idx);
     portsToErase.set(idx);
-
-    // Operation is in forward slice, add.
-    auto chase = [&](Operation *op) {
-      if (!toRemoveIfNotInst.insert(op).second)
-        return;
-      worklist.push_back(op);
-    };
-    // Forward slice through value -> users.
-    auto chaseUsers = [&](Value v) {
-      for (auto *user : v.getUsers())
-        chase(user);
-    };
-    // Upwards chase for connect, and chase all users.
-    auto chaseVal = [&](Value v) -> LogicalResult {
-      if (auto depArg = dyn_cast<BlockArgument>(v)) {
-        // Input probe flows to different argument?
-        // With current (valid) IR this should not be possible.
-        if (depArg != arg)
-          return emitError(depArg.getLoc(), "argument depends on input probe")
-                     .attachNote(arg.getLoc())
-                 << "input probe";
-        // Shouldn't happen either, but safe to ignore.
-        return success();
-      }
-      auto *op = v.getDefiningOp();
-      assert(op);
-      chase(op);
-      chaseUsers(v);
-      return success();
-    };
-
-    // Start with all users of the input probe.
-    chaseUsers(arg);
-
-    while (!worklist.empty()) {
-      auto *op = worklist.pop_back_val();
-
-      // Generally just walk users.  Only "backwards" chasing is for connect,
-      // which only flows to the destination which must not be a refsub or cast.
-      auto result =
-          TypeSwitch<Operation *, LogicalResult>(op)
-              .Case([&](InstanceOp inst) {
-                // Ignore, only reachable via connect which also chases users
-                // for us.  Don't chase results not in slice.
-                return success();
-              })
-              .Case([&](FConnectLike connect) {
-                return chaseVal(connect.getDest());
-              })
-              .Case([&](RefSubOp op) {
-                chaseUsers(op.getResult());
-                return success();
-              })
-              .Case([&](RefCastOp op) {
-                chaseUsers(op.getResult());
-                return success();
-              })
-              .Case([&](WireOp op) {
-                // Ignore, only reachable via connect which also chases users
-                // for us.
-                return success();
-              })
-              .Default([&](auto *op) -> LogicalResult {
-                return emitError(op->getLoc(), "input probes cannot be used")
-                           .attachNote(arg.getLoc())
-                       << "input probe here";
-              });
-      if (failed(result))
-        return result;
-    }
+    if (failed(slice.add(modOp.getArgument(idx))))
+      return failure();
   }
 
   // Track whether any changes were made.
@@ -206,7 +230,7 @@ ProbeDCEPass::process(FModuleLike mod,
         auto inst = dyn_cast<InstanceOp>(op);
         // For everything that's not an instance, remove if in slice.
         if (!inst) {
-          if (toRemoveIfNotInst.contains(op)) {
+          if (slice.contains(op)) {
             ++numErasedOps;
             changes = true;
             op->erase();
