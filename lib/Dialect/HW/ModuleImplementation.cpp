@@ -250,9 +250,7 @@ ParseResult parseOptionalKeywordOrOptionalString(OpAsmParser &p,
     return success();
   }
 
-  // Just as easy to make the required return check happy this way.
-  if (succeeded(p.parseOptionalString(result)))
-    return success();
+  p.parseOptionalString(result);
   return success();
 }
 
