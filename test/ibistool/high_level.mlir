@@ -3,37 +3,55 @@
 // CHECK-LABEL:   ibis.class @ToHandshake {
 // CHECK:           %[[VAL_0:.*]] = ibis.this @ToHandshake
 // CHECK:           ibis.method.df @foo(%[[VAL_1:.*]]: index, %[[VAL_2:.*]]: index, %[[VAL_3:.*]]: i1, %[[VAL_4:.*]]: none) -> (i32, none) {
-// CHECK:             %[[VAL_5:.*]] = handshake.constant %[[VAL_4]] {value = 2 : i32} : i32
+// CHECK:             %[[VAL_5:.*]] = handshake.constant %[[VAL_4]] {value = 0 : i32} : i32
 // CHECK:             %[[VAL_6:.*]] = handshake.constant %[[VAL_4]] {value = 1 : index} : index
-// CHECK:             %[[VAL_7:.*]] = handshake.constant %[[VAL_4]] {value = 0 : i32} : i32
-// CHECK:             %[[VAL_8:.*]] = handshake.buffer [1] seq %[[VAL_9:.*]] {initValues = [0]} : i1
-// CHECK:             %[[VAL_10:.*]] = handshake.mux %[[VAL_8]] {{\[}}%[[VAL_4]], %[[VAL_11:.*]]] : i1, none
-// CHECK:             %[[VAL_12:.*]] = handshake.mux %[[VAL_8]] {{\[}}%[[VAL_1]], %[[VAL_13:.*]]] : i1, index
-// CHECK:             %[[VAL_14:.*]] = handshake.mux %[[VAL_8]] {{\[}}%[[VAL_7]], %[[VAL_15:.*]]] : i1, i32
-// CHECK:             %[[VAL_16:.*]] = handshake.mux %[[VAL_8]] {{\[}}%[[VAL_2]], %[[VAL_17:.*]]] : i1, index
-// CHECK:             %[[VAL_18:.*]] = handshake.mux %[[VAL_8]] {{\[}}%[[VAL_5]], %[[VAL_19:.*]]] : i1, i32
-// CHECK:             %[[VAL_20:.*]] = handshake.mux %[[VAL_8]] {{\[}}%[[VAL_6]], %[[VAL_21:.*]]] : i1, index
-// CHECK:             %[[VAL_22:.*]] = handshake.mux %[[VAL_8]] {{\[}}%[[VAL_7]], %[[VAL_23:.*]]] : i1, i32
-// CHECK:             %[[VAL_9]] = arith.cmpi slt, %[[VAL_12]], %[[VAL_16]] : index
-// CHECK:             %[[VAL_24:.*]], %[[VAL_25:.*]] = handshake.cond_br %[[VAL_9]], %[[VAL_12]] : index
-// CHECK:             %[[VAL_26:.*]], %[[VAL_27:.*]] = handshake.cond_br %[[VAL_9]], %[[VAL_14]] : i32
-// CHECK:             %[[VAL_17]], %[[VAL_28:.*]] = handshake.cond_br %[[VAL_9]], %[[VAL_16]] : index
-// CHECK:             %[[VAL_19]], %[[VAL_29:.*]] = handshake.cond_br %[[VAL_9]], %[[VAL_18]] : i32
-// CHECK:             %[[VAL_21]], %[[VAL_30:.*]] = handshake.cond_br %[[VAL_9]], %[[VAL_20]] : index
-// CHECK:             %[[VAL_23]], %[[VAL_31:.*]] = handshake.cond_br %[[VAL_9]], %[[VAL_22]] : i32
-// CHECK:             %[[VAL_32:.*]], %[[VAL_33:.*]] = handshake.cond_br %[[VAL_9]], %[[VAL_10]] : none
-// CHECK:             %[[VAL_34:.*]] = arith.index_cast %[[VAL_24]] : index to i32
-// CHECK:             %[[VAL_35:.*]] = arith.remsi %[[VAL_26]], %[[VAL_19]] : i32
-// CHECK:             %[[VAL_36:.*]] = arith.cmpi eq, %[[VAL_35]], %[[VAL_23]] : i32
-// CHECK:             %[[VAL_37:.*]], %[[VAL_38:.*]] = handshake.cond_br %[[VAL_36]], %[[VAL_26]] : i32
-// CHECK:             %[[VAL_39:.*]], %[[VAL_40:.*]] = handshake.cond_br %[[VAL_36]], %[[VAL_32]] : none
-// CHECK:             %[[VAL_41:.*]], %[[VAL_42:.*]] = handshake.cond_br %[[VAL_36]], %[[VAL_34]] : i32
-// CHECK:             %[[VAL_43:.*]] = arith.addi %[[VAL_37]], %[[VAL_41]] : i32
-// CHECK:             %[[VAL_44:.*]] = arith.subi %[[VAL_38]], %[[VAL_42]] : i32
-// CHECK:             %[[VAL_15]] = handshake.mux %[[VAL_45:.*]] {{\[}}%[[VAL_44]], %[[VAL_43]]] : index, i32
-// CHECK:             %[[VAL_11]], %[[VAL_45]] = handshake.control_merge %[[VAL_40]], %[[VAL_39]] : none, index
-// CHECK:             %[[VAL_13]] = arith.addi %[[VAL_24]], %[[VAL_21]] : index
-// CHECK:             ibis.return %[[VAL_27]], %[[VAL_33]] : i32, none
+// CHECK:             %[[VAL_7:.*]] = handshake.constant %[[VAL_4]] {value = 2 : i32} : i32
+// CHECK:             %[[VAL_8:.*]]:3 = ibis.sblock () -> (i32, index, i32) {
+// CHECK:               ibis.sblock.return %[[VAL_7]], %[[VAL_6]], %[[VAL_5]] : i32, index, i32
+// CHECK:             }
+// CHECK:             %[[VAL_9:.*]] = handshake.buffer [1] seq %[[VAL_10:.*]] {initValues = [0]} : i1
+// CHECK:             %[[VAL_11:.*]] = handshake.mux %[[VAL_9]] {{\[}}%[[VAL_4]], %[[VAL_12:.*]]] : i1, none
+// CHECK:             %[[VAL_13:.*]] = handshake.mux %[[VAL_9]] {{\[}}%[[VAL_1]], %[[VAL_14:.*]]] : i1, index
+// CHECK:             %[[VAL_15:.*]] = handshake.mux %[[VAL_9]] {{\[}}%[[VAL_16:.*]]#2, %[[VAL_17:.*]]] : i1, i32
+// CHECK:             %[[VAL_18:.*]] = handshake.mux %[[VAL_9]] {{\[}}%[[VAL_2]], %[[VAL_19:.*]]] : i1, index
+// CHECK:             %[[VAL_20:.*]] = handshake.mux %[[VAL_9]] {{\[}}%[[VAL_16]]#0, %[[VAL_21:.*]]] : i1, i32
+// CHECK:             %[[VAL_22:.*]] = handshake.mux %[[VAL_9]] {{\[}}%[[VAL_16]]#1, %[[VAL_23:.*]]] : i1, index
+// CHECK:             %[[VAL_24:.*]] = handshake.mux %[[VAL_9]] {{\[}}%[[VAL_16]]#2, %[[VAL_25:.*]]] : i1, i32
+// CHECK:             %[[VAL_10]] = ibis.sblock (%[[VAL_26:.*]] : index = %[[VAL_13]], %[[VAL_27:.*]] : index = %[[VAL_18]]) -> i1 {
+// CHECK:               %[[VAL_28:.*]] = arith.cmpi slt, %[[VAL_26]], %[[VAL_27]] : index
+// CHECK:               ibis.sblock.return %[[VAL_28]] : i1
+// CHECK:             }
+// CHECK:             %[[VAL_29:.*]], %[[VAL_30:.*]] = handshake.cond_br %[[VAL_10]], %[[VAL_13]] : index
+// CHECK:             %[[VAL_31:.*]], %[[VAL_32:.*]] = handshake.cond_br %[[VAL_10]], %[[VAL_15]] : i32
+// CHECK:             %[[VAL_19]], %[[VAL_33:.*]] = handshake.cond_br %[[VAL_10]], %[[VAL_18]] : index
+// CHECK:             %[[VAL_21]], %[[VAL_34:.*]] = handshake.cond_br %[[VAL_10]], %[[VAL_20]] : i32
+// CHECK:             %[[VAL_23]], %[[VAL_35:.*]] = handshake.cond_br %[[VAL_10]], %[[VAL_22]] : index
+// CHECK:             %[[VAL_25]], %[[VAL_36:.*]] = handshake.cond_br %[[VAL_10]], %[[VAL_24]] : i32
+// CHECK:             %[[VAL_37:.*]], %[[VAL_38:.*]] = handshake.cond_br %[[VAL_10]], %[[VAL_11]] : none
+// CHECK:             %[[VAL_39:.*]]:2 = ibis.sblock (%[[VAL_26]] : index = %[[VAL_29]], %[[VAL_40:.*]] : i32 = %[[VAL_31]], %[[VAL_41:.*]] : i32 = %[[VAL_21]], %[[VAL_42:.*]] : i32 = %[[VAL_25]]) -> (i32, i1) {
+// CHECK:               %[[VAL_43:.*]] = arith.index_cast %[[VAL_26]] : index to i32
+// CHECK:               %[[VAL_44:.*]] = arith.remsi %[[VAL_40]], %[[VAL_41]] : i32
+// CHECK:               %[[VAL_45:.*]] = arith.cmpi eq, %[[VAL_44]], %[[VAL_42]] : i32
+// CHECK:               ibis.sblock.return %[[VAL_43]], %[[VAL_45]] : i32, i1
+// CHECK:             }
+// CHECK:             %[[VAL_46:.*]], %[[VAL_47:.*]] = handshake.cond_br %[[VAL_48:.*]]#1, %[[VAL_31]] : i32
+// CHECK:             %[[VAL_49:.*]], %[[VAL_50:.*]] = handshake.cond_br %[[VAL_48]]#1, %[[VAL_37]] : none
+// CHECK:             %[[VAL_51:.*]], %[[VAL_52:.*]] = handshake.cond_br %[[VAL_48]]#1, %[[VAL_48]]#0 : i32
+// CHECK:             %[[VAL_53:.*]] = ibis.sblock (%[[VAL_26]] : i32 = %[[VAL_46]], %[[VAL_54:.*]] : i32 = %[[VAL_51]]) -> i32 {
+// CHECK:               %[[VAL_55:.*]] = arith.addi %[[VAL_26]], %[[VAL_54]] : i32
+// CHECK:               ibis.sblock.return %[[VAL_55]] : i32
+// CHECK:             }
+// CHECK:             %[[VAL_56:.*]] = ibis.sblock (%[[VAL_26]] : i32 = %[[VAL_47]], %[[VAL_57:.*]] : i32 = %[[VAL_52]]) -> i32 {
+// CHECK:               %[[VAL_58:.*]] = arith.subi %[[VAL_26]], %[[VAL_57]] : i32
+// CHECK:               ibis.sblock.return %[[VAL_58]] : i32
+// CHECK:             }
+// CHECK:             %[[VAL_17]] = handshake.mux %[[VAL_59:.*]] {{\[}}%[[VAL_56]], %[[VAL_53]]] : index, i32
+// CHECK:             %[[VAL_12]], %[[VAL_59]] = handshake.control_merge %[[VAL_50]], %[[VAL_49]] : none, index
+// CHECK:             %[[VAL_14]] = ibis.sblock (%[[VAL_26]] : index = %[[VAL_29]], %[[VAL_60:.*]] : index = %[[VAL_23]]) -> index {
+// CHECK:               %[[VAL_61:.*]] = arith.addi %[[VAL_26]], %[[VAL_60]] : index
+// CHECK:               ibis.sblock.return %[[VAL_61]] : index
+// CHECK:             }
+// CHECK:             ibis.return %[[VAL_32]], %[[VAL_38]] : i32, none
 // CHECK:           }
 // CHECK:         }
 
