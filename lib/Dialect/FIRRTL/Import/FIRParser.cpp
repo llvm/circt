@@ -2582,7 +2582,7 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
   case FIRToken::lp_release_initial:
     return parseRefReleaseInitial();
   case FIRToken::kw_group:
-    if (requireFeature({3, 1, 0}, "optional groups"))
+    if (requireFeature({3, 2, 0}, "optional groups"))
       return failure();
     return parseGroup(stmtIndent);
 
@@ -4749,7 +4749,7 @@ ParseResult FIRCircuitParser::parseToplevelDefinition(CircuitOp circuit,
   case FIRToken::kw_class:
     return parseClass(circuit, indent);
   case FIRToken::kw_declgroup:
-    if (requireFeature({3, 1, 0}, "optional groups"))
+    if (requireFeature({3, 2, 0}, "optional groups"))
       return failure();
     return parseGroupDecl(circuit);
   case FIRToken::kw_extclass:
