@@ -21,16 +21,17 @@ namespace ibis {
 #define GEN_PASS_DECL_IBISTUNNELING
 #include "circt/Dialect/Ibis/IbisPasses.h.inc"
 
-std::unique_ptr<Pass> createCallPrepPass();
-std::unique_ptr<Pass> createContainerizePass();
-std::unique_ptr<Pass> createTunnelingPass(const IbisTunnelingOptions & = {});
-std::unique_ptr<Pass> createPortrefLoweringPass();
-std::unique_ptr<Pass> createCleanSelfdriversPass();
-std::unique_ptr<Pass> createContainersToHWPass();
-std::unique_ptr<Pass> createArgifyBlocksPass();
-std::unique_ptr<Pass> createReblockPass();
-std::unique_ptr<Pass> createInlineSBlocksPass();
-std::unique_ptr<Pass> createConvertCFToHandshakePass();
+std::unique_ptr<mlir::Pass> createCallPrepPass();
+std::unique_ptr<mlir::Pass> createContainerizePass();
+std::unique_ptr<mlir::Pass>
+createTunnelingPass(const IbisTunnelingOptions & = {});
+std::unique_ptr<mlir::Pass> createPortrefLoweringPass();
+std::unique_ptr<mlir::Pass> createCleanSelfdriversPass();
+std::unique_ptr<mlir::Pass> createContainersToHWPass();
+std::unique_ptr<mlir::Pass> createArgifyBlocksPass();
+std::unique_ptr<mlir::Pass> createReblockPass();
+std::unique_ptr<mlir::Pass> createInlineSBlocksPass();
+std::unique_ptr<mlir::Pass> createConvertCFToHandshakePass();
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION

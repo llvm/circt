@@ -9,6 +9,7 @@ add_circt_dialect_library(CIRCTIbisTransforms
   IbisReblockPass.cpp
   IbisInlineSBlocksPass.cpp
   IbisConvertCFToHandshake.cpp
+  IbisPassPipelines.cpp
 
   DEPENDS
   CIRCTIbisTransformsIncGen
