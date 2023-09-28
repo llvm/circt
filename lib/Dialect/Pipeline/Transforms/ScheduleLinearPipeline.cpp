@@ -196,17 +196,12 @@ ScheduleLinearPipelinePass::schedulePipeline(UnscheduledPipelineOp pipeline) {
 }
 
 void ScheduleLinearPipelinePass::runOnOperation() {
-  if (getOperation()->getNumRegions() == 0)
-    return;
-
-  for (auto pipeline :
-       llvm::make_early_inc_range(getOperation()
-                                      ->getRegions()
-                                      .front()
-                                      .front()
-                                      .getOps<UnscheduledPipelineOp>())) {
-    if (failed(schedulePipeline(pipeline)))
-      return signalPassFailure();
+  for (auto &region : getOperation()->getRegions()) {
+    for (auto pipeline :
+         llvm::make_early_inc_range(region.getOps<UnscheduledPipelineOp>())) {
+      if (failed(schedulePipeline(pipeline)))
+        return signalPassFailure();
+    }
   }
 }
 
