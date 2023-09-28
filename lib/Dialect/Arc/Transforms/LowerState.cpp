@@ -10,6 +10,7 @@
 #include "circt/Dialect/Arc/ArcPasses.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Support/BackedgeBuilder.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMAttrs.h"
@@ -61,8 +62,6 @@ struct Statistics {
 struct ClockLowering {
   /// The root clock this lowering is for.
   Value clock;
-  /// The new clock.
-  Backedge newClock;
   /// A `ClockTreeOp` or `PassThroughOp`.
   Operation *treeOp;
   /// Pass statistics.
@@ -74,10 +73,8 @@ struct ClockLowering {
   /// A cache of AND gates created for aggregating enable conditions.
   DenseMap<std::pair<Value, Value>, Value> andCache;
 
-  ClockLowering(Value clock, Backedge newClock, Operation *treeOp,
-                Statistics &stats)
-      : clock(clock), newClock(newClock), treeOp(treeOp), stats(stats),
-        builder(treeOp) {
+  ClockLowering(Value clock, Operation *treeOp, Statistics &stats)
+      : clock(clock), treeOp(treeOp), stats(stats), builder(treeOp) {
     assert((isa<ClockTreeOp, PassThroughOp>(treeOp)));
     builder.setInsertionPointToStart(&treeOp->getRegion(0).front());
   }
@@ -107,8 +104,7 @@ struct ModuleLowering {
 
   ModuleLowering(HWModuleOp moduleOp, Statistics &stats)
       : moduleOp(moduleOp), stats(stats), context(moduleOp.getContext()),
-        clockBuilder(moduleOp), stateBuilder(moduleOp), edgeBuilder(moduleOp),
-        backedgeBuilder(edgeBuilder, moduleOp.getLoc()) {}
+        clockBuilder(moduleOp), stateBuilder(moduleOp) {}
 
   GatedClockLowering getOrCreateClockLowering(Value clock);
   ClockLowering &getOrCreatePassThrough();
@@ -126,10 +122,6 @@ struct ModuleLowering {
   LogicalResult lowerExtModule(InstanceOp instOp);
 
   LogicalResult cleanup();
-
-private:
-  OpBuilder edgeBuilder;
-  BackedgeBuilder backedgeBuilder;
 };
 } // namespace
 
@@ -271,7 +263,8 @@ GatedClockLowering ModuleLowering::getOrCreateClockLowering(Value clock) {
   // Create the `ClockTreeOp` that corresponds to this ungated clock.
   auto &slot = clockLowerings[clock];
   if (!slot) {
-    auto newClock = backedgeBuilder.get(stateBuilder.getI1Type());
+    auto newClock =
+        clockBuilder.createOrFold<seq::FromClockOp>(clock.getLoc(), clock);
 
     // Detect a rising edge on the clock, as `(old != new) & new`.
     auto oldClockStorage = stateBuilder.create<AllocStateOp>(
@@ -288,7 +281,7 @@ GatedClockLowering ModuleLowering::getOrCreateClockLowering(Value clock) {
     // Create the tree op.
     auto treeOp = clockBuilder.create<ClockTreeOp>(clock.getLoc(), trigger);
     treeOp.getBody().emplaceBlock();
-    slot = std::make_unique<ClockLowering>(clock, newClock, treeOp, stats);
+    slot = std::make_unique<ClockLowering>(clock, treeOp, stats);
   }
   return GatedClockLowering{*slot, Value{}};
 }
@@ -298,7 +291,7 @@ ClockLowering &ModuleLowering::getOrCreatePassThrough() {
   if (!slot) {
     auto treeOp = clockBuilder.create<PassThroughOp>(moduleOp.getLoc());
     treeOp.getBody().emplaceBlock();
-    slot = std::make_unique<ClockLowering>(Value{}, Backedge{}, treeOp, stats);
+    slot = std::make_unique<ClockLowering>(Value{}, treeOp, stats);
   }
   return *slot;
 }
@@ -307,7 +300,9 @@ ClockLowering &ModuleLowering::getOrCreatePassThrough() {
 Value ModuleLowering::replaceValueWithStateRead(Value value, Value state) {
   OpBuilder builder(state.getContext());
   builder.setInsertionPointAfterValue(state);
-  auto readOp = builder.create<StateReadOp>(value.getLoc(), state);
+  Value readOp = builder.create<StateReadOp>(value.getLoc(), state);
+  if (isa<seq::ClockType>(value.getType()))
+    readOp = builder.createOrFold<seq::ToClockOp>(value.getLoc(), readOp);
   value.replaceAllUsesWith(readOp);
   return readOp;
 }
@@ -338,10 +333,7 @@ LogicalResult ModuleLowering::lowerPrimaryInputs() {
     }
     auto state = stateBuilder.create<RootInputOp>(
         blockArg.getLoc(), StateType::get(innerTy), name, storageArg);
-    Value readOp = replaceValueWithStateRead(blockArg, state);
-    // Presently all clocks must be arguments, so they can be resolved here.
-    if (auto it = clockLowerings.find(blockArg); it != clockLowerings.end())
-      it->second->newClock.setValue(readOp);
+    replaceValueWithStateRead(blockArg, state);
   }
   return success();
 }
@@ -354,18 +346,26 @@ LogicalResult ModuleLowering::lowerPrimaryOutputs() {
     auto outputOperands = SmallVector<Value>(outputOp.getOperands());
     outputOp->dropAllReferences();
     auto &passThrough = getOrCreatePassThrough();
-    for (auto [value, name] :
+    for (auto [outputArg, name] :
          llvm::zip(outputOperands, moduleOp.getOutputNames())) {
-      auto intType = value.getType().dyn_cast<IntegerType>();
-      if (!intType)
+      IntegerType innerTy;
+      if (outputArg.getType().isa<seq::ClockType>()) {
+        innerTy = IntegerType::get(context, 1);
+      } else if (auto intType = outputArg.getType().dyn_cast<IntegerType>()) {
+        innerTy = intType;
+      } else {
         return mlir::emitError(outputOp.getLoc(), "output ")
-               << name << " is of non-integer type " << value.getType();
-      auto materializedValue = passThrough.materializeValue(value);
+               << name << " is of non-integer type " << outputArg.getType();
+      }
+      auto value = passThrough.materializeValue(outputArg);
       auto state = stateBuilder.create<RootOutputOp>(
-          outputOp.getLoc(), StateType::get(intType), name.cast<StringAttr>(),
+          outputOp.getLoc(), StateType::get(innerTy), name.cast<StringAttr>(),
           storageArg);
-      passThrough.builder.create<StateWriteOp>(outputOp.getLoc(), state,
-                                               materializedValue, Value{});
+      if (isa<seq::ClockType>(value.getType()))
+        value = passThrough.builder.createOrFold<seq::FromClockOp>(
+            outputOp.getLoc(), value);
+      passThrough.builder.create<StateWriteOp>(outputOp.getLoc(), state, value,
+                                               Value{});
     }
   }
   outputOp.erase();
@@ -799,13 +799,13 @@ LogicalResult LowerStatePass::runOnModule(HWModuleOp moduleOp,
   lowering.clockBuilder.setInsertionPoint(clockSentinel);
 
   lowering.addStorageArg();
-  if (failed(lowering.lowerStates()))
-    return failure();
-  if (failed(lowering.lowerExtModules(symtbl)))
-    return failure();
   if (failed(lowering.lowerPrimaryInputs()))
     return failure();
   if (failed(lowering.lowerPrimaryOutputs()))
+    return failure();
+  if (failed(lowering.lowerStates()))
+    return failure();
+  if (failed(lowering.lowerExtModules(symtbl)))
     return failure();
 
   // Clean up the module body which contains a lot of operations that the
