@@ -20,7 +20,7 @@ hw.module @adder(input %in1: i2, input %in2: i2, output out: i2) {
   hw.output %sum : i2
 }
 
-hw.module @halfAdder(input %in1: i1, input %in2: i1, output carry: i1, sum: i1) {
+hw.module @halfAdder(input %in1: i1, input %in2: i1, output carry: i1, output sum: i1) {
   %sum = comb.xor bin %in1, %in2 : i1
   %carry = comb.and bin %in1, %in2 : i1
   hw.output %carry, %sum: i1, i1
@@ -207,14 +207,14 @@ hw.module @subtractor(input %in1: i8, input %in2: i8, output out: i8) {
   hw.output %diff : i8
 }
 
-hw.module @halfSubtractor(input %in1: i1, input %in2: i1, output borrow: i1, diff: i1) {
+hw.module @halfSubtractor(input %in1: i1, input %in2: i1, output borrow: i1, output diff: i1) {
   %diff = comb.xor bin %in1, %in2 : i1
   %not_in1 = hw.instance "n_in1" @not(in: %in1: i1) -> (out: i1)
   %borrow = comb.and bin %not_in1, %in2 : i1
   hw.output %borrow, %diff: i1, i1
 }
 
-hw.module @fullSubtractor(input %in1: i1, input %in2: i1, input %b_in: i1, output borrow: i1, diff: i1) {
+hw.module @fullSubtractor(input %in1: i1, input %in2: i1, input %b_in: i1, output borrow: i1, output diff: i1) {
   %b1, %d1 = hw.instance "s1" @halfSubtractor(in1: %in1: i1, in2: %in2: i1) -> (borrow: i1, diff: i1)
   %b2, %d_out = hw.instance "s2" @halfSubtractor(in1: %d1: i1, in2: %b_in: i1) -> (borrow: i1, diff: i1)
   %b_out = comb.or bin %b1, %b2 : i1

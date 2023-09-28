@@ -1,6 +1,6 @@
-hw.module.extern @ichi(input %a: i2, input %b: i3, output c: i4, d: i5)
+hw.module.extern @ichi(input %a: i2, input %b: i3, output c: i4, output d: i5)
 
-hw.module @owo(, output owo_result : i32) {
+hw.module @owo(output owo_result : i32) {
   %0 = hw.constant 3 : i32
   hw.output %0 : i32
 }
