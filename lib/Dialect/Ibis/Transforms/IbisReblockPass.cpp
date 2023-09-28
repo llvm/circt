@@ -26,6 +26,9 @@ struct ReblockPass : public IbisReblockBase<ReblockPass> {
 
   // Transforms an `ibis.sblock.inline.begin/end` scope into an `ibis.sblock`.
   LogicalResult reblock(ArrayRef<Operation *> ops, Operation *blockTerminator);
+
+  /// Track ops that should be erased.
+  SmallVector<Operation *> opsToErase;
 };
 
 // Returns true if the given op signal that the existing set of sblock
@@ -55,6 +58,8 @@ void ReblockPass::runOnOperation() {
         opsToBlock.push_back(&op);
     }
   }
+
+  llvm::for_each(opsToErase, [](Operation *op) { op->erase(); });
 }
 
 LogicalResult ReblockPass::reblock(ArrayRef<Operation *> ops,
@@ -134,8 +139,8 @@ LogicalResult ReblockPass::reblock(ArrayRef<Operation *> ops,
 
   // If this was an explicit sblock, erase the markers.
   if (blockBeginOp) {
-    blockBeginOp.erase();
-    blockTerminator->erase();
+    opsToErase.push_back(blockBeginOp);
+    opsToErase.push_back(blockTerminator);
   }
 
   return success();
