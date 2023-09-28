@@ -37,15 +37,15 @@ hw.module @shl(in %a: i1, out b: i1) {
 
 hw.module @TESTSIMPLE(in %a: i4, in %b: i4, in %cond: i1, in %array: !hw.array<10xi4>,
                         in %uarray: !hw.uarray<16xi8>,
-  output r0: i4, output r1: i4, output r2: i4, output r3: i4,
-  output r4: i4, output r5: i4, output r6: i4, output r7: i4,
-  output r8: i4, output r9: i4, output r10: i4, output r11: i4,
-  output r12: i4, output r13: i1,
-  output r14: i1, output r15: i1, output r16: i1, output r17: i1,
-  output r18: i1, output r19: i1, output r20: i1, output r21: i1,
-  output r22: i1, output r23: i1,
-  output r24: i12, output r25: i2, output r27: i4, output r28: i4,
-  output r29: !hw.array<3xi4>
+  out  r0: i4, out  r1: i4, out  r2: i4, out  r3: i4,
+  out  r4: i4, out  r5: i4, out  r6: i4, out  r7: i4,
+  out  r8: i4, out  r9: i4, out  r10: i4, out  r11: i4,
+  out  r12: i4, out  r13: i1,
+  out  r14: i1, out  r15: i1, out  r16: i1, out  r17: i1,
+  out  r18: i1, out  r19: i1, out  r20: i1, out  r21: i1,
+  out  r22: i1, out  r23: i1,
+  out  r24: i12, out  r25: i2, out  r27: i4, out  r28: i4,
+  out  r29: !hw.array<3xi4>
   ) {
 
   %0 = comb.add %a, %b : i4
@@ -115,7 +115,7 @@ hw.module @StructDecls() {
   %reg2 = sv.reg : !hw.inout<array<8xstruct<a: i1, b: i1>>>
 }
 
-hw.module @UniformArrayCreate(output arr: !hw.array<5xi8>) {
+hw.module @UniformArrayCreate(out arr: !hw.array<5xi8>) {
   %c0_i8 = hw.constant 0 : i8
   %arr = hw.array_create %c0_i8, %c0_i8, %c0_i8, %c0_i8, %c0_i8 : i8
   hw.output %arr : !hw.array<5xi8>

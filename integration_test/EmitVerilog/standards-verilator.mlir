@@ -21,8 +21,8 @@ hw.module @top(in %clock : i1, in %reset: i1,
                 in %s: !hw.struct<foo: i2, bar: i4>,
                 in %parray: !hw.array<10xi4>,
                 in %uarray: !hw.uarray<16xi8>,
-                output r0: i4, 
-                output r1: i4) {
+                out r0: i4, 
+                out r1: i4) {
   %0 = comb.or %a, %a : i4
   %1 = comb.and %a, %a : i4
 

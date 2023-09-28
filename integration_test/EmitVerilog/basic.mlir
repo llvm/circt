@@ -14,7 +14,7 @@ module {
     }
   }
 
-  hw.module @AAA(output f: i1) {
+  hw.module @AAA(out f: i1) {
     %z = hw.constant 1 : i1
     hw.output %z : i1
   }
