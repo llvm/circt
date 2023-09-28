@@ -72,7 +72,7 @@ void BundlePort::mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
                        return newResults[port.argNum];
                      }));
   SmallVector<Type, 5> unpackResults(llvm::map_range(
-      newOutputChannels, [](hw::PortInfo port) { return port.type; }));
+      newInputChannels, [](hw::PortInfo port) { return port.type; }));
 
   auto unpack = OpBuilder(inst).create<UnpackBundleOp>(
       origPort.loc, unpackResults, unpackOperands);
@@ -88,13 +88,13 @@ void BundlePort::mapOutputSignals(OpBuilder &b, Operation *inst,
   auto bundleType = cast<ChannelBundleType>(origPort.type);
 
   SmallVector<Value, 4> packOperands(
-      llvm::map_range(newInputChannels, [&](hw::PortInfo port) {
+      llvm::map_range(newOutputChannels, [&](hw::PortInfo port) {
         return newResults[port.argNum];
       }));
   SmallVector<Type, 5> packResults;
   packResults.push_back(bundleType);
   llvm::append_range(packResults,
-                     llvm::map_range(newOutputChannels, [](hw::PortInfo port) {
+                     llvm::map_range(newInputChannels, [](hw::PortInfo port) {
                        return port.type;
                      }));
 

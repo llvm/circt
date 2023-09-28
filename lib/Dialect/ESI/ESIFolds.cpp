@@ -97,20 +97,24 @@ LogicalResult PackBundleOp::canonicalize(PackBundleOp pack,
 LogicalResult UnpackBundleOp::canonicalize(UnpackBundleOp unpack,
                                            PatternRewriter &rewriter) {
   Value bundle = unpack.getBundle();
+  // This condition should be caught by the verifier, but we don't want to
+  // crash.
   if (!bundle.hasOneUse())
     return rewriter.notifyMatchFailure(unpack, "bundle has more than one user");
 
+  // unpack(pack(b), *) -> *
   auto pack = dyn_cast<PackBundleOp>(bundle.getDefiningOp());
   if (pack) {
-    for (auto [a, b] :
-         llvm::zip_equal(pack.getToChannels(), unpack.getToChannels()))
-      rewriter.replaceAllUsesWith(b, a);
-    for (auto [a, b] :
-         llvm::zip_equal(unpack.getFromChannels(), pack.getFromChannels()))
-      rewriter.replaceAllUsesWith(b, a);
-    rewriter.eraseOp(unpack);
-    rewriter.eraseOp(pack);
-    return success();
+    return PackBundleOp::canonicalize(pack, rewriter);
+    //   for (auto [a, b] :
+    //        llvm::zip_equal(pack.getToChannels(), unpack.getToChannels()))
+    //     rewriter.replaceAllUsesWith(b, a);
+    //   for (auto [a, b] :
+    //        llvm::zip_equal(unpack.getFromChannels(), pack.getFromChannels()))
+    //     rewriter.replaceAllUsesWith(b, a);
+    //   rewriter.eraseOp(unpack);
+    //   rewriter.eraseOp(pack);
+    //   return success();
   }
   return rewriter.notifyMatchFailure(unpack,
                                      "could not find corresponding pack");
