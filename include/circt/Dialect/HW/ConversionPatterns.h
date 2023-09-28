@@ -15,6 +15,11 @@
 
 namespace circt {
 
+// Performs type conversion on the given operation.
+LogicalResult doTypeConversion(Operation *op, ValueRange operands,
+                               ConversionPatternRewriter &rewriter,
+                               const TypeConverter *typeConverter);
+
 /// Generic pattern which replaces an operation by one of the same operation
 /// name, but with converted attributes, operands, and result types to eliminate
 /// illegal types. Uses generic builders based on OperationState to make sure
@@ -29,7 +34,23 @@ public:
 
   LogicalResult
   matchAndRewrite(Operation *op, ArrayRef<Value> operands,
-                  ConversionPatternRewriter &rewriter) const override;
+                  ConversionPatternRewriter &rewriter) const override {
+    return doTypeConversion(op, operands, rewriter, getTypeConverter());
+  }
+};
+
+// Specialization of the above which targets a specific operation.
+template <typename OpTy>
+struct TypeOpConversionPattern : public mlir::OpConversionPattern<OpTy> {
+  using mlir::OpConversionPattern<OpTy>::OpConversionPattern;
+  using OpAdaptor = typename mlir::OpConversionPattern<OpTy>::OpAdaptor;
+
+  LogicalResult
+  matchAndRewrite(OpTy op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    return doTypeConversion(op.getOperation(), adaptor.getOperands(), rewriter,
+                            this->getTypeConverter());
+  }
 };
 
 } // namespace circt
