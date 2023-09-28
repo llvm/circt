@@ -350,7 +350,7 @@ void FirRegLowering::createTree(OpBuilder &builder, Value reg, Value term,
   auto firReg = term.getDefiningOp<seq::FirRegOp>();
   DenseSet<Operation *> regMuxFanout;
   getForwardSliceSimple(firReg, regMuxFanout, [&](Operation *op) {
-    return op == firReg || !isa<sv::RegOp, seq::FirRegOp>(op);
+    return op == firReg || !isa<sv::RegOp, seq::FirRegOp, hw::InstanceOp>(op);
   });
 
   SmallVector<std::tuple<Block *, Value, Value, Value>> worklist;
