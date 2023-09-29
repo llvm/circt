@@ -218,9 +218,9 @@ circuit Top :
     ; NOEXTRACT-NEXT:   assign MyView.sub_vecOfBundle[1].uint = [[DUT_submodule_w_vecOfBundle_1_uint:[a-zA-Z0-9_]+]];
     ; NOEXTRACT-NEXT:   assign MyView.ext_port_1 = [[ExtModuleWithPort_source_1:[a-zA-Z0-9_]+]];
     ; NOEXTRACT:        Tap tap (
-    ; NOEXTRACT-NEXT:     .b     (r),
     ; NOEXTRACT-NEXT:     .clock (clock),
-    ; NOEXTRACT-NEXT:     .a     (_tap_a)
+    ; NOEXTRACT-NEXT:     .a     (_tap_a),
+    ; NOEXTRACT-NEXT:     .b     (r)
     ; NOEXTRACT-NEXT:   );
     ; NOEXTRACT-NEXT: endmodule
 
@@ -310,9 +310,9 @@ circuit Top :
     ; EXTRACT-NEXT:     assign MyView.sub_vecOfBundle[1].uint = [[DUT_submodule_in_vecOfBundle_1_uint_port]];
     ; EXTRACT-NEXT:     assign MyView.ext_port_1 = [[ExtModuleWithPort_source_1_port]];
     ; EXTRACT:          Tap tap (
-    ; EXTRACT-NEXT:       .b     (r),
     ; EXTRACT-NEXT:       .clock (_tap_clock),
-    ; EXTRACT-NEXT:       .a     (_tap_a)
+    ; EXTRACT-NEXT:       .a     (_tap_a),
+    ; EXTRACT-NEXT:       .b     (r)
     ; EXTRACT-NEXT:     );
     ; EXTRACT-NEXT:   endmodule
 
