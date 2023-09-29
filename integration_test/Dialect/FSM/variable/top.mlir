@@ -1,3 +1,4 @@
+// NOTE: @mortbopet: this test is currently disabled, see lit.local.cfg.py in this directory
 // REQUIRES: verilator
 // RUN: circt-opt %s --convert-fsm-to-sv --canonicalize --lower-seq-to-sv --export-split-verilog -o %t2.mlir
 // RUN: circt-rtl-sim.py --compileargs="-I%T/.." top.sv %S/driver.cpp --no-default-driver | FileCheck %s
