@@ -233,8 +233,10 @@ static StringRef getPortVerilogName(Operation *module, size_t portArgNum) {
 
 /// Return the verilog name of the port for the module.
 static StringRef getInputPortVerilogName(Operation *module, size_t portArgNum) {
-  auto htmo = cast<HWModuleLike>(module);
-  return getPortVerilogName(module, htmo.getPortList().atInput(portArgNum));
+  if (auto htmo = dyn_cast<HWTestModuleOp>(module))
+    return getPortVerilogName(module, htmo.getPortList().atInput(portArgNum));
+  auto hml = cast<HWModuleLike>(module);
+  return getPortVerilogName(module, hml.getPortList().atInput(portArgNum));
 }
 
 /// This predicate returns true if the specified operation is considered a
