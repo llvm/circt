@@ -2,7 +2,7 @@
 
 module attributes {calyx.entrypoint = "main"} {
   // CHECK: import "primitives/memories.futil";
-  // CHECK-LABEL: component main<"static"=1>(in: 32, @go go: 1, @clk clk: 1, @reset reset: 1) -> (out: 32, @done done: 1) {
+  // CHECK-LABEL: component main<"static"=1,>(in: 32, @go go: 1, @clk clk: 1, @reset reset: 1) -> (out: 32, @done done: 1) {
   calyx.component @main(%in: i32, %go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%out: i32, %done: i1 {done}) {
     %c1_1 = hw.constant 1 : i1
     %m1.addr0, %m1.write_data, %m1.write_en, %m1.write_done, %m1.clk, %m1.read_data, %m1.read_en, %m1.read_done = calyx.seq_mem @m1 <[64] x 32> [6] : i6, i32, i1, i1, i1, i32, i1, i1

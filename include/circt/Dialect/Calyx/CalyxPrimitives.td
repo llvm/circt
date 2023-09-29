@@ -18,6 +18,38 @@ class CalyxPrimitive<string mnemonic, list<Trait> traits = []> :
     let skipDefaultBuilders = 1;
 }
 
+/// The n-bit, undef op which only provides the out signal
+def UndefLibOp: CalyxPrimitive<"undefined", []> {
+  let summary = "An undefined signal";
+  let description = [{
+    The "calyx.undef" op defines an undefined signal. An undefined signal can be
+    replaced with any value representable in n-bits.
+    ```mlir
+      // A 32-bit undefined value
+      %undef.out = calyx.undef @undef : i32
+    ```
+  }];
+  let arguments = (ins SymbolNameAttr:$sym_name);
+  let builders = [
+    OpBuilder<(ins "StringRef":$sym_name, "::mlir::TypeRange":$resultTypes), [{
+      $_state.addAttribute(mlir::SymbolTable::getSymbolAttrName(), $_builder.getStringAttr(sym_name));
+      $_state.addTypes(resultTypes);
+    }]>
+  ];
+  let results = (outs AnyType:$out);
+  let extraClassDefinition = [{
+    bool $cppClass::isCombinational() { return false; }
+    SmallVector<StringRef> $cppClass::portNames() { return {"out"}; }
+    SmallVector<Direction> $cppClass::portDirections() { return {Output}; }
+    void $cppClass::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+      getCellAsmResultNames(setNameFn, *this, this->portNames());
+    }
+    SmallVector<DictionaryAttr> $cppClass::portAttributes() {
+      return {DictionaryAttr::get(getContext())};
+    }
+  }];
+}
+
 /// Trait used to mark certain operations in the Calyx dialect as combinational.
 def Combinational : NativeOpTrait<"Combinational"> {
   let cppNamespace = "::circt::calyx";
@@ -271,6 +303,22 @@ def MuxLibOp : CalyxLibraryOp<"mux", [
   Combinational, SameTypeConstraint<"tru", "fal">, SameTypeConstraint<"tru", "out">
   ]> {
   let results = (outs I1:$sel, AnyType:$tru, AnyType:$fal, AnyType:$out);
+  let extraClassDefinition = [{
+    SmallVector<StringRef> $cppClass::portNames() {
+      return {"sel", "tru", "fal", "out"};
+    }
+    SmallVector<Direction> $cppClass::portDirections() {
+      return {Input, Input, Input, Output};
+    }
+    void $cppClass::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+      getCellAsmResultNames(setNameFn, *this, this->portNames());
+    }
+    bool $cppClass::isCombinational() { return true; }
+    SmallVector<DictionaryAttr> $cppClass::portAttributes() {
+      return {DictionaryAttr::get(getContext()), DictionaryAttr::get(getContext()),
+              DictionaryAttr::get(getContext()), DictionaryAttr::get(getContext())};
+    }
+  }];
 }
 
 class ArithBinaryPipeLibraryOp<string mnemonic> : ArithBinaryLibraryOp<mnemonic # "_pipe", [
