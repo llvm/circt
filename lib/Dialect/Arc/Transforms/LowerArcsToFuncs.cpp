@@ -11,12 +11,11 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Support/Namespace.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
-#include "mlir/Pass/Pass.h"
-#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMAttrs.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/BuiltinDialect.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/Support/Debug.h"
 
@@ -115,6 +114,7 @@ static void populateLegality(ConversionTarget &target) {
   target.addLegalDialect<scf::SCFDialect>();
   target.addLegalDialect<LLVM::LLVMDialect>();
 
+  target.addIllegalOp<arc::CallOp>();
   target.addIllegalOp<arc::DefineOp>();
   target.addIllegalOp<arc::OutputOp>();
   target.addIllegalOp<arc::StateOp>();
@@ -137,17 +137,11 @@ static void populateOpConversion(RewritePatternSet &patterns,
 }
 
 static void populateTypeConversion(TypeConverter &typeConverter) {
-  typeConverter.addConversion([&](StorageType type) {
-    return LLVM::LLVMPointerType::get(IntegerType::get(type.getContext(), 8));
-  });
-  typeConverter.addConversion([&](StateType type) {
-    return LLVM::LLVMPointerType::get(
-        typeConverter.convertType(type.getType()));
-  });
+  typeConverter.addConversion([&](StorageType type) { return type; });
+  typeConverter.addConversion([&](StateType type) { return type; });
   typeConverter.addConversion([](hw::ArrayType type) { return type; });
   typeConverter.addConversion([](mlir::IntegerType type) { return type; });
 }
-
 
 LogicalResult LowerArcsToFuncsPass::lowerToFuncs() {
   LLVM_DEBUG(llvm::dbgs() << "Lowering arcs to funcs\n");
