@@ -525,7 +525,7 @@ private:
     }
     // Attribute dictionary is always prepended for a control operation.
     auto prependAttributes = [&](Operation *op, StringRef sym) {
-      return (getAttributes(op, true) + sym).str();
+      return (getAttributes(op, /*atFormat=*/true) + sym).str();
     };
 
     for (auto &&op : *body) {
@@ -629,7 +629,7 @@ void Emitter::emitComponent(ComponentInterface op) {
   std::string combinationalPrefix = op.isComb() ? "comb " : "";
 
   indent() << combinationalPrefix << "component " << op.getName()
-           << getAttributes(op, false, nullptr);
+           << getAttributes(op, /*atFormat=*/false, nullptr);
   // Emit the ports.
   emitComponentPorts(op);
   os << space() << LBraceEndL();
@@ -690,8 +690,8 @@ void Emitter::emitComponentPorts(ComponentInterface op) {
 
       // We only care about the bit width in the emitted .futil file.
       unsigned int bitWidth = port.type.getIntOrFloatBitWidth();
-      os << getAttributes(op, true, port.attributes) << port.name.getValue()
-         << colon() << bitWidth;
+      os << getAttributes(op, /*atFormat=*/true, port.attributes)
+         << port.name.getValue() << colon() << bitWidth;
 
       if (i + 1 < e)
         os << comma();
@@ -718,7 +718,7 @@ void Emitter::emitPrimitiveExtern(hw::HWModuleExternOp op) {
     });
     os << RSquare();
   }
-  os << getAttributes(op, false);
+  os << getAttributes(op, /*atFormat=*/false);
   // Emit the ports.
   emitPrimitivePorts(op);
   os << semicolonEndL();
@@ -737,8 +737,8 @@ void Emitter::emitPrimitivePorts(hw::HWModuleExternOp op) {
           op.getPortAttrs(isInput ? type.getPortIdForInputId(i)
                                   : type.getPortIdForOutputId(i)));
 
-      os << getAttributes(op, true, portAttr) << port.name.getValue()
-         << colon();
+      os << getAttributes(op, /*atFormat=*/true, portAttr)
+         << port.name.getValue() << colon();
       // We only care about the bit width in the emitted .futil file.
       // Emit parameterized or non-parameterized bit width.
       if (hw::isParametricType(port.type)) {
@@ -764,14 +764,15 @@ void Emitter::emitPrimitivePorts(hw::HWModuleExternOp op) {
 }
 
 void Emitter::emitInstance(InstanceOp op) {
-  indent() << getAttributes(op, true) << op.instanceName() << space()
-           << equals() << space() << op.getComponentName() << LParen()
-           << RParen() << semicolonEndL();
+  indent() << getAttributes(op, /*atFormat=*/true) << op.instanceName()
+           << space() << equals() << space() << op.getComponentName()
+           << LParen() << RParen() << semicolonEndL();
 }
 
 void Emitter::emitPrimitive(PrimitiveOp op) {
-  indent() << getAttributes(op, true) << op.instanceName() << space()
-           << equals() << space() << op.getPrimitiveName() << LParen();
+  indent() << getAttributes(op, /*atFormat=*/true) << op.instanceName()
+           << space() << equals() << space() << op.getPrimitiveName()
+           << LParen();
 
   if (op.getParameters().has_value()) {
     llvm::interleaveComma(*op.getParameters(), os, [&](Attribute param) {
@@ -792,15 +793,15 @@ void Emitter::emitPrimitive(PrimitiveOp op) {
 
 void Emitter::emitRegister(RegisterOp reg) {
   size_t bitWidth = reg.getIn().getType().getIntOrFloatBitWidth();
-  indent() << getAttributes(reg, true) << reg.instanceName() << space()
-           << equals() << space() << "std_reg" << LParen()
+  indent() << getAttributes(reg, /*atFormat=*/true) << reg.instanceName()
+           << space() << equals() << space() << "std_reg" << LParen()
            << std::to_string(bitWidth) << RParen() << semicolonEndL();
 }
 
 void Emitter::emitUndef(UndefLibOp op) {
   size_t bitwidth = op.getOut().getType().getIntOrFloatBitWidth();
-  indent() << getAttributes(op, true) << op.instanceName() << space()
-           << equals() << space() << "undef" << LParen()
+  indent() << getAttributes(op, /*atFormat=*/true) << op.instanceName()
+           << space() << equals() << space() << "undef" << LParen()
            << std::to_string(bitwidth) << RParen() << semicolonEndL();
 }
 
@@ -811,9 +812,10 @@ void Emitter::emitMemory(MemoryOp memory) {
                         "supported by the native Calyx compiler.");
     return;
   }
-  indent() << getAttributes(memory, true) << memory.instanceName() << space()
-           << equals() << space() << "std_mem_d" << std::to_string(dimension)
-           << LParen() << memory.getWidth() << comma();
+  indent() << getAttributes(memory, /*atFormat=*/true) << memory.instanceName()
+           << space() << equals() << space() << "std_mem_d"
+           << std::to_string(dimension) << LParen() << memory.getWidth()
+           << comma();
   for (Attribute size : memory.getSizes()) {
     APInt memSize = size.cast<IntegerAttr>().getValue();
     memSize.print(os, /*isSigned=*/false);
@@ -838,9 +840,10 @@ void Emitter::emitSeqMemory(SeqMemoryOp memory) {
                         "supported by the native Calyx compiler.");
     return;
   }
-  indent() << getAttributes(memory, true) << memory.instanceName() << space()
-           << equals() << space() << "seq_mem_d" << std::to_string(dimension)
-           << LParen() << memory.getWidth() << comma();
+  indent() << getAttributes(memory, /*atFormat=*/true) << memory.instanceName()
+           << space() << equals() << space() << "seq_mem_d"
+           << std::to_string(dimension) << LParen() << memory.getWidth()
+           << comma();
   for (Attribute size : memory.getSizes()) {
     APInt memSize = size.cast<IntegerAttr>().getValue();
     memSize.print(os, /*isSigned=*/false);
@@ -917,8 +920,8 @@ static StringRef removeCalyxPrefix(StringRef s) { return s.split(".").second; }
 
 void Emitter::emitLibraryPrimTypedByAllPorts(Operation *op) {
   auto cell = cast<CellInterface>(op);
-  indent() << getAttributes(op, true) << cell.instanceName() << space()
-           << equals() << space()
+  indent() << getAttributes(op, /*atFormat=*/true) << cell.instanceName()
+           << space() << equals() << space()
            << removeCalyxPrefix(op->getName().getStringRef()) << LParen();
   llvm::interleaveComma(op->getResults(), os, [&](auto res) {
     os << std::to_string(res.getType().getIntOrFloatBitWidth());
@@ -930,9 +933,9 @@ void Emitter::emitLibraryPrimTypedByFirstInputPort(Operation *op) {
   auto cell = cast<CellInterface>(op);
   unsigned bitWidth = cell.getInputPorts()[0].getType().getIntOrFloatBitWidth();
   StringRef opName = op->getName().getStringRef();
-  indent() << getAttributes(op, true) << cell.instanceName() << space()
-           << equals() << space() << removeCalyxPrefix(opName) << LParen()
-           << bitWidth << RParen() << semicolonEndL();
+  indent() << getAttributes(op, /*atFormat=*/true) << cell.instanceName()
+           << space() << equals() << space() << removeCalyxPrefix(opName)
+           << LParen() << bitWidth << RParen() << semicolonEndL();
 }
 
 void Emitter::emitLibraryPrimTypedByFirstOutputPort(
@@ -941,8 +944,8 @@ void Emitter::emitLibraryPrimTypedByFirstOutputPort(
   unsigned bitWidth =
       cell.getOutputPorts()[0].getType().getIntOrFloatBitWidth();
   StringRef opName = op->getName().getStringRef();
-  indent() << getAttributes(op, true) << cell.instanceName() << space()
-           << equals() << space()
+  indent() << getAttributes(op, /*atFormat=*/true) << cell.instanceName()
+           << space() << equals() << space()
            << (calyxLibName ? *calyxLibName : removeCalyxPrefix(opName))
            << LParen() << bitWidth << RParen() << semicolonEndL();
 }
@@ -996,12 +999,13 @@ void Emitter::emitGroup(GroupInterface group) {
     prefix = isa<CombGroupOp>(group) ? "comb group" : "group";
   }
   auto groupHeader =
-      (group.symName().getValue() + getAttributes(group, false)).str();
+      (group.symName().getValue() + getAttributes(group, /*atFormat=*/false))
+          .str();
   emitCalyxSection(prefix, emitGroupBody, groupHeader);
 }
 
 void Emitter::emitEnable(EnableOp enable) {
-  indent() << getAttributes(enable, true) << enable.getGroupName()
+  indent() << getAttributes(enable, /*atFormat=*/true) << enable.getGroupName()
            << semicolonEndL();
 }
 
