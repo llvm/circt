@@ -952,10 +952,10 @@ static ParseResult parsePorts(AsmParser &p,
   return p.parseCommaSeparatedList(
       mlir::AsmParser::Delimiter::LessGreater, [&]() -> ParseResult {
         StringRef dir;
-        StringRef name;
+        std::string name;
         Type type;
-        if (p.parseKeyword(&dir) || p.parseKeyword(&name) || p.parseColon() ||
-            p.parseType(type))
+        if (p.parseKeyword(&dir) || p.parseKeywordOrString(&name) ||
+            p.parseColon() || p.parseType(type))
           return failure();
         ports.push_back(
             {StringAttr::get(p.getContext(), name), type, strToDir(dir)});
@@ -967,8 +967,9 @@ static ParseResult parsePorts(AsmParser &p,
 static void printPorts(AsmPrinter &p, ArrayRef<ModulePort> ports) {
   p << '<';
   llvm::interleaveComma(ports, p, [&](const ModulePort &port) {
-    p << dirToStr(port.dir) << " " << port.name.getValue() << " : "
-      << port.type;
+    p << dirToStr(port.dir) << " ";
+    p.printKeywordOrString(port.name.getValue());
+    p << " : " << port.type;
   });
   p << ">";
 }
