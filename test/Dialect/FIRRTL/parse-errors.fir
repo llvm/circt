@@ -787,29 +787,29 @@ circuit KeywordTypeName:
 
 ;// -----
 
-FIRRTL version 3.0.0
+FIRRTL version 3.1.0
 circuit UnsupportedVersionDeclGroups:
-  ; expected-error @below {{optional groups are a FIRRTL 3.1.0+ feature, but the specified FIRRTL version was 3.0.0}}
+  ; expected-error @below {{optional groups are a FIRRTL 3.2.0+ feature, but the specified FIRRTL version was 3.1.0}}
   declgroup A, bind:
 
 ;// -----
 
-FIRRTL version 3.0.0
+FIRRTL version 3.1.0
 circuit UnsupportedVersionGroups:
   module UnsupportedVersionGroups:
-    ; expected-error @below {{optional groups are a FIRRTL 3.1.0+ feature, but the specified FIRRTL version was 3.0.0}}
+    ; expected-error @below {{optional groups are a FIRRTL 3.2.0+ feature, but the specified FIRRTL version was 3.1.0}}
     group A:
 
 ;// -----
 
-FIRRTL version 3.1.0
+FIRRTL version 3.2.0
 circuit UnsupportedGroupConvention:
   ; expected-error @below {{unknown convention 'foo'}}
   declgroup A, foo :
 
 ;// -----
 
-FIRRTL version 3.1.0
+FIRRTL version 3.2.0
 circuit GroupAndCircuitShareName:
   ; expected-error @below {{cannot have the same name as the circuit}}
   declgroup GroupAndCircuitShareName, bind :

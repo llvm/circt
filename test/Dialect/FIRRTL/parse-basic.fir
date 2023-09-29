@@ -1619,7 +1619,7 @@ circuit Top:
 ;// -----
 
 ; CHECK-LABEL: firrtl.circuit "Groups"
-FIRRTL version 3.1.0
+FIRRTL version 3.2.0
 circuit Groups:
   declgroup A, bind:
     declgroup B, bind:
