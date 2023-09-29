@@ -381,3 +381,15 @@ hw.module @foo() {
   %2 = hw.enum.cmp %0, %1 : !hw.enum<A>, !hw.enum<B>
   hw.output
 }
+
+// -----
+
+// expected-error @+2 {{duplicate field name 'foo'}}
+// expected-error @+1 {{duplicate field name 'bar'}}
+hw.module @struct(in %a: !hw.struct<foo: i8, bar: i8, foo: i8, baz: i8, bar: i8>) {}
+
+// -----
+
+// expected-error @+2 {{duplicate field name 'foo' in hw.union type}}
+// expected-error @+1 {{duplicate field name 'bar' in hw.union type}}
+hw.module @union(in %a: !hw.union<foo: i8, bar: i8, foo: i8, baz: i8, bar: i8>) {}

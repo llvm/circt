@@ -22,7 +22,9 @@
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/StorageUniquerSupport.h"
 #include "mlir/IR/Types.h"
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
@@ -236,21 +238,37 @@ llvm::hash_code hash_value(const FieldInfo &fi) {
 } // namespace hw
 } // namespace circt
 
-/// Parse a list of field names and types within <>. E.g.:
+/// Parse a list of unique field names and types within <>. E.g.:
 /// <foo: i7, bar: i8>
 static ParseResult parseFields(AsmParser &p,
                                SmallVectorImpl<FieldInfo> &parameters) {
-  return p.parseCommaSeparatedList(
+  llvm::StringSet<> nameSet;
+  bool hasDuplicateName = false;
+  auto parseResult = p.parseCommaSeparatedList(
       mlir::AsmParser::Delimiter::LessGreater, [&]() -> ParseResult {
         std::string name;
         Type type;
+
+        auto fieldLoc = p.getCurrentLocation();
         if (p.parseKeywordOrString(&name) || p.parseColon() ||
             p.parseType(type))
           return failure();
+
+        if (!nameSet.insert(name).second) {
+          p.emitError(fieldLoc, "duplicate field name \'" + name + "\'");
+          // Continue parsing to print all duplicates, but make sure to error
+          // eventually
+          hasDuplicateName = true;
+        }
+
         parameters.push_back(
             FieldInfo{StringAttr::get(p.getContext(), name), type});
         return success();
       });
+
+  if (hasDuplicateName)
+    return failure();
+  return parseResult;
 }
 
 /// Print out a list of named fields surrounded by <>.
@@ -268,6 +286,20 @@ Type StructType::parse(AsmParser &p) {
   if (parseFields(p, parameters))
     return Type();
   return get(p.getContext(), parameters);
+}
+
+LogicalResult StructType::verify(function_ref<InFlightDiagnostic()> emitError,
+                                 ArrayRef<StructType::FieldInfo> elements) {
+  llvm::SmallDenseSet<StringAttr> fieldNameSet;
+  LogicalResult result = success();
+  fieldNameSet.reserve(elements.size());
+  for (const auto &elt : elements)
+    if (!fieldNameSet.insert(elt.name).second) {
+      result = failure();
+      emitError() << "duplicate field name '" << elt.name.getValue()
+                  << "' in hw.struct type";
+    }
+  return result;
 }
 
 void StructType::print(AsmPrinter &p) const { printFields(p, getElements()); }
@@ -384,12 +416,25 @@ llvm::hash_code hash_value(const OffsetFieldInfo &fi) {
 
 Type UnionType::parse(AsmParser &p) {
   llvm::SmallVector<FieldInfo, 4> parameters;
+  llvm::StringSet<> nameSet;
+  bool hasDuplicateName = false;
   if (p.parseCommaSeparatedList(
           mlir::AsmParser::Delimiter::LessGreater, [&]() -> ParseResult {
             StringRef name;
             Type type;
+
+            auto fieldLoc = p.getCurrentLocation();
             if (p.parseKeyword(&name) || p.parseColon() || p.parseType(type))
               return failure();
+
+            if (!nameSet.insert(name).second) {
+              p.emitError(fieldLoc, "duplicate field name \'" + name +
+                                        "\' in hw.union type");
+              // Continue parsing to print all duplicates, but make sure to
+              // error eventually
+              hasDuplicateName = true;
+            }
+
             size_t offset = 0;
             if (succeeded(p.parseOptionalKeyword("offset")))
               if (p.parseInteger(offset))
@@ -399,6 +444,10 @@ Type UnionType::parse(AsmParser &p) {
             return success();
           }))
     return Type();
+
+  if (hasDuplicateName)
+    return Type();
+
   return get(p.getContext(), parameters);
 }
 
@@ -411,6 +460,20 @@ void UnionType::print(AsmPrinter &odsPrinter) const {
           odsPrinter << " offset " << field.offset;
       });
   odsPrinter << ">";
+}
+
+LogicalResult UnionType::verify(function_ref<InFlightDiagnostic()> emitError,
+                                ArrayRef<UnionType::FieldInfo> elements) {
+  llvm::SmallDenseSet<StringAttr> fieldNameSet;
+  LogicalResult result = success();
+  fieldNameSet.reserve(elements.size());
+  for (const auto &elt : elements)
+    if (!fieldNameSet.insert(elt.name).second) {
+      result = failure();
+      emitError() << "duplicate field name '" << elt.name.getValue()
+                  << "' in hw.union type";
+    }
+  return result;
 }
 
 UnionType::FieldInfo UnionType::getFieldInfo(::mlir::StringRef fieldName) {
