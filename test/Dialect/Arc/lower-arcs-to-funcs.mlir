@@ -7,16 +7,16 @@ arc.define @EmptyArc() {
 }
 // CHECK-NEXT: }
 
-// CHECK-LABEL: func.func @test1(%arg0: i32)
-arc.define @test1(%arg0: i32) -> (i32) {
+// CHECK-LABEL: func.func @callTest(%arg0: i32)
+arc.define @callTest(%arg0: i32) -> (i32) {
     %0 = arc.call @sub1(%arg0) : (i32) -> i32
     // CHECK-NEXT: %0 = call @sub1(%arg0) : (i32) -> i32
     arc.output %0 : i32
     // CHECK-NEXT: return %0 : i32
 }
 
-// CHECK-LABEL: hw.module @test2
-hw.module @test2(%arg0: i32) -> (out0: i32) {
+// CHECK-LABEL: hw.module @stateTest
+hw.module @stateTest(%arg0: i32) -> (out0: i32) {
   %0 = arc.state @sub1(%arg0) lat 0 : (i32) -> i32
   // CHECK-NEXT: %0 = func.call @sub1(%arg0) : (i32) -> i32
   hw.output %0 : i32
