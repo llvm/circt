@@ -277,6 +277,7 @@ def UnpackBundleOp : ESI_Op<"bundle.unpack", [
       type($toChannels), type($fromChannels), type($bundle))
   }];
 
+  let hasVerifier = 1;
   let hasCanonicalizeMethod = 1;
 }
 

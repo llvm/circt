@@ -24,13 +24,17 @@ using namespace circt::hw;
 
 namespace {
 
-/// Implement the Valid/Ready signaling standard.
+/// Lower channel bundles into the constituent channels. The workhorse of this
+/// pass. Works by adding channel ports, using [un]pack operations to recreate
+/// the original value. (Pretty standard in MLIR for type conversions.) The new
+/// [un]pack operations get lowered away later on.
 class BundlePort : public PortConversion {
 public:
   BundlePort(PortConverterImpl &converter, hw::PortInfo origPort)
       : PortConversion(converter, origPort) {}
 
 protected:
+  // Modifies the instance signals.
   void mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
                        SmallVectorImpl<Value> &newOperands,
                        ArrayRef<Backedge> newResults) override;
@@ -38,6 +42,7 @@ protected:
                         SmallVectorImpl<Value> &newOperands,
                         ArrayRef<Backedge> newResults) override;
 
+  // Modifies the module ports.
   void buildInputSignals() override;
   void buildOutputSignals() override;
 
@@ -61,51 +66,52 @@ public:
 };
 } // namespace
 
-void BundlePort::mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
+/// When replacing an instance with an input bundle, we must unpack the
+/// individual channels and feed/consume them into/from the new instance.
+void BundlePort::mapInputSignals(OpBuilder &b, Operation *inst, Value,
                                  SmallVectorImpl<Value> &newOperands,
                                  ArrayRef<Backedge> newResults) {
-
-  SmallVector<Value, 4> unpackOperands;
-  unpackOperands.push_back(inst->getOperand(origPort.argNum));
-  llvm::append_range(unpackOperands,
-                     llvm::map_range(newOutputChannels, [&](hw::PortInfo port) {
-                       return newResults[port.argNum];
-                     }));
-  SmallVector<Type, 5> unpackResults(llvm::map_range(
+  // Assemble the operands/result types and build the op.
+  SmallVector<Value, 4> fromChannels(
+      llvm::map_range(newOutputChannels, [&](hw::PortInfo port) {
+        return newResults[port.argNum];
+      }));
+  SmallVector<Type, 5> toChannelTypes(llvm::map_range(
       newInputChannels, [](hw::PortInfo port) { return port.type; }));
+  auto unpack = b.create<UnpackBundleOp>(
+      origPort.loc, toChannelTypes,
+      /*bundle=*/inst->getOperand(origPort.argNum), fromChannels);
 
-  auto unpack = OpBuilder(inst).create<UnpackBundleOp>(
-      origPort.loc, unpackResults, unpackOperands);
-
+  // Connect the new instance inputs to the results of the unpack.
   for (auto [idx, inPort] : llvm::enumerate(newInputChannels))
     newOperands[inPort.argNum] = unpack.getResult(idx);
 }
 
-void BundlePort::mapOutputSignals(OpBuilder &b, Operation *inst,
-                                  Value instValue,
+/// When replacing an instance with an output bundle, we must pack the
+/// individual channels in a bundle to recreate the original Value.
+void BundlePort::mapOutputSignals(OpBuilder &b, Operation *inst, Value,
                                   SmallVectorImpl<Value> &newOperands,
                                   ArrayRef<Backedge> newResults) {
-  auto bundleType = cast<ChannelBundleType>(origPort.type);
-
-  SmallVector<Value, 4> packOperands(
+  // Assemble the operands/result types and build the op.
+  SmallVector<Value, 4> toChannels(
       llvm::map_range(newOutputChannels, [&](hw::PortInfo port) {
         return newResults[port.argNum];
       }));
-  SmallVector<Type, 5> packResults;
-  packResults.push_back(bundleType);
-  llvm::append_range(packResults,
-                     llvm::map_range(newInputChannels, [](hw::PortInfo port) {
-                       return port.type;
-                     }));
+  SmallVector<Type, 5> fromChannelTypes(llvm::map_range(
+      newInputChannels, [](hw::PortInfo port) { return port.type; }));
+  auto pack = b.create<PackBundleOp>(origPort.loc,
+                                     cast<ChannelBundleType>(origPort.type),
+                                     fromChannelTypes, toChannels);
 
-  auto pack = OpBuilder(inst).create<PackBundleOp>(origPort.loc, packResults,
-                                                   packOperands);
-
+  // Feed the fromChannels into the new instance.
   for (auto [idx, inPort] : llvm::enumerate(newInputChannels))
     newOperands[inPort.argNum] = pack.getFromChannels()[idx];
+  // Replace the users of the old bundle Value with the new one.
   inst->getResult(origPort.argNum).replaceAllUsesWith(pack.getBundle());
 }
 
+/// When replacing an instance with an input bundle, we must unpack the
+/// bundle into its individual channels.
 void BundlePort::buildInputSignals() {
   auto bundleType = cast<ChannelBundleType>(origPort.type);
   SmallVector<Value, 4> newInputValues;
@@ -113,6 +119,7 @@ void BundlePort::buildInputSignals() {
 
   SmallVector<Type, 4> packOpResultTypes;
   packOpResultTypes.push_back(bundleType);
+
   for (BundledChannel ch : bundleType.getChannels()) {
     // 'to' on an input bundle becomes an input channel.
     if (ch.direction == ChannelDirection::to) {
@@ -127,6 +134,8 @@ void BundlePort::buildInputSignals() {
     }
   }
 
+  // On an input port, new channels must be packed to recreate the original
+  // Value.
   PackBundleOp pack;
   if (body) {
     ImplicitLocOpBuilder b(origPort.loc, body, body->begin());
@@ -134,6 +143,8 @@ void BundlePort::buildInputSignals() {
     body->getArgument(origPort.argNum).replaceAllUsesWith(pack.getBundle());
   }
 
+  // Build new ports and put the new port info directly into the member
+  // variable.
   newOutputChannels.resize(outputChannels.size());
   for (auto [idx, ch] : llvm::enumerate(outputChannels))
     converter.createNewOutput(origPort, "_" + ch.name.getValue(), ch.type,
@@ -141,6 +152,8 @@ void BundlePort::buildInputSignals() {
                               newOutputChannels[idx]);
 }
 
+/// For an output port, we need to unpack the results from the original value
+/// into the new channel ports.
 void BundlePort::buildOutputSignals() {
   auto bundleType = cast<ChannelBundleType>(origPort.type);
   SmallVector<Value, 4> unpackOperands;
@@ -164,12 +177,16 @@ void BundlePort::buildOutputSignals() {
     }
   }
 
+  // For an output port, the original bundle must be unpacked into the
+  // individual channel ports.
   UnpackBundleOp unpack;
   if (body) {
-    ImplicitLocOpBuilder b(origPort.loc, body, body->begin());
+    ImplicitLocOpBuilder b(origPort.loc, body, body->end());
     unpack = b.create<UnpackBundleOp>(unpackOpResultTypes, unpackOperands);
   }
 
+  // Build new ports and put the new port info directly into the member
+  // variable.
   newOutputChannels.resize(outputChannels.size());
   for (auto [idx, ch] : llvm::enumerate(outputChannels))
     converter.createNewOutput(origPort, "_" + ch.name.getValue(), ch.type,
@@ -198,6 +215,8 @@ void ESIBundlesPass::runOnOperation() {
       return signalPassFailure();
   }
 
+  // Canonicalize away bundle packs and unpacks. Any non-back-to-back [un]packs
+  // need to be gone by now.
   ConversionTarget tgt(ctxt);
   tgt.markUnknownOpDynamicallyLegal([](Operation *) { return true; });
   tgt.addIllegalOp<PackBundleOp, UnpackBundleOp>();
