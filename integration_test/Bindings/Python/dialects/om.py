@@ -108,7 +108,7 @@ except ValueError as e:
   # CHECK: unable to get field, see previous error(s)
   print(e)
 
-# Test instantiate success.
+## Test instantiate success.
 
 obj = evaluator.instantiate("Test", 42)
 

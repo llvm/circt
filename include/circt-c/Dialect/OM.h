@@ -228,6 +228,10 @@ MLIR_CAPI_EXPORTED MlirIdentifier omMapAttrGetElementKey(MlirAttribute attr,
 MLIR_CAPI_EXPORTED MlirAttribute omMapAttrGetElementValue(MlirAttribute attr,
                                                           intptr_t pos);
 
+MLIR_CAPI_EXPORTED bool omAttrIsAPathAttr(MlirAttribute attr);
+
+MLIR_CAPI_EXPORTED MlirIdentifier omPathAttrGetPath(MlirAttribute attr);
+
 #ifdef __cplusplus
 }
 #endif

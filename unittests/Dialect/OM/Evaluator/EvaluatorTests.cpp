@@ -177,7 +177,8 @@ TEST(EvaluatorTests, GetFieldInvalidName) {
 
   ASSERT_TRUE(succeeded(result));
 
-  auto fieldValue = result.value()->getField(builder.getStringAttr("foo"));
+  auto fieldValue = llvm::cast<evaluator::ObjectValue>(result.value().get())
+                        ->getField(builder.getStringAttr("foo"));
 
   ASSERT_FALSE(succeeded(fieldValue));
 }
@@ -214,7 +215,7 @@ TEST(EvaluatorTests, InstantiateObjectWithParamField) {
   ASSERT_TRUE(succeeded(result));
 
   auto fieldValue = llvm::cast<evaluator::AttributeValue>(
-                        result.value()
+                        llvm::cast<evaluator::ObjectValue>(result.value().get())
                             ->getField(builder.getStringAttr("field"))
                             .value()
                             .get())
@@ -252,7 +253,7 @@ TEST(EvaluatorTests, InstantiateObjectWithConstantField) {
   ASSERT_TRUE(succeeded(result));
 
   auto fieldValue = cast<evaluator::AttributeValue>(
-                        result.value()
+                        llvm::cast<evaluator::ObjectValue>(result.value().get())
                             ->getField(builder.getStringAttr("field"))
                             .value()
                             .get())
@@ -299,7 +300,10 @@ TEST(EvaluatorTests, InstantiateObjectWithChildObject) {
   ASSERT_TRUE(succeeded(result));
 
   auto *fieldValue = llvm::cast<evaluator::ObjectValue>(
-      result.value()->getField(builder.getStringAttr("field")).value().get());
+      llvm::cast<evaluator::ObjectValue>(result.value().get())
+          ->getField(builder.getStringAttr("field"))
+          .value()
+          .get());
 
   ASSERT_TRUE(fieldValue);
 
@@ -352,12 +356,16 @@ TEST(EvaluatorTests, InstantiateObjectWithFieldAccess) {
 
   ASSERT_TRUE(succeeded(result));
 
-  auto fieldValue = llvm::cast<evaluator::AttributeValue>(
-                        result.value()
-                            ->getField(builder.getStringAttr("field"))
-                            .value()
-                            .get())
-                        ->getAs<circt::om::IntegerAttr>();
+  auto fieldValue =
+      llvm::cast<evaluator::AttributeValue>(
+          llvm::cast<evaluator::ReferenceValue>(
+              llvm::cast<evaluator::ObjectValue>(result.value().get())
+                  ->getField(builder.getStringAttr("field"))
+                  .value()
+                  .get())
+              ->getValue()
+              .get())
+          ->getAs<circt::om::IntegerAttr>();
 
   ASSERT_TRUE(fieldValue);
   ASSERT_EQ(fieldValue.getValue().getValue(), 42);
@@ -395,12 +403,19 @@ TEST(EvaluatorTests, InstantiateObjectWithChildObjectMemoized) {
   ASSERT_TRUE(succeeded(result));
 
   auto *field1Value = llvm::cast<evaluator::ObjectValue>(
-      result.value()->getField(builder.getStringAttr("field1")).value().get());
+      llvm::cast<evaluator::ObjectValue>(result.value().get())
+          ->getField(builder.getStringAttr("field1"))
+          .value()
+          .get());
 
   auto *field2Value = llvm::cast<evaluator::ObjectValue>(
-      result.value()->getField(builder.getStringAttr("field2")).value().get());
+      llvm::cast<evaluator::ObjectValue>(result.value().get())
+          ->getField(builder.getStringAttr("field2"))
+          .value()
+          .get());
 
-  auto fieldNames = result.value()->getFieldNames();
+  auto fieldNames =
+      llvm::cast<evaluator::ObjectValue>(result.value().get())->getFieldNames();
 
   ASSERT_TRUE(fieldNames.size() == 2);
   StringRef fieldNamesTruth[] = {"field1", "field2"};
@@ -448,7 +463,10 @@ TEST(EvaluatorTests, AnyCastObject) {
   ASSERT_TRUE(succeeded(result));
 
   auto *fieldValue = llvm::cast<evaluator::ObjectValue>(
-      result.value()->getField(builder.getStringAttr("field")).value().get());
+      llvm::cast<evaluator::ObjectValue>(result.value().get())
+          ->getField(builder.getStringAttr("field"))
+          .value()
+          .get());
 
   ASSERT_TRUE(fieldValue);
 
@@ -495,7 +513,10 @@ TEST(EvaluatorTests, AnyCastParam) {
   ASSERT_TRUE(succeeded(result));
 
   auto *fieldValue = llvm::cast<evaluator::ObjectValue>(
-      result.value()->getField(builder.getStringAttr("field")).value().get());
+      llvm::cast<evaluator::ObjectValue>(result.value().get())
+          ->getField(builder.getStringAttr("field"))
+          .value()
+          .get());
 
   ASSERT_TRUE(fieldValue);
 
