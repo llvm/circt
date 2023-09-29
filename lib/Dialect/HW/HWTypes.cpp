@@ -422,13 +422,14 @@ Type UnionType::parse(AsmParser &p) {
           mlir::AsmParser::Delimiter::LessGreater, [&]() -> ParseResult {
             StringRef name;
             Type type;
+
+            auto fieldLoc = p.getCurrentLocation();
             if (p.parseKeyword(&name) || p.parseColon() || p.parseType(type))
               return failure();
 
             if (!nameSet.insert(name).second) {
-              p.emitError(p.getCurrentLocation(), "duplicate field name \'" +
-                                                      name +
-                                                      "\' in hw.union type");
+              p.emitError(fieldLoc, "duplicate field name \'" + name +
+                                        "\' in hw.union type");
               // Continue parsing to print all duplicates, but make sure to
               // error eventually
               hasDuplicateName = true;
