@@ -243,20 +243,31 @@ llvm::hash_code hash_value(const FieldInfo &fi) {
 static ParseResult parseFields(AsmParser &p,
                                SmallVectorImpl<FieldInfo> &parameters) {
   llvm::StringSet<> nameSet;
-  return p.parseCommaSeparatedList(
+  bool hasDuplicateName = false;
+  auto parseResult = p.parseCommaSeparatedList(
       mlir::AsmParser::Delimiter::LessGreater, [&]() -> ParseResult {
         std::string name;
         Type type;
         if (p.parseKeywordOrString(&name) || p.parseColon() ||
             p.parseType(type))
           return failure();
-        if (!nameSet.insert(name).second)
-          return p.emitError(p.getCurrentLocation(),
-                             "duplicate field name \'" + name + "\'");
+
+        if (!nameSet.insert(name).second) {
+          p.emitError(p.getCurrentLocation(),
+                      "duplicate field name \'" + name + "\'");
+          // Continue parsing to print all duplicates, but make sure to error
+          // eventually
+          hasDuplicateName = true;
+        }
+
         parameters.push_back(
             FieldInfo{StringAttr::get(p.getContext(), name), type});
         return success();
       });
+
+  if (hasDuplicateName)
+    return failure();
+  return parseResult;
 }
 
 /// Print out a list of named fields surrounded by <>.
@@ -279,12 +290,15 @@ Type StructType::parse(AsmParser &p) {
 LogicalResult StructType::verify(function_ref<InFlightDiagnostic()> emitError,
                                  ArrayRef<StructType::FieldInfo> elements) {
   llvm::SmallDenseSet<StringAttr> fieldNameSet;
+  LogicalResult result = success();
   fieldNameSet.reserve(elements.size());
   for (const auto &elt : elements)
-    if (!fieldNameSet.insert(elt.name).second)
-      return emitError() << "duplicate field name '" << elt.name.getValue()
-                         << "' in hw.struct type";
-  return success();
+    if (!fieldNameSet.insert(elt.name).second) {
+      result = failure();
+      emitError() << "duplicate field name '" << elt.name.getValue()
+                  << "' in hw.struct type";
+    }
+  return result;
 }
 
 void StructType::print(AsmPrinter &p) const { printFields(p, getElements()); }
@@ -402,16 +416,23 @@ llvm::hash_code hash_value(const OffsetFieldInfo &fi) {
 Type UnionType::parse(AsmParser &p) {
   llvm::SmallVector<FieldInfo, 4> parameters;
   llvm::StringSet<> nameSet;
+  bool hasDuplicateName = false;
   if (p.parseCommaSeparatedList(
           mlir::AsmParser::Delimiter::LessGreater, [&]() -> ParseResult {
             StringRef name;
             Type type;
             if (p.parseKeyword(&name) || p.parseColon() || p.parseType(type))
               return failure();
-            if (!nameSet.insert(name).second)
-              return p.emitError(p.getCurrentLocation(),
-                                 "duplicate field name \'" + name +
-                                     "\' in hw.union type");
+
+            if (!nameSet.insert(name).second) {
+              p.emitError(p.getCurrentLocation(), "duplicate field name \'" +
+                                                      name +
+                                                      "\' in hw.union type");
+              // Continue parsing to print all duplicates, but make sure to
+              // error eventually
+              hasDuplicateName = true;
+            }
+
             size_t offset = 0;
             if (succeeded(p.parseOptionalKeyword("offset")))
               if (p.parseInteger(offset))
@@ -421,6 +442,10 @@ Type UnionType::parse(AsmParser &p) {
             return success();
           }))
     return Type();
+
+  if (hasDuplicateName)
+    return Type();
+
   return get(p.getContext(), parameters);
 }
 
@@ -438,12 +463,15 @@ void UnionType::print(AsmPrinter &odsPrinter) const {
 LogicalResult UnionType::verify(function_ref<InFlightDiagnostic()> emitError,
                                 ArrayRef<UnionType::FieldInfo> elements) {
   llvm::SmallDenseSet<StringAttr> fieldNameSet;
+  LogicalResult result = success();
   fieldNameSet.reserve(elements.size());
   for (const auto &elt : elements)
-    if (!fieldNameSet.insert(elt.name).second)
-      return emitError() << "duplicate field name '" << elt.name.getValue()
-                         << "' in hw.union type";
-  return success();
+    if (!fieldNameSet.insert(elt.name).second) {
+      result = failure();
+      emitError() << "duplicate field name '" << elt.name.getValue()
+                  << "' in hw.union type";
+    }
+  return result;
 }
 
 UnionType::FieldInfo UnionType::getFieldInfo(::mlir::StringRef fieldName) {

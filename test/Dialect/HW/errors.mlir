@@ -384,14 +384,12 @@ hw.module @foo() {
 
 // -----
 
-// expected-error @+1 {{duplicate field name 'foo'}}
-hw.module @struct(in %a: !hw.struct<foo: i8, bar: i8, foo: i8, baz: i8>) {
-    hw.output
-}
+// expected-error @+2 {{duplicate field name 'foo'}}
+// expected-error @+1 {{duplicate field name 'bar'}}
+hw.module @struct(in %a: !hw.struct<foo: i8, bar: i8, foo: i8, baz: i8, bar: i8>) {}
 
 // -----
 
-// expected-error @+1 {{duplicate field name 'foo' in hw.union type}}
-hw.module @union(in %a: !hw.union<foo: i8, bar: i8, foo: i8, baz: i8>) {
-    hw.output
-}
+// expected-error @+2 {{duplicate field name 'foo' in hw.union type}}
+// expected-error @+1 {{duplicate field name 'bar' in hw.union type}}
+hw.module @union(in %a: !hw.union<foo: i8, bar: i8, foo: i8, baz: i8, bar: i8>) {}
