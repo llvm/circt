@@ -248,13 +248,14 @@ static ParseResult parseFields(AsmParser &p,
       mlir::AsmParser::Delimiter::LessGreater, [&]() -> ParseResult {
         std::string name;
         Type type;
+
+        auto fieldLoc = p.getCurrentLocation();
         if (p.parseKeywordOrString(&name) || p.parseColon() ||
             p.parseType(type))
           return failure();
 
         if (!nameSet.insert(name).second) {
-          p.emitError(p.getCurrentLocation(),
-                      "duplicate field name \'" + name + "\'");
+          p.emitError(fieldLoc, "duplicate field name \'" + name + "\'");
           // Continue parsing to print all duplicates, but make sure to error
           // eventually
           hasDuplicateName = true;
