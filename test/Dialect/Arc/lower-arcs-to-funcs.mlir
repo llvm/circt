@@ -16,7 +16,7 @@ arc.define @callTest(%arg0: i32) -> (i32) {
 }
 
 // CHECK-LABEL: hw.module @stateTest
-hw.module @stateTest(%arg0: i32) -> (out0: i32) {
+hw.module @stateTest(in %arg0: i32) -> (out0: i32) {
   %0 = arc.state @sub1(%arg0) lat 0 : (i32) -> i32
   // CHECK-NEXT: %0 = func.call @sub1(%arg0) : (i32) -> i32
   hw.output %0 : i32
