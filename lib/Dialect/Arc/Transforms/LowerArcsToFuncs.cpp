@@ -108,12 +108,9 @@ static void populateLegality(ConversionTarget &target) {
 static void populateOpConversion(RewritePatternSet &patterns,
                                  TypeConverter &typeConverter) {
   auto *context = patterns.getContext();
-  patterns.add<
-    CallOpLowering,
-    DefineOpLowering,
-    OutputOpLowering,
-    StateOpLowering
-  >(typeConverter, context);
+  patterns
+      .add<CallOpLowering, DefineOpLowering, OutputOpLowering, StateOpLowering>(
+          typeConverter, context);
 
   mlir::populateFunctionOpInterfaceTypeConversionPattern<func::FuncOp>(
       patterns, typeConverter);
