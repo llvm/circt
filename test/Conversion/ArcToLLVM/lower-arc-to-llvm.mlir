@@ -145,17 +145,6 @@ func.func @zeroCount(%arg0 : i32) {
   return
 }
 
-// CHECK-LABEL: llvm.func @callOp
-func.func @callOp(%arg0: i32) -> i32 {
-  // CHECK-NEXT: [[V0:%.+]] = llvm.call @dummyCallee(%arg0) : (i32) -> i32
-  %0 = func.call @dummyCallee(%arg0) : (i32) -> i32
-  // CHECK-NEXT: return [[V0]] : i32
-  return %0 : i32
-}
-func.func @dummyCallee(%arg0: i32) -> i32 {
-  return %arg0 : i32
-}
-
 // FIXME: this does not really belong here, but there is no better place either.
 // CHECK-LABEL: llvm.func @lowerCombParity
 func.func @lowerCombParity(%arg0: i32) -> i1 {

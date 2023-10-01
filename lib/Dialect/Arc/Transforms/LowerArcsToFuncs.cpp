@@ -1,4 +1,4 @@
-//===- LowerArcsToFuncs.cpp ---------------------------------------------===//
+//===- LowerArcsToFuncs.cpp -----------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -8,14 +8,8 @@
 
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/Arc/ArcPasses.h"
-#include "circt/Dialect/Comb/CombOps.h"
-#include "circt/Support/Namespace.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
-#include "mlir/Dialect/LLVMIR/LLVMAttrs.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
-#include "mlir/Dialect/SCF/IR/SCF.h"
-#include "mlir/IR/BuiltinDialect.h"
-#include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/Support/Debug.h"
 
@@ -30,8 +24,6 @@ namespace arc {
 
 using namespace mlir;
 using namespace circt;
-using namespace arc;
-using namespace hw;
 
 //===----------------------------------------------------------------------===//
 // Pass Implementation
@@ -40,9 +32,6 @@ using namespace hw;
 namespace {
 struct LowerArcsToFuncsPass
     : public arc::impl::LowerArcsToFuncsBase<LowerArcsToFuncsPass> {
-  LowerArcsToFuncsPass() = default;
-  LowerArcsToFuncsPass(const LowerArcsToFuncsPass &pass)
-      : LowerArcsToFuncsPass() {}
 
   LogicalResult lowerToFuncs();
   void runOnOperation() override;
@@ -107,11 +96,7 @@ struct StateOpLowering : public OpConversionPattern<arc::StateOp> {
 } // namespace
 
 static void populateLegality(ConversionTarget &target) {
-  target.addLegalDialect<mlir::BuiltinDialect>();
-  target.addLegalDialect<hw::HWDialect>();
-  target.addLegalDialect<comb::CombDialect>();
   target.addLegalDialect<func::FuncDialect>();
-  target.addLegalDialect<scf::SCFDialect>();
   target.addLegalDialect<LLVM::LLVMDialect>();
 
   target.addIllegalOp<arc::CallOp>();
@@ -123,24 +108,19 @@ static void populateLegality(ConversionTarget &target) {
 static void populateOpConversion(RewritePatternSet &patterns,
                                  TypeConverter &typeConverter) {
   auto *context = patterns.getContext();
-  // clang-format off
   patterns.add<
     CallOpLowering,
     DefineOpLowering,
     OutputOpLowering,
     StateOpLowering
   >(typeConverter, context);
-  // clang-format on
 
   mlir::populateFunctionOpInterfaceTypeConversionPattern<func::FuncOp>(
       patterns, typeConverter);
 }
 
 static void populateTypeConversion(TypeConverter &typeConverter) {
-  typeConverter.addConversion([&](StorageType type) { return type; });
-  typeConverter.addConversion([&](StateType type) { return type; });
-  typeConverter.addConversion([](hw::ArrayType type) { return type; });
-  typeConverter.addConversion([](mlir::IntegerType type) { return type; });
+  typeConverter.addConversion([&](Type type) { return type; });
 }
 
 LogicalResult LowerArcsToFuncsPass::lowerToFuncs() {
