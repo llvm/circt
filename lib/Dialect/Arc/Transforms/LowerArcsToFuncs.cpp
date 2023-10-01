@@ -111,9 +111,6 @@ static void populateOpConversion(RewritePatternSet &patterns,
   patterns
       .add<CallOpLowering, DefineOpLowering, OutputOpLowering, StateOpLowering>(
           typeConverter, context);
-
-  mlir::populateFunctionOpInterfaceTypeConversionPattern<func::FuncOp>(
-      patterns, typeConverter);
 }
 
 static void populateTypeConversion(TypeConverter &typeConverter) {
