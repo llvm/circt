@@ -299,6 +299,35 @@ def IsolatedStaticBlockOp : HighLevelBlockLikeOp<"sblock.isolated", [
   }];
 }
 
+def DCBlockOp : BlockLikeOp<"sblock.dc", [
+  IsolatedFromAbove
+]> {
+  let summary = "DC-interfaced Ibis block";
+  let description = [{
+    The `ibis.sblock.dc` operation is like an `ibis.sblock` operation with
+    a few differences, being:
+    1. The operation is DC-interfaced, meaning that all arguments and results
+       are dc-value typed.
+    2. The operation is IsolatedFromAbove.
+  }];
+
+  let builders = [
+    OpBuilder<(ins "TypeRange":$outputs, "ValueRange":$inputs,
+        CArg<"IntegerAttr", "{}">:$maxThreads)>
+  ];
+
+  let extraBlockClassDeclaration = [{
+    // The internal result types of a DC block op is the DC-type stripped
+    // outer result values.
+    llvm::SmallVector<Type> getInternalResultTypes() {
+      llvm::SmallVector<Type> innerRes;
+      for(Type outerRes : getResultTypes())
+        innerRes.push_back(outerRes.cast<dc::ValueType>().getInnerType());
+      return innerRes;
+    }
+  }];
+}
+
 def InlineStaticBlockBeginOp : IbisOp<"sblock.inline.begin", [
   HasParent<"MethodOp">
 ]> {
@@ -342,7 +371,8 @@ def InlineStaticBlockEndOp : IbisOp<"sblock.inline.end", [
 }
 
 def BlockReturnOp : IbisOp<"sblock.return", [
-  Pure, ReturnLike, Terminator, ParentOneOf<["StaticBlockOp", "IsolatedStaticBlockOp"]>]> {
+    Pure, ReturnLike, Terminator,
+    ParentOneOf<["StaticBlockOp", "IsolatedStaticBlockOp", "DCBlockOp"]>]> {
   let summary = "Ibis static block terminator";
 
   let arguments = (ins Variadic<AnyType>:$retValues);

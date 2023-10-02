@@ -9,7 +9,8 @@ add_circt_dialect_library(CIRCTIbis
   LINK_LIBS PUBLIC
   MLIRIR
   CIRCTHW
+  CIRCTDC
   CIRCTSeq
-  )
+)
 
 add_subdirectory(Transforms)

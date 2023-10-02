@@ -180,6 +180,20 @@ def IbisConvertCFToHandshake : Pass<"ibis-convert-cf-to-handshake", "ibis::Class
   let dependentDialects = ["circt::handshake::HandshakeDialect", "mlir::cf::ControlFlowDialect"];
 }
 
+def IbisConvertHandshakeToDC : Pass<"ibis-convert-handshake-to-dc", "ibis::ClassOp"> {
+  let summary = "Converts an `ibis.method.df` to use DC";
+  let description = [{
+    Converts an `ibis.method.df` from using `handshake` operations to
+    `dc` operations.
+  }];
+  let constructor = "circt::ibis::createConvertHandshakeToDCPass()";
+  let dependentDialects = [
+    "circt::dc::DCDialect",
+    "circt::handshake::HandshakeDialect",
+    "mlir::arith::ArithDialect"
+  ];
+}
+
 def IbisPrepareScheduling : Pass<"ibis-prepare-scheduling", "ibis::IsolatedStaticBlockOp"> {
   let summary = "Prepare `ibis.sblock` operations for scheduling";
   let description = [{

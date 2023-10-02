@@ -57,15 +57,6 @@ void circt::ibis::loadIbisHighLevelPassPipeline(mlir::PassManager &pm) {
   pm.addPass(ibis::createArgifyBlocksPass());
   pm.addPass(createSimpleCanonicalizerPass());
 
-  // Make the CFG a binary tree by inserting merge blocks.
-  pm.addPass(circt::createInsertMergeBlocksPass());
-
-  // Perform dataflow conversion
-  pm.nest<ibis::ClassOp>().addPass(ibis::createConvertCFToHandshakePass());
-  // Canonicalize - necessary after handshake conversion to clean up a lot of
-  // stuff e.g. simple branches.
-  pm.addPass(createSimpleCanonicalizerPass());
-
   // Now we're ready to schedule our pipelines.
   pm.nest<ibis::ClassOp>()
       .nest<ibis::DataflowMethodOp>()
