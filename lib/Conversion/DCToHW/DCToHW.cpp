@@ -695,7 +695,7 @@ public:
     UnwrappedIO io = unwrapIO(op, operands.getOperands(), rewriter, bb);
     io.inputs[0].ready->setValue(
         RTLBuilder(op.getLoc(), rewriter).constant(1, 1));
-    rewriter.replaceOp(op, io.outputs[0].channel);
+    rewriter.eraseOp(op);
     return success();
   }
 };
@@ -710,7 +710,6 @@ public:
     UnwrappedIO io = unwrapIO(op, operands.getOperands(), rewriter, bb);
     RTLBuilder rtlb(op.getLoc(), rewriter);
     io.outputs[0].valid->setValue(rtlb.constant(1, 1));
-    io.outputs[0].data->setValue(rtlb.constant(0, 0));
     rewriter.replaceOp(op, io.outputs[0].channel);
     return success();
   }

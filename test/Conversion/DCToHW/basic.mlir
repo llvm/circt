@@ -156,3 +156,24 @@ hw.module @to_from_esi_noop(in %token : !esi.channel<i0>, in %value : !esi.chann
     %value_esi = dc.to_esi %value_dc : !dc.value<i1>
     hw.output %token_esi, %value_esi : !esi.channel<i0>, !esi.channel<i1>
 }
+
+// CHECK-LABEL:   hw.module @sink(in 
+// CHECK-SAME:                       %[[VAL_0:.*]] : !esi.channel<i0>) {
+// CHECK:           %[[VAL_1:.*]], %[[VAL_2:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_3:.*]] : i0
+// CHECK:           %[[VAL_3]] = hw.constant true
+// CHECK:           hw.output
+// CHECK:         }
+hw.module @sink(in %token : !dc.token) {
+    dc.sink %token
+}
+
+// CHECK-LABEL:   hw.module @source(out token : !esi.channel<i0>) {
+// CHECK:           %[[VAL_0:.*]] = hw.constant 0 : i0
+// CHECK:           %[[VAL_1:.*]], %[[VAL_2:.*]] = esi.wrap.vr %[[VAL_0]], %[[VAL_3:.*]] : i0
+// CHECK:           %[[VAL_3]] = hw.constant true
+// CHECK:           hw.output %[[VAL_1]] : !esi.channel<i0>
+// CHECK:         }
+hw.module @source(out token : !dc.token) {
+    %token = dc.source
+    hw.output %token : !dc.token
+}
