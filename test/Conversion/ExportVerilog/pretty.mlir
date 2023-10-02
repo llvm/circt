@@ -281,3 +281,23 @@ hw.module @TestCond() {
   }
   hw.output
 }
+
+// -----
+
+// Declaration keyword, type, and name alignment should not produce excessively
+// long lines when large aggregate types are involved. Lack of a declaration
+// keyword, i.e. when the declaration directly starts with a type, should not
+// indent the declaration.
+//
+// See https://github.com/llvm/circt/pull/6171
+
+// CHECK-LABEL:module Top{{.*}}
+// CHECK-NEXT:  reg        foo;{{.*}}
+// CHECK-NEXT:  reg [63:0] bar;{{.*}}
+// CHECK-NEXT:  struct packed {logic dw; logic [3:0] fn; logic [63:0] in; } agg;{{.*}}
+// CHECK-NEXT:endmodule
+hw.module @Top() {
+  %foo = sv.reg : !hw.inout<i1>
+  %bar = sv.reg : !hw.inout<i64>
+  %agg = sv.reg : !hw.inout<struct<dw: i1, fn: i4, in: i64>>
+}

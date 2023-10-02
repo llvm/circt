@@ -3509,6 +3509,11 @@ public:
 private:
   size_t maxDeclNameWidth = 0, maxTypeWidth = 0;
   ModuleEmitter &moduleEmitter;
+
+  /// Types that are longer than `maxTypeWidthBound` are not added to the
+  /// `maxTypeWidth` to prevent one single huge type from messing up the
+  /// alignment of all other declarations.
+  static constexpr size_t maxTypeWidthBound = 32;
 };
 } // namespace
 
@@ -3538,7 +3543,8 @@ void NameCollector::collectNames(Block &block) {
           moduleEmitter.printPackedType(stripUnpackedTypes(result.getType()),
                                         stringStream, op.getLoc());
         }
-        maxTypeWidth = std::max(typeString.size(), maxTypeWidth);
+        if (typeString.size() <= maxTypeWidthBound)
+          maxTypeWidth = std::max(typeString.size(), maxTypeWidth);
       }
     }
 
@@ -5254,16 +5260,21 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
   auto word = getVerilogDeclWord(op, state.options);
   auto isZeroBit = isZeroBitType(type);
   ps.scopedBox(isZeroBit ? PP::neverbox : PP::ibox2, [&]() {
-    if (!isZeroBit) {
-      if (!word.empty())
-        ps << PPExtString(word);
-      unsigned spaces = 0;
-      if (word.size() < maxDeclNameWidth)
-        spaces += maxDeclNameWidth - word.size();
-      auto extraIndent = word.empty() ? 0 : 1;
-      ps.spaces(spaces + extraIndent);
-    } else {
+    unsigned targetColumn = 0;
+    unsigned column = 0;
+
+    // Emit the declaration keyword.
+    if (maxDeclNameWidth > 0)
+      targetColumn += maxDeclNameWidth + 1;
+
+    if (isZeroBit) {
       ps << "// Zero width: " << PPExtString(word) << PP::space;
+    } else if (!word.empty()) {
+      ps << PPExtString(word);
+      column += word.size();
+      unsigned numSpaces = targetColumn > column ? targetColumn - column : 1;
+      ps.spaces(numSpaces);
+      column += numSpaces;
     }
 
     SmallString<8> typeString;
@@ -5274,10 +5285,18 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
                               op->getLoc());
     }
     // Emit the type.
-    if (!typeString.empty())
+    if (maxTypeWidth > 0)
+      targetColumn += maxTypeWidth + 1;
+    unsigned numSpaces = 0;
+    if (!typeString.empty()) {
       ps << typeString;
-    if (typeString.size() < maxTypeWidth)
-      ps.spaces(maxTypeWidth - typeString.size());
+      column += typeString.size();
+      ++numSpaces;
+    }
+    if (targetColumn > column)
+      numSpaces = targetColumn - column;
+    ps.spaces(numSpaces);
+    column += numSpaces;
 
     // Emit the name.
     ps << PPExtString(getSymOpName(op));
@@ -5375,9 +5394,6 @@ void StmtEmitter::collectNamesAndCalculateDeclarationWidths(Block &block) {
   // Record maxDeclNameWidth and maxTypeWidth in the current scope.
   maxDeclNameWidth = collector.getMaxDeclNameWidth();
   maxTypeWidth = collector.getMaxTypeWidth();
-
-  if (maxTypeWidth > 0) // add a space if any type exists
-    maxTypeWidth += 1;
 }
 
 void StmtEmitter::emitStatementBlock(Block &body) {
