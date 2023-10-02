@@ -441,7 +441,7 @@ def HandshakeToDC : Pass<"lower-handshake-to-dc", "mlir::ModuleOp"> {
 // DCToHW
 //===----------------------------------------------------------------------===//
 
-def DCToHW : Pass<"lower-dc-to-hw", "mlir::ModuleOp"> {
+def DCToHW : Pass<"lower-dc-to-hw"> {
   let summary = "Lower DC to HW";
   let description = [{
     Lower DC to ESI/hw/comb/seq operations.
