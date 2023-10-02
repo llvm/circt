@@ -395,10 +395,19 @@ void circt::python::populateDialectOMSubmodule(py::module &m) {
            [](MlirAttribute arr) { return PyListAttrIterator(arr); });
   PyListAttrIterator::bind(m);
 
+  // Add the MapAttr definition
   mlir_attribute_subclass(m, "MapAttr", omAttrIsAMapAttr)
       .def("__iter__", [](MlirAttribute arr) { return PyMapAttrIterator(arr); })
       .def("__len__", &omMapAttrGetNumElements);
   PyMapAttrIterator::bind(m);
+
+  // Add the PathAttr definition
+  mlir_attribute_subclass(m, "PathAttr", omAttrIsAPathAttr)
+      .def_property_readonly("value", [](MlirAttribute arr) {
+        auto path = mlirIdentifierStr(omPathAttrGetPath(arr));
+        std::string pathStr(path.data, path.length);
+        return pathStr;
+      });
 
   // Add the ClassType class definition.
   mlir_type_subclass(m, "ClassType", omTypeIsAClassType, omClassTypeGetTypeID)
