@@ -9,7 +9,7 @@
 // CHECK:             %[[VAL_8:.*]] = handshake.buffer [2] fifo %[[VAL_7]] : i1
 // CHECK:             %[[VAL_9:.*]] = handshake.merge %[[VAL_4]] : none
 // CHECK:             %[[VAL_10:.*]] = ibis.sblock (%[[VAL_11:.*]] : i32 = %[[VAL_5]], %[[VAL_12:.*]] : i32 = %[[VAL_6]]) -> i32 attributes {maxThreads = 1 : i64} {
-// CHECK:               %[[VAL_13:.*]] = "foo.op1"(%[[VAL_11]], %[[VAL_12]]) : (i32, i32) -> i32
+// CHECK:               %[[VAL_13:.*]] = arith.addi %[[VAL_11]], %[[VAL_12]] : i32
 // CHECK:               ibis.sblock.return %[[VAL_13]] : i32
 // CHECK:             }
 // CHECK:             %[[VAL_14:.*]], %[[VAL_15:.*]] = handshake.cond_br %[[VAL_7]], %[[VAL_5]] : i32
@@ -19,7 +19,7 @@
 // CHECK:             %[[VAL_21:.*]] = handshake.merge %[[VAL_18]] : i32
 // CHECK:             %[[VAL_22:.*]], %[[VAL_23:.*]] = handshake.control_merge %[[VAL_16]] : none, index
 // CHECK:             %[[VAL_24:.*]] = ibis.sblock (%[[VAL_25:.*]] : i32 = %[[VAL_21]], %[[VAL_26:.*]] : i32 = %[[VAL_20]]) -> i32 {
-// CHECK:               %[[VAL_27:.*]] = "foo.op2"(%[[VAL_25]], %[[VAL_26]]) : (i32, i32) -> i32
+// CHECK:               %[[VAL_27:.*]] = arith.subi %[[VAL_25]], %[[VAL_26]] : i32
 // CHECK:               ibis.sblock.return %[[VAL_27]] : i32
 // CHECK:             }
 // CHECK:             %[[VAL_28:.*]] = handshake.br %[[VAL_22]] : none
@@ -46,13 +46,13 @@ ibis.class @ToHandshake {
   // in the handshake dialect tests.
   ibis.method @foo(%a: i32, %b: i32, %cond : i1) -> i32 {
     %0 = ibis.sblock (%arg0 : i32 = %a, %arg1 : i32 = %b) -> i32 attributes {maxThreads = 1 : i64} {
-      %4 = "foo.op1"(%arg0, %arg1) : (i32, i32) -> i32
+      %4 = arith.addi %arg0, %arg1 : i32
       ibis.sblock.return %4 : i32
     }
     cf.cond_br %cond, ^bb1(%a, %0 : i32, i32), ^bb2(%a, %0 : i32, i32)
   ^bb1(%11: i32, %21: i32):  // pred: ^bb0
     %31 = ibis.sblock (%arg0 : i32 = %21, %arg1 : i32 = %11) -> i32 {
-      %4 = "foo.op2"(%arg0, %arg1) : (i32, i32) -> i32
+      %4 = arith.subi %arg0, %arg1 : i32
       ibis.sblock.return %4 : i32
     }
     cf.br ^bb4(%31 : i32)

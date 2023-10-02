@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Ibis/IbisOps.h"
+#include "circt/Dialect/DC/DCTypes.h"
 #include "circt/Support/ParsingUtils.h"
 
 #include "mlir/IR/BuiltinOps.h"
@@ -697,6 +698,69 @@ ParseResult IsolatedStaticBlockOp::parse(OpAsmParser &parser,
 void IsolatedStaticBlockOp::print(OpAsmPrinter &p) {
   return printBlockLikeOp(*this, p);
 }
+
+//===----------------------------------------------------------------------===//
+// DCBlockOp
+//===----------------------------------------------------------------------===//
+
+void DCBlockOp::build(OpBuilder &odsBuilder, OperationState &odsState,
+                      TypeRange outputs, ValueRange inputs,
+                      IntegerAttr maxThreads) {
+  odsState.addOperands(inputs);
+  if (maxThreads)
+    odsState.addAttribute(getMaxThreadsAttrName(odsState.name), maxThreads);
+  auto *region = odsState.addRegion();
+  llvm::SmallVector<Type> resTypes;
+  for (auto output : outputs) {
+    dc::ValueType dcType = output.dyn_cast<dc::ValueType>();
+    assert(dcType && "DCBlockOp outputs must be dc::ValueType");
+    resTypes.push_back(dcType);
+  }
+  odsState.addTypes(resTypes);
+  ensureTerminator(*region, odsBuilder, odsState.location);
+  llvm::SmallVector<Location> argLocs;
+  llvm::SmallVector<Type> argTypes;
+  for (auto input : inputs) {
+    argLocs.push_back(input.getLoc());
+    dc::ValueType dcType = input.getType().dyn_cast<dc::ValueType>();
+    assert(dcType && "DCBlockOp inputs must be dc::ValueType");
+    argTypes.push_back(dcType.getInnerType());
+  }
+  region->front().addArguments(argTypes, argLocs);
+}
+
+LogicalResult DCBlockOp::verify() {
+  if (getInputs().size() != getBodyBlock()->getNumArguments())
+    return emitOpError("number of inputs must match number of block arguments");
+
+  for (auto [arg, barg] :
+       llvm::zip(getInputs(), getBodyBlock()->getArguments())) {
+    dc::ValueType dcType = arg.getType().dyn_cast<dc::ValueType>();
+    if (!dcType)
+      return emitOpError("DCBlockOp inputs must be dc::ValueType but got ")
+             << arg.getType();
+
+    if (dcType.getInnerType() != barg.getType())
+      return emitOpError("block argument type must match input type. Got ")
+             << barg.getType() << " expected " << dcType.getInnerType();
+  }
+
+  return success();
+}
+
+ParseResult DCBlockOp::parse(OpAsmParser &parser, OperationState &result) {
+  return parseBlockLikeOp<DCBlockOp>(
+      parser, result, [&](OpAsmParser::Argument &arg) -> LogicalResult {
+        dc::ValueType valueType = arg.type.dyn_cast<dc::ValueType>();
+        if (!valueType)
+          return parser.emitError(parser.getCurrentLocation(),
+                                  "DCBlockOp inputs must be dc::ValueType");
+        arg.type = valueType.getInnerType();
+        return success();
+      });
+}
+
+void DCBlockOp::print(OpAsmPrinter &p) { return printBlockLikeOp(*this, p); }
 
 //===----------------------------------------------------------------------===//
 // BlockReturnOp

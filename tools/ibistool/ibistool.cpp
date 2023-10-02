@@ -44,6 +44,7 @@
 #include "circt/Dialect/ESI/ESIDialect.h"
 #include "circt/Dialect/ESI/ESIPasses.h"
 #include "circt/Dialect/Ibis/IbisDialect.h"
+#include "circt/Dialect/Ibis/IbisOps.h"
 #include "circt/Dialect/Ibis/IbisPassPipelines.h"
 #include "circt/Dialect/Ibis/IbisPasses.h"
 #include "circt/Dialect/Pipeline/PipelineDialect.h"
@@ -158,22 +159,24 @@ static void loadHighLevelControlflowTransformsPipeline(OpPassManager &pm) {
 }
 
 static void loadHandshakeTransformsPipeline(OpPassManager &pm) {
-  pm.addPass(circt::createCFToHandshakePass(
-      /*sourceConstants=*/false,
-      /*disableTaskPipelining=*/false));
-  pm.addPass(createSimpleCanonicalizerPass());
-  pm.nest<handshake::FuncOp>().addPass(
-      handshake::createHandshakeMaterializeForksSinksPass());
+  // Make the CFG a binary tree by inserting merge blocks.
+  pm.addPass(circt::createInsertMergeBlocksPass());
+
+  // Perform dataflow conversion
+  pm.nest<ibis::ClassOp>().addPass(ibis::createConvertCFToHandshakePass());
+  // Canonicalize - necessary after handshake conversion to clean up a lot of
+  // stuff e.g. simple branches.
   pm.addPass(createSimpleCanonicalizerPass());
   pm.nest<handshake::FuncOp>().addPass(
       handshake::createHandshakeInsertBuffersPass("all", 2));
-  pm.addPass(createSimpleCanonicalizerPass());
 }
 
 static void loadDCTransformsPipeline(OpPassManager &pm) {
-  pm.addPass(circt::createHandshakeToDCPass());
+  pm.nest<ClassOp>().addPass(ibis::createConvertHandshakeToDCPass());
   pm.addPass(createSimpleCanonicalizerPass());
-  pm.addPass(circt::createDCToHWPass());
+  pm.nest<ClassOp>().nest<DataflowMethodOp>().addPass(
+      dc::createDCMaterializeForksSinksPass());
+  pm.nest<ClassOp>().addPass(circt::createDCToHWPass());
 }
 
 static void loadESILoweringPipeline(OpPassManager &pm) {
