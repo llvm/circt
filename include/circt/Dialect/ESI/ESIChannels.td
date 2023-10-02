@@ -259,6 +259,9 @@ def PackBundleOp : ESI_Op<"bundle.pack", [
     $toChannels attr-dict `:` custom<UnPackBundleType>(
       type($toChannels), type($fromChannels), type($bundle))
   }];
+
+  let hasVerifier = 1;
+  let hasCanonicalizeMethod = 1;
 }
 
 def UnpackBundleOp : ESI_Op<"bundle.unpack", [
@@ -273,6 +276,9 @@ def UnpackBundleOp : ESI_Op<"bundle.unpack", [
     $fromChannels `from` $bundle attr-dict `:` custom<UnPackBundleType>(
       type($toChannels), type($fromChannels), type($bundle))
   }];
+
+  let hasVerifier = 1;
+  let hasCanonicalizeMethod = 1;
 }
 
 //===----------------------------------------------------------------------===//

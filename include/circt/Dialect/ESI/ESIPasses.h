@@ -24,6 +24,7 @@ namespace esi {
 
 std::unique_ptr<OperationPass<ModuleOp>> createESIEmitCollateralPass();
 std::unique_ptr<OperationPass<ModuleOp>> createESIPhysicalLoweringPass();
+std::unique_ptr<OperationPass<ModuleOp>> createESIBundleLoweringPass();
 std::unique_ptr<OperationPass<ModuleOp>> createESIPortLoweringPass();
 std::unique_ptr<OperationPass<ModuleOp>> createESITypeLoweringPass();
 std::unique_ptr<OperationPass<ModuleOp>> createESItoHWPass();

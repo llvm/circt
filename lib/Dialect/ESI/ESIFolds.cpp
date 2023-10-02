@@ -71,3 +71,48 @@ OpFoldResult UnwrapWindow::fold(FoldAdaptor) {
     return wrap.getFrame();
   return {};
 }
+
+LogicalResult PackBundleOp::canonicalize(PackBundleOp pack,
+                                         PatternRewriter &rewriter) {
+  Value bundle = pack.getBundle();
+  // This condition should be caught by the verifier, but we don't want to
+  // crash if we assume it since canonicalize can get run on IR in a broken
+  // state.
+  if (!bundle.hasOneUse())
+    return rewriter.notifyMatchFailure(pack,
+                                       "bundle has zero or more than one user");
+
+  // unpack(pack(x)) -> x
+  auto unpack = dyn_cast<UnpackBundleOp>(*bundle.getUsers().begin());
+  if (unpack) {
+    for (auto [a, b] :
+         llvm::zip_equal(pack.getToChannels(), unpack.getToChannels()))
+      rewriter.replaceAllUsesWith(b, a);
+    for (auto [a, b] :
+         llvm::zip_equal(unpack.getFromChannels(), pack.getFromChannels()))
+      rewriter.replaceAllUsesWith(b, a);
+    rewriter.eraseOp(unpack);
+    rewriter.eraseOp(pack);
+    return success();
+  }
+  return rewriter.notifyMatchFailure(pack,
+                                     "could not find corresponding unpack");
+}
+
+LogicalResult UnpackBundleOp::canonicalize(UnpackBundleOp unpack,
+                                           PatternRewriter &rewriter) {
+  Value bundle = unpack.getBundle();
+  // This condition should be caught by the verifier, but we don't want to
+  // crash if we assume it since canonicalize can get run on IR in a broken
+  // state.
+  if (!bundle.hasOneUse())
+    return rewriter.notifyMatchFailure(unpack,
+                                       "bundle has zero or more than one user");
+
+  // Reuse pack's canonicalizer.
+  auto pack = dyn_cast<PackBundleOp>(bundle.getDefiningOp());
+  if (pack)
+    return PackBundleOp::canonicalize(pack, rewriter);
+  return rewriter.notifyMatchFailure(unpack,
+                                     "could not find corresponding pack");
+}

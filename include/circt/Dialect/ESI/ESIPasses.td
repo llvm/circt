@@ -63,6 +63,12 @@ def LowerESIToPhysical: Pass<"lower-esi-to-physical", "mlir::ModuleOp"> {
   let dependentDialects = ["circt::hw::HWDialect"];
 }
 
+def LowerESIBundles: Pass<"lower-esi-bundles", "mlir::ModuleOp"> {
+  let summary = "Lower ESI bundles to channels.";
+  let constructor = "circt::esi::createESIBundleLoweringPass()";
+  let dependentDialects = ["circt::hw::HWDialect"];
+}
+
 def LowerESIPorts: Pass<"lower-esi-ports", "mlir::ModuleOp"> {
   let summary = "Lower ESI input and/or output ports.";
   let constructor = "circt::esi::createESIPortLoweringPass()";

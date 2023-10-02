@@ -495,6 +495,18 @@ static void printUnPackBundleType(OpAsmPrinter &p, Operation *, T3, T4,
   p.printType(bundleType);
 }
 
+LogicalResult PackBundleOp::verify() {
+  if (!getBundle().hasOneUse())
+    return emitOpError("bundles must have exactly one user");
+  return success();
+}
+
+LogicalResult UnpackBundleOp::verify() {
+  if (!getBundle().hasOneUse())
+    return emitOpError("bundles must have exactly one user");
+  return success();
+}
+
 void PackBundleOp::getAsmResultNames(::mlir::OpAsmSetValueNameFn setNameFn) {
   setNameFn(getResult(0), "bundle");
   for (auto [idx, from] : llvm::enumerate(llvm::make_filter_range(
