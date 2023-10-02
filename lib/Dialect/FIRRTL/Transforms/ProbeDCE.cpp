@@ -54,7 +54,7 @@ void ProbeDCEPass::runOnOperation() {
 
   auto ig = getCachedAnalysis<InstanceGraph>();
 
-  std::atomic<bool> anyChanges;
+  std::atomic<bool> anyChanges(false);
   auto result = failableParallelForEach(&getContext(), ops, [&](Operation *op) {
     auto failOrChanged = process(cast<FModuleLike>(op), ig);
     if (failed(failOrChanged))
