@@ -22,9 +22,9 @@ circuit TestHarness : %[[
 ]]
   ; DUTMODULE: module DUTModule
   ; DUTMODULE: mem mem
-  ; DUTMODULE:   .mem_wiring_0_R0_data
   ; DUTMODULE:   .mem_wiring_0_R0_addr
   ; DUTMODULE:   .mem_wiring_0_R0_clk
+  ; DUTMODULE:   .mem_wiring_0_R0_data
   ; DUTMODULE:   .mem_wiring_0_W0_addr
   ; DUTMODULE:   .mem_wiring_0_W0_en
   ; DUTMODULE:   .mem_wiring_0_W0_clk

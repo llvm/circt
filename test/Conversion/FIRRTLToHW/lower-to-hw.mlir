@@ -1055,7 +1055,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %bar = firrtl.dshl %a, %b {name = "anothername"} : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
   }
 
-  // CHECK-LABEL: hw.module private @MultibitMux(in %source_0 : i1, in %source_1 : i1, in %source_2 : i1, in %index : i2, out sink : i1) {
+  // CHECK-LABEL: hw.module private @MultibitMux(in %source_0 : i1, in %source_1 : i1, in %source_2 : i1, out sink : i1, in %index : i2) {
   firrtl.module private @MultibitMux(in %source_0: !firrtl.uint<1>, in %source_1: !firrtl.uint<1>, in %source_2: !firrtl.uint<1>, out %sink: !firrtl.uint<1>, in %index: !firrtl.uint<2>) {
     %0 = firrtl.multibit_mux %index, %source_2, %source_1, %source_0 : !firrtl.uint<2>, !firrtl.uint<1>
     firrtl.connect %sink, %0 : !firrtl.uint<1>, !firrtl.uint<1>

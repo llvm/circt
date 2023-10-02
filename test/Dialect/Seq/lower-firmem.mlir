@@ -24,26 +24,26 @@ sv.macro.decl @SomeMacro
 // CHECK-SAME: in %RW0_clk : !seq.clock, 
 // CHECK-SAME: in %RW0_wmode : i1, 
 // CHECK-SAME: in %RW0_wdata : i42, 
-// CHECK-SAME: in %RW0_wmask : i3,
-// CHECK-SAME: out RW0_rdata : i42
+// CHECK-SAME: out RW0_rdata : i42,
+// CHECK-SAME: in %RW0_wmask : i3
 // CHECK-SAME: ) attributes {depth = 12 : i64, initFilename = "", initIsBinary = false, initIsInline = false, maskGran = 14 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 1 : ui32, numWritePorts = 0 : ui32, readLatency = 0 : ui32, readUnderWrite = 0 : i32, width = 42 : ui32, writeClockIDs = [0 : i32], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
 // CHECK: hw.module.generated @m0_mem4_12x42, @FIRRTLMem(
 // CHECK-SAME: in %R0_addr : i4, 
 // CHECK-SAME: in %R0_en : i1, 
 // CHECK-SAME: in %R0_clk : !seq.clock, 
+// CHECK-SAME: out R0_data : i42, 
 // CHECK-SAME: in %RW0_addr : i4, 
 // CHECK-SAME: in %RW0_en : i1, 
 // CHECK-SAME: in %RW0_clk : !seq.clock, 
 // CHECK-SAME: in %RW0_wmode : i1, 
 // CHECK-SAME: in %RW0_wdata : i42, 
+// CHECK-SAME: out RW0_rdata : i42,
 // CHECK-SAME: in %RW0_wmask : i6, 
 // CHECK-SAME: in %W0_addr : i4, 
 // CHECK-SAME: in %W0_en : i1, 
 // CHECK-SAME: in %W0_clk : !seq.clock, 
 // CHECK-SAME: in %W0_data : i42, 
-// CHECK-SAME: in %W0_mask : i6,
-// CHECK-SAME: out R0_data : i42, 
-// CHECK-SAME: out RW0_rdata : i42
+// CHECK-SAME: in %W0_mask : i6
 // CHECK-SAME: ) attributes {depth = 12 : i64, initFilename = "", initIsBinary = false, initIsInline = false, maskGran = 7 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 1 : ui32, numWritePorts = 1 : ui32, readLatency = 0 : ui32, readUnderWrite = 0 : i32, width = 42 : ui32, writeClockIDs = [0 : i32, 0 : i32], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
 
 // CHECK-LABEL: hw.module @Foo

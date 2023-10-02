@@ -80,7 +80,7 @@ firrtl.circuit "Simple" {
     firrtl.printf %clock, %reset, "Something interesting! %x"(%myext#1) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<8>
   }
 
-  // CHECK-LABEL: hw.module private @OutputFirst(in %in1 : i1, in %in4 : i4, out out4 : i4) {
+  // CHECK-LABEL: hw.module private @OutputFirst(out out4 : i4, in %in1 : i1, in %in4 : i4) {
   firrtl.module private @OutputFirst(out %out4: !firrtl.uint<4>,
                              in %in1: !firrtl.uint<1>,
                              in %in4: !firrtl.uint<4>) {
@@ -90,8 +90,8 @@ firrtl.circuit "Simple" {
   }
 
   // CHECK-LABEL: hw.module private @PortMadness(
-  // CHECK: in %inA : i4, in %inB : i4, in %inC : i4, in %inE : i3,
-  // CHECK: out outA : i4, out outB : i4, out outC : i4, out outD : i4, out outE : i4) {
+  // CHECK: in %inA : i4, in %inB : i4, in %inC : i4, 
+  // CHECK: out outA : i4, out outB : i4, out outC : i4, out outD : i4, in %inE : i3, out outE : i4) {
   firrtl.module private @PortMadness(in %inA: !firrtl.uint<4>,
                              in %inB: !firrtl.uint<4>,
                              in %inC: !firrtl.uint<4>,
