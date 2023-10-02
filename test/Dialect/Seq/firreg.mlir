@@ -513,7 +513,7 @@ hw.module @issue1594(in %clock: !seq.clock, in %reset: i1, in %a: i1, out b: i1)
 
 // Check that deeply nested if statement creation doesn't cause any issue.
 // COMMON-LABEL: @DeeplyNestedIfs
-// CHECK-COUNT-17: sv.if
+// CHECK-COUNT-1: sv.if
 hw.module @DeeplyNestedIfs(in %a_0: i1, in %a_1: i1, in %a_2: i1, in %c_0_0: i1, in %c_0_1: i1, in %c_1_0: i1, in %c_1_1: i1, in %c_2_0: i1, in %c_2_1: i1, in %clock: !seq.clock, out out_0: i1, out out_1: i1) {
   %r_0 = seq.firreg %25 clock %clock {firrtl.random_init_start = 0 : ui64} : i1
   %r_1 = seq.firreg %51 clock %clock {firrtl.random_init_start = 1 : ui64} : i1
@@ -763,4 +763,115 @@ hw.module @reg_of_clock_type(in %clk: !seq.clock, in %rst: i1, in %i: !seq.clock
   // CHECK: hw.output [[REG2_READ]] : i1
 
   hw.output %r2 : !seq.clock
+}
+
+// Check if/else structure for register enable inference is maintained, without
+// pulling unnecessary muxes into if/else structures.
+
+// The following testcase is generated from:
+//   reg r1 : UInt<8>, clock
+//   reg r2 : UInt<8>, clock
+//   wire value : UInt<8>
+//   when a :
+//     connect value, foo
+//   else :
+//     connect value, bar
+//   when b :
+//     connect r1, fizz
+//     connect r2, value
+//   when c :
+//     connect r1, value
+//     connect r2, buzz
+// CHECK-LABEL: @RegMuxInlining1
+hw.module @RegMuxInlining1(in %clock: !seq.clock, in %reset: i1, in %a: i1, in %b: i1, in %c: i1, in %foo: i8, in %bar: i8, in %fizz: i8, in %buzz: i8, out out: i8) {
+  // CHECK: [[REG0:%.+]] = sv.reg : !hw.inout<i8>
+  %r1 = seq.firreg %3 clock %clock : i8
+
+  // CHECK: [[REG1:%.+]] = sv.reg : !hw.inout<i8>
+  %r2 = seq.firreg %4 clock %clock : i8
+
+  // CHECK: [[VALUE:%.+]] = comb.mux bin %a, %foo, %bar
+  %0 = comb.mux bin %a, %foo, %bar {sv.namehint = "value"} : i8
+
+  // CHECK: sv.always posedge %clock {
+  // CHECK:   sv.if %c {
+  // CHECK:     sv.passign [[REG0]], [[VALUE]]
+  // CHECK:     sv.passign [[REG1]], %buzz
+  // CHECK:   } else {
+  // CHECK:     sv.if %b {
+  // CHECK:       sv.passign [[REG0]], %fizz
+  // CHECK:       sv.passign [[REG1]], [[VALUE]]
+  // CHECK:     }
+  // CHECK:   }
+  // CHECK: }
+  %1 = comb.mux bin %b, %fizz, %r1 : i8
+  %2 = comb.mux bin %b, %0, %r2 : i8
+  %3 = comb.mux bin %c, %0, %1 : i8
+  %4 = comb.mux bin %c, %buzz, %2 : i8
+  %5 = comb.add %r1, %r2 {sv.namehint = "_out_T"} : i8
+  hw.output %5 : i8
+}
+
+// The following testcase is generated from:
+//   reg r1 : UInt<8>, clock
+//   when a :
+//     when b :
+//       when c :
+//         connect r1, x
+//     else :
+//       connect r1, y
+//   else :
+//     connect r1, z
+// CHECK-LABEL: @RegMuxInlining2
+hw.module @RegMuxInlining2(in %clock: !seq.clock, in %reset: i1, in %a: i1, in %b: i1, in %c: i1, in %x: i8, in %y: i8, in %z: i8, out out: i8) {
+  // CHECK: [[REG0:%.+]] = sv.reg : !hw.inout<i8>
+  %r1 = seq.firreg %2 clock %clock : i8
+
+  // CHECK: sv.always posedge %clock {
+  // CHECK:   sv.if %a {
+  // CHECK:     sv.if %b {
+  // CHECK:       sv.if %c {
+  // CHECK:         sv.passign [[REG0]], %x
+  // CHECK:       } else {
+  // CHECK:       }
+  // CHECK:     } else {
+  // CHECK:       sv.passign [[REG0]], %y
+  // CHECK:     }
+  // CHECK:   } else {
+  // CHECK:     sv.passign [[REG0]], %z
+  // CHECK:   }
+  // CHECK: }
+  %0 = comb.mux bin %c, %x, %r1 : i8
+  %1 = comb.mux bin %b, %0, %y : i8
+  %2 = comb.mux bin %a, %1, %z : i8
+  hw.output %r1 : i8
+}
+
+// The following testcase is generated from:
+//   reg r1 : UInt<2>, clock
+//   reg r2 : UInt<2>, clock
+//   reg r3 : UInt<2>, clock
+//   r1 <= mux(c, r2, r3)
+//   r2 <= r1
+//   r3 <= r1
+// CHECK-LABEL: @RegMuxInlining3
+hw.module @RegMuxInlining3(in %clock: !seq.clock, in %c: i1, out out: i8) {
+  // CHECK: [[REG0:%.+]] = sv.reg : !hw.inout<i8>
+  // CHECK: [[REG0_READ:%.+]] = sv.read_inout [[REG0]]
+  %r1 = seq.firreg %0 clock %clock : i8
+
+  // CHECK: [[REG1:%.+]] = sv.reg : !hw.inout<i8>
+  %r2 = seq.firreg %r1 clock %clock : i8
+
+  // CHECK: [[REG2:%.+]] = sv.reg : !hw.inout<i8>
+  %r3 = seq.firreg %r1 clock %clock : i8
+
+  // CHECK: [[MUX:%.+]] = comb.mux
+  // CHECK: sv.always posedge %clock {
+  // CHECK:   sv.passign [[REG0]], [[MUX]]
+  // CHECK:   sv.passign [[REG1]], [[REG0_READ]]
+  // CHECK:   sv.passign [[REG2]], [[REG0_READ]]
+  // CHECK: }
+  %0 = comb.mux bin %c, %r2, %r3 : i8
+  hw.output %r1 : i8
 }
