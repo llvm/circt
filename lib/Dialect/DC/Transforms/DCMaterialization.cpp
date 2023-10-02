@@ -18,6 +18,10 @@ using namespace circt;
 using namespace dc;
 using namespace mlir;
 
+static bool isDCTyped(Value v) {
+  return v.getType().isa<dc::TokenType, dc::ValueType>();
+}
+
 static void replaceFirstUse(Operation *op, Value oldVal, Value newVal) {
   for (int i = 0, e = op->getNumOperands(); i < e; ++i)
     if (op->getOperand(i) == oldVal) {
@@ -26,9 +30,15 @@ static void replaceFirstUse(Operation *op, Value oldVal, Value newVal) {
     }
 }
 
-static void insertSink(Value val, OpBuilder &rewriter) {
-  rewriter.setInsertionPointAfterValue(val);
-  rewriter.create<SinkOp>(val.getLoc(), val);
+// Adds a sink to the provided token or value-typed Value `v`.
+static void insertSink(Value v, OpBuilder &rewriter) {
+  rewriter.setInsertionPointAfterValue(v);
+  if (v.getType().isa<ValueType>()) {
+    // Unpack before sinking
+    v = rewriter.create<UnpackOp>(v.getLoc(), v).getToken();
+  }
+
+  rewriter.create<SinkOp>(v.getLoc(), v);
 }
 
 static void insertFork(Value result, OpBuilder &rewriter) {
@@ -52,10 +62,16 @@ static void insertFork(Value result, OpBuilder &rewriter) {
 // Insert Fork Operation for every operation and function argument with more
 // than one successor.
 static LogicalResult addForkOps(Block &block, OpBuilder &rewriter) {
-  for (Operation &op : block) {
+  // Materialization adds operations _after_ their definition, so we can't use
+  // llvm::make_early_inc_range. Copy over all of the ops to process.
+  llvm::SmallVector<Operation *> opsToProcess;
+  for (auto &op : block.getOperations())
+    opsToProcess.push_back(&op);
+
+  for (Operation *op : opsToProcess) {
     // Ignore terminators.
-    if (!op.hasTrait<OpTrait::IsTerminator>()) {
-      for (auto result : op.getResults()) {
+    if (!op->hasTrait<OpTrait::IsTerminator>()) {
+      for (auto result : op->getResults()) {
         // If there is a result, it is used more than once, and it is a DC
         // type, fork it!
         if (!result.use_empty() && !result.hasOneUse() &&
@@ -78,16 +94,24 @@ namespace dc {
 // Create sink for every unused result
 LogicalResult addSinkOps(Block &block, OpBuilder &rewriter) {
   for (auto arg : block.getArguments()) {
-    if (arg.use_empty())
+    if (isDCTyped(arg) && arg.use_empty())
       insertSink(arg, rewriter);
   }
-  for (Operation &op : block) {
-    if (op.getNumResults() == 0)
+
+  // Materialization adds operations _after_ their definition, so we can't use
+  // llvm::make_early_inc_range. Copy over all of the ops to process.
+  llvm::SmallVector<Operation *> opsToProcess;
+  for (auto &op : block.getOperations())
+    opsToProcess.push_back(&op);
+
+  for (Operation *op : opsToProcess) {
+    if (op->getNumResults() == 0)
       continue;
 
-    for (auto result : op.getResults())
-      if (result.use_empty())
+    for (auto result : op->getResults()) {
+      if (isDCTyped(result) && result.use_empty())
         insertSink(result, rewriter);
+    }
   }
 
   return success();
