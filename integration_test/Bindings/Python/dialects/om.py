@@ -44,6 +44,9 @@ with Context() as ctx, Location.unknown():
       %0 = om.object @Child(%c_14) : (!om.integer) -> !om.class.type<@Child>
       om.class.field @child, %0 : !om.class.type<@Child>
 
+      %path = om.constant #om.path<"path"> : !om.path
+      om.class.field @path, %path : !om.path
+
       om.class.field @reference, %sym : !om.ref
 
       %list = om.constant #om.list<!om.string, ["X" : !om.string, "Y" : !om.string]> : !om.list<!om.string>
@@ -126,6 +129,9 @@ print(obj.reference)
 # CHECK: 14
 (fst, snd) = obj.tuple
 print(snd)
+
+# CHECK: path
+print(obj.path)
 
 try:
   print(obj.tuple[3])
