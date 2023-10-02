@@ -41,22 +41,37 @@ static void insertSink(Value v, OpBuilder &rewriter) {
   rewriter.create<SinkOp>(v.getLoc(), v);
 }
 
+// Adds a fork of the provided token or value-typed Value `result`.
 static void insertFork(Value result, OpBuilder &rewriter) {
+  rewriter.setInsertionPointAfterValue(result);
   // Get successor operations
   std::vector<Operation *> opsToProcess;
   for (auto &u : result.getUses())
     opsToProcess.push_back(u.getOwner());
 
+  bool isValue = result.getType().isa<ValueType>();
+  Value token = result;
+  Value value;
+  if (isValue) {
+    auto unpack = rewriter.create<UnpackOp>(result.getLoc(), result);
+    token = unpack.getToken();
+    value = unpack.getOutput();
+  }
+
   // Insert fork after op
-  rewriter.setInsertionPointAfterValue(result);
   auto forkSize = opsToProcess.size();
-  auto newFork = rewriter.create<ForkOp>(result.getLoc(), result, forkSize);
+  auto newFork = rewriter.create<ForkOp>(token.getLoc(), token, forkSize);
 
   // Modify operands of successor
   // opsToProcess may have multiple instances of same operand
   // Replace uses one by one to assign different fork outputs to them
-  for (auto [op, forkRes] : llvm::zip(opsToProcess, newFork->getResults()))
+  for (auto [op, forkOutput] : llvm::zip(opsToProcess, newFork->getResults())) {
+    Value forkRes = forkOutput;
+    if (isValue)
+      forkRes =
+          rewriter.create<PackOp>(forkRes.getLoc(), forkRes, value).getOutput();
     replaceFirstUse(op, result, forkRes);
+  }
 }
 
 // Insert Fork Operation for every operation and function argument with more
@@ -72,10 +87,11 @@ static LogicalResult addForkOps(Block &block, OpBuilder &rewriter) {
     // Ignore terminators.
     if (!op->hasTrait<OpTrait::IsTerminator>()) {
       for (auto result : op->getResults()) {
+        if (!isDCTyped(result))
+          continue;
         // If there is a result, it is used more than once, and it is a DC
         // type, fork it!
-        if (!result.use_empty() && !result.hasOneUse() &&
-            result.getType().isa<dc::TokenType, dc::ValueType>())
+        if (!result.use_empty() && !result.hasOneUse())
           insertFork(result, rewriter);
       }
     }
@@ -88,11 +104,8 @@ static LogicalResult addForkOps(Block &block, OpBuilder &rewriter) {
   return success();
 }
 
-namespace circt {
-namespace dc {
-
 // Create sink for every unused result
-LogicalResult addSinkOps(Block &block, OpBuilder &rewriter) {
+static LogicalResult addSinkOps(Block &block, OpBuilder &rewriter) {
   for (auto arg : block.getArguments()) {
     if (isDCTyped(arg) && arg.use_empty())
       insertSink(arg, rewriter);
@@ -116,9 +129,6 @@ LogicalResult addSinkOps(Block &block, OpBuilder &rewriter) {
 
   return success();
 }
-
-} // namespace dc
-} // namespace circt
 
 namespace {
 struct DCMaterializeForksSinksPass
