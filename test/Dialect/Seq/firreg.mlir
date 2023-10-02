@@ -783,7 +783,7 @@ hw.module @reg_of_clock_type(in %clk: !seq.clock, in %rst: i1, in %i: !seq.clock
 //     connect r1, value
 //     connect r2, buzz
 // CHECK-LABEL: @RegMuxInlining1
-hw.module @RegMuxInlining1(%clock: !seq.clock, %reset: i1, %a: i1, %b: i1, %c: i1, %foo: i8, %bar: i8, %fizz: i8, %buzz: i8) -> (out: i8) {
+hw.module @RegMuxInlining1(in %clock: !seq.clock, in %reset: i1, in %a: i1, in %b: i1, in %c: i1, in %foo: i8, in %bar: i8, in %fizz: i8, in %buzz: i8, out out: i8) {
   // CHECK: [[REG0:%.+]] = sv.reg : !hw.inout<i8>
   %r1 = seq.firreg %3 clock %clock : i8
 
@@ -823,7 +823,7 @@ hw.module @RegMuxInlining1(%clock: !seq.clock, %reset: i1, %a: i1, %b: i1, %c: i
 //   else :
 //     connect r1, z
 // CHECK-LABEL: @RegMuxInlining2
-hw.module @RegMuxInlining2(%clock: !seq.clock, %reset: i1, %a: i1, %b: i1, %c: i1, %x: i8, %y: i8, %z: i8) -> (out: i8) {
+hw.module @RegMuxInlining2(in %clock: !seq.clock, in %reset: i1, in %a: i1, in %b: i1, in %c: i1, in %x: i8, in %y: i8, in %z: i8, out out: i8) {
   // CHECK: [[REG0:%.+]] = sv.reg : !hw.inout<i8>
   %r1 = seq.firreg %2 clock %clock : i8
 
@@ -855,7 +855,7 @@ hw.module @RegMuxInlining2(%clock: !seq.clock, %reset: i1, %a: i1, %b: i1, %c: i
 //   r2 <= r1
 //   r3 <= r1
 // CHECK-LABEL: @RegMuxInlining3
-hw.module @RegMuxInlining3(%clock: !seq.clock, %c: i1) -> (out: i8) {
+hw.module @RegMuxInlining3(in %clock: !seq.clock, in %c: i1, out out: i8) {
   // CHECK: [[REG0:%.+]] = sv.reg : !hw.inout<i8>
   // CHECK: [[REG0_READ:%.+]] = sv.read_inout [[REG0]]
   %r1 = seq.firreg %0 clock %clock : i8
