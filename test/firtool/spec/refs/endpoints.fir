@@ -1,8 +1,10 @@
-; RUN: firtool %s --verify-diagnostics
-; RUN: firtool %s -preserve-aggregate=all -scalarize-top-module=false --verify-diagnostics
+; RUN: firtool %s
+; RUN: firtool %s -preserve-aggregate=all -scalarize-top-module=false
 FIRRTL version 3.0.0
-circuit Top :
-  ; expected-error @+3 {{input probes not yet supported}}
+circuit Top : %[[
+{ "class": "firrtl.transforms.DontTouchAnnotation", "target": "~Top|Top>producer_debug"},
+{ "class": "firrtl.transforms.DontTouchAnnotation", "target": "~Top|Top>consumer_debug"}
+]]
   ; SPEC EXAMPLE BEGIN
   module Consumer:
     input in : {a: UInt, pref: Probe<UInt>, flip cref: Probe<UInt>}
@@ -16,6 +18,7 @@ circuit Top :
     define out.pref = probe(x)
     ; ...
     connect out.a, x
+    x <= UInt<3>(5) ; XXX: Modification: initialize x.
 
   module Connect:
     output out : {pref: Probe<UInt>, cref: Probe<UInt>}

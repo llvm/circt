@@ -445,38 +445,16 @@ circuit DefineIntoProbe:
 
 circuit InProbeTop:
   module InProbeTop:
-    input p : Probe<UInt<1>> ; expected-error {{input probes not yet supported}}
+    input p : Probe<UInt<1>> ; expected-error {{main module may not contain input references}}
 
 ;// -----
 
 circuit InProbeExt:
   extmodule BadExtMod:
-    input p : Probe<UInt<1>> ; expected-error {{input probes not yet supported}}
+    input p : Probe<UInt<1>> ; expected-error {{references in ports must be output on extmodule and intmodule}}
 
   module InProbeExt:
     inst e of BadExtMod
-
-;// -----
-; Input probes not allowed anywhere for now.
-
-circuit InProbe:
-  module Child:
-    input p : Probe<UInt<1>> ; expected-error {{input probes not yet supported}}
-  module InProbe:
-    input x : UInt<1>
-    inst c of Child
-    define c.p = probe(x)
-
-;// -----
-; Input probes not allowed anywhere for now.
-
-circuit InProbeBundle:
-  module Child:
-    output out : { flip p: Probe<UInt<1>>} ; expected-error {{input probes not yet supported}}
-  module InProbeBundle:
-    input x : UInt<1>
-    inst c of Child
-    define c.out.p = probe(x)
 
 ;// -----
 

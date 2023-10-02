@@ -1,8 +1,15 @@
 ; RUN: firtool %s -verify-diagnostics
 ; RUN: firtool %s -preserve-aggregate=all -scalarize-top-module=false -verify-diagnostics
 FIRRTL version 3.0.0
-circuit UTurn:
-  ; expected-error @+3 {{input probes not yet supported}}
+circuit UTurnTH:
+  module UTurnTH:
+    input in : UInt<5>
+    output out : UInt<5>
+
+    inst rb of RefBouncing
+    connect rb.x, in
+    connect out, rb.y
+
   ; SPEC EXAMPLE BEGIN
   module UTurn:
     input in : Probe<UInt>

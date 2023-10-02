@@ -768,4 +768,18 @@ def HoistPassthrough : Pass<"firrtl-hoist-passthrough", "firrtl::CircuitOp"> {
   ];
 }
 
+def ProbeDCE : Pass<"firrtl-probe-dce", "firrtl::CircuitOp"> {
+  let summary = "Delete dead probe ports and operations.";
+  let description = [{
+    Simple pass to delete dead probe ports and operations.
+    Diagnoses illegal or unsupported input probe uses.
+    Post-condition: no input probe ports.
+  }];
+  let constructor = "circt::firrtl::createProbeDCEPass()";
+  let statistics = [
+    Statistic<"numErasedPorts", "num-erased-ports", "Number of ports erased">,
+    Statistic<"numErasedOps", "num-erased-ops", "Number of operations erased">
+  ];
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD

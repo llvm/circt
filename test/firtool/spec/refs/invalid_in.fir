@@ -3,7 +3,8 @@
 FIRRTL version 3.0.0
 circuit FooUser:
   ; Invalid, per spec
-  ; expected-error @+3 {{input probes not yet supported}}
+  ; expected-error @+7 {{input probes cannot be used}}
+  ; expected-note @+3 {{input probe here}}
   ; SPEC EXAMPLE BEGIN
   module Foo:
      input in : Probe<UInt>
@@ -12,9 +13,9 @@ circuit FooUser:
      connect out, read(in)
   ; SPEC EXAMPLE END
   module FooUser:
+    input in : UInt<2>
     output out : UInt
 
-    node n = UInt<2>(1)
     inst f of Foo
-    connect f.in, probe(n)
+    define f.in = probe(in)
     connect out, f.out
