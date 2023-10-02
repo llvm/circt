@@ -133,7 +133,9 @@ public:
   /// Forward slice through the given input probe argument, diagnosing
   /// illegal/unsupported uses if encountered.
   LogicalResult add(BlockArgument arg) {
+    // Set current slice source for use by helpers, clear when done.
     llvm::SaveAndRestore<BlockArgument> x(this->currentSliceSource, arg);
+    // Slice worklist.
     SmallVector<Operation *> worklist;
 
     // Start with all users of the input probe.
