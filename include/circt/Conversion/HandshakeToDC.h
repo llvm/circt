@@ -26,6 +26,22 @@ namespace circt {
 
 std::unique_ptr<mlir::Pass> createHandshakeToDCPass();
 
+namespace handshaketodc {
+using ConvertedOps = DenseSet<Operation *>;
+
+// Runs Handshake to DC conversion on the provided op. `patternBuilder` can be
+// used to describe additional patterns to run - typically this will be a
+// pattern that converts the container operation (e.g. `op`).
+// `configureTarget` can be provided to specialize legalization.
+LogicalResult runHandshakeToDC(
+    mlir::Operation *op,
+    llvm::function_ref<void(TypeConverter &typeConverter,
+                            ConvertedOps &convertedOps,
+                            RewritePatternSet &patterns)>
+        patternBuilder,
+    llvm::function_ref<void(mlir::ConversionTarget &)> configureTarget = {});
+} // namespace handshaketodc
+
 namespace handshake {
 
 // Converts 't' into a valid HW type. This is strictly used for converting
