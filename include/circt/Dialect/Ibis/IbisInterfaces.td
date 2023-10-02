@@ -85,4 +85,18 @@ def ScopeOpInterface : OpInterface<"ScopeOpInterface", [Symbol]> {
   ];
 }
 
+def BlockOpInterface : OpInterface<"BlockOpInterface"> {
+  let cppNamespace = "circt::ibis";
+  let description = [{
+    An interface for Ibis block-like operations.
+  }];
+
+  let methods = [
+    InterfaceMethod<
+      "Returns the result types of this block from the point of view of inside the block",
+      "llvm::SmallVector<Type>", "getInternalResultTypes",
+      (ins)>
+  ];
+}
+
 #endif // CIRCT_DIALECT_IBIS_INTERFACES_TD
