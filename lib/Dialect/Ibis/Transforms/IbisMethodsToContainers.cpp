@@ -79,7 +79,6 @@ void MethodsToContainersPass::runOnOperation() {
   target.addIllegalOp<ReturnOp>();
   RewritePatternSet patterns(context);
 
-  // Setup a namespace to ensure that the new container names are unique.
   patterns.insert<DataflowMethodOpConversion>(context);
   if (failed(
           applyPartialConversion(getOperation(), target, std::move(patterns))))
