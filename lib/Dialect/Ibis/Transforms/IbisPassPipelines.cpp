@@ -67,6 +67,8 @@ void circt::ibis::loadIbisHighLevelPassPipeline(mlir::PassManager &pm) {
   pm.addPass(createSimpleCanonicalizerPass());
 
   // Now we're ready to schedule our pipelines.
-  pm.nest<ibis::ClassOp>().nest<ibis::DataflowMethodOp>().addPass(
-      ibis::createPrepareSchedulingPass());
+  pm.nest<ibis::ClassOp>()
+      .nest<ibis::DataflowMethodOp>()
+      .nest<ibis::IsolatedStaticBlockOp>()
+      .addPass(ibis::createPrepareSchedulingPass());
 }

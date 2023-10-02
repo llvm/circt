@@ -15,6 +15,7 @@
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Interfaces/FunctionImplementation.h"
 #include "llvm/ADT/TypeSwitch.h"
+
 using namespace mlir;
 using namespace circt;
 using namespace ibis;
@@ -595,20 +596,10 @@ LogicalResult OutputWireOp::canonicalize(OutputWireOp op,
 // StaticBlockOp
 //===----------------------------------------------------------------------===//
 
-LogicalResult StaticBlockOp::verify() {
-  if (getInputs().size() != getBodyBlock()->getNumArguments())
-    return emitOpError("number of inputs must match number of block arguments");
-
-  for (auto [arg, barg] :
-       llvm::zip(getInputs(), getBodyBlock()->getArguments())) {
-    if (arg.getType() != barg.getType())
-      return emitOpError("block argument type must match input type");
-  }
-
-  return success();
-}
-
-ParseResult StaticBlockOp::parse(OpAsmParser &parser, OperationState &result) {
+template <typename TOp>
+static ParseResult parseBlockLikeOp(
+    OpAsmParser &parser, OperationState &result,
+    llvm::function_ref<ParseResult(OpAsmParser::Argument &)> argAdjuster = {}) {
   // Parse the argument initializer list.
   llvm::SmallVector<OpAsmParser::UnresolvedOperand> inputOperands;
   llvm::SmallVector<OpAsmParser::Argument> inputArguments;
@@ -633,23 +624,78 @@ ParseResult StaticBlockOp::parse(OpAsmParser &parser, OperationState &result) {
                              result.operands))
     return failure();
 
+  // If the user provided an arg adjuster, apply it to each argument.
+  if (argAdjuster) {
+    for (auto &arg : inputArguments)
+      if (failed(argAdjuster(arg)))
+        return failure();
+  }
+
   // Parse the body region.
   Region *body = result.addRegion();
   if (parser.parseRegion(*body, inputArguments))
     return failure();
 
-  ensureTerminator(*body, parser.getBuilder(), result.location);
+  TOp::ensureTerminator(*body, parser.getBuilder(), result.location);
   return success();
 }
 
+template <typename T>
+static void printBlockLikeOp(T op, OpAsmPrinter &p) {
+  p << ' ';
+  parsing_util::printInitializerList(p, op.getInputs(),
+                                     op.getBodyBlock()->getArguments());
+  p.printOptionalArrowTypeList(op.getResultTypes());
+  p.printOptionalAttrDictWithKeyword(op.getOperation()->getAttrs());
+  p << ' ';
+  p.printRegion(op.getBody(), /*printEntryBlockArgs=*/false);
+}
+
+LogicalResult StaticBlockOp::verify() {
+  if (getInputs().size() != getBodyBlock()->getNumArguments())
+    return emitOpError("number of inputs must match number of block arguments");
+
+  for (auto [arg, barg] :
+       llvm::zip(getInputs(), getBodyBlock()->getArguments())) {
+    if (arg.getType() != barg.getType())
+      return emitOpError("block argument type must match input type");
+  }
+
+  return success();
+}
+
+ParseResult StaticBlockOp::parse(OpAsmParser &parser, OperationState &result) {
+  return parseBlockLikeOp<StaticBlockOp>(parser, result);
+}
+
 void StaticBlockOp::print(OpAsmPrinter &p) {
-  p << ' ';
-  parsing_util::printInitializerList(p, getInputs(),
-                                     getBodyBlock()->getArguments());
-  p.printOptionalArrowTypeList(getResultTypes());
-  p.printOptionalAttrDictWithKeyword(getOperation()->getAttrs());
-  p << ' ';
-  p.printRegion(getBody(), /*printEntryBlockArgs=*/false);
+  return printBlockLikeOp(*this, p);
+}
+
+//===----------------------------------------------------------------------===//
+// IsolatedStaticBlockOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult IsolatedStaticBlockOp::verify() {
+  if (getInputs().size() != getBodyBlock()->getNumArguments())
+    return emitOpError("number of inputs must match number of block arguments");
+
+  for (auto [arg, barg] :
+       llvm::zip(getInputs(), getBodyBlock()->getArguments())) {
+    if (arg.getType() != barg.getType())
+      return emitOpError("block argument type must match input type");
+  }
+
+  return success();
+}
+
+ParseResult IsolatedStaticBlockOp::parse(OpAsmParser &parser,
+                                         OperationState &result) {
+  return parseBlockLikeOp<IsolatedStaticBlockOp>(parser, result);
+}
+
+void IsolatedStaticBlockOp::print(OpAsmPrinter &p) {
+  return printBlockLikeOp(*this, p);
 }
 
 //===----------------------------------------------------------------------===//
@@ -657,14 +703,20 @@ void StaticBlockOp::print(OpAsmPrinter &p) {
 //===----------------------------------------------------------------------===//
 
 LogicalResult BlockReturnOp::verify() {
-  auto parent = cast<StaticBlockOp>(getOperation()->getParentOp());
+  Operation *parent = getOperation()->getParentOp();
+  auto parentBlock = dyn_cast<BlockOpInterface>(parent);
+  if (!parentBlock)
+    return emitOpError("must be nested in a block");
 
-  if (getNumOperands() != parent.getOutputs().size())
+  if (getNumOperands() != parent->getNumResults())
     return emitOpError("number of operands must match number of block outputs");
 
-  for (auto [op, out] : llvm::zip(getOperands(), parent.getOutputs())) {
-    if (op.getType() != out.getType())
-      return emitOpError("operand type must match block output type");
+  for (auto [op, out] :
+       llvm::zip(getOperands(), parentBlock.getInternalResultTypes())) {
+    if (op.getType() != out)
+      return emitOpError(
+                 "operand type must match parent block output type. Expected ")
+             << out << " got " << op.getType();
   }
 
   return success();

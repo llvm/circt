@@ -225,10 +225,54 @@ def ReturnOp : IbisOp<"return", [
   ];
 }
 
-def StaticBlockOp : IbisOp<"sblock", [
+class BlockLikeOp<string mnemonic, list<Trait> traits = []> : IbisOp<mnemonic, !listconcat(traits, [
   SingleBlockImplicitTerminator<"BlockReturnOp">,
-  AutomaticAllocationScope
-]> {
+  AutomaticAllocationScope,
+  BlockOpInterface])> {
+  let arguments = (ins
+    Variadic<AnyType>:$inputs,
+    OptionalAttr<ConfinedAttr<I64Attr, [IntMinValue<1>]>>:$maxThreads
+  );
+  let results = (outs Variadic<AnyType>:$outputs);
+  let regions = (region SizedRegion<1>:$body);
+  let hasCustomAssemblyFormat = 1;
+
+  code extraBlockClassDeclaration = ?;
+  let extraClassDeclaration = extraBlockClassDeclaration # [{
+    // Return the body of this block.
+    Block* getBodyBlock() { return &getBody().front(); }
+  }];
+  let hasVerifier = 1;
+  let skipDefaultBuilders = 1;
+}
+
+class HighLevelBlockLikeOp<string mnemonic, list<Trait> traits = []> : BlockLikeOp<mnemonic, traits> {
+  let builders = [
+    OpBuilder<(ins "TypeRange":$outputs, "ValueRange":$inputs,
+        CArg<"IntegerAttr", "{}">:$maxThreads), [{
+      $_state.addOperands(inputs);
+      if (maxThreads)
+        $_state.addAttribute(getMaxThreadsAttrName($_state.name), maxThreads);
+      auto* region = $_state.addRegion();
+      $_state.addTypes(outputs);
+      ensureTerminator(*region, $_builder, $_state.location);
+      llvm::SmallVector<Location> argLocs;
+      for(auto input : inputs)
+        argLocs.push_back(input.getLoc());
+      region->front().addArguments(inputs.getTypes(), argLocs);
+    }]>
+  ];
+
+  let extraBlockClassDeclaration = [{
+    llvm::SmallVector<Type> getInternalResultTypes() {
+      llvm::SmallVector<Type> outTypes;
+      llvm::copy(getResultTypes(), std::back_inserter(outTypes));
+      return outTypes;
+    }
+  }];
+}
+
+def StaticBlockOp : HighLevelBlockLikeOp<"sblock"> {
   let summary = "Ibis block";
   let description = [{
     The `ibis.sblock` operation defines a block wherein a group of operations
@@ -242,33 +286,17 @@ def StaticBlockOp : IbisOp<"sblock", [
     The block may contain additional attributes to specify constraints on
     the block further down the compilation pipeline.
   }];
+}
 
-  let arguments = (ins
-    Variadic<AnyType>:$inputs,
-    OptionalAttr<ConfinedAttr<I64Attr, [IntMinValue<1>]>>:$maxThreads
-  );
-  let results = (outs Variadic<AnyType>:$outputs);
-  let regions = (region SizedRegion<1>:$body);
-  let hasCustomAssemblyFormat = 1;
-
-  let extraClassDeclaration = [{
-    // Return the body of this block.
-    Block* getBodyBlock() { return &getBody().front(); }
+def IsolatedStaticBlockOp : HighLevelBlockLikeOp<"sblock.isolated", [
+  IsolatedFromAbove
+]> {
+  let summary = "Ibis isolated block";
+  let description = [{
+    The `ibis.sblock.isolated` operation is like an `ibis.sblock` operation
+    but with an IsolatedFromAbove condition, meaning that all arguments and
+    results are passed through the block as arguments and results.
   }];
-  let hasVerifier = 1;
-  let skipDefaultBuilders = 1;
-    let builders = [
-    OpBuilder<(ins "TypeRange":$outputs, "ValueRange":$inputs,
-        CArg<"IntegerAttr", "{}">:$maxThreads), [{
-      $_state.addOperands(inputs);
-      if (maxThreads) {
-        $_state.addAttribute(getMaxThreadsAttrName($_state.name), maxThreads);
-      }
-      auto* region = $_state.addRegion();
-      $_state.addTypes(outputs);
-      ensureTerminator(*region, $_builder, $_state.location);
-    }]>
-  ];
 }
 
 def InlineStaticBlockBeginOp : IbisOp<"sblock.inline.begin", [
@@ -314,7 +342,7 @@ def InlineStaticBlockEndOp : IbisOp<"sblock.inline.end", [
 }
 
 def BlockReturnOp : IbisOp<"sblock.return", [
-  Pure, ReturnLike, Terminator, HasParent<"StaticBlockOp">]> {
+  Pure, ReturnLike, Terminator, ParentOneOf<["StaticBlockOp", "IsolatedStaticBlockOp"]>]> {
   let summary = "Ibis static block terminator";
 
   let arguments = (ins Variadic<AnyType>:$retValues);

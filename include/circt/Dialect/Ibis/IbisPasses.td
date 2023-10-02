@@ -106,7 +106,8 @@ def IbisArgifyBlocks : Pass<"ibis-argify-blocks"> {
   let summary = "Add arguments to ibis blocks";
   let description = [{
     Analyses `ibis.sblock` operations and converts any SSA value defined outside
-    the `ibis.sblock` to a block argument.
+    the `ibis.sblock` to a block argument. As a result, `ibis.sblock.isolated`
+    are produced.
   }];
   let constructor = "circt::ibis::createArgifyBlocksPass()";
 }
@@ -179,7 +180,7 @@ def IbisConvertCFToHandshake : Pass<"ibis-convert-cf-to-handshake", "ibis::Class
   let dependentDialects = ["circt::handshake::HandshakeDialect", "mlir::cf::ControlFlowDialect"];
 }
 
-def IbisPrepareScheduling : Pass<"ibis-prepare-scheduling", "ibis::DataflowMethodOp"> {
+def IbisPrepareScheduling : Pass<"ibis-prepare-scheduling", "ibis::IsolatedStaticBlockOp"> {
   let summary = "Prepare `ibis.sblock` operations for scheduling";
   let description = [{
     Prepares `ibis.sblock` operations for scheduling by:

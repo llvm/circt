@@ -27,18 +27,13 @@ struct PrepareSchedulingPass
     : public IbisPrepareSchedulingBase<PrepareSchedulingPass> {
   void runOnOperation() override;
 
-  void prepareSBlock(StaticBlockOp op);
+  void prepareSBlock(IsolatedStaticBlockOp sblock);
 };
 } // anonymous namespace
 
-void PrepareSchedulingPass::runOnOperation() {
-  DataflowMethodOp method = getOperation();
+void PrepareSchedulingPass::runOnOperation() { prepareSBlock(getOperation()); }
 
-  for (auto sblock : method.getOps<StaticBlockOp>())
-    prepareSBlock(sblock);
-}
-
-void PrepareSchedulingPass::prepareSBlock(StaticBlockOp sblock) {
+void PrepareSchedulingPass::prepareSBlock(IsolatedStaticBlockOp sblock) {
   Location loc = sblock.getLoc();
   Block *bodyBlock = sblock.getBodyBlock();
   auto b = OpBuilder::atBlockBegin(bodyBlock);
