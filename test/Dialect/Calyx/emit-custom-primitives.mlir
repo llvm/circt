@@ -4,13 +4,13 @@ module attributes {calyx.entrypoint = "A"} {
   // CHECK-LABEL: extern "test.v" {
   // CHECK: primitive prim(in: 32) -> (out: 32);
   // CHECK: }
-  hw.module.extern @prim(%in: i32) -> (out: i32) attributes {filename = "test.v"}
+  hw.module.extern @prim(in %in : i32, out out: i32) attributes {filename = "test.v"}
   // CHECK-LABEL: extern "test.v" {
   // CHECK: primitive params[WIDTH](in: WIDTH) -> (out: WIDTH);
   // CHECK: }
-  hw.module.extern @params<WIDTH: i32>(%in: !hw.int<#hw.param.decl.ref<"WIDTH">>) -> (out: !hw.int<#hw.param.decl.ref<"WIDTH">>) attributes {filename = "test.v"}
+  hw.module.extern @params<WIDTH: i32>(in %in : !hw.int<#hw.param.decl.ref<"WIDTH">>, out out : !hw.int<#hw.param.decl.ref<"WIDTH">>) attributes {filename = "test.v"}
 
-  // CHECK-LABEL: component A<"static"=1>(in_0: 32, in_1: 32, @go go: 1, @clk clk: 1, @reset reset: 1) -> (out_0: 32, out_1: 32, @done done: 1) {
+  // CHECK-LABEL: component A<"static"=1,>(in_0: 32, in_1: 32, @go go: 1, @clk clk: 1, @reset reset: 1) -> (out_0: 32, out_1: 32, @done done: 1) {
   calyx.component @A(%in_0: i32, %in_1: i32, %go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%out_0: i32, %out_1: i32, %done: i1 {done}) {
     %c1_1 = hw.constant 1 : i1
     // CHECK: params_0 = params(32);
@@ -39,9 +39,9 @@ module attributes {calyx.entrypoint = "A"} {
   // CHECK-LABEL: extern "test.v" {
   // CHECK: primitive params[WIDTH](in: WIDTH, @clk clk: 1, @go go: 1) -> (out: WIDTH, @done done: 1);
   // CHECK: }
-  hw.module.extern @params<WIDTH: i32>(%in: !hw.int<#hw.param.decl.ref<"WIDTH">>, %clk: i1 {calyx.clk}, %go: i1 {calyx.go}) -> (out: !hw.int<#hw.param.decl.ref<"WIDTH">>, done: i1 {calyx.done}) attributes {filename = "test.v"}
+  hw.module.extern @params<WIDTH: i32>(in %in : !hw.int<#hw.param.decl.ref<"WIDTH">>, in %clk : i1 {calyx.clk}, in %go : i1 {calyx.go}, out out: !hw.int<#hw.param.decl.ref<"WIDTH">>, out done : i1 {calyx.done}) attributes {filename = "test.v"}
 
-  // CHECK-LABEL: component A<"static"=1>(in_0: 32, in_1: 32, @go go: 1, @clk clk: 1, @reset reset: 1) -> (out_0: 32, out_1: 32, @done done: 1) {
+  // CHECK-LABEL: component A<"static"=1,>(in_0: 32, in_1: 32, @go go: 1, @clk clk: 1, @reset reset: 1) -> (out_0: 32, out_1: 32, @done done: 1) {
   calyx.component @A(%in_0: i32, %in_1: i32, %go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%out_0: i32, %out_1: i32, %done: i1 {done}) {
     %c1_1 = hw.constant 1 : i1
     // CHECK: params_0 = params(32);

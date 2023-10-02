@@ -31,3 +31,27 @@ func.func @testSink(%a: !dc.value<i1>) -> (!dc.token) {
     %true, %false = dc.branch %a
     return %true : !dc.token
 }
+
+// CHECK-LABEL:   func.func @testUnusedArg(
+// CHECK-SAME:                             %[[VAL_0:.*]]: !dc.token,
+// CHECK-SAME:                             %[[VAL_1:.*]]: !dc.value<i1>) {
+// CHECK:           %[[VAL_2:.*]], %[[VAL_3:.*]] = dc.unpack %[[VAL_1]] : !dc.value<i1>
+// CHECK:           dc.sink %[[VAL_2]]
+// CHECK:           dc.sink %[[VAL_0]]
+// CHECK:           return
+// CHECK:         }
+func.func @testUnusedArg(%t: !dc.token, %v : !dc.value<i1>) -> () {
+    return
+}
+
+// CHECK-LABEL:   func.func @testForkOfValue(
+// CHECK-SAME:                               %[[VAL_0:.*]]: !dc.value<i1>) -> (!dc.value<i1>, !dc.value<i1>) {
+// CHECK:           %[[VAL_1:.*]], %[[VAL_2:.*]] = dc.unpack %[[VAL_0]] : !dc.value<i1>
+// CHECK:           %[[VAL_3:.*]]:2 = dc.fork [2] %[[VAL_1]]
+// CHECK:           %[[VAL_4:.*]] = dc.pack %[[VAL_3]]#0, %[[VAL_2]] : i1
+// CHECK:           %[[VAL_5:.*]] = dc.pack %[[VAL_3]]#1, %[[VAL_2]] : i1
+// CHECK:           return %[[VAL_4]], %[[VAL_5]] : !dc.value<i1>, !dc.value<i1>
+// CHECK:         }
+func.func @testForkOfValue(%v : !dc.value<i1>) -> (!dc.value<i1>, !dc.value<i1>) {
+    return %v, %v : !dc.value<i1>, !dc.value<i1>
+}

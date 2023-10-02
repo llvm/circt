@@ -227,17 +227,16 @@ static StringRef getPortVerilogName(Operation *module, PortInfo port) {
 
 /// Return the verilog name of the port for the module.
 static StringRef getPortVerilogName(Operation *module, size_t portArgNum) {
+  auto htmo = cast<HWModuleLike>(module);
+  return getPortVerilogName(module, htmo.getPortList().at(portArgNum));
+}
+
+/// Return the verilog name of the port for the module.
+static StringRef getInputPortVerilogName(Operation *module, size_t portArgNum) {
   if (auto htmo = dyn_cast<HWTestModuleOp>(module))
-    return getPortVerilogName(module, htmo.getPortList().at(portArgNum));
-  // portArgNum is the index into the result of getAllModulePortInfos.
-  // Also ensure the correct index into the input/output list is computed.
-  char verilogNameAttr[] = "hw.verilogName";
-  auto portAttr = cast<HWModuleLike>(module).getAllPortAttrs();
-  if (auto portDict = cast_or_null<DictionaryAttr>(portAttr[portArgNum]))
-    if (auto updatedName = portDict.get(verilogNameAttr))
-      return updatedName.cast<StringAttr>().getValue();
-  // Get the original name of input port if no renaming.
-  return cast<HWModuleLike>(module).getPortName(portArgNum);
+    return getPortVerilogName(module, htmo.getPortList().atInput(portArgNum));
+  auto hml = cast<HWModuleLike>(module);
+  return getPortVerilogName(module, hml.getPortList().atInput(portArgNum));
 }
 
 /// This predicate returns true if the specified operation is considered a
@@ -998,8 +997,8 @@ StringRef getVerilogValueName(Value val) {
     // If the value is defined by for op, use its associated verilog name.
     if (auto forOp = dyn_cast<ForOp>(port.getParentBlock()->getParentOp()))
       return forOp->getAttrOfType<StringAttr>("hw.verilogName");
-    return getPortVerilogName(port.getParentBlock()->getParentOp(),
-                              port.getArgNumber());
+    return getInputPortVerilogName(port.getParentBlock()->getParentOp(),
+                                   port.getArgNumber());
   }
   assert(false && "unhandled value");
   return {};
@@ -6171,9 +6170,10 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit,
         // the verilog location. This also clears the map, so that the map only
         // contains the current iteration's ops.
         state.addVerilogLocToOps(lineOffset, fileName);
-      } else
+      } else {
         os << entry.getStringData();
-      ++lineOffset;
+        ++lineOffset;
+      }
     }
 
     if (state.encounteredError)
@@ -6308,7 +6308,22 @@ struct ExportVerilogPass : public ExportVerilogBase<ExportVerilogPass> {
 private:
   raw_ostream &os;
 };
+
+struct ExportVerilogStreamOwnedPass : public ExportVerilogPass {
+  ExportVerilogStreamOwnedPass(std::unique_ptr<llvm::raw_ostream> os)
+      : ExportVerilogPass{*os} {
+    owned = std::move(os);
+  }
+
+private:
+  std::unique_ptr<llvm::raw_ostream> owned;
+};
 } // end anonymous namespace
+
+std::unique_ptr<mlir::Pass>
+circt::createExportVerilogPass(std::unique_ptr<llvm::raw_ostream> os) {
+  return std::make_unique<ExportVerilogStreamOwnedPass>(std::move(os));
+}
 
 std::unique_ptr<mlir::Pass>
 circt::createExportVerilogPass(llvm::raw_ostream &os) {

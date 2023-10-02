@@ -40,7 +40,7 @@ llhd.proc @proc(%arg0 : !llhd.sig<i32>, %arg1 : !llhd.sig<i16>) -> (%out0 : !llh
 }
 
 // CHECK-LABEL: @hwModule
-hw.module @hwModule(%arg0 : i32, %arg1 : i16) -> (arg2: i8) {
+hw.module @hwModule(in %arg0 : i32, in %arg1 : i16, out arg2: i8) {
   %0 = hw.constant 2 : i8
   hw.output %0 : i8
 }

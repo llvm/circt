@@ -246,11 +246,13 @@ circuit TestHarness : %[[
 ; CHECK:       module Top(
 ; CHECK-NOT:   endmodule
 ; CHECK:         Companion Companion (
+; CHECK-NEXT:    .io (io),
 ; CHECK-NEXT:    .[[bore:[a-zA-Z0-9_]+]] (Top.test.signal_probe)
 ; CHECK:       endmodule
 
 ; CHECK:       module Companion(
 ; CHECK-NOT:   endmodule
+; CHECK-NEXT:    output io,
 ; CHECK-NEXT:    input [7:0] [[bore]]
 ; CHECK:         io = [[bore]][0];
 ; CHECK:       endmodule

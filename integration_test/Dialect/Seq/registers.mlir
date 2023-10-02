@@ -11,7 +11,7 @@
 sv.macro.decl @INIT_RANDOM_PROLOG_
 sv.macro.def @INIT_RANDOM_PROLOG_ ""
 
-hw.module @top(%clk: !seq.clock, %rst: i1) {
+hw.module @top(in %clk: !seq.clock, in %rst: i1) {
   %cst0 = hw.constant 0 : i32
   %cst1 = hw.constant 1 : i32
 

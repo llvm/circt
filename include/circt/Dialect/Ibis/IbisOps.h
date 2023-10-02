@@ -9,9 +9,11 @@
 #ifndef CIRCT_DIALECT_IBIS_IBISOPS_H
 #define CIRCT_DIALECT_IBIS_IBISOPS_H
 
+#include "circt/Dialect/DC/DCTypes.h"
 #include "circt/Dialect/Handshake/HandshakeInterfaces.h"
 #include "circt/Dialect/Ibis/IbisDialect.h"
 #include "circt/Dialect/Ibis/IbisTypes.h"
+#include "circt/Dialect/Seq/SeqTypes.h"
 #include "circt/Support/InstanceGraphInterface.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Builders.h"
@@ -24,7 +26,6 @@
 #include "mlir/Interfaces/FunctionInterfaces.h"
 #include "mlir/Interfaces/InferTypeOpInterface.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
-
 namespace circt {
 namespace ibis {
 class ContainerOp;

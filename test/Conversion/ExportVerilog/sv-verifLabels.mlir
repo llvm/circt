@@ -1,7 +1,7 @@
 // RUN: circt-opt --export-verilog %s | FileCheck %s --check-prefix=CHECK-OFF
 // RUN: circt-opt --test-apply-lowering-options='options=verifLabels' --export-verilog %s | FileCheck %s --check-prefix=CHECK-ON
 
-hw.module @foo(%clock: i1, %cond: i1) {
+hw.module @foo(in %clock: i1, in %cond: i1) {
   sv.initial {
     // CHECK-OFF: assert(
     // CHECK-OFF: assume(

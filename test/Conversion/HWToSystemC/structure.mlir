@@ -3,13 +3,13 @@
 // CHECK: emitc.include <"systemc.h">
 
 // CHECK-LABEL: systemc.module @emptyModule ()
-hw.module @emptyModule () -> () {}
+hw.module @emptyModule () {}
 
 // CHECK-LABEL: systemc.module @onlyInputs (%a: !systemc.in<!systemc.uint<32>>, %b: !systemc.in<!systemc.biguint<256>>, %c: !systemc.in<!systemc.bv<1024>>, %d: !systemc.in<i1>)
-hw.module @onlyInputs (%a: i32, %b: i256, %c: i1024, %d: i1) -> () {}
+hw.module @onlyInputs (in %a: i32, in %b: i256, in %c: i1024, in %d: i1) {}
 
 // CHECK-LABEL: systemc.module @onlyOutputs (%sum: !systemc.out<!systemc.uint<32>>)
-hw.module @onlyOutputs () -> (sum: i32) {
+hw.module @onlyOutputs (out sum: i32) {
   // CHECK-NEXT: systemc.ctor {
   // CHECK-NEXT:   systemc.method %innerLogic
   // CHECK-NEXT: }
@@ -23,7 +23,7 @@ hw.module @onlyOutputs () -> (sum: i32) {
 }
 
 // CHECK-LABEL: systemc.module @adder (%a: !systemc.in<!systemc.uint<32>>, %b: !systemc.in<!systemc.uint<32>>, %sum: !systemc.out<!systemc.uint<32>>)
-hw.module @adder (%a: i32, %b: i32) -> (sum: i32) {
+hw.module @adder (in %a: i32, in %b: i32, out sum: i32) {
   // CHECK-NEXT: systemc.ctor {
   // CHECK-NEXT:   systemc.method %innerLogic
   // CHECK-NEXT:   systemc.sensitive %a, %b : !systemc.in<!systemc.uint<32>>, !systemc.in<!systemc.uint<32>>
@@ -43,28 +43,28 @@ hw.module @adder (%a: i32, %b: i32) -> (sum: i32) {
 }
 
 // CHECK-LABEL: systemc.module private @moduleVisibility
-hw.module private @moduleVisibility () -> () {}
+hw.module private @moduleVisibility () {}
 
 // CHECK-LABEL: systemc.module @argAttrs (%port0: !systemc.in<!systemc.uint<32>> {hw.attrname = "sometext"}, %port1: !systemc.in<!systemc.uint<32>>, %out0: !systemc.out<!systemc.uint<32>>)
-hw.module @argAttrs (%port0: i32 {hw.attrname = "sometext"}, %port1: i32) -> (out0: i32) {
+hw.module @argAttrs (in %port0: i32 {hw.attrname = "sometext"}, in %port1: i32, out out0: i32) {
   %0 = hw.constant 0 : i32
   hw.output %0 : i32
 }
 
 // CHECK-LABEL: systemc.module @resultAttrs (%port0: !systemc.in<!systemc.uint<32>>, %out0: !systemc.out<!systemc.uint<32>> {hw.attrname = "sometext"})
-hw.module @resultAttrs (%port0: i32) -> (out0: i32 {hw.attrname = "sometext"}) {
+hw.module @resultAttrs (in %port0: i32, out out0: i32 {hw.attrname = "sometext"}) {
   %0 = hw.constant 0 : i32
   hw.output %0 : i32
 }
 
 // CHECK-LABEL: systemc.module @submodule
-hw.module @submodule (%in0: i16, %in1: i32) -> (out0: i16, out1: i32, out2: i64) {
+hw.module @submodule (in %in0: i16, in %in1: i32, out out0: i16, out out1: i32, out out2: i64) {
   %0 = hw.constant 0 : i64
   hw.output %in0, %in1, %0 : i16, i32, i64
 }
 
 // CHECK-LABEL:  systemc.module @instanceLowering (%port0: !systemc.in<!systemc.uint<32>>, %out0: !systemc.out<!systemc.uint<16>>, %out1: !systemc.out<!systemc.uint<32>>, %out2: !systemc.out<!systemc.uint<64>>) {
-hw.module @instanceLowering (%port0: i32) -> (out0: i16, out1: i32, out2: i64) {
+hw.module @instanceLowering (in %port0: i32, out out0: i16, out out1: i32, out out2: i64) {
 // CHECK-NEXT:    %inst1 = systemc.instance.decl  @submodule : !systemc.module<submodule(in0: !systemc.in<!systemc.uint<16>>, in1: !systemc.in<!systemc.uint<32>>, out0: !systemc.out<!systemc.uint<16>>, out1: !systemc.out<!systemc.uint<32>>, out2: !systemc.out<!systemc.uint<64>>)>
 // CHECK-NEXT:    %inst1_in0 = systemc.signal  : !systemc.signal<!systemc.uint<16>>
 // CHECK-NEXT:    %inst1_in1 = systemc.signal  : !systemc.signal<!systemc.uint<32>>
@@ -118,7 +118,7 @@ hw.module @instanceLowering (%port0: i32) -> (out0: i16, out1: i32, out2: i64) {
 }
 
 // CHECK-LABEL:  systemc.module @instanceLowering2
-hw.module @instanceLowering2 () -> () {
+hw.module @instanceLowering2 () {
 // CHECK-NEXT: %inst1 = systemc.instance.decl @emptyModule : !systemc.module<emptyModule()>
 // CHECK-NEXT: systemc.ctor {
 // CHECK-NEXT:   systemc.method %
@@ -130,10 +130,10 @@ hw.module @instanceLowering2 () -> () {
 }
 
 // CHECK-LABEL: systemc.module @systemCTypes (%p0: !systemc.in<!systemc.int<32>>, %p1: !systemc.in<!systemc.int_base>, %p2: !systemc.in<!systemc.uint<32>>, %p3: !systemc.in<!systemc.uint_base>, %p4: !systemc.in<!systemc.bigint<32>>, %p5: !systemc.in<!systemc.signed>, %p6: !systemc.in<!systemc.biguint<32>>, %p7: !systemc.in<!systemc.unsigned>, %p8: !systemc.in<!systemc.bv<32>>, %p9: !systemc.in<!systemc.bv_base>, %p10: !systemc.in<!systemc.lv<32>>, %p11: !systemc.in<!systemc.lv_base>, %p12: !systemc.in<!systemc.logic>)
-hw.module @systemCTypes (%p0: !systemc.int<32>, %p1: !systemc.int_base,
-                         %p2: !systemc.uint<32>, %p3: !systemc.uint_base,
-                         %p4: !systemc.bigint<32>, %p5: !systemc.signed,
-                         %p6: !systemc.biguint<32>, %p7: !systemc.unsigned,
-                         %p8: !systemc.bv<32>, %p9: !systemc.bv_base,
-                         %p10: !systemc.lv<32>, %p11: !systemc.lv_base,
-                         %p12: !systemc.logic) -> () {}
+hw.module @systemCTypes (in %p0: !systemc.int<32>, in %p1: !systemc.int_base,
+                         in %p2: !systemc.uint<32>, in %p3: !systemc.uint_base,
+                         in %p4: !systemc.bigint<32>, in %p5: !systemc.signed,
+                         in %p6: !systemc.biguint<32>, in %p7: !systemc.unsigned,
+                         in %p8: !systemc.bv<32>, in %p9: !systemc.bv_base,
+                         in %p10: !systemc.lv<32>, in %p11: !systemc.lv_base,
+                         in %p12: !systemc.logic) {}

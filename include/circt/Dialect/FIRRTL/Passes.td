@@ -737,6 +737,17 @@ def LowerGroups : Pass<"firrtl-lower-groups", "firrtl::CircuitOp"> {
   let dependentDialects = ["sv::SVDialect"];
 }
 
+def GroupSink : Pass<"firrtl-group-sink", "firrtl::FModuleOp"> {
+  let summary = "Sink operations into FIRRTL optional groups";
+  let description = [{
+
+  }];
+  let constructor = "::circt::firrtl::createGroupSinkPass()";
+  let statistics = [
+    Statistic<"numSunk", "num-sunk", "Number of operations sunk">,
+  ];
+}
+
 def HoistPassthrough : Pass<"firrtl-hoist-passthrough", "firrtl::CircuitOp"> {
   let summary = "Hoist passthrough logic";
   let description = [{
@@ -754,6 +765,20 @@ def HoistPassthrough : Pass<"firrtl-hoist-passthrough", "firrtl::CircuitOp"> {
       "Number of ref-type drivers processed">,
     Statistic<"numHWDrivers", "num-hw-drivers",
       "Number of hw-type drivers processed">
+  ];
+}
+
+def ProbeDCE : Pass<"firrtl-probe-dce", "firrtl::CircuitOp"> {
+  let summary = "Delete dead probe ports and operations.";
+  let description = [{
+    Simple pass to delete dead probe ports and operations.
+    Diagnoses illegal or unsupported input probe uses.
+    Post-condition: no input probe ports.
+  }];
+  let constructor = "circt::firrtl::createProbeDCEPass()";
+  let statistics = [
+    Statistic<"numErasedPorts", "num-erased-ports", "Number of ports erased">,
+    Statistic<"numErasedOps", "num-erased-ops", "Number of operations erased">
   ];
 }
 

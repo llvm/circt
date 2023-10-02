@@ -1,9 +1,6 @@
 // RUN: circt-opt -lower-handshake-to-hw -split-input-file %s | FileCheck %s
 
-// CHECK-LABEL:   hw.module @main(
-// CHECK-SAME:                    %[[VAL_0:.*]]: !esi.channel<i0>,
-// CHECK-SAME:                    %[[CLOCK:.*]]: !seq.clock,
-// CHECK-SAME:                    %[[VAL_2:.*]]: i1) -> (out0: !esi.channel<i64>, outCtrl: !esi.channel<i0>) {
+// CHECK:   hw.module @main(in %[[VAL_0:.*]] : !esi.channel<i0>, in %[[CLOCK:.*]] : !seq.clock, in %[[VAL_2:.*]] : i1, out out0 : !esi.channel<i64>, out outCtrl : !esi.channel<i0>) {
 // CHECK:           %[[VAL_3:.*]], %[[VAL_4:.*]], %[[VAL_5:.*]], %[[VAL_6:.*]] = hw.instance "handshake_fork0" @handshake_fork_1ins_4outs_ctrl(in0: %[[VAL_0]]: !esi.channel<i0>, clock: %[[CLOCK]]: !seq.clock, reset: %[[VAL_2]]: i1) -> (out0: !esi.channel<i0>, out1: !esi.channel<i0>, out2: !esi.channel<i0>, out3: !esi.channel<i0>)
 // CHECK:           %[[VAL_7:.*]] = hw.instance "handshake_constant0" @handshake_constant_c1_out_ui64(ctrl: %[[VAL_5]]: !esi.channel<i0>) -> (out0: !esi.channel<i64>)
 // CHECK:           %[[VAL_8:.*]] = hw.instance "handshake_constant1" @handshake_constant_c42_out_ui64(ctrl: %[[VAL_4]]: !esi.channel<i0>) -> (out0: !esi.channel<i64>)

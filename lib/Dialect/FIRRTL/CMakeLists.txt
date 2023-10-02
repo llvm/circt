@@ -1,5 +1,6 @@
 set(CIRCT_FIRRTL_Sources
   CHIRRTLDialect.cpp
+  FieldRefCache.cpp
   FIRRTLAnnotationHelper.cpp
   FIRRTLAnnotations.cpp
   FIRRTLAttributes.cpp

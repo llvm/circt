@@ -101,6 +101,8 @@ std::unique_ptr<mlir::Pass> createLowerMemoryPass();
 std::unique_ptr<mlir::Pass>
 createHoistPassthroughPass(bool hoistHWDrivers = true);
 
+std::unique_ptr<mlir::Pass> createProbeDCEPass();
+
 std::unique_ptr<mlir::Pass>
 createMemToRegOfVecPass(bool replSeqMem = false, bool ignoreReadEnable = false);
 
@@ -169,6 +171,8 @@ std::unique_ptr<mlir::Pass> createFinalizeIRPass();
 std::unique_ptr<mlir::Pass> createLowerClassesPass();
 
 std::unique_ptr<mlir::Pass> createLowerGroupsPass();
+
+std::unique_ptr<mlir::Pass> createGroupSinkPass();
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION

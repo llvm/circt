@@ -1,7 +1,6 @@
 // RUN: circt-opt -split-input-file -lower-handshake-to-hw %s | FileCheck %s
 
-// CHECK-LABEL:   hw.module @handshake_cond_br_in_ui1_ui64_out_ui64_ui64(
-// CHECK-SAME:             %[[VAL_0:.*]]: !esi.channel<i1>, %[[VAL_1:.*]]: !esi.channel<i64>) -> (outTrue: !esi.channel<i64>, outFalse: !esi.channel<i64>) {
+// CHECK:   hw.module @handshake_cond_br_in_ui1_ui64_out_ui64_ui64(in %[[VAL_0:.*]] : !esi.channel<i1>, in %[[VAL_1:.*]] : !esi.channel<i64>, out outTrue : !esi.channel<i64>, out outFalse : !esi.channel<i64>) {
 // CHECK:           %[[VAL_2:.*]], %[[VAL_3:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_4:.*]] : i1
 // CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]] = esi.unwrap.vr %[[VAL_1]], %[[VAL_4]] : i64
 // CHECK:           %[[VAL_7:.*]], %[[VAL_8:.*]] = esi.wrap.vr %[[VAL_5]], %[[VAL_9:.*]] : i64
@@ -23,8 +22,7 @@ handshake.func @test_conditional_branch(%arg0: i1, %arg1: index) -> (index, inde
 
 // -----
 
-// CHECK-LABEL:   hw.module @handshake_cond_br_in_ui1_2ins_2outs_ctrl(
-// CHECK-SAME:              %[[VAL_0:.*]]: !esi.channel<i1>, %[[VAL_1:.*]]: !esi.channel<i0>) -> (outTrue: !esi.channel<i0>, outFalse: !esi.channel<i0>) {
+// CHECK:   hw.module @handshake_cond_br_in_ui1_2ins_2outs_ctrl(in %[[VAL_0:.*]] : !esi.channel<i1>, in %[[VAL_1:.*]] : !esi.channel<i0>, out outTrue : !esi.channel<i0>, out outFalse : !esi.channel<i0>) {
 // CHECK:           %[[VAL_2:.*]], %[[VAL_3:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_4:.*]] : i1
 // CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]] = esi.unwrap.vr %[[VAL_1]], %[[VAL_4]] : i0
 // CHECK:           %[[VAL_7:.*]], %[[VAL_8:.*]] = esi.wrap.vr %[[VAL_5]], %[[VAL_9:.*]] : i0

@@ -21,6 +21,7 @@
 
 namespace circt {
 namespace firtool {
+// Remember to sync changes to C-API
 struct FirtoolOptions {
   llvm::cl::OptionCategory &category;
 
@@ -320,6 +321,10 @@ LogicalResult populateLowFIRRTLToHW(mlir::PassManager &pm,
                                     const FirtoolOptions &opt);
 
 LogicalResult populateHWToSV(mlir::PassManager &pm, const FirtoolOptions &opt);
+
+LogicalResult populateExportVerilog(mlir::PassManager &pm,
+                                    const FirtoolOptions &opt,
+                                    std::unique_ptr<llvm::raw_ostream> os);
 
 LogicalResult populateExportVerilog(mlir::PassManager &pm,
                                     const FirtoolOptions &opt,

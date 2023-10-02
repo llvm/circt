@@ -2,7 +2,7 @@
 // RUN: circt-opt %s -test-apply-lowering-options='options=exprInEventControl' -prettify-verilog -export-verilog | FileCheck %s --check-prefix=INLINE
 
 // CHECK-LABEL: module AlwaysSpill(
-hw.module @AlwaysSpill(%port: i1) {
+hw.module @AlwaysSpill(in %port: i1) {
   %false = hw.constant false
   %true = hw.constant true
   %awire = sv.wire : !hw.inout<i1>
@@ -33,7 +33,7 @@ hw.module @AlwaysSpill(%port: i1) {
 
 // CHECK-LABEL: module Foo
 // INLINE-LABEL: module Foo
-hw.module @Foo(%reset0: i1, %reset1: i1) -> () {
+hw.module @Foo(in %reset0: i1, in %reset1: i1) {
   %0 = comb.or %reset0, %reset1 : i1
   // CHECK:      wire [[TMP0:.*]] = reset0 | reset1;
   // CHECK-NEXT: always @(posedge [[TMP0]])

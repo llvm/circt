@@ -48,17 +48,28 @@ struct BlockConversionPattern : public OpConversionPattern<StaticBlockOp> {
     getExternallyDefinedOperands(blockOp, mapping);
     Block *bodyBlock = blockOp.getBodyBlock();
 
-    rewriter.updateRootInPlace(blockOp, [&]() {
-      // Add inputs and block arguments to the block, and replace the operand
-      // uses.
-      for (auto &[value, uses] : mapping) {
-        blockOp.getInputsMutable().append({value});
-        auto newArg = bodyBlock->addArgument(value.getType(), value.getLoc());
-        for (OpOperand *operand : uses)
-          operand->set(newArg);
-      }
-    });
+    auto isolatedBlock = rewriter.create<IsolatedStaticBlockOp>(
+        blockOp.getLoc(), blockOp.getResultTypes(), blockOp.getOperands(),
+        blockOp.getMaxThreadsAttr());
+    // Erase the default terminator.
+    Block *isolatedBlockBody = isolatedBlock.getBodyBlock();
+    rewriter.eraseOp(isolatedBlockBody->getTerminator());
+    llvm::SmallVector<Value> preAddBArgs;
+    llvm::copy(blockOp.getBodyBlock()->getArguments(),
+               std::back_inserter(preAddBArgs));
 
+    // Add inputs and block arguments to the block, and replace the operand
+    // uses.
+    for (auto &[value, uses] : mapping) {
+      isolatedBlock.getInputsMutable().append({value});
+      auto newArg =
+          isolatedBlockBody->addArgument(value.getType(), value.getLoc());
+      for (OpOperand *operand : uses)
+        operand->set(newArg);
+    }
+    // Inline the old block into the isolated block
+    rewriter.mergeBlocks(bodyBlock, isolatedBlockBody, preAddBArgs);
+    rewriter.replaceOp(blockOp, isolatedBlock.getResults());
     return success();
   }
 };
@@ -71,11 +82,8 @@ struct ArgifyBlocksPass : public IbisArgifyBlocksBase<ArgifyBlocksPass> {
 void ArgifyBlocksPass::runOnOperation() {
   auto *ctx = &getContext();
   ConversionTarget target(*ctx);
-  target.addDynamicallyLegalOp<StaticBlockOp>([](StaticBlockOp op) {
-    ValueMapping mapping;
-    getExternallyDefinedOperands(op, mapping);
-    return mapping.empty();
-  });
+  target.addIllegalOp<StaticBlockOp>();
+  target.addLegalDialect<IbisDialect>();
 
   RewritePatternSet patterns(ctx);
   patterns.add<BlockConversionPattern>(ctx);

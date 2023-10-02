@@ -3,7 +3,7 @@
 // RUN: circt-reduce %s --test /usr/bin/env --test-arg grep --test-arg -q --test-arg "DummyArc(%arg0)" --keep-best=0 --include arc-state-elimination | FileCheck %s
 
 // CHECK-LABEL: hw.module @Foo
-hw.module @Foo(%clk: !seq.clock, %en: i1, %rst: i1, %arg0: i32) -> (out: i32) {
+hw.module @Foo(in %clk: !seq.clock, in %en: i1, in %rst: i1, in %arg0: i32, out out: i32) {
   // CHECK-NEXT: [[V0:%.+]] = arc.call @DummyArc(%arg0) : (i32) -> i32
   %0 = arc.state @DummyArc(%arg0) clock %clk enable %en reset %rst lat 1 {name="reg1"} : (i32) -> (i32)
   // CHECK-NEXT: hw.output [[V0]]

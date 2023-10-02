@@ -7,7 +7,7 @@ esi.service.decl @BSP {
   esi.service.to_server @Send : !esi.channel<i8>
 }
 
-hw.module @Top(%clk: !seq.clock, %rst: i1) {
+hw.module @Top(in %clk: !seq.clock, in %rst: i1) {
   %0 = esi.null : !esi.channel<i1>
   %1 = esi.cosim %clk, %rst, %0, "m1.loopback_tohw" : !esi.channel<i1> -> !esi.channel<i8>
   %2 = esi.cosim %clk, %rst, %m1.loopback_fromhw, "m1.loopback_fromhw" : !esi.channel<i8> -> !esi.channel<i1>
@@ -19,7 +19,7 @@ hw.module @Top(%clk: !seq.clock, %rst: i1) {
   hw.output
 }
 
-hw.module @Loopback(%clk: !seq.clock, %loopback_tohw: !esi.channel<i8>) -> (loopback_fromhw: !esi.channel<i8>) {
+hw.module @Loopback(in %clk: !seq.clock, in %loopback_tohw: !esi.channel<i8>, out loopback_fromhw: !esi.channel<i8>) {
   hw.output %loopback_tohw : !esi.channel<i8>
 }
 

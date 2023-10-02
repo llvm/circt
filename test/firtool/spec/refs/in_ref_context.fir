@@ -1,6 +1,8 @@
 ; RUN: firtool %s -verify-diagnostics
 ; RUN: firtool %s -preserve-aggregate=all -scalarize-top-module=false -verify-diagnostics
 FIRRTL version 3.0.0
+; expected-error @+27 {{input probes cannot be used}}
+; expected-note @+19 {{input probe here}}
 ; SPEC EXAMPLE BEGIN
 circuit Top:
   module Top:
@@ -19,7 +21,6 @@ circuit Top:
 
   module UpDown:
     input in : UInt<4>
-    ; expected-error @below {{input probes not yet supported}}
     input in_ref : Probe<UInt<4>>
     output r1 : Probe<UInt<4>>
     output r2 : Probe<UInt<4>>

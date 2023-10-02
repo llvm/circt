@@ -6,7 +6,7 @@
 
 // CHECK-LABEL: module side_effect_expr
 // DISALLOW-LABEL: module side_effect_expr
-hw.module @side_effect_expr(%clock: i1) -> (a: i1, a2: i1) {
+hw.module @side_effect_expr(in %clock: i1, out a: i1, out a2: i1) {
 
   // CHECK: `ifdef FOO_MACRO
   // DISALLOW: `ifdef FOO_MACRO
@@ -54,7 +54,7 @@ hw.module @side_effect_expr(%clock: i1) -> (a: i1, a2: i1) {
 
 // CHECK-LABEL: module hoist_expressions
 // DISALLOW-LABEL: module hoist_expressions
-hw.module @hoist_expressions(%clock: i1, %x: i8, %y: i8, %z: i8) {
+hw.module @hoist_expressions(in %clock: i1, in %x: i8, in %y: i8, in %z: i8) {
   // DISALLOW: wire [7:0] [[ADD:[_A-Za-z0-9]+]] = x + y;
 
   %fd = hw.constant 0x80000002 : i32
@@ -102,7 +102,7 @@ hw.module @hoist_expressions(%clock: i1, %x: i8, %y: i8, %z: i8) {
 // CHECK-LABEL: module always_inline_expr
 // DISALLOW-LABEL: module always_inline_expr
 // https://github.com/llvm/circt/issues/1705
-hw.module @always_inline_expr(%ro_clock_0: i1, %ro_en_0: i1, %ro_addr_0: i1, %wo_clock_0: i1, %wo_en_0: i1, %wo_addr_0: i1, %wo_mask_0: i1, %wo_data_0: i5) -> (ro_data_0: i5) {
+hw.module @always_inline_expr(in %ro_clock_0: i1, in %ro_en_0: i1, in %ro_addr_0: i1, in %wo_clock_0: i1, in %wo_en_0: i1, in %wo_addr_0: i1, in %wo_mask_0: i1, in %wo_data_0: i5, out ro_data_0: i5) {
   %Memory = sv.reg  : !hw.inout<uarray<2xi5>>
   %0 = sv.array_index_inout %Memory[%ro_addr_0] : !hw.inout<uarray<2xi5>>, i1
   %1 = sv.read_inout %0 : !hw.inout<i5>
@@ -125,7 +125,7 @@ hw.module @always_inline_expr(%ro_clock_0: i1, %ro_en_0: i1, %ro_addr_0: i1, %wo
 // CHECK-LABEL: module EmittedDespiteDisallowed
 // DISALLOW-LABEL: module EmittedDespiteDisallowed
 // https://github.com/llvm/circt/issues/2216
-hw.module @EmittedDespiteDisallowed(%clock: i1, %reset: i1) {
+hw.module @EmittedDespiteDisallowed(in %clock: i1, in %reset: i1) {
   %tick_value_2 = sv.reg  : !hw.inout<i1>
   %counter_value = sv.reg  : !hw.inout<i1>
 
@@ -152,7 +152,7 @@ hw.module @EmittedDespiteDisallowed(%clock: i1, %reset: i1) {
 }
 
 // CHECK-LABEL: module ReadInoutAggregate(
-hw.module @ReadInoutAggregate(%clock: i1) {
+hw.module @ReadInoutAggregate(in %clock: i1) {
   %register = sv.reg  : !hw.inout<array<1xstruct<a: i32>>>
   sv.always posedge %clock  {
     %c0_i16 = hw.constant 0 : i16
@@ -179,7 +179,7 @@ hw.module @ReadInoutAggregate(%clock: i1) {
 // DISALLOW-NEXT:   if (a == b)
 // DISALLOW-NEXT:     $error("error")
 
-hw.module @DefinedInDifferentBlock(%a: i1, %b: i1) {
+hw.module @DefinedInDifferentBlock(in %a: i1, in %b: i1) {
   sv.ifdef "DEF" {
     %0 = comb.icmp eq %a, %b : i1
     sv.initial {
@@ -193,7 +193,7 @@ hw.module @DefinedInDifferentBlock(%a: i1, %b: i1) {
 
 // CHECK-LABEL: module TemporaryWireAtDifferentBlock(
 // DISALLOW-LABEL: module TemporaryWireAtDifferentBlock(
-hw.module @TemporaryWireAtDifferentBlock(%a: i1) -> (b: i1) {
+hw.module @TemporaryWireAtDifferentBlock(in %a: i1, out b: i1) {
   // Check that %0 and %1 are not inlined.
   // CHECK:      wire [[GEN1:.+]];
   // CHECK:      wire [[GEN2:.+]] = [[GEN1]] + [[GEN1]];
@@ -214,7 +214,7 @@ hw.module @TemporaryWireAtDifferentBlock(%a: i1) -> (b: i1) {
 
 // CHECK-LABEL: module AggregateInline(
 // DISALLOW-LABEL: module AggregateInline(
-hw.module @AggregateInline(%clock: i1) {
+hw.module @AggregateInline(in %clock: i1) {
   %c0_i16 = hw.constant 0 : i16
   %false = hw.constant false
   // CHECK: wire [15:0]{{ *}}[[GEN:.+]];

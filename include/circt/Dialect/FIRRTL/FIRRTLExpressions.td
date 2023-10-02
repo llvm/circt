@@ -1335,6 +1335,15 @@ def RefSubOp : FIRRTLExprOp<"ref.sub"> {
 
   let assemblyFormat =
      "$input `[` $index `]` attr-dict `:` qualified(type($input))";
+
+  let firrtlExtraClassDeclaration = [{
+    /// Return a `FieldRef` to the accessed field.
+    FieldRef getAccessedField() {
+      auto inputBaseType = getInput().getType().getType();
+      size_t fieldID = ::circt::hw::FieldIdImpl::getFieldID(inputBaseType, getIndex());
+      return FieldRef(getInput(), fieldID);
+    }
+  }];
 }
 
 def RWProbeOp : FIRRTLOp<"ref.rwprobe",

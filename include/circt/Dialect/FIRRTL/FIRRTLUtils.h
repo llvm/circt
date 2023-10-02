@@ -88,6 +88,9 @@ bool walkDrivers(FIRRTLBaseValue value, bool lookThroughWires,
 /// likely will result in source having slightly different type.
 FieldRef getFieldRefFromValue(Value value, bool lookThroughCasts = false);
 
+/// Get the delta indexing from a value, as a FieldRef.
+FieldRef getDeltaRef(Value value, bool lookThroughCasts = false);
+
 /// Get a string identifier representing the FieldRef.  Return this string and a
 /// boolean indicating if a valid "root" for the identifier was found.  If
 /// nameSafe is true, this will generate a string that is better suited for

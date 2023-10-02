@@ -136,6 +136,12 @@ struct Object {
     return pyFieldNames;
   }
 
+  // Get the hash of the object
+  unsigned getHash() { return omEvaluatorObjectGetHash(value); }
+
+  // Check the equality of the underlying values.
+  bool eq(Object &other) { return omEvaluatorObjectIsEq(value, other.value); }
+
   OMEvaluatorValue getValue() const { return value; }
 
 private:
@@ -361,8 +367,9 @@ void circt::python::populateDialectOMSubmodule(py::module &m) {
            py::arg("name"))
       .def_property_readonly("field_names", &Object::getFieldNames,
                              "Get field names from an Object")
-      .def_property_readonly("type", &Object::getType,
-                             "The Type of the Object");
+      .def_property_readonly("type", &Object::getType, "The Type of the Object")
+      .def("__hash__", &Object::getHash, "Get object hash")
+      .def("__eq__", &Object::eq, "Check if two objects are same");
 
   // Add the ReferenceAttr definition
   mlir_attribute_subclass(m, "ReferenceAttr", omAttrIsAReferenceAttr)
@@ -388,10 +395,19 @@ void circt::python::populateDialectOMSubmodule(py::module &m) {
            [](MlirAttribute arr) { return PyListAttrIterator(arr); });
   PyListAttrIterator::bind(m);
 
+  // Add the MapAttr definition
   mlir_attribute_subclass(m, "MapAttr", omAttrIsAMapAttr)
       .def("__iter__", [](MlirAttribute arr) { return PyMapAttrIterator(arr); })
       .def("__len__", &omMapAttrGetNumElements);
   PyMapAttrIterator::bind(m);
+
+  // Add the PathAttr definition
+  mlir_attribute_subclass(m, "PathAttr", omAttrIsAPathAttr)
+      .def_property_readonly("value", [](MlirAttribute arr) {
+        auto path = mlirIdentifierStr(omPathAttrGetPath(arr));
+        std::string pathStr(path.data, path.length);
+        return pathStr;
+      });
 
   // Add the ClassType class definition.
   mlir_type_subclass(m, "ClassType", omTypeIsAClassType, omClassTypeGetTypeID)

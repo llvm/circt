@@ -7,7 +7,7 @@
 //   2. the IR must trigger ExportVerilog to create a sv.wire
 
 
-hw.module @cyclic(%a: i1) -> (b: i1) {
+hw.module @cyclic(in %a: i1, out b: i1) {
   // Check that a wire temporary is created by export verilog. This wire is
   // for holding the value of %0.  If this wire is not emitted then this test
   // should either be deleted or find a different way to force IR generation.

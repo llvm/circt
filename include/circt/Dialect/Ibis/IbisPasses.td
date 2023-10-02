@@ -35,8 +35,21 @@ def IbisTunneling : Pass<"ibis-tunneling", "mlir::ModuleOp"> {
     ports of `!ibis.portref<...>` type are created.
     After this pass, `get_port` ops should only exist at the same scope of
     container instantiations.
+
+    The user may provide options for `readSuffix` and `writeSuffix`, respectively,
+    which is to be used to generate the name of the ports that are tunneled
+    through the hierarchy, with respect to how the port was requested to be accessed.
+    Suffixes must be provided in cases where a port is tunneled for both read and
+    write accesses, and the suffixes must be different (in this case, the suffixes
+    will be appended to the target port name, and thus de-alias the resulting ports).
   }];
   let constructor = "circt::ibis::createTunnelingPass()";
+  let options = [
+    Option<"readSuffix", "read-suffix", "std::string", "\".rd\"",
+           "Suffix to be used for the port when a port is tunneled for read access">,
+    Option<"writeSuffix", "write-suffix", "std::string", "\".wr\"",
+            "Suffix to be used for the port when a port is tunneled for write access">
+  ];
 }
 
 def IbisPortrefLowering : Pass<"ibis-lower-portrefs", "mlir::ModuleOp"> {
@@ -93,7 +106,8 @@ def IbisArgifyBlocks : Pass<"ibis-argify-blocks"> {
   let summary = "Add arguments to ibis blocks";
   let description = [{
     Analyses `ibis.sblock` operations and converts any SSA value defined outside
-    the `ibis.sblock` to a block argument.
+    the `ibis.sblock` to a block argument. As a result, `ibis.sblock.isolated`
+    are produced.
   }];
   let constructor = "circt::ibis::createArgifyBlocksPass()";
 }
@@ -164,6 +178,32 @@ def IbisConvertCFToHandshake : Pass<"ibis-convert-cf-to-handshake", "ibis::Class
 
   let constructor = "circt::ibis::createConvertCFToHandshakePass()";
   let dependentDialects = ["circt::handshake::HandshakeDialect", "mlir::cf::ControlFlowDialect"];
+}
+
+def IbisConvertHandshakeToDC : Pass<"ibis-convert-handshake-to-dc", "ibis::ClassOp"> {
+  let summary = "Converts an `ibis.method.df` to use DC";
+  let description = [{
+    Converts an `ibis.method.df` from using `handshake` operations to
+    `dc` operations.
+  }];
+  let constructor = "circt::ibis::createConvertHandshakeToDCPass()";
+  let dependentDialects = [
+    "circt::dc::DCDialect",
+    "circt::handshake::HandshakeDialect",
+    "mlir::arith::ArithDialect"
+  ];
+}
+
+def IbisPrepareScheduling : Pass<"ibis-prepare-scheduling", "ibis::IsolatedStaticBlockOp"> {
+  let summary = "Prepare `ibis.sblock` operations for scheduling";
+  let description = [{
+    Prepares `ibis.sblock` operations for scheduling by:
+    - creating an `ibis.pipleine.header` operation
+    - moving operations of an `ibis.sblock` into a `pipeline.unscheduled`
+      operation, which is connected to the pipeline header.
+  }];
+  let constructor = "circt::ibis::createPrepareSchedulingPass()";
+  let dependentDialects = ["circt::pipeline::PipelineDialect"];
 }
 
 #endif // CIRCT_DIALECT_IBIS_PASSES_TD

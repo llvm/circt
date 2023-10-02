@@ -1,7 +1,15 @@
 ; RUN: firtool %s -verify-diagnostics
 ; RUN: firtool %s -preserve-aggregate=all -scalarize-top-module=false -verify-diagnostics
-circuit UnusedInputRef :
-  ; expected-error @+3 {{input probes not yet supported}}
+FIRRTL version 3.0.0
+circuit ForwardDownwardsTH :
+  module ForwardDownwardsTH :
+    input in : UInt<1>
+    output out : UInt<1>
+    connect out, in ; Do something to quiet warnings about empty.
+
+    inst fd of ForwardDownwards
+    connect fd.in, in
+
   ; SPEC EXAMPLE BEGIN
   module UnusedInputRef :
     input r : Probe<UInt<1>>

@@ -1,8 +1,8 @@
 // RUN: circt-opt --lower-seq-hlmem %s | FileCheck %s
 
 // CHECK-LABEL:   hw.module @d1(
-// CHECK-SAME:                  %[[CLOCK:.*]]: !seq.clock,
-// CHECK-SAME:                  %[[VAL_1:.*]]: i1) {
+// CHECK-SAME:                  in %[[CLOCK:.*]] : !seq.clock,
+// CHECK-SAME:                  in %[[VAL_1:.*]] : i1) {
 // CHECK:           %[[VAL_2:.*]] = sv.reg  : !hw.inout<uarray<4xi32>>
 // CHECK:           %[[CLK:.+]] = seq.from_clock %[[CLOCK]]
 // CHECK:           sv.alwaysff(posedge %[[CLK]]) {
@@ -23,7 +23,7 @@
 // CHECK:           %[[VAL_15:.*]] = seq.compreg sym @myMemory_rd0_reg %[[VAL_14]], %[[CLOCK]] : i32
 // CHECK:           hw.output
 // CHECK:         }
-hw.module @d1(%clk : !seq.clock, %rst : i1) -> () {
+hw.module @d1(in %clk : !seq.clock, in %rst : i1) {
   %myMemory = seq.hlmem @myMemory %clk, %rst : <4xi32>
     seq.write %myMemory[%c0_i2] %c42_i32 wren %c1_i1 { latency = 1 } : !seq.hlmem<4xi32>
 

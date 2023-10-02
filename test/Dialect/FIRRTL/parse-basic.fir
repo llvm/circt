@@ -1619,7 +1619,7 @@ circuit Top:
 ;// -----
 
 ; CHECK-LABEL: firrtl.circuit "Groups"
-FIRRTL version 3.1.0
+FIRRTL version 3.2.0
 circuit Groups:
   declgroup A, bind:
     declgroup B, bind:
@@ -1679,7 +1679,7 @@ circuit Groups:
 
 ;// -----
 ; CHECK-LABEL: firrtl.circuit "BasicProps"
-FIRRTL version 3.2.0
+FIRRTL version 3.3.0
 circuit BasicProps :
   module BasicProps :
   ; CHECK-LABEL: module private @Integer
@@ -1879,7 +1879,7 @@ circuit WireOfProbesAndNames:
     wire probe : Probe<UInt<1>>
 
 ;// -----
-FIRRTL version 3.2.0
+FIRRTL version 3.3.0
 
 ; CHECK-LABEL: circuit "AnyRef"
 circuit AnyRef:

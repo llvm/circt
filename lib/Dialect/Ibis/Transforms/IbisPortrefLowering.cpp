@@ -16,6 +16,9 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/Debug.h"
+
+#define DEBUG_TYPE "ibis-lower-portrefs"
 
 using namespace mlir;
 using namespace circt;
@@ -198,7 +201,7 @@ class GetPortConversionPattern : public OpConversionPattern<GetPortOp> {
         return rewriter.notifyMatchFailure(
             op, "expected an ibis.port.write to wrap the get_port result");
       wrapper = getPortWrapper;
-
+      LLVM_DEBUG(llvm::dbgs() << "Found wrapper: " << *wrapper);
       if (innerDirection == Direction::Input) {
         // The portref<in portref<in T>> is now an output port.
         auto newGetPort =
@@ -233,41 +236,81 @@ class GetPortConversionPattern : public OpConversionPattern<GetPortOp> {
             op, "expected an ibis.port.read to unwrap the get_port result");
       wrapper = getPortUnwrapper;
 
+      LLVM_DEBUG(llvm::dbgs() << "Found unwrapper: " << *wrapper);
       if (innerDirection == Direction::Input) {
         // In this situation, we're retrieving an input port that is sent as an
         // output of the container: %rr = ibis.get_port %c %c_in :
         // !ibis.scoperef<...> -> !ibis.portref<out !ibis.portref<in T>>
         //
-        // Thus we expect two ops to be present:
-        // 1. a read op which unwraps the portref<out portref<in T>> into a
-        // portref<in T>
+        // Thus we expect one of these cases:
+        // (always). a read op which unwraps the portref<out portref<in T>> into
+        // a portref<in T>
         //    %r = ibis.port.read %rr : !ibis.portref<out !ibis.portref<in T>>
-        // 2. A write to %r which drives the input port
+        // either:
+        // 1. A write to %r which drives the target input port
         //    ibis.port.write %r, %someValue : !ibis.portref<in T>
+        // 2. A write using %r which forwards the input port reference
+        //    ibis.port.write %r_fw, %r : !ibis.portref<out !ibis.portref<in
+        //    T>>
         //
-        // We then replace the whole structure above with simply writing the
-        // driving value to the actual input port of the container.
         PortWriteOp portDriver;
+        PortWriteOp portForwardingDriver;
         for (auto *user : getPortUnwrapper.getResult().getUsers()) {
           auto writeOp = dyn_cast<PortWriteOp>(user);
-          if (!writeOp || writeOp.getPort() != getPortUnwrapper.getResult())
+          if (!writeOp)
             continue;
 
-          portDriver = writeOp;
-          break;
+          bool isForwarding = writeOp.getPort() != getPortUnwrapper.getResult();
+          if (isForwarding) {
+            if (portForwardingDriver)
+              return rewriter.notifyMatchFailure(
+                  op, "expected a single ibis.port.write to use the unwrapped "
+                      "get_port result, but found multiple");
+            portForwardingDriver = writeOp;
+            LLVM_DEBUG(llvm::dbgs()
+                       << "Found forwarding driver: " << *portForwardingDriver);
+          } else {
+            if (portDriver)
+              return rewriter.notifyMatchFailure(
+                  op, "expected a single ibis.port.write to use the unwrapped "
+                      "get_port result, but found multiple");
+            portDriver = writeOp;
+            LLVM_DEBUG(llvm::dbgs() << "Found driver: " << *portDriver);
+          }
         }
 
-        if (!portDriver)
+        if (!portDriver && !portForwardingDriver)
           return rewriter.notifyMatchFailure(
               op, "expected an ibis.port.write to drive the unwrapped get_port "
                   "result");
 
+        Value portDriverValue;
+        if (portForwardingDriver) {
+          // In the case of forwarding, it is simplest to just create a new
+          // input port, and write the forwarded value to it. This will allow
+          // this pattern to recurse and eventually reach the case where the
+          // forwarding is resolved through reading/writing the intermediate
+          // inputs.
+          auto forwardedInputPort = rewriter.create<InputPortOp>(
+              op.getLoc(), rewriter.getStringAttr(portName.strref() + "_fw"),
+              innerType);
+
+          rewriter.replaceAllUsesWith(getPortUnwrapper, forwardedInputPort);
+          portDriverValue = rewriter.create<PortReadOp>(
+              op.getLoc(), forwardedInputPort.getPort());
+        } else {
+          // Direct assignmenet - the driver value will be the value of
+          // the driver.
+          portDriverValue = portDriver.getValue();
+          rewriter.eraseOp(portDriver);
+        }
+
+        // Perform assignment to the input port of the target instance using
+        // the driver value.
         auto rawPort =
             rewriter.create<GetPortOp>(op.getLoc(), op.getInstance(), portName,
                                        innerType, Direction::Input);
-        rewriter.create<PortWriteOp>(op.getLoc(), rawPort,
-                                     portDriver.getValue());
-        rewriter.eraseOp(portDriver);
+        rewriter.create<PortWriteOp>(op.getLoc(), rawPort, portDriverValue);
       } else {
         // In this situation, we're retrieving an output port that is sent as an
         // output of the container: %rr = ibis.get_port %c %c_in :

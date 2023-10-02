@@ -2850,21 +2850,6 @@ LogicalResult SliceLibOp::verify() {
   return success();
 }
 
-SmallVector<StringRef> MuxLibOp::portNames() {
-  return {"sel", "tru", "fal", "out"};
-}
-SmallVector<Direction> MuxLibOp::portDirections() {
-  return {Input, Input, Input, Output};
-}
-void MuxLibOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  getCellAsmResultNames(setNameFn, *this, this->portNames());
-}
-bool MuxLibOp::isCombinational() { return true; }
-SmallVector<DictionaryAttr> MuxLibOp::portAttributes() {
-  return {DictionaryAttr::get(getContext()), DictionaryAttr::get(getContext()),
-          DictionaryAttr::get(getContext()), DictionaryAttr::get(getContext())};
-}
-
 #define ImplBinPipeOpCellInterface(OpType, outName)                            \
   SmallVector<StringRef> OpType::portNames() {                                 \
     return {"clk", "reset", "go", "left", "right", outName, "done"};           \

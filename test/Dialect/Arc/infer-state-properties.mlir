@@ -171,7 +171,7 @@ arc.define @onlyOneReset(%arg0: i1, %arg1: i1, %arg2: i1) -> (i1, i1) {
 }
 
 // CHECK-LABEL: hw.module @testModule
-hw.module @testModule (%arg0: i1, %arg1: i1, %arg2: i1, %arg3: i1, %clock: !seq.clock) {
+hw.module @testModule (in %arg0: i1, in %arg1: i1, in %arg2: i1, in %arg3: i1, in %clock: !seq.clock) {
   // COM: Test: AND based reset pattern detected
   // CHECK: arc.state @ANDBasedReset(%arg0, %arg1, %arg2) clock %clock reset %arg0 lat 1 : (i1, i1, i1) -> i1
   %0 = arc.state @ANDBasedReset(%arg0, %arg1, %arg2) clock %clock lat 1 : (i1, i1, i1) -> i1

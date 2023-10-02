@@ -256,7 +256,7 @@ systemc.module @instanceDeclNonExistentModule () {
 // -----
 
 // expected-note @+1 {{module declared here}}
-hw.module @adder () -> () {}
+hw.module @adder () {}
 
 systemc.module @instanceDeclDoesNotReferenceSystemCModule () {
   // expected-error @+1 {{symbol reference 'adder' isn't a systemc module}}

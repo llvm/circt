@@ -32,10 +32,9 @@ using namespace circt;
 using namespace handshake;
 using namespace dc;
 using namespace hw;
+using namespace handshaketodc;
 
 namespace {
-
-using ConvertedOps = DenseSet<Operation *>;
 
 struct DCTuple {
   DCTuple() = default;
@@ -308,9 +307,6 @@ public:
   LogicalResult
   matchAndRewrite(Operation *op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override {
-    if (op->getNumResults() != 1)
-      return op->emitOpError("expected single result for pattern to apply");
-
     llvm::SmallVector<Value, 4> inputData;
     llvm::SmallVector<Value, 4> inputTokens;
     for (auto input : operands) {
@@ -337,9 +333,12 @@ public:
     Operation *newOp = rewriter.create(state);
     joinedOps->insert(newOp);
 
-    // Pack the result token with the output data, and replace the use.
-    rewriter.replaceOp(op, ValueRange{pack(rewriter, join.getResult(),
-                                           newOp->getResults().front())});
+    // Pack the result token with the output data, and replace the uses.
+    llvm::SmallVector<Value> results;
+    for (auto result : newOp->getResults())
+      results.push_back(pack(rewriter, join, result));
+
+    rewriter.replaceOp(op, results);
 
     return success();
   }
@@ -391,9 +390,9 @@ public:
   }
 };
 
-class ReturnOpConversion : public DCOpConversionPattern<handshake::ReturnOp> {
+class ReturnOpConversion : public OpConversionPattern<handshake::ReturnOp> {
 public:
-  using DCOpConversionPattern<handshake::ReturnOp>::DCOpConversionPattern;
+  using OpConversionPattern<handshake::ReturnOp>::OpConversionPattern;
   using OpAdaptor = typename handshake::ReturnOp::Adaptor;
 
   LogicalResult
@@ -504,9 +503,9 @@ static hw::ModulePortInfo getModulePortInfoHS(const TypeConverter &tc,
   return hw::ModulePortInfo{inputs, outputs};
 }
 
-class FuncOpConversion : public DCOpConversionPattern<handshake::FuncOp> {
+class FuncOpConversion : public OpConversionPattern<handshake::FuncOp> {
 public:
-  using DCOpConversionPattern<handshake::FuncOp>::DCOpConversionPattern;
+  using OpConversionPattern<handshake::FuncOp>::OpConversionPattern;
   using OpAdaptor = typename handshake::FuncOp::Adaptor;
 
   // Replaces a handshake.func with a hw.module, converting the argument and
@@ -547,53 +546,19 @@ class HandshakeToDCPass : public HandshakeToDCBase<HandshakeToDCPass> {
 public:
   void runOnOperation() override {
     mlir::ModuleOp mod = getOperation();
+    auto targetModifier = [](mlir::ConversionTarget &target) {
+      target.addLegalDialect<hw::HWDialect, func::FuncDialect>();
+    };
 
-    // Maintain the set of operations which has been converted either through
-    // unit rate conversion, or as part of other conversions.
-    // Rationale:
-    // This is needed for all of the arith ops that get created as part of the
-    // handshake ops (e.g. arith.select for handshake.mux). There's a bit of a
-    // dilemma here seeing as all operations need to be converted/touched in a
-    // handshake.func - which is done so by UnitRateConversionPattern (when no
-    // other pattern applies). However, we obviously don't want to run said
-    // pattern on these newly created ops since they do not have handshake
-    // semantics.
-    ConvertedOps convertedOps;
+    auto patternBuilder = [&](TypeConverter &typeConverter,
+                              handshaketodc::ConvertedOps &convertedOps,
+                              RewritePatternSet &patterns) {
+      patterns.add<FuncOpConversion, ReturnOpConversion>(typeConverter,
+                                                         mod.getContext());
+    };
 
-    ConversionTarget target(getContext());
-    target.addIllegalDialect<handshake::HandshakeDialect>();
-    target.addLegalDialect<dc::DCDialect, func::FuncDialect, hw::HWDialect>();
-    target.addLegalOp<mlir::ModuleOp>();
-
-    // The various patterns will insert new operations into the module to
-    // facilitate the conversion - however, these operations must be
-    // distinguishable from already converted operations (which may be of the
-    // same type as the newly inserted operations). To do this, we mark all
-    // operations which have been converted as legal, and all other operations
-    // as illegal.
-    target.markUnknownOpDynamicallyLegal(
-        [&](Operation *op) { return convertedOps.contains(op); });
-
-    DCTypeConverter typeConverter;
-    RewritePatternSet patterns(&getContext());
-
-    // Add handshake conversion patterns.
-    // Note: merge/control merge are not supported - these are non-deterministic
-    // operators and we do not care for them.
-    patterns
-        .add<FuncOpConversion, BufferOpConversion, CondBranchConversionPattern,
-             SinkOpConversionPattern, SourceOpConversionPattern,
-             MuxOpConversionPattern, ReturnOpConversion,
-             ForkOpConversionPattern, JoinOpConversion,
-             ControlMergeOpConversion, ConstantOpConversion, SyncOpConversion>(
-            &getContext(), typeConverter, &convertedOps);
-
-    // ALL other single-result operations are converted via the
-    // UnitRateConversionPattern.
-    patterns.add<UnitRateConversionPattern>(&getContext(), typeConverter,
-                                            &convertedOps);
-
-    if (failed(applyPartialConversion(mod, target, std::move(patterns))))
+    LogicalResult res = runHandshakeToDC(mod, patternBuilder, targetModifier);
+    if (failed(res))
       signalPassFailure();
   }
 };
@@ -601,4 +566,63 @@ public:
 
 std::unique_ptr<mlir::Pass> circt::createHandshakeToDCPass() {
   return std::make_unique<HandshakeToDCPass>();
+}
+
+LogicalResult circt::handshaketodc::runHandshakeToDC(
+    mlir::Operation *op,
+    llvm::function_ref<void(TypeConverter &typeConverter,
+                            handshaketodc::ConvertedOps &convertedOps,
+                            RewritePatternSet &patterns)>
+        patternBuilder,
+    llvm::function_ref<void(mlir::ConversionTarget &)> configureTarget) {
+  // Maintain the set of operations which has been converted either through
+  // unit rate conversion, or as part of other conversions.
+  // Rationale:
+  // This is needed for all of the arith ops that get created as part of the
+  // handshake ops (e.g. arith.select for handshake.mux). There's a bit of a
+  // dilemma here seeing as all operations need to be converted/touched in a
+  // handshake.func - which is done so by UnitRateConversionPattern (when no
+  // other pattern applies). However, we obviously don't want to run said
+  // pattern on these newly created ops since they do not have handshake
+  // semantics.
+  handshaketodc::ConvertedOps convertedOps;
+  mlir::MLIRContext *ctx = op->getContext();
+  ConversionTarget target(*ctx);
+  target.addIllegalDialect<handshake::HandshakeDialect>();
+  target.addLegalDialect<dc::DCDialect>();
+  target.addLegalOp<mlir::ModuleOp>();
+
+  // And any user-specified target adjustments
+  if (configureTarget)
+    configureTarget(target);
+
+  // The various patterns will insert new operations into the module to
+  // facilitate the conversion - however, these operations must be
+  // distinguishable from already converted operations (which may be of the
+  // same type as the newly inserted operations). To do this, we mark all
+  // operations which have been converted as legal, and all other operations
+  // as illegal.
+  target.markUnknownOpDynamicallyLegal(
+      [&](Operation *op) { return convertedOps.contains(op); });
+
+  DCTypeConverter typeConverter;
+  RewritePatternSet patterns(ctx);
+
+  // Add handshake conversion patterns.
+  // Note: merge/control merge are not supported - these are non-deterministic
+  // operators and we do not care for them.
+  patterns
+      .add<BufferOpConversion, CondBranchConversionPattern,
+           SinkOpConversionPattern, SourceOpConversionPattern,
+           MuxOpConversionPattern, ForkOpConversionPattern, JoinOpConversion,
+           ControlMergeOpConversion, ConstantOpConversion, SyncOpConversion>(
+          ctx, typeConverter, &convertedOps);
+
+  // ALL other single-result operations are converted via the
+  // UnitRateConversionPattern.
+  patterns.add<UnitRateConversionPattern>(ctx, typeConverter, &convertedOps);
+
+  // Build any user-specified patterns
+  patternBuilder(typeConverter, convertedOps, patterns);
+  return applyPartialConversion(op, target, std::move(patterns));
 }

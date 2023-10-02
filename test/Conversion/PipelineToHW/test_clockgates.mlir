@@ -3,7 +3,7 @@
 
 
 // CHECK-LABEL:   hw.module @testSingle(
-// CHECK-SAME:           %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i1, %[[CLOCK:.*]]: !seq.clock, %[[VAL_4:.*]]: i1) -> (out0: i32, out1: i1) {
+// CHECK-SAME:           %[[VAL_0:.*]] : i32, in %[[VAL_1:.*]] : i32, in %[[VAL_2:.*]] : i1, in %[[CLOCK:.*]] : !seq.clock, in %[[VAL_4:.*]] : i1, out out0 : i32, out out1 : i1) {
 // CHECK:           %[[VAL_5:.*]] = comb.sub %[[VAL_0]], %[[VAL_1]] : i32
 // CHECK:           %[[VAL_6:.*]] = hw.constant true
 // CHECK:           %[[VAL_7:.*]] = hw.constant false
@@ -16,7 +16,7 @@
 // CHECK:         }
 
 // CGATE-LABEL:   hw.module @testSingle(
-// CGATE-SAME:           %[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i1, %[[CLOCK:.*]]: !seq.clock, %[[VAL_4:.*]]: i1) -> (out0: i32, out1: i1) {
+// CGATE-SAME:           %[[VAL_0:.*]] : i32, in %[[VAL_1:.*]] : i32, in %[[VAL_2:.*]] : i1, in %[[CLOCK:.*]] : !seq.clock, in %[[VAL_4:.*]] : i1, out out0 : i32, out out1 : i1) {
 // CGATE:           %[[VAL_5:.*]] = comb.sub %[[VAL_0]], %[[VAL_1]] : i32
 // CGATE:           %[[VAL_6:.*]] = hw.constant true
 // CGATE:           %[[VAL_7:.*]] = hw.constant false
@@ -31,7 +31,7 @@
 // CGATE:           hw.output %[[VAL_15]], %[[VAL_14]] : i32, i1
 // CGATE:         }
 
-hw.module @testSingle(%arg0: i32, %arg1: i32, %go: i1, %clk: !seq.clock, %rst: i1) -> (out0: i32, out1: i1) {
+hw.module @testSingle(in %arg0: i32, in %arg1: i32, in %go: i1, in %clk: !seq.clock, in %rst: i1, out out0: i32, out out1: i1) {
   %0:2 = pipeline.scheduled(%a0 : i32 = %arg0, %a1 : i32 = %arg1) clock(%clk) reset(%rst) go(%go) entryEn(%s0_enable) -> (out: i32){
     %1 = comb.sub %a0, %a1 : i32
     %true = hw.constant true

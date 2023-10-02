@@ -1,6 +1,6 @@
 ; RUN: firtool %s | FileCheck %s
 
-FIRRTL version 3.1.0
+FIRRTL version 3.2.0
 circuit Foo: %[[
   {
     "class": "firrtl.transforms.DontTouchAnnotation",

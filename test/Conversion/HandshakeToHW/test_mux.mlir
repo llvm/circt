@@ -1,7 +1,6 @@
 // RUN: circt-opt -lower-handshake-to-hw -split-input-file %s | FileCheck %s
 
-// CHECK-LABEL:   hw.module @handshake_mux_in_ui64_ui64_ui64_out_ui64(
-// CHECK-SAME:                                                        %[[VAL_0:.*]]: !esi.channel<i64>, %[[VAL_1:.*]]: !esi.channel<i64>, %[[VAL_2:.*]]: !esi.channel<i64>) -> (out0: !esi.channel<i64>) {
+// CHECK:   hw.module @handshake_mux_in_ui64_ui64_ui64_out_ui64(in %[[VAL_0:.*]] : !esi.channel<i64>, in %[[VAL_1:.*]] : !esi.channel<i64>, in %[[VAL_2:.*]] : !esi.channel<i64>, out out0 : !esi.channel<i64>) {
 // CHECK:           %[[VAL_3:.*]], %[[VAL_4:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_5:.*]] : i64
 // CHECK:           %[[VAL_6:.*]], %[[VAL_7:.*]] = esi.unwrap.vr %[[VAL_1]], %[[VAL_8:.*]] : i64
 // CHECK:           %[[VAL_9:.*]], %[[VAL_10:.*]] = esi.unwrap.vr %[[VAL_2]], %[[VAL_11:.*]] : i64
@@ -29,8 +28,7 @@ handshake.func @test_mux(%arg0: index, %arg1: index, %arg2: index, %arg3: none, 
 
 // -----
 
-// CHECK-LABEL:   hw.module @handshake_mux_in_ui64_ui64_ui64_ui64_out_ui64(
-// CHECK-SAME:                                                             %[[VAL_0:.*]]: !esi.channel<i64>, %[[VAL_1:.*]]: !esi.channel<i64>, %[[VAL_2:.*]]: !esi.channel<i64>, %[[VAL_3:.*]]: !esi.channel<i64>) -> (out0: !esi.channel<i64>) {
+// CHECK:   hw.module @handshake_mux_in_ui64_ui64_ui64_ui64_out_ui64(in %[[VAL_0:.*]] : !esi.channel<i64>, in %[[VAL_1:.*]] : !esi.channel<i64>, in %[[VAL_2:.*]] : !esi.channel<i64>, in %[[VAL_3:.*]] : !esi.channel<i64>, out out0 : !esi.channel<i64>) {
 // CHECK:           %[[VAL_4:.*]], %[[VAL_5:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_6:.*]] : i64
 // CHECK:           %[[VAL_7:.*]], %[[VAL_8:.*]] = esi.unwrap.vr %[[VAL_1]], %[[VAL_9:.*]] : i64
 // CHECK:           %[[VAL_10:.*]], %[[VAL_11:.*]] = esi.unwrap.vr %[[VAL_2]], %[[VAL_12:.*]] : i64

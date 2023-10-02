@@ -2,7 +2,7 @@
 
 // CHECK: <<UNSUPPORTED OPERATION (hw.module)>>
 // expected-error @+1 {{no emission pattern found for 'hw.module'}}
-hw.module @notSupported () -> () { }
+hw.module @notSupported () { }
 
 // -----
 

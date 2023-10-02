@@ -1,8 +1,4 @@
-// RUN: circt-opt --ibis-containerize --ibis-tunneling --ibis-lower-portrefs \
-// RUN:   --canonicalize --ibis-clean-selfdrivers --canonicalize \
-// RUN:   --ibis-convert-containers-to-hw --pipeline-explicit-regs \
-// RUN:   --lower-pipeline-to-hw --lower-seq-to-sv \
-// RUN:   --export-verilog -o %t_lo.mlir %s > %t.sv
+// RUN: ibistool -lo %s
 
 // A class hierarchy with a shared parent, and accessing between the children
 

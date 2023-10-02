@@ -18,6 +18,10 @@ using namespace circt;
 using namespace dc;
 using namespace mlir;
 
+static bool isDCTyped(Value v) {
+  return v.getType().isa<dc::TokenType, dc::ValueType>();
+}
+
 static void replaceFirstUse(Operation *op, Value oldVal, Value newVal) {
   for (int i = 0, e = op->getNumOperands(); i < e; ++i)
     if (op->getOperand(i) == oldVal) {
@@ -26,40 +30,68 @@ static void replaceFirstUse(Operation *op, Value oldVal, Value newVal) {
     }
 }
 
-static void insertSink(Value val, OpBuilder &rewriter) {
-  rewriter.setInsertionPointAfterValue(val);
-  rewriter.create<SinkOp>(val.getLoc(), val);
+// Adds a sink to the provided token or value-typed Value `v`.
+static void insertSink(Value v, OpBuilder &rewriter) {
+  rewriter.setInsertionPointAfterValue(v);
+  if (v.getType().isa<ValueType>()) {
+    // Unpack before sinking
+    v = rewriter.create<UnpackOp>(v.getLoc(), v).getToken();
+  }
+
+  rewriter.create<SinkOp>(v.getLoc(), v);
 }
 
+// Adds a fork of the provided token or value-typed Value `result`.
 static void insertFork(Value result, OpBuilder &rewriter) {
+  rewriter.setInsertionPointAfterValue(result);
   // Get successor operations
   std::vector<Operation *> opsToProcess;
   for (auto &u : result.getUses())
     opsToProcess.push_back(u.getOwner());
 
+  bool isValue = result.getType().isa<ValueType>();
+  Value token = result;
+  Value value;
+  if (isValue) {
+    auto unpack = rewriter.create<UnpackOp>(result.getLoc(), result);
+    token = unpack.getToken();
+    value = unpack.getOutput();
+  }
+
   // Insert fork after op
-  rewriter.setInsertionPointAfterValue(result);
   auto forkSize = opsToProcess.size();
-  auto newFork = rewriter.create<ForkOp>(result.getLoc(), result, forkSize);
+  auto newFork = rewriter.create<ForkOp>(token.getLoc(), token, forkSize);
 
   // Modify operands of successor
   // opsToProcess may have multiple instances of same operand
   // Replace uses one by one to assign different fork outputs to them
-  for (auto [op, forkRes] : llvm::zip(opsToProcess, newFork->getResults()))
+  for (auto [op, forkOutput] : llvm::zip(opsToProcess, newFork->getResults())) {
+    Value forkRes = forkOutput;
+    if (isValue)
+      forkRes =
+          rewriter.create<PackOp>(forkRes.getLoc(), forkRes, value).getOutput();
     replaceFirstUse(op, result, forkRes);
+  }
 }
 
 // Insert Fork Operation for every operation and function argument with more
 // than one successor.
 static LogicalResult addForkOps(Block &block, OpBuilder &rewriter) {
-  for (Operation &op : block) {
+  // Materialization adds operations _after_ their definition, so we can't use
+  // llvm::make_early_inc_range. Copy over all of the ops to process.
+  llvm::SmallVector<Operation *> opsToProcess;
+  for (auto &op : block.getOperations())
+    opsToProcess.push_back(&op);
+
+  for (Operation *op : opsToProcess) {
     // Ignore terminators.
-    if (!op.hasTrait<OpTrait::IsTerminator>()) {
-      for (auto result : op.getResults()) {
+    if (!op->hasTrait<OpTrait::IsTerminator>()) {
+      for (auto result : op->getResults()) {
+        if (!isDCTyped(result))
+          continue;
         // If there is a result, it is used more than once, and it is a DC
         // type, fork it!
-        if (!result.use_empty() && !result.hasOneUse() &&
-            result.getType().isa<dc::TokenType, dc::ValueType>())
+        if (!result.use_empty() && !result.hasOneUse())
           insertFork(result, rewriter);
       }
     }
@@ -72,29 +104,31 @@ static LogicalResult addForkOps(Block &block, OpBuilder &rewriter) {
   return success();
 }
 
-namespace circt {
-namespace dc {
-
 // Create sink for every unused result
-LogicalResult addSinkOps(Block &block, OpBuilder &rewriter) {
+static LogicalResult addSinkOps(Block &block, OpBuilder &rewriter) {
   for (auto arg : block.getArguments()) {
-    if (arg.use_empty())
+    if (isDCTyped(arg) && arg.use_empty())
       insertSink(arg, rewriter);
   }
-  for (Operation &op : block) {
-    if (op.getNumResults() == 0)
+
+  // Materialization adds operations _after_ their definition, so we can't use
+  // llvm::make_early_inc_range. Copy over all of the ops to process.
+  llvm::SmallVector<Operation *> opsToProcess;
+  for (auto &op : block.getOperations())
+    opsToProcess.push_back(&op);
+
+  for (Operation *op : opsToProcess) {
+    if (op->getNumResults() == 0)
       continue;
 
-    for (auto result : op.getResults())
-      if (result.use_empty())
+    for (auto result : op->getResults()) {
+      if (isDCTyped(result) && result.use_empty())
         insertSink(result, rewriter);
+    }
   }
 
   return success();
 }
-
-} // namespace dc
-} // namespace circt
 
 namespace {
 struct DCMaterializeForksSinksPass

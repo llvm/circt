@@ -8,44 +8,44 @@
 // RUN: verilator --lint-only --top-module exprInlineTestIssue439 %t1.sv
 // RUN: verilator --lint-only --top-module StructDecls %t1.sv
 
-hw.module @B(%a: i1) -> (b: i1, c: i1) {
+hw.module @B(in %a: i1, out b: i1, out c: i1) {
   %0 = comb.or %a, %a : i1
   %1 = comb.and %a, %a : i1
   hw.output %0, %1 : i1, i1
 }
 
-hw.module @A(%d: i1, %e: i1) -> (f: i1) {
+hw.module @A(in %d: i1, in %e: i1, out f: i1) {
   %1 = comb.mux %d, %d, %e : i1
   hw.output %1 : i1
 }
 
-hw.module @AAA(%d: i1, %e: i1) -> (f: i1) {
+hw.module @AAA(in %d: i1, in %e: i1, out f: i1) {
   %z = hw.constant 0 : i1
   hw.output %z : i1
 }
 
-hw.module @AB(%w: i1, %x: i1) -> (y: i1, z: i1) {
+hw.module @AB(in %w: i1, in %x: i1, out y: i1, out z: i1) {
   %w2 = hw.instance "a1" @AAA(d: %w: i1, e: %w1: i1) -> (f: i1)
   %w1, %y = hw.instance "b1" @B(a: %w2: i1) -> (b: i1, c: i1)
   hw.output %y, %x : i1, i1
 }
 
-hw.module @shl(%a: i1) -> (b: i1) {
+hw.module @shl(in %a: i1, out b: i1) {
   %0 = comb.shl %a, %a : i1
   hw.output %0 : i1
 }
 
-hw.module @TESTSIMPLE(%a: i4, %b: i4, %cond: i1, %array: !hw.array<10xi4>,
-                        %uarray: !hw.uarray<16xi8>) -> (
-  r0: i4, r1: i4, r2: i4, r3: i4,
-  r4: i4, r5: i4, r6: i4, r7: i4,
-  r8: i4, r9: i4, r10: i4, r11: i4,
-  r12: i4, r13: i1,
-  r14: i1, r15: i1, r16: i1, r17: i1,
-  r18: i1, r19: i1, r20: i1, r21: i1,
-  r22: i1, r23: i1,
-  r24: i12, r25: i2, r27: i4, r28: i4,
-  r29: !hw.array<3xi4>
+hw.module @TESTSIMPLE(in %a: i4, in %b: i4, in %cond: i1, in %array: !hw.array<10xi4>,
+                        in %uarray: !hw.uarray<16xi8>,
+  out  r0: i4, out  r1: i4, out  r2: i4, out  r3: i4,
+  out  r4: i4, out  r5: i4, out  r6: i4, out  r7: i4,
+  out  r8: i4, out  r9: i4, out  r10: i4, out  r11: i4,
+  out  r12: i4, out  r13: i1,
+  out  r14: i1, out  r15: i1, out  r16: i1, out  r17: i1,
+  out  r18: i1, out  r19: i1, out  r20: i1, out  r21: i1,
+  out  r22: i1, out  r23: i1,
+  out  r24: i12, out  r25: i2, out  r27: i4, out  r28: i4,
+  out  r29: !hw.array<3xi4>
   ) {
 
   %0 = comb.add %a, %b : i4
@@ -91,7 +91,7 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %cond: i1, %array: !hw.array<10xi4>,
     i12,i2, i4, i4, !hw.array<3xi4>
 }
 
-hw.module @exprInlineTestIssue439(%clk: i1) {
+hw.module @exprInlineTestIssue439(in %clk: i1) {
   %c = hw.constant 0 : i32
 
   sv.always posedge %clk {
@@ -102,7 +102,7 @@ hw.module @exprInlineTestIssue439(%clk: i1) {
   }
 }
 
-hw.module @casts(%in1: i64) -> (r1: !hw.array<5xi8>) {
+hw.module @casts(in %in1: i64, out r1: !hw.array<5xi8>) {
   %bits = hw.bitcast %in1 : (i64) -> !hw.array<64xi1>
   %idx = hw.constant 10 : i6
   %midBits = hw.array_slice %bits[%idx] : (!hw.array<64xi1>) -> !hw.array<40xi1>
@@ -115,7 +115,7 @@ hw.module @StructDecls() {
   %reg2 = sv.reg : !hw.inout<array<8xstruct<a: i1, b: i1>>>
 }
 
-hw.module @UniformArrayCreate() -> (arr: !hw.array<5xi8>) {
+hw.module @UniformArrayCreate(out arr: !hw.array<5xi8>) {
   %c0_i8 = hw.constant 0 : i8
   %arr = hw.array_create %c0_i8, %c0_i8, %c0_i8, %c0_i8, %c0_i8 : i8
   hw.output %arr : !hw.array<5xi8>

@@ -51,7 +51,7 @@ hw.module @foo() {
 }
 
 // CHECK-LABEL: hw.module @HasBeenReset
-hw.module @HasBeenReset(%clock: i1, %reset: i1) {
+hw.module @HasBeenReset(in %clock: i1, in %reset: i1) {
   // CHECK-NEXT: verif.has_been_reset %clock, async %reset
   // CHECK-NEXT: verif.has_been_reset %clock, sync %reset
   %hbr0 = verif.has_been_reset %clock, async %reset

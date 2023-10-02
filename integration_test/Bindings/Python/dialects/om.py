@@ -13,6 +13,28 @@ with Context() as ctx, Location.unknown():
 
   module = Module.parse("""
   module {
+    om.class @node() {
+      %0 = om.constant #om.list<!om.string,["MyThing" : !om.string]> : !om.list<!om.string>
+      %1 = om.constant "Component.inst1.foo" : !om.string
+      om.class.field @field2, %1 : !om.string
+    }
+    
+    om.class @comp(
+        %inst1_propOut_bore: !om.class.type<@node>,
+        %inst2_propOut_bore: !om.class.type<@node>) {
+      om.class.field @field2, %inst1_propOut_bore : !om.class.type<@node>
+      om.class.field @field3, %inst2_propOut_bore : !om.class.type<@node>
+    }
+    
+    om.class  @Client() {
+      %0 = om.object @node() : () -> !om.class.type<@node>
+      %2 = om.object @comp(%0, %0) : (!om.class.type<@node>, !om.class.type<@node>) -> !om.class.type<@comp>
+    
+      om.class.field @client_omnode_0_OMIROut, %2 : !om.class.type<@comp>
+      om.class.field @node0_OMIROut, %0 : !om.class.type<@node>
+      om.class.field @node1_OMIROut, %0 : !om.class.type<@node>
+    }
+
     %sym = om.constant #om.ref<<@Root::@x>> : !om.ref
 
     om.class @Test(%param: !om.integer) {
@@ -21,6 +43,9 @@ with Context() as ctx, Location.unknown():
       %c_14 = om.constant #om.integer<14> : !om.integer
       %0 = om.object @Child(%c_14) : (!om.integer) -> !om.class.type<@Child>
       om.class.field @child, %0 : !om.class.type<@Child>
+
+      %path = om.constant #om.path<"path"> : !om.path
+      om.class.field @path, %path : !om.path
 
       om.class.field @reference, %sym : !om.ref
 
@@ -56,7 +81,7 @@ with Context() as ctx, Location.unknown():
       om.class.field @list_child, %0 : !om.list<!om.class.type<@Child>>
     }
 
-    hw.module @Root(%clock: i1) -> () {
+    hw.module @Root(in %clock: i1) {
       %0 = sv.wire sym @x : !hw.inout<i1>
     }
   }
@@ -105,6 +130,9 @@ print(obj.reference)
 (fst, snd) = obj.tuple
 print(snd)
 
+# CHECK: path
+print(obj.path)
+
 try:
   print(obj.tuple[3])
 except IndexError as e:
@@ -150,3 +178,10 @@ for k, v in obj.map_create.items():
   # CHECK-NEXT: X 14
   # CHECK-NEXT: Y 15
   print(k, v)
+
+obj = evaluator.instantiate("Client")
+object_dict: dict[om.Object, str] = {}
+for field_name, data in obj:
+  if isinstance(data, om.Object):
+    object_dict[data] = field_name
+assert len(object_dict) == 2

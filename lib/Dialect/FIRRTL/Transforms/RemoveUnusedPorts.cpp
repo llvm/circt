@@ -68,7 +68,8 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
 
     // If the port is don't touch or has unprocessed annotations, we cannot
     // remove the port. Maybe we can allow annotations though.
-    if ((hasDontTouch(arg) || !port.annotations.empty()) && !ignoreDontTouch)
+    if ((hasDontTouch(arg) || !port.annotations.canBeDeleted()) &&
+        !ignoreDontTouch)
       continue;
 
     // TODO: Handle inout ports.

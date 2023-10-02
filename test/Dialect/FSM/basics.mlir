@@ -43,7 +43,7 @@ fsm.machine @foo(%arg0: i1) attributes {initialState = "IDLE"} {
 // CHECK:     }
 // CHECK:   }
 // CHECK: }
-// CHECK: hw.module @bar(%clk: !seq.clock, %rst_n: i1) {
+// CHECK: hw.module @bar(in %clk : !seq.clock, in %rst_n : i1) {
 // CHECK:   %true = hw.constant true
 // CHECK:   %0 = fsm.hw_instance "foo_inst" @foo(%true), clock %clk, reset %rst_n : (i1) -> i1
 // CHECK:   hw.output
@@ -99,7 +99,7 @@ fsm.machine @foo(%arg0: i1) -> i1 attributes {initialState = "IDLE"} {
 }
 
 // Hardware-style instantiation.
-hw.module @bar(%clk: !seq.clock, %rst_n: i1) {
+hw.module @bar(in %clk: !seq.clock, in %rst_n: i1) {
   %in = hw.constant true
   %out = fsm.hw_instance "foo_inst" @foo(%in), clock %clk, reset %rst_n : (i1) -> i1
 }

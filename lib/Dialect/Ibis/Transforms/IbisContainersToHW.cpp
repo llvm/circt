@@ -14,6 +14,7 @@
 #include "circt/Dialect/Ibis/IbisPasses.h"
 #include "circt/Dialect/Ibis/IbisTypes.h"
 
+#include "mlir/IR/OperationSupport.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/TypeSwitch.h"
 
@@ -208,9 +209,20 @@ struct ContainerInstanceOpConversionPattern
         getScopeRefModuleName(op.getResult().getType())));
     size_t nInputPorts = std::distance(cpi.hwPorts->getInputs().begin(),
                                        cpi.hwPorts->getInputs().end());
-    if (nInputPorts != inputWritesToUse.size())
-      return rewriter.notifyMatchFailure(
-          op, "expected exactly one ibis.port.write op of each input port");
+    if (nInputPorts != inputWritesToUse.size()) {
+      std::string errMsg;
+      llvm::raw_string_ostream ers(errMsg);
+      ers << "Error when lowering instance ";
+      op.print(ers, mlir::OpPrintingFlags().printGenericOpForm());
+
+      ers << "\nexpected exactly one ibis.port.write op of each input port. "
+             "Mising port assignments were:\n";
+      for (auto input : cpi.hwPorts->getInputs()) {
+        if (inputWritesToUse.find(input.name) == inputWritesToUse.end())
+          ers << "\t" << input.name << "\n";
+      }
+      return rewriter.notifyMatchFailure(op, errMsg);
+    }
     for (auto input : cpi.hwPorts->getInputs()) {
       auto writeOp = inputWritesToUse.at(input.name);
       operands.push_back(writeOp.getValue());

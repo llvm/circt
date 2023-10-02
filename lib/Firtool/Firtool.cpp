@@ -82,6 +82,7 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createHoistPassthroughPass(
       /*hoistHWDrivers=*/!opt.disableOptimization &&
       !opt.disableHoistingHWPassthrough));
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createProbeDCEPass());
 
   if (opt.dedup)
     emitWarning(UnknownLoc::get(pm.getContext()),
@@ -112,6 +113,7 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
   modulePM.addPass(firrtl::createExpandWhensPass());
   modulePM.addPass(firrtl::createSFCCompatPass());
+  modulePM.addPass(firrtl::createGroupSinkPass());
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerGroupsPass());
 
@@ -312,6 +314,14 @@ populatePrepareForExportVerilog(mlir::PassManager &pm,
   return success();
 }
 } // namespace detail
+
+LogicalResult
+firtool::populateExportVerilog(mlir::PassManager &pm, const FirtoolOptions &opt,
+                               std::unique_ptr<llvm::raw_ostream> os) {
+  pm.addPass(createExportVerilogPass(std::move(os)));
+
+  return success();
+}
 
 LogicalResult firtool::populateExportVerilog(mlir::PassManager &pm,
                                              const FirtoolOptions &opt,

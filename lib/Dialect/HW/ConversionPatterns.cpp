@@ -34,9 +34,9 @@ static hw::ModuleType convertModuleType(const TypeConverter &typeConverter,
   return hw::ModuleType::get(type.getContext(), ports);
 }
 
-LogicalResult TypeConversionPattern::matchAndRewrite(
-    Operation *op, ArrayRef<Value> operands,
-    ConversionPatternRewriter &rewriter) const {
+LogicalResult circt::doTypeConversion(Operation *op, ValueRange operands,
+                                      ConversionPatternRewriter &rewriter,
+                                      const TypeConverter *typeConverter) {
   // Convert the TypeAttrs.
   llvm::SmallVector<NamedAttribute, 4> newAttrs;
   newAttrs.reserve(op->getAttrs().size());
@@ -46,11 +46,11 @@ LogicalResult TypeConversionPattern::matchAndRewrite(
       // TypeConvert::convertType doesn't handle function types, so we need to
       // handle them manually.
       if (auto funcType = innerType.dyn_cast<FunctionType>())
-        innerType = convertFunctionType(*getTypeConverter(), funcType);
+        innerType = convertFunctionType(*typeConverter, funcType);
       else if (auto modType = innerType.dyn_cast<hw::ModuleType>())
-        innerType = convertModuleType(*getTypeConverter(), modType);
+        innerType = convertModuleType(*typeConverter, modType);
       else
-        innerType = getTypeConverter()->convertType(innerType);
+        innerType = typeConverter->convertType(innerType);
       newAttrs.emplace_back(attr.getName(), TypeAttr::get(innerType));
     } else {
       newAttrs.push_back(attr);
@@ -59,8 +59,7 @@ LogicalResult TypeConversionPattern::matchAndRewrite(
 
   // Convert the result types.
   llvm::SmallVector<Type, 4> newResults;
-  if (failed(
-          getTypeConverter()->convertTypes(op->getResultTypes(), newResults)))
+  if (failed(typeConverter->convertTypes(op->getResultTypes(), newResults)))
     return rewriter.notifyMatchFailure(op->getLoc(), "type conversion failed");
 
   // Build the state for the edited clone.
@@ -88,11 +87,11 @@ LogicalResult TypeConversionPattern::matchAndRewrite(
     // Move the region and convert the region args.
     rewriter.inlineRegionBefore(region, *newRegion, newRegion->begin());
     TypeConverter::SignatureConversion result(newRegion->getNumArguments());
-    if (failed(getTypeConverter()->convertSignatureArgs(
+    if (failed(typeConverter->convertSignatureArgs(
             newRegion->getArgumentTypes(), result)))
       return rewriter.notifyMatchFailure(op->getLoc(),
                                          "type conversion failed");
-    rewriter.applySignatureConversion(newRegion, result, getTypeConverter());
+    rewriter.applySignatureConversion(newRegion, result, typeConverter);
 
     // Apply the argument locations.
     for (auto [arg, loc] : llvm::zip(newRegion->getArguments(), argLocs))

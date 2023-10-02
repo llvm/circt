@@ -12,7 +12,7 @@ arc.define @Bar() {
 
 // -----
 
-hw.module @Foo(%clock: !seq.clock) {
+hw.module @Foo(in %clock: !seq.clock) {
   // expected-error @+1 {{'arc.state' op with non-zero latency outside a clock domain requires a clock}}
   arc.state @Bar() lat 1 : () -> ()
 }
@@ -22,7 +22,7 @@ arc.define @Bar() {
 
 // -----
 
-hw.module @Foo(%clock: !seq.clock) {
+hw.module @Foo(in %clock: !seq.clock) {
   // expected-error @+1 {{'arc.state' op with zero latency cannot have a clock}}
   arc.state @Bar() clock %clock lat 0 : () -> ()
 }
@@ -32,7 +32,7 @@ arc.define @Bar() {
 
 // -----
 
-hw.module @Foo(%clock: !seq.clock, %enable: i1) {
+hw.module @Foo(in %clock: !seq.clock, in %enable: i1) {
   // expected-error @+1 {{'arc.state' op with zero latency cannot have an enable}}
   arc.state @Bar() enable %enable lat 0 : () -> ()
 }
@@ -42,7 +42,7 @@ arc.define @Bar() {
 
 // -----
 
-hw.module @Foo(%clock: !seq.clock, %reset: i1) {
+hw.module @Foo(in %clock: !seq.clock, in %reset: i1) {
   // expected-error @+1 {{'arc.state' op with zero latency cannot have a reset}}
   arc.state @Bar() reset %reset lat 0 : () -> ()
 }
@@ -208,7 +208,7 @@ arc.define @lutSideEffects () -> i32 {
 
 // -----
 
-hw.module @clockDomainNumOutputs(%clk: !seq.clock) {
+hw.module @clockDomainNumOutputs(in %clk: !seq.clock) {
   %0 = arc.clock_domain () clock %clk : () -> (i32) {
   ^bb0:
     // expected-error @+1 {{incorrect number of outputs: expected 1, but got 0}}
@@ -219,7 +219,7 @@ hw.module @clockDomainNumOutputs(%clk: !seq.clock) {
 
 // -----
 
-hw.module @clockDomainNumInputs(%clk: !seq.clock) {
+hw.module @clockDomainNumInputs(in %clk: !seq.clock) {
   // expected-error @+1 {{incorrect number of inputs: expected 1, but got 0}}
   arc.clock_domain () clock %clk : () -> () {
   ^bb0(%arg0: i32):
@@ -230,7 +230,7 @@ hw.module @clockDomainNumInputs(%clk: !seq.clock) {
 
 // -----
 
-hw.module @clockDomainInputTypes(%clk: !seq.clock, %arg0: i16) {
+hw.module @clockDomainInputTypes(in %clk: !seq.clock, in %arg0: i16) {
   // expected-error @+3 {{input type mismatch: input #0}}
   // expected-note @+2 {{expected type: 'i32'}}
   // expected-note @+1 {{actual type: 'i16'}}
@@ -243,7 +243,7 @@ hw.module @clockDomainInputTypes(%clk: !seq.clock, %arg0: i16) {
 
 // -----
 
-hw.module @clockDomainOutputTypes(%clk: !seq.clock) {
+hw.module @clockDomainOutputTypes(in %clk: !seq.clock) {
   %0 = arc.clock_domain () clock %clk : () -> (i32) {
   ^bb0:
     %c0_i16 = hw.constant 0 : i16
@@ -257,7 +257,7 @@ hw.module @clockDomainOutputTypes(%clk: !seq.clock) {
 
 // -----
 
-hw.module @clockDomainIsolatedFromAbove(%clk: !seq.clock, %arg0: i32) {
+hw.module @clockDomainIsolatedFromAbove(in %clk: !seq.clock, in %arg0: i32) {
   // expected-note @+1 {{required by region isolation constraints}}
   %0 = arc.clock_domain () clock %clk : () -> (i32) {
     // expected-error @+1 {{using value defined outside the region}}
@@ -268,7 +268,7 @@ hw.module @clockDomainIsolatedFromAbove(%clk: !seq.clock, %arg0: i32) {
 
 // -----
 
-hw.module @stateOpInsideClockDomain(%clk: !seq.clock) {
+hw.module @stateOpInsideClockDomain(in %clk: !seq.clock) {
   arc.clock_domain (%clk) clock %clk : (!seq.clock) -> () {
   ^bb0(%arg0: !seq.clock):
     // expected-error @+1 {{inside a clock domain cannot have a clock}}
@@ -283,7 +283,7 @@ arc.define @dummyArc() {
 
 // -----
 
-hw.module @memoryWritePortOpInsideClockDomain(%clk: !seq.clock) {
+hw.module @memoryWritePortOpInsideClockDomain(in %clk: !seq.clock) {
   arc.clock_domain (%clk) clock %clk : (!seq.clock) -> () {
   ^bb0(%arg0: !seq.clock):
     %mem = arc.memory <4 x i32, i32>
@@ -299,7 +299,7 @@ arc.define @identity(%addr: i32, %data: i32, %enable: i1) -> (i32, i32, i1) {
 
 // -----
 
-hw.module @memoryWritePortOpOutsideClockDomain(%clock: !seq.clock, %en: i1) {
+hw.module @memoryWritePortOpOutsideClockDomain(in %clock: !seq.clock, in %en: i1) {
   %mem = arc.memory <4 x i32, i32>
   %c0_i32 = hw.constant 0 : i32
   // expected-error @+1 {{outside a clock domain requires a clock}}
@@ -311,7 +311,7 @@ arc.define @identity(%addr: i32, %data: i32, %enable: i1) -> (i32, i32, i1) {
 
 // -----
 
-hw.module @memoryWritePortOpLatZero(%clock: !seq.clock, %en: i1) {
+hw.module @memoryWritePortOpLatZero(in %clock: !seq.clock, in %en: i1) {
   %mem = arc.memory <4 x i32, i32>
   %c0_i32 = hw.constant 0 : i32
   // expected-error @+1 {{latency must be at least 1}}
@@ -340,7 +340,7 @@ arc.define @outputOpVerifier () -> i32 {
 
 // -----
 
-hw.module @operand_type_mismatch(%in0: i2, %in1: i1, %in2: i1, %in3: i1) -> (out0: i1, out1: i1) {
+hw.module @operand_type_mismatch(in %in0: i2, in %in1: i1, in %in2: i1, in %in3: i1, out out0: i1, out out1: i1) {
   // expected-error @below {{all input vector lane types must match}}
   %0:2 = arc.vectorize (%in0, %in1), (%in2, %in3) : (i2, i1, i1, i1) -> (i1, i1) {
   ^bb0(%arg0: i1, %arg1: i1):
@@ -352,7 +352,7 @@ hw.module @operand_type_mismatch(%in0: i2, %in1: i1, %in2: i1, %in3: i1) -> (out
 
 // -----
 
-hw.module @number_results_does_not_match_way(%in0: i1, %in1: i1, %in2: i1, %in3: i1) -> (out0: i1) {
+hw.module @number_results_does_not_match_way(in %in0: i1, in %in1: i1, in %in2: i1, in %in3: i1, out out0: i1) {
   // expected-error @below {{number results must match input vector size}}
   %0 = arc.vectorize (%in0, %in1), (%in2, %in3) : (i1, i1, i1, i1) -> i1 {
   ^bb0(%arg0: i1, %arg1: i1):
@@ -364,7 +364,7 @@ hw.module @number_results_does_not_match_way(%in0: i1, %in1: i1, %in2: i1, %in3:
 
 // -----
 
-hw.module @result_type_mismatch(%in0: i1, %in1: i1, %in2: i1, %in3: i1) -> (out0: i1, out1: i2) {
+hw.module @result_type_mismatch(in %in0: i1, in %in1: i1, in %in2: i1, in %in3: i1, out out0: i1, out out1: i2) {
   // expected-error @below {{all result types must match}}
   %0:2 = arc.vectorize (%in0, %in1), (%in2, %in3) : (i1, i1, i1, i1) -> (i1, i2) {
   ^bb0(%arg0: i1, %arg1: i1):
@@ -376,7 +376,7 @@ hw.module @result_type_mismatch(%in0: i1, %in1: i1, %in2: i1, %in3: i1) -> (out0
 
 // -----
 
-hw.module @vectorized_block_arg_type_mismatch(%in0: i1, %in1: i1, %in2: i1, %in3: i1) -> (out0: i1, out1: i1) {
+hw.module @vectorized_block_arg_type_mismatch(in %in0: i1, in %in1: i1, in %in2: i1, in %in3: i1, out out0: i1, out out1: i1) {
   // expected-error @below {{if terminator type matches result type the argument types must match the input types}}
   %0:2 = arc.vectorize (%in0, %in1), (%in2, %in3) : (i1, i1, i1, i1) -> (i1, i1) {
   ^bb0(%arg0: i2, %arg1: i1):
@@ -389,7 +389,7 @@ hw.module @vectorized_block_arg_type_mismatch(%in0: i1, %in1: i1, %in2: i1, %in3
 
 // -----
 
-hw.module @number_vectorized_block_args_mismatch(%in0: i1, %in1: i1, %in2: i1, %in3: i1) -> (out0: i1, out1: i1) {
+hw.module @number_vectorized_block_args_mismatch(in %in0: i1, in %in1: i1, in %in2: i1, in %in3: i1, out out0: i1, out out1: i1) {
   // expected-error @below {{number of block arguments must match number of input vectors}}
   %0:2 = arc.vectorize (%in0, %in1), (%in2, %in3) : (i1, i1, i1, i1) -> (i1, i1) {
   ^bb0(%arg0: i1):
@@ -400,7 +400,7 @@ hw.module @number_vectorized_block_args_mismatch(%in0: i1, %in1: i1, %in2: i1, %
 
 // -----
 
-hw.module @only_one_block_allowed(%in0: i1, %in1: i1, %in2: i1, %in3: i1) -> (out0: i1, out1: i1) {
+hw.module @only_one_block_allowed(in %in0: i1, in %in1: i1, in %in2: i1, in %in3: i1, out out0: i1, out out1: i1) {
   // expected-error @below {{region #0 ('body') failed to verify constraint: region with 1 blocks}}
   %0:2 = arc.vectorize (%in0, %in1), (%in2, %in3) : (i1, i1, i1, i1) -> (i1, i1) {
   ^bb0(%arg0: i1, %arg1: i1):
@@ -414,7 +414,7 @@ hw.module @only_one_block_allowed(%in0: i1, %in1: i1, %in2: i1, %in3: i1) -> (ou
 
 // -----
 
-hw.module @only_one_block_allowed(%in0: i1, %in1: i1, %in2: i1, %in3: i1) -> (out0: i1, out1: i1) {
+hw.module @only_one_block_allowed(in %in0: i1, in %in1: i1, in %in2: i1, in %in3: i1, out out0: i1, out out1: i1) {
   // expected-error @below {{region #0 ('body') failed to verify constraint: region with 1 blocks}}
   %0:2 = arc.vectorize (%in0, %in1), (%in2, %in3) : (i1, i1, i1, i1) -> (i1, i1) {}
   hw.output %0#0, %0#1 : i1, i1
@@ -422,7 +422,7 @@ hw.module @only_one_block_allowed(%in0: i1, %in1: i1, %in2: i1, %in3: i1) -> (ou
 
 // -----
 
-hw.module @invalid_input_type(%in0: vector<2xi1>, %in1: vector<2xi1>, %in2: vector<2xi1>, %in3: vector<2xi1>) -> (out0: i1, out1: i1) {
+hw.module @invalid_input_type(in %in0: vector<2xi1>, in %in1: vector<2xi1>, in %in2: vector<2xi1>, in %in3: vector<2xi1>, out out0: i1, out out1: i1) {
   // expected-error @below {{input vector element type must be a signless integer}}
   %0:2 = arc.vectorize (%in0, %in1), (%in2, %in3) : (vector<2xi1>, vector<2xi1>, vector<2xi1>, vector<2xi1>) -> (i1, i1) {
   ^bb0(%arg0: vector<2xi1>, %arg1: vector<2xi1>):
@@ -434,7 +434,7 @@ hw.module @invalid_input_type(%in0: vector<2xi1>, %in1: vector<2xi1>, %in2: vect
 
 // -----
 
-hw.module @invalid_result_type(%in0: i1, %in1: i1, %in2: i1, %in3: i1) -> (out0: vector<2xi1>, out1: vector<2xi1>) {
+hw.module @invalid_result_type(in %in0: i1, in %in1: i1, in %in2: i1, in %in3: i1, out out0: vector<2xi1>, out out1: vector<2xi1>) {
   // expected-error @below {{may only return a vector type if boundary is already vectorized}}
   %0:2 = arc.vectorize (%in0, %in1), (%in2, %in3) : (i1, i1, i1, i1) -> (vector<2xi1>, vector<2xi1>) {
   ^bb0(%arg0: i1, %arg1: i1):
@@ -446,7 +446,7 @@ hw.module @invalid_result_type(%in0: i1, %in1: i1, %in2: i1, %in3: i1) -> (out0:
 
 // -----
 
-hw.module @input_operand_list_not_empty() -> (out0: i1, out1: i1) {
+hw.module @input_operand_list_not_empty(out out0: i1, out out1: i1) {
   // expected-error @below {{there has to be at least one input vector}}
   %0:2 = arc.vectorize : () -> (i1, i1) {
   ^bb0:
@@ -458,7 +458,7 @@ hw.module @input_operand_list_not_empty() -> (out0: i1, out1: i1) {
 
 // -----
 
-hw.module @input_vector_sizes_must_match(%in0: i1, %in1: i1, %in2: i1) -> (out0: i1, out1: i1) {
+hw.module @input_vector_sizes_must_match(in %in0: i1, in %in1: i1, in %in2: i1, out out0: i1, out out1: i1) {
   // expected-error @below {{all input vectors must have the same size}}
   %0:2 = arc.vectorize (%in0, %in1), (%in2) : (i1, i1, i1) -> (i1, i1) {
   ^bb0(%arg0: i1, %arg1: i1):
@@ -470,7 +470,7 @@ hw.module @input_vector_sizes_must_match(%in0: i1, %in1: i1, %in2: i1) -> (out0:
 
 // -----
 
-hw.module @input_vector_not_empty() -> (out0: i1, out1: i1) {
+hw.module @input_vector_not_empty(out out0: i1, out out1: i1) {
   // expected-error @below {{input vector must have at least one element}}
   %0:2 = arc.vectorize () : () -> (i1, i1) {
   ^bb0:
@@ -482,7 +482,7 @@ hw.module @input_vector_not_empty() -> (out0: i1, out1: i1) {
 
 // -----
 
-hw.module @at_least_one_result(%in0: i1, %in1: i1, %in2: i1, %in3: i1) {
+hw.module @at_least_one_result(in %in0: i1, in %in1: i1, in %in2: i1, in %in3: i1) {
   // expected-error @below {{op must have at least one result}}
   arc.vectorize (%in0, %in1), (%in2, %in3) : (i1, i1, i1, i1) -> () {
   ^bb0(%arg0: i1, %arg1: i1):
@@ -494,7 +494,7 @@ hw.module @at_least_one_result(%in0: i1, %in1: i1, %in2: i1, %in3: i1) {
 
 // -----
 
-hw.module @not_divisible_width(%in0: i4, %in1: i4) -> (out0: i4) {
+hw.module @not_divisible_width(in %in0: i4, in %in1: i4, out out0: i4) {
   %0 = arc.vectorize (%in0), (%in1) : (i4, i4) -> i4 {
   ^bb0(%arg0: i3, %arg1: i3):
     %1 = comb.and %arg0, %arg1 : i3
@@ -506,7 +506,7 @@ hw.module @not_divisible_width(%in0: i4, %in1: i4) -> (out0: i4) {
 
 // -----
 
-hw.module @body_vector_size_must_match_vector_operand_number(%in0: i1, %in1: i1, %in2: i1, %in3: i1) -> (out0: i1, out1: i1) {
+hw.module @body_vector_size_must_match_vector_operand_number(in %in0: i1, in %in1: i1, in %in2: i1, in %in3: i1, out out0: i1, out out1: i1) {
   // expected-error @below {{when boundary not vectorized the number of vector element operands must match the width of the vectorized body}}
   %0:2 = arc.vectorize (%in0, %in1), (%in2, %in3) : (i1, i1, i1, i1) -> (i1, i1) {
   ^bb0(%arg0: i3, %arg1: i3):
@@ -518,7 +518,7 @@ hw.module @body_vector_size_must_match_vector_operand_number(%in0: i1, %in1: i1,
 
 // -----
 
-hw.module @vectorize(%in0: i1, %in1: i1, %in2: i1, %in3: i1) -> (out0: i1, out1: i1) {
+hw.module @vectorize(in %in0: i1, in %in1: i1, in %in2: i1, in %in3: i1, out out0: i1, out out1: i1) {
   // expected-error @below {{input and output vector width must match}}
   %0:2 = arc.vectorize (%in0, %in1), (%in2, %in3) : (i1, i1, i1, i1) -> (i1, i1) {
   ^bb0(%arg0: i1, %arg1: i1):
@@ -530,7 +530,7 @@ hw.module @vectorize(%in0: i1, %in1: i1, %in2: i1, %in3: i1) -> (out0: i1, out1:
 
 // -----
 
-hw.module @vectorize(%in0: i2, %in1: i2) -> (out0: i2) {
+hw.module @vectorize(in %in0: i2, in %in1: i2, out out0: i2) {
   // expected-error @below {{block argument must be a vectorized variant of the operand}}
   %0 = arc.vectorize (%in0), (%in1) : (i2, i2) -> (i2) {
   ^bb0(%arg0: i1, %arg1: i1):
@@ -542,7 +542,7 @@ hw.module @vectorize(%in0: i2, %in1: i2) -> (out0: i2) {
 
 // -----
 
-hw.module @vectorize(%in0: i2, %in1: i2) -> (out0: i2) {
+hw.module @vectorize(in %in0: i2, in %in1: i2, out out0: i2) {
   // expected-error @below {{input and output vector width must match}}
   %0 = arc.vectorize (%in0), (%in1) : (i2, i2) -> (i2) {
   ^bb0(%arg0: i2, %arg1: i2):
@@ -554,7 +554,7 @@ hw.module @vectorize(%in0: i2, %in1: i2) -> (out0: i2) {
 
 // -----
 
-hw.module @vectorize(%in0: i4, %in1: i4) -> (out0: i4) {
+hw.module @vectorize(in %in0: i4, in %in1: i4, out out0: i4) {
   // expected-error @below {{block argument must be a scalar variant of the vectorized operand}}
   %0 = arc.vectorize (%in0), (%in1) : (i4, i4) -> (i4) {
   ^bb0(%arg0: i8, %arg1: i8):

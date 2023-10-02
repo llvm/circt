@@ -13,7 +13,7 @@ arc.define @SimpleB(%arg0: i4, %arg1: i4) -> i4 {
 }
 
 // CHECK-LABEL: hw.module @Simple
-hw.module @Simple(%x: i4, %y: i4, %clock: !seq.clock) {
+hw.module @Simple(in %x: i4, in %y: i4, in %clock: !seq.clock) {
   // CHECK-NEXT: arc.state @SimpleA(%x, %y)
   // CHECK-NEXT: arc.state @SimpleA(%y, %x)
   %0 = arc.state @SimpleA(%x, %y) lat 0 : (i4, i4) -> i4
@@ -37,7 +37,7 @@ arc.define @MismatchB(%arg0: i4, %arg1: i4) -> i4 {
 }
 
 // CHECK-LABEL: hw.module @Mismatch
-hw.module @Mismatch(%x: i4, %y: i4) {
+hw.module @Mismatch(in %x: i4, in %y: i4) {
   // CHECK-NEXT: arc.state @MismatchA(%x, %y)
   // CHECK-NEXT: arc.state @MismatchB(%y, %x)
   %0 = arc.state @MismatchA(%x, %y) lat 0 : (i4, i4) -> i4
@@ -68,7 +68,7 @@ arc.define @OutlineConstB(%arg0: i4) -> i4 {
 }
 
 // CHECK-LABEL: hw.module @OutlineConst
-hw.module @OutlineConst(%x: i4, %y: i4) {
+hw.module @OutlineConst(in %x: i4, in %y: i4) {
   // CHECK-DAG: %c3_i4 = hw.constant 3 : i4
   // CHECK-DAG: %c7_i4 = hw.constant 7 : i4
   // CHECK-DAG: arc.state @OutlineConstA(%x, %c3_i4)
@@ -115,7 +115,7 @@ arc.define @OutlineNonUniformConstsD(%arg0: i4, %arg1: i4) -> i4 {
 }
 
 // CHECK-LABEL: hw.module @OutlineNonUniformConsts
-hw.module @OutlineNonUniformConsts(%x: i4) {
+hw.module @OutlineNonUniformConsts(in %x: i4) {
   // CHECK-DAG: %c3_i4 = hw.constant 3 : i4
   // CHECK-DAG: %c7_i4 = hw.constant 7 : i4
   // CHECK-DAG: %c5_i4 = hw.constant 5 : i4
@@ -158,7 +158,7 @@ arc.define @SplitArgumentsC(%arg0: i4, %arg1: i4) -> i4 {
 }
 
 // CHECK-LABEL: hw.module @SplitArguments
-hw.module @SplitArguments(%x: i4, %y: i4) {
+hw.module @SplitArguments(in %x: i4, in %y: i4) {
   // CHECK-DAG: arc.state @SplitArgumentsA(%x, %x)
   // CHECK-DAG: arc.state @SplitArgumentsA(%x, %y)
   // CHECK-DAG: arc.state @SplitArgumentsA(%y, %x)
@@ -197,7 +197,7 @@ arc.define @WeirdSplitArgumentsC(%arg0: i4, %arg1: i4) -> i4 {
 }
 
 // CHECK-LABEL: hw.module @WeirdSplitArguments
-hw.module @WeirdSplitArguments(%x: i4, %y: i4) {
+hw.module @WeirdSplitArguments(in %x: i4, in %y: i4) {
   // CHECK-DAG: arc.state @WeirdSplitArgumentsA(%x, %x, %x, %y)
   // CHECK-DAG: arc.state @WeirdSplitArgumentsA(%x, %x, %y, %y)
   // CHECK-DAG: arc.state @WeirdSplitArgumentsA(%x, %y, %x, %y)
@@ -223,7 +223,7 @@ arc.define @VariadicDiffsDontDedupB(%arg0: i4, %arg1: i4) -> i4 {
 }
 
 // CHECK-LABEL: hw.module @VariadicDiffsDontDedup
-hw.module @VariadicDiffsDontDedup(%x: i4, %y: i4, %z: i4) {
+hw.module @VariadicDiffsDontDedup(in %x: i4, in %y: i4, in %z: i4) {
   // CHECK-DAG: arc.state @VariadicDiffsDontDedupA(%x, %y, %z)
   // CHECK-DAG: arc.state @VariadicDiffsDontDedupB(%x, %y)
   %0 = arc.state @VariadicDiffsDontDedupA(%x, %y, %z) lat 0 : (i4, i4, i4) -> i4
@@ -257,7 +257,7 @@ arc.define @DedupWithRegionsB(%arg0: i1, %arg1: i4) -> i4 {
 }
 
 // CHECK-LABEL: hw.module @DedupWithRegions
-hw.module @DedupWithRegions(%x: i4, %y: i1) {
+hw.module @DedupWithRegions(in %x: i4, in %y: i1) {
   // CHECK-NEXT: arc.state @DedupWithRegionsA(%x, %y)
   // CHECK-NEXT: arc.state @DedupWithRegionsA(%x, %y)
   %0 = arc.state @DedupWithRegionsA(%x, %y) lat 0 : (i4, i1) -> i4
@@ -281,7 +281,7 @@ arc.define @DiffAttrsBlockDedupB(%arg0: i4) -> i4 {
 }
 
 // CHECK-LABEL: hw.module @DiffAttrsBlockDedup
-hw.module @DiffAttrsBlockDedup(%x: i4) {
+hw.module @DiffAttrsBlockDedup(in %x: i4) {
   // CHECK-NEXT: arc.state @DiffAttrsBlockDedupA(%x)
   // CHECK-NEXT: arc.state @DiffAttrsBlockDedupB(%x)
   %0 = arc.state @DiffAttrsBlockDedupA(%x) lat 0 : (i4) -> i4
@@ -307,7 +307,7 @@ arc.define @DiffTypesBlockDedupB(%arg0: i4) -> i1 {
 }
 
 // CHECK-LABEL: hw.module @DiffTypesBlockDedup
-hw.module @DiffTypesBlockDedup(%x: i4) {
+hw.module @DiffTypesBlockDedup(in %x: i4) {
   // CHECK-NEXT: arc.state @DiffTypesBlockDedupA(%x)
   // CHECK-NEXT: arc.state @DiffTypesBlockDedupB(%x)
   %0 = arc.state @DiffTypesBlockDedupA(%x) lat 0 : (i4) -> i1
@@ -337,7 +337,7 @@ arc.define @NestedArc(%arg0: i4, %arg1: i4) -> i4 {
 }
 
 // CHECK-LABEL: hw.module @StateAndCall
-hw.module @StateAndCall(%x: i4, %y: i4) {
+hw.module @StateAndCall(in %x: i4, in %y: i4) {
   // CHECK-NEXT: arc.state @StateAndCallA(%x, %y)
   // CHECK-NEXT: arc.call @StateAndCallA(%y, %x)
   // CHECK-NEXT: arc.call @StateAndCallA(%y, %x)
@@ -389,7 +389,7 @@ arc.define @OutlineRegressionB(%arg0: i1, %arg1: i3) -> (i3, i3) {
 }
 
 // CHECK-LABEL: hw.module @OutlineRegression
-hw.module @OutlineRegression(%a: i1, %b: i3) {
+hw.module @OutlineRegression(in %a: i1, in %b: i3) {
   // CHECK-NEXT: [[K0:%.+]] = hw.constant 0 : i3
   // CHECK-NEXT: arc.call @OutlineRegressionA(%a, %b, [[K0]]) :
   // CHECK-NEXT: [[K1:%.+]] = hw.constant 0 : i3

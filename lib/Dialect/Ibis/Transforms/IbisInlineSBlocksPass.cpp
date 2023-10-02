@@ -42,9 +42,14 @@ public:
                   ConversionPatternRewriter &rewriter) const override {
     Location loc = op.getLoc();
 
-    // Start the inline block...
-    auto inlineStart = rewriter.create<ibis::InlineStaticBlockBeginOp>(loc);
-    inlineStart->setAttrs(op->getAttrs());
+    // We only create block markers in case the sblock has attributes.
+    bool hasAttributes = !op->getAttrs().empty();
+
+    if (hasAttributes) {
+      // Start the inline block...
+      auto inlineStart = rewriter.create<ibis::InlineStaticBlockBeginOp>(loc);
+      inlineStart->setAttrs(op->getAttrs());
+    }
 
     // Inline the sblock.
     Block *sblockBody = op.getBodyBlock();
@@ -56,9 +61,11 @@ public:
     for (auto [res, val] : llvm::zip(op.getResults(), ret.getRetValues()))
       rewriter.replaceAllUsesWith(res, val);
 
-    // Close the inline block
-    rewriter.setInsertionPoint(ret);
-    rewriter.create<ibis::InlineStaticBlockEndOp>(loc);
+    if (hasAttributes) {
+      // Close the inline block
+      rewriter.setInsertionPoint(ret);
+      rewriter.create<ibis::InlineStaticBlockEndOp>(loc);
+    }
 
     rewriter.eraseOp(ret);
     rewriter.eraseOp(op);

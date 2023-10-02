@@ -869,7 +869,7 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     break;
 
   case FIRToken::kw_Inst: {
-    if (requireFeature({3, 2, 0}, "Inst types"))
+    if (requireFeature(nextFIRVersion, "Inst types"))
       return failure();
 
     consumeToken(FIRToken::kw_Inst);
@@ -897,7 +897,7 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
   }
 
   case FIRToken::kw_AnyRef: {
-    if (requireFeature({3, 2, 0}, "AnyRef types"))
+    if (requireFeature(nextFIRVersion, "AnyRef types"))
       return failure();
 
     consumeToken(FIRToken::kw_AnyRef);
@@ -1054,29 +1054,29 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     result = FIntegerType::get(getContext());
     break;
   case FIRToken::kw_Bool:
-    if (requireFeature({3, 2, 0}, "Bools"))
+    if (requireFeature(nextFIRVersion, "Bools"))
       return failure();
     consumeToken(FIRToken::kw_Bool);
     result = BoolType::get(getContext());
     break;
   case FIRToken::kw_Double:
-    if (requireFeature({3, 2, 0}, "Doubles"))
+    if (requireFeature(nextFIRVersion, "Doubles"))
       return failure();
     consumeToken(FIRToken::kw_Double);
     result = DoubleType::get(getContext());
     break;
   case FIRToken::kw_Path:
-    if (requireFeature({3, 1, 0}, "Paths"))
+    if (requireFeature(nextFIRVersion, "Paths"))
       return failure();
     consumeToken(FIRToken::kw_Path);
     result = PathType::get(getContext());
     break;
   case FIRToken::kw_List:
-    if (requireFeature({3, 2, 0}, "Lists") || parseListType(result))
+    if (requireFeature(nextFIRVersion, "Lists") || parseListType(result))
       return failure();
     break;
   case FIRToken::kw_Map:
-    if (requireFeature({3, 2, 0}, "Maps") || parseMapType(result))
+    if (requireFeature(nextFIRVersion, "Maps") || parseMapType(result))
       return failure();
     break;
   }
@@ -1854,7 +1854,7 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
     break;
   }
   case FIRToken::kw_Bool: {
-    if (requireFeature({3, 2, 0}, "Bools"))
+    if (requireFeature(nextFIRVersion, "Bools"))
       return failure();
     locationProcessor.setLoc(getToken().getLoc());
     consumeToken(FIRToken::kw_Bool);
@@ -1873,7 +1873,7 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
     break;
   }
   case FIRToken::kw_Double: {
-    if (requireFeature({3, 2, 0}, "Doubles"))
+    if (requireFeature(nextFIRVersion, "Doubles"))
       return failure();
     locationProcessor.setLoc(getToken().getLoc());
     consumeToken(FIRToken::kw_Double);
@@ -1893,7 +1893,7 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
     break;
   }
   case FIRToken::kw_List: {
-    if (requireFeature({3, 2, 0}, "Lists"))
+    if (requireFeature(nextFIRVersion, "Lists"))
       return failure();
     if (isLeadingStmt)
       return emitError("unexpected List<>() as start of statement");
@@ -1902,7 +1902,7 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
     break;
   }
   case FIRToken::kw_Map: {
-    if (requireFeature({3, 2, 0}, "Maps"))
+    if (requireFeature(nextFIRVersion, "Maps"))
       return failure();
     if (isLeadingStmt)
       return emitError("unexpected Map<>() as start of statement");
@@ -1913,7 +1913,7 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
   case FIRToken::lp_path:
     if (isLeadingStmt)
       return emitError("unexpected path() as start of statement");
-    if (requireFeature({3, 2, 0}, "paths") || parsePathExp(result))
+    if (requireFeature(nextFIRVersion, "paths") || parsePathExp(result))
       return failure();
     break;
 
@@ -2582,7 +2582,7 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
   case FIRToken::lp_release_initial:
     return parseRefReleaseInitial();
   case FIRToken::kw_group:
-    if (requireFeature({3, 1, 0}, "optional groups"))
+    if (requireFeature({3, 2, 0}, "optional groups"))
       return failure();
     return parseGroup(stmtIndent);
 
@@ -3691,7 +3691,7 @@ ParseResult FIRStmtParser::parseObject() {
   if (auto isExpr = parseExpWithLeadingKeyword(startTok))
     return *isExpr;
 
-  if (requireFeature({3, 2, 0}, "object statements"))
+  if (requireFeature(nextFIRVersion, "object statements"))
     return failure();
 
   StringRef id;
@@ -4311,34 +4311,10 @@ FIRCircuitParser::parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
     resultPortLocs.push_back(info.getFIRLoc());
   }
 
-  // Helper for the temporary check rejecting input-oriented refs.
-  std::function<bool(Type, bool)> hasInputRef = [&](Type type,
-                                                    bool output) -> bool {
-    auto ftype = type_dyn_cast<FIRRTLType>(type);
-    if (!ftype || !ftype.containsReference())
-      return false;
-    return TypeSwitch<FIRRTLType, bool>(ftype)
-        .Case<RefType>([&](auto reftype) { return !output; })
-        .Case<OpenVectorType>([&](OpenVectorType ovt) {
-          return hasInputRef(ovt.getElementType(), output);
-        })
-        .Case<OpenBundleType>([&](OpenBundleType obt) {
-          for (auto field : obt.getElements())
-            if (hasInputRef(field.type, field.isFlip ^ output))
-              return true;
-          return false;
-        });
-  };
-
   // Check for port name collisions.
   SmallDenseMap<Attribute, SMLoc> portIds;
   for (auto portAndLoc : llvm::zip(resultPorts, resultPortLocs)) {
     PortInfo &port = std::get<0>(portAndLoc);
-    // See #4812 and look through the reference input test collection
-    // and ensure they work before allowing them from user input.
-    if (hasInputRef(port.type, port.isOutput()))
-      return emitError(std::get<1>(portAndLoc),
-                       "input probes not yet supported");
     auto &entry = portIds[port.name];
     if (!entry.isValid()) {
       entry = std::get<1>(portAndLoc);
@@ -4569,7 +4545,7 @@ ParseResult FIRCircuitParser::parseClass(CircuitOp circuit, unsigned indent) {
   SmallVector<SMLoc> portLocs;
   LocWithInfo info(getToken().getLoc(), this);
 
-  if (requireFeature({3, 2, 0}, "classes"))
+  if (requireFeature(nextFIRVersion, "classes"))
     return failure();
 
   consumeToken(FIRToken::kw_class);
@@ -4606,7 +4582,7 @@ ParseResult FIRCircuitParser::parseExtClass(CircuitOp circuit,
   SmallVector<SMLoc> portLocs;
   LocWithInfo info(getToken().getLoc(), this);
 
-  if (requireFeature({3, 2, 0}, "classes"))
+  if (requireFeature(nextFIRVersion, "classes"))
     return failure();
 
   consumeToken(FIRToken::kw_extclass);
@@ -4749,7 +4725,7 @@ ParseResult FIRCircuitParser::parseToplevelDefinition(CircuitOp circuit,
   case FIRToken::kw_class:
     return parseClass(circuit, indent);
   case FIRToken::kw_declgroup:
-    if (requireFeature({3, 1, 0}, "optional groups"))
+    if (requireFeature({3, 2, 0}, "optional groups"))
       return failure();
     return parseGroupDecl(circuit);
   case FIRToken::kw_extclass:

@@ -138,11 +138,11 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
 ; VERILOG-NEXT:    input        clock,
 ; VERILOG-NEXT:                 a,
 ; VERILOG-NEXT:    input  [1:0] b,
+; VERILOG-NEXT:    output       c,
 ; VERILOG-NEXT:    input vec_0,
 ; VERILOG-NEXT:          vec_1,
 ; VERILOG-NEXT:          vec_2,
-; VERILOG-NEXT:    output       c,
-; VERILOG-NEXT:                 out_implicitTrunc,
+; VERILOG-NEXT:    output       out_implicitTrunc,
 ; VERILOG-NEXT:                 out_prettifyExample,
 ; VERILOG-NEXT:                 out_multibitMux,
 ; VERILOG-NEXT:                 out_mux2cell_0,
@@ -196,7 +196,7 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
     output d: UInt<6>
     d <= cat(cat(a, b), c)
 
-; MLIRLOWER-LABEL: hw.module private @Cat(%a: i2, %b: i2, %c: i2) -> (d: i6) {
+; MLIRLOWER-LABEL: hw.module private @Cat(in %a : i2, in %b : i2, in %c : i2, out d : i6) {
 ; MLIRLOWER-NEXT:    %0 = comb.concat %a, %b, %c : i2, i2, i2
 ; MLIRLOWER-NEXT:    hw.output %0 : i6
 ; MLIRLOWER-NEXT:  }
@@ -212,7 +212,7 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
     out1 <= dshl(inp_2, inp_1)
     out2 <= inp_2
 
-; MLIRLOWER-LABEL: hw.module private @ImplicitTrunc(%inp_1: i1, %inp_2: i5) -> (out1: i3, out2: i3) {
+; MLIRLOWER-LABEL: hw.module private @ImplicitTrunc(in %inp_1 : i1, in %inp_2 : i5, out out1 : i3, out out2 : i3) {
 ; MLIRLOWER-NEXT:    %c0_i5 = hw.constant 0 : i5
 ; MLIRLOWER-NEXT:    %0 = comb.extract %inp_2 from 4 : (i5) -> i1
 ; MLIRLOWER-NEXT:    %1 = comb.concat %0, %inp_2 : i1, i5

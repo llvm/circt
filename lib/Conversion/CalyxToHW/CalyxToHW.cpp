@@ -315,6 +315,10 @@ private:
           auto wire = wireIn(op.getIn(), op.instanceName(), "", b);
           wires.append({wire.getInput(), wire});
         })
+        .Case([&](UndefLibOp op) {
+          auto undef = b.create<sv::ConstantXOp>(op.getType());
+          wires.append({undef});
+        })
         .Case([&](PadLibOp op) {
           auto in =
               wireIn(op.getIn(), op.instanceName(), op.portName(op.getIn()), b);
