@@ -78,13 +78,13 @@ circuit Top : %[[
 ; NOREFS-NOT:  endmodule
 ; NOREFS:        rf_8x8 rf_ext (
 ; NOREFS:          .R1_data (memTap_7),
-; NOREFS:     .R2_data (memTap_6),
-; NOREFS:     .R3_data (memTap_5),
-; NOREFS:     .R4_data (memTap_4),
-; NOREFS:     .R5_data (memTap_3),
-; NOREFS:     .R6_data (memTap_2),
-; NOREFS:     .R7_data (memTap_1),
-; NOREFS:     .R8_data (memTap_0)
+; NOREFS:          .R2_data (memTap_6),
+; NOREFS:          .R3_data (memTap_5),
+; NOREFS:          .R4_data (memTap_4),
+; NOREFS:          .R5_data (memTap_3),
+; NOREFS:          .R6_data (memTap_2),
+; NOREFS:          .R7_data (memTap_1),
+; NOREFS:          .R8_data (memTap_0)
 ; NOREFS:   )
 ; NOREFS:      endmodule
 ; NOREFS:      DUTModule dut (
