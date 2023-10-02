@@ -89,7 +89,7 @@ class InputProbeForwardSlicer {
   DenseSet<Operation *> slice;
 
   // Current slice source, only valid while slicing.
-  BlockArgument arg;
+  BlockArgument currentSliceSource;
 
   /// Operation is in forward slice, add.
   void chase(SmallVectorImpl<Operation *> &worklist, Operation *op) {
@@ -109,9 +109,9 @@ class InputProbeForwardSlicer {
     if (auto depArg = dyn_cast<BlockArgument>(v)) {
       // Input probe flows to different argument?
       // With current (valid) IR this should not be possible.
-      if (depArg != arg)
+      if (depArg != currentSliceSource)
         return emitError(depArg.getLoc(), "argument depends on input probe")
-                   .attachNote(arg.getLoc())
+                   .attachNote(currentSliceSource.getLoc())
                << "input probe";
       // Shouldn't happen either, but safe to ignore.
       return success();
@@ -133,7 +133,7 @@ public:
   /// Forward slice through the given input probe argument, diagnosing
   /// illegal/unsupported uses if encountered.
   LogicalResult add(BlockArgument arg) {
-    llvm::SaveAndRestore<BlockArgument> x(this->arg, arg);
+    llvm::SaveAndRestore<BlockArgument> x(this->currentSliceSource, arg);
     SmallVector<Operation *> worklist;
 
     // Start with all users of the input probe.
