@@ -27,7 +27,7 @@ struct PrepareSchedulingPass
     : public IbisPrepareSchedulingBase<PrepareSchedulingPass> {
   void runOnOperation() override;
 
-  void prepareSBlock(IsolatedStaticBlockOp op);
+  void prepareSBlock(IsolatedStaticBlockOp sblock);
 };
 } // anonymous namespace
 
