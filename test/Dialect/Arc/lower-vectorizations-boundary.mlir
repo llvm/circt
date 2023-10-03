@@ -88,8 +88,8 @@ hw.module @boundary_already_vectorized(in %in0: i1, in %in1: i1, in %in2: i1, ou
     %4 = arith.andi %arg0, %arg1 : i1
     arc.vectorize.return %4 : i1
   }
-  %4 = vector.extract %2[0] : vector<2xi1>
-  %5 = vector.extract %2[1] : vector<2xi1>
+  %4 = vector.extract %2[0] : i1 from vector<2xi1>
+  %5 = vector.extract %2[1] : i1 from vector<2xi1>
   hw.output %4, %5 : i1, i1
 }
 
