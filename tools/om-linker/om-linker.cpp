@@ -11,8 +11,11 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/Comb/CombDialect.h"
+#include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/OM/OMDialect.h"
 #include "circt/Dialect/OM/OMPasses.h"
+#include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Support/Version.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Threading.h"
@@ -202,8 +205,11 @@ int main(int argc, char **argv) {
   cl::ParseCommandLineOptions(argc, argv, "OM linker\n");
 
   MLIRContext context;
-  // Register OM dialect.
+  // Register post-export dialects.
+  context.loadDialect<comb::CombDialect>();
+  context.loadDialect<hw::HWDialect>();
   context.loadDialect<om::OMDialect>();
+  context.loadDialect<sv::SVDialect>();
 
   // Do the guts of the om-linker process.
   auto result = executeOMLinker(context);
