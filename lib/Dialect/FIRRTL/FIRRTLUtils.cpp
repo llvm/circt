@@ -494,7 +494,8 @@ FieldRef circt::firrtl::getDeltaRef(Value value, bool lookThroughCasts) {
               return FieldRef();
             return FieldRef(op.getInput(), 0);
           })
-      .Case<SubfieldOp, OpenSubfieldOp, SubindexOp, OpenSubindexOp, RefSubOp>(
+      .Case<SubfieldOp, OpenSubfieldOp, SubindexOp, OpenSubindexOp, RefSubOp,
+            ObjectSubfieldOp>(
           [](auto subOp) { return subOp.getAccessedField(); })
       .Default(FieldRef());
 }
@@ -533,6 +534,10 @@ static void getDeclName(Value value, SmallString<64> &string, bool nameSafe) {
 
     auto *op = value.getDefiningOp();
     TypeSwitch<Operation *>(op)
+        .Case<ObjectOp>([&](ObjectOp op) {
+          string += op.getInstanceName();
+          value = nullptr;
+        })
         .Case<InstanceOp, MemOp>([&](auto op) {
           string += op.getName();
           string += nameSafe ? "_" : ".";
@@ -604,6 +609,13 @@ circt::firrtl::getFieldName(const FieldRef &fieldRef, bool nameSafe) {
       name += element.name.getValue();
       type = element.type;
       localID = localID - enumType.getFieldID(index);
+    } else if (auto classType = type_dyn_cast<ClassType>(type)) {
+      auto index = classType.getIndexForFieldID(localID);
+      auto &element = classType.getElement(index);
+      name += nameSafe ? "_" : ".";
+      name += element.name.getValue();
+      type = element.type;
+      localID = localID - classType.getFieldID(index);
     } else {
       // If we reach here, the field ref is pointing inside some aggregate type
       // that isn't a bundle or a vector. If the type is a ground type, then the

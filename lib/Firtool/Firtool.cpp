@@ -109,9 +109,11 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   // things up.
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass(
       opt.preserveAggregate, firrtl::PreserveAggregate::None));
-  // Only enable expand whens if lower types is also enabled.
+
+  pm.nest<firrtl::CircuitOp>().nestAny().addPass(
+      firrtl::createExpandWhensPass());
+
   auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
-  modulePM.addPass(firrtl::createExpandWhensPass());
   modulePM.addPass(firrtl::createSFCCompatPass());
   modulePM.addPass(firrtl::createGroupSinkPass());
 

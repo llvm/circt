@@ -35,6 +35,7 @@ struct RefTypeStorage;
 struct BaseTypeAliasStorage;
 struct OpenBundleTypeStorage;
 struct OpenVectorTypeStorage;
+struct ClassTypeStorage;
 } // namespace detail.
 
 class AnyRefType;

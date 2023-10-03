@@ -1555,7 +1555,6 @@ std::pair<Type, uint64_t>
 BundleType::getSubTypeByFieldID(uint64_t fieldID) const {
   if (fieldID == 0)
     return {*this, 0};
-  auto fieldIDs = getImpl()->fieldIDs;
   auto subfieldIndex = getIndexForFieldID(fieldID);
   auto subfieldType = getElementType(subfieldIndex);
   auto subfieldID = fieldID - getFieldID(subfieldIndex);
@@ -1779,7 +1778,6 @@ std::pair<Type, uint64_t>
 OpenBundleType::getSubTypeByFieldID(uint64_t fieldID) const {
   if (fieldID == 0)
     return {*this, 0};
-  auto fieldIDs = getImpl()->fieldIDs;
   auto subfieldIndex = getIndexForFieldID(fieldID);
   auto subfieldType = getElementType(subfieldIndex);
   auto subfieldID = fieldID - getFieldID(subfieldIndex);
@@ -2265,7 +2263,6 @@ std::pair<Type, uint64_t>
 FEnumType::getSubTypeByFieldID(uint64_t fieldID) const {
   if (fieldID == 0)
     return {*this, 0};
-  auto fieldIDs = getImpl()->fieldIDs;
   auto subfieldIndex = getIndexForFieldID(fieldID);
   auto subfieldType = getElementType(subfieldIndex);
   auto subfieldID = fieldID - getFieldID(subfieldIndex);
@@ -2506,8 +2503,48 @@ AsyncResetType AsyncResetType::getConstType(bool isConst) {
 }
 
 //===----------------------------------------------------------------------===//
-// InstanceType
+// ClassType
 //===----------------------------------------------------------------------===//
+
+struct circt::firrtl::detail::ClassTypeStorage : mlir::TypeStorage {
+  using KeyTy = std::pair<FlatSymbolRefAttr, ArrayRef<ClassElement>>;
+
+  static ClassTypeStorage *construct(TypeStorageAllocator &allocator,
+                                     KeyTy key) {
+    auto name = key.first;
+    auto elements = allocator.copyInto(key.second);
+
+    // build the field ID table
+    SmallVector<uint64_t, 4> ids;
+    uint64_t id = 0;
+    ids.reserve(elements.size());
+    for (auto &element : elements) {
+      id += 1;
+      ids.push_back(id);
+      id += hw::FieldIdImpl::getMaxFieldID(element.type);
+    }
+
+    auto fieldIDs = allocator.copyInto(ArrayRef(ids));
+    auto maxFieldID = id;
+
+    return new (allocator.allocate<ClassTypeStorage>())
+        ClassTypeStorage(name, elements, fieldIDs, maxFieldID);
+  }
+
+  ClassTypeStorage(FlatSymbolRefAttr name, ArrayRef<ClassElement> elements,
+                   ArrayRef<uint64_t> fieldIDs, uint64_t maxFieldID)
+      : name(name), elements(elements), fieldIDs(fieldIDs),
+        maxFieldID(maxFieldID) {}
+
+  bool operator==(const KeyTy &key) const {
+    return name == key.first && elements == key.second;
+  }
+
+  FlatSymbolRefAttr name;
+  ArrayRef<ClassElement> elements;
+  ArrayRef<uint64_t> fieldIDs;
+  uint64_t maxFieldID;
+};
 
 ClassType ClassType::get(FlatSymbolRefAttr name,
                          ArrayRef<ClassElement> elements) {
@@ -2552,6 +2589,45 @@ void ClassType::printInterface(AsmPrinter &p) const {
     first = false;
   }
   p << ")";
+}
+
+uint64_t ClassType::getFieldID(uint64_t index) const {
+  return getImpl()->fieldIDs[index];
+}
+
+uint64_t ClassType::getIndexForFieldID(uint64_t fieldID) const {
+  assert(!getElements().empty() && "Class must have >0 fields");
+  auto fieldIDs = getImpl()->fieldIDs;
+  auto *it = std::prev(llvm::upper_bound(fieldIDs, fieldID));
+  return std::distance(fieldIDs.begin(), it);
+}
+
+std::pair<uint64_t, uint64_t>
+ClassType::getIndexAndSubfieldID(uint64_t fieldID) const {
+  auto index = getIndexForFieldID(fieldID);
+  auto elementFieldID = getFieldID(index);
+  return {index, fieldID - elementFieldID};
+}
+
+std::pair<Type, uint64_t>
+ClassType::getSubTypeByFieldID(uint64_t fieldID) const {
+  if (fieldID == 0)
+    return {*this, 0};
+  auto subfieldIndex = getIndexForFieldID(fieldID);
+  auto subfieldType = getElement(subfieldIndex).type;
+  auto subfieldID = fieldID - getFieldID(subfieldIndex);
+  return {subfieldType, subfieldID};
+}
+
+uint64_t ClassType::getMaxFieldID() const { return getImpl()->maxFieldID; }
+
+std::pair<uint64_t, bool>
+ClassType::projectToChildFieldID(uint64_t fieldID, uint64_t index) const {
+  auto childRoot = getFieldID(index);
+  auto rangeEnd = index + 1 >= getNumElements() ? getMaxFieldID()
+                                                : (getFieldID(index + 1) - 1);
+  return std::make_pair(fieldID - childRoot,
+                        fieldID >= childRoot && fieldID <= rangeEnd);
 }
 
 ParseResult ClassType::parseInterface(AsmParser &parser, ClassType &result) {

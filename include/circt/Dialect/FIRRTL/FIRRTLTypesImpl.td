@@ -436,7 +436,8 @@ class PropImplType<string name,
                    string baseCppClass = "::circt::firrtl::FIRRTLType">
   : FIRRTLImplType<name, traits, baseCppClass>;
 
-def ClassImpl : PropImplType<"Class"> {
+def ClassImpl : PropImplType<"Class", [
+  DeclareTypeInterfaceMethods<FieldIDTypeInterface>]> {
   let summary = [{
     An instance of a class.
 
@@ -449,7 +450,7 @@ def ClassImpl : PropImplType<"Class"> {
     "FlatSymbolRefAttr":$name,
     ArrayRefParameter<"ClassElement">:$elements
   );
-  let genStorageClass = true;
+  let genStorageClass = false;
   let genAccessors = false;
   let builders = [
     TypeBuilderWithInferredContext<(ins
