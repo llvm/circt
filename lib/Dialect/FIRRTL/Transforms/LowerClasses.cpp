@@ -264,7 +264,8 @@ void LowerClassesPass::runOnOperation() {
 
   // Update Object creation ops in Classes or Modules in parallel.
   if (failed(mlir::failableParallelForEach(
-          ctx, objectContainers, [this, &instanceGraph, &symbolTable](auto *op) {
+          ctx, objectContainers,
+          [this, &instanceGraph, &symbolTable](auto *op) {
             return updateInstances(op, instanceGraph, symbolTable);
           })))
     return signalPassFailure();
