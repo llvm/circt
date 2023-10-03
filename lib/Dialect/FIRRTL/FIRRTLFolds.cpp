@@ -1491,9 +1491,11 @@ public:
 
 void MuxPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
-  results.add<MuxPad, MuxSharedCond, patterns::MuxNot, patterns::MuxSameTrue,
-              patterns::MuxSameFalse, patterns::NarrowMuxLHS,
-              patterns::NarrowMuxRHS>(context);
+  results.add<MuxPad, MuxSharedCond, patterns::MuxEQOperands,
+              patterns::MuxEQOperandsSwapped, patterns::MuxNEQOperands,
+              patterns::MuxNEQOperandsSwapped, patterns::MuxNot,
+              patterns::MuxSameTrue, patterns::MuxSameFalse,
+              patterns::NarrowMuxLHS, patterns::NarrowMuxRHS>(context);
 }
 
 OpFoldResult PadPrimOp::fold(FoldAdaptor adaptor) {

@@ -544,6 +544,30 @@ def NarrowMuxRHS : Pat <
   (MoveNameHint $old, (CatPrimOp (MuxPrimOp $cond, $a, $c), $b)),
   [(EqualTypes $lhs, $rhs), (KnownWidth $lhs)]>;
 
+// mux(eq(a, b), a, b) -> b
+def MuxEQOperands : Pat<
+  (MuxPrimOp:$old (EQPrimOp $a, $b), $a, $b),
+  (replaceWithValue $b),
+  [(EqualTypes $a, $b), (KnownWidth $a)]>;
+
+// mux(eq(b, a), a, b) -> b
+def MuxEQOperandsSwapped : Pat<
+  (MuxPrimOp:$old (EQPrimOp $b, $a), $a, $b),
+  (replaceWithValue $b),
+  [(EqualTypes $a, $b), (KnownWidth $a)]>;
+
+// mux(neq(a, b), a, b) -> a
+def MuxNEQOperands : Pat<
+  (MuxPrimOp:$old (NEQPrimOp $a, $b), $a, $b),
+  (replaceWithValue $a),
+  [(EqualTypes $a, $b), (KnownWidth $a)]>;
+
+// mux(neq(b, a), a, b) -> a
+def MuxNEQOperandsSwapped : Pat<
+  (MuxPrimOp:$old (NEQPrimOp $b, $a), $a, $b),
+  (replaceWithValue $a),
+  [(EqualTypes $a, $b), (KnownWidth $a)]>;
+
 def CatDoubleConst : Pat <
   (CatPrimOp:$old $cst1, (CatPrimOp $cst2, $v)),
   (MoveNameHint $old, (CatPrimOp (CatPrimOp $cst1, (AsUIntPrimOp $cst2)), (AsUIntPrimOp $v))),
