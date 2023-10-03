@@ -545,7 +545,7 @@ buildModule(OpBuilder &builder, OperationState &result, StringAttr name,
   // Add an attribute for the name.
   result.addAttribute(SymbolTable::getSymbolAttrName(), name);
 
-  SmallVector<Attribute> portAttrs;
+  SmallVector<Attribute> perPortAttrs;
   SmallVector<Attribute> portLocs;
   SmallVector<ModulePort> portTypes;
   auto exportPortIdent = StringAttr::get(builder.getContext(), "hw.exportPort");
@@ -553,12 +553,13 @@ buildModule(OpBuilder &builder, OperationState &result, StringAttr name,
   for (auto elt : ports) {
     portTypes.push_back(elt);
     portLocs.push_back(elt.loc ? elt.loc : unknownLoc);
-    Attribute attr;
+    llvm::SmallVector<NamedAttribute> portAttrs;
+    if (elt.attrs)
+      llvm::copy(elt.attrs, std::back_inserter(portAttrs));
+
     if (elt.sym && !elt.sym.empty())
-      attr = builder.getDictionaryAttr({{exportPortIdent, elt.sym}});
-    else
-      attr = builder.getDictionaryAttr({});
-    portAttrs.push_back(attr);
+      portAttrs.push_back(builder.getNamedAttr(exportPortIdent, elt.sym));
+    perPortAttrs.push_back(builder.getDictionaryAttr(portAttrs));
   }
 
   // Allow clients to pass in null for the parameters list.
@@ -571,7 +572,7 @@ buildModule(OpBuilder &builder, OperationState &result, StringAttr name,
                       TypeAttr::get(type));
   result.addAttribute("port_locs", builder.getArrayAttr(portLocs));
   result.addAttribute("per_port_attrs",
-                      arrayOrEmpty(builder.getContext(), portAttrs));
+                      arrayOrEmpty(builder.getContext(), perPortAttrs));
   result.addAttribute("parameters", parameters);
   if (!comment)
     comment = builder.getStringAttr("");
