@@ -1,4 +1,5 @@
 ; RUN: firtool %s | FileCheck %s
+; Check that `r` is optimized and the constant is propagated to the top-level port. 
 ; CHECK-NOT:   Passthrough
 ; CHECK-NOT:   Child
 ; CHECK-LABEL: module Example
