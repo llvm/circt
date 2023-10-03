@@ -206,4 +206,9 @@ def IbisPrepareScheduling : Pass<"ibis-prepare-scheduling", "ibis::IsolatedStati
   let dependentDialects = ["circt::pipeline::PipelineDialect"];
 }
 
+def IbisConvertMethodsToContainers : Pass<"ibis-convert-methods-to-containers", "ibis::ClassOp"> {
+  let summary = "Converts `ibis.method.df` to `ibis.container`s";
+  let constructor = "circt::ibis::createConvertMethodsToContainersPass()";
+}
+
 #endif // CIRCT_DIALECT_IBIS_PASSES_TD
