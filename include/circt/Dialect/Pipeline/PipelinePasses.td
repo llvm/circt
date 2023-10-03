@@ -30,7 +30,7 @@ def ScheduleLinearPipeline : Pass<"pipeline-schedule-linear"> {
   let description = [{
     Schedules `pipeline.unscheduled` operations based on operator latencies.
   }];
-  let dependentDialects = ["hw::HWDialect"];
+  let dependentDialects = ["hw::HWDialect", "seq::SeqDialect"];
   let constructor = "circt::pipeline::createScheduleLinearPipelinePass()";
 }
 
