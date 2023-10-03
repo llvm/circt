@@ -30,6 +30,9 @@ def IbisDialect : Dialect {
     void registerTypes();
     void registerAttributes();
   }];
+
+  // Needed for ibis.pipeline_header
+  let dependentDialects = ["seq::SeqDialect"];
 }
 
 #endif // CIRCT_DIALECT_IBIS_DIALECT_TD
