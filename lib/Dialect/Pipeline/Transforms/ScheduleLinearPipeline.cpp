@@ -46,12 +46,13 @@ static bool ignoreOp(Operation *op) {
 
 LogicalResult
 ScheduleLinearPipelinePass::schedulePipeline(UnscheduledPipelineOp pipeline) {
-  // Get operator library for the pipeline.
+  // Get operator library for the pipeline - assume it's placed in the top level
+  // module.
   auto opLibAttr = pipeline->getAttrOfType<FlatSymbolRefAttr>("operator_lib");
   if (!opLibAttr)
     return pipeline.emitError("missing 'operator_lib' attribute");
-  auto opLib = dyn_cast_or_null<ssp::OperatorLibraryOp>(
-      SymbolTable::lookupNearestSymbolFrom(pipeline->getParentOp(), opLibAttr));
+  auto parentModule = pipeline->getParentOfType<ModuleOp>();
+  auto opLib = parentModule.lookupSymbol<ssp::OperatorLibraryOp>(opLibAttr);
   if (!opLib)
     return pipeline.emitError("operator library '")
            << opLibAttr << "' not found";
