@@ -548,7 +548,6 @@ buildModule(OpBuilder &builder, OperationState &result, StringAttr name,
   SmallVector<Attribute> perPortAttrs;
   SmallVector<Attribute> portLocs;
   SmallVector<ModulePort> portTypes;
-  auto exportPortIdent = StringAttr::get(builder.getContext(), "hw.exportPort");
 
   for (auto elt : ports) {
     portTypes.push_back(elt);
@@ -857,13 +856,6 @@ void HWModuleGeneratedOp::modifyPorts(
 
 void HWModuleGeneratedOp::appendOutputs(
     ArrayRef<std::pair<StringAttr, Value>> outputs) {}
-
-static InnerSymAttr extractSym(DictionaryAttr attrs) {
-  if (attrs)
-    if (auto symRef = attrs.get("hw.exportPort"))
-      return symRef.cast<InnerSymAttr>();
-  return {};
-}
 
 static bool hasAttribute(StringRef name, ArrayRef<NamedAttribute> attrs) {
   for (auto &argAttr : attrs)
