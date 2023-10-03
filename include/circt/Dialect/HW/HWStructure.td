@@ -30,7 +30,6 @@ include "mlir/Interfaces/SideEffectInterfaces.td"
 class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
     HWOp<mnemonic, traits # [
       DeclareOpInterfaceMethods<PortList>,
-      DeclareOpInterfaceMethods<SymboledPortList>,
       DeclareOpInterfaceMethods<HWModuleLike>,
       DeclareOpInterfaceMethods<HWMutableModuleLike>,
       Symbol, InnerSymbolTable,
@@ -69,14 +68,6 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
       return getModuleType();
     }
 
-    ::circt::hw::InnerSymAttr $cppClass::getPortSymbolAttr(size_t portIndex) {
-      DictionaryAttr portAttrs = cast_or_null<DictionaryAttr>(getPortAttrs(portIndex));
-      if (portAttrs)
-        return portAttrs.getAs<::circt::hw::InnerSymAttr>(
-          getPortSymbolAttrName());
-      return {};
-    }
-
     void $cppClass::setPortSymbolAttr(size_t portIndex, ::circt::hw::InnerSymAttr sym) {
       auto portSymAttr = StringAttr::get(getContext(), getPortSymbolAttrName());
       setPortAttr(portIndex, portSymAttr, sym);
@@ -111,13 +102,16 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
       return ::getPortList(*this);
     }
 
+    ::circt::hw::PortInfo $cppClass::getPort(size_t idx) {
+      return ::getPort(*this, idx);
+    }
+
   }];
 
 }
 
 def HWTestModuleOp : HWOp<"testmodule", [Symbol,
                                          DeclareOpInterfaceMethods<PortList>,
-                                         DeclareOpInterfaceMethods<SymboledPortList>,
                                          OpAsmOpInterface,
                                          HasParent<"mlir::ModuleOp">,
                                          IsolatedFromAbove,

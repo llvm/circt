@@ -117,7 +117,6 @@ PureModuleLowering::matchAndRewrite(ESIPureModuleOp pureMod, OpAdaptor adaptor,
                         hw::ModulePort::Direction::Input},
                        inputs.size(),
                        {},
-                       {},
                        port.getLoc()});
       inputs.push_back(port);
     } else if (auto port = dyn_cast<ESIPureModuleOutputOp>(op)) {
@@ -125,7 +124,6 @@ PureModuleLowering::matchAndRewrite(ESIPureModuleOp pureMod, OpAdaptor adaptor,
           hw::PortInfo{{port.getNameAttr(), port.getValue().getType(),
                         hw::ModulePort::Direction::Output},
                        outputs.size(),
-                       {},
                        {},
                        port.getLoc()});
       outputs.push_back(port);

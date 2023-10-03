@@ -548,7 +548,6 @@ buildModule(OpBuilder &builder, OperationState &result, StringAttr name,
   SmallVector<Attribute> perPortAttrs;
   SmallVector<Attribute> portLocs;
   SmallVector<ModulePort> portTypes;
-  auto exportPortIdent = StringAttr::get(builder.getContext(), "hw.exportPort");
 
   for (auto elt : ports) {
     portTypes.push_back(elt);
@@ -556,9 +555,6 @@ buildModule(OpBuilder &builder, OperationState &result, StringAttr name,
     llvm::SmallVector<NamedAttribute> portAttrs;
     if (elt.attrs)
       llvm::copy(elt.attrs, std::back_inserter(portAttrs));
-
-    if (elt.sym && !elt.sym.empty())
-      portAttrs.push_back(builder.getNamedAttr(exportPortIdent, elt.sym));
     perPortAttrs.push_back(builder.getDictionaryAttr(portAttrs));
   }
 
@@ -624,9 +620,10 @@ static void modifyModuleArgs(
       if (port.dir == ModulePort::Direction::InOut &&
           !port.type.isa<InOutType>())
         port.type = InOutType::get(port.type);
+      auto sym = port.getSym();
       Attribute attr =
-          (port.sym && !port.sym.empty())
-              ? DictionaryAttr::get(context, {{exportPortAttrName, port.sym}})
+          (sym && !sym.empty())
+              ? DictionaryAttr::get(context, {{exportPortAttrName, sym}})
               : emptyDictAttr;
       newArgNames.push_back(port.name);
       newArgTypes.push_back(port.type);
@@ -859,13 +856,6 @@ void HWModuleGeneratedOp::modifyPorts(
 
 void HWModuleGeneratedOp::appendOutputs(
     ArrayRef<std::pair<StringAttr, Value>> outputs) {}
-
-static InnerSymAttr extractSym(DictionaryAttr attrs) {
-  if (attrs)
-    if (auto symRef = attrs.get("hw.exportPort"))
-      return symRef.cast<InnerSymAttr>();
-  return {};
-}
 
 static bool hasAttribute(StringRef name, ArrayRef<NamedAttribute> attrs) {
   for (auto &argAttr : attrs)
@@ -1392,9 +1382,24 @@ static SmallVector<PortInfo> getPortList(ModuleTy &mod) {
     retval.push_back({modTy.getPorts()[i],
                       modTy.isOutput(i) ? modTy.getOutputIdForPortId(i)
                                         : modTy.getInputIdForPortId(i),
-                      extractSym(attrs), attrs, loc});
+                      attrs, loc});
   }
   return retval;
+}
+
+template <typename ModuleTy>
+static PortInfo getPort(ModuleTy &mod, size_t idx) {
+  auto modTy = mod.getHWModuleType();
+  auto emptyDict = DictionaryAttr::get(mod.getContext());
+  LocationAttr loc = mod.getPortLoc(idx);
+  DictionaryAttr attrs =
+      dyn_cast_or_null<DictionaryAttr>(mod.getPortAttrs(idx));
+  if (!attrs)
+    attrs = emptyDict;
+  return {modTy.getPorts()[idx],
+          modTy.isOutput(idx) ? modTy.getOutputIdForPortId(idx)
+                              : modTy.getInputIdForPortId(idx),
+          attrs, loc};
 }
 
 //===----------------------------------------------------------------------===//
@@ -1560,11 +1565,8 @@ SmallVector<PortInfo> InstanceOp::getPortList() {
     LocationAttr loc;
     if (argLocs)
       loc = argLocs[i].cast<LocationAttr>();
-    ports.push_back({{argNames[i].cast<StringAttr>(), type, direction},
-                     i,
-                     {},
-                     emptyDict,
-                     loc});
+    ports.push_back(
+        {{argNames[i].cast<StringAttr>(), type, direction}, i, emptyDict, loc});
   }
 
   auto resultNames = (*this)->getAttrOfType<ArrayAttr>("resultNames");
@@ -1577,12 +1579,13 @@ SmallVector<PortInfo> InstanceOp::getPortList() {
     ports.push_back({{resultNames[i].cast<StringAttr>(), resultTypes[i],
                       ModulePort::Direction::Output},
                      i,
-                     {},
                      emptyDict,
                      loc});
   }
   return ports;
 }
+
+PortInfo InstanceOp::getPort(size_t idx) { return getPortList()[idx]; }
 
 size_t InstanceOp::getNumPorts() {
   return getNumInputPorts() + getNumOutputPorts();
@@ -3267,11 +3270,12 @@ SmallVector<PortInfo> HWTestModuleOp::getPortList() {
                              : LocationAttr();
     auto attr = getPortAttrs() ? cast<DictionaryAttr>((*getPortAttrs())[i])
                                : DictionaryAttr();
-    InnerSymAttr sym = {};
-    ports.push_back({{port}, i, sym, attr, loc});
+    ports.push_back({{port}, i, attr, loc});
   }
   return ports;
 }
+
+PortInfo HWTestModuleOp::getPort(size_t idx) { return getPortList()[idx]; }
 
 size_t HWTestModuleOp::getNumPorts() { return getModuleType().getNumPorts(); }
 size_t HWTestModuleOp::getNumInputPorts() {
@@ -3287,13 +3291,6 @@ size_t HWTestModuleOp::getPortIdForInputId(size_t idx) {
 
 size_t HWTestModuleOp::getPortIdForOutputId(size_t idx) {
   return getModuleType().getPortIdForOutputId(idx);
-}
-
-hw::InnerSymAttr HWTestModuleOp::getPortSymbolAttr(size_t portIndex) {
-  auto pa = getPortAttrs();
-  if (pa)
-    return cast<hw::InnerSymAttr>((*pa)[portIndex]);
-  return nullptr;
 }
 
 //===----------------------------------------------------------------------===//

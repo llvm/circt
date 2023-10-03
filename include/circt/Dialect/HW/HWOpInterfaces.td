@@ -24,6 +24,9 @@ def PortList : OpInterface<"PortList", []> {
     InterfaceMethod<"Get port list",
     "SmallVector<::circt::hw::PortInfo>", "getPortList", (ins)>,
 
+    InterfaceMethod<"Get port list",
+    "::circt::hw::PortInfo", "getPort", (ins "size_t":$idx)>,
+
     InterfaceMethod<"Get the port a specific input",
     "size_t", "getPortIdForInputId", (ins "size_t":$idx)>,
 
@@ -39,18 +42,8 @@ def PortList : OpInterface<"PortList", []> {
   ];
 }
 
-def SymboledPortList : OpInterface<"SymboledPortList", [PortList]> {
-  let cppNamespace = "circt::hw";
-  let description = "Operations which produce a unified port list representation which includes port symbols";
-  let methods = [
-    InterfaceMethod<"Get a port symbol attribute",
-    "::circt::hw::InnerSymAttr", "getPortSymbolAttr", (ins "size_t":$portIndex)>,
-  ];
-}
-
-
 def HWModuleLike : OpInterface<"HWModuleLike", [
-  Symbol, SymboledPortList, InstanceGraphModuleOpInterface]> {
+  Symbol, PortList, InstanceGraphModuleOpInterface]> {
   let cppNamespace = "circt::hw";
   let description = "Provide common module information.";
 

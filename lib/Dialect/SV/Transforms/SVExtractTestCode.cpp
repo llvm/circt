@@ -349,8 +349,9 @@ inlineInputOnly(hw::HWModuleOp oldMod, hw::InstanceGraph &instanceGraph,
   // declaration with an inner symbol referred by non-bind ops (e.g. hierpath).
   auto oldModName = oldMod.getModuleNameAttr();
   for (auto port : oldMod.getPortList()) {
-    if (port.sym) {
-      for (auto property : port.sym) {
+    auto sym = port.getSym();
+    if (sym) {
+      for (auto property : sym) {
         auto innerRef = hw::InnerRefAttr::get(oldModName, property.getName());
         if (innerRefUsedByNonBindOp.count(innerRef)) {
           oldMod.emitWarning() << "module " << oldMod.getModuleName()

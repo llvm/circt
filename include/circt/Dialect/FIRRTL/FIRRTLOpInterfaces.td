@@ -16,7 +16,7 @@
 include "mlir/IR/OpBase.td"
 include "circt/Dialect/HW/HWOpInterfaces.td"
 
-def FModuleLike : OpInterface<"FModuleLike", [Symbol, SymboledPortList, InstanceGraphModuleOpInterface]> {
+def FModuleLike : OpInterface<"FModuleLike", [Symbol, PortList, InstanceGraphModuleOpInterface]> {
   let cppNamespace = "circt::firrtl";
   let description = "Provide common module information.";
   let methods = [
@@ -183,6 +183,15 @@ def FModuleLike : OpInterface<"FModuleLike", [Symbol, SymboledPortList, Instance
       auto syms = $_op.getPortSymbols();
         return  (!syms.empty() &&
         !syms[portIndex].template cast<hw::InnerSymAttr>().empty());
+    }]>,
+
+    InterfaceMethod<"Get the port symbol attribute",
+    "circt::hw::InnerSymAttr", "getPortSymbolAttr", (ins "size_t":$portIndex), [{}], [{
+      auto syms = $_op.getPortSymbols();
+      if (syms.empty() ||
+          syms[portIndex].template cast<hw::InnerSymAttr>().empty())
+        return hw::InnerSymAttr();
+      return syms[portIndex].template cast<hw::InnerSymAttr>();
     }]>,
 
     // Setters
