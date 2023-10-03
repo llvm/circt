@@ -181,11 +181,14 @@ ScheduleLinearPipelinePass::schedulePipeline(UnscheduledPipelineOp pipeline) {
   // Reorder pipeline. Initially place unscheduled ops at the entry stage, and
   // then all following ops in their assigned stage.
   Block *entryStage = schedPipeline.getStage(0);
+  Operation *entryStageTerminator = entryStage->getTerminator();
   for (auto *op : otherOps)
-    op->moveBefore(entryStage, entryStage->end());
+    op->moveBefore(entryStageTerminator);
 
   for (auto [startTime, ops] : stageMap) {
-    auto *stageTerminator = schedPipeline.getStage(startTime)->getTerminator();
+    Block *stage = schedPipeline.getStage(startTime);
+    assert(stage && "Stage not found");
+    Operation *stageTerminator = stage->getTerminator();
     for (auto *op : ops)
       op->moveBefore(stageTerminator);
   }
