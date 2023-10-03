@@ -2422,8 +2422,16 @@ struct FoldZeroWidthMemory : public mlir::RewritePattern {
     for (auto port : op->getResults()) {
       for (auto *user : llvm::make_early_inc_range(port.getUsers())) {
         SubfieldOp sfop = cast<SubfieldOp>(user);
-        replaceOpWithNewOpAndCopyName<WireOp>(rewriter, sfop,
-                                              sfop.getResult().getType());
+        auto wire = replaceOpWithNewOpAndCopyName<WireOp>(
+                        rewriter, sfop, sfop.getResult().getType())
+                        .getResult();
+        if (auto intType = type_dyn_cast<IntType>(wire.getType());
+            intType && intType.getBitWidthOrSentinel() == 0) {
+          // Make sure to write data ports.
+          auto zero = rewriter.create<firrtl::ConstantOp>(
+              wire.getLoc(), intType, APInt::getZero(0));
+          rewriter.create<StrictConnectOp>(wire.getLoc(), wire, zero);
+        }
       }
     }
     rewriter.eraseOp(op);
