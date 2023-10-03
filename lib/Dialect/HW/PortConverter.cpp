@@ -89,7 +89,6 @@ Value PortConverterImpl::createNewInput(PortInfo origPort, const Twine &suffix,
       {append(origPort.name, suffix), type, ModulePort::Direction::Input},
       newInputs.size(),
       {},
-      {},
       origPort.loc};
   newInputs.emplace_back(0, newPort);
 
@@ -104,7 +103,6 @@ void PortConverterImpl::createNewOutput(PortInfo origPort, const Twine &suffix,
   newPort = PortInfo{
       {append(origPort.name, suffix), type, ModulePort::Direction::Output},
       newOutputs.size(),
-      {},
       {},
       origPort.loc};
   newOutputs.emplace_back(0, newPort);

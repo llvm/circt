@@ -272,7 +272,7 @@ hw::ModulePortInfo getPortInfoForOpTypes(Operation *op, TypeRange inputs,
         {{portNames.inputName(arg.index()), esiWrapper(arg.value()),
           hw::ModulePort::Direction::Input},
          arg.index(),
-         hw::InnerSymAttr{}});
+         {}});
     inIdx++;
   }
 
@@ -282,7 +282,7 @@ hw::ModulePortInfo getPortInfoForOpTypes(Operation *op, TypeRange inputs,
         {{portNames.outputName(res.index()), esiWrapper(res.value()),
           hw::ModulePort::Direction::Output},
          res.index(),
-         hw::InnerSymAttr{}});
+         {}});
   }
 
   // Add clock and reset signals.
@@ -290,11 +290,11 @@ hw::ModulePortInfo getPortInfoForOpTypes(Operation *op, TypeRange inputs,
     pinputs.push_back({{StringAttr::get(ctx, "clock"), clkType,
                         hw::ModulePort::Direction::Input},
                        inIdx++,
-                       hw::InnerSymAttr{}});
+                       {}});
     pinputs.push_back({{StringAttr::get(ctx, "reset"), i1Type,
                         hw::ModulePort::Direction::Input},
                        inIdx,
-                       hw::InnerSymAttr{}});
+                       {}});
   }
 
   return hw::ModulePortInfo{pinputs, poutputs};

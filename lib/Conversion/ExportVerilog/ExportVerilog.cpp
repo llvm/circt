@@ -5759,7 +5759,7 @@ void ModuleEmitter::emitPortList(Operation *module,
           [&](auto &os) { printUnpackedTypePostfix(portType, os); });
 
       // Emit the symbol.
-      auto innerSym = portInfo.at(portIdx).sym;
+      auto innerSym = portInfo.at(portIdx).getSym();
       if (state.options.printDebugInfo && innerSym && !innerSym.empty()) {
         ps << " /* ";
         ps.invokeWithStringOS([&](auto &os) { os << innerSym; });
@@ -5809,9 +5809,10 @@ void ModuleEmitter::emitPortList(Operation *module,
               [&](auto &os) { printUnpackedTypePostfix(port.type, os); });
 
           // Emit the symbol.
-          if (state.options.printDebugInfo && port.sym && !port.sym.empty())
-            ps << " /* inner_sym: "
-               << PPExtString(port.sym.getSymName().getValue()) << " */";
+          auto sym = port.getSym();
+          if (state.options.printDebugInfo && sym && !sym.empty())
+            ps << " /* inner_sym: " << PPExtString(sym.getSymName().getValue())
+               << " */";
 
           // Emit the comma if this is not the last real port.
           if (portIdx != lastNonZeroPort && portIdx != lastPort)

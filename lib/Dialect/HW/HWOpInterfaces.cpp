@@ -22,6 +22,27 @@
 
 using namespace circt;
 
+hw::InnerSymAttr hw::PortInfo::getSym() const {
+  if (attrs)
+    return attrs.getAs<::circt::hw::InnerSymAttr>(
+        hw::HWModuleLike::getPortSymbolAttrName());
+  return {};
+}
+
+void hw::PortInfo::setSym(InnerSymAttr sym, MLIRContext *ctx) {
+  auto portSymAttr =
+      StringAttr::get(ctx, hw::HWModuleLike::getPortSymbolAttrName());
+  NamedAttrList pattr(attrs);
+  Attribute oldValue;
+  if (!sym)
+    oldValue = pattr.erase(portSymAttr);
+  else
+    oldValue = pattr.set(portSymAttr, sym);
+  if (oldValue != sym) {
+    attrs = pattr.getDictionary(ctx);
+  }
+}
+
 LogicalResult hw::verifyInnerSymAttr(InnerSymbolOpInterface op) {
   auto innerSym = op.getInnerSymAttr();
   // If does not have any inner sym then ignore.
@@ -93,7 +114,7 @@ raw_ostream &circt::hw::operator<<(raw_ostream &printer, PortInfo port) {
     break;
   }
   printer << dirstr << " " << port.name << " : " << port.type << " (argnum "
-          << port.argNum << ", sym " << port.sym << ", loc " << port.loc
+          << port.argNum << ", sym " << port.getSym() << ", loc " << port.loc
           << ", args " << port.attrs << ")";
   return printer;
 }

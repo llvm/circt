@@ -66,7 +66,6 @@ class FIRRTLModuleLike<string mnemonic, list<Trait> traits = []> :
     IsolatedFromAbove, Symbol, HasParent<"CircuitOp">,
     DeclareOpInterfaceMethods<FModuleLike>,
     DeclareOpInterfaceMethods<PortList>,
-    DeclareOpInterfaceMethods<SymboledPortList>,
     DeclareOpInterfaceMethods<InstanceGraphModuleOpInterface>,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>,
     OpAsmOpInterface, InnerSymbolTable]> {
@@ -79,14 +78,6 @@ class FIRRTLModuleLike<string mnemonic, list<Trait> traits = []> :
   }];
 
   let extraClassDefinition = extraModuleClassDefinition # [{
-
-    circt::hw::InnerSymAttr $cppClass::getPortSymbolAttr(size_t portIndex) {
-      auto syms = getPortSymbols();
-      if (syms.empty() ||
-          syms[portIndex].template cast<hw::InnerSymAttr>().empty())
-        return hw::InnerSymAttr();
-      return syms[portIndex].template cast<hw::InnerSymAttr>();
-    }
 
     size_t $cppClass::getNumPorts() {
       return getPortTypesAttr().size();

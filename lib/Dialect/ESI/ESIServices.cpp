@@ -548,7 +548,6 @@ ESIConnectServicesPass::surfaceReqs(hw::HWMutableModuleLike mod,
                       hw::ModulePort::Direction::Input},
                      origNumInputs,
                      {},
-                     {},
                      req->getLoc()}));
 
     // Replace uses with new block args which will correspond to said ports.

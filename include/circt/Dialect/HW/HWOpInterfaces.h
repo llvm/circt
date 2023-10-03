@@ -36,7 +36,6 @@ struct PortInfo : public ModulePort {
   size_t argNum = ~0U;
 
   /// The optional symbol for this port.
-  InnerSymAttr sym = {};
   DictionaryAttr attrs = {};
   LocationAttr loc = {};
 
@@ -47,6 +46,10 @@ struct PortInfo : public ModulePort {
 
   /// Return a unique numeric identifier for this port.
   ssize_t getId() const { return isOutput() ? argNum : (-1 - argNum); };
+
+  // Inspect or mutate attributes
+  InnerSymAttr getSym() const;
+  void setSym(InnerSymAttr sym, MLIRContext *ctx);
 };
 
 raw_ostream &operator<<(raw_ostream &printer, PortInfo port);

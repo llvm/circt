@@ -534,13 +534,20 @@ static hw::ModulePort::Direction dirFtoH(Direction dir) {
 
 static SmallVector<hw::PortInfo> getPortListImpl(FModuleLike module) {
   SmallVector<hw::PortInfo> results;
+  auto aname = StringAttr::get(module.getContext(),
+                               hw::HWModuleLike::getPortSymbolAttrName());
+  auto emptyDict = DictionaryAttr::get(module.getContext());
   for (unsigned i = 0, e = getNumPorts(module); i < e; ++i) {
-    results.push_back({{module.getPortNameAttr(i), module.getPortType(i),
-                        dirFtoH(module.getPortDirection(i))},
-                       i,
-                       module.getPortSymbolAttr(i),
-                       {},
-                       module.getPortLocation(i)});
+    auto sym = module.getPortSymbolAttr(i);
+    results.push_back(
+        {{module.getPortNameAttr(i), module.getPortType(i),
+          dirFtoH(module.getPortDirection(i))},
+         i,
+         sym ? DictionaryAttr::get(
+                   module.getContext(),
+                   ArrayRef<mlir::NamedAttribute>{NamedAttribute{aname, sym}})
+             : emptyDict,
+         module.getPortLocation(i)});
   }
   return results;
 }
@@ -559,6 +566,35 @@ SmallVector<::circt::hw::PortInfo> FIntModuleOp::getPortList() {
 
 SmallVector<::circt::hw::PortInfo> FMemModuleOp::getPortList() {
   return ::getPortListImpl(*this);
+}
+
+static hw::PortInfo getPortImpl(FModuleLike module, size_t idx) {
+  return {{module.getPortNameAttr(idx), module.getPortType(idx),
+           dirFtoH(module.getPortDirection(idx))},
+          idx,
+          DictionaryAttr::get(
+              module.getContext(),
+              ArrayRef<mlir::NamedAttribute>{NamedAttribute{
+                  StringAttr::get(module.getContext(),
+                                  hw::HWModuleLike::getPortSymbolAttrName()),
+                  module.getPortSymbolAttr(idx)}}),
+          module.getPortLocation(idx)};
+}
+
+::circt::hw::PortInfo FModuleOp::getPort(size_t idx) {
+  return ::getPortImpl(*this, idx);
+}
+
+::circt::hw::PortInfo FExtModuleOp::getPort(size_t idx) {
+  return ::getPortImpl(*this, idx);
+}
+
+::circt::hw::PortInfo FIntModuleOp::getPort(size_t idx) {
+  return ::getPortImpl(*this, idx);
+}
+
+::circt::hw::PortInfo FMemModuleOp::getPort(size_t idx) {
+  return ::getPortImpl(*this, idx);
 }
 
 // Return the port with the specified name.
@@ -1786,6 +1822,10 @@ SmallVector<::circt::hw::PortInfo> ClassOp::getPortList() {
   return ::getPortListImpl(*this);
 }
 
+::circt::hw::PortInfo ClassOp::getPort(size_t idx) {
+  return ::getPortImpl(*this, idx);
+}
+
 BlockArgument ClassOp::getArgument(size_t portNumber) {
   return getBodyBlock()->getArgument(portNumber);
 }
@@ -1856,6 +1896,10 @@ ArrayAttr ExtClassOp::getPortAnnotationsAttr() {
 
 SmallVector<::circt::hw::PortInfo> ExtClassOp::getPortList() {
   return ::getPortListImpl(*this);
+}
+
+::circt::hw::PortInfo ExtClassOp::getPort(size_t idx) {
+  return ::getPortImpl(*this, idx);
 }
 
 bool ExtClassOp::canDiscardOnUseEmpty() {

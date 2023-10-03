@@ -488,7 +488,7 @@ static hw::ModulePortInfo getModulePortInfoHS(const TypeConverter &tc,
     inputs.push_back({{StringAttr::get(ctx, "in" + std::to_string(index)),
                        tc.convertType(type), hw::ModulePort::Direction::Input},
                       index,
-                      hw::InnerSymAttr{}});
+                      {}});
   }
 
   // Add all outputs of funcOp.
@@ -497,7 +497,7 @@ static hw::ModulePortInfo getModulePortInfoHS(const TypeConverter &tc,
         {{StringAttr::get(ctx, "out" + std::to_string(index)),
           tc.convertType(type), hw::ModulePort::Direction::Output},
          index,
-         hw::InnerSymAttr{}});
+         {}});
   }
 
   return hw::ModulePortInfo{inputs, outputs};

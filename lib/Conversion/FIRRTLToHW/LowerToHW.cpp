@@ -896,9 +896,9 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<PortInfo> firrtlPorts,
                << "cannot lower aggregate port " << firrtlPort.name
                << " with field sensitive symbols, HW dialect does not support "
                   "per field symbols yet.";
-    hwPort.sym = firrtlPort.sym;
+    hwPort.setSym(firrtlPort.sym, moduleOp->getContext());
     bool hadDontTouch = firrtlPort.annotations.removeDontTouch();
-    if (hadDontTouch && !hwPort.sym) {
+    if (hadDontTouch && !hwPort.getSym()) {
       if (hwPort.type.isInteger(0)) {
         if (enableAnnotationWarning) {
           mlir::emitWarning(firrtlPort.loc)
@@ -907,9 +907,11 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<PortInfo> firrtlPorts,
         }
         continue;
       }
-      hwPort.sym = hw::InnerSymAttr::get(StringAttr::get(
-          moduleOp->getContext(),
-          Twine("__") + moduleName + Twine("__") + firrtlPort.name.strref()));
+      hwPort.setSym(
+          hw::InnerSymAttr::get(StringAttr::get(
+              moduleOp->getContext(), Twine("__") + moduleName + Twine("__") +
+                                          firrtlPort.name.strref())),
+          moduleOp->getContext());
     }
 
     // We can't lower all types, so make sure to cleanly reject them.
@@ -921,10 +923,11 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<PortInfo> firrtlPorts,
     // If this is a zero bit port, just drop it.  It doesn't matter if it is
     // input, output, or inout.  We don't want these at the HW level.
     if (hwPort.type.isInteger(0)) {
-      if (hwPort.sym && !hwPort.sym.empty()) {
+      auto sym = hwPort.getSym();
+      if (sym && !sym.empty()) {
         return mlir::emitError(firrtlPort.loc)
                << "zero width port " << hwPort.name
-               << " is referenced by name [" << hwPort.sym
+               << " is referenced by name [" << sym
                << "] (e.g. in an XMR) but must be removed";
       }
       continue;
@@ -1389,7 +1392,7 @@ LogicalResult FIRRTLModuleLowering::lowerModulePortsAndMoveBody(
       outputs.push_back(output);
 
       // If output port has symbol, move it to this wire.
-      if (auto sym = newModule.getPortSymbolAttr(idx)) {
+      if (auto sym = newModule.getPortList()[idx].getSym()) {
         newArg.setInnerSymAttr(sym);
         newModule.setPortSymbolAttr(idx, {});
       }

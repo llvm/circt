@@ -594,6 +594,9 @@ hw::ModuleType ESIPureModuleOp::getHWModuleType() {
 }
 
 SmallVector<::circt::hw::PortInfo> ESIPureModuleOp::getPortList() { return {}; }
+::circt::hw::PortInfo ESIPureModuleOp::getPort(size_t idx) {
+  ::llvm::report_fatal_error("not supported");
+}
 
 size_t ESIPureModuleOp::getNumPorts() { return 0; }
 size_t ESIPureModuleOp::getNumInputPorts() { return 0; }
@@ -605,11 +608,6 @@ size_t ESIPureModuleOp::getPortIdForInputId(size_t) {
 size_t ESIPureModuleOp::getPortIdForOutputId(size_t) {
   assert(0 && "Out of bounds output port id");
   return ~0ULL;
-}
-
-hw::InnerSymAttr ESIPureModuleOp::getPortSymbolAttr(size_t portIndex) {
-  emitError("No ports for port locations");
-  return nullptr;
 }
 
 SmallVector<Location> ESIPureModuleOp::getAllPortLocs() {

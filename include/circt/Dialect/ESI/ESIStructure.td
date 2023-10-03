@@ -24,7 +24,6 @@ def ESIPureModuleOp : ESI_Op<"pure_module",
       [Symbol, NoTerminator, RegionKindInterface, NoRegionArguments,
        SingleBlock, HasParent<"mlir::ModuleOp">,
        DeclareOpInterfaceMethods<PortList>,
-       DeclareOpInterfaceMethods<SymboledPortList>,
        DeclareOpInterfaceMethods<HWModuleLike>]> {
   let summary = "ESI pure module";
   let description = [{
