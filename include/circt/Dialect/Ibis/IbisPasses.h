@@ -10,6 +10,7 @@
 #define CIRCT_DIALECT_IBIS_IBISPASSES_H
 
 #include "circt/Dialect/Pipeline/PipelineDialect.h"
+#include "circt/Dialect/SSP/SSPDialect.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
 #include "mlir/Pass/Pass.h"
@@ -37,6 +38,7 @@ std::unique_ptr<mlir::Pass> createConvertCFToHandshakePass();
 std::unique_ptr<mlir::Pass> createPrepareSchedulingPass();
 std::unique_ptr<mlir::Pass> createConvertHandshakeToDCPass();
 std::unique_ptr<mlir::Pass> createConvertMethodsToContainersPass();
+std::unique_ptr<mlir::Pass> createAddOperatorLibraryPass();
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
