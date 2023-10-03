@@ -250,7 +250,7 @@ ParseResult parseOptionalKeywordOrOptionalString(OpAsmParser &p,
     return success();
   }
 
-  p.parseOptionalString(result);
+  (void)p.parseOptionalString(result);
   return success();
 }
 

@@ -874,33 +874,6 @@ static bool hasAttribute(StringRef name, ArrayRef<NamedAttribute> attrs) {
   return false;
 }
 
-static Attribute getAttribute(StringRef name, ArrayRef<NamedAttribute> attrs) {
-  for (auto &argAttr : attrs)
-    if (argAttr.getName() == name)
-      return argAttr.getValue();
-  return {};
-}
-
-static void addArgAndResultAttrsHW(Builder &builder, OperationState &result,
-                                   ArrayRef<DictionaryAttr> argAttrs,
-                                   ArrayRef<DictionaryAttr> resultAttrs) {
-  // Add the attributes to the function arguments.
-  result.addAttribute(
-      "per_port_attrs",
-      arrayOrEmpty(builder.getContext(),
-                   llvm::to_vector(
-                       llvm::concat<const Attribute>(argAttrs, resultAttrs))));
-}
-
-static void addArgAndResultAttrsHW(Builder &builder, OperationState &result,
-                                   ArrayRef<OpAsmParser::Argument> args,
-                                   ArrayRef<DictionaryAttr> resultAttrs) {
-  SmallVector<DictionaryAttr> argAttrs;
-  for (const auto &arg : args)
-    argAttrs.push_back(arg.attrs);
-  addArgAndResultAttrsHW(builder, result, argAttrs, resultAttrs);
-}
-
 static void
 addPortAttrsAndLocs(Builder &builder, OperationState &result,
                     SmallVectorImpl<module_like_impl::PortParse> &ports,
