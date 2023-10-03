@@ -3275,4 +3275,23 @@ firrtl.module @OMIRRemoval(in %source : !firrtl.uint<1>) {
   firrtl.strictconnect %d, %tmp_3 : !firrtl.uint<1>
 }
 
+// CHECK-LABEL: firrtl.module @Whens
+firrtl.module @Whens(in %clock: !firrtl.clock, in %a: !firrtl.uint<1>, in %reset: !firrtl.uint<1>) {
+  // Erase empty whens.
+  // CHECK-NOT: when %a
+  firrtl.when %a : !firrtl.uint<1> {
+  }
+  firrtl.when %a : !firrtl.uint<1> {
+  } else {
+  }
+  // Erase an empty else block.
+  // CHECK-NEXT: firrtl.when %reset : !firrtl.uint<1> {
+  // CHECK-NEXT:   firrtl.printf %clock, %reset, "foo!"  : !firrtl.clock, !firrtl.uint<1>
+  // CHECK-NEXT: }
+  firrtl.when %reset : !firrtl.uint<1> {
+    firrtl.printf %clock, %reset, "foo!"  : !firrtl.clock, !firrtl.uint<1>
+  } else {
+  }
+}
+
 }
