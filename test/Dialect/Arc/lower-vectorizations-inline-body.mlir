@@ -26,8 +26,8 @@ hw.module @inline_body(in %in0: i1, in %in1: i1, in %in2: i1, in %in3: i1, out o
     arc.vectorize.return %12 : vector<2xi1>
   }
 
-  %10 = vector.extract %9[0] : vector<2xi1>
-  %11 = vector.extract %9[1] : vector<2xi1>
+  %10 = vector.extract %9[0] : i1 from vector<2xi1>
+  %11 = vector.extract %9[1] : i1 from vector<2xi1>
   hw.output %3, %4, %10, %11 : i1, i1, i1, i1
 }
 

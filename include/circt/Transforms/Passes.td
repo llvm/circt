@@ -53,7 +53,7 @@ def StripDebugInfoWithPred : Pass<"strip-debuginfo-with-pred", "::mlir::ModuleOp
            "intended to be used for testing."> ];
 }
 
-def MapArithToCombPass : InterfacePass<"map-arith-to-comb", "circt::hw::HWModuleLike"> {
+def MapArithToCombPass : Pass<"map-arith-to-comb"> {
   let summary = "Map arith ops to combinational logic";
   let description = [{
     A pass which does a simple `arith` to `comb` mapping wherever possible.

@@ -411,7 +411,7 @@ LogicalResult AffineToLoopSchedule::createLoopSchedulePipeline(
   // Create Values for the loop's lower and upper bounds.
   Value lowerBound = lowerAffineLowerBound(innerLoop, builder);
   Value upperBound = lowerAffineUpperBound(innerLoop, builder);
-  int64_t stepValue = innerLoop.getStep();
+  int64_t stepValue = innerLoop.getStep().getSExtValue();
   auto step = builder.create<arith::ConstantOp>(
       IntegerAttr::get(builder.getIndexType(), stepValue));
 

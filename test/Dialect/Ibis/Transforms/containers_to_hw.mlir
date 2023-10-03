@@ -1,7 +1,7 @@
 // RUN: circt-opt --split-input-file --ibis-convert-containers-to-hw %s | FileCheck %s
 
 
-// CHECK:  hw.module @B(in %in : i1, out out : i1) {
+// CHECK:  hw.module @B(in %in : i1 {inputAttr}, out out : i1 {outputAttr}) {
 // CHECK:    hw.output %in : i1
 // CHECK:  }
 // CHECK:  hw.module @AccessSibling(in %p_b_out : i1, out p_b_in : i1) {
@@ -15,8 +15,8 @@
 
 ibis.container @B {
   %this = ibis.this @B 
-  %in = ibis.port.input @in : i1
-  %out = ibis.port.output @out : i1
+  %in = ibis.port.input @in : i1 {"inputAttr"}
+  %out = ibis.port.output @out : i1 {"outputAttr"}
 
   // Loopback.
   %v = ibis.port.read %in : !ibis.portref<in i1>

@@ -88,7 +88,7 @@ def MachineOp : FSMOp<"machine", [
     //===------------------------------------------------------------------===//
     // PortList Methods
     //===------------------------------------------------------------------===//
-    ::circt::hw::ModulePortInfo getPortList();
+    SmallVector<::circt::hw::PortInfo> getPortList();
   }];
 
   let skipDefaultBuilders = 1;
@@ -115,7 +115,7 @@ def InstanceOp : FSMOp<"instance", [Symbol, HasCustomSSAName]> {
     //===------------------------------------------------------------------===//
     // PortList Methods
     //===------------------------------------------------------------------===//
-    ::circt::hw::ModulePortInfo getPortList();
+    SmallVector<::circt::hw::PortInfo> getPortList();
   }];
 
   let hasVerifier = 1;
@@ -177,7 +177,7 @@ def HWInstanceOp : FSMOp<"hw_instance", [
     //===------------------------------------------------------------------===//
     // PortList Methods
     //===------------------------------------------------------------------===//
-    ::circt::hw::ModulePortInfo getPortList();
+    SmallVector<::circt::hw::PortInfo> getPortList();
   }];
 
   let hasVerifier = 1;

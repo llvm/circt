@@ -54,13 +54,12 @@ void firtoolOptionsDestroy(FirtoolOptions options) { delete unwrap(options); }
     return cpp_to_c(unwrap(options)->field);                                   \
   }
 
-DEFINE_FIRTOOL_OPTION_STRING(OutputFilename, outputFilename);
-DEFINE_FIRTOOL_OPTION_BOOL(DisableAnnotationsUnknown,
-                           disableAnnotationsUnknown);
+DEFINE_FIRTOOL_OPTION_STRING(OutputFilename, outputFilename)
+DEFINE_FIRTOOL_OPTION_BOOL(DisableAnnotationsUnknown, disableAnnotationsUnknown)
 DEFINE_FIRTOOL_OPTION_BOOL(DisableAnnotationsClassless,
-                           disableAnnotationsClassless);
+                           disableAnnotationsClassless)
 DEFINE_FIRTOOL_OPTION_BOOL(LowerAnnotationsNoRefTypePorts,
-                           lowerAnnotationsNoRefTypePorts);
+                           lowerAnnotationsNoRefTypePorts)
 DEFINE_FIRTOOL_OPTION_ENUM(
     PreserveAggregate, preserveAggregate, FirtoolPreserveAggregateMode,
     [](FirtoolPreserveAggregateMode value) {
@@ -90,7 +89,7 @@ DEFINE_FIRTOOL_OPTION_ENUM(
       default: // NOLINT(clang-diagnostic-covered-switch-default)
         llvm_unreachable("unknown preserve aggregate mode");
       }
-    });
+    })
 DEFINE_FIRTOOL_OPTION_ENUM(
     PreserveValues, preserveMode, FirtoolPreserveValuesMode,
     [](FirtoolPreserveValuesMode value) {
@@ -116,7 +115,7 @@ DEFINE_FIRTOOL_OPTION_ENUM(
       default: // NOLINT(clang-diagnostic-covered-switch-default)
         llvm_unreachable("unknown preserve values mode");
       }
-    });
+    })
 DEFINE_FIRTOOL_OPTION_ENUM(
     BuildMode, buildMode, FirtoolBuildMode,
     [](FirtoolBuildMode value) {
@@ -138,25 +137,25 @@ DEFINE_FIRTOOL_OPTION_ENUM(
       default: // NOLINT(clang-diagnostic-covered-switch-default)
         llvm_unreachable("unknown build mode");
       }
-    });
-DEFINE_FIRTOOL_OPTION_BOOL(DisableOptimization, disableOptimization);
-DEFINE_FIRTOOL_OPTION_BOOL(ExportChiselInterface, exportChiselInterface);
+    })
+DEFINE_FIRTOOL_OPTION_BOOL(DisableOptimization, disableOptimization)
+DEFINE_FIRTOOL_OPTION_BOOL(ExportChiselInterface, exportChiselInterface)
 DEFINE_FIRTOOL_OPTION_STRING(ChiselInterfaceOutDirectory,
-                             chiselInterfaceOutDirectory);
-DEFINE_FIRTOOL_OPTION_BOOL(VbToBv, vbToBV);
-DEFINE_FIRTOOL_OPTION_BOOL(Dedup, dedup);
+                             chiselInterfaceOutDirectory)
+DEFINE_FIRTOOL_OPTION_BOOL(VbToBv, vbToBV)
+DEFINE_FIRTOOL_OPTION_BOOL(Dedup, dedup)
 DEFINE_FIRTOOL_OPTION_BOOL(GrandCentralInstantiateCompanionOnly,
-                           grandCentralInstantiateCompanionOnly);
+                           grandCentralInstantiateCompanionOnly)
 DEFINE_FIRTOOL_OPTION_BOOL(DisableAggressiveMergeConnections,
-                           disableAggressiveMergeConnections);
-DEFINE_FIRTOOL_OPTION_BOOL(EmitOMIR, emitOMIR);
-DEFINE_FIRTOOL_OPTION_STRING(OMIROutFile, omirOutFile);
-DEFINE_FIRTOOL_OPTION_BOOL(LowerMemories, lowerMemories);
-DEFINE_FIRTOOL_OPTION_STRING(BlackBoxRootPath, blackBoxRootPath);
-DEFINE_FIRTOOL_OPTION_BOOL(ReplSeqMem, replSeqMem);
-DEFINE_FIRTOOL_OPTION_STRING(ReplSeqMemFile, replSeqMemFile);
-DEFINE_FIRTOOL_OPTION_BOOL(ExtractTestCode, extractTestCode);
-DEFINE_FIRTOOL_OPTION_BOOL(IgnoreReadEnableMem, ignoreReadEnableMem);
+                           disableAggressiveMergeConnections)
+DEFINE_FIRTOOL_OPTION_BOOL(EmitOMIR, emitOMIR)
+DEFINE_FIRTOOL_OPTION_STRING(OMIROutFile, omirOutFile)
+DEFINE_FIRTOOL_OPTION_BOOL(LowerMemories, lowerMemories)
+DEFINE_FIRTOOL_OPTION_STRING(BlackBoxRootPath, blackBoxRootPath)
+DEFINE_FIRTOOL_OPTION_BOOL(ReplSeqMem, replSeqMem)
+DEFINE_FIRTOOL_OPTION_STRING(ReplSeqMemFile, replSeqMemFile)
+DEFINE_FIRTOOL_OPTION_BOOL(ExtractTestCode, extractTestCode)
+DEFINE_FIRTOOL_OPTION_BOOL(IgnoreReadEnableMem, ignoreReadEnableMem)
 DEFINE_FIRTOOL_OPTION_ENUM(
     DisableRandom, disableRandom, FirtoolRandomKind,
     [](FirtoolRandomKind value) {
@@ -186,28 +185,27 @@ DEFINE_FIRTOOL_OPTION_ENUM(
       default: // NOLINT(clang-diagnostic-covered-switch-default)
         llvm_unreachable("unknown random kind");
       }
-    });
-DEFINE_FIRTOOL_OPTION_STRING(OutputAnnotationFilename,
-                             outputAnnotationFilename);
-DEFINE_FIRTOOL_OPTION_BOOL(EnableAnnotationWarning, enableAnnotationWarning);
-DEFINE_FIRTOOL_OPTION_BOOL(AddMuxPragmas, addMuxPragmas);
-DEFINE_FIRTOOL_OPTION_BOOL(EmitChiselAssertsAsSVA, emitChiselAssertsAsSVA);
-DEFINE_FIRTOOL_OPTION_BOOL(EmitSeparateAlwaysBlocks, emitSeparateAlwaysBlocks);
+    })
+DEFINE_FIRTOOL_OPTION_STRING(OutputAnnotationFilename, outputAnnotationFilename)
+DEFINE_FIRTOOL_OPTION_BOOL(EnableAnnotationWarning, enableAnnotationWarning)
+DEFINE_FIRTOOL_OPTION_BOOL(AddMuxPragmas, addMuxPragmas)
+DEFINE_FIRTOOL_OPTION_BOOL(EmitChiselAssertsAsSVA, emitChiselAssertsAsSVA)
+DEFINE_FIRTOOL_OPTION_BOOL(EmitSeparateAlwaysBlocks, emitSeparateAlwaysBlocks)
 DEFINE_FIRTOOL_OPTION_BOOL(EtcDisableInstanceExtraction,
-                           etcDisableInstanceExtraction);
+                           etcDisableInstanceExtraction)
 DEFINE_FIRTOOL_OPTION_BOOL(EtcDisableRegisterExtraction,
-                           etcDisableRegisterExtraction);
-DEFINE_FIRTOOL_OPTION_BOOL(EtcDisableModuleInlining, etcDisableModuleInlining);
+                           etcDisableRegisterExtraction)
+DEFINE_FIRTOOL_OPTION_BOOL(EtcDisableModuleInlining, etcDisableModuleInlining)
 DEFINE_FIRTOOL_OPTION_BOOL(AddVivadoRAMAddressConflictSynthesisBugWorkaround,
-                           addVivadoRAMAddressConflictSynthesisBugWorkaround);
-DEFINE_FIRTOOL_OPTION_STRING(CkgModuleName, ckgModuleName);
-DEFINE_FIRTOOL_OPTION_STRING(CkgInputName, ckgInputName);
-DEFINE_FIRTOOL_OPTION_STRING(CkgOutputName, ckgOutputName);
-DEFINE_FIRTOOL_OPTION_STRING(CkgEnableName, ckgEnableName);
-DEFINE_FIRTOOL_OPTION_STRING(CkgTestEnableName, ckgTestEnableName);
-DEFINE_FIRTOOL_OPTION_BOOL(ExportModuleHierarchy, exportModuleHierarchy);
-DEFINE_FIRTOOL_OPTION_BOOL(StripFirDebugInfo, stripFirDebugInfo);
-DEFINE_FIRTOOL_OPTION_BOOL(StripDebugInfo, stripDebugInfo);
+                           addVivadoRAMAddressConflictSynthesisBugWorkaround)
+DEFINE_FIRTOOL_OPTION_STRING(CkgModuleName, ckgModuleName)
+DEFINE_FIRTOOL_OPTION_STRING(CkgInputName, ckgInputName)
+DEFINE_FIRTOOL_OPTION_STRING(CkgOutputName, ckgOutputName)
+DEFINE_FIRTOOL_OPTION_STRING(CkgEnableName, ckgEnableName)
+DEFINE_FIRTOOL_OPTION_STRING(CkgTestEnableName, ckgTestEnableName)
+DEFINE_FIRTOOL_OPTION_BOOL(ExportModuleHierarchy, exportModuleHierarchy)
+DEFINE_FIRTOOL_OPTION_BOOL(StripFirDebugInfo, stripFirDebugInfo)
+DEFINE_FIRTOOL_OPTION_BOOL(StripDebugInfo, stripDebugInfo)
 
 #undef DEFINE_FIRTOOL_OPTION_STRING
 #undef DEFINE_FIRTOOL_OPTION_BOOL

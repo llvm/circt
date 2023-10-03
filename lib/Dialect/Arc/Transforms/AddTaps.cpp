@@ -38,7 +38,7 @@ struct AddTapsPass : public arc::impl::AddTapsBase<AddTapsPass> {
     if (!tapPorts)
       return;
     auto *outputOp = moduleOp.getBodyBlock()->getTerminator();
-    ModulePortInfo ports = moduleOp.getPortList();
+    ModulePortInfo ports(moduleOp.getPortList());
 
     // Add taps to inputs.
     auto builder = OpBuilder::atBlockBegin(moduleOp.getBodyBlock());

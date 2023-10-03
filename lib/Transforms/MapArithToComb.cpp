@@ -169,6 +169,7 @@ public:
                     OneToOnePattern<arith::ShLIOp, comb::ShlOp>,
                     OneToOnePattern<arith::ShRSIOp, comb::ShrSOp>,
                     OneToOnePattern<arith::ShRUIOp, comb::ShrUOp>,
+                    OneToOnePattern<arith::ConstantOp, hw::ConstantOp>,
                     OneToOnePattern<arith::SelectOp, comb::MuxOp>,
                     ExtSConversionPattern, ExtZConversionPattern,
                     TruncateConversionPattern, CompConversionPattern>(

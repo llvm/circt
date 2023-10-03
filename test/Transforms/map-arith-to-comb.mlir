@@ -22,6 +22,8 @@
 // CHECK:           %[[VAL_19:.*]] = hw.constant 0 : i3
 // CHECK:           %[[VAL_20:.*]] = comb.concat %[[VAL_19]], %[[VAL_1]] : i3, i32
 // CHECK:           %[[VAL_21:.*]] = comb.extract %[[VAL_1]] from 0 : (i32) -> i16
+// CHECK:           %[[VAL_22:.*]] = comb.icmp slt %[[VAL_0]], %[[VAL_1]] : i32
+// CHECK:           %[[VAL_23:.*]] = hw.constant 0 : i32
 // CHECK:           hw.output
 // CHECK:         }
 
@@ -44,6 +46,7 @@ hw.module @foo(in %arg0 : i32, in %arg1 : i32, in %arg2 : i1) {
     %15 = arith.extui %arg1 : i32 to i35
     %16 = arith.trunci %arg1 : i32 to i16
     %17 = arith.cmpi slt, %arg0, %arg1 : i32
+    %c0_i32 = arith.constant 0 : i32
 }
 
 // -----

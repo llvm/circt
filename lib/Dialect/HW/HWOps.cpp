@@ -545,7 +545,7 @@ buildModule(OpBuilder &builder, OperationState &result, StringAttr name,
   // Add an attribute for the name.
   result.addAttribute(SymbolTable::getSymbolAttrName(), name);
 
-  SmallVector<Attribute> portAttrs;
+  SmallVector<Attribute> perPortAttrs;
   SmallVector<Attribute> portLocs;
   SmallVector<ModulePort> portTypes;
   auto exportPortIdent = StringAttr::get(builder.getContext(), "hw.exportPort");
@@ -553,12 +553,13 @@ buildModule(OpBuilder &builder, OperationState &result, StringAttr name,
   for (auto elt : ports) {
     portTypes.push_back(elt);
     portLocs.push_back(elt.loc ? elt.loc : unknownLoc);
-    Attribute attr;
+    llvm::SmallVector<NamedAttribute> portAttrs;
+    if (elt.attrs)
+      llvm::copy(elt.attrs, std::back_inserter(portAttrs));
+
     if (elt.sym && !elt.sym.empty())
-      attr = builder.getDictionaryAttr({{exportPortIdent, elt.sym}});
-    else
-      attr = builder.getDictionaryAttr({});
-    portAttrs.push_back(attr);
+      portAttrs.push_back(builder.getNamedAttr(exportPortIdent, elt.sym));
+    perPortAttrs.push_back(builder.getDictionaryAttr(portAttrs));
   }
 
   // Allow clients to pass in null for the parameters list.
@@ -571,7 +572,7 @@ buildModule(OpBuilder &builder, OperationState &result, StringAttr name,
                       TypeAttr::get(type));
   result.addAttribute("port_locs", builder.getArrayAttr(portLocs));
   result.addAttribute("per_port_attrs",
-                      arrayOrEmpty(builder.getContext(), portAttrs));
+                      arrayOrEmpty(builder.getContext(), perPortAttrs));
   result.addAttribute("parameters", parameters);
   if (!comment)
     comment = builder.getStringAttr("");
@@ -871,33 +872,6 @@ static bool hasAttribute(StringRef name, ArrayRef<NamedAttribute> attrs) {
     if (argAttr.getName() == name)
       return true;
   return false;
-}
-
-static Attribute getAttribute(StringRef name, ArrayRef<NamedAttribute> attrs) {
-  for (auto &argAttr : attrs)
-    if (argAttr.getName() == name)
-      return argAttr.getValue();
-  return {};
-}
-
-static void addArgAndResultAttrsHW(Builder &builder, OperationState &result,
-                                   ArrayRef<DictionaryAttr> argAttrs,
-                                   ArrayRef<DictionaryAttr> resultAttrs) {
-  // Add the attributes to the function arguments.
-  result.addAttribute(
-      "per_port_attrs",
-      arrayOrEmpty(builder.getContext(),
-                   llvm::to_vector(
-                       llvm::concat<const Attribute>(argAttrs, resultAttrs))));
-}
-
-static void addArgAndResultAttrsHW(Builder &builder, OperationState &result,
-                                   ArrayRef<OpAsmParser::Argument> args,
-                                   ArrayRef<DictionaryAttr> resultAttrs) {
-  SmallVector<DictionaryAttr> argAttrs;
-  for (const auto &arg : args)
-    argAttrs.push_back(arg.attrs);
-  addArgAndResultAttrsHW(builder, result, argAttrs, resultAttrs);
 }
 
 static void
@@ -1405,7 +1379,7 @@ void HWModuleGeneratedOp::getAsmBlockArgumentNames(
 LogicalResult HWModuleOp::verifyBody() { return success(); }
 
 template <typename ModuleTy>
-static ModulePortInfo getPortList(ModuleTy &mod) {
+static SmallVector<PortInfo> getPortList(ModuleTy &mod) {
   auto modTy = mod.getHWModuleType();
   auto emptyDict = DictionaryAttr::get(mod.getContext());
   SmallVector<PortInfo> retval;
@@ -1420,7 +1394,7 @@ static ModulePortInfo getPortList(ModuleTy &mod) {
                                         : modTy.getInputIdForPortId(i),
                       extractSym(attrs), attrs, loc});
   }
-  return ModulePortInfo(retval);
+  return retval;
 }
 
 //===----------------------------------------------------------------------===//
@@ -1568,8 +1542,8 @@ void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
                                         getResultNames(), getResults());
 }
 
-ModulePortInfo InstanceOp::getPortList() {
-  SmallVector<PortInfo> inputs, outputs;
+SmallVector<PortInfo> InstanceOp::getPortList() {
+  SmallVector<PortInfo> ports;
   auto emptyDict = DictionaryAttr::get(getContext());
   auto argNames = (*this)->getAttrOfType<ArrayAttr>("argNames");
   auto argTypes = getModuleType(*this).getInputs();
@@ -1586,11 +1560,11 @@ ModulePortInfo InstanceOp::getPortList() {
     LocationAttr loc;
     if (argLocs)
       loc = argLocs[i].cast<LocationAttr>();
-    inputs.push_back({{argNames[i].cast<StringAttr>(), type, direction},
-                      i,
-                      {},
-                      emptyDict,
-                      loc});
+    ports.push_back({{argNames[i].cast<StringAttr>(), type, direction},
+                     i,
+                     {},
+                     emptyDict,
+                     loc});
   }
 
   auto resultNames = (*this)->getAttrOfType<ArrayAttr>("resultNames");
@@ -1600,14 +1574,14 @@ ModulePortInfo InstanceOp::getPortList() {
     LocationAttr loc;
     if (resultLocs)
       loc = resultLocs[i].cast<LocationAttr>();
-    outputs.push_back({{resultNames[i].cast<StringAttr>(), resultTypes[i],
-                        ModulePort::Direction::Output},
-                       i,
-                       {},
-                       emptyDict,
-                       loc});
+    ports.push_back({{resultNames[i].cast<StringAttr>(), resultTypes[i],
+                      ModulePort::Direction::Output},
+                     i,
+                     {},
+                     emptyDict,
+                     loc});
   }
-  return ModulePortInfo(inputs, outputs);
+  return ports;
 }
 
 size_t InstanceOp::getNumPorts() {
@@ -3285,7 +3259,7 @@ void HWTestModuleOp::getAsmBlockArgumentNames(
   }
 }
 
-ModulePortInfo HWTestModuleOp::getPortList() {
+SmallVector<PortInfo> HWTestModuleOp::getPortList() {
   SmallVector<PortInfo> ports;
   auto refPorts = getModuleType().getPorts();
   for (auto [i, port] : enumerate(refPorts)) {
@@ -3296,7 +3270,7 @@ ModulePortInfo HWTestModuleOp::getPortList() {
     InnerSymAttr sym = {};
     ports.push_back({{port}, i, sym, attr, loc});
   }
-  return ModulePortInfo(ports);
+  return ports;
 }
 
 size_t HWTestModuleOp::getNumPorts() { return getModuleType().getNumPorts(); }

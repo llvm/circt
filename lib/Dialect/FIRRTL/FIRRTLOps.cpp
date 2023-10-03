@@ -532,7 +532,7 @@ static hw::ModulePort::Direction dirFtoH(Direction dir) {
   abort();
 }
 
-static hw::ModulePortInfo getPortListImpl(FModuleLike module) {
+static SmallVector<hw::PortInfo> getPortListImpl(FModuleLike module) {
   SmallVector<hw::PortInfo> results;
   for (unsigned i = 0, e = getNumPorts(module); i < e; ++i) {
     results.push_back({{module.getPortNameAttr(i), module.getPortType(i),
@@ -542,20 +542,22 @@ static hw::ModulePortInfo getPortListImpl(FModuleLike module) {
                        {},
                        module.getPortLocation(i)});
   }
-  return hw::ModulePortInfo(results);
+  return results;
 }
 
-hw::ModulePortInfo FModuleOp::getPortList() { return ::getPortListImpl(*this); }
-
-hw::ModulePortInfo FExtModuleOp::getPortList() {
+SmallVector<::circt::hw::PortInfo> FModuleOp::getPortList() {
   return ::getPortListImpl(*this);
 }
 
-hw::ModulePortInfo FIntModuleOp::getPortList() {
+SmallVector<::circt::hw::PortInfo> FExtModuleOp::getPortList() {
   return ::getPortListImpl(*this);
 }
 
-hw::ModulePortInfo FMemModuleOp::getPortList() {
+SmallVector<::circt::hw::PortInfo> FIntModuleOp::getPortList() {
+  return ::getPortListImpl(*this);
+}
+
+SmallVector<::circt::hw::PortInfo> FMemModuleOp::getPortList() {
   return ::getPortListImpl(*this);
 }
 
@@ -1780,7 +1782,9 @@ ArrayAttr ClassOp::getPortAnnotationsAttr() {
   return ArrayAttr::get(getContext(), {});
 }
 
-hw::ModulePortInfo ClassOp::getPortList() { return ::getPortListImpl(*this); }
+SmallVector<::circt::hw::PortInfo> ClassOp::getPortList() {
+  return ::getPortListImpl(*this);
+}
 
 BlockArgument ClassOp::getArgument(size_t portNumber) {
   return getBodyBlock()->getArgument(portNumber);
@@ -1850,7 +1854,7 @@ ArrayAttr ExtClassOp::getPortAnnotationsAttr() {
   return ArrayAttr::get(getContext(), {});
 }
 
-hw::ModulePortInfo ExtClassOp::getPortList() {
+SmallVector<::circt::hw::PortInfo> ExtClassOp::getPortList() {
   return ::getPortListImpl(*this);
 }
 
@@ -1875,7 +1879,7 @@ Operation *InstanceOp::getReferencedModuleSlow() {
   return circuit.lookupSymbol<FModuleLike>(getModuleNameAttr());
 }
 
-hw::ModulePortInfo InstanceOp::getPortList() {
+SmallVector<::circt::hw::PortInfo> InstanceOp::getPortList() {
   return cast<hw::PortList>(getReferencedModuleSlow()).getPortList();
 }
 

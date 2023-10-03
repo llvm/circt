@@ -118,7 +118,7 @@ void PortConverterImpl::createNewOutput(PortInfo origPort, const Twine &suffix,
 }
 
 LogicalResult PortConverterImpl::run() {
-  ModulePortInfo ports = mod.getPortList();
+  ModulePortInfo ports(mod.getPortList());
 
   bool foundLoweredPorts = false;
 
@@ -206,7 +206,7 @@ LogicalResult PortConverterImpl::run() {
 void PortConverterImpl::updateInstance(hw::InstanceOp inst) {
   ImplicitLocOpBuilder b(inst.getLoc(), inst);
   BackedgeBuilder beb(b, inst.getLoc());
-  ModulePortInfo ports = mod.getPortList();
+  ModulePortInfo ports(mod.getPortList());
 
   // Create backedges for the future instance results so the signal mappers can
   // use the future results as values.

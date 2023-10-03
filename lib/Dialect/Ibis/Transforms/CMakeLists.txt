@@ -12,6 +12,7 @@ add_circt_dialect_library(CIRCTIbisTransforms
   IbisPassPipelines.cpp
   IbisPrepareScheduling.cpp
   IbisConvertHandshakeToDC.cpp
+  IbisMethodsToContainers.cpp
 
   DEPENDS
   CIRCTIbisTransformsIncGen

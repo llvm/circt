@@ -1674,7 +1674,7 @@ verifyPrimitiveOpType(PrimitiveOp instance,
            << "'.";
 
   // Verify the instance result ports with those of its referenced component.
-  hw::ModulePortInfo primitivePorts = referencedPrimitive.getPortList();
+  auto primitivePorts = referencedPrimitive.getPortList();
   size_t numPorts = primitivePorts.size();
 
   size_t numResults = instance.getNumResults();
@@ -1717,7 +1717,7 @@ verifyPrimitiveOpType(PrimitiveOp instance,
 
   for (size_t i = 0; i != numResults; ++i) {
     auto resultType = instance.getResult(i).getType();
-    auto expectedType = primitivePorts.at(i).type;
+    auto expectedType = primitivePorts[i].type;
     auto replacedType = hw::evaluateParametricType(
         instance.getLoc(), instance.getParametersAttr(), expectedType);
     if (failed(replacedType))
@@ -1725,7 +1725,7 @@ verifyPrimitiveOpType(PrimitiveOp instance,
     if (resultType == replacedType)
       continue;
     return instance.emitOpError()
-           << "result type for " << primitivePorts.at(i).name << " must be "
+           << "result type for " << primitivePorts[i].name << " must be "
            << expectedType << ", but got " << resultType;
   }
   return success();

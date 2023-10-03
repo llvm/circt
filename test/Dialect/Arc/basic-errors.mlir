@@ -426,7 +426,7 @@ hw.module @invalid_input_type(in %in0: vector<2xi1>, in %in1: vector<2xi1>, in %
   // expected-error @below {{input vector element type must be a signless integer}}
   %0:2 = arc.vectorize (%in0, %in1), (%in2, %in3) : (vector<2xi1>, vector<2xi1>, vector<2xi1>, vector<2xi1>) -> (i1, i1) {
   ^bb0(%arg0: vector<2xi1>, %arg1: vector<2xi1>):
-    %1 = vector.extract %arg0[0] : vector<2xi1>
+    %1 = vector.extract %arg0[0] : i1 from vector<2xi1>
     arc.vectorize.return %1 : i1
   }
   hw.output %0#0, %0#1 : i1, i1

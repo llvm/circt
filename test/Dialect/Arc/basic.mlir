@@ -270,8 +270,8 @@ hw.module @vectorize_boundary_lowered(in %in0: i1, in %in1: i1, in %in2: i1, in 
     %9 = arith.andi %arg0, %arg1 : i1
     arc.vectorize.return %9 : i1
   }
-  %9 = vector.extract %8[0] : vector<2xi1>
-  %10 = vector.extract %8[1] : vector<2xi1>
+  %9 = vector.extract %8[0] : i1 from vector<2xi1>
+  %10 = vector.extract %8[1] : i1 from vector<2xi1>
 
   hw.output %3, %4, %9, %10 : i1, i1, i1, i1
 }
@@ -320,8 +320,8 @@ hw.module @vectorize_both_sides_lowered(in %in0: i1, in %in1: i1, in %in2: i1, i
     %9 = arith.andi %arg0, %arg1 : vector<2xi1>
     arc.vectorize.return %9 : vector<2xi1>
   }
-  %9 = vector.extract %8[0] : vector<2xi1>
-  %10 = vector.extract %8[1] : vector<2xi1>
+  %9 = vector.extract %8[0] : i1 from vector<2xi1>
+  %10 = vector.extract %8[1] : i1 from vector<2xi1>
 
   hw.output %3, %4, %9, %10 : i1, i1, i1, i1
 }

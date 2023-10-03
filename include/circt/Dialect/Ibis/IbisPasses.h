@@ -36,6 +36,7 @@ std::unique_ptr<mlir::Pass> createInlineSBlocksPass();
 std::unique_ptr<mlir::Pass> createConvertCFToHandshakePass();
 std::unique_ptr<mlir::Pass> createPrepareSchedulingPass();
 std::unique_ptr<mlir::Pass> createConvertHandshakeToDCPass();
+std::unique_ptr<mlir::Pass> createConvertMethodsToContainersPass();
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION

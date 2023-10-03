@@ -95,7 +95,7 @@ def SCModuleOp : SystemCOp<"module", [
     //===------------------------------------------------------------------===//
     // PortList Methods
     //===------------------------------------------------------------------===//
-    ::circt::hw::ModulePortInfo getPortList();
+    SmallVector<::circt::hw::PortInfo> getPortList();
   }];
 }
 

@@ -22,7 +22,7 @@ def PortList : OpInterface<"PortList", []> {
   let description = "Operations which produce a unified port list representation";
   let methods = [
     InterfaceMethod<"Get port list",
-    "::circt::hw::ModulePortInfo", "getPortList", (ins)>,
+    "SmallVector<::circt::hw::PortInfo>", "getPortList", (ins)>,
 
     InterfaceMethod<"Get the port a specific input",
     "size_t", "getPortIdForInputId", (ins "size_t":$idx)>,

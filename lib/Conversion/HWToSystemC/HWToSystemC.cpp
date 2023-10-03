@@ -51,7 +51,7 @@ struct ConvertHWModule : public OpConversionPattern<HWModuleOp> {
 
     // Create the SystemC module.
     for (size_t i = 0; i < ports.size(); ++i)
-      ports.at(i).type = typeConverter->convertType(ports.at(i).type);
+      ports[i].type = typeConverter->convertType(ports[i].type);
 
     auto scModule = rewriter.create<SCModuleOp>(module.getLoc(),
                                                 module.getNameAttr(), ports);
@@ -98,7 +98,7 @@ struct ConvertHWModule : public OpConversionPattern<HWModuleOp> {
               .create<SignalReadOp>(scFunc.getLoc(), scModule.getArgument(i))
               .getResult();
       auto converted = typeConverter->materializeSourceConversion(
-          rewriter, scModule.getLoc(), portsLocal.at(i).type, inputRead);
+          rewriter, scModule.getLoc(), portsLocal[i].type, inputRead);
       scFuncBody.getArgument(0).replaceAllUsesWith(converted);
       scFuncBody.eraseArgument(0);
     }
