@@ -21,6 +21,25 @@ using namespace circt;
 using namespace comb;
 using namespace matchers;
 
+/// In comb, we assume no knowledge of the semantics of cross-block dataflow. As
+/// such, cross-block dataflow is interpreted as a canonicalization barrier.
+/// This is a conservative approach which:
+/// 1. still allows for efficient canonicalization for the common CIRCT usecase
+///    of comb (comb logic nested inside single-block hw.module's)
+/// 2. allows comb operations to be used in non-HW container ops - that may use
+///    MLIR blocks and regions to represent various forms of hierarchical
+///    abstractions, thus allowing comb to compose with other dialects.
+static bool hasOperandsOutsideOfBlock(Operation *op) {
+  Block *thisBlock = op->getBlock();
+  return llvm::any_of(op->getOperands(), [&](Value operand) {
+    return operand.getParentBlock() != thisBlock;
+  });
+}
+
+#define bailCanonIfOutsideBlockOperands(op)                                    \
+  if (hasOperandsOutsideOfBlock(&*op))                                         \
+    return failure();
+
 /// Create a new instance of a generic operation that only has value operands,
 /// and has a single result value whose type matches the first operand.
 ///
@@ -308,6 +327,8 @@ OpFoldResult ShlOp::fold(FoldAdaptor adaptor) {
 }
 
 LogicalResult ShlOp::canonicalize(ShlOp op, PatternRewriter &rewriter) {
+  bailCanonIfOutsideBlockOperands(op);
+
   // ShlOp(x, cst) -> Concat(Extract(x), zeros)
   APInt value;
   if (!matchPattern(op.getRhs(), m_ConstantInt(&value)))
@@ -345,6 +366,8 @@ OpFoldResult ShrUOp::fold(FoldAdaptor adaptor) {
 }
 
 LogicalResult ShrUOp::canonicalize(ShrUOp op, PatternRewriter &rewriter) {
+  bailCanonIfOutsideBlockOperands(op);
+
   // ShrUOp(x, cst) -> Concat(zeros, Extract(x))
   APInt value;
   if (!matchPattern(op.getRhs(), m_ConstantInt(&value)))
@@ -377,6 +400,8 @@ OpFoldResult ShrSOp::fold(FoldAdaptor adaptor) {
 }
 
 LogicalResult ShrSOp::canonicalize(ShrSOp op, PatternRewriter &rewriter) {
+  bailCanonIfOutsideBlockOperands(op);
+
   // ShrSOp(x, cst) -> Concat(replicate(extract(x, topbit)),extract(x))
   APInt value;
   if (!matchPattern(op.getRhs(), m_ConstantInt(&value)))
@@ -534,6 +559,8 @@ static bool extractFromReplicate(ExtractOp op, ReplicateOp replicate,
 }
 
 LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
+  bailCanonIfOutsideBlockOperands(op);
+
   auto *inputOp = op.getInput().getDefiningOp();
 
   // This turns out to be incredibly expensive.  Disable until performance is
@@ -841,6 +868,8 @@ static bool canonicalizeIdempotentInputs(Op op, PatternRewriter &rewriter) {
 }
 
 LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
+  bailCanonIfOutsideBlockOperands(op);
+
   auto inputs = op.getInputs();
   auto size = inputs.size();
   assert(size > 1 && "expected 2 or more operands, `fold` should handle this");
@@ -1113,6 +1142,8 @@ static bool canonicalizeOrOfConcatsWithCstOperands(OrOp op, size_t concatIdx1,
 }
 
 LogicalResult OrOp::canonicalize(OrOp op, PatternRewriter &rewriter) {
+  bailCanonIfOutsideBlockOperands(op);
+
   auto inputs = op.getInputs();
   auto size = inputs.size();
   assert(size > 1 && "expected 2 or more operands");
@@ -1264,6 +1295,8 @@ static void canonicalizeXorIcmpTrue(XorOp op, unsigned icmpOperand,
 }
 
 LogicalResult XorOp::canonicalize(XorOp op, PatternRewriter &rewriter) {
+  bailCanonIfOutsideBlockOperands(op);
+
   auto inputs = op.getInputs();
   auto size = inputs.size();
   assert(size > 1 && "expected 2 or more operands");
@@ -1369,6 +1402,8 @@ OpFoldResult SubOp::fold(FoldAdaptor adaptor) {
 }
 
 LogicalResult SubOp::canonicalize(SubOp op, PatternRewriter &rewriter) {
+  bailCanonIfOutsideBlockOperands(op);
+
   // sub(x, cst) -> add(x, -cst)
   APInt value;
   if (matchPattern(op.getRhs(), m_ConstantInt(&value))) {
@@ -1397,6 +1432,8 @@ OpFoldResult AddOp::fold(FoldAdaptor adaptor) {
 }
 
 LogicalResult AddOp::canonicalize(AddOp op, PatternRewriter &rewriter) {
+  bailCanonIfOutsideBlockOperands(op);
+
   auto inputs = op.getInputs();
   auto size = inputs.size();
   assert(size > 1 && "expected 2 or more operands");
@@ -1521,6 +1558,8 @@ OpFoldResult MulOp::fold(FoldAdaptor adaptor) {
 }
 
 LogicalResult MulOp::canonicalize(MulOp op, PatternRewriter &rewriter) {
+  bailCanonIfOutsideBlockOperands(op);
+
   auto inputs = op.getInputs();
   auto size = inputs.size();
   assert(size > 1 && "expected 2 or more operands");
@@ -1652,6 +1691,8 @@ OpFoldResult ConcatOp::fold(FoldAdaptor adaptor) {
 }
 
 LogicalResult ConcatOp::canonicalize(ConcatOp op, PatternRewriter &rewriter) {
+  bailCanonIfOutsideBlockOperands(op);
+
   auto inputs = op.getInputs();
   auto size = inputs.size();
   assert(size > 1 && "expected 2 or more operands");
@@ -2908,6 +2949,8 @@ static void combineEqualityICmpWithXorOfConstant(ICmpOp cmpOp, XorOp xorOp,
 }
 
 LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
+  bailCanonIfOutsideBlockOperands(op);
+
   APInt lhs, rhs;
 
   // icmp 1, x -> icmp x, 1
