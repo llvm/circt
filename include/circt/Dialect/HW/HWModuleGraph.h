@@ -150,7 +150,7 @@ struct llvm::DOTGraphTraits<circt::hw::HWModuleOp>
     auto &os = g.getOStream();
     os << "subgraph cluster_entry_args {\n";
     os << "label=\"Input arguments\";\n";
-    auto iports = mod.getPortList();
+    circt::hw::ModulePortInfo iports(mod.getPortList());
     for (auto [info, arg] :
          llvm::zip(iports.getInputs(), mod.getBodyBlock()->getArguments())) {
       g.emitSimpleNode(reinterpret_cast<void *>(&arg), "",

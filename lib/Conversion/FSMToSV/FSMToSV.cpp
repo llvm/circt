@@ -483,10 +483,11 @@ LogicalResult MachineOpConverter::dispatch() {
   // 4/5) Create next-state assignments for each output.
   llvm::SmallVector<CaseMuxItem, 4> outputCaseAssignments;
   auto hwPortList = hwModuleOp.getPortList();
-  for (size_t portIndex = 0; portIndex < machineOp.getNumResults();
-       portIndex++) {
-    auto outputPort = hwPortList.atOutput(portIndex);
-    auto outputPortType = outputPort.type;
+  size_t portIndex = 0;
+  for (auto &port : hwPortList) {
+    if (!port.isOutput())
+      continue;
+    auto outputPortType = port.type;
     CaseMuxItem outputAssignment;
     outputAssignment.wire = b.create<sv::RegOp>(
         machineOp.getLoc(), outputPortType,
@@ -497,6 +498,7 @@ LogicalResult MachineOpConverter::dispatch() {
           stateConvResults[state].outputs[portIndex]};
 
     outputCaseAssignments.push_back(outputAssignment);
+    ++portIndex;
   }
 
   // Create next-state maps for the FSM variables.

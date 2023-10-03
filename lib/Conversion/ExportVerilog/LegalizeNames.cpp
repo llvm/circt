@@ -156,7 +156,7 @@ static void legalizeModuleLocalNames(HWModuleOp module,
         updated = true;
       continue;
     }
-    auto oldName = ports.at(idx).name;
+    auto oldName = ports[idx].name;
     auto newName = nameResolver.getLegalName(oldName);
     // Set the verilogName attr only if the name is updated.
     if (newName != oldName) {

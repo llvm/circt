@@ -228,15 +228,17 @@ static StringRef getPortVerilogName(Operation *module, PortInfo port) {
 /// Return the verilog name of the port for the module.
 static StringRef getPortVerilogName(Operation *module, size_t portArgNum) {
   auto htmo = cast<HWModuleLike>(module);
-  return getPortVerilogName(module, htmo.getPortList().at(portArgNum));
+  return getPortVerilogName(module, htmo.getPortList()[portArgNum]);
 }
 
 /// Return the verilog name of the port for the module.
 static StringRef getInputPortVerilogName(Operation *module, size_t portArgNum) {
   if (auto htmo = dyn_cast<HWTestModuleOp>(module))
-    return getPortVerilogName(module, htmo.getPortList().atInput(portArgNum));
+    return getPortVerilogName(
+        module, ModulePortInfo(htmo.getPortList()).atInput(portArgNum));
   auto hml = cast<HWModuleLike>(module);
-  return getPortVerilogName(module, hml.getPortList().atInput(portArgNum));
+  return getPortVerilogName(
+      module, ModulePortInfo(hml.getPortList()).atInput(portArgNum));
 }
 
 /// This predicate returns true if the specified operation is considered a
@@ -3900,7 +3902,7 @@ LogicalResult StmtEmitter::visitStmt(OutputOp op) {
   auto parent = op->getParentOfType<PortList>();
 
   size_t operandIndex = 0;
-  auto ports = parent.getPortList();
+  ModulePortInfo ports(parent.getPortList());
   for (PortInfo port : ports.getOutputs()) {
     auto operand = op.getOperand(operandIndex);
     // Outputs that are set by the output port of an instance are handled
@@ -4881,7 +4883,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
 
   ps << PP::nbsp << PPExtString(getSymOpName(op)) << " (";
 
-  auto modPortInfo = cast<PortList>(moduleOp).getPortList();
+  ModulePortInfo modPortInfo(cast<PortList>(moduleOp).getPortList());
   // Get the max port name length so we can align the '('.
   size_t maxNameLength = 0;
   for (auto &elt : modPortInfo) {
@@ -4898,7 +4900,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   bool isZeroWidth = false;
 
   auto containingModule = cast<HWModuleOp>(emitter.currentModuleOp);
-  auto containingPortList = containingModule.getPortList();
+  ModulePortInfo containingPortList(containingModule.getPortList());
   SmallVector<Value> instPortValues(modPortInfo.size());
   op.getValues(instPortValues, modPortInfo);
   for (size_t portNum = 0, portEnd = modPortInfo.size(); portNum < portEnd;
@@ -5470,7 +5472,7 @@ void ModuleEmitter::emitBind(BindOp op) {
   InstanceOp inst = op.getReferencedInstance(&state.symbolCache);
 
   HWModuleOp parentMod = inst->getParentOfType<hw::HWModuleOp>();
-  auto parentPortList = parentMod.getPortList();
+  ModulePortInfo parentPortList(parentMod.getPortList());
   auto parentVerilogName = getVerilogModuleNameAttr(parentMod);
 
   Operation *childMod = inst.getReferencedModuleCached(&state.symbolCache);
@@ -5484,7 +5486,7 @@ void ModuleEmitter::emitBind(BindOp op) {
   bool isFirst = true; // True until we print a port.
   ps.scopedBox(PP::bbox2, [&]() {
     auto parentPortInfo = parentMod.getPortList();
-    auto childPortInfo = cast<PortList>(childMod).getPortList();
+    ModulePortInfo childPortInfo(cast<PortList>(childMod).getPortList());
 
     // Get the max port name length so we can align the '('.
     size_t maxNameLength = 0;
@@ -5852,7 +5854,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
   // If we have any parameters, print them on their own line.
   emitParameters(module, module.getParameters());
 
-  emitPortList(module, module.getPortList());
+  emitPortList(module, ModulePortInfo(module.getPortList()));
 
   assert(state.pendingNewline);
 
@@ -5878,7 +5880,7 @@ void ModuleEmitter::emitHWTestModule(HWTestModuleOp module) {
   // If we have any parameters, print them on their own line.
   emitParameters(module, module.getParameters());
 
-  emitPortList(module, module.getPortList());
+  emitPortList(module, ModulePortInfo(module.getPortList()));
 
   assert(state.pendingNewline);
 

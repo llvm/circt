@@ -116,7 +116,7 @@ SCModuleOp::getPortsOfDirection(hw::ModulePort::Direction direction) {
   return llvm::make_filter_range(getArguments(), predicateFn);
 }
 
-hw::ModulePortInfo SCModuleOp::getPortList() {
+SmallVector<::circt::hw::PortInfo> SCModuleOp::getPortList() {
   SmallVector<hw::PortInfo> ports;
   for (int i = 0, e = getNumArguments(); i < e; ++i) {
     hw::PortInfo info;
@@ -125,7 +125,7 @@ hw::ModulePortInfo SCModuleOp::getPortList() {
     info.dir = getDirection(info.type);
     ports.push_back(info);
   }
-  return hw::ModulePortInfo{ports};
+  return ports;
 }
 
 mlir::Region *SCModuleOp::getCallableRegion() { return &getBody(); }
@@ -535,7 +535,7 @@ InstanceDeclOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   return success();
 }
 
-hw::ModulePortInfo InstanceDeclOp::getPortList() {
+SmallVector<hw::PortInfo> InstanceDeclOp::getPortList() {
   return cast<hw::PortList>(getReferencedModuleSlow()).getPortList();
 }
 

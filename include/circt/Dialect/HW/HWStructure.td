@@ -107,7 +107,7 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
       return modty.getPortIdForOutputId(idx);
     }
 
-    ModulePortInfo $cppClass::getPortList() {
+    SmallVector<::circt::hw::PortInfo> $cppClass::getPortList() {
       return ::getPortList(*this);
     }
 
@@ -490,13 +490,6 @@ def InstanceOp : HWOp<"instance", [
     /// Note: The module ports may not be input, output ordered. This computes
     /// the port index to instance result/input Value mapping.
     void getValues(SmallVectorImpl<Value> &values, const ModulePortInfo &mpi);
-
-    //===------------------------------------------------------------------===//
-    // SymbolOpInterface Methods
-    //===------------------------------------------------------------------===//
-
-    /// An InstanceOp may optionally define a symbol.
-    bool isOptionalSymbol() { return true; }
 
   }];
 

@@ -593,9 +593,7 @@ hw::ModuleType ESIPureModuleOp::getHWModuleType() {
   return hw::ModuleType::get(getContext(), {});
 }
 
-::circt::hw::ModulePortInfo ESIPureModuleOp::getPortList() {
-  return hw::ModulePortInfo(ArrayRef<hw::PortInfo>{});
-}
+SmallVector<::circt::hw::PortInfo> ESIPureModuleOp::getPortList() { return {}; }
 
 size_t ESIPureModuleOp::getNumPorts() { return 0; }
 size_t ESIPureModuleOp::getNumInputPorts() { return 0; }

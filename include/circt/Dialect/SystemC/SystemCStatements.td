@@ -143,7 +143,7 @@ def InstanceDeclOp : SystemCOp<"instance.decl", [
     //===------------------------------------------------------------------===//
     // PortList Methods
     //===------------------------------------------------------------------===//
-    ::circt::hw::ModulePortInfo getPortList();
+    SmallVector<::circt::hw::PortInfo> getPortList();
   }];
 }
 

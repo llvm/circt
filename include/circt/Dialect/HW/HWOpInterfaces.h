@@ -205,6 +205,10 @@ public:
       outputPortMap[out.name] = out.argNum;
   }
 
+  explicit ModulePortLookupInfo(MLIRContext *ctx,
+                                const SmallVector<PortInfo> &portInfo)
+      : ModulePortLookupInfo(ctx, ModulePortInfo(portInfo)) {}
+
   // Return the index of the input port with the specified name.
   FailureOr<unsigned> getInputPortIndex(StringAttr name) const {
     return lookupPortIndex(inputPortMap, name);

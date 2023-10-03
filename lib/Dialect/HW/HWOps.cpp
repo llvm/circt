@@ -1379,7 +1379,7 @@ void HWModuleGeneratedOp::getAsmBlockArgumentNames(
 LogicalResult HWModuleOp::verifyBody() { return success(); }
 
 template <typename ModuleTy>
-static ModulePortInfo getPortList(ModuleTy &mod) {
+static SmallVector<PortInfo> getPortList(ModuleTy &mod) {
   auto modTy = mod.getHWModuleType();
   auto emptyDict = DictionaryAttr::get(mod.getContext());
   SmallVector<PortInfo> retval;
@@ -1394,7 +1394,7 @@ static ModulePortInfo getPortList(ModuleTy &mod) {
                                         : modTy.getInputIdForPortId(i),
                       extractSym(attrs), attrs, loc});
   }
-  return ModulePortInfo(retval);
+  return retval;
 }
 
 //===----------------------------------------------------------------------===//
@@ -1542,8 +1542,8 @@ void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
                                         getResultNames(), getResults());
 }
 
-ModulePortInfo InstanceOp::getPortList() {
-  SmallVector<PortInfo> inputs, outputs;
+SmallVector<PortInfo> InstanceOp::getPortList() {
+  SmallVector<PortInfo> ports;
   auto emptyDict = DictionaryAttr::get(getContext());
   auto argNames = (*this)->getAttrOfType<ArrayAttr>("argNames");
   auto argTypes = getModuleType(*this).getInputs();
@@ -1560,11 +1560,11 @@ ModulePortInfo InstanceOp::getPortList() {
     LocationAttr loc;
     if (argLocs)
       loc = argLocs[i].cast<LocationAttr>();
-    inputs.push_back({{argNames[i].cast<StringAttr>(), type, direction},
-                      i,
-                      {},
-                      emptyDict,
-                      loc});
+    ports.push_back({{argNames[i].cast<StringAttr>(), type, direction},
+                     i,
+                     {},
+                     emptyDict,
+                     loc});
   }
 
   auto resultNames = (*this)->getAttrOfType<ArrayAttr>("resultNames");
@@ -1574,14 +1574,14 @@ ModulePortInfo InstanceOp::getPortList() {
     LocationAttr loc;
     if (resultLocs)
       loc = resultLocs[i].cast<LocationAttr>();
-    outputs.push_back({{resultNames[i].cast<StringAttr>(), resultTypes[i],
-                        ModulePort::Direction::Output},
-                       i,
-                       {},
-                       emptyDict,
-                       loc});
+    ports.push_back({{resultNames[i].cast<StringAttr>(), resultTypes[i],
+                      ModulePort::Direction::Output},
+                     i,
+                     {},
+                     emptyDict,
+                     loc});
   }
-  return ModulePortInfo(inputs, outputs);
+  return ports;
 }
 
 size_t InstanceOp::getNumPorts() {
@@ -3259,7 +3259,7 @@ void HWTestModuleOp::getAsmBlockArgumentNames(
   }
 }
 
-ModulePortInfo HWTestModuleOp::getPortList() {
+SmallVector<PortInfo> HWTestModuleOp::getPortList() {
   SmallVector<PortInfo> ports;
   auto refPorts = getModuleType().getPorts();
   for (auto [i, port] : enumerate(refPorts)) {
@@ -3270,7 +3270,7 @@ ModulePortInfo HWTestModuleOp::getPortList() {
     InnerSymAttr sym = {};
     ports.push_back({{port}, i, sym, attr, loc});
   }
-  return ModulePortInfo(ports);
+  return ports;
 }
 
 size_t HWTestModuleOp::getNumPorts() { return getModuleType().getNumPorts(); }
