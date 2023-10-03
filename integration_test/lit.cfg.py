@@ -86,7 +86,8 @@ tool_dirs = [
 ]
 tools = [
     'circt-opt', 'circt-translate', 'firtool', 'circt-rtl-sim.py',
-    'esi-cosim-runner.py', 'equiv-rtl.sh', 'handshake-runner', 'hlstool'
+    'esi-cosim-runner.py', 'equiv-rtl.sh', 'handshake-runner', 'hlstool',
+    'ibistool'
 ]
 
 # Enable python if its path was configured
