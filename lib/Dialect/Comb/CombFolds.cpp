@@ -37,7 +37,7 @@ static bool hasOperandsOutsideOfBlock(Operation *op) {
 }
 
 #define bailCanonIfOutsideBlockOperands(op)                                    \
-  if (hasOperandsOutsideOfBlock(&*op))                                         \
+  if (hasOperandsOutsideOfBlock(&*(op)))                                       \
     return failure();
 
 /// Create a new instance of a generic operation that only has value operands,
@@ -90,7 +90,7 @@ static void replaceOpAndCopyName(PatternRewriter &rewriter, Operation *op,
 /// this function propagates the name to the new value.
 template <typename OpTy, typename... Args>
 static OpTy replaceOpWithNewOpAndCopyName(PatternRewriter &rewriter,
-                                          Operation *op, Args &&...args) {
+                                          Operation *op, Args &&... args) {
   auto name = op->getAttrOfType<StringAttr>("sv.namehint");
   auto newOp =
       rewriter.replaceOpWithNewOp<OpTy>(op, std::forward<Args>(args)...);
