@@ -42,6 +42,20 @@ struct ContainerPortInfo {
   ContainerPortInfo(ContainerOp container) {
     SmallVector<hw::PortInfo, 4> inputs, outputs;
 
+    // Copies all attributes from a port, except for the port symbol and type.
+    auto copyPortAttrs = [](auto port) {
+      llvm::DenseSet<StringAttr> elidedAttrs;
+      elidedAttrs.insert(port.getSymNameAttrName());
+      elidedAttrs.insert(port.getTypeAttrName());
+      llvm::SmallVector<NamedAttribute> attrs;
+      for (NamedAttribute namedAttr : port->getAttrs()) {
+        if (elidedAttrs.contains(namedAttr.getName()))
+          continue;
+        attrs.push_back(namedAttr);
+      }
+      return DictionaryAttr::get(port.getContext(), attrs);
+    };
+
     // Gather in and output port ops.
     for (auto input : container.getBodyBlock()->getOps<InputPortOp>()) {
       opInputs[input.getSymNameAttr()] = input;
@@ -50,6 +64,7 @@ struct ContainerPortInfo {
       portInfo.name = input.getSymNameAttr();
       portInfo.type = cast<PortOpInterface>(input.getOperation()).getPortType();
       portInfo.dir = hw::ModulePort::Direction::Input;
+      portInfo.attrs = copyPortAttrs(input);
       inputs.push_back(portInfo);
     }
 
@@ -61,6 +76,7 @@ struct ContainerPortInfo {
       portInfo.type =
           cast<PortOpInterface>(output.getOperation()).getPortType();
       portInfo.dir = hw::ModulePort::Direction::Output;
+      portInfo.attrs = copyPortAttrs(output);
       outputs.push_back(portInfo);
     }
     hwPorts = std::make_unique<hw::ModulePortInfo>(inputs, outputs);
