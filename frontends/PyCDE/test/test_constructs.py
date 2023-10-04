@@ -6,7 +6,7 @@ from pycde.constructs import ControlReg, NamedWire, Reg, Wire, SystolicArray
 from pycde.dialects import comb
 from pycde.testing import unittestmodule
 
-# CHECK-LABEL: hw.module @WireAndRegTest(%In: i8, %InCE: i1, %clk: !seq.clock, %rst: i1) -> (Out: i8, OutReg: i8, OutRegRst: i8, OutRegCE: i8)
+# CHECK-LABEL: hw.module @WireAndRegTest(in %In : i8, in %InCE : i1, in %clk : !seq.clock, in %rst : i1, out Out : i8, out OutReg : i8, out OutRegRst : i8, out OutRegCE : i8)
 # CHECK:         [[r0:%.+]] = comb.extract %In from 0 {sv.namehint = "In_0upto7"} : (i8) -> i7
 # CHECK:         [[r1:%.+]] = comb.extract %In from 7 {sv.namehint = "In_7upto8"} : (i8) -> i1
 # CHECK:         [[r2:%.+]] = comb.concat [[r1]], [[r0]] {sv.namehint = "w1"} : i1, i7
@@ -59,7 +59,7 @@ class WireAndRegTest(Module):
 # CHECK:         msft.pe.output [[SUMR]] : i8
 
 
-# CHECK-LABEL: hw.module @SystolicArrayTest(%clk: i1, %col_data: !hw.array<2xi8>, %row_data: !hw.array<3xi8>) -> (out: !hw.array<3xarray<2xi8>>)
+# CHECK-LABEL: hw.module @SystolicArrayTest(in %clk : i1, in %col_data : !hw.array<2xi8>, in %row_data : !hw.array<3xi8>, out out : !hw.array<3xarray<2xi8>>)
 # CHECK:         %sum__reg1_0_0 = sv.reg sym @sum__reg1  : !hw.inout<i8>
 # CHECK:         sv.read_inout %sum__reg1_0_0 : !hw.inout<i8>
 @unittestmodule(print=True, run_passes=True, print_after_passes=True)

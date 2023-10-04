@@ -132,8 +132,8 @@ poly.print()
 # CHECK: %example2.y = hw.instance "example2" sym @example2 @PolyComputeForCoeff__62__42__6_(x: %[[EXAMPLE_Y]]: i32) -> (y: i32)
 # CHECK: hw.instance "example2_1" sym @example2_1 @PolyComputeForCoeff__1__2__3__4__5_(x: %[[EXAMPLE_Y]]: i32)
 # CHECK: %CoolPolynomialCompute.y = hw.instance "CoolPolynomialCompute" sym @CoolPolynomialCompute @supercooldevice(x: %c23_i32{{.*}}: i32) -> (y: i32)
-# CHECK-LABEL: hw.module @PolyComputeForCoeff__62__42__6_(%x: i32) -> (y: i32)
-# CHECK-LABEL: hw.module @PolyComputeForCoeff__1__2__3__4__5_(%x: i32)
+# CHECK-LABEL: hw.module @PolyComputeForCoeff__62__42__6_(in %x : i32, out y : i32)
+# CHECK-LABEL: hw.module @PolyComputeForCoeff__1__2__3__4__5_(in %x : i32, out y : i32)
 # CHECK-NOT: hw.module @pycde.PolynomialCompute
 
 poly.emit_outputs()

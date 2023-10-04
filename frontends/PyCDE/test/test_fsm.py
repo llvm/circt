@@ -8,7 +8,7 @@ from pycde.types import types
 from pycde.testing import unittestmodule
 
 # FSM state transitions example
-# CHECK-LABEL: hw.module @FSMUser(%a: i1, %b: i1, %c: i1, %clk: !seq.clock, %rst: i1) -> (is_a: i1, is_b: i1, is_c: i1)
+# CHECK-LABEL: hw.module @FSMUser(in %a : i1, in %b : i1, in %c : i1, in %clk : !seq.clock, in %rst : i1, out is_a : i1, out is_b : i1, out is_c : i1)
 # CHECK-NEXT:    %0:4 = fsm.hw_instance "F0" @F0(%a, %b, %c), clock %clk, reset %rst : (i1, i1, i1) -> (i1, i1, i1, i1)
 # CHECK-NEXT:    hw.output %0#1, %0#2, %0#3 : i1, i1, i1
 # CHECK-NEXT:  }
