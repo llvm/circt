@@ -9,3 +9,8 @@ from .._mlir_libs._circt._esi import *
 class ChannelSignaling:
   ValidReady: int = 0
   FIFO0: int = 1
+
+
+class BundleDirection:
+  TO = 1
+  FROM = 2

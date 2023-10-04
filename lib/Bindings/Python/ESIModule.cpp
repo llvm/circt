@@ -114,6 +114,39 @@ void circt::python::populateDialectESISubmodule(py::module &m) {
         return circtESIListTypeGetElementType(self);
       });
 
+  mlir_type_subclass(m, "BundleType", circtESITypeIsABundleType)
+      .def_classmethod(
+          "get",
+          [](py::object cls, std::vector<py::tuple> channelTuples,
+             bool resettable, MlirContext ctxt) {
+            llvm::SmallVector<CirctESIBundleTypeBundleChannel, 4> channels(
+                llvm::map_range(channelTuples, [ctxt](py::tuple t) {
+                  std::string name = py::cast<std::string>(t[0]);
+                  return CirctESIBundleTypeBundleChannel{
+                      mlirIdentifierGet(ctxt, mlirStringRefCreate(
+                                                  name.data(), name.length())),
+                      py::cast<unsigned>(t[1]), py::cast<MlirType>(t[2])};
+                }));
+            return cls(circtESIBundleTypeGet(ctxt, channels.size(),
+                                             channels.data(), resettable));
+          },
+          py::arg("cls"), py::arg("channels"), py::arg("resettable"),
+          py::arg("ctxt") = nullptr)
+      .def_property_readonly("resettable", &circtESIBundleTypeGetResettable)
+      .def_property_readonly("channels", [](MlirType bundleType) {
+        std::vector<py::tuple> channels;
+        size_t numChannels = circtESIBundleTypeGetNumChannels(bundleType);
+        for (size_t i = 0; i < numChannels; ++i) {
+          CirctESIBundleTypeBundleChannel channel =
+              circtESIBundleTypeGetChannel(bundleType, i);
+          MlirStringRef name = mlirIdentifierStr(channel.name);
+          channels.push_back(py::make_tuple(py::str(name.data, name.length),
+                                            py::cast(channel.direction),
+                                            py::cast(channel.channelType)));
+        }
+        return channels;
+      });
+
   mlir_attribute_subclass(m, "AppIDAttr", circtESIAttributeIsAnAppIDAttr)
       .def_classmethod(
           "get",
