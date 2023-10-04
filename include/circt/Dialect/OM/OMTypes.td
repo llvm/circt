@@ -99,12 +99,12 @@ def PathType : TypeDef<OMDialect, "Path", []> {
 }
 
 def FrozenBasePathType : TypeDef<OMDialect, "FrozenBasePath", []> {
-  let summary = "A fragment of a path to a hardware component";
+  let summary = "A frozen fragment of a path to a hardware component";
   let mnemonic = "frozenbasepath";
 }
 
 def FrozenPathType : TypeDef<OMDialect, "FrozenPath", []> {
-  let summary = "A path to a hardware component";
+  let summary = "A frozen path to a hardware component";
   let mnemonic = "frozenpath";
 }
 
