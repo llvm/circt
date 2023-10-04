@@ -1780,7 +1780,7 @@ static LogicalResult canonicalizeSingleSetConnect(StrictConnectOp op,
   } else {
     // Constants/invalids in the same block are ok to forward, even through
     // reg's since the clocking doesn't matter for constants.
-    if (!isa<ConstantOp>(srcValueOp) && !isa<InvalidValueOp>(srcValueOp))
+    if (!isa<ConstantOp>(srcValueOp))
       return failure();
     if (srcValueOp->getBlock() != declBlock)
       return failure();
@@ -1789,26 +1789,10 @@ static LogicalResult canonicalizeSingleSetConnect(StrictConnectOp op,
   // Ok, we know we are doing the transformation.
 
   auto replacement = op.getSrc();
-  if (srcValueOp) {
-    // Replace with constant zero.
-    if (isa<InvalidValueOp>(srcValueOp)) {
-      if (isa<BundleType, FVectorType>(op.getDest().getType()))
-        return failure();
-      if (isa<ClockType, AsyncResetType, ResetType>(op.getDest().getType()))
-        replacement = rewriter.create<SpecialConstantOp>(
-            op.getSrc().getLoc(), op.getDest().getType(),
-            rewriter.getBoolAttr(false));
-      else
-        replacement = rewriter.create<ConstantOp>(
-            op.getSrc().getLoc(), op.getDest().getType(),
-            getIntZerosAttr(op.getDest().getType()));
-    }
-    // This will be replaced with the constant source.  First, make sure the
-    // constant dominates all users.
-    else if (srcValueOp != &declBlock->front()) {
-      srcValueOp->moveBefore(&declBlock->front());
-    }
-  }
+  // This will be replaced with the constant source.  First, make sure the
+  // constant dominates all users.
+  if (srcValueOp && srcValueOp != &declBlock->front())
+    srcValueOp->moveBefore(&declBlock->front());
 
   // Replace all things *using* the decl with the constant/port, and
   // remove the declaration.
