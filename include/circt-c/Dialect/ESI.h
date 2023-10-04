@@ -43,6 +43,32 @@ MLIR_CAPI_EXPORTED void circtESIAppendMlirFile(MlirModule,
 MLIR_CAPI_EXPORTED MlirOperation circtESILookup(MlirModule,
                                                 MlirStringRef symbol);
 
+//===----------------------------------------------------------------------===//
+// Channel bundles
+//===----------------------------------------------------------------------===//
+
+const unsigned BUNDLE_DIRECTION_TO = 1;
+const unsigned BUNDLE_DIRECTION_FROM = 2;
+
+typedef struct {
+  MlirIdentifier name;
+  unsigned direction;
+  MlirType channelType; // MUST be ChannelType.
+} CirctESIBundleTypeBundleChannel;
+
+MLIR_CAPI_EXPORTED bool circtESITypeIsABundleType(MlirType type);
+MLIR_CAPI_EXPORTED MlirType circtESIBundleTypeGet(
+    MlirContext, size_t numChannels,
+    const CirctESIBundleTypeBundleChannel *channels, bool resettable);
+MLIR_CAPI_EXPORTED bool circtESIBundleTypeGetResettable(MlirType bundle);
+MLIR_CAPI_EXPORTED size_t circtESIBundleTypeGetNumChannels(MlirType bundle);
+MLIR_CAPI_EXPORTED CirctESIBundleTypeBundleChannel
+circtESIBundleTypeGetChannel(MlirType bundle, size_t idx);
+
+//===----------------------------------------------------------------------===//
+// Services
+//===----------------------------------------------------------------------===//
+
 typedef MlirLogicalResult (*CirctESIServiceGeneratorFunc)(
     MlirOperation serviceImplementReqOp, MlirOperation declOp, void *userData);
 MLIR_CAPI_EXPORTED void circtESIRegisterGlobalServiceGenerator(

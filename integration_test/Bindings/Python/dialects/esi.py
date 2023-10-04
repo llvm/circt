@@ -20,6 +20,21 @@ with Context() as ctx:
   print()
   # CHECK: !esi.list<i3>
 
+  channel_type = esi.ChannelType.get(IntegerType.get_signless(16))
+  print(channel_type)
+  print()
+  # CHECK: !esi.channel<i16>
+
+  bundle_type = esi.BundleType.get(
+      [("i16chan", esi.BundleDirection.TO, channel_type)], False)
+  print(bundle_type)
+  # CHECK: !esi.bundle<[!esi.channel<i16> to "i16chan"]>
+  assert (bundle_type.resettable == False)
+  for bchan in bundle_type.channels:
+    print(bchan)
+  # CHECK: ('i16chan', 1, Type(!esi.channel<i16>))
+  print()
+
 
 # CHECK-LABEL: === testGen called with op:
 # CHECK:       %0:2 = esi.service.impl_req svc @HostComms impl as "test"(%clk) : (i1) -> (i8, !esi.channel<i8>) {
