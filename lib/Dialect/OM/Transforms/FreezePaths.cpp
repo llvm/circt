@@ -157,7 +157,7 @@ LogicalResult PathVisitor::processPath(PathOp path) {
     auto module = node->getModule<hw::HWModuleLike>();
 
     // If the module is public, stop here.
-    if (module.getVisibility() == SymbolTable::Visibility::Public)
+    if (module.isPublic())
       break;
 
     if (!node->hasOneUse()) {
