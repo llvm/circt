@@ -498,7 +498,6 @@ firrtl.module @Head(in %in4u: !firrtl.uint<4>,
 
 // CHECK-LABEL: firrtl.module @Mux
 firrtl.module @Mux(in %in: !firrtl.uint<4>,
-                   in %in2: !firrtl.uint<4>,
                    in %cond: !firrtl.uint<1>,
                    in %val1: !firrtl.uint<1>,
                    in %val2: !firrtl.uint<1>,
@@ -507,11 +506,7 @@ firrtl.module @Mux(in %in: !firrtl.uint<4>,
                    out %out1: !firrtl.uint<1>,
                    out %out2: !firrtl.uint<0>,
                    out %out3: !firrtl.uint<1>,
-                   out %out4: !firrtl.uint<4>,
-                   out %out5: !firrtl.uint<4>,
-                   out %out6: !firrtl.uint<4>,
-                   out %out7: !firrtl.uint<4>,
-                   out %out8: !firrtl.uint<4>) {
+                   out %out4: !firrtl.uint<4>) {
   // CHECK: firrtl.strictconnect %out, %in
   %0 = firrtl.int.mux2cell (%cond, %in, %in) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
   firrtl.connect %out, %0 : !firrtl.uint<4>, !firrtl.uint<4>
@@ -565,26 +560,6 @@ firrtl.module @Mux(in %in: !firrtl.uint<4>,
   // CHECK-NEXT: [[V2:%.+]] = firrtl.mux(%cond
   // CHECK-NEXT: firrtl.strictconnect %out4, [[V2]]
   firrtl.connect %out4, %15 : !firrtl.uint<4>, !firrtl.uint<4>
-
-  %eq = firrtl.eq %in, %in2 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
-  %16 = firrtl.mux (%eq, %in, %in2) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
-  // CHECK-NEXT: firrtl.strictconnect %out5, %in2
-  firrtl.strictconnect %out5, %16 : !firrtl.uint<4>
-
-  %eq_swapped = firrtl.eq %in2, %in : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
-  %17 = firrtl.mux (%eq_swapped, %in, %in2) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
-  // CHECK-NEXT: firrtl.strictconnect %out6, %in2
-  firrtl.strictconnect %out6, %17 : !firrtl.uint<4>
-
-  %neq = firrtl.neq %in, %in2 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
-  %18 = firrtl.mux (%neq, %in, %in2) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
-  // CHECK-NEXT: firrtl.strictconnect %out7, %in
-  firrtl.strictconnect %out7, %18 : !firrtl.uint<4>
-
-  %neq_swapped = firrtl.neq %in, %in2 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
-  %19 = firrtl.mux (%neq_swapped, %in, %in2) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
-  // CHECK-NEXT: firrtl.strictconnect %out8, %in
-  firrtl.strictconnect %out8, %19 : !firrtl.uint<4>  
 }
 
 // CHECK-LABEL: firrtl.module @Pad
@@ -2948,6 +2923,42 @@ firrtl.module @MuxCondWidth(in %cond: !firrtl.uint<1>, out %foo: !firrtl.uint<3>
   %c1_ui3 = firrtl.constant 1 : !firrtl.uint<3>
   %0 = firrtl.mux(%cond, %c0_ui1, %c1_ui3) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<3>) -> !firrtl.uint<3>
   firrtl.strictconnect %foo, %0 : !firrtl.uint<3>
+}
+
+// CHECK-LABEL: @MuxEQ
+firrtl.module @MuxEQ(in %a: !firrtl.uint<4>,
+                     in %b: !firrtl.uint<4>,
+                     in %c: !firrtl.uint<4>,
+                     out %out1: !firrtl.uint<4>,
+                     out %out2: !firrtl.uint<4>,
+                     out %out3: !firrtl.uint<4>,
+                     out %out4: !firrtl.uint<4>,
+                     out %out5: !firrtl.uint<4>) {
+  %eq = firrtl.eq %a, %b : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
+  %0 = firrtl.mux (%eq, %a, %b) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  // CHECK-NEXT: firrtl.strictconnect %out1, %b
+  firrtl.strictconnect %out1, %0 : !firrtl.uint<4>
+
+  %eq_swapped = firrtl.eq %b, %a : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
+  %1 = firrtl.mux (%eq_swapped, %a, %b) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  // CHECK-NEXT: firrtl.strictconnect %out2, %b
+  firrtl.strictconnect %out2, %1 : !firrtl.uint<4>
+
+  %neq = firrtl.neq %a, %b : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
+  %2 = firrtl.mux (%neq, %a, %b) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  // CHECK-NEXT: firrtl.strictconnect %out3, %a
+  firrtl.strictconnect %out3, %2 : !firrtl.uint<4>
+
+  %neq_swapped = firrtl.neq %b, %a : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
+  %3 = firrtl.mux (%neq_swapped, %a, %b) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  // CHECK-NEXT: firrtl.strictconnect %out4, %a
+  firrtl.strictconnect %out4, %3 : !firrtl.uint<4>
+
+  // CHECK-NEXT: [[EQ:%.+]] = firrtl.eq %a, %b : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
+  // CHECK-NEXT: [[MUX:%.+]] = firrtl.mux([[EQ]], %c, %a) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  // CHECK-NEXT: firrtl.strictconnect %out5, [[MUX]]
+  %4 = firrtl.mux (%neq, %a, %c) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  firrtl.strictconnect %out5, %4 : !firrtl.uint<4>
 }
 
 // CHECK-LABEL: firrtl.module @RemoveUnusedInvalid

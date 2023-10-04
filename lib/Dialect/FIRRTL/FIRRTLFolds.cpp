@@ -1492,9 +1492,8 @@ public:
 void MuxPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
   results.add<MuxPad, MuxSharedCond, patterns::MuxEQOperands,
-              patterns::MuxEQOperandsSwapped, patterns::MuxNEQOperands,
-              patterns::MuxNEQOperandsSwapped, patterns::MuxNot,
-              patterns::MuxSameTrue, patterns::MuxSameFalse,
+              patterns::MuxEQOperandsSwapped, patterns::MuxNEQ,
+              patterns::MuxNot, patterns::MuxSameTrue, patterns::MuxSameFalse,
               patterns::NarrowMuxLHS, patterns::NarrowMuxRHS>(context);
 }
 
