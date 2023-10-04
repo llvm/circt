@@ -47,6 +47,7 @@ MLIR_CAPI_EXPORTED MlirOperation circtESILookup(MlirModule,
 // Channel bundles
 //===----------------------------------------------------------------------===//
 
+// NOLINTNEXTLINE(modernize-use-using)
 typedef struct {
   MlirIdentifier name;
   unsigned direction;
