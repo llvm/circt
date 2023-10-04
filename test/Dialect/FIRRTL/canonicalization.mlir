@@ -2644,31 +2644,6 @@ firrtl.module @Issue2291(out %out: !firrtl.uint<1>) {
   firrtl.connect %out, %0 : !firrtl.uint<1>, !firrtl.uint<1>
 }
 
-// Check that canonicalizing connects to zero works for clock, reset, and async
-// reset.  All these types require special constants as opposed to constants.
-//
-// CHECK-LABEL: @Issue2314
-firrtl.module @Issue2314(out %clock: !firrtl.clock, out %reset: !firrtl.reset, out %asyncReset: !firrtl.asyncreset) {
-  // CHECK-DAG: %[[zero_clock:.+]] = firrtl.specialconstant 0 : !firrtl.clock
-  // CHECK-DAG: %[[zero_reset:.+]] = firrtl.specialconstant 0 : !firrtl.reset
-  // CHECK-DAG: %[[zero_asyncReset:.+]] = firrtl.specialconstant 0 : !firrtl.asyncreset
-  %inv_clock = firrtl.wire  : !firrtl.clock
-  %invalid_clock = firrtl.invalidvalue : !firrtl.clock
-  firrtl.connect %inv_clock, %invalid_clock : !firrtl.clock, !firrtl.clock
-  firrtl.connect %clock, %inv_clock : !firrtl.clock, !firrtl.clock
-  // CHECK: firrtl.strictconnect %clock, %[[zero_clock]]
-  %inv_reset = firrtl.wire  : !firrtl.reset
-  %invalid_reset = firrtl.invalidvalue : !firrtl.reset
-  firrtl.connect %inv_reset, %invalid_reset : !firrtl.reset, !firrtl.reset
-  firrtl.connect %reset, %inv_reset : !firrtl.reset, !firrtl.reset
-  // CHECK: firrtl.strictconnect %reset, %[[zero_reset]]
-  %inv_asyncReset = firrtl.wire  : !firrtl.asyncreset
-  %invalid_asyncreset = firrtl.invalidvalue : !firrtl.asyncreset
-  firrtl.connect %inv_asyncReset, %invalid_asyncreset : !firrtl.asyncreset, !firrtl.asyncreset
-  firrtl.connect %asyncReset, %inv_asyncReset : !firrtl.asyncreset, !firrtl.asyncreset
-  // CHECK: firrtl.strictconnect %asyncReset, %[[zero_asyncReset]]
-}
-
 // Crasher from issue #3043
 // CHECK-LABEL: @Issue3043
 firrtl.module @Issue3043(out %a: !firrtl.vector<uint<5>, 3>) {
@@ -2923,6 +2898,42 @@ firrtl.module @MuxCondWidth(in %cond: !firrtl.uint<1>, out %foo: !firrtl.uint<3>
   %c1_ui3 = firrtl.constant 1 : !firrtl.uint<3>
   %0 = firrtl.mux(%cond, %c0_ui1, %c1_ui3) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<3>) -> !firrtl.uint<3>
   firrtl.strictconnect %foo, %0 : !firrtl.uint<3>
+}
+
+// CHECK-LABEL: @MuxEQ
+firrtl.module @MuxEQ(in %a: !firrtl.uint<4>,
+                     in %b: !firrtl.uint<4>,
+                     in %c: !firrtl.uint<4>,
+                     out %out1: !firrtl.uint<4>,
+                     out %out2: !firrtl.uint<4>,
+                     out %out3: !firrtl.uint<4>,
+                     out %out4: !firrtl.uint<4>,
+                     out %out5: !firrtl.uint<4>) {
+  %eq = firrtl.eq %a, %b : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
+  %0 = firrtl.mux (%eq, %a, %b) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  // CHECK-NEXT: firrtl.strictconnect %out1, %b
+  firrtl.strictconnect %out1, %0 : !firrtl.uint<4>
+
+  %eq_swapped = firrtl.eq %b, %a : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
+  %1 = firrtl.mux (%eq_swapped, %a, %b) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  // CHECK-NEXT: firrtl.strictconnect %out2, %b
+  firrtl.strictconnect %out2, %1 : !firrtl.uint<4>
+
+  %neq = firrtl.neq %a, %b : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
+  %2 = firrtl.mux (%neq, %a, %b) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  // CHECK-NEXT: firrtl.strictconnect %out3, %a
+  firrtl.strictconnect %out3, %2 : !firrtl.uint<4>
+
+  %neq_swapped = firrtl.neq %b, %a : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
+  %3 = firrtl.mux (%neq_swapped, %a, %b) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  // CHECK-NEXT: firrtl.strictconnect %out4, %a
+  firrtl.strictconnect %out4, %3 : !firrtl.uint<4>
+
+  // CHECK-NEXT: [[EQ:%.+]] = firrtl.eq %a, %b : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
+  // CHECK-NEXT: [[MUX:%.+]] = firrtl.mux([[EQ]], %c, %a) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  // CHECK-NEXT: firrtl.strictconnect %out5, [[MUX]]
+  %4 = firrtl.mux (%neq, %a, %c) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  firrtl.strictconnect %out5, %4 : !firrtl.uint<4>
 }
 
 // CHECK-LABEL: firrtl.module @RemoveUnusedInvalid

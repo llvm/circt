@@ -1,14 +1,15 @@
 // RUN: circt-opt --pass-pipeline="builtin.module(ibis.class(ibis.method.df(ibis.sblock.isolated(ibis-prepare-scheduling))))" \
 // RUN:      --allow-unregistered-dialect %s | FileCheck %s
 
-// CHECK:   %[[VAL_3:.*]]:2 = ibis.sblock.isolated (%[[VAL_4:.*]] : i32 = %[[VAL_1:.*]], %[[VAL_5:.*]] : i32 = %[[VAL_2:.*]]) -> (i32, i32) {
-// CHECK:     %[[VAL_6:.*]], %[[VAL_7:.*]], %[[VAL_8:.*]], %[[VAL_9:.*]] = ibis.pipeline.header
-// CHECK:     %[[VAL_10:.*]], %[[VAL_11:.*]], %[[VAL_12:.*]] = pipeline.unscheduled(%[[VAL_13:.*]] : i32 = %[[VAL_4]], %[[VAL_14:.*]] : i32 = %[[VAL_5]]) stall(%[[VAL_9]]) clock(%[[VAL_6]]) reset(%[[VAL_7]]) go(%[[VAL_8]]) entryEn(%[[VAL_15:.*]])  -> (out0 : i32, out1 : i32) {
-// CHECK:       %[[VAL_16:.*]] = "foo.op1"(%[[VAL_13]], %[[VAL_14]]) : (i32, i32) -> i32
-// CHECK:       pipeline.return %[[VAL_16]], %[[VAL_13]] : i32, i32
-// CHECK:     }
-// CHECK:     ibis.sblock.return %[[VAL_17:.*]], %[[VAL_18:.*]] : i32, i32
-// CHECK:   }
+// CHECK:  ibis.method.df @foo(%[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i32) -> (i32, i32) {
+// CHECK:    %[[VAL_3:.*]]:2 = ibis.sblock.isolated (%[[VAL_4:.*]] : i32 = %[[VAL_1]], %[[VAL_5:.*]] : i32 = %[[VAL_2]]) -> (i32, i32) {
+// CHECK:      %[[VAL_6:.*]], %[[VAL_7:.*]], %[[VAL_8:.*]], %[[VAL_9:.*]] = ibis.pipeline.header
+// CHECK:      %[[VAL_10:.*]], %[[VAL_11:.*]], %[[VAL_12:.*]] = pipeline.unscheduled(%[[VAL_13:.*]] : i32 = %[[VAL_4]], %[[VAL_14:.*]] : i32 = %[[VAL_5]]) stall(%[[VAL_9]]) clock(%[[VAL_6]]) reset(%[[VAL_7]]) go(%[[VAL_8]]) entryEn(%[[VAL_15:.*]])  {operator_lib = @ibis_operator_library} -> (out0 : i32, out1 : i32) {
+// CHECK:        %[[VAL_16:.*]] = "foo.op1"(%[[VAL_13]], %[[VAL_14]]) {ssp.operator_type = @foo.op1} : (i32, i32) -> i32
+// CHECK:        pipeline.return %[[VAL_16]], %[[VAL_13]] : i32, i32
+// CHECK:      }
+// CHECK:      ibis.sblock.return %[[VAL_17:.*]], %[[VAL_18:.*]] : i32, i32
+// CHECK:    }
 
 ibis.class @PrepareScheduling {
   %this = ibis.this @PrepareScheduling

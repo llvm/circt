@@ -11,6 +11,7 @@ add_circt_dialect_library(CIRCTArcTransforms
   IsolateClocks.cpp
   LatencyRetiming.cpp
   LegalizeStateUpdate.cpp
+  LowerArcsToFuncs.cpp
   LowerClocksToFuncs.cpp
   LowerLUT.cpp
   LowerState.cpp

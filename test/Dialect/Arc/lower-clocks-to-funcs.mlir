@@ -16,8 +16,11 @@
 
 // CHECK-LABEL: arc.model "Trivial" {
 // CHECK-NEXT:  ^bb0(%arg0: !arc.storage<42>):
+// CHECK-NEXT:    %true = hw.constant true
 // CHECK-NEXT:    %false = hw.constant false
-// CHECK-NEXT:    func.call @Trivial_clock(%arg0) : (!arc.storage<42>) -> ()
+// CHECK-NEXT:    scf.if %true {
+// CHECK-NEXT:      func.call @Trivial_clock(%arg0) : (!arc.storage<42>) -> ()
+// CHECK-NEXT:    }
 // CHECK-NEXT:    func.call @Trivial_passthrough(%arg0) : (!arc.storage<42>) -> ()
 // CHECK-NEXT:  }
 

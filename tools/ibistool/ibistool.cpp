@@ -176,7 +176,7 @@ static void loadDCTransformsPipeline(OpPassManager &pm) {
   pm.addPass(createSimpleCanonicalizerPass());
   pm.nest<ClassOp>().nest<DataflowMethodOp>().addPass(
       dc::createDCMaterializeForksSinksPass());
-  pm.nest<ClassOp>().addPass(circt::createDCToHWPass());
+  // pm.nest<ClassOp>().addPass(circt::createDCToHWPass());
 }
 
 static void loadESILoweringPipeline(OpPassManager &pm) {
@@ -200,6 +200,29 @@ static void loadHWLoweringPipeline(OpPassManager &pm) {
   // Tidy up the IR to improve verilog emission quality.
   auto &modulePM = pm.nest<hw::HWModuleOp>();
   modulePM.addPass(sv::createPrettifyVerilogPass());
+}
+
+static void loadSchedulingPipeline(OpPassManager &pm) {
+  // Inject operator library
+  pm.addPass(ibis::createAddOperatorLibraryPass());
+
+  // Map any arith operators to comb
+  pm.nest<ibis::ClassOp>()
+      .nest<ibis::DataflowMethodOp>()
+      .nest<ibis::IsolatedStaticBlockOp>()
+      .addPass(circt::createMapArithToCombPass());
+
+  // Prepare for scheduling
+  pm.nest<ibis::ClassOp>()
+      .nest<ibis::DataflowMethodOp>()
+      .nest<ibis::IsolatedStaticBlockOp>()
+      .addPass(ibis::createPrepareSchedulingPass());
+
+  // Schedule!
+  pm.nest<ibis::ClassOp>()
+      .nest<ibis::DataflowMethodOp>()
+      .nest<ibis::IsolatedStaticBlockOp>()
+      .addPass(pipeline::createScheduleLinearPipelinePass());
 }
 
 static void loadPipelineLoweringPipeline(OpPassManager &pm) {
@@ -239,6 +262,7 @@ static void loadIbisHiFlow(
   loadIbisHighLevelPassPipeline(pm);
   if (outputFormat != OutputLoweredIbis) {
     loadHandshakeTransformsPipeline(pm);
+    loadSchedulingPipeline(pm);
     loadDCTransformsPipeline(pm);
     if (outputFormat != OutputLoweredIbis)
       loadLowLevelPassPipeline(pm, module, outputFile);

@@ -41,58 +41,23 @@ using namespace hw;
 
 namespace {
 
-struct DefineOpLowering : public OpConversionPattern<arc::DefineOp> {
+struct ModelOpLowering : public OpConversionPattern<arc::ModelOp> {
   using OpConversionPattern::OpConversionPattern;
   LogicalResult
-  matchAndRewrite(arc::DefineOp op, OpAdaptor adaptor,
+  matchAndRewrite(arc::ModelOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
-    auto func = rewriter.create<mlir::func::FuncOp>(op.getLoc(), op.getName(),
-                                                    op.getFunctionType());
-    func->setAttr(
-        "llvm.linkage",
-        LLVM::LinkageAttr::get(getContext(), LLVM::linkage::Linkage::Internal));
+    {
+      IRRewriter::InsertionGuard guard(rewriter);
+      rewriter.setInsertionPointToEnd(&op.getBodyBlock());
+      rewriter.create<func::ReturnOp>(op.getLoc());
+    }
+    auto funcName = rewriter.getStringAttr(op.getName() + "_eval");
+    auto funcType =
+        rewriter.getFunctionType(op.getBody().getArgumentTypes(), {});
+    auto func =
+        rewriter.create<mlir::func::FuncOp>(op.getLoc(), funcName, funcType);
     rewriter.inlineRegionBefore(op.getRegion(), func.getBody(), func.end());
     rewriter.eraseOp(op);
-    return success();
-  }
-};
-
-struct OutputOpLowering : public OpConversionPattern<arc::OutputOp> {
-  using OpConversionPattern::OpConversionPattern;
-  LogicalResult
-  matchAndRewrite(arc::OutputOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const final {
-    rewriter.replaceOpWithNewOp<func::ReturnOp>(op, adaptor.getOutputs());
-    return success();
-  }
-};
-
-struct CallOpLowering : public OpConversionPattern<arc::CallOp> {
-  using OpConversionPattern::OpConversionPattern;
-  LogicalResult
-  matchAndRewrite(arc::CallOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const final {
-    SmallVector<Type> newResultTypes;
-    if (failed(
-            typeConverter->convertTypes(op.getResultTypes(), newResultTypes)))
-      return failure();
-    rewriter.replaceOpWithNewOp<func::CallOp>(
-        op, newResultTypes, op.getArcAttr(), adaptor.getInputs());
-    return success();
-  }
-};
-
-struct StateOpLowering : public OpConversionPattern<arc::StateOp> {
-  using OpConversionPattern::OpConversionPattern;
-  LogicalResult
-  matchAndRewrite(arc::StateOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const final {
-    SmallVector<Type> newResultTypes;
-    if (failed(
-            typeConverter->convertTypes(op.getResultTypes(), newResultTypes)))
-      return failure();
-    rewriter.replaceOpWithNewOp<func::CallOp>(
-        op, newResultTypes, op.getArcAttr(), adaptor.getInputs());
     return success();
   }
 };
@@ -410,15 +375,12 @@ static void populateOpConversion(RewritePatternSet &patterns,
     AllocStateLikeOpLowering<arc::RootInputOp>,
     AllocStateLikeOpLowering<arc::RootOutputOp>,
     AllocStorageOpLowering,
-    CallOpLowering,
     ClockGateOpLowering,
-    DefineOpLowering,
+    FuncCallOpLowering,
     MemoryReadOpLowering,
     MemoryWriteOpLowering,
-    OutputOpLowering,
-    FuncCallOpLowering,
+    ModelOpLowering,
     ReturnOpLowering,
-    StateOpLowering,
     StateReadOpLowering,
     StateWriteOpLowering,
     StorageGetOpLowering,
@@ -443,15 +405,6 @@ struct LowerArcToLLVMPass : public LowerArcToLLVMBase<LowerArcToLLVMPass> {
 } // namespace
 
 void LowerArcToLLVMPass::runOnOperation() {
-  // Remove the models since we only care about the clock functions at this
-  // point.
-  // NOTE: In the future we may want to have an earlier pass lower the model
-  // into a separate `*_eval` function that checks for rising edges on clocks
-  // and then calls the appropriate function. At that point we won't have to
-  // delete models here anymore.
-  for (auto op : llvm::make_early_inc_range(getOperation().getOps<ModelOp>()))
-    op.erase();
-
   if (failed(lowerToMLIR()))
     return signalPassFailure();
 

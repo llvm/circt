@@ -13,6 +13,7 @@ add_circt_dialect_library(CIRCTIbisTransforms
   IbisPrepareScheduling.cpp
   IbisConvertHandshakeToDC.cpp
   IbisMethodsToContainers.cpp
+  IbisAddOperatorLibrary.cpp
 
   DEPENDS
   CIRCTIbisTransformsIncGen
@@ -24,6 +25,7 @@ add_circt_dialect_library(CIRCTIbisTransforms
   CIRCTCFToHandshake
   CIRCTHandshakeToDC
   CIRCTIbis
+  CIRCTSSP
   CIRCTHW
   CIRCTSupport
   CIRCTTransforms

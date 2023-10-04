@@ -230,6 +230,12 @@ void AccessAnalysis::addOpAccess(OpAccesses &op, Access access) {
     anyInvalidStateAccesses = true;
   }
 
+  // HACK: Do not propagate accesses outside of `arc.passthrough` to prevent
+  // reads from being legalized. Ideally we'd be able to more precisely specify
+  // on read ops whether they should read the initial or the final value.
+  if (isa<PassThroughOp>(op.op))
+    return;
+
   // Propagate to the parent block and operation if the access escapes the block
   // or targets a block argument.
   if (op.accesses.insert(access).second && op.parent) {
@@ -295,19 +301,6 @@ LogicalResult Legalizer::run(MutableArrayRef<Region> regions) {
 }
 
 LogicalResult Legalizer::visitBlock(Block *block) {
-  // Do not legalize ops directly in the `arc.model` body.
-  // NOTE: Once we switch to an eval-based implementation of `arc.model`, we'll
-  // want to propagate state accesses through all operations such that the eval
-  // function can also be properly ordered and legalized.
-  if (isa<ModelOp>(block->getParentOp())) {
-    for (auto &op : *block)
-      for (auto &region : op.getRegions())
-        for (auto &block : region)
-          if (failed(visitBlock(&block)))
-            return failure();
-    return success();
-  }
-
   // In a first reverse pass over the block, find the first write that occurs
   // before the last read of a state, if any.
   SmallPtrSet<Value, 4> readStates;

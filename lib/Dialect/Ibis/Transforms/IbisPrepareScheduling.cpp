@@ -8,11 +8,13 @@
 
 #include "PassDetails.h"
 
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/Ibis/IbisDialect.h"
 #include "circt/Dialect/Ibis/IbisOps.h"
 #include "circt/Dialect/Ibis/IbisPasses.h"
 #include "circt/Dialect/Ibis/IbisTypes.h"
 #include "circt/Dialect/Pipeline/PipelineOps.h"
+#include "circt/Dialect/SSP/SSPOps.h"
 
 #include "circt/Support/Namespace.h"
 #include "circt/Support/SymCache.h"
@@ -27,13 +29,19 @@ struct PrepareSchedulingPass
     : public IbisPrepareSchedulingBase<PrepareSchedulingPass> {
   void runOnOperation() override;
 
-  void prepareSBlock(IsolatedStaticBlockOp sblock);
+  // Prepares the given sblock for scheduling by moving its body into a
+  // pipeline.unscheduled operation, and returns the pipeline op.
+  pipeline::UnscheduledPipelineOp prepareSBlock(IsolatedStaticBlockOp sblock);
+
+  // Iterates over the operations in the pipeline, looks up the corresponding
+  // operator in the provided operator library, and attaches the operator type
+  // to the op.
+  LogicalResult attachOperatorTypes(pipeline::UnscheduledPipelineOp pipeline);
 };
 } // anonymous namespace
 
-void PrepareSchedulingPass::runOnOperation() { prepareSBlock(getOperation()); }
-
-void PrepareSchedulingPass::prepareSBlock(IsolatedStaticBlockOp sblock) {
+pipeline::UnscheduledPipelineOp
+PrepareSchedulingPass::prepareSBlock(IsolatedStaticBlockOp sblock) {
   Location loc = sblock.getLoc();
   Block *bodyBlock = sblock.getBodyBlock();
   auto b = OpBuilder::atBlockBegin(bodyBlock);
@@ -85,6 +93,39 @@ void PrepareSchedulingPass::prepareSBlock(IsolatedStaticBlockOp sblock) {
   for (Operation *op :
        ArrayRef(opsToMove.begin(), opsToMove.end()).drop_front(2).drop_back())
     op->moveBefore(pipelineRet);
+
+  return pipeline;
+}
+
+LogicalResult PrepareSchedulingPass::attachOperatorTypes(
+    pipeline::UnscheduledPipelineOp pipeline) {
+  for (Operation &op : *pipeline.getEntryStage()) {
+    if (op.hasAttr("ssp.operator_type"))
+      continue;
+
+    // Skip unscheduled pipeline ops.
+    if (isa<pipeline::ReturnOp>(op) || op.hasTrait<OpTrait::ConstantLike>())
+      continue;
+
+    // The operator lib convention just assumes that the exact
+    // operation name is present in the library.
+    op.setAttr(
+        "ssp.operator_type",
+        FlatSymbolRefAttr::get(op.getContext(), op.getName().getStringRef()));
+  }
+
+  // Attach the operator lib attribute
+  pipeline->setAttr(
+      "operator_lib",
+      FlatSymbolRefAttr::get(pipeline.getContext(), kIbisOperatorLibName));
+
+  return success();
+}
+
+void PrepareSchedulingPass::runOnOperation() {
+  pipeline::UnscheduledPipelineOp pipeline = prepareSBlock(getOperation());
+  if (failed(attachOperatorTypes(pipeline)))
+    return signalPassFailure();
 }
 
 std::unique_ptr<Pass> circt::ibis::createPrepareSchedulingPass() {

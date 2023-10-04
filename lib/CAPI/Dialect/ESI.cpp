@@ -94,6 +94,40 @@ void circtESIRegisterGlobalServiceGenerator(
         return unwrap(genFunc(wrap(req), wrap(decl.getOperation()), userData));
       });
 }
+//===----------------------------------------------------------------------===//
+// Channel bundles
+//===----------------------------------------------------------------------===//
+
+bool circtESITypeIsABundleType(MlirType type) {
+  return isa<ChannelBundleType>(unwrap(type));
+}
+MlirType circtESIBundleTypeGet(MlirContext cctxt, size_t numChannels,
+                               const CirctESIBundleTypeBundleChannel *channels,
+                               bool resettable) {
+  MLIRContext *ctxt = unwrap(cctxt);
+  SmallVector<BundledChannel, 4> channelsVector(llvm::map_range(
+      ArrayRef<CirctESIBundleTypeBundleChannel>(channels, numChannels),
+      [](auto channel) {
+        return BundledChannel{cast<StringAttr>(unwrap(channel.name)),
+                              (ChannelDirection)channel.direction,
+                              cast<ChannelType>(unwrap(channel.channelType))};
+      }));
+  return wrap(ChannelBundleType::get(
+      ctxt, channelsVector, resettable ? UnitAttr::get(ctxt) : UnitAttr()));
+}
+bool circtESIBundleTypeGetResettable(MlirType bundle) {
+  return cast<ChannelBundleType>(unwrap(bundle)).getResettable() != UnitAttr();
+}
+size_t circtESIBundleTypeGetNumChannels(MlirType bundle) {
+  return cast<ChannelBundleType>(unwrap(bundle)).getChannels().size();
+}
+CirctESIBundleTypeBundleChannel circtESIBundleTypeGetChannel(MlirType bundle,
+                                                             size_t idx) {
+  BundledChannel channel =
+      cast<ChannelBundleType>(unwrap(bundle)).getChannels()[idx];
+  return CirctESIBundleTypeBundleChannel{
+      wrap(channel.name), (unsigned)channel.direction, wrap(channel.type)};
+}
 
 //===----------------------------------------------------------------------===//
 // AppID

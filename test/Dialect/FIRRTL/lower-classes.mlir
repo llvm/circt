@@ -295,6 +295,9 @@ firrtl.circuit "ModuleInstances" {
   // CHECK: firrtl.extmodule private @ExtModule(in inputWire: !firrtl.uint<1>, out outputWire: !firrtl.uint<1>)
   firrtl.extmodule private @ExtModule(in inputWire: !firrtl.uint<1>, in inputProp: !firrtl.string, out outputWire: !firrtl.uint<1>, out outputProp: !firrtl.string)
 
+  // CHECK: firrtl.extmodule private @ExtModuleDefname
+  firrtl.extmodule private @ExtModuleDefname(in inputProp: !firrtl.string, out outputProp: !firrtl.string) attributes {defname = "TheRealName"}
+
   // CHECK: firrtl.module private @Module(in %[[IN_WIRE0:.+]]: !firrtl.uint<1>, out %[[OUT_WIRE0:.+]]: !firrtl.uint<1>)
   firrtl.module private @Module(in %inputWire: !firrtl.uint<1>, in %inputProp: !firrtl.string, out %outputWire: !firrtl.uint<1>, out %outputProp: !firrtl.string) {
     // CHECK: firrtl.strictconnect %[[OUT_WIRE0]], %[[IN_WIRE0]]
@@ -307,6 +310,8 @@ firrtl.circuit "ModuleInstances" {
   firrtl.module @ModuleInstances(in %inputWire: !firrtl.uint<1>, in %inputProp: !firrtl.string, out %outputWire: !firrtl.uint<1>, out %outputProp: !firrtl.string) {
     // CHECK: %[[EXT_IN_WIRE:.+]], %[[EXT_OUT_WIRE:.+]] = firrtl.instance ext @ExtModule
     %ext.inputWire, %ext.inputProp, %ext.outputWire, %ext.outputProp = firrtl.instance ext @ExtModule(in inputWire: !firrtl.uint<1>, in inputProp: !firrtl.string, out outputWire: !firrtl.uint<1>, out outputProp: !firrtl.string)
+    // CHECK: firrtl.instance extdefname @ExtModuleDefname
+    %extdefname.inputProp, %extdefname.outputProp = firrtl.instance extdefname @ExtModuleDefname(in inputProp: !firrtl.string, out outputProp: !firrtl.string)
     // CHECK: %[[MOD_IN_WIRE:.+]], %[[MOD_OUT_WIRE:.+]] = firrtl.instance mod @Module
     %mod.inputWire, %mod.inputProp, %mod.outputWire, %mod.outputProp = firrtl.instance mod @Module(in inputWire: !firrtl.uint<1>, in inputProp: !firrtl.string, out outputWire: !firrtl.uint<1>, out outputProp: !firrtl.string)
 
@@ -319,11 +324,15 @@ firrtl.circuit "ModuleInstances" {
 
     // CHECK-NEXT: }
     firrtl.propassign %ext.inputProp, %inputProp : !firrtl.string
+    firrtl.propassign %extdefname.inputProp, %inputProp : !firrtl.string
     firrtl.propassign %mod.inputProp, %ext.outputProp : !firrtl.string
     firrtl.propassign %outputProp, %mod.outputProp : !firrtl.string
   }
 
   // CHECK: om.class.extern @ExtModule_Class(%inputProp: !om.string)
+  // CHECK:   om.class.extern.field @outputProp : !om.string
+
+  // CHECK: om.class.extern @TheRealName_Class(%inputProp: !om.string)
   // CHECK:   om.class.extern.field @outputProp : !om.string
 
   // CHECK: om.class @Module_Class(%[[IN_PROP0:.+]]: !om.string)
@@ -332,6 +341,7 @@ firrtl.circuit "ModuleInstances" {
   // CHECK: om.class @ModuleInstances_Class(%[[IN_PROP1:.+]]: !om.string)
   // CHECK:   %[[O0:.+]] = om.object @ExtModule_Class(%[[IN_PROP1]])
   // CHECK:   %[[F0:.+]] = om.object.field %[[O0]], [@outputProp]
+  // CHECK:   om.object @TheRealName_Class
   // CHECK:   %[[O1:.+]] = om.object @Module_Class(%[[F0]])
   // CHECK:   %[[F1:.+]] = om.object.field %[[O1]], [@outputProp]
   // CHECK:   om.class.field @outputProp, %[[F1]]

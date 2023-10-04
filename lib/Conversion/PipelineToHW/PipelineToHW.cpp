@@ -229,7 +229,7 @@ public:
           assignedInName = ("in" + Twine(regi)).str();
         }
 
-        if (pipelineName) {
+        if (pipelineName && !pipelineName.getValue().empty()) {
           assignedRegName = pipelineName.str() + "_" + assignedRegName;
           assignedOutName = pipelineName.str() + "_" + assignedOutName;
           assignedInName = pipelineName.str() + "_" + assignedInName;
@@ -251,7 +251,7 @@ public:
           assignedInName = ("pass" + Twine(passi)).str();
         }
 
-        if (pipelineName) {
+        if (pipelineName && !pipelineName.getValue().empty()) {
           assignedOutName = pipelineName.str() + "_" + assignedOutName;
           assignedInName = pipelineName.str() + "_" + assignedInName;
         }
@@ -306,8 +306,10 @@ public:
   using PipelineLowering::PipelineLowering;
 
   StringAttr getStagePrefix(size_t stageIdx) override {
-    return builder.getStringAttr(pipelineName.strref() + "_stage" +
-                                 Twine(stageIdx));
+    if (pipelineName && !pipelineName.getValue().empty())
+      return builder.getStringAttr(pipelineName.strref() + "_stage" +
+                                   Twine(stageIdx));
+    return builder.getStringAttr("stage" + Twine(stageIdx));
   }
 
   LogicalResult run() override {

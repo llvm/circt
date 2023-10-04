@@ -240,8 +240,7 @@ for model in models:
       io.name = io.name + "_"
 
   print('extern "C" {')
-  print(f"void {model.name}_clock(void* state);")
-  print(f"void {model.name}_passthrough(void* state);")
+  print(f"void {model.name}_eval(void* state);")
   print('}')
 
   # Generate the model layout.
@@ -300,8 +299,7 @@ for model in models:
   print(
       f"  {model.name}() : storage({model.name}Layout::numStateBytes, 0), view(&storage[0]) {{}}"
   )
-  print(f"  void clock() {{ {model.name}_clock(&storage[0]); }}")
-  print(f"  void passthrough() {{ {model.name}_passthrough(&storage[0]); }}")
+  print(f"  void eval() {{ {model.name}_eval(&storage[0]); }}")
   print(
       f"  ValueChangeDump<{model.name}Layout> vcd(std::basic_ostream<char> &os) {{"
   )
