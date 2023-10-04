@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_OM_OMOPS_H
 #define CIRCT_DIALECT_OM_OMOPS_H
 
+#include "circt/Dialect/OM/OMAttributes.h"
 #include "circt/Dialect/OM/OMDialect.h"
 #include "circt/Dialect/OM/OMOpInterfaces.h"
 #include "circt/Dialect/OM/OMTypes.h"

@@ -103,21 +103,20 @@ def MapAttr : AttrDef<OMDialect, "Map", [TypedAttrInterface]> {
   }];
 }
 
-def OMPathAttribute : AttrDef<OMDialect, "Path", [TypedAttrInterface]> {
-  let summary = "An attribute that represents a path";
+def OMPathAttr : AttrDef<OMDialect, "Path"> {
+  let summary = "An attribute that represents an instance path";
 
   let mnemonic = "path";
 
-  let parameters = (ins "::mlir::StringAttr":$path);
+  let parameters = (ins ArrayRefParameter<"::circt::om::PathElement">:$path);
 
-  let builders = [
-    AttrBuilderWithInferredContext<(ins "::mlir::StringAttr":$path)>
-  ];
+  let genVerifyDecl = 1;
 
-  let assemblyFormat = " `<` $path `>` ";
+  let hasCustomAssemblyFormat = 1;
 
   let extraClassDeclaration = [{
-    mlir::Type getType();
+    auto begin() const { return getPath().begin(); }
+    auto end() const { return getPath().end(); }
   }];
 }
 

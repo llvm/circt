@@ -565,8 +565,8 @@ ArrayAttr circt::om::evaluator::MapValue::getKeys() {
     attrs.push_back(key);
 
   std::sort(attrs.begin(), attrs.end(), [](Attribute l, Attribute r) {
-    if (auto lInt = dyn_cast<IntegerAttr>(l))
-      if (auto rInt = dyn_cast<IntegerAttr>(r))
+    if (auto lInt = dyn_cast<mlir::IntegerAttr>(l))
+      if (auto rInt = dyn_cast<mlir::IntegerAttr>(r))
         return lInt.getValue().ult(rInt.getValue());
 
     assert(isa<StringAttr>(l) && isa<StringAttr>(r) &&

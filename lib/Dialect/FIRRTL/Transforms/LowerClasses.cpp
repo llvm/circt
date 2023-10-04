@@ -303,6 +303,8 @@ bool LowerClassesPass::shouldCreateClass(FModuleLike moduleLike) {
 ClassLoweringState LowerClassesPass::createClass(FModuleLike moduleLike) {
   // Collect the parameter names from input properties.
   SmallVector<StringRef> formalParamNames;
+  // Every class gets a base path as its first parameter.
+  formalParamNames.emplace_back("basepath");
   for (auto [index, port] : llvm::enumerate(moduleLike.getPorts()))
     if (port.isInput() && isa<PropertyType>(port.type))
       formalParamNames.push_back(port.name);
@@ -371,6 +373,9 @@ void LowerClassesPass::lowerClass(om::ClassOp classOp, FModuleLike moduleLike) {
   // Construct the OM Class body with block arguments for each input property,
   // updating the mapping to map from the input property to the block argument.
   Block *classBody = &classOp->getRegion(0).emplaceBlock();
+  // Every class created from a module gets a base path as its first parameter.
+  classBody->addArgument(BasePathType::get(&getContext()),
+                         UnknownLoc::get(&getContext()));
   for (auto inputProperty : inputProperties) {
     BlockArgument parameterValue =
         classBody->addArgument(inputProperty.type, inputProperty.loc);
@@ -440,6 +445,10 @@ void LowerClassesPass::lowerClassExtern(ClassExternOp classExternOp,
   Block *classBody = &classExternOp.getRegion().emplaceBlock();
   OpBuilder builder = OpBuilder::atBlockBegin(classBody);
 
+  // Every class gets a base path as its first parameter.
+  classBody->addArgument(BasePathType::get(&getContext()),
+                         UnknownLoc::get(&getContext()));
+
   for (unsigned i = 0, e = moduleLike.getNumPorts(); i < e; ++i) {
     auto type = moduleLike.getPortType(i);
     if (!isa<PropertyType>(type))
@@ -471,6 +480,8 @@ void LowerClassesPass::lowerClassExtern(ClassExternOp classExternOp,
 static LogicalResult
 updateObjectInstance(firrtl::ObjectOp firrtlObject, OpBuilder &builder,
                      SmallVectorImpl<Operation *> &opsToErase) {
+  // The 0'th argument is the base path.
+  auto basePath = firrtlObject->getBlock()->getArgument(0);
   // build a table mapping the indices of input ports to their position in the
   // om class's parameter list.
   auto firrtlClassType = firrtlObject.getType();
@@ -478,7 +489,8 @@ updateObjectInstance(firrtl::ObjectOp firrtlObject, OpBuilder &builder,
   llvm::SmallVector<unsigned> argIndexTable;
   argIndexTable.resize(numElements);
 
-  unsigned nextArgIndex = 0;
+  unsigned nextArgIndex = 1;
+
   for (unsigned i = 0; i < numElements; ++i) {
     auto direction = firrtlClassType.getElement(i).direction;
     if (direction == Direction::In)
@@ -490,6 +502,7 @@ updateObjectInstance(firrtl::ObjectOp firrtlObject, OpBuilder &builder,
 
   llvm::SmallVector<Value> args;
   args.resize(nextArgIndex);
+  args[0] = basePath;
 
   for (auto *user : llvm::make_early_inc_range(firrtlObject->getUsers())) {
     if (auto subfield = dyn_cast<ObjectSubfieldOp>(user)) {
@@ -562,6 +575,8 @@ updateModuleInstanceClass(InstanceOp firrtlInstance, OpBuilder &builder,
   // parameters. The order of the SmallVector needs to match the order the
   // formal parameters are declared on the corresponding Class.
   SmallVector<Value> actualParameters;
+  // The 0'th argument is the base path.
+  actualParameters.push_back(firrtlInstance->getBlock()->getArgument(0));
   for (auto result : firrtlInstance.getResults()) {
     // If the port is an output, continue.
     if (firrtlInstance.getPortDirection(result.getResultNumber()) ==
@@ -821,6 +836,9 @@ struct PathOpConversion : public OpConversionPattern<firrtl::PathOp> {
     auto pathType = om::PathType::get(context);
     auto pathInfo = pathInfoTable.lookup(op.getTarget());
 
+    // The 0'th argument is the base path.
+    auto basePath = op->getBlock()->getArgument(0);
+
     // If the target was optimized away, then replace the path operation with
     // a deleted path.
     if (!pathInfo) {
@@ -828,8 +846,7 @@ struct PathOpConversion : public OpConversionPattern<firrtl::PathOp> {
         return emitError(op.getLoc(), "DontTouch target was deleted");
       if (op.getTargetKind() == firrtl::TargetKind::Instance)
         return emitError(op.getLoc(), "Instance target was deleted");
-      auto pathAttr = om::PathAttr::get(StringAttr::get(context, "OMDeleted"));
-      rewriter.replaceOpWithNewOp<om::ConstantOp>(op, pathAttr);
+      rewriter.replaceOpWithNewOp<om::EmptyPathOp>(op);
       return success();
     }
 
@@ -861,9 +878,9 @@ struct PathOpConversion : public OpConversionPattern<firrtl::PathOp> {
       break;
     }
 
-    rewriter.replaceOpWithNewOp<om::PathOp>(
+    rewriter.replaceOpWithNewOp<om::PathCreateOp>(
         op, pathType, om::TargetKindAttr::get(op.getContext(), targetKind),
-        symbol);
+        basePath, symbol);
     return success();
   }
 
@@ -1133,6 +1150,9 @@ static void populateTypeConverter(TypeConverter &converter) {
 
   // Convert FIRRTL PathType to OM PathType.
   converter.addConversion([](om::PathType type) { return type; });
+  converter.addConversion([](om::BasePathType type) { return type; });
+  converter.addConversion([](om::FrozenPathType type) { return type; });
+  converter.addConversion([](om::FrozenBasePathType type) { return type; });
   converter.addConversion([](firrtl::PathType type) {
     return om::PathType::get(type.getContext());
   });
