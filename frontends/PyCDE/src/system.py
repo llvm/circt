@@ -183,7 +183,7 @@ class System:
     if len(builder.generators) > 0:
       self._generate_queue.append(builder)
       file_name = builder.modcls.__name__ + ".sv"
-      outfn = self.output_directory / file_name
+      outfn = self.hw_output_dir / file_name
       self.files.add(outfn)
       self.mod_files.add(outfn)
       op.fileName = ir.StringAttr.get(str(file_name))

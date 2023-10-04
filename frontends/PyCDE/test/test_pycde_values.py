@@ -6,7 +6,7 @@ from pycde.signals import And, Or
 from pycde.testing import unittestmodule
 
 
-# CHECK-LABEL: hw.module @BitsMod(%inp: i5)
+# CHECK-LABEL: hw.module @BitsMod(in %inp : i5)
 @unittestmodule()
 class BitsMod(Module):
   inp = Input(types.i5)
@@ -64,7 +64,7 @@ def MyModule(SIZE: int):
   return Mod
 
 
-# CHECK-LABEL: hw.module @ArrayMod(%inp: !hw.array<5xi1>)
+# CHECK-LABEL: hw.module @ArrayMod(in %inp : !hw.array<5xi1>)
 @unittestmodule()
 class ArrayMod(Module):
   inp = Input(dim(types.i1, 5))

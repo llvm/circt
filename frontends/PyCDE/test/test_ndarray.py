@@ -163,7 +163,7 @@ class M1(Module):
 
 # -----
 
-# CHECK-LABEL:   hw.module @M1() -> (out: !hw.array<3xarray<3xi32>>) attributes {output_file = #hw.output_file<"M1.sv", includeReplicatedOps>} {
+# CHECK-LABEL:   hw.module @M1(out out : !hw.array<3xarray<3xi32>>)
 # CHECK:           %[[VAL_0:.*]] = hw.constant 0 : i32
 # CHECK:           %[[VAL_1:.*]] = hw.constant 1 : i32
 # CHECK:           %[[VAL_2:.*]] = hw.constant 2 : i32

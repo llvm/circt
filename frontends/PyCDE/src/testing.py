@@ -121,7 +121,7 @@ class _IVerilogHandler:
     # timescale of '1'. This prevents cocotb from creating small timescale clocks.
     # Since a timescale is not emitted by default from export-verilog, make our
     # lives easier and create a minimum timescale through the command-line.
-    cmd_file = os.path.join(pycde_system._output_directory, "cmds.f")
+    cmd_file = os.path.join(pycde_system.output_directory, "cmds.f")
     with open(cmd_file, "w+") as f:
       f.write("+timescale+1ns/1ps")
 
@@ -155,6 +155,7 @@ def cocotestbench(pycde_mod, simulator='icarus', **kwargs):
   def testbenchmodule_inner(tb_class):
     sys = System([pycde_mod])
     sys.generate()
+    sys.run_passes()
     sys.emit_outputs()
     testmodule = "test_" + pycde_mod.__name__
 
@@ -175,7 +176,7 @@ def cocotestbench(pycde_mod, simulator='icarus', **kwargs):
     ]
 
     # Generate the cocotb test file.
-    testfile_path = Path(sys._output_directory, f"{testmodule}.py")
+    testfile_path = Path(sys.output_directory, f"{testmodule}.py")
     with open(testfile_path, "w") as f:
       f.write(_gen_cocotb_testfile(testbench_funcs))
 
@@ -191,7 +192,7 @@ def cocotestbench(pycde_mod, simulator='icarus', **kwargs):
         toplevel=pycde_mod.__name__,
         toplevel_lang="verilog",
         verilog_sources=list(test_files),
-        work_dir=sys._output_directory,
+        work_dir=sys.output_directory,
         **kwargs)
 
     return pycde_mod

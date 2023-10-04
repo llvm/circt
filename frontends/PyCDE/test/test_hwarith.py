@@ -5,7 +5,7 @@ from pycde.testing import unittestmodule
 from pycde.types import types, UInt
 
 
-# CHECK: hw.module @InfixArith(%in0: si16, %in1: ui16)
+# CHECK: hw.module @InfixArith(in %in0 : si16, in %in1 : ui16)
 # CHECK-NEXT:   %0 = hwarith.add %in0, %in1 {{({sv.namehint = ".*"} )?}}: (si16, ui16) -> si18
 # CHECK-NEXT:   %1 = hwarith.sub %in0, %in1 {{({sv.namehint = ".*"} )?}}: (si16, ui16) -> si18
 # CHECK-NEXT:   %2 = hwarith.mul %in0, %in1 {{({sv.namehint = ".*"} )?}}: (si16, ui16) -> si32
@@ -31,7 +31,7 @@ class InfixArith(Module):
 # -----
 
 
-# CHECK: hw.module @InfixLogic(%in0: i16, %in1: i16)
+# CHECK: hw.module @InfixLogic(in %in0 : i16, in %in1 : i16)
 # CHECK-NEXT:  comb.and bin %in0, %in1 {{({sv.namehint = ".*"} )?}}: i16
 # CHECK-NEXT:  comb.or bin %in0, %in1 {{({sv.namehint = ".*"} )?}}: i16
 # CHECK-NEXT:  comb.xor bin %in0, %in1 {{({sv.namehint = ".*"} )?}}: i16
@@ -54,7 +54,7 @@ class InfixLogic(Module):
 # -----
 
 
-# CHECK: hw.module @SignlessInfixComparison(%in0: i16, %in1: i16)
+# CHECK: hw.module @SignlessInfixComparison(in %in0 : i16, in %in1 : i16)
 # CHECK-NEXT:    %0 = comb.icmp bin eq %in0, %in1 {{({sv.namehint = ".*"} )?}}: i16
 # CHECK-NEXT:    %1 = comb.icmp bin ne %in0, %in1 {{({sv.namehint = ".*"} )?}}: i16
 # CHECK-NEXT:    hw.output
@@ -72,7 +72,7 @@ class SignlessInfixComparison(Module):
 # -----
 
 
-# CHECK: hw.module @InfixComparison(%in0: ui16, %in1: ui16)
+# CHECK: hw.module @InfixComparison(in %in0 : ui16, in %in1 : ui16)
 # CHECK:  %0 = hwarith.icmp eq %in0, %in1 {sv.namehint = "in0_eq_in1"} : ui16, ui16
 # CHECK:  %1 = hwarith.icmp ne %in0, %in1 {sv.namehint = "in0_neq_in1"} : ui16, ui16
 # CHECK:  %2 = hwarith.icmp lt %in0, %in1 {sv.namehint = "in0_lt_in1"} : ui16, ui16
@@ -98,7 +98,7 @@ class InfixComparison(Module):
 # -----
 
 
-# CHECK:  hw.module @Multiple(%in0: si16, %in1: si16) -> (out0: i16)
+# CHECK:  hw.module @Multiple(in %in0 : si16, in %in1 : si16, out out0 : i16)
 # CHECK-NEXT:    %0 = hwarith.add %in0, %in1 {{({sv.namehint = ".*"} )?}}: (si16, si16) -> si17
 # CHECK-NEXT:    %1 = hwarith.add %0, %in0 {{({sv.namehint = ".*"} )?}}: (si17, si16) -> si18
 # CHECK-NEXT:    %2 = hwarith.add %1, %in1 {{({sv.namehint = ".*"} )?}}: (si18, si16) -> si19
@@ -118,7 +118,7 @@ class Multiple(Module):
 # -----
 
 
-# CHECK:  hw.module @Casting(%in0: i16)
+# CHECK:  hw.module @Casting(in %in0 : i16)
 # CHECK-NEXT:    %0 = hwarith.cast %in0 {{({sv.namehint = ".*"} )?}}: (i16) -> si16
 # CHECK-NEXT:    %1 = hwarith.cast %in0 {{({sv.namehint = ".*"} )?}}: (i16) -> ui16
 # CHECK-NEXT:    %2 = hwarith.cast %0 {{({sv.namehint = ".*"} )?}}: (si16) -> i16
@@ -145,7 +145,7 @@ class Casting(Module):
 # -----
 
 
-# CHECK-LABEL: hw.module @Lowering(%in0: i16, %in1: i16) -> (out0: i16)
+# CHECK-LABEL: hw.module @Lowering(in %in0 : i16, in %in1 : i16, out out0 : i16)
 # CHECK-NEXT:    %0 = hwarith.cast %in0 {sv.namehint = "in0"} : (i16) -> si16
 # CHECK-NEXT:    %1 = hwarith.cast %in1 {sv.namehint = "in1"} : (i16) -> si16
 # CHECK-NEXT:    %2 = hwarith.add %0, %1 {sv.namehint = "in0_plus_in1"} : (si16, si16) -> si17
@@ -165,7 +165,7 @@ class Lowering(Module):
 # -----
 
 
-# CHECK-LABEL:  hw.module @Constants(%uin: ui16, %sin: si16)
+# CHECK-LABEL:  hw.module @Constants(in %uin : ui16, in %sin : si16)
 # CHECK-NEXT:     [[R0:%.+]] = hwarith.constant 1 : ui1
 # CHECK-NEXT:     [[R1:%.+]] = hwarith.add %uin, [[R0]] : (ui16, ui1) -> ui17
 # CHECK-NEXT:     [[R2:%.+]] = hwarith.constant -1 : si2
