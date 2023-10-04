@@ -12,8 +12,7 @@ hw.module @Top() {
 // -----
 
 hw.hierpath private @nla [@Child]
-// expected-note @below {{module marked public}}
-hw.module @Child() {}
+hw.module private @Child() {}
 hw.module @Top() {
   // expected-error @below {{unable to uniquely resolve target due to multiple instantiation}}
   %path = om.path reference @nla
