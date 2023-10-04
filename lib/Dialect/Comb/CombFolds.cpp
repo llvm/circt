@@ -2305,6 +2305,8 @@ struct MuxRewriter : public mlir::OpRewritePattern<MuxOp> {
 
 LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
                                            PatternRewriter &rewriter) const {
+  bailCanonIfOutsideBlockOperands(op);
+
   // If the op has a SV attribute, don't optimize it.
   if (hasSVAttributes(op))
     return failure();
@@ -2595,6 +2597,8 @@ struct ArrayRewriter : public mlir::OpRewritePattern<hw::ArrayCreateOp> {
 
   LogicalResult matchAndRewrite(hw::ArrayCreateOp op,
                                 PatternRewriter &rewriter) const override {
+    bailCanonIfOutsideBlockOperands(op);
+
     if (foldArrayOfMuxes(op, rewriter))
       return success();
     return failure();
