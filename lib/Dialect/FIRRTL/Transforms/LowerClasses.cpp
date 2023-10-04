@@ -73,7 +73,8 @@ struct LowerClassesPass : public LowerClassesBase<LowerClassesPass> {
   void runOnOperation() override;
 
 private:
-  LogicalResult lowerPaths(PathInfoTable &pathInfoTable);
+  LogicalResult lowerPaths(PathInfoTable &pathInfoTable,
+                           SymbolTable &symbolTable);
 
   // Predicate to check if a module-like needs a Class to be created.
   bool shouldCreateClass(FModuleLike moduleLike);
@@ -87,7 +88,8 @@ private:
   void lowerClassExtern(ClassExternOp classExternOp, FModuleLike moduleLike);
 
   // Update Object instantiations in a FIRRTL Module or OM Class.
-  LogicalResult updateInstances(Operation *op, InstanceGraph &instanceGraph);
+  LogicalResult updateInstances(Operation *op, InstanceGraph &instanceGraph,
+                                SymbolTable &symbolTable);
 
   // Convert to OM ops and types in Classes or Modules.
   LogicalResult dialectConversion(
@@ -103,10 +105,10 @@ private:
 /// corresponding hierarchical paths. We use this table to convert FIRRTL path
 /// ops to OM. FIRRTL paths refer to their target using a target ID, while OM
 /// paths refer to their target using hierarchical paths.
-LogicalResult LowerClassesPass::lowerPaths(PathInfoTable &pathInfoTable) {
+LogicalResult LowerClassesPass::lowerPaths(PathInfoTable &pathInfoTable,
+                                           SymbolTable &symbolTable) {
   auto *context = &getContext();
   auto circuit = getOperation();
-  auto &symbolTable = getAnalysis<SymbolTable>();
   hw::InnerSymbolNamespaceCollection namespaces;
   HierPathCache cache(circuit, symbolTable);
 
@@ -221,12 +223,13 @@ void LowerClassesPass::runOnOperation() {
   // Get the CircuitOp.
   CircuitOp circuit = getOperation();
 
-  // Get the InstanceGraph.
+  // Get the InstanceGraph and SymbolTable.
   InstanceGraph &instanceGraph = getAnalysis<InstanceGraph>();
+  SymbolTable &symbolTable = getAnalysis<SymbolTable>();
 
   // Rewrite all path annotations into inner symbol targets.
   PathInfoTable pathInfoTable;
-  if (failed(lowerPaths(pathInfoTable))) {
+  if (failed(lowerPaths(pathInfoTable, symbolTable))) {
     signalPassFailure();
     return;
   }
@@ -261,8 +264,9 @@ void LowerClassesPass::runOnOperation() {
 
   // Update Object creation ops in Classes or Modules in parallel.
   if (failed(mlir::failableParallelForEach(
-          ctx, objectContainers, [this, &instanceGraph](auto *op) {
-            return updateInstances(op, instanceGraph);
+          ctx, objectContainers,
+          [this, &instanceGraph, &symbolTable](auto *op) {
+            return updateInstances(op, instanceGraph, symbolTable);
           })))
     return signalPassFailure();
 
@@ -307,6 +311,11 @@ ClassLoweringState LowerClassesPass::createClass(FModuleLike moduleLike) {
 
   // Take the name from the FIRRTL Class or Module to create the OM Class name.
   StringRef className = moduleLike.getName();
+
+  // Use the defname for external modules.
+  if (auto externMod = dyn_cast<FExtModuleOp>(moduleLike.getOperation()))
+    if (auto defname = externMod.getDefname())
+      className = defname.value();
 
   // If the op is a Module or ExtModule, the OM Class would conflict with the HW
   // Module, so give it a suffix. There is no formal ABI for this yet.
@@ -547,7 +556,8 @@ updateObjectInstance(firrtl::ObjectOp firrtlObject, OpBuilder &builder,
 // Module.
 static LogicalResult
 updateModuleInstanceClass(InstanceOp firrtlInstance, OpBuilder &builder,
-                          SmallVectorImpl<Operation *> &opsToErase) {
+                          SmallVectorImpl<Operation *> &opsToErase,
+                          SymbolTable &symbolTable) {
   // Collect the FIRRTL instance inputs to form the Object instance actual
   // parameters. The order of the SmallVector needs to match the order the
   // formal parameters are declared on the corresponding Class.
@@ -573,9 +583,21 @@ updateModuleInstanceClass(InstanceOp firrtlInstance, OpBuilder &builder,
     opsToErase.push_back(propertyAssignment);
   }
 
+  // Get the referenced module to get its name.
+  auto referencedModule =
+      dyn_cast<FModuleLike>(firrtlInstance.getReferencedModule(symbolTable));
+
+  StringRef moduleName = referencedModule.getName();
+
+  // Use the defname for external modules.
+  if (auto externMod = dyn_cast<FExtModuleOp>(referencedModule.getOperation()))
+    if (auto defname = externMod.getDefname())
+      moduleName = defname.value();
+
   // Convert the FIRRTL Module name to an OM Class type.
   auto className = FlatSymbolRefAttr::get(
-      builder.getStringAttr(firrtlInstance.getModuleName() + kClassNameSuffix));
+      builder.getStringAttr(moduleName + kClassNameSuffix));
+
   auto classType = om::ClassType::get(firrtlInstance->getContext(), className);
 
   // Create the new Object op.
@@ -648,7 +670,8 @@ updateModuleInstanceModule(InstanceOp firrtlInstance, OpBuilder &builder,
 
 // Update Object or Module instantiations in a FIRRTL Module or OM Class.
 LogicalResult LowerClassesPass::updateInstances(Operation *op,
-                                                InstanceGraph &instanceGraph) {
+                                                InstanceGraph &instanceGraph,
+                                                SymbolTable &symbolTable) {
   OpBuilder builder(op);
 
   // Track ops to erase at the end. We can't do this eagerly, since we want to
@@ -670,7 +693,7 @@ LogicalResult LowerClassesPass::updateInstances(Operation *op,
                     // Convert FIRRTL Module instance within a Class to OM
                     // Object instance.
                     return updateModuleInstanceClass(firrtlInstance, builder,
-                                                     opsToErase);
+                                                     opsToErase, symbolTable);
                   })
                   .Case([&](FModuleOp) {
                     // Convert FIRRTL Module instance within a Module to remove
