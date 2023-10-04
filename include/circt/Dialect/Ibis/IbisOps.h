@@ -31,6 +31,9 @@ namespace ibis {
 class ContainerOp;
 class ThisOp;
 
+// Symbol name for the ibis operator library to be used during scheduling.
+static constexpr const char *kIbisOperatorLibName = "ibis_operator_library";
+
 namespace detail {
 // Verify that `op` conforms to the ScopeOpInterface.
 LogicalResult verifyScopeOpInterface(Operation *op);

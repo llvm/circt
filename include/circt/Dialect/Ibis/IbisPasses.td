@@ -211,4 +211,14 @@ def IbisConvertMethodsToContainers : Pass<"ibis-convert-methods-to-containers", 
   let constructor = "circt::ibis::createConvertMethodsToContainersPass()";
 }
 
+def IbisAddOperatorLibrary : Pass<"ibis-add-operator-library", "mlir::ModuleOp"> {
+  let summary = "Injects the Ibis operator library into the IR";
+  let description = [{
+    Injects the Ibis operator library into the IR, which contains the
+    definitions of the Ibis operators.
+  }];
+  let constructor = "circt::ibis::createAddOperatorLibraryPass()";
+  let dependentDialects = ["circt::ssp::SSPDialect"];
+}
+
 #endif // CIRCT_DIALECT_IBIS_PASSES_TD
