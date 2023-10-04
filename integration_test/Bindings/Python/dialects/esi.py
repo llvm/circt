@@ -29,10 +29,17 @@ with Context() as ctx:
       [("i16chan", esi.BundleDirection.TO, channel_type)], False)
   print(bundle_type)
   # CHECK: !esi.bundle<[!esi.channel<i16> to "i16chan"]>
-  assert (bundle_type.resettable == False)
+  assert (not bundle_type.resettable)
   for bchan in bundle_type.channels:
     print(bchan)
   # CHECK: ('i16chan', 1, Type(!esi.channel<i16>))
+  print()
+
+  bundle_type = esi.BundleType.get(
+      [("i16chan", esi.BundleDirection.FROM, channel_type)], True)
+  print(bundle_type)
+  # CHECK: !esi.bundle<[!esi.channel<i16> from "i16chan"] reset >
+  assert (bundle_type.resettable)
   print()
 
 

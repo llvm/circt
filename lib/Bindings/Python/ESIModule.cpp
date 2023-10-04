@@ -70,20 +70,6 @@ private:
   CirctESIAppIDIndex index;
 };
 
-static std::vector<py::tuple> getBundleChannels(MlirType bundleType) {
-  std::vector<py::tuple> channels;
-  size_t numChannels = circtESIBundleTypeGetNumChannels(bundleType);
-  for (size_t i = 0; i < numChannels; ++i) {
-    CirctESIBundleTypeBundleChannel channel =
-        circtESIBundleTypeGetChannel(bundleType, i);
-    MlirStringRef name = mlirIdentifierStr(channel.name);
-    channels.push_back(py::make_tuple(py::str(name.data, name.length),
-                                      py::cast(channel.direction),
-                                      py::cast(channel.channelType)));
-  }
-  return channels;
-}
-
 using namespace mlir::python::adaptors;
 
 void circt::python::populateDialectESISubmodule(py::module &m) {
@@ -147,7 +133,19 @@ void circt::python::populateDialectESISubmodule(py::module &m) {
           py::arg("cls"), py::arg("channels"), py::arg("resettable"),
           py::arg("ctxt") = nullptr)
       .def_property_readonly("resettable", &circtESIBundleTypeGetResettable)
-      .def_property_readonly("channels", &getBundleChannels);
+      .def_property_readonly("channels", [](MlirType bundleType) {
+        std::vector<py::tuple> channels;
+        size_t numChannels = circtESIBundleTypeGetNumChannels(bundleType);
+        for (size_t i = 0; i < numChannels; ++i) {
+          CirctESIBundleTypeBundleChannel channel =
+              circtESIBundleTypeGetChannel(bundleType, i);
+          MlirStringRef name = mlirIdentifierStr(channel.name);
+          channels.push_back(py::make_tuple(py::str(name.data, name.length),
+                                            py::cast(channel.direction),
+                                            py::cast(channel.channelType)));
+        }
+        return channels;
+      });
 
   mlir_attribute_subclass(m, "AppIDAttr", circtESIAttributeIsAnAppIDAttr)
       .def_classmethod(
