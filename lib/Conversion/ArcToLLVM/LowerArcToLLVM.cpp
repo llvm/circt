@@ -41,62 +41,6 @@ using namespace hw;
 
 namespace {
 
-struct DefineOpLowering : public OpConversionPattern<arc::DefineOp> {
-  using OpConversionPattern::OpConversionPattern;
-  LogicalResult
-  matchAndRewrite(arc::DefineOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const final {
-    auto func = rewriter.create<mlir::func::FuncOp>(op.getLoc(), op.getName(),
-                                                    op.getFunctionType());
-    func->setAttr(
-        "llvm.linkage",
-        LLVM::LinkageAttr::get(getContext(), LLVM::linkage::Linkage::Internal));
-    rewriter.inlineRegionBefore(op.getRegion(), func.getBody(), func.end());
-    rewriter.eraseOp(op);
-    return success();
-  }
-};
-
-struct OutputOpLowering : public OpConversionPattern<arc::OutputOp> {
-  using OpConversionPattern::OpConversionPattern;
-  LogicalResult
-  matchAndRewrite(arc::OutputOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const final {
-    rewriter.replaceOpWithNewOp<func::ReturnOp>(op, adaptor.getOutputs());
-    return success();
-  }
-};
-
-struct CallOpLowering : public OpConversionPattern<arc::CallOp> {
-  using OpConversionPattern::OpConversionPattern;
-  LogicalResult
-  matchAndRewrite(arc::CallOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const final {
-    SmallVector<Type> newResultTypes;
-    if (failed(
-            typeConverter->convertTypes(op.getResultTypes(), newResultTypes)))
-      return failure();
-    rewriter.replaceOpWithNewOp<func::CallOp>(
-        op, newResultTypes, op.getArcAttr(), adaptor.getInputs());
-    return success();
-  }
-};
-
-struct StateOpLowering : public OpConversionPattern<arc::StateOp> {
-  using OpConversionPattern::OpConversionPattern;
-  LogicalResult
-  matchAndRewrite(arc::StateOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const final {
-    SmallVector<Type> newResultTypes;
-    if (failed(
-            typeConverter->convertTypes(op.getResultTypes(), newResultTypes)))
-      return failure();
-    rewriter.replaceOpWithNewOp<func::CallOp>(
-        op, newResultTypes, op.getArcAttr(), adaptor.getInputs());
-    return success();
-  }
-};
-
 struct AllocStorageOpLowering
     : public OpConversionPattern<arc::AllocStorageOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -410,15 +354,11 @@ static void populateOpConversion(RewritePatternSet &patterns,
     AllocStateLikeOpLowering<arc::RootInputOp>,
     AllocStateLikeOpLowering<arc::RootOutputOp>,
     AllocStorageOpLowering,
-    CallOpLowering,
     ClockGateOpLowering,
-    DefineOpLowering,
     MemoryReadOpLowering,
     MemoryWriteOpLowering,
-    OutputOpLowering,
     FuncCallOpLowering,
     ReturnOpLowering,
-    StateOpLowering,
     StateReadOpLowering,
     StateWriteOpLowering,
     StorageGetOpLowering,
