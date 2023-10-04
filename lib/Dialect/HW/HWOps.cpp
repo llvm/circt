@@ -509,9 +509,6 @@ FunctionType hw::getModuleType(Operation *moduleOrInstance) {
     return FunctionType::get(instance->getContext(), inputs, results);
   }
 
-  if (auto mod = dyn_cast<HWTestModuleOp>(moduleOrInstance))
-    return mod.getModuleType().getFuncType();
-
   if (auto mod = dyn_cast<HWModuleLike>(moduleOrInstance))
     return mod.getHWModuleType().getFuncType();
 
@@ -1625,8 +1622,6 @@ LogicalResult OutputOp::verify() {
   ModuleType modType;
   if (auto mod = dyn_cast<HWModuleOp>((*this)->getParentOp()))
     modType = mod.getHWModuleType();
-  else if (auto mod = dyn_cast<HWTestModuleOp>((*this)->getParentOp()))
-    modType = mod.getModuleType();
   else {
     emitOpError("must have a module parent");
     return failure();
@@ -3154,143 +3149,6 @@ void TriggeredOp::build(OpBuilder &builder, OperationState &odsState,
   llvm::transform(inputs, std::back_inserter(argLocs),
                   [&](Value v) { return v.getLoc(); });
   b->addArguments(inputs.getTypes(), argLocs);
-}
-
-//===----------------------------------------------------------------------===//
-// Temporary test module
-//===----------------------------------------------------------------------===//
-
-void HWTestModuleOp::print(OpAsmPrinter &p) {
-  p << ' ';
-  // Print the visibility of the module.
-  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
-  if (auto visibility = (*this)->getAttrOfType<StringAttr>(visibilityAttrName))
-    p << visibility.getValue() << ' ';
-
-  // Print the operation and the function name.
-  p.printSymbolName(SymbolTable::getSymbolName(*this).getValue());
-
-  // Print the parameter list if present.
-  printOptionalParameterList(p, *this, getParameters());
-
-  module_like_impl::printModuleSignatureNew(p, *this);
-  SmallVector<StringRef, 3> omittedAttrs;
-  omittedAttrs.push_back(getPortLocsAttrName());
-  omittedAttrs.push_back(getModuleTypeAttrName());
-  omittedAttrs.push_back(getPortAttrsAttrName());
-  omittedAttrs.push_back(getParametersAttrName());
-  omittedAttrs.push_back(visibilityAttrName);
-  if (auto cmt = (*this)->getAttrOfType<StringAttr>("comment"))
-    if (cmt.getValue().empty())
-      omittedAttrs.push_back("comment");
-
-  mlir::function_interface_impl::printFunctionAttributes(p, *this,
-                                                         omittedAttrs);
-
-  // Print the body if this is not an external function.
-  Region &body = getBody();
-  if (!body.empty()) {
-    p << " ";
-    p.printRegion(body, /*printEntryBlockArgs=*/false,
-                  /*printBlockTerminators=*/true);
-  }
-}
-
-ParseResult HWTestModuleOp::parse(OpAsmParser &parser, OperationState &result) {
-  auto loc = parser.getCurrentLocation();
-
-  // Parse the visibility attribute.
-  (void)mlir::impl::parseOptionalVisibilityKeyword(parser, result.attributes);
-
-  // Parse the name as a symbol.
-  StringAttr nameAttr;
-  if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(),
-                             result.attributes))
-    return failure();
-
-  // Parse the parameters.
-  ArrayAttr parameters;
-  if (parseOptionalParameterList(parser, parameters))
-    return failure();
-
-  SmallVector<module_like_impl::PortParse> ports;
-  TypeAttr modType;
-  if (failed(module_like_impl::parseModuleSignature(parser, ports, modType)))
-    return failure();
-
-  // Parse the attribute dict.
-  if (failed(parser.parseOptionalAttrDictWithKeyword(result.attributes)))
-    return failure();
-
-  if (hasAttribute("parameters", result.attributes)) {
-    parser.emitError(loc, "explicit `parameters` attributes not allowed");
-    return failure();
-  }
-
-  result.addAttribute("parameters", parameters);
-  result.addAttribute(getModuleTypeAttrName(result.name), modType);
-  addPortAttrsAndLocs(parser.getBuilder(), result, ports,
-                      getPortAttrsAttrName(result.name),
-                      getPortLocsAttrName(result.name));
-
-  SmallVector<OpAsmParser::Argument, 4> entryArgs;
-  for (auto &port : ports)
-    if (port.direction != ModulePort::Direction::Output)
-      entryArgs.push_back(port);
-
-  // Parse the optional function body.
-  auto *body = result.addRegion();
-  if (parser.parseRegion(*body, entryArgs))
-    return failure();
-
-  HWModuleOp::ensureTerminator(*body, parser.getBuilder(), result.location);
-
-  return success();
-}
-
-void HWTestModuleOp::getAsmBlockArgumentNames(
-    mlir::Region &region, mlir::OpAsmSetValueNameFn setNameFn) {
-  if (region.empty())
-    return;
-  // Assign port names to the bbargs.
-  auto *block = &region.front();
-  auto mt = getModuleType();
-  for (size_t i = 0, e = block->getNumArguments(); i != e; ++i) {
-    auto name = mt.getInputName(i);
-    if (!name.empty())
-      setNameFn(block->getArgument(i), name);
-  }
-}
-
-SmallVector<PortInfo> HWTestModuleOp::getPortList() {
-  SmallVector<PortInfo> ports;
-  auto refPorts = getModuleType().getPorts();
-  for (auto [i, port] : enumerate(refPorts)) {
-    auto loc = getPortLocs() ? cast<LocationAttr>((*getPortLocs())[i])
-                             : LocationAttr();
-    auto attr = getPortAttrs() ? cast<DictionaryAttr>((*getPortAttrs())[i])
-                               : DictionaryAttr();
-    ports.push_back({{port}, i, attr, loc});
-  }
-  return ports;
-}
-
-PortInfo HWTestModuleOp::getPort(size_t idx) { return getPortList()[idx]; }
-
-size_t HWTestModuleOp::getNumPorts() { return getModuleType().getNumPorts(); }
-size_t HWTestModuleOp::getNumInputPorts() {
-  return getModuleType().getNumInputs();
-}
-size_t HWTestModuleOp::getNumOutputPorts() {
-  return getModuleType().getNumOutputs();
-}
-
-size_t HWTestModuleOp::getPortIdForInputId(size_t idx) {
-  return getModuleType().getPortIdForInputId(idx);
-}
-
-size_t HWTestModuleOp::getPortIdForOutputId(size_t idx) {
-  return getModuleType().getPortIdForOutputId(idx);
 }
 
 //===----------------------------------------------------------------------===//

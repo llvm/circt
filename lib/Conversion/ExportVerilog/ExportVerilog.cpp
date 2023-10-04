@@ -188,7 +188,7 @@ StringRef ExportVerilog::getSymOpName(Operation *symOp) {
   if (auto attr = symOp->getAttrOfType<StringAttr>("hw.verilogName"))
     return attr.getValue();
   return TypeSwitch<Operation *, StringRef>(symOp)
-      .Case<HWModuleOp, HWModuleExternOp, HWModuleGeneratedOp, HWTestModuleOp>(
+      .Case<HWModuleOp, HWModuleExternOp, HWModuleGeneratedOp>(
           [](Operation *op) { return getVerilogModuleName(op); })
       .Case<InterfaceOp>([&](InterfaceOp op) {
         return getVerilogModuleNameAttr(op).getValue();
@@ -233,9 +233,6 @@ static StringRef getPortVerilogName(Operation *module, size_t portArgNum) {
 
 /// Return the verilog name of the port for the module.
 static StringRef getInputPortVerilogName(Operation *module, size_t portArgNum) {
-  if (auto htmo = dyn_cast<HWTestModuleOp>(module))
-    return getPortVerilogName(
-        module, ModulePortInfo(htmo.getPortList()).atInput(portArgNum));
   auto hml = cast<HWModuleLike>(module);
   return getPortVerilogName(
       module, ModulePortInfo(hml.getPortList()).atInput(portArgNum));
@@ -1471,7 +1468,6 @@ public:
   void emitPortList(Operation *module, const ModulePortInfo &portInfo);
 
   void emitHWModule(HWModuleOp module);
-  void emitHWTestModule(HWTestModuleOp module);
   void emitHWExternModule(HWModuleExternOp module);
   void emitHWGeneratedModule(HWModuleGeneratedOp module);
 
@@ -5870,30 +5866,6 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
   currentModuleOp = nullptr;
 }
 
-void ModuleEmitter::emitHWTestModule(HWTestModuleOp module) {
-  currentModuleOp = module;
-
-  emitComment(module.getCommentAttr());
-  emitSVAttributes(module);
-  startStatement();
-  ps << "module " << PPExtString(getVerilogModuleName(module));
-
-  // If we have any parameters, print them on their own line.
-  emitParameters(module, module.getParameters());
-
-  emitPortList(module, ModulePortInfo(module.getPortList()));
-
-  assert(state.pendingNewline);
-
-  // Emit the body of the module.
-  StmtEmitter(*this, state.options).emitStatementBlock(*module.getBodyBlock());
-  startStatement();
-  ps << "endmodule" << PP::newline;
-  setPendingNewline();
-
-  currentModuleOp = nullptr;
-}
-
 //===----------------------------------------------------------------------===//
 // Top level "file" emitter logic
 //===----------------------------------------------------------------------===//
@@ -5995,18 +5967,6 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
     // root file, or replicate in all output files.
     TypeSwitch<Operation *>(&op)
         .Case<HWModuleOp>([&](auto mod) {
-          // Build the IR cache.
-          symbolCache.addDefinition(mod.getNameAttr(), mod);
-          collectPorts(mod);
-          collectInstanceSymbolsAndBinds(mod);
-
-          // Emit into a separate file named after the module.
-          if (attr || separateModules)
-            separateFile(mod, getVerilogModuleName(mod) + ".sv");
-          else
-            rootFile.ops.push_back(info);
-        })
-        .Case<HWTestModuleOp>([&](auto mod) {
           // Build the IR cache.
           symbolCache.addDefinition(mod.getNameAttr(), mod);
           collectPorts(mod);
@@ -6138,8 +6098,6 @@ void SharedEmitterState::collectOpsForFile(const FileInfo &file,
 static void emitOperation(VerilogEmitterState &state, Operation *op) {
   TypeSwitch<Operation *>(op)
       .Case<HWModuleOp>([&](auto op) { ModuleEmitter(state).emitHWModule(op); })
-      .Case<HWTestModuleOp>(
-          [&](auto op) { ModuleEmitter(state).emitHWTestModule(op); })
       .Case<HWModuleExternOp>(
           [&](auto op) { ModuleEmitter(state).emitHWExternModule(op); })
       .Case<HWModuleGeneratedOp>(

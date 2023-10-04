@@ -110,31 +110,6 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
 
 }
 
-def HWTestModuleOp : HWOp<"testmodule", [Symbol,
-                                         DeclareOpInterfaceMethods<PortList>,
-                                         OpAsmOpInterface,
-                                         HasParent<"mlir::ModuleOp">,
-                                         IsolatedFromAbove,
-                                         SingleBlockImplicitTerminator<"OutputOp">]> {
-  let arguments = (ins SymbolNameAttr:$sym_name,
-                       TypeAttrOf<ModuleType>:$module_type,
-                       OptionalAttr<DictArrayAttr>:$port_attrs,
-                       OptionalAttr<LocationArrayAttr>:$port_locs,
-                       ParamDeclArrayAttr:$parameters,
-                       OptionalAttr<StrAttr>:$comment);
-  let results = (outs);
-  let regions = (region SizedRegion<1>:$body);
-  let hasCustomAssemblyFormat = 1;
-
-  let extraClassDeclaration = [{
-    void getAsmBlockArgumentNames(mlir::Region &region,
-                                  mlir::OpAsmSetValueNameFn setNameFn);
-
-    Block *getBodyBlock() { return &getRegion().front(); }
-  }];
-
-}
-
 def HWModuleOp : HWModuleOpBase<"module",
       [IsolatedFromAbove, RegionKindInterface,
        SingleBlockImplicitTerminator<"OutputOp">]>{
@@ -491,7 +466,7 @@ def InstanceOp : HWOp<"instance", [
   let hasVerifier = 1;
 }
 
-def OutputOp : HWOp<"output", [Terminator, HasParent<"HWModuleOp, HWTestModuleOp">,
+def OutputOp : HWOp<"output", [Terminator, HasParent<"HWModuleOp">,
                                 Pure, ReturnLike]> {
   let summary = "HW termination operation";
   let description = [{
