@@ -270,3 +270,22 @@ hw.module @testStallability(in %arg0: i32, in %go: i1, in %clk: !seq.clock, in %
   }
   hw.output %out : i32
 }
+
+// -----
+
+// CHECK-LABEL:  hw.module @testAnonymous(in %arg0 : i1, in %clk : !seq.clock, in %rst : i1, out out : i1) {
+// CHECK-NEXT:    %stage0_reg0 = seq.compreg sym @stage0_reg0 %arg0, %clk : i1
+// CHECK-NEXT:    %false = hw.constant false
+// CHECK-NEXT:    %stage1_enable = seq.compreg sym @stage1_enable %arg0, %clk, %rst, %false  : i1
+// CHECK-NEXT:    hw.output %stage0_reg0 : i1
+// CHECK-NEXT:  }
+
+hw.module @testAnonymous(in %arg0: i1, in %clk: !seq.clock, in %rst: i1, out out : i1) {
+  %0:2 = pipeline.scheduled ""(%a0 : i1 = %arg0) clock(%clk) reset(%rst) go(%arg0) entryEn(%s0_enable) -> (out : i1) {
+    pipeline.stage ^bb1 regs(%a0 : i1)
+  ^bb1(%a0_0: i1, %s1_enable: i1):
+    pipeline.return %a0_0 : i1
+  }
+  hw.output %0#0 : i1
+}
+
