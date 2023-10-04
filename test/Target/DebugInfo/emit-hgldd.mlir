@@ -16,9 +16,9 @@
 #loc11 = loc("Bar.sv":49:10)
 
 // CHECK-FOO:      "file_info": [
-// CHECK-FOO-NEXT:   "my_source{{[/\\]}}InputFoo.scala"
-// CHECK-FOO-NEXT:   "my_verilog{{[/\\]}}Foo.sv"
-// CHECK-FOO-NEXT:   "my_source{{[/\\]}}InputBar.scala"
+// CHECK-FOO-NEXT:   "my_source{{/|\\\\}}InputFoo.scala"
+// CHECK-FOO-NEXT:   "my_verilog{{/|\\\\}}Foo.sv"
+// CHECK-FOO-NEXT:   "my_source{{/|\\\\}}InputBar.scala"
 // CHECK-FOO-NEXT: ]
 // CHECK-FOO-NEXT: "hdl_file_index": 2
 
@@ -26,8 +26,8 @@
 // CHECK-FOO: "obj_name": "Foo"
 
 // CHECK-BAR:      "file_info": [
-// CHECK-BAR-NEXT:   "my_source{{[/\\]}}InputBar.scala"
-// CHECK-BAR-NEXT:   "my_verilog{{[/\\]}}Bar.sv"
+// CHECK-BAR-NEXT:   "my_source{{/|\\\\}}InputBar.scala"
+// CHECK-BAR-NEXT:   "my_verilog{{/|\\\\}}Bar.sv"
 // CHECK-BAR-NEXT: ]
 // CHECK-BAR-NEXT: "hdl_file_index": 2
 
