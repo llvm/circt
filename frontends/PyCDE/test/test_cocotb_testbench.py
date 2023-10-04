@@ -1,6 +1,6 @@
 # REQUIRES: iverilog,cocotb
 # RUN: %PYTHON% %s 2>&1 | FileCheck %s
-from pycde import Input, Output, generator, module, Clock, externmodule
+from pycde import Input, Output, generator, modparams, Module, Clock
 from pycde.types import types
 from pycde.testing import cocotestbench, cocotest, cocoextra
 from pycde.dialects import comb
@@ -15,7 +15,7 @@ import os
 # CHECK-NEXT: ********************************
 
 
-@module
+@modparams
 def make_adder(width):
 
   class Adder(Module):
@@ -30,7 +30,6 @@ def make_adder(width):
   return Adder
 
 
-@module
 class RegAdd(Module):
   rst = Input(types.i1)
   clk = Clock()
@@ -103,14 +102,14 @@ class RegAddTester:
 # CHECK-NEXT: *******************************
 
 
-@externmodule("adder")
 class ExternAdder(Module):
   in1 = Input(types.i16)
   in2 = Input(types.i16)
   out = Output(types.i16)
 
+  module_name = "adder"
 
-@module
+
 class RegAdd(Module):
   rst = Input(types.i1)
   clk = Clock()

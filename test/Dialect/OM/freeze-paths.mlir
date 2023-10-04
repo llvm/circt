@@ -6,11 +6,13 @@ hw.hierpath private @nla_2 [@PathModule::@sym_2]
 hw.hierpath private @nla_3 [@PathModule::@child]
 hw.hierpath private @nla_4 [@Child]
 hw.hierpath private @nla_5 [@PathModule::@child, @Child::@sym]
+hw.hierpath private @nla_6 [@PublicLeaf]
 hw.module @PathModule(in %in: i1 {hw.exportPort = #hw<innerSym@sym>}) {
   %wire = hw.wire %wire sym @sym_0 {hw.verilogName = "wire"} : i8
   %array = hw.wire %array sym [<@sym_1,1,public>] {hw.verilogName = "array"}: !hw.array<1xi8>
   %struct = hw.wire %struct sym [<@sym_2,1,public>] {hw.verilogName = "struct"}: !hw.struct<a: i8>
   hw.instance "child" sym @child @Child() -> () {hw.verilogName = "child"}
+  hw.instance "public_middle" @PublicMiddle() -> () {hw.verilogName = "public_middle"}
   hw.output
 }
 hw.hierpath private @NonLocal [@PathModule::@child, @Child]
@@ -19,6 +21,13 @@ hw.module private @Child() {
   %non_local = hw.wire %z_i8 sym @sym {hw.verilogName = "non_local"}  : i8
   hw.output
 }
+
+hw.module @PublicMiddle() {
+  hw.instance "leaf" @PublicLeaf() -> () {hw.verilogName = "leaf"}
+}
+
+hw.module private @PublicLeaf() {}
+
 // CHECK-LABEL om.class @PathTest()
 om.class @PathTest() {
   // CHECK: om.constant #om.path<"OMReferenceTarget:PathModule>in"> : !om.path
@@ -50,4 +59,7 @@ om.class @PathTest() {
 
   // CHECK: om.constant #om.path<"OMReferenceTarget:PathModule/child:Child"> : !om.path
   %10 = om.path reference @nla_4
+
+  // CHECK: om.constant #om.path<"OMReferenceTarget:PublicMiddle/leaf:PublicLeaf"> : !om.path
+  %11 = om.path reference @nla_6
 }

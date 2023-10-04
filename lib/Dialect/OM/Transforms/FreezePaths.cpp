@@ -154,7 +154,12 @@ LogicalResult PathVisitor::processPath(PathOp path) {
   assert(topModule && "must have something?");
   auto *node = instanceGraph.lookup(topModule);
   while (!node->noUses()) {
-    auto module = node->getModule();
+    auto module = node->getModule<hw::HWModuleLike>();
+
+    // If the module is public, stop here.
+    if (module.isPublic())
+      break;
+
     if (!node->hasOneUse()) {
       auto diag = path->emitError() << "unable to uniquely resolve target "
                                        "due to multiple instantiation";

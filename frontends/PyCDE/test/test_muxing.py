@@ -6,7 +6,7 @@ from pycde.constructs import Mux
 from pycde.testing import unittestmodule
 from pycde.types import Bits
 
-# CHECK-LABEL: hw.module @ComplexMux(%Clk: !seq.clock, %In: !hw.array<5xarray<4xi3>>, %Sel: i1) -> (Out: !hw.array<4xi3>, OutArr: !hw.array<2xarray<4xi3>>, OutInt: i1, OutSlice: !hw.array<3xarray<4xi3>>)
+# CHECK-LABEL: hw.module @ComplexMux(in %Clk : !seq.clock, in %In : !hw.array<5xarray<4xi3>>, in %Sel : i1, out Out : !hw.array<4xi3>, out OutArr : !hw.array<2xarray<4xi3>>, out OutInt : i1, out OutSlice : !hw.array<3xarray<4xi3>>)
 # CHECK:         %c3_i3 = hw.constant 3 : i3
 # CHECK:         %0 = hw.array_get %In[%c3_i3] {sv.namehint = "In__3"} : !hw.array<5xarray<4xi3>>
 # CHECK:         %In__3__reg1 = seq.compreg sym @In__3__reg1 %0, %Clk : !hw.array<4xi3>
@@ -54,7 +54,7 @@ class ComplexMux(Module):
 
 # -----
 
-# CHECK-LABEL:  hw.module @Slicing(%In: !hw.array<5xarray<4xi8>>, %Sel8: i8, %Sel2: i2) -> (OutIntSlice: i2, OutArrSlice8: !hw.array<2xarray<4xi8>>, OutArrSlice2: !hw.array<2xarray<4xi8>>)
+# CHECK-LABEL:  hw.module @Slicing(in %In : !hw.array<5xarray<4xi8>>, in %Sel8 : i8, in %Sel2 : i2, out OutIntSlice : i2, out OutArrSlice8 : !hw.array<2xarray<4xi8>>, out OutArrSlice2 : !hw.array<2xarray<4xi8>>)
 # CHECK:          [[R0:%.+]] = hw.array_get %In[%c0_i3] {sv.namehint = "In__0"} : !hw.array<5xarray<4xi8>>
 # CHECK:          [[R1:%.+]] = hw.array_get %0[%c0_i2] {sv.namehint = "In__0__0"} : !hw.array<4xi8>
 # CHECK:          [[R2:%.+]] = comb.concat %c0_i6, %Sel2 {sv.namehint = "Sel2_padto_8"} : i6, i2
@@ -85,7 +85,7 @@ class Slicing(Module):
     ports.OutArrSlice8 = ports.In.slice(ports.Sel8, 2)
 
 
-# CHECK-LABEL:  hw.module @SimpleMux2(%op: i1, %a: i32, %b: i32) -> (out: i32)
+# CHECK-LABEL:  hw.module @SimpleMux2(in %op : i1, in %a : i32, in %b : i32, out out : i32)
 # CHECK-NEXT:     [[r0:%.+]] = comb.mux bin %op, %b, %a
 # CHECK-NEXT:     hw.output %0 : i32
 @unittestmodule()
@@ -100,7 +100,7 @@ class SimpleMux2(Module):
     self.out = Mux(self.op, self.a, self.b)
 
 
-# CHECK-LABEL:  hw.module @SimpleMux4(%op: i2, %a: i32, %b: i32, %c: i32, %d: i32) -> (out: i32)
+# CHECK-LABEL:  hw.module @SimpleMux4(in %op : i2, in %a : i32, in %b : i32, in %c : i32, in %d : i32, out out : i32)
 # CHECK-NEXT:     [[r0:%.+]] = hw.array_create %d, %c, %b, %a
 # CHECK-NEXT:     [[r1:%.+]] = hw.array_get [[r0]][%op]
 # CHECK-NEXT:     hw.output [[r1]] : i32

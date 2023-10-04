@@ -192,8 +192,3 @@ hw.module @fileListTest(in %arg1: i32) attributes {output_filelist = #hw.output_
 // CHECK-SAME: attributes {comment = "hello world"}
 hw.module @commentModule() attributes {comment = "hello world"} {}
 
-module {
-  hw.testmodule @NewStyle (in %a : i3, out b : i3, inout %c : i64 {hw.exportPort = #hw<innerSym@symA>}) {
-    hw.output %a : i3
-  }
-}

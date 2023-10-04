@@ -14,7 +14,7 @@ from pycde.testing import unittestmodule
 # CHECK:    hw.struct_create (%c7_i12_0) : !hw.typealias<@pycde::@bar, !hw.struct<foo: i12>>
 # CHECK:    %Taps.taps = hw.instance "Taps" sym @Taps @Taps() -> (taps: !hw.array<3xi8>)
 # CHECK:    hw.output
-# CHECK-LABEL:  hw.module @Taps() -> (taps: !hw.array<3xi8>)
+# CHECK-LABEL:  hw.module @Taps(out taps : !hw.array<3xi8>)
 # CHECK:    %c-53_i8 = hw.constant -53 : i8
 # CHECK:    %c100_i8 = hw.constant 100 : i8
 # CHECK:    %c23_i8 = hw.constant 23 : i8
@@ -49,7 +49,7 @@ class Top(Module):
 
 # -----
 
-# CHECK:  hw.module @ComplexPorts(%clk: !seq.clock, %data_in: !hw.array<3xi32>, %sel: i2, %struct_data_in: !hw.struct<foo: i36>) -> (a: i32, b: i32, c: i32)
+# CHECK:  hw.module @ComplexPorts(in %clk : !seq.clock, in %data_in : !hw.array<3xi32>, in %sel : i2, in %struct_data_in : !hw.struct<foo: i36>, out a : i32, out b : i32, out c : i32)
 # CHECK:    %c0_i2 = hw.constant 0 : i2
 # CHECK:    [[REG0:%.+]] = hw.array_get %data_in[%c0_i2] {sv.namehint = "data_in__0"} : !hw.array<3xi32>
 # CHECK:    [[REGR1:%data_in__0__reg1]] = seq.compreg sym @data_in__0__reg1 [[REG0]], %clk : i32

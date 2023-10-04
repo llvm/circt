@@ -63,7 +63,7 @@ class ExStruct(Struct):
 print(ExStruct)
 
 
-# CHECK-LABEL:  hw.module @TestStruct(%inp1: !hw.typealias<@pycde::@ExStruct, !hw.struct<a: i4, b: ui32>>) -> (out1: ui33, out2: !hw.typealias<@pycde::@ExStruct, !hw.struct<a: i4, b: ui32>>)
+# CHECK-LABEL:  hw.module @TestStruct(in %inp1 : !hw.typealias<@pycde::@ExStruct, !hw.struct<a: i4, b: ui32>>, out out1 : ui33, out out2 : !hw.typealias<@pycde::@ExStruct, !hw.struct<a: i4, b: ui32>>)
 # CHECK-NEXT:     %b = hw.struct_extract %inp1["b"] {sv.namehint = "inp1__b"} : !hw.typealias<@pycde::@ExStruct, !hw.struct<a: i4, b: ui32>>
 # CHECK-NEXT:     [[r0:%.+]] = hwarith.constant 1 : ui1
 # CHECK-NEXT:     [[r1:%.+]] = hwarith.add %b, [[r0]] : (ui32, ui1) -> ui33

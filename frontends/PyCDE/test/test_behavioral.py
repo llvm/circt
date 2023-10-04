@@ -4,7 +4,7 @@ from pycde import generator, types, Module, Input, Output
 from pycde.behavioral import If, Else, EndIf
 from pycde.testing import unittestmodule
 
-# CHECK-LABEL: hw.module @IfNestedTest(%a: ui8, %b: ui8, %cond: i1, %cond2: i1) -> (out: ui17, out2: ui24)
+# CHECK-LABEL: hw.module @IfNestedTest(in %a : ui8, in %b : ui8, in %cond : i1, in %cond2 : i1, out out : ui17, out out2 : ui24)
 # CHECK:         %0 = hwarith.mul %a, %b {sv.namehint = "a_mul_b"} : (ui8, ui8) -> ui16
 # CHECK:         %1 = comb.mux bin %cond2, %a, %b {sv.namehint = "x"} : ui8
 # CHECK:         %2 = hwarith.mul %a, %1 {sv.namehint = "v_thenvalue"} : (ui8, ui8) -> ui16
@@ -53,7 +53,7 @@ class IfNestedTest(Module):
     ports.out = v + w
 
 
-# CHECK-LABEL: hw.module @IfDefaultTest(%a: ui8, %b: ui8, %cond: i1, %cond2: i1) -> (out: ui8)
+# CHECK-LABEL: hw.module @IfDefaultTest(in %a : ui8, in %b : ui8, in %cond : i1, in %cond2 : i1, out out : ui8)
 # CHECK:         [[r1:%.+]] = comb.mux bin %cond2, %b, %a {sv.namehint = "v_thenvalue"} : ui8
 # CHECK:         [[r0:%.+]] = comb.mux bin %cond, [[r1]], %a {sv.namehint = "v"} : ui8
 # CHECK:         hw.output [[r0]] : ui8
