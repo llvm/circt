@@ -120,18 +120,30 @@ assert isinstance(obj.type, om.ClassType)
 # CHECK: Test
 print(obj.type.name)
 
+# This is the location of the `om.class @Test`
+# CHECK: loc("-":27:5)
+print(obj.get_loc())
+
 # CHECK: 42
 print(obj.field)
+
+# location of the om.class.field @field
+# CHECK: loc("-":28:7)
+print(obj.get_field_loc("field"))
+
 # CHECK: 14
 print(obj.child.foo)
 # CHECK: ('Root', 'x')
 print(obj.reference)
-# CHECK: 14
 (fst, snd) = obj.tuple
+# CHECK: 14
 print(snd)
 
 # CHECK: path
 print(obj.path)
+# location of om.class.field @path, %path : !om.path
+# CHECK: loc("-":35:7)
+print(obj.get_field_loc("path"))
 
 try:
   print(obj.tuple[3])
