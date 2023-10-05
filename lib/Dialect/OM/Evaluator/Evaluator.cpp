@@ -53,22 +53,15 @@ LogicalResult circt::om::evaluator::EvaluatorValue::finalize() {
 }
 
 Type circt::om::evaluator::EvaluatorValue::getType() const {
-  Type actualParamType;
-  if (auto *attr = dyn_cast<evaluator::AttributeValue>(this)) {
-    if (auto typedActualParam = attr->getAttr().dyn_cast_or_null<TypedAttr>())
-      actualParamType = typedActualParam.getType();
-  } else if (auto *object = dyn_cast<evaluator::ObjectValue>(this))
-    actualParamType = object->getObjectType();
-  else if (auto *list = dyn_cast<evaluator::ListValue>(this))
-    actualParamType = list->getListType();
-  else if (auto *tuple = dyn_cast<evaluator::TupleValue>(this))
-    actualParamType = tuple->getTupleType();
-  else if (auto *map = dyn_cast<evaluator::MapValue>(this))
-    actualParamType = map->getMapType();
-  else if (auto *ref = dyn_cast<evaluator::ReferenceValue>(this))
-    actualParamType = ref->getValueType();
-
-  return actualParamType;
+  return llvm::TypeSwitch<const EvaluatorValue *, Type>(this)
+      .Case<AttributeValue>([](auto *attr) -> Type {
+        return cast<TypedAttr>(attr->getAttr()).getType();
+      })
+      .Case<ObjectValue>([](auto *object) { return object->getObjectType(); })
+      .Case<ListValue>([](auto *list) { return list->getListType(); })
+      .Case<MapValue>([](auto *map) { return map->getMapType(); })
+      .Case<ReferenceValue>([](auto *ref) { return ref->getValueType(); })
+      .Case<TupleValue>([](auto *tuple) { return tuple->getTupleType(); });
 }
 
 FailureOr<evaluator::EvaluatorValuePtr>
@@ -158,7 +151,7 @@ circt::om::Evaluator::getOrCreateValue(Value value,
 FailureOr<evaluator::EvaluatorValuePtr>
 circt::om::Evaluator::evaluateObjectInstance(StringAttr className,
                                              ActualParameters actualParams,
-                                             Key instanceKey) {
+                                             ObjectKey instanceKey) {
   ClassOp cls = symbolTable.lookup<ClassOp>(className);
   if (!cls)
     return symbolTable.getOp()->emitError("unknown class name ") << className;
@@ -267,8 +260,8 @@ circt::om::Evaluator::instantiate(
   if (failed(result))
     return failure();
 
-  //  evaluateObjectInstance` has populated the worklist. Continue evaluations
-  //  unless there is a partially evaluated value.
+  // `evaluateObjectInstance` has populated the worklist. Continue evaluations
+  // unless there is a partially evaluated value.
   while (!worklist.empty()) {
     auto [value, args] = worklist.front();
     worklist.pop();

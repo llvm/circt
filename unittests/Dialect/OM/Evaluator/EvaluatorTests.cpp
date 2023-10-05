@@ -356,6 +356,16 @@ TEST(EvaluatorTests, InstantiateObjectWithFieldAccess) {
           &context, builder.getI32IntegerAttr(42)))});
 
   ASSERT_TRUE(succeeded(result));
+
+  auto fieldValue = llvm::cast<evaluator::AttributeValue>(
+                        llvm::cast<evaluator::ObjectValue>(result.value().get())
+                            ->getField(builder.getStringAttr("field"))
+                            .value()
+                            .get())
+                        ->getAs<circt::om::IntegerAttr>();
+
+  ASSERT_TRUE(fieldValue);
+  ASSERT_EQ(fieldValue.getValue().getValue(), 42);
 }
 
 TEST(EvaluatorTests, InstantiateObjectWithChildObjectMemoized) {

@@ -52,7 +52,10 @@ struct EvaluatorValue : std::enable_shared_from_this<EvaluatorValue> {
 
   // Return true the value is fully evaluated.
   bool isFullyEvaluated() const { return fullyEvaluated; }
-  void markFullyEvaluated() { fullyEvaluated = true; }
+  void markFullyEvaluated() {
+    assert(!fullyEvaluated && "should not mark twice");
+    fullyEvaluated = true;
+  }
 
   // Return a MLIR type which the value represents.
   Type getType() const;
@@ -336,14 +339,14 @@ struct Evaluator {
   using ActualParameters =
       SmallVectorImpl<std::shared_ptr<evaluator::EvaluatorValue>> *;
 
-  using Key = std::pair<Value, ActualParameters>;
+  using ObjectKey = std::pair<Value, ActualParameters>;
 
 private:
   bool isFullyEvaluated(Value value, ActualParameters key) {
     return isFullyEvaluated({value, key});
   }
 
-  bool isFullyEvaluated(Key key) {
+  bool isFullyEvaluated(ObjectKey key) {
     auto val = objects.lookup(key);
     return val && val->isFullyEvaluated();
   }
@@ -368,7 +371,7 @@ private:
   /// Instantiate an Object with its class name and actual parameters.
   FailureOr<EvaluatorValuePtr>
   evaluateObjectInstance(StringAttr className, ActualParameters actualParams,
-                         Key instanceKey = {});
+                         ObjectKey instanceObjectKey = {});
   FailureOr<EvaluatorValuePtr>
   evaluateObjectInstance(ObjectOp op, ActualParameters actualParams);
   FailureOr<EvaluatorValuePtr>
@@ -389,17 +392,17 @@ private:
   /// Used to look up class definitions.
   SymbolTable symbolTable;
 
-  /// This stores a
+  /// This uniquely stores vectors that represent parameters.
   SmallVector<
       std::unique_ptr<SmallVector<std::shared_ptr<evaluator::EvaluatorValue>>>>
       actualParametersBuffers;
 
   /// A worklist that tracks values which needs to be fully evaluated.
-  std::queue<Key> worklist;
+  std::queue<ObjectKey> worklist;
 
   /// Evaluator value storage. Return an evaluator value for the given
   /// instantiation context (a pair of Value and parameters).
-  DenseMap<Key, std::shared_ptr<evaluator::EvaluatorValue>> objects;
+  DenseMap<ObjectKey, std::shared_ptr<evaluator::EvaluatorValue>> objects;
 };
 
 /// Helper to enable printing objects in Diagnostics.
