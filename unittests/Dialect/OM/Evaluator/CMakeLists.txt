@@ -7,4 +7,5 @@ target_link_libraries(CIRCTOMEvaluatorTests
   CIRCTOMEvaluator
   CIRCTOM
   MLIRIR
+  MLIRParser
 )
