@@ -485,6 +485,28 @@ def OutputOp : HWOp<"output", [Terminator, HasParent<"HWModuleOp">,
   let hasVerifier = 1;
 }
 
+def PathToHereOp : HWOp<"path.to_here", [Symbol, Pure]> {
+  let summary = "Path to current location operation";
+  let description = [{
+    The `hw.path.to_here` operation represents a path through the instance
+    hierarchy which starts from the top-level module and ends at the current
+    instance wherein the `hw.path.to_here` is located. The operation can be
+    lowered to `hw.hierpath` and is useful in cases where we want to track the
+    absolute path of an instance in the design, but not yet want to use
+    `hw.hierpath` operations due to the extra overhead involved in maintaining
+    said op if the instance hierarchy is modified.
+
+    The operation (and pass) should only be used in cases where modules are
+    expected to be unique within the design, i.e. only a single instance exists
+    for any given module in between the module instance and the top level module
+    (note: this does not imply that the entire module hierarchy must be
+    elaborated); thus the user must either ensure this by design, or elaborate
+    parts of the design accordingly.
+  }];
+  let arguments = (ins SymbolNameAttr:$sym_name);
+  let assemblyFormat = "$sym_name attr-dict";
+}
+
 def HierPathOp : HWOp<"hierpath",
       [IsolatedFromAbove, Symbol,
        DeclareOpInterfaceMethods<InnerRefUserOpInterface>]> {
