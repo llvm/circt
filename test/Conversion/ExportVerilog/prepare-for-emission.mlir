@@ -287,7 +287,7 @@ module attributes {circt.loweringOptions = "disallowLocalVariables"} {
     sv.alwayscomb {
       // CHECK-NEXT: sv.xmr.ref
       %0 = sv.xmr.ref @xmr : !hw.inout<i1>
-      %1 = sv.read_inout %0 : !hw.inout<i1>
+      sv.verbatim "{{0}}" (%0) : !hw.inout<i1>
     }
   }
   hw.hierpath @xmr [@Foo::@a]
