@@ -272,3 +272,25 @@ hw.module @Issue5605(in %a: i1, in %b: i1, in %clock: i1, in %reset: i1) {
   sv.assert.concurrent posedge %clock, %reset label "assert_1" message "bar"(%1) : i2
   hw.output
 }
+
+// -----
+
+// The following use of `sv.xmr.ref` inside a procedural block would trigger an
+// assertion in `PrepareForEmission`, since the op was not marked as side-effect
+// free.
+//
+// CHECK-LABEL: hw.module @Foo
+module attributes {circt.loweringOptions = "disallowLocalVariables"} {
+  hw.module @Foo(in %a: i1) {
+    hw.wire %a sym @a : i1
+    %b = sv.reg : !hw.inout<i1>
+    // CHECK: sv.alwayscomb
+    sv.alwayscomb {
+      // CHECK-NEXT: sv.xmr.ref
+      %0 = sv.xmr.ref @xmr : !hw.inout<i1>
+      %1 = sv.read_inout %0 : !hw.inout<i1>
+      sv.bpassign %b, %1 : i1
+    }
+  }
+  hw.hierpath @xmr [@Foo::@a]
+}
