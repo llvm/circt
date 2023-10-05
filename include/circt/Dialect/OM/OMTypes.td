@@ -88,10 +88,24 @@ def StringType : TypeDef<OMDialect, "String", []> {
   let mnemonic = "string";
 }
 
+def BasePathType : TypeDef<OMDialect, "BasePath", []> {
+  let summary = "A fragment of a path to a hardware component";
+  let mnemonic = "basepath";
+}
+
 def PathType : TypeDef<OMDialect, "Path", []> {
   let summary = "A path to a hardware component";
-
   let mnemonic = "path";
+}
+
+def FrozenBasePathType : TypeDef<OMDialect, "FrozenBasePath", []> {
+  let summary = "A frozen fragment of a path to a hardware component";
+  let mnemonic = "frozenbasepath";
+}
+
+def FrozenPathType : TypeDef<OMDialect, "FrozenPath", []> {
+  let summary = "A frozen path to a hardware component";
+  let mnemonic = "frozenpath";
 }
 
 def EnumType : TypeDef<OMDialect, "Enum", []> {

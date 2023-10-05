@@ -108,8 +108,7 @@ OMEvaluatorValue omEvaluatorInstantiate(OMEvaluator evaluator,
     cppActualParams.push_back(unwrap(actualParams[i]));
 
   // Invoke the Evaluator to instantiate the Object.
-  FailureOr<std::shared_ptr<evaluator::ObjectValue>> result =
-      cppEvaluator->instantiate(cppClassName, cppActualParams);
+  auto result = cppEvaluator->instantiate(cppClassName, cppActualParams);
 
   // If instantiation failed, return a null Object. A Diagnostic will be emitted
   // in this case.

@@ -110,7 +110,10 @@ def XMROp : SVOp<"xmr", []> {
   let assemblyFormat = "(`isRooted` $isRooted^)? custom<XMRPath>($path, $terminal) attr-dict `:` qualified(type($result))";
 }
 
-def XMRRefOp : SVOp<"xmr.ref", [DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
+def XMRRefOp : SVOp<"xmr.ref", [
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+  Pure
+]> {
   let summary = "Encode a reference to something with a hw.hierpath.";
   let description = [{
     This represents a hierarchical path, but using something which the compiler

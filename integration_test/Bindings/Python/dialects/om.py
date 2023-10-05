@@ -185,3 +185,7 @@ for field_name, data in obj:
   if isinstance(data, om.Object):
     object_dict[data] = field_name
 assert len(object_dict) == 2
+
+obj = evaluator.instantiate("Test", 41)
+# CHECK: 41
+print(obj.field)
