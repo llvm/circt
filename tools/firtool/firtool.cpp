@@ -45,9 +45,11 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassInstrumentation.h"
 #include "mlir/Pass/PassManager.h"
+#include "mlir/Pass/PassRegistry.h"
 #include "mlir/Support/FileUtilities.h"
 #include "mlir/Support/Timing.h"
 #include "mlir/Support/ToolUtilities.h"
+#include "mlir/Tools/Plugins/PassPlugin.h"
 #include "mlir/Transforms/Passes.h"
 #include "llvm/Support/Chrono.h"
 #include "llvm/Support/CommandLine.h"
@@ -127,6 +129,16 @@ static cl::opt<bool>
                         cl::init(true), cl::cat(mainCategory));
 
 static firtool::FirtoolOptions firtoolOptions(mainCategory);
+
+static cl::list<std::string>
+    passPlugins("load-pass-plugin", cl::desc("Load passes from plugin library"),
+                cl::cat(mainCategory));
+
+static cl::opt<std::string>
+    lowFIRRTLPassPlugin("low-firrtl-pass-plugin",
+                        cl::desc("Insert passes before lowering to HW. Specify "
+                                 "passes with MLIR textual format."),
+                        cl::init(""), cl::cat(mainCategory));
 
 enum OutputFormatKind {
   OutputParseOnly,
@@ -286,6 +298,7 @@ static LogicalResult processBuffer(
         std::make_unique<
             VerbosePassInstrumentation<firrtl::CircuitOp, mlir::ModuleOp>>(
             "firtool"));
+
   if (failed(applyPassManagerCLOptions(pm)))
     return failure();
 
@@ -303,6 +316,10 @@ static LogicalResult processBuffer(
   if (failed(firtool::populateCHIRRTLToLowFIRRTL(pm, firtoolOptions, *module,
                                                  inputFilename)))
     return failure();
+
+  if (!StringRef(lowFIRRTLPassPlugin).empty())
+    if (failed(parsePassPipeline(StringRef(lowFIRRTLPassPlugin), pm)))
+      return failure();
 
   // Lower if we are going to verilog or if lowering was specifically requested.
   if (outputFormat != OutputIRFir) {
@@ -466,6 +483,7 @@ processInput(MLIRContext &context, TimingScope &ts,
 /// command line options are parsed and LLVM/MLIR are all set up and ready to
 /// go.
 static LogicalResult executeFirtool(MLIRContext &context) {
+
   // Create the timing manager we use to sample execution times.
   DefaultTimingManager tm;
   applyDefaultTimingManagerCLOptions(tm);
@@ -552,6 +570,17 @@ int main(int argc, char **argv) {
   // Hide default LLVM options, other than for this tool.
   // MLIR options are added below.
   cl::HideUnrelatedOptions(mainCategory);
+
+  /// Set the callback to load a pass plugin.
+  passPlugins.setCallback([&](const std::string &pluginPath) {
+    auto plugin = PassPlugin::load(pluginPath);
+    if (!plugin) {
+      errs() << "Failed to load passes from '" << pluginPath
+             << "'. Request ignored.\n";
+      return;
+    }
+    plugin.get().registerPassRegistryCallbacks();
+  });
 
   // Register passes before parsing command-line options, so that they are
   // available for use with options like `--mlir-print-ir-before`.
