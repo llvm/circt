@@ -191,7 +191,7 @@ hw.module @Trivial(in %clock: !seq.clock, in %i0: i4, in %reset: i1, out out: i4
   // CHECK: [[RES0:%.+]] = arc.state @[[TRIVIAL_ARC]](%i0) clock %clock reset %reset lat 1 {names = ["foo"]
   // CHECK-NEXT: hw.output [[RES0:%.+]]
   %0 = hw.constant 0 : i4
-  %foo = seq.compreg %i0, %clock, %reset, %0 : i4
+  %foo = seq.compreg %i0, %clock reset %reset, %0 : i4
   hw.output %foo : i4
 }
 // CHECK-NEXT: }
@@ -210,8 +210,8 @@ hw.module @NonTrivial(in %clock: !seq.clock, in %i0: i4, in %reset1: i1, in %res
   // CHECK-NEXT: [[RES3:%.+]] = arc.state @[[NONTRIVIAL_ARC_1]](%i0) clock %clock reset %reset2 lat 1 {names = ["bar"]
   // CHECK-NEXT: hw.output [[RES2]], [[RES3]]
   %0 = hw.constant 0 : i4
-  %foo = seq.compreg %i0, %clock, %reset1, %0 : i4
-  %bar = seq.compreg %i0, %clock, %reset2, %0 : i4
+  %foo = seq.compreg %i0, %clock reset %reset1, %0 : i4
+  %bar = seq.compreg %i0, %clock reset %reset2, %0 : i4
   hw.output %foo, %bar : i4, i4
 }
 // CHECK-NEXT: }
