@@ -593,7 +593,26 @@ circt::firrtl::getFieldName(const FieldRef &fieldRef, bool nameSafe) {
       // Recurse in to the element type.
       type = element.type;
       localID = localID - bundleType.getFieldID(index);
+    } else if (auto bundleType = type_dyn_cast<OpenBundleType>(type)) {
+      auto index = bundleType.getIndexForFieldID(localID);
+      // Add the current field string, and recurse into a subfield.
+      auto &element = bundleType.getElements()[index];
+      if (!name.empty())
+        name += nameSafe ? "_" : ".";
+      name += element.name.getValue();
+      // Recurse in to the element type.
+      type = element.type;
+      localID = localID - bundleType.getFieldID(index);
     } else if (auto vecType = type_dyn_cast<FVectorType>(type)) {
+      auto index = vecType.getIndexForFieldID(localID);
+      name += nameSafe ? "_" : "[";
+      name += std::to_string(index);
+      if (!nameSafe)
+        name += "]";
+      // Recurse in to the element type.
+      type = vecType.getElementType();
+      localID = localID - vecType.getFieldID(index);
+    } else if (auto vecType = type_dyn_cast<OpenVectorType>(type)) {
       auto index = vecType.getIndexForFieldID(localID);
       name += nameSafe ? "_" : "[";
       name += std::to_string(index);
