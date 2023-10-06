@@ -118,6 +118,10 @@ void walkGroundTypes(FIRRTLType firrtlType,
 // Inner symbol and InnerRef helpers.
 //===----------------------------------------------------------------------===//
 
+/// Return the inner sym target for the specified value and fieldID.
+/// If root is a blockargument, this must be FModuleLike.
+hw::InnerSymTarget getTargetFor(FieldRef ref);
+
 /// Ensure that the the InnerSymAttr has a symbol on the field specified.
 /// Returns the updated InnerSymAttr as well as the name of the symbol attached
 /// to the specified field.

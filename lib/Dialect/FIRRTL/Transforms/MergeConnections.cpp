@@ -121,9 +121,14 @@ bool MergeConnection::peelConnect(StrictConnectOp connect) {
   if (count != subConnections.size())
     return false;
 
-  changed = true;
-
   auto parentType = parent.getType();
+  auto parentBaseTy = type_dyn_cast<FIRRTLBaseType>(parentType);
+
+  // Reject if not passive, we don't support aggregate constants for these.
+  if (!parentBaseTy || !parentBaseTy.isPassive())
+    return false;
+
+  changed = true;
 
   auto getMergedValue = [&](auto aggregateType) {
     SmallVector<Value> operands;
@@ -229,8 +234,7 @@ bool MergeConnection::peelConnect(StrictConnectOp connect) {
 
   // Emit strict connect if possible, fallback to normal connect.
   // Don't use emitConnect(), will split the connect apart.
-  auto parentBaseTy = type_cast<FIRRTLBaseType>(parentType);
-  if (parentBaseTy.isPassive() && !parentBaseTy.hasUninferredWidth())
+  if (!parentBaseTy.hasUninferredWidth())
     builder->create<StrictConnectOp>(connect.getLoc(), parent, merged);
   else
     builder->create<ConnectOp>(connect.getLoc(), parent, merged);
