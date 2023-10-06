@@ -40,7 +40,11 @@ msft.instance.hierarchy @reg "bar" {
 // CHECK: hw.hierpath @instref_3 [@reg::@reg]
 // CHECK-DAG: msft.pd.reg_location ref @instref_3 i4 [<3, 4, 5>, *, *, *]
 
-
+hw.hierpath @reg.reg [@reg::@reg]
+hw.hierpath @reg.reg2 [@reg::@reg2]
+msft.instance.hierarchy @reg "multicycle" {
+  msft.pd.multicycle 2 @reg.reg -> @reg.reg2
+}
 
 hw.module.extern @Foo()
 
@@ -76,6 +80,7 @@ hw.module @deeper () {
 
 hw.module @reg (in %input : i4, in %clk : !seq.clock) {
   %reg = seq.compreg sym @reg %input, %clk  : i4
+  %reg2 = seq.compreg sym @reg2 %input, %clk  : i4
 }
 // TCL-LABEL: proc reg_0_foo_config
 // TCL: set_location_assignment FF_X1_Y2_N3 -to $parent|reg_0[1]
@@ -84,3 +89,6 @@ hw.module @reg (in %input : i4, in %clk : !seq.clock) {
 
 // TCL-LABEL: proc reg_0_bar_config
 // TCL: set_location_assignment FF_X3_Y4_N5 -to $parent|reg_0[0]
+
+// TCL-LABEL: proc reg_0_multicycle_config { parent } {
+// TCL: set_multicycle_path -hold 1 -setup 2 -from [get_registers {$parent|reg_0}] -to [get_registers {$parent|reg2}]

@@ -80,7 +80,7 @@ LogicalResult LowerInstancesPass::lower(DynamicInstanceOp inst,
     hierBlock.insert(&op);
 
     // Assign a ref for ops which need it.
-    if (auto specOp = dyn_cast<DynInstDataOpInterface>(op)) {
+    if (auto specOp = dyn_cast<UnaryDynInstDataOpInterface>(op)) {
       assert(ref);
       specOp.setPathOp(ref);
     }
