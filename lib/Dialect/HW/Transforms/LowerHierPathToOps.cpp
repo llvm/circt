@@ -1,11 +1,11 @@
-//===- LowerPathToHereOps.cpp - Lower hw.path.to_here ops -------*- C++ -*-===//
+//===- LowerHierPathToOps.cpp - Lower hw.hierpath.to ops --------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //===----------------------------------------------------------------------===//
 //
-// Lowers `hw.path.to_here` operations to `hw.hierpath` ops.
+// Lowers `hw.hierpath.to` operations to `hw.hierpath` ops.
 //
 //===----------------------------------------------------------------------===//
 
@@ -20,27 +20,32 @@ using namespace hw;
 
 namespace {
 
-struct PathToHereOpConversionPattern
-    : public OpConversionPattern<hw::PathToHereOp> {
-  PathToHereOpConversionPattern(MLIRContext *ctx,
+struct HierPathToOpConversionPattern
+    : public OpConversionPattern<hw::HierPathToOp> {
+  HierPathToOpConversionPattern(MLIRContext *ctx,
                                 igraph::InstanceGraph &instanceGraph)
       : OpConversionPattern(ctx), instanceGraph(instanceGraph) {}
 
   LogicalResult
-  matchAndRewrite(hw::PathToHereOp op, OpAdaptor adaptor,
+  matchAndRewrite(hw::HierPathToOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto parentOp = dyn_cast<igraph::ModuleOpInterface>(op->getParentOp());
     if (!parentOp)
-      return op.emitError("hw.path.to_here must be in an op implementing "
+      return op.emitError("hw.hierpath.to must be in an op implementing "
                           "igraph::ModuleOpInterface.");
+
+    // Process the inner level.
     igraph::InstanceGraphNode *parentNode = instanceGraph.lookup(parentOp);
-    llvm::SmallVector<Attribute> path;
+    llvm::SmallVector<Attribute> path{
+        hw::InnerRefAttr::get(parentNode->getModule().getModuleNameAttr(),
+                              op.getTargetAttr().getAttr())};
+
     while (parentNode) {
       // Verify that exactly one instance of the parent exists.
       size_t nUses = parentNode->getNumUses();
       if (nUses > 1) {
         auto err = op.emitError(
-            "cannot lower path.to_here ops in module hierarchies with "
+            "cannot lower hierpath.to ops in module hierarchies with "
             "multiple instantiations.");
         for (igraph::InstanceRecord *use : parentNode->uses())
           err.attachNote(use->getInstance().getLoc())
@@ -48,10 +53,6 @@ struct PathToHereOpConversionPattern
         return err;
       }
       if (nUses == 0) {
-        if (path.empty())
-          return op.emitError(
-              "cannot lower path.to_here ops in modules with no "
-              "instantiations.");
         // End of hierarchy.
         break;
       }
@@ -80,29 +81,29 @@ struct PathToHereOpConversionPattern
   }
 
   igraph::InstanceGraph &instanceGraph;
-};
+}; // namespace
 
-struct LowerPathToHereOpsPass
-    : public LowerPathToHereOpsBase<LowerPathToHereOpsPass> {
+struct LowerHierPathToOpsPass
+    : public LowerHierPathToOpsBase<LowerHierPathToOpsPass> {
   void runOnOperation() override;
 };
 } // namespace
 
-void LowerPathToHereOpsPass::runOnOperation() {
+void LowerHierPathToOpsPass::runOnOperation() {
   Operation *parent = getOperation();
   igraph::InstanceGraph &instanceGraph = getAnalysis<igraph::InstanceGraph>();
 
   ConversionTarget target(getContext());
   target.addLegalDialect<hw::HWDialect>();
-  target.addIllegalOp<hw::PathToHereOp>();
+  target.addIllegalOp<hw::HierPathToOp>();
 
   RewritePatternSet patterns(&getContext());
-  patterns.add<PathToHereOpConversionPattern>(&getContext(), instanceGraph);
+  patterns.add<HierPathToOpConversionPattern>(&getContext(), instanceGraph);
 
   if (failed(applyPartialConversion(parent, target, std::move(patterns))))
     signalPassFailure();
 }
 
-std::unique_ptr<mlir::Pass> circt::hw::createLowerPathToHereOpsPass() {
-  return std::make_unique<LowerPathToHereOpsPass>();
+std::unique_ptr<mlir::Pass> circt::hw::createLowerHierPathToOpsPass() {
+  return std::make_unique<LowerHierPathToOpsPass>();
 }

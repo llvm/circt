@@ -58,9 +58,9 @@ def VerifyInnerRefNamespace : Pass<"hw-verify-irn"> {
   let constructor =  "circt::hw::createVerifyInnerRefNamespacePass()";
 }
 
-def LowerPathToHereOps : Pass<"hw-lower-path-to-here"> {
-  let summary = "Lower hw.path.here operations to hw.hierpath operations.";
-  let constructor =  "circt::hw::createLowerPathToHereOpsPass()";
+def LowerHierPathToOps : Pass<"hw-lower-hierpathto-ops"> {
+  let summary = "Lower hw.hierpath.to operations to hw.hierpath operations.";
+  let constructor =  "circt::hw::createLowerHierPathToOpsPass()";
 }
 
 #endif // CIRCT_DIALECT_HW_PASSES_TD

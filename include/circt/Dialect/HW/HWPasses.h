@@ -27,7 +27,7 @@ std::unique_ptr<mlir::Pass> createPrintHWModuleGraphPass();
 std::unique_ptr<mlir::Pass> createFlattenIOPass();
 std::unique_ptr<mlir::Pass> createVerifyInnerRefNamespacePass();
 std::unique_ptr<mlir::Pass> createHWLegalizeNamesPass();
-std::unique_ptr<mlir::Pass> createLowerPathToHereOpsPass();
+std::unique_ptr<mlir::Pass> createLowerHierPathToOpsPass();
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION

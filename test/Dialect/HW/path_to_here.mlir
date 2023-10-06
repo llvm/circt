@@ -1,8 +1,10 @@
-// RUN: circt-opt --hw-lower-path-to-here --split-input-file --verify-diagnostics %s | FileCheck %s
+// RUN: circt-opt --hw-lower-hierpathto-ops --split-input-file --verify-diagnostics %s | FileCheck %s
 
 hw.module @Root() {
-  // CHECK: hw.hierpath @sym [@ParentOne::@root]
-  hw.path.to_here @sym
+  // CHECK: hw.hierpath @sym [@ParentOne::@root, @Root::@w]
+  hw.hierpath.to @sym(@w)
+  %c0 = hw.constant false
+  hw.wire %c0 sym @w : i1
 }
 
 hw.module @ParentOne() {
@@ -12,8 +14,10 @@ hw.module @ParentOne() {
 // -----
 
 hw.module @Root() {
-  // CHECK: hw.hierpath @sym [@ParentTwo::@parentOne, @ParentOne::@root]
-  hw.path.to_here @sym
+  // CHECK: hw.hierpath @sym [@ParentTwo::@parentOne, @ParentOne::@root, @Root::@w]
+  hw.hierpath.to @sym(@w)
+  %c0 = hw.constant false
+  hw.wire %c0 sym @w : i1
 }
 
 hw.module @ParentOne() {
@@ -27,9 +31,9 @@ hw.module @ParentTwo() {
 // -----
 
 hw.module @NoParent() {
-  // expected-error @below {{cannot lower path.to_here ops in modules with no instantiations.}}
-  // expected-error @below {{failed to legalize operation 'hw.path.to_here' that was explicitly marked illegal}}
-  hw.path.to_here @sym
+  hw.hierpath.to @sym(@w)
+  %c0 = hw.constant false
+  hw.wire %c0 sym @w : i1
 }
 
 // -----
@@ -37,9 +41,11 @@ hw.module @NoParent() {
 // Test non-unique instance hierarchy at the first level
 
 hw.module @Root() {
-  // expected-error @below {{cannot lower path.to_here ops in module hierarchies with multiple instantiations.}}
-  // expected-error @below {{failed to legalize operation 'hw.path.to_here' that was explicitly marked illegal}}
-  hw.path.to_here @sym
+  // expected-error @below {{cannot lower hierpath.to ops in module hierarchies with multiple instantiations.}}
+  // expected-error @below {{failed to legalize operation 'hw.hierpath.to' that was explicitly marked illegal}}
+  hw.hierpath.to @sym(@w)
+  %c0 = hw.constant false
+  hw.wire %c0 sym @w : i1
 }
 
 hw.module @FirstUser() {
@@ -62,9 +68,11 @@ hw.module @Top() {
 // Test non-unique instance hierarchy at the second level.
 
 hw.module @Root() {
-  // expected-error @below {{cannot lower path.to_here ops in module hierarchies with multiple instantiations.}}
-  // expected-error @below {{failed to legalize operation 'hw.path.to_here' that was explicitly marked illegal}}
-  hw.path.to_here @sym
+  // expected-error @below {{cannot lower hierpath.to ops in module hierarchies with multiple instantiations.}}
+  // expected-error @below {{failed to legalize operation 'hw.hierpath.to' that was explicitly marked illegal}}
+  hw.hierpath.to @sym(@w)
+  %c0 = hw.constant false
+  hw.wire %c0 sym @w : i1
 }
 
 hw.module @RootParent() {
