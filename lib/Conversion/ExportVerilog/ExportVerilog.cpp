@@ -235,7 +235,8 @@ static StringRef getPortVerilogName(Operation *module, size_t portArgNum) {
 static StringRef getInputPortVerilogName(Operation *module, size_t portArgNum) {
   auto hml = cast<HWModuleLike>(module);
   return getPortVerilogName(
-      module, ModulePortInfo(hml.getPortList()).atInput(portArgNum));
+      module,
+      hml.getPort(hml.getHWModuleType().getPortIdForInputId(portArgNum)));
 }
 
 /// This predicate returns true if the specified operation is considered a
