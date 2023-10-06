@@ -228,7 +228,7 @@ static StringRef getPortVerilogName(Operation *module, PortInfo port) {
 /// Return the verilog name of the port for the module.
 static StringRef getPortVerilogName(Operation *module, size_t portArgNum) {
   auto htmo = cast<HWModuleLike>(module);
-  return getPortVerilogName(module, htmo.getPortList()[portArgNum]);
+  return getPortVerilogName(module, htmo.getPort(portArgNum));
 }
 
 /// Return the verilog name of the port for the module.
