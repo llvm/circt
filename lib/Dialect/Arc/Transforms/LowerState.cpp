@@ -592,7 +592,7 @@ LogicalResult ModuleLowering::lowerExtModule(InstanceOp instOp) {
 
   // Lower the inputs of the extmodule as state that is only written.
   for (auto [operand, name] :
-       llvm::zip(instOp.getOperands(), instOp.getArgNames())) {
+       llvm::zip(instOp.getOperands(), instOp.getModuleType().getInputNames())) {
     LLVM_DEBUG(llvm::dbgs()
                << "  - Input " << name << " : " << operand.getType() << "\n");
     auto intType = operand.getType().dyn_cast<IntegerType>();
@@ -614,7 +614,7 @@ LogicalResult ModuleLowering::lowerExtModule(InstanceOp instOp) {
 
   // Lower the outputs of the extmodule as state that is only read.
   for (auto [result, name] :
-       llvm::zip(instOp.getResults(), instOp.getResultNames())) {
+       llvm::zip(instOp.getResults(), instOp.getModuleType().getOutputNames())) {
     LLVM_DEBUG(llvm::dbgs()
                << "  - Output " << name << " : " << result.getType() << "\n");
     auto intType = result.getType().dyn_cast<IntegerType>();

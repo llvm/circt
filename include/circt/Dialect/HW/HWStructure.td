@@ -404,8 +404,8 @@ def InstanceOp : HWOp<"instance", [
 
   let arguments = (ins StrAttr:$instanceName,
                        FlatSymbolRefAttr:$moduleName,
+                       TypeAttrOf<ModuleType>:$moduleType,
                        Variadic<AnyType>:$inputs,
-                       StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
                        ParamDeclArrayAttr:$parameters,
                        OptionalAttr<InnerSymAttr>:$inner_sym);
   let results = (outs Variadic<AnyType>:$results);
@@ -442,14 +442,10 @@ def InstanceOp : HWOp<"instance", [
     void setResultName(size_t i, StringAttr name);
 
     /// Change the names of all the input ports.
-    void setInputNames(ArrayAttr names) {
-      setArgNamesAttr(names);
-    }
+    void setInputNames(ArrayRef<Attribute> names);
 
     /// Change the names of all the result ports.
-    void setOutputNames(ArrayAttr names) {
-      setResultNamesAttr(names);
-    }
+    void setOutputNames(ArrayRef<Attribute> names);
 
     /// Lookup the module or extmodule for the symbol.  This returns null on
     /// invalid IR.

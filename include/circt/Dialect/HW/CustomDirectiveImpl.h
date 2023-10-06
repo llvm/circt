@@ -33,7 +33,7 @@ parseInputPortList(OpAsmParser &parser,
 
 /// Print a list of instance input ports.
 void printInputPortList(OpAsmPrinter &p, Operation *op, OperandRange inputs,
-                        TypeRange inputTypes, ArrayAttr inputNames);
+                        TypeRange inputTypes, ArrayRef<Attribute> inputNames);
 
 //===----------------------------------------------------------------------===//
 // OutputPortList Custom Directive
@@ -48,7 +48,7 @@ ParseResult parseOutputPortList(OpAsmParser &parser,
 
 /// Print a list of instance output ports.
 void printOutputPortList(OpAsmPrinter &p, Operation *op, TypeRange resultTypes,
-                         ArrayAttr resultNames);
+                         ArrayRef<Attribute> resultNames);
 
 //===----------------------------------------------------------------------===//
 // OptionalParameterList Custom Directive

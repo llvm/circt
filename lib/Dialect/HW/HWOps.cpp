@@ -500,23 +500,6 @@ bool hw::isAnyModuleOrInstance(Operation *moduleOrInstance) {
   return isa<HWModuleLike, InstanceOp>(moduleOrInstance);
 }
 
-/// Return the signature for a module as a function type from the module itself
-/// or from an hw::InstanceOp.
-FunctionType hw::getModuleType(Operation *moduleOrInstance) {
-  if (auto instance = dyn_cast<InstanceOp>(moduleOrInstance)) {
-    SmallVector<Type> inputs(instance->getOperandTypes());
-    SmallVector<Type> results(instance->getResultTypes());
-    return FunctionType::get(instance->getContext(), inputs, results);
-  }
-
-  if (auto mod = dyn_cast<HWModuleLike>(moduleOrInstance))
-    return mod.getHWModuleType().getFuncType();
-
-  return cast<mlir::FunctionOpInterface>(moduleOrInstance)
-      .getFunctionType()
-      .cast<FunctionType>();
-}
-
 /// Return the name to use for the Verilog module that we're referencing
 /// here.  This is typically the symbol, but can be overridden with the
 /// verilogName attribute.
@@ -1412,12 +1395,10 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
     parameters = builder.getArrayAttr({});
 
   auto mod = cast<hw::HWModuleLike>(module);
-  auto argNames = builder.getArrayAttr(mod.getInputNames());
-  auto resultNames = builder.getArrayAttr(mod.getOutputNames());
   FunctionType modType = mod.getHWModuleType().getFuncType();
-  build(builder, result, modType.getResults(), name,
-        FlatSymbolRefAttr::get(SymbolTable::getSymbolName(module)), inputs,
-        argNames, resultNames, parameters, innerSym);
+  build(builder, result, modType.getResults(), name, 
+        FlatSymbolRefAttr::get(SymbolTable::getSymbolName(module)), TypeAttr::get(mod.getHWModuleType()), inputs,
+         parameters, innerSym);
 }
 
 std::optional<size_t> InstanceOp::getTargetResultIndex() {
@@ -1431,8 +1412,8 @@ Operation *InstanceOp::getReferencedModuleSlow() {
 
 LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   return instance_like_impl::verifyInstanceOfHWModule(
-      *this, getModuleNameAttr(), getInputs(), getResultTypes(), getArgNames(),
-      getResultNames(), getParameters(), symbolTable);
+      *this, getModuleNameAttr(), getInputs(), getResultTypes(), 
+      getModuleType(), getParameters(), symbolTable);
 }
 
 LogicalResult InstanceOp::verify() {
@@ -1486,8 +1467,6 @@ ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
     return failure();
   }
 
-  result.addAttribute("argNames", argNames);
-  result.addAttribute("resultNames", resultNames);
   result.addAttribute("parameters", parameters);
   result.addTypes(allResultTypes);
   return success();
@@ -1504,51 +1483,72 @@ void InstanceOp::print(OpAsmPrinter &p) {
   p.printAttributeWithoutType(getModuleNameAttr());
   printOptionalParameterList(p, *this, getParameters());
   printInputPortList(p, *this, getInputs(), getInputs().getTypes(),
-                     getArgNames());
+                     getModuleType().getInputNames());
   p << " -> ";
-  printOutputPortList(p, *this, getResultTypes(), getResultNames());
+  printOutputPortList(p, *this, getResultTypes(), getModuleType().getOutputNames());
 
   p.printOptionalAttrDict(
       (*this)->getAttrs(),
       /*elidedAttrs=*/{"instanceName",
                        InnerSymbolTable::getInnerSymbolAttrName(), "moduleName",
-                       "argNames", "resultNames", "parameters"});
+                       "moduleType", "parameters"});
 }
 
-/// Return the name of the specified input port or null if it cannot be
-/// determined.
+/// Return the name of the specified input port.
 StringAttr InstanceOp::getArgumentName(size_t idx) {
-  return instance_like_impl::getName(getArgNames(), idx);
+  return getModuleType().getInputNameAttr(idx);
 }
 
 /// Return the name of the specified result or null if it cannot be
 /// determined.
 StringAttr InstanceOp::getResultName(size_t idx) {
-  return instance_like_impl::getName(getResultNames(), idx);
+  return getModuleType().getOutputNameAttr(idx);
 }
 
 /// Change the name of the specified input port.
 void InstanceOp::setArgumentName(size_t i, StringAttr name) {
-  setInputNames(instance_like_impl::updateName(getArgNames(), i, name));
+  auto names = getModuleType().getPortNamesStr();
+  names[getModuleType().getPortIdForInputId(i)] = name;
+  setModuleType(getModuleType().rebuildWithNames(names));
 }
 
 /// Change the name of the specified output port.
 void InstanceOp::setResultName(size_t i, StringAttr name) {
-  setOutputNames(instance_like_impl::updateName(getResultNames(), i, name));
+  auto names = getModuleType().getPortNamesStr();
+  names[getModuleType().getPortIdForOutputId(i)] = name;
+  setModuleType(getModuleType().rebuildWithNames(names));
+}
+
+/// Change the name of the input ports.
+void InstanceOp::setInputNames(ArrayRef<Attribute> names) {
+  auto allNames = getModuleType().getPortNamesStr();
+  assert(getModuleType().getNumInputs() == names.size());
+  for (size_t i = 0, e = names.size(); i < e; ++i)
+    allNames[getModuleType().getPortIdForInputId(i)] = cast<StringAttr>(names[i]);
+  setModuleType(getModuleType().rebuildWithNames(allNames));
+}
+
+/// Change the name of the output ports.
+void InstanceOp::setOutputNames(ArrayRef<Attribute> names) {
+  auto allNames = getModuleType().getPortNamesStr();
+  assert(getModuleType().getNumOutputs() == names.size());
+  for (size_t i = 0, e = names.size(); i < e; ++i)
+    allNames[getModuleType().getPortIdForOutputId(i)] = cast<StringAttr>(names[i]);
+  setModuleType(getModuleType().rebuildWithNames(allNames));
 }
 
 /// Suggest a name for each result value based on the saved result names
 /// attribute.
 void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   instance_like_impl::getAsmResultNames(setNameFn, getInstanceName(),
-                                        getResultNames(), getResults());
+                                        getModuleType().getOutputNames(), getResults());
 }
 
 SmallVector<PortInfo> InstanceOp::getPortList() {
   SmallVector<PortInfo> ports;
   auto emptyDict = DictionaryAttr::get(getContext());
-  auto argNames = (*this)->getAttrOfType<ArrayAttr>("argNames");
-  auto argTypes = getModuleType(*this).getInputs();
+  auto argTypes = getModuleType().getInputTypes();
+  auto argNames = getModuleType().getInputNames();
   auto argLocs = (*this)->getAttrOfType<ArrayAttr>("argLocs");
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
     auto type = argTypes[i];
@@ -1566,8 +1566,8 @@ SmallVector<PortInfo> InstanceOp::getPortList() {
         {{argNames[i].cast<StringAttr>(), type, direction}, i, emptyDict, loc});
   }
 
-  auto resultNames = (*this)->getAttrOfType<ArrayAttr>("resultNames");
-  auto resultTypes = getModuleType(*this).getResults();
+  auto resultTypes = getModuleType().getOutputTypes();
+  auto resultNames = getModuleType().getOutputNames();
   auto resultLocs = (*this)->getAttrOfType<ArrayAttr>("resultLocs");
   for (unsigned i = 0, e = resultTypes.size(); i < e; ++i) {
     LocationAttr loc;

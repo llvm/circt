@@ -252,17 +252,17 @@ struct ContainerInstanceOpConversionPattern
 
     // Gather arg and res names
     // TODO: @mortbopet - this should be part of ModulePortInfo
-    llvm::SmallVector<Attribute> argNames, resNames;
-    llvm::transform(cpi.hwPorts->getInputs(), std::back_inserter(argNames),
-                    [](auto port) { return port.name; });
-    llvm::transform(cpi.hwPorts->getOutputs(), std::back_inserter(resNames),
-                    [](auto port) { return port.name; });
+    llvm::SmallVector<hw::ModulePort> ports;
+    llvm::transform(cpi.hwPorts->getInputs(), std::back_inserter(ports),
+                    [](auto port) { return hw::ModulePort{port.name, port.type, hw::ModulePort::Direction::Input};});
+    llvm::transform(cpi.hwPorts->getOutputs(), std::back_inserter(ports),
+                    [](auto port) {return hw::ModulePort{ port.name, port.type, hw::ModulePort::Direction::Output};});
 
     // Create the hw.instance op.
     StringRef moduleName = getScopeRefModuleName(op.getType());
+    hw::ModuleType modTy = hw::ModuleType::get(op.getContext(), ports);
     auto hwInst = rewriter.create<hw::InstanceOp>(
-        op.getLoc(), retTypes, op.getSymName(), moduleName, operands,
-        rewriter.getArrayAttr(argNames), rewriter.getArrayAttr(resNames),
+        op.getLoc(), retTypes, op.getSymName(), moduleName, modTy, operands,
         /*parameters*/ rewriter.getArrayAttr({}), /*innerSym*/ nullptr);
 
     // Replace the reads of the output ports with the hw.instance results.

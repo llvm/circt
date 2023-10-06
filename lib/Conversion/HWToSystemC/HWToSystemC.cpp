@@ -139,7 +139,7 @@ class ConvertInstance : public OpConversionPattern<InstanceOp> {
 private:
   template <typename PortTy>
   LogicalResult
-  collectPortInfo(ValueRange ports, ArrayAttr portNames,
+  collectPortInfo(ValueRange ports, ArrayRef<Attribute> portNames,
                   SmallVector<systemc::ModuleType::PortInfo> &portInfo) const {
     for (auto inPort : llvm::zip(ports, portNames)) {
       Type ty = std::get<0>(inPort).getType();
@@ -176,9 +176,9 @@ public:
     // them to appropriate systemc types.
     SmallVector<systemc::ModuleType::PortInfo> portInfo;
     if (failed(collectPortInfo<InputType>(adaptor.getInputs(),
-                                          adaptor.getArgNames(), portInfo)) ||
+                                          adaptor.getModuleType().getInputNames(), portInfo)) ||
         failed(collectPortInfo<OutputType>(instanceOp->getResults(),
-                                           adaptor.getResultNames(), portInfo)))
+                                           adaptor.getModuleType().getOutputNames(), portInfo)))
       return instanceOp->emitOpError("inout ports not supported");
 
     Location loc = instanceOp->getLoc();

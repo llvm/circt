@@ -41,7 +41,7 @@ ParseResult circt::parseInputPortList(
 
 void circt::printInputPortList(OpAsmPrinter &p, Operation *op,
                                OperandRange inputs, TypeRange inputTypes,
-                               ArrayAttr inputNames) {
+                               ArrayRef<Attribute> inputNames) {
   p << "(";
   llvm::interleaveComma(llvm::zip(inputs, inputNames), p,
                         [&](std::tuple<Value, Attribute> input) {
@@ -78,7 +78,7 @@ ParseResult circt::parseOutputPortList(OpAsmParser &parser,
 }
 
 void circt::printOutputPortList(OpAsmPrinter &p, Operation *op,
-                                TypeRange resultTypes, ArrayAttr resultNames) {
+                                TypeRange resultTypes, ArrayRef<Attribute> resultNames) {
   p << "(";
   llvm::interleaveComma(
       llvm::zip(resultTypes, resultNames), p,

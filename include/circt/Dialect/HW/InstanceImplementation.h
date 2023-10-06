@@ -15,6 +15,7 @@
 #ifndef CIRCT_DIALECT_HW_INSTANCEIMPLEMENTATION_H
 #define CIRCT_DIALECT_HW_INSTANCEIMPLEMENTATION_H
 
+#include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Support/LLVM.h"
 #include <functional>
 
@@ -51,14 +52,16 @@ LogicalResult resolveParametricTypes(Location loc, ArrayAttr parameters,
 
 /// Verify that the list of inputs of the instance and the module match in terms
 /// of length, names, and types.
-LogicalResult verifyInputs(ArrayAttr argNames, ArrayAttr moduleArgNames,
+LogicalResult verifyInputs(ArrayRef<Attribute> argNames, 
+                           ArrayRef<Attribute> moduleArgNames,
                            TypeRange inputTypes,
                            ArrayRef<Type> moduleInputTypes,
                            const EmitErrorFn &emitError);
 
 /// Verify that the list of outputs of the instance and the module match in
 /// terms of length, names, and types.
-LogicalResult verifyOutputs(ArrayAttr resultNames, ArrayAttr moduleResultNames,
+LogicalResult verifyOutputs(ArrayRef<Attribute> resultNames, 
+                            ArrayRef<Attribute> moduleResultNames,
                             TypeRange resultTypes,
                             ArrayRef<Type> moduleResultTypes,
                             const EmitErrorFn &emitError);
@@ -74,8 +77,18 @@ LogicalResult verifyParameters(ArrayAttr parameters, ArrayAttr moduleParameters,
 /// case not parameters are verified.
 LogicalResult verifyInstanceOfHWModule(
     Operation *instance, FlatSymbolRefAttr moduleRef, OperandRange inputs,
-    TypeRange results, ArrayAttr argNames, ArrayAttr resultNames,
+    TypeRange results, hw::ModuleType modType,
     ArrayAttr parameters, SymbolTableCollection &symbolTable);
+
+/// Combines verifyReferencedModule, verifyInputs, verifyOutputs, and
+/// verifyParameters. It is only allowed to call this function when the instance
+/// refers to a HW module. The @param parameters attribute may be null in which
+/// case not parameters are verified.
+LogicalResult verifyInstanceOfHWModule(
+    Operation *instance, FlatSymbolRefAttr moduleRef, OperandRange inputs,
+    TypeRange results, ArrayAttr argNames, ArrayAttr resNames,
+    ArrayAttr parameters, SymbolTableCollection &symbolTable);
+
 
 /// Check that all the parameter values specified to the instance are
 /// structurally valid.
@@ -94,7 +107,7 @@ ArrayAttr updateName(ArrayAttr oldNames, size_t i, StringAttr name);
 /// Suggest a name for each result value based on the saved result names
 /// attribute.
 void getAsmResultNames(OpAsmSetValueNameFn setNameFn, StringRef instanceName,
-                       ArrayAttr resultNames, ValueRange results);
+                       ArrayRef<Attribute> resultNames, ValueRange results);
 
 } // namespace instance_like_impl
 } // namespace hw

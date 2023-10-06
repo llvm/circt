@@ -905,6 +905,13 @@ Type ModuleType::getOutputType(size_t idx) {
   return getPorts()[getPortIdForOutputId(idx)].type;
 }
 
+SmallVector<StringAttr> ModuleType::getPortNamesStr() {
+  SmallVector<StringAttr> retval;
+  for (auto &p : getPorts())
+    retval.push_back(p.name);
+  return retval;
+}
+
 SmallVector<StringAttr> ModuleType::getInputNamesStr() {
   SmallVector<StringAttr> retval;
   for (auto &p : getPorts())
@@ -918,6 +925,13 @@ SmallVector<StringAttr> ModuleType::getOutputNamesStr() {
   for (auto &p : getPorts())
     if (p.dir == ModulePort::Direction::Output)
       retval.push_back(p.name);
+  return retval;
+}
+
+SmallVector<Attribute> ModuleType::getPortNames() {
+  SmallVector<Attribute> retval;
+  for (auto &p : getPorts())
+    retval.push_back(p.name);
   return retval;
 }
 
@@ -1046,6 +1060,14 @@ Type ModuleType::parse(AsmParser &odsParser) {
 
 void ModuleType::print(AsmPrinter &odsPrinter) const {
   printPorts(odsPrinter, getPorts());
+}
+
+ModuleType ModuleType::rebuildWithNames(ArrayRef<StringAttr> names) {
+  SmallVector<ModulePort> mp(getPorts().begin(), getPorts().end());
+  assert(names.size() == mp.size());
+  for (int i = 0, e = names.size(); i < e; ++i)
+    mp[i].name = names[i];
+  return ModuleType::get(getContext(), mp);
 }
 
 namespace circt {

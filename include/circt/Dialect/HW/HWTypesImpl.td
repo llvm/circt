@@ -257,8 +257,10 @@ def ModuleTypeImpl : HWType<"Module"> {
     Type getPortType(size_t);
     Type getInputType(size_t);
     Type getOutputType(size_t);
+    SmallVector<StringAttr> getPortNamesStr();
     SmallVector<StringAttr> getInputNamesStr();
     SmallVector<StringAttr> getOutputNamesStr();
+    SmallVector<Attribute> getPortNames();
     SmallVector<Attribute> getInputNames();
     SmallVector<Attribute> getOutputNames();
     StringAttr getPortNameAttr(size_t);
@@ -273,6 +275,10 @@ def ModuleTypeImpl : HWType<"Module"> {
     size_t getOutputIdForPortId(size_t);
     size_t getPortIdForInputId(size_t);
     size_t getPortIdForOutputId(size_t);
+
+    // Rebuilders
+    ModuleType rebuildWithNames(ArrayRef<StringAttr> names);
+
   }];
 }
 

@@ -60,8 +60,8 @@ LogicalResult instance_like_impl::resolveParametricTypes(
   return success();
 }
 
-LogicalResult instance_like_impl::verifyInputs(ArrayAttr argNames,
-                                               ArrayAttr moduleArgNames,
+LogicalResult instance_like_impl::verifyInputs(ArrayRef<Attribute> argNames,
+                                               ArrayRef<Attribute> moduleArgNames,
                                                TypeRange inputTypes,
                                                ArrayRef<Type> moduleInputTypes,
                                                const EmitErrorFn &emitError) {
@@ -111,7 +111,7 @@ LogicalResult instance_like_impl::verifyInputs(ArrayAttr argNames,
 }
 
 LogicalResult instance_like_impl::verifyOutputs(
-    ArrayAttr resultNames, ArrayAttr moduleResultNames, TypeRange resultTypes,
+    ArrayRef<Attribute> resultNames, ArrayRef<Attribute> moduleResultNames, TypeRange resultTypes,
     ArrayRef<Type> moduleResultTypes, const EmitErrorFn &emitError) {
   // Check result types and labels.
   if (moduleResultTypes.size() != resultTypes.size()) {
@@ -212,6 +212,77 @@ instance_like_impl::verifyParameters(ArrayAttr parameters,
 
 LogicalResult instance_like_impl::verifyInstanceOfHWModule(
     Operation *instance, FlatSymbolRefAttr moduleRef, OperandRange inputs,
+    TypeRange results, ModuleType modType,
+    ArrayAttr parameters, SymbolTableCollection &symbolTable) {
+  // Verify that we reference some kind of HW module and get the module on
+  // success.
+  Operation *module;
+  if (failed(instance_like_impl::verifyReferencedModule(instance, symbolTable,
+                                                        moduleRef, module)))
+    return failure();
+
+  // Emit an error message on the instance, with a note indicating which module
+  // is being referenced. The error message on the instance is added by the
+  // verification function this lambda is passed to.
+  EmitErrorFn emitError =
+      [&](const std::function<bool(InFlightDiagnostic & diag)> &fn) {
+        auto diag = instance->emitOpError();
+        if (fn(diag))
+          diag.attachNote(module->getLoc()) << "module declared here";
+      };
+
+  // Check that input types are consistent with the referenced module.
+  auto mod = cast<HWModuleLike>(module);
+  auto modArgNames =
+      ArrayAttr::get(instance->getContext(), mod.getInputNames());
+  auto modResultNames =
+      ArrayAttr::get(instance->getContext(), mod.getOutputNames());
+
+  auto unresolvedInputTypes = mod.getHWModuleType().getInputTypes();
+  ArrayRef<Type> resolvedModInputTypesRef = unresolvedInputTypes;
+  SmallVector<Type> resolvedModInputTypes;
+  if (parameters) {
+    if (failed(instance_like_impl::resolveParametricTypes(
+            instance->getLoc(), parameters, mod.getHWModuleType().getInputTypes(),
+            resolvedModInputTypes, emitError)))
+      return failure();
+    resolvedModInputTypesRef = resolvedModInputTypes;
+  }
+  if (failed(instance_like_impl::verifyInputs(
+          modType.getInputNames(), modArgNames, inputs.getTypes(), resolvedModInputTypesRef,
+          emitError)))
+    return failure();
+
+  // Check that result types are consistent with the referenced module.
+  auto unresolvedModResultTypes = mod.getHWModuleType().getOutputTypes();
+  ArrayRef<Type> resolvedModResultTypesRef = unresolvedModResultTypes;
+  SmallVector<Type> resolvedModResultTypes;
+  if (parameters) {
+    if (failed(instance_like_impl::resolveParametricTypes(
+            instance->getLoc(), parameters, mod.getHWModuleType().getOutputTypes(),
+            resolvedModResultTypes, emitError)))
+      return failure();
+    resolvedModResultTypesRef = resolvedModResultTypes;
+  }
+  if (failed(instance_like_impl::verifyOutputs(
+          modType.getOutputNames(), modResultNames, results, resolvedModResultTypesRef,
+          emitError)))
+    return failure();
+
+  if (parameters) {
+    // Check that the parameters are consistent with the referenced module.
+    ArrayAttr modParameters = module->getAttrOfType<ArrayAttr>("parameters");
+    if (failed(instance_like_impl::verifyParameters(parameters, modParameters,
+                                                    emitError)))
+      return failure();
+  }
+
+  return success();
+}
+
+// Legacy version of this function and it should go away.
+LogicalResult instance_like_impl::verifyInstanceOfHWModule(
+    Operation *instance, FlatSymbolRefAttr moduleRef, OperandRange inputs,
     TypeRange results, ArrayAttr argNames, ArrayAttr resultNames,
     ArrayAttr parameters, SymbolTableCollection &symbolTable) {
   // Verify that we reference some kind of HW module and get the module on
@@ -238,11 +309,12 @@ LogicalResult instance_like_impl::verifyInstanceOfHWModule(
   auto modResultNames =
       ArrayAttr::get(instance->getContext(), mod.getOutputNames());
 
-  ArrayRef<Type> resolvedModInputTypesRef = getModuleType(module).getInputs();
+  auto unresolvedInputTypes = mod.getHWModuleType().getInputTypes();
+  ArrayRef<Type> resolvedModInputTypesRef = unresolvedInputTypes;
   SmallVector<Type> resolvedModInputTypes;
   if (parameters) {
     if (failed(instance_like_impl::resolveParametricTypes(
-            instance->getLoc(), parameters, getModuleType(module).getInputs(),
+            instance->getLoc(), parameters, mod.getHWModuleType().getInputTypes(),
             resolvedModInputTypes, emitError)))
       return failure();
     resolvedModInputTypesRef = resolvedModInputTypes;
@@ -253,11 +325,12 @@ LogicalResult instance_like_impl::verifyInstanceOfHWModule(
     return failure();
 
   // Check that result types are consistent with the referenced module.
-  ArrayRef<Type> resolvedModResultTypesRef = getModuleType(module).getResults();
+  auto unresolvedModResultTypes = mod.getHWModuleType().getOutputTypes();
+  ArrayRef<Type> resolvedModResultTypesRef = unresolvedModResultTypes;
   SmallVector<Type> resolvedModResultTypes;
   if (parameters) {
     if (failed(instance_like_impl::resolveParametricTypes(
-            instance->getLoc(), parameters, getModuleType(module).getResults(),
+            instance->getLoc(), parameters, mod.getHWModuleType().getOutputTypes(),
             resolvedModResultTypes, emitError)))
       return failure();
     resolvedModResultTypesRef = resolvedModResultTypes;
@@ -335,14 +408,14 @@ ArrayAttr instance_like_impl::updateName(ArrayAttr oldNames, size_t i,
 
 void instance_like_impl::getAsmResultNames(OpAsmSetValueNameFn setNameFn,
                                            StringRef instanceName,
-                                           ArrayAttr resultNames,
+                                           ArrayRef<Attribute> resultNames,
                                            ValueRange results) {
   // Provide default names for instance results.
   std::string name = instanceName.str() + ".";
   size_t baseNameLen = name.size();
 
   for (size_t i = 0, e = resultNames.size(); i != e; ++i) {
-    auto resName = getName(resultNames, i);
+    auto resName = dyn_cast_or_null<StringAttr>(resultNames[i]);
     name.resize(baseNameLen);
     if (resName && !resName.getValue().empty())
       name += resName.getValue().str();
