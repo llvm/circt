@@ -88,15 +88,15 @@ firrtl.circuit "Test"   {
 
 
   // Check that we don't use strictconnect when merging connections into non-passive type.
-  // COMMON-LABEL:   firrtl.module private @DUT
-  // COMMON-NEXT:     %p = firrtl.wire
-  // COMMON-NEXT:     %0 = firrtl.subfield
-  // COMMON-NEXT:      firrtl.strictconnect %0, %x_a
-  // COMMON-NEXT:     %1 = firrtl.subfield
-  // COMMON-NEXT:     firrtl.strictconnect %x_b, %1
-  // COMMON-NEXT:     firrtl.strictconnect %y_a, %0
-  // COMMON-NEXT:      firrtl.strictconnect %1, %y_b
-  // COMMON-NEXT:   }
+  // COMMON-LABEL: firrtl.module private @DUT
+  // COMMON-NEXT:    %p = firrtl.wire
+  // COMMON-NEXT:    %0 = firrtl.subfield
+  // COMMON-NEXT:    firrtl.strictconnect %0, %x_a
+  // COMMON-NEXT:    %1 = firrtl.subfield
+  // COMMON-NEXT:    firrtl.strictconnect %x_b, %1
+  // COMMON-NEXT:    firrtl.strictconnect %y_a, %0
+  // COMMON-NEXT:    firrtl.strictconnect %1, %y_b
+  // COMMON-NEXT:  }
   firrtl.module private @DUT(in %x_a: !firrtl.uint<2>,
                              out %x_b: !firrtl.uint<2>,
                              out %y_a: !firrtl.uint<2>,
