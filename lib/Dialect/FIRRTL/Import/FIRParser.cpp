@@ -3251,46 +3251,52 @@ ParseResult FIRStmtParser::parseRWProbe(Value &result) {
   auto fieldRef = getFieldRefFromValue(staticRef);
   auto target = fieldRef.getValue();
 
-  // Ports are handled differently, emit a RWProbeOp with inner symbol.
-  if (auto arg = dyn_cast<BlockArgument>(target)) {
-    // Check target type.
-    if (targetType.hasUninferredReset())
+  auto *definingOp = target.getDefiningOp();
+
+  if (isa_and_nonnull<MemOp, CombMemOp, SeqMemOp, MemoryPortOp,
+                      MemoryDebugPortOp, MemoryPortAccessOp>(definingOp))
+    return emitError(startTok.getLoc(), "cannot probe memories or their ports");
+
+  // Use Forceable if necessary (reset).
+  if (targetType.hasUninferredReset()) {
+    if (!definingOp)
       return emitError(startTok.getLoc(),
                        "must have concrete reset type in type ")
              << targetType;
-    auto forceableType =
-        firrtl::detail::getForceableResultType(true, targetType);
-    if (!forceableType)
-      return emitError(startTok.getLoc(), "cannot force target of type ")
-             << targetType;
 
-    // Get InnerRef for target field.
-    auto mod = cast<FModuleOp>(arg.getOwner()->getParentOp());
-    auto sym = getInnerRefTo(
-        hw::InnerSymTarget(arg.getArgNumber(), mod, fieldRef.getFieldID()),
-        [&](auto _) -> hw::InnerSymbolNamespace & { return modNameSpace; });
-    result = builder.create<RWProbeOp>(forceableType, sym);
+    auto forceable = dyn_cast<Forceable>(definingOp);
+    if (!forceable || !forceable.isForceable() /* e.g., is/has const type*/)
+      return emitError(startTok.getLoc(), "rwprobe target not forceable")
+          .attachNote(definingOp->getLoc());
+
+    // TODO: do the ref.sub work while parsing the static expression.
+    result = getValueByFieldID(builder, forceable.getDataRef(),
+                               fieldRef.getFieldID());
+
     return success();
   }
 
-  auto *definingOp = target.getDefiningOp();
-  if (!definingOp)
-    return emitError(startTok.getLoc(),
-                     "rwprobe value must be defined by an operation");
+  // RWProbe op!
+  auto forceableType = firrtl::detail::getForceableResultType(true, targetType);
+  if (!forceableType)
+    return emitError(startTok.getLoc(), "cannot force target of type ")
+           << targetType;
 
-  if (isa<MemOp, CombMemOp, SeqMemOp, MemoryPortOp, MemoryDebugPortOp,
-          MemoryPortAccessOp>(definingOp))
-    return emitError(startTok.getLoc(), "cannot probe memories or their ports");
+  hw::InnerSymTarget innerSymTarget;
+  if (auto arg = dyn_cast<BlockArgument>(target)) {
+    auto mod = cast<FModuleOp>(arg.getOwner()->getParentOp());
+    innerSymTarget =
+        hw::InnerSymTarget(arg.getArgNumber(), mod, fieldRef.getFieldID());
+  } else {
+    innerSymTarget = hw::InnerSymTarget(definingOp, fieldRef.getFieldID());
+  }
 
-  auto forceable = dyn_cast<Forceable>(definingOp);
-  if (!forceable || !forceable.isForceable() /* e.g., is/has const type*/)
-    return emitError(startTok.getLoc(), "rwprobe target not forceable")
-        .attachNote(definingOp->getLoc());
-
-  // TODO: do the ref.sub work while parsing the static expression.
-  result =
-      getValueByFieldID(builder, forceable.getDataRef(), fieldRef.getFieldID());
-
+  // Get InnerRef for target field.
+  auto sym =
+      getInnerRefTo(innerSymTarget, [&](auto _) -> hw::InnerSymbolNamespace & {
+        return modNameSpace;
+      });
+  result = builder.create<RWProbeOp>(forceableType, sym);
   return success();
 }
 
