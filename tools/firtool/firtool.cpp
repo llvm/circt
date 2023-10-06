@@ -131,14 +131,32 @@ static cl::opt<bool>
 static firtool::FirtoolOptions firtoolOptions(mainCategory);
 
 static cl::list<std::string>
-    passPlugins("load-pass-plugin", cl::desc("Load passes from plugin library"),
+    passPlugins("load-pass-plugin", cl::desc("Load passes from plugin library"), cl::CommaSeparated,
                 cl::cat(mainCategory));
+
+static cl::opt<std::string>
+    highFIRRTLPassPlugin("high-firrtl-pass-plugin",
+                         cl::desc("Insert passes after parsing FIRRTL. Specify "
+                                  "passes with MLIR textual format."),
+                         cl::init(""), cl::cat(mainCategory));
 
 static cl::opt<std::string>
     lowFIRRTLPassPlugin("low-firrtl-pass-plugin",
                         cl::desc("Insert passes before lowering to HW. Specify "
                                  "passes with MLIR textual format."),
                         cl::init(""), cl::cat(mainCategory));
+
+static cl::opt<std::string>
+    hwPassPlugin("hw-pass-plugin",
+                 cl::desc("Insert passes after lowering to HW. Specify "
+                          "passes with MLIR textual format."),
+                 cl::init(""), cl::cat(mainCategory));
+
+static cl::opt<std::string>
+    svPassPlugin("sv-pass-plugin",
+                 cl::desc("Insert passes after lowering to SV. Specify "
+                          "passes with MLIR textual format."),
+                 cl::init(""), cl::cat(mainCategory));
 
 enum OutputFormatKind {
   OutputParseOnly,
@@ -298,7 +316,6 @@ static LogicalResult processBuffer(
         std::make_unique<
             VerbosePassInstrumentation<firrtl::CircuitOp, mlir::ModuleOp>>(
             "firtool"));
-
   if (failed(applyPassManagerCLOptions(pm)))
     return failure();
 
@@ -313,11 +330,15 @@ static LogicalResult processBuffer(
     return printOp(*module, (*outputFile)->os());
   }
 
+  if (!highFIRRTLPassPlugin.empty())
+    if (failed(parsePassPipeline(StringRef(highFIRRTLPassPlugin), pm)))
+      return failure();
+
   if (failed(firtool::populateCHIRRTLToLowFIRRTL(pm, firtoolOptions, *module,
                                                  inputFilename)))
     return failure();
 
-  if (!StringRef(lowFIRRTLPassPlugin).empty())
+  if (!lowFIRRTLPassPlugin.empty())
     if (failed(parsePassPipeline(StringRef(lowFIRRTLPassPlugin), pm)))
       return failure();
 
@@ -325,8 +346,14 @@ static LogicalResult processBuffer(
   if (outputFormat != OutputIRFir) {
     if (failed(firtool::populateLowFIRRTLToHW(pm, firtoolOptions)))
       return failure();
+    if (!hwPassPlugin.empty())
+      if (failed(parsePassPipeline(StringRef(hwPassPlugin), pm)))
+        return failure();
     if (outputFormat != OutputIRHW)
       if (failed(firtool::populateHWToSV(pm, firtoolOptions)))
+        return failure();
+    if (!svPassPlugin.empty())
+      if (failed(parsePassPipeline(StringRef(svPassPlugin), pm)))
         return failure();
   }
 
@@ -483,7 +510,6 @@ processInput(MLIRContext &context, TimingScope &ts,
 /// command line options are parsed and LLVM/MLIR are all set up and ready to
 /// go.
 static LogicalResult executeFirtool(MLIRContext &context) {
-
   // Create the timing manager we use to sample execution times.
   DefaultTimingManager tm;
   applyDefaultTimingManagerCLOptions(tm);
@@ -573,8 +599,10 @@ int main(int argc, char **argv) {
 
   /// Set the callback to load a pass plugin.
   passPlugins.setCallback([&](const std::string &pluginPath) {
+    llvm::errs() << "[firtool] load plugin " << pluginPath << '\n';
     auto plugin = PassPlugin::load(pluginPath);
     if (!plugin) {
+      errs() << plugin.takeError() << '\n';
       errs() << "Failed to load passes from '" << pluginPath
              << "'. Request ignored.\n";
       return;
