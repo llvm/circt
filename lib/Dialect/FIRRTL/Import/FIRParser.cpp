@@ -3282,20 +3282,10 @@ ParseResult FIRStmtParser::parseRWProbe(Value &result) {
     return emitError(startTok.getLoc(), "cannot force target of type ")
            << targetType;
 
-  hw::InnerSymTarget innerSymTarget;
-  if (auto arg = dyn_cast<BlockArgument>(target)) {
-    auto mod = cast<FModuleOp>(arg.getOwner()->getParentOp());
-    innerSymTarget =
-        hw::InnerSymTarget(arg.getArgNumber(), mod, fieldRef.getFieldID());
-  } else {
-    innerSymTarget = hw::InnerSymTarget(definingOp, fieldRef.getFieldID());
-  }
-
   // Get InnerRef for target field.
-  auto sym =
-      getInnerRefTo(innerSymTarget, [&](auto _) -> hw::InnerSymbolNamespace & {
-        return modNameSpace;
-      });
+  auto sym = getInnerRefTo(
+      getTargetFor(fieldRef),
+      [&](auto _) -> hw::InnerSymbolNamespace & { return modNameSpace; });
   result = builder.create<RWProbeOp>(forceableType, sym);
   return success();
 }
