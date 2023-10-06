@@ -1294,7 +1294,8 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     wire inst_rw2 : RWProbe<UInt<1>>
     inst rc2 of RefsChild
 
-    ; CHECK: firrtl.strictconnect %rc2_in_bounce,
+    ; CHECK: %[[IN_CAST:[^ ]+]] = firrtl.constCast %in :
+    ; CHECK: firrtl.strictconnect %rc2_in_bounce, %[[IN_CAST]]
     rc2.in <= in
    ; CHECK-NEXT: firrtl.when %rc2_in_bounce :
    ; CHECK-NEXT:   %[[RWPROBE_RC2_IN_BOUNCE_1:[^ ]+]] = firrtl.ref.rwprobe <@Refs::@[[RC2_IN_BOUNCE_SYM]]>
