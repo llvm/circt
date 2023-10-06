@@ -131,8 +131,8 @@ static cl::opt<bool>
 static firtool::FirtoolOptions firtoolOptions(mainCategory);
 
 static cl::list<std::string>
-    passPlugins("load-pass-plugin", cl::desc("Load passes from plugin library"), cl::CommaSeparated,
-                cl::cat(mainCategory));
+    passPlugins("load-pass-plugin", cl::desc("Load passes from plugin library"),
+                cl::CommaSeparated, cl::cat(mainCategory));
 
 static cl::opt<std::string>
     highFIRRTLPassPlugin("high-firrtl-pass-plugin",
