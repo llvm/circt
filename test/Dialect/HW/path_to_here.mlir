@@ -30,6 +30,8 @@ hw.module @ParentTwo() {
 
 // -----
 
+// CHECK-LABEL:   hw.module @NoParent() {
+// CHECK:           hw.hierpath @sym [@NoParent::@w]
 hw.module @NoParent() {
   hw.hierpath.to @sym(@w)
   %c0 = hw.constant false
