@@ -120,10 +120,6 @@ assert isinstance(obj.type, om.ClassType)
 # CHECK: Test
 print(obj.type.name)
 
-# This is the location of the `om.class @Test`
-# CHECK: loc("-":27:5)
-print(obj.get_loc())
-
 # CHECK: 42
 print(obj.field)
 
@@ -133,11 +129,16 @@ print(obj.get_field_loc("field"))
 
 # CHECK: 14
 print(obj.child.foo)
+# CHECK: loc("-":64:7)
+print(obj.child.get_field_loc("foo"))
 # CHECK: ('Root', 'x')
 print(obj.reference)
 (fst, snd) = obj.tuple
 # CHECK: 14
 print(snd)
+
+# CHECK: loc("-":43:7)
+print(obj.get_field_loc("tuple"))
 
 # CHECK: path
 print(obj.path)
@@ -152,10 +153,16 @@ except IndexError as e:
   print(e)
 
 for (name, field) in obj:
+  # location from om.class.field @child, %0 : !om.class.type<@Child>
   # CHECK: name: child, field: <circt.dialects.om.Object object
-  # CHECK: name: field, field: 42
-  # CHECK: name: reference, field: ('Root', 'x')
-  print(f"name: {name}, field: {field}")
+  # CHECK-SAME: loc: loc("-":32:7)
+  #location from om.class.field @field, %param : !om.integer
+  # CHECK: name: field, field: 42, loc: loc("-":28:7)
+  # location from om.class.field @reference, %sym : !om.ref
+  # CHECK: name: reference, field: ('Root', 'x'), loc: loc("-":37:7)
+  loc = obj.get_field_loc(name)
+  print(f"name: {name}, field: {field}, loc: {loc}")
+  
 
 # CHECK: ['X', 'Y']
 print(obj.list)

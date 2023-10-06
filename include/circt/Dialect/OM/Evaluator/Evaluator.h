@@ -69,6 +69,11 @@ struct EvaluatorValue : std::enable_shared_from_this<EvaluatorValue> {
   Location getLoc() const { return loc; }
   // Set the Location associated with the Value.
   void setLoc(Location l) { loc = l; }
+  // Set the Location, if it is unknown.
+  void setLocIfUnknown(Location l) {
+    if (isa<UnknownLoc>(loc))
+      loc = l;
+  }
 
 private:
   const Kind kind;

@@ -105,13 +105,18 @@ circt::om::Evaluator::getPartiallyEvaluatedValue(Type type, Location loc) {
 FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::getOrCreateValue(
     Value value, ActualParameters actualParams, Location loc) {
   auto it = objects.find({value, actualParams});
-  if (it != objects.end())
-    return it->second;
+  if (it != objects.end()) {
+    auto evalVal = it->second;
+    evalVal->setLocIfUnknown(loc);
+    return evalVal;
+  }
 
   FailureOr<evaluator::EvaluatorValuePtr> result =
       TypeSwitch<Value, FailureOr<evaluator::EvaluatorValuePtr>>(value)
           .Case([&](BlockArgument arg) {
-            return (*actualParams)[arg.getArgNumber()];
+            auto val = (*actualParams)[arg.getArgNumber()];
+            val->setLoc(loc);
+            return val;
           })
           .Case([&](OpResult result) {
             return TypeSwitch<Operation *,
@@ -206,10 +211,13 @@ circt::om::Evaluator::evaluateObjectInstance(StringAttr className,
   // Instantiate the fields.
   evaluator::ObjectFields fields;
 
+  auto *context = cls.getContext();
   for (auto &op : cls.getOps())
     for (auto result : op.getResults()) {
-      // Allocate the value.
-      if (failed(getOrCreateValue(result, actualParams, loc)))
+      // Allocate the value, with unknown loc. It will be later set when
+      // evaluating the fields.
+      if (failed(
+              getOrCreateValue(result, actualParams, UnknownLoc::get(context))))
         return failure();
       // Add to the worklist.
       worklist.push({result, actualParams});
