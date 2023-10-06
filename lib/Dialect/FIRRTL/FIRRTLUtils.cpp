@@ -733,6 +733,17 @@ void circt::firrtl::walkGroundTypes(
   recurse(recurse, type);
 }
 
+/// Return the inner sym target for the specified value and fieldID.
+/// If root is a blockargument, this must be FModuleLike.
+hw::InnerSymTarget circt::firrtl::getTargetFor(FieldRef ref) {
+  auto root = ref.getValue();
+  if (auto arg = dyn_cast<BlockArgument>(root)) {
+    auto mod = cast<FModuleLike>(arg.getOwner()->getParentOp());
+    return hw::InnerSymTarget(arg.getArgNumber(), mod, ref.getFieldID());
+  }
+  return hw::InnerSymTarget(root.getDefiningOp(), ref.getFieldID());
+}
+
 // Return InnerSymAttr with sym on specified fieldID.
 std::pair<hw::InnerSymAttr, StringAttr> circt::firrtl::getOrAddInnerSym(
     MLIRContext *context, hw::InnerSymAttr attr, uint64_t fieldID,
