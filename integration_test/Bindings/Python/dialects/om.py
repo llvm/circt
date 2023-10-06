@@ -156,10 +156,12 @@ for (name, field) in obj:
   # location from om.class.field @child, %0 : !om.class.type<@Child>
   # CHECK: name: child, field: <circt.dialects.om.Object object
   # CHECK-SAME: loc: loc("-":32:7)
-  #location from om.class.field @field, %param : !om.integer
-  # CHECK: name: field, field: 42, loc: loc("-":28:7)
+  # location from om.class.field @field, %param : !om.integer
+  # CHECK: name: field, field: 42
+  # CHECK-SAME: loc: loc("-":28:7)
   # location from om.class.field @reference, %sym : !om.ref
-  # CHECK: name: reference, field: ('Root', 'x'), loc: loc("-":37:7)
+  # CHECK: name: reference, field: ('Root', 'x')
+  # CHECK-SAME: loc: loc("-":37:7)
   loc = obj.get_field_loc(name)
   print(f"name: {name}, field: {field}, loc: {loc}")
 
