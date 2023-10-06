@@ -162,7 +162,6 @@ for (name, field) in obj:
   # CHECK: name: reference, field: ('Root', 'x'), loc: loc("-":37:7)
   loc = obj.get_field_loc(name)
   print(f"name: {name}, field: {field}, loc: {loc}")
-  
 
 # CHECK: ['X', 'Y']
 print(obj.list)
