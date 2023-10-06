@@ -1095,8 +1095,8 @@ firrtl.module private @is1436_FOO() {
     out %probe: !firrtl.probe<uint<2>>
   ) {
     // Forceable declaration are never expanded into ground elements.
-    // CHECK-NEXT: %{{.+}}, %[[X_REF:.+]] = firrtl.wire forceable : !firrtl.bundle<a: vector<uint<1>, 2>, b flip: uint<2>>, !firrtl.rwprobe<bundle<a: vector<uint<1>, 2>, b: uint<2>>>
-    %x, %x_ref = firrtl.wire forceable : !firrtl.bundle<a: vector<uint<1>, 2>, b flip: uint<2>>, !firrtl.rwprobe<bundle<a: vector<uint<1>, 2>, b: uint<2>>>
+    // CHECK-NEXT: %{{.+}}, %[[X_REF:.+]] = firrtl.wire forceable : !firrtl.bundle<a: vector<uint<1>, 2>, b: uint<2>>, !firrtl.rwprobe<bundle<a: vector<uint<1>, 2>, b: uint<2>>>
+    %x, %x_ref = firrtl.wire forceable : !firrtl.bundle<a: vector<uint<1>, 2>, b: uint<2>>, !firrtl.rwprobe<bundle<a: vector<uint<1>, 2>, b: uint<2>>>
 
     // Define using forceable ref preserved.
     // CHECK-NEXT: firrtl.ref.define %{{.+}}, %[[X_REF]] : !firrtl.rwprobe<bundle<a: vector<uint<1>, 2>, b: uint<2>>>

@@ -1188,3 +1188,12 @@ circuit DoubleRadix:
     output d : Double
     ; expected-error @below {{expected floating point in Double expression}}
     propassign d, Double(0hABC)
+
+;// -----
+FIRRTL version 3.0.0
+circuit ForceNonPassive:
+  module ForceNonPassive:
+    output p : RWProbe<{a : UInt<5>, b : UInt<3> }>
+    wire x : { a : UInt<5>, flip b : UInt<3> }
+    ; expected-error @below {{cannot force target of type}}
+    define p = rwprobe(x)

@@ -1,5 +1,6 @@
 ; RUN: firtool %s -verify-diagnostics
 ; RUN: firtool %s -preserve-aggregate=all -scalarize-top-module=false -verify-diagnostics
+; Spec says this is valid, but is now actively rejected.
 FIRRTL version 3.0.0
 
 circuit Top :
@@ -30,4 +31,4 @@ circuit Top :
     connect p, x
     connect y, p
   ; SPEC EXAMPLE END
-  ; expected-error @-5 {{unable to lower due to symbol "sym" with target not preserved by lowering}}
+  ; expected-error @-4 {{cannot force target of type '!firrtl.bundle<a: uint<2>, b flip: uint<2>>'}}

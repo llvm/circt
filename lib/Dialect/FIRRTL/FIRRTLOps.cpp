@@ -5625,7 +5625,7 @@ LogicalResult RWProbeOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
         hw::FieldIdImpl::getFinalTypeByFieldID(type, target.getField());
     // Check.
     auto baseType = type_dyn_cast<FIRRTLBaseType>(fType);
-    if (!baseType || baseType.getPassiveType() != getType().getType()) {
+    if (!baseType || baseType != getType().getType()) {
       auto diag = emitOpError("has type mismatch: target resolves to ")
                   << fType << " instead of expected " << getType().getType();
       diag.attachNote(loc) << "target resolves here";

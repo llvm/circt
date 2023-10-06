@@ -114,15 +114,15 @@ firrtl.circuit "Test"   {
   // COMMON-LABEL: @Issue6259
   // COMMON-NOT: aggregateconstant
   // COMMON: }
-  firrtl.module private @Issue6259(out %a: !firrtl.rwprobe<bundle<a: uint<1>, b: uint<2>>>) {
+  firrtl.module private @Issue6259(out %a: !firrtl.bundle<a: uint<1>, b flip: uint<2>>) {
     %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    %w, %w_ref = firrtl.wire forceable {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.bundle<a: uint<1>, b flip: uint<2>>, !firrtl.rwprobe<bundle<a: uint<1>, b: uint<2>>>
+    %w = firrtl.wire {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.bundle<a: uint<1>, b flip: uint<2>>
     %0 = firrtl.subfield %w[b] : !firrtl.bundle<a: uint<1>, b flip: uint<2>>
     %1 = firrtl.subfield %w[a] : !firrtl.bundle<a: uint<1>, b flip: uint<2>>
     firrtl.strictconnect %1, %c0_ui1 : !firrtl.uint<1>
     firrtl.strictconnect %0, %c0_ui2 : !firrtl.uint<2>
-    firrtl.ref.define %a, %w_ref : !firrtl.rwprobe<bundle<a: uint<1>, b: uint<2>>>
+    firrtl.connect %a, %w : !firrtl.bundle<a: uint<1>, b flip: uint<2>>, !firrtl.bundle<a: uint<1>, b flip: uint<2>>
   }
 }
 
