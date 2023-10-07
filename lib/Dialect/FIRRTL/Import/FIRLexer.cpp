@@ -261,8 +261,6 @@ FIRToken FIRLexer::lexTokenImpl() {
     case ']':
       return formToken(FIRToken::r_square, tokStart);
     case '<':
-      if (*curPtr == '-')
-        return ++curPtr, formToken(FIRToken::less_minus, tokStart);
       if (*curPtr == '=')
         return ++curPtr, formToken(FIRToken::less_equal, tokStart);
       return formToken(FIRToken::less, tokStart);

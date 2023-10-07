@@ -209,8 +209,8 @@ circuit Top :
     parameter N = 1
 
 ; // -----
-; "Modules with aggregate ports that are (partial)? connected should NOT dedup if
-; their port names differ".
+; "Modules with aggregate ports that are connected should NOT dedup if their
+; port names differ".
 ;
 ; Since the MFC support expanding connects and partial connects when the port
 ; names differ, this now testing that the modules succesfully dedup.
@@ -232,12 +232,12 @@ circuit FooAndBarModule :
     ; CHECK: firrtl.instance bar @FooModule
     inst foo of FooModule
     inst bar of BarModule
-    io.foo <- foo.io
+    io.foo <= foo.io
     io.bar <= bar.io
 
 ; // -----
-; "Modules with aggregate ports that are (partial)? connected should dedup if
-; their port names are the same".
+; "Modules with aggregate ports that are connected should dedup if their port
+; names are the same".
 ;
 ; CHECK-LABEL: firrtl.circuit "FooAndBarModule"
 circuit FooAndBarModule :
@@ -256,7 +256,7 @@ circuit FooAndBarModule :
     inst foo of FooModule
     inst bar of BarModule
     io.foo <= foo.io
-    io.bar <- bar.io
+    io.bar <= bar.io
 
 ; // -----
 ; "The module A and B should be deduped with the first module in order".
