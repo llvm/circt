@@ -342,6 +342,8 @@ static LogicalResult processBuffer(
   if (failed(firtool::populatePreprocessTransforms(pm, firtoolOptions)))
     return failure();
 
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerIntrinsicsPass());
+
   // If the user asked for --parse-only, stop after running LowerAnnotations.
   if (outputFormat == OutputParseOnly) {
     if (failed(pm.run(module.get())))
