@@ -205,17 +205,31 @@ def StructExtractOp : HWOp<"struct_extract",
     ```
   }];
 
-  let arguments = (ins StructType:$input, StrAttr:$field);
+  let arguments = (ins StructType:$input, I32Attr:$fieldIndex);
   let results = (outs HWNonInOutType:$result);
   let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
 
   let builders = [
     OpBuilder<(ins "Value":$input, "StructType::FieldInfo":$field)>,
-    OpBuilder<(ins "Value":$input, "StringAttr":$field)>,
-    OpBuilder<(ins "Value":$input, "StringRef":$field), [{
-      build(odsBuilder, odsState, input, odsBuilder.getStringAttr(field));
+    OpBuilder<(ins "Value":$input, "StringAttr":$fieldName)>,
+    OpBuilder<(ins "Value":$input, "StringRef":$fieldName), [{
+      build($_builder, $_state, input, $_builder.getStringAttr(fieldName));
     }]>
   ];
+
+  let extraClassDeclaration = [{
+    /// Return the name attribute of the accessed field.
+    StringAttr getFieldNameAttr() {
+      StructType type = getInput().getType();
+      return type.getElements()[getFieldIndex()].name;
+    }
+
+    /// Return the name of the accessed field.
+    StringRef getFieldName() {
+      return getFieldNameAttr().getValue();
+    }
+  }];
 
   let hasFolder = 1;
   let hasCanonicalizeMethod = 1;
@@ -232,10 +246,32 @@ def StructInjectOp : HWOp<"struct_inject", [Pure,
     ```
   }];
 
-  let arguments = (ins StructType:$input, StrAttr:$field,
+  let arguments = (ins StructType:$input, I32Attr:$fieldIndex,
                    HWNonInOutType:$newValue);
   let results = (outs StructType:$result);
   let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+
+  let builders = [
+    OpBuilder<(ins "Value":$input, "StringAttr":$fieldName, "Value":$newValue)>,
+    OpBuilder<(ins "Value":$input, "StringRef":$fieldName, "Value":$newValue), [{
+      build($_builder, $_state, input, $_builder.getStringAttr(fieldName), newValue);
+    }]>
+  ];
+
+  let extraClassDeclaration = [{
+    /// Return the name attribute of the accessed field.
+    StringAttr getFieldNameAttr() {
+      StructType type = getInput().getType();
+      return type.getElements()[getFieldIndex()].name;
+    }
+
+    /// Return the name of the accessed field.
+    StringRef getFieldName() {
+      return getFieldNameAttr().getValue();
+    }
+  }];
+
   let hasFolder = 1;
   let hasCanonicalizeMethod = 1;
 }
@@ -277,9 +313,30 @@ def UnionCreateOp : HWOp<"union_create", [Pure]> {
     ```
   }];
 
-  let arguments = (ins StrAttr:$field, HWNonInOutType:$input);
+  let arguments = (ins I32Attr:$fieldIndex, HWNonInOutType:$input);
   let results = (outs UnionType:$result);
   let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+
+  let builders = [
+    OpBuilder<(ins "Type":$unionType, "StringAttr":$fieldName, "Value":$input)>,
+    OpBuilder<(ins "Type":$unionType, "StringRef":$fieldName, "Value":$input), [{
+      build($_builder, $_state, unionType, $_builder.getStringAttr(fieldName), input);
+    }]>
+  ];
+
+  let extraClassDeclaration = [{
+    /// Return the name attribute of the accessed field.
+    StringAttr getFieldNameAttr() {
+      UnionType type = getType();
+      return type.getElements()[getFieldIndex()].name;
+    }
+
+    /// Return the name of the accessed field.
+    StringRef getFieldName() {
+      return getFieldNameAttr().getValue();
+    }
+  }];
 }
 
 def UnionExtractOp : HWOp<"union_extract", [Pure, 
@@ -298,9 +355,29 @@ def UnionExtractOp : HWOp<"union_extract", [Pure,
     ```
   }];
 
-  let arguments = (ins UnionType:$input, StrAttr:$field);
+  let arguments = (ins UnionType:$input, I32Attr:$fieldIndex);
   let results = (outs HWNonInOutType:$result);
   let hasCustomAssemblyFormat = 1;
+
+  let builders = [
+    OpBuilder<(ins "Value":$input, "StringAttr":$fieldName)>,
+    OpBuilder<(ins "Value":$input, "StringRef":$fieldName), [{
+      build($_builder, $_state, input, $_builder.getStringAttr(fieldName));
+    }]>
+  ];
+
+  let extraClassDeclaration = [{
+    /// Return the name attribute of the accessed field.
+    StringAttr getFieldNameAttr() {
+      UnionType type = getInput().getType();
+      return type.getElements()[getFieldIndex()].name;
+    }
+
+    /// Return the name of the accessed field.
+    StringRef getFieldName() {
+      return getFieldNameAttr().getValue();
+    }
+  }];
 }
 
 #endif // CIRCT_DIALECT_HW_HWAGGREGATES_TD

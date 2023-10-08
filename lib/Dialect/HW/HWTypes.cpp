@@ -476,10 +476,21 @@ LogicalResult UnionType::verify(function_ref<InFlightDiagnostic()> emitError,
   return result;
 }
 
+std::optional<unsigned> UnionType::getFieldIndex(mlir::StringAttr fieldName) {
+  ArrayRef<hw::UnionType::FieldInfo> elems = getElements();
+  for (size_t idx = 0, numElems = elems.size(); idx < numElems; ++idx)
+    if (elems[idx].name == fieldName)
+      return idx;
+  return {};
+}
+
+std::optional<unsigned> UnionType::getFieldIndex(mlir::StringRef fieldName) {
+  return getFieldIndex(StringAttr::get(getContext(), fieldName));
+}
+
 UnionType::FieldInfo UnionType::getFieldInfo(::mlir::StringRef fieldName) {
-  for (const auto &field : getElements())
-    if (field.name == fieldName)
-      return field;
+  if (auto fieldIndex = getFieldIndex(fieldName))
+    return getElements()[*fieldIndex];
   return FieldInfo();
 }
 

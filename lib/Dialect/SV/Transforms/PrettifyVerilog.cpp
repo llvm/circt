@@ -97,7 +97,7 @@ static bool isSelfWrite(Value dst, Value src) {
         auto toField = dyn_cast<sv::StructFieldInOutOp>(dstOp);
         if (!toField)
           return false;
-        if (toField.getField() != extract.getField())
+        if (toField.getFieldAttr() != extract.getFieldNameAttr())
           return false;
         return isSelfWrite(toField.getInput(), extract.getInput());
       })
@@ -126,7 +126,7 @@ bool PrettifyVerilogPass::splitStructAssignment(OpBuilder &builder,
     // Inner injects are overwritten by outer injects.
     // Insert does not overwrite the store to be lowered.
     auto field = std::make_pair(inj.getLoc(), inj.getNewValue());
-    fields.try_emplace(inj.getFieldAttr(), field);
+    fields.try_emplace(inj.getFieldNameAttr(), field);
     src = inj.getInput();
   }
 

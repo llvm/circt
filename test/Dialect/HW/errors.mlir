@@ -137,6 +137,13 @@ hw.module @union(in %b: i42) {
 
 // -----
 
+hw.module @union(in %a: !hw.union<foo: i42>) {
+  // expected-error @+1 {{custom op 'hw.union_extract' invalid field name specified}}
+  %aget = hw.union_extract %a["bar"] : !hw.union<foo: i42>
+}
+
+// -----
+
 // expected-note @+1 {{module declared here}}
 hw.module @empty() {
   hw.output

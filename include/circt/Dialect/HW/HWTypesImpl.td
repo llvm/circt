@@ -193,6 +193,8 @@ def UnionTypeImpl : HWType<"Union"> {
     FieldInfo getFieldInfo(::mlir::StringRef fieldName);
 
     ::mlir::Type getFieldType(::mlir::StringRef fieldName);
+    std::optional<unsigned> getFieldIndex(mlir::StringRef fieldName);
+    std::optional<unsigned> getFieldIndex(mlir::StringAttr fieldName);
   }];
 }
 
