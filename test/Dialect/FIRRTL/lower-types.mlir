@@ -933,15 +933,15 @@ firrtl.circuit "TopLevel" {
   firrtl.module private @Foo4() {
     // CHECK: firrtl.mem
     // CHECK-SAME: portAnnotations = [
-    // CHECK-SAME: [{a}, {b, circt.fieldID = 4 : i32}],
-    // CHECK-SAME: [{c, circt.fieldID = 2 : i32}]
-    // CHECK-SAME: [{circt.fieldID = 4 : i32, e}, {circt.fieldID = 7 : i32, f}]
+    // CHECK-SAME: [{a}, {b, circt.fieldID = 4 : i64}],
+    // CHECK-SAME: [{c, circt.fieldID = 2 : i64}]
+    // CHECK-SAME: [{circt.fieldID = 4 : i64, e}, {circt.fieldID = 7 : i64, f}]
 
     // CHECK: firrtl.mem
     // CHECK-SAME: portAnnotations = [
-    // CHECK-SAME: [{a}, {b, circt.fieldID = 4 : i32}],
-    // CHECK-SAME: [{c, circt.fieldID = 2 : i32}, {circt.fieldID = 4 : i32, d}]
-    // CHECK-SAME: [{circt.fieldID = 4 : i32, e}]
+    // CHECK-SAME: [{a}, {b, circt.fieldID = 4 : i64}],
+    // CHECK-SAME: [{c, circt.fieldID = 2 : i64}, {circt.fieldID = 4 : i64, d}]
+    // CHECK-SAME: [{circt.fieldID = 4 : i64, e}]
 
     %bar_r, %bar_w, %bar_rw = firrtl.mem Undefined  {depth = 16 : i64, name = "bar",
         portAnnotations = [

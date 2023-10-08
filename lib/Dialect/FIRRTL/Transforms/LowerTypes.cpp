@@ -291,7 +291,7 @@ static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
         if (annoFieldID == oldPortType.getFieldID(targetIndex)) {
           anno.setMember(
               "circt.fieldID",
-              b->getI32IntegerAttr(portType.getFieldID(targetIndex)));
+              b->getI64IntegerAttr(portType.getFieldID(targetIndex)));
           portAnno.push_back(anno.getDict());
           continue;
         }
@@ -309,7 +309,7 @@ static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
             // Set the field ID of the new annotation.
             auto newFieldID =
                 annoFieldID - fieldID + portType.getFieldID(targetIndex);
-            anno.setMember("circt.fieldID", b->getI32IntegerAttr(newFieldID));
+            anno.setMember("circt.fieldID", b->getI64IntegerAttr(newFieldID));
             portAnno.push_back(anno.getDict());
           }
         }
@@ -561,7 +561,7 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(MLIRContext *ctxt,
     if (auto newFieldID = fieldID - field.fieldID) {
       // If the target is a subfield/subindex of the current field, create a
       // new annotation with the correct circt.fieldID.
-      anno.setMember("circt.fieldID", builder->getI32IntegerAttr(newFieldID));
+      anno.setMember("circt.fieldID", builder->getI64IntegerAttr(newFieldID));
     }
 
     retval.push_back(anno.getAttr());
