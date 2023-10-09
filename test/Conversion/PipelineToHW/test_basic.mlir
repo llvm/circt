@@ -230,10 +230,10 @@ hw.module @testWithStall(in %arg0: i32, in %go: i1, in %stall : i1, in %clk: !se
 // CHECK:           %[[VAL_5:.*]] = hw.constant true
 // CHECK:           %[[VAL_6:.*]] = comb.xor %[[VAL_4]], %[[VAL_5]] : i1
 // CHECK:           %[[VAL_7:.*]] = comb.and %[[VAL_1]], %[[VAL_6]]
-// CHECK:           %[[VAL_8:.*]] = seq.compreg.ce sym @MyPipeline_a0 %[[VAL_0]], %[[CLOCK]], %[[VAL_7]] : i32
+// CHECK:           %[[VAL_8:.*]] = seq.compreg.ce sym @MyPipeline_a0_s1 %[[VAL_0]], %[[CLOCK]], %[[VAL_7]] : i32
 // CHECK:           %[[VAL_9:.*]] = hw.constant false
 // CHECK:           %[[VAL_10:.*]] = seq.compreg sym @MyPipeline_stage1_enable  %[[VAL_7]], %[[CLOCK]] reset %[[VAL_3]], %[[VAL_9]]  : i1
-// CHECK:           %[[VAL_11:.*]] = seq.compreg.ce sym @MyPipeline_a0 %[[VAL_8]], %[[CLOCK]], %[[VAL_10]] {name = "MyPipeline_a0"} : i32
+// CHECK:           %[[VAL_11:.*]] = seq.compreg.ce sym @MyPipeline_a0_s2 %[[VAL_8]], %[[CLOCK]], %[[VAL_10]] : i32
 // CHECK:           %[[VAL_12:.*]] = hw.constant false
 // CHECK:           %[[VAL_13:.*]] = hw.constant true
 // CHECK:           %[[VAL_14:.*]] = comb.xor %[[VAL_4]], %[[VAL_13]] : i1
@@ -243,7 +243,7 @@ hw.module @testWithStall(in %arg0: i32, in %go: i1, in %stall : i1, in %clk: !se
 // CHECK:           %[[VAL_18:.*]] = comb.xor %[[VAL_4]], %[[VAL_17]] : i1
 // CHECK:           %[[VAL_19:.*]] = comb.or %[[VAL_10]], %[[VAL_18]] : i1
 // CHECK:           %[[VAL_20:.*]] = comb.and %[[VAL_16]], %[[VAL_19]]
-// CHECK:           %[[VAL_21:.*]] = seq.compreg.ce sym @MyPipeline_a0 %[[VAL_11]], %[[CLOCK]], %[[VAL_20]] {name = "MyPipeline_a0"} : i32
+// CHECK:           %[[VAL_21:.*]] = seq.compreg.ce sym @MyPipeline_a0_s3 %[[VAL_11]], %[[CLOCK]], %[[VAL_20]] : i32
 // CHECK:           %[[VAL_22:.*]] = hw.constant false
 // CHECK:           %[[VAL_23:.*]] = hw.constant true
 // CHECK:           %[[VAL_24:.*]] = comb.xor %[[VAL_4]], %[[VAL_23]] : i1
@@ -260,11 +260,11 @@ hw.module @testStallability(in %arg0: i32, in %go: i1, in %clk: !seq.clock, in %
   %out, %done = pipeline.scheduled "MyPipeline"(%a0 : i32 = %arg0)
       stall(%stall) clock(%clk) reset(%rst) go(%go) entryEn(%s0_enable)
       {stallability = [true, false, true]} -> (out : i32) {
-    pipeline.stage ^bb1 regs("a0" = %a0 : i32)
+    pipeline.stage ^bb1 regs("a0_s1" = %a0 : i32)
   ^bb1(%a0_0: i32, %s1_enable: i1):  // pred: ^bb0
-    pipeline.stage ^bb2 regs("a0" = %a0_0 : i32)
+    pipeline.stage ^bb2 regs("a0_s2" = %a0_0 : i32)
   ^bb2(%a0_1: i32, %s2_enable: i1):  // pred: ^bb1
-    pipeline.stage ^bb3 regs("a0" = %a0_1 : i32)
+    pipeline.stage ^bb3 regs("a0_s3" = %a0_1 : i32)
   ^bb3(%a0_2: i32, %s3_enable: i1):  // pred: ^bb2
     pipeline.return %a0_2 : i32
   }
