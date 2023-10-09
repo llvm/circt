@@ -463,8 +463,17 @@ def GrandCentral : Pass<"firrtl-grand-central", "CircuitOp"> {
   let constructor = "circt::firrtl::createGrandCentralPass()";
   let dependentDialects = ["circt::sv::SVDialect", "circt::hw::HWDialect"];
   let options = [
-    Option<"instantiateCompanionOnly", "instantiate-companion-only", "bool", "false",
-      "Instantiate the companion without a bind and drop the interface">
+    Option<"companionMode", "companion-mode", "CompanionMode",
+           "CompanionMode::Bind",
+           "specify the handling of companion modules", [{
+            ::llvm::cl::values(
+              clEnumValN(CompanionMode::Bind, "bind",
+                "Lower companion instances to SystemVerilog binds"),
+              clEnumValN(CompanionMode::Instantiate, "instantiate",
+                "Instantiate companions in the design"),
+              clEnumValN(CompanionMode::Drop, "drop",
+                "Remove companions from the design"))
+           }]>
   ];
   let statistics = [
     Statistic<"numViews", "num-views-created",

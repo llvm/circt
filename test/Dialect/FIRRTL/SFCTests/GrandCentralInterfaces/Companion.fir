@@ -1,4 +1,6 @@
-; RUN: firtool %s --grand-central-instantiate-companion | FileCheck %s --check-prefix CHECK
+; RUN: firtool %s --grand-central-companion-mode=instantiate | FileCheck %s --check-prefixes=INST
+; RUN: firtool %s --grand-central-companion-mode=drop | FileCheck %s --check-prefixes=DROP
+; RUN: firtool %s --grand-central-companion-mode=bind | FileCheck %s --check-prefixes=BIND
 
 circuit Foo : %[[
   {
@@ -56,12 +58,23 @@ circuit Foo : %[[
     companion.clock <= clock
     companion.a <= a
 
-    ; CHECK:     module Foo
-    ; CHECK-NOT: endmodule
-    ; CHECK-NOT:   emitted as a bind statement
-    ; CHECK:       Companion companion
-    ; CHECK:     endmodule
+    ; INST:     module Foo
+    ; INST-NOT: endmodule
+    ; INST-NOT:   emitted as a bind statement
+    ; INST:       Companion companion
+    ; INST:     endmodule
+    ; INST:     FILE "gct.yaml"
+    ; INST:     []
 
-; Verify that an empty yaml file is created.
-; CHECK: FILE "gct.yaml"
-; CHECK: []  
+    ; DROP-NOT: module Companion
+    ; DROP:     module Foo
+    ; DROP NOT: Companion
+    ; DROP: endmodule
+    ; DROP:     FILE "gct.yaml"
+    ; DROP:     []
+
+    ; BIND: module Foo
+    ; BIND:     FILE "gct.yaml"
+    ; BIND:     []
+    ; BIND: module Companion
+    ; BIND: bind Foo Companion companion

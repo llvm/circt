@@ -169,7 +169,7 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   // certain black boxes should be placed.  Note: all Grand Central Taps related
   // collateral is resolved entirely by LowerAnnotations.
   pm.addNestedPass<firrtl::CircuitOp>(
-      firrtl::createGrandCentralPass(opt.grandCentralInstantiateCompanionOnly));
+      firrtl::createGrandCentralPass(opt.companionMode));
 
   // Read black box source files into the IR.
   StringRef blackBoxRoot = opt.blackBoxRootPath.empty()
