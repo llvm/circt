@@ -54,13 +54,6 @@ def CompRegOp : SeqOp<"compreg",
                    /*reset*/ Value(), /*resetValue*/ Value(),
                    /*powerOnValue*/ Value(), hw::InnerSymAttr::get(nameAttr));
     }]>,
-    /// Create a register with an inner_sym matching the register's name.
-    OpBuilder<(ins "Value":$input, "Value":$clk, "const Twine &":$name), [{
-      auto nameAttr = StringAttr::get($_builder.getContext(), name);
-      return build($_builder, $_state, input.getType(), input, clk, nameAttr,
-                   /*reset*/ Value(), /*resetValue*/ Value(),
-                   /*powerOnValue*/ Value(), hw::InnerSymAttr::get(nameAttr));
-    }]>,
     /// Create a register with a reset, with an inner_sym matching the
     /// register's name, and optional power-on value.
     OpBuilder<(ins "Value":$input, "Value":$clk, "Value":$reset, "Value":$rstValue,
