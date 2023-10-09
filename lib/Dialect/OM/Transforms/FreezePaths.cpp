@@ -190,6 +190,7 @@ LogicalResult PathVisitor::processPath(PathOp path) {
 
   // Create the target string.
   SmallString<128> targetString;
+  targetString.append("~")
   targetString.append(targetKind);
   targetString.append(":");
   targetString.append(topModule);
