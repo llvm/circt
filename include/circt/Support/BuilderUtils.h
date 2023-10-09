@@ -9,6 +9,8 @@
 #ifndef CIRCT_SUPPORT_BUILDERUTILS_H
 #define CIRCT_SUPPORT_BUILDERUTILS_H
 
+#include <variant>
+
 #include "circt/Support/LLVM.h"
 #include "llvm/ADT/TypeSwitch.h"
 
@@ -20,23 +22,27 @@ namespace circt {
 /// The `get` function can then be used to obtain a `StringAttr` from any of the
 /// possible variants `StringAttrOrRef` can take.
 class StringAttrOrRef {
-  using Value = llvm::PointerUnion<StringAttr, StringRef *, Twine *>;
-  Value value;
+  std::variant<StringAttr, StringRef, Twine, const char *> value;
 
 public:
   StringAttrOrRef() : value() {}
   StringAttrOrRef(StringAttr attr) : value(attr) {}
-  StringAttrOrRef(const StringRef &str)
-      : value(const_cast<StringRef *>(&str)) {}
-  StringAttrOrRef(const Twine &twine) : value(const_cast<Twine *>(&twine)) {}
+  StringAttrOrRef(const StringRef &str) : value(str) {}
+  StringAttrOrRef(const char *ptr) : value(ptr) {}
+  StringAttrOrRef(const std::string &str) : value(StringRef(str)) {}
+  StringAttrOrRef(const Twine &twine) : value(twine) {}
 
   /// Return the represented string as a `StringAttr`.
   StringAttr get(MLIRContext *context) const {
-    return TypeSwitch<Value, StringAttr>(value)
-        .Case<StringAttr>([&](auto value) { return value; })
-        .Case<StringRef *, Twine *>(
-            [&](auto value) { return StringAttr::get(context, *value); })
-        .Default([](auto) { return StringAttr{}; });
+    if (auto *attr = std::get_if<StringAttr>(&value))
+      return *attr;
+    if (auto *ref = std::get_if<StringRef>(&value))
+      return StringAttr::get(context, *ref);
+    if (auto *twine = std::get_if<Twine>(&value))
+      return StringAttr::get(context, *twine);
+    if (auto *ptr = std::get_if<const char *>(&value))
+      return StringAttr::get(context, *ptr);
+    return StringAttr{};
   }
 };
 

@@ -48,17 +48,17 @@ def CompRegOp : SeqOp<"compreg",
 
   let builders = [
     /// Create a register with an inner_sym matching the register's name.
-    OpBuilder<(ins "Value":$input, "Value":$clk, "StringRef":$name), [{
-      auto nameAttr = StringAttr::get($_builder.getContext(), name);
+    OpBuilder<(ins "Value":$input, "Value":$clk, "StringAttrOrRef":$name), [{
+      auto nameAttr = name.get($_builder.getContext());
       return build($_builder, $_state, input.getType(), input, clk, nameAttr,
                    /*reset*/ Value(), /*resetValue*/ Value(),
                    /*powerOnValue*/ Value(), hw::InnerSymAttr::get(nameAttr));
     }]>,
     /// Create a register with a reset, with an inner_sym matching the
     /// register's name, and optional power-on value.
-    OpBuilder<(ins "Value":$input, "Value":$clk, "Value":$reset,
-                   "Value":$rstValue, "StringRef":$name, CArg<"Value", "{}">:$powerOnValue), [{
-      auto nameAttr = StringAttr::get($_builder.getContext(), name);
+    OpBuilder<(ins "Value":$input, "Value":$clk, "Value":$reset, "Value":$rstValue,
+                   "StringAttrOrRef":$name, CArg<"Value", "{}">:$powerOnValue), [{
+      auto nameAttr = name.get($_builder.getContext());
       return build($_builder, $_state, input.getType(), input, clk, nameAttr,
                    reset, rstValue, powerOnValue, hw::InnerSymAttr::get(nameAttr));
     }]>
