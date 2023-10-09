@@ -24,7 +24,7 @@ class SeqOp<string mnemonic, list<Trait> traits = []> :
 
 def CompRegOp : SeqOp<"compreg",
     [Pure, Clocked, Resettable,
-     AllTypesMatch<["input", "data"/*, "resetValue"*/]>,
+     AllTypesMatch<["input", "data"]>,
      DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
      DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>,
      AttrSizedOperandSegments]> {
@@ -36,14 +36,20 @@ def CompRegOp : SeqOp<"compreg",
   let arguments = (ins
     AnyType:$input,
     ClockType:$clk,
-    StrAttr:$name,
+    OptionalAttr<StrAttr>:$name,
     Optional<I1>:$reset,
     Optional<AnyType>:$resetValue,
     Optional<AnyType>:$powerOnValue,
     OptionalAttr<InnerSymAttr>:$inner_sym
   );
   let results = (outs AnyType:$data);
-  let hasCustomAssemblyFormat = 1;
+  let assemblyFormat = [{
+    (`sym` $inner_sym^)? custom<ImplicitSSAName>($name) $input `,` $clk
+    (`reset` $reset^ `,` $resetValue)?
+    (`powerOn` $powerOnValue^)? attr-dict `:` type($data)
+    custom<OptionalTypeMatch>(ref(type($data)), ref($resetValue), type($resetValue))
+    custom<OptionalTypeMatch>(ref(type($data)), ref($powerOnValue), type($powerOnValue))
+  }];
   let hasVerifier = 1;
 
   let builders = [
@@ -67,7 +73,7 @@ def CompRegOp : SeqOp<"compreg",
 
 def CompRegClockEnabledOp : SeqOp<"compreg.ce",
     [Pure, Clocked, Resettable,
-     AllTypesMatch<["input", "data"/*, "resetValue"*/]>,
+     AllTypesMatch<["input", "data"]>,
      DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
      DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>,
      AttrSizedOperandSegments]> {
@@ -80,14 +86,20 @@ def CompRegClockEnabledOp : SeqOp<"compreg.ce",
     AnyType:$input,
     ClockType:$clk,
     I1:$clockEnable,
-    StrAttr:$name,
+    OptionalAttr<StrAttr>:$name,
     Optional<I1>:$reset,
     Optional<AnyType>:$resetValue,
     Optional<AnyType>:$powerOnValue,
     OptionalAttr<InnerSymAttr>:$inner_sym
   );
   let results = (outs AnyType:$data);
-  let hasCustomAssemblyFormat = 1;
+  let assemblyFormat = [{
+    (`sym` $inner_sym^)? custom<ImplicitSSAName>($name) $input `,` $clk `,` $clockEnable
+    (`reset` $reset^ `,` $resetValue)?
+    (`powerOn` $powerOnValue^)? attr-dict `:` type($data)
+    custom<OptionalTypeMatch>(ref(type($data)), ref($resetValue), type($resetValue))
+    custom<OptionalTypeMatch>(ref(type($data)), ref($powerOnValue), type($powerOnValue))
+  }];
   let hasVerifier = 1;
 
   let builders = [

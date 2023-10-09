@@ -70,6 +70,20 @@ static bool canElideName(OpAsmPrinter &p, Operation *op) {
   return actualName == name;
 }
 
+static ParseResult
+parseOptionalTypeMatch(OpAsmParser &parser, Type refType,
+                       std::optional<OpAsmParser::UnresolvedOperand> operand,
+                       Type &type) {
+  if (operand)
+    type = refType;
+  return success();
+}
+
+static void printOptionalTypeMatch(OpAsmPrinter &p, Operation *op, Type refType,
+                                   Value operand, Type type) {
+  // Nothing to do - this is strictly an implicit parsing helper.
+}
+
 //===----------------------------------------------------------------------===//
 // ReadPortOp
 //===----------------------------------------------------------------------===//
@@ -277,121 +291,12 @@ LogicalResult FIFOOp::verify() {
 // CompRegOp
 //===----------------------------------------------------------------------===//
 
-template <bool ClockEnabled>
-static ParseResult parseCompReg(OpAsmParser &parser, OperationState &result) {
-  llvm::SMLoc loc = parser.getCurrentLocation();
-
-  if (succeeded(parser.parseOptionalKeyword("sym"))) {
-    hw::InnerSymAttr innerSym;
-    if (parser.parseCustomAttributeWithFallback(innerSym, /*type=*/nullptr,
-                                                "inner_sym", result.attributes))
-      return failure();
-  }
-
-  llvm::SmallVector<OpAsmParser::UnresolvedOperand, 6> operands;
-  OpAsmParser::UnresolvedOperand input, clock, reset, resetValue, ce, powerOn;
-  bool withReset = false;
-  bool withPowerOn = false;
-
-  if (failed(parser.parseOperand(input)) || failed(parser.parseComma()) ||
-      failed(parser.parseOperand(clock)))
-    return parser.emitError(loc, "expected input and clock operands");
-
-  operands.append({input, clock});
-  llvm::SmallVector<int32_t> operandSegmentSizes = {
-      1, // input
-      1, // clock
-  };
-
-  if constexpr (ClockEnabled) {
-    if (failed(parser.parseComma()) || failed(parser.parseOperand(ce)))
-      return parser.emitError(loc, "expected clock enable operand");
-    operands.push_back(ce);
-    operandSegmentSizes.push_back(1);
-  }
-
-  if (succeeded(parser.parseOptionalKeyword("reset"))) {
-    if (failed(parser.parseOperand(reset)) || failed(parser.parseComma()) ||
-        failed(parser.parseOperand(resetValue)))
-      return parser.emitError(loc, "expected reset and resetValue operands");
-    operands.append({reset, resetValue});
-    operandSegmentSizes.append({1, 1});
-    withReset = true;
-  } else {
-    operandSegmentSizes.append({0, 0});
-  }
-
-  if (succeeded(parser.parseOptionalKeyword("powerOn"))) {
-    if (failed(parser.parseOperand(powerOn)))
-      return parser.emitError(loc, "expected powerOn operand");
-    operands.push_back(powerOn);
-    operandSegmentSizes.push_back(1);
-    withPowerOn = true;
-  } else {
-    operandSegmentSizes.push_back(0);
-  }
-
-  Type i1 = IntegerType::get(result.getContext(), 1);
-  Type ty;
-  if (parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
-      parser.parseType(ty))
-    return failure();
-
-  SmallVector<Type, 5> operandTypes;
-  operandTypes.append({ty, ClockType::get(result.getContext())});
-  if constexpr (ClockEnabled)
-    operandTypes.push_back(i1);
-  if (withReset)
-    operandTypes.append({i1, ty}); /*reset*/
-  if (withPowerOn)
-    operandTypes.push_back(ty); /*powerOnValue*/
-
-  setNameFromResult(parser, result);
-  result.addTypes({ty});
-  if (failed(
-          parser.resolveOperands(operands, operandTypes, loc, result.operands)))
-    return failure();
-
-  result.addAttribute(
-      "operandSegmentSizes",
-      parser.getBuilder().getDenseI32ArrayAttr(operandSegmentSizes));
-  return success();
-}
-
-template <class Op>
-static void printCompReg(::mlir::OpAsmPrinter &p, Op op) {
-  SmallVector<StringRef> elidedAttrs{"operandSegmentSizes"};
-  if (auto sym = op.getInnerSymAttr()) {
-    elidedAttrs.push_back("inner_sym");
-    p << ' ' << "sym ";
-    sym.print(p);
-  }
-
-  p << ' ' << op.getInput() << ", " << op.getClk();
-
-  if constexpr (std::is_same<Op, CompRegClockEnabledOp>::value)
-    p << ", " << op.getClockEnable();
-
-  if (op.getReset())
-    p << " reset " << op.getReset() << ", " << op.getResetValue() << ' ';
-
-  if (Value pov = op.getPowerOnValue())
-    p << " powerOn " << pov;
-
-  // Determine if 'name' can be elided.
-  if (canElideName(p, op))
-    elidedAttrs.push_back("name");
-
-  p.printOptionalAttrDict(op->getAttrs(), elidedAttrs);
-  p << " : " << op.getInput().getType();
-}
-
 /// Suggest a name for each result value based on the saved result names
 /// attribute.
 void CompRegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   // If the wire has an optional 'name' attribute, use it.
-  if (!getName().empty())
-    setNameFn(getResult(), getName());
+  if (auto name = getName())
+    setNameFn(getResult(), *name);
 }
 
 std::optional<size_t> CompRegOp::getTargetResultIndex() { return 0; }
@@ -403,18 +308,12 @@ LogicalResult CompRegOp::verify() {
   return success();
 }
 
-ParseResult CompRegOp::parse(OpAsmParser &parser, OperationState &result) {
-  return parseCompReg<false>(parser, result);
-}
-
-void CompRegOp::print(::mlir::OpAsmPrinter &p) { printCompReg(p, *this); }
-
 /// Suggest a name for each result value based on the saved result names
 /// attribute.
 void CompRegClockEnabledOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   // If the wire has an optional 'name' attribute, use it.
-  if (!getName().empty())
-    setNameFn(getResult(), getName());
+  if (auto name = getName())
+    setNameFn(getResult(), *name);
 }
 
 std::optional<size_t> CompRegClockEnabledOp::getTargetResultIndex() {
@@ -426,15 +325,6 @@ LogicalResult CompRegClockEnabledOp::verify() {
     return emitOpError(
         "either reset and resetValue or neither must be specified");
   return success();
-}
-
-ParseResult CompRegClockEnabledOp::parse(OpAsmParser &parser,
-                                         OperationState &result) {
-  return parseCompReg<true>(parser, result);
-}
-
-void CompRegClockEnabledOp::print(::mlir::OpAsmPrinter &p) {
-  printCompReg(p, *this);
 }
 
 //===----------------------------------------------------------------------===//
