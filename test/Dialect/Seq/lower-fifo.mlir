@@ -10,10 +10,10 @@
 // CHECK:           %[[VAL_7:.*]] = hw.constant -2 : i2
 // CHECK:           %[[VAL_8:.*]] = hw.constant 1 : i2
 // CHECK:           %[[VAL_9:.*]] = hw.constant 0 : i2
-// CHECK:           %[[VAL_10:.*]] = seq.compreg sym @fifo_count %[[VAL_11:.*]], %[[CLOCK]], %[[VAL_1]], %[[VAL_9]]  : i2
+// CHECK:           %[[VAL_10:.*]] = seq.compreg sym @fifo_count  %[[VAL_11:.*]], %[[CLOCK]] reset %[[VAL_1]], %[[VAL_9]]  : i2
 // CHECK:           %[[VAL_12:.*]] = seq.hlmem @fifo_mem %[[CLOCK]], %[[VAL_1]] : <3xi32>
-// CHECK:           %[[VAL_13:.*]] = seq.compreg sym @fifo_rd_addr %[[VAL_14:.*]], %[[CLOCK]], %[[VAL_1]], %[[VAL_9]]  : i2
-// CHECK:           %[[VAL_15:.*]] = seq.compreg sym @fifo_wr_addr %[[VAL_16:.*]], %[[CLOCK]], %[[VAL_1]], %[[VAL_9]]  : i2
+// CHECK:           %[[VAL_13:.*]] = seq.compreg sym @fifo_rd_addr  %[[VAL_14:.*]], %[[CLOCK]] reset %[[VAL_1]], %[[VAL_9]]  : i2
+// CHECK:           %[[VAL_15:.*]] = seq.compreg sym @fifo_wr_addr  %[[VAL_16:.*]], %[[CLOCK]] reset %[[VAL_1]], %[[VAL_9]]  : i2
 // CHECK:           %[[VAL_17:.*]] = seq.read %[[VAL_12]]{{\[}}%[[VAL_13]]] rden %[[VAL_3]] {latency = 0 : i64} : !seq.hlmem<3xi32>
 // CHECK:           seq.write %[[VAL_12]]{{\[}}%[[VAL_15]]] %[[VAL_2]] wren %[[VAL_4]] {latency = 1 : i64} : !seq.hlmem<3xi32>
 // CHECK:           %[[VAL_18:.*]] = comb.xor %[[VAL_3]], %[[VAL_5]] : i1
@@ -56,10 +56,10 @@ hw.module @fifo1(in %clk : !seq.clock, in %rst : i1, in %in : i32, in %rdEn : i1
 // CHECK:           %[[VAL_10:.*]] = hw.constant 1 : i3
 // CHECK:           %[[VAL_11:.*]] = hw.constant 0 : i3
 // CHECK:           %[[VAL_12:.*]] = hw.constant 1 : i2
-// CHECK:           %[[VAL_13:.*]] = seq.compreg sym @fifo_count %[[VAL_14:.*]], %[[CLOCK]], %[[VAL_1]], %[[VAL_11]]  : i3
+// CHECK:           %[[VAL_13:.*]] = seq.compreg sym @fifo_count  %[[VAL_14:.*]], %[[CLOCK]] reset %[[VAL_1]], %[[VAL_11]]  : i3
 // CHECK:           %[[VAL_15:.*]] = seq.hlmem @fifo_mem %[[CLOCK]], %[[VAL_1]] : <4xi32>
-// CHECK:           %[[VAL_16:.*]] = seq.compreg sym @fifo_rd_addr %[[VAL_17:.*]], %[[CLOCK]], %[[VAL_1]], %[[VAL_6]]  : i2
-// CHECK:           %[[VAL_18:.*]] = seq.compreg sym @fifo_wr_addr %[[VAL_19:.*]], %[[CLOCK]], %[[VAL_1]], %[[VAL_6]]  : i2
+// CHECK:           %[[VAL_16:.*]] = seq.compreg sym @fifo_rd_addr  %[[VAL_17:.*]], %[[CLOCK]] reset %[[VAL_1]], %[[VAL_6]]  : i2
+// CHECK:           %[[VAL_18:.*]] = seq.compreg sym @fifo_wr_addr  %[[VAL_19:.*]], %[[CLOCK]] reset %[[VAL_1]], %[[VAL_6]]  : i2
 // CHECK:           %[[VAL_20:.*]] = seq.read %[[VAL_15]]{{\[}}%[[VAL_16]]] rden %[[VAL_3]] {latency = 0 : i64} : !seq.hlmem<4xi32>
 // CHECK:           seq.write %[[VAL_15]]{{\[}}%[[VAL_18]]] %[[VAL_2]] wren %[[VAL_4]] {latency = 1 : i64} : !seq.hlmem<4xi32>
 // CHECK:           %[[VAL_21:.*]] = comb.icmp eq %[[VAL_13]], %[[VAL_9]] {sv.namehint = "fifo_full"} : i3

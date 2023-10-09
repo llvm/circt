@@ -41,7 +41,7 @@ hw.module @top(in %arg0: i1, in %arg1: i1, in %clk : !seq.clock, in %rst : i1, o
 // CHECK-NEXT:    %1 = sv.read_inout %to_B : !hw.inout<typealias<@fsm_enum_typedecls::@top_state_t, !hw.enum<A, B>>>
 // CHECK-NEXT:    %state_next = sv.reg  : !hw.inout<typealias<@fsm_enum_typedecls::@top_state_t, !hw.enum<A, B>>>
 // CHECK-NEXT:    %2 = sv.read_inout %state_next : !hw.inout<typealias<@fsm_enum_typedecls::@top_state_t, !hw.enum<A, B>>>
-// CHECK-NEXT:    %state_reg = seq.compreg %2, %clk, %rst, %0  : !hw.typealias<@fsm_enum_typedecls::@top_state_t, !hw.enum<A, B>>
+// CHECK-NEXT:    %state_reg = seq.compreg sym @state_reg %2, %clk reset %rst, %0  : !hw.typealias<@fsm_enum_typedecls::@top_state_t, !hw.enum<A, B>>
 // CHECK-NEXT:    %c42_i8 = hw.constant 42 : i8
 // CHECK-NEXT:    %c0_i8 = hw.constant 0 : i8
 // CHECK-NEXT:    %c1_i8 = hw.constant 1 : i8

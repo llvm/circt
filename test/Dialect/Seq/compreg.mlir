@@ -4,9 +4,9 @@
 hw.module @top(in %clk: !seq.clock, in %rst: i1, in %i: i32, in %s: !hw.struct<foo: i32>) {
   %rv = hw.constant 0 : i32
 
-  %r0 = seq.compreg %i, %clk, %rst, %rv : i32
+  %r0 = seq.compreg %i, %clk reset %rst, %rv : i32
   seq.compreg %i, %clk : i32
-  // CHECK: %{{.+}} = seq.compreg %i, %clk, %rst, %c0_i32  : i32
+  // CHECK: %{{.+}} = seq.compreg %i, %clk reset %rst, %c0_i32  : i32
   // CHECK: %{{.+}} = seq.compreg %i, %clk : i32
   // SV: [[REG0:%.+]] = sv.reg  : !hw.inout<i32>
   // SV: [[REG5:%.+]] = sv.read_inout [[REG0]] : !hw.inout<i32>
@@ -35,9 +35,9 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1, in %i: i32, in %s: !hw.struct<f
 
   %sv = hw.struct_create (%r0) : !hw.struct<foo: i32>
 
-  %foo = seq.compreg %s, %clk, %rst, %sv {sv.attributes=[#sv.attribute<"dont_merge">]} : !hw.struct<foo: i32>
+  %foo = seq.compreg %s, %clk reset %rst, %sv {sv.attributes=[#sv.attribute<"dont_merge">]} : !hw.struct<foo: i32>
   seq.compreg %s, %clk : !hw.struct<foo: i32>
-  // CHECK: %foo = seq.compreg %s, %clk, %rst, %{{.+}} : !hw.struct<foo: i32>
+  // CHECK: %foo = seq.compreg %s, %clk reset %rst, %{{.+}} : !hw.struct<foo: i32>
   // CHECK: %{{.+}} = seq.compreg %s, %clk : !hw.struct<foo: i32>
 
   // SV: [[REGST:%.+]] = hw.struct_create ([[REG5]]) : !hw.struct<foo: i32>
@@ -72,13 +72,16 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1, in %i: i32, in %s: !hw.struct<f
 
   // SV: %bar = sv.reg sym @reg1
   // SV: sv.reg sym @reg2
+
+  %withPowerOn = seq.compreg sym @withPowerOn %i, %clk reset %rst, %rv powerOn %rv : i32
+  // SV: %withPowerOn = sv.reg init %c0_i32 sym @withPowerOn : !hw.inout<i32>
 }
 
 hw.module @top_ce(in %clk: !seq.clock, in %rst: i1, in %ce: i1, in %i: i32) {
   %rv = hw.constant 0 : i32
 
-  %r0 = seq.compreg.ce %i, %clk, %ce, %rst, %rv : i32
-  // CHECK: %r0 = seq.compreg.ce %i, %clk, %ce, %rst, %c0_i32  : i32
+  %r0 = seq.compreg.ce %i, %clk, %ce reset %rst, %rv : i32
+  // CHECK: %r0 = seq.compreg.ce %i, %clk, %ce reset %rst, %c0_i32  : i32
   // SV: [[REG_CE0:%.+]] = sv.reg  : !hw.inout<i32>
   // SV: [[REG_CE5:%.+]] = sv.read_inout [[REG0]] : !hw.inout<i32>
   // SV: sv.alwaysff(posedge %clk)  {
@@ -99,6 +102,9 @@ hw.module @top_ce(in %clk: !seq.clock, in %rst: i1, in %ce: i1, in %i: i32) {
   // ALWAYS:     }
   // ALWAYS:   }
   // ALWAYS: }
+
+  %withPowerOn = seq.compreg.ce sym @withPowerOn %i, %clk, %ce reset %rst, %rv powerOn %rv : i32
+  // SV: %withPowerOn = sv.reg init %c0_i32 sym @withPowerOn : !hw.inout<i32>
 }
 
 // SV-LABEL: @reg_of_clock_type

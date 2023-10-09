@@ -2,16 +2,17 @@
 
 // Test a control merge that is control only.
 
-// CHECK:   hw.module @handshake_control_merge_out_ui64_2ins_2outs_ctrl(in %[[VAL_0:.*]] : !esi.channel<i0>, in %[[VAL_1:.*]] : !esi.channel<i0>, in %[[CLOCK:.*]] : !seq.clock, in %[[VAL_3:.*]] : i1, out dataOut : !esi.channel<i0>, out index : !esi.channel<i64>) {
+// CHECK-LABEL:   hw.module @handshake_control_merge_out_ui64_2ins_2outs_ctrl(in 
+// CHECK-SAME:             %[[VAL_0:.*]] : !esi.channel<i0>, in %[[VAL_1:.*]] : !esi.channel<i0>, in %[[VAL_2:.*]] : !seq.clock, in %[[VAL_3:.*]] : i1, out dataOut : !esi.channel<i0>, out index : !esi.channel<i64>) {
 // CHECK:           %[[VAL_4:.*]], %[[VAL_5:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_6:.*]] : i0
 // CHECK:           %[[VAL_7:.*]], %[[VAL_8:.*]] = esi.unwrap.vr %[[VAL_1]], %[[VAL_9:.*]] : i0
 // CHECK:           %[[VAL_10:.*]], %[[VAL_11:.*]] = esi.wrap.vr %[[VAL_12:.*]], %[[VAL_13:.*]] : i0
 // CHECK:           %[[VAL_14:.*]], %[[VAL_15:.*]] = esi.wrap.vr %[[VAL_16:.*]], %[[VAL_17:.*]] : i64
 // CHECK:           %[[VAL_18:.*]] = hw.constant 0 : i2
 // CHECK:           %[[VAL_19:.*]] = hw.constant false
-// CHECK:           %[[VAL_20:.*]] = seq.compreg %[[VAL_21:.*]], %[[CLOCK]], %[[VAL_3]], %[[VAL_18]]  : i2
-// CHECK:           %[[VAL_22:.*]] = seq.compreg %[[VAL_23:.*]], %[[CLOCK]], %[[VAL_3]], %[[VAL_19]]  : i1
-// CHECK:           %[[VAL_24:.*]] = seq.compreg %[[VAL_25:.*]], %[[CLOCK]], %[[VAL_3]], %[[VAL_19]]  : i1
+// CHECK:           %[[VAL_20:.*]] = seq.compreg sym @won_reg %[[VAL_21:.*]], %[[VAL_2]] reset %[[VAL_3]], %[[VAL_18]]  : i2
+// CHECK:           %[[VAL_22:.*]] = seq.compreg sym @result_emitted_reg %[[VAL_23:.*]], %[[VAL_2]] reset %[[VAL_3]], %[[VAL_19]]  : i1
+// CHECK:           %[[VAL_24:.*]] = seq.compreg sym @index_emitted_reg %[[VAL_25:.*]], %[[VAL_2]] reset %[[VAL_3]], %[[VAL_19]]  : i1
 // CHECK:           %[[VAL_26:.*]] = comb.extract %[[VAL_27:.*]] from 0 : (i2) -> i1
 // CHECK:           %[[VAL_28:.*]] = comb.extract %[[VAL_27]] from 1 : (i2) -> i1
 // CHECK:           %[[VAL_29:.*]] = comb.or %[[VAL_26]], %[[VAL_28]] : i1
@@ -47,7 +48,7 @@
 // CHECK:           %[[VAL_6]] = comb.icmp eq %[[VAL_50]], %[[VAL_35]] : i2
 // CHECK:           %[[VAL_9]] = comb.icmp eq %[[VAL_50]], %[[VAL_33]] : i2
 // CHECK:           hw.output %[[VAL_10]], %[[VAL_14]] : !esi.channel<i0>, !esi.channel<i64>
-// CHECK:         }
+// CHECK:         } 
 
 handshake.func @test_cmerge(%arg0: none, %arg1: none, %arg2: none, ...) -> (none, index, none) {
   %0:2 = control_merge %arg0, %arg1 : none, index
@@ -58,7 +59,8 @@ handshake.func @test_cmerge(%arg0: none, %arg1: none, %arg2: none, ...) -> (none
 
 // Test a control merge that also outputs the selected input's data.
 
-// CHECK:   hw.module @handshake_control_merge_in_ui64_ui64_ui64_out_ui64_ui64(in %[[VAL_0:.*]] : !esi.channel<i64>, in %[[VAL_1:.*]] : !esi.channel<i64>, in %[[VAL_2:.*]] : !esi.channel<i64>, in %[[CLOCK:.*]] : !seq.clock, in %[[VAL_4:.*]] : i1, out dataOut : !esi.channel<i64>, out index : !esi.channel<i64>) {
+// CHECK-LABEL:   hw.module @handshake_control_merge_in_ui64_ui64_ui64_out_ui64_ui64(in 
+// CHECK-SAME:         %[[VAL_0:.*]] : !esi.channel<i64>, in %[[VAL_1:.*]] : !esi.channel<i64>, in %[[VAL_2:.*]] : !esi.channel<i64>, in %[[VAL_3:.*]] : !seq.clock, in %[[VAL_4:.*]] : i1, out dataOut : !esi.channel<i64>, out index : !esi.channel<i64>) {
 // CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_7:.*]] : i64
 // CHECK:           %[[VAL_8:.*]], %[[VAL_9:.*]] = esi.unwrap.vr %[[VAL_1]], %[[VAL_10:.*]] : i64
 // CHECK:           %[[VAL_11:.*]], %[[VAL_12:.*]] = esi.unwrap.vr %[[VAL_2]], %[[VAL_13:.*]] : i64
@@ -66,9 +68,9 @@ handshake.func @test_cmerge(%arg0: none, %arg1: none, %arg2: none, ...) -> (none
 // CHECK:           %[[VAL_18:.*]], %[[VAL_19:.*]] = esi.wrap.vr %[[VAL_20:.*]], %[[VAL_21:.*]] : i64
 // CHECK:           %[[VAL_22:.*]] = hw.constant 0 : i3
 // CHECK:           %[[VAL_23:.*]] = hw.constant false
-// CHECK:           %[[VAL_24:.*]] = seq.compreg %[[VAL_25:.*]], %[[CLOCK]], %[[VAL_4]], %[[VAL_22]]  : i3
-// CHECK:           %[[VAL_26:.*]] = seq.compreg %[[VAL_27:.*]], %[[CLOCK]], %[[VAL_4]], %[[VAL_23]]  : i1
-// CHECK:           %[[VAL_28:.*]] = seq.compreg %[[VAL_29:.*]], %[[CLOCK]], %[[VAL_4]], %[[VAL_23]]  : i1
+// CHECK:           %[[VAL_24:.*]] = seq.compreg sym @won_reg %[[VAL_25:.*]], %[[VAL_3]] reset %[[VAL_4]], %[[VAL_22]]  : i3
+// CHECK:           %[[VAL_26:.*]] = seq.compreg sym @result_emitted_reg %[[VAL_27:.*]], %[[VAL_3]] reset %[[VAL_4]], %[[VAL_23]]  : i1
+// CHECK:           %[[VAL_28:.*]] = seq.compreg sym @index_emitted_reg %[[VAL_29:.*]], %[[VAL_3]] reset %[[VAL_4]], %[[VAL_23]]  : i1
 // CHECK:           %[[VAL_30:.*]] = comb.extract %[[VAL_31:.*]] from 0 : (i3) -> i1
 // CHECK:           %[[VAL_32:.*]] = comb.extract %[[VAL_31]] from 1 : (i3) -> i1
 // CHECK:           %[[VAL_33:.*]] = comb.extract %[[VAL_31]] from 2 : (i3) -> i1
@@ -114,7 +116,6 @@ handshake.func @test_cmerge(%arg0: none, %arg1: none, %arg2: none, ...) -> (none
 // CHECK:           %[[VAL_13]] = comb.icmp eq %[[VAL_62]], %[[VAL_39]] : i3
 // CHECK:           hw.output %[[VAL_14]], %[[VAL_18]] : !esi.channel<i64>, !esi.channel<i64>
 // CHECK:         }
-
 handshake.func @test_cmerge_data(%arg0: index, %arg1: index, %arg2: index) -> (index, index) {
   %0:2 = control_merge %arg0, %arg1, %arg2 : index, index
   return %0#0, %0#1 : index, index

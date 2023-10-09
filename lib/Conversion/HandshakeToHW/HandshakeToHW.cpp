@@ -499,8 +499,8 @@ struct RTLBuilder {
            "No global reset provided to this RTLBuilder - a reset "
            "signal must be provided to the reg(...) function.");
 
-    return b.create<seq::CompRegOp>(loc, in.getType(), in, resolvedClk, name,
-                                    resolvedRst, rstValue, hw::InnerSymAttr());
+    return b.create<seq::CompRegOp>(loc, in, resolvedClk, resolvedRst, rstValue,
+                                    name);
   }
 
   Value cmp(Value lhs, Value rhs, comb::ICmpPredicate predicate,

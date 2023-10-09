@@ -26,16 +26,16 @@ class CompRegLike:
                *,
                reset=None,
                reset_value=None,
+               power_on_value=None,
                name=None,
                sym_name=None,
                loc=None,
                ip=None):
-    operands = []
+    operands = [input, clk]
     results = []
     attributes = {}
     results.append(data_type)
-    operands.append(input)
-    operands.append(clk)
+    operand_segment_sizes = [1, 1]
     if isinstance(self, CompRegOp):
       if clockEnable is not None:
         raise Exception("Clock enable not supported on compreg")
@@ -43,18 +43,31 @@ class CompRegLike:
       if clockEnable is None:
         raise Exception("Clock enable required on compreg.ce")
       operands.append(clockEnable)
+      operand_segment_sizes.append(1)
     else:
       assert False, "Class not recognized"
-    if reset is not None:
+    if reset is not None and reset_value is not None:
       operands.append(reset)
-    if reset_value is not None:
       operands.append(reset_value)
+      operand_segment_sizes += [1, 1]
+    else:
+      operand_segment_sizes += [0, 0]
+      operands += [None, None]
+
+    if power_on_value is not None:
+      operands.append(power_on_value)
+      operand_segment_sizes.append(1)
+    else:
+      operands.append(None)
+      operand_segment_sizes.append(0)
     if name is None:
       attributes["name"] = StringAttr.get("")
     else:
       attributes["name"] = StringAttr.get(name)
     if sym_name is not None:
       attributes["inner_sym"] = hw.InnerSymAttr.get(StringAttr.get(sym_name))
+
+    self._ODS_OPERAND_SEGMENTS = operand_segment_sizes
 
     OpView.__init__(
         self,

@@ -7,7 +7,7 @@
 // CHECK:           %[[VAL_7:.*]] = seq.compreg sym @p0_stage0_reg0 %[[VAL_5]], %[[VAL_6]] : i32
 // CHECK:           %[[VAL_8:.*]] = seq.compreg sym @p0_stage0_reg1 %[[VAL_0]], %[[VAL_6]] : i32
 // CHECK:           %[[VAL_9:.*]] = hw.constant false
-// CHECK:           %[[VAL_10:.*]] = seq.compreg sym @p0_stage1_enable %[[VAL_2]], %[[CLOCK]], %[[VAL_4]], %[[VAL_9]]  : i1
+// CHECK:           %[[VAL_10:.*]] = seq.compreg sym @p0_stage1_enable  %[[VAL_2]], %[[CLOCK]] reset %[[VAL_4]], %[[VAL_9]]  : i1
 // CHECK:           %[[VAL_11:.*]] = comb.add %[[VAL_7]], %[[VAL_8]] : i32
 // CHECK:           hw.output %[[VAL_11]], %[[VAL_10]] : i32, i1
 // CHECK:         }
