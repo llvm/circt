@@ -193,12 +193,17 @@ LogicalResult PathVisitor::processPath(PathOp path) {
   targetString.append(targetKind);
   targetString.append(":");
   targetString.append(topModule);
-  if (!modules.empty())
+  size_t numModules = modules.size();
+  if (numModules > 0)
     targetString.append("/");
-  for (auto [instance, module] : llvm::reverse(modules)) {
+  for (auto [i, instanceAndModule] : llvm::enumerate(llvm::reverse(modules))) {
+    auto instance = instanceAndModule.first;
+    auto module = instanceAndModule.second;
     targetString.append(instance);
     targetString.append(":");
     targetString.append(module);
+    if (i < numModules - 1)
+      targetString.append("/");
   }
   if (component) {
     targetString.append(">");
