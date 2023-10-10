@@ -21,4 +21,3 @@ hw.module @testPowerOn(in %arg0: i32, in %arg1: i32, in %go: i1, in %clk: !seq.c
   }
   hw.output %0#0, %0#1 : i32, i1
 }
-`
