@@ -127,6 +127,10 @@ omEvaluatorObjectGetFieldNames(OMEvaluatorValue object);
 MLIR_CAPI_EXPORTED MlirContext
 omEvaluatorValueGetContext(OMEvaluatorValue evaluatorValue);
 
+// Get Location from an EvaluatorValue.
+MLIR_CAPI_EXPORTED MlirLocation
+omEvaluatorValueGetLoc(OMEvaluatorValue evaluatorValue);
+
 // Query if the EvaluatorValue is null.
 MLIR_CAPI_EXPORTED bool omEvaluatorValueIsNull(OMEvaluatorValue evaluatorValue);
 

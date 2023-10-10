@@ -16,6 +16,7 @@
 #include "circt/Dialect/OM/OMDialect.h"
 #include "mlir/CAPI/Registration.h"
 #include "mlir/CAPI/Wrap.h"
+#include "mlir/IR/Location.h"
 #include "llvm/ADT/Hashing.h"
 #include "llvm/Support/Casting.h"
 
@@ -189,6 +190,11 @@ OMEvaluatorValue omEvaluatorObjectGetField(OMEvaluatorValue object,
 // Get a context from an EvaluatorValue.
 MlirContext omEvaluatorValueGetContext(OMEvaluatorValue evaluatorValue) {
   return wrap(unwrap(evaluatorValue)->getContext());
+}
+
+// Get location from an EvaluatorValue.
+MlirLocation omEvaluatorValueGetLoc(OMEvaluatorValue evaluatorValue) {
+  return wrap(unwrap(evaluatorValue)->getLoc());
 }
 
 // Query if the EvaluatorValue is null.

@@ -107,6 +107,19 @@ struct Object {
   /// Get the Type from an Object, which will be a ClassType.
   MlirType getType() { return omEvaluatorObjectGetType(value); }
 
+  // Get the field location info.
+  MlirLocation getFieldLoc(const std::string &name) {
+    // Wrap the requested field name in an attribute.
+    MlirContext context = mlirTypeGetContext(omEvaluatorObjectGetType(value));
+    MlirStringRef cName = mlirStringRefCreateFromCString(name.c_str());
+    MlirAttribute nameAttr = mlirStringAttrGet(context, cName);
+
+    // Get the field's ObjectValue via the CAPI.
+    OMEvaluatorValue result = omEvaluatorObjectGetField(value, nameAttr);
+
+    return omEvaluatorValueGetLoc(result);
+  }
+
   // Get a field from the Object, using pybind's support for variant to return a
   // Python object that is either an Object or Attribute.
   PythonValue getField(const std::string &name) {
@@ -365,6 +378,8 @@ void circt::python::populateDialectOMSubmodule(py::module &m) {
       .def(py::init<Object>(), py::arg("object"))
       .def("__getattr__", &Object::getField, "Get a field from an Object",
            py::arg("name"))
+      .def("get_field_loc", &Object::getFieldLoc,
+           "Get the location of a field from an Object", py::arg("name"))
       .def_property_readonly("field_names", &Object::getFieldNames,
                              "Get field names from an Object")
       .def_property_readonly("type", &Object::getType, "The Type of the Object")

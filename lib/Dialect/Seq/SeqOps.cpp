@@ -526,9 +526,15 @@ LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
       // If the register has a reset value, we can replace it with that.
       rewriter.replaceOp(op, resetValue);
     } else {
-      auto constant = rewriter.create<hw::ConstantOp>(
-          op.getLoc(), APInt::getZero(hw::getBitWidth(op.getType())));
-      rewriter.replaceOpWithNewOp<hw::BitcastOp>(op, op.getType(), constant);
+      if (op.getType().isa<seq::ClockType>()) {
+        rewriter.replaceOpWithNewOp<seq::ConstClockOp>(
+            op,
+            seq::ClockConstAttr::get(rewriter.getContext(), ClockConst::Low));
+      } else {
+        auto constant = rewriter.create<hw::ConstantOp>(
+            op.getLoc(), APInt::getZero(hw::getBitWidth(op.getType())));
+        rewriter.replaceOpWithNewOp<hw::BitcastOp>(op, op.getType(), constant);
+      }
     }
     return success();
   }

@@ -218,7 +218,9 @@ def PipelineToHW : Pass<"lower-pipeline-to-hw", "mlir::ModuleOp"> {
   ];
   let options = [
     Option<"clockGateRegs", "clock-gate-regs", "bool", "false",
-      "Clock gate each register instead of (default) input muxing  (ASIC optimization).">
+      "Clock gate each register instead of (default) input muxing  (ASIC optimization).">,
+    Option<"enablePowerOnValues", "enable-poweron-values", "bool", "false",
+      "Add power-on values to the pipeline control registers">
   ];
 }
 

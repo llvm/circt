@@ -133,6 +133,11 @@ class Object(BaseObject):
     field = super().__getattr__(name)
     return wrap_mlir_object(field)
 
+  def get_field_loc(self, name: str):
+    # Call the base method to get the loc.
+    loc = super().get_field_loc(name)
+    return loc
+
   # Support iterating over an Object by yielding its fields.
   def __iter__(self):
     for name in self.field_names:
