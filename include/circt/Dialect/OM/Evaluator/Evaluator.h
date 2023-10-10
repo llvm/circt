@@ -17,6 +17,7 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Diagnostics.h"
+#include "mlir/IR/Location.h"
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Support/LogicalResult.h"
@@ -46,7 +47,8 @@ using ObjectFields = SmallDenseMap<StringAttr, EvaluatorValuePtr>;
 struct EvaluatorValue : std::enable_shared_from_this<EvaluatorValue> {
   // Implement LLVM RTTI.
   enum class Kind { Attr, Object, List, Tuple, Map, Reference };
-  EvaluatorValue(MLIRContext *ctx, Kind kind) : kind(kind), ctx(ctx) {}
+  EvaluatorValue(MLIRContext *ctx, Kind kind, Location loc)
+      : kind(kind), ctx(ctx), loc(loc) {}
   Kind getKind() const { return kind; }
   MLIRContext *getContext() const { return ctx; }
 
@@ -63,9 +65,20 @@ struct EvaluatorValue : std::enable_shared_from_this<EvaluatorValue> {
   // Finalize the evaluator value. Strip intermidiate reference values.
   LogicalResult finalize();
 
+  // Return the Location associated with the Value.
+  Location getLoc() const { return loc; }
+  // Set the Location associated with the Value.
+  void setLoc(Location l) { loc = l; }
+  // Set the Location, if it is unknown.
+  void setLocIfUnknown(Location l) {
+    if (isa<UnknownLoc>(loc))
+      loc = l;
+  }
+
 private:
   const Kind kind;
   MLIRContext *ctx;
+  Location loc;
   bool fullyEvaluated = false;
   bool finalized = false;
 };
@@ -74,8 +87,8 @@ private:
 /// ReferenceValue is replaced with its element and erased at the end of
 /// evaluation.
 struct ReferenceValue : EvaluatorValue {
-  ReferenceValue(Type type)
-      : EvaluatorValue(type.getContext(), Kind::Reference), value(nullptr),
+  ReferenceValue(Type type, Location loc)
+      : EvaluatorValue(type.getContext(), Kind::Reference, loc), value(nullptr),
         type(type) {}
 
   // Implement LLVM RTTI.
@@ -114,10 +127,11 @@ private:
 /// Values which can be directly representable by MLIR attributes.
 struct AttributeValue : EvaluatorValue {
   AttributeValue(Attribute attr)
-      : EvaluatorValue(attr.getContext(), Kind::Attr), attr(attr) {
+      : AttributeValue(attr, mlir::UnknownLoc::get(attr.getContext())) {}
+  AttributeValue(Attribute attr, Location loc)
+      : EvaluatorValue(attr.getContext(), Kind::Attr, loc), attr(attr) {
     markFullyEvaluated();
   }
-
   Attribute getAttr() const { return attr; }
   template <typename AttrTy>
   AttrTy getAs() const {
@@ -151,8 +165,9 @@ static inline LogicalResult finalizeEvaluatorValue(EvaluatorValuePtr &value) {
 
 /// A List which contains variadic length of elements with the same type.
 struct ListValue : EvaluatorValue {
-  ListValue(om::ListType type, SmallVector<EvaluatorValuePtr> elements)
-      : EvaluatorValue(type.getContext(), Kind::List), type(type),
+  ListValue(om::ListType type, SmallVector<EvaluatorValuePtr> elements,
+            Location loc)
+      : EvaluatorValue(type.getContext(), Kind::List, loc), type(type),
         elements(std::move(elements)) {
     markFullyEvaluated();
   }
@@ -166,8 +181,8 @@ struct ListValue : EvaluatorValue {
   LogicalResult finalizeImpl();
 
   // Partially evaluated value.
-  ListValue(om::ListType type)
-      : EvaluatorValue(type.getContext(), Kind::List), type(type) {}
+  ListValue(om::ListType type, Location loc)
+      : EvaluatorValue(type.getContext(), Kind::List, loc), type(type) {}
 
   const auto &getElements() const { return elements; }
 
@@ -186,15 +201,16 @@ private:
 
 /// A Map value.
 struct MapValue : EvaluatorValue {
-  MapValue(om::MapType type, DenseMap<Attribute, EvaluatorValuePtr> elements)
-      : EvaluatorValue(type.getContext(), Kind::Map), type(type),
+  MapValue(om::MapType type, DenseMap<Attribute, EvaluatorValuePtr> elements,
+           Location loc)
+      : EvaluatorValue(type.getContext(), Kind::Map, loc), type(type),
         elements(std::move(elements)) {
     markFullyEvaluated();
   }
 
   // Partially evaluated value.
-  MapValue(om::MapType type)
-      : EvaluatorValue(type.getContext(), Kind::Map), type(type) {}
+  MapValue(om::MapType type, Location loc)
+      : EvaluatorValue(type.getContext(), Kind::Map, loc), type(type) {}
 
   const auto &getElements() const { return elements; }
   void setElements(DenseMap<Attribute, EvaluatorValuePtr> newElements) {
@@ -223,15 +239,15 @@ private:
 
 /// A composite Object, which has a type and fields.
 struct ObjectValue : EvaluatorValue {
-  ObjectValue(om::ClassOp cls, ObjectFields fields)
-      : EvaluatorValue(cls.getContext(), Kind::Object), cls(cls),
+  ObjectValue(om::ClassOp cls, ObjectFields fields, Location loc)
+      : EvaluatorValue(cls.getContext(), Kind::Object, loc), cls(cls),
         fields(std::move(fields)) {
     markFullyEvaluated();
   }
 
   // Partially evaluated value.
-  ObjectValue(om::ClassOp cls)
-      : EvaluatorValue(cls.getContext(), Kind::Object), cls(cls) {}
+  ObjectValue(om::ClassOp cls, Location loc)
+      : EvaluatorValue(cls.getContext(), Kind::Object, loc), cls(cls) {}
 
   om::ClassOp getClassOp() const { return cls; }
   const auto &getFields() const { return fields; }
@@ -275,15 +291,15 @@ private:
 /// Tuple values.
 struct TupleValue : EvaluatorValue {
   using TupleElements = llvm::SmallVector<EvaluatorValuePtr>;
-  TupleValue(TupleType type, TupleElements tupleElements)
-      : EvaluatorValue(type.getContext(), Kind::Tuple), type(type),
+  TupleValue(TupleType type, TupleElements tupleElements, Location loc)
+      : EvaluatorValue(type.getContext(), Kind::Tuple, loc), type(type),
         elements(std::move(tupleElements)) {
     markFullyEvaluated();
   }
 
   // Partially evaluated value.
-  TupleValue(TupleType type)
-      : EvaluatorValue(type.getContext(), Kind::Tuple), type(type) {}
+  TupleValue(TupleType type, Location loc)
+      : EvaluatorValue(type.getContext(), Kind::Tuple, loc), type(type) {}
 
   void setElements(TupleElements newElements) {
     elements = std::move(newElements);
@@ -334,7 +350,8 @@ struct Evaluator {
   /// Get the Module this Evaluator is built from.
   mlir::ModuleOp getModule();
 
-  FailureOr<evaluator::EvaluatorValuePtr> getPartiallyEvaluatedValue(Type type);
+  FailureOr<evaluator::EvaluatorValuePtr>
+  getPartiallyEvaluatedValue(Type type, Location loc);
 
   using ActualParameters =
       SmallVectorImpl<std::shared_ptr<evaluator::EvaluatorValue>> *;
@@ -351,42 +368,48 @@ private:
     return val && val->isFullyEvaluated();
   }
 
-  FailureOr<EvaluatorValuePtr> getOrCreateValue(Value value,
-                                                ActualParameters actualParams);
+  FailureOr<EvaluatorValuePtr>
+  getOrCreateValue(Value value, ActualParameters actualParams, Location loc);
   FailureOr<EvaluatorValuePtr>
   allocateObjectInstance(StringAttr clasName, ActualParameters actualParams);
 
   /// Evaluate a Value in a Class body according to the small expression grammar
   /// described in the rationale document. The actual parameters are the values
   /// supplied at the current instantiation of the Class being evaluated.
-  FailureOr<EvaluatorValuePtr> evaluateValue(Value value,
-                                             ActualParameters actualParams);
+  FailureOr<EvaluatorValuePtr>
+  evaluateValue(Value value, ActualParameters actualParams, Location loc);
 
   /// Evaluator dispatch functions for the small expression grammar.
   FailureOr<EvaluatorValuePtr> evaluateParameter(BlockArgument formalParam,
-                                                 ActualParameters actualParams);
+                                                 ActualParameters actualParams,
+                                                 Location loc);
 
-  FailureOr<EvaluatorValuePtr> evaluateConstant(ConstantOp op,
-                                                ActualParameters actualParams);
+  FailureOr<EvaluatorValuePtr>
+  evaluateConstant(ConstantOp op, ActualParameters actualParams, Location loc);
   /// Instantiate an Object with its class name and actual parameters.
   FailureOr<EvaluatorValuePtr>
   evaluateObjectInstance(StringAttr className, ActualParameters actualParams,
-                         ObjectKey instanceObjectKey = {});
+                         Location loc, ObjectKey instanceKey = {});
   FailureOr<EvaluatorValuePtr>
   evaluateObjectInstance(ObjectOp op, ActualParameters actualParams);
   FailureOr<EvaluatorValuePtr>
-  evaluateObjectField(ObjectFieldOp op, ActualParameters actualParams);
+  evaluateObjectField(ObjectFieldOp op, ActualParameters actualParams,
+                      Location loc);
+  FailureOr<EvaluatorValuePtr> evaluateListCreate(ListCreateOp op,
+                                                  ActualParameters actualParams,
+                                                  Location loc);
   FailureOr<EvaluatorValuePtr>
-  evaluateListCreate(ListCreateOp op, ActualParameters actualParams);
+  evaluateTupleCreate(TupleCreateOp op, ActualParameters actualParams,
+                      Location loc);
   FailureOr<EvaluatorValuePtr>
-  evaluateTupleCreate(TupleCreateOp op, ActualParameters actualParams);
-  FailureOr<EvaluatorValuePtr> evaluateTupleGet(TupleGetOp op,
-                                                ActualParameters actualParams);
+  evaluateTupleGet(TupleGetOp op, ActualParameters actualParams, Location loc);
   FailureOr<evaluator::EvaluatorValuePtr>
-  evaluateMapCreate(MapCreateOp op, ActualParameters actualParams);
+  evaluateMapCreate(MapCreateOp op, ActualParameters actualParams,
+                    Location loc);
 
   FailureOr<ActualParameters>
-  createParametersFromOperands(ValueRange range, ActualParameters actualParams);
+  createParametersFromOperands(ValueRange range, ActualParameters actualParams,
+                               Location loc);
 
   /// The symbol table for the IR module the Evaluator was constructed with.
   /// Used to look up class definitions.
