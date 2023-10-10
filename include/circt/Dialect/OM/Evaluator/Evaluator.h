@@ -127,11 +127,7 @@ private:
 /// Values which can be directly representable by MLIR attributes.
 struct AttributeValue : EvaluatorValue {
   AttributeValue(Attribute attr)
-      : EvaluatorValue(attr.getContext(), Kind::Attr,
-                       mlir::UnknownLoc::get(attr.getContext())),
-        attr(attr) {
-    markFullyEvaluated();
-  }
+      : AttributeValue(attr, mlir::UnknownLoc::get(attr.getContext())) {}
   AttributeValue(Attribute attr, Location loc)
       : EvaluatorValue(attr.getContext(), Kind::Attr, loc), attr(attr) {
     markFullyEvaluated();
