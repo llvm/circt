@@ -24,10 +24,10 @@ class SeqOp<string mnemonic, list<Trait> traits = []> :
 
 def CompRegOp : SeqOp<"compreg",
     [Pure, Clocked, Resettable,
-     AllTypesMatch<["input", "data"/*, "resetValue"*/]>,
-     SameVariadicOperandSize,
+     AllTypesMatch<["input", "data"]>,
      DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
-     DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>]> {
+     DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>,
+     AttrSizedOperandSegments]> {
        // AllTypesMatch doesn't work with Optional types yet.
 
   let summary = "Register a value, storing it for one cycle";
@@ -36,39 +36,47 @@ def CompRegOp : SeqOp<"compreg",
   let arguments = (ins
     AnyType:$input,
     ClockType:$clk,
-    StrAttr:$name,
+    OptionalAttr<StrAttr>:$name,
     Optional<I1>:$reset,
     Optional<AnyType>:$resetValue,
+    Optional<AnyType>:$powerOnValue,
     OptionalAttr<InnerSymAttr>:$inner_sym
   );
   let results = (outs AnyType:$data);
-  let hasCustomAssemblyFormat = 1;
+  let assemblyFormat = [{
+    (`sym` $inner_sym^)? custom<ImplicitSSAName>($name) $input `,` $clk
+    (`reset` $reset^ `,` $resetValue)?
+    (`powerOn` $powerOnValue^)? attr-dict `:` type($data)
+    custom<OptionalTypeMatch>(ref(type($data)), ref($resetValue), type($resetValue))
+    custom<OptionalTypeMatch>(ref(type($data)), ref($powerOnValue), type($powerOnValue))
+  }];
   let hasVerifier = 1;
 
   let builders = [
     /// Create a register with an inner_sym matching the register's name.
-    OpBuilder<(ins "Value":$input, "Value":$clk, "StringRef":$name), [{
-      auto nameAttr = StringAttr::get($_builder.getContext(), name);
+    OpBuilder<(ins "Value":$input, "Value":$clk, "StringAttrOrRef":$name), [{
+      auto nameAttr = name.get($_builder.getContext());
       return build($_builder, $_state, input.getType(), input, clk, nameAttr,
-                   Value(), Value(), hw::InnerSymAttr::get(nameAttr));
+                   /*reset*/ Value(), /*resetValue*/ Value(),
+                   /*powerOnValue*/ Value(), hw::InnerSymAttr::get(nameAttr));
     }]>,
     /// Create a register with a reset, with an inner_sym matching the
-    /// register's name.
-    OpBuilder<(ins "Value":$input, "Value":$clk, "Value":$reset,
-                   "Value":$rstValue, "StringRef":$name), [{
-      auto nameAttr = StringAttr::get($_builder.getContext(), name);
+    /// register's name, and optional power-on value.
+    OpBuilder<(ins "Value":$input, "Value":$clk, "Value":$reset, "Value":$rstValue,
+                   "StringAttrOrRef":$name, CArg<"Value", "{}">:$powerOnValue), [{
+      auto nameAttr = name.get($_builder.getContext());
       return build($_builder, $_state, input.getType(), input, clk, nameAttr,
-                   reset, rstValue, hw::InnerSymAttr::get(nameAttr));
-    }]>,
+                   reset, rstValue, powerOnValue, hw::InnerSymAttr::get(nameAttr));
+    }]>
   ];
 }
 
 def CompRegClockEnabledOp : SeqOp<"compreg.ce",
     [Pure, Clocked, Resettable,
-     AllTypesMatch<["input", "data"/*, "resetValue"*/]>,
-     SameVariadicOperandSize,
+     AllTypesMatch<["input", "data"]>,
      DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
-     DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>]> {
+     DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>,
+     AttrSizedOperandSegments]> {
        // AllTypesMatch doesn't work with Optional types yet.
 
   let summary = "When enabled, register a value";
@@ -78,13 +86,20 @@ def CompRegClockEnabledOp : SeqOp<"compreg.ce",
     AnyType:$input,
     ClockType:$clk,
     I1:$clockEnable,
-    StrAttr:$name,
+    OptionalAttr<StrAttr>:$name,
     Optional<I1>:$reset,
     Optional<AnyType>:$resetValue,
+    Optional<AnyType>:$powerOnValue,
     OptionalAttr<InnerSymAttr>:$inner_sym
   );
   let results = (outs AnyType:$data);
-  let hasCustomAssemblyFormat = 1;
+  let assemblyFormat = [{
+    (`sym` $inner_sym^)? custom<ImplicitSSAName>($name) $input `,` $clk `,` $clockEnable
+    (`reset` $reset^ `,` $resetValue)?
+    (`powerOn` $powerOnValue^)? attr-dict `:` type($data)
+    custom<OptionalTypeMatch>(ref(type($data)), ref($resetValue), type($resetValue))
+    custom<OptionalTypeMatch>(ref(type($data)), ref($powerOnValue), type($powerOnValue))
+  }];
   let hasVerifier = 1;
 
   let builders = [
@@ -92,14 +107,18 @@ def CompRegClockEnabledOp : SeqOp<"compreg.ce",
                    "StringRef":$name), [{
       auto nameAttr = StringAttr::get($_builder.getContext(), name);
       return build($_builder, $_state, input.getType(), input, clk, ce,
-                   nameAttr, Value(), Value(), hw::InnerSymAttr::get(nameAttr));
+                   nameAttr, /*reset*/ Value(), /*resetValue*/ Value(),
+                   /*powerOnValue*/ Value(),
+                   hw::InnerSymAttr::get(nameAttr));
     }]>,
     OpBuilder<(ins "Value":$input, "Value":$clk, "Value":$ce,
-                   "Value":$reset, "Value":$rstValue, "StringRef":$name),
+                   "Value":$reset, "Value":$rstValue, "StringRef":$name,
+                   CArg<"Value", "{}">:$powerOnValue),
     [{
       auto nameAttr = StringAttr::get($_builder.getContext(), name);
       return build($_builder, $_state, input.getType(), input, clk, ce,
-                   nameAttr, reset, rstValue, hw::InnerSymAttr::get(nameAttr));
+                   nameAttr, reset, rstValue, powerOnValue,
+                   hw::InnerSymAttr::get(nameAttr));
     }]>,
   ];
 }

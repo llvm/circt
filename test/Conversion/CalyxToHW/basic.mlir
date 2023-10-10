@@ -54,7 +54,7 @@
     // CHECK-DAG:  %[[BUF_RESET_VAL:.+]] = sv.read_inout %buf_reset
     // CHECK-DAG:  %[[FALSE:.+]] = hw.constant false
     // CHECK-DAG:  %[[SEQ_CLK:.+]] = seq.to_clock %[[BUF_CLK_VAL]]
-    // CHECK-DAG:  %[[BUF_DONE_REG:.+]] = seq.compreg sym @buf_done_reg %[[BUF_WRITE_EN_VAL]], %[[SEQ_CLK]], %[[BUF_RESET_VAL]], %[[FALSE]]  : i1
+    // CHECK-DAG:  %[[BUF_DONE_REG:.+]] = seq.compreg sym @buf_done_reg %[[BUF_WRITE_EN_VAL]], %[[SEQ_CLK]] reset %[[BUF_RESET_VAL]], %[[FALSE]]  : i1
     // CHECK-DAG:  %buf_done = sv.wire
     // CHECK-DAG:  sv.assign %buf_done, %[[BUF_DONE_REG]]
     // CHECK-DAG:  %[[BUF_DONE_VAL:.+]] = sv.read_inout %buf_done
@@ -62,7 +62,7 @@
     // CHECK-DAG:  %[[BUF_DONE_VAL_NEG:.+]] = comb.xor %[[BUF_DONE_VAL]], %true : i1
     // CHECK-DAG:  %[[BUF_REG_WRITE_EN:.+]] = comb.and %[[BUF_WRITE_EN_VAL]], %[[BUF_DONE_VAL_NEG]] : i1
     // CHECK-DAG:  %[[C0_I32:.+]] = hw.constant 0 : i32
-    // CHECK-DAG:  %[[BUF_REG:.+]] = seq.compreg.ce sym @buf_reg %[[BUF_IN_VAL]], %[[SEQ_CLK]], %[[BUF_REG_WRITE_EN]], %[[BUF_RESET_VAL]], %[[C0_I32]]
+    // CHECK-DAG:  %[[BUF_REG:.+]] = seq.compreg.ce sym @buf_reg %[[BUF_IN_VAL]], %[[SEQ_CLK]], %[[BUF_REG_WRITE_EN]] reset %[[BUF_RESET_VAL]], %[[C0_I32]]
     // CHECK-DAG:  %buf = sv.wire
     // CHECK-DAG:  sv.assign %buf, %[[BUF_REG]]
     // CHECK-DAG:  %[[BUF_VAL:.+]] = sv.read_inout %buf

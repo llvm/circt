@@ -435,8 +435,9 @@ LogicalResult MachineOpConverter::dispatch() {
       b.create<sv::RegOp>(loc, stateType, b.getStringAttr("state_next"));
   auto nextStateWireRead = b.create<sv::ReadInOutOp>(loc, nextStateWire);
   stateReg = b.create<seq::CompRegOp>(
-      loc, stateType, nextStateWireRead, clock, "state_reg", reset,
-      /*reset value=*/encoding->encode(machineOp.getInitialStateOp()), nullptr);
+      loc, nextStateWireRead, clock, reset,
+      /*reset value=*/encoding->encode(machineOp.getInitialStateOp()),
+      "state_reg");
 
   llvm::DenseMap<VariableOp, sv::RegOp> variableNextStateWires;
   for (auto variableOp : machineOp.front().getOps<fsm::VariableOp>()) {
@@ -450,9 +451,8 @@ LogicalResult MachineOpConverter::dispatch() {
         varLoc, varType, b.getStringAttr(variableOp.getName() + "_next"));
     auto varResetVal = b.create<hw::ConstantOp>(varLoc, initValueAttr);
     auto variableReg = b.create<seq::CompRegOp>(
-        varLoc, varType, b.create<sv::ReadInOutOp>(varLoc, varNextState), clock,
-        b.getStringAttr(variableOp.getName() + "_reg"), reset, varResetVal,
-        nullptr);
+        varLoc, b.create<sv::ReadInOutOp>(varLoc, varNextState), clock, reset,
+        varResetVal, b.getStringAttr(variableOp.getName() + "_reg"));
     variableToRegister[variableOp] = variableReg;
     variableNextStateWires[variableOp] = varNextState;
     // Postpone value replacement until all logic has been created.

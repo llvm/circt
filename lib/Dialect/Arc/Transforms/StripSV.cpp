@@ -152,7 +152,7 @@ void StripSVPass::runOnOperation() {
 
         Value compReg = builder.create<seq::CompRegOp>(
             reg.getLoc(), next.getType(), next, reg.getClk(), reg.getNameAttr(),
-            Value{}, Value{}, reg.getInnerSymAttr());
+            Value{}, Value{}, Value{}, reg.getInnerSymAttr());
         reg.replaceAllUsesWith(compReg);
         opsToDelete.push_back(reg);
         continue;

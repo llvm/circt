@@ -24,22 +24,25 @@ with Context() as ctx, Location.unknown():
     def top(module):
       # CHECK: %[[RESET_VAL:.+]] = hw.constant 0
       reg_reset = hw.ConstantOp.create(i32, 0).result
+      # CHECK: %[[POWERON_VAL:.+]] = hw.constant 42
+      poweron_value = hw.ConstantOp.create(i32, 42).result
       # CHECK: %[[INPUT_VAL:.+]] = hw.constant 45
       reg_input = hw.ConstantOp.create(i32, 45).result
-      # CHECK: %[[DATA_VAL:.+]] = seq.compreg %[[INPUT_VAL]], %clk, %rst, %[[RESET_VAL]]
+      # CHECK: %[[DATA_VAL:.+]] = seq.compreg %[[INPUT_VAL]], %clk reset %rst, %[[RESET_VAL]] powerOn %[[POWERON_VAL]]
       reg = seq.CompRegOp(i32,
                           reg_input,
                           module.clk,
                           reset=module.rst,
                           reset_value=reg_reset,
+                          power_on_value=poweron_value,
                           name="my_reg")
 
       # CHECK: seq.compreg %[[INPUT_VAL]], %clk
       seq.reg(reg_input, module.clk)
-      # CHECK: seq.compreg %[[INPUT_VAL]], %clk, %rst, %{{.+}}
+      # CHECK: seq.compreg %[[INPUT_VAL]], %clk reset %rst, %{{.+}}
       seq.reg(reg_input, module.clk, reset=module.rst)
       # CHECK: %[[RESET_VALUE:.+]] = hw.constant 123
-      # CHECK: seq.compreg %[[INPUT_VAL]], %clk, %rst, %[[RESET_VALUE]]
+      # CHECK: seq.compreg %[[INPUT_VAL]], %clk reset %rst, %[[RESET_VALUE]]
       custom_reset = hw.ConstantOp.create(i32, 123).result
       seq.reg(reg_input, module.clk, reset=module.rst, reset_value=custom_reset)
       # CHECK: %FuBar = seq.compreg {{.+}}

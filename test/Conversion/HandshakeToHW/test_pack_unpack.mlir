@@ -33,14 +33,14 @@ handshake.func @test_pack(%arg0: i64, %arg1: i32, %ctrl: none, ...) -> (tuple<i6
 // CHECK:           %[[VAL_15:.*]] = hw.constant true
 // CHECK:           %[[VAL_16:.*]] = comb.xor %[[VAL_5]], %[[VAL_15]] : i1
 // CHECK:           %[[VAL_17:.*]] = comb.and %[[VAL_18:.*]], %[[VAL_16]] : i1
-// CHECK:           %[[VAL_19:.*]] = seq.compreg %[[VAL_17]], %[[CLOCK]], %[[VAL_2]], %[[VAL_14]]  : i1
+// CHECK:           %[[VAL_19:.*]] = seq.compreg sym @emitted_0 %[[VAL_17]], %[[CLOCK]] reset %[[VAL_2]], %[[VAL_14]]  : i1
 // CHECK:           %[[VAL_20:.*]] = comb.xor %[[VAL_19]], %[[VAL_15]] : i1
 // CHECK:           %[[VAL_9]] = comb.and %[[VAL_20]], %[[VAL_4]] : i1
 // CHECK:           %[[VAL_21:.*]] = comb.and %[[VAL_7]], %[[VAL_9]] : i1
 // CHECK:           %[[VAL_18]] = comb.or %[[VAL_21]], %[[VAL_19]] {sv.namehint = "done0"} : i1
 // CHECK:           %[[VAL_22:.*]] = comb.xor %[[VAL_5]], %[[VAL_15]] : i1
 // CHECK:           %[[VAL_23:.*]] = comb.and %[[VAL_24:.*]], %[[VAL_22]] : i1
-// CHECK:           %[[VAL_25:.*]] = seq.compreg %[[VAL_23]], %[[CLOCK]], %[[VAL_2]], %[[VAL_14]]  : i1
+// CHECK:           %[[VAL_25:.*]] = seq.compreg sym @emitted_1 %[[VAL_23]], %[[CLOCK]] reset %[[VAL_2]], %[[VAL_14]]  : i1
 // CHECK:           %[[VAL_26:.*]] = comb.xor %[[VAL_25]], %[[VAL_15]] : i1
 // CHECK:           %[[VAL_13]] = comb.and %[[VAL_26]], %[[VAL_4]] : i1
 // CHECK:           %[[VAL_27:.*]] = comb.and %[[VAL_11]], %[[VAL_13]] : i1

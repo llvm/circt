@@ -56,6 +56,7 @@ addressing, meaning that this operation sets / reads the entire value.
 - **reset**: Signal to set the state to 'resetValue'. Optional.
 - **resetValue**: A value which the state is set to upon reset. Required iff
 'reset' is present.
+- **powerOn**: A value which will be assigned to the register upon system power-on.
 - **name**: A name for the register, defaults to `""`. Inferred from the textual
 SSA value name, or passed explicitly in builder APIs. The name will be passed to
 the `sv.reg` during lowering.
@@ -63,7 +64,7 @@ the `sv.reg` during lowering.
 passed to the `sv.reg` during lowering if present.
 
 ```mlir
-%q = seq.compreg %input, %clk [, %reset, %resetValue ] : $type(input)
+%q = seq.compreg %input, %clk [ reset %reset, %resetValue ] [powerOn %powerOn] : $type(input)
 ```
 
 Upon initialization, the state is defined to be uninitialized.

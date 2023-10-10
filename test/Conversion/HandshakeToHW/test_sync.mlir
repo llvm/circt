@@ -11,14 +11,14 @@
 // CHECK:           %[[VAL_18:.*]] = hw.constant true
 // CHECK:           %[[VAL_19:.*]] = comb.xor %[[VAL_16]], %[[VAL_18]] : i1
 // CHECK:           %[[VAL_20:.*]] = comb.and %[[VAL_21:.*]], %[[VAL_19]] : i1
-// CHECK:           %[[VAL_22:.*]] = seq.compreg %[[VAL_20]], %[[CLOCK]], %[[VAL_3]], %[[VAL_17]]  : i1
+// CHECK:           %[[VAL_22:.*]] = seq.compreg sym @emitted_0 %[[VAL_20]], %[[CLOCK]] reset %[[VAL_3]], %[[VAL_17]]  : i1
 // CHECK:           %[[VAL_23:.*]] = comb.xor %[[VAL_22]], %[[VAL_18]] : i1
 // CHECK:           %[[VAL_11]] = comb.and %[[VAL_23]], %[[VAL_15]] : i1
 // CHECK:           %[[VAL_24:.*]] = comb.and %[[VAL_10]], %[[VAL_11]] : i1
 // CHECK:           %[[VAL_21]] = comb.or %[[VAL_24]], %[[VAL_22]] {sv.namehint = "done0"} : i1
 // CHECK:           %[[VAL_25:.*]] = comb.xor %[[VAL_16]], %[[VAL_18]] : i1
 // CHECK:           %[[VAL_26:.*]] = comb.and %[[VAL_27:.*]], %[[VAL_25]] : i1
-// CHECK:           %[[VAL_28:.*]] = seq.compreg %[[VAL_26]], %[[CLOCK]], %[[VAL_3]], %[[VAL_17]]  : i1
+// CHECK:           %[[VAL_28:.*]] = seq.compreg sym @emitted_1 %[[VAL_26]], %[[CLOCK]] reset %[[VAL_3]], %[[VAL_17]]  : i1
 // CHECK:           %[[VAL_29:.*]] = comb.xor %[[VAL_28]], %[[VAL_18]] : i1
 // CHECK:           %[[VAL_14]] = comb.and %[[VAL_29]], %[[VAL_15]] : i1
 // CHECK:           %[[VAL_30:.*]] = comb.and %[[VAL_13]], %[[VAL_14]] : i1
