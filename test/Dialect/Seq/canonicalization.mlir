@@ -231,3 +231,11 @@ hw.module @const_clock(out clock_true : !seq.clock, out clock_false : !seq.clock
   // CHECK: hw.output [[CLOCK_FALSE]], [[CLOCK_TRUE]]
   hw.output %clock_false, %clock_true : !seq.clock, !seq.clock
 }
+
+// CHECK-LABEL: @const_clock_reg
+hw.module @const_clock_reg(in %clock : !seq.clock, out r_data : !seq.clock) {
+  // CHECK: seq.const_clock low
+  %0 = seq.const_clock  low
+  %1 = seq.firreg %1 clock %0 : !seq.clock
+  hw.output %1 : !seq.clock
+}
