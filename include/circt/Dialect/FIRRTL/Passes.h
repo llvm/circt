@@ -117,8 +117,18 @@ std::unique_ptr<mlir::Pass> createPrintNLATablePass();
 std::unique_ptr<mlir::Pass>
 createBlackBoxReaderPass(std::optional<mlir::StringRef> inputPrefix = {});
 
+enum class CompanionMode {
+  // Lower companions to SystemVerilog binds.
+  Bind,
+  // Lower companions to explicit instances. Used when assertions or other
+  // debugging constructs from the companion are to be included in the design.
+  Instantiate,
+  // Drop companion modules, eliminating them from the design.
+  Drop,
+};
+
 std::unique_ptr<mlir::Pass>
-createGrandCentralPass(bool instantiateCompanionOnly = false);
+createGrandCentralPass(CompanionMode companionMode = CompanionMode::Bind);
 
 std::unique_ptr<mlir::Pass> createCheckCombLoopsPass();
 

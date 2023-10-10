@@ -346,3 +346,32 @@ firrtl.circuit "NotInstantiated" attributes {
     firrtl.instance dut @DUT()
   }
 }
+
+// -----
+
+firrtl.circuit "CompanionWithOutputs"
+  attributes {annotations = [
+    {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+     defName = "Foo",
+     elements = [
+       {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+        defName = "Bar",
+        elements = [],
+        name = "bar"}],
+     id = 0 : i64,
+     name = "MyView"}]}  {
+  // expected-error @below {{'firrtl.module' op companion instance cannot have output ports}}
+  firrtl.module private @MyView_companion(
+    out %out : !firrtl.uint<32>
+  )
+    attributes {annotations = [{
+      class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
+      id = 0 : i64,
+      name = "MyView"}]} {}
+  firrtl.module private @DUT() {
+    firrtl.instance MyView_companion  @MyView_companion(out out: !firrtl.uint<32>)
+  }
+  firrtl.module @CompanionWithOutputs() {
+    firrtl.instance dut @DUT()
+  }
+}

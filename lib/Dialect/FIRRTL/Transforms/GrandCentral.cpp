@@ -577,9 +577,7 @@ struct InterfaceElemsBuilder {
 ///    instantiate interfaces and to generate the "mappings" file that produces
 ///    cross-module references (XMRs) to drive the interface.
 struct GrandCentralPass : public GrandCentralBase<GrandCentralPass> {
-  GrandCentralPass(bool instantiateCompanionOnlyFlag) {
-    instantiateCompanionOnly = instantiateCompanionOnlyFlag;
-  }
+  using GrandCentralBase::companionMode;
 
   void runOnOperation() override;
 
@@ -1551,13 +1549,13 @@ void GrandCentralPass::runOnOperation() {
   bool removalError = false;
   AnnotationSet::removeAnnotations(circuitOp, [&](Annotation anno) {
     if (anno.isClass(augmentedBundleTypeClass)) {
-      // If we are in "instantiateCompanionOnly" mode, then we don't need to
+      // If we are in "Instantiate" companion mode, then we don't need to
       // create the interface, so we can skip adding it to the worklist.  This
       // is a janky hack for situations where you want to synthesize assertion
       // logic included in the companion, but don't want to have a dead
       // interface hanging around (or have problems with tools understanding
       // interfaces).
-      if (!instantiateCompanionOnly)
+      if (companionMode != CompanionMode::Instantiate)
         worklist.push_back(anno);
       ++numAnnosRemoved;
       return true;
@@ -1761,6 +1759,7 @@ void GrandCentralPass::runOnOperation() {
   /// Central annotations.  This is used to populate: (1) the companionIDMap and
   /// (2) the leafMap.  Annotations are removed as they are discovered and if
   /// they are not malformed.
+  DenseSet<Operation *> modulesToDelete;
   removalError = false;
   circuitOp.walk([&](Operation *op) {
     TypeSwitch<Operation *>(op)
@@ -1875,6 +1874,15 @@ void GrandCentralPass::runOnOperation() {
               if (!instance)
                 goto FModuleOp_error;
 
+              // Companions are only allowed to take inputs.
+              for (unsigned i = 0, n = instance->getNumResults(); i < n; ++i) {
+                if (instance->getPortDirection(i) != Direction::In) {
+                  op.emitOpError()
+                      << "companion instance cannot have output ports";
+                  goto FModuleOp_error;
+                }
+              }
+
               // If no extraction info was provided, exit.  Otherwise, setup the
               // lone instance of the companion to be lowered as a bind.
               if (!maybeExtractInfo) {
@@ -1889,17 +1897,6 @@ void GrandCentralPass::runOnOperation() {
                 return true;
               }
 
-              // Lower the companion to a bind unless the user told us
-              // explicitly not to.
-              if (!instantiateCompanionOnly)
-                (*instance)->setAttr("lowerToBind", builder.getUnitAttr());
-
-              (*instance)->setAttr(
-                  "output_file",
-                  hw::OutputFileAttr::getFromFilename(
-                      &getContext(), maybeExtractInfo->bindFilename.getValue(),
-                      /*excludeFromFileList=*/true));
-
               // Look for any modules/extmodules _only_ instantiated by the
               // companion.  If these have no output file attribute, then mark
               // them as being extracted into the Grand Central directory.
@@ -1913,6 +1910,30 @@ void GrandCentralPass::runOnOperation() {
                     << "  submodules exclusively instantiated "
                        "(including companion):\n";
               });
+
+              if (companionMode == CompanionMode::Drop) {
+                // Delete the instance if companions are disabled.
+                OpBuilder builder(&getContext());
+                for (auto port : instance->getResults()) {
+                  builder.setInsertionPointAfterValue(port);
+                  auto wire =
+                      builder.create<WireOp>(port.getLoc(), port.getType());
+                  port.replaceAllUsesWith(wire.getResult());
+                }
+                instance->erase();
+              } else {
+                // Lower the companion to a bind unless the user told us
+                // explicitly not to.
+                if (companionMode == CompanionMode::Bind)
+                  (*instance)->setAttr("lowerToBind", builder.getUnitAttr());
+
+                (*instance)->setAttr(
+                    "output_file",
+                    hw::OutputFileAttr::getFromFilename(
+                        &getContext(),
+                        maybeExtractInfo->bindFilename.getValue(),
+                        /*excludeFromFileList=*/true));
+              }
 
               for (auto &node : llvm::depth_first(companionNode)) {
                 auto mod = node->getModule();
@@ -1935,6 +1956,10 @@ void GrandCentralPass::runOnOperation() {
 
                 if (auto extmodule = dyn_cast<FExtModuleOp>(*mod)) {
                   for (auto anno : AnnotationSet(extmodule)) {
+                    if (companionMode == CompanionMode::Drop) {
+                      modulesToDelete.insert(mod);
+                      break;
+                    }
                     if (!anno.isClass(blackBoxInlineAnnoClass) &&
                         !anno.isClass(blackBoxPathAnnoClass))
                       continue;
@@ -1950,17 +1975,21 @@ void GrandCentralPass::runOnOperation() {
                   continue;
                 }
 
-                // Move this module under the Grand Central output directory if
-                // no pre-existing output file information is present.
-                if (!mod->hasAttr("output_file")) {
-                  mod->setAttr("output_file",
-                               hw::OutputFileAttr::getAsDirectory(
-                                   &getContext(),
-                                   maybeExtractInfo->directory.getValue(),
-                                   /*excludeFromFileList=*/true,
-                                   /*includeReplicatedOps=*/true));
-                  mod->setAttr("comment", builder.getStringAttr(
-                                              "VCS coverage exclude_file"));
+                if (companionMode == CompanionMode::Drop) {
+                  modulesToDelete.insert(mod);
+                } else {
+                  // Move this module under the Grand Central output directory
+                  // if no pre-existing output file information is present.
+                  if (!mod->hasAttr("output_file")) {
+                    mod->setAttr("output_file",
+                                 hw::OutputFileAttr::getAsDirectory(
+                                     &getContext(),
+                                     maybeExtractInfo->directory.getValue(),
+                                     /*excludeFromFileList=*/true,
+                                     /*includeReplicatedOps=*/true));
+                    mod->setAttr("comment", builder.getStringAttr(
+                                                "VCS coverage exclude_file"));
+                  }
                 }
               }
 
@@ -1980,6 +2009,26 @@ void GrandCentralPass::runOnOperation() {
 
   if (removalError)
     return signalPassFailure();
+
+  if (companionMode == CompanionMode::Drop) {
+    for (auto *mod : modulesToDelete) {
+      auto name = cast<FModuleLike>(mod).getModuleNameAttr();
+
+      DenseSet<hw::HierPathOp> nlas;
+      nlaTable->getNLAsInModule(name, nlas);
+      nlaTable->removeNLAsfromModule(nlas, name);
+      for (auto nla : nlas) {
+        if (nla.root() == name)
+          nla.erase();
+      }
+
+      mod->erase();
+    }
+
+    SmallVector<sv::InterfaceOp, 0> interfaceVec;
+    emitHierarchyYamlFile(interfaceVec);
+    return;
+  }
 
   LLVM_DEBUG({
     // Print out the companion map and all leaf values that were discovered.
@@ -2266,6 +2315,8 @@ void GrandCentralPass::emitHierarchyYamlFile(
 //===----------------------------------------------------------------------===//
 
 std::unique_ptr<mlir::Pass>
-circt::firrtl::createGrandCentralPass(bool instantiateCompanionOnly) {
-  return std::make_unique<GrandCentralPass>(instantiateCompanionOnly);
+circt::firrtl::createGrandCentralPass(CompanionMode companionMode) {
+  auto pass = std::make_unique<GrandCentralPass>();
+  pass->companionMode = companionMode;
+  return pass;
 }
