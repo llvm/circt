@@ -23,13 +23,19 @@ using namespace mlir;
 using namespace circt;
 using namespace pipeline;
 
+namespace {
+
+#define GEN_PASS_DEF_PIPELINETOHW
+#include "circt/Conversion/Passes.h.inc"
+
 // Base class for all pipeline lowerings.
 class PipelineLowering {
 public:
   PipelineLowering(size_t pipelineID, ScheduledPipelineOp pipeline,
-                   OpBuilder &builder, bool clockGateRegs)
+                   OpBuilder &builder, bool clockGateRegs,
+                   bool enablePowerOnValues)
       : pipelineID(pipelineID), pipeline(pipeline), builder(builder),
-        clockGateRegs(clockGateRegs) {
+        clockGateRegs(clockGateRegs), enablePowerOnValues(enablePowerOnValues) {
     parentClk = pipeline.getClock();
     parentRst = pipeline.getReset();
     parentModule = pipeline->getParentOfType<hw::HWModuleOp>();
@@ -297,6 +303,9 @@ protected:
   // If true, will use clock gating for registers instead of input muxing.
   bool clockGateRegs;
 
+  // If true, will add power-on values to the control registers of the design.
+  bool enablePowerOnValues;
+
   // Name of this pipeline - used for naming stages and registers.
   // Implementation defined.
   StringAttr pipelineName;
@@ -393,6 +402,13 @@ public:
             args.reset, enableRegResetVal, enableRegName);
         break;
       }
+
+      if (enablePowerOnValues) {
+        llvm::TypeSwitch<Operation *, void>(stageEnabled.getDefiningOp())
+            .Case<seq::CompRegOp, seq::CompRegClockEnabledOp>([&](auto op) {
+              op.getPowerOnValueMutable().assign(enableRegResetVal);
+            });
+      }
     }
 
     // Replace the stage valid signal.
@@ -436,13 +452,15 @@ public:
     return stageRets;
   }
 };
+} // namespace
 
 //===----------------------------------------------------------------------===//
 // Pipeline to HW Conversion Pass
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct PipelineToHWPass : public PipelineToHWBase<PipelineToHWPass> {
+struct PipelineToHWPass : public impl::PipelineToHWBase<PipelineToHWPass> {
+  using PipelineToHWBase::PipelineToHWBase;
   void runOnOperation() override;
 
 private:
@@ -467,7 +485,7 @@ void PipelineToHWPass::runOnHWModule(hw::HWModuleOp mod) {
   for (auto pipeline :
        llvm::make_early_inc_range(mod.getOps<ScheduledPipelineOp>())) {
     if (failed(PipelineInlineLowering(pipelinesSeen, pipeline, builder,
-                                      clockGateRegs)
+                                      clockGateRegs, enablePowerOnValues)
                    .run())) {
       signalPassFailure();
       return;
@@ -478,6 +496,7 @@ void PipelineToHWPass::runOnHWModule(hw::HWModuleOp mod) {
 
 } // namespace
 
-std::unique_ptr<mlir::Pass> circt::createPipelineToHWPass() {
-  return std::make_unique<PipelineToHWPass>();
+std::unique_ptr<mlir::Pass>
+circt::createPipelineToHWPass(const PipelineToHWOptions &options) {
+  return std::make_unique<PipelineToHWPass>(options);
 }
