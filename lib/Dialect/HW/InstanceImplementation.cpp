@@ -97,7 +97,8 @@ LogicalResult instance_like_impl::verifyInputs(ArrayAttr argNames,
       return failure();
     }
 
-    if (argNames[i] != moduleArgNames[i]) {
+    if (argNames[i] != moduleArgNames[i] &&
+        !argNames[i].cast<StringAttr>().empty()) {
       emitError([&](auto &diag) {
         diag << "input label #" << i << " must be " << moduleArgNames[i]
              << ", but got " << argNames[i];
