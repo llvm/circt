@@ -802,12 +802,10 @@ TypedeclOp TypeAliasType::getTypeDecl(const HWSymbolCache &cache) {
 
 LogicalResult ModuleType::verify(function_ref<InFlightDiagnostic()> emitError,
                                  ArrayRef<ModulePort> ports) {
-  for (auto port : ports) {
-    if (hasHWInOutType(port.type))
-      return emitError() << "Ports cannot be inout types";
-    if (port.name.empty())
-      return emitError() << "Port names cannot be empty";
-  }
+  if (llvm::any_of(ports, [](const ModulePort &port) {
+        return hasHWInOutType(port.type);
+      }))
+    return emitError() << "Ports cannot be inout types";
   return success();
 }
 
