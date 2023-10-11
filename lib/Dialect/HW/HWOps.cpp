@@ -21,6 +21,7 @@
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "circt/Support/Namespace.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Interfaces/FunctionImplementation.h"
 #include "llvm/ADT/BitVector.h"
@@ -547,6 +548,8 @@ buildModule(OpBuilder &builder, OperationState &result, StringAttr name,
   SmallVector<ModulePort> portTypes;
 
   for (auto elt : ports) {
+    if (elt.name.empty())
+      elt.name = builder.getStringAttr("arg" + Twine(elt.argNum));
     portTypes.push_back(elt);
     portLocs.push_back(elt.loc ? elt.loc : unknownLoc);
     llvm::SmallVector<NamedAttribute> portAttrs;
