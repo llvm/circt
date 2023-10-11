@@ -3,6 +3,7 @@
 hw.module @InnerModule() {}
 
 hw.module @MainDesign() {
+  hw.instance "" @InnerModule() -> ()
   hw.instance "inner" @InnerModule() -> ()
 }
 
@@ -11,6 +12,8 @@ hw.module @TestHarness() attributes {firrtl.moduleHierarchyFile = [#hw.output_fi
 }
 
 // CHECK:      hw.module @MainDesign()
+// CHECK-NEXT:   hw.instance ""
+// CHECK-SAME:     sym @{{[_a-zA-Z0-9]+}}
 // CHECK-NEXT:   hw.instance "inner"
 // CHECK-SAME:     sym @[[MainDesign_inner_sym:[_a-zA-Z0-9]+]]
 

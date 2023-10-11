@@ -28,7 +28,11 @@ namespace circt {
 /// namespaces implementations.
 class Namespace {
 public:
-  Namespace() {}
+  Namespace() {
+    // This fills an entry for an empty string beforehand so that `newName`
+    // doesn't return an empty string.
+    nextIndex.insert({"", 0});
+  }
   Namespace(const Namespace &other) = default;
   Namespace(Namespace &&other) : nextIndex(std::move(other.nextIndex)) {}
 
