@@ -113,14 +113,19 @@ struct FirtoolOptions {
       llvm::cl::desc("Disable deduplication of structurally identical modules"),
       llvm::cl::init(false), llvm::cl::cat(category)};
 
-  llvm::cl::opt<bool> grandCentralInstantiateCompanionOnly{
-      "grand-central-instantiate-companion",
-      llvm::cl::desc("Run Grand Central in a mode where the companion module "
-                     "is instantiated and not bound in and the interface is "
-                     "dropped.  This is intended for situations where there is "
-                     "useful assertion logic inside the companion, but you "
-                     "don't care about the actual interface."),
-      llvm::cl::init(false), llvm::cl::Hidden, llvm::cl::cat(category)};
+  llvm::cl::opt<firrtl::CompanionMode> companionMode{
+      "grand-central-companion-mode",
+      llvm::cl::desc("Specifies the handling of Grand Central companions"),
+      ::llvm::cl::values(
+          clEnumValN(firrtl::CompanionMode::Bind, "bind",
+                     "Lower companion instances to SystemVerilog binds"),
+          clEnumValN(firrtl::CompanionMode::Instantiate, "instantiate",
+                     "Instantiate companions in the design"),
+          clEnumValN(firrtl::CompanionMode::Drop, "drop",
+                     "Remove companions from the design")),
+      llvm::cl::init(firrtl::CompanionMode::Bind),
+      llvm::cl::Hidden,
+      llvm::cl::cat(category)};
 
   llvm::cl::opt<bool> disableAggressiveMergeConnections{
       "disable-aggressive-merge-connections",
