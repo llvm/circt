@@ -24,6 +24,7 @@
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/IRMapping.h"
+#include "llvm/ADT/SetVector.h"
 
 #include <set>
 
@@ -167,7 +168,7 @@ static StringAttr getNameForPort(Value val,
     }
   }
 
-  return StringAttr::get(val.getContext(), "arg");
+  return StringAttr::get(val.getContext(), "");
 }
 
 // Given a set of values, construct a module and bind instance of that module
@@ -203,12 +204,14 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
   SmallVector<hw::PortInfo> ports;
   {
     auto srcPorts = op.getInputNames();
+    llvm::SmallSetVector<StringRef, 8> portNames;
+    portNames.insert("");
     for (auto port : llvm::enumerate(realInputs)) {
-      // Append the port index to create unique names.
-      auto name =
-          b.getStringAttr(getNameForPort(port.value(), srcPorts).getValue() +
-                          Twine(port.index()));
-
+      auto name = getNameForPort(port.value(), srcPorts);
+      if (!portNames.insert(name.getValue())) {
+        // Append the port index to create unique names.
+        name = b.getStringAttr(name.getValue() + "port_" + Twine(port.index()));
+      }
       ports.push_back(
           {{name, port.value().getType(), hw::ModulePort::Direction::Input},
            port.index()});

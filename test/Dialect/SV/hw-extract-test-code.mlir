@@ -6,7 +6,7 @@
 // CHECK-NOT: attributes
 // CHECK-NEXT: hw.module.extern @foo_assert
 // CHECK-NOT: attributes
-// CHECK: hw.module @issue1246_assert(in %{{[^ ]+}} : i1) attributes {comment = "VCS coverage exclude_file", output_file = #hw.output_file<"dir3{{/|\\\\}}", excludeFromFileList, includeReplicatedOps>}
+// CHECK: hw.module @issue1246_assert(in %clock : i1) attributes {comment = "VCS coverage exclude_file", output_file = #hw.output_file<"dir3{{/|\\\\}}", excludeFromFileList, includeReplicatedOps>}
 // CHECK: sv.assert
 // CHECK: sv.error "Assertion failed"
 // CHECK: sv.error "assert:"
@@ -14,11 +14,11 @@
 // CHECK: sv.error "check [verif-library-assert] is included"
 // CHECK: sv.fatal 1
 // CHECK: foo_assert
-// CHECK: hw.module @issue1246_assume(in %{{[^ ]+}} : i1)
+// CHECK: hw.module @issue1246_assume(in %clock : i1)
 // CHECK-SAME: attributes {comment = "VCS coverage exclude_file"}
 // CHECK: sv.assume
 // CHECK: foo_assume
-// CHECK: hw.module @issue1246_cover(in %{{[^ ]+}} : i1)
+// CHECK: hw.module @issue1246_cover(in %clock : i1)
 // CHECK-SAME: attributes {comment = "VCS coverage exclude_file"}
 // CHECK: sv.cover
 // CHECK: foo_cover
@@ -117,7 +117,7 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
 // Check wires are extracted once
 
 // CHECK-LABEL: @MultiRead(
-// CHECK: hw.instance "[[name:.+]]_cover"  sym @{{[^ ]+}} @[[name]]_cover({{[^ ]+}}: %0: i1, {{[^ ]+}}: %clock: i1)
+// CHECK: hw.instance "[[name:.+]]_cover"  sym @{{[^ ]+}} @[[name]]_cover(foo: %0: i1, clock: %clock: i1)
 module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>} {
   hw.module @MultiRead(in %clock: i1, in %cond: i1) {
     %foo = sv.wire : !hw.inout<i1>
@@ -137,7 +137,7 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
 // Check extracted module ports take name of instance result when needed.
 
 // CHECK-LABEL: @InstResult(
-// CHECK: hw.instance "[[name:.+]]_cover"  sym @{{[^ ]+}} @[[name]]_cover({{[^ ]+}}: %{{[^ ]+}}: i1, {{[^ ]+}}: %{{[^ ]+}}: i1, {{[^ ]+}}: %clock: i1)
+// CHECK: hw.instance "[[name:.+]]_cover"  sym @{{[^ ]+}} @[[name]]_cover(mem.result_name: %{{[^ ]+}}: i1, mem.1: %{{[^ ]+}}: i1, clock: %clock: i1)
 module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>} {
   hw.module @Mem(out result_name: i1, out "": i1) {
     %reg = sv.reg : !hw.inout<i1>
@@ -266,7 +266,7 @@ module {
 // CHECK: hw.instance "qux"
 // CHECK-LABEL: @MultiResultExtracted
 // CHECK-SAME: (in %[[clock:.+]] : i1, in %[[in:.+]] : i1)
-// CHECK: hw.instance {{.+}} @MultiResultExtracted_cover({{[^ ]+}}: %[[in]]: i1, {{[^ ]+}}: %{{[^ ]+}}: i1)
+// CHECK: hw.instance {{.+}} @MultiResultExtracted_cover([[in]]: %[[in]]: i1, [[clock]]: %[[clock]]: i1)
 
 // In SymNotExtracted, instance foo should not be extracted because it has a sym.
 // CHECK-LABEL: @SymNotExtracted_cover
@@ -452,10 +452,9 @@ module {
 // Check that constants are cloned freely.
 
 module {
-  // CHECK-LABEL: @ConstantCloned_cover
-  // CHECK-SAME:  in %[[vin:.+]] : i1, in %{{[^ ]+}} : i1)
+  // CHECK-LABEL: @ConstantCloned_cover(in %in : i1, in %clock : i1)
   // CHECK-NEXT:   %true = hw.constant true
-  // CHECK-NEXT:   comb.xor bin %[[vin]], %true : i1
+  // CHECK-NEXT:   comb.xor bin %in, %true : i1
   hw.module @ConstantCloned(in %clock: i1, in %in: i1, out out: i1) {
     %true = hw.constant true
     %not = comb.xor bin %in, %true : i1
@@ -546,10 +545,33 @@ module {
     hw.instance "dut" @Foo(clock: %clock: !seq.clock, in: %in: i1) -> ()
     hw.output
   }
-  // CHECK: hw.module @Foo_cover(in %{{[^ ]+}} : !seq.clock, in %{{[^ ]+}} : i1)
+  // CHECK: hw.module @Foo_cover(in %clock : !seq.clock, in %in : i1)
   hw.module private @Foo(in %clock: !seq.clock, in %in: i1) {
     %0 = seq.from_clock %clock
     sv.cover.concurrent posedge %0, %in label "cover__hello"
     hw.output
+  }
+}
+
+
+// -----
+
+// Check that no anonymous ports are created and all the port names are unique.
+
+module {
+  hw.module @PortName(in %clock : !seq.clock, in %in : i1) {
+    %x = hw.instance "pF" @PortNameFoo(clock: %clock: !seq.clock, "": %in: i1) -> (o: i1)
+    hw.output
+  }
+  // CHECK-LABEL: hw.module @PortNameFoo_cover
+  // CHECK-SAME: (in %clock : !seq.clock, in %port_1 : i1, in %port_2 : i1)
+  hw.module private @PortNameFoo(in %clock: !seq.clock, in %1: i1, out o : i1) {
+    // CHECK: hw.instance "PortNameFoo_cover"
+    // CHECK-SAME: @PortNameFoo_cover(clock: %clock: !seq.clock, port_1: %arg0: i1, port_2: %0: i1) -> ()
+    %0 = seq.from_clock %clock
+    %2 = comb.xor %1, %1 : i1
+    sv.cover.concurrent posedge %0, %1 label "cover__hello1"
+    sv.cover.concurrent posedge %0, %2 label "cover__hello2"
+    hw.output %2 : i1
   }
 }
