@@ -204,6 +204,7 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
   {
     auto srcPorts = op.getInputNames();
     for (auto port : llvm::enumerate(realInputs)) {
+      // Append the port index to create unique names.
       auto name =
           b.getStringAttr(getNameForPort(port.value(), srcPorts).getValue() +
                           Twine(port.index()));
