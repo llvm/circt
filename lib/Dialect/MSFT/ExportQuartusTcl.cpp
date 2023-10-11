@@ -103,9 +103,11 @@ struct TclOutputState {
   LogicalResult emit(PDRegPhysLocationOp);
   LogicalResult emit(DynamicInstanceVerbatimAttrOp attr);
   LogicalResult emit(PDMulticycleOp op);
+  LogicalResult emit(PDInstanceHierarchyCallOp op);
 
   void emitPath(hw::HierPathOp ref, std::optional<StringRef> subpath);
   void emitInnerRefPart(hw::InnerRefAttr innerRef);
+  void emitModConfigName(Operation *hwMod, StringAttr instName = {});
 
   /// Get the HierPathOp to which the given operation is pointing. Add it to
   /// the set of used global refs.
@@ -125,6 +127,14 @@ struct TclOutputState {
   }
 };
 } // anonymous namespace
+
+void TclOutputState::emitModConfigName(Operation *hwMod, StringAttr instName) {
+  os << "{{" << symbolRefs.size() << "}}";
+  if (instName)
+    os << '_' << instName.getValue();
+  os << "_config";
+  symbolRefs.push_back(SymbolRefAttr::get(hwMod));
+}
 
 void TclOutputState::emitInnerRefPart(hw::InnerRefAttr innerRef) {
   // We append new symbolRefs to the state, so s.symbolRefs.size() is the
@@ -218,6 +228,23 @@ LogicalResult TclOutputState::emit(PDMulticycleOp op) {
   return success();
 }
 
+LogicalResult TclOutputState::emit(PDInstanceHierarchyCallOp op) {
+  indent();
+  auto targetHier =
+      dyn_cast_or_null<msft::InstanceHierarchyOp>(emitter.getDefinition(
+          FlatSymbolRefAttr::get(op.getContext(), op.getProc())));
+  assert(targetHier && "Could not find target hierarchy");
+
+  // FIXME: currently there's not really a deterministic naming scheme for
+  // msft.instance.hierarchy vs. the TCL proc that they generate...
+  emitModConfigName(emitter.getDefinition(
+      FlatSymbolRefAttr::get(op.getContext(), targetHier.getTopModuleRef())));
+  os << " $parent|";
+  emitPath(getRefOp(op.getLoc(), op.getRefAttr()), std::nullopt);
+  os << "\n";
+  return success();
+}
+
 /// Emit tcl in the form of:
 /// "set_global_assignment -name NAME VALUE -to $parent|fooInst|entityName"
 LogicalResult TclOutputState::emit(DynamicInstanceVerbatimAttrOp attr) {
@@ -303,11 +330,9 @@ LogicalResult TclEmitter::emit(Operation *hwMod, StringRef outputFile) {
   // each one.
   for (const auto &tclOpsForInstancesKV : tclOpsForModInstance[hwMod]) {
     StringAttr instName = tclOpsForInstancesKV.first;
-    os << "proc {{" << state.symbolRefs.size() << "}}";
-    if (instName)
-      os << '_' << instName.getValue();
-    os << "_config { parent } {\n";
-    state.symbolRefs.push_back(SymbolRefAttr::get(hwMod));
+    os << "proc ";
+    state.emitModConfigName(hwMod, instName);
+    os << " { parent } {\n";
 
     // Loop through the ops relevant to the specified root module "instance".
     LogicalResult ret = success();
@@ -315,13 +340,10 @@ LogicalResult TclEmitter::emit(Operation *hwMod, StringRef outputFile) {
     for (Operation *tclOp : tclOpsForMod) {
       LogicalResult rc =
           TypeSwitch<Operation *, LogicalResult>(tclOp)
-              .Case([&](PDPhysLocationOp op) { return state.emit(op); })
-              .Case([&](PDRegPhysLocationOp op) { return state.emit(op); })
-              .Case([&](PDPhysRegionOp op) { return state.emit(op); })
-              .Case([&](PDMulticycleOp op) { return state.emit(op); })
-              .Case([&](DynamicInstanceVerbatimAttrOp op) {
-                return state.emit(op);
-              })
+              .Case<PDPhysLocationOp, PDRegPhysLocationOp, PDPhysRegionOp,
+                    PDMulticycleOp, DynamicInstanceVerbatimAttrOp,
+                    PDInstanceHierarchyCallOp>(
+                  [&](auto op) { return state.emit(op); })
               .Default([](Operation *op) {
                 return op->emitOpError("could not determine how to output tcl");
               });

@@ -57,6 +57,19 @@ void ExportTclPass::runOnOperation() {
   auto *ctxt = &getContext();
   TclEmitter emitter(top);
 
+  llvm::SmallVector<std::string, 4> tops;
+  if (topsOpt.empty()) {
+    DenseSet<StringAttr> uniqueTops;
+    for (msft::InstanceHierarchyOp ihop :
+         top.getOps<msft::InstanceHierarchyOp>())
+      uniqueTops.insert(ihop.getTopModuleRefAttr().getAttr());
+
+    for (auto top : uniqueTops)
+      tops.push_back(top.getValue().str());
+  } else {
+    llvm::copy(topsOpt, std::back_inserter(tops));
+  }
+
   // Traverse MSFT location attributes and export the required Tcl into
   // templated `sv::VerbatimOp`s with symbolic references to the instance paths.
   for (const std::string &moduleName : tops) {

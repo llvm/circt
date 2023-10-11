@@ -106,8 +106,9 @@ def PDPhysRegionOp : MSFTOp<"pd.physregion",
   }];
 }
 
-def InstanceHierarchyOp : MSFTOp<"instance.hierarchy",
-                                 [HasParent<"mlir::ModuleOp">, NoTerminator]> {
+def InstanceHierarchyOp : MSFTOp<"instance.hierarchy",[
+    HasParent<"mlir::ModuleOp">, SingleBlock, NoTerminator, Symbol
+  ]> {
   let summary = "The root of an instance hierarchy";
   let description = [{
     Models the "root" / "top" of an instance hierarchy. `DynamicInstanceOp`s
@@ -117,12 +118,14 @@ def InstanceHierarchyOp : MSFTOp<"instance.hierarchy",
     producing the design's "top" module but a subdesign.)
   }];
 
-  let arguments = (ins FlatSymbolRefAttr:$topModuleRef,
-                       OptionalAttr<StrAttr>:$instName);
-  let regions = (region SizedRegion<1>:$body);
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    FlatSymbolRefAttr:$topModuleRef,
+    OptionalAttr<StrAttr>:$instName);
+  let regions = (region SizedRegion<1>:$region);
 
   let assemblyFormat = [{
-    $topModuleRef ($instName^)? $body attr-dict
+    $sym_name `(` $topModuleRef ($instName^)? `)` $region attr-dict
   }];
 }
 
@@ -181,5 +184,19 @@ def DynamicInstanceVerbatimAttrOp : MSFTOp<
     Operation* getTopModule(circt::hw::HWSymbolCache &symCache) {
       return getHierPathTopModule(getOperation()->getLoc(), symCache, getPathSym());
     }
+  }];
+}
+
+def PDInstanceHierarchyCallOp : MSFTOp<"instance.hierarchy.call", [
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+  DeclareOpInterfaceMethods<DynInstDataOpInterface>
+]> {
+  let summary = "Call an instance hierarchy config procedure on an instance";
+  let arguments = (ins
+    FlatSymbolRefAttr:$proc,
+    OptionalAttr<FlatSymbolRefAttr>:$ref
+  );
+  let assemblyFormat = [{
+    $proc (`ref` $ref^)? attr-dict
   }];
 }
