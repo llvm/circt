@@ -297,27 +297,138 @@ def MapCreateOp : OMOp<"map_create", [Pure, SameTypeOperands]> {
   let hasCustomAssemblyFormat = true;
 }
 
-def PathOp : OMOp<"path", [Pure, 
+def BasePathCreateOp : OMOp<"basepath_create", [Pure, 
+      DeclareOpInterfaceMethods<SymbolUserOpInterface>
+    ]> {
+  let summary = "Produce a base path value";
+  let description = [{
+    Produces a value which represents a fragment of a hierarchical path to a
+    target. Given a base path, extend it with the name of a module instance, to
+    produce a new base path. The instance is identified via an NLA. Once the
+    final verilog name of the instance is known, this op can be converted into
+    a FrozenBasePathOp.
+
+    Example:
+    ```mlir
+    hw.module @Foo() -> () {
+      hw.inst "bar" sym @bar @Bar() -> ()
+    }
+    hw.hierpath @Path [@Foo::@bar]
+    om.class @OM(%basepath: !om.basepath) {
+      %0 = om.basepath_create %base @Path
+    }
+    ```
+  }];
+  let arguments = (ins BasePathType:$basePath, FlatSymbolRefAttr:$target);
+  let results = (outs BasePathType:$result);
+  let assemblyFormat = "$basePath $target attr-dict";
+}
+
+def PathCreateOp : OMOp<"path_create", [Pure,
       DeclareOpInterfaceMethods<SymbolUserOpInterface>
     ]> {
   let summary = "Produce a path value";
   let description = [{
     Produces a value which represents a hierarchical path to a hardware
-    component.
+    target.
+     from a base path to a target.
 
     Example:
     ```mlir
-    hw.module @Foo {
+    hw.module @Foo() -> () {
       %wire = hw.wire sym @w: !i1
     }
     hw.hierpath @Path [@Foo::@w]
-    %0 = om.path member @Path
+    om.class @OM(%basepath: !om.basepath)
+      %0 = om.path_create reference %basepath @Path
+    }
     ```
   }];
-  let arguments = (ins TargetKind:$targetKind,
-                       FlatSymbolRefAttr:$target);
+  let arguments = (ins
+    TargetKind:$targetKind,
+    BasePathType:$basePath,
+    FlatSymbolRefAttr:$target
+  );
   let results = (outs PathType:$result);
-  let assemblyFormat = "$targetKind $target attr-dict";
+  let assemblyFormat = "$targetKind $basePath $target attr-dict";
+}
+
+def EmptyPathOp : OMOp<"path_empty", [Pure]> {
+  let summary = "Produce a path value to nothing";
+  let description = [{
+    Produces a value which represents a hierarchical path to nothing.
+
+    Example:
+    ```mlir
+    om.class @OM()
+      %0 = om.path_empty
+    }
+    ```
+  }];
+  let results = (outs FrozenPathType:$result);
+  let assemblyFormat = "attr-dict";
+}
+
+def FrozenBasePathCreateOp : OMOp<"frozenbasepath_create", [Pure]> {
+  let summary = "Produce a frozen base path value";
+  let description = [{
+    Produces a value which represents a fragment of a hierarchical path to a
+    target.
+
+    Example:
+    ```mlir
+    om.class @OM(%basepath: !om.basepath)
+      %0 = om.frozenbasepath_create %basepath "Foo/bar:Bar/baz"
+    }
+    ```
+  }];
+  let arguments = (ins FrozenBasePathType:$basePath, OMPathAttr:$path);
+  let results = (outs FrozenBasePathType:$result);
+  let assemblyFormat = "$basePath custom<BasePathString>($path) attr-dict";
+}
+
+def FrozenPathCreateOp : OMOp<"frozenpath_create", [Pure]> {
+  let summary = "Produce a frozen path value";
+  let description = [{
+    Produces a value which represents a hierarchical path to a hardware
+    component from a base path to a target.
+
+    Example:
+    ```mlir
+    om.class @OM(%basepath: !om.basepath)
+      %0 = om.frozenpath_create reference %base "Foo/bar:Bar>w.a"
+    }
+    ```
+  }];
+  let arguments = (ins
+    TargetKind:$targetKind,
+    FrozenBasePathType:$basePath,
+    OMPathAttr:$path,
+    StrAttr:$module,
+    StrAttr:$ref,
+    StrAttr:$field
+  );
+  let results = (outs FrozenPathType:$result);
+  let assemblyFormat = [{
+    $targetKind $basePath custom<PathString>($path, $module, $ref, $field)
+      attr-dict
+  }];
+}
+
+def FrozenEmptyPathOp : OMOp<"frozenpath_empty", [Pure]> {
+  let summary = "Produce a frozen path value to nothing";
+  let description = [{
+    Produces a value which represents a hierarchical path to nothing.
+
+    Example:
+    ```mlir
+    om.class @OM()
+      %0 = om.frozenpath_empty
+    }
+    ```
+  }];
+  let results = (outs FrozenPathType:$result);
+  let assemblyFormat = "attr-dict";
 }
 
 def AnyCastOp : OMOp<"any_cast", [Pure]> {
@@ -336,23 +447,5 @@ def AnyCastOp : OMOp<"any_cast", [Pure]> {
 
   let assemblyFormat =
      "$input attr-dict `:` functional-type($input, $result)";
-}
-
-def PathAppendOp : OMOp<"path_append", [Pure]> {
-  let summary = "Append two path value";
-  let description = [{
-    Appends the path to the root path. The root path must not have a component.
-    The appended path must begin where the root path ends.
-
-    Example:
-    ```mlir
-    %root = om.constant #om.path<"Foo/bar:Bar">
-    %path = om.constant #om.path<"Bar/baz:Baz>output">
-    %0 = om.path_append %root, %path
-    ```
-  }];
-  let arguments = (ins PathType:$root, PathType:$path);
-  let results = (outs PathType:$result);
-  let assemblyFormat = "$root `,` $path attr-dict";
 }
 #endif // CIRCT_DIALECT_OM_OMOPS_TD

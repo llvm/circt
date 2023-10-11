@@ -14,6 +14,7 @@ add_circt_dialect_library(
   OMOpInterfaces.cpp
   OMOps.cpp
   OMTypes.cpp
+  OMUtils.cpp
 
   DEPENDS
   MLIROMIncGen

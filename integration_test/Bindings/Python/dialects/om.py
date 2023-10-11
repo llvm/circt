@@ -44,9 +44,6 @@ with Context() as ctx, Location.unknown():
       %0 = om.object @Child(%c_14) : (!om.integer) -> !om.class.type<@Child>
       om.class.field @child, %0 : !om.class.type<@Child>
 
-      %path = om.constant #om.path<"path"> : !om.path
-      om.class.field @path, %path : !om.path
-
       om.class.field @reference, %sym : !om.ref
 
       %list = om.constant #om.list<!om.string, ["X" : !om.string, "Y" : !om.string]> : !om.list<!om.string>
@@ -129,7 +126,7 @@ print(obj.get_field_loc("field"))
 
 # CHECK: 14
 print(obj.child.foo)
-# CHECK: loc("-":64:7)
+# CHECK: loc("-":61:7)
 print(obj.child.get_field_loc("foo"))
 # CHECK: ('Root', 'x')
 print(obj.reference)
@@ -137,14 +134,8 @@ print(obj.reference)
 # CHECK: 14
 print(snd)
 
-# CHECK: loc("-":43:7)
+# CHECK: loc("-":40:7)
 print(obj.get_field_loc("tuple"))
-
-# CHECK: path
-print(obj.path)
-# location of om.class.field @path, %path : !om.path
-# CHECK: loc("-":35:7)
-print(obj.get_field_loc("path"))
 
 try:
   print(obj.tuple[3])
@@ -161,7 +152,7 @@ for (name, field) in obj:
   # CHECK-SAME: loc: loc("-":28:7)
   # location from om.class.field @reference, %sym : !om.ref
   # CHECK: name: reference, field: ('Root', 'x')
-  # CHECK-SAME: loc: loc("-":37:7)
+  # CHECK-SAME: loc: loc("-":34:7)
   loc = obj.get_field_loc(name)
   print(f"name: {name}, field: {field}, loc: {loc}")
 

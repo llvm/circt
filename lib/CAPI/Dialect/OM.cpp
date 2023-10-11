@@ -363,15 +363,3 @@ MlirAttribute omMapAttrGetElementValue(MlirAttribute attr, intptr_t pos) {
   auto mapAttr = llvm::cast<MapAttr>(unwrap(attr));
   return wrap(mapAttr.getElements().getValue()[pos].getValue());
 }
-
-//===----------------------------------------------------------------------===//
-// PathAttr API.
-//===----------------------------------------------------------------------===//
-
-bool omAttrIsAPathAttr(MlirAttribute attr) {
-  return unwrap(attr).isa<PathAttr>();
-}
-
-MlirIdentifier omPathAttrGetPath(MlirAttribute attr) {
-  return wrap(unwrap(attr).cast<PathAttr>().getPath());
-}
