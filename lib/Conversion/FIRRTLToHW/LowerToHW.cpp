@@ -3214,8 +3214,10 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
   auto innerSym = oldInstance.getInnerSymAttr();
   if (oldInstance.getLowerToBind()) {
     if (!innerSym)
-      innerSym = hw::InnerSymAttr::get(
-          builder.getStringAttr("__" + oldInstance.getName() + "__"));
+      std::tie(innerSym, std::ignore) = getOrAddInnerSym(
+          oldInstance.getContext(), oldInstance.getInnerSymAttr(), 0,
+          [&]() -> hw::InnerSymbolNamespace & { return moduleNamespace; });
+
     auto bindOp = builder.create<sv::BindOp>(theModule.getNameAttr(),
                                              innerSym.getSymName());
     // If the lowered op already had output file information, then use that.

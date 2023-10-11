@@ -589,8 +589,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %1455 = builtin.unrealized_conversion_cast %hits_1_7 : !firrtl.uint<1> to !firrtl.uint<1>
   }
 
-  // CHECK: sv.bind <@bindTest::@[[bazSymbol:.+]]>
+  // CHECK: sv.bind <@bindTest::@[[bazSymbol:sym]]>
   // CHECK-NOT: output_file
+  // CHECK: sv.bind <@bindTest::@[[bazSymbol2:sym_0]]>
   // CHECK-NEXT: sv.bind <@bindTest::@[[quxSymbol:.+]]> {
   // CHECK-SAME: output_file = #hw.output_file<"bindings.sv", excludeFromFileList>
   // CHECK-NEXT: hw.module private @bindTest(in %dummy : i1)
@@ -598,6 +599,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK: hw.instance "baz" sym @[[bazSymbol]] @bar
     %baz = firrtl.instance baz {lowerToBind} @bar(in io_cpu_flush: !firrtl.uint<1>)
     firrtl.connect %baz, %dummy : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: hw.instance "baz" sym @[[bazSymbol2]] @bar
+    %baz_dup = firrtl.instance baz {lowerToBind} @bar(in io_cpu_flush: !firrtl.uint<1>)
+    firrtl.connect %baz_dup, %dummy : !firrtl.uint<1>, !firrtl.uint<1>
 
     // CHECK: hw.instance "qux" sym @[[quxSymbol]] @bar
     %qux = firrtl.instance qux {lowerToBind, output_file = #hw.output_file<"bindings.sv", excludeFromFileList>} @bar(in io_cpu_flush: !firrtl.uint<1>)
