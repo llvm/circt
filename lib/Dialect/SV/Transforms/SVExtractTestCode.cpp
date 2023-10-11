@@ -137,7 +137,8 @@ getBackwardSlice(hw::HWModuleOp module,
 }
 
 static StringAttr getNameForPort(Value val,
-                                 SmallVector<mlir::Attribute> modulePorts) {
+                                 SmallVector<mlir::Attribute> modulePorts,
+                                 unsigned index) {
   if (auto bv = val.dyn_cast<BlockArgument>())
     return modulePorts[bv.getArgNumber()].cast<StringAttr>();
 
@@ -167,7 +168,7 @@ static StringAttr getNameForPort(Value val,
     }
   }
 
-  return StringAttr::get(val.getContext(), "port");
+  return StringAttr::get(val.getContext(), "arg" + Twine(index));
 }
 
 // Given a set of values, construct a module and bind instance of that module
@@ -204,7 +205,7 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
   {
     auto srcPorts = op.getInputNames();
     for (auto port : llvm::enumerate(realInputs)) {
-      auto name = getNameForPort(port.value(), srcPorts);
+      auto name = getNameForPort(port.value(), srcPorts, port.index());
       ports.push_back(
           {{name, port.value().getType(), hw::ModulePort::Direction::Input},
            port.index()});
