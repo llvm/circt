@@ -167,7 +167,7 @@ static StringAttr getNameForPort(Value val,
     }
   }
 
-  return StringAttr::get(val.getContext(), "");
+  return StringAttr::get(val.getContext(), "port");
 }
 
 // Given a set of values, construct a module and bind instance of that module
