@@ -65,12 +65,14 @@ struct FirtoolOptions {
   llvm::cl::opt<firrtl::PreserveValues::PreserveMode> preserveMode{
       "preserve-values",
       llvm::cl::desc("Specify the values which can be optimized away"),
-      llvm::cl::values(clEnumValN(firrtl::PreserveValues::None, "none",
-                                  "Preserve no values"),
-                       clEnumValN(firrtl::PreserveValues::Named, "named",
-                                  "Preserve values with meaningful names"),
-                       clEnumValN(firrtl::PreserveValues::All, "all",
-                                  "Preserve all values")),
+      llvm::cl::values(
+          clEnumValN(firrtl::PreserveValues::Strip, "strip", "Strip all names"),
+          clEnumValN(firrtl::PreserveValues::None, "none",
+                     "Preserve no values"),
+          clEnumValN(firrtl::PreserveValues::Named, "named",
+                     "Preserve values with meaningful names"),
+          clEnumValN(firrtl::PreserveValues::All, "all",
+                     "Preserve all values")),
       llvm::cl::init(firrtl::PreserveValues::None), llvm::cl::cat(category)};
 
   // Build mode options.
