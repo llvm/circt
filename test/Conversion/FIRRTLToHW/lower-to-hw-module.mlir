@@ -286,11 +286,19 @@ firrtl.circuit "Simple" {
 
   // DontTouch on ports becomes symbol.
   // CHECK-LABEL: hw.module.extern private @PortDT
-  // CHECK-SAME: (in %a : i1 {hw.exportPort = #hw<innerSym@__PortDT__a>}, in %hassym : i1 {hw.exportPort = #hw<innerSym@hassym>},
-  // CHECK-SAME: out b : i2 {hw.exportPort = #hw<innerSym@__PortDT__b>})
+  // CHECK-SAME: (in %a : i1 {hw.exportPort = #hw<innerSym@__PortDT__DONTTOUCH__0__a>}, in %hassym : i1 {hw.exportPort = #hw<innerSym@hassym>},
+  // CHECK-SAME: out b : i2 {hw.exportPort = #hw<innerSym@__PortDT__DONTTOUCH__2__b>})
   firrtl.extmodule private @PortDT(
     in a: !firrtl.uint<1> [{class = "firrtl.transforms.DontTouchAnnotation"}],
     in hassym: !firrtl.uint<1> sym @hassym [{class = "firrtl.transforms.DontTouchAnnotation"}],
     out b: !firrtl.uint<2> [{class = "firrtl.transforms.DontTouchAnnotation"}]
   )
+
+  // CHECK-LABEL: @PortDT2
+  // CHECK-SAME:  {hw.exportPort = #hw<innerSym@__PortDT2__DONTTOUCH__0__>}
+  // CHECK-SAME:  {hw.exportPort = #hw<innerSym@__PortDT2__DONTTOUCH__1__>}
+  firrtl.module private @PortDT2(
+    in %0: !firrtl.uint<1> [{class = "firrtl.transforms.DontTouchAnnotation"}],
+    in %1: !firrtl.uint<1> [{class = "firrtl.transforms.DontTouchAnnotation"}]
+  ) {}
 }
