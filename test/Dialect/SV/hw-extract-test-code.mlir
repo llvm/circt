@@ -552,3 +552,26 @@ module {
     hw.output
   }
 }
+
+
+// -----
+
+// Check that no anonymous ports are created and all the port names are unique.
+
+module {
+  hw.module @PortName(in %clock : !seq.clock, in %in : i1) {
+    %x = hw.instance "pF" @PortNameFoo(clock: %clock: !seq.clock, "": %in: i1) -> (o: i1)
+    hw.output
+  }
+  // CHECK-LABEL: hw.module @PortNameFoo_cover
+  // CHECK-SAME: (in %clock : !seq.clock, in %port_1 : i1, in %port_2 : i1)
+  hw.module private @PortNameFoo(in %clock: !seq.clock, in %1: i1, out o : i1) {
+    // CHECK: hw.instance "PortNameFoo_cover"
+    // CHECK-SAME: @PortNameFoo_cover(clock: %clock: !seq.clock, port_1: %arg0: i1, port_2: %0: i1) -> ()
+    %0 = seq.from_clock %clock
+    %2 = comb.xor %1, %1 : i1
+    sv.cover.concurrent posedge %0, %1 label "cover__hello1"
+    sv.cover.concurrent posedge %0, %2 label "cover__hello2"
+    hw.output %2 : i1
+  }
+}
