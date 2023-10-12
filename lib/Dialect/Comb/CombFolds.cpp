@@ -36,10 +36,6 @@ static bool hasOperandsOutsideOfBlock(Operation *op) {
   });
 }
 
-#define bailCanonIfOutsideBlockOperands(op)                                    \
-  if (hasOperandsOutsideOfBlock(&*(op)))                                       \
-    return failure();
-
 /// Create a new instance of a generic operation that only has value operands,
 /// and has a single result value whose type matches the first operand.
 ///
@@ -90,7 +86,7 @@ static void replaceOpAndCopyName(PatternRewriter &rewriter, Operation *op,
 /// this function propagates the name to the new value.
 template <typename OpTy, typename... Args>
 static OpTy replaceOpWithNewOpAndCopyName(PatternRewriter &rewriter,
-                                          Operation *op, Args &&...args) {
+                                          Operation *op, Args &&... args) {
   auto name = op->getAttrOfType<StringAttr>("sv.namehint");
   auto newOp =
       rewriter.replaceOpWithNewOp<OpTy>(op, std::forward<Args>(args)...);
@@ -327,7 +323,8 @@ OpFoldResult ShlOp::fold(FoldAdaptor adaptor) {
 }
 
 LogicalResult ShlOp::canonicalize(ShlOp op, PatternRewriter &rewriter) {
-  bailCanonIfOutsideBlockOperands(op);
+  if (hasOperandsOutsideOfBlock(&*op))
+    return failure();
 
   // ShlOp(x, cst) -> Concat(Extract(x), zeros)
   APInt value;
@@ -366,7 +363,8 @@ OpFoldResult ShrUOp::fold(FoldAdaptor adaptor) {
 }
 
 LogicalResult ShrUOp::canonicalize(ShrUOp op, PatternRewriter &rewriter) {
-  bailCanonIfOutsideBlockOperands(op);
+  if (hasOperandsOutsideOfBlock(&*op))
+    return failure();
 
   // ShrUOp(x, cst) -> Concat(zeros, Extract(x))
   APInt value;
@@ -400,7 +398,8 @@ OpFoldResult ShrSOp::fold(FoldAdaptor adaptor) {
 }
 
 LogicalResult ShrSOp::canonicalize(ShrSOp op, PatternRewriter &rewriter) {
-  bailCanonIfOutsideBlockOperands(op);
+  if (hasOperandsOutsideOfBlock(&*op))
+    return failure();
 
   // ShrSOp(x, cst) -> Concat(replicate(extract(x, topbit)),extract(x))
   APInt value;
@@ -559,7 +558,8 @@ static bool extractFromReplicate(ExtractOp op, ReplicateOp replicate,
 }
 
 LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
-  bailCanonIfOutsideBlockOperands(op);
+  if (hasOperandsOutsideOfBlock(&*op))
+    return failure();
 
   auto *inputOp = op.getInput().getDefiningOp();
 
@@ -868,7 +868,8 @@ static bool canonicalizeIdempotentInputs(Op op, PatternRewriter &rewriter) {
 }
 
 LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
-  bailCanonIfOutsideBlockOperands(op);
+  if (hasOperandsOutsideOfBlock(&*op))
+    return failure();
 
   auto inputs = op.getInputs();
   auto size = inputs.size();
@@ -1142,7 +1143,8 @@ static bool canonicalizeOrOfConcatsWithCstOperands(OrOp op, size_t concatIdx1,
 }
 
 LogicalResult OrOp::canonicalize(OrOp op, PatternRewriter &rewriter) {
-  bailCanonIfOutsideBlockOperands(op);
+  if (hasOperandsOutsideOfBlock(&*op))
+    return failure();
 
   auto inputs = op.getInputs();
   auto size = inputs.size();
@@ -1295,7 +1297,8 @@ static void canonicalizeXorIcmpTrue(XorOp op, unsigned icmpOperand,
 }
 
 LogicalResult XorOp::canonicalize(XorOp op, PatternRewriter &rewriter) {
-  bailCanonIfOutsideBlockOperands(op);
+  if (hasOperandsOutsideOfBlock(&*op))
+    return failure();
 
   auto inputs = op.getInputs();
   auto size = inputs.size();
@@ -1402,7 +1405,8 @@ OpFoldResult SubOp::fold(FoldAdaptor adaptor) {
 }
 
 LogicalResult SubOp::canonicalize(SubOp op, PatternRewriter &rewriter) {
-  bailCanonIfOutsideBlockOperands(op);
+  if (hasOperandsOutsideOfBlock(&*op))
+    return failure();
 
   // sub(x, cst) -> add(x, -cst)
   APInt value;
@@ -1432,7 +1436,8 @@ OpFoldResult AddOp::fold(FoldAdaptor adaptor) {
 }
 
 LogicalResult AddOp::canonicalize(AddOp op, PatternRewriter &rewriter) {
-  bailCanonIfOutsideBlockOperands(op);
+  if (hasOperandsOutsideOfBlock(&*op))
+    return failure();
 
   auto inputs = op.getInputs();
   auto size = inputs.size();
@@ -1558,7 +1563,8 @@ OpFoldResult MulOp::fold(FoldAdaptor adaptor) {
 }
 
 LogicalResult MulOp::canonicalize(MulOp op, PatternRewriter &rewriter) {
-  bailCanonIfOutsideBlockOperands(op);
+  if (hasOperandsOutsideOfBlock(&*op))
+    return failure();
 
   auto inputs = op.getInputs();
   auto size = inputs.size();
@@ -1691,7 +1697,8 @@ OpFoldResult ConcatOp::fold(FoldAdaptor adaptor) {
 }
 
 LogicalResult ConcatOp::canonicalize(ConcatOp op, PatternRewriter &rewriter) {
-  bailCanonIfOutsideBlockOperands(op);
+  if (hasOperandsOutsideOfBlock(&*op))
+    return failure();
 
   auto inputs = op.getInputs();
   auto size = inputs.size();
@@ -2305,7 +2312,8 @@ struct MuxRewriter : public mlir::OpRewritePattern<MuxOp> {
 
 LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
                                            PatternRewriter &rewriter) const {
-  bailCanonIfOutsideBlockOperands(op);
+  if (hasOperandsOutsideOfBlock(&*op))
+    return failure();
 
   // If the op has a SV attribute, don't optimize it.
   if (hasSVAttributes(op))
@@ -2597,7 +2605,8 @@ struct ArrayRewriter : public mlir::OpRewritePattern<hw::ArrayCreateOp> {
 
   LogicalResult matchAndRewrite(hw::ArrayCreateOp op,
                                 PatternRewriter &rewriter) const override {
-    bailCanonIfOutsideBlockOperands(op);
+    if (hasOperandsOutsideOfBlock(&*op))
+      return failure();
 
     if (foldArrayOfMuxes(op, rewriter))
       return success();
@@ -2953,7 +2962,8 @@ static void combineEqualityICmpWithXorOfConstant(ICmpOp cmpOp, XorOp xorOp,
 }
 
 LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
-  bailCanonIfOutsideBlockOperands(op);
+  if (hasOperandsOutsideOfBlock(&*op))
+    return failure();
 
   APInt lhs, rhs;
 
