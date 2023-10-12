@@ -22,6 +22,7 @@
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/Seq/SeqOps.h"
+#include "circt/Support/Namespace.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/IRMapping.h"
 #include "llvm/ADT/SetVector.h"
@@ -203,18 +204,15 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
   // Construct the ports, this is just the input Values
   SmallVector<hw::PortInfo> ports;
   {
+    Namespace portNames;
     auto srcPorts = op.getInputNames();
-    llvm::SmallSetVector<StringRef, 8> portNames;
-    portNames.insert("");
     for (auto port : llvm::enumerate(realInputs)) {
-      auto name = getNameForPort(port.value(), srcPorts);
-      if (!portNames.insert(name.getValue())) {
-        // Append the port index to create unique names.
-        name = b.getStringAttr(name.getValue() + "port_" + Twine(port.index()));
-      }
-      ports.push_back(
-          {{name, port.value().getType(), hw::ModulePort::Direction::Input},
-           port.index()});
+      auto name = getNameForPort(port.value(), srcPorts).getValue();
+      name = portNames.newName(name.empty() ? "port_" + Twine(port.index())
+                                            : name);
+      ports.push_back({{b.getStringAttr(name), port.value().getType(),
+                        hw::ModulePort::Direction::Input},
+                       port.index()});
     }
   }
 
