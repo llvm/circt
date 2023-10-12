@@ -66,9 +66,10 @@ struct FirtoolOptions {
       "preserve-values",
       llvm::cl::desc("Specify the values which can be optimized away"),
       llvm::cl::values(
-          clEnumValN(firrtl::PreserveValues::Strip, "strip", "Strip all names"),
+          clEnumValN(firrtl::PreserveValues::Strip, "strip",
+                     "Strip all names. No name is preserved"),
           clEnumValN(firrtl::PreserveValues::None, "none",
-                     "Preserve no values"),
+                     "Names could be preserved by best-effort unlike `strip`"),
           clEnumValN(firrtl::PreserveValues::Named, "named",
                      "Preserve values with meaningful names"),
           clEnumValN(firrtl::PreserveValues::All, "all",

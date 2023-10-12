@@ -591,9 +591,9 @@ def DropName : Pass<"firrtl-drop-names", "firrtl::FModuleOp"> {
            "specify the values which can be optimized away", [{
             ::llvm::cl::values(
               clEnumValN(PreserveValues::Strip, "strip",
-                "Strip all names"),
+                "Strip all names. No name is preserved"),
               clEnumValN(PreserveValues::None, "none",
-                "Preserve no values"),
+                "Preserve no named values. Names could be preserved by best-effort unlike `strip`"),
               clEnumValN(PreserveValues::Named, "named",
                 "Preserve values with meaningful names"),
               clEnumValN(PreserveValues::All, "all",
