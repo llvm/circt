@@ -146,8 +146,11 @@ std::unique_ptr<mlir::Pass> createDropConstPass();
 /// Configure which values will be explicitly preserved by the DropNames pass.
 namespace PreserveValues {
 enum PreserveMode {
+  /// Strip all names. No name on declaration is preserved.
+  Strip,
   /// Don't explicitly preserve any named values. Every named operation could
-  /// be optimized away by the compiler.
+  /// be optimized away by the compiler. Unlike `Strip` names could be preserved
+  /// until the end.
   None,
   // Explicitly preserved values with meaningful names.  If a name begins with
   // an "_" it is not considered meaningful.
