@@ -286,7 +286,9 @@ static ParseResult parseInputPort(OpAsmParser &parser,
   if (parseOptionalKeywordOrOptionalString(parser, result.rawName, found))
     return failure();
 
-  // Need to set the rawName to the ssa name
+  // If there is only a ssa name, use it as the port name.  The ssa name is
+  // always required, but if there is the optional arbitrary name, it is used as
+  // the port name and the ssa name is just used for parsing the module.
   if (!found)
     result.rawName =
         parsing_util::getNameFromSSA(parser.getContext(), result.ssaName.name)
