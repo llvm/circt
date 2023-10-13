@@ -941,10 +941,8 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
 
   SmallVector<OpAsmParser::Argument, 4> entryArgs;
   for (auto &port : ports)
-    if (port.direction != ModulePort::Direction::Output) {
+    if (port.direction != ModulePort::Direction::Output)
       entryArgs.push_back(port);
-      llvm::errs() << entryArgs.back().ssaName.name << "\n";
-    }
 
   // Parse the optional function body.
   auto *body = result.addRegion();
@@ -953,7 +951,6 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
       return failure();
 
     HWModuleOp::ensureTerminator(*body, parser.getBuilder(), result.location);
-    body->front().dump();
   }
   return success();
 }

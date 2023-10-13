@@ -286,9 +286,6 @@ static ParseResult parseInputPort(OpAsmParser &parser,
   if (parseOptionalKeywordOrOptionalString(parser, result.rawName, found))
     return failure();
 
-  llvm::errs() << "*" << found << "*" << result.ssaName.name << "*"
-               << result.rawName << "*\n";
-
   // Need to set the rawName to the ssa name
   if (!found)
     result.rawName =
@@ -377,7 +374,7 @@ ParseResult module_like_impl::parseModuleSignature(
       arg.sourceLoc = parser.getEncodedSourceLoc(arg.ssaName.location);
   }
   modType = TypeAttr::get(ModuleType::get(context, ports));
-  modType.dump();
+
   return success();
 }
 
