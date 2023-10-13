@@ -266,7 +266,7 @@ hw.module @orConcatsWithMux(in %bit: i1, in %cond: i1, out o: i6) {
 hw.module @extractNested(in %0: i5, out o1 : i1) {
 // Multiple layers of nested extract is a weak evidence that the cannonicalization
 // operates recursively.
-// CHECK-NEXT: %0 = comb.extract %arg0 from 4 : (i5) -> i1
+// CHECK-NEXT: %1 = comb.extract %0 from 4 : (i5) -> i1
   %1 = comb.extract %0 from 1 : (i5) -> i4
   %2 = comb.extract %1 from 2 : (i4) -> i2
   %3 = comb.extract %2 from 1 : (i2) -> i1
