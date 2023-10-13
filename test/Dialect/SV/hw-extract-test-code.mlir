@@ -567,7 +567,7 @@ module {
   // CHECK-SAME: (in %clock : !seq.clock, in %port_1 : i1, in %port_2 : i1)
   hw.module private @PortNameFoo(in %clock: !seq.clock, in %1: i1, out o : i1) {
     // CHECK: hw.instance "PortNameFoo_cover"
-    // CHECK-SAME: @PortNameFoo_cover(clock: %clock: !seq.clock, port_1: %arg0: i1, port_2: %0: i1) -> ()
+    // CHECK-SAME: @PortNameFoo_cover(clock: %clock: !seq.clock, port_1: %0: i1, port_2: %1: i1) -> ()
     %0 = seq.from_clock %clock
     %2 = comb.xor %1, %1 : i1
     sv.cover.concurrent posedge %0, %1 label "cover__hello1"
