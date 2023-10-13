@@ -1887,17 +1887,14 @@ LogicalResult AttachOp::canonicalize(AttachOp op, PatternRewriter &rewriter) {
 static void replaceOpWithRegion(PatternRewriter &rewriter, Operation *op,
                                 Region &region) {
   assert(llvm::hasSingleElement(region) && "expected single-region block");
-  Block *fromBlock = &region.front();
-  // Merge it in above the specified operation.
-  op->getBlock()->getOperations().splice(Block::iterator(op),
-                                         fromBlock->getOperations());
+  rewriter.inlineBlockBefore(&region.front(), op, {});
 }
 
 LogicalResult WhenOp::canonicalize(WhenOp op, PatternRewriter &rewriter) {
   if (auto constant = op.getCondition().getDefiningOp<firrtl::ConstantOp>()) {
     if (constant.getValue().isAllOnes())
       replaceOpWithRegion(rewriter, op, op.getThenRegion());
-    else if (!op.getElseRegion().empty())
+    else if (op.hasElseRegion() && !op.getElseRegion().empty())
       replaceOpWithRegion(rewriter, op, op.getElseRegion());
 
     rewriter.eraseOp(op);
