@@ -242,15 +242,20 @@ ParseResult module_like_impl::parseModuleFunctionSignature(
 ////////////////////////////////////////////////////////////////////////////////
 
 /// Parse an optional keyword or string and set instance into 'result'.`
+/// Returns failure on a parse issue, but not on not finding the string. 'found'
+/// indicates whether the optional value exists.
 ParseResult parseOptionalKeywordOrOptionalString(OpAsmParser &p,
-                                                 std::string *result) {
+                                                 std::string &result,
+                                                 bool &found) {
   StringRef keyword;
   if (succeeded(p.parseOptionalKeyword(&keyword))) {
-    *result = keyword.str();
+    result = keyword.str();
+    found = true;
     return success();
   }
 
-  (void)p.parseOptionalString(result);
+  if (succeeded(p.parseOptionalString(&result)))
+    found = true;
   return success();
 }
 
@@ -277,8 +282,18 @@ static ParseResult parseInputPort(OpAsmParser &parser,
   NamedAttrList attrs;
 
   // Parse the result name.
-  if (parseOptionalKeywordOrOptionalString(parser, &result.rawName))
+  bool found = false;
+  if (parseOptionalKeywordOrOptionalString(parser, result.rawName, found))
     return failure();
+
+  llvm::errs() << "*" << found << "*" << result.ssaName.name << "*"
+               << result.rawName << "*\n";
+
+  // Need to set the rawName to the ssa name
+  if (!found)
+    result.rawName =
+        parsing_util::getNameFromSSA(parser.getContext(), result.ssaName.name)
+            .str();
 
   if (parser.parseColonType(result.type) ||
       parser.parseOptionalAttrDict(attrs) ||
@@ -353,10 +368,8 @@ ParseResult module_like_impl::parseModuleSignature(
   // Process the ssa args for the information we're looking for.
   SmallVector<ModulePort> ports;
   for (auto &arg : args) {
-    std::string name = arg.rawName;
-    if (arg.direction != ModulePort::Output)
-      name = parsing_util::getNameFromSSA(context, arg.ssaName.name).str();
-    ports.push_back({StringAttr::get(context, name), arg.type, arg.direction});
+    ports.push_back(
+        {StringAttr::get(context, arg.rawName), arg.type, arg.direction});
     // rewrite type AFTER constructing ports.  This will be used in block args.
     if (arg.direction == ModulePort::InOut)
       arg.type = InOutType::get(arg.type);
@@ -364,7 +377,7 @@ ParseResult module_like_impl::parseModuleSignature(
       arg.sourceLoc = parser.getEncodedSourceLoc(arg.ssaName.location);
   }
   modType = TypeAttr::get(ModuleType::get(context, ports));
-
+  modType.dump();
   return success();
 }
 
