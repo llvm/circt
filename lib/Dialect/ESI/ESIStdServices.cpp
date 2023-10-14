@@ -22,13 +22,20 @@ using namespace circt;
 using namespace circt::esi;
 
 /// Wrap types in esi channels and return the port info struct.
-static ServicePortInfo createPort(StringRef name, Type toServerInner,
-                                  Type toClientInner) {
-  assert(toServerInner || toClientInner);
-  auto *ctxt =
-      toServerInner ? toServerInner.getContext() : toClientInner.getContext();
-  return {StringAttr::get(ctxt, name), ChannelType::get(ctxt, toServerInner),
-          ChannelType::get(ctxt, toClientInner)};
+static ServicePortInfo createReqResp(StringRef name, StringRef reqName,
+                                     Type reqType, StringRef respName,
+                                     Type respType) {
+  assert(reqType || respType);
+  auto *ctxt = reqType ? reqType.getContext() : respType.getContext();
+  auto bundle = ChannelBundleType::get(
+      ctxt,
+      {BundledChannel{StringAttr::get(ctxt, reqName), ChannelDirection::to,
+                      ChannelType::get(ctxt, reqType)},
+       BundledChannel{StringAttr::get(ctxt, respName), ChannelDirection::from,
+                      ChannelType::get(ctxt, respType)}},
+      /*resettable=false*/ UnitAttr());
+  return {StringAttr::get(ctxt, name), ServicePortInfo::Direction::toServer,
+          bundle};
 }
 
 void RandomAccessMemoryDeclOp::getPortList(
@@ -42,8 +49,10 @@ void RandomAccessMemoryDeclOp::getPortList(
       {hw::StructType::FieldInfo{StringAttr::get(ctxt, "address"), addressType},
        hw::StructType::FieldInfo{StringAttr::get(ctxt, "data"),
                                  getInnerType()}});
-  ports.push_back(createPort("write", writeType, IntegerType::get(ctxt, 0)));
+  ports.push_back(createReqResp("write", "req", writeType, "ack",
+                                IntegerType::get(ctxt, 0)));
 
   // Read port
-  ports.push_back(createPort("read", addressType, getInnerType()));
+  ports.push_back(
+      createReqResp("read", "address", addressType, "data", getInnerType()));
 }

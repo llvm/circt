@@ -92,44 +92,8 @@ def ServiceReqOpInterface : OpInterface<"ServiceReqOpInterface"> {
         $_op.setClientNamePathAttr(newClientNamePath);
       }]>,
     InterfaceMethod<
-      "Returns the type headed to the client. Can be null.",
-      "Type", "getToClientType", (ins),
-      /*methodBody=*/[{
-        Value toClient = $_op.getToClient();
-        if (!toClient)
-          return {};
-        return toClient.getType();
-      }]>,
-    InterfaceMethod<
-      "Returns the value headed to the client. Can be null.",
-      "Value", "getToClient", (ins),
-      /*methodBody=*/"",
-      /*defaultImplementation=*/[{
-        return {};
-      }]>,
-    InterfaceMethod<
-      "Returns the type headed to the server. Can be null.",
-      "Type", "getToServerType", (ins),
-      /*methodBody=*/[{
-        Value toServer = $_op.getToServer();
-        if (!toServer)
-          return {};
-        return toServer.getType();
-      }]>,
-    InterfaceMethod<
-      "Returns the value headed to the server. Can be null.",
-      "Value", "getToServer", (ins),
-      /*methodBody=*/"",
-      /*defaultImplementation=*/[{
-        return {};
-      }]>,
-    InterfaceMethod<
-      "Set the value headed to the server. Can assert().",
-      "void", "setToServer", (ins "Value":$newValue),
-      /*methodBody=*/"",
-      /*defaultImplementation=*/[{
-        assert(false && "This op doesn't support the to server direction");
-      }]>
+      "Returns the bundle type.",
+      "ChannelBundleType", "getBundleType", (ins)>,
   ];
 }
 

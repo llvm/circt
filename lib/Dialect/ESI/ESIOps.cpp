@@ -358,9 +358,17 @@ static LogicalResult reqPortMatches(Operation *op, hw::InnerRefAttr port,
   return serviceDecl.validateRequest(op);
 }
 
+ChannelBundleType RequestToClientConnectionOp::getBundleType() {
+  return getToClient().getType();
+}
+
 LogicalResult RequestToClientConnectionOp::verifySymbolUses(
     SymbolTableCollection &symbolTable) {
   return reqPortMatches(getOperation(), getServicePortAttr(), symbolTable);
+}
+
+ChannelBundleType RequestToServerConnectionOp::getBundleType() {
+  return getToServer().getType();
 }
 
 LogicalResult RequestToServerConnectionOp::verifySymbolUses(
@@ -368,29 +376,10 @@ LogicalResult RequestToServerConnectionOp::verifySymbolUses(
   return reqPortMatches(getOperation(), getServicePortAttr(), symbolTable);
 }
 
-LogicalResult
-RequestInOutChannelOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  return reqPortMatches(getOperation(), getServicePortAttr(), symbolTable);
-}
-
-/// Overloads to get the two types from a number of supported ops.
-std::pair<Type, Type> getToServerToClientTypes(RequestInOutChannelOp req) {
-  return std::make_pair(req.getToServer().getType(),
-                        req.getToClient().getType());
-}
-std::pair<Type, Type>
-getToServerToClientTypes(RequestToClientConnectionOp req) {
-  return std::make_pair(Type(), req.getToClient().getType());
-}
-std::pair<Type, Type>
-getToServerToClientTypes(RequestToServerConnectionOp req) {
-  return std::make_pair(req.getToServer().getType(), Type());
-}
-
 /// Validate a connection request against a service decl by comparing against
 /// the port list.
-template <class OpType>
-LogicalResult validateRequest(ServiceDeclOpInterface svc, OpType req) {
+LogicalResult validateRequest(ServiceDeclOpInterface svc,
+                              ServiceReqOpInterface req) {
   ServicePortInfo portDecl;
   SmallVector<ServicePortInfo> ports;
   svc.getPortList(ports);
@@ -403,54 +392,53 @@ LogicalResult validateRequest(ServiceDeclOpInterface svc, OpType req) {
     return req.emitOpError("Could not locate port ")
            << req.getServicePort().getName();
 
+  ServicePortInfo::Direction reqDirection =
+      isa<RequestToClientConnectionOp>(req)
+          ? ServicePortInfo::Direction::toClient
+          : ServicePortInfo::Direction::toServer;
+  if (reqDirection != portDecl.direction)
+    return req.emitOpError(
+        "Request direction does not match service port direction");
+
+  DenseMap<StringAttr, BundledChannel> declBundleChannels;
+  for (BundledChannel bc : portDecl.type.getChannels())
+    declBundleChannels[bc.name] = bc;
+
   auto *ctxt = req.getContext();
   auto anyChannelType = ChannelType::get(ctxt, AnyType::get(ctxt));
-  auto [toServerType, toClientType] = getToServerToClientTypes(req);
+  for (BundledChannel bc : req.getBundleType().getChannels()) {
+    auto f = declBundleChannels.find(bc.name);
+    if (f == declBundleChannels.end())
+      return req.emitOpError(
+          "Request channel name not found in service port bundle");
+    if (f->second.direction != bc.direction)
+      return req.emitOpError("Request channel direction does not match service "
+                             "port bundle channel direction");
 
-  // TODO: Because `inout` requests get broken in two pretty early on, we can't
-  // tell if a to_client/to_server request was initially part of an inout
-  // request, so we can't check that an inout port is only accessed by an inout
-  // request. Consider a different way to do this.
-
-  // Check the input port type.
-  if (!isa<RequestToClientConnectionOp>(req) &&
-      portDecl.toServerType != toServerType &&
-      portDecl.toServerType != anyChannelType)
-    return req.emitOpError("Request to_server type does not match port type ")
-           << portDecl.toServerType;
-
-  // Check the output port type.
-  if (!isa<RequestToServerConnectionOp>(req) &&
-      portDecl.toClientType != toClientType &&
-      portDecl.toClientType != anyChannelType)
-    return req.emitOpError("Request to_client type does not match port type ")
-           << portDecl.toClientType;
+    if (f->second.type != bc.type && f->second.type != anyChannelType)
+      return req.emitOpError("Request channel type does not match service port "
+                             "bundle channel type");
+  }
   return success();
 }
 
 LogicalResult
 circt::esi::validateServiceConnectionRequest(ServiceDeclOpInterface decl,
                                              Operation *reqOp) {
-  if (auto req = dyn_cast<RequestToClientConnectionOp>(reqOp))
-    return ::validateRequest(decl, req);
-  if (auto req = dyn_cast<RequestToServerConnectionOp>(reqOp))
-    return ::validateRequest(decl, req);
-  if (auto req = dyn_cast<RequestInOutChannelOp>(reqOp))
+  if (auto req = dyn_cast<ServiceReqOpInterface>(reqOp))
     return ::validateRequest(decl, req);
   return reqOp->emitOpError("Did not recognize request op");
 }
 
 void CustomServiceDeclOp::getPortList(SmallVectorImpl<ServicePortInfo> &ports) {
   for (auto toServer : getOps<ToServerOp>())
-    ports.push_back(ServicePortInfo{
-        toServer.getInnerSymAttr(), toServer.getToServerType(), {}});
+    ports.push_back(ServicePortInfo{toServer.getInnerSymAttr(),
+                                    ServicePortInfo::Direction::toServer,
+                                    toServer.getToServerType()});
   for (auto toClient : getOps<ToClientOp>())
-    ports.push_back(ServicePortInfo{
-        toClient.getInnerSymAttr(), {}, toClient.getToClientType()});
-  for (auto inoutPort : getOps<ServiceDeclInOutOp>())
-    ports.push_back(ServicePortInfo{inoutPort.getInnerSymAttr(),
-                                    inoutPort.getToServerType(),
-                                    inoutPort.getToClientType()});
+    ports.push_back(ServicePortInfo{toClient.getInnerSymAttr(),
+                                    ServicePortInfo::Direction::toClient,
+                                    toClient.getToClientType()});
 }
 
 //===----------------------------------------------------------------------===//
@@ -518,7 +506,7 @@ LogicalResult ESIPureModuleOp::verify() {
   ESIDialect *esiDialect = getContext()->getLoadedDialect<ESIDialect>();
   Block &body = getBody().front();
   auto channelOrOutput = [](Value v) {
-    if (v.getType().isa<ChannelType>())
+    if (v.getType().isa<ChannelType, ChannelBundleType>())
       return true;
     if (v.getUsers().empty())
       return false;
@@ -533,7 +521,7 @@ LogicalResult ESIPureModuleOp::verify() {
     if (igraph::InstanceOpInterface inst =
             dyn_cast<igraph::InstanceOpInterface>(op)) {
       if (llvm::any_of(op.getOperands(), [](Value v) {
-            return !(v.getType().isa<ChannelType>() ||
+            return !(v.getType().isa<ChannelType, ChannelBundleType>() ||
                      isa<ESIPureModuleInputOp>(v.getDefiningOp()));
           }))
         return inst.emitOpError(

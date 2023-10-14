@@ -207,24 +207,25 @@ LogicalResult HandshakeLowerExtmemToHWPass::wrapESI(
     // Load ports:
     auto loadServicePort = hw::InnerRefAttr::get(memServiceDecl.getNameAttr(),
                                                  b.getStringAttr("read"));
-    for (unsigned i = 0; i < memType.loadPorts; ++i) {
-      auto loadReq = b.create<esi::RequestInOutChannelOp>(
-          loc, handshake::esiWrapper(dataType), loadServicePort,
-          backedges[resIdx], b.getArrayAttr({}));
-      instanceArgsFromThisMem.push_back(loadReq);
-      ++resIdx;
-    }
+    // for (unsigned i = 0; i < memType.loadPorts; ++i) {
+    //   auto loadReq = b.create<esi::RequestInOutChannelOp>(
+    //       loc, handshake::esiWrapper(dataType), loadServicePort,
+    //       backedges[resIdx], b.getArrayAttr({}));
+    //   instanceArgsFromThisMem.push_back(loadReq);
+    //   ++resIdx;
+    // }
 
-    // Store ports:
-    auto storeServicePort = hw::InnerRefAttr::get(memServiceDecl.getNameAttr(),
-                                                  b.getStringAttr("write"));
-    for (unsigned i = 0; i < memType.storePorts; ++i) {
-      auto storeReq = b.create<esi::RequestInOutChannelOp>(
-          loc, handshake::esiWrapper(b.getIntegerType(0)), storeServicePort,
-          backedges[resIdx], b.getArrayAttr({}));
-      instanceArgsFromThisMem.push_back(storeReq);
-      ++resIdx;
-    }
+    // // Store ports:
+    // auto storeServicePort =
+    // hw::InnerRefAttr::get(memServiceDecl.getNameAttr(),
+    //                                               b.getStringAttr("write"));
+    // for (unsigned i = 0; i < memType.storePorts; ++i) {
+    //   auto storeReq = b.create<esi::RequestInOutChannelOp>(
+    //       loc, handshake::esiWrapper(b.getIntegerType(0)), storeServicePort,
+    //       backedges[resIdx], b.getArrayAttr({}));
+    //   instanceArgsFromThisMem.push_back(storeReq);
+    //   ++resIdx;
+    // }
 
     instanceArgsForMem.emplace_back(instanceArgsFromThisMem);
   }
