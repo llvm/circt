@@ -41,6 +41,8 @@ declare_mlir_python_extension(CIRCTBindingsPythonExtension
     LLVMSupport
 )
 
+add_dependencies(CIRCTBindingsPythonExtension circt-headers)
+
 ################################################################################
 # Declare Python sources
 ################################################################################

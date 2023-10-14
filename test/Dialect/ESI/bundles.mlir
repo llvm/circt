@@ -52,3 +52,10 @@ hw.module @Top() {
 hw.module.extern @ResettableBundleModule(in %foo: !esi.bundle<[
   !esi.channel<i8> to "data",
   !esi.channel<none> from ack] reset>)
+
+// LOWER-LABEL:  hw.module @BundleTest(in %s1_in : !esi.channel<i32>, in %b_send_resp : !esi.channel<i1>, out b_send_req : !esi.channel<i32>, out i1_out : !esi.channel<i1>) {
+// LOWER-NEXT:     hw.output %s1_in, %b_send_resp : !esi.channel<i32>, !esi.channel<i1>
+hw.module @BundleTest(in %s1_in : !esi.channel<i32>, out b_send : !esi.bundle<[!esi.channel<i32> to "req", !esi.channel<i1> from "resp"]>, out i1_out : !esi.channel<i1>) {
+  %bundle, %resp = esi.bundle.pack %s1_in : !esi.bundle<[!esi.channel<i32> to "req", !esi.channel<i1> from "resp"]>
+  hw.output %bundle, %resp: !esi.bundle<[!esi.channel<i32> to "req", !esi.channel<i1> from "resp"]>, !esi.channel<i1>
+}
