@@ -26,8 +26,6 @@ struct ESICleanMetadataPass
 void ESICleanMetadataPass::runOnOperation() {
   auto mod = getOperation();
 
-  // Delete all service declarations.
-  mod.walk([&](ServiceHierarchyMetadataOp op) { op.erase(); });
   // Track declarations which are still used so that the service impl reqs are
   // still valid.
   DenseSet<StringAttr> stillUsed;

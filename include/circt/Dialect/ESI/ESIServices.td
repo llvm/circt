@@ -211,20 +211,4 @@ def RequestInOutChannelOp : ESI_Op<"service.req.inout", [
   }];
 }
 
-def ServiceHierarchyMetadataOp : ESI_Op<"service.hierarchy.metadata", [
-        DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
-  let summary = "Metadata about a service in the service hierarchy";
-
-  let arguments = (ins OptionalAttr<FlatSymbolRefAttr>:$service_symbol,
-                       ArrayAttr:$serverNamePath,
-                       StrAttr:$impl_type,
-                       OptionalAttr<DictionaryAttr>:$impl_details,
-                       ArrayAttr:$clients);
-  let assemblyFormat = [{
-    `path` $serverNamePath (`implementing` $service_symbol^)?
-      `impl` `as` $impl_type (`opts` $impl_details^)?
-      `clients` $clients attr-dict 
-  }];
-}
-
 #endif // CIRCT_DIALECT_ESI_SERVICES_TD
