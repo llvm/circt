@@ -566,6 +566,7 @@ class Channel(Type):
 
 @dataclass
 class BundledChannel:
+  """A named, directed channel for inclusion in a bundle."""
   name: str
   direction: ChannelDirection
   channel: Channel
@@ -575,6 +576,7 @@ class BundledChannel:
 
 
 class Bundle(Type):
+  """A group of named, directed channels. Typically used in a service."""
 
   def __new__(cls, channels: typing.List[BundledChannel]):
     type = esi.BundleType.get(

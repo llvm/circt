@@ -707,6 +707,7 @@ class ChannelSignal(Signal):
 
 
 class BundleSignal(Signal):
+  """Signal for types.Bundle."""
 
   def reg(self, clk, rst=None, name=None):
     raise TypeError("Cannot register a bundle")

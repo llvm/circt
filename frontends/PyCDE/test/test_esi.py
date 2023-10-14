@@ -254,7 +254,7 @@ ExStruct = types.struct({
 
 # TODO: figure out a replacement for `esi.FlattenStructPorts`.
 # XFAIL-LABEL:  hw.module @FlattenTest{{.*}}(in %a_a : i4, in %a_b : ui32, in %a_valid : i1, out a_ready : i1)
-# @unittestmodule(print=False, run_passes=True, print_after_passes=True)
+@unittestmodule(print=False, run_passes=True, print_after_passes=True)
 class FlattenTest(Module):
   a = InputChannel(ExStruct)
 
@@ -266,7 +266,7 @@ class FlattenTest(Module):
 
 
 # XFAIL-LABEL:  hw.module.extern @FlattenExternTest{{.*}}(%a_a: i4, %a_b: ui32, %a_valid: i1) -> (a_ready: i1)
-# @unittestmodule(print=False, run_passes=True, print_after_passes=True)
+@unittestmodule(print=False, run_passes=True, print_after_passes=True)
 class FlattenExternTest(Module):
   a = InputChannel(ExStruct)
 
@@ -274,7 +274,7 @@ class FlattenExternTest(Module):
 
 
 # XFAIL-LABEL:   hw.module @FlattenPureTest(%a_a: i4, %a_b: ui32, %a_valid: i1) -> (a_ready: i1) attributes {esi.portFlattenStructs}
-# @unittestmodule(print=False, run_passes=True, print_after_passes=True)
+@unittestmodule(print=False, run_passes=True, print_after_passes=True)
 class FlattenPureTest(esi.PureModule):
 
   Attributes = {esi.FlattenStructPorts}
