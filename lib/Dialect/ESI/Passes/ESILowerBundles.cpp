@@ -180,10 +180,9 @@ void BundlePort::buildOutputSignals() {
   // For an output port, the original bundle must be unpacked into the
   // individual channel ports.
   UnpackBundleOp unpack;
-  if (body) {
-    ImplicitLocOpBuilder b(origPort.loc, body, body->end());
-    unpack = b.create<UnpackBundleOp>(unpackOpResultTypes, unpackOperands);
-  }
+  if (body)
+    unpack = OpBuilder::atBlockTerminator(body).create<UnpackBundleOp>(
+        origPort.loc, unpackOpResultTypes, unpackOperands);
 
   // Build new ports and put the new port info directly into the member
   // variable.
