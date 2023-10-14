@@ -104,14 +104,13 @@ static void getAsmBlockArgumentNamesImpl(mlir::Region &region,
   if (region.empty())
     return;
   // Assign port names to the bbargs.
-  //  auto *module = region.getParentOp();
   auto module = cast<HWModuleOp>(region.getParentOp());
 
   auto *block = &region.front();
   for (size_t i = 0, e = block->getNumArguments(); i != e; ++i) {
     auto name = module.getInputName(i);
-    if (!name.empty())
-      setNameFn(block->getArgument(i), name);
+    // Let mlir deterministically convert names to valid identifiers
+    setNameFn(block->getArgument(i), name);
   }
 }
 
