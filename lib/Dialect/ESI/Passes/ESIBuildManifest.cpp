@@ -16,6 +16,7 @@
 
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/Compression.h"
 #include "llvm/Support/JSON.h"
 
 using namespace circt;
@@ -69,6 +70,26 @@ void ESIBuildManifestPass::runOnOperation() {
       hw::OutputFileAttr::getFromFilename(ctxt, "esi_system_manifest.json");
   verbatim->setAttr("output_file", outputFileAttr);
 
+  // If zlib is available, compress the manifest and append it to the module.
+  SmallVector<uint8_t, 10 * 1024> compressedManifest;
+  if (llvm::compression::zlib::isAvailable()) {
+    // Compress the manifest.
+    llvm::compression::zlib::compress(
+        ArrayRef((uint8_t *)jsonManifest.data(), jsonManifest.length()),
+        compressedManifest, llvm::compression::zlib::BestSizeCompression);
+
+    // Append a verbatim with the compressed manifest to the end of the module.
+    auto compressedVerbatim = b.create<sv::VerbatimOp>(
+        b.getUnknownLoc(),
+        StringAttr::get(ctxt, StringRef((char *)compressedManifest.data(),
+                                        compressedManifest.size())));
+    auto compressedOutputFileAttr = hw::OutputFileAttr::getFromFilename(
+        ctxt, "esi_system_manifest.json.zlib");
+    compressedVerbatim->setAttr("output_file", compressedOutputFileAttr);
+  } else {
+    mod->emitWarning() << "zlib not available, skipping compressed manifest";
+  }
+
   // If directed, write the manifest to a file. Mostly for debugging.
   if (!writeDirect.empty()) {
     std::error_code ec;
@@ -78,6 +99,18 @@ void ESIBuildManifestPass::runOnOperation() {
       signalPassFailure();
     } else {
       os << jsonManifest;
+    }
+
+    // If the compressed manifest is available, output it also.
+    if (!compressedManifest.empty()) {
+      llvm::raw_fd_ostream bos(writeDirect + ".zlib", ec);
+      if (ec) {
+        mod->emitError() << "Failed to open compressed file for writing: "
+                         << ec.message();
+        signalPassFailure();
+      } else {
+        bos.write((char *)compressedManifest.data(), compressedManifest.size());
+      }
     }
   }
 }
