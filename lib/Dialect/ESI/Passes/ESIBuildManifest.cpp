@@ -70,7 +70,7 @@ void ESIBuildManifestPass::runOnOperation() {
   verbatim->setAttr("output_file", outputFileAttr);
 
   // If directed, write the manifest to a file. Mostly for debugging.
-  if (writeDirect != "") {
+  if (!writeDirect.empty()) {
     std::error_code ec;
     llvm::raw_fd_ostream os(writeDirect, ec);
     if (ec) {
@@ -82,6 +82,7 @@ void ESIBuildManifestPass::runOnOperation() {
   }
 }
 
+// NOLINTNEXTLINE(misc-no-recursion)
 std::string ESIBuildManifestPass::json() {
   std::string jsonStrBuffer;
   llvm::raw_string_ostream os(jsonStrBuffer);
