@@ -82,7 +82,6 @@ void ESIBuildManifestPass::runOnOperation() {
   }
 }
 
-// NOLINTNEXTLINE(misc-no-recursion)
 std::string ESIBuildManifestPass::json() {
   std::string jsonStrBuffer;
   llvm::raw_string_ostream os(jsonStrBuffer);
@@ -108,6 +107,7 @@ void ESIBuildManifestPass::scrapeTypes(Operation *op) {
 }
 
 /// Get a JSON representation of a type.
+// NOLINTNEXTLINE(misc-no-recursion)
 llvm::json::Value ESIBuildManifestPass::json(Type type) {
   using llvm::json::Array;
   using llvm::json::Object;
