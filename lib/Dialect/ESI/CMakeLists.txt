@@ -23,6 +23,7 @@ set(srcs
   Passes/ESILowerToHW.cpp
   Passes/ESILowerTypes.cpp
   Passes/ESICleanMetadata.cpp
+  Passes/ESIBuildManifest.cpp
 
   APIUtilities.cpp
 
