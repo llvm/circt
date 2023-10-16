@@ -21,8 +21,7 @@ instance_like_impl::getReferencedModule(const HWSymbolCache *cache,
     if (auto *result = cache->getDefinition(moduleName))
       return result;
 
-  auto topLevelModuleOp = instanceOp->getParentOfType<ModuleOp>();
-  return topLevelModuleOp.lookupSymbol(moduleName.getValue());
+  return SymbolTable::lookupNearestSymbolFrom(instanceOp, moduleName);
 }
 
 LogicalResult instance_like_impl::verifyReferencedModule(

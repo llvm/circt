@@ -393,3 +393,17 @@ hw.module @struct(in %a: !hw.struct<foo: i8, bar: i8, foo: i8, baz: i8, bar: i8>
 // expected-error @+2 {{duplicate field name 'foo' in hw.union type}}
 // expected-error @+1 {{duplicate field name 'bar' in hw.union type}}
 hw.module @union(in %a: !hw.union<foo: i8, bar: i8, foo: i8, baz: i8, bar: i8>) {}
+
+// -----
+
+// Test that nested symbol tables fail in the correct way when trying to use an
+// instance to escape its containing table.
+
+hw.module @Foo () {}
+
+builtin.module @Nested {
+  hw.module @Bar () {
+    // expected-error @+1 {{Cannot find module definition 'Foo'}}
+    hw.instance "inst" @Foo () -> ()
+  }
+}
