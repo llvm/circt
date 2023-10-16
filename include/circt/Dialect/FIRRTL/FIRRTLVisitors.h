@@ -38,7 +38,8 @@ public:
             AddPrimOp, SubPrimOp, MulPrimOp, DivPrimOp, RemPrimOp, AndPrimOp,
             OrPrimOp, XorPrimOp,
             // Elementwise operations,
-            ElementwiseOrPrimOp, ElementwiseAndPrimOp, ElementwiseXorPrimOp,
+            AddVecOp, SubVecOp, AndVecOp, OrVecOp, XorVecOp, LEQVecOp, LTVecOp,
+            GEQVecOp, GTVecOp, EQVecOp, NEQVecOp,
             // Comparisons.
             LEQPrimOp, LTPrimOp, GEQPrimOp, GTPrimOp, EQPrimOp, NEQPrimOp,
             // Misc Binary Primitives.
@@ -96,6 +97,13 @@ public:
     return static_cast<ConcreteType *>(this)->visitUnhandledExpr(op, args...);
   }
 
+  /// This fallback is invoked on any binary vector expr that isn't explicitly
+  /// handled. The default implementation delegates to the unhandled expression
+  /// fallback.
+  ResultType visitBinaryVecExpr(Operation *op, ExtraArgs... args) {
+    return static_cast<ConcreteType *>(this)->visitUnhandledExpr(op, args...);
+  }
+
 #define HANDLE(OPTYPE, OPKIND)                                                 \
   ResultType visitExpr(OPTYPE op, ExtraArgs... args) {                         \
     return static_cast<ConcreteType *>(this)->visit##OPKIND##Expr(op,          \
@@ -130,6 +138,12 @@ public:
   HANDLE(OrPrimOp, Binary);
   HANDLE(XorPrimOp, Binary);
 
+  HANDLE(AddVecOp, BinaryVec);
+  HANDLE(SubVecOp, BinaryVec);
+  HANDLE(AndVecOp, BinaryVec);
+  HANDLE(OrVecOp, BinaryVec);
+  HANDLE(XorVecOp, BinaryVec);
+
   // Comparisons.
   HANDLE(LEQPrimOp, Binary);
   HANDLE(LTPrimOp, Binary);
@@ -138,11 +152,20 @@ public:
   HANDLE(EQPrimOp, Binary);
   HANDLE(NEQPrimOp, Binary);
 
+  HANDLE(LEQVecOp, BinaryVec);
+  HANDLE(LTVecOp, BinaryVec);
+  HANDLE(GEQVecOp, BinaryVec);
+  HANDLE(GTVecOp, BinaryVec);
+  HANDLE(EQVecOp, BinaryVec);
+  HANDLE(NEQVecOp, BinaryVec);
+
   // Misc Binary Primitives.
   HANDLE(CatPrimOp, Binary);
   HANDLE(DShlPrimOp, Binary);
   HANDLE(DShlwPrimOp, Binary);
   HANDLE(DShrPrimOp, Binary);
+
+  HANDLE(CatVecOp, BinaryVec);
 
   // Unary operators.
   HANDLE(AsSIntPrimOp, Unary);
@@ -155,10 +178,6 @@ public:
   HANDLE(AndRPrimOp, Unary);
   HANDLE(OrRPrimOp, Unary);
   HANDLE(XorRPrimOp, Unary);
-
-  HANDLE(ElementwiseOrPrimOp, Unhandled);
-  HANDLE(ElementwiseAndPrimOp, Unhandled);
-  HANDLE(ElementwiseXorPrimOp, Unhandled);
 
   // Intrinsic Expr.
   HANDLE(IsXIntrinsicOp, Unhandled);

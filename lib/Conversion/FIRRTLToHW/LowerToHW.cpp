@@ -738,8 +738,7 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
 
   // Helper function to emit #ifndef guard.
   auto emitGuard = [&](const char *guard, llvm::function_ref<void(void)> body) {
-    b.create<sv::IfDefOp>(
-        guard, []() {}, body);
+    b.create<sv::IfDefOp>(guard, []() {}, body);
   };
 
   bool needsRandomizeRegInit =
@@ -1570,7 +1569,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult lowerBinOpToVariadic(Operation *op);
 
   template <typename ResultOpType>
-  LogicalResult lowerElementwiseLogicalOp(Operation *op);
+  LogicalResult lowerVectorLogicalOp(Operation *op);
 
   LogicalResult lowerCmpOp(Operation *op, ICmpPredicate signedOp,
                            ICmpPredicate unsignedOp);
@@ -1582,20 +1581,20 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitExpr(AndPrimOp op) {
     return lowerBinOpToVariadic<comb::AndOp>(op);
   }
+  LogicalResult visitExpr(AndVecOp op) {
+    return lowerVectorLogicalOp<comb::AndOp>(op);
+  }
   LogicalResult visitExpr(OrPrimOp op) {
     return lowerBinOpToVariadic<comb::OrOp>(op);
+  }
+  LogicalResult visitExpr(OrVecOp op) {
+    return lowerVectorLogicalOp<comb::OrOp>(op);
   }
   LogicalResult visitExpr(XorPrimOp op) {
     return lowerBinOpToVariadic<comb::XorOp>(op);
   }
-  LogicalResult visitExpr(ElementwiseOrPrimOp op) {
-    return lowerElementwiseLogicalOp<comb::OrOp>(op);
-  }
-  LogicalResult visitExpr(ElementwiseAndPrimOp op) {
-    return lowerElementwiseLogicalOp<comb::AndOp>(op);
-  }
-  LogicalResult visitExpr(ElementwiseXorPrimOp op) {
-    return lowerElementwiseLogicalOp<comb::XorOp>(op);
+  LogicalResult visitExpr(XorVecOp op) {
+    return lowerVectorLogicalOp<comb::XorOp>(op);
   }
   LogicalResult visitExpr(AddPrimOp op) {
     return lowerBinOpToVariadic<comb::AddOp>(op);
@@ -2500,8 +2499,7 @@ void FIRRTLLowering::addToAlwaysBlock(sv::EventControl clockEdge, Value clock,
       auto createIfOp = [&]() {
         // It is weird but intended. Here we want to create an empty sv.if
         // with an else block.
-        insideIfOp = builder.create<sv::IfOp>(
-            reset, []() {}, []() {});
+        insideIfOp = builder.create<sv::IfOp>(reset, []() {}, []() {});
       };
       if (resetStyle == ::ResetType::AsyncReset) {
         sv::EventControl events[] = {clockEdge, resetEdge};
@@ -3479,7 +3477,7 @@ LogicalResult FIRRTLLowering::lowerBinOpToVariadic(Operation *op) {
 /// operations. Eventually we might want to introduce elementwise operations
 /// into HW/SV level as well.
 template <typename ResultOpType>
-LogicalResult FIRRTLLowering::lowerElementwiseLogicalOp(Operation *op) {
+LogicalResult FIRRTLLowering::lowerVectorLogicalOp(Operation *op) {
   auto resultType = op->getResult(0).getType();
   auto lhs = getLoweredAndExtendedValue(op->getOperand(0), resultType);
   auto rhs = getLoweredAndExtendedValue(op->getOperand(1), resultType);

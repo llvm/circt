@@ -84,11 +84,10 @@ void VectorizationPass::runOnOperation() {
                           << "Module: '" << getOperation().getName() << "'\n";);
 
   RewritePatternSet patterns(&getContext());
-  patterns
-      .insert<VectorCreateToLogicElementwise<OrPrimOp, ElementwiseOrPrimOp>,
-              VectorCreateToLogicElementwise<AndPrimOp, ElementwiseAndPrimOp>,
-              VectorCreateToLogicElementwise<XorPrimOp, ElementwiseXorPrimOp>>(
-          &getContext());
+  patterns.insert<VectorCreateToLogicElementwise<OrPrimOp, OrVecOp>,
+                  VectorCreateToLogicElementwise<AndPrimOp, AndVecOp>,
+                  VectorCreateToLogicElementwise<XorPrimOp, XorVecOp>>(
+      &getContext());
   mlir::FrozenRewritePatternSet frozenPatterns(std::move(patterns));
   (void)applyPatternsAndFoldGreedily(getOperation(), frozenPatterns);
 }

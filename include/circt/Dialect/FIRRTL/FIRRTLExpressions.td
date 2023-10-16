@@ -27,6 +27,10 @@ def SameOperandsIntTypeKind : NativeOpTrait<"SameOperandsIntTypeKind"> {
   let cppNamespace = "::circt::firrtl";
 }
 
+def SameOperandsVecIntTypeKind : NativeOpTrait<"SameOperandsVecIntTypeKind"> {
+  let cppNamespace = "::circt::firrtl";
+}
+
 // A common base class for operations that implement type inference and parsed
 // argument validation.
 class FIRRTLExprOp<string mnemonic, list<Trait> traits = []> :
@@ -590,24 +594,13 @@ def DivPrimOp : IntBinaryPrimOp<"div", IntType> {
   }];
 }
 def RemPrimOp : IntBinaryPrimOp<"rem", IntType>;
+
 let inferType = "impl::inferBitwiseResult" in {
   let hasCanonicalizer = true in {
     def AndPrimOp : IntBinaryPrimOp<"and", UIntType, [Commutative]>;
     def OrPrimOp  : IntBinaryPrimOp<"or",  UIntType, [Commutative]>;
     def XorPrimOp : IntBinaryPrimOp<"xor", UIntType, [Commutative]>;
   }
-}
-
-// Element-wise and/or/xor operations whose result and operands are 1d vectors with
-// a same type. Apply bitwise operation to each element.
-let inferType = "impl::inferElementwiseResult" in
-let hasFolder = 0 in {
-  def ElementwiseAndPrimOp : BinaryPrimOp<"elementwise_and", 1DVecIntType,
-                                1DVecIntType, 1DVecUIntType, [Commutative]>;
-  def ElementwiseOrPrimOp  : BinaryPrimOp<"elementwise_or", 1DVecIntType,
-                                1DVecIntType, 1DVecUIntType, [Commutative]>;
-  def ElementwiseXorPrimOp : BinaryPrimOp<"elementwise_xor", 1DVecUIntType,
-                                1DVecIntType, 1DVecUIntType, [Commutative]>;
 }
 
 // Comparison Operations
@@ -821,6 +814,41 @@ def TailPrimOp : PrimOp<"tail"> {
   let hasCanonicalizeMethod = true;
   let parseValidator = "impl::validateOneOperandOneConst";
 }
+
+//===----------------------------------------------------------------------===//
+// Vector Binary Operations
+//===----------------------------------------------------------------------===//
+
+class IntBinaryVecOp<string mnemonic, Type resultType,
+                      list<Trait> traits = []> :
+   BinaryPrimOp<mnemonic, VecIntType, VecIntType, resultType,
+                traits # [SameOperandsVecIntTypeKind]>;
+
+let hasFolder = 0 in {
+  let inferType = "impl::inferVecAddSubResult" in {
+    def AddVecOp : IntBinaryVecOp<"vec.add", VecIntType, [Commutative]>;
+    def SubVecOp : IntBinaryVecOp<"vec.sub", VecIntType>;
+  }
+
+  let inferType = "impl::inferVecBitwiseResult" in {
+    def AndVecOp : IntBinaryVecOp<"vec.and", VecUIntType, [Commutative]>;
+    def OrVecOp  : IntBinaryVecOp<"vec.or",  VecUIntType, [Commutative]>;
+    def XorVecOp : IntBinaryVecOp<"vec.xor", VecUIntType, [Commutative]>;
+  }
+
+  // Comparison Operations
+  let inferType = "impl::inferVecComparisonResult" in {
+    def LEQVecOp : IntBinaryVecOp<"vec.leq", VecUInt1Type>;
+    def LTVecOp  : IntBinaryVecOp<"vec.lt",  VecUInt1Type>;
+    def GEQVecOp : IntBinaryVecOp<"vec.geq", VecUInt1Type>;
+    def GTVecOp  : IntBinaryVecOp<"vec.gt",  VecUInt1Type>;
+    def EQVecOp  : IntBinaryVecOp<"vec.eq",  VecUInt1Type, [Commutative]>;
+    def NEQVecOp : IntBinaryVecOp<"vec.neq", VecUInt1Type, [Commutative]>;
+  }
+
+  def CatVecOp : IntBinaryVecOp<"vec.cat", VecUIntType>;
+}
+
 
 //===----------------------------------------------------------------------===//
 // Target Specific Intrinsics

@@ -138,6 +138,7 @@ StrictConnectOp getSingleConnectUserOf(Value value);
 // functions commonly used among operations.
 namespace impl {
 LogicalResult verifySameOperandsIntTypeKind(Operation *op);
+LogicalResult verifySameOperandsVecIntTypeKind(Operation *op);
 
 // Type inference adaptor for FIRRTL operations.
 LogicalResult inferReturnTypes(
@@ -153,11 +154,17 @@ FIRRTLType inferAddSubResult(FIRRTLType lhs, FIRRTLType rhs,
                              std::optional<Location> loc);
 FIRRTLType inferBitwiseResult(FIRRTLType lhs, FIRRTLType rhs,
                               std::optional<Location> loc);
-FIRRTLType inferElementwiseResult(FIRRTLType lhs, FIRRTLType rhs,
-                                  std::optional<Location> loc);
 FIRRTLType inferComparisonResult(FIRRTLType lhs, FIRRTLType rhs,
                                  std::optional<Location> loc);
 FIRRTLType inferReductionResult(FIRRTLType arg, std::optional<Location> loc);
+
+// Common vector type inference functions.
+FIRRTLType inferVecAddSubResult(FIRRTLType lhs, FIRRTLType rhs,
+                                std::optional<Location> loc);
+FIRRTLType inferVecBitwiseResult(FIRRTLType lhs, FIRRTLType rhs,
+                                 std::optional<Location> loc);
+FIRRTLType inferVecComparisonResult(FIRRTLType lhs, FIRRTLType rhs,
+                                    std::optional<Location> loc);
 
 // Common parsed argument validation functions.
 LogicalResult validateBinaryOpArguments(ValueRange operands,
@@ -178,6 +185,16 @@ class SameOperandsIntTypeKind
 public:
   static LogicalResult verifyTrait(Operation *op) {
     return impl::verifySameOperandsIntTypeKind(op);
+  }
+};
+
+/// A binary operation where the operands have the same integer kind.
+template <typename ConcreteOp>
+class SameOperandsVecIntTypeKind
+    : public OpTrait::TraitBase<ConcreteOp, SameOperandsVecIntTypeKind> {
+public:
+  static LogicalResult verifyTrait(Operation *op) {
+    return impl::verifySameOperandsVecIntTypeKind(op);
   }
 };
 

@@ -181,15 +181,15 @@ firrtl.module @PrimOpMixedConstOperandsNonConstResult(in %a: !firrtl.const.uint<
 // both operand outer types are 'const'.
 firrtl.module @ElementwiseConstOperandsConstResult(in %a: !firrtl.const.vector<uint<1>, 2>, 
                                                    in %b: !firrtl.vector<const.uint<1>, 2>) {
-  %0 = firrtl.elementwise_or %a, %a : (!firrtl.const.vector<uint<1>, 2>, 
+  %0 = firrtl.vec.or %a, %a : (!firrtl.const.vector<uint<1>, 2>, 
                                        !firrtl.const.vector<uint<1>, 2>) 
                                         -> !firrtl.const.vector<const.uint<1>, 2>
 
-  %1 = firrtl.elementwise_and %b, %b : (!firrtl.vector<const.uint<1>, 2>, 
+  %1 = firrtl.vec.and %b, %b : (!firrtl.vector<const.uint<1>, 2>, 
                                         !firrtl.vector<const.uint<1>, 2>) 
                                          -> !firrtl.vector<const.uint<1>, 2>
 
-  %2 = firrtl.elementwise_xor %a, %b : (!firrtl.const.vector<uint<1>, 2>, 
+  %2 = firrtl.vec.xor %a, %b : (!firrtl.const.vector<uint<1>, 2>, 
                                         !firrtl.vector<const.uint<1>, 2>) 
                                          -> !firrtl.vector<const.uint<1>, 2>
 }
@@ -197,7 +197,7 @@ firrtl.module @ElementwiseConstOperandsConstResult(in %a: !firrtl.const.vector<u
 // Elementwise ops with mixed 'const' operands infer a non-'const' result type.
 firrtl.module @ElementwiseMixedConstOperandsNonConstResult(in %a: !firrtl.const.vector<uint<1>, 2>, 
                                                            in %b: !firrtl.vector<uint<1>, 2>) {
-  %0 = firrtl.elementwise_or %a, %b : (!firrtl.const.vector<uint<1>, 2>, 
+  %0 = firrtl.vec.or %a, %b : (!firrtl.const.vector<uint<1>, 2>, 
                                        !firrtl.vector<uint<1>, 2>) 
                                         -> !firrtl.vector<uint<1>, 2>
 }
