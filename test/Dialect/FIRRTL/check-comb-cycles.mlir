@@ -1004,3 +1004,33 @@ firrtl.circuit "Issue5462" {
     firrtl.strictconnect %out_a, %4 : !firrtl.uint<8>
   }
 }
+
+// -----
+firrtl.circuit "FlipConnect1" {
+  // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: FlipConnect1.{w.a <- x.a <- w.a}}}
+  firrtl.module @FlipConnect1(){
+    %w = firrtl.wire : !firrtl.bundle<a flip: uint<8>>
+    %x = firrtl.wire : !firrtl.bundle<a flip: uint<8>>
+    // x.a <= w.a
+    firrtl.connect %w, %x: !firrtl.bundle<a flip: uint<8>>, !firrtl.bundle<a flip: uint<8>>
+    // w.a <= x.a
+    %w_a = firrtl.subfield %w[a] : !firrtl.bundle<a flip: uint<8>>
+    %x_a = firrtl.subfield %x[a] : !firrtl.bundle<a flip: uint<8>>
+    firrtl.strictconnect %w_a, %x_a : !firrtl.uint<8>
+  }
+}
+
+// -----
+
+firrtl.circuit "FlipConnect2" {
+  // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: FlipConnect2.{in.a.a <- out.a.a <- in.a.a}}}
+  firrtl.module @FlipConnect2() {
+    %in = firrtl.wire   : !firrtl.bundle<a flip: bundle<a flip: uint<1>>>
+    %out  = firrtl.wire  : !firrtl.bundle<a flip: bundle<a flip: uint<1>>>
+    firrtl.connect %out, %in : !firrtl.bundle<a flip: bundle<a flip: uint<1>>>, 
+    !firrtl.bundle<a flip: bundle<a flip: uint<1>>>
+    %0 = firrtl.subfield %in[a] : !firrtl.bundle<a flip: bundle<a flip: uint<1>>>
+    %1 = firrtl.subfield %out[a] : !firrtl.bundle<a flip: bundle<a flip: uint<1>>>
+    firrtl.connect %1, %0 : !firrtl.bundle<a flip: uint<1>>,!firrtl.bundle<a flip: uint<1>>
+  }
+}
