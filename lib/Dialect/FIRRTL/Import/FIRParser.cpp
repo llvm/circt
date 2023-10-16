@@ -3361,11 +3361,10 @@ ParseResult FIRStmtParser::parseRWProbe(Value &result) {
                       MemoryDebugPortOp, MemoryPortAccessOp>(definingOp))
     return emitError(startTok.getLoc(), "cannot probe memories or their ports");
 
-  auto forceableType =
-    firrtl::detail::getForceableResultType(true, targetType);
+  auto forceableType = firrtl::detail::getForceableResultType(true, targetType);
   if (!forceableType)
     return emitError(startTok.getLoc(), "cannot force target of type ")
-      << targetType;
+           << targetType;
 
   // Use Forceable if necessary (reset).
   if (targetType.hasUninferredReset()) {
