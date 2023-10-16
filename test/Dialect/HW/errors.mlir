@@ -399,6 +399,9 @@ hw.module @union(in %a: !hw.union<foo: i8, bar: i8, foo: i8, baz: i8, bar: i8>) 
 // Test that nested symbol tables fail in the correct way when trying to use an
 // instance to escape its containing table.
 
+// If you make a change and this check isn't triggered, then you are breaking
+// SymbolTable semantics.
+
 hw.module @Foo () {}
 
 builtin.module @Nested {
