@@ -3110,7 +3110,8 @@ ParseResult FIRStmtParser::parseRWProbeStaticRefExp(FieldRef &refResult,
 
         // Either entire instance result is forceable + bounce wire, or reject.
         // (even if rwprobe is of a portion of the port)
-        bool forceable = !!firrtl::detail::getForceableResultType(true, type);
+        bool forceable = static_cast<bool>(
+            firrtl::detail::getForceableResultType(true, type));
         if (!forceable)
           return emitError(loc, "unable to force instance result of type ")
                  << type;
