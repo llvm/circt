@@ -3056,7 +3056,8 @@ ParseResult FIRStmtParser::parseStaticRefExp(Value &result,
 /// Populate `refResult` with rwprobe "root" and parsed indexing.
 /// Root is base-type target, and will be block argument or forceable.
 /// Also set `Type`, so we can handle const-ness while visiting.
-/// If root is an unbundled entry, replace with bounce wire.
+/// If root is an unbundled entry, replace with bounce wire and update
+/// the unbundled entry to point to this for future users.
 // NOLINTNEXTLINE(misc-no-recursion)
 ParseResult FIRStmtParser::parseRWProbeStaticRefExp(FieldRef &refResult,
                                                     Type &type,
@@ -3087,9 +3088,12 @@ ParseResult FIRStmtParser::parseRWProbeStaticRefExp(FieldRef &refResult,
       return failure();
 
     // Find unbundled entry for the specified result/port.
+    // Get a reference to it--as we may update it (!!).
     auto fieldAttr = StringAttr::get(getContext(), fieldName);
     for (auto &elt : ubEntry) {
       if (elt.first == fieldAttr) {
+        // Grab the unbundled entry /by reference/ so we can update it with the
+        // new forceable wire we insert (if not already done).
         auto &instResult = elt.second;
 
         // If it's already forceable, use that.
@@ -3133,6 +3137,9 @@ ParseResult FIRStmtParser::parseRWProbeStaticRefExp(FieldRef &refResult,
           emitConnect(builder, bounceVal, instResult);
         else
           emitConnect(builder, instResult, bounceVal);
+        // Set the parse result AND update `instResult` which is a reference to
+        // the unbundled entry for the instance result, so that future uses also
+        // find this new wire.
         result = instResult = bounce.getDataRaw();
         break;
       }
