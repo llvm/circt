@@ -69,7 +69,7 @@ public:
       if (module.getPortDirection(port.getArgNumber()) != Direction::Out)
         continue;
       walkGroundTypes(port.getType().cast<FIRRTLType>(),
-                      [&](uint64_t index, FIRRTLBaseType t) {
+                      [&](uint64_t index, FIRRTLBaseType t, auto isFlip) {
                         getOrAddNode(FieldRef(port, index));
                       });
     }
@@ -227,15 +227,21 @@ public:
       // between each individual ground type. This is equivalent to flattening
       // the type to ensure all the contained FieldRefs are also recorded.
       if (dstValType && !dstValType.isGround())
-        walkGroundTypes(dstValType, [&](uint64_t dstIndex, FIRRTLBaseType t) {
+        walkGroundTypes(dstValType, [&](uint64_t dstIndex, FIRRTLBaseType t,
+                                        bool dstIsFlip) {
           // Handle the case when the dst and src are not of the same type.
           // For each dst ground type, and for each src ground type.
-          if (srcValType == dstValType)
+          if (srcValType == dstValType) {
+            // This is the only case when the flip is valid. Flip is relevant
+            // only for connect ops, and src and dst of a connect op must be
+            // type equivalent!
+            if (dstIsFlip)
+              std::swap(dst, src);
             addReachingDef(dst.getSubField(dstIndex),
                            src.getSubField(dstIndex));
-          else if (srcValType && !srcValType.isGround())
+          } else if (srcValType && !srcValType.isGround())
             walkGroundTypes(srcValType,
-                            [&](uint64_t srcIndex, FIRRTLBaseType t) {
+                            [&](uint64_t srcIndex, FIRRTLBaseType t, auto) {
                               addReachingDef(dst.getSubField(dstIndex),
                                              src.getSubField(srcIndex));
                             });
