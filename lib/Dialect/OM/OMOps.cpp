@@ -11,13 +11,68 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/OM/OMOps.h"
-
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/OM/OMUtils.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 
 using namespace mlir;
 using namespace circt::om;
+
+//===----------------------------------------------------------------------===//
+// Path Printers and Parsers
+//===----------------------------------------------------------------------===//
+
+static ParseResult parseBasePathString(OpAsmParser &parser, PathAttr &path) {
+  auto *context = parser.getContext();
+  auto loc = parser.getCurrentLocation();
+  std::string rawPath;
+  if (parser.parseString(&rawPath))
+    return failure();
+  if (parseBasePath(context, rawPath, path))
+    return parser.emitError(loc, "invalid base path");
+  return success();
+}
+
+static void printBasePathString(OpAsmPrinter &p, Operation *op, PathAttr path) {
+  p << '\"';
+  llvm::interleave(
+      path, p,
+      [&](const PathElement &elt) {
+        p << elt.module.getValue() << '/' << elt.instance.getValue();
+      },
+      ":");
+  p << '\"';
+}
+
+static ParseResult parsePathString(OpAsmParser &parser, PathAttr &path,
+                                   StringAttr &module, StringAttr &ref,
+                                   StringAttr &field) {
+
+  auto *context = parser.getContext();
+  auto loc = parser.getCurrentLocation();
+  std::string rawPath;
+  if (parser.parseString(&rawPath))
+    return failure();
+  if (parsePath(context, rawPath, path, module, ref, field))
+    return parser.emitError(loc, "invalid path");
+  return success();
+}
+
+static void printPathString(OpAsmPrinter &p, Operation *op, PathAttr path,
+                            StringAttr module, StringAttr ref,
+                            StringAttr field) {
+  p << '\"';
+  for (const auto &elt : path)
+    p << elt.module.getValue() << '/' << elt.instance.getValue() << ':';
+  if (!module.getValue().empty())
+    p << module.getValue();
+  if (!ref.getValue().empty())
+    p << '>' << ref.getValue();
+  if (!field.getValue().empty())
+    p << field.getValue();
+  p << '\"';
+}
 
 //===----------------------------------------------------------------------===//
 // Shared definitions
@@ -406,7 +461,7 @@ LogicalResult TupleGetOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> location, ValueRange operands,
     DictionaryAttr attributes, OpaqueProperties, RegionRange regions,
     llvm::SmallVectorImpl<Type> &inferredReturnTypes) {
-  auto idx = attributes.getAs<IntegerAttr>("index");
+  auto idx = attributes.getAs<mlir::IntegerAttr>("index");
   if (operands.empty() || !idx)
     return failure();
 
@@ -456,8 +511,25 @@ ParseResult circt::om::MapCreateOp::parse(OpAsmParser &parser,
   return success();
 }
 
-LogicalResult PathOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  // Get the containing ModuleOp.
+//===----------------------------------------------------------------------===//
+// BasePathCreateOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+BasePathCreateOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto hierPath = symbolTable.lookupNearestSymbolFrom<hw::HierPathOp>(
+      *this, getTargetAttr());
+  if (!hierPath)
+    return emitOpError("invalid symbol reference");
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// PathCreateOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+PathCreateOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto hierPath = symbolTable.lookupNearestSymbolFrom<hw::HierPathOp>(
       *this, getTargetAttr());
   if (!hierPath)

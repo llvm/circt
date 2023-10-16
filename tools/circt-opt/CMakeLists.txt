@@ -4,6 +4,9 @@ set(LLVM_LINK_COMPONENTS
 
 add_circt_tool(circt-opt
   circt-opt.cpp
+
+  DEPENDS
+  SUPPORT_PLUGINS
 )
 llvm_update_compile_flags(circt-opt)
 target_link_libraries(circt-opt
@@ -95,3 +98,5 @@ target_link_libraries(circt-opt
   MLIRFuncInlinerExtension
   MLIRVectorDialect
 )
+
+export_executable_symbols_for_plugins(circt-opt)

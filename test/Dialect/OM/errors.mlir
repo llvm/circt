@@ -120,7 +120,7 @@ om.class @MapConstant() {
 // -----
 
 om.class @Thing() { }
-om.class @BadPath() {
+om.class @BadPath(%basepath: !om.basepath) {
   // expected-error @below {{invalid symbol reference}}
-  %0 = om.path reference @Thing
+  %0 = om.path_create reference %basepath @Thing
 }

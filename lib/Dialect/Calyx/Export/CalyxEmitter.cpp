@@ -86,18 +86,6 @@ static bool isValidCalyxAttribute(StringRef identifier) {
          llvm::find(booleanAttributes, identifier) != booleanAttributes.end();
 }
 
-/// Additional information about an unsupported operation.
-static std::optional<StringRef> unsupportedOpInfo(Operation *op) {
-  return llvm::TypeSwitch<Operation *, std::optional<StringRef>>(op)
-      .Case<ExtSILibOp>([](auto) -> std::optional<StringRef> {
-        static constexpr std::string_view info =
-            "calyx.std_extsi is currently not available in the native Rust "
-            "compiler (see github.com/cucapra/calyx/issues/1009)";
-        return {info};
-      })
-      .Default([](auto) { return std::nullopt; });
-}
-
 /// A tracker to determine which libraries should be imported for a given
 /// program.
 struct ImportTracker {
@@ -140,7 +128,7 @@ private:
             })
         .Case<SgtLibOp, SltLibOp, SeqLibOp, SneqLibOp, SgeLibOp, SleLibOp,
               SrshLibOp, MultPipeLibOp, RemUPipeLibOp, RemSPipeLibOp,
-              DivUPipeLibOp, DivSPipeLibOp>(
+              DivUPipeLibOp, DivSPipeLibOp, ExtSILibOp>(
             [&](auto op) -> FailureOr<StringRef> {
               static constexpr std::string_view sBinaryOperators =
                   "binary_operators";
@@ -150,12 +138,8 @@ private:
           static constexpr std::string_view sMemories = "memories";
           return {sMemories};
         })
-        /*.Case<>([&](auto op) { library = "math"; })*/
         .Default([&](auto op) {
           auto diag = op->emitOpError() << "not supported for emission";
-          auto note = unsupportedOpInfo(op);
-          if (note)
-            diag.attachNote() << *note;
           return diag;
         });
   }
@@ -650,7 +634,7 @@ void Emitter::emitComponent(ComponentInterface op) {
           .Case<MemoryOp>([&](auto op) { emitMemory(op); })
           .Case<SeqMemoryOp>([&](auto op) { emitSeqMemory(op); })
           .Case<hw::ConstantOp>([&](auto op) { /*Do nothing*/ })
-          .Case<SliceLibOp, PadLibOp>(
+          .Case<SliceLibOp, PadLibOp, ExtSILibOp>(
               [&](auto op) { emitLibraryPrimTypedByAllPorts(op); })
           .Case<LtLibOp, GtLibOp, EqLibOp, NeqLibOp, GeLibOp, LeLibOp, SltLibOp,
                 SgtLibOp, SeqLibOp, SneqLibOp, SgeLibOp, SleLibOp, AddLibOp,

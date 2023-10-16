@@ -1875,12 +1875,16 @@ void GrandCentralPass::runOnOperation() {
                 goto FModuleOp_error;
 
               // Companions are only allowed to take inputs.
-              for (unsigned i = 0, n = instance->getNumResults(); i < n; ++i) {
-                if (instance->getPortDirection(i) != Direction::In) {
-                  op.emitOpError()
-                      << "companion instance cannot have output ports";
-                  goto FModuleOp_error;
-                }
+              for (auto [i, result] : llvm::enumerate(instance->getResults())) {
+                if (instance->getPortDirection(i) == Direction::In)
+                  continue;
+                // Do not allow any outputs in the drop mode.
+                auto ty = result.getType();
+                if (ty.isa<RefType>() && companionMode != CompanionMode::Drop)
+                  continue;
+                op.emitOpError()
+                    << "companion instance cannot have output ports";
+                goto FModuleOp_error;
               }
 
               // If no extraction info was provided, exit.  Otherwise, setup the

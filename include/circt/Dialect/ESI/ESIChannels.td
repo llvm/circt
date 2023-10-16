@@ -216,7 +216,10 @@ def ChannelDirection : I32EnumAttr<"ChannelDirection",
   "Direction of channel (see ChannelBundleImpl for details)", [
     I32EnumAttrCase<"to", 1>,
     I32EnumAttrCase<"from", 2>,
-  ]>;
+  ]> {
+  let cppNamespace = "::circt::esi";
+}
+
 
 def ChannelBundleImpl : ESI_Type<"ChannelBundle"> {
   let summary = "a group of related channels";

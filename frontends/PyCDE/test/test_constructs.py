@@ -92,7 +92,7 @@ class SystolicArrayTest(Module):
 # CHECK:          [[r2:%.+]] = comb.or bin [[r0]], [[r1]]
 # CHECK:          [[r3:%.+]] = hw.array_get %resets[%c0_i0]
 # CHECK:          [[r4:%.+]] = comb.or bin [[r3]]
-# CHECK:          %state = seq.compreg [[r6]], %clk, %rst, %false{{.*}}
+# CHECK:          %state = seq.compreg [[r6]], %clk reset %rst, %false{{.*}}
 # CHECK:          [[r5:%.+]] = comb.mux bin [[r4]], %false{{.*}}, %state
 # CHECK:          [[r6:%.+]] = comb.mux bin [[r2]], %true{{.*}}, [[r5]]
 # CHECK:          hw.output %state

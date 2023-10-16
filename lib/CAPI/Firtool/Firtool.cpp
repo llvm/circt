@@ -144,8 +144,33 @@ DEFINE_FIRTOOL_OPTION_STRING(ChiselInterfaceOutDirectory,
                              chiselInterfaceOutDirectory)
 DEFINE_FIRTOOL_OPTION_BOOL(VbToBv, vbToBV)
 DEFINE_FIRTOOL_OPTION_BOOL(Dedup, dedup)
-DEFINE_FIRTOOL_OPTION_BOOL(GrandCentralInstantiateCompanionOnly,
-                           grandCentralInstantiateCompanionOnly)
+DEFINE_FIRTOOL_OPTION_ENUM(
+    CompanionMode, companionMode, FirtoolCompanionMode,
+    [](FirtoolCompanionMode value) {
+      switch (value) {
+      case FIRTOOL_COMPANION_MODE_BIND:
+        return firrtl::CompanionMode::Bind;
+      case FIRTOOL_COMPANION_MODE_INSTANTIATE:
+        return firrtl::CompanionMode::Instantiate;
+      case FIRTOOL_COMPANION_MODE_DROP:
+        return firrtl::CompanionMode::Drop;
+      default: // NOLINT(clang-diagnostic-covered-switch-default)
+        llvm_unreachable("unknown build mode");
+      }
+    },
+    [](firrtl::CompanionMode value) {
+      switch (value) {
+      case firrtl::CompanionMode::Bind:
+        return FIRTOOL_COMPANION_MODE_BIND;
+      case firrtl::CompanionMode::Instantiate:
+        return FIRTOOL_COMPANION_MODE_INSTANTIATE;
+      case firrtl::CompanionMode::Drop:
+        return FIRTOOL_COMPANION_MODE_DROP;
+      default: // NOLINT(clang-diagnostic-covered-switch-default)
+        llvm_unreachable("unknown build mode");
+      }
+    })
+
 DEFINE_FIRTOOL_OPTION_BOOL(DisableAggressiveMergeConnections,
                            disableAggressiveMergeConnections)
 DEFINE_FIRTOOL_OPTION_BOOL(EmitOMIR, emitOMIR)

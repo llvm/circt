@@ -42,6 +42,13 @@ typedef enum FirtoolPreserveValuesMode {
 } FirtoolPreserveValuesMode;
 
 // NOLINTNEXTLINE(modernize-use-using)
+typedef enum FirtoolCompanionMode {
+  FIRTOOL_COMPANION_MODE_BIND,
+  FIRTOOL_COMPANION_MODE_INSTANTIATE,
+  FIRTOOL_COMPANION_MODE_DROP,
+} FirtoolCompanionMode;
+
+// NOLINTNEXTLINE(modernize-use-using)
 typedef enum FirtoolBuildMode {
   FIRTOOL_BUILD_MODE_DEBUG,
   FIRTOOL_BUILD_MODE_RELEASE,
@@ -75,7 +82,7 @@ DECLARE_FIRTOOL_OPTION(ExportChiselInterface, bool);
 DECLARE_FIRTOOL_OPTION(ChiselInterfaceOutDirectory, MlirStringRef);
 DECLARE_FIRTOOL_OPTION(VbToBv, bool);
 DECLARE_FIRTOOL_OPTION(Dedup, bool);
-DECLARE_FIRTOOL_OPTION(GrandCentralInstantiateCompanionOnly, bool);
+DECLARE_FIRTOOL_OPTION(CompanionMode, FirtoolCompanionMode);
 DECLARE_FIRTOOL_OPTION(DisableAggressiveMergeConnections, bool);
 DECLARE_FIRTOOL_OPTION(EmitOMIR, bool);
 DECLARE_FIRTOOL_OPTION(OMIROutFile, MlirStringRef);

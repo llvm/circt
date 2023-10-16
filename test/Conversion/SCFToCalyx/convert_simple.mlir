@@ -194,10 +194,10 @@ module {
 // CHECK:     calyx.group @ret_assign_0 {
 // CHECK-DAG:   calyx.assign %ret_arg0_reg.in = %std_pad_0.out : i8
 // CHECK-DAG:   calyx.assign %ret_arg0_reg.write_en = %true : i1
-// CHECK-DAG:   calyx.assign %ret_arg1_reg.in = %std_extsi_0.out : i8
+// CHECK-DAG:   calyx.assign %ret_arg1_reg.in = %std_signext_0.out : i8
 // CHECK-DAG:   calyx.assign %ret_arg1_reg.write_en = %true : i1
 // CHECK-DAG:   calyx.assign %std_pad_0.in = %in0 : i4
-// CHECK-DAG:   calyx.assign %std_extsi_0.in = %in0 : i4
+// CHECK-DAG:   calyx.assign %std_signext_0.in = %in0 : i4
 // CHECK-DAG:   %0 = comb.and %ret_arg1_reg.done, %ret_arg0_reg.done : i1
 // CHECK-DAG:   calyx.group_done %0 ? %true : i1
 // CHECK-DAG: }
