@@ -20,11 +20,12 @@ using namespace circt;
 // Option API.
 //===----------------------------------------------------------------------===//
 
-DEFINE_C_API_PTR_METHODS(FirtoolOptions, firtool::FirtoolOptions)
+DEFINE_C_API_PTR_METHODS(FirtoolOptions,
+                         firtool::FirtoolOptions<firtool::OptStorage>)
 
 FirtoolOptions firtoolOptionsCreateDefault() {
   static auto category = llvm::cl::OptionCategory{"Firtool Options"};
-  auto *options = new firtool::FirtoolOptions{category};
+  auto *options = new firtool::FirtoolOptions<firtool::OptStorage>{category};
   return wrap(options);
 }
 
@@ -32,7 +33,7 @@ void firtoolOptionsDestroy(FirtoolOptions options) { delete unwrap(options); }
 
 #define DEFINE_FIRTOOL_OPTION_STRING(name, field)                              \
   void firtoolOptionsSet##name(FirtoolOptions options, MlirStringRef value) {  \
-    unwrap(options)->field = unwrap(value).str();                              \
+    unwrap(options)->field.setValue(unwrap(value).str());                      \
   }                                                                            \
   MlirStringRef firtoolOptionsGet##name(FirtoolOptions options) {              \
     return wrap(unwrap(options)->field.getValue());                            \
@@ -40,18 +41,18 @@ void firtoolOptionsDestroy(FirtoolOptions options) { delete unwrap(options); }
 
 #define DEFINE_FIRTOOL_OPTION_BOOL(name, field)                                \
   void firtoolOptionsSet##name(FirtoolOptions options, bool value) {           \
-    unwrap(options)->field = value;                                            \
+    unwrap(options)->field.setValue(value);                                    \
   }                                                                            \
   bool firtoolOptionsGet##name(FirtoolOptions options) {                       \
-    return unwrap(options)->field;                                             \
+    return unwrap(options)->field.getValue();                                  \
   }
 
 #define DEFINE_FIRTOOL_OPTION_ENUM(name, field, enum_type, c_to_cpp, cpp_to_c) \
   void firtoolOptionsSet##name(FirtoolOptions options, enum_type value) {      \
-    unwrap(options)->field = c_to_cpp(value);                                  \
+    unwrap(options)->field.setValue(c_to_cpp(value));                          \
   }                                                                            \
   enum_type firtoolOptionsGet##name(FirtoolOptions options) {                  \
-    return cpp_to_c(unwrap(options)->field);                                   \
+    return cpp_to_c(unwrap(options)->field.getValue());                        \
   }
 
 DEFINE_FIRTOOL_OPTION_STRING(OutputFilename, outputFilename)
@@ -121,18 +122,18 @@ DEFINE_FIRTOOL_OPTION_ENUM(
     [](FirtoolBuildMode value) {
       switch (value) {
       case FIRTOOL_BUILD_MODE_DEBUG:
-        return firtool::FirtoolOptions::BuildModeDebug;
+        return firtool::BuildMode::Debug;
       case FIRTOOL_BUILD_MODE_RELEASE:
-        return firtool::FirtoolOptions::BuildModeRelease;
+        return firtool::BuildMode::Release;
       default: // NOLINT(clang-diagnostic-covered-switch-default)
         llvm_unreachable("unknown build mode");
       }
     },
-    [](firtool::FirtoolOptions::BuildMode value) {
+    [](firtool::BuildMode value) {
       switch (value) {
-      case firtool::FirtoolOptions::BuildModeDebug:
+      case firtool::BuildMode::Debug:
         return FIRTOOL_BUILD_MODE_DEBUG;
-      case firtool::FirtoolOptions::BuildModeRelease:
+      case firtool::BuildMode::Release:
         return FIRTOOL_BUILD_MODE_RELEASE;
       default: // NOLINT(clang-diagnostic-covered-switch-default)
         llvm_unreachable("unknown build mode");
@@ -186,26 +187,26 @@ DEFINE_FIRTOOL_OPTION_ENUM(
     [](FirtoolRandomKind value) {
       switch (value) {
       case FIRTOOL_RANDOM_KIND_NONE:
-        return firtool::FirtoolOptions::RandomKind::None;
+        return firtool::RandomKind::None;
       case FIRTOOL_RANDOM_KIND_MEM:
-        return firtool::FirtoolOptions::RandomKind::Mem;
+        return firtool::RandomKind::Mem;
       case FIRTOOL_RANDOM_KIND_REG:
-        return firtool::FirtoolOptions::RandomKind::Reg;
+        return firtool::RandomKind::Reg;
       case FIRTOOL_RANDOM_KIND_ALL:
-        return firtool::FirtoolOptions::RandomKind::All;
+        return firtool::RandomKind::All;
       default: // NOLINT(clang-diagnostic-covered-switch-default)
         llvm_unreachable("unknown random kind");
       }
     },
-    [](firtool::FirtoolOptions::RandomKind value) {
+    [](firtool::RandomKind value) {
       switch (value) {
-      case firtool::FirtoolOptions::RandomKind::None:
+      case firtool::RandomKind::None:
         return FIRTOOL_RANDOM_KIND_NONE;
-      case firtool::FirtoolOptions::RandomKind::Mem:
+      case firtool::RandomKind::Mem:
         return FIRTOOL_RANDOM_KIND_MEM;
-      case firtool::FirtoolOptions::RandomKind::Reg:
+      case firtool::RandomKind::Reg:
         return FIRTOOL_RANDOM_KIND_REG;
-      case firtool::FirtoolOptions::RandomKind::All:
+      case firtool::RandomKind::All:
         return FIRTOOL_RANDOM_KIND_ALL;
       default: // NOLINT(clang-diagnostic-covered-switch-default)
         llvm_unreachable("unknown random kind");

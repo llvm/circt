@@ -129,7 +129,7 @@ static cl::opt<bool>
                         cl::desc("Scalarize the ports of any external modules"),
                         cl::init(true), cl::cat(mainCategory));
 
-static firtool::FirtoolOptions firtoolOptions(mainCategory);
+static firtool::FirtoolOptions<firtool::Opt> firtoolOptions(mainCategory);
 
 static cl::list<std::string>
     passPlugins("load-pass-plugin", cl::desc("Load passes from plugin library"),
