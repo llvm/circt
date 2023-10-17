@@ -6,13 +6,24 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file implements the FIRRTL combinational cycles detection pass. The
-// algorithm handles aggregates and sub-index/field/access ops.
+// This file implements the FIRRTL combinational cycles detection pass.
+// Terminology:
+// In the context of the circt that the MLIR represents, a Value is called the
+// driver of another Value, if the driver actively sets the the other Value. The
+// driver Value is responsible for determining the logic level of the driven
+// Value.
+// This pass is a dataflow analysis that interprets the operations of the
+// circt to build a connectivity graph, which represents the driver
+// relationships. Each node in this connectivity graph is a FieldRef, and an
+// edge exists from a source node to a desination node if the source drives the
+// destination..
+// Algorithm to construct the connectivity graph.
 // 1. Traverse each module in the Instance Graph bottom up.
-// 2. Preprocess step: Construct the reaching definitions directed graph.
+// 2. Preprocess step: Construct the circt connectivity directed graph.
 // Perform a dataflow analysis, on the domain of FieldRefs. Interpret each
-// operation, to record the corresponding reaching def. Each node in the graph
-// is a fieldRef. Each edge represents a dataflow from the source to the sink.
+// operation, to record the values that can potentially drive another value.
+// Each node in the graph is a fieldRef. Each edge represents a dataflow from
+// the source to the sink.
 // 3. Perform a DFS traversal on the graph, to detect combinational loops and
 // paths between ports.
 // 4. Inline the combinational paths discovered in each module to its instance
@@ -33,7 +44,7 @@
 using namespace circt;
 using namespace firrtl;
 
-using ReachingDefsMapType = DenseMap<FieldRef, DenseSet<FieldRef>>;
+using DrivenBysMapType = DenseMap<FieldRef, DenseSet<FieldRef>>;
 
 class DiscoverLoops {
 
@@ -41,30 +52,29 @@ class DiscoverLoops {
   /// Each entry is a pair, the first element is the FieldRef corresponding to
   /// the graph vertex. The second element is the list of vertices, that have an
   /// edge to this vertex.
-  /// The directed edges represent a reaching definition from the source to the
-  /// sink.
-  using ReachingDefgraphType =
+  /// The directed edges represent a connectivity relation, of a source that
+  /// drives the sink.
+  using DrivenByGraphType =
       SmallVector<std::pair<FieldRef, SmallVector<unsigned>>, 64>;
 
 public:
   DiscoverLoops(
       FModuleOp module, InstanceGraph &instanceGraph,
-      const DenseMap<FModuleLike, ReachingDefsMapType> &otherModulePortPaths,
-      ReachingDefsMapType &thisModulePortPaths)
+      const DenseMap<FModuleLike, DrivenBysMapType> &otherModulePortPaths,
+      DrivenBysMapType &thisModulePortPaths)
       : module(module), instanceGraph(instanceGraph),
         modulePortPaths(otherModulePortPaths), portPaths(thisModulePortPaths) {}
 
   LogicalResult processModule() {
     LLVM_DEBUG(llvm::dbgs() << "\n processing module :" << module.getName());
-    constructReachingDefGraph(module);
-    return dfsTraverse(reachingDefGraph);
+    constructConnectivityGraph(module);
+    return dfsTraverse(drivenBy);
   }
 
-  void constructReachingDefGraph(FModuleOp module) {
+  void constructConnectivityGraph(FModuleOp module) {
     LLVM_DEBUG(llvm::dbgs() << "\n Module :" << module.getName());
 
-    // ALl the module output ports must be added as the initial nodes to the
-    // reaching def graph.
+    // ALl the module output ports must be added as the initial nodes.
     for (auto port : module.getArguments()) {
       if (module.getPortDirection(port.getArgNumber()) != Direction::Out)
         continue;
@@ -177,31 +187,31 @@ public:
     if (iter != nodes.end())
       return iter->second;
     // Add the fieldRef to the graph.
-    auto id = reachingDefGraph.size();
+    auto id = drivenBy.size();
     // The node id can be used to index into the graph. The entry is a pair,
     // first element is the corresponding FieldRef, and the second entry is a
     // list of adjacent nodes.
-    reachingDefGraph.push_back({f, {}});
+    drivenBy.push_back({f, {}});
     nodes[f] = id;
     return id;
   }
 
-  // Construct the reaching def graph, by adding `dst` and `src` as new nodes,
+  // Construct the connectivity graph, by adding `dst` and `src` as new nodes,
   // if not already existing. Then add an edge from `src` to `dst`.
-  void addReachingDef(FieldRef dst, FieldRef src) {
+  void addDrivenBy(FieldRef dst, FieldRef src) {
     auto srcNode = getOrAddNode(src);
     auto dstNode = getOrAddNode(dst);
-    reachingDefGraph[dstNode].second.push_back(srcNode);
+    drivenBy[dstNode].second.push_back(srcNode);
   }
 
-  // Add `srcVal` as a reaching def to `dstVal`.
+  // Add `dstVal` as being driven by `srcVal`.
   void recordDataflow(Value dstVal, Value srcVal) {
-    // Ignore reaching def from constants.
+    // Ignore connectivity from constants.
     if (auto *def = srcVal.getDefiningOp())
       if (def->hasTrait<OpTrait::ConstantLike>())
         return;
     // Check if srcVal/dstVal is a fieldRef to an aggregate. Then, there may
-    // exist other values, that refer to the same fieldRef. Add a reaching def
+    // exist other values, that refer to the same fieldRef. Add a connectivity
     // from all such "aliasing" values.
     auto dstIt = valToFieldRefs.find(dstVal);
     auto srcIt = valToFieldRefs.find(srcVal);
@@ -220,7 +230,7 @@ public:
 
     // Handle Properties.
     if (!(srcValType && dstValType))
-      return addReachingDef({dstVal, 0}, {srcVal, 0});
+      return addDrivenBy({dstVal, 0}, {srcVal, 0});
 
     auto addDef = [&](FieldRef dst, FieldRef src) {
       // If the dstVal and srcVal are aggregate types, then record the dataflow
@@ -237,20 +247,18 @@ public:
             // type equivalent!
             if (dstIsFlip)
               std::swap(dst, src);
-            addReachingDef(dst.getSubField(dstIndex),
-                           src.getSubField(dstIndex));
+            addDrivenBy(dst.getSubField(dstIndex), src.getSubField(dstIndex));
           } else if (srcValType && !srcValType.isGround())
-            walkGroundTypes(srcValType,
-                            [&](uint64_t srcIndex, FIRRTLBaseType t, auto) {
-                              addReachingDef(dst.getSubField(dstIndex),
-                                             src.getSubField(srcIndex));
-                            });
+            walkGroundTypes(srcValType, [&](uint64_t srcIndex, FIRRTLBaseType t,
+                                            auto) {
+              addDrivenBy(dst.getSubField(dstIndex), src.getSubField(srcIndex));
+            });
           // Else, the src is ground type.
           else
-            addReachingDef(dst.getSubField(dstIndex), src);
+            addDrivenBy(dst.getSubField(dstIndex), src);
         });
 
-      addReachingDef(dst, src);
+      addDrivenBy(dst, src);
     };
 
     // Both the dstVal and srcVal, can refer to multiple FieldRefs, ensure that
@@ -286,24 +294,23 @@ public:
     });
   }
 
-  // Record srcVal as a reaching def to the original data value that the probe
-  // refers to.
-  void handleRefForce(Value dstRef, Value srcVal) {
-    recordDataflow(dstRef, srcVal);
-    auto dstNode = getOrAddNode(dstRef);
-    // Now add srcVal as a reaching def to the data that dstRef refers to.
+  // Record srcVal as driving the original data value that the probe refers to.
+  void handleRefForce(Value dstProbe, Value srcVal) {
+    recordDataflow(dstProbe, srcVal);
+    auto dstNode = getOrAddNode(dstProbe);
+    // Now add srcVal as driving the data that dstProbe refers to.
     auto leader = rwProbeClasses.findLeader(dstNode);
     if (leader == rwProbeClasses.member_end())
       return;
     auto iter = rwProbeRefersTo.find(*leader);
     assert(iter != rwProbeRefersTo.end());
     if (iter->second != dstNode)
-      reachingDefGraph[iter->second].second.push_back(getOrAddNode(srcVal));
+      drivenBy[iter->second].second.push_back(getOrAddNode(srcVal));
   }
 
-  // Check the referenced module paths and add input ports as the reaching defs
-  // for the corresponding output port. The granularity of the reaching
-  // definitions is per field.
+  // Check the referenced module paths and add input ports as the drivers for
+  // the corresponding output port. The granularity of the connectivity
+  // relations is per field.
   void handleInstanceOp(InstanceOp inst) {
     auto refMod =
         dyn_cast_or_null<FModuleOp>(*instanceGraph.getReferencedModule(inst));
@@ -316,13 +323,13 @@ public:
     // Note: Handling RWProbes.
     // 1. For RWProbes, output ports can be source of dataflow.
     // 2. All the RWProbes that refer to the same base value form a strongly
-    // connected component. Each has a reaching def from the other, including
+    // connected component. Each has a dataflow from the other, including
     // itself.
-    // Steps to add the instance ports to the reaching def graph::
+    // Steps to add the instance ports to the connectivity graph:
     // 1. Find the set of RWProbes that refer to the same base value.
     // 2. Add them to the same rwProbeClasses.
-    // 3. Chose the first RWProbe port from this set as a representative base
-    //    value. And add it as the source reaching def for every other RWProbe
+    // 3. Choose the first RWProbe port from this set as a representative base
+    //    value. And add it as the source driver for every other RWProbe
     //    port in the set.
     // 4. This will ensure we can detect cycles involving different RWProbes to
     //    the same base value.
@@ -364,16 +371,15 @@ public:
               rwProbeClasses.findLeader(sinkNode) ==
                   rwProbeClasses.findLeader(srcNode))
             continue;
-          // Check if sinkPort is a reaching def of sourcePort.
-          auto reachingDefsToSrcPort =
-              modulePaths->second.find(modSrcPortField);
-          if (reachingDefsToSrcPort != modulePaths->second.end())
-            if (llvm::find(reachingDefsToSrcPort->second, modSinkPortField) !=
-                reachingDefsToSrcPort->second.end()) {
+          // Check if sinkPort is a driver of sourcePort.
+          auto drivenBysToSrcPort = modulePaths->second.find(modSrcPortField);
+          if (drivenBysToSrcPort != modulePaths->second.end())
+            if (llvm::find(drivenBysToSrcPort->second, modSinkPortField) !=
+                drivenBysToSrcPort->second.end()) {
               // This case can occur when there are multiple RWProbes on the
               // port, which refer to the same base value. So, each of such
-              // probes are reaching defs of each other. Hence the false
-              // loops. Instead of recording this in the reachingDefGraph,
+              // probes are drivers of each other. Hence the false
+              // loops. Instead of recording this in the drivenByGraph,
               // record it separately with the rwProbeClasses.
               setOfEquivalentRWProbes.insert(srcNode);
               if (minArgNum > srcArgNum) {
@@ -385,7 +391,7 @@ public:
               continue;
             }
         }
-        addReachingDef(sinkPort, srcPort);
+        addDrivenBy(sinkPort, srcPort);
       }
       if (setOfEquivalentRWProbes.empty())
         continue;
@@ -401,10 +407,10 @@ public:
       rwProbeRefersTo[leader] = basePortNode;
 
       setOfEquivalentRWProbes.insert(sinkNode);
-      // Add a reaching def  from base RWProbe port to all other RWProbe ports.
+      // Add the base RWProbe port as a driver to all other RWProbe ports.
       for (auto probe : setOfEquivalentRWProbes)
         if (probe != basePortNode)
-          reachingDefGraph[probe].second.push_back(basePortNode);
+          drivenBy[probe].second.push_back(basePortNode);
     }
   }
 
@@ -435,24 +441,23 @@ public:
   void handleMemory(MemOp mem) {
     if (mem.getReadLatency() > 0)
       return;
-    // Add the enable and address fields as the reaching definitions to the data
-    // field.
+    // Add the enable and address fields as the drivers of the data field.
     for (auto memPort : mem.getResults())
       // TODO: Can reftype ports create cycle ?
       if (auto type = type_dyn_cast<BundleType>(memPort.getType())) {
         auto enableFieldId = type.getFieldID((unsigned)ReadPortSubfield::en);
         auto addressFieldId = type.getFieldID((unsigned)ReadPortSubfield::addr);
         auto dataFieldId = type.getFieldID((unsigned)ReadPortSubfield::data);
-        addReachingDef({memPort, static_cast<unsigned int>(dataFieldId)},
-                       {memPort, static_cast<unsigned int>(enableFieldId)});
-        addReachingDef({memPort, static_cast<unsigned int>(dataFieldId)},
-                       {memPort, static_cast<unsigned int>(addressFieldId)});
+        addDrivenBy({memPort, static_cast<unsigned int>(dataFieldId)},
+                    {memPort, static_cast<unsigned int>(enableFieldId)});
+        addDrivenBy({memPort, static_cast<unsigned int>(dataFieldId)},
+                    {memPort, static_cast<unsigned int>(addressFieldId)});
       }
   }
 
   // Perform an iterative DFS traversal of the given graph. Record paths between
   // the ports and detect and report any cycles in the graph.
-  LogicalResult dfsTraverse(const ReachingDefgraphType &graph) {
+  LogicalResult dfsTraverse(const DrivenByGraphType &graph) {
     auto numNodes = graph.size();
     SmallVector<bool> onStack(numNodes, false);
     SmallVector<unsigned> dfsStack;
@@ -471,19 +476,19 @@ public:
           onStack[currentNode] = true;
           LLVM_DEBUG(llvm::dbgs()
                      << "\n visiting :"
-                     << reachingDefGraph[currentNode].first.getValue().getType()
-                     << reachingDefGraph[currentNode].first.getValue() << ","
-                     << reachingDefGraph[currentNode].first.getFieldID() << "\n"
-                     << getName(reachingDefGraph[currentNode].first));
+                     << drivenBy[currentNode].first.getValue().getType()
+                     << drivenBy[currentNode].first.getValue() << ","
+                     << drivenBy[currentNode].first.getFieldID() << "\n"
+                     << getName(drivenBy[currentNode].first));
 
-          FieldRef currentF = reachingDefGraph[currentNode].first;
+          FieldRef currentF = drivenBy[currentNode].first;
           if (recordPortPaths && currentNode != rootNode) {
             if (isa<mlir::BlockArgument>(currentF.getValue()))
-              portPaths[reachingDefGraph[rootNode].first].insert(currentF);
+              portPaths[drivenBy[rootNode].first].insert(currentF);
             // Even if the current node is not a port, there can be RWProbes of
             // the current node at the port.
-            addToPortPathsIfRWProbe(
-                currentNode, portPaths[reachingDefGraph[rootNode].first]);
+            addToPortPathsIfRWProbe(currentNode,
+                                    portPaths[drivenBy[rootNode].first]);
           }
         } else {
           onStack[currentNode] = false;
@@ -500,16 +505,16 @@ public:
             // Construct the cyclic path.
             do {
               SmallVector<unsigned>::iterator it =
-                  llvm::find_if(reachingDefGraph[loopNode].second,
+                  llvm::find_if(drivenBy[loopNode].second,
                                 [&](unsigned node) { return onStack[node]; });
-              if (it == reachingDefGraph[loopNode].second.end())
+              if (it == drivenBy[loopNode].second.end())
                 break;
 
-              path.push_back(reachingDefGraph[loopNode].first);
+              path.push_back(drivenBy[loopNode].first);
               loopNode = *it;
             } while (loopNode != neighbor);
 
-            reportLoopFound(path, reachingDefGraph[neighbor].first.getLoc());
+            reportLoopFound(path, drivenBy[neighbor].first.getLoc());
             return failure();
           }
         }
@@ -520,8 +525,7 @@ public:
     DenseSet<unsigned> visited;
     for (unsigned node = 0; node < graph.size(); ++node) {
       bool isPort = false;
-      if (auto arg =
-              dyn_cast<BlockArgument>(reachingDefGraph[node].first.getValue()))
+      if (auto arg = dyn_cast<BlockArgument>(drivenBy[node].first.getValue()))
         if (module.getPortDirection(arg.getArgNumber()) == Direction::Out) {
           // For output ports, reset the visited. Required to revisit the entire
           // graph, to discover all the paths that exist from any input port.
@@ -580,13 +584,13 @@ public:
 
   void dumpMap() {
     LLVM_DEBUG({
-      llvm::dbgs() << "\n Reaching Def Graph ==>";
-      for (const auto &[index, i] : llvm::enumerate(reachingDefGraph)) {
+      llvm::dbgs() << "\n Connectivity Graph ==>";
+      for (const auto &[index, i] : llvm::enumerate(drivenBy)) {
         llvm::dbgs() << "\n ===>dst:" << getName(i.first)
                      << "::" << i.first.getValue();
         for (auto s : i.second)
-          llvm::dbgs() << "<---" << getName(reachingDefGraph[s].first)
-                       << "::" << reachingDefGraph[s].first.getValue();
+          llvm::dbgs() << "<---" << getName(drivenBy[s].first)
+                       << "::" << drivenBy[s].first.getValue();
       }
 
       llvm::dbgs() << "\n Value to FieldRef :";
@@ -603,10 +607,8 @@ public:
       }
       llvm::dbgs() << "\n rwprobes:";
       for (auto node : rwProbeRefersTo) {
-        llvm::dbgs() << "\n node:"
-                     << getName(reachingDefGraph[node.first].first)
-                     << "=> probe:"
-                     << getName(reachingDefGraph[node.second].first);
+        llvm::dbgs() << "\n node:" << getName(drivenBy[node.first].first)
+                     << "=> probe:" << getName(drivenBy[node.second].first);
       }
       for (auto i = rwProbeClasses.begin(), e = rwProbeClasses.end(); i != e;
            ++i) { // Iterate over all of the equivalence sets.
@@ -640,7 +642,7 @@ public:
   void addToPortPathsIfRWProbe(unsigned srcNode,
                                DenseSet<FieldRef> &inputPortPaths) {
     // Check if there exists any RWProbe for the srcNode.
-    auto baseFieldRef = reachingDefGraph[srcNode].first;
+    auto baseFieldRef = drivenBy[srcNode].first;
     if (auto defOp = dyn_cast_or_null<Forceable>(baseFieldRef.getDefiningOp()))
       if (defOp.isForceable() && !defOp.getDataRef().use_empty()) {
         // Assumption, the probe must exist in the equivalence classes.
@@ -652,7 +654,7 @@ public:
              llvm::make_range(rwProbeClasses.member_begin(
                                   rwProbeClasses.findValue(rwProbeNode)),
                               rwProbeClasses.member_end())) {
-          auto probeVal = reachingDefGraph[probe].first;
+          auto probeVal = drivenBy[probe].first;
           // If the probe is a port, then record the path from the probe to the
           // input port.
           if (probeVal.getValue().isa<BlockArgument>()) {
@@ -666,22 +668,22 @@ private:
   FModuleOp module;
   InstanceGraph &instanceGraph;
 
-  /// Map of value to the corresponding FieldRef.
+  /// Map of values to the set of all FieldRefs (same base) that this may be
+  /// directly derived from through indexing operations.
   DenseMap<Value, SmallVector<FieldRef>> valToFieldRefs;
   /// Comb paths that exist between module ports. This is maintained across
   /// modules.
-  const DenseMap<FModuleLike, ReachingDefsMapType> &modulePortPaths;
+  const DenseMap<FModuleLike, DrivenBysMapType> &modulePortPaths;
   /// The comb paths between the ports of this module. This is the final
   /// output of this intra-procedural analysis, that is used to construct the
   /// inter-procedural dataflow.
-  ReachingDefsMapType &portPaths;
+  DrivenBysMapType &portPaths;
 
-  /// This is an adjacency list representation of the Reaching definitions
-  /// graph. This can be indexed by the graph node id, and each entry is the
-  /// list of graph nodes that has an edge to it. Each graph node represents a
-  /// FieldRef and each edge represents an immediate reaching definition from
-  /// source to the sink of the edge.
-  ReachingDefgraphType reachingDefGraph;
+  /// This is an adjacency list representation of the connectivity graph. This
+  /// can be indexed by the graph node id, and each entry is the list of graph
+  /// nodes that has an edge to it. Each graph node represents a FieldRef and
+  /// each edge represents a source that directly drives the sink node.
+  DrivenByGraphType drivenBy;
   /// Map of FieldRef to its corresponding graph node.
   DenseMap<FieldRef, size_t> nodes;
 
@@ -701,7 +703,7 @@ class CheckCombLoopsPass : public CheckCombLoopsBase<CheckCombLoopsPass> {
 public:
   void runOnOperation() override {
     auto &instanceGraph = getAnalysis<InstanceGraph>();
-    DenseMap<FModuleLike, ReachingDefsMapType> modulePortPaths;
+    DenseMap<FModuleLike, DrivenBysMapType> modulePortPaths;
 
     // Traverse modules in a post order to make sure the combinational paths
     // between IOs of a module have been detected and recorded in
