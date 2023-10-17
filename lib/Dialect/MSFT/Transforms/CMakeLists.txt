@@ -3,6 +3,7 @@ add_circt_dialect_library(CIRCTMSFTTransforms
   MSFTLowerInstances.cpp
   MSFTLowerConstructs.cpp
   PassCommon.cpp
+  MSFTCreateGenericPDHierarchy.cpp
 
   DEPENDS
   CIRCTMSFTTransformsIncGen

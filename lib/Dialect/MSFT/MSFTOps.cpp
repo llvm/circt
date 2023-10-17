@@ -265,5 +265,24 @@ Operation *PDMulticycleOp::getTopModule(hw::HWSymbolCache &cache) {
   return srcTop;
 }
 
+//===----------------------------------------------------------------------===//
+// PDInstanceHierarchyCallOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult PDInstanceHierarchyCallOp::verifySymbolUses(
+    mlir::SymbolTableCollection &symbolTable) {
+  auto parentModule = getOperation()->getParentOfType<mlir::ModuleOp>();
+  auto ih = symbolTable.lookupSymbolIn<msft::InstanceHierarchyOp>(
+      parentModule, getProcAttr());
+  if (!ih)
+    return emitOpError("could not find instance hierarchy op named ")
+           << getProc();
+  return success();
+}
+
+Operation *PDInstanceHierarchyCallOp::getTopModule(hw::HWSymbolCache &cache) {
+  return getHierPathTopModule(getLoc(), cache, getRefAttr());
+}
+
 #define GET_OP_CLASSES
 #include "circt/Dialect/MSFT/MSFT.cpp.inc"

@@ -25,6 +25,7 @@ namespace msft {
 std::unique_ptr<mlir::Pass> createLowerInstancesPass();
 std::unique_ptr<mlir::Pass> createLowerConstructsPass();
 std::unique_ptr<mlir::Pass> createExportTclPass();
+std::unique_ptr<mlir::Pass> createCreateGenericPDHierarchyPass();
 
 /// A set of methods which are broadly useful in a number of dialects.
 struct PassCommon {

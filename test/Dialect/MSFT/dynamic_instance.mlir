@@ -2,7 +2,7 @@
 // RUN: circt-opt %s --msft-lower-instances --verify-each | FileCheck %s
 // RUN: circt-opt %s --msft-lower-instances --lower-seq-to-sv --msft-export-tcl=tops=shallow,deeper,reg --export-verilog -o %t.mlir | FileCheck %s --check-prefix=TCL
 
-msft.instance.hierarchy @deeper {
+msft.instance.hierarchy @d(@deeper) {
   msft.instance.dynamic @deeper::@branch {
     msft.instance.dynamic @shallow::@leaf {
       msft.instance.dynamic @leaf::@module {
@@ -15,7 +15,7 @@ msft.instance.hierarchy @deeper {
 // CHECK: hw.hierpath @instref [@deeper::@branch, @shallow::@leaf, @leaf::@module]
 // CHECK: msft.pd.location @instref M20K x: 15 y: 9 n: 3 path : "|memBank2"
 
-msft.instance.hierarchy @shallow {
+msft.instance.hierarchy @a1(@shallow) {
   msft.instance.dynamic @shallow::@leaf {
     msft.instance.dynamic @leaf::@module {
       msft.pd.location M20K x: 8 y: 19 n: 1 path: "|memBank2"
@@ -25,12 +25,12 @@ msft.instance.hierarchy @shallow {
 // CHECK: hw.hierpath @instref_1 [@shallow::@leaf, @leaf::@module]
 // CHECK: msft.pd.location @instref_1 M20K x: 8 y: 19 n: 1 path : "|memBank2"
 
-msft.instance.hierarchy @reg "foo" {
+msft.instance.hierarchy @a2(@reg "foo") {
   msft.instance.dynamic @reg::@reg {
     msft.pd.reg_location i4 [*, <1,2,3>, <1,2,4>, <1,2,5>]
   }
 }
-msft.instance.hierarchy @reg "bar" {
+msft.instance.hierarchy @a3(@reg "bar") {
   msft.instance.dynamic @reg::@reg {
     msft.pd.reg_location i4 [<3,4,5>, *, *, *]
   }
@@ -42,7 +42,7 @@ msft.instance.hierarchy @reg "bar" {
 
 hw.hierpath @reg.reg [@reg::@reg]
 hw.hierpath @reg.reg2 [@reg::@reg2]
-msft.instance.hierarchy @reg "multicycle" {
+msft.instance.hierarchy @ms(@reg "multicycle") {
   msft.pd.multicycle 2 @reg.reg -> @reg.reg2
 }
 

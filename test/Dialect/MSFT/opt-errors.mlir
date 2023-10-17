@@ -16,7 +16,7 @@ module {
 
 // -----
 
-msft.instance.hierarchy @reg {
+msft.instance.hierarchy @reg_pd(@reg) {
   msft.instance.dynamic @reg::@reg {
     // expected-error @+1 {{'msft.pd.location' op cannot both have a global ref symbol and be a child of a dynamic instance op}}
     msft.pd.location @ref FF x: 0 y: 0 n: 0
