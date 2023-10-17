@@ -104,14 +104,13 @@ static void getAsmBlockArgumentNamesImpl(mlir::Region &region,
   if (region.empty())
     return;
   // Assign port names to the bbargs.
-  //  auto *module = region.getParentOp();
   auto module = cast<HWModuleOp>(region.getParentOp());
 
   auto *block = &region.front();
   for (size_t i = 0, e = block->getNumArguments(); i != e; ++i) {
     auto name = module.getInputName(i);
-    if (!name.empty())
-      setNameFn(block->getArgument(i), name);
+    // Let mlir deterministically convert names to valid identifiers
+    setNameFn(block->getArgument(i), name);
   }
 }
 
@@ -1550,6 +1549,12 @@ SmallVector<PortInfo> InstanceOp::getPortList() {
   auto argNames = (*this)->getAttrOfType<ArrayAttr>("argNames");
   auto argTypes = getModuleType(*this).getInputs();
   auto argLocs = (*this)->getAttrOfType<ArrayAttr>("argLocs");
+
+  auto resultNames = (*this)->getAttrOfType<ArrayAttr>("resultNames");
+  auto resultTypes = getModuleType(*this).getResults();
+  auto resultLocs = (*this)->getAttrOfType<ArrayAttr>("resultLocs");
+
+  ports.reserve(argTypes.size() + resultTypes.size());
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
     auto type = argTypes[i];
     auto direction = ModulePort::Direction::Input;
@@ -1566,9 +1571,6 @@ SmallVector<PortInfo> InstanceOp::getPortList() {
         {{argNames[i].cast<StringAttr>(), type, direction}, i, emptyDict, loc});
   }
 
-  auto resultNames = (*this)->getAttrOfType<ArrayAttr>("resultNames");
-  auto resultTypes = getModuleType(*this).getResults();
-  auto resultLocs = (*this)->getAttrOfType<ArrayAttr>("resultLocs");
   for (unsigned i = 0, e = resultTypes.size(); i < e; ++i) {
     LocationAttr loc;
     if (resultLocs)

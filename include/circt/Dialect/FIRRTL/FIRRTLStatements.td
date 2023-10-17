@@ -181,8 +181,7 @@ def CoverOp : VerifOp<"cover"> {
   let summary = "Cover Verification Statement";
 }
 
-def WhenOp : FIRRTLOp<"when", [SingleBlock, NoTerminator, NoRegionArguments,
-                               RecursiveMemoryEffects, RecursivelySpeculatable]> {
+def WhenOp : FIRRTLOp<"when", [SingleBlock, NoTerminator, NoRegionArguments]> {
   let summary = "When Statement";
   let description = [{
     The "firrtl.when" operation represents a conditional.  Connections within
@@ -195,6 +194,7 @@ def WhenOp : FIRRTLOp<"when", [SingleBlock, NoTerminator, NoRegionArguments,
   let regions = (region SizedRegion<1>:$thenRegion, AnyRegion:$elseRegion);
 
   let skipDefaultBuilders = 1;
+  let hasCanonicalizeMethod = 1;
   let builders = [
     OpBuilder<(ins "Value":$condition, "bool":$withElseRegion,
                       CArg<"std::function<void()>", "{}">:$thenCtor,

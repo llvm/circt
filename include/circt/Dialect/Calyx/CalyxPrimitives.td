@@ -358,4 +358,4 @@ def WireLibOp : UnaryLibraryOp<"wire", [SameTypeConstraint<"in", "out">]> {
   ];
 }
 
-def ExtSILibOp  : UnaryLibraryOp<"extsi"> {}
+def ExtSILibOp  : UnaryLibraryOp<"signext"> {}

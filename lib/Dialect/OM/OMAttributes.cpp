@@ -91,11 +91,39 @@ circt::om::MapAttr::verify(function_ref<InFlightDiagnostic()> emitError,
   return success();
 }
 
-circt::om::PathAttr circt::om::PathAttr::get(mlir::StringAttr path) {
-  return om::PathAttr::get(path.getContext(), path);
+void PathAttr::print(AsmPrinter &odsPrinter) const {
+  odsPrinter << '[';
+  llvm::interleaveComma(getPath(), odsPrinter, [&](PathElement element) {
+    odsPrinter.printKeywordOrString(element.module);
+    odsPrinter << '>';
+    odsPrinter.printKeywordOrString(element.instance);
+  });
+  odsPrinter << ']';
 }
 
-Type circt::om::PathAttr::getType() { return PathType::get(getContext()); }
+Attribute PathAttr::parse(AsmParser &odsParser, Type odsType) {
+  auto *context = odsParser.getContext();
+  SmallVector<PathElement> path;
+  if (odsParser.parseCommaSeparatedList(
+          OpAsmParser::Delimiter::Square, [&]() -> ParseResult {
+            std::string module;
+            std::string instance;
+            if (odsParser.parseKeywordOrString(&module) ||
+                odsParser.parseGreater() ||
+                odsParser.parseKeywordOrString(&instance))
+              return failure();
+            path.emplace_back(StringAttr::get(context, module),
+                              StringAttr::get(context, instance));
+            return success();
+          }))
+    return nullptr;
+  return PathAttr::get(context, path);
+}
+
+LogicalResult PathAttr::verify(function_ref<mlir::InFlightDiagnostic()>,
+                               ArrayRef<PathElement> path) {
+  return success();
+}
 
 Type circt::om::IntegerAttr::getType() {
   return OMIntegerType::get(getContext());

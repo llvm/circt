@@ -192,3 +192,13 @@ hw.module @fileListTest(in %arg1: i32) attributes {output_filelist = #hw.output_
 // CHECK-SAME: attributes {comment = "hello world"}
 hw.module @commentModule() attributes {comment = "hello world"} {}
 
+ // CHECK-LABEL: hw.module @Foo(in %_d2A " d*" : i1, in %0 "" : i1, out "" : i1, out "1" : i1) {
+hw.module @Foo(in %0 " d*" : i1, in %1 "" : i1, out "" : i1, out "1" : i1) {
+  hw.output %0 , %1: i1, i1
+ }
+ // CHECK-LABEL: hw.module @Bar(in %foo : i1, out "" : i1, out "" : i1) {
+hw.module @Bar(in %foo : i1, out "" : i1, out "" : i1) {
+   // CHECK-NEXT:  hw.instance "foo" @Foo(" d*": %foo: i1, "": %foo: i1) -> ("": i1, "1": i1)
+  %0, %1 = hw.instance "foo" @Foo(" d*": %foo: i1, "": %foo : i1)  -> ("" : i1, "1" : i1)
+  hw.output %0, %1 : i1, i1
+}

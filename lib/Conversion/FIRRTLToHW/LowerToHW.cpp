@@ -885,7 +885,9 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<PortInfo> firrtlPorts,
   ports.reserve(firrtlPorts.size());
   size_t numArgs = 0;
   size_t numResults = 0;
-  for (auto firrtlPort : firrtlPorts) {
+  for (auto e : llvm::enumerate(firrtlPorts)) {
+    PortInfo firrtlPort = e.value();
+    size_t portNo = e.index();
     hw::PortInfo hwPort;
     hwPort.name = firrtlPort.name;
     hwPort.type = loweringState.lowerType(firrtlPort.type, firrtlPort.loc);
@@ -907,10 +909,12 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<PortInfo> firrtlPorts,
         }
         continue;
       }
+
       hwPort.setSym(
           hw::InnerSymAttr::get(StringAttr::get(
-              moduleOp->getContext(), Twine("__") + moduleName + Twine("__") +
-                                          firrtlPort.name.strref())),
+              moduleOp->getContext(),
+              Twine("__") + moduleName + Twine("__DONTTOUCH__") +
+                  Twine(portNo) + Twine("__") + firrtlPort.name.strref())),
           moduleOp->getContext());
     }
 
@@ -3214,8 +3218,10 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
   auto innerSym = oldInstance.getInnerSymAttr();
   if (oldInstance.getLowerToBind()) {
     if (!innerSym)
-      innerSym = hw::InnerSymAttr::get(
-          builder.getStringAttr("__" + oldInstance.getName() + "__"));
+      std::tie(innerSym, std::ignore) = getOrAddInnerSym(
+          oldInstance.getContext(), oldInstance.getInnerSymAttr(), 0,
+          [&]() -> hw::InnerSymbolNamespace & { return moduleNamespace; });
+
     auto bindOp = builder.create<sv::BindOp>(theModule.getNameAttr(),
                                              innerSym.getSymName());
     // If the lowered op already had output file information, then use that.
