@@ -135,11 +135,17 @@ static cl::list<std::string>
     passPlugins("load-pass-plugin", cl::desc("Load passes from plugin library"),
                 cl::CommaSeparated, cl::cat(mainCategory));
 
-static cl::opt<std::string>
-    highFIRRTLPassPlugin("high-firrtl-pass-plugin",
-                         cl::desc("Insert passes after parsing FIRRTL. Specify "
-                                  "passes with MLIR textual format."),
-                         cl::init(""), cl::cat(mainCategory));
+static cl::opt<std::string> initialFIRRTLPassPlugin(
+    "initial-firrtl-pass-plugin",
+    cl::desc("Insert passes just after parsing FIRRTL. Specify "
+             "passes with MLIR textual format."),
+    cl::init(""), cl::cat(mainCategory));
+
+static cl::opt<std::string> highFIRRTLPassPlugin(
+    "high-firrtl-pass-plugin",
+    cl::desc("Insert passes after annotation lowering. Specify "
+             "passes with MLIR textual format."),
+    cl::init(""), cl::cat(mainCategory));
 
 static cl::opt<std::string>
     lowFIRRTLPassPlugin("low-firrtl-pass-plugin",
@@ -368,6 +374,10 @@ static LogicalResult processBuffer(
             "firtool"));
   if (failed(applyPassManagerCLOptions(pm)))
     return failure();
+
+  if (!initialFIRRTLPassPlugin.empty())
+    if (failed(parsePassPipeline(StringRef(initialFIRRTLPassPlugin), pm)))
+      return failure();
 
   if (failed(firtool::populatePreprocessTransforms(pm, firtoolOptions)))
     return failure();
