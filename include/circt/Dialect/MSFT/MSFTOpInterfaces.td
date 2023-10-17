@@ -62,12 +62,4 @@ def DynInstDataOpInterface : OpInterface<"DynInstDataOpInterface"> {
       }]
     >
   ];
-
-  let extraClassDeclaration = [{
-    // We cannot directly implement getTopModule of DynInstDataOpInterface
-    // since the generated .cpp will cast to the implementing class and not
-    // consider interface hierarchies. But we still provide an implementation which
-    // ops can reference.
-    Operation* getTopModuleImpl(circt::hw::HWSymbolCache &symCache);
-  }];
 }
