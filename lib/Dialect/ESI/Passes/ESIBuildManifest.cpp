@@ -91,9 +91,9 @@ void ESIBuildManifestPass::runOnOperation() {
   }
 
   // If directed, write the manifest to a file. Mostly for debugging.
-  if (!writeDirect.empty()) {
+  if (!toFile.empty()) {
     std::error_code ec;
-    llvm::raw_fd_ostream os(writeDirect, ec);
+    llvm::raw_fd_ostream os(toFile, ec);
     if (ec) {
       mod->emitError() << "Failed to open file for writing: " << ec.message();
       signalPassFailure();
@@ -103,7 +103,7 @@ void ESIBuildManifestPass::runOnOperation() {
 
     // If the compressed manifest is available, output it also.
     if (!compressedManifest.empty()) {
-      llvm::raw_fd_ostream bos(writeDirect + ".zlib", ec);
+      llvm::raw_fd_ostream bos(toFile + ".zlib", ec);
       if (ec) {
         mod->emitError() << "Failed to open compressed file for writing: "
                          << ec.message();

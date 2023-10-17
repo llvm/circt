@@ -1,4 +1,4 @@
-// RUN: circt-opt %s --esi-build-manifest=write-direct=%t1.json
+// RUN: circt-opt %s --esi-build-manifest=to-file=%t1.json
 // RUN: FileCheck --input-file=%t1.json %s
 
 hw.type_scope @__hw_typedecls {
