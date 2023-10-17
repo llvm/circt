@@ -253,10 +253,6 @@ std::optional<AnnoPathValue> resolvePath(StringRef rawPath, CircuitOp circuit,
                                          SymbolTable &symTbl,
                                          CircuitTargetCache &cache);
 
-/// Return true if an Annotation's class name is handled by the LowerAnnotations
-/// pass.
-bool isAnnoClassLowered(StringRef className);
-
 /// A representation of a deferred Wiring problem consisting of a source that
 /// should be connected to a sink.
 struct WiringProblem {
@@ -436,6 +432,124 @@ InstanceOp addPortsToModule(FModuleLike mod, InstanceOp instOnPath,
                             StringRef newName,
                             InstancePathCache &instancePathcache,
                             CircuitTargetCache *targetCaches = nullptr);
+
+///===----------------------------------------------------------------------===//
+/// LowerAnnotations
+///===----------------------------------------------------------------------===//
+
+/// Annotation resolver and handler.
+struct AnnoRecord {
+  llvm::function_ref<std::optional<AnnoPathValue>(DictionaryAttr, ApplyState &)>
+      resolver;
+  llvm::function_ref<LogicalResult(const AnnoPathValue &, DictionaryAttr,
+                                   ApplyState &)>
+      applier;
+};
+
+/// A helper struct to lower annotations.
+struct LowerAnnotationsDriver {
+  LowerAnnotationsDriver(CircuitOp circuit, InstanceGraph *instanceGraph,
+                         const llvm::StringMap<AnnoRecord> &annotationRecords,
+                         bool ignoreAnnotationClassless,
+                         bool ignoreAnnotationUnknown, bool noRefTypePorts)
+      : circuit(circuit), instanceGraph(instanceGraph),
+        annotationRecords(annotationRecords),
+        ignoreAnnotationClassless(ignoreAnnotationClassless),
+        ignoreAnnotationUnknown(ignoreAnnotationUnknown),
+        noRefTypePorts(noRefTypePorts) {}
+
+  /// Run the main procedure.
+  bool run();
+
+  LogicalResult applyAnnotation(DictionaryAttr anno, ApplyState &state);
+  LogicalResult legacyToWiringProblems(ApplyState &state);
+  LogicalResult solveWiringProblems(ApplyState &state);
+
+  int64_t getNumFailures() const { return numFailures; }
+  int64_t getNumRawAnnotations() const { return numRawAnnotations; }
+  int64_t getNumAddedAnnos() const { return numAddedAnnos; }
+  int64_t getNumReusedHierPathOps() const { return numReusedHierPathOps; }
+  int64_t getNumUnhandled() const { return numUnhandled; }
+  int64_t getNumAnnos() const { return numAnnos; }
+
+private:
+  CircuitOp circuit;
+  InstanceGraph *instanceGraph;
+
+  // A map from annotation classes to annotation records.
+  const llvm::StringMap<AnnoRecord> &annotationRecords;
+
+  // Stats.
+  int64_t numRawAnnotations = 0;
+  int64_t numAddedAnnos = 0;
+  int64_t numAnnos = 0;
+  int64_t numReusedHierPathOps = 0;
+  int64_t numUnhandled = 0;
+  int64_t numFailures = 0;
+
+  // Options.
+  bool ignoreAnnotationClassless;
+  bool ignoreAnnotationUnknown;
+  bool noRefTypePorts;
+
+  SmallVector<DictionaryAttr> worklistAttrs;
+};
+
+///===----------------------------------------------------------------------===//
+/// Standard Utility Resolvers
+///===----------------------------------------------------------------------===//
+
+/// (SFC) FIRRTL SingleTargetAnnotation resolver.  Uses the 'target' field of
+/// the annotation with standard parsing to resolve the path.  This requires
+/// 'target' to exist and be normalized (per docs/FIRRTLAnnotations.md).
+std::optional<AnnoPathValue> stdResolve(DictionaryAttr anno, ApplyState &state);
+
+/// Resolves with target, if it exists.  If not, resolves to the circuit.
+std::optional<AnnoPathValue> tryResolve(DictionaryAttr anno, ApplyState &state);
+
+///===----------------------------------------------------------------------===//
+/// Standard Utility Appliers
+///===----------------------------------------------------------------------===//
+
+/// An applier which puts the annotation on the target and drops the 'target'
+/// field from the annotation.  Optionally handles non-local annotations.
+LogicalResult applyWithoutTargetImpl(const AnnoPathValue &target,
+                                     DictionaryAttr anno, ApplyState &state,
+                                     bool allowNonLocal);
+
+/// An applier which puts the annotation on the target and drops the 'target'
+/// field from the annotation.  Optionally handles non-local annotations.
+/// Ensures the target resolves to an expected type of operation.
+template <bool allowNonLocal, bool allowPortAnnoTarget, typename T,
+          typename... Tr>
+static LogicalResult applyWithoutTarget(const AnnoPathValue &target,
+                                        DictionaryAttr anno,
+                                        ApplyState &state) {
+  if (target.ref.isa<PortAnnoTarget>()) {
+    if (!allowPortAnnoTarget)
+      return failure();
+  } else if (!target.isOpOfType<T, Tr...>())
+    return failure();
+
+  return applyWithoutTargetImpl(target, anno, state, allowNonLocal);
+}
+
+template <bool allowNonLocal, typename T, typename... Tr>
+static LogicalResult applyWithoutTarget(const AnnoPathValue &target,
+                                        DictionaryAttr anno,
+                                        ApplyState &state) {
+  return applyWithoutTarget<allowNonLocal, false, T, Tr...>(target, anno,
+                                                            state);
+}
+
+/// An applier which puts the annotation on the target and drops the 'target'
+/// field from the annotaiton.  Optionally handles non-local annotations.
+template <bool allowNonLocal = false>
+static LogicalResult applyWithoutTarget(const AnnoPathValue &target,
+                                        DictionaryAttr anno,
+                                        ApplyState &state) {
+  return applyWithoutTargetImpl(target, anno, state, allowNonLocal);
+}
 
 } // namespace firrtl
 } // namespace circt
