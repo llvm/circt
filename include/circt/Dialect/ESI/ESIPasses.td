@@ -51,6 +51,16 @@ def ESIEmitCollateral: Pass<"esi-emit-collateral", "mlir::ModuleOp"> {
   ];
 }
 
+def ESIBuildManifest : Pass<"esi-build-manifest", "mlir::ModuleOp"> {
+  let summary = "Build a manifest of an ESI system";
+  let constructor = "circt::esi::createESIBuildManifestPass()";
+  let dependentDialects = ["circt::hw::HWDialect", "circt::sv::SVDialect"];
+  let options = [
+    Option<"toFile", "to-file", "std::string",
+           "", "Write the manifest JSON directly to this file">
+  ];
+}
+
 def ESICleanMetadata : Pass<"esi-clean-metadata", "mlir::ModuleOp"> {
   let summary = "Clean up ESI service metadata";
   let constructor = "circt::esi::createESICleanMetadataPass()";
