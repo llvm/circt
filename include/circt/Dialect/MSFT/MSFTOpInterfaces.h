@@ -14,7 +14,13 @@
 
 namespace circt {
 namespace msft {
-LogicalResult verifyDynInstData(Operation *);
+LogicalResult verifyUnaryDynInstDataOp(Operation *);
+
+/// Returns the top-level module which the given HierPathOp that defines
+/// pathSym, refers to.
+Operation *getHierPathTopModule(Location loc,
+                                circt::hw::HWSymbolCache &symCache,
+                                FlatSymbolRefAttr pathSym);
 class InstanceHierarchyOp;
 } // namespace msft
 } // namespace circt

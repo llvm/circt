@@ -10,11 +10,30 @@ include "mlir/IR/OpBase.td"
 
 def DynInstDataOpInterface : OpInterface<"DynInstDataOpInterface"> {
   let description = [{
+    Interface for ops that define dynamic instance data.
+  }];
+  let cppNamespace = "::circt::msft";
+
+  let methods = [
+    InterfaceMethod<
+      /*desc=*/[{
+        Get the top module op to which this op is providing data for.
+      }],
+      /*retTy=*/"Operation *",
+      /*methodName=*/"getTopModule",
+      /*args=*/(ins "circt::hw::HWSymbolCache &":$symCache)
+    >
+  ];
+}
+
+  def UnaryDynInstDataOpInterface : OpInterface<"UnaryDynInstDataOpInterface",
+    [DynInstDataOpInterface]> {  
+  let description = [{
     Interface for anything which needs to refer to a HierPathOp.
   }];
   let cppNamespace = "::circt::msft";
   let verify = [{
-    return ::circt::msft::verifyDynInstData($_op);
+    return ::circt::msft::verifyUnaryDynInstDataOp($_op);
   }];
 
   let methods = [
@@ -40,33 +59,6 @@ def DynInstDataOpInterface : OpInterface<"DynInstDataOpInterface"> {
       /*methodBody=*/[{}],
       /*defaultImplementation=*/[{
         return $_op.getRefAttr();
-      }]
-    >,
-    InterfaceMethod<
-      /*desc=*/[{
-        Get the top module op to which the HierPathOp which this op is referring.
-      }],
-      /*retTy=*/"Operation *",
-      /*methodName=*/"getTopModule",
-      /*args=*/(ins "circt::hw::HWSymbolCache &":$symCache),
-      /*methodBody=*/[{}],
-      /*defaultImplementation=*/[{
-        FlatSymbolRefAttr refSym = $_op.getPathSym();
-        if (!refSym) {
-          $_op->emitOpError("must run dynamic instance lowering first");
-          return nullptr;
-        }
-        auto ref = dyn_cast_or_null<hw::HierPathOp>(
-            symCache.getDefinition(refSym));
-        if (!ref) {
-          $_op->emitOpError("could not find hw.hierpath ") << refSym;
-          return nullptr;
-        }
-        if (ref.getNamepath().empty())
-          return nullptr;
-        auto modSym = FlatSymbolRefAttr::get(
-            ref.getNamepath()[0].cast<hw::InnerRefAttr>().getModule());
-        return symCache.getDefinition(modSym);
       }]
     >
   ];

@@ -22,7 +22,7 @@ def DeclPhysicalRegionOp : MSFTOp<"physical_region",
 }
 
 def PDPhysLocationOp : MSFTOp<"pd.location",
-      [DeclareOpInterfaceMethods<DynInstDataOpInterface>]> {
+      [DeclareOpInterfaceMethods<UnaryDynInstDataOpInterface>]> {
   let summary = "Specify a location for an instance";
   let description = [{
     Used to specify a specific location on an FPGA to place a dynamic instance.
@@ -38,10 +38,16 @@ def PDPhysLocationOp : MSFTOp<"pd.location",
   let assemblyFormat = [{
     ($ref^)? custom<PhysLoc>($loc) (`path` `:` $subPath^)? attr-dict
   }];
+
+  let extraClassDeclaration = [{
+    Operation* getTopModule(circt::hw::HWSymbolCache &symCache) {
+      return getHierPathTopModule(getOperation()->getLoc(), symCache, getPathSym());
+    }
+  }];
 }
 
 def PDRegPhysLocationOp : MSFTOp<"pd.reg_location",
-      [DeclareOpInterfaceMethods<DynInstDataOpInterface>]> {
+      [DeclareOpInterfaceMethods<UnaryDynInstDataOpInterface>]> {
   let summary = "Specify register locations";
   let description = [{
     A version of "PDPhysLocationOp" specialized for registers, which have one
@@ -52,10 +58,34 @@ def PDRegPhysLocationOp : MSFTOp<"pd.reg_location",
   let assemblyFormat = [{
     (`ref` $ref^)? custom<ListOptionalRegLocList>($locs) attr-dict
   }];
+
+  let extraClassDeclaration = [{
+    Operation* getTopModule(circt::hw::HWSymbolCache &symCache) {
+      return getHierPathTopModule(getOperation()->getLoc(), symCache, getPathSym());
+    }
+  }];
+}
+
+def PDMulticycleOp : MSFTOp<"pd.multicycle",
+    [DeclareOpInterfaceMethods<DynInstDataOpInterface>]> {
+  let summary = "Specify a multicycle constraint";
+  let description = [{
+    Specifies a multicycle constraint in between two registers.
+    `source` and `dest` symbols reference `HierPathOp` symbols denoting the
+    exact registers in the instance hierarchy to which the constraint applies.
+  }];
+  let arguments = (ins
+    FlatSymbolRefAttr:$source,
+    FlatSymbolRefAttr:$dest,
+    ConfinedAttr<I32Attr, [IntMinValue<1>]>:$cycles
+  );
+  let assemblyFormat = [{
+    $cycles $source `->` $dest attr-dict
+  }];
 }
 
 def PDPhysRegionOp : MSFTOp<"pd.physregion",
-      [DeclareOpInterfaceMethods<DynInstDataOpInterface>]> {
+      [DeclareOpInterfaceMethods<UnaryDynInstDataOpInterface>]> {
   let summary = "Specify a physical region for an instance";
   let description = [{
     Annotate a particular entity within an op with the region of the devices
@@ -67,6 +97,12 @@ def PDPhysRegionOp : MSFTOp<"pd.physregion",
                        OptionalAttr<FlatSymbolRefAttr>:$ref);
   let assemblyFormat = [{
     ($ref^)? $physRegionRef (`path` `:` $subPath^)? attr-dict
+  }];
+
+  let extraClassDeclaration = [{
+    Operation* getTopModule(circt::hw::HWSymbolCache &symCache) {
+      return getHierPathTopModule(getOperation()->getLoc(), symCache, getPathSym());
+    }
   }];
 }
 
@@ -123,7 +159,8 @@ def DynamicInstanceOp : MSFTOp<"instance.dynamic",
 }
 
 def DynamicInstanceVerbatimAttrOp : MSFTOp<
-    "instance.verb_attr", [DeclareOpInterfaceMethods<DynInstDataOpInterface>]> {
+    "instance.verb_attr", [
+      DeclareOpInterfaceMethods<UnaryDynInstDataOpInterface>]> {
   let summary = "Specify an arbitrary attribute attached to a dynamic instance";
   let description = [{
     Allows a user to specify a custom attribute name and value which is attached
@@ -138,5 +175,11 @@ def DynamicInstanceVerbatimAttrOp : MSFTOp<
                        OptionalAttr<FlatSymbolRefAttr>:$ref);
   let assemblyFormat = [{
     ($ref^)? `name` `:` $name `value` `:` $value (`path` `:` $subPath^)? attr-dict
+  }];
+
+  let extraClassDeclaration = [{
+    Operation* getTopModule(circt::hw::HWSymbolCache &symCache) {
+      return getHierPathTopModule(getOperation()->getLoc(), symCache, getPathSym());
+    }
   }];
 }
