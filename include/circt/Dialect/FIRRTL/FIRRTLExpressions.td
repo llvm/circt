@@ -824,6 +824,36 @@ class IntBinaryVecOp<string mnemonic, Type resultType,
    BinaryPrimOp<mnemonic, VecIntType, VecIntType, resultType,
                 traits # [SameOperandsVecIntTypeKind]>;
 
+// Base class for Unary Vector operators.
+class UnaryVecOp<string mnemonic, Type srcType, Type resultType,
+                  list<Trait> traits = []> : PrimOp<mnemonic, traits> {
+  let arguments = (ins srcType:$input);
+  let results = (outs resultType:$result);
+
+  let assemblyFormat =
+    "$input attr-dict `:` functional-type($input, $result)";
+
+  // Give concrete operations a chance to set a type inference callback. If left
+  // empty, a declaration for `inferUnaryReturnType` will be emitted that the
+  // operation is expected to implement.
+  code inferType = "";
+  let inferTypeDecl = !if(!empty(inferType), [{
+    /// Infer the return type of this unary operation.
+    static FIRRTLType inferUnaryVecReturnType(FIRRTLType input,
+                                           std::optional<Location> loc);
+    }], "") # !subst("$_infer", !if(!empty(inferType), "inferUnaryVecReturnType",
+      inferType), [{
+    /// Infer the return type of this operation.
+    static FIRRTLType inferReturnType(ValueRange operands,
+                                      ArrayRef<NamedAttribute> attrs,
+                                      std::optional<Location> loc) {
+      return $_infer(firrtl::type_cast<FIRRTLType>(operands[0].getType()), loc);
+    }
+  }]);
+
+  let parseValidator = "impl::validateUnaryOpArguments";
+}
+
 let hasFolder = 0 in {
   let inferType = "impl::inferVecAddSubResult" in {
     def AddVecOp : IntBinaryVecOp<"vec.add", VecIntType, [Commutative]>;
@@ -847,6 +877,31 @@ let hasFolder = 0 in {
   }
 
   def CatVecOp : IntBinaryVecOp<"vec.cat", VecUIntType>;
+
+  let inferType = "impl::inferVecReductionResult" in {
+    def AndRVecOp : UnaryVecOp<"vec.andr", VecIntType, UIntType> {
+      let description = [{
+        Horizontally reduce a value to one bit, using the 'and' operation to merge
+        bits.  `andr(x)` is equivalent to `concat(x, 1b1) == ~0`.  As such, it
+        returns 1 for zero-bit-wide operands.
+      }];
+    }
+    def OrRVecOp : UnaryVecOp<"vec.orr", VecIntType, UIntType> {
+      let description = [{
+        Horizontally reduce a value to one bit, using the 'or' operation to merge
+        bits.  `orr(x)` is equivalent to `concat(x, 1b0) != 0`.  As such, it
+        returns 0 for zero-bit-wide operands.
+      }];
+    }
+    def XorRVecOp : UnaryVecOp<"vec.xorr", VecIntType, UIntType> {
+      let description = [{
+        Horizontally reduce a value to one bit, using the 'xor' operation to merge
+        bits.  `xorr(x)` is equivalent to `popcount(concat(x, 1b0)) & 1`.  As
+        such, it returns 0 for zero-bit-wide operands.
+      }];
+  }
+}
+
 }
 
 

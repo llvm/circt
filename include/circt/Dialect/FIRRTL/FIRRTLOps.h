@@ -157,6 +157,7 @@ FIRRTLType inferBitwiseResult(FIRRTLType lhs, FIRRTLType rhs,
 FIRRTLType inferComparisonResult(FIRRTLType lhs, FIRRTLType rhs,
                                  std::optional<Location> loc);
 FIRRTLType inferReductionResult(FIRRTLType arg, std::optional<Location> loc);
+FIRRTLType inferVecReductionResult(FIRRTLType arg, std::optional<Location> loc);
 
 // Common vector type inference functions.
 FIRRTLType inferVecAddSubResult(FIRRTLType lhs, FIRRTLType rhs,

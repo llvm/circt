@@ -4784,6 +4784,12 @@ FIRRTLType impl::inferReductionResult(FIRRTLType input,
   return UIntType::get(input.getContext(), 1, isConst(input));
 }
 
+FIRRTLType impl::inferVecReductionResult(FIRRTLType input,
+                                      std::optional<Location> loc) {
+  return cast<FVectorType>(input).getElementType();
+}
+
+
 //===----------------------------------------------------------------------===//
 // Other Operations
 //===----------------------------------------------------------------------===//
@@ -5396,10 +5402,13 @@ void AddVecOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 void AndPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
-void AndVecOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+void AndRPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
-void AndRPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+void AndRVecOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void AndVecOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 void AsAsyncResetPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
@@ -5516,10 +5525,13 @@ void OpenSubindexOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 void OrPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
-void OrVecOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+void OrRPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
-void OrRPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+void OrRVecOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void OrVecOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 void PadPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
@@ -5574,10 +5586,13 @@ void UninferredResetCastOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 void XorPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
-void XorVecOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+void XorRPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
-void XorRPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+void XorRVecOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void XorVecOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 

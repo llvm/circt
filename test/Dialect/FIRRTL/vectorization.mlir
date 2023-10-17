@@ -26,5 +26,16 @@ firrtl.module @ElementWise(in %a: !firrtl.vector<uint<1>, 2>, in %b: !firrtl.vec
   %12 = firrtl.vectorcreate %10, %11 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.vector<uint<1>, 2>
   firrtl.strictconnect %c_2, %12 : !firrtl.vector<uint<1>, 2>
 }
+
+firrtl.module @reduce(in %a: !firrtl.vector<uint<4>, 3>, out %b: !firrtl.uint<4>) {
+  %0 = firrtl.subindex %a[1] : !firrtl.vector<uint<4>, 3>
+  %1 = firrtl.subindex %a[0] : !firrtl.vector<uint<4>, 3>
+  %2 = firrtl.subindex %a[2] : !firrtl.vector<uint<4>, 3>
+  %3 = firrtl.or %0, %1 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  %4 = firrtl.or %3, %2 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  firrtl.strictconnect %b, %4 : !firrtl.uint<4>
+// CHECK: %0 = firrtl.vec.orr %a : (!firrtl.vector<uint<4>, 3>) -> !firrtl.uint<4>
+// CHECK:      firrtl.strictconnect %b, %0 : !firrtl.uint<4>
 }
 
+}
