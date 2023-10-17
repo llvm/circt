@@ -4785,10 +4785,9 @@ FIRRTLType impl::inferReductionResult(FIRRTLType input,
 }
 
 FIRRTLType impl::inferVecReductionResult(FIRRTLType input,
-                                      std::optional<Location> loc) {
+                                         std::optional<Location> loc) {
   return cast<FVectorType>(input).getElementType();
 }
-
 
 //===----------------------------------------------------------------------===//
 // Other Operations

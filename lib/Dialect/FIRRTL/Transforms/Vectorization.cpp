@@ -70,13 +70,15 @@ public:
 
 template <typename OpTy, typename ResultOpType>
 class ChainedReducer : public mlir::RewritePattern {
-  public:
+public:
   ChainedReducer(MLIRContext *context)
       : RewritePattern(OpTy::getOperationName(), 0, context) {}
 
-  bool recurse(OpTy root, Value vec, DenseSet<size_t>& indexes) const {
-    auto lhsSub = dyn_cast_or_null<SubindexOp>(root->getOperand(0).getDefiningOp());
-    auto rhsSub = dyn_cast_or_null<SubindexOp>(root->getOperand(1).getDefiningOp());
+  bool recurse(OpTy root, Value vec, DenseSet<size_t> &indexes) const {
+    auto lhsSub =
+        dyn_cast_or_null<SubindexOp>(root->getOperand(0).getDefiningOp());
+    auto rhsSub =
+        dyn_cast_or_null<SubindexOp>(root->getOperand(1).getDefiningOp());
     auto lhsOp = dyn_cast<OpTy>(root->getOperand(0).getDefiningOp());
     auto rhsOp = dyn_cast<OpTy>(root->getOperand(1).getDefiningOp());
     // op(subindex(vec,x), op_chain);
@@ -90,7 +92,8 @@ class ChainedReducer : public mlir::RewritePattern {
       indexes.insert(rhsSub.getIndex());
       return recurse(lhsOp, vec, indexes);
     }
-    if (lhsSub && rhsSub && lhsSub.getInput() == vec && rhsSub.getInput() == vec) {
+    if (lhsSub && rhsSub && lhsSub.getInput() == vec &&
+        rhsSub.getInput() == vec) {
       indexes.insert(lhsSub.getIndex());
       indexes.insert(rhsSub.getIndex());
       return true;
@@ -103,24 +106,30 @@ class ChainedReducer : public mlir::RewritePattern {
                   mlir::PatternRewriter &rewriter) const override {
     auto root = cast<OpTy>(op);
     // Try each recursion in turn
-    if (auto lhsSub = dyn_cast_or_null<SubindexOp>(root->getOperand(0).getDefiningOp())) {
+    if (auto lhsSub =
+            dyn_cast_or_null<SubindexOp>(root->getOperand(0).getDefiningOp())) {
       DenseSet<size_t> indexes;
       if (recurse(root, lhsSub.getInput(), indexes) &&
-          indexes.size() == firrtl::type_cast<FVectorType>(lhsSub.getInput().getType()).getNumElements()) {
-            rewriter.replaceOpWithNewOp<ResultOpType>(op, lhsSub.getInput());
-            return success();
+          indexes.size() ==
+              firrtl::type_cast<FVectorType>(lhsSub.getInput().getType())
+                  .getNumElements()) {
+        rewriter.replaceOpWithNewOp<ResultOpType>(op, lhsSub.getInput());
+        return success();
       }
     }
-        if (auto rhsSub = dyn_cast_or_null<SubindexOp>(root->getOperand(1).getDefiningOp())) {
+    if (auto rhsSub =
+            dyn_cast_or_null<SubindexOp>(root->getOperand(1).getDefiningOp())) {
       DenseSet<size_t> indexes;
       if (recurse(root, rhsSub.getInput(), indexes) &&
-          indexes.size() == firrtl::type_cast<FVectorType>(rhsSub.getInput().getType()).getNumElements()) {
-            rewriter.replaceOpWithNewOp<ResultOpType>(op, rhsSub.getInput());
-            return success();
+          indexes.size() ==
+              firrtl::type_cast<FVectorType>(rhsSub.getInput().getType())
+                  .getNumElements()) {
+        rewriter.replaceOpWithNewOp<ResultOpType>(op, rhsSub.getInput());
+        return success();
       }
     }
     return failure();
-                  }
+  }
 };
 
 struct VectorizationPass : public VectorizationBase<VectorizationPass> {
@@ -149,9 +158,7 @@ void VectorizationPass::runOnOperation() {
                   VectorCreateToLogicElementwise<NEQPrimOp, NEQVecOp>,
                   ChainedReducer<OrPrimOp, OrRVecOp>,
                   ChainedReducer<AndPrimOp, AndRVecOp>,
-                  ChainedReducer<XorPrimOp, XorRVecOp>
-                  >(
-      &getContext());
+                  ChainedReducer<XorPrimOp, XorRVecOp>>(&getContext());
   mlir::FrozenRewritePatternSet frozenPatterns(std::move(patterns));
   (void)applyPatternsAndFoldGreedily(getOperation(), frozenPatterns);
 }
