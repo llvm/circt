@@ -4,9 +4,10 @@
 from pycde import (Clock, Input, InputChannel, OutputChannel, Module, generator,
                    types)
 from pycde import esi
-from pycde.common import Output
+from pycde.common import Output, RecvBundle, SendBundle
 from pycde.constructs import Wire
-from pycde.types import Bits, Channel, ChannelSignaling, UInt, ClockType
+from pycde.types import (Bits, Bundle, BundledChannel, Channel,
+                         ChannelDirection, ChannelSignaling, UInt, ClockType)
 from pycde.testing import unittestmodule
 from pycde.signals import BitVectorSignal, ChannelSignal
 
@@ -281,3 +282,41 @@ class FlattenPureTest(esi.PureModule):
   @generator
   def build(self):
     esi.PureModule.input_port("a", types.channel(ExStruct))
+
+
+Bundle1 = Bundle([
+    BundledChannel("req", ChannelDirection.TO, types.channel(types.i32)),
+    BundledChannel("resp", ChannelDirection.FROM, types.channel(types.i1)),
+])
+# CHECK: Bundle<[('req', ChannelDirection.TO, Channel<Bits<32>, ValidReady>), ('resp', ChannelDirection.FROM, Channel<Bits<1>, ValidReady>)]>
+print(Bundle1)
+
+
+# CHECK-LABEL:  hw.module @SendBundleTest(in %s1_in : !esi.channel<i32>, out b_send : !esi.bundle<[!esi.channel<i32> to "req", !esi.channel<i1> from "resp"]>, out i1_out : !esi.channel<i1>) attributes {output_file = #hw.output_file<"SendBundleTest.sv", includeReplicatedOps>} {
+# CHECK-NEXT:     %bundle, %resp = esi.bundle.pack %s1_in : !esi.bundle<[!esi.channel<i32> to "req", !esi.channel<i1> from "resp"]>
+# CHECK-NEXT:     hw.output %bundle, %resp : !esi.bundle<[!esi.channel<i32> to "req", !esi.channel<i1> from "resp"]>, !esi.channel<i1>
+@unittestmodule()
+class SendBundleTest(Module):
+  b_send = SendBundle(Bundle1)
+  s1_in = InputChannel(types.i32)
+  i1_out = OutputChannel(types.i1)
+
+  @generator
+  def build(self):
+    (self.b_send, from_chans) = Bundle1.pack(req=self.s1_in)
+    self.i1_out = from_chans['resp']
+
+
+# CHECK-LABEL:  hw.module @RecvBundleTest(in %b_recv : !esi.bundle<[!esi.channel<i32> to "req", !esi.channel<i1> from "resp"]>, in %i1_in : !esi.channel<i1>, out s1_out : !esi.channel<i32>) attributes {output_file = #hw.output_file<"RecvBundleTest.sv", includeReplicatedOps>} {
+# CHECK-NEXT:     %req = esi.bundle.unpack %i1_in from %b_recv : !esi.bundle<[!esi.channel<i32> to "req", !esi.channel<i1> from "resp"]>
+# CHECK-NEXT:     hw.output %req : !esi.channel<i32>
+@unittestmodule()
+class RecvBundleTest(Module):
+  b_recv = RecvBundle(Bundle1)
+  s1_out = OutputChannel(types.i32)
+  i1_in = InputChannel(types.i1)
+
+  @generator
+  def build(self):
+    to_channels = self.b_recv.unpack(resp=self.i1_in)
+    self.s1_out = to_channels['req']
