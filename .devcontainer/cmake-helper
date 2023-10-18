@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+
+set -e
+
+# Calls CMake, loading arguments from devcontainer settings to maintain a single source of truth.
+
+PROJECT_NAME=circel
+
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+PROJECT_ROOT=$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel)
+
+LLVM_DIR=${LLVM_DIR:-${PROJECT_ROOT}/llvm/llvm}
+CMAKE_HELPER_BUILD_DIR=${CMAKE_HELPER_BUILD_DIR:-$PROJECT_ROOT/build/$PROJECT_NAME}
+
+case "$1" in
+  "print-configure-args")
+    shift 1 # Remove "print-configure-args" from the arguments
+
+    if [[ $# -ne 0 ]]; then
+      echo "Usage: $0 print-configure-args"
+      echo "  Prints the arguments that would be passed to CMake."
+      echo "  Takes no arguments."
+      exit 1;
+    fi
+
+    VSCODE_SETTINGS_FILE=${VSCODE_SETTINGS_FILE:-$PROJECT_ROOT/.vscode/settings.json}
+    if ! sed 's@//.*@@' < "$VSCODE_SETTINGS_FILE" | jq . > /dev/null; then
+      echo "Error: $VSCODE_SETTINGS_FILE is not a valid JSON file."
+      exit 1
+    fi
+
+    # If specified, sets the CMAKE_{C,CXX}_COMPILER variables as specified in the CMake Tools kits file.
+    CMAKE_TOOLS_KITS_FILE=${CMAKE_TOOLS_KITS_FILE:-}
+    CMAKE_TOOLS_KITS_FILE_INDEX=${CMAKE_TOOLS_KITS_FILE_INDEX:-0}
+    if [[ -n "$CMAKE_TOOLS_KITS_FILE" ]]; then
+      if ! jq . < "$CMAKE_TOOLS_KITS_FILE" > /dev/null; then
+        echo "Error: $CMAKE_TOOLS_KITS_FILE is not a valid JSON file."
+        exit 1
+      fi
+    fi
+    
+    set -e
+    echo "-DCMAKE_BUILD_TYPE=Debug"
+    sed 's@//.*@@' < "$VSCODE_SETTINGS_FILE" | \
+      sed "s@\${[A-Za-z]*orkspaceFolder}@$PROJECT_ROOT@" | \
+      jq -jr '"\"\(.["cmake.configureArgs"] | join("\" \""))\" -G \(.["cmake.generator"]) "'
+    if [[ -n "$CMAKE_TOOLS_KITS_FILE" ]]; then
+        jq -r ".[$CMAKE_TOOLS_KITS_FILE_INDEX].compilers | \"-DCMAKE_C_COMPILER=\(.C) -DCMAKE_CXX_COMPILER=\(.CXX)\"" < "$CMAKE_TOOLS_KITS_FILE"
+    fi
+    echo "$@"
+
+    ;;
+  "configure")
+    shift 1 # Remove "configure" from the arguments
+
+    (
+      set -x
+      "${BASH_SOURCE[0]}" print-configure-args | xargs cmake \
+        "-S$LLVM_DIR" \
+        "-B$CMAKE_HELPER_BUILD_DIR"
+    )
+    (
+      cd "$PROJECT_ROOT/build"
+      rm -f compile_commands.json
+      ln -s "$PROJECT_NAME/compile_commands.json" compile_commands.json
+    )
+    ;;
+  "build"|"test")
+    TASK_KIND=$1
+    shift 1 # Remove "build" or "test" from the arguments
+
+    if [[ $# -eq 0 ]]; then
+      TASKS_JSON=".vscode/tasks.json"
+      if ! jq . < "$PROJECT_ROOT/$TASKS_JSON" > /dev/null; then
+        echo "Error: $TASKS_JSON is not a valid JSON file."
+        exit 1
+      fi
+      while IFS="=" read -r next; do
+        TARGETS+=("$next")
+      done < <(jq -r "[.tasks[] | select(.group | .kind == \"$TASK_KIND\" and .isDefault)][0] | .targets | join(\"\n\")" < "$PROJECT_ROOT/$TASKS_JSON")
+    else
+      TARGETS=("$@")
+    fi
+
+    set -x
+    cmake \
+      --build "$CMAKE_HELPER_BUILD_DIR" \
+      --target "${TARGETS[@]}" --
+    ;;
+  *)
+    echo "Usage: $0 [configure|build|test]"
+    exit 1
+    ;;
+esac

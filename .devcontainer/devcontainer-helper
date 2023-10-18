@@ -1,0 +1,54 @@
+#!/bin/bash
+
+set -e
+
+PROJECT_ROOT=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )/.." &> /dev/null && pwd )
+cd "$PROJECT_ROOT" || exit 1
+
+print_help() {
+  cat <<- EOF
+    Usage: devcontainer-helpe --make-singular <devcontainer-name>
+                              --clean
+    
+    The devcontainer/ci GitHub action does not support named devcontainers (i.e. ones located in subfolders of .devcontainer), so this script makes the selected devcontainer the singular devcontainer in the repo.
+EOF
+}
+
+case "$1" in
+  "--help")
+    print_help
+    ;;
+
+  "--make-singular")
+    DEVCONTAINER_NAME=$2
+    if [ -z "$DEVCONTAINER_NAME" ]; then
+      print_help
+      exit 1
+    fi
+    
+    if [[ ! -d ".actual-devcontainer" ]]; then
+      mv .devcontainer .actual-devcontainer
+    else 
+      rm -rf .devcontainer
+    fi
+
+    cp -R ".actual-devcontainer/$DEVCONTAINER_NAME" .devcontainer/
+    cp -R ".actual-devcontainer/$DEVCONTAINER_NAME" .devcontainer/
+    cp -R ".actual-devcontainer/devcontainer-helper" .devcontainer/
+    ;;
+
+  "--clean")
+    if [[ ! -d ".actual-devcontainer" ]]; then
+      echo "No singular devcontainer to clean"
+      exit 1
+    fi
+
+    rm -rf .devcontainer
+    mv .actual-devcontainer .devcontainer
+    ;;
+
+  *)
+    print_help
+    exit 1
+    ;;  
+esac

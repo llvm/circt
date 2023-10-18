@@ -1,0 +1,70 @@
+{
+  // -- CMake Tools
+  "cmake.sourceDirectory": "${workspaceFolder}/llvm/llvm",
+  "cmake.buildDirectory": "${workspaceFolder}/build/circt",
+  "cmake.installPrefix": "/usr/local",
+  "cmake.configureOnOpen": false,
+  "cmake.configureOnEdit": false,
+  "cmake.generator": "Ninja",
+  "cmake.configureArgs": [
+    // CMAKE
+    "-DCMAKE_WARN_DEPRECATED=OFF",
+    "-DCMAKE_C_COMPILER_LAUNCHER=ccache",
+    "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache",
+
+    // LLVM
+    "-DLLVM_ENABLE_ASSERTIONS=ON",
+    "-DLLVM_ENABLE_PROJECTS=mlir",
+    "-DLLVM_TARGETS_TO_BUILD=host",
+    "-DLLVM_BUILD_EXAMPLES=OFF",
+    "-DLLVM_ENABLE_OCAMLDOC=OFF",
+    "-DLLVM_ENABLE_BINDINGS=OFF",
+    "-DLLVM_ENABLE_MODULES=OFF",
+    "-DLLVM_USE_SANITIZER=",
+
+    // LLVM (performance)
+    "-DLLVM_USE_LINKER=lld-17",
+    "-DLLVM_OPTIMIZED_TABLEGEN=ON",
+    "-DLLVM_USE_SPLIT_DWARF=ON",
+
+    // CIRCT
+    "-DLLVM_EXTERNAL_PROJECTS=circt",
+    "-DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=${workspaceFolder}",
+    "-DCIRCT_LLHD_SIM_ENABLED=OFF"
+  ],
+
+  // -- Clangd Settings
+  "clangd.path": "clangd-17",
+  "clangd.checkUpdates": false,
+  "clangd.onConfigChanged": "restart",
+  "clangd.arguments": [
+    "--all-scopes-completion",
+    "--compile-commands-dir=${workspaceFolder}/build/circt",
+    "--header-insertion=never",
+    "--clang-tidy",
+    "--clang-tidy-checks=*",
+    "--pch-storage=memory"
+  ],
+
+  // -- MLIR LSP Server
+  "mlir.onSettingsChanged": "restart",
+
+  // -- Metals 
+  // Metals opens some ports in the remote container that we don't need to forward to the host. This setting needs to be set `settings.json`.
+  "remote.autoForwardPorts": false,
+
+  // -- Other
+  "files.watcherExclude": {
+    "**/target": true
+  },
+  "files.exclude": {
+    "**/target": true,
+    ".bloop/*": true
+  },
+  "search.exclude": {
+    "**/.ninja_log": true,
+    "**/*.ninja": true,
+    "build/**/*.json": true,
+    "build/**/CMakeFiles": true
+  }
+}

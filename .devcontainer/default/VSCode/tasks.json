@@ -1,0 +1,32 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "type": "cmake",
+      "label": "Build CIRCT",
+      "command": "build",
+      "targets": [
+        "circt-lsp-server",
+        "firtool"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": [ ]
+    },
+    {
+      "type": "cmake",
+      "label": "Test CIRCT",
+      "command": "build",
+      "targets": [
+        "check-circt"
+      ],
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
+      "problemMatcher": [ ]
+    }
+  ]
+}

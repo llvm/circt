@@ -1,0 +1,140 @@
+name: Validate devcontainer
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  validate-devcontainer:
+    name: Validate devcontainer
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        devcontainer-name: ["default"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
+      - name: Make devcontainer '${{ matrix.devcontainer-name }}' singular
+        run: .devcontainer/devcontainer-helper --make-singular ${{ matrix.devcontainer-name }}
+
+      - name: Initialize devcontainer
+        uses: devcontainers/ci@v0.3
+        with:
+          push: never
+          runCmd: |
+            echo "Done."
+
+      # Even though devcontainers/ci should support $GITHUB_OUTPUT, it doesn't seem to work, so instead we write everything to a file that we later write to $GITHUB_OUTPUT in a non-devcontainer step.
+      - name: Get cache key parts
+        uses: devcontainers/ci@v0.3
+        with:
+          push: never
+          runCmd: |
+            git config --global --add safe.directory $PWD
+            rm -f .temporary-github-output
+            echo "llvm-hash=$(git rev-parse @:./llvm)" >> .temporary-github-output
+            . /etc/lsb-release
+            echo "ubuntu-codename=$DISTRIB_CODENAME" >> .temporary-github-output
+      - name: Export cache key parts
+        id: get-cache-key-parts
+        run: |
+          cat .temporary-github-output
+          cat .temporary-github-output >> $GITHUB_OUTPUT
+          rm .temporary-github-output
+        
+      - name: Restore ccache database
+        uses: actions/cache/restore@v3
+        with: 
+          path: ccache
+          key: circt-ccache-database-${{ steps.get-cache-key-parts.outputs.ubuntu-codename }}-${{ steps.get-cache-key-parts.outputs.llvm-hash }}-${{ hashFiles('.devcontainer/**') }}
+          restore-keys: |
+            circt-ccache-database-${{ steps.get-cache-key-parts.outputs.ubuntu-codename }}-${{ steps.get-cache-key-parts.outputs.llvm-hash }}-
+            circt-ccache-database-${{ steps.get-cache-key-parts.outputs.ubuntu-codename }}-${{ steps.get-cache-key-parts.outputs.llvm-hash }}-
+            circt-ccache-database-${{ steps.get-cache-key-parts.outputs.ubuntu-codename }}-
+      
+      - name: Initialize ccache
+        uses: devcontainers/ci@v0.3
+        with:
+          # We configure ccache to not evict anything during compilation, and we perform a cleanup after compilation completes
+          push: never
+          runCmd: |
+            date +%s > .workflow-start-seconds
+            export CCACHE_DIR=$PWD/ccache
+            ccache -M 1600GB
+            ccache -sv
+            ccache -z
+
+      - name: Configure CMake Project
+        uses: devcontainers/ci@v0.3
+        with:
+          push: never
+          runCmd: |
+            export CCACHE_DIR=$PWD/ccache
+            git config --global --add safe.directory $PWD
+            ./.devcontainer/cmake-helper configure
+
+      # We run the build, once to check the targets and once to log the errors without any progress logs cluttering the output (since it is a trivial incremental build). Please take care to make sure the following two steps stay in sync.
+      - name: Check targets
+        id: check-targets
+        uses: devcontainers/ci@v0.3
+        with:
+          push: never
+          runCmd: |
+            export CCACHE_DIR=$PWD/ccache
+            git config --global --add safe.directory $PWD
+            ./.devcontainer/cmake-helper build
+            ./.devcontainer/cmake-helper test
+
+      - name: Log errors in a separate task
+        if: failure() && steps.check-targets.outcome == 'failure'
+        uses: devcontainers/ci@v0.3
+        with:
+          push: never
+          runCmd: |
+            export CCACHE_DIR=$PWD/ccache
+            git config --global --add safe.directory $PWD
+            ./.devcontainer/cmake-helper build
+            ./.devcontainer/cmake-helper test
+
+      - name: Clean up ccache
+        uses: devcontainers/ci@v0.3
+        with:
+          push: never
+          runCmd: |
+            export CCACHE_DIR=$PWD/ccache
+            ccache -sv
+            ccache -M 1GB
+            ccache --cleanup
+            ccache -sv
+      # Save the cache prior to pruning it
+      - name: Save ccache database
+        uses: actions/cache/save@v3
+        if: steps.check-targets.outcome == 'success'
+        with: 
+          path: ccache
+          key: circt-ccache-database-${{ steps.get-cache-key-parts.outputs.ubuntu-codename }}-${{ steps.get-cache-key-parts.outputs.llvm-hash }}-${{ hashFiles('.devcontainer/**') }}
+      # If evicting everything that wasn't used this workflow does not reduce the cache past its maximum, it may benefit performance to increase the cache size.
+      - name: Log ccache estimated usage
+        uses: devcontainers/ci@v0.3
+        with:
+          push: never
+          runCmd: |
+            export CCACHE_DIR=$PWD/ccache
+            ccache --evict-older-than $(($(date +%s) - $(cat .workflow-start-seconds)))s
+            ccache -sv
+            rm .workflow-start-seconds
+      - name: Check that repository is clean
+        uses: devcontainers/ci@v0.3
+        with:
+          push: never
+          runCmd: |
+            git config --global --add safe.directory $PWD
+            .devcontainer/devcontainer-helper --clean
+            git diff --exit-code
