@@ -9,6 +9,8 @@
 // vector_create (or a[0], b[0]), (or a[1], b[1]), (or a[2], b[2])
 // => elementwise_or a, b
 //
+// This has to be replaced with a single pass over the IR which computes use
+// summaries of vectors.
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
@@ -79,8 +81,8 @@ public:
         dyn_cast_or_null<SubindexOp>(root->getOperand(0).getDefiningOp());
     auto rhsSub =
         dyn_cast_or_null<SubindexOp>(root->getOperand(1).getDefiningOp());
-    auto lhsOp = dyn_cast<OpTy>(root->getOperand(0).getDefiningOp());
-    auto rhsOp = dyn_cast<OpTy>(root->getOperand(1).getDefiningOp());
+    auto lhsOp = dyn_cast_or_null<OpTy>(root->getOperand(0).getDefiningOp());
+    auto rhsOp = dyn_cast_or_null<OpTy>(root->getOperand(1).getDefiningOp());
     // op(subindex(vec,x), op_chain);
     // op(op_chain, subindex(vec,x))
     // op(subindex(vec,x), subindex(vec,y))
