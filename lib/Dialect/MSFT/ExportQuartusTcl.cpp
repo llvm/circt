@@ -94,7 +94,7 @@ struct TclOutputState {
   SmallVector<Attribute> symbolRefs;
 
   void emit(PhysLocationAttr);
-  LogicalResult emitLocationAssignment(DynInstDataOpInterface refOp,
+  LogicalResult emitLocationAssignment(UnaryDynInstDataOpInterface refOp,
                                        PhysLocationAttr,
                                        std::optional<StringRef> subpath);
 
@@ -102,19 +102,25 @@ struct TclOutputState {
   LogicalResult emit(PDPhysLocationOp loc);
   LogicalResult emit(PDRegPhysLocationOp);
   LogicalResult emit(DynamicInstanceVerbatimAttrOp attr);
+  LogicalResult emit(PDMulticycleOp op);
 
   void emitPath(hw::HierPathOp ref, std::optional<StringRef> subpath);
   void emitInnerRefPart(hw::InnerRefAttr innerRef);
 
   /// Get the HierPathOp to which the given operation is pointing. Add it to
   /// the set of used global refs.
-  HierPathOp getRefOp(DynInstDataOpInterface op) {
-    auto ref = dyn_cast_or_null<hw::HierPathOp>(
-        emitter.getDefinition(op.getPathSym()));
+  HierPathOp getRefOp(UnaryDynInstDataOpInterface op) {
+    return getRefOp(op.getLoc(), op.getPathSym());
+  }
+
+  /// Get the HierPathOp to which a given value is pointing. Add it to the
+  /// set of used global refs.
+  HierPathOp getRefOp(Location loc, FlatSymbolRefAttr pathSym) {
+    auto ref = dyn_cast_or_null<hw::HierPathOp>(emitter.getDefinition(pathSym));
     if (ref)
       emitter.usedRef(ref);
     else
-      op.emitOpError("could not find hw.hierpath named ") << op.getPathSym();
+      emitError(loc, "could not find hw.hierpath named ") << pathSym;
     return ref;
   }
 };
@@ -166,7 +172,7 @@ void TclOutputState::emit(PhysLocationAttr pla) {
 /// "set_location_assignment MPDSP_X34_Y285_N0 -to
 /// $parent|fooInst|entityName(subpath)"
 LogicalResult
-TclOutputState::emitLocationAssignment(DynInstDataOpInterface refOp,
+TclOutputState::emitLocationAssignment(UnaryDynInstDataOpInterface refOp,
                                        PhysLocationAttr loc,
                                        std::optional<StringRef> subpath) {
   indent() << "set_location_assignment ";
@@ -196,6 +202,19 @@ LogicalResult TclOutputState::emit(PDRegPhysLocationOp locs) {
       return failure();
     os << "[" << i << "]\n";
   }
+  return success();
+}
+
+LogicalResult TclOutputState::emit(PDMulticycleOp op) {
+  indent() << "set_multicycle_path ";
+  os << "-hold 1 ";
+  os << "-setup " << op.getCycles() << " ";
+  os << "-from [get_registers {$parent|";
+  emitPath(getRefOp(op.getLoc(), op.getSourceAttr()), std::nullopt);
+  os << "}] ";
+  os << "-to [get_registers {$parent|";
+  emitPath(getRefOp(op.getLoc(), op.getDestAttr()), std::nullopt);
+  os << "}]\n";
   return success();
 }
 
@@ -299,6 +318,7 @@ LogicalResult TclEmitter::emit(Operation *hwMod, StringRef outputFile) {
               .Case([&](PDPhysLocationOp op) { return state.emit(op); })
               .Case([&](PDRegPhysLocationOp op) { return state.emit(op); })
               .Case([&](PDPhysRegionOp op) { return state.emit(op); })
+              .Case([&](PDMulticycleOp op) { return state.emit(op); })
               .Case([&](DynamicInstanceVerbatimAttrOp op) {
                 return state.emit(op);
               })

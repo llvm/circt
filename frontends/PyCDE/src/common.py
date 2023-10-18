@@ -7,7 +7,7 @@ from __future__ import annotations
 from .circt.dialects import esi
 from .circt import ir
 
-from .types import Type, Channel, ChannelSignaling, ClockType, Bits
+from .types import Type, Bundle, Channel, ChannelSignaling, ClockType, Bits
 
 from functools import singledispatchmethod
 
@@ -41,6 +41,13 @@ class OutputChannel(Output):
     super().__init__(type, name)
 
 
+class SendBundle(Output):
+  """Create an ESI bundle output port (aka sending port)."""
+
+  def __init__(self, bundle: Bundle, name: str = None):
+    super().__init__(bundle, name)
+
+
 class Input(ModuleDecl):
   """Create an RTL-level input port."""
 
@@ -68,6 +75,13 @@ class InputChannel(Input):
                name: str = None):
     type = Channel(type, signaling)
     super().__init__(type, name)
+
+
+class RecvBundle(Input):
+  """Create an ESI bundle input port (aka receiving port)."""
+
+  def __init__(self, bundle: Bundle, name: str = None):
+    super().__init__(bundle, name)
 
 
 class AppID:

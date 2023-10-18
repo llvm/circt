@@ -1549,6 +1549,12 @@ SmallVector<PortInfo> InstanceOp::getPortList() {
   auto argNames = (*this)->getAttrOfType<ArrayAttr>("argNames");
   auto argTypes = getModuleType(*this).getInputs();
   auto argLocs = (*this)->getAttrOfType<ArrayAttr>("argLocs");
+
+  auto resultNames = (*this)->getAttrOfType<ArrayAttr>("resultNames");
+  auto resultTypes = getModuleType(*this).getResults();
+  auto resultLocs = (*this)->getAttrOfType<ArrayAttr>("resultLocs");
+
+  ports.reserve(argTypes.size() + resultTypes.size());
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
     auto type = argTypes[i];
     auto direction = ModulePort::Direction::Input;
@@ -1565,9 +1571,6 @@ SmallVector<PortInfo> InstanceOp::getPortList() {
         {{argNames[i].cast<StringAttr>(), type, direction}, i, emptyDict, loc});
   }
 
-  auto resultNames = (*this)->getAttrOfType<ArrayAttr>("resultNames");
-  auto resultTypes = getModuleType(*this).getResults();
-  auto resultLocs = (*this)->getAttrOfType<ArrayAttr>("resultLocs");
   for (unsigned i = 0, e = resultTypes.size(); i < e; ++i) {
     LocationAttr loc;
     if (resultLocs)

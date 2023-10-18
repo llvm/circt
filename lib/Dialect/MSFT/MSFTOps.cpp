@@ -248,5 +248,22 @@ LogicalResult LinearOp::verify() {
   return success();
 }
 
+//===----------------------------------------------------------------------===//
+// PDMulticycleOp
+//===----------------------------------------------------------------------===//
+
+Operation *PDMulticycleOp::getTopModule(hw::HWSymbolCache &cache) {
+  // Both symbols should reference the same top-level module in their respective
+  // HierPath ops.
+  Operation *srcTop = getHierPathTopModule(getLoc(), cache, getSourceAttr());
+  Operation *dstTop = getHierPathTopModule(getLoc(), cache, getDestAttr());
+  if (srcTop != dstTop) {
+    emitOpError("source and destination paths must refer to the same top-level "
+                "module.");
+    return nullptr;
+  }
+  return srcTop;
+}
+
 #define GET_OP_CLASSES
 #include "circt/Dialect/MSFT/MSFT.cpp.inc"

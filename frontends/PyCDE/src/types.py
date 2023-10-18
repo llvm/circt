@@ -8,9 +8,10 @@ from .support import get_user_loc
 
 from .circt import ir, support
 from .circt.dialects import esi, hw, seq, sv
-from .circt.dialects.esi import ChannelSignaling
+from .circt.dialects.esi import ChannelSignaling, ChannelDirection
 
 import typing
+from dataclasses import dataclass
 
 
 class _Types:
@@ -153,6 +154,8 @@ def _FromCirctType(type: typing.Union[ir.Type, Type]) -> Type:
     return Type.__new__(Any, type)
   if isinstance(type, esi.ChannelType):
     return Type.__new__(Channel, type)
+  if isinstance(type, esi.BundleType):
+    return Type.__new__(Bundle, type)
   if isinstance(type, esi.ListType):
     return Type.__new__(List, type)
   return Type(type)
@@ -559,6 +562,79 @@ class Channel(Type):
       return wrap_op[0], wrap_op[1]
     else:
       raise TypeError("Unknown signaling standard")
+
+
+@dataclass
+class BundledChannel:
+  """A named, directed channel for inclusion in a bundle."""
+  name: str
+  direction: ChannelDirection
+  channel: Channel
+
+  def __repr__(self) -> str:
+    return f"('{self.name}', {str(self.direction)}, {self.channel})"
+
+
+class Bundle(Type):
+  """A group of named, directed channels. Typically used in a service."""
+
+  def __new__(cls, channels: typing.List[BundledChannel]):
+    type = esi.BundleType.get(
+        [(bc.name, bc.direction, bc.channel._type) for bc in channels], False)
+    return super(Bundle, cls).__new__(cls, type)
+
+  def _get_value_class(self):
+    from .signals import BundleSignal
+    return BundleSignal
+
+  @property
+  def channels(self):
+    return [
+        BundledChannel(name, dir, _FromCirctType(type))
+        for (name, dir, type) in self._type.channels
+    ]
+
+  def __repr__(self):
+    return f"Bundle<{self.channels}>"
+
+  def pack(
+      self, **kwargs: typing.Dict[str, "ChannelSignal"]
+  ) -> ("BundleSignal", typing.Dict[str, "ChannelSignal"]):
+    """Pack a dict of TO channels into a bundle. Returns the bundle AND a dict
+    of all the FROM channels."""
+
+    from .signals import BundleSignal, _FromCirctValue
+    to_channels = {
+        bc.name: (idx, bc) for idx, bc in enumerate(
+            filter(lambda c: c.direction == ChannelDirection.TO, self.channels))
+    }
+    from_channels = [
+        c for c in self.channels if c.direction == ChannelDirection.FROM
+    ]
+
+    operands = [None] * len(to_channels)
+    for name, value in kwargs.items():
+      if name not in to_channels:
+        raise ValueError(f"Unknown channel name '{name}'")
+      idx, bc = to_channels[name]
+      if value.type != bc.channel:
+        raise TypeError(f"Expected channel type {bc.channel}, got {value.type} "
+                        f"on channel '{name}'")
+      operands[idx] = value.value
+      del to_channels[name]
+    if len(to_channels) > 0:
+      raise ValueError(f"Missing channels: {', '.join(to_channels.keys())}")
+
+    pack_op = esi.PackBundleOp(self._type,
+                               [bc.channel._type for bc in from_channels],
+                               operands)
+
+    from_channels_results = pack_op.fromChannels
+    from_channels_ret = {
+        bc.name: _FromCirctValue(from_channels_results[idx])
+        for idx, bc in enumerate(from_channels)
+    }
+    return BundleSignal(pack_op.bundle, self), from_channels_ret
 
 
 class List(Type):

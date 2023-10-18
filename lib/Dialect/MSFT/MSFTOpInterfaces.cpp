@@ -12,9 +12,10 @@
 using namespace circt;
 using namespace msft;
 
-LogicalResult circt::msft::verifyDynInstData(Operation *op) {
+LogicalResult circt::msft::verifyUnaryDynInstDataOp(Operation *op) {
   auto inst = dyn_cast<DynamicInstanceOp>(op->getParentOp());
-  FlatSymbolRefAttr pathRef = cast<DynInstDataOpInterface>(op).getPathSym();
+  FlatSymbolRefAttr pathRef =
+      cast<UnaryDynInstDataOpInterface>(op).getPathSym();
 
   if (inst && pathRef)
     return op->emitOpError("cannot both have a global ref symbol and be a "
@@ -23,6 +24,22 @@ LogicalResult circt::msft::verifyDynInstData(Operation *op) {
     return op->emitOpError("must have either a global ref symbol of belong to "
                            "a dynamic instance op");
   return success();
+}
+
+Operation *circt::msft::getHierPathTopModule(Location loc,
+                                             circt::hw::HWSymbolCache &symCache,
+                                             FlatSymbolRefAttr pathSym) {
+  assert(pathSym && "pathSym must be non-null");
+  auto ref = dyn_cast_or_null<hw::HierPathOp>(symCache.getDefinition(pathSym));
+  if (!ref) {
+    emitError(loc) << "could not find hw.hierpath " << pathSym;
+    return nullptr;
+  }
+  if (ref.getNamepath().empty())
+    return nullptr;
+  auto modSym = FlatSymbolRefAttr::get(
+      ref.getNamepath()[0].cast<hw::InnerRefAttr>().getModule());
+  return symCache.getDefinition(modSym);
 }
 
 namespace circt {
