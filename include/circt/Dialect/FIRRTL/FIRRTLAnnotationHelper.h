@@ -446,54 +446,9 @@ struct AnnoRecord {
       applier;
 };
 
-/// A helper struct to lower annotations.
-struct LowerAnnotationsDriver {
-  LowerAnnotationsDriver(CircuitOp circuit, InstanceGraph *instanceGraph,
-                         const llvm::StringMap<AnnoRecord> &annotationRecords,
-                         bool ignoreAnnotationClassless,
-                         bool ignoreAnnotationUnknown, bool noRefTypePorts)
-      : circuit(circuit), instanceGraph(instanceGraph),
-        annotationRecords(annotationRecords),
-        ignoreAnnotationClassless(ignoreAnnotationClassless),
-        ignoreAnnotationUnknown(ignoreAnnotationUnknown),
-        noRefTypePorts(noRefTypePorts) {}
-
-  /// Run the main procedure.
-  bool run();
-
-  LogicalResult applyAnnotation(DictionaryAttr anno, ApplyState &state);
-  LogicalResult legacyToWiringProblems(ApplyState &state);
-  LogicalResult solveWiringProblems(ApplyState &state);
-
-  int64_t getNumFailures() const { return numFailures; }
-  int64_t getNumRawAnnotations() const { return numRawAnnotations; }
-  int64_t getNumAddedAnnos() const { return numAddedAnnos; }
-  int64_t getNumReusedHierPathOps() const { return numReusedHierPathOps; }
-  int64_t getNumUnhandled() const { return numUnhandled; }
-  int64_t getNumAnnos() const { return numAnnos; }
-
-private:
-  CircuitOp circuit;
-  InstanceGraph *instanceGraph;
-
-  // A map from annotation classes to annotation records.
-  const llvm::StringMap<AnnoRecord> &annotationRecords;
-
-  // Stats.
-  int64_t numRawAnnotations = 0;
-  int64_t numAddedAnnos = 0;
-  int64_t numAnnos = 0;
-  int64_t numReusedHierPathOps = 0;
-  int64_t numUnhandled = 0;
-  int64_t numFailures = 0;
-
-  // Options.
-  bool ignoreAnnotationClassless;
-  bool ignoreAnnotationUnknown;
-  bool noRefTypePorts;
-
-  SmallVector<DictionaryAttr> worklistAttrs;
-};
+/// Register external annotation records.
+LogicalResult registerAnnotationRecord(StringRef annoClass,
+                                       AnnoRecord annoRecord);
 
 ///===----------------------------------------------------------------------===//
 /// Standard Utility Resolvers
