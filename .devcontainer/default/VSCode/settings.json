@@ -49,18 +49,7 @@
   // -- MLIR LSP Server
   "mlir.onSettingsChanged": "restart",
 
-  // -- Metals 
-  // Metals opens some ports in the remote container that we don't need to forward to the host. This setting needs to be set `settings.json`.
-  "remote.autoForwardPorts": false,
-
   // -- Other
-  "files.watcherExclude": {
-    "**/target": true
-  },
-  "files.exclude": {
-    "**/target": true,
-    ".bloop/*": true
-  },
   "search.exclude": {
     "**/.ninja_log": true,
     "**/*.ninja": true,
