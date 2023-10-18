@@ -34,7 +34,7 @@ case "$1" in
 
     cp -R ".actual-devcontainer/$DEVCONTAINER_NAME" .devcontainer/
     cp -R ".actual-devcontainer/$DEVCONTAINER_NAME" .devcontainer/
-    cp -R ".actual-devcontainer/devcontainer-helper" .devcontainer/
+    cp .actual-devcontainer/{devcontainer,cmake}-helper .devcontainer/
     ;;
 
   "--clean")
