@@ -43,7 +43,6 @@ jobs:
           # Base ref is the target branch, in text form (not hash)
           PR_BASE: ${{ github.base_ref }}
         run: |
-          # Run clang-format
           if [ -z "$PR_BASE" ]; then
             DIFF_COMMIT_NAME="HEAD^"
           else
@@ -73,6 +72,10 @@ jobs:
         run: |
           # Run clang-format
           git clang-format $DIFF_COMMIT
+          
+          # clang-format unnecessarily formats some JSON in this directory, and disagrees with VSCode's formatting rules
+          git checkout HEAD -- .devcontainer
+
           git diff --ignore-submodules > clang-format.patch
           if [ -s clang-format.patch ]; then
             echo "Clang-format found formatting problems in the following " \
