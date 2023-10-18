@@ -39,7 +39,6 @@ LogicalResult firtool::populatePreprocessTransforms(mlir::PassManager &pm,
 
 LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
                                                   const FirtoolOptions &opt,
-                                                  ModuleOp module,
                                                   StringRef inputFilename) {
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerIntrinsicsPass());
 

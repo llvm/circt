@@ -121,8 +121,7 @@ MLIR_CAPI_EXPORTED MlirLogicalResult
 firtoolPopulatePreprocessTransforms(MlirPassManager pm, FirtoolOptions options);
 
 MLIR_CAPI_EXPORTED MlirLogicalResult firtoolPopulateCHIRRTLToLowFIRRTL(
-    MlirPassManager pm, FirtoolOptions options, MlirModule module,
-    MlirStringRef inputFilename);
+    MlirPassManager pm, FirtoolOptions options, MlirStringRef inputFilename);
 
 MLIR_CAPI_EXPORTED MlirLogicalResult
 firtoolPopulateLowFIRRTLToHW(MlirPassManager pm, FirtoolOptions options);

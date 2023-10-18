@@ -322,7 +322,6 @@ LogicalResult populatePreprocessTransforms(mlir::PassManager &pm,
 
 LogicalResult populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
                                          const FirtoolOptions &opt,
-                                         ModuleOp module,
                                          StringRef inputFilename);
 
 LogicalResult populateLowFIRRTLToHW(mlir::PassManager &pm,
