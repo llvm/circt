@@ -22,7 +22,13 @@ extern "C" {
   };                                                                           \
   typedef struct name name
 
-DEFINE_C_API_STRUCT(FirtoolOptions, void);
+DEFINE_C_API_STRUCT(FirtoolGeneralOptions, void);
+DEFINE_C_API_STRUCT(FirtoolPreprocessTransformsOptions, void);
+DEFINE_C_API_STRUCT(FirtoolCHIRRTLToLowFIRRTLOptions, void);
+DEFINE_C_API_STRUCT(FirtoolLowFIRRTLToHWOptions, void);
+DEFINE_C_API_STRUCT(FirtoolHWToSVOptions, void);
+DEFINE_C_API_STRUCT(FirtoolExportVerilogOptions, void);
+DEFINE_C_API_STRUCT(FirtoolFinalizeIROptions, void);
 
 #undef DEFINE_C_API_STRUCT
 
@@ -62,83 +68,125 @@ typedef enum FirtoolRandomKind {
   FIRTOOL_RANDOM_KIND_ALL,
 } FirtoolRandomKind;
 
-MLIR_CAPI_EXPORTED FirtoolOptions firtoolOptionsCreateDefault();
-MLIR_CAPI_EXPORTED void firtoolOptionsDestroy(FirtoolOptions options);
+#define DECLARE_FIRTOOL_OPTIONS_CREATE_DESTROY(opt)                            \
+  MLIR_CAPI_EXPORTED Firtool##opt##Options firtool##opt##OptionsCreateDefault( \
+      FirtoolGeneralOptions general);                                          \
+  MLIR_CAPI_EXPORTED void firtool##opt##OptionsDestroy(                        \
+      Firtool##opt##Options options);                                          \
+  MLIR_CAPI_EXPORTED void firtool##opt##OptionsSetGeneral(                     \
+      Firtool##opt##Options options, FirtoolGeneralOptions general);           \
+  MLIR_CAPI_EXPORTED FirtoolGeneralOptions firtool##opt##OptionsGetGeneral(    \
+      Firtool##opt##Options options);
 
-#define DECLARE_FIRTOOL_OPTION(name, type)                                     \
-  MLIR_CAPI_EXPORTED void firtoolOptionsSet##name(FirtoolOptions options,      \
-                                                  type value);                 \
-  MLIR_CAPI_EXPORTED type firtoolOptionsGet##name(FirtoolOptions options)
+#define DECLARE_FIRTOOL_OPTION(opt, name, type)                                \
+  MLIR_CAPI_EXPORTED void firtool##opt##OptionsSet##name(                      \
+      Firtool##opt##Options options, type value);                              \
+  MLIR_CAPI_EXPORTED type firtool##opt##OptionsGet##name(                      \
+      Firtool##opt##Options options)
 
-DECLARE_FIRTOOL_OPTION(OutputFilename, MlirStringRef);
-DECLARE_FIRTOOL_OPTION(DisableAnnotationsUnknown, bool);
-DECLARE_FIRTOOL_OPTION(DisableAnnotationsClassless, bool);
-DECLARE_FIRTOOL_OPTION(LowerAnnotationsNoRefTypePorts, bool);
-DECLARE_FIRTOOL_OPTION(PreserveAggregate, FirtoolPreserveAggregateMode);
-DECLARE_FIRTOOL_OPTION(PreserveValues, FirtoolPreserveValuesMode);
-DECLARE_FIRTOOL_OPTION(BuildMode, FirtoolBuildMode);
-DECLARE_FIRTOOL_OPTION(DisableOptimization, bool);
-DECLARE_FIRTOOL_OPTION(ExportChiselInterface, bool);
-DECLARE_FIRTOOL_OPTION(ChiselInterfaceOutDirectory, MlirStringRef);
-DECLARE_FIRTOOL_OPTION(VbToBv, bool);
-DECLARE_FIRTOOL_OPTION(Dedup, bool);
-DECLARE_FIRTOOL_OPTION(CompanionMode, FirtoolCompanionMode);
-DECLARE_FIRTOOL_OPTION(DisableAggressiveMergeConnections, bool);
-DECLARE_FIRTOOL_OPTION(EmitOMIR, bool);
-DECLARE_FIRTOOL_OPTION(OMIROutFile, MlirStringRef);
-DECLARE_FIRTOOL_OPTION(LowerMemories, bool);
-DECLARE_FIRTOOL_OPTION(BlackBoxRootPath, MlirStringRef);
-DECLARE_FIRTOOL_OPTION(ReplSeqMem, bool);
-DECLARE_FIRTOOL_OPTION(ReplSeqMemFile, MlirStringRef);
-DECLARE_FIRTOOL_OPTION(ExtractTestCode, bool);
-DECLARE_FIRTOOL_OPTION(IgnoreReadEnableMem, bool);
-DECLARE_FIRTOOL_OPTION(DisableRandom, FirtoolRandomKind);
-DECLARE_FIRTOOL_OPTION(OutputAnnotationFilename, MlirStringRef);
-DECLARE_FIRTOOL_OPTION(EnableAnnotationWarning, bool);
-DECLARE_FIRTOOL_OPTION(AddMuxPragmas, bool);
-DECLARE_FIRTOOL_OPTION(EmitChiselAssertsAsSVA, bool);
-DECLARE_FIRTOOL_OPTION(EmitSeparateAlwaysBlocks, bool);
-DECLARE_FIRTOOL_OPTION(EtcDisableInstanceExtraction, bool);
-DECLARE_FIRTOOL_OPTION(EtcDisableRegisterExtraction, bool);
-DECLARE_FIRTOOL_OPTION(EtcDisableModuleInlining, bool);
-DECLARE_FIRTOOL_OPTION(AddVivadoRAMAddressConflictSynthesisBugWorkaround, bool);
-DECLARE_FIRTOOL_OPTION(CkgModuleName, MlirStringRef);
-DECLARE_FIRTOOL_OPTION(CkgInputName, MlirStringRef);
-DECLARE_FIRTOOL_OPTION(CkgOutputName, MlirStringRef);
-DECLARE_FIRTOOL_OPTION(CkgEnableName, MlirStringRef);
-DECLARE_FIRTOOL_OPTION(CkgTestEnableName, MlirStringRef);
-DECLARE_FIRTOOL_OPTION(ExportModuleHierarchy, bool);
-DECLARE_FIRTOOL_OPTION(StripFirDebugInfo, bool);
-DECLARE_FIRTOOL_OPTION(StripDebugInfo, bool);
+// ========== General ==========
+
+MLIR_CAPI_EXPORTED FirtoolGeneralOptions firtoolGeneralOptionsCreateDefault();
+MLIR_CAPI_EXPORTED void
+firtoolGeneralOptionsDestroy(FirtoolGeneralOptions options);
+DECLARE_FIRTOOL_OPTION(General, DisableOptimization, bool);
+DECLARE_FIRTOOL_OPTION(General, ReplSeqMem, bool);
+DECLARE_FIRTOOL_OPTION(General, ReplSeqMemFile, MlirStringRef);
+DECLARE_FIRTOOL_OPTION(General, IgnoreReadEnableMem, bool);
+DECLARE_FIRTOOL_OPTION(General, DisableRandom, FirtoolRandomKind);
+
+// ========== PreprocessTransforms ==========
+
+DECLARE_FIRTOOL_OPTIONS_CREATE_DESTROY(PreprocessTransforms);
+DECLARE_FIRTOOL_OPTION(PreprocessTransforms, DisableAnnotationsUnknown, bool);
+DECLARE_FIRTOOL_OPTION(PreprocessTransforms, DisableAnnotationsClassless, bool);
+DECLARE_FIRTOOL_OPTION(PreprocessTransforms, LowerAnnotationsNoRefTypePorts,
+                       bool);
+
+// ========== CHIRRTLToLowFIRRTL ==========
+
+DECLARE_FIRTOOL_OPTIONS_CREATE_DESTROY(CHIRRTLToLowFIRRTL);
+DECLARE_FIRTOOL_OPTION(CHIRRTLToLowFIRRTL, PreserveValues,
+                       FirtoolPreserveValuesMode);
+DECLARE_FIRTOOL_OPTION(CHIRRTLToLowFIRRTL, PreserveAggregate,
+                       FirtoolPreserveAggregateMode);
+DECLARE_FIRTOOL_OPTION(CHIRRTLToLowFIRRTL, ExportChiselInterface, bool);
+DECLARE_FIRTOOL_OPTION(CHIRRTLToLowFIRRTL, ChiselInterfaceOutDirectory,
+                       MlirStringRef);
+DECLARE_FIRTOOL_OPTION(CHIRRTLToLowFIRRTL, DisableHoistingHWPassthrough, bool);
+DECLARE_FIRTOOL_OPTION(CHIRRTLToLowFIRRTL, Dedup, bool);
+DECLARE_FIRTOOL_OPTION(CHIRRTLToLowFIRRTL, NoDedup, bool);
+DECLARE_FIRTOOL_OPTION(CHIRRTLToLowFIRRTL, VbToBv, bool);
+DECLARE_FIRTOOL_OPTION(CHIRRTLToLowFIRRTL, LowerMemories, bool);
+DECLARE_FIRTOOL_OPTION(CHIRRTLToLowFIRRTL, CompanionMode, FirtoolCompanionMode);
+DECLARE_FIRTOOL_OPTION(CHIRRTLToLowFIRRTL, BlackBoxRootPath, MlirStringRef);
+DECLARE_FIRTOOL_OPTION(CHIRRTLToLowFIRRTL, EmitOMIR, bool);
+DECLARE_FIRTOOL_OPTION(CHIRRTLToLowFIRRTL, OMIROutFile, MlirStringRef);
+DECLARE_FIRTOOL_OPTION(CHIRRTLToLowFIRRTL, DisableAggressiveMergeConnections,
+                       bool);
+
+// ========== LowFIRRTLToHW ==========
+
+DECLARE_FIRTOOL_OPTIONS_CREATE_DESTROY(LowFIRRTLToHW);
+DECLARE_FIRTOOL_OPTION(LowFIRRTLToHW, OutputAnnotationFilename, MlirStringRef);
+DECLARE_FIRTOOL_OPTION(LowFIRRTLToHW, EnableAnnotationWarning, bool);
+DECLARE_FIRTOOL_OPTION(LowFIRRTLToHW, EmitChiselAssertsAsSVA, bool);
+
+// ========== HWToSV ==========
+
+DECLARE_FIRTOOL_OPTIONS_CREATE_DESTROY(HWToSV);
+DECLARE_FIRTOOL_OPTION(HWToSV, ExtractTestCode, bool);
+DECLARE_FIRTOOL_OPTION(HWToSV, EtcDisableInstanceExtraction, bool);
+DECLARE_FIRTOOL_OPTION(HWToSV, EtcDisableRegisterExtraction, bool);
+DECLARE_FIRTOOL_OPTION(HWToSV, EtcDisableModuleInlining, bool);
+DECLARE_FIRTOOL_OPTION(HWToSV, CkgModuleName, MlirStringRef);
+DECLARE_FIRTOOL_OPTION(HWToSV, CkgInputName, MlirStringRef);
+DECLARE_FIRTOOL_OPTION(HWToSV, CkgOutputName, MlirStringRef);
+DECLARE_FIRTOOL_OPTION(HWToSV, CkgEnableName, MlirStringRef);
+DECLARE_FIRTOOL_OPTION(HWToSV, CkgTestEnableName, MlirStringRef);
+DECLARE_FIRTOOL_OPTION(HWToSV, CkgInstName, MlirStringRef);
+DECLARE_FIRTOOL_OPTION(HWToSV, EmitSeparateAlwaysBlocks, bool);
+DECLARE_FIRTOOL_OPTION(HWToSV, AddMuxPragmas, bool);
+DECLARE_FIRTOOL_OPTION(HWToSV,
+                       AddVivadoRAMAddressConflictSynthesisBugWorkaround, bool);
+
+// ========== ExportVerilog ==========
+
+DECLARE_FIRTOOL_OPTIONS_CREATE_DESTROY(ExportVerilog);
+DECLARE_FIRTOOL_OPTION(ExportVerilog, StripFirDebugInfo, bool);
+DECLARE_FIRTOOL_OPTION(ExportVerilog, StripDebugInfo, bool);
+DECLARE_FIRTOOL_OPTION(ExportVerilog, ExportModuleHierarchy, bool);
+// Filename for ExportVerilog, directory for ExportSplitVerilog
+DECLARE_FIRTOOL_OPTION(ExportVerilog, OutputPath, MlirStringRef);
 
 #undef DECLARE_FIRTOOL_OPTION
+#undef DECLARE_FIRTOOL_OPTIONS_CREATE_DESTROY
 
 //===----------------------------------------------------------------------===//
 // Populate API.
 //===----------------------------------------------------------------------===//
 
-MLIR_CAPI_EXPORTED MlirLogicalResult
-firtoolPopulatePreprocessTransforms(MlirPassManager pm, FirtoolOptions options);
+MLIR_CAPI_EXPORTED MlirLogicalResult firtoolPopulatePreprocessTransforms(
+    MlirPassManager pm, FirtoolPreprocessTransformsOptions options);
 
 MLIR_CAPI_EXPORTED MlirLogicalResult firtoolPopulateCHIRRTLToLowFIRRTL(
-    MlirPassManager pm, FirtoolOptions options, MlirModule module,
-    MlirStringRef inputFilename);
+    MlirPassManager pm, FirtoolCHIRRTLToLowFIRRTLOptions options);
+
+MLIR_CAPI_EXPORTED MlirLogicalResult firtoolPopulateLowFIRRTLToHW(
+    MlirPassManager pm, FirtoolLowFIRRTLToHWOptions options);
 
 MLIR_CAPI_EXPORTED MlirLogicalResult
-firtoolPopulateLowFIRRTLToHW(MlirPassManager pm, FirtoolOptions options);
+firtoolPopulateHWToSV(MlirPassManager pm, FirtoolHWToSVOptions options);
 
-MLIR_CAPI_EXPORTED MlirLogicalResult
-firtoolPopulateHWToSV(MlirPassManager pm, FirtoolOptions options);
-
-MLIR_CAPI_EXPORTED MlirLogicalResult
-firtoolPopulateExportVerilog(MlirPassManager pm, FirtoolOptions options,
-                             MlirStringCallback callback, void *userData);
+MLIR_CAPI_EXPORTED MlirLogicalResult firtoolPopulateExportVerilog(
+    MlirPassManager pm, FirtoolExportVerilogOptions options,
+    MlirStringCallback callback, void *userData);
 
 MLIR_CAPI_EXPORTED MlirLogicalResult firtoolPopulateExportSplitVerilog(
-    MlirPassManager pm, FirtoolOptions options, MlirStringRef directory);
+    MlirPassManager pm, FirtoolExportVerilogOptions options);
 
 MLIR_CAPI_EXPORTED MlirLogicalResult
-firtoolPopulateFinalizeIR(MlirPassManager pm, FirtoolOptions options);
+firtoolPopulateFinalizeIR(MlirPassManager pm, FirtoolFinalizeIROptions options);
 
 #ifdef __cplusplus
 }

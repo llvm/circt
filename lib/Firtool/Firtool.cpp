@@ -23,8 +23,8 @@
 using namespace llvm;
 using namespace circt;
 
-LogicalResult firtool::populatePreprocessTransforms(mlir::PassManager &pm,
-                                                    const FirtoolOptions &opt) {
+LogicalResult firtool::populatePreprocessTransforms(
+    mlir::PassManager &pm, const FirtoolPreprocessTransformsOptions &opt) {
   // Legalize away "open" aggregates to hw-only versions.
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerOpenAggsPass());
 
@@ -37,18 +37,16 @@ LogicalResult firtool::populatePreprocessTransforms(mlir::PassManager &pm,
   return success();
 }
 
-LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
-                                                  const FirtoolOptions &opt,
-                                                  ModuleOp module,
-                                                  StringRef inputFilename) {
+LogicalResult firtool::populateCHIRRTLToLowFIRRTL(
+    mlir::PassManager &pm, const FirtoolCHIRRTLToLowFIRRTLOptions &opt) {
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerIntrinsicsPass());
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInjectDUTHierarchyPass());
 
   pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
-      firrtl::createDropNamesPass(opt.getPreserveMode()));
+      firrtl::createDropNamesPass(opt.preserveValues));
 
-  if (!opt.disableOptimization)
+  if (!opt.general->disableOptimization)
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         mlir::createCSEPass());
 
@@ -63,8 +61,8 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   // Width inference creates canonicalization opportunities.
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferWidthsPass());
 
-  pm.nest<firrtl::CircuitOp>().addPass(
-      firrtl::createMemToRegOfVecPass(opt.replSeqMem, opt.ignoreReadEnableMem));
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createMemToRegOfVecPass(
+      opt.general->replSeqMem, opt.general->ignoreReadEnableMem));
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferResetsPass());
 
@@ -80,7 +78,7 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createDropConstPass());
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createHoistPassthroughPass(
-      /*hoistHWDrivers=*/!opt.disableOptimization &&
+      /*hoistHWDrivers=*/!opt.general->disableOptimization &&
       !opt.disableHoistingHWPassthrough));
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createProbeDCEPass());
 
@@ -125,33 +123,33 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   // implementation assumes it can run at a time where every register is
   // currently in the final module it will be emitted in, all registers have
   // been created, and no registers have yet been removed.
-  if (opt.isRandomEnabled(FirtoolOptions::RandomKind::Reg))
+  if (opt.general->isRandomEnabled(RandomKind::Reg))
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         firrtl::createRandomizeRegisterInitPass());
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCheckCombLoopsPass());
 
   // If we parsed a FIRRTL file and have optimizations enabled, clean it up.
-  if (!opt.disableOptimization)
+  if (!opt.general->disableOptimization)
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         createSimpleCanonicalizerPass());
 
   // Run the infer-rw pass, which merges read and write ports of a memory with
   // mutually exclusive enables.
-  if (!opt.disableOptimization)
+  if (!opt.general->disableOptimization)
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         firrtl::createInferReadWritePass());
 
-  if (opt.replSeqMem)
+  if (opt.general->replSeqMem)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerMemoryPass());
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createPrefixModulesPass());
 
-  if (!opt.disableOptimization) {
+  if (!opt.general->disableOptimization) {
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createIMConstPropPass());
 
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createHoistPassthroughPass(
-        /*hoistHWDrivers=*/!opt.disableOptimization &&
+        /*hoistHWDrivers=*/!opt.general->disableOptimization &&
         !opt.disableHoistingHWPassthrough));
     // Cleanup after hoisting passthroughs, for separation-of-concerns.
     pm.addPass(firrtl::createIMDeadCodeElimPass());
@@ -159,8 +157,8 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
 
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createAddSeqMemPortsPass());
 
-  pm.addPass(firrtl::createCreateSiFiveMetadataPass(opt.replSeqMem,
-                                                    opt.replSeqMemFile));
+  pm.addPass(firrtl::createCreateSiFiveMetadataPass(
+      opt.general->replSeqMem, opt.general->replSeqMemFile));
 
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createExtractInstancesPass());
 
@@ -172,11 +170,8 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
       firrtl::createGrandCentralPass(opt.companionMode));
 
   // Read black box source files into the IR.
-  StringRef blackBoxRoot = opt.blackBoxRootPath.empty()
-                               ? llvm::sys::path::parent_path(inputFilename)
-                               : opt.blackBoxRootPath;
   pm.nest<firrtl::CircuitOp>().addPass(
-      firrtl::createBlackBoxReaderPass(blackBoxRoot));
+      firrtl::createBlackBoxReaderPass(opt.blackBoxRootPath));
 
   // Run SymbolDCE as late as possible, but before InnerSymbolDCE. This is for
   // hierpathop's and just for general cleanup.
@@ -188,7 +183,7 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   // The above passes, IMConstProp in particular, introduce additional
   // canonicalization opportunities that we should pick up here before we
   // proceed to output-specific pipelines.
-  if (!opt.disableOptimization) {
+  if (!opt.general->disableOptimization) {
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         createSimpleCanonicalizerPass());
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
@@ -206,24 +201,25 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   // Always run this, required for legalization.
   pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
       firrtl::createMergeConnectionsPass(
-          !opt.disableAggressiveMergeConnections.getValue()));
+          !opt.disableAggressiveMergeConnections));
 
-  if (!opt.disableOptimization)
+  if (!opt.general->disableOptimization)
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         firrtl::createVectorizationPass());
 
   return success();
 }
 
-LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
-                                             const FirtoolOptions &opt) {
+LogicalResult
+firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
+                               const FirtoolLowFIRRTLToHWOptions &opt) {
   // Remove TraceAnnotations and write their updated paths to an output
   // annotation file.
   if (opt.outputAnnotationFilename.empty())
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createResolveTracesPass());
   else
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createResolveTracesPass(
-        opt.outputAnnotationFilename.getValue()));
+    pm.nest<firrtl::CircuitOp>().addPass(
+        firrtl::createResolveTracesPass(opt.outputAnnotationFilename));
 
   // Lower the ref.resolve and ref.send ops and remove the RefType ports.
   // LowerToHW cannot handle RefType so, this pass must be run to remove all
@@ -233,12 +229,11 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerClassesPass());
 
   pm.addPass(createLowerFIRRTLToHWPass(
-      opt.enableAnnotationWarning.getValue(),
-      opt.emitChiselAssertsAsSVA.getValue(),
-      !opt.isRandomEnabled(FirtoolOptions::RandomKind::Mem),
-      !opt.isRandomEnabled(FirtoolOptions::RandomKind::Reg)));
+      opt.enableAnnotationWarning, opt.emitChiselAssertsAsSVA,
+      !opt.general->isRandomEnabled(RandomKind::Mem),
+      !opt.general->isRandomEnabled(RandomKind::Reg)));
 
-  if (!opt.disableOptimization) {
+  if (!opt.general->disableOptimization) {
     auto &modulePM = pm.nest<hw::HWModuleOp>();
     modulePM.addPass(mlir::createCSEPass());
     modulePM.addPass(createSimpleCanonicalizerPass());
@@ -251,27 +246,26 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
 }
 
 LogicalResult firtool::populateHWToSV(mlir::PassManager &pm,
-                                      const FirtoolOptions &opt) {
+                                      const FirtoolHWToSVOptions &opt) {
   if (opt.extractTestCode)
     pm.addPass(sv::createSVExtractTestCodePass(opt.etcDisableInstanceExtraction,
                                                opt.etcDisableRegisterExtraction,
                                                opt.etcDisableModuleInlining));
 
-  pm.addPass(seq::createExternalizeClockGatePass(opt.clockGateOpts));
+  pm.addPass(seq::createExternalizeClockGatePass(opt.ckg));
   pm.addPass(circt::createLowerSeqToSVPass(
-      {/*disableRandomization=*/!opt.isRandomEnabled(
-           FirtoolOptions::RandomKind::Reg),
+      {/*disableRandomization=*/!opt.general->isRandomEnabled(RandomKind::Reg),
        /*emitSeparateAlwaysBlocks=*/
        opt.emitSeparateAlwaysBlocks}));
   pm.addNestedPass<hw::HWModuleOp>(createLowerVerifToSVPass());
   pm.addPass(sv::createHWMemSimImplPass(
-      opt.replSeqMem, opt.ignoreReadEnableMem, opt.addMuxPragmas,
-      !opt.isRandomEnabled(FirtoolOptions::RandomKind::Mem),
-      !opt.isRandomEnabled(FirtoolOptions::RandomKind::Reg),
+      opt.general->replSeqMem, opt.general->ignoreReadEnableMem,
+      opt.addMuxPragmas, !opt.general->isRandomEnabled(RandomKind::Mem),
+      !opt.general->isRandomEnabled(RandomKind::Reg),
       opt.addVivadoRAMAddressConflictSynthesisBugWorkaround));
 
   // If enabled, run the optimizer.
-  if (!opt.disableOptimization) {
+  if (!opt.general->disableOptimization) {
     auto &modulePM = pm.nest<hw::HWModuleOp>();
     modulePM.addPass(mlir::createCSEPass());
     modulePM.addPass(createSimpleCanonicalizerPass());
@@ -287,15 +281,14 @@ LogicalResult firtool::populateHWToSV(mlir::PassManager &pm,
 }
 
 namespace detail {
-LogicalResult
-populatePrepareForExportVerilog(mlir::PassManager &pm,
-                                const firtool::FirtoolOptions &opt) {
+LogicalResult populatePrepareForExportVerilog(
+    mlir::PassManager &pm, const firtool::FirtoolExportVerilogOptions &opt) {
 
   // Legalize unsupported operations within the modules.
   pm.nest<hw::HWModuleOp>().addPass(sv::createHWLegalizeModulesPass());
 
   // Tidy up the IR to improve verilog emission quality.
-  if (!opt.disableOptimization)
+  if (!opt.general->disableOptimization)
     pm.nest<hw::HWModuleOp>().addPass(sv::createPrettifyVerilogPass());
 
   if (opt.stripFirDebugInfo)
@@ -311,7 +304,7 @@ populatePrepareForExportVerilog(mlir::PassManager &pm,
 
   // Emit module and testbench hierarchy JSON files.
   if (opt.exportModuleHierarchy)
-    pm.addPass(sv::createHWExportModuleHierarchyPass(opt.outputFilename));
+    pm.addPass(sv::createHWExportModuleHierarchyPass(opt.outputPath));
 
   // Check inner symbols and inner refs.
   pm.addPass(hw::createVerifyInnerRefNamespacePass());
@@ -321,16 +314,18 @@ populatePrepareForExportVerilog(mlir::PassManager &pm,
 } // namespace detail
 
 LogicalResult
-firtool::populateExportVerilog(mlir::PassManager &pm, const FirtoolOptions &opt,
+firtool::populateExportVerilog(mlir::PassManager &pm,
+                               const FirtoolExportVerilogOptions &opt,
                                std::unique_ptr<llvm::raw_ostream> os) {
   pm.addPass(createExportVerilogPass(std::move(os)));
 
   return success();
 }
 
-LogicalResult firtool::populateExportVerilog(mlir::PassManager &pm,
-                                             const FirtoolOptions &opt,
-                                             llvm::raw_ostream &os) {
+LogicalResult
+firtool::populateExportVerilog(mlir::PassManager &pm,
+                               const FirtoolExportVerilogOptions &opt,
+                               llvm::raw_ostream &os) {
   if (failed(::detail::populatePrepareForExportVerilog(pm, opt)))
     return failure();
 
@@ -338,18 +333,18 @@ LogicalResult firtool::populateExportVerilog(mlir::PassManager &pm,
   return success();
 }
 
-LogicalResult firtool::populateExportSplitVerilog(mlir::PassManager &pm,
-                                                  const FirtoolOptions &opt,
-                                                  llvm::StringRef directory) {
+LogicalResult
+firtool::populateExportSplitVerilog(mlir::PassManager &pm,
+                                    const FirtoolExportVerilogOptions &opt) {
   if (failed(::detail::populatePrepareForExportVerilog(pm, opt)))
     return failure();
 
-  pm.addPass(createExportSplitVerilogPass(directory));
+  pm.addPass(createExportSplitVerilogPass(opt.outputPath));
   return success();
 }
 
 LogicalResult firtool::populateFinalizeIR(mlir::PassManager &pm,
-                                          const FirtoolOptions &opt) {
+                                          const FirtoolFinalizeIROptions &opt) {
   pm.addPass(firrtl::createFinalizeIRPass());
   pm.addPass(om::createFreezePathsPass());
 

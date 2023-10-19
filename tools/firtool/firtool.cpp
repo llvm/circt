@@ -369,7 +369,8 @@ static LogicalResult processBuffer(
   if (failed(applyPassManagerCLOptions(pm)))
     return failure();
 
-  if (failed(firtool::populatePreprocessTransforms(pm, firtoolOptions)))
+  if (failed(firtool::populatePreprocessTransforms(
+          pm, firtoolOptions.getPreprocessTransformsOptions())))
     return failure();
 
   // If the user asked for --parse-only, stop after running LowerAnnotations.
@@ -384,8 +385,12 @@ static LogicalResult processBuffer(
     if (failed(parsePassPipeline(StringRef(highFIRRTLPassPlugin), pm)))
       return failure();
 
-  if (failed(firtool::populateCHIRRTLToLowFIRRTL(pm, firtoolOptions, *module,
-                                                 inputFilename)))
+  if (firtoolOptions.blackBoxRootPath.getValue().empty()) {
+    firtoolOptions.blackBoxRootPath =
+        llvm::sys::path::parent_path(inputFilename).str();
+  }
+  if (failed(firtool::populateCHIRRTLToLowFIRRTL(
+          pm, firtoolOptions.getCHIRRTLToLowFIRRTLOptions())))
     return failure();
 
   if (!lowFIRRTLPassPlugin.empty())
@@ -394,13 +399,15 @@ static LogicalResult processBuffer(
 
   // Lower if we are going to verilog or if lowering was specifically requested.
   if (outputFormat != OutputIRFir) {
-    if (failed(firtool::populateLowFIRRTLToHW(pm, firtoolOptions)))
+    if (failed(firtool::populateLowFIRRTLToHW(
+            pm, firtoolOptions.getLowFIRRTLToHWOptions())))
       return failure();
     if (!hwPassPlugin.empty())
       if (failed(parsePassPipeline(StringRef(hwPassPlugin), pm)))
         return failure();
     if (outputFormat != OutputIRHW)
-      if (failed(firtool::populateHWToSV(pm, firtoolOptions)))
+      if (failed(
+              firtool::populateHWToSV(pm, firtoolOptions.getHWToSVOptions())))
         return failure();
     if (!svPassPlugin.empty())
       if (failed(parsePassPipeline(StringRef(svPassPlugin), pm)))
@@ -426,23 +433,24 @@ static LogicalResult processBuffer(
     default:
       llvm_unreachable("can't reach this");
     case OutputVerilog:
-      if (failed(firtool::populateExportVerilog(pm, firtoolOptions,
-                                                (*outputFile)->os())))
+      if (failed(firtool::populateExportVerilog(
+              pm, firtoolOptions.getExportVerilogOptions(),
+              (*outputFile)->os())))
         return failure();
       if (emitHGLDD)
         pm.addPass(std::make_unique<EmitHGLDDPass>((*outputFile)->os()));
       break;
     case OutputSplitVerilog:
       if (failed(firtool::populateExportSplitVerilog(
-              pm, firtoolOptions, firtoolOptions.outputFilename)))
+              pm, firtoolOptions.getExportVerilogOptions())))
         return failure();
       if (emitHGLDD)
         pm.addPass(std::make_unique<EmitSplitHGLDDPass>());
       break;
     case OutputIRVerilog:
       // Run the ExportVerilog pass to get its lowering, but discard the output.
-      if (failed(firtool::populateExportVerilog(pm, firtoolOptions,
-                                                llvm::nulls())))
+      if (failed(firtool::populateExportVerilog(
+              pm, firtoolOptions.getExportVerilogOptions(), llvm::nulls())))
         return failure();
       break;
     }
@@ -450,7 +458,8 @@ static LogicalResult processBuffer(
     // Run final IR mutations to clean it up after ExportVerilog and before
     // emitting the final MLIR.
     if (!mlirOutFile.empty())
-      if (failed(firtool::populateFinalizeIR(pm, firtoolOptions)))
+      if (failed(firtool::populateFinalizeIR(
+              pm, firtoolOptions.getFinalizeIROptions())))
         return failure();
   }
 
@@ -601,8 +610,8 @@ static LogicalResult executeFirtool(MLIRContext &context) {
   std::optional<std::unique_ptr<llvm::ToolOutputFile>> outputFile;
   if (outputFormat != OutputSplitVerilog) {
     // Create an output file.
-    outputFile.emplace(
-        openOutputFile(firtoolOptions.outputFilename, &errorMessage));
+    outputFile.emplace(openOutputFile(firtoolOptions.outputFilename.getValue(),
+                                      &errorMessage));
     if (!(*outputFile)) {
       llvm::errs() << errorMessage << "\n";
       return failure();
@@ -610,7 +619,7 @@ static LogicalResult executeFirtool(MLIRContext &context) {
   } else {
     // Create an output directory.
     if (firtoolOptions.outputFilename.isDefaultOption() ||
-        firtoolOptions.outputFilename == "-") {
+        firtoolOptions.outputFilename.getValue() == "-") {
       llvm::errs() << "missing output directory: specify with -o=<dir>\n";
       return failure();
     }
