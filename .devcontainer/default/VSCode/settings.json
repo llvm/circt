@@ -23,7 +23,7 @@
     "-DLLVM_USE_SANITIZER=",
 
     // LLVM (performance)
-    "-DLLVM_USE_LINKER=lld-17",
+    "-DLLVM_USE_LINKER=lld",
     "-DLLVM_OPTIMIZED_TABLEGEN=ON",
     "-DLLVM_USE_SPLIT_DWARF=ON",
 
@@ -34,7 +34,6 @@
   ],
 
   // -- Clangd Settings
-  "clangd.path": "clangd-17",
   "clangd.checkUpdates": false,
   "clangd.onConfigChanged": "restart",
   "clangd.arguments": [
@@ -42,7 +41,6 @@
     "--compile-commands-dir=${workspaceFolder}/build/circt",
     "--header-insertion=never",
     "--clang-tidy",
-    "--clang-tidy-checks=*",
     "--pch-storage=memory"
   ],
 

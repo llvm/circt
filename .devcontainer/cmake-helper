@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 
-set -e
+set -euo pipefail
 
 # Calls CMake, loading arguments from devcontainer settings to maintain a single source of truth.
 
-PROJECT_NAME=circel
+PROJECT_NAME=circt
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 PROJECT_ROOT=$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel)
@@ -39,7 +39,6 @@ case "$1" in
       fi
     fi
     
-    set -e
     echo "-DCMAKE_BUILD_TYPE=Debug"
     sed 's@//.*@@' < "$VSCODE_SETTINGS_FILE" | \
       sed "s@\${[A-Za-z]*orkspaceFolder}@$PROJECT_ROOT@" | \

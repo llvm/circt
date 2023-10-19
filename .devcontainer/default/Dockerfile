@@ -3,25 +3,16 @@ FROM --platform=$BUILDPLATFORM ubuntu:rolling
 # The following line is needed to set the $TARGETARCH variable to amd64 or arm64 depending on the target architecture. If you need alternative formulations (x86_64 or aarch64) use $(arch) in a RUN command.
 ARG TARGETARCH
 
-# This can be changed to "ci" to remove developer tools and reduce image size. Currently this only saves about 200MB of space.
+# This can be changed to "ci" to remove developer tools and reduce image size. Currently this only saves about 200MB of space
 ARG CONTAINER_MODE=dev
 
-# Different versions of clang and Java can be selected by specifying the following build arguments, but are not guaranteed to work.
+# The version of clang to use
 ARG CLANG_VERSION=17
-ARG JAVA_VERSION=java11
-
-# Can be set to something like `firtool-1.56.1` to use a specific CIRCT release
-ARG PINNED_CIRCT_VERSION=
 
 # Setup container environment
 ENV \
     # Change locale to suppress some warnings
     LC_ALL=C \
-    #
-    # Setup clang
-    CC=clang-$CLANG_VERSION \
-    CXX=clang++-$CLANG_VERSION \
-    LLVM_SYMBOLIZER_PATH=llvm-symbolizer-$CLANG_VERSION \
     #
     # Set VSCode as default editor
     EDITOR="code --wait" \
@@ -75,6 +66,9 @@ RUN \
     apt remove -y gcc && \
     apt autoremove -y && \
     rm /usr/bin/clang-cl-$CLANG_VERSION && \
+    #
+    # Create suffix-free links to clang binaries
+    for FILE in $(find /usr/bin -name "*-$CLANG_VERSION"); do ln -s ${FILE} ${FILE%-$CLANG_VERSION}; done && \
     #
     # Verilator hardcodes "g++" as the C++ compiler, so we symlink clang++ to g++ to avoid having gcc installed
     cd /usr/bin && ln -s clang++-$CLANG_VERSION g++ && \
