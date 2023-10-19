@@ -248,10 +248,9 @@ MlirLogicalResult firtoolPopulatePreprocessTransforms(MlirPassManager pm,
 
 MlirLogicalResult
 firtoolPopulateCHIRRTLToLowFIRRTL(MlirPassManager pm, FirtoolOptions options,
-                                  MlirModule module,
                                   MlirStringRef inputFilename) {
-  return wrap(firtool::populateCHIRRTLToLowFIRRTL(
-      *unwrap(pm), *unwrap(options), unwrap(module), unwrap(inputFilename)));
+  return wrap(firtool::populateCHIRRTLToLowFIRRTL(*unwrap(pm), *unwrap(options),
+                                                  unwrap(inputFilename)));
 }
 
 MlirLogicalResult firtoolPopulateLowFIRRTLToHW(MlirPassManager pm,
