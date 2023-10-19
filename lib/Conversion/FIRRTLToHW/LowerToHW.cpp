@@ -3633,6 +3633,7 @@ LogicalResult FIRRTLLowering::visitExpr(PlusArgsValueIntrinsicOp op) {
       "SYNTHESIS",
       [&]() {
         auto cst0 = getOrCreateIntConstant(1, 0);
+        builder.create<sv::AssignOp>(regv, getOrCreateZConstant(type));
         builder.create<sv::AssignOp>(regf, cst0);
       },
       [&]() {

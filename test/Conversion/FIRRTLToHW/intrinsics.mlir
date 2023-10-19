@@ -4,6 +4,7 @@ firrtl.circuit "Intrinsics" {
   // CHECK-LABEL: hw.module @Intrinsics
   firrtl.module @Intrinsics(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>) {
     // CHECK-NEXT: %c0_i32 = hw.constant 0 : i32
+    // CHECK-NEXT: %z_i5 = sv.constantZ : i5
     // CHECK-NEXT: %false = hw.constant false
     // CHECK-NEXT: [[CLK:%.+]] = seq.from_clock %clk
     // CHECK-NEXT: %x_i1 = sv.constantX : i1
@@ -26,6 +27,7 @@ firrtl.circuit "Intrinsics" {
     // CHECK-NEXT: [[BAR_VALUE_DECL:%.*]] = sv.reg : !hw.inout<i5>
     // CHECK-NEXT: [[BAR_FOUND_DECL:%.*]] = sv.reg : !hw.inout<i1>
     // CHECK-NEXT: sv.ifdef "SYNTHESIS" {
+    // CHECK-NEXT:   sv.assign [[BAR_VALUE_DECL]], %z_i5
     // CHECK-NEXT:   sv.assign [[BAR_FOUND_DECL]], %false
     // CHECK-NEXT: } else {
     // CHECK-NEXT:   sv.initial {
