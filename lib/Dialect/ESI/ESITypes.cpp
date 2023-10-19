@@ -166,12 +166,8 @@ inline ::llvm::raw_ostream &operator<<(::llvm::raw_ostream &p,
 
 ChannelBundleType ChannelBundleType::getReversed() const {
   SmallVector<BundledChannel, 4> reversed;
-  for (auto channel : getChannels()) {
-    ChannelDirection rev = channel.direction == ChannelDirection::from
-                               ? ChannelDirection::to
-                               : ChannelDirection::from;
-    reversed.push_back({channel.name, rev, channel.type});
-  }
+  for (auto channel : getChannels())
+    reversed.push_back({channel.name, flip(channel.direction), channel.type});
   return ChannelBundleType::get(getContext(), reversed, getResettable());
 }
 

@@ -25,7 +25,7 @@ using namespace circt::esi;
 static ServicePortInfo createReqResp(StringAttr sym, Twine name,
                                      StringRef reqName, Type reqType,
                                      StringRef respName, Type respType) {
-  assert(reqType || respType);
+  assert(reqType && respType);
   auto *ctxt = reqType ? reqType.getContext() : respType.getContext();
   auto bundle = ChannelBundleType::get(
       ctxt,

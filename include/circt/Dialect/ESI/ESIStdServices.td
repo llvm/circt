@@ -36,5 +36,7 @@ def RandomAccessMemoryDeclOp: ESI_Op<"mem.ram",
   let extraClassDeclaration = [{
     ServicePortInfo readPortInfo();
     ServicePortInfo writePortInfo();
+    static constexpr auto ReqDirChannelIdx = 0;
+    static constexpr auto RespDirChannelIdx = 0;
   }];
 }

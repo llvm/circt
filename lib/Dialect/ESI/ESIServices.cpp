@@ -100,11 +100,12 @@ static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
         .replaceAllUsesWith(pack.getBundle());
 
     size_t chanIdx = 0;
-    for (BundledChannel ch : bundleType.getChannels())
+    for (BundledChannel ch : bundleType.getChannels()) {
       if (ch.direction == ChannelDirection::from)
         b.create<CosimEndpointOp>(loc, i1ch, clk, rst,
                                   pack.getFromChannels()[chanIdx++],
                                   toStringAttr(clientNamePathAttr));
+    }
   }
 
   // Erase the generation request.
@@ -182,7 +183,8 @@ instantiateSystemVerilogMemory(ServiceImplementReqOp implReq,
       auto pack =
           b.create<PackBundleOp>(implReq.getLoc(), req.getToClient().getType(),
                                  ackChannel.getChanOutput());
-      Value toServer = pack.getFromChannels()[0];
+      Value toServer =
+          pack.getFromChannels()[RandomAccessMemoryDeclOp::ReqDirChannelIdx];
       toClientResp = pack.getBundle();
 
       // Unwrap the write request and 'explode' the struct.
@@ -214,7 +216,8 @@ instantiateSystemVerilogMemory(ServiceImplementReqOp implReq,
       auto pack =
           b.create<PackBundleOp>(implReq.getLoc(), req.getToClient().getType(),
                                  dataChannel.getChanOutput());
-      Value toServer = pack.getFromChannels()[0];
+      Value toServer =
+          pack.getFromChannels()[RandomAccessMemoryDeclOp::RespDirChannelIdx];
       toClientResp = pack.getBundle();
 
       // Unwrap the requested address and read from that memory location.

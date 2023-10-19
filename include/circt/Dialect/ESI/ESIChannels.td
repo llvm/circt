@@ -252,6 +252,13 @@ def ChannelBundleType : ESI_Type<"ChannelBundle"> {
     // Get a channel bundle with the same types and names but the directions
     // reversed.
     ChannelBundleType getReversed() const;
+
+    // Return the opposite direction.
+    static ChannelDirection flip(ChannelDirection dir) {
+      return dir == ChannelDirection::from
+                               ? ChannelDirection::to
+                               : ChannelDirection::from;
+    }
   }];
 }
 
