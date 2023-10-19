@@ -255,7 +255,6 @@ def ChannelBundleType : ESI_Type<"ChannelBundle"> {
   }];
 }
 
-
 def PackBundleOp : ESI_Op<"bundle.pack", [
       DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>
     ]> {
@@ -271,7 +270,7 @@ def PackBundleOp : ESI_Op<"bundle.pack", [
 
   let hasVerifier = 1;
   let hasCanonicalizeMethod = 1;
-  
+
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<(ins "ChannelBundleType":$bundleType,
