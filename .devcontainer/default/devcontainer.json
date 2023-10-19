@@ -1,12 +1,12 @@
+// Reference: https://containers.dev/implementors/json_reference/
 {
   "name": "CIRCT",
   "dockerFile": "Dockerfile",
-  "runArgs": [
-    // Allow the processes in the container to attach a debugger
-    "--cap-add=SYS_PTRACE",
-    "--security-opt",
-    "seccomp=unconfined"
-  ],
+
+  // Allow the processes in the container to attach a debugger
+  "capAdd": [ "SYS_PTRACE" ],
+  "securityOpt": [ "seccomp=unconfined" ],
+
   "mounts": [
     // VSCode settings in Docker need to be different from the host machine
     "source=${localWorkspaceFolder}/.devcontainer/default/VSCode,target=${containerWorkspaceFolder}/.vscode,type=bind",
@@ -18,7 +18,7 @@
   ],
   "remoteEnv": {
     "LOCAL_WORKSPACE_FOLDER": "${localWorkspaceFolder}",
-    "PATH": "${containerWorkspaceFolder}/build/circt/bin:${containerEnv:PATH}"
+    "PATH": "${containerWorkspaceFolder}/build/${containerWorkspaceFolderBasename}/bin:${containerEnv:PATH}"
   },
   "customizations": {
     "vscode": {
@@ -33,7 +33,7 @@
       ],
       "settings": {
         // This must be set in devcontainer.json because it must be an absolute path and thus cannot use `${workspaceFolder}` if defined in `settings.json`
-        "mlir.server_path": "${containerWorkspaceFolder}/build/circt/bin/circt-lsp-server"
+        "mlir.server_path": "${containerWorkspaceFolder}/build/${containerWorkspaceFolderBasename}/bin/circt-lsp-server"
       }
     }
   }

@@ -1,7 +1,7 @@
 {
   // -- CMake Tools
   "cmake.sourceDirectory": "${workspaceFolder}/llvm/llvm",
-  "cmake.buildDirectory": "${workspaceFolder}/build/circt",
+  "cmake.buildDirectory": "${workspaceFolder}/build/${workspaceFolderBasename}",
   "cmake.installPrefix": "/usr/local",
   "cmake.configureOnOpen": false,
   "cmake.configureOnEdit": false,
@@ -9,7 +9,9 @@
   "cmake.configureArgs": [
     // CMAKE
     "-DCMAKE_WARN_DEPRECATED=OFF",
+    "-DCMAKE_C_COMPILER=clang",
     "-DCMAKE_C_COMPILER_LAUNCHER=ccache",
+    "-DCMAKE_CXX_COMPILER=clang++",
     "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache",
 
     // LLVM
@@ -38,7 +40,7 @@
   "clangd.onConfigChanged": "restart",
   "clangd.arguments": [
     "--all-scopes-completion",
-    "--compile-commands-dir=${workspaceFolder}/build/circt",
+    "--compile-commands-dir=${workspaceFolder}/build/${workspaceFolderBasename}",
     "--header-insertion=never",
     "--clang-tidy",
     "--pch-storage=memory"

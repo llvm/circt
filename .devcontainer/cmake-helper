@@ -4,13 +4,11 @@ set -euo pipefail
 
 # Calls CMake, loading arguments from devcontainer settings to maintain a single source of truth.
 
-PROJECT_NAME=circt
-
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 PROJECT_ROOT=$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel)
 
 LLVM_DIR=${LLVM_DIR:-${PROJECT_ROOT}/llvm/llvm}
-CMAKE_HELPER_BUILD_DIR=${CMAKE_HELPER_BUILD_DIR:-$PROJECT_ROOT/build/$PROJECT_NAME}
+CMAKE_HELPER_BUILD_DIR=${CMAKE_HELPER_BUILD_DIR:-$PROJECT_ROOT/build/$(basename "$PROJECT_ROOT")}
 
 case "$1" in
   "print-configure-args")
@@ -39,17 +37,11 @@ case "$1" in
   "configure")
     shift 1 # Remove "configure" from the arguments
 
-    (
-      set -x
-      "${BASH_SOURCE[0]}" print-configure-args | xargs cmake \
-        "-S$LLVM_DIR" \
-        "-B$CMAKE_HELPER_BUILD_DIR"
-    )
-    (
-      cd "$PROJECT_ROOT/build"
-      rm -f compile_commands.json
-      ln -s "$PROJECT_NAME/compile_commands.json" compile_commands.json
-    )
+    "${BASH_SOURCE[0]}" print-configure-args | xargs cmake \
+      "-S$LLVM_DIR" \
+      "-B$CMAKE_HELPER_BUILD_DIR"
+    rm -f "$PROJECT_ROOT/build/compile_commands.json"
+    ln -s "$CMAKE_HELPER_BUILD_DIR/compile_commands.json" "$PROJECT_ROOT/build/compile_commands.json"
     ;;
   "build"|"test")
     TASK_KIND=$1
