@@ -468,18 +468,6 @@ void CustomServiceDeclOp::getPortList(SmallVectorImpl<ServicePortInfo> &ports) {
         ServicePortInfo::Direction::toClient, toClient.getToClientType()});
 }
 
-LogicalResult ServiceImplementOutputOp::verify() {
-  // Ensure the results match the partent results.
-  // if (getOutputs().size() != getParentOp()->getNumResults())
-  //   return emitOpError("Number of results does not match parent");
-  // for (auto [res, parentRes] :
-  //      llvm::zip_equal(getOutputs(), getParentOp()->getResults()))
-  //   if (res.getType() != parentRes.getType())
-  //     return emitOpError("Result type does not match parent");
-
-  return success();
-}
-
 //===----------------------------------------------------------------------===//
 // Bundle ops.
 //===----------------------------------------------------------------------===//

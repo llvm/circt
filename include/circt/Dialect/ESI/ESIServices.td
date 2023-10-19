@@ -162,7 +162,6 @@ def ServiceImplementOutputOp : ESI_Op<"service.impl_req.output", [
     Terminator, HasParent<"ServiceImplementReqOp">]> {
   let summary = "Output of a service implementation";
   let arguments = (ins Variadic<AnyType>:$outputs);
-  let hasVerifier = 1;
 
   let builders = [
     OpBuilder<(ins), "build($_builder, $_state, std::nullopt);">
