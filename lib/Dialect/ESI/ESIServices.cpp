@@ -295,8 +295,10 @@ struct ESIConnectServicesPass
   /// Convert both to_server and to_client requests into the canonical
   /// implementation connection request. This simplifies the rest of the pass
   /// and the service implementation code.
-  void convertReq(RequestToClientConnectionOp);
-  void convertReq(RequestToServerConnectionOp);
+  void convertReq(RequestToClientConnectionOp,
+                  SmallVectorImpl<Operation *> &opsToErase);
+  void convertReq(RequestToServerConnectionOp,
+                  SmallVectorImpl<Operation *> &opsToErase);
 
   /// "Bubble up" the specified requests to all of the instantiations of the
   /// module specified. Create and connect up ports to tunnel the ESI channels
@@ -322,12 +324,14 @@ void ESIConnectServicesPass::runOnOperation() {
   ModuleOp outerMod = getOperation();
   topLevelSyms.addDefinitions(outerMod);
 
+  SmallVector<Operation *> opsToErase;
   outerMod.walk([&](Operation *op) {
     if (auto req = dyn_cast<RequestToClientConnectionOp>(op))
-      convertReq(req);
+      convertReq(req, opsToErase);
     if (auto req = dyn_cast<RequestToServerConnectionOp>(op))
-      convertReq(req);
+      convertReq(req, opsToErase);
   });
+  llvm::for_each(opsToErase, [](auto *op) { op->erase(); });
 
   // Get a partially-ordered list of modules based on the instantiation DAG.
   // It's _very_ important that we process modules before their instantiations
@@ -347,7 +351,8 @@ void ESIConnectServicesPass::runOnOperation() {
 }
 
 void ESIConnectServicesPass::convertReq(
-    RequestToClientConnectionOp toClientReq) {
+    RequestToClientConnectionOp toClientReq,
+    SmallVectorImpl<Operation *> &opsToErase) {
   OpBuilder b(toClientReq);
   // to_client requests are already in the canonical form, just the wrong op.
   auto newReq = b.create<ServiceImplementConnReqOp>(
@@ -355,11 +360,12 @@ void ESIConnectServicesPass::convertReq(
       toClientReq.getServicePortAttr(), toClientReq.getClientNamePath());
   newReq->setDialectAttrs(toClientReq->getDialectAttrs());
   toClientReq.getToClient().replaceAllUsesWith(newReq.getToClient());
-  toClientReq.erase();
+  opsToErase.push_back(toClientReq);
 }
 
 void ESIConnectServicesPass::convertReq(
-    RequestToServerConnectionOp toServerReq) {
+    RequestToServerConnectionOp toServerReq,
+    SmallVectorImpl<Operation *> &opsToErase) {
   OpBuilder b(toServerReq);
   BackedgeBuilder beb(b, toServerReq.getLoc());
 
@@ -397,7 +403,7 @@ void ESIConnectServicesPass::convertReq(
                                       unpackToClientFromChannelsBackedges))
     be.setValue(v);
 
-  toServerReq.erase();
+  opsToErase.push_back(toServerReq);
 }
 
 LogicalResult ESIConnectServicesPass::process(hw::HWModuleLike mod) {
