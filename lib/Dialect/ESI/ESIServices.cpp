@@ -538,20 +538,11 @@ ESIConnectServicesPass::surfaceReqs(hw::HWMutableModuleLike mod,
 
   // Update the module instantiations.
   SmallVector<igraph::InstanceOpInterface, 1> newModuleInstantiations;
-  StringAttr argsAttrName = StringAttr::get(ctxt, "argNames");
-  StringAttr resultsAttrName = StringAttr::get(ctxt, "resultNames");
   for (auto inst : moduleInstantiations[mod]) {
     OpBuilder b(inst);
 
-    // Assemble lists for the new instance op. Seed it with the existing
-    // values.
-    SmallVector<Value, 16> newOperands(inst->getOperands().begin(),
-                                       inst->getOperands().end());
-    SmallVector<Type, 16> newResultTypes(inst->getResultTypes().begin(),
-                                         inst->getResultTypes().end());
-
-    // Add new inputs for the new requests and clone the request
-    // into the module containing `inst`.
+    // Add new inputs for the new bundles being requested.
+    SmallVector<Value, 16> newOperands;
     for (auto req : reqs) {
       auto clone = b.create<ServiceImplementConnReqOp>(
           req.getLoc(), req.getToClient().getType(), req.getServicePortAttr(),
@@ -559,38 +550,11 @@ ESIConnectServicesPass::surfaceReqs(hw::HWMutableModuleLike mod,
       clone->setDialectAttrs(req->getDialectAttrs());
       newOperands.push_back(clone.getToClient());
     }
-
-    // Create a replacement instance of the same operation type.
-    SmallVector<NamedAttribute> newAttrs;
-    for (auto attr : inst->getAttrs()) {
-      if (attr.getName() == argsAttrName) {
-        auto names = mod.getInputNames();
-        newAttrs.push_back(b.getNamedAttr(argsAttrName, b.getArrayAttr(names)));
-      } else if (attr.getName() == resultsAttrName) {
-        auto names = mod.getOutputNames();
-        newAttrs.push_back(
-            b.getNamedAttr(resultsAttrName, b.getArrayAttr(names)));
-      } else {
-        newAttrs.push_back(attr);
-      }
-    }
-    auto *newInst = b.insert(Operation::create(
-        inst->getLoc(), inst->getName(), newResultTypes, newOperands,
-        b.getDictionaryAttr(newAttrs), inst->getPropertiesStorage(),
-        inst->getSuccessors(), inst->getRegions()));
-    newModuleInstantiations.push_back(
-        cast<igraph::InstanceOpInterface>(newInst));
-
-    // Replace all uses of the instance being replaced.
-    for (auto [newV, oldV] :
-         llvm::zip(newInst->getResults(), inst->getResults()))
-      oldV.replaceAllUsesWith(newV);
+    inst->insertOperands(inst->getNumOperands(), newOperands);
+    // Set the names, if we know how.
+    if (auto hwInst = dyn_cast<hw::InstanceOp>(*inst))
+      hwInst.setArgNamesAttr(b.getArrayAttr(mod.getInputNames()));
   }
-
-  // Replace the list of instantiations and erase the old ones.
-  moduleInstantiations[mod].swap(newModuleInstantiations);
-  for (auto oldInst : newModuleInstantiations)
-    oldInst->erase();
 
   // Erase the original requests since they have been cloned into the proper
   // destination modules.
