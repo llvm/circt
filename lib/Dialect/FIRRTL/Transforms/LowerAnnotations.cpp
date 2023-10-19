@@ -511,11 +511,17 @@ static llvm::StringMap<AnnoRecord> annotationRecords{{
     {wiringSourceAnnoClass, {stdResolve, applyWiring}},
     {attributeAnnoClass, {stdResolve, applyAttributeAnnotation}}}};
 
-LogicalResult registerAnnotationRecord(StringRef annoClass,
-                                       AnnoRecord annoRecord) {
-  return LogicalResult::success(
-      annotationRecords.insert({annoClass, annoRecord}).second);
+LogicalResult
+registerAnnotationRecord(StringRef annoClass, AnnoRecord annoRecord,
+                         std::function<void(llvm::Twine)> errorHandler) {
+
+  if (annotationRecords.insert({annoClass, annoRecord}).second)
+    return LogicalResult::success();
+  if (errorHandler)
+    errorHandler("annotation record '" + annoClass + "' is registered twice\n");
+  return LogicalResult::failure();
 }
+
 } // namespace circt::firrtl
 
 /// Lookup a record for a given annotation class.  Optionally, returns the
