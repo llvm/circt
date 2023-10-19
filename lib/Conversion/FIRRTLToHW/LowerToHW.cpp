@@ -3633,7 +3633,14 @@ LogicalResult FIRRTLLowering::visitExpr(PlusArgsValueIntrinsicOp op) {
       "SYNTHESIS",
       [&]() {
         auto cst0 = getOrCreateIntConstant(1, 0);
-        builder.create<sv::AssignOp>(regv, getOrCreateZConstant(type));
+        auto assignZ =
+            builder.create<sv::AssignOp>(regv, getOrCreateZConstant(type));
+        circt::sv::setSVAttributes(
+            assignZ, sv::SVAttributeAttr::get(
+                         builder.getContext(),
+                         "This dummy assignment exists to avoid undriven lint "
+                         "warnings (e.g., Verilator UNDRIVEN).",
+                         /*emitAsComment=*/true));
         builder.create<sv::AssignOp>(regf, cst0);
       },
       [&]() {

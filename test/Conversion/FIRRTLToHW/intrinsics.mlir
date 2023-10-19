@@ -28,6 +28,8 @@ firrtl.circuit "Intrinsics" {
     // CHECK-NEXT: [[BAR_FOUND_DECL:%.*]] = sv.reg : !hw.inout<i1>
     // CHECK-NEXT: sv.ifdef "SYNTHESIS" {
     // CHECK-NEXT:   sv.assign [[BAR_VALUE_DECL]], %z_i5
+    // CHECK-SAME:     #sv.attribute<"This dummy assignment exists to avoid undriven lint warnings
+    // CHECK-SAME:     emitAsComment
     // CHECK-NEXT:   sv.assign [[BAR_FOUND_DECL]], %false
     // CHECK-NEXT: } else {
     // CHECK-NEXT:   sv.initial {
