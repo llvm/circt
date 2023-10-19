@@ -115,7 +115,9 @@ def ServiceInstanceOp : ESI_Op<"service.instance"> {
   }];
 }
 
-def ServiceImplementReqOp : ESI_Op<"service.impl_req", [NoTerminator]> {
+
+def ServiceImplementReqOp : ESI_Op<"service.impl_req", [
+    SingleBlockImplicitTerminator<"ServiceImplementOutputOp">]> {
   let summary = "Request for a service to be implemented";
   let description = [{
     The connect services pass replaces `service.instance`s with this op. The
@@ -139,6 +141,35 @@ def ServiceImplementReqOp : ESI_Op<"service.impl_req", [NoTerminator]> {
     (`svc` $service_symbol^)? `impl` `as` $impl_type (`opts` $impl_opts^)?
      `(` $inputs `)` attr-dict `:` functional-type($inputs, results)
       $portReqs
+  }];
+}
+
+def ServiceImplementConnReqOp : ESI_Op<"service.impl_req.req", [
+        DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+        DeclareOpInterfaceMethods<ServiceReqOpInterface>]> {
+  let summary = "The canonical form of a connection request";
+
+  let arguments = (ins InnerRefAttr:$servicePort,
+                       StrArrayAttr:$clientNamePath);
+  let results = (outs ChannelBundleType:$toClient);
+  let assemblyFormat = [{
+    $servicePort `(` $clientNamePath `)`
+      attr-dict `:` qualified(type($toClient))
+  }];
+}
+
+def ServiceImplementOutputOp : ESI_Op<"service.impl_req.output", [ 
+    Terminator, HasParent<"ServiceImplementReqOp">]> {
+  let summary = "Output of a service implementation";
+  let arguments = (ins Variadic<AnyType>:$outputs);
+  let hasVerifier = 1;
+
+  let builders = [
+    OpBuilder<(ins), "build($_builder, $_state, std::nullopt);">
+  ];
+
+  let assemblyFormat = [{
+    `(` $outputs `)` attr-dict `:` type($outputs)
   }];
 }
 

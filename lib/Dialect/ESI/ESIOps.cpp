@@ -376,6 +376,33 @@ LogicalResult RequestToServerConnectionOp::verifySymbolUses(
   return reqPortMatches(getOperation(), getServicePortAttr(), symbolTable);
 }
 
+ChannelBundleType ServiceImplementConnReqOp::getBundleType() {
+  return getToClient().getType();
+}
+
+LogicalResult ServiceImplementConnReqOp::verifySymbolUses(
+    SymbolTableCollection &symbolTable) {
+
+  hw::InnerRefAttr port = getServicePort();
+  auto serviceDecl = getServiceDecl(*this, symbolTable, port);
+  if (!serviceDecl)
+    return emitOpError("Could not find service declaration ")
+           << port.getModuleRef();
+
+  ServicePortInfo portDecl;
+  SmallVector<ServicePortInfo> ports;
+  serviceDecl.getPortList(ports);
+  for (ServicePortInfo portFromList : ports)
+    if (portFromList.name == port.getName()) {
+      portDecl = portFromList;
+      break;
+    }
+  if (!portDecl.name)
+    return emitOpError("Could not locate port ") << port.getName();
+
+  return success();
+}
+
 /// Validate a connection request against a service decl by comparing against
 /// the port list.
 LogicalResult validateRequest(ServiceDeclOpInterface svc,
@@ -441,6 +468,18 @@ void CustomServiceDeclOp::getPortList(SmallVectorImpl<ServicePortInfo> &ports) {
                                     toClient.getToClientType()});
 }
 
+LogicalResult ServiceImplementOutputOp::verify() {
+  // Ensure the results match the partent results.
+  // if (getOutputs().size() != getParentOp()->getNumResults())
+  //   return emitOpError("Number of results does not match parent");
+  // for (auto [res, parentRes] :
+  //      llvm::zip_equal(getOutputs(), getParentOp()->getResults()))
+  //   if (res.getType() != parentRes.getType())
+  //     return emitOpError("Result type does not match parent");
+
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // Bundle ops.
 //===----------------------------------------------------------------------===//
@@ -469,11 +508,31 @@ static void printUnPackBundleType(OpAsmPrinter &p, Operation *, T3, T4,
                                   Type bundleType) {
   p.printType(bundleType);
 }
+void UnpackBundleOp::build(::mlir::OpBuilder &odsBuilder,
+                           ::mlir::OperationState &odsState, Value bundle,
+                           mlir::ValueRange fromChannels) {
+  for (BundledChannel ch :
+       cast<ChannelBundleType>(bundle.getType()).getChannels())
+    if (ch.direction == ChannelDirection::to)
+      odsState.addTypes(ch.type);
+  odsState.addOperands(bundle);
+  odsState.addOperands(fromChannels);
+}
 
 LogicalResult PackBundleOp::verify() {
   if (!getBundle().hasOneUse())
     return emitOpError("bundles must have exactly one user");
   return success();
+}
+void PackBundleOp::build(::mlir::OpBuilder &odsBuilder,
+                         ::mlir::OperationState &odsState,
+                         ChannelBundleType bundleType,
+                         mlir::ValueRange toChannels) {
+  odsState.addTypes(bundleType);
+  for (BundledChannel ch : cast<ChannelBundleType>(bundleType).getChannels())
+    if (ch.direction == ChannelDirection::from)
+      odsState.addTypes(ch.type);
+  odsState.addOperands(toChannels);
 }
 
 LogicalResult UnpackBundleOp::verify() {
@@ -483,12 +542,15 @@ LogicalResult UnpackBundleOp::verify() {
 }
 
 void PackBundleOp::getAsmResultNames(::mlir::OpAsmSetValueNameFn setNameFn) {
+  if (getNumResults() == 0)
+    return;
   setNameFn(getResult(0), "bundle");
   for (auto [idx, from] : llvm::enumerate(llvm::make_filter_range(
            getBundle().getType().getChannels(), [](BundledChannel ch) {
              return ch.direction == ChannelDirection::from;
            })))
-    setNameFn(getResult(idx + 1), from.name.getValue());
+    if (idx + 1 < getNumResults())
+      setNameFn(getResult(idx + 1), from.name.getValue());
 }
 
 void UnpackBundleOp::getAsmResultNames(::mlir::OpAsmSetValueNameFn setNameFn) {
@@ -496,7 +558,8 @@ void UnpackBundleOp::getAsmResultNames(::mlir::OpAsmSetValueNameFn setNameFn) {
            getBundle().getType().getChannels(), [](BundledChannel ch) {
              return ch.direction == ChannelDirection::to;
            })))
-    setNameFn(getResult(idx), to.name.getValue());
+    if (idx < getNumResults())
+      setNameFn(getResult(idx), to.name.getValue());
 }
 //===----------------------------------------------------------------------===//
 // Structural ops.

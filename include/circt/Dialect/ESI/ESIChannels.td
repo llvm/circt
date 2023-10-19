@@ -260,6 +260,10 @@ def ChannelBundleType : ESI_Type<"ChannelBundle"> {
     // If the bundle has no more one 'from' channel, return it or null. Failure
     // otherwise.
     FailureOr<BundledChannel> getFromChannel() const;
+
+    // Get a channel bundle with the same types and names but the directions
+    // reversed.
+    ChannelBundleType getReversed() const;
   }];
 }
 
@@ -279,6 +283,12 @@ def PackBundleOp : ESI_Op<"bundle.pack", [
 
   let hasVerifier = 1;
   let hasCanonicalizeMethod = 1;
+  
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<(ins "ChannelBundleType":$bundleType,
+                   "mlir::ValueRange":$toChannels)>
+  ];
 }
 
 def UnpackBundleOp : ESI_Op<"bundle.unpack", [
@@ -296,6 +306,11 @@ def UnpackBundleOp : ESI_Op<"bundle.unpack", [
 
   let hasVerifier = 1;
   let hasCanonicalizeMethod = 1;
+
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<(ins "Value":$bundle, "mlir::ValueRange":$fromChannels)>
+  ];
 }
 
 //===----------------------------------------------------------------------===//
