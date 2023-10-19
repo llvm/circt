@@ -393,11 +393,11 @@ LogicalResult ServiceImplementConnReqOp::verifySymbolUses(
   SmallVector<ServicePortInfo> ports;
   serviceDecl.getPortList(ports);
   for (ServicePortInfo portFromList : ports)
-    if (portFromList.name == port.getName()) {
+    if (portFromList.port == port) {
       portDecl = portFromList;
       break;
     }
-  if (!portDecl.name)
+  if (!portDecl.port)
     return emitOpError("Could not locate port ") << port.getName();
 
   return success();
@@ -411,11 +411,11 @@ LogicalResult validateRequest(ServiceDeclOpInterface svc,
   SmallVector<ServicePortInfo> ports;
   svc.getPortList(ports);
   for (ServicePortInfo portFromList : ports)
-    if (portFromList.name == req.getServicePort().getName()) {
+    if (portFromList.port == req.getServicePort()) {
       portDecl = portFromList;
       break;
     }
-  if (!portDecl.name)
+  if (!portDecl.port)
     return req.emitOpError("Could not locate port ")
            << req.getServicePort().getName();
 
@@ -459,13 +459,13 @@ circt::esi::validateServiceConnectionRequest(ServiceDeclOpInterface decl,
 
 void CustomServiceDeclOp::getPortList(SmallVectorImpl<ServicePortInfo> &ports) {
   for (auto toServer : getOps<ToServerOp>())
-    ports.push_back(ServicePortInfo{toServer.getInnerSymAttr(),
-                                    ServicePortInfo::Direction::toServer,
-                                    toServer.getToServerType()});
+    ports.push_back(ServicePortInfo{
+        hw::InnerRefAttr::get(getSymNameAttr(), toServer.getInnerSymAttr()),
+        ServicePortInfo::Direction::toServer, toServer.getToServerType()});
   for (auto toClient : getOps<ToClientOp>())
-    ports.push_back(ServicePortInfo{toClient.getInnerSymAttr(),
-                                    ServicePortInfo::Direction::toClient,
-                                    toClient.getToClientType()});
+    ports.push_back(ServicePortInfo{
+        hw::InnerRefAttr::get(getSymNameAttr(), toClient.getInnerSymAttr()),
+        ServicePortInfo::Direction::toClient, toClient.getToClientType()});
 }
 
 LogicalResult ServiceImplementOutputOp::verify() {

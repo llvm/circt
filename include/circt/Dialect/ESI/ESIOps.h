@@ -30,7 +30,7 @@ namespace esi {
 struct ServicePortInfo {
   enum class Direction { toClient, toServer };
 
-  StringAttr name;
+  hw::InnerRefAttr port;
   Direction direction;
   ChannelBundleType type;
 };

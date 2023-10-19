@@ -197,6 +197,8 @@ LogicalResult HandshakeLowerExtmemToHWPass::wrapESI(
     auto memServiceDecl = b.create<esi::RandomAccessMemoryDeclOp>(
         loc, origPortInfo.name, TypeAttr::get(dataType),
         b.getI64IntegerAttr(memrefSize));
+    esi::ServicePortInfo writePortInfo = memServiceDecl.writePortInfo();
+    esi::ServicePortInfo readPortInfo = memServiceDecl.readPortInfo();
 
     SmallVector<Value> instanceArgsFromThisMem;
 
@@ -205,27 +207,24 @@ LogicalResult HandshakeLowerExtmemToHWPass::wrapESI(
     b.setInsertionPointToStart(wrapperMod.getBodyBlock());
 
     // Load ports:
-    auto loadServicePort = hw::InnerRefAttr::get(memServiceDecl.getNameAttr(),
-                                                 b.getStringAttr("read"));
-    // for (unsigned i = 0; i < memType.loadPorts; ++i) {
-    //   auto loadReq = b.create<esi::RequestInOutChannelOp>(
-    //       loc, handshake::esiWrapper(dataType), loadServicePort,
-    //       backedges[resIdx], b.getArrayAttr({}));
-    //   instanceArgsFromThisMem.push_back(loadReq);
-    //   ++resIdx;
-    // }
+    for (unsigned i = 0; i < memType.loadPorts; ++i) {
+      auto reqPack = b.create<esi::PackBundleOp>(loc, readPortInfo.type,
+                                                 (Value)backedges[resIdx]);
+      b.create<esi::RequestToServerConnectionOp>(
+          loc, readPortInfo.port, reqPack.getBundle(), b.getArrayAttr({}));
+      instanceArgsFromThisMem.push_back(reqPack.getFromChannels()[0]);
+      ++resIdx;
+    }
 
-    // // Store ports:
-    // auto storeServicePort =
-    // hw::InnerRefAttr::get(memServiceDecl.getNameAttr(),
-    //                                               b.getStringAttr("write"));
-    // for (unsigned i = 0; i < memType.storePorts; ++i) {
-    //   auto storeReq = b.create<esi::RequestInOutChannelOp>(
-    //       loc, handshake::esiWrapper(b.getIntegerType(0)), storeServicePort,
-    //       backedges[resIdx], b.getArrayAttr({}));
-    //   instanceArgsFromThisMem.push_back(storeReq);
-    //   ++resIdx;
-    // }
+    // Store ports:
+    for (unsigned i = 0; i < memType.storePorts; ++i) {
+      auto reqPack = b.create<esi::PackBundleOp>(loc, writePortInfo.type,
+                                                 (Value)backedges[resIdx]);
+      b.create<esi::RequestToServerConnectionOp>(
+          loc, writePortInfo.port, reqPack.getBundle(), b.getArrayAttr({}));
+      instanceArgsFromThisMem.push_back(reqPack.getFromChannels()[0]);
+      ++resIdx;
+    }
 
     instanceArgsForMem.emplace_back(instanceArgsFromThisMem);
   }
