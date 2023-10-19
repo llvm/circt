@@ -164,6 +164,13 @@ inline ::llvm::raw_ostream &operator<<(::llvm::raw_ostream &p,
 }
 } // namespace llvm
 
+ChannelBundleType ChannelBundleType::getReversed() const {
+  SmallVector<BundledChannel, 4> reversed;
+  for (auto channel : getChannels())
+    reversed.push_back({channel.name, flip(channel.direction), channel.type});
+  return ChannelBundleType::get(getContext(), reversed, getResettable());
+}
+
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/ESI/ESITypes.cpp.inc"
 

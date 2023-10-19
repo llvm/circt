@@ -247,6 +247,19 @@ def ChannelBundleType : ESI_Type<"ChannelBundle"> {
   let assemblyFormat = [{
     `<` `[` $channels `]` (`reset` $resettable^)? `>`
   }];
+
+  let extraClassDeclaration = [{
+    // Get a channel bundle with the same types and names but the directions
+    // reversed.
+    ChannelBundleType getReversed() const;
+
+    // Return the opposite direction.
+    static ChannelDirection flip(ChannelDirection dir) {
+      return dir == ChannelDirection::from
+                               ? ChannelDirection::to
+                               : ChannelDirection::from;
+    }
+  }];
 }
 
 def PackBundleOp : ESI_Op<"bundle.pack", [
