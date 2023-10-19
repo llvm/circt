@@ -225,9 +225,9 @@ bool MergeConnection::peelConnect(StrictConnectOp connect) {
   };
 
   Value merged;
-  if (auto bundle = dyn_cast_or_null<BundleType>(parentType))
+  if (auto bundle = type_dyn_cast<BundleType>(parentType))
     merged = getMergedValue(bundle);
-  if (auto vector = dyn_cast_or_null<FVectorType>(parentType))
+  if (auto vector = type_dyn_cast<FVectorType>(parentType))
     merged = getMergedValue(vector);
   if (!merged)
     return false;
