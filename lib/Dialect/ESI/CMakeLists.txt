@@ -26,11 +26,6 @@ set(srcs
   Passes/ESIBuildManifest.cpp
 
   APIUtilities.cpp
-
-  # C++ API
-  Passes/CPPAPI/ESIAddCPPAPI.cpp
-  Passes/CPPAPI/ESIEmitCPPAPI.cpp
-  Passes/CPPAPI/CPPAPI.cpp
 )
 
 set(ESI_LinkLibs
