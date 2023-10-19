@@ -110,7 +110,7 @@ LogicalResult UnpackBundleOp::canonicalize(UnpackBundleOp unpack,
                                        "bundle has zero or more than one user");
 
   // Reuse pack's canonicalizer.
-  auto pack = dyn_cast<PackBundleOp>(bundle.getDefiningOp());
+  auto pack = dyn_cast_or_null<PackBundleOp>(bundle.getDefiningOp());
   if (pack)
     return PackBundleOp::canonicalize(pack, rewriter);
   return rewriter.notifyMatchFailure(unpack,

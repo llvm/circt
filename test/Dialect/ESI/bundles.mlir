@@ -1,4 +1,4 @@
-// RUN: circt-opt %s | circt-opt | FileCheck %s
+// RUN: circt-opt %s --canonicalize | circt-opt | FileCheck %s
 // RUN: circt-opt --lower-esi-bundles %s | circt-opt | FileCheck %s --check-prefix=LOWER
 
 !bundleType = !esi.bundle<[
