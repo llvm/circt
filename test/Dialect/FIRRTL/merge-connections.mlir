@@ -127,7 +127,7 @@ firrtl.circuit "Test"   {
 
   // COMMON-LABEL: @Alias
   firrtl.module @Alias(in %i: !firrtl.alias<MyBundle, bundle<f: uint<1>, b: uint<1>>>, out %o: !firrtl.alias<MyBundle, bundle<f: uint<1>, b: uint<1>>>) {
-    // CHECK-NEXT:  firrtl.strictconnect %o, %
+    // CHECK-NEXT:  firrtl.strictconnect %o, %i
     %0 = firrtl.subfield %i[f] : !firrtl.alias<MyBundle, bundle<f: uint<1>, b: uint<1>>>
     %1 = firrtl.subfield %o[f] : !firrtl.alias<MyBundle, bundle<f: uint<1>, b: uint<1>>>
     firrtl.strictconnect %1, %0 : !firrtl.uint<1>
