@@ -60,42 +60,11 @@ def ServiceDeclOpInterface : OpInterface<"ServiceDeclOpInterface"> {
     >,
     InterfaceMethod<
         "Validate this service request against this service decl.",
-        "mlir::LogicalResult", "validateRequest",
-        (ins "mlir::Operation*":$req, "bool":$skipDirectionCheck),
+        "mlir::LogicalResult", "validateRequest", (ins "mlir::Operation*":$req),
         /*methodBody=*/"",
         /*defaultImplementation=*/[{
-          return circt::esi::validateServiceConnectionRequest(
-            $_op, req, skipDirectionCheck);
+          return circt::esi::validateServiceConnectionRequest($_op, req);
         }]>,
-  ];
-}
-
-def ServiceReqOpInterface : OpInterface<"ServiceReqOpInterface"> {
-  let cppNamespace = "circt::esi";
-  let description = [{
-    Any op which is requesting connection to a service's port or has information
-    pertaining to one of said requests.
-  }];
-
-  let methods = [
-    InterfaceMethod<
-      "Returns the service port symbol.",
-      "hw::InnerRefAttr", "getServicePort", (ins)
-    >,
-    InterfaceMethod<
-      "Returns the client name path.",
-      "ArrayAttr", "getClientNamePath", (ins)
-    >,
-    InterfaceMethod<
-      "Set the client name path.",
-      "void", "setClientNamePath", (ins "ArrayAttr":$newClientNamePath),
-      /*methodBody=*/"",
-      /*defaultImplementation=*/[{
-        $_op.setClientNamePathAttr(newClientNamePath);
-      }]>,
-    InterfaceMethod<
-      "Returns the bundle type.",
-      "ChannelBundleType", "getBundleType", (ins)>,
   ];
 }
 

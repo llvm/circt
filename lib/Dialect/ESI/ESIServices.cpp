@@ -80,7 +80,7 @@ static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
   // work to suit this new world order, so let's put this off.
   for (auto req : implReq.getOps<ServiceImplementConnReqOp>()) {
     Location loc = req->getLoc();
-    ChannelBundleType bundleType = req.getBundleType();
+    ChannelBundleType bundleType = req.getToClient().getType();
     ArrayAttr clientNamePathAttr = req.getClientNamePath();
 
     SmallVector<Value, 8> toServerValues;
@@ -179,8 +179,9 @@ instantiateSystemVerilogMemory(ServiceImplementReqOp implReq,
       auto doneValid = bb.get(i1);
       auto ackChannel = b.create<WrapValidReadyOp>(none, doneValid);
 
-      auto pack = b.create<PackBundleOp>(implReq.getLoc(), req.getBundleType(),
-                                         ackChannel.getChanOutput());
+      auto pack =
+          b.create<PackBundleOp>(implReq.getLoc(), req.getToClient().getType(),
+                                 ackChannel.getChanOutput());
       Value toServer = pack.getFromChannels()[0];
       toClientResp = pack.getBundle();
 
@@ -210,8 +211,9 @@ instantiateSystemVerilogMemory(ServiceImplementReqOp implReq,
       auto data = bb.get(ramDecl.getInnerType());
       auto dataChannel = b.create<WrapValidReadyOp>(data, dataValid);
 
-      auto pack = b.create<PackBundleOp>(implReq.getLoc(), req.getBundleType(),
-                                         dataChannel.getChanOutput());
+      auto pack =
+          b.create<PackBundleOp>(implReq.getLoc(), req.getToClient().getType(),
+                                 dataChannel.getChanOutput());
       Value toServer = pack.getFromChannels()[0];
       toClientResp = pack.getBundle();
 
@@ -290,7 +292,8 @@ struct ESIConnectServicesPass
   /// Convert both to_server and to_client requests into the canonical
   /// implementation connection request. This simplifies the rest of the pass
   /// and the service implementation code.
-  LogicalResult convertReq(ServiceReqOpInterface req);
+  void convertReq(RequestToClientConnectionOp);
+  void convertReq(RequestToServerConnectionOp);
 
   /// "Bubble up" the specified requests to all of the instantiations of the
   /// module specified. Create and connect up ports to tunnel the ESI channels
@@ -316,9 +319,11 @@ void ESIConnectServicesPass::runOnOperation() {
   ModuleOp outerMod = getOperation();
   topLevelSyms.addDefinitions(outerMod);
 
-  outerMod.walk([&](ServiceReqOpInterface req) {
-    if (failed(convertReq(req)))
-      signalPassFailure();
+  outerMod.walk([&](Operation *op) {
+    if (auto req = dyn_cast<RequestToClientConnectionOp>(op))
+      convertReq(req);
+    if (auto req = dyn_cast<RequestToServerConnectionOp>(op))
+      convertReq(req);
   });
 
   // Get a partially-ordered list of modules based on the instantiation DAG.
@@ -338,60 +343,58 @@ void ESIConnectServicesPass::runOnOperation() {
   }
 }
 
-LogicalResult ESIConnectServicesPass::convertReq(ServiceReqOpInterface req) {
-  OpBuilder b(req);
-  BackedgeBuilder beb(b, req.getLoc());
+void ESIConnectServicesPass::convertReq(
+    RequestToClientConnectionOp toClientReq) {
+  OpBuilder b(toClientReq);
+  // to_client requests are already in the canonical form, just the wrong op.
+  auto newReq = b.create<ServiceImplementConnReqOp>(
+      toClientReq.getLoc(), toClientReq.getToClient().getType(),
+      toClientReq.getServicePortAttr(), toClientReq.getClientNamePath());
+  newReq->setDialectAttrs(toClientReq->getDialectAttrs());
+  toClientReq.getToClient().replaceAllUsesWith(newReq.getToClient());
+  toClientReq.erase();
+}
 
-  if (auto toServerReq = dyn_cast<RequestToServerConnectionOp>(*req)) {
-    // to_server requests need to be converted to bundles with the opposite
-    // directions.
-    ChannelBundleType toClientType = toServerReq.getBundleType().getReversed();
+void ESIConnectServicesPass::convertReq(
+    RequestToServerConnectionOp toServerReq) {
+  OpBuilder b(toServerReq);
+  BackedgeBuilder beb(b, toServerReq.getLoc());
 
-    // Create the new canonical request. It's modeled in the to_client form.
-    auto toClientReq = b.create<ServiceImplementConnReqOp>(
-        toServerReq.getLoc(), toClientType, toServerReq.getServicePortAttr(),
-        toServerReq.getClientNamePath());
-    toClientReq->setDialectAttrs(toServerReq->getDialectAttrs());
+  // to_server requests need to be converted to bundles with the opposite
+  // directions.
+  ChannelBundleType toClientType =
+      toServerReq.getToServer().getType().getReversed();
 
-    // Unpack the bundle coming from the new request.
-    SmallVector<Value, 8> unpackToClientFromChannels;
-    SmallVector<Backedge, 8> unpackToClientFromChannelsBackedges;
-    for (BundledChannel ch : toClientType.getChannels()) {
-      if (ch.direction == ChannelDirection::to)
-        continue;
-      unpackToClientFromChannelsBackedges.push_back(beb.get(ch.type));
-      unpackToClientFromChannels.push_back(
-          unpackToClientFromChannelsBackedges.back());
-    }
-    auto unpackToClient = b.create<UnpackBundleOp>(toServerReq.getLoc(),
-                                                   toClientReq.getToClient(),
-                                                   unpackToClientFromChannels);
+  // Create the new canonical request. It's modeled in the to_client form.
+  auto toClientReq = b.create<ServiceImplementConnReqOp>(
+      toServerReq.getLoc(), toClientType, toServerReq.getServicePortAttr(),
+      toServerReq.getClientNamePath());
+  toClientReq->setDialectAttrs(toServerReq->getDialectAttrs());
 
-    // Convert the unpacked channels to the original request's bundle type with
-    // another unpack.
-    auto unpackToServer = b.create<UnpackBundleOp>(
-        toServerReq.getLoc(), toServerReq.getToServer(),
-        unpackToClient.getToChannels());
-    for (auto [v, be] : llvm::zip_equal(unpackToServer.getToChannels(),
-                                        unpackToClientFromChannelsBackedges))
-      be.setValue(v);
-
-    req.erase();
-
-  } else if (auto toClientReq = dyn_cast<RequestToClientConnectionOp>(*req)) {
-    // to_client requests are already in the canonical form, just the wrong op.
-    auto newReq = b.create<ServiceImplementConnReqOp>(
-        toClientReq.getLoc(), toClientReq.getBundleType(),
-        toClientReq.getServicePortAttr(), toClientReq.getClientNamePath());
-    newReq->setDialectAttrs(toClientReq->getDialectAttrs());
-    toClientReq.getToClient().replaceAllUsesWith(newReq.getToClient());
-    req.erase();
-
-  } else if (!isa<ServiceImplementConnReqOp>(*req)) {
-    return req.emitOpError("Unknown request type");
+  // Unpack the bundle coming from the new request.
+  SmallVector<Value, 8> unpackToClientFromChannels;
+  SmallVector<Backedge, 8> unpackToClientFromChannelsBackedges;
+  for (BundledChannel ch : toClientType.getChannels()) {
+    if (ch.direction == ChannelDirection::to)
+      continue;
+    unpackToClientFromChannelsBackedges.push_back(beb.get(ch.type));
+    unpackToClientFromChannels.push_back(
+        unpackToClientFromChannelsBackedges.back());
   }
+  auto unpackToClient =
+      b.create<UnpackBundleOp>(toServerReq.getLoc(), toClientReq.getToClient(),
+                               unpackToClientFromChannels);
 
-  return success();
+  // Convert the unpacked channels to the original request's bundle type with
+  // another unpack.
+  auto unpackToServer =
+      b.create<UnpackBundleOp>(toServerReq.getLoc(), toServerReq.getToServer(),
+                               unpackToClient.getToChannels());
+  for (auto [v, be] : llvm::zip_equal(unpackToServer.getToChannels(),
+                                      unpackToClientFromChannelsBackedges))
+    be.setValue(v);
+
+  toServerReq.erase();
 }
 
 LogicalResult ESIConnectServicesPass::process(hw::HWModuleLike mod) {

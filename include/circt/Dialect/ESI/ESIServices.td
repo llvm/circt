@@ -143,8 +143,7 @@ def ServiceImplementReqOp : ESI_Op<"service.impl_req", [NoTerminator]> {
 }
 
 def ServiceImplementConnReqOp : ESI_Op<"service.impl_req.req", [
-        DeclareOpInterfaceMethods<SymbolUserOpInterface>,
-        DeclareOpInterfaceMethods<ServiceReqOpInterface>]> {
+        DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "The canonical form of a connection request";
 
   let arguments = (ins InnerRefAttr:$servicePort,
@@ -154,11 +153,14 @@ def ServiceImplementConnReqOp : ESI_Op<"service.impl_req.req", [
     $servicePort `(` $clientNamePath `)`
       attr-dict `:` qualified(type($toClient))
   }];
+
+  let extraClassDeclaration = [{
+    ChannelBundleType getBundleType() { return getToClient().getType(); }
+  }];
 }
 
 def RequestToServerConnectionOp : ESI_Op<"service.req.to_server", [
-        DeclareOpInterfaceMethods<SymbolUserOpInterface>,
-        DeclareOpInterfaceMethods<ServiceReqOpInterface>]> {
+        DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "Request a connection to send data";
 
   let arguments = (ins InnerRefAttr:$servicePort,
@@ -168,19 +170,10 @@ def RequestToServerConnectionOp : ESI_Op<"service.req.to_server", [
     $toServer `->` $servicePort `(` $clientNamePath `)`
       attr-dict `:` qualified(type($toServer))
   }];
-
-  let extraClassDeclaration = [{
-    // Set the value headed to the server. Overrides method in
-    // ServiceReqOpInterface.
-    void setToServer(Value v) {
-      getToServerMutable().assign(v);
-    }
-  }];
 }
 
 def RequestToClientConnectionOp : ESI_Op<"service.req.to_client", [
-        DeclareOpInterfaceMethods<SymbolUserOpInterface>,
-        DeclareOpInterfaceMethods<ServiceReqOpInterface>]> {
+        DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "Request a connection to receive data";
 
   let arguments = (ins InnerRefAttr:$servicePort,

@@ -350,17 +350,12 @@ static ServiceDeclOpInterface getServiceDecl(Operation *op,
 /// Check that the type of a given service request matches the services port
 /// type.
 static LogicalResult reqPortMatches(Operation *op, hw::InnerRefAttr port,
-                                    SymbolTableCollection &symbolTable,
-                                    bool skipDirectionCheck = false) {
+                                    SymbolTableCollection &symbolTable) {
   auto serviceDecl = getServiceDecl(op, symbolTable, port);
   if (!serviceDecl)
     return op->emitOpError("Could not find service declaration ")
            << port.getModuleRef();
-  return serviceDecl.validateRequest(op, skipDirectionCheck);
-}
-
-ChannelBundleType RequestToClientConnectionOp::getBundleType() {
-  return getToClient().getType();
+  return serviceDecl.validateRequest(op);
 }
 
 LogicalResult RequestToClientConnectionOp::verifySymbolUses(
@@ -368,41 +363,32 @@ LogicalResult RequestToClientConnectionOp::verifySymbolUses(
   return reqPortMatches(getOperation(), getServicePortAttr(), symbolTable);
 }
 
-ChannelBundleType RequestToServerConnectionOp::getBundleType() {
-  return getToServer().getType();
-}
-
 LogicalResult RequestToServerConnectionOp::verifySymbolUses(
     SymbolTableCollection &symbolTable) {
   return reqPortMatches(getOperation(), getServicePortAttr(), symbolTable);
 }
 
-ChannelBundleType ServiceImplementConnReqOp::getBundleType() {
-  return getToClient().getType();
-}
-
 LogicalResult ServiceImplementConnReqOp::verifySymbolUses(
     SymbolTableCollection &symbolTable) {
-  return reqPortMatches(getOperation(), getServicePortAttr(), symbolTable,
-                        true);
+  return reqPortMatches(getOperation(), getServicePortAttr(), symbolTable);
 }
 
 /// Validate a connection request against a service decl by comparing against
 /// the port list.
-LogicalResult validateRequest(ServiceDeclOpInterface svc,
-                              ServiceReqOpInterface req,
+LogicalResult validateRequest(ServiceDeclOpInterface svc, Operation *req,
+                              ChannelBundleType bundleType,
+                              hw::InnerRefAttr port,
                               bool skipDirectionCheck = false) {
   ServicePortInfo portDecl;
   SmallVector<ServicePortInfo> ports;
   svc.getPortList(ports);
   for (ServicePortInfo portFromList : ports)
-    if (portFromList.port == req.getServicePort()) {
+    if (portFromList.port == port) {
       portDecl = portFromList;
       break;
     }
   if (!portDecl.port)
-    return req.emitOpError("Could not locate port ")
-           << req.getServicePort().getName();
+    return req->emitOpError("Could not locate port ") << port.getName();
 
   if (!skipDirectionCheck) {
     ServicePortInfo::Direction reqDirection =
@@ -410,7 +396,7 @@ LogicalResult validateRequest(ServiceDeclOpInterface svc,
             ? ServicePortInfo::Direction::toClient
             : ServicePortInfo::Direction::toServer;
     if (reqDirection != portDecl.direction)
-      return req.emitOpError(
+      return req->emitOpError(
           "Request direction does not match service port direction");
   }
 
@@ -418,28 +404,38 @@ LogicalResult validateRequest(ServiceDeclOpInterface svc,
   for (BundledChannel bc : portDecl.type.getChannels())
     declBundleChannels[bc.name] = bc;
 
-  auto *ctxt = req.getContext();
+  auto *ctxt = req->getContext();
   auto anyChannelType = ChannelType::get(ctxt, AnyType::get(ctxt));
-  for (BundledChannel bc : req.getBundleType().getChannels()) {
+  for (BundledChannel bc : bundleType.getChannels()) {
     auto f = declBundleChannels.find(bc.name);
     if (f == declBundleChannels.end())
-      return req.emitOpError(
+      return req->emitOpError(
           "Request channel name not found in service port bundle");
     if (!skipDirectionCheck && f->second.direction != bc.direction)
-      return req.emitOpError("Request channel direction does not match service "
-                             "port bundle channel direction");
+      return req->emitOpError(
+          "Request channel direction does not match service "
+          "port bundle channel direction");
 
     if (f->second.type != bc.type && f->second.type != anyChannelType)
-      return req.emitOpError("Request channel type does not match service port "
-                             "bundle channel type");
+      return req->emitOpError(
+          "Request channel type does not match service port "
+          "bundle channel type");
   }
   return success();
 }
 
-LogicalResult circt::esi::validateServiceConnectionRequest(
-    ServiceDeclOpInterface decl, Operation *reqOp, bool skipDirectionCheck) {
-  if (auto req = dyn_cast<ServiceReqOpInterface>(reqOp))
-    return ::validateRequest(decl, req, skipDirectionCheck);
+LogicalResult
+circt::esi::validateServiceConnectionRequest(ServiceDeclOpInterface decl,
+                                             Operation *reqOp) {
+  if (auto req = dyn_cast<RequestToClientConnectionOp>(reqOp))
+    return ::validateRequest(decl, req, req.getToClient().getType(),
+                             req.getServicePortAttr(), false);
+  if (auto req = dyn_cast<RequestToServerConnectionOp>(reqOp))
+    return ::validateRequest(decl, req, req.getToServer().getType(),
+                             req.getServicePortAttr(), false);
+  if (auto req = dyn_cast<ServiceImplementConnReqOp>(reqOp))
+    return ::validateRequest(decl, req, req.getToClient().getType(),
+                             req.getServicePortAttr(), true);
   return reqOp->emitOpError("Did not recognize request op");
 }
 
