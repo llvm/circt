@@ -28,24 +28,11 @@ case "$1" in
       echo "Error: $VSCODE_SETTINGS_FILE is not a valid JSON file."
       exit 1
     fi
-
-    # If specified, sets the CMAKE_{C,CXX}_COMPILER variables as specified in the CMake Tools kits file.
-    CMAKE_TOOLS_KITS_FILE=${CMAKE_TOOLS_KITS_FILE:-}
-    CMAKE_TOOLS_KITS_FILE_INDEX=${CMAKE_TOOLS_KITS_FILE_INDEX:-0}
-    if [[ -n "$CMAKE_TOOLS_KITS_FILE" ]]; then
-      if ! jq . < "$CMAKE_TOOLS_KITS_FILE" > /dev/null; then
-        echo "Error: $CMAKE_TOOLS_KITS_FILE is not a valid JSON file."
-        exit 1
-      fi
-    fi
     
     echo "-DCMAKE_BUILD_TYPE=Debug"
     sed 's@//.*@@' < "$VSCODE_SETTINGS_FILE" | \
       sed "s@\${[A-Za-z]*orkspaceFolder}@$PROJECT_ROOT@" | \
       jq -jr '"\"\(.["cmake.configureArgs"] | join("\" \""))\" -G \(.["cmake.generator"]) "'
-    if [[ -n "$CMAKE_TOOLS_KITS_FILE" ]]; then
-        jq -r ".[$CMAKE_TOOLS_KITS_FILE_INDEX].compilers | \"-DCMAKE_C_COMPILER=\(.C) -DCMAKE_CXX_COMPILER=\(.CXX)\"" < "$CMAKE_TOOLS_KITS_FILE"
-    fi
     echo "$@"
 
     ;;
