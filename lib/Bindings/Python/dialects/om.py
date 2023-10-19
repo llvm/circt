@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from ._om_ops_gen import *
-from .._mlir_libs._circt._om import Evaluator as BaseEvaluator, Object as BaseObject, List as BaseList, Tuple as BaseTuple, Map as BaseMap, ClassType, ReferenceAttr, ListAttr, MapAttr, OMIntegerAttr
+from .._mlir_libs._circt._om import Evaluator as BaseEvaluator, Object as BaseObject, List as BaseList, Tuple as BaseTuple, Map as BaseMap, FrozenBasePath as BaseFrozenBasePath, FrozenPath as BaseFrozenPath, ClassType, ReferenceAttr, ListAttr, MapAttr, OMIntegerAttr
 
 from ..ir import Attribute, Diagnostic, DiagnosticSeverity, Module, StringAttr, IntegerAttr, IntegerType
 from ..support import attribute_to_var, var_to_attribute
@@ -34,6 +34,12 @@ def wrap_mlir_object(value):
   if isinstance(value, BaseMap):
     return Map(value)
 
+  if isinstance(value, BaseFrozenBasePath):
+    return FrozenBasePath(value)
+
+  if isinstance(value, BaseFrozenPath):
+    return FrozenPath(value)
+
   # For objects, return an Object, wrapping the base implementation.
   assert isinstance(value, BaseObject)
   return Object(value)
@@ -60,6 +66,12 @@ def unwrap_python_object(value):
 
   if isinstance(value, Map):
     return BaseMap(value)
+
+  if isinstance(value, FrozenBasePath):
+    return BaseFrozenBasePath(value)
+
+  if isinstance(value, FrozenPath):
+    return BaseFrozenPath(value)
 
   # Otherwise, it must be an Object. Cast to the mlir object.
   assert isinstance(value, Object)
@@ -120,6 +132,22 @@ class Map(BaseMap):
   def __iter__(self):
     for i in super().keys():
       yield (wrap_mlir_object(i), self.__getitem__(i))
+
+
+class FrozenBasePath(BaseFrozenBasePath):
+
+  def __init__(self, obj: BaseFrozenBasePath) -> None:
+    super().__init__(obj)
+
+  @staticmethod
+  def get_empty(context=None) -> "FrozenBasePath":
+    return FrozenBasePath(BaseFrozenBasePath.get_empty(context))
+
+
+class FrozenPath(BaseFrozenPath):
+
+  def __init__(self, obj: BaseFrozenPath) -> None:
+    super().__init__(obj)
 
 
 # Define the Object class by inheriting from the base implementation in C++.
