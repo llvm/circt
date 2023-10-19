@@ -337,76 +337,47 @@ static void printInferWindowRet(OpAsmPrinter &p, Operation *, Type,
 //===----------------------------------------------------------------------===//
 
 /// Get the port declaration op for the specified service decl, port name.
-static ServiceDeclOpInterface getServiceDecl(Operation *op,
-                                             SymbolTableCollection &symbolTable,
-                                             hw::InnerRefAttr servicePort) {
+static FailureOr<ServiceDeclOpInterface>
+getServiceDecl(Operation *op, SymbolTableCollection &symbolTable,
+               hw::InnerRefAttr servicePort) {
   ModuleOp top = op->getParentOfType<mlir::ModuleOp>();
   SymbolTable &topSyms = symbolTable.getSymbolTable(top);
 
   StringAttr modName = servicePort.getModule();
-  return topSyms.lookup<ServiceDeclOpInterface>(modName);
-}
-
-/// Check that the type of a given service request matches the services port
-/// type.
-static LogicalResult reqPortMatches(Operation *op, hw::InnerRefAttr port,
-                                    SymbolTableCollection &symbolTable) {
-  auto serviceDecl = getServiceDecl(op, symbolTable, port);
+  auto serviceDecl = topSyms.lookup<ServiceDeclOpInterface>(modName);
   if (!serviceDecl)
     return op->emitOpError("Could not find service declaration ")
-           << port.getModuleRef();
-  return serviceDecl.validateRequest(op);
+           << servicePort.getModuleRef();
+  return serviceDecl;
 }
 
-LogicalResult RequestToClientConnectionOp::verifySymbolUses(
-    SymbolTableCollection &symbolTable) {
-  return reqPortMatches(getOperation(), getServicePortAttr(), symbolTable);
+/// Get the port info for the specified service decl and port name.
+static FailureOr<ServicePortInfo>
+getServicePortInfo(Operation *op, SymbolTableCollection &symbolTable,
+                   hw::InnerRefAttr servicePort) {
+  auto serviceDecl = getServiceDecl(op, symbolTable, servicePort);
+  if (failed(serviceDecl))
+    return failure();
+  auto portInfo = serviceDecl->getPortInfo(servicePort.getName());
+  if (failed(portInfo))
+    return op->emitOpError("Could not locate port ") << servicePort.getName();
+  return portInfo;
 }
 
-LogicalResult RequestToServerConnectionOp::verifySymbolUses(
-    SymbolTableCollection &symbolTable) {
-  return reqPortMatches(getOperation(), getServicePortAttr(), symbolTable);
-}
+static LogicalResult checkTypeMatch(Operation *req,
+                                    ChannelBundleType svcBundleType,
+                                    ChannelBundleType reqBundleType,
+                                    bool skipDirectionCheck) {
+  auto *ctxt = svcBundleType.getContext();
+  auto anyChannelType = ChannelType::get(ctxt, AnyType::get(ctxt));
 
-LogicalResult ServiceImplementConnReqOp::verifySymbolUses(
-    SymbolTableCollection &symbolTable) {
-  return reqPortMatches(getOperation(), getServicePortAttr(), symbolTable);
-}
-
-/// Validate a connection request against a service decl by comparing against
-/// the port list.
-LogicalResult validateRequest(ServiceDeclOpInterface svc, Operation *req,
-                              ChannelBundleType bundleType,
-                              hw::InnerRefAttr port,
-                              bool skipDirectionCheck = false) {
-  ServicePortInfo portDecl;
-  SmallVector<ServicePortInfo> ports;
-  svc.getPortList(ports);
-  for (ServicePortInfo portFromList : ports)
-    if (portFromList.port == port) {
-      portDecl = portFromList;
-      break;
-    }
-  if (!portDecl.port)
-    return req->emitOpError("Could not locate port ") << port.getName();
-
-  if (!skipDirectionCheck) {
-    ServicePortInfo::Direction reqDirection =
-        isa<RequestToClientConnectionOp>(req)
-            ? ServicePortInfo::Direction::toClient
-            : ServicePortInfo::Direction::toServer;
-    if (reqDirection != portDecl.direction)
-      return req->emitOpError(
-          "Request direction does not match service port direction");
-  }
-
+  // Build fast lookup.
   DenseMap<StringAttr, BundledChannel> declBundleChannels;
-  for (BundledChannel bc : portDecl.type.getChannels())
+  for (BundledChannel bc : svcBundleType.getChannels())
     declBundleChannels[bc.name] = bc;
 
-  auto *ctxt = req->getContext();
-  auto anyChannelType = ChannelType::get(ctxt, AnyType::get(ctxt));
-  for (BundledChannel bc : bundleType.getChannels()) {
+  // Check all the channels.
+  for (BundledChannel bc : reqBundleType.getChannels()) {
     auto f = declBundleChannels.find(bc.name);
     if (f == declBundleChannels.end())
       return req->emitOpError(
@@ -424,19 +395,32 @@ LogicalResult validateRequest(ServiceDeclOpInterface svc, Operation *req,
   return success();
 }
 
-LogicalResult
-circt::esi::validateServiceConnectionRequest(ServiceDeclOpInterface decl,
-                                             Operation *reqOp) {
-  if (auto req = dyn_cast<RequestToClientConnectionOp>(reqOp))
-    return ::validateRequest(decl, req, req.getToClient().getType(),
-                             req.getServicePortAttr(), false);
-  if (auto req = dyn_cast<RequestToServerConnectionOp>(reqOp))
-    return ::validateRequest(decl, req, req.getToServer().getType(),
-                             req.getServicePortAttr(), false);
-  if (auto req = dyn_cast<ServiceImplementConnReqOp>(reqOp))
-    return ::validateRequest(decl, req, req.getToClient().getType(),
-                             req.getServicePortAttr(), true);
-  return reqOp->emitOpError("Did not recognize request op");
+LogicalResult RequestToClientConnectionOp::verifySymbolUses(
+    SymbolTableCollection &symbolTable) {
+  auto svcPort = getServicePortInfo(*this, symbolTable, getServicePortAttr());
+  if (failed(svcPort))
+    return failure();
+  if (svcPort->direction != ServicePortInfo::Direction::toClient)
+    return emitOpError("Service port is not a to-client port");
+  return checkTypeMatch(*this, svcPort->type, getToClient().getType(), false);
+}
+
+LogicalResult RequestToServerConnectionOp::verifySymbolUses(
+    SymbolTableCollection &symbolTable) {
+  auto svcPort = getServicePortInfo(*this, symbolTable, getServicePortAttr());
+  if (failed(svcPort))
+    return failure();
+  if (svcPort->direction != ServicePortInfo::Direction::toServer)
+    return emitOpError("Service port is not a to-server port");
+  return checkTypeMatch(*this, svcPort->type, getToServer().getType(), false);
+}
+
+LogicalResult ServiceImplementConnReqOp::verifySymbolUses(
+    SymbolTableCollection &symbolTable) {
+  auto svcPort = getServicePortInfo(*this, symbolTable, getServicePortAttr());
+  if (failed(svcPort))
+    return failure();
+  return checkTypeMatch(*this, svcPort->type, getToClient().getType(), true);
 }
 
 void CustomServiceDeclOp::getPortList(SmallVectorImpl<ServicePortInfo> &ports) {

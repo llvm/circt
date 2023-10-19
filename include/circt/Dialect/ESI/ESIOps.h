@@ -35,11 +35,6 @@ struct ServicePortInfo {
   ChannelBundleType type;
 };
 
-class ServiceDeclOpInterface;
-/// Validate a connection request against a service decl by comparing against
-/// the port list.
-LogicalResult validateServiceConnectionRequest(ServiceDeclOpInterface decl,
-                                               Operation *reqOp);
 } // namespace esi
 } // namespace circt
 
