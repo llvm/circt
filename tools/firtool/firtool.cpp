@@ -15,6 +15,7 @@
 #include "circt/Conversion/ExportVerilog.h"
 #include "circt/Conversion/Passes.h"
 #include "circt/Dialect/Comb/CombDialect.h"
+#include "circt/Dialect/Debug/DebugDialect.h"
 #include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRParser.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
@@ -208,6 +209,10 @@ static cl::opt<std::string>
                 cl::init(""), cl::value_desc("filename"),
                 cl::cat(mainCategory));
 
+static cl::opt<bool>
+    enableDebugInfo("g", cl::desc("Enable the generation of debug information"),
+                    cl::init(false), cl::cat(mainCategory));
+
 static cl::opt<bool> emitHGLDD("emit-hgldd", cl::desc("Emit HGLDD debug info"),
                                cl::init(false), cl::cat(mainCategory));
 
@@ -371,6 +376,10 @@ static LogicalResult processBuffer(
 
   if (failed(firtool::populatePreprocessTransforms(pm, firtoolOptions)))
     return failure();
+
+  if (enableDebugInfo)
+    pm.nest<firrtl::CircuitOp>().addNestedPass<firrtl::FModuleOp>(
+        firrtl::createMaterializeDebugInfoPass());
 
   // If the user asked for --parse-only, stop after running LowerAnnotations.
   if (outputFormat == OutputParseOnly) {
@@ -628,7 +637,7 @@ static LogicalResult executeFirtool(MLIRContext &context) {
   context.loadDialect<chirrtl::CHIRRTLDialect, firrtl::FIRRTLDialect,
                       hw::HWDialect, comb::CombDialect, seq::SeqDialect,
                       om::OMDialect, sv::SVDialect, verif::VerifDialect,
-                      ltl::LTLDialect>();
+                      ltl::LTLDialect, debug::DebugDialect>();
 
   // Process the input.
   if (failed(processInput(context, ts, std::move(input), outputFile)))
