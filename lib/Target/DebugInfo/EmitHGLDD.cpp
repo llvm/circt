@@ -203,6 +203,13 @@ StringAttr getVerilogModuleName(DIModule &module) {
   return module.name;
 }
 
+StringAttr getVerilogInstanceName(DIInstance &inst) {
+  if (auto *op = inst.op)
+    if (auto attr = op->getAttrOfType<StringAttr>("hw.verilogName"))
+      return attr;
+  return inst.name;
+}
+
 /// Emit the debug info for a `DIModule`.
 void FileEmitter::emitModule(llvm::json::OStream &json, DIModule *module) {
   json.objectBegin();
@@ -232,6 +239,9 @@ void FileEmitter::emitInstance(llvm::json::OStream &json,
                                DIInstance *instance) {
   json.objectBegin();
   json.attribute("name", instance->name.getValue());
+  auto verilogName = getVerilogInstanceName(*instance);
+  if (verilogName != instance->name)
+    json.attribute("hdl_obj_name", verilogName.getValue());
   json.attribute("obj_name", instance->module->name.getValue()); // HGL
   json.attribute("module_name",
                  getVerilogModuleName(*instance->module).getValue()); // HDL

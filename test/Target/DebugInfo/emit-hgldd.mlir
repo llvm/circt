@@ -89,3 +89,14 @@ hw.module private @Bar(in %x: i32 loc(#loc7), out y: i32 loc(#loc8)) {
 // CHECK:       "module_name": "CustomSingleResult123"
 // CHECK:       "isExtModule": 1
 hw.module.extern @SingleResult(out outPort: i1) attributes {verilogName = "CustomSingleResult123"}
+
+// CHECK-LABEL: "module_name": "LegalizedNames"
+// CHECK:       "children"
+// CHECK:         "name": "reg"
+// CHECK:         "hdl_obj_name": "reg_0"
+// CHECK:         "obj_name": "Dummy"
+// CHECK:         "module_name": "CustomDummy"
+hw.module @LegalizedNames() {
+  hw.instance "reg" @Dummy() -> () {hw.verilogName = "reg_0"}
+}
+hw.module.extern @Dummy() attributes {verilogName = "CustomDummy"}
