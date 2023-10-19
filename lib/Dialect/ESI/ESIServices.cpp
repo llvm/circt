@@ -276,10 +276,6 @@ struct ESIConnectServicesPass
   LogicalResult surfaceReqs(hw::HWMutableModuleLike,
                             ArrayRef<ServiceReqOpInterface>);
 
-  /// Copy all service metadata up the instance hierarchy. Modify the service
-  /// name path while copying.
-  void copyMetadata(hw::HWModuleLike);
-
   /// For any service which is "local" (provides the requested service) in a
   /// module, replace it with a ServiceImplementOp. Said op is to be replaced
   /// with an instantiation by a generator.
@@ -351,9 +347,6 @@ LogicalResult ESIConnectServicesPass::process(hw::HWModuleLike mod) {
       return failure();
   }
 
-  // Copy any metadata up the instance hierarchy.
-  copyMetadata(mod);
-
   // Identify the non-local reqs which need to be surfaced from this module.
   SmallVector<ServiceReqOpInterface, 4> nonLocalReqs;
   mod.walk([&](ServiceReqOpInterface req) {
@@ -371,95 +364,6 @@ LogicalResult ESIConnectServicesPass::process(hw::HWModuleLike mod) {
     return surfaceReqs(mutableMod, nonLocalReqs);
   return mod.emitOpError(
       "Cannot surface requests through module without mutable ports");
-}
-
-void ESIConnectServicesPass::copyMetadata(hw::HWModuleLike mod) {
-  SmallVector<ServiceHierarchyMetadataOp, 8> metadataOps;
-  mod.walk([&](ServiceHierarchyMetadataOp op) { metadataOps.push_back(op); });
-
-  for (auto inst : moduleInstantiations[mod]) {
-    OpBuilder b(inst);
-    auto instName = inst.getInstanceNameAttr();
-    for (auto metadata : metadataOps) {
-      SmallVector<Attribute, 4> path;
-      path.push_back(hw::InnerRefAttr::get(mod.getModuleNameAttr(), instName));
-      for (auto attr : metadata.getServerNamePathAttr())
-        path.push_back(attr);
-
-      auto metadataCopy = cast<ServiceHierarchyMetadataOp>(b.clone(*metadata));
-      metadataCopy.setServerNamePathAttr(b.getArrayAttr(path));
-    }
-  }
-}
-
-/// Create an op which contains metadata about the soon-to-be implemented
-/// service. To be used by later passes which require these data (e.g.
-/// automated software API creation).
-static void emitServiceMetadata(ServiceImplementReqOp implReqOp) {
-  ImplicitLocOpBuilder b(implReqOp.getLoc(), implReqOp);
-
-  // Check if there are any "BSP" service providers -- ones which implement any
-  // service -- and create an implicit service declaration for them.
-  std::unique_ptr<Block> bspPorts = nullptr;
-  if (!implReqOp.getServiceSymbol().has_value()) {
-    bspPorts = std::make_unique<Block>();
-    b.setInsertionPointToStart(bspPorts.get());
-  }
-
-  SmallVector<Attribute, 8> clients;
-  for (auto req : implReqOp.getOps<ServiceReqOpInterface>()) {
-    SmallVector<NamedAttribute, 4> clientAttrs;
-    Attribute clientNamePath = req.getClientNamePath();
-    Attribute servicePort = req.getServicePort();
-    if (req.getToServerType())
-      clientAttrs.push_back(b.getNamedAttr(
-          "to_server_type", TypeAttr::get(req.getToServerType())));
-    if (req.getToClient())
-      clientAttrs.push_back(b.getNamedAttr(
-          "to_client_type", TypeAttr::get(req.getToClientType())));
-
-    clientAttrs.push_back(b.getNamedAttr("port", servicePort));
-    clientAttrs.push_back(b.getNamedAttr("client_name", clientNamePath));
-
-    clients.push_back(b.getDictionaryAttr(clientAttrs));
-
-    if (!bspPorts)
-      continue;
-
-    llvm::TypeSwitch<Operation *>(req)
-        .Case([&](RequestInOutChannelOp) {
-          assert(req.getToClientType());
-          assert(req.getToServerType());
-          b.create<ServiceDeclInOutOp>(req.getServicePort().getName(),
-                                       TypeAttr::get(req.getToServerType()),
-                                       TypeAttr::get(req.getToClientType()));
-        })
-        .Case([&](RequestToClientConnectionOp) {
-          b.create<ToClientOp>(req.getServicePort().getName(),
-                               TypeAttr::get(req.getToClientType()));
-        })
-        .Case([&](RequestToServerConnectionOp) {
-          b.create<ToServerOp>(req.getServicePort().getName(),
-                               TypeAttr::get(req.getToServerType()));
-        })
-        .Default([](Operation *) {});
-  }
-
-  if (bspPorts && !bspPorts->empty()) {
-    b.setInsertionPointToEnd(
-        implReqOp->getParentOfType<mlir::ModuleOp>().getBody());
-    // TODO: we currently only support one BSP. Should we support more?
-    auto decl = b.create<CustomServiceDeclOp>("BSP");
-    decl.getPorts().push_back(bspPorts.release());
-    implReqOp.setServiceSymbol(decl.getSymNameAttr().getValue());
-  }
-
-  auto clientsAttr = b.getArrayAttr(clients);
-  auto nameAttr = b.getArrayAttr(ArrayRef<Attribute>{});
-  b.setInsertionPointAfter(implReqOp);
-  b.create<ServiceHierarchyMetadataOp>(
-      implReqOp.getServiceSymbolAttr(), nameAttr, implReqOp.getImplTypeAttr(),
-      implReqOp.getImplOptsAttr(), clientsAttr);
 }
 
 LogicalResult ESIConnectServicesPass::replaceInst(ServiceInstanceOp instOp,
@@ -503,8 +407,6 @@ LogicalResult ESIConnectServicesPass::replaceInst(ServiceInstanceOp instOp,
     req.getToClient().replaceAllUsesWith(
         implOp.getResult(idx + instOpNumResults));
   }
-
-  emitServiceMetadata(implOp);
 
   // Try to generate the service provider.
   if (failed(genDispatcher.generate(implOp, decl)))

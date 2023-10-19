@@ -453,19 +453,6 @@ void CustomServiceDeclOp::getPortList(SmallVectorImpl<ServicePortInfo> &ports) {
                                     inoutPort.getToClientType()});
 }
 
-LogicalResult ServiceHierarchyMetadataOp::verifySymbolUses(
-    SymbolTableCollection &symbolTable) {
-  ModuleOp top = getOperation()->getParentOfType<mlir::ModuleOp>();
-  auto sym = getServiceSymbol();
-  if (!sym)
-    return success();
-  SymbolTable &topSyms = symbolTable.getSymbolTable(top);
-  auto serviceDeclOp = topSyms.lookup<ServiceDeclOpInterface>(*sym);
-  if (!serviceDeclOp)
-    return emitOpError("Could not find service declaration ") << *sym;
-  return success();
-}
-
 //===----------------------------------------------------------------------===//
 // Bundle ops.
 //===----------------------------------------------------------------------===//

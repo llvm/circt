@@ -104,7 +104,6 @@ hw.module @InOutLoopback (in %clk: !seq.clock) {
 // CONN-NEXT:     [[clk:%.+]] = esi.pure_module.input "clk" : !seq.clock
 // CONN-NEXT:     [[rst:%.+]] = esi.pure_module.input "rst" : i1
 // CONN-NEXT:     [[r2:%.+]] = esi.cosim [[clk]], [[rst]], %m1.loopback_inout, "m1.loopback_inout" : !esi.channel<i8> -> !esi.channel<i16>
-// CONN-NEXT:     esi.service.hierarchy.metadata path [] implementing @HostComms impl as "cosim" clients [{client_name = ["m1", "loopback_inout"], port = #hw.innerNameRef<@HostComms::@ReqResp>, to_client_type = !esi.channel<i16>, to_server_type = !esi.channel<i8>}]
 // CONN-NEXT:     %m1.loopback_inout = hw.instance "m1" @InOutLoopback(clk: [[clk]]: !seq.clock, loopback_inout: [[r2]]: !esi.channel<i16>) -> (loopback_inout: !esi.channel<i8>)
 esi.pure_module @LoopbackCosimPure {
   %clk = esi.pure_module.input "clk" : !seq.clock
@@ -154,7 +153,6 @@ hw.module @MemoryAccess1(in %clk : !seq.clock, in %rst : i1, in %write : !esi.ch
 
 // CONN-LABEL: hw.module @MemoryAccess2Read(in %clk : !seq.clock, in %rst : i1, in %write : !esi.channel<!hw.struct<address: i5, data: i64>>, in %readAddress : !esi.channel<i5>, in %readAddress2 : !esi.channel<i5>, out readData : !esi.channel<i64>, out readData2 : !esi.channel<i64>, out writeDone : !esi.channel<i0>) {
 // CONN:         %MemA = sv.reg : !hw.inout<uarray<20xi64>>
-// CONN:         esi.service.hierarchy.metadata path [] implementing @MemA impl as "sv_mem" clients [{client_name = [], port = #hw.innerNameRef<@MemA::@write>, to_client_type = !esi.channel<i0>, to_server_type = !esi.channel<!hw.struct<address: i5, data: i64>>}, {client_name = [], port = #hw.innerNameRef<@MemA::@read>, to_client_type = !esi.channel<i64>, to_server_type = !esi.channel<i5>}, {client_name = [], port = #hw.innerNameRef<@MemA::@read>, to_client_type = !esi.channel<i64>, to_server_type = !esi.channel<i5>}]
 // CONN:         hw.output %chanOutput_0, %chanOutput_4, %chanOutput : !esi.channel<i64>, !esi.channel<i64>, !esi.channel<i0>
 
 hw.module @MemoryAccess2Read(in %clk: !seq.clock, in %rst: i1, in %write: !esi.channel<!write>, in %readAddress: !esi.channel<i5>, in %readAddress2: !esi.channel<i5>, out readData: !esi.channel<i64>, out readData2: !esi.channel<i64>, out writeDone: !esi.channel<i0>) {
