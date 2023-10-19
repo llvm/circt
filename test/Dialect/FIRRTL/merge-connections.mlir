@@ -124,5 +124,16 @@ firrtl.circuit "Test"   {
     firrtl.strictconnect %0, %c0_ui2 : !firrtl.uint<2>
     firrtl.ref.define %a, %w_ref : !firrtl.rwprobe<bundle<a: uint<1>, b: uint<2>>>
   }
+
+  // COMMON-LABEL: @Alias
+  firrtl.module @Alias(in %i: !firrtl.alias<MyBundle, bundle<f: uint<1>, b: uint<1>>>, out %o: !firrtl.alias<MyBundle, bundle<f: uint<1>, b: uint<1>>>) {
+    // CHECK-NEXT:  firrtl.strictconnect %o, %
+    %0 = firrtl.subfield %i[f] : !firrtl.alias<MyBundle, bundle<f: uint<1>, b: uint<1>>>
+    %1 = firrtl.subfield %o[f] : !firrtl.alias<MyBundle, bundle<f: uint<1>, b: uint<1>>>
+    firrtl.strictconnect %1, %0 : !firrtl.uint<1>
+    %2 = firrtl.subfield %i[b] : !firrtl.alias<MyBundle, bundle<f: uint<1>, b: uint<1>>>
+    %3 = firrtl.subfield %o[b] : !firrtl.alias<MyBundle, bundle<f: uint<1>, b: uint<1>>>
+    firrtl.strictconnect %3, %2 : !firrtl.uint<1>
+  }
 }
 
