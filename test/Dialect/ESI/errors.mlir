@@ -47,12 +47,45 @@ hw.module @test(in %m : !sv.modport<@IData::@Noexist>) {
 // -----
 
 esi.service.decl @HostComms {
+  esi.service.to_client @Send : !esi.bundle<[!esi.channel<i8> to "send"]>
+}
+
+hw.module @Loopback (in %clk: i1, in %dataIn: !esi.bundle<[!esi.channel<i8> to "send"]>) {
+  // expected-error @+1 {{Service port is not a to-server port}}
+  esi.service.req.to_server %dataIn -> <@HostComms::@Send> (["loopback_fromhw"]) : !esi.bundle<[!esi.channel<i8> to "send"]>
+}
+
+// -----
+
+esi.service.decl @HostComms {
+  esi.service.to_server @Send : !esi.bundle<[!esi.channel<i8> to "send"]>
+}
+
+hw.module @Loopback (in %clk: i1) {
+  // expected-error @+1 {{Service port is not a to-client port}}
+  esi.service.req.to_client <@HostComms::@Send> (["loopback_fromhw"]) : !esi.bundle<[!esi.channel<i8> to "send"]>
+}
+
+// -----
+
+esi.service.decl @HostComms {
   esi.service.to_server @Send : !esi.bundle<[!esi.channel<i16> to "send"]>
 }
 
 hw.module @Loopback (in %clk: i1, in %dataIn: !esi.bundle<[!esi.channel<i8> to "send"]>) {
   // expected-error @+1 {{Request channel type does not match service port bundle channel type}}
   esi.service.req.to_server %dataIn -> <@HostComms::@Send> (["loopback_fromhw"]) : !esi.bundle<[!esi.channel<i8> to "send"]>
+}
+
+// -----
+
+esi.service.decl @HostComms {
+  esi.service.to_server @Send : !esi.bundle<[!esi.channel<i16> to "send"]>
+}
+
+hw.module @Loopback (in %clk: i1, in %dataIn: !esi.bundle<[!esi.channel<i8> to "send", !esi.channel<i3> to "foo"]>) {
+  // expected-error @+1 {{Request port bundle channel count does not match service port bundle channel count}}
+  esi.service.req.to_server %dataIn -> <@HostComms::@Send> (["loopback_fromhw"]) : !esi.bundle<[!esi.channel<i8> to "send", !esi.channel<i3> to "foo"]>
 }
 
 // -----

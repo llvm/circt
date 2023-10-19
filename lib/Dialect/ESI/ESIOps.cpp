@@ -364,12 +364,19 @@ getServicePortInfo(Operation *op, SymbolTableCollection &symbolTable,
   return portInfo;
 }
 
+/// Check that the channels on two bundles match allowing for AnyType in the
+/// 'svc' bundle.
 static LogicalResult checkTypeMatch(Operation *req,
                                     ChannelBundleType svcBundleType,
                                     ChannelBundleType reqBundleType,
                                     bool skipDirectionCheck) {
   auto *ctxt = svcBundleType.getContext();
   auto anyChannelType = ChannelType::get(ctxt, AnyType::get(ctxt));
+
+  if (svcBundleType.getChannels().size() != reqBundleType.getChannels().size())
+    return req->emitOpError(
+        "Request port bundle channel count does not match service "
+        "port bundle channel count");
 
   // Build fast lookup.
   DenseMap<StringAttr, BundledChannel> declBundleChannels;
