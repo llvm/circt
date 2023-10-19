@@ -481,11 +481,31 @@ static void printUnPackBundleType(OpAsmPrinter &p, Operation *, T3, T4,
                                   Type bundleType) {
   p.printType(bundleType);
 }
+void UnpackBundleOp::build(::mlir::OpBuilder &odsBuilder,
+                           ::mlir::OperationState &odsState, Value bundle,
+                           mlir::ValueRange fromChannels) {
+  for (BundledChannel ch :
+       cast<ChannelBundleType>(bundle.getType()).getChannels())
+    if (ch.direction == ChannelDirection::to)
+      odsState.addTypes(ch.type);
+  odsState.addOperands(bundle);
+  odsState.addOperands(fromChannels);
+}
 
 LogicalResult PackBundleOp::verify() {
   if (!getBundle().hasOneUse())
     return emitOpError("bundles must have exactly one user");
   return success();
+}
+void PackBundleOp::build(::mlir::OpBuilder &odsBuilder,
+                         ::mlir::OperationState &odsState,
+                         ChannelBundleType bundleType,
+                         mlir::ValueRange toChannels) {
+  odsState.addTypes(bundleType);
+  for (BundledChannel ch : cast<ChannelBundleType>(bundleType).getChannels())
+    if (ch.direction == ChannelDirection::from)
+      odsState.addTypes(ch.type);
+  odsState.addOperands(toChannels);
 }
 
 LogicalResult UnpackBundleOp::verify() {
@@ -495,12 +515,15 @@ LogicalResult UnpackBundleOp::verify() {
 }
 
 void PackBundleOp::getAsmResultNames(::mlir::OpAsmSetValueNameFn setNameFn) {
+  if (getNumResults() == 0)
+    return;
   setNameFn(getResult(0), "bundle");
   for (auto [idx, from] : llvm::enumerate(llvm::make_filter_range(
            getBundle().getType().getChannels(), [](BundledChannel ch) {
              return ch.direction == ChannelDirection::from;
            })))
-    setNameFn(getResult(idx + 1), from.name.getValue());
+    if (idx + 1 < getNumResults())
+      setNameFn(getResult(idx + 1), from.name.getValue());
 }
 
 void UnpackBundleOp::getAsmResultNames(::mlir::OpAsmSetValueNameFn setNameFn) {
@@ -508,7 +531,8 @@ void UnpackBundleOp::getAsmResultNames(::mlir::OpAsmSetValueNameFn setNameFn) {
            getBundle().getType().getChannels(), [](BundledChannel ch) {
              return ch.direction == ChannelDirection::to;
            })))
-    setNameFn(getResult(idx), to.name.getValue());
+    if (idx < getNumResults())
+      setNameFn(getResult(idx), to.name.getValue());
 }
 //===----------------------------------------------------------------------===//
 // Structural ops.
@@ -518,7 +542,7 @@ LogicalResult ESIPureModuleOp::verify() {
   ESIDialect *esiDialect = getContext()->getLoadedDialect<ESIDialect>();
   Block &body = getBody().front();
   auto channelOrOutput = [](Value v) {
-    if (v.getType().isa<ChannelType>())
+    if (v.getType().isa<ChannelType, ChannelBundleType>())
       return true;
     if (v.getUsers().empty())
       return false;
@@ -533,7 +557,7 @@ LogicalResult ESIPureModuleOp::verify() {
     if (igraph::InstanceOpInterface inst =
             dyn_cast<igraph::InstanceOpInterface>(op)) {
       if (llvm::any_of(op.getOperands(), [](Value v) {
-            return !(v.getType().isa<ChannelType>() ||
+            return !(v.getType().isa<ChannelType, ChannelBundleType>() ||
                      isa<ESIPureModuleInputOp>(v.getDefiningOp()));
           }))
         return inst.emitOpError(
