@@ -73,7 +73,11 @@ static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
   for (auto req : implReq.getOps<ServiceImplementConnReqOp>())
     toClientResultNum[req] = toClientResultNum.size();
 
-  // Iterate through them, building a cosim endpoint for each one.
+  // Iterate through the requests, building a cosim endpoint for each channel in
+  // the bundle.
+  // TODO: The cosim op should probably be able to take a bundle type and get
+  // lowered to the SV primitive later on. The SV primitive will also need some
+  // work to suit this new world order, so let's put this off.
   for (auto req : implReq.getOps<ServiceImplementConnReqOp>()) {
     Location loc = req->getLoc();
     ChannelBundleType bundleType = req.getBundleType();

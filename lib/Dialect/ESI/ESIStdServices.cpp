@@ -21,7 +21,7 @@
 using namespace circt;
 using namespace circt::esi;
 
-/// Wrap types in esi channels and return the port info struct.
+/// Utility function to create a req/resp pair bundle service port.
 static ServicePortInfo createReqResp(StringAttr sym, Twine name,
                                      StringRef reqName, Type reqType,
                                      StringRef respName, Type respType) {
