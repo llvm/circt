@@ -249,18 +249,6 @@ def ChannelBundleType : ESI_Type<"ChannelBundle"> {
   }];
 
   let extraClassDeclaration = [{
-    // Get all the 'to' channels.
-    void getToChannels(SmallVectorImpl<BundledChannel> &results) const;
-    // If the bundle has no more one 'to' channel, return it or null. Failure
-    // otherwise.
-    FailureOr<BundledChannel> getToChannel() const;
-
-    // Get all the 'from' channels.
-    void getFromChannels(SmallVectorImpl<BundledChannel> &results) const;
-    // If the bundle has no more one 'from' channel, return it or null. Failure
-    // otherwise.
-    FailureOr<BundledChannel> getFromChannel() const;
-
     // Get a channel bundle with the same types and names but the directions
     // reversed.
     ChannelBundleType getReversed() const;

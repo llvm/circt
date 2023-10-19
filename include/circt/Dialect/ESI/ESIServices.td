@@ -116,8 +116,7 @@ def ServiceInstanceOp : ESI_Op<"service.instance"> {
 }
 
 
-def ServiceImplementReqOp : ESI_Op<"service.impl_req", [
-    SingleBlockImplicitTerminator<"ServiceImplementOutputOp">]> {
+def ServiceImplementReqOp : ESI_Op<"service.impl_req", [NoTerminator]> {
   let summary = "Request for a service to be implemented";
   let description = [{
     The connect services pass replaces `service.instance`s with this op. The
@@ -155,20 +154,6 @@ def ServiceImplementConnReqOp : ESI_Op<"service.impl_req.req", [
   let assemblyFormat = [{
     $servicePort `(` $clientNamePath `)`
       attr-dict `:` qualified(type($toClient))
-  }];
-}
-
-def ServiceImplementOutputOp : ESI_Op<"service.impl_req.output", [ 
-    Terminator, HasParent<"ServiceImplementReqOp">]> {
-  let summary = "Output of a service implementation";
-  let arguments = (ins Variadic<AnyType>:$outputs);
-
-  let builders = [
-    OpBuilder<(ins), "build($_builder, $_state, std::nullopt);">
-  ];
-
-  let assemblyFormat = [{
-    `(` $outputs `)` attr-dict `:` type($outputs)
   }];
 }
 

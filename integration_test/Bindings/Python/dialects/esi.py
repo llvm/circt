@@ -45,8 +45,7 @@ with Context() as ctx:
 
 # CHECK-LABEL: === testGen called with op:
 # CHECK:       %0:2 = esi.service.impl_req svc @HostComms impl as "test"(%clk) : (i1) -> (i8, !esi.bundle<[!esi.channel<i8> to "recv"]>) {
-# CHECK:       %2 = esi.service.impl_req.req <@HostComms::@Recv>(["m1", "loopback_tohw"]) : !esi.bundle<[!esi.channel<i8> to "recv"]>
-# CHECK:       esi.service.impl_req.output(%2) : !esi.bundle<[!esi.channel<i8> to "recv"]>
+# CHECK:         %2 = esi.service.impl_req.req <@HostComms::@Recv>(["m1", "loopback_tohw"]) : !esi.bundle<[!esi.channel<i8> to "recv"]>
 def testGen(reqOp: esi.ServiceImplementReqOp) -> bool:
   print("=== testGen called with op:")
   reqOp.print()

@@ -478,12 +478,6 @@ LogicalResult ESIConnectServicesPass::replaceInst(ServiceInstanceOp instOp,
         implOp.getResult(idx + instOpNumResults));
   }
 
-  SmallVector<Value, 8> implOutputs;
-  for (auto req : portReqs->getOps<ServiceImplementConnReqOp>())
-    implOutputs.append(req->getResults().begin(), req->getResults().end());
-  b.setInsertionPointToEnd(portReqs);
-  b.create<ServiceImplementOutputOp>(instOp.getLoc(), implOutputs);
-
   // Try to generate the service provider.
   if (failed(genDispatcher.generate(implOp, decl)))
     return instOp.emitOpError("failed to generate server");

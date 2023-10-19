@@ -41,7 +41,6 @@ hw.module @Loopback (in %clk: !seq.clock) {
 // CONN-DAG:       %3 = esi.service.impl_req.req <@HostComms::@Recv>(["r1", "c1", "consumingFromChan"]) : !esi.bundle<[!esi.channel<i8> to "recv"]>
 // CONN-DAG:       %4 = esi.service.impl_req.req <@HostComms::@Send>(["r1", "p1", "producedMsgChan"]) : !esi.bundle<[!esi.channel<i8> from "send"]>
 // CONN-DAG:       %5 = esi.service.impl_req.req <@HostComms::@Send>(["r1", "p2", "producedMsgChan"]) : !esi.bundle<[!esi.channel<i8> from "send"]>
-// CONN:           esi.service.impl_req.output(%1, %2, %3, %4, %5) : !esi.bundle<[!esi.channel<i8> to "recv"]>, !esi.bundle<[!esi.channel<i8> from "send"]>, !esi.bundle<[!esi.channel<i8> to "recv"]>, !esi.bundle<[!esi.channel<i8> from "send"]>, !esi.bundle<[!esi.channel<i8> from "send"]>
 // CONN:         hw.instance "r1" @Rec(clk: %clk: !seq.clock, m1.loopback_tohw: %0#1: !esi.bundle<[!esi.channel<i8> to "recv"]>, m1.loopback_fromhw: %0#2: !esi.bundle<[!esi.channel<i8> from "send"]>, c1.consumingFromChan: %0#3: !esi.bundle<[!esi.channel<i8> to "recv"]>, p1.producedMsgChan: %0#4: !esi.bundle<[!esi.channel<i8> from "send"]>, p2.producedMsgChan: %0#5: !esi.bundle<[!esi.channel<i8> from "send"]>) -> ()
 // CONN:         hw.output [[r0]]#0 : i8
 hw.module @Top2 (in %clk: !seq.clock, out chksum: i8) {
