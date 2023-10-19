@@ -39,7 +39,8 @@ class ServiceDeclOpInterface;
 /// Validate a connection request against a service decl by comparing against
 /// the port list.
 LogicalResult validateServiceConnectionRequest(ServiceDeclOpInterface decl,
-                                               Operation *reqOp);
+                                               Operation *reqOp,
+                                               bool skipDirectionCheck = false);
 } // namespace esi
 } // namespace circt
 

@@ -350,12 +350,13 @@ static ServiceDeclOpInterface getServiceDecl(Operation *op,
 /// Check that the type of a given service request matches the services port
 /// type.
 static LogicalResult reqPortMatches(Operation *op, hw::InnerRefAttr port,
-                                    SymbolTableCollection &symbolTable) {
+                                    SymbolTableCollection &symbolTable,
+                                    bool skipDirectionCheck = false) {
   auto serviceDecl = getServiceDecl(op, symbolTable, port);
   if (!serviceDecl)
     return op->emitOpError("Could not find service declaration ")
            << port.getModuleRef();
-  return serviceDecl.validateRequest(op);
+  return serviceDecl.validateRequest(op, skipDirectionCheck);
 }
 
 ChannelBundleType RequestToClientConnectionOp::getBundleType() {
@@ -382,31 +383,15 @@ ChannelBundleType ServiceImplementConnReqOp::getBundleType() {
 
 LogicalResult ServiceImplementConnReqOp::verifySymbolUses(
     SymbolTableCollection &symbolTable) {
-
-  hw::InnerRefAttr port = getServicePort();
-  auto serviceDecl = getServiceDecl(*this, symbolTable, port);
-  if (!serviceDecl)
-    return emitOpError("Could not find service declaration ")
-           << port.getModuleRef();
-
-  ServicePortInfo portDecl;
-  SmallVector<ServicePortInfo> ports;
-  serviceDecl.getPortList(ports);
-  for (ServicePortInfo portFromList : ports)
-    if (portFromList.port == port) {
-      portDecl = portFromList;
-      break;
-    }
-  if (!portDecl.port)
-    return emitOpError("Could not locate port ") << port.getName();
-
-  return success();
+  return reqPortMatches(getOperation(), getServicePortAttr(), symbolTable,
+                        true);
 }
 
 /// Validate a connection request against a service decl by comparing against
 /// the port list.
 LogicalResult validateRequest(ServiceDeclOpInterface svc,
-                              ServiceReqOpInterface req) {
+                              ServiceReqOpInterface req,
+                              bool skipDirectionCheck = false) {
   ServicePortInfo portDecl;
   SmallVector<ServicePortInfo> ports;
   svc.getPortList(ports);
@@ -419,13 +404,15 @@ LogicalResult validateRequest(ServiceDeclOpInterface svc,
     return req.emitOpError("Could not locate port ")
            << req.getServicePort().getName();
 
-  ServicePortInfo::Direction reqDirection =
-      isa<RequestToClientConnectionOp>(req)
-          ? ServicePortInfo::Direction::toClient
-          : ServicePortInfo::Direction::toServer;
-  if (reqDirection != portDecl.direction)
-    return req.emitOpError(
-        "Request direction does not match service port direction");
+  if (!skipDirectionCheck) {
+    ServicePortInfo::Direction reqDirection =
+        isa<RequestToClientConnectionOp>(req)
+            ? ServicePortInfo::Direction::toClient
+            : ServicePortInfo::Direction::toServer;
+    if (reqDirection != portDecl.direction)
+      return req.emitOpError(
+          "Request direction does not match service port direction");
+  }
 
   DenseMap<StringAttr, BundledChannel> declBundleChannels;
   for (BundledChannel bc : portDecl.type.getChannels())
@@ -438,7 +425,7 @@ LogicalResult validateRequest(ServiceDeclOpInterface svc,
     if (f == declBundleChannels.end())
       return req.emitOpError(
           "Request channel name not found in service port bundle");
-    if (f->second.direction != bc.direction)
+    if (!skipDirectionCheck && f->second.direction != bc.direction)
       return req.emitOpError("Request channel direction does not match service "
                              "port bundle channel direction");
 
@@ -449,11 +436,10 @@ LogicalResult validateRequest(ServiceDeclOpInterface svc,
   return success();
 }
 
-LogicalResult
-circt::esi::validateServiceConnectionRequest(ServiceDeclOpInterface decl,
-                                             Operation *reqOp) {
+LogicalResult circt::esi::validateServiceConnectionRequest(
+    ServiceDeclOpInterface decl, Operation *reqOp, bool skipDirectionCheck) {
   if (auto req = dyn_cast<ServiceReqOpInterface>(reqOp))
-    return ::validateRequest(decl, req);
+    return ::validateRequest(decl, req, skipDirectionCheck);
   return reqOp->emitOpError("Did not recognize request op");
 }
 

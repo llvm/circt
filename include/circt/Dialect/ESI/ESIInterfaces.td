@@ -60,10 +60,12 @@ def ServiceDeclOpInterface : OpInterface<"ServiceDeclOpInterface"> {
     >,
     InterfaceMethod<
         "Validate this service request against this service decl.",
-        "mlir::LogicalResult", "validateRequest", (ins "mlir::Operation*":$req),
+        "mlir::LogicalResult", "validateRequest",
+        (ins "mlir::Operation*":$req, "bool":$skipDirectionCheck),
         /*methodBody=*/"",
         /*defaultImplementation=*/[{
-          return circt::esi::validateServiceConnectionRequest($_op, req);
+          return circt::esi::validateServiceConnectionRequest(
+            $_op, req, skipDirectionCheck);
         }]>,
   ];
 }

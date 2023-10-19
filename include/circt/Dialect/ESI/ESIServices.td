@@ -115,7 +115,6 @@ def ServiceInstanceOp : ESI_Op<"service.instance"> {
   }];
 }
 
-
 def ServiceImplementReqOp : ESI_Op<"service.impl_req", [NoTerminator]> {
   let summary = "Request for a service to be implemented";
   let description = [{
