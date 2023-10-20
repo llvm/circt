@@ -292,6 +292,23 @@ bool omEvaluatorValueIsAMap(OMEvaluatorValue evaluatorValue) {
   return isa<evaluator::MapValue>(unwrap(evaluatorValue).get());
 }
 
+bool omEvaluatorValueIsABasePath(OMEvaluatorValue evaluatorValue) {
+  return isa<evaluator::BasePathValue>(unwrap(evaluatorValue).get());
+}
+
+OMEvaluatorValue omEvaluatorBasePathGetEmpty(MlirContext context) {
+  return wrap(std::make_shared<evaluator::BasePathValue>(unwrap(context)));
+}
+
+bool omEvaluatorValueIsAPath(OMEvaluatorValue evaluatorValue) {
+  return isa<evaluator::PathValue>(unwrap(evaluatorValue).get());
+}
+
+MlirAttribute omEvaluatorPathGetAsString(OMEvaluatorValue evaluatorValue) {
+  const auto *path = cast<evaluator::PathValue>(unwrap(evaluatorValue).get());
+  return wrap((Attribute)path->getAsString());
+}
+
 //===----------------------------------------------------------------------===//
 // ReferenceAttr API.
 //===----------------------------------------------------------------------===//
