@@ -1094,12 +1094,12 @@ hw.module @useRenamedStruct(inout %a: !hw.struct<repeat: i1, repeat_0: i1>, out 
 
   %0 = sv.struct_field_inout %a["repeat"] : !hw.inout<struct<repeat: i1, repeat_0: i1>>
   %1 = sv.read_inout %0 : !hw.inout<i1>
-  // assign r1 = a.repeat_0;
+  // CHECK: assign r1 = a.repeat_0;
   %2 = hw.struct_extract %read["repeat_0"] : !hw.struct<repeat: i1, repeat_0: i1>
-  // assign r2 = a.repeat_0_1;
+  // CHECK: assign r2 = a.repeat_0_0
   %true = hw.constant true
   %3 = hw.struct_inject %read["repeat_0"], %true : !hw.struct<repeat: i1, repeat_0: i1>
-  // assign r3 = '{repeat_0: a.repeat_0, repeat_0_0: (1'h1)};
+  // CHECK: assign r3 = '{repeat_0: a.repeat_0, repeat_0_0: (1'h1)};
   hw.output %1, %2, %3, %i0 : i1, i1, !hw.struct<repeat: i1, repeat_0: i1>, !hw.struct<repeat: i1, repeat_0: i1>
 }
 
