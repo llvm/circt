@@ -13,6 +13,8 @@
 #ifndef CIRCT_DIALECT_ESI_APPID_TD
 #define CIRCT_DIALECT_ESI_APPID_TD
 
+include "circt/Dialect/ESI/ESIDialect.td"
+
 include "mlir/IR/AttrTypeBase.td"
 
 def AppIDAttr : ESI_Attr<"AppID"> {
