@@ -364,6 +364,11 @@ void ESIConnectServicesPass::convertReq(
   newReq->setDialectAttrs(toClientReq->getDialectAttrs());
   toClientReq.getToClient().replaceAllUsesWith(newReq.getToClient());
 
+  // Emit a record of the original request.
+  b.create<ServiceRequestRecordOp>(toClientReq.getLoc(), toClientReq.getAppID(),
+                                   toClientReq.getServicePortAttr(),
+                                   BundleDirection::toClient,
+                                   toClientReq.getToClient().getType());
   toClientReq.erase();
 }
 
@@ -406,6 +411,11 @@ void ESIConnectServicesPass::convertReq(
                                       unpackToClientFromChannelsBackedges))
     be.setValue(v);
 
+  // Emit a record of the original request.
+  b.create<ServiceRequestRecordOp>(toServerReq.getLoc(), toServerReq.getAppID(),
+                                   toServerReq.getServicePortAttr(),
+                                   BundleDirection::toServer,
+                                   toServerReq.getToServer().getType());
   toServerReq.erase();
 }
 

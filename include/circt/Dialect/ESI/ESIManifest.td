@@ -51,6 +51,14 @@ def AppIDPathAttr : ESI_Attr<"AppIDPath"> {
   }];
 }
 
+def BundleDirection : I32EnumAttr<"BundleDirection",
+  "Direction of original request", [
+    I32EnumAttrCase<"toServer", 1>,
+    I32EnumAttrCase<"toClient", 2>,
+  ]> {
+  let cppNamespace = "::circt::esi";
+}
+
 def ServiceRequestRecordOp : ESI_Op<"esi.manifest.req", []> {
   let summary = "Record of a service request";
   let description = [{
@@ -59,8 +67,15 @@ def ServiceRequestRecordOp : ESI_Op<"esi.manifest.req", []> {
     service to preserve metadata about the original request.
   }];
 
-  let arguments = (ins AppIDAttr:$requestor, InnerRefAttr:$servicePort,
-                       I1Attr:$toClient, ChannelBundleType:$bundleType);
+  let arguments = (ins AppIDAttr:$requestor,
+                       InnerRefAttr:$servicePort,
+                       BundleDirection:$direction,
+                       TypeAttrOf<ChannelBundleType>:$bundleType);
+
+  let assemblyFormat = [{
+    qualified($requestor) `,` $servicePort `,` $direction `,` $bundleType
+    attr-dict
+  }];
 }
 
 #endif // CIRCT_DIALECT_ESI_MANIFEST_TD
