@@ -5,15 +5,15 @@
 from __future__ import annotations
 
 from .support import get_user_loc, _obj_to_value_infer_type
-from .types import ChannelSignaling, Type
+from .types import ChannelDirection, ChannelSignaling, Type
 
-from .circt.dialects import sv
+from .circt.dialects import esi, sv
 from .circt import support
 from .circt import ir
 
 from contextvars import ContextVar
 from functools import singledispatchmethod
-from typing import List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 import re
 import numpy as np
 
@@ -704,6 +704,48 @@ class ChannelSignal(Signal):
       return wrap_op[0], wrap_op[1]
     else:
       raise TypeError("Unknown signaling standard")
+
+
+class BundleSignal(Signal):
+  """Signal for types.Bundle."""
+
+  def reg(self, clk, rst=None, name=None):
+    raise TypeError("Cannot register a bundle")
+
+  def unpack(self, **kwargs: Dict[str,
+                                  ChannelSignal]) -> Dict[str, ChannelSignal]:
+    """Given FROM channels, unpack a bundle into the TO channels."""
+    from_channels = {
+        bc.name: (idx, bc) for idx, bc in enumerate(
+            filter(lambda c: c.direction == ChannelDirection.FROM,
+                   self.type.channels))
+    }
+    to_channels = [
+        c for c in self.type.channels if c.direction == ChannelDirection.TO
+    ]
+
+    operands = [None] * len(to_channels)
+    for name, value in kwargs.items():
+      if name not in from_channels:
+        raise ValueError(f"Unknown channel name '{name}'")
+      idx, bc = from_channels[name]
+      if value.type != bc.channel:
+        raise TypeError(f"Expected channel type {bc.channel}, got {value.type} "
+                        f"on channel '{name}'")
+      operands[idx] = value.value
+      del from_channels[name]
+    if len(from_channels) > 0:
+      raise ValueError(
+          f"Missing channel values for {', '.join(from_channels.keys())}")
+
+    unpack_op = esi.UnpackBundleOp([bc.channel._type for bc in to_channels],
+                                   self.value, operands)
+
+    to_channels_results = unpack_op.toChannels
+    return {
+        bc.name: _FromCirctValue(to_channels_results[idx])
+        for idx, bc in enumerate(to_channels)
+    }
 
 
 class ListSignal(Signal):

@@ -384,7 +384,7 @@ static LogicalResult processBuffer(
     if (failed(parsePassPipeline(StringRef(highFIRRTLPassPlugin), pm)))
       return failure();
 
-  if (failed(firtool::populateCHIRRTLToLowFIRRTL(pm, firtoolOptions, *module,
+  if (failed(firtool::populateCHIRRTLToLowFIRRTL(pm, firtoolOptions,
                                                  inputFilename)))
     return failure();
 
