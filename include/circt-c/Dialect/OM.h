@@ -187,21 +187,21 @@ MLIR_CAPI_EXPORTED bool omEvaluatorValueIsAMap(OMEvaluatorValue evaluatorValue);
 MLIR_CAPI_EXPORTED MlirType
 omEvaluatorMapGetType(OMEvaluatorValue evaluatorValue);
 
-/// Query if the EvaluatorValue is a FrozenBasePath.
+/// Query if the EvaluatorValue is a BasePath.
 MLIR_CAPI_EXPORTED bool
-omEvaluatorValueIsAFrozenBasePath(OMEvaluatorValue evaluatorValue);
+omEvaluatorValueIsABasePath(OMEvaluatorValue evaluatorValue);
 
-/// Create an empty FrozenBasePath.
+/// Create an empty BasePath.
 MLIR_CAPI_EXPORTED OMEvaluatorValue
-omEvaluatorFrozenBasePathGetEmpty(MlirContext context);
+omEvaluatorBasePathGetEmpty(MlirContext context);
 
-/// Query if the EvaluatorValue is a FrozenPath.
+/// Query if the EvaluatorValue is a Path.
 MLIR_CAPI_EXPORTED bool
-omEvaluatorValueIsAFrozenPath(OMEvaluatorValue evaluatorValue);
+omEvaluatorValueIsAPath(OMEvaluatorValue evaluatorValue);
 
-/// Get a string representation of a FrozenPath.
+/// Get a string representation of a Path.
 MLIR_CAPI_EXPORTED MlirAttribute
-omEvaluatorFrozenPathGetAsString(OMEvaluatorValue evaluatorValue);
+omEvaluatorPathGetAsString(OMEvaluatorValue evaluatorValue);
 
 //===----------------------------------------------------------------------===//
 // ReferenceAttr API
@@ -247,7 +247,6 @@ MLIR_CAPI_EXPORTED MlirIdentifier omMapAttrGetElementKey(MlirAttribute attr,
 
 MLIR_CAPI_EXPORTED MlirAttribute omMapAttrGetElementValue(MlirAttribute attr,
                                                           intptr_t pos);
-
 
 #ifdef __cplusplus
 }

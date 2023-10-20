@@ -210,7 +210,7 @@ obj = evaluator.instantiate("Test", 41)
 # CHECK: 41
 print(obj.field)
 
-path = om.FrozenBasePath.get_empty(evaluator.module.context)
+path = om.BasePath.get_empty(evaluator.module.context)
 obj = evaluator.instantiate("Paths", path)
 print(obj.path)
 # CHECK: OMReferenceTarget:~Foo|Foo/bar:Bar/baz:Baz>w

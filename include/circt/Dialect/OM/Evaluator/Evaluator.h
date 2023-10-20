@@ -334,30 +334,15 @@ private:
 
 /// A Basepath value.
 struct BasePathValue : EvaluatorValue {
-  BasePathValue(MLIRContext *context)
-      : EvaluatorValue(context, Kind::BasePath, UnknownLoc::get(context)),
-        path(PathAttr::get(context, {})) {
-    markFullyEvaluated();
-  }
+  BasePathValue(MLIRContext *context);
 
   /// Create a path value representing a basepath.
-  BasePathValue(om::PathAttr path, Location loc)
-      : EvaluatorValue(path.getContext(), Kind::BasePath, loc), path(path) {}
+  BasePathValue(om::PathAttr path, Location loc);
 
-  om::PathAttr getPath() const {
-    assert(isFullyEvaluated());
-    return path;
-  }
+  om::PathAttr getPath() const;
 
   /// Set the basepath which this path is relative to.
-  void setBasepath(const BasePathValue &basepath) {
-    assert(!isFullyEvaluated());
-    auto newPath = llvm::to_vector(basepath.path.getPath());
-    auto oldPath = path.getPath();
-    newPath.append(oldPath.begin(), oldPath.end());
-    path = PathAttr::get(path.getContext(), newPath);
-    markFullyEvaluated();
-  }
+  void setBasepath(const BasePathValue &basepath);
 
   /// Finalize the evaluator value.
   LogicalResult finalizeImpl() { return success(); }
@@ -375,16 +360,9 @@ private:
 struct PathValue : EvaluatorValue {
   /// Create a path value representing a regular path.
   PathValue(om::TargetKindAttr targetKind, om::PathAttr path, StringAttr module,
-            StringAttr ref, StringAttr field, Location loc)
-      : EvaluatorValue(loc.getContext(), Kind::Path, loc),
-        targetKind(targetKind), path(path), module(module), ref(ref),
-        field(field) {}
+            StringAttr ref, StringAttr field, Location loc);
 
-  static PathValue getEmptyPath(Location loc) {
-    PathValue path(nullptr, nullptr, nullptr, nullptr, nullptr, loc);
-    path.markFullyEvaluated();
-    return path;
-  }
+  static PathValue getEmptyPath(Location loc);
 
   om::TargetKindAttr getTargetKind() const { return targetKind; }
 
@@ -396,59 +374,9 @@ struct PathValue : EvaluatorValue {
 
   StringAttr getField() const { return field; }
 
-  StringAttr getAsString() const {
-    // If the module is null, then this is a path to a deleted object.
-    if (!targetKind)
-      return StringAttr::get(getContext(), "OMDeleted");
-    SmallString<64> result;
-    switch (targetKind.getValue()) {
-    case om::TargetKind::DontTouch:
-      result += "OMDontTouchedReferenceTarget";
-      break;
-    case om::TargetKind::Instance:
-      result += "OMInstanceTarget";
-      break;
-    case om::TargetKind::MemberInstance:
-      result += "OMMemberInstanceTarget";
-      break;
-    case om::TargetKind::MemberReference:
-      result += "OMMemberReferenceTarget";
-      break;
-    case om::TargetKind::Reference:
-      result += "OMReferenceTarget";
-      break;
-    }
-    result += ":~";
-    if (!path.getPath().empty())
-      result += path.getPath().front().module;
-    else
-      result += module.getValue();
-    result += '|';
-    for (const auto &elt : path) {
-      result += elt.module.getValue();
-      result += '/';
-      result += elt.instance.getValue();
-      result += ':';
-    }
-    if (!module.getValue().empty())
-      result += module.getValue();
-    if (!ref.getValue().empty()) {
-      result += '>';
-      result += ref.getValue();
-    }
-    if (!field.getValue().empty())
-      result += field.getValue();
-    return StringAttr::get(field.getContext(), result);
-  }
+  StringAttr getAsString() const;
 
-  void setBasepath(const BasePathValue &basepath) {
-    assert(!isFullyEvaluated());
-    auto newPath = llvm::to_vector(basepath.getPath().getPath());
-    auto oldPath = path.getPath();
-    newPath.append(oldPath.begin(), oldPath.end());
-    path = PathAttr::get(path.getContext(), newPath);
-    markFullyEvaluated();
-  }
+  void setBasepath(const BasePathValue &basepath);
 
   // Finalize the evaluator value.
   LogicalResult finalizeImpl() { return success(); }

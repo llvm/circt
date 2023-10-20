@@ -681,3 +681,100 @@ LogicalResult circt::om::evaluator::ListValue::finalizeImpl() {
   }
   return success();
 }
+
+//===----------------------------------------------------------------------===//
+// BasePathValue
+//===----------------------------------------------------------------------===//
+
+evaluator::BasePathValue::BasePathValue(MLIRContext *context)
+    : EvaluatorValue(context, Kind::BasePath, UnknownLoc::get(context)),
+      path(PathAttr::get(context, {})) {
+  markFullyEvaluated();
+}
+
+evaluator::BasePathValue::BasePathValue(PathAttr path, Location loc)
+    : EvaluatorValue(path.getContext(), Kind::BasePath, loc), path(path) {}
+
+PathAttr evaluator::BasePathValue::getPath() const {
+  assert(isFullyEvaluated());
+  return path;
+}
+
+void evaluator::BasePathValue::setBasepath(const BasePathValue &basepath) {
+  assert(!isFullyEvaluated());
+  auto newPath = llvm::to_vector(basepath.path.getPath());
+  auto oldPath = path.getPath();
+  newPath.append(oldPath.begin(), oldPath.end());
+  path = PathAttr::get(path.getContext(), newPath);
+  markFullyEvaluated();
+}
+
+//===----------------------------------------------------------------------===//
+// PathValue
+//===----------------------------------------------------------------------===//
+
+evaluator::PathValue::PathValue(TargetKindAttr targetKind, PathAttr path,
+                                StringAttr module, StringAttr ref,
+                                StringAttr field, Location loc)
+    : EvaluatorValue(loc.getContext(), Kind::Path, loc), targetKind(targetKind),
+      path(path), module(module), ref(ref), field(field) {}
+
+evaluator::PathValue evaluator::PathValue::getEmptyPath(Location loc) {
+  PathValue path(nullptr, nullptr, nullptr, nullptr, nullptr, loc);
+  path.markFullyEvaluated();
+  return path;
+}
+
+StringAttr evaluator::PathValue::getAsString() const {
+  // If the module is null, then this is a path to a deleted object.
+  if (!targetKind)
+    return StringAttr::get(getContext(), "OMDeleted");
+  SmallString<64> result;
+  switch (targetKind.getValue()) {
+  case TargetKind::DontTouch:
+    result += "OMDontTouchedReferenceTarget";
+    break;
+  case TargetKind::Instance:
+    result += "OMInstanceTarget";
+    break;
+  case TargetKind::MemberInstance:
+    result += "OMMemberInstanceTarget";
+    break;
+  case TargetKind::MemberReference:
+    result += "OMMemberReferenceTarget";
+    break;
+  case TargetKind::Reference:
+    result += "OMReferenceTarget";
+    break;
+  }
+  result += ":~";
+  if (!path.getPath().empty())
+    result += path.getPath().front().module;
+  else
+    result += module.getValue();
+  result += '|';
+  for (const auto &elt : path) {
+    result += elt.module.getValue();
+    result += '/';
+    result += elt.instance.getValue();
+    result += ':';
+  }
+  if (!module.getValue().empty())
+    result += module.getValue();
+  if (!ref.getValue().empty()) {
+    result += '>';
+    result += ref.getValue();
+  }
+  if (!field.getValue().empty())
+    result += field.getValue();
+  return StringAttr::get(field.getContext(), result);
+}
+
+void evaluator::PathValue::setBasepath(const BasePathValue &basepath) {
+  assert(!isFullyEvaluated());
+  auto newPath = llvm::to_vector(basepath.getPath().getPath());
+  auto oldPath = path.getPath();
+  newPath.append(oldPath.begin(), oldPath.end());
+  path = PathAttr::get(path.getContext(), newPath);
+  markFullyEvaluated();
+}

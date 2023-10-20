@@ -26,13 +26,17 @@ struct List;
 struct Object;
 struct Tuple;
 struct Map;
-struct FrozenBasePath;
-struct FrozenPath;
+struct BasePath;
+struct Path;
 
-/// None is used to by pybind when default initializing a PythonValue.
+/// None is used to by pybind when default initializing a PythonValue. The order
+/// of types in the variant matters here, and we want pybind to try casting to
+/// the Python classes defined in this file first, before MlirAttribute and the
+/// upstream MLIR type casters.  If the MlirAttribute is tried first, then we
+/// can hit an assert inside the MLIR codebase.
 struct None {};
-using PythonValue = std::variant<None, Object, List, Tuple, Map, FrozenBasePath,
-                                 FrozenPath, MlirAttribute>;
+using PythonValue =
+    std::variant<None, Object, List, Tuple, Map, BasePath, Path, MlirAttribute>;
 
 /// Map an opaque OMEvaluatorValue into a python value.
 PythonValue omEvaluatorValueToPythonValue(OMEvaluatorValue result);
@@ -104,13 +108,13 @@ private:
   OMEvaluatorValue value;
 };
 
-/// Provides a FrozenBasePath class by simply wrapping the OMObject CAPI.
-struct FrozenBasePath {
+/// Provides a BasePath class by simply wrapping the OMObject CAPI.
+struct BasePath {
   // Instantiate a Map with a reference to the underlying OMEvaluatorValue.
-  FrozenBasePath(OMEvaluatorValue value) : value(value) {}
+  BasePath(OMEvaluatorValue value) : value(value) {}
 
-  static FrozenBasePath getEmpty(MlirContext context) {
-    return FrozenBasePath(omEvaluatorFrozenBasePathGetEmpty(context));
+  static BasePath getEmpty(MlirContext context) {
+    return BasePath(omEvaluatorBasePathGetEmpty(context));
   }
 
   /// Return a context from an underlying value.
@@ -123,10 +127,10 @@ private:
   OMEvaluatorValue value;
 };
 
-/// Provides a FrozenPath class by simply wrapping the OMObject CAPI.
-struct FrozenPath {
+/// Provides a Path class by simply wrapping the OMObject CAPI.
+struct Path {
   // Instantiate a Map with a reference to the underlying OMEvaluatorValue.
-  FrozenPath(OMEvaluatorValue value) : value(value) {}
+  Path(OMEvaluatorValue value) : value(value) {}
 
   /// Return a context from an underlying value.
   MlirContext getContext() const { return omEvaluatorValueGetContext(value); }
@@ -134,8 +138,7 @@ struct FrozenPath {
   OMEvaluatorValue getValue() const { return value; }
 
   std::string dunderStr() {
-    auto ref =
-        mlirStringAttrGetValue(omEvaluatorFrozenPathGetAsString(getValue()));
+    auto ref = mlirStringAttrGetValue(omEvaluatorPathGetAsString(getValue()));
     return std::string(ref.data, ref.length);
   }
 
@@ -366,12 +369,12 @@ PythonValue omEvaluatorValueToPythonValue(OMEvaluatorValue result) {
     return Map(result);
 
   // If the field was a base path, return a new BasePath.
-  if (omEvaluatorValueIsAFrozenBasePath(result))
-    return FrozenBasePath(result);
+  if (omEvaluatorValueIsABasePath(result))
+    return BasePath(result);
 
   // If the field was a path, return a new Path.
-  if (omEvaluatorValueIsAFrozenPath(result))
-    return FrozenPath(result);
+  if (omEvaluatorValueIsAPath(result))
+    return Path(result);
 
   // If the field was a primitive, return the Attribute.
   assert(omEvaluatorValueIsAPrimitive(result));
@@ -391,10 +394,10 @@ OMEvaluatorValue pythonValueToOMEvaluatorValue(PythonValue result) {
   if (auto *map = std::get_if<Map>(&result))
     return map->getValue();
 
-  if (auto *basePath = std::get_if<FrozenBasePath>(&result))
+  if (auto *basePath = std::get_if<BasePath>(&result))
     return basePath->getValue();
 
-  if (auto *path = std::get_if<FrozenPath>(&result))
+  if (auto *path = std::get_if<Path>(&result))
     return path->getValue();
 
   return std::get<Object>(result).getValue();
@@ -432,16 +435,16 @@ void circt::python::populateDialectOMSubmodule(py::module &m) {
       .def("keys", &Map::getKeys)
       .def_property_readonly("type", &Map::getType, "The Type of the Map");
 
-  // Add the FrozenBasePath class definition.
-  py::class_<FrozenBasePath>(m, "FrozenBasePath")
-      .def(py::init<FrozenBasePath>(), py::arg("basepath"))
-      .def_static("get_empty", &FrozenBasePath::getEmpty,
+  // Add the BasePath class definition.
+  py::class_<BasePath>(m, "BasePath")
+      .def(py::init<BasePath>(), py::arg("basepath"))
+      .def_static("get_empty", &BasePath::getEmpty,
                   py::arg("context") = py::none());
 
-  // Add the FrozenPath class definition.
-  py::class_<FrozenPath>(m, "FrozenPath")
-      .def(py::init<FrozenPath>(), py::arg("basepath"))
-      .def("__str__", &FrozenPath::dunderStr);
+  // Add the Path class definition.
+  py::class_<Path>(m, "Path")
+      .def(py::init<Path>(), py::arg("basepath"))
+      .def("__str__", &Path::dunderStr);
 
   // Add the Object class definition.
   py::class_<Object>(m, "Object")
