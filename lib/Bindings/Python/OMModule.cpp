@@ -110,7 +110,8 @@ private:
 
 /// Provides a BasePath class by simply wrapping the OMObject CAPI.
 struct BasePath {
-  // Instantiate a Map with a reference to the underlying OMEvaluatorValue.
+  /// Instantiate a BasePath with a reference to the underlying
+  /// OMEvaluatorValue.
   BasePath(OMEvaluatorValue value) : value(value) {}
 
   static BasePath getEmpty(MlirContext context) {
@@ -129,7 +130,7 @@ private:
 
 /// Provides a Path class by simply wrapping the OMObject CAPI.
 struct Path {
-  // Instantiate a Map with a reference to the underlying OMEvaluatorValue.
+  /// Instantiate a Path with a reference to the underlying OMEvaluatorValue.
   Path(OMEvaluatorValue value) : value(value) {}
 
   /// Return a context from an underlying value.
@@ -443,7 +444,7 @@ void circt::python::populateDialectOMSubmodule(py::module &m) {
 
   // Add the Path class definition.
   py::class_<Path>(m, "Path")
-      .def(py::init<Path>(), py::arg("basepath"))
+      .def(py::init<Path>(), py::arg("path"))
       .def("__str__", &Path::dunderStr);
 
   // Add the Object class definition.
