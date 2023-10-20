@@ -1,17 +1,16 @@
-//===- ESIChannels.td - All ESI ops related to app channels -- tablegen -*-===//
+//===- ESIManifest.td - System manifest stuff ---------------- tablegen -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-//
-// This is where any operations for the ESI dialect live.
-//
-//===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_ESI_APPID_TD
-#define CIRCT_DIALECT_ESI_APPID_TD
+#ifndef CIRCT_DIALECT_ESI_MANIFEST_TD
+#define CIRCT_DIALECT_ESI_MANIFEST_TD
+
+include "circt/Dialect/ESI/ESIChannels.td"
+include "circt/Dialect/HW/HWAttributesNaming.td"
 
 include "mlir/IR/AttrTypeBase.td"
 
@@ -22,16 +21,20 @@ def AppIDAttr : ESI_Attr<"AppID"> {
     Indended to make locating an instance easier in the instance hierarchy.
   }];
 
-  let parameters = (ins "StringAttr":$name, "uint64_t":$index);
+  let parameters = (ins "StringAttr":$name,
+                        OptionalParameter<"std::optional<uint64_t>">:$index);
   let mnemonic = "appid";
   let assemblyFormat = [{
-    `<` $name `[` $index `]` `>`
+    `<` $name (`[` $index^ `]`)? `>`
   }];
 
   let extraClassDeclaration = [{
     static constexpr StringRef AppIDAttrName = "esi.appid";
   }];
 }
+
+def AppIDArrayAttr :
+  TypedArrayAttrBase<AppIDAttr, "Array of AppIDs">;
 
 def AppIDPathAttr : ESI_Attr<"AppIDPath"> {
   let summary = "An application-specific hierarchical path through a design";
@@ -48,4 +51,16 @@ def AppIDPathAttr : ESI_Attr<"AppIDPath"> {
   }];
 }
 
-#endif // CIRCT_DIALECT_ESI_APPID_TD
+def ServiceRequestRecordOp : ESI_Op<"esi.manifest.req", []> {
+  let summary = "Record of a service request";
+  let description = [{
+    A record of a service request, including the requestor, the service
+    requested, and the parameters of the request. Emitted before connecting the
+    service to preserve metadata about the original request.
+  }];
+
+  let arguments = (ins AppIDAttr:$requestor, InnerRefAttr:$servicePort,
+                       I1Attr:$toClient, ChannelBundleType:$bundleType);
+}
+
+#endif // CIRCT_DIALECT_ESI_MANIFEST_TD
