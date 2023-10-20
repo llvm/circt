@@ -145,8 +145,12 @@ MlirAttribute circtESIAppIDAttrGet(MlirContext ctxt, MlirStringRef name,
 MlirStringRef circtESIAppIDAttrGetName(MlirAttribute attr) {
   return wrap(unwrap(attr).cast<AppIDAttr>().getName().getValue());
 }
-uint64_t circtESIAppIDAttrGetIndex(MlirAttribute attr) {
-  return unwrap(attr).cast<AppIDAttr>().getIndex();
+bool circtESIAppIDAttrGetIndex(MlirAttribute attr, uint64_t *indexOut) {
+  std::optional<uint64_t> index = unwrap(attr).cast<AppIDAttr>().getIndex();
+  if (!index)
+    return false;
+  *indexOut = index.value();
+  return true;
 }
 
 bool circtESIAttributeIsAnAppIDPathAttr(MlirAttribute attr) {

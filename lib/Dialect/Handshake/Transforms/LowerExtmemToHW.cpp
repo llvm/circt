@@ -211,7 +211,8 @@ LogicalResult HandshakeLowerExtmemToHWPass::wrapESI(
       auto reqPack = b.create<esi::PackBundleOp>(loc, readPortInfo.type,
                                                  (Value)backedges[resIdx]);
       b.create<esi::RequestToServerConnectionOp>(
-          loc, readPortInfo.port, reqPack.getBundle(), b.getArrayAttr({}));
+          loc, readPortInfo.port, reqPack.getBundle(),
+          esi::AppIDAttr::get(ctx, b.getStringAttr("load"), {}));
       instanceArgsFromThisMem.push_back(
           reqPack.getFromChannels()
               [esi::RandomAccessMemoryDeclOp::RespDirChannelIdx]);
@@ -223,7 +224,8 @@ LogicalResult HandshakeLowerExtmemToHWPass::wrapESI(
       auto reqPack = b.create<esi::PackBundleOp>(loc, writePortInfo.type,
                                                  (Value)backedges[resIdx]);
       b.create<esi::RequestToServerConnectionOp>(
-          loc, writePortInfo.port, reqPack.getBundle(), b.getArrayAttr({}));
+          loc, writePortInfo.port, reqPack.getBundle(),
+          esi::AppIDAttr::get(ctx, b.getStringAttr("store"), {}));
       instanceArgsFromThisMem.push_back(
           reqPack.getFromChannels()
               [esi::RandomAccessMemoryDeclOp::RespDirChannelIdx]);

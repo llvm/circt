@@ -22,16 +22,20 @@ def AppIDAttr : ESI_Attr<"AppID"> {
     Indended to make locating an instance easier in the instance hierarchy.
   }];
 
-  let parameters = (ins "StringAttr":$name, "uint64_t":$index);
-  let mnemonic = "appid";
-  let assemblyFormat = [{
-    `<` $name `[` $index `]` `>`
-  }];
+  let parameters = (ins "StringAttr":$name,
+                        OptionalParameter<"std::optional<uint64_t>">:$index);
+   let mnemonic = "appid";
+   let assemblyFormat = [{
+    `<` $name (`[` $index^ `]`)? `>`
+   }];
 
   let extraClassDeclaration = [{
     static constexpr StringRef AppIDAttrName = "esi.appid";
   }];
 }
+
+def AppIDArrayAttr :
+  TypedArrayAttrBase<AppIDAttr, "Array of AppIDs">;
 
 def AppIDPathAttr : ESI_Attr<"AppIDPath"> {
   let summary = "An application-specific hierarchical path through a design";

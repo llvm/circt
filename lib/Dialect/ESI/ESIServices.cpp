@@ -62,10 +62,18 @@ static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
   }
 
   // Assemble the name to use for an endpoint.
-  auto toStringAttr = [&](ArrayAttr strArr) {
+  auto toStringAttr = [&](ArrayAttr strArr, StringAttr channelName) {
     std::string buff;
     llvm::raw_string_ostream os(buff);
-    llvm::interleave(strArr.getAsValueRange<StringAttr>(), os, ".");
+    llvm::interleave(
+        strArr.getAsRange<AppIDAttr>(), os,
+        [&](AppIDAttr appid) {
+          os << appid.getName().getValue();
+          if (appid.getIndex())
+            os << "[" << appid.getIndex() << "]";
+        },
+        ".");
+    os << "." << channelName.getValue();
     return StringAttr::get(ctxt, os.str());
   };
 
@@ -81,7 +89,6 @@ static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
   for (auto req : implReq.getOps<ServiceImplementConnReqOp>()) {
     Location loc = req->getLoc();
     ChannelBundleType bundleType = req.getToClient().getType();
-    ArrayAttr clientNamePathAttr = req.getClientNamePath();
 
     SmallVector<Value, 8> toServerValues;
     for (BundledChannel ch : bundleType.getChannels()) {
@@ -89,7 +96,7 @@ static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
         auto nullSource = b.create<NullSourceOp>(loc, i1ch);
         auto cosim = b.create<CosimEndpointOp>(
             loc, ch.type, clk, rst, nullSource.getOut(),
-            toStringAttr(clientNamePathAttr));
+            toStringAttr(req.getRelativeAppIDPathAttr(), ch.name));
         toServerValues.push_back(cosim.getRecv());
       }
     }
@@ -102,9 +109,9 @@ static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
     size_t chanIdx = 0;
     for (BundledChannel ch : bundleType.getChannels()) {
       if (ch.direction == ChannelDirection::from)
-        b.create<CosimEndpointOp>(loc, i1ch, clk, rst,
-                                  pack.getFromChannels()[chanIdx++],
-                                  toStringAttr(clientNamePathAttr));
+        b.create<CosimEndpointOp>(
+            loc, i1ch, clk, rst, pack.getFromChannels()[chanIdx++],
+            toStringAttr(req.getRelativeAppIDPathAttr(), ch.name));
     }
   }
 
@@ -352,7 +359,8 @@ void ESIConnectServicesPass::convertReq(
   // to_client requests are already in the canonical form, just the wrong op.
   auto newReq = b.create<ServiceImplementConnReqOp>(
       toClientReq.getLoc(), toClientReq.getToClient().getType(),
-      toClientReq.getServicePortAttr(), toClientReq.getClientNamePath());
+      toClientReq.getServicePortAttr(),
+      ArrayAttr::get(&getContext(), {toClientReq.getAppIDAttr()}));
   newReq->setDialectAttrs(toClientReq->getDialectAttrs());
   toClientReq.getToClient().replaceAllUsesWith(newReq.getToClient());
 
@@ -372,7 +380,7 @@ void ESIConnectServicesPass::convertReq(
   // Create the new canonical request. It's modeled in the to_client form.
   auto toClientReq = b.create<ServiceImplementConnReqOp>(
       toServerReq.getLoc(), toClientType, toServerReq.getServicePortAttr(),
-      toServerReq.getClientNamePath());
+      ArrayAttr::get(&getContext(), {toServerReq.getAppIDAttr()}));
   toClientReq->setDialectAttrs(toServerReq->getDialectAttrs());
 
   // Unpack the bundle coming from the new request.
@@ -512,8 +520,12 @@ ESIConnectServicesPass::surfaceReqs(hw::HWMutableModuleLike mod,
     std::string portName;
     llvm::raw_string_ostream nameOS(portName);
     llvm::interleave(
-        namePath.getValue(), nameOS,
-        [&](Attribute attr) { nameOS << attr.cast<StringAttr>().getValue(); },
+        namePath.getAsRange<AppIDAttr>(), nameOS,
+        [&](AppIDAttr appid) {
+          nameOS << appid.getName().getValue();
+          if (appid.getIndex())
+            nameOS << "_" << appid.getIndex();
+        },
         ".");
     return StringAttr::get(ctxt, nameOS.str());
   };
@@ -527,8 +539,8 @@ ESIConnectServicesPass::surfaceReqs(hw::HWMutableModuleLike mod,
   for (auto req : reqs) {
     newInputs.push_back(std::make_pair(
         origNumInputs,
-        hw::PortInfo{{getPortName(req.getClientNamePath()), req.getBundleType(),
-                      hw::ModulePort::Direction::Input},
+        hw::PortInfo{{getPortName(req.getRelativeAppIDPathAttr()),
+                      req.getBundleType(), hw::ModulePort::Direction::Input},
                      origNumInputs,
                      {},
                      req->getLoc()}));
@@ -540,11 +552,11 @@ ESIConnectServicesPass::surfaceReqs(hw::HWMutableModuleLike mod,
   mod.insertPorts(newInputs, {});
 
   // Prepend a name to the instance tracking array.
-  auto prependNamePart = [&](ArrayAttr namePath, StringRef part) {
-    SmallVector<Attribute, 8> newNamePath;
-    newNamePath.push_back(StringAttr::get(namePath.getContext(), part));
-    newNamePath.append(namePath.begin(), namePath.end());
-    return ArrayAttr::get(namePath.getContext(), newNamePath);
+  auto prependNamePart = [&](ArrayAttr appIDPath, AppIDAttr appID) {
+    SmallVector<Attribute, 8> newAppIDPath;
+    newAppIDPath.push_back(appID);
+    newAppIDPath.append(appIDPath.begin(), appIDPath.end());
+    return ArrayAttr::get(appIDPath.getContext(), newAppIDPath);
   };
 
   // Update the module instantiations.
@@ -555,9 +567,16 @@ ESIConnectServicesPass::surfaceReqs(hw::HWMutableModuleLike mod,
     // Add new inputs for the new bundles being requested.
     SmallVector<Value, 16> newOperands;
     for (auto req : reqs) {
+      // If the instance has an AppID, prepend it.
+      ArrayAttr appIDPath = req.getRelativeAppIDPathAttr();
+      if (auto instAppID = dyn_cast_or_null<AppIDAttr>(
+              inst->getDiscardableAttr(AppIDAttr::AppIDAttrName)))
+        appIDPath = prependNamePart(appIDPath, instAppID);
+
+      // Clone the request.
       auto clone = b.create<ServiceImplementConnReqOp>(
           req.getLoc(), req.getToClient().getType(), req.getServicePortAttr(),
-          prependNamePart(req.getClientNamePath(), inst.getInstanceName()));
+          appIDPath);
       clone->setDialectAttrs(req->getDialectAttrs());
       newOperands.push_back(clone.getToClient());
     }

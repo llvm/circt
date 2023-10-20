@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_ESI_ESIOPS_H
 #define CIRCT_DIALECT_ESI_ESIOPS_H
 
+#include "circt/Dialect/ESI/ESIAttributes.h"
 #include "circt/Dialect/ESI/ESIDialect.h"
 #include "circt/Dialect/ESI/ESITypes.h"
 

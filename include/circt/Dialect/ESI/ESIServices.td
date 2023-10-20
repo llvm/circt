@@ -12,6 +12,7 @@
 include "mlir/IR/RegionKindInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
 
+include "circt/Dialect/ESI/ESIAppID.td"
 include "circt/Dialect/ESI/ESIChannels.td"
 include "circt/Dialect/ESI/ESIInterfaces.td"
 include "circt/Dialect/ESI/ESITypes.td"
@@ -147,10 +148,10 @@ def ServiceImplementConnReqOp : ESI_Op<"service.impl_req.req", [
   let summary = "The canonical form of a connection request";
 
   let arguments = (ins InnerRefAttr:$servicePort,
-                       StrArrayAttr:$clientNamePath);
+                       AppIDArrayAttr:$relativeAppIDPath);
   let results = (outs ChannelBundleType:$toClient);
   let assemblyFormat = [{
-    $servicePort `(` $clientNamePath `)`
+    $servicePort `(` $relativeAppIDPath `)`
       attr-dict `:` qualified(type($toClient))
   }];
 
@@ -165,9 +166,9 @@ def RequestToServerConnectionOp : ESI_Op<"service.req.to_server", [
 
   let arguments = (ins InnerRefAttr:$servicePort,
                        ChannelBundleType:$toServer,
-                       StrArrayAttr:$clientNamePath);
+                       AppIDAttr:$appID);
   let assemblyFormat = [{
-    $toServer `->` $servicePort `(` $clientNamePath `)`
+    $toServer `->` $servicePort `(` qualified($appID) `)`
       attr-dict `:` qualified(type($toServer))
   }];
 }
@@ -177,10 +178,10 @@ def RequestToClientConnectionOp : ESI_Op<"service.req.to_client", [
   let summary = "Request a connection to receive data";
 
   let arguments = (ins InnerRefAttr:$servicePort,
-                       StrArrayAttr:$clientNamePath);
+                       AppIDAttr:$appID);
   let results = (outs ChannelBundleType:$toClient);
   let assemblyFormat = [{
-    $servicePort `(` $clientNamePath `)`
+    $servicePort `(` qualified($appID) `)`
       attr-dict `:` qualified(type($toClient))
   }];
 }
