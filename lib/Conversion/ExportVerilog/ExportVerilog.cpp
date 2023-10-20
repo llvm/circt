@@ -3102,7 +3102,8 @@ SubExprInfo ExprEmitter::visitTypeOp(StructInjectOp op) {
             emitSubExpr(op.getNewValue(), Selection);
           } else {
             emitSubExpr(op.getInput(), Selection);
-            ps << "." << PPExtString(field.name.getValue());
+            ps << "."
+               << PPExtString(emitter.getVerilogStructFieldName(field.name));
           }
         });
       },
