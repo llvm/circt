@@ -64,8 +64,8 @@ llhd.entity @convert_prb (%sI1 : !llhd.sig<i1>, %sArr : !llhd.sig<!hw.array<3xi5
 // CHECK:           %[[VAL_6:.*]] = llvm.getelementptr %[[VAL_2]]{{\[}}%[[VAL_5]]] : (!llvm.ptr<struct<(ptr, i64, i64, i64)>>, i32) -> !llvm.ptr<struct<(ptr, i64, i64, i64)>>
 // CHECK:           %[[VAL_7:.*]] = llvm.mlir.constant(false) : i1
 // CHECK:           %[[VAL_8:.*]] = llvm.mlir.constant(0 : i5) : i5
-// CHECK:           %[[VAL_9:.*]] = llvm.mlir.addressof @{{.+}} : !llvm.ptr<array<3 x i5>>
-// CHECK:           %[[VAL_10:.*]] = llvm.load %[[VAL_9]] : !llvm.ptr<array<3 x i5>>
+// CHECK:           %[[VAL_9:.*]] = llvm.mlir.addressof @{{.+}} : !llvm.ptr
+// CHECK:           %[[VAL_10:.*]] = llvm.load %[[VAL_9]] : !llvm.ptr
 // CHECK:           %[[VAL_13:.*]] = llvm.mlir.constant(dense<[1000, 0, 0]> : tensor<3xi64>) : !llvm.array<3 x i64>
 // CHECK:           %[[VAL_14:.*]] = llvm.mlir.constant(1 : i64) : i64
 // CHECK:           %[[VAL_15:.*]] = llvm.mlir.constant(1 : i32) : i32

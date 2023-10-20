@@ -436,7 +436,7 @@ firrtl.module @X(in %a : !firrtl.uint<4>) {
 
 firrtl.circuit "BadPort" {
   firrtl.module @BadPort(in %a : !firrtl.uint<1>) {
-    // expected-error @+1 {{'firrtl.attach' op operand #0 must be analog type, but got '!firrtl.uint<1>'}}
+    // expected-error @+1 {{'firrtl.attach' op operand #0 must be variadic of analog type, but got '!firrtl.uint<1>'}}
     firrtl.attach %a, %a : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }

@@ -81,6 +81,15 @@ with Context() as ctx, Location.unknown():
     hw.module @Root(in %clock: i1) {
       %0 = sv.wire sym @x : !hw.inout<i1>
     }
+    
+    om.class @Paths(%basepath: !om.frozenbasepath) {
+      %0 = om.frozenbasepath_create %basepath "Foo/bar"
+      %1 = om.frozenpath_create reference %0 "Bar/baz:Baz>w"
+      om.class.field @path, %1 : !om.frozenpath
+
+      %3 = om.frozenpath_empty
+      om.class.field @deleted, %3 : !om.frozenpath
+    }
   }
   """)
 
@@ -200,3 +209,11 @@ assert len(object_dict) == 2
 obj = evaluator.instantiate("Test", 41)
 # CHECK: 41
 print(obj.field)
+
+path = om.BasePath.get_empty(evaluator.module.context)
+obj = evaluator.instantiate("Paths", path)
+print(obj.path)
+# CHECK: OMReferenceTarget:~Foo|Foo/bar:Bar/baz:Baz>w
+
+print(obj.deleted)
+# CHECK: OMDeleted

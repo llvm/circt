@@ -332,7 +332,7 @@ void ESIConnectServicesPass::runOnOperation() {
   outerMod.walk([&](Operation *op) {
     if (auto req = dyn_cast<RequestToClientConnectionOp>(op))
       convertReq(req);
-    if (auto req = dyn_cast<RequestToServerConnectionOp>(op))
+    else if (auto req = dyn_cast<RequestToServerConnectionOp>(op))
       convertReq(req);
   });
 
@@ -363,6 +363,7 @@ void ESIConnectServicesPass::convertReq(
       ArrayAttr::get(&getContext(), {toClientReq.getAppIDAttr()}));
   newReq->setDialectAttrs(toClientReq->getDialectAttrs());
   toClientReq.getToClient().replaceAllUsesWith(newReq.getToClient());
+
   toClientReq.erase();
 }
 

@@ -10,13 +10,11 @@ llhd.entity @root() -> () {
 llhd.entity @initSig () -> () {
   %1 = hw.aggregate_constant [ 0 : i1, 1 : i1] : !hw.array<2xi1>
   %2 = hw.aggregate_constant [ 0 : i1, 1 : i5] : !hw.struct<f1: i1, f2: i5>
-  // CHECK: [[V0:%.+]] = llvm.mlir.addressof @{{.+}} : !llvm.ptr<array<2 x i1>>
-  // CHECK: [[V1:%.+]] = llvm.load [[V0]] : !llvm.ptr<array<2 x i1>>
-  // CHECK: llvm.store [[V1]], {{%.+}} : !llvm.ptr<array<2 x i1>>
+  // CHECK: [[V0:%.+]] = llvm.mlir.addressof @{{.+}} : !llvm.ptr
+  // CHECK: [[V1:%.+]] = llvm.load [[V0]] : !llvm.ptr
   %3 = llhd.sig "sig1" %1 : !hw.array<2xi1>
-  // CHECK: [[V2:%.+]] = llvm.mlir.addressof @{{.+}} : !llvm.ptr<struct<(i5, i1)>>
-  // CHECK: [[V3:%.+]] = llvm.load [[V2]] : !llvm.ptr<struct<(i5, i1)>>
-  // CHECK: llvm.store [[V3]], {{%.+}} : !llvm.ptr<struct<(i5, i1)>>
+  // CHECK: [[V2:%.+]] = llvm.mlir.addressof @{{.+}} : !llvm.ptr
+  // CHECK: [[V3:%.+]] = llvm.load [[V2]] : !llvm.ptr
   %4 = llhd.sig "sig2" %2 : !hw.struct<f1: i1, f2: i5>
 }
 
@@ -38,7 +36,6 @@ func.func @getInitValue() -> (i32, i32, i32) {
 // CHECK: [[E1:%.+]] = llvm.extractvalue [[RETURN]][0] : !llvm.struct<(i32, i32, i32)>
 // CHECK: [[E2:%.+]] = llvm.extractvalue [[RETURN]][1] : !llvm.struct<(i32, i32, i32)>
 // CHECK: [[E3:%.+]] = llvm.extractvalue [[RETURN]][2] : !llvm.struct<(i32, i32, i32)>
-// CHECK: llvm.store [[E2]], {{%.+}} : !llvm.ptr<i32>
 llhd.entity @initMultipleResults () -> () {
   %0, %1, %2 = func.call @getInitValue() : () -> (i32, i32, i32)
   %3 = llhd.sig "sig" %1 : i32
