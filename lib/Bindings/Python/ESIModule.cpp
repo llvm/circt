@@ -170,8 +170,11 @@ void circt::python::populateDialectESISubmodule(py::module &m) {
                                    unwrap(circtESIAppIDAttrGetName(self));
                                return std::string(name.data(), name.size());
                              })
-      .def_property_readonly("index", [](MlirAttribute self) {
-        return circtESIAppIDAttrGetIndex(self);
+      .def_property_readonly("index", [](MlirAttribute self) -> py::object {
+        uint64_t index;
+        if (circtESIAppIDAttrGetIndex(self, &index))
+          return py::cast(index);
+        return py::none();
       });
 
   mlir_attribute_subclass(m, "AppIDPathAttr",
