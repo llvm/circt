@@ -221,8 +221,8 @@ def ChannelDirection : I32EnumAttr<"ChannelDirection",
 }
 
 
-def ChannelBundleImpl : ESI_Type<"ChannelBundle"> {
-  let summary = "a group of related channels";
+def ChannelBundleType : ESI_Type<"ChannelBundle"> {
+  let summary = "a bundle of channels";
 
   let description = [{
     A channel bundle (sometimes referred to as just "bundle") is a set of
@@ -247,8 +247,20 @@ def ChannelBundleImpl : ESI_Type<"ChannelBundle"> {
   let assemblyFormat = [{
     `<` `[` $channels `]` (`reset` $resettable^)? `>`
   }];
-}
 
+  let extraClassDeclaration = [{
+    // Get a channel bundle with the same types and names but the directions
+    // reversed.
+    ChannelBundleType getReversed() const;
+
+    // Return the opposite direction.
+    static ChannelDirection flip(ChannelDirection dir) {
+      return dir == ChannelDirection::from
+                               ? ChannelDirection::to
+                               : ChannelDirection::from;
+    }
+  }];
+}
 
 def PackBundleOp : ESI_Op<"bundle.pack", [
       DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>
@@ -256,7 +268,7 @@ def PackBundleOp : ESI_Op<"bundle.pack", [
   let summary = "pack channels into a bundle";
 
   let arguments = (ins Variadic<ChannelType>:$toChannels);
-  let results =  (outs ChannelBundleImpl:$bundle,
+  let results =  (outs ChannelBundleType:$bundle,
                        Variadic<ChannelType>:$fromChannels);
   let assemblyFormat = [{
     $toChannels attr-dict `:` custom<UnPackBundleType>(
@@ -265,6 +277,12 @@ def PackBundleOp : ESI_Op<"bundle.pack", [
 
   let hasVerifier = 1;
   let hasCanonicalizeMethod = 1;
+
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<(ins "ChannelBundleType":$bundleType,
+                   "mlir::ValueRange":$toChannels)>
+  ];
 }
 
 def UnpackBundleOp : ESI_Op<"bundle.unpack", [
@@ -272,7 +290,7 @@ def UnpackBundleOp : ESI_Op<"bundle.unpack", [
     ]> {
   let summary = "unpack channels from a bundle";
 
-  let arguments = (ins ChannelBundleImpl:$bundle,
+  let arguments = (ins ChannelBundleType:$bundle,
                        Variadic<ChannelType>:$fromChannels);
   let results =  (outs Variadic<ChannelType>:$toChannels);
   let assemblyFormat = [{
@@ -282,6 +300,11 @@ def UnpackBundleOp : ESI_Op<"bundle.unpack", [
 
   let hasVerifier = 1;
   let hasCanonicalizeMethod = 1;
+
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<(ins "Value":$bundle, "mlir::ValueRange":$fromChannels)>
+  ];
 }
 
 //===----------------------------------------------------------------------===//

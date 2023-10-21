@@ -22,6 +22,7 @@
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Support/LogicalResult.h"
 #include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/ADT/SmallString.h"
 
 #include <queue>
 #include <utility>
@@ -46,7 +47,7 @@ using ObjectFields = SmallDenseMap<StringAttr, EvaluatorValuePtr>;
 /// the appropriate reference count.
 struct EvaluatorValue : std::enable_shared_from_this<EvaluatorValue> {
   // Implement LLVM RTTI.
-  enum class Kind { Attr, Object, List, Tuple, Map, Reference };
+  enum class Kind { Attr, Object, List, Tuple, Map, Reference, BasePath, Path };
   EvaluatorValue(MLIRContext *ctx, Kind kind, Location loc)
       : kind(kind), ctx(ctx), loc(loc) {}
   Kind getKind() const { return kind; }
@@ -58,6 +59,9 @@ struct EvaluatorValue : std::enable_shared_from_this<EvaluatorValue> {
     assert(!fullyEvaluated && "should not mark twice");
     fullyEvaluated = true;
   }
+
+  /// Return the associated MLIR context.
+  MLIRContext *getContext() { return ctx; }
 
   // Return a MLIR type which the value represents.
   Type getType() const;
@@ -328,6 +332,68 @@ private:
   TupleElements elements;
 };
 
+/// A Basepath value.
+struct BasePathValue : EvaluatorValue {
+  BasePathValue(MLIRContext *context);
+
+  /// Create a path value representing a basepath.
+  BasePathValue(om::PathAttr path, Location loc);
+
+  om::PathAttr getPath() const;
+
+  /// Set the basepath which this path is relative to.
+  void setBasepath(const BasePathValue &basepath);
+
+  /// Finalize the evaluator value.
+  LogicalResult finalizeImpl() { return success(); }
+
+  /// Implement LLVM RTTI.
+  static bool classof(const EvaluatorValue *e) {
+    return e->getKind() == Kind::BasePath;
+  }
+
+private:
+  om::PathAttr path;
+};
+
+/// A Path value.
+struct PathValue : EvaluatorValue {
+  /// Create a path value representing a regular path.
+  PathValue(om::TargetKindAttr targetKind, om::PathAttr path, StringAttr module,
+            StringAttr ref, StringAttr field, Location loc);
+
+  static PathValue getEmptyPath(Location loc);
+
+  om::TargetKindAttr getTargetKind() const { return targetKind; }
+
+  om::PathAttr getPath() const { return path; }
+
+  StringAttr getModule() const { return module; }
+
+  StringAttr getRef() const { return ref; }
+
+  StringAttr getField() const { return field; }
+
+  StringAttr getAsString() const;
+
+  void setBasepath(const BasePathValue &basepath);
+
+  // Finalize the evaluator value.
+  LogicalResult finalizeImpl() { return success(); }
+
+  /// Implement LLVM RTTI.
+  static bool classof(const EvaluatorValue *e) {
+    return e->getKind() == Kind::Path;
+  }
+
+private:
+  om::TargetKindAttr targetKind;
+  om::PathAttr path;
+  StringAttr module;
+  StringAttr ref;
+  StringAttr field;
+};
+
 } // namespace evaluator
 
 using Object = evaluator::ObjectValue;
@@ -406,6 +472,15 @@ private:
   FailureOr<evaluator::EvaluatorValuePtr>
   evaluateMapCreate(MapCreateOp op, ActualParameters actualParams,
                     Location loc);
+  FailureOr<evaluator::EvaluatorValuePtr>
+  evaluateBasePathCreate(FrozenBasePathCreateOp op,
+                         ActualParameters actualParams, Location loc);
+  FailureOr<evaluator::EvaluatorValuePtr>
+  evaluatePathCreate(FrozenPathCreateOp op, ActualParameters actualParams,
+                     Location loc);
+  FailureOr<evaluator::EvaluatorValuePtr>
+  evaluateEmptyPath(FrozenEmptyPathOp op, ActualParameters actualParams,
+                    Location loc);
 
   FailureOr<ActualParameters>
   createParametersFromOperands(ValueRange range, ActualParameters actualParams,
@@ -441,6 +516,11 @@ operator<<(mlir::Diagnostic &diag,
     diag << "List(" << list->getType() << ")";
   else if (auto *map = llvm::dyn_cast<evaluator::MapValue>(&evaluatorValue))
     diag << "Map(" << map->getType() << ")";
+  else if (auto *basePath =
+               llvm::dyn_cast<evaluator::BasePathValue>(&evaluatorValue))
+    diag << "BasePath()";
+  else if (auto *path = llvm::dyn_cast<evaluator::PathValue>(&evaluatorValue))
+    diag << "Path()";
   else
     assert(false && "unhandled evaluator value");
   return diag;

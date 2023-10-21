@@ -2,7 +2,7 @@
 
 hw.module @signlessOperands() {
   %c1_1 = arith.constant 1 : i1
-  // expected-error @+1 {{'hwarith.add' op operand #0 must be an arbitrary precision integer with signedness semantics, but got 'i1'}}
+  // expected-error @+1 {{'hwarith.add' op operand #0 must be variadic of an arbitrary precision integer with signedness semantics, but got 'i1'}}
   %0 = hwarith.add %c1_1, %c1_1 : (i1, i1) -> i2
 }
 

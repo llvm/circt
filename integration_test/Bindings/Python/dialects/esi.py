@@ -44,9 +44,8 @@ with Context() as ctx:
 
 
 # CHECK-LABEL: === testGen called with op:
-# CHECK:       %0:2 = esi.service.impl_req svc @HostComms impl as "test"(%clk) : (i1) -> (i8, !esi.channel<i8>) {
-# CHECK:         %2 = esi.service.req.to_client <@HostComms::@Recv>(["m1", "loopback_tohw"]) : !esi.channel<i8>
-# CHECK:         esi.service.req.to_server %m1.loopback_fromhw -> <@HostComms::@Send>(["m1", "loopback_fromhw"]) : !esi.channel<i8>
+# CHECK:       %0:2 = esi.service.impl_req svc @HostComms impl as "test"(%clk) : (i1) -> (i8, !esi.bundle<[!esi.channel<i8> to "recv"]>) {
+# CHECK:         %2 = esi.service.impl_req.req <@HostComms::@Recv>(["m1", "loopback_tohw"]) : !esi.bundle<[!esi.channel<i8> to "recv"]>
 def testGen(reqOp: esi.ServiceImplementReqOp) -> bool:
   print("=== testGen called with op:")
   reqOp.print()
@@ -59,9 +58,10 @@ esi.registerServiceGenerator("test", testGen)
 with Context() as ctx:
   circt.register_dialects(ctx)
   mod = Module.parse("""
+!recvI8 = !esi.bundle<[!esi.channel<i8> to "recv"]>
+
 esi.service.decl @HostComms {
-  esi.service.to_server @Send : !esi.channel<!esi.any>
-  esi.service.to_client @Recv : !esi.channel<i8>
+  esi.service.to_client @Recv : !recvI8
 }
 
 hw.module @MsTop (in %clk : i1, out chksum : i8) {
@@ -71,8 +71,7 @@ hw.module @MsTop (in %clk : i1, out chksum : i8) {
 }
 
 hw.module @MsLoopback (in %clk : i1) {
-  %dataIn = esi.service.req.to_client <@HostComms::@Recv> (["loopback_tohw"]) : !esi.channel<i8>
-  esi.service.req.to_server %dataIn -> <@HostComms::@Send> (["loopback_fromhw"]) : !esi.channel<i8>
+  %dataIn = esi.service.req.to_client <@HostComms::@Recv> (["loopback_tohw"]) : !recvI8
 }
 """)
   pm = passmanager.PassManager.parse("builtin.module(esi-connect-services)")

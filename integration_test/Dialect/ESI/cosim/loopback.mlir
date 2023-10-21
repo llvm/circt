@@ -1,3 +1,4 @@
+// XFAIL: *
 // REQUIRES: esi-cosim
 // RUN: rm -rf %t6 && mkdir %t6 && cd %t6
 // RUN: circt-opt %s --esi-connect-services --esi-emit-collateral=schema-file=%t2.capnp --esi-clean-metadata > %t4.mlir

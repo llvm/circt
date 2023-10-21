@@ -26,8 +26,17 @@ struct List;
 struct Object;
 struct Tuple;
 struct Map;
+struct BasePath;
+struct Path;
 
-using PythonValue = std::variant<MlirAttribute, Object, List, Tuple, Map>;
+/// None is used to by pybind when default initializing a PythonValue. The order
+/// of types in the variant matters here, and we want pybind to try casting to
+/// the Python classes defined in this file first, before MlirAttribute and the
+/// upstream MLIR type casters.  If the MlirAttribute is tried first, then we
+/// can hit an assert inside the MLIR codebase.
+struct None {};
+using PythonValue =
+    std::variant<None, Object, List, Tuple, Map, BasePath, Path, MlirAttribute>;
 
 /// Map an opaque OMEvaluatorValue into a python value.
 PythonValue omEvaluatorValueToPythonValue(OMEvaluatorValue result);
@@ -93,6 +102,46 @@ struct Map {
 
   OMEvaluatorValue getValue() const { return value; }
   MlirType getType() { return omEvaluatorMapGetType(value); }
+
+private:
+  // The underlying CAPI value.
+  OMEvaluatorValue value;
+};
+
+/// Provides a BasePath class by simply wrapping the OMObject CAPI.
+struct BasePath {
+  /// Instantiate a BasePath with a reference to the underlying
+  /// OMEvaluatorValue.
+  BasePath(OMEvaluatorValue value) : value(value) {}
+
+  static BasePath getEmpty(MlirContext context) {
+    return BasePath(omEvaluatorBasePathGetEmpty(context));
+  }
+
+  /// Return a context from an underlying value.
+  MlirContext getContext() const { return omEvaluatorValueGetContext(value); }
+
+  OMEvaluatorValue getValue() const { return value; }
+
+private:
+  // The underlying CAPI value.
+  OMEvaluatorValue value;
+};
+
+/// Provides a Path class by simply wrapping the OMObject CAPI.
+struct Path {
+  /// Instantiate a Path with a reference to the underlying OMEvaluatorValue.
+  Path(OMEvaluatorValue value) : value(value) {}
+
+  /// Return a context from an underlying value.
+  MlirContext getContext() const { return omEvaluatorValueGetContext(value); }
+
+  OMEvaluatorValue getValue() const { return value; }
+
+  std::string dunderStr() {
+    auto ref = mlirStringAttrGetValue(omEvaluatorPathGetAsString(getValue()));
+    return std::string(ref.data, ref.length);
+  }
 
 private:
   // The underlying CAPI value.
@@ -320,6 +369,14 @@ PythonValue omEvaluatorValueToPythonValue(OMEvaluatorValue result) {
   if (omEvaluatorValueIsAMap(result))
     return Map(result);
 
+  // If the field was a base path, return a new BasePath.
+  if (omEvaluatorValueIsABasePath(result))
+    return BasePath(result);
+
+  // If the field was a path, return a new Path.
+  if (omEvaluatorValueIsAPath(result))
+    return Path(result);
+
   // If the field was a primitive, return the Attribute.
   assert(omEvaluatorValueIsAPrimitive(result));
   return omEvaluatorValueGetPrimitive(result);
@@ -337,6 +394,12 @@ OMEvaluatorValue pythonValueToOMEvaluatorValue(PythonValue result) {
 
   if (auto *map = std::get_if<Map>(&result))
     return map->getValue();
+
+  if (auto *basePath = std::get_if<BasePath>(&result))
+    return basePath->getValue();
+
+  if (auto *path = std::get_if<Path>(&result))
+    return path->getValue();
 
   return std::get<Object>(result).getValue();
 }
@@ -372,6 +435,17 @@ void circt::python::populateDialectOMSubmodule(py::module &m) {
       .def("__getitem__", &Map::dunderGetItem)
       .def("keys", &Map::getKeys)
       .def_property_readonly("type", &Map::getType, "The Type of the Map");
+
+  // Add the BasePath class definition.
+  py::class_<BasePath>(m, "BasePath")
+      .def(py::init<BasePath>(), py::arg("basepath"))
+      .def_static("get_empty", &BasePath::getEmpty,
+                  py::arg("context") = py::none());
+
+  // Add the Path class definition.
+  py::class_<Path>(m, "Path")
+      .def(py::init<Path>(), py::arg("path"))
+      .def("__str__", &Path::dunderStr);
 
   // Add the Object class definition.
   py::class_<Object>(m, "Object")

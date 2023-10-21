@@ -337,133 +337,108 @@ static void printInferWindowRet(OpAsmPrinter &p, Operation *, Type,
 //===----------------------------------------------------------------------===//
 
 /// Get the port declaration op for the specified service decl, port name.
-static ServiceDeclOpInterface getServiceDecl(Operation *op,
-                                             SymbolTableCollection &symbolTable,
-                                             hw::InnerRefAttr servicePort) {
+static FailureOr<ServiceDeclOpInterface>
+getServiceDecl(Operation *op, SymbolTableCollection &symbolTable,
+               hw::InnerRefAttr servicePort) {
   ModuleOp top = op->getParentOfType<mlir::ModuleOp>();
   SymbolTable &topSyms = symbolTable.getSymbolTable(top);
 
   StringAttr modName = servicePort.getModule();
-  return topSyms.lookup<ServiceDeclOpInterface>(modName);
-}
-
-/// Check that the type of a given service request matches the services port
-/// type.
-static LogicalResult reqPortMatches(Operation *op, hw::InnerRefAttr port,
-                                    SymbolTableCollection &symbolTable) {
-  auto serviceDecl = getServiceDecl(op, symbolTable, port);
+  auto serviceDecl = topSyms.lookup<ServiceDeclOpInterface>(modName);
   if (!serviceDecl)
     return op->emitOpError("Could not find service declaration ")
-           << port.getModuleRef();
-  return serviceDecl.validateRequest(op);
+           << servicePort.getModuleRef();
+  return serviceDecl;
+}
+
+/// Get the port info for the specified service decl and port name.
+static FailureOr<ServicePortInfo>
+getServicePortInfo(Operation *op, SymbolTableCollection &symbolTable,
+                   hw::InnerRefAttr servicePort) {
+  auto serviceDecl = getServiceDecl(op, symbolTable, servicePort);
+  if (failed(serviceDecl))
+    return failure();
+  auto portInfo = serviceDecl->getPortInfo(servicePort.getName());
+  if (failed(portInfo))
+    return op->emitOpError("Could not locate port ") << servicePort.getName();
+  return portInfo;
+}
+
+/// Check that the channels on two bundles match allowing for AnyType in the
+/// 'svc' bundle.
+static LogicalResult checkTypeMatch(Operation *req,
+                                    ChannelBundleType svcBundleType,
+                                    ChannelBundleType reqBundleType,
+                                    bool skipDirectionCheck) {
+  auto *ctxt = svcBundleType.getContext();
+  auto anyChannelType = ChannelType::get(ctxt, AnyType::get(ctxt));
+
+  if (svcBundleType.getChannels().size() != reqBundleType.getChannels().size())
+    return req->emitOpError(
+        "Request port bundle channel count does not match service "
+        "port bundle channel count");
+
+  // Build fast lookup.
+  DenseMap<StringAttr, BundledChannel> declBundleChannels;
+  for (BundledChannel bc : svcBundleType.getChannels())
+    declBundleChannels[bc.name] = bc;
+
+  // Check all the channels.
+  for (BundledChannel bc : reqBundleType.getChannels()) {
+    auto f = declBundleChannels.find(bc.name);
+    if (f == declBundleChannels.end())
+      return req->emitOpError(
+          "Request channel name not found in service port bundle");
+    if (!skipDirectionCheck && f->second.direction != bc.direction)
+      return req->emitOpError(
+          "Request channel direction does not match service "
+          "port bundle channel direction");
+
+    if (f->second.type != bc.type && f->second.type != anyChannelType)
+      return req->emitOpError(
+          "Request channel type does not match service port "
+          "bundle channel type");
+  }
+  return success();
 }
 
 LogicalResult RequestToClientConnectionOp::verifySymbolUses(
     SymbolTableCollection &symbolTable) {
-  return reqPortMatches(getOperation(), getServicePortAttr(), symbolTable);
+  auto svcPort = getServicePortInfo(*this, symbolTable, getServicePortAttr());
+  if (failed(svcPort))
+    return failure();
+  if (svcPort->direction != ServicePortInfo::Direction::toClient)
+    return emitOpError("Service port is not a to-client port");
+  return checkTypeMatch(*this, svcPort->type, getToClient().getType(), false);
 }
 
 LogicalResult RequestToServerConnectionOp::verifySymbolUses(
     SymbolTableCollection &symbolTable) {
-  return reqPortMatches(getOperation(), getServicePortAttr(), symbolTable);
+  auto svcPort = getServicePortInfo(*this, symbolTable, getServicePortAttr());
+  if (failed(svcPort))
+    return failure();
+  if (svcPort->direction != ServicePortInfo::Direction::toServer)
+    return emitOpError("Service port is not a to-server port");
+  return checkTypeMatch(*this, svcPort->type, getToServer().getType(), false);
 }
 
-LogicalResult
-RequestInOutChannelOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  return reqPortMatches(getOperation(), getServicePortAttr(), symbolTable);
-}
-
-/// Overloads to get the two types from a number of supported ops.
-std::pair<Type, Type> getToServerToClientTypes(RequestInOutChannelOp req) {
-  return std::make_pair(req.getToServer().getType(),
-                        req.getToClient().getType());
-}
-std::pair<Type, Type>
-getToServerToClientTypes(RequestToClientConnectionOp req) {
-  return std::make_pair(Type(), req.getToClient().getType());
-}
-std::pair<Type, Type>
-getToServerToClientTypes(RequestToServerConnectionOp req) {
-  return std::make_pair(req.getToServer().getType(), Type());
-}
-
-/// Validate a connection request against a service decl by comparing against
-/// the port list.
-template <class OpType>
-LogicalResult validateRequest(ServiceDeclOpInterface svc, OpType req) {
-  ServicePortInfo portDecl;
-  SmallVector<ServicePortInfo> ports;
-  svc.getPortList(ports);
-  for (ServicePortInfo portFromList : ports)
-    if (portFromList.name == req.getServicePort().getName()) {
-      portDecl = portFromList;
-      break;
-    }
-  if (!portDecl.name)
-    return req.emitOpError("Could not locate port ")
-           << req.getServicePort().getName();
-
-  auto *ctxt = req.getContext();
-  auto anyChannelType = ChannelType::get(ctxt, AnyType::get(ctxt));
-  auto [toServerType, toClientType] = getToServerToClientTypes(req);
-
-  // TODO: Because `inout` requests get broken in two pretty early on, we can't
-  // tell if a to_client/to_server request was initially part of an inout
-  // request, so we can't check that an inout port is only accessed by an inout
-  // request. Consider a different way to do this.
-
-  // Check the input port type.
-  if (!isa<RequestToClientConnectionOp>(req) &&
-      portDecl.toServerType != toServerType &&
-      portDecl.toServerType != anyChannelType)
-    return req.emitOpError("Request to_server type does not match port type ")
-           << portDecl.toServerType;
-
-  // Check the output port type.
-  if (!isa<RequestToServerConnectionOp>(req) &&
-      portDecl.toClientType != toClientType &&
-      portDecl.toClientType != anyChannelType)
-    return req.emitOpError("Request to_client type does not match port type ")
-           << portDecl.toClientType;
-  return success();
-}
-
-LogicalResult
-circt::esi::validateServiceConnectionRequest(ServiceDeclOpInterface decl,
-                                             Operation *reqOp) {
-  if (auto req = dyn_cast<RequestToClientConnectionOp>(reqOp))
-    return ::validateRequest(decl, req);
-  if (auto req = dyn_cast<RequestToServerConnectionOp>(reqOp))
-    return ::validateRequest(decl, req);
-  if (auto req = dyn_cast<RequestInOutChannelOp>(reqOp))
-    return ::validateRequest(decl, req);
-  return reqOp->emitOpError("Did not recognize request op");
+LogicalResult ServiceImplementConnReqOp::verifySymbolUses(
+    SymbolTableCollection &symbolTable) {
+  auto svcPort = getServicePortInfo(*this, symbolTable, getServicePortAttr());
+  if (failed(svcPort))
+    return failure();
+  return checkTypeMatch(*this, svcPort->type, getToClient().getType(), true);
 }
 
 void CustomServiceDeclOp::getPortList(SmallVectorImpl<ServicePortInfo> &ports) {
   for (auto toServer : getOps<ToServerOp>())
     ports.push_back(ServicePortInfo{
-        toServer.getInnerSymAttr(), toServer.getToServerType(), {}});
+        hw::InnerRefAttr::get(getSymNameAttr(), toServer.getInnerSymAttr()),
+        ServicePortInfo::Direction::toServer, toServer.getToServerType()});
   for (auto toClient : getOps<ToClientOp>())
     ports.push_back(ServicePortInfo{
-        toClient.getInnerSymAttr(), {}, toClient.getToClientType()});
-  for (auto inoutPort : getOps<ServiceDeclInOutOp>())
-    ports.push_back(ServicePortInfo{inoutPort.getInnerSymAttr(),
-                                    inoutPort.getToServerType(),
-                                    inoutPort.getToClientType()});
-}
-
-LogicalResult ServiceHierarchyMetadataOp::verifySymbolUses(
-    SymbolTableCollection &symbolTable) {
-  ModuleOp top = getOperation()->getParentOfType<mlir::ModuleOp>();
-  auto sym = getServiceSymbol();
-  if (!sym)
-    return success();
-  SymbolTable &topSyms = symbolTable.getSymbolTable(top);
-  auto serviceDeclOp = topSyms.lookup<ServiceDeclOpInterface>(*sym);
-  if (!serviceDeclOp)
-    return emitOpError("Could not find service declaration ") << *sym;
-  return success();
+        hw::InnerRefAttr::get(getSymNameAttr(), toClient.getInnerSymAttr()),
+        ServicePortInfo::Direction::toClient, toClient.getToClientType()});
 }
 
 //===----------------------------------------------------------------------===//
@@ -494,11 +469,31 @@ static void printUnPackBundleType(OpAsmPrinter &p, Operation *, T3, T4,
                                   Type bundleType) {
   p.printType(bundleType);
 }
+void UnpackBundleOp::build(::mlir::OpBuilder &odsBuilder,
+                           ::mlir::OperationState &odsState, Value bundle,
+                           mlir::ValueRange fromChannels) {
+  for (BundledChannel ch :
+       cast<ChannelBundleType>(bundle.getType()).getChannels())
+    if (ch.direction == ChannelDirection::to)
+      odsState.addTypes(ch.type);
+  odsState.addOperands(bundle);
+  odsState.addOperands(fromChannels);
+}
 
 LogicalResult PackBundleOp::verify() {
   if (!getBundle().hasOneUse())
     return emitOpError("bundles must have exactly one user");
   return success();
+}
+void PackBundleOp::build(::mlir::OpBuilder &odsBuilder,
+                         ::mlir::OperationState &odsState,
+                         ChannelBundleType bundleType,
+                         mlir::ValueRange toChannels) {
+  odsState.addTypes(bundleType);
+  for (BundledChannel ch : cast<ChannelBundleType>(bundleType).getChannels())
+    if (ch.direction == ChannelDirection::from)
+      odsState.addTypes(ch.type);
+  odsState.addOperands(toChannels);
 }
 
 LogicalResult UnpackBundleOp::verify() {
@@ -508,12 +503,15 @@ LogicalResult UnpackBundleOp::verify() {
 }
 
 void PackBundleOp::getAsmResultNames(::mlir::OpAsmSetValueNameFn setNameFn) {
+  if (getNumResults() == 0)
+    return;
   setNameFn(getResult(0), "bundle");
   for (auto [idx, from] : llvm::enumerate(llvm::make_filter_range(
            getBundle().getType().getChannels(), [](BundledChannel ch) {
              return ch.direction == ChannelDirection::from;
            })))
-    setNameFn(getResult(idx + 1), from.name.getValue());
+    if (idx + 1 < getNumResults())
+      setNameFn(getResult(idx + 1), from.name.getValue());
 }
 
 void UnpackBundleOp::getAsmResultNames(::mlir::OpAsmSetValueNameFn setNameFn) {
@@ -521,7 +519,8 @@ void UnpackBundleOp::getAsmResultNames(::mlir::OpAsmSetValueNameFn setNameFn) {
            getBundle().getType().getChannels(), [](BundledChannel ch) {
              return ch.direction == ChannelDirection::to;
            })))
-    setNameFn(getResult(idx), to.name.getValue());
+    if (idx < getNumResults())
+      setNameFn(getResult(idx), to.name.getValue());
 }
 //===----------------------------------------------------------------------===//
 // Structural ops.
@@ -531,7 +530,7 @@ LogicalResult ESIPureModuleOp::verify() {
   ESIDialect *esiDialect = getContext()->getLoadedDialect<ESIDialect>();
   Block &body = getBody().front();
   auto channelOrOutput = [](Value v) {
-    if (v.getType().isa<ChannelType>())
+    if (v.getType().isa<ChannelType, ChannelBundleType>())
       return true;
     if (v.getUsers().empty())
       return false;
@@ -546,7 +545,7 @@ LogicalResult ESIPureModuleOp::verify() {
     if (igraph::InstanceOpInterface inst =
             dyn_cast<igraph::InstanceOpInterface>(op)) {
       if (llvm::any_of(op.getOperands(), [](Value v) {
-            return !(v.getType().isa<ChannelType>() ||
+            return !(v.getType().isa<ChannelType, ChannelBundleType>() ||
                      isa<ESIPureModuleInputOp>(v.getDefiningOp()));
           }))
         return inst.emitOpError(

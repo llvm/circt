@@ -23,13 +23,9 @@ set(srcs
   Passes/ESILowerToHW.cpp
   Passes/ESILowerTypes.cpp
   Passes/ESICleanMetadata.cpp
+  Passes/ESIBuildManifest.cpp
 
   APIUtilities.cpp
-
-  # C++ API
-  Passes/CPPAPI/ESIAddCPPAPI.cpp
-  Passes/CPPAPI/ESIEmitCPPAPI.cpp
-  Passes/CPPAPI/CPPAPI.cpp
 )
 
 set(ESI_LinkLibs

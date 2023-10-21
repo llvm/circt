@@ -1561,3 +1561,20 @@ firrtl.circuit "RefXMRLowering" {
   }
 
 }
+
+// -----
+
+firrtl.circuit "ZeroWidthForeignOperand" {
+  // CHECK-LABEL: hw.module @ZeroWidthForeignOperand(
+  firrtl.module @ZeroWidthForeignOperand(in %a: !firrtl.uint<0>) {
+    // CHECK-NEXT: %c0_i0 = hw.constant 0 : i0
+    // CHECK-NEXT: dbg.variable "v0", %c0_i0 : i0
+    // CHECK-NEXT: dbg.variable "v1", %c0_i0 : i0
+    // CHECK-NEXT: dbg.variable "v2", %c0_i0 : i0
+    %c0_ui0 = firrtl.constant 0 : !firrtl.uint<0>
+    %0 = firrtl.or %a, %c0_ui0 : (!firrtl.uint<0>, !firrtl.uint<0>) -> !firrtl.uint<0>
+    dbg.variable "v0", %c0_ui0 : !firrtl.uint<0>
+    dbg.variable "v1", %0 : !firrtl.uint<0>
+    dbg.variable "v2", %a : !firrtl.uint<0>
+  }
+}
