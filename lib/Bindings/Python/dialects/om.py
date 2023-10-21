@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from ._om_ops_gen import *
-from .._mlir_libs._circt._om import Evaluator as BaseEvaluator, Object as BaseObject, List as BaseList, Tuple as BaseTuple, Map as BaseMap, ClassType, ReferenceAttr, ListAttr, MapAttr, OMIntegerAttr
+from .._mlir_libs._circt._om import Evaluator as BaseEvaluator, Object as BaseObject, List as BaseList, Tuple as BaseTuple, Map as BaseMap, BasePath as BaseBasePath, Path, ClassType, ReferenceAttr, ListAttr, MapAttr, OMIntegerAttr
 
 from ..ir import Attribute, Diagnostic, DiagnosticSeverity, Module, StringAttr, IntegerAttr, IntegerType
 from ..support import attribute_to_var, var_to_attribute
@@ -34,6 +34,12 @@ def wrap_mlir_object(value):
   if isinstance(value, BaseMap):
     return Map(value)
 
+  if isinstance(value, BaseBasePath):
+    return BasePath(value)
+
+  if isinstance(value, Path):
+    return value
+
   # For objects, return an Object, wrapping the base implementation.
   assert isinstance(value, BaseObject)
   return Object(value)
@@ -60,6 +66,12 @@ def unwrap_python_object(value):
 
   if isinstance(value, Map):
     return BaseMap(value)
+
+  if isinstance(value, BasePath):
+    return BaseBasePath(value)
+
+  if isinstance(value, Path):
+    return value
 
   # Otherwise, it must be an Object. Cast to the mlir object.
   assert isinstance(value, Object)
@@ -120,6 +132,13 @@ class Map(BaseMap):
   def __iter__(self):
     for i in super().keys():
       yield (wrap_mlir_object(i), self.__getitem__(i))
+
+
+class BasePath(BaseBasePath):
+
+  @staticmethod
+  def get_empty(context=None) -> "BasePath":
+    return BasePath(BaseBasePath.get_empty(context))
 
 
 # Define the Object class by inheriting from the base implementation in C++.

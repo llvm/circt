@@ -407,7 +407,7 @@ systemc.module @sensitivityNotInCtor() {
 systemc.module @sensitivityNoChannelType() {
   systemc.ctor {
     %var = systemc.cpp.variable : i1
-    // expected-error @+1 {{operand #0 must be a SystemC sc_in<T> type or a SystemC sc_inout<T> type or a SystemC sc_out<T> type or a SystemC sc_signal<T> type, but got 'i1'}}
+    // expected-error @+1 {{operand #0 must be variadic of a SystemC sc_in<T> type or a SystemC sc_inout<T> type or a SystemC sc_out<T> type or a SystemC sc_signal<T> type, but got 'i1'}}
     systemc.sensitive %var : i1
   }
 }

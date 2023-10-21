@@ -98,30 +98,30 @@ func.func @convertArray(%arg0 : i1, %arg1: !hw.array<2xi32>, %arg2: i32, %arg3: 
 // CHECK: @convertConstArray
 func.func @convertConstArray(%arg0 : i1) {
   // COM: Test: simple constant array converted to constant global
-  // CHECK: %[[VAL_2:.*]] = llvm.mlir.addressof @[[GLOB1]] : !llvm.ptr<array<2 x i32>>
-  // CHECK-NEXT: %[[VAL_3:.*]] = llvm.load %[[VAL_2]] : !llvm.ptr<array<2 x i32>>
+  // CHECK: %[[VAL_2:.*]] = llvm.mlir.addressof @[[GLOB1]] : !llvm.ptr
+  // CHECK-NEXT: %[[VAL_3:.*]] = llvm.load %[[VAL_2]] : !llvm.ptr -> !llvm.array<2 x i32>
   %0 = hw.aggregate_constant [0 : i32, 1 : i32] : !hw.array<2xi32>
 
   // COM: Test: when the array argument is already a load from a pointer,
   // COM: then don't allocate on the stack again but take that pointer directly as a shortcut
   // CHECK-NEXT: %[[VAL_4:.*]] = llvm.mlir.constant(0 : i32) : i32
   // CHECK-NEXT: %[[VAL_5:.*]] = llvm.zext %arg0 : i1 to i2
-  // CHECK-NEXT: %[[VAL_6:.*]] = llvm.getelementptr %[[VAL_2]][%[[VAL_4]], %[[VAL_5]]] : (!llvm.ptr<array<2 x i32>>, i32, i2) -> !llvm.ptr<i32>
-  // CHECK-NEXT: %{{.+}} = llvm.load %[[VAL_6]] : !llvm.ptr<i32>
+  // CHECK-NEXT: %[[VAL_6:.*]] = llvm.getelementptr %[[VAL_2]][%[[VAL_4]], %[[VAL_5]]] : (!llvm.ptr, i32, i2) -> !llvm.ptr, i32
+  // CHECK-NEXT: %{{.+}} = llvm.load %[[VAL_6]] : !llvm.ptr -> i32
   %1 = hw.array_get %0[%arg0] : !hw.array<2xi32>, i1
 
   // COM: Test: nested constant array can also converted to a constant global
-  // CHECK: %[[VAL_7:.*]] = llvm.mlir.addressof @[[GLOB2]] : !llvm.ptr<array<2 x array<2 x i32>>>
-  // CHECK-NEXT: %{{.+}} = llvm.load %[[VAL_7]] : !llvm.ptr<array<2 x array<2 x i32>>>
+  // CHECK: %[[VAL_7:.*]] = llvm.mlir.addressof @[[GLOB2]] : !llvm.ptr
+  // CHECK-NEXT: %{{.+}} = llvm.load %[[VAL_7]] : !llvm.ptr -> !llvm.array<2 x array<2 x i32>>
   %2 = hw.aggregate_constant [[0 : i32, 1 : i32], [2 : i32, 3 : i32]] : !hw.array<2x!hw.array<2xi32>>
 
   // COM: the same constants only create one global (note: even if they are in different functions).
-  // CHECK: %[[VAL_8:.*]] = llvm.mlir.addressof @[[GLOB2]] : !llvm.ptr<array<2 x array<2 x i32>>>
-  // CHECK-NEXT: %{{.+}} = llvm.load %[[VAL_8]] : !llvm.ptr<array<2 x array<2 x i32>>>
+  // CHECK: %[[VAL_8:.*]] = llvm.mlir.addressof @[[GLOB2]] : !llvm.ptr
+  // CHECK-NEXT: %{{.+}} = llvm.load %[[VAL_8]] : !llvm.ptr -> !llvm.array<2 x array<2 x i32>>
   %3 = hw.aggregate_constant [[0 : i32, 1 : i32], [2 : i32, 3 : i32]] : !hw.array<2x!hw.array<2xi32>>
 
-  // CHECK: %[[VAL_9:.+]] = llvm.mlir.addressof @[[GLOB3]] : !llvm.ptr<array<2 x struct<(i1, i32)>>>
-  // CHECK-NEXT: {{%.+}} = llvm.load %[[VAL_9]] : !llvm.ptr<array<2 x struct<(i1, i32)>>>
+  // CHECK: %[[VAL_9:.+]] = llvm.mlir.addressof @[[GLOB3]] : !llvm.ptr
+  // CHECK-NEXT: {{%.+}} = llvm.load %[[VAL_9]] : !llvm.ptr -> !llvm.array<2 x struct<(i1, i32)>>
   %4 = hw.aggregate_constant [[0 : i32, 1 : i1], [2 : i32, 0 : i1]] : !hw.array<2x!hw.struct<a: i32, b: i1>>
 
   return
@@ -138,8 +138,8 @@ func.func @convertConstArray(%arg0 : i1) {
 
 // CHECK: @convertConstStruct
 func.func @convertConstStruct() {
-  // CHECK-NEXT: [[V0:%.+]] = llvm.mlir.addressof @[[GLOB4]] : !llvm.ptr<struct<(i2, i32)>>
-  // CHECK-NEXT: [[V1:%.+]] = llvm.load [[V0]] : !llvm.ptr<struct<(i2, i32)>>
+  // CHECK-NEXT: [[V0:%.+]] = llvm.mlir.addressof @[[GLOB4]] : !llvm.ptr
+  // CHECK-NEXT: [[V1:%.+]] = llvm.load [[V0]] : !llvm.ptr -> !llvm.struct<(i2, i32)>
   %0 = hw.aggregate_constant [0 : i32, 1 : i2] : !hw.struct<a: i32, b: i2>
   // CHECK-NEXT: {{%.+}} = llvm.mlir.constant(0 : i32) : i32
   %1 = hw.struct_extract %0["a"] : !hw.struct<a: i32, b: i2>

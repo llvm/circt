@@ -1867,11 +1867,37 @@ LogicalResult FIRRTLLowering::run() {
   // original values.  We know that any lowered operations will be dead (if
   // removed in reverse order) at this point - any users of them from
   // unremapped operations will be changed to use the newly lowered ops.
+  hw::ConstantOp zeroI0;
   while (!opsToRemove.empty()) {
-    assert(opsToRemove.back()->use_empty() &&
-           "Should remove ops in reverse order of visitation");
-    maybeUnusedValues.erase(opsToRemove.back());
-    opsToRemove.pop_back_val()->erase();
+    auto *op = opsToRemove.pop_back_val();
+
+    // We remove zero-width values when lowering FIRRTL ops. We can't remove
+    // such a value if it escapes to a foreign op. In that case, create an
+    // `hw.constant 0 : i0` to pass along.
+    for (auto result : op->getResults()) {
+      if (!isZeroBitFIRRTLType(result.getType()))
+        continue;
+      if (!zeroI0) {
+        auto builder = OpBuilder::atBlockBegin(&body.front());
+        zeroI0 = builder.create<hw::ConstantOp>(op->getLoc(),
+                                                builder.getIntegerType(0), 0);
+        maybeUnusedValues.insert(zeroI0);
+      }
+      result.replaceAllUsesWith(zeroI0);
+    }
+
+    if (!op->use_empty()) {
+      auto d = op->emitOpError(
+          "still has uses; should remove ops in reverse order of visitation");
+      SmallPtrSet<Operation *, 2> visited;
+      for (auto *user : op->getUsers())
+        if (visited.insert(user).second)
+          d.attachNote(user->getLoc())
+              << "used by " << user->getName() << " op";
+      return d;
+    }
+    maybeUnusedValues.erase(op);
+    op->erase();
   }
 
   // Prune operations that may have become unused throughout the lowering.
