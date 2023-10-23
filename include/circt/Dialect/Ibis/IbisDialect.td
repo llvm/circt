@@ -32,7 +32,7 @@ def IbisDialect : Dialect {
   }];
 
   // Needed for ibis.pipeline_header
-  let dependentDialects = ["seq::SeqDialect"];
+  let dependentDialects = ["seq::SeqDialect", "hw::HWDialect"];
 }
 
 #endif // CIRCT_DIALECT_IBIS_DIALECT_TD
