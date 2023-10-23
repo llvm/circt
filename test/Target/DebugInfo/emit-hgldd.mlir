@@ -54,8 +54,8 @@
 // CHECK:     "begin_line": 42
 // CHECK:     "begin_column": 10
 // CHECK:   "port_vars"
-// CHECK:     "var_name": "a"
-// CHECK:     "var_name": "b"
+// CHECK:     "var_name": "inA"
+// CHECK:     "var_name": "outB"
 // CHECK:   "children"
 // CHECK:     "name": "b0"
 // CHECK:     "obj_name": "Bar"
@@ -68,6 +68,8 @@
 // CHECK:     "hgl_loc"
 // CHECK:       "file": 3,
 hw.module @Foo(in %a: i32 loc(#loc2), out b: i32 loc(#loc3)) {
+  dbg.variable "inA", %a : i32 loc(#loc2)
+  dbg.variable "outB", %b1.y : i32 loc(#loc3)
   %b0.y = hw.instance "b0" @Bar(x: %a: i32) -> (y: i32) loc(#loc4)
   %b1.y = hw.instance "b1" @Bar(x: %b0.y: i32) -> (y: i32) loc(#loc5)
   hw.output %b1.y : i32 loc(#loc1)
@@ -76,14 +78,25 @@ hw.module @Foo(in %a: i32 loc(#loc2), out b: i32 loc(#loc3)) {
 // CHECK-LABEL: FILE "Bar.dd"
 // CHECK: "module_name": "Bar"
 // CHECK:   "port_vars"
-// CHECK:     "var_name": "x"
-// CHECK:     "var_name": "y"
-// CHECK:     "var_name": "z"
+// CHECK:     "var_name": "inX"
+// CHECK:     "var_name": "outY"
+// CHECK:     "var_name": "varZ"
 hw.module private @Bar(in %x: i32 loc(#loc7), out y: i32 loc(#loc8)) {
   %0 = comb.mul %x, %x : i32 loc(#loc9)
-  %z = hw.wire %0 : i32 loc(#loc9)
-  hw.output %z : i32 loc(#loc6)
+  dbg.variable "inX", %x : i32 loc(#loc7)
+  dbg.variable "outY", %0 : i32 loc(#loc8)
+  dbg.variable "varZ", %0 : i32 loc(#loc9)
+  hw.output %0 : i32 loc(#loc6)
 } loc(fused[#loc6, "emitted"(#loc11)])
+
+// CHECK-LABEL: FILE "global.dd"
+// CHECK: "module_name": "Aggregates"
+// CHECK:     "var_name": "data"
+hw.module @Aggregates(in %data_a: i32, in %data_b: i42, in %data_c_0: i17, in %data_c_1: i17) {
+  %0 = dbg.array [%data_c_0, %data_c_1] : i17
+  %1 = dbg.struct {"a": %data_a, "b": %data_b, "c": %0} : i32, i42, !dbg.array
+  dbg.variable "data", %1 : !dbg.struct
+}
 
 // CHECK-LABEL: "obj_name": "SingleResult"
 // CHECK:       "module_name": "CustomSingleResult123"

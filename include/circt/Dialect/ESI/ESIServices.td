@@ -12,7 +12,6 @@
 include "mlir/IR/RegionKindInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
 
-include "circt/Dialect/ESI/ESIAppID.td"
 include "circt/Dialect/ESI/ESIChannels.td"
 include "circt/Dialect/ESI/ESIInterfaces.td"
 include "circt/Dialect/ESI/ESIManifest.td"
