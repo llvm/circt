@@ -35,7 +35,8 @@ struct LowerHWtoBTOR2Pass : public LowerHWtoBTOR2Base<LowerHWtoBTOR2Pass> {
     // Create maps to keep track of lid associations
     // Proper maps wouldn't work for some reason so I'll use a vector of pairs instead
     llvm::SmallVector<std::pair<size_t, size_t>> sortToLIDMap; // Keeps track of the ids associated to each declared sort 
-    llvm::SmallVector<std::pair<std::string, size_t>> nameLIDMap; // Connects a variable name to it's most recent update line
+    llvm::DenseMap<Operation*, size_t> opLIDMap; // Connects an operation to it's most recent update line
+    llvm::DenseMap<Operation*, Operation*> opAliasMap; // key: alias, value: original op
 
     // Set of often reused strings in btor2 emission (to avoid typos and enable auto-complete)
     const std::string SORT    = "sort";
@@ -97,37 +98,40 @@ struct LowerHWtoBTOR2Pass : public LowerHWtoBTOR2Base<LowerHWtoBTOR2Pass> {
         ));
     }
 
-    // Checks if a name was declared with the given width
+    // Checks if an operation was declared
     // If so, its lid will be returned
     // Otherwise -1 will be returned
-    size_t getNameLID(std::string n) {
-      // Look for presence of the width in a pair
-      for(auto p : nameLIDMap) {
-        // If the width was declared, return it's lid
-        if(n == p.first) {
-          return p.second;
-        }
+    size_t getOpLID(Operation* op) {
+      // Look for the operation declaration
+      if(opLIDMap.contains(op)) {
+        return opLIDMap[op];
       }
       // If no lid was found return -1
       return NO_LID;
     }
 
-    // Updates or creates an entry for the given name
+    // Updates or creates an entry for the given operation
     // associating it with the current lid
-    void setNameLID(std::string n) {
-      // Check for the existence of the sort
-      for(size_t i = 0; i < nameLIDMap.size(); ++i) {
-        auto p = nameLIDMap[i];
+    void setOpLID(Operation* op) {
+      opLIDMap[op] = lid;
+    }
 
-        // If the width was declared, update it's lid
-        if(n == p.first) {
-          nameLIDMap[i] = std::make_pair<std::string, size_t>(n.c_str(), std::forward<size_t>(lid));
-          return;
-        }
+    // Checks if an operation has an alias
+    // If so, the original operation is returned
+    // Otherwise the argument is returned as it is the original op
+    Operation* getOpAlias(Operation* op) {
+      // Look for the operation declaration
+      if(opAliasMap.contains(op)) {
+        return opAliasMap[op];
       }
+      // If no lid was found return -1
+      return op;
+    }
 
-        // Otherwise simply create a new entry 
-        nameLIDMap.push_back(std::make_pair<std::string, size_t>(n.c_str(), std::forward<size_t>(lid)));
+    // Updates or creates an entry for the given operation
+    // associating it with the current lid
+    void setOpAlias(Operation* alias, Operation* op) {
+      opAliasMap[alias] = op;
     }
 
     /// String generation helper functions
@@ -158,17 +162,14 @@ struct LowerHWtoBTOR2Pass : public LowerHWtoBTOR2Base<LowerHWtoBTOR2Pass> {
       // Check that a result was found before continuing
       assert(found);
 
-      // Register the input name
-      setNameLID(name);
-
       // Generate input declaration
       return std::to_string(lid++) + WS + INPUT + WS + std::to_string(sortLid) + WS + name + NL;
     }
 
     // Generates a constant declaration given a value, a width and a name
-    std::string genConst(uint64_t value, size_t width, std::string name) {
+    std::string genConst(int64_t value, size_t width, Operation* op) {
       // For now we're going to assume that the name isn't taken, given that hw is already in SSA form
-      setNameLID(name);
+      setOpLID(op);
 
       // Retrieve the lid associated with the sort (sid)
       size_t sid = getSortLID(width);
@@ -221,29 +222,30 @@ void LowerHWtoBTOR2Pass::runOnOperation() {
       // Pattern match the operation to figure out what type it is
       llvm::TypeSwitch<Operation*, void>(op) 
         // Constants are directly mapped to the btor2 constants
-        .Case<hw::ConstantOp>([&](hw::ConstantOp op) {
+        .Case<hw::ConstantOp>([&](hw::ConstantOp cop) {
           // Start by figuring out what sort needs to be generated
-          int64_t width = hw::getBitWidth(op.getType());
+          int64_t width = hw::getBitWidth(cop.getType());
 
           // Generate the sort (nothing will be added if the sort already exists)
           btor2Res += genSort(BITVEC, width);
 
           // Extract the associated constant value
-          uint64_t value = dyn_cast<uint64_t, APInt>(op.getValue());
+          int64_t value = cop.getValue().getSExtValue();
 
-          // Extract the name from the op
-          auto name = op.getResult();
-
-          //TODO: Figure out how to extract the string used to define the result
-          // e.g. extract "result" from  %result = hw.constant 42 : t1
-
+          // Simply generate the operation
+          btor2Res += genConst(value, width, cop);
         })
         // Wires can generally be ignored in bto2, however we do need
         // to keep track of the new alias it creates
-        .Case<hw::WireOp>([&](hw::WireOp op) {
+        .Case<hw::WireOp>([&](hw::WireOp wop) {
+          // Retrieve the aliased operation
+          Operation* defOp = wop.getOperand().getDefiningOp();
+          // Wires don't output anything so just record alias
+          setOpAlias(wop, defOp);
         })
         // Outputs map to btor2 outputs on their final assignment
         .Case<hw::OutputOp>([&](hw::OutputOp op) {
+          // Outputs don't actually mean much in btor, only assertions matter
         })
         // Supported Comb operations
         // Concat operations can directly be mapped to btor2 concats
