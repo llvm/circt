@@ -176,4 +176,38 @@ firrtl.circuit "Intrinsics" {
     firrtl.strictconnect %hbr1, %0 : !firrtl.uint<1>
     firrtl.strictconnect %hbr2, %1 : !firrtl.uint<1>
   }
+
+  // CHECK-LABEL: hw.module @FPGAProbeMod
+  firrtl.module @FPGAProbeMod(
+    in %clock: !firrtl.clock,
+    in %reset: !firrtl.uint<1>,
+    out %a: !firrtl.uint<8>,
+    out %b: !firrtl.uint<1>,
+    out %c_0: !firrtl.uint<8>,
+    out %c_1: !firrtl.uint<8>,
+    out %c_2: !firrtl.uint<8>,
+    out %c_3: !firrtl.uint<8>,
+    out %d_out_foo: !firrtl.uint<1>,
+    out %d_out_bar: !firrtl.uint<1>,
+    in %in: !firrtl.uint<8>
+  ) attributes {convention = #firrtl<convention scalarized>} {
+      %c0_ui8 = firrtl.constant 0 : !firrtl.uint<8>
+      %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+      firrtl.int.fpga_probe %clock, %a : !firrtl.uint<8>
+      firrtl.int.fpga_probe %clock, %b : !firrtl.uint<1>
+      %0 = firrtl.vectorcreate %c_0, %c_1, %c_2, %c_3 : (!firrtl.uint<8>, !firrtl.uint<8>, !firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.vector<uint<8>, 4>
+      firrtl.int.fpga_probe %clock, %0 : !firrtl.vector<uint<8>, 4>
+      %1 = firrtl.bundlecreate %d_out_foo, %d_out_bar : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.bundle<foo: uint<1>, bar: uint<1>>
+      %2 = firrtl.bundlecreate %1 : (!firrtl.bundle<foo: uint<1>, bar: uint<1>>) -> !firrtl.bundle<out: bundle<foo: uint<1>, bar: uint<1>>>
+      firrtl.int.fpga_probe %clock, %2 : !firrtl.bundle<out: bundle<foo: uint<1>, bar: uint<1>>>
+      firrtl.int.fpga_probe %clock, %in : !firrtl.uint<8>
+      firrtl.strictconnect %a, %c0_ui8 : !firrtl.uint<8>
+      firrtl.strictconnect %b, %c0_ui1 : !firrtl.uint<1>
+      firrtl.strictconnect %c_0, %c0_ui8 : !firrtl.uint<8>
+      firrtl.strictconnect %c_1, %c0_ui8 : !firrtl.uint<8>
+      firrtl.strictconnect %c_2, %c0_ui8 : !firrtl.uint<8>
+      firrtl.strictconnect %c_3, %c0_ui8 : !firrtl.uint<8>
+      firrtl.strictconnect %d_out_foo, %c0_ui1 : !firrtl.uint<1>
+      firrtl.strictconnect %d_out_bar, %c0_ui1 : !firrtl.uint<1>
+    } 
 }

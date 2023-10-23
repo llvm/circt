@@ -919,6 +919,18 @@ def HasBeenResetIntrinsicOp : FIRRTLOp<"int.has_been_reset", [Pure]> {
   let assemblyFormat = "$clock `,` $reset attr-dict `:` type($reset)";
 }
 
+def FPGAProbeIntrinsicOp : FIRRTLOp<"int.fpga_probe", []> {
+  let summary = "FPGA ILA probe";
+
+  let description = [{
+      Result of `firrtl.int.fpga_probe` for probing signals
+  }];
+  let arguments = (ins AnyType:$input, NonConstClockType:$clock);
+  let results = (outs);
+
+  let assemblyFormat = "$clock `,` $input attr-dict `:` type($input)";
+}
+
 //===----------------------------------------------------------------------===//
 // Verbatim
 //===----------------------------------------------------------------------===//
