@@ -257,6 +257,9 @@ static bool narrowOperationWidth(OpTy op, bool narrowTrailingBits,
 //===----------------------------------------------------------------------===//
 
 OpFoldResult ReplicateOp::fold(FoldAdaptor adaptor) {
+  if (hasOperandsOutsideOfBlock(getOperation()))
+    return {};
+
   // Replicate one time -> noop.
   if (getType().cast<IntegerType>().getWidth() ==
       getInput().getType().getIntOrFloatBitWidth())
@@ -284,6 +287,9 @@ OpFoldResult ReplicateOp::fold(FoldAdaptor adaptor) {
 }
 
 OpFoldResult ParityOp::fold(FoldAdaptor adaptor) {
+  if (hasOperandsOutsideOfBlock(getOperation()))
+    return {};
+
   // Constant fold.
   if (auto input = adaptor.getInput().dyn_cast_or_null<IntegerAttr>())
     return getIntAttr(APInt(1, input.getValue().popcount() & 1), getContext());
@@ -310,6 +316,9 @@ static Attribute constFoldBinaryOp(ArrayRef<Attribute> operands,
 }
 
 OpFoldResult ShlOp::fold(FoldAdaptor adaptor) {
+  if (hasOperandsOutsideOfBlock(getOperation()))
+    return {};
+
   if (auto rhs = adaptor.getRhs().dyn_cast_or_null<IntegerAttr>()) {
     unsigned shift = rhs.getValue().getZExtValue();
     unsigned width = getType().getIntOrFloatBitWidth();
@@ -350,6 +359,9 @@ LogicalResult ShlOp::canonicalize(ShlOp op, PatternRewriter &rewriter) {
 }
 
 OpFoldResult ShrUOp::fold(FoldAdaptor adaptor) {
+  if (hasOperandsOutsideOfBlock(getOperation()))
+    return {};
+
   if (auto rhs = adaptor.getRhs().dyn_cast_or_null<IntegerAttr>()) {
     unsigned shift = rhs.getValue().getZExtValue();
     if (shift == 0)
@@ -390,6 +402,9 @@ LogicalResult ShrUOp::canonicalize(ShrUOp op, PatternRewriter &rewriter) {
 }
 
 OpFoldResult ShrSOp::fold(FoldAdaptor adaptor) {
+  if (hasOperandsOutsideOfBlock(getOperation()))
+    return {};
+
   if (auto rhs = adaptor.getRhs().dyn_cast_or_null<IntegerAttr>()) {
     if (rhs.getValue().getZExtValue() == 0)
       return getOperand(0);
@@ -430,6 +445,9 @@ LogicalResult ShrSOp::canonicalize(ShrSOp op, PatternRewriter &rewriter) {
 //===----------------------------------------------------------------------===//
 
 OpFoldResult ExtractOp::fold(FoldAdaptor adaptor) {
+  if (hasOperandsOutsideOfBlock(getOperation()))
+    return {};
+
   // If we are extracting the entire input, then return it.
   if (getInput().getType() == getType())
     return getInput();
@@ -771,6 +789,9 @@ static bool canonicalizeLogicalCstWithConcat(Operation *logicalOp,
 }
 
 OpFoldResult AndOp::fold(FoldAdaptor adaptor) {
+  if (hasOperandsOutsideOfBlock(getOperation()))
+    return {};
+
   APInt value = APInt::getAllOnes(getType().cast<IntegerType>().getWidth());
 
   auto inputs = adaptor.getInputs();
@@ -1004,6 +1025,9 @@ LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
 }
 
 OpFoldResult OrOp::fold(FoldAdaptor adaptor) {
+  if (hasOperandsOutsideOfBlock(getOperation()))
+    return {};
+
   auto value = APInt::getZero(getType().cast<IntegerType>().getWidth());
   auto inputs = adaptor.getInputs();
   // or(x, 10, 01) -> 11
@@ -1245,6 +1269,9 @@ LogicalResult OrOp::canonicalize(OrOp op, PatternRewriter &rewriter) {
 }
 
 OpFoldResult XorOp::fold(FoldAdaptor adaptor) {
+  if (hasOperandsOutsideOfBlock(getOperation()))
+    return {};
+
   auto size = getInputs().size();
   auto inputs = adaptor.getInputs();
 
@@ -1375,6 +1402,9 @@ LogicalResult XorOp::canonicalize(XorOp op, PatternRewriter &rewriter) {
 }
 
 OpFoldResult SubOp::fold(FoldAdaptor adaptor) {
+  if (hasOperandsOutsideOfBlock(getOperation()))
+    return {};
+
   // sub(x - x) -> 0
   if (getRhs() == getLhs())
     return getIntAttr(
@@ -1425,6 +1455,9 @@ LogicalResult SubOp::canonicalize(SubOp op, PatternRewriter &rewriter) {
 }
 
 OpFoldResult AddOp::fold(FoldAdaptor adaptor) {
+  if (hasOperandsOutsideOfBlock(getOperation()))
+    return {};
+
   auto size = getInputs().size();
 
   // add(x) -> x -- noop
@@ -1539,6 +1572,9 @@ LogicalResult AddOp::canonicalize(AddOp op, PatternRewriter &rewriter) {
 }
 
 OpFoldResult MulOp::fold(FoldAdaptor adaptor) {
+  if (hasOperandsOutsideOfBlock(getOperation()))
+    return {};
+
   auto size = getInputs().size();
   auto inputs = adaptor.getInputs();
 
@@ -1630,10 +1666,16 @@ static OpFoldResult foldDiv(Op op, ArrayRef<Attribute> constants) {
 }
 
 OpFoldResult DivUOp::fold(FoldAdaptor adaptor) {
+  if (hasOperandsOutsideOfBlock(getOperation()))
+    return {};
+
   return foldDiv<DivUOp, /*isSigned=*/false>(*this, adaptor.getOperands());
 }
 
 OpFoldResult DivSOp::fold(FoldAdaptor adaptor) {
+  if (hasOperandsOutsideOfBlock(getOperation()))
+    return {};
+
   return foldDiv<DivSOp, /*isSigned=*/true>(*this, adaptor.getOperands());
 }
 
@@ -1661,10 +1703,16 @@ static OpFoldResult foldMod(Op op, ArrayRef<Attribute> constants) {
 }
 
 OpFoldResult ModUOp::fold(FoldAdaptor adaptor) {
+  if (hasOperandsOutsideOfBlock(getOperation()))
+    return {};
+
   return foldMod<ModUOp, /*isSigned=*/false>(*this, adaptor.getOperands());
 }
 
 OpFoldResult ModSOp::fold(FoldAdaptor adaptor) {
+  if (hasOperandsOutsideOfBlock(getOperation()))
+    return {};
+
   return foldMod<ModSOp, /*isSigned=*/true>(*this, adaptor.getOperands());
 }
 //===----------------------------------------------------------------------===//
@@ -1673,6 +1721,9 @@ OpFoldResult ModSOp::fold(FoldAdaptor adaptor) {
 
 // Constant folding
 OpFoldResult ConcatOp::fold(FoldAdaptor adaptor) {
+  if (hasOperandsOutsideOfBlock(getOperation()))
+    return {};
+
   if (getNumOperands() == 1)
     return getOperand(0);
 
@@ -1863,6 +1914,9 @@ LogicalResult ConcatOp::canonicalize(ConcatOp op, PatternRewriter &rewriter) {
 //===----------------------------------------------------------------------===//
 
 OpFoldResult MuxOp::fold(FoldAdaptor adaptor) {
+  if (hasOperandsOutsideOfBlock(getOperation()))
+    return {};
+
   // mux (c, b, b) -> b
   if (getTrueValue() == getFalseValue())
     return getTrueValue();
@@ -2687,6 +2741,9 @@ static bool applyCmpPredicateToEqualOperands(ICmpPredicate predicate) {
 }
 
 OpFoldResult ICmpOp::fold(FoldAdaptor adaptor) {
+  if (hasOperandsOutsideOfBlock(getOperation()))
+    return {};
+
   // gt a, a -> false
   // gte a, a -> true
   if (getLhs() == getRhs()) {
