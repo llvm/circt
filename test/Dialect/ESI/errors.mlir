@@ -52,7 +52,7 @@ esi.service.decl @HostComms {
 
 hw.module @Loopback (in %clk: i1, in %dataIn: !esi.bundle<[!esi.channel<i8> to "send"]>) {
   // expected-error @+1 {{Service port is not a to-server port}}
-  esi.service.req.to_server %dataIn -> <@HostComms::@Send> (["loopback_fromhw"]) : !esi.bundle<[!esi.channel<i8> to "send"]>
+  esi.service.req.to_server %dataIn -> <@HostComms::@Send> (#esi.appid<"loopback_fromhw">) : !esi.bundle<[!esi.channel<i8> to "send"]>
 }
 
 // -----
@@ -63,7 +63,7 @@ esi.service.decl @HostComms {
 
 hw.module @Loopback (in %clk: i1) {
   // expected-error @+1 {{Service port is not a to-client port}}
-  esi.service.req.to_client <@HostComms::@Send> (["loopback_fromhw"]) : !esi.bundle<[!esi.channel<i8> to "send"]>
+  esi.service.req.to_client <@HostComms::@Send> (#esi.appid<"loopback_fromhw">) : !esi.bundle<[!esi.channel<i8> to "send"]>
 }
 
 // -----
@@ -74,7 +74,7 @@ esi.service.decl @HostComms {
 
 hw.module @Loopback (in %clk: i1, in %dataIn: !esi.bundle<[!esi.channel<i8> to "send"]>) {
   // expected-error @+1 {{Request channel type does not match service port bundle channel type}}
-  esi.service.req.to_server %dataIn -> <@HostComms::@Send> (["loopback_fromhw"]) : !esi.bundle<[!esi.channel<i8> to "send"]>
+  esi.service.req.to_server %dataIn -> <@HostComms::@Send> (#esi.appid<"loopback_fromhw">) : !esi.bundle<[!esi.channel<i8> to "send"]>
 }
 
 // -----
@@ -85,7 +85,7 @@ esi.service.decl @HostComms {
 
 hw.module @Loopback (in %clk: i1, in %dataIn: !esi.bundle<[!esi.channel<i8> to "send", !esi.channel<i3> to "foo"]>) {
   // expected-error @+1 {{Request port bundle channel count does not match service port bundle channel count}}
-  esi.service.req.to_server %dataIn -> <@HostComms::@Send> (["loopback_fromhw"]) : !esi.bundle<[!esi.channel<i8> to "send", !esi.channel<i3> to "foo"]>
+  esi.service.req.to_server %dataIn -> <@HostComms::@Send> (#esi.appid<"loopback_fromhw">) : !esi.bundle<[!esi.channel<i8> to "send", !esi.channel<i3> to "foo"]>
 }
 
 // -----
@@ -95,14 +95,14 @@ esi.service.decl @HostComms {
 
 hw.module @Loopback (in %clk: i1) {
   // expected-error @+1 {{'esi.service.req.to_client' op Could not locate port "Recv"}}
-  %dataIn = esi.service.req.to_client <@HostComms::@Recv> (["loopback_tohw"]) : !esi.bundle<[!esi.channel<i1> from "foo"]>
+  %dataIn = esi.service.req.to_client <@HostComms::@Recv> (#esi.appid<"loopback_tohw">) : !esi.bundle<[!esi.channel<i1> from "foo"]>
 }
 
 // -----
 
 hw.module @Loopback (in %clk: i1) {
   // expected-error @+1 {{'esi.service.req.to_client' op Could not find service declaration @HostComms}}
-  %dataIn = esi.service.req.to_client <@HostComms::@Recv> (["loopback_tohw"]) : !esi.bundle<[!esi.channel<i1> from "foo"]>
+  %dataIn = esi.service.req.to_client <@HostComms::@Recv> (#esi.appid<"loopback_tohw">) : !esi.bundle<[!esi.channel<i1> from "foo"]>
 }
 
 // -----
