@@ -38,6 +38,7 @@ add_circt_library(CIRCTDebugInfoAnalysis
   DebugInfo.cpp
 
   LINK_LIBS PUBLIC
+  CIRCTDebug
   CIRCTHW
   MLIRIR
 )
