@@ -83,7 +83,8 @@ def ESIAnyType : ESI_Type<"Any"> {
   }];
 }
 
-def ServiceInstanceOp : ESI_Op<"service.instance"> {
+def ServiceInstanceOp : ESI_Op<"service.instance", [
+        DeclareOpInterfaceMethods<HasAppIDOpInterface>]> {
   let summary = "Instantiate a server module";
   let description = [{
     Instantiate a service adhering to a service declaration interface.
@@ -165,6 +166,7 @@ def ServiceImplementConnReqOp : ESI_Op<"service.impl_req.req", [
 }
 
 def RequestToServerConnectionOp : ESI_Op<"service.req.to_server", [
+        DeclareOpInterfaceMethods<HasAppIDOpInterface>,
         DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "Request a connection to send data";
 
@@ -178,6 +180,7 @@ def RequestToServerConnectionOp : ESI_Op<"service.req.to_server", [
 }
 
 def RequestToClientConnectionOp : ESI_Op<"service.req.to_client", [
+        DeclareOpInterfaceMethods<HasAppIDOpInterface>,
         DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "Request a connection to receive data";
 
