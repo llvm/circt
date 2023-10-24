@@ -7,7 +7,12 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Analysis/DebugInfo.h"
+#include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/Debug/DebugOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWSymCache.h"
+#include "circt/Dialect/SV/SVOps.h"
+#include "circt/Support/Namespace.h"
 #include "circt/Target/DebugInfo.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Support/FileUtilities.h"
@@ -25,6 +30,11 @@ using namespace debug;
 
 using llvm::MapVector;
 using llvm::SmallMapVector;
+
+using JValue = llvm::json::Value;
+using JArray = llvm::json::Array;
+using JObject = llvm::json::Object;
+using JOStream = llvm::json::OStream;
 
 /// Walk the given `loc` and collect file-line-column locations that we want to
 /// report as source ("HGL") locations or as emitted Verilog ("HDL") locations.
@@ -79,26 +89,112 @@ static FileLineColLoc findBestLocation(Location loc, bool emitted) {
   return {};
 }
 
+// Allow `json::Value`s to be used as map keys for the purpose of struct
+// definition uniquification. This abuses the `null` and `[null]` JSON values as
+// markers, and uses a very inefficient hashing of the value's JSON string.
+namespace llvm {
+template <>
+struct DenseMapInfo<JValue> {
+  static JValue getEmptyKey() { return nullptr; }
+  static JValue getTombstoneKey() { return JArray({nullptr}); }
+  static unsigned getHashValue(const JValue &x) {
+    SmallString<128> buffer;
+    llvm::raw_svector_ostream(buffer) << x;
+    return hash_value(buffer);
+  }
+  static bool isEqual(const JValue &a, const JValue &b) { return a == b; }
+};
+} // namespace llvm
+
 //===----------------------------------------------------------------------===//
 // HGLDD File Emission
 //===----------------------------------------------------------------------===//
 
 namespace {
 
+/// An emitted type.
+struct EmittedType {
+  StringRef name;
+  SmallVector<int64_t, 1> packedDims;
+  SmallVector<int64_t, 1> unpackedDims;
+
+  EmittedType() = default;
+  EmittedType(StringRef name) : name(name) {}
+  EmittedType(Type type) {
+    type = hw::getCanonicalType(type);
+    if (auto inoutType = dyn_cast<hw::InOutType>(type))
+      type = hw::getCanonicalType(inoutType.getElementType());
+    if (hw::isHWIntegerType(type)) {
+      name = "logic";
+      addPackedDim(hw::getBitWidth(type));
+    }
+  }
+
+  void addPackedDim(int64_t dim) { packedDims.push_back(dim); }
+  void addUnpackedDim(int64_t dim) { unpackedDims.push_back(dim); }
+
+  operator bool() const { return !name.empty(); }
+
+  static JArray emitDims(ArrayRef<int64_t> dims, bool skipFirstLen1Dim) {
+    JArray json;
+    if (skipFirstLen1Dim && !dims.empty() && dims[0] == 1)
+      dims = dims.drop_front();
+    for (auto dim : llvm::reverse(dims)) {
+      json.push_back(dim - 1);
+      json.push_back(0);
+    }
+    return json;
+  }
+  JArray emitPackedDims() const { return emitDims(packedDims, true); }
+  JArray emitUnpackedDims() const { return emitDims(unpackedDims, false); }
+};
+
+/// An emitted expression and its type.
+struct EmittedExpr {
+  JValue expr = nullptr;
+  EmittedType type;
+  operator bool() const { return expr != nullptr && type; }
+};
+
+llvm::raw_ostream &operator<<(llvm::raw_ostream &os, const EmittedType &type) {
+  if (!type)
+    return os << "<null>";
+  os << type.name;
+  for (auto dim : type.packedDims)
+    os << '[' << dim << ']';
+  if (!type.unpackedDims.empty()) {
+    os << '$';
+    for (auto dim : type.unpackedDims)
+      os << '[' << dim << ']';
+  }
+  return os;
+}
+
+llvm::raw_ostream &operator<<(llvm::raw_ostream &os, const EmittedExpr &expr) {
+  if (!expr)
+    return os << "<null>";
+  return os << expr.expr << " : " << expr.type;
+}
+
 /// Contextual information for a single HGLDD file to be emitted.
 struct FileEmitter {
   const EmitHGLDDOptions *options = nullptr;
+  const hw::HWSymbolCache *symbolCache = nullptr;
   SmallVector<DIModule *> modules;
   SmallString<64> outputFileName;
   StringAttr hdlFile;
   SmallMapVector<StringAttr, unsigned, 8> sourceFiles;
+  Namespace objectNamespace;
+  SmallMapVector<JValue, StringRef, 8> structDefs;
+  SmallString<128> structNameHint;
 
   void emit(llvm::raw_ostream &os);
-  void emit(llvm::json::OStream &json);
-  void emitLoc(llvm::json::OStream &json, FileLineColLoc loc, bool emitted);
-  void emitModule(llvm::json::OStream &json, DIModule *module);
-  void emitInstance(llvm::json::OStream &json, DIInstance *instance);
-  void emitVariable(llvm::json::OStream &json, DIVariable *variable);
+  void emit(JOStream &json);
+  JValue emitLoc(FileLineColLoc loc, FileLineColLoc endLoc, bool emitted);
+  void emitModule(JOStream &json, DIModule *module);
+  void emitInstance(JOStream &json, DIInstance *instance);
+  void emitVariable(JOStream &json, DIVariable *variable);
+  EmittedExpr emitExpression(Value value);
 
   /// Get a numeric index for the given `sourceFile`. Populates `sourceFiles`
   /// with a unique ID assignment for each source file.
@@ -129,35 +225,104 @@ struct FileEmitter {
 
   /// Find the best location and, if one is found, emit it under the given
   /// `fieldName`.
-  void findAndEmitLoc(llvm::json::OStream &json, StringRef fieldName,
-                      Location loc, bool emitted) {
+  void findAndEmitLoc(JOStream &json, StringRef fieldName, Location loc,
+                      bool emitted) {
     if (auto fileLoc = findBestLocation(loc, emitted))
-      json.attributeObject(fieldName, [&] { emitLoc(json, fileLoc, emitted); });
+      json.attribute(fieldName, emitLoc(fileLoc, {}, emitted));
+  }
+
+  /// Find the best location and, if one is found, emit it under the given
+  /// `fieldName`. If none is found, guess a location by looking at nested
+  /// operations.
+  void findAndEmitLocOrGuess(JOStream &json, StringRef fieldName, Operation *op,
+                             bool emitted) {
+    if (auto fileLoc = findBestLocation(op->getLoc(), emitted)) {
+      json.attribute(fieldName, emitLoc(fileLoc, {}, emitted));
+      return;
+    }
+
+    // Otherwise do a majority vote on the file name to report as location. Walk
+    // the operation, collect all locations, and group them by file name.
+    SmallMapVector<StringAttr, std::pair<SmallVector<FileLineColLoc>, unsigned>,
+                   4>
+        locsByFile;
+    op->walk([&](Operation *subop) {
+      // Consider operations.
+      if (auto fileLoc = findBestLocation(subop->getLoc(), emitted))
+        locsByFile[fileLoc.getFilename()].first.push_back(fileLoc);
+
+      // Consider block arguments.
+      for (auto &region : subop->getRegions())
+        for (auto &block : region)
+          for (auto arg : block.getArguments())
+            if (auto fileLoc = findBestLocation(arg.getLoc(), emitted))
+              locsByFile[fileLoc.getFilename()].first.push_back(fileLoc);
+    });
+
+    // Give immediate block arguments a larger weight.
+    for (auto &region : op->getRegions())
+      for (auto &block : region)
+        for (auto arg : block.getArguments())
+          if (auto fileLoc = findBestLocation(arg.getLoc(), emitted))
+            locsByFile[fileLoc.getFilename()].second += 10;
+
+    if (locsByFile.empty())
+      return;
+
+    // Pick the highest-scoring file and create a location from it.
+    llvm::sort(locsByFile, [](auto &a, auto &b) {
+      return (a.second.first.size() + a.second.second) >
+             (b.second.first.size() + a.second.second);
+    });
+
+    auto &locs = locsByFile.front().second.first;
+    llvm::sort(locs, [](auto &a, auto &b) {
+      if (a.getLine() < b.getLine())
+        return true;
+      if (a.getLine() > b.getLine())
+        return false;
+      if (a.getColumn() < b.getColumn())
+        return true;
+      return false;
+    });
+
+    json.attribute(fieldName, emitLoc(locs.front(), locs.back(), emitted));
+  }
+
+  /// Find the best locations to report for HGL and HDL and set them as fields
+  /// on the `into` JSON object.
+  void findAndSetLocs(JObject &into, Location loc) {
+    if (auto fileLoc = findBestLocation(loc, false))
+      into["hgl_loc"] = emitLoc(fileLoc, {}, false);
+    if (auto fileLoc = findBestLocation(loc, true))
+      into["hdl_loc"] = emitLoc(fileLoc, {}, true);
   }
 };
 
 } // namespace
 
 void FileEmitter::emit(llvm::raw_ostream &os) {
-  llvm::json::OStream json(os, 2);
+  JOStream json(os, 2);
   emit(json);
   os << "\n";
 }
 
-void FileEmitter::emit(llvm::json::OStream &json) {
+void FileEmitter::emit(JOStream &json) {
+  for (auto *module : modules)
+    objectNamespace.newName(module->name.getValue());
+
   // The "HGLDD" header field needs to be the first in the JSON file (which
   // violates the JSON spec, but what can you do). But we only know after module
   // emission what the contents of the header will be.
-  std::string rawObjects;
-  {
-    llvm::raw_string_ostream objectsOS(rawObjects);
-    llvm::json::OStream objectsJson(objectsOS, 2);
-    objectsJson.arrayBegin(); // dummy for indentation
-    objectsJson.arrayBegin();
-    for (auto *module : modules)
-      emitModule(objectsJson, module);
-    objectsJson.arrayEnd();
-    objectsJson.arrayEnd(); // dummy for indentation
+  SmallVector<std::string, 16> rawObjects;
+  for (auto *module : modules) {
+    llvm::raw_string_ostream objectOS(rawObjects.emplace_back());
+    JOStream objectJson(objectOS, 2);
+    objectJson.arrayBegin(); // dummy for indentation
+    objectJson.arrayBegin(); // dummy for indentation
+    emitModule(objectJson, module);
+    objectJson.arrayEnd(); // dummy for indentation
+    objectJson.arrayEnd(); // dummy for indentation
   }
 
   std::optional<unsigned> hdlFileIndex;
@@ -165,7 +330,6 @@ void FileEmitter::emit(llvm::json::OStream &json) {
     hdlFileIndex = getSourceFile(hdlFile, true);
 
   json.objectBegin();
-
   json.attributeObject("HGLDD", [&] {
     json.attribute("version", "1.0");
     json.attributeArray("file_info", [&] {
@@ -175,25 +339,51 @@ void FileEmitter::emit(llvm::json::OStream &json) {
     if (hdlFileIndex)
       json.attribute("hdl_file_index", *hdlFileIndex);
   });
-
-  json.attributeBegin("objects");
-  json.rawValue(StringRef(rawObjects).drop_front().drop_back().trim());
-  json.attributeEnd();
-
+  json.attributeArray("objects", [&] {
+    for (auto &[structDef, name] : structDefs)
+      json.value(structDef);
+    for (auto &rawObject : rawObjects) {
+      // The "rawObject" is nested within two dummy arrays (`[[<stuff>]]`) to
+      // make the indentation of the actual object JSON inside line up with the
+      // current scope (`{"objects":[<stuff>]}`). This is a bit of a hack, but
+      // allows us to use the JSON `OStream` API when constructing the modules
+      // above, creating a simple string buffer, instead of building up a
+      // potentially huge in-memory hierarchy of JSON objects for every module
+      // first. To remove the two dummy arrays, we drop the `[` and `]` at the
+      // front and back twice, and trim the remaining whitespace after each
+      // (since the actual string looks a lot more like
+      // `[\n  [\n    <stuff>\n  ]\n]`).
+      json.rawValue(StringRef(rawObject)
+                        .drop_front()
+                        .drop_back()
+                        .trim()
+                        .drop_front()
+                        .drop_back()
+                        .trim());
+    }
+  });
   json.objectEnd();
 }
 
-void FileEmitter::emitLoc(llvm::json::OStream &json, FileLineColLoc loc,
-                          bool emitted) {
-  json.attribute("file", getSourceFile(loc.getFilename(), emitted));
-  if (auto line = loc.getLine()) {
-    json.attribute("begin_line", line);
-    json.attribute("end_line", line);
+JValue FileEmitter::emitLoc(FileLineColLoc loc, FileLineColLoc endLoc,
+                            bool emitted) {
+  JObject obj;
+  obj["file"] = getSourceFile(loc.getFilename(), emitted);
+  if (loc.getLine()) {
+    obj["begin_line"] = loc.getLine();
+    obj["end_line"] = loc.getLine();
   }
-  if (auto col = loc.getColumn()) {
-    json.attribute("begin_column", col);
-    json.attribute("end_column", col);
+  if (loc.getColumn()) {
+    obj["begin_column"] = loc.getColumn();
+    obj["end_column"] = loc.getColumn();
   }
+  if (endLoc) {
+    if (endLoc.getLine())
+      obj["end_line"] = endLoc.getLine();
+    if (endLoc.getColumn())
+      obj["end_column"] = endLoc.getColumn();
+  }
+  return obj;
 }
 
 StringAttr getVerilogModuleName(DIModule &module) {
@@ -211,7 +401,8 @@ StringAttr getVerilogInstanceName(DIInstance &inst) {
 }
 
 /// Emit the debug info for a `DIModule`.
-void FileEmitter::emitModule(llvm::json::OStream &json, DIModule *module) {
+void FileEmitter::emitModule(JOStream &json, DIModule *module) {
+  structNameHint = module->name.getValue();
   json.objectBegin();
   json.attribute("kind", "module");
   json.attribute("obj_name", module->name.getValue()); // HGL
@@ -220,7 +411,7 @@ void FileEmitter::emitModule(llvm::json::OStream &json, DIModule *module) {
   if (module->isExtern)
     json.attribute("isExtModule", 1);
   if (auto *op = module->op) {
-    findAndEmitLoc(json, "hgl_loc", op->getLoc(), false);
+    findAndEmitLocOrGuess(json, "hgl_loc", op, false);
     findAndEmitLoc(json, "hdl_loc", op->getLoc(), true);
   }
   json.attributeArray("port_vars", [&] {
@@ -235,8 +426,7 @@ void FileEmitter::emitModule(llvm::json::OStream &json, DIModule *module) {
 }
 
 /// Emit the debug info for a `DIInstance`.
-void FileEmitter::emitInstance(llvm::json::OStream &json,
-                               DIInstance *instance) {
+void FileEmitter::emitInstance(JOStream &json, DIInstance *instance) {
   json.objectBegin();
   json.attribute("name", instance->name.getValue());
   auto verilogName = getVerilogInstanceName(*instance);
@@ -253,51 +443,329 @@ void FileEmitter::emitInstance(llvm::json::OStream &json,
 }
 
 /// Emit the debug info for a `DIVariable`.
-void FileEmitter::emitVariable(llvm::json::OStream &json,
-                               DIVariable *variable) {
+void FileEmitter::emitVariable(JOStream &json, DIVariable *variable) {
   json.objectBegin();
   json.attribute("var_name", variable->name.getValue());
   findAndEmitLoc(json, "hgl_loc", variable->loc, false);
   findAndEmitLoc(json, "hdl_loc", variable->loc, true);
 
+  EmittedExpr emitted;
   if (auto value = variable->value) {
-    StringAttr portName;
-    auto *defOp = value.getParentBlock()->getParentOp();
-    auto module = dyn_cast<hw::HWModuleOp>(defOp);
-    if (!module)
-      module = defOp->getParentOfType<hw::HWModuleOp>();
-    if (module) {
-      if (auto arg = dyn_cast<BlockArgument>(value)) {
-        portName = dyn_cast_or_null<StringAttr>(
-            module.getInputNames()[arg.getArgNumber()]);
-      } else if (auto wireOp = value.getDefiningOp<hw::WireOp>()) {
-        portName = wireOp.getNameAttr();
-      } else {
-        for (auto &use : value.getUses()) {
-          if (auto outputOp = dyn_cast<hw::OutputOp>(use.getOwner())) {
-            portName = dyn_cast_or_null<StringAttr>(
-                module.getOutputNames()[use.getOperandNumber()]);
-            break;
-          }
-        }
-      }
-    }
-    if (auto intType = dyn_cast<IntegerType>(value.getType())) {
-      json.attribute("type_name", "logic");
-      if (intType.getIntOrFloatBitWidth() != 1) {
-        json.attributeArray("packed_range", [&] {
-          json.value(intType.getIntOrFloatBitWidth() - 1);
-          json.value(0);
-        });
-      }
-    }
-    if (portName) {
-      json.attributeObject(
-          "value", [&] { json.attribute("sig_name", portName.getValue()); });
-    }
+    auto structNameHintLen = structNameHint.size();
+    structNameHint += '_';
+    structNameHint += variable->name.getValue();
+    emitted = emitExpression(value);
+    structNameHint.resize(structNameHintLen);
+  }
+
+  LLVM_DEBUG(llvm::dbgs() << "- " << variable->name << ": " << emitted << "\n");
+  if (emitted) {
+    json.attributeBegin("value");
+    json.rawValue([&](auto &os) { os << emitted.expr; });
+    json.attributeEnd();
+    json.attribute("type_name", emitted.type.name);
+    if (auto dims = emitted.type.emitPackedDims(); !dims.empty())
+      json.attribute("packed_range", std::move(dims));
+    if (auto dims = emitted.type.emitUnpackedDims(); !dims.empty())
+      json.attribute("unpacked_range", std::move(dims));
   }
 
   json.objectEnd();
+}
+
+/// Emit the DI expression necessary to materialize a value.
+EmittedExpr FileEmitter::emitExpression(Value value) {
+  // A few helpers to simplify creating the various JSON operator and expression
+  // snippets.
+  auto hglddSigName = [](StringRef sigName) -> JObject {
+    return JObject{{"sig_name", sigName}};
+  };
+  auto hglddOperator = [](StringRef opcode, JValue args) -> JObject {
+    return JObject{
+        {"opcode", opcode},
+        {"operands", std::move(args)},
+    };
+  };
+  auto hglddInt32 = [](uint32_t value) -> JObject {
+    return JObject({{"integer_num", value}});
+  };
+
+  if (auto blockArg = dyn_cast<BlockArgument>(value)) {
+    auto module = dyn_cast<hw::HWModuleOp>(blockArg.getOwner()->getParentOp());
+    if (!module)
+      return {};
+    auto name = module.getInputNameAttr(blockArg.getArgNumber());
+    if (!name)
+      return {};
+    return {hglddSigName(name), value.getType()};
+  }
+
+  auto result = cast<OpResult>(value);
+  auto *op = result.getOwner();
+
+  // If the operation has only this one result and is named in some form, use
+  // that name.
+  if (op->getNumResults() == 1) {
+    // If a `hw.verilogName` is available, emit the value as just a reference to
+    // that name.
+    if (auto name = op->getAttrOfType<StringAttr>("hw.verilogName");
+        name && !name.empty())
+      return {hglddSigName(name), result.getType()};
+
+    // Use the "name" attribute of certain Verilog-visible ops directly.
+    if (auto name = op->getAttrOfType<StringAttr>("name");
+        name && !name.empty() &&
+        isa<hw::WireOp, sv::WireOp, sv::RegOp, sv::LogicOp>(op))
+      return {hglddSigName(name), result.getType()};
+  }
+
+  // Emit references to instance ports as `<instName>.<portName>`.
+  if (auto instOp = dyn_cast<hw::InstanceOp>(op)) {
+    auto instName = instOp->getAttrOfType<StringAttr>("hw.verilogName");
+    if (!instName)
+      instName = instOp.getInstanceNameAttr();
+    if (!instName)
+      return {};
+    auto *moduleOp = instOp.getReferencedModuleCached(symbolCache);
+    auto portName =
+        cast<hw::HWModuleLike>(moduleOp)
+            .getPort(instOp.getPortIdForOutputId(result.getResultNumber()))
+            .getVerilogName();
+    if (portName.empty())
+      return {};
+    auto inner = hglddSigName(instName);
+    return {JObject({
+                {"var_ref", std::move(inner)},
+                {"field", portName},
+            }),
+            result.getType()};
+  }
+
+  // Emit constants directly.
+  if (auto constOp = dyn_cast<hw::ConstantOp>(op)) {
+    // Determine the bit width of the constant.
+    auto type = constOp.getType();
+    auto width = hw::getBitWidth(type);
+
+    // Emit zero-width constants as a 1-bit zero value. This ensures we get a
+    // proper Verilog-compatible value as a result. Expressions like
+    // concatenation should instead skip zero-width values.
+    if (width < 1)
+      return {JObject({{"bit_vector", "0"}}),
+              IntegerType::get(op->getContext(), 1)};
+
+    // Serialize the constant as a base-2 binary string.
+    SmallString<64> buffer;
+    buffer.reserve(width);
+    constOp.getValue().toStringUnsigned(buffer, 2);
+
+    // Pad the string with leading zeros such that it is exactly of the required
+    // width. This is needed since tools will use the string length to determine
+    // the width of the constant.
+    std::reverse(buffer.begin(), buffer.end());
+    while (buffer.size() < (size_t)width)
+      buffer += '0';
+    std::reverse(buffer.begin(), buffer.end());
+    assert(buffer.size() == (size_t)width);
+
+    return {JObject({{"bit_vector", buffer}}), type};
+  }
+
+  // Emit structs as assignment patterns and generate corresponding struct
+  // definitions for inclusion in the main "objects" array.
+  if (auto structOp = dyn_cast<debug::StructOp>(op)) {
+    // Collect field names, expressions, and types.
+    auto structNameHintLen = structNameHint.size();
+    std::vector<JValue> values;
+    SmallVector<std::tuple<EmittedType, StringAttr, Location>> types;
+    for (auto [nameAttr, field] :
+         llvm::zip(structOp.getNamesAttr(), structOp.getFields())) {
+      auto name = cast<StringAttr>(nameAttr);
+      structNameHint += '_';
+      structNameHint += name.getValue();
+      if (auto value = emitExpression(field)) {
+        values.push_back(value.expr);
+        types.push_back({value.type, name, field.getLoc()});
+      }
+      structNameHint.resize(structNameHintLen);
+    }
+
+    // Emit empty structs as 0 `bit`.
+    if (values.empty())
+      return {hglddInt32(0), EmittedType("bit")};
+
+    // Assemble the struct type definition.
+    JArray fieldDefs;
+    for (auto [type, name, loc] : types) {
+      JObject fieldDef;
+      fieldDef["var_name"] = name.getValue();
+      fieldDef["type_name"] = type.name;
+      if (auto dims = type.emitPackedDims(); !dims.empty())
+        fieldDef["packed_range"] = std::move(dims);
+      if (auto dims = type.emitUnpackedDims(); !dims.empty())
+        fieldDef["unpacked_range"] = std::move(dims);
+      findAndSetLocs(fieldDef, loc);
+      fieldDefs.push_back(std::move(fieldDef));
+    }
+    auto structName = objectNamespace.newName(structNameHint);
+    JObject structDef;
+    structDef["kind"] = "struct";
+    structDef["obj_name"] = structName;
+    structDef["port_vars"] = std::move(fieldDefs);
+    findAndSetLocs(structDef, structOp.getLoc());
+
+    StringRef structNameFinal =
+        structDefs.insert({std::move(structDef), structName}).first->second;
+
+    return {hglddOperator("'{", values), EmittedType(structNameFinal)};
+  }
+
+  // Emit arrays as assignment patterns.
+  if (auto arrayOp = dyn_cast<debug::ArrayOp>(op)) {
+    std::vector<JValue> values;
+    EmittedType type;
+    for (auto element : arrayOp.getElements()) {
+      if (auto value = emitExpression(element)) {
+        values.push_back(value.expr);
+        if (type && type != value.type)
+          return {};
+        type = value.type;
+      }
+    }
+
+    // Emit empty arrays as 0 `bit`.
+    if (!type)
+      return {hglddInt32(0), EmittedType("bit")};
+
+    type.addUnpackedDim(values.size());
+    return {hglddOperator("'{", values), type};
+  }
+
+  // Look through read inout ops.
+  if (auto readOp = dyn_cast<sv::ReadInOutOp>(op))
+    return emitExpression(readOp.getInput());
+
+  // Emit unary and binary combinational ops as their corresponding HGLDD
+  // operation.
+  StringRef unaryOpcode = TypeSwitch<Operation *, StringRef>(op)
+                              .Case<comb::ParityOp>([](auto) { return "^"; })
+                              .Default([](auto) { return ""; });
+  if (!unaryOpcode.empty() && op->getNumOperands() == 1) {
+    auto arg = emitExpression(op->getOperand(0));
+    if (!arg)
+      return {};
+    return {hglddOperator(unaryOpcode, JArray{arg.expr}), result.getType()};
+  }
+
+  StringRef binaryOpcode =
+      TypeSwitch<Operation *, StringRef>(op)
+          .Case<comb::AndOp>([](auto) { return "&"; })
+          .Case<comb::OrOp>([](auto) { return "|"; })
+          .Case<comb::XorOp>([](auto) { return "^"; })
+          .Case<comb::AddOp>([](auto) { return "+"; })
+          .Case<comb::SubOp>([](auto) { return "-"; })
+          .Case<comb::MulOp>([](auto) { return "*"; })
+          .Case<comb::DivUOp, comb::DivSOp>([](auto) { return "/"; })
+          .Case<comb::ModUOp, comb::ModSOp>([](auto) { return "%"; })
+          .Case<comb::ShlOp>([](auto) { return "<<"; })
+          .Case<comb::ShrUOp>([](auto) { return ">>"; })
+          .Case<comb::ShrSOp>([](auto) { return ">>>"; })
+          .Case<comb::ICmpOp>([](auto cmpOp) -> StringRef {
+            switch (cmpOp.getPredicate()) {
+            case comb::ICmpPredicate::eq:
+              return "==";
+            case comb::ICmpPredicate::ne:
+              return "!=";
+            case comb::ICmpPredicate::ceq:
+              return "===";
+            case comb::ICmpPredicate::cne:
+              return "!==";
+            case comb::ICmpPredicate::weq:
+              return "==?";
+            case comb::ICmpPredicate::wne:
+              return "!=?";
+            case comb::ICmpPredicate::ult:
+            case comb::ICmpPredicate::slt:
+              return "<";
+            case comb::ICmpPredicate::ugt:
+            case comb::ICmpPredicate::sgt:
+              return ">";
+            case comb::ICmpPredicate::ule:
+            case comb::ICmpPredicate::sle:
+              return "<=";
+            case comb::ICmpPredicate::uge:
+            case comb::ICmpPredicate::sge:
+              return ">=";
+            }
+            return {};
+          })
+          .Default([](auto) { return ""; });
+  if (!binaryOpcode.empty()) {
+    if (op->getNumOperands() != 2) {
+      op->emitOpError("must have two operands for HGLDD emission");
+      return {};
+    }
+    auto lhs = emitExpression(op->getOperand(0));
+    auto rhs = emitExpression(op->getOperand(1));
+    if (!lhs || !rhs)
+      return {};
+    return {hglddOperator(binaryOpcode, {lhs.expr, rhs.expr}),
+            result.getType()};
+  }
+
+  // Special handling for concatenation.
+  if (auto concatOp = dyn_cast<comb::ConcatOp>(op)) {
+    std::vector<JValue> args;
+    for (auto operand : concatOp.getOperands()) {
+      auto value = emitExpression(operand);
+      if (!value)
+        return {};
+      args.push_back(value.expr);
+    }
+    return {hglddOperator("{}", args), concatOp.getType()};
+  }
+
+  // Emit `ReplicateOp` as HGLDD `R{}` op.
+  if (auto replicateOp = dyn_cast<comb::ReplicateOp>(op)) {
+    auto arg = emitExpression(replicateOp.getInput());
+    if (!arg)
+      return {};
+    return {hglddOperator("R{}",
+                          {
+                              hglddInt32(replicateOp.getMultiple()),
+                              arg.expr,
+                          }),
+            replicateOp.getType()};
+  }
+
+  // Emit extracts as HGLDD `[]` ops.
+  if (auto extractOp = dyn_cast<comb::ExtractOp>(op)) {
+    auto arg = emitExpression(extractOp.getInput());
+    if (!arg)
+      return {};
+    auto lowBit = extractOp.getLowBit();
+    auto highBit = lowBit + extractOp.getType().getIntOrFloatBitWidth() - 1;
+    return {hglddOperator("[]",
+                          {
+                              arg.expr,
+                              hglddInt32(highBit),
+                              hglddInt32(lowBit),
+                          }),
+            extractOp.getType()};
+  }
+
+  // Emit `MuxOp` as HGLDD `?:` ternary op.
+  if (auto muxOp = dyn_cast<comb::MuxOp>(op)) {
+    auto cond = emitExpression(muxOp.getCond());
+    auto lhs = emitExpression(muxOp.getTrueValue());
+    auto rhs = emitExpression(muxOp.getFalseValue());
+    if (!cond || !lhs || !rhs)
+      return {};
+    return {hglddOperator("?:", {cond.expr, lhs.expr, rhs.expr}),
+            muxOp.getType()};
+  }
+
+  return {};
 }
 
 //===----------------------------------------------------------------------===//
@@ -312,6 +780,7 @@ namespace {
 struct Emitter {
   DebugInfo di;
   SmallVector<FileEmitter, 0> files;
+  hw::HWSymbolCache symbolCache;
 
   Emitter(Operation *module, const EmitHGLDDOptions &options);
 };
@@ -320,6 +789,9 @@ struct Emitter {
 
 Emitter::Emitter(Operation *module, const EmitHGLDDOptions &options)
     : di(module) {
+  symbolCache.addDefinitions(module);
+  symbolCache.freeze();
+
   // Group the DI modules according to their emitted file path. Modules that
   // don't have an emitted file path annotated are collected in a separate
   // group. That group, with a null `StringAttr` key, is emitted into a separate
@@ -337,6 +809,7 @@ Emitter::Emitter(Operation *module, const EmitHGLDDOptions &options)
   // member.
   files.reserve(groups.size());
   for (auto &[hdlFile, emitter] : groups) {
+    emitter.symbolCache = &symbolCache;
     emitter.options = &options;
     emitter.hdlFile = hdlFile;
     emitter.outputFileName = options.outputDirectory;
