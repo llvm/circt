@@ -33,6 +33,7 @@ struct PathVisitor {
   LogicalResult process(BasePathCreateOp pathOp);
   LogicalResult process(PathCreateOp pathOp);
   LogicalResult process(EmptyPathOp pathOp);
+  LogicalResult process(ListCreateOp pathOp);
   LogicalResult run(ModuleOp module);
   hw::InstanceGraph &instanceGraph;
   hw::InnerRefNamespace &irn;
@@ -251,6 +252,29 @@ LogicalResult PathVisitor::process(EmptyPathOp path) {
   return success();
 }
 
+/// Replace a ListCreateOp of path types with frozen path types.
+LogicalResult PathVisitor::process(ListCreateOp listCreateOp) {
+  ListType listType = listCreateOp.getResult().getType();
+  Type elementType = listType.getElementType();
+
+  Type newElementType;
+  if (isa<BasePathType>(elementType))
+    newElementType = FrozenBasePathType::get(listCreateOp.getContext());
+  if (isa<PathType>(elementType))
+    newElementType = FrozenPathType::get(listCreateOp.getContext());
+
+  if (!newElementType)
+    return success();
+
+  OpBuilder builder(listCreateOp);
+  auto newListType = ListType::get(newElementType);
+  auto newListCreateOp = builder.create<ListCreateOp>(
+      listCreateOp.getLoc(), newListType, listCreateOp.getOperands());
+  listCreateOp.replaceAllUsesWith(newListCreateOp.getResult());
+  listCreateOp->erase();
+  return success();
+}
+
 LogicalResult PathVisitor::run(ModuleOp module) {
   auto frozenBasePathType = FrozenBasePathType::get(module.getContext());
   auto frozenPathType = FrozenPathType::get(module.getContext());
@@ -273,6 +297,9 @@ LogicalResult PathVisitor::run(ModuleOp module) {
           return WalkResult::interrupt();
       } else if (auto path = dyn_cast<EmptyPathOp>(op)) {
         if (failed(process(path)))
+          return WalkResult::interrupt();
+      } else if (auto listCreate = dyn_cast<ListCreateOp>(op)) {
+        if (failed(process(listCreate)))
           return WalkResult::interrupt();
       }
       return WalkResult::advance();

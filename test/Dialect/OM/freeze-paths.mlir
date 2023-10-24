@@ -69,3 +69,18 @@ om.class @PathTest(%basepath : !om.basepath, %path : !om.path) {
   // CHECK: om.frozenbasepath_create %basepath "PathModule/child"
   %13 = om.basepath_create %basepath @nla_3
 }
+
+// CHECK-LABEL om.class @ListCreateTest()
+om.class @ListCreateTest(%basepath : !om.basepath, %path : !om.path) {
+  // CHECK: [[BASE_PATH_LIST:%.+]] = om.list_create %basepath : !om.frozenbasepath
+  %0 = om.list_create %basepath : !om.basepath
+
+  // CHECK: [[PATH_LIST:%.+]] = om.list_create %path : !om.frozenpath
+  %1 = om.list_create %path : !om.path
+
+  // CHECK: om.class.field @basepath, [[BASE_PATH_LIST]] : !om.list<!om.frozenbasepath>
+  om.class.field @basepath, %0 : !om.list<!om.basepath>
+
+  // CHECK: om.class.field @path, [[PATH_LIST]] : !om.list<!om.frozenpath>
+  om.class.field @path, %1 : !om.list<!om.path>
+}
