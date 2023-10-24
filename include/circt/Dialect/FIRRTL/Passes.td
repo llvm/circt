@@ -793,4 +793,17 @@ def ProbeDCE : Pass<"firrtl-probe-dce", "firrtl::CircuitOp"> {
   ];
 }
 
+def MaterializeDebugInfo :
+    Pass<"firrtl-materialize-debug-info", "firrtl::FModuleOp"> {
+  let summary = "Generate debug ops to track FIRRTL values";
+  let description = [{
+    This pass creates debug ops to track FIRRTL-level ports, nodes, wires,
+    registers, and instances throughout the pipeline. The `DebugInfo` analysis
+    can then be used at a later point in the pipeline to obtain a source
+    language view into the lowered IR.
+  }];
+  let constructor = "circt::firrtl::createMaterializeDebugInfoPass()";
+  let dependentDialects = ["debug::DebugDialect"];
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD
