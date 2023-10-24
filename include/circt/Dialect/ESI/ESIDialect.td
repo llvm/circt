@@ -22,9 +22,6 @@ def ESI_Dialect : Dialect {
   let useDefaultTypePrinterParser = 1;
   let useDefaultAttributePrinterParser = 1;
 
-  // Opt-out of properties for now, must migrate by LLVM 19.  #5273.
-  let usePropertiesForAttributes = 0;
-
   let extraClassDeclaration = [{
     /// Register all ESI attributes.
     void registerAttributes();
