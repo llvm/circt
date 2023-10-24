@@ -78,4 +78,40 @@ def ServiceRequestRecordOp : ESI_Op<"esi.manifest.req", []> {
   }];
 }
 
+def ServiceImplRecordOp : ESI_Op<"esi.manifest.service_impl", [NoTerminator]> {
+  let summary = "Record of a service implementation";
+  let description = [{
+    A record of a service implementation. Optionally emitted by the service
+    implementation. Contains information necessary to connect to the service and
+    service clients.
+  }];
+
+  let arguments = (ins OptionalAttr<FlatSymbolRefAttr>:$service,
+                       StrAttr:$serviceImplName,
+                       DictionaryAttr:$implDetails);
+  let regions = (region SizedRegion<1>:$reqDetails);
+  let assemblyFormat = [{
+    (`svc` $service^)? `by` $serviceImplName `with` $implDetails
+    attr-dict-with-keyword $reqDetails
+  }];
+}
+
+def ServiceImplClientRecordOp : ESI_Op<"esi.manifest.impl_conn", [
+      HasParent<"ServiceImplRecordOp">]> {
+  let summary = "Details of a service implementation client connection";
+  let description = [{
+    A record containing all the necessary details of how to connect to a client
+    which the parent service record is servicing.
+  }];
+
+  let arguments = (ins AppIDArrayAttr:$relAppIDPath,
+                       InnerRefAttr:$servicePort,
+                       TypeAttrOf<ChannelBundleType>:$bundleType,
+                       DictionaryAttr:$implDetails);
+  let assemblyFormat = [{
+    $relAppIDPath `req` $servicePort `(` $bundleType `)`
+      `with` $implDetails attr-dict
+  }];
+}
+
 #endif // CIRCT_DIALECT_ESI_MANIFEST_TD
