@@ -209,10 +209,6 @@ static cl::opt<std::string>
                 cl::init(""), cl::value_desc("filename"),
                 cl::cat(mainCategory));
 
-static cl::opt<bool>
-    enableDebugInfo("g", cl::desc("Enable the generation of debug information"),
-                    cl::init(false), cl::cat(mainCategory));
-
 static cl::opt<bool> emitHGLDD("emit-hgldd", cl::desc("Emit HGLDD debug info"),
                                cl::init(false), cl::cat(mainCategory));
 
@@ -376,10 +372,6 @@ static LogicalResult processBuffer(
 
   if (failed(firtool::populatePreprocessTransforms(pm, firtoolOptions)))
     return failure();
-
-  if (enableDebugInfo)
-    pm.nest<firrtl::CircuitOp>().addNestedPass<firrtl::FModuleOp>(
-        firrtl::createMaterializeDebugInfoPass());
 
   // If the user asked for --parse-only, stop after running LowerAnnotations.
   if (outputFormat == OutputParseOnly) {

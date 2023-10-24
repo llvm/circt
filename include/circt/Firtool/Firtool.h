@@ -76,6 +76,10 @@ struct FirtoolOptions {
                      "Preserve all values")),
       llvm::cl::init(firrtl::PreserveValues::None), llvm::cl::cat(category)};
 
+  llvm::cl::opt<bool> enableDebugInfo{
+      "g", llvm::cl::desc("Enable the generation of debug information"),
+      llvm::cl::init(false), llvm::cl::cat(category)};
+
   // Build mode options.
   enum BuildMode { BuildModeDebug, BuildModeRelease };
   llvm::cl::opt<BuildMode> buildMode{
