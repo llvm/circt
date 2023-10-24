@@ -51,6 +51,7 @@ static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
   Type i1ch = ChannelType::get(ctxt, b.getIntegerType(1));
   Value clk = implReq.getOperand(0);
   Value rst = implReq.getOperand(1);
+  SmallVector<NamedAttribute, 8> implDetails;
 
   // Determine which EndpointID this generator should start with.
   if (implReq.getImplOpts()) {
@@ -60,6 +61,12 @@ static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
              << nameAttr.getName();
     }
   }
+
+  auto implRecord = b.create<ServiceImplRecordOp>(
+      implReq.getLoc(), implReq.getServiceSymbolAttr(),
+      b.getStringAttr("cosim"), b.getDictionaryAttr(implDetails));
+  Block &connImplBlock = implRecord.getReqDetails().emplaceBlock();
+  OpBuilder implRecords = OpBuilder::atBlockEnd(&connImplBlock);
 
   // Assemble the name to use for an endpoint.
   auto toStringAttr = [&](ArrayAttr strArr, StringAttr channelName) {
@@ -89,6 +96,7 @@ static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
   for (auto req : implReq.getOps<ServiceImplementConnReqOp>()) {
     Location loc = req->getLoc();
     ChannelBundleType bundleType = req.getToClient().getType();
+    SmallVector<NamedAttribute, 8> channelAssignments;
 
     SmallVector<Value, 8> toServerValues;
     for (BundledChannel ch : bundleType.getChannels()) {
@@ -98,6 +106,8 @@ static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
             loc, ch.type, clk, rst, nullSource.getOut(),
             toStringAttr(req.getRelativeAppIDPathAttr(), ch.name));
         toServerValues.push_back(cosim.getRecv());
+        channelAssignments.push_back(
+            b.getNamedAttr(ch.name, cosim.getNameAttr()));
       }
     }
 
@@ -108,11 +118,20 @@ static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
 
     size_t chanIdx = 0;
     for (BundledChannel ch : bundleType.getChannels()) {
-      if (ch.direction == ChannelDirection::from)
-        b.create<CosimEndpointOp>(
+      if (ch.direction == ChannelDirection::from) {
+        auto cosim = b.create<CosimEndpointOp>(
             loc, i1ch, clk, rst, pack.getFromChannels()[chanIdx++],
             toStringAttr(req.getRelativeAppIDPathAttr(), ch.name));
+        channelAssignments.push_back(
+            b.getNamedAttr(ch.name, cosim.getNameAttr()));
+      }
     }
+
+    implRecords.create<ServiceImplClientRecordOp>(
+        req.getLoc(), req.getRelativeAppIDPathAttr(), req.getServicePortAttr(),
+        TypeAttr::get(bundleType),
+        b.getDictionaryAttr(b.getNamedAttr(
+            "channel_assignments", b.getDictionaryAttr(channelAssignments))));
   }
 
   // Erase the generation request.
@@ -364,6 +383,11 @@ void ESIConnectServicesPass::convertReq(
   newReq->setDialectAttrs(toClientReq->getDialectAttrs());
   toClientReq.getToClient().replaceAllUsesWith(newReq.getToClient());
 
+  // Emit a record of the original request.
+  b.create<ServiceRequestRecordOp>(toClientReq.getLoc(), toClientReq.getAppID(),
+                                   toClientReq.getServicePortAttr(),
+                                   BundleDirection::toClient,
+                                   toClientReq.getToClient().getType());
   toClientReq.erase();
 }
 
@@ -406,6 +430,11 @@ void ESIConnectServicesPass::convertReq(
                                       unpackToClientFromChannelsBackedges))
     be.setValue(v);
 
+  // Emit a record of the original request.
+  b.create<ServiceRequestRecordOp>(toServerReq.getLoc(), toServerReq.getAppID(),
+                                   toServerReq.getServicePortAttr(),
+                                   BundleDirection::toServer,
+                                   toServerReq.getToServer().getType());
   toServerReq.erase();
 }
 
@@ -482,8 +511,9 @@ LogicalResult ESIConnectServicesPass::replaceInst(ServiceInstanceOp instOp,
   // Create the generation request op.
   OpBuilder b(instOp);
   auto implOp = b.create<ServiceImplementReqOp>(
-      instOp.getLoc(), resultTypes, instOp.getServiceSymbolAttr(),
-      instOp.getImplTypeAttr(), instOp.getImplOptsAttr(), instOp.getOperands());
+      instOp.getLoc(), resultTypes, instOp.getAppIDAttr(),
+      instOp.getServiceSymbolAttr(), instOp.getImplTypeAttr(),
+      instOp.getImplOptsAttr(), instOp.getOperands());
   implOp->setDialectAttrs(instOp->getDialectAttrs());
   implOp.getPortReqs().push_back(portReqs);
 

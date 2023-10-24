@@ -12,9 +12,9 @@
 include "mlir/IR/RegionKindInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
 
-include "circt/Dialect/ESI/ESIAppID.td"
 include "circt/Dialect/ESI/ESIChannels.td"
 include "circt/Dialect/ESI/ESIInterfaces.td"
+include "circt/Dialect/ESI/ESIManifest.td"
 include "circt/Dialect/ESI/ESITypes.td"
 
 include "circt/Dialect/HW/HWAttributesNaming.td"
@@ -105,14 +105,16 @@ def ServiceInstanceOp : ESI_Op<"service.instance"> {
     implementation to use for this service.
   }];
 
-  let arguments = (ins OptionalAttr<FlatSymbolRefAttr>:$service_symbol,
+  let arguments = (ins AppIDAttr:$appID,
+                       OptionalAttr<FlatSymbolRefAttr>:$service_symbol,
                        StrAttr:$impl_type,
                        OptionalAttr<DictionaryAttr>:$impl_opts,
                        Variadic<AnyType>:$inputs);
   let results = (outs Variadic<AnyType>);
   let assemblyFormat = [{
-    (`svc` $service_symbol^)? `impl` `as` $impl_type (`opts` $impl_opts^)?
-      `(` $inputs `)` attr-dict `:` functional-type($inputs, results)
+    qualified($appID) (`svc` $service_symbol^)? `impl` `as` $impl_type
+      (`opts` $impl_opts^)? `(` $inputs `)`
+      attr-dict `:` functional-type($inputs, results)
   }];
 }
 
@@ -129,7 +131,8 @@ def ServiceImplementReqOp : ESI_Op<"service.impl_req", [NoTerminator]> {
     implementation.
   }];
 
-  let arguments = (ins OptionalAttr<FlatSymbolRefAttr>:$service_symbol,
+  let arguments = (ins AppIDAttr:$appID,
+                       OptionalAttr<FlatSymbolRefAttr>:$service_symbol,
                        StrAttr:$impl_type,
                        OptionalAttr<DictionaryAttr>:$impl_opts,
                        Variadic<AnyType>:$inputs);
@@ -137,8 +140,9 @@ def ServiceImplementReqOp : ESI_Op<"service.impl_req", [NoTerminator]> {
   let regions = (region SizedRegion<1>:$portReqs);
 
   let assemblyFormat = [{
-    (`svc` $service_symbol^)? `impl` `as` $impl_type (`opts` $impl_opts^)?
-     `(` $inputs `)` attr-dict `:` functional-type($inputs, results)
+    qualified($appID) (`svc` $service_symbol^)? `impl` `as` $impl_type
+      (`opts` $impl_opts^)? `(` $inputs `)`
+      attr-dict `:` functional-type($inputs, results)
       $portReqs
   }];
 }
