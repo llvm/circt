@@ -12,7 +12,7 @@
 // CHECK-NEXT:       calyx.group @ret_assign_0 {
 // CHECK-NEXT:         calyx.assign %ret_arg0_reg.in = %std_mux_0.out : i32
 // CHECK-NEXT:         calyx.assign %ret_arg0_reg.write_en = %true : i1
-// CHECK-NEXT:         calyx.assign %std_mux_0.sel = %in0 : i1
+// CHECK-NEXT:         calyx.assign %std_mux_0.cond = %in0 : i1
 // CHECK-NEXT:         calyx.assign %std_mux_0.tru = %std_sub_0.out : i32
 // CHECK-NEXT:         calyx.assign %std_sub_0.left = %std_lsh_0.out : i32
 // CHECK-NEXT:         calyx.assign %std_lsh_0.left = %std_add_0.out : i32
