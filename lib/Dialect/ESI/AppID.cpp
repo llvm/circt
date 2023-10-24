@@ -49,12 +49,15 @@ public:
   // Returns a range iterator to the AppID components exposed by this module.
   auto getAppIDs() const { return llvm::make_first_range(childAppIDPaths); }
 
+  // Get a read-only reference to the index.
+  const auto &getIndex() const { return childAppIDPaths; }
+
 private:
   // Operations involved in appids.
   DenseMap<AppIDAttr, hw::InnerSymbolOpInterface> childAppIDPaths;
 };
 
-AppIDIndex::AppIDIndex(Operation *mlirTop) : valid(true) {
+AppIDIndex::AppIDIndex(Operation *mlirTop) : valid(true), mlirTop(mlirTop) {
   Block &topBlock = mlirTop->getRegion(0).front();
   symCache.addDefinitions(mlirTop);
   symCache.freeze();
@@ -89,6 +92,56 @@ ArrayAttr AppIDIndex::getChildAppIDsOf(hw::HWModuleLike fromMod) const {
   SmallVector<Attribute, 8> attrs(
       llvm::map_range(appids, [](AppIDAttr a) -> Attribute { return a; }));
   return ArrayAttr::get(fromMod.getContext(), attrs);
+}
+
+/// Walk the AppID hierarchy rooted at the specified module.
+LogicalResult
+AppIDIndex::walk(hw::HWModuleLike mod, SmallVectorImpl<AppIDAttr> &pathStack,
+                 function_ref<void(AppIDPathAttr, Operation *)> fn) const {
+  ModuleAppIDs *modIDs = containerAppIDs.lookup(mod);
+  if (!modIDs) {
+    mod.emitWarning("Module has no AppIDs");
+    return success();
+  }
+  for (auto [appid, innerSym] : modIDs->getIndex()) {
+    AppIDPathAttr path = AppIDPathAttr::get(
+        mod.getContext(), FlatSymbolRefAttr::get(mod.getNameAttr()), pathStack);
+    fn(path, innerSym);
+
+    if (auto inst = dyn_cast<hw::HWInstanceLike>(innerSym.getOperation())) {
+      auto tgtMod = dyn_cast<hw::HWModuleLike>(
+          symCache.getDefinition(inst.getReferencedModuleNameAttr()));
+      // Do the assert here to get a more precise message.
+      assert(tgtMod && "invalid module reference");
+
+      AppIDAttr appid =
+          innerSym->getAttrOfType<AppIDAttr>(AppIDAttr::AppIDAttrName);
+      if (appid)
+        pathStack.push_back(appid);
+      LogicalResult rc = walk(tgtMod, pathStack, fn);
+      if (appid)
+        pathStack.pop_back();
+      if (failed(rc))
+        return failure();
+    }
+  }
+  return success();
+}
+
+LogicalResult
+AppIDIndex::walk(hw::HWModuleLike top,
+                 function_ref<void(AppIDPathAttr, Operation *)> fn) const {
+  SmallVector<AppIDAttr, 8> path;
+  return walk(top, path, fn);
+}
+LogicalResult
+AppIDIndex::walk(StringRef top,
+                 function_ref<void(AppIDPathAttr, Operation *)> fn) const {
+  Operation *op = symCache.getDefinition(
+      FlatSymbolRefAttr::get(mlirTop->getContext(), top));
+  if (auto topMod = dyn_cast_or_null<hw::HWModuleLike>(op))
+    return walk(topMod, fn);
+  return mlirTop->emitOpError("Could not find module '") << top << "'";
 }
 
 FailureOr<ArrayAttr> AppIDIndex::getAppIDPathAttr(hw::HWModuleLike fromMod,

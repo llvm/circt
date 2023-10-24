@@ -39,12 +39,22 @@ public:
   // Return an array of AppIDAttrs which are contained in the module.
   ArrayAttr getChildAppIDsOf(hw::HWModuleLike) const;
 
+  /// Walk the AppID hierarchy rooted at the specified module.
+  LogicalResult walk(hw::HWModuleLike top,
+                     function_ref<void(AppIDPathAttr, Operation *)> fn) const;
+  LogicalResult walk(StringRef top,
+                     function_ref<void(AppIDPathAttr, Operation *)> fn) const;
+
   /// Return an array of InnerNameRefAttrs representing the relative path to
   /// 'appid' from 'fromMod'.
   FailureOr<ArrayAttr> getAppIDPathAttr(hw::HWModuleLike fromMod,
                                         AppIDAttr appid, Location loc) const;
 
 private:
+  /// Walk the AppID hierarchy rooted at the specified module.
+  LogicalResult walk(hw::HWModuleLike, SmallVectorImpl<AppIDAttr> &,
+                     function_ref<void(AppIDPathAttr, Operation *)> fn) const;
+
   //===--------------------------------------------------------------------===//
   // Index construction and storage.
   //===--------------------------------------------------------------------===//
@@ -58,6 +68,7 @@ private:
 
   bool valid;
   hw::HWSymbolCache symCache;
+  Operation *mlirTop;
 };
 
 } // namespace esi

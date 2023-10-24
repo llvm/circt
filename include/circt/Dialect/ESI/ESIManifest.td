@@ -49,6 +49,10 @@ def AppIDPathAttr : ESI_Attr<"AppIDPath"> {
   let assemblyFormat = [{
     `<` $root `[` $path `]` `>`
   }];
+
+  let extraClassDeclaration = [{
+    AppIDPathAttr getParent();
+  }];
 }
 
 def BundleDirection : I32EnumAttr<"BundleDirection",
@@ -111,6 +115,32 @@ def ServiceImplClientRecordOp : ESI_Op<"esi.manifest.impl_conn", [
   let assemblyFormat = [{
     $relAppIDPath `req` $servicePort `(` $bundleType `)`
       `with` $implDetails attr-dict
+  }];
+}
+
+def AppIDHierRootOp : ESI_Op<"esi.manifest.hier_root",
+                             [HasParent<"mlir::ModuleOp">, NoTerminator]> {
+  let summary = "The root of an appid instance hierarchy";
+
+  let arguments = (ins FlatSymbolRefAttr:$topModuleRef);
+  let regions = (region SizedRegion<1>:$children);
+
+  let assemblyFormat = [{
+    $topModuleRef attr-dict-with-keyword $children
+  }];
+}
+
+def AppIDHierNodeOp : ESI_Op<"esi.manifest.hier_node", [
+      ParentOneOf<["circt::esi::AppIDHierRootOp",
+                   "circt::esi::AppIDHierNodeOp"]>,
+      NoTerminator]> {
+  let summary = "A node in the AppID hierarchy";
+
+  let arguments = (ins AppIDAttr:$appID);
+  let regions = (region SizedRegion<1>:$children);
+
+  let assemblyFormat = [{
+    $appID attr-dict-with-keyword $children
   }];
 }
 
