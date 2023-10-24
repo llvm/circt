@@ -7,11 +7,20 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/ESI/AppID.h"
+#include "circt/Dialect/ESI/ESIOps.h"
 
 #include "circt/Support/InstanceGraph.h"
 
 using namespace circt;
 using namespace esi;
+
+AppIDAttr circt::esi::getAppID(Operation *op) {
+  if (auto appidOp = dyn_cast<esi::HasAppID>(op))
+    return appidOp.getAppID();
+  if (auto appid = op->getAttrOfType<AppIDAttr>(AppIDAttr::AppIDAttrName))
+    return appid;
+  return AppIDAttr();
+}
 
 /// Helper class constructed on a per-HWModuleLike basis. Contains a map for
 /// fast lookups to the operation involved in an appid component.
@@ -107,7 +116,7 @@ FailureOr<ArrayAttr> AppIDIndex::getAppIDPathAttr(hw::HWModuleLike fromMod,
       return failure();
     path.push_back(op->getInnerRef());
 
-    if (op->getOperation()->hasAttr(AppIDAttr::AppIDAttrName))
+    if (getAppID(*op))
       break;
 
     if (auto inst = dyn_cast<hw::HWInstanceLike>(op->getOperation()))
@@ -132,7 +141,7 @@ AppIDIndex::buildIndexFor(hw::HWModuleLike mod) {
     // If an op has an appid attribute, add it to the index and terminate the
     // DFS (since AppIDs only get 'bubbled up' until they encounter an ID'd
     // instantiation).
-    if (auto appid = op->getAttrOfType<AppIDAttr>(AppIDAttr::AppIDAttrName)) {
+    if (AppIDAttr appid = getAppID(op)) {
       if (failed(appIDs->add(appid, op, false)))
         return WalkResult::interrupt();
       return WalkResult::advance();

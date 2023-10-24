@@ -24,6 +24,10 @@
 namespace circt {
 namespace esi {
 
+/// Get the AppID of a particular operation. Returns null if the operation does
+/// not have one.
+AppIDAttr getAppID(Operation *op);
+
 /// An index for resolving AppIDPaths to dynamic instances.
 class AppIDIndex {
 public:
