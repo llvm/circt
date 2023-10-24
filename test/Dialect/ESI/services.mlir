@@ -25,8 +25,10 @@ hw.module @Top (in %clk: !seq.clock, in %rst: i1) {
 
 
 // CONN-LABEL:  hw.module @Loopback(in %clk : !seq.clock, in %loopback_tohw : !esi.bundle<[!esi.channel<i8> to "recv"]>, in %loopback_fromhw : !esi.bundle<[!esi.channel<i8> from "send"]>) {
-// CONN:          %recv = esi.bundle.unpack  from %loopback_tohw : !esi.bundle<[!esi.channel<i8> to "recv"]>
+// CONN-NEXT:     esi.esi.manifest.req #esi.appid<"loopback_tohw">, <@HostComms::@Recv>, toClient, !esi.bundle<[!esi.channel<i8> to "recv"]>
+// CONN-NEXT:     %recv = esi.bundle.unpack  from %loopback_tohw : !esi.bundle<[!esi.channel<i8> to "recv"]>
 // CONN-NEXT:     esi.bundle.unpack %recv from %loopback_fromhw : !esi.bundle<[!esi.channel<i8> from "send"]>
+// CONN-NEXT:         esi.esi.manifest.req #esi.appid<"loopback_fromhw">, <@HostComms::@Send>, toServer, !esi.bundle<[!esi.channel<i8> to "send"]>
 hw.module @Loopback (in %clk: !seq.clock) {
   %dataInBundle = esi.service.req.to_client <@HostComms::@Recv> (#esi.appid<"loopback_tohw">) : !recvI8
   %dataOut = esi.bundle.unpack from %dataInBundle : !recvI8
@@ -103,7 +105,10 @@ hw.module @InOutLoopback (in %clk: !seq.clock) {
 // CONN-LABEL:  esi.pure_module @LoopbackCosimPure {
 // CONN-NEXT:     [[clk:%.+]] = esi.pure_module.input "clk" : !seq.clock
 // CONN-NEXT:     [[rst:%.+]] = esi.pure_module.input "rst" : i1
-// CONN:          [[null:%.+]] = esi.null : !esi.channel<i1>
+// CONN-NEXT:     esi.esi.manifest.service_impl svc @HostComms by "cosim" with {} {
+// CONN-NEXT:       esi.esi.manifest.impl_conn [#esi.appid<"loopback_inout">] req <@HostComms::@ReqResp>(!esi.bundle<[!esi.channel<i16> to "req", !esi.channel<i8> from "resp"]>) with {channel_assignments = {req = "loopback_inout.req", resp = "loopback_inout.resp"}}
+// CONN-NEXT:     }
+// CONN-NEXT:     [[null:%.+]] = esi.null : !esi.channel<i1>
 // CONN-NEXT:     [[r2:%.+]] = esi.cosim [[clk]], [[rst]], [[null]], "loopback_inout.req" : !esi.channel<i1> -> !esi.channel<i16>
 // CONN-NEXT:     %bundle, %resp = esi.bundle.pack [[r2]] : !esi.bundle<[!esi.channel<i16> to "req", !esi.channel<i8> from "resp"]>
 // CONN-NEXT:     esi.cosim [[clk]], [[rst]], %resp, "loopback_inout.resp" : !esi.channel<i8> -> !esi.channel<i1>
