@@ -20,6 +20,7 @@
 #include "ExportVerilogInternals.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombVisitors.h"
+#include "circt/Dialect/Debug/DebugDialect.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
@@ -3626,7 +3627,7 @@ void NameCollector::collectNames(Block &block) {
     // anyway.
     if (isa<InstanceOp, InterfaceInstanceOp>(op))
       continue;
-    if (isa<ltl::LTLDialect>(op.getDialect()))
+    if (isa<ltl::LTLDialect, debug::DebugDialect>(op.getDialect()))
       continue;
 
     if (!isVerilogExpression(&op)) {
@@ -5212,8 +5213,8 @@ void StmtEmitter::emitStatement(Operation *op) {
     return;
 
   // Ignore LTL expressions as they are emitted as part of verification
-  // statements.
-  if (isa<ltl::LTLDialect>(op->getDialect()))
+  // statements. Ignore debug ops as they are emitted as part of debug info.
+  if (isa<ltl::LTLDialect, debug::DebugDialect>(op->getDialect()))
     return;
 
   // Handle HW statements, SV statements.
