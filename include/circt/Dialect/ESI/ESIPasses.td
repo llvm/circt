@@ -46,8 +46,7 @@ def ESIBuildManifest : Pass<"esi-build-manifest", "mlir::ModuleOp"> {
   let dependentDialects = ["circt::hw::HWDialect", "circt::sv::SVDialect"];
   let options = [
     Option<"toFile", "to-file", "std::string",
-           "", "Write the manifest JSON directly to this file">,
-    Option<"top", "top", "std::string", "", "Top level module">
+           "", "Write the manifest JSON directly to this file">
   ];
 }
 
