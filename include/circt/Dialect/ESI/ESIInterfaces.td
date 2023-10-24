@@ -39,6 +39,24 @@ def ChannelOpInterface : OpInterface<"ChannelOpInterface"> {
   ];
 }
 
+def HasAppIDOpInterface : OpInterface<"HasAppID"> {
+  let cppNamespace = "circt::esi";
+  let description = [{
+    Op can be identified by an AppID.
+  }];
+
+  let methods = [
+    InterfaceMethod<
+      "Returns the AppID of this operation.",
+      "::circt::esi::AppIDAttr", "getAppID", (ins),
+        /*methodBody=*/"",
+        /*defaultImplementation=*/[{
+          return $_op.getAppID();
+        }]
+    >,
+  ];
+}
+
 //===----------------------------------------------------------------------===//
 //
 // Service-related interfaces.

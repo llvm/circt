@@ -59,7 +59,8 @@ def BundleDirection : I32EnumAttr<"BundleDirection",
   let cppNamespace = "::circt::esi";
 }
 
-def ServiceRequestRecordOp : ESI_Op<"esi.manifest.req", []> {
+def ServiceRequestRecordOp : ESI_Op<"esi.manifest.req", [
+        DeclareOpInterfaceMethods<HasAppIDOpInterface>]> {
   let summary = "Record of a service request";
   let description = [{
     A record of a service request, including the requestor, the service
@@ -75,6 +76,12 @@ def ServiceRequestRecordOp : ESI_Op<"esi.manifest.req", []> {
   let assemblyFormat = [{
     qualified($requestor) `,` $servicePort `,` $direction `,` $bundleType
     attr-dict
+  }];
+
+  let extraClassDeclaration = [{
+    AppIDAttr getAppID() {
+      return getRequestor();
+    }
   }];
 }
 
