@@ -1141,3 +1141,16 @@ circuit PublicNonModule:
   ; expected-error @below {{only modules may be public}}
   public extmodule Foo:
   module PublicNonModule:
+
+;// -----
+circuit RWProbeExprOOB :
+  module RWProbeExprOOB :
+    output p : RWProbe<UInt<1>>
+    wire x : UInt<1>[2]
+    x is invalid
+
+    ; expected-error @below {{out of range index '100' for vector type '!firrtl.vector<uint<1>, 2>'}}
+    define p = rwprobe(x[100])
+
+   input out_0 : SInt<8>[5]
+   out_0[4] <- out_0[5]

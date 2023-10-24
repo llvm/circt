@@ -3206,16 +3206,19 @@ ParseResult FIRStmtParser::parseRWProbeStaticRefExp(FieldRef &refResult,
         if ((unsigned)index < vector.getNumElements()) {
           refResult = refResult.getSubField(vector.getFieldID(index));
           type = vector.getElementTypePreservingConst();
+          continue;
         }
       } else if (auto vector = type_dyn_cast<OpenVectorType>(type)) {
         if ((unsigned)index < vector.getNumElements()) {
           refResult = refResult.getSubField(vector.getFieldID(index));
           type = vector.getElementTypePreservingConst();
+          continue;
         }
       } else {
         return emitError(loc, "subindex requires vector operand");
       }
-      continue;
+      return emitError(loc, "out of range index '")
+             << index << "' for vector type " << type;
     }
     return success();
   }
