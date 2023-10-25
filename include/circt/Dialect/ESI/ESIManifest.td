@@ -51,6 +51,8 @@ def AppIDPathAttr : ESI_Attr<"AppIDPath"> {
   }];
 
   let extraClassDeclaration = [{
+    // Get an AppIDPathAttr without the last component. Returns None if the path
+    // is simply the root.
     AppIDPathAttr getParent();
   }];
 }
