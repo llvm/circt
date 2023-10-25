@@ -33,7 +33,7 @@ function(add_circt_dialect_doc dialect dialect_namespace)
 endfunction()
 
 function(add_circt_library name)
-  add_mlir_library(${ARGV})
+  add_mlir_library(${ARGV} DISABLE_INSTALL)
   add_circt_library_install(${name})
 endfunction()
 
