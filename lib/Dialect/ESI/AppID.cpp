@@ -101,32 +101,36 @@ ArrayAttr AppIDIndex::getChildAppIDsOf(hw::HWModuleLike fromMod) const {
   return ArrayAttr::get(fromMod.getContext(), attrs);
 }
 
-/// Walk the AppID hierarchy rooted at the specified module.
+// NOLINTNEXTLINE(misc-no-recursion)
 LogicalResult
-AppIDIndex::walk(hw::HWModuleLike top, hw::HWModuleLike mod,
+AppIDIndex::walk(hw::HWModuleLike top, hw::HWModuleLike current,
                  SmallVectorImpl<AppIDAttr> &pathStack,
                  function_ref<void(AppIDPathAttr, Operation *)> fn) const {
-  ModuleAppIDs *modIDs = containerAppIDs.lookup(mod);
+  ModuleAppIDs *modIDs = containerAppIDs.lookup(current);
   if (!modIDs) {
-    mod.emitWarning("Module has no AppIDs");
+    current.emitWarning("Module has no AppIDs");
     return success();
   }
   for (auto [appid, op] : modIDs->getChildren()) {
+    // Call the callback.
     AppIDPathAttr path = AppIDPathAttr::get(
-        mod.getContext(), FlatSymbolRefAttr::get(top.getNameAttr()), pathStack);
+        current.getContext(), FlatSymbolRefAttr::get(top.getNameAttr()),
+        pathStack);
     fn(path, op);
 
+    // We must recurse on an instance.
     if (auto inst = dyn_cast<hw::HWInstanceLike>(op)) {
       auto tgtMod = dyn_cast<hw::HWModuleLike>(
           symCache.getDefinition(inst.getReferencedModuleNameAttr()));
-      // Do the assert here to get a more precise message.
       assert(tgtMod && "invalid module reference");
 
+      // If the instance has an AppID, it needs to be appended to the path.
       AppIDAttr appid = getAppID(op);
       if (appid)
         pathStack.push_back(appid);
       LogicalResult rc = walk(top, tgtMod, pathStack, fn);
       if (appid)
+        // Since the stack is shared (for efficiency reasons), pop it off.
         pathStack.pop_back();
       if (failed(rc))
         return failure();

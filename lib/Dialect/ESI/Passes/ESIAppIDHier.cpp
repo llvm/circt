@@ -20,18 +20,25 @@ struct ESIAppIDHierPass : public ESIAppIDHierBase<ESIAppIDHierPass> {
   void runOnOperation() override;
 
 private:
+  // Existing node blocks.
   DenseMap<AppIDPathAttr, Block *> nodeBlock;
+
+  /// Get the node's block for a particular path.
+  // NOLINTNEXTLINE(misc-no-recursion)
   Block *getBlock(AppIDPathAttr path) {
     Block *&block = nodeBlock[path];
     if (block)
       return block;
+
+    // Check if we need to create a root node.
     if (path.getPath().empty()) {
       auto rootOp = OpBuilder::atBlockEnd(getOperation().getBody())
                         .create<AppIDHierRootOp>(UnknownLoc::get(&getContext()),
                                                  path.getRoot());
       block = &rootOp.getChildren().emplaceBlock();
     } else {
-      auto parentBlock = getBlock(path.getParent());
+      // Create a normal node underneath the parent AppID.
+      auto *parentBlock = getBlock(path.getParent());
       auto node = OpBuilder::atBlockEnd(parentBlock)
                       .create<AppIDHierNodeOp>(UnknownLoc::get(&getContext()),
                                                path.getPath().back());
@@ -48,6 +55,7 @@ void ESIAppIDHierPass::runOnOperation() {
   if (!index.isValid())
     return signalPassFailure();
 
+  // Clone in manifest data, creating the instance hierarchy as we go.
   LogicalResult rc =
       index.walk(top, [&](AppIDPathAttr appidPath, Operation *op) {
         auto *block = getBlock(appidPath);
