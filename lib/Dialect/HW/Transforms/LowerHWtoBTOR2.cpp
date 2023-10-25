@@ -144,7 +144,12 @@ struct LowerHWtoBTOR2Pass : public LowerHWtoBTOR2Base<LowerHWtoBTOR2Pass> {
       // To do so, we start by checking if our operation isa block argument
       if(BlockArgument barg = dyn_cast<BlockArgument>(op)) {
         // Extract the block argument index and use that to get the line number
-        return inputLIDs[barg.getArgNumber()];
+        size_t argIdx = barg.getArgNumber();
+
+        // Check that the extracted argument is in range
+        if(argIdx < inputLIDs.size()) {
+          return inputLIDs[argIdx];
+        }
       }
 
       // If no lid was found return -1
@@ -347,12 +352,12 @@ void LowerHWtoBTOR2Pass::runOnOperation() {
     for(auto &port : module.getPortList()) {
       // Separate the inputs from outputs and generate the first btor2 lines for input declaration
       // We only consider ports with an explicit bit-width for now (so ignore clocks)
-      if (port.isInput() && port.type.isIntOrFloat()) {
+      if (port.isInput() && port.getName().str() != "clock") {
         // Generate the associated btor declaration for the inputs
         std::string iName = port.getName().str();  // Start by retrieving the name
 
         // Then only retrieve the width if the input is not a clock
-        size_t width = port.type.getIntOrFloatBitWidth();
+        size_t width = hw::getBitWidth(port.type);
 
         // Generate the input and sort declaration using the extracted information
         btor2Res += genSort(BITVEC, width); // We assume all sorts are bitvectors for now
