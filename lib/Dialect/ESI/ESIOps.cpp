@@ -647,12 +647,16 @@ StringRef ServiceImplRecordOp::getManifestClass() { return "service"; }
 
 void ServiceImplRecordOp::getDetails(SmallVectorImpl<NamedAttribute> &results) {
   auto *ctxt = getContext();
+  // AppID, optionally the service name, implementation name and details.
   results.emplace_back(getAppIDAttrName(), getAppIDAttr());
   if (getService())
     results.emplace_back(getServiceAttrName(), getServiceAttr());
   results.emplace_back(getServiceImplNameAttrName(), getServiceImplNameAttr());
-  results.emplace_back(getImplDetailsAttrName(), getImplDetailsAttr());
+  // Don't add another level for the implementation details.
+  for (auto implDetail : getImplDetailsAttr().getValue())
+    results.push_back(implDetail);
 
+  // All of the manifest data contained by this op.
   SmallVector<Attribute, 8> reqDetails;
   for (auto reqDetail : getReqDetails().front().getOps<IsManifestData>())
     reqDetails.push_back(reqDetail.getDetailsAsDict());
@@ -665,8 +669,12 @@ StringRef ServiceImplClientRecordOp::getManifestClass() {
 }
 void ServiceImplClientRecordOp::getDetails(
     SmallVectorImpl<NamedAttribute> &results) {
+  // Relative AppID path, service port, and implementation details. Don't add
+  // the bundle type since it is meaningless to the host and just clutters the
+  // output.
   results.emplace_back(getRelAppIDPathAttrName(), getRelAppIDPathAttr());
   results.emplace_back(getServicePortAttrName(), getServicePortAttr());
+  // Don't add another level for the implementation details.
   for (auto implDetail : getImplDetailsAttr().getValue())
     results.push_back(implDetail);
 }

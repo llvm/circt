@@ -321,6 +321,9 @@ llvm::json::Value ESIBuildManifestPass::json(Operation *errorOp,
 
         llvm::json::Object typeMD;
         if (typeLookup.contains(t)) {
+          // If the type is in the type table, it'll be present in the types
+          // section. Just give the circt type name, which is guaranteed to
+          // uniquely identify the type.
           std::string buff;
           llvm::raw_string_ostream(buff) << a;
           typeMD["circt_name"] = buff;
@@ -360,6 +363,7 @@ llvm::json::Value ESIBuildManifestPass::json(Operation *errorOp,
         return buff;
       });
 }
+
 std::unique_ptr<OperationPass<ModuleOp>>
 circt::esi::createESIBuildManifestPass() {
   return std::make_unique<ESIBuildManifestPass>();

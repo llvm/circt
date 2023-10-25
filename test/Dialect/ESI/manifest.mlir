@@ -57,7 +57,6 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:            },
 // CHECK-NEXT:            "service": "@HostComms",
 // CHECK-NEXT:            "serviceImplName": "cosim",
-// CHECK-NEXT:            "implDetails": {},
 // CHECK-NEXT:            "client_details": [
 // CHECK-NEXT:              {
 // CHECK-NEXT:                "channel_assignments": {
