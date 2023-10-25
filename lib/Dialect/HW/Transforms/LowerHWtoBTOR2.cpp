@@ -349,10 +349,11 @@ void LowerHWtoBTOR2Pass::runOnOperation() {
 
         // Generate the input and sort declaration using the extracted information
         btor2Res += genSort(BITVEC, width); // We assume all sorts are bitvectors for now
-        btor2Res += genInput(width, iName);
 
         // Record the defining operation's line ID (the module itself)
         inputLIDs.push_back(lid);
+        btor2Res += genInput(width, iName);
+
       } 
     }
 
