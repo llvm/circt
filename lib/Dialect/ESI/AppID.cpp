@@ -102,21 +102,25 @@ ArrayAttr AppIDIndex::getChildAppIDsOf(hw::HWModuleLike fromMod) const {
 }
 
 // NOLINTNEXTLINE(misc-no-recursion)
-LogicalResult
-AppIDIndex::walk(hw::HWModuleLike top, hw::HWModuleLike current,
-                 SmallVectorImpl<AppIDAttr> &pathStack,
-                 function_ref<void(AppIDPathAttr, Operation *)> fn) const {
+LogicalResult AppIDIndex::walk(
+    hw::HWModuleLike top, hw::HWModuleLike current,
+    SmallVectorImpl<AppIDAttr> &pathStack,
+    SmallVectorImpl<Operation *> &opStack,
+    function_ref<void(AppIDPathAttr, ArrayRef<Operation *>)> fn) const {
   ModuleAppIDs *modIDs = containerAppIDs.lookup(current);
   if (!modIDs) {
     current.emitWarning("Module has no AppIDs");
     return success();
   }
   for (auto [appid, op] : modIDs->getChildren()) {
+    opStack.push_back(op);
+    pathStack.push_back(appid);
+
     // Call the callback.
     AppIDPathAttr path = AppIDPathAttr::get(
         current.getContext(), FlatSymbolRefAttr::get(top.getNameAttr()),
         pathStack);
-    fn(path, op);
+    fn(path, opStack);
 
     // We must recurse on an instance.
     if (auto inst = dyn_cast<hw::HWInstanceLike>(op)) {
@@ -124,30 +128,26 @@ AppIDIndex::walk(hw::HWModuleLike top, hw::HWModuleLike current,
           symCache.getDefinition(inst.getReferencedModuleNameAttr()));
       assert(tgtMod && "invalid module reference");
 
-      // If the instance has an AppID, it needs to be appended to the path.
-      AppIDAttr appid = getAppID(op);
-      if (appid)
-        pathStack.push_back(appid);
-      LogicalResult rc = walk(top, tgtMod, pathStack, fn);
-      if (appid)
-        // Since the stack is shared (for efficiency reasons), pop it off.
-        pathStack.pop_back();
-      if (failed(rc))
+      if (failed(walk(top, tgtMod, pathStack, opStack, fn)))
         return failure();
     }
+    // Since the stacks are shared (for efficiency reasons), pop them.
+    pathStack.pop_back();
+    opStack.pop_back();
   }
   return success();
 }
 
-LogicalResult
-AppIDIndex::walk(hw::HWModuleLike top,
-                 function_ref<void(AppIDPathAttr, Operation *)> fn) const {
+LogicalResult AppIDIndex::walk(
+    hw::HWModuleLike top,
+    function_ref<void(AppIDPathAttr, ArrayRef<Operation *>)> fn) const {
   SmallVector<AppIDAttr, 8> path;
-  return walk(top, top, path, fn);
+  SmallVector<Operation *, 8> opStack;
+  return walk(top, top, path, opStack, fn);
 }
-LogicalResult
-AppIDIndex::walk(StringRef top,
-                 function_ref<void(AppIDPathAttr, Operation *)> fn) const {
+LogicalResult AppIDIndex::walk(
+    StringRef top,
+    function_ref<void(AppIDPathAttr, ArrayRef<Operation *>)> fn) const {
   Operation *op = symCache.getDefinition(
       FlatSymbolRefAttr::get(mlirTop->getContext(), top));
   if (auto topMod = dyn_cast_or_null<hw::HWModuleLike>(op))

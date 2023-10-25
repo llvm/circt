@@ -149,11 +149,11 @@ def AppIDHierNodeOp : ESI_Op<"esi.manifest.hier_node", [
       NoTerminator]> {
   let summary = "A node in the AppID hierarchy";
 
-  let arguments = (ins AppIDAttr:$appID);
+  let arguments = (ins AppIDAttr:$appID, FlatSymbolRefAttr:$moduleRef);
   let regions = (region SizedRegion<1>:$children);
 
   let assemblyFormat = [{
-    qualified($appID) attr-dict-with-keyword $children
+    qualified($appID) `mod` $moduleRef attr-dict-with-keyword $children
   }];
 }
 

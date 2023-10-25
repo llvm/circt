@@ -25,7 +25,7 @@ private:
 
   /// Get the node's block for a particular path.
   // NOLINTNEXTLINE(misc-no-recursion)
-  Block *getBlock(AppIDPathAttr path) {
+  Block *getBlock(AppIDPathAttr path, ArrayRef<Operation *> opStack) {
     Block *&block = nodeBlock[path];
     if (block)
       return block;
@@ -37,12 +37,19 @@ private:
                                                  path.getRoot());
       block = &rootOp.getChildren().emplaceBlock();
     } else {
-      // Create a normal node underneath the parent AppID.
-      auto *parentBlock = getBlock(path.getParent());
-      auto node = OpBuilder::atBlockEnd(parentBlock)
-                      .create<AppIDHierNodeOp>(UnknownLoc::get(&getContext()),
-                                               path.getPath().back());
-      block = &node.getChildren().emplaceBlock();
+      auto *parentBlock = getBlock(path.getParent(), opStack.drop_back());
+      auto *op = opStack.back();
+      if (auto inst = dyn_cast<hw::InstanceOp>(op)) {
+        // Create a normal node underneath the parent AppID.
+
+        auto node = OpBuilder::atBlockEnd(parentBlock)
+                        .create<AppIDHierNodeOp>(UnknownLoc::get(&getContext()),
+                                                 path.getPath().back(),
+                                                 inst.getModuleNameAttr());
+        block = &node.getChildren().emplaceBlock();
+      } else {
+        block = parentBlock;
+      }
     }
     return block;
   };
@@ -56,9 +63,10 @@ void ESIAppIDHierPass::runOnOperation() {
     return signalPassFailure();
 
   // Clone in manifest data, creating the instance hierarchy as we go.
-  LogicalResult rc =
-      index.walk(top, [&](AppIDPathAttr appidPath, Operation *op) {
-        auto *block = getBlock(appidPath);
+  LogicalResult rc = index.walk(
+      top, [&](AppIDPathAttr appidPath, ArrayRef<Operation *> opStack) {
+        auto *block = getBlock(appidPath, opStack);
+        auto *op = opStack.back();
         if (isa<IsManifestData>(op))
           OpBuilder::atBlockEnd(block).clone(*op);
       });

@@ -44,10 +44,12 @@ public:
   ArrayAttr getChildAppIDsOf(hw::HWModuleLike) const;
 
   /// Walk the AppID hierarchy rooted at the specified module.
-  LogicalResult walk(hw::HWModuleLike top,
-                     function_ref<void(AppIDPathAttr, Operation *)> fn) const;
-  LogicalResult walk(StringRef top,
-                     function_ref<void(AppIDPathAttr, Operation *)> fn) const;
+  LogicalResult
+  walk(hw::HWModuleLike top,
+       function_ref<void(AppIDPathAttr, ArrayRef<Operation *>)> fn) const;
+  LogicalResult
+  walk(StringRef top,
+       function_ref<void(AppIDPathAttr, ArrayRef<Operation *>)> fn) const;
 
   /// Return an array of InnerNameRefAttrs representing the relative path to
   /// 'appid' from 'fromMod'.
@@ -56,9 +58,11 @@ public:
 
 private:
   /// Walk the AppID hierarchy rooted at the specified module.
-  LogicalResult walk(hw::HWModuleLike top, hw::HWModuleLike current,
-                     SmallVectorImpl<AppIDAttr> &pathStack,
-                     function_ref<void(AppIDPathAttr, Operation *)> fn) const;
+  LogicalResult
+  walk(hw::HWModuleLike top, hw::HWModuleLike current,
+       SmallVectorImpl<AppIDAttr> &pathStack,
+       SmallVectorImpl<Operation *> &opStack,
+       function_ref<void(AppIDPathAttr, ArrayRef<Operation *>)> fn) const;
 
   //===--------------------------------------------------------------------===//
   // Index construction and storage.
