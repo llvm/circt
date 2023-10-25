@@ -1,10 +1,26 @@
-// RUN: circt-opt %s --esi-build-manifest=to-file=%t1.json
+// RUN: circt-opt %s --esi-connect-services --esi-appid-hier=top=top | FileCheck --check-prefix=HIER %s
+// RUN: circt-opt %s --esi-appid-hier=top=top --esi-build-manifest=to-file=%t1.json
 // RUN: FileCheck --input-file=%t1.json %s
 
 hw.type_scope @__hw_typedecls {
   hw.typedecl @foo, "Foo" : i1
 }
 !alias = !hw.typealias<@__hw_typedecls::@foo, i1>
+
+!sendI8 = !esi.bundle<[!esi.channel<i8> to "send"]>
+!recvI8 = !esi.bundle<[!esi.channel<i8> to "recv"]>
+
+esi.service.decl @HostComms {
+  esi.service.to_server @Send : !sendI8
+  esi.service.to_client @Recv : !recvI8
+}
+
+hw.module @Loopback (in %clk: !seq.clock) {
+  %dataInBundle = esi.service.req.to_client <@HostComms::@Recv> (#esi.appid<"loopback_tohw">) {esi.appid=#esi.appid<"loopback_tohw">} : !recvI8
+  %dataOut = esi.bundle.unpack from %dataInBundle : !recvI8
+  %dataOutBundle = esi.bundle.pack %dataOut : !sendI8
+  esi.service.req.to_server %dataOutBundle -> <@HostComms::@Send> (#esi.appid<"loopback_fromhw">) : !sendI8
+}
 
 hw.module @top(in %clk: !seq.clock, in %rst: i1) {
   %0 = esi.null : !esi.channel<si14>
@@ -18,7 +34,21 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 
   %3 = esi.null : !esi.channel<!alias>
   esi.cosim %clk, %rst, %3, "t3" : !esi.channel<!alias> -> !esi.channel<i32>
+
+  esi.service.instance #esi.appid<"cosim"> svc @HostComms impl as "cosim" (%clk, %rst) : (!seq.clock, i1) -> ()
+  hw.instance "m1" @Loopback (clk: %clk: !seq.clock) -> () {esi.appid=#esi.appid<"loopback_inst">}
 }
+
+// HIER-LABEL:  esi.esi.manifest.hier_root @top {
+// HIER:          esi.esi.manifest.service_impl #esi.appid<"cosim"> svc @HostComms by "cosim" with {} {
+// HIER:            esi.esi.manifest.impl_conn [#esi.appid<"loopback_inst">, #esi.appid<"loopback_tohw">] req <@HostComms::@Recv>(!esi.bundle<[!esi.channel<i8> to "recv"]>) with {channel_assignments = {recv = "loopback_inst.loopback_tohw.recv"}}
+// HIER:            esi.esi.manifest.impl_conn [#esi.appid<"loopback_inst">, #esi.appid<"loopback_fromhw">] req <@HostComms::@Send>(!esi.bundle<[!esi.channel<i8> from "send"]>) with {channel_assignments = {send = "loopback_inst.loopback_fromhw.send"}}
+// HIER:          }
+// HIER:          esi.esi.manifest.hier_node #esi.appid<"loopback_inst"> mod @Loopback {
+// HIER:            esi.esi.manifest.req #esi.appid<"loopback_tohw">, <@HostComms::@Recv>, toClient, !esi.bundle<[!esi.channel<i8> to "recv"]>
+// HIER:            esi.esi.manifest.req #esi.appid<"loopback_fromhw">, <@HostComms::@Send>, toServer, !esi.bundle<[!esi.channel<i8> to "send"]>
+// HIER:          }
+// HIER:        }
 
 // CHECK:      {
 // CHECK-NEXT:   "api_version": 1,

@@ -163,8 +163,8 @@ static std::optional<AnnoPathValue> stdResolveImpl(StringRef rawPath,
 /// (SFC) FIRRTL SingleTargetAnnotation resolver.  Uses the 'target' field of
 /// the annotation with standard parsing to resolve the path.  This requires
 /// 'target' to exist and be normalized (per docs/FIRRTLAnnotations.md).
-static std::optional<AnnoPathValue> stdResolve(DictionaryAttr anno,
-                                               ApplyState &state) {
+std::optional<AnnoPathValue> circt::firrtl::stdResolve(DictionaryAttr anno,
+                                                       ApplyState &state) {
   auto target = anno.getNamed("target");
   if (!target) {
     mlir::emitError(state.circuit.getLoc())
@@ -180,8 +180,8 @@ static std::optional<AnnoPathValue> stdResolve(DictionaryAttr anno,
 }
 
 /// Resolves with target, if it exists.  If not, resolves to the circuit.
-static std::optional<AnnoPathValue> tryResolve(DictionaryAttr anno,
-                                               ApplyState &state) {
+std::optional<AnnoPathValue> circt::firrtl::tryResolve(DictionaryAttr anno,
+                                                       ApplyState &state) {
   auto target = anno.getNamed("target");
   if (target)
     return stdResolveImpl(cast<StringAttr>(target->getValue()).getValue(),
@@ -195,10 +195,11 @@ static std::optional<AnnoPathValue> tryResolve(DictionaryAttr anno,
 
 /// An applier which puts the annotation on the target and drops the 'target'
 /// field from the annotation.  Optionally handles non-local annotations.
-static LogicalResult applyWithoutTargetImpl(const AnnoPathValue &target,
-                                            DictionaryAttr anno,
-                                            ApplyState &state,
-                                            bool allowNonLocal) {
+LogicalResult circt::firrtl::applyWithoutTargetImpl(const AnnoPathValue &target,
+
+                                                    DictionaryAttr anno,
+                                                    ApplyState &state,
+                                                    bool allowNonLocal) {
   if (!allowNonLocal && !target.isLocal()) {
     Annotation annotation(anno);
     auto diag = mlir::emitError(target.ref.getOp()->getLoc())
@@ -223,47 +224,12 @@ static LogicalResult applyWithoutTargetImpl(const AnnoPathValue &target,
   return success();
 }
 
-/// An applier which puts the annotation on the target and drops the 'target'
-/// field from the annotation.  Optionally handles non-local annotations.
-/// Ensures the target resolves to an expected type of operation.
-template <bool allowNonLocal, bool allowPortAnnoTarget, typename T,
-          typename... Tr>
-static LogicalResult applyWithoutTarget(const AnnoPathValue &target,
-                                        DictionaryAttr anno,
-                                        ApplyState &state) {
-  if (target.ref.isa<PortAnnoTarget>()) {
-    if (!allowPortAnnoTarget)
-      return failure();
-  } else if (!target.isOpOfType<T, Tr...>())
-    return failure();
-
-  return applyWithoutTargetImpl(target, anno, state, allowNonLocal);
-}
-
-template <bool allowNonLocal, typename T, typename... Tr>
-static LogicalResult applyWithoutTarget(const AnnoPathValue &target,
-                                        DictionaryAttr anno,
-                                        ApplyState &state) {
-  return applyWithoutTarget<allowNonLocal, false, T, Tr...>(target, anno,
-                                                            state);
-}
-
-/// An applier which puts the annotation on the target and drops the 'target'
-/// field from the annotaiton.  Optionally handles non-local annotations.
-template <bool allowNonLocal = false>
-static LogicalResult applyWithoutTarget(const AnnoPathValue &target,
-                                        DictionaryAttr anno,
-                                        ApplyState &state) {
-  return applyWithoutTargetImpl(target, anno, state, allowNonLocal);
-}
-
 /// Just drop the annotation.  This is intended for Annotations which are known,
 /// but can be safely ignored.
-static LogicalResult drop(const AnnoPathValue &target, DictionaryAttr anno,
-                          ApplyState &state) {
+LogicalResult drop(const AnnoPathValue &target, DictionaryAttr anno,
+                   ApplyState &state) {
   return success();
 }
-
 //===----------------------------------------------------------------------===//
 // Customized Appliers
 //===----------------------------------------------------------------------===//
@@ -423,15 +389,7 @@ static LogicalResult applyLoadMemoryAnno(const AnnoPathValue &target,
 // Driving table
 //===----------------------------------------------------------------------===//
 
-namespace {
-struct AnnoRecord {
-  llvm::function_ref<std::optional<AnnoPathValue>(DictionaryAttr, ApplyState &)>
-      resolver;
-  llvm::function_ref<LogicalResult(const AnnoPathValue &, DictionaryAttr,
-                                   ApplyState &)>
-      applier;
-};
-
+namespace circt::firrtl {
 /// Resolution and application of a "firrtl.annotations.NoTargetAnnotation".
 /// This should be used for any Annotation which does not apply to anything in
 /// the FIRRTL Circuit, i.e., an Annotation which has no target.  Historically,
@@ -447,9 +405,7 @@ struct AnnoRecord {
 static AnnoRecord NoTargetAnnotation = {noResolve,
                                         applyWithoutTarget<false, CircuitOp>};
 
-} // end anonymous namespace
-
-static const llvm::StringMap<AnnoRecord> annotationRecords{{
+static llvm::StringMap<AnnoRecord> annotationRecords{{
 
     // Testing Annotation
     {"circt.test", {stdResolve, applyWithoutTarget<true>}},
@@ -555,6 +511,19 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
     {wiringSourceAnnoClass, {stdResolve, applyWiring}},
     {attributeAnnoClass, {stdResolve, applyAttributeAnnotation}}}};
 
+LogicalResult
+registerAnnotationRecord(StringRef annoClass, AnnoRecord annoRecord,
+                         const std::function<void(llvm::Twine)> &errorHandler) {
+
+  if (annotationRecords.insert({annoClass, annoRecord}).second)
+    return LogicalResult::success();
+  if (errorHandler)
+    errorHandler("annotation record '" + annoClass + "' is registered twice\n");
+  return LogicalResult::failure();
+}
+
+} // namespace circt::firrtl
+
 /// Lookup a record for a given annotation class.  Optionally, returns the
 /// record for "circuit.missing" if the record doesn't exist.
 static const AnnoRecord *getAnnotationHandler(StringRef annoStr,
@@ -565,10 +534,6 @@ static const AnnoRecord *getAnnotationHandler(StringRef annoStr,
   if (ignoreAnnotationUnknown)
     return &annotationRecords.find("circt.missing")->second;
   return nullptr;
-}
-
-bool firrtl::isAnnoClassLowered(StringRef className) {
-  return annotationRecords.count(className);
 }
 
 //===----------------------------------------------------------------------===//

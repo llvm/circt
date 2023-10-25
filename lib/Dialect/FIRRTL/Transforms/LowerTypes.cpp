@@ -1360,8 +1360,13 @@ bool TypeLoweringVisitor::visitExpr(BitCastOp op) {
       // Take the first field, or else Cat the previous fields with this field.
       if (uptoBits == 0)
         srcLoweredVal = src;
-      else
-        srcLoweredVal = builder->create<CatPrimOp>(src, srcLoweredVal);
+      else {
+        if (isa<BundleType>(op.getInput().getType())) {
+          srcLoweredVal = builder->create<CatPrimOp>(srcLoweredVal, src);
+        } else {
+          srcLoweredVal = builder->create<CatPrimOp>(src, srcLoweredVal);
+        }
+      }
       // Record the total bits already accumulated.
       uptoBits += fieldBitwidth;
     }

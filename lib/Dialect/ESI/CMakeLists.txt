@@ -24,6 +24,7 @@ set(srcs
   Passes/ESILowerTypes.cpp
   Passes/ESICleanMetadata.cpp
   Passes/ESIBuildManifest.cpp
+  Passes/ESIAppIDHier.cpp
 
   APIUtilities.cpp
 )

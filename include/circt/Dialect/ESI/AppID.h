@@ -24,6 +24,10 @@
 namespace circt {
 namespace esi {
 
+/// Get the AppID of a particular operation. Returns null if the operation does
+/// not have one.
+AppIDAttr getAppID(Operation *op);
+
 /// An index for resolving AppIDPaths to dynamic instances.
 class AppIDIndex {
 public:
@@ -39,12 +43,27 @@ public:
   // Return an array of AppIDAttrs which are contained in the module.
   ArrayAttr getChildAppIDsOf(hw::HWModuleLike) const;
 
+  /// Walk the AppID hierarchy rooted at the specified module.
+  LogicalResult
+  walk(hw::HWModuleLike top,
+       function_ref<void(AppIDPathAttr, ArrayRef<Operation *>)> fn) const;
+  LogicalResult
+  walk(StringRef top,
+       function_ref<void(AppIDPathAttr, ArrayRef<Operation *>)> fn) const;
+
   /// Return an array of InnerNameRefAttrs representing the relative path to
   /// 'appid' from 'fromMod'.
   FailureOr<ArrayAttr> getAppIDPathAttr(hw::HWModuleLike fromMod,
                                         AppIDAttr appid, Location loc) const;
 
 private:
+  /// Walk the AppID hierarchy rooted at the specified module.
+  LogicalResult
+  walk(hw::HWModuleLike top, hw::HWModuleLike current,
+       SmallVectorImpl<AppIDAttr> &pathStack,
+       SmallVectorImpl<Operation *> &opStack,
+       function_ref<void(AppIDPathAttr, ArrayRef<Operation *>)> fn) const;
+
   //===--------------------------------------------------------------------===//
   // Index construction and storage.
   //===--------------------------------------------------------------------===//
@@ -58,6 +77,7 @@ private:
 
   bool valid;
   hw::HWSymbolCache symCache;
+  Operation *mlirTop;
 };
 
 } // namespace esi
