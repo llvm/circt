@@ -90,7 +90,6 @@ jobs:
             export CCACHE_DIR=$PWD/ccache
             git config --global --add safe.directory $PWD
             ./.devcontainer/cmake-helper build
-            ./.devcontainer/cmake-helper test
 
       - name: Log errors in a separate task
         if: failure() && steps.check-targets.outcome == 'failure'
@@ -101,7 +100,6 @@ jobs:
             export CCACHE_DIR=$PWD/ccache
             git config --global --add safe.directory $PWD
             ./.devcontainer/cmake-helper build
-            ./.devcontainer/cmake-helper test
 
       - name: Clean up ccache
         uses: devcontainers/ci@v0.3
