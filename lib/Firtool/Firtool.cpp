@@ -235,6 +235,10 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerClassesPass());
 
+  // Check for static asserts.
+  pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+      circt::firrtl::createLintingPass());
+
   pm.addPass(createLowerFIRRTLToHWPass(
       opt.enableAnnotationWarning.getValue(),
       opt.emitChiselAssertsAsSVA.getValue(),
