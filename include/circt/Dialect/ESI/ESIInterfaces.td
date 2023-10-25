@@ -57,6 +57,17 @@ def HasAppIDOpInterface : OpInterface<"HasAppID"> {
   ];
 }
 
+def IsManifestData : OpInterface<"IsManifestData"> {
+  let cppNamespace = "circt::esi";
+  let description = [{
+    Op's attributes should be represented in the manifest.
+  }];
+
+  let methods = [
+    // Methods not needed at the moment. Will be shortly.
+  ];
+}
+
 //===----------------------------------------------------------------------===//
 //
 // Service-related interfaces.
