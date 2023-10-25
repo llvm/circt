@@ -13,6 +13,10 @@ firrtl.circuit "lint_tests" {
     firrtl.assert %clock, %false, %en, "valid" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>  {eventControl = 0 : i32, isConcurrent = false}
     // CHECK: firrtl.int.verif.assert
     firrtl.int.verif.assert %pred : !firrtl.uint<1>
+    // CHECK: firrtl.int.verif.assert
+    firrtl.when %en : !firrtl.uint<1> {
+      firrtl.int.verif.assert %false : !firrtl.uint<1>
+    }
   }
 }
 
@@ -63,4 +67,16 @@ firrtl.circuit "assert_reset2" {
   }
 }
 
+// -----
 
+firrtl.circuit "assert_reset3" {
+firrtl.declgroup @GroupFoo bind {}
+  // expected-note @below {{reset signal defined here}}
+  firrtl.module @assert_reset3(in %en: !firrtl.uint<1>, in %pred: !firrtl.uint<1>, in %reset: !firrtl.reset, in %reset_async: !firrtl.asyncreset, in %clock: !firrtl.clock) {
+    %0 = firrtl.asUInt %reset : (!firrtl.reset) -> !firrtl.uint<1>
+    firrtl.group @GroupFoo {
+      // expected-error @below {{op is guaranteed to fail simulation, as the predicate is a reset signal}}
+      firrtl.int.verif.assert %0 : !firrtl.uint<1>
+    }
+  }
+}

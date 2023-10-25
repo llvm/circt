@@ -18,9 +18,17 @@ namespace {
 struct LintPass : public LintBase<LintPass> {
   void runOnOperation() override {
     auto fModule = getOperation();
-    for (auto &op : fModule.getOps())
-      if (checkAssert(&op).failed())
-        return signalPassFailure();
+    auto walkResult = fModule.walk<WalkOrder::PreOrder>([&](Operation *op) {
+      if (isa<WhenOp>(op))
+        return WalkResult::skip();
+      if (isa<AssertOp, VerifAssertIntrinsicOp>(op))
+        if (checkAssert(op).failed())
+          return WalkResult::interrupt();
+
+      return WalkResult::advance();
+    });
+    if (walkResult.wasInterrupted())
+      return signalPassFailure();
 
     markAllAnalysesPreserved();
   };
