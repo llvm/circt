@@ -159,11 +159,8 @@ struct ArrayGetOpConversion : public ConvertOpToLLVMPattern<hw::ArrayGetOp> {
       rewriter.create<LLVM::StoreOp>(op->getLoc(), adaptor.getInput(), arrPtr);
     }
 
+    auto arrTy = typeConverter->convertType(op.getInput().getType());
     auto elemTy = typeConverter->convertType(op.getResult().getType());
-
-    auto zeroC = rewriter.create<LLVM::ConstantOp>(
-        op->getLoc(), IntegerType::get(rewriter.getContext(), 32),
-        rewriter.getI32IntegerAttr(0));
     auto zextIndex = zextByOne(op->getLoc(), rewriter, op.getIndex());
 
     // During the ongoing migration to opaque types, use the constructor that
@@ -173,11 +170,11 @@ struct ArrayGetOpConversion : public ConvertOpToLLVMPattern<hw::ArrayGetOp> {
     if (cast<LLVM::LLVMPointerType>(arrPtr.getType()).isOpaque())
       gep = rewriter.create<LLVM::GEPOp>(
           op->getLoc(), LLVM::LLVMPointerType::get(rewriter.getContext()),
-          elemTy, arrPtr, ArrayRef<Value>({zeroC, zextIndex}));
+          arrTy, arrPtr, ArrayRef<LLVM::GEPArg>{0, zextIndex});
     else
       gep = rewriter.create<LLVM::GEPOp>(
           op->getLoc(), LLVM::LLVMPointerType::get(elemTy), arrPtr,
-          ArrayRef<Value>({zeroC, zextIndex}));
+          ArrayRef<LLVM::GEPArg>{0, zextIndex});
 
     rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, elemTy, gep);
 
@@ -202,8 +199,6 @@ struct ArraySliceOpConversion
     auto elemTy = typeConverter->convertType(
         op.getDst().getType().cast<hw::ArrayType>().getElementType());
 
-    auto zeroC = rewriter.create<LLVM::ConstantOp>(
-        op->getLoc(), rewriter.getI32Type(), rewriter.getI32IntegerAttr(0));
     auto oneC = rewriter.create<LLVM::ConstantOp>(
         op->getLoc(), rewriter.getI32Type(), rewriter.getI32IntegerAttr(1));
 
@@ -223,11 +218,11 @@ struct ArraySliceOpConversion
     if (cast<LLVM::LLVMPointerType>(arrPtr.getType()).isOpaque())
       gep = rewriter.create<LLVM::GEPOp>(
           op->getLoc(), LLVM::LLVMPointerType::get(rewriter.getContext()),
-          elemTy, arrPtr, ArrayRef<Value>({zeroC, zextIndex}));
+          dstTy, arrPtr, ArrayRef<LLVM::GEPArg>{0, zextIndex});
     else
       gep = rewriter.create<LLVM::GEPOp>(
           op->getLoc(), LLVM::LLVMPointerType::get(elemTy), arrPtr,
-          ArrayRef<Value>({zeroC, zextIndex}));
+          ArrayRef<LLVM::GEPArg>{0, zextIndex});
 
     auto cast = rewriter.create<LLVM::BitcastOp>(
         op->getLoc(), LLVM::LLVMPointerType::get(dstTy), gep);

@@ -36,18 +36,16 @@ func.func @convertArray(%arg0 : i1, %arg1: !hw.array<2xi32>, %arg2: i32, %arg3: 
   // CHECK-NEXT: %[[ONE:.*]] = llvm.mlir.constant(1 : i32) : i32
   // CHECK-NEXT: %[[ALLOCA:.*]] = llvm.alloca %[[ONE]] x !llvm.array<2 x i32> {alignment = 4 : i64} : (i32) -> !llvm.ptr<array<2 x i32>>
   // CHECK-NEXT: llvm.store %[[CAST0]], %[[ALLOCA]] : !llvm.ptr<array<2 x i32>>
-  // CHECK-NEXT: %[[ZERO:.*]] = llvm.mlir.constant(0 : i32) : i32
   // CHECK-NEXT: %[[ZEXT:.*]] = llvm.zext %arg0 : i1 to i2
-  // CHECK-NEXT: %[[GEP:.*]] = llvm.getelementptr %[[ALLOCA]][%[[ZERO]], %[[ZEXT]]] : (!llvm.ptr<array<2 x i32>>, i32, i2) -> !llvm.ptr<i32>
+  // CHECK-NEXT: %[[GEP:.*]] = llvm.getelementptr %[[ALLOCA]][0, %[[ZEXT]]] : (!llvm.ptr<array<2 x i32>>, i2) -> !llvm.ptr<i32>
   // CHECK-NEXT: llvm.load %[[GEP]] : !llvm.ptr<i32>
   %0 = hw.array_get %arg1[%arg0] : !hw.array<2xi32>, i1
 
-  // CHECK-NEXT: %[[ZERO1:.*]] = llvm.mlir.constant(0 : i32) : i32
   // CHECK-NEXT: %[[ONE4:.*]] = llvm.mlir.constant(1 : i32) : i32
   // CHECK-NEXT: %[[ALLOCA1:.*]] = llvm.alloca %[[ONE4]] x !llvm.array<2 x i32> {alignment = 4 : i64} : (i32) -> !llvm.ptr<array<2 x i32>>
   // CHECK-NEXT: llvm.store %[[CAST0]], %[[ALLOCA1]] : !llvm.ptr<array<2 x i32>>
   // CHECK-NEXT: %[[ZEXT1:.*]] = llvm.zext %arg0 : i1 to i2
-  // CHECK-NEXT: %[[GEP1:.*]] = llvm.getelementptr %[[ALLOCA1]][%[[ZERO1]], %[[ZEXT1]]] : (!llvm.ptr<array<2 x i32>>, i32, i2) -> !llvm.ptr<i32>
+  // CHECK-NEXT: %[[GEP1:.*]] = llvm.getelementptr %[[ALLOCA1]][0, %[[ZEXT1]]] : (!llvm.ptr<array<2 x i32>>, i2) -> !llvm.ptr<i32>
   // CHECK-NEXT: %[[BITCAST:.*]] = llvm.bitcast %[[GEP1]] : !llvm.ptr<i32> to !llvm.ptr<array<1 x i32>>
   // CHECK-NEXT: llvm.load %[[LD:.*]] : !llvm.ptr<array<1 x i32>>
   %1 = hw.array_slice %arg1[%arg0] : (!hw.array<2xi32>) -> !hw.array<1xi32>
@@ -104,9 +102,8 @@ func.func @convertConstArray(%arg0 : i1) {
 
   // COM: Test: when the array argument is already a load from a pointer,
   // COM: then don't allocate on the stack again but take that pointer directly as a shortcut
-  // CHECK-NEXT: %[[VAL_4:.*]] = llvm.mlir.constant(0 : i32) : i32
   // CHECK-NEXT: %[[VAL_5:.*]] = llvm.zext %arg0 : i1 to i2
-  // CHECK-NEXT: %[[VAL_6:.*]] = llvm.getelementptr %[[VAL_2]][%[[VAL_4]], %[[VAL_5]]] : (!llvm.ptr, i32, i2) -> !llvm.ptr, i32
+  // CHECK-NEXT: %[[VAL_6:.*]] = llvm.getelementptr %[[VAL_2]][0, %[[VAL_5]]] : (!llvm.ptr, i2) -> !llvm.ptr, !llvm.array<2 x i32>
   // CHECK-NEXT: %{{.+}} = llvm.load %[[VAL_6]] : !llvm.ptr -> i32
   %1 = hw.array_get %0[%arg0] : !hw.array<2xi32>, i1
 

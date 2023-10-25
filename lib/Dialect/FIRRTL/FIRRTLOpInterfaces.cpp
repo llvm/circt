@@ -177,7 +177,7 @@ circt::firrtl::detail::replaceWithNewForceability(Forceable op, bool forceable,
   if (forceable)
     attributes.push_back(forceableMarker);
   else {
-    llvm::erase_value(attributes, forceableMarker);
+    llvm::erase(attributes, forceableMarker);
     assert(attributes.size() != op->getAttrs().size());
   }
 
