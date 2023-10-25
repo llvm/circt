@@ -136,6 +136,10 @@ def ServiceImplClientRecordOp : ESI_Op<"esi.manifest.impl_conn", [
     $relAppIDPath `req` $servicePort `(` $bundleType `)`
       `with` $implDetails attr-dict
   }];
+
+  let extraClassDeclaration = [{
+    void getDetails(SmallVectorImpl<NamedAttribute> &results);
+  }];
 }
 
 def AppIDHierRootOp : ESI_Op<"esi.manifest.hier_root",

@@ -38,7 +38,9 @@ private:
   /// Get a JSON representation of a type.
   llvm::json::Value json(Operation *errorOp, Attribute);
 
+  // Output a node in the appid hierarchy.
   void emitNode(llvm::json::OStream &, AppIDHierNodeOp nodeOp);
+  // Output the manifest data of a node in the appid hierarchy.
   void emitBlock(llvm::json::OStream &, Block &block);
 
   AppIDHierRootOp appidRoot;
@@ -66,6 +68,7 @@ void ESIBuildManifestPass::runOnOperation() {
   symCache.addDefinitions(mod);
   symCache.freeze();
 
+  // Find the top level appid hierarchy root.
   for (auto root : mod->getRegion(0).front().getOps<AppIDHierRootOp>())
     if (root.getTopModuleRef() == top)
       appidRoot = root;
@@ -75,7 +78,8 @@ void ESIBuildManifestPass::runOnOperation() {
     return signalPassFailure();
   }
 
-  // Gather the relevant types.
+  // Gather the relevant types under the appid hierarchy root only. This avoids
+  // scraping unnecessary types.
   appidRoot->walk([&](Operation *op) { scrapeTypes(op); });
 
   // JSONify the manifest.
@@ -133,30 +137,31 @@ void ESIBuildManifestPass::runOnOperation() {
     }
   }
 }
+
 void ESIBuildManifestPass::emitNode(llvm::json::OStream &j,
                                     AppIDHierNodeOp nodeOp) {
   j.object([&] {
-    j.attribute("class", "instance");
     j.attribute("appID", json(nodeOp, nodeOp.getAppIDAttr()));
     j.attribute("inst_of", json(nodeOp, nodeOp.getModuleRefAttr()));
     j.attributeArray("contents",
                      [&]() { emitBlock(j, nodeOp.getChildren().front()); });
+    j.attributeArray("children", [&]() {
+      for (auto nodeOp : nodeOp.getChildren().front().getOps<AppIDHierNodeOp>())
+        emitNode(j, nodeOp);
+    });
   });
 }
 
 void ESIBuildManifestPass::emitBlock(llvm::json::OStream &j, Block &block) {
-  for (auto &op : block) {
-    if (auto manifestData = dyn_cast<IsManifestData>(op))
-      j.object([&] {
-        j.attribute("class", manifestData.getManifestClass());
-        SmallVector<NamedAttribute, 4> attrs;
-        manifestData.getDetails(attrs);
-        for (auto attr : attrs)
-          j.attribute(attr.getName().getValue(), json(&op, attr.getValue()));
-      });
-    if (auto nodeOp = dyn_cast<AppIDHierNodeOp>(op))
-      emitNode(j, nodeOp);
-  }
+  for (auto manifestData : block.getOps<IsManifestData>())
+    j.object([&] {
+      j.attribute("class", manifestData.getManifestClass());
+      SmallVector<NamedAttribute, 4> attrs;
+      manifestData.getDetails(attrs);
+      for (auto attr : attrs)
+        j.attribute(attr.getName().getValue(),
+                    json(manifestData, attr.getValue()));
+    });
 }
 
 std::string ESIBuildManifestPass::json() {
@@ -167,8 +172,18 @@ std::string ESIBuildManifestPass::json() {
 
   j.objectBegin();
   j.attribute("api_version", esiApiVersion);
-  j.attributeArray("design",
-                   [&]() { emitBlock(j, appidRoot.getChildren().front()); });
+  j.attributeArray("design", [&]() {
+    j.object([&] {
+      j.attribute("inst_of", json(appidRoot, appidRoot.getTopModuleRefAttr()));
+      j.attributeArray(
+          "contents", [&]() { emitBlock(j, appidRoot.getChildren().front()); });
+      j.attributeArray("children", [&]() {
+        for (auto nodeOp :
+             appidRoot.getChildren().front().getOps<AppIDHierNodeOp>())
+          emitNode(j, nodeOp);
+      });
+    });
+  });
   j.attributeArray("types", [&]() {
     for (auto type : types) {
       j.value(json(mod, type));
@@ -184,7 +199,15 @@ void ESIBuildManifestPass::scrapeTypes(Operation *op) {
     addType(oper.getType());
   for (auto res : op->getResults())
     addType(res.getType());
-  for (auto attr : op->getAttrs())
+
+  // If op is a manifest data op, we only need to include types found in the
+  // details it reports.
+  SmallVector<NamedAttribute> attrs;
+  if (auto manifestData = dyn_cast<IsManifestData>(op))
+    manifestData.getDetails(attrs);
+  else
+    llvm::append_range(attrs, op->getAttrs());
+  for (auto attr : attrs)
     scrapeTypes(attr.getValue());
 }
 
@@ -220,13 +243,13 @@ llvm::json::Value ESIBuildManifestPass::json(Operation *errorOp, Type type) {
           })
           .Case([&](ChannelBundleType t) {
             m = "bundle";
-            Array fields;
+            Array channels;
             for (auto field : t.getChannels())
-              fields.push_back(Object(
+              channels.push_back(Object(
                   {{"name", field.name.getValue()},
                    {"direction", stringifyChannelDirection(field.direction)},
                    {"type", json(errorOp, field.type)}}));
-            return Object({{"fields", Value(std::move(fields))}});
+            return Object({{"channels", Value(std::move(channels))}});
           })
           .Case([&](AnyType t) {
             m = "any";
@@ -297,16 +320,14 @@ llvm::json::Value ESIBuildManifestPass::json(Operation *errorOp,
         Type t = a.getValue();
 
         llvm::json::Object typeMD;
-        auto f = typeLookup.find(t);
-        if (f != typeLookup.end()) {
-          typeMD["type_ref"] = f->second;
+        if (typeLookup.contains(t)) {
+          std::string buff;
+          llvm::raw_string_ostream(buff) << a;
+          typeMD["circt_name"] = buff;
           return typeMD;
         }
 
-        std::string buf;
-        llvm::raw_string_ostream(buf) << t;
         typeMD["type"] = json(errorOp, t);
-
         return typeMD;
       })
       .Case([&](ArrayAttr a) {

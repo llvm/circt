@@ -644,6 +644,7 @@ void ESIPureModuleOp::setHWModuleType(hw::ModuleType type) {
 //===----------------------------------------------------------------------===//
 
 StringRef ServiceImplRecordOp::getManifestClass() { return "service"; }
+
 void ServiceImplRecordOp::getDetails(SmallVectorImpl<NamedAttribute> &results) {
   auto *ctxt = getContext();
   results.emplace_back(getAppIDAttrName(), getAppIDAttr());
@@ -662,8 +663,16 @@ void ServiceImplRecordOp::getDetails(SmallVectorImpl<NamedAttribute> &results) {
 StringRef ServiceImplClientRecordOp::getManifestClass() {
   return "service_client";
 }
+void ServiceImplClientRecordOp::getDetails(
+    SmallVectorImpl<NamedAttribute> &results) {
+  results.emplace_back(getRelAppIDPathAttrName(), getRelAppIDPathAttr());
+  results.emplace_back(getServicePortAttrName(), getServicePortAttr());
+  for (auto implDetail : getImplDetailsAttr().getValue())
+    results.push_back(implDetail);
+}
 
 StringRef ServiceRequestRecordOp::getManifestClass() { return "client_port"; }
+
 void ServiceRequestRecordOp::getDetails(
     SmallVectorImpl<NamedAttribute> &results) {
   auto *ctxt = getContext();
