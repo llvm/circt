@@ -60,6 +60,13 @@ struct LowerHWtoBTOR2Pass : public LowerHWtoBTOR2Base<LowerHWtoBTOR2Pass> {
     const std::string MUL         = "mul";
     const std::string AND         = "and";
     const std::string OR          = "or";
+    const std::string XOR         = "xor";
+    const std::string SLL         = "sll";
+    const std::string SRL         = "srl"; // a.k.a. unsigned right shift
+    const std::string SRA         = "sra"; // a.k.a. signed right shift
+    const std::string SDIV        = "sdiv";
+    const std::string UDIV        = "udiv";
+    const std::string SMOD        = "smod";
     const std::string CONCAT      = "concat";
     const std::string NOT         = "not";
     const std::string ITE         = "ite";
@@ -386,6 +393,7 @@ void LowerHWtoBTOR2Pass::runOnOperation() {
         // Outputs map to btor2 outputs on their final assignment
         .Case<hw::OutputOp>([&](hw::OutputOp op) {
           // Outputs don't actually mean much in btor, only assertions matter
+          // Plus, btormc doesn't support outputs, so we're just going to ignore them
         })
         // Supported Comb operations
         // Concat operations can directly be mapped to btor2 concats
@@ -401,36 +409,85 @@ void LowerHWtoBTOR2Pass::runOnOperation() {
           // Extract the target width
           int64_t width = hw::getBitWidth(addop.getType());
           
-          // Emit the concat instruction
+          // Emit the instruction
           emitBinOp(btor2Res, ADD, op, width);
         })
         .Case<comb::SubOp>([&](comb::SubOp subop) {
           // Extract the target width
           int64_t width = hw::getBitWidth(subop.getType());
           
-          // Emit the concat instruction
+          // Emit the instruction
           emitBinOp(btor2Res, SUB, op, width);
         })
         .Case<comb::MulOp>([&](comb::MulOp mulop) {
           // Extract the target width
           int64_t width = hw::getBitWidth(mulop.getType());
           
-          // Emit the concat instruction
+          // Emit the instruction
           emitBinOp(btor2Res, MUL, op, width);
         })
         .Case<comb::AndOp>([&](comb::AndOp andop) {
           // Extract the target width
           int64_t width = hw::getBitWidth(andop.getType());
           
-          // Emit the concat instruction
+          // Emit the instruction
           emitBinOp(btor2Res, AND, op, width);
         })
         .Case<comb::OrOp>([&](comb::OrOp orop) {
           // Extract the target width
           int64_t width = hw::getBitWidth(orop.getType());
           
-          // Emit the concat instruction
+          // Emit the instruction
           emitBinOp(btor2Res, OR, op, width);
+        })
+        .Case<comb::XorOp>([&](comb::XorOp xorop) {
+          // Extract the target width
+          int64_t width = hw::getBitWidth(xorop.getType());
+          
+          // Emit the instruction
+          emitBinOp(btor2Res, XOR, op, width);
+        })
+        .Case<comb::ShlOp>([&](comb::ShlOp shlop) {
+          // Extract the target width
+          int64_t width = hw::getBitWidth(shlop.getType());
+          
+          // Emit the instruction
+          emitBinOp(btor2Res, SLL, op, width);
+        })
+        .Case<comb::ShrSOp>([&](comb::ShrSOp shrsop) {
+          // Extract the target width
+          int64_t width = hw::getBitWidth(shrsop.getType());
+          
+          // Emit the instruction
+          emitBinOp(btor2Res, SRA, op, width);
+        })
+        .Case<comb::ShrUOp>([&](comb::ShrUOp shruop) {
+          // Extract the target width
+          int64_t width = hw::getBitWidth(shruop.getType());
+          
+          // Emit the instruction
+          emitBinOp(btor2Res, SRL, op, width);
+        })
+        .Case<comb::ModSOp>([&](comb::ModSOp modsop) {
+          // Extract the target width
+          int64_t width = hw::getBitWidth(modsop.getType());
+          
+          // Emit the instruction
+          emitBinOp(btor2Res, SMOD, op, width);
+        })
+        .Case<comb::DivSOp>([&](comb::DivSOp divsop) {
+          // Extract the target width
+          int64_t width = hw::getBitWidth(divsop.getType());
+          
+          // Emit the instruction
+          emitBinOp(btor2Res, SDIV, op, width);
+        })
+        .Case<comb::DivUOp>([&](comb::DivUOp divuop) {
+          // Extract the target width
+          int64_t width = hw::getBitWidth(divuop.getType());
+          
+          // Emit the instruction
+          emitBinOp(btor2Res, UDIV, op, width);
         })
         // Extract op will translate into a slice op
         .Case<comb::ExtractOp>([&](comb::ExtractOp extop) {
