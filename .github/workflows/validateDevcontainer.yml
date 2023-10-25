@@ -40,10 +40,10 @@ jobs:
             git config --global --add safe.directory $PWD
             rm -f .temporary-github-output
             echo "llvm-hash=$(git rev-parse @:./llvm)" >> .temporary-github-output
-            . /etc/lsb-release
-            echo "ubuntu-codename=$DISTRIB_CODENAME" >> .temporary-github-output
+            echo "circt-hash=$(git rev-parse HEAD)" >> .temporary-github-output
+            echo "cache-key-prefix=\"ccache-devcontainer-${{ matrix.devcontainer-name }}-${DISTRIB_ID}_${DISTRIB_RELEASE}"  >> .temporary-github-output
       - name: Export cache key parts
-        id: get-cache-key-parts
+        id: cache-key-parts
         run: |
           cat .temporary-github-output
           cat .temporary-github-output >> $GITHUB_OUTPUT
@@ -53,11 +53,10 @@ jobs:
         uses: actions/cache/restore@v3
         with: 
           path: ccache
-          key: circt-ccache-database-${{ steps.get-cache-key-parts.outputs.ubuntu-codename }}-${{ steps.get-cache-key-parts.outputs.llvm-hash }}-${{ hashFiles('.devcontainer/**') }}
+          key: ${{ steps.cache-key-parts.outputs.cache-key-prefix }}-llvm_${{ steps.cache-key-parts.outputs.llvm-hash }}-circt_${{ steps.cache-key-parts.outputs.circt-hash }}
           restore-keys: |
-            circt-ccache-database-${{ steps.get-cache-key-parts.outputs.ubuntu-codename }}-${{ steps.get-cache-key-parts.outputs.llvm-hash }}-
-            circt-ccache-database-${{ steps.get-cache-key-parts.outputs.ubuntu-codename }}-${{ steps.get-cache-key-parts.outputs.llvm-hash }}-
-            circt-ccache-database-${{ steps.get-cache-key-parts.outputs.ubuntu-codename }}-
+            ${{ steps.cache-key-parts.outputs.cache-key-prefix }}-llvm_${{ steps.cache-key-parts.outputs.llvm-hash }}-circt_
+            ${{ steps.cache-key-parts.outputs.cache-key-prefix }}-llvm_
       
       - name: Initialize ccache
         uses: devcontainers/ci@v0.3
@@ -118,7 +117,7 @@ jobs:
         if: ${{ always() && steps.configure-cmake-project.outcome == 'success' }}
         with: 
           path: ccache
-          key: circt-ccache-database-${{ steps.get-cache-key-parts.outputs.ubuntu-codename }}-${{ steps.get-cache-key-parts.outputs.llvm-hash }}-${{ hashFiles('.devcontainer/**') }}
+          key: ${{ steps.cache-key-parts.outputs.cache-key-prefix }}-llvm_${{ steps.cache-key-parts.outputs.llvm-hash }}-circt_${{ steps.cache-key-parts.outputs.circt-hash }}
       # If evicting everything that wasn't used this workflow does not reduce the cache past its maximum, it may benefit performance to increase the cache size.
       - name: Log ccache estimated usage
         uses: devcontainers/ci@v0.3
