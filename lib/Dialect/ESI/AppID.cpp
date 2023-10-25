@@ -54,7 +54,9 @@ public:
   auto getAppIDs() const { return llvm::make_first_range(childAppIDPaths); }
 
   // Get a read-only reference to the index.
-  const auto &getChildren() const { return childAppIDPathsOrdered; }
+  ArrayRef<std::pair<AppIDAttr, Operation *>> getChildren() const {
+    return childAppIDPathsOrdered;
+  }
 
 private:
   // Operations involved in appids.

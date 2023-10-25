@@ -23,7 +23,8 @@ private:
   // Existing node blocks.
   DenseMap<AppIDPathAttr, Block *> nodeBlock;
 
-  /// Get the node's block for a particular path.
+  /// Get the AppIDHierNodeOp's or AppIDHierRootOp's block for a particular
+  /// path.
   // NOLINTNEXTLINE(misc-no-recursion)
   Block *getBlock(AppIDPathAttr path, ArrayRef<Operation *> opStack) {
     Block *&block = nodeBlock[path];
@@ -37,8 +38,8 @@ private:
                                                  path.getRoot());
       block = &rootOp.getChildren().emplaceBlock();
     } else {
-      auto *parentBlock = getBlock(path.getParent(), opStack.drop_back());
-      auto *op = opStack.back();
+      Block *parentBlock = getBlock(path.getParent(), opStack.drop_back());
+      Operation *op = opStack.back();
       if (auto inst = dyn_cast<hw::InstanceOp>(op)) {
         // Create a normal node underneath the parent AppID.
 

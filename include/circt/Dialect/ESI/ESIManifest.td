@@ -132,7 +132,8 @@ def ServiceImplClientRecordOp : ESI_Op<"esi.manifest.impl_conn", [
 }
 
 def AppIDHierRootOp : ESI_Op<"esi.manifest.hier_root",
-                             [HasParent<"mlir::ModuleOp">, NoTerminator]> {
+                             [HasParent<"mlir::ModuleOp">,
+                             NoTerminator, SingleBlock]> {
   let summary = "The root of an appid instance hierarchy";
 
   let arguments = (ins FlatSymbolRefAttr:$topModuleRef);
@@ -146,7 +147,7 @@ def AppIDHierRootOp : ESI_Op<"esi.manifest.hier_root",
 def AppIDHierNodeOp : ESI_Op<"esi.manifest.hier_node", [
       ParentOneOf<["circt::esi::AppIDHierRootOp",
                    "circt::esi::AppIDHierNodeOp"]>,
-      NoTerminator]> {
+      NoTerminator, SingleBlock]> {
   let summary = "A node in the AppID hierarchy";
 
   let arguments = (ins AppIDAttr:$appID, FlatSymbolRefAttr:$moduleRef);
