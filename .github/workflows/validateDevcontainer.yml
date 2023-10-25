@@ -72,6 +72,7 @@ jobs:
             ccache -z
 
       - name: Configure CMake Project
+        id: configure-cmake-project
         uses: devcontainers/ci@v0.3
         with:
           push: never
@@ -81,25 +82,25 @@ jobs:
             ./.devcontainer/cmake-helper configure
 
       # We run the build, once to check the targets and once to log the errors without any progress logs cluttering the output (since it is a trivial incremental build). Please take care to make sure the following two steps stay in sync.
-      - name: Check targets
-        id: check-targets
+      - name: Build Firtool
+        id: build-cmake-project
         uses: devcontainers/ci@v0.3
         with:
           push: never
           runCmd: |
             export CCACHE_DIR=$PWD/ccache
             git config --global --add safe.directory $PWD
-            ./.devcontainer/cmake-helper build
+            ./.devcontainer/cmake-helper build firtool
 
       - name: Log errors in a separate task
-        if: failure() && steps.check-targets.outcome == 'failure'
+        if: ${{ failure() && steps.build-cmake-project.outcome == 'failure' }}
         uses: devcontainers/ci@v0.3
         with:
           push: never
           runCmd: |
             export CCACHE_DIR=$PWD/ccache
             git config --global --add safe.directory $PWD
-            ./.devcontainer/cmake-helper build
+            ./.devcontainer/cmake-helper build firtool
 
       - name: Clean up ccache
         uses: devcontainers/ci@v0.3
@@ -114,7 +115,7 @@ jobs:
       # Save the cache prior to pruning it
       - name: Save ccache database
         uses: actions/cache/save@v3
-        if: steps.check-targets.outcome == 'success'
+        if: ${{ always() && steps.configure-cmake-project.outcome == 'success' }}
         with: 
           path: ccache
           key: circt-ccache-database-${{ steps.get-cache-key-parts.outputs.ubuntu-codename }}-${{ steps.get-cache-key-parts.outputs.llvm-hash }}-${{ hashFiles('.devcontainer/**') }}
