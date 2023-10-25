@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Analysis/DebugInfo.h"
+#include "circt/Dialect/Debug/DebugOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "llvm/Support/Debug.h"
@@ -19,12 +20,13 @@ using namespace circt;
 namespace circt {
 namespace detail {
 
+/// Helper to populate a `DebugInfo` with nodes.
 struct DebugInfoBuilder {
   DebugInfoBuilder(DebugInfo &di) : di(di) {}
   DebugInfo &di;
 
   void visitRoot(Operation *op);
-  void visitModule(Operation *op, DIModule &module);
+  void visitModule(hw::HWModuleOp moduleOp, DIModule &module);
 
   DIModule *createModule() {
     return new (di.moduleAllocator.Allocate()) DIModule;
@@ -55,23 +57,7 @@ void DebugInfoBuilder::visitRoot(Operation *op) {
                  << "Collect DI for module " << moduleOp.getNameAttr() << "\n");
       auto &module = getOrCreateModule(moduleOp.getNameAttr());
       module.op = op;
-
-      // Add variables for each of the ports.
-      auto inputValues = moduleOp.getBody().getArguments();
-      auto outputValues =
-          moduleOp.getBodyBlock()->getTerminator()->getOperands();
-      for (auto &port : moduleOp.getPortList()) {
-        auto value = port.isOutput() ? outputValues[port.argNum]
-                                     : inputValues[port.argNum];
-        auto *var = createVariable();
-        var->name = port.name;
-        var->loc = port.loc;
-        var->value = value;
-        module.variables.push_back(var);
-      }
-
-      // Visit the ops in the module.
-      visitModule(op, module);
+      visitModule(moduleOp, module);
       return WalkResult::skip();
     }
 
@@ -97,29 +83,73 @@ void DebugInfoBuilder::visitRoot(Operation *op) {
   });
 }
 
-void DebugInfoBuilder::visitModule(Operation *op, DIModule &module) {
-  op->walk([&](Operation *op) {
-    if (auto instOp = dyn_cast<hw::InstanceOp>(op)) {
-      auto &childModule =
-          getOrCreateModule(instOp.getModuleNameAttr().getAttr());
-      auto *instance = createInstance();
-      instance->name = instOp.getInstanceNameAttr();
-      instance->op = instOp;
-      instance->module = &childModule;
-      module.instances.push_back(instance);
+void DebugInfoBuilder::visitModule(hw::HWModuleOp moduleOp, DIModule &module) {
+  // Try to gather debug info from debug ops in the module. If we find any,
+  // return. Otherwise collect ports, instances, and variables as a
+  // fallback.
 
-      // TODO: What do we do with the port assignments? These should be tracked
-      // somewhere.
+  // Check what kind of DI is present in the module.
+  bool hasVariables = false;
+  bool hasInstances = false;
+  moduleOp.walk([&](Operation *op) {
+    if (isa<debug::VariableOp>(op))
+      hasVariables = true;
+  });
+
+  // If the module has no DI for variables, add variables for each of the ports
+  // as a fallback.
+  if (!hasVariables) {
+    auto inputValues = moduleOp.getBody().getArguments();
+    auto outputValues = moduleOp.getBodyBlock()->getTerminator()->getOperands();
+    for (auto &port : moduleOp.getPortList()) {
+      auto value = port.isOutput() ? outputValues[port.argNum]
+                                   : inputValues[port.argNum];
+      auto *var = createVariable();
+      var->name = port.name;
+      var->loc = port.loc;
+      var->value = value;
+      module.variables.push_back(var);
+    }
+  }
+
+  // Fill in any missing DI as a fallback.
+  moduleOp->walk([&](Operation *op) {
+    if (auto varOp = dyn_cast<debug::VariableOp>(op)) {
+      auto *var = createVariable();
+      var->name = varOp.getNameAttr();
+      var->loc = varOp.getLoc();
+      var->value = varOp.getValue();
+      module.variables.push_back(var);
       return;
     }
 
-    if (auto wireOp = dyn_cast<hw::WireOp>(op)) {
-      auto *var = createVariable();
-      var->name = wireOp.getNameAttr();
-      var->loc = wireOp.getLoc();
-      var->value = wireOp;
-      module.variables.push_back(var);
-      return;
+    // Fallback if the module has no DI for its instances.
+    if (!hasInstances) {
+      if (auto instOp = dyn_cast<hw::InstanceOp>(op)) {
+        auto &childModule =
+            getOrCreateModule(instOp.getModuleNameAttr().getAttr());
+        auto *instance = createInstance();
+        instance->name = instOp.getInstanceNameAttr();
+        instance->op = instOp;
+        instance->module = &childModule;
+        module.instances.push_back(instance);
+
+        // TODO: What do we do with the port assignments? These should be
+        // tracked somewhere.
+        return;
+      }
+    }
+
+    // Fallback if the module has no DI for its variables.
+    if (!hasVariables) {
+      if (auto wireOp = dyn_cast<hw::WireOp>(op)) {
+        auto *var = createVariable();
+        var->name = wireOp.getNameAttr();
+        var->loc = wireOp.getLoc();
+        var->value = wireOp;
+        module.variables.push_back(var);
+        return;
+      }
     }
   });
 }

@@ -40,6 +40,15 @@ def ESIEmitCollateral: Pass<"esi-emit-collateral", "mlir::ModuleOp"> {
   ];
 }
 
+def ESIAppIDHier : Pass<"esi-appid-hier", "mlir::ModuleOp"> {
+  let summary = "Build an AppID based hierarchy rooted at top module 'top'";
+  let constructor = "circt::esi::createESIAppIDHierPass()";
+  let options = [
+    Option<"top", "top", "std::string",
+           "", "Root module of the instance hierarchy">
+  ];
+}
+
 def ESIBuildManifest : Pass<"esi-build-manifest", "mlir::ModuleOp"> {
   let summary = "Build a manifest of an ESI system";
   let constructor = "circt::esi::createESIBuildManifestPass()";

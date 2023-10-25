@@ -28,9 +28,9 @@
 // CHECK-SAME: out out0 : !esi.channel<i0>
 // CHECK-SAME: ) {
 //CHECK-NEXT:   %bundle, %data = esi.bundle.pack %main.mem_ld0.addr : !esi.bundle<[!esi.channel<i4> to "address", !esi.channel<i32> from "data"]>
-//CHECK-NEXT:   esi.service.req.to_server %bundle -> <@mem::@read>([]) : !esi.bundle<[!esi.channel<i4> to "address", !esi.channel<i32> from "data"]>
+//CHECK-NEXT:   esi.service.req.to_server %bundle -> <@mem::@read>(#esi.appid<"load">) : !esi.bundle<[!esi.channel<i4> to "address", !esi.channel<i32> from "data"]>
 //CHECK-NEXT:   %bundle_0, %ack = esi.bundle.pack %main.mem_st0 : !esi.bundle<[!esi.channel<!hw.struct<address: i4, data: i32>> to "req", !esi.channel<i0> from "ack"]>
-//CHECK-NEXT:   esi.service.req.to_server %bundle_0 -> <@mem::@write>([]) : !esi.bundle<[!esi.channel<!hw.struct<address: i4, data: i32>> to "req", !esi.channel<i0> from "ack"]>
+//CHECK-NEXT:   esi.service.req.to_server %bundle_0 -> <@mem::@write>(#esi.appid<"store">) : !esi.bundle<[!esi.channel<!hw.struct<address: i4, data: i32>> to "req", !esi.channel<i0> from "ack"]>
 //CHECK-NEXT:   %main.out0, %main.mem_ld0.addr, %main.mem_st0 = hw.instance "main" @__main_hw(arg0: %arg0: !esi.channel<i64>, arg1: %arg1: !esi.channel<i64>, v: %v: !esi.channel<i32>, mem_ld0.data: %data: !esi.channel<i32>, mem_st0.done: %ack: !esi.channel<i0>, argCtrl: %argCtrl: !esi.channel<i0>, clock: %clock: !seq.clock, reset: %reset: i1) -> (out0: !esi.channel<i0>, mem_ld0.addr: !esi.channel<i4>, mem_st0: !esi.channel<!hw.struct<address: i4, data: i32>>)
 //CHECK-NEXT:   hw.output %main.out0 : !esi.channel<i0>
 //CHECK-NEXT: }

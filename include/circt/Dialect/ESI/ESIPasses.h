@@ -32,6 +32,7 @@ std::unique_ptr<OperationPass<ModuleOp>> createESIConnectServicesPass();
 std::unique_ptr<OperationPass<ModuleOp>> createESIAddCPPAPIPass();
 std::unique_ptr<OperationPass<ModuleOp>> createESICleanMetadataPass();
 std::unique_ptr<OperationPass<ModuleOp>> createESIBuildManifestPass();
+std::unique_ptr<OperationPass<ModuleOp>> createESIAppIDHierPass();
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION

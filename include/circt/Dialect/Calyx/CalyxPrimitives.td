@@ -302,10 +302,10 @@ def XorLibOp  : CombinationalArithBinaryLibraryOp<"xor"> {}
 def MuxLibOp : CalyxLibraryOp<"mux", [
   Combinational, SameTypeConstraint<"tru", "fal">, SameTypeConstraint<"tru", "out">
   ]> {
-  let results = (outs I1:$sel, AnyType:$tru, AnyType:$fal, AnyType:$out);
+  let results = (outs I1:$cond, AnyType:$tru, AnyType:$fal, AnyType:$out);
   let extraClassDefinition = [{
     SmallVector<StringRef> $cppClass::portNames() {
-      return {"sel", "tru", "fal", "out"};
+      return {"cond", "tru", "fal", "out"};
     }
     SmallVector<Direction> $cppClass::portDirections() {
       return {Input, Input, Input, Output};

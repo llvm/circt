@@ -25,3 +25,26 @@ hw.module @Bar(in %x: i32, out y: i32) {
   %z = hw.wire %0 : i32
   hw.output %z : i32
 }
+
+// CHECK-LABEL: Module "Vars" for hw.module
+// CHECK-NEXT: Variable "inA"
+// CHECK-NEXT:   Arg 0 of hw.module of type i32
+// CHECK-NEXT: Variable "outB"
+// CHECK-NEXT:   Result 0 of comb.add of type i32
+// CHECK-NOT: Variable "a"
+// CHECK-NOT: Variable "b"
+hw.module @Vars(in %a: i32, out b: i32) {
+  dbg.variable "inA", %a : i32
+  dbg.variable "outB", %0 : i32
+  %0 = comb.add %a, %a : i32
+  hw.output %0 : i32
+}
+
+// CHECK-LABEL: Module "Aggregates" for hw.module
+// CHECK-NEXT: Variable "data"
+// CHECK-NEXT:   Result 0 of dbg.struct of type !dbg.struct
+hw.module @Aggregates(in %data_a: i32, in %data_b: index, in %data_c_0: i17, in %data_c_1: i17) {
+  %0 = dbg.array [%data_c_0, %data_c_1] : i17
+  %1 = dbg.struct {"a": %data_a, "b": %data_b, "c": %0} : i32, index, !dbg.array<i17>
+  dbg.variable "data", %1 : !dbg.struct<i32, index, !dbg.array<i17>>
+}

@@ -238,8 +238,8 @@ private:
           convertArithBinaryOp<XorLibOp, XorOp>(op, wires, b);
         })
         .Case([&](MuxLibOp op) {
-          auto sel = wireIn(op.getSel(), op.instanceName(),
-                            op.portName(op.getSel()), b);
+          auto sel = wireIn(op.getCond(), op.instanceName(),
+                            op.portName(op.getCond()), b);
           auto tru = wireIn(op.getTru(), op.instanceName(),
                             op.portName(op.getTru()), b);
           auto fal = wireIn(op.getFal(), op.instanceName(),

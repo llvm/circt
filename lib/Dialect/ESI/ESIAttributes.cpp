@@ -16,6 +16,13 @@
 using namespace circt;
 using namespace esi;
 
+AppIDPathAttr AppIDPathAttr::getParent() {
+  ArrayRef<AppIDAttr> path = getPath();
+  if (path.empty())
+    return {};
+  return AppIDPathAttr::get(getContext(), getRoot(), path.drop_back());
+}
+
 #define GET_ATTRDEF_CLASSES
 #include "circt/Dialect/ESI/ESIAttributes.cpp.inc"
 
