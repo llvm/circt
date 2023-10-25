@@ -41,7 +41,7 @@ struct LowerHWtoBTOR2Pass : public LowerHWtoBTOR2Base<LowerHWtoBTOR2Pass> {
     SmallVector<std::pair<size_t, size_t>> sortToLIDMap; // Keeps track of the ids associated to each declared sort 
     DenseMap<Operation*, size_t> opLIDMap; // Connects an operation to it's most recent update line
     DenseMap<Operation*, Operation*> opAliasMap; // key: alias, value: original op
-    DenseMap<StringRef, size_t> portToLID;
+    SmallVector<size_t> inputLIDs; // Stores the LID of the associated input (key: block argument index)
 
     // Set of often reused strings in btor2 emission (to avoid typos and enable auto-complete)
     const std::string SORT        = "sort";
@@ -135,10 +135,10 @@ struct LowerHWtoBTOR2Pass : public LowerHWtoBTOR2Base<LowerHWtoBTOR2Pass> {
 
       // Check for special case where op is actually a port
       // To do so, we start by checking if our operation isa block argument
-      /*if(op.isa<BlockArgument>()) {
-        // Convert the the block argument into its defining hwmoduleop
-        dyn_cast<HWModuleOp, Operation*>(op.getDefiningOp()).dump();
-      }*/
+      if(BlockArgument barg = dyn_cast<BlockArgument>(op)) {
+        // Extract the block argument index and use that to get the line number
+        return inputLIDs[barg.getArgNumber()];
+      }
 
       // If no lid was found return -1
       return NO_LID;
@@ -228,7 +228,6 @@ struct LowerHWtoBTOR2Pass : public LowerHWtoBTOR2Base<LowerHWtoBTOR2Pass> {
       // Find the LIDs associated to the operands
       size_t op1LID = getOpLID(op1);
       size_t op2LID = getOpLID(op2);
-
 
       // Build and return the string
       return std::to_string(lid++) + WS + inst + WS + std::to_string(sid) + WS 
@@ -336,8 +335,7 @@ void LowerHWtoBTOR2Pass::runOnOperation() {
   // Start by checking for each module in the circt, for now we only consider the 1st one
   // As we are not support multi-modules yet. We assume that no nested modules exist at this point.
   // This simplifies lowering to btor as btor does not support the concept of module instanciation.
-  getOperation().walk([&](hw::HWModuleOp module) {
-    
+  getOperation().walk([&](hw::HWModuleOp module) {    
     // Start by extracting the inputs and generating appropriate instructions
     for(auto &port : module.getPortList()) {
       // Separate the inputs from outputs and generate the first btor2 lines for input declaration
@@ -354,7 +352,7 @@ void LowerHWtoBTOR2Pass::runOnOperation() {
         btor2Res += genInput(width, iName);
 
         // Record the defining operation's line ID (the module itself)
-        portToLID[port.getName()] = lid;
+        inputLIDs.push_back(lid);
       } 
     }
 
