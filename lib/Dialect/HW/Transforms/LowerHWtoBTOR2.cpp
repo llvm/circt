@@ -38,30 +38,35 @@ struct LowerHWtoBTOR2Pass : public LowerHWtoBTOR2Base<LowerHWtoBTOR2Pass> {
 
     // Create maps to keep track of lid associations
     // Proper maps wouldn't work for some reason so I'll use a vector of pairs instead
-    llvm::SmallVector<std::pair<size_t, size_t>> sortToLIDMap; // Keeps track of the ids associated to each declared sort 
-    llvm::DenseMap<Operation*, size_t> opLIDMap; // Connects an operation to it's most recent update line
-    llvm::DenseMap<Operation*, Operation*> opAliasMap; // key: alias, value: original op
+    SmallVector<std::pair<size_t, size_t>> sortToLIDMap; // Keeps track of the ids associated to each declared sort 
+    DenseMap<Operation*, size_t> opLIDMap; // Connects an operation to it's most recent update line
+    DenseMap<Operation*, Operation*> opAliasMap; // key: alias, value: original op
+    DenseMap<StringRef, size_t> portToLID;
 
     // Set of often reused strings in btor2 emission (to avoid typos and enable auto-complete)
-    const std::string SORT    = "sort";
-    const std::string BITVEC  = "bitvec";
-    const std::string INPUT   = "input";
-    const std::string OUTPUT  = "output";
-    const std::string ZERO    = "zero";
-    const std::string ONE     = "one";
-    const std::string CONST   = "const";
-    const std::string CONSTD  = "constd";
-    const std::string CONSTH  = "consth";
-    const std::string SLICE   = "slice";
-    const std::string UEXT    = "uext";
-    const std::string ADD     = "add";
-    const std::string SUB     = "sub";
-    const std::string MUL     = "mul";
-    const std::string CONCAT  = "concat";
-    const std::string NOT     = "not";
-    const std::string BAD     = "bad";
-    const std::string WS      = " "; // WhiteSpace
-    const std::string NL      = "\n"; // NewLine
+    const std::string SORT        = "sort";
+    const std::string BITVEC      = "bitvec";
+    const std::string INPUT       = "input";
+    const std::string OUTPUT      = "output";
+    const std::string ZERO        = "zero";
+    const std::string ONE         = "one";
+    const std::string CONST       = "const";
+    const std::string CONSTD      = "constd";
+    const std::string CONSTH      = "consth";
+    const std::string SLICE       = "slice";
+    const std::string UEXT        = "uext";
+    const std::string ADD         = "add";
+    const std::string SUB         = "sub";
+    const std::string MUL         = "mul";
+    const std::string AND         = "and";
+    const std::string OR          = "or";
+    const std::string CONCAT      = "concat";
+    const std::string NOT         = "not";
+    const std::string ITE         = "ite";
+    const std::string BAD         = "bad";
+    const std::string CONSTRAINT  = "constraint";
+    const std::string WS          = " "; // WhiteSpace
+    const std::string NL          = "\n"; // NewLine
 
     /// Field helper functions
 
@@ -109,9 +114,32 @@ struct LowerHWtoBTOR2Pass : public LowerHWtoBTOR2Base<LowerHWtoBTOR2Pass> {
     // Otherwise -1 will be returned
     size_t getOpLID(Operation* op) {
       // Look for the operation declaration
-      if(opLIDMap.contains(op)) {
-        return opLIDMap[op];
+      Operation* defOp = getOpAlias(op);
+      if(opLIDMap.contains(defOp)) {
+        return opLIDMap[defOp];
       }
+
+      // If no lid was found return -1
+      return NO_LID;
+    }
+
+    // Checks if an operation was declared
+    // If so, its lid will be returned
+    // Otherwise -1 will be returned
+    size_t getOpLID(Value op) {
+      // Look for the operation declaration
+      Operation* defOp = getOpAlias(op.getDefiningOp());
+      if(opLIDMap.contains(defOp)) {
+        return opLIDMap[defOp];
+      }
+
+      // Check for special case where op is actually a port
+      // To do so, we start by checking if our operation isa block argument
+      /*if(op.isa<BlockArgument>()) {
+        // Convert the the block argument into its defining hwmoduleop
+        dyn_cast<HWModuleOp, Operation*>(op.getDefiningOp()).dump();
+      }*/
+
       // If no lid was found return -1
       return NO_LID;
     }
@@ -157,19 +185,15 @@ struct LowerHWtoBTOR2Pass : public LowerHWtoBTOR2Base<LowerHWtoBTOR2Pass> {
     }
 
     // Generates an input declaration given a sort lid and a name
-    std::string genInput(size_t sortLid, std::string name) {
-      // Sanity check: The given lid must be associated to a sort declaration
-      bool found = false;
-      for(auto entry : sortToLIDMap) {
-        // Iterate until we've found our association
-        if((found = (entry.second == sortLid))) break; 
-      }
+    std::string genInput(size_t width, std::string name) {
+      // Retrieve the lid associated with the sort (sid)
+      size_t sid = getSortLID(width);
 
       // Check that a result was found before continuing
-      assert(found);
+      assert(sid != NO_LID);
 
       // Generate input declaration
-      return std::to_string(lid++) + WS + INPUT + WS + std::to_string(sortLid) + WS + name + NL;
+      return std::to_string(lid++) + WS + INPUT + WS + std::to_string(sid) + WS + name + NL;
     }
 
     // Generates a constant declaration given a value, a width and a name
@@ -189,7 +213,7 @@ struct LowerHWtoBTOR2Pass : public LowerHWtoBTOR2Base<LowerHWtoBTOR2Pass> {
 
     // Generates a binary operation instruction given an op name, two operands and a result width
     std::string genBinOp(
-      std::string inst, Operation* binop, Operation* op1, Operation* op2, size_t width
+      std::string inst, Operation* binop, Value op1, Value op2, size_t width
     ) {
       // Set the LID for this operation 
       setOpLID(binop);
@@ -214,8 +238,8 @@ struct LowerHWtoBTOR2Pass : public LowerHWtoBTOR2Base<LowerHWtoBTOR2Pass> {
     // Emits a btor2 string for the given binary operation
     void emitBinOp(std::string & btor2Res, std::string inst, Operation* binop, int64_t width) {
       // Start by extracting the operands
-      Operation* op1 = binop->getOperand(0).getDefiningOp();
-      Operation* op2 = binop->getOperand(1).getDefiningOp();
+      Value op1 = binop->getOperand(0);
+      Value op2 = binop->getOperand(1);
 
       // Generate a sort for the width (nothing is done is sort is defined)
       btor2Res += genSort(BITVEC, width);
@@ -225,7 +249,7 @@ struct LowerHWtoBTOR2Pass : public LowerHWtoBTOR2Base<LowerHWtoBTOR2Pass> {
     }
 
     // Generates a slice instruction given an operand, the lowbit, and the width
-    std::string genSlice(Operation* srcop, Operation* op0, size_t lowbit, int64_t width) {
+    std::string genSlice(Operation* srcop, Value op0, size_t lowbit, int64_t width) {
       // Set the LID for this operation 
       setOpLID(srcop);
 
@@ -245,8 +269,8 @@ struct LowerHWtoBTOR2Pass : public LowerHWtoBTOR2Base<LowerHWtoBTOR2Pass> {
     }
 
     // Generates a constant declaration given a value, a width and a name
-    std::string genUnaryOp(Operation* srcop, Operation* op0, std::string inst, size_t width) {
-      // For now we're going to assume that the name isn't taken, given that hw is already in SSA form
+    std::string genUnaryOp(Operation* srcop, Value op0, std::string inst, size_t width) {
+      // Register the source operation with the current line id      
       setOpLID(srcop);
 
       // Retrieve the lid associated with the sort (sid)
@@ -272,6 +296,36 @@ struct LowerHWtoBTOR2Pass : public LowerHWtoBTOR2Base<LowerHWtoBTOR2Pass> {
       // Build and return the btor2 string
       return std::to_string(lid++) + WS + BAD + WS + std::to_string(assertLID) + NL;
     }
+
+    // Generate a btor2 constraint given an expression from an assumption operation
+    std::string genConstraint(Value expr) {
+      // Start by finding the expression lid
+      size_t exprLID = getOpLID(expr);
+
+      // Build and return the btor2 string
+      return std::to_string(lid++) + WS + CONSTRAINT + WS + std::to_string(exprLID) + NL;
+    }
+
+    // Generate an ITE instruction (if then else) given a predicate, two values and a res width
+    std::string genIte(Operation* srcop, Value cond, Value t, Value f, int64_t width) {
+      // Register the source operation with the current line id
+      setOpLID(srcop);
+
+      // Retrieve the lid associated with the sort (sid)
+      size_t sid = getSortLID(width);
+
+      // Check that a result was found before continuing
+      assert(sid != NO_LID);
+
+      // Retrieve the operand lids, assuming they were emitted
+      size_t condLID = getOpLID(cond);
+      size_t tLID = getOpLID(t);
+      size_t fLID = getOpLID(f);
+
+      // Build and return the slice instruction
+      return std::to_string(lid++) + WS + ITE + WS + std::to_string(sid) + WS 
+        + std::to_string(condLID) + WS + std::to_string(tLID) + WS + std::to_string(fLID) + NL;
+    }
 };
 } // end anonymous namespace
 
@@ -284,14 +338,11 @@ void LowerHWtoBTOR2Pass::runOnOperation() {
   // This simplifies lowering to btor as btor does not support the concept of module instanciation.
   getOperation().walk([&](hw::HWModuleOp module) {
     
-    // Start by extracting the inputs and outputs from the module
-    SmallVector<PortInfo> inputs, outputs;
+    // Start by extracting the inputs and generating appropriate instructions
     for(auto &port : module.getPortList()) {
       // Separate the inputs from outputs and generate the first btor2 lines for input declaration
       // We only consider ports with an explicit bit-width for now (so ignore clocks)
       if (port.isInput() && port.type.isIntOrFloat()) {
-        inputs.push_back(port);
-        
         // Generate the associated btor declaration for the inputs
         std::string iName = port.getName().str();  // Start by retrieving the name
 
@@ -300,12 +351,11 @@ void LowerHWtoBTOR2Pass::runOnOperation() {
 
         // Generate the input and sort declaration using the extracted information
         btor2Res += genSort(BITVEC, width); // We assume all sorts are bitvectors for now
-        btor2Res += genInput(getSortLID(width), iName);
-      
-      } else if (port.isOutput()) {
-        outputs.push_back(port);
-      }
+        btor2Res += genInput(width, iName);
 
+        // Record the defining operation's line ID (the module itself)
+        portToLID[port.getName()] = lid;
+      } 
     }
 
     // Go over all operations in our module
@@ -369,10 +419,24 @@ void LowerHWtoBTOR2Pass::runOnOperation() {
           // Emit the concat instruction
           emitBinOp(btor2Res, MUL, op, width);
         })
+        .Case<comb::AndOp>([&](comb::AndOp andop) {
+          // Extract the target width
+          int64_t width = hw::getBitWidth(andop.getType());
+          
+          // Emit the concat instruction
+          emitBinOp(btor2Res, AND, op, width);
+        })
+        .Case<comb::OrOp>([&](comb::OrOp orop) {
+          // Extract the target width
+          int64_t width = hw::getBitWidth(orop.getType());
+          
+          // Emit the concat instruction
+          emitBinOp(btor2Res, OR, op, width);
+        })
         // Extract op will translate into a slice op
         .Case<comb::ExtractOp>([&](comb::ExtractOp extop) {
           // Start by extracting the operand
-          Operation* op0 = extop.getOperand().getDefiningOp();
+          Value op0 = extop.getOperand();
 
           // Extract low bit from attributes
           size_t lb = extop.getLowBit();
@@ -388,8 +452,8 @@ void LowerHWtoBTOR2Pass::runOnOperation() {
         })
         .Case<comb::ICmpOp>([&](comb::ICmpOp cmpop) {
           // Extract operands
-          Operation* lhs = cmpop.getOperand(0).getDefiningOp();
-          Operation* rhs = cmpop.getOperand(1).getDefiningOp();
+          Value lhs = cmpop.getOperand(0);
+          Value rhs = cmpop.getOperand(1);
 
           // Extract the predicate name (assuming that its a valid btor2 predicate)
           std::string pred = stringifyICmpPredicate(cmpop.getPredicate()).str();
@@ -400,10 +464,28 @@ void LowerHWtoBTOR2Pass::runOnOperation() {
           // Generate the comparison btor2 instruction
           btor2Res += genBinOp(pred, cmpop, lhs, rhs, 1);
         })
+        // Muxes generally convert to an ite statement
+        .Case<comb::MuxOp>([&](comb::MuxOp mux) {
+          // Extract predicate, true and false values
+          Value pred = mux.getOperand(0);
+          Value tval = mux.getOperand(1);
+          Value fval = mux.getOperand(2);
+
+          // We assume that both tval and fval have the same width
+          // This width should be the same as the output width
+          int64_t width = hw::getBitWidth(mux.getType());
+
+          // Generate the sort (nothing will be added if the sort already exists)
+          btor2Res += genSort(BITVEC, width);
+
+          // Generate the ite instruction
+          btor2Res += genIte(mux, pred, tval, fval, width);
+        })
         // Supported SV Operations
+        // Assertions are negated then converted to a btor2 BAD instruction
         .Case<circt::sv::AssertOp>([&](circt::sv::AssertOp assertop) {
           // Extract the expression
-          Operation* expr = assertop.getExpression().getDefiningOp();
+          Value expr = assertop.getExpression();
 
           // Generate a sort (for assertion inversion)
           btor2Res += genSort(BITVEC, 1);
@@ -414,12 +496,20 @@ void LowerHWtoBTOR2Pass::runOnOperation() {
           // Genrate the BAD btor2 intruction
           btor2Res += genBad(assertop);
         })
+        // Assumptions are converted to a btor2 constraint instruction
+        .Case<circt::sv::AssumeOp>([&](circt::sv::AssumeOp assop) {
+          // Extract the expression
+          Value expr = assop.getExpression();
+
+          // Genrate the constraint btor2 intruction
+          btor2Res += genConstraint(expr);
+        })
         // All other operations should be ignored for the time being
         .Default([](auto) {});
     });
 
     // Print out the resuling btor2
-    llvm::errs() << "==========BTOR2 FORM:==========\n" 
+    llvm::errs() << "==========BTOR2 FORM:==========\n\n" 
                  << btor2Res 
                  << "\n===============================\n\n";
 
