@@ -36,8 +36,19 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
   esi.cosim %clk, %rst, %3, "t3" : !esi.channel<!alias> -> !esi.channel<i32>
 
   esi.service.instance #esi.appid<"cosim"> svc @HostComms impl as "cosim" (%clk, %rst) : (!seq.clock, i1) -> ()
-  hw.instance "m1" @Loopback (clk: %clk: !seq.clock) -> ()
+  hw.instance "m1" @Loopback (clk: %clk: !seq.clock) -> () {esi.appid=#esi.appid<"loopback_inst">}
 }
+
+// HIER-LABEL:  esi.esi.manifest.hier_root @top {
+// HIER:          esi.esi.manifest.service_impl #esi.appid<"cosim"> svc @HostComms by "cosim" with {} {
+// HIER:            esi.esi.manifest.impl_conn [#esi.appid<"loopback_inst">, #esi.appid<"loopback_tohw">] req <@HostComms::@Recv>(!esi.bundle<[!esi.channel<i8> to "recv"]>) with {channel_assignments = {recv = "loopback_inst.loopback_tohw.recv"}}
+// HIER:            esi.esi.manifest.impl_conn [#esi.appid<"loopback_inst">, #esi.appid<"loopback_fromhw">] req <@HostComms::@Send>(!esi.bundle<[!esi.channel<i8> from "send"]>) with {channel_assignments = {send = "loopback_inst.loopback_fromhw.send"}}
+// HIER:          }
+// HIER:          esi.esi.manifest.hier_node #esi.appid<"loopback_inst"> {
+// HIER:            esi.esi.manifest.req #esi.appid<"loopback_tohw">, <@HostComms::@Recv>, toClient, !esi.bundle<[!esi.channel<i8> to "recv"]>
+// HIER:            esi.esi.manifest.req #esi.appid<"loopback_fromhw">, <@HostComms::@Send>, toServer, !esi.bundle<[!esi.channel<i8> to "send"]>
+// HIER:          }
+// HIER:        }
 
 // CHECK:      {
 // CHECK-NEXT:   "api_version": 1,

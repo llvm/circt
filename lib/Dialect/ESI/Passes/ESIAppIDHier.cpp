@@ -44,7 +44,6 @@ private:
 
 void ESIAppIDHierPass::runOnOperation() {
   auto mod = getOperation();
-  auto *ctxt = &getContext();
   AppIDIndex index(mod);
   if (!index.isValid())
     return signalPassFailure();
@@ -52,6 +51,8 @@ void ESIAppIDHierPass::runOnOperation() {
   LogicalResult rc =
       index.walk(top, [&](AppIDPathAttr appidPath, Operation *op) {
         auto *block = getBlock(appidPath);
+        if (isa<IsManifestData>(op))
+          OpBuilder::atBlockEnd(block).clone(*op);
       });
   if (failed(rc))
     return signalPassFailure();

@@ -64,6 +64,7 @@ def BundleDirection : I32EnumAttr<"BundleDirection",
 }
 
 def ServiceRequestRecordOp : ESI_Op<"esi.manifest.req", [
+        DeclareOpInterfaceMethods<IsManifestData>,
         DeclareOpInterfaceMethods<HasAppIDOpInterface>]> {
   let summary = "Record of a service request";
   let description = [{
@@ -89,7 +90,10 @@ def ServiceRequestRecordOp : ESI_Op<"esi.manifest.req", [
   }];
 }
 
-def ServiceImplRecordOp : ESI_Op<"esi.manifest.service_impl", [NoTerminator]> {
+def ServiceImplRecordOp : ESI_Op<"esi.manifest.service_impl", [
+        NoTerminator, 
+        DeclareOpInterfaceMethods<IsManifestData>,
+        DeclareOpInterfaceMethods<HasAppIDOpInterface>]> {
   let summary = "Record of a service implementation";
   let description = [{
     A record of a service implementation. Optionally emitted by the service
@@ -97,18 +101,20 @@ def ServiceImplRecordOp : ESI_Op<"esi.manifest.service_impl", [NoTerminator]> {
     service clients.
   }];
 
-  let arguments = (ins OptionalAttr<FlatSymbolRefAttr>:$service,
+  let arguments = (ins AppIDAttr:$appID,
+                       OptionalAttr<FlatSymbolRefAttr>:$service,
                        StrAttr:$serviceImplName,
                        DictionaryAttr:$implDetails);
   let regions = (region SizedRegion<1>:$reqDetails);
   let assemblyFormat = [{
-    (`svc` $service^)? `by` $serviceImplName `with` $implDetails
+    qualified($appID) (`svc` $service^)? `by` $serviceImplName `with` $implDetails
     attr-dict-with-keyword $reqDetails
   }];
 }
 
 def ServiceImplClientRecordOp : ESI_Op<"esi.manifest.impl_conn", [
-      HasParent<"ServiceImplRecordOp">]> {
+        DeclareOpInterfaceMethods<IsManifestData>,
+        HasParent<"ServiceImplRecordOp">]> {
   let summary = "Details of a service implementation client connection";
   let description = [{
     A record containing all the necessary details of how to connect to a client
@@ -147,7 +153,7 @@ def AppIDHierNodeOp : ESI_Op<"esi.manifest.hier_node", [
   let regions = (region SizedRegion<1>:$children);
 
   let assemblyFormat = [{
-    $appID attr-dict-with-keyword $children
+    qualified($appID) attr-dict-with-keyword $children
   }];
 }
 

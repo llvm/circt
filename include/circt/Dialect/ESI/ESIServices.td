@@ -119,7 +119,8 @@ def ServiceInstanceOp : ESI_Op<"service.instance", [
   }];
 }
 
-def ServiceImplementReqOp : ESI_Op<"service.impl_req", [NoTerminator]> {
+def ServiceImplementReqOp : ESI_Op<"service.impl_req", [
+        NoTerminator, DeclareOpInterfaceMethods<HasAppIDOpInterface>]> {
   let summary = "Request for a service to be implemented";
   let description = [{
     The connect services pass replaces `service.instance`s with this op. The

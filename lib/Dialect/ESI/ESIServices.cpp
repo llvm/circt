@@ -63,7 +63,7 @@ static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
   }
 
   auto implRecord = b.create<ServiceImplRecordOp>(
-      implReq.getLoc(), implReq.getServiceSymbolAttr(),
+      implReq.getLoc(), implReq.getAppID(), implReq.getServiceSymbolAttr(),
       b.getStringAttr("cosim"), b.getDictionaryAttr(implDetails));
   Block &connImplBlock = implRecord.getReqDetails().emplaceBlock();
   OpBuilder implRecords = OpBuilder::atBlockEnd(&connImplBlock);

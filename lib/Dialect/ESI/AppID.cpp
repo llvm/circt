@@ -29,12 +29,7 @@ public:
   /// Add an appid component to the index. 'Inherited' is true if we're
   /// bubbling up from an instance and is used to inform the conflicting entry
   /// error message.
-  LogicalResult add(AppIDAttr id, hw::InnerSymbolOpInterface op,
-                    bool inherited) {
-    if (!op.getInnerName())
-      return op->emitOpError(
-          "to carry an appid, this op must have an inner symbol");
-
+  LogicalResult add(AppIDAttr id, Operation *op, bool inherited) {
     if (childAppIDPaths.find(id) != childAppIDPaths.end()) {
       return op->emitOpError("Found multiple identical AppIDs in same module")
                  .attachNote(childAppIDPaths[id]->getLoc())
@@ -44,11 +39,11 @@ public:
                            : "");
     }
     childAppIDPaths[id] = op;
+    childAppIDPathsOrdered.emplace_back(id, op);
     return success();
   }
 
-  FailureOr<hw::InnerSymbolOpInterface> lookup(AppIDAttr id,
-                                               Location loc) const {
+  FailureOr<Operation *> lookup(AppIDAttr id, Location loc) const {
     auto f = childAppIDPaths.find(id);
     if (f == childAppIDPaths.end())
       return emitError(loc, "could not find appid '") << id << "'";
@@ -59,11 +54,14 @@ public:
   auto getAppIDs() const { return llvm::make_first_range(childAppIDPaths); }
 
   // Get a read-only reference to the index.
-  const auto &getIndex() const { return childAppIDPaths; }
+  const auto &getChildren() const { return childAppIDPathsOrdered; }
 
 private:
   // Operations involved in appids.
-  DenseMap<AppIDAttr, hw::InnerSymbolOpInterface> childAppIDPaths;
+  DenseMap<AppIDAttr, Operation *> childAppIDPaths;
+  // For every entry in childAppIDPaths, we need it in the original order. Keep
+  // that order here.
+  SmallVector<std::pair<AppIDAttr, Operation *>, 8> childAppIDPathsOrdered;
 };
 
 AppIDIndex::AppIDIndex(Operation *mlirTop) : valid(true), mlirTop(mlirTop) {
@@ -105,29 +103,29 @@ ArrayAttr AppIDIndex::getChildAppIDsOf(hw::HWModuleLike fromMod) const {
 
 /// Walk the AppID hierarchy rooted at the specified module.
 LogicalResult
-AppIDIndex::walk(hw::HWModuleLike mod, SmallVectorImpl<AppIDAttr> &pathStack,
+AppIDIndex::walk(hw::HWModuleLike top, hw::HWModuleLike mod,
+                 SmallVectorImpl<AppIDAttr> &pathStack,
                  function_ref<void(AppIDPathAttr, Operation *)> fn) const {
   ModuleAppIDs *modIDs = containerAppIDs.lookup(mod);
   if (!modIDs) {
     mod.emitWarning("Module has no AppIDs");
     return success();
   }
-  for (auto [appid, innerSym] : modIDs->getIndex()) {
+  for (auto [appid, op] : modIDs->getChildren()) {
     AppIDPathAttr path = AppIDPathAttr::get(
-        mod.getContext(), FlatSymbolRefAttr::get(mod.getNameAttr()), pathStack);
-    fn(path, innerSym);
+        mod.getContext(), FlatSymbolRefAttr::get(top.getNameAttr()), pathStack);
+    fn(path, op);
 
-    if (auto inst = dyn_cast<hw::HWInstanceLike>(innerSym.getOperation())) {
+    if (auto inst = dyn_cast<hw::HWInstanceLike>(op)) {
       auto tgtMod = dyn_cast<hw::HWModuleLike>(
           symCache.getDefinition(inst.getReferencedModuleNameAttr()));
       // Do the assert here to get a more precise message.
       assert(tgtMod && "invalid module reference");
 
-      AppIDAttr appid =
-          innerSym->getAttrOfType<AppIDAttr>(AppIDAttr::AppIDAttrName);
+      AppIDAttr appid = getAppID(op);
       if (appid)
         pathStack.push_back(appid);
-      LogicalResult rc = walk(tgtMod, pathStack, fn);
+      LogicalResult rc = walk(top, tgtMod, pathStack, fn);
       if (appid)
         pathStack.pop_back();
       if (failed(rc))
@@ -141,7 +139,7 @@ LogicalResult
 AppIDIndex::walk(hw::HWModuleLike top,
                  function_ref<void(AppIDPathAttr, Operation *)> fn) const {
   SmallVector<AppIDAttr, 8> path;
-  return walk(top, path, fn);
+  return walk(top, top, path, fn);
 }
 LogicalResult
 AppIDIndex::walk(StringRef top,
@@ -190,7 +188,7 @@ AppIDIndex::buildIndexFor(hw::HWModuleLike mod) {
     return appIDs;
   appIDs = new ModuleAppIDs();
 
-  auto done = mod.walk([&](hw::InnerSymbolOpInterface op) {
+  auto done = mod.walk([&](Operation *op) {
     // If an op has an appid attribute, add it to the index and terminate the
     // DFS (since AppIDs only get 'bubbled up' until they encounter an ID'd
     // instantiation).
@@ -201,7 +199,7 @@ AppIDIndex::buildIndexFor(hw::HWModuleLike mod) {
     }
 
     // If we encounter an instance op which isn't ID'd...
-    if (auto inst = dyn_cast<hw::HWInstanceLike>(op.getOperation())) {
+    if (auto inst = dyn_cast<hw::HWInstanceLike>(op)) {
       auto tgtMod = dyn_cast<hw::HWModuleLike>(
           symCache.getDefinition(inst.getReferencedModuleNameAttr()));
       // Do the assert here to get a more precise message.

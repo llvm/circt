@@ -56,7 +56,8 @@ public:
 
 private:
   /// Walk the AppID hierarchy rooted at the specified module.
-  LogicalResult walk(hw::HWModuleLike, SmallVectorImpl<AppIDAttr> &,
+  LogicalResult walk(hw::HWModuleLike top, hw::HWModuleLike current,
+                     SmallVectorImpl<AppIDAttr> &,
                      function_ref<void(AppIDPathAttr, Operation *)> fn) const;
 
   //===--------------------------------------------------------------------===//
