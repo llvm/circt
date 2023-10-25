@@ -255,19 +255,29 @@ LogicalResult PathVisitor::process(EmptyPathOp path) {
 /// Replace a ListCreateOp of path types with frozen path types.
 LogicalResult PathVisitor::process(ListCreateOp listCreateOp) {
   ListType listType = listCreateOp.getResult().getType();
-  Type elementType = listType.getElementType();
 
-  Type newElementType;
-  if (isa<BasePathType>(elementType))
-    newElementType = FrozenBasePathType::get(listCreateOp.getContext());
-  if (isa<PathType>(elementType))
-    newElementType = FrozenPathType::get(listCreateOp.getContext());
+  // Check if the element type of a potentially nested list includes path types.
+  bool hasPathType = false;
+  listType.walk([&](Type innerType) {
+    if (isa<BasePathType, PathType>(innerType))
+      hasPathType = true;
+  });
 
-  if (!newElementType)
+  if (!hasPathType)
     return success();
 
+  // Set up a type replacer to replace potentially nested path types.
+  mlir::AttrTypeReplacer replacer;
+  replacer.addReplacement([](BasePathType innerType) {
+    return FrozenBasePathType::get(innerType.getContext());
+  });
+  replacer.addReplacement([](PathType innerType) {
+    return FrozenPathType::get(innerType.getContext());
+  });
+
+  // Create a new op with the result type updated to replace path types.
   OpBuilder builder(listCreateOp);
-  auto newListType = ListType::get(newElementType);
+  auto newListType = replacer.replace(listType);
   auto newListCreateOp = builder.create<ListCreateOp>(
       listCreateOp.getLoc(), newListType, listCreateOp.getOperands());
   listCreateOp.replaceAllUsesWith(newListCreateOp.getResult());
