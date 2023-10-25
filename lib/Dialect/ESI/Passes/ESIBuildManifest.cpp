@@ -31,9 +31,18 @@ struct ESIBuildManifestPass
 private:
   /// Get the types of an operations, but only if the operation is relevant.
   void scrapeTypes(Operation *);
+  void scrapeTypes(Attribute);
 
   /// Get a JSON representation of a type.
-  llvm::json::Value json(Type);
+  llvm::json::Value json(Operation *errorOp, Type);
+  /// Get a JSON representation of a type.
+  llvm::json::Value json(Operation *errorOp, Attribute);
+
+  void emitNode(llvm::json::OStream &, AppIDHierNodeOp nodeOp);
+  void emitBlock(llvm::json::OStream &, Block &block);
+
+  AppIDHierRootOp appidRoot;
+
   /// Get a JSON representation of the manifest.
   std::string json();
 
@@ -57,8 +66,17 @@ void ESIBuildManifestPass::runOnOperation() {
   symCache.addDefinitions(mod);
   symCache.freeze();
 
+  for (auto root : mod->getRegion(0).front().getOps<AppIDHierRootOp>())
+    if (root.getTopModuleRef() == top)
+      appidRoot = root;
+  if (!appidRoot) {
+    mod->emitError() << "No AppID hierarchy found for top level '" << top
+                     << "'";
+    return signalPassFailure();
+  }
+
   // Gather the relevant types.
-  mod->walk([&](Operation *op) { scrapeTypes(op); });
+  appidRoot->walk([&](Operation *op) { scrapeTypes(op); });
 
   // JSONify the manifest.
   std::string jsonManifest = json();
@@ -99,7 +117,7 @@ void ESIBuildManifestPass::runOnOperation() {
       mod->emitError() << "Failed to open file for writing: " << ec.message();
       signalPassFailure();
     } else {
-      os << jsonManifest;
+      os << jsonManifest << "\n";
     }
 
     // If the compressed manifest is available, output it also.
@@ -115,17 +133,45 @@ void ESIBuildManifestPass::runOnOperation() {
     }
   }
 }
+void ESIBuildManifestPass::emitNode(llvm::json::OStream &j,
+                                    AppIDHierNodeOp nodeOp) {
+  j.object([&] {
+    j.attribute("class", "instance");
+    j.attribute("appID", json(nodeOp, nodeOp.getAppIDAttr()));
+    j.attribute("inst_of", json(nodeOp, nodeOp.getModuleRefAttr()));
+    j.attributeArray("contents",
+                     [&]() { emitBlock(j, nodeOp.getChildren().front()); });
+  });
+}
+
+void ESIBuildManifestPass::emitBlock(llvm::json::OStream &j, Block &block) {
+  for (auto &op : block) {
+    if (auto manifestData = dyn_cast<IsManifestData>(op))
+      j.object([&] {
+        j.attribute("class", manifestData.getManifestClass());
+        SmallVector<NamedAttribute, 4> attrs;
+        manifestData.getDetails(attrs);
+        for (auto attr : attrs)
+          j.attribute(attr.getName().getValue(), json(&op, attr.getValue()));
+      });
+    if (auto nodeOp = dyn_cast<AppIDHierNodeOp>(op))
+      emitNode(j, nodeOp);
+  }
+}
 
 std::string ESIBuildManifestPass::json() {
+  auto mod = getOperation();
   std::string jsonStrBuffer;
   llvm::raw_string_ostream os(jsonStrBuffer);
   llvm::json::OStream j(os, 2);
 
   j.objectBegin();
   j.attribute("api_version", esiApiVersion);
+  j.attributeArray("design",
+                   [&]() { emitBlock(j, appidRoot.getChildren().front()); });
   j.attributeArray("types", [&]() {
     for (auto type : types) {
-      j.value(json(type));
+      j.value(json(mod, type));
     }
   });
   j.objectEnd();
@@ -134,15 +180,32 @@ std::string ESIBuildManifestPass::json() {
 }
 
 void ESIBuildManifestPass::scrapeTypes(Operation *op) {
-  TypeSwitch<Operation *>(op).Case([&](CosimEndpointOp cosim) {
-    addType(cosim.getSend().getType());
-    addType(cosim.getRecv().getType());
-  });
+  for (auto oper : op->getOperands())
+    addType(oper.getType());
+  for (auto res : op->getResults())
+    addType(res.getType());
+  for (auto attr : op->getAttrs())
+    scrapeTypes(attr.getValue());
+}
+
+// NOLINTNEXTLINE(misc-no-recursion)
+void ESIBuildManifestPass::scrapeTypes(Attribute attr) {
+  // This is far from complete. Build out as necessary.
+  TypeSwitch<Attribute>(attr)
+      .Case([&](TypeAttr a) { addType(a.getValue()); })
+      .Case([&](ArrayAttr a) {
+        for (auto attr : a)
+          scrapeTypes(attr);
+      })
+      .Case([&](DictionaryAttr a) {
+        for (const auto &entry : a.getValue())
+          scrapeTypes(entry.getValue());
+      });
 }
 
 /// Get a JSON representation of a type.
 // NOLINTNEXTLINE(misc-no-recursion)
-llvm::json::Value ESIBuildManifestPass::json(Type type) {
+llvm::json::Value ESIBuildManifestPass::json(Operation *errorOp, Type type) {
   using llvm::json::Array;
   using llvm::json::Object;
   using llvm::json::Value;
@@ -153,7 +216,7 @@ llvm::json::Value ESIBuildManifestPass::json(Type type) {
       TypeSwitch<Type, Object>(type)
           .Case([&](ChannelType t) {
             m = "channel";
-            return Object({{"inner", json(t.getInner())}});
+            return Object({{"inner", json(errorOp, t.getInner())}});
           })
           .Case([&](ChannelBundleType t) {
             m = "bundle";
@@ -162,7 +225,7 @@ llvm::json::Value ESIBuildManifestPass::json(Type type) {
               fields.push_back(Object(
                   {{"name", field.name.getValue()},
                    {"direction", stringifyChannelDirection(field.direction)},
-                   {"type", json(field.type)}}));
+                   {"type", json(errorOp, field.type)}}));
             return Object({{"fields", Value(std::move(fields))}});
           })
           .Case([&](AnyType t) {
@@ -171,25 +234,25 @@ llvm::json::Value ESIBuildManifestPass::json(Type type) {
           })
           .Case([&](ListType t) {
             m = "list";
-            return Object({{"element", json(t.getElementType())}});
+            return Object({{"element", json(errorOp, t.getElementType())}});
           })
           .Case([&](hw::ArrayType t) {
             m = "array";
             return Object({{"size", t.getNumElements()},
-                           {"element", json(t.getElementType())}});
+                           {"element", json(errorOp, t.getElementType())}});
           })
           .Case([&](hw::StructType t) {
             m = "struct";
             Array fields;
             for (auto field : t.getElements())
               fields.push_back(Object({{"name", field.name.getValue()},
-                                       {"type", json(field.type)}}));
+                                       {"type", json(errorOp, field.type)}}));
             return Object({{"fields", Value(std::move(fields))}});
           })
           .Case([&](hw::TypeAliasType t) {
             m = "alias";
             return Object({{"name", t.getTypeDecl(symCache).getPreferredName()},
-                           {"inner", json(t.getInnerType())}});
+                           {"inner", json(errorOp, t.getInnerType())}});
           })
           .Case([&](IntegerType t) {
             m = "int";
@@ -199,7 +262,7 @@ llvm::json::Value ESIBuildManifestPass::json(Type type) {
             return Object({{"signedness", signedness}});
           })
           .Default([&](Type t) {
-            getOperation()->emitWarning()
+            errorOp->emitWarning()
                 << "ESI system manifest: unknown type: " << t;
             return Object();
           });
@@ -208,13 +271,73 @@ llvm::json::Value ESIBuildManifestPass::json(Type type) {
   std::string circtName;
   llvm::raw_string_ostream(circtName) << type;
   o["circt_name"] = circtName;
+
   int64_t width = hw::getBitWidth(type);
+  if (auto chanType = type.dyn_cast<ChannelType>())
+    width = hw::getBitWidth(chanType.getInner());
   if (width >= 0)
     o["hw_bitwidth"] = width;
+
   o["dialect"] = type.getDialect().getNamespace();
   if (m.length())
     o["mnemonic"] = m;
   return o;
+}
+
+// Serialize an attribute to a JSON value.
+// NOLINTNEXTLINE(misc-no-recursion)
+llvm::json::Value ESIBuildManifestPass::json(Operation *errorOp,
+                                             Attribute attr) {
+  // This is far from complete. Build out as necessary.
+  using llvm::json::Value;
+  return TypeSwitch<Attribute, Value>(attr)
+      .Case([&](StringAttr a) { return a.getValue(); })
+      .Case([&](IntegerAttr a) { return a.getValue().getLimitedValue(); })
+      .Case([&](TypeAttr a) {
+        Type t = a.getValue();
+
+        llvm::json::Object typeMD;
+        auto f = typeLookup.find(t);
+        if (f != typeLookup.end()) {
+          typeMD["type_ref"] = f->second;
+          return typeMD;
+        }
+
+        std::string buf;
+        llvm::raw_string_ostream(buf) << t;
+        typeMD["type"] = json(errorOp, t);
+
+        return typeMD;
+      })
+      .Case([&](ArrayAttr a) {
+        return llvm::json::Array(
+            llvm::map_range(a, [&](Attribute a) { return json(errorOp, a); }));
+      })
+      .Case([&](DictionaryAttr a) {
+        llvm::json::Object dict;
+        for (const auto &entry : a.getValue())
+          dict[entry.getName().getValue()] = json(errorOp, entry.getValue());
+        return dict;
+      })
+      .Case([&](hw::InnerRefAttr ref) {
+        llvm::json::Object dict;
+        dict["outer_sym"] = ref.getModule().getValue();
+        dict["inner"] = ref.getName().getValue();
+        return dict;
+      })
+      .Case([&](AppIDAttr appid) {
+        llvm::json::Object dict;
+        dict["name"] = appid.getName().getValue();
+        auto idx = appid.getIndex();
+        if (idx)
+          dict["index"] = *idx;
+        return dict;
+      })
+      .Default([&](Attribute a) {
+        std::string buff;
+        llvm::raw_string_ostream(buff) << a;
+        return buff;
+      });
 }
 std::unique_ptr<OperationPass<ModuleOp>>
 circt::esi::createESIBuildManifestPass() {

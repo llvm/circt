@@ -639,6 +639,41 @@ void ESIPureModuleOp::setHWModuleType(hw::ModuleType type) {
   emitError("No ports for port types");
 }
 
+//===----------------------------------------------------------------------===//
+// Manifest ops.
+//===----------------------------------------------------------------------===//
+
+StringRef ServiceImplRecordOp::getManifestClass() { return "service"; }
+void ServiceImplRecordOp::getDetails(SmallVectorImpl<NamedAttribute> &results) {
+  auto *ctxt = getContext();
+  results.emplace_back(getAppIDAttrName(), getAppIDAttr());
+  if (getService())
+    results.emplace_back(getServiceAttrName(), getServiceAttr());
+  results.emplace_back(getServiceImplNameAttrName(), getServiceImplNameAttr());
+  results.emplace_back(getImplDetailsAttrName(), getImplDetailsAttr());
+
+  SmallVector<Attribute, 8> reqDetails;
+  for (auto reqDetail : getReqDetails().front().getOps<IsManifestData>())
+    reqDetails.push_back(reqDetail.getDetailsAsDict());
+  results.emplace_back(StringAttr::get(ctxt, "client_details"),
+                       ArrayAttr::get(ctxt, reqDetails));
+}
+
+StringRef ServiceImplClientRecordOp::getManifestClass() {
+  return "service_client";
+}
+
+StringRef ServiceRequestRecordOp::getManifestClass() { return "client_port"; }
+void ServiceRequestRecordOp::getDetails(
+    SmallVectorImpl<NamedAttribute> &results) {
+  auto *ctxt = getContext();
+  results.emplace_back(StringAttr::get(ctxt, "appID"), getRequestorAttr());
+  results.emplace_back(
+      getDirectionAttrName(),
+      StringAttr::get(ctxt, stringifyBundleDirection(getDirection())));
+  results.emplace_back(getBundleTypeAttrName(), getBundleTypeAttr());
+}
+
 #define GET_OP_CLASSES
 #include "circt/Dialect/ESI/ESI.cpp.inc"
 

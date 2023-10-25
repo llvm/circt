@@ -36,7 +36,8 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
   esi.cosim %clk, %rst, %3, "t3" : !esi.channel<!alias> -> !esi.channel<i32>
 
   esi.service.instance #esi.appid<"cosim"> svc @HostComms impl as "cosim" (%clk, %rst) : (!seq.clock, i1) -> ()
-  hw.instance "m1" @Loopback (clk: %clk: !seq.clock) -> () {esi.appid=#esi.appid<"loopback_inst">}
+  hw.instance "m1" @Loopback (clk: %clk: !seq.clock) -> () {esi.appid=#esi.appid<"loopback_inst"[0]>}
+  hw.instance "m1" @Loopback (clk: %clk: !seq.clock) -> () {esi.appid=#esi.appid<"loopback_inst"[1]>}
 }
 
 // HIER-LABEL:  esi.esi.manifest.hier_root @top {

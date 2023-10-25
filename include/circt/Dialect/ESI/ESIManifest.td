@@ -87,6 +87,7 @@ def ServiceRequestRecordOp : ESI_Op<"esi.manifest.req", [
     AppIDAttr getAppID() {
       return getRequestor();
     }
+    void getDetails(SmallVectorImpl<NamedAttribute> &results);
   }];
 }
 
@@ -109,6 +110,10 @@ def ServiceImplRecordOp : ESI_Op<"esi.manifest.service_impl", [
   let assemblyFormat = [{
     qualified($appID) (`svc` $service^)? `by` $serviceImplName `with` $implDetails
     attr-dict-with-keyword $reqDetails
+  }];
+
+  let extraClassDeclaration = [{
+    void getDetails(SmallVectorImpl<NamedAttribute> &results);
   }];
 }
 
