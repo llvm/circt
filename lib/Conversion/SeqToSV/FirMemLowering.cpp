@@ -373,7 +373,7 @@ void FirMemLowering::lowerMemoriesInModule(
       memName = *name;
     ImplicitLocOpBuilder builder(memOp.getLoc(), memOp);
     auto instOp = builder.create<hw::InstanceOp>(
-        genOp, builder.getStringAttr(memName + "_ext"), inputs, ArrayAttr{},
+        genOp, builder.getStringAttr(memName), inputs, ArrayAttr{},
         memOp.getInnerSymAttr());
     for (auto [oldOutput, newOutput] : llvm::zip(outputs, instOp.getResults()))
       oldOutput.replaceAllUsesWith(newOutput);
