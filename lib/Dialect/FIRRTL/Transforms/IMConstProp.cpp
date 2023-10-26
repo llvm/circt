@@ -199,7 +199,7 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
       return;
     }
 
-    walkGroundTypes(firrtlType, [&](uint64_t fieldID, auto) {
+    walkGroundTypes(firrtlType, [&](uint64_t fieldID, auto, auto) {
       markOverdefined(fieldRef.getSubField(fieldID));
     });
   }
@@ -257,7 +257,7 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
     if (type_isa<PropertyType>(result.getType()))
       return mergeLatticeValue(fieldRefResult, fieldRefFrom);
     walkGroundTypes(type_cast<FIRRTLType>(result.getType()),
-                    [&](uint64_t fieldID, auto) {
+                    [&](uint64_t fieldID, auto, auto) {
                       mergeLatticeValue(fieldRefResult.getSubField(fieldID),
                                         fieldRefFrom.getSubField(fieldID));
                     });
@@ -518,7 +518,7 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
           fieldRefToUsers[fieldRef].push_back(&op);
           continue;
         }
-        walkGroundTypes(firrtlType, [&](uint64_t fieldID, auto type) {
+        walkGroundTypes(firrtlType, [&](uint64_t fieldID, auto type, auto) {
           fieldRefToUsers[fieldRef.getSubField(fieldID)].push_back(&op);
         });
       }
@@ -550,7 +550,7 @@ void IMConstPropPass::markConstantValueOp(OpTy op) {
 }
 
 void IMConstPropPass::markAggregateConstantOp(AggregateConstantOp constant) {
-  walkGroundTypes(constant.getType(), [&](uint64_t fieldID, auto) {
+  walkGroundTypes(constant.getType(), [&](uint64_t fieldID, auto, auto) {
     mergeLatticeValue(FieldRef(constant, fieldID),
                       LatticeValue(cast<IntegerAttr>(
                           constant.getAttributeFromFieldID(fieldID))));
