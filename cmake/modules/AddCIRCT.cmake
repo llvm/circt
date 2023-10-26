@@ -68,8 +68,27 @@ endmacro()
 # Adds a CIRCT library target for installation.  This should normally only be
 # called from add_circt_library().
 function(add_circt_library_install name)
-  install(TARGETS ${name} COMPONENT ${name} EXPORT CIRCTTargets)
+  if (NOT LLVM_INSTALL_TOOLCHAIN_ONLY)
+  get_target_export_arg(${name} CIRCT export_to_circttargets UMBRELLA circt-libraries)
+  install(TARGETS ${name}
+    COMPONENT ${name}
+    ${export_to_circttargets}
+    LIBRARY DESTINATION lib${LLVM_LIBDIR_SUFFIX}
+    ARCHIVE DESTINATION lib${LLVM_LIBDIR_SUFFIX}
+    RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
+    # Note that CMake will create a directory like:
+    #   objects-${CMAKE_BUILD_TYPE}/obj.LibName
+    # and put object files there.
+    OBJECTS DESTINATION lib${LLVM_LIBDIR_SUFFIX}
+  )
+
+  if (NOT LLVM_ENABLE_IDE)
+    add_llvm_install_targets(install-${name}
+                            DEPENDS ${name}
+                            COMPONENT ${name})
+  endif()
   set_property(GLOBAL APPEND PROPERTY CIRCT_ALL_LIBS ${name})
+  endif()   
   set_property(GLOBAL APPEND PROPERTY CIRCT_EXPORTS ${name})
 endfunction()
 
