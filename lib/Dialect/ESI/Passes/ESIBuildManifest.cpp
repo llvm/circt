@@ -30,8 +30,8 @@ struct ESIBuildManifestPass
 
 private:
   /// Get the types of an operations, but only if the operation is relevant.
-  void scrapeTypes(Operation *);
-  void scrapeTypes(Attribute);
+  void gatherFilters(Operation *);
+  void gatherFilters(Attribute);
 
   /// Get a JSON representation of a type.
   llvm::json::Value json(Operation *errorOp, Type);
@@ -58,6 +58,9 @@ private:
   SmallVector<Type, 8> types;
   DenseMap<Type, size_t> typeLookup;
 
+  // Symbols which are referenced.
+  DenseSet<SymbolRefAttr> symbols;
+
   hw::HWSymbolCache symCache;
 };
 } // anonymous namespace
@@ -80,7 +83,7 @@ void ESIBuildManifestPass::runOnOperation() {
 
   // Gather the relevant types under the appid hierarchy root only. This avoids
   // scraping unnecessary types.
-  appidRoot->walk([&](Operation *op) { scrapeTypes(op); });
+  appidRoot->walk([&](Operation *op) { gatherFilters(op); });
 
   // JSONify the manifest.
   std::string jsonManifest = json();
@@ -172,6 +175,21 @@ std::string ESIBuildManifestPass::json() {
 
   j.objectBegin();
   j.attribute("api_version", esiApiVersion);
+
+  j.attributeArray("symbols", [&]() {
+    for (auto symInfo : mod.getBody()->getOps<SymbolMetadataOp>()) {
+      if (!symbols.contains(symInfo.getSymbolRefAttr()))
+        continue;
+      j.object([&] {
+        SmallVector<NamedAttribute, 4> attrs;
+        symInfo.getDetails(attrs);
+        for (auto attr : attrs)
+          j.attribute(attr.getName().getValue(),
+                      json(symInfo, attr.getValue()));
+      });
+    }
+  });
+
   j.attributeArray("design", [&]() {
     j.object([&] {
       j.attribute("inst_of", json(appidRoot, appidRoot.getTopModuleRefAttr()));
@@ -184,6 +202,29 @@ std::string ESIBuildManifestPass::json() {
       });
     });
   });
+
+  j.attributeArray("service_decls", [&]() {
+    for (auto svcDecl : mod.getBody()->getOps<ServiceDeclOpInterface>()) {
+      auto sym = FlatSymbolRefAttr::get(svcDecl);
+      if (!symbols.contains(sym))
+        continue;
+      j.object([&] {
+        j.attribute("symbol", sym.getValue());
+        llvm::SmallVector<ServicePortInfo, 8> ports;
+        svcDecl.getPortList(ports);
+        j.attributeArray("ports", [&]() {
+          for (auto port : ports) {
+            j.object([&] {
+              j.attribute("name", port.port.getName().getValue());
+              j.attribute("direction", port.directionAsString());
+              j.attribute("type", json(svcDecl, TypeAttr::get(port.type)));
+            });
+          }
+        });
+      });
+    }
+  });
+
   j.attributeArray("types", [&]() {
     for (auto type : types) {
       j.value(json(mod, type));
@@ -194,7 +235,7 @@ std::string ESIBuildManifestPass::json() {
   return jsonStrBuffer;
 }
 
-void ESIBuildManifestPass::scrapeTypes(Operation *op) {
+void ESIBuildManifestPass::gatherFilters(Operation *op) {
   for (auto oper : op->getOperands())
     addType(oper.getType());
   for (auto res : op->getResults())
@@ -208,21 +249,23 @@ void ESIBuildManifestPass::scrapeTypes(Operation *op) {
   else
     llvm::append_range(attrs, op->getAttrs());
   for (auto attr : attrs)
-    scrapeTypes(attr.getValue());
+    gatherFilters(attr.getValue());
 }
 
 // NOLINTNEXTLINE(misc-no-recursion)
-void ESIBuildManifestPass::scrapeTypes(Attribute attr) {
+void ESIBuildManifestPass::gatherFilters(Attribute attr) {
   // This is far from complete. Build out as necessary.
   TypeSwitch<Attribute>(attr)
       .Case([&](TypeAttr a) { addType(a.getValue()); })
+      .Case([&](FlatSymbolRefAttr a) { symbols.insert(a); })
+      .Case([&](hw::InnerRefAttr a) { symbols.insert(a.getModuleRef()); })
       .Case([&](ArrayAttr a) {
         for (auto attr : a)
-          scrapeTypes(attr);
+          gatherFilters(attr);
       })
       .Case([&](DictionaryAttr a) {
         for (const auto &entry : a.getValue())
-          scrapeTypes(entry.getValue());
+          gatherFilters(entry.getValue());
       });
 }
 

@@ -691,6 +691,8 @@ void ServiceRequestRecordOp::getDetails(
   results.emplace_back(getBundleTypeAttrName(), getBundleTypeAttr());
 }
 
+StringRef SymbolMetadataOp::getManifestClass() { return "sym_info"; }
+
 #define GET_OP_CLASSES
 #include "circt/Dialect/ESI/ESI.cpp.inc"
 

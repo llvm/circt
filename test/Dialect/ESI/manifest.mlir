@@ -21,6 +21,8 @@ hw.module @Loopback (in %clk: !seq.clock) {
   esi.service.req.to_server %dataOutBundle -> <@HostComms::@Send> (#esi.appid<"loopback_fromhw">) : !sendI8
 }
 
+esi.esi.manifest.sym @Loopback name "LoopbackIP" version "v0.0" summary "IP which simply echos bytes" {foo=1}
+
 hw.module @top(in %clk: !seq.clock, in %rst: i1) {
   esi.service.instance #esi.appid<"cosim"> svc @HostComms impl as "cosim" (%clk, %rst) : (!seq.clock, i1) -> ()
   hw.instance "m1" @Loopback (clk: %clk: !seq.clock) -> () {esi.appid=#esi.appid<"loopback_inst"[0]>}
@@ -46,6 +48,17 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 
 // CHECK:       {
 // CHECK-LABEL:   "api_version": 1,
+
+// CHECK-LABEL:   "symbols": [
+// CHECK-NEXT:      {
+// CHECK-NEXT:        "foo": 1,
+// CHECK-NEXT:        "name": "LoopbackIP",
+// CHECK-NEXT:        "summary": "IP which simply echos bytes",
+// CHECK-NEXT:        "symbolRef": "@Loopback",
+// CHECK-NEXT:        "version": "v0.0"
+// CHECK-NEXT:      }
+// CHECK-NEXT:    ],
+
 // CHECK-LABEL:   "design": [
 // CHECK-NEXT:      {
 // CHECK-NEXT:        "inst_of": "@top",
@@ -197,6 +210,29 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:        ]
 // CHECK-NEXT:      }
 // CHECK-NEXT:    ],
+
+// CHECK-LABEL:   "service_decls": [
+// CHECK-NEXT:      {
+// CHECK-NEXT:        "symbol": "HostComms",
+// CHECK-NEXT:        "ports": [
+// CHECK-NEXT:          {
+// CHECK-NEXT:            "name": "Send",
+// CHECK-NEXT:            "direction": "toServer",
+// CHECK-NEXT:            "type": {
+// CHECK-NEXT:              "circt_name": "!esi.bundle<[!esi.channel<i8> to \"send\"]>"
+// CHECK-NEXT:            }
+// CHECK-NEXT:          },
+// CHECK-NEXT:          {
+// CHECK-NEXT:            "name": "Recv",
+// CHECK-NEXT:            "direction": "toClient",
+// CHECK-NEXT:            "type": {
+// CHECK-NEXT:              "circt_name": "!esi.bundle<[!esi.channel<i8> to \"recv\"]>"
+// CHECK-NEXT:            }
+// CHECK-NEXT:          }
+// CHECK-NEXT:        ]
+// CHECK-NEXT:      }
+// CHECK-NEXT:    ],
+
 // CHECK-LABEL:   "types": [
 // CHECK-NEXT:      {
 // CHECK-NEXT:        "channels": [
