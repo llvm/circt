@@ -352,7 +352,7 @@ void LowerHWtoBTOR2Pass::runOnOperation() {
     for(auto &port : module.getPortList()) {
       // Separate the inputs from outputs and generate the first btor2 lines for input declaration
       // We only consider ports with an explicit bit-width for now (so ignore clocks)
-      if (port.isInput() && port.getName().str() != "clock") {
+      if (port.isInput() && !port.type.isa<seq::ClockType>()) {
         // Generate the associated btor declaration for the inputs
         std::string iName = port.getName().str();  // Start by retrieving the name
 
