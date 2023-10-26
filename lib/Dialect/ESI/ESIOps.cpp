@@ -639,6 +639,58 @@ void ESIPureModuleOp::setHWModuleType(hw::ModuleType type) {
   emitError("No ports for port types");
 }
 
+//===----------------------------------------------------------------------===//
+// Manifest ops.
+//===----------------------------------------------------------------------===//
+
+StringRef ServiceImplRecordOp::getManifestClass() { return "service"; }
+
+void ServiceImplRecordOp::getDetails(SmallVectorImpl<NamedAttribute> &results) {
+  auto *ctxt = getContext();
+  // AppID, optionally the service name, implementation name and details.
+  results.emplace_back(getAppIDAttrName(), getAppIDAttr());
+  if (getService())
+    results.emplace_back(getServiceAttrName(), getServiceAttr());
+  results.emplace_back(getServiceImplNameAttrName(), getServiceImplNameAttr());
+  // Don't add another level for the implementation details.
+  for (auto implDetail : getImplDetailsAttr().getValue())
+    results.push_back(implDetail);
+
+  // All of the manifest data contained by this op.
+  SmallVector<Attribute, 8> reqDetails;
+  for (auto reqDetail : getReqDetails().front().getOps<IsManifestData>())
+    reqDetails.push_back(reqDetail.getDetailsAsDict());
+  results.emplace_back(StringAttr::get(ctxt, "client_details"),
+                       ArrayAttr::get(ctxt, reqDetails));
+}
+
+StringRef ServiceImplClientRecordOp::getManifestClass() {
+  return "service_client";
+}
+void ServiceImplClientRecordOp::getDetails(
+    SmallVectorImpl<NamedAttribute> &results) {
+  // Relative AppID path, service port, and implementation details. Don't add
+  // the bundle type since it is meaningless to the host and just clutters the
+  // output.
+  results.emplace_back(getRelAppIDPathAttrName(), getRelAppIDPathAttr());
+  results.emplace_back(getServicePortAttrName(), getServicePortAttr());
+  // Don't add another level for the implementation details.
+  for (auto implDetail : getImplDetailsAttr().getValue())
+    results.push_back(implDetail);
+}
+
+StringRef ServiceRequestRecordOp::getManifestClass() { return "client_port"; }
+
+void ServiceRequestRecordOp::getDetails(
+    SmallVectorImpl<NamedAttribute> &results) {
+  auto *ctxt = getContext();
+  results.emplace_back(StringAttr::get(ctxt, "appID"), getRequestorAttr());
+  results.emplace_back(
+      getDirectionAttrName(),
+      StringAttr::get(ctxt, stringifyBundleDirection(getDirection())));
+  results.emplace_back(getBundleTypeAttrName(), getBundleTypeAttr());
+}
+
 #define GET_OP_CLASSES
 #include "circt/Dialect/ESI/ESI.cpp.inc"
 

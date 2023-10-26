@@ -89,6 +89,7 @@ def ServiceRequestRecordOp : ESI_Op<"esi.manifest.req", [
     AppIDAttr getAppID() {
       return getRequestor();
     }
+    void getDetails(SmallVectorImpl<NamedAttribute> &results);
   }];
 }
 
@@ -112,6 +113,10 @@ def ServiceImplRecordOp : ESI_Op<"esi.manifest.service_impl", [
     qualified($appID) (`svc` $service^)? `by` $serviceImplName `with` $implDetails
     attr-dict-with-keyword $reqDetails
   }];
+
+  let extraClassDeclaration = [{
+    void getDetails(SmallVectorImpl<NamedAttribute> &results);
+  }];
 }
 
 def ServiceImplClientRecordOp : ESI_Op<"esi.manifest.impl_conn", [
@@ -130,6 +135,10 @@ def ServiceImplClientRecordOp : ESI_Op<"esi.manifest.impl_conn", [
   let assemblyFormat = [{
     $relAppIDPath `req` $servicePort `(` $bundleType `)`
       `with` $implDetails attr-dict
+  }];
+
+  let extraClassDeclaration = [{
+    void getDetails(SmallVectorImpl<NamedAttribute> &results);
   }];
 }
 
