@@ -172,6 +172,12 @@ def AppIDHierNodeOp : ESI_Op<"esi.manifest.hier_node", [
 def SymbolMetadataOp : ESI_Op<"esi.manifest.sym", [
   DeclareOpInterfaceMethods<IsManifestData>]> {
   let summary = "Metadata about a symbol";
+  let description = [{
+    Metadata about a symbol, including its name, repository, commit hash,
+    version, and summary. All are optional, but strongly encouraged. Any
+    additional metadata which users wish to attach should go as discardable
+    attributes.
+  }];
 
   let arguments = (ins FlatSymbolRefAttr:$symbolRef,
                        OptionalAttr<StrAttr>:$name,
