@@ -1,4 +1,5 @@
 // RUN: circt-opt --esi-connect-services --canonicalize %s | circt-opt | FileCheck %s --check-prefix=CONN
+// RUN: circt-opt --esi-connect-services --lower-esi-bundles %s
 
 !sendI8 = !esi.bundle<[!esi.channel<i8> to "send"]>
 !recvI8 = !esi.bundle<[!esi.channel<i8> to "recv"]>
