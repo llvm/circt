@@ -165,7 +165,7 @@ public:
   /// Remove the NLA from the Module. This updates the module name to NLA
   /// tracking.
   void removeNLAfromModule(hw::HierPathOp nla, StringAttr mod) {
-    llvm::erase_value(nodeMap[mod], nla);
+    llvm::erase(nodeMap[mod], nla);
   }
 
   /// Remove all the nlas in the set `nlas` from the module. This updates the
