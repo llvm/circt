@@ -169,4 +169,26 @@ def AppIDHierNodeOp : ESI_Op<"esi.manifest.hier_node", [
   }];
 }
 
+def SymbolMetadataOp : ESI_Op<"esi.manifest.sym", [
+  DeclareOpInterfaceMethods<IsManifestData>]> {
+  let summary = "Metadata about a symbol";
+
+  let arguments = (ins FlatSymbolRefAttr:$symbolRef,
+                       OptionalAttr<StrAttr>:$name,
+                       OptionalAttr<StrAttr>:$repo,
+                       OptionalAttr<StrAttr>:$commitHash,
+                       OptionalAttr<StrAttr>:$version,
+                       OptionalAttr<StrAttr>:$summary);
+                       
+  let assemblyFormat = [{
+    $symbolRef
+    (`name` $name^)?
+    (`repo` $repo^)?
+    (`commit` $commitHash^)?
+    (`version` $version^)?
+    (`summary` $summary^)?
+    attr-dict
+  }];
+}
+
 #endif // CIRCT_DIALECT_ESI_MANIFEST_TD

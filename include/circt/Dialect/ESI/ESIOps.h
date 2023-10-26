@@ -34,6 +34,11 @@ struct ServicePortInfo {
   hw::InnerRefAttr port;
   Direction direction;
   ChannelBundleType type;
+
+  StringRef directionAsString() {
+    return direction == ServicePortInfo::Direction::toClient ? "toClient"
+                                                             : "toServer";
+  }
 };
 
 } // namespace esi
