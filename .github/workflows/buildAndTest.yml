@@ -89,7 +89,7 @@ jobs:
         if: ${{ always() }}
         shell: bash
         run: |
-          files=$(git diff --name-only $DIFF_COMMIT | grep -e '\.py$' || echo -n)
+          files=$(git diff --name-only --diff-filter=d $DIFF_COMMIT | grep -e '\.py$' || echo -n)
           if [[ ! -z $files ]]; then
             yapf --diff $files
           fi
