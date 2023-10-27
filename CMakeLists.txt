@@ -434,6 +434,8 @@ else()
     message(STATUS "Found Cap'nProto at ${CapnProto_DIR}.")
     set(CMAKE_INSTALL_RPATH ${capnp_LIBDIR})
     set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+
+    option(ESI_COSIM "Enable ESI Cosimulation" ON)
   endif()
 endif()
 

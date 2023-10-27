@@ -497,30 +497,6 @@ def RtlBitArrayType : Type<CPred<"$_self.isa<::circt::hw::ArrayType>()"
  " && $_self.cast<::circt::hw::ArrayType>().getElementType() =="
  "   ::mlir::IntegerType::get($_self.getContext(), 1)">, "an HW bit array">;
 
-def CapnpDecodeOp : ESI_Physical_Op<"decode.capnp", [Pure]> {
-  let summary = "Translate bits in Cap'nProto messages to HW typed data";
-
-  let arguments = (ins ClockType:$clk, I1:$valid, RtlBitArrayType:$capnpBits);
-  let results = (outs AnyType:$decodedData);
-
-  let assemblyFormat = [{
-    $clk $valid $capnpBits attr-dict `:` qualified(type($capnpBits)) `->`
-                                         qualified(type($decodedData))
-  }];
-}
-
-def CapnpEncodeOp : ESI_Physical_Op<"encode.capnp", [Pure]> {
-  let summary = "Translate HW typed data to Cap'nProto";
-
-  let arguments = (ins ClockType:$clk, I1:$valid, AnyType:$dataToEncode);
-  let results = (outs RtlBitArrayType:$capnpBits);
-
-  let assemblyFormat = [{
-    $clk $valid $dataToEncode attr-dict `:` qualified(type($dataToEncode))
-                                          `->` qualified(type($capnpBits))
-  }];
-}
-
 def NullSourceOp : ESI_Physical_Op<"null", [Pure]> {
   let summary = "An op which never produces messages.";
 

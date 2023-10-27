@@ -26,20 +26,6 @@ def ESIConnectServices : Pass<"esi-connect-services", "mlir::ModuleOp"> {
     "circt::comb::CombDialect"];
 }
 
-
-def ESIEmitCollateral: Pass<"esi-emit-collateral", "mlir::ModuleOp"> {
-  let summary = "Emit all the neccessary collateral";
-  let constructor = "circt::esi::createESIEmitCollateralPass()";
-  let dependentDialects = ["circt::sv::SVDialect"];
-  let options = [
-    Option<"schemaFile", "schema-file", "std::string",
-           "", "File to output capnp schema into">,
-    ListOption<"tops", "tops", "std::string",
-               "List of top modules to export Tcl for",
-               "llvm::cl::ZeroOrMore,">
-  ];
-}
-
 def ESIAppIDHier : Pass<"esi-appid-hier", "mlir::ModuleOp"> {
   let summary = "Build an AppID based hierarchy rooted at top module 'top'";
   let constructor = "circt::esi::createESIAppIDHierPass()";

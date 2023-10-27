@@ -47,6 +47,8 @@ public:
   // API-safe name for this type which should work with most languages.
   StringRef name() const;
 
+  uint64_t size() const;
+
   // Capnproto-safe type id for this type.
   uint64_t typeID() const;
 
