@@ -41,7 +41,7 @@ circuit Foo : %[[
     ; SIM-FIR:      firrtl.mem
     ; SIM-FIR-SAME:   name = "mem"
     ; SIM-FIR-SAME:   prefix = "prefix1_"
-    ; SIM-HW:       hw.instance "mem_ext" @prefix1_mem
+    ; SIM-HW:       hw.instance "mem" @prefix1_mem
     mem mem :
       data-type => UInt<1>
       depth => 8
@@ -84,7 +84,7 @@ circuit Foo : %[[
     ; SIM-FIR:      firrtl.mem
     ; SIM-FIR-SAME:   name = "mem"
     ; SIM-FIR-SAME:   prefix = "prefix2_"
-    ; SIM-HW:       hw.instance "mem_ext" @prefix2_mem
+    ; SIM-HW:       hw.instance "mem" @prefix2_mem
     mem mem :
       data-type => UInt<2>
       depth => 8

@@ -130,8 +130,8 @@ circuit Top : %[[
 ; CHECK:      module Top
 ; CHECK:        tap_0 = Top.unsigned_0.signed_0.localparam_0.foo.bar.in;
 ; CHECK-NEXT:   tap_1 = Top.unsigned_0.signed_0.localparam_0.foo.bar.out;
-; CHECK-NEXT:   tap_2_0 = Top.unsigned_0.signed_0.always_ext.Memory[0];
-; CHECK-NEXT:   tap_2_1 = Top.unsigned_0.signed_0.always_ext.Memory[1];
+; CHECK-NEXT:   tap_2_0 = Top.unsigned_0.signed_0.always_0.Memory[0];
+; CHECK-NEXT:   tap_2_1 = Top.unsigned_0.signed_0.always_0.Memory[1];
 
 ; // -----
 

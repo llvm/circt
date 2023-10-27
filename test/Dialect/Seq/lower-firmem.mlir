@@ -49,8 +49,8 @@ sv.macro.decl @SomeMacro
 // CHECK-LABEL: hw.module @Foo
 hw.module @Foo(in %clk: !seq.clock, in %en: i1, in %addr: i4, in %wdata: i42, in %wmode: i1, in %mask2: i2, in %mask3: i3, in %mask6: i6) {
   // CHECK-NEXT: %[[c1_i2:.+]] = hw.constant 1 : i2
-  // CHECK-NEXT: [[TMP0:%.+]] = hw.instance "m0_mem1A_ext" @m0_mem1_12x42(R0_addr: %addr: i4, R0_en: %en: i1, R0_clk: %clk: !seq.clock) -> (R0_data: i42)
-  // CHECK-NEXT: [[TMP1:%.+]] = hw.instance "m0_mem1B_ext" @m0_mem1_12x42(R0_addr: %addr: i4, R0_en: %en: i1, R0_clk: %clk: !seq.clock) -> (R0_data: i42)
+  // CHECK-NEXT: [[TMP0:%.+]] = hw.instance "m0_mem1A" @m0_mem1_12x42(R0_addr: %addr: i4, R0_en: %en: i1, R0_clk: %clk: !seq.clock) -> (R0_data: i42)
+  // CHECK-NEXT: [[TMP1:%.+]] = hw.instance "m0_mem1B" @m0_mem1_12x42(R0_addr: %addr: i4, R0_en: %en: i1, R0_clk: %clk: !seq.clock) -> (R0_data: i42)
   // CHECK-NEXT: comb.xor [[TMP0]], [[TMP1]]
   %m0_mem1A = seq.firmem 0, 1, undefined, port_order : <12 x 42>
   %m0_mem1B = seq.firmem 0, 1, undefined, port_order : <12 x 42>
@@ -58,17 +58,17 @@ hw.module @Foo(in %clk: !seq.clock, in %en: i1, in %addr: i4, in %wdata: i42, in
   %1 = seq.firmem.read_port %m0_mem1B[%addr], clock %clk enable %en : <12 x 42>
   comb.xor %0, %1 : i42
 
-  // CHECK-NEXT: hw.instance "m0_mem2_ext" @m0_mem2_12x42(W0_addr: %addr: i4, W0_en: %en: i1, W0_clk: %clk: !seq.clock, W0_data: %wdata: i42, W0_mask: %[[c1_i2]]: i2) -> ()
+  // CHECK-NEXT: hw.instance "m0_mem2" @m0_mem2_12x42(W0_addr: %addr: i4, W0_en: %en: i1, W0_clk: %clk: !seq.clock, W0_data: %wdata: i42, W0_mask: %[[c1_i2]]: i2) -> ()
   %m0_mem2 = seq.firmem 0, 1, undefined, port_order : <12 x 42, mask 2>
   seq.firmem.write_port %m0_mem2[%addr] = %wdata, clock %clk enable %en : <12 x 42, mask 2>
 
-  // CHECK-NEXT: [[TMP:%.+]] = hw.instance "m0_mem3_ext" @m0_mem3_12x42(RW0_addr: %addr: i4, RW0_en: %en: i1, RW0_clk: %clk: !seq.clock, RW0_wmode: %wmode: i1, RW0_wdata: %wdata: i42, RW0_wmask: %mask3: i3) -> (RW0_rdata: i42)
+  // CHECK-NEXT: [[TMP:%.+]] = hw.instance "m0_mem3" @m0_mem3_12x42(RW0_addr: %addr: i4, RW0_en: %en: i1, RW0_clk: %clk: !seq.clock, RW0_wmode: %wmode: i1, RW0_wdata: %wdata: i42, RW0_wmask: %mask3: i3) -> (RW0_rdata: i42)
   // CHECK-NEXT: comb.xor [[TMP]]
   %m0_mem3 = seq.firmem 0, 1, undefined, port_order : <12 x 42, mask 3>
   %2 = seq.firmem.read_write_port %m0_mem3[%addr] = %wdata if %wmode, clock %clk enable %en mask %mask3 : <12 x 42, mask 3>, i3
   comb.xor %2 : i42
 
-  // CHECK-NEXT: [[TMP0:%.+]], [[TMP1:%.+]] = hw.instance "m0_mem4_ext" @m0_mem4_12x42(R0_addr: %addr: i4, R0_en: %en: i1, R0_clk: %clk: !seq.clock, RW0_addr: %addr: i4, RW0_en: %en: i1, RW0_clk: %clk: !seq.clock, RW0_wmode: %wmode: i1, RW0_wdata: %wdata: i42, RW0_wmask: %mask6: i6, W0_addr: %addr: i4, W0_en: %en: i1, W0_clk: %clk: !seq.clock, W0_data: %wdata: i42, W0_mask: %mask6: i6) -> (R0_data: i42, RW0_rdata: i42)
+  // CHECK-NEXT: [[TMP0:%.+]], [[TMP1:%.+]] = hw.instance "m0_mem4" @m0_mem4_12x42(R0_addr: %addr: i4, R0_en: %en: i1, R0_clk: %clk: !seq.clock, RW0_addr: %addr: i4, RW0_en: %en: i1, RW0_clk: %clk: !seq.clock, RW0_wmode: %wmode: i1, RW0_wdata: %wdata: i42, RW0_wmask: %mask6: i6, W0_addr: %addr: i4, W0_en: %en: i1, W0_clk: %clk: !seq.clock, W0_data: %wdata: i42, W0_mask: %mask6: i6) -> (R0_data: i42, RW0_rdata: i42)
   // CHECK-NEXT: comb.xor [[TMP0]], [[TMP1]]
   %m0_mem4 = seq.firmem 0, 1, undefined, port_order : <12 x 42, mask 6>
   %3 = seq.firmem.read_port %m0_mem4[%addr], clock %clk enable %en : <12 x 42, mask 6>
@@ -82,8 +82,8 @@ hw.module @Foo(in %clk: !seq.clock, in %en: i1, in %addr: i4, in %wdata: i42, in
 
 // CHECK-LABEL: hw.module @SeparateOutputFiles
 hw.module @SeparateOutputFiles() {
-  // CHECK-NEXT: hw.instance "m1_mem1_ext" @m1_mem1_24x1337(
-  // CHECK-NEXT: hw.instance "m1_mem2_ext" @m1_mem2_24x1337(
+  // CHECK-NEXT: hw.instance "m1_mem1" @m1_mem1_24x1337(
+  // CHECK-NEXT: hw.instance "m1_mem2" @m1_mem2_24x1337(
   %m1_mem1 = seq.firmem 0, 1, undefined, port_order {output_file = "foo"} : <24 x 1337>
   %m1_mem2 = seq.firmem 0, 1, undefined, port_order {output_file = "bar"} : <24 x 1337>
 }
@@ -94,12 +94,12 @@ hw.module @SeparateOutputFiles() {
 
 // CHECK-LABEL: hw.module @SeparatePrefices
 hw.module @SeparatePrefices() {
-  // CHECK-NEXT: hw.instance "m2_mem1_ext" @foo_m2_mem1_24x9001(
+  // CHECK-NEXT: hw.instance "m2_mem1" @foo_m2_mem1_24x9001(
   %m2_mem1 = seq.firmem 0, 1, undefined, port_order {prefix = "foo_"} : <24 x 9001>
-  // CHECK-NEXT: hw.instance "m2_mem2_ext" @bar_m2_mem2_24x9001(
+  // CHECK-NEXT: hw.instance "m2_mem2" @bar_m2_mem2_24x9001(
   %m2_mem2 = seq.firmem 0, 1, undefined, port_order {prefix = "bar_"} : <24 x 9001>
-  // CHECK-NEXT: hw.instance "m2_mem3_ext" @uwu_m2_mem_24x9001(
-  // CHECK-NEXT: hw.instance "m2_mem4_ext" @uwu_m2_mem_24x9001(
+  // CHECK-NEXT: hw.instance "m2_mem3" @uwu_m2_mem_24x9001(
+  // CHECK-NEXT: hw.instance "m2_mem4" @uwu_m2_mem_24x9001(
   %m2_mem3 = seq.firmem 0, 1, undefined, port_order {prefix = "uwu_"} : <24 x 9001>
   %m2_mem4 = seq.firmem 0, 1, undefined, port_order {prefix = "uwu_"} : <24 x 9001>
 }
@@ -135,7 +135,7 @@ hw.module @MemoryWritePortBehavior(in %clock1: !seq.clock, in %clock2: !seq.cloc
   // lowered to an "aa" memory. Even if the clock is passed via different
   // wires, we should identify the clocks to be same.
   //
-  // CHECK: hw.instance "m3_mem1_ext" @m3_mem_12x8
+  // CHECK: hw.instance "m3_mem1" @m3_mem_12x8
   %m3_mem1 = seq.firmem 0, 1, undefined, port_order : <12 x 8>
   %cwire1 = hw.wire %clock1 : !seq.clock
   %cwire2 = hw.wire %clock1 : !seq.clock
@@ -145,7 +145,7 @@ hw.module @MemoryWritePortBehavior(in %clock1: !seq.clock, in %clock2: !seq.cloc
   // This memory has different clocks for each write port. It should be
   // lowered to an "ab" memory.
   //
-  // CHECK: hw.instance "m3_mem2_ext" @m3_mem2_12x8
+  // CHECK: hw.instance "m3_mem2" @m3_mem2_12x8
   %m3_mem2 = seq.firmem 0, 1, undefined, port_order : <12 x 8>
   seq.firmem.write_port %m3_mem2[%z_i4] = %z_i8, clock %clock1 enable %z_i1 : <12 x 8>
   seq.firmem.write_port %m3_mem2[%z_i4] = %z_i8, clock %clock2 enable %z_i1 : <12 x 8>
@@ -155,7 +155,7 @@ hw.module @MemoryWritePortBehavior(in %clock1: !seq.clock, in %clock2: !seq.cloc
   // annotation blocking this from being optimized away). This should be
   // lowered to an "aa" since they are identical.
   //
-  // CHECK: hw.instance "m3_mem3_ext" @m3_mem_12x8
+  // CHECK: hw.instance "m3_mem3" @m3_mem_12x8
   %m3_mem3 = seq.firmem 0, 1, undefined, port_order : <12 x 8>
   seq.firmem.write_port %m3_mem3[%z_i4] = %z_i8, clock %clock1 enable %z_i1 : <12 x 8>
   seq.firmem.write_port %m3_mem3[%z_i4] = %z_i8, clock %clock1 enable %z_i1 : <12 x 8>

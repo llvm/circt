@@ -19,7 +19,7 @@ circuit test: %[[{
     output out0: UInt<8>
     output out1: UInt<8>
 
-    ; CHECK: testmem_16x8 testmem_ext (
+    ; CHECK: testmem_16x8 testmem (
     smem testmem : UInt<8>[16], undefined
 
     ; CHECK: .R0_en (1'h1)

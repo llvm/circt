@@ -55,28 +55,28 @@ circuit Top : %[[
 
 ; CHECK:      module Top(
 ; CHECK-NOT:  module
-; CHECK:        wire [7:0] memTap_0 = Top.dut.rf_ext.Memory[0];
-; CHECK-NEXT:   wire [7:0] memTap_1 = Top.dut.rf_ext.Memory[1];
-; CHECK-NEXT:   wire [7:0] memTap_2 = Top.dut.rf_ext.Memory[2];
-; CHECK-NEXT:   wire [7:0] memTap_3 = Top.dut.rf_ext.Memory[3];
-; CHECK-NEXT:   wire [7:0] memTap_4 = Top.dut.rf_ext.Memory[4];
-; CHECK-NEXT:   wire [7:0] memTap_5 = Top.dut.rf_ext.Memory[5];
-; CHECK-NEXT:   wire [7:0] memTap_6 = Top.dut.rf_ext.Memory[6];
-; CHECK-NEXT:   wire [7:0] memTap_7 = Top.dut.rf_ext.Memory[7];
+; CHECK:        wire [7:0] memTap_0 = Top.dut.rf.Memory[0];
+; CHECK-NEXT:   wire [7:0] memTap_1 = Top.dut.rf.Memory[1];
+; CHECK-NEXT:   wire [7:0] memTap_2 = Top.dut.rf.Memory[2];
+; CHECK-NEXT:   wire [7:0] memTap_3 = Top.dut.rf.Memory[3];
+; CHECK-NEXT:   wire [7:0] memTap_4 = Top.dut.rf.Memory[4];
+; CHECK-NEXT:   wire [7:0] memTap_5 = Top.dut.rf.Memory[5];
+; CHECK-NEXT:   wire [7:0] memTap_6 = Top.dut.rf.Memory[6];
+; CHECK-NEXT:   wire [7:0] memTap_7 = Top.dut.rf.Memory[7];
 ; AGGGREGATE:       wire [7:0][7:0] memTap =
-; AGGGREGATE-NEXT{LITERAL}: {{Top.dut.rf_ext.Memory[7]},
-; AGGGREGATE-NEXT:           {Top.dut.rf_ext.Memory[6]},
-; AGGGREGATE-NEXT:           {Top.dut.rf_ext.Memory[5]},
-; AGGGREGATE-NEXT:           {Top.dut.rf_ext.Memory[4]},
-; AGGGREGATE-NEXT:           {Top.dut.rf_ext.Memory[3]},
-; AGGGREGATE-NEXT:           {Top.dut.rf_ext.Memory[2]},
-; AGGGREGATE-NEXT:           {Top.dut.rf_ext.Memory[1]},
-; AGGGREGATE-NEXT:           {Top.dut.rf_ext.Memory[0]}};
+; AGGGREGATE-NEXT{LITERAL}: {{Top.dut.rf.Memory[7]},
+; AGGGREGATE-NEXT:           {Top.dut.rf.Memory[6]},
+; AGGGREGATE-NEXT:           {Top.dut.rf.Memory[5]},
+; AGGGREGATE-NEXT:           {Top.dut.rf.Memory[4]},
+; AGGGREGATE-NEXT:           {Top.dut.rf.Memory[3]},
+; AGGGREGATE-NEXT:           {Top.dut.rf.Memory[2]},
+; AGGGREGATE-NEXT:           {Top.dut.rf.Memory[1]},
+; AGGGREGATE-NEXT:           {Top.dut.rf.Memory[0]}};
 ; CHECK:      endmodule
 
 ; NOREFS:      module DUTModule(
 ; NOREFS-NOT:  endmodule
-; NOREFS:        rf_8x8 rf_ext (
+; NOREFS:        rf_8x8 rf (
 ; NOREFS:          .R1_data (memTap_7),
 ; NOREFS:          .R2_data (memTap_6),
 ; NOREFS:          .R3_data (memTap_5),
