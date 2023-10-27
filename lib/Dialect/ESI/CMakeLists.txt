@@ -102,7 +102,7 @@ foreach(SRC ${ESI_RUNTIME_SRCS})
   copy_esi_runtime(${SRC})
 endforeach()
 
-if (ESI_CAPNP)
+if (ESI_COSIM)
   add_dependencies(esi-collateral EsiCosimCapnp)
   get_target_property(EsiCosimCapnp_bindir EsiCosimCapnp SOURCE_DIR)
   set(ESI_COSIM_SCHEMA "${EsiCosimCapnp_bindir}/CosimDpi.capnp")
@@ -111,8 +111,6 @@ if (ESI_CAPNP)
     COMMAND ${CMAKE_COMMAND} -E
     copy "${ESI_COSIM_SCHEMA}"
          "${CMAKE_CURRENT_BINARY_DIR}/runtime/CosimDpi.capnp")
-
-  target_compile_definitions(obj.CIRCTESI PRIVATE CAPNP)
 endif()
 
 add_subdirectory(cosim)
