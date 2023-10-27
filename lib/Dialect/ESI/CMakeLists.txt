@@ -14,9 +14,7 @@ set(srcs
   ESIPasses.cpp
   ESIServices.cpp
   ESIStdServices.cpp
-  ESITranslations.cpp
   ESITypes.cpp
-  Passes/ESIEmitCollateral.cpp
   Passes/ESILowerPhysical.cpp
   Passes/ESILowerBundles.cpp
   Passes/ESILowerPorts.cpp
@@ -49,12 +47,6 @@ set(ESI_Deps
   MLIRESITransformsIncGen
   MLIRESIInterfacesIncGen
 )
-
-if(CapnProto_FOUND)
-  option(ESI_CAPNP "Enable ESI Capnp features" ON)
-  list(APPEND srcs capnp/Schema.cpp)
-  list(APPEND ESI_LinkLibs CapnProto::capnp CapnProto::capnpc)
-endif()
 
 add_circt_dialect_library(CIRCTESI
   ${srcs}
@@ -121,7 +113,6 @@ if (ESI_CAPNP)
          "${CMAKE_CURRENT_BINARY_DIR}/runtime/CosimDpi.capnp")
 
   target_compile_definitions(obj.CIRCTESI PRIVATE CAPNP)
-  target_link_libraries(obj.CIRCTESI CapnProto::capnp CapnProto::capnpc)
 endif()
 
 add_subdirectory(cosim)

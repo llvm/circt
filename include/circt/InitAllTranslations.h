@@ -29,7 +29,6 @@ namespace circt {
 // automatically.
 inline void registerAllTranslations() {
   static bool initOnce = []() {
-    esi::registerESITranslations();
     calyx::registerToCalyxTranslation();
     firrtl::registerFromFIRFileTranslation();
     firrtl::registerToFIRFileTranslation();
