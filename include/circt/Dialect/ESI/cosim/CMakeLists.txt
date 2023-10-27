@@ -8,6 +8,7 @@ if(CapnProto_FOUND)
   option(ESI_COSIM "Enable ESI Cosimulation" ON)
   message("-- Enabling ESI cosim")
 
+  file(READ CosimDpi.capnp EsiCosimSchema)
   if (MSVC)
     string(REPLACE "/EHs-c-" "" CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHa")
