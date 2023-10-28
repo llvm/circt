@@ -6,12 +6,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_ESI_COSIM_LOWLEVEL_H
-#define CIRCT_DIALECT_ESI_COSIM_LOWLEVEL_H
+#ifndef COSIM_LOWLEVEL_H
+#define COSIM_LOWLEVEL_H
 
-#include "Utils.h"
+#include "cosim/Utils.h"
 
-namespace circt {
 namespace esi {
 namespace cosim {
 
@@ -33,6 +32,5 @@ public:
 
 } // namespace cosim
 } // namespace esi
-} // namespace circt
 
 #endif

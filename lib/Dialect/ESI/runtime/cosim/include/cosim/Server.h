@@ -13,14 +13,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_ESI_COSIM_SERVER_H
-#define CIRCT_DIALECT_ESI_COSIM_SERVER_H
+#ifndef COSIM_SERVER_H
+#define COSIM_SERVER_H
 
-#include "circt/Dialect/ESI/cosim/Endpoint.h"
-#include "circt/Dialect/ESI/cosim/LowLevel.h"
+#include "cosim/Endpoint.h"
+#include "cosim/LowLevel.h"
 #include <thread>
 
-namespace circt {
 namespace esi {
 namespace cosim {
 
@@ -53,6 +52,5 @@ private:
 
 } // namespace cosim
 } // namespace esi
-} // namespace circt
 
 #endif

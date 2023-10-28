@@ -6,14 +6,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_ESI_COSIM_UTILS_H
-#define CIRCT_DIALECT_ESI_COSIM_UTILS_H
+#ifndef COSIM_UTILS_H
+#define COSIM_UTILS_H
 
 #include <mutex>
 #include <optional>
 #include <queue>
 
-namespace circt {
 namespace esi {
 namespace cosim {
 
@@ -47,6 +46,5 @@ public:
 
 } // namespace cosim
 } // namespace esi
-} // namespace circt
 
 #endif

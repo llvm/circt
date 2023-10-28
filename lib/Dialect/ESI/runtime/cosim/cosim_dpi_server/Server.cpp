@@ -17,8 +17,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/ESI/cosim/Server.h"
-#include "circt/Dialect/ESI/cosim/CosimDpi.capnp.h"
+#include "cosim/Server.h"
+#include "CosimDpi.capnp.h"
 #include <capnp/ez-rpc.h>
 #include <thread>
 #if WIN32
@@ -28,7 +28,7 @@
 #endif
 
 using namespace capnp;
-using namespace circt::esi::cosim;
+using namespace esi::cosim;
 
 namespace {
 /// Implements the `EsiDpiEndpoint` interface from the RPC schema. Mostly a

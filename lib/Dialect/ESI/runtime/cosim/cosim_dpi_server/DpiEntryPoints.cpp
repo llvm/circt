@@ -16,14 +16,14 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/ESI/cosim/Server.h"
-#include "circt/Dialect/ESI/cosim/dpi.h"
+#include "cosim/Server.h"
+#include "cosim/dpi.h"
 
 #include <algorithm>
 #include <cassert>
 #include <cstdlib>
 
-using namespace circt::esi::cosim;
+using namespace esi::cosim;
 
 /// If non-null, log to this file. Protected by 'serverMutex`.
 static FILE *logFile;

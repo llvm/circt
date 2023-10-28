@@ -10,9 +10,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/ESI/cosim/Endpoint.h"
+#include "cosim/Endpoint.h"
 
-using namespace circt::esi::cosim;
+using namespace esi::cosim;
 
 Endpoint::Endpoint(uint64_t sendTypeId, int sendTypeMaxSize,
                    uint64_t recvTypeId, int recvTypeMaxSize)

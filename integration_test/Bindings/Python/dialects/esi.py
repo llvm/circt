@@ -1,5 +1,4 @@
 # REQUIRES: bindings_python
-# REQUIRES: capnp
 # RUN: %PYTHON% %s | FileCheck %s
 
 import circt
