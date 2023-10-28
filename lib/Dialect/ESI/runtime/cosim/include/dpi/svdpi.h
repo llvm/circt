@@ -16,8 +16,8 @@
 
 // clang-format off
 
-#ifndef COSIM_SVDPI_H
-#define COSIM_SVDPI_H
+#ifndef DPI_SVDPI_H
+#define DPI_SVDPI_H
 
 #ifdef __cplusplus
 extern "C" {
