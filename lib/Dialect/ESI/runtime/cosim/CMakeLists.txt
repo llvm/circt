@@ -1,7 +1,8 @@
-##===- CMakeLists.txt - Add the ESI Cosim subdirectories ------*- cmake -*-===//
+##===- CMakeLists.txt - ESI cosim support ---------------------*- cmake -*-===//
 ##
 ##===----------------------------------------------------------------------===//
 
+# Cap'nProto MUST be built with exceptions enabled.
 if (MSVC)
   string(REPLACE "/EHs-c-" "" CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHa")
@@ -9,6 +10,7 @@ else ()
   string(REPLACE "-fno-exceptions" "" CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
 endif ()
 
+# Compile Capnp file.
 add_definitions(${CAPNP_DEFINITIONS})
 set(CAPNPC_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/../cpp/include/backends)
 include_directories(${CAPNPC_OUTPUT_DIR})
@@ -17,6 +19,9 @@ capnp_generate_cpp(
   COSIM_CAPNP_SRCS COSIM_CANPN_HDRS
   "CosimDpi.capnp"
 )
+
+# Compile a library for ESI cosim capnp for both the API runtime backend and the
+# cosim DPI server to use.
 add_library(EsiCosimCapnp STATIC
   ${COSIM_CAPNP_HDRS}
   ${COSIM_CAPNP_SRCS}

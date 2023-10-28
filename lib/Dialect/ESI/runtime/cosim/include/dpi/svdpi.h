@@ -111,12 +111,12 @@ typedef uint32_t svBitVecVal;
 #define SV_MASK(N) (~(-1 << (N)))
 
 #define SV_GET_UNSIGNED_BITS(VALUE, N)                                         \
-  ((N) == 32 ? (VALUE) : ((VALUE) & SV_MASK(N)))
+  ((N) == 32 ? (VALUE) : ((VALUE)&SV_MASK(N)))
 
 #define SV_GET_SIGNED_BITS(VALUE, N)                                           \
   ((N) == 32 ? (VALUE)                                                         \
              : (((VALUE) & (1 << (N))) ? ((VALUE) | ~SV_MASK(N))               \
-                                       : ((VALUE) & SV_MASK(N))))
+                                       : ((VALUE)&SV_MASK(N))))
 
 /*
  * Implementation-dependent representation.
