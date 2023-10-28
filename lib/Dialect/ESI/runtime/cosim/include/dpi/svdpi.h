@@ -14,6 +14,8 @@
 |*                                                                            *|
 \*===----------------------------------------------------------------------===*/
 
+// clang-format off
+
 #ifndef COSIM_SVDPI_H
 #define COSIM_SVDPI_H
 
