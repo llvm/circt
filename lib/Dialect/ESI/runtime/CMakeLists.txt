@@ -55,34 +55,22 @@ endif()
 
 # If Cap'nProto has been found, generate the headers and definitions.
 if(CapnProto_FOUND)
+  set(ESI_COSIM true)
+  message("-- ESI cosim enabled")
+
   message(STATUS "Found Cap'nProto at ${CapnProto_DIR}.")
   set(CMAKE_INSTALL_RPATH ${capnp_LIBDIR})
   set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
-  add_definitions(${CAPNP_DEFINITIONS})
-  set(CAPNPC_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/cpp/include/backends)
-  include_directories(${CAPNPC_OUTPUT_DIR})
-  file(MAKE_DIRECTORY ${CAPNPC_OUTPUT_DIR})
+  add_subdirectory(cosim)
 
-  if (NOT DEFINED ESI_COSIM_SCHEMA)
-    set(ESI_COSIM_SCHEMA CosimDpi.capnp)
-  endif()
-
-  capnp_generate_cpp(
-    COSIM_CAPNP_SRCS COSIM_CANPN_HDRS
-    ${ESI_COSIM_SCHEMA}
-  )
   set(ESIRuntimeSources
     ${ESIRuntimeSources}
     cpp/lib/backends/Cosim.cpp
-    ${COSIM_CAPNP_HDRS}
-    ${COSIM_CAPNP_SRCS}
-    ${COSIM_SCHEMA_HDR}
   )
   set(ESIRuntimeLinkLibraries
     ${ESIRuntimeLinkLibraries}
-    CapnProto::capnp
-    CapnProto::capnp-rpc
+    EsiCosimCapnp
   )
 endif()
 

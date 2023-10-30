@@ -14,8 +14,10 @@
 |*                                                                            *|
 \*===----------------------------------------------------------------------===*/
 
-#ifndef EXTERNAL_DPI_SVDPI_H
-#define EXTERNAL_DPI_SVDPI_H
+// clang-format off
+
+#ifndef DPI_SVDPI_H
+#define DPI_SVDPI_H
 
 #ifdef __cplusplus
 extern "C" {

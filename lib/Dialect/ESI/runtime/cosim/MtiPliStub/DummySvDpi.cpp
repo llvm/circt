@@ -20,7 +20,7 @@
 #undef EETERN
 #define EETERN DPI_EXTERN DPI_DLLESPEC
 
-#include "external/dpi/svdpi.h"
+#include "dpi/svdpi.h"
 #undef NDEBUG
 #include <cassert>
 

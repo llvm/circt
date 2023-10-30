@@ -15,7 +15,7 @@
 #ifndef CIRCT_DIALECT_ESI_COSIM_DPI_H
 #define CIRCT_DIALECT_ESI_COSIM_DPI_H
 
-#include "external/dpi/svdpi.h"
+#include "dpi/svdpi.h"
 
 #ifdef WIN32
 #define DPI extern "C" __declspec(dllexport)

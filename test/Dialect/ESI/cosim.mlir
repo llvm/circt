@@ -1,4 +1,3 @@
-// REQUIRES: capnp
 // RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
 
 hw.module.extern @Sender(out x: !esi.channel<si14>)

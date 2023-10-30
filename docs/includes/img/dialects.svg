@@ -369,7 +369,7 @@
 <polyline fill="none" stroke="#000000" points="656.5702,-112 656.5702,-106 "/>
 <polyline fill="none" stroke="#000000" points="662.5702,-106 656.5702,-106 "/>
 <text text-anchor="middle" x="570.5702" y="-96.8" font-family="Times,serif" font-size="14.00" fill="#000000">ESI system description</text>
-<text text-anchor="middle" x="570.5702" y="-81.8" font-family="Times,serif" font-size="14.00" fill="#000000">(JSON/Capnp)</text>
+<text text-anchor="middle" x="570.5702" y="-81.8" font-family="Times,serif" font-size="14.00" fill="#000000">(JSON)</text>
 </g>
 <!-- ESI&#45;&gt;ServiceDesc -->
 <g id="edge44" class="edge">

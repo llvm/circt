@@ -174,20 +174,16 @@ if len(ieee_sims) > 1:
 if ieee_sims and ieee_sims[-1][1] == config.iverilog_path:
   config.available_features.add('ieee-sim-iverilog')
 
-# Enable ESI cosim tests if they have been built.
-if config.esi_cosim_path != "":
-  config.available_features.add('esi-cosim')
-  config.substitutions.append(
-      ('%ESIINC%', f'{config.circt_include_dir}/circt/Dialect/ESI/'))
-  config.substitutions.append(('%ESICOSIM%', f'{config.esi_cosim_path}'))
-
 # Enable ESI runtime tests.
 if config.esi_runtime == "1":
   config.available_features.add('esi-runtime')
 
-# Enable ESI's Capnp tests if they're supported.
-if config.esi_capnp != "":
-  config.available_features.add('capnp')
+  # Enable ESI cosim tests if they have been built.
+  if config.esi_cosim_path != "":
+    config.available_features.add('esi-cosim')
+    config.substitutions.append(
+        ('%ESIINC%', f'{config.circt_include_dir}/circt/Dialect/ESI/'))
+    config.substitutions.append(('%ESICOSIM%', f'{config.esi_cosim_path}'))
 
 # Enable Python bindings tests if they're supported.
 if config.bindings_python_enabled:

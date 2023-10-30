@@ -412,34 +412,6 @@ else()
 endif()
 
 #-------------------------------------------------------------------------------
-# capnp Configuration
-#-------------------------------------------------------------------------------
-
-# If capnp hasn't been explicitly disabled, find it.
-option(CAPNP_DISABLE "Disable Cap'nProto (needed for cosimulation).")
-if (CAPNP_DISABLE)
-  message (STATUS "Disabling Cap'nProto.")
-else()
-  if(DEFINED CAPNP_PATH)
-    set(ENV{PKG_CONFIG_PATH}
-      "${CAPNP_PATH}/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
-    find_package(CapnProto CONFIG PATHS ${CAPNP_PATH})
-  else()
-    set(ENV{PKG_CONFIG_PATH}
-      "${CMAKE_CURRENT_SOURCE_DIR}/ext/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
-    find_package(CapnProto CONFIG PATHS "${CMAKE_CURRENT_SOURCE_DIR}/ext")
-  endif()
-
-  if(CapnProto_FOUND)
-    message(STATUS "Found Cap'nProto at ${CapnProto_DIR}.")
-    set(CMAKE_INSTALL_RPATH ${capnp_LIBDIR})
-    set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
-
-    option(ESI_COSIM "Enable ESI Cosimulation" ON)
-  endif()
-endif()
-
-#-------------------------------------------------------------------------------
 # OR-Tools Configuration
 #-------------------------------------------------------------------------------
 

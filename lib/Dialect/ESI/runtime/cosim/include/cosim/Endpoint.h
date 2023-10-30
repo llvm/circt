@@ -10,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_ESI_COSIM_ENDPOINT_H
-#define CIRCT_DIALECT_ESI_COSIM_ENDPOINT_H
+#ifndef COSIM_ENDPOINT_H
+#define COSIM_ENDPOINT_H
 
 #include <functional>
 #include <map>
@@ -20,7 +20,6 @@
 #include <queue>
 #include <string>
 
-namespace circt {
 namespace esi {
 namespace cosim {
 
@@ -147,6 +146,5 @@ private:
 
 } // namespace cosim
 } // namespace esi
-} // namespace circt
 
 #endif
