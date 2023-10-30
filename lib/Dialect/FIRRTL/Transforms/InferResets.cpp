@@ -1534,6 +1534,18 @@ void InferResetsPass::determineImpl() {
 ///     port name, and marks that as to be created.
 /// - Otherwise indicates that a port with the reset's name should be created.
 ///
+/// 
+/// - if i see a regreset, does it have subfields? for each subfield:
+///   - is the subfield only ever invalidated? if so, connect it to 0
+///   - is the subfield last-connected to something other than invalid? if so, ignore
+///
+/// fart currently looks at regresets and assumes that they are all
+/// reset to some value. this assumption is not true since users can
+/// set aggregate regresets to regular regs without a real reset value
+/// by connecting them to a dontcare. fart needs to check for
+/// invalidated fields of a reg reset (aggregate or otherwise) and set
+/// them to 0
+
 void InferResetsPass::determineImpl(FModuleOp module, ResetDomain &domain) {
   if (!domain.reset)
     return; // nothing to do if the module needs no reset
@@ -1797,8 +1809,9 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
   }
 
   // Handle reset-less registers.
+  // TODO this needs to account for invalidated registers
   if (auto regOp = dyn_cast<RegOp>(op)) {
-    if (AnnotationSet::removeAnnotations(regOp, excludeMemToRegAnnoClass))
+    if (AnnotationSet::removeAnnotations(regOp, excludeMemToRegAnnoClass)) 
       return;
 
     LLVM_DEBUG(llvm::dbgs() << "- Adding async reset to " << regOp << "\n");
@@ -1819,7 +1832,7 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
     // If the register already has an async reset, leave it untouched.
     if (type_isa<AsyncResetType>(regOp.getResetSignal().getType())) {
       LLVM_DEBUG(llvm::dbgs()
-                 << "- Skipping (has async reset) " << regOp << "\n");
+                 << "- Skipping (has async reset) " << regOp << "\n of type\n\t" << regOp.getResetSignal().getType() << "\n\n");
       // The following performs the logic of `CheckResets` in the original
       // Scala source code.
       if (failed(regOp.verifyInvariants()))
