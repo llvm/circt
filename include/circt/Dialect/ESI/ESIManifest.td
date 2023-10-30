@@ -65,7 +65,7 @@ def BundleDirection : I32EnumAttr<"BundleDirection",
   let cppNamespace = "::circt::esi";
 }
 
-def ServiceRequestRecordOp : ESI_Op<"esi.manifest.req", [
+def ServiceRequestRecordOp : ESI_Op<"manifest.req", [
         DeclareOpInterfaceMethods<IsManifestData>,
         DeclareOpInterfaceMethods<HasAppIDOpInterface>]> {
   let summary = "Record of a service request";
@@ -93,7 +93,7 @@ def ServiceRequestRecordOp : ESI_Op<"esi.manifest.req", [
   }];
 }
 
-def ServiceImplRecordOp : ESI_Op<"esi.manifest.service_impl", [
+def ServiceImplRecordOp : ESI_Op<"manifest.service_impl", [
         NoTerminator, 
         DeclareOpInterfaceMethods<IsManifestData>,
         DeclareOpInterfaceMethods<HasAppIDOpInterface>]> {
@@ -119,7 +119,7 @@ def ServiceImplRecordOp : ESI_Op<"esi.manifest.service_impl", [
   }];
 }
 
-def ServiceImplClientRecordOp : ESI_Op<"esi.manifest.impl_conn", [
+def ServiceImplClientRecordOp : ESI_Op<"manifest.impl_conn", [
         DeclareOpInterfaceMethods<IsManifestData>,
         HasParent<"ServiceImplRecordOp">]> {
   let summary = "Details of a service implementation client connection";
@@ -142,7 +142,7 @@ def ServiceImplClientRecordOp : ESI_Op<"esi.manifest.impl_conn", [
   }];
 }
 
-def AppIDHierRootOp : ESI_Op<"esi.manifest.hier_root",
+def AppIDHierRootOp : ESI_Op<"manifest.hier_root",
                              [HasParent<"mlir::ModuleOp">,
                              NoTerminator, SingleBlock]> {
   let summary = "The root of an appid instance hierarchy";
@@ -155,7 +155,7 @@ def AppIDHierRootOp : ESI_Op<"esi.manifest.hier_root",
   }];
 }
 
-def AppIDHierNodeOp : ESI_Op<"esi.manifest.hier_node", [
+def AppIDHierNodeOp : ESI_Op<"manifest.hier_node", [
       ParentOneOf<["circt::esi::AppIDHierRootOp",
                    "circt::esi::AppIDHierNodeOp"]>,
       NoTerminator, SingleBlock]> {
@@ -169,7 +169,7 @@ def AppIDHierNodeOp : ESI_Op<"esi.manifest.hier_node", [
   }];
 }
 
-def SymbolMetadataOp : ESI_Op<"esi.manifest.sym", [
+def SymbolMetadataOp : ESI_Op<"manifest.sym", [
   DeclareOpInterfaceMethods<IsManifestData>]> {
   let summary = "Metadata about a symbol";
   let description = [{
