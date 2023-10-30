@@ -20,6 +20,7 @@ add_circt_dialect_library(CIRCTArcTransforms
   MuxToControlFlow.cpp
   PrintStateInfo.cpp
   SimplifyVariadicOps.cpp
+  SplitFuncs.cpp
   SplitLoops.cpp
   StripSV.cpp
 

@@ -277,6 +277,12 @@ def SimplifyVariadicOps : Pass<"arc-simplify-variadic-ops", "mlir::ModuleOp"> {
   ];
 }
 
+def SplitFuncs : Pass<"arc-split-funcs", "mlir::func::FuncOp"> {
+  let summary = "Split functions (clock functions and arcs) into smaller functions for better parallelism";
+  let constructor = "circt::arc::createSplitFuncsPass()";
+  let dependentDialects = ["mlir::func::FuncDialect", "mlir::scf::SCFDialect"];
+}
+
 def SplitLoops : Pass<"arc-split-loops", "mlir::ModuleOp"> {
   let summary = "Split arcs to break zero latency loops";
   let constructor = "circt::arc::createSplitLoopsPass()";
