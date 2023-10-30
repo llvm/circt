@@ -112,8 +112,15 @@ void ESIBuildManifestPass::runOnOperation() {
     auto compressedOutputFileAttr = hw::OutputFileAttr::getFromFilename(
         ctxt, "esi_system_manifest.json.zlib");
     compressedVerbatim->setAttr("output_file", compressedOutputFileAttr);
+
+    b.create<CompressedManifestOp>(
+        b.getUnknownLoc(),
+        BlobAttr::get(ctxt, ArrayRef<char>(reinterpret_cast<char *>(
+                                               compressedManifest.data()),
+                                           compressedManifest.size())));
   } else {
-    mod->emitWarning() << "zlib not available, skipping compressed manifest";
+    mod->emitError() << "zlib not available but required for manifest support";
+    signalPassFailure();
   }
 
   // If directed, write the manifest to a file. Mostly for debugging.

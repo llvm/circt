@@ -1,4 +1,4 @@
-// RUN: circt-opt %s --esi-connect-services --esi-appid-hier=top=top --esi-build-manifest="top=top to-file=%t1.json" | FileCheck --check-prefix=HIER %s
+// RUN: circt-opt %s --esi-connect-services --esi-appid-hier=top=top --esi-build-manifest="top=top to-file=%t1.json" | circt-opt | FileCheck --check-prefix=HIER %s
 // RUN: FileCheck --input-file=%t1.json %s
 
 hw.type_scope @__hw_typedecls {
@@ -45,6 +45,7 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // HIER:            esi.manifest.req #esi.appid<"loopback_fromhw">, <@HostComms::@Send>, toServer, !esi.bundle<[!esi.channel<i8> to "send"]>
 // HIER:          }
 // HIER:        }
+// HIER-LABEL:  esi.manifest.compressed <"{{.+}}">
 
 // CHECK:       {
 // CHECK-LABEL:   "api_version": 1,

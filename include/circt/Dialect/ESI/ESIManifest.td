@@ -197,4 +197,20 @@ def SymbolMetadataOp : ESI_Op<"manifest.sym", [
   }];
 }
 
+def BlobAttr : ESI_Attr<"Blob"> {
+  let summary = "A binary blob";
+
+  let parameters = (ins ArrayRefParameter<"char">:$data);
+  let mnemonic = "blob";
+  let hasCustomAssemblyFormat = 1;
+}
+
+def CompressedManifestOp : ESI_Op<"manifest.compressed", []> {
+  let summary = "A zlib-compressed JSON manifest";
+  let arguments = (ins BlobAttr:$compressedManifest);
+  let assemblyFormat = [{
+    $compressedManifest attr-dict
+  }];
+}
+
 #endif // CIRCT_DIALECT_ESI_MANIFEST_TD
