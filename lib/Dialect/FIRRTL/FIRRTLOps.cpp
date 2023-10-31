@@ -3854,8 +3854,17 @@ LogicalResult VectorCreateOp::verify() {
   auto elemTy = resultType.getElementTypePreservingConst();
   for (size_t i = 0; i < resultType.getNumElements(); ++i)
     if (!areTypesConstCastable(
-            elemTy, type_cast<FIRRTLBaseType>(getOperand(i).getType())))
-      return emitOpError("type of element doesn't match vector element");
+            elemTy, type_cast<FIRRTLBaseType>(getOperand(i).getType()))) {
+              llvm::errs() << "\n";
+              for (auto user : (*this)->getUsers())
+                user->dump();
+//              (*this)->dump();
+              llvm::errs() << "\n** " << i << " **\n";
+              getOperand(i).dump();
+//              (*this)->getParentOp()->dump();
+      return emitOpError("type of element doesn't match vector element ")
+        << getOperand(i).getType() << " " << elemTy << " " << resultType;
+            }
   // TODO: check flow
   return success();
 }
