@@ -1,9 +1,11 @@
 // RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-lower-types))' %s | FileCheck --check-prefixes=CHECK,COMMON %s
 // RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-lower-types{preserve-aggregate=all}))' %s | FileCheck --check-prefixes=AGGREGATE,COMMON %s
+// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-lower-signatures))' %s | FileCheck --check-prefixes=SIG %s
 
 
 firrtl.circuit "TopLevel" {
 
+  // SIG-LABEL: firrtl.module private @Simple
   // COMMON-LABEL: firrtl.module private @Simple
   // COMMON-SAME: in %[[SOURCE_VALID_NAME:source_valid]]: [[SOURCE_VALID_TYPE:!firrtl.uint<1>]]
   // COMMON-SAME: out %[[SOURCE_READY_NAME:source_ready]]: [[SOURCE_READY_TYPE:!firrtl.uint<1>]]
@@ -743,7 +745,10 @@ firrtl.circuit "TopLevel" {
 //
 //     b <= a[sel][sel]
 
-  firrtl.module private @multidimRead(in %a: !firrtl.vector<vector<uint<2>, 2>, 2>, in %sel: !firrtl.uint<2>, out %b: !firrtl.uint<2>) {
+  firrtl.module private @multidimRead(
+    in %a: !firrtl.vector<vector<uint<2>, 2>, 2>, 
+    in %sel: !firrtl.uint<2>, 
+    out %b: !firrtl.uint<2>) {
     %0 = firrtl.subaccess %a[%sel] : !firrtl.vector<vector<uint<2>, 2>, 2>, !firrtl.uint<2>
     %1 = firrtl.subaccess %0[%sel] : !firrtl.vector<uint<2>, 2>, !firrtl.uint<2>
     firrtl.connect %b, %1 : !firrtl.uint<2>, !firrtl.uint<2>
@@ -897,7 +902,12 @@ firrtl.circuit "TopLevel" {
 
 // Handle zero-length vector subaccess
   // CHECK-LABEL: zvec
-  firrtl.module private @zvec(in %i: !firrtl.vector<bundle<a: uint<8>, b: uint<4>>, 0>, in %sel: !firrtl.uint<1>, out %foo: !firrtl.vector<uint<1>, 0>, out %o: !firrtl.uint<8>) {
+  firrtl.module private @zvec(
+      in %i: !firrtl.vector<bundle<a: uint<8>, b: uint<4>>, 0>, 
+      in %sel: !firrtl.uint<1>, 
+      out %foo: !firrtl.vector<uint<1>, 0>, 
+      out %o: !firrtl.uint<8>)
+    {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %0 = firrtl.subaccess %foo[%c0_ui1] : !firrtl.vector<uint<1>, 0>, !firrtl.uint<1>
     firrtl.connect %0, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>

@@ -88,6 +88,8 @@ createEmitOMIRPass(mlir::StringRef outputFilename = "");
 
 std::unique_ptr<mlir::Pass> createLowerMatchesPass();
 
+std::unique_ptr<mlir::Pass> createLowerSignaturesPass();
+
 std::unique_ptr<mlir::Pass> createExpandWhensPass();
 
 std::unique_ptr<mlir::Pass> createFlattenMemoryPass();

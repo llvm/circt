@@ -93,6 +93,16 @@ def LowerFIRRTLTypes : Pass<"firrtl-lower-types", "firrtl::CircuitOp"> {
   let dependentDialects = ["hw::HWDialect"];
 }
 
+def LowerSignatures : Pass<"firrtl-lower-signatures", "firrtl::CircuitOp"> {
+  let summary = "Lower FIRRTL module signatures";
+  let description = [{
+    Lower aggregate FIRRTL types in Modules as indicated by the calling 
+    convention.
+  }];
+  let constructor = "circt::firrtl::createLowerSignaturesPass()";
+}
+
+
 def IMConstProp : Pass<"firrtl-imconstprop", "firrtl::CircuitOp"> {
   let summary = "Intermodule constant propagation and dead code elimination";
   let description = [{
