@@ -303,7 +303,7 @@ void ContainersToHWPass::runOnOperation() {
 
   ConversionTarget target(*ctx);
   target.addIllegalOp<ContainerOp, ContainerInstanceOp, ThisOp>();
-  target.addLegalDialect<hw::HWDialect>();
+  target.markUnknownOpDynamicallyLegal([](Operation *) { return true; });
 
   // Parts of the conversion patterns will update operations in place, which in
   // turn requires the updated operations to be legalizeable. These in-place ops
