@@ -18,6 +18,8 @@
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/SV/SVTypes.h"
+#include <iostream>
+#include <fstream>
 
 using namespace circt;
 using namespace hw;
@@ -42,6 +44,7 @@ struct LowerHWtoBTOR2Pass : public LowerHWtoBTOR2Base<LowerHWtoBTOR2Pass> {
     DenseMap<Operation*, size_t> opLIDMap; // Connects an operation to it's most recent update line
     DenseMap<Operation*, Operation*> opAliasMap; // key: alias, value: original op
     SmallVector<size_t> inputLIDs; // Stores the LID of the associated input (key: block argument index)
+    SmallVector<Operation*> regOps; // Stores all of the register declaration ops (for next instruction generation)
 
     // Set of often reused strings in btor2 emission (to avoid typos and enable auto-complete)
     const std::string SORT        = "sort";
@@ -70,6 +73,9 @@ struct LowerHWtoBTOR2Pass : public LowerHWtoBTOR2Base<LowerHWtoBTOR2Pass> {
     const std::string CONCAT      = "concat";
     const std::string NOT         = "not";
     const std::string ITE         = "ite";
+    const std::string IMPLIES     = "implies"; // logical implication
+    const std::string STATE       = "state"; // Register state
+    const std::string NEXT        = "next"; // Register state transition
     const std::string BAD         = "bad";
     const std::string CONSTRAINT  = "constraint";
     const std::string WS          = " "; // WhiteSpace
@@ -280,8 +286,8 @@ struct LowerHWtoBTOR2Pass : public LowerHWtoBTOR2Base<LowerHWtoBTOR2Pass> {
     }
 
     // Generates a constant declaration given a value, a width and a name
-    std::string genUnaryOp(Operation* srcop, Value op0, std::string inst, size_t width) {
-      // Register the source operation with the current line id      
+    std::string genUnaryOp(Operation* srcop, Operation* op0, std::string inst, size_t width) {
+       // Register the source operation with the current line id      
       setOpLID(srcop);
 
       // Retrieve the lid associated with the sort (sid)
@@ -296,6 +302,11 @@ struct LowerHWtoBTOR2Pass : public LowerHWtoBTOR2Base<LowerHWtoBTOR2Pass> {
 
       return std::to_string(lid++) + WS + inst + WS + std::to_string(sid) + WS 
             + std::to_string(op0LID) + NL;
+    }
+
+    // Generates a constant declaration given a value, a width and a name
+    std::string genUnaryOp(Operation* srcop, Value op0, std::string inst, size_t width) {
+      return genUnaryOp(srcop, op0.getDefiningOp(), inst, width);
     }
     
     // Generate a btor2 assertion given an assertion operation
@@ -333,9 +344,64 @@ struct LowerHWtoBTOR2Pass : public LowerHWtoBTOR2Base<LowerHWtoBTOR2Pass> {
       size_t tLID = getOpLID(t);
       size_t fLID = getOpLID(f);
 
-      // Build and return the slice instruction
+      // Build and return the ite instruction
       return std::to_string(lid++) + WS + ITE + WS + std::to_string(sid) + WS 
         + std::to_string(condLID) + WS + std::to_string(tLID) + WS + std::to_string(fLID) + NL;
+    }
+
+    // Generate a logical implication given a lhs and a rhs
+    std::string genImplies(Operation* srcop, Value lhs, Value rhs) {
+      // Register the source operation with the current line id
+      setOpLID(srcop);
+
+      // Retrieve the lid associated with the sort (sid)
+      size_t sid = getSortLID(1);
+
+      // Check that a result was found before continuing
+      assert(sid != NO_LID);
+
+      // Retrieve LIDs for the lhs and rhs
+      size_t lhsLID = getOpLID(lhs);
+      size_t rhsLID = getOpLID(rhs);
+
+      // Build and return the implies operation
+      return std::to_string(lid++) + WS + IMPLIES + WS + std::to_string(sid) + WS 
+        + std::to_string(lhsLID) + WS + std::to_string(rhsLID) + NL;
+    }
+
+    // Generates a state instruction given a width and a name
+    std::string genState(Operation* srcop, int64_t width, std::string name) {
+      // Register the source operation with the current line id
+      setOpLID(srcop);
+
+      // Retrieve the lid associated with the sort (sid)
+      size_t sid = getSortLID(width);
+
+      // Check that a result was found before continuing
+      assert(sid != NO_LID);
+
+      // Build and return the state instruction
+      return std::to_string(lid++) + WS + STATE + WS + std::to_string(sid) + NL;
+    }
+
+    // Generates a next instruction, given a width, a state LID, and a next value LID
+    std::string genNext(Operation* srcop, Operation* reg, Operation* next, int64_t width) {
+      // Register the source operation with the current line id
+      setOpLID(srcop);
+
+      // Retrieve the lid associated with the sort (sid)
+      size_t sid = getSortLID(width);
+
+      // Check that a result was found before continuing
+      assert(sid != NO_LID);
+
+      // Retrieve the LIDs associated to reg and next
+      size_t regLID = getOpLID(reg);
+      size_t nextLID = getOpLID(next);
+
+      // Build and return the next instruction
+      return std::to_string(lid++) + WS + NEXT + WS + std::to_string(sid) + WS 
+          + std::to_string(regLID) + WS + std::to_string(nextLID) + NL;
     }
 };
 } // end anonymous namespace
@@ -544,30 +610,71 @@ void LowerHWtoBTOR2Pass::runOnOperation() {
         })
         // Supported SV Operations
         // Assertions are negated then converted to a btor2 BAD instruction
-        .Case<circt::sv::AssertOp>([&](circt::sv::AssertOp assertop) {
+        .Case<sv::AssertOp>([&](sv::AssertOp assertop) {
           // Extract the expression
           Value expr = assertop.getExpression();
 
-          // Generate a sort (for assertion inversion)
+          // Generate a sort (for assertion inversion and potential implies)
           btor2Res += genSort(BITVEC, 1);
 
-          // Generate the expression inversion
-          btor2Res += genUnaryOp(assertop, expr, NOT, 1);
+          // Check for an overaching enable
+          // In our case the sv.if operation will probably only be used when conditioning 
+          // an sv.assert on an enable signal. This means that its condition is probably 
+          // used to imply our assertion
+          if(sv::IfOp ifop = dyn_cast<sv::IfOp>(op->getParentOp())) {
+            Value en = ifop.getOperand();
+
+            // Generate the implication
+            genImplies(ifop, en, expr);
+
+            // Generate the implies inversion
+            btor2Res += genUnaryOp(assertop, ifop, NOT, 1);
+          } else {
+            // Generate the expression inversion
+            btor2Res += genUnaryOp(assertop, expr, NOT, 1);
+          }
 
           // Genrate the BAD btor2 intruction
           btor2Res += genBad(assertop);
         })
         // Assumptions are converted to a btor2 constraint instruction
-        .Case<circt::sv::AssumeOp>([&](circt::sv::AssumeOp assop) {
+        .Case<sv::AssumeOp>([&](sv::AssumeOp assop) {
           // Extract the expression
           Value expr = assop.getExpression();
 
           // Genrate the constraint btor2 intruction
           btor2Res += genConstraint(expr);
         })
+        // Sequential operations, tied to registers
+
+        // Firrtl registers generate a state instruction
+        // The final update is also used to generate a set of next btor instructions
+        .Case<seq::FirRegOp>([&](seq::FirRegOp reg) {
+          // Start by retrieving the register's name
+          std::string regName = reg.getName().str();
+
+          // Retrieve the width
+          int64_t width = hw::getBitWidth(reg.getType());
+
+          // Generate the sort (nothing will be added if the sort already exists)
+          btor2Res += genSort(BITVEC, width);
+
+          // Generate state instruction
+          btor2Res += genState(reg, width, regName);
+
+          // Record the operation for future next instruction generation
+          regOps.push_back(reg);
+
+          //TODO: iterate through registers and emit next instructions
+        })
         // All other operations should be ignored for the time being
         .Default([](auto) {});
     });
+
+    // Write resulting btor to a file (for a demo not going to be kept)
+    std::ofstream btor("btor_tmp.btor2");
+    btor << btor2Res;
+    btor.close();
 
     // Print out the resuling btor2
     llvm::errs() << "==========BTOR2 FORM:==========\n\n" 
