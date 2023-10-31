@@ -1,3 +1,4 @@
+// REQUIRES: zlib
 // RUN: circt-opt %s --esi-connect-services --esi-appid-hier=top=top --esi-build-manifest="top=top to-file=%t1.json" | circt-opt | FileCheck --check-prefix=HIER %s
 // RUN: FileCheck --input-file=%t1.json %s
 

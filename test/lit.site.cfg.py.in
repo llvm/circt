@@ -37,6 +37,7 @@ config.circt_tools_dir = "@CIRCT_TOOLS_DIR@"
 config.circt_shlib_dir = "@LLVM_LIBRARY_OUTPUT_INTDIR@"
 config.verilator_path = "@VERILATOR_PATH@"
 config.esi_capnp = "@ESI_CAPNP@"
+config.zlib = "@HAVE_ZLIB@"
 config.scheduling_or_tools = "@SCHEDULING_OR_TOOLS@"
 config.llhd_sim_enabled = @CIRCT_LLHD_SIM_ENABLED@
 
