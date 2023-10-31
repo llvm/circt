@@ -496,4 +496,12 @@ void circt::python::populateDialectOMSubmodule(py::module &m) {
         MlirStringRef name = mlirIdentifierStr(omClassTypeGetName(type));
         return std::string(name.data, name.length);
       });
+
+  // Add the BasePathType class definition.
+  mlir_type_subclass(m, "BasePathType", omTypeIsAFrozenBasePathType,
+                     omFrozenBasePathTypeGetTypeID);
+
+  // Add the PathType class definition.
+  mlir_type_subclass(m, "PathType", omTypeIsAFrozenPathType,
+                     omFrozenPathTypeGetTypeID);
 }

@@ -44,6 +44,26 @@ MlirIdentifier omClassTypeGetName(MlirType type) {
   return wrap(cast<ClassType>(unwrap(type)).getClassName().getAttr());
 }
 
+/// Is the Type a FrozenBasePathType.
+bool omTypeIsAFrozenBasePathType(MlirType type) {
+  return isa<FrozenBasePathType>(unwrap(type));
+}
+
+/// Get the TypeID for a FrozenBasePathType.
+MlirTypeID omFrozenBasePathTypeGetTypeID(void) {
+  return wrap(FrozenBasePathType::getTypeID());
+}
+
+/// Is the Type a FrozenPathType.
+bool omTypeIsAFrozenPathType(MlirType type) {
+  return isa<FrozenPathType>(unwrap(type));
+}
+
+/// Get the TypeID for a FrozenPathType.
+MlirTypeID omFrozenPathTypeGetTypeID(void) {
+  return wrap(FrozenPathType::getTypeID());
+}
+
 /// Is the Type a StringType.
 bool omTypeIsAStringType(MlirType type) {
   return unwrap(type).isa<StringType>();
