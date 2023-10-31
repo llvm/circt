@@ -74,6 +74,7 @@ class CosimTestRunner:
       self.sources += [
           os.path.join(esiInclude, "runtime", "cosim", "Cosim_DpiPkg.sv"),
           os.path.join(esiInclude, "runtime", "cosim", "Cosim_Endpoint.sv"),
+          os.path.join(esiInclude, "runtime", "cosim", "Cosim_Manifest.sv"),
           os.path.join(esiInclude, "runtime", "cosim", "Cosim_MMIO.sv"),
           os.path.join(esiInclude, "ESIPrimitives.sv")
       ]

@@ -84,6 +84,7 @@ set(ESI_RUNTIME_SRCS
   runtime/cosim/CMakeLists.txt
   runtime/cosim/Cosim_DpiPkg.sv
   runtime/cosim/Cosim_Endpoint.sv
+  runtime/cosim/Cosim_Manifest.sv
   runtime/cosim/Cosim_MMIO.sv
   runtime/cosim/MtiPliStub/CMakeLists.txt
   runtime/cosim/MtiPliStub/DummySvDpi.cpp
