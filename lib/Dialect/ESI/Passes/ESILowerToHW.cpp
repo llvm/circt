@@ -402,6 +402,62 @@ CosimLowering::matchAndRewrite(CosimEndpointOp ep, OpAdaptor adaptor,
   return success();
 }
 
+namespace {
+/// Lower `CompressedManifestOps` ops to a SystemVerilog extern module.
+struct CosimManifestLowering
+    : public OpConversionPattern<CompressedManifestOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(CompressedManifestOp, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final;
+};
+} // anonymous namespace
+
+LogicalResult CosimManifestLowering::matchAndRewrite(
+    CompressedManifestOp op, OpAdaptor adaptor,
+    ConversionPatternRewriter &rewriter) const {
+  MLIRContext *ctxt = rewriter.getContext();
+
+  // Declare external module.
+  Attribute params[] = {
+      ParamDeclAttr::get("COMPRESSED_MANIFEST_SIZE", rewriter.getI32Type())};
+  PortInfo ports[] = {
+      {{rewriter.getStringAttr("compressed_manifest"),
+        rewriter.getType<hw::UnpackedArrayType>(
+            rewriter.getI8Type(),
+            ParamDeclRefAttr::get(
+                rewriter.getStringAttr("COMPRESSED_MANIFEST_SIZE"),
+                rewriter.getI32Type())),
+        ModulePort::Direction::Input},
+       0},
+  };
+  rewriter.setInsertionPointToEnd(
+      op->getParentOfType<mlir::ModuleOp>().getBody());
+  auto manifestModule = rewriter.create<HWModuleExternOp>(
+      op.getLoc(), rewriter.getStringAttr("Cosim_Manifest"), ports,
+      "Cosim_Manifest", ArrayAttr::get(ctxt, params));
+
+  SmallVector<Attribute> bytes;
+  for (char b : op.getCompressedManifest().getData())
+    bytes.push_back(rewriter.getI8IntegerAttr(b));
+
+  rewriter.setInsertionPoint(op);
+  auto manifestConstant = rewriter.create<hw::AggregateConstantOp>(
+      op.getLoc(),
+      hw::UnpackedArrayType::get(rewriter.getI8Type(), bytes.size()),
+      rewriter.getArrayAttr(bytes));
+  rewriter.create<hw::InstanceOp>(
+      op.getLoc(), manifestModule, "__manifest",
+      ArrayRef<Value>({manifestConstant}),
+      rewriter.getArrayAttr(
+          {ParamDeclAttr::get("COMPRESSED_MANIFEST_SIZE",
+                              rewriter.getI32IntegerAttr(bytes.size()))}));
+  rewriter.eraseOp(op);
+  return success();
+}
+
 void ESItoHWPass::runOnOperation() {
   auto top = getOperation();
   auto *ctxt = &getContext();
@@ -427,6 +483,7 @@ void ESItoHWPass::runOnOperation() {
 
   pass1Target.addIllegalOp<WrapSVInterfaceOp, UnwrapSVInterfaceOp>();
   pass1Target.addIllegalOp<PipelineStageOp>();
+  pass1Target.addIllegalOp<CompressedManifestOp>();
 
   // Add all the conversion patterns.
   ESIHWBuilder esiBuilder(top);
@@ -436,6 +493,10 @@ void ESItoHWPass::runOnOperation() {
   pass1Patterns.insert<UnwrapInterfaceLower>(ctxt);
   pass1Patterns.insert<CosimLowering>(esiBuilder);
   pass1Patterns.insert<NullSourceOpLowering>(ctxt);
+
+  if (platform == Platform::Cosim) {
+    pass1Patterns.insert<CosimManifestLowering>(ctxt);
+  }
 
   // Run the conversion.
   if (failed(
