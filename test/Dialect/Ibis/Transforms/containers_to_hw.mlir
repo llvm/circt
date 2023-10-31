@@ -44,6 +44,8 @@ ibis.container @Parent {
   %b.in.ref = ibis.get_port %b, @in : !ibis.scoperef<@B> -> !ibis.portref<in i1>
 }
 
+// -----
+
 // Test that we can instantiate and get ports of a container from a hw.module.
 
 // CHECK:  hw.module @C(in %in : i1, out out : i1) {
@@ -68,4 +70,35 @@ hw.module @Top() {
   %out = ibis.get_port %c, @out : !ibis.scoperef<@C> -> !ibis.portref<out i1>
   %v = ibis.port.read %out : !ibis.portref<out i1>
   ibis.port.write %in, %v : !ibis.portref<in i1>
+}
+
+// -----
+
+// Test that we can also move non-ibis ops
+
+// CHECK-LABEL:   hw.module @Inst(out out : i1) {
+// CHECK:           %[[VAL_0:.*]] = hw.constant true
+// CHECK:           hw.output %[[VAL_0]] : i1
+// CHECK:         }
+
+// CHECK-LABEL:   hw.module @Top() {
+// CHECK:           %[[VAL_0:.*]] = hw.instance "myInst" @Inst() -> (out: i1)
+// CHECK:           %[[VAL_1:.*]] = hw.constant true
+// CHECK:           %[[VAL_2:.*]] = comb.and bin %[[VAL_1]], %[[VAL_0]] : i1
+// CHECK:           hw.output
+// CHECK:         }
+
+ibis.container @Inst {
+  %this = ibis.this @Inst
+  %out = ibis.port.output @out : i1
+  %true = hw.constant 1 : i1
+  ibis.port.write %out, %true : !ibis.portref<out i1>
+}
+ibis.container @Top {
+  %this = ibis.this @Top
+  %myInst = ibis.container.instance @myInst, @Inst
+  %true = hw.constant 1 : i1
+  %out.ref = ibis.get_port %myInst, @out : !ibis.scoperef<@Inst> -> !ibis.portref<out i1>
+  %out.v = ibis.port.read %out.ref : !ibis.portref<out i1>
+  %blake = comb.and bin %true, %out.v : i1
 }
