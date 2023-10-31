@@ -497,7 +497,7 @@ void ESItoHWPass::runOnOperation() {
   pass1Patterns.insert<CosimLowering>(esiBuilder);
   pass1Patterns.insert<NullSourceOpLowering>(ctxt);
 
-  if (platform == Platform::Cosim) {
+  if (platform == Platform::cosim) {
     pass1Patterns.insert<CosimManifestLowering>(ctxt);
   }
 

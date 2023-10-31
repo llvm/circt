@@ -25,7 +25,7 @@ namespace esi {
 /// This should eventually become a set of functions to define the various
 /// platform-specific lowerings.
 struct Platform {
-  static constexpr char Cosim[] = "cosim";
+  static constexpr char cosim[] = "cosim";
 };
 
 std::unique_ptr<OperationPass<ModuleOp>> createESIPhysicalLoweringPass();
