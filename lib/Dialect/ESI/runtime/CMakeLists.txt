@@ -29,17 +29,13 @@ cmake_minimum_required(VERSION 3.20)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 
-find_package(ZLIB REQUIRED)
-
 include_directories(cpp/include)
 
 set(ESIRuntimeSources
   cpp/lib/Accelerator.cpp
   cpp/lib/StdServices.cpp
 )
-set(ESIRuntimeLinkLibraries
-  ZLIB::ZLIB
-)
+set(ESIRuntimeLinkLibraries)
 
 # If Cap'nProto hasn't been explicitly disabled, find it.
 option(CAPNP_DISABLE "Disable Cap'nProto (needed for cosimulation).")
@@ -77,7 +73,6 @@ if(CapnProto_FOUND)
     EsiCosimCapnp
   )
 endif()
-
 
 # The core API. For now, compile the backends into it directly.
 # TODO: make this a plugin architecture.
