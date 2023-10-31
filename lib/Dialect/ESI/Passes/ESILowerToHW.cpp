@@ -439,15 +439,18 @@ LogicalResult CosimManifestLowering::matchAndRewrite(
       op.getLoc(), rewriter.getStringAttr("Cosim_Manifest"), ports,
       "Cosim_Manifest", ArrayAttr::get(ctxt, params));
 
+  rewriter.setInsertionPoint(op);
+
+  // Assemble the manifest data into a constant.
   SmallVector<Attribute> bytes;
   for (char b : op.getCompressedManifest().getData())
     bytes.push_back(rewriter.getI8IntegerAttr(b));
-
-  rewriter.setInsertionPoint(op);
   auto manifestConstant = rewriter.create<hw::AggregateConstantOp>(
       op.getLoc(),
       hw::UnpackedArrayType::get(rewriter.getI8Type(), bytes.size()),
       rewriter.getArrayAttr(bytes));
+
+  // Then instantiate the external module.
   rewriter.create<hw::InstanceOp>(
       op.getLoc(), manifestModule, "__manifest",
       ArrayRef<Value>({manifestConstant}),
