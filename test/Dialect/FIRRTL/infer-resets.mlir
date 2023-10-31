@@ -1081,3 +1081,30 @@ firrtl.circuit "InferToRWProbe" {
    firrtl.connect %r_b, %driver : !firrtl.reset, !firrtl.asyncreset
   }
 }
+
+// -----
+
+// Check that invalidated fields are also reset
+
+firrtl.circuit "Top" {
+  firrtl.module @Top(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %in: !firrtl.bundle<foo: uint<8>, bar: uint<8>>, out %out: !firrtl.bundle<foo: uint<8>, bar: uint<8>>, in %extraReset: !firrtl.asyncreset [{class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}, {class = "firrtl.transforms.DontTouchAnnotation"}]) attributes {convention = #firrtl<convention scalarized>} {
+    %reg1_w = firrtl.wire : !firrtl.bundle<foo: uint<8>, bar: uint<8>>
+    %0 = firrtl.subfield %reg1_w[foo] : !firrtl.bundle<foo: uint<8>, bar: uint<8>>
+    %1 = firrtl.subfield %reg1_w[bar] : !firrtl.bundle<foo: uint<8>, bar: uint<8>>
+    %invalid_ui8 = firrtl.invalidvalue : !firrtl.uint<8>
+    firrtl.strictconnect %1, %invalid_ui8 : !firrtl.uint<8>
+    %invalid_ui8_0 = firrtl.invalidvalue : !firrtl.uint<8>
+    firrtl.strictconnect %0, %invalid_ui8_0 : !firrtl.uint<8>
+    %c12_ui4 = firrtl.constant 12 : !firrtl.const.uint<4>
+    %2 = firrtl.pad %c12_ui4, 8 : (!firrtl.const.uint<4>) -> !firrtl.const.uint<8>
+    %3 = firrtl.constCast %2 : (!firrtl.const.uint<8>) -> !firrtl.uint<8>
+    firrtl.strictconnect %0, %3 : !firrtl.uint<8>
+    %invalid_ui8_1 = firrtl.invalidvalue : !firrtl.uint<8>
+    firrtl.strictconnect %1, %invalid_ui8_1 : !firrtl.uint<8>
+    %reg1 = firrtl.regreset %clock, %extraReset, %reg1_w : !firrtl.clock, !firrtl.asyncreset, !firrtl.bundle<foo: uint<8>, bar: uint<8>>, !firrtl.bundle<foo: uint<8>, bar: uint<8>>
+    %reg2 = firrtl.wire : !firrtl.bundle<foo: uint<8>, bar: uint<8>>
+    firrtl.strictconnect %reg1, %in : !firrtl.bundle<foo: uint<8>, bar: uint<8>>
+    firrtl.strictconnect %reg2, %reg1 : !firrtl.bundle<foo: uint<8>, bar: uint<8>>
+    firrtl.strictconnect %out, %reg2 : !firrtl.bundle<foo: uint<8>, bar: uint<8>>
+  }
+}
