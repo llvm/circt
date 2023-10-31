@@ -62,81 +62,6 @@ struct AttrCache {
       sPortSyms, sPortLocations, sPortAnnotations, sEmpty;
 };
 
-// The visitors all return true if the operation should be deleted, false if
-// not.
-struct SigLoweringVisitor : public FIRRTLVisitor<SigLoweringVisitor, bool> {
-
-  SigLoweringVisitor(
-      MLIRContext *context, SymbolTable &symTbl, const AttrCache &cache,
-      const llvm::DenseMap<FModuleLike, Convention> &conventionTable)
-      : context(context), symTbl(symTbl), cache(cache),
-        conventionTable(conventionTable) {}
-  using FIRRTLVisitor<SigLoweringVisitor, bool>::visitDecl;
-  using FIRRTLVisitor<SigLoweringVisitor, bool>::visitExpr;
-  using FIRRTLVisitor<SigLoweringVisitor, bool>::visitStmt;
-
-  /// If the referenced operation is a FModuleOp or an FExtModuleOp, perform
-  /// type lowering on all operations.
-  void lowerModule(FModuleLike op, Convention conv);
-
-  // Helpers to manage state.
-  bool visitDecl(InstanceOp op);
-
-  bool isFailed() const { return encounteredError; }
-
-private:
-  /// Filter out and return \p annotations that target includes \field,
-  /// modifying as needed to adjust fieldID's relative to to \field.
-  // ArrayAttr filterAnnotations(MLIRContext *ctxt, ArrayAttr annotations,
-  //                             FIRRTLType srcType, FlatBundleFieldEntry
-  //                             field);
-
-  /// Partition inner symbols on given type.  Fails if any symbols
-  /// cannot be assigned to a field, such as inner symbol on root.
-  // LogicalResult partitionSymbols(hw::InnerSymAttr sym, FIRRTLType parentType,
-  //                                SmallVectorImpl<hw::InnerSymAttr> &newSyms,
-  //                                Location errorLoc);
-
-  PreserveAggregate::PreserveMode
-  getPreservationModeForModule(FModuleLike moduleLike);
-
-  size_t uniqueIdx = 0;
-  std::string uniqueName() {
-    auto myID = uniqueIdx++;
-    return (Twine("__GEN_") + Twine(myID)).str();
-  }
-
-  MLIRContext *context;
-
-  // Keep a symbol table around for resolving symbols
-  SymbolTable &symTbl;
-
-  // Cache some attributes
-  const AttrCache &cache;
-
-  const llvm::DenseMap<FModuleLike, Convention> &conventionTable;
-
-  // Set true if the lowering failed.
-  bool encounteredError = false;
-};
-} // namespace
-
-/// Return aggregate preservation mode for the module. If the module has a
-/// scalarized linkage, then we may not preserve it's aggregate ports.
-PreserveAggregate::PreserveMode
-SigLoweringVisitor::getPreservationModeForModule(FModuleLike module) {
-  auto lookup = conventionTable.find(module);
-  if (lookup == conventionTable.end())
-    return PreserveAggregate::All;
-  switch (lookup->second) {
-  case Convention::Scalarized:
-    return PreserveAggregate::None;
-  case Convention::Internal:
-    return PreserveAggregate::All;
-  }
-  llvm_unreachable("Unknown convention");
-  return PreserveAggregate::All;
-}
 
 struct FieldMapEntry : public PortInfo {
   size_t portID;
@@ -145,6 +70,7 @@ struct FieldMapEntry : public PortInfo {
 };
 
 using PortConversion = SmallVector<FieldMapEntry>;
+}
 
 // compute a new moduletype from an old module type and lowering convention.
 // Also compute a fieldID map from port, fieldID -> port
