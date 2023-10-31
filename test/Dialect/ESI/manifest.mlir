@@ -1,6 +1,8 @@
 // REQUIRES: zlib
-// RUN: circt-opt %s --esi-connect-services --esi-appid-hier=top=top --esi-build-manifest="top=top to-file=%t1.json" | circt-opt | FileCheck --check-prefix=HIER %s
+// RUN: circt-opt %s --esi-connect-services --esi-appid-hier=top=top --esi-build-manifest="top=top to-file=%t1.json" > %t1.mlir 
+// RUN: circt-opt %t1.mlir | FileCheck --check-prefix=HIER %s
 // RUN: FileCheck --input-file=%t1.json %s
+// RUN: circt-opt %t1.mlir --esi-clean-metadata --lower-esi-bundles --lower-esi-ports --lower-esi-to-hw=platform=cosim | FileCheck --check-prefix=HW %s
 
 hw.type_scope @__hw_typedecls {
   hw.typedecl @foo, "Foo" : i1
@@ -30,6 +32,7 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
   hw.instance "m2" @Loopback (clk: %clk: !seq.clock) -> () {esi.appid=#esi.appid<"loopback_inst"[1]>}
 }
 
+// HIER-LABEL:  esi.manifest.compressed <"{{.+}}">
 // HIER-LABEL:  esi.manifest.hier_root @top {
 // HIER:          esi.manifest.service_impl #esi.appid<"cosim"> svc @HostComms by "cosim" with {} {
 // HIER:            esi.manifest.impl_conn [#esi.appid<"loopback_inst"[0]>, #esi.appid<"loopback_tohw">] req <@HostComms::@Recv>(!esi.bundle<[!esi.channel<i8> to "recv"]>) with {channel_assignments = {recv = "loopback_inst[0].loopback_tohw.recv"}}
@@ -46,7 +49,10 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // HIER:            esi.manifest.req #esi.appid<"loopback_fromhw">, <@HostComms::@Send>, toServer, !esi.bundle<[!esi.channel<i8> to "send"]>
 // HIER:          }
 // HIER:        }
-// HIER-LABEL:  esi.manifest.compressed <"{{.+}}">
+
+// HW-LABEL:    hw.module @top
+// HW:            hw.instance "__manifest" @Cosim_Manifest<COMPRESSED_MANIFEST_SIZE: i32 = 774>(compressed_manifest: %{{.+}}: !hw.uarray<774xi8>) -> ()
+// HW-LABEL:    hw.module.extern @Cosim_Manifest<COMPRESSED_MANIFEST_SIZE: i32>(in %compressed_manifest : !hw.uarray<#hw.param.decl.ref<"COMPRESSED_MANIFEST_SIZE">xi8>) attributes {verilogName = "Cosim_Manifest"}
 
 // CHECK:       {
 // CHECK-LABEL:   "api_version": 1,

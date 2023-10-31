@@ -81,6 +81,10 @@ def LowerESItoHW: Pass<"lower-esi-to-hw", "mlir::ModuleOp"> {
   let summary = "Lower ESI to HW where possible and SV elsewhere.";
   let constructor = "circt::esi::createESItoHWPass()";
   let dependentDialects = ["circt::comb::CombDialect", "circt::hw::HWDialect"];
+  let options = [
+    Option<"platform", "platform", "std::string",
+           "", "Target this platform">
+  ];
 }
 
 #endif // CIRCT_DIALECT_ESI_ESIPASSES_TD

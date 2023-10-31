@@ -113,6 +113,10 @@ void ESIBuildManifestPass::runOnOperation() {
         ctxt, "esi_system_manifest.json.zlib");
     compressedVerbatim->setAttr("output_file", compressedOutputFileAttr);
 
+    b.setInsertionPoint(symCache.getDefinition(appidRoot.getTopModuleRefAttr())
+                            ->getRegion(0)
+                            .front()
+                            .getTerminator());
     b.create<CompressedManifestOp>(
         b.getUnknownLoc(),
         BlobAttr::get(ctxt, ArrayRef<char>(reinterpret_cast<char *>(
