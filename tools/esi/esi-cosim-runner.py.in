@@ -30,7 +30,7 @@ class CosimTestRunner:
 
   def __init__(self, testFile, schema, tmpdir, addlArgs, interactive: bool,
                include_aux_files: bool, exec: bool, exec_args: str,
-               server_only: bool):
+               server_only: bool, sim: str):
     """Parse a test file. Look for comments we recognize anywhere in the
         file. Assemble a list of sources."""
 
@@ -45,6 +45,7 @@ class CosimTestRunner:
     self.sources = list()
     self.top = "top"
     self.tmpdir = tmpdir
+    self.sim = sim
 
     esiInclude = "@ESI_COLLATERAL_PATH@"
 
@@ -84,8 +85,10 @@ class CosimTestRunner:
 
     # Run the simulation compilation step. Requires a simulator to be
     # installed and working.
-    cmd = [self.simRunScript, "--no-objdir", "--no-run"] \
-        + self.sources + self.args
+    cmd = [self.simRunScript, "--no-objdir", "--no-run"]
+    if self.sim != "":
+      cmd = cmd + ["--sim", self.sim]
+    cmd = cmd + self.sources + self.args
     print("[INFO] Compile command: " + " ".join(cmd))
     vrun = subprocess.run(cmd, capture_output=True, text=True)
     output = vrun.stdout + "\n----- STDERR ------\n" + vrun.stderr
@@ -157,8 +160,10 @@ class CosimTestRunner:
       simEnv = os.environ.copy()
       if "@CMAKE_BUILD_TYPE@" == "Debug":
         simEnv["COSIM_DEBUG_FILE"] = "cosim_debug.log"
-      cmd = [self.simRunScript, "--no-objdir"] + \
-          self.sources + self.args
+      cmd = [self.simRunScript, "--no-objdir"]
+      if self.sim != "":
+        cmd = cmd + ["--sim", self.sim]
+      cmd = cmd + self.sources + self.args
       print("[INFO] Sim run command: " + " ".join(cmd))
       simProc = subprocess.Popen(cmd,
                                  stdout=simStdout,
@@ -303,6 +308,11 @@ def __main__(args):
                          "--interactive",
                          action="store_true",
                          help="Run the script in the foreground.")
+  argparser.add_argument("--sim",
+                         type=str,
+                         default="",
+                         help="Name of the RTL simulator (if in PATH) to " +
+                         "use or path to an executable.")
   argparser.add_argument("--schema", default="", help="The schema file to use.")
   argparser.add_argument(
       "--tmpdir",
@@ -345,7 +355,7 @@ def __main__(args):
 
   runner = CosimTestRunner(args.source, args.schema, args.tmpdir, args.addlArgs,
                            args.interactive, not args.no_aux_files, args.exec,
-                           args.test_args, args.server_only)
+                           args.test_args, args.server_only, args.sim)
   rc = runner.compile()
   if rc != 0:
     return rc
