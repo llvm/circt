@@ -46,6 +46,9 @@ DPI int sv2cCosimserverInit();
 /// Shutdown the RPC server.
 DPI void sv2cCosimserverFinish();
 
+/// Set the system zlib-compressed manifest.
+DPI void sv2cCosimserverSetManifest(const svOpenArrayHandle compressedManifest);
+
 /// Register an MMIO module. Just checks that there is only one instantiated.
 DPI int sv2cCosimserverMMIORegister();
 

@@ -15,10 +15,25 @@
 
 #include "esi/StdServices.h"
 
+#include "zlib.h"
+
+#include <cassert>
 #include <stdexcept>
 
 using namespace esi;
 using namespace esi::services;
+
+constexpr uint32_t MAX_MANIFEST_SIZE = 1 << 20;
+std::string SysInfo::rawJsonManifest() const {
+  std::vector<uint8_t> compressed = rawCompressedManifest();
+  Bytef *dst = new Bytef[MAX_MANIFEST_SIZE];
+  uLongf dstSize = MAX_MANIFEST_SIZE;
+  int rc = uncompress(dst, &dstSize, compressed.data(), compressed.size());
+  if (rc != Z_OK)
+    throw std::runtime_error("zlib uncompress failed with rc=" +
+                             std::to_string(rc));
+  return std::string(reinterpret_cast<char *>(dst), dstSize);
+}
 
 MMIOSysInfo::MMIOSysInfo(const MMIO *mmio) : mmio(mmio) {}
 
@@ -30,4 +45,6 @@ uint32_t MMIOSysInfo::esiVersion() const {
   return mmio->read(VersionNumberOffset);
 }
 
-std::string MMIOSysInfo::rawJsonManifest() const { return ""; }
+std::vector<uint8_t> MMIOSysInfo::rawCompressedManifest() const {
+  assert(false && "Not implemented");
+}

@@ -74,6 +74,13 @@ import "DPI-C" sv2cCosimserverEpTryGet =
     inout int unsigned data_size
     );
 
+// --------------------- Manifest ----------------------------------------------
+
+import "DPI-C" sv2cCosimserverSetManifest =
+  function void cosim_set_manifest(
+    input byte unsigned compressed_manifest[]
+  );
+
 // --------------------- Low Level interface -----------------------------------
 
 /// Register an MMIO module. Just checks that there is only one instantiated.

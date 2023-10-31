@@ -23,8 +23,12 @@ interface CosimDpiServer @0x85e029b5352bcdb5 {
   # safety and your language supports it.
   open @1 [S, T] (iface :EsiDpiInterfaceDesc) -> (iface :EsiDpiEndpoint(S, T));
 
+  # Get the zlib-compressed JSON system manifest.
+  getCompressedManifest @2 () -> (compressedManifest :Data);
+
   # Create a low level interface into the simulation.
-  openLowLevel @2 () -> (lowLevel :EsiLowLevel);
+  openLowLevel @3 () -> (lowLevel :EsiLowLevel);
+
 }
 
 # Description of a registered endpoint.

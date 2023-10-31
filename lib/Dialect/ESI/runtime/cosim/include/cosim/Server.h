@@ -39,6 +39,10 @@ public:
   void run(uint16_t port);
   void stop();
 
+  void setManifest(const std::vector<uint8_t> &manifest) {
+    compressedManifest = manifest;
+  }
+
 private:
   using Lock = std::lock_guard<std::mutex>;
 
@@ -48,6 +52,8 @@ private:
   std::thread *mainThread;
   volatile bool stopSig;
   std::mutex m;
+
+  std::vector<uint8_t> compressedManifest;
 };
 
 } // namespace cosim
