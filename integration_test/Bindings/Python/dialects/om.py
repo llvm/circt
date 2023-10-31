@@ -217,3 +217,17 @@ print(obj.path)
 
 print(obj.deleted)
 # CHECK: OMDeleted
+
+paths_class = [
+    cls for cls in module.body
+    if hasattr(cls, "sym_name") and cls.sym_name.value == "Paths"
+][0]
+base_path_type = paths_class.regions[0].blocks[0].arguments[0].type
+assert isinstance(base_path_type, om.BasePathType)
+
+paths_fields = [
+    op for op in paths_class.regions[0].blocks[0]
+    if isinstance(op, om.ClassFieldOp)
+]
+for paths_field in paths_fields:
+  assert isinstance(paths_field.value.type, om.PathType)
