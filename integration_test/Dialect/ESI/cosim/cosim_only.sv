@@ -12,7 +12,6 @@ module top(
     Cosim_Manifest #(
       .COMPRESSED_MANIFEST_SIZE(774)
     ) __manifest (
-      .clk(clk),
       .compressed_manifest('{
         8'h78, 8'hDA, 8'hED, 8'h58, 8'h4B, 8'h8F, 8'hDA, 8'h30,
         8'h10, 8'hBE, 8'hF3, 8'h2B, 8'h52, 8'h9F, 8'h23, 8'h04,

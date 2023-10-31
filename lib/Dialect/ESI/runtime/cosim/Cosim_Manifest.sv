@@ -17,17 +17,10 @@ module Cosim_Manifest
 #(
   parameter int COMPRESSED_MANIFEST_SIZE = 0
 )(
-  input logic clk,
   input byte unsigned compressed_manifest[COMPRESSED_MANIFEST_SIZE]
 );
 
-  // Registration logic -- run once.
-  bit Initialized = 0;
-  always@(posedge clk) begin
-    if (!Initialized) begin
-      cosim_set_manifest(compressed_manifest);
-      Initialized = 1;
-    end
-  end
+  always@(compressed_manifest)
+    cosim_set_manifest(compressed_manifest);
 
 endmodule

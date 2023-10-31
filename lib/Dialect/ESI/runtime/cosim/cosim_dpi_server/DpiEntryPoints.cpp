@@ -28,6 +28,7 @@ using namespace esi::cosim;
 /// If non-null, log to this file. Protected by 'serverMutex`.
 static FILE *logFile;
 static RpcServer *server = nullptr;
+static std::vector<uint8_t> manifest;
 static std::mutex serverMutex;
 
 // ---- Helper functions ----
@@ -260,8 +261,7 @@ DPI int sv2cCosimserverInit() {
 
 DPI void
 sv2cCosimserverSetManifest(const svOpenArrayHandle compressedManifest) {
-  if (server == nullptr)
-    return;
+  sv2cCosimserverInit();
 
   if (validateSvOpenArray(compressedManifest, sizeof(int8_t)) != 0) {
     printf("ERROR: DPI-func=%s line=%d event=invalid-sv-array\n", __func__,
