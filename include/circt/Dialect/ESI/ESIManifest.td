@@ -89,6 +89,8 @@ def ServiceRequestRecordOp : ESI_Op<"manifest.req", [
     AppIDAttr getAppID() {
       return getRequestor();
     }
+    // Misc information about the original request which must appear in the
+    // manifest.
     void getDetails(SmallVectorImpl<NamedAttribute> &results);
   }];
 }
@@ -115,6 +117,8 @@ def ServiceImplRecordOp : ESI_Op<"manifest.service_impl", [
   }];
 
   let extraClassDeclaration = [{
+    // Get information which needs to appear in the manifest for the host to
+    // connect to this service.
     void getDetails(SmallVectorImpl<NamedAttribute> &results);
   }];
 }
@@ -138,6 +142,8 @@ def ServiceImplClientRecordOp : ESI_Op<"manifest.impl_conn", [
   }];
 
   let extraClassDeclaration = [{
+    // Get information which needs to appear in the manifest for the host to
+    // connect to this client through the parent service.
     void getDetails(SmallVectorImpl<NamedAttribute> &results);
   }];
 }
