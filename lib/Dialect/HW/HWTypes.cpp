@@ -988,11 +988,12 @@ FunctionType ModuleType::getFuncType() {
 }
 
 FailureOr<ModuleType> ModuleType::resolveParametricTypes(ArrayAttr parameters,
-                                                         LocationAttr loc) {
+                                                         LocationAttr loc,
+                                                         bool emitErrors) {
   SmallVector<ModulePort, 8> resolvedPorts;
   for (ModulePort port : getPorts()) {
     FailureOr<Type> resolvedType =
-        evaluateParametricType(loc, parameters, port.type);
+        evaluateParametricType(loc, parameters, port.type, emitErrors);
     if (failed(resolvedType))
       // What should I do here?
       return failure();

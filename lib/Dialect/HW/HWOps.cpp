@@ -1413,12 +1413,13 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
   auto mod = cast<hw::HWModuleLike>(module);
   auto argNames = builder.getArrayAttr(mod.getInputNames());
   auto resultNames = builder.getArrayAttr(mod.getOutputNames());
-  FailureOr<ModuleType> resolvedModType =
-      mod.getHWModuleType().resolveParametricTypes(parameters, result.location);
-  if (failed(resolvedModType))
-    return;
-  FunctionType modType = resolvedModType->getFuncType();
-  build(builder, result, modType.getResults(), name,
+  ModuleType modType = mod.getHWModuleType();
+  FailureOr<ModuleType> resolvedModType = modType.resolveParametricTypes(
+      parameters, result.location, /*emitErrors=*/false);
+  if (succeeded(resolvedModType))
+    modType = *resolvedModType;
+  FunctionType funcType = resolvedModType->getFuncType();
+  build(builder, result, funcType.getResults(), name,
         FlatSymbolRefAttr::get(SymbolTable::getSymbolName(module)), inputs,
         argNames, resultNames, parameters, innerSym);
 }
