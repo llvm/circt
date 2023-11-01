@@ -1457,7 +1457,7 @@ namespace {
 class ModuleEmitter : public EmitterBase {
 public:
   explicit ModuleEmitter(VerilogEmitterState &state)
-      : EmitterBase(state),
+      : EmitterBase(state), currentModuleOp(nullptr),
         fieldNameResolver(FieldNameResolver(state.globalNames, state.options)) {
   }
   ~ModuleEmitter() {
@@ -1792,7 +1792,9 @@ void ModuleEmitter::printUnpackedTypePostfix(Type type, raw_ostream &os) {
         printUnpackedTypePostfix(inoutType.getElementType(), os);
       })
       .Case<UnpackedArrayType>([&](UnpackedArrayType arrayType) {
-        emitDim(arrayType.getSizeAttr(), os, currentModuleOp->getLoc(), *this,
+        auto loc = currentModuleOp ? currentModuleOp->getLoc()
+                                   : state.designOp->getLoc();
+        emitDim(arrayType.getSizeAttr(), os, loc, *this,
                 /*downTo=*/false);
         printUnpackedTypePostfix(arrayType.getElementType(), os);
       })
