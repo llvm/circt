@@ -3098,7 +3098,7 @@ SubExprInfo ExprEmitter::visitTypeOp(StructExtractOp op) {
 
   emitSubExpr(op.getInput(), Selection);
   ps << "."
-     << PPExtString(emitter.getVerilogStructFieldName(op.getFieldAttr()));
+     << PPExtString(emitter.getVerilogStructFieldName(op.getFieldNameAttr()));
   return {Selection, IsUnsigned};
 }
 
@@ -3118,7 +3118,7 @@ SubExprInfo ExprEmitter::visitTypeOp(StructInjectOp op) {
         ps.scopedBox(PP::ibox2, [&]() {
           ps << PPExtString(emitter.getVerilogStructFieldName(field.name))
              << ":" << PP::space;
-          if (field.name == op.getField()) {
+          if (field.name == op.getFieldNameAttr()) {
             emitSubExpr(op.getNewValue(), Selection);
           } else {
             emitSubExpr(op.getInput(), Selection);
@@ -3151,10 +3151,9 @@ SubExprInfo ExprEmitter::visitTypeOp(UnionCreateOp op) {
     emitError(op, "SV attributes emission is unimplemented for the op");
 
   // Check if this union type has been padded.
-  auto fieldName = op.getFieldAttr();
   auto unionType = cast<UnionType>(getCanonicalType(op.getType()));
   auto unionWidth = hw::getBitWidth(unionType);
-  auto element = unionType.getFieldInfo(fieldName.getValue());
+  auto &element = unionType.getElements()[op.getFieldIndex()];
   auto elementWidth = hw::getBitWidth(element.type);
 
   // If the element is 0 width, just fill the union with 0s.
@@ -3195,13 +3194,12 @@ SubExprInfo ExprEmitter::visitTypeOp(UnionExtractOp op) {
   emitSubExpr(op.getInput(), Selection);
 
   // Check if this union type has been padded.
-  auto fieldName = op.getFieldAttr();
   auto unionType = cast<UnionType>(getCanonicalType(op.getInput().getType()));
   auto unionWidth = hw::getBitWidth(unionType);
-  auto element = unionType.getFieldInfo(fieldName.getValue());
+  auto &element = unionType.getElements()[op.getFieldIndex()];
   auto elementWidth = hw::getBitWidth(element.type);
   bool needsPadding = elementWidth < unionWidth || element.offset > 0;
-  auto verilogFieldName = emitter.getVerilogStructFieldName(fieldName);
+  auto verilogFieldName = emitter.getVerilogStructFieldName(element.name);
 
   // If the element needs padding then we need to get the actual element out
   // of an anonymous structure.

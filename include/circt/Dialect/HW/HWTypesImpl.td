@@ -142,8 +142,8 @@ def StructTypeImpl : HWType<"Struct", [DeclareTypeInterfaceMethods<FieldIDTypeIn
     using FieldInfo = ::circt::hw::detail::FieldInfo;
     mlir::Type getFieldType(mlir::StringRef fieldName);
     void getInnerTypes(mlir::SmallVectorImpl<mlir::Type>&);
-    std::optional<unsigned> getFieldIndex(mlir::StringRef fieldName);
-    std::optional<unsigned> getFieldIndex(mlir::StringAttr fieldName);
+    std::optional<uint32_t> getFieldIndex(mlir::StringRef fieldName);
+    std::optional<uint32_t> getFieldIndex(mlir::StringAttr fieldName);
   }];
 }
 
@@ -193,6 +193,8 @@ def UnionTypeImpl : HWType<"Union"> {
     FieldInfo getFieldInfo(::mlir::StringRef fieldName);
 
     ::mlir::Type getFieldType(::mlir::StringRef fieldName);
+    std::optional<uint32_t> getFieldIndex(mlir::StringRef fieldName);
+    std::optional<uint32_t> getFieldIndex(mlir::StringAttr fieldName);
   }];
 }
 
