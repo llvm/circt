@@ -52,6 +52,7 @@ struct LowerHWtoBTOR2Pass : public LowerHWtoBTOR2Base<LowerHWtoBTOR2Pass> {
     const std::string SORT        = "sort";
     const std::string BITVEC      = "bitvec";
     const std::string INPUT       = "input";
+    const std::string RESET       = "reset";
     const std::string OUTPUT      = "output";
     const std::string ZERO        = "zero";
     const std::string ONE         = "one";
@@ -494,7 +495,7 @@ void LowerHWtoBTOR2Pass::runOnOperation() {
         inputLIDs[port.argNum] = lid;
 
         // Check if it's a reset (we assume that the explicit name is always %reset)
-        if(iName == "reset") {
+        if(iName == RESET) {
           resetLID = lid;
         }
         btor2Res += genInput(width, iName);
