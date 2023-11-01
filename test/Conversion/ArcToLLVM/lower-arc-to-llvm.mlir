@@ -170,3 +170,15 @@ func.func @funcCallOp(%arg0: i32) -> (i32, i32) {
 func.func @dummyFuncCallee(%arg0: i32) -> (i32, i32) {
   func.return %arg0, %arg0 : i32, i32
 }
+
+func.func @seqClocks(%clk1: !seq.clock, %clk2: !seq.clock) -> !seq.clock {
+  %0 = seq.from_clock %clk1
+  %1 = seq.from_clock %clk2
+  %2 = arith.xori %0, %1 : i1
+  %3 = seq.to_clock %2
+  return %3 : !seq.clock
+}
+// CHECK-LABEL: llvm.func @seqClocks
+//  CHECK-SAME: ([[CLK1:%.+]]: i1, [[CLK2:%.+]]: i1)
+//       CHECK: [[RES:%.+]] = llvm.xor [[CLK1]], [[CLK2]]
+//       CHECK: llvm.return [[RES]] : i1
