@@ -37,13 +37,15 @@ struct LowerHWtoBTOR2Pass : public LowerHWtoBTOR2Base<LowerHWtoBTOR2Pass> {
   private:
     // Create a counter that attributes a unique id to each generated btor2 line
     size_t lid = 1; // btor2 line identifiers usually start at 1
+    size_t resetLID = NO_LID; // keeps track of the reset's LID
 
     // Create maps to keep track of lid associations
     // Proper maps wouldn't work for some reason so I'll use a vector of pairs instead
     SmallVector<std::pair<size_t, size_t>> sortToLIDMap; // Keeps track of the ids associated to each declared sort 
+    DenseMap<std::pair<int64_t, size_t>, size_t> constToLIDMap; // Keeps track of the 
     DenseMap<Operation*, size_t> opLIDMap; // Connects an operation to it's most recent update line
     DenseMap<Operation*, Operation*> opAliasMap; // key: alias, value: original op
-    SmallVector<size_t> inputLIDs; // Stores the LID of the associated input (key: block argument index)
+    DenseMap<size_t, size_t> inputLIDs; // Stores the LID of the associated input (key: block argument index)
     SmallVector<Operation*> regOps; // Stores all of the register declaration ops (for next instruction generation)
 
     // Set of often reused strings in btor2 emission (to avoid typos and enable auto-complete)
@@ -72,6 +74,8 @@ struct LowerHWtoBTOR2Pass : public LowerHWtoBTOR2Base<LowerHWtoBTOR2Pass> {
     const std::string SMOD        = "smod";
     const std::string CONCAT      = "concat";
     const std::string NOT         = "not";
+    const std::string NEQ         = "neq";
+    const std::string HW_NEQ      = "ne";
     const std::string ITE         = "ite";
     const std::string IMPLIES     = "implies"; // logical implication
     const std::string STATE       = "state"; // Register state
@@ -82,6 +86,31 @@ struct LowerHWtoBTOR2Pass : public LowerHWtoBTOR2Base<LowerHWtoBTOR2Pass> {
     const std::string NL          = "\n"; // NewLine
 
     /// Field helper functions
+
+    // Checks if a constant of a given size has been declared
+    // If so, its lid will be returned
+    // Otherwise -1 will be returned
+    size_t getConstLID(int64_t val, size_t w) {
+      // Look for the pair 
+      for(auto p : constToLIDMap) {
+        // Compare the given value and width to those in the entry
+        if((val == p.getFirst().first) && (w == p.getFirst().second)) {
+          return p.getSecond();
+        }
+      }
+      // if no lid was found return -1
+      return NO_LID;
+    }
+
+    // Updates or creates an entryfor  a constant of a given size 
+    // associating it with the current lid
+    void setConstLID(int64_t val, size_t w) {
+      // Create a new entry for the pair
+      constToLIDMap[std::make_pair<int64_t, size_t>(
+          std::forward<int64_t>(val), 
+          std::forward<size_t>(w)
+      )] = lid;
+    }
 
     // Checks if a sort was declared with the given width
     // If so, its lid will be returned
@@ -153,7 +182,7 @@ struct LowerHWtoBTOR2Pass : public LowerHWtoBTOR2Base<LowerHWtoBTOR2Pass> {
         size_t argIdx = barg.getArgNumber();
 
         // Check that the extracted argument is in range
-        if(argIdx < inputLIDs.size()) {
+        if(inputLIDs.contains(argIdx)) {
           return inputLIDs[argIdx];
         }
       }
@@ -227,6 +256,26 @@ struct LowerHWtoBTOR2Pass : public LowerHWtoBTOR2Base<LowerHWtoBTOR2Pass> {
 
       return std::to_string(lid++) + WS + CONSTD + WS + std::to_string(sid) + WS 
             + std::to_string(value) + NL;
+    }
+
+    // Generates a zero constant expression
+    std::string genZero(size_t width) {
+      // Check if the constant has been created yet
+      if(getConstLID(0, width) != NO_LID) {
+        return "";
+      }
+      
+      // Retrieve the lid associated with the sort (sid)
+      size_t sid = getSortLID(width);
+
+      // Check that a result was found before continuing
+      assert(sid != NO_LID);
+
+      // Keep track of this value in a constant declaration tracker
+      setConstLID(0, width);
+
+      // Build and return the zero btor instruction
+      return std::to_string(lid++) + WS + ZERO + WS + std::to_string(sid) + NL;
     }
 
     // Generates a binary operation instruction given an op name, two operands and a result width
@@ -349,6 +398,22 @@ struct LowerHWtoBTOR2Pass : public LowerHWtoBTOR2Base<LowerHWtoBTOR2Pass> {
         + std::to_string(condLID) + WS + std::to_string(tLID) + WS + std::to_string(fLID) + NL;
     }
 
+    // Generate an ITE instruction (if then else) given a predicate, two values and a res width
+    std::string genIte(Operation* srcop, size_t condLID, size_t tLID, size_t fLID, int64_t width) {
+      // Register the source operation with the current line id
+      setOpLID(srcop);
+
+      // Retrieve the lid associated with the sort (sid)
+      size_t sid = getSortLID(width);
+
+      // Check that a result was found before continuing
+      assert(sid != NO_LID);
+
+      // Build and return the ite instruction
+      return std::to_string(lid++) + WS + ITE + WS + std::to_string(sid) + WS 
+        + std::to_string(condLID) + WS + std::to_string(tLID) + WS + std::to_string(fLID) + NL;
+    }
+
     // Generate a logical implication given a lhs and a rhs
     std::string genImplies(Operation* srcop, Value lhs, Value rhs) {
       // Register the source operation with the current line id
@@ -385,10 +450,7 @@ struct LowerHWtoBTOR2Pass : public LowerHWtoBTOR2Base<LowerHWtoBTOR2Pass> {
     }
 
     // Generates a next instruction, given a width, a state LID, and a next value LID
-    std::string genNext(Operation* srcop, Operation* reg, Operation* next, int64_t width) {
-      // Register the source operation with the current line id
-      setOpLID(srcop);
-
+    std::string genNext(Operation* next, Operation* reg, int64_t width) {
       // Retrieve the lid associated with the sort (sid)
       size_t sid = getSortLID(width);
 
@@ -429,7 +491,12 @@ void LowerHWtoBTOR2Pass::runOnOperation() {
         btor2Res += genSort(BITVEC, width); // We assume all sorts are bitvectors for now
 
         // Record the defining operation's line ID (the module itself)
-        inputLIDs.push_back(lid);
+        inputLIDs[port.argNum] = lid;
+
+        // Check if it's a reset (we assume that the explicit name is always %reset)
+        if(iName == "reset") {
+          resetLID = lid;
+        }
         btor2Res += genInput(width, iName);
 
       } 
@@ -585,6 +652,11 @@ void LowerHWtoBTOR2Pass::runOnOperation() {
           // Extract the predicate name (assuming that its a valid btor2 predicate)
           std::string pred = stringifyICmpPredicate(cmpop.getPredicate()).str();
 
+          // Check for special cases where hw doesn't align with btor syntax
+          if(pred == HW_NEQ) {
+            pred = NEQ;
+          }
+
           // Generate a sort (width of res is always 1 for cmp)
           btor2Res += genSort(BITVEC, 1);
 
@@ -625,7 +697,7 @@ void LowerHWtoBTOR2Pass::runOnOperation() {
             Value en = ifop.getOperand();
 
             // Generate the implication
-            genImplies(ifop, en, expr);
+            btor2Res += genImplies(ifop, en, expr);
 
             // Generate the implies inversion
             btor2Res += genUnaryOp(assertop, ifop, NOT, 1);
@@ -670,6 +742,32 @@ void LowerHWtoBTOR2Pass::runOnOperation() {
         // All other operations should be ignored for the time being
         .Default([](auto) {});
     });
+
+    // Iterate throught the registers and generate the next instructions
+    for(size_t i = 0; i < regOps.size(); ++i) {
+      // Check the register type (done to support non-firrtl registers as well)
+      if(seq::FirRegOp reg = dyn_cast<seq::FirRegOp>(regOps[i])) {
+        // Extract the next operation for each register
+        Operation* next = reg.getNext().getDefiningOp();
+
+        // Genrate the reset condition (for sync & async resets)
+        // We assume for now that the reset value is always 0
+        size_t width = hw::getBitWidth(reg.getType());
+        btor2Res += genSort(BITVEC, width);
+        btor2Res += genZero(width);
+
+        // Next should already be associated to an LID at this point
+        // As we are going to override it, we need to keep track of the original instruction
+        size_t nextLID = getOpLID(next);
+
+        // Generate the ite for the register update reset condition
+        // i.e. reg <= reset ? 0 : next
+        btor2Res += genIte(next, resetLID, getConstLID(0, width), nextLID, width);
+
+        // Finally generate the next statement
+        btor2Res += genNext(next, reg, width);
+      }
+    }
 
     // Write resulting btor to a file (for a demo not going to be kept)
     std::ofstream btor("btor_tmp.btor2");
