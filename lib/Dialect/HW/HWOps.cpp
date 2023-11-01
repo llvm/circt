@@ -2312,7 +2312,7 @@ LogicalResult StructExplodeOp::canonicalize(StructExplodeOp op,
   auto elements = type_cast<StructType>(op.getInput().getType()).getElements();
   auto result = failure();
   auto opResults = op.getResults();
-  for (unsigned index = 0; index < elements.size(); index++) {
+  for (uint32_t index = 0; index < elements.size(); index++) {
     if (auto foldResult = foldStructExtract(inputOp, index)) {
       rewriter.replaceAllUsesWith(opResults[index], foldResult);
       result = success();

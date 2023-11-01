@@ -311,7 +311,7 @@ Type StructType::getFieldType(mlir::StringRef fieldName) {
   return Type();
 }
 
-std::optional<unsigned> StructType::getFieldIndex(mlir::StringRef fieldName) {
+std::optional<uint32_t> StructType::getFieldIndex(mlir::StringRef fieldName) {
   ArrayRef<hw::StructType::FieldInfo> elems = getElements();
   for (size_t idx = 0, numElems = elems.size(); idx < numElems; ++idx)
     if (elems[idx].name == fieldName)
@@ -319,7 +319,7 @@ std::optional<unsigned> StructType::getFieldIndex(mlir::StringRef fieldName) {
   return {};
 }
 
-std::optional<unsigned> StructType::getFieldIndex(mlir::StringAttr fieldName) {
+std::optional<uint32_t> StructType::getFieldIndex(mlir::StringAttr fieldName) {
   ArrayRef<hw::StructType::FieldInfo> elems = getElements();
   for (size_t idx = 0, numElems = elems.size(); idx < numElems; ++idx)
     if (elems[idx].name == fieldName)
@@ -476,7 +476,7 @@ LogicalResult UnionType::verify(function_ref<InFlightDiagnostic()> emitError,
   return result;
 }
 
-std::optional<unsigned> UnionType::getFieldIndex(mlir::StringAttr fieldName) {
+std::optional<uint32_t> UnionType::getFieldIndex(mlir::StringAttr fieldName) {
   ArrayRef<hw::UnionType::FieldInfo> elems = getElements();
   for (size_t idx = 0, numElems = elems.size(); idx < numElems; ++idx)
     if (elems[idx].name == fieldName)
@@ -484,7 +484,7 @@ std::optional<unsigned> UnionType::getFieldIndex(mlir::StringAttr fieldName) {
   return {};
 }
 
-std::optional<unsigned> UnionType::getFieldIndex(mlir::StringRef fieldName) {
+std::optional<uint32_t> UnionType::getFieldIndex(mlir::StringRef fieldName) {
   return getFieldIndex(StringAttr::get(getContext(), fieldName));
 }
 
