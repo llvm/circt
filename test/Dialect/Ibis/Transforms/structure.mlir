@@ -5,14 +5,14 @@
 // CHECK-LABEL: ibis.class @C {
 // CHECK:         ibis.method @getAndSet(%x: ui32) -> ui32 {
 // CHECK:           ibis.return %x : ui32
-// CHECK:         ibis.method @returnNothingWithRet() {
+// CHECK:         ibis.method @returnNothingWithRet() -> () {
 // CHECK:           ibis.return
 
 // PREP-LABEL: ibis.class @C {
 // PREP:         ibis.method @getAndSet(%arg: !hw.struct<x: ui32>) -> ui32 {
 // PREP:           %x = hw.struct_explode %arg : !hw.struct<x: ui32>
 // PREP:           ibis.return %x : ui32
-// PREP:         ibis.method @returnNothingWithRet(%arg: !hw.struct<>) {
+// PREP:         ibis.method @returnNothingWithRet(%arg: !hw.struct<>) -> () {
 // PREP:           hw.struct_explode %arg : !hw.struct<>
 // PREP:           ibis.return
 ibis.class @C {

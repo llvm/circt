@@ -45,7 +45,7 @@ struct ContainerPortInfo {
     // Copies all attributes from a port, except for the port symbol and type.
     auto copyPortAttrs = [](auto port) {
       llvm::DenseSet<StringAttr> elidedAttrs;
-      elidedAttrs.insert(port.getSymNameAttrName());
+      elidedAttrs.insert(port.getInnerSymAttrName());
       elidedAttrs.insert(port.getTypeAttrName());
       llvm::SmallVector<NamedAttribute> attrs;
       for (NamedAttribute namedAttr : port->getAttrs()) {
@@ -58,10 +58,10 @@ struct ContainerPortInfo {
 
     // Gather in and output port ops.
     for (auto input : container.getBodyBlock()->getOps<InputPortOp>()) {
-      opInputs[input.getSymNameAttr()] = input;
+      opInputs[input.getInnerSym().getSymName()] = input;
 
       hw::PortInfo portInfo;
-      portInfo.name = input.getSymNameAttr();
+      portInfo.name = input.getInnerSym().getSymName();
       portInfo.type = cast<PortOpInterface>(input.getOperation()).getPortType();
       portInfo.dir = hw::ModulePort::Direction::Input;
       portInfo.attrs = copyPortAttrs(input);
@@ -69,10 +69,10 @@ struct ContainerPortInfo {
     }
 
     for (auto output : container.getBodyBlock()->getOps<OutputPortOp>()) {
-      opOutputs[output.getSymNameAttr()] = output;
+      opOutputs[output.getInnerSym().getSymName()] = output;
 
       hw::PortInfo portInfo;
-      portInfo.name = output.getSymNameAttr();
+      portInfo.name = output.getInnerSym().getSymName();
       portInfo.type =
           cast<PortOpInterface>(output.getOperation()).getPortType();
       portInfo.dir = hw::ModulePort::Direction::Output;
@@ -261,8 +261,9 @@ struct ContainerInstanceOpConversionPattern
     // Create the hw.instance op.
     StringRef moduleName = getScopeRefModuleName(op.getType());
     auto hwInst = rewriter.create<hw::InstanceOp>(
-        op.getLoc(), retTypes, op.getSymName(), moduleName, operands,
-        rewriter.getArrayAttr(argNames), rewriter.getArrayAttr(resNames),
+        op.getLoc(), retTypes, op.getInnerSym().getSymName(), moduleName,
+        operands, rewriter.getArrayAttr(argNames),
+        rewriter.getArrayAttr(resNames),
         /*parameters*/ rewriter.getArrayAttr({}), /*innerSym*/ nullptr);
 
     // Replace the reads of the output ports with the hw.instance results.

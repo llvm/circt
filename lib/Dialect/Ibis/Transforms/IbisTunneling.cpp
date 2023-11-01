@@ -19,6 +19,7 @@
 #include "llvm/ADT/TypeSwitch.h"
 
 using namespace mlir;
+using namespace circt;
 using namespace circt::ibis;
 using namespace circt::igraph;
 
@@ -228,7 +229,8 @@ Value Tunneler::portForwardIfNeeded(PortOpInterface actualPort,
       rewriter.create<PortReadOp>(op.getLoc(), actualPort.getPort());
   auto wireOp = rewriter.create<OutputWireOp>(
       op.getLoc(),
-      rewriter.getStringAttr(actualPort.getPortName().strref() + ".rd"),
+      hw::InnerSymAttr::get(
+          rewriter.getStringAttr(actualPort.getPortName().strref() + ".rd")),
       inputValue);
   return wireOp.getPort();
 }
@@ -246,7 +248,7 @@ static FailureOr<ContainerInstanceOp> locateInstanceIn(Operation *parentOp,
 
   // Default: scan the container instances.
   for (auto instanceOp : parentOp->getRegion(0).getOps<ContainerInstanceOp>()) {
-    if (instanceOp.getName() == name.getValue())
+    if (instanceOp.getInnerSym().getSymName() == name.getValue())
       return instanceOp;
   }
 
@@ -292,8 +294,8 @@ LogicalResult Tunneler::tunnelDown(InstanceGraphNode *currentContainer,
   rewriter.setInsertionPointToEnd(tunnelScope.getBodyBlock());
   llvm::DenseMap<StringAttr, OutputPortOp> outputPortOps;
   for (PortInfo &pi : portInfos) {
-    outputPortOps[pi.portName] =
-        rewriter.create<OutputPortOp>(op.getLoc(), pi.portName, pi.getType());
+    outputPortOps[pi.portName] = rewriter.create<OutputPortOp>(
+        op.getLoc(), circt::hw::InnerSymAttr::get(pi.portName), pi.getType());
   }
 
   // Recurse into the tunnel instance container.
@@ -371,8 +373,8 @@ LogicalResult Tunneler::tunnelUp(InstanceGraphNode *currentContainer,
   // Create input ports for the requested portrefs.
   rewriter.setInsertionPointToEnd(scopeOp.getBodyBlock());
   for (PortInfo &pi : portInfos) {
-    auto inputPort =
-        rewriter.create<InputPortOp>(op.getLoc(), pi.portName, pi.getType());
+    auto inputPort = rewriter.create<InputPortOp>(
+        op.getLoc(), hw::InnerSymAttr::get(pi.portName), pi.getType());
     // Read the input port of the current container to forward the portref.
 
     portMapping[&pi] =
