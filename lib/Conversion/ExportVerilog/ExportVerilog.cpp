@@ -1457,7 +1457,7 @@ namespace {
 class ModuleEmitter : public EmitterBase {
 public:
   explicit ModuleEmitter(VerilogEmitterState &state)
-      : EmitterBase(state),
+      : EmitterBase(state), currentModuleOp(nullptr),
         fieldNameResolver(FieldNameResolver(state.globalNames, state.options)) {
   }
   ~ModuleEmitter() {
@@ -1544,38 +1544,55 @@ public:
 //===----------------------------------------------------------------------===//
 // Methods for formatting types.
 
-/// Emit a list of dimensions.
+/// Emit a single dimension.
+static void emitDim(Attribute width, raw_ostream &os, Location loc,
+                    ModuleEmitter &emitter, bool downTo) {
+  if (!width) {
+    os << "<<invalid type>>";
+    return;
+  }
+  if (auto intAttr = width.dyn_cast<IntegerAttr>()) {
+    if (intAttr.getValue().isZero()) {
+      os << "/*Zero Width*/";
+    } else {
+      os << '[';
+      if (!downTo)
+        os << "0:";
+      os << (intAttr.getValue().getZExtValue() - 1);
+      if (downTo)
+        os << ":0";
+      os << ']';
+    }
+    return;
+  }
+
+  // Otherwise it must be a parameterized dimension.  Shove the "-1" into the
+  // attribute so it gets printed in canonical form.
+  auto typedAttr = width.dyn_cast<TypedAttr>();
+  if (!typedAttr) {
+    mlir::emitError(loc, "untyped dimension attribute ") << width;
+    return;
+  }
+  auto negOne =
+      getIntAttr(loc.getContext(), typedAttr.getType(),
+                 APInt(typedAttr.getType().getIntOrFloatBitWidth(), -1L, true));
+  width = ParamExprAttr::get(PEO::Add, typedAttr, negOne);
+  os << '[';
+  if (!downTo)
+    os << "0:";
+  emitter.printParamValue(width, os, [loc]() {
+    return mlir::emitError(loc, "invalid parameter in type");
+  });
+  if (downTo)
+    os << ":0";
+  os << ']';
+}
+
+/// Emit a list of packed dimensions.
 static void emitDims(ArrayRef<Attribute> dims, raw_ostream &os, Location loc,
                      ModuleEmitter &emitter) {
   for (Attribute width : dims) {
-    if (!width) {
-      os << "<<invalid type>>";
-      continue;
-    }
-    if (auto intAttr = width.dyn_cast<IntegerAttr>()) {
-      if (intAttr.getValue().isZero())
-        os << "/*Zero Width*/";
-      else
-        os << '[' << (intAttr.getValue().getZExtValue() - 1) << ":0]";
-      continue;
-    }
-
-    // Otherwise it must be a parameterized dimension.  Shove the "-1" into the
-    // attribute so it gets printed in canonical form.
-    auto typedAttr = width.dyn_cast<TypedAttr>();
-    if (!typedAttr) {
-      mlir::emitError(loc, "untyped dimension attribute ") << width;
-      continue;
-    }
-    auto negOne = getIntAttr(
-        loc.getContext(), typedAttr.getType(),
-        APInt(typedAttr.getType().getIntOrFloatBitWidth(), -1L, true));
-    width = ParamExprAttr::get(PEO::Add, typedAttr, negOne);
-    os << '[';
-    emitter.printParamValue(width, os, [loc]() {
-      return mlir::emitError(loc, "invalid parameter in type");
-    });
-    os << ":0]";
+    emitDim(width, os, loc, emitter, /*downTo=*/true);
   }
 }
 
@@ -1775,7 +1792,10 @@ void ModuleEmitter::printUnpackedTypePostfix(Type type, raw_ostream &os) {
         printUnpackedTypePostfix(inoutType.getElementType(), os);
       })
       .Case<UnpackedArrayType>([&](UnpackedArrayType arrayType) {
-        os << "[0:" << (arrayType.getNumElements() - 1) << "]";
+        auto loc = currentModuleOp ? currentModuleOp->getLoc()
+                                   : state.designOp->getLoc();
+        emitDim(arrayType.getSizeAttr(), os, loc, *this,
+                /*downTo=*/false);
         printUnpackedTypePostfix(arrayType.getElementType(), os);
       })
       .Case<InterfaceType>([&](auto) {

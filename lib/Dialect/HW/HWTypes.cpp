@@ -668,7 +668,9 @@ UnpackedArrayType::verify(function_ref<InFlightDiagnostic()> emitError,
 }
 
 size_t UnpackedArrayType::getNumElements() const {
-  return getSizeAttr().cast<IntegerAttr>().getInt();
+  if (auto intAttr = getSizeAttr().dyn_cast<IntegerAttr>())
+    return intAttr.getInt();
+  return -1;
 }
 
 uint64_t UnpackedArrayType::getMaxFieldID() const {
