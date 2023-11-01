@@ -102,14 +102,15 @@ static int validateSvOpenArray(const svOpenArrayHandle data,
 
 // Register simulated device endpoints.
 // - return 0 on success, non-zero on failure (duplicate EP registered).
-DPI int sv2cCosimserverEpRegister(char *endpointId, long long sendTypeId,
-                                  int sendTypeSize, long long recvTypeId,
-                                  int recvTypeSize) {
+DPI int sv2cCosimserverEpRegister(char *endpointId, char *fromHostTypeId,
+                                  int fromHostTypeSize, char *toHostTypeId,
+                                  int toHostTypeSize) {
   // Ensure the server has been constructed.
   sv2cCosimserverInit();
   // Then register with it.
-  if (server->endpoints.registerEndpoint(endpointId, sendTypeId, sendTypeSize,
-                                         recvTypeId, recvTypeSize))
+  if (server->endpoints.registerEndpoint(endpointId, fromHostTypeId,
+                                         fromHostTypeSize, toHostTypeId,
+                                         toHostTypeSize))
     return 0;
   return -1;
 }
@@ -207,7 +208,7 @@ DPI int sv2cCosimserverEpTryPut(char *endpointId,
     return -3;
   }
 
-  Endpoint::BlobPtr blob = std::make_shared<Endpoint::Blob>(dataSize);
+  Endpoint::BlobPtr blob = std::make_unique<Endpoint::Blob>(dataSize);
   // Copy the message data into 'blob'.
   for (int i = 0; i < dataSize; ++i) {
     (*blob)[i] = *(char *)svGetArrElemPtr1(data, i);
@@ -219,7 +220,7 @@ DPI int sv2cCosimserverEpTryPut(char *endpointId,
     return -4;
   }
   log(endpointId, true, blob);
-  ep->pushMessageToClient(blob);
+  ep->pushMessageToClient(std::move(blob));
   return 0;
 }
 

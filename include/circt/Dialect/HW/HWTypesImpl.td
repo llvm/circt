@@ -267,7 +267,8 @@ def ModuleTypeImpl : HWType<"Module"> {
     StringRef getInputName(size_t);
     StringAttr getOutputNameAttr(size_t);
     StringRef getOutputName(size_t);
-    FunctionType getFuncType();
+    FunctionType getFuncType(
+      ArrayAttr parameters=ArrayAttr(), LocationAttr loc=LocationAttr());
     bool isOutput(size_t);
     size_t getInputIdForPortId(size_t);
     size_t getOutputIdForPortId(size_t);

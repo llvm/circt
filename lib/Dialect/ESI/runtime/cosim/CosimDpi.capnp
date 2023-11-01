@@ -13,7 +13,7 @@
 ##
 ##===----------------------------------------------------------------------===//
 
-@0xe642127a31681ef6;
+@0x9fd65fec6e2d2779;
 
 # The primary interface exposed by an ESI cosim simulation.
 interface CosimDpiServer @0x85e029b5352bcdb5 {
@@ -21,7 +21,7 @@ interface CosimDpiServer @0x85e029b5352bcdb5 {
   list @0 () -> (ifaces :List(EsiDpiInterfaceDesc));
   # Open one of them. Specify both the send and recv data types if want type
   # safety and your language supports it.
-  open @1 [S, T] (iface :EsiDpiInterfaceDesc) -> (iface :EsiDpiEndpoint(S, T));
+  open @1 [S, T] (iface :EsiDpiInterfaceDesc) -> (iface :EsiDpiEndpoint);
 
   # Get the zlib-compressed JSON system manifest.
   getCompressedManifest @2 () -> (compressedManifest :Data);
@@ -34,26 +34,21 @@ interface CosimDpiServer @0x85e029b5352bcdb5 {
 # Description of a registered endpoint.
 struct EsiDpiInterfaceDesc @0xd2584d2506f01c8c {
   # Capn'Proto ID of the struct type being sent _to_ the simulator.
-  sendTypeID @0 :UInt64;
+  fromHostType @0 :Text;
   # Capn'Proto ID of the struct type being sent _from_ the simulator.
-  recvTypeID @1 :UInt64;
+  toHostType @1 :Text;
   # Numerical identifier of the endpoint. Defined in the design.
   endpointID @2 :Text;
 }
 
 # Interactions with an open endpoint. Optionally typed.
-interface EsiDpiEndpoint @0xfb0a36bf859be47b (SendMsgType, RecvMsgType) {
+interface EsiDpiEndpoint @0xfb0a36bf859be47b {
   # Send a message to the endpoint.
-  send @0 (msg :SendMsgType);
+  sendFromHost @0 (msg :Data);
   # Recieve a message from the endpoint. Non-blocking.
-  recv @1 (block :Bool = true) -> (hasData :Bool, resp :RecvMsgType);
+  recvToHost @1 () -> (hasData :Bool, resp :Data);
   # Close the connect to this endpoint.
   close @2 ();
-}
-
-# A struct for untyped access to an endpoint.
-struct UntypedData @0xac6e64291027d47a {
-  data @0 :Data;
 }
 
 # A low level interface simply provides MMIO and host memory access. In all

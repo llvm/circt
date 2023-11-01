@@ -24,24 +24,19 @@ module top(
       })
     );
 
-    localparam int TYPE_SIZE_BITS =
-        (1 * 64) + // root message
-        (1 * 64) + // list header
-        (1 * 64);  // list of length 3 bytes, rounded up to multiples of 8 bytes
-
     wire DataOutValid;
     wire DataOutReady = 1;
-    wire [TYPE_SIZE_BITS-1:0] DataOut;
+    wire [23:0] DataOut;
     
     logic DataInValid;
     logic DataInReady;
-    logic [TYPE_SIZE_BITS-1:0] DataIn;
+    logic [31:0] DataIn;
 
     Cosim_Endpoint #(
-        .RECV_TYPE_ID(1),
-        .RECV_TYPE_SIZE_BITS(TYPE_SIZE_BITS),
-        .SEND_TYPE_ID(1),
-        .SEND_TYPE_SIZE_BITS(TYPE_SIZE_BITS)
+        .FROM_HOST_TYPE_ID("i24"),
+        .FROM_HOST_SIZE_BITS(24),
+        .TO_HOST_TYPE_ID("i32"),
+        .TO_HOST_SIZE_BITS(32)
     ) ep (
         .*
     );
@@ -53,7 +48,7 @@ module top(
             if (DataOutValid && DataOutReady)
             begin
                 $display("[%d] Recv'd: %h", $time(), DataOut);
-                DataIn <= DataOut;
+                DataIn <= {8'b0, DataOut};
             end
             DataInValid <= DataOutValid && DataOutReady;
 

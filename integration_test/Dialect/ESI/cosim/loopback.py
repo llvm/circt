@@ -20,12 +20,8 @@ class LoopbackTester(esi_cosim.CosimBase):
     ep.close().wait()
 
   def test_two_chan_loopback(self, num_msgs):
-    to_hw = self.openEP("top.TwoChanLoopback_loopback_tohw",
-                        sendType=self.schema.I1,
-                        recvType=self.schema.I8)
-    from_hw = self.openEP("top.TwoChanLoopback_loopback_fromhw",
-                          sendType=self.schema.I8,
-                          recvType=self.schema.I1)
+    to_hw = self.openEP("top.TwoChanLoopback_loopback_tohw")
+    from_hw = self.openEP("top.TwoChanLoopback_loopback_fromhw")
     for _ in range(num_msgs):
       data = random.randint(0, 2**8 - 1)
       print(f"Sending {data}")
@@ -48,19 +44,19 @@ class LoopbackTester(esi_cosim.CosimBase):
 
   def write_3bytes(self, ep):
     r = random.randrange(0, 2**24 - 1)
-    data = r.to_bytes(3, 'big')
-    print(f'Sending: {binascii.hexlify(data)}')
-    ep.send(self.schema.UntypedData.new_message(data=data)).wait()
-    return data
+    data = r.to_bytes(3, 'little')
+    print(f'Sending: {r:8x} as {binascii.hexlify(data)}')
+    ep.sendFromHost(msg=data).wait()
+    return r
 
   def read_3bytes(self, ep):
-    dataMsg = self.readMsg(ep, self.schema.UntypedData)
-    data = dataMsg.data
-    print(binascii.hexlify(data))
-    return data
+    data = self.readMsg(ep)
+    i = int.from_bytes(data, 'little')
+    print(f"Recv'd: {i:8x} as {binascii.hexlify(data)}")
+    return i
 
   def test_3bytes(self, num_msgs=50):
-    ep = self.openEP("top.ep")
+    ep = self.openEP("top.ep", from_host_type="i24", to_host_type="i32")
     print("Testing writes")
     dataSent = list()
     for _ in range(num_msgs):
