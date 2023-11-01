@@ -447,7 +447,7 @@ struct LowerHWtoBTOR2Pass : public LowerHWtoBTOR2Base<LowerHWtoBTOR2Pass> {
       assert(sid != NO_LID);
 
       // Build and return the state instruction
-      return std::to_string(lid++) + WS + STATE + WS + std::to_string(sid) + NL;
+      return std::to_string(lid++) + WS + STATE + WS + std::to_string(sid) + WS + name + NL;
     }
 
     // Generates a next instruction, given a width, a state LID, and a next value LID
