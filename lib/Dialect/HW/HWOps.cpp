@@ -2350,13 +2350,15 @@ static LogicalResult verifyAggregateFieldIndexAndType(AggregateOp &op,
                                                       Type elementType) {
   auto index = op.getFieldIndex();
   if (index >= aggType.getElements().size())
-    return op.emitOpError("field index " + Twine(index) +
-                          " exceeds element count of aggregate type");
+    return op.emitOpError() << "field index " << index
+                            << " exceeds element count of aggregate type";
 
   if (getCanonicalType(elementType) !=
       getCanonicalType(aggType.getElements()[index].type))
-    return op.emitOpError("type of accessed field in aggregate at index " +
-                          Twine(index) + " does not match expected type");
+    return op.emitOpError()
+           << "type " << aggType.getElements()[index].type
+           << " of accessed field in aggregate at index " << index
+           << " does not match expected type " << elementType;
 
   return success();
 }
