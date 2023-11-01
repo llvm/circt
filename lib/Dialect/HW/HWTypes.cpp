@@ -975,27 +975,15 @@ bool ModuleType::isOutput(size_t idx) {
   return p.dir == ModulePort::Direction::Output;
 }
 
-FunctionType ModuleType::getFuncType(ArrayAttr parameters, LocationAttr loc) {
+FunctionType ModuleType::getFuncType() {
   SmallVector<Type> inputs, outputs;
-
-  // Try our best to resolve parametric types.
-  auto resolveType = [&](Type t) {
-    if (!parameters)
-      return t;
-    FailureOr<Type> evaled =
-        evaluateParametricType(Location(loc), parameters, t);
-    if (succeeded(evaled))
-      return *evaled;
-    return t;
-  };
-
   for (auto p : getPorts())
     if (p.dir == ModulePort::Input)
-      inputs.push_back(resolveType(p.type));
+      inputs.push_back(p.type);
     else if (p.dir == ModulePort::InOut)
-      inputs.push_back(resolveType(InOutType::get(p.type)));
+      inputs.push_back(InOutType::get(p.type));
     else
-      outputs.push_back(resolveType(p.type));
+      outputs.push_back(p.type);
   return FunctionType::get(getContext(), inputs, outputs);
 }
 

@@ -36,22 +36,15 @@ module Cosim_Endpoint_ToHost
   else
     assign ENDPOINT_ID = ENDPOINT_ID_BASE;
 
-  bit Initialized;
-
-  // Handle initialization logic.
-  always@(posedge clk) begin
-    // We've been instructed to start AND we're uninitialized.
-    if (!Initialized) begin
-      int rc;
-      rc = cosim_init();
-      if (rc != 0)
-        $error("Cosim init failed (%d)", rc);
-      rc = cosim_ep_register(ENDPOINT_ID, "", 0,
-                             TO_HOST_TYPE_ID, TO_HOST_SIZE_BYTES);
-      if (rc != 0)
-        $error("Cosim endpoint (%d) register failed: %d", ENDPOINT_ID, rc);
-      Initialized = 1'b1;
-    end
+  initial begin
+    int rc;
+    rc = cosim_init();
+    if (rc != 0)
+      $error("Cosim init failed (%d)", rc);
+    rc = cosim_ep_register(ENDPOINT_ID, "", 0,
+                            TO_HOST_TYPE_ID, TO_HOST_SIZE_BYTES);
+    if (rc != 0)
+      $error("Cosim endpoint (%d) register failed: %d", ENDPOINT_ID, rc);
   end
 
   /// **********************
@@ -69,7 +62,7 @@ module Cosim_Endpoint_ToHost
   byte unsigned DataInBuffer[TO_HOST_SIZE_BYTES-1:0];
 
   always@(posedge clk) begin
-    if (~rst && Initialized) begin
+    if (~rst) begin
       if (DataInValid) begin
         int rc;
         rc = cosim_ep_tryput(ENDPOINT_ID, DataInBuffer, TO_HOST_SIZE_BYTES);
@@ -127,22 +120,16 @@ module Cosim_Endpoint_FromHost
   else
     assign ENDPOINT_ID = ENDPOINT_ID_BASE;
 
-  bit Initialized;
-
   // Handle initialization logic.
-  always@(posedge clk) begin
-    // We've been instructed to start AND we're uninitialized.
-    if (!Initialized) begin
-      int rc;
-      rc = cosim_init();
-      if (rc != 0)
-        $error("Cosim init failed (%d)", rc);
-      rc = cosim_ep_register(ENDPOINT_ID, FROM_HOST_TYPE_ID, FROM_HOST_SIZE_BYTES,
-                             "", 0);
-      if (rc != 0)
-        $error("Cosim endpoint (%d) register failed: %d", ENDPOINT_ID, rc);
-      Initialized = 1'b1;
-    end
+  initial begin
+    int rc;
+    rc = cosim_init();
+    if (rc != 0)
+      $error("Cosim init failed (%d)", rc);
+    rc = cosim_ep_register(ENDPOINT_ID, FROM_HOST_TYPE_ID, FROM_HOST_SIZE_BYTES,
+                            "", 0);
+    if (rc != 0)
+      $error("Cosim endpoint (%d) register failed: %d", ENDPOINT_ID, rc);
   end
 
   /// *******************
@@ -158,7 +145,7 @@ module Cosim_Endpoint_FromHost
 
   byte unsigned DataOutBuffer[FROM_HOST_SIZE_BYTES-1:0];
   always @(posedge clk) begin
-    if (~rst && Initialized) begin
+    if (~rst) begin
       if (DataOutValid && DataOutReady) // A transfer occurred.
         DataOutValid <= 1'b0;
 
