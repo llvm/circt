@@ -2388,7 +2388,9 @@ static ParseResult parseExtractOp(OpAsmParser &parser, OperationState &result) {
 
   auto fieldIndex = aggType.getFieldIndex(fieldName);
   if (!fieldIndex) {
-    parser.emitError(parser.getNameLoc(), "invalid field name specified");
+    parser.emitError(parser.getNameLoc(), "field name '" +
+                                              fieldName.getValue() +
+                                              "' not found in aggregate type");
     return failure();
   }
 
@@ -2509,7 +2511,9 @@ ParseResult StructInjectOp::parse(OpAsmParser &parser, OperationState &result) {
 
   auto fieldIndex = structType.getFieldIndex(fieldName);
   if (!fieldIndex) {
-    parser.emitError(parser.getNameLoc(), "invalid field name specified");
+    parser.emitError(parser.getNameLoc(), "field name '" +
+                                              fieldName.getValue() +
+                                              "' not found in aggregate type");
     return failure();
   }
 

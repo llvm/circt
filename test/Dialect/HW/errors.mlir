@@ -110,7 +110,7 @@ hw.module @struct(in %a: !hw.struct<foo: i42>) {
 // -----
 
 hw.module @struct(in %a: !hw.struct<foo: i42>) {
-  // expected-error @+1 {{custom op 'hw.struct_extract' invalid field name specified}}
+  // expected-error @+1 {{custom op 'hw.struct_extract' field name 'bar' not found in aggregate type}}
   %aget = hw.struct_extract %a["bar"] : !hw.struct<foo: i42>
 }
 
@@ -138,7 +138,7 @@ hw.module @struct(in %a: !hw.struct<foo: i42>, in %b: i42) {
 // -----
 
 hw.module @struct(in %a: !hw.struct<foo: i42>, in %b: i42) {
-  // expected-error @+1 {{custom op 'hw.struct_inject' invalid field name specified}}
+  // expected-error @+1 {{custom op 'hw.struct_inject' field name 'bar' not found in aggregate type}}
   %aget = hw.struct_inject %a["bar"], %b : !hw.struct<foo: i42>
 }
 
@@ -179,7 +179,7 @@ hw.module @union(in %a: i12) {
 // -----
 
 hw.module @union(in %a: !hw.union<foo: i42>) {
-  // expected-error @+1 {{custom op 'hw.union_extract' invalid field name specified}}
+  // expected-error @+1 {{custom op 'hw.union_extract' field name 'bar' not found in aggregate type}}
   %aget = hw.union_extract %a["bar"] : !hw.union<foo: i42>
 }
 // -----
