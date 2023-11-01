@@ -127,9 +127,11 @@ template <typename TOp>
 ParseResult parseMethodLikeOp(OpAsmParser &parser, OperationState &result) {
   // Parse the name as a symbol.
   StringAttr nameAttr;
-  if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(),
-                             result.attributes))
+  if (parser.parseSymbolName(nameAttr))
     return failure();
+
+  result.attributes.append(hw::InnerSymbolTable::getInnerSymbolAttrName(),
+                           hw::InnerSymAttr::get(nameAttr));
 
   // Parse the function signature.
   SmallVector<OpAsmParser::Argument, 4> args;
@@ -180,12 +182,15 @@ template <typename TOp>
 void printMethodLikeOp(TOp op, OpAsmPrinter &p) {
   FunctionType funcTy = op.getFunctionType();
   p << ' ';
-  p.printSymbolName(op.getSymName());
-  function_interface_impl::printFunctionSignature(
-      p, op, funcTy.getInputs(), /*isVariadic=*/false, funcTy.getResults());
+  p.printSymbolName(op.getInnerSym().getSymName());
+  Region &body = op.getBody();
+  p << "(";
+  llvm::interleaveComma(body.getArguments(), p,
+                        [&](BlockArgument arg) { p.printRegionArgument(arg); });
+  p << ") ";
+  p.printArrowTypeList(funcTy.getResults());
   p.printOptionalAttrDictWithKeyword(op.getOperation()->getAttrs(),
                                      op.getAttributeNames());
-  Region &body = op.getBody();
   if (!body.empty()) {
     p << ' ';
     p.printRegion(body, /*printEntryBlockArgs=*/false,
@@ -234,8 +239,8 @@ void ReturnOp::build(OpBuilder &odsBuilder, OperationState &odsState) {}
 
 LogicalResult ReturnOp::verify() {
   // Check that the return operand type matches the function return type.
-  auto func = cast<FunctionOpInterface>((*this)->getParentOp());
-  ArrayRef<Type> resTypes = func.getResultTypes();
+  auto methodLike = cast<MethodLikeOpInterface>((*this)->getParentOp());
+  ArrayRef<Type> resTypes = methodLike.getResultTypes();
 
   if (getNumOperands() != resTypes.size())
     return emitOpError(
@@ -254,17 +259,18 @@ LogicalResult ReturnOp::verify() {
 // GetVarOp
 //===----------------------------------------------------------------------===//
 
-LogicalResult GetVarOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  auto varOp = getTarget(&symbolTable.getSymbolTable(
-      getOperation()->getParentOfType<mlir::ModuleOp>()));
+LogicalResult GetVarOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
+  ScopeRefType parentType = getInstance().getType().cast<ScopeRefType>();
+  auto varOp = ns.lookupOp<VarOp>(hw::InnerRefAttr::get(
+      parentType.getScopeRef().getAttr(), getVarNameAttr().getAttr()));
 
-  if (failed(varOp))
+  if (!varOp)
     return failure();
 
   // Ensure that the dereferenced type is the same type as the variable type.
-  if (varOp->getType() != getType())
+  if (varOp.getType() != getType())
     return emitOpError() << "dereferenced type (" << getType()
-                         << ") must match variable type (" << varOp->getType()
+                         << ") must match variable type (" << varOp.getType()
                          << ")";
 
   return success();
@@ -317,23 +323,15 @@ void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 // GetPortOp
 //===----------------------------------------------------------------------===//
 
-LogicalResult GetPortOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+LogicalResult GetPortOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
   // Lookup the target module type of the instance class reference.
-  ModuleOp mod = getOperation()->getParentOfType<ModuleOp>();
   ScopeRefType crt = getInstance().getType().cast<ScopeRefType>();
-  // @teqdruid TODO: make this more efficient using
-  // innersymtablecollection when that's available to non-firrtl dialects.
-  ScopeOpInterface targetScope =
-      symbolTable.lookupSymbolIn<ScopeOpInterface>(mod, crt.getScopeRef());
-  assert(targetScope && "should have been verified by the type system");
-  // @teqdruid TODO: make this more efficient using
-  // innersymtablecollection when that's available to non-firrtl dialects.
-  Operation *targetOp = targetScope.lookupPort(getPortSymbol());
+  Operation *targetOp = ns.lookupOp(hw::InnerRefAttr::get(
+      crt.getScopeRef().getAttr(), getPortSymbolAttr().getAttr()));
 
   if (!targetOp)
     return emitOpError() << "port '" << getPortSymbolAttr()
-                         << "' does not exist in "
-                         << targetScope.getScopeName();
+                         << "' does not exist in " << crt.getScopeRef();
 
   auto portOp = dyn_cast<PortOpInterface>(targetOp);
   if (!portOp)
@@ -375,7 +373,7 @@ void GetPortOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 // ThisOp
 //===----------------------------------------------------------------------===//
 
-LogicalResult ThisOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+LogicalResult ThisOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
   // A thisOp should always refer to the parent operation, which in turn should
   // be an Ibis ScopeOpInterface.
   auto parentScope =
@@ -504,11 +502,10 @@ LogicalResult PathOp::canonicalize(PathOp op, PatternRewriter &rewriter) {
   PathStepAttr firstStep = *range.begin();
   if (pathSize == 1 && firstStep.getDirection() == PathDirection::Child) {
     auto parentScope = cast<ScopeOpInterface>(op->getParentOp());
-    Operation *childInstance =
-        SymbolTable::lookupSymbolIn(parentScope, firstStep.getChild());
+    auto childInstance = dyn_cast_or_null<ContainerInstanceOp>(
+        parentScope.lookupInnerSym(firstStep.getChild().getValue()));
     assert(childInstance && "should have been verified by the op verifier");
-    rewriter.replaceOp(op,
-                       {cast<ContainerInstanceOp>(childInstance).getResult()});
+    rewriter.replaceOp(op, {childInstance.getResult()});
     return success();
   }
 

@@ -81,8 +81,9 @@ void ConvertHandshakeToDCPass::runOnOperation() {
   auto targetModifier = [&](mlir::ConversionTarget &target) {
     target.addDynamicallyLegalOp<ibis::DataflowMethodOp>(
         [](ibis::DataflowMethodOp op) {
-          return llvm::all_of(op.getArgumentTypes(), isDCType) &&
-                 llvm::all_of(op.getResultTypes(), isDCType);
+          auto methodLikeOp = cast<MethodLikeOpInterface>(op.getOperation());
+          return llvm::all_of(methodLikeOp.getArgumentTypes(), isDCType) &&
+                 llvm::all_of(methodLikeOp.getResultTypes(), isDCType);
         });
     target.addDynamicallyLegalOp<ibis::ReturnOp>(isDCTypedOp);
     target.addLegalDialect<hw::HWDialect, ibis::IbisDialect>();

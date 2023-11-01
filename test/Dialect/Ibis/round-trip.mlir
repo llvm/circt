@@ -78,6 +78,7 @@ ibis.class @HighLevel {
 // CHECK-NEXT:      %parent.a.out.ref = ibis.get_port %parent.a, @out : !ibis.scoperef<@A> -> !ibis.portref<out i1>
 // CHECK-NEXT:      ibis.port.write %parent.a.in.ref, %parent.LowLevel_out.ref.val : !ibis.portref<in i1>
 // CHECK-NEXT:      %parent.a.out.ref.val = ibis.port.read %parent.a.out.ref : !ibis.portref<out i1>
+// CHECK-NEXT:      hw.instance "foo" @externModule() -> ()
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }
 
@@ -120,5 +121,10 @@ ibis.class @LowLevel {
     %A.out_p = ibis.get_port %A.in_parent, @out : !ibis.scoperef<@A> -> !ibis.portref<out i1>
     ibis.port.write %A.in_p, %LowLevel_out : !ibis.portref<in i1>
     %A.out = ibis.port.read %A.out_p : !ibis.portref<out i1>
+
+    // Test hw.instance ops inside a container (symbol table usage)
+    hw.instance "foo" @externModule() -> ()
   }
 }
+
+hw.module.extern @externModule()

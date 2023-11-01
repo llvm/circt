@@ -39,7 +39,7 @@ struct OutlineContainerPattern : public OpConversionPattern<ContainerOp> {
                           "that is not nested within a class.");
 
     rewriter.setInsertionPoint(parentClass);
-    auto newContainerName = rewriter.getStringAttr(
+    StringAttr newContainerName = rewriter.getStringAttr(
         ns.newName(parentClass.getName() + "_" + op.getName()));
     auto newContainer =
         rewriter.create<ContainerOp>(op.getLoc(), newContainerName);
@@ -56,8 +56,9 @@ struct OutlineContainerPattern : public OpConversionPattern<ContainerOp> {
 
     // Create a container instance op in the parent class.
     rewriter.setInsertionPoint(op);
-    rewriter.create<ContainerInstanceOp>(parentClass.getLoc(), newContainerName,
-                                         newContainer.getNameAttr());
+    rewriter.create<ContainerInstanceOp>(
+        parentClass.getLoc(), hw::InnerSymAttr::get(newContainerName),
+        newContainer.getNameAttr());
     rewriter.eraseOp(op);
     return success();
   }
@@ -89,7 +90,7 @@ struct InstanceToContainerInstancePattern
                   ConversionPatternRewriter &rewriter) const override {
     // Replace the instance by a container instance of the same name.
     rewriter.replaceOpWithNewOp<ContainerInstanceOp>(
-        op, op.getNameAttr(), op.getTargetNameAttr().getAttr());
+        op, op.getInnerSym(), op.getTargetNameAttr().getAttr());
     return success();
   }
 };

@@ -1457,7 +1457,7 @@ namespace {
 class ModuleEmitter : public EmitterBase {
 public:
   explicit ModuleEmitter(VerilogEmitterState &state)
-      : EmitterBase(state),
+      : EmitterBase(state), currentModuleOp(nullptr),
         fieldNameResolver(FieldNameResolver(state.globalNames, state.options)) {
   }
   ~ModuleEmitter() {
@@ -1544,38 +1544,55 @@ public:
 //===----------------------------------------------------------------------===//
 // Methods for formatting types.
 
-/// Emit a list of dimensions.
+/// Emit a single dimension.
+static void emitDim(Attribute width, raw_ostream &os, Location loc,
+                    ModuleEmitter &emitter, bool downTo) {
+  if (!width) {
+    os << "<<invalid type>>";
+    return;
+  }
+  if (auto intAttr = width.dyn_cast<IntegerAttr>()) {
+    if (intAttr.getValue().isZero()) {
+      os << "/*Zero Width*/";
+    } else {
+      os << '[';
+      if (!downTo)
+        os << "0:";
+      os << (intAttr.getValue().getZExtValue() - 1);
+      if (downTo)
+        os << ":0";
+      os << ']';
+    }
+    return;
+  }
+
+  // Otherwise it must be a parameterized dimension.  Shove the "-1" into the
+  // attribute so it gets printed in canonical form.
+  auto typedAttr = width.dyn_cast<TypedAttr>();
+  if (!typedAttr) {
+    mlir::emitError(loc, "untyped dimension attribute ") << width;
+    return;
+  }
+  auto negOne =
+      getIntAttr(loc.getContext(), typedAttr.getType(),
+                 APInt(typedAttr.getType().getIntOrFloatBitWidth(), -1L, true));
+  width = ParamExprAttr::get(PEO::Add, typedAttr, negOne);
+  os << '[';
+  if (!downTo)
+    os << "0:";
+  emitter.printParamValue(width, os, [loc]() {
+    return mlir::emitError(loc, "invalid parameter in type");
+  });
+  if (downTo)
+    os << ":0";
+  os << ']';
+}
+
+/// Emit a list of packed dimensions.
 static void emitDims(ArrayRef<Attribute> dims, raw_ostream &os, Location loc,
                      ModuleEmitter &emitter) {
   for (Attribute width : dims) {
-    if (!width) {
-      os << "<<invalid type>>";
-      continue;
-    }
-    if (auto intAttr = width.dyn_cast<IntegerAttr>()) {
-      if (intAttr.getValue().isZero())
-        os << "/*Zero Width*/";
-      else
-        os << '[' << (intAttr.getValue().getZExtValue() - 1) << ":0]";
-      continue;
-    }
-
-    // Otherwise it must be a parameterized dimension.  Shove the "-1" into the
-    // attribute so it gets printed in canonical form.
-    auto typedAttr = width.dyn_cast<TypedAttr>();
-    if (!typedAttr) {
-      mlir::emitError(loc, "untyped dimension attribute ") << width;
-      continue;
-    }
-    auto negOne = getIntAttr(
-        loc.getContext(), typedAttr.getType(),
-        APInt(typedAttr.getType().getIntOrFloatBitWidth(), -1L, true));
-    width = ParamExprAttr::get(PEO::Add, typedAttr, negOne);
-    os << '[';
-    emitter.printParamValue(width, os, [loc]() {
-      return mlir::emitError(loc, "invalid parameter in type");
-    });
-    os << ":0]";
+    emitDim(width, os, loc, emitter, /*downTo=*/true);
   }
 }
 
@@ -1775,7 +1792,10 @@ void ModuleEmitter::printUnpackedTypePostfix(Type type, raw_ostream &os) {
         printUnpackedTypePostfix(inoutType.getElementType(), os);
       })
       .Case<UnpackedArrayType>([&](UnpackedArrayType arrayType) {
-        os << "[0:" << (arrayType.getNumElements() - 1) << "]";
+        auto loc = currentModuleOp ? currentModuleOp->getLoc()
+                                   : state.designOp->getLoc();
+        emitDim(arrayType.getSizeAttr(), os, loc, *this,
+                /*downTo=*/false);
         printUnpackedTypePostfix(arrayType.getElementType(), os);
       })
       .Case<InterfaceType>([&](auto) {
@@ -3078,7 +3098,7 @@ SubExprInfo ExprEmitter::visitTypeOp(StructExtractOp op) {
 
   emitSubExpr(op.getInput(), Selection);
   ps << "."
-     << PPExtString(emitter.getVerilogStructFieldName(op.getFieldAttr()));
+     << PPExtString(emitter.getVerilogStructFieldName(op.getFieldNameAttr()));
   return {Selection, IsUnsigned};
 }
 
@@ -3098,7 +3118,7 @@ SubExprInfo ExprEmitter::visitTypeOp(StructInjectOp op) {
         ps.scopedBox(PP::ibox2, [&]() {
           ps << PPExtString(emitter.getVerilogStructFieldName(field.name))
              << ":" << PP::space;
-          if (field.name == op.getField()) {
+          if (field.name == op.getFieldNameAttr()) {
             emitSubExpr(op.getNewValue(), Selection);
           } else {
             emitSubExpr(op.getInput(), Selection);
@@ -3131,10 +3151,9 @@ SubExprInfo ExprEmitter::visitTypeOp(UnionCreateOp op) {
     emitError(op, "SV attributes emission is unimplemented for the op");
 
   // Check if this union type has been padded.
-  auto fieldName = op.getFieldAttr();
   auto unionType = cast<UnionType>(getCanonicalType(op.getType()));
   auto unionWidth = hw::getBitWidth(unionType);
-  auto element = unionType.getFieldInfo(fieldName.getValue());
+  auto &element = unionType.getElements()[op.getFieldIndex()];
   auto elementWidth = hw::getBitWidth(element.type);
 
   // If the element is 0 width, just fill the union with 0s.
@@ -3175,13 +3194,12 @@ SubExprInfo ExprEmitter::visitTypeOp(UnionExtractOp op) {
   emitSubExpr(op.getInput(), Selection);
 
   // Check if this union type has been padded.
-  auto fieldName = op.getFieldAttr();
   auto unionType = cast<UnionType>(getCanonicalType(op.getInput().getType()));
   auto unionWidth = hw::getBitWidth(unionType);
-  auto element = unionType.getFieldInfo(fieldName.getValue());
+  auto &element = unionType.getElements()[op.getFieldIndex()];
   auto elementWidth = hw::getBitWidth(element.type);
   bool needsPadding = elementWidth < unionWidth || element.offset > 0;
-  auto verilogFieldName = emitter.getVerilogStructFieldName(fieldName);
+  auto verilogFieldName = emitter.getVerilogStructFieldName(element.name);
 
   // If the element needs padding then we need to get the actual element out
   // of an anonymous structure.
