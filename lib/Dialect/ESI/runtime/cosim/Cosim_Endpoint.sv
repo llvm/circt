@@ -109,7 +109,7 @@ module Cosim_Endpoint_FromHost
 #(
   parameter string ENDPOINT_ID_EXT = "",
   parameter string FROM_HOST_TYPE_ID = "",
-  parameter int FROM_HOST_SIZE_BITS = -1,
+  parameter int FROM_HOST_SIZE_BITS = -1
 )
 (
   input  logic clk,
@@ -117,7 +117,7 @@ module Cosim_Endpoint_FromHost
 
   output logic DataOutValid,
   input  logic DataOutReady,
-  output logic [FROM_HOST_SIZE_BITS-1:0] DataOut,
+  output logic [FROM_HOST_SIZE_BITS-1:0] DataOut
 );
 
   string ENDPOINT_ID_BASE = $sformatf("%m");

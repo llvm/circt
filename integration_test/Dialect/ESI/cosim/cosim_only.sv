@@ -32,12 +32,17 @@ module top(
     logic DataInReady;
     logic [31:0] DataIn;
 
-    Cosim_Endpoint #(
+    Cosim_Endpoint_FromHost #(
         .FROM_HOST_TYPE_ID("i24"),
-        .FROM_HOST_SIZE_BITS(24),
+        .FROM_HOST_SIZE_BITS(24)
+    ) fromHost (
+        .*
+    );
+
+    Cosim_Endpoint_ToHost #(
         .TO_HOST_TYPE_ID("i32"),
         .TO_HOST_SIZE_BITS(32)
-    ) ep (
+    ) toHost (
         .*
     );
 
