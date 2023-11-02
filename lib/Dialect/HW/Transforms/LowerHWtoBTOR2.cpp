@@ -492,35 +492,12 @@ struct LowerHWtoBTOR2Pass : public LowerHWtoBTOR2Base<LowerHWtoBTOR2Pass> {
       return std::to_string(lid++) + WS + NEXT + WS + std::to_string(sid) + WS 
           + std::to_string(regLID) + WS + std::to_string(nextLID) + NL;
     }
-
-    // Generates a special state that is used to handle register initializations
-    void genInitState(std::string & btor2Res) {
-      // Start by making sure that a 1bit sort exists
-      btor2Res += genSort(BITVEC, 1);
-
-      // Store the future state lid
-      size_t stateLID = lid;
-
-      // Now generate the state
-      btor2Res += genState(nullptr, 1, "initState");
-
-      // Store the implication lid
-      size_t impliesLID = lid;
-
-      // Finally create the implication as well as the assumption
-      btor2Res += genImplies(nullptr, stateLID, resetLID);
-
-      // Create the assumption
-      btor2Res += genConstraint(impliesLID);
-    }
 };
 } // end anonymous namespace
 
 void LowerHWtoBTOR2Pass::runOnOperation() {
   // String used to build out our emitted btor2
   std::string btor2Res; 
-  // flag to keep track of our state initializer emission
-  bool initStateEmitted = false;
 
   // Start by checking for each module in the circt, for now we only consider the 1st one
   // As we are not support multi-modules yet. We assume that no nested modules exist at this point.
@@ -771,17 +748,6 @@ void LowerHWtoBTOR2Pass::runOnOperation() {
         // Firrtl registers generate a state instruction
         // The final update is also used to generate a set of next btor instructions
         .Case<seq::FirRegOp>([&](seq::FirRegOp reg) {
-
-          // Check to make sure that we emitted our initState state
-          if(!initStateEmitted) {
-            genInitState(btor2Res);
-            initStateEmitted = true;
-          }
-
-          // Check for asynchronous resets
-          if(!isAsync) {
-            isAsync = reg.getIsAsync();
-          }
 
           // Start by retrieving the register's name
           std::string regName = reg.getName().str();
