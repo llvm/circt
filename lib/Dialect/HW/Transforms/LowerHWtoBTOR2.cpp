@@ -18,8 +18,6 @@
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/SV/SVTypes.h"
-#include <iostream>
-#include <fstream>
 
 using namespace circt;
 using namespace hw;
@@ -793,16 +791,6 @@ void LowerHWtoBTOR2Pass::runOnOperation() {
         btor2Res += genNext(next, reg, width);
       }
     }
-
-    // Write resulting btor to a file (for a demo not going to be kept)
-    std::ofstream btor("btor_tmp.btor2");
-    btor << btor2Res;
-    btor.close();
-
-    // Print out the resuling btor2
-    llvm::errs() << "==========BTOR2 FORM:==========\n\n" 
-                 << btor2Res 
-                 << "\n===============================\n\n";
 
   });
 }
