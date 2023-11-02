@@ -121,8 +121,7 @@ public:
     auto maniResp =
         client.getCompressedManifestRequest().send().wait(waitScope);
     capnp::Data::Reader data = maniResp.getCompressedManifest();
-    std::vector<uint8_t> result(data.begin(), data.end());
-    return result;
+    return std::vector<uint8_t>(data.begin(), data.end());
   }
 
 private:

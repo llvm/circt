@@ -23,16 +23,19 @@
 using namespace esi;
 using namespace esi::services;
 
-constexpr uint32_t MAX_MANIFEST_SIZE = 1 << 20;
+// Allocate 10MB for the uncompressed manifest. This should be plenty.
+constexpr uint32_t MAX_MANIFEST_SIZE = 10 << 20;
+/// Get the compressed manifest, uncompress, and return it.
 std::string SysInfo::jsonManifest() const {
   std::vector<uint8_t> compressed = compressedManifest();
-  Bytef *dst = new Bytef[MAX_MANIFEST_SIZE];
+  std::vector<Bytef> dst(MAX_MANIFEST_SIZE);
   uLongf dstSize = MAX_MANIFEST_SIZE;
-  int rc = uncompress(dst, &dstSize, compressed.data(), compressed.size());
+  int rc =
+      uncompress(dst.data(), &dstSize, compressed.data(), compressed.size());
   if (rc != Z_OK)
     throw std::runtime_error("zlib uncompress failed with rc=" +
                              std::to_string(rc));
-  return std::string(reinterpret_cast<char *>(dst), dstSize);
+  return std::string(reinterpret_cast<char *>(dst.data()), dstSize);
 }
 
 MMIOSysInfo::MMIOSysInfo(const MMIO *mmio) : mmio(mmio) {}

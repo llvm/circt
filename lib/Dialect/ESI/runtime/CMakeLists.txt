@@ -96,6 +96,7 @@ add_executable(esiquery
 )
 target_link_libraries(esiquery PRIVATE ESIRuntime)
 
+# Global variable for the path to the ESI runtime for use by tests.
 set(ESIRuntimePath "${CMAKE_CURRENT_BINARY_DIR}"
   CACHE INTERNAL "Path to ESI runtime" FORCE)
 
@@ -125,7 +126,8 @@ if(Python_FOUND)
   if (NOT pybind11_FOUND)
     message (STATUS "Could not find pybind11. Disabling Python API.")
   else()
-    pybind11_add_module(esiCppAccel python/esi/esiaccel.cpp)
+    # Compile Pybind11 module and copy to the correct python directory.
+    pybind11_add_module(esiCppAccel python/esi/esiCppAccel.cpp)
     target_link_libraries(esiCppAccel PRIVATE ESIRuntime)
     add_custom_command(
         TARGET esiCppAccel
@@ -135,6 +137,7 @@ if(Python_FOUND)
             "${CMAKE_CURRENT_BINARY_DIR}/python/esi/$<TARGET_FILE_NAME:esiCppAccel>"
     )
 
+    # Copy each of the Python sources to the build dir.
     foreach(pysrc ${ESIPythonRuntimeSources})
       add_custom_command(
           OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${pysrc}
@@ -145,6 +148,8 @@ if(Python_FOUND)
       )
     endforeach()
 
+    # Custom target for the Python runtime just aggregates the python sources
+    # and Pybind11 module.
     add_custom_target(ESIPythonRuntime
       DEPENDS
         ${ESIPythonRuntimeSources}
