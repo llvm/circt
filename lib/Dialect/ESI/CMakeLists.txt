@@ -1,7 +1,6 @@
 ##===- CMakeLists.txt - ESI dialect code ----------------------*- cmake -*-===//
 ##
-## Implementation files the ESI dialect. Optionally include the Capnp
-## dependent code.
+## Implementation files the ESI dialect.
 ##
 ##===----------------------------------------------------------------------===//
 
@@ -14,9 +13,7 @@ set(srcs
   ESIPasses.cpp
   ESIServices.cpp
   ESIStdServices.cpp
-  ESITranslations.cpp
   ESITypes.cpp
-  Passes/ESIEmitCollateral.cpp
   Passes/ESILowerPhysical.cpp
   Passes/ESILowerBundles.cpp
   Passes/ESILowerPorts.cpp
@@ -50,12 +47,6 @@ set(ESI_Deps
   MLIRESIInterfacesIncGen
 )
 
-if(CapnProto_FOUND)
-  option(ESI_CAPNP "Enable ESI Capnp features" ON)
-  list(APPEND srcs capnp/Schema.cpp)
-  list(APPEND ESI_LinkLibs CapnProto::capnp CapnProto::capnpc)
-endif()
-
 add_circt_dialect_library(CIRCTESI
   ${srcs}
 
@@ -77,9 +68,6 @@ add_circt_dialect_library(CIRCTESI
 add_custom_target(esi-collateral)
 
 set(ESI_RUNTIME_SRCS
-  cosim/Cosim_DpiPkg.sv
-  cosim/Cosim_Endpoint.sv
-  cosim/Cosim_MMIO.sv
   ESIPrimitives.sv
 
   runtime/CMakeLists.txt
@@ -92,7 +80,25 @@ set(ESI_RUNTIME_SRCS
   runtime/cpp/lib/StdServices.cpp
   runtime/cpp/lib/backends/Cosim.cpp
   runtime/cpp/tools/esiquery.cpp
-  runtime/python/esi/esiaccel.cpp
+  runtime/python/esi/esiCppAccel.cpp
+  runtime/cosim/CMakeLists.txt
+  runtime/cosim/Cosim_DpiPkg.sv
+  runtime/cosim/Cosim_Endpoint.sv
+  runtime/cosim/Cosim_Manifest.sv
+  runtime/cosim/Cosim_MMIO.sv
+  runtime/cosim/MtiPliStub/CMakeLists.txt
+  runtime/cosim/MtiPliStub/DummySvDpi.cpp
+  runtime/cosim/cosim_dpi_server/CMakeLists.txt
+  runtime/cosim/cosim_dpi_server/DpiEntryPoints.cpp
+  runtime/cosim/cosim_dpi_server/Endpoint.cpp
+  runtime/cosim/cosim_dpi_server/Server.cpp
+  runtime/cosim/CosimDpi.capnp
+  runtime/cosim/include/cosim/dpi.h
+  runtime/cosim/include/cosim/Endpoint.h
+  runtime/cosim/include/cosim/LowLevel.h
+  runtime/cosim/include/cosim/Server.h
+  runtime/cosim/include/cosim/Utils.h
+  runtime/cosim/include/dpi/svdpi.h
 )
 
 # A function which copies a file from the source tree to the build tree.
@@ -110,25 +116,9 @@ foreach(SRC ${ESI_RUNTIME_SRCS})
   copy_esi_runtime(${SRC})
 endforeach()
 
-if (ESI_CAPNP)
-  add_dependencies(esi-collateral EsiCosimCapnp)
-  get_target_property(EsiCosimCapnp_bindir EsiCosimCapnp SOURCE_DIR)
-  set(ESI_COSIM_SCHEMA "${EsiCosimCapnp_bindir}/CosimDpi.capnp")
-  set(CAPNPC_SRC_PREFIX "${EsiCosimCapnp_bindir}")
-  add_custom_command(TARGET esi-collateral PRE_BUILD
-    COMMAND ${CMAKE_COMMAND} -E
-    copy "${ESI_COSIM_SCHEMA}"
-         "${CMAKE_CURRENT_BINARY_DIR}/runtime/CosimDpi.capnp")
-
-  target_compile_definitions(obj.CIRCTESI PRIVATE CAPNP)
-  target_link_libraries(obj.CIRCTESI CapnProto::capnp CapnProto::capnpc)
-endif()
-
-add_subdirectory(cosim)
-
 # We include this directory as collateral, but we also need to have a compiled
 # version for testing.
-option(ESI_RUNTIME "Build and test the ESI runtime")
+option(ESI_RUNTIME "Build and test the ESI runtime" OFF)
 llvm_canonicalize_cmake_booleans(ESI_RUNTIME)
 if (ESI_RUNTIME)
   message(STATUS "Enabling ESI runtime build and testing")

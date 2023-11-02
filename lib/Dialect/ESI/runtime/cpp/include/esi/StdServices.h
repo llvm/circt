@@ -36,7 +36,10 @@ public:
   virtual uint32_t esiVersion() const = 0;
 
   /// Return the JSON-formatted system manifest.
-  virtual std::string rawJsonManifest() const = 0;
+  virtual std::string jsonManifest() const;
+
+  /// Return the zlib compressed JSON system manifest.
+  virtual std::vector<uint8_t> compressedManifest() const = 0;
 };
 
 class MMIO : public Service {
@@ -54,8 +57,8 @@ public:
   /// Get the ESI version number to check version compatibility.
   uint32_t esiVersion() const override;
 
-  /// Return the JSON-formatted system manifest.
-  std::string rawJsonManifest() const override;
+  /// Return the zlib compressed JSON system manifest.
+  virtual std::vector<uint8_t> compressedManifest() const override;
 
 private:
   const MMIO *mmio;

@@ -71,6 +71,9 @@ if config.verilator_path != "":
 if config.esi_capnp != "":
   config.available_features.add('capnp')
 
+if config.zlib == "1":
+  config.available_features.add('zlib')
+
 # Enable tests for schedulers relying on an external solver from OR-Tools.
 if config.scheduling_or_tools != "":
   config.available_features.add('or-tools')

@@ -67,11 +67,6 @@ config.test_exec_root = os.path.join(config.circt_obj_root, 'integration_test')
 
 # Tweak the PATH to include the tools dir.
 llvm_config.with_environment('PATH', config.llvm_tools_dir, append_path=True)
-# Substitute '%l' with the path to the build lib dir.
-
-# Tweak the PYTHONPATH to include the lib dir. Some pybind11 modules there.
-llvm_config.with_environment('PYTHONPATH', [config.llvm_lib_dir],
-                             append_path=True)
 
 # Tweak the PYTHONPATH to include the binary dir.
 if config.bindings_python_enabled:
@@ -174,20 +169,20 @@ if len(ieee_sims) > 1:
 if ieee_sims and ieee_sims[-1][1] == config.iverilog_path:
   config.available_features.add('ieee-sim-iverilog')
 
-# Enable ESI cosim tests if they have been built.
-if config.esi_cosim_path != "":
-  config.available_features.add('esi-cosim')
-  config.substitutions.append(
-      ('%ESIINC%', f'{config.circt_include_dir}/circt/Dialect/ESI/'))
-  config.substitutions.append(('%ESICOSIM%', f'{config.esi_cosim_path}'))
-
 # Enable ESI runtime tests.
 if config.esi_runtime == "1":
   config.available_features.add('esi-runtime')
 
-# Enable ESI's Capnp tests if they're supported.
-if config.esi_capnp != "":
-  config.available_features.add('capnp')
+  llvm_config.with_environment('PYTHONPATH',
+                               [f"{config.esi_runtime_path}/python/"],
+                               append_path=True)
+
+  # Enable ESI cosim tests if they have been built.
+  if config.esi_cosim_path != "":
+    config.available_features.add('esi-cosim')
+    config.substitutions.append(
+        ('%ESIINC%', f'{config.circt_include_dir}/circt/Dialect/ESI/'))
+    config.substitutions.append(('%ESICOSIM%', f'{config.esi_cosim_path}'))
 
 # Enable Python bindings tests if they're supported.
 if config.bindings_python_enabled:

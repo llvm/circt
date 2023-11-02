@@ -11,7 +11,6 @@
 #ifndef CIRCT_C_DIALECT_MSFT_H
 #define CIRCT_C_DIALECT_MSFT_H
 
-#include "circt/Dialect/MSFT/MSFTDialect.h"
 #include "mlir-c/IR.h"
 #include "mlir-c/Pass.h"
 
@@ -89,8 +88,8 @@ typedef struct {
 
 enum CirctMSFTDirection { NONE = 0, ASC = 1, DESC = 2 };
 typedef struct {
-  CirctMSFTDirection columns;
-  CirctMSFTDirection rows;
+  enum CirctMSFTDirection columns;
+  enum CirctMSFTDirection rows;
 } CirctMSFTWalkOrder;
 
 MLIR_CAPI_EXPORTED CirctMSFTPlacementDB

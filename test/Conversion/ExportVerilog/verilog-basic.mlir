@@ -465,6 +465,34 @@ hw.module @UseInstances(in %a_in: i8, out a_out1: i1, out a_out2: i1) {
   hw.output %xyz.out, %xyz2.out : i1, i1
 }
 
+// CHECK-LABEL: module ArrayParams
+hw.module @ArrayParams<param: i32>(
+  in %arr: !hw.array<#hw.param.decl.ref<"param"> x i8>,
+  in %uarr: !hw.uarray<#hw.param.decl.ref<"param"> x i8>) {}
+// CHECK:        #(parameter /*integer*/ param) (
+// CHECK:        input [param - 64'd1:0][7:0] arr,
+// CHECK:        input [7:0]                  uarr[0:param - 64'd1]
+// CHECK:      );
+// CHECK:     endmodule
+
+// CHECK-LABEL: module ArrayParamsInst();
+hw.module @ArrayParamsInst() {
+  %arr = hw.aggregate_constant [1 : i8, 2 : i8] : !hw.array<2 x i8>
+  %uarr = hw.aggregate_constant [1 : i8, 2 : i8] : !hw.uarray<2 x i8>
+  hw.instance "arrays" @ArrayParams<param: i32 = 2>(
+    arr: %arr : !hw.array<2 x i8>,
+    uarr: %uarr : !hw.uarray<2 x i8>) -> ()
+}
+// CHECK:       wire [1:0][7:0] [[G0:_.*]] = {8'h1, 8'h2};
+// CHECK:       wire [7:0]      [[G1:_.*]][0:1] = '{8'h1, 8'h2};
+// CHECK:       ArrayParams #(
+// CHECK:         .param(2)
+// CHECK:       ) arrays (
+// CHECK:         .arr  ([[G0]]),
+// CHECK:         .uarr ([[G1]])
+// CHECK:       );
+// CHECK:     endmodule
+
 // Instantiate a parametric module using parameters from its parent module
 hw.module.extern @ExternParametricWidth<width: i32>
   (in %in: !hw.int<#hw.param.decl.ref<"width">>, out out: !hw.int<#hw.param.decl.ref<"width">>)

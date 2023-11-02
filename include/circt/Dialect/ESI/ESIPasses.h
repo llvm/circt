@@ -22,14 +22,18 @@
 namespace circt {
 namespace esi {
 
-std::unique_ptr<OperationPass<ModuleOp>> createESIEmitCollateralPass();
+/// This should eventually become a set of functions to define the various
+/// platform-specific lowerings.
+struct Platform {
+  static constexpr char cosim[] = "cosim";
+};
+
 std::unique_ptr<OperationPass<ModuleOp>> createESIPhysicalLoweringPass();
 std::unique_ptr<OperationPass<ModuleOp>> createESIBundleLoweringPass();
 std::unique_ptr<OperationPass<ModuleOp>> createESIPortLoweringPass();
 std::unique_ptr<OperationPass<ModuleOp>> createESITypeLoweringPass();
 std::unique_ptr<OperationPass<ModuleOp>> createESItoHWPass();
 std::unique_ptr<OperationPass<ModuleOp>> createESIConnectServicesPass();
-std::unique_ptr<OperationPass<ModuleOp>> createESIAddCPPAPIPass();
 std::unique_ptr<OperationPass<ModuleOp>> createESICleanMetadataPass();
 std::unique_ptr<OperationPass<ModuleOp>> createESIBuildManifestPass();
 std::unique_ptr<OperationPass<ModuleOp>> createESIAppIDHierPass();

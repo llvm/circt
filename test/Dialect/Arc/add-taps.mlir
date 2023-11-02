@@ -30,8 +30,8 @@ hw.module @ObserveWires() {
   %y = sv.wire : !hw.inout<i4>
 
   // CHECK-NEXT: hw.constant
-  // CHECK-NEXT: arc.tap %z {name = "z"} : i4
-  // CHECK-NEXT: %z = hw.wire
+  // CHECK-NEXT: arc.tap %c0_i4 {name = "z"} : i4
+  // CHECK-NOT: hw.wire
   %c0_i4 = hw.constant 0 : i4
   %z = hw.wire %c0_i4 : i4
 

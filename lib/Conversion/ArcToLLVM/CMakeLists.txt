@@ -10,6 +10,7 @@ add_circt_conversion_library(CIRCTArcToLLVM
   LINK_LIBS PUBLIC
   CIRCTArc
   CIRCTComb
+  CIRCTSeq
   CIRCTCombToLLVM
   CIRCTHWToLLVM
   MLIRArithToLLVM

@@ -54,6 +54,12 @@ bool ESIAPIType::isSupported() const {
   return circt::esi::isSupported(type, true);
 }
 
+uint64_t ESIAPIType::size() const {
+  if (auto chan = dyn_cast<ChannelType>(type))
+    return hw::getBitWidth(chan.getInner());
+  return hw::getBitWidth(type);
+}
+
 ESIAPIType::ESIAPIType(Type typeArg) : type(innerType(typeArg)) {
   TypeSwitch<Type>(type)
       .Case([this](IntegerType t) {

@@ -33,6 +33,7 @@ struct PathVisitor {
   LogicalResult process(BasePathCreateOp pathOp);
   LogicalResult process(PathCreateOp pathOp);
   LogicalResult process(EmptyPathOp pathOp);
+  LogicalResult process(ListCreateOp pathOp);
   LogicalResult run(ModuleOp module);
   hw::InstanceGraph &instanceGraph;
   hw::InnerRefNamespace &irn;
@@ -251,6 +252,39 @@ LogicalResult PathVisitor::process(EmptyPathOp path) {
   return success();
 }
 
+/// Replace a ListCreateOp of path types with frozen path types.
+LogicalResult PathVisitor::process(ListCreateOp listCreateOp) {
+  ListType listType = listCreateOp.getResult().getType();
+
+  // Check if the element type of a potentially nested list includes path types.
+  bool hasPathType = false;
+  listType.walk([&](Type innerType) {
+    if (isa<BasePathType, PathType>(innerType))
+      hasPathType = true;
+  });
+
+  if (!hasPathType)
+    return success();
+
+  // Set up a type replacer to replace potentially nested path types.
+  mlir::AttrTypeReplacer replacer;
+  replacer.addReplacement([](BasePathType innerType) {
+    return FrozenBasePathType::get(innerType.getContext());
+  });
+  replacer.addReplacement([](PathType innerType) {
+    return FrozenPathType::get(innerType.getContext());
+  });
+
+  // Create a new op with the result type updated to replace path types.
+  OpBuilder builder(listCreateOp);
+  auto newListType = replacer.replace(listType);
+  auto newListCreateOp = builder.create<ListCreateOp>(
+      listCreateOp.getLoc(), newListType, listCreateOp.getOperands());
+  listCreateOp.replaceAllUsesWith(newListCreateOp.getResult());
+  listCreateOp->erase();
+  return success();
+}
+
 LogicalResult PathVisitor::run(ModuleOp module) {
   auto frozenBasePathType = FrozenBasePathType::get(module.getContext());
   auto frozenPathType = FrozenPathType::get(module.getContext());
@@ -273,6 +307,9 @@ LogicalResult PathVisitor::run(ModuleOp module) {
           return WalkResult::interrupt();
       } else if (auto path = dyn_cast<EmptyPathOp>(op)) {
         if (failed(process(path)))
+          return WalkResult::interrupt();
+      } else if (auto listCreate = dyn_cast<ListCreateOp>(op)) {
+        if (failed(process(listCreate)))
           return WalkResult::interrupt();
       }
       return WalkResult::advance();

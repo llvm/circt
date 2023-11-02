@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Analysis/DebugAnalysis.h"
 #include "circt/Analysis/DependenceAnalysis.h"
 #include "circt/Analysis/SchedulingAnalysis.h"
 #include "circt/Dialect/HW/HWInstanceGraph.h"
@@ -18,15 +19,42 @@
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/Value.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/Support/Debug.h"
 
 using namespace mlir;
 using namespace mlir::affine;
+using namespace circt;
 using namespace circt::analysis;
 
 //===----------------------------------------------------------------------===//
-// DependenceAnalysis passes.
+// DebugAnalysis
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct TestDebugAnalysisPass
+    : public PassWrapper<TestDebugAnalysisPass, OperationPass<mlir::ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TestDebugAnalysisPass)
+
+  void runOnOperation() override;
+  StringRef getArgument() const override { return "test-debug-analysis"; }
+  StringRef getDescription() const override {
+    return "Perform debug analysis and emit results as attributes";
+  }
+};
+} // namespace
+
+void TestDebugAnalysisPass::runOnOperation() {
+  auto *context = &getContext();
+  auto &analysis = getAnalysis<DebugAnalysis>();
+  for (auto *op : analysis.debugOps) {
+    op->setAttr("debug.only", UnitAttr::get(context));
+  }
+}
+
+//===----------------------------------------------------------------------===//
+// DependenceAnalysis
 //===----------------------------------------------------------------------===//
 
 namespace {
@@ -77,7 +105,7 @@ void TestDependenceAnalysisPass::runOnOperation() {
 }
 
 //===----------------------------------------------------------------------===//
-// DependenceAnalysis passes.
+// SchedulingAnalysis
 //===----------------------------------------------------------------------===//
 
 namespace {
@@ -114,7 +142,7 @@ void TestSchedulingAnalysisPass::runOnOperation() {
 }
 
 //===----------------------------------------------------------------------===//
-// InferTopModule passes.
+// InstanceGraph
 //===----------------------------------------------------------------------===//
 
 namespace {
@@ -154,13 +182,16 @@ void InferTopModulePass::runOnOperation() {
 namespace circt {
 namespace test {
 void registerAnalysisTestPasses() {
-  mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+  registerPass([]() -> std::unique_ptr<Pass> {
     return std::make_unique<TestDependenceAnalysisPass>();
   });
-  mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+  registerPass([]() -> std::unique_ptr<Pass> {
     return std::make_unique<TestSchedulingAnalysisPass>();
   });
-  mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+  registerPass([]() -> std::unique_ptr<Pass> {
+    return std::make_unique<TestDebugAnalysisPass>();
+  });
+  registerPass([]() -> std::unique_ptr<Pass> {
     return std::make_unique<InferTopModulePass>();
   });
 }

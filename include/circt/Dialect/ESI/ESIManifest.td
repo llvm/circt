@@ -65,7 +65,7 @@ def BundleDirection : I32EnumAttr<"BundleDirection",
   let cppNamespace = "::circt::esi";
 }
 
-def ServiceRequestRecordOp : ESI_Op<"esi.manifest.req", [
+def ServiceRequestRecordOp : ESI_Op<"manifest.req", [
         DeclareOpInterfaceMethods<IsManifestData>,
         DeclareOpInterfaceMethods<HasAppIDOpInterface>]> {
   let summary = "Record of a service request";
@@ -89,10 +89,13 @@ def ServiceRequestRecordOp : ESI_Op<"esi.manifest.req", [
     AppIDAttr getAppID() {
       return getRequestor();
     }
+    // Misc information about the original request which must appear in the
+    // manifest.
+    void getDetails(SmallVectorImpl<NamedAttribute> &results);
   }];
 }
 
-def ServiceImplRecordOp : ESI_Op<"esi.manifest.service_impl", [
+def ServiceImplRecordOp : ESI_Op<"manifest.service_impl", [
         NoTerminator, 
         DeclareOpInterfaceMethods<IsManifestData>,
         DeclareOpInterfaceMethods<HasAppIDOpInterface>]> {
@@ -112,9 +115,15 @@ def ServiceImplRecordOp : ESI_Op<"esi.manifest.service_impl", [
     qualified($appID) (`svc` $service^)? `by` $serviceImplName `with` $implDetails
     attr-dict-with-keyword $reqDetails
   }];
+
+  let extraClassDeclaration = [{
+    // Get information which needs to appear in the manifest for the host to
+    // connect to this service.
+    void getDetails(SmallVectorImpl<NamedAttribute> &results);
+  }];
 }
 
-def ServiceImplClientRecordOp : ESI_Op<"esi.manifest.impl_conn", [
+def ServiceImplClientRecordOp : ESI_Op<"manifest.impl_conn", [
         DeclareOpInterfaceMethods<IsManifestData>,
         HasParent<"ServiceImplRecordOp">]> {
   let summary = "Details of a service implementation client connection";
@@ -131,9 +140,15 @@ def ServiceImplClientRecordOp : ESI_Op<"esi.manifest.impl_conn", [
     $relAppIDPath `req` $servicePort `(` $bundleType `)`
       `with` $implDetails attr-dict
   }];
+
+  let extraClassDeclaration = [{
+    // Get information which needs to appear in the manifest for the host to
+    // connect to this client through the parent service.
+    void getDetails(SmallVectorImpl<NamedAttribute> &results);
+  }];
 }
 
-def AppIDHierRootOp : ESI_Op<"esi.manifest.hier_root",
+def AppIDHierRootOp : ESI_Op<"manifest.hier_root",
                              [HasParent<"mlir::ModuleOp">,
                              NoTerminator, SingleBlock]> {
   let summary = "The root of an appid instance hierarchy";
@@ -146,7 +161,7 @@ def AppIDHierRootOp : ESI_Op<"esi.manifest.hier_root",
   }];
 }
 
-def AppIDHierNodeOp : ESI_Op<"esi.manifest.hier_node", [
+def AppIDHierNodeOp : ESI_Op<"manifest.hier_node", [
       ParentOneOf<["circt::esi::AppIDHierRootOp",
                    "circt::esi::AppIDHierNodeOp"]>,
       NoTerminator, SingleBlock]> {
@@ -157,6 +172,50 @@ def AppIDHierNodeOp : ESI_Op<"esi.manifest.hier_node", [
 
   let assemblyFormat = [{
     qualified($appID) `mod` $moduleRef attr-dict-with-keyword $children
+  }];
+}
+
+def SymbolMetadataOp : ESI_Op<"manifest.sym", [
+  DeclareOpInterfaceMethods<IsManifestData>]> {
+  let summary = "Metadata about a symbol";
+  let description = [{
+    Metadata about a symbol, including its name, repository, commit hash,
+    version, and summary. All are optional, but strongly encouraged. Any
+    additional metadata which users wish to attach should go as discardable
+    attributes.
+  }];
+
+  let arguments = (ins FlatSymbolRefAttr:$symbolRef,
+                       OptionalAttr<StrAttr>:$name,
+                       OptionalAttr<StrAttr>:$repo,
+                       OptionalAttr<StrAttr>:$commitHash,
+                       OptionalAttr<StrAttr>:$version,
+                       OptionalAttr<StrAttr>:$summary);
+                       
+  let assemblyFormat = [{
+    $symbolRef
+    (`name` $name^)?
+    (`repo` $repo^)?
+    (`commit` $commitHash^)?
+    (`version` $version^)?
+    (`summary` $summary^)?
+    attr-dict
+  }];
+}
+
+def BlobAttr : ESI_Attr<"Blob"> {
+  let summary = "A binary blob";
+
+  let parameters = (ins ArrayRefParameter<"char">:$data);
+  let mnemonic = "blob";
+  let hasCustomAssemblyFormat = 1;
+}
+
+def CompressedManifestOp : ESI_Op<"manifest.compressed", []> {
+  let summary = "A zlib-compressed JSON manifest";
+  let arguments = (ins BlobAttr:$compressedManifest);
+  let assemblyFormat = [{
+    $compressedManifest attr-dict
   }];
 }
 
