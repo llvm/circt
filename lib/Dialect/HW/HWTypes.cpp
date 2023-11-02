@@ -1008,7 +1008,6 @@ FailureOr<ModuleType> ModuleType::resolveParametricTypes(ArrayAttr parameters,
     FailureOr<Type> resolvedType =
         evaluateParametricType(loc, parameters, port.type, emitErrors);
     if (failed(resolvedType))
-      // What should I do here?
       return failure();
     port.type = *resolvedType;
     resolvedPorts.push_back(port);
