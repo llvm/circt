@@ -80,7 +80,7 @@ set(ESI_RUNTIME_SRCS
   runtime/cpp/lib/StdServices.cpp
   runtime/cpp/lib/backends/Cosim.cpp
   runtime/cpp/tools/esiquery.cpp
-  runtime/python/esi/esiaccel.cpp
+  runtime/python/esi/esiCppAccel.cpp
   runtime/cosim/CMakeLists.txt
   runtime/cosim/Cosim_DpiPkg.sv
   runtime/cosim/Cosim_Endpoint.sv

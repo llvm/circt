@@ -15,12 +15,13 @@ import Cosim_DpiPkg::*;
 
 module Cosim_Manifest
 #(
-  parameter int COMPRESSED_MANIFEST_SIZE = 0
+  parameter int COMPRESSED_MANIFEST_SIZE = 0,
+  parameter int unsigned ESI_VERSION = 1
 )(
   input byte unsigned compressed_manifest[COMPRESSED_MANIFEST_SIZE]
 );
 
   always@(compressed_manifest)
-    cosim_set_manifest(compressed_manifest);
+    cosim_set_manifest(ESI_VERSION, compressed_manifest);
 
 endmodule

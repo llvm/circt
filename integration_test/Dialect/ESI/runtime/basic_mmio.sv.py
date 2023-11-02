@@ -1,10 +1,10 @@
-import esiaccel
+import esi
 import os
 import sys
 
 conn = f"{sys.argv[1]}:{sys.argv[2]}"
 
-acc = esiaccel.Accelerator.connect("cosim", conn)
+acc = esi.Accelerator("cosim", conn)
 mmio = acc.get_service_mmio()
 
 r = mmio.read(40)
@@ -26,7 +26,3 @@ try:
   assert False, "above should have thrown exception"
 except Exception:
   print("caught expected exception")
-
-# Crashes with "magic num not found", which is expected since this isn't
-# supported yet.
-# acc.sysinfo().esi_version()

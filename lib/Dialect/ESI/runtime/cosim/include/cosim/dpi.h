@@ -47,7 +47,8 @@ DPI int sv2cCosimserverInit();
 DPI void sv2cCosimserverFinish();
 
 /// Set the system zlib-compressed manifest.
-DPI void sv2cCosimserverSetManifest(const svOpenArrayHandle compressedManifest);
+DPI void sv2cCosimserverSetManifest(unsigned int esiVersion,
+                                    const svOpenArrayHandle compressedManifest);
 
 /// Register an MMIO module. Just checks that there is only one instantiated.
 DPI int sv2cCosimserverMMIORegister();
