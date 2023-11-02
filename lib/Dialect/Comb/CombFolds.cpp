@@ -788,6 +788,27 @@ static bool canonicalizeLogicalCstWithConcat(Operation *logicalOp,
   return true;
 }
 
+// Determines whether the inputs to a logical element are of opposite
+// comparisons and can lowered into a constant.
+static bool canCombineOppositeBinCmpIntoConstant(OperandRange operands) {
+  llvm::SmallDenseSet<std::tuple<ICmpPredicate, Value, Value>> seenPredicates;
+
+  for (auto op : operands) {
+    if (auto icmpOp = op.getDefiningOp<ICmpOp>();
+        icmpOp && icmpOp.getTwoState()) {
+      auto predicate = icmpOp.getPredicate();
+      auto lhs = icmpOp.getLhs();
+      auto rhs = icmpOp.getRhs();
+      if (seenPredicates.contains(
+              {ICmpOp::getNegatedPredicate(predicate), lhs, rhs}))
+        return true;
+
+      seenPredicates.insert({predicate, lhs, rhs});
+    }
+  }
+  return false;
+}
+
 OpFoldResult AndOp::fold(FoldAdaptor adaptor) {
   if (hasOperandsOutsideOfBlock(getOperation()))
     return {};
@@ -826,6 +847,13 @@ OpFoldResult AndOp::fold(FoldAdaptor adaptor) {
               getContext());
     }
   }
+
+  // x0 = icmp(pred, x, y)
+  // x1 = icmp(!pred, x, y)
+  // and(x0, x1) -> 0
+  if (canCombineOppositeBinCmpIntoConstant(getInputs()))
+    return getIntAttr(APInt::getZero(getType().cast<IntegerType>().getWidth()),
+                      getContext());
 
   // Constant fold
   return constFoldAssociativeOp(inputs, hw::PEO::And);
@@ -1060,6 +1088,14 @@ OpFoldResult OrOp::fold(FoldAdaptor adaptor) {
               getContext());
     }
   }
+
+  // x0 = icmp(pred, x, y)
+  // x1 = icmp(!pred, x, y)
+  // or(x0, x1) -> 1
+  if (canCombineOppositeBinCmpIntoConstant(getInputs()))
+    return getIntAttr(
+        APInt::getAllOnes(getType().cast<IntegerType>().getWidth()),
+        getContext());
 
   // Constant fold
   return constFoldAssociativeOp(inputs, hw::PEO::Or);
