@@ -26,20 +26,6 @@ def ESIConnectServices : Pass<"esi-connect-services", "mlir::ModuleOp"> {
     "circt::comb::CombDialect"];
 }
 
-
-def ESIEmitCollateral: Pass<"esi-emit-collateral", "mlir::ModuleOp"> {
-  let summary = "Emit all the neccessary collateral";
-  let constructor = "circt::esi::createESIEmitCollateralPass()";
-  let dependentDialects = ["circt::sv::SVDialect"];
-  let options = [
-    Option<"schemaFile", "schema-file", "std::string",
-           "", "File to output capnp schema into">,
-    ListOption<"tops", "tops", "std::string",
-               "List of top modules to export Tcl for",
-               "llvm::cl::ZeroOrMore,">
-  ];
-}
-
 def ESIAppIDHier : Pass<"esi-appid-hier", "mlir::ModuleOp"> {
   let summary = "Build an AppID based hierarchy rooted at top module 'top'";
   let constructor = "circt::esi::createESIAppIDHierPass()";
@@ -55,7 +41,9 @@ def ESIBuildManifest : Pass<"esi-build-manifest", "mlir::ModuleOp"> {
   let dependentDialects = ["circt::hw::HWDialect", "circt::sv::SVDialect"];
   let options = [
     Option<"toFile", "to-file", "std::string",
-           "", "Write the manifest JSON directly to this file">
+           "", "Write the manifest JSON directly to this file">,
+    Option<"top", "top", "std::string",
+           "", "Root module of the instance hierarchy">
   ];
 }
 
@@ -93,6 +81,10 @@ def LowerESItoHW: Pass<"lower-esi-to-hw", "mlir::ModuleOp"> {
   let summary = "Lower ESI to HW where possible and SV elsewhere.";
   let constructor = "circt::esi::createESItoHWPass()";
   let dependentDialects = ["circt::comb::CombDialect", "circt::hw::HWDialect"];
+  let options = [
+    Option<"platform", "platform", "std::string",
+           "", "Target this platform">
+  ];
 }
 
 #endif // CIRCT_DIALECT_ESI_ESIPASSES_TD

@@ -198,6 +198,62 @@ struct VariadicOpConversion : OpConversionPattern<SourceOp> {
     return success();
   }
 };
+
+// Shifts greater than or equal to the width of the lhs are currently
+// unspecified in arith and produce poison in LLVM IR. To prevent undefined
+// behaviour we handle this case explicitly.
+
+/// Lower the logical shift SourceOp to the logical shift TargetOp
+/// Ensure to produce zero for shift amounts greater than or equal to the width
+/// of the lhs
+template <typename SourceOp, typename TargetOp>
+struct LogicalShiftConversion : OpConversionPattern<SourceOp> {
+  using OpConversionPattern<SourceOp>::OpConversionPattern;
+  using OpAdaptor = typename SourceOp::Adaptor;
+
+  LogicalResult
+  matchAndRewrite(SourceOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    unsigned shifteeWidth =
+        hw::type_cast<IntegerType>(adaptor.getLhs().getType())
+            .getIntOrFloatBitWidth();
+    auto zeroConstOp = rewriter.create<arith::ConstantOp>(
+        op.getLoc(), IntegerAttr::get(adaptor.getLhs().getType(), 0));
+    auto maxShamtConstOp = rewriter.create<arith::ConstantOp>(
+        op.getLoc(),
+        IntegerAttr::get(adaptor.getLhs().getType(), shifteeWidth));
+    auto shiftOp = rewriter.createOrFold<TargetOp>(
+        op.getLoc(), adaptor.getLhs(), adaptor.getRhs());
+    auto isAllZeroOp = rewriter.createOrFold<CmpIOp>(
+        op.getLoc(), CmpIPredicate::uge, adaptor.getRhs(),
+        maxShamtConstOp.getResult());
+    rewriter.replaceOpWithNewOp<SelectOp>(op, isAllZeroOp, zeroConstOp,
+                                          shiftOp);
+    return success();
+  }
+};
+
+/// Lower a comb::ShrSOp operation to a (saturating) arith::ShRSIOp
+struct ShrSOpConversion : OpConversionPattern<ShrSOp> {
+  using OpConversionPattern<ShrSOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ShrSOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    unsigned shifteeWidth =
+        hw::type_cast<IntegerType>(adaptor.getLhs().getType())
+            .getIntOrFloatBitWidth();
+    // Clamp the shift amount to shifteeWidth - 1
+    auto maxShamtMinusOneConstOp = rewriter.create<arith::ConstantOp>(
+        op.getLoc(),
+        IntegerAttr::get(adaptor.getLhs().getType(), shifteeWidth - 1));
+    auto shamtOp = rewriter.createOrFold<MinUIOp>(op.getLoc(), adaptor.getRhs(),
+                                                  maxShamtMinusOneConstOp);
+    rewriter.replaceOpWithNewOp<ShRSIOp>(op, adaptor.getLhs(), shamtOp);
+    return success();
+  }
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -215,15 +271,15 @@ void circt::populateCombToArithConversionPatterns(
     TypeConverter &converter, mlir::RewritePatternSet &patterns) {
   patterns.add<
       CombReplicateOpConversion, HWConstantOpConversion, IcmpOpConversion,
-      ExtractOpConversion, ConcatOpConversion,
-      BinaryOpConversion<ShlOp, ShLIOp>, BinaryOpConversion<ShrSOp, ShRSIOp>,
-      BinaryOpConversion<ShrUOp, ShRUIOp>, BinaryOpConversion<SubOp, SubIOp>,
-      BinaryOpConversion<DivSOp, DivSIOp>, BinaryOpConversion<DivUOp, DivUIOp>,
-      BinaryOpConversion<ModSOp, RemSIOp>, BinaryOpConversion<ModUOp, RemUIOp>,
-      BinaryOpConversion<MuxOp, SelectOp>, VariadicOpConversion<AddOp, AddIOp>,
-      VariadicOpConversion<MulOp, MulIOp>, VariadicOpConversion<AndOp, AndIOp>,
-      VariadicOpConversion<OrOp, OrIOp>, VariadicOpConversion<XorOp, XOrIOp>>(
-      converter, patterns.getContext());
+      ExtractOpConversion, ConcatOpConversion, ShrSOpConversion,
+      LogicalShiftConversion<ShlOp, ShLIOp>,
+      LogicalShiftConversion<ShrUOp, ShRUIOp>,
+      BinaryOpConversion<SubOp, SubIOp>, BinaryOpConversion<DivSOp, DivSIOp>,
+      BinaryOpConversion<DivUOp, DivUIOp>, BinaryOpConversion<ModSOp, RemSIOp>,
+      BinaryOpConversion<ModUOp, RemUIOp>, BinaryOpConversion<MuxOp, SelectOp>,
+      VariadicOpConversion<AddOp, AddIOp>, VariadicOpConversion<MulOp, MulIOp>,
+      VariadicOpConversion<AndOp, AndIOp>, VariadicOpConversion<OrOp, OrIOp>,
+      VariadicOpConversion<XorOp, XOrIOp>>(converter, patterns.getContext());
 }
 
 void ConvertCombToArithPass::runOnOperation() {

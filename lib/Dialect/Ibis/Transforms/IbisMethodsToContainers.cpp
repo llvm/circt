@@ -31,8 +31,8 @@ struct DataflowMethodOpConversion
   matchAndRewrite(DataflowMethodOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     // Replace the class by a container of the same name.
-    auto newContainer =
-        rewriter.create<ContainerOp>(op.getLoc(), op.getNameAttr());
+    auto newContainer = rewriter.create<ContainerOp>(
+        op.getLoc(), op.getInnerSym().getSymName());
     rewriter.setInsertionPointToStart(newContainer.getBodyBlock());
 
     // Create mandatory %this
@@ -44,15 +44,18 @@ struct DataflowMethodOpConversion
     llvm::SmallVector<Value> argValues;
     for (auto [arg, name] : llvm::zip_equal(
              op.getArguments(), op.getArgNames().getAsRange<StringAttr>())) {
-      auto port =
-          rewriter.create<InputPortOp>(arg.getLoc(), name, arg.getType());
+      auto port = rewriter.create<InputPortOp>(
+          arg.getLoc(), hw::InnerSymAttr::get(name), arg.getType());
       argValues.push_back(rewriter.create<PortReadOp>(arg.getLoc(), port));
     }
 
     ReturnOp returnOp = cast<ReturnOp>(op.getBodyBlock()->getTerminator());
-    for (auto [idx, resType] : llvm::enumerate(op.getResultTypes())) {
+    for (auto [idx, resType] : llvm::enumerate(
+             cast<MethodLikeOpInterface>(op.getOperation()).getResultTypes())) {
       auto port = rewriter.create<OutputPortOp>(
-          op.getLoc(), rewriter.getStringAttr("out" + std::to_string(idx)),
+          op.getLoc(),
+          hw::InnerSymAttr::get(
+              rewriter.getStringAttr("out" + std::to_string(idx))),
           resType);
       rewriter.create<PortWriteOp>(op.getLoc(), port, returnOp.getOperand(idx));
     }

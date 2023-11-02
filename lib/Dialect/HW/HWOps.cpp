@@ -65,17 +65,15 @@ bool hw::isCombinational(Operation *op) {
          IsCombClassifier().dispatchTypeOpVisitor(op);
 }
 
-static Value foldStructExtract(Operation *inputOp, StringRef field) {
+static Value foldStructExtract(Operation *inputOp, uint32_t fieldIndex) {
   // A struct extract of a struct create -> corresponding struct create operand.
   if (auto structCreate = dyn_cast_or_null<StructCreateOp>(inputOp)) {
-    auto ty = type_cast<StructType>(structCreate.getResult().getType());
-    if (auto idx = ty.getFieldIndex(field))
-      return structCreate.getOperand(*idx);
-    return {};
+    return structCreate.getOperand(fieldIndex);
   }
+
   // Extracting injected field -> corresponding field
   if (auto structInject = dyn_cast_or_null<StructInjectOp>(inputOp)) {
-    if (structInject.getField() != field)
+    if (structInject.getFieldIndex() != fieldIndex)
       return {};
     return structInject.getNewValue();
   }
@@ -1413,8 +1411,17 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
   auto mod = cast<hw::HWModuleLike>(module);
   auto argNames = builder.getArrayAttr(mod.getInputNames());
   auto resultNames = builder.getArrayAttr(mod.getOutputNames());
-  FunctionType modType = mod.getHWModuleType().getFuncType();
-  build(builder, result, modType.getResults(), name,
+
+  // Try to resolve the parameterized module type. If failed, use the module's
+  // parmeterized type. If the client doesn't fix this error, the verifier will
+  // fail.
+  ModuleType modType = mod.getHWModuleType();
+  FailureOr<ModuleType> resolvedModType = modType.resolveParametricTypes(
+      parameters, result.location, /*emitErrors=*/false);
+  if (succeeded(resolvedModType))
+    modType = *resolvedModType;
+  FunctionType funcType = resolvedModType->getFuncType();
+  build(builder, result, funcType.getResults(), name,
         FlatSymbolRefAttr::get(SymbolTable::getSymbolName(module)), inputs,
         argNames, resultNames, parameters, innerSym);
 }
@@ -2313,9 +2320,10 @@ LogicalResult StructExplodeOp::canonicalize(StructExplodeOp op,
   auto *inputOp = op.getInput().getDefiningOp();
   auto elements = type_cast<StructType>(op.getInput().getType()).getElements();
   auto result = failure();
-  for (auto [element, res] : llvm::zip(elements, op.getResults())) {
-    if (auto foldResult = foldStructExtract(inputOp, element.name.str())) {
-      rewriter.replaceAllUsesWith(res, foldResult);
+  auto opResults = op.getResults();
+  for (uint32_t index = 0; index < elements.size(); index++) {
+    if (auto foldResult = foldStructExtract(inputOp, index)) {
+      rewriter.replaceAllUsesWith(opResults[index], foldResult);
       result = success();
     }
   }
@@ -2343,6 +2351,32 @@ void StructExplodeOp::build(OpBuilder &odsBuilder, OperationState &odsState,
 // StructExtractOp
 //===----------------------------------------------------------------------===//
 
+/// Ensure an aggregate op's field index is within the bounds of
+/// the aggregate type and the accessed field is of 'elementType'.
+template <typename AggregateOp, typename AggregateType>
+static LogicalResult verifyAggregateFieldIndexAndType(AggregateOp &op,
+                                                      AggregateType aggType,
+                                                      Type elementType) {
+  auto index = op.getFieldIndex();
+  if (index >= aggType.getElements().size())
+    return op.emitOpError() << "field index " << index
+                            << " exceeds element count of aggregate type";
+
+  if (getCanonicalType(elementType) !=
+      getCanonicalType(aggType.getElements()[index].type))
+    return op.emitOpError()
+           << "type " << aggType.getElements()[index].type
+           << " of accessed field in aggregate at index " << index
+           << " does not match expected type " << elementType;
+
+  return success();
+}
+
+LogicalResult StructExtractOp::verify() {
+  return verifyAggregateFieldIndexAndType<StructExtractOp, StructType>(
+      *this, getInput().getType(), getType());
+}
+
 /// Use the same parser for both struct_extract and union_extract since the
 /// syntax is identical.
 template <typename AggregateType>
@@ -2352,8 +2386,7 @@ static ParseResult parseExtractOp(OpAsmParser &parser, OperationState &result) {
   Type declType;
 
   if (parser.parseOperand(operand) || parser.parseLSquare() ||
-      parser.parseAttribute(fieldName, "field", result.attributes) ||
-      parser.parseRSquare() ||
+      parser.parseAttribute(fieldName) || parser.parseRSquare() ||
       parser.parseOptionalAttrDict(result.attributes) ||
       parser.parseColonType(declType))
     return failure();
@@ -2362,11 +2395,18 @@ static ParseResult parseExtractOp(OpAsmParser &parser, OperationState &result) {
     return parser.emitError(parser.getNameLoc(),
                             "invalid kind of type specified");
 
-  Type resultType = aggType.getFieldType(fieldName.getValue());
-  if (!resultType) {
-    parser.emitError(parser.getNameLoc(), "invalid field name specified");
+  auto fieldIndex = aggType.getFieldIndex(fieldName);
+  if (!fieldIndex) {
+    parser.emitError(parser.getNameLoc(), "field name '" +
+                                              fieldName.getValue() +
+                                              "' not found in aggregate type");
     return failure();
   }
+
+  auto indexAttr =
+      IntegerAttr::get(IntegerType::get(parser.getContext(), 32), *fieldIndex);
+  result.addAttribute("fieldIndex", indexAttr);
+  Type resultType = aggType.getElements()[*fieldIndex].type;
   result.addTypes(resultType);
 
   if (parser.resolveOperand(operand, declType, result.operands))
@@ -2380,8 +2420,8 @@ template <typename AggType>
 static void printExtractOp(OpAsmPrinter &printer, AggType op) {
   printer << " ";
   printer.printOperand(op.getInput());
-  printer << "[\"" << op.getField() << "\"]";
-  printer.printOptionalAttrDict(op->getAttrs(), {"field"});
+  printer << "[\"" << op.getFieldName() << "\"]";
+  printer.printOptionalAttrDict(op->getAttrs(), {"fieldIndex"});
   printer << " : " << op.getInput().getType();
 }
 
@@ -2396,27 +2436,30 @@ void StructExtractOp::print(OpAsmPrinter &printer) {
 
 void StructExtractOp::build(OpBuilder &builder, OperationState &odsState,
                             Value input, StructType::FieldInfo field) {
-  build(builder, odsState, field.type, input, field.name);
+  auto fieldIndex =
+      type_cast<StructType>(input.getType()).getFieldIndex(field.name);
+  assert(fieldIndex.has_value() && "field name not found in aggregate type");
+  build(builder, odsState, field.type, input, *fieldIndex);
 }
 
 void StructExtractOp::build(OpBuilder &builder, OperationState &odsState,
-                            Value input, StringAttr fieldAttr) {
+                            Value input, StringAttr fieldName) {
   auto structType = type_cast<StructType>(input.getType());
-  auto resultType = structType.getFieldType(fieldAttr);
-  build(builder, odsState, resultType, input, fieldAttr);
+  auto fieldIndex = structType.getFieldIndex(fieldName);
+  assert(fieldIndex.has_value() && "field name not found in aggregate type");
+  auto resultType = structType.getElements()[*fieldIndex].type;
+  build(builder, odsState, resultType, input, *fieldIndex);
 }
 
 OpFoldResult StructExtractOp::fold(FoldAdaptor adaptor) {
   if (auto constOperand = adaptor.getInput()) {
     // Fold extract from aggregate constant
-    auto operandType = type_cast<StructType>(getOperand().getType());
-    auto fieldIdx = operandType.getFieldIndex(getField());
     auto operandAttr = llvm::cast<ArrayAttr>(constOperand);
-    return operandAttr.getValue()[*fieldIdx];
+    return operandAttr.getValue()[getFieldIndex()];
   }
 
   if (auto foldResult =
-          foldStructExtract(getInput().getDefiningOp(), getField()))
+          foldStructExtract(getInput().getDefiningOp(), getFieldIndex()))
     return foldResult;
   return {};
 }
@@ -2427,9 +2470,9 @@ LogicalResult StructExtractOp::canonicalize(StructExtractOp op,
 
   // b = extract(inject(x["a"], v0)["b"]) => extract(x, "b")
   if (auto structInject = dyn_cast_or_null<StructInjectOp>(inputOp)) {
-    if (structInject.getField() != op.getField()) {
+    if (structInject.getFieldIndex() != op.getFieldIndex()) {
       rewriter.replaceOpWithNewOp<StructExtractOp>(
-          op, op.getType(), structInject.getInput(), op.getField());
+          op, op.getType(), structInject.getInput(), op.getFieldIndexAttr());
       return success();
     }
   }
@@ -2439,18 +2482,25 @@ LogicalResult StructExtractOp::canonicalize(StructExtractOp op,
 
 void StructExtractOp::getAsmResultNames(
     function_ref<void(Value, StringRef)> setNameFn) {
-  auto structType = type_cast<StructType>(getInput().getType());
-  for (auto field : structType.getElements()) {
-    if (field.name == getField()) {
-      setNameFn(getResult(), field.name.str());
-      return;
-    }
-  }
+  setNameFn(getResult(), getFieldName());
 }
 
 //===----------------------------------------------------------------------===//
 // StructInjectOp
 //===----------------------------------------------------------------------===//
+
+void StructInjectOp::build(OpBuilder &builder, OperationState &odsState,
+                           Value input, StringAttr fieldName, Value newValue) {
+  auto structType = type_cast<StructType>(input.getType());
+  auto fieldIndex = structType.getFieldIndex(fieldName);
+  assert(fieldIndex.has_value() && "field name not found in aggregate type");
+  build(builder, odsState, input, *fieldIndex, newValue);
+}
+
+LogicalResult StructInjectOp::verify() {
+  return verifyAggregateFieldIndexAndType<StructInjectOp, StructType>(
+      *this, getInput().getType(), getNewValue().getType());
+}
 
 ParseResult StructInjectOp::parse(OpAsmParser &parser, OperationState &result) {
   llvm::SMLoc inputOperandsLoc = parser.getCurrentLocation();
@@ -2459,9 +2509,8 @@ ParseResult StructInjectOp::parse(OpAsmParser &parser, OperationState &result) {
   Type declType;
 
   if (parser.parseOperand(operand) || parser.parseLSquare() ||
-      parser.parseAttribute(fieldName, "field", result.attributes) ||
-      parser.parseRSquare() || parser.parseComma() ||
-      parser.parseOperand(val) ||
+      parser.parseAttribute(fieldName) || parser.parseRSquare() ||
+      parser.parseComma() || parser.parseOperand(val) ||
       parser.parseOptionalAttrDict(result.attributes) ||
       parser.parseColonType(declType))
     return failure();
@@ -2469,13 +2518,20 @@ ParseResult StructInjectOp::parse(OpAsmParser &parser, OperationState &result) {
   if (!structType)
     return parser.emitError(inputOperandsLoc, "invalid kind of type specified");
 
-  Type resultType = structType.getFieldType(fieldName.getValue());
-  if (!resultType) {
-    parser.emitError(inputOperandsLoc, "invalid field name specified");
+  auto fieldIndex = structType.getFieldIndex(fieldName);
+  if (!fieldIndex) {
+    parser.emitError(parser.getNameLoc(), "field name '" +
+                                              fieldName.getValue() +
+                                              "' not found in aggregate type");
     return failure();
   }
+
+  auto indexAttr =
+      IntegerAttr::get(IntegerType::get(parser.getContext(), 32), *fieldIndex);
+  result.addAttribute("fieldIndex", indexAttr);
   result.addTypes(declType);
 
+  Type resultType = structType.getElements()[*fieldIndex].type;
   if (parser.resolveOperands({operand, val}, {declType, resultType},
                              inputOperandsLoc, result.operands))
     return failure();
@@ -2485,9 +2541,9 @@ ParseResult StructInjectOp::parse(OpAsmParser &parser, OperationState &result) {
 void StructInjectOp::print(OpAsmPrinter &printer) {
   printer << " ";
   printer.printOperand(getInput());
-  printer << "[\"" << getField() << "\"], ";
+  printer << "[\"" << getFieldName() << "\"], ";
   printer.printOperand(getNewValue());
-  printer.printOptionalAttrDict((*this)->getAttrs(), {"field"});
+  printer.printOptionalAttrDict((*this)->getAttrs(), {"fieldIndex"});
   printer << " : " << getInput().getType();
 }
 
@@ -2498,9 +2554,7 @@ OpFoldResult StructInjectOp::fold(FoldAdaptor adaptor) {
     return {};
   SmallVector<Attribute> array;
   llvm::copy(input.cast<ArrayAttr>(), std::back_inserter(array));
-  StructType structType = getInput().getType();
-  auto index = *structType.getFieldIndex(getField());
-  array[index] = newValue;
+  array[getFieldIndex()] = newValue;
   return ArrayAttr::get(getContext(), array);
 }
 
@@ -2517,7 +2571,7 @@ LogicalResult StructInjectOp::canonicalize(StructInjectOp op,
     if (!injects.insert(inject).second)
       return failure();
 
-    fields.try_emplace(inject.getFieldAttr(), inject.getNewValue());
+    fields.try_emplace(inject.getFieldNameAttr(), inject.getNewValue());
     input = inject.getInput();
     inject = dyn_cast_or_null<StructInjectOp>(input.getDefiningOp());
   } while (inject);
@@ -2543,11 +2597,11 @@ LogicalResult StructInjectOp::canonicalize(StructInjectOp op,
     return failure();
 
   // Eliminate overwrites. The hash map contains the last write to each field.
-  for (const auto &field : elements) {
-    auto it = fields.find(field.name);
+  for (uint32_t fieldIndex = 0; fieldIndex < elements.size(); fieldIndex++) {
+    auto it = fields.find(elements[fieldIndex].name);
     if (it == fields.end())
       continue;
-    input = rewriter.create<StructInjectOp>(op.getLoc(), ty, input, field.name,
+    input = rewriter.create<StructInjectOp>(op.getLoc(), ty, input, fieldIndex,
                                             it->second);
   }
 
@@ -2559,14 +2613,26 @@ LogicalResult StructInjectOp::canonicalize(StructInjectOp op,
 // UnionCreateOp
 //===----------------------------------------------------------------------===//
 
+LogicalResult UnionCreateOp::verify() {
+  return verifyAggregateFieldIndexAndType<UnionCreateOp, UnionType>(
+      *this, getType(), getInput().getType());
+}
+
+void UnionCreateOp::build(OpBuilder &builder, OperationState &odsState,
+                          Type unionType, StringAttr fieldName, Value input) {
+  auto fieldIndex = type_cast<UnionType>(unionType).getFieldIndex(fieldName);
+  assert(fieldIndex.has_value() && "field name not found in aggregate type");
+  build(builder, odsState, unionType, *fieldIndex, input);
+}
+
 ParseResult UnionCreateOp::parse(OpAsmParser &parser, OperationState &result) {
   Type declOrAliasType;
-  StringAttr field;
+  StringAttr fieldName;
   OpAsmParser::UnresolvedOperand input;
   llvm::SMLoc fieldLoc = parser.getCurrentLocation();
 
-  if (parser.parseAttribute(field, "field", result.attributes) ||
-      parser.parseComma() || parser.parseOperand(input) ||
+  if (parser.parseAttribute(fieldName) || parser.parseComma() ||
+      parser.parseOperand(input) ||
       parser.parseOptionalAttrDict(result.attributes) ||
       parser.parseColonType(declOrAliasType))
     return failure();
@@ -2576,12 +2642,17 @@ ParseResult UnionCreateOp::parse(OpAsmParser &parser, OperationState &result) {
     return parser.emitError(parser.getNameLoc(),
                             "expected !hw.union type or alias");
 
-  Type inputType = declType.getFieldType(field.getValue());
-  if (!inputType) {
+  auto fieldIndex = declType.getFieldIndex(fieldName);
+  if (!fieldIndex) {
     parser.emitError(fieldLoc, "cannot find union field '")
-        << field.getValue() << '\'';
+        << fieldName.getValue() << '\'';
     return failure();
   }
+
+  auto indexAttr =
+      IntegerAttr::get(IntegerType::get(parser.getContext(), 32), *fieldIndex);
+  result.addAttribute("fieldIndex", indexAttr);
+  Type inputType = declType.getElements()[*fieldIndex].type;
 
   if (parser.resolveOperand(input, inputType, result.operands))
     return failure();
@@ -2590,9 +2661,9 @@ ParseResult UnionCreateOp::parse(OpAsmParser &parser, OperationState &result) {
 }
 
 void UnionCreateOp::print(OpAsmPrinter &printer) {
-  printer << " \"" << getField() << "\", ";
+  printer << " \"" << getFieldName() << "\", ";
   printer.printOperand(getInput());
-  printer.printOptionalAttrDict((*this)->getAttrs(), {"field"});
+  printer.printOptionalAttrDict((*this)->getAttrs(), {"fieldIndex"});
   printer << " : " << getType();
 }
 
@@ -2612,9 +2683,27 @@ LogicalResult UnionExtractOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
     DictionaryAttr attrs, mlir::OpaqueProperties properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
-  results.push_back(cast<UnionType>(getCanonicalType(operands[0].getType()))
-                        .getFieldType(attrs.getAs<StringAttr>("field")));
+  auto unionElements =
+      hw::type_cast<UnionType>((operands[0].getType())).getElements();
+  unsigned fieldIndex =
+      attrs.getAs<IntegerAttr>("fieldIndex").getValue().getZExtValue();
+  if (fieldIndex >= unionElements.size()) {
+    if (loc)
+      mlir::emitError(*loc, "field index " + Twine(fieldIndex) +
+                                " exceeds element count of aggregate type");
+    return failure();
+  }
+  results.push_back(unionElements[fieldIndex].type);
   return success();
+}
+
+void UnionExtractOp::build(OpBuilder &odsBuilder, OperationState &odsState,
+                           Value input, StringAttr fieldName) {
+  auto unionType = type_cast<UnionType>(input.getType());
+  auto fieldIndex = unionType.getFieldIndex(fieldName);
+  assert(fieldIndex.has_value() && "field name not found in aggregate type");
+  auto resultType = unionType.getElements()[*fieldIndex].type;
+  build(odsBuilder, odsState, resultType, input, *fieldIndex);
 }
 
 //===----------------------------------------------------------------------===//

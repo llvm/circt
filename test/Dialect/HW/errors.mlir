@@ -110,8 +110,22 @@ hw.module @struct(in %a: !hw.struct<foo: i42>) {
 // -----
 
 hw.module @struct(in %a: !hw.struct<foo: i42>) {
-  // expected-error @+1 {{custom op 'hw.struct_extract' invalid field name specified}}
+  // expected-error @+1 {{custom op 'hw.struct_extract' field name 'bar' not found in aggregate type}}
   %aget = hw.struct_extract %a["bar"] : !hw.struct<foo: i42>
+}
+
+// -----
+
+hw.module @struct(in %a: !hw.struct<foo: i32, bar: i18>) {
+  // expected-error @+1 {{'hw.struct_extract' op field index 2 exceeds element count of aggregate type}}
+  %0 = "hw.struct_extract"(%a) {fieldIndex = 2 : i32} : (!hw.struct<foo: i32, bar: i18>) -> i18
+}
+
+// -----
+
+hw.module @struct(in %a: !hw.struct<foo: i32, bar: i18>) {
+  // expected-error @+1 {{'hw.struct_extract' op type 'i18' of accessed field in aggregate at index 1 does not match expected type 'i19'}}
+  %0 = "hw.struct_extract"(%a) {fieldIndex = 1 : i32} : (!hw.struct<foo: i32, bar: i18>) -> i19
 }
 
 // -----
@@ -124,15 +138,63 @@ hw.module @struct(in %a: !hw.struct<foo: i42>, in %b: i42) {
 // -----
 
 hw.module @struct(in %a: !hw.struct<foo: i42>, in %b: i42) {
-  // expected-error @+1 {{custom op 'hw.struct_inject' invalid field name specified}}
+  // expected-error @+1 {{custom op 'hw.struct_inject' field name 'bar' not found in aggregate type}}
   %aget = hw.struct_inject %a["bar"], %b : !hw.struct<foo: i42>
 }
 
 // -----
 
-hw.module @union(in %b: i42) {
+hw.module @struct(in %a: !hw.struct<foo: i32, bar: i18>, in %b: i18) {
+  // expected-error @+1 {{'hw.struct_inject' op field index 2 exceeds element count of aggregate type}}
+  %0 = "hw.struct_inject"(%a, %b) {fieldIndex = 2 : i32} : (!hw.struct<foo: i32, bar: i18>, i18) -> !hw.struct<foo: i32, bar: i18>
+}
+
+// -----
+
+hw.module @struct(in %a: !hw.struct<foo: i32, bar: i18>, in %b: i42) {
+  // expected-error @+1 {{'hw.struct_inject' op type 'i18' of accessed field in aggregate at index 1 does not match expected type 'i42'}}
+  %0 = "hw.struct_inject"(%a, %b) {fieldIndex = 1 : i32} : (!hw.struct<foo: i32, bar: i18>, i42) -> !hw.struct<foo: i32, bar: i18>
+}
+// -----
+
+hw.module @union(in %a: i42) {
   // expected-error @+1 {{custom op 'hw.union_create' cannot find union field 'bar'}}
   %u = hw.union_create "bar", %a : !hw.union<foo: i42>
+}
+
+// -----
+
+hw.module @union(in %a: i42) {
+  // expected-error @+1 {{'hw.union_create' op field index 1 exceeds element count of aggregate type}}
+  %0 = "hw.union_create"(%a) {fieldIndex = 1 : i32} : (i42) -> !hw.union<foo: i42>
+}
+
+// -----
+
+hw.module @union(in %a: i12) {
+  // expected-error @+1 {{'hw.union_create' op type 'i42' of accessed field in aggregate at index 0 does not match expected type 'i12'}}
+  %0 = "hw.union_create"(%a) {fieldIndex = 0 : i32} : (i12) -> !hw.union<foo: i42, bar: i12>
+}
+
+// -----
+
+hw.module @union(in %a: !hw.union<foo: i42>) {
+  // expected-error @+1 {{custom op 'hw.union_extract' field name 'bar' not found in aggregate type}}
+  %aget = hw.union_extract %a["bar"] : !hw.union<foo: i42>
+}
+// -----
+
+hw.module @union(in %a: !hw.union<foo: i42>) {
+  // expected-error @+2 {{'hw.union_extract' op failed to infer returned types}}
+  // expected-error @+1 {{field index 1 exceeds element count of aggregate type}}
+  %aget = "hw.union_extract"(%a) {fieldIndex = 1 : i32} : (!hw.union<foo: i42>) -> i42
+}
+// -----
+
+hw.module @union(in %a: !hw.union<foo: i42, bar: i12>) {
+  // expected-error @+2 {{'hw.union_extract' op failed to infer returned types}}
+  // expected-error @+1 {{'hw.union_extract' op inferred type(s) 'i12' are incompatible with return type(s) of operation 'i42'}}
+  %aget = "hw.union_extract"(%a) {fieldIndex = 1 : i32} : (!hw.union<foo: i42, bar: i12>) -> i42
 }
 
 // -----

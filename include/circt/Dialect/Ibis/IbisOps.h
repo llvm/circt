@@ -10,6 +10,7 @@
 #define CIRCT_DIALECT_IBIS_IBISOPS_H
 
 #include "circt/Dialect/DC/DCTypes.h"
+#include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "circt/Dialect/Handshake/HandshakeInterfaces.h"
 #include "circt/Dialect/Ibis/IbisDialect.h"
 #include "circt/Dialect/Ibis/IbisTypes.h"

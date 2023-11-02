@@ -19,10 +19,6 @@ extern "C" {
 
 MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(ESI, esi);
 MLIR_CAPI_EXPORTED void registerESIPasses(void);
-MLIR_CAPI_EXPORTED void registerESITranslations(void);
-
-MLIR_CAPI_EXPORTED MlirLogicalResult
-circtESIExportCosimSchema(MlirModule, MlirStringCallback, void *userData);
 
 MLIR_CAPI_EXPORTED bool circtESITypeIsAChannelType(MlirType type);
 MLIR_CAPI_EXPORTED MlirType circtESIChannelTypeGet(MlirType inner,

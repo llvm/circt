@@ -215,3 +215,19 @@ hw.module @NonTrivial(in %clock: !seq.clock, in %i0: i4, in %reset1: i1, in %res
   hw.output %foo, %bar : i4, i4
 }
 // CHECK-NEXT: }
+
+hw.module @ObserveWires(in %in1: i32, in %in2: i32, out out: i32) {
+  %c-1_i32 = hw.constant -1 : i32
+  %0 = comb.and %in1, %in2 : i32
+  arc.tap %0 {name = "z"} : i32
+  %1 = comb.xor %0, %c-1_i32 : i32
+  hw.output %1 : i32
+}
+//       CHECK: arc.define @[[ARC_NAME:[a-zA-Z0-9_]+]]
+//       CHECK:   [[V0:%.+]] = comb.and
+//       CHECK:   [[V1:%.+]] = comb.xor [[V0]], {{.*}} :
+//       CHECK:   arc.output [[V0]], [[V1]] :
+//       CHECK: hw.module @ObserveWires
+//   CHECK-DAG:   [[RES:%.+]]:2 = arc.state @[[ARC_NAME]]({{.*}}) lat 0 :
+//   CHECK-DAG:   arc.tap [[RES]]#0 {name = "z"} : i32
+//       CHECK:   hw.output %0#1 : i32

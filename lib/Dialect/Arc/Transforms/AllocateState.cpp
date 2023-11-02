@@ -76,8 +76,8 @@ void AllocateStatePass::allocateOps(Value storage, Block *block,
   // most.
   unsigned currentByte = 0;
   auto allocBytes = [&](unsigned numBytes) {
-    currentByte = llvm::alignToPowerOf2(currentByte,
-                                        llvm::bit_ceil(std::min(numBytes, 8U)));
+    currentByte = llvm::alignToPowerOf2(
+        currentByte, llvm::bit_ceil(std::min(numBytes, 16U)));
     unsigned offset = currentByte;
     currentByte += numBytes;
     return offset;

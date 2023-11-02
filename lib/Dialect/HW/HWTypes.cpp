@@ -311,7 +311,7 @@ Type StructType::getFieldType(mlir::StringRef fieldName) {
   return Type();
 }
 
-std::optional<unsigned> StructType::getFieldIndex(mlir::StringRef fieldName) {
+std::optional<uint32_t> StructType::getFieldIndex(mlir::StringRef fieldName) {
   ArrayRef<hw::StructType::FieldInfo> elems = getElements();
   for (size_t idx = 0, numElems = elems.size(); idx < numElems; ++idx)
     if (elems[idx].name == fieldName)
@@ -319,7 +319,7 @@ std::optional<unsigned> StructType::getFieldIndex(mlir::StringRef fieldName) {
   return {};
 }
 
-std::optional<unsigned> StructType::getFieldIndex(mlir::StringAttr fieldName) {
+std::optional<uint32_t> StructType::getFieldIndex(mlir::StringAttr fieldName) {
   ArrayRef<hw::StructType::FieldInfo> elems = getElements();
   for (size_t idx = 0, numElems = elems.size(); idx < numElems; ++idx)
     if (elems[idx].name == fieldName)
@@ -476,10 +476,21 @@ LogicalResult UnionType::verify(function_ref<InFlightDiagnostic()> emitError,
   return result;
 }
 
+std::optional<uint32_t> UnionType::getFieldIndex(mlir::StringAttr fieldName) {
+  ArrayRef<hw::UnionType::FieldInfo> elems = getElements();
+  for (size_t idx = 0, numElems = elems.size(); idx < numElems; ++idx)
+    if (elems[idx].name == fieldName)
+      return idx;
+  return {};
+}
+
+std::optional<uint32_t> UnionType::getFieldIndex(mlir::StringRef fieldName) {
+  return getFieldIndex(StringAttr::get(getContext(), fieldName));
+}
+
 UnionType::FieldInfo UnionType::getFieldInfo(::mlir::StringRef fieldName) {
-  for (const auto &field : getElements())
-    if (field.name == fieldName)
-      return field;
+  if (auto fieldIndex = getFieldIndex(fieldName))
+    return getElements()[*fieldIndex];
   return FieldInfo();
 }
 
@@ -668,7 +679,9 @@ UnpackedArrayType::verify(function_ref<InFlightDiagnostic()> emitError,
 }
 
 size_t UnpackedArrayType::getNumElements() const {
-  return getSizeAttr().cast<IntegerAttr>().getInt();
+  if (auto intAttr = getSizeAttr().dyn_cast<IntegerAttr>())
+    return intAttr.getInt();
+  return -1;
 }
 
 uint64_t UnpackedArrayType::getMaxFieldID() const {
@@ -985,6 +998,21 @@ FunctionType ModuleType::getFuncType() {
     else
       outputs.push_back(p.type);
   return FunctionType::get(getContext(), inputs, outputs);
+}
+
+FailureOr<ModuleType> ModuleType::resolveParametricTypes(ArrayAttr parameters,
+                                                         LocationAttr loc,
+                                                         bool emitErrors) {
+  SmallVector<ModulePort, 8> resolvedPorts;
+  for (ModulePort port : getPorts()) {
+    FailureOr<Type> resolvedType =
+        evaluateParametricType(loc, parameters, port.type, emitErrors);
+    if (failed(resolvedType))
+      return failure();
+    port.type = *resolvedType;
+    resolvedPorts.push_back(port);
+  }
+  return ModuleType::get(getContext(), resolvedPorts);
 }
 
 static StringRef dirToStr(ModulePort::Direction dir) {

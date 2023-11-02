@@ -2,7 +2,7 @@
 
 // CHECK-LABEL: ibis.class @Argify {
 // CHECK-NEXT:   %this = ibis.this @Argify 
-// CHECK-NEXT:   ibis.method @foo() {
+// CHECK-NEXT:   ibis.method @foo() -> () {
 // CHECK-NEXT:     %c32_i32 = hw.constant 32 : i32
 // CHECK-NEXT:     %0:2 = ibis.sblock.isolated (%arg0 : i32 = %c32_i32) -> (i32, i32) {
 // CHECK-NEXT:       %c31_i32 = hw.constant 31 : i32

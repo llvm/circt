@@ -806,4 +806,15 @@ def MaterializeDebugInfo :
   let dependentDialects = ["debug::DebugDialect"];
 }
 
+def Lint :
+    Pass<"firrtl-lint", "firrtl::FModuleOp"> {
+  let summary = "An analysis pass to detect static simulation failures.";
+  let description = [{
+    This pass detects operations that will trivially fail any simulation.
+    Currently it detects assertions whose predicate condition can be statically
+    inferred to be false. The pass emits error on such failing ops.
+  }];
+  let constructor = "circt::firrtl::createLintingPass()";
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD

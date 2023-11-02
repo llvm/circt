@@ -15,7 +15,7 @@
 #include "circt/Support/LLVM.h"
 #include "circt/Support/SymCache.h"
 
-#include "mlir/Transforms/DialectConversion.h"
+#include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
 using namespace circt;
 using namespace circt::esi;
@@ -209,14 +209,17 @@ void ESIBundlesPass::runOnOperation() {
 
   // Canonicalize away bundle packs and unpacks. Any non-back-to-back [un]packs
   // need to be gone by now.
-  ConversionTarget tgt(ctxt);
-  tgt.markUnknownOpDynamicallyLegal([](Operation *) { return true; });
-  tgt.addIllegalOp<PackBundleOp, UnpackBundleOp>();
   RewritePatternSet patterns(&ctxt);
   PackBundleOp::getCanonicalizationPatterns(patterns, &ctxt);
   UnpackBundleOp::getCanonicalizationPatterns(patterns, &ctxt);
-  if (failed(applyPartialConversion(getOperation(), tgt, std::move(patterns))))
+  if (failed(mlir::applyPatternsAndFoldGreedily(getOperation(),
+                                                std::move(patterns))))
     signalPassFailure();
+
+  top.walk([&](PackBundleOp pack) {
+    pack.emitError("PackBundleOp should have been canonicalized away by now");
+    signalPassFailure();
+  });
 }
 
 std::unique_ptr<OperationPass<ModuleOp>>

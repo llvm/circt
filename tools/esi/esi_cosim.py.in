@@ -17,39 +17,38 @@ class CosimBase:
     """List the available interfaces"""
     return self.cosim.list().wait().ifaces
 
-  def openEP(self, epid: str, sendType=None, recvType=None):
+  def openEP(self, epid: str, from_host_type=None, to_host_type=None):
     """Open the endpoint, optionally checking the send and recieve types"""
     ifaces = self.cosim.list().wait().ifaces
     epid = self.prefix + "." + epid
     for iface in ifaces:
       if iface.endpointID == epid:
         # Optionally check that the type IDs match.
-        print(f"SendTypeId: {iface.sendTypeID:x}")
-        print(f"RecvTypeId: {iface.recvTypeID:x}")
-        if sendType is not None:
-          assert (iface.sendTypeID == sendType.schema.node.id)
-        if recvType is not None:
-          assert (iface.recvTypeID == recvType.schema.node.id)
+        if from_host_type is not None:
+          assert (iface.fromHostType == from_host_type)
+        if to_host_type is not None:
+          assert (iface.toHostType == to_host_type)
 
         openResp = self.cosim.open(iface).wait()
         assert openResp.iface is not None
         return openResp.iface
     assert False, "Could not find specified EndpointID"
 
-  def readMsg(self, ep, expectedType):
+  def readMsg(self, ep):
     """Cosim doesn't currently support blocking reads. Implement a blocking
            read via polling."""
     while True:
-      recvResp = ep.recv(False).wait()
+      recvResp = ep.recvToHost().wait()
       if recvResp.hasData:
         break
       else:
         time.sleep(0.01)
     assert recvResp.resp is not None
-    return recvResp.resp.as_struct(expectedType)
+    return recvResp.resp
 
 
 class LowLevel:
+
   def __init__(self, schemaPath, hostPort):
     """Load the schema and connect to the RPC server"""
     self.schema = capnp.load(schemaPath)

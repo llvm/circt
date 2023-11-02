@@ -42,6 +42,18 @@ MLIR_CAPI_EXPORTED MlirTypeID omClassTypeGetTypeID(void);
 /// Get the name for a ClassType.
 MLIR_CAPI_EXPORTED MlirIdentifier omClassTypeGetName(MlirType type);
 
+/// Is the Type a FrozenBasePathType.
+MLIR_CAPI_EXPORTED bool omTypeIsAFrozenBasePathType(MlirType type);
+
+/// Get the TypeID for a FrozenBasePathType.
+MLIR_CAPI_EXPORTED MlirTypeID omFrozenBasePathTypeGetTypeID(void);
+
+/// Is the Type a FrozenPathType.
+MLIR_CAPI_EXPORTED bool omTypeIsAFrozenPathType(MlirType type);
+
+/// Get the TypeID for a FrozenPathType.
+MLIR_CAPI_EXPORTED MlirTypeID omFrozenPathTypeGetTypeID(void);
+
 /// Is the Type a MapType.
 MLIR_CAPI_EXPORTED bool omTypeIsAMapType(MlirType type);
 

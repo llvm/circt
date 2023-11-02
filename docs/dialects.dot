@@ -108,7 +108,7 @@ digraph G {
     VCDTrace [label="Trace (vcd)"]
     SystemCFile [label="SystemC (c++)"]
     SVFile [label="SystemVerilog"]
-    ServiceDesc [label="ESI system description\n(JSON/Capnp)"]
+    ServiceDesc [label="ESI system description\n(JSON)"]
     SoftwareAPI [label="Software API\n(e.g. py/c++/c#)" style=dashed]
     TCL [label="Placements (tcl)"]
     SimBinary [label="Simulation Binary (obj)"]
@@ -156,7 +156,6 @@ digraph G {
   Calyx_native -> lower_to_sv_and_core [arrowhead=none]
   LLHD -> llhd_sim
   llhd_sim -> VCDTrace
-  //ESI -> CapNProto
   ESI -> ServiceDesc
   MSFT -> TCL
   PyFile -> PyCDE

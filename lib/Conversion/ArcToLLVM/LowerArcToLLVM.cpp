@@ -12,6 +12,7 @@
 #include "circt/Conversion/HWToLLVM.h"
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Support/Namespace.h"
 #include "mlir/Conversion/ArithToLLVM/ArithToLLVM.h"
 #include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
@@ -302,11 +303,23 @@ struct ZeroCountOpLowering : public OpConversionPattern<arc::ZeroCountOp> {
   }
 };
 
+template <typename OpTy>
+struct ReplaceOpWithInputPattern : public OpConversionPattern<OpTy> {
+  using OpConversionPattern<OpTy>::OpConversionPattern;
+  using OpAdaptor = typename OpTy::Adaptor;
+  LogicalResult
+  matchAndRewrite(OpTy op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOp(op, adaptor.getInput());
+    return success();
+  }
+};
+
 } // namespace
 
 static bool isArcType(Type type) {
   return type.isa<StorageType>() || type.isa<MemoryType>() ||
-         type.isa<StateType>();
+         type.isa<StateType>() || type.isa<seq::ClockType>();
 }
 
 static bool hasArcType(TypeRange types) {
@@ -331,6 +344,7 @@ static void populateLegality(ConversionTarget &target) {
   target.addLegalDialect<func::FuncDialect>();
   target.addLegalDialect<scf::SCFDialect>();
   target.addLegalDialect<LLVM::LLVMDialect>();
+  target.addIllegalDialect<seq::SeqDialect>();
 
   target.addIllegalOp<arc::DefineOp>();
   target.addIllegalOp<arc::OutputOp>();
@@ -350,6 +364,9 @@ static void populateLegality(ConversionTarget &target) {
 }
 
 static void populateTypeConversion(TypeConverter &typeConverter) {
+  typeConverter.addConversion([&](seq::ClockType type) {
+    return IntegerType::get(type.getContext(), 1);
+  });
   typeConverter.addConversion([&](StorageType type) {
     return LLVM::LLVMPointerType::get(IntegerType::get(type.getContext(), 8));
   });
@@ -380,6 +397,8 @@ static void populateOpConversion(RewritePatternSet &patterns,
     MemoryReadOpLowering,
     MemoryWriteOpLowering,
     ModelOpLowering,
+    ReplaceOpWithInputPattern<seq::ToClockOp>,
+    ReplaceOpWithInputPattern<seq::FromClockOp>,
     ReturnOpLowering,
     StateReadOpLowering,
     StateWriteOpLowering,

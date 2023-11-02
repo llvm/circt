@@ -516,10 +516,9 @@ operator<<(mlir::Diagnostic &diag,
     diag << "List(" << list->getType() << ")";
   else if (auto *map = llvm::dyn_cast<evaluator::MapValue>(&evaluatorValue))
     diag << "Map(" << map->getType() << ")";
-  else if (auto *basePath =
-               llvm::dyn_cast<evaluator::BasePathValue>(&evaluatorValue))
+  else if (llvm::isa<evaluator::BasePathValue>(&evaluatorValue))
     diag << "BasePath()";
-  else if (auto *path = llvm::dyn_cast<evaluator::PathValue>(&evaluatorValue))
+  else if (llvm::isa<evaluator::PathValue>(&evaluatorValue))
     diag << "Path()";
   else
     assert(false && "unhandled evaluator value");
