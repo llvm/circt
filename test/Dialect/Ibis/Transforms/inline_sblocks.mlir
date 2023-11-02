@@ -2,7 +2,7 @@
 
 // CHECK-LABEL:   ibis.class @Inline1 {
 // CHECK:           %[[VAL_0:.*]] = ibis.this @Inline1
-// CHECK:           ibis.method @foo(%[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i32) {
+// CHECK:           ibis.method @foo(%[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i32) -> () {
 // CHECK:             ibis.sblock.inline.begin {maxThreads = 1 : i64}
 // CHECK:             %[[VAL_3:.*]] = "foo.op1"(%[[VAL_1]], %[[VAL_2]]) : (i32, i32) -> i32
 // CHECK:             ibis.sblock.inline.end
@@ -23,7 +23,7 @@ ibis.class @Inline1 {
 
 // CHECK-LABEL:   ibis.class @Inline2 {
 // CHECK:           %[[VAL_0:.*]] = ibis.this @Inline2
-// CHECK:           ibis.method @foo(%[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i32) {
+// CHECK:           ibis.method @foo(%[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i32) -> () {
 // CHECK:             "foo.unused1"() : () -> ()
 // CHECK:             ibis.sblock.inline.begin {maxThreads = 1 : i64}
 // CHECK:             %[[VAL_3:.*]] = "foo.op1"(%[[VAL_1]], %[[VAL_2]]) : (i32, i32) -> i32

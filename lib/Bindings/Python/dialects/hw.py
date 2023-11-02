@@ -521,8 +521,11 @@ class StructExtractOp(StructExtractOp):
     struct_value = support.get_value(struct_value)
     struct_type = support.get_self_or_inner(struct_value.type)
     field_type = struct_type.get_field(field_name)
-    return hw.StructExtractOp(field_type, struct_value,
-                              StringAttr.get(field_name))
+    field_index = struct_type.get_field_index(field_name)
+    if field_index == UnitAttr.get():
+      raise TypeError(
+          f"field '{field_name}' not element of struct type {struct_type}")
+    return hw.StructExtractOp(field_type, struct_value, field_index)
 
 
 @_ods_cext.register_operation(_Dialect, replace=True)

@@ -123,8 +123,8 @@ struct StructExtractOpConversion
   matchAndRewrite(hw::StructExtractOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
 
-    uint32_t fieldIndex = HWToLLVMEndianessConverter::llvmIndexOfStructField(
-        op.getInput().getType().cast<hw::StructType>(), op.getField());
+    uint32_t fieldIndex = HWToLLVMEndianessConverter::convertToLLVMEndianess(
+        op.getInput().getType(), op.getFieldIndex());
     rewriter.replaceOpWithNewOp<LLVM::ExtractValueOp>(op, adaptor.getInput(),
                                                       fieldIndex);
     return success();
@@ -250,9 +250,8 @@ struct StructInjectOpConversion
   matchAndRewrite(hw::StructInjectOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
 
-    uint32_t fieldIndex = HWToLLVMEndianessConverter::llvmIndexOfStructField(
-        op.getInput().getType().cast<hw::StructType>(),
-        op.getFieldAttr().getValue());
+    uint32_t fieldIndex = HWToLLVMEndianessConverter::convertToLLVMEndianess(
+        op.getInput().getType(), op.getFieldIndex());
 
     rewriter.replaceOpWithNewOp<LLVM::InsertValueOp>(
         op, adaptor.getInput(), op.getNewValue(), fieldIndex);

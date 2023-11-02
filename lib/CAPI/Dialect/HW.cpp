@@ -146,6 +146,14 @@ MlirType hwStructTypeGetField(MlirType structType, MlirStringRef fieldName) {
   return wrap(st.getFieldType(unwrap(fieldName)));
 }
 
+MlirAttribute hwStructTypeGetFieldIndex(MlirType structType,
+                                        MlirStringRef fieldName) {
+  StructType st = unwrap(structType).cast<StructType>();
+  if (auto idx = st.getFieldIndex(unwrap(fieldName)))
+    return wrap(IntegerAttr::get(IntegerType::get(st.getContext(), 32), *idx));
+  return wrap(UnitAttr::get(st.getContext()));
+}
+
 intptr_t hwStructTypeGetNumFields(MlirType structType) {
   StructType st = unwrap(structType).cast<StructType>();
   return st.getElements().size();

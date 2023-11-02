@@ -36,16 +36,17 @@ LogicalResult ConvertCFToHandshakePass::convertMethod(MethodOp method) {
   // Add a control input/output to the method.
   OpBuilder b(method);
   llvm::SmallVector<Type> newArgTypes, newResTypes;
-  llvm::copy(method.getArgumentTypes(), std::back_inserter(newArgTypes));
-  llvm::copy(method.getResultTypes(), std::back_inserter(newResTypes));
+  auto methodLikeOp = cast<MethodLikeOpInterface>(method.getOperation());
+  llvm::copy(methodLikeOp.getArgumentTypes(), std::back_inserter(newArgTypes));
+  llvm::copy(methodLikeOp.getResultTypes(), std::back_inserter(newResTypes));
   newArgTypes.push_back(b.getNoneType());
   newResTypes.push_back(b.getNoneType());
   auto newFuncType = b.getFunctionType(newArgTypes, newResTypes);
   auto dataflowMethodOp = b.create<DataflowMethodOp>(
-      method.getLoc(), method.getSymNameAttr(), TypeAttr::get(newFuncType),
+      method.getLoc(), method.getInnerSymAttr(), TypeAttr::get(newFuncType),
       method.getArgNamesAttr(), method.getArgAttrsAttr(),
-      method.getAllResultAttrs());
-  dataflowMethodOp.getBody().takeBody(method.getBody());
+      method.getResAttrsAttr());
+  dataflowMethodOp.getFunctionBody().takeBody(method.getBody());
   dataflowMethodOp.getBodyBlock()->addArgument(b.getNoneType(),
                                                method.getLoc());
   Value entryCtrl = dataflowMethodOp.getBodyBlock()->getArguments().back();
