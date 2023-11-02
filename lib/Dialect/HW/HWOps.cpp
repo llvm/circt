@@ -1413,6 +1413,10 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
   auto mod = cast<hw::HWModuleLike>(module);
   auto argNames = builder.getArrayAttr(mod.getInputNames());
   auto resultNames = builder.getArrayAttr(mod.getOutputNames());
+
+  // Try to resolve the parameterized module type. If failed, use the module's
+  // parmeterized type. If the client doesn't fix this error, the verifier will
+  // fail.
   ModuleType modType = mod.getHWModuleType();
   FailureOr<ModuleType> resolvedModType = modType.resolveParametricTypes(
       parameters, result.location, /*emitErrors=*/false);
