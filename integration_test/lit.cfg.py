@@ -173,9 +173,9 @@ if ieee_sims and ieee_sims[-1][1] == config.iverilog_path:
 if config.esi_runtime == "1":
   config.available_features.add('esi-runtime')
 
-  print(config.esi_runtime_path)
   llvm_config.with_environment('PYTHONPATH',
-                               [f"{config.esi_runtime_path}/python/"], append_path=True)
+                               [f"{config.esi_runtime_path}/python/"],
+                               append_path=True)
 
   # Enable ESI cosim tests if they have been built.
   if config.esi_cosim_path != "":
