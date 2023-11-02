@@ -275,6 +275,8 @@ def ModuleTypeImpl : HWType<"Module"> {
     size_t getOutputIdForPortId(size_t);
     size_t getPortIdForInputId(size_t);
     size_t getPortIdForOutputId(size_t);
+    FailureOr<ModuleType> resolveParametricTypes(
+      ArrayAttr parameters, LocationAttr loc, bool emitErrors);
   }];
 }
 

@@ -1000,6 +1000,21 @@ FunctionType ModuleType::getFuncType() {
   return FunctionType::get(getContext(), inputs, outputs);
 }
 
+FailureOr<ModuleType> ModuleType::resolveParametricTypes(ArrayAttr parameters,
+                                                         LocationAttr loc,
+                                                         bool emitErrors) {
+  SmallVector<ModulePort, 8> resolvedPorts;
+  for (ModulePort port : getPorts()) {
+    FailureOr<Type> resolvedType =
+        evaluateParametricType(loc, parameters, port.type, emitErrors);
+    if (failed(resolvedType))
+      return failure();
+    port.type = *resolvedType;
+    resolvedPorts.push_back(port);
+  }
+  return ModuleType::get(getContext(), resolvedPorts);
+}
+
 static StringRef dirToStr(ModulePort::Direction dir) {
   switch (dir) {
   case ModulePort::Direction::Input:
