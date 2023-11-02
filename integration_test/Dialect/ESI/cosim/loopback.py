@@ -53,8 +53,8 @@ class LoopbackTester(esi_cosim.CosimBase):
     recv_ep.close().wait()
     assert dataSent == dataRecv
 
+
 if __name__ == "__main__":
-  import os
   import sys
   rpc = LoopbackTester(sys.argv[2], sys.argv[1])
   print(rpc.list())
