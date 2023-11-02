@@ -449,6 +449,7 @@ LogicalResult CosimManifestLowering::matchAndRewrite(
     CompressedManifestOp op, OpAdaptor adaptor,
     ConversionPatternRewriter &rewriter) const {
   MLIRContext *ctxt = rewriter.getContext();
+  Location loc = op.getLoc();
 
   // Declare external module.
   Attribute params[] = {
@@ -466,8 +467,8 @@ LogicalResult CosimManifestLowering::matchAndRewrite(
   rewriter.setInsertionPointToEnd(
       op->getParentOfType<mlir::ModuleOp>().getBody());
   auto manifestModule = rewriter.create<HWModuleExternOp>(
-      op.getLoc(), rewriter.getStringAttr("Cosim_Manifest"), ports,
-      "Cosim_Manifest", ArrayAttr::get(ctxt, params));
+      loc, rewriter.getStringAttr("Cosim_Manifest"), ports, "Cosim_Manifest",
+      ArrayAttr::get(ctxt, params));
 
   rewriter.setInsertionPoint(op);
 
@@ -476,14 +477,16 @@ LogicalResult CosimManifestLowering::matchAndRewrite(
   for (char b : op.getCompressedManifest().getData())
     bytes.push_back(rewriter.getI8IntegerAttr(b));
   auto manifestConstant = rewriter.create<hw::AggregateConstantOp>(
-      op.getLoc(),
-      hw::UnpackedArrayType::get(rewriter.getI8Type(), bytes.size()),
+      loc, hw::UnpackedArrayType::get(rewriter.getI8Type(), bytes.size()),
       rewriter.getArrayAttr(bytes));
+  auto manifestLogic =
+      rewriter.create<sv::LogicOp>(loc, manifestConstant.getType());
+  rewriter.create<sv::AssignOp>(loc, manifestLogic, manifestConstant);
+  auto manifest = rewriter.create<sv::ReadInOutOp>(loc, manifestLogic);
 
   // Then instantiate the external module.
   rewriter.create<hw::InstanceOp>(
-      op.getLoc(), manifestModule, "__manifest",
-      ArrayRef<Value>({manifestConstant}),
+      loc, manifestModule, "__manifest", ArrayRef<Value>({manifest}),
       rewriter.getArrayAttr(
           {ParamDeclAttr::get("COMPRESSED_MANIFEST_SIZE",
                               rewriter.getI32IntegerAttr(bytes.size()))}));
