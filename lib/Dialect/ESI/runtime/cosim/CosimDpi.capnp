@@ -16,7 +16,7 @@
 @0x9fd65fec6e2d2779;
 
 # The primary interface exposed by an ESI cosim simulation.
-interface CosimDpiServer @0x85e029b5352bcdb5 {
+interface CosimDpiServer @0xe3d7f70c7065c46a {
   # List all the registered endpoints.
   list @0 () -> (ifaces :List(EsiDpiInterfaceDesc));
   # Open one of them. Specify both the send and recv data types if want type
@@ -24,7 +24,7 @@ interface CosimDpiServer @0x85e029b5352bcdb5 {
   open @1 [S, T] (iface :EsiDpiInterfaceDesc) -> (iface :EsiDpiEndpoint);
 
   # Get the zlib-compressed JSON system manifest.
-  getCompressedManifest @2 () -> (compressedManifest :Data);
+  getCompressedManifest @2 () -> (version :Int32, compressedManifest :Data);
 
   # Create a low level interface into the simulation.
   openLowLevel @3 () -> (lowLevel :EsiLowLevel);

@@ -78,6 +78,7 @@ import "DPI-C" sv2cCosimserverEpTryGet =
 
 import "DPI-C" sv2cCosimserverSetManifest =
   function void cosim_set_manifest(
+    input int unsigned esi_version,
     input byte unsigned compressed_manifest[]
   );
 

@@ -21,10 +21,9 @@ using namespace esi;
 using namespace esi::services;
 
 // NOLINTNEXTLINE(readability-identifier-naming)
-PYBIND11_MODULE(esiaccel, m) {
+PYBIND11_MODULE(esiCppAccel, m) {
   py::class_<Accelerator>(m, "Accelerator")
-      .def_static("connect", &registry::connect,
-                  py::return_value_policy::take_ownership)
+      .def(py::init(&registry::connect))
       .def("sysinfo", &Accelerator::getService<SysInfo>,
            py::return_value_policy::reference_internal)
       .def("get_service_mmio", &Accelerator::getService<services::MMIO>,
@@ -32,7 +31,7 @@ PYBIND11_MODULE(esiaccel, m) {
 
   py::class_<SysInfo>(m, "SysInfo")
       .def("esi_version", &SysInfo::esiVersion)
-      .def("raw_json_manifest", &SysInfo::rawJsonManifest);
+      .def("json_manifest", &SysInfo::jsonManifest);
 
   py::class_<services::MMIO>(m, "MMIO")
       .def("read", &services::MMIO::read)

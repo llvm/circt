@@ -87,10 +87,12 @@ class CosimServer final : public CosimDpiServer::Server {
   /// The registry of endpoints. The RpcServer class owns this.
   EndpointRegistry &reg;
   LowLevel &lowLevelBridge;
+  const unsigned int &esiVersion;
   const std::vector<uint8_t> &compressedManifest;
 
 public:
   CosimServer(EndpointRegistry &reg, LowLevel &lowLevelBridge,
+              const unsigned int &esiVersion,
               const std::vector<uint8_t> &compressedManifest);
 
   /// List all the registered interfaces.
@@ -194,9 +196,12 @@ kj::Promise<void> LowLevelServer::writeMMIO(WriteMMIOContext context) {
 /// ----- CosimServer definitions.
 
 CosimServer::CosimServer(EndpointRegistry &reg, LowLevel &lowLevelBridge,
+                         const unsigned int &esiVersion,
                          const std::vector<uint8_t> &compressedManifest)
-    : reg(reg), lowLevelBridge(lowLevelBridge),
-      compressedManifest(compressedManifest) {}
+    : reg(reg), lowLevelBridge(lowLevelBridge), esiVersion(esiVersion),
+      compressedManifest(compressedManifest) {
+  printf("version: %d\n", esiVersion);
+}
 
 kj::Promise<void> CosimServer::list(ListContext context) {
   auto ifaces = context.getResults().initIfaces((unsigned int)reg.size());
@@ -224,6 +229,7 @@ kj::Promise<void> CosimServer::open(OpenContext ctxt) {
 
 kj::Promise<void>
 CosimServer::getCompressedManifest(GetCompressedManifestContext ctxt) {
+  ctxt.getResults().setVersion(esiVersion);
   ctxt.getResults().setCompressedManifest(
       Data::Reader(compressedManifest.data(), compressedManifest.size()));
   return kj::READY_NOW;
@@ -250,9 +256,10 @@ static void writePort(uint16_t port) {
 }
 
 void RpcServer::mainLoop(uint16_t port) {
-  capnp::EzRpcServer rpcServer(
-      kj::heap<CosimServer>(endpoints, lowLevelBridge, compressedManifest),
-      /* bindAddress */ "*", port);
+  capnp::EzRpcServer rpcServer(kj::heap<CosimServer>(endpoints, lowLevelBridge,
+                                                     esiVersion,
+                                                     compressedManifest),
+                               /* bindAddress */ "*", port);
   auto &waitScope = rpcServer.getWaitScope();
   // If port is 0, ExRpcSever selects one and we have to wait to get the port.
   if (port == 0) {

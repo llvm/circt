@@ -69,9 +69,6 @@ config.test_exec_root = os.path.join(config.circt_obj_root, 'integration_test')
 llvm_config.with_environment('PATH', config.llvm_tools_dir, append_path=True)
 # Substitute '%l' with the path to the build lib dir.
 
-# Tweak the PYTHONPATH to include the lib dir. Some pybind11 modules there.
-llvm_config.with_environment('PYTHONPATH', [config.llvm_lib_dir],
-                             append_path=True)
 
 # Tweak the PYTHONPATH to include the binary dir.
 if config.bindings_python_enabled:
@@ -177,6 +174,10 @@ if ieee_sims and ieee_sims[-1][1] == config.iverilog_path:
 # Enable ESI runtime tests.
 if config.esi_runtime == "1":
   config.available_features.add('esi-runtime')
+
+  print(config.esi_runtime_path)
+  llvm_config.with_environment(
+    'PYTHONPATH', [f"{config.esi_runtime_path}/python/"], append_path=True)
 
   # Enable ESI cosim tests if they have been built.
   if config.esi_cosim_path != "":

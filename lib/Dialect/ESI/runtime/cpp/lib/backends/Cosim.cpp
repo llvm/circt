@@ -105,11 +105,38 @@ private:
 };
 } // namespace
 
+namespace {
+class CosimSysInfo : public SysInfo {
+public:
+  CosimSysInfo(CosimDpiServer::Client &client, kj::WaitScope &waitScope)
+      : client(client), waitScope(waitScope) {}
+
+  uint32_t esiVersion() const override {
+    auto maniResp =
+        client.getCompressedManifestRequest().send().wait(waitScope);
+    return maniResp.getVersion();
+  }
+
+  std::vector<uint8_t> compressedManifest() const override {
+    auto maniResp =
+        client.getCompressedManifestRequest().send().wait(waitScope);
+    capnp::Data::Reader data = maniResp.getCompressedManifest();
+    std::vector<uint8_t> result(data.begin(), data.end());
+    return result;
+  }
+
+private:
+  CosimDpiServer::Client &client;
+  kj::WaitScope &waitScope;
+};
+} // namespace
+
 Service *CosimAccelerator::createService(Service::Type svcType) {
   if (svcType == typeid(MMIO))
     return new CosimMMIO(impl->lowLevel, impl->waitScope);
   else if (svcType == typeid(SysInfo))
-    return new MMIOSysInfo(getService<MMIO>());
+    // return new MMIOSysInfo(getService<MMIO>());
+    return new CosimSysInfo(impl->cosim, impl->waitScope);
   return nullptr;
 }
 

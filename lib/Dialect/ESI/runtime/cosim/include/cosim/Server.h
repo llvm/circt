@@ -39,7 +39,9 @@ public:
   void run(uint16_t port);
   void stop();
 
-  void setManifest(const std::vector<uint8_t> &manifest) {
+  void setManifest(unsigned int esiVersion,
+                   const std::vector<uint8_t> &manifest) {
+    this->esiVersion = esiVersion;
     compressedManifest = manifest;
   }
 
@@ -53,6 +55,7 @@ private:
   volatile bool stopSig;
   std::mutex m;
 
+  unsigned int esiVersion;
   std::vector<uint8_t> compressedManifest;
 };
 
