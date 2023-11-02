@@ -48,7 +48,6 @@ static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
                                                  ServiceDeclOpInterface) {
   auto *ctxt = implReq.getContext();
   OpBuilder b(implReq);
-  Type i1ch = ChannelType::get(ctxt, b.getIntegerType(1));
   Value clk = implReq.getOperand(0);
   Value rst = implReq.getOperand(1);
   SmallVector<NamedAttribute, 8> implDetails;
@@ -101,11 +100,10 @@ static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
     SmallVector<Value, 8> toServerValues;
     for (BundledChannel ch : bundleType.getChannels()) {
       if (ch.direction == ChannelDirection::to) {
-        auto nullSource = b.create<NullSourceOp>(loc, i1ch);
-        auto cosim = b.create<CosimEndpointOp>(
-            loc, ch.type, clk, rst, nullSource.getOut(),
+        auto cosim = b.create<CosimFromHostEndpointOp>(
+            loc, ch.type, clk, rst,
             toStringAttr(req.getRelativeAppIDPathAttr(), ch.name));
-        toServerValues.push_back(cosim.getRecv());
+        toServerValues.push_back(cosim.getFromHost());
         channelAssignments.push_back(
             b.getNamedAttr(ch.name, cosim.getNameAttr()));
       }
@@ -119,8 +117,8 @@ static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
     size_t chanIdx = 0;
     for (BundledChannel ch : bundleType.getChannels()) {
       if (ch.direction == ChannelDirection::from) {
-        auto cosim = b.create<CosimEndpointOp>(
-            loc, i1ch, clk, rst, pack.getFromChannels()[chanIdx++],
+        auto cosim = b.create<CosimToHostEndpointOp>(
+            loc, clk, rst, pack.getFromChannels()[chanIdx++],
             toStringAttr(req.getRelativeAppIDPathAttr(), ch.name));
         channelAssignments.push_back(
             b.getNamedAttr(ch.name, cosim.getNameAttr()));

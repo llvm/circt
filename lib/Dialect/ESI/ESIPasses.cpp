@@ -23,6 +23,20 @@ using namespace circt::esi::detail;
 using namespace circt::hw;
 using namespace circt::sv;
 
+StringAttr circt::esi::detail::getTypeID(Type t) {
+  if (auto ch = t.dyn_cast<ChannelType>())
+    t = ch.getInner();
+  std::string typeID;
+  llvm::raw_string_ostream(typeID) << t;
+  return StringAttr::get(t.getContext(), typeID);
+}
+
+uint64_t circt::esi::detail::getWidth(Type t) {
+  if (auto ch = t.dyn_cast<ChannelType>())
+    t = ch.getInner();
+  return hw::getBitWidth(t);
+}
+
 //===----------------------------------------------------------------------===//
 // ESI custom op builder.
 //===----------------------------------------------------------------------===//
@@ -160,38 +174,56 @@ HWModuleExternOp ESIHWBuilder::declareStage(Operation *symTable,
 /// Write an 'ExternModuleOp' to use a hand-coded SystemVerilog module. Said
 /// module contains a bi-directional Cosimulation DPI interface with valid/ready
 /// semantics.
-HWModuleExternOp ESIHWBuilder::declareCosimEndpointOp(Operation *symTable,
-                                                      Type sendType,
-                                                      Type recvType) {
-  HWModuleExternOp &endpoint =
-      declaredCosimEndpointOp[std::make_pair(sendType, recvType)];
-  if (endpoint)
-    return endpoint;
-  // Since this module has parameterized widths on the a input and x output,
-  // give the extern declation a None type since nothing else makes sense.
-  // Will be refining this when we decide how to better handle parameterized
-  // types and ops.
+HWModuleExternOp
+ESIHWBuilder::declareCosimEndpointToHostModule(Operation *symTable) {
+  if (declaredCosimEndpointToHostModule)
+    return *declaredCosimEndpointToHostModule;
+
+  SmallVector<Attribute, 8> params;
+  params.push_back(
+      ParamDeclAttr::get("TO_HOST_TYPE_ID", NoneType::get(getContext())));
+  params.push_back(ParamDeclAttr::get("TO_HOST_SIZE_BITS", getI32Type()));
+
+  auto dataInType = hw::IntType::get(hw::ParamDeclRefAttr::get(
+      StringAttr::get(getContext(), "TO_HOST_SIZE_BITS"),
+      getIntegerType(32, false)));
   PortInfo ports[] = {
       {{clk, getClockType(), ModulePort::Direction::Input}, 0},
       {{rst, getI1Type(), ModulePort::Direction::Input}, 1},
-      {{dataOutValid, getI1Type(), ModulePort::Direction::Output}, 0},
-      {{dataOutReady, getI1Type(), ModulePort::Direction::Input}, 2},
-      {{dataOut, recvType, ModulePort::Direction::Output}, 1},
-      {{dataInValid, getI1Type(), ModulePort::Direction::Input}, 3},
-      {{dataInReady, getI1Type(), ModulePort::Direction::Output}, 2},
-      {{dataIn, sendType, ModulePort::Direction::Input}, 4}};
+      {{dataInValid, getI1Type(), ModulePort::Direction::Input}, 2},
+      {{dataInReady, getI1Type(), ModulePort::Direction::Output}, 3},
+      {{dataIn, dataInType, ModulePort::Direction::Input}, 4}};
+
+  declaredCosimEndpointToHostModule = create<HWModuleExternOp>(
+      constructUniqueSymbol(symTable, "Cosim_Endpoint_ToHost"), ports,
+      "Cosim_Endpoint_ToHost", ArrayAttr::get(getContext(), params));
+  return *declaredCosimEndpointToHostModule;
+}
+
+HWModuleExternOp
+ESIHWBuilder::declareCosimEndpointFromHostModule(Operation *symTable) {
+  if (declaredCosimEndpointFromHostModule)
+    return *declaredCosimEndpointFromHostModule;
+
   SmallVector<Attribute, 8> params;
-  params.push_back(ParamDeclAttr::get("ENDPOINT_ID_EXT", getStringAttr("")));
   params.push_back(
-      ParamDeclAttr::get("SEND_TYPE_ID", getIntegerType(64, false)));
-  params.push_back(ParamDeclAttr::get("SEND_TYPE_SIZE_BITS", getI32Type()));
-  params.push_back(
-      ParamDeclAttr::get("RECV_TYPE_ID", getIntegerType(64, false)));
-  params.push_back(ParamDeclAttr::get("RECV_TYPE_SIZE_BITS", getI32Type()));
-  endpoint = create<HWModuleExternOp>(
-      constructUniqueSymbol(symTable, "Cosim_Endpoint"), ports,
-      "Cosim_Endpoint", ArrayAttr::get(getContext(), params));
-  return endpoint;
+      ParamDeclAttr::get("FROM_HOST_TYPE_ID", NoneType::get(getContext())));
+  params.push_back(ParamDeclAttr::get("FROM_HOST_SIZE_BITS", getI32Type()));
+
+  auto dataInType = hw::IntType::get(hw::ParamDeclRefAttr::get(
+      StringAttr::get(getContext(), "FROM_HOST_SIZE_BITS"),
+      getIntegerType(32, false)));
+  PortInfo ports[] = {
+      {{clk, getClockType(), ModulePort::Direction::Input}, 0},
+      {{rst, getI1Type(), ModulePort::Direction::Input}, 1},
+      {{dataOutValid, getI1Type(), ModulePort::Direction::Output}, 2},
+      {{dataOutReady, getI1Type(), ModulePort::Direction::Input}, 3},
+      {{dataOut, dataInType, ModulePort::Direction::Output}, 4}};
+
+  declaredCosimEndpointFromHostModule = create<HWModuleExternOp>(
+      constructUniqueSymbol(symTable, "Cosim_Endpoint_FromHost"), ports,
+      "Cosim_Endpoint_FromHost", ArrayAttr::get(getContext(), params));
+  return *declaredCosimEndpointFromHostModule;
 }
 
 /// Return the InterfaceType which corresponds to an ESI port type. If it

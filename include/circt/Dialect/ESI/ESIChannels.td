@@ -466,36 +466,43 @@ def PipelineStageOp : ESI_Physical_Op<"stage", [
 // Misc operations
 //===----------------------------------------------------------------------===//
 
-def CosimEndpointOp : ESI_Physical_Op<"cosim", []> {
-  let summary = "Co-simulation endpoint";
+def CosimToHostEndpointOp : ESI_Physical_Op<"cosim.to_host", []> {
+  let summary = "Co-simulation endpoint sending data to the host.";
   let description = [{
     A co-simulation endpoint is a connection from the simulation to some
     outside process, usually a software application responsible for driving
     the simulation (driver).
 
-    ESI uses a serialization protocol called Cap'n Proto (capnp for short).
-    The advantage of capnp is the decoding overhead: for value types (ints,
-    structs, etc.) there is none! This stands in contrast to Protocol Buffers
-    and Bond as their messages contain metadata for each field which must be
-    interpreted.
-
-    The advantage of using a well-supported serialization protocol is
-    language support -- driver applications can be written in any language
-    supported by the specific protocol.
+    It is uni-directional, in this case sending data from the simulation to the
+    host.
   }];
 
-  let arguments = (ins ClockType:$clk, I1:$rst, ChannelType:$send, StrAttr:$name);
-  let results = (outs ChannelType:$recv);
+  let arguments = (ins ClockType:$clk, I1:$rst,
+                       ChannelType:$toHost, StrAttr:$name);
 
   let assemblyFormat = [{
-    $clk `,` $rst `,` $send `,` $name attr-dict
-      `:` qualified(type($send)) `->` qualified(type($recv))
+    $clk `,` $rst `,` $toHost`,` $name attr-dict `:` qualified(type($toHost))
   }];
 }
 
-def RtlBitArrayType : Type<CPred<"$_self.isa<::circt::hw::ArrayType>()"
- " && $_self.cast<::circt::hw::ArrayType>().getElementType() =="
- "   ::mlir::IntegerType::get($_self.getContext(), 1)">, "an HW bit array">;
+def CosimFromHostEndpointOp : ESI_Physical_Op<"cosim.from_host", []> {
+  let summary = "Co-simulation endpoint receiving data from the host";
+  let description = [{
+    A co-simulation endpoint is a connection from the simulation to some
+    outside process, usually a software application responsible for driving
+    the simulation (driver).
+
+    It is uni-directional, in this case receiving data from the host for the
+    simulation.
+  }];
+
+  let arguments = (ins ClockType:$clk, I1:$rst, StrAttr:$name);
+  let results = (outs ChannelType:$fromHost);
+
+  let assemblyFormat = [{
+    $clk `,` $rst `,` $name attr-dict `:` qualified(type($fromHost))
+  }];
+}
 
 def NullSourceOp : ESI_Physical_Op<"null", [Pure]> {
   let summary = "An op which never produces messages.";

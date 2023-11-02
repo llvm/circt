@@ -33,13 +33,13 @@ import "DPI-C" sv2cCosimserverEpRegister =
     // The endpoint ID.
     input string endpoint_id,
     // The capnp type id which the _RPC client_ is sending us.
-    input longint send_type_id,
+    input string from_host_type_id,
     // The send types max size, in bytes.
-    input int send_type_size,
+    input int from_host_type_size,
     // The capnp type id which we are sending to the _RPC client_.
-    input longint esi_recv_type_id,
+    input string to_host_type_id,
     // The recv types max size, in bytes.
-    input int recv_type_size);
+    input int to_host_type_size);
 
 // --------------------- Endpoint Accessors ------------------------------------
 

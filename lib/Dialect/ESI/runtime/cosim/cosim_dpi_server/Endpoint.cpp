@@ -14,9 +14,10 @@
 
 using namespace esi::cosim;
 
-Endpoint::Endpoint(uint64_t sendTypeId, int sendTypeMaxSize,
-                   uint64_t recvTypeId, int recvTypeMaxSize)
-    : sendTypeId(sendTypeId), recvTypeId(recvTypeId), inUse(false) {}
+Endpoint::Endpoint(std::string fromHostTypeId, int fromHostTypeMaxSize,
+                   std::string toHostTypeId, int toHostTypeMaxSize)
+    : fromHostTypeId(fromHostTypeId), toHostTypeId(toHostTypeId), inUse(false) {
+}
 Endpoint::~Endpoint() {}
 
 bool Endpoint::setInUse() {
@@ -34,10 +35,11 @@ void Endpoint::returnForUse() {
   inUse = false;
 }
 
-bool EndpointRegistry::registerEndpoint(std::string epId, uint64_t sendTypeId,
-                                        int sendTypeMaxSize,
-                                        uint64_t recvTypeId,
-                                        int recvTypeMaxSize) {
+bool EndpointRegistry::registerEndpoint(std::string epId,
+                                        std::string fromHostTypeId,
+                                        int fromHostTypeMaxSize,
+                                        std::string toHostTypeId,
+                                        int toHostTypeMaxSize) {
   Lock g(m);
   if (endpoints.find(epId) != endpoints.end()) {
     fprintf(stderr, "Endpoint ID already exists!\n");
@@ -49,8 +51,8 @@ bool EndpointRegistry::registerEndpoint(std::string epId, uint64_t sendTypeId,
                     // Map key.
                     std::forward_as_tuple(epId),
                     // Endpoint constructor args.
-                    std::forward_as_tuple(sendTypeId, sendTypeMaxSize,
-                                          recvTypeId, recvTypeMaxSize));
+                    std::forward_as_tuple(fromHostTypeId, fromHostTypeMaxSize,
+                                          toHostTypeId, toHostTypeMaxSize));
   return true;
 }
 

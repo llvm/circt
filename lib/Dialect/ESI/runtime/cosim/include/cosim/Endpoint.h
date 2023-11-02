@@ -36,18 +36,18 @@ public:
   /// issue in the future but it is the easiest way to ensure memory
   /// correctness.
   using Blob = std::vector<uint8_t>;
-  using BlobPtr = std::shared_ptr<Blob>;
+  using BlobPtr = std::unique_ptr<Blob>;
 
   /// Construct an endpoint which knows and the type IDs in both directions.
-  Endpoint(uint64_t sendTypeId, int sendTypeMaxSize, uint64_t recvTypeId,
-           int recvTypeMaxSize);
+  Endpoint(std::string fromHostTypeId, int sendTypeMaxSize,
+           std::string toHostTypeId, int recvTypeMaxSize);
   ~Endpoint();
   /// Disallow copying. There is only ONE endpoint object per logical endpoint
   /// so copying is almost always a bug.
   Endpoint(const Endpoint &) = delete;
 
-  uint64_t getSendTypeId() const { return sendTypeId; }
-  uint64_t getRecvTypeId() const { return recvTypeId; }
+  std::string getSendTypeId() const { return fromHostTypeId; }
+  std::string getRecvTypeId() const { return toHostTypeId; }
 
   /// These two are used to set and unset the inUse flag, to ensure that an open
   /// endpoint is not opened again.
@@ -57,7 +57,7 @@ public:
   /// Queue message to the simulation.
   void pushMessageToSim(BlobPtr msg) {
     Lock g(m);
-    toCosim.push(msg);
+    toCosim.push(std::move(msg));
   }
 
   /// Pop from the to-simulator queue. Return true if there was a message in the
@@ -66,7 +66,7 @@ public:
     Lock g(m);
     if (toCosim.empty())
       return false;
-    msg = toCosim.front();
+    msg = std::move(toCosim.front());
     toCosim.pop();
     return true;
   }
@@ -74,7 +74,7 @@ public:
   /// Queue message to the RPC client.
   void pushMessageToClient(BlobPtr msg) {
     Lock g(m);
-    toClient.push(msg);
+    toClient.push(std::move(msg));
   }
 
   /// Pop from the to-RPC-client queue. Return true if there was a message in
@@ -83,14 +83,14 @@ public:
     Lock g(m);
     if (toClient.empty())
       return false;
-    msg = toClient.front();
+    msg = std::move(toClient.front());
     toClient.pop();
     return true;
   }
 
 private:
-  const uint64_t sendTypeId;
-  const uint64_t recvTypeId;
+  const std::string fromHostTypeId;
+  const std::string toHostTypeId;
   bool inUse;
 
   using Lock = std::lock_guard<std::mutex>;
@@ -111,8 +111,8 @@ class EndpointRegistry {
 public:
   /// Register an Endpoint. Creates the Endpoint object and owns it. Returns
   /// false if unsuccessful.
-  bool registerEndpoint(std::string epId, uint64_t sendTypeId,
-                        int sendTypeMaxSize, uint64_t recvTypeId,
+  bool registerEndpoint(std::string epId, std::string fromHostTypeId,
+                        int sendTypeMaxSize, std::string toHostTypeId,
                         int recvTypeMaxSize);
 
   /// Get the specified endpoint. Return nullptr if it does not exist. This

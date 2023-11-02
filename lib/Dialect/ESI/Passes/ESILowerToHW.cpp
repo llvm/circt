@@ -303,15 +303,15 @@ LogicalResult UnwrapInterfaceLower::matchAndRewrite(
 namespace {
 /// Lower `CosimEndpointOp` ops to a SystemVerilog extern module and a Capnp
 /// gasket op.
-struct CosimLowering : public OpConversionPattern<CosimEndpointOp> {
+struct CosimToHostLowering : public OpConversionPattern<CosimToHostEndpointOp> {
 public:
-  CosimLowering(ESIHWBuilder &b)
+  CosimToHostLowering(ESIHWBuilder &b)
       : OpConversionPattern(b.getContext(), 1), builder(b) {}
 
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(CosimEndpointOp, OpAdaptor adaptor,
+  matchAndRewrite(CosimToHostEndpointOp, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final;
 
 private:
@@ -319,79 +319,109 @@ private:
 };
 } // anonymous namespace
 
-LogicalResult
-CosimLowering::matchAndRewrite(CosimEndpointOp ep, OpAdaptor adaptor,
-                               ConversionPatternRewriter &rewriter) const {
+LogicalResult CosimToHostLowering::matchAndRewrite(
+    CosimToHostEndpointOp ep, OpAdaptor adaptor,
+    ConversionPatternRewriter &rewriter) const {
   auto loc = ep.getLoc();
   auto *ctxt = rewriter.getContext();
-  auto operands = adaptor.getOperands();
-  Value clk = operands[0];
-  Value rst = operands[1];
-  Value send = operands[2];
-
   circt::BackedgeBuilder bb(rewriter, loc);
-  Type ui64Type =
-      IntegerType::get(ctxt, 64, IntegerType::SignednessSemantics::Unsigned);
-  ESIAPIType sendTypeSchema(send.getType());
-  if (!sendTypeSchema.isSupported())
-    return rewriter.notifyMatchFailure(ep, "Send type not supported yet");
-  ESIAPIType recvTypeSchema(ep.getRecv().getType());
-  if (!recvTypeSchema.isSupported())
-    return rewriter.notifyMatchFailure(ep, "Recv type not supported yet");
+
+  Value toHost = adaptor.getToHost();
+  Type type = toHost.getType();
+  uint64_t width = getWidth(type);
 
   // Set all the parameters.
   SmallVector<Attribute, 8> params;
-  if (auto ext = ep->getAttrOfType<StringAttr>("name_ext"))
-    params.push_back(ParamDeclAttr::get("ENDPOINT_ID_EXT", ext));
-  else
-    params.push_back(
-        ParamDeclAttr::get("ENDPOINT_ID_EXT", StringAttr::get(ctxt, "")));
-  params.push_back(ParamDeclAttr::get(
-      "SEND_TYPE_ID", IntegerAttr::get(ui64Type, sendTypeSchema.typeID())));
-  params.push_back(
-      ParamDeclAttr::get("SEND_TYPE_SIZE_BITS",
-                         rewriter.getI32IntegerAttr(sendTypeSchema.size())));
-  params.push_back(ParamDeclAttr::get(
-      "RECV_TYPE_ID", IntegerAttr::get(ui64Type, recvTypeSchema.typeID())));
-  params.push_back(
-      ParamDeclAttr::get("RECV_TYPE_SIZE_BITS",
-                         rewriter.getI32IntegerAttr(recvTypeSchema.size())));
+  params.push_back(ParamDeclAttr::get("TO_HOST_TYPE_ID", getTypeID(type)));
+  params.push_back(ParamDeclAttr::get("TO_HOST_SIZE_BITS",
+                                      rewriter.getI32IntegerAttr(width)));
 
-  // Set up the egest route to drive the EP's send ports.
-  ArrayType egestBitArrayType =
-      ArrayType::get(rewriter.getI1Type(), sendTypeSchema.size());
+  // Set up the egest route to drive the EP's toHost ports.
   auto sendReady = bb.get(rewriter.getI1Type());
   UnwrapValidReadyOp unwrapSend =
-      rewriter.create<UnwrapValidReadyOp>(loc, send, sendReady);
+      rewriter.create<UnwrapValidReadyOp>(loc, toHost, sendReady);
   auto castedSendData = rewriter.create<hw::BitcastOp>(
-      loc, egestBitArrayType, unwrapSend.getRawOutput());
-
-  // Get information necessary for injest path.
-  auto recvReady = bb.get(rewriter.getI1Type());
-  ArrayType ingestBitArrayType =
-      ArrayType::get(rewriter.getI1Type(), recvTypeSchema.size());
+      loc, rewriter.getIntegerType(width), unwrapSend.getRawOutput());
 
   // Build or get the cached Cosim Endpoint module parameterization.
   Operation *symTable = ep->getParentWithTrait<OpTrait::SymbolTable>();
-  HWModuleExternOp endpoint = builder.declareCosimEndpointOp(
-      symTable, egestBitArrayType, ingestBitArrayType);
+  HWModuleExternOp endpoint =
+      builder.declareCosimEndpointToHostModule(symTable);
+
+  // Create replacement Cosim_Endpoint instance.
+  Value operands[] = {
+      adaptor.getClk(),
+      adaptor.getRst(),
+      unwrapSend.getValid(),
+      castedSendData.getResult(),
+  };
+  auto cosimEpModule = rewriter.create<InstanceOp>(
+      loc, endpoint, ep.getNameAttr(), operands, ArrayAttr::get(ctxt, params));
+  sendReady.setValue(cosimEpModule.getResult(0));
+
+  // Replace the CosimEndpointOp op.
+  rewriter.eraseOp(ep);
+
+  return success();
+}
+
+namespace {
+/// Lower `CosimEndpointOp` ops to a SystemVerilog extern module and a Capnp
+/// gasket op.
+struct CosimFromHostLowering
+    : public OpConversionPattern<CosimFromHostEndpointOp> {
+public:
+  CosimFromHostLowering(ESIHWBuilder &b)
+      : OpConversionPattern(b.getContext(), 1), builder(b) {}
+
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(CosimFromHostEndpointOp, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final;
+
+private:
+  ESIHWBuilder &builder;
+};
+} // anonymous namespace
+
+LogicalResult CosimFromHostLowering::matchAndRewrite(
+    CosimFromHostEndpointOp ep, OpAdaptor adaptor,
+    ConversionPatternRewriter &rewriter) const {
+  auto loc = ep.getLoc();
+  auto *ctxt = rewriter.getContext();
+  circt::BackedgeBuilder bb(rewriter, loc);
+
+  ChannelType type = ep.getFromHost().getType();
+  uint64_t width = getWidth(type);
+
+  // Set all the parameters.
+  SmallVector<Attribute, 8> params;
+  params.push_back(ParamDeclAttr::get("FROM_HOST_TYPE_ID", getTypeID(type)));
+  params.push_back(ParamDeclAttr::get("FROM_HOST_SIZE_BITS",
+                                      rewriter.getI32IntegerAttr(width)));
+
+  // Get information necessary for injest path.
+  auto recvReady = bb.get(rewriter.getI1Type());
+
+  // Build or get the cached Cosim Endpoint module parameterization.
+  Operation *symTable = ep->getParentWithTrait<OpTrait::SymbolTable>();
+  HWModuleExternOp endpoint =
+      builder.declareCosimEndpointFromHostModule(symTable);
 
   // Create replacement Cosim_Endpoint instance.
   StringAttr nameAttr = ep->getAttr("name").dyn_cast_or_null<StringAttr>();
   StringRef name = nameAttr ? nameAttr.getValue() : "CosimEndpointOp";
-  Value epInstInputs[] = {
-      clk, rst, recvReady, unwrapSend.getValid(), castedSendData.getResult(),
-  };
+  Value operands[] = {adaptor.getClk(), adaptor.getRst(), recvReady};
 
   auto cosimEpModule = rewriter.create<InstanceOp>(
-      loc, endpoint, name, epInstInputs, ArrayAttr::get(ctxt, params));
-  sendReady.setValue(cosimEpModule.getResult(2));
+      loc, endpoint, name, operands, ArrayAttr::get(ctxt, params));
 
   // Set up the injest path.
   Value recvDataFromCosim = cosimEpModule.getResult(1);
   Value recvValidFromCosim = cosimEpModule.getResult(0);
-  auto castedRecvData = rewriter.create<hw::BitcastOp>(
-      loc, recvTypeSchema.getType(), recvDataFromCosim);
+  auto castedRecvData =
+      rewriter.create<hw::BitcastOp>(loc, type.getInner(), recvDataFromCosim);
   WrapValidReadyOp wrapRecv = rewriter.create<WrapValidReadyOp>(
       loc, castedRecvData.getResult(), recvValidFromCosim);
   recvReady.setValue(wrapRecv.getReady());
@@ -494,7 +524,8 @@ void ESItoHWPass::runOnOperation() {
   pass1Patterns.insert<PipelineStageLowering>(esiBuilder, ctxt);
   pass1Patterns.insert<WrapInterfaceLower>(ctxt);
   pass1Patterns.insert<UnwrapInterfaceLower>(ctxt);
-  pass1Patterns.insert<CosimLowering>(esiBuilder);
+  pass1Patterns.insert<CosimToHostLowering>(esiBuilder);
+  pass1Patterns.insert<CosimFromHostLowering>(esiBuilder);
   pass1Patterns.insert<NullSourceOpLowering>(ctxt);
 
   if (platform == Platform::cosim) {

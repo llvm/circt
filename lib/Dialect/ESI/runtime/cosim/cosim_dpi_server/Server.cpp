@@ -35,8 +35,7 @@ namespace {
 /// wrapper around an `Endpoint` object. Whereas the `Endpoint`s are long-lived
 /// (associated with the HW endpoint), this class is constructed/destructed
 /// when the client open()s it.
-class EndpointServer final
-    : public EsiDpiEndpoint<capnp::AnyPointer, capnp::AnyPointer>::Server {
+class EndpointServer final : public EsiDpiEndpoint::Server {
   /// The wrapped endpoint.
   Endpoint &endpoint;
   /// Signals that this endpoint has been opened by a client and hasn't been
@@ -52,8 +51,8 @@ public:
   EndpointServer(const EndpointServer &) = delete;
 
   /// Implement the EsiDpiEndpoint RPC interface.
-  kj::Promise<void> send(SendContext) override;
-  kj::Promise<void> recv(RecvContext) override;
+  kj::Promise<void> sendFromHost(SendFromHostContext) override;
+  kj::Promise<void> recvToHost(RecvToHostContext) override;
   kj::Promise<void> close(CloseContext) override;
 };
 
@@ -116,31 +115,16 @@ EndpointServer::~EndpointServer() {
 
 /// This is the client polling for a message. If one is available, send it.
 /// TODO: implement a blocking call with a timeout.
-kj::Promise<void> EndpointServer::recv(RecvContext context) {
+kj::Promise<void> EndpointServer::recvToHost(RecvToHostContext context) {
   KJ_REQUIRE(open, "EndPoint closed already");
-  KJ_REQUIRE(!context.getParams().getBlock(),
-             "Blocking recv() not supported yet");
 
   // Try to pop a message.
   Endpoint::BlobPtr blob;
   auto msgPresent = endpoint.getMessageToClient(blob);
   context.getResults().setHasData(msgPresent);
   if (msgPresent) {
-    KJ_REQUIRE(blob->size() % 8 == 0,
-               "Response msg was malformed. Size of response was not a "
-               "multiple of 8 bytes.");
-    // Copy the blob into a single segment.
-    auto segment =
-        kj::ArrayPtr<capnp::word>((word *)blob->data(), blob->size() / 8)
-            .asConst();
-    // Create a single-element array of segments.
-    kj::Array<kj::ArrayPtr<const capnp::word>> segments =
-        kj::heapArray({segment});
-    // Create an object which will read the segments into a message on send.
-    std::unique_ptr<SegmentArrayMessageReader> msgReader =
-        std::make_unique<SegmentArrayMessageReader>(segments);
-    // Send.
-    context.getResults().getResp().set(msgReader->getRoot<AnyPointer>());
+    Data::Builder data(blob->data(), blob->size());
+    context.getResults().setResp(data.asReader());
   }
   return kj::READY_NOW;
 }
@@ -149,25 +133,13 @@ kj::Promise<void> EndpointServer::recv(RecvContext context) {
 /// recieving. The only way I could figure out to copy the raw message is a
 /// double copy. I was have issues getting libkj's arrays to play nice with
 /// others.
-kj::Promise<void> EndpointServer::send(SendContext context) {
+kj::Promise<void> EndpointServer::sendFromHost(SendFromHostContext context) {
   KJ_REQUIRE(open, "EndPoint closed already");
-  auto capnpMsgPointer = context.getParams().getMsg();
-  KJ_REQUIRE(capnpMsgPointer.isStruct(),
-             "Only messages can go in the 'msg' parameter");
-
-  // Copy the incoming message into a flat, single segment buffer.
-  auto msgSize = capnpMsgPointer.targetSize();
-  auto builder = std::make_unique<MallocMessageBuilder>(
-      msgSize.wordCount + 1, AllocationStrategy::FIXED_SIZE);
-  builder->setRoot(capnpMsgPointer);
-  auto segments = builder->getSegmentsForOutput();
-  KJ_REQUIRE(segments.size() == 1, "Messages must be one segment");
-
-  // Now copy it into a blob and queue it.
-  auto fstSegmentData = segments[0].asBytes();
-  auto blob = std::make_shared<Endpoint::Blob>(fstSegmentData.begin(),
-                                               fstSegmentData.end());
-  endpoint.pushMessageToSim(blob);
+  KJ_REQUIRE(context.getParams().hasMsg(), "Send request must have a message.");
+  kj::ArrayPtr<const kj::byte> data = context.getParams().getMsg().asBytes();
+  Endpoint::BlobPtr blob =
+      std::make_unique<Endpoint::Blob>(data.begin(), data.end());
+  endpoint.pushMessageToSim(std::move(blob));
   return kj::READY_NOW;
 }
 
@@ -231,8 +203,8 @@ kj::Promise<void> CosimServer::list(ListContext context) {
   unsigned int ctr = 0u;
   reg.iterateEndpoints([&](std::string id, const Endpoint &ep) {
     ifaces[ctr].setEndpointID(id);
-    ifaces[ctr].setSendTypeID(ep.getSendTypeId());
-    ifaces[ctr].setRecvTypeID(ep.getRecvTypeId());
+    ifaces[ctr].setFromHostType(ep.getSendTypeId());
+    ifaces[ctr].setToHostType(ep.getRecvTypeId());
     ++ctr;
   });
   return kj::READY_NOW;
@@ -245,8 +217,8 @@ kj::Promise<void> CosimServer::open(OpenContext ctxt) {
   auto gotLock = ep->setInUse();
   KJ_REQUIRE(gotLock, "Endpoint in use");
 
-  ctxt.getResults().setIface(EsiDpiEndpoint<AnyPointer, AnyPointer>::Client(
-      kj::heap<EndpointServer>(*ep)));
+  ctxt.getResults().setIface(
+      EsiDpiEndpoint::Client(kj::heap<EndpointServer>(*ep)));
   return kj::READY_NOW;
 }
 

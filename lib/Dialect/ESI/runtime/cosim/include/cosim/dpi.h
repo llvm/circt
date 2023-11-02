@@ -27,9 +27,9 @@
 extern "C" {
 #endif
 /// Register an endpoint.
-DPI int sv2cCosimserverEpRegister(char *endpointId, long long sendTypeId,
-                                  int sendTypeSize, long long recvTypeId,
-                                  int recvTypeSize);
+DPI int sv2cCosimserverEpRegister(char *endpointId, char *fromHostTypeId,
+                                  int fromHostTypeSize, char *toHostTypeId,
+                                  int toHostTypeSize);
 /// Try to get a message from a client.
 DPI int sv2cCosimserverEpTryGet(char *endpointId,
                                 // NOLINTNEXTLINE(misc-misplaced-const)
