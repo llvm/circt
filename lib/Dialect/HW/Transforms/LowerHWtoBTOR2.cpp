@@ -38,6 +38,7 @@ struct LowerHWtoBTOR2Pass : public LowerHWtoBTOR2Base<LowerHWtoBTOR2Pass> {
     // Create a counter that attributes a unique id to each generated btor2 line
     size_t lid = 1; // btor2 line identifiers usually start at 1
     size_t resetLID = NO_LID; // keeps track of the reset's LID
+    bool isAsync = false; // Records whether or not the reset is async (changes how we handle resets)
 
     // Create maps to keep track of lid associations
     // Proper maps wouldn't work for some reason so I'll use a vector of pairs instead
@@ -172,6 +173,7 @@ struct LowerHWtoBTOR2Pass : public LowerHWtoBTOR2Base<LowerHWtoBTOR2Pass> {
     size_t getOpLID(Value op) {
       // Look for the operation declaration
       Operation* defOp = getOpAlias(op.getDefiningOp());
+
       if(opLIDMap.contains(defOp)) {
         return opLIDMap[defOp];
       }
@@ -195,7 +197,9 @@ struct LowerHWtoBTOR2Pass : public LowerHWtoBTOR2Base<LowerHWtoBTOR2Pass> {
     // Updates or creates an entry for the given operation
     // associating it with the current lid
     void setOpLID(Operation* op) {
-      opLIDMap[op] = lid;
+      if(op != nullptr) {
+        opLIDMap[op] = lid;
+      }
     }
 
     // Checks if an operation has an alias
@@ -378,6 +382,12 @@ struct LowerHWtoBTOR2Pass : public LowerHWtoBTOR2Base<LowerHWtoBTOR2Pass> {
       return std::to_string(lid++) + WS + CONSTRAINT + WS + std::to_string(exprLID) + NL;
     }
 
+    // Generate a btor2 constraint given an expression from an assumption operation
+    std::string genConstraint(size_t exprLID) {
+      // Build and return the btor2 string
+      return std::to_string(lid++) + WS + CONSTRAINT + WS + std::to_string(exprLID) + NL;
+    }
+
     // Generate an ITE instruction (if then else) given a predicate, two values and a res width
     std::string genIte(Operation* srcop, Value cond, Value t, Value f, int64_t width) {
       // Register the source operation with the current line id
@@ -435,6 +445,22 @@ struct LowerHWtoBTOR2Pass : public LowerHWtoBTOR2Base<LowerHWtoBTOR2Pass> {
         + std::to_string(lhsLID) + WS + std::to_string(rhsLID) + NL;
     }
 
+    // Generate a logical implication given a lhs and a rhs
+    std::string genImplies(Operation* srcop, size_t lhsLID, size_t rhsLID) {
+      // Register the source operation with the current line id
+      setOpLID(srcop);
+
+      // Retrieve the lid associated with the sort (sid)
+      size_t sid = getSortLID(1);
+
+      // Check that a result was found before continuing
+      assert(sid != NO_LID);
+
+      // Build and return the implies operation
+      return std::to_string(lid++) + WS + IMPLIES + WS + std::to_string(sid) + WS 
+        + std::to_string(lhsLID) + WS + std::to_string(rhsLID) + NL;
+    }
+
     // Generates a state instruction given a width and a name
     std::string genState(Operation* srcop, int64_t width, std::string name) {
       // Register the source operation with the current line id
@@ -466,12 +492,35 @@ struct LowerHWtoBTOR2Pass : public LowerHWtoBTOR2Base<LowerHWtoBTOR2Pass> {
       return std::to_string(lid++) + WS + NEXT + WS + std::to_string(sid) + WS 
           + std::to_string(regLID) + WS + std::to_string(nextLID) + NL;
     }
+
+    // Generates a special state that is used to handle register initializations
+    void genInitState(std::string & btor2Res) {
+      // Start by making sure that a 1bit sort exists
+      btor2Res += genSort(BITVEC, 1);
+
+      // Store the future state lid
+      size_t stateLID = lid;
+
+      // Now generate the state
+      btor2Res += genState(nullptr, 1, "initState");
+
+      // Store the implication lid
+      size_t impliesLID = lid;
+
+      // Finally create the implication as well as the assumption
+      btor2Res += genImplies(nullptr, stateLID, resetLID);
+
+      // Create the assumption
+      btor2Res += genConstraint(impliesLID);
+    }
 };
 } // end anonymous namespace
 
 void LowerHWtoBTOR2Pass::runOnOperation() {
   // String used to build out our emitted btor2
   std::string btor2Res; 
+  // flag to keep track of our state initializer emission
+  bool initStateEmitted = false;
 
   // Start by checking for each module in the circt, for now we only consider the 1st one
   // As we are not support multi-modules yet. We assume that no nested modules exist at this point.
@@ -499,7 +548,6 @@ void LowerHWtoBTOR2Pass::runOnOperation() {
           resetLID = lid;
         }
         btor2Res += genInput(width, iName);
-
       } 
     }
 
@@ -723,6 +771,18 @@ void LowerHWtoBTOR2Pass::runOnOperation() {
         // Firrtl registers generate a state instruction
         // The final update is also used to generate a set of next btor instructions
         .Case<seq::FirRegOp>([&](seq::FirRegOp reg) {
+
+          // Check to make sure that we emitted our initState state
+          if(!initStateEmitted) {
+            genInitState(btor2Res);
+            initStateEmitted = true;
+          }
+
+          // Check for asynchronous resets
+          if(!isAsync) {
+            isAsync = reg.getIsAsync();
+          }
+
           // Start by retrieving the register's name
           std::string regName = reg.getName().str();
 
@@ -737,8 +797,6 @@ void LowerHWtoBTOR2Pass::runOnOperation() {
 
           // Record the operation for future next instruction generation
           regOps.push_back(reg);
-
-          //TODO: iterate through registers and emit next instructions
         })
         // All other operations should be ignored for the time being
         .Default([](auto) {});
