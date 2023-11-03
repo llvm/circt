@@ -201,16 +201,14 @@ std::string ESIBuildManifestPass::json() {
     }
   });
 
-  j.attributeArray("design", [&]() {
-    j.object([&] {
-      j.attribute("inst_of", json(appidRoot, appidRoot.getTopModuleRefAttr()));
-      j.attributeArray(
-          "contents", [&]() { emitBlock(j, appidRoot.getChildren().front()); });
-      j.attributeArray("children", [&]() {
-        for (auto nodeOp :
-             appidRoot.getChildren().front().getOps<AppIDHierNodeOp>())
-          emitNode(j, nodeOp);
-      });
+  j.attributeObject("design", [&]() {
+    j.attribute("inst_of", json(appidRoot, appidRoot.getTopModuleRefAttr()));
+    j.attributeArray("contents",
+                     [&]() { emitBlock(j, appidRoot.getChildren().front()); });
+    j.attributeArray("children", [&]() {
+      for (auto nodeOp :
+           appidRoot.getChildren().front().getOps<AppIDHierNodeOp>())
+        emitNode(j, nodeOp);
     });
   });
 

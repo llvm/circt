@@ -14,6 +14,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "esi/Accelerator.h"
+#include "esi/Manifest.h"
 #include "esi/StdServices.h"
 
 #include <iostream>
@@ -21,6 +22,8 @@
 #include <stdexcept>
 
 using namespace esi;
+
+void printInfo(std::ostream &os, Accelerator &acc);
 
 int main(int argc, const char *argv[]) {
   // TODO: find a command line parser library rather than doing this by hand.
@@ -36,12 +39,34 @@ int main(int argc, const char *argv[]) {
   if (argc > 3)
     cmd = argv[3];
 
-  std::unique_ptr<Accelerator> acc = Accelerator::connect(backend, conn);
-  const SysInfo &info = acc->sysInfo();
+  try {
+    std::unique_ptr<Accelerator> acc = registry::connect(backend, conn);
+    const auto &info = *acc->getService<services::SysInfo>();
 
-  // Only support the 'version' command.
-  if (cmd == "version")
-    std::cout << "ESI system version: " << info.esiVersion() << std::endl;
+    // Only support the 'version' command.
+    if (cmd == "version")
+      std::cout << "ESI system version: " << info.esiVersion() << std::endl;
+    else if (cmd == "json_manifest")
+      std::cout << info.jsonManifest() << std::endl;
+    else if (cmd == "info")
+      printInfo(std::cout, *acc);
+    else
+      std::cout << "Connection successful.\n";
 
-  return 0;
+    return 0;
+  } catch (std::exception &e) {
+    std::cerr << "Error: " << e.what() << std::endl;
+    return -1;
+  }
+}
+
+void printInfo(std::ostream &os, Accelerator &acc) {
+  Manifest m(acc);
+  os << "API version: " << m.apiVersion() << "\n\n";
+  os << "********************************\n";
+  os << "* Design information\n";
+  os << "********************************\n";
+  os << "\n";
+  for (ModuleInfo mod : m.modules())
+    os << mod << "\n";
 }

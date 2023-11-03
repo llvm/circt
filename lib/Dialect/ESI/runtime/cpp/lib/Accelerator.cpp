@@ -14,11 +14,13 @@
 //===----------------------------------------------------------------------===//
 
 #include "esi/Accelerator.h"
+#include "esi/StdServices.h"
 
 #include <map>
 #include <stdexcept>
 
 namespace esi {
+
 services::Service *Accelerator::getServiceImpl(Service::Type svcType) {
   std::unique_ptr<Service> &cacheEntry = serviceCache[&svcType];
   if (cacheEntry == nullptr)

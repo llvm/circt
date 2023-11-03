@@ -11,11 +11,14 @@
 //===----------------------------------------------------------------------===//
 
 #include "esi/Accelerator.h"
+#include "esi/Manifest.h"
 #include "esi/StdServices.h"
 
 // pybind11 includes
-#include "pybind11/pybind11.h"
+#include <pybind11/pybind11.h>
 namespace py = pybind11;
+
+#include <pybind11/stl.h>
 
 using namespace esi;
 using namespace esi::services;
@@ -36,4 +39,21 @@ PYBIND11_MODULE(esiCppAccel, m) {
   py::class_<services::MMIO>(m, "MMIO")
       .def("read", &services::MMIO::read)
       .def("write", &services::MMIO::write);
+
+  py::class_<Manifest>(m, "Manifest")
+      .def(py::init<Accelerator &>())
+      .def_property_readonly("api_version", &Manifest::apiVersion)
+      .def_property_readonly("design", &Manifest::design);
+
+  py::class_<Instance>(m, "Instance")
+      .def_property_readonly("id", &Instance::id)
+      .def_property_readonly("info", &Instance::info);
+
+  py::class_<AppID>(m, "AppID")
+      .def_property_readonly("name", [](AppID &id) { return id.name; })
+      .def_property_readonly("idx", [](AppID &id) -> py::object {
+        if (id.idx)
+          return py::cast(id.idx);
+        return py::none();
+      });
 }
