@@ -791,6 +791,11 @@ void LowerHWtoBTOR2Pass::runOnOperation() {
         btor2Res += genNext(next, reg, width);
       }
     }
+    
+    // Print out the resuling btor2
+    llvm::errs() << "==========BTOR2 FORM:==========\n\n" 
+                 << btor2Res 
+                 << "\n===============================\n\n";
 
   });
 }
