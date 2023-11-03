@@ -44,6 +44,8 @@ How flow documentation is structured:
 
 #### Resources
 
+The following is a list of work that has used or contributed to the DHLS flow in CIRCT:
+- (10/2022) [Multi-Level Rewriting for Stream Processing to RTL compilation (M.Sc. Thesis) - Christian Ulmann](https://www.research-collection.ethz.ch/handle/20.500.11850/578713)
 - (01/2022) [A Dynamically Scheduled HLS Flow in MLIR (M.Sc. Thesis) - Morten Borup Petersen](https://infoscience.epfl.ch/record/292189)
 
 
