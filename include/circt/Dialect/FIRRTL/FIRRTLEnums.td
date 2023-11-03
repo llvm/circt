@@ -97,6 +97,18 @@ def EventControlAttr : I32EnumAttr<"EventControl", "edge control trigger",
                                    [AtPosEdge, AtNegEdge, AtEdge]>  {}
 
 //===----------------------------------------------------------------------===//
+// Reset Sampling Modes
+//===----------------------------------------------------------------------===//
+
+def ResetSample : I32EnumAttr<
+  "ResetSample", "Reset sampling mode", [
+    I32EnumAttrCase<"Uninferred", 0, "uninferred reset">,
+    I32EnumAttrCase<"Sync", 1, "syncronous reset">,
+    I32EnumAttrCase<"Async", 2, "asyncronous reset">,
+    I32EnumAttrCase<"AsyncSync", 3, "asyncronous assert, syncronous deassert">,
+  ]> {}
+
+//===----------------------------------------------------------------------===//
 // OM Targets
 //===----------------------------------------------------------------------===//
 

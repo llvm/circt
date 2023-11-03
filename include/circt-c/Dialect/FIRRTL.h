@@ -64,6 +64,14 @@ typedef enum FIRRTLEventControl {
   FIRRTL_EVENT_CONTROL_AT_EDGE,
 } FIRRTLEventControl;
 
+// NOLINTNEXTLINE(modernize-use-using)
+typedef enum FIRRTLResetSample {
+  FIRRTL_RESET_SAMPLE_UNINFERRED,
+  FIRRTL_RESET_SAMPLE_SYNC,
+  FIRRTL_RESET_SAMPLE_ASYNC,
+  FIRRTL_RESET_SAMPLE_ASYNC_SYNC,
+} FIRRTLResetSample;
+
 //===----------------------------------------------------------------------===//
 // Dialect API.
 //===----------------------------------------------------------------------===//
@@ -77,8 +85,9 @@ MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(FIRRTL, firrtl);
 MLIR_CAPI_EXPORTED MlirType firrtlTypeGetUInt(MlirContext ctx, int32_t width);
 MLIR_CAPI_EXPORTED MlirType firrtlTypeGetSInt(MlirContext ctx, int32_t width);
 MLIR_CAPI_EXPORTED MlirType firrtlTypeGetClock(MlirContext ctx);
-MLIR_CAPI_EXPORTED MlirType firrtlTypeGetReset(MlirContext ctx);
-MLIR_CAPI_EXPORTED MlirType firrtlTypeGetAsyncReset(MlirContext ctx);
+MLIR_CAPI_EXPORTED MlirType firrtlTypeGetReset(MlirContext ctx,
+                                               FIRRTLResetSample sampling,
+                                               bool posEdge);
 MLIR_CAPI_EXPORTED MlirType firrtlTypeGetAnalog(MlirContext ctx, int32_t width);
 MLIR_CAPI_EXPORTED MlirType firrtlTypeGetVector(MlirContext ctx,
                                                 MlirType element, size_t count);

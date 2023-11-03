@@ -3003,7 +3003,7 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
 
   // Create a reg op, wiring itself to its input.
   auto innerSym = lowerInnerSymbol(op);
-  bool isAsync = type_isa<AsyncResetType>(op.getResetSignal().getType());
+  bool isAsync = type_cast<firrtl::ResetType>(op.getResetSignal().getType()).isAsync();
   Backedge inputEdge = backedgeBuilder.get(resultType);
   auto reg =
       builder.create<seq::FirRegOp>(inputEdge, clockVal, op.getNameAttr(),
@@ -3778,7 +3778,7 @@ LogicalResult FIRRTLLowering::visitExpr(HasBeenResetIntrinsicOp op) {
   auto resetType = op.getReset().getType();
   auto uintResetType = dyn_cast<UIntType>(resetType);
   auto isSync = uintResetType && uintResetType.getWidth() == 1;
-  auto isAsync = isa<AsyncResetType>(resetType);
+  auto isAsync = type_isa<firrtl::ResetType>(resetType) && type_cast<firrtl::ResetType>(resetType).isAsync();
   if (!isAsync && !isSync) {
     auto d = op.emitError("uninferred reset passed to 'has_been_reset'; "
                           "requires sync or async reset");

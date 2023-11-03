@@ -1050,7 +1050,7 @@ struct ModuleNameSanitizer : OpReduction<firrtl::CircuitOp> {
           auto newName = firrtl::FIRRTLTypeSwitch<Type, StringRef>(port.type)
                              .Case<firrtl::ClockType>(
                                  [&](auto a) { return ns.newName("clk"); })
-                             .Case<firrtl::ResetType, firrtl::AsyncResetType>(
+                             .Case<firrtl::ResetType>(
                                  [&](auto a) { return ns.newName("rst"); })
                              .Case<firrtl::RefType>(
                                  [&](auto a) { return ns.newName("ref"); })

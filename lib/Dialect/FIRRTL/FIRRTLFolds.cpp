@@ -1692,6 +1692,11 @@ LogicalResult MultibitMuxOp::canonicalize(MultibitMuxOp op,
     }
   }
 
+  // Eliminate unneeded bits in the index.  These arise from duplicate values in
+  // the mux.  This is done by slicing the mux into a mux tree.
+  // multibit_mux(index, {a, b, a, c}) -> multibit_mux(index[0], multibit_mux(index[1], a,a), multibit_mux(index[1]}, {b,c}))
+
+
   // If the size is 2, canonicalize into a normal mux to introduce more folds.
   if (op.getInputs().size() != 2)
     return failure();

@@ -36,12 +36,24 @@ MlirType firrtlTypeGetClock(MlirContext ctx) {
   return wrap(ClockType::get(unwrap(ctx)));
 }
 
-MlirType firrtlTypeGetReset(MlirContext ctx) {
-  return wrap(ResetType::get(unwrap(ctx)));
-}
-
-MlirType firrtlTypeGetAsyncReset(MlirContext ctx) {
-  return wrap(AsyncResetType::get(unwrap(ctx)));
+MlirType firrtlTypeGetReset(MlirContext ctx, FIRRTLResetSample sampling,
+                            bool posEdge) {
+    ResetSample rs;
+    switch(sampling) {
+      case FIRRTLResetSample::FIRRTL_RESET_SAMPLE_UNINFERRED:
+        rs = ResetSample::Uninferred;
+        break;
+      case FIRRTLResetSample::FIRRTL_RESET_SAMPLE_SYNC:
+        rs = ResetSample::Sync;
+        break;
+      case FIRRTLResetSample::FIRRTL_RESET_SAMPLE_ASYNC:
+        rs = ResetSample::Async;
+        break;
+      case FIRRTLResetSample::FIRRTL_RESET_SAMPLE_ASYNC_SYNC:
+        rs = ResetSample::AsyncSync;
+        break;
+    };
+  return wrap(ResetType::get(unwrap(ctx), rs, posEdge, false));
 }
 
 MlirType firrtlTypeGetAnalog(MlirContext ctx, int32_t width) {

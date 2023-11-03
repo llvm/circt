@@ -55,7 +55,6 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
   TypeSwitch<Type>(type)
       .Case<ClockType>([&](auto) { os << "clock"; })
       .Case<ResetType>([&](auto) { os << "reset"; })
-      .Case<AsyncResetType>([&](auto) { os << "asyncreset"; })
       .Case<SIntType>([&](auto sIntType) {
         os << "sint";
         printWidthQualifier(sIntType.getWidth());
@@ -817,9 +816,7 @@ int32_t FIRRTLBaseType::getBitWidthOrSentinel() {
 /// asynchronous reset, or an uninfered width UInt.
 bool FIRRTLBaseType::isResetType() {
   return TypeSwitch<FIRRTLType, bool>(*this)
-      .Case<ResetType, AsyncResetType>([](Type) { return true; })
-      .Case<UIntType>(
-          [](UIntType a) { return !a.hasWidth() || a.getWidth() == 1; })
+      .Case<ResetType>([](Type) { return true; })
       .Case<BaseTypeAliasType>(
           [](auto type) { return type.getInnerType().isResetType(); })
       .Default([](Type) { return false; });

@@ -95,7 +95,7 @@ static ParseResult resetPort(StringRef name, FModuleLike mod, unsigned n) {
     mod.emitError(name) << " missing port " << n;
     return failure();
   }
-  if (isa<ResetType, AsyncResetType>(ports[n].type))
+  if (isa<ResetType>(ports[n].type))
     return success();
   if (auto uintType = dyn_cast<UIntType>(ports[n].type))
     if (uintType.getWidth() == 1)

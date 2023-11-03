@@ -88,33 +88,6 @@ def ClockTypeImpl : FIRRTLImplType<"Clock"> {
   }];
 }
 
-def ResetTypeImpl : FIRRTLImplType<"Reset"> {
-  let summary = "Reset Signal";
-  let parameters = (ins "bool":$isConst);
-  let storageClass = "FIRRTLBaseTypeStorage";
-  let builders = [
-    TypeBuilder<(ins), [{
-      return $_get($_ctxt, false);
-    }]>
-  ];
-  let extraClassDeclaration = [{
-    ResetType getConstType(bool isConst);
-  }];
-}
-
-def AsyncResetTypeImpl : FIRRTLImplType<"AsyncReset"> {
-  let summary = "AsyncReset signal";
-  let parameters = (ins "bool":$isConst);
-  let storageClass = "FIRRTLBaseTypeStorage";
-  let builders = [
-    TypeBuilder<(ins), [{
-      return $_get($_ctxt, false);
-    }]>
-  ];
-  let extraClassDeclaration = [{
-    AsyncResetType getConstType(bool isConst);
-  }];
-}
 
 def AnalogTypeImpl : FIRRTLImplType<"Analog",
   [WidthQualifiedTypeTrait]> {

@@ -146,11 +146,13 @@ private:
     return TypeSwitch<Type, LogicalResult>(type)
         .Case<ClockType>(
             [&](ClockType type) { return emitType(type, "Clock"); })
-        .Case<AsyncResetType>(
-            [&](AsyncResetType type) { return emitType(type, "AsyncReset"); })
-        .Case<ResetType>([&](ResetType) {
-          return emitError(
+        .Case<ResetType>([&](ResetType t) {
+          if (t.isAsync()) {
+            return emitType(t, "AsyncReset");
+          }
+          emitError(
               location, "Expected reset type to be inferred for exported port");
+          return failure();
         })
         .Case<UIntType>([&](UIntType uIntType) {
           return emitWidthQualifiedType(uIntType, "UInt");

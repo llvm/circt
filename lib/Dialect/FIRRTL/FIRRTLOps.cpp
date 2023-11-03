@@ -3465,9 +3465,7 @@ void InvalidValueOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
       name = "invalid_analog";
     else
       name = ("invalid_analog" + Twine(width)).str();
-  } else if (type_isa<AsyncResetType>(getType()))
-    name = "invalid_asyncreset";
-  else if (type_isa<ResetType>(getType()))
+  } else if (type_isa<ResetType>(getType()))
     name = "invalid_reset";
   else if (type_isa<ClockType>(getType()))
     name = "invalid_clock";
@@ -3631,8 +3629,6 @@ void SpecialConstantOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
     specialName << "_clock";
   } else if (type_isa<ResetType>(type)) {
     specialName << "_reset";
-  } else if (type_isa<AsyncResetType>(type)) {
-    specialName << "_asyncreset";
   }
   setNameFn(getResult(), specialName.str());
 }
@@ -4688,7 +4684,8 @@ AsAsyncResetPrimOp::inferUnaryReturnType(FIRRTLType input,
   int32_t width = base.getBitWidthOrSentinel();
   if (width == -2 || width == 0 || width > 1)
     return emitInferRetTypeError(loc, "operand must be single bit scalar type");
-  return AsyncResetType::get(input.getContext(), base.isConst());
+  return ResetType::get(input.getContext(), ResetSample::Async, true,
+                        base.isConst());
 }
 
 FIRRTLType AsClockPrimOp::inferUnaryReturnType(FIRRTLType input,

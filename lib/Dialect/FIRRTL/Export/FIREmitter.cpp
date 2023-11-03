@@ -1076,11 +1076,14 @@ void Emitter::emitExpression(SpecialConstantOp op) {
         emitInner();
         ps << ")";
       })
-      .Case<ResetType>([&](auto type) { emitInner(); })
-      .Case<AsyncResetType>([&](auto type) {
-        ps << "asAsyncReset(";
-        emitInner();
-        ps << ")";
+      .Case<ResetType>([&](auto type) {
+        if (type.isAsync()) {
+          ps << "asAsyncReset(";
+          emitInner();
+          ps << ")";
+        } else {
+          emitInner();
+        }
       });
 }
 
@@ -1286,8 +1289,12 @@ void Emitter::emitType(Type type, bool includeConst) {
   // TODO: Emit type decl for type alias.
   FIRRTLTypeSwitch<Type>(type)
       .Case<ClockType>([&](auto) { ps << "Clock"; })
-      .Case<ResetType>([&](auto) { ps << "Reset"; })
-      .Case<AsyncResetType>([&](auto) { ps << "AsyncReset"; })
+      .Case<ResetType>([&](auto t) {
+        if (t.isAsync())
+          ps << "AsyncReset";
+        else
+          ps << "Reset";
+      })
       .Case<UIntType>([&](auto type) {
         ps << "UInt";
         emitWidth(type.getWidth());

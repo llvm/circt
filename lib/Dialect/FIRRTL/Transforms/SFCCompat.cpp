@@ -111,7 +111,7 @@ void SFCCompatPass::runOnOperation() {
     ImplicitLocOpBuilder builder(inv.getLoc(), inv);
     Value replacement =
         FIRRTLTypeSwitch<FIRRTLType, Value>(inv.getType())
-            .Case<ClockType, AsyncResetType, ResetType>(
+            .Case<ClockType, ResetType>(
                 [&](auto type) -> Value {
                   return builder.create<SpecialConstantOp>(
                       type, builder.getBoolAttr(false));

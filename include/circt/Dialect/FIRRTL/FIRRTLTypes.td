@@ -93,7 +93,9 @@ def SizedPassiveType : FIRRTLDialectType<And<[SizedType.predicate,PassiveType.pr
     "a sized passive base type (contains no uninferred widths, or flips)", "::circt::firrtl::FIRRTLType">;
 def SizedPassiveOrForeignType : AnyTypeOf<[SizedPassiveType, ForeignType]>;
 
-def AsyncResetType : FIRRTLDialectAliasTypeHelper<"AsyncResetType", "async reset type">;
+def AsyncResetType : FIRRTLDialectType<CPred<"type_isa<ResetType>($_self) && "
+    "type_cast<ResetType>($_self).isAsync()">,
+    "async reset type", "::circt::firrtl::ResetType">;
 
 def ResetType : FIRRTLDialectAliasTypeHelper<"ResetType", "reset type">;
 

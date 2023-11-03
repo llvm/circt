@@ -42,7 +42,6 @@ class AnyRefType;
 class ClassType;
 class ClockType;
 class ResetType;
-class AsyncResetType;
 class SIntType;
 class UIntType;
 class AnalogType;
@@ -308,6 +307,47 @@ public:
   IntType getConstType(bool isConst);
 
   static bool classof(Type type) { return llvm::isa<SIntType, UIntType>(type); }
+};
+
+//===----------------------------------------------------------------------===//
+// ResetType
+//===----------------------------------------------------------------------===//
+
+/// This is the common base class between SIntType and UIntType.
+class ResetType : public FIRRTLBaseType {
+  ResetSample sample;
+
+public:
+  using FIRRTLBaseType::FIRRTLBaseType;
+
+  static ResetType get(MLIRContext* context,
+                       ResetSample _sample = ResetSample::Uninferred,
+                       bool _posedge = true, bool isConst = false);
+
+  ResetType getConstType(bool isConst);
+  bool isUninferred() { return sample == ResetSample::Uninferred; }
+  bool isSync() { return sample == ResetSample::Sync; }
+  bool isAsync() { return sample == ResetSample::Async; }
+  bool isAsyncSync() { return sample == ResetSample::AsyncSync; }
+
+  /*
+    /// Return an SIntType or UIntType with the specified signedness, width, and
+    /// constness.
+    static IntType get(MLIRContext *context, bool isSigned,
+                       int32_t widthOrSentinel = -1, bool isConst = false);
+
+    bool isSigned() { return isa<SIntType>(); }
+    bool isUnsigned() { return isa<UIntType>(); }
+
+    /// Return the width of this type, or -1 if it has none specified.
+    int32_t getWidthOrSentinel() const;
+
+    /// Return a 'const' or non-'const' version of this type.
+    IntType getConstType(bool isConst);
+
+    static bool classof(Type type) { return llvm::isa<SIntType, UIntType>(type);
+    }
+  */
 };
 
 //===----------------------------------------------------------------------===//

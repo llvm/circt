@@ -912,7 +912,7 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
 
   case FIRToken::kw_AsyncReset:
     consumeToken(FIRToken::kw_AsyncReset);
-    result = AsyncResetType::get(getContext());
+    result = ResetType::get(getContext(), ResetSample::Async);
     break;
 
   case FIRToken::kw_UInt:
