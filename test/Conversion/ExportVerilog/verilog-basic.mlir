@@ -483,7 +483,7 @@ hw.module @ArrayParamsInst() {
     arr: %arr : !hw.array<2 x i8>,
     uarr: %uarr : !hw.uarray<2 x i8>) -> ()
 }
-// CHECK:       wire [1:0][7:0] [[G0:_.*]] = {8'h1, 8'h2};
+// CHECK:       wire [1:0][7:0] [[G0:_.*]] = '{8'h1, 8'h2};
 // CHECK:       wire [7:0]      [[G1:_.*]][0:1] = '{8'h1, 8'h2};
 // CHECK:       ArrayParams #(
 // CHECK:         .param(2)
