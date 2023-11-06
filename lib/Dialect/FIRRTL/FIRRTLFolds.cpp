@@ -1692,6 +1692,67 @@ LogicalResult MultibitMuxOp::canonicalize(MultibitMuxOp op,
     }
   }
 
+  // Eliminate unneeded bits in the index.  These arise from duplicate values in
+  // the mux.  This is done by slicing the mux into a mux tree.
+  // multibit_mux(index, {a, b, a, c}) -> multibit_mux(index[0],
+  // multibit_mux(index[1], a,a), multibit_mux(index[1]}, {b,c})) Search for
+  // identities in specific bit slices.   This is robust to unknown width
+  // indexes.
+  for (int bit = 0, lastbit = op.getIndex().getType().getBitWidthOrSentinel();
+       bit < lastbit; ++bit) {
+    for (int curval = 0; curval <= 1; ++curval) {
+      // We don't collect values here as the normal case is we don't find a
+      // match, so we don't want to move data around and do allocations.
+      Value v;
+      unsigned count = 0;
+      for (unsigned i = 0, e = op.getInputs().size(); i < e; ++i) {
+        if (((i >> bit) & 1) != curval)
+          continue;
+        ++count;
+        if (!v)
+          v = op.getInputs()[i];
+        if (v != op.getInputs()[i]) {
+          v = {};
+          break;
+        }
+      }
+      if (!v || count == 1)
+        continue;
+      // Found match, collect varying side of the future mux
+      SmallVector<Value> nonSimple;
+      for (unsigned i = 0, e = op.getInputs().size(); i < e; ++i) {
+        if (((i >> bit) & 1) != curval)
+          nonSimple.push_back(op.getInputs()[i]);
+      }
+      Value indBit = rewriter.createOrFold<BitsPrimOp>(op.getLoc(),
+                                                       op.getIndex(), bit, bit);
+      Value indBitRemLow;
+      if (bit)
+        indBitRemLow = rewriter.createOrFold<BitsPrimOp>(
+            op.getLoc(), op.getIndex(), bit - 1, 0);
+      else
+        indBitRemLow = rewriter.create<ConstantOp>(
+            op.getLoc(), IntType::get(op.getContext(), false, 0),
+            APInt(0U, 0UL));
+      Value indBitRemHigh;
+      if (bit == lastbit - 1)
+        indBitRemHigh = rewriter.create<ConstantOp>(
+            op.getLoc(), IntType::get(op.getContext(), false, 0),
+            APInt(0U, 0UL));
+      else
+        indBitRemHigh = rewriter.createOrFold<BitsPrimOp>(
+            op.getLoc(), op.getIndex(), lastbit - 1, bit + 1);
+      Value indBitRem = rewriter.createOrFold<CatPrimOp>(
+          op.getLoc(), indBitRemHigh, indBitRemLow);
+      Value otherSide =
+          rewriter.create<MultibitMuxOp>(op.getLoc(), indBitRem, nonSimple);
+      Value high = curval ? otherSide : v;
+      Value low = curval ? v : otherSide;
+      replaceOpWithNewOpAndCopyName<MuxPrimOp>(rewriter, op, indBit, high, low);
+      return success();
+    }
+  }
+
   // If the size is 2, canonicalize into a normal mux to introduce more folds.
   if (op.getInputs().size() != 2)
     return failure();
