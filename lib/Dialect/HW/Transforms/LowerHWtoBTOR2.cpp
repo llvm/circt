@@ -16,6 +16,7 @@
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/SV/SVTypes.h"
+#include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/GraphWriter.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -59,42 +60,42 @@ private:
 
   // Set of often reused strings in btor2 emission (to avoid typos and enable
   // auto-complete)
-  const std::string SORT = "sort";
-  const std::string BITVEC = "bitvec";
-  const std::string INPUT = "input";
-  const std::string RESET = "reset";
-  const std::string OUTPUT = "output";
-  const std::string ZERO = "zero";
-  const std::string ONE = "one";
-  const std::string CONST = "const";
-  const std::string CONSTD = "constd";
-  const std::string CONSTH = "consth";
-  const std::string SLICE = "slice";
-  const std::string UEXT = "uext";
-  const std::string ADD = "add";
-  const std::string SUB = "sub";
-  const std::string MUL = "mul";
-  const std::string AND = "and";
-  const std::string OR = "or";
-  const std::string XOR = "xor";
-  const std::string SLL = "sll";
-  const std::string SRL = "srl"; // a.k.a. unsigned right shift
-  const std::string SRA = "sra"; // a.k.a. signed right shift
-  const std::string SDIV = "sdiv";
-  const std::string UDIV = "udiv";
-  const std::string SMOD = "smod";
-  const std::string CONCAT = "concat";
-  const std::string NOT = "not";
-  const std::string NEQ = "neq";
-  const std::string HW_NEQ = "ne";
-  const std::string ITE = "ite";
-  const std::string IMPLIES = "implies"; // logical implication
-  const std::string STATE = "state";     // Register state
-  const std::string NEXT = "next";       // Register state transition
-  const std::string BAD = "bad";
-  const std::string CONSTRAINT = "constraint";
-  const std::string WS = " ";  // WhiteSpace
-  const std::string NL = "\n"; // NewLine
+  const constexpr StringLiteral SORT = "sort";
+  const constexpr StringLiteral BITVEC = "bitvec";
+  const constexpr StringLiteral INPUT = "input";
+  const constexpr StringLiteral RESET = "reset";
+  const constexpr StringLiteral OUTPUT = "output";
+  const constexpr StringLiteral ZERO = "zero";
+  const constexpr StringLiteral ONE = "one";
+  const constexpr StringLiteral CONST = "const";
+  const constexpr StringLiteral CONSTD = "constd";
+  const constexpr StringLiteral CONSTH = "consth";
+  const constexpr StringLiteral SLICE = "slice";
+  const constexpr StringLiteral UEXT = "uext";
+  const constexpr StringLiteral ADD = "add";
+  const constexpr StringLiteral SUB = "sub";
+  const constexpr StringLiteral MUL = "mul";
+  const constexpr StringLiteral AND = "and";
+  const constexpr StringLiteral OR = "or";
+  const constexpr StringLiteral XOR = "xor";
+  const constexpr StringLiteral SLL = "sll";
+  const constexpr StringLiteral SRL = "srl"; // a.k.a. unsigned right shift
+  const constexpr StringLiteral SRA = "sra"; // a.k.a. signed right shift
+  const constexpr StringLiteral SDIV = "sdiv";
+  const constexpr StringLiteral UDIV = "udiv";
+  const constexpr StringLiteral SMOD = "smod";
+  const constexpr StringLiteral CONCAT = "concat";
+  const constexpr StringLiteral NOT = "not";
+  const constexpr StringLiteral NEQ = "neq";
+  const constexpr StringLiteral HW_NEQ = "ne";
+  const constexpr StringLiteral ITE = "ite";
+  const constexpr StringLiteral IMPLIES = "implies"; // logical implication
+  const constexpr StringLiteral STATE = "state";     // Register state
+  const constexpr StringLiteral NEXT = "next"; // Register state transition
+  const constexpr StringLiteral BAD = "bad";
+  const constexpr StringLiteral CONSTRAINT = "constraint";
+  const constexpr StringLiteral WS = " ";  // WhiteSpace
+  const constexpr StringLiteral NL = "\n"; // NewLine
 
   /// Field helper functions
 
@@ -225,22 +226,21 @@ private:
 
   // Generates a sort declaration instruction given a type (bitvec or array) and
   // a width
-  StringRef genSort(StringRef type, size_t width) {
+  void genSort(StringRef type, size_t width) {
     // Check that the sort wasn't already declared
     if (getSortLID(width) != NO_LID) {
-      return ""; // If it has already been declared then return an empty string
+      return; // If it has already been declared then return an empty string
     }
 
     // Add the width to the declared sorts along with the associated line id
     setSortLID(width);
 
     // Build and return a sort declaration
-    return std::to_string(lid++) + WS + SORT + WS + BITVEC + WS +
-           std::to_string(width) + NL;
+    llvm::outs() << lid++ << WS << SORT << WS << BITVEC << WS << width << NL;
   }
 
   // Generates an input declaration given a sort lid and a name
-  StringRef genInput(size_t width, std::string name) {
+  void genInput(size_t width, StringRef name) {
     // Retrieve the lid associated with the sort (sid)
     size_t sid = getSortLID(width);
 
@@ -248,12 +248,11 @@ private:
     assert(sid != NO_LID);
 
     // Generate input declaration
-    return std::to_string(lid++) + WS + INPUT + WS + std::to_string(sid) + WS +
-           name + NL;
+    llvm::outs() << lid++ << WS << INPUT << WS << sid << WS << name << NL;
   }
 
   // Generates a constant declaration given a value, a width and a name
-  StringRef genConst(int64_t value, size_t width, Operation *op) {
+  void genConst(int64_t value, size_t width, Operation *op) {
     // For now we're going to assume that the name isn't taken, given that hw is
     // already in SSA form
     setOpLID(op);
@@ -264,15 +263,14 @@ private:
     // Check that a result was found before continuing
     assert(sid != NO_LID);
 
-    return std::to_string(lid++) + WS + CONSTD + WS + std::to_string(sid) + WS +
-           std::to_string(value) + NL;
+    llvm::outs() << lid++ << WS << CONSTD << WS << sid << WS << value << NL;
   }
 
   // Generates a zero constant expression
-  StringRef genZero(size_t width) {
+  void genZero(size_t width) {
     // Check if the constant has been created yet
     if (getConstLID(0, width) != NO_LID) {
-      return "";
+      return;
     }
 
     // Retrieve the lid associated with the sort (sid)
@@ -285,13 +283,13 @@ private:
     setConstLID(0, width);
 
     // Build and return the zero btor instruction
-    return std::to_string(lid++) + WS + ZERO + WS + std::to_string(sid) + NL;
+    llvm::outs() << lid++ << WS << ZERO << WS << sid << NL;
   }
 
   // Generates a binary operation instruction given an op name, two operands and
   // a result width
-  StringRef genBinOp(StringRef inst, Operation *binop, Value op1, Value op2,
-                     size_t width) {
+  void genBinOp(StringRef inst, Operation *binop, Value op1, Value op2,
+                size_t width) {
     // Set the LID for this operation
     setOpLID(binop);
 
@@ -307,8 +305,8 @@ private:
     size_t op2LID = getOpLID(op2);
 
     // Build and return the string
-    return std::to_string(lid++) + WS + inst + WS + std::to_string(sid) + WS +
-           std::to_string(op1LID) + WS + std::to_string(op2LID) + NL;
+    llvm::outs() << lid++ << WS << inst << WS << sid << WS << op1LID << WS
+                 << op2LID << NL;
   }
 
   // Emits a btor2 string for the given binary operation
@@ -318,16 +316,15 @@ private:
     Value op1 = binop->getOperand(0);
     Value op2 = binop->getOperand(1);
 
-    // Generate a sort for the width (nothing is done is sort is defined)
-    btor2Res += genSort(BITVEC, width);
+    // Make sure that the correct sort definition exists
+    genSort(BITVEC, width);
 
     // Generate the line
-    btor2Res += genBinOp(inst, binop, op1, op2, width);
+    genBinOp(inst, binop, op1, op2, width);
   }
 
   // Generates a slice instruction given an operand, the lowbit, and the width
-  StringRef genSlice(Operation *srcop, Value op0, size_t lowbit,
-                     int64_t width) {
+  void genSlice(Operation *srcop, Value op0, size_t lowbit, int64_t width) {
     // Set the LID for this operation
     setOpLID(srcop);
 
@@ -342,14 +339,13 @@ private:
     size_t op0LID = getOpLID(op0);
 
     // Build and return the slice instruction
-    return std::to_string(lid++) + WS + SLICE + WS + std::to_string(sid) + WS +
-           std::to_string(op0LID) + WS + std::to_string(width - 1) + WS +
-           std::to_string(lowbit) + NL;
+    llvm::outs() << lid++ << WS << SLICE << WS << sid << WS << op0LID << WS
+                 << (width - 1) << WS << lowbit << NL;
   }
 
   // Generates a constant declaration given a value, a width and a name
-  StringRef genUnaryOp(Operation *srcop, Operation *op0, StringRef inst,
-                       size_t width) {
+  void genUnaryOp(Operation *srcop, Operation *op0, StringRef inst,
+                  size_t width) {
     // Register the source operation with the current line id
     setOpLID(srcop);
 
@@ -363,51 +359,45 @@ private:
     // Find the LID associated to the operand
     size_t op0LID = getOpLID(op0);
 
-    return std::to_string(lid++) + WS + inst + WS + std::to_string(sid) + WS +
-           std::to_string(op0LID) + NL;
+    llvm::outs() << lid++ << WS << inst << WS << sid << WS << op0LID << NL;
   }
 
   // Generates a constant declaration given a value, a width and a name
-  StringRef genUnaryOp(Operation *srcop, Value op0, StringRef inst,
-                       size_t width) {
-    return genUnaryOp(srcop, op0.getDefiningOp(), inst, width);
+  void genUnaryOp(Operation *srcop, Value op0, StringRef inst, size_t width) {
+    genUnaryOp(srcop, op0.getDefiningOp(), inst, width);
   }
 
   // Generate a btor2 assertion given an assertion operation
   // Note that a predicate inversion must have already been generated at this
   // point
-  StringRef genBad(Operation *assertop) {
+  void genBad(Operation *assertop) {
     // Start by finding the expression lid
     size_t assertLID = getOpLID(assertop);
 
     // Build and return the btor2 string
-    return std::to_string(lid++) + WS + BAD + WS + std::to_string(assertLID) +
-           NL;
+    llvm::outs() << lid++ << WS << BAD << WS << assertLID << NL;
   }
 
   // Generate a btor2 constraint given an expression from an assumption
   // operation
-  StringRef genConstraint(Value expr) {
+  void genConstraint(Value expr) {
     // Start by finding the expression lid
     size_t exprLID = getOpLID(expr);
 
     // Build and return the btor2 string
-    return std::to_string(lid++) + WS + CONSTRAINT + WS +
-           std::to_string(exprLID) + NL;
+    llvm::outs() << lid++ << WS << CONSTRAINT << WS << exprLID << NL;
   }
 
   // Generate a btor2 constraint given an expression from an assumption
   // operation
-  StringRef genConstraint(size_t exprLID) {
+  void genConstraint(size_t exprLID) {
     // Build and return the btor2 string
-    return std::to_string(lid++) + WS + CONSTRAINT + WS +
-           std::to_string(exprLID) + NL;
+    llvm::outs() << lid++ << WS << CONSTRAINT << WS << exprLID << NL;
   }
 
   // Generate an ITE instruction (if then else) given a predicate, two values
   // and a res width
-  StringRef genIte(Operation *srcop, Value cond, Value t, Value f,
-                   int64_t width) {
+  void genIte(Operation *srcop, Value cond, Value t, Value f, int64_t width) {
     // Register the source operation with the current line id
     setOpLID(srcop);
 
@@ -423,15 +413,14 @@ private:
     size_t fLID = getOpLID(f);
 
     // Build and return the ite instruction
-    return std::to_string(lid++) + WS + ITE + WS + std::to_string(sid) + WS +
-           std::to_string(condLID) + WS + std::to_string(tLID) + WS +
-           std::to_string(fLID) + NL;
+    llvm::outs() << lid++ << WS << ITE << WS << sid << WS << condLID << WS
+                 << tLID << WS << fLID << NL;
   }
 
   // Generate an ITE instruction (if then else) given a predicate, two values
   // and a res width
-  StringRef genIte(Operation *srcop, size_t condLID, size_t tLID, size_t fLID,
-                   int64_t width) {
+  void genIte(Operation *srcop, size_t condLID, size_t tLID, size_t fLID,
+              int64_t width) {
     // Register the source operation with the current line id
     setOpLID(srcop);
 
@@ -442,13 +431,12 @@ private:
     assert(sid != NO_LID);
 
     // Build and return the ite instruction
-    return std::to_string(lid++) + WS + ITE + WS + std::to_string(sid) + WS +
-           std::to_string(condLID) + WS + std::to_string(tLID) + WS +
-           std::to_string(fLID) + NL;
+    llvm::outs() << lid++ << WS << ITE << WS << sid << WS << condLID << WS
+                 << tLID << WS << fLID << NL;
   }
 
   // Generate a logical implication given a lhs and a rhs
-  StringRef genImplies(Operation *srcop, Value lhs, Value rhs) {
+  void genImplies(Operation *srcop, Value lhs, Value rhs) {
     // Register the source operation with the current line id
     setOpLID(srcop);
 
@@ -463,12 +451,12 @@ private:
     size_t rhsLID = getOpLID(rhs);
 
     // Build and return the implies operation
-    return std::to_string(lid++) + WS + IMPLIES + WS + std::to_string(sid) +
-           WS + std::to_string(lhsLID) + WS + std::to_string(rhsLID) + NL;
+    llvm::outs() << lid++ << WS << IMPLIES << WS << sid << WS << lhsLID << WS
+                 << rhsLID << NL;
   }
 
   // Generate a logical implication given a lhs and a rhs
-  StringRef genImplies(Operation *srcop, size_t lhsLID, size_t rhsLID) {
+  void genImplies(Operation *srcop, size_t lhsLID, size_t rhsLID) {
     // Register the source operation with the current line id
     setOpLID(srcop);
 
@@ -479,12 +467,12 @@ private:
     assert(sid != NO_LID);
 
     // Build and return the implies operation
-    return std::to_string(lid++) + WS + IMPLIES + WS + std::to_string(sid) +
-           WS + std::to_string(lhsLID) + WS + std::to_string(rhsLID) + NL;
+    llvm::outs() << lid++ << WS << IMPLIES << WS << sid << WS << lhsLID << WS
+                 << rhsLID << NL;
   }
 
   // Generates a state instruction given a width and a name
-  StringRef genState(Operation *srcop, int64_t width, StringRef name) {
+  void genState(Operation *srcop, int64_t width, StringRef name) {
     // Register the source operation with the current line id
     setOpLID(srcop);
 
@@ -495,13 +483,12 @@ private:
     assert(sid != NO_LID);
 
     // Build and return the state instruction
-    return std::to_string(lid++) + WS + STATE + WS + std::to_string(sid) + WS +
-           name + NL;
+    llvm::outs() << lid++ << WS << STATE << WS << sid << WS << name << NL;
   }
 
   // Generates a next instruction, given a width, a state LID, and a next value
   // LID
-  StringRef genNext(Operation *next, Operation *reg, int64_t width) {
+  void genNext(Operation *next, Operation *reg, int64_t width) {
     // Retrieve the lid associated with the sort (sid)
     size_t sid = getSortLID(width);
 
@@ -513,20 +500,21 @@ private:
     size_t nextLID = getOpLID(next);
 
     // Build and return the next instruction
-    return std::to_string(lid++) + WS + NEXT + WS + std::to_string(sid) + WS +
-           std::to_string(regLID) + WS + std::to_string(nextLID) + NL;
+    llvm::outs() << lid++ << WS << NEXT << WS << sid << WS << regLID << WS
+                 << nextLID << NL;
   }
 
   // Verifies that the sort required for the given operation's btor2 emission
   // has been generated
-  void requireSort(mlir::Type type) {
+  int64_t requireSort(mlir::Type type) {
     // Start by figuring out what sort needs to be generated
     int64_t width = hw::getBitWidth(type);
     assert(width != NO_WIDTH);
 
     // Generate the sort regardles of resulting width (nothing will be added if
     // the sort already exists)
-    llvm::outs() << genSort(BITVEC, width);
+    genSort(BITVEC, width);
+    return width;
   }
 
   /// Visitor Methods used later on for pattern matching
@@ -545,7 +533,7 @@ private:
 
       // Guarantees that a sort will exist for the generation of this port's
       // translation into btor2
-      requireSort(port.type);
+      int64_t w = requireSort(port.type);
 
       // Record the defining operation's line ID (the module itself in the case
       // of ports)
@@ -555,7 +543,7 @@ private:
       if (iName == RESET)
         resetLID = lid;
 
-      llvm::outs() << genInput(width, iName);
+      genInput(w, iName);
     }
   }
 
@@ -569,63 +557,72 @@ private:
   // conversions
   void visit(hw::ConstantOp op) {
     // Make sure that a sort has been created for our operation
-    requireSort(op.getType());
+    int64_t w = requireSort(op.getType());
 
     // Prepare for for const generation by extracting the const value and
     // generting the btor2 string
     int64_t value = op.getValue().getSExtValue();
-    llvm::outs() << genConst(value, width, op);
+    genConst(value, w, op);
   }
 
   // Wires can generally be ignored in bto2, however we do need
   // to keep track of the new alias it creates
   void visit(hw::WireOp op) {
     // Retrieve the aliased operation
-    Operation *defOp = wop.getOperand().getDefiningOp();
+    Operation *defOp = op.getOperand().getDefiningOp();
     // Wires don't output anything so just record alias
-    setOpAlias(wop, defOp);
+    setOpAlias(op, defOp);
   }
 
   // Binary operations are all emitted the same way, so we can group them into
   // a single method.
   // @param {StringRef} inst, the btor2 name of the operation
   void visitBinOp(Operation *op, StringRef inst) {
-    requireSort(op->getType());
+    TypeSwitch<Operation *, void>(op)
+        .template Case<
+            // All supported binary ops
+            comb::AddOp, comb::SubOp, comb::MulOp, comb::DivUOp, comb::DivSOp,
+            comb::ModSOp, comb::ShlOp, comb::ShrUOp, comb::ShrSOp, comb::AndOp,
+            comb::OrOp, comb::XorOp, comb::ConcatOp>([&](auto expr) {
+          int64_t w = requireSort(expr.getType());
 
-    // Start by extracting the operands
-    Value op1 = binop->getOperand(0);
-    Value op2 = binop->getOperand(1);
+          // Start by extracting the operands
+          Value op1 = binop->getOperand(0);
+          Value op2 = binop->getOperand(1);
 
-    // Generate the line
-    llvm::outs() << genBinOp(inst, op, op1, op2, width);
+          // Generate the line
+          genBinOp(inst, op, op1, op2, w);
+        })
+        // Ignore anything else
+        .Default([&](auto expr) {});
   }
 
   // Visitors for the binary ops
-  void visit(comb::ConcatOp op) { visitBinOp(op, CONCAT); }
   void visit(comb::AddOp op) { visitBinOp(op, ADD); }
   void visit(comb::SubOp op) { visitBinOp(op, SUB); }
   void visit(comb::MulOp op) { visitBinOp(op, MUL); }
+  void visit(comb::DivSOp op) { visitBinOp(op, SDIV); }
+  void visit(comb::DivUOp op) { visitBinOp(op, UDIV); }
+  void visit(comb::ModSOp op) { visitBinOp(op, SMOD); }
+  void visit(comb::ShlOp op) { visitBinOp(op, SLL); }
+  void visit(comb::ShrUOp op) { visitBinOp(op, SRL); }
+  void visit(comb::ShrSOp op) { visitBinOp(op, SRA); }
   void visit(comb::AndOp op) { visitBinOp(op, AND); }
   void visit(comb::OrOp op) { visitBinOp(op, OR); }
   void visit(comb::XorOp op) { visitBinOp(op, XOR); }
-  void visit(comb::ShlOp op) { visitBinOp(op, SLL); }
-  void visit(comb::ShrSOp op) { visitBinOp(op, SRA); }
-  void visit(comb::ShrUOp op) { visitBinOp(op, SRL); }
-  void visit(comb::ModSOp op) { visitBinOp(op, SMOD); }
-  void visit(comb::DivSOp op) { visitBinOp(op, SDIV); }
-  void visit(comb::DivSOp op) { visitBinOp(op, UDIV); }
+  void visit(comb::ConcatOp op) { visitBinOp(op, CONCAT); }
 
   // Extract ops translate to a slice operation in btor2 in a one-to-one manner
   void visit(comb::ExtractOp op) {
-    requireSort(op.getType());
+    int64_t w = requireSort(op.getType());
 
     // Start by extracting the necessary information for the emission (i.e.
     // operand, low bit, ...)
-    Value op0 = extop.getOperand();
-    size_t lb = extop.getLowBit();
+    Value op0 = op.getOperand();
+    size_t lb = op.getLowBit();
 
     // Generate the slice instruction
-    llvm::outs() << genSlice(op, op0, lb, width);
+    genSlice(op, op0, lb, w);
   }
 
   // Btor2 uses similar syntax as hw for its comparisons
@@ -644,11 +641,11 @@ private:
       pred = NEQ;
 
     // Width of result is always 1 for comparison
-    btor2Res += genSort(BITVEC, 1);
+    genSort(BITVEC, 1);
 
     // With the special cases out of the way, the emission is the same as that
     // of a binary op
-    llvm::outs() << genBinOp(pred, op, lhs, rhs, 1);
+    genBinOp(pred, op, lhs, rhs, 1);
   }
 
   // Muxes generally convert to an ite statement
@@ -660,10 +657,10 @@ private:
 
     // We assume that both tval and fval have the same width
     // This width should be the same as the output width
-    requireSort(op.getType());
+    int64_t w = requireSort(op.getType());
 
     // Generate the ite instruction
-    llvm::outs << genIte(op, pred, tval, fval, width);
+    genIte(op, pred, tval, fval, w);
   }
 
   // Assertions are negated then converted to a btor2 BAD instruction
@@ -672,7 +669,7 @@ private:
     Value expr = op.getExpression();
 
     // This sort is for assertion inversion and potential implies
-    llvm::outs() << genSort(BITVEC, 1);
+    genSort(BITVEC, 1);
 
     // Check for an overaching enable
     // In our case the sv.if operation will probably only be used when
@@ -682,39 +679,35 @@ private:
       Value en = ifop.getOperand();
 
       // Generate the implication
-      llvm::outs() << genImplies(ifop, en, expr);
+      genImplies(ifop, en, expr);
 
       // Generate the implies inversion
-      llvm::outs() << genUnaryOp(op, ifop, NOT, 1);
+      genUnaryOp(op, ifop, NOT, 1);
     } else {
       // Generate the expression inversion
-      llvm::outs() << genUnaryOp(op, expr, NOT, 1);
+      genUnaryOp(op, expr, NOT, 1);
     }
 
     // Genrate the BAD btor2 intruction
-    llvm::outs() << genBad(op);
+    genBad(op);
   }
   // Assumptions are converted to a btor2 constraint instruction
   void visit(sv::AssumeOp op) {
     // Extract the expression that we want our constraint to be about
     Value expr = op.getExpression();
-    llvm::outs << genConstraint(expr);
+    genConstraint(expr);
   }
 
   // Firrtl registers generate a state instruction
   // The final update is also used to generate a set of next btor
   // instructions
   void visit(seq::FirRegOp reg) {
-    // Start by retrieving the register's name
+    // Start by retrieving the register's name and width
     StringRef regName = reg.getName();
-
-    // We don't call requireSort here as the width is needed again for the state
-    int64_t width = hw::getBitWidth(reg.getType());
-    assert(width != NO_WIDTH);
-    btor2Res += genSort(BITVEC, width);
+    int64_t w = requireSort(reg.getType());
 
     // Generate state instruction (represents the register declaration)
-    llvm::outs << genState(reg, width, regName);
+    genState(reg, width, regName);
 
     // Record the operation for future `next` instruction generation
     // This is required to model transitions between states (i.e. how a
@@ -736,7 +729,23 @@ void LowerHWtoBTOR2Pass::runOnOperation() {
     }
 
     // Visit all of the operations in our module
-    module.walk([&](Operation *op) { visit(op); });
+    module.walk([&](Operation *op) {
+      TypeSwitch<Operation *, void>(op)
+          .template Case<
+              // All supported hw operations
+              hw::OutputOp, hw::ConstantOp, hw::WireOp,
+              // All supported comb ops
+              comb::AddOp, comb::SubOp, comb::MulOp, comb::DivUOp, comb::DivSOp,
+              comb::ModSOp, comb::ShlOp, comb::ShrUOp, comb::ShrSOp,
+              comb::AndOp, comb::OrOp, comb::XorOp, comb::ConcatOp,
+              comb::ExtractOp, comb::ICmpOp, comb::MuxOp,
+              // All supported sv operations
+              sv::AssertOp, sv::AssumeOp,
+              // All supported seq operations
+              seq::FirRegOp>([&](auto expr) { visit(expr); })
+          // Ignore anything else
+          .Default([&](auto expr) {});
+    });
 
     // Iterate through the registers and generate the `next` instructions
     for (size_t i = 0; i < regOps.size(); ++i) {
@@ -749,8 +758,8 @@ void LowerHWtoBTOR2Pass::runOnOperation() {
         // Genrate the reset condition (for sync & async resets)
         // We assume for now that the reset value is always 0
         size_t width = hw::getBitWidth(reg.getType());
-        llvm::outs() << genSort(BITVEC, width);
-        llvm::outs() << genZero(width);
+        genSort(BITVEC, width);
+        genZero(width);
 
         // Next should already be associated to an LID at this point
         // As we are going to override it, we need to keep track of the original
@@ -759,11 +768,10 @@ void LowerHWtoBTOR2Pass::runOnOperation() {
 
         // Generate the ite for the register update reset condition
         // i.e. reg <= reset ? 0 : next
-        llvm::outs() << genIte(next, resetLID, getConstLID(0, width), nextLID,
-                               width);
+        genIte(next, resetLID, getConstLID(0, width), nextLID, width);
 
         // Finally generate the next statement
-        llvm::outs() << genNext(next, reg, width);
+        genNext(next, reg, width);
       }
     }
 
