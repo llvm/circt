@@ -192,100 +192,100 @@ class ExtractOp(ExtractOp):
                             needs_result_type=True)
 
 
-@UnaryOp
 @_ods_cext.register_operation(_Dialect, replace=True)
+@UnaryOp
 class ParityOp(ParityOp):
   pass
 
 
 # Sugar classes for the various non-variadic binary ops.
-@BinaryOp
 @_ods_cext.register_operation(_Dialect, replace=True)
+@BinaryOp
 class DivSOp(DivSOp):
   pass
 
 
-@BinaryOp
 @_ods_cext.register_operation(_Dialect, replace=True)
+@BinaryOp
 class DivUOp(DivUOp):
   pass
 
 
-@BinaryOp
 @_ods_cext.register_operation(_Dialect, replace=True)
+@BinaryOp
 class ModSOp(ModSOp):
   pass
 
 
-@BinaryOp
 @_ods_cext.register_operation(_Dialect, replace=True)
+@BinaryOp
 class ModUOp(ModUOp):
   pass
 
 
-@BinaryOp
 @_ods_cext.register_operation(_Dialect, replace=True)
+@BinaryOp
 class ShlOp(ShlOp):
   pass
 
 
-@BinaryOp
 @_ods_cext.register_operation(_Dialect, replace=True)
+@BinaryOp
 class ShrSOp(ShrSOp):
   pass
 
 
-@BinaryOp
 @_ods_cext.register_operation(_Dialect, replace=True)
+@BinaryOp
 class ShrUOp(ShrUOp):
   pass
 
 
-@BinaryOp
 @_ods_cext.register_operation(_Dialect, replace=True)
+@BinaryOp
 class SubOp(SubOp):
   pass
 
 
 # Sugar classes for the variadic ops.
-@VariadicOp
 @_ods_cext.register_operation(_Dialect, replace=True)
+@VariadicOp
 class AddOp(AddOp):
   pass
 
 
-@VariadicOp
 @_ods_cext.register_operation(_Dialect, replace=True)
+@VariadicOp
 class MulOp(MulOp):
   pass
 
 
-@VariadicOp
 @_ods_cext.register_operation(_Dialect, replace=True)
+@VariadicOp
 class AndOp(AndOp):
   pass
 
 
-@VariadicOp
 @_ods_cext.register_operation(_Dialect, replace=True)
+@VariadicOp
 class OrOp(OrOp):
   pass
 
 
-@VariadicOp
 @_ods_cext.register_operation(_Dialect, replace=True)
+@VariadicOp
 class XorOp(XorOp):
   pass
 
 
-@VariadicOp
 @_ods_cext.register_operation(_Dialect, replace=True)
+@VariadicOp
 class ConcatOp(ConcatOp):
   pass
 
 
 # Sugar classes for miscellaneous ops.
-@CreatableOp
 @_ods_cext.register_operation(_Dialect, replace=True)
+@CreatableOp
 class MuxOp(MuxOp):
   pass
