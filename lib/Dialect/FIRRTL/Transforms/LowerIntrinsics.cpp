@@ -603,6 +603,147 @@ static bool lowerCirctHasBeenReset(InstanceGraph &ig, FModuleLike mod) {
   return true;
 }
 
+static bool lowerCirctPLA(InstanceGraph &ig, FModuleLike mod) {
+  if (hasNPorts("circt.pla", mod, 2) ||
+      namedPort("circt.pla", mod, 0, "input") ||
+      namedPort("circt.pla", mod, 1, "output") ||
+      typedPort<UIntType>("circt.pla", mod, 0) ||
+      typedPort<UIntType>("circt.pla", mod, 1) ||
+      hasNParam("circt.pla", mod, 2, 1022) ||
+      namedIntParam("circt.pla", mod, "input1") ||
+      namedIntParam("circt.pla", mod, "output1"))
+    return false;
+
+  SmallVector<APInt, 8> inputs, outputs;
+
+  for (size_t i = 1; i <= 1024; i++) {
+    bool found = false;
+    for (auto a : mod.getParameters()) {
+      auto param = cast<ParamDeclAttr>(a);
+      if (param.getName().getValue().equals(std::string{"input"} +
+                                            std::to_string(i))) {
+        inputs.emplace_back(cast<IntegerAttr>(param.getValue()).getValue());
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      break;
+    }
+  }
+  for (size_t i = 1; i <= 1024; i++) {
+    bool found = false;
+    for (auto a : mod.getParameters()) {
+      auto param = cast<ParamDeclAttr>(a);
+      if (param.getName().getValue().equals(std::string{"output"} +
+                                            std::to_string(i))) {
+        outputs.emplace_back(cast<IntegerAttr>(param.getValue()).getValue());
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      break;
+    }
+  }
+
+  if (inputs.empty() || outputs.empty()) {
+    mod.emitError("circt.pla: inputs and outputs must be non empty");
+    return false;
+  }
+  if (inputs.size() != outputs.size()) {
+    mod.emitError("circt.pla: the number of the element for inputs and outputs "
+                  "must be the same");
+    return false;
+  }
+  if (!llvm::all_equal(llvm::map_range(
+          inputs, [](const APInt &value) { return value.getBitWidth(); }))) {
+    mod.emitError(
+        "circt.pla: all elements in the inputs must have the same width");
+    return false;
+  }
+  if (!llvm::all_equal(llvm::map_range(
+          outputs, [](const APInt &value) { return value.getBitWidth(); }))) {
+    mod.emitError(
+        "circt.pla: all elements in the outputs must have the same width");
+    return false;
+  }
+  auto inputWidth = inputs[0].getBitWidth();
+  auto outputWidth = outputs[0].getBitWidth();
+  if (inputWidth <= 0 || outputWidth <= 0) {
+    mod.emitError("circt.pla: the width of the element for inputs and outputs "
+                  "must be known");
+    return false;
+  }
+
+  auto ports = mod.getPorts();
+  if (cast<UIntType>(ports[0].type).getWidth() != inputWidth ||
+      cast<UIntType>(ports[1].type).getWidth() != outputWidth) {
+    mod.emitError(
+        "circt.pla: the width of port must be the same as the parameter");
+    return false;
+  }
+
+  for (auto *use : ig.lookup(mod)->uses()) {
+    auto inst = cast<InstanceOp>(use->getInstance().getOperation());
+    ImplicitLocOpBuilder builder(inst.getLoc(), inst);
+
+    auto inputWire = builder.create<WireOp>(ports[0].type);
+    auto outputWire = builder.create<WireOp>(ports[1].type);
+
+    auto invInputsWire =
+        builder.create<firrtl::NotPrimOp>(inputWire.getResult());
+
+    llvm::DenseMap<APInt, Value> andMatrix;
+    for (const auto &input : inputs) {
+      Value andRow;
+      for (size_t i = 0; i < inputWidth; i++) {
+        auto element = builder.create<firrtl::BitsPrimOp>(
+            ((input & (1 << i)) != 0) ? inputWire.getResult()
+                                      : invInputsWire.getResult(),
+            i, i);
+        if (i == 0) {
+          andRow = element;
+        } else {
+          andRow = builder.create<firrtl::CatPrimOp>(andRow, element);
+        }
+      }
+      auto andRowResult = builder.create<firrtl::AndRPrimOp>(andRow);
+      andMatrix.insert(std::make_pair(input, andRowResult));
+    }
+
+    Value orMatrix;
+    for (size_t i = 0; i < outputWidth; i++) {
+      Value orColumn;
+      size_t orColumeCount = 0;
+      for (auto [input, output] : llvm::zip(inputs, outputs)) {
+        if ((output & (1 << i)) != 0) {
+          auto element = andMatrix.find(input)->second;
+          if (orColumeCount++ == 0) {
+            orColumn = element;
+          } else {
+            orColumn = builder.create<firrtl::CatPrimOp>(orColumn, element);
+          }
+        }
+      }
+      if (orColumeCount != 0) {
+        if (i == 0) {
+          orMatrix = orColumn;
+        } else {
+          orMatrix = builder.create<firrtl::CatPrimOp>(orColumn, orMatrix);
+        }
+      } else {
+        assert(false);
+      }
+    }
+
+    inst.getResult(0).replaceAllUsesWith(inputWire.getResult());
+    inst.getResult(1).replaceAllUsesWith(outputWire.getResult());
+    inst.erase();
+  }
+  return true;
+}
+
 std::pair<const char *, std::function<bool(InstanceGraph &, FModuleLike)>>
     intrinsics[] = {
         {"circt.sizeof", lowerCirctSizeof},
@@ -644,7 +785,10 @@ std::pair<const char *, std::function<bool(InstanceGraph &, FModuleLike)>>
         {"circt.mux4cell", lowerCirctMuxCell<false>},
         {"circt_mux4cell", lowerCirctMuxCell<false>},
         {"circt.has_been_reset", lowerCirctHasBeenReset},
-        {"circt_has_been_reset", lowerCirctHasBeenReset}};
+        {"circt_has_been_reset", lowerCirctHasBeenReset},
+        {"circt.pla", lowerCirctPLA},
+        {"circt_pla", lowerCirctPLA},
+};
 
 // This is the main entrypoint for the lowering pass.
 void LowerIntrinsicsPass::runOnOperation() {
