@@ -203,9 +203,9 @@ hw.module @TESTSIMPLE(in %a: i4, in %b: i4, in %c: i2, in %cond: i1,
 // CHECK-NEXT:      assign r37 = array2d[a][b] (* svAttr *);
 // CHECK-NEXT:      assign r38 = {3{a}};
 // CHECK-NEXT:      assign r39 = '{a: 1'h0, b: 1'h1};
-// CHECK-NEXT:      assign r40 = {2'h0, 2'h1, 2'h2, 2'h3};
+// CHECK-NEXT:      assign r40 = '{2'h0, 2'h1, 2'h2, 2'h3};
 // CHECK-NEXT:      assign r41 = '{1'h0};
-// CHECK-NEXT:      assign r42 = '{a: {1'h0}};
+// CHECK-NEXT:      assign r42 = '{a: '{1'h0}};
 // CHECK-NEXT:      assign r43 = structA.bar;
 // CHECK-NEXT:      assign r44 = '{foo: structA.foo, bar: a};
 // CHECK-NEXT:      assign r45 = _GEN_0;
@@ -1419,7 +1419,7 @@ hw.module @inline_bitcast_in_concat(in %in1: i7, in %in2: !hw.array<8xi4>, out o
 }
 
 // CHECK-LABEL: module DontInlineAggregateConstantIntoPorts(
-// CHECK:         wire [1:0][3:0] _GEN = {4'h0, 4'h1};
+// CHECK:         wire [1:0][3:0] _GEN = '{4'h0, 4'h1};
 // CHECK-NEXT:    Array i0 (
 // CHECK-NEXT:     .a (_GEN)
 // CHECK-NEXT:    );
@@ -1459,4 +1459,11 @@ hw.module @FooB(in %test: !unionB, out a: i16, out b: i14) {
   %0 = hw.union_extract %test["a"] : !unionB
   %1 = hw.union_extract %test["b"] : !unionB
   hw.output %0, %1 : i16, i14
+}
+
+// CHECK-LABEL: module Issue6275
+hw.module @Issue6275(out z: !hw.struct<a: !hw.array<2xstruct<b: i1>>>) {
+  // CHECK: assign z = '{a: '{'{b: 1'h0}, '{b: 1'h1}}};
+  %0 = hw.aggregate_constant [[[false], [true]]] : !hw.struct<a: !hw.array<2xstruct<b: i1>>>
+  hw.output %0 : !hw.struct<a: !hw.array<2xstruct<b: i1>>>
 }
