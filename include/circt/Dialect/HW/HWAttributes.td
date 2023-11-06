@@ -313,4 +313,39 @@ def EnumFieldAttr : AttrDef<HWDialect, "EnumField"> {
   }];
 }
 
+// An attribute to indicate the lint waivers that need to be emitted for the
+// module.
+def WaiverAttr : AttrDef<HWDialect, "Waiver"> {
+  let summary = "Lint waiver attribute";
+  let description = [{
+    This attribute represents a lint waiver, that will be emitted as a comment
+    before the module body and after the module body.
+
+    Examples:
+    ```mlir
+      //spyglass disable_block NoAssignX-ML
+      //spyglass enable_block NoAssignX-ML
+    ```
+  }];
+  let mnemonic = "waiver";
+  let parameters = (ins "::mlir::StringAttr":$waiverName);
+
+  let assemblyFormat = "`<` $waiverName `>`";
+
+  let extraClassDeclaration = [{
+    // Create an attribute for waiveX waiver.
+    static WaiverAttr getWaiveXassign(::mlir::MLIRContext *context){
+      return (get(context, mlir::StringAttr::get(context, "waiveX")));
+  
+    };
+    // Get the pair of comments that need to be emitted at the module begin
+    // and end.
+    std::pair<std::string, std::string> getWaiverComment() ;
+      
+  }];
+}
+
+def WaiverArrayAttr
+  : TypedArrayAttrBase<WaiverAttr, "waiver array attribute">;
+
 #endif // CIRCT_DIALECT_HW_HWATTRIBUTES_TD

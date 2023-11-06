@@ -1084,3 +1084,10 @@ bool hw::isParametricType(mlir::Type t) {
       })
       .Default([](auto) { return false; });
 }
+
+std::pair<std::string, std::string> WaiverAttr::getWaiverComment() {
+  // Only waiveX is handled for now.
+  assert(getWaiverName().getValue().equals("waiveX") && "Unhandled waiver");
+  return {"//spyglass disable_block NoAssignX-ML",
+          "//spyglass enable_block NoAssignX-ML"};
+}
