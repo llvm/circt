@@ -1467,3 +1467,11 @@ hw.module @Issue6275(out z: !hw.struct<a: !hw.array<2xstruct<b: i1>>>) {
   %0 = hw.aggregate_constant [[[false], [true]]] : !hw.struct<a: !hw.array<2xstruct<b: i1>>>
   hw.output %0 : !hw.struct<a: !hw.array<2xstruct<b: i1>>>
 }
+
+// CHECK: module moduleWithWaiver
+// CHECK-NEXT: //spyglass disable_block NoAssignX-ML
+// CHECK: //spyglass enable_block NoAssignX-ML
+// CHECK-NEXT: endmodule
+
+hw.module @moduleWithWaiver()
+  attributes {waivers = [#hw.waiver<"waiveX">]} {}

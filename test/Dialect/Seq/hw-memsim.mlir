@@ -78,7 +78,7 @@ hw.module @WriteOrderedDifferentClock(in %clock: i1, in %clock2: i1, in %w0_addr
 hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(in %ro_addr_0: i4, in %ro_en_0: i1, in %ro_clock_0: i1, in %rw_addr_0: i4, in %rw_en_0: i1, in %rw_clock_0: i1, in %rw_wmode_0: i1, in %rw_wdata_0: i16, in %wo_addr_0: i4, in %wo_en_0: i1, in %wo_clock_0: i1, in %wo_data_0: i16, out ro_data_0: i16, out rw_rdata_0: i16) attributes {depth = 10 : i64, numReadPorts = 1 : ui32, numReadWritePorts = 1 : ui32, numWritePorts = 1 : ui32, readLatency = 0 : ui32, readUnderWrite = 0 : i32, width = 16 : ui32, writeClockIDs = [], writeLatency = 1 : ui32, writeUnderWrite = 0 : i32, initFilename = "", initIsBinary = false, initIsInline = false}
 
 //COMMON-LABEL: @FIRRTLMem_1_1_1_16_10_0_1_0_0
-//CHECK-SAME:  attributes {comment = "VCS coverage exclude_file"}
+//CHECK-SAME:  attributes {comment = "VCS coverage exclude_file", waivers = [#hw.waiver<"waiveX">]}
 //CHECK:       %Memory = sv.reg
 //VIVADO-SAME:  #sv.attribute<"ram_style" = "\22distributed\22">
 //CHECK-SAME:  !hw.inout<uarray<10xi16>>
