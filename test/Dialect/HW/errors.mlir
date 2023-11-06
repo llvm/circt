@@ -427,6 +427,13 @@ hw.module @aggConstDimArray() {
 
 // -----
 
+hw.module @aggConstDimUArray() {
+  // expected-error @+1 {{'hw.aggregate_constant' op array attribute (1) has wrong size for unpacked array constant (2)}}
+  %0 = hw.aggregate_constant [42 : i8] : !hw.uarray<2xi8>
+}
+
+// -----
+
 hw.module @aggConstDimStruct() {
   // expected-error @+1 {{'hw.aggregate_constant' op array attribute (1) has wrong size for struct constant (2)}}
   %0 = hw.aggregate_constant [42 : i8] : !hw.struct<foo: i8, bar: i8>

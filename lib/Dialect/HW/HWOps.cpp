@@ -438,6 +438,12 @@ static LogicalResult checkAttributes(Operation *op, Attribute attr, Type type) {
       return op->emitOpError("expected array attribute for constant of type ")
              << type;
     auto elementType = arrayType.getElementType();
+    if (arrayType.getNumElements() != arrayAttr.size()) {
+      return op->emitOpError("array attribute (")
+             << arrayAttr.size()
+             << ") has wrong size for unpacked array constant ("
+             << arrayType.getNumElements() << ")";
+    }
     for (auto attr : arrayAttr.getValue()) {
       if (failed(checkAttributes(op, attr, elementType)))
         return failure();
