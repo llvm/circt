@@ -21,6 +21,7 @@
 #include "circt/Dialect/Seq/SeqAttributes.h"
 #include "circt/Dialect/Seq/SeqPasses.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Path.h"
 
@@ -184,6 +185,14 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
   ImplicitLocOpBuilder b(op.getLoc(), op.getBody());
 
   InnerSymbolNamespace moduleNamespace(op);
+  if (!ignoreReadEnable) {
+    auto ws = op.getWaivers();
+    SmallVector<Attribute, 2> waivers;
+    if (ws.has_value())
+      llvm::append_range(waivers, ws->getValue());
+    waivers.push_back(WaiverAttr::getWaiveXassign(b.getContext()));
+    op.setWaiversAttr(ArrayAttr::get(b.getContext(), waivers));
+  }
 
   // Compute total number of mask bits.
   if (mem.maskGran == 0)
