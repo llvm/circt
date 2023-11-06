@@ -2060,13 +2060,15 @@ public:
   /// expression, we emit that expression, otherwise we emit a reference to the
   /// already computed name.
   ///
-  void emitExpression(Value exp, VerilogPrecedence parenthesizeIfLooserThan) {
+  void emitExpression(Value exp, VerilogPrecedence parenthesizeIfLooserThan,
+                      bool isAssignmentLikeContext) {
     assert(localTokens.empty());
     // Wrap to this column.
     ps.scopedBox(PP::ibox0, [&]() {
       emitSubExpr(exp, parenthesizeIfLooserThan,
                   /*signRequirement*/ NoRequirement,
-                  /*isSelfDeterminedUnsignedValue*/ false);
+                  /*isSelfDeterminedUnsignedValue*/ false,
+                  isAssignmentLikeContext);
     });
     // If we are not using an external token buffer provided through the
     // constructor, but we're using the default `ExprEmitter`-scoped buffer,
@@ -2090,7 +2092,8 @@ private:
   /// known to be have "self determined" width, allowing us to omit extensions.
   SubExprInfo emitSubExpr(Value exp, VerilogPrecedence parenthesizeIfLooserThan,
                           SubExprSignRequirement signReq = NoRequirement,
-                          bool isSelfDeterminedUnsignedValue = false);
+                          bool isSelfDeterminedUnsignedValue = false,
+                          bool isAssignmentLikeContext = false);
 
   /// Emit SystemVerilog attributes attached to the expression op as dialect
   /// attributes.
@@ -2197,6 +2200,16 @@ private:
 
   /// Print an APInt constant.
   SubExprInfo printConstantScalar(APInt &value, IntegerType type);
+
+  /// Print a constant array.
+  void printConstantArray(ArrayAttr elementValues, Type elementType,
+                          bool printAsPattern, Operation *op);
+  /// Print a constant struct.
+  void printConstantStruct(ArrayRef<hw::detail::FieldInfo> fieldInfos,
+                           ArrayAttr fieldValues, bool printAsPattern,
+                           Operation *op);
+  /// Print an aggregate array or struct constant as the given type.
+  void printConstantAggregate(Attribute attr, Type type, Operation *op);
 
   SubExprInfo visitSV(GetModportOp op);
   SubExprInfo visitSV(SystemFunctionOp op);
@@ -2313,6 +2326,19 @@ private:
   SubExprInfo visitComb(ExtractOp op);
   SubExprInfo visitComb(ICmpOp op);
 
+  InFlightDiagnostic emitAssignmentPatternContextError(Operation *op) {
+    auto d = emitOpError(op, "must be printed as assignment pattern, but is "
+                             "not printed within an assignment-like context");
+    d.attachNote() << "this is likely a bug in PrepareForEmission, which is "
+                      "supposed to spill such expressions";
+    return d;
+  }
+
+  SubExprInfo printStructCreate(
+      ArrayRef<hw::detail::FieldInfo> fieldInfos,
+      llvm::function_ref<void(const hw::detail::FieldInfo &, unsigned)> fieldFn,
+      bool printAsPattern, Operation *op);
+
 public:
   ModuleEmitter &emitter;
 
@@ -2335,6 +2361,14 @@ private:
 
   /// Stream to emit expressions into, will add to buffer.
   TokenStreamWithCallback<OpLocMap, CallbackDataTy, BufferingPP> ps;
+
+  /// Tracks whether the expression being emitted is currently within an
+  /// assignment-like context. Certain constructs such as `'{...}` assignment
+  /// patterns are restricted to only appear in assignment-like contexts.
+  /// Others, like packed struct and array constants, can be printed as either
+  /// `{...}` concatenation or `'{...}` assignment pattern, depending on whether
+  /// they appear within an assignment-like context or not.
+  bool isAssignmentLikeContext = false;
 };
 } // end anonymous namespace
 
@@ -2448,7 +2482,8 @@ static Value isZeroExtension(Value value) {
 SubExprInfo ExprEmitter::emitSubExpr(Value exp,
                                      VerilogPrecedence parenthesizeIfLooserThan,
                                      SubExprSignRequirement signRequirement,
-                                     bool isSelfDeterminedUnsignedValue) {
+                                     bool isSelfDeterminedUnsignedValue,
+                                     bool isAssignmentLikeContext) {
   // If this is a self-determined unsigned value, look through any inline zero
   // extensions.  This occurs on the RHS of a shift operation for example.
   if (isSelfDeterminedUnsignedValue && exp.hasOneUse()) {
@@ -2495,6 +2530,8 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
     }
   // Okay, this is an expression we should emit inline.  Do this through our
   // visitor.
+  llvm::SaveAndRestore restoreALC(this->isAssignmentLikeContext,
+                                  isAssignmentLikeContext);
   auto expInfo = dispatchCombinationalVisitor(exp.getDefiningOp());
 
   // Check cases where we have to insert things before the expression now that
@@ -2735,7 +2772,7 @@ SubExprInfo ExprEmitter::emitMacroCall(MacroTy op) {
   if (!op.getInputs().empty()) {
     ps << "(";
     llvm::interleaveComma(op.getInputs(), ps, [&](Value val) {
-      emitExpression(val, LowestPrecedence);
+      emitExpression(val, LowestPrecedence, /*isAssignmentLikeContext=*/false);
     });
     ps << ")";
   }
@@ -2824,6 +2861,89 @@ SubExprInfo ExprEmitter::visitTypeOp(ConstantOp op) {
   return printConstantScalar(value, op.getType().cast<IntegerType>());
 }
 
+void ExprEmitter::printConstantArray(ArrayAttr elementValues, Type elementType,
+                                     bool printAsPattern, Operation *op) {
+  if (printAsPattern && !isAssignmentLikeContext)
+    emitAssignmentPatternContextError(op);
+  StringRef openDelim = printAsPattern ? "'{" : "{";
+
+  emitBracedList(
+      elementValues, [&]() { ps << openDelim; },
+      [&](Attribute elementValue) {
+        printConstantAggregate(elementValue, elementType, op);
+      },
+      [&]() { ps << "}"; });
+}
+
+void ExprEmitter::printConstantStruct(
+    ArrayRef<hw::detail::FieldInfo> fieldInfos, ArrayAttr fieldValues,
+    bool printAsPattern, Operation *op) {
+  if (printAsPattern && !isAssignmentLikeContext)
+    emitAssignmentPatternContextError(op);
+
+  // Only emit elements with non-zero bit width.
+  // TODO: Ideally we should emit zero bit values as comments, e.g. `{/*a:
+  // ZeroBit,*/ b: foo, /* c: ZeroBit*/ d: bar}`. However it's tedious to
+  // nicely emit all edge cases hence currently we just elide zero bit
+  // values.
+  auto fieldRange = llvm::make_filter_range(
+      llvm::zip(fieldInfos, fieldValues), [](const auto &fieldAndValue) {
+        // Elide zero bit elements.
+        return !isZeroBitType(std::get<0>(fieldAndValue).type);
+      });
+
+  if (printAsPattern) {
+    emitBracedList(
+        fieldRange, [&]() { ps << "'{"; },
+        [&](const auto &fieldAndValue) {
+          ps.scopedBox(PP::ibox2, [&]() {
+            const auto &[field, value] = fieldAndValue;
+            ps << PPExtString(emitter.getVerilogStructFieldName(field.name))
+               << ":" << PP::space;
+            printConstantAggregate(value, field.type, op);
+          });
+        },
+        [&]() { ps << "}"; });
+  } else {
+    emitBracedList(
+        fieldRange, [&]() { ps << "{"; },
+        [&](const auto &fieldAndValue) {
+          ps.scopedBox(PP::ibox2, [&]() {
+            const auto &[field, value] = fieldAndValue;
+            printConstantAggregate(value, field.type, op);
+          });
+        },
+        [&]() { ps << "}"; });
+  }
+}
+
+void ExprEmitter::printConstantAggregate(Attribute attr, Type type,
+                                         Operation *op) {
+  // Packed arrays can be printed as concatenation or pattern.
+  if (auto arrayType = hw::type_dyn_cast<ArrayType>(type))
+    return printConstantArray(cast<ArrayAttr>(attr), arrayType.getElementType(),
+                              isAssignmentLikeContext, op);
+
+  // Unpacked arrays must be printed as pattern.
+  if (auto arrayType = hw::type_dyn_cast<UnpackedArrayType>(type))
+    return printConstantArray(cast<ArrayAttr>(attr), arrayType.getElementType(),
+                              true, op);
+
+  // Packed structs can be printed as concatenation or pattern.
+  if (auto structType = hw::type_dyn_cast<StructType>(type))
+    return printConstantStruct(structType.getElements(), cast<ArrayAttr>(attr),
+                               isAssignmentLikeContext, op);
+
+  if (auto intType = hw::type_dyn_cast<IntegerType>(type)) {
+    auto value = attr.cast<IntegerAttr>().getValue();
+    printConstantScalar(value, intType);
+    return;
+  }
+
+  emitOpError(op, "contains constant of type ")
+      << type << " which cannot be emitted as Verilog";
+}
+
 SubExprInfo ExprEmitter::visitTypeOp(AggregateConstantOp op) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
@@ -2832,56 +2952,7 @@ SubExprInfo ExprEmitter::visitTypeOp(AggregateConstantOp op) {
   assert(!isZeroBitType(op.getType()) &&
          "zero-bit types not allowed at this point");
 
-  std::function<void(Attribute, Type)> printAggregate = [&](Attribute attr,
-                                                            Type type) {
-    if (auto arrayType = hw::type_dyn_cast<ArrayType>(type)) {
-      auto elementType = arrayType.getElementType();
-      emitBracedList(
-          attr.cast<ArrayAttr>(), [&]() { ps << "{"; },
-          [&](Attribute attr) { printAggregate(attr, elementType); },
-          [&]() { ps << "}"; });
-    } else if (auto arrayType = hw::type_dyn_cast<UnpackedArrayType>(type)) {
-      auto elementType = arrayType.getElementType();
-      emitBracedList(
-          attr.cast<ArrayAttr>(), [&]() { ps << "'{"; },
-          [&](Attribute attr) { printAggregate(attr, elementType); },
-          [&]() { ps << "}"; });
-    } else if (auto structType = hw::type_dyn_cast<StructType>(type)) {
-      // Only emit elements with non-zero bit width.
-      // TODO: Ideally we should emit zero bit values as comments, e.g. `{/*a:
-      // ZeroBit,*/ b: foo, /* c: ZeroBit*/ d: bar}`. However it's tedious to
-      // nicely emit all edge cases hence currently we just elide zero bit
-      // values.
-      emitBracedList(
-          llvm::make_filter_range(
-              llvm::zip(structType.getElements(), attr.cast<ArrayAttr>()),
-              [](const auto &fieldAndAttr) {
-                // Elide zero bit elements.
-                return !isZeroBitType(std::get<0>(fieldAndAttr).type);
-              }),
-          [&]() { ps << "'{"; },
-          [&](const auto &fieldAndAttr) {
-            ps.scopedBox(PP::ibox2, [&]() {
-              const auto &[field, attr] = fieldAndAttr;
-              ps << PPExtString(emitter.getVerilogStructFieldName(field.name))
-                 << ":" << PP::space;
-              printAggregate(attr, field.type);
-            });
-          },
-          [&]() { ps << "}"; });
-    } else if (auto enumType = hw::type_dyn_cast<EnumType>(type)) {
-      assert(false && "unsupported");
-      auto value = attr.cast<StringAttr>();
-      ps << value.getValue();
-    } else if (auto intType = hw::type_dyn_cast<IntegerType>(type)) {
-      auto value = attr.cast<IntegerAttr>().getValue();
-      printConstantScalar(value, intType);
-    } else {
-      assert(false && "unknown constant kind");
-    }
-  };
-
-  printAggregate(op.getFields(), op.getType());
+  printConstantAggregate(op.getFields(), op.getType(), op);
   return {Symbol, IsUnsigned};
 }
 
@@ -3063,33 +3134,59 @@ SubExprInfo ExprEmitter::visitComb(MuxOp op) {
   });
 }
 
+SubExprInfo ExprEmitter::printStructCreate(
+    ArrayRef<hw::detail::FieldInfo> fieldInfos,
+    llvm::function_ref<void(const hw::detail::FieldInfo &, unsigned)> fieldFn,
+    bool printAsPattern, Operation *op) {
+  if (printAsPattern && !isAssignmentLikeContext)
+    emitAssignmentPatternContextError(op);
+
+  // Elide zero bit elements.
+  auto filteredFields = llvm::make_filter_range(
+      llvm::enumerate(fieldInfos),
+      [](const auto &field) { return !isZeroBitType(field.value().type); });
+
+  if (printAsPattern) {
+    emitBracedList(
+        filteredFields, [&]() { ps << "'{"; },
+        [&](const auto &field) {
+          ps.scopedBox(PP::ibox2, [&]() {
+            ps << PPExtString(
+                      emitter.getVerilogStructFieldName(field.value().name))
+               << ":" << PP::space;
+            fieldFn(field.value(), field.index());
+          });
+        },
+        [&]() { ps << "}"; });
+  } else {
+    emitBracedList(
+        filteredFields, [&]() { ps << "{"; },
+        [&](const auto &field) {
+          ps.scopedBox(PP::ibox2,
+                       [&]() { fieldFn(field.value(), field.index()); });
+        },
+        [&]() { ps << "}"; });
+  }
+
+  return {Selection, IsUnsigned};
+}
+
 SubExprInfo ExprEmitter::visitTypeOp(StructCreateOp op) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
-  StructType stype = op.getType();
-  // Only emit elements with non-zero bit width.
-  // TODO: Ideally we should emit zero bit values as comments, e.g. `{/*a:
-  // ZeroBit,*/ b: foo, /* c: ZeroBit*/ d: bar}`. However it's tedious to nicely
-  // emit all edge cases hence currently we just elide zero bit values.
-  emitBracedList(
-      llvm::make_filter_range(llvm::zip(stype.getElements(), op.getOperands()),
-                              [](const auto &fieldAndOperand) {
-                                // Elide zero bit elements.
-                                const auto &[field, _] = fieldAndOperand;
-                                return !isZeroBitType(field.type);
-                              }),
-      [&]() { ps << "'{"; },
-      [&](const auto &fieldAndOperand) {
-        ps.scopedBox(PP::ibox2, [&]() {
-          const auto &[field, operand] = fieldAndOperand;
-          ps << PPExtString(emitter.getVerilogStructFieldName(field.name))
-             << ":" << PP::space;
-          emitSubExpr(operand, Selection);
-        });
+  // TODO: For unpacked structs, once we have support for them, `printAsPattern`
+  // should be set to true.
+  bool printAsPattern = isAssignmentLikeContext;
+  StructType structType = op.getType();
+  return printStructCreate(
+      structType.getElements(),
+      [&](const auto &field, auto index) {
+        emitSubExpr(op.getOperand(index), Selection, NoRequirement,
+                    /*isSelfDeterminedUnsignedValue=*/false,
+                    /*isAssignmentLikeContext=*/isAssignmentLikeContext);
       },
-      [&]() { ps << "}"; });
-  return {Unary, IsUnsigned};
+      printAsPattern, op);
 }
 
 SubExprInfo ExprEmitter::visitTypeOp(StructExtractOp op) {
@@ -3106,29 +3203,22 @@ SubExprInfo ExprEmitter::visitTypeOp(StructInjectOp op) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
-  StructType stype = op.getType().cast<StructType>();
-  // Only emit elements with non-zero bit width.
-  emitBracedList(
-
-      llvm::make_filter_range(
-          stype.getElements(),
-          [](const auto &field) { return !isZeroBitType(field.type); }),
-      [&]() { ps << "'{"; },
-      [&](const StructType::FieldInfo &field) {
-        ps.scopedBox(PP::ibox2, [&]() {
-          ps << PPExtString(emitter.getVerilogStructFieldName(field.name))
-             << ":" << PP::space;
-          if (field.name == op.getFieldNameAttr()) {
-            emitSubExpr(op.getNewValue(), Selection);
-          } else {
-            emitSubExpr(op.getInput(), Selection);
-            ps << "."
-               << PPExtString(emitter.getVerilogStructFieldName(field.name));
-          }
-        });
+  // TODO: For unpacked structs, once we have support for them, `printAsPattern`
+  // should be set to true.
+  bool printAsPattern = isAssignmentLikeContext;
+  StructType structType = op.getType();
+  return printStructCreate(
+      structType.getElements(),
+      [&](const auto &field, auto index) {
+        if (field.name == op.getFieldNameAttr()) {
+          emitSubExpr(op.getNewValue(), Selection);
+        } else {
+          emitSubExpr(op.getInput(), Selection);
+          ps << "."
+             << PPExtString(emitter.getVerilogStructFieldName(field.name));
+        }
       },
-      [&]() { ps << "}"; });
-  return {Selection, IsUnsigned};
+      printAsPattern, op);
 }
 
 SubExprInfo ExprEmitter::visitTypeOp(EnumConstantOp op) {
@@ -3349,7 +3439,8 @@ EmittedProperty PropertyEmitter::emitNestedProperty(
   // to `VerilogPrecedence::LowestPrecedence`.
   if (!isa<ltl::SequenceType, ltl::PropertyType>(property.getType())) {
     ExprEmitter(emitter, emittedOps, buffer.tokens)
-        .emitExpression(property, LowestPrecedence);
+        .emitExpression(property, LowestPrecedence,
+                        /*isAssignmentLikeContext=*/false);
     return {PropertyPrecedence::Symbol};
   }
 
@@ -3607,7 +3698,8 @@ private:
 
   void
   emitExpression(Value exp, SmallPtrSetImpl<Operation *> &emittedExprs,
-                 VerilogPrecedence parenthesizeIfLooserThan = LowestPrecedence);
+                 VerilogPrecedence parenthesizeIfLooserThan = LowestPrecedence,
+                 bool isAssignmentLikeContext = false);
   void emitSVAttributes(Operation *op);
 
   using hw::StmtVisitor<StmtEmitter, LogicalResult>::visitStmt;
@@ -3738,9 +3830,10 @@ private:
 ///
 void StmtEmitter::emitExpression(Value exp,
                                  SmallPtrSetImpl<Operation *> &emittedExprs,
-                                 VerilogPrecedence parenthesizeIfLooserThan) {
+                                 VerilogPrecedence parenthesizeIfLooserThan,
+                                 bool isAssignmentLikeContext) {
   ExprEmitter(emitter, emittedExprs)
-      .emitExpression(exp, parenthesizeIfLooserThan);
+      .emitExpression(exp, parenthesizeIfLooserThan, isAssignmentLikeContext);
 }
 
 /// Emit SystemVerilog attributes attached to the statement op as dialect
@@ -3786,8 +3879,11 @@ StmtEmitter::emitAssignLike(Op op, PPExtString syntax,
   startStatement();
   ps.addCallback({op, true});
   emitAssignLike([&]() { emitExpression(op.getDest(), ops); },
-                 [&]() { emitExpression(op.getSrc(), ops); }, syntax,
-                 PPExtString(";"), wordBeforeLHS);
+                 [&]() {
+                   emitExpression(op.getSrc(), ops, LowestPrecedence,
+                                  /*isAssignmentLikeContext=*/true);
+                 },
+                 syntax, PPExtString(";"), wordBeforeLHS);
 
   ps.addCallback({op, false});
   emitLocationInfoAndNewLine(ops);
@@ -3950,7 +4046,8 @@ LogicalResult StmtEmitter::visitStmt(OutputOp op) {
             isa_and_nonnull<hw::ConstantOp>(operand.getDefiningOp()))
           ps << "/*Zero width*/";
         else
-          emitExpression(operand, ops, LowestPrecedence);
+          emitExpression(operand, ops, LowestPrecedence,
+                         /*isAssignmentLikeContext=*/true);
         ps << ";";
       });
     });
@@ -5347,8 +5444,10 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
     if (auto regOp = dyn_cast<RegOp>(op)) {
       if (auto initValue = regOp.getInit()) {
         ps << PP::space << "=" << PP::space;
-        ps.scopedBox(PP::ibox0,
-                     [&]() { emitExpression(initValue, opsForLocation); });
+        ps.scopedBox(PP::ibox0, [&]() {
+          emitExpression(initValue, opsForLocation, LowestPrecedence,
+                         /*isAssignmentLikeContext=*/true);
+        });
       }
     }
 
@@ -5365,7 +5464,9 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
             op->getNextNode() == singleAssign) {
           ps << PP::space << "=" << PP::space;
           ps.scopedBox(PP::ibox0, [&]() {
-            emitExpression(singleAssign.getSrc(), opsForLocation);
+            emitExpression(singleAssign.getSrc(), opsForLocation,
+                           LowestPrecedence,
+                           /*isAssignmentLikeContext=*/true);
           });
           emitter.assignsInlined.insert(singleAssign);
         }
@@ -5387,7 +5488,9 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
                                                                  *this)) {
             ps << PP::space << "=" << PP::space;
             ps.scopedBox(PP::ibox0, [&]() {
-              emitExpression(singleAssign.getSrc(), opsForLocation);
+              emitExpression(singleAssign.getSrc(), opsForLocation,
+                             LowestPrecedence,
+                             /*isAssignmentLikeContext=*/true);
             });
             // Remember that the assignment and logic op are emitted into decl.
             emitter.assignsInlined.insert(singleAssign);
@@ -5567,10 +5670,14 @@ void ModuleEmitter::emitBind(BindOp op) {
               parentMod, parentPortList.atOutput(outputPortNo)));
         } else {
           portVal = portVal.getUsers().begin()->getOperand(0);
-          ExprEmitter(*this, ops).emitExpression(portVal, LowestPrecedence);
+          ExprEmitter(*this, ops)
+              .emitExpression(portVal, LowestPrecedence,
+                              /*isAssignmentLikeContext=*/false);
         }
       } else {
-        ExprEmitter(*this, ops).emitExpression(portVal, LowestPrecedence);
+        ExprEmitter(*this, ops)
+            .emitExpression(portVal, LowestPrecedence,
+                            /*isAssignmentLikeContext=*/false);
       }
 
       ps << ")";
