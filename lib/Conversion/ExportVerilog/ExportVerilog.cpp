@@ -5959,6 +5959,18 @@ void ModuleEmitter::emitPortList(Operation *module,
 void ModuleEmitter::emitHWModule(HWModuleOp module) {
   currentModuleOp = module;
 
+  auto waivers = module.getWaivers();
+  SmallVector<std::pair<std::string, std::string>> waiverStrs;
+
+  if (waivers.has_value()) {
+    // Ensure waivers are unique, not repeated.
+    llvm::StringSet<> waiverNames;
+    for (auto &w : waivers->getValue()) {
+      auto waiver = w.cast<WaiverAttr>();
+      if (waiverNames.insert(waiver.getWaiverName().getValue()).second)
+        waiverStrs.push_back(waiver.getWaiverComment());
+    }
+  }
   emitComment(module.getCommentAttr());
   emitSVAttributes(module);
   startStatement();
@@ -5973,8 +5985,14 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
   assert(state.pendingNewline);
 
   // Emit the body of the module.
+  for (const auto &w : waiverStrs)
+    ps << PP::newline << w.first << PP::newline;
+
   StmtEmitter(*this, state.options).emitStatementBlock(*module.getBodyBlock());
   startStatement();
+  for (const auto &w : waiverStrs)
+    ps << PP::newline << w.second << PP::newline;
+
   ps << "endmodule";
   ps.addCallback({module, false});
   ps << PP::newline;
