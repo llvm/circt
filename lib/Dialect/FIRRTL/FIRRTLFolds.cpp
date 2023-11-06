@@ -1698,14 +1698,15 @@ LogicalResult MultibitMuxOp::canonicalize(MultibitMuxOp op,
   // multibit_mux(index[1], a,a), multibit_mux(index[1]}, {b,c})) Search for
   // identities in specific bit slices.   This is robust to unknown width
   // indexes.
-  for (int bit = 0, lastbit = op.getIndex().getType().getBitWidthOrSentinel();
+  for (uint64_t bit = 0,
+                lastbit = op.getIndex().getType().getBitWidthOrSentinel();
        bit < lastbit; ++bit) {
     for (int curval = 0; curval <= 1; ++curval) {
       // We don't collect values here as the normal case is we don't find a
       // match, so we don't want to move data around and do allocations.
       Value v;
-      unsigned count = 0;
-      for (unsigned i = 0, e = op.getInputs().size(); i < e; ++i) {
+      uint64_t count = 0;
+      for (uint64_t i = 0, e = op.getInputs().size(); i < e; ++i) {
         if (((i >> bit) & 1) != curval)
           continue;
         ++count;
@@ -1720,7 +1721,7 @@ LogicalResult MultibitMuxOp::canonicalize(MultibitMuxOp op,
         continue;
       // Found match, collect varying side of the future mux
       SmallVector<Value> nonSimple;
-      for (unsigned i = 0, e = op.getInputs().size(); i < e; ++i) {
+      for (uint64_t i = 0, e = op.getInputs().size(); i < e; ++i) {
         if (((i >> bit) & 1) != curval)
           nonSimple.push_back(op.getInputs()[i]);
       }
