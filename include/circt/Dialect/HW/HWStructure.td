@@ -124,7 +124,9 @@ def HWModuleOp : HWModuleOpBase<"module",
                        OptionalAttr<DictArrayAttr>:$per_port_attrs,
                        OptionalAttr<LocationArrayAttr>:$port_locs,
                        ParamDeclArrayAttr:$parameters,
-                       OptionalAttr<StrAttr>:$comment);
+                       OptionalAttr<StrAttr>:$comment,
+                       OptionalAttr<WaiverArrayAttr>:$waivers
+                       );
   let results = (outs);
   let regions = (region SizedRegion<1>:$body);
 
