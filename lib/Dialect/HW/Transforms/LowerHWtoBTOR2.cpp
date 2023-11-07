@@ -60,42 +60,45 @@ private:
 
   // Set of often reused strings in btor2 emission (to avoid typos and enable
   // auto-complete)
-  const constexpr StringLiteral SORT = "sort";
-  const constexpr StringLiteral BITVEC = "bitvec";
-  const constexpr StringLiteral INPUT = "input";
-  const constexpr StringLiteral RESET = "reset";
-  const constexpr StringLiteral OUTPUT = "output";
-  const constexpr StringLiteral ZERO = "zero";
-  const constexpr StringLiteral ONE = "one";
-  const constexpr StringLiteral CONST = "const";
-  const constexpr StringLiteral CONSTD = "constd";
-  const constexpr StringLiteral CONSTH = "consth";
-  const constexpr StringLiteral SLICE = "slice";
-  const constexpr StringLiteral UEXT = "uext";
-  const constexpr StringLiteral ADD = "add";
-  const constexpr StringLiteral SUB = "sub";
-  const constexpr StringLiteral MUL = "mul";
-  const constexpr StringLiteral AND = "and";
-  const constexpr StringLiteral OR = "or";
-  const constexpr StringLiteral XOR = "xor";
-  const constexpr StringLiteral SLL = "sll";
-  const constexpr StringLiteral SRL = "srl"; // a.k.a. unsigned right shift
-  const constexpr StringLiteral SRA = "sra"; // a.k.a. signed right shift
-  const constexpr StringLiteral SDIV = "sdiv";
-  const constexpr StringLiteral UDIV = "udiv";
-  const constexpr StringLiteral SMOD = "smod";
-  const constexpr StringLiteral CONCAT = "concat";
-  const constexpr StringLiteral NOT = "not";
-  const constexpr StringLiteral NEQ = "neq";
-  const constexpr StringLiteral HW_NEQ = "ne";
-  const constexpr StringLiteral ITE = "ite";
-  const constexpr StringLiteral IMPLIES = "implies"; // logical implication
-  const constexpr StringLiteral STATE = "state";     // Register state
-  const constexpr StringLiteral NEXT = "next"; // Register state transition
-  const constexpr StringLiteral BAD = "bad";
-  const constexpr StringLiteral CONSTRAINT = "constraint";
-  const constexpr StringLiteral WS = " ";  // WhiteSpace
-  const constexpr StringLiteral NL = "\n"; // NewLine
+  const static constexpr StringLiteral SORT = "sort";
+  const static constexpr StringLiteral BITVEC = "bitvec";
+  const static constexpr StringLiteral INPUT = "input";
+  const static constexpr StringLiteral RESET = "reset";
+  const static constexpr StringLiteral OUTPUT = "output";
+  const static constexpr StringLiteral ZERO = "zero";
+  const static constexpr StringLiteral ONE = "one";
+  const static constexpr StringLiteral CONST = "const";
+  const static constexpr StringLiteral CONSTD = "constd";
+  const static constexpr StringLiteral CONSTH = "consth";
+  const static constexpr StringLiteral SLICE = "slice";
+  const static constexpr StringLiteral UEXT = "uext";
+  const static constexpr StringLiteral ADD = "add";
+  const static constexpr StringLiteral SUB = "sub";
+  const static constexpr StringLiteral MUL = "mul";
+  const static constexpr StringLiteral AND = "and";
+  const static constexpr StringLiteral OR = "or";
+  const static constexpr StringLiteral XOR = "xor";
+  const static constexpr StringLiteral SLL = "sll";
+  const static constexpr StringLiteral SRL =
+      "srl"; // a.k.a. unsigned right shift
+  const static constexpr StringLiteral SRA = "sra"; // a.k.a. signed right shift
+  const static constexpr StringLiteral SDIV = "sdiv";
+  const static constexpr StringLiteral UDIV = "udiv";
+  const static constexpr StringLiteral SMOD = "smod";
+  const static constexpr StringLiteral CONCAT = "concat";
+  const static constexpr StringLiteral NOT = "not";
+  const static constexpr StringLiteral NEQ = "neq";
+  const static constexpr StringLiteral HW_NEQ = "ne";
+  const static constexpr StringLiteral ITE = "ite";
+  const static constexpr StringLiteral IMPLIES =
+      "implies";                                        // logical implication
+  const static constexpr StringLiteral STATE = "state"; // Register state
+  const static constexpr StringLiteral NEXT =
+      "next"; // Register state transition
+  const static constexpr StringLiteral BAD = "bad";
+  const static constexpr StringLiteral CONSTRAINT = "constraint";
+  const static constexpr StringLiteral WS = " ";  // WhiteSpace
+  const static constexpr StringLiteral NL = "\n"; // NewLine
 
   /// Field helper functions
 
@@ -707,7 +710,7 @@ private:
     int64_t w = requireSort(reg.getType());
 
     // Generate state instruction (represents the register declaration)
-    genState(reg, width, regName);
+    genState(reg, w, regName);
 
     // Record the operation for future `next` instruction generation
     // This is required to model transitions between states (i.e. how a
