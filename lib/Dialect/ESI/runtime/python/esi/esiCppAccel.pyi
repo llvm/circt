@@ -42,20 +42,22 @@ class Manifest:
     def api_version(self) -> int:
         ...
 class ModuleInfo:
-    @property
-    def commit_hash(self) -> str:
+    def __repr__(self) -> str:
         ...
     @property
-    def name(self) -> str:
+    def commit_hash(self) -> str | None:
         ...
     @property
-    def repo(self) -> str:
+    def name(self) -> str | None:
         ...
     @property
-    def summary(self) -> str:
+    def repo(self) -> str | None:
         ...
     @property
-    def version(self) -> str:
+    def summary(self) -> str | None:
+        ...
+    @property
+    def version(self) -> str | None:
         ...
 class SysInfo:
     def esi_version(self) -> int:

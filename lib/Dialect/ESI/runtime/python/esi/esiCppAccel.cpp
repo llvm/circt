@@ -36,6 +36,7 @@ PYBIND11_MODULE(esiCppAccel, m) {
       .def_property_readonly("repo", [](ModuleInfo &info) { return info.repo; })
       .def_property_readonly("commit_hash",
                              [](ModuleInfo &info) { return info.commitHash; })
+      // TODO: "extra" field.
       .def("__repr__", [](ModuleInfo &info) {
         std::string ret;
         std::stringstream os(ret);
@@ -67,12 +68,17 @@ PYBIND11_MODULE(esiCppAccel, m) {
         return ret;
       });
 
+  // Store this variable (not commonly done) as the "children" method needs for
+  // "Instance" to be defined first.
   auto design = py::class_<Design>(m, "Design")
                     .def_property_readonly("info", &Design::info);
 
+  // In order to inherit methods from "Design", it needs to be defined first.
   py::class_<Instance, Design>(m, "Instance")
       .def_property_readonly("id", &Instance::id);
 
+  // Since this returns a vector of Instance*, we need to define Instance first
+  // or else pybind11-stubgen complains.
   design.def_property_readonly(
       "children",
       [](Design &d) -> std::vector<Instance *> {

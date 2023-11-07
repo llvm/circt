@@ -26,20 +26,14 @@
 #include <string>
 
 namespace esi {
-namespace manifest {
-struct Service;
-}
+// Forward declarations.
 class Instance;
-
-class PortChannel {};
 
 class Design {
 public:
   Design(std::optional<ModuleInfo> info,
-         std::vector<std::unique_ptr<Instance>> children,
-         std::vector<std::unique_ptr<services::Service>> services)
-      : _info(info), _children(std::move(children)),
-        _services(std::move(services)) {}
+         std::vector<std::unique_ptr<Instance>> children)
+      : _info(info), _children(std::move(children)) {}
 
   std::optional<ModuleInfo> info() const { return _info; }
   const std::vector<std::unique_ptr<Instance>> &children() const {
@@ -49,8 +43,6 @@ public:
 protected:
   const std::optional<ModuleInfo> _info;
   const std::vector<std::unique_ptr<Instance>> _children;
-  const std::vector<std::unique_ptr<services::Service>> _services;
-  // const std::map<AppID, PortChannel &> _ports;
 };
 
 class Instance : public Design {
@@ -59,9 +51,8 @@ public:
   Instance(const Instance &) = delete;
   ~Instance() = default;
   Instance(AppID id, std::optional<ModuleInfo> info,
-           std::vector<std::unique_ptr<Instance>> children,
-           std::vector<std::unique_ptr<services::Service>> services)
-      : Design(info, std::move(children), std::move(services)), _id(id) {}
+           std::vector<std::unique_ptr<Instance>> children)
+      : Design(info, std::move(children)), _id(id) {}
 
   const AppID id() const { return _id; }
 
@@ -70,7 +61,5 @@ protected:
 };
 
 } // namespace esi
-
-std::ostream &operator<<(std::ostream &, const esi::AppID &);
 
 #endif // ESI_DESIGN_H

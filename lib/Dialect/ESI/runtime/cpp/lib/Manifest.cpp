@@ -36,18 +36,25 @@ public:
   ManifestProxy(std::string jsonManifest, Manifest &manifest);
 
   auto at(std::string key) const { return manifestJson.at(key); }
+
+  // Get the module info (if any) for the module instance in 'json'.
   std::optional<ModuleInfo> getModInfo(const nlohmann::json &json) const;
+
+  // Build the 'Instance' recursively for the instance in 'json'.
   Instance getInstance(const nlohmann::json &json) const;
+
+  /// Build the set of child instances for the module instance in 'json'.
   std::vector<std::unique_ptr<Instance>>
   getChildInstances(Accelerator &acc, const nlohmann::json &json) const;
-  std::vector<std::unique_ptr<services::Service>>
-  getServiceProviders(Accelerator &acc, const nlohmann::json &contents) const;
 
+  /// Build a dynamic API for the Accelerator connection 'acc' based on the
+  /// manifest stored herein.
   std::unique_ptr<Design> buildDesign(Accelerator &acc) const;
 
 private:
+  // The parsed json.
   nlohmann::json manifestJson;
-  Manifest &manifest;
+  // Cache the module info for each symbol.
   std::map<std::string, ModuleInfo> symbolInfoCache;
 };
 } // namespace internal
@@ -103,8 +110,7 @@ static ModuleInfo parseModuleInfo(const nlohmann::json &mod) {
 //===----------------------------------------------------------------------===//
 
 internal::ManifestProxy::ManifestProxy(std::string manifestStr,
-                                       Manifest &manifest)
-    : manifest(manifest) {
+                                       Manifest &manifest) {
   manifestJson = nlohmann::ordered_json::parse(manifestStr);
 
   for (auto &mod : manifestJson.at("symbols"))
@@ -115,13 +121,11 @@ internal::ManifestProxy::ManifestProxy(std::string manifestStr,
 std::unique_ptr<Design>
 internal::ManifestProxy::buildDesign(Accelerator &acc) const {
   auto designJson = manifestJson.at("design");
-  std::vector<std::unique_ptr<services::Service>> services =
-      getServiceProviders(acc, designJson);
   std::vector<std::unique_ptr<Instance>> children =
       getChildInstances(acc, designJson);
-  return std::make_unique<Design>(getModInfo(designJson), std::move(children),
-                                  std::move(services));
+  return std::make_unique<Design>(getModInfo(designJson), std::move(children));
 }
+
 std::optional<ModuleInfo>
 internal::ManifestProxy::getModInfo(const nlohmann::json &json) const {
   auto instOfIter = json.find("inst_of");
@@ -141,19 +145,10 @@ internal::ManifestProxy::getChildInstances(Accelerator &acc,
   if (childrenIter == json.end())
     return ret;
   for (auto &child : childrenIter.value()) {
-    std::vector<std::unique_ptr<services::Service>> services =
-        getServiceProviders(acc, child);
     auto children = getChildInstances(acc, child);
     ret.emplace_back(std::make_unique<Instance>(
-        parseID(child.at("app_id")), getModInfo(child), std::move(children),
-        std::move(services)));
+        parseID(child.at("app_id")), getModInfo(child), std::move(children)));
   }
-  return ret;
-}
-std::vector<std::unique_ptr<services::Service>>
-internal::ManifestProxy::getServiceProviders(
-    Accelerator &acc, const nlohmann::json &contents) const {
-  std::vector<std::unique_ptr<services::Service>> ret;
   return ret;
 }
 
@@ -169,7 +164,7 @@ uint32_t Manifest::apiVersion() const {
   return manifest.at("api_version").get<uint32_t>();
 }
 
-std::vector<ModuleInfo> Manifest::modules() const {
+std::vector<ModuleInfo> Manifest::moduleInfos() const {
   std::vector<ModuleInfo> ret;
   for (auto &mod : manifest.at("symbols"))
     ret.push_back(parseModuleInfo(mod));
@@ -184,6 +179,7 @@ std::unique_ptr<Design> Manifest::buildDesign(Accelerator &acc) const {
 // POCO helpers.
 //===----------------------------------------------------------------------===//
 
+// Print a module info, including the extra metadata.
 std::ostream &operator<<(std::ostream &os, const ModuleInfo &m) {
   auto printAny = [&os](std::any a) {
     if (a.type() == typeid(std::string))

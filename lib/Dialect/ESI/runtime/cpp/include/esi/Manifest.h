@@ -72,7 +72,7 @@ struct ServiceInfo {
 // Forward declarations.
 namespace internal {
 class ManifestProxy;
-}
+} // namespace internal
 class Accelerator;
 class Design;
 
@@ -85,7 +85,7 @@ public:
 
   uint32_t apiVersion() const;
   // Modules which have designer specified metadata.
-  std::vector<ModuleInfo> modules() const;
+  std::vector<ModuleInfo> moduleInfos() const;
 
   // Build a dynamic design hierarchy from the manifest.
   std::unique_ptr<Design> buildDesign(Accelerator &acc) const;
@@ -97,5 +97,6 @@ private:
 } // namespace esi
 
 std::ostream &operator<<(std::ostream &, const esi::ModuleInfo &);
+std::ostream &operator<<(std::ostream &, const esi::AppID &);
 
 #endif // ESI_MANIFEST_H

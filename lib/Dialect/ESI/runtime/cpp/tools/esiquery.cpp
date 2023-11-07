@@ -43,17 +43,21 @@ int main(int argc, const char *argv[]) {
     std::unique_ptr<Accelerator> acc = registry::connect(backend, conn);
     const auto &info = *acc->getService<services::SysInfo>();
 
-    // Only support the 'version' command.
     if (cmd == "version")
       std::cout << "ESI system version: " << info.esiVersion() << std::endl;
     else if (cmd == "json_manifest")
       std::cout << info.jsonManifest() << std::endl;
     else if (cmd == "info")
       printInfo(std::cout, *acc);
+    // TODO: add a command to print out the instance hierarchy.
     else
-      std::cout << "Connection successful.\n";
+      std::cout << "Connection successful." << std::endl;
 
-    return 0;
+    if (cmd.empty())
+      return 0;
+    std::cerr << "Unknown command: " << cmd << std::endl;
+    return 1;
+
   } catch (std::exception &e) {
     std::cerr << "Error: " << e.what() << std::endl;
     return -1;
@@ -64,11 +68,11 @@ void printInfo(std::ostream &os, Accelerator &acc) {
   std::string jsonManifest =
       acc.getService<services::SysInfo>()->jsonManifest();
   Manifest m(jsonManifest);
-  os << "API version: " << m.apiVersion() << "\n\n";
-  os << "********************************\n";
-  os << "* Design information\n";
-  os << "********************************\n";
-  os << "\n";
-  for (ModuleInfo mod : m.modules())
-    os << mod << "\n";
+  os << "API version: " << m.apiVersion() << std::endl << std::endl;
+  os << "********************************" << std::endl;
+  os << "* Design information" << std::endl;
+  os << "********************************" << std::endl;
+  os << std::endl;
+  for (ModuleInfo mod : m.moduleInfos())
+    os << mod << std::endl;
 }
