@@ -39,8 +39,6 @@ private:
   // Create a counter that attributes a unique id to each generated btor2 line
   size_t lid = 1;           // btor2 line identifiers usually start at 1
   size_t resetLID = NO_LID; // keeps track of the reset's LID
-  bool isAsync = false; // Records whether or not the reset is async (changes
-                        // how we handle resets)
 
   // Create maps to keep track of lid associations
   // Proper maps wouldn't work for some reason so I'll use a vector of pairs
@@ -590,8 +588,8 @@ private:
           int64_t w = requireSort(expr.getType());
 
           // Start by extracting the operands
-          Value op1 = binop->getOperand(0);
-          Value op2 = binop->getOperand(1);
+          Value op1 = expr->getOperand(0);
+          Value op2 = expr->getOperand(1);
 
           // Generate the line
           genBinOp(inst, op, op1, op2, w);
