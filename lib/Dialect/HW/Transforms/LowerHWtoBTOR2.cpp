@@ -58,45 +58,45 @@ private:
 
   // Set of often reused strings in btor2 emission (to avoid typos and enable
   // auto-complete)
-  const static constexpr StringLiteral SORT = "sort";
-  const static constexpr StringLiteral BITVEC = "bitvec";
-  const static constexpr StringLiteral INPUT = "input";
-  const static constexpr StringLiteral RESET = "reset";
-  const static constexpr StringLiteral OUTPUT = "output";
-  const static constexpr StringLiteral ZERO = "zero";
-  const static constexpr StringLiteral ONE = "one";
-  const static constexpr StringLiteral CONST = "const";
-  const static constexpr StringLiteral CONSTD = "constd";
-  const static constexpr StringLiteral CONSTH = "consth";
-  const static constexpr StringLiteral SLICE = "slice";
-  const static constexpr StringLiteral UEXT = "uext";
-  const static constexpr StringLiteral ADD = "add";
-  const static constexpr StringLiteral SUB = "sub";
-  const static constexpr StringLiteral MUL = "mul";
-  const static constexpr StringLiteral AND = "and";
-  const static constexpr StringLiteral OR = "or";
-  const static constexpr StringLiteral XOR = "xor";
-  const static constexpr StringLiteral SLL = "sll";
-  const static constexpr StringLiteral SRL =
+  const static constexpr StringLiteral sort = "sort";
+  const static constexpr StringLiteral bitvec = "bitvec";
+  const static constexpr StringLiteral input = "input";
+  const static constexpr StringLiteral reset = "reset";
+  const static constexpr StringLiteral output = "output";
+  const static constexpr StringLiteral zero = "zero";
+  const static constexpr StringLiteral one = "one";
+  const static constexpr StringLiteral constStr = "const";
+  const static constexpr StringLiteral constd = "constd";
+  const static constexpr StringLiteral consth = "consth";
+  const static constexpr StringLiteral slice = "slice";
+  const static constexpr StringLiteral uext = "uext";
+  const static constexpr StringLiteral add = "add";
+  const static constexpr StringLiteral sub = "sub";
+  const static constexpr StringLiteral mul = "mul";
+  const static constexpr StringLiteral andStr = "and";
+  const static constexpr StringLiteral orStr = "or";
+  const static constexpr StringLiteral xorStr = "xor";
+  const static constexpr StringLiteral sll = "sll";
+  const static constexpr StringLiteral srl =
       "srl"; // a.k.a. unsigned right shift
-  const static constexpr StringLiteral SRA = "sra"; // a.k.a. signed right shift
-  const static constexpr StringLiteral SDIV = "sdiv";
-  const static constexpr StringLiteral UDIV = "udiv";
-  const static constexpr StringLiteral SMOD = "smod";
-  const static constexpr StringLiteral CONCAT = "concat";
-  const static constexpr StringLiteral NOT = "not";
-  const static constexpr StringLiteral NEQ = "neq";
-  const static constexpr StringLiteral HW_NEQ = "ne";
-  const static constexpr StringLiteral ITE = "ite";
-  const static constexpr StringLiteral IMPLIES =
+  const static constexpr StringLiteral sra = "sra"; // a.k.a. signed right shift
+  const static constexpr StringLiteral sdiv = "sdiv";
+  const static constexpr StringLiteral udiv = "udiv";
+  const static constexpr StringLiteral smod = "smod";
+  const static constexpr StringLiteral concat = "concat";
+  const static constexpr StringLiteral notStr = "not";
+  const static constexpr StringLiteral neq = "neq";
+  const static constexpr StringLiteral hwNeq = "ne";
+  const static constexpr StringLiteral ite = "ite";
+  const static constexpr StringLiteral implies =
       "implies";                                        // logical implication
-  const static constexpr StringLiteral STATE = "state"; // Register state
-  const static constexpr StringLiteral NEXT =
+  const static constexpr StringLiteral state = "state"; // Register state
+  const static constexpr StringLiteral next =
       "next"; // Register state transition
-  const static constexpr StringLiteral BAD = "bad";
-  const static constexpr StringLiteral CONSTRAINT = "constraint";
-  const static constexpr StringLiteral WS = " ";  // WhiteSpace
-  const static constexpr StringLiteral NL = "\n"; // NewLine
+  const static constexpr StringLiteral bad = "bad";
+  const static constexpr StringLiteral constraint = "constraint";
+  const static constexpr StringLiteral ws = " ";  // WhiteSpace
+  const static constexpr StringLiteral nl = "\n"; // NewLine
 
   /// Field helper functions
 
@@ -237,7 +237,7 @@ private:
     setSortLID(width);
 
     // Build and return a sort declaration
-    llvm::outs() << lid++ << WS << SORT << WS << BITVEC << WS << width << NL;
+    llvm::outs() << lid++ << ws << sort << ws << bitvec << ws << width << nl;
   }
 
   // Generates an input declaration given a sort lid and a name
@@ -249,7 +249,7 @@ private:
     assert(sid != NO_LID);
 
     // Generate input declaration
-    llvm::outs() << lid++ << WS << INPUT << WS << sid << WS << name << NL;
+    llvm::outs() << lid++ << ws << input << ws << sid << ws << name << nl;
   }
 
   // Generates a constant declaration given a value, a width and a name
@@ -264,7 +264,7 @@ private:
     // Check that a result was found before continuing
     assert(sid != NO_LID);
 
-    llvm::outs() << lid++ << WS << CONSTD << WS << sid << WS << value << NL;
+    llvm::outs() << lid++ << ws << constd << ws << sid << ws << value << nl;
   }
 
   // Generates a zero constant expression
@@ -284,7 +284,7 @@ private:
     setConstLID(0, width);
 
     // Build and return the zero btor instruction
-    llvm::outs() << lid++ << WS << ZERO << WS << sid << NL;
+    llvm::outs() << lid++ << ws << zero << ws << sid << nl;
   }
 
   // Generates a binary operation instruction given an op name, two operands and
@@ -306,8 +306,8 @@ private:
     size_t op2LID = getOpLID(op2);
 
     // Build and return the string
-    llvm::outs() << lid++ << WS << inst << WS << sid << WS << op1LID << WS
-                 << op2LID << NL;
+    llvm::outs() << lid++ << ws << inst << ws << sid << ws << op1LID << ws
+                 << op2LID << nl;
   }
 
   // Emits a btor2 string for the given binary operation
@@ -318,7 +318,7 @@ private:
     Value op2 = binop->getOperand(1);
 
     // Make sure that the correct sort definition exists
-    genSort(BITVEC, width);
+    genSort(bitvec, width);
 
     // Generate the line
     genBinOp(inst, binop, op1, op2, width);
@@ -340,8 +340,8 @@ private:
     size_t op0LID = getOpLID(op0);
 
     // Build and return the slice instruction
-    llvm::outs() << lid++ << WS << SLICE << WS << sid << WS << op0LID << WS
-                 << (width - 1) << WS << lowbit << NL;
+    llvm::outs() << lid++ << ws << slice << ws << sid << ws << op0LID << ws
+                 << (width - 1) << ws << lowbit << nl;
   }
 
   // Generates a constant declaration given a value, a width and a name
@@ -360,7 +360,7 @@ private:
     // Find the LID associated to the operand
     size_t op0LID = getOpLID(op0);
 
-    llvm::outs() << lid++ << WS << inst << WS << sid << WS << op0LID << NL;
+    llvm::outs() << lid++ << ws << inst << ws << sid << ws << op0LID << nl;
   }
 
   // Generates a constant declaration given a value, a width and a name
@@ -376,7 +376,7 @@ private:
     size_t assertLID = getOpLID(assertop);
 
     // Build and return the btor2 string
-    llvm::outs() << lid++ << WS << BAD << WS << assertLID << NL;
+    llvm::outs() << lid++ << ws << bad << ws << assertLID << nl;
   }
 
   // Generate a btor2 constraint given an expression from an assumption
@@ -386,17 +386,17 @@ private:
     size_t exprLID = getOpLID(expr);
 
     // Build and return the btor2 string
-    llvm::outs() << lid++ << WS << CONSTRAINT << WS << exprLID << NL;
+    llvm::outs() << lid++ << ws << constraint << ws << exprLID << nl;
   }
 
   // Generate a btor2 constraint given an expression from an assumption
   // operation
   void genConstraint(size_t exprLID) {
     // Build and return the btor2 string
-    llvm::outs() << lid++ << WS << CONSTRAINT << WS << exprLID << NL;
+    llvm::outs() << lid++ << ws << constraint << ws << exprLID << nl;
   }
 
-  // Generate an ITE instruction (if then else) given a predicate, two values
+  // Generate an ite instruction (if then else) given a predicate, two values
   // and a res width
   void genIte(Operation *srcop, Value cond, Value t, Value f, int64_t width) {
     // Register the source operation with the current line id
@@ -414,11 +414,11 @@ private:
     size_t fLID = getOpLID(f);
 
     // Build and return the ite instruction
-    llvm::outs() << lid++ << WS << ITE << WS << sid << WS << condLID << WS
-                 << tLID << WS << fLID << NL;
+    llvm::outs() << lid++ << ws << ite << ws << sid << ws << condLID << ws
+                 << tLID << ws << fLID << nl;
   }
 
-  // Generate an ITE instruction (if then else) given a predicate, two values
+  // Generate an ite instruction (if then else) given a predicate, two values
   // and a res width
   void genIte(Operation *srcop, size_t condLID, size_t tLID, size_t fLID,
               int64_t width) {
@@ -432,8 +432,8 @@ private:
     assert(sid != NO_LID);
 
     // Build and return the ite instruction
-    llvm::outs() << lid++ << WS << ITE << WS << sid << WS << condLID << WS
-                 << tLID << WS << fLID << NL;
+    llvm::outs() << lid++ << ws << ite << ws << sid << ws << condLID << ws
+                 << tLID << ws << fLID << nl;
   }
 
   // Generate a logical implication given a lhs and a rhs
@@ -452,8 +452,8 @@ private:
     size_t rhsLID = getOpLID(rhs);
 
     // Build and return the implies operation
-    llvm::outs() << lid++ << WS << IMPLIES << WS << sid << WS << lhsLID << WS
-                 << rhsLID << NL;
+    llvm::outs() << lid++ << ws << implies << ws << sid << ws << lhsLID << ws
+                 << rhsLID << nl;
   }
 
   // Generate a logical implication given a lhs and a rhs
@@ -468,8 +468,8 @@ private:
     assert(sid != NO_LID);
 
     // Build and return the implies operation
-    llvm::outs() << lid++ << WS << IMPLIES << WS << sid << WS << lhsLID << WS
-                 << rhsLID << NL;
+    llvm::outs() << lid++ << ws << implies << ws << sid << ws << lhsLID << ws
+                 << rhsLID << nl;
   }
 
   // Generates a state instruction given a width and a name
@@ -484,7 +484,7 @@ private:
     assert(sid != NO_LID);
 
     // Build and return the state instruction
-    llvm::outs() << lid++ << WS << STATE << WS << sid << WS << name << NL;
+    llvm::outs() << lid++ << ws << state << ws << sid << ws << name << nl;
   }
 
   // Generates a next instruction, given a width, a state LID, and a next value
@@ -501,8 +501,8 @@ private:
     size_t nextLID = getOpLID(next);
 
     // Build and return the next instruction
-    llvm::outs() << lid++ << WS << NEXT << WS << sid << WS << regLID << WS
-                 << nextLID << NL;
+    llvm::outs() << lid++ << ws << next << ws << sid << ws << regLID << ws
+                 << nextLID << nl;
   }
 
   // Verifies that the sort required for the given operation's btor2 emission
@@ -514,7 +514,7 @@ private:
 
     // Generate the sort regardles of resulting width (nothing will be added if
     // the sort already exists)
-    genSort(BITVEC, width);
+    genSort(bitvec, width);
     return width;
   }
 
@@ -541,7 +541,7 @@ private:
       inputLIDs[port.argNum] = lid;
 
       // We assume that the explicit name is always %reset for reset ports
-      if (iName == RESET)
+      if (iName == reset)
         resetLID = lid;
 
       genInput(w, iName);
@@ -599,19 +599,19 @@ private:
   }
 
   // Visitors for the binary ops
-  void visit(comb::AddOp op) { visitBinOp(op, ADD); }
-  void visit(comb::SubOp op) { visitBinOp(op, SUB); }
-  void visit(comb::MulOp op) { visitBinOp(op, MUL); }
-  void visit(comb::DivSOp op) { visitBinOp(op, SDIV); }
-  void visit(comb::DivUOp op) { visitBinOp(op, UDIV); }
-  void visit(comb::ModSOp op) { visitBinOp(op, SMOD); }
-  void visit(comb::ShlOp op) { visitBinOp(op, SLL); }
-  void visit(comb::ShrUOp op) { visitBinOp(op, SRL); }
-  void visit(comb::ShrSOp op) { visitBinOp(op, SRA); }
-  void visit(comb::AndOp op) { visitBinOp(op, AND); }
-  void visit(comb::OrOp op) { visitBinOp(op, OR); }
-  void visit(comb::XorOp op) { visitBinOp(op, XOR); }
-  void visit(comb::ConcatOp op) { visitBinOp(op, CONCAT); }
+  void visit(comb::AddOp op) { visitBinOp(op, add); }
+  void visit(comb::SubOp op) { visitBinOp(op, sub); }
+  void visit(comb::MulOp op) { visitBinOp(op, mul); }
+  void visit(comb::DivSOp op) { visitBinOp(op, sdiv); }
+  void visit(comb::DivUOp op) { visitBinOp(op, udiv); }
+  void visit(comb::ModSOp op) { visitBinOp(op, smod); }
+  void visit(comb::ShlOp op) { visitBinOp(op, sll); }
+  void visit(comb::ShrUOp op) { visitBinOp(op, srl); }
+  void visit(comb::ShrSOp op) { visitBinOp(op, sra); }
+  void visit(comb::AndOp op) { visitBinOp(op, andStr); }
+  void visit(comb::OrOp op) { visitBinOp(op, orStr); }
+  void visit(comb::XorOp op) { visitBinOp(op, xorStr); }
+  void visit(comb::ConcatOp op) { visitBinOp(op, concat); }
 
   // Extract ops translate to a slice operation in btor2 in a one-to-one manner
   void visit(comb::ExtractOp op) {
@@ -638,11 +638,11 @@ private:
     StringRef pred = stringifyICmpPredicate(op.getPredicate());
 
     // Check for special cases where hw doesn't align with btor syntax
-    if (pred == HW_NEQ)
-      pred = NEQ;
+    if (pred == hwNeq)
+      pred = neq;
 
     // Width of result is always 1 for comparison
-    genSort(BITVEC, 1);
+    genSort(bitvec, 1);
 
     // With the special cases out of the way, the emission is the same as that
     // of a binary op
@@ -664,13 +664,13 @@ private:
     genIte(op, pred, tval, fval, w);
   }
 
-  // Assertions are negated then converted to a btor2 BAD instruction
+  // Assertions are negated then converted to a btor2 bad instruction
   void visit(sv::AssertOp op) {
     // Expression is what we will try to invert for our assertion
     Value expr = op.getExpression();
 
     // This sort is for assertion inversion and potential implies
-    genSort(BITVEC, 1);
+    genSort(bitvec, 1);
 
     // Check for an overaching enable
     // In our case the sv.if operation will probably only be used when
@@ -683,13 +683,13 @@ private:
       genImplies(ifop, en, expr);
 
       // Generate the implies inversion
-      genUnaryOp(op, ifop, NOT, 1);
+      genUnaryOp(op, ifop, notStr, 1);
     } else {
       // Generate the expression inversion
-      genUnaryOp(op, expr, NOT, 1);
+      genUnaryOp(op, expr, notStr, 1);
     }
 
-    // Genrate the BAD btor2 intruction
+    // Genrate the bad btor2 intruction
     genBad(op);
   }
   // Assumptions are converted to a btor2 constraint instruction
@@ -759,7 +759,7 @@ void LowerHWtoBTOR2Pass::runOnOperation() {
         // Genrate the reset condition (for sync & async resets)
         // We assume for now that the reset value is always 0
         size_t width = hw::getBitWidth(reg.getType());
-        genSort(BITVEC, width);
+        genSort(bitvec, width);
         genZero(width);
 
         // Next should already be associated to an LID at this point
