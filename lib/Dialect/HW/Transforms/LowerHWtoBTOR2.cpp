@@ -25,7 +25,7 @@ using namespace hw;
 
 // Macros for C-style error handling
 #define NO_LID -1UL
-#define NO_WIDTH NO_LID
+#define NO_WIDTH -1L
 
 namespace {
 // The goal here is to traverse the operations in order and convert them one by
