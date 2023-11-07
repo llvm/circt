@@ -407,6 +407,11 @@ static LogicalResult checkAttributes(Operation *op, Attribute attr, Type type) {
     if (!arrayAttr)
       return op->emitOpError("expected array attribute for constant of type ")
              << type;
+    if (structType.getElements().size() != arrayAttr.size())
+      return op->emitOpError("array attribute (")
+             << arrayAttr.size() << ") has wrong size for struct constant ("
+             << structType.getElements().size() << ")";
+
     for (auto [attr, fieldInfo] :
          llvm::zip(arrayAttr.getValue(), structType.getElements())) {
       if (failed(checkAttributes(op, attr, fieldInfo.type)))
@@ -417,6 +422,11 @@ static LogicalResult checkAttributes(Operation *op, Attribute attr, Type type) {
     if (!arrayAttr)
       return op->emitOpError("expected array attribute for constant of type ")
              << type;
+    if (arrayType.getNumElements() != arrayAttr.size())
+      return op->emitOpError("array attribute (")
+             << arrayAttr.size() << ") has wrong size for array constant ("
+             << arrayType.getNumElements() << ")";
+
     auto elementType = arrayType.getElementType();
     for (auto attr : arrayAttr.getValue()) {
       if (failed(checkAttributes(op, attr, elementType)))
@@ -428,6 +438,12 @@ static LogicalResult checkAttributes(Operation *op, Attribute attr, Type type) {
       return op->emitOpError("expected array attribute for constant of type ")
              << type;
     auto elementType = arrayType.getElementType();
+    if (arrayType.getNumElements() != arrayAttr.size())
+      return op->emitOpError("array attribute (")
+             << arrayAttr.size()
+             << ") has wrong size for unpacked array constant ("
+             << arrayType.getNumElements() << ")";
+
     for (auto attr : arrayAttr.getValue()) {
       if (failed(checkAttributes(op, attr, elementType)))
         return failure();
