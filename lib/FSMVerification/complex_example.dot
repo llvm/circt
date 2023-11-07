@@ -1,0 +1,14 @@
+digraph unnamed {
+
+        Node0x151f2a200 [shape=record,label="{A|fsm.output %cnt : i16}"];
+        Node0x151f2a200 -> Node0x151f2c2c0[label="fsm.return %arg0"];
+        Node0x151f2c2c0 [shape=record,label="{B|fsm.output %cnt : i16}"];
+        Node0x151f2c2c0 -> Node0x151f2a200[label="%0 = comb.icmp eq %cnt, %c5_i16 : i16\nfsm.return %0"];
+        Node0x151f2c2c0 -> Node0x151f2c2c0;
+variables [shape=record,label="Variables|%cnt = fsm.variable \"cnt\" \{initValue = 0 : i16\} : i16\n%c0_i16 = hw.constant 0 : i16\n%c1_i16 = hw.constant 1 : i16\n%c5_i16 = hw.constant 5 : i16"]}
+digraph unnamed {
+
+        Node0x153106340 [shape=record,label="{C|fsm.output %ack : i1}"];
+        Node0x153106340 -> Node0x153106160[label="%0 = comb.icmp eq %arg0, %c0_i16 : i16\nfsm.return %0"];
+        Node0x153106160 [shape=record,label="{D|fsm.output %ack : i1}"];
+variables [shape=record,label="Variables|%ack = fsm.variable \"ack\" \{initValue = false\} : i1\n%c0_i16 = hw.constant 0 : i16\n%true = hw.constant true"]}
