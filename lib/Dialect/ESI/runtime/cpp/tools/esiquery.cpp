@@ -61,7 +61,9 @@ int main(int argc, const char *argv[]) {
 }
 
 void printInfo(std::ostream &os, Accelerator &acc) {
-  Manifest m(acc);
+  std::string jsonManifest =
+      acc.getService<services::SysInfo>()->jsonManifest();
+  Manifest m(jsonManifest);
   os << "API version: " << m.apiVersion() << "\n\n";
   os << "********************************\n";
   os << "* Design information\n";

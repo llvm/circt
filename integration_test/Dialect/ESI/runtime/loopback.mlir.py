@@ -1,5 +1,4 @@
 import esi
-import os
 import IPython
 import sys
 
@@ -10,8 +9,11 @@ acc = esi.Accelerator("cosim", conn)
 assert acc.sysinfo().esi_version() == 1
 assert acc.manifest.api_version == 1
 
-appid = acc.manifest.design.id
-print(appid.name)
-print(appid.idx)
+#print(acc.sysinfo().json_manifest())
+d = acc.manifest.build_design(acc)
 
 IPython.embed()
+print(d.children)
+appid = d.children[0].id
+print(appid.name)
+print(appid.idx)

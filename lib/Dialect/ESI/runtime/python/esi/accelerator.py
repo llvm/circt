@@ -4,18 +4,11 @@
 
 from . import esiCppAccel as cpp
 
-import json
-
 
 class Accelerator(cpp.Accelerator):
   """A connection to an ESI accelerator."""
 
   @property
-  def manifest(self) -> "AcceleratorManifest":
+  def manifest(self) -> cpp.Manifest:
     """Get and parse the accelerator manifest."""
-    return AcceleratorManifest(self)
-
-
-class AcceleratorManifest(cpp.Manifest):
-  """An accelerator manifest. Essential for interacting with an accelerator."""
-  pass
+    return cpp.Manifest(self.sysinfo().json_manifest())

@@ -155,7 +155,7 @@ void ESIBuildManifestPass::runOnOperation() {
 void ESIBuildManifestPass::emitNode(llvm::json::OStream &j,
                                     AppIDHierNodeOp nodeOp) {
   j.object([&] {
-    j.attribute("appID", json(nodeOp, nodeOp.getAppIDAttr()));
+    j.attribute("app_id", json(nodeOp, nodeOp.getAppIDAttr()));
     j.attribute("inst_of", json(nodeOp, nodeOp.getModuleRefAttr()));
     j.attributeArray("contents",
                      [&]() { emitBlock(j, nodeOp.getChildren().front()); });

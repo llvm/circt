@@ -44,6 +44,7 @@ include_directories(cpp/include)
 
 set(ESIRuntimeSources
   cpp/lib/Accelerator.cpp
+  cpp/lib/Design.cpp
   cpp/lib/Manifest.cpp
   cpp/lib/StdServices.cpp
 )
@@ -54,6 +55,7 @@ set(ESIRuntimeLinkLibraries
 set(ESIPythonRuntimeSources
   python/esi/__init__.py
   python/esi/accelerator.py
+  python/esi/esiCppAccel.pyi
 )
 
 # If Cap'nProto hasn't been explicitly disabled, find it.
