@@ -6,7 +6,14 @@
 //
 //===----------------------------------------------------------------------===//
 //
+// The dynamic API into an accelerator allows access to the accelerator's design
+// and communication channels through various stl containers (e.g. std::vector,
+// std::map, etc.). This allows runtime reflection against the accelerator and
+// can be pybind'd to create a Python API.
 //
+// The static API, in contrast, is a compile-time API that allows access to the
+// design and communication channels symbolically. It will be generated once
+// (not here) then compiled into the host software.
 //
 // DO NOT EDIT!
 // This file is distributed as part of an ESI package. The source for this file

@@ -52,19 +52,6 @@ struct ServicePort {
   std::string portName;
 };
 
-struct HWClientDetail {
-  ServicePort port;
-  std::vector<AppID> relativeAppID;
-  std::map<std::string, std::any> extra;
-};
-
-struct ServiceInfo {
-  std::string name;
-  std::string serviceImpl;
-  std::vector<HWClientDetail> clients;
-  std::map<std::string, std::any> extra;
-};
-
 //===----------------------------------------------------------------------===//
 // Manifest parsing and API creation.
 //===----------------------------------------------------------------------===//
@@ -80,7 +67,7 @@ class Design;
 /// accelerator.
 class Manifest {
 public:
-  Manifest(std::string jsonManifest);
+  Manifest(const std::string &jsonManifest);
   ~Manifest();
 
   uint32_t apiVersion() const;

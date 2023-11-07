@@ -33,9 +33,9 @@ namespace internal {
 // file.
 class ManifestProxy {
 public:
-  ManifestProxy(std::string jsonManifest, Manifest &manifest);
+  ManifestProxy(const std::string &jsonManifest, Manifest &manifest);
 
-  auto at(std::string key) const { return manifestJson.at(key); }
+  auto at(const std::string &key) const { return manifestJson.at(key); }
 
   // Get the module info (if any) for the module instance in 'json'.
   std::optional<ModuleInfo> getModInfo(const nlohmann::json &json) const;
@@ -45,7 +45,7 @@ public:
 
   /// Build the set of child instances for the module instance in 'json'.
   std::vector<std::unique_ptr<Instance>>
-  getChildInstances(Accelerator &acc, const nlohmann::json &json) const;
+  getChildInstances(const nlohmann::json &json) const;
 
   /// Build a dynamic API for the Accelerator connection 'acc' based on the
   /// manifest stored herein.
@@ -64,29 +64,29 @@ private:
 // Simple JSON -> object parsers.
 //===----------------------------------------------------------------------===//
 
-static AppID parseID(const nlohmann::json &json) {
+static AppID parseID(const nlohmann::json &jsonID) {
   std::optional<uint32_t> idx;
-  if (json.contains("index"))
-    idx = json.at("index").get<uint32_t>();
-  return AppID{json.at("name").get<std::string>(), idx};
+  if (jsonID.contains("index"))
+    idx = jsonID.at("index").get<uint32_t>();
+  return AppID{jsonID.at("name").get<std::string>(), idx};
 }
 
 static ModuleInfo parseModuleInfo(const nlohmann::json &mod) {
-  auto getAny = [](const nlohmann::json &json) -> std::any {
-    if (json.is_string())
-      return json.get<std::string>();
-    else if (json.is_number_integer())
-      return json.get<int64_t>();
-    else if (json.is_number_unsigned())
-      return json.get<uint64_t>();
-    else if (json.is_number_float())
-      return json.get<double>();
-    else if (json.is_boolean())
-      return json.get<bool>();
-    else if (json.is_null())
-      return json.get<std::nullptr_t>();
+  auto getAny = [](const nlohmann::json &value) -> std::any {
+    if (value.is_string())
+      return value.get<std::string>();
+    else if (value.is_number_integer())
+      return value.get<int64_t>();
+    else if (value.is_number_unsigned())
+      return value.get<uint64_t>();
+    else if (value.is_number_float())
+      return value.get<double>();
+    else if (value.is_boolean())
+      return value.get<bool>();
+    else if (value.is_null())
+      return value.get<std::nullptr_t>();
     else
-      throw std::runtime_error("Unknown type in manifest: " + json.dump(2));
+      throw std::runtime_error("Unknown type in manifest: " + value.dump(2));
   };
   std::map<std::string, std::any> extras;
   for (auto &extra : mod.items())
@@ -95,7 +95,7 @@ static ModuleInfo parseModuleInfo(const nlohmann::json &mod) {
         extra.key() != "commit_hash" && extra.key() != "symbolRef")
       extras[extra.key()] = getAny(extra.value());
 
-  auto value = [&](std::string key) -> std::optional<std::string> {
+  auto value = [&](const std::string &key) -> std::optional<std::string> {
     auto f = mod.find(key);
     if (f == mod.end())
       return std::nullopt;
@@ -109,7 +109,7 @@ static ModuleInfo parseModuleInfo(const nlohmann::json &mod) {
 // ManifestProxy class implementation.
 //===----------------------------------------------------------------------===//
 
-internal::ManifestProxy::ManifestProxy(std::string manifestStr,
+internal::ManifestProxy::ManifestProxy(const std::string &manifestStr,
                                        Manifest &manifest) {
   manifestJson = nlohmann::ordered_json::parse(manifestStr);
 
@@ -122,7 +122,7 @@ std::unique_ptr<Design>
 internal::ManifestProxy::buildDesign(Accelerator &acc) const {
   auto designJson = manifestJson.at("design");
   std::vector<std::unique_ptr<Instance>> children =
-      getChildInstances(acc, designJson);
+      getChildInstances(designJson);
   return std::make_unique<Design>(getModInfo(designJson), std::move(children));
 }
 
@@ -138,14 +138,13 @@ internal::ManifestProxy::getModInfo(const nlohmann::json &json) const {
 }
 
 std::vector<std::unique_ptr<Instance>>
-internal::ManifestProxy::getChildInstances(Accelerator &acc,
-                                           const nlohmann::json &json) const {
+internal::ManifestProxy::getChildInstances(const nlohmann::json &json) const {
   std::vector<std::unique_ptr<Instance>> ret;
   auto childrenIter = json.find("children");
   if (childrenIter == json.end())
     return ret;
   for (auto &child : childrenIter.value()) {
-    auto children = getChildInstances(acc, child);
+    auto children = getChildInstances(child);
     ret.emplace_back(std::make_unique<Instance>(
         parseID(child.at("app_id")), getModInfo(child), std::move(children)));
   }
@@ -156,7 +155,7 @@ internal::ManifestProxy::getChildInstances(Accelerator &acc,
 // Manifest class implementation.
 //===----------------------------------------------------------------------===//
 
-Manifest::Manifest(std::string jsonManifest)
+Manifest::Manifest(const std::string &jsonManifest)
     : manifest(*new internal::ManifestProxy(jsonManifest, *this)) {}
 Manifest::~Manifest() { delete &manifest; }
 
@@ -182,17 +181,18 @@ std::unique_ptr<Design> Manifest::buildDesign(Accelerator &acc) const {
 // Print a module info, including the extra metadata.
 std::ostream &operator<<(std::ostream &os, const ModuleInfo &m) {
   auto printAny = [&os](std::any a) {
-    if (a.type() == typeid(std::string))
+    const std::type_info &t = a.type();
+    if (t == typeid(std::string))
       os << std::any_cast<std::string>(a);
-    else if (a.type() == typeid(int64_t))
+    else if (t == typeid(int64_t))
       os << std::any_cast<int64_t>(a);
-    else if (a.type() == typeid(uint64_t))
+    else if (t == typeid(uint64_t))
       os << std::any_cast<uint64_t>(a);
-    else if (a.type() == typeid(double))
+    else if (t == typeid(double))
       os << std::any_cast<double>(a);
-    else if (a.type() == typeid(bool))
+    else if (t == typeid(bool))
       os << std::any_cast<bool>(a);
-    else if (a.type() == typeid(std::nullptr_t))
+    else if (t == typeid(std::nullptr_t))
       os << "null";
     else
       os << "unknown";
