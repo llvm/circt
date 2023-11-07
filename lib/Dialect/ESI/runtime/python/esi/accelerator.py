@@ -2,23 +2,13 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from .esiCppAccel import Accelerator as CppAccelerator
-
-import json
+from . import esiCppAccel as cpp
 
 
-class Accelerator(CppAccelerator):
+class Accelerator(cpp.Accelerator):
   """A connection to an ESI accelerator."""
 
   @property
-  def manifest(self) -> "AcceleratorManifest":
+  def manifest(self) -> cpp.Manifest:
     """Get and parse the accelerator manifest."""
-    return AcceleratorManifest(self)
-
-
-class AcceleratorManifest:
-  """An accelerator manifest. Essential for interacting with an accelerator."""
-
-  def __init__(self, accel: Accelerator) -> None:
-    self.accel = accel
-    self._manifest = json.loads(accel.sysinfo().json_manifest())
+    return cpp.Manifest(self.sysinfo().json_manifest())
