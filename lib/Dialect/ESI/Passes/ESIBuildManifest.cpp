@@ -155,7 +155,7 @@ void ESIBuildManifestPass::runOnOperation() {
 void ESIBuildManifestPass::emitNode(llvm::json::OStream &j,
                                     AppIDHierNodeOp nodeOp) {
   j.object([&] {
-    j.attribute("appID", json(nodeOp, nodeOp.getAppIDAttr()));
+    j.attribute("app_id", json(nodeOp, nodeOp.getAppIDAttr()));
     j.attribute("inst_of", json(nodeOp, nodeOp.getModuleRefAttr()));
     j.attributeArray("contents",
                      [&]() { emitBlock(j, nodeOp.getChildren().front()); });
@@ -201,16 +201,14 @@ std::string ESIBuildManifestPass::json() {
     }
   });
 
-  j.attributeArray("design", [&]() {
-    j.object([&] {
-      j.attribute("inst_of", json(appidRoot, appidRoot.getTopModuleRefAttr()));
-      j.attributeArray(
-          "contents", [&]() { emitBlock(j, appidRoot.getChildren().front()); });
-      j.attributeArray("children", [&]() {
-        for (auto nodeOp :
-             appidRoot.getChildren().front().getOps<AppIDHierNodeOp>())
-          emitNode(j, nodeOp);
-      });
+  j.attributeObject("design", [&]() {
+    j.attribute("inst_of", json(appidRoot, appidRoot.getTopModuleRefAttr()));
+    j.attributeArray("contents",
+                     [&]() { emitBlock(j, appidRoot.getChildren().front()); });
+    j.attributeArray("children", [&]() {
+      for (auto nodeOp :
+           appidRoot.getChildren().front().getOps<AppIDHierNodeOp>())
+        emitNode(j, nodeOp);
     });
   });
 
