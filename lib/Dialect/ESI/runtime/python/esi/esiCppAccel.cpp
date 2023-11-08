@@ -91,10 +91,16 @@ PYBIND11_MODULE(esiCppAccel, m) {
 
   py::class_<Accelerator>(m, "Accelerator")
       .def(py::init(&registry::connect))
-      .def("sysinfo", &Accelerator::getService<SysInfo>,
-           py::return_value_policy::reference_internal)
-      .def("get_service_mmio", &Accelerator::getService<services::MMIO>,
-           py::return_value_policy::reference_internal);
+      .def(
+          "sysinfo",
+          [](Accelerator &acc) {
+            return acc.getService<services::SysInfo>({});
+          },
+          py::return_value_policy::reference_internal)
+      .def(
+          "get_service_mmio",
+          [](Accelerator &acc) { return acc.getService<services::MMIO>({}); },
+          py::return_value_policy::reference_internal);
 
   py::class_<Manifest>(m, "Manifest")
       .def(py::init<std::string>())

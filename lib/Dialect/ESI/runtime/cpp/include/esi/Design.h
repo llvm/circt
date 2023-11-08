@@ -36,11 +36,28 @@ namespace esi {
 // Forward declarations.
 class Instance;
 
+class ChannelPort {};
+
+class BundlePort {
+  friend class services::Service;
+
+public:
+  BundlePort(AppID id, std::map<std::string, ChannelPort *> channels);
+  bool isConnected() const;
+
+private:
+  AppID _id;
+  std::map<std::string, ChannelPort *> _channels;
+};
+
 class Design {
 public:
   Design(std::optional<ModuleInfo> info,
-         std::vector<std::unique_ptr<Instance>> children)
-      : _info(info), _children(std::move(children)) {}
+         std::vector<std::unique_ptr<Instance>> children,
+         std::vector<services::Service *> services,
+         std::vector<BundlePort> ports)
+      : _info(info), _children(std::move(children)), _services(services),
+        _ports(ports) {}
 
   std::optional<ModuleInfo> info() const { return _info; }
   const std::vector<std::unique_ptr<Instance>> &children() const {
@@ -50,6 +67,8 @@ public:
 protected:
   const std::optional<ModuleInfo> _info;
   const std::vector<std::unique_ptr<Instance>> _children;
+  const std::vector<services::Service *> _services;
+  const std::vector<BundlePort> _ports;
 };
 
 class Instance : public Design {
@@ -58,8 +77,10 @@ public:
   Instance(const Instance &) = delete;
   ~Instance() = default;
   Instance(AppID id, std::optional<ModuleInfo> info,
-           std::vector<std::unique_ptr<Instance>> children)
-      : Design(info, std::move(children)), _id(id) {}
+           std::vector<std::unique_ptr<Instance>> children,
+           std::vector<services::Service *> services,
+           std::vector<BundlePort> ports)
+      : Design(info, std::move(children), services, ports), _id(id) {}
 
   const AppID id() const { return _id; }
 

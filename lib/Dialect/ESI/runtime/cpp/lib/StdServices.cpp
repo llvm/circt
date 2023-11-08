@@ -23,6 +23,8 @@
 using namespace esi;
 using namespace esi::services;
 
+std::string SysInfo::getServiceSymbol() const { return "__builtin_SysInfo"; }
+
 // Allocate 10MB for the uncompressed manifest. This should be plenty.
 constexpr uint32_t MAX_MANIFEST_SIZE = 10 << 20;
 /// Get the compressed manifest, uncompress, and return it.
@@ -37,6 +39,8 @@ std::string SysInfo::jsonManifest() const {
                              std::to_string(rc));
   return std::string(reinterpret_cast<char *>(dst.data()), dstSize);
 }
+
+std::string MMIO::getServiceSymbol() const { return "__builtin_MMIO"; }
 
 MMIOSysInfo::MMIOSysInfo(const MMIO *mmio) : mmio(mmio) {}
 

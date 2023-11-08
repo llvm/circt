@@ -58,7 +58,10 @@ public:
   static std::unique_ptr<Accelerator> connect(std::string connectionString);
 
 protected:
-  virtual Service *createService(Service::Type service) override;
+  virtual Service *
+  createService(Service::Type service, AppIDPath idPath,
+                const services::ServiceImplDetails &details,
+                const services::HWClientDetails &clients) override;
 
 private:
   struct Impl;

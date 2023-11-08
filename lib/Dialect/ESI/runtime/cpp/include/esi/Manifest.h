@@ -19,10 +19,12 @@
 #define ESI_MANIFEST_H
 
 #include <any>
+#include <assert.h>
 #include <cstdint>
 #include <map>
 #include <memory>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -35,8 +37,14 @@ namespace esi {
 struct AppID {
   const std::string name;
   const std::optional<uint32_t> idx;
+
+  bool operator==(const AppID &other) const {
+    return name == other.name && idx == other.idx;
+  }
+  bool operator!=(const AppID &other) const { return !(*this == other); }
 };
 using AppIDPath = std::vector<AppID>;
+bool operator<(const AppIDPath &a, const AppIDPath &b);
 
 struct ModuleInfo {
   const std::optional<std::string> name;

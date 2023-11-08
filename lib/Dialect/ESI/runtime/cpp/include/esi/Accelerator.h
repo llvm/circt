@@ -21,6 +21,9 @@
 #ifndef ESI_ACCELERATOR_H
 #define ESI_ACCELERATOR_H
 
+#include "esi/Manifest.h"
+
+#include <any>
 #include <cstdint>
 #include <functional>
 #include <map>
@@ -36,14 +39,48 @@ constexpr uint32_t MagicNumberHi = 0x207D98E5;
 constexpr uint32_t VersionNumberOffset = MagicNumOffset + 8;
 constexpr uint32_t ExpectedVersionNumber = 0;
 
+class ChannelPort;
+
 namespace services {
+
+struct ServicePortDesc {
+  std::string name;
+  std::string portName;
+};
+
+struct HWClientDetail {
+  AppIDPath path;
+  ServicePortDesc port;
+  std::map<std::string, std::any> implOptions;
+};
+using HWClientDetails = std::vector<HWClientDetail>;
+using ServiceImplDetails = std::map<std::string, std::any>;
+
 /// Parent class of all APIs modeled as 'services'. May or may not map to a
 /// hardware side 'service'.
 class Service {
 public:
   using Type = const std::type_info &;
   virtual ~Service() = default;
+
+  virtual std::string getServiceSymbol() const = 0;
+  virtual std::map<std::string, ChannelPort *> requestChannelsFor(AppIDPath) {
+    assert(false);
+  };
 };
+
+class CustomService : public Service {
+public:
+  CustomService(AppIDPath idPath, const services::ServiceImplDetails &details,
+                const services::HWClientDetails &clients);
+  virtual ~CustomService() = default;
+
+  virtual std::string getServiceSymbol() const { return _serviceSymbol; }
+
+private:
+  std::string _serviceSymbol;
+};
+
 } // namespace services
 
 /// An ESI accelerator system.
@@ -51,28 +88,36 @@ class Accelerator {
 public:
   virtual ~Accelerator() = default;
 
+  using Service = services::Service;
   /// Get a typed reference to a particular service type. Caller does *not* take
   /// ownership of the returned pointer -- the Accelerator object owns it.
   /// Pointer lifetime ends with the Accelerator lifetime.
   template <typename ServiceClass>
-  ServiceClass *getService() {
-    return dynamic_cast<ServiceClass *>(getServiceImpl(typeid(ServiceClass)));
+  ServiceClass *getService(AppIDPath id = {},
+                           services::ServiceImplDetails details = {},
+                           services::HWClientDetails clients = {}) {
+    return dynamic_cast<ServiceClass *>(
+        getService(typeid(ServiceClass), id, details, clients));
   }
+  /// Calls `createService` and caches the result. Subclasses can override if
+  /// they want to use their own caching mechanism.
+  virtual Service *getService(Service::Type service, AppIDPath id = {},
+                              services::ServiceImplDetails details = {},
+                              services::HWClientDetails clients = {});
 
 protected:
-  using Service = services::Service;
   /// Called by `getServiceImpl` exclusively. It wraps the pointer returned by
   /// this in a unique_ptr and caches it. Separate this from the
   /// wrapping/caching since wrapping/caching is an implementation detail.
-  virtual Service *createService(Service::Type service) = 0;
-  /// Calls `createService` and caches the result. Subclasses can override if
-  /// they want to use their own caching mechanism.
-  virtual Service *getServiceImpl(Service::Type service);
+  virtual Service *createService(Service::Type service, AppIDPath idPath,
+                                 const services::ServiceImplDetails &details,
+                                 const services::HWClientDetails &clients) = 0;
 
 private:
   /// Cache services via a unique_ptr so they get free'd automatically when
   /// Accelerator objects get deconstructed.
-  std::map<const std::type_info *, std::unique_ptr<Service>> serviceCache;
+  using ServiceCacheKey = std::tuple<const std::type_info *, AppIDPath>;
+  std::map<ServiceCacheKey, std::unique_ptr<Service>> serviceCache;
 };
 
 namespace registry {

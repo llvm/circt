@@ -8,8 +8,7 @@
 //
 // DO NOT EDIT!
 // This file is distributed as part of an ESI package. The source for this file
-// should always be modified within CIRCT
-// (lib/dialect/ESI/runtime/cpp/lib/backends/Cosim.cpp).
+// should always be modified within CIRCT (lib/dialect/ESI/runtime/cpp/).
 //
 //===----------------------------------------------------------------------===//
 
@@ -25,6 +24,10 @@ using namespace esi;
 namespace esi {
 namespace internal {
 
+// While building the design, keep around a map of active services indexed by
+// the service name.
+using ServiceTable = std::map<std::string, services::Service *>;
+
 // This is a proxy class to the manifest JSON. It is used to avoid having to
 // include the JSON parser in the header. Forward references don't work since
 // nlohmann::json is a rather complex template.
@@ -38,17 +41,30 @@ public:
   auto at(const std::string &key) const { return manifestJson.at(key); }
 
   // Get the module info (if any) for the module instance in 'json'.
-  std::optional<ModuleInfo> getModInfo(const nlohmann::json &json) const;
+  std::optional<ModuleInfo> getModInfo(const nlohmann::json &) const;
 
-  // Build the 'Instance' recursively for the instance in 'json'.
-  Instance getInstance(const nlohmann::json &json) const;
+  services::Service *getService(AppIDPath idPath, Accelerator &,
+                                const nlohmann::json &,
+                                ServiceTable &activeServices) const;
+  void getServices(AppIDPath idPath, Accelerator &, const nlohmann::json &,
+                   std::vector<services::Service *> &outServices,
+                   ServiceTable &activeServices) const;
 
-  /// Build the set of child instances for the module instance in 'json'.
+  std::vector<BundlePort> getBundlePorts(AppIDPath idPath,
+                                         const ServiceTable &activeServices,
+                                         const nlohmann::json &json) const;
+
+  /// Build the set of child instances (recursively) for the module instance in
+  /// 'json'.
   std::vector<std::unique_ptr<Instance>>
-  getChildInstances(const nlohmann::json &json) const;
-
-  /// Build a dynamic API for the Accelerator connection 'acc' based on the
-  /// manifest stored herein.
+  getChildInstances(AppIDPath idPath, Accelerator &acc,
+                    ServiceTable activeServices,
+                    const nlohmann::json &json) const;
+  std::unique_ptr<Instance> getChildInstance(AppIDPath idPath, Accelerator &acc,
+                                             ServiceTable activeServices,
+                                             const nlohmann::json &json) const;
+  /// Build a dynamic API for the Accelerator connection 'acc'
+  /// based on the manifest stored herein.
   std::unique_ptr<Design> buildDesign(Accelerator &acc) const;
 
 private:
@@ -71,23 +87,56 @@ static AppID parseID(const nlohmann::json &jsonID) {
   return AppID{jsonID.at("name").get<std::string>(), idx};
 }
 
-static ModuleInfo parseModuleInfo(const nlohmann::json &mod) {
-  auto getAny = [](const nlohmann::json &value) -> std::any {
-    if (value.is_string())
-      return value.get<std::string>();
-    else if (value.is_number_integer())
-      return value.get<int64_t>();
-    else if (value.is_number_unsigned())
-      return value.get<uint64_t>();
-    else if (value.is_number_float())
-      return value.get<double>();
-    else if (value.is_boolean())
-      return value.get<bool>();
-    else if (value.is_null())
-      return value.get<std::nullptr_t>();
-    else
-      throw std::runtime_error("Unknown type in manifest: " + value.dump(2));
+static AppIDPath parseIDPath(const nlohmann::json &jsonIDPath) {
+  AppIDPath ret;
+  for (auto &id : jsonIDPath)
+    ret.push_back(parseID(id));
+  return ret;
+}
+
+static services::ServicePortDesc
+parseServicePort(const nlohmann::json &jsonPort) {
+  return services::ServicePortDesc{jsonPort.at("outer_sym").get<std::string>(),
+                                   jsonPort.at("inner").get<std::string>()};
+}
+
+static std::any getAny(const nlohmann::json &value) {
+  auto getObject = [](const nlohmann::json &json) {
+    std::map<std::string, std::any> ret;
+    for (auto &e : json.items())
+      ret[e.key()] = getAny(e.value());
+    return ret;
   };
+
+  auto getArray = [](const nlohmann::json &json) {
+    std::vector<std::any> ret;
+    for (auto &e : json)
+      ret.push_back(getAny(e));
+    return ret;
+  };
+
+  if (value.is_string())
+    return value.get<std::string>();
+  else if (value.is_number_integer())
+    return value.get<int64_t>();
+  else if (value.is_number_unsigned())
+    return value.get<uint64_t>();
+  else if (value.is_number_float())
+    return value.get<double>();
+  else if (value.is_boolean())
+    return value.get<bool>();
+  else if (value.is_null())
+    return value.get<std::nullptr_t>();
+  else if (value.is_object())
+    return getObject(value);
+  else if (value.is_array())
+    return getArray(value);
+  else
+    throw std::runtime_error("Unknown type in manifest: " + value.dump(2));
+}
+
+static ModuleInfo parseModuleInfo(const nlohmann::json &mod) {
+
   std::map<std::string, std::any> extras;
   for (auto &extra : mod.items())
     if (extra.key() != "name" && extra.key() != "summary" &&
@@ -121,9 +170,15 @@ internal::ManifestProxy::ManifestProxy(const std::string &manifestStr,
 std::unique_ptr<Design>
 internal::ManifestProxy::buildDesign(Accelerator &acc) const {
   auto designJson = manifestJson.at("design");
-  std::vector<std::unique_ptr<Instance>> children =
-      getChildInstances(designJson);
-  return std::make_unique<Design>(getModInfo(designJson), std::move(children));
+
+  ServiceTable activeSvcs;
+  std::vector<services::Service *> services;
+  getServices({}, acc, designJson, services, activeSvcs);
+
+  return std::make_unique<Design>(
+      getModInfo(designJson),
+      getChildInstances({}, acc, activeSvcs, designJson), services,
+      getBundlePorts({}, activeSvcs, designJson));
 }
 
 std::optional<ModuleInfo>
@@ -138,15 +193,105 @@ internal::ManifestProxy::getModInfo(const nlohmann::json &json) const {
 }
 
 std::vector<std::unique_ptr<Instance>>
-internal::ManifestProxy::getChildInstances(const nlohmann::json &json) const {
+internal::ManifestProxy::getChildInstances(
+    AppIDPath idPath, Accelerator &acc, ServiceTable activeServices,
+    const nlohmann::json &instJson) const {
   std::vector<std::unique_ptr<Instance>> ret;
-  auto childrenIter = json.find("children");
-  if (childrenIter == json.end())
+  auto childrenIter = instJson.find("children");
+  if (childrenIter == instJson.end())
     return ret;
-  for (auto &child : childrenIter.value()) {
-    auto children = getChildInstances(child);
-    ret.emplace_back(std::make_unique<Instance>(
-        parseID(child.at("app_id")), getModInfo(child), std::move(children)));
+  for (auto &child : childrenIter.value())
+    ret.emplace_back(getChildInstance(idPath, acc, activeServices, child));
+  return ret;
+}
+std::unique_ptr<Instance>
+internal::ManifestProxy::getChildInstance(AppIDPath idPath, Accelerator &acc,
+                                          ServiceTable activeServices,
+                                          const nlohmann::json &child) const {
+  AppID childID = parseID(child.at("app_id"));
+  idPath.push_back(childID);
+
+  std::vector<services::Service *> services;
+  getServices(idPath, acc, child, services, activeServices);
+
+  auto children = getChildInstances(idPath, acc, activeServices, child);
+  return std::make_unique<Instance>(
+      parseID(child.at("app_id")), getModInfo(child), std::move(children),
+      services, getBundlePorts(idPath, activeServices, child));
+}
+
+services::Service *
+internal::ManifestProxy::getService(AppIDPath idPath, Accelerator &acc,
+                                    const nlohmann::json &svcJson,
+                                    ServiceTable &activeServices) const {
+
+  AppID id = parseID(svcJson.at("appID"));
+  idPath.push_back(id);
+
+  services::HWClientDetails clientDetails;
+  for (auto &client : svcJson.at("client_details")) {
+    services::HWClientDetail clientDetail;
+    for (auto &detail : client.items()) {
+      if (detail.key() == "relAppIDPath")
+        clientDetail.path = parseIDPath(detail.value());
+      else if (detail.key() == "port")
+        clientDetail.port = parseServicePort(detail.value());
+      else
+        clientDetail.implOptions[detail.key()] = getAny(detail.value());
+    }
+  }
+
+  services::ServiceImplDetails svcDetails;
+  for (auto &detail : svcJson.items())
+    if (detail.key() != "appID" && detail.key() != "client_details")
+      svcDetails[detail.key()] = getAny(detail.value());
+
+  auto svc = acc.getService<services::CustomService>(idPath, svcDetails,
+                                                     clientDetails);
+  if (!svc) {
+    throw std::runtime_error("Could not create service for ");
+  }
+  activeServices[svc->getServiceSymbol()] = svc;
+  return svc;
+}
+
+void internal::ManifestProxy::getServices(AppIDPath idPath, Accelerator &acc,
+                                          const nlohmann::json &svcsJson,
+                                          std::vector<services::Service *> &ret,
+                                          ServiceTable &activeServices) const {
+
+  auto contentsIter = svcsJson.find("contents");
+  if (contentsIter == svcsJson.end())
+    return;
+
+  for (auto &content : contentsIter.value())
+    if (content.at("class") == "service")
+      ret.emplace_back(getService(idPath, acc, content, activeServices));
+}
+
+std::vector<BundlePort>
+internal::ManifestProxy::getBundlePorts(AppIDPath idPath,
+                                        const ServiceTable &activeServices,
+                                        const nlohmann::json &instJson) const {
+
+  std::vector<BundlePort> ret;
+  auto contentsIter = instJson.find("contents");
+  if (contentsIter == instJson.end())
+    return ret;
+
+  for (auto &content : contentsIter.value()) {
+    if (content.at("class") != "client_port")
+      continue;
+
+    services::ServicePortDesc port =
+        parseServicePort(content.at("servicePort"));
+    auto f = activeServices.find(port.name);
+    if (f == activeServices.end())
+      throw std::runtime_error("Could not find service '" + port.name + "'");
+
+    idPath.push_back(parseID(content.at("appID")));
+    ret.emplace_back(idPath.back(), f->second->requestChannelsFor(idPath));
+    idPath.pop_back();
   }
   return ret;
 }
@@ -223,3 +368,19 @@ std::ostream &operator<<(std::ostream &os, const ModuleInfo &m) {
   }
   return os;
 }
+
+namespace esi {
+bool operator<(const AppID &a, const AppID &b) {
+  if (a.name != b.name)
+    return a.name < b.name;
+  return a.idx < b.idx;
+}
+bool operator<(const AppIDPath &a, const AppIDPath &b) {
+  if (a.size() != b.size())
+    return a.size() < b.size();
+  for (size_t i = 0, e = a.size(); i < e; ++i)
+    if (a[i] != b[i])
+      return a[i] < b[i];
+  return false;
+}
+} // namespace esi

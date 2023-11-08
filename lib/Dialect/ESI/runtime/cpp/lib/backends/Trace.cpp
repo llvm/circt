@@ -87,6 +87,17 @@ private:
 };
 } // namespace
 
+namespace {
+class TraceCustomService : public CustomService {
+public:
+  using CustomService::CustomService;
+
+  virtual std::map<std::string, ChannelPort *> requestChannelsFor(AppIDPath) {
+    return {};
+  }
+};
+} // namespace
+
 struct esi::backends::trace::TraceAccelerator::Impl {
   Impl(Mode mode, std::filesystem::path manifestJson,
        std::filesystem::path traceFile)
@@ -96,7 +107,9 @@ struct esi::backends::trace::TraceAccelerator::Impl {
                           "' does not exist");
   }
 
-  Service *createService(Service::Type svcType);
+  Service *createService(Service::Type svcType, AppIDPath idPath,
+                         const services::ServiceImplDetails &details,
+                         const services::HWClientDetails &clients);
 
 private:
   Mode mode;
@@ -104,9 +117,14 @@ private:
   std::filesystem::path traceFile;
 };
 
-Service *TraceAccelerator::Impl::createService(Service::Type svcType) {
+Service *TraceAccelerator::Impl::createService(
+    Service::Type svcType, AppIDPath idPath,
+    const services::ServiceImplDetails &details,
+    const services::HWClientDetails &clients) {
   if (svcType == typeid(SysInfo))
     return new TraceSysInfo(manifestJson);
+  if (svcType == typeid(CustomService))
+    return new TraceCustomService(idPath, details, clients);
   return nullptr;
 }
 
@@ -115,9 +133,11 @@ TraceAccelerator::TraceAccelerator(Mode mode,
                                    std::filesystem::path traceFile) {
   impl = std::make_unique<Impl>(mode, manifestJson, traceFile);
 }
-
-Service *TraceAccelerator::createService(Service::Type svcType) {
-  return impl->createService(svcType);
+Service *
+TraceAccelerator::createService(Service::Type svcType, AppIDPath idPath,
+                                const services::ServiceImplDetails &details,
+                                const services::HWClientDetails &clients) {
+  return impl->createService(svcType, idPath, details, clients);
 }
 
 REGISTER_ACCELERATOR("trace", TraceAccelerator);
