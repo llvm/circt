@@ -71,7 +71,9 @@ LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp, OpBuilder funcBuilder) {
   assert(splitBound != 0 && "Cannot split functions into functions of size 0");
   int numOps =
       funcOp->getRegion(0).front().getOperations().size(); // TODO neaten this!
-  int numBlocks = ceil(numOps / splitBound);
+  if (numOps < splitBound)
+    return success();
+  int numBlocks = ceil((float)numOps / splitBound);
   OpBuilder opBuilder(funcOp->getContext());
   std::vector<Block *> blocks;
   assert(funcOp->getNumRegions() == 1);
