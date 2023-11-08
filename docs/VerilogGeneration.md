@@ -61,7 +61,7 @@ this case, what length of lines the emitter should aim for (e.g. 80 columns
 wide, 120 wide, etc), and whether the emitter is allowed to use `automatic
 logic` declarations in nested blocks or not.
 
-The defaults in `LoweringOptions` are set up to generate aethetically pleasing
+The defaults in `LoweringOptions` are set up to generate aesthetically pleasing
 output, and to use the modern features of SystemVerilog where possible.  Client
 tools and frontends can change these, e.g. if they need to generate standard
 Verilog for older tools.
