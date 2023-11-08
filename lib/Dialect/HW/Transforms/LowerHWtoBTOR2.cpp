@@ -44,31 +44,31 @@ private:
   // instructions to reference the given sorts (key: width, value: LID)
   DenseMap<size_t, size_t> sortToLIDMap;
   // Keeps track of {constant, width} -> LID mappings
-  // This is used in order to avoid duplicating constant declarations 
-  // in the output btor2. It is also useful when tracking 
+  // This is used in order to avoid duplicating constant declarations
+  // in the output btor2. It is also useful when tracking
   // constants declarations that aren't tied to MLIR ops.
-  DenseMap<std::pair<int64_t, size_t>, size_t> constToLIDMap; 
+  DenseMap<std::pair<int64_t, size_t>, size_t> constToLIDMap;
   // Keeps track of the most recent update line for each operation
   // This allows for operations to be used throughout the btor file
   // with their most recent expression. Btor uses unique identifiers for each
   // instruction, so we need to have an association between those and MLIR Ops.
-  DenseMap<Operation *, size_t> opLIDMap; 
+  DenseMap<Operation *, size_t> opLIDMap;
   // Keeps track of operation aliases. This is used for wire inlining, as
-  // btor2 does not have the concept of a wire. This means that wires in 
-  // hw will simply create an alias for the operation that will point to 
+  // btor2 does not have the concept of a wire. This means that wires in
+  // hw will simply create an alias for the operation that will point to
   // the same LID as the original op.
   // key: alias, value: original op
   DenseMap<Operation *, Operation *> opAliasMap;
   // Stores the LID of the associated input.
   // This holds a similar function as the opLIDMap but keeps
-  // track of block argument index -> LID mappings                    
-  DenseMap<size_t, size_t> inputLIDs; 
+  // track of block argument index -> LID mappings
+  DenseMap<size_t, size_t> inputLIDs;
   // Stores all of the register declaration ops.
   // This allows for the emission of transition arcs for the regs
   // to be deferred to the end of the pass.
   // This is necessary, as we need to wait for the `next` operation to
   // have been converted to btor2 before we can emit the transition.
-  SmallVector<Operation *> regOps; 
+  SmallVector<Operation *> regOps;
 
   // Set of often reused strings in btor2 emission (to avoid typos and enable
   // auto-complete)
