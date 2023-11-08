@@ -52,7 +52,7 @@ std::unique_ptr<mlir::Pass> createMuxToControlFlowPass();
 std::unique_ptr<mlir::Pass>
 createPrintStateInfoPass(llvm::StringRef stateFile = "");
 std::unique_ptr<mlir::Pass> createSimplifyVariadicOpsPass();
-std::unique_ptr<mlir::Pass> createSplitFuncsPass();
+std::unique_ptr<mlir::Pass> createSplitFuncsPass(unsigned splitBound = 20000);
 std::unique_ptr<mlir::Pass> createSplitLoopsPass();
 std::unique_ptr<mlir::Pass> createStripSVPass();
 

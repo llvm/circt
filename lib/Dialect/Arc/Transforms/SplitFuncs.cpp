@@ -12,10 +12,15 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/TypeRange.h"
+#include "mlir/IR/ValueRange.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/RegionUtils.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SparseBitVector.h"
+#include "llvm/Support/Casting.h"
 #include "llvm/Support/Debug.h"
+#include <string>
 
 #define DEBUG_TYPE "arc-split-funcs"
 
@@ -43,109 +48,127 @@ struct SplitFuncsPass : public arc::impl::SplitFuncsBase<SplitFuncsPass> {
   SplitFuncsPass(const SplitFuncsPass &pass) : SplitFuncsPass() {}
 
   void runOnOperation() override;
-  LogicalResult lowerModel(ModelOp modelOp);
-  LogicalResult lowerFunc(FuncOp funcOp);
+  LogicalResult lowerFunc(FuncOp funcOp, OpBuilder funcBuilder);
 
   SymbolTable *symbolTable;
-  int splitBound;
 
   Statistic numFuncsCreated{this, "funcs-created",
                             "Number of new functions created"};
 
-  // using SplitFuncsBase::funcSizeThreshold;
+  using SplitFuncsBase::splitBound;
 };
 } // namespace
 
 void SplitFuncsPass::runOnOperation() {
-  // symbolTable = &getAnalysis<SymbolTable>();
-  lowerFunc(getOperation());
-  // for (auto op : getOperation().getOps<ModelOp>()) {
-  //   if (failed(lowerModel(op)))
-  //     return signalPassFailure();
-  // }
+  symbolTable = &getAnalysis<SymbolTable>();
+  OpBuilder funcBuilder(getOperation().getBodyRegion());
+  for (auto op : getOperation().getOps<FuncOp>())
+    if (failed(lowerFunc(op, funcBuilder)))
+      return signalPassFailure();
 }
 
-LogicalResult SplitFuncsPass::lowerModel(ModelOp modelOp) {
-  for (auto op : modelOp.getOps<FuncOp>()) {
-    if (failed(lowerFunc(op)))
-      return failure();
-  }
-}
-
-LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp) {
-  int funcSizeThreshold = 2;
+LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp, OpBuilder funcBuilder) {
+  assert(splitBound != 0 && "Cannot split functions into functions of size 0");
   int numOps =
       funcOp->getRegion(0).front().getOperations().size(); // TODO neaten this!
-  int numBlocks = ceil(numOps / funcSizeThreshold);
+  int numBlocks = ceil(numOps / splitBound);
   OpBuilder opBuilder(funcOp->getContext());
   std::vector<Block *> blocks;
   assert(funcOp->getNumRegions() == 1);
-  blocks.push_back(&(funcOp->getRegion(0).front()));
+  Block *frontBlock = &(funcOp.getBody().front());
+  blocks.push_back(frontBlock);
   for (int i = 0; i < numBlocks - 1; i++) {
-    auto *block = opBuilder.createBlock(&funcOp->getRegion(0));
+    std::vector<Location> locs;
+    for (auto t : frontBlock->getArgumentTypes()) {
+      locs.push_back(funcOp.getLoc());
+    }
+    auto *block = opBuilder.createBlock(&(funcOp.getBody()), {},
+                                        frontBlock->getArgumentTypes(), locs);
     blocks.push_back(block);
   }
+
   int numOpsInBlock = 0;
   std::vector<Block *>::iterator blockIter = blocks.begin();
-  for (auto &op : llvm::make_early_inc_range(funcOp.getOps())) {
-    if (numOpsInBlock >= funcSizeThreshold) {
+  for (auto &op : llvm::make_early_inc_range(*frontBlock)) {
+    if (numOpsInBlock >= splitBound) {
       blockIter++;
       numOpsInBlock = 0;
       opBuilder.setInsertionPointToEnd(*blockIter);
     }
     numOpsInBlock++;
     // Don't bother moving ops to the original block
-    if (*blockIter == &(funcOp->getRegion(0).front())) {
+    if (*blockIter == (frontBlock))
       continue;
-    }
     // Remove op from original block and insert in new block
     op.remove();
-    // opBuilder.insert(&op);
     (*blockIter)->push_back(&op);
   }
 
-  // Create funcs to contain blocks
+  DenseMap<Value, Value> argMap;
+  // Move function arguments to the block that will stay in the function
+  for (int argIndex = 0; argIndex < frontBlock->getNumArguments(); argIndex++) {
+    auto oldArg = frontBlock->getArgument(argIndex);
+    auto newArg = blocks.back()->getArgument(argIndex);
+    replaceAllUsesInRegionWith(oldArg, newArg, funcOp.getBody());
+    argMap.insert(std::pair(oldArg, newArg));
+  }
   Liveness liveness(funcOp);
-  Block *currentBlock = blocks[0];
-  Block *previousBlock;
-  auto liveOut = liveness.getLiveOut(currentBlock);
-  auto liveIn = liveOut;
-  for (int i = 1; i < blocks.size(); i++) {
-    previousBlock = currentBlock;
+  std::vector<Operation *> funcs;
+  auto liveOut = liveness.getLiveIn(blocks[0]);
+  Liveness::ValueSetT liveIn;
+  auto argTypes = blocks.back()->getArgumentTypes();
+  auto args = blocks.back()->getArguments();
+  for (int i = 0; i < blocks.size() - 1; i++) {
     liveIn = liveOut;
-    currentBlock = blocks[i];
+    Block *currentBlock = blocks[i];
     liveOut = liveness.getLiveOut(currentBlock);
-    std::vector<Type> inTypes;
-    llvm::for_each(liveIn,
-                   [&inTypes](auto el) { inTypes.push_back(el.getType()); });
     std::vector<Type> outTypes;
-    llvm::for_each(liveOut,
-                   [&outTypes](auto el) { outTypes.push_back(el.getType()); });
-    auto newFunc = opBuilder.create<FuncOp>(
-        funcOp->getLoc(), funcOp.getName(),
-        opBuilder.getFunctionType({inTypes}, {outTypes}));
-    // TODO: can do without temp?
-    auto *tempBlock = opBuilder.createBlock(&funcOp.getRegion());
-    currentBlock->moveBefore(tempBlock);
-    tempBlock->erase();
-    std::vector<Value> valVec;
+    std::vector<Value> outValues;
+    llvm::for_each(liveOut, [&outTypes, &outValues, &argMap](auto el) {
+      auto argLookup = argMap.find(el);
+      if (argLookup != argMap.end()) {
+        outValues.push_back(argLookup->second);
+        outTypes.push_back(argLookup->second.getType());
+      } else {
+        outValues.push_back(el);
+        outTypes.push_back(el.getType());
+      }
+    });
+    opBuilder.setInsertionPoint(funcOp);
+    SmallString<64> funcName;
+    funcName.append(funcOp.getName());
+    funcName.append(std::to_string(i));
+    auto newFunc = funcBuilder.create<FuncOp>(
+        funcOp->getLoc(), funcName,
+        opBuilder.getFunctionType(argTypes, outTypes));
+    symbolTable->insert(newFunc);
+    auto *funcBlock = newFunc.addEntryBlock();
+    for (auto &op : make_early_inc_range(currentBlock->getOperations())) {
+      op.remove();
+      funcBlock->push_back(&op);
+    }
+    funcs.push_back(newFunc);
+    currentBlock->erase();
+    currentBlock = funcBlock;
     int j = 0;
-    for (auto el : liveOut) {
-      valVec.push_back(el);
-      replaceAllUsesInRegionWith(el, funcOp.getArgument(j++),
+    for (auto el : args) {
+      replaceAllUsesInRegionWith(el, newFunc.getArgument(j++),
                                  newFunc.getRegion());
     }
-    ValueRange vals(valVec);
     opBuilder.setInsertionPointToEnd(currentBlock);
-    Operation *returnOp = opBuilder.create<ReturnOp>(funcOp->getLoc(), vals);
-    opBuilder.setInsertionPointToStart(currentBlock);
-    auto prevReturn = *previousBlock->getOps<ReturnOp>().begin();
+    opBuilder.create<ReturnOp>(funcOp->getLoc(), ValueRange(outValues));
+    opBuilder.setInsertionPointToStart(blocks[i + 1]);
     Operation *callOp = opBuilder.create<func::CallOp>(
-        funcOp->getLoc(), inTypes, funcOp.getName(), vals);
+        funcOp->getLoc(), outTypes, funcName, args);
+    auto callResults = callOp->getResults();
+    for (int k = 0; k < outValues.size(); k++) {
+      replaceAllUsesInRegionWith(outValues[k], callResults[k],
+                                 funcOp.getBody());
+    }
   }
   return success();
 }
 
-std::unique_ptr<Pass> arc::createSplitFuncsPass() {
+std::unique_ptr<Pass> arc::createSplitFuncsPass(unsigned splitBound) {
   return std::make_unique<SplitFuncsPass>();
 }
