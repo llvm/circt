@@ -6,7 +6,7 @@ import zlib
 
 import loopback as test
 
-rpc = test.LoopbackTester(sys.argv[2], sys.argv[1])
+rpc = test.LoopbackTester(sys.argv[3], sys.argv[2])
 print(rpc.cosim.list().wait())
 rpc.test_list()
 rpc.test_3bytes(5)

@@ -2,9 +2,8 @@ import esi
 import os
 import sys
 
-conn = f"{sys.argv[1]}:{sys.argv[2]}"
+acc = esi.Accelerator(sys.argv[1], sys.argv[2])
 
-acc = esi.Accelerator("cosim", conn)
 mmio = acc.get_service_mmio()
 
 r = mmio.read(40)

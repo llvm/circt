@@ -220,7 +220,8 @@ class CosimTestRunner:
             "PYTHONPATH"] + f":{os.path.dirname(__file__)}"
         # Run the test script.
         if self.exec:
-          args = [f"localhost:{port}", self.schema] + self.exec_args.split(" ")
+          args = ["cosim", f"localhost:{port}", self.schema
+                 ] + self.exec_args.split(" ")
           if self.file.endswith(".py"):
             cmd = [sys.executable, "-u", self.file] + args
           else:

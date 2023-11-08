@@ -4,7 +4,7 @@ import esi_cosim
 import capnp
 import sys
 
-c = esi_cosim.LowLevel(sys.argv[2], sys.argv[1])
+c = esi_cosim.LowLevel(sys.argv[3], sys.argv[2])
 r = c.low.readMMIO(40).wait()
 print(f"data resp: 0x{r.data:x}")
 
