@@ -304,7 +304,7 @@ void BlackBoxReaderPass::runOnOperation() {
                                    /*excludeFromFileList=*/true));
   }
 
-  // If nothing has changed we can preseve the analysis.
+  // If nothing has changed we can preserve the analysis.
   if (!anythingChanged)
     markAllAnalysesPreserved();
   markAnalysesPreserved<InstanceGraph>();
