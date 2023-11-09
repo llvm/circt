@@ -335,7 +335,7 @@ void FirMemLowering::lowerMemoriesInModule(
         continue;
       addInput(port.getAddress());
       addInput(valueOrOne(port.getEnable()));
-      addInput(port.getClock());
+      addInput(port.getClk());
       addOutput(port.getData());
     }
 
@@ -346,7 +346,7 @@ void FirMemLowering::lowerMemoriesInModule(
         continue;
       addInput(port.getAddress());
       addInput(valueOrOne(port.getEnable()));
-      addInput(port.getClock());
+      addInput(port.getClk());
       addInput(port.getMode());
       addInput(port.getWriteData());
       addOutput(port.getReadData());
@@ -361,7 +361,7 @@ void FirMemLowering::lowerMemoriesInModule(
         continue;
       addInput(port.getAddress());
       addInput(valueOrOne(port.getEnable()));
-      addInput(port.getClock());
+      addInput(port.getClk());
       addInput(port.getData());
       if (config->maskBits > 1)
         addInput(valueOrOne(port.getMask(), config->maskBits));

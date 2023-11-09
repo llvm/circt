@@ -50,14 +50,14 @@ int main(int argc, const char *argv[]) {
     else if (cmd == "info")
       printInfo(std::cout, *acc);
     // TODO: add a command to print out the instance hierarchy.
-    else
+    else {
       std::cout << "Connection successful." << std::endl;
-
-    if (cmd.empty())
-      return 0;
-    std::cerr << "Unknown command: " << cmd << std::endl;
-    return 1;
-
+      if (!cmd.empty()) {
+        std::cerr << "Unknown command: " << cmd << std::endl;
+        return 1;
+      }
+    }
+    return 0;
   } catch (std::exception &e) {
     std::cerr << "Error: " << e.what() << std::endl;
     return -1;
@@ -75,4 +75,12 @@ void printInfo(std::ostream &os, Accelerator &acc) {
   os << std::endl;
   for (ModuleInfo mod : m.moduleInfos())
     os << mod << std::endl;
+
+  os << "********************************" << std::endl;
+  os << "* Type table" << std::endl;
+  os << "********************************" << std::endl;
+  os << std::endl;
+  size_t i = 0;
+  for (Type t : m.getTypeTable())
+    os << "  " << i++ << ": " << t.getID() << std::endl;
 }

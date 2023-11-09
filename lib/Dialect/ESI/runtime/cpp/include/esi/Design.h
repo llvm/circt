@@ -80,12 +80,12 @@ public:
            std::vector<std::unique_ptr<Instance>> children,
            std::vector<services::Service *> services,
            std::vector<BundlePort> ports)
-      : Design(info, std::move(children), services, ports), _id(id) {}
+      : Design(info, std::move(children), services, ports), id_(id) {}
 
-  const AppID id() const { return _id; }
+  const AppID id() const { return id_; }
 
 protected:
-  const AppID _id;
+  const AppID id_;
 };
 
 } // namespace esi
