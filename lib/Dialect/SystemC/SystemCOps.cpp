@@ -467,11 +467,6 @@ InstanceDeclOp::getReferencedModuleCached(const hw::HWSymbolCache *cache) {
   return topLevelModuleOp.lookupSymbol(getModuleName());
 }
 
-Operation *InstanceDeclOp::getReferencedModuleSlow() {
-  auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
-  return topLevelModuleOp.lookupSymbol(getModuleName());
-}
-
 LogicalResult
 InstanceDeclOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto *module =

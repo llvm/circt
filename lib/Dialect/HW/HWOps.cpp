@@ -1447,10 +1447,6 @@ std::optional<size_t> InstanceOp::getTargetResultIndex() {
   return std::nullopt;
 }
 
-Operation *InstanceOp::getReferencedModuleSlow() {
-  return getReferencedModuleCached(/*cache=*/nullptr);
-}
-
 LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   return instance_like_impl::verifyInstanceOfHWModule(
       *this, getModuleNameAttr(), getInputs(), getResultTypes(), getArgNames(),

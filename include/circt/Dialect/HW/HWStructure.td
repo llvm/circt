@@ -451,10 +451,6 @@ def InstanceOp : HWOp<"instance", [
       setResultNamesAttr(names);
     }
 
-    /// Lookup the module or extmodule for the symbol.  This returns null on
-    /// invalid IR.
-    Operation *getReferencedModuleSlow();
-
     /// Return the values for the port in port order.
     /// Note: The module ports may not be input, output ordered. This computes
     /// the port index to instance result/input Value mapping.

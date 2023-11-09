@@ -42,8 +42,11 @@ class HardwareDeclOp<string mnemonic, list <Trait> traits = []> :
 
 def InstanceOp : HardwareDeclOp<"instance", [
     DeclareOpInterfaceMethods<SymbolUserOpInterface>,
-    DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface, ["getModuleName"]>,
-    ]> {
+    DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface, [
+      "getModuleName",
+      "getReferencedModuleSlow"
+    ]>,
+  ]> {
   let summary = "Instantiate an instance of a module";
   let description = [{
     This represents an instance of a module.  The results are the modules inputs
@@ -597,7 +600,8 @@ def ObjectOp :  FIRRTLOp<"object", [
     DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface, [
       "getReferencedModuleName",
       "getReferencedModuleNameAttr",
-      "getReferencedModule"
+      "getReferencedModule",
+      "getReferencedModuleSlow"
     ]>,
     DeclareOpInterfaceMethods<OpAsmOpInterface, [
       "getAsmResultNames"
