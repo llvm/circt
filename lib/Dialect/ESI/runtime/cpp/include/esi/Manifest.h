@@ -18,6 +18,8 @@
 #ifndef ESI_MANIFEST_H
 #define ESI_MANIFEST_H
 
+#include "esi/Types.h"
+
 #include <any>
 #include <cstdint>
 #include <map>
@@ -67,6 +69,7 @@ class Design;
 /// accelerator.
 class Manifest {
 public:
+  Manifest(const Manifest &) = delete;
   Manifest(const std::string &jsonManifest);
   ~Manifest();
 
@@ -76,6 +79,9 @@ public:
 
   // Build a dynamic design hierarchy from the manifest.
   std::unique_ptr<Design> buildDesign(Accelerator &acc) const;
+
+  std::optional<std::reference_wrapper<const Type>> getType(Type::ID id) const;
+  const std::vector<std::reference_wrapper<const Type>> &getTypeTable() const;
 
 private:
   internal::ManifestProxy &manifest;
