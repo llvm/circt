@@ -18,23 +18,16 @@ extern "C" {
 #endif
 
 // NOLINTNEXTLINE(modernize-use-using)
-typedef struct FIRRTLBundleField {
-  MlirIdentifier name;
-  bool isFlip;
-  MlirType type;
-} FIRRTLBundleField;
-
-// NOLINTNEXTLINE(modernize-use-using)
 typedef enum FIRRTLConvention {
   FIRRTL_CONVENTION_INTERNAL,
   FIRRTL_CONVENTION_SCALARIZED,
 } FIRRTLConvention;
 
 // NOLINTNEXTLINE(modernize-use-using)
-typedef enum FIRRTLPortDir {
-  FIRRTL_PORT_DIR_INPUT,
-  FIRRTL_PORT_DIR_OUTPUT,
-} FIRRTLPortDir;
+typedef enum FIRRTLDirection {
+  FIRRTL_DIRECTION_IN,
+  FIRRTL_DIRECTION_OUT,
+} FIRRTLDirection;
 
 // NOLINTNEXTLINE(modernize-use-using)
 typedef enum FIRRTLNameKind {
@@ -64,6 +57,20 @@ typedef enum FIRRTLEventControl {
   FIRRTL_EVENT_CONTROL_AT_EDGE,
 } FIRRTLEventControl;
 
+// NOLINTNEXTLINE(modernize-use-using)
+typedef struct FIRRTLBundleField {
+  MlirIdentifier name;
+  bool isFlip;
+  MlirType type;
+} FIRRTLBundleField;
+
+// NOLINTNEXTLINE(modernize-use-using)
+typedef struct FIRRTLClassElement {
+  MlirIdentifier name;
+  MlirType type;
+  FIRRTLDirection direction;
+} FIRRTLClassElement;
+
 //===----------------------------------------------------------------------===//
 // Dialect API.
 //===----------------------------------------------------------------------===//
@@ -85,6 +92,18 @@ MLIR_CAPI_EXPORTED MlirType firrtlTypeGetVector(MlirContext ctx,
 MLIR_CAPI_EXPORTED MlirType firrtlTypeGetBundle(
     MlirContext ctx, size_t count, const FIRRTLBundleField *fields);
 
+MLIR_CAPI_EXPORTED MlirType firrtlTypeGetAnyRef(MlirContext ctx);
+MLIR_CAPI_EXPORTED MlirType firrtlTypeGetInteger(MlirContext ctx);
+MLIR_CAPI_EXPORTED MlirType firrtlTypeGetDouble(MlirContext ctx);
+MLIR_CAPI_EXPORTED MlirType firrtlTypeGetString(MlirContext ctx);
+MLIR_CAPI_EXPORTED MlirType firrtlTypeGetBoolean(MlirContext ctx);
+MLIR_CAPI_EXPORTED MlirType firrtlTypeGetPath(MlirContext ctx);
+MLIR_CAPI_EXPORTED MlirType firrtlTypeGetList(MlirContext ctx,
+                                              MlirType elementType);
+MLIR_CAPI_EXPORTED MlirType
+firrtlTypeGetClass(MlirContext ctx, MlirAttribute name, size_t numberOfElements,
+                   const FIRRTLClassElement *elements);
+
 //===----------------------------------------------------------------------===//
 // Attribute API.
 //===----------------------------------------------------------------------===//
@@ -92,8 +111,8 @@ MLIR_CAPI_EXPORTED MlirType firrtlTypeGetBundle(
 MLIR_CAPI_EXPORTED MlirAttribute
 firrtlAttrGetConvention(MlirContext ctx, FIRRTLConvention convention);
 
-MLIR_CAPI_EXPORTED MlirAttribute
-firrtlAttrGetPortDirs(MlirContext ctx, size_t count, const FIRRTLPortDir *dirs);
+MLIR_CAPI_EXPORTED MlirAttribute firrtlAttrGetPortDirs(
+    MlirContext ctx, size_t count, const FIRRTLDirection *dirs);
 
 MLIR_CAPI_EXPORTED MlirAttribute firrtlAttrGetParamDecl(MlirContext ctx,
                                                         MlirIdentifier name,
