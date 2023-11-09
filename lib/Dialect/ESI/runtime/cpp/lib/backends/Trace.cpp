@@ -25,11 +25,16 @@ using namespace esi;
 using namespace esi::services;
 using namespace esi::backends::trace;
 
+// We only support v1.
+constexpr uint32_t ESIVersion = 1;
+
 unique_ptr<Accelerator> TraceAccelerator::connect(string connectionString) {
   string modeStr;
   string manifestPath;
   string traceFile = "trace.json";
 
+  // Parse the connection string.
+  // <mode>:<manifest path>[:<traceFile>]
   regex connPattern("(\\w):([^:]+)(:(\\w+))?");
   smatch match;
   if (regex_search(connectionString, match, connPattern)) {
@@ -42,6 +47,7 @@ unique_ptr<Accelerator> TraceAccelerator::connect(string connectionString) {
                         "'<mode>:<manifest path>[:<traceFile>]'");
   }
 
+  // Parse the mode.
   Mode mode;
   if (modeStr == "w")
     mode = Write;
@@ -58,8 +64,10 @@ public:
   TraceSysInfo(std::filesystem::path manifestJson)
       : manifestJson(manifestJson) {}
 
-  uint32_t esiVersion() const override { return 1; }
+  uint32_t esiVersion() const override { return ESIVersion; }
+
   std::string jsonManifest() const override {
+    // Read in the whole json file and return it.
     ifstream manifest(manifestJson);
     if (!manifest.is_open())
       throw runtime_error("failed to open manifest file '" +
@@ -71,7 +79,7 @@ public:
   }
 
   std::vector<uint8_t> compressedManifest() const override {
-    throw runtime_error("compressed manifest not supported");
+    throw runtime_error("compressed manifest not supported by trace backend");
   }
 
 private:
