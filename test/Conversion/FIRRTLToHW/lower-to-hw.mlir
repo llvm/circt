@@ -595,10 +595,13 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   }
 
 
-  // CHECK-LABEL: hw.module private @output_fileTest
+  // CHECK-LABEL: hw.module private @attributes_preservation
+  // CHECK-SAME: firrtl.foo = "bar"
   // CHECK-SAME: output_file = #hw.output_file<"output_fileTest.sv", excludeFromFileList>
-  firrtl.module private @output_fileTest() attributes {
-      output_file = #hw.output_file<"output_fileTest.sv", excludeFromFileList >} {
+  firrtl.module private @attributes_preservation() attributes {
+      firrtl.foo = "bar",
+      output_file = #hw.output_file<"output_fileTest.sv", excludeFromFileList >
+      } {
   }
 
   // https://github.com/llvm/circt/issues/314
