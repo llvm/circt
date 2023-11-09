@@ -32,9 +32,9 @@ namespace esi {
 class Type {
 public:
   using ID = std::string;
-  Type(ID id) : _id(id) {}
+  Type(const ID &id) : _id(id) {}
 
-  ID getID() { return _id; }
+  ID id() { return _id; }
 
 private:
   ID _id;
@@ -48,12 +48,12 @@ class BundleType : public Type {
 public:
   enum Direction { To, From };
   BundleType(
-      ID id,
+      const ID &id,
       std::vector<std::tuple<std::string, Direction, const Type &>> channels)
       : Type(id), _channels(channels) {}
 
   const std::vector<std::tuple<std::string, Direction, const Type &>> &
-  getChannels() {
+  channels() {
     return _channels;
   }
 
