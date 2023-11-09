@@ -8,9 +8,9 @@
 //
 // This is a specialization of the ESI C++ API (backend) for trace-based
 // Accelerator interactions. This means that it will have the capability to read
-// trace files recorded from interactions with an actual connection. It also
-// (currently) has a mode wherein it will write to a file (for sends) and
-// produce random data (for receives). Both modes are intended for debugging.
+// trace files recorded from interactions with an actual connection. It also has
+// a mode wherein it will write to a file (for sends) and produce random data
+// (for receives). Both modes are intended for debugging without a simulation.
 //
 // DO NOT EDIT!
 // This file is distributed as part of an ESI package. The source for this file
