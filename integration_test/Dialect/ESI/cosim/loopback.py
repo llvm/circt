@@ -56,6 +56,6 @@ class LoopbackTester(esi_cosim.CosimBase):
 
 if __name__ == "__main__":
   import sys
-  rpc = LoopbackTester(sys.argv[2], sys.argv[1])
+  rpc = LoopbackTester(sys.argv[3], sys.argv[2])
   print(rpc.list())
   rpc.test_two_chan_loopback(25)

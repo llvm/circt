@@ -420,6 +420,27 @@ hw.module @bab<param: i32, N: i32> (in %array2d: !hw.array<i3 x i4>) {}
 
 // -----
 
+hw.module @aggConstDimArray() {
+  // expected-error @+1 {{'hw.aggregate_constant' op array attribute (1) has wrong size for array constant (2)}}
+  %0 = hw.aggregate_constant [42 : i8] : !hw.array<2xi8>
+}
+
+// -----
+
+hw.module @aggConstDimUArray() {
+  // expected-error @+1 {{'hw.aggregate_constant' op array attribute (1) has wrong size for unpacked array constant (2)}}
+  %0 = hw.aggregate_constant [42 : i8] : !hw.uarray<2xi8>
+}
+
+// -----
+
+hw.module @aggConstDimStruct() {
+  // expected-error @+1 {{'hw.aggregate_constant' op array attribute (1) has wrong size for struct constant (2)}}
+  %0 = hw.aggregate_constant [42 : i8] : !hw.struct<foo: i8, bar: i8>
+}
+
+// -----
+
 hw.module @foo() {
   // expected-error @+1 {{enum value 'D' is not a member of enum type '!hw.enum<A, B, C>'}}
   %0 = hw.enum.constant D : !hw.enum<A, B, C>
