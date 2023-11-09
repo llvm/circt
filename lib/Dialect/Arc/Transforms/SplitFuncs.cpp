@@ -65,6 +65,7 @@ void SplitFuncsPass::runOnOperation() {
   for (auto op : getOperation().getOps<FuncOp>())
     if (failed(lowerFunc(op, funcBuilder)))
       return signalPassFailure();
+  getOperation().dump();
 }
 
 LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp, OpBuilder funcBuilder) {
@@ -106,13 +107,13 @@ LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp, OpBuilder funcBuilder) {
     (*blockIter)->push_back(&op);
   }
 
-  DenseMap<Value, Value> argMap;
+  std::vector<std::pair<Value, Value>> argMap;
   // Move function arguments to the block that will stay in the function
   for (int argIndex = 0; argIndex < frontBlock->getNumArguments(); argIndex++) {
     auto oldArg = frontBlock->getArgument(argIndex);
     auto newArg = blocks.back()->getArgument(argIndex);
     replaceAllUsesInRegionWith(oldArg, newArg, funcOp.getBody());
-    argMap.insert(std::pair(oldArg, newArg));
+    // argMap.insert(std::pair(oldArg, newArg));
   }
   Liveness liveness(funcOp);
   std::vector<Operation *> funcs;
@@ -127,14 +128,14 @@ LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp, OpBuilder funcBuilder) {
     std::vector<Type> outTypes;
     std::vector<Value> outValues;
     llvm::for_each(liveOut, [&outTypes, &outValues, &argMap](auto el) {
-      auto argLookup = argMap.find(el);
-      if (argLookup != argMap.end()) {
-        outValues.push_back(argLookup->second);
-        outTypes.push_back(argLookup->second.getType());
-      } else {
-        outValues.push_back(el);
-        outTypes.push_back(el.getType());
-      }
+      // auto argLookup = argMap.find(el);
+      // if (argLookup != argMap.end() && false) {
+      //   outValues.push_back(argLookup->second);
+      //   outTypes.push_back(argLookup->second.getType());
+      // } else {
+      outValues.push_back(el);
+      outTypes.push_back(el.getType());
+      // }
     });
     opBuilder.setInsertionPoint(funcOp);
     SmallString<64> funcName;
@@ -152,20 +153,28 @@ LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp, OpBuilder funcBuilder) {
     funcs.push_back(newFunc);
     currentBlock->erase();
     currentBlock = funcBlock;
+
     int j = 0;
     for (auto el : args) {
       replaceAllUsesInRegionWith(el, newFunc.getArgument(j++),
                                  newFunc.getRegion());
     }
+
     opBuilder.setInsertionPointToEnd(currentBlock);
     opBuilder.create<ReturnOp>(funcOp->getLoc(), ValueRange(outValues));
+    for (auto pair : argMap) {
+      replaceAllUsesInRegionWith(pair.first, pair.second, newFunc.getBody());
+    }
+
     opBuilder.setInsertionPointToStart(blocks[i + 1]);
     Operation *callOp = opBuilder.create<func::CallOp>(
         funcOp->getLoc(), outTypes, funcName, args);
     auto callResults = callOp->getResults();
+    argMap.clear();
     for (int k = 0; k < outValues.size(); k++) {
-      replaceAllUsesInRegionWith(outValues[k], callResults[k],
-                                 funcOp.getBody());
+      // replaceAllUsesInRegionWith(outValues[k], callResults[k],
+      //                            funcOp.getBody());
+      argMap.push_back(std::pair(outValues[k], callResults[k]));
     }
   }
   return success();
