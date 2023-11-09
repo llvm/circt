@@ -38,7 +38,7 @@ rather, they speak to the signaling.
 ## Channels
 
 ESI "channels" are streaming connections upon which *messages* can be sent and
-recieved.  They are expressed by wrapping the type (e.g. `!esi.channel<i5>`) and
+received.  They are expressed by wrapping the type (e.g. `!esi.channel<i5>`) and
 using it like any other value type.
 
 ```mlir
