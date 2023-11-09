@@ -764,7 +764,7 @@ LogicalResult FirMemWriteOp::canonicalize(FirMemWriteOp op,
                                           PatternRewriter &rewriter) {
   // Remove the write port if it is trivially dead.
   if (isConstZero(op.getEnable()) || isConstZero(op.getMask()) ||
-      isConstClock(op.getClock())) {
+      isConstClock(op.getClk())) {
     rewriter.eraseOp(op);
     return success();
   }
@@ -790,11 +790,11 @@ LogicalResult FirMemReadWriteOp::canonicalize(FirMemReadWriteOp op,
   // Replace the read-write port with a read port if the write behavior is
   // trivially disabled.
   if (isConstZero(op.getEnable()) || isConstZero(op.getMask()) ||
-      isConstClock(op.getClock()) || isConstZero(op.getMode())) {
+      isConstClock(op.getClk()) || isConstZero(op.getMode())) {
     auto opAttrs = op->getAttrs();
     auto opAttrNames = op.getAttributeNames();
     auto newOp = rewriter.replaceOpWithNewOp<FirMemReadOp>(
-        op, op.getMemory(), op.getAddress(), op.getClock(), op.getEnable());
+        op, op.getMemory(), op.getAddress(), op.getClk(), op.getEnable());
     for (auto namedAttr : opAttrs)
       if (!llvm::is_contained(opAttrNames, namedAttr.getName()))
         newOp->setAttr(namedAttr.getName(), namedAttr.getValue());

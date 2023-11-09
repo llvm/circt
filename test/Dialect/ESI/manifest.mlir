@@ -1,7 +1,7 @@
 // REQUIRES: zlib
-// RUN: circt-opt %s --esi-connect-services --esi-appid-hier=top=top --esi-build-manifest="top=top to-file=%t1.json" > %t1.mlir 
+// RUN: circt-opt %s --esi-connect-services --esi-appid-hier=top=top --esi-build-manifest="top=top" > %t1.mlir 
 // RUN: circt-opt %t1.mlir | FileCheck --check-prefix=HIER %s
-// RUN: FileCheck --input-file=%t1.json %s
+// RUN: FileCheck --input-file=esi_system_manifest.json %s
 // RUN: circt-opt %t1.mlir --esi-clean-metadata --lower-esi-bundles --lower-esi-ports --lower-esi-to-hw=platform=cosim | FileCheck --check-prefix=HW %s
 
 hw.type_scope @__hw_typedecls {
@@ -51,7 +51,7 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // HIER:        }
 
 // HW-LABEL:    hw.module @top
-// HW:            hw.instance "__manifest" @Cosim_Manifest<COMPRESSED_MANIFEST_SIZE: i32 = 774>(compressed_manifest: %{{.+}}: !hw.uarray<774xi8>) -> ()
+// HW:            hw.instance "__manifest" @Cosim_Manifest<COMPRESSED_MANIFEST_SIZE: i32 = 780>(compressed_manifest: %{{.+}}: !hw.uarray<780xi8>) -> ()
 // HW-LABEL:    hw.module.extern @Cosim_Manifest<COMPRESSED_MANIFEST_SIZE: i32>(in %compressed_manifest : !hw.uarray<#hw.param.decl.ref<"COMPRESSED_MANIFEST_SIZE">xi8>) attributes {verilogName = "Cosim_Manifest"}
 
 // CHECK:       {
@@ -67,157 +67,155 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:      }
 // CHECK-NEXT:    ],
 
-// CHECK-LABEL:   "design": [
-// CHECK-NEXT:      {
-// CHECK-NEXT:        "inst_of": "@top",
-// CHECK-NEXT:        "contents": [
-// CHECK-NEXT:          {
-// CHECK-NEXT:            "class": "service",
-// CHECK-NEXT:            "appID": {
-// CHECK-NEXT:              "name": "cosim"
-// CHECK-NEXT:            },
-// CHECK-NEXT:            "service": "@HostComms",
-// CHECK-NEXT:            "serviceImplName": "cosim",
-// CHECK-NEXT:            "client_details": [
-// CHECK-NEXT:              {
-// CHECK-NEXT:                "channel_assignments": {
-// CHECK-NEXT:                  "recv": "loopback_inst[0].loopback_tohw.recv"
-// CHECK-NEXT:                },
-// CHECK-NEXT:                "relAppIDPath": [
-// CHECK-NEXT:                  {
-// CHECK-NEXT:                    "index": 0,
-// CHECK-NEXT:                    "name": "loopback_inst"
-// CHECK-NEXT:                  },
-// CHECK-NEXT:                  {
-// CHECK-NEXT:                    "name": "loopback_tohw"
-// CHECK-NEXT:                  }
-// CHECK-NEXT:                ],
-// CHECK-NEXT:                "servicePort": {
-// CHECK-NEXT:                  "inner": "Recv",
-// CHECK-NEXT:                  "outer_sym": "HostComms"
-// CHECK-NEXT:                }
-// CHECK-NEXT:              },
-// CHECK-NEXT:              {
-// CHECK-NEXT:                "channel_assignments": {
-// CHECK-NEXT:                  "send": "loopback_inst[0].loopback_fromhw.send"
-// CHECK-NEXT:                },
-// CHECK-NEXT:                "relAppIDPath": [
-// CHECK-NEXT:                  {
-// CHECK-NEXT:                    "index": 0,
-// CHECK-NEXT:                    "name": "loopback_inst"
-// CHECK-NEXT:                  },
-// CHECK-NEXT:                  {
-// CHECK-NEXT:                    "name": "loopback_fromhw"
-// CHECK-NEXT:                  }
-// CHECK-NEXT:                ],
-// CHECK-NEXT:                "servicePort": {
-// CHECK-NEXT:                  "inner": "Send",
-// CHECK-NEXT:                  "outer_sym": "HostComms"
-// CHECK-NEXT:                }
-// CHECK-NEXT:              },
-// CHECK-NEXT:              {
-// CHECK-NEXT:                "channel_assignments": {
-// CHECK-NEXT:                  "recv": "loopback_inst[1].loopback_tohw.recv"
-// CHECK-NEXT:                },
-// CHECK-NEXT:                "relAppIDPath": [
-// CHECK-NEXT:                  {
-// CHECK-NEXT:                    "index": 1,
-// CHECK-NEXT:                    "name": "loopback_inst"
-// CHECK-NEXT:                  },
-// CHECK-NEXT:                  {
-// CHECK-NEXT:                    "name": "loopback_tohw"
-// CHECK-NEXT:                  }
-// CHECK-NEXT:                ],
-// CHECK-NEXT:                "servicePort": {
-// CHECK-NEXT:                  "inner": "Recv",
-// CHECK-NEXT:                  "outer_sym": "HostComms"
-// CHECK-NEXT:                }
-// CHECK-NEXT:              },
-// CHECK-NEXT:              {
-// CHECK-NEXT:                "channel_assignments": {
-// CHECK-NEXT:                  "send": "loopback_inst[1].loopback_fromhw.send"
-// CHECK-NEXT:                },
-// CHECK-NEXT:                "relAppIDPath": [
-// CHECK-NEXT:                  {
-// CHECK-NEXT:                    "index": 1,
-// CHECK-NEXT:                    "name": "loopback_inst"
-// CHECK-NEXT:                  },
-// CHECK-NEXT:                  {
-// CHECK-NEXT:                    "name": "loopback_fromhw"
-// CHECK-NEXT:                  }
-// CHECK-NEXT:                ],
-// CHECK-NEXT:                "servicePort": {
-// CHECK-NEXT:                  "inner": "Send",
-// CHECK-NEXT:                  "outer_sym": "HostComms"
-// CHECK-NEXT:                }
-// CHECK-NEXT:              }
-// CHECK-NEXT:            ]
-// CHECK-NEXT:          }
-// CHECK-NEXT:        ],
-// CHECK-NEXT:        "children": [
-// CHECK-NEXT:          {
-// CHECK-NEXT:            "appID": {
-// CHECK-NEXT:              "index": 0,
-// CHECK-NEXT:              "name": "loopback_inst"
-// CHECK-NEXT:            },
-// CHECK-NEXT:            "inst_of": "@Loopback",
-// CHECK-NEXT:            "contents": [
-// CHECK-NEXT:              {
-// CHECK-NEXT:                "class": "client_port",
-// CHECK-NEXT:                "appID": {
-// CHECK-NEXT:                  "name": "loopback_tohw"
-// CHECK-NEXT:                },
-// CHECK-NEXT:                "direction": "toClient",
-// CHECK-NEXT:                "bundleType": {
-// CHECK-NEXT:                  "circt_name": "!esi.bundle<[!esi.channel<i8> to \"recv\"]>"
-// CHECK-NEXT:                }
-// CHECK-NEXT:              },
-// CHECK-NEXT:              {
-// CHECK-NEXT:                "class": "client_port",
-// CHECK-NEXT:                "appID": {
-// CHECK-NEXT:                  "name": "loopback_fromhw"
-// CHECK-NEXT:                },
-// CHECK-NEXT:                "direction": "toServer",
-// CHECK-NEXT:                "bundleType": {
-// CHECK-NEXT:                  "circt_name": "!esi.bundle<[!esi.channel<i8> to \"send\"]>"
-// CHECK-NEXT:                }
-// CHECK-NEXT:              }
-// CHECK-NEXT:            ],
-// CHECK-NEXT:            "children": []
+// CHECK-LABEL:   "design": {
+// CHECK-NEXT:      "inst_of": "@top",
+// CHECK-NEXT:      "contents": [
+// CHECK-NEXT:        {
+// CHECK-NEXT:          "class": "service",
+// CHECK-NEXT:          "appID": {
+// CHECK-NEXT:            "name": "cosim"
 // CHECK-NEXT:          },
-// CHECK-NEXT:          {
-// CHECK-NEXT:            "appID": {
-// CHECK-NEXT:              "index": 1,
-// CHECK-NEXT:              "name": "loopback_inst"
-// CHECK-NEXT:            },
-// CHECK-NEXT:            "inst_of": "@Loopback",
-// CHECK-NEXT:            "contents": [
-// CHECK-NEXT:              {
-// CHECK-NEXT:                "class": "client_port",
-// CHECK-NEXT:                "appID": {
-// CHECK-NEXT:                  "name": "loopback_tohw"
-// CHECK-NEXT:                },
-// CHECK-NEXT:                "direction": "toClient",
-// CHECK-NEXT:                "bundleType": {
-// CHECK-NEXT:                  "circt_name": "!esi.bundle<[!esi.channel<i8> to \"recv\"]>"
-// CHECK-NEXT:                }
+// CHECK-NEXT:          "service": "@HostComms",
+// CHECK-NEXT:          "serviceImplName": "cosim",
+// CHECK-NEXT:          "client_details": [
+// CHECK-NEXT:            {
+// CHECK-NEXT:              "channel_assignments": {
+// CHECK-NEXT:                "recv": "loopback_inst[0].loopback_tohw.recv"
 // CHECK-NEXT:              },
-// CHECK-NEXT:              {
-// CHECK-NEXT:                "class": "client_port",
-// CHECK-NEXT:                "appID": {
-// CHECK-NEXT:                  "name": "loopback_fromhw"
+// CHECK-NEXT:              "relAppIDPath": [
+// CHECK-NEXT:                {
+// CHECK-NEXT:                  "index": 0,
+// CHECK-NEXT:                  "name": "loopback_inst"
 // CHECK-NEXT:                },
-// CHECK-NEXT:                "direction": "toServer",
-// CHECK-NEXT:                "bundleType": {
-// CHECK-NEXT:                  "circt_name": "!esi.bundle<[!esi.channel<i8> to \"send\"]>"
+// CHECK-NEXT:                {
+// CHECK-NEXT:                  "name": "loopback_tohw"
 // CHECK-NEXT:                }
+// CHECK-NEXT:              ],
+// CHECK-NEXT:              "servicePort": {
+// CHECK-NEXT:                "inner": "Recv",
+// CHECK-NEXT:                "outer_sym": "HostComms"
 // CHECK-NEXT:              }
-// CHECK-NEXT:            ],
-// CHECK-NEXT:            "children": []
-// CHECK-NEXT:          }
-// CHECK-NEXT:        ]
-// CHECK-NEXT:      }
-// CHECK-NEXT:    ],
+// CHECK-NEXT:            },
+// CHECK-NEXT:            {
+// CHECK-NEXT:              "channel_assignments": {
+// CHECK-NEXT:                "send": "loopback_inst[0].loopback_fromhw.send"
+// CHECK-NEXT:              },
+// CHECK-NEXT:              "relAppIDPath": [
+// CHECK-NEXT:                {
+// CHECK-NEXT:                  "index": 0,
+// CHECK-NEXT:                  "name": "loopback_inst"
+// CHECK-NEXT:                },
+// CHECK-NEXT:                {
+// CHECK-NEXT:                  "name": "loopback_fromhw"
+// CHECK-NEXT:                }
+// CHECK-NEXT:              ],
+// CHECK-NEXT:              "servicePort": {
+// CHECK-NEXT:                "inner": "Send",
+// CHECK-NEXT:                "outer_sym": "HostComms"
+// CHECK-NEXT:              }
+// CHECK-NEXT:            },
+// CHECK-NEXT:            {
+// CHECK-NEXT:              "channel_assignments": {
+// CHECK-NEXT:                "recv": "loopback_inst[1].loopback_tohw.recv"
+// CHECK-NEXT:              },
+// CHECK-NEXT:              "relAppIDPath": [
+// CHECK-NEXT:                {
+// CHECK-NEXT:                  "index": 1,
+// CHECK-NEXT:                  "name": "loopback_inst"
+// CHECK-NEXT:                },
+// CHECK-NEXT:                {
+// CHECK-NEXT:                  "name": "loopback_tohw"
+// CHECK-NEXT:                }
+// CHECK-NEXT:              ],
+// CHECK-NEXT:              "servicePort": {
+// CHECK-NEXT:                "inner": "Recv",
+// CHECK-NEXT:                "outer_sym": "HostComms"
+// CHECK-NEXT:              }
+// CHECK-NEXT:            },
+// CHECK-NEXT:            {
+// CHECK-NEXT:              "channel_assignments": {
+// CHECK-NEXT:                "send": "loopback_inst[1].loopback_fromhw.send"
+// CHECK-NEXT:              },
+// CHECK-NEXT:              "relAppIDPath": [
+// CHECK-NEXT:                {
+// CHECK-NEXT:                  "index": 1,
+// CHECK-NEXT:                  "name": "loopback_inst"
+// CHECK-NEXT:                },
+// CHECK-NEXT:                {
+// CHECK-NEXT:                  "name": "loopback_fromhw"
+// CHECK-NEXT:                }
+// CHECK-NEXT:              ],
+// CHECK-NEXT:              "servicePort": {
+// CHECK-NEXT:                "inner": "Send",
+// CHECK-NEXT:                "outer_sym": "HostComms"
+// CHECK-NEXT:              }
+// CHECK-NEXT:            }
+// CHECK-NEXT:          ]
+// CHECK-NEXT:        }
+// CHECK-NEXT:      ],
+// CHECK-NEXT:      "children": [
+// CHECK-NEXT:        {
+// CHECK-NEXT:          "app_id": {
+// CHECK-NEXT:            "index": 0,
+// CHECK-NEXT:            "name": "loopback_inst"
+// CHECK-NEXT:          },
+// CHECK-NEXT:          "inst_of": "@Loopback",
+// CHECK-NEXT:          "contents": [
+// CHECK-NEXT:            {
+// CHECK-NEXT:              "class": "client_port",
+// CHECK-NEXT:              "appID": {
+// CHECK-NEXT:                "name": "loopback_tohw"
+// CHECK-NEXT:              },
+// CHECK-NEXT:              "direction": "toClient",
+// CHECK-NEXT:              "bundleType": {
+// CHECK-NEXT:                "circt_name": "!esi.bundle<[!esi.channel<i8> to \"recv\"]>"
+// CHECK-NEXT:              }
+// CHECK-NEXT:            },
+// CHECK-NEXT:            {
+// CHECK-NEXT:              "class": "client_port",
+// CHECK-NEXT:              "appID": {
+// CHECK-NEXT:                "name": "loopback_fromhw"
+// CHECK-NEXT:              },
+// CHECK-NEXT:              "direction": "toServer",
+// CHECK-NEXT:              "bundleType": {
+// CHECK-NEXT:                "circt_name": "!esi.bundle<[!esi.channel<i8> to \"send\"]>"
+// CHECK-NEXT:              }
+// CHECK-NEXT:            }
+// CHECK-NEXT:          ],
+// CHECK-NEXT:          "children": []
+// CHECK-NEXT:        },
+// CHECK-NEXT:        {
+// CHECK-NEXT:          "app_id": {
+// CHECK-NEXT:            "index": 1,
+// CHECK-NEXT:            "name": "loopback_inst"
+// CHECK-NEXT:          },
+// CHECK-NEXT:          "inst_of": "@Loopback",
+// CHECK-NEXT:          "contents": [
+// CHECK-NEXT:            {
+// CHECK-NEXT:              "class": "client_port",
+// CHECK-NEXT:              "appID": {
+// CHECK-NEXT:                "name": "loopback_tohw"
+// CHECK-NEXT:              },
+// CHECK-NEXT:              "direction": "toClient",
+// CHECK-NEXT:              "bundleType": {
+// CHECK-NEXT:                "circt_name": "!esi.bundle<[!esi.channel<i8> to \"recv\"]>"
+// CHECK-NEXT:              }
+// CHECK-NEXT:            },
+// CHECK-NEXT:            {
+// CHECK-NEXT:              "class": "client_port",
+// CHECK-NEXT:              "appID": {
+// CHECK-NEXT:                "name": "loopback_fromhw"
+// CHECK-NEXT:              },
+// CHECK-NEXT:              "direction": "toServer",
+// CHECK-NEXT:              "bundleType": {
+// CHECK-NEXT:                "circt_name": "!esi.bundle<[!esi.channel<i8> to \"send\"]>"
+// CHECK-NEXT:              }
+// CHECK-NEXT:            }
+// CHECK-NEXT:          ],
+// CHECK-NEXT:          "children": []
+// CHECK-NEXT:        }
+// CHECK-NEXT:      ]
+// CHECK-NEXT:    },
 
 // CHECK-LABEL:   "service_decls": [
 // CHECK-NEXT:      {

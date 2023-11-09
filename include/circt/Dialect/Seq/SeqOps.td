@@ -465,6 +465,7 @@ class DataMatchesFirMem<string memoryValue, string dataValue> :
     }]>;
 
 def FirMemReadOp : SeqOp<"firmem.read_port", [
+  Clocked,
   MemoryEffects<[MemRead]>,
   AddressMatchesFirMem<"memory", "address">,
   DataMatchesFirMem<"memory", "data">
@@ -481,12 +482,12 @@ def FirMemReadOp : SeqOp<"firmem.read_port", [
   let arguments = (ins
     FirMemType:$memory,
     AnySignlessInteger:$address,
-    ClockType:$clock,
+    ClockType:$clk,
     Optional<I1>:$enable
   );
   let results = (outs AnySignlessInteger:$data);
   let assemblyFormat = [{
-    $memory `[` $address `]` `,` `clock` $clock
+    $memory `[` $address `]` `,` `clock` $clk
     (`enable` $enable^)?
     attr-dict `:` type($memory)
   }];
@@ -494,6 +495,7 @@ def FirMemReadOp : SeqOp<"firmem.read_port", [
 }
 
 def FirMemWriteOp : SeqOp<"firmem.write_port", [
+  Clocked,
   MemoryEffects<[MemWrite]>,
   AddressMatchesFirMem<"memory", "address">,
   DataMatchesFirMem<"memory", "data">,
@@ -514,13 +516,13 @@ def FirMemWriteOp : SeqOp<"firmem.write_port", [
   let arguments = (ins
     FirMemType:$memory,
     AnySignlessInteger:$address,
-    ClockType:$clock,
+    ClockType:$clk,
     Optional<I1>:$enable,
     AnySignlessInteger:$data,
     Optional<AnySignlessInteger>:$mask
   );
   let assemblyFormat = [{
-    $memory `[` $address `]` `=` $data `,` `clock` $clock
+    $memory `[` $address `]` `=` $data `,` `clock` $clk
     (`enable` $enable^)? (`mask` $mask^)?
     attr-dict `:` type($memory) (`,` type($mask)^)?
   }];
@@ -529,6 +531,7 @@ def FirMemWriteOp : SeqOp<"firmem.write_port", [
 }
 
 def FirMemReadWriteOp : SeqOp<"firmem.read_write_port", [
+  Clocked,
   MemoryEffects<[MemRead, MemWrite]>,
   AddressMatchesFirMem<"memory", "address">,
   DataMatchesFirMem<"memory", "writeData">,
@@ -551,7 +554,7 @@ def FirMemReadWriteOp : SeqOp<"firmem.read_write_port", [
   let arguments = (ins
     FirMemType:$memory,
     AnySignlessInteger:$address,
-    ClockType:$clock,
+    ClockType:$clk,
     Optional<I1>:$enable,
     AnySignlessInteger:$writeData,
     I1:$mode,
@@ -559,7 +562,7 @@ def FirMemReadWriteOp : SeqOp<"firmem.read_write_port", [
   );
   let results = (outs AnySignlessInteger:$readData);
   let assemblyFormat = [{
-    $memory `[` $address `]` `=` $writeData `if` $mode `,` `clock` $clock
+    $memory `[` $address `]` `=` $writeData `if` $mode `,` `clock` $clk
     (`enable` $enable^)? (`mask` $mask^)?
     attr-dict `:` type($memory) (`,` type($mask)^)?
   }];

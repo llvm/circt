@@ -176,3 +176,19 @@ with Context() as ctx, Location.unknown():
     hw.HWModuleOp(name="test", body_builder=build)
 
   print(m)
+
+  # Check that isinstance is working properly for these ops, which broke with changes to op extensions.
+  for op in m.body.operations[0].body.blocks[0].operations:
+    # Only check comb, which has unusual class hierarchies.
+    if "comb." not in op.name:
+      continue
+
+    # Clean up the IR operation name to match the Python class name.
+    op_name = f"{op.name.split('.')[1].capitalize()}Op"
+    op_name = op_name.replace("cmp", "Cmp")
+    op_name = op_name.replace("sOp", "SOp")
+    op_name = op_name.replace("uOp", "UOp")
+
+    # Dynamically get the Python class, and check that the op isinstance of the class.
+    cls = getattr(comb, op_name)
+    assert isinstance(op, cls)

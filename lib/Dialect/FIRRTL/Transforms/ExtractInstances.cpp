@@ -178,7 +178,7 @@ void ExtractInstancesPass::runOnOperation() {
   if (anyFailures)
     return signalPassFailure();
 
-  // If nothing has changed we can preseve the analysis.
+  // If nothing has changed we can preserve the analysis.
   LLVM_DEBUG(llvm::dbgs() << "\n");
   if (!anythingChanged)
     markAllAnalysesPreserved();
