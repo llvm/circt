@@ -146,9 +146,7 @@ private:
   // If so, its lid will be returned
   // Otherwise -1 will be returned
   size_t getOrCreateOpLID(Value op) {
-    if (op == nullptr)
-      return noLID;
-
+    // Check for an operation alias
     Operation *defOp = getOpAlias(op.getDefiningOp());
 
     if (opLIDMap.contains(defOp)) {
@@ -431,7 +429,7 @@ private:
 
   // Generates a next instruction, given a width, a state LID, and a next value
   // LID
-  void genNext(Operation *next, Operation *reg, int64_t width) {
+  void genNext(Value next, Operation *reg, int64_t width) {
     // Retrieve the lid associated with the sort (sid)
     size_t sid = sortToLIDMap.at(width);
 
@@ -692,9 +690,6 @@ void ConvertHWToBTOR2Pass::runOnOperation() {
       auto reg = dyn_cast<seq::FirRegOp>(regOps[i]);
       if (!reg)
         continue;
-      // Extract the `next` operation for each register (used to define the
-      // transition)
-      Operation *next = reg.getNext().getDefiningOp();
 
       // Genrate the reset condition (for sync & async resets)
       // We assume for now that the reset value is always 0
@@ -702,14 +697,36 @@ void ConvertHWToBTOR2Pass::runOnOperation() {
       genSort(bitvecStr, width);
       genZero(width);
 
+      // Extract the `next` operation for each register (used to define the
+      // transition). We need to check if next is a port to avoid nullptrs
+      Value next = reg.getNext();
+
       // Next should already be associated to an LID at this point
       // As we are going to override it, we need to keep track of the original
       // instruction
-      size_t nextLID = getOrCreateOpLID(next);
+      size_t nextLID = noLID;
+
+      // Check for special case where next is actually a port
+      // To do so, we start by checking if our operation is a block argument
+      if (BlockArgument barg = dyn_cast<BlockArgument>(next)) {
+        // Extract the block argument index and use that to get the line number
+        size_t argIdx = barg.getArgNumber();
+
+        // Check that the extracted argument is in range before using it
+        if (inputLIDs.contains(argIdx)) {
+          nextLID = inputLIDs[argIdx];
+        }
+      } else {
+        nextLID = getOrCreateOpLID(next);
+      }
+
+      // Sanity check
+      assert(nextLID != noLID);
 
       // Generate the ite for the register update reset condition
       // i.e. reg <= reset ? 0 : next
-      genIte(next, resetLID, constToLIDMap.at({0, width}), nextLID, width);
+      genIte(next.getDefiningOp(), resetLID, constToLIDMap.at({0, width}),
+             nextLID, width);
 
       // Finally generate the next statement
       genNext(next, reg, width);
