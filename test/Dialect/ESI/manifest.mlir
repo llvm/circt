@@ -1,7 +1,7 @@
 // REQUIRES: zlib
-// RUN: circt-opt %s --esi-connect-services --esi-appid-hier=top=top --esi-build-manifest="top=top to-file=%t1.json" > %t1.mlir 
+// RUN: circt-opt %s --esi-connect-services --esi-appid-hier=top=top --esi-build-manifest="top=top" > %t1.mlir 
 // RUN: circt-opt %t1.mlir | FileCheck --check-prefix=HIER %s
-// RUN: FileCheck --input-file=%t1.json %s
+// RUN: FileCheck --input-file=esi_system_manifest.json %s
 // RUN: circt-opt %t1.mlir --esi-clean-metadata --lower-esi-bundles --lower-esi-ports --lower-esi-to-hw=platform=cosim | FileCheck --check-prefix=HW %s
 
 hw.type_scope @__hw_typedecls {
