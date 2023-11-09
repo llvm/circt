@@ -740,10 +740,11 @@ public:
   }
 
   // Ignore all other explicitly mentionned operations
-  void ignore(Operation *op) { /* Willingly empty */ }
+  // ** Purposefully left empty **
+  void ignore(Operation *op) {}
 
   // Tail method that handles all operations that weren't handled by previous
-  // visitors. Here we simply make the pass fail
+  // visitors. Here we simply make the pass fail or ignore the op
   void visitUnsupportedOp(Operation *op) {
     // Check for explicitly ignored ops vs unsupported ops (which cause a
     // failure)
