@@ -1,9 +1,7 @@
 import esi
 import sys
 
-conn = f"{sys.argv[1]}:{sys.argv[2]}"
-
-acc = esi.Accelerator("cosim", conn)
+acc = esi.Accelerator(sys.argv[1], sys.argv[2])
 
 assert acc.sysinfo().esi_version() == 1
 assert acc.manifest.api_version == 1
