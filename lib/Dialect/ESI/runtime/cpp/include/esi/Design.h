@@ -59,12 +59,12 @@ public:
   ~Instance() = default;
   Instance(AppID id, std::optional<ModuleInfo> info,
            std::vector<std::unique_ptr<Instance>> children)
-      : Design(info, std::move(children)), _id(id) {}
+      : Design(info, std::move(children)), id_(id) {}
 
-  const AppID id() const { return _id; }
+  const AppID id() const { return id_; }
 
 protected:
-  const AppID _id;
+  const AppID id_;
 };
 
 } // namespace esi

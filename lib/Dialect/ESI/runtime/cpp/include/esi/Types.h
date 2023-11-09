@@ -32,12 +32,12 @@ namespace esi {
 class Type {
 public:
   using ID = std::string;
-  Type(const ID &id) : _id(id) {}
+  Type(const ID &id) : id(id) {}
 
-  ID id() { return _id; }
+  ID getID() { return id; }
 
 protected:
-  ID _id;
+  ID id;
 };
 
 /// Bundles represent a collection of channels. Services exclusively expose
@@ -52,12 +52,12 @@ public:
       std::vector<std::tuple<std::string, Direction, const Type &>>;
 
   BundleType(const ID &id, const ChannelVector &channels)
-      : Type(id), _channels(channels) {}
+      : Type(id), channels(channels) {}
 
-  const ChannelVector &channels() { return _channels; }
+  const ChannelVector &getChannels() { return channels; }
 
 protected:
-  ChannelVector _channels;
+  ChannelVector channels;
 };
 
 } // namespace esi

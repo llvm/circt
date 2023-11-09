@@ -97,8 +97,8 @@ PYBIND11_MODULE(esiCppAccel, m) {
            py::return_value_policy::reference_internal);
 
   py::class_<Type>(m, "Type")
-      .def_property_readonly("id", &Type::id)
-      .def("__repr__", [](Type &t) { return "<" + t.id() + ">"; });
+      .def_property_readonly("id", &Type::getID)
+      .def("__repr__", [](Type &t) { return "<" + t.getID() + ">"; });
 
   py::class_<Manifest>(m, "Manifest")
       .def(py::init<std::string>())
