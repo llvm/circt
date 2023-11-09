@@ -12,13 +12,22 @@
 #include "circt/Conversion/HWToBTOR2.h"
 #include "../PassDetail.h"
 #include "circt/Dialect/Comb/CombDialect.h"
+#include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/Comb/CombVisitors.h"
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWModuleGraph.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWPasses.h"
+#include "circt/Dialect/HW/HWTypes.h"
+#include "circt/Dialect/HW/HWVisitors.h"
+#include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/SV/SVTypes.h"
+#include "circt/Dialect/SV/SVVisitors.h"
+#include "circt/Dialect/Seq/SeqDialect.h"
+#include "circt/Dialect/Seq/SeqOps.h"
 #include "llvm/ADT/TypeSwitch.h"
-#include "llvm/Support/GraphWriter.h"
 #include "llvm/Support/raw_ostream.h"
 
 using namespace circt;
@@ -28,7 +37,10 @@ namespace {
 // The goal here is to traverse the operations in order and convert them one by
 // one into btor2
 struct ConvertHWToBTOR2Pass
-    : public ConvertHWToBTOR2Base<ConvertHWToBTOR2Pass> {
+    : public ConvertHWToBTOR2Base<ConvertHWToBTOR2Pass>,
+      public comb::CombinationalVisitor<ConvertHWToBTOR2Pass>,
+      public sv::Visitor<ConvertHWToBTOR2Pass>,
+      public hw::TypeOpVisitor<ConvertHWToBTOR2Pass> {
 public:
   ConvertHWToBTOR2Pass(raw_ostream &os) : os(os) {}
   // Executes the pass
@@ -79,7 +91,7 @@ private:
   // Set of often reused strings in btor2 emission (to avoid typos and enable
   // auto-complete)
   static constexpr StringLiteral sortStr = "sort";
-  static constexpr StringLiteral bitvecStr = "bitvecStr";
+  static constexpr StringLiteral bitvecStr = "bitvec";
   static constexpr StringLiteral inputStr = "input";
   static constexpr StringLiteral resetStr = "reset";
   static constexpr StringLiteral outputStr = "output";
@@ -455,6 +467,7 @@ private:
     return width;
   }
 
+public:
   /// Visitor Methods used later on for pattern matching
 
   // Visitor for the inputs of the module.
@@ -488,12 +501,12 @@ private:
   // Outputs don't actually mean much in btor, only assertions matter
   // Additionally, btormc doesn't support outputs, so we're just going to
   // ignore them
-  void visit(hw::OutputOp op) {}
+  void visitTypeOp(hw::OutputOp op) {}
 
   // Emits the associated btor2 operation for a constant. Note that for
   // simplicity, we will only emit `constd` in order to avoid bit-string
   // conversions
-  void visit(hw::ConstantOp op) {
+  void visitTypeOp(hw::ConstantOp op) {
     // Make sure that a sort has been created for our operation
     int64_t w = requireSort(op.getType());
 
@@ -505,16 +518,23 @@ private:
 
   // Wires can generally be ignored in bto2, however we do need
   // to keep track of the new alias it creates
-  void visit(hw::WireOp op) {
+  void visitTypeOp(hw::WireOp op) {
     // Retrieve the aliased operation
     Operation *defOp = op.getOperand().getDefiningOp();
     // Wires don't output anything so just record alias
     setOpAlias(op, defOp);
   }
 
+  void visitTypeOp(Operation *op) { visitInvalidTypeOp(op); }
+
+  // Handles non-hw operations
+  void visitInvalidTypeOp(Operation *op) {
+    // Try comb ops
+    dispatchCombinationalVisitor(op);
+  }
+
   // Binary operations are all emitted the same way, so we can group them into
   // a single method.
-  // @param {StringRef} inst, the btor2 name of the operation
   void visitBinOp(Operation *op, StringRef inst) {
     TypeSwitch<Operation *, void>(op)
         .template Case<
@@ -536,22 +556,22 @@ private:
   }
 
   // Visitors for the binary ops
-  void visit(comb::AddOp op) { visitBinOp(op, addStr); }
-  void visit(comb::SubOp op) { visitBinOp(op, subStr); }
-  void visit(comb::MulOp op) { visitBinOp(op, mulStr); }
-  void visit(comb::DivSOp op) { visitBinOp(op, sdivStr); }
-  void visit(comb::DivUOp op) { visitBinOp(op, udivStr); }
-  void visit(comb::ModSOp op) { visitBinOp(op, smodStr); }
-  void visit(comb::ShlOp op) { visitBinOp(op, sllStr); }
-  void visit(comb::ShrUOp op) { visitBinOp(op, srlStr); }
-  void visit(comb::ShrSOp op) { visitBinOp(op, sraStr); }
-  void visit(comb::AndOp op) { visitBinOp(op, andStr); }
-  void visit(comb::OrOp op) { visitBinOp(op, orStr); }
-  void visit(comb::XorOp op) { visitBinOp(op, xorStr); }
-  void visit(comb::ConcatOp op) { visitBinOp(op, concatStr); }
+  void visitComb(comb::AddOp op) { visitBinOp(op, addStr); }
+  void visitComb(comb::SubOp op) { visitBinOp(op, subStr); }
+  void visitComb(comb::MulOp op) { visitBinOp(op, mulStr); }
+  void visitComb(comb::DivSOp op) { visitBinOp(op, sdivStr); }
+  void visitComb(comb::DivUOp op) { visitBinOp(op, udivStr); }
+  void visitComb(comb::ModSOp op) { visitBinOp(op, smodStr); }
+  void visitComb(comb::ShlOp op) { visitBinOp(op, sllStr); }
+  void visitComb(comb::ShrUOp op) { visitBinOp(op, srlStr); }
+  void visitComb(comb::ShrSOp op) { visitBinOp(op, sraStr); }
+  void visitComb(comb::AndOp op) { visitBinOp(op, andStr); }
+  void visitComb(comb::OrOp op) { visitBinOp(op, orStr); }
+  void visitComb(comb::XorOp op) { visitBinOp(op, xorStr); }
+  void visitComb(comb::ConcatOp op) { visitBinOp(op, concatStr); }
 
   // Extract ops translate to a slice operation in btor2 in a one-to-one manner
-  void visit(comb::ExtractOp op) {
+  void visitComb(comb::ExtractOp op) {
     int64_t w = requireSort(op.getType());
 
     // Start by extracting the necessary information for the emission (i.e.
@@ -566,7 +586,7 @@ private:
   // Btor2 uses similar syntax as hw for its comparisons
   // So we simply need to emit the cmpop name and check for corner cases
   // where the namings differ.
-  void visit(comb::ICmpOp op) {
+  void visitComb(comb::ICmpOp op) {
     Value lhs = op.getOperand(0);
     Value rhs = op.getOperand(1);
 
@@ -587,7 +607,7 @@ private:
   }
 
   // Muxes generally convert to an ite statement
-  void visit(comb::MuxOp op) {
+  void visitComb(comb::MuxOp op) {
     // Extract predicate, true and false values
     Value pred = op.getCond();
     Value tval = op.getTrueValue();
@@ -601,8 +621,15 @@ private:
     genIte(op, pred, tval, fval, w);
   }
 
+  void visitComb(Operation *op) { visitInvalidComb(op); }
+
+  void visitInvalidComb(Operation *op) {
+    // try sv ops
+    dispatchSVVisitor(op);
+  }
+
   // Assertions are negated then converted to a btor2 bad instruction
-  void visit(sv::AssertOp op) {
+  void visitSV(sv::AssertOp op) {
     // Expression is what we will try to invert for our assertion
     Value expr = op.getExpression();
 
@@ -630,10 +657,21 @@ private:
     genBad(op);
   }
   // Assumptions are converted to a btor2 constraint instruction
-  void visit(sv::AssumeOp op) {
+  void visitSV(sv::AssumeOp op) {
     // Extract the expression that we want our constraint to be about
     Value expr = op.getExpression();
     genConstraint(expr);
+  }
+
+  void visitSV(Operation *op) { visitInvalidSV(op); }
+
+  void visitInvalidSV(Operation *op) {
+    // The only op left is registers
+    auto reg = dyn_cast<seq::FirRegOp>(op);
+    if (!reg)
+      return;
+
+    visit(reg);
   }
 
   // Firrtl registers generate a state instruction
@@ -666,23 +704,7 @@ void ConvertHWToBTOR2Pass::runOnOperation() {
     }
 
     // Visit all of the operations in our module
-    module.walk([&](Operation *op) {
-      TypeSwitch<Operation *, void>(op)
-          .template Case<
-              // All supported hw operations
-              hw::OutputOp, hw::ConstantOp, hw::WireOp,
-              // All supported comb ops
-              comb::AddOp, comb::SubOp, comb::MulOp, comb::DivUOp, comb::DivSOp,
-              comb::ModSOp, comb::ShlOp, comb::ShrUOp, comb::ShrSOp,
-              comb::AndOp, comb::OrOp, comb::XorOp, comb::ConcatOp,
-              comb::ExtractOp, comb::ICmpOp, comb::MuxOp,
-              // All supported sv operations
-              sv::AssertOp, sv::AssumeOp,
-              // All supported seq operations
-              seq::FirRegOp>([&](auto expr) { visit(expr); })
-          // Ignore anything else
-          .Default([&](auto expr) {});
-    });
+    module.walk([&](Operation *op) { dispatchTypeOpVisitor(op); });
 
     // Iterate through the registers and generate the `next` instructions
     for (size_t i = 0; i < regOps.size(); ++i) {
@@ -691,7 +713,7 @@ void ConvertHWToBTOR2Pass::runOnOperation() {
       if (!reg)
         continue;
 
-      // Genrate the reset condition (for sync & async resets)
+      // Generate the reset condition (for sync & async resets)
       // We assume for now that the reset value is always 0
       size_t width = hw::getBitWidth(reg.getType());
       genSort(bitvecStr, width);

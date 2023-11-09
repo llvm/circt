@@ -25,4 +25,4 @@ std::unique_ptr<mlir::Pass> createConvertHWToBTOR2Pass();
 
 } // namespace circt
 
-#endif // CIRCT_CONVERSION_DCTOHW_H
+#endif // CIRCT_CONVERSION_HWTOBTOR2_H
