@@ -28,6 +28,7 @@
 
 namespace esi {
 
+/// Root class of the ESI type system.
 class Type {
 public:
   using ID = std::string;
@@ -39,6 +40,10 @@ private:
   ID _id;
 };
 
+/// Bundles represent a collection of channels. Services exclusively expose
+/// bundles (sometimes of just one channel). As such, they are the type of
+/// accessible ports on an accelerator, from a host API perspective.
+/// TODO: Add a good description of direction?
 class BundleType : public Type {
 public:
   enum Direction { To, From };

@@ -52,6 +52,7 @@ public:
   /// Parse all the types and populate the types table.
   void populateTypes(const nlohmann::json &typesJson);
 
+  // Forwarded from Manifest.
   const std::vector<std::reference_wrapper<const Type>> &getTypeTable() const {
     return _typeTable;
   }
@@ -189,19 +190,26 @@ internal::ManifestProxy::parseBundleType(const nlohmann::json &typeJson) {
   return new BundleType(typeJson.at("circt_name"), channels);
 }
 
+// Parse a type if it doesn't already exist in the cache.
 const Type &internal::ManifestProxy::parseType(const nlohmann::json &typeJson) {
+  // We use the circt type string as a unique ID.
   std::string circt_name = typeJson.at("circt_name");
+
+  // Check the cache.
   auto typeF = _types.find(circt_name);
   if (typeF != _types.end())
     return *typeF->second;
 
+  // Parse the type.
   std::string mnemonic = typeJson.at("mnemonic");
   Type *t;
   if (mnemonic == "bundle")
     t = parseBundleType(typeJson);
   else
+    // Types we don't know about are opaque.
     t = new Type(circt_name);
 
+  // Insert into the cache.
   _types.emplace(circt_name, std::unique_ptr<Type>(t));
   return *t;
 }
