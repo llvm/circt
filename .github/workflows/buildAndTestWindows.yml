@@ -14,7 +14,7 @@ jobs:
     name: Build and Test
     uses: ./.github/workflows/unifiedBuildTestAndInstall.yml
     with:
-      runner: windows-2019
+      runner: windows-2022
       cmake_build_type: release
       llvm_enable_assertions: ON
       build_shared_libs: OFF
