@@ -501,7 +501,7 @@ public:
   // Outputs don't actually mean much in btor, only assertions matter
   // Additionally, btormc doesn't support outputs, so we're just going to
   // ignore them
-  void visitTypeOp(hw::OutputOp op) {}
+  void visit(hw::OutputOp op) {}
 
   // Emits the associated btor2 operation for a constant. Note that for
   // simplicity, we will only emit `constd` in order to avoid bit-string
@@ -663,15 +663,27 @@ public:
     genConstraint(expr);
   }
 
-  void visitSV(Operation *op) { visitInvalidSV(op); }
+  void visitSV(Operation *op) {
+    // All explicitly ignored sv ops
+    TypeSwitch<Operation *, void>(op)
+        .template Case<sv::MacroDefOp, sv::MacroDeclOp, sv::VerbatimOp,
+                       sv::VerbatimExprOp, sv::VerbatimExprSEOp, sv::IfOp,
+                       sv::IfDefOp, sv::IfDefProceduralOp, sv::AlwaysOp,
+                       sv::AlwaysCombOp, sv::AlwaysFFOp>([&](auto expr) {})
+        .Default([&](auto expr) { visitInvalidSV(op); });
+  }
 
-  void visitInvalidSV(Operation *op) {
-    // The only op left is registers
-    auto reg = dyn_cast<seq::FirRegOp>(op);
-    if (!reg)
-      return;
+  // Once SV Ops are visited, we need to check for seq ops
+  void visitInvalidSV(Operation *op) { visitSeq(op); }
 
-    visit(reg);
+  // Seq operation visitor, that dispatches to other seq ops
+  // Also handles all remaining operations that should be explicitly ignored
+  void visitSeq(Operation *op) {
+    // Typeswitch is used here because other seq types will be supported
+    // like all operations relating to memories and CompRegs
+    TypeSwitch<Operation *, void>(op)
+        .template Case<seq::FirRegOp>([&](auto expr) { visit(expr); })
+        .Default([&](auto expr) { visitUnsupportedOp(op); });
   }
 
   // Firrtl registers generate a state instruction
@@ -689,6 +701,24 @@ public:
     // This is required to model transitions between states (i.e. how a
     // register's value evolves over time)
     regOps.push_back(reg);
+  }
+
+  // Ignore all other explicitly mentionned operations
+  void ignore(Operation *op) {}
+
+  // Tail method that handles all operations that weren't handled by previous
+  // visitors. Here we simply make the pass fail
+  void visitUnsupportedOp(Operation *op) {
+    // Check for ignored ops vs unsupported ops (which cause a failure)
+    TypeSwitch<Operation *, void>(op)
+        .template Case<seq::FromClockOp, seq::ClockDivider, seq::ClockGateOp,
+                       seq::ClockMuxOp, seq::ConstClockOp, seq::ToClockOp,
+                       hw::OutputOp, hw::HWModuleOp>(
+            [&](auto expr) { ignore(op); })
+        .Default([&](auto expr) {
+          op->emitOpError("is an unsupported operation");
+          return signalPassFailure();
+        });
   }
 };
 } // end anonymous namespace
