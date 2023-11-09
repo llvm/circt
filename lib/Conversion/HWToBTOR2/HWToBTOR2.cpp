@@ -467,6 +467,55 @@ private:
     return width;
   }
 
+  // Generates the transitions requires to finilize the register to state
+  // transition system conversion
+  void finilizeRegVisit(Operation *op) {
+    // Check the register type (done to support non-firrtl registers as well)
+    auto reg = dyn_cast<seq::FirRegOp>(op);
+    if (!reg)
+      return;
+
+    // Generate the reset condition (for sync & async resets)
+    // We assume for now that the reset value is always 0
+    size_t width = hw::getBitWidth(reg.getType());
+    genSort(bitvecStr, width);
+    genZero(width);
+
+    // Extract the `next` operation for each register (used to define the
+    // transition). We need to check if next is a port to avoid nullptrs
+    Value next = reg.getNext();
+
+    // Next should already be associated to an LID at this point
+    // As we are going to override it, we need to keep track of the original
+    // instruction
+    size_t nextLID = noLID;
+
+    // Check for special case where next is actually a port
+    // To do so, we start by checking if our operation is a block argument
+    if (BlockArgument barg = dyn_cast<BlockArgument>(next)) {
+      // Extract the block argument index and use that to get the line number
+      size_t argIdx = barg.getArgNumber();
+
+      // Check that the extracted argument is in range before using it
+      if (inputLIDs.contains(argIdx)) {
+        nextLID = inputLIDs[argIdx];
+      }
+    } else {
+      nextLID = getOrCreateOpLID(next);
+    }
+
+    // Sanity check
+    assert(nextLID != noLID);
+
+    // Generate the ite for the register update reset condition
+    // i.e. reg <= reset ? 0 : next
+    genIte(next.getDefiningOp(), resetLID, constToLIDMap.at({0, width}),
+           nextLID, width);
+
+    // Finally generate the next statement
+    genNext(next, reg, width);
+  }
+
 public:
   /// Visitor Methods used later on for pattern matching
 
@@ -497,11 +546,6 @@ public:
       genInput(w, iName);
     }
   }
-
-  // Outputs don't actually mean much in btor, only assertions matter
-  // Additionally, btormc doesn't support outputs, so we're just going to
-  // ignore them
-  void visit(hw::OutputOp op) {}
 
   // Emits the associated btor2 operation for a constant. Note that for
   // simplicity, we will only emit `constd` in order to avoid bit-string
@@ -663,15 +707,7 @@ public:
     genConstraint(expr);
   }
 
-  void visitSV(Operation *op) {
-    // All explicitly ignored sv ops
-    TypeSwitch<Operation *, void>(op)
-        .template Case<sv::MacroDefOp, sv::MacroDeclOp, sv::VerbatimOp,
-                       sv::VerbatimExprOp, sv::VerbatimExprSEOp, sv::IfOp,
-                       sv::IfDefOp, sv::IfDefProceduralOp, sv::AlwaysOp,
-                       sv::AlwaysCombOp, sv::AlwaysFFOp>([&](auto expr) {})
-        .Default([&](auto expr) { visitInvalidSV(op); });
-  }
+  void visitSV(Operation *op) { visitInvalidSV(op); }
 
   // Once SV Ops are visited, we need to check for seq ops
   void visitInvalidSV(Operation *op) { visitSeq(op); }
@@ -704,17 +740,25 @@ public:
   }
 
   // Ignore all other explicitly mentionned operations
-  void ignore(Operation *op) {}
+  void ignore(Operation *op) { /* Willingly empty */ }
 
   // Tail method that handles all operations that weren't handled by previous
   // visitors. Here we simply make the pass fail
   void visitUnsupportedOp(Operation *op) {
-    // Check for ignored ops vs unsupported ops (which cause a failure)
+    // Check for explicitly ignored ops vs unsupported ops (which cause a
+    // failure)
     TypeSwitch<Operation *, void>(op)
-        .template Case<seq::FromClockOp, seq::ClockDivider, seq::ClockGateOp,
-                       seq::ClockMuxOp, seq::ConstClockOp, seq::ToClockOp,
-                       hw::OutputOp, hw::HWModuleOp>(
+        // All explicitly ignored operations are defined here
+        .template Case<
+            sv::MacroDefOp, sv::MacroDeclOp, sv::VerbatimOp, sv::VerbatimExprOp,
+            sv::VerbatimExprSEOp, sv::IfOp, sv::IfDefOp, sv::IfDefProceduralOp,
+            sv::AlwaysOp, sv::AlwaysCombOp, sv::AlwaysFFOp, seq::FromClockOp,
+            seq::ClockDivider, seq::ClockGateOp, seq::ClockMuxOp,
+            seq::ConstClockOp, seq::ToClockOp, hw::OutputOp, hw::HWModuleOp>(
             [&](auto expr) { ignore(op); })
+
+        // Anything else is considered unsupported and might cause a wrong
+        // behavior if ignored, so an error is thrown
         .Default([&](auto expr) {
           op->emitOpError("is an unsupported operation");
           return signalPassFailure();
@@ -738,50 +782,7 @@ void ConvertHWToBTOR2Pass::runOnOperation() {
 
     // Iterate through the registers and generate the `next` instructions
     for (size_t i = 0; i < regOps.size(); ++i) {
-      // Check the register type (done to support non-firrtl registers as well)
-      auto reg = dyn_cast<seq::FirRegOp>(regOps[i]);
-      if (!reg)
-        continue;
-
-      // Generate the reset condition (for sync & async resets)
-      // We assume for now that the reset value is always 0
-      size_t width = hw::getBitWidth(reg.getType());
-      genSort(bitvecStr, width);
-      genZero(width);
-
-      // Extract the `next` operation for each register (used to define the
-      // transition). We need to check if next is a port to avoid nullptrs
-      Value next = reg.getNext();
-
-      // Next should already be associated to an LID at this point
-      // As we are going to override it, we need to keep track of the original
-      // instruction
-      size_t nextLID = noLID;
-
-      // Check for special case where next is actually a port
-      // To do so, we start by checking if our operation is a block argument
-      if (BlockArgument barg = dyn_cast<BlockArgument>(next)) {
-        // Extract the block argument index and use that to get the line number
-        size_t argIdx = barg.getArgNumber();
-
-        // Check that the extracted argument is in range before using it
-        if (inputLIDs.contains(argIdx)) {
-          nextLID = inputLIDs[argIdx];
-        }
-      } else {
-        nextLID = getOrCreateOpLID(next);
-      }
-
-      // Sanity check
-      assert(nextLID != noLID);
-
-      // Generate the ite for the register update reset condition
-      // i.e. reg <= reset ? 0 : next
-      genIte(next.getDefiningOp(), resetLID, constToLIDMap.at({0, width}),
-             nextLID, width);
-
-      // Finally generate the next statement
-      genNext(next, reg, width);
+      finilizeRegVisit(regOps[i]);
     }
   });
 
