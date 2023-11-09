@@ -3,6 +3,7 @@
 // RUN: circt-opt %s --esi-connect-services --esi-appid-hier=top=top --esi-build-manifest=top=top --esi-clean-metadata > %t4.mlir
 // RUN: circt-opt %t4.mlir --lower-esi-to-physical --lower-esi-bundles --lower-esi-ports --lower-esi-to-hw=platform=cosim --lower-seq-to-sv --export-split-verilog -o %t3.mlir
 // RUN: cd ..
+// RUN: %python %s.py trace w:%t6/esi_system_manifest.json
 // RUN: esi-cosim-runner.py --exec %s.py %t6/*.sv
 
 !sendI8 = !esi.bundle<[!esi.channel<i8> to "send"]>

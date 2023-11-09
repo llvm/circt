@@ -46,6 +46,8 @@ set(ESIRuntimeSources
   cpp/lib/Accelerator.cpp
   cpp/lib/Manifest.cpp
   cpp/lib/StdServices.cpp
+
+  cpp/lib/backends/Trace.cpp
 )
 set(ESIRuntimeLinkLibraries
   ZLIB::ZLIB
