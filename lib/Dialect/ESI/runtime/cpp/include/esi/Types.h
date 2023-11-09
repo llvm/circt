@@ -36,7 +36,7 @@ public:
 
   ID id() { return _id; }
 
-private:
+protected:
   ID _id;
 };
 
@@ -47,18 +47,17 @@ private:
 class BundleType : public Type {
 public:
   enum Direction { To, From };
-  BundleType(
-      const ID &id,
-      std::vector<std::tuple<std::string, Direction, const Type &>> channels)
+
+  using ChannelVector =
+      std::vector<std::tuple<std::string, Direction, const Type &>>;
+
+  BundleType(const ID &id, const ChannelVector &channels)
       : Type(id), _channels(channels) {}
 
-  const std::vector<std::tuple<std::string, Direction, const Type &>> &
-  channels() {
-    return _channels;
-  }
+  const ChannelVector &channels() { return _channels; }
 
-private:
-  std::vector<std::tuple<std::string, Direction, const Type &>> _channels;
+protected:
+  ChannelVector _channels;
 };
 
 } // namespace esi
