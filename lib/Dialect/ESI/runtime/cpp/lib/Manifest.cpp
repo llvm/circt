@@ -32,8 +32,10 @@ namespace internal {
 // Plus, it allows us to hide some implementation functions from the header
 // file.
 class ManifestProxy {
+  friend class ::esi::Manifest;
+
 public:
-  ManifestProxy(const std::string &jsonManifest, Manifest &manifest);
+  ManifestProxy(const std::string &jsonManifest);
 
   auto at(const std::string &key) const { return manifestJson.at(key); }
 
@@ -47,11 +49,26 @@ public:
   std::vector<std::unique_ptr<Instance>>
   getChildInstances(const nlohmann::json &json) const;
 
+  /// Parse all the types and populate the types table.
+  void populateTypes(const nlohmann::json &typesJson);
+
+  // Forwarded from Manifest.
+  const std::vector<std::reference_wrapper<const Type>> &getTypeTable() const {
+    return _typeTable;
+  }
+
   /// Build a dynamic API for the Accelerator connection 'acc' based on the
   /// manifest stored herein.
   std::unique_ptr<Design> buildDesign(Accelerator &acc) const;
 
+  const Type &parseType(const nlohmann::json &typeJson);
+
 private:
+  BundleType *parseBundleType(const nlohmann::json &typeJson);
+
+  std::vector<std::reference_wrapper<const Type>> _typeTable;
+  std::map<Type::ID, std::unique_ptr<Type>> _types;
+
   // The parsed json.
   nlohmann::json manifestJson;
   // Cache the module info for each symbol.
@@ -109,13 +126,13 @@ static ModuleInfo parseModuleInfo(const nlohmann::json &mod) {
 // ManifestProxy class implementation.
 //===----------------------------------------------------------------------===//
 
-internal::ManifestProxy::ManifestProxy(const std::string &manifestStr,
-                                       Manifest &manifest) {
+internal::ManifestProxy::ManifestProxy(const std::string &manifestStr) {
   manifestJson = nlohmann::ordered_json::parse(manifestStr);
 
   for (auto &mod : manifestJson.at("symbols"))
     symbolInfoCache.insert(
         std::make_pair(mod.at("symbolRef"), parseModuleInfo(mod)));
+  populateTypes(manifestJson.at("types"));
 }
 
 std::unique_ptr<Design>
@@ -151,12 +168,63 @@ internal::ManifestProxy::getChildInstances(const nlohmann::json &json) const {
   return ret;
 }
 
+BundleType *
+internal::ManifestProxy::parseBundleType(const nlohmann::json &typeJson) {
+  assert(typeJson.at("mnemonic") == "bundle");
+
+  std::vector<std::tuple<std::string, BundleType::Direction, const Type &>>
+      channels;
+  for (auto &chanJson : typeJson["channels"]) {
+    std::string dirStr = chanJson.at("direction");
+    BundleType::Direction dir;
+    if (dirStr == "to")
+      dir = BundleType::Direction::To;
+    else if (dirStr == "from")
+      dir = BundleType::Direction::From;
+    else
+      throw std::runtime_error("Malformed manifest: unknown direction '" +
+                               dirStr + "'");
+    channels.emplace_back(chanJson.at("name"), dir,
+                          parseType(chanJson["type"]));
+  }
+  return new BundleType(typeJson.at("circt_name"), channels);
+}
+
+// Parse a type if it doesn't already exist in the cache.
+const Type &internal::ManifestProxy::parseType(const nlohmann::json &typeJson) {
+  // We use the circt type string as a unique ID.
+  std::string circt_name = typeJson.at("circt_name");
+
+  // Check the cache.
+  auto typeF = _types.find(circt_name);
+  if (typeF != _types.end())
+    return *typeF->second;
+
+  // Parse the type.
+  std::string mnemonic = typeJson.at("mnemonic");
+  Type *t;
+  if (mnemonic == "bundle")
+    t = parseBundleType(typeJson);
+  else
+    // Types we don't know about are opaque.
+    t = new Type(circt_name);
+
+  // Insert into the cache.
+  _types.emplace(circt_name, std::unique_ptr<Type>(t));
+  return *t;
+}
+
+void internal::ManifestProxy::populateTypes(const nlohmann::json &typesJson) {
+  for (auto &typeJson : typesJson)
+    _typeTable.push_back(parseType(typeJson));
+}
+
 //===----------------------------------------------------------------------===//
 // Manifest class implementation.
 //===----------------------------------------------------------------------===//
 
 Manifest::Manifest(const std::string &jsonManifest)
-    : manifest(*new internal::ManifestProxy(jsonManifest, *this)) {}
+    : manifest(*new internal::ManifestProxy(jsonManifest)) {}
 Manifest::~Manifest() { delete &manifest; }
 
 uint32_t Manifest::apiVersion() const {
@@ -172,6 +240,18 @@ std::vector<ModuleInfo> Manifest::moduleInfos() const {
 
 std::unique_ptr<Design> Manifest::buildDesign(Accelerator &acc) const {
   return manifest.buildDesign(acc);
+}
+
+std::optional<std::reference_wrapper<const Type>>
+Manifest::getType(Type::ID id) const {
+  if (auto f = manifest._types.find(id); f != manifest._types.end())
+    return *f->second;
+  return std::nullopt;
+}
+
+const std::vector<std::reference_wrapper<const Type>> &
+Manifest::getTypeTable() const {
+  return manifest.getTypeTable();
 }
 
 //===----------------------------------------------------------------------===//

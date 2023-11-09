@@ -96,8 +96,13 @@ PYBIND11_MODULE(esiCppAccel, m) {
       .def("get_service_mmio", &Accelerator::getService<services::MMIO>,
            py::return_value_policy::reference_internal);
 
+  py::class_<Type>(m, "Type")
+      .def_property_readonly("id", &Type::getID)
+      .def("__repr__", [](Type &t) { return "<" + t.getID() + ">"; });
+
   py::class_<Manifest>(m, "Manifest")
       .def(py::init<std::string>())
       .def_property_readonly("api_version", &Manifest::apiVersion)
-      .def("build_design", &Manifest::buildDesign);
+      .def("build_design", &Manifest::buildDesign)
+      .def_property_readonly("type_table", &Manifest::getTypeTable);
 }
