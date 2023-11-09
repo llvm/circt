@@ -1,4 +1,4 @@
-//===- LowerHWtoBTOR2.cpp - Lowers a hw module to btor2 --------*- C++ -*-===//
+//===- HWToBTOR2.cpp - HW to BTOR2 translation ------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -9,7 +9,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
+#include "circt/Conversion/HWToBTOR2.h"
+#include "../PassDetail.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/HW/HWModuleGraph.h"
 #include "circt/Dialect/HW/HWPasses.h"
@@ -26,12 +27,17 @@ using namespace hw;
 namespace {
 // The goal here is to traverse the operations in order and convert them one by
 // one into btor2
-struct LowerHWtoBTOR2Pass : public LowerHWtoBTOR2Base<LowerHWtoBTOR2Pass> {
+struct ConvertHWToBTOR2Pass
+    : public ConvertHWToBTOR2Base<ConvertHWToBTOR2Pass> {
 public:
+  ConvertHWToBTOR2Pass(raw_ostream &os) : os(os) {}
   // Executes the pass
   void runOnOperation() override;
 
 private:
+  // Output stream in which the btor2 will be emitted
+  raw_ostream &os;
+
   // Create a counter that attributes a unique id to each generated btor2 line
   size_t lid = 1;          // btor2 line identifiers usually start at 1
   size_t resetLID = noLID; // keeps track of the reset's LID
@@ -119,7 +125,8 @@ private:
   // If so, its lid will be returned
   // Otherwise -1 will be returned
   size_t getOpLID(Operation *op) {
-    // Look for the operation declaration
+    // Look for the original operation declaration
+    // Make sure that wires are considered when looking for an lid
     Operation *defOp = getOpAlias(op);
     if (opLIDMap.contains(defOp)) {
       return opLIDMap[defOp];
@@ -133,7 +140,6 @@ private:
   // If so, its lid will be returned
   // Otherwise -1 will be returned
   size_t getOpLID(Value op) {
-    // Look for the operation declaration
     Operation *defOp = getOpAlias(op.getDefiningOp());
 
     if (opLIDMap.contains(defOp)) {
@@ -141,12 +147,12 @@ private:
     }
 
     // Check for special case where op is actually a port
-    // To do so, we start by checking if our operation isa block argument
+    // To do so, we start by checking if our operation is a block argument
     if (BlockArgument barg = dyn_cast<BlockArgument>(op)) {
       // Extract the block argument index and use that to get the line number
       size_t argIdx = barg.getArgNumber();
 
-      // Check that the extracted argument is in range
+      // Check that the extracted argument is in range before using it
       if (inputLIDs.contains(argIdx)) {
         return inputLIDs[argIdx];
       }
@@ -164,15 +170,14 @@ private:
     }
   }
 
-  // Checks if an operation has an alias
+  // Checks if an operation has an alias. This is the case for wires
   // If so, the original operation is returned
   // Otherwise the argument is returned as it is the original op
   Operation *getOpAlias(Operation *op) {
-    // Look for the operation declaration
     if (opAliasMap.contains(op)) {
       return opAliasMap[op];
     }
-    // If no lid was found return -1
+    // If the op isn't an alias then simply return it
     return op;
   }
 
@@ -180,13 +185,35 @@ private:
   // associating it with the current lid
   void setOpAlias(Operation *alias, Operation *op) { opAliasMap[alias] = op; }
 
+  // Checks if a sort was declared with the given width
+  // If so, its lid will be returned
+  // Otherwise -1 will be returned
+  size_t getSortLID(size_t w) {
+    if (sortToLIDMap.contains(w)) {
+      return sortToLIDMap[w];
+    }
+    // If no lid was found return -1
+    return noLID;
+  }
+
+  // Checks if a constant of a given size has been declared
+  // If so, its lid will be returned
+  // Otherwise -1 will be returned
+  size_t getConstLID(int64_t val, size_t w) {
+    if (constToLIDMap.contains({val, w})) {
+      return constToLIDMap[{val, w}];
+    }
+    // if no lid was found return -1
+    return noLID;
+  }
+
   /// String generation helper functions
 
   // Generates a sort declaration instruction given a type (bitvecStr or array)
   // and a width
   void genSort(StringRef type, size_t width) {
     // Check that the sort wasn't already declared
-    if (sortToLIDMap.at(width) != noLID) {
+    if (getSortLID(width) != noLID) {
       return; // If it has already been declared then return an empty string
     }
 
@@ -194,8 +221,7 @@ private:
     sortToLIDMap[width] = lid;
 
     // Build and return a sort declaration
-    llvm::outs() << lid++ << wsStr << sortStr << wsStr << type << wsStr << width
-                 << nlStr;
+    os << lid++ << wsStr << sortStr << wsStr << type << wsStr << width << nlStr;
   }
 
   // Generates an input declaration given a sort lid and a name
@@ -203,12 +229,8 @@ private:
     // Retrieve the lid associated with the sort (sid)
     size_t sid = sortToLIDMap.at(width);
 
-    // Check that a result was found before continuing
-    assert(sid != noLID);
-
     // Generate input declaration
-    llvm::outs() << lid++ << wsStr << inputStr << wsStr << sid << wsStr << name
-                 << nlStr;
+    os << lid++ << wsStr << inputStr << wsStr << sid << wsStr << name << nlStr;
   }
 
   // Generates a constant declaration given a value, a width and a name
@@ -220,31 +242,25 @@ private:
     // Retrieve the lid associated with the sort (sid)
     size_t sid = sortToLIDMap.at(width);
 
-    // Check that a result was found before continuing
-    assert(sid != noLID);
-
-    llvm::outs() << lid++ << wsStr << constdStr << wsStr << sid << wsStr
-                 << value << nlStr;
+    os << lid++ << wsStr << constdStr << wsStr << sid << wsStr << value
+       << nlStr;
   }
 
   // Generates a zero constant expression
   void genZero(size_t width) {
     // Check if the constant has been created yet
-    if (constToLIDMap.at({0, width}) != noLID) {
+    if (getConstLID(0, width) != noLID) {
       return;
     }
 
     // Retrieve the lid associated with the sort (sid)
     size_t sid = sortToLIDMap.at(width);
 
-    // Check that a result was found before continuing
-    assert(sid != noLID);
-
     // Keep track of this value in a constant declaration tracker
     constToLIDMap[{0, width}] = lid;
 
     // Build and return the zero btor instruction
-    llvm::outs() << lid++ << wsStr << zeroStr << wsStr << sid << nlStr;
+    os << lid++ << wsStr << zeroStr << wsStr << sid << nlStr;
   }
 
   // Generates a binary operation instruction given an op name, two operands and
@@ -257,17 +273,14 @@ private:
     // Find the sort's lid
     size_t sid = sortToLIDMap.at(width);
 
-    // Sanity check
-    assert(sid != noLID);
-
     // Assuming that the operands were already emitted
     // Find the LIDs associated to the operands
     size_t op1LID = getOpLID(op1);
     size_t op2LID = getOpLID(op2);
 
     // Build and return the string
-    llvm::outs() << lid++ << wsStr << inst << wsStr << sid << wsStr << op1LID
-                 << wsStr << op2LID << nlStr;
+    os << lid++ << wsStr << inst << wsStr << sid << wsStr << op1LID << wsStr
+       << op2LID << nlStr;
   }
 
   // Emits a btor2 string for the given binary operation
@@ -286,22 +299,19 @@ private:
 
   // Generates a slice instruction given an operand, the lowbit, and the width
   void genSlice(Operation *srcop, Value op0, size_t lowbit, int64_t width) {
-    // Set the LID for this operation
+    // Assign a LID to this operation
     setOpLID(srcop);
 
-    // Find the sort's lid
+    // Find the sort's associated lid in order to use it in the instruction
     size_t sid = sortToLIDMap.at(width);
-
-    // Sanity check
-    assert(sid != noLID);
 
     // Assuming that the operand has already been emitted
     // Find the LID associated to the operand
     size_t op0LID = getOpLID(op0);
 
     // Build and return the slice instruction
-    llvm::outs() << lid++ << wsStr << sliceStr << wsStr << sid << wsStr
-                 << op0LID << wsStr << (width - 1) << wsStr << lowbit << nlStr;
+    os << lid++ << wsStr << sliceStr << wsStr << sid << wsStr << op0LID << wsStr
+       << (width - 1) << wsStr << lowbit << nlStr;
   }
 
   // Generates a constant declaration given a value, a width and a name
@@ -313,15 +323,11 @@ private:
     // Retrieve the lid associated with the sort (sid)
     size_t sid = sortToLIDMap.at(width);
 
-    // Check that a result was found before continuing
-    assert(sid != noLID);
-
     // Assuming that the operand has already been emitted
     // Find the LID associated to the operand
     size_t op0LID = getOpLID(op0);
 
-    llvm::outs() << lid++ << wsStr << inst << wsStr << sid << wsStr << op0LID
-                 << nlStr;
+    os << lid++ << wsStr << inst << wsStr << sid << wsStr << op0LID << nlStr;
   }
 
   // Generates a constant declaration given a value, a width and a name
@@ -337,7 +343,7 @@ private:
     size_t assertLID = getOpLID(assertop);
 
     // Build and return the btor2 string
-    llvm::outs() << lid++ << wsStr << badStr << wsStr << assertLID << nlStr;
+    os << lid++ << wsStr << badStr << wsStr << assertLID << nlStr;
   }
 
   // Generate a btor2 constraint given an expression from an assumption
@@ -347,16 +353,14 @@ private:
     size_t exprLID = getOpLID(expr);
 
     // Build and return the btor2 string
-    llvm::outs() << lid++ << wsStr << constraintStr << wsStr << exprLID
-                 << nlStr;
+    os << lid++ << wsStr << constraintStr << wsStr << exprLID << nlStr;
   }
 
   // Generate a btor2 constraint given an expression from an assumption
   // operation
   void genConstraint(size_t exprLID) {
     // Build and return the btor2 string
-    llvm::outs() << lid++ << wsStr << constraintStr << wsStr << exprLID
-                 << nlStr;
+    os << lid++ << wsStr << constraintStr << wsStr << exprLID << nlStr;
   }
 
   // Generate an ite instruction (if then else) given a predicate, two values
@@ -368,17 +372,14 @@ private:
     // Retrieve the lid associated with the sort (sid)
     size_t sid = sortToLIDMap.at(width);
 
-    // Check that a result was found before continuing
-    assert(sid != noLID);
-
     // Retrieve the operand lids, assuming they were emitted
     size_t condLID = getOpLID(cond);
     size_t tLID = getOpLID(t);
     size_t fLID = getOpLID(f);
 
     // Build and return the ite instruction
-    llvm::outs() << lid++ << wsStr << iteStr << wsStr << sid << wsStr << condLID
-                 << wsStr << tLID << wsStr << fLID << nlStr;
+    os << lid++ << wsStr << iteStr << wsStr << sid << wsStr << condLID << wsStr
+       << tLID << wsStr << fLID << nlStr;
   }
 
   // Generate an ite instruction (if then else) given a predicate, two values
@@ -391,12 +392,9 @@ private:
     // Retrieve the lid associated with the sort (sid)
     size_t sid = sortToLIDMap.at(width);
 
-    // Check that a result was found before continuing
-    assert(sid != noLID);
-
     // Build and return the ite instruction
-    llvm::outs() << lid++ << wsStr << iteStr << wsStr << sid << wsStr << condLID
-                 << wsStr << tLID << wsStr << fLID << nlStr;
+    os << lid++ << wsStr << iteStr << wsStr << sid << wsStr << condLID << wsStr
+       << tLID << wsStr << fLID << nlStr;
   }
 
   // Generate a logical implication given a lhs and a rhs
@@ -407,16 +405,13 @@ private:
     // Retrieve the lid associated with the sort (sid)
     size_t sid = sortToLIDMap.at(1);
 
-    // Check that a result was found before continuing
-    assert(sid != noLID);
-
     // Retrieve LIDs for the lhs and rhs
     size_t lhsLID = getOpLID(lhs);
     size_t rhsLID = getOpLID(rhs);
 
     // Build and return the implies operation
-    llvm::outs() << lid++ << wsStr << impliesStr << wsStr << sid << wsStr
-                 << lhsLID << wsStr << rhsLID << nlStr;
+    os << lid++ << wsStr << impliesStr << wsStr << sid << wsStr << lhsLID
+       << wsStr << rhsLID << nlStr;
   }
 
   // Generate a logical implication given a lhs and a rhs
@@ -427,12 +422,9 @@ private:
     // Retrieve the lid associated with the sort (sid)
     size_t sid = sortToLIDMap.at(1);
 
-    // Check that a result was found before continuing
-    assert(sid != noLID);
-
     // Build and return the implies operation
-    llvm::outs() << lid++ << wsStr << impliesStr << wsStr << sid << wsStr
-                 << lhsLID << wsStr << rhsLID << nlStr;
+    os << lid++ << wsStr << impliesStr << wsStr << sid << wsStr << lhsLID
+       << wsStr << rhsLID << nlStr;
   }
 
   // Generates a state instruction given a width and a name
@@ -443,12 +435,8 @@ private:
     // Retrieve the lid associated with the sort (sid)
     size_t sid = sortToLIDMap.at(width);
 
-    // Check that a result was found before continuing
-    assert(sid != noLID);
-
     // Build and return the state instruction
-    llvm::outs() << lid++ << wsStr << stateStr << wsStr << sid << wsStr << name
-                 << nlStr;
+    os << lid++ << wsStr << stateStr << wsStr << sid << wsStr << name << nlStr;
   }
 
   // Generates a next instruction, given a width, a state LID, and a next value
@@ -457,16 +445,13 @@ private:
     // Retrieve the lid associated with the sort (sid)
     size_t sid = sortToLIDMap.at(width);
 
-    // Check that a result was found before continuing
-    assert(sid != noLID);
-
     // Retrieve the LIDs associated to reg and next
     size_t regLID = getOpLID(reg);
     size_t nextLID = getOpLID(next);
 
     // Build and return the next instruction
-    llvm::outs() << lid++ << wsStr << nextStr << wsStr << sid << wsStr << regLID
-                 << wsStr << nextLID << nlStr;
+    os << lid++ << wsStr << nextStr << wsStr << sid << wsStr << regLID << wsStr
+       << nextLID << nlStr;
   }
 
   // Verifies that the sort required for the given operation's btor2 emission
@@ -616,9 +601,9 @@ private:
   // Muxes generally convert to an ite statement
   void visit(comb::MuxOp op) {
     // Extract predicate, true and false values
-    Value pred = op.getOperand(0);
-    Value tval = op.getOperand(1);
-    Value fval = op.getOperand(2);
+    Value pred = op.getCond();
+    Value tval = op.getTrueValue();
+    Value fval = op.getFalseValue();
 
     // We assume that both tval and fval have the same width
     // This width should be the same as the output width
@@ -682,7 +667,7 @@ private:
 };
 } // end anonymous namespace
 
-void LowerHWtoBTOR2Pass::runOnOperation() {
+void ConvertHWToBTOR2Pass::runOnOperation() {
   // Btor2 does not have the concept of modules or module
   // hierarchies, so we assume that no nested modules exist at this point.
   // This greatly simplifies translation.
@@ -739,12 +724,18 @@ void LowerHWtoBTOR2Pass::runOnOperation() {
       // Finally generate the next statement
       genNext(next, reg, width);
     }
-
-    llvm::outs() << "\n===============================\n\n";
   });
+
+  // Clear data structures to allow for pass reuse
+  sortToLIDMap.clear();
+  constToLIDMap.clear();
+  opLIDMap.clear();
+  opAliasMap.clear();
+  inputLIDs.clear();
+  regOps.clear();
 }
 
 // Basic constructor for the pass
-std::unique_ptr<mlir::Pass> circt::hw::createLowerHWtoBTOR2Pass() {
-  return std::make_unique<LowerHWtoBTOR2Pass>();
+std::unique_ptr<mlir::Pass> circt::createConvertHWToBTOR2Pass() {
+  return std::make_unique<ConvertHWToBTOR2Pass>(llvm::outs());
 }

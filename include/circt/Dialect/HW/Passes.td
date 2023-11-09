@@ -58,14 +58,4 @@ def VerifyInnerRefNamespace : Pass<"hw-verify-irn"> {
   let constructor =  "circt::hw::createVerifyInnerRefNamespacePass()";
 }
 
-def LowerHWtoBTOR2 : Pass<"hw-lower-to-botr2", "mlir::ModuleOp"> {
-  let summary = "Lowers the hw dialect to a btor2 format";
-  let constructor = "circt::hw::createLowerHWtoBTOR2Pass()";
-  let description = [{
-    Creates a btor2 model file from the hw dialect. This requires tracking
-    the btor-id to mlir-name mappings and available bitvec sort sizes in order
-    to express the hw model in a btor form. 
-  }];
-}
-
 #endif // CIRCT_DIALECT_HW_PASSES_TD
