@@ -68,10 +68,34 @@ PYBIND11_MODULE(esiCppAccel, m) {
         return ret;
       });
 
+  py::class_<ChannelPort>(m, "ChannelPort");
+  py::class_<WriteChannelPort, ChannelPort>(m, "WriteChannelPort")
+      .def("write", [](WriteChannelPort &p, std::vector<uint8_t> data) {
+        p.write(data.data(), data.size());
+      });
+  py::class_<ReadChannelPort, ChannelPort>(m, "ReadChannelPort")
+      .def("read", [](ReadChannelPort &p, size_t maxSize) {
+        std::vector<uint8_t> data(maxSize);
+        ssize_t size = p.read(data.data(), data.size());
+        if (size < 0)
+          throw std::runtime_error("read failed");
+        data.resize(size);
+        return data;
+      });
+
+  py::class_<BundlePort>(m, "BundlePort")
+      .def("getWrite", &BundlePort::getRawWrite,
+           py::return_value_policy::reference)
+      .def("getRead", &BundlePort::getRawRead,
+           py::return_value_policy::reference);
+
   // Store this variable (not commonly done) as the "children" method needs for
   // "Instance" to be defined first.
-  auto design = py::class_<Design>(m, "Design")
-                    .def_property_readonly("info", &Design::info);
+  auto design =
+      py::class_<Design>(m, "Design")
+          .def_property_readonly("info", &Design::info)
+          .def_property_readonly("ports", &Design::getPorts,
+                                 py::return_value_policy::reference_internal);
 
   // In order to inherit methods from "Design", it needs to be defined first.
   py::class_<Instance, Design>(m, "Instance")

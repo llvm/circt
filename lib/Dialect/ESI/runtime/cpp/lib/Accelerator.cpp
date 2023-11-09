@@ -21,8 +21,8 @@ using namespace esi;
 using namespace esi::services;
 
 CustomService::CustomService(AppIDPath idPath,
-                             const services::ServiceImplDetails &details,
-                             const services::HWClientDetails &clients) {
+                             const ServiceImplDetails &details,
+                             const HWClientDetails &clients) {
   _serviceSymbol = std::any_cast<std::string>(details.at("service"));
   // Strip off initial '@'.
   _serviceSymbol = _serviceSymbol.substr(1);
@@ -30,8 +30,8 @@ CustomService::CustomService(AppIDPath idPath,
 
 namespace esi {
 services::Service *Accelerator::getService(Service::Type svcType, AppIDPath id,
-                                           services::ServiceImplDetails details,
-                                           services::HWClientDetails clients) {
+                                           ServiceImplDetails details,
+                                           HWClientDetails clients) {
   std::unique_ptr<Service> &cacheEntry =
       serviceCache[std::make_tuple(&svcType, id)];
   if (cacheEntry == nullptr)

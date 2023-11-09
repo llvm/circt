@@ -51,7 +51,7 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // HIER:        }
 
 // HW-LABEL:    hw.module @top
-// HW:            hw.instance "__manifest" @Cosim_Manifest<COMPRESSED_MANIFEST_SIZE: i32 = 780>(compressed_manifest: %{{.+}}: !hw.uarray<780xi8>) -> ()
+// HW:            hw.instance "__manifest" @Cosim_Manifest<COMPRESSED_MANIFEST_SIZE: i32 = {{.+}}>(compressed_manifest: %{{.+}}: !hw.uarray<{{.+}}xi8>) -> ()
 // HW-LABEL:    hw.module.extern @Cosim_Manifest<COMPRESSED_MANIFEST_SIZE: i32>(in %compressed_manifest : !hw.uarray<#hw.param.decl.ref<"COMPRESSED_MANIFEST_SIZE">xi8>) attributes {verilogName = "Cosim_Manifest"}
 
 // CHECK:       {
@@ -169,6 +169,10 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:              "direction": "toClient",
 // CHECK-NEXT:              "bundleType": {
 // CHECK-NEXT:                "circt_name": "!esi.bundle<[!esi.channel<i8> to \"recv\"]>"
+// CHECK-NEXT:              },
+// CHECK-NEXT:              "servicePort": {
+// CHECK-NEXT:                "inner": "Recv",
+// CHECK-NEXT:                "outer_sym": "HostComms"
 // CHECK-NEXT:              }
 // CHECK-NEXT:            },
 // CHECK-NEXT:            {
@@ -179,6 +183,10 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:              "direction": "toServer",
 // CHECK-NEXT:              "bundleType": {
 // CHECK-NEXT:                "circt_name": "!esi.bundle<[!esi.channel<i8> to \"send\"]>"
+// CHECK-NEXT:              },
+// CHECK-NEXT:              "servicePort": {
+// CHECK-NEXT:                "inner": "Send",
+// CHECK-NEXT:                "outer_sym": "HostComms"
 // CHECK-NEXT:              }
 // CHECK-NEXT:            }
 // CHECK-NEXT:          ],
@@ -199,6 +207,10 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:              "direction": "toClient",
 // CHECK-NEXT:              "bundleType": {
 // CHECK-NEXT:                "circt_name": "!esi.bundle<[!esi.channel<i8> to \"recv\"]>"
+// CHECK-NEXT:              },
+// CHECK-NEXT:              "servicePort": {
+// CHECK-NEXT:                "inner": "Recv",
+// CHECK-NEXT:                "outer_sym": "HostComms"
 // CHECK-NEXT:              }
 // CHECK-NEXT:            },
 // CHECK-NEXT:            {
@@ -209,6 +221,10 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:              "direction": "toServer",
 // CHECK-NEXT:              "bundleType": {
 // CHECK-NEXT:                "circt_name": "!esi.bundle<[!esi.channel<i8> to \"send\"]>"
+// CHECK-NEXT:              },
+// CHECK-NEXT:              "servicePort": {
+// CHECK-NEXT:                "inner": "Send",
+// CHECK-NEXT:                "outer_sym": "HostComms"
 // CHECK-NEXT:              }
 // CHECK-NEXT:            }
 // CHECK-NEXT:          ],

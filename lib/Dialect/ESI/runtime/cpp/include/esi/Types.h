@@ -33,6 +33,7 @@ class Type {
 public:
   using ID = std::string;
   Type(const ID &id) : id(id) {}
+  virtual ~Type() = default;
 
   ID getID() { return id; }
 
@@ -54,7 +55,7 @@ public:
   BundleType(const ID &id, const ChannelVector &channels)
       : Type(id), channels(channels) {}
 
-  const ChannelVector &getChannels() { return channels; }
+  const ChannelVector &getChannels() const { return channels; }
 
 protected:
   ChannelVector channels;

@@ -76,6 +76,12 @@ public:
     return _typeTable;
   }
 
+  std::optional<std::reference_wrapper<const Type>> getType(Type::ID id) const {
+    if (auto f = _types.find(id); f != _types.end())
+      return *f->second;
+    return std::nullopt;
+  }
+
   /// Build a dynamic API for the Accelerator connection 'acc' based on the
   /// manifest stored herein.
   std::unique_ptr<Design> buildDesign(Accelerator &acc) const;
@@ -114,10 +120,9 @@ static AppIDPath parseIDPath(const nlohmann::json &jsonIDPath) {
   return ret;
 }
 
-static services::ServicePortDesc
-parseServicePort(const nlohmann::json &jsonPort) {
-  return services::ServicePortDesc{jsonPort.at("outer_sym").get<std::string>(),
-                                   jsonPort.at("inner").get<std::string>()};
+static ServicePortDesc parseServicePort(const nlohmann::json &jsonPort) {
+  return ServicePortDesc{jsonPort.at("outer_sym").get<std::string>(),
+                         jsonPort.at("inner").get<std::string>()};
 }
 
 static std::any getAny(const nlohmann::json &value) {
@@ -248,9 +253,9 @@ internal::ManifestProxy::getService(AppIDPath idPath, Accelerator &acc,
   AppID id = parseID(svcJson.at("appID"));
   idPath.push_back(id);
 
-  services::HWClientDetails clientDetails;
+  HWClientDetails clientDetails;
   for (auto &client : svcJson.at("client_details")) {
-    services::HWClientDetail clientDetail;
+    HWClientDetail clientDetail;
     for (auto &detail : client.items()) {
       if (detail.key() == "relAppIDPath")
         clientDetail.path = parseIDPath(detail.value());
@@ -261,7 +266,7 @@ internal::ManifestProxy::getService(AppIDPath idPath, Accelerator &acc,
     }
   }
 
-  services::ServiceImplDetails svcDetails;
+  ServiceImplDetails svcDetails;
   for (auto &detail : svcJson.items())
     if (detail.key() != "appID" && detail.key() != "client_details")
       svcDetails[detail.key()] = getAny(detail.value());
@@ -303,14 +308,34 @@ internal::ManifestProxy::getBundlePorts(AppIDPath idPath,
     if (content.at("class") != "client_port")
       continue;
 
-    services::ServicePortDesc port =
-        parseServicePort(content.at("servicePort"));
+    ServicePortDesc port = parseServicePort(content.at("servicePort"));
     auto f = activeServices.find(port.name);
     if (f == activeServices.end())
       throw std::runtime_error("Could not find service '" + port.name + "'");
 
+    std::string typeName = content.at("bundleType").at("circt_name");
+    auto type = getType(typeName);
+    if (!type)
+      throw std::runtime_error("Could not find port type '" + typeName + "'");
+    const BundleType &bundleType =
+        dynamic_cast<const BundleType &>(type->get());
+
+    BundlePort::Direction portDir;
+    std::string dirStr = content.at("direction");
+    if (dirStr == "toClient")
+      portDir = BundlePort::Direction::ToClient;
+    else if (dirStr == "toServer")
+      portDir = BundlePort::Direction::ToServer;
+    else
+      throw std::runtime_error("Malformed manifest: unknown direction '" +
+                               dirStr + "'");
+
     idPath.push_back(parseID(content.at("appID")));
-    ret.emplace_back(idPath.back(), f->second->requestChannelsFor(idPath));
+    std::map<std::string, ChannelPort &> portChannels;
+    // If we need to have custom ports (because of a custom service), add them.
+    if (auto *customSvc = dynamic_cast<services::CustomService *>(f->second))
+      portChannels = customSvc->requestChannelsFor(idPath, bundleType, portDir);
+    ret.emplace_back(idPath.back(), portChannels);
     idPath.pop_back();
   }
   return ret;
@@ -465,5 +490,19 @@ bool operator<(const AppIDPath &a, const AppIDPath &b) {
     if (a[i] != b[i])
       return a[i] < b[i];
   return false;
+}
+std::ostream &operator<<(std::ostream &os, const AppID &id) {
+  os << id.name;
+  if (id.idx)
+    os << "[" << *id.idx << "]";
+  return os;
+}
+std::ostream &operator<<(std::ostream &os, const AppIDPath &path) {
+  for (size_t i = 0, e = path.size(); i < e; ++i) {
+    if (i > 0)
+      os << '.';
+    os << path[i];
+  }
+  return os;
 }
 } // namespace esi

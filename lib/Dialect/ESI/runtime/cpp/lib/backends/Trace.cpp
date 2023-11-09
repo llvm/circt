@@ -13,7 +13,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "esi/backends/Trace.h"
+#include "esi/Design.h"
 #include "esi/StdServices.h"
+#include "esi/Utils.h"
 
 #include <fstream>
 #include <iostream>
@@ -27,6 +29,62 @@ using namespace esi::backends::trace;
 
 // We only support v1.
 constexpr uint32_t ESIVersion = 1;
+
+namespace {
+class TraceChannelPort;
+}
+
+struct esi::backends::trace::TraceAccelerator::Impl {
+  Impl(Mode mode, std::filesystem::path manifestJson,
+       std::filesystem::path traceFile)
+      : manifestJson(manifestJson), traceFile(traceFile) {
+    if (!filesystem::exists(manifestJson))
+      throw runtime_error("manifest file '" + manifestJson.string() +
+                          "' does not exist");
+
+    if (mode == Write) {
+      // Open the trace file for writing.
+      traceWrite = new ofstream(traceFile);
+      if (!traceWrite->is_open())
+        throw runtime_error("failed to open trace file '" + traceFile.string() +
+                            "'");
+    } else {
+      assert(false && "not implemented");
+    }
+  }
+
+  ~Impl() {
+    if (traceWrite) {
+      traceWrite->close();
+      delete traceWrite;
+    }
+  }
+
+  Service *createService(Service::Type svcType, AppIDPath idPath,
+                         const ServiceImplDetails &details,
+                         const HWClientDetails &clients);
+
+  void adoptChannelPort(ChannelPort *port) { channels.emplace_back(port); }
+
+  void write(const AppIDPath &id, const std::string &portName, const void *data,
+             size_t size);
+
+private:
+  ofstream *traceWrite;
+  std::filesystem::path manifestJson;
+  std::filesystem::path traceFile;
+  vector<unique_ptr<ChannelPort>> channels;
+};
+
+void TraceAccelerator::Impl::write(const AppIDPath &id,
+                                   const std::string &portName,
+                                   const void *data, size_t size) {
+  std::string b64data;
+  utils::encodeBase64(data, size, b64data);
+
+  *traceWrite << "write " << id << '.' << portName << ": " << b64data
+              << std::endl;
+}
 
 unique_ptr<Accelerator> TraceAccelerator::connect(string connectionString) {
   string modeStr;
@@ -58,6 +116,18 @@ unique_ptr<Accelerator> TraceAccelerator::connect(string connectionString) {
       mode, filesystem::path(manifestPath), filesystem::path(traceFile));
 }
 
+TraceAccelerator::TraceAccelerator(Mode mode,
+                                   std::filesystem::path manifestJson,
+                                   std::filesystem::path traceFile) {
+  impl = std::make_unique<Impl>(mode, manifestJson, traceFile);
+}
+
+Service *TraceAccelerator::createService(Service::Type svcType,
+                                         AppIDPath idPath,
+                                         const ServiceImplDetails &details,
+                                         const HWClientDetails &clients) {
+  return impl->createService(svcType, idPath, details, clients);
+}
 namespace {
 class TraceSysInfo : public SysInfo {
 public:
@@ -88,56 +158,77 @@ private:
 } // namespace
 
 namespace {
-class TraceCustomService : public CustomService {
+class WriteTraceChannelPort : public WriteChannelPort {
 public:
-  using CustomService::CustomService;
+  WriteTraceChannelPort(TraceAccelerator::Impl &impl, const AppIDPath &id,
+                        const std::string &portName)
+      : impl(impl), id(id), portName(portName) {}
 
-  virtual std::map<std::string, ChannelPort *> requestChannelsFor(AppIDPath) {
-    return {};
+  virtual void write(const void *data, size_t size) override {
+    impl.write(id, portName, data, size);
   }
+
+protected:
+  TraceAccelerator::Impl &impl;
+  AppIDPath id;
+  std::string portName;
 };
 } // namespace
 
-struct esi::backends::trace::TraceAccelerator::Impl {
-  Impl(Mode mode, std::filesystem::path manifestJson,
-       std::filesystem::path traceFile)
-      : mode(mode), manifestJson(manifestJson), traceFile(traceFile) {
-    if (!filesystem::exists(manifestJson))
-      throw runtime_error("manifest file '" + manifestJson.string() +
-                          "' does not exist");
+namespace {
+class ReadTraceChannelPort : public ReadChannelPort {
+public:
+  ReadTraceChannelPort(TraceAccelerator::Impl &impl) {}
+
+  virtual ssize_t read(void *data, size_t maxSize) override;
+};
+} // namespace
+
+ssize_t ReadTraceChannelPort::read(void *data, size_t maxSize) {
+  uint8_t *dataPtr = reinterpret_cast<uint8_t *>(data);
+  for (size_t i = 0; i < maxSize; ++i)
+    dataPtr[i] = rand() % 256;
+  return maxSize;
+}
+
+namespace {
+class TraceCustomService : public CustomService {
+public:
+  TraceCustomService(TraceAccelerator::Impl &impl, AppIDPath idPath,
+                     const ServiceImplDetails &details,
+                     const HWClientDetails &clients)
+      : CustomService(idPath, details, clients), impl(impl) {}
+
+  virtual std::map<std::string, ChannelPort &>
+  requestChannelsFor(AppIDPath idPath, const BundleType &bundleType,
+                     BundlePort::Direction svcDir) override {
+    std::map<std::string, ChannelPort &> channels;
+    for (auto [name, dir, type] : bundleType.getChannels()) {
+      ChannelPort *port;
+      if (BundlePort::isWrite(dir, svcDir))
+        port = new WriteTraceChannelPort(impl, idPath, name);
+      else
+        port = new ReadTraceChannelPort(impl);
+      channels.emplace(name, *port);
+      impl.adoptChannelPort(port);
+    }
+    return channels;
   }
 
-  Service *createService(Service::Type svcType, AppIDPath idPath,
-                         const services::ServiceImplDetails &details,
-                         const services::HWClientDetails &clients);
-
 private:
-  Mode mode;
-  std::filesystem::path manifestJson;
-  std::filesystem::path traceFile;
+  TraceAccelerator::Impl &impl;
 };
+} // namespace
 
-Service *TraceAccelerator::Impl::createService(
-    Service::Type svcType, AppIDPath idPath,
-    const services::ServiceImplDetails &details,
-    const services::HWClientDetails &clients) {
+Service *
+TraceAccelerator::Impl::createService(Service::Type svcType, AppIDPath idPath,
+                                      const ServiceImplDetails &details,
+                                      const HWClientDetails &clients) {
   if (svcType == typeid(SysInfo))
     return new TraceSysInfo(manifestJson);
   if (svcType == typeid(CustomService))
-    return new TraceCustomService(idPath, details, clients);
+    return new TraceCustomService(*this, idPath, details, clients);
   return nullptr;
-}
-
-TraceAccelerator::TraceAccelerator(Mode mode,
-                                   std::filesystem::path manifestJson,
-                                   std::filesystem::path traceFile) {
-  impl = std::make_unique<Impl>(mode, manifestJson, traceFile);
-}
-Service *
-TraceAccelerator::createService(Service::Type svcType, AppIDPath idPath,
-                                const services::ServiceImplDetails &details,
-                                const services::HWClientDetails &clients) {
-  return impl->createService(svcType, idPath, details, clients);
 }
 
 REGISTER_ACCELERATOR("trace", TraceAccelerator);

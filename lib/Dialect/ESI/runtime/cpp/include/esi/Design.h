@@ -25,7 +25,6 @@
 #ifndef ESI_DESIGN_H
 #define ESI_DESIGN_H
 
-#include "esi/Accelerator.h"
 #include "esi/Manifest.h"
 
 #include <any>
@@ -35,19 +34,45 @@
 namespace esi {
 // Forward declarations.
 class Instance;
+class ChannelPort;
+class WriteChannelPort;
+class ReadChannelPort;
+namespace services {
+class Service;
+}
 
-class ChannelPort {};
-
+/// Services provide connections to 'bundles' -- collections of named,
+/// unidirectional communication channels. This class provides access to those
+/// ChannelPorts.
 class BundlePort {
   friend class services::Service;
 
 public:
-  BundlePort(AppID id, std::map<std::string, ChannelPort *> channels);
-  bool isConnected() const;
+  /// Direction of a bundle. This -- combined with the channel direction in the
+  /// bundle -- can be used to determine if a channel should be writing to or
+  /// reading from the accelerator.
+  enum Direction { ToServer, ToClient };
+
+  /// Compute the direction of a channel given the bundle direction and the
+  /// bundle port's direction.
+  static bool isWrite(BundleType::Direction bundleDir, Direction svcDir) {
+    if (svcDir == Direction::ToClient)
+      return bundleDir == BundleType::Direction::To;
+    return bundleDir == BundleType::Direction::From;
+  }
+
+  /// Construct a port.
+  BundlePort(AppID id, std::map<std::string, ChannelPort &> channels);
+
+  /// Get access to the raw byte streams of a channel. Not intended for internal
+  /// usage and binding to other languages (e.g. Python) which have their own
+  /// message serialization code.
+  WriteChannelPort &getRawWrite(const std::string &name) const;
+  ReadChannelPort &getRawRead(const std::string &name) const;
 
 private:
   AppID _id;
-  std::map<std::string, ChannelPort *> _channels;
+  std::map<std::string, ChannelPort &> _channels;
 };
 
 class Design {
@@ -63,6 +88,8 @@ public:
   const std::vector<std::unique_ptr<Instance>> &children() const {
     return _children;
   }
+
+  const std::vector<BundlePort> &getPorts() const { return _ports; }
 
 protected:
   const std::optional<ModuleInfo> _info;

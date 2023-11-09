@@ -21,6 +21,7 @@
 #ifndef ESI_ACCELERATOR_H
 #define ESI_ACCELERATOR_H
 
+#include "esi/Design.h"
 #include "esi/Manifest.h"
 
 #include <any>
@@ -39,22 +40,33 @@ constexpr uint32_t MagicNumberHi = 0x207D98E5;
 constexpr uint32_t VersionNumberOffset = MagicNumOffset + 8;
 constexpr uint32_t ExpectedVersionNumber = 0;
 
-class ChannelPort;
+/// Unidirectional channels are the basic communication primitive between the
+/// host and accelerator. A 'ChannelPort' is the host side of a channel. It can
+/// be either read or write but not both. At this level, channels are untyped --
+/// just streams of bytes. They are not intended to be used directly by users
+/// but used by higher level APIs which add types.
+class ChannelPort {
+public:
+  virtual ~ChannelPort() = default;
+};
+
+/// A ChannelPort which sends data to the accelerator.
+class WriteChannelPort : public ChannelPort {
+public:
+  /// A very basic write API. Will likely change for performance reasons.
+  virtual void write(const void *data, size_t size) = 0;
+};
+
+/// A ChannelPort which reads data from the accelerator.
+class ReadChannelPort : public ChannelPort {
+public:
+  /// Specify a buffer to read into and a maximum size to read. Returns the
+  /// number of bytes read, or -1 on error. Basic API, will likely change for
+  /// performance reasons.
+  virtual ssize_t read(void *data, size_t maxSize) = 0;
+};
 
 namespace services {
-
-struct ServicePortDesc {
-  std::string name;
-  std::string portName;
-};
-
-struct HWClientDetail {
-  AppIDPath path;
-  ServicePortDesc port;
-  std::map<std::string, std::any> implOptions;
-};
-using HWClientDetails = std::vector<HWClientDetail>;
-using ServiceImplDetails = std::map<std::string, std::any>;
 
 /// Parent class of all APIs modeled as 'services'. May or may not map to a
 /// hardware side 'service'.
@@ -64,23 +76,27 @@ public:
   virtual ~Service() = default;
 
   virtual std::string getServiceSymbol() const = 0;
-  virtual std::map<std::string, ChannelPort *> requestChannelsFor(AppIDPath) {
-    assert(false);
-  };
 };
 
+/// A service for which there are no standard services registered.
 class CustomService : public Service {
 public:
-  CustomService(AppIDPath idPath, const services::ServiceImplDetails &details,
-                const services::HWClientDetails &clients);
+  CustomService(AppIDPath idPath, const ServiceImplDetails &details,
+                const HWClientDetails &clients);
   virtual ~CustomService() = default;
 
   virtual std::string getServiceSymbol() const { return _serviceSymbol; }
 
+  /// Request the host side channel ports for a particular instance (identified
+  /// by the AppID path). For convenience, provide the bundle type and direction
+  /// of the bundle port.
+  virtual std::map<std::string, ChannelPort &>
+  requestChannelsFor(AppIDPath, const BundleType &,
+                     BundlePort::Direction portDir) = 0;
+
 private:
   std::string _serviceSymbol;
 };
-
 } // namespace services
 
 /// An ESI accelerator system.
@@ -93,25 +109,24 @@ public:
   /// ownership of the returned pointer -- the Accelerator object owns it.
   /// Pointer lifetime ends with the Accelerator lifetime.
   template <typename ServiceClass>
-  ServiceClass *getService(AppIDPath id = {},
-                           services::ServiceImplDetails details = {},
-                           services::HWClientDetails clients = {}) {
+  ServiceClass *getService(AppIDPath id = {}, ServiceImplDetails details = {},
+                           HWClientDetails clients = {}) {
     return dynamic_cast<ServiceClass *>(
         getService(typeid(ServiceClass), id, details, clients));
   }
   /// Calls `createService` and caches the result. Subclasses can override if
   /// they want to use their own caching mechanism.
   virtual Service *getService(Service::Type service, AppIDPath id = {},
-                              services::ServiceImplDetails details = {},
-                              services::HWClientDetails clients = {});
+                              ServiceImplDetails details = {},
+                              HWClientDetails clients = {});
 
 protected:
   /// Called by `getServiceImpl` exclusively. It wraps the pointer returned by
   /// this in a unique_ptr and caches it. Separate this from the
   /// wrapping/caching since wrapping/caching is an implementation detail.
   virtual Service *createService(Service::Type service, AppIDPath idPath,
-                                 const services::ServiceImplDetails &details,
-                                 const services::HWClientDetails &clients) = 0;
+                                 const ServiceImplDetails &details,
+                                 const HWClientDetails &clients) = 0;
 
 private:
   /// Cache services via a unique_ptr so they get free'd automatically when
