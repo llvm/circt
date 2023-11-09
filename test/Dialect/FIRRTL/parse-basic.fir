@@ -1808,44 +1808,6 @@ circuit BasicProps :
     ; CHECK-NEXT: firrtl.propassign %nested, %[[NESTED]]
     propassign nested, List<List<String>>(List<String>(), List<String>(String("test")), List<String>())
 
-  ; CHECK-LABEL: module private @Map
-  module Map :
-    ; CHECK-SAME: in %list: !firrtl.list<string>
-    input list : List<String>
-    ; CHECK-SAME: out %str2str: !firrtl.map<string, string>
-    ; CHECK-SAME: out %str2objs: !firrtl.map<string, class<@SimpleClass({{.*}})>>
-    ; CHECK-SAME: out %int2list: !firrtl.map<integer, list<string>>
-    ; CHECK-SAME: out %empty: !firrtl.map<integer, integer>
-    output str2str : Map<String, String>
-    output str2objs : Map<String, Inst<SimpleClass>>
-    output int2list : Map<Integer, List<String>>
-    output empty : Map<Integer, Integer>
-
-    ; CHECK-NEXT: %[[HELLO:.+]] = firrtl.string "hello"
-    ; CHECK-NEXT: %[[WORLD:.+]] = firrtl.string "world"
-    ; CHECK-NEXT: %[[STRINGS:.+]] = firrtl.map.create (%[[HELLO]] -> %[[WORLD]]) : !firrtl.map<string, string>
-    ; CHECK-NEXT: firrtl.propassign %str2str, %[[STRINGS]] : !firrtl.map<string, string>
-    propassign str2str, Map<String, String>(String("hello") -> String("world"))
-
-    ; CHECK-NEXT: %[[OBJ:.+]] = firrtl.object
-    ; CHECK-NEXT: %[[HELLO:.+]] = firrtl.string "hello"
-    ; CHECK-NEXT: %[[WORLD:.+]] = firrtl.string "world"
-    ; CHECK-NEXT: %[[OBJS:.+]] = firrtl.map.create (%[[HELLO]] -> %[[OBJ]], %[[WORLD]] -> %[[OBJ]]) : !firrtl.map<string, class<@SimpleClass({{.*}})>>
-    ; CHECK-NEXT: firrtl.propassign %str2objs, %[[OBJS]] : !firrtl.map<string, class
-    object obj of SimpleClass
-    propassign str2objs, Map<String, Inst<SimpleClass>>(String("hello") -> obj, String("world") -> obj)
-
-    ; CHECK-NEXT: %[[FIVE:.+]] = firrtl.integer 5
-    ; CHECK-NEXT: %[[EMPTY:.+]] = firrtl.list.create : !firrtl.list<string>
-    ; CHECK-NEXT: %[[TEN:.+]] = firrtl.integer 10
-    ; CHECK-NEXT: %[[INTLISTMAP:.+]] = firrtl.map.create (%[[FIVE]] -> %[[EMPTY]], %[[TEN]] -> %list) : !firrtl.map<integer, list<string>>
-    ; CHECK-NEXT: firrtl.propassign %int2list, %[[INTLISTMAP]]
-    propassign int2list, Map<Integer, List<String>>(Integer(5) -> List<String>(), Integer(10) -> list)
-
-    ; CHECK-NEXT: %[[EMPTY:.+]] = firrtl.map.create : !firrtl.map<integer, integer>
-    ; CHECK-NEXT: firrtl.propassign %empty, %[[EMPTY]]
-    propassign empty, Map<Integer, Integer>()
-
 ;// -----
 FIRRTL version 3.1.0
 
@@ -1890,10 +1852,6 @@ circuit AnyRef:
     ; CHECK: !firrtl.anyref
     output listOfAny : List<AnyRef>
     ; CHECK: !firrtl.list<anyref>
-    output mapToAny : Map<Integer, AnyRef>
-    ; CHECK: !firrtl.map<integer, anyref>
-    output mapFromAny : Map<AnyRef, Integer>
-    ; CHECK: !firrtl.map<anyref, integer>
 
     object foo of Foo
     propassign y, foo
@@ -1905,14 +1863,3 @@ circuit AnyRef:
     ; CHECK-NEXT: %[[CAST:.+]] = firrtl.object.anyref_cast %[[OBJ]]
     ; CHECK-NEXT: %[[LIST:.+]] = firrtl.list.create %[[CAST]], %x
     ; CHECK-NEXT: propassign %listOfAny, %[[LIST]]
-
-    propassign mapToAny, Map<Integer, AnyRef>(Integer(2) -> foo)
-    ; CHECK-NEXT: %[[TWO:.+]] = firrtl.integer 2
-    ; CHECK-NEXT: %[[CAST:.+]] = firrtl.object.anyref_cast %[[OBJ]]
-    ; CHECK-NEXT: %[[MAPTO:.+]] = firrtl.map.create (%[[TWO]] -> %[[CAST]])
-    ; CHECK-NEXT: propassign %mapToAny, %[[MAPTO]]
-    propassign mapFromAny, Map<AnyRef, Integer>(foo -> Integer(5))
-    ; CHECK-NEXT: %[[FIVE:.+]] = firrtl.integer 5
-    ; CHECK-NEXT: %[[CAST:.+]] = firrtl.object.anyref_cast %[[OBJ]]
-    ; CHECK-NEXT: %[[MAPFROM:.+]] = firrtl.map.create (%[[CAST]] -> %[[FIVE]])
-    ; CHECK-NEXT: propassign %mapFromAny, %[[MAPFROM]]

@@ -511,14 +511,6 @@ def ListImpl : PropImplType<"List"> {
   let genAccessors = true;
 }
 
-def MapImpl : PropImplType<"Map"> {
-  let summary = "A typed map of properties.  Not representable in hardware.";
-  let parameters = (ins TypeParameter<"circt::firrtl::PropertyType", "key type">:$keyType,
-                    TypeParameter<"circt::firrtl::PropertyType", "value type">:$valueType);
-  let genStorageClass = true;
-  let genAccessors = true;
-}
-
 def PathImpl : PropImplType<"Path"> {
   let summary = "A path to a hardware entity.  Not representable in hardware.";
   let parameters = (ins);

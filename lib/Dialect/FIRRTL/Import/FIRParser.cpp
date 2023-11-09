@@ -257,7 +257,6 @@ struct FIRParser {
                               const Twine &message);
   ParseResult parseEnumType(FIRRTLType &result);
   ParseResult parseListType(FIRRTLType &result);
-  ParseResult parseMapType(FIRRTLType &result);
   ParseResult parseType(FIRRTLType &result, const Twine &message);
   // Parse a property type specifically.
   ParseResult parsePropertyType(PropertyType &result, const Twine &message);
@@ -824,21 +823,6 @@ ParseResult FIRParser::parseListType(FIRRTLType &result) {
   return success();
 }
 
-/// map-type ::= 'Map' '<' type ',' type '>'
-ParseResult FIRParser::parseMapType(FIRRTLType &result) {
-  consumeToken(FIRToken::kw_Map);
-
-  PropertyType key, value;
-  if (parseToken(FIRToken::less, "expected '<' in Map type") ||
-      parsePropertyType(key, "expected Map key type") ||
-      parsePropertyType(value, "expected Map value type") ||
-      parseToken(FIRToken::greater, "expected '>' in Map type"))
-    return failure();
-
-  result = MapType::get(getContext(), key, value);
-  return success();
-}
-
 /// type ::= 'Clock'
 ///      ::= 'Reset'
 ///      ::= 'AsyncReset'
@@ -852,7 +836,6 @@ ParseResult FIRParser::parseMapType(FIRRTLType &result) {
 ///      ::= 'const' type
 ///      ::= 'String'
 ///      ::= list-type
-///      ::= map-type
 ///      ::= id
 ///
 /// field: 'flip'? fieldId ':' type
@@ -1073,10 +1056,6 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     break;
   case FIRToken::kw_List:
     if (requireFeature(nextFIRVersion, "Lists") || parseListType(result))
-      return failure();
-    break;
-  case FIRToken::kw_Map:
-    if (requireFeature(nextFIRVersion, "Maps") || parseMapType(result))
       return failure();
     break;
   }
@@ -1577,7 +1556,6 @@ private:
   ParseResult parsePrimExp(Value &result);
   ParseResult parseIntegerLiteralExp(Value &result);
   ParseResult parseListExp(Value &result);
-  ParseResult parseMapExp(Value &result);
 
   std::optional<ParseResult> parseExpWithLeadingKeyword(FIRToken keyword);
 
@@ -1898,15 +1876,6 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
     if (isLeadingStmt)
       return emitError("unexpected List<>() as start of statement");
     if (parseListExp(result))
-      return failure();
-    break;
-  }
-  case FIRToken::kw_Map: {
-    if (requireFeature(nextFIRVersion, "Maps"))
-      return failure();
-    if (isLeadingStmt)
-      return emitError("unexpected Map<>() as start of statement");
-    if (parseMapExp(result))
       return failure();
     break;
   }
@@ -2359,56 +2328,6 @@ ParseResult FIRStmtParser::parseListExp(Value &result) {
 
   locationProcessor.setLoc(loc);
   result = builder.create<ListCreateOp>(listType, operands);
-  return success();
-}
-
-/// kv-pair ::= exp '->' exp
-/// map-exp ::= map-type '(' ( kv-pair ( ',' kv-pair )* )? ')'
-ParseResult FIRStmtParser::parseMapExp(Value &result) {
-  auto loc = getToken().getLoc();
-  FIRRTLType type;
-  if (parseMapType(type))
-    return failure();
-  auto mapType = type_cast<MapType>(type);
-  auto keyType = mapType.getKeyType();
-  auto valueType = mapType.getValueType();
-
-  if (parseToken(FIRToken::l_paren, "expected '(' in Map expression"))
-    return failure();
-
-  SmallVector<Value, 3> keys, values;
-  if (parseListUntil(FIRToken::r_paren, [&]() -> ParseResult {
-        Value key, value;
-        locationProcessor.setLoc(loc);
-        if (parseExp(key, "expected key expression in Map expression") ||
-            parseToken(FIRToken::minus_greater,
-                       "expected '->' in Map expression") ||
-            parseExp(value, "expected value expression in Map expression"))
-          return failure();
-
-        if (key.getType() != keyType) {
-          if (!isa<AnyRefType>(keyType) || !isa<ClassType>(key.getType()))
-            return emitError(loc, "unexpected expression of type ")
-                   << key.getType() << " for key in Map expression, expected "
-                   << keyType;
-          key = builder.create<ObjectAnyRefCastOp>(key);
-        }
-        if (value.getType() != valueType) {
-          if (!isa<AnyRefType>(valueType) || !isa<ClassType>(value.getType()))
-            return emitError(loc, "unexpected expression of type ")
-                   << value.getType()
-                   << " for value in Map expression, expected " << valueType;
-          value = builder.create<ObjectAnyRefCastOp>(value);
-        }
-
-        keys.push_back(key);
-        values.push_back(value);
-        return success();
-      }))
-    return failure();
-
-  locationProcessor.setLoc(loc);
-  result = builder.create<MapCreateOp>(mapType, keys, values);
   return success();
 }
 

@@ -56,7 +56,6 @@ class PropertyType;
 class StringType;
 class FIntegerType;
 class ListType;
-class MapType;
 class PathType;
 class BoolType;
 class DoubleType;
@@ -319,7 +318,7 @@ public:
   /// Support method to enable LLVM-style type casting.
   static bool classof(Type type) {
     return llvm::isa<AnyRefType, ClassType, StringType, FIntegerType, ListType,
-                     MapType, PathType, BoolType, DoubleType>(type);
+                     PathType, BoolType, DoubleType>(type);
   }
 
 protected:

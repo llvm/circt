@@ -150,47 +150,6 @@ firrtl.circuit "Component" {
     %dbl = firrtl.double 0.4
     firrtl.propassign %d, %dbl: !firrtl.double
   }
-
-  // CHECK-LABEL: om.class @MapTest
-  firrtl.class @MapTest(in %s1: !firrtl.string,
-                        in %s2: !firrtl.string,
-                        in %c1: !firrtl.class<@ClassTest()>,
-                        in %c2: !firrtl.class<@ClassTest()>,
-                        out %out_strings: !firrtl.map<string, string>,
-                        out %out_empty: !firrtl.map<string, string>,
-                        out %out_nested: !firrtl.map<string, map<string, string>>,
-                        out %out_objs: !firrtl.map<string, class<@ClassTest()>>) {
-    // Map of basic property types (strings)
-    // CHECK-NEXT: %[[TUPLE1:.+]] = om.tuple_create %s1, %s1
-    // CHECK-NEXT: %[[TUPLE2:.+]] = om.tuple_create %s2, %s2
-    // CHECK-NEXT: %[[STRINGS:.+]] = om.map_create %[[TUPLE1]], %[[TUPLE2]]
-    %strings = firrtl.map.create (%s1 -> %s1, %s2 -> %s2) : !firrtl.map<string, string>
-    firrtl.propassign %out_strings, %strings : !firrtl.map<string, string>
-
-    // Empty map
-    // CHECK-NEXT: %[[EMPTY:.+]] = om.map_create : !om.string, !om.string
-    %empty = firrtl.map.create : !firrtl.map<string, string>
-    firrtl.propassign %out_empty, %empty : !firrtl.map<string, string>
-
-    // Nested map
-    // CHECK-NEXT: %[[TUPLE1:.+]] = om.tuple_create %s1, %[[STRINGS]]
-    // CHECK-NEXT: %[[TUPLE2:.+]] = om.tuple_create %s2, %[[EMPTY]]
-    // CHECK-NEXT: %[[NESTED:.+]] = om.map_create %[[TUPLE1]], %[[TUPLE2]]
-    %nested = firrtl.map.create (%s1 -> %strings, %s2 -> %empty) : !firrtl.map<string, map<string, string>>
-    firrtl.propassign %out_nested, %nested: !firrtl.map<string, map<string, string>>
-
-    // Map of objects
-    // CHECK-NEXT: %[[TUPLE1:.+]] = om.tuple_create %s1, %c1
-    // CHECK-NEXT: %[[TUPLE2:.+]] = om.tuple_create %s2, %c2
-    // CHECK-NEXT: %[[OBJS:.+]] = om.map_create %[[TUPLE1]], %[[TUPLE2]]
-    %objs = firrtl.map.create (%s1 -> %c1, %s2 -> %c2) : !firrtl.map<string, class<@ClassTest()>>
-    firrtl.propassign %out_objs, %objs : !firrtl.map<string, class<@ClassTest()>>
-
-    // CHECK-NEXT: om.class.field @out_strings, %[[STRINGS]] : !om.map<!om.string, !om.string>
-    // CHECK-NEXT: om.class.field @out_empty, %[[EMPTY]] : !om.map<!om.string, !om.string>
-    // CHECK-NEXT: om.class.field @out_nested, %[[NESTED]] : !om.map<!om.string, !om.map<!om.string, !om.string>>
-    // CHECK-NEXT: om.class.field @out_objs, %[[OBJS]] : !om.map<!om.string, !om.class.type<@ClassTest>>
-  }
 }
 
 // CHECK-LABEL: firrtl.circuit "PathModule"
