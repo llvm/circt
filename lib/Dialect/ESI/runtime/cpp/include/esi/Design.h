@@ -79,20 +79,20 @@ public:
          std::vector<std::unique_ptr<Instance>> children,
          std::vector<services::Service *> services,
          std::vector<BundlePort> ports)
-      : _info(info), _children(std::move(children)), _services(services),
-        _ports(ports) {}
+      : info(info), children(std::move(children)), services(services),
+        ports(ports) {}
 
-  std::optional<ModuleInfo> info() const { return _info; }
-  const std::vector<std::unique_ptr<Instance>> &children() const {
-    return _children;
+  std::optional<ModuleInfo> getInfo() const { return info; }
+  const std::vector<std::unique_ptr<Instance>> &getChildren() const {
+    return children;
   }
-  const std::vector<BundlePort> &getPorts() const { return _ports; }
+  const std::vector<BundlePort> &getPorts() const { return ports; }
 
 protected:
-  const std::optional<ModuleInfo> _info;
-  const std::vector<std::unique_ptr<Instance>> _children;
-  const std::vector<services::Service *> _services;
-  const std::vector<BundlePort> _ports;
+  const std::optional<ModuleInfo> info;
+  const std::vector<std::unique_ptr<Instance>> children;
+  const std::vector<services::Service *> services;
+  const std::vector<BundlePort> ports;
 };
 
 class Instance : public Design {
@@ -104,12 +104,12 @@ public:
            std::vector<std::unique_ptr<Instance>> children,
            std::vector<services::Service *> services,
            std::vector<BundlePort> ports)
-      : Design(info, std::move(children), services, ports), id_(id) {}
+      : Design(info, std::move(children), services, ports), id(id) {}
 
-  const AppID id() const { return id_; }
+  const AppID getID() const { return id; }
 
 protected:
-  const AppID id_;
+  const AppID id;
 };
 
 } // namespace esi

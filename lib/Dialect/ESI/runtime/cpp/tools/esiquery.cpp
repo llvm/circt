@@ -21,66 +21,67 @@
 #include <map>
 #include <stdexcept>
 
+using namespace std;
+
 using namespace esi;
 
-void printInfo(std::ostream &os, Accelerator &acc);
+void printInfo(ostream &os, Accelerator &acc);
 
 int main(int argc, const char *argv[]) {
   // TODO: find a command line parser library rather than doing this by hand.
   if (argc < 3) {
-    std::cerr << "Expected usage: " << argv[0]
-              << " <backend> <connection specifier> [command]" << std::endl;
+    cerr << "Expected usage: " << argv[0]
+         << " <backend> <connection specifier> [command]" << endl;
     return -1;
   }
 
   const char *backend = argv[1];
   const char *conn = argv[2];
-  std::string cmd;
+  string cmd;
   if (argc > 3)
     cmd = argv[3];
 
   try {
-    std::unique_ptr<Accelerator> acc = registry::connect(backend, conn);
+    unique_ptr<Accelerator> acc = registry::connect(backend, conn);
     const auto &info = *acc->getService<services::SysInfo>();
 
     if (cmd == "version")
-      std::cout << "ESI system version: " << info.esiVersion() << std::endl;
+      cout << "ESI system version: " << info.getEsiVersion() << endl;
     else if (cmd == "json_manifest")
-      std::cout << info.jsonManifest() << std::endl;
+      cout << info.getJsonManifest() << endl;
     else if (cmd == "info")
-      printInfo(std::cout, *acc);
+      printInfo(cout, *acc);
     // TODO: add a command to print out the instance hierarchy.
     else {
-      std::cout << "Connection successful." << std::endl;
+      cout << "Connection successful." << endl;
       if (!cmd.empty()) {
-        std::cerr << "Unknown command: " << cmd << std::endl;
+        cerr << "Unknown command: " << cmd << endl;
         return 1;
       }
     }
     return 0;
-  } catch (std::exception &e) {
-    std::cerr << "Error: " << e.what() << std::endl;
+  } catch (exception &e) {
+    cerr << "Error: " << e.what() << endl;
     return -1;
   }
 }
 
-void printInfo(std::ostream &os, Accelerator &acc) {
-  std::string jsonManifest =
-      acc.getService<services::SysInfo>()->jsonManifest();
+void printInfo(ostream &os, Accelerator &acc) {
+  string jsonManifest = acc.getService<services::SysInfo>()->getJsonManifest();
   Manifest m(jsonManifest);
-  os << "API version: " << m.apiVersion() << std::endl << std::endl;
-  os << "********************************" << std::endl;
-  os << "* Design information" << std::endl;
-  os << "********************************" << std::endl;
-  os << std::endl;
-  for (ModuleInfo mod : m.moduleInfos())
-    os << mod << std::endl;
+  os << "API version: " << m.getApiVersion() << endl << endl;
+  os << "********************************" << endl;
+  os << "* Design information" << endl;
+  os << "********************************" << endl;
+  os << endl;
+  for (ModuleInfo mod : m.getModuleInfos())
+    os << mod << endl;
 
-  os << "********************************" << std::endl;
-  os << "* Type table" << std::endl;
-  os << "********************************" << std::endl;
-  os << std::endl;
+  os << "********************************" << endl;
+  os << "* Type table" << endl;
+  os << "********************************" << endl;
+  os << endl;
   size_t i = 0;
   for (Type t : m.getTypeTable())
-    os << "  " << i++ << ": " << t.getID() << std::endl;
+    os << "  " << i++ << ": " << t.getID() << endl;
 }

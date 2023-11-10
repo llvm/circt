@@ -22,6 +22,8 @@
 #include <fstream>
 #include <iostream>
 
+using namespace std;
+
 using namespace esi;
 using namespace esi::services;
 using namespace esi::backends::cosim;
@@ -30,21 +32,20 @@ using namespace esi::backends::cosim;
 /// traditional 'host:port' syntax and a path to 'cosim.cfg' which is output by
 /// the cosimulation when it starts (which is useful when it chooses its own
 /// port).
-std::unique_ptr<Accelerator>
-CosimAccelerator::connect(std::string connectionString) {
-  std::string portStr;
-  std::string host = "localhost";
+unique_ptr<Accelerator> CosimAccelerator::connect(string connectionString) {
+  string portStr;
+  string host = "localhost";
 
   size_t colon;
-  if ((colon = connectionString.find(':')) != std::string::npos) {
+  if ((colon = connectionString.find(':')) != string::npos) {
     portStr = connectionString.substr(colon + 1);
     host = connectionString.substr(0, colon);
   } else {
-    std::ifstream cfg(connectionString);
-    std::string line, key, value;
+    ifstream cfg(connectionString);
+    string line, key, value;
 
-    while (std::getline(cfg, line))
-      if ((colon = line.find(":")) != std::string::npos) {
+    while (getline(cfg, line))
+      if ((colon = line.find(":")) != string::npos) {
         key = line.substr(0, colon);
         value = line.substr(colon + 1);
         if (key == "port")
@@ -54,10 +55,10 @@ CosimAccelerator::connect(std::string connectionString) {
       }
 
     if (portStr.size() == 0)
-      throw std::runtime_error("port line not found in file");
+      throw runtime_error("port line not found in file");
   }
-  uint16_t port = std::stoul(portStr);
-  return std::make_unique<CosimAccelerator>(host, port);
+  uint16_t port = stoul(portStr);
+  return make_unique<CosimAccelerator>(host, port);
 }
 
 struct esi::backends::cosim::CosimAccelerator::Impl {
@@ -66,7 +67,7 @@ struct esi::backends::cosim::CosimAccelerator::Impl {
   CosimDpiServer::Client cosim;
   EsiLowLevel::Client lowLevel;
 
-  Impl(std::string hostname, uint16_t port)
+  Impl(string hostname, uint16_t port)
       : rpcClient(hostname, port), waitScope(rpcClient.getWaitScope()),
         cosim(rpcClient.getMain<CosimDpiServer>()), lowLevel(nullptr) {
     auto llReq = cosim.openLowLevelRequest();
@@ -77,8 +78,8 @@ struct esi::backends::cosim::CosimAccelerator::Impl {
 
 /// Construct and connect to a cosim server.
 // TODO: Implement this.
-CosimAccelerator::CosimAccelerator(std::string hostname, uint16_t port) {
-  impl = std::make_unique<Impl>(hostname, port);
+CosimAccelerator::CosimAccelerator(string hostname, uint16_t port) {
+  impl = make_unique<Impl>(hostname, port);
 }
 
 namespace {
@@ -111,17 +112,17 @@ public:
   CosimSysInfo(CosimDpiServer::Client &client, kj::WaitScope &waitScope)
       : client(client), waitScope(waitScope) {}
 
-  uint32_t esiVersion() const override {
+  uint32_t getEsiVersion() const override {
     auto maniResp =
         client.getCompressedManifestRequest().send().wait(waitScope);
     return maniResp.getVersion();
   }
 
-  std::vector<uint8_t> compressedManifest() const override {
+  vector<uint8_t> getCompressedManifest() const override {
     auto maniResp =
         client.getCompressedManifestRequest().send().wait(waitScope);
     capnp::Data::Reader data = maniResp.getCompressedManifest();
-    return std::vector<uint8_t>(data.begin(), data.end());
+    return vector<uint8_t>(data.begin(), data.end());
   }
 
 private:
@@ -135,7 +136,7 @@ class CosimCustomService : public services::CustomService {
 public:
   using CustomService::CustomService;
 
-  virtual std::map<std::string, ChannelPort &>
+  virtual map<string, ChannelPort &>
   requestChannelsFor(AppIDPath, const BundleType &,
                      BundlePort::Direction portDir) override {
     return {};

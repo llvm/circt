@@ -79,9 +79,7 @@ using ServiceImplDetails = std::map<std::string, std::any>;
 //===----------------------------------------------------------------------===//
 
 // Forward declarations.
-namespace internal {
-class ManifestProxy;
-} // namespace internal
+namespace internal {} // namespace internal
 class Accelerator;
 class Design;
 
@@ -89,13 +87,15 @@ class Design;
 /// accelerator.
 class Manifest {
 public:
+  class Impl;
+
   Manifest(const Manifest &) = delete;
   Manifest(const std::string &jsonManifest);
   ~Manifest();
 
-  uint32_t apiVersion() const;
+  uint32_t getApiVersion() const;
   // Modules which have designer specified metadata.
-  std::vector<ModuleInfo> moduleInfos() const;
+  std::vector<ModuleInfo> getModuleInfos() const;
 
   // Build a dynamic design hierarchy from the manifest.
   std::unique_ptr<Design> buildDesign(Accelerator &acc) const;
@@ -110,7 +110,7 @@ public:
   const std::vector<std::reference_wrapper<const Type>> &getTypeTable() const;
 
 private:
-  internal::ManifestProxy &manifest;
+  Impl &impl;
 };
 
 } // namespace esi
