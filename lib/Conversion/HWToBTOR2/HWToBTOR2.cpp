@@ -562,7 +562,7 @@ public:
 
   // Wires can generally be ignored in bto2, however we do need
   // to keep track of the new alias it creates
-  void visitTypeOp(hw::WireOp op) {
+  void visit(hw::WireOp op) {
     // Retrieve the aliased operation
     Operation *defOp = op.getOperand().getDefiningOp();
     // Wires don't output anything so just record alias
@@ -710,15 +710,16 @@ public:
   void visitSV(Operation *op) { visitInvalidSV(op); }
 
   // Once SV Ops are visited, we need to check for seq ops
-  void visitInvalidSV(Operation *op) { visitSeq(op); }
+  void visitInvalidSV(Operation *op) { visit(op); }
 
   // Seq operation visitor, that dispatches to other seq ops
   // Also handles all remaining operations that should be explicitly ignored
-  void visitSeq(Operation *op) {
+  void visit(Operation *op) {
     // Typeswitch is used here because other seq types will be supported
     // like all operations relating to memories and CompRegs
     TypeSwitch<Operation *, void>(op)
-        .template Case<seq::FirRegOp>([&](auto expr) { visit(expr); })
+        .template Case<seq::FirRegOp, hw::WireOp>(
+            [&](auto expr) { visit(expr); })
         .Default([&](auto expr) { visitUnsupportedOp(op); });
   }
 
@@ -796,7 +797,13 @@ void ConvertHWToBTOR2Pass::runOnOperation() {
   regOps.clear();
 }
 
-// Basic constructor for the pass
+// Constructor with a custom ostream
+std::unique_ptr<mlir::Pass>
+circt::createConvertHWToBTOR2Pass(llvm::raw_ostream &os) {
+  return std::make_unique<ConvertHWToBTOR2Pass>(os);
+}
+
+// Basic default constructor
 std::unique_ptr<mlir::Pass> circt::createConvertHWToBTOR2Pass() {
   return std::make_unique<ConvertHWToBTOR2Pass>(llvm::outs());
 }
