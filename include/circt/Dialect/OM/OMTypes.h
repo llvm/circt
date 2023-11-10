@@ -21,14 +21,6 @@ namespace circt::om {
 // integer.
 bool isMapKeyValuePairType(mlir::Type);
 
-namespace detail {
-struct EnumElement {
-  mlir::StringAttr name;
-  mlir::Type type;
-};
-
-} // namespace detail
-
 } // namespace circt::om
 
 #define GET_TYPEDEF_CLASSES
