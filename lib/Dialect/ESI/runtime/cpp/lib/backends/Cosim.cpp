@@ -111,13 +111,13 @@ public:
   CosimSysInfo(CosimDpiServer::Client &client, kj::WaitScope &waitScope)
       : client(client), waitScope(waitScope) {}
 
-  uint32_t esiVersion() const override {
+  uint32_t getEsiVersion() const override {
     auto maniResp =
         client.getCompressedManifestRequest().send().wait(waitScope);
     return maniResp.getVersion();
   }
 
-  std::vector<uint8_t> compressedManifest() const override {
+  std::vector<uint8_t> getCompressedManifest() const override {
     auto maniResp =
         client.getCompressedManifestRequest().send().wait(waitScope);
     capnp::Data::Reader data = maniResp.getCompressedManifest();

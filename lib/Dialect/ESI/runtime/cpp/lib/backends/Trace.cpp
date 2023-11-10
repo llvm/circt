@@ -35,8 +35,7 @@ class TraceChannelPort;
 }
 
 struct esi::backends::trace::TraceAccelerator::Impl {
-  Impl(Mode mode, std::filesystem::path manifestJson,
-       std::filesystem::path traceFile)
+  Impl(Mode mode, filesystem::path manifestJson, filesystem::path traceFile)
       : manifestJson(manifestJson), traceFile(traceFile) {
     if (!filesystem::exists(manifestJson))
       throw runtime_error("manifest file '" + manifestJson.string() +
@@ -66,24 +65,22 @@ struct esi::backends::trace::TraceAccelerator::Impl {
 
   void adoptChannelPort(ChannelPort *port) { channels.emplace_back(port); }
 
-  void write(const AppIDPath &id, const std::string &portName, const void *data,
+  void write(const AppIDPath &id, const string &portName, const void *data,
              size_t size);
 
 private:
   ofstream *traceWrite;
-  std::filesystem::path manifestJson;
-  std::filesystem::path traceFile;
+  filesystem::path manifestJson;
+  filesystem::path traceFile;
   vector<unique_ptr<ChannelPort>> channels;
 };
 
-void TraceAccelerator::Impl::write(const AppIDPath &id,
-                                   const std::string &portName,
+void TraceAccelerator::Impl::write(const AppIDPath &id, const string &portName,
                                    const void *data, size_t size) {
-  std::string b64data;
+  string b64data;
   utils::encodeBase64(data, size, b64data);
 
-  *traceWrite << "write " << id << '.' << portName << ": " << b64data
-              << std::endl;
+  *traceWrite << "write " << id << '.' << portName << ": " << b64data << endl;
 }
 
 unique_ptr<Accelerator> TraceAccelerator::connect(string connectionString) {
@@ -112,14 +109,13 @@ unique_ptr<Accelerator> TraceAccelerator::connect(string connectionString) {
   else
     throw runtime_error("unknown mode '" + modeStr + "'");
 
-  return std::make_unique<TraceAccelerator>(
-      mode, filesystem::path(manifestPath), filesystem::path(traceFile));
+  return make_unique<TraceAccelerator>(mode, filesystem::path(manifestPath),
+                                       filesystem::path(traceFile));
 }
 
-TraceAccelerator::TraceAccelerator(Mode mode,
-                                   std::filesystem::path manifestJson,
-                                   std::filesystem::path traceFile) {
-  impl = std::make_unique<Impl>(mode, manifestJson, traceFile);
+TraceAccelerator::TraceAccelerator(Mode mode, filesystem::path manifestJson,
+                                   filesystem::path traceFile) {
+  impl = make_unique<Impl>(mode, manifestJson, traceFile);
 }
 
 Service *TraceAccelerator::createService(Service::Type svcType,
@@ -131,12 +127,11 @@ Service *TraceAccelerator::createService(Service::Type svcType,
 namespace {
 class TraceSysInfo : public SysInfo {
 public:
-  TraceSysInfo(std::filesystem::path manifestJson)
-      : manifestJson(manifestJson) {}
+  TraceSysInfo(filesystem::path manifestJson) : manifestJson(manifestJson) {}
 
-  uint32_t esiVersion() const override { return ESIVersion; }
+  uint32_t getEsiVersion() const override { return ESIVersion; }
 
-  std::string jsonManifest() const override {
+  string getJsonManifest() const override {
     // Read in the whole json file and return it.
     ifstream manifest(manifestJson);
     if (!manifest.is_open())
@@ -148,12 +143,12 @@ public:
     return buffer.str();
   }
 
-  std::vector<uint8_t> compressedManifest() const override {
+  vector<uint8_t> getCompressedManifest() const override {
     throw runtime_error("compressed manifest not supported by trace backend");
   }
 
 private:
-  std::filesystem::path manifestJson;
+  filesystem::path manifestJson;
 };
 } // namespace
 
@@ -161,7 +156,7 @@ namespace {
 class WriteTraceChannelPort : public WriteChannelPort {
 public:
   WriteTraceChannelPort(TraceAccelerator::Impl &impl, const AppIDPath &id,
-                        const std::string &portName)
+                        const string &portName)
       : impl(impl), id(id), portName(portName) {}
 
   virtual void write(const void *data, size_t size) override {
@@ -171,7 +166,7 @@ public:
 protected:
   TraceAccelerator::Impl &impl;
   AppIDPath id;
-  std::string portName;
+  string portName;
 };
 } // namespace
 
@@ -199,10 +194,10 @@ public:
                      const HWClientDetails &clients)
       : CustomService(idPath, details, clients), impl(impl) {}
 
-  virtual std::map<std::string, ChannelPort &>
+  virtual map<string, ChannelPort &>
   requestChannelsFor(AppIDPath idPath, const BundleType &bundleType,
                      BundlePort::Direction svcDir) override {
-    std::map<std::string, ChannelPort &> channels;
+    map<string, ChannelPort &> channels;
     for (auto [name, dir, type] : bundleType.getChannels()) {
       ChannelPort *port;
       if (BundlePort::isWrite(dir, svcDir))

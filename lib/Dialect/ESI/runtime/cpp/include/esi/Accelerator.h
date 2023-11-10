@@ -86,7 +86,7 @@ public:
                 const HWClientDetails &clients);
   virtual ~CustomService() = default;
 
-  virtual std::string getServiceSymbol() const { return _serviceSymbol; }
+  virtual std::string getServiceSymbol() const { return serviceSymbol; }
 
   /// Request the host side channel ports for a particular instance (identified
   /// by the AppID path). For convenience, provide the bundle type and direction
@@ -96,7 +96,7 @@ public:
                      BundlePort::Direction portDir) = 0;
 
 private:
-  std::string _serviceSymbol;
+  std::string serviceSymbol;
 };
 } // namespace services
 
