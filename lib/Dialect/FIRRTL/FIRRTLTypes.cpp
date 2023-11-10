@@ -121,13 +121,6 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
         printNestedType(listType.getElementType(), os);
         os << '>';
       })
-      .Case<MapType>([&](auto mapType) {
-        os << "map<";
-        printNestedType(mapType.getKeyType(), os);
-        os << ", ";
-        printNestedType(mapType.getValueType(), os);
-        os << '>';
-      })
       .Case<PathType>([&](auto pathType) { os << "path"; })
       .Case<BaseTypeAliasType>([&](BaseTypeAliasType alias) {
         os << "alias<" << alias.getName().getValue() << ", ";
@@ -421,21 +414,6 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
         parser.parseGreater())
       return failure();
     result = parser.getChecked<ListType>(context, elementType);
-    if (!result)
-      return failure();
-    return success();
-  }
-  if (name.equals("map")) {
-    if (isConst) {
-      parser.emitError(parser.getNameLoc(), "maps cannot be const");
-      return failure();
-    }
-    PropertyType keyType, valueType;
-    if (parser.parseLess() || parseNestedPropertyType(keyType, parser) ||
-        parser.parseComma() || parseNestedPropertyType(valueType, parser) ||
-        parser.parseGreater())
-      return failure();
-    result = parser.getChecked<MapType>(context, keyType, valueType);
     if (!result)
       return failure();
     return success();

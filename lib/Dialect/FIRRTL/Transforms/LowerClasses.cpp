@@ -801,26 +801,6 @@ struct ListCreateOpConversion
   }
 };
 
-struct MapCreateOpConversion : public OpConversionPattern<firrtl::MapCreateOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(firrtl::MapCreateOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    auto mapType = getTypeConverter()->convertType<om::MapType>(op.getType());
-    if (!mapType)
-      return failure();
-    auto keys = adaptor.getKeys();
-    auto values = adaptor.getValues();
-    SmallVector<Value> tuples;
-    for (auto [key, value] : llvm::zip(keys, values))
-      tuples.push_back(rewriter.create<om::TupleCreateOp>(
-          op.getLoc(), ArrayRef<Value>{key, value}));
-    rewriter.replaceOpWithNewOp<om::MapCreateOp>(op, mapType, tuples);
-    return success();
-  }
-};
-
 struct PathOpConversion : public OpConversionPattern<firrtl::PathOp> {
 
   PathOpConversion(TypeConverter &typeConverter, MLIRContext *context,
@@ -1189,32 +1169,6 @@ static void populateTypeConverter(TypeConverter &converter) {
         return convertListType(type);
       });
 
-  auto convertMapType = [&converter](auto type) -> std::optional<mlir::Type> {
-    auto keyType = converter.convertType(type.getKeyType());
-    // Reject key types that are not string or integer.
-    if (!isa_and_nonnull<om::StringType, mlir::IntegerType>(keyType))
-      return {};
-
-    auto valueType = converter.convertType(type.getValueType());
-    if (!valueType)
-      return {};
-
-    return om::MapType::get(keyType, valueType);
-  };
-
-  // Convert FIRRTL Map type to OM Map type.
-  converter.addConversion(
-      [convertMapType](om::MapType type) -> std::optional<mlir::Type> {
-        // Convert any om.map<firrtl, firrtl> -> om.map<om, om>
-        return convertMapType(type);
-      });
-
-  converter.addConversion(
-      [convertMapType](firrtl::MapType type) -> std::optional<mlir::Type> {
-        // Convert any firrtl.map<firrtl, firrtl> -> om.map<om, om>
-        return convertMapType(type);
-      });
-
   // Convert FIRRTL Bool type to OM
   converter.addConversion(
       [](BoolType type) { return IntegerType::get(type.getContext(), 1); });
@@ -1258,7 +1212,6 @@ static void populateRewritePatterns(
   patterns.add<ObjectOpConversion>(converter, patterns.getContext());
   patterns.add<ObjectFieldOpConversion>(converter, patterns.getContext());
   patterns.add<ListCreateOpConversion>(converter, patterns.getContext());
-  patterns.add<MapCreateOpConversion>(converter, patterns.getContext());
   patterns.add<BoolConstantOpConversion>(converter, patterns.getContext());
   patterns.add<DoubleConstantOpConversion>(converter, patterns.getContext());
 }

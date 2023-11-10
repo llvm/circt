@@ -1333,15 +1333,6 @@ firrtl.circuit "ListOfHW" {
 }
 
 // -----
-// Property aggregates can only contain properties.
-// Check map.
-
-firrtl.circuit "MapOfHW" {
-  // expected-error @below {{expected property type, found '!firrtl.uint<4>'}}
-  firrtl.module @MapOfHW(in %in: !firrtl.map<string,uint<4>>) {}
-}
-
-// -----
 
 // Reject list.create with mixed element types.
 firrtl.circuit "MixedList" {
@@ -1357,35 +1348,6 @@ firrtl.circuit "MixedList" {
 
 // -----
 
-// Reject map.create with mixed key types.
-firrtl.circuit "MixedMapKeys" {
-  firrtl.module @MixedMapKeys(
-      in %s: !firrtl.string,
-      // expected-note @below {{prior use here}}
-      in %int: !firrtl.integer
-      ) {
-    // expected-error @below {{use of value '%int' expects different type than prior uses: '!firrtl.string' vs '!firrtl.integer'}}
-    firrtl.map.create (%s -> %int, %int -> %int) : !firrtl.map<string, integer>
-  }
-}
-
-// -----
-
-// Reject map.create with mixed value types.
-firrtl.circuit "MixedMapValues" {
-  firrtl.module @MixedMapValues(
-      in %s1: !firrtl.string,
-      // expected-note @below {{prior use here}}
-      in %s2: !firrtl.string,
-      in %int: !firrtl.integer
-      ) {
-    // expected-error @below {{use of value '%s2' expects different type than prior uses: '!firrtl.integer' vs '!firrtl.string'}}
-    firrtl.map.create (%s1 -> %int, %s2 -> %s2) : !firrtl.map<string, integer>
-  }
-}
-
-// -----
-
 // Reject list.create with elements of wrong type compared to result type.
 firrtl.circuit "ListCreateWrongType" {
   firrtl.module @ListCreateWrongType(
@@ -1394,19 +1356,6 @@ firrtl.circuit "ListCreateWrongType" {
       ) {
     // expected-error @below {{use of value '%int' expects different type than prior uses: '!firrtl.string' vs '!firrtl.integer'}}
     firrtl.list.create %int : !firrtl.list<string>
-  }
-}
-
-// -----
-
-// Reject map.create with consistent but wrong key/value elements.
-firrtl.circuit "MapCreateWrongType" {
-  firrtl.module @MapCreateWrongType(
-      // expected-note @below {{prior use here}}
-      in %int: !firrtl.integer
-      ) {
-    // expected-error @below {{use of value '%int' expects different type than prior uses: '!firrtl.string' vs '!firrtl.integer'}}
-    firrtl.map.create (%int -> %int) : !firrtl.map<integer, string>
   }
 }
 
