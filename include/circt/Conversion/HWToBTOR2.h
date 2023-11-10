@@ -14,13 +14,17 @@
 #ifndef CIRCT_CONVERSION_HWTOBTOR2_H
 #define CIRCT_CONVERSION_HWTOBTOR2_H
 
-#include <memory>
+#include "mlir/IR/BuiltinOps.h"
+#include "mlir/Pass/Pass.h"
 
 namespace mlir {
 class Pass;
 } // namespace mlir
 
+using namespace mlir;
+
 namespace circt {
+std::unique_ptr<mlir::Pass> createConvertHWToBTOR2Pass(llvm::raw_ostream &os);
 std::unique_ptr<mlir::Pass> createConvertHWToBTOR2Pass();
 
 } // namespace circt
