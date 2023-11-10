@@ -20,7 +20,6 @@ include "circt/Dialect/OM/OMOpInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/IR/BuiltinAttributeInterfaces.td"
-include "mlir/IR/BuiltinTypes.td"
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/RegionKindInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
@@ -278,70 +277,6 @@ def ListConcatOp : OMOp<"list_concat", [Pure, SameOperandsAndResultType]> {
   let results = (outs ListType:$result);
 
   let assemblyFormat = "$subLists attr-dict `:` type($result)";
-}
-
-def TupleCreateOp : OMOp<"tuple_create", [Pure, InferTypeOpInterface]> {
-  let summary = "Create a tuple of values";
-  let description = [{
-    Create a tuple from a sequence of inputs.
-
-    ```
-    %tuple = om.tuple_create %a, %b, %c : !om.ref, !om.string, !om.list<i32>
-    ```
-  }];
-
-  let arguments = (ins Variadic<AnyType>:$inputs);
-  let results = (outs
-    TupleOf<[AnyType]>:$result
-  );
-
-  let assemblyFormat = [{
-    $inputs attr-dict `:` type($inputs)
-  }];
-
-  let extraClassDeclaration = [{
-    // Implement InferTypeOpInterface.
-    static ::mlir::LogicalResult inferReturnTypes(
-      ::mlir::MLIRContext *context, ::std::optional<::mlir::Location> location,
-      ::mlir::ValueRange operands, ::mlir::DictionaryAttr attributes,
-      ::mlir::OpaqueProperties,
-      ::mlir::RegionRange regions,
-      ::llvm::SmallVectorImpl<::mlir::Type> &inferredReturnTypes);
-   }];
-
-}
-
-def TupleGetOp : OMOp<"tuple_get", [Pure, InferTypeOpInterface]> {
-  let summary = "Extract a value from a tuple";
-  let description = [{
-    Extract a value from a tuple.
-
-    ```
-    %value = om.tuple_get %a[0] : tuple<!om.ref, !om.string, !om.list<i32>>
-    ```
-  }];
-
-  let arguments = (ins
-    TupleOf<[AnyType]>:$input,
-    I32Attr:$index
-  );
-
-  let results = (outs
-    AnyType:$result
-  );
-
-  let assemblyFormat = [{
-    $input `[` $index `]` attr-dict `:` type($input)
-  }];
-
-  let extraClassDeclaration = [{
-    // Implement InferTypeOpInterface.
-    static ::mlir::LogicalResult inferReturnTypes(
-      ::mlir::MLIRContext *context, ::std::optional<::mlir::Location> location,
-      ::mlir::ValueRange operands, ::mlir::DictionaryAttr attributes,
-      ::mlir::OpaqueProperties, ::mlir::RegionRange regions,
-      ::llvm::SmallVectorImpl<::mlir::Type> &inferredReturnTypes);
-   }];
 }
 
 def BasePathCreateOp : OMOp<"basepath_create", [Pure,

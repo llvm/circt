@@ -280,25 +280,6 @@ OMEvaluatorValue omEvaluatorListGetElement(OMEvaluatorValue evaluatorValue,
                   ->getElements()[pos]);
 }
 
-/// Query if the EvaluatorValue is a Tuple.
-bool omEvaluatorValueIsATuple(OMEvaluatorValue evaluatorValue) {
-  return isa<evaluator::TupleValue>(unwrap(evaluatorValue).get());
-}
-
-/// Get the length of the Tuple.
-intptr_t omEvaluatorTupleGetNumElements(OMEvaluatorValue evaluatorValue) {
-  return cast<evaluator::TupleValue>(unwrap(evaluatorValue).get())
-      ->getElements()
-      .size();
-}
-
-/// Get an element of the Tuple.
-OMEvaluatorValue omEvaluatorTupleGetElement(OMEvaluatorValue evaluatorValue,
-                                            intptr_t pos) {
-  return wrap(cast<evaluator::TupleValue>(unwrap(evaluatorValue).get())
-                  ->getElements()[pos]);
-}
-
 bool omEvaluatorValueIsABasePath(OMEvaluatorValue evaluatorValue) {
   return isa<evaluator::BasePathValue>(unwrap(evaluatorValue).get());
 }
