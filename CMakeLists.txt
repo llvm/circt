@@ -381,6 +381,24 @@ else()
 endif()
 
 #-------------------------------------------------------------------------------
+# Btormc Configuration
+#-------------------------------------------------------------------------------
+
+# If btormc hasn't been explicitly disabled, find it.
+option(BTORMC_DISABLE "Disable the btormc tests.")
+if (BTORMC_DISABLE)
+  message(STATUS "Disabling btormc tests.")
+else()
+  find_program(BOOLECTOR_PATH "btormc")
+  if(EXISTS ${BOOLECTOR_PATH})
+    message(STATUS "Found btormc at ${BOOLECTOR_PATH}.")
+  else()
+    set(BOOLECTOR_PATH "")
+    message(STATUS "Did not find btormc.")
+  endif()
+endif()
+
+#-------------------------------------------------------------------------------
 # Icarus Verilog Configuration
 #-------------------------------------------------------------------------------
 
