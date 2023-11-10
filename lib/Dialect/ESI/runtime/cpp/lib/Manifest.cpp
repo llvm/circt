@@ -25,7 +25,9 @@ namespace esi {
 namespace internal {
 
 // While building the design, keep around a map of active services indexed by
-// the service name.
+// the service name. When a new service is encountered during descent, add it to
+// the table (perhaps overwriting one). Modifications to the table only apply to
+// the current branch, so copy this and update it at each level of the tree.
 using ServiceTable = std::map<std::string, services::Service *>;
 
 // This is a proxy class to the manifest JSON. It is used to avoid having to
@@ -45,29 +47,38 @@ public:
   // Get the module info (if any) for the module instance in 'json'.
   std::optional<ModuleInfo> getModInfo(const nlohmann::json &) const;
 
+  /// Get a Service for the service specified in 'json'. Update the
+  /// activeServices table.
   services::Service *getService(AppIDPath idPath, Accelerator &,
                                 const nlohmann::json &,
                                 ServiceTable &activeServices) const;
-  void getServices(AppIDPath idPath, Accelerator &, const nlohmann::json &,
-                   std::vector<services::Service *> &outServices,
-                   ServiceTable &activeServices) const;
 
+  /// Get all the services in the description of an instance. Update the active
+  /// services table.
+  std::vector<services::Service *>
+  getServices(AppIDPath idPath, Accelerator &, const nlohmann::json &,
+              ServiceTable &activeServices) const;
+
+  /// Get the bundle ports for the instance at 'idPath' and specified in
+  /// 'instJson'. Look them up in 'activeServies'.
   std::vector<BundlePort> getBundlePorts(AppIDPath idPath,
                                          const ServiceTable &activeServices,
-                                         const nlohmann::json &json) const;
+                                         const nlohmann::json &instJson) const;
 
-  /// Build the set of child instances (recursively) for the module instance in
-  /// 'json'.
+  /// Build the set of child instances (recursively) for the module instance
+  /// description.
   std::vector<std::unique_ptr<Instance>>
   getChildInstances(AppIDPath idPath, Accelerator &acc,
-                    ServiceTable activeServices,
-                    const nlohmann::json &json) const;
-  std::unique_ptr<Instance> getChildInstance(AppIDPath idPath, Accelerator &acc,
-                                             ServiceTable activeServices,
-                                             const nlohmann::json &json) const;
+                    const ServiceTable &activeServices,
+                    const nlohmann::json &instJson) const;
 
-  /// Build a dynamic API for the Accelerator connection 'acc'
-  /// based on the manifest stored herein.
+  /// Get a single child instance. Implicitly copy the active services table so
+  /// that it can be safely updated for the child's branch of the tree.
+  std::unique_ptr<Instance>
+  getChildInstance(AppIDPath idPath, Accelerator &acc,
+                   ServiceTable activeServices,
+                   const nlohmann::json &childJson) const;
+
   /// Parse all the types and populate the types table.
   void populateTypes(const nlohmann::json &typesJson);
 
@@ -76,6 +87,7 @@ public:
     return _typeTable;
   }
 
+  // Forwarded from Manifest.
   std::optional<std::reference_wrapper<const Type>> getType(Type::ID id) const {
     if (auto f = _types.find(id); f != _types.end())
       return *f->second;
@@ -125,6 +137,8 @@ static ServicePortDesc parseServicePort(const nlohmann::json &jsonPort) {
                          jsonPort.at("inner").get<std::string>()};
 }
 
+/// Convert the json value to a 'std::any', which can be exposed outside of this
+/// file.
 static std::any getAny(const nlohmann::json &value) {
   auto getObject = [](const nlohmann::json &json) {
     std::map<std::string, std::any> ret;
@@ -196,9 +210,10 @@ std::unique_ptr<Design>
 internal::ManifestProxy::buildDesign(Accelerator &acc) const {
   auto designJson = manifestJson.at("design");
 
+  // Get the initial active services table. Update it as we descend down.
   ServiceTable activeSvcs;
-  std::vector<services::Service *> services;
-  getServices({}, acc, designJson, services, activeSvcs);
+  std::vector<services::Service *> services =
+      getServices({}, acc, designJson, activeSvcs);
 
   return std::make_unique<Design>(
       getModInfo(designJson),
@@ -219,7 +234,7 @@ internal::ManifestProxy::getModInfo(const nlohmann::json &json) const {
 
 std::vector<std::unique_ptr<Instance>>
 internal::ManifestProxy::getChildInstances(
-    AppIDPath idPath, Accelerator &acc, ServiceTable activeServices,
+    AppIDPath idPath, Accelerator &acc, const ServiceTable &activeServices,
     const nlohmann::json &instJson) const {
   std::vector<std::unique_ptr<Instance>> ret;
   auto childrenIter = instJson.find("children");
@@ -236,8 +251,8 @@ internal::ManifestProxy::getChildInstance(AppIDPath idPath, Accelerator &acc,
   AppID childID = parseID(child.at("app_id"));
   idPath.push_back(childID);
 
-  std::vector<services::Service *> services;
-  getServices(idPath, acc, child, services, activeServices);
+  std::vector<services::Service *> services =
+      getServices(idPath, acc, child, activeServices);
 
   auto children = getChildInstances(idPath, acc, activeServices, child);
   return std::make_unique<Instance>(
@@ -253,6 +268,7 @@ internal::ManifestProxy::getService(AppIDPath idPath, Accelerator &acc,
   AppID id = parseID(svcJson.at("appID"));
   idPath.push_back(id);
 
+  // Get all the client info, including the implementation details.
   HWClientDetails clientDetails;
   for (auto &client : svcJson.at("client_details")) {
     HWClientDetail clientDetail;
@@ -266,39 +282,43 @@ internal::ManifestProxy::getService(AppIDPath idPath, Accelerator &acc,
     }
   }
 
+  // Get the implementation details.
   ServiceImplDetails svcDetails;
   for (auto &detail : svcJson.items())
     if (detail.key() != "appID" && detail.key() != "client_details")
       svcDetails[detail.key()] = getAny(detail.value());
 
+  // Create the service.
+  // TODO: Add support for 'standard' services.
   auto svc = acc.getService<services::CustomService>(idPath, svcDetails,
                                                      clientDetails);
-  if (!svc) {
+  if (!svc)
     throw std::runtime_error("Could not create service for ");
-  }
+
+  // Update the active services table.
   activeServices[svc->getServiceSymbol()] = svc;
   return svc;
 }
 
-void internal::ManifestProxy::getServices(AppIDPath idPath, Accelerator &acc,
-                                          const nlohmann::json &svcsJson,
-                                          std::vector<services::Service *> &ret,
-                                          ServiceTable &activeServices) const {
-
+std::vector<services::Service *>
+internal::ManifestProxy::getServices(AppIDPath idPath, Accelerator &acc,
+                                     const nlohmann::json &svcsJson,
+                                     ServiceTable &activeServices) const {
+  std::vector<services::Service *> ret;
   auto contentsIter = svcsJson.find("contents");
   if (contentsIter == svcsJson.end())
-    return;
+    return ret;
 
   for (auto &content : contentsIter.value())
     if (content.at("class") == "service")
       ret.emplace_back(getService(idPath, acc, content, activeServices));
+  return ret;
 }
 
 std::vector<BundlePort>
 internal::ManifestProxy::getBundlePorts(AppIDPath idPath,
                                         const ServiceTable &activeServices,
                                         const nlohmann::json &instJson) const {
-
   std::vector<BundlePort> ret;
   auto contentsIter = instJson.find("contents");
   if (contentsIter == instJson.end())
@@ -308,15 +328,19 @@ internal::ManifestProxy::getBundlePorts(AppIDPath idPath,
     if (content.at("class") != "client_port")
       continue;
 
+    // Lookup the requested service in the active services table.
     ServicePortDesc port = parseServicePort(content.at("servicePort"));
-    auto f = activeServices.find(port.name);
-    if (f == activeServices.end())
-      throw std::runtime_error("Could not find service '" + port.name + "'");
+    auto svc = activeServices.find(port.name);
+    if (svc == activeServices.end())
+      throw std::runtime_error(
+          "Malformed manifest: could not find active service '" + port.name +
+          "'");
 
     std::string typeName = content.at("bundleType").at("circt_name");
     auto type = getType(typeName);
     if (!type)
-      throw std::runtime_error("Could not find port type '" + typeName + "'");
+      throw std::runtime_error(
+          "Malformed manifest: could not find port type '" + typeName + "'");
     const BundleType &bundleType =
         dynamic_cast<const BundleType &>(type->get());
 
@@ -333,9 +357,11 @@ internal::ManifestProxy::getBundlePorts(AppIDPath idPath,
     idPath.push_back(parseID(content.at("appID")));
     std::map<std::string, ChannelPort &> portChannels;
     // If we need to have custom ports (because of a custom service), add them.
-    if (auto *customSvc = dynamic_cast<services::CustomService *>(f->second))
+    if (auto *customSvc = dynamic_cast<services::CustomService *>(svc->second))
       portChannels = customSvc->requestChannelsFor(idPath, bundleType, portDir);
     ret.emplace_back(idPath.back(), portChannels);
+    // Since we share idPath between iterations, pop the last element before the
+    // next iteration.
     idPath.pop_back();
   }
   return ret;

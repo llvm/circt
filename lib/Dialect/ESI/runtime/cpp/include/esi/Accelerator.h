@@ -67,7 +67,6 @@ public:
 };
 
 namespace services {
-
 /// Parent class of all APIs modeled as 'services'. May or may not map to a
 /// hardware side 'service'.
 class Service {
@@ -78,7 +77,9 @@ public:
   virtual std::string getServiceSymbol() const = 0;
 };
 
-/// A service for which there are no standard services registered.
+/// A service for which there are no standard services registered. Requires
+/// ports be added to the design hierarchy instead of high level interfaces like
+/// the ones in StdServices.h.
 class CustomService : public Service {
 public:
   CustomService(AppIDPath idPath, const ServiceImplDetails &details,

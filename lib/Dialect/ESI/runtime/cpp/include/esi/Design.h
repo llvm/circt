@@ -45,8 +45,6 @@ class Service;
 /// unidirectional communication channels. This class provides access to those
 /// ChannelPorts.
 class BundlePort {
-  friend class services::Service;
-
 public:
   /// Direction of a bundle. This -- combined with the channel direction in the
   /// bundle -- can be used to determine if a channel should be writing to or
@@ -64,7 +62,7 @@ public:
   /// Construct a port.
   BundlePort(AppID id, std::map<std::string, ChannelPort &> channels);
 
-  /// Get access to the raw byte streams of a channel. Not intended for internal
+  /// Get access to the raw byte streams of a channel. Intended for internal
   /// usage and binding to other languages (e.g. Python) which have their own
   /// message serialization code.
   WriteChannelPort &getRawWrite(const std::string &name) const;
@@ -88,7 +86,6 @@ public:
   const std::vector<std::unique_ptr<Instance>> &children() const {
     return _children;
   }
-
   const std::vector<BundlePort> &getPorts() const { return _ports; }
 
 protected:
