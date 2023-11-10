@@ -1711,8 +1711,8 @@ LogicalResult MultibitMuxOp::canonicalize(MultibitMuxOp op,
           continue;
         ++count;
         if (!v)
-          v = op.getInputs()[i];
-        if (v != op.getInputs()[i]) {
+          v = op.getInputs()[e - i - 1];
+        if (v != op.getInputs()[e - i - 1]) {
           v = {};
           break;
         }
@@ -1723,8 +1723,9 @@ LogicalResult MultibitMuxOp::canonicalize(MultibitMuxOp op,
       SmallVector<Value> nonSimple;
       for (uint64_t i = 0, e = op.getInputs().size(); i < e; ++i) {
         if (((i >> bit) & 1) != curval)
-          nonSimple.push_back(op.getInputs()[i]);
+          nonSimple.push_back(op.getInputs()[e - i - 1]);
       }
+      std::reverse(nonSimple.begin(), nonSimple.end());
       Value indBit = rewriter.createOrFold<BitsPrimOp>(op.getLoc(),
                                                        op.getIndex(), bit, bit);
       Value indBitRemLow;
@@ -1747,8 +1748,8 @@ LogicalResult MultibitMuxOp::canonicalize(MultibitMuxOp op,
           op.getLoc(), indBitRemHigh, indBitRemLow);
       Value otherSide =
           rewriter.create<MultibitMuxOp>(op.getLoc(), indBitRem, nonSimple);
-      Value high = curval ? otherSide : v;
-      Value low = curval ? v : otherSide;
+      Value high = curval ? v : otherSide;
+      Value low = curval ? otherSide : v;
       replaceOpWithNewOpAndCopyName<MuxPrimOp>(rewriter, op, indBit, high, low);
       return success();
     }
