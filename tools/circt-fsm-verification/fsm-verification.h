@@ -70,12 +70,45 @@ using namespace mlir;
 using namespace circt;
 using namespace std;
 
-void explore_nested_blocks(Operation &op, int level);
+struct variable{
+  string name;
+  int initValue;
+};
 
-void explore_region(Region &region);
+struct outputs{
+  string name;
+};
 
-string convert_comb_exp(Operation &op);
+struct transition{
+  string from;
+  string to;
+  std::vector<std::string > *var_updates;
+  std::vector<std::string > *guards;
+};
 
-void manage_state(Operation &op);
 
-void manage_output_region(Region &region);
+struct CFG{
+  std::vector<variable> variables;
+  std::vector<transition *> transitions;
+  std::vector<outputs> outputs;
+};
+
+void print_cfg(CFG *cfg);
+
+void store_variable_declaration(Operation &op, CFG *cfg);
+
+string manage_comb_exp(Operation &op);
+
+void manage_output_region(Region &region, CFG *cfg);
+
+void manage_guard_region(Region &region, transition *t);
+
+void manage_action_region(Region &region, transition *t);
+
+void manage_transitions_region(Region &region, string current_state, CFG *cfg);
+
+void manage_state(Operation &op, CFG *cfg);
+
+void explore_nested_blocks(Operation &op, int level, CFG *cfg);
+
+void parse_fsm(string input_file);
