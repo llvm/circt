@@ -67,11 +67,49 @@ add_circt_dialect_library(CIRCTESI
 # distribution.
 add_custom_target(esi-collateral)
 
-file(GLOB_RECURSE
-  ESI_RUNTIME_SRCS
-  ${CMAKE_CURRENT_SOURCE_DIR}/runtime/*/*.*
+set(ESI_RUNTIME_SRCS
+  ESIPrimitives.sv
+
+  runtime/cpp/include/esi/backends/Cosim.h
+  runtime/cpp/include/esi/backends/Trace.h
+  runtime/cpp/include/esi/Accelerator.h
+  runtime/cpp/include/esi/Design.h
+  runtime/cpp/include/esi/Manifest.h
+  runtime/cpp/include/esi/StdServices.h
+  runtime/cpp/include/esi/Types.h
+  runtime/cpp/include/esi/Utils.h
+  runtime/cpp/lib/backends/Cosim.cpp
+  runtime/cpp/lib/backends/Trace.cpp
+  runtime/cpp/lib/Accelerator.cpp
+  runtime/cpp/lib/Design.cpp
+  runtime/cpp/lib/Manifest.cpp
+  runtime/cpp/lib/StdServices.cpp
+  runtime/cpp/lib/Utils.cpp
+  runtime/cpp/tools/esiquery.cpp
+  runtime/cosim/CMakeLists.txt
+  runtime/cosim/Cosim_MMIO.sv
+  runtime/cosim/MtiPliStub/CMakeLists.txt
+  runtime/cosim/MtiPliStub/DummySvDpi.cpp
+  runtime/cosim/cosim_dpi_server/CMakeLists.txt
+  runtime/cosim/cosim_dpi_server/Endpoint.cpp
+  runtime/cosim/cosim_dpi_server/DpiEntryPoints.cpp
+  runtime/cosim/cosim_dpi_server/Server.cpp
+  runtime/cosim/include/cosim/LowLevel.h
+  runtime/cosim/include/cosim/Utils.h
+  runtime/cosim/include/cosim/Endpoint.h
+  runtime/cosim/include/cosim/Server.h
+  runtime/cosim/include/cosim/dpi.h
+  runtime/cosim/include/dpi/svdpi.h
+  runtime/cosim/Cosim_Endpoint.sv
+  runtime/cosim/CosimDpi.capnp
+  runtime/cosim/Cosim_DpiPkg.sv
+  runtime/cosim/Cosim_Manifest.sv
+  runtime/python/esi/__init__.py
+  runtime/python/esi/accelerator.py
+  runtime/python/esi/esiCppAccel.cpp
+  runtime/python/esi/esiCppAccel.pyi
+  runtime/CMakeLists.txt
 )
-list(APPEND ESI_RUNTIME_SRCS ESIPrimitives.sv)
 
 # A function which copies a file from the source tree to the build tree.
 # This is an alternative to configure_file to ensure that the file is copied
