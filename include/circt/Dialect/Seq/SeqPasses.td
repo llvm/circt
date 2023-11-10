@@ -51,4 +51,33 @@ def ExternalizeClockGate: Pass<"externalize-clock-gate", "mlir::ModuleOp"> {
   ];
 }
 
+def HWMemSimImpl : Pass<"hw-memory-sim", "ModuleOp"> {
+  let summary = "Implement FIRRTMMem memories nodes with simulation model";
+  let description = [{
+    This pass replaces generated module nodes of type FIRRTLMem with a model
+    suitable for simulation.
+  }];
+
+  let constructor = "circt::seq::createHWMemSimImplPass()";
+  let dependentDialects = ["circt::hw::HWDialect", "circt::sv::SVDialect"];
+
+  let options = [
+    Option<"disableMemRandomization", "disable-mem-randomization", "bool", "false",
+            "Disable emission of memory randomization code">,
+    Option<"disableRegRandomization", "disable-reg-randomization", "bool", "false",
+            "Disable emission of register randomization code">,
+    Option<"replSeqMem", "repl-seq-mem", "bool",
+                "false", "Prepare seq mems for macro replacement">,
+    Option<"ignoreReadEnable", "ignore-read-enable", "bool",
+                "false",
+    "ignore the read enable signal, instead of assigning X on read disable">,
+    Option<"addMuxPragmas", "add-mux-pragmas", "bool", "false",
+            "Add mux pragmas to memory reads">,
+    Option<"addVivadoRAMAddressConflictSynthesisBugWorkaround",
+           "add-vivado-ram-address-conflict-synthesis-bug-workaround", "bool", "false",
+            "Add a vivado attribute to specify a ram style of an array register">
+
+   ];
+}
+
 #endif // CIRCT_DIALECT_SEQ_SEQPASSES

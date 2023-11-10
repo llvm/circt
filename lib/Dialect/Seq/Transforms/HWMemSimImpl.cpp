@@ -11,43 +11,33 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetail.h"
+#include "PassDetails.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
-#include "circt/Dialect/SV/SVPasses.h"
+#include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Seq/SeqAttributes.h"
+#include "circt/Dialect/Seq/SeqPasses.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Path.h"
 
 using namespace circt;
 using namespace hw;
+using namespace seq;
+
+namespace circt {
+namespace seq {
+#define GEN_PASS_DEF_HWMEMSIMIMPL
+#include "circt/Dialect/Seq/SeqPasses.h.inc"
+} // namespace seq
+} // namespace circt
 
 //===----------------------------------------------------------------------===//
 // HWMemSimImplPass Pass
 //===----------------------------------------------------------------------===//
-
-namespace {
-struct FirMemory {
-  size_t numReadPorts;
-  size_t numWritePorts;
-  size_t numReadWritePorts;
-  size_t dataWidth;
-  size_t depth;
-  size_t maskGran;
-  size_t readLatency;
-  size_t writeLatency;
-  seq::RUW readUnderWrite;
-  seq::WUW writeUnderWrite;
-  SmallVector<int32_t> writeClockIDs;
-  StringRef initFilename;
-  bool initIsBinary;
-  bool initIsInline;
-};
-} // end anonymous namespace
 
 namespace {
 
@@ -83,47 +73,13 @@ public:
   void generateMemory(HWModuleOp op, FirMemory mem);
 };
 
-struct HWMemSimImplPass : public sv::HWMemSimImplBase<HWMemSimImplPass> {
-  void runOnOperation() override;
+struct HWMemSimImplPass : public impl::HWMemSimImplBase<HWMemSimImplPass> {
+  using HWMemSimImplBase::HWMemSimImplBase;
 
-  using sv::HWMemSimImplBase<HWMemSimImplPass>::ignoreReadEnable;
-  using sv::HWMemSimImplBase<HWMemSimImplPass>::replSeqMem;
-  using sv::HWMemSimImplBase<HWMemSimImplPass>::addMuxPragmas;
-  using sv::HWMemSimImplBase<HWMemSimImplPass>::disableMemRandomization;
-  using sv::HWMemSimImplBase<HWMemSimImplPass>::disableRegRandomization;
-  using sv::HWMemSimImplBase<
-      HWMemSimImplPass>::addVivadoRAMAddressConflictSynthesisBugWorkaround;
+  void runOnOperation() override;
 };
 
 } // end anonymous namespace
-
-static FirMemory analyzeMemOp(HWModuleGeneratedOp op) {
-  FirMemory mem;
-  mem.depth = op->getAttrOfType<IntegerAttr>("depth").getInt();
-  mem.numReadPorts = op->getAttrOfType<IntegerAttr>("numReadPorts").getUInt();
-  mem.numWritePorts = op->getAttrOfType<IntegerAttr>("numWritePorts").getUInt();
-  mem.numReadWritePorts =
-      op->getAttrOfType<IntegerAttr>("numReadWritePorts").getUInt();
-  mem.readLatency = op->getAttrOfType<IntegerAttr>("readLatency").getUInt();
-  mem.writeLatency = op->getAttrOfType<IntegerAttr>("writeLatency").getUInt();
-  mem.dataWidth = op->getAttrOfType<IntegerAttr>("width").getUInt();
-  if (op->hasAttrOfType<IntegerAttr>("maskGran"))
-    mem.maskGran = op->getAttrOfType<IntegerAttr>("maskGran").getUInt();
-  else
-    mem.maskGran = mem.dataWidth;
-  mem.readUnderWrite =
-      op->getAttrOfType<seq::RUWAttr>("readUnderWrite").getValue();
-  mem.writeUnderWrite =
-      op->getAttrOfType<seq::WUWAttr>("writeUnderWrite").getValue();
-  if (auto clockIDsAttr = op->getAttrOfType<ArrayAttr>("writeClockIDs"))
-    for (auto clockID : clockIDsAttr)
-      mem.writeClockIDs.push_back(
-          clockID.cast<IntegerAttr>().getValue().getZExtValue());
-  mem.initFilename = op->getAttrOfType<StringAttr>("initFilename").getValue();
-  mem.initIsBinary = op->getAttrOfType<BoolAttr>("initIsBinary").getValue();
-  mem.initIsInline = op->getAttrOfType<BoolAttr>("initIsInline").getValue();
-  return mem;
-}
 
 /// A helper that returns true if a value definition (or block argument) is
 /// visible to another operation, either because it's a block argument or
@@ -745,7 +701,7 @@ void HWMemSimImplPass::runOnOperation() {
         SymbolTable::lookupSymbolIn(getOperation(), gen));
 
     if (genOp.getDescriptor() == "FIRRTL_Memory") {
-      auto mem = analyzeMemOp(oldModule);
+      FirMemory mem(oldModule);
 
       OpBuilder builder(oldModule);
       auto nameAttr = builder.getStringAttr(oldModule.getName());
@@ -781,17 +737,7 @@ void HWMemSimImplPass::runOnOperation() {
     markAllAnalysesPreserved();
 }
 
-std::unique_ptr<Pass> circt::sv::createHWMemSimImplPass(
-    bool replSeqMem, bool ignoreReadEnable, bool addMuxPragmas,
-    bool disableMemRandomization, bool disableRegRandomization,
-    bool addVivadoRAMAddressConflictSynthesisBugWorkaround) {
-  auto pass = std::make_unique<HWMemSimImplPass>();
-  pass->replSeqMem = replSeqMem;
-  pass->ignoreReadEnable = ignoreReadEnable;
-  pass->addMuxPragmas = addMuxPragmas;
-  pass->disableMemRandomization = disableMemRandomization;
-  pass->disableRegRandomization = disableRegRandomization;
-  pass->addVivadoRAMAddressConflictSynthesisBugWorkaround =
-      addVivadoRAMAddressConflictSynthesisBugWorkaround;
-  return pass;
+std::unique_ptr<Pass>
+circt::seq::createHWMemSimImplPass(const HWMemSimImplOptions &options) {
+  return std::make_unique<HWMemSimImplPass>(options);
 }

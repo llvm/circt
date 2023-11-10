@@ -271,11 +271,16 @@ LogicalResult firtool::populateHWToSV(mlir::PassManager &pm,
        /*emitSeparateAlwaysBlocks=*/
        opt.emitSeparateAlwaysBlocks}));
   pm.addNestedPass<hw::HWModuleOp>(createLowerVerifToSVPass());
-  pm.addPass(sv::createHWMemSimImplPass(
-      opt.replSeqMem, opt.ignoreReadEnableMem, opt.addMuxPragmas,
-      !opt.isRandomEnabled(FirtoolOptions::RandomKind::Mem),
-      !opt.isRandomEnabled(FirtoolOptions::RandomKind::Reg),
-      opt.addVivadoRAMAddressConflictSynthesisBugWorkaround));
+  pm.addPass(seq::createHWMemSimImplPass(
+      {/*disableMemRandomization=*/!opt.isRandomEnabled(
+           FirtoolOptions::RandomKind::Mem),
+       /*disableRegRandomization=*/
+       !opt.isRandomEnabled(FirtoolOptions::RandomKind::Reg),
+       /*replSeqMem=*/opt.replSeqMem,
+       /*ignoreReadEnable=*/opt.ignoreReadEnableMem,
+       /*addMuxPragmas=*/opt.addMuxPragmas,
+       /*addVivadoRAMAddressConflictSynthesisBugWorkaround=*/
+       opt.addVivadoRAMAddressConflictSynthesisBugWorkaround}));
 
   // If enabled, run the optimizer.
   if (!opt.disableOptimization) {
