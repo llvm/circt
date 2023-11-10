@@ -32,6 +32,8 @@ class SysInfo : public Service {
 public:
   virtual ~SysInfo() = default;
 
+  virtual std::string getServiceSymbol() const;
+
   /// Get the ESI version number to check version compatibility.
   virtual uint32_t esiVersion() const = 0;
 
@@ -47,6 +49,7 @@ public:
   virtual ~MMIO() = default;
   virtual uint64_t read(uint32_t addr) const = 0;
   virtual void write(uint32_t addr, uint64_t data) = 0;
+  virtual std::string getServiceSymbol() const;
 };
 
 /// Implement the SysInfo API for a standard MMIO protocol.

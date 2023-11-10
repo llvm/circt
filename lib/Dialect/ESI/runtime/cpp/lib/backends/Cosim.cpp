@@ -130,12 +130,29 @@ private:
 };
 } // namespace
 
-Service *CosimAccelerator::createService(Service::Type svcType) {
+namespace {
+class CosimCustomService : public services::CustomService {
+public:
+  using CustomService::CustomService;
+
+  virtual std::map<std::string, ChannelPort &>
+  requestChannelsFor(AppIDPath, const BundleType &,
+                     BundlePort::Direction portDir) override {
+    return {};
+  }
+};
+} // namespace
+
+Service *CosimAccelerator::createService(Service::Type svcType, AppIDPath id,
+                                         const ServiceImplDetails &details,
+                                         const HWClientDetails &clients) {
   if (svcType == typeid(MMIO))
     return new CosimMMIO(impl->lowLevel, impl->waitScope);
   else if (svcType == typeid(SysInfo))
     // return new MMIOSysInfo(getService<MMIO>());
     return new CosimSysInfo(impl->cosim, impl->waitScope);
+  else if (svcType == typeid(CustomService))
+    return new CosimCustomService(id, details, clients);
   return nullptr;
 }
 

@@ -7,8 +7,9 @@ from __future__ import annotations
 import typing
 
 __all__ = [
-    'Accelerator', 'AppID', 'Design', 'Instance', 'MMIO', 'Manifest',
-    'ModuleInfo', 'SysInfo', 'Type'
+    'Accelerator', 'AppID', 'BundlePort', 'ChannelPort', 'Design', 'Instance',
+    'MMIO', 'Manifest', 'ModuleInfo', 'ReadChannelPort', 'SysInfo', 'Type',
+    'WriteChannelPort'
 ]
 
 
@@ -38,6 +39,19 @@ class AppID:
     ...
 
 
+class BundlePort:
+
+  def getRead(self, arg0: str) -> ReadChannelPort:
+    ...
+
+  def getWrite(self, arg0: str) -> WriteChannelPort:
+    ...
+
+
+class ChannelPort:
+  pass
+
+
 class Design:
 
   @property
@@ -46,6 +60,10 @@ class Design:
 
   @property
   def info(self) -> ModuleInfo | None:
+    ...
+
+  @property
+  def ports(self) -> list[BundlePort]:
     ...
 
 
@@ -108,6 +126,12 @@ class ModuleInfo:
     ...
 
 
+class ReadChannelPort(ChannelPort):
+
+  def read(self, arg0: int) -> list[int]:
+    ...
+
+
 class SysInfo:
 
   def esi_version(self) -> int:
@@ -124,4 +148,10 @@ class Type:
 
   @property
   def id(self) -> str:
+    ...
+
+
+class WriteChannelPort(ChannelPort):
+
+  def write(self, arg0: list[int]) -> None:
     ...

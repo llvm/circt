@@ -12,7 +12,7 @@
 //
 // DO NOT EDIT!
 // This file is distributed as part of an ESI package. The source for this file
-// should always be modified within CIRCT (lib/dialect/ESI/runtime/cpp/esi.h).
+// should always be modified within CIRCT (lib/dialect/ESI/runtime/cpp).
 //
 //===----------------------------------------------------------------------===//
 
@@ -35,7 +35,9 @@ public:
   static std::unique_ptr<Accelerator> connect(std::string connectionString);
 
 protected:
-  virtual Service *createService(Service::Type service) override;
+  virtual Service *createService(Service::Type service, AppIDPath path,
+                                 const ServiceImplDetails &details,
+                                 const HWClientDetails &clients) override;
 
 private:
   struct Impl;

@@ -25,6 +25,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -37,8 +38,15 @@ namespace esi {
 struct AppID {
   const std::string name;
   const std::optional<uint32_t> idx;
+
+  bool operator==(const AppID &other) const {
+    return name == other.name && idx == other.idx;
+  }
+  bool operator!=(const AppID &other) const { return !(*this == other); }
 };
 using AppIDPath = std::vector<AppID>;
+bool operator<(const AppIDPath &a, const AppIDPath &b);
+std::ostream &operator<<(std::ostream &, const AppIDPath &);
 
 struct ModuleInfo {
   const std::optional<std::string> name;
@@ -49,10 +57,22 @@ struct ModuleInfo {
   const std::map<std::string, std::any> extra;
 };
 
-struct ServicePort {
+/// A description of a service port. Used pretty exclusively in setting up the
+/// design.
+struct ServicePortDesc {
   std::string name;
   std::string portName;
 };
+
+/// A description of a hardware client. Used pretty exclusively in setting up
+/// the design.
+struct HWClientDetail {
+  AppIDPath path;
+  ServicePortDesc port;
+  std::map<std::string, std::any> implOptions;
+};
+using HWClientDetails = std::vector<HWClientDetail>;
+using ServiceImplDetails = std::map<std::string, std::any>;
 
 //===----------------------------------------------------------------------===//
 // Manifest parsing and API creation.

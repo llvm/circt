@@ -8,8 +8,7 @@
 //
 // DO NOT EDIT!
 // This file is distributed as part of an ESI package. The source for this file
-// should always be modified within CIRCT
-// (lib/dialect/ESI/runtime/cpp/lib/backends/Cosim.cpp).
+// should always be modified within CIRCT (lib/dialect/ESI/runtime/cpp/).
 //
 //===----------------------------------------------------------------------===//
 
@@ -18,13 +17,29 @@
 #include <map>
 #include <stdexcept>
 
+using namespace esi;
+using namespace esi::services;
+
+CustomService::CustomService(AppIDPath idPath,
+                             const ServiceImplDetails &details,
+                             const HWClientDetails &clients) {
+  _serviceSymbol = std::any_cast<std::string>(details.at("service"));
+  // Strip off initial '@'.
+  _serviceSymbol = _serviceSymbol.substr(1);
+}
+
 namespace esi {
-services::Service *Accelerator::getServiceImpl(Service::Type svcType) {
-  std::unique_ptr<Service> &cacheEntry = serviceCache[&svcType];
+services::Service *Accelerator::getService(Service::Type svcType, AppIDPath id,
+                                           ServiceImplDetails details,
+                                           HWClientDetails clients) {
+  std::unique_ptr<Service> &cacheEntry =
+      serviceCache[std::make_tuple(&svcType, id)];
   if (cacheEntry == nullptr)
-    cacheEntry = std::unique_ptr<Service>(createService(svcType));
+    cacheEntry =
+        std::unique_ptr<Service>(createService(svcType, id, details, clients));
   return cacheEntry.get();
 }
+
 namespace registry {
 namespace internal {
 

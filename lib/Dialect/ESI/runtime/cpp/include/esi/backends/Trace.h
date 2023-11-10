@@ -57,11 +57,15 @@ public:
   /// "<mode>:<manifest path>[:<traceFile>]".
   static std::unique_ptr<Accelerator> connect(std::string connectionString);
 
+  /// Internal implementation.
+  struct Impl;
+
 protected:
-  virtual Service *createService(Service::Type service) override;
+  virtual Service *createService(Service::Type service, AppIDPath idPath,
+                                 const ServiceImplDetails &details,
+                                 const HWClientDetails &clients) override;
 
 private:
-  struct Impl;
   std::unique_ptr<Impl> impl;
 };
 
