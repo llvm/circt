@@ -268,12 +268,6 @@ om.class @FrozenPath(%basepath: !om.frozenbasepath) {
   %1 = om.frozenpath_create reference %basepath "Foo/bar:Bar>w.a"
 }
 
-// CHECK-LABEL: @Enum
-// CHECK-SAME: !om.enum<a: !om.string, b: i64>
-om.class @Enum(%e : !om.enum<a: !om.string, b: i64>) {
-  om.class.field @map_i64, %e : !om.enum<a: !om.string, b: i64>
-}
-
 // CHECK-LABEL: @Any
 // CHECK-SAME: %[[IN:.+]]: !om.class.type
 om.class @Any(%in: !om.class.type<@Empty>) {
