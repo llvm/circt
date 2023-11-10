@@ -182,18 +182,6 @@ omEvaluatorListGetNumElements(OMEvaluatorValue evaluatorValue);
 MLIR_CAPI_EXPORTED OMEvaluatorValue
 omEvaluatorListGetElement(OMEvaluatorValue evaluatorValue, intptr_t pos);
 
-/// Query if the EvaluatorValue is a Tuple.
-MLIR_CAPI_EXPORTED bool
-omEvaluatorValueIsATuple(OMEvaluatorValue evaluatorValue);
-
-/// Get the size of the tuple.
-MLIR_CAPI_EXPORTED intptr_t
-omEvaluatorTupleGetNumElements(OMEvaluatorValue evaluatorValue);
-
-/// Get an element of the tuple.
-MLIR_CAPI_EXPORTED OMEvaluatorValue
-omEvaluatorTupleGetElement(OMEvaluatorValue evaluatorValue, intptr_t pos);
-
 /// Query if the EvaluatorValue is a BasePath.
 MLIR_CAPI_EXPORTED bool
 omEvaluatorValueIsABasePath(OMEvaluatorValue evaluatorValue);

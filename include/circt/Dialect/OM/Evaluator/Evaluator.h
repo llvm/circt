@@ -47,7 +47,7 @@ using ObjectFields = SmallDenseMap<StringAttr, EvaluatorValuePtr>;
 /// the appropriate reference count.
 struct EvaluatorValue : std::enable_shared_from_this<EvaluatorValue> {
   // Implement LLVM RTTI.
-  enum class Kind { Attr, Object, List, Tuple, Reference, BasePath, Path };
+  enum class Kind { Attr, Object, List, Reference, BasePath, Path };
   EvaluatorValue(MLIRContext *ctx, Kind kind, Location loc)
       : kind(kind), ctx(ctx), loc(loc) {}
   Kind getKind() const { return kind; }
@@ -275,46 +275,6 @@ private:
   llvm::SmallDenseMap<StringAttr, EvaluatorValuePtr> fields;
 };
 
-/// Tuple values.
-struct TupleValue : EvaluatorValue {
-  using TupleElements = llvm::SmallVector<EvaluatorValuePtr>;
-  TupleValue(TupleType type, TupleElements tupleElements, Location loc)
-      : EvaluatorValue(type.getContext(), Kind::Tuple, loc), type(type),
-        elements(std::move(tupleElements)) {
-    markFullyEvaluated();
-  }
-
-  // Partially evaluated value.
-  TupleValue(TupleType type, Location loc)
-      : EvaluatorValue(type.getContext(), Kind::Tuple, loc), type(type) {}
-
-  void setElements(TupleElements newElements) {
-    elements = std::move(newElements);
-    markFullyEvaluated();
-  }
-
-  LogicalResult finalizeImpl() {
-    for (auto &&value : elements)
-      if (failed(finalizeEvaluatorValue(value)))
-        return failure();
-
-    return success();
-  }
-  /// Implement LLVM RTTI.
-  static bool classof(const EvaluatorValue *e) {
-    return e->getKind() == Kind::Tuple;
-  }
-
-  /// Return the type of the value, which is a TupleType.
-  TupleType getTupleType() const { return type; }
-
-  const TupleElements &getElements() const { return elements; }
-
-private:
-  TupleType type;
-  TupleElements elements;
-};
-
 /// A Basepath value.
 struct BasePathValue : EvaluatorValue {
   BasePathValue(MLIRContext *context);
@@ -455,11 +415,6 @@ private:
   FailureOr<EvaluatorValuePtr> evaluateListConcat(ListConcatOp op,
                                                   ActualParameters actualParams,
                                                   Location loc);
-  FailureOr<EvaluatorValuePtr>
-  evaluateTupleCreate(TupleCreateOp op, ActualParameters actualParams,
-                      Location loc);
-  FailureOr<EvaluatorValuePtr>
-  evaluateTupleGet(TupleGetOp op, ActualParameters actualParams, Location loc);
   FailureOr<evaluator::EvaluatorValuePtr>
   evaluateBasePathCreate(FrozenBasePathCreateOp op,
                          ActualParameters actualParams, Location loc);
