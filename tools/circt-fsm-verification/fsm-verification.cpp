@@ -156,7 +156,9 @@ void manage_action_region(Region &region, transition *t){
   for (Block &bl : region.getBlocks()){
       for(Operation &op : bl.getOperations()){
         if (auto op1 = dyn_cast<fsm::UpdateOp>(op)){
-
+          // TODO HERE
+          // string s = manage_update_op()
+          // t->var_updates->push_back(s);
         } else {
           string s = manage_comb_exp(op);
           t->var_updates->push_back(s);
