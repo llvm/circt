@@ -249,10 +249,6 @@ def attribute_to_var(attr):
   except ValueError:
     pass
   try:
-    return {name: attribute_to_var(value) for name, value in om.MapAttr(attr)}
-  except ValueError:
-    pass
-  try:
     return int(str(om.OMIntegerAttr(attr)))
   except ValueError:
     pass

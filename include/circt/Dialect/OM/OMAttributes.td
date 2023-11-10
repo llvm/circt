@@ -81,28 +81,6 @@ def OMListAttr : AttrDef<OMDialect, "List", [TypedAttrInterface]> {
   }];
 }
 
-def MapAttr : AttrDef<OMDialect, "Map", [TypedAttrInterface]> {
-  let summary = "An attribute that represents a string map";
-
-  let mnemonic = "map";
-
-  let parameters = (ins
-    "mlir::Type": $valueType,
-    "mlir::DictionaryAttr":$elements
-  );
-
-  // TODO: Use custom assembly format to infer a type from elements.
-  let assemblyFormat = [{
-    `<` $valueType `,` $elements `>`
-  }];
-
-  let genVerifyDecl = 1;
-
-  let extraClassDeclaration = [{
-    mlir::Type getType();
-  }];
-}
-
 def OMPathAttr : AttrDef<OMDialect, "Path"> {
   let summary = "An attribute that represents an instance path";
 
