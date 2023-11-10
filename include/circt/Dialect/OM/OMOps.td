@@ -344,30 +344,6 @@ def TupleGetOp : OMOp<"tuple_get", [Pure, InferTypeOpInterface]> {
    }];
 }
 
-def MapKeyValuePair: Type<CPred<"::circt::om::isMapKeyValuePairType($_self)">,
-                        "a pair whose first element is an attribute",
-                        "::mlir::TupleType">;
-
-def MapCreateOp : OMOp<"map_create", [Pure, SameTypeOperands]> {
-  let summary = "Create a map";
-  let description = [{
-    Creates a map from a sequence of inputs.
-
-    ```
-    %map = om.map_create %e1, %e2 : !om.string, i8
-    ```
-    where `%e1` and `e2` have !om.tuple<!om.string, i8> and
-    `%map` has `!om.map<!om.string, i8>` type.
-  }];
-
-  let arguments = (ins Variadic<MapKeyValuePair>:$inputs);
-  let results = (outs
-    MapType:$result
-  );
-
-  let hasCustomAssemblyFormat = true;
-}
-
 def BasePathCreateOp : OMOp<"basepath_create", [Pure,
       DeclareOpInterfaceMethods<SymbolUserOpInterface>
     ]> {

@@ -48,20 +48,12 @@ with Context() as ctx, Location.unknown():
       %1 = om.object @Child(%c_15) : (!om.integer) -> !om.class.type<@Child>
       %list_child = om.list_create %0, %1: !om.class.type<@Child>
       %2 = om.object @Nest(%list_child) : (!om.list<!om.class.type<@Child>>) -> !om.class.type<@Nest>
-
-      %3 = om.constant #om.map<!om.integer, {a = #om.integer<42>, b = #om.integer<32>}> : !om.map<!om.string, !om.integer>
+      om.class.field @nest, %2 : !om.class.type<@Nest>
 
       %x = om.constant "X" : !om.string
       %y = om.constant "Y" : !om.string
       %entry1 = om.tuple_create %x, %c_14: !om.string, !om.integer
       %entry2 = om.tuple_create %y, %c_15: !om.string, !om.integer
-
-      %map = om.map_create %entry1, %entry2: !om.string, !om.integer
-
-      %true = om.constant true
-      %false = om.constant false
-
-      om.class.fields %param, %0, %sym, %list, %tuple, %2, %3, %map, %true, %false : !om.integer, !om.class.type<@Child>, !om.ref, !om.list<!om.string>, tuple<!om.list<!om.string>, !om.integer>, !om.class.type<@Nest>, !om.map<!om.string, !om.integer>, !om.map<!om.string, !om.integer>, i1, i1
     }
 
     om.class @Child(%0: !om.integer) -> (foo: !om.integer) {
@@ -195,38 +187,6 @@ for child in obj.nest.list_child:
   # CHECK: 14
   # CHECK-NEXT: 15
   print(child.foo)
-
-# CHECK: 2
-print(len(obj.map))
-# CHECK: {'a': 42, 'b': 32}
-print(obj.map)
-for k, v in obj.map.items():
-  # CHECK-NEXT: a 42
-  # CHECK-NEXT: b 32
-  print(k, v)
-
-try:
-  print(obj.map_create[1])
-except KeyError as e:
-  # CHECK-NEXT: 'key is not integer'
-  print(e)
-try:
-  print(obj.map_create["INVALID"])
-except KeyError as e:
-  # CHECK-NEXT: 'key not found'
-  print(e)
-# CHECK-NEXT: 14
-print(obj.map_create["X"])
-
-for k, v in obj.map_create.items():
-  # CHECK-NEXT: X 14
-  # CHECK-NEXT: Y 15
-  print(k, v)
-
-# CHECK: True
-print(obj.true)
-# CHECK: False
-print(obj.false)
 
 obj = evaluator.instantiate("Client")
 object_dict: Dict[om.Object, str] = {}

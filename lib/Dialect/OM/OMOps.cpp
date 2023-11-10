@@ -654,38 +654,6 @@ LogicalResult TupleGetOp::inferReturnTypes(
 }
 
 //===----------------------------------------------------------------------===//
-// MapCreateOp
-//===----------------------------------------------------------------------===//
-
-void circt::om::MapCreateOp::print(OpAsmPrinter &p) {
-  p << " ";
-  p.printOperands(getInputs());
-  p.printOptionalAttrDict((*this)->getAttrs());
-  p << " : " << cast<circt::om::MapType>(getType()).getKeyType() << ", "
-    << cast<circt::om::MapType>(getType()).getValueType();
-}
-
-ParseResult circt::om::MapCreateOp::parse(OpAsmParser &parser,
-                                          OperationState &result) {
-  llvm::SmallVector<OpAsmParser::UnresolvedOperand, 16> operands;
-  Type elementType, valueType;
-
-  if (parser.parseOperandList(operands) ||
-      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
-      parser.parseType(elementType) || parser.parseComma() ||
-      parser.parseType(valueType))
-    return failure();
-  result.addTypes({circt::om::MapType::get(elementType, valueType)});
-  auto operandType =
-      mlir::TupleType::get(valueType.getContext(), {elementType, valueType});
-
-  for (auto operand : operands)
-    if (parser.resolveOperand(operand, operandType, result.operands))
-      return failure();
-  return success();
-}
-
-//===----------------------------------------------------------------------===//
 // BasePathCreateOp
 //===----------------------------------------------------------------------===//
 

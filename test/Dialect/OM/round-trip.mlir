@@ -223,14 +223,6 @@ om.class @BoolConstant(%b0 : i1) -> (bool: i1, bool2: i1, bool3: i1) {
   // CHECK: om.class.fields %b0, %[[const1]], %[[const2]] : i1, i1, i1
   om.class.fields %b0, %1, %2 : i1, i1, i1
 }
- 
-// CHECK-LABEL: @Map
-// CHECK-SAME: !om.map<!om.string, !om.string>
-// CHECK-SAME: -> (field: !om.map<!om.string, !om.string>)
-om.class @Map(%map: !om.map<!om.string, !om.string>) -> (field: !om.map<!om.string, !om.string>) {
-  // CHECK: om.class.fields %map : !om.map<!om.string, !om.string>
-  om.class.fields %map : !om.map<!om.string, !om.string>
-}
 
 // CHECK-LABEL: @Tuple
 // CHECK-SAME: -> (tuple: tuple<i1, !om.string>, val: !om.string)
@@ -241,24 +233,6 @@ om.class @Tuple(%int: i1, %str: !om.string) -> (tuple: tuple<i1, !om.string>, va
   %val = om.tuple_get %tuple[1]  : tuple<i1, !om.string>
   // CHECK-NEXT: om.class.fields %[[tuple]], %[[tuple_get]] : tuple<i1, !om.string>, !om.string
   om.class.fields %tuple, %val : tuple<i1, !om.string>, !om.string
-}
-
-// CHECK-LABEL: @MapConstant
-// CHECK-SAME: -> (map_i64: !om.map<!om.string, i64>)
-om.class @MapConstant() -> (map_i64: !om.map<!om.string, i64>) {
-  // CHECK: %[[const1:.+]] = om.constant #om.map<i64, {a = 42 : i64, b = 32 : i64}> : !om.map<!om.string, i64>
-  %0 = om.constant #om.map<i64, {a = 42, b = 32}> : !om.map<!om.string, i64>
-  // CHECK: om.class.fields %[[const1]] : !om.map<!om.string, i64>
-  om.class.fields %0 : !om.map<!om.string, i64>
-}
-
-// CHECK-LABEL: @MapCreate
-// CHECK-SAME: -> (map_field: !om.map<!om.string, !om.class.type<@Empty>>)
-om.class @MapCreate(%e1: tuple<!om.string, !om.class.type<@Empty>>, %e2: tuple<!om.string, !om.class.type<@Empty>>) -> (map_field: !om.map<!om.string, !om.class.type<@Empty>>) {
-  // CHECK: %[[map:.+]] = om.map_create %e1, %e2 : !om.string, !om.class.type<@Empty>
-  %map = om.map_create %e1, %e2 : !om.string, !om.class.type<@Empty>
-  // CHECK-NEXT: om.class.fields  %[[map]] : !om.map<!om.string, !om.class.type<@Empty>>
-  om.class.fields %map : !om.map<!om.string, !om.class.type<@Empty>>
 }
 
 hw.hierpath @HierPath [@PathModule::@wire]

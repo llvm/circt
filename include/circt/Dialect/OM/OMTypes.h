@@ -17,9 +17,6 @@
 #include "mlir/IR/Types.h"
 
 namespace circt::om {
-// Return true if the type is a pair whose first element is either string or
-// integer.
-bool isMapKeyValuePairType(mlir::Type);
 
 } // namespace circt::om
 
