@@ -68,7 +68,9 @@ PYBIND11_MODULE(esiCppAccel, m) {
         return ret;
       });
 
-  py::class_<ChannelPort>(m, "ChannelPort");
+  py::class_<ChannelPort>(m, "ChannelPort")
+      .def("connect", &ChannelPort::connect);
+
   py::class_<WriteChannelPort, ChannelPort>(m, "WriteChannelPort")
       .def("write", [](WriteChannelPort &p, std::vector<uint8_t> data) {
         p.write(data.data(), data.size());

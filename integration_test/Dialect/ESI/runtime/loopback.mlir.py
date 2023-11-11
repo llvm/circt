@@ -16,10 +16,15 @@ print(appid)
 assert appid.name == "loopback_inst"
 assert appid.idx == 0
 
-# Services are only hooked up for the trace backend currently.
-if platform == "trace":
-  d.children[0].ports[0].getWrite("recv").write([45] * 128)
-  d.children[0].ports[0].getWrite("recv").write([24])
-  d.children[0].ports[0].getWrite("recv").write([24, 45, 138])
+recv = d.children[0].ports[0].getWrite("recv")
+recv.connect()
 
-  d.children[0].ports[1].getRead("send").read(8)
+send = d.children[0].ports[1].getRead("send")
+send.connect()
+
+data = [24]
+recv.write(data)
+resp = send.read(1)
+assert resp == data
+
+print("PASS")

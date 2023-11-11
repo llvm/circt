@@ -27,8 +27,8 @@ class CosimBase:
           assert (iface.toHostType == to_host_type)
 
         openResp = self.cosim.open(iface).wait()
-        assert openResp.iface is not None
-        return openResp.iface
+        assert openResp.endpoint is not None
+        return openResp.endpoint
     assert False, f"Could not find specified EndpointID '{epid}'"
 
   def readMsg(self, ep):

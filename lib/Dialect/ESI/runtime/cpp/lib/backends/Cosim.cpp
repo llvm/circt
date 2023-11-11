@@ -21,6 +21,7 @@
 
 #include <fstream>
 #include <iostream>
+#include <set>
 
 using namespace std;
 
@@ -61,11 +62,16 @@ unique_ptr<Accelerator> CosimAccelerator::connect(string connectionString) {
   return make_unique<CosimAccelerator>(host, port);
 }
 
+namespace {
+class CosimChannelPort;
+}
+
 struct esi::backends::cosim::CosimAccelerator::Impl {
   capnp::EzRpcClient rpcClient;
   kj::WaitScope &waitScope;
   CosimDpiServer::Client cosim;
   EsiLowLevel::Client lowLevel;
+  set<CosimChannelPort *> channels;
 
   Impl(string hostname, uint16_t port)
       : rpcClient(hostname, port), waitScope(rpcClient.getWaitScope()),
@@ -74,6 +80,7 @@ struct esi::backends::cosim::CosimAccelerator::Impl {
     auto llPromise = llReq.send();
     lowLevel = llPromise.wait(waitScope).getLowLevel();
   }
+  ~Impl();
 };
 
 /// Construct and connect to a cosim server.
@@ -132,15 +139,150 @@ private:
 } // namespace
 
 namespace {
+class CosimChannelPort {
+public:
+  CosimChannelPort(CosimAccelerator::Impl &impl, string name)
+      : impl(impl), name(name), isConnected(false), ep(nullptr) {
+    impl.channels.insert(this);
+  }
+
+  void connect();
+  void disconnect();
+
+protected:
+  CosimAccelerator::Impl &impl;
+  string name;
+  bool isConnected;
+  EsiDpiEndpoint::Client ep;
+};
+} // namespace
+
+esi::backends::cosim::CosimAccelerator::Impl::~Impl() {
+  for (CosimChannelPort *ccp : channels)
+    ccp->disconnect();
+}
+
+void CosimChannelPort::connect() {
+  auto listResp = impl.cosim.listRequest().send().wait(impl.waitScope);
+  for (auto iface : listResp.getIfaces())
+    if (iface.getEndpointID() == name) {
+      auto openReq = impl.cosim.openRequest();
+      openReq.setIface(iface);
+      auto openResp = openReq.send().wait(impl.waitScope);
+      ep = openResp.getEndpoint();
+      isConnected = true;
+      return;
+    }
+  throw runtime_error("Could not find channel '" + name + "' in cosimulation");
+}
+
+void CosimChannelPort::disconnect() {
+  if (!isConnected)
+    return;
+  ep.closeRequest().send().wait(impl.waitScope);
+  ep = nullptr;
+}
+
+namespace {
+class WriteCosimChannelPort : public WriteChannelPort, public CosimChannelPort {
+public:
+  using CosimChannelPort::CosimChannelPort;
+  virtual ~WriteCosimChannelPort() throw() = default;
+
+  virtual void connect() override { CosimChannelPort::connect(); }
+  virtual void write(const void *data, size_t size) override;
+};
+} // namespace
+
+void WriteCosimChannelPort::write(const void *data, size_t size) {
+  if (!isConnected)
+    throw runtime_error("Cannot write to a channel port that is not connected");
+
+  auto req = ep.sendFromHostRequest();
+  req.setMsg(
+      capnp::Data::Reader(reinterpret_cast<const uint8_t *>(data), size));
+  req.send().wait(impl.waitScope);
+}
+
+namespace {
+class ReadCosimChannelPort : public ReadChannelPort, public CosimChannelPort {
+public:
+  using CosimChannelPort::CosimChannelPort;
+  virtual ~ReadCosimChannelPort() throw() = default;
+
+  virtual void connect() override { CosimChannelPort::connect(); }
+  virtual ssize_t read(void *data, size_t maxSize) override;
+};
+
+} // namespace
+
+ssize_t ReadCosimChannelPort::read(void *data, size_t maxSize) {
+  auto req = ep.recvToHostRequest();
+  auto resp = req.send().wait(impl.waitScope);
+  if (!resp.getHasData())
+    return 0;
+  capnp::Data::Reader msg = resp.getResp();
+  size_t size = msg.size();
+  if (size > maxSize)
+    return -1;
+  memcpy(data, msg.begin(), size);
+  return size;
+}
+
+namespace {
 class CosimCustomService : public services::CustomService {
 public:
-  using CustomService::CustomService;
+  CosimCustomService(CosimAccelerator::Impl &impl, AppIDPath idPath,
+                     const ServiceImplDetails &details,
+                     const HWClientDetails &clients)
+      : CustomService(idPath, details, clients), impl(impl) {
+
+    // Compute our parents id path.
+    AppIDPath prefix = std::move(idPath);
+    prefix.pop_back();
+
+    // Get the channel assignments for each client.
+    for (auto client : clients) {
+      AppIDPath fullClientPath = prefix + client.relPath;
+      map<string, string> channelAssignments;
+      for (auto assignment : any_cast<map<string, any>>(
+               client.implOptions.at("channel_assignments")))
+        channelAssignments[assignment.first] =
+            any_cast<string>(assignment.second);
+      clientChannelAssignments[fullClientPath] = std::move(channelAssignments);
+    }
+  }
 
   virtual map<string, ChannelPort &>
-  requestChannelsFor(AppIDPath, const BundleType &,
-                     BundlePort::Direction portDir) override {
-    return {};
+  requestChannelsFor(AppIDPath fullPath, const BundleType &bundleType,
+                     BundlePort::Direction svcDir) override {
+    auto f = clientChannelAssignments.find(fullPath);
+    if (f == clientChannelAssignments.end())
+      throw runtime_error("Could not find channel assignments for '" +
+                          fullPath.toStr() + "'");
+    const map<string, string> &channelAssignments = f->second;
+
+    map<string, ChannelPort &> channels;
+    for (auto [name, dir, type] : bundleType.getChannels()) {
+      auto f = channelAssignments.find(name);
+      if (f == channelAssignments.end())
+        throw runtime_error("Could not find channel assignment for '" +
+                            fullPath.toStr() + "." + name + "'");
+      string channelName = f->second;
+
+      ChannelPort *port;
+      if (BundlePort::isWrite(dir, svcDir))
+        port = new WriteCosimChannelPort(impl, channelName);
+      else
+        port = new ReadCosimChannelPort(impl, channelName);
+      channels.emplace(name, *port);
+    }
+    return channels;
   }
+
+private:
+  map<AppIDPath, map<string, string>> clientChannelAssignments;
+  CosimAccelerator::Impl &impl;
 };
 } // namespace
 
@@ -153,7 +295,7 @@ Service *CosimAccelerator::createService(Service::Type svcType, AppIDPath id,
     // return new MMIOSysInfo(getService<MMIO>());
     return new CosimSysInfo(impl->cosim, impl->waitScope);
   else if (svcType == typeid(CustomService))
-    return new CosimCustomService(id, details, clients);
+    return new CosimCustomService(*impl, id, details, clients);
   return nullptr;
 }
 
