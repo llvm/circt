@@ -344,8 +344,8 @@ LogicalResult CompRegClockEnabledOp::verify() {
 
 void ShiftRegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   // If the wire has an optional 'name' attribute, use it.
-  if (auto name = getName(); name.has_value())
-    setNameFn(getResult(), name.value());
+  if (auto name = getName())
+    setNameFn(getResult(), *name);
 }
 
 std::optional<size_t> ShiftRegOp::getTargetResultIndex() { return 0; }

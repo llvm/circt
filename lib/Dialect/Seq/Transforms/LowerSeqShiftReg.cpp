@@ -28,13 +28,16 @@ public:
   matchAndRewrite(seq::ShiftRegOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
     Value in = adaptor.getInput();
-    auto baseName = op.getName().value_or("sreg");
-    for (size_t i = 0; i < op.getNumElements(); ++i)
+    auto baseName = op.getName();
+    for (size_t i = 0; i < op.getNumElements(); ++i) {
+      StringAttr name;
+      if (baseName.has_value())
+        name = rewriter.getStringAttr(baseName.value() + "_sh" + Twine(i + 1));
       in = rewriter.create<seq::CompRegClockEnabledOp>(
           op.getLoc(), in, adaptor.getClk(), adaptor.getClockEnable(),
-          adaptor.getReset(), adaptor.getResetValue(),
-          rewriter.getStringAttr(baseName + "_sh" + Twine(i + 1)),
+          adaptor.getReset(), adaptor.getResetValue(), name,
           op.getPowerOnValue());
+    }
 
     op.replaceAllUsesWith(in);
     rewriter.eraseOp(op);

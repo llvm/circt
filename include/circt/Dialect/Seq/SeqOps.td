@@ -128,9 +128,9 @@ def ShiftRegOp : SeqOp<"shiftreg", [
   Clocked,
   Resettable,
   AllTypesMatch<["input", "data"]>,
-  SameVariadicOperandSize,
   DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
-  DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>
+  DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>,
+  AttrSizedOperandSegments
 ]> {
   let summary = "Shift register";
   let description = [{
