@@ -118,6 +118,7 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
 
   auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
   modulePM.addPass(firrtl::createSFCCompatPass());
+  modulePM.addPass(firrtl::createGroupMergePass());
   modulePM.addPass(firrtl::createGroupSinkPass());
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerGroupsPass());
