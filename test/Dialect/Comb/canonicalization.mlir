@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -canonicalize='top-down=true region-simplify=true' | FileCheck %s
+// RUN: circt-opt %s -canonicalize='top-down=true region-simplify=false' --allow-unregistered-dialect | FileCheck %s
 
 // CHECK-LABEL: @narrowMux
 hw.module @narrowMux(in %a: i8, in %b: i8, in %c: i1, out o: i4) {
@@ -1533,3 +1533,22 @@ hw.module @OrMuxSameTrueValueAndZero(in %tag_0: i1, in %tag_1: i1, in %tag_2: i1
   %4 = comb.or bin %0, %1, %2, %3 : i4
   hw.output %4 : i4
 }
+
+// CHECK-LABEL:   "test.acrossBlockCanonicalizationBarrier"() ({
+// CHECK:         ^bb0(%[[A:.*]]: i32, %[[B:.*]]: i32, %[[C:.*]]: i32):
+// CHECK:           %[[ADD1:.*]] = comb.add %[[A]], %[[B]] : i32
+// CHECK:           "terminator"() : () -> ()
+// CHECK:         ^bb1:
+// CHECK:           %[[ADD2:.*]] = comb.add %[[ADD1]], %[[C]] : i32
+// CHECK:           "terminator"(%[[ADD2]]) : (i32) -> ()
+// CHECK:         }) : () -> ()
+"test.acrossBlockCanonicalizationBarrier"() ({
+  ^bb0(%a : i32, %b : i32, %c : i32):
+    %add1 = comb.add %a, %b : i32
+    "terminator"() : () -> ()
+  ^bb1:
+    // Canonicalization should _not_ pull %add1 into a combined add op when %add1
+    // is defined in another block.
+    %add2 = comb.add %add1, %c : i32
+    "terminator"(%add2) : (i32) -> ()
+}) : () -> ()

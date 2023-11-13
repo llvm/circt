@@ -21,6 +21,21 @@ using namespace circt;
 using namespace comb;
 using namespace matchers;
 
+/// In comb, we assume no knowledge of the semantics of cross-block dataflow. As
+/// such, cross-block dataflow is interpreted as a canonicalization barrier.
+/// This is a conservative approach which:
+/// 1. still allows for efficient canonicalization for the common CIRCT usecase
+///    of comb (comb logic nested inside single-block hw.module's)
+/// 2. allows comb operations to be used in non-HW container ops - that may use
+///    MLIR blocks and regions to represent various forms of hierarchical
+///    abstractions, thus allowing comb to compose with other dialects.
+static bool hasOperandsOutsideOfBlock(Operation *op) {
+  Block *thisBlock = op->getBlock();
+  return llvm::any_of(op->getOperands(), [&](Value operand) {
+    return operand.getParentBlock() != thisBlock;
+  });
+}
+
 /// Create a new instance of a generic operation that only has value operands,
 /// and has a single result value whose type matches the first operand.
 ///
@@ -242,6 +257,9 @@ static bool narrowOperationWidth(OpTy op, bool narrowTrailingBits,
 //===----------------------------------------------------------------------===//
 
 OpFoldResult ReplicateOp::fold(FoldAdaptor adaptor) {
+  if (hasOperandsOutsideOfBlock(getOperation()))
+    return {};
+
   // Replicate one time -> noop.
   if (getType().cast<IntegerType>().getWidth() ==
       getInput().getType().getIntOrFloatBitWidth())
@@ -269,6 +287,9 @@ OpFoldResult ReplicateOp::fold(FoldAdaptor adaptor) {
 }
 
 OpFoldResult ParityOp::fold(FoldAdaptor adaptor) {
+  if (hasOperandsOutsideOfBlock(getOperation()))
+    return {};
+
   // Constant fold.
   if (auto input = adaptor.getInput().dyn_cast_or_null<IntegerAttr>())
     return getIntAttr(APInt(1, input.getValue().popcount() & 1), getContext());
@@ -295,6 +316,9 @@ static Attribute constFoldBinaryOp(ArrayRef<Attribute> operands,
 }
 
 OpFoldResult ShlOp::fold(FoldAdaptor adaptor) {
+  if (hasOperandsOutsideOfBlock(getOperation()))
+    return {};
+
   if (auto rhs = adaptor.getRhs().dyn_cast_or_null<IntegerAttr>()) {
     unsigned shift = rhs.getValue().getZExtValue();
     unsigned width = getType().getIntOrFloatBitWidth();
@@ -308,6 +332,9 @@ OpFoldResult ShlOp::fold(FoldAdaptor adaptor) {
 }
 
 LogicalResult ShlOp::canonicalize(ShlOp op, PatternRewriter &rewriter) {
+  if (hasOperandsOutsideOfBlock(&*op))
+    return failure();
+
   // ShlOp(x, cst) -> Concat(Extract(x), zeros)
   APInt value;
   if (!matchPattern(op.getRhs(), m_ConstantInt(&value)))
@@ -332,6 +359,9 @@ LogicalResult ShlOp::canonicalize(ShlOp op, PatternRewriter &rewriter) {
 }
 
 OpFoldResult ShrUOp::fold(FoldAdaptor adaptor) {
+  if (hasOperandsOutsideOfBlock(getOperation()))
+    return {};
+
   if (auto rhs = adaptor.getRhs().dyn_cast_or_null<IntegerAttr>()) {
     unsigned shift = rhs.getValue().getZExtValue();
     if (shift == 0)
@@ -345,6 +375,9 @@ OpFoldResult ShrUOp::fold(FoldAdaptor adaptor) {
 }
 
 LogicalResult ShrUOp::canonicalize(ShrUOp op, PatternRewriter &rewriter) {
+  if (hasOperandsOutsideOfBlock(&*op))
+    return failure();
+
   // ShrUOp(x, cst) -> Concat(zeros, Extract(x))
   APInt value;
   if (!matchPattern(op.getRhs(), m_ConstantInt(&value)))
@@ -369,6 +402,9 @@ LogicalResult ShrUOp::canonicalize(ShrUOp op, PatternRewriter &rewriter) {
 }
 
 OpFoldResult ShrSOp::fold(FoldAdaptor adaptor) {
+  if (hasOperandsOutsideOfBlock(getOperation()))
+    return {};
+
   if (auto rhs = adaptor.getRhs().dyn_cast_or_null<IntegerAttr>()) {
     if (rhs.getValue().getZExtValue() == 0)
       return getOperand(0);
@@ -377,6 +413,9 @@ OpFoldResult ShrSOp::fold(FoldAdaptor adaptor) {
 }
 
 LogicalResult ShrSOp::canonicalize(ShrSOp op, PatternRewriter &rewriter) {
+  if (hasOperandsOutsideOfBlock(&*op))
+    return failure();
+
   // ShrSOp(x, cst) -> Concat(replicate(extract(x, topbit)),extract(x))
   APInt value;
   if (!matchPattern(op.getRhs(), m_ConstantInt(&value)))
@@ -406,6 +445,9 @@ LogicalResult ShrSOp::canonicalize(ShrSOp op, PatternRewriter &rewriter) {
 //===----------------------------------------------------------------------===//
 
 OpFoldResult ExtractOp::fold(FoldAdaptor adaptor) {
+  if (hasOperandsOutsideOfBlock(getOperation()))
+    return {};
+
   // If we are extracting the entire input, then return it.
   if (getInput().getType() == getType())
     return getInput();
@@ -534,6 +576,9 @@ static bool extractFromReplicate(ExtractOp op, ReplicateOp replicate,
 }
 
 LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
+  if (hasOperandsOutsideOfBlock(&*op))
+    return failure();
+
   auto *inputOp = op.getInput().getDefiningOp();
 
   // This turns out to be incredibly expensive.  Disable until performance is
@@ -744,6 +789,9 @@ static bool canonicalizeLogicalCstWithConcat(Operation *logicalOp,
 }
 
 OpFoldResult AndOp::fold(FoldAdaptor adaptor) {
+  if (hasOperandsOutsideOfBlock(getOperation()))
+    return {};
+
   APInt value = APInt::getAllOnes(getType().cast<IntegerType>().getWidth());
 
   auto inputs = adaptor.getInputs();
@@ -841,6 +889,9 @@ static bool canonicalizeIdempotentInputs(Op op, PatternRewriter &rewriter) {
 }
 
 LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
+  if (hasOperandsOutsideOfBlock(&*op))
+    return failure();
+
   auto inputs = op.getInputs();
   auto size = inputs.size();
   assert(size > 1 && "expected 2 or more operands, `fold` should handle this");
@@ -974,6 +1025,9 @@ LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
 }
 
 OpFoldResult OrOp::fold(FoldAdaptor adaptor) {
+  if (hasOperandsOutsideOfBlock(getOperation()))
+    return {};
+
   auto value = APInt::getZero(getType().cast<IntegerType>().getWidth());
   auto inputs = adaptor.getInputs();
   // or(x, 10, 01) -> 11
@@ -1113,6 +1167,9 @@ static bool canonicalizeOrOfConcatsWithCstOperands(OrOp op, size_t concatIdx1,
 }
 
 LogicalResult OrOp::canonicalize(OrOp op, PatternRewriter &rewriter) {
+  if (hasOperandsOutsideOfBlock(&*op))
+    return failure();
+
   auto inputs = op.getInputs();
   auto size = inputs.size();
   assert(size > 1 && "expected 2 or more operands");
@@ -1212,6 +1269,9 @@ LogicalResult OrOp::canonicalize(OrOp op, PatternRewriter &rewriter) {
 }
 
 OpFoldResult XorOp::fold(FoldAdaptor adaptor) {
+  if (hasOperandsOutsideOfBlock(getOperation()))
+    return {};
+
   auto size = getInputs().size();
   auto inputs = adaptor.getInputs();
 
@@ -1264,6 +1324,9 @@ static void canonicalizeXorIcmpTrue(XorOp op, unsigned icmpOperand,
 }
 
 LogicalResult XorOp::canonicalize(XorOp op, PatternRewriter &rewriter) {
+  if (hasOperandsOutsideOfBlock(&*op))
+    return failure();
+
   auto inputs = op.getInputs();
   auto size = inputs.size();
   assert(size > 1 && "expected 2 or more operands");
@@ -1339,6 +1402,9 @@ LogicalResult XorOp::canonicalize(XorOp op, PatternRewriter &rewriter) {
 }
 
 OpFoldResult SubOp::fold(FoldAdaptor adaptor) {
+  if (hasOperandsOutsideOfBlock(getOperation()))
+    return {};
+
   // sub(x - x) -> 0
   if (getRhs() == getLhs())
     return getIntAttr(
@@ -1369,6 +1435,9 @@ OpFoldResult SubOp::fold(FoldAdaptor adaptor) {
 }
 
 LogicalResult SubOp::canonicalize(SubOp op, PatternRewriter &rewriter) {
+  if (hasOperandsOutsideOfBlock(&*op))
+    return failure();
+
   // sub(x, cst) -> add(x, -cst)
   APInt value;
   if (matchPattern(op.getRhs(), m_ConstantInt(&value))) {
@@ -1386,6 +1455,9 @@ LogicalResult SubOp::canonicalize(SubOp op, PatternRewriter &rewriter) {
 }
 
 OpFoldResult AddOp::fold(FoldAdaptor adaptor) {
+  if (hasOperandsOutsideOfBlock(getOperation()))
+    return {};
+
   auto size = getInputs().size();
 
   // add(x) -> x -- noop
@@ -1397,6 +1469,9 @@ OpFoldResult AddOp::fold(FoldAdaptor adaptor) {
 }
 
 LogicalResult AddOp::canonicalize(AddOp op, PatternRewriter &rewriter) {
+  if (hasOperandsOutsideOfBlock(&*op))
+    return failure();
+
   auto inputs = op.getInputs();
   auto size = inputs.size();
   assert(size > 1 && "expected 2 or more operands");
@@ -1497,6 +1572,9 @@ LogicalResult AddOp::canonicalize(AddOp op, PatternRewriter &rewriter) {
 }
 
 OpFoldResult MulOp::fold(FoldAdaptor adaptor) {
+  if (hasOperandsOutsideOfBlock(getOperation()))
+    return {};
+
   auto size = getInputs().size();
   auto inputs = adaptor.getInputs();
 
@@ -1521,6 +1599,9 @@ OpFoldResult MulOp::fold(FoldAdaptor adaptor) {
 }
 
 LogicalResult MulOp::canonicalize(MulOp op, PatternRewriter &rewriter) {
+  if (hasOperandsOutsideOfBlock(&*op))
+    return failure();
+
   auto inputs = op.getInputs();
   auto size = inputs.size();
   assert(size > 1 && "expected 2 or more operands");
@@ -1585,10 +1666,16 @@ static OpFoldResult foldDiv(Op op, ArrayRef<Attribute> constants) {
 }
 
 OpFoldResult DivUOp::fold(FoldAdaptor adaptor) {
+  if (hasOperandsOutsideOfBlock(getOperation()))
+    return {};
+
   return foldDiv<DivUOp, /*isSigned=*/false>(*this, adaptor.getOperands());
 }
 
 OpFoldResult DivSOp::fold(FoldAdaptor adaptor) {
+  if (hasOperandsOutsideOfBlock(getOperation()))
+    return {};
+
   return foldDiv<DivSOp, /*isSigned=*/true>(*this, adaptor.getOperands());
 }
 
@@ -1616,10 +1703,16 @@ static OpFoldResult foldMod(Op op, ArrayRef<Attribute> constants) {
 }
 
 OpFoldResult ModUOp::fold(FoldAdaptor adaptor) {
+  if (hasOperandsOutsideOfBlock(getOperation()))
+    return {};
+
   return foldMod<ModUOp, /*isSigned=*/false>(*this, adaptor.getOperands());
 }
 
 OpFoldResult ModSOp::fold(FoldAdaptor adaptor) {
+  if (hasOperandsOutsideOfBlock(getOperation()))
+    return {};
+
   return foldMod<ModSOp, /*isSigned=*/true>(*this, adaptor.getOperands());
 }
 //===----------------------------------------------------------------------===//
@@ -1628,6 +1721,9 @@ OpFoldResult ModSOp::fold(FoldAdaptor adaptor) {
 
 // Constant folding
 OpFoldResult ConcatOp::fold(FoldAdaptor adaptor) {
+  if (hasOperandsOutsideOfBlock(getOperation()))
+    return {};
+
   if (getNumOperands() == 1)
     return getOperand(0);
 
@@ -1652,6 +1748,9 @@ OpFoldResult ConcatOp::fold(FoldAdaptor adaptor) {
 }
 
 LogicalResult ConcatOp::canonicalize(ConcatOp op, PatternRewriter &rewriter) {
+  if (hasOperandsOutsideOfBlock(&*op))
+    return failure();
+
   auto inputs = op.getInputs();
   auto size = inputs.size();
   assert(size > 1 && "expected 2 or more operands");
@@ -1815,6 +1914,9 @@ LogicalResult ConcatOp::canonicalize(ConcatOp op, PatternRewriter &rewriter) {
 //===----------------------------------------------------------------------===//
 
 OpFoldResult MuxOp::fold(FoldAdaptor adaptor) {
+  if (hasOperandsOutsideOfBlock(getOperation()))
+    return {};
+
   // mux (c, b, b) -> b
   if (getTrueValue() == getFalseValue())
     return getTrueValue();
@@ -2264,6 +2366,9 @@ struct MuxRewriter : public mlir::OpRewritePattern<MuxOp> {
 
 LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
                                            PatternRewriter &rewriter) const {
+  if (hasOperandsOutsideOfBlock(&*op))
+    return failure();
+
   // If the op has a SV attribute, don't optimize it.
   if (hasSVAttributes(op))
     return failure();
@@ -2554,6 +2659,9 @@ struct ArrayRewriter : public mlir::OpRewritePattern<hw::ArrayCreateOp> {
 
   LogicalResult matchAndRewrite(hw::ArrayCreateOp op,
                                 PatternRewriter &rewriter) const override {
+    if (hasOperandsOutsideOfBlock(&*op))
+      return failure();
+
     if (foldArrayOfMuxes(op, rewriter))
       return success();
     return failure();
@@ -2633,6 +2741,9 @@ static bool applyCmpPredicateToEqualOperands(ICmpPredicate predicate) {
 }
 
 OpFoldResult ICmpOp::fold(FoldAdaptor adaptor) {
+  if (hasOperandsOutsideOfBlock(getOperation()))
+    return {};
+
   // gt a, a -> false
   // gte a, a -> true
   if (getLhs() == getRhs()) {
@@ -2908,6 +3019,9 @@ static void combineEqualityICmpWithXorOfConstant(ICmpOp cmpOp, XorOp xorOp,
 }
 
 LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
+  if (hasOperandsOutsideOfBlock(&*op))
+    return failure();
+
   APInt lhs, rhs;
 
   // icmp 1, x -> icmp x, 1
