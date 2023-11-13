@@ -3,6 +3,7 @@ add_circt_dialect_library(CIRCTSeqTransforms
   HWMemSimImpl.cpp
   LowerSeqHLMem.cpp
   LowerSeqFIFO.cpp
+  LowerSeqShiftReg.cpp
 
   DEPENDS
   CIRCTSeqTransformsIncGen

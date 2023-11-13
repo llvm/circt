@@ -123,6 +123,49 @@ def CompRegClockEnabledOp : SeqOp<"compreg.ce",
   ];
 }
 
+def ShiftRegOp : SeqOp<"shiftreg", [
+  Pure,
+  Clocked,
+  Resettable,
+  AllTypesMatch<["input", "data"]>,
+  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+  DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>,
+  AttrSizedOperandSegments
+]> {
+  let summary = "Shift register";
+  let description = [{
+    The `seq.shiftreg` op represents a shift register. It takes the input
+    value and shifts it every cycle when `clockEnable` is asserted.
+    The `reset` and `resetValue` operands are optional and if present, every
+    entry in the shift register will be initialized to `resetValue` upon
+    assertion of the reset signal. Exact reset behavior (sync/async) is
+    implementation defined.
+  }];
+
+  let arguments = (ins
+    ConfinedAttr<I64Attr, [IntMinValue<1>]>:$numElements,
+    AnyType:$input,
+    ClockType:$clk,
+    I1:$clockEnable,
+    OptionalAttr<StrAttr>:$name,
+    Optional<I1>:$reset,
+    Optional<AnyType>:$resetValue,
+    Optional<AnyType>:$powerOnValue,
+    OptionalAttr<InnerSymAttr>:$inner_sym
+  );
+  let results = (outs AnyType:$data);
+  let hasVerifier = 1;
+
+  let assemblyFormat = [{
+    `[` $numElements `]`
+    (`sym` $inner_sym^)? custom<ImplicitSSAName>($name) $input `,` $clk `,` $clockEnable
+    (`reset` $reset^ `,` $resetValue)?
+    (`powerOn` $powerOnValue^)? attr-dict `:` type($data)
+    custom<OptionalTypeMatch>(ref(type($data)), ref($resetValue), type($resetValue))
+    custom<OptionalTypeMatch>(ref(type($data)), ref($powerOnValue), type($powerOnValue))
+  }];
+}
+
 //===----------------------------------------------------------------------===//
 // FIRRTL-flavored register
 //===----------------------------------------------------------------------===//

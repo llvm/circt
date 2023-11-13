@@ -299,12 +299,24 @@ void CompRegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
     setNameFn(getResult(), *name);
 }
 
-std::optional<size_t> CompRegOp::getTargetResultIndex() { return 0; }
-
 LogicalResult CompRegOp::verify() {
   if ((getReset() == nullptr) ^ (getResetValue() == nullptr))
     return emitOpError(
         "either reset and resetValue or neither must be specified");
+  return success();
+}
+
+std::optional<size_t> CompRegOp::getTargetResultIndex() { return 0; }
+
+template <typename TOp>
+LogicalResult verifyResets(TOp op) {
+  if ((op.getReset() == nullptr) ^ (op.getResetValue() == nullptr))
+    return op->emitOpError(
+        "either reset and resetValue or neither must be specified");
+  bool hasReset = op.getReset() != nullptr;
+  if (hasReset && op.getResetValue().getType() != op.getInput().getType())
+    return op->emitOpError("reset value must be the same type as the input");
+
   return success();
 }
 
@@ -321,9 +333,26 @@ std::optional<size_t> CompRegClockEnabledOp::getTargetResultIndex() {
 }
 
 LogicalResult CompRegClockEnabledOp::verify() {
-  if ((getReset() == nullptr) ^ (getResetValue() == nullptr))
-    return emitOpError(
-        "either reset and resetValue or neither must be specified");
+  if (failed(verifyResets(*this)))
+    return failure();
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// ShiftRegOp
+//===----------------------------------------------------------------------===//
+
+void ShiftRegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  // If the wire has an optional 'name' attribute, use it.
+  if (auto name = getName())
+    setNameFn(getResult(), *name);
+}
+
+std::optional<size_t> ShiftRegOp::getTargetResultIndex() { return 0; }
+
+LogicalResult ShiftRegOp::verify() {
+  if (failed(verifyResets(*this)))
+    return failure();
   return success();
 }
 
