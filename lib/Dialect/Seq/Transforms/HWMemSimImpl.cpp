@@ -42,7 +42,7 @@ namespace seq {
 namespace {
 
 class HWMemSimImpl {
-  bool ignoreReadEnable;
+  ReadEnableMode readEnableMode;
   bool addMuxPragmas;
   bool disableMemRandomization;
   bool disableRegRandomization;
@@ -59,11 +59,11 @@ class HWMemSimImpl {
 public:
   Namespace &mlirModuleNamespace;
 
-  HWMemSimImpl(bool ignoreReadEnable, bool addMuxPragmas,
+  HWMemSimImpl(ReadEnableMode readEnableMode, bool addMuxPragmas,
                bool disableMemRandomization, bool disableRegRandomization,
                bool addVivadoRAMAddressConflictSynthesisBugWorkaround,
                Namespace &mlirModuleNamespace)
-      : ignoreReadEnable(ignoreReadEnable), addMuxPragmas(addMuxPragmas),
+      : readEnableMode(readEnableMode), addMuxPragmas(addMuxPragmas),
         disableMemRandomization(disableMemRandomization),
         disableRegRandomization(disableRegRandomization),
         addVivadoRAMAddressConflictSynthesisBugWorkaround(
@@ -231,7 +231,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
     Value en = op.getBody().getArgument(inArg++);
     Value clock = op.getBody().getArgument(inArg++);
     // Add pipeline stages
-    if (ignoreReadEnable) {
+    if (readEnableMode == ReadEnableMode::Ignore) {
       for (size_t j = 0, e = mem.readLatency; j != e; ++j) {
         auto enLast = en;
         if (j < e - 1)
@@ -249,9 +249,19 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
 
     // Read Logic
     Value rdata = getMemoryRead(b, reg, addr, addMuxPragmas);
-    if (!ignoreReadEnable) {
+    switch (readEnableMode) {
+    case ReadEnableMode::Undefined: {
       Value x = b.create<sv::ConstantXOp>(rdata.getType());
       rdata = b.create<comb::MuxOp>(en, rdata, x, false);
+      break;
+    }
+    case ReadEnableMode::Zero: {
+      Value x = b.create<hw::ConstantOp>(rdata.getType(), 0);
+      rdata = b.create<comb::MuxOp>(en, rdata, x, false);
+      break;
+    }
+    case ReadEnableMode::Ignore:
+      break;
     }
     outputs.push_back(rdata);
   }
@@ -284,7 +294,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
     // Add read-only pipeline stages.
     Value readAddr = addr;
     Value readEn = en;
-    if (ignoreReadEnable) {
+    if (readEnableMode == ReadEnableMode::Ignore) {
       for (size_t j = 0, e = mem.readLatency; j != e; ++j) {
         auto enLast = en;
         if (j < e - 1)
@@ -345,9 +355,20 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
         false);
 
     auto val = getMemoryRead(b, reg, readAddr, addMuxPragmas);
-    if (!ignoreReadEnable) {
+
+    switch (readEnableMode) {
+    case ReadEnableMode::Undefined: {
       Value x = b.create<sv::ConstantXOp>(val.getType());
       val = b.create<comb::MuxOp>(rcond, val, x, false);
+      break;
+    }
+    case ReadEnableMode::Zero: {
+      Value x = b.create<hw::ConstantOp>(val.getType(), 0);
+      val = b.create<comb::MuxOp>(rcond, val, x, false);
+      break;
+    }
+    case ReadEnableMode::Ignore:
+      break;
     }
     b.create<sv::AssignOp>(rWire, val);
 
@@ -721,7 +742,7 @@ void HWMemSimImplPass::runOnOperation() {
         newModule.setCommentAttr(
             builder.getStringAttr("VCS coverage exclude_file"));
 
-        HWMemSimImpl(ignoreReadEnable, addMuxPragmas, disableMemRandomization,
+        HWMemSimImpl(readEnableMode, addMuxPragmas, disableMemRandomization,
                      disableRegRandomization,
                      addVivadoRAMAddressConflictSynthesisBugWorkaround,
                      mlirModuleNamespace)

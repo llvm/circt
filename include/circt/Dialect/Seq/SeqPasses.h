@@ -19,6 +19,8 @@
 namespace circt {
 namespace seq {
 
+enum class ReadEnableMode { Zero, Ignore, Undefined };
+
 #define GEN_PASS_DECL_EXTERNALIZECLOCKGATE
 #define GEN_PASS_DECL_HWMEMSIMIMPL
 #include "circt/Dialect/Seq/SeqPasses.h.inc"
