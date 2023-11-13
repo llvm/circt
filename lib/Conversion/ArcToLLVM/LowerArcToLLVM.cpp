@@ -181,8 +181,8 @@ static MemoryAccess prepareMemoryAccess(Location loc, Value memory,
   Value withinBounds = rewriter.create<LLVM::ICmpOp>(
       loc, LLVM::ICmpPredicate::ult, addr, addrLimit);
   Value ptr = rewriter.create<LLVM::GEPOp>(
-      loc, LLVM::LLVMPointerType::get(memory.getContext()), type.getWordType(),
-      memory, ValueRange{addr});
+      loc, LLVM::LLVMPointerType::get(memory.getContext()),
+      rewriter.getIntegerType(type.getStride() * 8), memory, ValueRange{addr});
   return {ptr, withinBounds};
 }
 
