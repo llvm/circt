@@ -868,6 +868,35 @@ OpFoldResult FromClockOp::fold(FoldAdaptor adaptor) {
 }
 
 //===----------------------------------------------------------------------===//
+// FIR memory helper
+//===----------------------------------------------------------------------===//
+
+FirMemory::FirMemory(hw::HWModuleGeneratedOp op) {
+  depth = op->getAttrOfType<IntegerAttr>("depth").getInt();
+  numReadPorts = op->getAttrOfType<IntegerAttr>("numReadPorts").getUInt();
+  numWritePorts = op->getAttrOfType<IntegerAttr>("numWritePorts").getUInt();
+  numReadWritePorts =
+      op->getAttrOfType<IntegerAttr>("numReadWritePorts").getUInt();
+  readLatency = op->getAttrOfType<IntegerAttr>("readLatency").getUInt();
+  writeLatency = op->getAttrOfType<IntegerAttr>("writeLatency").getUInt();
+  dataWidth = op->getAttrOfType<IntegerAttr>("width").getUInt();
+  if (op->hasAttrOfType<IntegerAttr>("maskGran"))
+    maskGran = op->getAttrOfType<IntegerAttr>("maskGran").getUInt();
+  else
+    maskGran = dataWidth;
+  readUnderWrite = op->getAttrOfType<seq::RUWAttr>("readUnderWrite").getValue();
+  writeUnderWrite =
+      op->getAttrOfType<seq::WUWAttr>("writeUnderWrite").getValue();
+  if (auto clockIDsAttr = op->getAttrOfType<ArrayAttr>("writeClockIDs"))
+    for (auto clockID : clockIDsAttr)
+      writeClockIDs.push_back(
+          clockID.cast<IntegerAttr>().getValue().getZExtValue());
+  initFilename = op->getAttrOfType<StringAttr>("initFilename").getValue();
+  initIsBinary = op->getAttrOfType<BoolAttr>("initIsBinary").getValue();
+  initIsInline = op->getAttrOfType<BoolAttr>("initIsInline").getValue();
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 
