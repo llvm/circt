@@ -161,9 +161,8 @@ private:
     // Check for an operation alias
     Operation *defOp = getOpAlias(op.getDefiningOp());
 
-    if (opLIDMap.contains(defOp)) {
-      return opLIDMap[defOp];
-    }
+    if (auto it = opLIDMap.find(defOp); it != opLIDMap.end())
+      return it->second;
 
     // Check for special case where op is actually a port
     // To do so, we start by checking if our operation is a block argument
@@ -172,9 +171,8 @@ private:
       size_t argIdx = barg.getArgNumber();
 
       // Check that the extracted argument is in range before using it
-      if (inputLIDs.contains(argIdx)) {
-        return inputLIDs[argIdx];
-      }
+      if (auto it = inputLIDs.find(argIdx); it != inputLIDs.end())
+        return it->second;
     }
 
     // Create a new entry with the current LID
@@ -188,9 +186,8 @@ private:
   // If so, the original operation is returned
   // Otherwise the argument is returned as it is the original op
   Operation *getOpAlias(Operation *op) {
-    if (opAliasMap.contains(op)) {
-      return opAliasMap[op];
-    }
+    if (auto it = opAliasMap.find(op); it != opAliasMap.end())
+      return it->second;
     // If the op isn't an alias then simply return it
     return op;
   }
@@ -203,9 +200,9 @@ private:
   // If so, its lid will be returned
   // Otherwise -1 will be returned
   size_t getSortLID(size_t w) {
-    if (sortToLIDMap.contains(w)) {
-      return sortToLIDMap[w];
-    }
+    if (auto it = sortToLIDMap.find(w); it != sortToLIDMap.end())
+      return it->second;
+
     // If no lid was found return -1
     return noLID;
   }
@@ -214,9 +211,9 @@ private:
   // If so, its lid will be returned
   // Otherwise -1 will be returned
   size_t getConstLID(int64_t val, size_t w) {
-    if (constToLIDMap.contains({val, w})) {
-      return constToLIDMap[{val, w}];
-    }
+    if (auto it = constToLIDMap.find({val, w}); it != constToLIDMap.end())
+      return it->second;
+
     // if no lid was found return -1
     return noLID;
   }
@@ -263,9 +260,8 @@ private:
   // Generates a zero constant expression
   void genZero(size_t width) {
     // Check if the constant has been created yet
-    if (getConstLID(0, width) != noLID) {
+    if (getConstLID(0, width) != noLID)
       return;
-    }
 
     // Retrieve the lid associated with the sort (sid)
     size_t sid = sortToLIDMap.at(width);
@@ -352,8 +348,7 @@ private:
     // Start by finding the expression lid
     size_t exprLID = getOrCreateOpLID(expr);
 
-    // Build and return the btor2 string
-    os << lid++ << wsStr << constraintStr << wsStr << exprLID << nlStr;
+    genConstraint(exprLID);
   }
 
   // Generate a btor2 constraint given an expression from an assumption
@@ -366,20 +361,12 @@ private:
   // Generate an ite instruction (if then else) given a predicate, two values
   // and a res width
   void genIte(Operation *srcop, Value cond, Value t, Value f, int64_t width) {
-    // Register the source operation with the current line id
-    getOrCreateOpLID(srcop);
-
-    // Retrieve the lid associated with the sort (sid)
-    size_t sid = sortToLIDMap.at(width);
-
     // Retrieve the operand lids, assuming they were emitted
     size_t condLID = getOrCreateOpLID(cond);
     size_t tLID = getOrCreateOpLID(t);
     size_t fLID = getOrCreateOpLID(f);
 
-    // Build and return the ite instruction
-    os << lid++ << wsStr << iteStr << wsStr << sid << wsStr << condLID << wsStr
-       << tLID << wsStr << fLID << nlStr;
+    genIte(srcop, condLID, tLID, fLID, width);
   }
 
   // Generate an ite instruction (if then else) given a predicate, two values
@@ -399,19 +386,11 @@ private:
 
   // Generate a logical implication given a lhs and a rhs
   void genImplies(Operation *srcop, Value lhs, Value rhs) {
-    // Register the source operation with the current line id
-    getOrCreateOpLID(srcop);
-
-    // Retrieve the lid associated with the sort (sid)
-    size_t sid = sortToLIDMap.at(1);
-
     // Retrieve LIDs for the lhs and rhs
     size_t lhsLID = getOrCreateOpLID(lhs);
     size_t rhsLID = getOrCreateOpLID(rhs);
 
-    // Build and return the implies operation
-    os << lid++ << wsStr << impliesStr << wsStr << sid << wsStr << lhsLID
-       << wsStr << rhsLID << nlStr;
+    genImplies(srcop, lhsLID, rhsLID);
   }
 
   // Generate a logical implication given a lhs and a rhs
@@ -422,7 +401,7 @@ private:
     // Retrieve the lid associated with the sort (sid)
     size_t sid = sortToLIDMap.at(1);
 
-    // Build and return the implies operation
+    // Build and emit the implies operation
     os << lid++ << wsStr << impliesStr << wsStr << sid << wsStr << lhsLID
        << wsStr << rhsLID << nlStr;
   }
@@ -459,6 +438,10 @@ private:
   int64_t requireSort(mlir::Type type) {
     // Start by figuring out what sort needs to be generated
     int64_t width = hw::getBitWidth(type);
+
+    // Sanity check: getBitWidth can technically return -1 it is a type with no
+    // width (like a clock). This shouldn't be allowed as width is required to
+    // generate a sort
     assert(width != noWidth);
 
     // Generate the sort regardles of resulting width (nothing will be added if
@@ -504,7 +487,8 @@ private:
       nextLID = getOrCreateOpLID(next);
     }
 
-    // Sanity check
+    // Sanity check: at this point the next operation should have had it's btor2
+    // counterpart emitted if not then something terrible must have happened.
     assert(nextLID != noLID);
 
     // Generate the ite for the register update reset condition
@@ -579,40 +563,56 @@ public:
 
   // Binary operations are all emitted the same way, so we can group them into
   // a single method.
-  void visitBinOp(Operation *op, StringRef inst) {
-    TypeSwitch<Operation *, void>(op)
-        .template Case<
-            // All supported binary ops
-            comb::AddOp, comb::SubOp, comb::MulOp, comb::DivUOp, comb::DivSOp,
-            comb::ModSOp, comb::ShlOp, comb::ShrUOp, comb::ShrSOp, comb::AndOp,
-            comb::OrOp, comb::XorOp, comb::ConcatOp>([&](auto expr) {
-          int64_t w = requireSort(expr.getType());
+  void visitBinOp(Operation *op, StringRef inst, int64_t w) {
 
-          // Start by extracting the operands
-          Value op1 = expr->getOperand(0);
-          Value op2 = expr->getOperand(1);
+    // Start by extracting the operands
+    Value op1 = op->getOperand(0);
+    Value op2 = op->getOperand(1);
 
-          // Generate the line
-          genBinOp(inst, op, op1, op2, w);
-        })
-        // Ignore anything else
-        .Default([&](auto expr) {});
+    // Generate the line
+    genBinOp(inst, op, op1, op2, w);
   }
 
   // Visitors for the binary ops
-  void visitComb(comb::AddOp op) { visitBinOp(op, addStr); }
-  void visitComb(comb::SubOp op) { visitBinOp(op, subStr); }
-  void visitComb(comb::MulOp op) { visitBinOp(op, mulStr); }
-  void visitComb(comb::DivSOp op) { visitBinOp(op, sdivStr); }
-  void visitComb(comb::DivUOp op) { visitBinOp(op, udivStr); }
-  void visitComb(comb::ModSOp op) { visitBinOp(op, smodStr); }
-  void visitComb(comb::ShlOp op) { visitBinOp(op, sllStr); }
-  void visitComb(comb::ShrUOp op) { visitBinOp(op, srlStr); }
-  void visitComb(comb::ShrSOp op) { visitBinOp(op, sraStr); }
-  void visitComb(comb::AndOp op) { visitBinOp(op, andStr); }
-  void visitComb(comb::OrOp op) { visitBinOp(op, orStr); }
-  void visitComb(comb::XorOp op) { visitBinOp(op, xorStr); }
-  void visitComb(comb::ConcatOp op) { visitBinOp(op, concatStr); }
+  void visitComb(comb::AddOp op) {
+    visitBinOp(op, addStr, requireSort(op.getType()));
+  }
+  void visitComb(comb::SubOp op) {
+    visitBinOp(op, subStr, requireSort(op.getType()));
+  }
+  void visitComb(comb::MulOp op) {
+    visitBinOp(op, mulStr, requireSort(op.getType()));
+  }
+  void visitComb(comb::DivSOp op) {
+    visitBinOp(op, sdivStr, requireSort(op.getType()));
+  }
+  void visitComb(comb::DivUOp op) {
+    visitBinOp(op, udivStr, requireSort(op.getType()));
+  }
+  void visitComb(comb::ModSOp op) {
+    visitBinOp(op, smodStr, requireSort(op.getType()));
+  }
+  void visitComb(comb::ShlOp op) {
+    visitBinOp(op, sllStr, requireSort(op.getType()));
+  }
+  void visitComb(comb::ShrUOp op) {
+    visitBinOp(op, srlStr, requireSort(op.getType()));
+  }
+  void visitComb(comb::ShrSOp op) {
+    visitBinOp(op, sraStr, requireSort(op.getType()));
+  }
+  void visitComb(comb::AndOp op) {
+    visitBinOp(op, andStr, requireSort(op.getType()));
+  }
+  void visitComb(comb::OrOp op) {
+    visitBinOp(op, orStr, requireSort(op.getType()));
+  }
+  void visitComb(comb::XorOp op) {
+    visitBinOp(op, xorStr, requireSort(op.getType()));
+  }
+  void visitComb(comb::ConcatOp op) {
+    visitBinOp(op, concatStr, requireSort(op.getType()));
+  }
 
   // Extract ops translate to a slice operation in btor2 in a one-to-one manner
   void visitComb(comb::ExtractOp op) {
@@ -718,8 +718,7 @@ public:
     // Typeswitch is used here because other seq types will be supported
     // like all operations relating to memories and CompRegs
     TypeSwitch<Operation *, void>(op)
-        .template Case<seq::FirRegOp, hw::WireOp>(
-            [&](auto expr) { visit(expr); })
+        .Case<seq::FirRegOp, hw::WireOp>([&](auto expr) { visit(expr); })
         .Default([&](auto expr) { visitUnsupportedOp(op); });
   }
 
@@ -751,12 +750,12 @@ public:
     // failure)
     TypeSwitch<Operation *, void>(op)
         // All explicitly ignored operations are defined here
-        .template Case<
-            sv::MacroDefOp, sv::MacroDeclOp, sv::VerbatimOp, sv::VerbatimExprOp,
-            sv::VerbatimExprSEOp, sv::IfOp, sv::IfDefOp, sv::IfDefProceduralOp,
-            sv::AlwaysOp, sv::AlwaysCombOp, sv::AlwaysFFOp, seq::FromClockOp,
-            seq::ClockDivider, seq::ClockGateOp, seq::ClockMuxOp,
-            seq::ConstClockOp, seq::ToClockOp, hw::OutputOp, hw::HWModuleOp>(
+        .Case<sv::MacroDefOp, sv::MacroDeclOp, sv::VerbatimOp,
+              sv::VerbatimExprOp, sv::VerbatimExprSEOp, sv::IfOp, sv::IfDefOp,
+              sv::IfDefProceduralOp, sv::AlwaysOp, sv::AlwaysCombOp,
+              sv::AlwaysFFOp, seq::FromClockOp, seq::ClockDivider,
+              seq::ClockGateOp, seq::ClockMuxOp, seq::ConstClockOp,
+              seq::ToClockOp, hw::OutputOp, hw::HWModuleOp>(
             [&](auto expr) { ignore(op); })
 
         // Anything else is considered unsupported and might cause a wrong
