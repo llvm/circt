@@ -186,8 +186,8 @@ public:
           dataReg = builder.create<seq::CompRegClockEnabledOp>(
               stageOp->getLoc(), regIn, args.clock, stageValid, regName);
         } else {
-          dataReg = builder.create<seq::CompRegOp>(
-              stageOp->getLoc(), regIn, args.clock, regName.strref());
+          dataReg = builder.create<seq::CompRegOp>(stageOp->getLoc(), regIn,
+                                                   args.clock, regName);
         }
       }
       rets.regs.push_back(dataReg);
