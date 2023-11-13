@@ -748,6 +748,18 @@ def LowerGroups : Pass<"firrtl-lower-groups", "firrtl::CircuitOp"> {
   let dependentDialects = ["sv::SVDialect"];
 }
 
+def GroupMerge : Pass<"firrtl-group-merge", "firrtl::FModuleOp"> {
+  let summary = "Merge group definitions";
+  let description = [{
+    Combine all group definitions in a module which reference the same group
+    declaration.
+  }];
+  let constructor = "::circt::firrtl::createGroupMergePass()";
+  let statistics = [
+    Statistic<"numMerged", "num-merged", "Number of groups merged">,
+  ];
+}
+
 def GroupSink : Pass<"firrtl-group-sink", "firrtl::FModuleOp"> {
   let summary = "Sink operations into FIRRTL optional groups";
   let description = [{
