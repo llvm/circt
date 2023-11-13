@@ -35,8 +35,6 @@
 #include "circt/Support/LoweringOptions.h"
 #include "circt/Support/Version.h"
 #include "llvm/Support/PrettyStackTrace.h"
-#include "circt/Dialect/Arc/ArcReductions.h"
-#include "circt/Dialect/FIRRTL/FIRRTLReductions.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/HW/HWReductions.h"
 #include "circt/InitAllDialects.h"
@@ -75,6 +73,10 @@ struct variable{
   int initValue;
 };
 
+struct inputs{
+  string name;
+};
+
 struct outputs{
   string name;
 };
@@ -88,9 +90,11 @@ struct transition{
 
 
 struct CFG{
+  string initialState;
   std::vector<variable> variables;
   std::vector<transition *> transitions;
   std::vector<outputs> outputs;
+  std::vector<inputs> inputs;
 };
 
 void print_cfg(CFG *cfg);
@@ -112,3 +116,5 @@ void manage_state(Operation &op, CFG *cfg);
 void explore_nested_blocks(Operation &op, int level, CFG *cfg);
 
 void parse_fsm(string input_file);
+
+void manage_block_in_out(Block &op, CFG *cfg);

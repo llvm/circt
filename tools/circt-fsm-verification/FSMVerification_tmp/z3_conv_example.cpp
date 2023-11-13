@@ -5,6 +5,8 @@
 
 using namespace z3;
 
+// updates
+
 expr AtoB(context* c, expr x) {
   return x;
 }
@@ -16,6 +18,8 @@ expr BtoA(context* c, expr x) {
 expr BtoB(context *c, expr x) {
   return x + 1;
 }
+
+// guards, tautology if none, unless updates
 
 expr trans_AB(context* c, expr x) {
    return x || !x;
