@@ -28,7 +28,7 @@ module {
     // CHECK:   [[NID9:[0-9]+]] add [[NID6]] [[NID7]] [[NID8]]
     %2 = comb.add bin %1, %c1_i33 : i33
 
-    // CHECK:   [[NID0:[0-9]+]] slice [[NID0]] [[NID9]] 31 0
+    // CHECK:   [[NID10:[0-9]+]] slice [[NID0]] [[NID9]] 31 0
     %3 = comb.extract %2 from 0 : (i33) -> i32
 
     // CHECK:   [[NID11:[0-9]+]] ugt [[NID3]] [[NID10]] 2
