@@ -1123,7 +1123,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
           // Get element size.
           auto null = initBuilder.create<LLVM::ZeroOp>(op.getLoc(), voidPtrTy);
           auto gepFirst = initBuilder.create<LLVM::GEPOp>(
-              op.getLoc(), voidPtrTy, arrayTy.getElementType(), null,
+              op.getLoc(), voidPtrTy, arrayTy, null,
               ArrayRef<LLVM::GEPArg>({0, 1}));
           auto toInt = initBuilder.create<LLVM::PtrToIntOp>(op.getLoc(), i32Ty,
                                                             gepFirst);
@@ -1138,7 +1138,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
           for (size_t i = 0, e = structTy.getBody().size(); i < e; ++i) {
             // Get pointer offset.
             auto gepElem = initBuilder.create<LLVM::GEPOp>(
-                op.getLoc(), voidPtrTy, structTy.getBody()[i], null,
+                op.getLoc(), voidPtrTy, structTy, null,
                 ArrayRef<LLVM::GEPArg>({0, i}));
             auto elemToInt = initBuilder.create<LLVM::PtrToIntOp>(
                 op.getLoc(), i32Ty, gepElem);
