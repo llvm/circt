@@ -2921,12 +2921,12 @@ StringAttr ObjectOp::getClassNameAttr() {
 
 StringRef ObjectOp::getClassName() { return getType().getName(); }
 
-ClassLike ObjectOp::getReferencedClass(SymbolTable &symbolTable) {
+ClassLike ObjectOp::getReferencedClass(const SymbolTable &symbolTable) {
   auto symRef = getType().getNameAttr();
   return symbolTable.lookup<ClassLike>(symRef.getLeafReference());
 }
 
-Operation *ObjectOp::getReferencedModule(SymbolTable &symtbl) {
+Operation *ObjectOp::getReferencedModule(const SymbolTable &symtbl) {
   return getReferencedClass(symtbl);
 }
 

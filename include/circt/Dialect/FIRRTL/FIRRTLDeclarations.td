@@ -626,7 +626,7 @@ def ObjectOp :  FIRRTLOp<"object", [
   let extraClassDeclaration = [{
     /// Lookup the module or extmodule for the symbol.  This returns null on
     /// invalid IR.
-    ClassLike getReferencedClass(SymbolTable& symbolTable);
+    ClassLike getReferencedClass(const SymbolTable &symbolTable);
 
     StringAttr getClassNameAttr();
     StringRef getClassName();
