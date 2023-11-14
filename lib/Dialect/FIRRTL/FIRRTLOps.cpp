@@ -3787,8 +3787,17 @@ LogicalResult VectorCreateOp::verify() {
   auto elemTy = resultType.getElementTypePreservingConst();
   for (size_t i = 0; i < resultType.getNumElements(); ++i)
     if (!areTypesConstCastable(
-            elemTy, type_cast<FIRRTLBaseType>(getOperand(i).getType())))
-      return emitOpError("type of element doesn't match vector element");
+            elemTy, type_cast<FIRRTLBaseType>(getOperand(i).getType()))) {
+              llvm::errs() << "\n";
+              for (auto user : (*this)->getUsers())
+                user->dump();
+//              (*this)->dump();
+              llvm::errs() << "\n** " << i << " **\n";
+              getOperand(i).dump();
+//              (*this)->getParentOp()->dump();
+      return emitOpError("type of element doesn't match vector element ")
+        << getOperand(i).getType() << " " << elemTy << " " << resultType;
+            }
   // TODO: check flow
   return success();
 }
@@ -4402,6 +4411,18 @@ LogicalResult impl::verifySameOperandsIntTypeKind(Operation *op) {
                                    rhsWidth, isConstResult, op->getLoc()));
 }
 
+LogicalResult impl::verifySameOperandsVecIntTypeKind(Operation *op) {
+  assert(op->getNumOperands() == 2 &&
+         "SameOperandsIntTypeKind on non-binary op");
+  int32_t lhsWidth, rhsWidth;
+  bool isConstResult;
+  FVectorType v0 = type_cast<FVectorType>(op->getOperand(0).getType());
+  FVectorType v1 = type_cast<FVectorType>(op->getOperand(1).getType());
+  return success(isSameIntTypeKind(v0.getElementType(), v1.getElementType(),
+                                   lhsWidth, rhsWidth, isConstResult,
+                                   op->getLoc()));
+}
+
 LogicalResult impl::validateBinaryOpArguments(ValueRange operands,
                                               ArrayRef<NamedAttribute> attrs,
                                               Location loc) {
@@ -4423,6 +4444,23 @@ FIRRTLType impl::inferAddSubResult(FIRRTLType lhs, FIRRTLType rhs,
     resultWidth = std::max(lhsWidth, rhsWidth) + 1;
   return IntType::get(lhs.getContext(), type_isa<SIntType>(lhs), resultWidth,
                       isConstResult);
+}
+
+FIRRTLType impl::inferVecAddSubResult(FIRRTLType lhs, FIRRTLType rhs,
+                                      std::optional<Location> loc) {
+  FVectorType vLhs = firrtl::type_cast<FVectorType>(lhs);
+  FVectorType vRhs = firrtl::type_cast<FVectorType>(rhs);
+  int32_t lhsWidth, rhsWidth, resultWidth = -1;
+  bool isConstResult = false;
+  if (!isSameIntTypeKind(vLhs, vRhs, lhsWidth, rhsWidth, isConstResult, loc))
+    return {};
+
+  if (lhsWidth != -1 && rhsWidth != -1)
+    resultWidth = std::max(lhsWidth, rhsWidth) + 1;
+  return FVectorType::get(IntType::get(lhs.getContext(),
+                                       firrtl::type_isa<SIntType>(vLhs),
+                                       resultWidth),
+                          vLhs.getNumElements(), isConstResult);
 }
 
 FIRRTLType MulPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
@@ -4480,8 +4518,8 @@ FIRRTLType impl::inferBitwiseResult(FIRRTLType lhs, FIRRTLType rhs,
   return UIntType::get(lhs.getContext(), resultWidth, isConstResult);
 }
 
-FIRRTLType impl::inferElementwiseResult(FIRRTLType lhs, FIRRTLType rhs,
-                                        std::optional<Location> loc) {
+FIRRTLType impl::inferVecBitwiseResult(FIRRTLType lhs, FIRRTLType rhs,
+                                       std::optional<Location> loc) {
   if (!type_isa<FVectorType>(lhs) || !type_isa<FVectorType>(rhs))
     return {};
 
@@ -4507,8 +4545,27 @@ FIRRTLType impl::inferComparisonResult(FIRRTLType lhs, FIRRTLType rhs,
   return UIntType::get(lhs.getContext(), 1, isConst(lhs) && isConst(rhs));
 }
 
+FIRRTLType impl::inferVecComparisonResult(FIRRTLType lhs, FIRRTLType rhs,
+                                          std::optional<Location> loc) {
+  FVectorType vLhs = firrtl::type_cast<FVectorType>(lhs);
+  return FVectorType::get(UIntType::get(lhs.getContext(), 1, false),
+                          vLhs.getNumElements(), isConst(lhs) && isConst(rhs));
+}
+
 FIRRTLType CatPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
                                             std::optional<Location> loc) {
+  int32_t lhsWidth, rhsWidth, resultWidth = -1;
+  bool isConstResult = false;
+  if (!isSameIntTypeKind(lhs, rhs, lhsWidth, rhsWidth, isConstResult, loc))
+    return {};
+
+  if (lhsWidth != -1 && rhsWidth != -1)
+    resultWidth = lhsWidth + rhsWidth;
+  return UIntType::get(lhs.getContext(), resultWidth, isConstResult);
+}
+
+FIRRTLType CatVecOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
+                                           std::optional<Location> loc) {
   int32_t lhsWidth, rhsWidth, resultWidth = -1;
   bool isConstResult = false;
   if (!isSameIntTypeKind(lhs, rhs, lhsWidth, rhsWidth, isConstResult, loc))
@@ -4667,6 +4724,11 @@ FIRRTLType NotPrimOp::inferUnaryReturnType(FIRRTLType input,
 FIRRTLType impl::inferReductionResult(FIRRTLType input,
                                       std::optional<Location> loc) {
   return UIntType::get(input.getContext(), 1, isConst(input));
+}
+
+FIRRTLType impl::inferVecReductionResult(FIRRTLType input,
+                                         std::optional<Location> loc) {
+  return cast<FVectorType>(input).getElementType();
 }
 
 //===----------------------------------------------------------------------===//
@@ -5275,16 +5337,19 @@ static void genericAsmResultNames(Operation *op,
 void AddPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
-
+void AddVecOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
 void AndPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
-
 void AndRPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
-
-void SizeOfIntrinsicOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+void AndRVecOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void AndVecOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 void AsAsyncResetPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
@@ -5305,6 +5370,12 @@ void BitsPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 void CatPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
+void CatVecOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void ConstCastOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
 void CvtPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
@@ -5323,10 +5394,19 @@ void DivPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 void EQPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
+void EQVecOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
 void GEQPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
+void GEQVecOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
 void GTPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void GTVecOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 void HeadPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
@@ -5338,17 +5418,16 @@ void IsTagOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 void IsXIntrinsicOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
-void PlusArgsValueIntrinsicOp::getAsmResultNames(
-    OpAsmSetValueNameFn setNameFn) {
-  genericAsmResultNames(*this, setNameFn);
-}
-void PlusArgsTestIntrinsicOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  genericAsmResultNames(*this, setNameFn);
-}
 void LEQPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
+void LEQVecOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
 void LTPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void LTVecOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 void MulPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
@@ -5369,10 +5448,19 @@ void Mux2CellIntrinsicOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 void NEQPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
+void NEQVecOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
 void NegPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 void NotPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void OpenSubfieldOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void OpenSubindexOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 void OrPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
@@ -5381,7 +5469,20 @@ void OrPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 void OrRPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
+void OrRVecOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void OrVecOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
 void PadPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void PlusArgsValueIntrinsicOp::getAsmResultNames(
+    OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void PlusArgsTestIntrinsicOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 void RemPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
@@ -5393,67 +5494,46 @@ void ShlPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 void ShrPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
-
+void SizeOfIntrinsicOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
 void SubPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
-
+void SubVecOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
 void SubaccessOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
-
 void SubfieldOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
-void OpenSubfieldOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  genericAsmResultNames(*this, setNameFn);
-}
-
 void SubtagOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
-
 void SubindexOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
-
-void OpenSubindexOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  genericAsmResultNames(*this, setNameFn);
-}
-
 void TagExtractOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
-
 void TailPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
-
-void XorPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  genericAsmResultNames(*this, setNameFn);
-}
-
-void XorRPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  genericAsmResultNames(*this, setNameFn);
-}
-
 void UninferredResetCastOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
-
-void ConstCastOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+void XorPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
-
-void ElementwiseXorPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+void XorRPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
-
-void ElementwiseOrPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+void XorRVecOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
-
-void ElementwiseAndPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+void XorVecOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 

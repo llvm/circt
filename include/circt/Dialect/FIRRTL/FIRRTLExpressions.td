@@ -27,6 +27,10 @@ def SameOperandsIntTypeKind : NativeOpTrait<"SameOperandsIntTypeKind"> {
   let cppNamespace = "::circt::firrtl";
 }
 
+def SameOperandsVecIntTypeKind : NativeOpTrait<"SameOperandsVecIntTypeKind"> {
+  let cppNamespace = "::circt::firrtl";
+}
+
 // A common base class for operations that implement type inference and parsed
 // argument validation.
 class FIRRTLExprOp<string mnemonic, list<Trait> traits = []> :
@@ -590,24 +594,13 @@ def DivPrimOp : IntBinaryPrimOp<"div", IntType> {
   }];
 }
 def RemPrimOp : IntBinaryPrimOp<"rem", IntType>;
+
 let inferType = "impl::inferBitwiseResult" in {
   let hasCanonicalizer = true in {
     def AndPrimOp : IntBinaryPrimOp<"and", UIntType, [Commutative]>;
     def OrPrimOp  : IntBinaryPrimOp<"or",  UIntType, [Commutative]>;
     def XorPrimOp : IntBinaryPrimOp<"xor", UIntType, [Commutative]>;
   }
-}
-
-// Element-wise and/or/xor operations whose result and operands are 1d vectors with
-// a same type. Apply bitwise operation to each element.
-let inferType = "impl::inferElementwiseResult" in
-let hasFolder = 0 in {
-  def ElementwiseAndPrimOp : BinaryPrimOp<"elementwise_and", 1DVecIntType,
-                                1DVecIntType, 1DVecUIntType, [Commutative]>;
-  def ElementwiseOrPrimOp  : BinaryPrimOp<"elementwise_or", 1DVecIntType,
-                                1DVecIntType, 1DVecUIntType, [Commutative]>;
-  def ElementwiseXorPrimOp : BinaryPrimOp<"elementwise_xor", 1DVecUIntType,
-                                1DVecIntType, 1DVecUIntType, [Commutative]>;
 }
 
 // Comparison Operations
@@ -821,6 +814,96 @@ def TailPrimOp : PrimOp<"tail"> {
   let hasCanonicalizeMethod = true;
   let parseValidator = "impl::validateOneOperandOneConst";
 }
+
+//===----------------------------------------------------------------------===//
+// Vector Binary Operations
+//===----------------------------------------------------------------------===//
+
+class IntBinaryVecOp<string mnemonic, Type resultType,
+                      list<Trait> traits = []> :
+   BinaryPrimOp<mnemonic, VecIntType, VecIntType, resultType,
+                traits # [SameOperandsVecIntTypeKind]>;
+
+// Base class for Unary Vector operators.
+class UnaryVecOp<string mnemonic, Type srcType, Type resultType,
+                  list<Trait> traits = []> : PrimOp<mnemonic, traits> {
+  let arguments = (ins srcType:$input);
+  let results = (outs resultType:$result);
+
+  let assemblyFormat =
+    "$input attr-dict `:` functional-type($input, $result)";
+
+  // Give concrete operations a chance to set a type inference callback. If left
+  // empty, a declaration for `inferUnaryReturnType` will be emitted that the
+  // operation is expected to implement.
+  code inferType = "";
+  let inferTypeDecl = !if(!empty(inferType), [{
+    /// Infer the return type of this unary operation.
+    static FIRRTLType inferUnaryVecReturnType(FIRRTLType input,
+                                           std::optional<Location> loc);
+    }], "") # !subst("$_infer", !if(!empty(inferType), "inferUnaryVecReturnType",
+      inferType), [{
+    /// Infer the return type of this operation.
+    static FIRRTLType inferReturnType(ValueRange operands,
+                                      ArrayRef<NamedAttribute> attrs,
+                                      std::optional<Location> loc) {
+      return $_infer(firrtl::type_cast<FIRRTLType>(operands[0].getType()), loc);
+    }
+  }]);
+
+  let parseValidator = "impl::validateUnaryOpArguments";
+}
+
+let hasFolder = 0 in {
+  let inferType = "impl::inferVecAddSubResult" in {
+    def AddVecOp : IntBinaryVecOp<"vec.add", VecIntType, [Commutative]>;
+    def SubVecOp : IntBinaryVecOp<"vec.sub", VecIntType>;
+  }
+
+  let inferType = "impl::inferVecBitwiseResult" in {
+    def AndVecOp : IntBinaryVecOp<"vec.and", VecUIntType, [Commutative]>;
+    def OrVecOp  : IntBinaryVecOp<"vec.or",  VecUIntType, [Commutative]>;
+    def XorVecOp : IntBinaryVecOp<"vec.xor", VecUIntType, [Commutative]>;
+  }
+
+  // Comparison Operations
+  let inferType = "impl::inferVecComparisonResult" in {
+    def LEQVecOp : IntBinaryVecOp<"vec.leq", VecUInt1Type>;
+    def LTVecOp  : IntBinaryVecOp<"vec.lt",  VecUInt1Type>;
+    def GEQVecOp : IntBinaryVecOp<"vec.geq", VecUInt1Type>;
+    def GTVecOp  : IntBinaryVecOp<"vec.gt",  VecUInt1Type>;
+    def EQVecOp  : IntBinaryVecOp<"vec.eq",  VecUInt1Type, [Commutative]>;
+    def NEQVecOp : IntBinaryVecOp<"vec.neq", VecUInt1Type, [Commutative]>;
+  }
+
+  def CatVecOp : IntBinaryVecOp<"vec.cat", VecUIntType>;
+
+  let inferType = "impl::inferVecReductionResult" in {
+    def AndRVecOp : UnaryVecOp<"vec.andr", VecIntType, UIntType> {
+      let description = [{
+        Horizontally reduce a value to one bit, using the 'and' operation to merge
+        bits.  `andr(x)` is equivalent to `concat(x, 1b1) == ~0`.  As such, it
+        returns 1 for zero-bit-wide operands.
+      }];
+    }
+    def OrRVecOp : UnaryVecOp<"vec.orr", VecIntType, UIntType> {
+      let description = [{
+        Horizontally reduce a value to one bit, using the 'or' operation to merge
+        bits.  `orr(x)` is equivalent to `concat(x, 1b0) != 0`.  As such, it
+        returns 0 for zero-bit-wide operands.
+      }];
+    }
+    def XorRVecOp : UnaryVecOp<"vec.xorr", VecIntType, UIntType> {
+      let description = [{
+        Horizontally reduce a value to one bit, using the 'xor' operation to merge
+        bits.  `xorr(x)` is equivalent to `popcount(concat(x, 1b0)) & 1`.  As
+        such, it returns 0 for zero-bit-wide operands.
+      }];
+  }
+}
+
+}
+
 
 //===----------------------------------------------------------------------===//
 // Target Specific Intrinsics

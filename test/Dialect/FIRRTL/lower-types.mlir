@@ -1253,14 +1253,14 @@ firrtl.module private @is1436_FOO() {
     // CHECK-NEXT: %2 = firrtl.xor %a_0, %b_0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     // CHECK-NEXT: firrtl.strictconnect %c_2_0, %2 : !firrtl.uint<1>
     // Check that elementwise_* are preserved.
-    // AGGREGATE: firrtl.elementwise_or
-    // AGGREGATE: firrtl.elementwise_and
-    // AGGREGATE: firrtl.elementwise_xor
-    %0 = firrtl.elementwise_or %a, %b : (!firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>) -> !firrtl.vector<uint<1>, 1>
+    // AGGREGATE: firrtl.vec.or
+    // AGGREGATE: firrtl.vec.and
+    // AGGREGATE: firrtl.vec.xor
+    %0 = firrtl.vec.or %a, %b : (!firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>) -> !firrtl.vector<uint<1>, 1>
     firrtl.strictconnect %c_0, %0 : !firrtl.vector<uint<1>, 1>
-    %1 = firrtl.elementwise_and %a, %b : (!firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>) -> !firrtl.vector<uint<1>, 1>
+    %1 = firrtl.vec.and %a, %b : (!firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>) -> !firrtl.vector<uint<1>, 1>
     firrtl.strictconnect %c_1, %1 : !firrtl.vector<uint<1>, 1>
-    %2 = firrtl.elementwise_xor %a, %b : (!firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>) -> !firrtl.vector<uint<1>, 1>
+    %2 = firrtl.vec.xor %a, %b : (!firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>) -> !firrtl.vector<uint<1>, 1>
     firrtl.strictconnect %c_2, %2 : !firrtl.vector<uint<1>, 1>
   }
 

@@ -388,9 +388,9 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
   bool visitExpr(SubaccessOp op);
   bool visitExpr(VectorCreateOp op);
   bool visitExpr(BundleCreateOp op);
-  bool visitExpr(ElementwiseAndPrimOp op);
-  bool visitExpr(ElementwiseOrPrimOp op);
-  bool visitExpr(ElementwiseXorPrimOp op);
+  bool visitExpr(AndVecOp op);
+  bool visitExpr(OrVecOp op);
+  bool visitExpr(XorVecOp op);
   bool visitExpr(MultibitMuxOp op);
   bool visitExpr(MuxPrimOp op);
   bool visitExpr(Mux2CellIntrinsicOp op);
@@ -1560,42 +1560,39 @@ bool TypeLoweringVisitor::visitExpr(BundleCreateOp op) {
   return lowerProducer(op, clone);
 }
 
-bool TypeLoweringVisitor::visitExpr(ElementwiseOrPrimOp op) {
+bool TypeLoweringVisitor::visitExpr(OrVecOp op) {
   auto clone = [&](const FlatBundleFieldEntry &field,
                    ArrayAttr attrs) -> Value {
     Value operands[] = {getSubWhatever(op.getLhs(), field.index),
                         getSubWhatever(op.getRhs(), field.index)};
     return type_isa<BundleType, FVectorType>(field.type)
-               ? (Value)builder->create<ElementwiseOrPrimOp>(field.type,
-                                                             operands)
+               ? (Value)builder->create<OrVecOp>(field.type, operands)
                : (Value)builder->create<OrPrimOp>(operands);
   };
 
   return lowerProducer(op, clone);
 }
 
-bool TypeLoweringVisitor::visitExpr(ElementwiseAndPrimOp op) {
+bool TypeLoweringVisitor::visitExpr(AndVecOp op) {
   auto clone = [&](const FlatBundleFieldEntry &field,
                    ArrayAttr attrs) -> Value {
     Value operands[] = {getSubWhatever(op.getLhs(), field.index),
                         getSubWhatever(op.getRhs(), field.index)};
     return type_isa<BundleType, FVectorType>(field.type)
-               ? (Value)builder->create<ElementwiseAndPrimOp>(field.type,
-                                                              operands)
+               ? (Value)builder->create<AndVecOp>(field.type, operands)
                : (Value)builder->create<AndPrimOp>(operands);
   };
 
   return lowerProducer(op, clone);
 }
 
-bool TypeLoweringVisitor::visitExpr(ElementwiseXorPrimOp op) {
+bool TypeLoweringVisitor::visitExpr(XorVecOp op) {
   auto clone = [&](const FlatBundleFieldEntry &field,
                    ArrayAttr attrs) -> Value {
     Value operands[] = {getSubWhatever(op.getLhs(), field.index),
                         getSubWhatever(op.getRhs(), field.index)};
     return type_isa<BundleType, FVectorType>(field.type)
-               ? (Value)builder->create<ElementwiseXorPrimOp>(field.type,
-                                                              operands)
+               ? (Value)builder->create<XorVecOp>(field.type, operands)
                : (Value)builder->create<XorPrimOp>(operands);
   };
 

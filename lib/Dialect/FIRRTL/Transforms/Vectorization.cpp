@@ -9,6 +9,8 @@
 // vector_create (or a[0], b[0]), (or a[1], b[1]), (or a[2], b[2])
 // => elementwise_or a, b
 //
+// This has to be replaced with a single pass over the IR which computes use
+// summaries of vectors.
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
@@ -30,8 +32,6 @@ namespace {
 //===----------------------------------------------------------------------===//
 // Pass Infrastructure
 //===----------------------------------------------------------------------===//
-
-namespace {
 
 template <typename OpTy, typename ResultOpType>
 class VectorCreateToLogicElementwise : public mlir::RewritePattern {
@@ -69,7 +69,70 @@ public:
     return failure();
   }
 };
-} // namespace
+
+template <typename OpTy, typename ResultOpType>
+class ChainedReducer : public mlir::RewritePattern {
+public:
+  ChainedReducer(MLIRContext *context)
+      : RewritePattern(OpTy::getOperationName(), 0, context) {}
+
+  bool recurse(OpTy root, Value vec, DenseSet<size_t> &indexes) const {
+    auto lhsSub =
+        dyn_cast_or_null<SubindexOp>(root->getOperand(0).getDefiningOp());
+    auto rhsSub =
+        dyn_cast_or_null<SubindexOp>(root->getOperand(1).getDefiningOp());
+    auto lhsOp = dyn_cast_or_null<OpTy>(root->getOperand(0).getDefiningOp());
+    auto rhsOp = dyn_cast_or_null<OpTy>(root->getOperand(1).getDefiningOp());
+    // op(subindex(vec,x), op_chain);
+    // op(op_chain, subindex(vec,x))
+    // op(subindex(vec,x), subindex(vec,y))
+    if (lhsSub && rhsOp && lhsSub.getInput() == vec) {
+      indexes.insert(lhsSub.getIndex());
+      return recurse(rhsOp, vec, indexes);
+    }
+    if (rhsSub && lhsOp && rhsSub.getInput() == vec) {
+      indexes.insert(rhsSub.getIndex());
+      return recurse(lhsOp, vec, indexes);
+    }
+    if (lhsSub && rhsSub && lhsSub.getInput() == vec &&
+        rhsSub.getInput() == vec) {
+      indexes.insert(lhsSub.getIndex());
+      indexes.insert(rhsSub.getIndex());
+      return true;
+    }
+    return false;
+  }
+
+  LogicalResult
+  matchAndRewrite(Operation *op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto root = cast<OpTy>(op);
+    // Try each recursion in turn
+    if (auto lhsSub =
+            dyn_cast_or_null<SubindexOp>(root->getOperand(0).getDefiningOp())) {
+      DenseSet<size_t> indexes;
+      if (recurse(root, lhsSub.getInput(), indexes) &&
+          indexes.size() ==
+              firrtl::type_cast<FVectorType>(lhsSub.getInput().getType())
+                  .getNumElements()) {
+        rewriter.replaceOpWithNewOp<ResultOpType>(op, lhsSub.getInput());
+        return success();
+      }
+    }
+    if (auto rhsSub =
+            dyn_cast_or_null<SubindexOp>(root->getOperand(1).getDefiningOp())) {
+      DenseSet<size_t> indexes;
+      if (recurse(root, rhsSub.getInput(), indexes) &&
+          indexes.size() ==
+              firrtl::type_cast<FVectorType>(rhsSub.getInput().getType())
+                  .getNumElements()) {
+        rewriter.replaceOpWithNewOp<ResultOpType>(op, rhsSub.getInput());
+        return success();
+      }
+    }
+    return failure();
+  }
+};
 
 struct VectorizationPass : public VectorizationBase<VectorizationPass> {
   VectorizationPass() = default;
@@ -84,11 +147,20 @@ void VectorizationPass::runOnOperation() {
                           << "Module: '" << getOperation().getName() << "'\n";);
 
   RewritePatternSet patterns(&getContext());
-  patterns
-      .insert<VectorCreateToLogicElementwise<OrPrimOp, ElementwiseOrPrimOp>,
-              VectorCreateToLogicElementwise<AndPrimOp, ElementwiseAndPrimOp>,
-              VectorCreateToLogicElementwise<XorPrimOp, ElementwiseXorPrimOp>>(
-          &getContext());
+  patterns.insert<VectorCreateToLogicElementwise<OrPrimOp, OrVecOp>,
+                  VectorCreateToLogicElementwise<AndPrimOp, AndVecOp>,
+                  VectorCreateToLogicElementwise<XorPrimOp, XorVecOp>,
+                  VectorCreateToLogicElementwise<AddPrimOp, AddVecOp>,
+                  VectorCreateToLogicElementwise<SubPrimOp, SubVecOp>,
+                  VectorCreateToLogicElementwise<LEQPrimOp, LEQVecOp>,
+                  VectorCreateToLogicElementwise<LTPrimOp, LTVecOp>,
+                  VectorCreateToLogicElementwise<GEQPrimOp, GEQVecOp>,
+                  VectorCreateToLogicElementwise<GTPrimOp, GTVecOp>,
+                  VectorCreateToLogicElementwise<EQPrimOp, EQVecOp>,
+                  VectorCreateToLogicElementwise<NEQPrimOp, NEQVecOp>,
+                  ChainedReducer<OrPrimOp, OrRVecOp>,
+                  ChainedReducer<AndPrimOp, AndRVecOp>,
+                  ChainedReducer<XorPrimOp, XorRVecOp>>(&getContext());
   mlir::FrozenRewritePatternSet frozenPatterns(std::move(patterns));
   (void)applyPatternsAndFoldGreedily(getOperation(), frozenPatterns);
 }

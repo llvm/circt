@@ -142,6 +142,32 @@ def UInt1OrUnsizedType : AnyTypeOf<[UInt1Type, UnsizedUIntType]>;
 def UInt2OrUnsizedType : AnyTypeOf<[UInt2Type, UnsizedUIntType]>;
 
 //===----------------------------------------------------------------------===//
+// Vectors of Sized and Unsized Integers
+//===----------------------------------------------------------------------===//
+
+def IsFVectorTypePred : CPred<"::llvm::isa<::circt::firrtl::FVectorType>($_self)">;
+
+class FVectorContainerType<list<Type> allowedTypes,
+                          Pred containerPred, string descr,
+                          string cppClassName = "::mlir::Type"> :
+    Type<And<[containerPred,
+              Concat<"[](::mlir::Type elementType) { return ",
+                SubstLeaves<"$_self", "elementType",
+                AnyTypeOf<allowedTypes>.predicate>,
+                "; }(::llvm::cast<::circt::firrtl::FVectorType>($_self).getElementType())">]>,
+         descr # " of " # AnyTypeOf<allowedTypes>.summary # " values", cppClassName>;
+
+class FVectorOf<list<Type> allowedTypes> :
+  FVectorContainerType<allowedTypes, IsFVectorTypePred, "vector",
+                      "::circt::firrtl::FVectorType">;
+
+def VecIntType : FVectorOf<[IntType]>;
+def VecSIntType : FVectorOf<[SIntType]>;
+def VecUIntType : FVectorOf<[UIntType]>;
+
+def VecUInt1Type : FVectorOf<[UInt1Type]>;
+
+//===----------------------------------------------------------------------===//
 // FIRRTL Types Predicates
 //===----------------------------------------------------------------------===//
 
