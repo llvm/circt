@@ -1832,13 +1832,12 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
     // If the register already has an async reset, leave it untouched.
     if (type_isa<AsyncResetType>(regOp.getResetSignal().getType())) {
 	// check if the reg has subfields and if each of them has a valid reset
+	// 
 	// regOp.subfields.foreach { subfield =>
 	// 	subfield.getResetValue match
 	// 	DontCare => subfield.connect(0.U)
 	// 	_ => 
-	// }
-
-	// 
+	// } 
 	
       LLVM_DEBUG(llvm::dbgs()
                  << "- Skipping (has async reset) " << regOp << "\n of type\n\t" << regOp.getResetSignal().getType() << "\n\n");

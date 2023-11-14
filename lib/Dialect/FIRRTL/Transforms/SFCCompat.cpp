@@ -58,8 +58,10 @@ void SFCCompatPass::runOnOperation() {
     // with a `RegOp`.
     if (walkDrivers(reg.getResetValue(), true, false, false,
                     [](FieldRef dst, FieldRef src) {
+			// do some bookkeeping of fields that are invalidated
                       return src.isa<InvalidValueOp>();
                     })) {
+	// use the bookkeeping to replace things
       ImplicitLocOpBuilder builder(reg.getLoc(), reg);
       RegOp newReg = builder.create<RegOp>(
           reg.getResult().getType(), reg.getClockVal(), reg.getNameAttr(),
