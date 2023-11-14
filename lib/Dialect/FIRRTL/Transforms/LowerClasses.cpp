@@ -284,7 +284,7 @@ void LowerClassesPass::runOnOperation() {
   // Move ops from FIRRTL Class to OM Class in parallel.
   mlir::parallelForEach(ctx, loweringState.classLoweringStateTable,
                         [this](auto &entry) {
-                          auto [classLike, state] = entry;
+                          const auto &[classLike, state] = entry;
                           lowerClassLike(state.moduleLike, classLike);
                         });
 

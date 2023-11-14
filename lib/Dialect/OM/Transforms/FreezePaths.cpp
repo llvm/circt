@@ -33,7 +33,7 @@ struct PathVisitor {
   LogicalResult process(BasePathCreateOp pathOp);
   LogicalResult process(PathCreateOp pathOp);
   LogicalResult process(EmptyPathOp pathOp);
-  LogicalResult process(ListCreateOp pathOp);
+  LogicalResult process(ListCreateOp listCreateOp);
   LogicalResult run(ModuleOp module);
   hw::InstanceGraph &instanceGraph;
   hw::InnerRefNamespace &irn;
@@ -147,48 +147,6 @@ LogicalResult PathVisitor::processPath(Location loc, hw::HierPathOp hierPathOp,
       return diag;
     }
     modules.emplace_back(innerRef.getModule(), verilogName);
-  }
-
-  auto topRef = namepath.front();
-
-  auto topModule = isa<hw::InnerRefAttr>(topRef)
-                       ? cast<hw::InnerRefAttr>(topRef).getModule()
-                       : cast<FlatSymbolRefAttr>(topRef).getAttr();
-
-  // Handle the modules not present in the path.
-  auto *node = instanceGraph.lookup(topModule);
-  while (!node->noUses()) {
-    auto module = node->getModule<hw::HWModuleLike>();
-
-    // If the module is public, stop here.
-    if (module.isPublic())
-      break;
-
-    if (!node->hasOneUse()) {
-      auto diag = emitError(loc) << "unable to uniquely resolve target "
-                                    "due to multiple instantiation";
-      for (auto *use : node->uses()) {
-        if (auto *op = use->getInstance<Operation *>())
-          diag.attachNote(op->getLoc()) << "instance here";
-        else {
-          auto module = node->getModule();
-          diag.attachNote(module->getLoc()) << "module marked public";
-        }
-      }
-      return diag;
-    }
-    // Get the single instance of this module.
-    auto *record = *node->usesBegin();
-    auto *inst = record->getInstance<Operation *>();
-    // If the instance is external, just break here.
-    if (!inst)
-      break;
-    // Get the verilog name of the instance.
-    auto verilogName = inst->getAttrOfType<StringAttr>("hw.verilogName");
-    if (!verilogName)
-      return inst->emitError("component does not have verilog name");
-    node = record->getParent();
-    modules.emplace_back(node->getModule().getModuleNameAttr(), verilogName);
   }
 
   // Create the target path.
@@ -329,6 +287,7 @@ struct FreezePathsPass : public FreezePathsBase<FreezePathsPass> {
 void FreezePathsPass::runOnOperation() {
   auto module = getOperation();
   auto &instanceGraph = getAnalysis<hw::InstanceGraph>();
+  mlir::SymbolTableCollection symbolTableCollection;
   auto &symbolTable = getAnalysis<SymbolTable>();
   hw::InnerSymbolTableCollection collection(module);
   hw::InnerRefNamespace irn{symbolTable, collection};
