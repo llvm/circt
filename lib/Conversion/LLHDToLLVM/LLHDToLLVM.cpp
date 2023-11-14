@@ -559,9 +559,7 @@ static Value shiftArraySigPointer(Location loc,
                                   LLVM::GEPArg index) {
   if (auto indexValue = dyn_cast<Value>(index))
     index = zextByOne(loc, rewriter, indexValue);
-  return shiftStructuredSigPointer(
-      loc, rewriter, arrTy.cast<LLVM::LLVMArrayType>().getElementType(),
-      pointer, index);
+  return shiftStructuredSigPointer(loc, rewriter, arrTy, pointer, index);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1719,9 +1717,8 @@ struct SigStructExtractOpConversion
     uint32_t index = HWToLLVMEndianessConverter::llvmIndexOfStructField(
         op.getStructType(), op.getField());
 
-    auto elemTy = llvmStructTy.cast<LLVM::LLVMStructType>().getBody()[index];
-    Value adjusted = shiftStructuredSigPointer(op->getLoc(), rewriter, elemTy,
-                                               sigDetail[0], index);
+    Value adjusted = shiftStructuredSigPointer(
+        op->getLoc(), rewriter, llvmStructTy, sigDetail[0], index);
 
     rewriter.replaceOp(op, createSubSig(&getDialect(), rewriter, op->getLoc(),
                                         sigDetail, adjusted, sigDetail[1]));
