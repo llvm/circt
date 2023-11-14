@@ -45,7 +45,10 @@ struct PathInfo {
 
   operator bool() const { return op != nullptr; }
 
+  /// The hardware component targeted by this path.
   Operation *op = nullptr;
+
+  /// A reference to the hierarchical path targeting the op.
   FlatSymbolRefAttr symRef = nullptr;
 };
 
@@ -66,30 +69,37 @@ struct Property {
 /// Helper class to capture state about a Class being lowered.
 struct ClassLoweringState {
   FModuleLike moduleLike;
-  om::ClassLike classLike;
+  std::vector<hw::HierPathOp> paths;
+};
+
+struct LoweringState {
+  PathInfoTable pathInfoTable;
+  DenseMap<om::ClassLike, ClassLoweringState> classLoweringStateTable;
 };
 
 struct LowerClassesPass : public LowerClassesBase<LowerClassesPass> {
   void runOnOperation() override;
 
 private:
-  LogicalResult lowerPaths(PathInfoTable &pathInfoTable,
-                           SymbolTable &symbolTable);
+  LogicalResult processPaths(hw::InnerSymbolNamespaceCollection &namespaces,
+                             HierPathCache &cache, PathInfoTable &pathInfoTable,
+                             SymbolTable &symbolTable);
 
   // Predicate to check if a module-like needs a Class to be created.
   bool shouldCreateClass(FModuleLike moduleLike);
 
   // Create an OM Class op from a FIRRTL Class op.
-  ClassLoweringState createClass(FModuleLike moduleLike);
+  om::ClassLike createClass(FModuleLike moduleLike);
 
   // Lower the FIRRTL Class to OM Class.
-  void lowerClassLike(ClassLoweringState state);
+  void lowerClassLike(FModuleLike moduleLike, om::ClassLike classLike);
   void lowerClass(om::ClassOp classOp, FModuleLike moduleLike);
   void lowerClassExtern(ClassExternOp classExternOp, FModuleLike moduleLike);
 
   // Update Object instantiations in a FIRRTL Module or OM Class.
   LogicalResult updateInstances(Operation *op, InstanceGraph &instanceGraph,
-                                SymbolTable &symbolTable);
+                                const SymbolTable &symbolTable,
+                                const LoweringState &state);
 
   // Convert to OM ops and types in Classes or Modules.
   LogicalResult dialectConversion(
@@ -99,24 +109,21 @@ private:
 
 } // namespace
 
-/// This pass removes the OMIR tracker annotations from operations, and ensures
-/// that each thing that was targeted has a hierarchical path targeting it. It
+/// This pass removes the OMIR tracker annotations from operations and
 /// builds a table which maps the OMIR tracker annotation IDs to the
 /// corresponding hierarchical paths. We use this table to convert FIRRTL path
 /// ops to OM. FIRRTL paths refer to their target using a target ID, while OM
 /// paths refer to their target using hierarchical paths.
-LogicalResult LowerClassesPass::lowerPaths(PathInfoTable &pathInfoTable,
-                                           SymbolTable &symbolTable) {
+LogicalResult LowerClassesPass::processPaths(
+    hw::InnerSymbolNamespaceCollection &namespaces, HierPathCache &cache,
+    PathInfoTable &pathInfoTable, SymbolTable &symbolTable) {
   auto *context = &getContext();
   auto circuit = getOperation();
-  hw::InnerSymbolNamespaceCollection namespaces;
-  HierPathCache cache(circuit, symbolTable);
 
   auto processPathTrackers = [&](AnnoTarget target) -> LogicalResult {
     auto error = false;
     auto annotations = target.getAnnotations();
     auto *op = target.getOp();
-    FModuleLike module;
     annotations.removeAnnotations([&](Annotation anno) {
       // If there has been an error, just skip this annotation.
       if (error)
@@ -227,19 +234,47 @@ void LowerClassesPass::runOnOperation() {
   InstanceGraph &instanceGraph = getAnalysis<InstanceGraph>();
   SymbolTable &symbolTable = getAnalysis<SymbolTable>();
 
+  hw::InnerSymbolNamespaceCollection namespaces;
+  HierPathCache cache(circuit, symbolTable);
+
   // Rewrite all path annotations into inner symbol targets.
   PathInfoTable pathInfoTable;
-  if (failed(lowerPaths(pathInfoTable, symbolTable))) {
+  if (failed(processPaths(namespaces, cache, pathInfoTable, symbolTable))) {
     signalPassFailure();
     return;
   }
 
+  LoweringState loweringState;
+
   // Create new OM Class ops serially.
   DenseMap<StringAttr, firrtl::ClassType> classTypeTable;
-  SmallVector<ClassLoweringState> loweringState;
   for (auto moduleLike : circuit.getOps<FModuleLike>()) {
     if (shouldCreateClass(moduleLike)) {
-      loweringState.push_back(createClass(moduleLike));
+      auto omClass = createClass(moduleLike);
+      auto &classLoweringState = loweringState.classLoweringStateTable[omClass];
+      classLoweringState.moduleLike = moduleLike;
+
+      // Find the module instances under the current module with metadata. These
+      // ops will be converted to om objects by this pass. Create a hierarchical
+      // path for each of these instances, which will be used to rebase path
+      // operations. Hierarchical paths must be created serially to ensure their
+      // order in the circuit is deterministc.
+      moduleLike.walk([&](InstanceOp inst) {
+        // Get the referenced module.
+        auto module =
+            symbolTable.lookup<FModuleLike>(inst.getReferencedModuleNameAttr());
+        if (shouldCreateClass(module)) {
+          auto targetSym = getInnerRefTo(
+              {inst, 0}, [&](FModuleLike module) -> hw::InnerSymbolNamespace & {
+                return namespaces[module];
+              });
+          SmallVector<Attribute> path = {targetSym};
+          auto pathAttr = ArrayAttr::get(ctx, path);
+          auto hierPath = cache.getOpFor(pathAttr);
+          classLoweringState.paths.push_back(hierPath);
+        }
+      });
+
       if (auto classLike =
               dyn_cast<firrtl::ClassLike>(moduleLike.getOperation()))
         classTypeTable[classLike.getNameAttr()] = classLike.getInstanceType();
@@ -247,11 +282,14 @@ void LowerClassesPass::runOnOperation() {
   }
 
   // Move ops from FIRRTL Class to OM Class in parallel.
-  mlir::parallelForEach(ctx, loweringState,
-                        [this](auto state) { lowerClassLike(state); });
+  mlir::parallelForEach(ctx, loweringState.classLoweringStateTable,
+                        [this](auto &entry) {
+                          auto [classLike, state] = entry;
+                          lowerClassLike(state.moduleLike, classLike);
+                        });
 
   // Completely erase Class module-likes
-  for (auto state : loweringState) {
+  for (auto &[omClass, state] : loweringState.classLoweringStateTable) {
     if (isa<firrtl::ClassLike>(state.moduleLike.getOperation()))
       state.moduleLike.erase();
   }
@@ -263,10 +301,10 @@ void LowerClassesPass::runOnOperation() {
       objectContainers.push_back(&op);
 
   // Update Object creation ops in Classes or Modules in parallel.
-  if (failed(mlir::failableParallelForEach(
-          ctx, objectContainers,
-          [this, &instanceGraph, &symbolTable](auto *op) {
-            return updateInstances(op, instanceGraph, symbolTable);
+  if (failed(
+          mlir::failableParallelForEach(ctx, objectContainers, [&](auto *op) {
+            return updateInstances(op, instanceGraph, symbolTable,
+                                   loweringState);
           })))
     return signalPassFailure();
 
@@ -300,7 +338,7 @@ bool LowerClassesPass::shouldCreateClass(FModuleLike moduleLike) {
 }
 
 // Create an OM Class op from a FIRRTL Class op or Module op with properties.
-ClassLoweringState LowerClassesPass::createClass(FModuleLike moduleLike) {
+om::ClassLike LowerClassesPass::createClass(FModuleLike moduleLike) {
   // Collect the parameter names from input properties.
   SmallVector<StringRef> formalParamNames;
   // Every class gets a base path as its first parameter.
@@ -333,12 +371,11 @@ ClassLoweringState LowerClassesPass::createClass(FModuleLike moduleLike) {
     loweredClassOp = builder.create<om::ClassOp>(
         moduleLike.getLoc(), className + suffix, formalParamNames);
 
-  return {moduleLike, loweredClassOp};
+  return loweredClassOp;
 }
 
-void LowerClassesPass::lowerClassLike(ClassLoweringState state) {
-  auto moduleLike = state.moduleLike;
-  auto classLike = state.classLike;
+void LowerClassesPass::lowerClassLike(FModuleLike moduleLike,
+                                      om::ClassLike classLike) {
 
   if (auto classOp = dyn_cast<om::ClassOp>(classLike.getOperation())) {
     return lowerClass(classOp, moduleLike);
@@ -478,8 +515,8 @@ void LowerClassesPass::lowerClassExtern(ClassExternOp classExternOp,
 // Helper to update an Object instantiation. FIRRTL Object instances are
 // converted to OM Object instances.
 static LogicalResult
-updateObjectInstance(firrtl::ObjectOp firrtlObject, OpBuilder &builder,
-                     SmallVectorImpl<Operation *> &opsToErase) {
+updateObjectInClass(firrtl::ObjectOp firrtlObject,
+                    SmallVectorImpl<Operation *> &opsToErase) {
   // The 0'th argument is the base path.
   auto basePath = firrtlObject->getBlock()->getArgument(0);
   // build a table mapping the indices of input ports to their position in the
@@ -550,7 +587,7 @@ updateObjectInstance(firrtl::ObjectOp firrtlObject, OpBuilder &builder,
   auto classType = om::ClassType::get(firrtlObject->getContext(), className);
 
   // Create the new Object op.
-  builder.setInsertionPoint(firrtlObject);
+  OpBuilder builder(firrtlObject);
   auto object = builder.create<om::ObjectOp>(
       firrtlObject.getLoc(), classType, firrtlObject.getClassNameAttr(), args);
 
@@ -560,7 +597,6 @@ updateObjectInstance(firrtl::ObjectOp firrtlObject, OpBuilder &builder,
 
   // Erase the original Object, now that we're done with it.
   opsToErase.push_back(firrtlObject);
-
   return success();
 }
 
@@ -568,15 +604,24 @@ updateObjectInstance(firrtl::ObjectOp firrtlObject, OpBuilder &builder,
 // Class are converted to OM Object instances of the Class derived from the
 // Module.
 static LogicalResult
-updateModuleInstanceClass(InstanceOp firrtlInstance, OpBuilder &builder,
-                          SmallVectorImpl<Operation *> &opsToErase,
-                          SymbolTable &symbolTable) {
+updateInstanceInClass(InstanceOp firrtlInstance, hw::HierPathOp hierPath,
+                      const SymbolTable &symbolTable,
+                      SmallVectorImpl<Operation *> &opsToErase) {
+
+  // Set the insertion point right before the instance op.
+  OpBuilder builder(firrtlInstance);
+
   // Collect the FIRRTL instance inputs to form the Object instance actual
   // parameters. The order of the SmallVector needs to match the order the
   // formal parameters are declared on the corresponding Class.
   SmallVector<Value> actualParameters;
   // The 0'th argument is the base path.
-  actualParameters.push_back(firrtlInstance->getBlock()->getArgument(0));
+  auto basePath = firrtlInstance->getBlock()->getArgument(0);
+  auto symRef = FlatSymbolRefAttr::get(hierPath.getSymNameAttr());
+  auto rebasedPath = builder.create<om::BasePathCreateOp>(
+      firrtlInstance->getLoc(), basePath, symRef);
+
+  actualParameters.push_back(rebasedPath);
   for (auto result : firrtlInstance.getResults()) {
     // If the port is an output, continue.
     if (firrtlInstance.getPortDirection(result.getResultNumber()) ==
@@ -616,7 +661,6 @@ updateModuleInstanceClass(InstanceOp firrtlInstance, OpBuilder &builder,
   auto classType = om::ClassType::get(firrtlInstance->getContext(), className);
 
   // Create the new Object op.
-  builder.setInsertionPoint(firrtlInstance);
   auto object =
       builder.create<om::ObjectOp>(firrtlInstance.getLoc(), classType,
                                    className.getAttr(), actualParameters);
@@ -647,16 +691,14 @@ updateModuleInstanceClass(InstanceOp firrtlInstance, OpBuilder &builder,
 
   // Erase the original instance, now that we're done with it.
   opsToErase.push_back(firrtlInstance);
-
   return success();
 }
 
 // Helper to update a Module instantiation in a Module. Module instances within
 // a Module are updated to remove the property typed ports.
 static LogicalResult
-updateModuleInstanceModule(InstanceOp firrtlInstance, OpBuilder &builder,
-                           SmallVectorImpl<Operation *> &opsToErase,
-                           InstanceGraph &instanceGraph) {
+updateInstanceInModule(InstanceOp firrtlInstance, InstanceGraph &instanceGraph,
+                       SmallVectorImpl<Operation *> &opsToErase) {
   // Collect property typed ports to erase.
   BitVector portsToErase(firrtlInstance.getNumResults());
   for (auto result : firrtlInstance.getResults())
@@ -668,7 +710,7 @@ updateModuleInstanceModule(InstanceOp firrtlInstance, OpBuilder &builder,
     return success();
 
   // Create a new instance with the property ports removed.
-  builder.setInsertionPoint(firrtlInstance);
+  OpBuilder builder(firrtlInstance);
   InstanceOp newInstance = firrtlInstance.erasePorts(builder, portsToErase);
 
   // Replace the instance in the instance graph. This is called from multiple
@@ -679,51 +721,70 @@ updateModuleInstanceModule(InstanceOp firrtlInstance, OpBuilder &builder,
 
   // Erase the original instance, which is now replaced.
   opsToErase.push_back(firrtlInstance);
+  return success();
+}
 
+static LogicalResult
+updateInstancesInModule(FModuleOp moduleOp, InstanceGraph &instanceGraph,
+                        SmallVectorImpl<Operation *> &opsToErase) {
+  OpBuilder builder(moduleOp);
+  for (auto &op : moduleOp->getRegion(0).getOps()) {
+    if (auto objectOp = dyn_cast<firrtl::ObjectOp>(op)) {
+      assert(0 && "should be no objects in modules");
+    } else if (auto instanceOp = dyn_cast<InstanceOp>(op)) {
+      if (failed(updateInstanceInModule(instanceOp, instanceGraph, opsToErase)))
+        return failure();
+    }
+  }
+  return success();
+}
+
+static LogicalResult updateObjectsAndInstancesInClass(
+    om::ClassOp classOp, const SymbolTable &symbolTable,
+    const LoweringState &state, SmallVectorImpl<Operation *> &opsToErase) {
+  OpBuilder builder(classOp);
+  auto &classState = state.classLoweringStateTable.at(classOp);
+  auto it = classState.paths.begin();
+  for (auto &op : classOp->getRegion(0).getOps()) {
+    if (auto objectOp = dyn_cast<firrtl::ObjectOp>(op)) {
+      if (failed(updateObjectInClass(objectOp, opsToErase)))
+        return failure();
+    } else if (auto instanceOp = dyn_cast<InstanceOp>(op)) {
+      if (failed(updateInstanceInClass(instanceOp, *it++, symbolTable,
+                                       opsToErase)))
+        return failure();
+    }
+  }
   return success();
 }
 
 // Update Object or Module instantiations in a FIRRTL Module or OM Class.
 LogicalResult LowerClassesPass::updateInstances(Operation *op,
                                                 InstanceGraph &instanceGraph,
-                                                SymbolTable &symbolTable) {
-  OpBuilder builder(op);
+                                                const SymbolTable &symbolTable,
+                                                const LoweringState &state) {
 
   // Track ops to erase at the end. We can't do this eagerly, since we want to
   // loop over each op in the container's body, and we may end up removing some
   // ops later in the body when we visit instances earlier in the body.
   SmallVector<Operation *> opsToErase;
+  auto result =
+      TypeSwitch<Operation *, LogicalResult>(op)
 
-  // Dispatch on each Object or Module instance.
-  for (auto &instance : llvm::make_early_inc_range(op->getRegion(0).getOps())) {
-    LogicalResult result =
-        TypeSwitch<Operation *, LogicalResult>(&instance)
-            .Case([&](firrtl::ObjectOp firrtlObject) {
-              // Convert FIRRTL Object instance to OM Object instance.
-              return updateObjectInstance(firrtlObject, builder, opsToErase);
-            })
-            .Case([&](InstanceOp firrtlInstance) {
-              return TypeSwitch<Operation *, LogicalResult>(op)
-                  .Case([&](om::ClassLike) {
-                    // Convert FIRRTL Module instance within a Class to OM
-                    // Object instance.
-                    return updateModuleInstanceClass(firrtlInstance, builder,
-                                                     opsToErase, symbolTable);
-                  })
-                  .Case([&](FModuleOp) {
-                    // Convert FIRRTL Module instance within a Module to remove
-                    // property ports if necessary.
-                    return updateModuleInstanceModule(
-                        firrtlInstance, builder, opsToErase, instanceGraph);
-                  })
-                  .Default([](auto *op) { return success(); });
-            })
-            .Default([](auto *op) { return success(); });
-
-    if (failed(result))
-      return result;
-  }
-
+          .Case([&](FModuleOp moduleOp) {
+            // Convert FIRRTL Module instance within a Module to
+            // remove property ports if necessary.
+            return updateInstancesInModule(moduleOp, instanceGraph, opsToErase);
+          })
+          .Case([&](om::ClassOp classOp) {
+            // Convert FIRRTL Module instance within a Class to OM
+            // Object instance.
+            return updateObjectsAndInstancesInClass(classOp, symbolTable, state,
+                                                    opsToErase);
+          })
+          .Default([](auto *op) { return success(); });
+  if (failed(result))
+    return result;
   // Erase the ops marked to be erased.
   for (auto *op : opsToErase)
     op->erase();

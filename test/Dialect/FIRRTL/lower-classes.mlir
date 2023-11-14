@@ -251,6 +251,9 @@ firrtl.circuit "PublicModule" {
 
 // CHECK-LABEL: firrtl.circuit "ModuleInstances"
 firrtl.circuit "ModuleInstances" {
+  // CHECK: hw.hierpath private @[[EXT_NLA:.+]] [@ModuleInstances::@[[EXT_SYM:.+]]]
+  // CHECK: hw.hierpath private @[[EXTDEFNAME_NLA:.+]] [@ModuleInstances::@[[EXTDEFNAME_SYM:.+]]]
+  // CHECK: hw.hierpath private @[[MOD_NLA:.+]] [@ModuleInstances::@[[MOD_SYM:.+]]]
   // CHECK: firrtl.extmodule private @ExtModule(in inputWire: !firrtl.uint<1>, out outputWire: !firrtl.uint<1>)
   firrtl.extmodule private @ExtModule(in inputWire: !firrtl.uint<1>, in inputProp: !firrtl.string, out outputWire: !firrtl.uint<1>, out outputProp: !firrtl.string)
 
@@ -267,11 +270,11 @@ firrtl.circuit "ModuleInstances" {
 
   // CHECK: firrtl.module @ModuleInstances(in %[[IN_WIRE1:.+]]: !firrtl.uint<1>, out %[[OUT_WIRE1:.+]]: !firrtl.uint<1>)
   firrtl.module @ModuleInstances(in %inputWire: !firrtl.uint<1>, in %inputProp: !firrtl.string, out %outputWire: !firrtl.uint<1>, out %outputProp: !firrtl.string) {
-    // CHECK: %[[EXT_IN_WIRE:.+]], %[[EXT_OUT_WIRE:.+]] = firrtl.instance ext @ExtModule
+    // CHECK: %[[EXT_IN_WIRE:.+]], %[[EXT_OUT_WIRE:.+]] = firrtl.instance ext sym @[[EXT_SYM]] @ExtModule
     %ext.inputWire, %ext.inputProp, %ext.outputWire, %ext.outputProp = firrtl.instance ext @ExtModule(in inputWire: !firrtl.uint<1>, in inputProp: !firrtl.string, out outputWire: !firrtl.uint<1>, out outputProp: !firrtl.string)
-    // CHECK: firrtl.instance extdefname @ExtModuleDefname
+    // CHECK: firrtl.instance extdefname sym @[[EXTDEFNAME_SYM]] @ExtModuleDefname
     %extdefname.inputProp, %extdefname.outputProp = firrtl.instance extdefname @ExtModuleDefname(in inputProp: !firrtl.string, out outputProp: !firrtl.string)
-    // CHECK: %[[MOD_IN_WIRE:.+]], %[[MOD_OUT_WIRE:.+]] = firrtl.instance mod @Module
+    // CHECK: %[[MOD_IN_WIRE:.+]], %[[MOD_OUT_WIRE:.+]] = firrtl.instance mod sym @[[MOD_SYM]] @Module
     %mod.inputWire, %mod.inputProp, %mod.outputWire, %mod.outputProp = firrtl.instance mod @Module(in inputWire: !firrtl.uint<1>, in inputProp: !firrtl.string, out outputWire: !firrtl.uint<1>, out outputProp: !firrtl.string)
 
     // CHECK: firrtl.strictconnect %[[EXT_IN_WIRE]], %[[IN_WIRE1]]
@@ -298,10 +301,13 @@ firrtl.circuit "ModuleInstances" {
   // CHECK:   om.class.field @outputProp, %[[IN_PROP0]] : !om.string
 
   // CHECK: om.class @ModuleInstances_Class(%basepath: !om.basepath, %[[IN_PROP1:.+]]: !om.string)
-  // CHECK:   %[[O0:.+]] = om.object @ExtModule_Class(%basepath, %[[IN_PROP1]])
+  // CHECK:   %[[BASEPATH:.+]] = om.basepath_create %basepath @[[EXT_NLA]]
+  // CHECK:   %[[O0:.+]] = om.object @ExtModule_Class(%[[BASEPATH]], %[[IN_PROP1]])
   // CHECK:   %[[F0:.+]] = om.object.field %[[O0]], [@outputProp]
+  // CHECK:   %[[BASEPATH:.+]] = om.basepath_create %basepath @[[EXTDEFNAME_NLA]]
   // CHECK:   om.object @TheRealName_Class
-  // CHECK:   %[[O1:.+]] = om.object @Module_Class(%basepath, %[[F0]])
+  // CHECK:   %[[BASEPATH:.+]] = om.basepath_create %basepath @[[MOD_NLA]]
+  // CHECK:   %[[O1:.+]] = om.object @Module_Class(%[[BASEPATH]], %[[F0]])
   // CHECK:   %[[F1:.+]] = om.object.field %[[O1]], [@outputProp]
   // CHECK:   om.class.field @outputProp, %[[F1]]
 }
