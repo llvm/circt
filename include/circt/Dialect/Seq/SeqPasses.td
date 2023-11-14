@@ -68,9 +68,17 @@ def HWMemSimImpl : Pass<"hw-memory-sim", "ModuleOp"> {
             "Disable emission of register randomization code">,
     Option<"replSeqMem", "repl-seq-mem", "bool",
                 "false", "Prepare seq mems for macro replacement">,
-    Option<"ignoreReadEnable", "ignore-read-enable", "bool",
-                "false",
-    "ignore the read enable signal, instead of assigning X on read disable">,
+    Option<"readEnableMode", "read-enable-mode", "::circt::seq::ReadEnableMode",
+           "::circt::seq::ReadEnableMode::Undefined",
+           "specify the behaviour of the read enable signal", [{
+              ::llvm::cl::values(
+              clEnumValN(ReadEnableMode::Ignore, "ignore",
+                         "Ignore the read enable signal"),
+              clEnumValN(ReadEnableMode::Zero, "zero",
+                         "Output zeros when reads are disabled"),
+              clEnumValN(ReadEnableMode::Undefined, "undefined",
+                         "Output X when reads are disbled"))
+           }]>,
     Option<"addMuxPragmas", "add-mux-pragmas", "bool", "false",
             "Add mux pragmas to memory reads">,
     Option<"addVivadoRAMAddressConflictSynthesisBugWorkaround",

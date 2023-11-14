@@ -278,7 +278,9 @@ LogicalResult firtool::populateHWToSV(mlir::PassManager &pm,
        /*disableRegRandomization=*/
        !opt.isRandomEnabled(FirtoolOptions::RandomKind::Reg),
        /*replSeqMem=*/opt.replSeqMem,
-       /*ignoreReadEnable=*/opt.ignoreReadEnableMem,
+       /*readEnableMode=*/opt.ignoreReadEnableMem
+           ? seq::ReadEnableMode::Ignore
+           : seq::ReadEnableMode::Undefined,
        /*addMuxPragmas=*/opt.addMuxPragmas,
        /*addVivadoRAMAddressConflictSynthesisBugWorkaround=*/
        opt.addVivadoRAMAddressConflictSynthesisBugWorkaround}));

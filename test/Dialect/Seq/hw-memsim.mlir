@@ -1,5 +1,6 @@
 // RUN: circt-opt -hw-memory-sim %s | FileCheck %s --check-prefix COMMON --implicit-check-not sv.attributes
-// RUN: circt-opt -pass-pipeline="builtin.module(hw-memory-sim{ignore-read-enable})" %s | FileCheck %s --check-prefixes=COMMON,IGNORE
+// RUN: circt-opt -pass-pipeline="builtin.module(hw-memory-sim{read-enable-mode=ignore})" %s | FileCheck %s --check-prefixes=COMMON,IGNORE
+// RUN: circt-opt -pass-pipeline="builtin.module(hw-memory-sim{read-enable-mode=zero})" %s | FileCheck %s --check-prefixes=COMMON,ZERO
 // RUN: circt-opt -pass-pipeline="builtin.module(hw-memory-sim{add-mux-pragmas})" %s | FileCheck %s --check-prefixes=COMMON,PRAMGAS
 // RUN: circt-opt -pass-pipeline="builtin.module(hw-memory-sim{disable-mem-randomization})" %s | FileCheck %s --check-prefix COMMON --implicit-check-not RANDOMIZE_MEM
 // RUN: circt-opt -pass-pipeline="builtin.module(hw-memory-sim{disable-reg-randomization})" %s | FileCheck %s --check-prefix COMMON --implicit-check-not RANDOMIZE_REG
@@ -193,7 +194,7 @@ hw.module.generated @FIRRTLMemTwoAlways, @FIRRTLMem( in %wo_addr_0: i4, in %wo_e
     hw.output %memory.R0_data : i32
   }
   // COMMON-LABEL: hw.module @FIRRTLMem_1_1_0_32_16_1_1_0_1_a(
-  // CHECK-SAME:    in %R0_addr : i4, in %R0_en : i1, in %R0_clk : i1, 
+  // CHECK-SAME:    in %R0_addr : i4, in %R0_en : i1, in %R0_clk : i1,
   // CHECK-SAME:    in %W0_addr : i4, in %W0_en : i1, in %W0_clk : i1, in %W0_data : i32, in %W0_mask : i4, out R0_data : i32)
   // CHECK-NEXT:   %[[Memory:.+]] = sv.reg
   // VIVADO-SAME:  #sv.attribute<"rw_addr_collision" = "\22yes\22">
@@ -203,6 +204,10 @@ hw.module.generated @FIRRTLMemTwoAlways, @FIRRTLMem( in %wo_addr_0: i4, in %wo_e
   // CHECK-NEXT:   %[[v12:.+]] = sv.read_inout %[[slot]]
   // CHECK-NEXT:   %[[x_i32:.+]] = sv.constantX : i32
   // CHECK-NEXT:   %[[v13:.+]] = comb.mux %[[v1:.+]], %[[v12]], %[[x_i32]] : i32
+  // ZERO:         %[[slot:.+]] = sv.array_index_inout
+  // ZERO:         %[[v12:.+]] = sv.read_inout %[[slot]]
+  // ZERO:         %[[zero_i32:.+]] = hw.constant 0 : i32
+  // ZERO-NEXT:    %[[v13:.+]] = comb.mux %[[v1:.+]], %[[v12]], %[[zero_i32]] : i32
   // CHECK-NEXT:   %[[v14:.+]] = comb.extract %W0_mask from 0 : (i4) -> i1
   // CHECK-NEXT:   %[[v15:.+]] = comb.extract %W0_data from 0 : (i32) -> i8
   // CHECK-NEXT:   %[[v16:.+]] = comb.extract %W0_mask from 1 : (i4) -> i1
@@ -238,12 +243,13 @@ hw.module.generated @FIRRTLMemTwoAlways, @FIRRTLMem( in %wo_addr_0: i4, in %wo_e
     hw.output %memory.R0_data : i32
   }
   // COMMON-LABEL:hw.module @FIRRTLMem_1_1_0_32_16_1_1_0_1_b(
-  // CHECK-SAME: in %R0_addr : i4, in %R0_en : i1, in %R0_clk : i1, 
+  // CHECK-SAME: in %R0_addr : i4, in %R0_en : i1, in %R0_clk : i1,
   // CHECK-SAME: in %W0_addr : i4, in %W0_en : i1, in %W0_clk : i1, in %W0_data : i32, in %W0_mask : i2, out R0_data : i32)
   // CHECK:  %[[Memory0:.+]] = sv.reg : !hw.inout<uarray<16xi32>>
   // CHECK:  %[[v8:.+]] = sv.array_index_inout %[[Memory0]][%[[v7:.+]]] : !hw.inout<uarray<16xi32>>, i4
   // CHECK:  %[[v9:.+]] = sv.read_inout
   // CHECK:  %[[x_i32:.+]] = sv.constantX : i32
+  // ZERO:   %[[x_i32:.+]] = hw.constant 0 : i32
   // CHECK:  %[[v13:.+]] = comb.mux
   // CHECK:  %[[v24:.+]] = sv.reg {{.+}} : !hw.inout<i32>
   // CHECK:  sv.always posedge %W0_clk {
@@ -328,11 +334,11 @@ hw.module.generated @PR2769, @FIRRTLMem(in %ro_addr_0: i4, in %ro_en_0: i1, in %
 // CHECK: %[[EXTRACT:.+]] = comb.extract %{{.+}} from 0 : (i160) -> i145
 // CHECK-NEXT: sv.bpassign %[[INOUT]], %[[EXTRACT]] : i145
 hw.module.generated @RandomizeWeirdWidths, @FIRRTLMem(
-  in %ro_addr_0: i4, in %ro_en_0: i1, in %ro_clock_0: i1, 
-  in %rw_addr_0: i4, in %rw_en_0: i1,  in %rw_clock_0: i1, 
-  in %rw_wmode_0: i1, in %rw_wdata_0: i145, 
-  in %wo_addr_0: i4, in %wo_en_0: i1, in %wo_clock_0: i1, 
-  in %wo_data_0: i145, 
+  in %ro_addr_0: i4, in %ro_en_0: i1, in %ro_clock_0: i1,
+  in %rw_addr_0: i4, in %rw_en_0: i1,  in %rw_clock_0: i1,
+  in %rw_wmode_0: i1, in %rw_wdata_0: i145,
+  in %wo_addr_0: i4, in %wo_en_0: i1, in %wo_clock_0: i1,
+  in %wo_data_0: i145,
   out ro_data_0: i145, out rw_rdata_0: i145
   ) attributes {depth = 10 : i64, numReadPorts = 1 : ui32, numReadWritePorts = 1 : ui32, numWritePorts = 1 : ui32, readLatency = 2 : ui32, readUnderWrite = 0 : i32, width = 145 : ui32, writeClockIDs = [], writeLatency = 4 : ui32, writeUnderWrite = 0 : i32, initFilename = "", initIsBinary = false, initIsInline = false}
 
