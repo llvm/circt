@@ -346,13 +346,9 @@ static void insertPersistence(const TypeConverter *converter,
 
   // Load the resume index from the process state argument.
   rewriter.setInsertionPoint(firstBB.getTerminator());
-  auto zeroC = rewriter.create<LLVM::ConstantOp>(loc, i32Ty,
-                                                 rewriter.getI32IntegerAttr(0));
-  auto oneC = rewriter.create<LLVM::ConstantOp>(loc, i32Ty,
-                                                rewriter.getI32IntegerAttr(1));
   auto gep = rewriter.create<LLVM::GEPOp>(
       loc, LLVM::LLVMPointerType::get(dialect->getContext()), i32Ty,
-      converted.getArgument(1), ArrayRef<Value>({zeroC, oneC}));
+      converted.getArgument(1), ArrayRef<LLVM::GEPArg>({1}));
 
   auto larg = rewriter.create<LLVM::LoadOp>(loc, i32Ty, gep);
 
@@ -394,7 +390,7 @@ static void insertPersistence(const TypeConverter *converter,
           loc, i32Ty, rewriter.getI32IntegerAttr(waitInd));
       auto resumeIdxPtr = rewriter.create<LLVM::GEPOp>(
           loc, LLVM::LLVMPointerType::get(dialect->getContext()), i32Ty,
-          procState, ArrayRef<Value>({zeroC, oneC}));
+          procState, ArrayRef<LLVM::GEPArg>({1}));
       rewriter.create<LLVM::StoreOp>(op->getLoc(), resumeIdxC, resumeIdxPtr);
     }
   });
@@ -810,9 +806,8 @@ struct HaltOpConversion : public ConvertToLLVMPattern {
     for (unsigned i = 0; i < numSenseEntries; ++i) {
       auto zeroB = rewriter.create<LLVM::ConstantOp>(
           op->getLoc(), i1Ty, rewriter.getI32IntegerAttr(0));
-      auto senseElemPtr =
-          rewriter.create<LLVM::GEPOp>(op->getLoc(), voidPtrTy, i1Ty, sensePtr,
-                                       ArrayRef<LLVM::GEPArg>({0, i}));
+      auto senseElemPtr = rewriter.create<LLVM::GEPOp>(
+          op->getLoc(), voidPtrTy, i1Ty, sensePtr, ArrayRef<LLVM::GEPArg>({i}));
       rewriter.create<LLVM::StoreOp>(op->getLoc(), zeroB, senseElemPtr);
     }
 
@@ -855,7 +850,7 @@ struct WaitOpConversion : public ConvertToLLVMPattern {
     // Get senses ptr.
     auto sensePtrGep =
         rewriter.create<LLVM::GEPOp>(op->getLoc(), voidPtrTy, voidPtrTy,
-                                     procState, ArrayRef<LLVM::GEPArg>({0, 2}));
+                                     procState, ArrayRef<LLVM::GEPArg>({2}));
     auto sensePtr =
         rewriter.create<LLVM::LoadOp>(op->getLoc(), voidPtrTy, sensePtrGep);
 
@@ -868,9 +863,9 @@ struct WaitOpConversion : public ConvertToLLVMPattern {
       auto zeroB = rewriter.create<LLVM::ConstantOp>(
           op->getLoc(), i1Ty, rewriter.getBoolAttr(false));
       for (size_t i = 0; i < numSenseEntries; ++i) {
-        auto senseElemPtr = rewriter.create<LLVM::GEPOp>(
-            op->getLoc(), voidPtrTy, i1Ty, sensePtr,
-            ArrayRef<LLVM::GEPArg>({0, i}));
+        auto senseElemPtr =
+            rewriter.create<LLVM::GEPOp>(op->getLoc(), voidPtrTy, i1Ty,
+                                         sensePtr, ArrayRef<LLVM::GEPArg>({i}));
         rewriter.create<LLVM::StoreOp>(op->getLoc(), zeroB, senseElemPtr);
       }
     }
@@ -879,7 +874,7 @@ struct WaitOpConversion : public ConvertToLLVMPattern {
     for (auto observed : transformed.getObs()) {
       auto instIndexPtr =
           rewriter.create<LLVM::GEPOp>(op->getLoc(), voidPtrTy, i64Ty, observed,
-                                       ArrayRef<LLVM::GEPArg>({0, 2}));
+                                       ArrayRef<LLVM::GEPArg>({2}));
       auto instIndex =
           rewriter.create<LLVM::LoadOp>(op->getLoc(), i64Ty, instIndexPtr)
               .getResult();
@@ -887,7 +882,7 @@ struct WaitOpConversion : public ConvertToLLVMPattern {
                                                     rewriter.getBoolAttr(true));
       auto senseElementPtr =
           rewriter.create<LLVM::GEPOp>(op->getLoc(), voidPtrTy, i1Ty, sensePtr,
-                                       ArrayRef<LLVM::GEPArg>({0, instIndex}));
+                                       ArrayRef<LLVM::GEPArg>({instIndex}));
       rewriter.create<LLVM::StoreOp>(op->getLoc(), oneB, senseElementPtr);
     }
 
@@ -1193,7 +1188,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
 
       // Store the initial resume index.
       auto resumeGep = initBuilder.create<LLVM::GEPOp>(
-          op->getLoc(), voidPtrTy, i32Ty, procStateMall,
+          op->getLoc(), voidPtrTy, procStateTy, procStateMall,
           ArrayRef<LLVM::GEPArg>({0, 1}));
       initBuilder.create<LLVM::StoreOp>(op->getLoc(), zeroC, resumeGep);
 
