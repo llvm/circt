@@ -93,26 +93,27 @@ static std::vector<Value> getSignalDetail(ConversionPatternRewriter &rewriter,
 
   auto voidPtrTy = LLVM::LLVMPointerType::get(dialect->getContext());
   auto i64Ty = IntegerType::get(dialect->getContext(), 64);
+  auto sigTy = getLLVMSigType(dialect);
 
   std::vector<Value> result;
 
   // Extract the value and offset elements.
-  auto sigPtrPtr = rewriter.create<LLVM::GEPOp>(
-      loc, voidPtrTy, voidPtrTy, signal, ArrayRef<LLVM::GEPArg>({0, 0}));
+  auto sigPtrPtr = rewriter.create<LLVM::GEPOp>(loc, voidPtrTy, sigTy, signal,
+                                                ArrayRef<LLVM::GEPArg>({0, 0}));
   result.push_back(rewriter.create<LLVM::LoadOp>(loc, voidPtrTy, sigPtrPtr));
 
-  auto offsetPtr = rewriter.create<LLVM::GEPOp>(loc, voidPtrTy, i64Ty, signal,
+  auto offsetPtr = rewriter.create<LLVM::GEPOp>(loc, voidPtrTy, sigTy, signal,
                                                 ArrayRef<LLVM::GEPArg>({0, 1}));
   result.push_back(rewriter.create<LLVM::LoadOp>(loc, i64Ty, offsetPtr));
 
   // Extract the instance and global indices.
   if (extractIndices) {
     auto instIndexPtr = rewriter.create<LLVM::GEPOp>(
-        loc, voidPtrTy, i64Ty, signal, ArrayRef<LLVM::GEPArg>({0, 2}));
+        loc, voidPtrTy, sigTy, signal, ArrayRef<LLVM::GEPArg>({0, 2}));
     result.push_back(rewriter.create<LLVM::LoadOp>(loc, i64Ty, instIndexPtr));
 
     auto globalIndexPtr = rewriter.create<LLVM::GEPOp>(
-        loc, voidPtrTy, i64Ty, signal, ArrayRef<LLVM::GEPArg>({0, 3}));
+        loc, voidPtrTy, sigTy, signal, ArrayRef<LLVM::GEPArg>({0, 3}));
     result.push_back(rewriter.create<LLVM::LoadOp>(loc, i64Ty, globalIndexPtr));
   }
 
@@ -891,9 +892,6 @@ struct WaitOpConversion : public ConvertToLLVMPattern {
     }
 
     // Update and store the new resume index in the process state.
-    auto procStateBC =
-        rewriter.create<LLVM::BitcastOp>(op->getLoc(), voidPtrTy, procState);
-
     // Spawn scheduled event, if present.
     if (waitOp.getTime()) {
       auto realTime = rewriter.create<LLVM::ExtractValueOp>(
@@ -903,7 +901,7 @@ struct WaitOpConversion : public ConvertToLLVMPattern {
       auto eps = rewriter.create<LLVM::ExtractValueOp>(
           op->getLoc(), transformed.getTime(), 2);
 
-      std::array<Value, 5> args({statePtr, procStateBC, realTime, delta, eps});
+      std::array<Value, 5> args({statePtr, procState, realTime, delta, eps});
       rewriter.create<LLVM::CallOp>(op->getLoc(), std::nullopt,
                                     SymbolRefAttr::get(llhdSuspendFunc), args);
     }
@@ -1012,11 +1010,9 @@ struct InstOpConversion : public ConvertToLLVMPattern {
     // Handle entity instantiation.
     if (auto child = module.lookupSymbol<EntityOp>(instOp.getCallee())) {
       auto regStateTy = getRegStateTy(&getDialect(), child.getOperation());
-      auto regStatePtrTy = voidPtrTy;
 
       // Get reg state size.
-      auto regNull =
-          initBuilder.create<LLVM::ZeroOp>(op->getLoc(), regStatePtrTy);
+      auto regNull = initBuilder.create<LLVM::ZeroOp>(op->getLoc(), voidPtrTy);
       auto regGep =
           initBuilder.create<LLVM::GEPOp>(op->getLoc(), voidPtrTy, regStateTy,
                                           regNull, ArrayRef<LLVM::GEPArg>({1}));
@@ -1029,8 +1025,6 @@ struct InstOpConversion : public ConvertToLLVMPattern {
                                                SymbolRefAttr::get(mallFunc),
                                                ArrayRef<Value>({regSize}))
                          .getResult();
-      auto regMallBC = initBuilder.create<LLVM::BitcastOp>(
-          op->getLoc(), regStatePtrTy, regMall);
       auto zeroB = initBuilder.create<LLVM::ConstantOp>(
           op->getLoc(), i1Ty, rewriter.getBoolAttr(false));
 
@@ -1044,7 +1038,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
                        .getNumElements();
         for (size_t j = 0; j < f; ++j) {
           auto regGep = initBuilder.create<LLVM::GEPOp>(
-              op->getLoc(), voidPtrTy, i1Ty, regMallBC,
+              op->getLoc(), voidPtrTy, i1Ty, regMall,
               ArrayRef<LLVM::GEPArg>({0, i, j}));
           initBuilder.create<LLVM::StoreOp>(op->getLoc(), zeroB, regGep);
         }
@@ -1061,7 +1055,6 @@ struct InstOpConversion : public ConvertToLLVMPattern {
       WalkResult sigWalkResult = child.walk([&](SigOp op) -> WalkResult {
         // if (auto sigOp = dyn_cast<SigOp>(op)) {
         auto underlyingTy = typeConverter->convertType(op.getInit().getType());
-        auto underlyingPtrTy = voidPtrTy;
         // Get index constant of the signal in the entity's signal table.
         auto indexConst = initBuilder.create<LLVM::ConstantOp>(
             op.getLoc(), i32Ty, rewriter.getI32IntegerAttr(initCounter));
@@ -1082,8 +1075,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
         // Compute the required space to malloc.
         auto twoC = initBuilder.create<LLVM::ConstantOp>(
             op.getLoc(), i64Ty, rewriter.getI32IntegerAttr(2));
-        auto nullPtr =
-            initBuilder.create<LLVM::ZeroOp>(op.getLoc(), underlyingPtrTy);
+        auto nullPtr = initBuilder.create<LLVM::ZeroOp>(op.getLoc(), voidPtrTy);
         auto sizeGep = initBuilder.create<LLVM::GEPOp>(
             op.getLoc(), voidPtrTy, underlyingTy, nullPtr,
             ArrayRef<LLVM::GEPArg>({1}));
@@ -1101,10 +1093,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
                 .getResult();
 
         // Store the initial value.
-        auto bitcast = initBuilder.create<LLVM::BitcastOp>(
-            op.getLoc(), underlyingPtrTy, mall);
-
-        initBuilder.create<LLVM::StoreOp>(op.getLoc(), initDefCast, bitcast);
+        initBuilder.create<LLVM::StoreOp>(op.getLoc(), initDefCast, mall);
 
         // Get the amount of bytes required to represent an integer underlying
         // type. Use the whole size of the type if not an integer.
@@ -1202,12 +1191,9 @@ struct InstOpConversion : public ConvertToLLVMPattern {
                                    SymbolRefAttr::get(mallFunc), procStateMArgs)
                                .getResult();
 
-      auto procStateBC = initBuilder.create<LLVM::BitcastOp>(
-          op->getLoc(), voidPtrTy, procStateMall);
-
       // Store the initial resume index.
       auto resumeGep = initBuilder.create<LLVM::GEPOp>(
-          op->getLoc(), voidPtrTy, i32Ty, procStateBC,
+          op->getLoc(), voidPtrTy, i32Ty, procStateMall,
           ArrayRef<LLVM::GEPArg>({0, 1}));
       initBuilder.create<LLVM::StoreOp>(op->getLoc(), zeroC, resumeGep);
 
@@ -1226,24 +1212,21 @@ struct InstOpConversion : public ConvertToLLVMPattern {
                                     SymbolRefAttr::get(mallFunc), senseMArgs)
               .getResult();
 
-      auto sensesBC = initBuilder.create<LLVM::BitcastOp>(
-          op->getLoc(), voidPtrTy, sensesMall);
-
       // Set all initial senses to 1.
       for (size_t i = 0, e = sensesTy.getNumElements(); i < e; ++i) {
         auto oneB = initBuilder.create<LLVM::ConstantOp>(
             op->getLoc(), i1Ty, rewriter.getBoolAttr(true));
         auto senseGep = initBuilder.create<LLVM::GEPOp>(
-            op->getLoc(), voidPtrTy, i1Ty, sensesBC,
+            op->getLoc(), voidPtrTy, i1Ty, sensesMall,
             ArrayRef<LLVM::GEPArg>({0, i}));
         initBuilder.create<LLVM::StoreOp>(op->getLoc(), oneB, senseGep);
       }
 
       // Store the senses pointer in the process state.
       auto procStateSensesPtr = initBuilder.create<LLVM::GEPOp>(
-          op->getLoc(), voidPtrTy, sensesTy, procStateBC,
+          op->getLoc(), voidPtrTy, sensesTy, procStateMall,
           ArrayRef<LLVM::GEPArg>({0, 2}));
-      initBuilder.create<LLVM::StoreOp>(op->getLoc(), sensesBC,
+      initBuilder.create<LLVM::StoreOp>(op->getLoc(), sensesMall,
                                         procStateSensesPtr);
 
       std::array<Value, 3> allocProcArgs({initStatePtr, owner, procStateMall});
@@ -1320,7 +1303,6 @@ struct PrbOpConversion : public ConvertToLLVMPattern {
 
     // Collect the used llvm types.
     auto resTy = prbOp.getType();
-    auto voidPtrTy = LLVM::LLVMPointerType::get(rewriter.getContext());
     auto finalTy = typeConverter->convertType(resTy);
 
     // Get the signal details from the signal struct.
@@ -1334,10 +1316,8 @@ struct PrbOpConversion : public ConvertToLLVMPattern {
       int loadWidth = (llvm::divideCeil(resWidth, 8) + 1) * 8;
       auto loadTy = IntegerType::get(rewriter.getContext(), loadWidth);
 
-      auto bitcast = rewriter.create<LLVM::BitcastOp>(op->getLoc(), voidPtrTy,
-                                                      sigDetail[0]);
       auto loadSig =
-          rewriter.create<LLVM::LoadOp>(op->getLoc(), loadTy, bitcast);
+          rewriter.create<LLVM::LoadOp>(op->getLoc(), loadTy, sigDetail[0]);
 
       // Shift the loaded value by the offset and truncate to the final width.
       auto trOff = adjustBitWidth(op->getLoc(), rewriter, loadTy, sigDetail[1]);
@@ -1349,9 +1329,7 @@ struct PrbOpConversion : public ConvertToLLVMPattern {
     }
 
     if (resTy.isa<hw::ArrayType, hw::StructType>()) {
-      auto bitcast = rewriter.create<LLVM::BitcastOp>(op->getLoc(), voidPtrTy,
-                                                      sigDetail[0]);
-      rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, finalTy, bitcast);
+      rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, finalTy, sigDetail[0]);
 
       return success();
     }
@@ -1451,7 +1429,6 @@ struct DrvOpConversion : public ConvertToLLVMPattern {
     auto alloca = rewriter.create<LLVM::AllocaOp>(op->getLoc(), voidPtrTy,
                                                   valTy, oneConst, 4);
     rewriter.create<LLVM::StoreOp>(op->getLoc(), castVal, alloca);
-    auto bc = rewriter.create<LLVM::BitcastOp>(op->getLoc(), voidPtrTy, alloca);
 
     // Get the time values.
     auto realTime = rewriter.create<LLVM::ExtractValueOp>(
@@ -1462,8 +1439,8 @@ struct DrvOpConversion : public ConvertToLLVMPattern {
                                                      transformed.getTime(), 2);
 
     // Define the driveSignal library call arguments.
-    std::array<Value, 7> args({statePtr, transformed.getSignal(), bc, sigWidth,
-                               realTime, delta, eps});
+    std::array<Value, 7> args({statePtr, transformed.getSignal(), alloca,
+                               sigWidth, realTime, delta, eps});
     // Create the library call.
     rewriter.create<LLVM::CallOp>(op->getLoc(), std::nullopt,
                                   SymbolRefAttr::get(drvFunc), args);
