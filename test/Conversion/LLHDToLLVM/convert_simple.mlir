@@ -6,6 +6,7 @@
 // CHECK-LABEL: llvm.func @Foo(
 // CHECK-SAME:    %arg0: !llvm.ptr, %arg1: !llvm.ptr, %arg2: !llvm.ptr) {
 llhd.entity @Foo () -> () {
+  // Unused in entity definition. Only used at instantiation site.
   // CHECK: [[C0:%.+]] = llvm.mlir.constant(false) : i1
   %0 = hw.constant 0 : i1
 
