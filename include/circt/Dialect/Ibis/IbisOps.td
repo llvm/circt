@@ -131,10 +131,10 @@ def InstanceOp : InstanceOpBase<"instance"> {
 
   let extraInstanceClassDeclaration = [{
     // Return the class this instance is instantiating.
-    ClassOp getClass(SymbolTable *symbolTable = nullptr);
+    ClassOp getClass(const SymbolTable *symbolTable = nullptr);
 
     Operation* getReferencedModuleSlow();
-    Operation* getReferencedModule(SymbolTable&);
+    Operation* getReferencedModule(const SymbolTable&);
   }];
 
   let extraInstanceClassDefinition = [{
@@ -142,7 +142,7 @@ def InstanceOp : InstanceOpBase<"instance"> {
       return getClass();
     }
 
-    Operation* InstanceOp::getReferencedModule(SymbolTable& symbolTable) {
+    Operation* InstanceOp::getReferencedModule(const SymbolTable& symbolTable) {
       return getClass(&symbolTable);
     }
   }];
@@ -620,10 +620,10 @@ def ContainerInstanceOp : InstanceOpBase<"container.instance"> {
 
   let extraInstanceClassDeclaration = [{
     // Return the container this instance is instantiating.
-    ContainerOp getContainer(SymbolTable* symbolTable = nullptr);
+    ContainerOp getContainer(const SymbolTable* symbolTable = nullptr);
 
     Operation* getReferencedModuleSlow();
-    Operation* getReferencedModule(SymbolTable&);
+    Operation* getReferencedModule(const SymbolTable&);
   }];
 
   let extraInstanceClassDefinition = [{
@@ -631,7 +631,7 @@ def ContainerInstanceOp : InstanceOpBase<"container.instance"> {
       return getContainer();
     }
 
-    Operation* ContainerInstanceOp::getReferencedModule(SymbolTable& symbolTable) {
+    Operation* ContainerInstanceOp::getReferencedModule(const SymbolTable &symbolTable) {
       return getContainer(&symbolTable);
     }
   }];
