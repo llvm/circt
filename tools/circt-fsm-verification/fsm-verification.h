@@ -90,6 +90,7 @@ struct transition{
 
 
 struct CFG{
+  llvm::DenseMap<mlir::Value, string> map;
   string initialState;
   std::vector<variable> variables;
   std::vector<transition *> transitions;

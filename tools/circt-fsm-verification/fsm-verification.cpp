@@ -1,6 +1,7 @@
 #include "fsm-verification.h"
 #include "circt/Dialect/FSM/FSMGraph.h"
-
+#include </Users/luisa/z3/src/api/z3.h>
+#include "llvm/ADT/DenseMap.h"
 
 using namespace llvm;
 using namespace mlir;
@@ -10,9 +11,6 @@ using namespace std;
 void print_cfg(CFG *cfg){
   llvm::outs()<<"------------------------ CFG ------------------------"<<"\n";
   llvm::outs()<<"------------------------ VARIABLES ------------------------"<<"\n";
-  for(variable v : cfg->variables){
-    llvm::outs()<<"Variable: "<<v.name<<" with init value "<<v.initValue<<"\n";
-  }
   llvm::outs()<<"------------------------ INPUTS ------------------------"<<"\n";
   for(inputs i : cfg->inputs){
     llvm::outs()<<"Input: "<<i.name<<"\n";
@@ -38,30 +36,122 @@ void print_cfg(CFG *cfg){
   }
 }
 
-void manage_block_in_out(Block &op, CFG *cfg){
-  // llvm::outs()<<"BLOCKSSSSSSSSSS"<<"\n";
-  // llvm::outs() << op <<"\n";
-  // auto init = op.getAttr("initialState").cast<StringAttr>().getValue().str().c_str();
-  // cfg->initialState = init;
-  auto v = op.getArguments();
-  auto types = op.getArgumentTypes();
+/// Populate the table of combinational transforms
+// void populateCombTransformTable() {
+//   // Assign non-ambiguous pairs (that don't require type clarification)
+//   this->combTransformTable = {
+//       {comb::AddOp::getOperationName(),
+//        [](auto op1, auto op2) { return op1 + op2; }},
+//       {comb::AndOp::getOperationName(),
+//        [](auto op1, auto op2) { return z3::operator&(op1, op2); }},
+//       {comb::ConcatOp::getOperationName(),
+//        [](auto op1, auto op2) { return z3::concat(op1, op2); }},
+//       {comb::DivSOp::getOperationName(),
+//        [](auto op1, auto op2) { return z3::operator/(op1, op2); }},
+//       {comb::DivUOp::getOperationName(),
+//        [](auto op1, auto op2) { return z3::udiv(op1, op2); }},
+//       {comb::ModSOp::getOperationName(),
+//        [](auto op1, auto op2) { return z3::smod(op1, op2); }},
+//       {comb::ModUOp::getOperationName(),
+//        [](auto op1, auto op2) { return z3::urem(op1, op2); }},
+//       {comb::MulOp::getOperationName(),
+//        [](auto op1, auto op2) { return op1 * op2; }},
+//       {comb::OrOp::getOperationName(),
+//        [](auto op1, auto op2) { return op1 | op2; }},
+//       {comb::ShlOp::getOperationName(),
+//        [](auto op1, auto op2) { return z3::shl(op1, op2); }},
+//       {comb::ShrSOp::getOperationName(),
+//        [](auto op1, auto op2) { return z3::ashr(op1, op2); }},
+//       {comb::SubOp::getOperationName(),
+//        [](auto op1, auto op2) { return op1 - op2; }},
+//       {comb::XorOp::getOperationName(),
+//        [](auto op1, auto op2) { return op1 ^ op2; }}};
 
-  int idx_arg=0;
+//   // Add ambiguous pairs - the type of these lambdas is ambiguous, so they
+//   // require casting
+//   this->combTransformTable.insert(std::pair(
+//       comb::ExtractOp::getOperationName(),
+//       (std::function<z3::expr(const z3::expr &, uint32_t, int)>)[](
+//           const z3::expr &op1, uint32_t lowBit, int width) {
+//         return op1.extract(lowBit + width - 1, lowBit);
+//       }));
 
-  llvm::outs()<< "Arguments:" << v.size() <<"\n";
-  for(auto e: v){
-    // llvm::outs()<< e.getImpl() <<"\n";
-    string s = "arg";// + to_string(e.getLoc());
-    inputs i;
-    i.name = s;
-    cfg->inputs.push_back(i);
-    idx_arg++;
-    // llvm::outs()<< "this is the argument "<< s <<"\n";
-    // inputs in;
-    // in.name = e;
-    // cfg->inputs.push_back(in);
-  }
-}
+//   this->combTransformTable.insert(std::pair(
+//       comb::ICmpOp::getOperationName(),
+//       (std::function<z3::expr(circt::comb::ICmpPredicate, const z3::expr &,
+//                               const z3::expr &)>)[](
+//           circt::comb::ICmpPredicate predicate, auto lhsExpr, auto rhsExpr) {
+//         // TODO: clean up and cut down on return points, re-add
+//         // bvtobool as well
+//         switch (predicate) {
+//         case circt::comb::ICmpPredicate::eq:
+//           return lhsExpr == rhsExpr;
+//           break;
+//         case circt::comb::ICmpPredicate::ne:
+//           return lhsExpr != rhsExpr;
+//           break;
+//         case circt::comb::ICmpPredicate::slt:
+//           return (z3::slt(lhsExpr, rhsExpr));
+//           break;
+//         case circt::comb::ICmpPredicate::sle:
+//           return (z3::sle(lhsExpr, rhsExpr));
+//           break;
+//         case circt::comb::ICmpPredicate::sgt:
+//           return (z3::sgt(lhsExpr, rhsExpr));
+//           break;
+//         case circt::comb::ICmpPredicate::sge:
+//           return (z3::sge(lhsExpr, rhsExpr));
+//           break;
+//         case circt::comb::ICmpPredicate::ult:
+//           return (z3::ult(lhsExpr, rhsExpr));
+//           break;
+//         case circt::comb::ICmpPredicate::ule:
+//           return (z3::ule(lhsExpr, rhsExpr));
+//           break;
+//         case circt::comb::ICmpPredicate::ugt:
+//           return (z3::ugt(lhsExpr, rhsExpr));
+//           break;
+//         case circt::comb::ICmpPredicate::uge:
+//           return (z3::uge(lhsExpr, rhsExpr));
+//           break;
+//         // Multi-valued logic comparisons are not supported.
+//         case circt::comb::ICmpPredicate::ceq:
+//         case circt::comb::ICmpPredicate::weq:
+//         case circt::comb::ICmpPredicate::cne:
+//         case circt::comb::ICmpPredicate::wne:
+//           assert(false);
+//         };
+//       }));
+//   this->combTransformTable.insert(std::pair(
+//       comb::MuxOp::getOperationName(),
+//       (std::function<z3::expr(const z3::expr &, const z3::expr &,
+//                               const z3::expr &)>)[this](
+//           auto condExpr, auto tvalue, auto fvalue) {
+//         return z3::ite(bvToBool(condExpr), tvalue, fvalue);
+//       }));
+//   this->combTransformTable.insert(
+//       std::pair(comb::ParityOp::getOperationName(), [](auto op1) {
+//         assert(false && "ParityOp not currently supported");
+//         // TODO
+//         // unsigned width = inputExpr.get_sort().bv_size();
+//         unsigned width = 5;
+//         // input has 1 or more bits
+//         z3::expr parity = op1.extract(0, 0);
+//         // calculate parity with every other bit
+//         for (unsigned int i = 1; i < width; i++) {
+//           parity = parity ^ op1.extract(i, i);
+//         }
+//         return parity;
+//       }));
+//   // Don't allow ExtractOp
+//   this->combTransformTable.insert(
+//       std::pair(comb::ExtractOp::getOperationName(), [](auto op1) {
+//         assert(false && "ExtractOp not supported");
+//         return op1;
+//       }));
+// };
+
+
 
 void store_variable_declaration(Operation &op, CFG *cfg){
   variable v;
@@ -110,6 +200,7 @@ string manage_comb_exp(Operation &op){
             log_exp += s;
           } 
         } else {
+          log_exp += (cfg->map.find_as(ops[i]));
           // string s = to_string(ops[i].getImpl());//to_string(ops[i].getImpl());
           // log_exp += s;
         }
@@ -291,18 +382,23 @@ void manage_state(Operation &op, CFG *cfg){
 void explore_nested_blocks(Operation &op, int level, CFG *cfg){
   for (Region &region : op.getRegions()) {
     for (Block &block : region) {
-      manage_block_in_out(block, cfg);
+      for(auto a: block.getArguments()){
+        llvm::outs()<<"Argument: "<<a<<"\n";
+        cfg->map.insert(std::pair(a, "arg"));
+      }
       for (Operation &op : block) {
-        llvm::outs()<<op.getName().getStringRef().str().c_str()<<"\n";
+        // llvm::outs()<<op.getName().getStringRef().str().c_str()<<"\n";
         if (!strcmp(op.getName().getStringRef().str().c_str(), "fsm.state")){
           manage_state(op, cfg);
-        } else 
-        if (!strcmp(op.getName().getStringRef().str().c_str(), "fsm.variable")){
-          store_variable_declaration(op, cfg);
-        } 
+        } else if(auto const_op = dyn_cast<hw::ConstantOp>(op)){
+          llvm::outs()<<"HW num results: "<<op.getNumResults()<<"\n";
+          cfg->map.insert(pair<mlir::Value, string>(op.getResult(0), "hw.const"));
+        } else if(auto const_op = dyn_cast<fsm::VariableOp>(op)){
+          llvm::outs()<<"FSM num results: "<<op.getNumResults()<<"\n";
+          cfg->map.insert(pair<mlir::Value, string>(op.getResult(0), op.getAttr("name").cast<StringAttr>().getValue().str()));
+        }
         else if (!strcmp(op.getName().getStringRef().str().c_str(), "fsm.machine")){
           llvm::outs()<< "machine region" <<"\n";
-          // manage_machine_in_out(op, cfg); 
         }
         explore_nested_blocks(op, level+1, cfg);
       }
@@ -326,6 +422,10 @@ void parse_fsm(string input_file){
     hw::HWDialect
   >();
 
+  llvm::DenseMap<mlir::Value, string> map;
+
+  cfg->map = map;
+
   cout << "parsing:\n" << input_file << endl;
 
   MLIRContext context(registry);
@@ -336,9 +436,7 @@ void parse_fsm(string input_file){
 
   int it = 0;
 
-  for (Operation &op : module.get()) {
-    explore_nested_blocks(op, it, cfg);
-  }
+  explore_nested_blocks(module.get()[0], it, cfg);
 
   print_cfg(cfg);
 
