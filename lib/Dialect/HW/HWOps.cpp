@@ -1185,15 +1185,17 @@ void HWModuleExternOp::getAsmBlockArgumentNames(
 
 template <typename ModTy>
 static SmallVector<Location> getAllPortLocs(ModTy module) {
-  SmallVector<Location> retval;
   auto locs = module.getPortLocs();
   if (locs) {
+    SmallVector<Location> retval;
     for (auto l : *locs)
       retval.push_back(cast<Location>(l));
     // Either we have a length of 0 or the correct length
     assert(!locs->size() || locs->size() == module.getNumPorts());
+    return retval;
   }
-  return retval;
+  return SmallVector<Location>(module.getNumPorts(),
+                               UnknownLoc::get(module.getContext()));
 }
 
 SmallVector<Location> HWModuleOp::getAllPortLocs() {
