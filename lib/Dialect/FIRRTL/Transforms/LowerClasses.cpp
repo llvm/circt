@@ -15,6 +15,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
+#include "circt/Dialect/FIRRTL/OwningModuleCache.h"
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/OM/OMAttributes.h"
 #include "circt/Dialect/OM/OMOps.h"
@@ -81,7 +82,8 @@ struct LowerClassesPass : public LowerClassesBase<LowerClassesPass> {
   void runOnOperation() override;
 
 private:
-  LogicalResult processPaths(hw::InnerSymbolNamespaceCollection &namespaces,
+  LogicalResult processPaths(InstanceGraph &instanceGraph,
+                             hw::InnerSymbolNamespaceCollection &namespaces,
                              HierPathCache &cache, PathInfoTable &pathInfoTable,
                              SymbolTable &symbolTable);
 
@@ -109,16 +111,48 @@ private:
 
 } // namespace
 
-/// This pass removes the OMIR tracker annotations from operations and
-/// builds a table which maps the OMIR tracker annotation IDs to the
+/// This pass removes the OMIR tracker annotations from operations, and ensures
+/// that each thing that was targeted has a hierarchical path targeting it. It
+/// builds a table which maps the original OMIR tracker annotation IDs to the
 /// corresponding hierarchical paths. We use this table to convert FIRRTL path
 /// ops to OM. FIRRTL paths refer to their target using a target ID, while OM
 /// paths refer to their target using hierarchical paths.
 LogicalResult LowerClassesPass::processPaths(
+    InstanceGraph &instanceGraph,
     hw::InnerSymbolNamespaceCollection &namespaces, HierPathCache &cache,
     PathInfoTable &pathInfoTable, SymbolTable &symbolTable) {
   auto *context = &getContext();
   auto circuit = getOperation();
+
+  // Collect the path declarations and owning modules.
+  OwningModuleCache owningModuleCache(instanceGraph);
+  DenseMap<DistinctAttr, FModuleOp> owningModules;
+  std::vector<Operation *> declarations;
+  auto result = circuit.walk([&](Operation *op) {
+    if (auto pathOp = dyn_cast<PathOp>(op)) {
+      // Find the owning module of this path reference.
+      auto owningModule = owningModuleCache.lookup(pathOp);
+      // If this reference does not have a single owning module, it is an error.
+      if (!owningModule) {
+        pathOp->emitError("path does not have a single owning module");
+        return WalkResult::interrupt();
+      }
+      auto target = pathOp.getTargetAttr();
+      auto [it, inserted] = owningModules.try_emplace(target, owningModule);
+      // If this declaration already has a reference, both references must have
+      // the same owning module.
+      if (!inserted && it->second != owningModule) {
+        pathOp->emitError()
+            << "path reference " << target << " has conflicting owning modules "
+            << it->second.getModuleNameAttr() << " and "
+            << owningModule.getModuleNameAttr();
+        return WalkResult::interrupt();
+      }
+    }
+    return WalkResult::advance();
+  });
+  if (result.wasInterrupted())
+    return failure();
 
   auto processPathTrackers = [&](AnnoTarget target) -> LogicalResult {
     auto error = false;
@@ -165,6 +199,13 @@ LogicalResult LowerClassesPass::processPaths(
 
       // Create the hierarchical path.
       SmallVector<Attribute> path;
+
+      // Copy the trailing final target part of the path.
+      path.push_back(targetSym);
+
+      auto moduleName = target.getModule().getModuleNameAttr();
+
+      // Copy the middle part from the annotation's NLA.
       if (auto hierName = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal")) {
         auto hierPathOp =
             dyn_cast<hw::HierPathOp>(symbolTable.lookup(hierName.getAttr()));
@@ -175,20 +216,59 @@ LogicalResult LowerClassesPass::processPaths(
         }
         // Copy the old path, dropping the module name.
         auto oldPath = hierPathOp.getNamepath().getValue();
-        llvm::append_range(path, oldPath.drop_back());
+        llvm::append_range(path, llvm::reverse(oldPath.drop_back()));
+        moduleName = cast<hw::InnerRefAttr>(oldPath.front()).getModule();
       }
-      path.push_back(targetSym);
 
-      // Create the HierPathOp.
-      auto pathAttr = ArrayAttr::get(context, path);
-      auto &pathInfo = pathInfoTable[id];
-      if (pathInfo) {
+      auto [it, inserted] = pathInfoTable.try_emplace(id);
+      auto &pathInfo = it->second;
+      if (!inserted) {
         auto diag =
             emitError(pathInfo.op->getLoc(), "duplicate identifier found");
         diag.attachNote(op->getLoc()) << "other identifier here";
         error = true;
         return false;
       }
+      pathInfo.op = op;
+
+      // Get the owning module. If there is no owning module, then this
+      // declaration does not have a use, and we can return early.
+      auto owningModule = owningModules.lookup(id);
+      if (!owningModule)
+        return true;
+
+      // Copy the leading part of the hierarchical path from the owning module
+      // to the start of the annotation's NLA.
+      auto *node = instanceGraph.lookup(moduleName);
+      while (true) {
+        // If the path is rooted at the owning module, we're done.
+        if (node->getModule() == owningModule)
+          break;
+        // If there are no more parents, then the path op lives in a different
+        // hierarchy than the HW object it references, which is an error.
+        if (node->noUses()) {
+          op->emitError() << "unable to resolve path relative to owning module "
+                          << owningModule.getModuleNameAttr();
+          error = true;
+          return false;
+        }
+        // If there is more than one instance of this module, then the path
+        // operation is ambiguous, which is an error.
+        if (!node->hasOneUse()) {
+          auto diag = op->emitError()
+                      << "unable to uniquely resolve target due "
+                         "to multiple instantiation";
+          for (auto *use : node->uses())
+            diag.attachNote(use->getInstance().getLoc()) << "instance here";
+          error = true;
+          return false;
+        }
+        node = (*node->usesBegin())->getParent();
+      }
+
+      // Create the HierPathOp.
+      std::reverse(path.begin(), path.end());
+      auto pathAttr = ArrayAttr::get(context, path);
 
       // Record the path operation associated with the path op.
       pathInfo = {op, cache.getRefFor(pathAttr)};
@@ -239,7 +319,8 @@ void LowerClassesPass::runOnOperation() {
 
   // Rewrite all path annotations into inner symbol targets.
   PathInfoTable pathInfoTable;
-  if (failed(processPaths(namespaces, cache, pathInfoTable, symbolTable))) {
+  if (failed(processPaths(instanceGraph, namespaces, cache, pathInfoTable,
+                          symbolTable))) {
     signalPassFailure();
     return;
   }
