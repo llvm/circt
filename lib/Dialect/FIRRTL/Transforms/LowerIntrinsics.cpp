@@ -662,8 +662,8 @@ std::pair<const char *, std::function<bool(InstanceGraph &, FModuleLike)>>
         {"circt_mux4cell", lowerCirctMuxCell<false>},
         {"circt.has_been_reset", lowerCirctHasBeenReset},
         {"circt_has_been_reset", lowerCirctHasBeenReset},
-	{"fpga_probe", lowerCirctProbe},
-	{"circt.fpga_probe", lowerCirctProbe}};
+	{"circt.fpga_probe", lowerCirctProbe},
+	{"circt_fpga_probe", lowerCirctProbe}};
 
 // This is the main entrypoint for the lowering pass.
 void LowerIntrinsicsPass::runOnOperation() {
