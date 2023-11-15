@@ -434,19 +434,24 @@ ParseResult FirRegOp::parse(OpAsmParser &parser, OperationState &result) {
       return failure();
   }
 
-  Type ty;
+  std::optional<int64_t> presetValue;
   if (succeeded(parser.parseOptionalKeyword("preset"))) {
-    IntegerAttr preset;
-    if (parser.parseAttribute(preset, "preset", result.attributes) ||
-        parser.parseOptionalAttrDict(result.attributes))
+    int64_t presetInt;
+    if (parser.parseInteger(presetInt))
       return failure();
-    ty = preset.getType();
-  } else {
-    if (parser.parseOptionalAttrDict(result.attributes) ||
-        parser.parseColon() || parser.parseType(ty))
-      return failure();
+    presetValue = presetInt;
   }
+
+  Type ty;
+  if (parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseType(ty))
+    return failure();
   result.addTypes({ty});
+
+  if (presetValue) {
+    result.addAttribute("preset",
+                        parser.getBuilder().getIntegerAttr(ty, *presetValue));
+  }
 
   setNameFromResult(parser, result);
 
