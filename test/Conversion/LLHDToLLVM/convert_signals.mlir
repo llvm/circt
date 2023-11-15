@@ -1,6 +1,6 @@
 // RUN: circt-opt %s --convert-llhd-to-llvm | FileCheck %s
 
-// CHEasdfCK-LABEL: llvm.func @driveSignal(!llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, i64, i64)
+// CHECK-LABEL: llvm.func @driveSignal(!llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, i64, i64)
 
 // CHECK-LABEL: llvm.func @convert_sig(
 // CHECK-SAME:    %arg0: !llvm.ptr, %arg1: !llvm.ptr, %arg2: !llvm.ptr) {

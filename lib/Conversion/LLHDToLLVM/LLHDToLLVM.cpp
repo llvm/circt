@@ -232,17 +232,10 @@ static void insertComparisonBlock(ConversionPatternRewriter &rewriter,
 /// persistence table.
 static Value gepPersistenceState(LLVM::LLVMDialect *dialect, Location loc,
                                  ConversionPatternRewriter &rewriter,
-                                 Type elementTy, int index, Value state) {
-  auto i32Ty = IntegerType::get(dialect->getContext(), 32);
-  auto zeroC = rewriter.create<LLVM::ConstantOp>(loc, i32Ty,
-                                                 rewriter.getI32IntegerAttr(0));
-  auto threeC = rewriter.create<LLVM::ConstantOp>(
-      loc, i32Ty, rewriter.getI32IntegerAttr(3));
-  auto indC = rewriter.create<LLVM::ConstantOp>(
-      loc, i32Ty, rewriter.getI32IntegerAttr(index));
+                                 Type stateTy, int index, Value state) {
   return rewriter.create<LLVM::GEPOp>(
-      loc, LLVM::LLVMPointerType::get(dialect->getContext()), elementTy, state,
-      ArrayRef<Value>({zeroC, threeC, indC}));
+      loc, LLVM::LLVMPointerType::get(dialect->getContext()), stateTy, state,
+      ArrayRef<LLVM::GEPArg>({0, 3, index}));
 }
 
 /// Persist a `Value` by storing it into the process persistence table, and
@@ -266,7 +259,7 @@ static void persistValue(LLVM::LLVMDialect *dialect, Location loc,
   Value convPersist = converter->materializeTargetConversion(
       rewriter, loc, converter->convertType(persist.getType()), {persist});
 
-  auto gep0 = gepPersistenceState(dialect, loc, rewriter, elemTy, i, state);
+  auto gep0 = gepPersistenceState(dialect, loc, rewriter, stateTy, i, state);
 
   Value toStore;
   if (auto ptr = persist.getType().dyn_cast<PtrType>()) {
@@ -307,7 +300,8 @@ static void persistValue(LLVM::LLVMDialect *dialect, Location loc,
       else
         rewriter.setInsertionPointToStart(user->getBlock());
 
-      auto gep1 = gepPersistenceState(dialect, loc, rewriter, elemTy, i, state);
+      auto gep1 =
+          gepPersistenceState(dialect, loc, rewriter, stateTy, i, state);
       // Use the pointer in the state struct directly for pointer and signal
       // types.
       if (persist.getType().isa<PtrType, SigType>()) {
