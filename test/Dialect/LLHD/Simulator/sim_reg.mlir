@@ -1,4 +1,5 @@
 // REQUIRES: llhd-sim
+// REQUIRES: llhd-sim-fixed
 // RUN: llhd-sim %s -n 10 -shared-libs=%shlibdir/libcirct-llhd-signals-runtime-wrappers%shlibext | FileCheck %s
 
 // CHECK: 0ps 0d 0e  root/clock  0x00

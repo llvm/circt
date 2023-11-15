@@ -1025,7 +1025,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
                        .getNumElements();
         for (size_t j = 0; j < f; ++j) {
           auto regGep = initBuilder.create<LLVM::GEPOp>(
-              op->getLoc(), voidPtrTy, i1Ty, regMall,
+              op->getLoc(), voidPtrTy, regStateTy, regMall,
               ArrayRef<LLVM::GEPArg>({0, i, j}));
           initBuilder.create<LLVM::StoreOp>(op->getLoc(), zeroB, regGep);
         }
@@ -1200,18 +1200,18 @@ struct InstOpConversion : public ConvertToLLVMPattern {
               .getResult();
 
       // Set all initial senses to 1.
+      auto oneB = initBuilder.create<LLVM::ConstantOp>(
+          op->getLoc(), i1Ty, rewriter.getBoolAttr(true));
       for (size_t i = 0, e = sensesTy.getNumElements(); i < e; ++i) {
-        auto oneB = initBuilder.create<LLVM::ConstantOp>(
-            op->getLoc(), i1Ty, rewriter.getBoolAttr(true));
         auto senseGep = initBuilder.create<LLVM::GEPOp>(
             op->getLoc(), voidPtrTy, i1Ty, sensesMall,
-            ArrayRef<LLVM::GEPArg>({0, i}));
+            ArrayRef<LLVM::GEPArg>({i}));
         initBuilder.create<LLVM::StoreOp>(op->getLoc(), oneB, senseGep);
       }
 
       // Store the senses pointer in the process state.
       auto procStateSensesPtr = initBuilder.create<LLVM::GEPOp>(
-          op->getLoc(), voidPtrTy, sensesTy, procStateMall,
+          op->getLoc(), voidPtrTy, procStateTy, procStateMall,
           ArrayRef<LLVM::GEPArg>({0, 2}));
       initBuilder.create<LLVM::StoreOp>(op->getLoc(), sensesMall,
                                         procStateSensesPtr);

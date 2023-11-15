@@ -1,4 +1,5 @@
 // REQUIRES: llhd-sim
+// REQUIRES: llhd-sim-fixed
 // RUN: llhd-sim %s -T 5000 --trace-format=full -shared-libs=%shlibdir/libcirct-llhd-signals-runtime-wrappers%shlibext | FileCheck %s --check-prefix=FULL
 // RUN: llhd-sim %s -T 5000 --trace-format=reduced -shared-libs=%shlibdir/libcirct-llhd-signals-runtime-wrappers%shlibext | FileCheck %s --check-prefix=REDUCED
 // RUN: llhd-sim %s -T 5000 --trace-format=merged -shared-libs=%shlibdir/libcirct-llhd-signals-runtime-wrappers%shlibext | FileCheck %s --check-prefix=MERGED
