@@ -169,6 +169,8 @@ firrtl.circuit "PathModule" {
     %vector = firrtl.wire {annotations = [{circt.fieldID = 1 : i32, class = "circt.tracker", id = distinct[2]<>}]} : !firrtl.vector<uint<8>, 1>
     // CHECK: firrtl.instance child sym @child @Child()
     firrtl.instance child sym @child {annotations = [{class = "circt.tracker", id = distinct[4]<>}]} @Child()
+
+    %path_test = firrtl.object @PathTest()
   }
   hw.hierpath @NonLocal [@PathModule::@child, @Child]
   // CHECK: firrtl.module @Child() {

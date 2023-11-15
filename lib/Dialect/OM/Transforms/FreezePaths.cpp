@@ -79,7 +79,23 @@ LogicalResult PathVisitor::processPath(Location loc, hw::HierPathOp hierPathOp,
   auto namepath = hierPathOp.getNamepathAttr().getValue();
   SmallVector<PathElement> modules;
 
-  // Process the final target first.
+  // Process the of the hierarchical path.
+  for (auto attr : namepath.drop_back()) {
+    auto innerRef = cast<hw::InnerRefAttr>(attr);
+    auto target = irn.lookup(innerRef);
+    assert(target.isOpOnly() && "can't target a port the middle of a namepath");
+    auto *op = target.getOp();
+    // Get the verilog name of the target.
+    auto verilogName = op->getAttrOfType<StringAttr>("hw.verilogName");
+    if (!verilogName) {
+      auto diag = emitError(loc, "component does not have verilog name");
+      diag.attachNote(op->getLoc()) << "component here";
+      return diag;
+    }
+    modules.emplace_back(innerRef.getModule(), verilogName);
+  }
+
+  // Process the final target.
   auto &end = namepath.back();
   if (auto innerRef = dyn_cast<hw::InnerRefAttr>(end)) {
     auto target = irn.lookup(innerRef);
@@ -133,24 +149,9 @@ LogicalResult PathVisitor::processPath(Location loc, hw::HierPathOp hierPathOp,
     field = StringAttr::get(context, "");
   }
 
-  // Process the rest of the hierarchical path.
-  for (auto attr : llvm::reverse(namepath.drop_back())) {
-    auto innerRef = cast<hw::InnerRefAttr>(attr);
-    auto target = irn.lookup(innerRef);
-    assert(target.isOpOnly() && "can't target a port the middle of a namepath");
-    auto *op = target.getOp();
-    // Get the verilog name of the target.
-    auto verilogName = op->getAttrOfType<StringAttr>("hw.verilogName");
-    if (!verilogName) {
-      auto diag = emitError(loc, "component does not have verilog name");
-      diag.attachNote(op->getLoc()) << "component here";
-      return diag;
-    }
-    modules.emplace_back(innerRef.getModule(), verilogName);
-  }
 
   // Create the target path.
-  targetPath = PathAttr::get(context, llvm::to_vector(llvm::reverse(modules)));
+  targetPath = PathAttr::get(context, modules);
   return success();
 }
 

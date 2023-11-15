@@ -12,6 +12,7 @@
 
 #include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
+#include "circt/Dialect/FIRRTL/OwningModuleCache.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 
 using namespace circt;
@@ -27,7 +28,8 @@ struct PathResolver {
   /// This function will find the operation targeted and create a hierarchical
   /// path operation if needed. If the target is resolved, the op will either
   /// be a reference to the HierPathOp, or null if no HierPathOp was needed.
-  LogicalResult resolveHierPath(Location loc, const AnnoPathValue &target,
+  LogicalResult resolveHierPath(Location loc, FModuleOp owningModule,
+                                const AnnoPathValue &target,
                                 FlatSymbolRefAttr &op) {
 
     // We want to root this path at the top level module, or in the case of an
@@ -36,7 +38,18 @@ struct PathResolver {
     if (!target.instances.empty())
       module = target.instances.front()->getParentOfType<FModuleLike>();
     auto *node = instanceGraph[module];
-    while (!node->noUses()) {
+    while (true) {
+      // If the path is rooted at the owning module, we're done.
+      if (node->getModule() == owningModule)
+        break;
+      // If there are no more parents, then the path op lives in a different
+      // hierarchy than the HW object it references, which is an error.
+      if (node->noUses())
+        return emitError(loc)
+               << "unable to resolve path relative to owning module "
+               << owningModule.getModuleNameAttr();
+      // If there is more than one instance of this module, then the path
+      // operation is ambiguous, which is an error.
       if (!node->hasOneUse()) {
         auto diag = emitError(loc) << "unable to uniquely resolve target due "
                                       "to multiple instantiation";
@@ -82,20 +95,23 @@ struct PathResolver {
     return success();
   }
 
-  LogicalResult resolve(UnresolvedPathOp unresolved) {
+  LogicalResult resolve(OwningModuleCache &cache, UnresolvedPathOp unresolved) {
     auto loc = unresolved.getLoc();
     ImplicitLocOpBuilder b(loc, unresolved);
     auto *context = b.getContext();
 
-    /// Spelling takes the form "OMReferenceTarget:~Circuit|Foo/bar:Bar>member".
+    /// Spelling takes the form
+    /// "OMReferenceTarget:~Circuit|Foo/bar:Bar>member".
     auto target = unresolved.getTarget();
 
-    // OMDeleted nodes do not have a target, so it is impossible to resolve them
-    // to a real path.  We create a special constant for these path values.
+    // OMDeleted nodes do not have a target, so it is impossible to resolve
+    // them to a real path.  We create a special constant for these path
+    // values.
     if (target.consume_front("OMDeleted")) {
       if (!target.empty())
         return emitError(loc, "OMDeleted references can not have targets");
-      // Deleted targets are turned into OMReference targets with a dangling id
+      // Deleted targets are turned into OMReference targets with a dangling
+      // id
       // - i.e. the id is not attached to any target.
       auto targetKind = TargetKindAttr::get(context, TargetKind::Reference);
       auto id = DistinctAttr::create(UnitAttr::get(context));
@@ -139,7 +155,7 @@ struct PathResolver {
       return failure();
 
     // Make sure that we are targeting a leaf of the operation. That way lower
-    // types can't split a single reference into many, and cause ambiguity.  If
+    // types can't split a single reference into many, and cause ambiguity. If
     // we are targeting a module, the type will be null.
     if (Type targetType = path->ref.getType()) {
       auto fieldId = path->fieldIdx;
@@ -155,9 +171,16 @@ struct PathResolver {
     // Create a unique ID.
     auto id = DistinctAttr::create(UnitAttr::get(context));
 
+    auto owningModule = cache.lookup(unresolved);
+    StringRef moduleName = "nullptr";
+    if (owningModule)
+      moduleName = owningModule.getModuleName();
+    if (!owningModule)
+      return unresolved->emitError("path does not have a single owning module");
+
     // Resolve a unique path to the operation in question.
     FlatSymbolRefAttr hierPathName;
-    if (failed(resolveHierPath(loc, *path, hierPathName)))
+    if (failed(resolveHierPath(loc, owningModule, *path, hierPathName)))
       return failure();
 
     // Create the annotation.
@@ -209,8 +232,9 @@ void ResolvePathsPass::runOnOperation() {
   auto circuit = getOperation();
   auto &instanceGraph = getAnalysis<InstanceGraph>();
   PathResolver resolver(circuit, instanceGraph);
+  OwningModuleCache cache(instanceGraph);
   auto result = circuit.walk([&](UnresolvedPathOp unresolved) {
-    if (failed(resolver.resolve(unresolved))) {
+    if (failed(resolver.resolve(cache, unresolved))) {
       signalPassFailure();
       return WalkResult::interrupt();
     }
