@@ -210,10 +210,6 @@ struct CircuitLoweringState {
   std::atomic<bool> used_ASSERT_VERBOSE_COND{false};
   std::atomic<bool> used_STOP_COND{false};
 
-  std::atomic<bool> used_RANDOMIZE_REG_INIT{false},
-      used_RANDOMIZE_MEM_INIT{false};
-  std::atomic<bool> used_RANDOMIZE_GARBAGE_ASSIGN{false};
-
   CircuitLoweringState(CircuitOp circuitOp, bool enableAnnotationWarning,
                        bool emitChiselAssertsAsSVA,
                        InstanceGraph *instanceGraph, NLATable *nlaTable)
@@ -487,8 +483,6 @@ namespace {
 struct FIRRTLModuleLowering : public LowerFIRRTLToHWBase<FIRRTLModuleLowering> {
 
   void runOnOperation() override;
-  void setDisableMemRandomization() { disableMemRandomization = true; }
-  void setDisableRegRandomization() { disableRegRandomization = true; }
   void setEnableAnnotationWarning() { enableAnnotationWarning = true; }
   void setEmitChiselAssertAsSVA() { emitChiselAssertsAsSVA = true; }
 
@@ -519,18 +513,14 @@ private:
 } // end anonymous namespace
 
 /// This is the pass constructor.
-std::unique_ptr<mlir::Pass> circt::createLowerFIRRTLToHWPass(
-    bool enableAnnotationWarning, bool emitChiselAssertsAsSVA,
-    bool disableMemRandomization, bool disableRegRandomization) {
+std::unique_ptr<mlir::Pass>
+circt::createLowerFIRRTLToHWPass(bool enableAnnotationWarning,
+                                 bool emitChiselAssertsAsSVA) {
   auto pass = std::make_unique<FIRRTLModuleLowering>();
   if (enableAnnotationWarning)
     pass->setEnableAnnotationWarning();
   if (emitChiselAssertsAsSVA)
     pass->setEmitChiselAssertAsSVA();
-  if (disableMemRandomization)
-    pass->setDisableMemRandomization();
-  if (disableRegRandomization)
-    pass->setDisableRegRandomization();
   return pass;
 }
 
@@ -695,25 +685,26 @@ void FIRRTLModuleLowering::runOnOperation() {
 /// Emit the file header that defines a bunch of macros.
 void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
                                            CircuitLoweringState &state) {
+  // If none of the macros are needed, then don't emit any header at all, not
+  // even the header comment.
+  if (!state.used_PRINTF_COND && !state.used_ASSERT_VERBOSE_COND &&
+      !state.used_STOP_COND)
+    return;
+
   // Intentionally pass an UnknownLoc here so we don't get line number
   // comments on the output of this boilerplate in generated Verilog.
   ImplicitLocOpBuilder b(UnknownLoc::get(&getContext()), op);
 
-  StringSet<> emittedDecls;
-
-  auto emitDecl = [&](StringRef name, ArrayAttr args) {
-    if (emittedDecls.count(name))
-      return;
-    emittedDecls.insert(name);
-    OpBuilder::InsertionGuard guard(b);
-    b.setInsertionPointAfter(op);
-    b.create<sv::MacroDeclOp>(name, args, StringAttr());
-  };
-
   // TODO: We could have an operation for macros and uses of them, and
   // even turn them into symbols so we can DCE unused macro definitions.
+  StringSet<> emittedDecls;
   auto emitDefine = [&](StringRef name, StringRef body, ArrayAttr args = {}) {
-    emitDecl(name, args);
+    if (!emittedDecls.count(name)) {
+      emittedDecls.insert(name);
+      OpBuilder::InsertionGuard guard(b);
+      b.setInsertionPointAfter(op);
+      b.create<sv::MacroDeclOp>(name, args, StringAttr());
+    }
     b.create<sv::MacroDefOp>(name, body);
   };
 
@@ -742,45 +733,8 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
         guard, []() {}, body);
   };
 
-  bool needsRandomizeRegInit =
-      state.used_RANDOMIZE_REG_INIT && !disableRegRandomization;
-  bool needsRandomizeMemInit =
-      state.used_RANDOMIZE_MEM_INIT && !disableMemRandomization;
-
-  // If none of the macros are needed, then don't emit any header at all, not
-  // even the header comment.
-  if (!state.used_RANDOMIZE_GARBAGE_ASSIGN && !needsRandomizeRegInit &&
-      !needsRandomizeMemInit && !state.used_PRINTF_COND &&
-      !state.used_ASSERT_VERBOSE_COND && !state.used_STOP_COND)
-    return;
-
-  b.create<sv::VerbatimOp>(
-      "// Standard header to adapt well known macros to our needs.");
-
-  bool needRandom = false;
-  if (state.used_RANDOMIZE_GARBAGE_ASSIGN) {
-    emitGuard("RANDOMIZE", [&]() {
-      emitGuardedDefine("RANDOMIZE_GARBAGE_ASSIGN", "RANDOMIZE");
-    });
-    needRandom = true;
-  }
-  if (needsRandomizeRegInit) {
-    emitGuard("RANDOMIZE",
-              [&]() { emitGuardedDefine("RANDOMIZE_REG_INIT", "RANDOMIZE"); });
-    needRandom = true;
-  }
-  if (needsRandomizeMemInit) {
-    emitGuard("RANDOMIZE",
-              [&]() { emitGuardedDefine("RANDOMIZE_MEM_INIT", "RANDOMIZE"); });
-    needRandom = true;
-  }
-
-  if (needRandom) {
-    b.create<sv::VerbatimOp>(
-        "\n// RANDOM may be set to an expression that produces a 32-bit "
-        "random unsigned value.");
-    emitGuardedDefine("RANDOM", "RANDOM", StringRef(), "$random");
-  }
+  b.create<sv::VerbatimOp>("// Standard header to adapt well known macros for "
+                           "prints and assertions.");
 
   if (state.used_PRINTF_COND) {
     b.create<sv::VerbatimOp>(
@@ -807,69 +761,6 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
         "to stop conditions.");
     emitGuard("STOP_COND_", [&]() {
       emitGuardedDefine("STOP_COND", "STOP_COND_", "(`STOP_COND)", "1");
-    });
-  }
-
-  if (needRandom) {
-    b.create<sv::VerbatimOp>(
-        "\n// Users can define INIT_RANDOM as general code that gets "
-        "injected "
-        "into the\n// initializer block for modules with registers.");
-    emitGuardedDefine("INIT_RANDOM", "INIT_RANDOM", StringRef(), "");
-
-    b.create<sv::VerbatimOp>(
-        "\n// If using random initialization, you can also define "
-        "RANDOMIZE_DELAY to\n// customize the delay used, otherwise 0.002 "
-        "is used.");
-    emitGuardedDefine("RANDOMIZE_DELAY", "RANDOMIZE_DELAY", StringRef(),
-                      "0.002");
-
-    b.create<sv::VerbatimOp>(
-        "\n// Define INIT_RANDOM_PROLOG_ for use in our modules below.");
-    emitGuard("INIT_RANDOM_PROLOG_", [&]() {
-      b.create<sv::IfDefOp>(
-          "RANDOMIZE",
-          [&]() {
-            emitGuardedDefine("VERILATOR", "INIT_RANDOM_PROLOG_",
-                              "`INIT_RANDOM",
-                              "`INIT_RANDOM #`RANDOMIZE_DELAY begin end");
-          },
-          [&]() { emitDefine("INIT_RANDOM_PROLOG_", ""); });
-    });
-
-    b.create<sv::VerbatimOp>("\n// Include register initializers in init "
-                             "blocks unless synthesis is set");
-    emitGuard("SYNTHESIS", [&] {
-      emitGuardedDefine("ENABLE_INITIAL_REG_", "ENABLE_INITIAL_REG_",
-                        StringRef(), "");
-    });
-
-    b.create<sv::VerbatimOp>("\n// Include rmemory initializers in init "
-                             "blocks unless synthesis is set");
-    emitGuard("SYNTHESIS", [&] {
-      emitGuardedDefine("ENABLE_INITIAL_MEM_", "ENABLE_INITIAL_MEM_",
-                        StringRef(), "");
-    });
-  }
-
-  if (state.used_RANDOMIZE_GARBAGE_ASSIGN) {
-    b.create<sv::VerbatimOp>(
-        "\n// RANDOMIZE_GARBAGE_ASSIGN enable range checks for mem "
-        "assignments.");
-    emitGuard("RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK", [&]() {
-      b.create<sv::IfDefOp>(
-          "RANDOMIZE_GARBAGE_ASSIGN",
-          [&]() {
-            StringRef args[] = {"INDEX", "VALUE", "SIZE"};
-            emitDefine("RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK",
-                       "  ((INDEX) < (SIZE) ? (VALUE) : {`RANDOM})",
-                       b.getStrArrayAttr(ArrayRef(args)));
-          },
-          [&]() {
-            StringRef args[] = {"INDEX", "VALUE", "SIZE"};
-            emitDefine("RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK", "(VALUE)",
-                       b.getStrArrayAttr(args));
-          });
     });
   }
 
@@ -2980,7 +2871,6 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
     sv::setSVAttributes(reg, svAttrs);
 
   inputEdge.setValue(reg);
-  circuitState.used_RANDOMIZE_REG_INIT = true;
   (void)setLowering(op.getResult(), reg);
   return success();
 }
@@ -3022,7 +2912,6 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
     sv::setSVAttributes(reg, svAttrs);
 
   inputEdge.setValue(reg);
-  circuitState.used_RANDOMIZE_REG_INIT = true;
   (void)setLowering(op.getResult(), reg);
 
   return success();
@@ -3153,7 +3042,6 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
     }
   }
 
-  circuitState.used_RANDOMIZE_MEM_INIT = true;
   return success();
 }
 

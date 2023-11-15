@@ -1,7 +1,5 @@
 // RUN: circt-opt -pass-pipeline="builtin.module(lower-firrtl-to-hw)" -verify-diagnostics %s --split-input-file | FileCheck %s
-// RUN: circt-opt -pass-pipeline="builtin.module(lower-firrtl-to-hw{disable-reg-randomization})" -verify-diagnostics %s | FileCheck %s --check-prefix DISABLE_RANDOM --implicit-check-not RANDOMIZE_REG
 
-// DISABLE_RANDOM-LABEL: module @Simple
 firrtl.circuit "Simple"   attributes {annotations = [{class =
 "sifive.enterprise.firrtl.ExtractAssumptionsAnnotation", directory = "dir1",  filename = "./dir1/filename1" }, {class =
 "sifive.enterprise.firrtl.ExtractCoverageAnnotation", directory = "dir2",  filename = "./dir2/filename2" }, {class =
@@ -30,18 +28,6 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-NEXT:     sv.macro.def @STOP_COND_ "(`STOP_COND)"
   // CHECK-NEXT:   } else {
   // CHECK-NEXT:     sv.macro.def @STOP_COND_ "1"
-  // CHECK-NEXT:   }
-  // CHECK-NEXT: }
-  // CHECK:      sv.ifdef  "INIT_RANDOM_PROLOG_" {
-  // CHECK-NEXT: } else {
-  // CHECK-NEXT:   sv.ifdef  "RANDOMIZE" {
-  // CHECK-NEXT:     sv.ifdef  "VERILATOR" {
-  // CHECK-NEXT:       sv.macro.def @INIT_RANDOM_PROLOG_ "`INIT_RANDOM"
-  // CHECK-NEXT:     } else {
-  // CHECK-NEXT:       sv.macro.def @INIT_RANDOM_PROLOG_ "`INIT_RANDOM #`RANDOMIZE_DELAY begin end"
-  // CHECK-NEXT:     }
-  // CHECK-NEXT:   } else {
-  // CHECK-NEXT:     sv.macro.def @INIT_RANDOM_PROLOG_ ""
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
 

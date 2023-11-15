@@ -408,10 +408,6 @@ def LowerFIRRTLToHW : Pass<"lower-firrtl-to-hw", "mlir::ModuleOp"> {
                            "seq::SeqDialect", "sv::SVDialect",
                            "ltl::LTLDialect", "verif::VerifDialect"];
   let options = [
-    Option<"disableMemRandomization", "disable-mem-randomization", "bool", "false",
-            "Disable emission of memory randomization code">,
-    Option<"disableRegRandomization", "disable-reg-randomization", "bool", "false",
-            "Disable emission of register randomization code">,
     Option<"enableAnnotationWarning", "warn-on-unprocessed-annotations",
            "bool", "false",
     "Emit warnings on unprocessed annotations during lower-to-hw pass">,
@@ -657,6 +653,8 @@ def LowerSeqToSV: Pass<"lower-seq-to-sv",  "mlir::ModuleOp"> {
   let options = [
     Option<"disableRegRandomization", "disable-reg-randomization", "bool", "false",
            "Disable emission of register randomization code">,
+    Option<"disableMemRandomization", "disable-mem-randomization", "bool", "false",
+           "Disable emission of memory randomization code">,
     Option<"emitSeparateAlwaysBlocks", "emit-separate-always-blocks", "bool", "false",
            "Emit assigments to registers in separate always blocks">,
     Option<"lowerToAlwaysFF", "lower-to-always-ff", "bool", "true",
@@ -672,12 +670,6 @@ def LowerFirMem : Pass<"lower-seq-firmem", "mlir::ModuleOp"> {
   let summary = "Lower seq.firmem ops to instances of hw.module.generated ops";
   let constructor = "circt::createLowerFirMemPass()";
   let dependentDialects = ["circt::hw::HWDialect"];
-}
-
-def LowerSeqFIRRTLInitToSV: Pass<"lower-seq-firrtl-init-to-sv", "mlir::ModuleOp"> {
-  let summary = "Prep the module with macro definitions for firrtl registers.";
-  let constructor = "circt::createLowerSeqFIRRTLInitToSV()";
-  let dependentDialects = ["circt::sv::SVDialect"];
 }
 
 #endif // CIRCT_CONVERSION_PASSES_TD
