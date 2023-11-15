@@ -56,3 +56,17 @@ llhd.proc @convert_wait(%a: !llhd.sig<i1>, %b: !llhd.sig<i1>) -> () {
 ^end:
   cf.br ^end
 }
+
+// CHECK-LABEL: llvm.func @convert_halt(
+// CHECK-SAME:    %arg0: !llvm.ptr, %arg1: !llvm.ptr, %arg2: !llvm.ptr)
+llhd.proc @convert_halt() -> (%a: !llhd.sig<i1>, %b: !llhd.sig<i1>) {
+  // Clear sensitivity flags for all signals.
+  // CHECK: [[TMP:%.+]] = llvm.getelementptr %arg1[2]
+  // CHECK: [[SENSE_PTR:%.+]] = llvm.load [[TMP]]
+  // CHECK: [[FALSE:%.+]] = llvm.mlir.constant(false)
+  // CHECK: [[SENSE_A:%.+]] = llvm.getelementptr [[SENSE_PTR]][0]
+  // CHECK: llvm.store [[FALSE]], [[SENSE_A]] : i1, !llvm.ptr
+  // CHECK: [[SENSE_B:%.+]] = llvm.getelementptr [[SENSE_PTR]][1]
+  // CHECK: llvm.store [[FALSE]], [[SENSE_B]] : i1, !llvm.ptr
+  llhd.halt
+}

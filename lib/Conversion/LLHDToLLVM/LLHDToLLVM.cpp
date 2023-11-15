@@ -786,7 +786,7 @@ struct HaltOpConversion : public ConvertToLLVMPattern {
     // Get senses ptr from the process state argument.
     auto sensePtrGep =
         rewriter.create<LLVM::GEPOp>(op->getLoc(), voidPtrTy, voidPtrTy,
-                                     procState, ArrayRef<LLVM::GEPArg>({0, 2}));
+                                     procState, ArrayRef<LLVM::GEPArg>({2}));
     auto sensePtr =
         rewriter.create<LLVM::LoadOp>(op->getLoc(), voidPtrTy, sensePtrGep);
 
@@ -795,9 +795,9 @@ struct HaltOpConversion : public ConvertToLLVMPattern {
         llvmFunc->getAttrOfType<IntegerAttr>("llhd.argument_count")
             .getValue()
             .getZExtValue();
+    auto zeroB = rewriter.create<LLVM::ConstantOp>(op->getLoc(), i1Ty,
+                                                   rewriter.getBoolAttr(false));
     for (unsigned i = 0; i < numSenseEntries; ++i) {
-      auto zeroB = rewriter.create<LLVM::ConstantOp>(
-          op->getLoc(), i1Ty, rewriter.getI32IntegerAttr(0));
       auto senseElemPtr = rewriter.create<LLVM::GEPOp>(
           op->getLoc(), voidPtrTy, i1Ty, sensePtr, ArrayRef<LLVM::GEPArg>({i}));
       rewriter.create<LLVM::StoreOp>(op->getLoc(), zeroB, senseElemPtr);
