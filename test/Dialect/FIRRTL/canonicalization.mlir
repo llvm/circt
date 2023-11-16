@@ -3083,13 +3083,6 @@ firrtl.module @RefTypes(
   %f_read = firrtl.ref.resolve %f_rw : !firrtl.rwprobe<uint<1>>
   %f_wire = firrtl.wire : !firrtl.uint<1>
   firrtl.strictconnect %f_wire, %f_read : !firrtl.uint<1>
-
-  // CHECK: firrtl.wire forceable
-  // CHECK: ref.resolve
-  %flipbundle, %flipbundle_rw = firrtl.wire forceable : !firrtl.bundle<a flip: uint<1>>, !firrtl.rwprobe<bundle<a: uint<1>>>
-  %flipbundle_read = firrtl.ref.resolve %flipbundle_rw : !firrtl.rwprobe<bundle<a: uint<1>>>
-  %flipbundle_wire = firrtl.wire : !firrtl.bundle<a : uint<1>>
-  firrtl.strictconnect %flipbundle_wire, %flipbundle_read : !firrtl.bundle<a: uint<1>>
 }
 
 // Do not rename InstanceOp: https://github.com/llvm/circt/issues/5351

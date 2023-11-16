@@ -109,9 +109,9 @@ RefType circt::firrtl::detail::getForceableResultType(bool forceable,
                                                       Type type) {
   auto base = dyn_cast_or_null<FIRRTLBaseType>(type);
   // TODO: Find a way to not check same things RefType::get/verify does.
-  if (!forceable || !base || base.containsConst())
+  if (!forceable || !base || !base.isPassive() || base.containsConst())
     return {};
-  return circt::firrtl::RefType::get(base.getPassiveType(), forceable);
+  return circt::firrtl::RefType::get(base, forceable);
 }
 
 LogicalResult circt::firrtl::detail::verifyForceableOp(Forceable op) {
