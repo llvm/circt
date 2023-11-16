@@ -50,6 +50,12 @@ struct PortInfo : public ModulePort {
   // Inspect or mutate attributes
   InnerSymAttr getSym() const;
   void setSym(InnerSymAttr sym, MLIRContext *ctx);
+
+  // Return the port's Verilog name. This returns either the port's name, or the
+  // `hw.verilogName` attribute if one is present. After `ExportVerilog` has
+  // run, this will reflect the exact name of the port as emitted to the Verilog
+  // output.
+  StringRef getVerilogName() const;
 };
 
 raw_ostream &operator<<(raw_ostream &printer, PortInfo port);
