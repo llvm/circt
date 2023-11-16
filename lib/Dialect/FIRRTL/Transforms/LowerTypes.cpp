@@ -1334,6 +1334,10 @@ bool TypeLoweringVisitor::visitExpr(mlir::UnrealizedConversionCastOp op) {
     return builder->create<mlir::UnrealizedConversionCastOp>(field.type, input)
         .getResult(0);
   };
+  // If the input to the cast is an unknown type, getSubWhatever cannot handle
+  // it, donot lower the op.
+  if (!isa<FVectorType, BundleType, RefType>(op->getOperand(0).getType()))
+    return false;
   return lowerProducer(op, clone);
 }
 
