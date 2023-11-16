@@ -22,7 +22,6 @@
 #include "mlir/Target/LLVMIR/Dialect/All.h"
 #include "mlir/Target/LLVMIR/Export.h"
 #include "mlir/Transforms/Passes.h"
-#include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/FileSystem.h"
@@ -53,7 +52,6 @@
 #include "llvm/Support/ToolOutputFile.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/BuiltinOps.h"
-#include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/Verifier.h"
 #include "mlir/Parser/Parser.h"
 #include "llvm/ADT/StringRef.h"
@@ -62,23 +60,23 @@
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/raw_ostream.h"
+#include </Users/luisa/z3/src/api/c++/z3++.h>
+
 
 using namespace llvm;
 using namespace mlir;
 using namespace circt;
 using namespace std;
+using namespace z3; 
 
 struct variable{
   string name;
   int initValue;
 };
 
-struct inputs{
-  string name;
-};
-
 struct outputs{
-  string name;
+  string state_from;
+  mlir::Value name;
 };
 
 struct transition{
@@ -95,27 +93,29 @@ struct CFG{
   std::vector<variable> variables;
   std::vector<transition *> transitions;
   std::vector<outputs> outputs;
-  std::vector<inputs> inputs;
+  std::vector<mlir::Value> inputs;
 };
 
-void print_cfg(CFG *cfg);
+// void print_cfg(CFG *cfg);
 
-void store_variable_declaration(Operation &op, CFG *cfg);
+// void store_variable_declaration(Operation &op, CFG *cfg);
 
-string manage_comb_exp(Operation &op);
+string manage_comb_exp(Operation &op, context& c);
 
-void manage_output_region(Region &region, CFG *cfg);
+// void manage_output_region(Region &region, CFG *cfg);
 
-void manage_guard_region(Region &region, transition *t);
+// void manage_guard_region(Region &region, transition *t, context c);
 
-void manage_action_region(Region &region, transition *t);
+// void manage_action_region(Region &region, transition *t, context c);
 
-void manage_transitions_region(Region &region, string current_state, CFG *cfg);
+// void manage_transitions_region(Region &region, string current_state, CFG *cfg, context c);
 
-void manage_state(Operation &op, CFG *cfg);
+// void manage_state(Operation &op, CFG *cfg);
 
-void explore_nested_blocks(Operation &op, int level, CFG *cfg);
+void explore_nested_blocks(Operation &op, int level, CFG *cfg, context& ctx);
 
-void parse_fsm(string input_file);
+// void parse_fsm(string input_file);
 
-void manage_block_in_out(Block &op, CFG *cfg);
+// void manage_block_in_out(Block &op, CFG *cfg);
+
+void printSolverAssertions(z3::solver& solver);

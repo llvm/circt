@@ -1,42 +1,59 @@
 #include "fsm-verification.h"
 #include "circt/Dialect/FSM/FSMGraph.h"
-#include </Users/luisa/z3/src/api/z3.h>
+#include </Users/luisa/z3/src/api/c++/z3++.h>
 #include "llvm/ADT/DenseMap.h"
+
+#define VERBOSE 1
 
 using namespace llvm;
 using namespace mlir;
 using namespace circt;
 using namespace std;
+using namespace z3;
 
 void print_cfg(CFG *cfg){
   llvm::outs()<<"------------------------ CFG ------------------------"<<"\n";
   llvm::outs()<<"------------------------ VARIABLES ------------------------"<<"\n";
   llvm::outs()<<"------------------------ INPUTS ------------------------"<<"\n";
-  for(inputs i : cfg->inputs){
-    llvm::outs()<<"Input: "<<i.name<<"\n";
+  for(auto i : cfg->inputs){
+    llvm::outs()<<"Input: "<<cfg->map.at(i)<<"\n";
   }
   llvm::outs()<<"Initial State: "<<cfg->initialState<<"\n";
   llvm::outs()<<"------------------------ OUTPUTS ------------------------"<<"\n";
   for(outputs o : cfg->outputs){
-    llvm::outs()<<"Output: "<<o.name<<"\n";
+    llvm::outs()<<"Output: "<<o.name<<" from "<<o.state_from<<"\n";
   }
   llvm::outs()<<"------------------------ TRANSITIONS ------------------------"<<"\n";
   for(transition *t : cfg->transitions){
     llvm::outs()<<"Transition from "<<t->from<<" to "<<t->to<<"\n";
     llvm::outs()<<"Guards: ";
     for(string s : *(t->guards)){
-      llvm::outs()<<s<<" ";
+      llvm::outs()<<s<<"\n";
     }
     llvm::outs()<<"\n";
     llvm::outs()<<"Updates: ";
     for(string s : *(t->var_updates)){
-      llvm::outs()<<s<<" ";
+      llvm::outs()<<s<<"\n";
     }
     llvm::outs()<<"\n";
   }
 }
 
-/// Populate the table of combinational transforms
+void printSolverAssertions(z3::solver& solver) {
+  llvm::outs()<<"------------------------ SOLVER ------------------------"<<"\n";
+    model m = solver.get_model();
+    std::cout << m << "\n";
+    // traversing the model
+    for (unsigned i = 0; i < m.size(); i++) {
+        func_decl v = m[i];
+        // this problem contains only constants
+        assert(v.arity() == 0); 
+        std::cout << v.name() << " = " << m.get_const_interp(v) << "\n";
+    }
+}
+
+
+// Populate the table of combinational transforms
 // void populateCombTransformTable() {
 //   // Assign non-ambiguous pairs (that don't require type clarification)
 //   this->combTransformTable = {
@@ -66,7 +83,6 @@ void print_cfg(CFG *cfg){
 //        [](auto op1, auto op2) { return op1 - op2; }},
 //       {comb::XorOp::getOperationName(),
 //        [](auto op1, auto op2) { return op1 ^ op2; }}};
-
 //   // Add ambiguous pairs - the type of these lambdas is ambiguous, so they
 //   // require casting
 //   this->combTransformTable.insert(std::pair(
@@ -75,7 +91,6 @@ void print_cfg(CFG *cfg){
 //           const z3::expr &op1, uint32_t lowBit, int width) {
 //         return op1.extract(lowBit + width - 1, lowBit);
 //       }));
-
 //   this->combTransformTable.insert(std::pair(
 //       comb::ICmpOp::getOperationName(),
 //       (std::function<z3::expr(circt::comb::ICmpPredicate, const z3::expr &,
@@ -152,199 +167,128 @@ void print_cfg(CFG *cfg){
 // };
 
 
-
-void store_variable_declaration(Operation &op, CFG *cfg){
-  variable v;
-  v.name = op.getAttr("name").cast<StringAttr>().getValue().str();
-  v.initValue = 0;
-  cfg->variables.push_back(v);
-  // llvm::outs() << op.getResult(0) << endl;;u
-  // v.initValue = op.getAttr("initValue").cast<StringAttr>().getValue();
-}
-
-string manage_comb_exp(Operation &op){
-  llvm::outs()<<"MANAGE COMB EXP\n";
+string manage_comb_exp(Operation &op, context& c, CFG *cfg, solver& solver, int idx){
+  string s;
+  llvm::outs()<<"comb expression "<< op.getName().getStringRef().str().c_str() <<"\n";
   string log_exp = "";
-  if(!strcmp(op.getName().getStringRef().str().c_str(), "comb.add")){
-    int n = op.getNumOperands();
-    // llvm::outs()<<"Number of operands: "<<n<<"\n";
-    auto ops = op.getOperands();
+  if(auto add = dyn_cast<comb::AddOp>(op)){
+    int n = add.getNumOperands();
+    auto ops = add.getOperands();
+    mlir::Value new_var = add.getResult();
+    cfg->map.insert({new_var, "res"+to_string(idx)});
+    s = s + "res"+to_string(idx) + " = ";
     for(int i = 0; i < n; i++){
+      llvm::outs()<<"\tAddOp argument "<<cfg->map.at(ops[i])<<"\n";
+      s = s + cfg->map.at(ops[i]);
+      if(i < n-1){
+        s = s + " + ";
+      }
+      
       // llvm::outs()<<"\t\t\tOperand: "<<op.getName().getStringRef().str().c_str()<<"\n";
-      if(!strcmp(ops[i].getDefiningOp()->getName().getStringRef().str().c_str(), "fsm.variable")){
-        log_exp += ops[i].getDefiningOp()->getAttr("name").cast<StringAttr>().getValue().str();
-      } else if (auto op = dyn_cast<hw::ConstantOp>(ops[i].getDefiningOp())){
-        int in = op.getValue().getZExtValue();
-        string s = std::to_string(in);
-        log_exp += s;
-      }
-      if(i!=n-1){
-        log_exp += " + ";
-      }
     }
-
   } 
-  else if(!strcmp(op.getName().getStringRef().str().c_str(), "comb.and")){
-  int n = op.getNumOperands();
-
-      llvm::outs()<<"Number of operands: "<<n<<"\n";
-      auto ops = op.getOperands();
-      for(int i = 0; i < n; i++){
-        llvm::outs()<<"\t\t\tOperand: "<<op<<"\n";
-        if(ops[i].getDefiningOp()!=NULL){
-          if(!strcmp(ops[i].getDefiningOp()->getName().getStringRef().str().c_str(), "fsm.variable")){
-            log_exp += ops[i].getDefiningOp()->getAttr("name").cast<StringAttr>().getValue().str();
-          } else if (auto op = dyn_cast<hw::ConstantOp>(ops[i].getDefiningOp())){
-            int in = op.getValue().getZExtValue();
-            string s = std::to_string(in);
-            log_exp += s;
-          } 
-        } else {
-          log_exp += (cfg->map.find_as(ops[i]));
-          // string s = to_string(ops[i].getImpl());//to_string(ops[i].getImpl());
-          // log_exp += s;
-        }
-        if(i!=n-1){
-          log_exp += " and ";
-        }
-      }
-  }
-  // else if(!strcmp(op.getName().getStringRef().str().c_str(), "comb.concat")){
-
-  // }
-  // else if(!strcmp(op.getName().getStringRef().str().c_str(), "comb.divs")){
-
-  // }
-  // else if(!strcmp(op.getName().getStringRef().str().c_str(), "comb.divu")){
-
-  // }
-  // else if(!strcmp(op.getName().getStringRef().str().c_str(), "comb.extract")){
-
-  // }
-  else if(!strcmp(op.getName().getStringRef().str().c_str(), "comb.icmp")){
-    int n = op.getNumOperands();
-    // llvm::outs()<<"Number of operands: "<<n<<"\n";
-    auto ops = op.getOperands();
-    for(auto [i, op1]: llvm::enumerate(ops)){
+  else if(auto and_op = dyn_cast<comb::AndOp>(op)){
+    int n = and_op.getNumOperands();
+    auto ops = and_op.getOperands();
+    mlir::Value new_var = and_op.getResult();
+    cfg->map.insert({new_var, "res"+to_string(idx)});
+    s = s + "res"+to_string(idx) + " = ";
+    for(int i = 0; i < n; i++){
+      llvm::outs()<<"\tAndOp argument "<<cfg->map.at(ops[i])<<"\n";
       // llvm::outs()<<"\t\t\tOperand: "<<op.getName().getStringRef().str().c_str()<<"\n";
-      if(auto var_op = dyn_cast<fsm::VariableOp>(op1.getDefiningOp())){
-        
-        // !strcmp(ops[i].getDefiningOp()->getName().getStringRef().str().c_str(), "fsm.variable")){
-        log_exp += var_op.getName();
-
-      } else if (auto op2 = dyn_cast<hw::ConstantOp>(op1.getDefiningOp())){
-        int in = op2.getValue().getZExtValue();
-        string s = std::to_string(in);
-        log_exp += s;
-      }
-      if(i!=n-1){
-        log_exp += " == ";
+      s = s + cfg->map.at(ops[i]);
+      if(i < n-1){
+        s = s + " & ";
       }
     }
   }
-  // else if(!strcmp(op.getName().getStringRef().str().c_str(), "comb.mods")){
-
-  // }
-  // else if(!strcmp(op.getName().getStringRef().str().c_str(), "comb.modu")){
-
-  // }
-  // else if(!strcmp(op.getName().getStringRef().str().c_str(), "comb.mul")){
-
-  // }
-  // else if(!strcmp(op.getName().getStringRef().str().c_str(), "comb.mux")){
-
-  // }
-  // else if(!strcmp(op.getName().getStringRef().str().c_str(), "comb.or")){
-
-  // }
-  // else if(!strcmp(op.getName().getStringRef().str().c_str(), "comb.parity")){
-
-  // }
-  // else if(!strcmp(op.getName().getStringRef().str().c_str(), "comb.replicate")){
-
-  // }
-  // else if(!strcmp(op.getName().getStringRef().str().c_str(), "comb.shl")){
-
-  // }
-  // else if(!strcmp(op.getName().getStringRef().str().c_str(), "comb.shrs")){
-
-  // }
-  // else if(!strcmp(op.getName().getStringRef().str().c_str(), "comb.shru")){
-
-  // }
-  // else if(!strcmp(op.getName().getStringRef().str().c_str(), "comb.sub")){
-
-  // }
-  // else if(!strcmp(op.getName().getStringRef().str().c_str(), "comb.truth_table")){
-
-  // }
-  // else if(!strcmp(op.getName().getStringRef().str().c_str(), "comb.xor")){
-
-  // }
-
-  // llvm::outs()<<"EXP: "<<log_exp<<"\n";
-
-  return log_exp;
+  else if(auto icmp = dyn_cast<comb::ICmpOp>(op)){
+    int n = icmp.getNumOperands();
+    auto ops = icmp.getOperands();
+    mlir::Value new_var = icmp.getResult();
+    cfg->map.insert({new_var, "res"+to_string(idx)});
+    s = s + "res"+to_string(idx) + " = ";
+    for(int i = 0; i < n; i++){
+      llvm::outs()<<"\tICmpOp argument "<< icmp.getPredicate()<<" " <<cfg->map.at(ops[i])<<"\n";
+      // llvm::outs()<<"\t\t\tOperand: "<<op.getName().getStringRef().str().c_str()<<"\n";
+      s = s + cfg->map.at(ops[i]);
+      if(i < n-1){
+        s = s + " == ";
+      }
+      mlir::Value new_var = icmp.getResult();
+      cfg->map.insert({new_var, "res"+to_string(idx)});
+    }
+  }
+  
+  return s;
   
 }
 
-void manage_output_region(Region &region, CFG *cfg){
-	// llvm::outs() << "OUTPUT\n";
-  //   for (Block &bl : region.getBlocks()){
-  //     for(Operation &op : bl.getOperations()){
-	// 	if(!strcmp(op.getName().getStringRef().str().c_str(), "fsm.output")){
-	// 		llvm::outs() << "\t\tOuptuts "<< op.getNumResults() << "\n";
-	// 	} else {
-	// 		cout << "MANAGE OUTPUT VAL\n";
-	// 	}
-  //     }
-  // }
-}
-
-void manage_guard_region(Region &region, transition *t){
-	// llvm::outs() << "GUARD\n";
-  for (Block &bl : region.getBlocks()){
+void manage_output_region(Region &region, CFG *cfg, context& ctx, solver& solver, string current_state){
+    for (Block &bl : region.getBlocks()){
       for(Operation &op : bl.getOperations()){
-        if (auto op1 = dyn_cast<fsm::ReturnOp>(op)){
-          // TODO HERE
-          // string s = manage_update_op()
-          // t->var_updates->push_back(s);
-        } else {
-          string s = manage_comb_exp(op);
-          t->guards->push_back(s);
+        if(auto output_op = dyn_cast<fsm::OutputOp>(op)){
+          auto ops = output_op.getOperands();
+          for (auto o : ops){
+            outputs out;
+            out.state_from = current_state;
+            out.name = o;
+            cfg->outputs.push_back(out);
+          }
         }
       }
   }
 }
 
-void manage_action_region(Region &region, transition *t){
-	// llvm::outs() << "ACTION\n";
+int manage_guard_region(Region &region, transition *t, context& c, CFG *cfg, solver& solver){
+	// llvm::outs() << "GUARD\n";
+  int num_op = 0;
   for (Block &bl : region.getBlocks()){
       for(Operation &op : bl.getOperations()){
-        if (auto op1 = dyn_cast<fsm::UpdateOp>(op)){
+        if (auto op1 = dyn_cast<fsm::ReturnOp>(op)){
+          mlir::Value res = op1.getOperand();
+          t->guards->push_back(cfg->map.at(res));
+        } else {
+          string s = manage_comb_exp(op, c, cfg, solver, num_op);
+          t->guards->push_back(s);
+          num_op++;
+        }
+      }
+  }
+  return num_op;
+}
+
+int manage_action_region(Region &region, transition *t, context& c, CFG *cfg, solver& solver){
+	// llvm::outs() << "ACTION\n";
+  int num_action = 0;
+  for (Block &bl : region.getBlocks()){
+      for(Operation &op : bl.getOperations()){
+        if (auto op1 = dyn_cast<fsm::UpdateOp>(op)){  
+          string last_update = cfg->map.at(op1.getVariable()) + " + " + cfg->map.at(op1.getValue());
           // if(auto op2 = dyn_cast<fsm::VariableOp>((dyn_cast<fsm::UpdateOp>(op)).getVariable())){
             // auto op1 = dyn_cast<fsm::UpdateOp>(op).getVariable()
           // string name = (dyn_cast<fsm::VariableOp>(op1)).getName().str();
           // llvm::outs()<<name<<"\n";
-
           // }
-        
           // string s2 = op.getAttr("value").cast<StringAttr>().getValue().str();
           // string s = s1 + " = ";
           // TODO HERE
           // string s = manage_update_op()
           // t->var_updates->push_back(s);
         } else {
-          string s = manage_comb_exp(op);
+          string s = manage_comb_exp(op, c, cfg, solver, num_action);
           t->var_updates->push_back(s);
+          num_action++;
         }
       }
   }
+  return num_action;
 }
 
 
-void manage_transitions_region(Region &region, string current_state, CFG *cfg){
+void manage_transitions_region(Region &region, func_decl& inv_state, CFG *cfg, context& c, solver& solver, string current_state){
 // llvm::outs() << "TRANSITIONS\n";
+  expr x = c.bv_const("x", 32);
     for (Block &bl : region.getBlocks()){
       for(Operation &op : bl.getOperations()){
       if(!strcmp(op.getName().getStringRef().str().c_str(), "fsm.transition")){
@@ -355,9 +299,11 @@ void manage_transitions_region(Region &region, string current_state, CFG *cfg){
         t->to = op.getAttr("nextState").cast<FlatSymbolRefAttr>().getValue().str();
         // llvm::outs() << "\t\tTransition from "<< t->from << " to " << t->to << "\n";
         MutableArrayRef<Region> regions = op.getRegions();
-        manage_guard_region(regions[0], t);
-        manage_action_region(regions[1], t);
+        int guards = manage_guard_region(regions[0], t, c, cfg, solver);
+        int actions = manage_action_region(regions[1], t, c, cfg, solver);
+
         cfg->transitions.push_back(t);
+        
       } else {
         cout << "ERROR WITH TRANSITIONS on op"<< op.getName().getStringRef().str().c_str() << "\n";
       }
@@ -365,42 +311,36 @@ void manage_transitions_region(Region &region, string current_state, CFG *cfg){
   }
 }
 
-void manage_state(Operation &op, CFG *cfg){
-  // llvm::outs() << "STATE OP ANALYSIS: " << op.getName() << "\n";
-  // for (auto arg : op.getOperands()){
-  //   llvm::outs() << "With operand: " << arg << "\n";
-  // }
-  // llvm::outs() << "With name: " << op.getInherentAttr("sym_name") << "\n";
+void manage_state(Operation &op, CFG *cfg, context& ctx, solver& solver){
+  func_decl I = ctx.function(op.getAttr("sym_name").cast<StringAttr>().getValue().str().c_str(), ctx.bv_sort(32), ctx.bool_sort());
 	MutableArrayRef<Region> regions = op.getRegions();
-	// llvm::outs() << "REGIONS are "<< regions.size() <<"\n";
-  manage_output_region(regions[0], cfg);
-  manage_transitions_region(regions[1], op.getAttr("sym_name").cast<StringAttr>().getValue().str(), cfg);
+  solver.add(I(0));
+  manage_output_region(regions[0], cfg, ctx, solver, op.getAttr("sym_name").cast<StringAttr>().getValue().str());
+  manage_transitions_region(regions[1], I, cfg, ctx, solver, op.getAttr("sym_name").cast<StringAttr>().getValue().str());
 }
 
 
 
-void explore_nested_blocks(Operation &op, int level, CFG *cfg){
+void explore_nested_blocks(Operation &op, int num_args, CFG *cfg, context& ctx, solver& solver){
   for (Region &region : op.getRegions()) {
     for (Block &block : region) {
       for(auto a: block.getArguments()){
-        llvm::outs()<<"Argument: "<<a<<"\n";
-        cfg->map.insert(std::pair(a, "arg"));
+        cfg->inputs.push_back(a);
+        cfg->map.insert({a, "arg"+to_string(num_args)});
+        num_args++;
       }
       for (Operation &op : block) {
-        // llvm::outs()<<op.getName().getStringRef().str().c_str()<<"\n";
         if (!strcmp(op.getName().getStringRef().str().c_str(), "fsm.state")){
-          manage_state(op, cfg);
+          manage_state(op, cfg, ctx, solver);
         } else if(auto const_op = dyn_cast<hw::ConstantOp>(op)){
-          llvm::outs()<<"HW num results: "<<op.getNumResults()<<"\n";
-          cfg->map.insert(pair<mlir::Value, string>(op.getResult(0), "hw.const"));
-        } else if(auto const_op = dyn_cast<fsm::VariableOp>(op)){
-          llvm::outs()<<"FSM num results: "<<op.getNumResults()<<"\n";
-          cfg->map.insert(pair<mlir::Value, string>(op.getResult(0), op.getAttr("name").cast<StringAttr>().getValue().str()));
+          cfg->map.insert({const_op.getResult(), "hw.const"+to_string(num_args)});
+          num_args++;
+        } else if(auto var_op = dyn_cast<fsm::VariableOp>(op)){
+          cfg->map.insert({var_op.getResult(), var_op.getName().str()});
+        } else if(auto machine = dyn_cast<fsm::MachineOp>(op)){
+          cfg->initialState = machine.getInitialState();
         }
-        else if (!strcmp(op.getName().getStringRef().str().c_str(), "fsm.machine")){
-          llvm::outs()<< "machine region" <<"\n";
-        }
-        explore_nested_blocks(op, level+1, cfg);
+        explore_nested_blocks(op, num_args, cfg, ctx, solver);
       }
     }
   }
@@ -431,14 +371,21 @@ void parse_fsm(string input_file){
   MLIRContext context(registry);
 
   // Parse the MLIR code into a module.
-  OwningOpRef<ModuleOp> module = parseSourceFile<ModuleOp>(input_file, &context);
+  OwningOpRef<ModuleOp> module = mlir::parseSourceFile<ModuleOp>(input_file, &context);
 
 
   int it = 0;
 
-  explore_nested_blocks(module.get()[0], it, cfg);
+  z3::context ctx;
+
+  solver s(ctx);
+
+
+  explore_nested_blocks(module.get()[0], it, cfg, ctx, s);
 
   print_cfg(cfg);
+
+  // printSolverAssertions(s);
 
 }
 
@@ -451,3 +398,7 @@ int main(int argc, char **argv){
   return 0;
 
 }
+
+
+
+

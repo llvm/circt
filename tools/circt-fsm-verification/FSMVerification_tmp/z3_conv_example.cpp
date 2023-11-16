@@ -1,43 +1,42 @@
-
 /*++Copyright (c) 2015 Microsoft Corporation--*/
 
-#include <z3++.h>
+#include </Users/luisa/z3/src/api/c++/z3++.h>
 
 using namespace z3;
 
 // updates
 
-expr AtoB(context* c, expr x) {
+expr AToB(context& c, expr x) {
   return x;
 }
 
-expr BtoA(context* c, expr x) {
-  return c->bv_val(0, 32);
+expr BToA(context& c, expr x) {
+  return c.bv_val(0, 32);
 }
 
-expr BtoB(context *c, expr x) {
+expr BToB(context& c, expr x) {
   return x + 1;
 }
 
 // guards, tautology if none, unless updates
 
-expr trans_AB(context* c, expr x) {
+expr trans_AB(context& c, expr x) {
    return x || !x;
 }
 
-expr trans_BB(context* c, expr x) {
+expr trans_BB(context& c, expr x) {
     return x!=5;
 }
 
-expr trans_BA(context* c, expr x) {
+expr trans_BA(context& c, expr x) {
     return x==5;
 }
 
 int main() {
 
     context c; 
-    sort cn = c.int_sort();
-    sort in = c.bool_sort();
+    z3::sort cn = c.int_sort();
+    z3::sort in = c.bool_sort();
 
     func_decl IA = c.function("IA", c.bv_sort(32), c.bool_sort());
     func_decl IB = c.function("IB", c.bv_sort(32), c.bool_sort());
@@ -49,17 +48,12 @@ int main() {
 
     s.add(IA(0));
 
-    s.add(forall(x, implies(IA(x), IB(AtoB(c, x)))));
-    s.add(forall(x, implies(And(IB(x), transitionBToA(c, x)), IA(BToA(c, x)))));
-    s.add(forall(x, implies(And(IB(x), transitionBToB(c, x)), IB(BToB(c,  x)))));
-    s.add(forall(x, implies(And(IA(x), x != 0), 0)));
-    s.add(forall(x, implies(And(IB(x), x > 5), False)));
+    s.add(forall(x, implies(IA(x), IB(AToB(c, x)))));
+    s.add(forall(x, implies((IB(x) && trans_BA(c, x)), IA(BToA(c, x)))));
+    s.add(forall(x, implies((IB(x) && trans_BB(c, x)), IB(BToB(c,  x)))));
+    s.add(forall(x, implies((IA(x) && x != 0), 0)));
   
+    std::cout<<s.check()<<std::endl;
 
-    std::cout<<solver.check()std::<<endl;
-
-    
-    
     return 0;
 }
-

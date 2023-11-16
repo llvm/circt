@@ -3,13 +3,12 @@ set(LLVM_LINK_COMPONENTS Support)
 add_circt_tool(fsm-verification fsm-verification.cpp)
 target_link_libraries(fsm-verification
   PRIVATE
+  CIRCTFSM
   CIRCTArc
   CIRCTArcToLLVM
   CIRCTArcTransforms
   CIRCTCombToArith
   CIRCTConvertToArcs
-  CIRCTFSM
-  CIRCTHW
   CIRCTOM
   CIRCTSeqToSV
   CIRCTSeqTransforms
@@ -21,6 +20,8 @@ target_link_libraries(fsm-verification
   MLIRLLVMToLLVMIRTranslation
   MLIRParser
   MLIRTargetLLVMIRExport
+  ${Z3_LIBRARIES}
+
 )
 
 llvm_update_compile_flags(fsm-verification)
