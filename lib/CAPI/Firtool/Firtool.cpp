@@ -143,7 +143,6 @@ DEFINE_FIRTOOL_OPTION_BOOL(ExportChiselInterface, exportChiselInterface)
 DEFINE_FIRTOOL_OPTION_STRING(ChiselInterfaceOutDirectory,
                              chiselInterfaceOutDirectory)
 DEFINE_FIRTOOL_OPTION_BOOL(VbToBv, vbToBV)
-DEFINE_FIRTOOL_OPTION_BOOL(Dedup, dedup)
 DEFINE_FIRTOOL_OPTION_ENUM(
     CompanionMode, companionMode, FirtoolCompanionMode,
     [](FirtoolCompanionMode value) {

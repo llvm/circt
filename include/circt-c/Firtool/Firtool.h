@@ -81,7 +81,6 @@ DECLARE_FIRTOOL_OPTION(DisableOptimization, bool);
 DECLARE_FIRTOOL_OPTION(ExportChiselInterface, bool);
 DECLARE_FIRTOOL_OPTION(ChiselInterfaceOutDirectory, MlirStringRef);
 DECLARE_FIRTOOL_OPTION(VbToBv, bool);
-DECLARE_FIRTOOL_OPTION(Dedup, bool);
 DECLARE_FIRTOOL_OPTION(CompanionMode, FirtoolCompanionMode);
 DECLARE_FIRTOOL_OPTION(DisableAggressiveMergeConnections, bool);
 DECLARE_FIRTOOL_OPTION(EmitOMIR, bool);
