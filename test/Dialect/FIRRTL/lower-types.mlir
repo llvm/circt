@@ -1,5 +1,5 @@
-// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-lower-types))' %s | FileCheck --check-prefixes=CHECK,COMMON %s
-// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-lower-types{preserve-aggregate=all}))' %s | FileCheck --check-prefixes=AGGREGATE,COMMON %s
+// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-lower-types))' --allow-unregistered-dialect %s | FileCheck --check-prefixes=CHECK,COMMON %s
+// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-lower-types{preserve-aggregate=all}))' --allow-unregistered-dialect %s | FileCheck --check-prefixes=AGGREGATE,COMMON %s
 
 
 firrtl.circuit "TopLevel" {
@@ -1362,5 +1362,13 @@ firrtl.circuit "WireProbe" {
     firrtl.ref.define %sp_in, %0 : !firrtl.probe<bundle<a: uint<5>, b: uint<5>>>
     firrtl.ref.define %y, %sp_y : !firrtl.probe<uint<5>>
     firrtl.ref.define %z, %sp_z : !firrtl.probe<uint<5>>
+  }
+  firrtl.module @UnrealizedConversion( ){
+    // CHECK: %[[a:.+]] = "d.w"() : () -> !hw.struct<data: i64, tag: i1>
+    // CHECK: = builtin.unrealized_conversion_cast %[[a]] : !hw.struct<data: i64, tag: i1> to !firrtl.bundle<data: uint<64>, tag: uint<1>>
+    %a = "d.w"() : () -> (!hw.struct<data: i64, tag: i1>)
+    %b = builtin.unrealized_conversion_cast %a : !hw.struct<data: i64, tag: i1> to !firrtl.bundle<data: uint<64>, tag: uint<1>>
+    %w = firrtl.wire : !firrtl.bundle<data: uint<64>, tag: uint<1>>
+    firrtl.strictconnect %w, %b : !firrtl.bundle<data: uint<64>, tag: uint<1>>
   }
 }
