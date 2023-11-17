@@ -808,8 +808,8 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
     while (!sources.empty() && !sinks.empty()) {
       if (sources.top() != sinks.top())
         break;
-      auto newLCA = sources.top();
-      lca = cast<FModuleOp>(instanceGraph.getReferencedModule(newLCA));
+      auto newLCA = cast<InstanceOp>(*sources.top());
+      lca = cast<FModuleOp>(newLCA.getReferencedModule(instanceGraph));
       sources = sources.dropFront();
       sinks = sinks.dropFront();
     }
@@ -885,8 +885,9 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
     auto addPorts = [&](igraph::InstancePath insts, Value val, Type tpe,
                         Direction dir) {
       StringRef name, instName;
-      for (auto inst : llvm::reverse(insts)) {
-        auto mod = instanceGraph.getReferencedModule<FModuleOp>(inst);
+      for (auto instNode : llvm::reverse(insts)) {
+        auto inst = cast<InstanceOp>(*instNode);
+        auto mod = inst.getReferencedModule<FModuleOp>(instanceGraph);
         if (name.empty()) {
           if (problem.newNameHint.empty())
             name = state.getNamespace(mod).newName(

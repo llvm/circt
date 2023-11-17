@@ -209,14 +209,6 @@ public:
   /// Lookup an InstanceGraphNode for a module.
   InstanceGraphNode *operator[](ModuleOpInterface op) { return lookup(op); }
 
-  /// Look up the referenced module from an InstanceOp. This will use a
-  /// hashtable lookup to find the module, where
-  /// InstanceOp.getReferencedModule() will be a linear search through the IR.
-  template <typename TTarget = ModuleOpInterface>
-  auto getReferencedModule(InstanceOpInterface op) {
-    return cast<TTarget>(getReferencedModuleImpl(op).getOperation());
-  }
-
   /// Check if child is instantiated by a parent.
   bool isAncestor(ModuleOpInterface child, ModuleOpInterface parent);
 
@@ -330,8 +322,8 @@ static T &operator<<(T &os, const InstancePath &path) {
   return path.print(os);
 }
 
-/// A data structure that caches and provides absolute paths to module instances
-/// in the IR.
+/// A data structure that caches and provides absolute paths to module
+/// instances in the IR.
 struct InstancePathCache {
   /// The instance graph of the IR.
   InstanceGraph &instanceGraph;

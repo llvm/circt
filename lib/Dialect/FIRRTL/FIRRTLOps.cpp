@@ -2919,7 +2919,7 @@ ClassLike ObjectOp::getReferencedClass(const SymbolTable &symbolTable) {
   return symbolTable.lookup<ClassLike>(symRef.getLeafReference());
 }
 
-Operation *ObjectOp::getReferencedModule(const SymbolTable &symtbl) {
+Operation *ObjectOp::getReferencedOperation(const SymbolTable &symtbl) {
   return getReferencedClass(symtbl);
 }
 

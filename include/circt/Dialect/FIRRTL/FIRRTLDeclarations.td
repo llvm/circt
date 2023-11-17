@@ -130,6 +130,21 @@ def InstanceOp : HardwareDeclOp<"instance", [
     InstanceOp cloneAndInsertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports);
 
     //===------------------------------------------------------------------===//
+    // Instance graph methods
+    //===------------------------------------------------------------------===//
+
+    // Quick lookup of the referenced module using the instance graph.
+    template <typename T = ::circt::igraph::ModuleOpInterface>
+    T getReferencedModule(::circt::igraph::InstanceGraph &instanceGraph) {
+      auto moduleNameAttr = getModuleNameAttr().getAttr();
+      auto *node =  instanceGraph.lookup(moduleNameAttr);
+      if (!node)
+        return nullptr;
+      Operation *moduleOp = node->getModule();
+      return dyn_cast_or_null<T>(moduleOp);
+    }
+
+    //===------------------------------------------------------------------===//
     // PortList Methods
     //===------------------------------------------------------------------===//
     SmallVector<::circt::hw::PortInfo> getPortList();
@@ -598,7 +613,7 @@ def ObjectOp :  FIRRTLOp<"object", [
     ParentOneOf<["firrtl::FModuleOp, firrtl::ClassOp"]>,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>,
     DeclareOpInterfaceMethods<FInstanceLike, [
-      "getReferencedModule"
+      "getReferencedOperation"
     ]>,
     DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface, [
       "getReferencedModuleName",

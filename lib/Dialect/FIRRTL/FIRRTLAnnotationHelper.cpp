@@ -244,7 +244,7 @@ firrtl::resolveEntities(TokenAnnoTarget path, CircuitOp circuit,
   ArrayRef<TargetToken> component(path.component);
   if (auto instance = dyn_cast<InstanceOp>(ref.getOp())) {
     instances.push_back(instance);
-    auto target = cast<FModuleLike>(instance.getReferencedModule(symTbl));
+    auto target = cast<FModuleLike>(instance.getReferencedOperation(symTbl));
     if (component.empty()) {
       ref = OpAnnoTarget(target);
     } else if (component.front().isIndex) {
