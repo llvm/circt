@@ -15,7 +15,6 @@
 
 #include "circt/Dialect/Handshake/HandshakeDialect.h"
 #include "circt/Support/LLVM.h"
-#include "llvm/ADT/Any.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/Operation.h"
@@ -23,6 +22,7 @@
 #include "mlir/Interfaces/FunctionInterfaces.h"
 #include "mlir/Interfaces/InferTypeOpInterface.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
+#include "llvm/ADT/Any.h"
 
 namespace circt {
 namespace handshake {
