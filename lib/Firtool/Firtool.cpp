@@ -234,11 +234,8 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
   pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
       circt::firrtl::createLintingPass());
 
-  pm.addPass(createLowerFIRRTLToHWPass(
-      opt.enableAnnotationWarning.getValue(),
-      opt.emitChiselAssertsAsSVA.getValue(),
-      !opt.isRandomEnabled(FirtoolOptions::RandomKind::Mem),
-      !opt.isRandomEnabled(FirtoolOptions::RandomKind::Reg)));
+  pm.addPass(createLowerFIRRTLToHWPass(opt.enableAnnotationWarning.getValue(),
+                                       opt.emitChiselAssertsAsSVA.getValue()));
 
   if (!opt.disableOptimization) {
     auto &modulePM = pm.nest<hw::HWModuleOp>();
@@ -261,8 +258,10 @@ LogicalResult firtool::populateHWToSV(mlir::PassManager &pm,
 
   pm.addPass(seq::createExternalizeClockGatePass(opt.clockGateOpts));
   pm.addPass(circt::createLowerSeqToSVPass(
-      {/*disableRandomization=*/!opt.isRandomEnabled(
+      {/*disableRegRandomization=*/!opt.isRandomEnabled(
            FirtoolOptions::RandomKind::Reg),
+       /*disableMemRandomization=*/
+       !opt.isRandomEnabled(FirtoolOptions::RandomKind::Mem),
        /*emitSeparateAlwaysBlocks=*/
        opt.emitSeparateAlwaysBlocks}));
   pm.addNestedPass<hw::HWModuleOp>(createLowerVerifToSVPass());

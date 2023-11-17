@@ -1,6 +1,6 @@
-// RUN: circt-opt %s -verify-diagnostics --lower-seq-firrtl-init-to-sv --lower-seq-to-sv | FileCheck %s --check-prefixes=CHECK,COMMON
-// RUN: circt-opt %s -verify-diagnostics --pass-pipeline="builtin.module(lower-seq-firrtl-init-to-sv, lower-seq-to-sv{disable-reg-randomization})" | FileCheck %s --check-prefix COMMON --implicit-check-not RANDOMIZE_REG
-// RUN: circt-opt %s -verify-diagnostics --pass-pipeline="builtin.module(lower-seq-firrtl-init-to-sv, lower-seq-to-sv{emit-separate-always-blocks})" | FileCheck %s --check-prefixes SEPARATE
+// RUN: circt-opt %s -verify-diagnostics --lower-seq-to-sv | FileCheck %s --check-prefixes=CHECK,COMMON
+// RUN: circt-opt %s -verify-diagnostics --pass-pipeline="builtin.module(lower-seq-to-sv{disable-reg-randomization})" | FileCheck %s --check-prefix COMMON --implicit-check-not RANDOMIZE_REG
+// RUN: circt-opt %s -verify-diagnostics --pass-pipeline="builtin.module(lower-seq-to-sv{emit-separate-always-blocks})" | FileCheck %s --check-prefixes SEPARATE
 
 // COMMON-LABEL: hw.module @lowering
 // SEPARATE-LABEL: hw.module @lowering
