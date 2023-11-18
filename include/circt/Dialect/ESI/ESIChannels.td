@@ -475,13 +475,15 @@ def CosimToHostEndpointOp : ESI_Physical_Op<"cosim.to_host", []> {
 
     It is uni-directional, in this case sending data from the simulation to the
     host.
+
+    NOTE: $id MUST be unique across all endpoints at simulation runtime.
   }];
 
   let arguments = (ins ClockType:$clk, I1:$rst,
-                       ChannelType:$toHost, StrAttr:$name);
+                       ChannelType:$toHost, StrAttr:$id);
 
   let assemblyFormat = [{
-    $clk `,` $rst `,` $toHost`,` $name attr-dict `:` qualified(type($toHost))
+    $clk `,` $rst `,` $toHost`,` $id attr-dict `:` qualified(type($toHost))
   }];
 }
 
@@ -494,13 +496,15 @@ def CosimFromHostEndpointOp : ESI_Physical_Op<"cosim.from_host", []> {
 
     It is uni-directional, in this case receiving data from the host for the
     simulation.
+
+    NOTE: $id MUST be unique across all endpoints at simulation runtime.
   }];
 
-  let arguments = (ins ClockType:$clk, I1:$rst, StrAttr:$name);
+  let arguments = (ins ClockType:$clk, I1:$rst, StrAttr:$id);
   let results = (outs ChannelType:$fromHost);
 
   let assemblyFormat = [{
-    $clk `,` $rst `,` $name attr-dict `:` qualified(type($fromHost))
+    $clk `,` $rst `,` $id attr-dict `:` qualified(type($fromHost))
   }];
 }
 

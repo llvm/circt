@@ -105,7 +105,7 @@ static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
             toStringAttr(req.getRelativeAppIDPathAttr(), ch.name));
         toServerValues.push_back(cosim.getFromHost());
         channelAssignments.push_back(
-            b.getNamedAttr(ch.name, cosim.getNameAttr()));
+            b.getNamedAttr(ch.name, cosim.getIdAttr()));
       }
     }
 
@@ -121,7 +121,7 @@ static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
             loc, clk, rst, pack.getFromChannels()[chanIdx++],
             toStringAttr(req.getRelativeAppIDPathAttr(), ch.name));
         channelAssignments.push_back(
-            b.getNamedAttr(ch.name, cosim.getNameAttr()));
+            b.getNamedAttr(ch.name, cosim.getIdAttr()));
       }
     }
 

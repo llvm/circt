@@ -332,6 +332,7 @@ LogicalResult CosimToHostLowering::matchAndRewrite(
 
   // Set all the parameters.
   SmallVector<Attribute, 8> params;
+  params.push_back(ParamDeclAttr::get("ENDPOINT_ID", ep.getIdAttr()));
   params.push_back(ParamDeclAttr::get("TO_HOST_TYPE_ID", getTypeID(type)));
   params.push_back(ParamDeclAttr::get("TO_HOST_SIZE_BITS",
                                       rewriter.getI32IntegerAttr(width)));
@@ -356,7 +357,7 @@ LogicalResult CosimToHostLowering::matchAndRewrite(
       castedSendData.getResult(),
   };
   auto cosimEpModule = rewriter.create<InstanceOp>(
-      loc, endpoint, ep.getNameAttr(), operands, ArrayAttr::get(ctxt, params));
+      loc, endpoint, ep.getIdAttr(), operands, ArrayAttr::get(ctxt, params));
   sendReady.setValue(cosimEpModule.getResult(0));
 
   // Replace the CosimEndpointOp op.
@@ -397,6 +398,7 @@ LogicalResult CosimFromHostLowering::matchAndRewrite(
 
   // Set all the parameters.
   SmallVector<Attribute, 8> params;
+  params.push_back(ParamDeclAttr::get("ENDPOINT_ID", ep.getIdAttr()));
   params.push_back(ParamDeclAttr::get("FROM_HOST_TYPE_ID", getTypeID(type)));
   params.push_back(ParamDeclAttr::get("FROM_HOST_SIZE_BITS",
                                       rewriter.getI32IntegerAttr(width)));
@@ -410,12 +412,9 @@ LogicalResult CosimFromHostLowering::matchAndRewrite(
       builder.declareCosimEndpointFromHostModule(symTable);
 
   // Create replacement Cosim_Endpoint instance.
-  StringAttr nameAttr = ep->getAttr("name").dyn_cast_or_null<StringAttr>();
-  StringRef name = nameAttr ? nameAttr.getValue() : "CosimEndpointOp";
   Value operands[] = {adaptor.getClk(), adaptor.getRst(), recvReady};
-
   auto cosimEpModule = rewriter.create<InstanceOp>(
-      loc, endpoint, name, operands, ArrayAttr::get(ctxt, params));
+      loc, endpoint, ep.getIdAttr(), operands, ArrayAttr::get(ctxt, params));
 
   // Set up the injest path.
   Value recvDataFromCosim = cosimEpModule.getResult(1);
