@@ -44,8 +44,7 @@ def InstanceOp : HardwareDeclOp<"instance", [
     DeclareOpInterfaceMethods<FInstanceLike>,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>,
     DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface, [
-      "getModuleName",
-      "getReferencedModuleSlow"
+      "getModuleName"
     ]>,
   ]> {
   let summary = "Instantiate an instance of a module";

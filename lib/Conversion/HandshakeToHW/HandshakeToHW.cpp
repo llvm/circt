@@ -322,7 +322,9 @@ static LogicalResult convertExtMemoryOps(HWModuleOp mod) {
     // Get the attached extmemory external module.
     auto extmemInstance = cast<hw::InstanceOp>(*arg.getUsers().begin());
     auto extmemMod =
-        cast<hw::HWModuleExternOp>(extmemInstance.getReferencedModuleSlow());
+        cast<hw::HWModuleExternOp>(SymbolTable::lookupNearestSymbolFrom(
+            extmemInstance, extmemInstance.getReferencedModuleNameAttr()));
+
     ModulePortInfo portInfo(extmemMod.getPortList());
 
     // The extmemory external module's interface is a direct wrapping of the

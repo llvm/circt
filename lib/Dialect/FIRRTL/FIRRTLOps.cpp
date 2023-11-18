@@ -1913,18 +1913,11 @@ bool ExtClassOp::canDiscardOnUseEmpty() {
 // Declarations
 //===----------------------------------------------------------------------===//
 
-/// Lookup the module or extmodule for the symbol.  This returns null on
-/// invalid IR.
-Operation *InstanceOp::getReferencedModuleSlow() {
+SmallVector<::circt::hw::PortInfo> InstanceOp::getPortList() {
   auto circuit = (*this)->getParentOfType<CircuitOp>();
   if (!circuit)
-    return nullptr;
-
-  return circuit.lookupSymbol<FModuleLike>(getModuleNameAttr());
-}
-
-SmallVector<::circt::hw::PortInfo> InstanceOp::getPortList() {
-  return cast<hw::PortList>(getReferencedModuleSlow()).getPortList();
+    llvm::report_fatal_error("instance op not in circuit");
+  return circuit.lookupSymbol<hw::PortList>(getModuleNameAttr()).getPortList();
 }
 
 void InstanceOp::build(OpBuilder &builder, OperationState &result,
@@ -2928,14 +2921,6 @@ ClassLike ObjectOp::getReferencedClass(const SymbolTable &symbolTable) {
 
 Operation *ObjectOp::getReferencedModule(const SymbolTable &symtbl) {
   return getReferencedClass(symtbl);
-}
-
-Operation *ObjectOp::getReferencedModuleSlow() {
-  auto circuit = (*this)->getParentOfType<CircuitOp>();
-  if (!circuit)
-    return nullptr;
-
-  return circuit.lookupSymbol<ClassLike>(getClassNameAttr());
 }
 
 StringRef ObjectOp::getInstanceName() { return getName(); }
