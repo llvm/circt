@@ -41,6 +41,7 @@ class HardwareDeclOp<string mnemonic, list <Trait> traits = []> :
       "firrtl::WhenOp", "firrtl::MatchOp"]>]> {}
 
 def InstanceOp : HardwareDeclOp<"instance", [
+    DeclareOpInterfaceMethods<FInstanceLike>,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>,
     DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface, [
       "getModuleName",
@@ -597,10 +598,12 @@ def ClockGateIntrinsicOp : FIRRTLOp<"int.clock_gate", [Pure]> {
 def ObjectOp :  FIRRTLOp<"object", [
     ParentOneOf<["firrtl::FModuleOp, firrtl::ClassOp"]>,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+    DeclareOpInterfaceMethods<FInstanceLike, [
+      "getReferencedModule"
+    ]>,
     DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface, [
       "getReferencedModuleName",
       "getReferencedModuleNameAttr",
-      "getReferencedModule",
       "getReferencedModuleSlow"
     ]>,
     DeclareOpInterfaceMethods<OpAsmOpInterface, [

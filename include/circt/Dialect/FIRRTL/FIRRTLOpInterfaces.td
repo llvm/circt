@@ -356,6 +356,23 @@ def FModuleLike : OpInterface<"FModuleLike", [Symbol, PortList, InstanceGraphMod
   }];
 }
 
+def FInstanceLike : OpInterface<"FInstanceLike", [
+  InstanceGraphInstanceOpInterface
+]> {
+  let cppNamespace = "circt::firrtl";
+  let description = "Provide common  instance information.";
+
+  let methods = [
+    InterfaceMethod<"Get the referenced module via a symbol table.",
+    "::mlir::Operation *", "getReferencedModule",
+    (ins "const SymbolTable&":$symtbl),
+    /*methodBody=*/[{}],
+    /*defaultImplementation=*/[{
+      return symtbl.lookup($_op.getReferencedModuleName());
+    }]>,
+  ];
+}
+
 def ClassLike : OpInterface<"ClassLike", [FModuleLike]> {
   let cppNamespace = "circt::firrtl";
   let description = "Provide common class information.";

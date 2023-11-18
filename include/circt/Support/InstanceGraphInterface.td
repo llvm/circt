@@ -49,15 +49,7 @@ def InstanceGraphInstanceOpInterface : OpInterface<"InstanceOpInterface"> {
     /*defaultImplementation=*/[{
         return SymbolTable::lookupNearestSymbolFrom(
             $_op, getReferencedModuleNameAttr());
-    }]>,
-
-    InterfaceMethod<"Get the referenced module via a symbol table.",
-    "::mlir::Operation *", "getReferencedModule",
-    (ins "const SymbolTable&":$symtbl),
-    /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{
-      return symtbl.lookup(getReferencedModuleName());
-    }]>,
+    }]>
   ];
 }
 
