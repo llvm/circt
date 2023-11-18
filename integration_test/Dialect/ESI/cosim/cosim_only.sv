@@ -33,6 +33,7 @@ module top(
     logic [31:0] DataIn;
 
     Cosim_Endpoint_FromHost #(
+        .ENDPOINT_ID("fromHost"),
         .FROM_HOST_TYPE_ID("i24"),
         .FROM_HOST_SIZE_BITS(24)
     ) fromHost (
@@ -40,6 +41,7 @@ module top(
     );
 
     Cosim_Endpoint_ToHost #(
+        .ENDPOINT_ID("toHost"),
         .TO_HOST_TYPE_ID("i32"),
         .TO_HOST_SIZE_BITS(32)
     ) toHost (

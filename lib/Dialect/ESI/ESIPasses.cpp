@@ -181,6 +181,8 @@ ESIHWBuilder::declareCosimEndpointToHostModule(Operation *symTable) {
 
   SmallVector<Attribute, 8> params;
   params.push_back(
+      ParamDeclAttr::get("ENDPOINT_ID", NoneType::get(getContext())));
+  params.push_back(
       ParamDeclAttr::get("TO_HOST_TYPE_ID", NoneType::get(getContext())));
   params.push_back(ParamDeclAttr::get("TO_HOST_SIZE_BITS", getI32Type()));
 
@@ -206,6 +208,8 @@ ESIHWBuilder::declareCosimEndpointFromHostModule(Operation *symTable) {
     return *declaredCosimEndpointFromHostModule;
 
   SmallVector<Attribute, 8> params;
+  params.push_back(
+      ParamDeclAttr::get("ENDPOINT_ID", NoneType::get(getContext())));
   params.push_back(
       ParamDeclAttr::get("FROM_HOST_TYPE_ID", NoneType::get(getContext())));
   params.push_back(ParamDeclAttr::get("FROM_HOST_SIZE_BITS", getI32Type()));

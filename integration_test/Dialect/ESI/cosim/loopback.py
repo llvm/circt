@@ -13,8 +13,8 @@ class LoopbackTester(esi_cosim.CosimBase):
     assert len(ifaces) > 0
 
   def test_two_chan_loopback(self, num_msgs):
-    to_hw = self.openEP("top.loopback_inst5B05D_loopback_tohw_recv")
-    from_hw = self.openEP("top.loopback_inst5B05D_loopback_fromhw_send")
+    to_hw = self.openEP("loopback_inst[0].loopback_tohw.recv")
+    from_hw = self.openEP("loopback_inst[0].loopback_fromhw.send")
     for _ in range(num_msgs):
       i = random.randint(0, 2**8 - 1)
       print(f"Sending {i}")
@@ -38,8 +38,8 @@ class LoopbackTester(esi_cosim.CosimBase):
     return i
 
   def test_3bytes(self, num_msgs=50):
-    send_ep = self.openEP("top.fromHost", from_host_type="i24")
-    recv_ep = self.openEP("top.toHost", to_host_type="i32")
+    send_ep = self.openEP("fromHost", from_host_type="i24")
+    recv_ep = self.openEP("toHost", to_host_type="i32")
     print("Testing writes")
     dataSent = list()
     for _ in range(num_msgs):

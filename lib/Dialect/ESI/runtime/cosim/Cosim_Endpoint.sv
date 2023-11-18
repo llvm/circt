@@ -16,7 +16,7 @@ import Cosim_DpiPkg::*;
 
 module Cosim_Endpoint_ToHost
 #(
-  parameter string ENDPOINT_ID_EXT = "",
+  parameter string ENDPOINT_ID = "",
   parameter string TO_HOST_TYPE_ID = "",
   parameter int TO_HOST_SIZE_BITS = -1
 )
@@ -28,13 +28,6 @@ module Cosim_Endpoint_ToHost
   output logic DataInReady,
   input  logic [TO_HOST_SIZE_BITS-1:0] DataIn
 );
-
-  string ENDPOINT_ID_BASE = $sformatf("%m");
-  string ENDPOINT_ID;
-  if (ENDPOINT_ID_EXT != "")
-    assign ENDPOINT_ID = $sformatf("%s.%s", ENDPOINT_ID_BASE, ENDPOINT_ID_EXT);
-  else
-    assign ENDPOINT_ID = ENDPOINT_ID_BASE;
 
   initial begin
     int rc;
@@ -100,7 +93,7 @@ endmodule
 
 module Cosim_Endpoint_FromHost
 #(
-  parameter string ENDPOINT_ID_EXT = "",
+  parameter string ENDPOINT_ID = "",
   parameter string FROM_HOST_TYPE_ID = "",
   parameter int FROM_HOST_SIZE_BITS = -1
 )
@@ -112,13 +105,6 @@ module Cosim_Endpoint_FromHost
   input  logic DataOutReady,
   output logic [FROM_HOST_SIZE_BITS-1:0] DataOut
 );
-
-  string ENDPOINT_ID_BASE = $sformatf("%m");
-  string ENDPOINT_ID;
-  if (ENDPOINT_ID_EXT != "")
-    assign ENDPOINT_ID = $sformatf("%s.%s", ENDPOINT_ID_BASE, ENDPOINT_ID_EXT);
-  else
-    assign ENDPOINT_ID = ENDPOINT_ID_BASE;
 
   // Handle initialization logic.
   initial begin
