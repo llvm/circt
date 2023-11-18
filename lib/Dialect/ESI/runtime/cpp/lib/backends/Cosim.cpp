@@ -71,7 +71,10 @@ struct esi::backends::cosim::CosimAccelerator::Impl {
   kj::WaitScope &waitScope;
   CosimDpiServer::Client cosim;
   EsiLowLevel::Client lowLevel;
-  set<CosimChannelPort *> channels;
+
+  // We own all channels connected to rpcClient since their lifetime is tied to
+  // rpcClient.
+  set<unique_ptr<CosimChannelPort>> channels;
 
   Impl(string hostname, uint16_t port)
       : rpcClient(hostname, port), waitScope(rpcClient.getWaitScope()),
@@ -84,7 +87,6 @@ struct esi::backends::cosim::CosimAccelerator::Impl {
 };
 
 /// Construct and connect to a cosim server.
-// TODO: Implement this.
 CosimAccelerator::CosimAccelerator(string hostname, uint16_t port) {
   impl = make_unique<Impl>(hostname, port);
 }
@@ -139,12 +141,12 @@ private:
 } // namespace
 
 namespace {
+/// Parent class for read and write channel ports.
 class CosimChannelPort {
 public:
   CosimChannelPort(CosimAccelerator::Impl &impl, string name)
-      : impl(impl), name(name), isConnected(false), ep(nullptr) {
-    impl.channels.insert(this);
-  }
+      : impl(impl), name(name), isConnected(false), ep(nullptr) {}
+  virtual ~CosimChannelPort() {}
 
   void connect();
   void disconnect();
@@ -158,11 +160,18 @@ protected:
 } // namespace
 
 esi::backends::cosim::CosimAccelerator::Impl::~Impl() {
-  for (CosimChannelPort *ccp : channels)
+  // Make sure all channels are disconnected before rpcClient gets deconstructed
+  // or it'll throw an exception.
+  for (auto &ccp : channels)
     ccp->disconnect();
 }
 
 void CosimChannelPort::connect() {
+  if (isConnected)
+    return;
+
+  // Linear search through the list of cosim endpoints. Slow, but good enough as
+  // connect isn't expected to be called often.
   auto listResp = impl.cosim.listRequest().send().wait(impl.waitScope);
   for (auto iface : listResp.getIfaces())
     if (iface.getEndpointID() == name) {
@@ -181,6 +190,7 @@ void CosimChannelPort::disconnect() {
     return;
   ep.closeRequest().send().wait(impl.waitScope);
   ep = nullptr;
+  isConnected = false;
 }
 
 namespace {
@@ -190,6 +200,7 @@ public:
   virtual ~WriteCosimChannelPort() throw() = default;
 
   virtual void connect() override { CosimChannelPort::connect(); }
+  virtual void disconnect() override { CosimChannelPort::disconnect(); }
   virtual void write(const void *data, size_t size) override;
 };
 } // namespace
@@ -211,6 +222,7 @@ public:
   virtual ~ReadCosimChannelPort() throw() = default;
 
   virtual void connect() override { CosimChannelPort::connect(); }
+  virtual void disconnect() override { CosimChannelPort::disconnect(); }
   virtual ssize_t read(void *data, size_t maxSize) override;
 };
 
@@ -223,6 +235,7 @@ ssize_t ReadCosimChannelPort::read(void *data, size_t maxSize) {
     return 0;
   capnp::Data::Reader msg = resp.getResp();
   size_t size = msg.size();
+  // TODO: buffer data over multiple calls.
   if (size > maxSize)
     return -1;
   memcpy(data, msg.begin(), size);
@@ -241,6 +254,9 @@ public:
     AppIDPath prefix = std::move(idPath);
     prefix.pop_back();
 
+    // TODO: Sanity check that the cosim service was actually used. If not, the
+    // code below will fail.
+
     // Get the channel assignments for each client.
     for (auto client : clients) {
       AppIDPath fullClientPath = prefix + client.relPath;
@@ -256,12 +272,14 @@ public:
   virtual map<string, ChannelPort &>
   requestChannelsFor(AppIDPath fullPath, const BundleType &bundleType,
                      BundlePort::Direction svcDir) override {
+    // Find the client details for the port at 'fullPath'.
     auto f = clientChannelAssignments.find(fullPath);
     if (f == clientChannelAssignments.end())
       throw runtime_error("Could not find channel assignments for '" +
                           fullPath.toStr() + "'");
     const map<string, string> &channelAssignments = f->second;
 
+    // Each channel in a bundle has a separate cosim endpoint. Find them all.
     map<string, ChannelPort &> channels;
     for (auto [name, dir, type] : bundleType.getChannels()) {
       auto f = channelAssignments.find(name);
@@ -270,17 +288,19 @@ public:
                             fullPath.toStr() + "." + name + "'");
       string channelName = f->second;
 
-      ChannelPort *port;
+      CosimChannelPort *port;
       if (BundlePort::isWrite(dir, svcDir))
         port = new WriteCosimChannelPort(impl, channelName);
       else
         port = new ReadCosimChannelPort(impl, channelName);
-      channels.emplace(name, *port);
+      impl.channels.emplace(port);
+      channels.emplace(name, *dynamic_cast<ChannelPort *>(port));
     }
     return channels;
   }
 
 private:
+  // Map from client path to channel assignments for that client.
   map<AppIDPath, map<string, string>> clientChannelAssignments;
   CosimAccelerator::Impl &impl;
 };

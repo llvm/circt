@@ -24,7 +24,15 @@ send.connect()
 
 data = [24]
 recv.write(data)
-resp = send.read(1)
-assert resp == data
+resp = []
+# Reads are non-blocking, so we need to poll.
+while resp == []:
+  resp = send.read(1)
+
+# Trace platform intentionally produces random responses.
+if platform != "trace":
+  print(f"data: {data}")
+  print(f"resp: {resp}")
+  assert resp == data
 
 print("PASS")
