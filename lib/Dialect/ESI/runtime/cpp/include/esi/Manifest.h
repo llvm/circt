@@ -36,17 +36,28 @@ namespace esi {
 //===----------------------------------------------------------------------===//
 
 struct AppID {
-  const std::string name;
-  const std::optional<uint32_t> idx;
+  std::string name;
+  std::optional<uint32_t> idx;
+
+  AppID(const std::string &name, std::optional<uint32_t> idx)
+      : name(name), idx(idx) {}
+  AppID(const AppID &) = default;
 
   bool operator==(const AppID &other) const {
     return name == other.name && idx == other.idx;
   }
   bool operator!=(const AppID &other) const { return !(*this == other); }
 };
-using AppIDPath = std::vector<AppID>;
+
+class AppIDPath : public std::vector<AppID> {
+public:
+  using std::vector<AppID>::vector;
+
+  AppIDPath operator+(const AppIDPath &b);
+  std::string toStr() const;
+};
 bool operator<(const AppIDPath &a, const AppIDPath &b);
-std::ostream &operator<<(std::ostream &, const AppIDPath &);
+std::ostream &operator<<(std::ostream &, const esi::AppIDPath &);
 
 struct ModuleInfo {
   const std::optional<std::string> name;
@@ -67,7 +78,7 @@ struct ServicePortDesc {
 /// A description of a hardware client. Used pretty exclusively in setting up
 /// the design.
 struct HWClientDetail {
-  AppIDPath path;
+  AppIDPath relPath;
   ServicePortDesc port;
   std::map<std::string, std::any> implOptions;
 };

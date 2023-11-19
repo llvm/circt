@@ -269,12 +269,13 @@ Manifest::Impl::getService(AppIDPath idPath, Accelerator &acc,
     HWClientDetail clientDetail;
     for (auto &detail : client.items()) {
       if (detail.key() == "relAppIDPath")
-        clientDetail.path = parseIDPath(detail.value());
+        clientDetail.relPath = parseIDPath(detail.value());
       else if (detail.key() == "port")
         clientDetail.port = parseServicePort(detail.value());
       else
         clientDetail.implOptions[detail.key()] = getAny(detail.value());
     }
+    clientDetails.push_back(clientDetail);
   }
 
   // Get the implementation details.
@@ -495,6 +496,18 @@ ostream &operator<<(ostream &os, const ModuleInfo &m) {
 }
 
 namespace esi {
+AppIDPath AppIDPath::operator+(const AppIDPath &b) {
+  AppIDPath ret = *this;
+  ret.insert(ret.end(), b.begin(), b.end());
+  return ret;
+}
+
+string AppIDPath::toStr() const {
+  ostringstream os;
+  os << *this;
+  return os.str();
+}
+
 bool operator<(const AppID &a, const AppID &b) {
   if (a.name != b.name)
     return a.name < b.name;

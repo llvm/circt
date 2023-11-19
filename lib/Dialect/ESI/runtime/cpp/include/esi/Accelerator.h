@@ -48,6 +48,8 @@ constexpr uint32_t ExpectedVersionNumber = 0;
 class ChannelPort {
 public:
   virtual ~ChannelPort() = default;
+  virtual void connect() {}
+  virtual void disconnect() {}
 };
 
 /// A ChannelPort which sends data to the accelerator.
@@ -95,8 +97,9 @@ public:
   requestChannelsFor(AppIDPath, const BundleType &,
                      BundlePort::Direction portDir) = 0;
 
-private:
+protected:
   std::string serviceSymbol;
+  AppIDPath id;
 };
 } // namespace services
 

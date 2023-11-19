@@ -49,7 +49,9 @@ class BundlePort:
 
 
 class ChannelPort:
-  pass
+
+  def connect(self) -> None:
+    ...
 
 
 class Design:

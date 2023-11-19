@@ -222,7 +222,7 @@ kj::Promise<void> CosimServer::open(OpenContext ctxt) {
   auto gotLock = ep->setInUse();
   KJ_REQUIRE(gotLock, "Endpoint in use");
 
-  ctxt.getResults().setIface(
+  ctxt.getResults().setEndpoint(
       EsiDpiEndpoint::Client(kj::heap<EndpointServer>(*ep)));
   return kj::READY_NOW;
 }

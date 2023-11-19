@@ -31,6 +31,8 @@ namespace cosim {
 /// Connect to an ESI simulation.
 class CosimAccelerator : public esi::Accelerator {
 public:
+  struct Impl;
+
   CosimAccelerator(std::string hostname, uint16_t port);
   static std::unique_ptr<Accelerator> connect(std::string connectionString);
 
@@ -40,7 +42,6 @@ protected:
                                  const HWClientDetails &clients) override;
 
 private:
-  struct Impl;
   std::unique_ptr<Impl> impl;
 };
 
