@@ -118,7 +118,7 @@ static AppID parseID(const nlohmann::json &jsonID) {
   optional<uint32_t> idx;
   if (jsonID.contains("index"))
     idx = jsonID.at("index").get<uint32_t>();
-  return AppID{jsonID.at("name").get<string>(), idx};
+  return AppID(jsonID.at("name").get<string>(), idx);
 }
 
 static AppIDPath parseIDPath(const nlohmann::json &jsonIDPath) {

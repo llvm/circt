@@ -39,15 +39,16 @@ struct AppID {
   std::string name;
   std::optional<uint32_t> idx;
 
-  AppID(const std::string &name, std::optional<uint32_t> idx)
-      : name(name), idx(idx) {}
   AppID(const AppID &) = default;
+  AppID(std::string name, std::optional<uint32_t> idx = std::nullopt)
+      : name(name), idx(idx) {}
 
   bool operator==(const AppID &other) const {
     return name == other.name && idx == other.idx;
   }
   bool operator!=(const AppID &other) const { return !(*this == other); }
 };
+bool operator<(const AppID &a, const AppID &b);
 
 class AppIDPath : public std::vector<AppID> {
 public:

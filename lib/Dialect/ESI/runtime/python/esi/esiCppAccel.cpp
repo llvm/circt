@@ -25,6 +25,24 @@ namespace py = pybind11;
 using namespace esi;
 using namespace esi::services;
 
+namespace pybind11 {
+/// Pybind11 needs a little help downcasting with non-bound instances.
+template <>
+struct polymorphic_type_hook<ChannelPort> {
+  static const void *get(const ChannelPort *port, const std::type_info *&type) {
+    if (auto p = dynamic_cast<const WriteChannelPort *>(port)) {
+      type = &typeid(WriteChannelPort);
+      return p;
+    }
+    if (auto p = dynamic_cast<const ReadChannelPort *>(port)) {
+      type = &typeid(ReadChannelPort);
+      return p;
+    }
+    return port;
+  }
+};
+} // namespace pybind11
+
 // NOLINTNEXTLINE(readability-identifier-naming)
 PYBIND11_MODULE(esiCppAccel, m) {
   py::class_<ModuleInfo>(m, "ModuleInfo")
@@ -53,6 +71,8 @@ PYBIND11_MODULE(esiCppAccel, m) {
       .def("write", &services::MMIO::write);
 
   py::class_<AppID>(m, "AppID")
+      .def(py::init<std::string, std::optional<uint32_t>>(), py::arg("name"),
+           py::arg("idx") = std::nullopt)
       .def_property_readonly("name", [](AppID &id) { return id.name; })
       .def_property_readonly("idx",
                              [](AppID &id) -> py::object {
@@ -60,12 +80,19 @@ PYBIND11_MODULE(esiCppAccel, m) {
                                  return py::cast(id.idx);
                                return py::none();
                              })
-      .def("__repr__", [](AppID &id) {
-        std::string ret = "<" + id.name;
-        if (id.idx)
-          ret = ret + "[" + std::to_string(*id.idx) + "]";
-        ret = ret + ">";
-        return ret;
+      .def("__repr__",
+           [](AppID &id) {
+             std::string ret = "<" + id.name;
+             if (id.idx)
+               ret = ret + "[" + std::to_string(*id.idx) + "]";
+             ret = ret + ">";
+             return ret;
+           })
+      .def("__eq__", [](AppID &a, AppID &b) { return a == b; })
+      .def("__hash__", [](AppID &id) {
+        // TODO: This is a bad hash function. Replace it.
+        return std::hash<std::string>{}(id.name) ^
+               (std::hash<uint32_t>{}(id.idx.value_or(-1)) << 1);
       });
 
   py::class_<ChannelPort>(m, "ChannelPort")
@@ -86,6 +113,9 @@ PYBIND11_MODULE(esiCppAccel, m) {
       });
 
   py::class_<BundlePort>(m, "BundlePort")
+      .def_property_readonly("id", &BundlePort::getID)
+      .def_property_readonly("channels", &BundlePort::getChannels,
+                             py::return_value_policy::reference)
       .def("getWrite", &BundlePort::getRawWrite,
            py::return_value_policy::reference)
       .def("getRead", &BundlePort::getRawRead,
@@ -105,15 +135,8 @@ PYBIND11_MODULE(esiCppAccel, m) {
 
   // Since this returns a vector of Instance*, we need to define Instance first
   // or else pybind11-stubgen complains.
-  design.def_property_readonly(
-      "children",
-      [](Design &d) -> std::vector<Instance *> {
-        std::vector<Instance *> ret;
-        for (auto &c : d.getChildren())
-          ret.push_back(c.get());
-        return ret;
-      },
-      py::return_value_policy::reference);
+  design.def_property_readonly("children", &Design::getChildren,
+                               py::return_value_policy::reference_internal);
 
   py::class_<Accelerator>(m, "Accelerator")
       .def(py::init(&registry::connect))
