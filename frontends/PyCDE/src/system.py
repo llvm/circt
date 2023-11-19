@@ -247,8 +247,6 @@ class System:
       # defined so we can go through and output the typedefs delcarations.
       lambda sys: TypeAlias.declare_aliases(sys.mod),
       "builtin.module(lower-hwarith-to-hw, msft-lower-constructs, msft-lower-instances)",
-      # "builtin.module(esi-emit-cpp-api{{output-file=ESISystem.h}})",
-      "builtin.module(esi-emit-collateral{{tops={tops} schema-file=schema.capnp}})",
       "builtin.module(esi-clean-metadata)",
       "builtin.module(hw.module(lower-seq-hlmem))",
       "builtin.module(lower-esi-to-physical)",
@@ -436,8 +434,8 @@ class _OpCache:
 
   def get_symbol_pyproxy(self, symbol):
     """Get the _PyProxy for a symbol."""
-    if isinstance(symbol, ir.FlatSymbolRefAttr):
-      symbol = symbol.value
+    if isinstance(symbol, ir.Attribute):
+      symbol = ir.FlatSymbolRefAttr(symbol).value
     return self._symbol_pyproxy[symbol]
 
   def get_pyproxy_symbol(self, spec_mod) -> str:
