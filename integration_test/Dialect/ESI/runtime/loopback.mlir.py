@@ -11,15 +11,16 @@ print(m.type_table)
 
 d = m.build_design(acc)
 
-appid = d.children[0].id
+loopback = d.children[esi.AppID("loopback_inst", 0)]
+appid = loopback.id
 print(appid)
 assert appid.name == "loopback_inst"
 assert appid.idx == 0
 
-recv = d.children[0].ports[0].getWrite("recv")
+recv = loopback.ports[esi.AppID("loopback_tohw")].channels["recv"]
 recv.connect()
 
-send = d.children[0].ports[1].getRead("send")
+send = loopback.ports[esi.AppID("loopback_fromhw")].channels["send"]
 send.connect()
 
 data = [24]

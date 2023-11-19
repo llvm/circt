@@ -62,11 +62,17 @@ public:
   /// Construct a port.
   BundlePort(AppID id, std::map<std::string, ChannelPort &> channels);
 
+  /// Get the ID of the port.
+  AppID getID() const { return _id; }
+
   /// Get access to the raw byte streams of a channel. Intended for internal
   /// usage and binding to other languages (e.g. Python) which have their own
   /// message serialization code.
   WriteChannelPort &getRawWrite(const std::string &name) const;
   ReadChannelPort &getRawRead(const std::string &name) const;
+  const std::map<std::string, ChannelPort &> &getChannels() const {
+    return _channels;
+  }
 
 private:
   AppID _id;
@@ -78,21 +84,25 @@ public:
   Design(std::optional<ModuleInfo> info,
          std::vector<std::unique_ptr<Instance>> children,
          std::vector<services::Service *> services,
-         std::vector<BundlePort> ports)
-      : info(info), children(std::move(children)), services(services),
-        ports(ports) {}
+         std::vector<BundlePort> ports);
 
   std::optional<ModuleInfo> getInfo() const { return info; }
-  const std::vector<std::unique_ptr<Instance>> &getChildren() const {
+  const std::vector<std::unique_ptr<Instance>> &getChildrenOrdered() const {
     return children;
   }
-  const std::vector<BundlePort> &getPorts() const { return ports; }
+  const std::map<AppID, Instance *> &getChildren() const { return childIndex; }
+  const std::vector<BundlePort> &getPortsOrdered() const { return ports; }
+  const std::map<AppID, const BundlePort &> &getPorts() const {
+    return portIndex;
+  }
 
 protected:
   const std::optional<ModuleInfo> info;
   const std::vector<std::unique_ptr<Instance>> children;
+  const std::map<AppID, Instance *> childIndex;
   const std::vector<services::Service *> services;
   const std::vector<BundlePort> ports;
+  const std::map<AppID, const BundlePort &> portIndex;
 };
 
 class Instance : public Design {

@@ -27,6 +27,15 @@ class Accelerator:
 
 class AppID:
 
+  def __eq__(self, arg0: AppID) -> bool:
+    ...
+
+  def __hash__(self) -> int:
+    ...
+
+  def __init__(self, name: str, idx: int | None = None) -> None:
+    ...
+
   def __repr__(self) -> str:
     ...
 
@@ -47,6 +56,14 @@ class BundlePort:
   def getWrite(self, arg0: str) -> WriteChannelPort:
     ...
 
+  @property
+  def channels(self) -> dict[str, ChannelPort]:
+    ...
+
+  @property
+  def id(self) -> AppID:
+    ...
+
 
 class ChannelPort:
 
@@ -57,7 +74,7 @@ class ChannelPort:
 class Design:
 
   @property
-  def children(self) -> list[Instance]:
+  def children(self) -> dict[AppID, Instance]:
     ...
 
   @property
@@ -65,7 +82,7 @@ class Design:
     ...
 
   @property
-  def ports(self) -> list[BundlePort]:
+  def ports(self) -> dict[AppID, BundlePort]:
     ...
 
 
