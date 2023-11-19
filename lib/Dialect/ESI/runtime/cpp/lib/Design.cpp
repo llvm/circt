@@ -41,6 +41,7 @@ ReadChannelPort &BundlePort::getRawRead(const string &name) const {
   return *read;
 }
 
+/// Build an index of children by AppID.
 static map<AppID, Instance *>
 buildIndex(const vector<unique_ptr<Instance>> &insts) {
   map<AppID, Instance *> index;
@@ -49,6 +50,7 @@ buildIndex(const vector<unique_ptr<Instance>> &insts) {
   return index;
 }
 
+/// Build an index of ports by AppID.
 static map<AppID, const BundlePort &>
 buildIndex(const vector<BundlePort> &ports) {
   map<AppID, const BundlePort &> index;
