@@ -235,7 +235,8 @@ class TypeAlias(Type):
       for (name, type) in TypeAlias.RegisteredAliases.items():
         declared_aliases = [
             op for op in type_scope.body.operations
-            if isinstance(op, hw.TypedeclOp) and op.sym_name.value == name
+            if isinstance(op, hw.TypedeclOp) and
+            ir.StringAttr(op.sym_name).value == name
         ]
         if len(declared_aliases) != 0:
           continue

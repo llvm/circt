@@ -473,13 +473,12 @@ class ModuleBuilder(ModuleLikeBuilderBase):
     # supplied.
     if len(self.generators) == 0 and self.parameters is not None:
       parameters = self.parameters
-    from .circt.dialects import _hw_ops_ext as hwext
-    inst = hwext.InstanceBuilder(circt_mod,
-                                 instance_name,
-                                 circt_inputs,
-                                 parameters=parameters,
-                                 sym_name=instance_name,
-                                 loc=get_user_loc())
+    inst = hw.InstanceBuilder(circt_mod,
+                              instance_name,
+                              circt_inputs,
+                              parameters=parameters,
+                              sym_name=instance_name,
+                              loc=get_user_loc())
     inst.operation.verify()
     return inst
 
