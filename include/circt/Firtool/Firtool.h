@@ -35,7 +35,6 @@ public:
   enum BuildMode { BuildModeDefault, BuildModeDebug, BuildModeRelease };
   enum class RandomKind { None, Mem, Reg, All };
 
-
   bool isRandomEnabled(RandomKind kind) const {
     return disableRandom != RandomKind::All && disableRandom != kind;
   }
@@ -46,48 +45,80 @@ public:
       return firrtl::PreserveValues::Named;
     case BuildModeRelease:
       return firrtl::PreserveValues::None;
-      case BuildModeDefault:
+    case BuildModeDefault:
       return preserveMode;
     }
     llvm_unreachable("unknown build mode");
   }
 
-    StringRef getOutputFilename() const { return outputFilename; }
-    StringRef getOmirOutputFile() const { return omirOutFile; }
-    StringRef getBlackBoxRootPath() const { return blackBoxRootPath; }
-    StringRef getChiselInterfaceOutputDirectory() const { return chiselInterfaceOutDirectory; }
-    StringRef getReplaceSequentialMemoriesFile() const { return replSeqMemFile; }
-    StringRef getOutputAnnotationFilename() const { return outputAnnotationFilename; }
-    firrtl::PreserveAggregate::PreserveMode getPreserveAggregate() const { return preserveAggregate; }
-    firrtl::CompanionMode getCompanionMode() const { return companionMode; }
-    bool isDefaultOutputFilename() const { return outputFilename == "-"; }
-    bool shouldDisableUnknownAnnotations() const { return disableAnnotationsUnknown; }
-    bool shouldDisableClasslessAnnotations() const { return disableAnnotationsClassless; }
-    bool shouldLowerNoRefTypePortAnnotations() const { return lowerAnnotationsNoRefTypePorts; }
-    bool shouldReplicateSequentialMemories() const { return replSeqMem; }
-    bool shouldDisableOptimization() const { return disableOptimization; }
-    bool shouldLowerMemories() const { return lowerMemories; }
-    bool shouldDedup() const { return !noDedup; }
-    bool shouldEnableDebugInfo() const { return enableDebugInfo; }
-    bool shouldIgnoreReadEnableMemories() const { return ignoreReadEnableMem; }
-    bool shouldEmitOMIR() const { return emitOMIR; }
-    bool shouldExportChiselInterface() const { return exportChiselInterface; }
-    bool shouldDisableHoistingHWPassthrough() const { return disableHoistingHWPassthrough; }
-    bool shouldConvertVecOfBundle() const { return vbToBV; }
-    bool shouldEtcDisableInstanceExtraction() const { return etcDisableInstanceExtraction; }
-    bool shouldEtcDisableRegisterExtraction() const { return etcDisableRegisterExtraction; }
-    bool shouldEtcDisableModuleInlining() const { return etcDisableModuleInlining; }
-    bool shouldStripDebugInfo() const { return stripDebugInfo; }
-    bool shouldStripFirDebugInfo() const { return stripFirDebugInfo; }
-    bool shouldExportModuleHierarchy() const { return exportModuleHierarchy; }
-    bool shouldDisableAggressiveMergeConnections() const { return disableAggressiveMergeConnections; }
-    bool shouldEnableAnnotationWarning() const { return enableAnnotationWarning; }
-    bool shouldEmitChiselAssertsAsSVA() const { return emitChiselAssertsAsSVA; }
-    bool shouldEmitSeparateAlwaysBlocks() const { return emitSeparateAlwaysBlocks; }
-    bool shouldAddMuxPragmas() const { return addMuxPragmas; }
-    bool shouldAddVivadoRAMAddressConflictSynthesisBugWorkaround() const { return addVivadoRAMAddressConflictSynthesisBugWorkaround; }
-    bool shouldExtractTestCode() const { return extractTestCode; }
-    
+  StringRef getOutputFilename() const { return outputFilename; }
+  StringRef getOmirOutputFile() const { return omirOutFile; }
+  StringRef getBlackBoxRootPath() const { return blackBoxRootPath; }
+  StringRef getChiselInterfaceOutputDirectory() const {
+    return chiselInterfaceOutDirectory;
+  }
+  StringRef getReplaceSequentialMemoriesFile() const { return replSeqMemFile; }
+  StringRef getOutputAnnotationFilename() const {
+    return outputAnnotationFilename;
+  }
+
+  firrtl::PreserveAggregate::PreserveMode getPreserveAggregate() const {
+    return preserveAggregate;
+  }
+  firrtl::CompanionMode getCompanionMode() const { return companionMode; }
+
+  seq::ExternalizeClockGateOptions getClockGateOptions() const {
+    return {ckgModuleName, ckgInputName,      ckgOutputName,
+            ckgEnableName, ckgTestEnableName, "ckg"};
+  }
+
+  bool isDefaultOutputFilename() const { return outputFilename == "-"; }
+  bool shouldDisableUnknownAnnotations() const {
+    return disableAnnotationsUnknown;
+  }
+  bool shouldDisableClasslessAnnotations() const {
+    return disableAnnotationsClassless;
+  }
+  bool shouldLowerNoRefTypePortAnnotations() const {
+    return lowerAnnotationsNoRefTypePorts;
+  }
+  bool shouldReplicateSequentialMemories() const { return replSeqMem; }
+  bool shouldDisableOptimization() const { return disableOptimization; }
+  bool shouldLowerMemories() const { return lowerMemories; }
+  bool shouldDedup() const { return !noDedup; }
+  bool shouldEnableDebugInfo() const { return enableDebugInfo; }
+  bool shouldIgnoreReadEnableMemories() const { return ignoreReadEnableMem; }
+  bool shouldEmitOMIR() const { return emitOMIR; }
+  bool shouldExportChiselInterface() const { return exportChiselInterface; }
+  bool shouldDisableHoistingHWPassthrough() const {
+    return disableHoistingHWPassthrough;
+  }
+  bool shouldConvertVecOfBundle() const { return vbToBV; }
+  bool shouldEtcDisableInstanceExtraction() const {
+    return etcDisableInstanceExtraction;
+  }
+  bool shouldEtcDisableRegisterExtraction() const {
+    return etcDisableRegisterExtraction;
+  }
+  bool shouldEtcDisableModuleInlining() const {
+    return etcDisableModuleInlining;
+  }
+  bool shouldStripDebugInfo() const { return stripDebugInfo; }
+  bool shouldStripFirDebugInfo() const { return stripFirDebugInfo; }
+  bool shouldExportModuleHierarchy() const { return exportModuleHierarchy; }
+  bool shouldDisableAggressiveMergeConnections() const {
+    return disableAggressiveMergeConnections;
+  }
+  bool shouldEnableAnnotationWarning() const { return enableAnnotationWarning; }
+  bool shouldEmitChiselAssertsAsSVA() const { return emitChiselAssertsAsSVA; }
+  bool shouldEmitSeparateAlwaysBlocks() const {
+    return emitSeparateAlwaysBlocks;
+  }
+  bool shouldAddMuxPragmas() const { return addMuxPragmas; }
+  bool shouldAddVivadoRAMAddressConflictSynthesisBugWorkaround() const {
+    return addVivadoRAMAddressConflictSynthesisBugWorkaround;
+  }
+  bool shouldExtractTestCode() const { return extractTestCode; }
 
 private:
   std::string outputFilename;

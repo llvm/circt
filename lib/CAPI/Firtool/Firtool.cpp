@@ -30,28 +30,28 @@ FirtoolOptions firtoolOptionsCreateDefault() {
 void firtoolOptionsDestroy(FirtoolOptions options) { delete unwrap(options); }
 
 #define DEFINE_FIRTOOL_OPTION_STRING(name, field)                              \
-  void firtoolOptionsSet##name(FirtoolOptions options, MlirStringRef value) {  \
-    unwrap(options)->field = unwrap(value).str();                              \
-  }                                                                            \
-  MlirStringRef firtoolOptionsGet##name(FirtoolOptions options) {              \
-    return wrap(unwrap(options)->field.getValue());                            \
-  }
+  //  void firtoolOptionsSet##name(FirtoolOptions options, MlirStringRef value) {  \
+//    unwrap(options)->field = unwrap(value).str();                              \
+//  }                                                                            \
+//  MlirStringRef firtoolOptionsGet##name(FirtoolOptions options) {              \
+//    return wrap(unwrap(options)->field.getValue());                            \
+//  }
 
 #define DEFINE_FIRTOOL_OPTION_BOOL(name, field)                                \
-  void firtoolOptionsSet##name(FirtoolOptions options, bool value) {           \
-    unwrap(options)->field = value;                                            \
-  }                                                                            \
-  bool firtoolOptionsGet##name(FirtoolOptions options) {                       \
-    return unwrap(options)->field;                                             \
-  }
+  //  void firtoolOptionsSet##name(FirtoolOptions options, bool value) {           \
+//    unwrap(options)->field = value;                                            \
+//  }                                                                            \
+//  bool firtoolOptionsGet##name(FirtoolOptions options) {                       \
+//    return unwrap(options)->field;                                             \
+//  }
 
 #define DEFINE_FIRTOOL_OPTION_ENUM(name, field, enum_type, c_to_cpp, cpp_to_c) \
-  void firtoolOptionsSet##name(FirtoolOptions options, enum_type value) {      \
-    unwrap(options)->field = c_to_cpp(value);                                  \
-  }                                                                            \
-  enum_type firtoolOptionsGet##name(FirtoolOptions options) {                  \
-    return cpp_to_c(unwrap(options)->field);                                   \
-  }
+  //  void firtoolOptionsSet##name(FirtoolOptions options, enum_type value) {      \
+//    unwrap(options)->field = c_to_cpp(value);                                  \
+//  }                                                                            \
+//  enum_type firtoolOptionsGet##name(FirtoolOptions options) {                  \
+//    return cpp_to_c(unwrap(options)->field);                                   \
+//  }
 
 DEFINE_FIRTOOL_OPTION_STRING(OutputFilename, outputFilename)
 DEFINE_FIRTOOL_OPTION_BOOL(DisableAnnotationsUnknown, disableAnnotationsUnknown)

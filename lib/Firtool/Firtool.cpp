@@ -31,7 +31,8 @@ LogicalResult firtool::populatePreprocessTransforms(mlir::PassManager &pm,
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createResolvePathsPass());
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerFIRRTLAnnotationsPass(
-      opt.shouldDisableUnknownAnnotations(), opt.shouldDisableClasslessAnnotations(),
+      opt.shouldDisableUnknownAnnotations(),
+      opt.shouldDisableClasslessAnnotations(),
       opt.shouldLowerNoRefTypePortAnnotations()));
 
   if (opt.shouldEnableDebugInfo())
@@ -67,7 +68,8 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferWidthsPass());
 
   pm.nest<firrtl::CircuitOp>().addPass(
-      firrtl::createMemToRegOfVecPass(opt.shouldReplicateSequentialMemories(), opt.shouldIgnoreReadEnableMemories()));
+      firrtl::createMemToRegOfVecPass(opt.shouldReplicateSequentialMemories(),
+                                      opt.shouldIgnoreReadEnableMemories()));
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferResetsPass());
 
@@ -157,8 +159,9 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
 
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createAddSeqMemPortsPass());
 
-  pm.addPass(firrtl::createCreateSiFiveMetadataPass(opt.shouldReplicateSequentialMemories(),
-                                                    opt.getReplaceSequentialMemoriesFile()));
+  pm.addPass(firrtl::createCreateSiFiveMetadataPass(
+      opt.shouldReplicateSequentialMemories(),
+      opt.getReplaceSequentialMemoriesFile()));
 
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createExtractInstancesPass());
 
@@ -217,8 +220,8 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
                                              const FirtoolOptions &opt) {
   // Remove TraceAnnotations and write their updated paths to an output
   // annotation file.
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createResolveTracesPass(
-        opt.getOutputAnnotationFilename()));
+  pm.nest<firrtl::CircuitOp>().addPass(
+      firrtl::createResolveTracesPass(opt.getOutputAnnotationFilename()));
 
   // Lower the ref.resolve and ref.send ops and remove the RefType ports.
   // LowerToHW cannot handle RefType so, this pass must be run to remove all
@@ -249,18 +252,19 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
 LogicalResult firtool::populateHWToSV(mlir::PassManager &pm,
                                       const FirtoolOptions &opt) {
   if (opt.shouldExtractTestCode())
-    pm.addPass(sv::createSVExtractTestCodePass(opt.shouldEtcDisableInstanceExtraction(),
-                                               opt.shouldEtcDisableRegisterExtraction(),
-                                               opt.shouldEtcDisableModuleInlining()));
+    pm.addPass(sv::createSVExtractTestCodePass(
+        opt.shouldEtcDisableInstanceExtraction(),
+        opt.shouldEtcDisableRegisterExtraction(),
+        opt.shouldEtcDisableModuleInlining()));
 
-  pm.addPass(seq::createExternalizeClockGatePass(opt.clockGateOpts));
+  pm.addPass(seq::createExternalizeClockGatePass(opt.getClockGateOptions()));
   pm.addPass(circt::createLowerSeqToSVPass(
       {/*disableRegRandomization=*/!opt.isRandomEnabled(
            FirtoolOptions::RandomKind::Reg),
        /*disableMemRandomization=*/
        !opt.isRandomEnabled(FirtoolOptions::RandomKind::Mem),
        /*emitSeparateAlwaysBlocks=*/
-       opt.emitSeparateAlwaysBlocks}));
+       opt.shouldEmitSeparateAlwaysBlocks()}));
   pm.addNestedPass<hw::HWModuleOp>(createLowerVerifToSVPass());
   pm.addPass(seq::createHWMemSimImplPass(
       {/*disableMemRandomization=*/!opt.isRandomEnabled(
@@ -316,7 +320,7 @@ populatePrepareForExportVerilog(mlir::PassManager &pm,
 
   // Emit module and testbench hierarchy JSON files.
   if (opt.shouldExportModuleHierarchy())
-    pm.addPass(sv::createHWExportModuleHierarchyPass(opt.getOutputFilename()));
+    pm.addPass(sv::createHWExportModuleHierarchyPass());
 
   // Check inner symbols and inner refs.
   pm.addPass(hw::createVerifyInnerRefNamespacePass());
@@ -371,9 +375,11 @@ namespace {
 /// need for global command line options.
 struct FirtoolCmdOptions {
   llvm::cl::opt<std::string> outputFilename{
-      "o", llvm::cl::desc("Output filename, or directory for split output"),
-      llvm::cl::value_desc("filename"), llvm::cl::init("-"),
-      };
+      "o",
+      llvm::cl::desc("Output filename, or directory for split output"),
+      llvm::cl::value_desc("filename"),
+      llvm::cl::init("-"),
+  };
 
   llvm::cl::opt<bool> disableAnnotationsUnknown{
       "disable-annotation-unknown",
@@ -394,7 +400,8 @@ struct FirtoolCmdOptions {
 
   llvm::cl::opt<circt::firrtl::PreserveAggregate::PreserveMode>
       preserveAggregate{
-          "preserve-aggregate", llvm::cl::desc("Specify input file format:"),
+          "preserve-aggregate",
+          llvm::cl::desc("Specify input file format:"),
           llvm::cl::values(
               clEnumValN(circt::firrtl::PreserveAggregate::None, "none",
                          "Preserve no aggregate"),
@@ -405,7 +412,7 @@ struct FirtoolCmdOptions {
               clEnumValN(circt::firrtl::PreserveAggregate::All, "all",
                          "Preserve vectors and bundles")),
           llvm::cl::init(circt::firrtl::PreserveAggregate::None),
-          };
+      };
 
   llvm::cl::opt<firrtl::PreserveValues::PreserveMode> preserveMode{
       "preserve-values",
@@ -426,18 +433,19 @@ struct FirtoolCmdOptions {
       llvm::cl::init(false)};
 
   // Build mode options.
-  llvm::cl::opt<FirtoolOptions::BuildMode> buildMode{
+  llvm::cl::opt<firtool::FirtoolOptions::BuildMode> buildMode{
       "O", llvm::cl::desc("Controls how much optimization should be performed"),
-      llvm::cl::values(clEnumValN(FirtoolOptions::BuildModeDebug, "debug",
+      llvm::cl::values(clEnumValN(firtool::FirtoolOptions::BuildModeDebug,
+                                  "debug",
                                   "Compile with only necessary optimizations"),
-                       clEnumValN(FirtoolOptions::BuildModeRelease, "release",
-                                  "Compile with optimizations")),
-                                  llvm::cl::init(FirtoolOptions::BuildModeDefault)
-      };
+                       clEnumValN(firtool::FirtoolOptions::BuildModeRelease,
+                                  "release", "Compile with optimizations")),
+      llvm::cl::init(firtool::FirtoolOptions::BuildModeDefault)};
 
   llvm::cl::opt<bool> disableOptimization{
-      "disable-opt", llvm::cl::desc("Disable optimizations"),
-      };
+      "disable-opt",
+      llvm::cl::desc("Disable optimizations"),
+  };
 
   llvm::cl::opt<bool> exportChiselInterface{
       "export-chisel-interface",
@@ -473,7 +481,7 @@ struct FirtoolCmdOptions {
                      "Remove companions from the design")),
       llvm::cl::init(firrtl::CompanionMode::Bind),
       llvm::cl::Hidden,
-      };
+  };
 
   llvm::cl::opt<bool> disableAggressiveMergeConnections{
       "disable-aggressive-merge-connections",
@@ -505,8 +513,9 @@ struct FirtoolCmdOptions {
       "blackbox-path",
       llvm::cl::desc(
           "Optional path to use as the root of black box annotations"),
-      llvm::cl::value_desc("path"), llvm::cl::init(""),
-      };
+      llvm::cl::value_desc("path"),
+      llvm::cl::init(""),
+  };
 
   llvm::cl::opt<bool> replSeqMem{
       "repl-seq-mem",
@@ -528,23 +537,25 @@ struct FirtoolCmdOptions {
                      "assigning X on read disable"),
       llvm::cl::init(false)};
 
-  llvm::cl::opt<FirtoolOptions::RandomKind> disableRandom{
+  llvm::cl::opt<firtool::FirtoolOptions::RandomKind> disableRandom{
       llvm::cl::desc(
           "Disable random initialization code (may break semantics!)"),
       llvm::cl::values(
-          clEnumValN(FirtoolOptions::RandomKind::Mem, "disable-mem-randomization",
+          clEnumValN(firtool::FirtoolOptions::RandomKind::Mem,
+                     "disable-mem-randomization",
                      "Disable emission of memory randomization code"),
-          clEnumValN(FirtoolOptions::RandomKind::Reg, "disable-reg-randomization",
+          clEnumValN(firtool::FirtoolOptions::RandomKind::Reg,
+                     "disable-reg-randomization",
                      "Disable emission of register randomization code"),
-          clEnumValN(FirtoolOptions::RandomKind::All, "disable-all-randomization",
+          clEnumValN(firtool::FirtoolOptions::RandomKind::All,
+                     "disable-all-randomization",
                      "Disable emission of all randomization code")),
-      llvm::cl::init(FirtoolOptions::RandomKind::None)};
+      llvm::cl::init(firtool::FirtoolOptions::RandomKind::None)};
 
   llvm::cl::opt<std::string> outputAnnotationFilename{
       "output-annotation-file",
       llvm::cl::desc("Optional output annotation file"),
-      llvm::cl::CommaSeparated, llvm::cl::value_desc("filename")
-      };
+      llvm::cl::CommaSeparated, llvm::cl::value_desc("filename")};
 
   llvm::cl::opt<bool> enableAnnotationWarning{
       "warn-on-unprocessed-annotations",
@@ -597,29 +608,25 @@ struct FirtoolCmdOptions {
   // External Clock Gate Options
   //===----------------------------------------------------------------------===
 
-  llvm::cl::opt<std::string, true> ckgModuleName{
+  llvm::cl::opt<std::string> ckgModuleName{
       "ckg-name", llvm::cl::desc("Clock gate module name"),
-      llvm::cl::location(clockGateOpts.moduleName),
       llvm::cl::init("EICG_wrapper")};
 
-  llvm::cl::opt<std::string, true> ckgInputName{
+  llvm::cl::opt<std::string> ckgInputName{
       "ckg-input", llvm::cl::desc("Clock gate input port name"),
-      llvm::cl::location(clockGateOpts.inputName), llvm::cl::init("in")
-      };
+      llvm::cl::init("in")};
 
-  llvm::cl::opt<std::string, true> ckgOutputName{
+  llvm::cl::opt<std::string> ckgOutputName{
       "ckg-output", llvm::cl::desc("Clock gate output port name"),
-      llvm::cl::location(clockGateOpts.outputName), llvm::cl::init("out")
-      };
+      llvm::cl::init("out")};
 
-  llvm::cl::opt<std::string, true> ckgEnableName{
+  llvm::cl::opt<std::string> ckgEnableName{
       "ckg-enable", llvm::cl::desc("Clock gate enable port name"),
-      llvm::cl::location(clockGateOpts.enableName), llvm::cl::init("en")      };
+      llvm::cl::init("en")};
 
-  llvm::cl::opt<std::string, true> ckgTestEnableName{
+  llvm::cl::opt<std::string> ckgTestEnableName{
       "ckg-test-enable",
       llvm::cl::desc("Clock gate test enable port name (optional)"),
-      llvm::cl::location(clockGateOpts.testEnableName),
       llvm::cl::init("test_en")};
 
   llvm::cl::opt<bool> exportModuleHierarchy{
@@ -637,7 +644,6 @@ struct FirtoolCmdOptions {
       "strip-debug-info",
       llvm::cl::desc("Disable source locator information in output Verilog"),
       llvm::cl::init(false)};
-
 };
 } // namespace
 
@@ -653,53 +659,32 @@ void circt::firtool::registerFirtoolCLOptions() {
 
 // Initialize the firtool options with defaults supplied by the cl::opts above.
 circt::firtool::FirtoolOptions::FirtoolOptions()
-:
-outputFilename("-"), 
-disableAnnotationsUnknown(false),
-lowerAnnotationsNoRefTypePorts(false),
-preserveAggregate(firrtl::PreserveAggregate::None),
-preserveMode(firrtl::PreserveValues::None),
-enableDebugInfo(false),
-buildMode(BuildModeRelease),
-disableOptimization(false),
-exportChiselInterface(false),
-chiselInterfaceOutDirectory(""),
-vbtoBV(false),
-noDedup(false),
-companionMode(firrtl::CompanionMode::Bind),
-disableAggressiveMergeConnections(false),
-disableHoistingHWPassthrough(true),
-emitOMIR(takeBodyomirOutFile(""),
-lowerMemories(false),
-blackBoxRootPath(""),
-replSeqMem(false)
-replSeqMemFile(""),
-extractTestCode(false),
-ignoreReadEnableMem(false),
-disableRandom(RandomKind::None),
-outputAnnotatoinFilename(""),
-enableAnnotationWarning(false),
-addMuxPragmas(false),
-emitChiselAssertsAsSVA(false),
-emitSeparateAlwaysBlocks(false),
-etcDisableInstanceExtraction(false),
-etcDisableRegisterExtraction(false),
-etcDisableModuleInlining(false),
-addVivadoRAMAddressConflictSynthesisBugWorkaround(false),
-ckgModuleName("EICG_wrapper"),
-ckgInputName("in"),
-ckgOutputName("out"),
-ckgEnableName("en"),
-ckgTestEnableName("test_en"),
-exportModuleHierarch(false),
-stripFirDebugInfo(true),
-stripDebugInfo(false)
-{
+    : outputFilename("-"), disableAnnotationsUnknown(false),
+      lowerAnnotationsNoRefTypePorts(false),
+      preserveAggregate(firrtl::PreserveAggregate::None),
+      preserveMode(firrtl::PreserveValues::None), enableDebugInfo(false),
+      buildMode(BuildModeRelease), disableOptimization(false),
+      exportChiselInterface(false), chiselInterfaceOutDirectory(""),
+      vbToBV(false), noDedup(false), companionMode(firrtl::CompanionMode::Bind),
+      disableAggressiveMergeConnections(false),
+      disableHoistingHWPassthrough(true), emitOMIR(true), omirOutFile(""),
+      lowerMemories(false), blackBoxRootPath(""), replSeqMem(false),
+      replSeqMemFile(""), extractTestCode(false), ignoreReadEnableMem(false),
+      disableRandom(RandomKind::None), outputAnnotationFilename(""),
+      enableAnnotationWarning(false), addMuxPragmas(false),
+      emitChiselAssertsAsSVA(false), emitSeparateAlwaysBlocks(false),
+      etcDisableInstanceExtraction(false), etcDisableRegisterExtraction(false),
+      etcDisableModuleInlining(false),
+      addVivadoRAMAddressConflictSynthesisBugWorkaround(false),
+      ckgModuleName("EICG_wrapper"), ckgInputName("in"), ckgOutputName("out"),
+      ckgEnableName("en"), ckgTestEnableName("test_en"),
+      exportModuleHierarchy(false), stripFirDebugInfo(true),
+      stripDebugInfo(false) {
   if (!clOptions.isConstructed())
     return;
   outputFilename = clOptions->outputFilename;
-disableAnnotationsUnknown = clOptions->disableAnnotationsUnknown;
-lowerAnnotationsNoRefTypePorts = clOptions->lowerAnnotationsNoRefTypePorts;
-preserveAggregate = clOptions->preserveAggregate;
-preserveMode = clOptions->preserveMode;
+  disableAnnotationsUnknown = clOptions->disableAnnotationsUnknown;
+  lowerAnnotationsNoRefTypePorts = clOptions->lowerAnnotationsNoRefTypePorts;
+  preserveAggregate = clOptions->preserveAggregate;
+  preserveMode = clOptions->preserveMode;
 }
