@@ -991,13 +991,13 @@ firrtl.circuit "InlineInputProbe" {
     // CHECK-NEXT: firrtl.ref.define %child_child__a, %child__a : !firrtl.probe<uint<1>>
     // CHECK-NEXT: firrtl.ref.define %child__a, %xmr__a : !firrtl.probe<uint<1>>
   }
-  // CHECK: module @Child
-  firrtl.module @Child(in  %_a: !firrtl.probe<uint<1>>)  attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
+  // CHECK: module private @Child
+  firrtl.module private @Child(in  %_a: !firrtl.probe<uint<1>>)  attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
     %0 = firrtl.ref.resolve %_a : !firrtl.probe<uint<1>>
     %c_a = firrtl.instance child @Child2(in  _a: !firrtl.probe<uint<1>>)
     firrtl.ref.define %c_a, %_a : !firrtl.probe<uint<1>>
   }
-  firrtl.module @Child2(in  %_a: !firrtl.probe<uint<1>>) {
+  firrtl.module private @Child2(in  %_a: !firrtl.probe<uint<1>>) {
     %0 = firrtl.ref.resolve %_a : !firrtl.probe<uint<1>>
   }
 }
@@ -1027,13 +1027,13 @@ firrtl.circuit "InlineInputProbe2" {
     // CHECK-NEXT: firrtl.ref.define %child_child__a, %child__a : !firrtl.probe<uint<1>>
     // CHECK-NEXT: firrtl.ref.define %child__a, %xmr__a : !firrtl.probe<uint<1>>
   }
-  // CHECK: module @Child
-  firrtl.module @Child(in  %_a: !firrtl.probe<uint<1>>)  attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
+  // CHECK-NOT: module private @Child
+  firrtl.module private @Child(in  %_a: !firrtl.probe<uint<1>>)  attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
     %0 = firrtl.ref.resolve %_a : !firrtl.probe<uint<1>>
     %c_a = firrtl.instance child @Child2(in  _a: !firrtl.probe<uint<1>>)
     firrtl.ref.define %c_a, %_a : !firrtl.probe<uint<1>>
   }
-  firrtl.module @Child2(in  %_a: !firrtl.probe<uint<1>>)  attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
+  firrtl.module private @Child2(in  %_a: !firrtl.probe<uint<1>>)  attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
     %0 = firrtl.ref.resolve %_a : !firrtl.probe<uint<1>>
   }
 }
@@ -1056,6 +1056,9 @@ firrtl.circuit "RecursiveInlineInputProbe" {
     %c_a1, %c_a2  = firrtl.instance child @Child(in  _a1: !firrtl.probe<uint<1>>, in  _a2: !firrtl.probe<uint<1>>)
     firrtl.ref.define %c_a1, %xmr : !firrtl.probe<uint<1>>
     firrtl.ref.define %c_a2, %xmr2 : !firrtl.probe<uint<1>>
+    %cn_a1, %cn_a2  = firrtl.instance child @ChildNoInline(in  _a1: !firrtl.probe<uint<1>>, in  _a2: !firrtl.probe<uint<1>>)
+    firrtl.ref.define %cn_a1, %xmr : !firrtl.probe<uint<1>>
+    firrtl.ref.define %cn_a2, %xmr2 : !firrtl.probe<uint<1>>
     // CHECK:      %child__a1 = firrtl.wire : !firrtl.probe<uint<1>>
     // CHECK-NEXT: %child__a2 = firrtl.wire : !firrtl.probe<uint<1>>
     // CHECK-NEXT: %child_child__a = firrtl.wire : !firrtl.probe<uint<1>>
@@ -1070,8 +1073,24 @@ firrtl.circuit "RecursiveInlineInputProbe" {
     // CHECK-NEXT: firrtl.ref.define %child__a1, %xmr__a : !firrtl.probe<uint<1>>
     // CHECK-NEXT: firrtl.ref.define %child__a2, %0 : !firrtl.probe<uint<1>>
   }
-  // CHECK: module @Child
-  firrtl.module @Child(in  %_a1: !firrtl.probe<uint<1>>, in  %_a2: !firrtl.probe<uint<1>>)  attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
+  // CHECK-NOT: module private @Child
+  firrtl.module private @Child(in  %_a1: !firrtl.probe<uint<1>>, in  %_a2: !firrtl.probe<uint<1>>)  attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
+    %c_a = firrtl.instance child @Child2(in  _a: !firrtl.probe<uint<1>>)
+    firrtl.ref.define %c_a, %_a1 : !firrtl.probe<uint<1>>
+    %0 = firrtl.ref.resolve %_a2 : !firrtl.probe<uint<1>>
+    %cw = firrtl.wire : !firrtl.uint<1>
+    firrtl.strictconnect %cw, %0 : !firrtl.uint<1>
+  }
+  firrtl.module private @Child2(in  %_a: !firrtl.probe<uint<1>>)   attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
+    %0 = firrtl.ref.resolve %_a : !firrtl.probe<uint<1>>
+    %c_a = firrtl.instance child @Child3(in  _b: !firrtl.probe<uint<1>>)
+    firrtl.ref.define %c_a, %_a : !firrtl.probe<uint<1>>
+  }
+  firrtl.module private @Child3(in  %_b: !firrtl.probe<uint<1>>)   attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
+    %0 = firrtl.ref.resolve %_b : !firrtl.probe<uint<1>>
+  }
+  // CHECK: module private @ChildNoInline
+  firrtl.module private @ChildNoInline(in  %_a1: !firrtl.probe<uint<1>>, in  %_a2: !firrtl.probe<uint<1>>) {
     %c_a = firrtl.instance child @Child2(in  _a: !firrtl.probe<uint<1>>)
     // CHECK-NEXT: %child__a = firrtl.wire : !firrtl.probe<uint<1>>
     // CHECK-NEXT: %0 = firrtl.ref.resolve %child__a : !firrtl.probe<uint<1>>
@@ -1087,14 +1106,6 @@ firrtl.circuit "RecursiveInlineInputProbe" {
     %0 = firrtl.ref.resolve %_a2 : !firrtl.probe<uint<1>>
     %cw = firrtl.wire : !firrtl.uint<1>
     firrtl.strictconnect %cw, %0 : !firrtl.uint<1>
-  }
-  firrtl.module @Child2(in  %_a: !firrtl.probe<uint<1>>)   attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
-    %0 = firrtl.ref.resolve %_a : !firrtl.probe<uint<1>>
-    %c_a = firrtl.instance child @Child3(in  _b: !firrtl.probe<uint<1>>)
-    firrtl.ref.define %c_a, %_a : !firrtl.probe<uint<1>>
-  }
-  firrtl.module @Child3(in  %_b: !firrtl.probe<uint<1>>)   attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
-    %0 = firrtl.ref.resolve %_b : !firrtl.probe<uint<1>>
   }
 }
 
@@ -1137,20 +1148,20 @@ firrtl.circuit "FlattenProbe" {
     firrtl.ref.define %c_a1, %xmr : !firrtl.probe<uint<1>>
     firrtl.ref.define %c_a2, %xmr2 : !firrtl.probe<uint<1>>
   }
-  // CHECK: module @Child
-  firrtl.module @Child(in  %_a1: !firrtl.probe<uint<1>>, in  %_a2: !firrtl.probe<uint<1>>)  {
+  // CHECK-NOT: module private @Child
+  firrtl.module private @Child(in  %_a1: !firrtl.probe<uint<1>>, in  %_a2: !firrtl.probe<uint<1>>)  {
     %c_a = firrtl.instance child @Child2(in  _a: !firrtl.probe<uint<1>>)
     firrtl.ref.define %c_a, %_a1 : !firrtl.probe<uint<1>>
     %0 = firrtl.ref.resolve %_a2 : !firrtl.probe<uint<1>>
     %cw = firrtl.wire : !firrtl.uint<1>
     firrtl.strictconnect %cw, %0 : !firrtl.uint<1>
   }
-  firrtl.module @Child2(in  %_a: !firrtl.probe<uint<1>>){
+  firrtl.module private @Child2(in  %_a: !firrtl.probe<uint<1>>){
     %0 = firrtl.ref.resolve %_a : !firrtl.probe<uint<1>>
     %c_a = firrtl.instance child @Child3(in  _b: !firrtl.probe<uint<1>>)
     firrtl.ref.define %c_a, %_a : !firrtl.probe<uint<1>>
   }
-  firrtl.module @Child3(in  %_b: !firrtl.probe<uint<1>>){
+  firrtl.module private @Child3(in  %_b: !firrtl.probe<uint<1>>){
     %0 = firrtl.ref.resolve %_b : !firrtl.probe<uint<1>>
   }
 }
@@ -1171,7 +1182,7 @@ firrtl.circuit "UTurn" {
     // CHECK-NEXT: firrtl.ref.define %child_o_a, %child_bar__a : !firrtl.probe<uint<1>>
     // CHECK-NEXT: firrtl.ref.define %child__a, %child_o_a : !firrtl.probe<uint<1>>
   }
-  firrtl.module @Child(in  %_a: !firrtl.probe<uint<1>>, out  %o_a: !firrtl.probe<uint<1>>)   attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
+  firrtl.module private @Child(in  %_a: !firrtl.probe<uint<1>>, out  %o_a: !firrtl.probe<uint<1>>)   attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
     %0 = firrtl.ref.resolve %_a : !firrtl.probe<uint<1>>
     %bar_a = firrtl.instance bar sym @bar  @Bar(out _a: !firrtl.probe<uint<1>>)
     firrtl.ref.define %o_a, %bar_a : !firrtl.probe<uint<1>>
