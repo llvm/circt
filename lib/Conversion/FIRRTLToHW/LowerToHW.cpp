@@ -1021,18 +1021,33 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
   auto nameAttr = builder.getStringAttr(oldModule.getName());
   auto newModule =
       builder.create<hw::HWModuleOp>(oldModule.getLoc(), nameAttr, ports);
-  if (auto outputFile = oldModule->getAttr("output_file"))
-    newModule->setAttr("output_file", outputFile);
+
   if (auto comment = oldModule->getAttrOfType<StringAttr>("comment"))
     newModule.setCommentAttr(comment);
 
-  // Move SV attributes.
-  if (auto svAttrs = sv::getSVAttributes(oldModule))
-    sv::setSVAttributes(newModule, svAttrs);
+  // Copy over any attributes which are not required for FModuleOp.
+  SmallVector<StringRef, 12> attrNames = {"annotations",
+                                          "convention",
+                                          "portNames",
+                                          "sym_name",
+                                          "portDirections",
+                                          "portTypes",
+                                          "portAnnotations",
+                                          "portSyms",
+                                          "portLocations",
+                                          "parameters",
+                                          SymbolTable::getVisibilityAttrName()};
 
-  // Pass along the number of random initialization bits needed for this module.
-  if (auto randomWidth = oldModule->getAttr("firrtl.random_init_width"))
-    newModule->setAttr("firrtl.random_init_width", randomWidth);
+  DenseSet<StringRef> attrSet(attrNames.begin(), attrNames.end());
+  SmallVector<NamedAttribute> newAttrs(newModule->getAttrs());
+  for (auto i :
+       llvm::make_filter_range(oldModule->getAttrs(), [&](auto namedAttr) {
+         return !attrSet.count(namedAttr.getName()) &&
+                !newModule->getAttrDictionary().contains(namedAttr.getName());
+       }))
+    newAttrs.push_back(i);
+
+  newModule->setAttrs(newAttrs);
 
   // If the circuit has an entry point, set all other modules private.
   // Otherwise, mark all modules as public.
