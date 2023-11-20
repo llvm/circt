@@ -155,8 +155,8 @@ private:
   }
 
   // Forces a new LID to be associated to the given op
-  size_t updateOpLID(Operation* op) {
-    if(op == nullptr) 
+  size_t updateOpLID(Operation *op) {
+    if (op == nullptr)
       return noLID;
 
     opLIDMap[op] = lid;
