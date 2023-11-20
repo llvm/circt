@@ -154,6 +154,15 @@ private:
     return opLIDMap.at(defOp);
   }
 
+  // Forces a new LID to be associated to the given op
+  size_t updateOpLID(Operation* op) {
+    if(op == nullptr) 
+      return noLID;
+
+    opLIDMap[op] = lid;
+    return lid;
+  }
+
   // Checks if an operation was declared
   // If so, its lid will be returned
   // Otherwise -1 will be returned
@@ -374,7 +383,7 @@ private:
   void genIte(Operation *srcop, size_t condLID, size_t tLID, size_t fLID,
               int64_t width) {
     // Register the source operation with the current line id
-    getOrCreateOpLID(srcop);
+    updateOpLID(srcop);
 
     // Retrieve the lid associated with the sort (sid)
     size_t sid = sortToLIDMap.at(width);
@@ -462,6 +471,8 @@ private:
     // We assume for now that the reset value is always 0
     size_t width = hw::getBitWidth(reg.getType());
     genSort(bitvecStr, width);
+
+    // Extract the reset and generate the associated constant
     genZero(width);
 
     // Extract the `next` operation for each register (used to define the
