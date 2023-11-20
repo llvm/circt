@@ -74,7 +74,7 @@ struct esi::backends::cosim::CosimAccelerator::Impl {
 
   // We own all channels connected to rpcClient since their lifetime is tied to
   // rpcClient.
-  set<unique_ptr<CosimChannelPort>> channels;
+  set<unique_ptr<ChannelPort>> channels;
 
   Impl(string hostname, uint16_t port)
       : rpcClient(hostname, port), waitScope(rpcClient.getWaitScope()),
@@ -150,6 +150,8 @@ public:
 
   void connect();
   void disconnect();
+  void write(const void *data, size_t size);
+  ssize_t read(void *data, size_t maxSize);
 
 protected:
   CosimAccelerator::Impl &impl;
@@ -158,6 +160,30 @@ protected:
   EsiDpiEndpoint::Client ep;
 };
 } // namespace
+
+void CosimChannelPort::write(const void *data, size_t size) {
+  if (!isConnected)
+    throw runtime_error("Cannot write to a channel port that is not connected");
+
+  auto req = ep.sendFromHostRequest();
+  req.setMsg(
+      capnp::Data::Reader(reinterpret_cast<const uint8_t *>(data), size));
+  req.send().wait(impl.waitScope);
+}
+
+ssize_t CosimChannelPort::read(void *data, size_t maxSize) {
+  auto req = ep.recvToHostRequest();
+  auto resp = req.send().wait(impl.waitScope);
+  if (!resp.getHasData())
+    return 0;
+  capnp::Data::Reader msg = resp.getResp();
+  size_t size = msg.size();
+  // TODO: buffer data over multiple calls.
+  if (size > maxSize)
+    return -1;
+  memcpy(data, msg.begin(), size);
+  return size;
+}
 
 esi::backends::cosim::CosimAccelerator::Impl::~Impl() {
   // Make sure all channels are disconnected before rpcClient gets deconstructed
@@ -194,52 +220,46 @@ void CosimChannelPort::disconnect() {
 }
 
 namespace {
-class WriteCosimChannelPort : public WriteChannelPort, public CosimChannelPort {
+class WriteCosimChannelPort : public WriteChannelPort {
 public:
-  using CosimChannelPort::CosimChannelPort;
-  virtual ~WriteCosimChannelPort() throw() = default;
+  WriteCosimChannelPort(CosimAccelerator::Impl &impl, string name)
+      : cosim(make_unique<CosimChannelPort>(impl, name)) {}
 
-  virtual void connect() override { CosimChannelPort::connect(); }
-  virtual void disconnect() override { CosimChannelPort::disconnect(); }
+  virtual ~WriteCosimChannelPort() = default;
+
+  virtual void connect() override { cosim->connect(); }
+  virtual void disconnect() override { cosim->disconnect(); }
   virtual void write(const void *data, size_t size) override;
+
+protected:
+  std::unique_ptr<CosimChannelPort> cosim;
 };
 } // namespace
 
 void WriteCosimChannelPort::write(const void *data, size_t size) {
-  if (!isConnected)
-    throw runtime_error("Cannot write to a channel port that is not connected");
-
-  auto req = ep.sendFromHostRequest();
-  req.setMsg(
-      capnp::Data::Reader(reinterpret_cast<const uint8_t *>(data), size));
-  req.send().wait(impl.waitScope);
+  cosim->write(data, size);
 }
 
 namespace {
-class ReadCosimChannelPort : public ReadChannelPort, public CosimChannelPort {
+class ReadCosimChannelPort : public ReadChannelPort {
 public:
-  using CosimChannelPort::CosimChannelPort;
-  virtual ~ReadCosimChannelPort() throw() = default;
+  ReadCosimChannelPort(CosimAccelerator::Impl &impl, string name)
+      : cosim(new CosimChannelPort(impl, name)) {}
 
-  virtual void connect() override { CosimChannelPort::connect(); }
-  virtual void disconnect() override { CosimChannelPort::disconnect(); }
+  virtual ~ReadCosimChannelPort() = default;
+
+  virtual void connect() override { cosim->connect(); }
+  virtual void disconnect() override { cosim->disconnect(); }
   virtual ssize_t read(void *data, size_t maxSize) override;
+
+protected:
+  std::unique_ptr<CosimChannelPort> cosim;
 };
 
 } // namespace
 
 ssize_t ReadCosimChannelPort::read(void *data, size_t maxSize) {
-  auto req = ep.recvToHostRequest();
-  auto resp = req.send().wait(impl.waitScope);
-  if (!resp.getHasData())
-    return 0;
-  capnp::Data::Reader msg = resp.getResp();
-  size_t size = msg.size();
-  // TODO: buffer data over multiple calls.
-  if (size > maxSize)
-    return -1;
-  memcpy(data, msg.begin(), size);
-  return size;
+  return cosim->read(data, maxSize);
 }
 
 namespace {
@@ -288,13 +308,13 @@ public:
                             fullPath.toStr() + "." + name + "'");
       string channelName = f->second;
 
-      CosimChannelPort *port;
+      ChannelPort *port;
       if (BundlePort::isWrite(dir, svcDir))
         port = new WriteCosimChannelPort(impl, channelName);
       else
         port = new ReadCosimChannelPort(impl, channelName);
       impl.channels.emplace(port);
-      channels.emplace(name, *dynamic_cast<ChannelPort *>(port));
+      channels.emplace(name, *port);
     }
     return channels;
   }
