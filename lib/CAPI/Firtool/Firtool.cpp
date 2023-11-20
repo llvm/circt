@@ -23,8 +23,7 @@ using namespace circt;
 DEFINE_C_API_PTR_METHODS(FirtoolOptions, firtool::FirtoolOptions)
 
 FirtoolOptions firtoolOptionsCreateDefault() {
-  static auto category = llvm::cl::OptionCategory{"Firtool Options"};
-  auto *options = new firtool::FirtoolOptions{category};
+  auto *options = new firtool::FirtoolOptions();
   return wrap(options);
 }
 
