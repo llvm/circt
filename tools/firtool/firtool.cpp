@@ -296,9 +296,9 @@ struct EmitSplitHGLDDPass
 
 /// Process a single buffer of the input.
 static LogicalResult processBuffer(
-    MLIRContext &context, firtool::FirtoolOptions& firtoolOptions, TimingScope &ts, llvm::SourceMgr &sourceMgr,
+    MLIRContext &context, firtool::FirtoolOptions &firtoolOptions,
+    TimingScope &ts, llvm::SourceMgr &sourceMgr,
     std::optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
-
 
   // Add the annotation file if one was explicitly specified.
   unsigned numAnnotationFiles = 0;
@@ -517,8 +517,8 @@ public:
 /// creates a regular or verifying diagnostic handler, depending on whether the
 /// user set the verifyDiagnostics option.
 static LogicalResult processInputSplit(
-    MLIRContext &context, firtool::FirtoolOptions& firtoolOptions, TimingScope &ts,
-    std::unique_ptr<llvm::MemoryBuffer> buffer,
+    MLIRContext &context, firtool::FirtoolOptions &firtoolOptions,
+    TimingScope &ts, std::unique_ptr<llvm::MemoryBuffer> buffer,
     std::optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
   llvm::SourceMgr sourceMgr;
   sourceMgr.AddNewSourceBuffer(std::move(buffer), llvm::SMLoc());
@@ -539,11 +539,12 @@ static LogicalResult processInputSplit(
 /// Process the entire input provided by the user, splitting it up if the
 /// corresponding option was specified.
 static LogicalResult
-processInput(MLIRContext &context, firtool::FirtoolOptions& firtoolOptions, TimingScope &ts,
-             std::unique_ptr<llvm::MemoryBuffer> input,
+processInput(MLIRContext &context, firtool::FirtoolOptions &firtoolOptions,
+             TimingScope &ts, std::unique_ptr<llvm::MemoryBuffer> input,
              std::optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
   if (!splitInputFile)
-    return processInputSplit(context, firtoolOptions, ts, std::move(input), outputFile);
+    return processInputSplit(context, firtoolOptions, ts, std::move(input),
+                             outputFile);
 
   // Emit an error if the user provides a separate annotation file alongside
   // split input. This is technically not a problem, but the user likely
@@ -561,7 +562,8 @@ processInput(MLIRContext &context, firtool::FirtoolOptions& firtoolOptions, Timi
   return splitAndProcessBuffer(
       std::move(input),
       [&](std::unique_ptr<MemoryBuffer> buffer, raw_ostream &) {
-        return processInputSplit(context, firtoolOptions, ts, std::move(buffer), outputFile);
+        return processInputSplit(context, firtoolOptions, ts, std::move(buffer),
+                                 outputFile);
       },
       llvm::outs());
 }
@@ -569,7 +571,8 @@ processInput(MLIRContext &context, firtool::FirtoolOptions& firtoolOptions, Timi
 /// This implements the top-level logic for the firtool command, invoked once
 /// command line options are parsed and LLVM/MLIR are all set up and ready to
 /// go.
-static LogicalResult executeFirtool(MLIRContext &context, firtool::FirtoolOptions& firtoolOptions) {
+static LogicalResult executeFirtool(MLIRContext &context,
+                                    firtool::FirtoolOptions &firtoolOptions) {
   // Create the timing manager we use to sample execution times.
   DefaultTimingManager tm;
   applyDefaultTimingManagerCLOptions(tm);
@@ -618,8 +621,8 @@ static LogicalResult executeFirtool(MLIRContext &context, firtool::FirtoolOption
         llvm::sys::fs::create_directories(firtoolOptions.getOutputFilename());
     if (error) {
       llvm::errs() << "cannot create output directory '"
-                   << firtoolOptions.getOutputFilename() << "': " << error.message()
-                   << "\n";
+                   << firtoolOptions.getOutputFilename()
+                   << "': " << error.message() << "\n";
       return failure();
     }
   }
@@ -631,7 +634,8 @@ static LogicalResult executeFirtool(MLIRContext &context, firtool::FirtoolOption
                       ltl::LTLDialect, debug::DebugDialect>();
 
   // Process the input.
-  if (failed(processInput(context, firtoolOptions, ts, std::move(input), outputFile)))
+  if (failed(processInput(context, firtoolOptions, ts, std::move(input),
+                          outputFile)))
     return failure();
 
   // If the result succeeded and we're emitting a file, close it.
