@@ -75,11 +75,8 @@ void ESIBuildManifestPass::runOnOperation() {
   for (auto root : mod->getRegion(0).front().getOps<AppIDHierRootOp>())
     if (root.getTopModuleRef() == top)
       appidRoot = root;
-  if (!appidRoot) {
-    mod->emitError() << "No AppID hierarchy found for top level '" << top
-                     << "'";
-    return signalPassFailure();
-  }
+  if (!appidRoot)
+    return;
 
   // Gather the relevant types under the appid hierarchy root only. This avoids
   // scraping unnecessary types.
