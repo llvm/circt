@@ -66,6 +66,7 @@ class Producer(Module):
     HostComms.from_host(b, AppID("producer", 0))
     ports.int_out = chans['ch1']
 
+
 # TODO: fixme
 # @unittestmodule(run_passes=True, print_after_passes=True, emit_outputs=True)
 class PureTest(esi.PureModule):
@@ -86,7 +87,6 @@ ExStruct = types.struct({
     'a': Bits(4),
     'b': UInt(32),
 })
-
 
 Bundle1 = Bundle([
     BundledChannel("req", ChannelDirection.TO, types.channel(types.i32)),

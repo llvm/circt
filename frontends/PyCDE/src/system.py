@@ -323,28 +323,6 @@ class System:
     if self._placedb is None:
       self._placedb = PlacementDB(self, self.mod, primdb)
 
-  # def build_api(self, _=None):
-  #   """Build the ESI runtime APIs."""
-
-  #   sw_api_langs = self.sw_api_langs
-  #   if sw_api_langs is None:
-  #     sw_api_langs = ["python"]
-
-  #   for lang in sw_api_langs:
-  #     if lang != "python":
-  #       raise ValueError(f"Language '{lang}' not supported")
-
-  #     services_file = (self.hw_output_dir / "services.json")
-  #     if not services_file.exists():
-  #       raise FileNotFoundError("Could not locate ESI services description. " +
-  #                               "Have you emitted the outputs?")
-
-  #     api_output_dir = self.output_directory / "runtime"
-  #     if not api_output_dir.exists():
-  #       api_output_dir.mkdir()
-  #     b = PythonApiBuilder(services_file.open().read())
-  #     b.build(self.name, api_output_dir)
-
   def package(self):
     """Package up the system."""
     assert self.passed, "Must call compile before package"

@@ -523,22 +523,21 @@ class Module(metaclass=ModuleLikeType):
 
     kwargs = dict()
 
-    has_inst_name_param = False
+    # Figure out what the 'instantiate' method expects and then provide it.
     self.sig = inspect.signature(self._builder.instantiate)
     for (_, param) in self.sig.parameters.items():
       if param.name == "instance_name":
-        has_inst_name_param = True
+        # Create a valid instance name.
+        if instance_name is None:
+          if hasattr(self, "instance_name"):
+            instance_name = self.instance_name
+          else:
+            instance_name = self.__class__.__name__
+        kwargs["instance_name"] = _BlockContext.current().uniquify_symbol(
+            instance_name)
       elif param.name == "appid":
+        # Pass through the appid if it was provided.
         kwargs["appid"] = appid
-
-    if has_inst_name_param:
-      if instance_name is None:
-        if hasattr(self, "instance_name"):
-          instance_name = self.instance_name
-        else:
-          instance_name = self.__class__.__name__
-      kwargs["instance_name"] = _BlockContext.current().uniquify_symbol(
-          instance_name)
 
     self.inst = self._builder.instantiate(self, inputs, **kwargs)
 
