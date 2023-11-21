@@ -687,4 +687,42 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   lowerAnnotationsNoRefTypePorts = clOptions->lowerAnnotationsNoRefTypePorts;
   preserveAggregate = clOptions->preserveAggregate;
   preserveMode = clOptions->preserveMode;
+  enableDebugInfo = clOptions->enableDebugInfo;
+  buildMode = clOptions->buildMode;
+  disableOptimization = clOptions->disableOptimization;
+  exportChiselInterface = clOptions->exportChiselInterface;
+  chiselInterfaceOutDirectory = clOptions->chiselInterfaceOutDirectory;
+  vbToBV = clOptions->vbToBV;
+  noDedup = clOptions->noDedup;
+  companionMode = clOptions->companionMode;
+  disableAggressiveMergeConnections =
+      clOptions->disableAggressiveMergeConnections;
+  disableHoistingHWPassthrough = clOptions->disableHoistingHWPassthrough;
+  emitOMIR = clOptions->emitOMIR;
+  omirOutFile = clOptions->omirOutFile;
+  lowerMemories = clOptions->lowerMemories;
+  blackBoxRootPath = clOptions->blackBoxRootPath;
+  replSeqMem = clOptions->replSeqMem;
+  replSeqMemFile = clOptions->replSeqMemFile;
+  extractTestCode = clOptions->extractTestCode;
+  ignoreReadEnableMem = clOptions->ignoreReadEnableMem;
+  disableRandom = clOptions->disableRandom;
+  outputAnnotationFilename = clOptions->outputAnnotationFilename;
+  enableAnnotationWarning = clOptions->enableAnnotationWarning;
+  addMuxPragmas = clOptions->addMuxPragmas;
+  emitChiselAssertsAsSVA = clOptions->emitChiselAssertsAsSVA;
+  emitSeparateAlwaysBlocks = clOptions->emitSeparateAlwaysBlocks;
+  etcDisableInstanceExtraction = clOptions->etcDisableInstanceExtraction;
+  etcDisableRegisterExtraction = clOptions->etcDisableRegisterExtraction;
+  etcDisableModuleInlining = clOptions->etcDisableModuleInlining;
+  addVivadoRAMAddressConflictSynthesisBugWorkaround =
+      clOptions->addVivadoRAMAddressConflictSynthesisBugWorkaround;
+  ckgModuleName = clOptions->ckgModuleName;
+  ckgInputName = clOptions->ckgInputName;
+  ckgOutputName = clOptions->ckgOutputName;
+  ckgEnableName = clOptions->ckgEnableName;
+  ckgTestEnableName = clOptions->ckgTestEnableName;
+  exportModuleHierarchy = clOptions->exportModuleHierarchy;
+  stripFirDebugInfo = clOptions->stripFirDebugInfo;
+  stripDebugInfo = clOptions->stripDebugInfo;
 }
