@@ -26,21 +26,23 @@ class HostComms:
   from_host = TestFromBundle
 
 
-class Producer(Module):
+# CHECK-LABEL: hw.module @LoopbackInOutTop(in %clk : !seq.clock, in %rst : i1)
+# CHECK:         esi.service.instance #esi.appid<"cosim"[0]> svc @HostComms impl as "cosim"(%clk, %rst) : (!seq.clock, i1) -> ()
+# CHECK:         %bundle, %req = esi.bundle.pack %chanOutput : !esi.bundle<[!esi.channel<i16> to "resp", !esi.channel<i24> from "req"]>
+# CHECK:         esi.service.req.to_server %bundle -> <@HostComms::@req_resp>(#esi.appid<"loopback_inout"[0]>) : !esi.bundle<[!esi.channel<i16> to "resp", !esi.channel<i24> from "req"]>
+# CHECK:         %rawOutput, %valid = esi.unwrap.vr %req, %ready : i24
+# CHECK:         [[R0:%.+]] = comb.extract %rawOutput from 0 : (i24) -> i16
+# CHECK:         %chanOutput, %ready = esi.wrap.vr [[R0]], %valid : i16
+@unittestmodule(print=True)
+class LoopbackInOutTop(Module):
   clk = Clock()
-  int_out = OutputChannel(types.i32)
-
-  @generator
-  def construct(ports):
-    b, chans = TestFromBundle.pack()
-    HostComms.from_host(b, AppID("producer", 0))
-    ports.int_out = chans['ch1']
-
-
-class LoopbackInOut(Module):
+  rst = Input(types.i1)
 
   @generator
   def construct(self):
+    # Use Cosim to implement the 'HostComms' service.
+    esi.Cosim(HostComms, self.clk, self.rst)
+
     loopback = Wire(types.channel(types.i16))
     call_bundle, froms = TestBundle.pack(resp=loopback)
     from_host = froms['req']
@@ -54,24 +56,15 @@ class LoopbackInOut(Module):
     loopback.assign(data_chan)
 
 
-# CHECK-LABEL: hw.module @LoopbackInOutTop(in %clk : !seq.clock, in %rst : i1)
-# CHECK:         esi.service.instance svc @HostComms impl as "cosim"(%clk, %rst) : (!seq.clock, i1) -> ()
-# CHECK:         %0 = esi.service.req.inout %chanOutput -> <@HostComms::@req_resp>(["loopback_inout"]) : !esi.channel<i16> -> !esi.channel<i32>
-# CHECK:         %rawOutput, %valid = esi.unwrap.vr %0, %ready : i32
-# CHECK:         %1 = comb.extract %rawOutput from 0 : (i32) -> i16
-# CHECK:         %chanOutput, %ready = esi.wrap.vr %1, %valid : i16
-# CHECK:         hw.output
-@unittestmodule(print=True)
-class LoopbackInOutTop(Module):
+class Producer(Module):
   clk = Clock()
-  rst = Input(types.i1)
+  int_out = OutputChannel(types.i32)
 
   @generator
-  def construct(self):
-    # Use Cosim to implement the standard 'HostComms' service.
-    esi.Cosim(HostComms, self.clk, self.rst)
-    LoopbackInOut()
-
+  def construct(ports):
+    b, chans = TestFromBundle.pack()
+    HostComms.from_host(b, AppID("producer", 0))
+    ports.int_out = chans['ch1']
 
 # TODO: fixme
 # @unittestmodule(run_passes=True, print_after_passes=True, emit_outputs=True)
