@@ -26,9 +26,11 @@ CustomService::CustomService(AppIDPath idPath,
                              const ServiceImplDetails &details,
                              const HWClientDetails &clients)
     : id(idPath) {
-  serviceSymbol = any_cast<string>(details.at("service"));
-  // Strip off initial '@'.
-  serviceSymbol = serviceSymbol.substr(1);
+  if (auto f = details.find("service"); f != details.end()) {
+    serviceSymbol = any_cast<string>(f->second);
+    // Strip off initial '@'.
+    serviceSymbol = serviceSymbol.substr(1);
+  }
 }
 
 namespace esi {
