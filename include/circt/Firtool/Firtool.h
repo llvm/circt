@@ -29,7 +29,6 @@ namespace firtool {
 class FirtoolOptions {
 public:
   FirtoolOptions();
-  FirtoolOptions(std::nullopt_t) : FirtoolOptions() {}
 
   // Helper Types
   enum BuildMode { BuildModeDefault, BuildModeDebug, BuildModeRelease };
@@ -119,6 +118,17 @@ public:
     return addVivadoRAMAddressConflictSynthesisBugWorkaround;
   }
   bool shouldExtractTestCode() const { return extractTestCode; }
+
+  // Setters, used by the CAPI
+  FirtoolOptions &setOutputFilename(StringRef name) {
+    outputFilename = name;
+    return *this;
+  }
+
+  FirtoolOptions &setDisableUnknownAnnotations(bool disable) {
+    disableAnnotationsUnknown = disable;
+    return *this;
+  }
 
 private:
   std::string outputFilename;
