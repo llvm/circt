@@ -11,27 +11,24 @@ print(m.type_table)
 
 d = m.build_design(acc)
 
-loopback = d.children[esi.AppID("loopback_inst", 0)]
-appid = loopback.id
-print(appid)
-assert appid.name == "loopback_inst"
-assert appid.idx == 0
+# loopback = d.children[esi.AppID("loopback_inout", 0)]
 
-recv = loopback.ports[esi.AppID("loopback_inout", 0)].channels["resp"]
+recv = d.ports[esi.AppID("loopback_inout", 0)].channels["resp"]
 recv.connect()
 
-send = loopback.ports[esi.AppID("loopback_inout", 0)].channels["req"]
+send = d.ports[esi.AppID("loopback_inout", 0)].channels["req"]
 send.connect()
 
-data = [24]
-recv.write(data)
+data = [24, 42, 36]
+send.write(data)
 resp = []
 # Reads are non-blocking, so we need to poll.
 while resp == []:
-  resp = send.read(1)
+  resp = recv.read(2)
 
 print(f"data: {data}")
 print(f"resp: {resp}")
-assert resp == data
+assert resp[0] == data[0] + 7
+assert resp[1] == data[1]
 
 print("PASS")

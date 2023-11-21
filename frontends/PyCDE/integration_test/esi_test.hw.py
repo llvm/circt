@@ -3,6 +3,7 @@
 # RUN: %PYTHON% %s %t 2>&1
 # RUN: esi-cosim-runner.py --tmpdir %t --exec %S/esi_test.sw.py `ls %t/hw/*.sv | grep -v driver.sv`
 
+from doctest import debug
 import pycde
 from pycde import (AppID, Clock, Input, Module, generator, types)
 from pycde.bsp import cosim
@@ -53,5 +54,8 @@ if __name__ == "__main__":
   s = pycde.System(cosim.CosimBSP(Top),
                    name="ESILoopback",
                    output_directory=sys.argv[1])
+  s.run_passes(debug=True)
   s.compile()
   s.package()
+
+  s.print()
