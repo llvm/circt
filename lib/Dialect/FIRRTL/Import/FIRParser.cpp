@@ -4971,14 +4971,6 @@ DoneParsing:
       if (mod != main)
         SymbolTable::setSymbolVisibility(mod, SymbolTable::Visibility::Private);
     }
-    // Reject if main module has input ref-type ports.
-    // This should be checked in verifier for all public FModuleLike's but
-    // they're used internally so check this here.
-    for (auto &pi : mainMod.getPorts()) {
-      if (!pi.isOutput() && type_isa<RefType>(pi.type))
-        return mlir::emitError(pi.loc)
-               << "main module may not contain input references";
-    }
   }
   return success();
 }
