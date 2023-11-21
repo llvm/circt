@@ -748,6 +748,7 @@ class BundleSignal(Signal):
     }
 
 
+  # All the work is done in the metaclass.
 class ListSignal(Signal):
   pass
 

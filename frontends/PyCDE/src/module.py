@@ -435,7 +435,7 @@ class ModuleBuilder(ModuleLikeBuilderBase):
         ip=sys._get_ip(),
     )
 
-  def instantiate(self, module_inst, instance_name: str, **inputs):
+  def instantiate(self, module_inst, inputs, instance_name: str):
     """"Instantiate this Module. Check that the input types match expectations."""
 
     port_input_lookup = {name: ptype for name, ptype in self.inputs}
@@ -521,13 +521,27 @@ class Module(metaclass=ModuleLikeType):
     All inputs must be specified. If a signal has not been produced yet, use the
     `Wire` construct and assign the signal to that wire later on."""
 
-    if instance_name is None:
-      if hasattr(self, "instance_name"):
-        instance_name = self.instance_name
-      else:
-        instance_name = self.__class__.__name__
-    instance_name = _BlockContext.current().uniquify_symbol(instance_name)
-    self.inst = self._builder.instantiate(self, instance_name, **inputs)
+    kwargs = dict()
+
+    has_inst_name_param = False
+    self.sig = inspect.signature(self._builder.instantiate)
+    for (_, param) in self.sig.parameters.items():
+      if param.name == "instance_name":
+        has_inst_name_param = True
+      elif param.name == "appid":
+        kwargs["appid"] = appid
+
+    if has_inst_name_param:
+      if instance_name is None:
+        if hasattr(self, "instance_name"):
+          instance_name = self.instance_name
+        else:
+          instance_name = self.__class__.__name__
+      kwargs["instance_name"] = _BlockContext.current().uniquify_symbol(
+          instance_name)
+
+    self.inst = self._builder.instantiate(self, inputs, **kwargs)
+
     if appid is not None:
       self.inst.operation.attributes[AppID.AttributeName] = appid._appid
 
@@ -607,7 +621,7 @@ class ImportedModSpec(ModuleBuilder):
     self.modcls.hw_module = None
     return hw_module
 
-  def instantiate(self, module_inst, instance_name: str, **inputs):
+  def instantiate(self, module_inst, inputs, instance_name: str):
     inst = self.circt_mod.instantiate(
         instance_name,
         **{

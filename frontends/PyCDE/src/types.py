@@ -570,7 +570,7 @@ class BundledChannel:
   """A named, directed channel for inclusion in a bundle."""
   name: str
   direction: ChannelDirection
-  channel: Channel
+  channel: Type
 
   def __repr__(self) -> str:
     return f"('{self.name}', {str(self.direction)}, {self.channel})"
@@ -580,8 +580,15 @@ class Bundle(Type):
   """A group of named, directed channels. Typically used in a service."""
 
   def __new__(cls, channels: typing.List[BundledChannel]):
+
+    def wrap_in_channel(ty: Type):
+      if isinstance(ty, Channel):
+        return ty
+      return Channel(ty)
+
     type = esi.BundleType.get(
-        [(bc.name, bc.direction, bc.channel._type) for bc in channels], False)
+        [(bc.name, bc.direction, wrap_in_channel(bc.channel)._type)
+         for bc in channels], False)
     return super(Bundle, cls).__new__(cls, type)
 
   def _get_value_class(self):
