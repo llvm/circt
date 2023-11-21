@@ -20,6 +20,7 @@
 #include "circt/Dialect/HW/InnerSymbolTable.h"
 #include "circt/Dialect/Seq/SeqAttributes.h"
 #include "circt/Support/FieldRef.h"
+#include "circt/Support/InstanceGraph.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/RegionKindInterface.h"

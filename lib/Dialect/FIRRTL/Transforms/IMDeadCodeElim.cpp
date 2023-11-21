@@ -128,8 +128,7 @@ private:
 void IMDeadCodeElimPass::visitInstanceOp(InstanceOp instance) {
   markBlockUndeletable(instance);
 
-  auto module =
-      dyn_cast<FModuleOp>(*instanceGraph->getReferencedModule(instance));
+  auto module = instance.getReferencedModule<FModuleOp>(*instanceGraph);
 
   if (!module)
     return;
@@ -198,7 +197,7 @@ void IMDeadCodeElimPass::visitUser(Operation *op) {
 
 void IMDeadCodeElimPass::markInstanceOp(InstanceOp instance) {
   // Get the module being referenced.
-  Operation *op = instanceGraph->getReferencedModule(instance);
+  Operation *op = instance.getReferencedModule(*instanceGraph);
 
   // If this is an extmodule, just remember that any inputs and inouts are
   // alive.
@@ -487,8 +486,7 @@ void IMDeadCodeElimPass::visitValue(Value value) {
   if (auto instance = value.getDefiningOp<InstanceOp>()) {
     auto instanceResult = value.cast<mlir::OpResult>();
     // Update the src, when it's an instance op.
-    auto module =
-        dyn_cast<FModuleOp>(*instanceGraph->getReferencedModule(instance));
+    auto module = instance.getReferencedModule<FModuleOp>(*instanceGraph);
 
     // Propagate liveness only when a port is output.
     if (!module || module.getPortDirection(instanceResult.getResultNumber()) ==

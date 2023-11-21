@@ -205,8 +205,7 @@ void PrefixModulesPass::renameModuleBody(std::string prefix, StringRef oldName,
         newPrefix = StringAttr::get(context, prefix);
       memOp->setAttr("prefix", newPrefix);
     } else if (auto instanceOp = dyn_cast<InstanceOp>(op)) {
-      auto target = dyn_cast<FModuleLike>(
-          *instanceGraph->getReferencedModule(instanceOp));
+      auto target = instanceOp.getReferencedModule(*instanceGraph);
 
       // Skip all external modules, unless one of the following conditions
       // is true:

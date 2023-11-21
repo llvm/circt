@@ -620,20 +620,20 @@ struct Equivalence {
   LogicalResult check(InFlightDiagnostic &diag, InstanceOp a, InstanceOp b) {
     auto aName = a.getModuleNameAttr().getAttr();
     auto bName = b.getModuleNameAttr().getAttr();
+    if (aName == bName)
+      return success();
+
     // If the modules instantiate are different we will want to know why the
     // sub module did not dedupliate. This code recursively checks the child
     // module.
-    if (aName != bName) {
-      auto aModule = instanceGraph.getReferencedModule(a);
-      auto bModule = instanceGraph.getReferencedModule(b);
-      // Create a new error for the submodule.
-      diag.attachNote(std::nullopt)
-          << "in instance " << a.getNameAttr() << " of " << aName
-          << ", and instance " << b.getNameAttr() << " of " << bName;
-      check(diag, aModule, bModule);
-      return failure();
-    }
-    return success();
+    auto aModule = a.getReferencedModule(instanceGraph);
+    auto bModule = b.getReferencedModule(instanceGraph);
+    // Create a new error for the submodule.
+    diag.attachNote(std::nullopt)
+        << "in instance " << a.getNameAttr() << " of " << aName
+        << ", and instance " << b.getNameAttr() << " of " << bName;
+    check(diag, aModule, bModule);
+    return failure();
   }
 
   // NOLINTNEXTLINE(misc-no-recursion)

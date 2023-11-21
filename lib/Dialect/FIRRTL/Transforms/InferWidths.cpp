@@ -1635,7 +1635,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
 
       // Handle instances of other modules.
       .Case<InstanceOp>([&](auto op) {
-        auto refdModule = op.getReferencedModule(symtbl);
+        auto refdModule = op.getReferencedOperation(symtbl);
         auto module = dyn_cast<FModuleOp>(&*refdModule);
         if (!module) {
           auto diag = mlir::emitError(op.getLoc());

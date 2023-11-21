@@ -565,7 +565,7 @@ void IMConstPropPass::markInvalidValueOp(InvalidValueOp invalid) {
 /// enclosing block is marked live.  This sets up the def-use edges for ports.
 void IMConstPropPass::markInstanceOp(InstanceOp instance) {
   // Get the module being reference or a null pointer if this is an extmodule.
-  Operation *op = instanceGraph->getReferencedModule(instance);
+  Operation *op = instance.getReferencedModule(*instanceGraph);
 
   // If this is an extmodule, just remember that any results and inouts are
   // overdefined.
@@ -721,12 +721,11 @@ void IMConstPropPass::visitConnectLike(FConnectLike connect,
     if (auto instance = dest.getDefiningOp<InstanceOp>()) {
       // Update the dest, when its an instance op.
       mergeLatticeValue(fieldRefDestConnected, srcValue);
-      auto module =
-          dyn_cast<FModuleOp>(*instanceGraph->getReferencedModule(instance));
-      if (!module)
+      auto mod = instance.getReferencedModule<FModuleOp>(*instanceGraph);
+      if (!mod)
         return;
 
-      BlockArgument modulePortVal = module.getArgument(dest.getResultNumber());
+      BlockArgument modulePortVal = mod.getArgument(dest.getResultNumber());
 
       return mergeLatticeValue(
           FieldRef(modulePortVal, fieldRefDestConnected.getFieldID()),

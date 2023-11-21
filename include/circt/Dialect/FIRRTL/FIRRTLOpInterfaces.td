@@ -364,7 +364,7 @@ def FInstanceLike : OpInterface<"FInstanceLike", [
 
   let methods = [
     InterfaceMethod<"Get the referenced module via a symbol table.",
-    "::mlir::Operation *", "getReferencedModule",
+    "::mlir::Operation *", "getReferencedOperation",
     (ins "const SymbolTable&":$symtbl),
     /*methodBody=*/[{}],
     /*defaultImplementation=*/[{
