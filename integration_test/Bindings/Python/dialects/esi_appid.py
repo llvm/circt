@@ -58,7 +58,7 @@ with ir.Context() as ctx, ir.Location.unknown():
   print(mainmod)
 
   appids = appid_idx.get_child_appids_of(top)
-  # CHECK: [#esi.appid<"ext"[0]>, #esi.appid<"bar"[2]>]
+  # CHECK: [#esi.appid<"bar"[2]>, #esi.appid<"ext"[0]>]
   print(appids)
   path = appid_idx.get_appid_path(top, esi.AppIDAttr.get("bar", 2),
                                   ir.Location.file("msft.py", 12, 0))

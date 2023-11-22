@@ -40,9 +40,8 @@ private:
     } else {
       Block *parentBlock = getBlock(path.getParent(), opStack.drop_back());
       Operation *op = opStack.back();
-      if (auto inst = dyn_cast<hw::InstanceOp>(op)) {
+      if (auto inst = dyn_cast<hw::InstanceOp>(op); inst) {
         // Create a normal node underneath the parent AppID.
-
         auto node = OpBuilder::atBlockEnd(parentBlock)
                         .create<AppIDHierNodeOp>(UnknownLoc::get(&getContext()),
                                                  path.getPath().back(),
@@ -66,6 +65,8 @@ void ESIAppIDHierPass::runOnOperation() {
   // Clone in manifest data, creating the instance hierarchy as we go.
   LogicalResult rc = index.walk(
       top, [&](AppIDPathAttr appidPath, ArrayRef<Operation *> opStack) {
+        assert(appidPath.getPath().size() == opStack.size() &&
+               "path and opStack must be the same size.");
         auto *block = getBlock(appidPath, opStack);
         auto *op = opStack.back();
         if (isa<IsManifestData>(op))
