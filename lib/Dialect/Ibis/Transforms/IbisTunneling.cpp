@@ -288,7 +288,7 @@ LogicalResult Tunneler::tunnelDown(InstanceGraphNode *currentContainer,
   // We're not in the target, but tunneling into a child instance.
   // Create output ports in the child instance for the requested ports.
   auto *tunnelScopeNode =
-      ig.lookup(tunnelInstance.getReferencedModuleNameAttr());
+      ig.lookup(tunnelInstance.getTargetNameAttr().getAttr());
   auto tunnelScope = tunnelScopeNode->getModule<ScopeOpInterface>();
 
   rewriter.setInsertionPointToEnd(tunnelScope.getBodyBlock());
