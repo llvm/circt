@@ -400,7 +400,7 @@ def GroupDeclOp : FIRRTLOp<
   let summary = "A declaration of an optional group";
   let description = [{
     The `firrtl.declgroup` operation declares an optional group and a lowering
-    convetion for that group.  Optional groups are a feature of FIRRTL that add
+    convention for that group.  Optional groups are a feature of FIRRTL that add
     verification or debugging code to an existing module at runtime.
 
     A `firrtl.declgroup` operation only declares the group and any groups nested

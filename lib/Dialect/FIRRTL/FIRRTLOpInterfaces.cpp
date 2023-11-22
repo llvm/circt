@@ -22,6 +22,35 @@ using namespace mlir;
 using namespace llvm;
 using namespace circt::firrtl;
 
+static LogicalResult verifyNoInputProbes(FModuleLike module) {
+  // Helper to check for input-oriented refs.
+  std::function<bool(Type, bool)> hasInputRef = [&](Type type,
+                                                    bool output) -> bool {
+    auto ftype = type_dyn_cast<FIRRTLType>(type);
+    if (!ftype || !ftype.containsReference())
+      return false;
+    return FIRRTLTypeSwitch<FIRRTLType, bool>(ftype)
+        .Case<RefType>([&](auto reftype) { return !output; })
+        .Case<OpenVectorType>([&](OpenVectorType ovt) {
+          return hasInputRef(ovt.getElementType(), output);
+        })
+        .Case<OpenBundleType>([&](OpenBundleType obt) {
+          for (auto field : obt.getElements())
+            if (hasInputRef(field.type, field.isFlip ^ output))
+              return true;
+          return false;
+        });
+  };
+
+  if (module.isPublic()) {
+    for (auto &pi : module.getPorts()) {
+      if (hasInputRef(pi.type, pi.isOutput()))
+        return emitError(pi.loc, "input probe not allowed on public module");
+    }
+  }
+  return success();
+}
+
 LogicalResult circt::firrtl::verifyModuleLikeOpInterface(FModuleLike module) {
   // Verify port types first.  This is used as the basis for the number of
   // ports required everywhere else.
@@ -97,6 +126,9 @@ LogicalResult circt::firrtl::verifyModuleLikeOpInterface(FModuleLike module) {
   // Verify the body.
   if (module->getNumRegions() != 1)
     return module.emitOpError("requires one region");
+
+  if (failed(verifyNoInputProbes(module)))
+    return failure();
 
   return success();
 }
@@ -177,7 +209,7 @@ circt::firrtl::detail::replaceWithNewForceability(Forceable op, bool forceable,
   if (forceable)
     attributes.push_back(forceableMarker);
   else {
-    llvm::erase_value(attributes, forceableMarker);
+    llvm::erase(attributes, forceableMarker);
     assert(attributes.size() != op->getAttrs().size());
   }
 

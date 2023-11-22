@@ -978,7 +978,7 @@ firrtl.circuit "Top" attributes {
     }
   ]
 } {
-  firrtl.module @Companion_w1(in %_gen_uint: !firrtl.probe<uint<1>>) attributes {
+  firrtl.module private @Companion_w1(in %_gen_uint: !firrtl.probe<uint<1>>) attributes {
     annotations = [
       {
         class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
@@ -997,7 +997,7 @@ firrtl.circuit "Top" attributes {
       ]
     } : !firrtl.uint<1>
   }
-  firrtl.module @Companion_w2(in %_gen_uint: !firrtl.probe<uint<2>>) attributes {
+  firrtl.module private @Companion_w2(in %_gen_uint: !firrtl.probe<uint<2>>) attributes {
     annotations = [
       {
         class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",

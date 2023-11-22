@@ -947,7 +947,7 @@ void ParamExprAttr::print(AsmPrinter &p) const {
 static FailureOr<Attribute>
 replaceDeclRefInExpr(Location loc,
                      const std::map<std::string, Attribute> &parameters,
-                     Attribute paramAttr) {
+                     Attribute paramAttr, bool emitErrors) {
   if (paramAttr.dyn_cast<IntegerAttr>()) {
     // Nothing to do, constant value.
     return paramAttr;
@@ -955,17 +955,20 @@ replaceDeclRefInExpr(Location loc,
   if (auto paramRefAttr = paramAttr.dyn_cast<hw::ParamDeclRefAttr>()) {
     // Get the value from the provided parameters.
     auto it = parameters.find(paramRefAttr.getName().str());
-    if (it == parameters.end())
-      return emitError(loc)
-             << "Could not find parameter " << paramRefAttr.getName().str()
-             << " in the provided parameters for the expression!";
+    if (it == parameters.end()) {
+      if (emitErrors)
+        return emitError(loc)
+               << "Could not find parameter " << paramRefAttr.getName().str()
+               << " in the provided parameters for the expression!";
+      return failure();
+    }
     return it->second;
   }
   if (auto paramExprAttr = paramAttr.dyn_cast<hw::ParamExprAttr>()) {
     // Recurse into all operands of the expression.
     llvm::SmallVector<TypedAttr, 4> replacedOperands;
     for (auto operand : paramExprAttr.getOperands()) {
-      auto res = replaceDeclRefInExpr(loc, parameters, operand);
+      auto res = replaceDeclRefInExpr(loc, parameters, operand, emitErrors);
       if (failed(res))
         return {failure()};
       replacedOperands.push_back(res->cast<TypedAttr>());
@@ -979,7 +982,8 @@ replaceDeclRefInExpr(Location loc,
 
 FailureOr<TypedAttr> hw::evaluateParametricAttr(Location loc,
                                                 ArrayAttr parameters,
-                                                Attribute paramAttr) {
+                                                Attribute paramAttr,
+                                                bool emitErrors) {
   // Create a map of the provided parameters for faster lookup.
   std::map<std::string, Attribute> parameterMap;
   for (auto param : parameters) {
@@ -989,7 +993,8 @@ FailureOr<TypedAttr> hw::evaluateParametricAttr(Location loc,
 
   // First, replace any ParamDeclRefAttr in the expression with its
   // corresponding value in 'parameters'.
-  auto paramAttrRes = replaceDeclRefInExpr(loc, parameterMap, paramAttr);
+  auto paramAttrRes =
+      replaceDeclRefInExpr(loc, parameterMap, paramAttr, emitErrors);
   if (failed(paramAttrRes))
     return {failure()};
   paramAttr = *paramAttrRes;
@@ -1011,12 +1016,13 @@ FailureOr<TypedAttr> hw::evaluateParametricAttr(Location loc,
 
 template <typename TArray>
 FailureOr<Type> evaluateParametricArrayType(Location loc, ArrayAttr parameters,
-                                            TArray arrayType) {
-  auto size = evaluateParametricAttr(loc, parameters, arrayType.getSizeAttr());
+                                            TArray arrayType, bool emitErrors) {
+  auto size = evaluateParametricAttr(loc, parameters, arrayType.getSizeAttr(),
+                                     emitErrors);
   if (failed(size))
     return failure();
-  auto elementType =
-      evaluateParametricType(loc, parameters, arrayType.getElementType());
+  auto elementType = evaluateParametricType(
+      loc, parameters, arrayType.getElementType(), emitErrors);
   if (failed(elementType))
     return failure();
 
@@ -1033,11 +1039,11 @@ FailureOr<Type> evaluateParametricArrayType(Location loc, ArrayAttr parameters,
 }
 
 FailureOr<Type> hw::evaluateParametricType(Location loc, ArrayAttr parameters,
-                                           Type type) {
+                                           Type type, bool emitErrors) {
   return llvm::TypeSwitch<Type, FailureOr<Type>>(type)
       .Case<hw::IntType>([&](hw::IntType t) -> FailureOr<Type> {
         auto evaluatedWidth =
-            evaluateParametricAttr(loc, parameters, t.getWidth());
+            evaluateParametricAttr(loc, parameters, t.getWidth(), emitErrors);
         if (failed(evaluatedWidth))
           return {failure()};
 
@@ -1051,7 +1057,8 @@ FailureOr<Type> hw::evaluateParametricType(Location loc, ArrayAttr parameters,
       })
       .Case<hw::ArrayType, hw::UnpackedArrayType>(
           [&](auto arrayType) -> FailureOr<Type> {
-            return evaluateParametricArrayType(loc, parameters, arrayType);
+            return evaluateParametricArrayType(loc, parameters, arrayType,
+                                               emitErrors);
           })
       .Default([&](auto) { return type; });
 }

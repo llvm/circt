@@ -76,6 +76,10 @@ struct FirtoolOptions {
                      "Preserve all values")),
       llvm::cl::init(firrtl::PreserveValues::None), llvm::cl::cat(category)};
 
+  llvm::cl::opt<bool> enableDebugInfo{
+      "g", llvm::cl::desc("Enable the generation of debug information"),
+      llvm::cl::init(false), llvm::cl::cat(category)};
+
   // Build mode options.
   enum BuildMode { BuildModeDebug, BuildModeRelease };
   llvm::cl::opt<BuildMode> buildMode{
@@ -105,10 +109,6 @@ struct FirtoolOptions {
   llvm::cl::opt<bool> vbToBV{
       "vb-to-bv",
       llvm::cl::desc("Transform vectors of bundles to bundles of vectors"),
-      llvm::cl::init(false), llvm::cl::cat(category)};
-
-  llvm::cl::opt<bool> dedup{
-      "dedup", llvm::cl::desc("Deduplicate structurally identical modules"),
       llvm::cl::init(false), llvm::cl::cat(category)};
 
   llvm::cl::opt<bool> noDedup{

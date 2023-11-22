@@ -39,6 +39,57 @@ def ChannelOpInterface : OpInterface<"ChannelOpInterface"> {
   ];
 }
 
+def HasAppIDOpInterface : OpInterface<"HasAppID"> {
+  let cppNamespace = "circt::esi";
+  let description = [{
+    Op can be identified by an AppID.
+  }];
+
+  let methods = [
+    InterfaceMethod<
+      "Returns the AppID of this operation.",
+      "::circt::esi::AppIDAttr", "getAppID", (ins),
+        /*methodBody=*/"",
+        /*defaultImplementation=*/[{
+          return $_op.getAppID();
+        }]
+    >,
+  ];
+}
+
+def IsManifestData : OpInterface<"IsManifestData"> {
+  let cppNamespace = "circt::esi";
+  let description = [{
+    Op's attributes should be represented in the manifest.
+  }];
+
+  let methods = [
+    StaticInterfaceMethod<
+      "Get the class name for this op.",
+      "StringRef", "getManifestClass", (ins)
+    >,
+    InterfaceMethod<
+      "Populate results with the manifest data.",
+      "void", "getDetails", (ins "SmallVectorImpl<NamedAttribute>&":$results),
+        /*methodBody=*/"",
+        /*defaultImplementation=*/[{
+          auto attrs = $_op->getAttrs();
+          results.append(attrs.begin(), attrs.end());
+        }]
+    >,
+    InterfaceMethod<
+      "Get the manifest data from this op as an attribute.",
+      "DictionaryAttr", "getDetailsAsDict", (ins),
+        /*methodBody=*/"",
+        /*defaultImplementation=*/[{
+          SmallVector<NamedAttribute, 8> attrs;
+          $_op.getDetails(attrs);
+          return DictionaryAttr::get($_op.getContext(), attrs);
+        }]
+    >,
+  ];
+}
+
 //===----------------------------------------------------------------------===//
 //
 // Service-related interfaces.

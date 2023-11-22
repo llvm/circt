@@ -1,13 +1,5 @@
 // RUN: circt-opt -firrtl-lower-classes %s -verify-diagnostics --split-input-file
 
-firrtl.circuit "Component" {
-  firrtl.module @Component() {}
-  // expected-error @+1{{failed to legalize operation 'om.class' that was explicitly marked illegal}}
-  firrtl.class @Map(in %s1: !firrtl.map<list<string>, string>) {}
-}
-
-// -----
-
 firrtl.circuit "UnassignedInputPort" {
   firrtl.class @Class(in %input: !firrtl.string) {}
 
@@ -50,7 +42,9 @@ firrtl.circuit "PathDuplicateID" {
 // -----
 
 firrtl.circuit "PathDontTouchDeleted" {
-  firrtl.module @PathDontTouchDeleted() {}
+  firrtl.module @PathDontTouchDeleted() {
+    %class = firrtl.object @Class()
+  }
   firrtl.class @Class() {
     // expected-error @+2 {{DontTouch target was deleted}}
     // expected-error @+1 {{failed to legalize operation 'firrtl.path' that was explicitly marked illegal}}
@@ -61,7 +55,9 @@ firrtl.circuit "PathDontTouchDeleted" {
 // -----
 
 firrtl.circuit "PathInstanceDeleted" {
-  firrtl.module @PathInstanceDeleted() {}
+  firrtl.module @PathInstanceDeleted() {
+    %class = firrtl.object @Class()
+  }
   firrtl.class @Class() {
     // expected-error @+2 {{Instance target was deleted}}
     // expected-error @+1 {{failed to legalize operation 'firrtl.path' that was explicitly marked illegal}}
@@ -75,6 +71,7 @@ firrtl.circuit "NotInstance" {
   firrtl.module @NotInstance() {
     // expected-note @below {{target not instance or module}}
     firrtl.wire {annotations = [{class = "circt.tracker", id = distinct[0]<>}]} : !firrtl.uint<8>
+    %class = firrtl.object @Class()
   }
   firrtl.class @Class() {
     // expected-error @below {{invalid target for instance path}}

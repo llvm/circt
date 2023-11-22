@@ -375,17 +375,30 @@ firrtl.circuit "ExtractClockGatesComposed" attributes {annotations = [
   {class = "sifive.enterprise.firrtl.ExtractClockGatesFileAnnotation", filename = "ClockGates.txt"},
   {class = "sifive.enterprise.firrtl.ExtractSeqMemsFileAnnotation", filename = "SeqMems.txt"}
 ]} {
+  // CHECK: hw.hierpath private @nla0 [@ExtractClockGatesComposed::[[SYM0:.+]], @EICG_wrapper]
+  hw.hierpath private @nla0 [@DUTModule::@sym, @EICG_wrapper]
+  // CHECK: hw.hierpath private @nla1 [@ExtractClockGatesComposed::[[SYM1:.+]], @EICG_wrapper]
+  hw.hierpath private @nla1 [@Child::@sym, @EICG_wrapper]
   firrtl.extmodule private @EICG_wrapper(in in: !firrtl.clock, in en: !firrtl.uint<1>, out out: !firrtl.clock) attributes {defname = "EICG_wrapper"}
   firrtl.memmodule @mem_ext() attributes {dataWidth = 8 : ui32, depth = 8 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
-  firrtl.module private @DUTModule(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>) attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
-    firrtl.instance mem_ext @mem_ext()
-    %gate_in, %gate_en, %gate_out = firrtl.instance gate @EICG_wrapper(in in: !firrtl.clock, in en: !firrtl.uint<1>, out out: !firrtl.clock)
+  firrtl.module private @Child(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>) {
+    %gate_in, %gate_en, %gate_out = firrtl.instance gate sym @sym @EICG_wrapper(in in: !firrtl.clock, in en: !firrtl.uint<1>, out out: !firrtl.clock)
     firrtl.connect %gate_in, %clock : !firrtl.clock, !firrtl.clock
     firrtl.connect %gate_en, %en : !firrtl.uint<1>, !firrtl.uint<1>
   }
+  firrtl.module private @DUTModule(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>) attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
+    firrtl.instance mem_ext @mem_ext()
+    %gate_in, %gate_en, %gate_out = firrtl.instance gate sym @sym @EICG_wrapper(in in: !firrtl.clock, in en: !firrtl.uint<1>, out out: !firrtl.clock)
+    firrtl.connect %gate_in, %clock : !firrtl.clock, !firrtl.clock
+    firrtl.connect %gate_en, %en : !firrtl.uint<1>, !firrtl.uint<1>
+    %child_clock, %child_en = firrtl.instance child @Child(in clock: !firrtl.clock, in en: !firrtl.uint<1>)
+    firrtl.connect %child_clock, %clock : !firrtl.clock, !firrtl.clock
+    firrtl.connect %child_en, %en : !firrtl.uint<1>, !firrtl.uint<1>
+  }
   // CHECK-LABEL: firrtl.module @ExtractClockGatesComposed
   firrtl.module @ExtractClockGatesComposed(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>) {
-    // CHECK: firrtl.instance gate @EICG_wrapper
+    // CHECK: firrtl.instance gate sym [[SYM0]] @EICG_wrapper
+    // CHECK: firrtl.instance gate sym [[SYM1]] @EICG_wrapper
     // CHECK: firrtl.instance mem_ext @mem_ext
     %dut_clock, %dut_en = firrtl.instance dut @DUTModule(in clock: !firrtl.clock, in en: !firrtl.uint<1>)
     firrtl.connect %dut_clock, %clock : !firrtl.clock, !firrtl.clock
@@ -393,10 +406,12 @@ firrtl.circuit "ExtractClockGatesComposed" attributes {annotations = [
   }
   // CHECK: sv.verbatim ""
   // CHECK: sv.verbatim "
-  // CHECK-SAME{LITERAL}: clock_gate_0 -> {{0}}\0A
+  // CHECK-SAME{LITERAL}: clock_gate_0 -> {{0}}.{{1}}\0A
+  // CHECK-SAME{LITERAL}: clock_gate_1 -> {{0}}\0A
   // CHECK-SAME: output_file = #hw.output_file<"ClockGates.txt", excludeFromFileList>
   // CHECK-SAME: symbols = [
   // CHECK-SAME: @DUTModule
+  // CHECK-SAME: #hw.innerNameRef<@DUTModule::[[SYM0]]>
   // CHECK-SAME: ]
   // CHECK: sv.verbatim "
   // CHECK-SAME{LITERAL}: mem_wiring_0 -> {{0}}\0A

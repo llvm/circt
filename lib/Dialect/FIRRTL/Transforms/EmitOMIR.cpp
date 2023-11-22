@@ -738,8 +738,12 @@ void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
                 << opName.getValue() << "`";
     diag.attachNote(tracker.op->getLoc())
         << "may refer to the following paths:";
-    for (auto path : paths)
-      path.print(diag.attachNote(tracker.op->getLoc()) << "- ");
+    for (auto path : paths) {
+      std::string pathStr;
+      llvm::raw_string_ostream os(pathStr);
+      os << "- " << path;
+      diag.attachNote(tracker.op->getLoc()) << pathStr;
+    }
     anyFailures = true;
     return;
   }

@@ -12,6 +12,7 @@
 #include "circt/Conversion/HWToLLVM.h"
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Support/Namespace.h"
 #include "mlir/Conversion/ArithToLLVM/ArithToLLVM.h"
 #include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
@@ -71,7 +72,8 @@ struct AllocStorageOpLowering
     auto type = typeConverter->convertType(op.getType());
     if (!op.getOffset().has_value())
       return failure();
-    rewriter.replaceOpWithNewOp<LLVM::GEPOp>(op, type, adaptor.getInput(),
+    rewriter.replaceOpWithNewOp<LLVM::GEPOp>(op, type, rewriter.getI8Type(),
+                                             adaptor.getInput(),
                                              LLVM::GEPArg(*op.getOffset()));
     return success();
   }
@@ -91,14 +93,9 @@ struct AllocStateLikeOpLowering : public OpConversionPattern<ConcreteOp> {
     if (!offsetAttr)
       return failure();
     Value ptr = rewriter.create<LLVM::GEPOp>(
-        op->getLoc(), adaptor.getStorage().getType(), adaptor.getStorage(),
+        op->getLoc(), adaptor.getStorage().getType(), rewriter.getI8Type(),
+        adaptor.getStorage(),
         LLVM::GEPArg(offsetAttr.getValue().getZExtValue()));
-
-    // Cast the raw storage pointer to a pointer of the state's actual type.
-    auto type = typeConverter->convertType(op.getType());
-    if (type != ptr.getType())
-      ptr = rewriter.create<LLVM::BitcastOp>(op->getLoc(), type, ptr);
-
     rewriter.replaceOp(op, ptr);
     return success();
   }
@@ -109,7 +106,8 @@ struct StateReadOpLowering : public OpConversionPattern<arc::StateReadOp> {
   LogicalResult
   matchAndRewrite(arc::StateReadOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
-    rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, adaptor.getState());
+    auto type = typeConverter->convertType(op.getType());
+    rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, type, adaptor.getState());
     return success();
   }
 };
@@ -143,12 +141,9 @@ struct AllocMemoryOpLowering : public OpConversionPattern<arc::AllocMemoryOp> {
     if (!offsetAttr)
       return failure();
     Value ptr = rewriter.create<LLVM::GEPOp>(
-        op.getLoc(), adaptor.getStorage().getType(), adaptor.getStorage(),
+        op.getLoc(), adaptor.getStorage().getType(), rewriter.getI8Type(),
+        adaptor.getStorage(),
         LLVM::GEPArg(offsetAttr.getValue().getZExtValue()));
-
-    auto type = typeConverter->convertType(op.getType());
-    if (type != ptr.getType())
-      ptr = rewriter.create<LLVM::BitcastOp>(op.getLoc(), type, ptr);
 
     rewriter.replaceOp(op, ptr);
     return success();
@@ -162,12 +157,9 @@ struct StorageGetOpLowering : public OpConversionPattern<arc::StorageGetOp> {
                   ConversionPatternRewriter &rewriter) const final {
     Value offset = rewriter.create<LLVM::ConstantOp>(
         op.getLoc(), rewriter.getI32Type(), op.getOffsetAttr());
-    Value ptr = rewriter.create<LLVM::GEPOp>(op.getLoc(),
-                                             adaptor.getStorage().getType(),
-                                             adaptor.getStorage(), offset);
-    auto type = typeConverter->convertType(op.getType());
-    if (type != ptr.getType())
-      ptr = rewriter.create<LLVM::BitcastOp>(op.getLoc(), type, ptr);
+    Value ptr = rewriter.create<LLVM::GEPOp>(
+        op.getLoc(), adaptor.getStorage().getType(), rewriter.getI8Type(),
+        adaptor.getStorage(), offset);
     rewriter.replaceOp(op, ptr);
     return success();
   }
@@ -188,9 +180,9 @@ static MemoryAccess prepareMemoryAccess(Location loc, Value memory,
       loc, zextAddrType, rewriter.getI32IntegerAttr(type.getNumWords()));
   Value withinBounds = rewriter.create<LLVM::ICmpOp>(
       loc, LLVM::ICmpPredicate::ult, addr, addrLimit);
-  auto ptrType = LLVM::LLVMPointerType::get(type.getWordType());
-  Value ptr =
-      rewriter.create<LLVM::GEPOp>(loc, ptrType, memory, ValueRange{addr});
+  Value ptr = rewriter.create<LLVM::GEPOp>(
+      loc, LLVM::LLVMPointerType::get(memory.getContext()),
+      rewriter.getIntegerType(type.getStride() * 8), memory, ValueRange{addr});
   return {ptr, withinBounds};
 }
 
@@ -200,16 +192,18 @@ struct MemoryReadOpLowering : public OpConversionPattern<arc::MemoryReadOp> {
   matchAndRewrite(arc::MemoryReadOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
     auto type = typeConverter->convertType(op.getType());
-    auto access = prepareMemoryAccess(
-        op.getLoc(), adaptor.getMemory(), adaptor.getAddress(),
-        op.getMemory().getType().cast<MemoryType>(), rewriter);
+    auto memoryType = op.getMemory().getType().cast<MemoryType>();
+    auto access =
+        prepareMemoryAccess(op.getLoc(), adaptor.getMemory(),
+                            adaptor.getAddress(), memoryType, rewriter);
 
     // Only attempt to read the memory if the address is within bounds,
     // otherwise produce a zero value.
     rewriter.replaceOpWithNewOp<scf::IfOp>(
         op, access.withinBounds,
         [&](auto &builder, auto loc) {
-          Value loadOp = builder.template create<LLVM::LoadOp>(loc, access.ptr);
+          Value loadOp = builder.template create<LLVM::LoadOp>(
+              loc, memoryType.getWordType(), access.ptr);
           builder.template create<scf::YieldOp>(loc, loadOp);
         },
         [&](auto &builder, auto loc) {
@@ -302,11 +296,23 @@ struct ZeroCountOpLowering : public OpConversionPattern<arc::ZeroCountOp> {
   }
 };
 
+template <typename OpTy>
+struct ReplaceOpWithInputPattern : public OpConversionPattern<OpTy> {
+  using OpConversionPattern<OpTy>::OpConversionPattern;
+  using OpAdaptor = typename OpTy::Adaptor;
+  LogicalResult
+  matchAndRewrite(OpTy op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOp(op, adaptor.getInput());
+    return success();
+  }
+};
+
 } // namespace
 
 static bool isArcType(Type type) {
   return type.isa<StorageType>() || type.isa<MemoryType>() ||
-         type.isa<StateType>();
+         type.isa<StateType>() || type.isa<seq::ClockType>();
 }
 
 static bool hasArcType(TypeRange types) {
@@ -331,6 +337,7 @@ static void populateLegality(ConversionTarget &target) {
   target.addLegalDialect<func::FuncDialect>();
   target.addLegalDialect<scf::SCFDialect>();
   target.addLegalDialect<LLVM::LLVMDialect>();
+  target.addIllegalDialect<seq::SeqDialect>();
 
   target.addIllegalOp<arc::DefineOp>();
   target.addIllegalOp<arc::OutputOp>();
@@ -350,16 +357,17 @@ static void populateLegality(ConversionTarget &target) {
 }
 
 static void populateTypeConversion(TypeConverter &typeConverter) {
+  typeConverter.addConversion([&](seq::ClockType type) {
+    return IntegerType::get(type.getContext(), 1);
+  });
   typeConverter.addConversion([&](StorageType type) {
-    return LLVM::LLVMPointerType::get(IntegerType::get(type.getContext(), 8));
+    return LLVM::LLVMPointerType::get(type.getContext());
   });
   typeConverter.addConversion([&](MemoryType type) {
-    return LLVM::LLVMPointerType::get(
-        IntegerType::get(type.getContext(), type.getStride() * 8));
+    return LLVM::LLVMPointerType::get(type.getContext());
   });
   typeConverter.addConversion([&](StateType type) {
-    return LLVM::LLVMPointerType::get(
-        typeConverter.convertType(type.getType()));
+    return LLVM::LLVMPointerType::get(type.getContext());
   });
   typeConverter.addConversion([](hw::ArrayType type) { return type; });
   typeConverter.addConversion([](mlir::IntegerType type) { return type; });
@@ -380,6 +388,8 @@ static void populateOpConversion(RewritePatternSet &patterns,
     MemoryReadOpLowering,
     MemoryWriteOpLowering,
     ModelOpLowering,
+    ReplaceOpWithInputPattern<seq::ToClockOp>,
+    ReplaceOpWithInputPattern<seq::FromClockOp>,
     ReturnOpLowering,
     StateReadOpLowering,
     StateWriteOpLowering,

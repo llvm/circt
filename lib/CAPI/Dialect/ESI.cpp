@@ -22,13 +22,6 @@ MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(ESI, esi, circt::esi::ESIDialect)
 
 void registerESIPasses() { circt::esi::registerESIPasses(); }
 
-MlirLogicalResult circtESIExportCosimSchema(MlirModule module,
-                                            MlirStringCallback callback,
-                                            void *userData) {
-  mlir::detail::CallbackOstream stream(callback, userData);
-  return wrap(circt::esi::exportCosimSchema(unwrap(module), stream));
-}
-
 bool circtESITypeIsAChannelType(MlirType type) {
   return unwrap(type).isa<ChannelType>();
 }
@@ -145,8 +138,12 @@ MlirAttribute circtESIAppIDAttrGet(MlirContext ctxt, MlirStringRef name,
 MlirStringRef circtESIAppIDAttrGetName(MlirAttribute attr) {
   return wrap(unwrap(attr).cast<AppIDAttr>().getName().getValue());
 }
-uint64_t circtESIAppIDAttrGetIndex(MlirAttribute attr) {
-  return unwrap(attr).cast<AppIDAttr>().getIndex();
+bool circtESIAppIDAttrGetIndex(MlirAttribute attr, uint64_t *indexOut) {
+  std::optional<uint64_t> index = unwrap(attr).cast<AppIDAttr>().getIndex();
+  if (!index)
+    return false;
+  *indexOut = index.value();
+  return true;
 }
 
 bool circtESIAttributeIsAnAppIDPathAttr(MlirAttribute attr) {

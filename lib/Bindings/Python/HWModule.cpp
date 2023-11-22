@@ -149,6 +149,11 @@ void circt::python::populateDialectHWSubmodule(py::module &m) {
              return hwStructTypeGetField(
                  self, mlirStringRefCreateFromCString(fieldName.c_str()));
            })
+      .def("get_field_index",
+           [](MlirType self, const std::string &fieldName) {
+             return hwStructTypeGetFieldIndex(
+                 self, mlirStringRefCreateFromCString(fieldName.c_str()));
+           })
       .def("get_fields", [](MlirType self) {
         intptr_t num_fields = hwStructTypeGetNumFields(self);
         py::list fields;

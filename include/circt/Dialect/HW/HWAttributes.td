@@ -164,7 +164,14 @@ def ParamDeclAttr : AttrDef<HWDialect, "ParamDecl", [TypedAttrInterface]> {
       "return $_get(context, name, value.getType(), value);">,
     AttrBuilderWithInferredContext<(ins "::mlir::StringRef":$name,
                                         "::mlir::TypedAttr":$value),
-      "return get(StringAttr::get(value.getContext(), name), value);">
+      "return get(StringAttr::get(value.getContext(), name), value);">,
+    AttrBuilderWithInferredContext<(ins "::mlir::StringRef":$name,
+                                        "::mlir::Type":$type,
+                                        "::mlir::TypedAttr":$value),
+      [{return get(value.getContext(),
+                  StringAttr::get(value.getContext(), name),
+                  type,
+                  value);}]>
   ];
 
   let extraClassDeclaration = [{

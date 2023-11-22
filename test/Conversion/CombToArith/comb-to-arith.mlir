@@ -13,12 +13,7 @@ hw.module @test(in %arg0: i32, in %arg1: i32, in %arg2: i32, in %arg3: i32, in %
   %2 = comb.mods %arg0, %arg1 : i32
   // CHECK-NEXT: arith.remui %arg0, %arg1 : i32
   %3 = comb.modu %arg0, %arg1 : i32
-  // CHECK-NEXT: arith.shli %arg0, %arg1 : i32
-  %4 = comb.shl %arg0, %arg1 : i32
-  // CHECK-NEXT: arith.shrsi %arg0, %arg1 : i32
-  %5 = comb.shrs %arg0, %arg1 : i32
-  // CHECK-NEXT: arith.shrui %arg0, %arg1 : i32
-  %6 = comb.shru %arg0, %arg1 : i32
+
   // CHECK-NEXT: arith.subi %arg0, %arg1 : i32
   %7 = comb.sub %arg0, %arg1 : i32
 
@@ -106,3 +101,30 @@ hw.module @test(in %arg0: i32, in %arg1: i32, in %arg2: i32, in %arg3: i32, in %
   %31 = comb.replicate %arg0 : (i32) -> i64
 }
 
+// CHECK-LABEL: @shlTest
+hw.module @shlTest(in %arg0: i32, in %arg1: i32) {
+  // CHECK-NEXT: [[CST0:%.+]] = arith.constant 0 : i32
+  // CHECK-NEXT: [[CST32:%.+]] = arith.constant 32 : i32
+  // CHECK-NEXT: [[V0:%.+]] = arith.shli %arg0, %arg1 : i32
+  // CHECK-NEXT: [[V1:%.+]] = arith.cmpi uge, %arg1, [[CST32]] : i32
+  // CHECK-NEXT: [[V2:%.+]] = arith.select [[V1]], [[CST0]], [[V0]] : i32
+  %shl = comb.shl %arg0, %arg1 : i32
+}
+
+// CHECK-LABEL: @shruTest
+hw.module @shruTest(in %arg0: i32, in %arg1: i32) {
+  // CHECK-NEXT: [[CST0:%.+]] = arith.constant 0 : i32
+  // CHECK-NEXT: [[CST32:%.+]] = arith.constant 32 : i32
+  // CHECK-NEXT: [[V0:%.+]] = arith.shrui %arg0, %arg1 : i32
+  // CHECK-NEXT: [[V1:%.+]] = arith.cmpi uge, %arg1, [[CST32]] : i32
+  // CHECK-NEXT: [[V2:%.+]] = arith.select [[V1]], [[CST0]], [[V0]] : i32
+  %shru = comb.shru %arg0, %arg1 : i32
+}
+
+// CHECK-LABEL: @shrsTest
+hw.module @shrsTest(in %arg0: i32, in %arg1: i32) {
+  // CHECK-NEXT: [[CST31:%.+]] = arith.constant 31 : i32
+  // CHECK-NEXT: [[V0:%.+]] = arith.minui %arg1, [[CST31]] : i32
+  // CHECK-NEXT: [[V1:%.+]] = arith.shrsi %arg0, [[V0]] : i32
+  %shrs = comb.shrs %arg0, %arg1 : i32
+}

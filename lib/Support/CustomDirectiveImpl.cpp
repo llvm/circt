@@ -58,6 +58,9 @@ void circt::printImplicitSSAName(OpAsmPrinter &printer, Operation *op,
   llvm::raw_svector_ostream tmpStream(resultNameStr);
   printer.printOperand(op->getResult(0), tmpStream);
   auto actualName = tmpStream.str().drop_front();
+  // Optional names are printed as digits.
+  if (!attr)
+    return;
   auto expectedName = attr.getValue();
   // Anonymous names are printed as digits, which is fine.
   if (actualName == expectedName ||

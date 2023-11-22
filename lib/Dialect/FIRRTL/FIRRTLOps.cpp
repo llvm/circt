@@ -1913,18 +1913,11 @@ bool ExtClassOp::canDiscardOnUseEmpty() {
 // Declarations
 //===----------------------------------------------------------------------===//
 
-/// Lookup the module or extmodule for the symbol.  This returns null on
-/// invalid IR.
-Operation *InstanceOp::getReferencedModuleSlow() {
+SmallVector<::circt::hw::PortInfo> InstanceOp::getPortList() {
   auto circuit = (*this)->getParentOfType<CircuitOp>();
   if (!circuit)
-    return nullptr;
-
-  return circuit.lookupSymbol<FModuleLike>(getModuleNameAttr());
-}
-
-SmallVector<::circt::hw::PortInfo> InstanceOp::getPortList() {
-  return cast<hw::PortList>(getReferencedModuleSlow()).getPortList();
+    llvm::report_fatal_error("instance op not in circuit");
+  return circuit.lookupSymbol<hw::PortList>(getModuleNameAttr()).getPortList();
 }
 
 void InstanceOp::build(OpBuilder &builder, OperationState &result,
@@ -2943,21 +2936,13 @@ StringAttr ObjectOp::getClassNameAttr() {
 
 StringRef ObjectOp::getClassName() { return getType().getName(); }
 
-ClassLike ObjectOp::getReferencedClass(SymbolTable &symbolTable) {
+ClassLike ObjectOp::getReferencedClass(const SymbolTable &symbolTable) {
   auto symRef = getType().getNameAttr();
   return symbolTable.lookup<ClassLike>(symRef.getLeafReference());
 }
 
-Operation *ObjectOp::getReferencedModule(SymbolTable &symtbl) {
+Operation *ObjectOp::getReferencedOperation(const SymbolTable &symtbl) {
   return getReferencedClass(symtbl);
-}
-
-Operation *ObjectOp::getReferencedModuleSlow() {
-  auto circuit = (*this)->getParentOfType<CircuitOp>();
-  if (!circuit)
-    return nullptr;
-
-  return circuit.lookupSymbol<ClassLike>(getClassNameAttr());
 }
 
 StringRef ObjectOp::getInstanceName() { return getName(); }
@@ -3785,73 +3770,6 @@ LogicalResult ListCreateOp::verify() {
     return emitOpError("has elements of type ")
            << elementType << " instead of " << listElementType;
 
-  return success();
-}
-
-ParseResult MapCreateOp::parse(OpAsmParser &parser, OperationState &result) {
-  llvm::SmallVector<OpAsmParser::UnresolvedOperand, 16> keys;
-  llvm::SmallVector<OpAsmParser::UnresolvedOperand, 16> values;
-
-  MapType type;
-
-  auto parsePair = [&]() {
-    OpAsmParser::UnresolvedOperand key, value;
-    if (parser.parseOperand(key) || parser.parseArrow() ||
-        parser.parseOperand(value))
-      return failure();
-    keys.push_back(key);
-    values.push_back(value);
-    return success();
-  };
-  if (parser.parseCommaSeparatedList(OpAsmParser::Delimiter::OptionalParen,
-                                     parsePair) ||
-      parser.parseOptionalAttrDict(result.attributes) ||
-      parser.parseColonType(type))
-    return failure();
-  result.addTypes(type);
-
-  if (parser.resolveOperands(keys, type.getKeyType(), result.operands) ||
-      parser.resolveOperands(values, type.getValueType(), result.operands))
-    return failure();
-
-  return success();
-}
-
-void MapCreateOp::print(OpAsmPrinter &p) {
-  p << " ";
-  if (!getKeys().empty()) {
-    p << "(";
-    llvm::interleaveComma(llvm::zip_equal(getKeys(), getValues()), p,
-                          [&](auto pair) {
-                            auto &[key, value] = pair;
-                            p.printOperand(key);
-                            p << " -> ";
-                            p.printOperand(value);
-                          });
-    p << ")";
-  }
-  p.printOptionalAttrDict((*this)->getAttrs());
-  p << " : " << getType();
-}
-
-LogicalResult MapCreateOp::verify() {
-  if (getKeys().empty())
-    return success();
-
-  if (!llvm::all_equal(getKeys().getTypes()))
-    return emitOpError("has keys that are not all the same type");
-  if (!llvm::all_equal(getValues().getTypes()))
-    return emitOpError("has values that are not all the same type");
-
-  if (getKeys().front().getType() != getType().getKeyType())
-    return emitOpError("has unexpected key type ")
-           << getKeys().front().getType() << " instead of map key type "
-           << getType().getKeyType();
-
-  if (getValues().front().getType() != getType().getValueType())
-    return emitOpError("has unexpected value type ")
-           << getValues().front().getType() << " instead of map value type "
-           << getType().getValueType();
   return success();
 }
 

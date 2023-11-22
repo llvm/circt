@@ -32,11 +32,16 @@ class SysInfo : public Service {
 public:
   virtual ~SysInfo() = default;
 
+  virtual std::string getServiceSymbol() const override;
+
   /// Get the ESI version number to check version compatibility.
-  virtual uint32_t esiVersion() const = 0;
+  virtual uint32_t getEsiVersion() const = 0;
 
   /// Return the JSON-formatted system manifest.
-  virtual std::string rawJsonManifest() const = 0;
+  virtual std::string getJsonManifest() const;
+
+  /// Return the zlib compressed JSON system manifest.
+  virtual std::vector<uint8_t> getCompressedManifest() const = 0;
 };
 
 class MMIO : public Service {
@@ -44,6 +49,7 @@ public:
   virtual ~MMIO() = default;
   virtual uint64_t read(uint32_t addr) const = 0;
   virtual void write(uint32_t addr, uint64_t data) = 0;
+  virtual std::string getServiceSymbol() const override;
 };
 
 /// Implement the SysInfo API for a standard MMIO protocol.
@@ -52,10 +58,10 @@ public:
   MMIOSysInfo(const MMIO *);
 
   /// Get the ESI version number to check version compatibility.
-  uint32_t esiVersion() const override;
+  uint32_t getEsiVersion() const override;
 
-  /// Return the JSON-formatted system manifest.
-  std::string rawJsonManifest() const override;
+  /// Return the zlib compressed JSON system manifest.
+  virtual std::vector<uint8_t> getCompressedManifest() const override;
 
 private:
   const MMIO *mmio;

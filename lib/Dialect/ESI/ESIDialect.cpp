@@ -11,10 +11,12 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/ESI/ESIDialect.h"
+#include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/ESI/ESIOps.h"
 #include "circt/Dialect/ESI/ESITypes.h"
 #include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "circt/Dialect/HW/HWTypes.h"
+#include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Support/BackedgeBuilder.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Builders.h"

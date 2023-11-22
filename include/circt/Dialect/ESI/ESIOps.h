@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_ESI_ESIOPS_H
 #define CIRCT_DIALECT_ESI_ESIOPS_H
 
+#include "circt/Dialect/ESI/ESIAttributes.h"
 #include "circt/Dialect/ESI/ESIDialect.h"
 #include "circt/Dialect/ESI/ESITypes.h"
 
@@ -33,6 +34,11 @@ struct ServicePortInfo {
   hw::InnerRefAttr port;
   Direction direction;
   ChannelBundleType type;
+
+  StringRef directionAsString() {
+    return direction == ServicePortInfo::Direction::toClient ? "toClient"
+                                                             : "toServer";
+  }
 };
 
 } // namespace esi

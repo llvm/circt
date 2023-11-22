@@ -132,8 +132,12 @@ MLIR_CAPI_EXPORTED MlirType hwParamIntTypeGet(MlirAttribute parameter);
 
 MLIR_CAPI_EXPORTED MlirAttribute hwParamIntTypeGetWidthAttr(MlirType);
 
+MLIR_CAPI_EXPORTED MlirAttribute
+hwStructTypeGetFieldIndex(MlirType structType, MlirStringRef fieldName);
+
 MLIR_CAPI_EXPORTED HWStructFieldInfo
 hwStructTypeGetFieldNum(MlirType structType, unsigned idx);
+
 MLIR_CAPI_EXPORTED intptr_t hwStructTypeGetNumFields(MlirType structType);
 
 MLIR_CAPI_EXPORTED MlirType hwTypeAliasTypeGet(MlirStringRef scope,

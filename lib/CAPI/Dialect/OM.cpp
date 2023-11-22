@@ -44,6 +44,26 @@ MlirIdentifier omClassTypeGetName(MlirType type) {
   return wrap(cast<ClassType>(unwrap(type)).getClassName().getAttr());
 }
 
+/// Is the Type a FrozenBasePathType.
+bool omTypeIsAFrozenBasePathType(MlirType type) {
+  return isa<FrozenBasePathType>(unwrap(type));
+}
+
+/// Get the TypeID for a FrozenBasePathType.
+MlirTypeID omFrozenBasePathTypeGetTypeID(void) {
+  return wrap(FrozenBasePathType::getTypeID());
+}
+
+/// Is the Type a FrozenPathType.
+bool omTypeIsAFrozenPathType(MlirType type) {
+  return isa<FrozenPathType>(unwrap(type));
+}
+
+/// Get the TypeID for a FrozenPathType.
+MlirTypeID omFrozenPathTypeGetTypeID(void) {
+  return wrap(FrozenPathType::getTypeID());
+}
+
 /// Is the Type a StringType.
 bool omTypeIsAStringType(MlirType type) {
   return unwrap(type).isa<StringType>();
@@ -290,6 +310,23 @@ OMEvaluatorValue omEvaluatorMapGetElement(OMEvaluatorValue evaluatorValue,
 /// Query if the EvaluatorValue is a map.
 bool omEvaluatorValueIsAMap(OMEvaluatorValue evaluatorValue) {
   return isa<evaluator::MapValue>(unwrap(evaluatorValue).get());
+}
+
+bool omEvaluatorValueIsABasePath(OMEvaluatorValue evaluatorValue) {
+  return isa<evaluator::BasePathValue>(unwrap(evaluatorValue).get());
+}
+
+OMEvaluatorValue omEvaluatorBasePathGetEmpty(MlirContext context) {
+  return wrap(std::make_shared<evaluator::BasePathValue>(unwrap(context)));
+}
+
+bool omEvaluatorValueIsAPath(OMEvaluatorValue evaluatorValue) {
+  return isa<evaluator::PathValue>(unwrap(evaluatorValue).get());
+}
+
+MlirAttribute omEvaluatorPathGetAsString(OMEvaluatorValue evaluatorValue) {
+  const auto *path = cast<evaluator::PathValue>(unwrap(evaluatorValue).get());
+  return wrap((Attribute)path->getAsString());
 }
 
 //===----------------------------------------------------------------------===//

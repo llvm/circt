@@ -137,7 +137,7 @@ class Signal:
     from .circt.dialects import hw
     if isinstance(owner, ir.Block) and isinstance(owner.owner, hw.HWModuleOp):
       block_arg = ir.BlockArgument(self.value)
-      mod_type = hw.ModuleType(owner.owner.module_type.value)
+      mod_type = hw.ModuleType(ir.TypeAttr(owner.owner.module_type).value)
       return mod_type.input_names[block_arg.arg_number]
     if hasattr(self, "_name"):
       return self._name

@@ -42,6 +42,18 @@ MLIR_CAPI_EXPORTED MlirTypeID omClassTypeGetTypeID(void);
 /// Get the name for a ClassType.
 MLIR_CAPI_EXPORTED MlirIdentifier omClassTypeGetName(MlirType type);
 
+/// Is the Type a FrozenBasePathType.
+MLIR_CAPI_EXPORTED bool omTypeIsAFrozenBasePathType(MlirType type);
+
+/// Get the TypeID for a FrozenBasePathType.
+MLIR_CAPI_EXPORTED MlirTypeID omFrozenBasePathTypeGetTypeID(void);
+
+/// Is the Type a FrozenPathType.
+MLIR_CAPI_EXPORTED bool omTypeIsAFrozenPathType(MlirType type);
+
+/// Get the TypeID for a FrozenPathType.
+MLIR_CAPI_EXPORTED MlirTypeID omFrozenPathTypeGetTypeID(void);
+
 /// Is the Type a MapType.
 MLIR_CAPI_EXPORTED bool omTypeIsAMapType(MlirType type);
 
@@ -187,6 +199,22 @@ MLIR_CAPI_EXPORTED bool omEvaluatorValueIsAMap(OMEvaluatorValue evaluatorValue);
 MLIR_CAPI_EXPORTED MlirType
 omEvaluatorMapGetType(OMEvaluatorValue evaluatorValue);
 
+/// Query if the EvaluatorValue is a BasePath.
+MLIR_CAPI_EXPORTED bool
+omEvaluatorValueIsABasePath(OMEvaluatorValue evaluatorValue);
+
+/// Create an empty BasePath.
+MLIR_CAPI_EXPORTED OMEvaluatorValue
+omEvaluatorBasePathGetEmpty(MlirContext context);
+
+/// Query if the EvaluatorValue is a Path.
+MLIR_CAPI_EXPORTED bool
+omEvaluatorValueIsAPath(OMEvaluatorValue evaluatorValue);
+
+/// Get a string representation of a Path.
+MLIR_CAPI_EXPORTED MlirAttribute
+omEvaluatorPathGetAsString(OMEvaluatorValue evaluatorValue);
+
 //===----------------------------------------------------------------------===//
 // ReferenceAttr API
 //===----------------------------------------------------------------------===//
@@ -231,14 +259,6 @@ MLIR_CAPI_EXPORTED MlirIdentifier omMapAttrGetElementKey(MlirAttribute attr,
 
 MLIR_CAPI_EXPORTED MlirAttribute omMapAttrGetElementValue(MlirAttribute attr,
                                                           intptr_t pos);
-
-//===----------------------------------------------------------------------===//
-// PathAttr API
-//===----------------------------------------------------------------------===//
-
-MLIR_CAPI_EXPORTED bool omAttrIsAPathAttr(MlirAttribute attr);
-
-MLIR_CAPI_EXPORTED MlirIdentifier omPathAttrGetPath(MlirAttribute attr);
 
 #ifdef __cplusplus
 }

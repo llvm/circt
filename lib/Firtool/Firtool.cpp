@@ -34,6 +34,10 @@ LogicalResult firtool::populatePreprocessTransforms(mlir::PassManager &pm,
       opt.disableAnnotationsUnknown, opt.disableAnnotationsClassless,
       opt.lowerAnnotationsNoRefTypePorts));
 
+  if (opt.enableDebugInfo)
+    pm.nest<firrtl::CircuitOp>().addNestedPass<firrtl::FModuleOp>(
+        firrtl::createMaterializeDebugInfoPass());
+
   return success();
 }
 
@@ -83,12 +87,6 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
       !opt.disableHoistingHWPassthrough));
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createProbeDCEPass());
 
-  if (opt.dedup)
-    emitWarning(UnknownLoc::get(pm.getContext()),
-                "option -dedup is deprecated since firtool 1.57.0, has no "
-                "effect (deduplication is always enabled), and will be removed "
-                "in firtool 1.58.0");
-
   if (!opt.noDedup)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createDedupPass());
 
@@ -114,6 +112,7 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
 
   auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
   modulePM.addPass(firrtl::createSFCCompatPass());
+  modulePM.addPass(firrtl::createGroupMergePass());
   modulePM.addPass(firrtl::createGroupSinkPass());
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerGroupsPass());
@@ -231,11 +230,12 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerClassesPass());
 
-  pm.addPass(createLowerFIRRTLToHWPass(
-      opt.enableAnnotationWarning.getValue(),
-      opt.emitChiselAssertsAsSVA.getValue(),
-      !opt.isRandomEnabled(FirtoolOptions::RandomKind::Mem),
-      !opt.isRandomEnabled(FirtoolOptions::RandomKind::Reg)));
+  // Check for static asserts.
+  pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+      circt::firrtl::createLintingPass());
+
+  pm.addPass(createLowerFIRRTLToHWPass(opt.enableAnnotationWarning.getValue(),
+                                       opt.emitChiselAssertsAsSVA.getValue()));
 
   if (!opt.disableOptimization) {
     auto &modulePM = pm.nest<hw::HWModuleOp>();
@@ -258,16 +258,25 @@ LogicalResult firtool::populateHWToSV(mlir::PassManager &pm,
 
   pm.addPass(seq::createExternalizeClockGatePass(opt.clockGateOpts));
   pm.addPass(circt::createLowerSeqToSVPass(
-      {/*disableRandomization=*/!opt.isRandomEnabled(
+      {/*disableRegRandomization=*/!opt.isRandomEnabled(
            FirtoolOptions::RandomKind::Reg),
+       /*disableMemRandomization=*/
+       !opt.isRandomEnabled(FirtoolOptions::RandomKind::Mem),
        /*emitSeparateAlwaysBlocks=*/
        opt.emitSeparateAlwaysBlocks}));
   pm.addNestedPass<hw::HWModuleOp>(createLowerVerifToSVPass());
-  pm.addPass(sv::createHWMemSimImplPass(
-      opt.replSeqMem, opt.ignoreReadEnableMem, opt.addMuxPragmas,
-      !opt.isRandomEnabled(FirtoolOptions::RandomKind::Mem),
-      !opt.isRandomEnabled(FirtoolOptions::RandomKind::Reg),
-      opt.addVivadoRAMAddressConflictSynthesisBugWorkaround));
+  pm.addPass(seq::createHWMemSimImplPass(
+      {/*disableMemRandomization=*/!opt.isRandomEnabled(
+           FirtoolOptions::RandomKind::Mem),
+       /*disableRegRandomization=*/
+       !opt.isRandomEnabled(FirtoolOptions::RandomKind::Reg),
+       /*replSeqMem=*/opt.replSeqMem,
+       /*readEnableMode=*/opt.ignoreReadEnableMem
+           ? seq::ReadEnableMode::Ignore
+           : seq::ReadEnableMode::Undefined,
+       /*addMuxPragmas=*/opt.addMuxPragmas,
+       /*addVivadoRAMAddressConflictSynthesisBugWorkaround=*/
+       opt.addVivadoRAMAddressConflictSynthesisBugWorkaround}));
 
   // If enabled, run the optimizer.
   if (!opt.disableOptimization) {

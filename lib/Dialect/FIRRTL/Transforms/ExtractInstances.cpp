@@ -178,7 +178,7 @@ void ExtractInstancesPass::runOnOperation() {
   if (anyFailures)
     return signalPassFailure();
 
-  // If nothing has changed we can preseve the analysis.
+  // If nothing has changed we can preserve the analysis.
   LLVM_DEBUG(llvm::dbgs() << "\n");
   if (!anythingChanged)
     markAllAnalysesPreserved();
@@ -278,7 +278,7 @@ void ExtractInstancesPass::collectAnnos() {
   // Gather the annotations on instances to be extracted.
   circuit.walk([&](InstanceOp inst) {
     SmallVector<Annotation, 1> instAnnos;
-    Operation *module = instanceGraph->getReferencedModule(inst);
+    Operation *module = inst.getReferencedModule(*instanceGraph);
 
     // Module-level annotations.
     auto it = annotatedModules.find(module);
@@ -701,9 +701,8 @@ void ExtractInstancesPass::extractInstances() {
           LLVM_DEBUG(llvm::dbgs() << "    - Re-rooting " << nlaPath[0] << "\n");
           assert(isa<InnerRefAttr>(nlaPath[0]) &&
                  "head of hierpath must be an InnerRefAttr");
-          nlaPath[0] =
-              InnerRefAttr::get(newParent.getModuleNameAttr(),
-                                cast<InnerRefAttr>(nlaPath[0]).getName());
+          nlaPath[0] = InnerRefAttr::get(newParent.getModuleNameAttr(),
+                                         getInnerSymName(newInst));
 
           if (instParentNode->hasOneUse()) {
             // Simply update the existing NLA since our parent is only

@@ -81,6 +81,15 @@ with Context() as ctx, Location.unknown():
     hw.module @Root(in %clock: i1) {
       %0 = sv.wire sym @x : !hw.inout<i1>
     }
+    
+    om.class @Paths(%basepath: !om.frozenbasepath) {
+      %0 = om.frozenbasepath_create %basepath "Foo/bar"
+      %1 = om.frozenpath_create reference %0 "Bar/baz:Baz>w"
+      om.class.field @path, %1 : !om.frozenpath
+
+      %3 = om.frozenpath_empty
+      om.class.field @deleted, %3 : !om.frozenpath
+    }
   }
   """)
 
@@ -200,3 +209,25 @@ assert len(object_dict) == 2
 obj = evaluator.instantiate("Test", 41)
 # CHECK: 41
 print(obj.field)
+
+path = om.BasePath.get_empty(evaluator.module.context)
+obj = evaluator.instantiate("Paths", path)
+print(obj.path)
+# CHECK: OMReferenceTarget:~Foo|Foo/bar:Bar/baz:Baz>w
+
+print(obj.deleted)
+# CHECK: OMDeleted
+
+paths_class = [
+    cls for cls in module.body
+    if hasattr(cls, "sym_name") and cls.sym_name.value == "Paths"
+][0]
+base_path_type = paths_class.regions[0].blocks[0].arguments[0].type
+assert isinstance(base_path_type, om.BasePathType)
+
+paths_fields = [
+    op for op in paths_class.regions[0].blocks[0]
+    if isinstance(op, om.ClassFieldOp)
+]
+for paths_field in paths_fields:
+  assert isinstance(paths_field.value.type, om.PathType)

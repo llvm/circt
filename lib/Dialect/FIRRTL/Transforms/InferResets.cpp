@@ -862,7 +862,7 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
 /// instance's port values with the target module's port values.
 void InferResetsPass::traceResets(InstanceOp inst) {
   // Lookup the referenced module. Nothing to do if its an extmodule.
-  auto module = dyn_cast<FModuleOp>(*instanceGraph->getReferencedModule(inst));
+  auto module = inst.getReferencedModule<FModuleOp>(*instanceGraph);
   if (!module)
     return;
   LLVM_DEBUG(llvm::dbgs() << "Visiting instance " << inst.getName() << "\n");
@@ -1114,8 +1114,8 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
       if (auto blockArg = dyn_cast<BlockArgument>(value))
         moduleWorklist.insert(blockArg.getOwner()->getParentOp());
       else if (auto instOp = value.getDefiningOp<InstanceOp>()) {
-        if (auto extmodule = dyn_cast<FExtModuleOp>(
-                *instanceGraph->getReferencedModule(instOp)))
+        if (auto extmodule =
+                instOp.getReferencedModule<FExtModuleOp>(*instanceGraph))
           extmoduleWorklist.insert({extmodule, instOp});
       } else if (auto uncast = value.getDefiningOp<UninferredResetCastOp>()) {
         uncast.replaceAllUsesWith(uncast.getInput());
@@ -1742,8 +1742,7 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
     // Lookup the reset domain of the instantiated module. If there is no
     // reset domain associated with that module, or the module is explicitly
     // marked as being in no domain, simply skip.
-    auto refModule =
-        dyn_cast<FModuleOp>(*instanceGraph->getReferencedModule(instOp));
+    auto refModule = instOp.getReferencedModule<FModuleOp>(*instanceGraph);
     if (!refModule)
       return;
     auto domainIt = domains.find(refModule);

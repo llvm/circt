@@ -7,7 +7,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Comb/CombDialect.h"
+#include "circt/Dialect/Debug/DebugDialect.h"
 #include "circt/Dialect/HW/HWDialect.h"
+#include "circt/Dialect/OM/OMDialect.h"
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Target/DebugInfo.h"
@@ -21,9 +23,11 @@ namespace debug {
 
 static void registerDialects(DialectRegistry &registry) {
   registry.insert<comb::CombDialect>();
+  registry.insert<debug::DebugDialect>();
   registry.insert<hw::HWDialect>();
   registry.insert<seq::SeqDialect>();
   registry.insert<sv::SVDialect>();
+  registry.insert<om::OMDialect>();
 }
 
 void registerDumpTranslation() {

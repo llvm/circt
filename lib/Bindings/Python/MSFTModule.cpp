@@ -9,6 +9,7 @@
 #include "DialectModules.h"
 
 #include "circt-c/Dialect/MSFT.h"
+#include "circt/Dialect/MSFT/MSFTDialect.h"
 
 #include "mlir/Bindings/Python/PybindAdaptors.h"
 #include "mlir/CAPI/IR.h"

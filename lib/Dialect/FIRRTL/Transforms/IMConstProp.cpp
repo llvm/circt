@@ -199,7 +199,7 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
       return;
     }
 
-    walkGroundTypes(firrtlType, [&](uint64_t fieldID, bool, auto) {
+    walkGroundTypes(firrtlType, [&](uint64_t fieldID, auto, auto) {
       markOverdefined(fieldRef.getSubField(fieldID));
     });
   }
@@ -257,7 +257,7 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
     if (type_isa<PropertyType>(result.getType()))
       return mergeLatticeValue(fieldRefResult, fieldRefFrom);
     walkGroundTypes(type_cast<FIRRTLType>(result.getType()),
-                    [&](uint64_t fieldID, bool, auto) {
+                    [&](uint64_t fieldID, auto, auto) {
                       mergeLatticeValue(fieldRefResult.getSubField(fieldID),
                                         fieldRefFrom.getSubField(fieldID));
                     });
@@ -518,7 +518,7 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
           fieldRefToUsers[fieldRef].push_back(&op);
           continue;
         }
-        walkGroundTypes(firrtlType, [&](uint64_t fieldID, bool, auto type) {
+        walkGroundTypes(firrtlType, [&](uint64_t fieldID, auto type, auto) {
           fieldRefToUsers[fieldRef.getSubField(fieldID)].push_back(&op);
         });
       }
@@ -550,7 +550,7 @@ void IMConstPropPass::markConstantValueOp(OpTy op) {
 }
 
 void IMConstPropPass::markAggregateConstantOp(AggregateConstantOp constant) {
-  walkGroundTypes(constant.getType(), [&](uint64_t fieldID, bool, auto) {
+  walkGroundTypes(constant.getType(), [&](uint64_t fieldID, auto, auto) {
     mergeLatticeValue(FieldRef(constant, fieldID),
                       LatticeValue(cast<IntegerAttr>(
                           constant.getAttributeFromFieldID(fieldID))));
@@ -565,7 +565,7 @@ void IMConstPropPass::markInvalidValueOp(InvalidValueOp invalid) {
 /// enclosing block is marked live.  This sets up the def-use edges for ports.
 void IMConstPropPass::markInstanceOp(InstanceOp instance) {
   // Get the module being reference or a null pointer if this is an extmodule.
-  Operation *op = instanceGraph->getReferencedModule(instance);
+  Operation *op = instance.getReferencedModule(*instanceGraph);
 
   // If this is an extmodule, just remember that any results and inouts are
   // overdefined.
@@ -721,12 +721,11 @@ void IMConstPropPass::visitConnectLike(FConnectLike connect,
     if (auto instance = dest.getDefiningOp<InstanceOp>()) {
       // Update the dest, when its an instance op.
       mergeLatticeValue(fieldRefDestConnected, srcValue);
-      auto module =
-          dyn_cast<FModuleOp>(*instanceGraph->getReferencedModule(instance));
-      if (!module)
+      auto mod = instance.getReferencedModule<FModuleOp>(*instanceGraph);
+      if (!mod)
         return;
 
-      BlockArgument modulePortVal = module.getArgument(dest.getResultNumber());
+      BlockArgument modulePortVal = mod.getArgument(dest.getResultNumber());
 
       return mergeLatticeValue(
           FieldRef(modulePortVal, fieldRefDestConnected.getFieldID()),

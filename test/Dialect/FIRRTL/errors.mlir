@@ -436,7 +436,7 @@ firrtl.module @X(in %a : !firrtl.uint<4>) {
 
 firrtl.circuit "BadPort" {
   firrtl.module @BadPort(in %a : !firrtl.uint<1>) {
-    // expected-error @+1 {{'firrtl.attach' op operand #0 must be analog type, but got '!firrtl.uint<1>'}}
+    // expected-error @+1 {{'firrtl.attach' op operand #0 must be variadic of analog type, but got '!firrtl.uint<1>'}}
     firrtl.attach %a, %a : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
@@ -1076,10 +1076,11 @@ firrtl.circuit "DupSymField" {
 // Node ops cannot have reference type
 
 firrtl.circuit "NonRefNode" {
-firrtl.module @NonRefNode(in %in1 : !firrtl.probe<uint<8>>) {
+firrtl.module @NonRefNode() {
+  %w = firrtl.wire : !firrtl.uint<8>
+  %ref = firrtl.ref.send %w : !firrtl.uint<8>
   // expected-error @+1 {{'firrtl.node' op operand #0 must be a passive base type (contain no flips), but got '!firrtl.probe<uint<8>>'}}
-  %n1 = firrtl.node %in1 : !firrtl.probe<uint<8>>
-  %a = firrtl.wire : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>
+  %n1 = firrtl.node %ref: !firrtl.probe<uint<8>>
 }
 }
 
@@ -1098,7 +1099,7 @@ firrtl.circuit "NonRefRegister" {
 
 firrtl.circuit "RefBundle" {
   // expected-error @+1 {{reference base type must be passive}}
-  firrtl.module @RefBundle(in %in1 : !firrtl.probe<bundle<valid flip : uint<1>>>) {
+  firrtl.module @RefBundle(out %out: !firrtl.probe<bundle<valid flip : uint<1>>>) {
   }
 }
 
@@ -1107,7 +1108,7 @@ firrtl.circuit "RefBundle" {
 
 firrtl.circuit "RefRef" {
   // expected-error @+1 {{expected base type, found '!firrtl.probe<uint<1>>'}}
-  firrtl.module @RefRef(in %in1 : !firrtl.probe<probe<uint<1>>>) {
+  firrtl.module @RefRef(out %out: !firrtl.probe<probe<uint<1>>>) {
   }
 }
 
@@ -1116,7 +1117,7 @@ firrtl.circuit "RefRef" {
 
 firrtl.circuit "RefField" {
   // expected-error @+1 {{expected base type, found '!firrtl.probe<uint<1>>'}}
-  firrtl.module @RefField(in %in1 : !firrtl.bundle<r: probe<uint<1>>>) {
+  firrtl.module @RefField(out %out: !firrtl.bundle<r: probe<uint<1>>>) {
   }
 }
 
@@ -1134,7 +1135,8 @@ firrtl.circuit "InvalidRef" {
 // Mux ref
 
 firrtl.circuit "MuxRef" {
-  firrtl.module @MuxRef(in %a: !firrtl.probe<uint<1>>, in %b: !firrtl.probe<uint<1>>,
+  firrtl.module @MuxRef() {}
+  firrtl.module private @MuxRefPrivate(in %a: !firrtl.probe<uint<1>>, in %b: !firrtl.probe<uint<1>>,
                           in %cond: !firrtl.uint<1>) {
     // expected-error @+1 {{'firrtl.mux' op operand #1 must be a passive base type (contain no flips), but got '!firrtl.probe<uint<1>>'}}
     %a_or_b = firrtl.mux(%cond, %a, %b) : (!firrtl.uint<1>, !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>) -> !firrtl.probe<uint<1>>
@@ -1145,7 +1147,8 @@ firrtl.circuit "MuxRef" {
 // Bitcast ref
 
 firrtl.circuit "BitcastRef" {
-  firrtl.module @BitcastRef(in %a: !firrtl.probe<uint<1>>) {
+  firrtl.module @BitcastRef() {}
+  firrtl.module private @BitcastRefPrivate(in %a: !firrtl.probe<uint<1>>) {
     // expected-error @+1 {{'firrtl.bitcast' op operand #0 must be a base type, but got '!firrtl.probe<uint<1>>}}
     %0 = firrtl.bitcast %a : (!firrtl.probe<uint<1>>) -> (!firrtl.probe<uint<1>>)
   }
@@ -1155,11 +1158,11 @@ firrtl.circuit "BitcastRef" {
 // Cannot connect ref types
 
 firrtl.circuit "Top" {
-  firrtl.module @Foo (in %in: !firrtl.probe<uint<2>>) {}
-  firrtl.module @Top (in %in: !firrtl.probe<uint<2>>) {
-    %foo_in = firrtl.instance foo @Foo(in in: !firrtl.probe<uint<2>>)
+  firrtl.module @Foo (out %out: !firrtl.probe<uint<2>>) {}
+  firrtl.module @Top (out %out: !firrtl.probe<uint<2>>) {
+    %foo_out = firrtl.instance foo @Foo(out out: !firrtl.probe<uint<2>>)
     // expected-error @below {{must be a sized passive base type}}
-    firrtl.strictconnect %foo_in, %in : !firrtl.probe<uint<2>>
+    firrtl.strictconnect %out, %foo_out: !firrtl.probe<uint<2>>
   }
 }
 
@@ -1167,8 +1170,9 @@ firrtl.circuit "Top" {
 // Check flow semantics for ref.send
 
 firrtl.circuit "Foo" {
+  firrtl.module @Foo() {}
   // expected-note @+1 {{destination was defined here}}
-  firrtl.module @Foo(in  %_a: !firrtl.probe<uint<1>>) {
+  firrtl.module private @InProbe(in  %_a: !firrtl.probe<uint<1>>) {
     %a = firrtl.wire : !firrtl.uint<1>
     %1 = firrtl.ref.send %a : !firrtl.uint<1>
     // expected-error @+1 {{connect has invalid flow: the destination expression "_a" has source flow, expected sink or duplex flow}}
@@ -1333,15 +1337,6 @@ firrtl.circuit "ListOfHW" {
 }
 
 // -----
-// Property aggregates can only contain properties.
-// Check map.
-
-firrtl.circuit "MapOfHW" {
-  // expected-error @below {{expected property type, found '!firrtl.uint<4>'}}
-  firrtl.module @MapOfHW(in %in: !firrtl.map<string,uint<4>>) {}
-}
-
-// -----
 
 // Reject list.create with mixed element types.
 firrtl.circuit "MixedList" {
@@ -1357,35 +1352,6 @@ firrtl.circuit "MixedList" {
 
 // -----
 
-// Reject map.create with mixed key types.
-firrtl.circuit "MixedMapKeys" {
-  firrtl.module @MixedMapKeys(
-      in %s: !firrtl.string,
-      // expected-note @below {{prior use here}}
-      in %int: !firrtl.integer
-      ) {
-    // expected-error @below {{use of value '%int' expects different type than prior uses: '!firrtl.string' vs '!firrtl.integer'}}
-    firrtl.map.create (%s -> %int, %int -> %int) : !firrtl.map<string, integer>
-  }
-}
-
-// -----
-
-// Reject map.create with mixed value types.
-firrtl.circuit "MixedMapValues" {
-  firrtl.module @MixedMapValues(
-      in %s1: !firrtl.string,
-      // expected-note @below {{prior use here}}
-      in %s2: !firrtl.string,
-      in %int: !firrtl.integer
-      ) {
-    // expected-error @below {{use of value '%s2' expects different type than prior uses: '!firrtl.integer' vs '!firrtl.string'}}
-    firrtl.map.create (%s1 -> %int, %s2 -> %s2) : !firrtl.map<string, integer>
-  }
-}
-
-// -----
-
 // Reject list.create with elements of wrong type compared to result type.
 firrtl.circuit "ListCreateWrongType" {
   firrtl.module @ListCreateWrongType(
@@ -1394,19 +1360,6 @@ firrtl.circuit "ListCreateWrongType" {
       ) {
     // expected-error @below {{use of value '%int' expects different type than prior uses: '!firrtl.string' vs '!firrtl.integer'}}
     firrtl.list.create %int : !firrtl.list<string>
-  }
-}
-
-// -----
-
-// Reject map.create with consistent but wrong key/value elements.
-firrtl.circuit "MapCreateWrongType" {
-  firrtl.module @MapCreateWrongType(
-      // expected-note @below {{prior use here}}
-      in %int: !firrtl.integer
-      ) {
-    // expected-error @below {{use of value '%int' expects different type than prior uses: '!firrtl.string' vs '!firrtl.integer'}}
-    firrtl.map.create (%int -> %int) : !firrtl.map<integer, string>
   }
 }
 
@@ -1952,12 +1905,13 @@ firrtl.circuit "WrongGroupNesting" {
 // A group captures a type which is not a FIRRTL base type.
 firrtl.circuit "NonBaseTypeCapture" {
   firrtl.declgroup @A bind {}
-  // expected-note @below {{operand is defined here}}
-  firrtl.module @NonBaseTypeCapture(in %a: !firrtl.probe<uint<1>>) {
+  firrtl.module @NonBaseTypeCapture(in %in: !firrtl.uint<1>) {
+    // expected-note @below {{operand is defined here}}
+     %ref = firrtl.ref.send %in : !firrtl.uint<1>
     // expected-error @below {{'firrtl.group' op captures an operand which is not a FIRRTL base type}}
     firrtl.group @A {
       // expected-note @below {{operand is used here}}
-      %b = firrtl.ref.resolve %a : !firrtl.probe<uint<1>>
+      %b = firrtl.ref.resolve %ref : !firrtl.probe<uint<1>>
     }
   }
 }
@@ -2273,4 +2227,25 @@ firrtl.circuit "InstanceOfClass" {
     // expected-error @below {{op must instantiate a module not a class}}
     firrtl.instance a @A()
   }
+}
+
+// -----
+
+firrtl.circuit "InputProbePublic" {
+  // expected-error @below {{input probe not allowed on public module}}
+  firrtl.module @InputProbePublic(in %in : !firrtl.probe<uint<1>>) { }
+}
+
+// -----
+
+firrtl.circuit "InputProbeExt" {
+  // expected-error @below {{input probe not allowed on public module}}
+  firrtl.extmodule @InputProbeExt(in in : !firrtl.probe<uint<1>>)
+}
+
+// -----
+
+firrtl.circuit "InputProbeExt" {
+  // expected-error @below {{input probe not allowed on public module}}
+  firrtl.extmodule @InputProbeExt(in in : !firrtl.openbundle<b flip: openbundle<p flip: probe<uint<1>>>>)
 }

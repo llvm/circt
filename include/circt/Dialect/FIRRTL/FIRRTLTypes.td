@@ -218,7 +218,6 @@ def FIntegerType : FIRRTLDialectTypeHelper<"FIntegerType", "integer type">,
   BuildableType<"::circt::firrtl::FIntegerType::get($_builder.getContext())">;
 
 def ListType : FIRRTLDialectTypeHelper<"ListType", "list type">;
-def MapType : FIRRTLDialectTypeHelper<"MapType", "map type">;
 
 def BoolType : FIRRTLDialectTypeHelper<"BoolType", "boolean type">,
   BuildableType<"::circt::firrtl::BoolType::get($_builder.getContext())">;

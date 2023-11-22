@@ -25,17 +25,41 @@
 
 project(ESIRuntime)
 cmake_minimum_required(VERSION 3.20)
+include(FetchContent)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
+
+# We need zlib to uncompress the manifest.
+find_package(ZLIB REQUIRED)
+
+# JSON parser for the manifest.
+FetchContent_Declare(json
+  GIT_REPOSITORY https://github.com/nlohmann/json.git
+  GIT_TAG        v3.11.2
+)
+FetchContent_MakeAvailable(json)
 
 include_directories(cpp/include)
 
 set(ESIRuntimeSources
   cpp/lib/Accelerator.cpp
+  cpp/lib/Design.cpp
+  cpp/lib/Manifest.cpp
   cpp/lib/StdServices.cpp
+  cpp/lib/Utils.cpp
+
+  cpp/lib/backends/Trace.cpp
 )
-set(ESIRuntimeLinkLibraries)
+set(ESIRuntimeLinkLibraries
+  ZLIB::ZLIB
+  nlohmann_json::nlohmann_json
+)
+set(ESIPythonRuntimeSources
+  python/esi/__init__.py
+  python/esi/accelerator.py
+  python/esi/esiCppAccel.pyi
+)
 
 # If Cap'nProto hasn't been explicitly disabled, find it.
 option(CAPNP_DISABLE "Disable Cap'nProto (needed for cosimulation).")
@@ -55,34 +79,22 @@ endif()
 
 # If Cap'nProto has been found, generate the headers and definitions.
 if(CapnProto_FOUND)
+  set(ESI_COSIM true)
+  message("-- ESI cosim enabled")
+
   message(STATUS "Found Cap'nProto at ${CapnProto_DIR}.")
   set(CMAKE_INSTALL_RPATH ${capnp_LIBDIR})
   set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
-  add_definitions(${CAPNP_DEFINITIONS})
-  set(CAPNPC_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/cpp/include/backends)
-  include_directories(${CAPNPC_OUTPUT_DIR})
-  file(MAKE_DIRECTORY ${CAPNPC_OUTPUT_DIR})
+  add_subdirectory(cosim)
 
-  if (NOT DEFINED ESI_COSIM_SCHEMA)
-    set(ESI_COSIM_SCHEMA CosimDpi.capnp)
-  endif()
-
-  capnp_generate_cpp(
-    COSIM_CAPNP_SRCS COSIM_CANPN_HDRS
-    ${ESI_COSIM_SCHEMA}
-  )
   set(ESIRuntimeSources
     ${ESIRuntimeSources}
     cpp/lib/backends/Cosim.cpp
-    ${COSIM_CAPNP_HDRS}
-    ${COSIM_CAPNP_SRCS}
-    ${COSIM_SCHEMA_HDR}
   )
   set(ESIRuntimeLinkLibraries
     ${ESIRuntimeLinkLibraries}
-    CapnProto::capnp
-    CapnProto::capnp-rpc
+    EsiCosimCapnp
   )
 endif()
 
@@ -93,11 +105,19 @@ add_library(ESIRuntime SHARED
 )
 target_link_libraries(ESIRuntime PRIVATE ${ESIRuntimeLinkLibraries})
 
+if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+  target_compile_options(ESIRuntime PRIVATE -Wno-covered-switch-default)
+endif()
+
 # The esiquery tool is a simple wrapper around the SysInfo API.
 add_executable(esiquery
   cpp/tools/esiquery.cpp
 )
 target_link_libraries(esiquery PRIVATE ESIRuntime)
+
+# Global variable for the path to the ESI runtime for use by tests.
+set(ESIRuntimePath "${CMAKE_CURRENT_BINARY_DIR}"
+  CACHE INTERNAL "Path to ESI runtime" FORCE)
 
 # Pybind11 is used to wrap the ESIRuntime APIs.
 find_package(Python COMPONENTS Interpreter Development)
@@ -125,7 +145,35 @@ if(Python_FOUND)
   if (NOT pybind11_FOUND)
     message (STATUS "Could not find pybind11. Disabling Python API.")
   else()
-    pybind11_add_module(esiaccel python/esi/esiaccel.cpp)
-    target_link_libraries(esiaccel PRIVATE ESIRuntime)
+    # Compile Pybind11 module and copy to the correct python directory.
+    pybind11_add_module(esiCppAccel python/esi/esiCppAccel.cpp)
+    target_link_libraries(esiCppAccel PRIVATE ESIRuntime)
+    add_custom_command(
+        TARGET esiCppAccel
+        POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy
+            $<TARGET_FILE:esiCppAccel>
+            "${CMAKE_CURRENT_BINARY_DIR}/python/esi/$<TARGET_FILE_NAME:esiCppAccel>"
+    )
+
+    # Copy each of the Python sources to the build dir.
+    foreach(pysrc ${ESIPythonRuntimeSources})
+      add_custom_command(
+          OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${pysrc}
+          COMMAND ${CMAKE_COMMAND} -E copy
+              ${CMAKE_CURRENT_SOURCE_DIR}/${pysrc}
+              ${CMAKE_CURRENT_BINARY_DIR}/${pysrc}
+          DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${pysrc}
+      )
+    endforeach()
+
+    # Custom target for the Python runtime just aggregates the python sources
+    # and Pybind11 module.
+    add_custom_target(ESIPythonRuntime
+      DEPENDS
+        ${ESIPythonRuntimeSources}
+        esiCppAccel
+    )
+
   endif()
 endif()

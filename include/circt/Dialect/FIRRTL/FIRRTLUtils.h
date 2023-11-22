@@ -111,12 +111,12 @@ Value getValueByFieldID(ImplicitLocOpBuilder builder, Value value,
 bool getFlipByFieldID(FIRRTLType firrtlType, unsigned FieldID);
 
 /// Walk leaf ground types in the `firrtlType` and apply the function `fn`.
-/// The first argument of `fn` is field ID, and the second argument indicates if
-// the field is effectively flipped, the third is a
-/// leaf ground type.  The leaf ground type will be wrapped in a ref if it's a
-/// field of a ref.
-void walkGroundTypes(FIRRTLType firrtlType,
-                     llvm::function_ref<void(uint64_t, bool, FIRRTLType)> fn);
+/// The first argument of `fn` is field ID, and the second argument is a
+/// leaf ground type, and the third argument indicates if the element was
+/// flipped in a bundle.
+void walkGroundTypes(
+    FIRRTLType firrtlType,
+    llvm::function_ref<void(uint64_t, FIRRTLBaseType, bool)> fn);
 
 //===----------------------------------------------------------------------===//
 // Inner symbol and InnerRef helpers.

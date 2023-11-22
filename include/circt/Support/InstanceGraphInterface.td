@@ -39,19 +39,6 @@ def InstanceGraphInstanceOpInterface : OpInterface<"InstanceOpInterface"> {
     "::mlir::StringAttr", "getReferencedModuleNameAttr", (ins),
     /*methodBody=*/[{}],
     /*defaultImplementation=*/[{ return $_op.getModuleNameAttr().getAttr(); }]>,
-
-    InterfaceMethod<[{
-      Get the referenced module (slow, unsafe).  This function directly accesses
-      the parent operation to lookup a symbol, which is unsafe in many contexts.
-    }],
-    "::mlir::Operation *", "getReferencedModuleSlow", (ins)>,
-
-    InterfaceMethod<"Get the referenced module via a symbol table.",
-    "::mlir::Operation *", "getReferencedModule", (ins "SymbolTable&":$symtbl),
-    /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{
-      return symtbl.lookup(getReferencedModuleName());
-    }]>,
   ];
 }
 

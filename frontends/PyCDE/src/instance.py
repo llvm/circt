@@ -93,7 +93,7 @@ class Instance:
   def name(self) -> str:
     assert self.symbol is not None, \
            "If symbol is None, name() needs to be overridden"
-    return self.symbol.symName.value
+    return ir.StringAttr(self.symbol.symName).value
 
   @property
   def appid(self) -> Optional[AppID]:

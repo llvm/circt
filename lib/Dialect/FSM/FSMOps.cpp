@@ -284,7 +284,6 @@ LogicalResult TriggerOp::verify() { return verifyCallerTypes(*this); }
 //===----------------------------------------------------------------------===//
 
 // InstanceOpInterface interface
-Operation *HWInstanceOp::getReferencedModuleSlow() { return getMachineOp(); }
 
 /// Lookup the machine for the symbol.  This returns null on invalid IR.
 MachineOp HWInstanceOp::getMachineOp() {

@@ -758,6 +758,18 @@ def LowerGroups : Pass<"firrtl-lower-groups", "firrtl::CircuitOp"> {
   let dependentDialects = ["sv::SVDialect"];
 }
 
+def GroupMerge : Pass<"firrtl-group-merge", "firrtl::FModuleOp"> {
+  let summary = "Merge group definitions";
+  let description = [{
+    Combine all group definitions in a module which reference the same group
+    declaration.
+  }];
+  let constructor = "::circt::firrtl::createGroupMergePass()";
+  let statistics = [
+    Statistic<"numMerged", "num-merged", "Number of groups merged">,
+  ];
+}
+
 def GroupSink : Pass<"firrtl-group-sink", "firrtl::FModuleOp"> {
   let summary = "Sink operations into FIRRTL optional groups";
   let description = [{
@@ -801,6 +813,30 @@ def ProbeDCE : Pass<"firrtl-probe-dce", "firrtl::CircuitOp"> {
     Statistic<"numErasedPorts", "num-erased-ports", "Number of ports erased">,
     Statistic<"numErasedOps", "num-erased-ops", "Number of operations erased">
   ];
+}
+
+def MaterializeDebugInfo :
+    Pass<"firrtl-materialize-debug-info", "firrtl::FModuleOp"> {
+  let summary = "Generate debug ops to track FIRRTL values";
+  let description = [{
+    This pass creates debug ops to track FIRRTL-level ports, nodes, wires,
+    registers, and instances throughout the pipeline. The `DebugInfo` analysis
+    can then be used at a later point in the pipeline to obtain a source
+    language view into the lowered IR.
+  }];
+  let constructor = "circt::firrtl::createMaterializeDebugInfoPass()";
+  let dependentDialects = ["debug::DebugDialect"];
+}
+
+def Lint :
+    Pass<"firrtl-lint", "firrtl::FModuleOp"> {
+  let summary = "An analysis pass to detect static simulation failures.";
+  let description = [{
+    This pass detects operations that will trivially fail any simulation.
+    Currently it detects assertions whose predicate condition can be statically
+    inferred to be false. The pass emits error on such failing ops.
+  }];
+  let constructor = "circt::firrtl::createLintingPass()";
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD
