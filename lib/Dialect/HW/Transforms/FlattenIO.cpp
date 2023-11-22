@@ -93,11 +93,22 @@ struct InstanceOpConversion : public OpConversionPattern<hw::InstanceOp> {
       }
     }
 
-    // Create the new instance...
-    Operation *targetModule = SymbolTable::lookupNearestSymbolFrom(
-        op, op.getReferencedModuleNameAttr());
+    // Get the new module return type.
+    llvm::SmallVector<Type> newResultTypes;
+    for (auto oldResultType : op.getResultTypes())
+      if (auto structType = getStructType(oldResultType))
+        for (auto t : structType.getElements())
+          newResultTypes.push_back(t.type);
+      else
+        newResultTypes.push_back(oldResultType);
+
+    // Create the new instance, with incorrect argnames and other attributes,
+    // will be fixed later.
     auto newInstance = rewriter.create<hw::InstanceOp>(
-        loc, targetModule, op.getInstanceName(), convOperands);
+        loc, newResultTypes, op.getInstanceNameAttr(),
+        FlatSymbolRefAttr::get(op.getReferencedModuleNameAttr()), convOperands,
+        op.getArgNamesAttr(), op.getResultNamesAttr(), op.getParametersAttr(),
+        op.getInnerSymAttr());
 
     // re-create any structs in the result.
     llvm::SmallVector<Value> convResults;
@@ -290,21 +301,25 @@ updateBlockLocations(hw::HWModuleLike op,
     arg.setLoc(loc);
 }
 
+static void setioInfo(hw::HWModuleLike op, IOInfo &ioInfo) {
+  ioInfo.argTypes = op.getInputTypes();
+  ioInfo.resTypes = op.getOutputTypes();
+  for (auto [i, arg] : llvm::enumerate(ioInfo.argTypes)) {
+    if (auto structType = getStructType(arg))
+      ioInfo.argStructs[i] = structType;
+  }
+  for (auto [i, res] : llvm::enumerate(ioInfo.resTypes)) {
+    if (auto structType = getStructType(res))
+      ioInfo.resStructs[i] = structType;
+  }
+}
+
 template <typename T>
 static DenseMap<Operation *, IOInfo> populateIOInfoMap(mlir::ModuleOp module) {
   DenseMap<Operation *, IOInfo> ioInfoMap;
   for (auto op : module.getOps<T>()) {
     IOInfo ioInfo;
-    ioInfo.argTypes = op.getInputTypes();
-    ioInfo.resTypes = op.getOutputTypes();
-    for (auto [i, arg] : llvm::enumerate(ioInfo.argTypes)) {
-      if (auto structType = getStructType(arg))
-        ioInfo.argStructs[i] = structType;
-    }
-    for (auto [i, res] : llvm::enumerate(ioInfo.resTypes)) {
-      if (auto structType = getStructType(res))
-        ioInfo.resStructs[i] = structType;
-    }
+    setioInfo(op, ioInfo);
     ioInfoMap[op] = ioInfo;
   }
   return ioInfoMap;
@@ -383,10 +398,24 @@ static LogicalResult flattenOpsOfType(ModuleOp module, bool recursive) {
 
     // And likewise with the converted instance ops.
     for (auto instanceOp : convertedInstances) {
-      Operation *targetModule = SymbolTable::lookupNearestSymbolFrom(
-          instanceOp, instanceOp.getReferencedModuleNameAttr());
+      auto targetModule =
+          cast<hw::HWModuleLike>(SymbolTable::lookupNearestSymbolFrom(
+              instanceOp, instanceOp.getReferencedModuleNameAttr()));
 
-      auto ioInfo = ioInfoMap[targetModule];
+      IOInfo ioInfo;
+      if (!ioInfoMap.contains(targetModule)) {
+        // If an extern module, then not yet processed, populate the maps.
+        setioInfo(targetModule, ioInfo);
+        ioInfoMap[targetModule] = ioInfo;
+        oldArgNames[targetModule] =
+            ArrayAttr::get(module.getContext(), targetModule.getInputNames());
+        oldResNames[targetModule] =
+            ArrayAttr::get(module.getContext(), targetModule.getOutputNames());
+        oldArgLocs[targetModule] = targetModule.getInputLocsAttr();
+        oldResLocs[targetModule] = targetModule.getOutputLocsAttr();
+      } else
+        ioInfo = ioInfoMap[targetModule];
+
       instanceOp.setInputNames(ArrayAttr::get(
           instanceOp.getContext(),
           updateNameAttribute(instanceOp, "argNames", ioInfo.argStructs,
