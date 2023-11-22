@@ -623,11 +623,11 @@ def ObjectOp :  FIRRTLOp<"object", [
     ParentOneOf<["firrtl::FModuleOp, firrtl::ClassOp"]>,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>,
     DeclareOpInterfaceMethods<FInstanceLike, [
-      "getReferencedOperation"
-    ]>,
-    DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface, [
+      "getReferencedOperation",
       "getReferencedModuleName",
       "getReferencedModuleNameAttr",
+    ]>,
+    DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface, [
       "getReferencedModuleSlow"
     ]>,
     DeclareOpInterfaceMethods<OpAsmOpInterface, [

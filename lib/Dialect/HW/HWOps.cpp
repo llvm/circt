@@ -516,18 +516,19 @@ bool hw::isAnyModuleOrInstance(Operation *moduleOrInstance) {
 /// Return the signature for a module as a function type from the module itself
 /// or from an hw::InstanceOp.
 FunctionType hw::getModuleType(Operation *moduleOrInstance) {
-  if (auto instance = dyn_cast<InstanceOp>(moduleOrInstance)) {
-    SmallVector<Type> inputs(instance->getOperandTypes());
-    SmallVector<Type> results(instance->getResultTypes());
-    return FunctionType::get(instance->getContext(), inputs, results);
-  }
-
-  if (auto mod = dyn_cast<HWModuleLike>(moduleOrInstance))
-    return mod.getHWModuleType().getFuncType();
-
-  return cast<mlir::FunctionOpInterface>(moduleOrInstance)
-      .getFunctionType()
-      .cast<FunctionType>();
+  return TypeSwitch<Operation *, FunctionType>(moduleOrInstance)
+      .Case<InstanceOp, InstanceChoiceOp>([](auto instance) {
+        SmallVector<Type> inputs(instance->getOperandTypes());
+        SmallVector<Type> results(instance->getResultTypes());
+        return FunctionType::get(instance->getContext(), inputs, results);
+      })
+      .Case<HWModuleLike>(
+          [](auto mod) { return mod.getHWModuleType().getFuncType(); })
+      .Default([](Operation *op) {
+        return cast<mlir::FunctionOpInterface>(op)
+            .getFunctionType()
+            .cast<FunctionType>();
+      });
 }
 
 /// Return the name to use for the Verilog module that we're referencing
@@ -1668,6 +1669,14 @@ void InstanceChoiceOp::print(OpAsmPrinter &p) {
                        InnerSymbolTable::getInnerSymbolAttrName(),
                        "moduleNames", "targetNames", "argNames", "resultNames",
                        "parameters"});
+}
+
+ArrayAttr InstanceChoiceOp::getReferencedModuleNamesAttr() {
+  SmallVector<Attribute> moduleNames;
+  for (Attribute attr : getModuleNamesAttr()) {
+    moduleNames.push_back(attr.cast<FlatSymbolRefAttr>().getAttr());
+  }
+  return ArrayAttr::get(getContext(), moduleNames);
 }
 
 //===----------------------------------------------------------------------===//
@@ -3161,7 +3170,27 @@ bool HierPathOp::isComponent() { return (bool)ref(); }
 // module port or a declaration inside the module.
 // 7. The last element of the namepath can also be a module symbol.
 LogicalResult HierPathOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
-  StringAttr expectedModuleName = {};
+  ArrayAttr expectedModuleNames = {};
+  auto checkExpectedModule = [&](Attribute name) -> LogicalResult {
+    if (!expectedModuleNames)
+      return success();
+    if (llvm::any_of(expectedModuleNames,
+                     [name](Attribute attr) { return attr == name; }))
+      return success();
+    auto diag = emitOpError() << "instance path is incorrect. Expected ";
+    size_t n = expectedModuleNames.size();
+    if (n != 1) {
+      diag << "one of ";
+    }
+    for (size_t i = 0; i < n; ++i) {
+      if (i != 0)
+        diag << ((i + 1 == n) ? " or " : ", ");
+      diag << expectedModuleNames[i].cast<StringAttr>();
+    }
+    diag << ". Instead found: " << name;
+    return diag;
+  };
+
   if (!getNamepath() || getNamepath().empty())
     return emitOpError() << "the instance path cannot be empty";
   for (unsigned i = 0, s = getNamepath().size() - 1; i < s; ++i) {
@@ -3171,17 +3200,17 @@ LogicalResult HierPathOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
              << "the instance path can only contain inner sym reference"
              << ", only the leaf can refer to a module symbol";
 
-    if (expectedModuleName && expectedModuleName != innerRef.getModule())
-      return emitOpError() << "instance path is incorrect. Expected module: "
-                           << expectedModuleName
-                           << " instead found: " << innerRef.getModule();
+    if (failed(checkExpectedModule(innerRef.getModule())))
+      return failure();
+
     auto instOp = ns.lookupOp<igraph::InstanceOpInterface>(innerRef);
     if (!instOp)
       return emitOpError() << " module: " << innerRef.getModule()
                            << " does not contain any instance with symbol: "
                            << innerRef.getName();
-    expectedModuleName = instOp.getReferencedModuleNameAttr();
+    expectedModuleNames = instOp.getReferencedModuleNamesAttr();
   }
+
   // The instance path has been verified. Now verify the last element.
   auto leafRef = getNamepath()[getNamepath().size() - 1];
   if (auto innerRef = leafRef.dyn_cast<hw::InnerRefAttr>()) {
@@ -3189,17 +3218,11 @@ LogicalResult HierPathOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
       return emitOpError() << " operation with symbol: " << innerRef
                            << " was not found ";
     }
-    if (expectedModuleName && expectedModuleName != innerRef.getModule())
-      return emitOpError() << "instance path is incorrect. Expected module: "
-                           << expectedModuleName
-                           << " instead found: " << innerRef.getModule();
-  } else if (expectedModuleName &&
-             expectedModuleName !=
-                 leafRef.cast<FlatSymbolRefAttr>().getAttr()) {
-    // This is the case when the nla is applied to a module.
-    return emitOpError() << "instance path is incorrect. Expected module: "
-                         << expectedModuleName << " instead found: "
-                         << leafRef.cast<FlatSymbolRefAttr>().getAttr();
+    if (failed(checkExpectedModule(innerRef.getModule())))
+      return failure();
+  } else if (failed(checkExpectedModule(
+                 leafRef.cast<FlatSymbolRefAttr>().getAttr()))) {
+    return failure();
   }
   return success();
 }

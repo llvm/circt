@@ -821,7 +821,7 @@ firrtl.circuit "NLATop" {
 // -----
 
 firrtl.circuit "NLATop1" {
-  // expected-error @+1 {{instance path is incorrect. Expected module: "Aardvark" instead found: "Zebra"}}
+  // expected-error @+1 {{instance path is incorrect. Expected "Aardvark". Instead found: "Zebra"}}
   hw.hierpath private @nla [@NLATop1::@test, @Zebra::@test,@Aardvark::@test]
   hw.hierpath private @nla_1 [@NLATop1::@test,@Aardvark::@test_1, @Zebra]
   firrtl.module @NLATop1() {
@@ -882,7 +882,7 @@ firrtl.circuit "Foo"   {
 firrtl.circuit "Top"   {
  // Legal nla would be:
 //hw.hierpath private @nla [@Top::@mid, @Mid::@leaf, @Leaf::@w]
-  // expected-error @+1 {{instance path is incorrect. Expected module: "Middle" instead found: "Leaf"}}
+  // expected-error @+1 {{instance path is incorrect. Expected "Middle". Instead found: "Leaf"}}
   hw.hierpath private @nla [@Top::@mid, @Leaf::@w]
   firrtl.module @Leaf() {
     %w = firrtl.wire sym @w  {annotations = [{circt.nonlocal = @nla, class = "fake1"}]} : !firrtl.uint<3>
