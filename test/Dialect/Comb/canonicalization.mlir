@@ -1552,3 +1552,113 @@ hw.module @OrMuxSameTrueValueAndZero(in %tag_0: i1, in %tag_1: i1, in %tag_2: i1
     %add2 = comb.add %add1, %c : i32
     "terminator"(%add2) : (i32) -> ()
 }) : () -> ()
+
+// CHECK-LABEL: hw.module @combineOppositeBinCmpIntoConstant
+// CHECK: %[[ALL_ZEROS:.+]] = hw.constant 0 : i4
+// CHECK: %[[ALL_ONES:.+]] = hw.constant -1 : i4
+// CHECK: %[[FALSE:.+]] = hw.constant false
+// CHECK: %[[TRUE:.+]] = hw.constant true
+// CHECK-NEXT: hw.output %[[TRUE]], %[[FALSE]], %[[TRUE]], %[[FALSE]], %[[TRUE]], %[[FALSE]], %[[TRUE]], %[[FALSE]], %[[TRUE]], %[[FALSE]], %[[ALL_ONES]], %[[ALL_ZEROS]]
+hw.module @combineOppositeBinCmpIntoConstant(in %tag_0: i4, in %tag_1: i4, out o0: i1, out o1: i1, out o2: i1, out o3: i1, out o4: i1, out o5: i1, out o6: i1, out o7: i1, out o8: i1, out o9: i1, out o10: i4, out o11: i4) {
+  %op_ne = comb.icmp bin ne %tag_0, %tag_1 : i4
+  %op_eq = comb.icmp bin eq %tag_0, %tag_1 : i4
+  %eq_ne_or = comb.or %op_ne, %op_eq : i1
+  %eq_ne_and = comb.and %op_ne, %op_eq : i1
+
+  %op_slt = comb.icmp bin slt %tag_0, %tag_1 : i4
+  %op_sge = comb.icmp bin sge %tag_0, %tag_1 : i4
+  %slt_sge_or = comb.or %op_slt, %op_sge : i1
+  %slt_sge_and = comb.and %op_slt, %op_sge : i1
+
+  %op_sle = comb.icmp bin sle %tag_0, %tag_1 : i4
+  %op_sgt = comb.icmp bin sgt %tag_0, %tag_1 : i4
+  %sle_sgt_or = comb.or %op_sle, %op_sgt : i1
+  %sle_sgt_and = comb.and %op_sle, %op_sgt : i1
+
+  %op_ult = comb.icmp bin ult %tag_0, %tag_1 : i4
+  %op_uge = comb.icmp bin uge %tag_0, %tag_1 : i4
+  %ult_uge_or = comb.or %op_ult, %op_uge : i1
+  %ult_uge_and = comb.and %op_ult, %op_uge : i1
+
+  %op_ule = comb.icmp bin ule %tag_0, %tag_1 : i4
+  %op_ugt = comb.icmp bin ugt %tag_0, %tag_1 : i4
+  %ule_ugt_or = comb.or %op_ule, %op_ugt : i1
+  %ule_ugt_and = comb.and %op_ule, %op_ugt : i1
+
+  %op_neg_one = hw.constant -1 : i4
+  %op_xor = comb.xor bin %tag_1, %op_neg_one : i4
+  %opposite_xor_or = comb.or %tag_1, %op_xor : i4
+  %opposite_xor_and = comb.and %tag_1, %op_xor : i4
+
+  hw.output %eq_ne_or, %eq_ne_and,
+            %slt_sge_or, %slt_sge_and,
+            %sle_sgt_or, %sle_sgt_and,
+            %ult_uge_or, %ult_uge_and,
+            %ule_ugt_or, %ule_ugt_and,
+            %opposite_xor_or, %opposite_xor_and :
+            i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i4, i4
+}
+
+// CHECK-LABEL: hw.module @cantCombineOppositeNonBinCmpIntoConstant
+// CHECK: %[[ALL_ZEROS:.+]] = hw.constant 0 : i4
+// CHECK: %[[ALL_ONES:.+]] = hw.constant -1 : i4
+// CHECK: %[[OP_NE:.+]] = comb.icmp ne %tag_0, %tag_1 : i4
+// CHECK: %[[OP_EQ:.+]] = comb.icmp eq %tag_0, %tag_1 : i4
+// CHECK: %[[EQ_NE_OR:.+]] = comb.or %[[OP_NE]], %[[OP_EQ]] : i1
+// CHECK: %[[EQ_NE_AND:.+]] = comb.and %[[OP_NE]], %[[OP_EQ]] : i1
+// CHECK: %[[OP_SLT:.+]] = comb.icmp slt %tag_0, %tag_1 : i4
+// CHECK: %[[OP_SGE:.+]] = comb.icmp sge %tag_0, %tag_1 : i4
+// CHECK: %[[SLT_SGE_OR:.+]] = comb.or %[[OP_SLT]], %[[OP_SGE]] : i1
+// CHECK: %[[SLT_SGE_AND:.+]] = comb.and %[[OP_SLT]], %[[OP_SGE]] : i1
+// CHECK: %[[OP_SLE:.+]] = comb.icmp sle %tag_0, %tag_1 : i4
+// CHECK: %[[OP_SGT:.+]] = comb.icmp sgt %tag_0, %tag_1 : i4
+// CHECK: %[[SLE_SGT_OR:.+]] = comb.or %[[OP_SLE]], %[[OP_SGT]] : i1
+// CHECK: %[[SLE_SGT_AND:.+]] = comb.and %[[OP_SLE]], %[[OP_SGT]] : i1
+// CHECK: %[[OP_ULT:.+]] = comb.icmp ult %tag_0, %tag_1 : i4
+// CHECK: %[[OP_UGE:.+]] = comb.icmp uge %tag_0, %tag_1 : i4
+// CHECK: %[[ULT_UGE_OR:.+]] = comb.or %[[OP_ULT]], %[[OP_UGE]] : i1
+// CHECK: %[[ULT_UGE_AND:.+]] = comb.and %[[OP_ULT]], %[[OP_UGE]] : i1
+// CHECK: %[[OP_ULE:.+]] = comb.icmp ule %tag_0, %tag_1 : i4
+// CHECK: %[[OP_UGT:.+]] = comb.icmp ugt %tag_0, %tag_1 : i4
+// CHECK: %[[ULE_UGT_OR:.+]] = comb.or %[[OP_ULE]], %[[OP_UGT]] : i1
+// CHECK: %[[ULE_UGT_AND:.+]] = comb.and %[[OP_ULE]], %[[OP_UGT]] : i1
+// CHECK-NEXT: hw.output %[[EQ_NE_OR]], %[[EQ_NE_AND]], %[[SLT_SGE_OR]], %[[SLT_SGE_AND]], %[[SLE_SGT_OR]], %[[SLE_SGT_AND]], %[[ULT_UGE_OR]], %[[ULT_UGE_AND]], %[[ULE_UGT_OR]], %[[ULE_UGT_AND]], %[[ALL_ONES]], %[[ALL_ZEROS]] : i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i4, i4
+hw.module @cantCombineOppositeNonBinCmpIntoConstant(in %tag_0: i4, in %tag_1: i4, out o0: i1, out o1: i1, out o2: i1, out o3: i1, out o4: i1, out o5: i1, out o6: i1, out o7: i1, out o8: i1, out o9: i1, out o10: i4, out o11: i4) {
+  %op_ne = comb.icmp ne %tag_0, %tag_1 : i4
+  %op_eq = comb.icmp eq %tag_0, %tag_1 : i4
+  %eq_ne_or = comb.or %op_ne, %op_eq : i1
+  %eq_ne_and = comb.and %op_ne, %op_eq : i1
+
+  %op_slt = comb.icmp slt %tag_0, %tag_1 : i4
+  %op_sge = comb.icmp sge %tag_0, %tag_1 : i4
+  %slt_sge_or = comb.or %op_slt, %op_sge : i1
+  %slt_sge_and = comb.and %op_slt, %op_sge : i1
+
+  %op_sle = comb.icmp sle %tag_0, %tag_1 : i4
+  %op_sgt = comb.icmp sgt %tag_0, %tag_1 : i4
+  %sle_sgt_or = comb.or %op_sle, %op_sgt : i1
+  %sle_sgt_and = comb.and %op_sle, %op_sgt : i1
+
+  %op_ult = comb.icmp ult %tag_0, %tag_1 : i4
+  %op_uge = comb.icmp uge %tag_0, %tag_1 : i4
+  %ult_uge_or = comb.or %op_ult, %op_uge : i1
+  %ult_uge_and = comb.and %op_ult, %op_uge : i1
+
+  %op_ule = comb.icmp ule %tag_0, %tag_1 : i4
+  %op_ugt = comb.icmp ugt %tag_0, %tag_1 : i4
+  %ule_ugt_or = comb.or %op_ule, %op_ugt : i1
+  %ule_ugt_and = comb.and %op_ule, %op_ugt : i1
+
+  %op_neg_one = hw.constant -1 : i4
+  %op_xor = comb.xor %tag_1, %op_neg_one : i4
+  %opposite_xor_or = comb.or %tag_1, %op_xor : i4
+  %opposite_xor_and = comb.and %tag_1, %op_xor : i4
+
+  hw.output %eq_ne_or, %eq_ne_and,
+            %slt_sge_or, %slt_sge_and,
+            %sle_sgt_or, %sle_sgt_and,
+            %ult_uge_or, %ult_uge_and,
+            %ule_ugt_or, %ule_ugt_and,
+            %opposite_xor_or, %opposite_xor_and :
+            i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i4, i4
+}
