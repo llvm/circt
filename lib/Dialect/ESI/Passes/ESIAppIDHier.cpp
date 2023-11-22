@@ -40,7 +40,7 @@ private:
     } else {
       Block *parentBlock = getBlock(path.getParent(), opStack.drop_back());
       Operation *op = opStack.back();
-      if (auto inst = dyn_cast<hw::InstanceOp>(op); inst) {
+      if (auto inst = dyn_cast<hw::InstanceOp>(op)) {
         // Create a normal node underneath the parent AppID.
         auto node = OpBuilder::atBlockEnd(parentBlock)
                         .create<AppIDHierNodeOp>(UnknownLoc::get(&getContext()),
