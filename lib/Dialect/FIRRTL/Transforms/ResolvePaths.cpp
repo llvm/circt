@@ -64,7 +64,7 @@ struct PathResolver {
     // through the list of instances looking for the first module which is
     // multiply instantiated.  We will start our HierPathOp at this instance.
     auto *it = llvm::find_if(target.instances, [&](InstanceOp instance) {
-      auto *node = instanceGraph[instanceGraph.getReferencedModule(instance)];
+      auto *node = instanceGraph.lookup(instance.getReferencedModuleNameAttr());
       return !node->hasOneUse();
     });
 

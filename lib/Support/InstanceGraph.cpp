@@ -266,6 +266,13 @@ InstancePathCache::getAbsolutePaths(ModuleOpInterface op) {
 }
 // NOLINTEND(misc-no-recursion)
 
+void InstancePath::print(llvm::raw_ostream &into) const {
+  into << "$root";
+  for (auto inst : path)
+    into << "/" << inst.getInstanceName() << ":"
+         << inst.getReferencedModuleName();
+}
+
 InstancePath InstancePathCache::appendInstance(InstancePath path,
                                                InstanceOpInterface inst) {
   size_t n = path.size() + 1;

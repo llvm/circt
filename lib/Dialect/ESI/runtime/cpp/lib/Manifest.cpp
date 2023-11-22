@@ -325,11 +325,13 @@ Manifest::Impl::getBundlePorts(AppIDPath idPath,
       continue;
 
     // Lookup the requested service in the active services table.
-    ServicePortDesc port = parseServicePort(content.at("servicePort"));
-    auto svc = activeServices.find(port.name);
+    std::string serviceName = "";
+    if (auto f = content.find("servicePort"); f != content.end())
+      serviceName = parseServicePort(f.value()).name;
+    auto svc = activeServices.find(serviceName);
     if (svc == activeServices.end())
       throw runtime_error(
-          "Malformed manifest: could not find active service '" + port.name +
+          "Malformed manifest: could not find active service '" + serviceName +
           "'");
 
     string typeName = content.at("bundleType").at("circt_name");

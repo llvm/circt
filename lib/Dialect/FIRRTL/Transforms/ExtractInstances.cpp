@@ -278,7 +278,7 @@ void ExtractInstancesPass::collectAnnos() {
   // Gather the annotations on instances to be extracted.
   circuit.walk([&](InstanceOp inst) {
     SmallVector<Annotation, 1> instAnnos;
-    Operation *module = instanceGraph->getReferencedModule(inst);
+    Operation *module = inst.getReferencedModule(*instanceGraph);
 
     // Module-level annotations.
     auto it = annotatedModules.find(module);

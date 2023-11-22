@@ -41,10 +41,10 @@ class HardwareDeclOp<string mnemonic, list <Trait> traits = []> :
       "firrtl::WhenOp", "firrtl::MatchOp"]>]> {}
 
 def InstanceOp : HardwareDeclOp<"instance", [
+    DeclareOpInterfaceMethods<FInstanceLike>,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>,
     DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface, [
-      "getModuleName",
-      "getReferencedModuleSlow"
+      "getModuleName"
     ]>,
   ]> {
   let summary = "Instantiate an instance of a module";
@@ -128,6 +128,21 @@ def InstanceOp : HardwareDeclOp<"instance", [
     /// conjuction with adding ports to the referenced module. This will emit
     /// the new InstanceOp to the same location.
     InstanceOp cloneAndInsertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports);
+
+    //===------------------------------------------------------------------===//
+    // Instance graph methods
+    //===------------------------------------------------------------------===//
+
+    // Quick lookup of the referenced module using the instance graph.
+    template <typename T = ::circt::igraph::ModuleOpInterface>
+    T getReferencedModule(::circt::igraph::InstanceGraph &instanceGraph) {
+      auto moduleNameAttr = getModuleNameAttr().getAttr();
+      auto *node =  instanceGraph.lookup(moduleNameAttr);
+      if (!node)
+        return nullptr;
+      Operation *moduleOp = node->getModule();
+      return dyn_cast_or_null<T>(moduleOp);
+    }
 
     //===------------------------------------------------------------------===//
     // PortList Methods
@@ -597,10 +612,12 @@ def ClockGateIntrinsicOp : FIRRTLOp<"int.clock_gate", [Pure]> {
 def ObjectOp :  FIRRTLOp<"object", [
     ParentOneOf<["firrtl::FModuleOp, firrtl::ClassOp"]>,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+    DeclareOpInterfaceMethods<FInstanceLike, [
+      "getReferencedOperation"
+    ]>,
     DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface, [
       "getReferencedModuleName",
       "getReferencedModuleNameAttr",
-      "getReferencedModule",
       "getReferencedModuleSlow"
     ]>,
     DeclareOpInterfaceMethods<OpAsmOpInterface, [

@@ -100,7 +100,6 @@ private:
 
   // Update Object instantiations in a FIRRTL Module or OM Class.
   LogicalResult updateInstances(Operation *op, InstanceGraph &instanceGraph,
-                                const SymbolTable &symbolTable,
                                 const LoweringState &state);
 
   // Convert to OM ops and types in Classes or Modules.
@@ -384,8 +383,7 @@ void LowerClassesPass::runOnOperation() {
   // Update Object creation ops in Classes or Modules in parallel.
   if (failed(
           mlir::failableParallelForEach(ctx, objectContainers, [&](auto *op) {
-            return updateInstances(op, instanceGraph, symbolTable,
-                                   loweringState);
+            return updateInstances(op, instanceGraph, loweringState);
           })))
     return signalPassFailure();
 
@@ -686,7 +684,7 @@ updateObjectInClass(firrtl::ObjectOp firrtlObject,
 // Module.
 static LogicalResult
 updateInstanceInClass(InstanceOp firrtlInstance, hw::HierPathOp hierPath,
-                      const SymbolTable &symbolTable,
+                      InstanceGraph &instanceGraph,
                       SmallVectorImpl<Operation *> &opsToErase) {
 
   // Set the insertion point right before the instance op.
@@ -726,7 +724,7 @@ updateInstanceInClass(InstanceOp firrtlInstance, hw::HierPathOp hierPath,
 
   // Get the referenced module to get its name.
   auto referencedModule =
-      dyn_cast<FModuleLike>(firrtlInstance.getReferencedModule(symbolTable));
+      firrtlInstance.getReferencedModule<FModuleLike>(instanceGraph);
 
   StringRef moduleName = referencedModule.getName();
 
@@ -821,7 +819,7 @@ updateInstancesInModule(FModuleOp moduleOp, InstanceGraph &instanceGraph,
 }
 
 static LogicalResult updateObjectsAndInstancesInClass(
-    om::ClassOp classOp, const SymbolTable &symbolTable,
+    om::ClassOp classOp, InstanceGraph &instanceGraph,
     const LoweringState &state, SmallVectorImpl<Operation *> &opsToErase) {
   OpBuilder builder(classOp);
   auto &classState = state.classLoweringStateTable.at(classOp);
@@ -831,7 +829,7 @@ static LogicalResult updateObjectsAndInstancesInClass(
       if (failed(updateObjectInClass(objectOp, opsToErase)))
         return failure();
     } else if (auto instanceOp = dyn_cast<InstanceOp>(op)) {
-      if (failed(updateInstanceInClass(instanceOp, *it++, symbolTable,
+      if (failed(updateInstanceInClass(instanceOp, *it++, instanceGraph,
                                        opsToErase)))
         return failure();
     }
@@ -842,7 +840,6 @@ static LogicalResult updateObjectsAndInstancesInClass(
 // Update Object or Module instantiations in a FIRRTL Module or OM Class.
 LogicalResult LowerClassesPass::updateInstances(Operation *op,
                                                 InstanceGraph &instanceGraph,
-                                                const SymbolTable &symbolTable,
                                                 const LoweringState &state) {
 
   // Track ops to erase at the end. We can't do this eagerly, since we want to
@@ -860,8 +857,8 @@ LogicalResult LowerClassesPass::updateInstances(Operation *op,
           .Case([&](om::ClassOp classOp) {
             // Convert FIRRTL Module instance within a Class to OM
             // Object instance.
-            return updateObjectsAndInstancesInClass(classOp, symbolTable, state,
-                                                    opsToErase);
+            return updateObjectsAndInstancesInClass(classOp, instanceGraph,
+                                                    state, opsToErase);
           })
           .Default([](auto *op) { return success(); });
   if (failed(result))

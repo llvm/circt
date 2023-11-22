@@ -212,7 +212,7 @@ struct CircuitLoweringState {
 
   CircuitLoweringState(CircuitOp circuitOp, bool enableAnnotationWarning,
                        bool emitChiselAssertsAsSVA,
-                       InstanceGraph *instanceGraph, NLATable *nlaTable)
+                       InstanceGraph &instanceGraph, NLATable *nlaTable)
       : circuitOp(circuitOp), instanceGraph(instanceGraph),
         enableAnnotationWarning(enableAnnotationWarning),
         emitChiselAssertsAsSVA(emitChiselAssertsAsSVA), nlaTable(nlaTable) {
@@ -235,7 +235,7 @@ struct CircuitLoweringState {
     // Figure out which module is the DUT and TestHarness.  If there is no
     // module marked as the DUT, the top module is the DUT. If the DUT and the
     // test harness are the same, then there is no test harness.
-    testHarness = instanceGraph->getTopLevelModule();
+    testHarness = instanceGraph.getTopLevelModule();
     if (!dut) {
       dut = testHarness;
       testHarness = nullptr;
@@ -282,7 +282,7 @@ struct CircuitLoweringState {
   // Returns false if the module is not instantiated by the DUT.
   bool isInDUT(igraph::ModuleOpInterface child) {
     if (auto parent = dyn_cast<igraph::ModuleOpInterface>(*dut))
-      return getInstanceGraph()->isAncestor(child, parent);
+      return getInstanceGraph().isAncestor(child, parent);
     return dut == child;
   }
 
@@ -293,7 +293,7 @@ struct CircuitLoweringState {
   // Harness is not known.
   bool isInTestHarness(igraph::ModuleOpInterface mod) { return !isInDUT(mod); }
 
-  InstanceGraph *getInstanceGraph() { return instanceGraph; }
+  InstanceGraph &getInstanceGraph() { return instanceGraph; }
 
   /// Given a type, return the corresponding lowered type for the HW dialect.
   ///  A wrapper to the FIRRTLUtils::lowerType, required to ensure safe addition
@@ -316,7 +316,7 @@ private:
 
   /// Cache of module symbols.  We need to test hirarchy-based properties to
   /// lower annotaitons.
-  InstanceGraph *instanceGraph;
+  InstanceGraph &instanceGraph;
 
   // Record the set of remaining annotation classes. This is used to warn only
   // once about any annotation class.
@@ -548,7 +548,7 @@ void FIRRTLModuleLowering::runOnOperation() {
   // if lowering failed.
   CircuitLoweringState state(
       circuit, enableAnnotationWarning, emitChiselAssertsAsSVA,
-      &getAnalysis<InstanceGraph>(), &getAnalysis<NLATable>());
+      getAnalysis<InstanceGraph>(), &getAnalysis<NLATable>());
 
   SmallVector<hw::HWModuleOp, 32> modulesToProcess;
 
@@ -3062,7 +3062,8 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
 
 LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
   Operation *oldModule =
-      circuitState.getInstanceGraph()->getReferencedModule(oldInstance);
+      oldInstance.getReferencedModule(circuitState.getInstanceGraph());
+
   auto newModule = circuitState.getNewModule(oldModule);
   if (!newModule) {
     oldInstance->emitOpError("could not find module [")
