@@ -370,7 +370,11 @@ static LogicalResult processBuffer(
   if (failed(applyPassManagerCLOptions(pm)))
     return failure();
 
-  if (failed(firtool::populatePreprocessTransforms(pm, firtoolOptions)))
+  if (failed(firtool::populatePreprocessTransforms(
+          pm, firtoolOptions.shouldDisableUnknownAnnotations(),
+          firtoolOptions.shouldDisableClasslessAnnotations(),
+          firtoolOptions.shouldLowerNoRefTypePortAnnotations(),
+          firtoolOptions.shouldEnableDebugInfo())))
     return failure();
 
   // If the user asked for --parse-only, stop after running LowerAnnotations.
@@ -385,8 +389,26 @@ static LogicalResult processBuffer(
     if (failed(parsePassPipeline(StringRef(highFIRRTLPassPlugin), pm)))
       return failure();
 
-  if (failed(firtool::populateCHIRRTLToLowFIRRTL(pm, firtoolOptions,
-                                                 inputFilename)))
+  StringRef blackBoxRoot = firtoolOptions.getBlackBoxRootPath().empty()
+                               ? llvm::sys::path::parent_path(inputFilename)
+                               : firtoolOptions.getBlackBoxRootPath();
+  if (failed(firtool::populateCHIRRTLToLowFIRRTL(
+          pm, firtoolOptions.shouldDisableOptimization(),
+          firtoolOptions.getPreserveMode(),
+          firtoolOptions.getPreserveAggregate(),
+          firtoolOptions.shouldReplicateSequentialMemories(),
+          firtoolOptions.getReplaceSequentialMemoriesFile(),
+          firtoolOptions.shouldIgnoreReadEnableMemories(),
+          firtoolOptions.shouldExportChiselInterface(),
+          firtoolOptions.getChiselInterfaceOutputDirectory(),
+          firtoolOptions.shouldDisableHoistingHWPassthrough(),
+          !firtoolOptions.shouldDedup(),
+          firtoolOptions.shouldConvertVecOfBundle(),
+          firtoolOptions.shouldLowerMemories(),
+          firtoolOptions.getDisableRandom(), firtoolOptions.getCompanionMode(),
+          blackBoxRoot, firtoolOptions.shouldEmitOMIR(),
+          firtoolOptions.getOmirOutputFile(),
+          firtoolOptions.shouldDisableAggressiveMergeConnections())))
     return failure();
 
   if (!lowFIRRTLPassPlugin.empty())
@@ -395,13 +417,30 @@ static LogicalResult processBuffer(
 
   // Lower if we are going to verilog or if lowering was specifically requested.
   if (outputFormat != OutputIRFir) {
-    if (failed(firtool::populateLowFIRRTLToHW(pm, firtoolOptions)))
+    if (failed(firtool::populateLowFIRRTLToHW(
+            pm, firtoolOptions.shouldDisableOptimization(),
+            firtoolOptions.getOutputAnnotationFilename(),
+            firtoolOptions.shouldEnableAnnotationWarning(),
+            firtoolOptions.shouldEmitChiselAssertsAsSVA())))
       return failure();
     if (!hwPassPlugin.empty())
       if (failed(parsePassPipeline(StringRef(hwPassPlugin), pm)))
         return failure();
     if (outputFormat != OutputIRHW)
-      if (failed(firtool::populateHWToSV(pm, firtoolOptions)))
+      if (failed(firtool::populateHWToSV(
+              pm, firtoolOptions.shouldDisableOptimization(),
+              firtoolOptions.shouldExtractTestCode(),
+              firtoolOptions.shouldEtcDisableInstanceExtraction(),
+              firtoolOptions.shouldEtcDisableRegisterExtraction(),
+              firtoolOptions.shouldEtcDisableModuleInlining(),
+              firtoolOptions.getClockGateOptions(),
+              firtoolOptions.getDisableRandom(),
+              firtoolOptions.shouldEmitSeparateAlwaysBlocks(),
+              firtoolOptions.shouldReplicateSequentialMemories(),
+              firtoolOptions.shouldIgnoreReadEnableMemories(),
+              firtoolOptions.shouldAddMuxPragmas(),
+              firtoolOptions
+                  .shouldAddVivadoRAMAddressConflictSynthesisBugWorkaround())))
         return failure();
     if (!svPassPlugin.empty())
       if (failed(parsePassPipeline(StringRef(svPassPlugin), pm)))
@@ -427,23 +466,34 @@ static LogicalResult processBuffer(
     default:
       llvm_unreachable("can't reach this");
     case OutputVerilog:
-      if (failed(firtool::populateExportVerilog(pm, firtoolOptions,
-                                                (*outputFile)->os())))
+      if (failed(firtool::populateExportVerilog(
+              pm, firtoolOptions.shouldDisableOptimization(),
+              firtoolOptions.shouldStripFirDebugInfo(),
+              firtoolOptions.shouldStripDebugInfo(),
+              firtoolOptions.shouldExportModuleHierarchy(),
+              (*outputFile)->os())))
         return failure();
       if (emitHGLDD)
         pm.addPass(std::make_unique<EmitHGLDDPass>((*outputFile)->os()));
       break;
     case OutputSplitVerilog:
       if (failed(firtool::populateExportSplitVerilog(
-              pm, firtoolOptions, firtoolOptions.getOutputFilename())))
+              pm, firtoolOptions.shouldDisableOptimization(),
+              firtoolOptions.shouldStripFirDebugInfo(),
+              firtoolOptions.shouldStripDebugInfo(),
+              firtoolOptions.shouldExportModuleHierarchy(),
+              firtoolOptions.getOutputFilename())))
         return failure();
       if (emitHGLDD)
         pm.addPass(std::make_unique<EmitSplitHGLDDPass>());
       break;
     case OutputIRVerilog:
       // Run the ExportVerilog pass to get its lowering, but discard the output.
-      if (failed(firtool::populateExportVerilog(pm, firtoolOptions,
-                                                llvm::nulls())))
+      if (failed(firtool::populateExportVerilog(
+              pm, firtoolOptions.shouldDisableOptimization(),
+              firtoolOptions.shouldStripFirDebugInfo(),
+              firtoolOptions.shouldStripDebugInfo(),
+              firtoolOptions.shouldExportModuleHierarchy(), llvm::nulls())))
         return failure();
       break;
     }
@@ -451,7 +501,7 @@ static LogicalResult processBuffer(
     // Run final IR mutations to clean it up after ExportVerilog and before
     // emitting the final MLIR.
     if (!mlirOutFile.empty())
-      if (failed(firtool::populateFinalizeIR(pm, firtoolOptions)))
+      if (failed(firtool::populateFinalizeIR(pm)))
         return failure();
   }
 

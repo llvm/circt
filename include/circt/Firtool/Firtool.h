@@ -34,9 +34,15 @@ public:
   enum BuildMode { BuildModeDefault, BuildModeDebug, BuildModeRelease };
   enum class RandomKind { None, Mem, Reg, All };
 
-  bool isRandomEnabled(RandomKind kind) const {
-    return disableRandom != RandomKind::All && disableRandom != kind;
+  static bool isRandomEnabled(RandomKind disabled, RandomKind kind) {
+    return disabled != RandomKind::All && disabled != kind;
   }
+
+  bool isRandomEnabled(RandomKind kind) const {
+    return isRandomEnabled(disableRandom, kind);
+  }
+
+  RandomKind getDisableRandom() const { return disableRandom; }
 
   firrtl::PreserveValues::PreserveMode getPreserveMode() const {
     switch (buildMode) {
@@ -119,17 +125,6 @@ public:
   }
   bool shouldExtractTestCode() const { return extractTestCode; }
 
-  // Setters, used by the CAPI
-  FirtoolOptions &setOutputFilename(StringRef name) {
-    outputFilename = name;
-    return *this;
-  }
-
-  FirtoolOptions &setDisableUnknownAnnotations(bool disable) {
-    disableAnnotationsUnknown = disable;
-    return *this;
-  }
-
 private:
   std::string outputFilename;
   bool disableAnnotationsUnknown;
@@ -178,31 +173,53 @@ private:
 void registerFirtoolCLOptions();
 
 LogicalResult populatePreprocessTransforms(mlir::PassManager &pm,
-                                           const FirtoolOptions &opt);
+                                           bool disableAnnotationsUnknown,
+                                           bool disableAnnotationsClassless,
+                                           bool lowerAnnotationsNoRefTypePorts,
+                                           bool enableDebugInfo);
 
-LogicalResult populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
-                                         const FirtoolOptions &opt,
-                                         StringRef inputFilename);
+LogicalResult populateCHIRRTLToLowFIRRTL(
+    mlir::PassManager &pm, bool disableOptimization,
+    firrtl::PreserveValues::PreserveMode preserveValues,
+    firrtl::PreserveAggregate::PreserveMode preserveAggregate, bool replSeqMem,
+    StringRef replSeqMemFile, bool ignoreReadEnableMem,
+    bool exportChiselInterface, StringRef chiselInterfaceOutDirectory,
+    bool disableHoistingHWPassthrough, bool noDedup, bool vbToBV,
+    bool lowerMemories, FirtoolOptions::RandomKind disableRandom,
+    firrtl::CompanionMode companionMode, StringRef blackBoxRoot, bool emitOMIR,
+    StringRef omirOutFile, bool disableAggressiveMergeConnections);
 
 LogicalResult populateLowFIRRTLToHW(mlir::PassManager &pm,
-                                    const FirtoolOptions &opt);
+                                    bool disableOptimization,
+                                    StringRef outputAnnotationFilename,
+                                    bool enableAnnotationWarning,
+                                    bool emitChiselAssertsAsSVA);
 
-LogicalResult populateHWToSV(mlir::PassManager &pm, const FirtoolOptions &opt);
+LogicalResult populateHWToSV(
+    mlir::PassManager &pm, bool disableOptimization, bool extractTestCode,
+    bool etcDisableInstanceExtraction, bool etcDisableRegisterExtraction,
+    bool etcDisableModuleInlining, seq::ExternalizeClockGateOptions ckg,
+    FirtoolOptions::RandomKind disableRandom, bool emitSeparateAlwaysBlocks,
+    bool replSeqMem, bool ignoreReadEnableMem, bool addMuxPragmas,
+    bool addVivadoRAMAddressConflictSynthesisBugWorkaround);
 
 LogicalResult populateExportVerilog(mlir::PassManager &pm,
-                                    const FirtoolOptions &opt,
+                                    bool disableOptimization,
+                                    bool stripFirDebugInfo, bool stripDebugInfo,
+                                    bool exportModuleHierarchy,
                                     std::unique_ptr<llvm::raw_ostream> os);
 
 LogicalResult populateExportVerilog(mlir::PassManager &pm,
-                                    const FirtoolOptions &opt,
+                                    bool disableOptimization,
+                                    bool stripFirDebugInfo, bool stripDebugInfo,
+                                    bool exportModuleHierarchy,
                                     llvm::raw_ostream &os);
 
-LogicalResult populateExportSplitVerilog(mlir::PassManager &pm,
-                                         const FirtoolOptions &opt,
-                                         llvm::StringRef directory);
+LogicalResult populateExportSplitVerilog(
+    mlir::PassManager &pm, bool disableOptimization, bool stripFirDebugInfo,
+    bool stripDebugInfo, bool exportModuleHierarchy, llvm::StringRef directory);
 
-LogicalResult populateFinalizeIR(mlir::PassManager &pm,
-                                 const FirtoolOptions &opt);
+LogicalResult populateFinalizeIR(mlir::PassManager &pm);
 
 } // namespace firtool
 } // namespace circt
