@@ -1593,7 +1593,7 @@ private:
   ParseResult parseLeadingExpStmt(Value lhs);
   ParseResult parseConnect();
   ParseResult parseInvalidate();
-  ParseResult parseGroup(unsigned indent);
+  ParseResult parseLayerBlockOrGroup(unsigned indent);
 
   // Declarations
   ParseResult parseInstance();
@@ -2510,17 +2510,22 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
   case FIRToken::lp_release_initial:
     return parseRefReleaseInitial();
   case FIRToken::kw_group:
-    if (requireFeature({3, 2, 0}, "optional groups"))
+    if (requireFeature({3, 2, 0}, "optional groups") ||
+        removedFeature({4, 0, 0}, "optional groups"))
       return failure();
-    return parseGroup(stmtIndent);
+    return parseLayerBlockOrGroup(stmtIndent);
+  case FIRToken::kw_layerblock:
+    if (requireFeature({4, 0, 0}, "layers"))
+      return failure();
+    return parseLayerBlockOrGroup(stmtIndent);
 
   default: {
     // Statement productions that start with an expression.
     Value lhs;
     if (parseExpLeadingStmt(lhs, "unexpected token in module"))
       return failure();
-    // We use parseExp in a special mode that can complete the entire stmt at
-    // once in unusual cases.  If this happened, then we are done.
+    // We use parseExp in a special mode that can complete the entire stmt
+    // at once in unusual cases.  If this happened, then we are done.
     if (!lhs)
       return success();
 
@@ -3436,9 +3441,11 @@ ParseResult FIRStmtParser::parseInvalidate() {
   return success();
 }
 
-ParseResult FIRStmtParser::parseGroup(unsigned indent) {
+ParseResult FIRStmtParser::parseLayerBlockOrGroup(unsigned indent) {
 
-  auto startTok = consumeToken(FIRToken::kw_group);
+  auto startTok = consumeToken();
+  assert(startTok.is(FIRToken::kw_layerblock) ||
+         startTok.is(FIRToken::kw_group) && "consumed an unexpected token");
   auto loc = startTok.getLoc();
 
   StringRef id;
@@ -4361,6 +4368,7 @@ ParseResult FIRCircuitParser::skipToModuleEnd(unsigned indent) {
     case FIRToken::kw_extmodule:
     case FIRToken::kw_intmodule:
     case FIRToken::kw_module:
+    case FIRToken::kw_layer:
     case FIRToken::kw_type:
       // All module declarations should have the same indentation
       // level. Use this fact to differentiate between module
@@ -4648,7 +4656,8 @@ ParseResult FIRCircuitParser::parseToplevelDefinition(CircuitOp circuit,
   case FIRToken::kw_class:
     return parseClass(circuit, indent);
   case FIRToken::kw_declgroup:
-    if (requireFeature({3, 2, 0}, "optional groups"))
+    if (requireFeature({3, 2, 0}, "optional groups") ||
+        removedFeature({4, 0, 0}, "optional groups"))
       return failure();
     return parseLayer(circuit);
   case FIRToken::kw_extclass:
@@ -4657,6 +4666,10 @@ ParseResult FIRCircuitParser::parseToplevelDefinition(CircuitOp circuit,
     return parseExtModule(circuit, indent);
   case FIRToken::kw_intmodule:
     return parseIntModule(circuit, indent);
+  case FIRToken::kw_layer:
+    if (requireFeature({4, 0, 0}, "layers"))
+      return failure();
+    return parseLayer(circuit);
   case FIRToken::kw_module:
     return parseModule(circuit, indent);
   case FIRToken::kw_type:
@@ -4736,7 +4749,8 @@ ParseResult FIRCircuitParser::parseLayer(CircuitOp circuit) {
   // Parse any nested layers.
   while (getIndentation() > baseIndent) {
     switch (getToken().getKind()) {
-    case FIRToken::kw_declgroup: {
+    case FIRToken::kw_declgroup:
+    case FIRToken::kw_layer: {
       // Pop nested layers off the stack until we find out what layer to insert
       // this into.
       while (layerStack.back().first >= getIndentation())
@@ -4919,6 +4933,7 @@ ParseResult FIRCircuitParser::parseCircuit(
     case FIRToken::kw_extclass:
     case FIRToken::kw_extmodule:
     case FIRToken::kw_intmodule:
+    case FIRToken::kw_layer:
     case FIRToken::kw_module:
     case FIRToken::kw_type: {
       auto indent = getIndentation();

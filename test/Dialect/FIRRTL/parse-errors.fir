@@ -772,6 +772,20 @@ circuit UnsupportedVersionDeclGroups:
 
 ;// -----
 
+FIRRTL version 4.0.0
+circuit RemovedDeclGroups:
+  ; expected-error @below {{optional groups were removed in FIRRTL 4.0.0, but the specified FIRRTL version was 4.0.0}}
+  declgroup A, bind:
+
+;// -----
+
+FIRRTL version 3.9.0
+circuit UnsupportedVersionLayer:
+  ; expected-error @below {{layers are a FIRRTL 4.0.0+ feature, but the specified FIRRTL version was 3.9.0}}
+  layer A, bind:
+
+;// -----
+
 FIRRTL version 3.1.0
 circuit UnsupportedVersionGroups:
   module UnsupportedVersionGroups:
@@ -780,20 +794,35 @@ circuit UnsupportedVersionGroups:
 
 ;// -----
 
-FIRRTL version 3.2.0
-circuit UnsupportedGroupConvention:
-  ; expected-error @below {{unknown convention 'foo'}}
-  declgroup A, foo :
+FIRRTL version 4.1.0
+circuit RemovedGroups:
+  module RemovedGroups:
+    ; expected-error @below {{optional groups were removed in FIRRTL 4.0.0, but the specified FIRRTL version was 4.1.0}}
+    group A:
 
 ;// -----
 
-FIRRTL version 3.2.0
-circuit GroupAndCircuitShareName:
+FIRRTL version 3.9.0
+circuit UnsupportedLayerBlock:
+  module UnsupportedLayerBlock:
+    ; expected-error @below {{layers are a FIRRTL 4.0.0+ feature, but the specified FIRRTL version was 3.9.0}}
+    layerblock A:
+
+;// -----
+
+FIRRTL version 4.0.0
+circuit UnsupportedLayerConvention:
+  ; expected-error @below {{unknown convention 'foo'}}
+  layer A, foo :
+
+;// -----
+
+FIRRTL version 4.0.0
+circuit LayerAndCircuitShareName:
   ; expected-error @below {{cannot have the same name as the circuit}}
-  declgroup GroupAndCircuitShareName, bind :
+  layer LayerAndCircuitShareName, bind :
 
-  module GroupAndCircuitShareName:
-
+  module LayerAndCircuitShareName:
 
 ;// -----
 

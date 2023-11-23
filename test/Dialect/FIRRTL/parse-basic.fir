@@ -1616,15 +1616,15 @@ circuit Top:
 
 ;// -----
 
-; CHECK-LABEL: firrtl.circuit "Groups"
-FIRRTL version 3.2.0
-circuit Groups:
-  declgroup A, bind:
-    declgroup B, bind:
-      declgroup C, bind:
-      declgroup D, bind:
-        declgroup E, bind:
-    declgroup F, bind:
+; CHECK-LABEL: firrtl.circuit "Layers"
+FIRRTL version 4.0.0
+circuit Layers:
+  layer A, bind:
+    layer B, bind:
+      layer C, bind:
+      layer D, bind:
+        layer E, bind:
+    layer F, bind:
     ; CHECK-NEXT: firrtl.layer @A bind {
     ; CHECK-NEXT:   firrtl.layer @B bind {
     ; CHECK-NEXT:     firrtl.layer @C bind {
@@ -1638,21 +1638,21 @@ circuit Groups:
     ; CHECK-NEXT:   }
     ; CHECK-NEXT: }
 
-  ; CHECK: firrtl.module @Groups
-  module Groups:
+  ; CHECK: firrtl.module @Layers
+  module Layers:
     input a: UInt<1>
 
-    group A:
+    layerblock A:
       node A_a = a
-      group B:
+      layerblock B:
         node B_a = a
-        group C:
+        layerblock C:
           node C_a = a
-        group D:
+        layerblock D:
           node D_a = a
-          group E:
+          layerblock E:
             node E_a = a
-      group F:
+      layerblock F:
         node F_a = a
 
     ; CHECK-NEXT: firrtl.layerblock @A {
