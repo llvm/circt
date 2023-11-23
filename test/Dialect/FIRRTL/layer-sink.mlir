@@ -1,4 +1,4 @@
-// RUN: circt-opt -pass-pipeline="builtin.module(firrtl.circuit(firrtl.module(firrtl-group-sink)))" %s | FileCheck %s
+// RUN: circt-opt -pass-pipeline="builtin.module(firrtl.circuit(firrtl.module(firrtl-layer-sink)))" %s | FileCheck %s
 
 // Test that simple things are sunk:
 //   - nodes
@@ -17,11 +17,11 @@ firrtl.circuit "SimpleSink" {
    // CHECK-NEXT: firrtl.layerblock @A
    firrtl.layerblock @A {
      // CHECK: %c0_ui1 = firrtl.constant
-     %constant_group = firrtl.node %c0_ui1 : !firrtl.uint<1>
+     %constant_layer = firrtl.node %c0_ui1 : !firrtl.uint<1>
      // CHECK: %node = firrtl.node
-     %node_group = firrtl.node %node : !firrtl.uint<1>
+     %node_layer = firrtl.node %node : !firrtl.uint<1>
      // CHECK: %0 = firrtl.not
-     %primop_group = firrtl.node %0 : !firrtl.uint<1>
+     %primop_layer = firrtl.node %0 : !firrtl.uint<1>
    }
  }
 }

@@ -12,7 +12,6 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   FinalizeIR.cpp
   FlattenMemory.cpp
   GrandCentral.cpp
-  GroupSink.cpp
   HoistPassthrough.cpp
   IMConstProp.cpp
   IMDeadCodeElim.cpp
@@ -24,6 +23,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   LegacyWiring.cpp
   Lint.cpp
   LayerMerge.cpp
+  LayerSink.cpp
   LowerAnnotations.cpp
   LowerCHIRRTL.cpp
   LowerClasses.cpp

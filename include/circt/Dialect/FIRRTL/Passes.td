@@ -759,12 +759,12 @@ def LayerMerge : Pass<"firrtl-layer-merge", "firrtl::FModuleOp"> {
   ];
 }
 
-def GroupSink : Pass<"firrtl-group-sink", "firrtl::FModuleOp"> {
-  let summary = "Sink operations into FIRRTL optional groups";
+def LayerSink : Pass<"firrtl-layer-sink", "firrtl::FModuleOp"> {
+  let summary = "Sink operations into layer blocks";
   let description = [{
 
   }];
-  let constructor = "::circt::firrtl::createGroupSinkPass()";
+  let constructor = "::circt::firrtl::createLayerSinkPass()";
   let statistics = [
     Statistic<"numSunk", "num-sunk", "Number of operations sunk">,
   ];
