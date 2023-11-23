@@ -1655,21 +1655,21 @@ circuit Groups:
       group F:
         node F_a = a
 
-    ; CHECK-NEXT: firrtl.group @A {
+    ; CHECK-NEXT: firrtl.layerblock @A {
     ; CHECK-NEXT:   %A_a = firrtl.node{{.*}} %a
-    ; CHECK-NEXT:   firrtl.group @A::@B {
+    ; CHECK-NEXT:   firrtl.layerblock @A::@B {
     ; CHECK-NEXT:     %B_a = firrtl.node{{.*}} %a
-    ; CHECK-NEXT:     firrtl.group @A::@B::@C {
+    ; CHECK-NEXT:     firrtl.layerblock @A::@B::@C {
     ; CHECK-NEXT:       %C_a = firrtl.node{{.*}} %a
     ; CHECK-NEXT:     }
-    ; CHECK-NEXT:     firrtl.group @A::@B::@D {
+    ; CHECK-NEXT:     firrtl.layerblock @A::@B::@D {
     ; CHECK-NEXT:       %D_a = firrtl.node{{.*}} %a
-    ; CHECK-NEXT:       firrtl.group @A::@B::@D::@E {
+    ; CHECK-NEXT:       firrtl.layerblock @A::@B::@D::@E {
     ; CHECK-NEXT:         %E_a = firrtl.node{{.*}} %a
     ; CHECK-NEXT:       }
     ; CHECK-NEXT:     }
     ; CHECK-NEXT:   }
-    ; CHECK-NEXT:   firrtl.group @A::@F {
+    ; CHECK-NEXT:   firrtl.layerblock @A::@F {
     ; CHECK-NEXT:     %F_a = firrtl.node{{.*}} %a
     ; CHECK-NEXT:   }
     ; CHECK-NEXT: }

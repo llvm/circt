@@ -1277,8 +1277,8 @@ firrtl.module private @is1436_FOO() {
   // CHECK-LABEL: firrtl.module @Groups
   firrtl.layer @GroupFoo bind {}
   firrtl.module @Groups() {
-    // CHECK-NEXT: firrtl.group @GroupFoo
-    firrtl.group @GroupFoo {
+    // CHECK-NEXT: firrtl.layerblock @GroupFoo
+    firrtl.layerblock @GroupFoo {
       // CHECK-NEXT: %a_b = firrtl.wire : !firrtl.uint<1>
       %a = firrtl.wire : !firrtl.bundle<b: uint<1>>
     }

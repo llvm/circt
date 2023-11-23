@@ -288,7 +288,7 @@ firrtl.circuit "Foo" {
 
 firrtl.circuit "Foo" {
   firrtl.extmodule @Foo()
-  // expected-error @+1 {{'firrtl.instance' op expects parent op to be one of 'firrtl.module, firrtl.group, firrtl.when, firrtl.match'}}
+  // expected-error @+1 {{'firrtl.instance' op expects parent op to be one of 'firrtl.module, firrtl.layerblock, firrtl.when, firrtl.match'}}
   firrtl.instance "" @Foo()
 }
 
@@ -1837,7 +1837,7 @@ firrtl.circuit "ClassCannotHaveHardwarePorts" {
 firrtl.circuit "ClassCannotHaveWires" {
   firrtl.module @ClassCannotHaveWires() {}
   firrtl.class @ClassWithWire() {
-    // expected-error @below {{'firrtl.wire' op expects parent op to be one of 'firrtl.module, firrtl.group, firrtl.when, firrtl.match'}}
+    // expected-error @below {{'firrtl.wire' op expects parent op to be one of 'firrtl.module, firrtl.layerblock, firrtl.when, firrtl.match'}}
     %w = firrtl.wire : !firrtl.uint<8>
   }
 }
@@ -1854,62 +1854,62 @@ firrtl.circuit "ClassCannotHavePortSymbols" {
 
 // -----
 
-// A group definition, "@A::@B", is missing an outer nesting of a group
+// A layer block, "@A::@B", is missing an outer nesting of a layer block
 // definition with symbol "@A".
-firrtl.circuit "GroupMissingNesting" {
+firrtl.circuit "LayerBlockMissingNesting" {
   firrtl.layer @A bind {
     firrtl.layer @B bind {}
   }
   // expected-note @below {{illegal parent op defined here}}
-  firrtl.module @GroupMissingNesting() {
-    // expected-error @below {{'firrtl.group' op has a nested group symbol, but does not have a 'firrtl.group' op as a parent}}
-    firrtl.group @A::@B {}
+  firrtl.module @LayerBlockMissingNesting() {
+    // expected-error @below {{'firrtl.layerblock' op has a nested layer symbol, but does not have a 'firrtl.layerblock' op as a parent}}
+    firrtl.layerblock @A::@B {}
   }
 }
 
 // -----
 
-// A group definition with a legal symbol, "@B", is illegaly nested under
-// another group with a legal symbol, "@B".
-firrtl.circuit "UnnestedGroup" {
+// A layer block with a legal symbol, "@B", is illegaly nested under another
+// layer block with a legal symbol, "@B".
+firrtl.circuit "UnnestedLayerBlock" {
   firrtl.layer @A bind {}
   firrtl.layer @B bind {}
-  firrtl.module @UnnestedGroup() {
+  firrtl.module @UnnestedLayerBlock() {
     // expected-note @below {{illegal parent op defined here}}
-    firrtl.group @A {
-      // expected-error @below {{'firrtl.group' op has an un-nested group symbol, but does not have a 'firrtl.module' op as a parent}}
-      firrtl.group @B {}
+    firrtl.layerblock @A {
+      // expected-error @below {{'firrtl.layerblock' op has an un-nested layer symbol, but does not have a 'firrtl.module' op as a parent}}
+      firrtl.layerblock @B {}
     }
   }
 }
 
 // -----
 
-// A group definition, "@B::@C", is nested under the wrong group, "@A".
-firrtl.circuit "WrongGroupNesting" {
+// A layer block, "@B::@C", is nested under the wrong layer block, "@A".
+firrtl.circuit "WrongLayerBlockNesting" {
   firrtl.layer @A bind {}
   firrtl.layer @B bind {
     firrtl.layer @C bind {}
   }
-  firrtl.module @WrongGroupNesting() {
-    // expected-note @below {{illegal parent group defined here}}
-    firrtl.group @A {
-      // expected-error @below {{'firrtl.group' op is nested under an illegal group}}
-      firrtl.group @B::@C {}
+  firrtl.module @WrongLayerBlockNesting() {
+    // expected-note @below {{illegal parent layer block defined here}}
+    firrtl.layerblock @A {
+      // expected-error @below {{'firrtl.layerblock' op is nested under an illegal layer block}}
+      firrtl.layerblock @B::@C {}
     }
   }
 }
 
 // -----
 
-// A group captures a type which is not a FIRRTL base type.
+// A layer block captures a type which is not a FIRRTL base type.
 firrtl.circuit "NonBaseTypeCapture" {
   firrtl.layer @A bind {}
   firrtl.module @NonBaseTypeCapture(in %in: !firrtl.uint<1>) {
     // expected-note @below {{operand is defined here}}
      %ref = firrtl.ref.send %in : !firrtl.uint<1>
-    // expected-error @below {{'firrtl.group' op captures an operand which is not a FIRRTL base type}}
-    firrtl.group @A {
+    // expected-error @below {{'firrtl.layerblock' op captures an operand which is not a FIRRTL base type}}
+    firrtl.layerblock @A {
       // expected-note @below {{operand is used here}}
       %b = firrtl.ref.resolve %ref : !firrtl.probe<uint<1>>
     }
@@ -1918,14 +1918,14 @@ firrtl.circuit "NonBaseTypeCapture" {
 
 // -----
 
-// A group captures a non-passive type.
+// A layer block captures a non-passive type.
 firrtl.circuit "NonPassiveCapture" {
   firrtl.layer @A bind {}
   firrtl.module @NonPassiveCapture() {
     // expected-note @below {{operand is defined here}}
     %a = firrtl.wire : !firrtl.bundle<a flip: uint<1>>
-    // expected-error @below {{'firrtl.group' op captures an operand which is not a passive type}}
-    firrtl.group @A {
+    // expected-error @below {{'firrtl.layerblock' op captures an operand which is not a passive type}}
+    firrtl.layerblock @A {
       %b = firrtl.wire : !firrtl.bundle<a flip: uint<1>>
       // expected-note @below {{operand is used here}}
       firrtl.connect %b, %a : !firrtl.bundle<a flip: uint<1>>, !firrtl.bundle<a flip: uint<1>>
@@ -1935,18 +1935,18 @@ firrtl.circuit "NonPassiveCapture" {
 
 // -----
 
-// A group may not drive sinks outside the group.
-firrtl.circuit "GroupDrivesSinksOutside" {
+// A layer block may not drive sinks outside the layer block.
+firrtl.circuit "LayerBlockDrivesSinksOutside" {
   firrtl.layer @A bind {}
-  firrtl.module @GroupDrivesSinksOutside(in %cond : !firrtl.uint<1>) {
+  firrtl.module @LayerBlockDrivesSinksOutside(in %cond : !firrtl.uint<1>) {
     %a = firrtl.wire : !firrtl.uint<1>
     // expected-note @below {{destination is defined here}}
     %b = firrtl.wire : !firrtl.bundle<c: uint<1>>
-    // expected-note @below {{enclosing group is defined here}}
-    firrtl.group @A {
+    // expected-note @below {{enclosing layer block is defined here}}
+    firrtl.layerblock @A {
       firrtl.when %cond : !firrtl.uint<1> {
         %b_c = firrtl.subfield %b[c] : !firrtl.bundle<c: uint<1>>
-        // expected-error @below {{'firrtl.strictconnect' op connects to a destination which is defined outside its enclosing group}}
+        // expected-error @below {{'firrtl.strictconnect' op connects to a destination which is defined outside its enclosing layer block}}
         firrtl.strictconnect %b_c, %a : !firrtl.uint<1>
       }
     }

@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file sinks operations in FIRRTL optional groups.
+// This file sinks operations in layer blocks.
 //
 //===----------------------------------------------------------------------===//
 
@@ -35,8 +35,8 @@ void GroupSink::runOnOperation() {
                       "---------------------------------------------------===\n"
                    << "Module: '" << getOperation().getName() << "'\n";);
   auto &domInfo = getAnalysis<mlir::DominanceInfo>();
-  getOperation()->walk([&](GroupOp group) {
-    SmallVector<Region *> regionsToSink({&group.getRegion()});
+  getOperation()->walk([&](LayerBlockOp layerBlock) {
+    SmallVector<Region *> regionsToSink({&layerBlock.getRegion()});
     numSunk = controlFlowSink(
         regionsToSink, domInfo,
         [](Operation *op, Region *) { return !hasDontTouch(op); },

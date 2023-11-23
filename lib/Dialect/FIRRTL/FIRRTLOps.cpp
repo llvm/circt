@@ -5572,39 +5572,40 @@ LogicalResult RWProbeOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
 }
 
 //===----------------------------------------------------------------------===//
-// Optional Group Operations
+// Layer Block Operations
 //===----------------------------------------------------------------------===//
 
-LogicalResult GroupOp::verify() {
-  auto groupName = getGroupName();
+LogicalResult LayerBlockOp::verify() {
+  auto layerName = getLayerName();
   auto *parentOp = (*this)->getParentOp();
 
   // Verify the correctness of the symbol reference.  Only verify that this
-  // group makes sense in its parent module or group.
-  auto nestedReferences = groupName.getNestedReferences();
+  // layer block makes sense in its parent module or layer block.
+  auto nestedReferences = layerName.getNestedReferences();
   if (nestedReferences.empty()) {
     if (!isa<FModuleOp>(parentOp)) {
-      auto diag = emitOpError() << "has an un-nested group symbol, but does "
+      auto diag = emitOpError() << "has an un-nested layer symbol, but does "
                                    "not have a 'firrtl.module' op as a parent";
       return diag.attachNote(parentOp->getLoc())
              << "illegal parent op defined here";
     }
   } else {
-    auto parentGroup = dyn_cast<GroupOp>(parentOp);
-    if (!parentGroup) {
+    auto parentLayerBlock = dyn_cast<LayerBlockOp>(parentOp);
+    if (!parentLayerBlock) {
       auto diag = emitOpError()
-                  << "has a nested group symbol, but does not have a '"
+                  << "has a nested layer symbol, but does not have a '"
                   << getOperationName() << "' op as a parent'";
       return diag.attachNote(parentOp->getLoc())
              << "illegal parent op defined here";
     }
-    auto parentGroupName = parentGroup.getGroupName();
-    if (parentGroupName.getRootReference() != groupName.getRootReference() ||
-        parentGroupName.getNestedReferences() !=
-            groupName.getNestedReferences().drop_back()) {
-      auto diag = emitOpError() << "is nested under an illegal group";
-      return diag.attachNote(parentGroup->getLoc())
-             << "illegal parent group defined here";
+    auto parentLayerBlockName = parentLayerBlock.getLayerName();
+    if (parentLayerBlockName.getRootReference() !=
+            layerName.getRootReference() ||
+        parentLayerBlockName.getNestedReferences() !=
+            layerName.getNestedReferences().drop_back()) {
+      auto diag = emitOpError() << "is nested under an illegal layer block";
+      return diag.attachNote(parentLayerBlock->getLoc())
+             << "illegal parent layer block defined here";
     }
   }
 
@@ -5612,13 +5613,13 @@ LogicalResult GroupOp::verify() {
   Block *body = getBody(0);
   bool failed = false;
   body->walk<mlir::WalkOrder::PreOrder>([&](Operation *op) {
-    // Skip nested groups.  Those will be verified separately.
-    if (isa<GroupOp>(op))
+    // Skip nested layer blocks.  Those will be verified separately.
+    if (isa<LayerBlockOp>(op))
       return WalkResult::skip();
     // Check all the operands of each op to make sure that only legal things are
     // captured.
     for (auto operand : op->getOperands()) {
-      // Any value captured from the current group is fine.
+      // Any value captured from the current layer block is fine.
       if (operand.getParentBlock() == body)
         continue;
       // Capture of a non-base type, e.g., reference is illegal.
@@ -5641,15 +5642,15 @@ LogicalResult GroupOp::verify() {
         return WalkResult::advance();
       }
     }
-    // Ensure that the group does not drive any sinks.
+    // Ensure that the layer block does not drive any sinks.
     if (auto connect = dyn_cast<FConnectLike>(op)) {
       auto dest = getFieldRefFromValue(connect.getDest()).getValue();
       if (dest.getParentBlock() == body)
         return WalkResult::advance();
       auto diag = connect.emitOpError()
                   << "connects to a destination which is defined outside its "
-                     "enclosing group";
-      diag.attachNote(getLoc()) << "enclosing group is defined here";
+                     "enclosing layer block";
+      diag.attachNote(getLoc()) << "enclosing layer block is defined here";
       diag.attachNote(dest.getLoc()) << "destination is defined here";
       failed = true;
     }
@@ -5661,9 +5662,10 @@ LogicalResult GroupOp::verify() {
   return success();
 }
 
-LogicalResult GroupOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  auto layerOp = symbolTable.lookupNearestSymbolFrom<LayerOp>(
-      *this, getGroupNameAttr());
+LogicalResult
+LayerBlockOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto layerOp =
+      symbolTable.lookupNearestSymbolFrom<LayerOp>(*this, getLayerNameAttr());
   if (!layerOp) {
     return emitOpError("invalid symbol reference");
   }

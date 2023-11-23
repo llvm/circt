@@ -37,20 +37,20 @@ void GroupMerge::runOnOperation() {
   // declaration.  Because this pass operates as a single walk of the IR, it is
   // only ever possible that there is one prior group that references a given
   // group declaration.
-  llvm::DenseMap<SymbolRefAttr, GroupOp> priorGroups;
+  llvm::DenseMap<SymbolRefAttr, LayerBlockOp> priorGroups;
 
-  // Recursively walk GroupOps in the module.  Whenever we see a group, check to
-  // see if there is a prior group that references the same declaration.  If
-  // not, this group becomes the prior group and we continue.  If there is a
-  // prior group, then splice the prior group's body into the beginning of this
-  // group and erase the prior group.  This group then becomes the new prior
-  // group.
+  // Recursively walk LayerBlockOps in the module.  Whenever we see a group,
+  // check to see if there is a prior group that references the same
+  // declaration.  If not, this group becomes the prior group and we continue.
+  // If there is a prior group, then splice the prior group's body into the
+  // beginning of this group and erase the prior group.  This group then becomes
+  // the new prior group.
   //
   // The recursive walk will cause nested groups to also be merged.
   auto moduleOp = getOperation();
   mlir::IRRewriter rewriter(moduleOp.getContext());
-  moduleOp.walk([&](GroupOp group) {
-    auto groupName = group.getGroupName();
+  moduleOp.walk([&](LayerBlockOp group) {
+    auto groupName = group.getLayerName();
     // If we haven't seen this group before, then just insert it into
     // priorGroups.
     auto priorGroupIt = priorGroups.find(groupName);

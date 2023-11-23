@@ -39,7 +39,7 @@ class LowerGroupsPass : public LowerGroupsBase<LowerGroupsPass> {
   llvm::sys::SmartMutex<true> *circuitMutex;
 
   /// A map of group definition to module name that should be created for it.
-  DenseMap<GroupOp, StringRef> moduleNames;
+  DenseMap<LayerBlockOp, StringRef> moduleNames;
 };
 
 /// Multi-process safe function to build a module in the circuit and return it.
@@ -85,13 +85,13 @@ void LowerGroupsPass::runOnModule(FModuleOp moduleOp) {
   // 4. Instantiate the new module outside the group and hook it up.
   // 5. Erase the group.
   moduleOp.walk<mlir::WalkOrder::PostOrder>([&](Operation *op) {
-    auto group = dyn_cast<GroupOp>(op);
+    auto group = dyn_cast<LayerBlockOp>(op);
     if (!group)
       return WalkResult::advance();
 
     // Compute the expanded group name.  For group @A::@B::@C, this is "A_B_C".
-    SmallString<32> groupName(group.getGroupName().getRootReference());
-    for (auto ref : group.getGroupName().getNestedReferences()) {
+    SmallString<32> groupName(group.getLayerName().getRootReference());
+    for (auto ref : group.getLayerName().getNestedReferences()) {
       groupName.append("_");
       groupName.append(ref.getValue());
     }
@@ -315,9 +315,9 @@ void LowerGroupsPass::runOnOperation() {
   // avoid non-determinism from creating these in the parallel region.
   CircuitNamespace ns(circuitOp);
   circuitOp->walk([&](FModuleOp moduleOp) {
-    moduleOp->walk([&](GroupOp groupOp) {
-      SmallString<32> groupName(groupOp.getGroupName().getRootReference());
-      for (auto ref : groupOp.getGroupName().getNestedReferences()) {
+    moduleOp->walk([&](LayerBlockOp groupOp) {
+      SmallString<32> groupName(groupOp.getLayerName().getRootReference());
+      for (auto ref : groupOp.getLayerName().getNestedReferences()) {
         groupName.append("_");
         groupName.append(ref.getValue());
       }

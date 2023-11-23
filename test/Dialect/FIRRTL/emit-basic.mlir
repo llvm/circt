@@ -711,16 +711,16 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT:         group GroupE :
   // CHECK-NEXT:     group GroupF :
   firrtl.module @ModuleWithGroups() {
-    firrtl.group @GroupA {
-      firrtl.group @GroupA::@GroupB {
-        firrtl.group @GroupA::@GroupB::@GroupC {
+    firrtl.layerblock @GroupA {
+      firrtl.layerblock @GroupA::@GroupB {
+        firrtl.layerblock @GroupA::@GroupB::@GroupC {
         }
-        firrtl.group @GroupA::@GroupB::@GroupD {
-          firrtl.group @GroupA::@GroupB::@GroupD::@GroupE {
+        firrtl.layerblock @GroupA::@GroupB::@GroupD {
+          firrtl.layerblock @GroupA::@GroupB::@GroupD::@GroupE {
           }
         }
       }
-      firrtl.group @GroupA::@GroupF {
+      firrtl.layerblock @GroupA::@GroupF {
       }
     }
   }

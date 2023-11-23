@@ -228,7 +228,7 @@ public:
                        AssumeOp, CoverOp, PropAssignOp, RefForceOp,
                        RefForceInitialOp, RefReleaseOp, RefReleaseInitialOp,
                        VerifAssertIntrinsicOp, VerifAssumeIntrinsicOp,
-                       VerifCoverIntrinsicOp, GroupOp>(
+                       VerifCoverIntrinsicOp, LayerBlockOp>(
             [&](auto opNode) -> ResultType {
               return thisCast->visitStmt(opNode, args...);
             })
@@ -274,7 +274,7 @@ public:
   HANDLE(VerifAssertIntrinsicOp);
   HANDLE(VerifAssumeIntrinsicOp);
   HANDLE(VerifCoverIntrinsicOp);
-  HANDLE(GroupOp);
+  HANDLE(LayerBlockOp);
 
 #undef HANDLE
 };

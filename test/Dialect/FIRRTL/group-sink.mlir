@@ -14,8 +14,8 @@ firrtl.circuit "SimpleSink" {
    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
    %node = firrtl.node %a : !firrtl.uint<1>
    %0 = firrtl.not %a : (!firrtl.uint<1>) -> !firrtl.uint<1>
-   // CHECK-NEXT: firrtl.group @A
-   firrtl.group @A {
+   // CHECK-NEXT: firrtl.layerblock @A
+   firrtl.layerblock @A {
      // CHECK: %c0_ui1 = firrtl.constant
      %constant_group = firrtl.node %c0_ui1 : !firrtl.uint<1>
      // CHECK: %node = firrtl.node
