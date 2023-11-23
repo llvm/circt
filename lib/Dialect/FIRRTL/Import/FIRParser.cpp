@@ -174,6 +174,15 @@ struct FIRParser {
     return success();
   }
 
+  ParseResult removedFeature(FIRVersion removedVersion, StringRef feature) {
+    if (version >= removedVersion)
+      return emitError() << feature << " were removed in FIRRTL "
+                         << removedVersion
+                         << ", but the specified FIRRTL version was "
+                         << version;
+    return success();
+  }
+
   //===--------------------------------------------------------------------===//
   // Annotation Parsing
   //===--------------------------------------------------------------------===//
