@@ -1625,16 +1625,16 @@ circuit Groups:
       declgroup D, bind:
         declgroup E, bind:
     declgroup F, bind:
-    ; CHECK-NEXT: firrtl.declgroup @A bind {
-    ; CHECK-NEXT:   firrtl.declgroup @B bind {
-    ; CHECK-NEXT:     firrtl.declgroup @C bind {
+    ; CHECK-NEXT: firrtl.layer @A bind {
+    ; CHECK-NEXT:   firrtl.layer @B bind {
+    ; CHECK-NEXT:     firrtl.layer @C bind {
     ; CHECK-NEXT:     }
-    ; CHECK-NEXT:     firrtl.declgroup @D bind {
-    ; CHECK-NEXT:       firrtl.declgroup @E bind {
+    ; CHECK-NEXT:     firrtl.layer @D bind {
+    ; CHECK-NEXT:       firrtl.layer @E bind {
     ; CHECK-NEXT:       }
     ; CHECK-NEXT:     }
     ; CHECK-NEXT:   }
-    ; CHECK-NEXT:   firrtl.declgroup @F bind {
+    ; CHECK-NEXT:   firrtl.layer @F bind {
     ; CHECK-NEXT:   }
     ; CHECK-NEXT: }
 

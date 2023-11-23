@@ -348,56 +348,55 @@ void LowerGroupsPass::runOnOperation() {
   //
   // TODO: This would be better handled without the use of verbatim ops.
   OpBuilder builder(circuitOp);
-  SmallVector<std::pair<GroupDeclOp, StringAttr>> groupDecls;
+  SmallVector<std::pair<LayerOp, StringAttr>> layers;
   StringRef circuitName = circuitOp.getName();
-  circuitOp.walk<mlir::WalkOrder::PreOrder>([&](GroupDeclOp groupDeclOp) {
-    auto parentOp = groupDeclOp->getParentOfType<GroupDeclOp>();
-    while (parentOp && parentOp != groupDecls.back().first)
-      groupDecls.pop_back();
+  circuitOp.walk<mlir::WalkOrder::PreOrder>([&](LayerOp layerOp) {
+    auto parentOp = layerOp->getParentOfType<LayerOp>();
+    while (parentOp && parentOp != layers.back().first)
+      layers.pop_back();
     builder.setInsertionPointToStart(circuitOp.getBodyBlock());
 
     // Save the "groups_CIRCUIT_GROUP" string as this is reused a bunch.
     SmallString<32> prefix("groups_");
     prefix.append(circuitName);
     prefix.append("_");
-    for (auto [group, _] : groupDecls) {
-      prefix.append(group.getSymName());
+    for (auto [layer, _] : layers) {
+      prefix.append(layer.getSymName());
       prefix.append("_");
     }
-    prefix.append(groupDeclOp.getSymName());
+    prefix.append(layerOp.getSymName());
 
     auto outputFileAttr = hw::OutputFileAttr::getFromFilename(
         builder.getContext(), prefix + ".sv",
         /*excludeFromFileList=*/true);
 
     SmallString<128> includes;
-    for (auto [_, strAttr] : groupDecls) {
+    for (auto [_, strAttr] : layers) {
       includes.append(strAttr);
       includes.append("\n");
     }
 
     // Write header to a verbatim.
     builder
-        .create<sv::VerbatimOp>(groupDeclOp.getLoc(), includes + "`ifndef " +
-                                                          prefix + "\n" +
-                                                          "`define " + prefix)
+        .create<sv::VerbatimOp>(layerOp.getLoc(), includes + "`ifndef " +
+                                                      prefix + "\n" +
+                                                      "`define " + prefix)
         ->setAttr("output_file", outputFileAttr);
 
     // Write footer to a verbatim.
     builder.setInsertionPointToEnd(circuitOp.getBodyBlock());
-    builder.create<sv::VerbatimOp>(groupDeclOp.getLoc(), "`endif // " + prefix)
+    builder.create<sv::VerbatimOp>(layerOp.getLoc(), "`endif // " + prefix)
         ->setAttr("output_file", outputFileAttr);
 
-    if (!groupDeclOp.getBody().getOps<GroupDeclOp>().empty())
-      groupDecls.push_back(
-          {groupDeclOp,
-           builder.getStringAttr("`include \"" + prefix + ".sv\"")});
+    if (!layerOp.getBody().getOps<LayerOp>().empty())
+      layers.push_back(
+          {layerOp, builder.getStringAttr("`include \"" + prefix + ".sv\"")});
   });
 
-  // All group declarations can now be deleted.
-  for (auto groupDeclOp : llvm::make_early_inc_range(
-           circuitOp.getBodyBlock()->getOps<GroupDeclOp>()))
-    groupDeclOp.erase();
+  // All layers definitions can now be deleted.
+  for (auto layerOp :
+       llvm::make_early_inc_range(circuitOp.getBodyBlock()->getOps<LayerOp>()))
+    layerOp.erase();
 }
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createLowerGroupsPass() {

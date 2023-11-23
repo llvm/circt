@@ -5662,9 +5662,9 @@ LogicalResult GroupOp::verify() {
 }
 
 LogicalResult GroupOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  auto groupDeclOp = symbolTable.lookupNearestSymbolFrom<GroupDeclOp>(
+  auto layerOp = symbolTable.lookupNearestSymbolFrom<LayerOp>(
       *this, getGroupNameAttr());
-  if (!groupDeclOp) {
+  if (!layerOp) {
     return emitOpError("invalid symbol reference");
   }
 

@@ -1,9 +1,9 @@
 // RUN: circt-opt -firrtl-lower-groups -split-input-file %s | FileCheck %s
 
 firrtl.circuit "Simple" {
-  firrtl.declgroup @A bind {
-    firrtl.declgroup @B bind {
-      firrtl.declgroup @C bind {}
+  firrtl.layer @A bind {
+    firrtl.layer @B bind {
+      firrtl.layer @C bind {}
     }
   }
   firrtl.module @Simple() {
@@ -96,7 +96,7 @@ firrtl.circuit "Simple" {
 // -----
 
 firrtl.circuit "ModuleNameConflict" {
-  firrtl.declgroup @A bind {}
+  firrtl.layer @A bind {}
   firrtl.module private @ModuleNameConflict_A() {}
   firrtl.module @ModuleNameConflict() {
     %a = firrtl.wire : !firrtl.uint<1>

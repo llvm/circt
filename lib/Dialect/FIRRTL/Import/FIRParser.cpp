@@ -4111,7 +4111,7 @@ private:
 
   ParseResult parseTypeDecl();
 
-  ParseResult parseGroupDecl(CircuitOp circuit);
+  ParseResult parseLayer(CircuitOp circuit);
 
   struct DeferredModuleToParse {
     FModuleLike moduleOp;
@@ -4642,7 +4642,7 @@ ParseResult FIRCircuitParser::parseToplevelDefinition(CircuitOp circuit,
   case FIRToken::kw_declgroup:
     if (requireFeature({3, 2, 0}, "optional groups"))
       return failure();
-    return parseGroupDecl(circuit);
+    return parseLayer(circuit);
   case FIRToken::kw_extclass:
     return parseExtClass(circuit, indent);
   case FIRToken::kw_extmodule:
@@ -4689,12 +4689,12 @@ ParseResult FIRCircuitParser::parseTypeDecl() {
   return success();
 }
 
-// Parse a group declaration.
-ParseResult FIRCircuitParser::parseGroupDecl(CircuitOp circuit) {
+// Parse a layer definition.
+ParseResult FIRCircuitParser::parseLayer(CircuitOp circuit) {
   auto baseIndent = getIndentation();
 
   // A stack of all groups that are possibly parents of the current group.
-  SmallVector<std::pair<std::optional<unsigned>, GroupDeclOp>> groupStack;
+  SmallVector<std::pair<std::optional<unsigned>, LayerOp>> groupStack;
 
   // Parse a single group and add it to the groupStack.
   auto parseOne = [&](Block *block) -> ParseResult {
@@ -4704,7 +4704,7 @@ ParseResult FIRCircuitParser::parseGroupDecl(CircuitOp circuit) {
     consumeToken();
     if (parseId(id, "expected group name") || parseGetSpelling(convention))
       return failure();
-    auto groupConvention = symbolizeGroupConvention(convention);
+    auto groupConvention = symbolizeLayerConvention(convention);
     if (!groupConvention) {
       emitError() << "unknown convention '" << convention
                   << "' (did you misspell it?)";
@@ -4716,10 +4716,9 @@ ParseResult FIRCircuitParser::parseGroupDecl(CircuitOp circuit) {
       return failure();
     auto builder = OpBuilder::atBlockEnd(block);
     // Create the group declaration and give it an empty block.
-    auto groupDeclOp =
-        builder.create<GroupDeclOp>(info.getLoc(), id, *groupConvention);
-    groupDeclOp->getRegion(0).push_back(new Block());
-    groupStack.push_back({indent, groupDeclOp});
+    auto layerOp = builder.create<LayerOp>(info.getLoc(), id, *groupConvention);
+    layerOp->getRegion(0).push_back(new Block());
+    groupStack.push_back({indent, layerOp});
     return success();
   };
 

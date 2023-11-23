@@ -2,8 +2,8 @@
 
 // CHECK-LABEL: firrtl.circuit "SimpleMerge"
 firrtl.circuit "SimpleMerge" {
-  firrtl.declgroup @A  bind {
-    firrtl.declgroup @B  bind {
+  firrtl.layer @A  bind {
+    firrtl.layer @B  bind {
     }
   }
   // CHECK: firrtl.module @SimpleMerge

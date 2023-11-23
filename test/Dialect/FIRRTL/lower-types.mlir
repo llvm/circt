@@ -1275,7 +1275,7 @@ firrtl.module private @is1436_FOO() {
   }
 
   // CHECK-LABEL: firrtl.module @Groups
-  firrtl.declgroup @GroupFoo bind {}
+  firrtl.layer @GroupFoo bind {}
   firrtl.module @Groups() {
     // CHECK-NEXT: firrtl.group @GroupFoo
     firrtl.group @GroupFoo {

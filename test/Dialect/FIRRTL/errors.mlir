@@ -1857,8 +1857,8 @@ firrtl.circuit "ClassCannotHavePortSymbols" {
 // A group definition, "@A::@B", is missing an outer nesting of a group
 // definition with symbol "@A".
 firrtl.circuit "GroupMissingNesting" {
-  firrtl.declgroup @A bind {
-    firrtl.declgroup @B bind {}
+  firrtl.layer @A bind {
+    firrtl.layer @B bind {}
   }
   // expected-note @below {{illegal parent op defined here}}
   firrtl.module @GroupMissingNesting() {
@@ -1872,8 +1872,8 @@ firrtl.circuit "GroupMissingNesting" {
 // A group definition with a legal symbol, "@B", is illegaly nested under
 // another group with a legal symbol, "@B".
 firrtl.circuit "UnnestedGroup" {
-  firrtl.declgroup @A bind {}
-  firrtl.declgroup @B bind {}
+  firrtl.layer @A bind {}
+  firrtl.layer @B bind {}
   firrtl.module @UnnestedGroup() {
     // expected-note @below {{illegal parent op defined here}}
     firrtl.group @A {
@@ -1887,9 +1887,9 @@ firrtl.circuit "UnnestedGroup" {
 
 // A group definition, "@B::@C", is nested under the wrong group, "@A".
 firrtl.circuit "WrongGroupNesting" {
-  firrtl.declgroup @A bind {}
-  firrtl.declgroup @B bind {
-    firrtl.declgroup @C bind {}
+  firrtl.layer @A bind {}
+  firrtl.layer @B bind {
+    firrtl.layer @C bind {}
   }
   firrtl.module @WrongGroupNesting() {
     // expected-note @below {{illegal parent group defined here}}
@@ -1904,7 +1904,7 @@ firrtl.circuit "WrongGroupNesting" {
 
 // A group captures a type which is not a FIRRTL base type.
 firrtl.circuit "NonBaseTypeCapture" {
-  firrtl.declgroup @A bind {}
+  firrtl.layer @A bind {}
   firrtl.module @NonBaseTypeCapture(in %in: !firrtl.uint<1>) {
     // expected-note @below {{operand is defined here}}
      %ref = firrtl.ref.send %in : !firrtl.uint<1>
@@ -1920,7 +1920,7 @@ firrtl.circuit "NonBaseTypeCapture" {
 
 // A group captures a non-passive type.
 firrtl.circuit "NonPassiveCapture" {
-  firrtl.declgroup @A bind {}
+  firrtl.layer @A bind {}
   firrtl.module @NonPassiveCapture() {
     // expected-note @below {{operand is defined here}}
     %a = firrtl.wire : !firrtl.bundle<a flip: uint<1>>
@@ -1937,7 +1937,7 @@ firrtl.circuit "NonPassiveCapture" {
 
 // A group may not drive sinks outside the group.
 firrtl.circuit "GroupDrivesSinksOutside" {
-  firrtl.declgroup @A bind {}
+  firrtl.layer @A bind {}
   firrtl.module @GroupDrivesSinksOutside(in %cond : !firrtl.uint<1>) {
     %a = firrtl.wire : !firrtl.uint<1>
     // expected-note @below {{destination is defined here}}

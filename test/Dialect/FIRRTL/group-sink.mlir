@@ -7,7 +7,7 @@
 //
 // CHECK-LABEL: firrtl.circuit "SimpleSink"
 firrtl.circuit "SimpleSink" {
- firrtl.declgroup @A bind {
+ firrtl.layer @A bind {
  }
  // CHECK: firrtl.module @SimpleSink
  firrtl.module @SimpleSink(in %a: !firrtl.uint<1>) {

@@ -58,7 +58,7 @@ struct Emitter {
   void emitModulePorts(ArrayRef<PortInfo> ports,
                        Block::BlockArgListType arguments = {});
   void emitModuleParameters(Operation *op, ArrayAttr parameters);
-  void emitDeclaration(GroupDeclOp op);
+  void emitDeclaration(LayerOp op);
 
   // Statement emission
   void emitStatementsInBlock(Block &block);
@@ -383,7 +383,7 @@ void Emitter::emitCircuit(CircuitOp op) {
             emitModule(op);
             ps << PP::newline;
           })
-          .Case<GroupDeclOp>([&](auto op) { emitDeclaration(op); })
+          .Case<LayerOp>([&](auto op) { emitDeclaration(op); })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside circuit");
           });
@@ -514,15 +514,15 @@ void Emitter::emitModuleParameters(Operation *op, ArrayAttr parameters) {
 }
 
 /// Emit an optional group declaration.
-void Emitter::emitDeclaration(GroupDeclOp op) {
+void Emitter::emitDeclaration(LayerOp op) {
   startStatement();
   ps << "declgroup " << PPExtString(op.getSymName()) << ", "
-     << PPExtString(stringifyGroupConvention(op.getConvention())) << " : ";
+     << PPExtString(stringifyLayerConvention(op.getConvention())) << " : ";
   emitLocationAndNewLine(op);
   ps.scopedBox(PP::bbox2, [&]() {
     for (auto &bodyOp : op.getBody().getOps()) {
       TypeSwitch<Operation *>(&bodyOp)
-          .Case<GroupDeclOp>([&](auto op) { emitDeclaration(op); })
+          .Case<LayerOp>([&](auto op) { emitDeclaration(op); })
           .Default([&](auto op) {
             emitOpError(op,
                         "not supported for emission inside group declaration");
