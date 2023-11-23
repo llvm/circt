@@ -1,4 +1,4 @@
-// RUN: circt-opt -firrtl-lower-groups -split-input-file %s | FileCheck %s
+// RUN: circt-opt -firrtl-lower-layers -split-input-file %s | FileCheck %s
 
 firrtl.circuit "Simple" {
   firrtl.layer @A bind {

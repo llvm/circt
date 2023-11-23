@@ -27,8 +27,8 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   LowerAnnotations.cpp
   LowerCHIRRTL.cpp
   LowerClasses.cpp
-  LowerGroups.cpp
   LowerIntrinsics.cpp
+  LowerLayers.cpp
   LowerMatches.cpp
   LowerMemory.cpp
   LowerOpenAggs.cpp
