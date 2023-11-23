@@ -185,7 +185,7 @@ std::unique_ptr<mlir::Pass> createLowerClassesPass();
 
 std::unique_ptr<mlir::Pass> createLowerLayersPass();
 
-std::unique_ptr<mlir::Pass> createGroupMergePass();
+std::unique_ptr<mlir::Pass> createLayerMergePass();
 
 std::unique_ptr<mlir::Pass> createGroupSinkPass();
 

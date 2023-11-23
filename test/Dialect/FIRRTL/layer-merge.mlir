@@ -1,4 +1,4 @@
-// RUN: circt-opt -pass-pipeline="builtin.module(firrtl.circuit(firrtl.module(firrtl-group-merge)))" %s | FileCheck %s
+// RUN: circt-opt -pass-pipeline="builtin.module(firrtl.circuit(firrtl.module(firrtl-layer-merge)))" %s | FileCheck %s
 
 // CHECK-LABEL: firrtl.circuit "SimpleMerge"
 firrtl.circuit "SimpleMerge" {

@@ -747,15 +747,15 @@ def LowerLayers : Pass<"firrtl-lower-layers", "firrtl::CircuitOp"> {
   let dependentDialects = ["sv::SVDialect"];
 }
 
-def GroupMerge : Pass<"firrtl-group-merge", "firrtl::FModuleOp"> {
-  let summary = "Merge group definitions";
+def LayerMerge : Pass<"firrtl-layer-merge", "firrtl::FModuleOp"> {
+  let summary = "Merge layer blocks";
   let description = [{
-    Combine all group definitions in a module which reference the same group
-    declaration.
+    Combine all layer blocks in a module which reference the same layer
+    definition.
   }];
-  let constructor = "::circt::firrtl::createGroupMergePass()";
+  let constructor = "::circt::firrtl::createLayerMergePass()";
   let statistics = [
-    Statistic<"numMerged", "num-merged", "Number of groups merged">,
+    Statistic<"numMerged", "num-merged", "Number of layers merged">,
   ];
 }
 
