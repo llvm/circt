@@ -2408,7 +2408,8 @@ struct FoldZeroWidthMemory : public mlir::RewritePattern {
     if (hasDontTouch(mem))
       return failure();
 
-    if (!firrtl::type_isa<IntType>(mem.getDataType()) || mem.getDataType().getBitWidthOrSentinel() != 0)
+    if (!firrtl::type_isa<IntType>(mem.getDataType()) ||
+        mem.getDataType().getBitWidthOrSentinel() != 0)
       return failure();
 
     // Make sure are users are safe to replace
@@ -2429,7 +2430,8 @@ struct FoldZeroWidthMemory : public mlir::RewritePattern {
         if (fieldName.ends_with("data")) {
           // Make sure to write data ports.
           auto zero = rewriter.create<firrtl::ConstantOp>(
-              wire.getLoc(), firrtl::type_cast<IntType>(wire.getType()), APInt::getZero(0));
+              wire.getLoc(), firrtl::type_cast<IntType>(wire.getType()),
+              APInt::getZero(0));
           rewriter.create<StrictConnectOp>(wire.getLoc(), wire, zero);
         }
       }
