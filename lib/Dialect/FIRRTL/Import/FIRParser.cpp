@@ -3494,10 +3494,9 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs) {
   case FIRToken::less_equal:
     break;
   case FIRToken::less_minus:
-    // Partial connect ("<-") was removed in FIRRTL version 2.0.0.
-    if (version < FIRVersion(2, 0, 0))
-      break;
-    [[fallthrough]];
+    if (removedFeature({2, 0, 0}, "partial connects"))
+      return failure();
+    break;
   default:
     return emitError() << "unexpected token '" << getToken().getSpelling()
                        << "' in statement",

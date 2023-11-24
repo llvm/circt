@@ -627,7 +627,7 @@ circuit PartialConnect_v2p0p0:
     input a: UInt<1>
     output b: UInt<1>
 
-    b <- a ; expected-error {{unexpected token '<-' in statement}}
+    b <- a ; expected-error {{partial connects were removed in FIRRTL 2.0.0, but the specified FIRRTL version was 2.0.0}}
 
 ;// -----
 
