@@ -227,9 +227,12 @@ static LogicalResult exportChiselInterface(CircuitOp circuit,
   Emitter emitter(bodyStream);
 
   // Emit a class for the main circuit module.
-  auto topModule = circuit.getMainModule();
-  if (failed(emitter.emitModule(topModule)))
-    return failure();
+  for (auto moduleOp : circuit.getOps<FModuleOp>()) {
+    if (!moduleOp.isPublic())
+      continue;
+    if (failed(emitter.emitModule(moduleOp)))
+      return failure();
+  }
 
   // Emit an import for probe types if needed
   if (emitter.hasEmittedProbeType())

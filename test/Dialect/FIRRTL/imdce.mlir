@@ -93,6 +93,7 @@ firrtl.circuit "top"  {
 
   // CHECK-LABEL: firrtl.module @top(in %clock: !firrtl.clock, in %input: !firrtl.uint<1>) {
   // CHECK-NEXT:  }
+  // expected-warning @below {{module `top` is empty but cannot be removed because the module is public}}
   firrtl.module @top(in %clock: !firrtl.clock, in %input: !firrtl.uint<1>) {
     %tile_input, %tile_output = firrtl.instance tile  @Child1(in input: !firrtl.uint<1>, out output: !firrtl.uint<1>)
     firrtl.strictconnect %tile_input, %input : !firrtl.uint<1>
@@ -250,6 +251,7 @@ firrtl.circuit "RefPorts" {
 
 firrtl.circuit "MemoryInDeadCycle" {
   // CHECK-LABEL: firrtl.module public @MemoryInDeadCycle
+  // expected-warning @below {{module `MemoryInDeadCycle` is empty but cannot be removed because the module is public}}
   firrtl.module public @MemoryInDeadCycle(in %clock: !firrtl.clock, in %addr: !firrtl.uint<4>) {
 
     // CHECK-NOT: firrtl.mem

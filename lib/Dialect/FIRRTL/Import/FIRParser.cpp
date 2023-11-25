@@ -4992,22 +4992,6 @@ DoneParsing:
   if (failed(anyFailed))
     return failure();
 
-  auto main = circuit.getMainModule();
-  if (!main) {
-    // Give more specific error if no modules defined at all
-    if (circuit.getOps<FModuleLike>().empty()) {
-      return mlir::emitError(circuit.getLoc())
-             << "no modules found, circuit must contain one or more modules";
-    }
-    if (auto *notModule = circuit.lookupSymbol(circuit.getName())) {
-      return notModule->emitOpError()
-             << "cannot have the same name as the circuit";
-    }
-    return mlir::emitError(circuit.getLoc())
-           << "no main module found, circuit '" << circuit.getName()
-           << "' must contain a module named '" << circuit.getName() << "'";
-  }
-
   return success();
 }
 
