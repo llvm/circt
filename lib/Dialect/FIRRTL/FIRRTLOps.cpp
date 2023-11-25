@@ -338,13 +338,6 @@ void CircuitOp::build(OpBuilder &builder, OperationState &result,
   bodyRegion->push_back(body);
 }
 
-// Return the main module that is the entry point of the circuit.
-FModuleLike CircuitOp::getMainModule(mlir::SymbolTable *symtbl) {
-  if (symtbl)
-    return symtbl->lookup<FModuleLike>(getName());
-  return dyn_cast_or_null<FModuleLike>(lookupSymbol(getName()));
-}
-
 static ParseResult parseCircuitOpAttrs(OpAsmParser &parser,
                                        NamedAttrList &resultAttrs) {
   auto result = parser.parseOptionalAttrDictWithKeyword(resultAttrs);
@@ -376,21 +369,6 @@ LogicalResult CircuitOp::verifyRegions() {
   }
 
   mlir::SymbolTable symtbl(getOperation());
-
-  // Check that a module matching the "main" module exists in the circuit.
-  auto mainModule = getMainModule(&symtbl);
-  if (!mainModule)
-    return emitOpError("must contain one module that matches main name '" +
-                       main + "'");
-
-  // Even though ClassOps are FModuleLike, they are not a hardware entity, so
-  // we ban them from being our top-module in the design.
-  if (isa<ClassOp>(mainModule))
-    return emitOpError("must have a non-class top module");
-
-  // Check that the main module is public.
-  if (!mainModule.isPublic())
-    return emitOpError("main module '" + main + "' must be public");
 
   // Store a mapping of defname to either the first external module
   // that defines it or, preferentially, the first external module
