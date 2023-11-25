@@ -1863,3 +1863,15 @@ circuit AnyRef:
     ; CHECK-NEXT: %[[CAST:.+]] = firrtl.object.anyref_cast %[[OBJ]]
     ; CHECK-NEXT: %[[LIST:.+]] = firrtl.list.create %[[CAST]], %x
     ; CHECK-NEXT: propassign %listOfAny, %[[LIST]]
+
+;// -----
+
+FIRRTL version 4.0.0
+; CHECK-LABEL: circuit "PublicModules"
+circuit PublicModules:
+  ; CHECK: firrtl.module @Foo
+  public module Foo:
+  ; CHECK: firrtl.module private @Bar
+  module Bar:
+  ; CHECK: firrtl.module @PublicModules
+  public module PublicModules:

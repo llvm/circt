@@ -1140,3 +1140,16 @@ circuit DoubleRadix:
     output d : Double
     ; expected-error @below {{expected floating point in Double expression}}
     propassign d, Double(0hABC)
+
+;// -----
+FIRRTL version 3.9.0
+circuit PublicModuleUnsupported:
+  ; expected-error @below {{public modules are a FIRRTL 4.0.0+ feature}}
+  public module PublicModuleUnsupported:
+
+;// -----
+FIRRTL version 4.0.0
+circuit PublicNonModule:
+  ; expected-error @below {{only modules may be public}}
+  public extmodule Foo:
+  module PublicNonModule:
