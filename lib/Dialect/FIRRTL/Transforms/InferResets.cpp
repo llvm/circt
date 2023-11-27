@@ -18,6 +18,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Support/FieldRef.h"
+#include "circt/Support/InstanceGraph.h"
 #include "circt/Support/InstanceGraphInterface.h"
 #include "mlir/IR/Dominance.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -30,6 +31,9 @@
 
 #define DEBUG_TYPE "infer-resets"
 
+using circt::igraph::InstanceOpInterface;
+using circt::igraph::InstancePath;
+using circt::igraph::InstancePathCache;
 using llvm::BumpPtrAllocator;
 using llvm::MapVector;
 using llvm::SmallDenseSet;
@@ -44,29 +48,6 @@ using namespace firrtl;
 //===----------------------------------------------------------------------===//
 // Utilities
 //===----------------------------------------------------------------------===//
-
-/// An absolute instance path.
-using InstanceLike = ::circt::igraph::InstanceOpInterface;
-using InstancePathRef = ArrayRef<InstanceLike>;
-using InstancePathVec = SmallVector<InstanceLike>;
-
-template <typename T>
-static T &operator<<(T &os, InstancePathRef path) {
-  os << "$root";
-  for (InstanceLike inst : path)
-    os << "/" << inst.getInstanceName() << ":"
-       << inst.getReferencedModuleName();
-  return os;
-}
-
-#ifndef NDEBUG
-static StringRef getTail(InstancePathRef path) {
-  if (path.empty())
-    return "$root";
-  auto last = path.back();
-  return last.getInstanceName();
-}
-#endif
 
 namespace {
 /// A reset domain.
@@ -453,7 +434,7 @@ struct InferResetsPass : public InferResetsBase<InferResetsPass> {
   FailureOr<std::optional<Value>> collectAnnos(FModuleOp module);
 
   LogicalResult buildDomains(CircuitOp circuit);
-  void buildDomains(FModuleOp module, const InstancePathVec &instPath,
+  void buildDomains(FModuleOp module, const InstancePath &instPath,
                     Value parentReset, InstanceGraph &instGraph,
                     unsigned indent = 0);
 
@@ -503,11 +484,14 @@ struct InferResetsPass : public InferResetsBase<InferResetsPass> {
 
   /// The reset domain for a module. In case of conflicting domain membership,
   /// the vector for a module contains multiple elements.
-  MapVector<FModuleOp, SmallVector<std::pair<ResetDomain, InstancePathVec>, 1>>
+  MapVector<FModuleOp, SmallVector<std::pair<ResetDomain, InstancePath>, 1>>
       domains;
 
   /// Cache of modules symbols
   InstanceGraph *instanceGraph;
+
+  /// Cache of instance paths.
+  std::unique_ptr<InstancePathCache> instancePathCache;
 };
 } // namespace
 
@@ -517,11 +501,13 @@ void InferResetsPass::runOnOperation() {
   resetDrives.clear();
   annotatedResets.clear();
   domains.clear();
+  instancePathCache.reset(nullptr);
   markAnalysesPreserved<InstanceGraph>();
 }
 
 void InferResetsPass::runOnOperationInner() {
   instanceGraph = &getAnalysis<InstanceGraph>();
+  instancePathCache = std::make_unique<InstancePathCache>(*instanceGraph);
 
   // Trace the uninferred reset networks throughout the design.
   traceResets(getOperation());
@@ -1414,7 +1400,7 @@ LogicalResult InferResetsPass::buildDomains(CircuitOp circuit) {
                << "Skipping circuit because main module is no `firrtl.module`");
     return success();
   }
-  buildDomains(module, InstancePathVec{}, Value{}, instGraph);
+  buildDomains(module, InstancePath{}, Value{}, instGraph);
 
   // Report any domain conflicts among the modules.
   bool anyFailed = false;
@@ -1431,8 +1417,8 @@ LogicalResult InferResetsPass::buildDomains(CircuitOp circuit) {
                 << "' instantiated in different reset domains";
     for (auto &it : domainConflicts) {
       ResetDomain &domain = it.first;
-      InstancePathRef path = it.second;
-      auto inst = path.back();
+      const auto &path = it.second;
+      auto inst = path.leaf();
       auto loc = path.empty() ? module.getLoc() : inst.getLoc();
       auto &note = diag.attachNote(loc);
 
@@ -1442,7 +1428,8 @@ LogicalResult InferResetsPass::buildDomains(CircuitOp circuit) {
       else {
         note << "instance '";
         llvm::interleave(
-            path, [&](InstanceLike inst) { note << inst.getInstanceName(); },
+            path,
+            [&](InstanceOpInterface inst) { note << inst.getInstanceName(); },
             [&]() { note << "/"; });
         note << "'";
       }
@@ -1469,12 +1456,17 @@ LogicalResult InferResetsPass::buildDomains(CircuitOp circuit) {
 }
 
 void InferResetsPass::buildDomains(FModuleOp module,
-                                   const InstancePathVec &instPath,
+                                   const InstancePath &instPath,
                                    Value parentReset, InstanceGraph &instGraph,
                                    unsigned indent) {
-  LLVM_DEBUG(llvm::dbgs().indent(indent * 2)
-             << "Visiting " << getTail(instPath) << " (" << module.getName()
-             << ")\n");
+  LLVM_DEBUG({
+    llvm::dbgs().indent(indent * 2) << "Visiting ";
+    if (instPath.empty())
+      llvm::dbgs() << "$root";
+    else
+      llvm::dbgs() << instPath.leaf().getInstanceName();
+    llvm::dbgs() << " (" << module.getName() << ")\n";
+  });
 
   // Assemble the domain for this module.
   ResetDomain domain(parentReset);
@@ -1493,14 +1485,13 @@ void InferResetsPass::buildDomains(FModuleOp module,
     entries.push_back({domain, instPath});
 
   // Traverse the child instances.
-  InstancePathVec childPath = instPath;
   for (auto *record : *instGraph[module]) {
     auto submodule = dyn_cast<FModuleOp>(*record->getTarget()->getModule());
     if (!submodule)
       continue;
-    childPath.push_back(cast<InstanceLike>(*record->getInstance()));
+    auto childPath =
+        instancePathCache->appendInstance(instPath, record->getInstance());
     buildDomains(submodule, childPath, domain.reset, instGraph, indent + 1);
-    childPath.pop_back();
   }
 }
 
