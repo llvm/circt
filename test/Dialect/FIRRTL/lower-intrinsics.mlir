@@ -220,4 +220,22 @@ firrtl.circuit "Foo" {
     firrtl.strictconnect %in_reset2, %reset2 : !firrtl.asyncreset
     firrtl.strictconnect %in_reset3, %reset3 : !firrtl.reset
   }
+
+  // CHECK-NOT: PLAInt1
+  firrtl.intmodule @PLAInt1<
+    input1: i3 = 0, output1: i8 = 1,
+    input2: i3 = 1, output2: i8 = 2,
+    input3: i3 = 2, output3: i8 = 4,
+    input4: i3 = 3, output4: i8 = 8,
+    input5: i3 = 4, output5: i8 = 16,
+    input6: i3 = 5, output6: i8 = 32,
+    input7: i3 = 6, output7: i8 = 64,
+    input8: i3 = 7, output8: i8 = 128
+  >(in input: !firrtl.uint<3>, out output: !firrtl.uint<8>) attributes {intrinsic = "circt.pla"}
+  
+  // CHECK: PLA
+  firrtl.module @PLA(in %input: !firrtl.uint<3>, out %output: !firrtl.uint<8>) {
+    // TODO
+  }
+
 }
