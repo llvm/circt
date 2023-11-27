@@ -272,6 +272,7 @@ LogicalResult firtool::populateHWToSV(mlir::PassManager &pm,
        /*disableRegRandomization=*/
        !opt.isRandomEnabled(FirtoolOptions::RandomKind::Reg),
        /*replSeqMem=*/opt.shouldReplicateSequentialMemories(),
+       /*inlineMem=*/opt.shouldInlineSequentialMemories(),
        /*readEnableMode=*/opt.shouldIgnoreReadEnableMemories()
            ? seq::ReadEnableMode::Ignore
            : seq::ReadEnableMode::Undefined,
@@ -527,6 +528,10 @@ struct FirtoolCmdOptions {
       "repl-seq-mem-file", llvm::cl::desc("File name for seq mem metadata"),
       llvm::cl::init("")};
 
+  llvm::cl::opt<bool> inlineMem{
+      "inline-mem", llvm::cl::desc("Inline memories into their parent module"),
+      llvm::cl::init(false)};
+
   llvm::cl::opt<bool> extractTestCode{
       "extract-test-code", llvm::cl::desc("Run the extract test code pass"),
       llvm::cl::init(false)};
@@ -669,12 +674,12 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       disableAggressiveMergeConnections(false),
       disableHoistingHWPassthrough(true), emitOMIR(true), omirOutFile(""),
       lowerMemories(false), blackBoxRootPath(""), replSeqMem(false),
-      replSeqMemFile(""), extractTestCode(false), ignoreReadEnableMem(false),
-      disableRandom(RandomKind::None), outputAnnotationFilename(""),
-      enableAnnotationWarning(false), addMuxPragmas(false),
-      emitChiselAssertsAsSVA(false), emitSeparateAlwaysBlocks(false),
-      etcDisableInstanceExtraction(false), etcDisableRegisterExtraction(false),
-      etcDisableModuleInlining(false),
+      replSeqMemFile(""), inlineMem(false), extractTestCode(false),
+      ignoreReadEnableMem(false), disableRandom(RandomKind::None),
+      outputAnnotationFilename(""), enableAnnotationWarning(false),
+      addMuxPragmas(false), emitChiselAssertsAsSVA(false),
+      emitSeparateAlwaysBlocks(false), etcDisableInstanceExtraction(false),
+      etcDisableRegisterExtraction(false), etcDisableModuleInlining(false),
       addVivadoRAMAddressConflictSynthesisBugWorkaround(false),
       ckgModuleName("EICG_wrapper"), ckgInputName("in"), ckgOutputName("out"),
       ckgEnableName("en"), ckgTestEnableName("test_en"),
@@ -704,6 +709,7 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   blackBoxRootPath = clOptions->blackBoxRootPath;
   replSeqMem = clOptions->replSeqMem;
   replSeqMemFile = clOptions->replSeqMemFile;
+  inlineMem = clOptions->inlineMem;
   extractTestCode = clOptions->extractTestCode;
   ignoreReadEnableMem = clOptions->ignoreReadEnableMem;
   disableRandom = clOptions->disableRandom;

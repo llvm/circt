@@ -24,6 +24,9 @@
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Path.h"
 
+#include "circt/Support/LoweringOptions.h"
+#include "mlir/Transforms/InliningUtils.h"
+
 using namespace circt;
 using namespace hw;
 using namespace seq;
@@ -700,6 +703,39 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
   });
 }
 
+struct PrefixingInliner : public mlir::InlinerInterface {
+  StringRef prefix;
+  PrefixingInliner(MLIRContext *context, StringRef prefix)
+      : mlir::InlinerInterface(context), prefix(prefix) {}
+
+  bool isLegalToInline(Region *dest, Region *src, bool wouldBeCloned,
+                       IRMapping &valueMapping) const override {
+    return true;
+  }
+  bool isLegalToInline(Operation *op, Region *dest, bool wouldBeCloned,
+                       IRMapping &valueMapping) const override {
+    return true;
+  }
+  void handleTerminator(Operation *op,
+                        ArrayRef<Value> valuesToRepl) const override {
+    assert(isa<hw::OutputOp>(op));
+    for (auto [from, to] : llvm::zip(valuesToRepl, op->getOperands()))
+      from.replaceAllUsesWith(to);
+  }
+
+  void processInlinedBlocks(
+      iterator_range<Region::iterator> inlinedBlocks) override {
+    for (Block &block : inlinedBlocks)
+      block.walk([&](Operation *op) {
+        if (auto name = op->getAttrOfType<StringAttr>("name");
+            name && !name.getValue().empty()) {
+          op->setAttr("name", StringAttr::get(name.getContext(),
+                                              prefix + "_" + name.getValue()));
+        }
+      });
+  }
+};
+
 void HWMemSimImplPass::runOnOperation() {
   auto topModule = getOperation();
 
@@ -713,6 +749,7 @@ void HWMemSimImplPass::runOnOperation() {
 
   SmallVector<HWModuleGeneratedOp> toErase;
   bool anythingChanged = false;
+  DenseSet<HWModuleOp> wrapperModules;
 
   for (auto op :
        llvm::make_early_inc_range(topModule.getOps<HWModuleGeneratedOp>())) {
@@ -737,6 +774,7 @@ void HWMemSimImplPass::runOnOperation() {
       } else {
         auto newModule = builder.create<HWModuleOp>(
             oldModule.getLoc(), nameAttr, oldModule.getPortList());
+        wrapperModules.insert(newModule);
         if (auto outdir = oldModule->getAttr("output_file"))
           newModule->setAttr("output_file", outdir);
         newModule.setCommentAttr(
@@ -753,6 +791,35 @@ void HWMemSimImplPass::runOnOperation() {
       oldModule.erase();
       anythingChanged = true;
     }
+  }
+
+  // inline the memory modules created in the previous stage if
+  // inlineMem option enabled
+  if (inlineMem && !wrapperModules.empty()) {
+    SmallVector<InstanceOp> inlinedInstances;
+    auto &symbolTable = getAnalysis<SymbolTable>();
+    for (auto mod :
+         llvm::make_early_inc_range(topModule.getOps<HWModuleOp>())) {
+      for (auto inst : mod.getOps<InstanceOp>()) {
+        auto mem = symbolTable.lookup<HWModuleOp>(inst.getModuleName());
+        if (!wrapperModules.contains(mem))
+          continue;
+        PrefixingInliner interface(&getContext(), inst.getInstanceName());
+        if (failed(mlir::inlineRegion(interface, &mem.getBody(), inst,
+                                      inst.getOperands(), inst.getResults(),
+                                      std::nullopt, true))) {
+          inst.emitError("failed to inline '")
+              << mod.getModuleName() << "' into instance '"
+              << inst.getInstanceName() << "'";
+          return signalPassFailure();
+        }
+        inlinedInstances.push_back(inst);
+      }
+    }
+    for (auto inst : inlinedInstances)
+      inst.erase();
+    for (auto mod : wrapperModules)
+      mod.erase();
   }
 
   if (!anythingChanged)

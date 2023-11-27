@@ -82,6 +82,7 @@ public:
     return lowerAnnotationsNoRefTypePorts;
   }
   bool shouldReplicateSequentialMemories() const { return replSeqMem; }
+  bool shouldInlineSequentialMemories() const { return inlineMem; }
   bool shouldDisableOptimization() const { return disableOptimization; }
   bool shouldLowerMemories() const { return lowerMemories; }
   bool shouldDedup() const { return !noDedup; }
@@ -153,6 +154,7 @@ private:
   std::string blackBoxRootPath;
   bool replSeqMem;
   std::string replSeqMemFile;
+  bool inlineMem;
   bool extractTestCode;
   bool ignoreReadEnableMem;
   RandomKind disableRandom;

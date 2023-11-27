@@ -68,6 +68,8 @@ def HWMemSimImpl : Pass<"hw-memory-sim", "ModuleOp"> {
             "Disable emission of register randomization code">,
     Option<"replSeqMem", "repl-seq-mem", "bool",
                 "false", "Prepare seq mems for macro replacement">,
+    Option<"inlineMem", "inline-mem", "bool",
+                "false", "Inline memories into their parent module">,
     Option<"readEnableMode", "read-enable-mode", "::circt::seq::ReadEnableMode",
            "::circt::seq::ReadEnableMode::Undefined",
            "specify the behaviour of the read enable signal", [{
