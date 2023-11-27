@@ -3444,8 +3444,8 @@ ParseResult FIRStmtParser::parseInvalidate() {
 ParseResult FIRStmtParser::parseLayerBlockOrGroup(unsigned indent) {
 
   auto startTok = consumeToken();
-  assert(startTok.is(FIRToken::kw_layerblock) ||
-         startTok.is(FIRToken::kw_group) && "consumed an unexpected token");
+  assert(startTok.isAny(FIRToken::kw_layerblock, FIRToken::kw_group) &&
+         "consumed an unexpected token");
   auto loc = startTok.getLoc();
 
   StringRef id;
