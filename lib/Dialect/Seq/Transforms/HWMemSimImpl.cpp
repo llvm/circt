@@ -741,6 +741,7 @@ void HWMemSimImplPass::runOnOperation() {
           newModule->setAttr("output_file", outdir);
         newModule.setCommentAttr(
             builder.getStringAttr("VCS coverage exclude_file"));
+        newModule.setPrivate();
 
         HWMemSimImpl(readEnableMode, addMuxPragmas, disableMemRandomization,
                      disableRegRandomization,
