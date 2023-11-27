@@ -8,13 +8,21 @@
 #include "mlir-c/Pass.h"
 #include "mlir-c/Support.h"
 
+#include "circt/Firtool/Firtool.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-DEFINE_C_API_PTR_METHODS(CirctFirtoolFirtoolOptions,
-                         circt::firtool::FirtoolOptions)
-DEFINE_C_API_STRUCT(FirtoolOptions, void);
+#define DEFINE_C_API_STRUCT(name, storage)                                     \
+  struct name {                                                                \
+    storage *ptr;                                                              \
+  };                                                                           \
+  typedef struct name name
+
+DEFINE_C_API_STRUCT(CirctFirtoolFirtoolOptions, void);
+
+#undef DEFINE_C_API_STRUCT
 
 // NOLINTNEXTLINE(modernize-use-using)
 typedef enum FirtoolPreserveAggregateMode {
@@ -58,37 +66,39 @@ MLIR_CAPI_EXPORTED void
 circtFirtoolOptionsDestroy(CirctFirtoolFirtoolOptions options);
 
 MLIR_CAPI_EXPORTED void
-circtFirtoolOptionsSetOutputFilename(CirctFirtoolOptions options,
+circtFirtoolOptionsSetOutputFilename(CirctFirtoolFirtoolOptions options,
                                      MlirStringRef filename);
 MLIR_CAPI_EXPORTED void
-circtFirtoolOptionsDisableUnknownAnnotations(CirctFirtoolOptions options,
+circtFirtoolOptionsDisableUnknownAnnotations(CirctFirtoolFirtoolOptions options,
                                              bool disable);
 
 //===----------------------------------------------------------------------===//
 // Populate API.
 //===----------------------------------------------------------------------===//
 
-MLIR_CAPI_EXPORTED MlirLogicalResult
-firtoolPopulatePreprocessTransforms(MlirPassManager pm, FirtoolOptions options);
+MLIR_CAPI_EXPORTED MlirLogicalResult firtoolPopulatePreprocessTransforms(
+    MlirPassManager pm, CirctFirtoolFirtoolOptions options);
 
 MLIR_CAPI_EXPORTED MlirLogicalResult firtoolPopulateCHIRRTLToLowFIRRTL(
-    MlirPassManager pm, FirtoolOptions options, MlirStringRef inputFilename);
+    MlirPassManager pm, CirctFirtoolFirtoolOptions options,
+    MlirStringRef inputFilename);
+
+MLIR_CAPI_EXPORTED MlirLogicalResult firtoolPopulateLowFIRRTLToHW(
+    MlirPassManager pm, CirctFirtoolFirtoolOptions options);
 
 MLIR_CAPI_EXPORTED MlirLogicalResult
-firtoolPopulateLowFIRRTLToHW(MlirPassManager pm, FirtoolOptions options);
+firtoolPopulateHWToSV(MlirPassManager pm, CirctFirtoolFirtoolOptions options);
 
-MLIR_CAPI_EXPORTED MlirLogicalResult
-firtoolPopulateHWToSV(MlirPassManager pm, FirtoolOptions options);
-
-MLIR_CAPI_EXPORTED MlirLogicalResult
-firtoolPopulateExportVerilog(MlirPassManager pm, FirtoolOptions options,
-                             MlirStringCallback callback, void *userData);
+MLIR_CAPI_EXPORTED MlirLogicalResult firtoolPopulateExportVerilog(
+    MlirPassManager pm, CirctFirtoolFirtoolOptions options,
+    MlirStringCallback callback, void *userData);
 
 MLIR_CAPI_EXPORTED MlirLogicalResult firtoolPopulateExportSplitVerilog(
-    MlirPassManager pm, FirtoolOptions options, MlirStringRef directory);
+    MlirPassManager pm, CirctFirtoolFirtoolOptions options,
+    MlirStringRef directory);
 
-MLIR_CAPI_EXPORTED MlirLogicalResult
-firtoolPopulateFinalizeIR(MlirPassManager pm, FirtoolOptions options);
+MLIR_CAPI_EXPORTED MlirLogicalResult firtoolPopulateFinalizeIR(
+    MlirPassManager pm, CirctFirtoolFirtoolOptions options);
 
 #ifdef __cplusplus
 }
