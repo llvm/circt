@@ -1535,35 +1535,6 @@ void InstanceOp::print(OpAsmPrinter &p) {
                        "argNames", "resultNames", "parameters"});
 }
 
-/// Return the name of the specified input port or null if it cannot be
-/// determined.
-StringAttr InstanceOp::getArgumentName(size_t idx) {
-  return instance_like_impl::getName(getArgNames(), idx);
-}
-
-/// Return the name of the specified result or null if it cannot be
-/// determined.
-StringAttr InstanceOp::getResultName(size_t idx) {
-  return instance_like_impl::getName(getResultNames(), idx);
-}
-
-/// Change the name of the specified input port.
-void InstanceOp::setArgumentName(size_t i, StringAttr name) {
-  setInputNames(instance_like_impl::updateName(getArgNames(), i, name));
-}
-
-/// Change the name of the specified output port.
-void InstanceOp::setResultName(size_t i, StringAttr name) {
-  setOutputNames(instance_like_impl::updateName(getResultNames(), i, name));
-}
-
-/// Suggest a name for each result value based on the saved result names
-/// attribute.
-void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  instance_like_impl::getAsmResultNames(setNameFn, getInstanceName(),
-                                        getResultNames(), getResults());
-}
-
 void InstanceOp::getValues(SmallVectorImpl<Value> &values,
                            const ModulePortInfo &mpi) {
   size_t inputPort = 0, resultPort = 0;
