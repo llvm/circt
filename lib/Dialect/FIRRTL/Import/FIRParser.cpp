@@ -4573,7 +4573,7 @@ ParseResult FIRCircuitParser::parseExtModule(CircuitOp circuit,
   auto builder = circuit.getBodyBuilder();
   auto isMainModule = (name == circuit.getName());
   auto convention =
-      (isMainModule && getConstants().options.scalarizeTopModule) ||
+      (isMainModule && getConstants().options.scalarizePublicModules) ||
               getConstants().options.scalarizeExtModules
           ? Convention::Scalarized
           : Convention::Internal;
@@ -4638,19 +4638,20 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit, bool isPublic,
       info.parseOptionalInfo() || parsePortList(portList, portLocs, indent))
     return failure();
 
-  auto circuitName = circuit.getName();
-  auto isMainModule = (name == circuitName);
+  // The main module is implicitly public.
+  isPublic |= name == circuit.getName();
+
   ArrayAttr annotations = getConstants().emptyArrayAttr;
   auto convention = Convention::Internal;
-  if (isMainModule && getConstants().options.scalarizeTopModule)
+  if (isPublic && getConstants().options.scalarizePublicModules)
     convention = Convention::Scalarized;
   auto conventionAttr = ConventionAttr::get(getContext(), convention);
   auto builder = circuit.getBodyBuilder();
   auto moduleOp = builder.create<FModuleOp>(info.getLoc(), name, conventionAttr,
                                             portList, annotations);
 
-  auto visibility = isMainModule || isPublic ? SymbolTable::Visibility::Public
-                                             : SymbolTable::Visibility::Private;
+  auto visibility = isPublic ? SymbolTable::Visibility::Public
+                             : SymbolTable::Visibility::Private;
   SymbolTable::setSymbolVisibility(moduleOp, visibility);
 
   // Parse the body of this module after all prototypes have been parsed. This
