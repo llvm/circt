@@ -1535,19 +1535,6 @@ void InstanceOp::print(OpAsmPrinter &p) {
                        "argNames", "resultNames", "parameters"});
 }
 
-void InstanceOp::getValues(SmallVectorImpl<Value> &values,
-                           const ModulePortInfo &mpi) {
-  size_t inputPort = 0, resultPort = 0;
-  values.resize(mpi.size());
-  auto results = getResults();
-  auto inputs = getInputs();
-  for (auto [idx, port] : llvm::enumerate(mpi))
-    if (mpi.at(idx).isOutput())
-      values[idx] = results[resultPort++];
-    else
-      values[idx] = inputs[inputPort++];
-}
-
 //===----------------------------------------------------------------------===//
 // HWOutputOp
 //===----------------------------------------------------------------------===//

@@ -386,6 +386,7 @@ def HWModuleGeneratedOp : HWModuleOpBase<"module.generated", [
   let hasVerifier = 1;
 }
 
+/// Base class for most instance-like operations.
 class HWInstanceOpBase<string mnemonic, list<Trait> traits = []> :
     HWOp<mnemonic, traits # [
       DeclareOpInterfaceMethods<SymbolUserOpInterface>,
@@ -394,9 +395,7 @@ class HWInstanceOpBase<string mnemonic, list<Trait> traits = []> :
       DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>
     ]>
 {
-  code extraInstanceClassDeclaration = ?;
-
-  let extraClassDeclaration = extraInstanceClassDeclaration # [{
+  let extraClassDeclaration = [{
     /// Return the name of the specified input port or null if it cannot be
     /// determined.
     StringAttr getArgumentName(size_t idx) {
@@ -418,6 +417,21 @@ class HWInstanceOpBase<string mnemonic, list<Trait> traits = []> :
     void setResultName(size_t i, StringAttr name) {
       setOutputNames(instance_like_impl::updateName(getResultNames(), i, name));
     }
+
+    /// Change the names of all the input ports.
+    void setInputNames(ArrayAttr names) {
+      setArgNamesAttr(names);
+    }
+
+    /// Change the names of all the result ports.
+    void setOutputNames(ArrayAttr names) {
+      setResultNamesAttr(names);
+    }
+
+    /// Return the values for the port in port order.
+    /// Note: The module ports may not be input, output ordered. This computes
+    /// the port index to instance result/input Value mapping.
+    void getValues(SmallVectorImpl<Value> &values, const ModulePortInfo &mpi);
   }];
 
   let extraClassDefinition = [{
@@ -448,6 +462,19 @@ class HWInstanceOpBase<string mnemonic, list<Trait> traits = []> :
     void $cppClass::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
       ::circt::hw::instance_like_impl::getAsmResultNames(
           setNameFn, getInstanceName(), getResultNames(), getResults());
+    }
+
+    void $cppClass::getValues(SmallVectorImpl<Value> &values,
+                              const ModulePortInfo &mpi) {
+      size_t inputPort = 0, resultPort = 0;
+      values.resize(mpi.size());
+      auto results = getResults();
+      auto inputs = getInputs();
+      for (auto [idx, port] : llvm::enumerate(mpi))
+        if (mpi.at(idx).isOutput())
+          values[idx] = results[resultPort++];
+        else
+          values[idx] = inputs[inputPort++];
     }
   }];
 }
@@ -486,24 +513,6 @@ def InstanceOp : HWInstanceOpBase<"instance", [HWInstanceLike]> {
             parameters, innerSym);
     }]>,
   ];
-
-  let extraInstanceClassDeclaration = [{
-    /// Change the names of all the input ports.
-    void setInputNames(ArrayAttr names) {
-      setArgNamesAttr(names);
-    }
-
-    /// Change the names of all the result ports.
-    void setOutputNames(ArrayAttr names) {
-      setResultNamesAttr(names);
-    }
-
-    /// Return the values for the port in port order.
-    /// Note: The module ports may not be input, output ordered. This computes
-    /// the port index to instance result/input Value mapping.
-    void getValues(SmallVectorImpl<Value> &values, const ModulePortInfo &mpi);
-
-  }];
 
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
