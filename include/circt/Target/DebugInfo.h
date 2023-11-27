@@ -37,6 +37,11 @@ struct EmitHGLDDOptions {
   StringRef outputFilePrefix = "";
   /// The directory in which to place HGLDD output files.
   StringRef outputDirectory = "";
+  /// Only consider location information for files that actually exist on disk.
+  /// This can help strip out placeholder names such as `<stdin>` or
+  /// `<unknown>`, and force the HGLDD file to only refer to files that actually
+  /// exist.
+  bool onlyExistingFileLocs = false;
 };
 
 /// Serialize the debug information in the given `module` into the HGLDD format
