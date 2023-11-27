@@ -445,7 +445,7 @@ static LogicalResult getAncestorOpsInCommonDominatorBlock(
   // return values
   Operation *writeParent = write;
   while (writeParent->getBlock() != commonDominator) {
-    if (!isa<scf::IfOp, ClockTreeOp>(writeParent->getParentOp()))
+    if (!isa<scf::IfOp, ClockTreeOp, GroupOp>(writeParent->getParentOp()))
       return write->emitOpError("memory write operations in arbitrarily nested "
                                 "regions not supported");
     writeParent = writeParent->getParentOp();

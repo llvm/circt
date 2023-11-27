@@ -65,6 +65,12 @@ def GroupResetsAndEnables : Pass<"arc-group-resets-and-enables",
   let dependentDialects = ["arc::ArcDialect", "mlir::scf::SCFDialect"];
 }
 
+def GroupComputation : Pass<"arc-group-computation", "mlir::ModuleOp"> {
+  let summary = "Structure computation within clock trees";
+  let constructor = "circt::arc::createGroupComputationPass()";
+  let dependentDialects = ["arc::ArcDialect", "mlir::scf::SCFDialect"];
+}
+
 def InferMemories : Pass<"arc-infer-memories", "mlir::ModuleOp"> {
   let summary = "Convert `FIRRTL_Memory` instances to dedicated memory ops";
   let constructor = "circt::arc::createInferMemoriesPass()";

@@ -159,6 +159,21 @@ arc.define @identity3(%arg0: i32, %arg1: i32, %arg2: i32) -> (i32, i32, i32) {
   arc.output %arg0, %arg1, %arg2 : i32, i32, i32
 }
 
+// CHECK: arc.group {
+arc.group {}
+
+// CHECK: arc.group : i1 {
+arc.group : i1 {
+  %false = hw.constant false
+  arc.output %false : i1
+}
+
+// CHECK: arc.group : i1, i1, i1 {
+arc.group : i1, i1, i1 {
+  %false = hw.constant false
+  arc.output %false, %false, %false : i1, i1, i1
+}
+
 // -----
 
 hw.module @vectorize_in_clock_domain(in %in0: i2, in %in1: i2, in %in2: i1, in %in3: i1, in %clk: !seq.clock, out out0: i1, out out1: i1) {

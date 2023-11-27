@@ -99,6 +99,10 @@ static cl::opt<bool> shouldInline("inline", cl::desc("Inline arcs"),
 static cl::opt<bool> shouldDedup("dedup", cl::desc("Deduplicate arcs"),
                                  cl::init(true), cl::cat(mainCategory));
 
+static cl::opt<unsigned> numGroups("group",
+                                   cl::desc("Group clock tree computation"),
+                                   cl::init(0), cl::cat(mainCategory));
+
 static cl::opt<bool>
     shouldMakeLUTs("lookup-tables",
                    cl::desc("Optimize arcs into lookup tables"), cl::init(true),
@@ -242,6 +246,8 @@ static void populatePipeline(PassManager &pm) {
   if (untilReached(UntilStateLowering))
     return;
   pm.addPass(arc::createLowerStatePass());
+  for (unsigned i = 0; i < numGroups; ++i)
+    pm.addPass(arc::createGroupComputationPass());
   pm.addPass(createCSEPass());
   pm.addPass(arc::createArcCanonicalizerPass());
 

@@ -427,6 +427,22 @@ bool VectorizeOp::isBodyVectorized() {
   return false;
 }
 
+//===----------------------------------------------------------------------===//
+// GroupOp
+//===----------------------------------------------------------------------===//
+
+void GroupOp::getSuccessorRegions(RegionBranchPoint point,
+                                  SmallVectorImpl<RegionSuccessor> &regions) {
+  // If the predecessor is the GroupOp, branch into the body.
+  if (point.isParent()) {
+    regions.push_back(RegionSuccessor(&getRegion()));
+    return;
+  }
+
+  // Otherwise, the region branches back to the parent operation.
+  regions.push_back(RegionSuccessor(getResults()));
+}
+
 #include "circt/Dialect/Arc/ArcInterfaces.cpp.inc"
 
 #define GET_OP_CLASSES

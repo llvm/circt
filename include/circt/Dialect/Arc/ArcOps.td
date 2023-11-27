@@ -112,7 +112,7 @@ def DefineOp : ArcOp<"define", [
 
 def OutputOp : ArcOp<"output", [
   Terminator,
-  ParentOneOf<["DefineOp", "LutOp", "ClockDomainOp"]>,
+  ParentOneOf<["DefineOp", "LutOp", "ClockDomainOp", "GroupOp"]>,
   Pure,
   ReturnLike
 ]> {
@@ -799,6 +799,17 @@ def VectorizeReturnOp : ArcOp<"vectorize.return", [
   let summary = "arc.vectorized terminator";
   let arguments = (ins IntOr1DVectorOfInt:$value);
   let assemblyFormat = "operands attr-dict `:` qualified(type(operands))";
+}
+
+def GroupOp : ArcOp<"group", [
+  RecursiveMemoryEffects,
+  SingleBlockImplicitTerminator<"arc::OutputOp">,
+  DeclareOpInterfaceMethods<RegionBranchOpInterface>,
+]> {
+  let summary = "isolated subgraph of related operations";
+  let results = (outs Variadic<AnyType>:$results);
+  let regions = (region SizedRegion<1>:$body);
+  let assemblyFormat = [{ attr-dict-with-keyword (`:` type($results)^)? $body }];
 }
 
 #endif // CIRCT_DIALECT_ARC_ARCOPS_TD

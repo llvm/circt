@@ -308,6 +308,32 @@ struct ReplaceOpWithInputPattern : public OpConversionPattern<OpTy> {
   }
 };
 
+struct GroupOpLowering : public OpConversionPattern<arc::GroupOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(arc::GroupOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    auto execOp =
+        rewriter.create<scf::ExecuteRegionOp>(op.getLoc(), op.getResultTypes());
+    rewriter.inlineRegionBefore(op.getRegion(), execOp.getRegion(),
+                                execOp.getRegion().end());
+    rewriter.replaceOp(op, execOp);
+    return success();
+  }
+};
+
+struct OutputOpLowering : public OpConversionPattern<arc::OutputOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(arc::OutputOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    if (!isa<arc::GroupOp, scf::ExecuteRegionOp>(op->getParentOp()))
+      return failure();
+    rewriter.replaceOpWithNewOp<scf::YieldOp>(op, adaptor.getOutputs());
+    return success();
+  }
+};
+
 } // namespace
 
 static bool isArcType(Type type) {
@@ -388,6 +414,8 @@ static void populateOpConversion(RewritePatternSet &patterns,
     MemoryReadOpLowering,
     MemoryWriteOpLowering,
     ModelOpLowering,
+    GroupOpLowering,
+    OutputOpLowering,
     ReplaceOpWithInputPattern<seq::ToClockOp>,
     ReplaceOpWithInputPattern<seq::FromClockOp>,
     ReturnOpLowering,
