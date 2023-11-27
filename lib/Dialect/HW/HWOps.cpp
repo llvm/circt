@@ -1564,26 +1564,6 @@ void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
                                         getResultNames(), getResults());
 }
 
-SmallVector<PortInfo> InstanceOp::getPortList() {
-  return instance_like_impl::getPortList(getOperation());
-}
-
-PortInfo InstanceOp::getPort(size_t idx) { return getPortList()[idx]; }
-
-size_t InstanceOp::getNumPorts() {
-  return getNumInputPorts() + getNumOutputPorts();
-}
-
-size_t InstanceOp::getNumInputPorts() { return getNumOperands(); }
-
-size_t InstanceOp::getNumOutputPorts() { return getNumResults(); }
-
-size_t InstanceOp::getPortIdForInputId(size_t idx) { return idx; }
-
-size_t InstanceOp::getPortIdForOutputId(size_t idx) {
-  return idx + getNumInputPorts();
-}
-
 void InstanceOp::getValues(SmallVectorImpl<Value> &values,
                            const ModulePortInfo &mpi) {
   size_t inputPort = 0, resultPort = 0;

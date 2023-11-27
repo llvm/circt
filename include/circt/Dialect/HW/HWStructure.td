@@ -386,12 +386,40 @@ def HWModuleGeneratedOp : HWModuleOpBase<"module.generated", [
   let hasVerifier = 1;
 }
 
-def InstanceOp : HWOp<"instance", [
-        DeclareOpInterfaceMethods<SymbolUserOpInterface>,
-        DeclareOpInterfaceMethods<PortList>,
-        DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
-        DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>,
-        DeclareOpInterfaceMethods<HWInstanceLike>]> {
+class HWInstanceOpBase<string mnemonic, list<Trait> traits = []> :
+    HWOp<mnemonic, traits # [
+      DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+      DeclareOpInterfaceMethods<PortList>,
+      DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+      DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>
+    ]>
+{
+  let extraClassDefinition = [{
+    ::llvm::SmallVector<::circt::hw::PortInfo> $cppClass::getPortList() {
+      return instance_like_impl::getPortList(getOperation());
+    }
+
+    ::circt::hw::PortInfo $cppClass::getPort(size_t idx) {
+      return getPortList()[idx];
+    }
+
+    size_t $cppClass::getNumPorts() {
+      return getNumInputPorts() + getNumOutputPorts();
+    }
+
+    size_t $cppClass::getNumInputPorts() { return getNumOperands(); }
+
+    size_t $cppClass::getNumOutputPorts() { return getNumResults(); }
+
+    size_t $cppClass::getPortIdForInputId(size_t idx) { return idx; }
+
+    size_t $cppClass::getPortIdForOutputId(size_t idx) {
+      return idx + getNumInputPorts();
+    }
+  }];
+}
+
+def InstanceOp : HWInstanceOpBase<"instance", [HWInstanceLike]> {
   let summary = "Create an instance of a module";
   let description = [{
     This represents an instance of a module. The inputs and results are
