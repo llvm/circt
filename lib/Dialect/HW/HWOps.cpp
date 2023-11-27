@@ -1565,44 +1565,7 @@ void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 SmallVector<PortInfo> InstanceOp::getPortList() {
-  SmallVector<PortInfo> ports;
-  auto emptyDict = DictionaryAttr::get(getContext());
-  auto argNames = (*this)->getAttrOfType<ArrayAttr>("argNames");
-  auto argTypes = getModuleType(*this).getInputs();
-  auto argLocs = (*this)->getAttrOfType<ArrayAttr>("argLocs");
-
-  auto resultNames = (*this)->getAttrOfType<ArrayAttr>("resultNames");
-  auto resultTypes = getModuleType(*this).getResults();
-  auto resultLocs = (*this)->getAttrOfType<ArrayAttr>("resultLocs");
-
-  ports.reserve(argTypes.size() + resultTypes.size());
-  for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
-    auto type = argTypes[i];
-    auto direction = ModulePort::Direction::Input;
-
-    if (auto inout = type.dyn_cast<InOutType>()) {
-      type = inout.getElementType();
-      direction = ModulePort::Direction::InOut;
-    }
-
-    LocationAttr loc;
-    if (argLocs)
-      loc = argLocs[i].cast<LocationAttr>();
-    ports.push_back(
-        {{argNames[i].cast<StringAttr>(), type, direction}, i, emptyDict, loc});
-  }
-
-  for (unsigned i = 0, e = resultTypes.size(); i < e; ++i) {
-    LocationAttr loc;
-    if (resultLocs)
-      loc = resultLocs[i].cast<LocationAttr>();
-    ports.push_back({{resultNames[i].cast<StringAttr>(), resultTypes[i],
-                      ModulePort::Direction::Output},
-                     i,
-                     emptyDict,
-                     loc});
-  }
-  return ports;
+  return instance_like_impl::getPortList(getOperation());
 }
 
 PortInfo InstanceOp::getPort(size_t idx) { return getPortList()[idx]; }

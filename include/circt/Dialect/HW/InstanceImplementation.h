@@ -15,6 +15,7 @@
 #ifndef CIRCT_DIALECT_HW_INSTANCEIMPLEMENTATION_H
 #define CIRCT_DIALECT_HW_INSTANCEIMPLEMENTATION_H
 
+#include "circt/Dialect/HW/PortImplementation.h"
 #include "circt/Support/LLVM.h"
 #include <functional>
 
@@ -95,6 +96,10 @@ ArrayAttr updateName(ArrayAttr oldNames, size_t i, StringAttr name);
 /// attribute.
 void getAsmResultNames(OpAsmSetValueNameFn setNameFn, StringRef instanceName,
                        ArrayAttr resultNames, ValueRange results);
+
+/// Return the port list of an instance, based on the name, type and location
+/// attributes present on the instance.
+SmallVector<PortInfo> getPortList(Operation *instanceOp);
 
 } // namespace instance_like_impl
 } // namespace hw
