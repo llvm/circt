@@ -687,31 +687,6 @@ Value circt::firrtl::getValueByFieldID(ImplicitLocOpBuilder builder,
   return value;
 }
 
-bool circt::firrtl::getFlipByFieldID(FIRRTLType firrtlType, unsigned fieldID) {
-  bool isFlip = false;
-  // When the fieldID hits 0, we've found the target value.
-  while (fieldID != 0) {
-    FIRRTLTypeSwitch<Type, void>(firrtlType)
-        .Case<BundleType, OpenBundleType>([&](auto bundle) {
-          auto index = bundle.getIndexForFieldID(fieldID);
-          isFlip ^= bundle.getElement(index).isFlip;
-          fieldID -= bundle.getFieldID(index);
-          firrtlType = bundle.getElement(index).type;
-        })
-        .Case<FVectorType, OpenVectorType>([&](auto vector) {
-          auto index = vector.getIndexForFieldID(fieldID);
-          fieldID -= vector.getFieldID(index);
-          firrtlType = vector.getElementType();
-        })
-        // TODO: Plumb error case out and handle in callers.
-        .Default([&](auto _) {
-          llvm::report_fatal_error(
-              "unrecognized type for indexing through with fieldID");
-        });
-  }
-  return isFlip;
-}
-
 /// Walk leaf ground types in the `firrtlType` and apply the function `fn`.
 /// The first argument of `fn` is field ID, and the second argument is a
 /// leaf ground type and the third argument is a bool to indicate flip.

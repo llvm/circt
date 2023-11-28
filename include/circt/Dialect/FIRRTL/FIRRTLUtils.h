@@ -108,8 +108,6 @@ std::pair<std::string, bool> getFieldName(const FieldRef &fieldRef,
 Value getValueByFieldID(ImplicitLocOpBuilder builder, Value value,
                         unsigned fieldID);
 
-bool getFlipByFieldID(FIRRTLType firrtlType, unsigned FieldID);
-
 /// Walk leaf ground types in the `firrtlType` and apply the function `fn`.
 /// The first argument of `fn` is field ID, and the second argument is a
 /// leaf ground type, and the third argument indicates if the element was
