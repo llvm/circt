@@ -367,15 +367,12 @@ void LowerSignaturesPass::runOnOperation() {
   // Cached attr
   AttrCache cache(&getContext());
 
-  DenseMap<FModuleLike, Convention> conventionTable;
   DenseMap<StringAttr, PortConversion> portMap;
   auto circuit = getOperation();
-  for (auto mod : circuit.getOps<FModuleLike>()) {
-    conventionTable.insert({mod, mod.getConvention()});
-  }
 
-  for (auto [mod, cnv] : conventionTable) {
-    if (lowerModuleSignature(mod, cnv, cache, portMap[mod.getNameAttr()])
+  for (auto mod : circuit.getOps<FModuleLike>()) {
+    if (lowerModuleSignature(mod, mod.getConvention(), cache,
+                             portMap[mod.getNameAttr()])
             .failed())
       return signalPassFailure();
   }
