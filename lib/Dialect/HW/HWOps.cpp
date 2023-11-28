@@ -1536,6 +1536,141 @@ void InstanceOp::print(OpAsmPrinter &p) {
 }
 
 //===----------------------------------------------------------------------===//
+// InstanceChoiceOp
+//===----------------------------------------------------------------------===//
+
+std::optional<size_t> InstanceChoiceOp::getTargetResultIndex() {
+  // Inner symbols on instance operations target the op not any result.
+  return std::nullopt;
+}
+
+LogicalResult
+InstanceChoiceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  for (Attribute name : getModuleNamesAttr()) {
+    if (failed(instance_like_impl::verifyInstanceOfHWModule(
+            *this, name.cast<FlatSymbolRefAttr>(), getInputs(),
+            getResultTypes(), getArgNames(), getResultNames(), getParameters(),
+            symbolTable))) {
+      return failure();
+    }
+  }
+  return success();
+}
+
+LogicalResult InstanceChoiceOp::verify() {
+  auto module = (*this)->getParentOfType<HWModuleOp>();
+  if (!module)
+    return success();
+
+  auto moduleParameters = module->getAttrOfType<ArrayAttr>("parameters");
+  instance_like_impl::EmitErrorFn emitError =
+      [&](const std::function<bool(InFlightDiagnostic &)> &fn) {
+        auto diag = emitOpError();
+        if (fn(diag))
+          diag.attachNote(module->getLoc()) << "module declared here";
+      };
+  return instance_like_impl::verifyParameterStructure(
+      getParameters(), moduleParameters, emitError);
+  return success();
+}
+
+ParseResult InstanceChoiceOp::parse(OpAsmParser &parser,
+                                    OperationState &result) {
+  StringAttr instanceNameAttr;
+  InnerSymAttr innerSym;
+  SmallVector<Attribute> moduleNames;
+  SmallVector<Attribute> targetNames;
+  SmallVector<OpAsmParser::UnresolvedOperand, 4> inputsOperands;
+  SmallVector<Type, 1> inputsTypes, allResultTypes;
+  ArrayAttr argNames, resultNames, parameters;
+  auto noneType = parser.getBuilder().getType<NoneType>();
+
+  if (parser.parseAttribute(instanceNameAttr, noneType, "instanceName",
+                            result.attributes))
+    return failure();
+
+  if (succeeded(parser.parseOptionalKeyword("sym"))) {
+    // Parsing an optional symbol name doesn't fail, so no need to check the
+    // result.
+    if (parser.parseCustomAttributeWithFallback(innerSym))
+      return failure();
+    result.addAttribute(InnerSymbolTable::getInnerSymbolAttrName(), innerSym);
+  }
+
+  FlatSymbolRefAttr defaultModuleName;
+  if (parser.parseAttribute(defaultModuleName))
+    return failure();
+  moduleNames.push_back(defaultModuleName);
+
+  while (succeeded(parser.parseOptionalKeyword("or"))) {
+    FlatSymbolRefAttr moduleName;
+    StringAttr targetName;
+    if (parser.parseAttribute(moduleName) ||
+        parser.parseOptionalKeyword("if") || parser.parseAttribute(targetName))
+      return failure();
+    moduleNames.push_back(moduleName);
+    targetNames.push_back(targetName);
+  }
+
+  llvm::SMLoc parametersLoc, inputsOperandsLoc;
+  if (parser.getCurrentLocation(&parametersLoc) ||
+      parseOptionalParameterList(parser, parameters) ||
+      parseInputPortList(parser, inputsOperands, inputsTypes, argNames) ||
+      parser.resolveOperands(inputsOperands, inputsTypes, inputsOperandsLoc,
+                             result.operands) ||
+      parser.parseArrow() ||
+      parseOutputPortList(parser, allResultTypes, resultNames) ||
+      parser.parseOptionalAttrDict(result.attributes)) {
+    return failure();
+  }
+
+  result.addAttribute("moduleNames",
+                      ArrayAttr::get(parser.getContext(), moduleNames));
+  result.addAttribute("targetNames",
+                      ArrayAttr::get(parser.getContext(), targetNames));
+  result.addAttribute("argNames", argNames);
+  result.addAttribute("resultNames", resultNames);
+  result.addAttribute("parameters", parameters);
+  result.addTypes(allResultTypes);
+  return success();
+}
+
+void InstanceChoiceOp::print(OpAsmPrinter &p) {
+  p << ' ';
+  p.printAttributeWithoutType(getInstanceNameAttr());
+  if (auto attr = getInnerSymAttr()) {
+    p << " sym ";
+    attr.print(p);
+  }
+  p << ' ';
+
+  auto moduleNames = getModuleNamesAttr();
+  auto targetNames = getTargetNamesAttr();
+  assert(moduleNames.size() == targetNames.size() + 1);
+
+  p.printAttributeWithoutType(moduleNames[0]);
+  for (size_t i = 0, n = targetNames.size(); i < n; ++i) {
+    p << " or ";
+    p.printAttributeWithoutType(moduleNames[i + 1]);
+    p << " if ";
+    p.printAttributeWithoutType(targetNames[i]);
+  }
+
+  printOptionalParameterList(p, *this, getParameters());
+  printInputPortList(p, *this, getInputs(), getInputs().getTypes(),
+                     getArgNames());
+  p << " -> ";
+  printOutputPortList(p, *this, getResultTypes(), getResultNames());
+
+  p.printOptionalAttrDict(
+      (*this)->getAttrs(),
+      /*elidedAttrs=*/{"instanceName",
+                       InnerSymbolTable::getInnerSymbolAttrName(),
+                       "moduleNames", "targetNames", "argNames", "resultNames",
+                       "parameters"});
+}
+
+//===----------------------------------------------------------------------===//
 // HWOutputOp
 //===----------------------------------------------------------------------===//
 

@@ -518,6 +518,40 @@ def InstanceOp : HWInstanceOpBase<"instance", [HWInstanceLike]> {
   let hasVerifier = 1;
 }
 
+def InstanceChoiceOp : HWInstanceOpBase<"instance_choice", []> {
+  let summary = "Represents an instance with a target-specific reference";
+  let description = [{
+    This represents an instance to a module which is determined based on the
+    target through the ABI. Besides a default implementation, other targets can
+    be associated with a string, which will later determined which reference
+    is chosen.
+
+    For the purposes of analyses and transformations, it is assumed that any of
+    the targets is a possibility.
+
+    Example:
+    ```mlir
+    %b = hw.instance_choice "inst" sym
+        @TargetDefault or
+        @TargetA if "A" or
+        @TargetB if "B"
+        : (a: %a: i32) -> (b: i32)
+    ```
+  }];
+
+  let arguments = (ins StrAttr:$instanceName,
+                       FlatSymbolRefArrayAttr:$moduleNames,
+                       StrArrayAttr:$targetNames,
+                       Variadic<AnyType>:$inputs,
+                       StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
+                       ParamDeclArrayAttr:$parameters,
+                       OptionalAttr<InnerSymAttr>:$inner_sym);
+  let results = (outs Variadic<AnyType>:$results);
+
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+}
+
 def OutputOp : HWOp<"output", [Terminator, HasParent<"HWModuleOp">,
                                 Pure, ReturnLike]> {
   let summary = "HW termination operation";
