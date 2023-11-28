@@ -115,7 +115,7 @@ static LogicalResult computeLoweringImpl(PortConversion &newPorts,
   return FIRRTLTypeSwitch<FIRRTLType, LogicalResult>(type)
       .Case<BundleType>([&](BundleType bundle) {
         // This should be enhanced to be able to handle bundle<all flips of
-        // passive>
+        // passive>, or this should be a canonicalizer
         if (conv != Convention::Scalarized && bundle.isPassive()) {
           auto lastId = fieldID + bundle.getMaxFieldID();
           newPorts.push_back(
@@ -190,7 +190,6 @@ static LogicalResult computeLoweringImpl(PortConversion &newPorts,
 // Also compute a fieldID map from port, fieldID -> port
 static LogicalResult computeLowering(FModuleLike mod, Convention conv,
                                      PortConversion &newPorts) {
-  // assert(conv == Convention::Scalarized);
   for (auto [idx, port] : llvm::enumerate(mod.getPorts()))
     if (computeLoweringImpl(
             newPorts, conv, idx, port, port.direction == Direction::Out,
