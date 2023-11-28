@@ -271,7 +271,7 @@ static LogicalResult lowerModuleSignature(FModuleLike module, Convention conv,
       body->getArgument(idx).replaceAllUsesWith(bounceWires[idx]);
     }
 
-    // Goodby old ports, now ResultID in the PortInfo is correct.
+    // Goodbye old ports, now ResultID in the PortInfo is correct.
     body->eraseArguments(0, oldNumArgs);
 
     // Connect the bounce wires to the new arguments
