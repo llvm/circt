@@ -105,15 +105,15 @@ static AnnotationSet annosForFieldIDRange(const AnnotationSet &annos,
   return newAnnos;
 }
 
-// TODO: check for dead/unattachable symbols
-static LogicalResult computeLoweringImpl(PortConversion &newPorts,
-                                         Convention conv, size_t portID,
-                                         const PortInfo &port, bool isFlip,
-                                         Twine name, FIRRTLType type,
-                                         uint64_t fieldID) {
+// TODO: check for dead/unattachable symbols and put them on the wire if
+// possible
+static LogicalResult
+computeLoweringImpl(FModuleLike mod, PortConversion &newPorts, Convention conv,
+                    size_t portID, const PortInfo &port, bool isFlip,
+                    Twine name, FIRRTLType type, uint64_t fieldID) {
   auto *ctx = type.getContext();
   return FIRRTLTypeSwitch<FIRRTLType, LogicalResult>(type)
-      .Case<BundleType>([&](BundleType bundle) {
+      .Case<BundleType>([&](BundleType bundle) -> LogicalResult {
         // This should be enhanced to be able to handle bundle<all flips of
         // passive>, or this should be a canonicalizer
         if (conv != Convention::Scalarized && bundle.isPassive()) {
@@ -129,15 +129,30 @@ static LogicalResult computeLoweringImpl(PortConversion &newPorts,
         } else {
           for (auto [idx, elem] : llvm::enumerate(bundle.getElements())) {
             if (failed(computeLoweringImpl(
-                    newPorts, conv, portID, port, isFlip ^ elem.isFlip,
+                    mod, newPorts, conv, portID, port, isFlip ^ elem.isFlip,
                     name + "_" + elem.name.getValue(), elem.type,
                     fieldID + bundle.getFieldID(idx))))
               return failure();
+            if (port.sym && port.sym.getSymIfExists(fieldID))
+              return mod.emitError("Port [")
+                     << port.name
+                     << "] should be subdivided, but cannot be because of "
+                        "symbol ["
+                     << port.sym.getSymIfExists(fieldID) << "] on a bundle";
+            if (!annosForFieldIDRange(port.annotations, fieldID, fieldID)
+                     .empty())
+              return mod.emitError("Port [")
+                     << port.name
+                     << "] should be subdivided, but cannot be because of "
+                        "annotations ["
+                     << annosForFieldIDRange(port.annotations, fieldID, fieldID)
+                            .getArrayAttr()
+                     << "] on a bundle";
           }
         }
         return success();
       })
-      .template Case<FVectorType>([&](FVectorType vector) {
+      .template Case<FVectorType>([&](FVectorType vector) -> LogicalResult {
         if (conv != Convention::Scalarized &&
             vector.getElementType().isPassive()) {
           auto lastId = fieldID + vector.getMaxFieldID();
@@ -151,10 +166,26 @@ static LogicalResult computeLoweringImpl(PortConversion &newPorts,
                fieldID});
         } else {
           for (size_t i = 0, e = vector.getNumElements(); i < e; ++i) {
-            if (failed(computeLoweringImpl(
-                    newPorts, conv, portID, port, isFlip, name + "_" + Twine(i),
-                    vector.getElementType(), fieldID + vector.getFieldID(i))))
+            if (failed(computeLoweringImpl(mod, newPorts, conv, portID, port,
+                                           isFlip, name + "_" + Twine(i),
+                                           vector.getElementType(),
+                                           fieldID + vector.getFieldID(i))))
               return failure();
+            if (port.sym && port.sym.getSymIfExists(fieldID))
+              return mod.emitError("Port [")
+                     << port.name
+                     << "] should be subdivided, but cannot be because of "
+                        "symbol ["
+                     << port.sym.getSymIfExists(fieldID) << "] on a vector";
+            if (!annosForFieldIDRange(port.annotations, fieldID, fieldID)
+                     .empty())
+              return mod.emitError("Port [")
+                     << port.name
+                     << "] should be subdivided, but cannot be because of "
+                        "annotations ["
+                     << annosForFieldIDRange(port.annotations, fieldID, fieldID)
+                            .getArrayAttr()
+                     << "] on a vector";
           }
         }
         return success();
@@ -192,7 +223,7 @@ static LogicalResult computeLowering(FModuleLike mod, Convention conv,
                                      PortConversion &newPorts) {
   for (auto [idx, port] : llvm::enumerate(mod.getPorts()))
     if (computeLoweringImpl(
-            newPorts, conv, idx, port, port.direction == Direction::Out,
+            mod, newPorts, conv, idx, port, port.direction == Direction::Out,
             port.name.getValue(), type_cast<FIRRTLType>(port.type), 0)
             .failed())
       return failure();
