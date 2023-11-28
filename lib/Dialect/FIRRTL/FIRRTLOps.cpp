@@ -2001,7 +2001,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
       lowerToBind ? builder.getUnitAttr() : UnitAttr(), innerSym);
 }
 
-void InstanceOp::build(OpBuilder &builder, OperationState &result,
+void InstanceOp::build(OpBuilder &builder, OperationState &odsState,
                        ArrayRef<PortInfo> ports, StringRef moduleName,
                        StringRef name, NameKindEnum nameKind,
                        ArrayRef<Attribute> annotations, bool lowerToBind,
@@ -2019,7 +2019,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
     newPortAnnotations.push_back(p.annotations.getArrayAttr());
   }
 
-  return build(builder, result, newResultTypes, moduleName, name, nameKind,
+  return build(builder, odsState, newResultTypes, moduleName, name, nameKind,
                newPortDirections, newPortNames, annotations, newPortAnnotations,
                lowerToBind, innerSym);
 }
