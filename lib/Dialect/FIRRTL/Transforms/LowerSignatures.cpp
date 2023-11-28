@@ -62,7 +62,6 @@ struct AttrCache {
       sPortSyms, sPortLocations, sPortAnnotations, sEmpty;
 };
 
-
 struct FieldMapEntry : public PortInfo {
   size_t portID;
   size_t resultID;
@@ -70,33 +69,146 @@ struct FieldMapEntry : public PortInfo {
 };
 
 using PortConversion = SmallVector<FieldMapEntry>;
+} // namespace
+
+static hw::InnerSymAttr symbolsForFieldIDRange(hw::InnerSymAttr syms,
+                                               uint64_t low, uint64_t high) {
+  // No symbols, early exit
+  if (!syms || syms.empty())
+    return {};
+
+  SmallVector<hw::InnerSymPropertiesAttr, 4> newSyms;
+  for (auto sym : syms) {
+    auto sfield = sym.getFieldID();
+    if (sfield >= low && sfield <= high) {
+      newSyms.push_back(hw::InnerSymPropertiesAttr::get(
+          syms.getContext(), sym.getName(), sfield - low,
+          sym.getSymVisibility()));
+    }
+  }
+
+  if (newSyms.empty())
+    return {};
+
+  return hw::InnerSymAttr::get(syms.getContext(), newSyms);
+}
+
+static AnnotationSet annosForFieldIDRange(const AnnotationSet &annos,
+                                          uint64_t low, uint64_t high) {
+  AnnotationSet newAnnos(annos.getContext());
+  for (auto anno : annos) {
+    auto afield = anno.getFieldID();
+    if (afield >= low && afield <= high) {
+      newAnnos.addAnnotations(anno);
+    }
+  }
+  return newAnnos;
+}
+
+// TODO: check for dead/unattachable symbols
+static LogicalResult computeLoweringImpl(PortConversion &newPorts,
+                                         Convention conv, size_t portID,
+                                         const PortInfo &port, bool isFlip,
+                                         Twine name, FIRRTLType type,
+                                         uint64_t fieldID) {
+  auto *ctx = type.getContext();
+  return FIRRTLTypeSwitch<FIRRTLType, LogicalResult>(type)
+      .Case<BundleType>([&](BundleType bundle) {
+        // This should be enhanced to be able to handle bundle<all flips of
+        // passive>
+        if (conv != Convention::Scalarized && bundle.isPassive()) {
+          newPorts.push_back(
+              {{StringAttr::get(ctx, name), type,
+                isFlip ? Direction::Out : Direction::In,
+                symbolsForFieldIDRange(port.sym, fieldID,
+                                       fieldID + bundle.getMaxFieldID()),
+                port.loc,
+                annosForFieldIDRange(port.annotations, fieldID,
+                                     fieldID + bundle.getMaxFieldID())},
+               portID,
+               newPorts.size(),
+               fieldID});
+        } else {
+          for (auto &elem : bundle.getElements()) {
+            fieldID++;
+            if (failed(computeLoweringImpl(
+                    newPorts, conv, portID, port, isFlip ^ elem.isFlip,
+                    name + "_" + elem.name.getValue(), elem.type, fieldID)))
+              return failure();
+          }
+        }
+        return success();
+      })
+      .template Case<FVectorType>([&](FVectorType vector) {
+        if (conv != Convention::Scalarized &&
+            vector.getElementType().isPassive()) {
+          auto lastId = fieldID + vector.getFieldID(1) - 1;
+          newPorts.push_back(
+              {{StringAttr::get(ctx, name), type,
+                isFlip ? Direction::Out : Direction::In,
+                symbolsForFieldIDRange(port.sym, fieldID, lastId), port.loc,
+                annosForFieldIDRange(port.annotations, fieldID, lastId)},
+               portID,
+               newPorts.size(),
+               fieldID});
+        } else {
+          for (size_t i = 0, e = vector.getNumElements(); i < e; ++i) {
+            fieldID++;
+            if (failed(computeLoweringImpl(newPorts, conv, portID, port, isFlip,
+                                           name + "_" + Twine(i),
+                                           vector.getElementType(), fieldID)))
+              return failure();
+          }
+        }
+        return success();
+      })
+      .template Case<FEnumType>([&](FEnumType fenum) { return failure(); })
+      .template Case<RefType>([&](RefType ref) {
+        newPorts.push_back({{StringAttr::get(ctx, name),
+                             ref,
+                             isFlip ? Direction::Out : Direction::In,
+                             {},
+                             port.loc,
+                             {}},
+                            portID,
+                            newPorts.size(),
+                            fieldID});
+        return success();
+      })
+      .template Case<FIRRTLBaseType>([&](FIRRTLBaseType groundType) {
+        assert(groundType.isGround() && "only ground types are expected here");
+        newPorts.push_back(
+            {{StringAttr::get(ctx, name), groundType,
+              isFlip ? Direction::Out : Direction::In,
+              symbolsForFieldIDRange(port.sym, fieldID, fieldID), port.loc,
+              annosForFieldIDRange(port.annotations, fieldID, fieldID)},
+             portID,
+             newPorts.size(),
+             fieldID});
+        return success();
+      });
 }
 
 // compute a new moduletype from an old module type and lowering convention.
 // Also compute a fieldID map from port, fieldID -> port
-static PortConversion computeLowering(FModuleLike mod, Convention conv) {
+static LogicalResult computeLowering(FModuleLike mod, Convention conv,
+                                     PortConversion &newPorts) {
   // assert(conv == Convention::Scalarized);
-  PortConversion newPorts;
-  for (auto [idx, port] : llvm::enumerate(mod.getPorts())) {
-    auto fn = [idx, port, &newPorts](uint64_t fieldID, bool isFlip,
-                                     FIRRTLType type) {
-      newPorts.push_back(
-          {{port.name, type, (Direction)((unsigned)port.direction ^ isFlip),
-            port.sym, port.loc, port.annotations},
-           idx,
-           newPorts.size(),
-           fieldID});
-    };
-    walkGroundTypes(cast<FIRRTLType>(port.type), fn);
-  }
-  return newPorts;
+  for (auto [idx, port] : llvm::enumerate(mod.getPorts()))
+    if (computeLoweringImpl(
+            newPorts, conv, idx, port, port.direction == Direction::Out,
+            port.name.getValue(), type_cast<FIRRTLType>(port.type), 0)
+            .failed())
+      return failure();
+  return success();
 }
 
-static PortConversion lowerModuleSignature(FModuleLike module, Convention conv,
-                                           AttrCache &cache) {
+static LogicalResult lowerModuleSignature(FModuleLike module, Convention conv,
+                                          AttrCache &cache,
+                                          PortConversion &newPorts) {
   ImplicitLocOpBuilder theBuilder(module.getLoc(), module.getContext());
-
-  auto newPorts = computeLowering(module, conv);
+  if (computeLowering(module, conv, newPorts).failed())
+    return failure();
   if (auto mod = dyn_cast<FModuleOp>(module.getOperation())) {
     Block *body = mod.getBodyBlock();
     theBuilder.setInsertionPointToStart(body);
@@ -191,7 +303,7 @@ static PortConversion lowerModuleSignature(FModuleLike module, Convention conv,
   module->setAttrs(newModuleAttrs);
   module.setPortSymbols(newPortSyms);
   module->dump();
-  return newPorts;
+  return success();
 }
 
 void lowerModuleBody(FModuleOp mod,
@@ -265,8 +377,11 @@ void LowerSignaturesPass::runOnOperation() {
 
   for (auto [mod, cnv] : conventionTable) {
     // auto tl =
-    //     SigLoweringVisitor(&getContext(), symTbl, cache, conventionTable);
-    portMap[mod.getNameAttr()] = lowerModuleSignature(mod, cnv, cache);
+    //     SigLoweringVisitor(&getContext(), symTbl, cache,
+    //     conventionTable);
+    if (lowerModuleSignature(mod, cnv, cache, portMap[mod.getNameAttr()])
+            .failed())
+      signalPassFailure();
     //    if (tl.isFailed()) {
     //      signalPassFailure();
     //      return;

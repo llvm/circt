@@ -67,7 +67,7 @@ def FieldIDTypeInterface : TypeInterface<"FieldIDTypeInterface"> {
       Field IDs start at 1, and are assigned
       to each field in a recursive depth-first walk of all
       elements. A field ID of 0 is used to reference the type itself.
-    }], "uint64_t", "getFieldID", (ins "uint64_t":$fieldID)>,
+    }], "uint64_t", "getFieldID", (ins "uint64_t":$index)>,
 
     InterfaceMethod<[{
       Find the index of the element that contains the given fieldID.
