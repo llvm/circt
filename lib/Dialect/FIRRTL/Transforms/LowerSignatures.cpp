@@ -117,23 +117,21 @@ static LogicalResult computeLoweringImpl(PortConversion &newPorts,
         // This should be enhanced to be able to handle bundle<all flips of
         // passive>
         if (conv != Convention::Scalarized && bundle.isPassive()) {
+          auto lastId = fieldID + bundle.getMaxFieldID();
           newPorts.push_back(
               {{StringAttr::get(ctx, name), type,
                 isFlip ? Direction::Out : Direction::In,
-                symbolsForFieldIDRange(port.sym, fieldID,
-                                       fieldID + bundle.getMaxFieldID()),
-                port.loc,
-                annosForFieldIDRange(port.annotations, fieldID,
-                                     fieldID + bundle.getMaxFieldID())},
+                symbolsForFieldIDRange(port.sym, fieldID, lastId), port.loc,
+                annosForFieldIDRange(port.annotations, fieldID, lastId)},
                portID,
                newPorts.size(),
                fieldID});
         } else {
-          for (auto &elem : bundle.getElements()) {
-            fieldID++;
+          for (auto [idx, elem] : llvm::enumerate(bundle.getElements())) {
             if (failed(computeLoweringImpl(
                     newPorts, conv, portID, port, isFlip ^ elem.isFlip,
-                    name + "_" + elem.name.getValue(), elem.type, fieldID)))
+                    name + "_" + elem.name.getValue(), elem.type,
+                    fieldID + bundle.getFieldID(idx))))
               return failure();
           }
         }
@@ -142,7 +140,7 @@ static LogicalResult computeLoweringImpl(PortConversion &newPorts,
       .template Case<FVectorType>([&](FVectorType vector) {
         if (conv != Convention::Scalarized &&
             vector.getElementType().isPassive()) {
-          auto lastId = fieldID + vector.getFieldID(1) - 1;
+          auto lastId = fieldID + vector.getMaxFieldID();
           newPorts.push_back(
               {{StringAttr::get(ctx, name), type,
                 isFlip ? Direction::Out : Direction::In,
@@ -153,10 +151,9 @@ static LogicalResult computeLoweringImpl(PortConversion &newPorts,
                fieldID});
         } else {
           for (size_t i = 0, e = vector.getNumElements(); i < e; ++i) {
-            fieldID++;
-            if (failed(computeLoweringImpl(newPorts, conv, portID, port, isFlip,
-                                           name + "_" + Twine(i),
-                                           vector.getElementType(), fieldID)))
+            if (failed(computeLoweringImpl(
+                    newPorts, conv, portID, port, isFlip, name + "_" + Twine(i),
+                    vector.getElementType(), fieldID + vector.getFieldID(i))))
               return failure();
           }
         }
@@ -225,7 +222,10 @@ static LogicalResult lowerModuleSignature(FModuleLike module, Convention conv,
       if (p.fieldID != 0) {
         auto &wire = bounceWires[p.portID];
         if (!wire)
-          wire = theBuilder.create<WireOp>(module.getPortType(p.portID))
+          wire = theBuilder
+                     .create<WireOp>(module.getPortType(p.portID),
+                                     module.getPortNameAttr(p.portID),
+                                     NameKindEnum::InterestingName)
                      .getResult();
       } else {
         bounceWires[p.portID] = newArg;
@@ -246,6 +246,8 @@ static LogicalResult lowerModuleSignature(FModuleLike module, Convention conv,
 
     // Connect the bounce wires to the new arguments
     for (auto &p : newPorts) {
+      if (isa<BlockArgument>(bounceWires[p.portID]))
+        continue;
       if (p.isOutput())
         emitConnect(
             theBuilder, body->getArgument(p.resultID),
@@ -302,7 +304,6 @@ static LogicalResult lowerModuleSignature(FModuleLike module, Convention conv,
   // Update the module's attributes.
   module->setAttrs(newModuleAttrs);
   module.setPortSymbols(newPortSyms);
-  module->dump();
   return success();
 }
 
@@ -319,7 +320,6 @@ void lowerModuleBody(FModuleOp mod,
       auto wire = theBuilder.create<WireOp>(r.getType());
       bounceWires.push_back(wire.getResult());
       r.replaceAllUsesWith(wire.getResult());
-      wire->dump();
     }
     // Fix up the Instance
     SmallVector<PortInfo> instPorts; // Oh I wish ArrayRef was polymorphic.
@@ -347,7 +347,6 @@ void lowerModuleBody(FModuleOp mod,
 
     return;
   });
-  mod.dump();
 }
 
 //===----------------------------------------------------------------------===//
