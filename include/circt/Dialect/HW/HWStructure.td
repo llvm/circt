@@ -535,7 +535,7 @@ def InstanceChoiceOp : HWInstanceOpBase<"instance_choice", []> {
         @TargetDefault or
         @TargetA if "A" or
         @TargetB if "B"
-        : (a: %a: i32) -> (b: i32)
+        (a: %a: i32) -> (b: i32)
     ```
   }];
 

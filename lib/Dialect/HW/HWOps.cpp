@@ -1571,7 +1571,6 @@ LogicalResult InstanceChoiceOp::verify() {
       };
   return instance_like_impl::verifyParameterStructure(
       getParameters(), moduleParameters, emitError);
-  return success();
 }
 
 ParseResult InstanceChoiceOp::parse(OpAsmParser &parser,
