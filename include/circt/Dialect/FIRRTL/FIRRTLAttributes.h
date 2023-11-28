@@ -24,7 +24,7 @@ namespace firrtl {
 //===----------------------------------------------------------------------===//
 
 /// This represents the direction of a single port.
-enum class Direction { In = 0, Out = 1 };
+enum class Direction { In, Out };
 
 /// Prints the Direction to the stream as either "in" or "out".
 llvm::raw_ostream &operator<<(llvm::raw_ostream &os, const Direction &dir);
