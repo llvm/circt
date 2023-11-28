@@ -1973,7 +1973,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
                        FModuleLike module, StringRef name,
                        NameKindEnum nameKind, ArrayRef<Attribute> annotations,
                        ArrayRef<Attribute> portAnnotations, bool lowerToBind,
-                       StringAttr innerSym) {
+                       hw::InnerSymAttr innerSym) {
 
   // Gather the result types.
   SmallVector<Type> resultTypes;
@@ -1998,8 +1998,30 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
       NameKindEnumAttr::get(builder.getContext(), nameKind),
       module.getPortDirectionsAttr(), module.getPortNamesAttr(),
       builder.getArrayAttr(annotations), portAnnotationsAttr,
-      lowerToBind ? builder.getUnitAttr() : UnitAttr(),
-      innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr());
+      lowerToBind ? builder.getUnitAttr() : UnitAttr(), innerSym);
+}
+
+void InstanceOp::build(OpBuilder &builder, OperationState &odsState,
+                       ArrayRef<PortInfo> ports, StringRef moduleName,
+                       StringRef name, NameKindEnum nameKind,
+                       ArrayRef<Attribute> annotations, bool lowerToBind,
+                       hw::InnerSymAttr innerSym) {
+
+  // Gather the result types.
+  SmallVector<Type> newResultTypes;
+  SmallVector<Direction> newPortDirections;
+  SmallVector<Attribute> newPortNames;
+  SmallVector<Attribute> newPortAnnotations;
+  for (auto &p : ports) {
+    newResultTypes.push_back(p.type);
+    newPortDirections.push_back(p.direction);
+    newPortNames.push_back(p.name);
+    newPortAnnotations.push_back(p.annotations.getArrayAttr());
+  }
+
+  return build(builder, odsState, newResultTypes, moduleName, name, nameKind,
+               newPortDirections, newPortNames, annotations, newPortAnnotations,
+               lowerToBind, innerSym);
 }
 
 /// Builds a new `InstanceOp` with the ports listed in `portIndices` erased, and

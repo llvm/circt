@@ -3592,7 +3592,7 @@ ParseResult FIRStmtParser::parseInstance() {
   auto annotations = getConstants().emptyArrayAttr;
   SmallVector<Attribute, 4> portAnnotations(modulePorts.size(), annotations);
 
-  StringAttr sym = {};
+  hw::InnerSymAttr sym = {};
   auto result = builder.create<InstanceOp>(
       referencedModule, id, NameKindEnum::InterestingName,
       annotations.getValue(), portAnnotations, false, sym);
