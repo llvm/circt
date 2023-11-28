@@ -135,6 +135,10 @@ MlirAttribute circtESIAppIDAttrGet(MlirContext ctxt, MlirStringRef name,
   return wrap(AppIDAttr::get(
       unwrap(ctxt), StringAttr::get(unwrap(ctxt), unwrap(name)), index));
 }
+MlirAttribute circtESIAppIDAttrGetNoIdx(MlirContext ctxt, MlirStringRef name) {
+  return wrap(AppIDAttr::get(
+      unwrap(ctxt), StringAttr::get(unwrap(ctxt), unwrap(name)), std::nullopt));
+}
 MlirStringRef circtESIAppIDAttrGetName(MlirAttribute attr) {
   return wrap(unwrap(attr).cast<AppIDAttr>().getName().getValue());
 }

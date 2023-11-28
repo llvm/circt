@@ -251,6 +251,7 @@ class System:
       "builtin.module(esi-clean-metadata)",
       "builtin.module(hw.module(lower-seq-hlmem))",
       "builtin.module(lower-esi-to-physical)",
+      # TODO: support more than just cosim.
       "builtin.module(lower-esi-bundles, lower-esi-ports, lower-esi-to-hw{{platform=cosim}})",
       "builtin.module(convert-fsm-to-sv)",
       "builtin.module(lower-seq-to-sv)",
