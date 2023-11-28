@@ -329,10 +329,14 @@ Manifest::Impl::getBundlePorts(AppIDPath idPath,
     if (auto f = content.find("servicePort"); f != content.end())
       serviceName = parseServicePort(f.value()).name;
     auto svc = activeServices.find(serviceName);
-    if (svc == activeServices.end())
-      throw runtime_error(
-          "Malformed manifest: could not find active service '" + serviceName +
-          "'");
+    if (svc == activeServices.end()) {
+      // If a specific service isn't found, search for the default service
+      // (typically provided by a BSP).
+      if (svc = activeServices.find(""); svc == activeServices.end())
+        throw runtime_error(
+            "Malformed manifest: could not find active service '" +
+            serviceName + "'");
+    }
 
     string typeName = content.at("bundleType").at("circt_name");
     auto type = getType(typeName);

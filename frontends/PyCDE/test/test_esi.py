@@ -94,6 +94,8 @@ Bundle1 = Bundle([
 ])
 # CHECK: Bundle<[('req', ChannelDirection.TO, Channel<Bits<32>, ValidReady>), ('resp', ChannelDirection.FROM, Channel<Bits<1>, ValidReady>)]>
 print(Bundle1)
+# CHECK: Channel<Bits<1>, ValidReady>
+print(Bundle1.resp)
 
 
 # CHECK-LABEL:  hw.module @SendBundleTest(in %s1_in : !esi.channel<i32>, out b_send : !esi.bundle<[!esi.channel<i32> to "req", !esi.channel<i1> from "resp"]>, out i1_out : !esi.channel<i1>) attributes {output_file = #hw.output_file<"SendBundleTest.sv", includeReplicatedOps>} {
@@ -107,8 +109,8 @@ class SendBundleTest(Module):
 
   @generator
   def build(self):
-    (self.b_send, from_chans) = Bundle1.pack(req=self.s1_in)
-    self.i1_out = from_chans['resp']
+    self.b_send, from_chans = Bundle1.pack(req=self.s1_in)
+    self.i1_out = from_chans.resp
 
 
 # CHECK-LABEL:  hw.module @RecvBundleTest(in %b_recv : !esi.bundle<[!esi.channel<i32> to "req", !esi.channel<i1> from "resp"]>, in %i1_in : !esi.channel<i1>, out s1_out : !esi.channel<i32>) attributes {output_file = #hw.output_file<"RecvBundleTest.sv", includeReplicatedOps>} {
