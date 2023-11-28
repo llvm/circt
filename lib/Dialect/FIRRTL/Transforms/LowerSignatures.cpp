@@ -44,22 +44,17 @@ namespace {
 
 struct AttrCache {
   AttrCache(MLIRContext *context) {
-    i64ty = IntegerType::get(context, 64);
     nameAttr = StringAttr::get(context, "name");
-    nameKindAttr = StringAttr::get(context, "nameKind");
     sPortDirections = StringAttr::get(context, "portDirections");
     sPortNames = StringAttr::get(context, "portNames");
     sPortTypes = StringAttr::get(context, "portTypes");
-    sPortSyms = StringAttr::get(context, "portSyms");
     sPortLocations = StringAttr::get(context, "portLocations");
     sPortAnnotations = StringAttr::get(context, "portAnnotations");
-    sEmpty = StringAttr::get(context, "");
   }
   AttrCache(const AttrCache &) = default;
 
-  Type i64ty;
-  StringAttr nameAttr, nameKindAttr, sPortDirections, sPortNames, sPortTypes,
-      sPortSyms, sPortLocations, sPortAnnotations, sEmpty;
+  StringAttr nameAttr, sPortDirections, sPortNames, sPortTypes, sPortLocations,
+      sPortAnnotations;
 };
 
 struct FieldMapEntry : public PortInfo {
@@ -355,10 +350,18 @@ static void lowerModuleBody(FModuleOp mod,
     SmallVector<PortInfo> instPorts; // Oh I wish ArrayRef was polymorphic.
     for (auto p : modPorts)
       instPorts.push_back(p);
+    auto annos = inst.getAnnotations();
+    annos.dump();
     auto newOp = theBuilder.create<InstanceOp>(
         instPorts, inst.getModuleName(), inst.getName(), inst.getNameKind(),
-        inst.getAnnotations().getValue(), inst.getLowerToBind(),
-        inst.getInnerSymAttr());
+        annos.getValue(), inst.getLowerToBind(), inst.getInnerSymAttr());
+
+    auto oldDict = inst->getDiscardableAttrDictionary();
+    auto newDict = newOp->getDiscardableAttrDictionary();
+    SmallVector<NamedAttribute> newAttrs;
+    for (auto na : oldDict)
+      if (!newDict.contains(na.getName()))
+        newOp->setDiscardableAttr(na.getName(), na.getValue());
 
     // Connect up the Instance to the bounce wires
     for (auto [idx, p] : llvm::enumerate(modPorts)) {
