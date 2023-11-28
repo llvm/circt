@@ -130,6 +130,209 @@ public:
     return *this;
   }
 
+  FirtoolOptions &setDisableAnnotationsClassless(bool value) {
+    disableAnnotationsClassless = value;
+    return *this;
+  }
+
+  FirtoolOptions &setLowerAnnotationsNoRefTypePorts(bool value) {
+    lowerAnnotationsNoRefTypePorts = value;
+    return *this;
+  }
+
+  FirtoolOptions &
+  setPreserveAggregate(firrtl::PreserveAggregate::PreserveMode value) {
+    preserveAggregate = value;
+    return *this;
+  }
+
+  FirtoolOptions &
+  setPreserveValues(firrtl::PreserveValues::PreserveMode value) {
+    preserveMode = value;
+    return *this;
+  }
+
+  FirtoolOptions &setEnableDebugInfo(bool value) {
+    enableDebugInfo = value;
+    return *this;
+  }
+
+  FirtoolOptions &setBuildMode(BuildMode value) {
+    buildMode = value;
+    return *this;
+  }
+
+  FirtoolOptions &setDisableOptimization(bool value) {
+    disableOptimization = value;
+    return *this;
+  }
+
+  FirtoolOptions &setExportChiselInterface(bool value) {
+    exportChiselInterface = value;
+    return *this;
+  }
+
+  FirtoolOptions &setChiselInterfaceOutDirectory(StringRef value) {
+    chiselInterfaceOutDirectory = value;
+    return *this;
+  }
+
+  FirtoolOptions &setVbToBV(bool value) {
+    vbToBV = value;
+    return *this;
+  }
+
+  FirtoolOptions &setNoDedup(bool value) {
+    noDedup = value;
+    return *this;
+  }
+
+  FirtoolOptions &setCompanionMode(firrtl::CompanionMode value) {
+    companionMode = value;
+    return *this;
+  }
+
+  FirtoolOptions &setDisableAggressiveMergeConnections(bool value) {
+    disableAggressiveMergeConnections = value;
+    return *this;
+  }
+
+  FirtoolOptions &setDisableHoistingHWPassthrough(bool value) {
+    disableHoistingHWPassthrough = value;
+    return *this;
+  }
+
+  FirtoolOptions &setEmitOMIR(bool value) {
+    emitOMIR = value;
+    return *this;
+  }
+
+  FirtoolOptions &setOmirOutFile(StringRef value) {
+    omirOutFile = value;
+    return *this;
+  }
+
+  FirtoolOptions &setLowerMemories(bool value) {
+    lowerMemories = value;
+    return *this;
+  }
+
+  FirtoolOptions &setBlackBoxRootPath(StringRef value) {
+    blackBoxRootPath = value;
+    return *this;
+  }
+
+  FirtoolOptions &setReplSeqMem(bool value) {
+    replSeqMem = value;
+    return *this;
+  }
+
+  FirtoolOptions &setReplSeqMemFile(StringRef value) {
+    replSeqMemFile = value;
+    return *this;
+  }
+
+  FirtoolOptions &setExtractTestCode(bool value) {
+    extractTestCode = value;
+    return *this;
+  }
+
+  FirtoolOptions &setIgnoreReadEnableMem(bool value) {
+    ignoreReadEnableMem = value;
+    return *this;
+  }
+
+  FirtoolOptions &setDisableRandom(RandomKind value) {
+    disableRandom = value;
+    return *this;
+  }
+
+  FirtoolOptions &setOutputAnnotationFilename(StringRef value) {
+    outputAnnotationFilename = value;
+    return *this;
+  }
+
+  FirtoolOptions &setEnableAnnotationWarning(bool value) {
+    enableAnnotationWarning = value;
+    return *this;
+  }
+
+  FirtoolOptions &setAddMuxPragmas(bool value) {
+    addMuxPragmas = value;
+    return *this;
+  }
+
+  FirtoolOptions &setEmitChiselAssertsAsSVA(bool value) {
+    emitChiselAssertsAsSVA = value;
+    return *this;
+  }
+
+  FirtoolOptions &setEmitSeparateAlwaysBlocks(bool value) {
+    emitSeparateAlwaysBlocks = value;
+    return *this;
+  }
+
+  FirtoolOptions &setEtcDisableInstanceExtraction(bool value) {
+    etcDisableInstanceExtraction = value;
+    return *this;
+  }
+
+  FirtoolOptions &setEtcDisableRegisterExtraction(bool value) {
+    etcDisableRegisterExtraction = value;
+    return *this;
+  }
+
+  FirtoolOptions &setEtcDisableModuleInlining(bool value) {
+    etcDisableModuleInlining = value;
+    return *this;
+  }
+
+  FirtoolOptions &
+  setAddVivadoRAMAddressConflictSynthesisBugWorkaround(bool value) {
+    addVivadoRAMAddressConflictSynthesisBugWorkaround = value;
+    return *this;
+  }
+
+  FirtoolOptions &setCkgModuleName(StringRef value) {
+    ckgModuleName = value;
+    return *this;
+  }
+
+  FirtoolOptions &setCkgInputName(StringRef value) {
+    ckgInputName = value;
+    return *this;
+  }
+
+  FirtoolOptions &setCkgOutputName(StringRef value) {
+    ckgOutputName = value;
+    return *this;
+  }
+
+  FirtoolOptions &setCkgEnableName(StringRef value) {
+    ckgEnableName = value;
+    return *this;
+  }
+
+  FirtoolOptions &setCkgTestEnableName(StringRef value) {
+    ckgTestEnableName = value;
+    return *this;
+  }
+
+  FirtoolOptions &setExportModuleHierarchy(bool value) {
+    exportModuleHierarchy = value;
+    return *this;
+  }
+
+  FirtoolOptions &setStripFirDebugInfo(bool value) {
+    stripFirDebugInfo = value;
+    return *this;
+  }
+
+  FirtoolOptions &setStripDebugInfo(bool value) {
+    stripDebugInfo = value;
+    return *this;
+  }
+
 private:
   std::string outputFilename;
   bool disableAnnotationsUnknown;

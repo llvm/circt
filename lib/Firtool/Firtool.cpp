@@ -333,8 +333,10 @@ populatePrepareForExportVerilog(mlir::PassManager &pm,
 LogicalResult
 firtool::populateExportVerilog(mlir::PassManager &pm, const FirtoolOptions &opt,
                                std::unique_ptr<llvm::raw_ostream> os) {
-  pm.addPass(createExportVerilogPass(std::move(os)));
+  if (failed(::detail::populatePrepareForExportVerilog(pm, opt)))
+    return failure();
 
+  pm.addPass(createExportVerilogPass(std::move(os)));
   return success();
 }
 
