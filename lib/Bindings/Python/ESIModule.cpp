@@ -158,12 +158,14 @@ void circt::python::populateDialectESISubmodule(py::module &m) {
   mlir_attribute_subclass(m, "AppIDAttr", circtESIAttributeIsAnAppIDAttr)
       .def_classmethod(
           "get",
-          [](py::object cls, std::string name, uint64_t index,
+          [](py::object cls, std::string name, std::optional<uint64_t> index,
              MlirContext ctxt) {
-            return cls(circtESIAppIDAttrGet(ctxt, wrap(name), index));
+            if (index.has_value())
+              return cls(circtESIAppIDAttrGet(ctxt, wrap(name), index.value()));
+            return cls(circtESIAppIDAttrGetNoIdx(ctxt, wrap(name)));
           },
           "Create an AppID attribute", py::arg("cls"), py::arg("name"),
-          py::arg("index"), py::arg("context") = py::none())
+          py::arg("index") = py::none(), py::arg("context") = py::none())
       .def_property_readonly("name",
                              [](MlirAttribute self) {
                                llvm::StringRef name =

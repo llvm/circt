@@ -28,7 +28,7 @@ def CosimBSP(user_module):
     def build(ports):
       user_module(clk=ports.clk, rst=ports.rst)
       raw_esi.ServiceInstanceOp(result=[],
-                                appID=AppID("cosim", 0)._appid,
+                                appID=AppID("cosim")._appid,
                                 service_symbol=None,
                                 impl_type=ir.StringAttr.get("cosim"),
                                 inputs=[ports.clk.value, ports.rst.value])

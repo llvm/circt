@@ -76,6 +76,8 @@ MLIR_CAPI_EXPORTED bool circtESIAttributeIsAnAppIDAttr(MlirAttribute);
 MLIR_CAPI_EXPORTED
 MlirAttribute circtESIAppIDAttrGet(MlirContext, MlirStringRef name,
                                    uint64_t index);
+MLIR_CAPI_EXPORTED
+MlirAttribute circtESIAppIDAttrGetNoIdx(MlirContext ctxt, MlirStringRef name);
 MLIR_CAPI_EXPORTED MlirStringRef circtESIAppIDAttrGetName(MlirAttribute attr);
 MLIR_CAPI_EXPORTED bool circtESIAppIDAttrGetIndex(MlirAttribute attr,
                                                   uint64_t *index);
