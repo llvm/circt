@@ -307,13 +307,13 @@ static LogicalResult lowerModuleSignature(FModuleLike module, Convention conv,
   return success();
 }
 
-void lowerModuleBody(FModuleOp mod,
-                     DenseMap<StringAttr, PortConversion> &ports) {
+static void lowerModuleBody(FModuleOp mod,
+                            const DenseMap<StringAttr, PortConversion> &ports) {
   ImplicitLocOpBuilder theBuilder(mod.getLoc(), mod.getContext());
   mod->walk([&](InstanceOp inst) -> void {
     theBuilder.setInsertionPoint(inst);
-    assert(ports.count(inst.getModuleNameAttr().getAttr()));
-    auto &modPorts = ports[inst.getModuleNameAttr().getAttr()];
+    const auto &modPorts = ports.at(inst.getModuleNameAttr().getAttr());
+
     SmallVector<Value> bounceWires;
     // Create bounce wires for old signals
     for (auto r : inst.getResults()) {
@@ -375,20 +375,12 @@ void LowerSignaturesPass::runOnOperation() {
   }
 
   for (auto [mod, cnv] : conventionTable) {
-    // auto tl =
-    //     SigLoweringVisitor(&getContext(), symTbl, cache,
-    //     conventionTable);
     if (lowerModuleSignature(mod, cnv, cache, portMap[mod.getNameAttr()])
             .failed())
-      signalPassFailure();
-    //    if (tl.isFailed()) {
-    //      signalPassFailure();
-    //      return;
-    //    }
+      return signalPassFailure();
   }
-  for (auto mod : circuit.getOps<FModuleOp>()) {
-    lowerModuleBody(mod, portMap);
-  }
+  parallelForEach(&getContext(), circuit.getOps<FModuleOp>(),
+                  [&portMap](FModuleOp mod) { lowerModuleBody(mod, portMap); });
 }
 
 /// This is the pass constructor.
