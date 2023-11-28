@@ -57,7 +57,7 @@ void MaterializeDebugInfoPass::materializeVariable(OpBuilder &builder,
   if (name.getValue().starts_with("_"))
     return;
   if (auto dbgValue = convertToDebugAggregates(builder, value))
-    builder.create<debug::VariableOp>(value.getLoc(), name, dbgValue);
+    builder.create<debug::VariableOp>(value.getLoc(), name, dbgValue, Value{});
 }
 
 /// Unpack all aggregates in a FIRRTL value and repack them as debug aggregates.
