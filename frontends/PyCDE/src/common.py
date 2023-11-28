@@ -14,109 +14,109 @@ from typing import Optional
 
 
 class ModuleDecl:
-    """Represents an input or output port on a design module."""
+  """Represents an input or output port on a design module."""
 
-    __slots__ = ["name", "_type"]
+  __slots__ = ["name", "_type"]
 
-    def __init__(self, type: Type, name: str = None):
-        self.name: str = name
-        self._type: Type = type
+  def __init__(self, type: Type, name: str = None):
+    self.name: str = name
+    self._type: Type = type
 
-    @property
-    def type(self):
-        return self._type
+  @property
+  def type(self):
+    return self._type
 
 
 class Output(ModuleDecl):
-    """Create an RTL-level output port"""
+  """Create an RTL-level output port"""
 
 
 class OutputChannel(Output):
-    """Create an ESI output channel port."""
+  """Create an ESI output channel port."""
 
-    def __init__(self,
-                 type: Type,
-                 signaling: int = ChannelSignaling.ValidReady,
-                 name: str = None):
-        type = Channel(type, signaling)
-        super().__init__(type, name)
+  def __init__(self,
+               type: Type,
+               signaling: int = ChannelSignaling.ValidReady,
+               name: str = None):
+    type = Channel(type, signaling)
+    super().__init__(type, name)
 
 
 class SendBundle(Output):
-    """Create an ESI bundle output port (aka sending port)."""
+  """Create an ESI bundle output port (aka sending port)."""
 
-    def __init__(self, bundle: Bundle, name: str = None):
-        super().__init__(bundle, name)
+  def __init__(self, bundle: Bundle, name: str = None):
+    super().__init__(bundle, name)
 
 
 class Input(ModuleDecl):
-    """Create an RTL-level input port."""
+  """Create an RTL-level input port."""
 
 
 class Clock(Input):
-    """Create a clock input"""
+  """Create a clock input"""
 
-    def __init__(self, name: str = None):
-        super().__init__(ClockType(), name)
+  def __init__(self, name: str = None):
+    super().__init__(ClockType(), name)
 
 
 class Reset(Input):
-    """Create a reset input."""
+  """Create a reset input."""
 
-    def __init__(self, name: str = None):
-        super().__init__(Bits(1), name)
+  def __init__(self, name: str = None):
+    super().__init__(Bits(1), name)
 
 
 class InputChannel(Input):
-    """Create an ESI input channel port."""
+  """Create an ESI input channel port."""
 
-    def __init__(self,
-                 type: Type,
-                 signaling: int = ChannelSignaling.ValidReady,
-                 name: str = None):
-        type = Channel(type, signaling)
-        super().__init__(type, name)
+  def __init__(self,
+               type: Type,
+               signaling: int = ChannelSignaling.ValidReady,
+               name: str = None):
+    type = Channel(type, signaling)
+    super().__init__(type, name)
 
 
 class RecvBundle(Input):
-    """Create an ESI bundle input port (aka receiving port)."""
+  """Create an ESI bundle input port (aka receiving port)."""
 
-    def __init__(self, bundle: Bundle, name: str = None):
-        super().__init__(bundle, name)
+  def __init__(self, bundle: Bundle, name: str = None):
+    super().__init__(bundle, name)
 
 
 class AppID:
-    AttributeName = "esi.appid"
+  AttributeName = "esi.appid"
 
-    @singledispatchmethod
-    def __init__(self, name: str, idx: Optional[int] = None):
-        self._appid = esi.AppIDAttr.get(name, idx)
+  @singledispatchmethod
+  def __init__(self, name: str, idx: Optional[int] = None):
+    self._appid = esi.AppIDAttr.get(name, idx)
 
-    @__init__.register(ir.Attribute)
-    def __init__mlir_attr(self, attr: ir.Attribute):
-        self._appid = esi.AppIDAttr(attr)
+  @__init__.register(ir.Attribute)
+  def __init__mlir_attr(self, attr: ir.Attribute):
+    self._appid = esi.AppIDAttr(attr)
 
-    @property
-    def name(self) -> str:
-        return self._appid.name
+  @property
+  def name(self) -> str:
+    return self._appid.name
 
-    @property
-    def index(self) -> int:
-        return self._appid.index
+  @property
+  def index(self) -> int:
+    return self._appid.index
 
-    def __str__(self) -> str:
-        return f"{self.name}[{self.index}]"
+  def __str__(self) -> str:
+    return f"{self.name}[{self.index}]"
 
 
 class _PyProxy:
-    """Parent class for a Python object which has a corresponding IR op (i.e. a
+  """Parent class for a Python object which has a corresponding IR op (i.e. a
   proxy class)."""
 
-    __slots__ = ["name"]
+  __slots__ = ["name"]
 
-    def __init__(self, name: str):
-        self.name = name
+  def __init__(self, name: str):
+    self.name = name
 
 
 class PortError(Exception):
-    pass
+  pass

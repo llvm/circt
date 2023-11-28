@@ -16,7 +16,7 @@ from pathlib import Path
 __root_dir__ = Path(__file__).parent.parent
 
 
-def CosimBSP(user_module: Module):
+def CosimBSP(user_module):
   """Wrap and return a cosimulation 'board support package' containing
   'user_module'"""
 

@@ -108,7 +108,8 @@ class ServiceDecl(_PyProxy):
 
 
 class _RequestToServerConnection:
-  """Request a connection to a server."""
+  """Indicates a service with a 'to server' port. Call to create a 'to server'
+  (from client) connection request."""
 
   def __init__(self, decl: ServiceDecl, type: Bundle, attr_name: str):
     self.decl = decl
@@ -126,7 +127,8 @@ class _RequestToServerConnection:
 
 
 class _RequestFromServerConnection:
-  """Request a connection to a server."""
+  """Indicates a service with a 'from server' port. Call to create a 'from
+  server' (to client) connection request."""
 
   def __init__(self, decl: ServiceDecl, type: Bundle, attr_name: str):
     self.decl = decl
