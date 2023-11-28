@@ -24,7 +24,8 @@ namespace hw {
 std::unique_ptr<mlir::Pass> createPrintInstanceGraphPass();
 std::unique_ptr<mlir::Pass> createHWSpecializePass();
 std::unique_ptr<mlir::Pass> createPrintHWModuleGraphPass();
-std::unique_ptr<mlir::Pass> createFlattenIOPass();
+std::unique_ptr<mlir::Pass> createFlattenIOPass(bool recursiveFlag = true,
+                                                bool flattenExternFlag = false);
 std::unique_ptr<mlir::Pass> createVerifyInnerRefNamespacePass();
 
 /// Generate the code for registering passes.

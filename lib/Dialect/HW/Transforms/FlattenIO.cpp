@@ -72,13 +72,20 @@ struct OutputOpConversion : public OpConversionPattern<hw::OutputOp> {
 
 struct InstanceOpConversion : public OpConversionPattern<hw::InstanceOp> {
   InstanceOpConversion(TypeConverter &typeConverter, MLIRContext *context,
-                       DenseSet<hw::InstanceOp> *convertedOps)
-      : OpConversionPattern(typeConverter, context),
-        convertedOps(convertedOps) {}
+                       DenseSet<hw::InstanceOp> *convertedOps,
+                       const StringSet<> *externModules)
+      : OpConversionPattern(typeConverter, context), convertedOps(convertedOps),
+        externModules(externModules) {}
 
   LogicalResult
   matchAndRewrite(hw::InstanceOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+    auto referencedMod = op.getReferencedModuleNameAttr();
+    // If externModules is populated and this is an extern module instance,
+    // donot flatten it.
+    if (externModules->contains(referencedMod.getValue()))
+      return success();
+
     auto loc = op.getLoc();
     // Flatten the operands.
     llvm::SmallVector<Value> convOperands;
@@ -95,18 +102,19 @@ struct InstanceOpConversion : public OpConversionPattern<hw::InstanceOp> {
 
     // Get the new module return type.
     llvm::SmallVector<Type> newResultTypes;
-    for (auto oldResultType : op.getResultTypes())
+    for (auto oldResultType : op.getResultTypes()) {
       if (auto structType = getStructType(oldResultType))
         for (auto t : structType.getElements())
           newResultTypes.push_back(t.type);
       else
         newResultTypes.push_back(oldResultType);
+    }
 
-    // Create the new instance, with incorrect argnames and other attributes,
-    // will be fixed later.
+    // Create the new instance with the flattened module, attributes will be
+    // adjusted later.
     auto newInstance = rewriter.create<hw::InstanceOp>(
         loc, newResultTypes, op.getInstanceNameAttr(),
-        FlatSymbolRefAttr::get(op.getReferencedModuleNameAttr()), convOperands,
+        FlatSymbolRefAttr::get(referencedMod), convOperands,
         op.getArgNamesAttr(), op.getResultNamesAttr(), op.getParametersAttr(),
         op.getInnerSymAttr());
 
@@ -134,6 +142,7 @@ struct InstanceOpConversion : public OpConversionPattern<hw::InstanceOp> {
   }
 
   DenseSet<hw::InstanceOp> *convertedOps;
+  const StringSet<> *externModules;
 };
 
 using IOTypes = std::pair<TypeRange, TypeRange>;
@@ -155,6 +164,7 @@ public:
         results.push_back(type);
       else {
         for (auto field : structType.getElements())
+
           results.push_back(field.type);
       }
       return success();
@@ -301,7 +311,7 @@ updateBlockLocations(hw::HWModuleLike op,
     arg.setLoc(loc);
 }
 
-static void setioInfo(hw::HWModuleLike op, IOInfo &ioInfo) {
+static void setIOInfo(hw::HWModuleLike op, IOInfo &ioInfo) {
   ioInfo.argTypes = op.getInputTypes();
   ioInfo.resTypes = op.getOutputTypes();
   for (auto [i, arg] : llvm::enumerate(ioInfo.argTypes)) {
@@ -319,14 +329,15 @@ static DenseMap<Operation *, IOInfo> populateIOInfoMap(mlir::ModuleOp module) {
   DenseMap<Operation *, IOInfo> ioInfoMap;
   for (auto op : module.getOps<T>()) {
     IOInfo ioInfo;
-    setioInfo(op, ioInfo);
+    setIOInfo(op, ioInfo);
     ioInfoMap[op] = ioInfo;
   }
   return ioInfoMap;
 }
 
 template <typename T>
-static LogicalResult flattenOpsOfType(ModuleOp module, bool recursive) {
+static LogicalResult flattenOpsOfType(ModuleOp module, bool recursive,
+                                      StringSet<> &externModules) {
   auto *ctx = module.getContext();
   FlattenIOTypeConverter typeConverter;
 
@@ -353,13 +364,16 @@ static LogicalResult flattenOpsOfType(ModuleOp module, bool recursive) {
     DenseSet<Operation *> opVisited;
     patterns.add<OutputOpConversion>(typeConverter, ctx, &opVisited);
 
-    patterns.add<InstanceOpConversion>(typeConverter, ctx, &convertedInstances);
+    patterns.add<InstanceOpConversion>(typeConverter, ctx, &convertedInstances,
+                                       &externModules);
     target.addDynamicallyLegalOp<hw::OutputOp>(
         [&](auto op) { return opVisited.contains(op->getParentOp()); });
-    target.addDynamicallyLegalOp<hw::InstanceOp>([&](auto op) {
-      return llvm::none_of(op->getOperands(), [](auto operand) {
-        return isStructType(operand.getType());
-      });
+    target.addDynamicallyLegalOp<hw::InstanceOp>([&](hw::InstanceOp op) {
+      auto refName = op.getReferencedModuleName();
+      return externModules.contains(refName) ||
+             llvm::none_of(op->getOperands(), [](auto operand) {
+               return isStructType(operand.getType());
+             });
     });
 
     DenseMap<Operation *, ArrayAttr> oldArgNames, oldResNames, oldArgLocs,
@@ -405,7 +419,7 @@ static LogicalResult flattenOpsOfType(ModuleOp module, bool recursive) {
       IOInfo ioInfo;
       if (!ioInfoMap.contains(targetModule)) {
         // If an extern module, then not yet processed, populate the maps.
-        setioInfo(targetModule, ioInfo);
+        setIOInfo(targetModule, ioInfo);
         ioInfoMap[targetModule] = ioInfo;
         oldArgNames[targetModule] =
             ArrayAttr::get(module.getContext(), targetModule.getInputNames());
@@ -426,7 +440,6 @@ static LogicalResult flattenOpsOfType(ModuleOp module, bool recursive) {
           updateNameAttribute(instanceOp, "resultNames", ioInfo.resStructs,
                               oldResNames[targetModule]
                                   .template getAsValueRange<StringAttr>())));
-      instanceOp.dump();
     }
 
     // Break if we've only lowering a single level of structs.
@@ -441,28 +454,48 @@ static LogicalResult flattenOpsOfType(ModuleOp module, bool recursive) {
 //===----------------------------------------------------------------------===//
 
 template <typename... TOps>
-static bool flattenIO(ModuleOp module, bool recursive) {
-  return (failed(flattenOpsOfType<TOps>(module, recursive)) || ...);
+static bool flattenIO(ModuleOp module, bool recursive,
+                      StringSet<> &externModules) {
+  return (failed(flattenOpsOfType<TOps>(module, recursive, externModules)) ||
+          ...);
 }
 
 namespace {
 
 class FlattenIOPass : public circt::hw::FlattenIOBase<FlattenIOPass> {
 public:
+  FlattenIOPass(bool recursiveFlag, bool flattenExternFlag) {
+    recursive = recursiveFlag;
+    flattenExtern = flattenExternFlag;
+  }
+
   void runOnOperation() override {
     ModuleOp module = getOperation();
+    if (!flattenExtern) {
+      // Record the extern modules, donot flatten them.
+      for (auto m : module.getOps<hw::HWModuleExternOp>())
+        externModules.insert(m.getModuleName());
+      if (flattenIO<hw::HWModuleOp, hw::HWModuleGeneratedOp>(module, recursive,
+                                                             externModules))
+        signalPassFailure();
+      return;
+    }
+
     if (flattenIO<hw::HWModuleOp, hw::HWModuleExternOp,
-                  hw::HWModuleGeneratedOp>(module, recursive))
+                  hw::HWModuleGeneratedOp>(module, recursive, externModules))
       signalPassFailure();
   };
-};
 
+private:
+  StringSet<> externModules;
+};
 } // namespace
 
 //===----------------------------------------------------------------------===//
 // Pass initialization
 //===----------------------------------------------------------------------===//
 
-std::unique_ptr<Pass> circt::hw::createFlattenIOPass() {
-  return std::make_unique<FlattenIOPass>();
+std::unique_ptr<Pass> circt::hw::createFlattenIOPass(bool recursiveFlag,
+                                                     bool flattenExternFlag) {
+  return std::make_unique<FlattenIOPass>(true, flattenExternFlag);
 }
