@@ -87,9 +87,13 @@ MLIR_CAPI_EXPORTED MlirType firrtlTypeGetAsyncReset(MlirContext ctx);
 MLIR_CAPI_EXPORTED MlirType firrtlTypeGetAnalog(MlirContext ctx, int32_t width);
 MLIR_CAPI_EXPORTED MlirType firrtlTypeGetVector(MlirContext ctx,
                                                 MlirType element, size_t count);
+MLIR_CAPI_EXPORTED bool firrtlTypeIsAOpenBundle(MlirType type);
 MLIR_CAPI_EXPORTED MlirType firrtlTypeGetBundle(
     MlirContext ctx, size_t count, const FIRRTLBundleField *fields);
+MLIR_CAPI_EXPORTED unsigned
+firrtlTypeGetBundleFieldIndex(MlirType type, MlirStringRef fieldName);
 
+MLIR_CAPI_EXPORTED MlirType firrtlTypeGetRef(MlirType target, bool forceable);
 MLIR_CAPI_EXPORTED MlirType firrtlTypeGetAnyRef(MlirContext ctx);
 MLIR_CAPI_EXPORTED MlirType firrtlTypeGetInteger(MlirContext ctx);
 MLIR_CAPI_EXPORTED MlirType firrtlTypeGetDouble(MlirContext ctx);
