@@ -121,9 +121,9 @@ static cl::opt<InfoLocHandling> infoLocHandling(
     cl::init(InfoLocHandling::PreferInfo), cl::cat(mainCategory));
 
 static cl::opt<bool>
-    scalarizeTopModule("scalarize-top-module",
-                       cl::desc("Scalarize the ports of the top module"),
-                       cl::init(true), cl::cat(mainCategory));
+    scalarizePublicModules("scalarize-public-modules",
+                           cl::desc("Scalarize all public modules"),
+                           cl::init(true), cl::cat(mainCategory));
 
 static cl::opt<bool>
     scalarizeExtModules("scalarize-ext-modules",
@@ -339,7 +339,7 @@ static LogicalResult processBuffer(
     firrtl::FIRParserOptions options;
     options.infoLocatorHandling = infoLocHandling;
     options.numAnnotationFiles = numAnnotationFiles;
-    options.scalarizeTopModule = scalarizeTopModule;
+    options.scalarizePublicModules = scalarizePublicModules;
     options.scalarizeExtModules = scalarizeExtModules;
     module = importFIRFile(sourceMgr, &context, parserTimer, options);
   } else {

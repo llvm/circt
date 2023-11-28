@@ -24,6 +24,10 @@ with ir.Context() as ctx, ir.Location.unknown():
   # CHECK: appid1: #esi.appid<"foo"[4]>, foo, 4
   print(f"appid1: {appid1}, {appid1.name}, {appid1.index}")
 
+  appid_noidx = esi.AppIDAttr.get("noidx")
+  # CHECK: appid_noidx: #esi.appid<"noidx">, noidx, None
+  print(f"appid_noidx: {appid_noidx}, {appid_noidx.name}, {appid_noidx.index}")
+
   appid_path1 = esi.AppIDPathAttr.get(ir.FlatSymbolRefAttr.get("Foo"), [appid1])
   # CHECK: appid_path1: #esi.appid_path<@Foo[<"foo"[4]>]>, @Foo, 1, #esi.appid<"foo"[4]>
   print(f"appid_path1: {appid_path1}, {appid_path1.root}, "

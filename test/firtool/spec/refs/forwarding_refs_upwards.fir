@@ -1,5 +1,5 @@
 ; RUN: firtool %s
-; RUN: firtool %s -preserve-aggregate=all -scalarize-top-module=false
+; RUN: firtool %s -preserve-aggregate=all -scalarize-public-modules=false
 circuit Forward:
   ; SPEC EXAMPLE BEGIN
   extmodule Foo : ; XXX: module -> extmodule
