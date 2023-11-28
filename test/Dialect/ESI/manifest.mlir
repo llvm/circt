@@ -51,8 +51,10 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // HIER:        }
 
 // HW-LABEL:    hw.module @top
-// HW:            hw.instance "__manifest" @Cosim_Manifest<COMPRESSED_MANIFEST_SIZE: i32 = {{.+}}>(compressed_manifest: %{{.+}}: !hw.uarray<{{.+}}xi8>) -> ()
+// HW:            hw.instance "__manifest" @__ESIManifest() -> ()
 // HW-LABEL:    hw.module.extern @Cosim_Manifest<COMPRESSED_MANIFEST_SIZE: i32>(in %compressed_manifest : !hw.uarray<#hw.param.decl.ref<"COMPRESSED_MANIFEST_SIZE">xi8>) attributes {verilogName = "Cosim_Manifest"}
+// HW-LABEL:    hw.module @__ESIManifest()
+// HW:            hw.instance "__manifest" @Cosim_Manifest<COMPRESSED_MANIFEST_SIZE: i32 = {{.+}}>(compressed_manifest: %{{.+}}: !hw.uarray<{{.+}}xi8>) -> ()
 
 // CHECK:       {
 // CHECK-LABEL:   "api_version": 1,

@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt-c/Firtool/Firtool.h"
+#include "circt/Firtool/Firtool.h"
 
 #include "mlir/CAPI/IR.h"
 #include "mlir/CAPI/Pass.h"

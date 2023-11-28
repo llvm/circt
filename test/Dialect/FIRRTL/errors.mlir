@@ -21,27 +21,9 @@ firrtl.module @X(in %b : !firrtl.uint<32>, in %d : !firrtl.uint<16>, in %out : !
 
 // -----
 
-// expected-error @+1 {{'firrtl.circuit' op must contain one module that matches main name 'MyCircuit'}}
-firrtl.circuit "MyCircuit" {
-
-firrtl.module @X() {}
-
-}
-
-// -----
-
 
 // expected-error @+1 {{'firrtl.module' op expects parent op 'firrtl.circuit'}}
 firrtl.module @X() {}
-
-// -----
-
-// expected-error @+1 {{'firrtl.circuit' op must contain one module that matches main name 'Foo'}}
-firrtl.circuit "Foo" {
-
-firrtl.module @Bar() {}
-
-}
 
 // -----
 
@@ -986,13 +968,6 @@ firrtl.circuit "EnumNonExaustive" {
 
 // -----
 
-// expected-error @+1 {{'firrtl.circuit' op main module 'private_main' must be public}}
-firrtl.circuit "private_main" {
-  firrtl.module private @private_main() {}
-}
-
-// -----
-
 firrtl.circuit "InnerSymAttr" {
   firrtl.module @InnerSymAttr() {
     // expected-error @+1 {{cannot assign multiple symbol names to the field id:'2'}}
@@ -1812,14 +1787,6 @@ firrtl.circuit "NonEquivalenctStrictConnect" {
     // expected-error @below {{op failed to verify that operands must be structurally equivalent}}
     firrtl.strictconnect %out, %in: !firrtl.alias<foo, uint<2>>, !firrtl.uint<1>
   }
-}
-
-// -----
-// Classes cannot be the top module.
-
-// expected-error @below {{'firrtl.circuit' op must have a non-class top module}}
-firrtl.circuit "TopModuleIsClass" {
-  firrtl.class @TopModuleIsClass() {}
 }
 
 // -----

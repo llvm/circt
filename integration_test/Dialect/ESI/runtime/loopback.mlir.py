@@ -17,6 +17,9 @@ print(appid)
 assert appid.name == "loopback_inst"
 assert appid.idx == 0
 
+mysvc = loopback.ports[esi.AppID("mysvc_send")].channels["send"]
+mysvc.connect()
+
 recv = loopback.ports[esi.AppID("loopback_tohw")].channels["recv"]
 recv.connect()
 

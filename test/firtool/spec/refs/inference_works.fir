@@ -1,5 +1,5 @@
 ; RUN: firtool %s
-; RUN: firtool %s -preserve-aggregate=all -scalarize-top-module=false
+; RUN: firtool %s -preserve-aggregate=all -scalarize-public-modules=false
 ; NOT SPEC EXAMPLE
 FIRRTL version 3.0.0
 
@@ -16,4 +16,3 @@ circuit MinimumWidth :
     inst u of Uninferred
     connect u.x, x
     connect y, read(u.r)
-

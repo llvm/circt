@@ -465,30 +465,39 @@ LogicalResult CosimManifestLowering::matchAndRewrite(
   };
   rewriter.setInsertionPointToEnd(
       op->getParentOfType<mlir::ModuleOp>().getBody());
-  auto manifestModule = rewriter.create<HWModuleExternOp>(
+  auto cosimManifestExternModule = rewriter.create<HWModuleExternOp>(
       loc, rewriter.getStringAttr("Cosim_Manifest"), ports, "Cosim_Manifest",
       ArrayAttr::get(ctxt, params));
 
+  hw::ModulePortInfo portInfo({});
+  auto manifestMod = rewriter.create<hw::HWModuleOp>(
+      loc, rewriter.getStringAttr("__ESIManifest"), portInfo,
+      [&](OpBuilder &rewriter, const hw::HWModulePortAccessor &) {
+        // Assemble the manifest data into a constant.
+        SmallVector<Attribute> bytes;
+        for (char b : op.getCompressedManifest().getData())
+          bytes.push_back(rewriter.getI8IntegerAttr(b));
+        auto manifestConstant = rewriter.create<hw::AggregateConstantOp>(
+            loc, hw::UnpackedArrayType::get(rewriter.getI8Type(), bytes.size()),
+            rewriter.getArrayAttr(bytes));
+        auto manifestLogic =
+            rewriter.create<sv::LogicOp>(loc, manifestConstant.getType());
+        rewriter.create<sv::AssignOp>(loc, manifestLogic, manifestConstant);
+        auto manifest = rewriter.create<sv::ReadInOutOp>(loc, manifestLogic);
+
+        // Then instantiate the external module.
+        rewriter.create<hw::InstanceOp>(
+            loc, cosimManifestExternModule, "__manifest",
+            ArrayRef<Value>({manifest}),
+            rewriter.getArrayAttr({ParamDeclAttr::get(
+                "COMPRESSED_MANIFEST_SIZE",
+                rewriter.getI32IntegerAttr(bytes.size()))}));
+      });
+
   rewriter.setInsertionPoint(op);
+  rewriter.create<hw::InstanceOp>(loc, manifestMod, "__manifest",
+                                  ArrayRef<Value>({}));
 
-  // Assemble the manifest data into a constant.
-  SmallVector<Attribute> bytes;
-  for (char b : op.getCompressedManifest().getData())
-    bytes.push_back(rewriter.getI8IntegerAttr(b));
-  auto manifestConstant = rewriter.create<hw::AggregateConstantOp>(
-      loc, hw::UnpackedArrayType::get(rewriter.getI8Type(), bytes.size()),
-      rewriter.getArrayAttr(bytes));
-  auto manifestLogic =
-      rewriter.create<sv::LogicOp>(loc, manifestConstant.getType());
-  rewriter.create<sv::AssignOp>(loc, manifestLogic, manifestConstant);
-  auto manifest = rewriter.create<sv::ReadInOutOp>(loc, manifestLogic);
-
-  // Then instantiate the external module.
-  rewriter.create<hw::InstanceOp>(
-      loc, manifestModule, "__manifest", ArrayRef<Value>({manifest}),
-      rewriter.getArrayAttr(
-          {ParamDeclAttr::get("COMPRESSED_MANIFEST_SIZE",
-                              rewriter.getI32IntegerAttr(bytes.size()))}));
   rewriter.eraseOp(op);
   return success();
 }

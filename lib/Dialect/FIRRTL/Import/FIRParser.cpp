@@ -3592,7 +3592,7 @@ ParseResult FIRStmtParser::parseInstance() {
   auto annotations = getConstants().emptyArrayAttr;
   SmallVector<Attribute, 4> portAnnotations(modulePorts.size(), annotations);
 
-  StringAttr sym = {};
+  hw::InnerSymAttr sym = {};
   auto result = builder.create<InstanceOp>(
       referencedModule, id, NameKindEnum::InterestingName,
       annotations.getValue(), portAnnotations, false, sym);
@@ -4111,7 +4111,7 @@ private:
   ParseResult parseExtClass(CircuitOp circuit, unsigned indent);
   ParseResult parseExtModule(CircuitOp circuit, unsigned indent);
   ParseResult parseIntModule(CircuitOp circuit, unsigned indent);
-  ParseResult parseModule(CircuitOp circuit, unsigned indent);
+  ParseResult parseModule(CircuitOp circuit, bool isPublic, unsigned indent);
 
   ParseResult parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
                             SmallVectorImpl<SMLoc> &resultPortLocs,
@@ -4368,6 +4368,7 @@ ParseResult FIRCircuitParser::skipToModuleEnd(unsigned indent) {
     case FIRToken::kw_extmodule:
     case FIRToken::kw_intmodule:
     case FIRToken::kw_module:
+    case FIRToken::kw_public:
     case FIRToken::kw_layer:
     case FIRToken::kw_type:
       // All module declarations should have the same indentation
@@ -4497,6 +4498,7 @@ ParseResult FIRCircuitParser::parseClass(CircuitOp circuit, unsigned indent) {
   // build it
   auto builder = circuit.getBodyBuilder();
   auto classOp = builder.create<ClassOp>(info.getLoc(), name, portList);
+  classOp.setPrivate();
   deferredModules.emplace_back(
       DeferredModuleToParse{classOp, portLocs, getLexer().getCursor(), indent});
 
@@ -4569,13 +4571,20 @@ ParseResult FIRCircuitParser::parseExtModule(CircuitOp circuit,
     return failure();
 
   auto builder = circuit.getBodyBuilder();
-  auto convention = getConstants().options.scalarizeExtModules
-                        ? Convention::Scalarized
-                        : Convention::Internal;
+  auto isMainModule = (name == circuit.getName());
+  auto convention =
+      (isMainModule && getConstants().options.scalarizePublicModules) ||
+              getConstants().options.scalarizeExtModules
+          ? Convention::Scalarized
+          : Convention::Internal;
   auto conventionAttr = ConventionAttr::get(getContext(), convention);
   auto annotations = ArrayAttr::get(getContext(), {});
-  builder.create<FExtModuleOp>(info.getLoc(), name, conventionAttr, portList,
-                               defName, annotations, parameters, internalPaths);
+  auto extModuleOp = builder.create<FExtModuleOp>(
+      info.getLoc(), name, conventionAttr, portList, defName, annotations,
+      parameters, internalPaths);
+  auto visibility = isMainModule ? SymbolTable::Visibility::Public
+                                 : SymbolTable::Visibility::Private;
+  SymbolTable::setSymbolVisibility(extModuleOp, visibility);
   return success();
 }
 
@@ -4609,13 +4618,16 @@ ParseResult FIRCircuitParser::parseIntModule(CircuitOp circuit,
 
   ArrayAttr annotations = getConstants().emptyArrayAttr;
   auto builder = circuit.getBodyBuilder();
-  builder.create<FIntModuleOp>(info.getLoc(), name, portList, intName,
-                               annotations, parameters, internalPaths);
+  builder
+      .create<FIntModuleOp>(info.getLoc(), name, portList, intName, annotations,
+                            parameters, internalPaths)
+      .setPrivate();
   return success();
 }
 
 /// module ::= 'module' id ':' info? INDENT portlist simple_stmt_block DEDENT
-ParseResult FIRCircuitParser::parseModule(CircuitOp circuit, unsigned indent) {
+ParseResult FIRCircuitParser::parseModule(CircuitOp circuit, bool isPublic,
+                                          unsigned indent) {
   StringAttr name;
   SmallVector<PortInfo, 8> portList;
   SmallVector<SMLoc> portLocs;
@@ -4626,18 +4638,20 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit, unsigned indent) {
       info.parseOptionalInfo() || parsePortList(portList, portLocs, indent))
     return failure();
 
-  auto circuitName = circuit.getName();
-  auto isMainModule = (name == circuitName);
+  // The main module is implicitly public.
+  isPublic |= name == circuit.getName();
+
   ArrayAttr annotations = getConstants().emptyArrayAttr;
   auto convention = Convention::Internal;
-  if (isMainModule && getConstants().options.scalarizeTopModule)
+  if (isPublic && getConstants().options.scalarizePublicModules)
     convention = Convention::Scalarized;
   auto conventionAttr = ConventionAttr::get(getContext(), convention);
   auto builder = circuit.getBodyBuilder();
   auto moduleOp = builder.create<FModuleOp>(info.getLoc(), name, conventionAttr,
                                             portList, annotations);
-  auto visibility = isMainModule ? SymbolTable::Visibility::Public
-                                 : SymbolTable::Visibility::Private;
+
+  auto visibility = isPublic ? SymbolTable::Visibility::Public
+                             : SymbolTable::Visibility::Private;
   SymbolTable::setSymbolVisibility(moduleOp, visibility);
 
   // Parse the body of this module after all prototypes have been parsed. This
@@ -4671,7 +4685,14 @@ ParseResult FIRCircuitParser::parseToplevelDefinition(CircuitOp circuit,
       return failure();
     return parseLayer(circuit);
   case FIRToken::kw_module:
-    return parseModule(circuit, indent);
+    return parseModule(circuit, /*isPublic=*/false, indent);
+  case FIRToken::kw_public:
+    if (requireFeature({4, 0, 0}, "public modules"))
+      return failure();
+    consumeToken();
+    if (getToken().getKind() == FIRToken::kw_module)
+      return parseModule(circuit, /*isPublic=*/true, indent);
+    return emitError(getToken().getLoc(), "only modules may be public");
   case FIRToken::kw_type:
     return parseTypeDecl();
   default:
@@ -4935,6 +4956,7 @@ ParseResult FIRCircuitParser::parseCircuit(
     case FIRToken::kw_intmodule:
     case FIRToken::kw_layer:
     case FIRToken::kw_module:
+    case FIRToken::kw_public:
     case FIRToken::kw_type: {
       auto indent = getIndentation();
       if (!indent.has_value())
@@ -4970,30 +4992,6 @@ DoneParsing:
   if (failed(anyFailed))
     return failure();
 
-  auto main = circuit.getMainModule();
-  if (!main) {
-    // Give more specific error if no modules defined at all
-    if (circuit.getOps<FModuleLike>().empty()) {
-      return mlir::emitError(circuit.getLoc())
-             << "no modules found, circuit must contain one or more modules";
-    }
-    if (auto *notModule = circuit.lookupSymbol(circuit.getName())) {
-      return notModule->emitOpError()
-             << "cannot have the same name as the circuit";
-    }
-    return mlir::emitError(circuit.getLoc())
-           << "no main module found, circuit '" << circuit.getName()
-           << "' must contain a module named '" << circuit.getName() << "'";
-  }
-
-  // If the circuit has an entry point that is not an external module, set the
-  // visibility of all non-main modules to private.
-  if (auto mainMod = dyn_cast<FModuleOp>(*main)) {
-    for (auto mod : circuit.getOps<FModuleLike>()) {
-      if (mod != main)
-        SymbolTable::setSymbolVisibility(mod, SymbolTable::Visibility::Private);
-    }
-  }
   return success();
 }
 

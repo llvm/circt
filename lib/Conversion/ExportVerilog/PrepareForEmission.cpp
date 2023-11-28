@@ -21,6 +21,7 @@
 #include "ExportVerilogInternals.h"
 #include "circt/Conversion/ExportVerilog.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/Debug/DebugDialect.h"
 #include "circt/Dialect/LTL/LTLDialect.h"
 #include "circt/Dialect/Verif/VerifDialect.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -823,12 +824,16 @@ static LogicalResult legalizeHWModule(Block &block,
   // avoid processing same operations infinitely.
   DenseSet<Operation *> visitedAlwaysInlineOperations;
 
+  // Debug operations to be moved to the end of the block such that they don't
+  // create unnecessary spill wires.
+  SmallVector<Operation *> debugOpsToMoveToEnd;
+
   for (Block::iterator opIterator = block.begin(), e = block.end();
        opIterator != e;) {
     auto &op = *opIterator++;
 
     if (!isa<CombDialect, SVDialect, HWDialect, ltl::LTLDialect,
-             verif::VerifDialect>(op.getDialect())) {
+             verif::VerifDialect, debug::DebugDialect>(op.getDialect())) {
       auto d = op.emitError() << "dialect \"" << op.getDialect()->getNamespace()
                               << "\" not supported for direct Verilog emission";
       d.attachNote() << "ExportVerilog cannot emit this operation; it needs "
@@ -839,6 +844,12 @@ static LogicalResult legalizeHWModule(Block &block,
     // Do not reorder LTL expressions, which are always emitted inline.
     if (isa<ltl::LTLDialect>(op.getDialect()))
       continue;
+
+    // Move debug operations to the end of the block.
+    if (isa<debug::DebugDialect>(op.getDialect())) {
+      debugOpsToMoveToEnd.push_back(&op);
+      continue;
+    }
 
     // Name legalization should have happened in a different pass for these sv
     // elements and we don't want to change their name through re-legalization
@@ -1092,6 +1103,15 @@ static LogicalResult legalizeHWModule(Block &block,
       (void)reuseExistingInOut(&op, options);
   }
 
+  // Move debug operations to the end of the block.
+  auto debugBuilder = OpBuilder::atBlockEnd(&block);
+  if (!block.empty() && block.back().mightHaveTrait<OpTrait::IsTerminator>())
+    debugBuilder.setInsertionPoint(&block.back());
+  for (auto *op : debugOpsToMoveToEnd) {
+    op->remove();
+    debugBuilder.insert(op);
+  }
+
   if (isProceduralRegion) {
     // If there is no operation, there is nothing to do.
     if (block.empty())
@@ -1126,8 +1146,9 @@ static LogicalResult legalizeHWModule(Block &block,
   SmallPtrSet<Operation *, 32> seenOperations;
 
   for (auto &op : llvm::make_early_inc_range(block)) {
-    // Do not reorder LTL expressions, which are always emitted inline.
-    if (isa<ltl::LTLDialect>(op.getDialect()))
+    // Do not reorder LTL expressions, which are always emitted inline. Ignore
+    // debug operations which are not emitted as Verilog.
+    if (isa<ltl::LTLDialect, debug::DebugDialect>(op.getDialect()))
       continue;
 
     // Check the users of any expressions to see if they are

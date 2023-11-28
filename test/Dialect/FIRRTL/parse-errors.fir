@@ -297,19 +297,6 @@ circuit circuit:
 
 ;// -----
 
-circuit Issue2971: ; expected-error {{no main module}}
-  module NotIssue2971:
-    input in: UInt<1>
-    output out: UInt<1>
-    out <= in
-
-;// -----
-
-circuit NoModules: ; expected-error {{no modules found}}
-   ; nothing
-
-;// -----
-
 circuit NonAscii:
   module NonAscii:
     input clk: Clock
@@ -819,9 +806,10 @@ circuit UnsupportedLayerConvention:
 
 FIRRTL version 4.0.0
 circuit LayerAndCircuitShareName:
-  ; expected-error @below {{cannot have the same name as the circuit}}
+  ; expected-note @below {{see existing symbol definition here}}
   layer LayerAndCircuitShareName, bind :
 
+  ; expected-error @below {{redefinition of symbol named 'LayerAndCircuitShareName'}}
   module LayerAndCircuitShareName:
 
 ;// -----
@@ -1140,3 +1128,16 @@ circuit DoubleRadix:
     output d : Double
     ; expected-error @below {{expected floating point in Double expression}}
     propassign d, Double(0hABC)
+
+;// -----
+FIRRTL version 3.9.0
+circuit PublicModuleUnsupported:
+  ; expected-error @below {{public modules are a FIRRTL 4.0.0+ feature}}
+  public module PublicModuleUnsupported:
+
+;// -----
+FIRRTL version 4.0.0
+circuit PublicNonModule:
+  ; expected-error @below {{only modules may be public}}
+  public extmodule Foo:
+  module PublicNonModule:

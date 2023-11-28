@@ -1,5 +1,5 @@
 ; RUN: firtool %s
-; RUN: firtool %s -preserve-aggregate=all -scalarize-top-module=false
+; RUN: firtool %s -preserve-aggregate=all -scalarize-public-modules=false
 circuit NoSubAccessesWithProbes :
   extmodule Ext :
     output x : {a : Probe<UInt<2>[2]>, b : UInt<2>}[3]

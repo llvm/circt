@@ -46,7 +46,7 @@ struct FIRParserOptions {
   /// This, along with numOMIRFiles provides structure to the buffers in the
   /// source manager.
   unsigned numAnnotationFiles;
-  bool scalarizeTopModule = false;
+  bool scalarizePublicModules = false;
   bool scalarizeExtModules = false;
 };
 

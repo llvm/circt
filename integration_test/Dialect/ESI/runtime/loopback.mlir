@@ -14,17 +14,25 @@ esi.service.decl @HostComms {
   esi.service.to_client @Recv : !recvI8
 }
 
+esi.service.decl @MyService {
+  esi.service.to_client @Send : !sendI8
+}
+
 hw.module @Loopback (in %clk: !seq.clock) {
   %dataInBundle = esi.service.req.to_client <@HostComms::@Recv> (#esi.appid<"loopback_tohw">) {esi.appid=#esi.appid<"loopback_tohw">} : !recvI8
   %dataOut = esi.bundle.unpack from %dataInBundle : !recvI8
   %dataOutBundle = esi.bundle.pack %dataOut : !sendI8
   esi.service.req.to_server %dataOutBundle -> <@HostComms::@Send> (#esi.appid<"loopback_fromhw">) : !sendI8
+
+  %send = esi.service.req.to_client <@MyService::@Send> (#esi.appid<"mysvc_send">) : !sendI8
+  %send_ch = esi.bundle.unpack from %send : !sendI8
 }
 
 esi.manifest.sym @Loopback name "LoopbackIP" version "v0.0" summary "IP which simply echos bytes" {foo=1}
 
 hw.module @top(in %clk: !seq.clock, in %rst: i1) {
   esi.service.instance #esi.appid<"cosim"> svc @HostComms impl as "cosim" (%clk, %rst) : (!seq.clock, i1) -> ()
+  esi.service.instance #esi.appid<"cosim_default"> impl as "cosim" (%clk, %rst) : (!seq.clock, i1) -> ()
   hw.instance "m1" @Loopback (clk: %clk: !seq.clock) -> () {esi.appid=#esi.appid<"loopback_inst"[0]>}
   hw.instance "m2" @Loopback (clk: %clk: !seq.clock) -> () {esi.appid=#esi.appid<"loopback_inst"[1]>}
 }

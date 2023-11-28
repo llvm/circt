@@ -17,6 +17,7 @@ add_circt_translation_library(CIRCTExportVerilog
 
   LINK_LIBS PUBLIC
   CIRCTComb
+  CIRCTDebug
   CIRCTHW
   CIRCTLTL
   CIRCTOM
