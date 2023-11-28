@@ -2,18 +2,13 @@
 # RUN: %PYTHON% %s %t 2>&1
 # RUN: ls %t/hw/top.sv
 # RUN: ls %t/hw/Main.sv
-# RUN: ls %t/hw/services.json
 # RUN: ls %t/hw/ESILoopback.tcl
 # RUN: ls %t/hw/filelist.f
 # RUN: ls %t/hw/xsim.tcl
 # RUN: ls %t/hw/xrt_package.tcl
-# RUN: ls %t/runtime/ESILoopback/common.py
-# RUN: ls %t/runtime/ESILoopback/__init__.py
-# RUN: ls %t/runtime/ESILoopback/xrt.py
 # RUN: ls %t/Makefile.xrt
 # RUN: ls %t/xrt.ini
 # RUN: ls %t/xsim.tcl
-# RUN: ls %t/runtime/ESILoopback/EsiXrtPython.cpp
 
 # RUN: FileCheck %s --input-file %t/hw/top.sv --check-prefix=TOP
 
