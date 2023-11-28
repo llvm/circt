@@ -14,10 +14,7 @@ set(PYCDE_INTEGRATION_TEST_DEPENDS
   esi-collateral
   mlir-opt
   hlstool
-  CIRCTPythonModules
-  ESIRuntime
-  ESIPythonRuntime
-)
+  CIRCTPythonModules)
 
 if (TARGET esi-collateral)
   list(APPEND PYCDE_INTEGRATION_TEST_DEPENDS
