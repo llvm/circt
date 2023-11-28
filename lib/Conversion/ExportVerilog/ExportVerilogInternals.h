@@ -9,6 +9,7 @@
 #ifndef CONVERSION_EXPORTVERILOG_EXPORTVERILOGINTERNAL_H
 #define CONVERSION_EXPORTVERILOG_EXPORTVERILOGINTERNAL_H
 
+#include "circt/Analysis/DebugAnalysis.h"
 #include "circt/Dialect/Comb/CombVisitors.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWSymCache.h"
@@ -369,10 +370,14 @@ struct SharedEmitterState {
   /// Tracks the referenceable files through their symbol.
   FileMapping fileMapping;
 
+  /// Information about debug-only ops.
+  const DebugAnalysis &debugAnalysis;
+
   explicit SharedEmitterState(ModuleOp designOp, const LoweringOptions &options,
-                              GlobalNameTable globalNames)
+                              GlobalNameTable globalNames,
+                              const DebugAnalysis &debugAnalysis)
       : designOp(designOp), options(options),
-        globalNames(std::move(globalNames)) {}
+        globalNames(std::move(globalNames)), debugAnalysis(debugAnalysis) {}
   void gatherFiles(bool separateModules);
 
   using EmissionList = std::vector<StringOrOpToEmit>;
@@ -437,9 +442,9 @@ LogicalResult lowerHWInstanceChoices(mlir::ModuleOp module);
 
 /// For each module we emit, do a prepass over the structure, pre-lowering and
 /// otherwise rewriting operations we don't want to emit.
-LogicalResult prepareHWModule(Block &block, const LoweringOptions &options);
 LogicalResult prepareHWModule(hw::HWModuleOp module,
-                              const LoweringOptions &options);
+                              const LoweringOptions &options,
+                              DebugAnalysis &debugAnalysis);
 
 void pruneZeroValuedLogic(hw::HWModuleOp module);
 

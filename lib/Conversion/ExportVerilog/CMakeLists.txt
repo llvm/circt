@@ -19,6 +19,7 @@ add_circt_translation_library(CIRCTExportVerilog
   LINK_LIBS PUBLIC
   CIRCTComb
   CIRCTDebug
+  CIRCTDebugAnalysis
   CIRCTEmit
   CIRCTHW
   CIRCTLTL
