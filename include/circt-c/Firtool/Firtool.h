@@ -8,8 +8,6 @@
 #include "mlir-c/Pass.h"
 #include "mlir-c/Support.h"
 
-#include "circt/Firtool/Firtool.h"
-
 #ifdef __cplusplus
 extern "C" {
 #endif
