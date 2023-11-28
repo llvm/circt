@@ -657,7 +657,7 @@ public:
   void visitStmt(WhenOp whenOp);
   void visitStmt(ConnectOp connectOp);
   void visitStmt(StrictConnectOp connectOp);
-  void visitStmt(GroupOp groupOp);
+  void visitStmt(LayerBlockOp layerBlockOp);
 
   bool run(FModuleLike op);
   LogicalResult checkInitialization();
@@ -711,8 +711,8 @@ void ModuleVisitor::visitStmt(WhenOp whenOp) {
   processWhenOp(whenOp, /*outerCondition=*/{});
 }
 
-void ModuleVisitor::visitStmt(GroupOp groupOp) {
-  for (auto &op : llvm::make_early_inc_range(*groupOp.getBody())) {
+void ModuleVisitor::visitStmt(LayerBlockOp layerBlockOp) {
+  for (auto &op : llvm::make_early_inc_range(*layerBlockOp.getBody())) {
     dispatchVisitor(&op);
   }
 }

@@ -183,11 +183,11 @@ std::unique_ptr<mlir::Pass> createFinalizeIRPass();
 
 std::unique_ptr<mlir::Pass> createLowerClassesPass();
 
-std::unique_ptr<mlir::Pass> createLowerGroupsPass();
+std::unique_ptr<mlir::Pass> createLowerLayersPass();
 
-std::unique_ptr<mlir::Pass> createGroupMergePass();
+std::unique_ptr<mlir::Pass> createLayerMergePass();
 
-std::unique_ptr<mlir::Pass> createGroupSinkPass();
+std::unique_ptr<mlir::Pass> createLayerSinkPass();
 
 std::unique_ptr<mlir::Pass> createMaterializeDebugInfoPass();
 

@@ -70,11 +70,11 @@ firrtl.circuit "assert_reset2" {
 // -----
 
 firrtl.circuit "assert_reset3" {
-firrtl.declgroup @GroupFoo bind {}
+firrtl.layer @GroupFoo bind {}
   // expected-note @below {{reset signal defined here}}
   firrtl.module @assert_reset3(in %en: !firrtl.uint<1>, in %pred: !firrtl.uint<1>, in %reset: !firrtl.reset, in %reset_async: !firrtl.asyncreset, in %clock: !firrtl.clock) {
     %0 = firrtl.asUInt %reset : (!firrtl.reset) -> !firrtl.uint<1>
-    firrtl.group @GroupFoo {
+    firrtl.layerblock @GroupFoo {
       // expected-error @below {{op is guaranteed to fail simulation, as the predicate is a reset signal}}
       firrtl.int.verif.assert %0 : !firrtl.uint<1>
     }

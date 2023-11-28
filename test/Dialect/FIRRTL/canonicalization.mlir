@@ -2845,6 +2845,16 @@ firrtl.module @CrashAllUnusedPorts() {
   firrtl.strictconnect %26, %c0_ui1 : !firrtl.uint<1>
 }
 
+// CHECK-LABEL: firrtl.module @Issue6237
+// CHECK-NEXT:    %c0_ui0 = firrtl.constant 0 : !firrtl.uint<0>
+// CHECK-NEXT:    firrtl.strictconnect %out, %c0_ui0 : !firrtl.uint<0>
+firrtl.module @Issue6237(out %out: !firrtl.uint<0>) {
+  %foo, %bar = firrtl.mem  Undefined  {depth = 3 : i64, groupID = 4 : ui32, name = "whatever", portNames = ["MPORT_1", "MPORT_5"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>, !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data flip: uint<0>>
+  %a = firrtl.subfield %bar[data] : !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data flip: uint<0>>
+  firrtl.strictconnect %out, %a : !firrtl.uint<0>
+}
+
+
 // CHECK-LABEL: firrtl.module @CrashRegResetWithOneReset
 firrtl.module @CrashRegResetWithOneReset(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %io_d: !firrtl.uint<1>, out %io_q: !firrtl.uint<1>, in %io_en: !firrtl.uint<1>) {
   %c1_asyncreset = firrtl.specialconstant 1 : !firrtl.asyncreset

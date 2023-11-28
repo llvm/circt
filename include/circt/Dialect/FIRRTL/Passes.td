@@ -737,35 +737,34 @@ def LowerClasses : Pass<"firrtl-lower-classes", "firrtl::CircuitOp"> {
   let dependentDialects = ["om::OMDialect"];
 }
 
-def LowerGroups : Pass<"firrtl-lower-groups", "firrtl::CircuitOp"> {
-  let summary = "Lower optional groups to instances";
+def LowerLayers : Pass<"firrtl-lower-layers", "firrtl::CircuitOp"> {
+  let summary = "Lower layers and layer blocks to instances";
   let description = [{
-    This pass converts FIRRTL optional groups to new modules and instantiations.
-    Referenced SSA values captured by a group are converted to ports of the
-    created module.
+    This pass lowers FIRRTL layers as defined by their convention.  After this
+    pass, all layer blocks and layers are removed.
   }];
-  let constructor = "circt::firrtl::createLowerGroupsPass()";
+  let constructor = "circt::firrtl::createLowerLayersPass()";
   let dependentDialects = ["sv::SVDialect"];
 }
 
-def GroupMerge : Pass<"firrtl-group-merge", "firrtl::FModuleOp"> {
-  let summary = "Merge group definitions";
+def LayerMerge : Pass<"firrtl-layer-merge", "firrtl::FModuleOp"> {
+  let summary = "Merge layer blocks";
   let description = [{
-    Combine all group definitions in a module which reference the same group
-    declaration.
+    Combine all layer blocks in a module which reference the same layer
+    definition.
   }];
-  let constructor = "::circt::firrtl::createGroupMergePass()";
+  let constructor = "::circt::firrtl::createLayerMergePass()";
   let statistics = [
-    Statistic<"numMerged", "num-merged", "Number of groups merged">,
+    Statistic<"numMerged", "num-merged", "Number of layers merged">,
   ];
 }
 
-def GroupSink : Pass<"firrtl-group-sink", "firrtl::FModuleOp"> {
-  let summary = "Sink operations into FIRRTL optional groups";
+def LayerSink : Pass<"firrtl-layer-sink", "firrtl::FModuleOp"> {
+  let summary = "Sink operations into layer blocks";
   let description = [{
 
   }];
-  let constructor = "::circt::firrtl::createGroupSinkPass()";
+  let constructor = "::circt::firrtl::createLayerSinkPass()";
   let statistics = [
     Statistic<"numSunk", "num-sunk", "Number of operations sunk">,
   ];
