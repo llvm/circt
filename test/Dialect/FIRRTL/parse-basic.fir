@@ -1616,60 +1616,60 @@ circuit Top:
 
 ;// -----
 
-; CHECK-LABEL: firrtl.circuit "Groups"
-FIRRTL version 3.2.0
-circuit Groups:
-  declgroup A, bind:
-    declgroup B, bind:
-      declgroup C, bind:
-      declgroup D, bind:
-        declgroup E, bind:
-    declgroup F, bind:
-    ; CHECK-NEXT: firrtl.declgroup @A bind {
-    ; CHECK-NEXT:   firrtl.declgroup @B bind {
-    ; CHECK-NEXT:     firrtl.declgroup @C bind {
+; CHECK-LABEL: firrtl.circuit "Layers"
+FIRRTL version 4.0.0
+circuit Layers:
+  layer A, bind:
+    layer B, bind:
+      layer C, bind:
+      layer D, bind:
+        layer E, bind:
+    layer F, bind:
+    ; CHECK-NEXT: firrtl.layer @A bind {
+    ; CHECK-NEXT:   firrtl.layer @B bind {
+    ; CHECK-NEXT:     firrtl.layer @C bind {
     ; CHECK-NEXT:     }
-    ; CHECK-NEXT:     firrtl.declgroup @D bind {
-    ; CHECK-NEXT:       firrtl.declgroup @E bind {
+    ; CHECK-NEXT:     firrtl.layer @D bind {
+    ; CHECK-NEXT:       firrtl.layer @E bind {
     ; CHECK-NEXT:       }
     ; CHECK-NEXT:     }
     ; CHECK-NEXT:   }
-    ; CHECK-NEXT:   firrtl.declgroup @F bind {
+    ; CHECK-NEXT:   firrtl.layer @F bind {
     ; CHECK-NEXT:   }
     ; CHECK-NEXT: }
 
-  ; CHECK: firrtl.module @Groups
-  module Groups:
+  ; CHECK: firrtl.module @Layers
+  module Layers:
     input a: UInt<1>
 
-    group A:
+    layerblock A:
       node A_a = a
-      group B:
+      layerblock B:
         node B_a = a
-        group C:
+        layerblock C:
           node C_a = a
-        group D:
+        layerblock D:
           node D_a = a
-          group E:
+          layerblock E:
             node E_a = a
-      group F:
+      layerblock F:
         node F_a = a
 
-    ; CHECK-NEXT: firrtl.group @A {
+    ; CHECK-NEXT: firrtl.layerblock @A {
     ; CHECK-NEXT:   %A_a = firrtl.node{{.*}} %a
-    ; CHECK-NEXT:   firrtl.group @A::@B {
+    ; CHECK-NEXT:   firrtl.layerblock @A::@B {
     ; CHECK-NEXT:     %B_a = firrtl.node{{.*}} %a
-    ; CHECK-NEXT:     firrtl.group @A::@B::@C {
+    ; CHECK-NEXT:     firrtl.layerblock @A::@B::@C {
     ; CHECK-NEXT:       %C_a = firrtl.node{{.*}} %a
     ; CHECK-NEXT:     }
-    ; CHECK-NEXT:     firrtl.group @A::@B::@D {
+    ; CHECK-NEXT:     firrtl.layerblock @A::@B::@D {
     ; CHECK-NEXT:       %D_a = firrtl.node{{.*}} %a
-    ; CHECK-NEXT:       firrtl.group @A::@B::@D::@E {
+    ; CHECK-NEXT:       firrtl.layerblock @A::@B::@D::@E {
     ; CHECK-NEXT:         %E_a = firrtl.node{{.*}} %a
     ; CHECK-NEXT:       }
     ; CHECK-NEXT:     }
     ; CHECK-NEXT:   }
-    ; CHECK-NEXT:   firrtl.group @A::@F {
+    ; CHECK-NEXT:   firrtl.layerblock @A::@F {
     ; CHECK-NEXT:     %F_a = firrtl.node{{.*}} %a
     ; CHECK-NEXT:   }
     ; CHECK-NEXT: }

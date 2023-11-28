@@ -1,4 +1,4 @@
-//===- GroupSink.cpp - Sink ops into FIRRTL optional groups ---------------===//
+//===- LayerSink.cpp - Sink ops into layer blocks -------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file sinks operations in FIRRTL optional groups.
+// This file sinks operations into layer blocks.
 //
 //===----------------------------------------------------------------------===//
 
@@ -17,26 +17,26 @@
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "mlir/Transforms/ControlFlowSinkUtils.h"
 
-#define DEBUG_TYPE "firrtl-group-sink"
+#define DEBUG_TYPE "firrtl-layer-sink"
 
 using namespace circt;
 using namespace firrtl;
 
 namespace {
 /// A control-flow sink pass.
-struct GroupSink : public GroupSinkBase<GroupSink> {
+struct LayerSink : public LayerSinkBase<LayerSink> {
   void runOnOperation() override;
 };
 } // end anonymous namespace
 
-void GroupSink::runOnOperation() {
+void LayerSink::runOnOperation() {
   LLVM_DEBUG(
-      llvm::dbgs() << "==----- Running GroupSink "
+      llvm::dbgs() << "==----- Running LayerSink "
                       "---------------------------------------------------===\n"
                    << "Module: '" << getOperation().getName() << "'\n";);
   auto &domInfo = getAnalysis<mlir::DominanceInfo>();
-  getOperation()->walk([&](GroupOp group) {
-    SmallVector<Region *> regionsToSink({&group.getRegion()});
+  getOperation()->walk([&](LayerBlockOp layerBlock) {
+    SmallVector<Region *> regionsToSink({&layerBlock.getRegion()});
     numSunk = controlFlowSink(
         regionsToSink, domInfo,
         [](Operation *op, Region *) { return !hasDontTouch(op); },
@@ -49,6 +49,6 @@ void GroupSink::runOnOperation() {
   });
 }
 
-std::unique_ptr<mlir::Pass> circt::firrtl::createGroupSinkPass() {
-  return std::make_unique<GroupSink>();
+std::unique_ptr<mlir::Pass> circt::firrtl::createLayerSinkPass() {
+  return std::make_unique<LayerSink>();
 }

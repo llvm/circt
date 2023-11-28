@@ -1,11 +1,11 @@
-//===- LowerGroups.cpp - Lower Optiona Groups to Instances ------*- C++ -*-===//
+//===- LowerLayers.cpp - Lower Layers by Convention -------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //===----------------------------------------------------------------------===//
 //
-// This pass lowers FIRRTL optional groups to modules and instances.
+// This pass lowers FIRRTL layers based on their specified convention.
 //
 //===----------------------------------------------------------------------===//
 
@@ -18,12 +18,12 @@
 #include "llvm/Support/Mutex.h"
 #include "llvm/Support/RWMutex.h"
 
-#define DEBUG_TYPE "firrtl-lower-groups"
+#define DEBUG_TYPE "firrtl-lower-layers"
 
 using namespace circt;
 using namespace firrtl;
 
-class LowerGroupsPass : public LowerGroupsBase<LowerGroupsPass> {
+class LowerLayersPass : public LowerLayersBase<LowerLayersPass> {
   /// Safely build a new module with a given namehint.  This handles geting a
   /// lock to modify the top-level circuit.
   FModuleOp buildNewModule(OpBuilder &builder, Location location,
@@ -38,15 +38,15 @@ class LowerGroupsPass : public LowerGroupsBase<LowerGroupsPass> {
   /// Indicates exclusive access to modify the circuitNamespace and the circuit.
   llvm::sys::SmartMutex<true> *circuitMutex;
 
-  /// A map of group definition to module name that should be created for it.
-  DenseMap<GroupOp, StringRef> moduleNames;
+  /// A map of layer blocks to module name that should be created for it.
+  DenseMap<LayerBlockOp, StringRef> moduleNames;
 };
 
 /// Multi-process safe function to build a module in the circuit and return it.
 /// The name provided is only a namehint for the module---a unique name will be
 /// generated if there are conflicts with the namehint in the circuit-level
 /// namespace.
-FModuleOp LowerGroupsPass::buildNewModule(OpBuilder &builder, Location location,
+FModuleOp LowerLayersPass::buildNewModule(OpBuilder &builder, Location location,
                                           Twine namehint,
                                           SmallVectorImpl<PortInfo> &ports) {
   llvm::sys::SmartScopedLock<true> instrumentationLock(*circuitMutex);
@@ -58,11 +58,11 @@ FModuleOp LowerGroupsPass::buildNewModule(OpBuilder &builder, Location location,
   return newModule;
 }
 
-/// Process amodule to remove any groups it has.
-void LowerGroupsPass::runOnModule(FModuleOp moduleOp) {
+/// Process a module to remove any layer blocks it has.
+void LowerLayersPass::runOnModule(FModuleOp moduleOp) {
   LLVM_DEBUG({
     llvm::dbgs() << "Module: " << moduleOp.getModuleName() << "\n";
-    llvm::dbgs() << "  Examining Groups:\n";
+    llvm::dbgs() << "  Examining Layer Blocks:\n";
   });
 
   CircuitOp circuitOp = moduleOp->getParentOfType<CircuitOp>();
@@ -73,34 +73,35 @@ void LowerGroupsPass::runOnModule(FModuleOp moduleOp) {
   // dereferencing (avoiding a symbol table).
   DenseMap<InstanceOp, FModuleOp> createdInstances;
 
-  // Post-order traversal that expands a group into its parent. For each group
-  // found do the following:
+  // Post-order traversal that expands a layer block into its parent. For each
+  // layer block found do the following:
   //
   // 1. Create and connect one ref-type output port for each value defined in
-  //    this group that drives an instance marked lowerToBind and move this
-  //    instance outside the group.
-  // 2. Create one input port for each value captured by this group.
-  // 3. Create a new module for this group and move the (mutated) body of this
-  //    group to the new module.
-  // 4. Instantiate the new module outside the group and hook it up.
-  // 5. Erase the group.
+  //    this layer block that drives an instance marked lowerToBind and move
+  //    this instance outside the layer block.
+  // 2. Create one input port for each value captured by this layer block.
+  // 3. Create a new module for this layer block and move the (mutated) body of
+  //    this layer block to the new module.
+  // 4. Instantiate the new module outside the layer block and hook it up.
+  // 5. Erase the layer block.
   moduleOp.walk<mlir::WalkOrder::PostOrder>([&](Operation *op) {
-    auto group = dyn_cast<GroupOp>(op);
-    if (!group)
+    auto layerBlock = dyn_cast<LayerBlockOp>(op);
+    if (!layerBlock)
       return WalkResult::advance();
 
-    // Compute the expanded group name.  For group @A::@B::@C, this is "A_B_C".
-    SmallString<32> groupName(group.getGroupName().getRootReference());
-    for (auto ref : group.getGroupName().getNestedReferences()) {
-      groupName.append("_");
-      groupName.append(ref.getValue());
+    // Compute the expanded layer name.  For layer @A::@B::@C, this is "A_B_C".
+    SmallString<32> layerName(layerBlock.getLayerName().getRootReference());
+    for (auto ref : layerBlock.getLayerName().getNestedReferences()) {
+      layerName.append("_");
+      layerName.append(ref.getValue());
     }
-    LLVM_DEBUG(llvm::dbgs() << "    - Group: " << groupName << "\n");
+    LLVM_DEBUG(llvm::dbgs() << "    - Layer: " << layerName << "\n");
 
-    Block *body = group.getBody(0);
+    Block *body = layerBlock.getBody(0);
     OpBuilder builder(moduleOp);
 
-    // Ports that need to be created for the module derived from this group.
+    // Ports that need to be created for the module derived from this layer
+    // block.
     SmallVector<PortInfo> ports;
 
     // Connectsion that need to be made to the instance of the derived module.
@@ -117,8 +118,8 @@ void LowerGroupsPass::runOnModule(FModuleOp moduleOp) {
       ports.push_back({builder.getStringAttr("_" + operandName.first),
                        operand.getType(), Direction::In, /*sym=*/{},
                        /*loc=*/loc});
-      // Update the group's body with arguments as we will swap this body into
-      // the module when we create it.
+      // Update the layer block's body with arguments as we will swap this body
+      // into the module when we create it.
       body->addArgument(operand.getType(), loc);
       operand.replaceUsesWithIf(body->getArgument(portNum),
                                 [&](OpOperand &operand) {
@@ -128,9 +129,9 @@ void LowerGroupsPass::runOnModule(FModuleOp moduleOp) {
       connectValues.push_back(operand);
     };
 
-    // Set the location intelligently.  Use the location of the capture if
-    // this is a port created for forwarding from a parent group to a nested
-    // group.  Otherwise, use unknown.
+    // Set the location intelligently.  Use the location of the capture if this
+    // is a port created for forwarding from a parent layer block to a nested
+    // layer block.  Otherwise, use unknown.
     auto getPortLoc = [&](Value port) -> Location {
       Location loc = UnknownLoc::get(port.getContext());
       if (auto *destOp = port.getDefiningOp())
@@ -167,59 +168,60 @@ void LowerGroupsPass::runOnModule(FModuleOp moduleOp) {
     };
 
     for (auto &op : llvm::make_early_inc_range(*body)) {
-      // Handle instance ops that were created from nested groups.  These ops
-      // need to be moved outside the group to avoid nested binds which are
-      // illegal in the SystemVerilog specification (and checked by FIRRTL
-      // verification).
+      // Handle instance ops that were created from nested layer blocks.  These
+      // ops need to be moved outside the layer block to avoid nested binds.
+      // Nested binds are illegal in the SystemVerilog specification (and
+      // checked by FIRRTL verification).
       //
-      // For each value defined in this group which drives a port of one of
-      // these instances, create an output reference type port on the
+      // For each value defined in this layer block which drives a port of one
+      // of these instances, create an output reference type port on the
       // to-be-created module and drive it with the value.  Move the instance
-      // outside the group. We will hook it up later once we replace the group
-      // with an instance.
+      // outside the layer block.  We will hook it up later once we replace the
+      // layer block with an instance.
       if (auto instOp = dyn_cast<InstanceOp>(op)) {
         // Ignore any instance which this pass did not create from a nested
-        // group. Instances which are not marked lowerToBind do not need to be
-        // split out.
+        // layer block. Instances which are not marked lowerToBind do not need
+        // to be split out.
         if (!createdInstances.contains(instOp))
           continue;
         LLVM_DEBUG({
-          llvm::dbgs() << "      Found instance created from nested group:\n"
-                       << "        module: " << instOp.getModuleName() << "\n"
-                       << "        instance: " << instOp.getName() << "\n";
+          llvm::dbgs()
+              << "      Found instance created from nested layer block:\n"
+              << "        module: " << instOp.getModuleName() << "\n"
+              << "        instance: " << instOp.getName() << "\n";
         });
-        instOp->moveBefore(group);
+        instOp->moveBefore(layerBlock);
         continue;
       }
 
       if (auto connect = dyn_cast<FConnectLike>(op)) {
-        auto srcInGroup = connect.getSrc().getParentBlock() == body;
-        auto destInGroup = connect.getDest().getParentBlock() == body;
-        if (!srcInGroup && !destInGroup) {
-          connect->moveBefore(group);
+        auto srcInLayerBlock = connect.getSrc().getParentBlock() == body;
+        auto destInLayerBlock = connect.getDest().getParentBlock() == body;
+        if (!srcInLayerBlock && !destInLayerBlock) {
+          connect->moveBefore(layerBlock);
           continue;
         }
         // Create an input port.
-        if (!srcInGroup) {
+        if (!srcInLayerBlock) {
           createInputPort(connect.getSrc(), op.getLoc());
           continue;
         }
         // Create an output port.
-        if (!destInGroup) {
+        if (!destInLayerBlock) {
           createOutputPort(connect.getDest(), connect.getSrc());
           connect.erase();
           continue;
         }
-        // Source and destination in group.  Nothing to do.
+        // Source and destination in layer block.  Nothing to do.
         continue;
       }
 
       // Pattern match the following structure.  Move the ref.resolve outside
-      // the group.  The strictconnect will be moved outside in the next loop
-      // iteration:
+      // the layer block.  The strictconnect will be moved outside in the next
+      // loop iteration:
       //     %0 = ...
       //     %1 = ...
-      //     firrtl.group {
+      //     firrtl.layerblock {
       //       %2 = ref.resolve %0
       //       firrtl.strictconnect %1, %2
       //     }
@@ -228,7 +230,7 @@ void LowerGroupsPass::runOnModule(FModuleOp moduleOp) {
           if (auto connect = dyn_cast<StrictConnectOp>(
                   *refResolve.getResult().getUsers().begin()))
             if (connect.getDest().getParentBlock() != body) {
-              refResolve->moveBefore(group);
+              refResolve->moveBefore(layerBlock);
               continue;
             }
 
@@ -239,14 +241,15 @@ void LowerGroupsPass::runOnModule(FModuleOp moduleOp) {
     }
 
     // Create the new module.  This grabs a lock to modify the circuit.
-    FModuleOp newModule = buildNewModule(builder, group.getLoc(),
-                                         moduleNames.lookup(group), ports);
+    FModuleOp newModule = buildNewModule(builder, layerBlock.getLoc(),
+                                         moduleNames.lookup(layerBlock), ports);
     SymbolTable::setSymbolVisibility(newModule,
                                      SymbolTable::Visibility::Private);
-    newModule.getBody().takeBody(group.getRegion());
+    newModule.getBody().takeBody(layerBlock.getRegion());
 
     LLVM_DEBUG({
-      llvm::dbgs() << "      New Module: " << moduleNames.lookup(group) << "\n";
+      llvm::dbgs() << "      New Module: " << moduleNames.lookup(layerBlock)
+                   << "\n";
       llvm::dbgs() << "        ports:\n";
       for (size_t i = 0, e = ports.size(); i != e; ++i) {
         auto port = ports[i];
@@ -258,20 +261,22 @@ void LowerGroupsPass::runOnModule(FModuleOp moduleOp) {
       }
     });
 
-    // Replace the original group with an instance.  Hook up the instance.
-    builder.setInsertionPointAfter(group);
+    // Replace the original layer block with an instance.  Hook up the instance.
+    builder.setInsertionPointAfter(layerBlock);
     auto moduleName = newModule.getModuleName();
     auto instanceOp = builder.create<InstanceOp>(
-        group.getLoc(), /*moduleName=*/newModule,
+        layerBlock.getLoc(), /*moduleName=*/newModule,
         /*name=*/
         (Twine((char)tolower(moduleName[0])) + moduleName.drop_front()).str(),
         NameKindEnum::DroppableName,
         /*annotations=*/ArrayRef<Attribute>{},
         /*portAnnotations=*/ArrayRef<Attribute>{}, /*lowerToBind=*/true);
+    // TODO: Change this to "layers_" once we switch to FIRRTL 4.0.0+.
     instanceOp->setAttr("output_file",
                         hw::OutputFileAttr::getFromFilename(
                             builder.getContext(),
-                            "groups_" + circuitName + "_" + groupName + ".sv",
+
+                            "groups_" + circuitName + "_" + layerName + ".sv",
                             /*excludeFromFileList=*/true));
     createdInstances.try_emplace(instanceOp, newModule);
 
@@ -293,17 +298,17 @@ void LowerGroupsPass::runOnModule(FModuleOp moduleOp) {
             builder.create<RefResolveOp>(newModule.getPortLocationAttr(portNum),
                                          instanceOp.getResult(portNum)));
     }
-    group.erase();
+    layerBlock.erase();
 
     return WalkResult::advance();
   });
 }
 
-/// Process a circuit to remove all groups in each module and top-level group
-/// declarations.
-void LowerGroupsPass::runOnOperation() {
+/// Process a circuit to remove all layer blocks in each module and top-level
+/// layer definition.
+void LowerLayersPass::runOnOperation() {
   LLVM_DEBUG(
-      llvm::dbgs() << "==----- Running LowerGroups "
+      llvm::dbgs() << "==----- Running LowerLayers "
                       "-------------------------------------------------===\n");
   CircuitOp circuitOp = getOperation();
 
@@ -315,14 +320,14 @@ void LowerGroupsPass::runOnOperation() {
   // avoid non-determinism from creating these in the parallel region.
   CircuitNamespace ns(circuitOp);
   circuitOp->walk([&](FModuleOp moduleOp) {
-    moduleOp->walk([&](GroupOp groupOp) {
-      SmallString<32> groupName(groupOp.getGroupName().getRootReference());
-      for (auto ref : groupOp.getGroupName().getNestedReferences()) {
-        groupName.append("_");
-        groupName.append(ref.getValue());
+    moduleOp->walk([&](LayerBlockOp layerBlockOp) {
+      SmallString<32> layerName(layerBlockOp.getLayerName().getRootReference());
+      for (auto ref : layerBlockOp.getLayerName().getNestedReferences()) {
+        layerName.append("_");
+        layerName.append(ref.getValue());
       }
-      moduleNames.insert(
-          {groupOp, ns.newName(moduleOp.getModuleName() + "_" + groupName)});
+      moduleNames.insert({layerBlockOp, ns.newName(moduleOp.getModuleName() +
+                                                   "_" + layerName)});
     });
   });
 
@@ -330,7 +335,7 @@ void LowerGroupsPass::runOnOperation() {
   if (moduleNames.empty())
     return markAllAnalysesPreserved();
 
-  // Lower the groups of each module.
+  // Lower the layer blocks of each module.
   SmallVector<FModuleOp> modules(circuitOp.getBodyBlock()->getOps<FModuleOp>());
   llvm::parallelForEach(modules,
                         [&](FModuleOp moduleOp) { runOnModule(moduleOp); });
@@ -346,60 +351,61 @@ void LowerGroupsPass::runOnOperation() {
   //     <body>
   //     `endif // groups_A_B_C
   //
+  // TODO: Change this comment to "layers_" once we switch to FIRRTL 4.0.0+.
   // TODO: This would be better handled without the use of verbatim ops.
   OpBuilder builder(circuitOp);
-  SmallVector<std::pair<GroupDeclOp, StringAttr>> groupDecls;
+  SmallVector<std::pair<LayerOp, StringAttr>> layers;
   StringRef circuitName = circuitOp.getName();
-  circuitOp.walk<mlir::WalkOrder::PreOrder>([&](GroupDeclOp groupDeclOp) {
-    auto parentOp = groupDeclOp->getParentOfType<GroupDeclOp>();
-    while (parentOp && parentOp != groupDecls.back().first)
-      groupDecls.pop_back();
+  circuitOp.walk<mlir::WalkOrder::PreOrder>([&](LayerOp layerOp) {
+    auto parentOp = layerOp->getParentOfType<LayerOp>();
+    while (parentOp && parentOp != layers.back().first)
+      layers.pop_back();
     builder.setInsertionPointToStart(circuitOp.getBodyBlock());
 
     // Save the "groups_CIRCUIT_GROUP" string as this is reused a bunch.
+    // TODO: Change this to "layers_" once we switch to FIRRTL 4.0.0+.
     SmallString<32> prefix("groups_");
     prefix.append(circuitName);
     prefix.append("_");
-    for (auto [group, _] : groupDecls) {
-      prefix.append(group.getSymName());
+    for (auto [layer, _] : layers) {
+      prefix.append(layer.getSymName());
       prefix.append("_");
     }
-    prefix.append(groupDeclOp.getSymName());
+    prefix.append(layerOp.getSymName());
 
     auto outputFileAttr = hw::OutputFileAttr::getFromFilename(
         builder.getContext(), prefix + ".sv",
         /*excludeFromFileList=*/true);
 
     SmallString<128> includes;
-    for (auto [_, strAttr] : groupDecls) {
+    for (auto [_, strAttr] : layers) {
       includes.append(strAttr);
       includes.append("\n");
     }
 
     // Write header to a verbatim.
     builder
-        .create<sv::VerbatimOp>(groupDeclOp.getLoc(), includes + "`ifndef " +
-                                                          prefix + "\n" +
-                                                          "`define " + prefix)
+        .create<sv::VerbatimOp>(layerOp.getLoc(), includes + "`ifndef " +
+                                                      prefix + "\n" +
+                                                      "`define " + prefix)
         ->setAttr("output_file", outputFileAttr);
 
     // Write footer to a verbatim.
     builder.setInsertionPointToEnd(circuitOp.getBodyBlock());
-    builder.create<sv::VerbatimOp>(groupDeclOp.getLoc(), "`endif // " + prefix)
+    builder.create<sv::VerbatimOp>(layerOp.getLoc(), "`endif // " + prefix)
         ->setAttr("output_file", outputFileAttr);
 
-    if (!groupDeclOp.getBody().getOps<GroupDeclOp>().empty())
-      groupDecls.push_back(
-          {groupDeclOp,
-           builder.getStringAttr("`include \"" + prefix + ".sv\"")});
+    if (!layerOp.getBody().getOps<LayerOp>().empty())
+      layers.push_back(
+          {layerOp, builder.getStringAttr("`include \"" + prefix + ".sv\"")});
   });
 
-  // All group declarations can now be deleted.
-  for (auto groupDeclOp : llvm::make_early_inc_range(
-           circuitOp.getBodyBlock()->getOps<GroupDeclOp>()))
-    groupDeclOp.erase();
+  // All layers definitions can now be deleted.
+  for (auto layerOp :
+       llvm::make_early_inc_range(circuitOp.getBodyBlock()->getOps<LayerOp>()))
+    layerOp.erase();
 }
 
-std::unique_ptr<mlir::Pass> circt::firrtl::createLowerGroupsPass() {
-  return std::make_unique<LowerGroupsPass>();
+std::unique_ptr<mlir::Pass> circt::firrtl::createLowerLayersPass() {
+  return std::make_unique<LowerLayersPass>();
 }

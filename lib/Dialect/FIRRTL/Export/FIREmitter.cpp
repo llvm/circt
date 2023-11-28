@@ -58,7 +58,7 @@ struct Emitter {
   void emitModulePorts(ArrayRef<PortInfo> ports,
                        Block::BlockArgListType arguments = {});
   void emitModuleParameters(Operation *op, ArrayAttr parameters);
-  void emitDeclaration(GroupDeclOp op);
+  void emitDeclaration(LayerOp op);
 
   // Statement emission
   void emitStatementsInBlock(Block &block);
@@ -87,7 +87,7 @@ struct Emitter {
   void emitStatement(RefForceInitialOp op);
   void emitStatement(RefReleaseOp op);
   void emitStatement(RefReleaseInitialOp op);
-  void emitStatement(GroupOp op);
+  void emitStatement(LayerBlockOp op);
 
   template <class T>
   void emitVerifStatement(T op, StringRef mnemonic);
@@ -383,7 +383,7 @@ void Emitter::emitCircuit(CircuitOp op) {
             emitModule(op);
             ps << PP::newline;
           })
-          .Case<GroupDeclOp>([&](auto op) { emitDeclaration(op); })
+          .Case<LayerOp>([&](auto op) { emitDeclaration(op); })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside circuit");
           });
@@ -513,19 +513,19 @@ void Emitter::emitModuleParameters(Operation *op, ArrayAttr parameters) {
   }
 }
 
-/// Emit an optional group declaration.
-void Emitter::emitDeclaration(GroupDeclOp op) {
+/// Emit a layer definition.
+void Emitter::emitDeclaration(LayerOp op) {
   startStatement();
   ps << "declgroup " << PPExtString(op.getSymName()) << ", "
-     << PPExtString(stringifyGroupConvention(op.getConvention())) << " : ";
+     << PPExtString(stringifyLayerConvention(op.getConvention())) << " : ";
   emitLocationAndNewLine(op);
   ps.scopedBox(PP::bbox2, [&]() {
     for (auto &bodyOp : op.getBody().getOps()) {
       TypeSwitch<Operation *>(&bodyOp)
-          .Case<GroupDeclOp>([&](auto op) { emitDeclaration(op); })
+          .Case<LayerOp>([&](auto op) { emitDeclaration(op); })
           .Default([&](auto op) {
             emitOpError(op,
-                        "not supported for emission inside group declaration");
+                        "not supported for emission inside layer definition");
           });
     }
   });
@@ -549,7 +549,7 @@ void Emitter::emitStatementsInBlock(Block &block) {
               PropAssignOp, InstanceOp, AttachOp, MemOp, InvalidValueOp,
               SeqMemOp, CombMemOp, MemoryPortOp, MemoryDebugPortOp,
               MemoryPortAccessOp, RefDefineOp, RefForceOp, RefForceInitialOp,
-              RefReleaseOp, RefReleaseInitialOp, GroupOp>(
+              RefReleaseOp, RefReleaseInitialOp, LayerBlockOp>(
             [&](auto op) { emitStatement(op); })
         .Default([&](auto op) {
           startStatement();
@@ -982,9 +982,9 @@ void Emitter::emitStatement(RefReleaseInitialOp op) {
   emitLocationAndNewLine(op);
 }
 
-void Emitter::emitStatement(GroupOp op) {
+void Emitter::emitStatement(LayerBlockOp op) {
   startStatement();
-  ps << "group " << op.getGroupName().getLeafReference() << " :";
+  ps << "group " << op.getLayerName().getLeafReference() << " :";
   emitLocationAndNewLine(op);
   auto *body = op.getBody();
   ps.scopedBox(PP::bbox2, [&]() { emitStatementsInBlock(*body); });

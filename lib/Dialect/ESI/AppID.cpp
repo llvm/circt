@@ -51,7 +51,9 @@ public:
   }
 
   // Returns a range iterator to the AppID components exposed by this module.
-  auto getAppIDs() const { return llvm::make_first_range(childAppIDPaths); }
+  auto getAppIDs() const {
+    return llvm::make_first_range(childAppIDPathsOrdered);
+  }
 
   // Get a read-only reference to the index.
   ArrayRef<std::pair<AppIDAttr, Operation *>> getChildren() const {
@@ -89,17 +91,8 @@ ArrayAttr AppIDIndex::getChildAppIDsOf(hw::HWModuleLike fromMod) const {
     return ArrayAttr::get(fromMod.getContext(), {});
 
   const ModuleAppIDs *fromModIdx = f->getSecond();
-  SmallVector<AppIDAttr, 8> appids;
-  for (AppIDAttr childID : fromModIdx->getAppIDs())
-    appids.push_back(childID);
-  llvm::sort(appids, [](const AppIDAttr a, const AppIDAttr b) {
-    if (a.getName() == b.getName())
-      return a.getIndex() < b.getIndex();
-    return a.getName().compare(b.getName()) > 0;
-  });
-
-  SmallVector<Attribute, 8> attrs(
-      llvm::map_range(appids, [](AppIDAttr a) -> Attribute { return a; }));
+  SmallVector<Attribute, 8> attrs(llvm::map_range(
+      fromModIdx->getAppIDs(), [](AppIDAttr a) -> Attribute { return a; }));
   return ArrayAttr::get(fromMod.getContext(), attrs);
 }
 
@@ -110,11 +103,39 @@ LogicalResult AppIDIndex::walk(
     SmallVectorImpl<Operation *> &opStack,
     function_ref<void(AppIDPathAttr, ArrayRef<Operation *>)> fn) const {
   ModuleAppIDs *modIDs = containerAppIDs.lookup(current);
-  if (!modIDs) {
-    current.emitWarning("Module has no AppIDs");
+  if (!modIDs)
     return success();
-  }
+
   for (auto [appid, op] : modIDs->getChildren()) {
+    // If we encounter an instance op which isn't ID'd, iterate down the
+    // instance hierarchy until we find it.
+    AppIDAttr opAppID = getAppID(op);
+    while (!opAppID) {
+      // We make a bunch of assumptions based on correct construction of the
+      // index here. Assert on a bunch of things which would ordinarily be
+      // failures, but we can assume never to happen based on the index
+      // construction.
+
+      auto inst = dyn_cast<hw::HWInstanceLike>(op);
+      assert(inst && "Search bottomed out. Invalid appid index.");
+
+      auto tgtMod = dyn_cast<hw::HWModuleLike>(
+          symCache.getDefinition(inst.getReferencedModuleNameAttr()));
+      assert(tgtMod && "invalid module reference");
+
+      ModuleAppIDs *ffModIds = containerAppIDs.at(tgtMod);
+      assert(ffModIds && "could not find module in index.");
+
+      auto opF = ffModIds->lookup(appid, op->getLoc());
+      assert(succeeded(opF) &&
+             "could not find appid in module index. Invalid index.");
+
+      // Set the iteration variables for the next iteration.
+      op = *opF;
+      opAppID = getAppID(op);
+    }
+
+    // Push the appid and op onto the shared stacks.
     opStack.push_back(op);
     pathStack.push_back(appid);
 
@@ -133,6 +154,7 @@ LogicalResult AppIDIndex::walk(
       if (failed(walk(top, tgtMod, pathStack, opStack, fn)))
         return failure();
     }
+
     // Since the stacks are shared (for efficiency reasons), pop them.
     pathStack.pop_back();
     opStack.pop_back();

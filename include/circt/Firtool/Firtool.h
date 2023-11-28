@@ -21,301 +21,161 @@
 
 namespace circt {
 namespace firtool {
-// Remember to sync changes to C-API
-struct FirtoolOptions {
-  llvm::cl::OptionCategory &category;
+//===----------------------------------------------------------------------===//
+// FirtoolOptions
+//===----------------------------------------------------------------------===//
 
-  llvm::cl::opt<std::string> outputFilename{
-      "o", llvm::cl::desc("Output filename, or directory for split output"),
-      llvm::cl::value_desc("filename"), llvm::cl::init("-"),
-      llvm::cl::cat(category)};
+/// Set of options used to control the behavior of the firtool pipeline.
+class FirtoolOptions {
+public:
+  FirtoolOptions();
 
-  llvm::cl::opt<bool> disableAnnotationsUnknown{
-      "disable-annotation-unknown",
-      llvm::cl::desc("Ignore unknown annotations when parsing"),
-      llvm::cl::init(false), llvm::cl::cat(category)};
-
-  llvm::cl::opt<bool> disableAnnotationsClassless{
-      "disable-annotation-classless",
-      llvm::cl::desc("Ignore annotations without a class when parsing"),
-      llvm::cl::init(false), llvm::cl::cat(category)};
-
-  llvm::cl::opt<bool> lowerAnnotationsNoRefTypePorts{
-      "lower-annotations-no-ref-type-ports",
-      llvm::cl::desc(
-          "Create real ports instead of ref type ports when resolving "
-          "wiring problems inside the LowerAnnotations pass"),
-      llvm::cl::init(false), llvm::cl::Hidden, llvm::cl::cat(category)};
-
-  llvm::cl::opt<circt::firrtl::PreserveAggregate::PreserveMode>
-      preserveAggregate{
-          "preserve-aggregate", llvm::cl::desc("Specify input file format:"),
-          llvm::cl::values(
-              clEnumValN(circt::firrtl::PreserveAggregate::None, "none",
-                         "Preserve no aggregate"),
-              clEnumValN(circt::firrtl::PreserveAggregate::OneDimVec, "1d-vec",
-                         "Preserve only 1d vectors of ground type"),
-              clEnumValN(circt::firrtl::PreserveAggregate::Vec, "vec",
-                         "Preserve only vectors"),
-              clEnumValN(circt::firrtl::PreserveAggregate::All, "all",
-                         "Preserve vectors and bundles")),
-          llvm::cl::init(circt::firrtl::PreserveAggregate::None),
-          llvm::cl::cat(category)};
-
-  llvm::cl::opt<firrtl::PreserveValues::PreserveMode> preserveMode{
-      "preserve-values",
-      llvm::cl::desc("Specify the values which can be optimized away"),
-      llvm::cl::values(
-          clEnumValN(firrtl::PreserveValues::Strip, "strip",
-                     "Strip all names. No name is preserved"),
-          clEnumValN(firrtl::PreserveValues::None, "none",
-                     "Names could be preserved by best-effort unlike `strip`"),
-          clEnumValN(firrtl::PreserveValues::Named, "named",
-                     "Preserve values with meaningful names"),
-          clEnumValN(firrtl::PreserveValues::All, "all",
-                     "Preserve all values")),
-      llvm::cl::init(firrtl::PreserveValues::None), llvm::cl::cat(category)};
-
-  llvm::cl::opt<bool> enableDebugInfo{
-      "g", llvm::cl::desc("Enable the generation of debug information"),
-      llvm::cl::init(false), llvm::cl::cat(category)};
-
-  // Build mode options.
-  enum BuildMode { BuildModeDebug, BuildModeRelease };
-  llvm::cl::opt<BuildMode> buildMode{
-      "O", llvm::cl::desc("Controls how much optimization should be performed"),
-      llvm::cl::values(clEnumValN(BuildModeDebug, "debug",
-                                  "Compile with only necessary optimizations"),
-                       clEnumValN(BuildModeRelease, "release",
-                                  "Compile with optimizations")),
-      llvm::cl::cat(category)};
-
-  llvm::cl::opt<bool> disableOptimization{
-      "disable-opt", llvm::cl::desc("Disable optimizations"),
-      llvm::cl::cat(category)};
-
-  llvm::cl::opt<bool> exportChiselInterface{
-      "export-chisel-interface",
-      llvm::cl::desc("Generate a Scala Chisel interface to the top level "
-                     "module of the firrtl circuit"),
-      llvm::cl::init(false), llvm::cl::cat(category)};
-
-  llvm::cl::opt<std::string> chiselInterfaceOutDirectory{
-      "chisel-interface-out-dir",
-      llvm::cl::desc(
-          "The output directory for generated Chisel interface files"),
-      llvm::cl::init(""), llvm::cl::cat(category)};
-
-  llvm::cl::opt<bool> vbToBV{
-      "vb-to-bv",
-      llvm::cl::desc("Transform vectors of bundles to bundles of vectors"),
-      llvm::cl::init(false), llvm::cl::cat(category)};
-
-  llvm::cl::opt<bool> noDedup{
-      "no-dedup",
-      llvm::cl::desc("Disable deduplication of structurally identical modules"),
-      llvm::cl::init(false), llvm::cl::cat(category)};
-
-  llvm::cl::opt<firrtl::CompanionMode> companionMode{
-      "grand-central-companion-mode",
-      llvm::cl::desc("Specifies the handling of Grand Central companions"),
-      ::llvm::cl::values(
-          clEnumValN(firrtl::CompanionMode::Bind, "bind",
-                     "Lower companion instances to SystemVerilog binds"),
-          clEnumValN(firrtl::CompanionMode::Instantiate, "instantiate",
-                     "Instantiate companions in the design"),
-          clEnumValN(firrtl::CompanionMode::Drop, "drop",
-                     "Remove companions from the design")),
-      llvm::cl::init(firrtl::CompanionMode::Bind),
-      llvm::cl::Hidden,
-      llvm::cl::cat(category)};
-
-  llvm::cl::opt<bool> disableAggressiveMergeConnections{
-      "disable-aggressive-merge-connections",
-      llvm::cl::desc(
-          "Disable aggressive merge connections (i.e. merge all field-level "
-          "connections into bulk connections)"),
-      llvm::cl::init(false), llvm::cl::cat(category)};
-
-  llvm::cl::opt<bool> disableHoistingHWPassthrough{
-      "disable-hoisting-hw-passthrough",
-      llvm::cl::desc("Disable hoisting HW passthrough signals"),
-      llvm::cl::init(true), llvm::cl::Hidden, llvm::cl::cat(category)};
-
-  llvm::cl::opt<bool> emitOMIR{
-      "emit-omir", llvm::cl::desc("Emit OMIR annotations to a JSON file"),
-      llvm::cl::init(true), llvm::cl::cat(category)};
-
-  llvm::cl::opt<std::string> omirOutFile{
-      "output-omir", llvm::cl::desc("File name for the output omir"),
-      llvm::cl::init(""), llvm::cl::cat(category)};
-
-  llvm::cl::opt<bool> lowerMemories{
-      "lower-memories",
-      llvm::cl::desc("Lower memories to have memories with masks as an "
-                     "array with one memory per ground type"),
-      llvm::cl::init(false), llvm::cl::cat(category)};
-
-  llvm::cl::opt<std::string> blackBoxRootPath{
-      "blackbox-path",
-      llvm::cl::desc(
-          "Optional path to use as the root of black box annotations"),
-      llvm::cl::value_desc("path"), llvm::cl::init(""),
-      llvm::cl::cat(category)};
-
-  llvm::cl::opt<bool> replSeqMem{
-      "repl-seq-mem",
-      llvm::cl::desc("Replace the seq mem for macro replacement and emit "
-                     "relevant metadata"),
-      llvm::cl::init(false), llvm::cl::cat(category)};
-
-  llvm::cl::opt<std::string> replSeqMemFile{
-      "repl-seq-mem-file", llvm::cl::desc("File name for seq mem metadata"),
-      llvm::cl::init(""), llvm::cl::cat(category)};
-
-  llvm::cl::opt<bool> extractTestCode{
-      "extract-test-code", llvm::cl::desc("Run the extract test code pass"),
-      llvm::cl::init(false), llvm::cl::cat(category)};
-
-  llvm::cl::opt<bool> ignoreReadEnableMem{
-      "ignore-read-enable-mem",
-      llvm::cl::desc("Ignore the read enable signal, instead of "
-                     "assigning X on read disable"),
-      llvm::cl::init(false), llvm::cl::cat(category)};
-
+  // Helper Types
+  enum BuildMode { BuildModeDefault, BuildModeDebug, BuildModeRelease };
   enum class RandomKind { None, Mem, Reg, All };
-
-  llvm::cl::opt<RandomKind> disableRandom{
-      llvm::cl::desc(
-          "Disable random initialization code (may break semantics!)"),
-      llvm::cl::values(
-          clEnumValN(RandomKind::Mem, "disable-mem-randomization",
-                     "Disable emission of memory randomization code"),
-          clEnumValN(RandomKind::Reg, "disable-reg-randomization",
-                     "Disable emission of register randomization code"),
-          clEnumValN(RandomKind::All, "disable-all-randomization",
-                     "Disable emission of all randomization code")),
-      llvm::cl::init(RandomKind::None), llvm::cl::cat(category)};
-
-  llvm::cl::opt<std::string> outputAnnotationFilename{
-      "output-annotation-file",
-      llvm::cl::desc("Optional output annotation file"),
-      llvm::cl::CommaSeparated, llvm::cl::value_desc("filename"),
-      llvm::cl::cat(category)};
-
-  llvm::cl::opt<bool> enableAnnotationWarning{
-      "warn-on-unprocessed-annotations",
-      llvm::cl::desc(
-          "Warn about annotations that were not removed by lower-to-hw"),
-      llvm::cl::init(false), llvm::cl::cat(category)};
-
-  llvm::cl::opt<bool> addMuxPragmas{
-      "add-mux-pragmas",
-      llvm::cl::desc("Annotate mux pragmas for memory array access"),
-      llvm::cl::init(false), llvm::cl::cat(category)};
-
-  llvm::cl::opt<bool> emitChiselAssertsAsSVA{
-      "emit-chisel-asserts-as-sva",
-      llvm::cl::desc("Convert all chisel asserts into SVA"),
-      llvm::cl::init(false), llvm::cl::cat(category)};
-
-  llvm::cl::opt<bool> emitSeparateAlwaysBlocks{
-      "emit-separate-always-blocks",
-      llvm::cl::desc(
-          "Prevent always blocks from being merged and emit constructs into "
-          "separate always blocks whenever possible"),
-      llvm::cl::init(false), llvm::cl::cat(category)};
-
-  llvm::cl::opt<bool> etcDisableInstanceExtraction{
-      "etc-disable-instance-extraction",
-      llvm::cl::desc("Disable extracting instances only that feed test code"),
-      llvm::cl::init(false), llvm::cl::cat(category)};
-
-  llvm::cl::opt<bool> etcDisableRegisterExtraction{
-      "etc-disable-register-extraction",
-      llvm::cl::desc("Disable extracting registers that only feed test code"),
-      llvm::cl::init(false), llvm::cl::cat(category)};
-
-  llvm::cl::opt<bool> etcDisableModuleInlining{
-      "etc-disable-module-inlining",
-      llvm::cl::desc("Disable inlining modules that only feed test code"),
-      llvm::cl::init(false), llvm::cl::cat(category)};
-
-  llvm::cl::opt<bool> addVivadoRAMAddressConflictSynthesisBugWorkaround{
-      "add-vivado-ram-address-conflict-synthesis-bug-workaround",
-      llvm::cl::desc(
-          "Add a vivado specific SV attribute (* ram_style = "
-          "\"distributed\" *) to unpacked array registers as a workaronud "
-          "for a vivado synthesis bug that incorrectly modifies "
-          "address conflict behavivor of combinational memories"),
-      llvm::cl::init(false), llvm::cl::cat(category)};
-
-  //===----------------------------------------------------------------------===
-  // External Clock Gate Options
-  //===----------------------------------------------------------------------===
-
-  seq::ExternalizeClockGateOptions clockGateOpts;
-
-  llvm::cl::opt<std::string, true> ckgModuleName{
-      "ckg-name", llvm::cl::desc("Clock gate module name"),
-      llvm::cl::location(clockGateOpts.moduleName),
-      llvm::cl::init("EICG_wrapper"), llvm::cl::cat(category)};
-
-  llvm::cl::opt<std::string, true> ckgInputName{
-      "ckg-input", llvm::cl::desc("Clock gate input port name"),
-      llvm::cl::location(clockGateOpts.inputName), llvm::cl::init("in"),
-      llvm::cl::cat(category)};
-
-  llvm::cl::opt<std::string, true> ckgOutputName{
-      "ckg-output", llvm::cl::desc("Clock gate output port name"),
-      llvm::cl::location(clockGateOpts.outputName), llvm::cl::init("out"),
-      llvm::cl::cat(category)};
-
-  llvm::cl::opt<std::string, true> ckgEnableName{
-      "ckg-enable", llvm::cl::desc("Clock gate enable port name"),
-      llvm::cl::location(clockGateOpts.enableName), llvm::cl::init("en"),
-      llvm::cl::cat(category)};
-
-  llvm::cl::opt<std::string, true> ckgTestEnableName{
-      "ckg-test-enable",
-      llvm::cl::desc("Clock gate test enable port name (optional)"),
-      llvm::cl::location(clockGateOpts.testEnableName),
-      llvm::cl::init("test_en"), llvm::cl::cat(category)};
-
-  llvm::cl::opt<bool> exportModuleHierarchy{
-      "export-module-hierarchy",
-      llvm::cl::desc("Export module and instance hierarchy as JSON"),
-      llvm::cl::init(false), llvm::cl::cat(category)};
-
-  llvm::cl::opt<bool> stripFirDebugInfo{
-      "strip-fir-debug-info",
-      llvm::cl::desc(
-          "Disable source fir locator information in output Verilog"),
-      llvm::cl::init(true), llvm::cl::cat(category)};
-
-  llvm::cl::opt<bool> stripDebugInfo{
-      "strip-debug-info",
-      llvm::cl::desc("Disable source locator information in output Verilog"),
-      llvm::cl::init(false), llvm::cl::cat(category)};
 
   bool isRandomEnabled(RandomKind kind) const {
     return disableRandom != RandomKind::All && disableRandom != kind;
   }
 
   firrtl::PreserveValues::PreserveMode getPreserveMode() const {
-    if (!buildMode.getNumOccurrences())
-      return preserveMode;
     switch (buildMode) {
     case BuildModeDebug:
       return firrtl::PreserveValues::Named;
     case BuildModeRelease:
       return firrtl::PreserveValues::None;
+    case BuildModeDefault:
+      return preserveMode;
     }
     llvm_unreachable("unknown build mode");
   }
 
-  FirtoolOptions(llvm::cl::OptionCategory &category) : category(category) {}
+  StringRef getOutputFilename() const { return outputFilename; }
+  StringRef getOmirOutputFile() const { return omirOutFile; }
+  StringRef getBlackBoxRootPath() const { return blackBoxRootPath; }
+  StringRef getChiselInterfaceOutputDirectory() const {
+    return chiselInterfaceOutDirectory;
+  }
+  StringRef getReplaceSequentialMemoriesFile() const { return replSeqMemFile; }
+  StringRef getOutputAnnotationFilename() const {
+    return outputAnnotationFilename;
+  }
+
+  firrtl::PreserveAggregate::PreserveMode getPreserveAggregate() const {
+    return preserveAggregate;
+  }
+  firrtl::CompanionMode getCompanionMode() const { return companionMode; }
+
+  seq::ExternalizeClockGateOptions getClockGateOptions() const {
+    return {ckgModuleName, ckgInputName,      ckgOutputName,
+            ckgEnableName, ckgTestEnableName, "ckg"};
+  }
+
+  bool isDefaultOutputFilename() const { return outputFilename == "-"; }
+  bool shouldDisableUnknownAnnotations() const {
+    return disableAnnotationsUnknown;
+  }
+  bool shouldDisableClasslessAnnotations() const {
+    return disableAnnotationsClassless;
+  }
+  bool shouldLowerNoRefTypePortAnnotations() const {
+    return lowerAnnotationsNoRefTypePorts;
+  }
+  bool shouldReplicateSequentialMemories() const { return replSeqMem; }
+  bool shouldDisableOptimization() const { return disableOptimization; }
+  bool shouldLowerMemories() const { return lowerMemories; }
+  bool shouldDedup() const { return !noDedup; }
+  bool shouldEnableDebugInfo() const { return enableDebugInfo; }
+  bool shouldIgnoreReadEnableMemories() const { return ignoreReadEnableMem; }
+  bool shouldEmitOMIR() const { return emitOMIR; }
+  bool shouldExportChiselInterface() const { return exportChiselInterface; }
+  bool shouldDisableHoistingHWPassthrough() const {
+    return disableHoistingHWPassthrough;
+  }
+  bool shouldConvertVecOfBundle() const { return vbToBV; }
+  bool shouldEtcDisableInstanceExtraction() const {
+    return etcDisableInstanceExtraction;
+  }
+  bool shouldEtcDisableRegisterExtraction() const {
+    return etcDisableRegisterExtraction;
+  }
+  bool shouldEtcDisableModuleInlining() const {
+    return etcDisableModuleInlining;
+  }
+  bool shouldStripDebugInfo() const { return stripDebugInfo; }
+  bool shouldStripFirDebugInfo() const { return stripFirDebugInfo; }
+  bool shouldExportModuleHierarchy() const { return exportModuleHierarchy; }
+  bool shouldDisableAggressiveMergeConnections() const {
+    return disableAggressiveMergeConnections;
+  }
+  bool shouldEnableAnnotationWarning() const { return enableAnnotationWarning; }
+  bool shouldEmitChiselAssertsAsSVA() const { return emitChiselAssertsAsSVA; }
+  bool shouldEmitSeparateAlwaysBlocks() const {
+    return emitSeparateAlwaysBlocks;
+  }
+  bool shouldAddMuxPragmas() const { return addMuxPragmas; }
+  bool shouldAddVivadoRAMAddressConflictSynthesisBugWorkaround() const {
+    return addVivadoRAMAddressConflictSynthesisBugWorkaround;
+  }
+  bool shouldExtractTestCode() const { return extractTestCode; }
+
+  // Setters, used by the CAPI
+  FirtoolOptions &setOutputFilename(StringRef name) {
+    outputFilename = name;
+    return *this;
+  }
+
+  FirtoolOptions &setDisableUnknownAnnotations(bool disable) {
+    disableAnnotationsUnknown = disable;
+    return *this;
+  }
+
+private:
+  std::string outputFilename;
+  bool disableAnnotationsUnknown;
+  bool disableAnnotationsClassless;
+  bool lowerAnnotationsNoRefTypePorts;
+  firrtl::PreserveAggregate::PreserveMode preserveAggregate;
+  firrtl::PreserveValues::PreserveMode preserveMode;
+  bool enableDebugInfo;
+  BuildMode buildMode;
+  bool disableOptimization;
+  bool exportChiselInterface;
+  std::string chiselInterfaceOutDirectory;
+  bool vbToBV;
+  bool noDedup;
+  firrtl::CompanionMode companionMode;
+  bool disableAggressiveMergeConnections;
+  bool disableHoistingHWPassthrough;
+  bool emitOMIR;
+  std::string omirOutFile;
+  bool lowerMemories;
+  std::string blackBoxRootPath;
+  bool replSeqMem;
+  std::string replSeqMemFile;
+  bool extractTestCode;
+  bool ignoreReadEnableMem;
+  RandomKind disableRandom;
+  std::string outputAnnotationFilename;
+  bool enableAnnotationWarning;
+  bool addMuxPragmas;
+  bool emitChiselAssertsAsSVA;
+  bool emitSeparateAlwaysBlocks;
+  bool etcDisableInstanceExtraction;
+  bool etcDisableRegisterExtraction;
+  bool etcDisableModuleInlining;
+  bool addVivadoRAMAddressConflictSynthesisBugWorkaround;
+  std::string ckgModuleName;
+  std::string ckgInputName;
+  std::string ckgOutputName;
+  std::string ckgEnableName;
+  std::string ckgTestEnableName;
+  bool exportModuleHierarchy;
+  bool stripFirDebugInfo;
+  bool stripDebugInfo;
 };
+
+void registerFirtoolCLOptions();
 
 LogicalResult populatePreprocessTransforms(mlir::PassManager &pm,
                                            const FirtoolOptions &opt);

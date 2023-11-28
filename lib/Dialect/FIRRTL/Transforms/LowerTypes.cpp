@@ -404,7 +404,7 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
   bool visitStmt(StrictConnectOp op);
   bool visitStmt(RefDefineOp op);
   bool visitStmt(WhenOp op);
-  bool visitStmt(GroupOp op);
+  bool visitStmt(LayerBlockOp op);
 
   bool isFailed() const { return encounteredError; }
 
@@ -964,8 +964,8 @@ bool TypeLoweringVisitor::visitStmt(WhenOp op) {
   return false; // don't delete the when!
 }
 
-/// Lower any types declared in the group definition.
-bool TypeLoweringVisitor::visitStmt(GroupOp op) {
+/// Lower any types declared in layer blocks.
+bool TypeLoweringVisitor::visitStmt(LayerBlockOp op) {
   lowerBlock(op.getBody());
   return false;
 }

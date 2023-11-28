@@ -381,33 +381,35 @@ def VerifAssumeIntrinsicOp : VerifIntrinsicOp<"assume">;
 def VerifCoverIntrinsicOp : VerifIntrinsicOp<"cover">;
 
 //===----------------------------------------------------------------------===//
-// Group Op
+// Layer Block Op
 //===----------------------------------------------------------------------===//
 
-def GroupOp : FIRRTLOp<
-  "group",
+def LayerBlockOp : FIRRTLOp<
+  "layerblock",
   [SingleBlock, NoTerminator, NoRegionArguments,
-   ParentOneOf<["firrtl::FModuleOp", "firrtl::GroupOp"]>,
+   ParentOneOf<["firrtl::FModuleOp", "firrtl::LayerBlockOp"]>,
    DeclareOpInterfaceMethods<SymbolUserOpInterface>]
 > {
-  let summary = "A definition of an optional group";
+  let summary = "A definition of a layer block";
   let description = [{
-    The `firrtl.group` operation defines optional code that is conditionally
-    part of a `firrtl.module`.  This is typically used to store verification or
-    debugging code that is lowered to a SystemVerilog `bind` instantiation.  An
-    optional group can read from (capture) values defined in parent group
-    definitions or in the parent module, but may not write to hardware declared
-    outside the group.
+    The `firrtl.layerblock` operation defines optional code that is
+    conditionally part of a `firrtl.module` if its referenced `firrtl.layer` is
+    enabled.  This is typically used to store verification or debugging code
+    that is lowered to a module that is "enabled" using the `firrtl.layer`'s
+    convention (e.g., remote instantiation via SystemVerilog `bind`).  A layer
+    block can read from (capture) values defined in parent layer blocks or in
+    the parent module, but may not write to hardware declared outside the layer
+    block.
 
-    A `firrtl.group` must refer to an existing optional group declaration
-    (`firrtl.declgroup`) via a symbol reference.  A nested `firrtl.group` refers
-    to a nested group declaration via a nested symbol reference.
+    A `firrtl.layerblock` must refer to an existing layer definition
+    (`firrtl.layer`) via a symbol reference.  A nested `firrtl.layerblock`
+    refers to a nested layer definition via a nested symbol reference.
   }];
-  let arguments = (ins SymbolRefAttr:$groupName);
+  let arguments = (ins SymbolRefAttr:$layerName);
   let results = (outs);
   let regions = (region SizedRegion<1>:$region);
   let assemblyFormat = [{
-    $groupName $region attr-dict
+    $layerName $region attr-dict
   }];
   let hasVerifier = 1;
 }

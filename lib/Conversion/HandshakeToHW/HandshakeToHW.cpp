@@ -323,7 +323,7 @@ static LogicalResult convertExtMemoryOps(HWModuleOp mod) {
     auto extmemInstance = cast<hw::InstanceOp>(*arg.getUsers().begin());
     auto extmemMod =
         cast<hw::HWModuleExternOp>(SymbolTable::lookupNearestSymbolFrom(
-            extmemInstance, extmemInstance.getReferencedModuleNameAttr()));
+            extmemInstance, extmemInstance.getModuleNameAttr()));
 
     ModulePortInfo portInfo(extmemMod.getPortList());
 

@@ -174,6 +174,15 @@ struct FIRParser {
     return success();
   }
 
+  ParseResult removedFeature(FIRVersion removedVersion, StringRef feature) {
+    if (version >= removedVersion)
+      return emitError() << feature << " were removed in FIRRTL "
+                         << removedVersion
+                         << ", but the specified FIRRTL version was "
+                         << version;
+    return success();
+  }
+
   //===--------------------------------------------------------------------===//
   // Annotation Parsing
   //===--------------------------------------------------------------------===//
@@ -1494,12 +1503,12 @@ struct FIRStmtParser : public FIRParser {
   explicit FIRStmtParser(Block &blockToInsertInto,
                          FIRModuleContext &moduleContext,
                          hw::InnerSymbolNamespace &modNameSpace,
-                         FIRVersion version, SymbolRefAttr groupSym = {})
+                         FIRVersion version, SymbolRefAttr layerSym = {})
       : FIRParser(moduleContext.getConstants(), moduleContext.getLexer(),
                   version),
         builder(UnknownLoc::get(getContext()), getContext()),
         locationProcessor(this->builder), moduleContext(moduleContext),
-        modNameSpace(modNameSpace), groupSym(groupSym) {
+        modNameSpace(modNameSpace), layerSym(layerSym) {
     builder.setInsertionPointToEnd(&blockToInsertInto);
   }
 
@@ -1561,7 +1570,7 @@ private:
 
   // Stmt Parsing
   ParseResult parseSubBlock(Block &blockToInsertInto, unsigned indent,
-                            SymbolRefAttr groupSym);
+                            SymbolRefAttr layerSym);
   ParseResult parseAttach();
   ParseResult parseMemPort(MemDirAttr direction);
   ParseResult parsePrintf();
@@ -1584,7 +1593,7 @@ private:
   ParseResult parseLeadingExpStmt(Value lhs);
   ParseResult parseConnect();
   ParseResult parseInvalidate();
-  ParseResult parseGroup(unsigned indent);
+  ParseResult parseLayerBlockOrGroup(unsigned indent);
 
   // Declarations
   ParseResult parseInstance();
@@ -1606,9 +1615,9 @@ private:
 
   hw::InnerSymbolNamespace &modNameSpace;
 
-  // An optional symbol that contains the current group that we are in.  This is
-  // used to construct a nested symbol for a group definition operation.
-  SymbolRefAttr groupSym;
+  // An optional symbol that contains the current layer block that we are in.
+  // This is used to construct a nested symbol for a layer block operation.
+  SymbolRefAttr layerSym;
 };
 
 } // end anonymous namespace
@@ -2501,17 +2510,22 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
   case FIRToken::lp_release_initial:
     return parseRefReleaseInitial();
   case FIRToken::kw_group:
-    if (requireFeature({3, 2, 0}, "optional groups"))
+    if (requireFeature({3, 2, 0}, "optional groups") ||
+        removedFeature({4, 0, 0}, "optional groups"))
       return failure();
-    return parseGroup(stmtIndent);
+    return parseLayerBlockOrGroup(stmtIndent);
+  case FIRToken::kw_layerblock:
+    if (requireFeature({4, 0, 0}, "layers"))
+      return failure();
+    return parseLayerBlockOrGroup(stmtIndent);
 
   default: {
     // Statement productions that start with an expression.
     Value lhs;
     if (parseExpLeadingStmt(lhs, "unexpected token in module"))
       return failure();
-    // We use parseExp in a special mode that can complete the entire stmt at
-    // once in unusual cases.  If this happened, then we are done.
+    // We use parseExp in a special mode that can complete the entire stmt
+    // at once in unusual cases.  If this happened, then we are done.
     if (!lhs)
       return success();
 
@@ -2542,7 +2556,7 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
 
 ParseResult FIRStmtParser::parseSubBlock(Block &blockToInsertInto,
                                          unsigned indent,
-                                         SymbolRefAttr groupSym) {
+                                         SymbolRefAttr layerSym) {
   // Declarations within the suite are scoped to within the suite.
   auto suiteScope = std::make_unique<FIRModuleContext::ContextScope>(
       moduleContext, &blockToInsertInto);
@@ -2555,7 +2569,7 @@ ParseResult FIRStmtParser::parseSubBlock(Block &blockToInsertInto,
   // We parse the substatements into their own parser, so they get inserted
   // into the specified 'when' region.
   auto subParser = std::make_unique<FIRStmtParser>(
-      blockToInsertInto, moduleContext, modNameSpace, version, groupSym);
+      blockToInsertInto, moduleContext, modNameSpace, version, layerSym);
 
   // Figure out whether the body is a single statement or a nested one.
   auto stmtIndent = getIndentation();
@@ -2815,7 +2829,7 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
   auto whenStmt = builder.create<WhenOp>(condition, /*createElse*/ false);
 
   // Parse the 'then' body into the 'then' region.
-  if (parseSubBlock(whenStmt.getThenBlock(), whenIndent, groupSym))
+  if (parseSubBlock(whenStmt.getThenBlock(), whenIndent, layerSym))
     return failure();
 
   // If the else is present, handle it otherwise we're done.
@@ -2841,7 +2855,7 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
     // We create a sub parser for the else block.
     auto subParser =
         std::make_unique<FIRStmtParser>(whenStmt.getElseBlock(), moduleContext,
-                                        modNameSpace, version, groupSym);
+                                        modNameSpace, version, layerSym);
 
     return subParser->parseSimpleStmt(whenIndent);
   }
@@ -2850,7 +2864,7 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
   LocationAttr elseLoc; // ignore the else locator.
   if (parseToken(FIRToken::colon, "expected ':' after 'else'") ||
       parseOptionalInfoLocator(elseLoc) ||
-      parseSubBlock(whenStmt.getElseBlock(), whenIndent, groupSym))
+      parseSubBlock(whenStmt.getElseBlock(), whenIndent, layerSym))
     return failure();
 
   // TODO(firrtl spec): There is no reason for the 'else :' grammar to take an
@@ -2980,7 +2994,7 @@ ParseResult FIRStmtParser::parseMatch(unsigned matchIndent) {
 
     // Parse a block of statements that are indented more than the case.
     auto subParser = std::make_unique<FIRStmtParser>(
-        *caseBlock, moduleContext, modNameSpace, version, groupSym);
+        *caseBlock, moduleContext, modNameSpace, version, layerSym);
     if (subParser->parseSimpleStmtBlock(*caseIndent))
       return failure();
   }
@@ -3427,37 +3441,39 @@ ParseResult FIRStmtParser::parseInvalidate() {
   return success();
 }
 
-ParseResult FIRStmtParser::parseGroup(unsigned indent) {
+ParseResult FIRStmtParser::parseLayerBlockOrGroup(unsigned indent) {
 
-  auto startTok = consumeToken(FIRToken::kw_group);
+  auto startTok = consumeToken();
+  assert(startTok.isAny(FIRToken::kw_layerblock, FIRToken::kw_group) &&
+         "consumed an unexpected token");
   auto loc = startTok.getLoc();
 
   StringRef id;
-  if (parseId(id, "expected group identifer") ||
-      parseToken(FIRToken::colon, "expected ':' at end of group") ||
+  if (parseId(id, "expected layer identifer") ||
+      parseToken(FIRToken::colon, "expected ':' at end of layer block") ||
       parseOptionalInfo())
     return failure();
 
   locationProcessor.setLoc(loc);
 
-  StringRef rootGroup;
-  SmallVector<FlatSymbolRefAttr> nestedGroups;
-  if (!groupSym) {
-    rootGroup = id;
+  StringRef rootLayer;
+  SmallVector<FlatSymbolRefAttr> nestedLayers;
+  if (!layerSym) {
+    rootLayer = id;
   } else {
-    rootGroup = groupSym.getRootReference();
-    auto nestedRefs = groupSym.getNestedReferences();
-    nestedGroups.append(nestedRefs.begin(), nestedRefs.end());
-    nestedGroups.push_back(FlatSymbolRefAttr::get(builder.getContext(), id));
+    rootLayer = layerSym.getRootReference();
+    auto nestedRefs = layerSym.getNestedReferences();
+    nestedLayers.append(nestedRefs.begin(), nestedRefs.end());
+    nestedLayers.push_back(FlatSymbolRefAttr::get(builder.getContext(), id));
   }
 
-  auto groupOp = builder.create<GroupOp>(
-      SymbolRefAttr::get(builder.getContext(), rootGroup, nestedGroups));
-  groupOp->getRegion(0).push_back(new Block());
+  auto layerBlockOp = builder.create<LayerBlockOp>(
+      SymbolRefAttr::get(builder.getContext(), rootLayer, nestedLayers));
+  layerBlockOp->getRegion(0).push_back(new Block());
 
   if (getIndentation() > indent)
-    if (parseSubBlock(groupOp.getRegion().front(), indent,
-                      groupOp.getGroupName()))
+    if (parseSubBlock(layerBlockOp.getRegion().front(), indent,
+                      layerBlockOp.getLayerName()))
       return failure();
 
   return success();
@@ -3485,10 +3501,9 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs) {
   case FIRToken::less_equal:
     break;
   case FIRToken::less_minus:
-    // Partial connect ("<-") was removed in FIRRTL version 2.0.0.
-    if (version < FIRVersion(2, 0, 0))
-      break;
-    [[fallthrough]];
+    if (removedFeature({2, 0, 0}, "partial connects"))
+      return failure();
+    break;
   default:
     return emitError() << "unexpected token '" << getToken().getSpelling()
                        << "' in statement",
@@ -4111,7 +4126,7 @@ private:
 
   ParseResult parseTypeDecl();
 
-  ParseResult parseGroupDecl(CircuitOp circuit);
+  ParseResult parseLayer(CircuitOp circuit);
 
   struct DeferredModuleToParse {
     FModuleLike moduleOp;
@@ -4353,6 +4368,7 @@ ParseResult FIRCircuitParser::skipToModuleEnd(unsigned indent) {
     case FIRToken::kw_extmodule:
     case FIRToken::kw_intmodule:
     case FIRToken::kw_module:
+    case FIRToken::kw_layer:
     case FIRToken::kw_type:
       // All module declarations should have the same indentation
       // level. Use this fact to differentiate between module
@@ -4640,15 +4656,20 @@ ParseResult FIRCircuitParser::parseToplevelDefinition(CircuitOp circuit,
   case FIRToken::kw_class:
     return parseClass(circuit, indent);
   case FIRToken::kw_declgroup:
-    if (requireFeature({3, 2, 0}, "optional groups"))
+    if (requireFeature({3, 2, 0}, "optional groups") ||
+        removedFeature({4, 0, 0}, "optional groups"))
       return failure();
-    return parseGroupDecl(circuit);
+    return parseLayer(circuit);
   case FIRToken::kw_extclass:
     return parseExtClass(circuit, indent);
   case FIRToken::kw_extmodule:
     return parseExtModule(circuit, indent);
   case FIRToken::kw_intmodule:
     return parseIntModule(circuit, indent);
+  case FIRToken::kw_layer:
+    if (requireFeature({4, 0, 0}, "layers"))
+      return failure();
+    return parseLayer(circuit);
   case FIRToken::kw_module:
     return parseModule(circuit, indent);
   case FIRToken::kw_type:
@@ -4689,58 +4710,58 @@ ParseResult FIRCircuitParser::parseTypeDecl() {
   return success();
 }
 
-// Parse a group declaration.
-ParseResult FIRCircuitParser::parseGroupDecl(CircuitOp circuit) {
+// Parse a layer definition.
+ParseResult FIRCircuitParser::parseLayer(CircuitOp circuit) {
   auto baseIndent = getIndentation();
 
-  // A stack of all groups that are possibly parents of the current group.
-  SmallVector<std::pair<std::optional<unsigned>, GroupDeclOp>> groupStack;
+  // A stack of all layers that are possibly parents of the current layer.
+  SmallVector<std::pair<std::optional<unsigned>, LayerOp>> layerStack;
 
-  // Parse a single group and add it to the groupStack.
+  // Parse a single layer and add it to the layerStack.
   auto parseOne = [&](Block *block) -> ParseResult {
     auto indent = getIndentation();
     StringRef id, convention;
     LocWithInfo info(getToken().getLoc(), this);
     consumeToken();
-    if (parseId(id, "expected group name") || parseGetSpelling(convention))
+    if (parseId(id, "expected layer name") || parseGetSpelling(convention))
       return failure();
-    auto groupConvention = symbolizeGroupConvention(convention);
-    if (!groupConvention) {
+    auto layerConvention = symbolizeLayerConvention(convention);
+    if (!layerConvention) {
       emitError() << "unknown convention '" << convention
                   << "' (did you misspell it?)";
       return failure();
     }
     consumeToken();
-    if (parseToken(FIRToken::colon, "expected ':' after group definition") ||
+    if (parseToken(FIRToken::colon, "expected ':' after layer definition") ||
         info.parseOptionalInfo())
       return failure();
     auto builder = OpBuilder::atBlockEnd(block);
-    // Create the group declaration and give it an empty block.
-    auto groupDeclOp =
-        builder.create<GroupDeclOp>(info.getLoc(), id, *groupConvention);
-    groupDeclOp->getRegion(0).push_back(new Block());
-    groupStack.push_back({indent, groupDeclOp});
+    // Create the layer definition and give it an empty block.
+    auto layerOp = builder.create<LayerOp>(info.getLoc(), id, *layerConvention);
+    layerOp->getRegion(0).push_back(new Block());
+    layerStack.push_back({indent, layerOp});
     return success();
   };
 
   if (parseOne(circuit.getBodyBlock()))
     return failure();
 
-  // Parse any nested groups.
+  // Parse any nested layers.
   while (getIndentation() > baseIndent) {
     switch (getToken().getKind()) {
-    case FIRToken::kw_declgroup: {
-      // Pop nested groups off the stack until we find out what group to insert
+    case FIRToken::kw_declgroup:
+    case FIRToken::kw_layer: {
+      // Pop nested layers off the stack until we find out what layer to insert
       // this into.
-      while (groupStack.back().first >= getIndentation())
-        groupStack.pop_back();
-      auto parentGroup = groupStack.back().second;
-      if (parseOne(&parentGroup.getBody().front()))
+      while (layerStack.back().first >= getIndentation())
+        layerStack.pop_back();
+      auto parentLayer = layerStack.back().second;
+      if (parseOne(&parentLayer.getBody().front()))
         return failure();
       break;
     }
     default:
-      return emitError("expected 'declgroup'"), failure();
+      return emitError("expected 'layer'"), failure();
     }
   }
 
@@ -4912,6 +4933,7 @@ ParseResult FIRCircuitParser::parseCircuit(
     case FIRToken::kw_extclass:
     case FIRToken::kw_extmodule:
     case FIRToken::kw_intmodule:
+    case FIRToken::kw_layer:
     case FIRToken::kw_module:
     case FIRToken::kw_type: {
       auto indent = getIndentation();
