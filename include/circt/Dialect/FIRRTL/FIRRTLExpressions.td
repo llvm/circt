@@ -923,16 +923,16 @@ def FPGAProbeIntrinsicOp : FIRRTLOp<"int.fpga_probe", []> {
   let summary = "Mark a value to be observed through FPGA debugging facilities";
 
   let description = [{
-    The `firrtl.int.fpga_probe` intrinsic marks a value in the IR to be made observable
-    through FPGA debugging facilities. Most FPGAs offer a form of signal observation
-    or logic analyzer to debug a design. This operation allows the IR to indicate which
-    signals should be made observable for debugging. Later FPGA-specific passes
-    may then pick this information up and materialize the necessary logic analyzers
-    or tool scripts.
+    The `firrtl.int.fpga_probe` intrinsic marks a value in
+    the IR to be made observable through FPGA debugging facilities. Most FPGAs
+    offer a form of signal observation or logic analyzer to debug a design. This
+    operation allows the IR to indicate which signals should be made observable
+    for debugging. Later FPGA-specific passes may then pick this information up
+    and materialize the necessary logic analyzers or tool scripts.
   }];
+
   let arguments = (ins AnyType:$input, NonConstClockType:$clock);
   let results = (outs);
-
   let assemblyFormat = "$clock `,` $input attr-dict `:` type($input)";
 }
 

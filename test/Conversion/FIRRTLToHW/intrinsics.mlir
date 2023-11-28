@@ -181,14 +181,9 @@ firrtl.circuit "Intrinsics" {
   firrtl.module @FPGAProbe(
     in %clock: !firrtl.clock,
     in %reset: !firrtl.uint<1>,
-    out %out: !firrtl.uint<8>,
     in %in: !firrtl.uint<8>
    ) attributes {convention = #firrtl<convention scalarized>} {
-    %0 = firrtl.wire : !firrtl.uint<8>
-    %1 = firrtl.wire : !firrtl.clock
-    firrtl.int.fpga_probe %1, %0 : !firrtl.uint<8>
-    firrtl.strictconnect %1, %clock : !firrtl.clock
-    firrtl.strictconnect %0, %out : !firrtl.uint<8>
-    firrtl.strictconnect %out, %in : !firrtl.uint<8>
+    // CHECK: hw.wire %in
+    firrtl.int.fpga_probe %clock, %in : !firrtl.uint<8>
   }
 }

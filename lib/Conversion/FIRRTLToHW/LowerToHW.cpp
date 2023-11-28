@@ -3649,7 +3649,7 @@ LogicalResult FIRRTLLowering::visitExpr(PlusArgsTestIntrinsicOp op) {
 
 LogicalResult FIRRTLLowering::visitExpr(FPGAProbeIntrinsicOp op) {
   auto operand = getLoweredValue(op.getInput());
-  operand = builder.create<hw::WireOp>(operand);
+  builder.create<hw::WireOp>(operand);
   return success();
 }
 
