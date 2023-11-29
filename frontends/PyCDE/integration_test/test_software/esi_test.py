@@ -13,10 +13,10 @@ d = m.build_design(acc)
 
 # loopback = d.children[esi.AppID("loopback_inout", 0)]
 
-recv = d.ports[esi.AppID("loopback_inout", 0)].channels["resp"]
+recv = d.ports[esi.AppID("loopback_inout")].channels["resp"]
 recv.connect()
 
-send = d.ports[esi.AppID("loopback_inout", 0)].channels["req"]
+send = d.ports[esi.AppID("loopback_inout")].channels["req"]
 send.connect()
 
 data = [24, 42, 36]

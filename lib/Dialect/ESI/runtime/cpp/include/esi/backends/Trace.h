@@ -62,6 +62,7 @@ public:
 
 protected:
   virtual Service *createService(Service::Type service, AppIDPath idPath,
+                                 std::string implName,
                                  const ServiceImplDetails &details,
                                  const HWClientDetails &clients) override;
 

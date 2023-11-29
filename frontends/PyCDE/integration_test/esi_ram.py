@@ -33,7 +33,7 @@ class MemWriter(Module):
     (address_chan, ready) = read_bundle_type.address.wrap(address, True)
     read_bundle, [data_chan] = read_bundle_type.pack(address=address_chan)
     read_data, read_valid = data_chan.unwrap(True)
-    RamI64x8.read(read_bundle, AppID("int_reader", 0))
+    RamI64x8.read(read_bundle, AppID("int_reader"))
 
     write_bundle_type = RamI64x8.write.type
     write_data, _ = write_bundle_type.write.wrap(
@@ -42,7 +42,7 @@ class MemWriter(Module):
             'address': 3
         }, read_valid)
     write_bundle, [ack] = write_bundle_type.pack(write=write_data)
-    RamI64x8.write(write_bundle, appid=AppID("int_writer", 0))
+    RamI64x8.write(write_bundle, appid=AppID("int_writer"))
 
 
 class Top(Module):
@@ -53,12 +53,12 @@ class Top(Module):
   def construct(ports):
     MemWriter(clk=ports.clk, rst=ports.rst)
 
-    ram_write = MemComms.write(AppID("write", 0))
-    RamI64x8.write(ram_write, AppID("ram_write", 0))
-    ram_read = MemComms.read(AppID("read", 0))
-    RamI64x8.read(ram_read, AppID("ram_read", 0))
+    ram_write = MemComms.write(AppID("write"))
+    RamI64x8.write(ram_write, AppID("ram_write"))
+    ram_read = MemComms.read(AppID("read"))
+    RamI64x8.read(ram_read, AppID("ram_read"))
 
-    RamI64x8.instantiate_builtin(appid=AppID("mem", 0),
+    RamI64x8.instantiate_builtin(appid=AppID("mem"),
                                  builtin="sv_mem",
                                  result_types=[],
                                  inputs=[ports.clk, ports.rst])
@@ -68,5 +68,6 @@ if __name__ == "__main__":
   s = pycde.System([cosim.CosimBSP(Top)],
                    name="ESIMem",
                    output_directory=sys.argv[1])
+  s.run_passes(debug=True)
   s.compile()
   s.package()
