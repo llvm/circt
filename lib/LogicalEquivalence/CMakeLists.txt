@@ -1,4 +1,4 @@
-if(CIRCT_LEC_ENABLED)
+if(CIRCTSMT_ENABLED)
   add_circt_verification_library(CIRCTLogicalEquivalence
     Solver.cpp
     Circuit.cpp
@@ -12,7 +12,9 @@ if(CIRCT_LEC_ENABLED)
     MLIRTranslateLib
     CIRCTComb
     CIRCTHW
+    CIRCTSeq
     CIRCTSupport
+    CIRCTVerif
   )
 
   target_link_libraries(CIRCTLogicalEquivalence

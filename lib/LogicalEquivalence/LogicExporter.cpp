@@ -11,9 +11,12 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/LogicalEquivalence/LogicExporter.h"
+#include "circt/Dialect/Verif/VerifOps.h"
+#include "circt/Dialect/Verif/VerifVisitors.h"
 #include "circt/LogicalEquivalence/Circuit.h"
 #include "circt/LogicalEquivalence/Solver.h"
 #include "circt/LogicalEquivalence/Utility.h"
+#include "mlir/IR/BuiltinTypes.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 #define DEBUG_TYPE "lec-exporter"
@@ -27,7 +30,8 @@ namespace {
 /// operations, along with a dispatcher to visit the correct handler.
 struct Visitor : public hw::StmtVisitor<Visitor, LogicalResult>,
                  public hw::TypeOpVisitor<Visitor, LogicalResult>,
-                 public comb::CombinationalVisitor<Visitor, LogicalResult> {
+                 public comb::CombinationalVisitor<Visitor, LogicalResult>,
+                 public verif::Visitor<Visitor, LogicalResult> {
   using hw::StmtVisitor<Visitor, LogicalResult>::visitStmt;
   using hw::TypeOpVisitor<Visitor, LogicalResult>::visitTypeOp;
   using comb::CombinationalVisitor<Visitor, LogicalResult>::visitComb;
@@ -168,8 +172,9 @@ struct Visitor : public hw::StmtVisitor<Visitor, LogicalResult>,
   LogicalResult visitComb(comb::ICmpOp op) {
     if (!op.getTwoState())
       return op.emitOpError("without 'bin' unsupported");
-    return circuit->performICmp(op.getResult(), op.getPredicate(), op.getLhs(),
-                                op.getRhs());
+    circuit->performICmp(op.getResult(), op.getPredicate(), op.getLhs(),
+                         op.getRhs());
+    return success();
   }
   LogicalResult visitComb(comb::ModSOp op) {
     return visitBinaryCombOp(op, &Solver::Circuit::performModS);
@@ -213,8 +218,96 @@ struct Visitor : public hw::StmtVisitor<Visitor, LogicalResult>,
     return visitVariadicCombOp(op, &Solver::Circuit::performXor);
   }
 
+  LogicalResult visitInvalidComb(Operation *op) {
+    return dispatchVerifVisitor(op);
+  }
+
   LogicalResult visitUnhandledComb(Operation *op) {
     return visitUnhandledOp(op);
+  }
+
+  //===--------------------------------------------------------------------===//
+  // verif::VerifVisitor
+  //===--------------------------------------------------------------------===//
+
+  LogicalResult visitVerif(verif::AssertOp op) {
+    if (op.getProperty().getType().isSignlessInteger(1)) {
+      circuit->performAssert(op.getProperty());
+      return success();
+    }
+    return op->emitError("LTL properties not yet handled");
+  }
+
+  LogicalResult visitVerif(verif::AssumeOp op) {
+    if (op.getProperty().getType().isSignlessInteger(1)) {
+      circuit->performAssume(op.getProperty());
+      return success();
+    }
+    return op->emitError("LTL properties not yet handled");
+  }
+
+  LogicalResult visitVerif(verif::CoverOp op) {
+    return op->emitError(
+        "Coverage checks not currently supported for model checking.");
+  }
+
+  LogicalResult visitInvalidVerif(Operation *op) { return visitSeq(op); }
+
+  LogicalResult visitUnhandledVerif(Operation *op) {
+    return visitUnhandledOp(op);
+  }
+
+  //===----------------------------------------------------------------------===//
+  // Sequential Visitor implementation
+  //===----------------------------------------------------------------------===//
+
+  /// Visits seq dialect operations
+  mlir::LogicalResult visitSeq(mlir::Operation *op) {
+    mlir::LogicalResult outcome =
+        llvm::TypeSwitch<mlir::Operation *, mlir::LogicalResult>(op)
+            .Case<circt::seq::CompRegOp>([&](circt::seq::CompRegOp &op) {
+              return visitSeqOp(op, circuit);
+            })
+            .Case<circt::seq::FirRegOp>([&](circt::seq::FirRegOp &op) {
+              return visitSeqOp(op, circuit);
+            })
+            .Case<circt::seq::FromClockOp>([&](circt::seq::FromClockOp &op) {
+              return visitSeqOp(op, circuit);
+            })
+            .Default([&](mlir::Operation *op) { return visitUnhandledOp(op); });
+    return outcome;
+  }
+
+  mlir::LogicalResult visitSeqOp(circt::seq::CompRegOp &op,
+                                 Solver::Circuit *circuit) {
+    mlir::Value input = op.getInput();
+    mlir::Value clk = op.getClk();
+    mlir::Value data = op.getData();
+    mlir::Value reset = op.getReset();
+    mlir::Value resetValue = op.getResetValue();
+    circuit->performCompReg(input, clk, data, reset, resetValue);
+    return mlir::success();
+  }
+
+  mlir::LogicalResult visitSeqOp(circt::seq::FirRegOp &op,
+                                 Solver::Circuit *circuit) {
+    assert(!op.getIsAsync() && "Async resets not supported.");
+    mlir::Value next = op.getNext();
+    mlir::Value clk = op.getClk();
+    mlir::Value data = op.getData();
+    mlir::Value reset = op.getReset();
+    mlir::Value resetValue = op.getResetValue();
+    circuit->performCompReg(next, clk, data, reset, resetValue);
+    return mlir::success();
+  }
+
+  mlir::LogicalResult visitSeqOp(circt::seq::FromClockOp &op,
+                                 Solver::Circuit *circuit) {
+    mlir::Value result = op.getResult();
+    mlir::Value input = op.getInput();
+    // circuit->performCompReg(next, clk, data, reset, resetValue);
+    circuit->performFromClock(result, input);
+    return mlir::success();
   }
 };
 } // namespace
