@@ -11,10 +11,12 @@ hw.type_scope @__hw_typedecls {
 
 !sendI8 = !esi.bundle<[!esi.channel<i8> to "send"]>
 !recvI8 = !esi.bundle<[!esi.channel<i8> to "recv"]>
+!sendI0 = !esi.bundle<[!esi.channel<i0> to "send"]>
 
 esi.service.decl @HostComms {
   esi.service.to_server @Send : !sendI8
   esi.service.to_client @Recv : !recvI8
+  esi.service.to_server @SendI0 : !sendI0
 }
 
 hw.module @Loopback (in %clk: !seq.clock) {
@@ -22,6 +24,12 @@ hw.module @Loopback (in %clk: !seq.clock) {
   %dataOut = esi.bundle.unpack from %dataInBundle : !recvI8
   %dataOutBundle = esi.bundle.pack %dataOut : !sendI8
   esi.service.req.to_server %dataOutBundle -> <@HostComms::@Send> (#esi.appid<"loopback_fromhw">) : !sendI8
+
+  %c0_0 = hw.constant 0 : i0
+  %c0_1 = hw.constant 0 : i1
+  %sendi0_channel, %ready = esi.wrap.vr %c0_0, %c0_1 : i0
+  %sendi0_bundle = esi.bundle.pack %sendi0_channel : !sendI0
+  esi.service.req.to_server %sendi0_bundle -> <@HostComms::@SendI0> (#esi.appid<"loopback_fromhw_i0">) : !sendI0
 }
 
 esi.manifest.sym @Loopback name "LoopbackIP" version "v0.0" summary "IP which simply echos bytes" {foo=1}
@@ -37,16 +45,20 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // HIER:          esi.manifest.service_impl #esi.appid<"cosim"> svc @HostComms by "cosim" with {} {
 // HIER:            esi.manifest.impl_conn [#esi.appid<"loopback_inst"[0]>, #esi.appid<"loopback_tohw">] req <@HostComms::@Recv>(!esi.bundle<[!esi.channel<i8> to "recv"]>) with {channel_assignments = {recv = "loopback_inst[0].loopback_tohw.recv"}}
 // HIER:            esi.manifest.impl_conn [#esi.appid<"loopback_inst"[0]>, #esi.appid<"loopback_fromhw">] req <@HostComms::@Send>(!esi.bundle<[!esi.channel<i8> from "send"]>) with {channel_assignments = {send = "loopback_inst[0].loopback_fromhw.send"}}
+// HIER:            esi.manifest.impl_conn [#esi.appid<"loopback_inst"[0]>, #esi.appid<"loopback_fromhw_i0">] req <@HostComms::@SendI0>(!esi.bundle<[!esi.channel<i0> from "send"]>) with {channel_assignments = {send = "loopback_inst[0].loopback_fromhw_i0.send"}}
 // HIER:            esi.manifest.impl_conn [#esi.appid<"loopback_inst"[1]>, #esi.appid<"loopback_tohw">] req <@HostComms::@Recv>(!esi.bundle<[!esi.channel<i8> to "recv"]>) with {channel_assignments = {recv = "loopback_inst[1].loopback_tohw.recv"}}
 // HIER:            esi.manifest.impl_conn [#esi.appid<"loopback_inst"[1]>, #esi.appid<"loopback_fromhw">] req <@HostComms::@Send>(!esi.bundle<[!esi.channel<i8> from "send"]>) with {channel_assignments = {send = "loopback_inst[1].loopback_fromhw.send"}}
+// HIER:            esi.manifest.impl_conn [#esi.appid<"loopback_inst"[1]>, #esi.appid<"loopback_fromhw_i0">] req <@HostComms::@SendI0>(!esi.bundle<[!esi.channel<i0> from "send"]>) with {channel_assignments = {send = "loopback_inst[1].loopback_fromhw_i0.send"}}
 // HIER:          }
 // HIER:          esi.manifest.hier_node #esi.appid<"loopback_inst"[0]> mod @Loopback {
 // HIER:            esi.manifest.req #esi.appid<"loopback_tohw">, <@HostComms::@Recv>, toClient, !esi.bundle<[!esi.channel<i8> to "recv"]>
 // HIER:            esi.manifest.req #esi.appid<"loopback_fromhw">, <@HostComms::@Send>, toServer, !esi.bundle<[!esi.channel<i8> to "send"]>
+// HIER:            esi.manifest.req #esi.appid<"loopback_fromhw_i0">, <@HostComms::@SendI0>, toServer, !esi.bundle<[!esi.channel<i0> to "send"]>
 // HIER:          }
 // HIER:          esi.manifest.hier_node #esi.appid<"loopback_inst"[1]> mod @Loopback {
 // HIER:            esi.manifest.req #esi.appid<"loopback_tohw">, <@HostComms::@Recv>, toClient, !esi.bundle<[!esi.channel<i8> to "recv"]>
 // HIER:            esi.manifest.req #esi.appid<"loopback_fromhw">, <@HostComms::@Send>, toServer, !esi.bundle<[!esi.channel<i8> to "send"]>
+// HIER:            esi.manifest.req #esi.appid<"loopback_fromhw_i0">, <@HostComms::@SendI0>, toServer, !esi.bundle<[!esi.channel<i0> to "send"]>
 // HIER:          }
 // HIER:        }
 
@@ -118,6 +130,24 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:            },
 // CHECK-NEXT:            {
 // CHECK-NEXT:              "channel_assignments": {
+// CHECK-NEXT:                "send": "loopback_inst[0].loopback_fromhw_i0.send"
+// CHECK-NEXT:              },
+// CHECK-NEXT:              "relAppIDPath": [
+// CHECK-NEXT:                {
+// CHECK-NEXT:                  "index": 0,
+// CHECK-NEXT:                  "name": "loopback_inst"
+// CHECK-NEXT:                },
+// CHECK-NEXT:                {
+// CHECK-NEXT:                  "name": "loopback_fromhw_i0"
+// CHECK-NEXT:                }
+// CHECK-NEXT:              ],
+// CHECK-NEXT:              "servicePort": {
+// CHECK-NEXT:                "inner": "SendI0",
+// CHECK-NEXT:                "outer_sym": "HostComms"
+// CHECK-NEXT:              }
+// CHECK-NEXT:            },
+// CHECK-NEXT:            {
+// CHECK-NEXT:              "channel_assignments": {
 // CHECK-NEXT:                "recv": "loopback_inst[1].loopback_tohw.recv"
 // CHECK-NEXT:              },
 // CHECK-NEXT:              "relAppIDPath": [
@@ -149,6 +179,24 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:              ],
 // CHECK-NEXT:              "servicePort": {
 // CHECK-NEXT:                "inner": "Send",
+// CHECK-NEXT:                "outer_sym": "HostComms"
+// CHECK-NEXT:              }
+// CHECK-NEXT:            },
+// CHECK-NEXT:            {
+// CHECK-NEXT:              "channel_assignments": {
+// CHECK-NEXT:                "send": "loopback_inst[1].loopback_fromhw_i0.send"
+// CHECK-NEXT:              },
+// CHECK-NEXT:              "relAppIDPath": [
+// CHECK-NEXT:                {
+// CHECK-NEXT:                  "index": 1,
+// CHECK-NEXT:                  "name": "loopback_inst"
+// CHECK-NEXT:                },
+// CHECK-NEXT:                {
+// CHECK-NEXT:                  "name": "loopback_fromhw_i0"
+// CHECK-NEXT:                }
+// CHECK-NEXT:              ],
+// CHECK-NEXT:              "servicePort": {
+// CHECK-NEXT:                "inner": "SendI0",
 // CHECK-NEXT:                "outer_sym": "HostComms"
 // CHECK-NEXT:              }
 // CHECK-NEXT:            }
@@ -190,6 +238,20 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:                "inner": "Send",
 // CHECK-NEXT:                "outer_sym": "HostComms"
 // CHECK-NEXT:              }
+// CHECK-NEXT:            },
+// CHECK-NEXT:            {
+// CHECK-NEXT:              "class": "client_port",
+// CHECK-NEXT:              "appID": {
+// CHECK-NEXT:                "name": "loopback_fromhw_i0"
+// CHECK-NEXT:              },
+// CHECK-NEXT:              "direction": "toServer",
+// CHECK-NEXT:              "bundleType": {
+// CHECK-NEXT:                "circt_name": "!esi.bundle<[!esi.channel<i0> to \"send\"]>"
+// CHECK-NEXT:              },
+// CHECK-NEXT:              "servicePort": {
+// CHECK-NEXT:                "inner": "SendI0",
+// CHECK-NEXT:                "outer_sym": "HostComms"
+// CHECK-NEXT:              }
 // CHECK-NEXT:            }
 // CHECK-NEXT:          ],
 // CHECK-NEXT:          "children": []
@@ -228,6 +290,20 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:                "inner": "Send",
 // CHECK-NEXT:                "outer_sym": "HostComms"
 // CHECK-NEXT:              }
+// CHECK-NEXT:            },
+// CHECK-NEXT:            {
+// CHECK-NEXT:              "class": "client_port",
+// CHECK-NEXT:              "appID": {
+// CHECK-NEXT:                "name": "loopback_fromhw_i0"
+// CHECK-NEXT:              },
+// CHECK-NEXT:              "direction": "toServer",
+// CHECK-NEXT:              "bundleType": {
+// CHECK-NEXT:                "circt_name": "!esi.bundle<[!esi.channel<i0> to \"send\"]>"
+// CHECK-NEXT:              },
+// CHECK-NEXT:              "servicePort": {
+// CHECK-NEXT:                "inner": "SendI0",
+// CHECK-NEXT:                "outer_sym": "HostComms"
+// CHECK-NEXT:              }
 // CHECK-NEXT:            }
 // CHECK-NEXT:          ],
 // CHECK-NEXT:          "children": []
@@ -244,6 +320,13 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:            "direction": "toServer",
 // CHECK-NEXT:            "type": {
 // CHECK-NEXT:              "circt_name": "!esi.bundle<[!esi.channel<i8> to \"send\"]>"
+// CHECK-NEXT:            }
+// CHECK-NEXT:          },
+// CHECK-NEXT:          {
+// CHECK-NEXT:            "name": "SendI0",
+// CHECK-NEXT:            "direction": "toServer",
+// CHECK-NEXT:            "type": {
+// CHECK-NEXT:              "circt_name": "!esi.bundle<[!esi.channel<i0> to \"send\"]>"
 // CHECK-NEXT:            }
 // CHECK-NEXT:          },
 // CHECK-NEXT:          {
@@ -303,6 +386,30 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:          }
 // CHECK-NEXT:        ],
 // CHECK-NEXT:        "circt_name": "!esi.bundle<[!esi.channel<i8> to \"send\"]>",
+// CHECK-NEXT:        "dialect": "esi",
+// CHECK-NEXT:        "mnemonic": "bundle"
+// CHECK-NEXT:      },
+// CHECK-NEXT:      {
+// CHECK-NEXT:        "channels": [
+// CHECK-NEXT:          {
+// CHECK-NEXT:            "direction": "to",
+// CHECK-NEXT:            "name": "send",
+// CHECK-NEXT:            "type": {
+// CHECK-NEXT:              "circt_name": "!esi.channel<i0>",
+// CHECK-NEXT:              "dialect": "esi",
+// CHECK-NEXT:              "hw_bitwidth": 0,
+// CHECK-NEXT:              "inner": {
+// CHECK-NEXT:                "circt_name": "i0",
+// CHECK-NEXT:                "dialect": "builtin",
+// CHECK-NEXT:                "hw_bitwidth": 0,
+// CHECK-NEXT:                "mnemonic": "int",
+// CHECK-NEXT:                "signedness": "signless"
+// CHECK-NEXT:              },
+// CHECK-NEXT:              "mnemonic": "channel"
+// CHECK-NEXT:            }
+// CHECK-NEXT:          }
+// CHECK-NEXT:        ],
+// CHECK-NEXT:        "circt_name": "!esi.bundle<[!esi.channel<i0> to \"send\"]>",
 // CHECK-NEXT:        "dialect": "esi",
 // CHECK-NEXT:        "mnemonic": "bundle"
 // CHECK-NEXT:      }
