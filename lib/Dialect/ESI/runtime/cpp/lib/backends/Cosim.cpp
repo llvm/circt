@@ -327,6 +327,7 @@ private:
 } // namespace
 
 Service *CosimAccelerator::createService(Service::Type svcType, AppIDPath id,
+                                         std::string implName,
                                          const ServiceImplDetails &details,
                                          const HWClientDetails &clients) {
   if (svcType == typeid(MMIO))
@@ -334,7 +335,7 @@ Service *CosimAccelerator::createService(Service::Type svcType, AppIDPath id,
   else if (svcType == typeid(SysInfo))
     // return new MMIOSysInfo(getService<MMIO>());
     return new CosimSysInfo(impl->cosim, impl->waitScope);
-  else if (svcType == typeid(CustomService))
+  else if (svcType == typeid(CustomService) && implName == "cosim")
     return new CosimCustomService(*impl, id, details, clients);
   return nullptr;
 }

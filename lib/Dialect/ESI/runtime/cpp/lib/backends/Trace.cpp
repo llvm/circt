@@ -119,7 +119,7 @@ TraceAccelerator::TraceAccelerator(Mode mode, filesystem::path manifestJson,
 }
 
 Service *TraceAccelerator::createService(Service::Type svcType,
-                                         AppIDPath idPath,
+                                         AppIDPath idPath, std::string implName,
                                          const ServiceImplDetails &details,
                                          const HWClientDetails &clients) {
   return impl->createService(svcType, idPath, details, clients);

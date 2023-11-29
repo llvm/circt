@@ -115,14 +115,16 @@ public:
   /// ownership of the returned pointer -- the Accelerator object owns it.
   /// Pointer lifetime ends with the Accelerator lifetime.
   template <typename ServiceClass>
-  ServiceClass *getService(AppIDPath id = {}, ServiceImplDetails details = {},
+  ServiceClass *getService(AppIDPath id = {}, std::string implName = {},
+                           ServiceImplDetails details = {},
                            HWClientDetails clients = {}) {
     return dynamic_cast<ServiceClass *>(
-        getService(typeid(ServiceClass), id, details, clients));
+        getService(typeid(ServiceClass), id, implName, details, clients));
   }
   /// Calls `createService` and caches the result. Subclasses can override if
   /// they want to use their own caching mechanism.
   virtual Service *getService(Service::Type service, AppIDPath id = {},
+                              std::string implName = {},
                               ServiceImplDetails details = {},
                               HWClientDetails clients = {});
 
@@ -131,6 +133,7 @@ protected:
   /// this in a unique_ptr and caches it. Separate this from the
   /// wrapping/caching since wrapping/caching is an implementation detail.
   virtual Service *createService(Service::Type service, AppIDPath idPath,
+                                 std::string implName,
                                  const ServiceImplDetails &details,
                                  const HWClientDetails &clients) = 0;
 
