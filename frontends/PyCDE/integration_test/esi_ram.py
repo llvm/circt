@@ -1,4 +1,4 @@
-# REQUIRES: esi-cosim
+# REQUIRES: esi-runtime, esi-cosim, rtl-sim
 # RUN: rm -rf %t
 # RUN: mkdir %t && cd %t
 # RUN: %PYTHON% %s %t 2>&1
