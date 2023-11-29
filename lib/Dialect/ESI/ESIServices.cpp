@@ -46,7 +46,7 @@ ServiceGeneratorDispatcher::generate(ServiceImplementReqOp req,
   OpBuilder b(req);
   auto implRecord = b.create<ServiceImplRecordOp>(
       req.getLoc(), req.getAppID(), req.getServiceSymbolAttr(),
-      req.getImplTypeAttr(), b.getDictionaryAttr({}));
+      req.getStdServiceAttr(), req.getImplTypeAttr(), b.getDictionaryAttr({}));
   implRecord.getReqDetails().emplaceBlock();
 
   return genF->second(req, decl, implRecord);
@@ -344,6 +344,9 @@ struct ESIConnectServicesPass
   /// 'surfaceReqs' and/or 'replaceInst' as appropriate.
   LogicalResult process(hw::HWModuleLike);
 
+  /// If the servicePort is referring to a std service, return the name of it.
+  StringAttr getStdService(FlatSymbolRefAttr serviceSym);
+
 private:
   ServiceGeneratorDispatcher genDispatcher;
 };
@@ -377,6 +380,16 @@ void ESIConnectServicesPass::runOnOperation() {
   }
 }
 
+// Get the std service name, if any.
+StringAttr ESIConnectServicesPass::getStdService(FlatSymbolRefAttr svcSym) {
+  if (!svcSym)
+    return {};
+  Operation *svcDecl = topLevelSyms.getDefinition(svcSym);
+  if (!isa<CustomServiceDeclOp>(svcDecl))
+    return svcDecl->getName().getIdentifier();
+  return {};
+}
+
 void ESIConnectServicesPass::convertReq(
     RequestToClientConnectionOp toClientReq) {
   OpBuilder b(toClientReq);
@@ -389,10 +402,11 @@ void ESIConnectServicesPass::convertReq(
   toClientReq.getToClient().replaceAllUsesWith(newReq.getToClient());
 
   // Emit a record of the original request.
-  b.create<ServiceRequestRecordOp>(toClientReq.getLoc(), toClientReq.getAppID(),
-                                   toClientReq.getServicePortAttr(),
-                                   BundleDirection::toClient,
-                                   toClientReq.getToClient().getType());
+  b.create<ServiceRequestRecordOp>(
+      toClientReq.getLoc(), toClientReq.getAppID(),
+      toClientReq.getServicePortAttr(),
+      getStdService(toClientReq.getServicePortAttr().getModuleRef()),
+      BundleDirection::toClient, toClientReq.getToClient().getType());
   toClientReq.erase();
 }
 
@@ -436,10 +450,11 @@ void ESIConnectServicesPass::convertReq(
     be.setValue(v);
 
   // Emit a record of the original request.
-  b.create<ServiceRequestRecordOp>(toServerReq.getLoc(), toServerReq.getAppID(),
-                                   toServerReq.getServicePortAttr(),
-                                   BundleDirection::toServer,
-                                   toServerReq.getToServer().getType());
+  b.create<ServiceRequestRecordOp>(
+      toServerReq.getLoc(), toServerReq.getAppID(),
+      toServerReq.getServicePortAttr(),
+      getStdService(toServerReq.getServicePortAttr().getModuleRef()),
+      BundleDirection::toServer, toServerReq.getToServer().getType());
   toServerReq.erase();
 }
 
@@ -518,7 +533,7 @@ LogicalResult ESIConnectServicesPass::replaceInst(ServiceInstanceOp instOp,
   auto implOp = b.create<ServiceImplementReqOp>(
       instOp.getLoc(), resultTypes, instOp.getAppIDAttr(),
       instOp.getServiceSymbolAttr(), instOp.getImplTypeAttr(),
-      instOp.getImplOptsAttr(), instOp.getOperands());
+      getStdService(declSym), instOp.getImplOptsAttr(), instOp.getOperands());
   implOp->setDialectAttrs(instOp->getDialectAttrs());
   implOp.getPortReqs().push_back(portReqs);
 

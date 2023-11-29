@@ -77,12 +77,13 @@ def ServiceRequestRecordOp : ESI_Op<"manifest.req", [
 
   let arguments = (ins AppIDAttr:$requestor,
                        InnerRefAttr:$servicePort,
+                       OptionalAttr<StrAttr>:$stdService,
                        BundleDirection:$direction,
                        TypeAttrOf<ChannelBundleType>:$bundleType);
 
   let assemblyFormat = [{
-    qualified($requestor) `,` $servicePort `,` $direction `,` $bundleType
-    attr-dict
+    qualified($requestor) `,` $servicePort (`std` $stdService^)?
+    `,` $direction `,` $bundleType attr-dict
   }];
 
   let extraClassDeclaration = [{
@@ -108,11 +109,13 @@ def ServiceImplRecordOp : ESI_Op<"manifest.service_impl", [
 
   let arguments = (ins AppIDAttr:$appID,
                        OptionalAttr<FlatSymbolRefAttr>:$service,
+                       OptionalAttr<StrAttr>:$stdService,
                        StrAttr:$serviceImplName,
                        DictionaryAttr:$implDetails);
   let regions = (region SizedRegion<1>:$reqDetails);
   let assemblyFormat = [{
-    qualified($appID) (`svc` $service^)? `by` $serviceImplName `with` $implDetails
+    qualified($appID) (`svc` $service^)? (`std` $stdService^)?
+   `by` $serviceImplName `with` $implDetails
     attr-dict-with-keyword custom<ServiceImplRecordReqDetails>($reqDetails)
   }];
 

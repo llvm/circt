@@ -705,6 +705,8 @@ void ServiceRequestRecordOp::getDetails(
       StringAttr::get(ctxt, stringifyBundleDirection(getDirection())));
   results.emplace_back(getBundleTypeAttrName(), getBundleTypeAttr());
   results.emplace_back(getServicePortAttrName(), getServicePortAttr());
+  if (auto stdSvc = getStdServiceAttr())
+    results.emplace_back(getStdServiceAttrName(), getStdServiceAttr());
 }
 
 StringRef SymbolMetadataOp::getManifestClass() { return "sym_info"; }
