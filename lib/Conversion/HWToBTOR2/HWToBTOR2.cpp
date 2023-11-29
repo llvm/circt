@@ -472,8 +472,7 @@ private:
     size_t width = hw::getBitWidth(reg.getType());
     genSort(bitvecStr, width);
 
-    // Extract the reset and generate the associated constant
-    genZero(width);
+    size_t resetValLID = getOrCreateOpLID(reg.getResetValue().getDefiningOp());
 
     // Extract the `next` operation for each register (used to define the
     // transition). We need to check if next is a port to avoid nullptrs
@@ -504,8 +503,7 @@ private:
 
     // Generate the ite for the register update reset condition
     // i.e. reg <= reset ? 0 : next
-    genIte(next.getDefiningOp(), resetLID, constToLIDMap.at({0, width}),
-           nextLID, width);
+    genIte(next.getDefiningOp(), resetLID, resetValLID, nextLID, width);
 
     // Finally generate the next statement
     genNext(next, reg, width);
