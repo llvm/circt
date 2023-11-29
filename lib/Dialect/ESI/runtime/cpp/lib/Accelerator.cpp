@@ -35,12 +35,16 @@ CustomService::CustomService(AppIDPath idPath,
 
 namespace esi {
 services::Service *Accelerator::getService(Service::Type svcType, AppIDPath id,
+                                           std::string implName,
                                            ServiceImplDetails details,
                                            HWClientDetails clients) {
   unique_ptr<Service> &cacheEntry = serviceCache[make_tuple(&svcType, id)];
-  if (cacheEntry == nullptr)
-    cacheEntry =
-        unique_ptr<Service>(createService(svcType, id, details, clients));
+  if (cacheEntry == nullptr) {
+    Service *svc = createService(svcType, id, implName, details, clients);
+    if (!svc)
+      return nullptr;
+    cacheEntry = unique_ptr<Service>(svc);
+  }
   return cacheEntry.get();
 }
 

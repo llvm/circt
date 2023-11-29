@@ -280,19 +280,26 @@ Manifest::Impl::getService(AppIDPath idPath, Accelerator &acc,
 
   // Get the implementation details.
   ServiceImplDetails svcDetails;
-  for (auto &detail : svcJson.items())
-    if (detail.key() != "appID" && detail.key() != "client_details")
+  std::string implName;
+  std::string service;
+  for (auto &detail : svcJson.items()) {
+    if (detail.key() == "appID" || detail.key() == "client_details")
+      continue;
+    if (detail.key() == "serviceImplName")
+      implName = detail.value();
+    else if (detail.key() == "service")
+      service = detail.value().get<std::string>().substr(1);
+    else
       svcDetails[detail.key()] = getAny(detail.value());
+  }
 
   // Create the service.
   // TODO: Add support for 'standard' services.
-  auto svc = acc.getService<services::CustomService>(idPath, svcDetails,
-                                                     clientDetails);
-  if (!svc)
-    throw runtime_error("Could not create service for ");
+  auto svc = acc.getService<services::CustomService>(idPath, implName,
+                                                     svcDetails, clientDetails);
 
   // Update the active services table.
-  activeServices[svc->getServiceSymbol()] = svc;
+  activeServices[service] = svc;
   return svc;
 }
 
@@ -337,6 +344,11 @@ Manifest::Impl::getBundlePorts(AppIDPath idPath,
             "Malformed manifest: could not find active service '" +
             serviceName + "'");
     }
+
+    // If the active service is null, then this is a port that is not connected
+    // externally. Or we don't have an implementation for it.
+    if (!svc->second)
+      continue;
 
     string typeName = content.at("bundleType").at("circt_name");
     auto type = getType(typeName);
