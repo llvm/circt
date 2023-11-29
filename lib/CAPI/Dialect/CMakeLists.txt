@@ -2,6 +2,7 @@
 set(LLVM_OPTIONAL_SOURCES
   CHIRRTL.cpp
   Comb.cpp
+  Debug.cpp
   ESI.cpp
   FIRRTL.cpp
   FSM.cpp
@@ -24,6 +25,14 @@ add_mlir_public_c_api_library(CIRCTCAPIComb
   LINK_LIBS PUBLIC
   MLIRCAPIIR
   CIRCTComb
+)
+
+add_mlir_public_c_api_library(CIRCTCAPIDebug
+  Debug.cpp
+
+  LINK_LIBS PUBLIC
+  MLIRCAPIIR
+  CIRCTDebug
 )
 
 add_mlir_public_c_api_library(CIRCTCAPIESI
