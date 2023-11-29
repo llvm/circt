@@ -133,6 +133,8 @@ private:
 ///
 class AnnotationSet {
 public:
+  using ElementType = Annotation;
+
   /// Form an empty annotation set.
   explicit AnnotationSet(MLIRContext *context)
       : annotations(ArrayAttr::get(context, {})) {}

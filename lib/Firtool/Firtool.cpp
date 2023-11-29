@@ -106,6 +106,7 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
 
   // The input mlir file could be firrtl dialect so we might need to clean
   // things up.
+  //  pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerSignaturesPass());
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass(
       opt.getPreserveAggregate(), firrtl::PreserveAggregate::None));
 
