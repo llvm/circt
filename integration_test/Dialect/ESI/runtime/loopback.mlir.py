@@ -51,4 +51,9 @@ if platform != "trace":
   print(f"resp: {resp}")
   assert resp == data
 
+# Placeholder until we have a runtime function API.
+myfunc = d.ports[esi.AppID("func1")]
+myfunc.channels["arg"].connect()
+myfunc.channels["result"].connect()
+
 print("PASS")
