@@ -1385,8 +1385,9 @@ static SmallVector<PortInfo> getPortList(ModuleTy &mod) {
   auto modTy = mod.getHWModuleType();
   auto emptyDict = DictionaryAttr::get(mod.getContext());
   SmallVector<PortInfo> retval;
+  auto locs = mod.getAllPortLocs();
   for (unsigned i = 0, e = modTy.getNumPorts(); i < e; ++i) {
-    LocationAttr loc = mod.getPortLoc(i);
+    LocationAttr loc = locs[i];
     DictionaryAttr attrs =
         dyn_cast_or_null<DictionaryAttr>(mod.getPortAttrs(i));
     if (!attrs)
