@@ -1085,9 +1085,30 @@ bool hw::isParametricType(mlir::Type t) {
       .Default([](auto) { return false; });
 }
 
+WaiverAttr WaiverAttr::getWaiveXassign(::mlir::MLIRContext *context) {
+  return get(context, hw::WaiverKind::NoAssignX);
+}
+
+WaiverAttr WaiverAttr::getExcludeCoverage(::mlir::MLIRContext *context) {
+  return get(context, hw::WaiverKind::ExcludeCoverage);
+}
+
 std::pair<std::string, std::string> WaiverAttr::getWaiverComment() {
-  // Only waiveX is handled for now.
-  assert(getWaiverName().getValue().equals("waiveX") && "Unhandled waiver");
-  return {"//spyglass disable_block NoAssignX-ML",
-          "//spyglass enable_block NoAssignX-ML"};
+  switch (getWaiverKind()) {
+  case hw::WaiverKind::NoAssignX:
+    return {"//spyglass disable_block NoAssignX-ML",
+            "//spyglass enable_block NoAssignX-ML"};
+  case hw::WaiverKind::ExcludeCoverage:
+    return {"//VCS coverage exclude_file", ""};
+  }
+}
+
+mlir::ArrayAttr hw::addWaiver(mlir::Attribute waiversAttr, WaiverAttr w) {
+  if (waiversAttr) {
+    llvm::SmallVector<Attribute> waivers(
+        waiversAttr.cast<ArrayAttr>().getValue());
+    waivers.push_back(w);
+    return ArrayAttr::get(waiversAttr.getContext(), waivers);
+  }
+  return ArrayAttr::get(w.getContext(), {w});
 }

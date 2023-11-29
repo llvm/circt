@@ -313,6 +313,15 @@ def EnumFieldAttr : AttrDef<HWDialect, "EnumField"> {
   }];
 }
 
+let cppNamespace = "circt::hw" in {
+  // Define enum for all the different waivers.
+  def NoAssignXWaiver : I32EnumAttrCase<"NoAssignX", 0>;
+  def ExcludeCoverageWaiver : I32EnumAttrCase<"ExcludeCoverage", 1>;
+  // Kind of Waiver
+  def WaiverKindAttr : I32EnumAttr<"WaiverKind", "waiver kind",
+      [NoAssignXWaiver, ExcludeCoverageWaiver]> ;
+}
+
 // An attribute to indicate the lint waivers that need to be emitted for the
 // module.
 def WaiverAttr : AttrDef<HWDialect, "Waiver"> {
@@ -328,16 +337,15 @@ def WaiverAttr : AttrDef<HWDialect, "Waiver"> {
     ```
   }];
   let mnemonic = "waiver";
-  let parameters = (ins "::mlir::StringAttr":$waiverName);
+  let parameters = (ins "WaiverKind":$waiverKind);
 
-  let assemblyFormat = "`<` $waiverName `>`";
+  let assemblyFormat = "`<` $waiverKind `>`";
 
   let extraClassDeclaration = [{
-    // Create an attribute for waiveX waiver.
-    static WaiverAttr getWaiveXassign(::mlir::MLIRContext *context){
-      return (get(context, mlir::StringAttr::get(context, "waiveX")));
-  
-    };
+    // Create an attribute for waiveX.
+    static WaiverAttr getWaiveXassign(::mlir::MLIRContext *context);
+    // Create an attribute for exclude coverage.
+    static WaiverAttr getExcludeCoverage(::mlir::MLIRContext *context);
     // Get the pair of comments that need to be emitted at the module begin
     // and end.
     std::pair<std::string, std::string> getWaiverComment() ;

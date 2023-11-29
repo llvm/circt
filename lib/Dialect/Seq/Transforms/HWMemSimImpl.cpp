@@ -21,7 +21,6 @@
 #include "circt/Dialect/Seq/SeqAttributes.h"
 #include "circt/Dialect/Seq/SeqPasses.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
-#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Path.h"
 
@@ -185,14 +184,9 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
   ImplicitLocOpBuilder b(op.getLoc(), op.getBody());
 
   InnerSymbolNamespace moduleNamespace(op);
-  if (!ignoreReadEnable) {
-    auto ws = op.getWaivers();
-    SmallVector<Attribute, 2> waivers;
-    if (ws.has_value())
-      llvm::append_range(waivers, ws->getValue());
-    waivers.push_back(WaiverAttr::getWaiveXassign(b.getContext()));
-    op.setWaiversAttr(ArrayAttr::get(b.getContext(), waivers));
-  }
+  if (readEnableMode == ReadEnableMode::Undefined)
+    op.setWaiversAttr(hw::addWaiver(
+        op.getWaiversAttr(), WaiverAttr::getWaiveXassign(b.getContext())));
 
   // Compute total number of mask bits.
   if (mem.maskGran == 0)
@@ -748,8 +742,9 @@ void HWMemSimImplPass::runOnOperation() {
             oldModule.getLoc(), nameAttr, oldModule.getPortList());
         if (auto outdir = oldModule->getAttr("output_file"))
           newModule->setAttr("output_file", outdir);
-        newModule.setCommentAttr(
-            builder.getStringAttr("VCS coverage exclude_file"));
+        newModule.setWaiversAttr(
+            hw::addWaiver(newModule.getWaiversAttr(),
+                          hw::WaiverAttr::getExcludeCoverage(&getContext())));
         newModule.setPrivate();
 
         HWMemSimImpl(readEnableMode, addMuxPragmas, disableMemRandomization,

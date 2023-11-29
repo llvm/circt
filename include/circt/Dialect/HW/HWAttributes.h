@@ -18,6 +18,9 @@ namespace hw {
 class PEOAttr;
 class EnumType;
 enum class PEO : uint32_t;
+class WaiverKindAttr;
+enum class WaiverKind : uint32_t;
+class WaiverAttr;
 
 /// Returns a resolved version of 'type' wherein any parameter reference
 /// has been evaluated based on the set of provided 'parameters'.
@@ -34,6 +37,11 @@ evaluateParametricAttr(mlir::Location loc, mlir::ArrayAttr parameters,
 
 /// Returns true if any part of t is parametric.
 bool isParametricType(mlir::Type t);
+
+/// Return a list of waiver attributes containing the waiver attribute 'w'. If
+/// the 'waivers' is a valid array attribute, then append 'w' and return it,
+/// else return a singleton array of 'w'.
+mlir::ArrayAttr addWaiver(mlir::Attribute waivers, WaiverAttr w);
 
 } // namespace hw
 } // namespace circt

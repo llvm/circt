@@ -1145,6 +1145,11 @@ public:
   /// the value is empty.
   void emitComment(StringAttr comment);
 
+  /// Emit each waiver as a comment on new line.
+  void emitWaivers(ArrayAttr waivers,
+                   SmallVector<std::pair<std::string, std::string>> &waiverStrs,
+                   bool moduleEnd = false);
+
   /// If previous emission requires a newline, emit it now.
   /// This gives us opportunity to open/close boxes before linebreak.
   void emitPendingNewlineIfNeeded() {
@@ -1297,6 +1302,27 @@ void EmitterBase::emitTextWithSubstitutions(
   // Emit any text after the last substitution.
   if (!string.empty())
     ps << PPExtString(string);
+}
+
+void EmitterBase::emitWaivers(
+    ArrayAttr waivers,
+    SmallVector<std::pair<std::string, std::string>> &waiverStrs,
+    bool moduleEnd) {
+
+  if (!moduleEnd) {
+    if (!waivers)
+      return;
+    // Ensure waivers are unique, not repeated.
+    llvm::SmallSetVector<hw::WaiverKind, 2> uniqWaivers;
+    for (auto &w : waivers.getValue()) {
+      auto waiver = w.cast<WaiverAttr>();
+      if (uniqWaivers.insert(waiver.getWaiverKind()))
+        waiverStrs.push_back(waiver.getWaiverComment());
+    }
+  }
+  for (const auto &w : waiverStrs)
+    if (!(moduleEnd ? w.second.empty() : w.first.empty()))
+      ps << (moduleEnd ? w.second : w.first) << PP::newline;
 }
 
 void EmitterBase::emitComment(StringAttr comment) {
@@ -5112,6 +5138,8 @@ LogicalResult StmtEmitter::visitSV(BindOp op) {
 
 LogicalResult StmtEmitter::visitSV(InterfaceOp op) {
   emitComment(op.getCommentAttr());
+  SmallVector<std::pair<std::string, std::string>> waiverStrs;
+  emitWaivers(op->getAttrOfType<ArrayAttr>("waivers"), waiverStrs);
   // Emit SV attributes.
   emitSVAttributes(op);
   // TODO: source info!
@@ -5122,6 +5150,7 @@ LogicalResult StmtEmitter::visitSV(InterfaceOp op) {
   // FIXME: Don't emit the body of this as general statements, they aren't!
   emitStatementBlock(*op.getBodyBlock());
   startStatement();
+  emitWaivers({}, waiverStrs, true);
   ps << "endinterface" << PP::newline;
   ps.addCallback({op, false});
   setPendingNewline();
@@ -5959,19 +5988,9 @@ void ModuleEmitter::emitPortList(Operation *module,
 void ModuleEmitter::emitHWModule(HWModuleOp module) {
   currentModuleOp = module;
 
-  auto waivers = module.getWaivers();
-  SmallVector<std::pair<std::string, std::string>> waiverStrs;
-
-  if (waivers.has_value()) {
-    // Ensure waivers are unique, not repeated.
-    llvm::StringSet<> waiverNames;
-    for (auto &w : waivers->getValue()) {
-      auto waiver = w.cast<WaiverAttr>();
-      if (waiverNames.insert(waiver.getWaiverName().getValue()).second)
-        waiverStrs.push_back(waiver.getWaiverComment());
-    }
-  }
   emitComment(module.getCommentAttr());
+  SmallVector<std::pair<std::string, std::string>> waiverStrs;
+  emitWaivers(module.getWaiversAttr(), waiverStrs);
   emitSVAttributes(module);
   startStatement();
   ps.addCallback({module, true});
@@ -5985,13 +6004,9 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
   assert(state.pendingNewline);
 
   // Emit the body of the module.
-  for (const auto &w : waiverStrs)
-    ps << PP::newline << w.first << PP::newline;
-
   StmtEmitter(*this, state.options).emitStatementBlock(*module.getBodyBlock());
   startStatement();
-  for (const auto &w : waiverStrs)
-    ps << PP::newline << w.second << PP::newline;
+  emitWaivers({}, waiverStrs, true);
 
   ps << "endmodule";
   ps.addCallback({module, false});

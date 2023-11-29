@@ -637,8 +637,8 @@ firrtl.circuit "InterfaceGroundType" attributes {
 // comments, and types.
 //
 // CHECK:      sv.interface @GroundView
-// CHECK-SAME:   comment = "VCS coverage exclude_file"
 // CHECK-SAME:   output_file = #hw.output_file<"gct-dir{{/|\\\\}}"
+// CHECK-SAME:   waivers = [#hw.waiver<ExcludeCoverage>]
 // CHECK-NEXT:   sv.verbatim "// description of foo"
 // CHECK-NEXT:   sv.interface.signal @foo : i1
 // CHECK-NEXT:   sv.verbatim "// multi\0A// line\0A// description\0A// of\0A// bar"

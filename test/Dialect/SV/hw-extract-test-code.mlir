@@ -6,7 +6,8 @@
 // CHECK-NOT: attributes
 // CHECK-NEXT: hw.module.extern @foo_assert
 // CHECK-NOT: attributes
-// CHECK: hw.module @issue1246_assert(in %clock : i1) attributes {comment = "VCS coverage exclude_file", output_file = #hw.output_file<"dir3{{/|\\\\}}", excludeFromFileList, includeReplicatedOps>}
+// CHECK: hw.module @issue1246_assert(in %clock : i1) attributes {output_file = #hw.output_file<"dir3{{/|\\\\}}", excludeFromFileList, includeReplicatedOps>
+// CHECK-SAME:   waivers = [#hw.waiver<ExcludeCoverage>]
 // CHECK: sv.assert
 // CHECK: sv.error "Assertion failed"
 // CHECK: sv.error "assert:"
@@ -15,11 +16,11 @@
 // CHECK: sv.fatal 1
 // CHECK: foo_assert
 // CHECK: hw.module @issue1246_assume(in %clock : i1)
-// CHECK-SAME: attributes {comment = "VCS coverage exclude_file"}
+// CHECK-SAME:   waivers = [#hw.waiver<ExcludeCoverage>]
 // CHECK: sv.assume
 // CHECK: foo_assume
 // CHECK: hw.module @issue1246_cover(in %clock : i1)
-// CHECK-SAME: attributes {comment = "VCS coverage exclude_file"}
+// CHECK-SAME:   waivers = [#hw.waiver<ExcludeCoverage>]
 // CHECK: sv.cover
 // CHECK: foo_cover
 // CHECK: hw.module @issue1246

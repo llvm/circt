@@ -65,13 +65,13 @@ firrtl.circuit "MyTestHarness" attributes {annotations = [ {class = "sifive.ente
       {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {}
 
   // CHECK-LABEL: hw.module private @Testbench
-  // CHECK-SAME:  comment = "VCS coverage exclude_file"
   // CHECK-SAME:  firrtl.extract.do_not_extract
+  // CHECK-SAME:  waivers = [#hw.waiver<ExcludeCoverage>]
   firrtl.module private @Testbench() {}
 
   // CHECK-LABEL: hw.module @MyTestHarness
-  // CHECK-SAME:  comment = "VCS coverage exclude_file"
   // CHECK-SAME:  firrtl.extract.do_not_extract
+  // CHECK-SAME:  waivers = [#hw.waiver<ExcludeCoverage>]
   firrtl.module @MyTestHarness() {
     firrtl.instance myDUT @MyDUT()
     firrtl.instance myTestBench @Testbench()

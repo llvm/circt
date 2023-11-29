@@ -1991,8 +1991,11 @@ void GrandCentralPass::runOnOperation() {
                                      maybeExtractInfo->directory.getValue(),
                                      /*excludeFromFileList=*/true,
                                      /*includeReplicatedOps=*/true));
-                    mod->setAttr("comment", builder.getStringAttr(
-                                                "VCS coverage exclude_file"));
+                    mod->setAttr(
+                        "waivers",
+                        hw::addWaiver(
+                            mod->getAttr("waivers"),
+                            hw::WaiverAttr::getExcludeCoverage(&getContext())));
                   }
                 }
               }
@@ -2206,13 +2209,15 @@ void GrandCentralPass::runOnOperation() {
                        hw::OutputFileAttr::getAsDirectory(
                            &getContext(), getOutputDirectory().getValue(),
                            /*excludeFromFileList=*/true));
-      iface.setCommentAttr(builder.getStringAttr("VCS coverage exclude_file"));
+      iface->setAttr(
+          "waivers",
+          ArrayAttr::get(&getContext(),
+                         {hw::WaiverAttr::getExcludeCoverage(&getContext())}));
       builder.setInsertionPointToEnd(
           cast<sv::InterfaceOp>(iface).getBodyBlock());
       interfaceMap[FlatSymbolRefAttr::get(builder.getContext(),
                                           ifaceBuilder.iFaceName)] = iface;
       for (auto elem : ifaceBuilder.elementsList) {
-
         auto uloc = builder.getUnknownLoc();
 
         auto description = elem.description;
