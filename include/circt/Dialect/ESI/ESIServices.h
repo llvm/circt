@@ -25,7 +25,7 @@ class ServiceGeneratorDispatcher {
 public:
   // All generators must support this function pointer signature.
   using ServiceGeneratorFunc = std::function<LogicalResult(
-      ServiceImplementReqOp, ServiceDeclOpInterface)>;
+      ServiceImplementReqOp, ServiceDeclOpInterface, ServiceImplRecordOp)>;
 
   // Since passes don't have access to a context at creation time (and
   // Attributes are tied to the context), we need to delay lookup table creation
