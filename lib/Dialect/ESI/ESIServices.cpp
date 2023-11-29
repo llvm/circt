@@ -41,6 +41,8 @@ ServiceGeneratorDispatcher::generate(ServiceImplementReqOp req,
     return success();
   }
 
+  // Since we always need a record of generation, create it here then pass it to
+  // the generator for possible modification.
   OpBuilder b(req);
   auto implRecord = b.create<ServiceImplRecordOp>(
       req.getLoc(), req.getAppID(), req.getServiceSymbolAttr(),
@@ -68,7 +70,6 @@ instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
     }
   }
 
-  // implRecord.setServiceImplName("cosim");
   Block &connImplBlock = implRecord.getReqDetails().front();
   OpBuilder implRecords = OpBuilder::atBlockEnd(&connImplBlock);
 

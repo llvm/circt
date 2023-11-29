@@ -113,7 +113,7 @@ def ServiceImplRecordOp : ESI_Op<"manifest.service_impl", [
   let regions = (region SizedRegion<1>:$reqDetails);
   let assemblyFormat = [{
     qualified($appID) (`svc` $service^)? `by` $serviceImplName `with` $implDetails
-    attr-dict-with-keyword $reqDetails
+    attr-dict-with-keyword custom<ServiceImplRecordReqDetails>($reqDetails)
   }];
 
   let extraClassDeclaration = [{

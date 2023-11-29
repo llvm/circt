@@ -33,6 +33,19 @@ hw.module @Loopback (in %clk: !seq.clock) {
   esi.service.req.to_server %sendi0_bundle -> <@MyService::@Send> (#esi.appid<"mysvc_send">) : !sendI0
 }
 
+esi.mem.ram @MemA i64 x 20
+!write = !hw.struct<address: i5, data: i64>
+!writeBundle = !esi.bundle<[!esi.channel<!write> to "req", !esi.channel<i0> from "ack"]>
+
+hw.module @MemoryAccess1(in %clk : !seq.clock, in %rst : i1) {
+  esi.service.instance #esi.appid<"mem"> svc @MemA impl as "sv_mem" (%clk, %rst) : (!seq.clock, i1) -> ()
+  %write_struct = hw.aggregate_constant [0 : i5, 0 : i64] : !write
+  %valid = hw.constant 0 : i1
+  %write_ch, %ready = esi.wrap.vr %write_struct, %valid : !write
+  %writeBundle, %done = esi.bundle.pack %write_ch : !writeBundle
+  esi.service.req.to_server %writeBundle -> <@MemA::@write> (#esi.appid<"internal_write">) : !writeBundle
+}
+
 esi.manifest.sym @Loopback name "LoopbackIP" version "v0.0" summary "IP which simply echos bytes" {foo=1}
 
 hw.module @top(in %clk: !seq.clock, in %rst: i1) {
@@ -40,4 +53,5 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
   esi.service.instance #esi.appid<"cosim_default"> impl as "cosim" (%clk, %rst) : (!seq.clock, i1) -> ()
   hw.instance "m1" @Loopback (clk: %clk: !seq.clock) -> () {esi.appid=#esi.appid<"loopback_inst"[0]>}
   hw.instance "m2" @Loopback (clk: %clk: !seq.clock) -> () {esi.appid=#esi.appid<"loopback_inst"[1]>}
+  hw.instance "int_mem" @MemoryAccess1 (clk: %clk: !seq.clock, rst: %rst: i1) -> ()
 }
