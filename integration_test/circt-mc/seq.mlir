@@ -4,7 +4,7 @@
 //  RUN: circt-mc %s -b 10 --module ClkProp | FileCheck %s --check-prefix=CLKPROP
 //  CLKPROP: Success!
 
-hw.module @ClkProp(%clk: !seq.clock, %i0: i1) {
+hw.module @ClkProp(in %clk: !seq.clock, in %i0: i1) {
   %reg = seq.compreg %i0, %clk : i1
   // Condition (equivalent to %clk -> %reg == %i0)
   %c-1_i1 = hw.constant -1 : i1
@@ -20,7 +20,7 @@ hw.module @ClkProp(%clk: !seq.clock, %i0: i1) {
 //  RUN: circt-mc %s -b 10 --module StateProp | FileCheck %s --check-prefix=STATEPROP
 //  STATEPROP: Success!
 
-hw.module @StateProp(%clk: !seq.clock, %i0: i1) {
+hw.module @StateProp(in %clk: !seq.clock, in %i0: i1) {
   %c-1_i1 = hw.constant -1 : i1
   %reg = seq.compreg %i0, %clk : i1
   %not_reg = comb.xor bin %reg, %c-1_i1 : i1

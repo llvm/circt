@@ -2,7 +2,7 @@
 
 // expected-error @+1 {{Properties do not hold on module.}}
 module {
-  hw.module @OrEqAnd(%i0: i1, %i1: i1) {
+  hw.module @OrEqAnd(in %i0: i1, in %i1: i1) {
     %or = comb.or bin %i0, %i1 : i1
     %and = comb.and bin %i0, %i1 : i1
     // Condition

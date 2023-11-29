@@ -5,7 +5,7 @@
 //  RUN: circt-mc %s -b 10 --module OrCommutes | FileCheck %s --check-prefix=ORCOMMUTES
 //  ORCOMMUTES: Success!
 
-hw.module @OrCommutes(%i0: i1, %i1: i1) {
+hw.module @OrCommutes(in %i0: i1, in %i1: i1) {
   %or0 = comb.or bin %i0, %i1 : i1
   %or1 = comb.or bin %i1, %i0 : i1
   // Condition
@@ -16,7 +16,7 @@ hw.module @OrCommutes(%i0: i1, %i1: i1) {
 //  RUN: circt-mc %s -b 10 --module demorgan | FileCheck %s --check-prefix=DEMORGAN
 //  DEMORGAN: Success!
 
-hw.module @demorgan(%i0: i1, %i1: i1) {
+hw.module @demorgan(in %i0: i1, in %i1: i1) {
   %c1 = hw.constant 1 : i1
   %ni0 = comb.xor bin %i0, %c1 : i1
   %ni1 = comb.xor bin %i1, %c1 : i1
