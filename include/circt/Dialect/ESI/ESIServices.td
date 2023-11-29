@@ -136,6 +136,7 @@ def ServiceImplementReqOp : ESI_Op<"service.impl_req", [
   let arguments = (ins AppIDAttr:$appID,
                        OptionalAttr<FlatSymbolRefAttr>:$service_symbol,
                        StrAttr:$impl_type,
+                       OptionalAttr<StrAttr>:$stdService,
                        OptionalAttr<DictionaryAttr>:$impl_opts,
                        Variadic<AnyType>:$inputs);
   let results = (outs Variadic<AnyType>:$outputs);
@@ -143,7 +144,7 @@ def ServiceImplementReqOp : ESI_Op<"service.impl_req", [
 
   let assemblyFormat = [{
     qualified($appID) (`svc` $service_symbol^)? `impl` `as` $impl_type
-      (`opts` $impl_opts^)? `(` $inputs `)`
+      (`std` $stdService^)? (`opts` $impl_opts^)? `(` $inputs `)`
       attr-dict `:` functional-type($inputs, results)
       $portReqs
   }];

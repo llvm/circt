@@ -34,33 +34,46 @@ hw.module @Loopback (in %clk: !seq.clock) {
 
 esi.manifest.sym @Loopback name "LoopbackIP" version "v0.0" summary "IP which simply echos bytes" {foo=1}
 
+esi.service.std.func @funcs
+
+// CONN-LABEL:   hw.module @CallableFunc1(in %func1 : !esi.bundle<[!esi.channel<i16> to "arg", !esi.channel<i16> from "result"]>) {
+// CONN-NEXT:      esi.manifest.req #esi.appid<"func1">, <@funcs::@call> std "esi.service.std.func", toClient, !esi.bundle<[!esi.channel<i16> to "arg", !esi.channel<i16> from "result"]>
+// CONN-NEXT:      %arg = esi.bundle.unpack %arg from %func1 : !esi.bundle<[!esi.channel<i16> to "arg", !esi.channel<i16> from "result"]>
+!func1Signature = !esi.bundle<[!esi.channel<i16> to "arg", !esi.channel<i16> from "result"]>
+hw.module @CallableFunc1() {
+  %call = esi.service.req.to_client <@funcs::@call> (#esi.appid<"func1">) : !func1Signature
+  %arg = esi.bundle.unpack %arg from %call : !func1Signature
+}
+
 hw.module @top(in %clk: !seq.clock, in %rst: i1) {
   esi.service.instance #esi.appid<"cosim"> svc @HostComms impl as "cosim" (%clk, %rst) : (!seq.clock, i1) -> ()
   hw.instance "m1" @Loopback (clk: %clk: !seq.clock) -> () {esi.appid=#esi.appid<"loopback_inst"[0]>}
   hw.instance "m2" @Loopback (clk: %clk: !seq.clock) -> () {esi.appid=#esi.appid<"loopback_inst"[1]>}
+  hw.instance "func1" @CallableFunc1() -> ()
 }
 
 // HIER-LABEL:  esi.manifest.compressed <"{{.+}}">
 // HIER-LABEL:  esi.manifest.hier_root @top {
-// HIER:          esi.manifest.service_impl #esi.appid<"cosim"> svc @HostComms by "cosim" with {} {
-// HIER:            esi.manifest.impl_conn [#esi.appid<"loopback_inst"[0]>, #esi.appid<"loopback_tohw">] req <@HostComms::@Recv>(!esi.bundle<[!esi.channel<i8> to "recv"]>) with {channel_assignments = {recv = "loopback_inst[0].loopback_tohw.recv"}}
-// HIER:            esi.manifest.impl_conn [#esi.appid<"loopback_inst"[0]>, #esi.appid<"loopback_fromhw">] req <@HostComms::@Send>(!esi.bundle<[!esi.channel<i8> from "send"]>) with {channel_assignments = {send = "loopback_inst[0].loopback_fromhw.send"}}
-// HIER:            esi.manifest.impl_conn [#esi.appid<"loopback_inst"[0]>, #esi.appid<"loopback_fromhw_i0">] req <@HostComms::@SendI0>(!esi.bundle<[!esi.channel<i0> from "send"]>) with {channel_assignments = {send = "loopback_inst[0].loopback_fromhw_i0.send"}}
-// HIER:            esi.manifest.impl_conn [#esi.appid<"loopback_inst"[1]>, #esi.appid<"loopback_tohw">] req <@HostComms::@Recv>(!esi.bundle<[!esi.channel<i8> to "recv"]>) with {channel_assignments = {recv = "loopback_inst[1].loopback_tohw.recv"}}
-// HIER:            esi.manifest.impl_conn [#esi.appid<"loopback_inst"[1]>, #esi.appid<"loopback_fromhw">] req <@HostComms::@Send>(!esi.bundle<[!esi.channel<i8> from "send"]>) with {channel_assignments = {send = "loopback_inst[1].loopback_fromhw.send"}}
-// HIER:            esi.manifest.impl_conn [#esi.appid<"loopback_inst"[1]>, #esi.appid<"loopback_fromhw_i0">] req <@HostComms::@SendI0>(!esi.bundle<[!esi.channel<i0> from "send"]>) with {channel_assignments = {send = "loopback_inst[1].loopback_fromhw_i0.send"}}
-// HIER:          }
-// HIER:          esi.manifest.hier_node #esi.appid<"loopback_inst"[0]> mod @Loopback {
-// HIER:            esi.manifest.req #esi.appid<"loopback_tohw">, <@HostComms::@Recv>, toClient, !esi.bundle<[!esi.channel<i8> to "recv"]>
-// HIER:            esi.manifest.req #esi.appid<"loopback_fromhw">, <@HostComms::@Send>, toServer, !esi.bundle<[!esi.channel<i8> to "send"]>
-// HIER:            esi.manifest.req #esi.appid<"loopback_fromhw_i0">, <@HostComms::@SendI0>, toServer, !esi.bundle<[!esi.channel<i0> to "send"]>
-// HIER:          }
-// HIER:          esi.manifest.hier_node #esi.appid<"loopback_inst"[1]> mod @Loopback {
-// HIER:            esi.manifest.req #esi.appid<"loopback_tohw">, <@HostComms::@Recv>, toClient, !esi.bundle<[!esi.channel<i8> to "recv"]>
-// HIER:            esi.manifest.req #esi.appid<"loopback_fromhw">, <@HostComms::@Send>, toServer, !esi.bundle<[!esi.channel<i8> to "send"]>
-// HIER:            esi.manifest.req #esi.appid<"loopback_fromhw_i0">, <@HostComms::@SendI0>, toServer, !esi.bundle<[!esi.channel<i0> to "send"]>
-// HIER:          }
-// HIER:        }
+// HIER-NEXT:     esi.manifest.service_impl #esi.appid<"cosim"> svc @HostComms by "cosim" with {} {
+// HIER-NEXT:       esi.manifest.impl_conn [#esi.appid<"loopback_inst"[0]>, #esi.appid<"loopback_tohw">] req <@HostComms::@Recv>(!esi.bundle<[!esi.channel<i8> to "recv"]>) with {channel_assignments = {recv = "loopback_inst[0].loopback_tohw.recv"}}
+// HIER-NEXT:       esi.manifest.impl_conn [#esi.appid<"loopback_inst"[0]>, #esi.appid<"loopback_fromhw">] req <@HostComms::@Send>(!esi.bundle<[!esi.channel<i8> from "send"]>) with {channel_assignments = {send = "loopback_inst[0].loopback_fromhw.send"}}
+// HIER-NEXT:       esi.manifest.impl_conn [#esi.appid<"loopback_inst"[0]>, #esi.appid<"loopback_fromhw_i0">] req <@HostComms::@SendI0>(!esi.bundle<[!esi.channel<i0> from "send"]>) with {channel_assignments = {send = "loopback_inst[0].loopback_fromhw_i0.send"}}
+// HIER-NEXT:       esi.manifest.impl_conn [#esi.appid<"loopback_inst"[1]>, #esi.appid<"loopback_tohw">] req <@HostComms::@Recv>(!esi.bundle<[!esi.channel<i8> to "recv"]>) with {channel_assignments = {recv = "loopback_inst[1].loopback_tohw.recv"}}
+// HIER-NEXT:       esi.manifest.impl_conn [#esi.appid<"loopback_inst"[1]>, #esi.appid<"loopback_fromhw">] req <@HostComms::@Send>(!esi.bundle<[!esi.channel<i8> from "send"]>) with {channel_assignments = {send = "loopback_inst[1].loopback_fromhw.send"}}
+// HIER-NEXT:       esi.manifest.impl_conn [#esi.appid<"loopback_inst"[1]>, #esi.appid<"loopback_fromhw_i0">] req <@HostComms::@SendI0>(!esi.bundle<[!esi.channel<i0> from "send"]>) with {channel_assignments = {send = "loopback_inst[1].loopback_fromhw_i0.send"}}
+// HIER-NEXT:     }
+// HIER-NEXT:     esi.manifest.hier_node #esi.appid<"loopback_inst"[0]> mod @Loopback {
+// HIER-NEXT:       esi.manifest.req #esi.appid<"loopback_tohw">, <@HostComms::@Recv>, toClient, !esi.bundle<[!esi.channel<i8> to "recv"]>
+// HIER-NEXT:       esi.manifest.req #esi.appid<"loopback_fromhw">, <@HostComms::@Send>, toServer, !esi.bundle<[!esi.channel<i8> to "send"]>
+// HIER-NEXT:       esi.manifest.req #esi.appid<"loopback_fromhw_i0">, <@HostComms::@SendI0>, toServer, !esi.bundle<[!esi.channel<i0> to "send"]>
+// HIER-NEXT:     }
+// HIER-NEXT:     esi.manifest.hier_node #esi.appid<"loopback_inst"[1]> mod @Loopback {
+// HIER-NEXT:       esi.manifest.req #esi.appid<"loopback_tohw">, <@HostComms::@Recv>, toClient, !esi.bundle<[!esi.channel<i8> to "recv"]>
+// HIER-NEXT:       esi.manifest.req #esi.appid<"loopback_fromhw">, <@HostComms::@Send>, toServer, !esi.bundle<[!esi.channel<i8> to "send"]>
+// HIER-NEXT:       esi.manifest.req #esi.appid<"loopback_fromhw_i0">, <@HostComms::@SendI0>, toServer, !esi.bundle<[!esi.channel<i0> to "send"]>
+// HIER-NEXT:     }
+// HIER-NEXT:     esi.manifest.req #esi.appid<"func1">, <@funcs::@call> std "esi.service.std.func", toClient, !esi.bundle<[!esi.channel<i16> to "arg", !esi.channel<i16> from "result"]>
+// HIER-NEXT:   }
 
 // HW-LABEL:    hw.module @top
 // HW:            hw.instance "__manifest" @__ESIManifest() -> ()
@@ -201,6 +214,21 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:              }
 // CHECK-NEXT:            }
 // CHECK-NEXT:          ]
+// CHECK-NEXT:        },
+// CHECK-NEXT:        {
+// CHECK-NEXT:          "class": "client_port",
+// CHECK-NEXT:          "appID": {
+// CHECK-NEXT:            "name": "func1"
+// CHECK-NEXT:          },
+// CHECK-NEXT:          "direction": "toClient",
+// CHECK-NEXT:          "bundleType": {
+// CHECK-NEXT:            "circt_name": "!esi.bundle<[!esi.channel<i16> to \"arg\", !esi.channel<i16> from \"result\"]>"
+// CHECK-NEXT:          },
+// CHECK-NEXT:          "servicePort": {
+// CHECK-NEXT:            "inner": "call",
+// CHECK-NEXT:            "outer_sym": "funcs"
+// CHECK-NEXT:          },
+// CHECK-NEXT:          "stdService": "esi.service.std.func"
 // CHECK-NEXT:        }
 // CHECK-NEXT:      ],
 // CHECK-NEXT:      "children": [
@@ -337,6 +365,52 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:            }
 // CHECK-NEXT:          }
 // CHECK-NEXT:        ]
+// CHECK-NEXT:      },
+// CHECK-NEXT:      {
+// CHECK-NEXT:        "symbol": "funcs",
+// CHECK-NEXT:        "ports": [
+// CHECK-NEXT:          {
+// CHECK-NEXT:            "name": "call",
+// CHECK-NEXT:            "direction": "toClient",
+// CHECK-NEXT:            "type": {
+// CHECK-NEXT:              "type": {
+// CHECK-NEXT:                "channels": [
+// CHECK-NEXT:                  {
+// CHECK-NEXT:                    "direction": "to",
+// CHECK-NEXT:                    "name": "arg",
+// CHECK-NEXT:                    "type": {
+// CHECK-NEXT:                      "circt_name": "!esi.channel<!esi.any>",
+// CHECK-NEXT:                      "dialect": "esi",
+// CHECK-NEXT:                      "inner": {
+// CHECK-NEXT:                        "circt_name": "!esi.any",
+// CHECK-NEXT:                        "dialect": "esi",
+// CHECK-NEXT:                        "mnemonic": "any"
+// CHECK-NEXT:                      },
+// CHECK-NEXT:                      "mnemonic": "channel"
+// CHECK-NEXT:                    }
+// CHECK-NEXT:                  },
+// CHECK-NEXT:                  {
+// CHECK-NEXT:                    "direction": "from",
+// CHECK-NEXT:                    "name": "result",
+// CHECK-NEXT:                    "type": {
+// CHECK-NEXT:                      "circt_name": "!esi.channel<!esi.any>",
+// CHECK-NEXT:                      "dialect": "esi",
+// CHECK-NEXT:                      "inner": {
+// CHECK-NEXT:                        "circt_name": "!esi.any",
+// CHECK-NEXT:                        "dialect": "esi",
+// CHECK-NEXT:                        "mnemonic": "any"
+// CHECK-NEXT:                      },
+// CHECK-NEXT:                      "mnemonic": "channel"
+// CHECK-NEXT:                    }
+// CHECK-NEXT:                  }
+// CHECK-NEXT:                ],
+// CHECK-NEXT:                "circt_name": "!esi.bundle<[!esi.channel<!esi.any> to \"arg\", !esi.channel<!esi.any> from \"result\"]>",
+// CHECK-NEXT:                "dialect": "esi",
+// CHECK-NEXT:                "mnemonic": "bundle"
+// CHECK-NEXT:              }
+// CHECK-NEXT:            }
+// CHECK-NEXT:          }
+// CHECK-NEXT:        ]
 // CHECK-NEXT:      }
 // CHECK-NEXT:    ],
 
@@ -410,6 +484,47 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:          }
 // CHECK-NEXT:        ],
 // CHECK-NEXT:        "circt_name": "!esi.bundle<[!esi.channel<i0> to \"send\"]>",
+// CHECK-NEXT:        "dialect": "esi",
+// CHECK-NEXT:        "mnemonic": "bundle"
+// CHECK-NEXT:      },
+// CHECK-NEXT:      {
+// CHECK-NEXT:        "channels": [
+// CHECK-NEXT:          {
+// CHECK-NEXT:            "direction": "to",
+// CHECK-NEXT:            "name": "arg",
+// CHECK-NEXT:            "type": {
+// CHECK-NEXT:              "circt_name": "!esi.channel<i16>",
+// CHECK-NEXT:              "dialect": "esi",
+// CHECK-NEXT:              "hw_bitwidth": 16,
+// CHECK-NEXT:              "inner": {
+// CHECK-NEXT:                "circt_name": "i16",
+// CHECK-NEXT:                "dialect": "builtin",
+// CHECK-NEXT:                "hw_bitwidth": 16,
+// CHECK-NEXT:                "mnemonic": "int",
+// CHECK-NEXT:                "signedness": "signless"
+// CHECK-NEXT:              },
+// CHECK-NEXT:              "mnemonic": "channel"
+// CHECK-NEXT:            }
+// CHECK-NEXT:          },
+// CHECK-NEXT:          {
+// CHECK-NEXT:            "direction": "from",
+// CHECK-NEXT:            "name": "result",
+// CHECK-NEXT:            "type": {
+// CHECK-NEXT:              "circt_name": "!esi.channel<i16>",
+// CHECK-NEXT:              "dialect": "esi",
+// CHECK-NEXT:              "hw_bitwidth": 16,
+// CHECK-NEXT:              "inner": {
+// CHECK-NEXT:                "circt_name": "i16",
+// CHECK-NEXT:                "dialect": "builtin",
+// CHECK-NEXT:                "hw_bitwidth": 16,
+// CHECK-NEXT:                "mnemonic": "int",
+// CHECK-NEXT:                "signedness": "signless"
+// CHECK-NEXT:              },
+// CHECK-NEXT:              "mnemonic": "channel"
+// CHECK-NEXT:            }
+// CHECK-NEXT:          }
+// CHECK-NEXT:        ],
+// CHECK-NEXT:        "circt_name": "!esi.bundle<[!esi.channel<i16> to \"arg\", !esi.channel<i16> from \"result\"]>",
 // CHECK-NEXT:        "dialect": "esi",
 // CHECK-NEXT:        "mnemonic": "bundle"
 // CHECK-NEXT:      }
