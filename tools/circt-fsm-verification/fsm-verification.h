@@ -62,7 +62,6 @@
 #include "llvm/Support/raw_ostream.h"
 #include </Users/luisa/z3/src/api/c++/z3++.h>
 
-
 using namespace llvm;
 using namespace mlir;
 using namespace circt;
@@ -70,7 +69,7 @@ using namespace std;
 using namespace z3; 
 
 struct variable{
-  string name;
+  mlir::Value name;
   int initValue;
 };
 
@@ -79,28 +78,39 @@ struct outputs{
   mlir::Value name;
 };
 
+using z3Fun = std::function <expr (vector<expr>)>;
+
+
+// struct transition{
+//   string from;
+//   string to;
+//   std::vector<expr > *var_updates;
+//   Region guard_reg;
+// };
+
+
+// struct CFG{
+//   llvm::DenseMap<mlir::Value, z3::sort> variables;
+//   string initialState;
+//   llvm::DenseMap<mlir::Value, expr> constants;
+//   std::vector<transition *> transitions;
+//   std::vector<outputs> outputs;
+//   std::vector<expr> inputs;
+//   vector<string> states;
+// };
+
 struct transition{
   string from;
   string to;
-  std::vector<std::string > *var_updates;
-  std::vector<std::string > *guards;
-};
-
-
-struct CFG{
-  llvm::DenseMap<mlir::Value, string> map;
-  string initialState;
-  std::vector<variable> variables;
-  std::vector<transition *> transitions;
-  std::vector<outputs> outputs;
-  std::vector<mlir::Value> inputs;
+  vector<z3Fun> guards;
+  vector<z3Fun> actions;
 };
 
 // void print_cfg(CFG *cfg);
 
 // void store_variable_declaration(Operation &op, CFG *cfg);
 
-string manage_comb_exp(Operation &op, context& c);
+// expr manage_comb_exp(Operation &op, context& c);
 
 // void manage_output_region(Region &region, CFG *cfg);
 
@@ -112,7 +122,7 @@ string manage_comb_exp(Operation &op, context& c);
 
 // void manage_state(Operation &op, CFG *cfg);
 
-void explore_nested_blocks(Operation &op, int level, CFG *cfg, context& ctx);
+// void explore_nested_blocks(Operation &op, int level,? CFG *cfg, context& ctx);
 
 // void parse_fsm(string input_file);
 
