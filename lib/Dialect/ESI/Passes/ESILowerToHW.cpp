@@ -334,15 +334,20 @@ LogicalResult CosimToHostLowering::matchAndRewrite(
   SmallVector<Attribute, 8> params;
   params.push_back(ParamDeclAttr::get("ENDPOINT_ID", ep.getIdAttr()));
   params.push_back(ParamDeclAttr::get("TO_HOST_TYPE_ID", getTypeID(type)));
-  params.push_back(ParamDeclAttr::get("TO_HOST_SIZE_BITS",
-                                      rewriter.getI32IntegerAttr(width)));
+  params.push_back(ParamDeclAttr::get(
+      "TO_HOST_SIZE_BITS", rewriter.getI32IntegerAttr(width > 0 ? width : 1)));
 
   // Set up the egest route to drive the EP's toHost ports.
   auto sendReady = bb.get(rewriter.getI1Type());
   UnwrapValidReadyOp unwrapSend =
       rewriter.create<UnwrapValidReadyOp>(loc, toHost, sendReady);
-  auto castedSendData = rewriter.create<hw::BitcastOp>(
-      loc, rewriter.getIntegerType(width), unwrapSend.getRawOutput());
+  Value castedSendData;
+  if (width > 0)
+    castedSendData = rewriter.create<hw::BitcastOp>(
+        loc, rewriter.getIntegerType(width), unwrapSend.getRawOutput());
+  else
+    castedSendData = rewriter.create<hw::ConstantOp>(
+        loc, rewriter.getIntegerType(1), rewriter.getBoolAttr(false));
 
   // Build or get the cached Cosim Endpoint module parameterization.
   Operation *symTable = ep->getParentWithTrait<OpTrait::SymbolTable>();
@@ -354,7 +359,7 @@ LogicalResult CosimToHostLowering::matchAndRewrite(
       adaptor.getClk(),
       adaptor.getRst(),
       unwrapSend.getValid(),
-      castedSendData.getResult(),
+      castedSendData,
   };
   auto cosimEpModule = rewriter.create<InstanceOp>(
       loc, endpoint, ep.getIdAttr(), operands, ArrayAttr::get(ctxt, params));
@@ -400,8 +405,9 @@ LogicalResult CosimFromHostLowering::matchAndRewrite(
   SmallVector<Attribute, 8> params;
   params.push_back(ParamDeclAttr::get("ENDPOINT_ID", ep.getIdAttr()));
   params.push_back(ParamDeclAttr::get("FROM_HOST_TYPE_ID", getTypeID(type)));
-  params.push_back(ParamDeclAttr::get("FROM_HOST_SIZE_BITS",
-                                      rewriter.getI32IntegerAttr(width)));
+  params.push_back(
+      ParamDeclAttr::get("FROM_HOST_SIZE_BITS",
+                         rewriter.getI32IntegerAttr(width > 0 ? width : 1)));
 
   // Get information necessary for injest path.
   auto recvReady = bb.get(rewriter.getI1Type());
@@ -419,10 +425,16 @@ LogicalResult CosimFromHostLowering::matchAndRewrite(
   // Set up the injest path.
   Value recvDataFromCosim = cosimEpModule.getResult(1);
   Value recvValidFromCosim = cosimEpModule.getResult(0);
-  auto castedRecvData =
-      rewriter.create<hw::BitcastOp>(loc, type.getInner(), recvDataFromCosim);
+  Value castedRecvData;
+  if (width > 0)
+    castedRecvData =
+        rewriter.create<hw::BitcastOp>(loc, type.getInner(), recvDataFromCosim);
+  else
+    castedRecvData = rewriter.create<hw::ConstantOp>(
+        loc, rewriter.getIntegerType(0),
+        rewriter.getIntegerAttr(rewriter.getIntegerType(0), 0));
   WrapValidReadyOp wrapRecv = rewriter.create<WrapValidReadyOp>(
-      loc, castedRecvData.getResult(), recvValidFromCosim);
+      loc, castedRecvData, recvValidFromCosim);
   recvReady.setValue(wrapRecv.getReady());
 
   // Replace the CosimEndpointOp op.
