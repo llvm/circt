@@ -64,48 +64,80 @@ struct FieldMapEntry : public PortInfo {
 };
 
 using PortConversion = SmallVector<FieldMapEntry>;
+
+template <typename T>
+class FieldIDSearch {
+  using E = typename T::ElementType;
+  using V = SmallVector<E>;
+
+public:
+  using const_iterator = typename V::const_iterator;
+
+  template <typename Container>
+  FieldIDSearch(const Container &src) {
+    if constexpr (std::is_convertible_v<Container, Attribute>)
+      if (!src)
+        return;
+    for (auto attr : src)
+      vals.push_back(attr);
+    std::sort(vals.begin(), vals.end(), fieldComp);
+  }
+
+  std::pair<const_iterator, const_iterator> find(uint64_t low,
+                                                 uint64_t high) const {
+    return {std::lower_bound(vals.begin(), vals.end(), low, fieldCompInt2),
+            std::upper_bound(vals.begin(), vals.end(), high, fieldCompInt1)};
+  }
+
+  bool empty(uint64_t low, uint64_t high) const {
+    auto [b, e] = find(low, high);
+    return b == e;
+  }
+
+private:
+  static constexpr auto fieldComp = [](const E &lhs, const E &rhs) {
+    return lhs.getFieldID() < rhs.getFieldID();
+  };
+  static constexpr auto fieldCompInt2 = [](const E &lhs, uint64_t rhs) {
+    return lhs.getFieldID() < rhs;
+  };
+  static constexpr auto fieldCompInt1 = [](uint64_t lhs, const E &rhs) {
+    return lhs < rhs.getFieldID();
+  };
+
+  V vals;
+};
+
 } // namespace
 
-static hw::InnerSymAttr symbolsForFieldIDRange(hw::InnerSymAttr syms,
-                                               uint64_t low, uint64_t high) {
-  // No symbols, early exit
-  if (!syms || syms.empty())
-    return {};
-
-  SmallVector<hw::InnerSymPropertiesAttr, 4> newSyms;
-  for (auto sym : syms) {
-    auto sfield = sym.getFieldID();
-    if (sfield >= low && sfield <= high) {
-      newSyms.push_back(hw::InnerSymPropertiesAttr::get(
-          syms.getContext(), sym.getName(), sfield - low,
-          sym.getSymVisibility()));
-    }
-  }
-
+static hw::InnerSymAttr
+symbolsForFieldIDRange(MLIRContext *ctx,
+                       const FieldIDSearch<hw::InnerSymAttr> &syms,
+                       uint64_t low, uint64_t high) {
+  auto [b, e] = syms.find(low, high);
+  SmallVector<hw::InnerSymPropertiesAttr, 4> newSyms(b, e);
   if (newSyms.empty())
     return {};
-
-  return hw::InnerSymAttr::get(syms.getContext(), newSyms);
+  return hw::InnerSymAttr::get(ctx, newSyms);
 }
 
-static AnnotationSet annosForFieldIDRange(const AnnotationSet &annos,
-                                          uint64_t low, uint64_t high) {
-  AnnotationSet newAnnos(annos.getContext());
-  for (auto anno : annos) {
-    auto afield = anno.getFieldID();
-    if (afield >= low && afield <= high) {
-      newAnnos.addAnnotations(anno);
-    }
-  }
+static AnnotationSet
+annosForFieldIDRange(MLIRContext *ctx,
+                     const FieldIDSearch<AnnotationSet> &annos, uint64_t low,
+                     uint64_t high) {
+  AnnotationSet newAnnos(ctx);
+  auto [b, e] = annos.find(low, high);
+  for (; b != e; ++b)
+    newAnnos.addAnnotations(*b);
   return newAnnos;
 }
 
-// TODO: check for dead/unattachable symbols and put them on the wire if
-// possible
 static LogicalResult
 computeLoweringImpl(FModuleLike mod, PortConversion &newPorts, Convention conv,
                     size_t portID, const PortInfo &port, bool isFlip,
-                    Twine name, FIRRTLType type, uint64_t fieldID) {
+                    Twine name, FIRRTLType type, uint64_t fieldID,
+                    const FieldIDSearch<hw::InnerSymAttr> &syms,
+                    const FieldIDSearch<AnnotationSet> &annos) {
   auto *ctx = type.getContext();
   return FIRRTLTypeSwitch<FIRRTLType, LogicalResult>(type)
       .Case<BundleType>([&](BundleType bundle) -> LogicalResult {
@@ -116,8 +148,8 @@ computeLoweringImpl(FModuleLike mod, PortConversion &newPorts, Convention conv,
           newPorts.push_back(
               {{StringAttr::get(ctx, name), type,
                 isFlip ? Direction::Out : Direction::In,
-                symbolsForFieldIDRange(port.sym, fieldID, lastId), port.loc,
-                annosForFieldIDRange(port.annotations, fieldID, lastId)},
+                symbolsForFieldIDRange(ctx, syms, fieldID, lastId), port.loc,
+                annosForFieldIDRange(ctx, annos, fieldID, lastId)},
                portID,
                newPorts.size(),
                fieldID});
@@ -126,23 +158,27 @@ computeLoweringImpl(FModuleLike mod, PortConversion &newPorts, Convention conv,
             if (failed(computeLoweringImpl(
                     mod, newPorts, conv, portID, port, isFlip ^ elem.isFlip,
                     name + "_" + elem.name.getValue(), elem.type,
-                    fieldID + bundle.getFieldID(idx))))
+                    fieldID + bundle.getFieldID(idx), syms, annos)))
               return failure();
-            if (port.sym && port.sym.getSymIfExists(fieldID))
+            if (!syms.empty(fieldID, fieldID))
               return mod.emitError("Port [")
                      << port.name
                      << "] should be subdivided, but cannot be because of "
                         "symbol ["
                      << port.sym.getSymIfExists(fieldID) << "] on a bundle";
-            if (!annosForFieldIDRange(port.annotations, fieldID, fieldID)
-                     .empty())
-              return mod.emitError("Port [")
-                     << port.name
-                     << "] should be subdivided, but cannot be because of "
-                        "annotations ["
-                     << annosForFieldIDRange(port.annotations, fieldID, fieldID)
-                            .getArrayAttr()
-                     << "] on a bundle";
+            if (!annos.empty(fieldID, fieldID)) {
+              auto err = mod.emitError("Port [")
+                         << port.name
+                         << "] should be subdivided, but cannot be because of "
+                            "annotations [";
+              auto [b, e] = annos.find(fieldID, fieldID);
+              err << b->getClass();
+              b++;
+              for (; b != e; ++b)
+                err << ", " << b->getClass();
+              err << "] on a bundle";
+              return err;
+            }
           }
         }
         return success();
@@ -154,33 +190,37 @@ computeLoweringImpl(FModuleLike mod, PortConversion &newPorts, Convention conv,
           newPorts.push_back(
               {{StringAttr::get(ctx, name), type,
                 isFlip ? Direction::Out : Direction::In,
-                symbolsForFieldIDRange(port.sym, fieldID, lastId), port.loc,
-                annosForFieldIDRange(port.annotations, fieldID, lastId)},
+                symbolsForFieldIDRange(ctx, syms, fieldID, lastId), port.loc,
+                annosForFieldIDRange(ctx, annos, fieldID, lastId)},
                portID,
                newPorts.size(),
                fieldID});
         } else {
           for (size_t i = 0, e = vector.getNumElements(); i < e; ++i) {
-            if (failed(computeLoweringImpl(mod, newPorts, conv, portID, port,
-                                           isFlip, name + "_" + Twine(i),
-                                           vector.getElementType(),
-                                           fieldID + vector.getFieldID(i))))
+            if (failed(computeLoweringImpl(
+                    mod, newPorts, conv, portID, port, isFlip,
+                    name + "_" + Twine(i), vector.getElementType(),
+                    fieldID + vector.getFieldID(i), syms, annos)))
               return failure();
-            if (port.sym && port.sym.getSymIfExists(fieldID))
+            if (!syms.empty(fieldID, fieldID))
               return mod.emitError("Port [")
                      << port.name
                      << "] should be subdivided, but cannot be because of "
                         "symbol ["
                      << port.sym.getSymIfExists(fieldID) << "] on a vector";
-            if (!annosForFieldIDRange(port.annotations, fieldID, fieldID)
-                     .empty())
-              return mod.emitError("Port [")
-                     << port.name
-                     << "] should be subdivided, but cannot be because of "
-                        "annotations ["
-                     << annosForFieldIDRange(port.annotations, fieldID, fieldID)
-                            .getArrayAttr()
-                     << "] on a vector";
+            if (!annos.empty(fieldID, fieldID)) {
+              auto err = mod.emitError("Port [")
+                         << port.name
+                         << "] should be subdivided, but cannot be because of "
+                            "annotations [";
+              auto [b, e] = annos.find(fieldID, fieldID);
+              err << b->getClass();
+              ++b;
+              for (; b != e; ++b)
+                err << ", " << b->getClass();
+              err << "] on a vector";
+              return err;
+            }
           }
         }
         return success();
@@ -203,8 +243,8 @@ computeLoweringImpl(FModuleLike mod, PortConversion &newPorts, Convention conv,
         newPorts.push_back(
             {{StringAttr::get(ctx, name), groundType,
               isFlip ? Direction::Out : Direction::In,
-              symbolsForFieldIDRange(port.sym, fieldID, fieldID), port.loc,
-              annosForFieldIDRange(port.annotations, fieldID, fieldID)},
+              symbolsForFieldIDRange(ctx, syms, fieldID, fieldID), port.loc,
+              annosForFieldIDRange(ctx, annos, fieldID, fieldID)},
              portID,
              newPorts.size(),
              fieldID});
@@ -216,12 +256,15 @@ computeLoweringImpl(FModuleLike mod, PortConversion &newPorts, Convention conv,
 // Also compute a fieldID map from port, fieldID -> port
 static LogicalResult computeLowering(FModuleLike mod, Convention conv,
                                      PortConversion &newPorts) {
-  for (auto [idx, port] : llvm::enumerate(mod.getPorts()))
+  for (auto [idx, port] : llvm::enumerate(mod.getPorts())) {
     if (computeLoweringImpl(
             mod, newPorts, conv, idx, port, port.direction == Direction::Out,
-            port.name.getValue(), type_cast<FIRRTLType>(port.type), 0)
+            port.name.getValue(), type_cast<FIRRTLType>(port.type), 0,
+            FieldIDSearch<hw::InnerSymAttr>(port.sym),
+            FieldIDSearch<AnnotationSet>(port.annotations))
             .failed())
       return failure();
+  }
   return success();
 }
 

@@ -21,6 +21,7 @@ def PortList : OpInterface<"PortList", []> {
   let cppNamespace = "circt::hw";
   let description = "Operations which produce a unified port list representation";
   let methods = [
+    /// This is slow.  Do not use it repeatedly.
     InterfaceMethod<"Get port list",
     "SmallVector<::circt::hw::PortInfo>", "getPortList", (ins)>,
 
