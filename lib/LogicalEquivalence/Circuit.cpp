@@ -1020,9 +1020,6 @@ void Solver::Circuit::performFromClock(mlir::Value result, mlir::Value input) {
   // Constrain the result directly to the input's value
   WireVariant opInfo = std::tuple(input, seq::FromClockOp::getOperationName());
   constrainResult(result, opInfo);
-  // combTransformTable.insert(std::pair(
-  //     result, std::pair(std::make_tuple(input), [](auto op1) { return op1;
-  //     })));
 }
 
 //===----------------------------------------------------------------------===//
