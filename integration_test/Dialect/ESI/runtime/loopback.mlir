@@ -1,4 +1,4 @@
-// REQUIRES: esi-cosim
+// REQUIRES: esi-cosim, esi-runtime
 // RUN: rm -rf %t6 && mkdir %t6 && cd %t6
 // RUN: circt-opt %s --esi-connect-services --esi-appid-hier=top=top --esi-build-manifest=top=top --esi-clean-metadata > %t4.mlir
 // RUN: circt-opt %t4.mlir --lower-esi-to-physical --lower-esi-bundles --lower-esi-ports --lower-esi-to-hw=platform=cosim --lower-seq-to-sv --export-split-verilog -o %t3.mlir
@@ -8,6 +8,8 @@
 
 !sendI8 = !esi.bundle<[!esi.channel<i8> to "send"]>
 !recvI8 = !esi.bundle<[!esi.channel<i8> to "recv"]>
+!sendI0 = !esi.bundle<[!esi.channel<i0> to "send"]>
+!recvI0 = !esi.bundle<[!esi.channel<i0> to "recv"]>
 
 esi.service.decl @HostComms {
   esi.service.to_server @Send : !sendI8
@@ -15,7 +17,8 @@ esi.service.decl @HostComms {
 }
 
 esi.service.decl @MyService {
-  esi.service.to_client @Send : !sendI8
+  esi.service.to_server @Send : !sendI0
+  esi.service.to_client @Recv : !recvI0
 }
 
 hw.module @Loopback (in %clk: !seq.clock) {
@@ -24,8 +27,10 @@ hw.module @Loopback (in %clk: !seq.clock) {
   %dataOutBundle = esi.bundle.pack %dataOut : !sendI8
   esi.service.req.to_server %dataOutBundle -> <@HostComms::@Send> (#esi.appid<"loopback_fromhw">) : !sendI8
 
-  %send = esi.service.req.to_client <@MyService::@Send> (#esi.appid<"mysvc_send">) : !sendI8
-  %send_ch = esi.bundle.unpack from %send : !sendI8
+  %send = esi.service.req.to_client <@MyService::@Recv> (#esi.appid<"mysvc_recv">) : !recvI0
+  %send_ch = esi.bundle.unpack from %send : !recvI0
+  %sendi0_bundle = esi.bundle.pack %send_ch : !sendI0
+  esi.service.req.to_server %sendi0_bundle -> <@MyService::@Send> (#esi.appid<"mysvc_send">) : !sendI0
 }
 
 esi.manifest.sym @Loopback name "LoopbackIP" version "v0.0" summary "IP which simply echos bytes" {foo=1}
