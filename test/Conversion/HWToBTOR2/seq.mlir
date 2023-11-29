@@ -78,8 +78,7 @@ module {
     }
     hw.output
 
-    //CHECK:    [[NID29:[0-9]+]] zero [[NID6]]
-    //CHECK:    [[NID30:[0-9]+]] ite [[NID6]] [[NID1]] [[NID29]] [[NID23]]
+    //CHECK:    [[NID30:[0-9]+]] ite [[NID6]] [[NID1]] [[NID11]] [[NID23]]
     //CHECK:    [[NID31:[0-9]+]] next [[NID6]] [[NID12]] [[NID30]]
   }
 }
