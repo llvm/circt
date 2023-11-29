@@ -65,3 +65,18 @@ void RandomAccessMemoryDeclOp::getPortList(
   ports.push_back(writePortInfo());
   ports.push_back(readPortInfo());
 }
+
+void FuncServiceDeclOp::getPortList(SmallVectorImpl<ServicePortInfo> &ports) {
+  auto *ctxt = getContext();
+  ports.push_back(ServicePortInfo{
+      hw::InnerRefAttr::get(getSymNameAttr(), StringAttr::get(ctxt, "call")),
+      ServicePortInfo::Direction::toClient,
+      ChannelBundleType::get(
+          ctxt,
+          {BundledChannel{StringAttr::get(ctxt, "arg"), ChannelDirection::to,
+                          ChannelType::get(ctxt, AnyType::get(ctxt))},
+           BundledChannel{StringAttr::get(ctxt, "result"),
+                          ChannelDirection::from,
+                          ChannelType::get(ctxt, AnyType::get(ctxt))}},
+          /*resettable=*/UnitAttr())});
+}

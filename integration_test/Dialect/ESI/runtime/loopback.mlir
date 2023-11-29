@@ -46,6 +46,14 @@ hw.module @MemoryAccess1(in %clk : !seq.clock, in %rst : i1) {
   esi.service.req.to_server %writeBundle -> <@MemA::@write> (#esi.appid<"internal_write">) : !writeBundle
 }
 
+esi.service.std.func @funcs
+
+!func1Signature = !esi.bundle<[!esi.channel<i16> to "arg", !esi.channel<i16> from "result"]>
+hw.module @CallableFunc1() {
+  %call = esi.service.req.to_client <@funcs::@call> (#esi.appid<"func1">) : !func1Signature
+  %arg = esi.bundle.unpack %arg from %call : !func1Signature
+}
+
 esi.manifest.sym @Loopback name "LoopbackIP" version "v0.0" summary "IP which simply echos bytes" {foo=1}
 
 hw.module @top(in %clk: !seq.clock, in %rst: i1) {
@@ -54,4 +62,5 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
   hw.instance "m1" @Loopback (clk: %clk: !seq.clock) -> () {esi.appid=#esi.appid<"loopback_inst"[0]>}
   hw.instance "m2" @Loopback (clk: %clk: !seq.clock) -> () {esi.appid=#esi.appid<"loopback_inst"[1]>}
   hw.instance "int_mem" @MemoryAccess1 (clk: %clk: !seq.clock, rst: %rst: i1) -> ()
+  hw.instance "func1" @CallableFunc1() -> ()
 }

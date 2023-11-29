@@ -178,3 +178,28 @@ hw.module @MemoryAccess2Read(in %clk: !seq.clock, in %rst: i1, in %write: !esi.c
 
 // Check that it doesn't crap out on external modules.
 hw.module.extern @extern()
+
+// CHECK-LABEL:  esi.service.std.func @funcs
+esi.service.std.func @funcs
+
+// CHECK-LABEL:   hw.module @CallableFunc1(in %func1 : !esi.bundle<[!esi.channel<i16> to "arg", !esi.channel<i16> from "result"]>) {
+// CHECK-NEXT:      esi.manifest.req #esi.appid<"func1">, <@funcs::@call>, toClient, !esi.bundle<[!esi.channel<i16> to "arg", !esi.channel<i16> from "result"]>
+// CHECK-NEXT:      %arg = esi.bundle.unpack %arg from %func1 : !esi.bundle<[!esi.channel<i16> to "arg", !esi.channel<i16> from "result"]>
+!func1Signature = !esi.bundle<[!esi.channel<i16> to "arg", !esi.channel<i16> from "result"]>
+hw.module @CallableFunc1() {
+  %call = esi.service.req.to_client <@funcs::@call> (#esi.appid<"func1">) : !func1Signature
+  %arg = esi.bundle.unpack %arg from %call : !func1Signature
+}
+
+// CHECK-LABEL:   hw.module @CallableAccel1(in %clk : !seq.clock, in %rst : i1) {
+// CHECK-NEXT:      hw.instance "func1" @CallableFunc1(func1: %bundle: !esi.bundle<[!esi.channel<i16> to "arg", !esi.channel<i16> from "result"]>) -> ()
+// CHECK-NEXT:      esi.manifest.service_impl #esi.appid<"funcComms"> svc @funcs by "cosim" with {} {
+// CHECK-NEXT:        esi.manifest.impl_conn [#esi.appid<"func1">] req <@funcs::@call>(!esi.bundle<[!esi.channel<i16> to "arg", !esi.channel<i16> from "result"]>) with {channel_assignments = {arg = "func1.arg", result = "func1.result"}}
+// CHECK-NEXT:      }
+// CHECK-NEXT:      %0 = esi.cosim.from_host %clk, %rst, "func1.arg" : !esi.channel<i16>
+// CHECK-NEXT:      %bundle, %result = esi.bundle.pack %0 : !esi.bundle<[!esi.channel<i16> to "arg", !esi.channel<i16> from "result"]>
+// CHECK-NEXT:      esi.cosim.to_host %clk, %rst, %result, "func1.result" : !esi.channel<i16>
+hw.module @CallableAccel1(in %clk: !seq.clock, in %rst: i1) {
+  hw.instance "func1" @CallableFunc1() -> ()
+  esi.service.instance #esi.appid<"funcComms"> svc @funcs impl as "cosim" (%clk, %rst) : (!seq.clock, i1) -> ()
+}
