@@ -660,7 +660,7 @@ void circt::firtool::registerFirtoolCLOptions() {
 // Initialize the firtool options with defaults supplied by the cl::opts above.
 circt::firtool::FirtoolOptions::FirtoolOptions()
     : outputFilename("-"), disableAnnotationsUnknown(false),
-      lowerAnnotationsNoRefTypePorts(false),
+      disableAnnotationsClassless(false), lowerAnnotationsNoRefTypePorts(false),
       preserveAggregate(firrtl::PreserveAggregate::None),
       preserveMode(firrtl::PreserveValues::None), enableDebugInfo(false),
       buildMode(BuildModeRelease), disableOptimization(false),
@@ -684,6 +684,7 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
     return;
   outputFilename = clOptions->outputFilename;
   disableAnnotationsUnknown = clOptions->disableAnnotationsUnknown;
+  disableAnnotationsClassless = clOptions->disableAnnotationsClassless;
   lowerAnnotationsNoRefTypePorts = clOptions->lowerAnnotationsNoRefTypePorts;
   preserveAggregate = clOptions->preserveAggregate;
   preserveMode = clOptions->preserveMode;
