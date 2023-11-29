@@ -703,6 +703,8 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
   });
 }
 
+namespace {
+
 struct PrefixingInliner : public mlir::InlinerInterface {
   StringRef prefix;
   PrefixingInliner(MLIRContext *context, StringRef prefix)
@@ -736,6 +738,8 @@ struct PrefixingInliner : public mlir::InlinerInterface {
   }
 };
 
+} // end anonymous namespace
+
 void HWMemSimImplPass::runOnOperation() {
   auto topModule = getOperation();
 
@@ -749,7 +753,7 @@ void HWMemSimImplPass::runOnOperation() {
 
   SmallVector<HWModuleGeneratedOp> toErase;
   bool anythingChanged = false;
-  DenseSet<HWModuleOp> wrapperModules;
+  DenseMap<HWModuleOp, bool> wrapperModules;
 
   for (auto op :
        llvm::make_early_inc_range(topModule.getOps<HWModuleGeneratedOp>())) {
@@ -774,7 +778,7 @@ void HWMemSimImplPass::runOnOperation() {
       } else {
         auto newModule = builder.create<HWModuleOp>(
             oldModule.getLoc(), nameAttr, oldModule.getPortList());
-        wrapperModules.insert(newModule);
+        wrapperModules.insert({newModule, false});
         if (auto outdir = oldModule->getAttr("output_file"))
           newModule->setAttr("output_file", outdir);
         newModule.setCommentAttr(
@@ -804,6 +808,12 @@ void HWMemSimImplPass::runOnOperation() {
         auto mem = symbolTable.lookup<HWModuleOp>(inst.getModuleName());
         if (!wrapperModules.contains(mem))
           continue;
+        if (inst.getInnerNameAttr()) {
+          // memory instances with inner symbols should not be inlined
+          // mark them as used so that the wrapper module is not removed
+          wrapperModules[mem] = true;
+          continue;
+        }
         PrefixingInliner interface(&getContext(), inst.getInstanceName());
         if (failed(mlir::inlineRegion(interface, &mem.getBody(), inst,
                                       inst.getOperands(), inst.getResults(),
@@ -818,8 +828,9 @@ void HWMemSimImplPass::runOnOperation() {
     }
     for (auto inst : inlinedInstances)
       inst.erase();
-    for (auto mod : wrapperModules)
-      mod.erase();
+    for (auto [mod, used] : wrapperModules)
+      if (!used)
+        mod.erase();
   }
 
   if (!anythingChanged)

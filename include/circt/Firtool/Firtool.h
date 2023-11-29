@@ -82,7 +82,7 @@ public:
     return lowerAnnotationsNoRefTypePorts;
   }
   bool shouldReplicateSequentialMemories() const { return replSeqMem; }
-  bool shouldInlineSequentialMemories() const { return inlineMem; }
+  bool shouldInlineMemories() const { return inlineMem; }
   bool shouldDisableOptimization() const { return disableOptimization; }
   bool shouldLowerMemories() const { return lowerMemories; }
   bool shouldDedup() const { return !noDedup; }
