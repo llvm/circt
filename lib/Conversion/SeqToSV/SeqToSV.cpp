@@ -355,9 +355,10 @@ static bool isLegalType(Type ty) {
 
 static bool isLegalOp(Operation *op) {
   if (auto module = dyn_cast<hw::HWModuleLike>(op)) {
-    return llvm::all_of(module.getPortList(), [](hw::PortInfo port) {
-      return isLegalType(port.type);
-    });
+    for (auto port : module.getHWModuleType().getPorts())
+      if (!isLegalType(port.type))
+        return false;
+    return true;
   }
   bool allOperandsLowered = llvm::all_of(
       op->getOperands(), [](auto op) { return isLegalType(op.getType()); });
