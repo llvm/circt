@@ -259,6 +259,24 @@ def MuxToControlFlow : Pass<"arc-mux-to-control-flow", "mlir::ModuleOp"> {
   let dependentDialects = ["mlir::scf::SCFDialect"];
 }
 
+def Parallelize : Pass<"arc-parallelize", "mlir::ModuleOp"> {
+  let summary = "Parallelize computation";
+  let constructor = "circt::arc::createParallelizePass()";
+  let dependentDialects = [
+    "arc::ArcDialect",
+    "mlir::omp::OpenMPDialect",
+  ];
+  let options = [
+    Option<"maxTaskComplexity", "task-complexity", "unsigned", "5000",
+           "Maximum complexity of each parallel task">,
+  ];
+}
+
+def HoistParallelRegions : Pass<"arc-hoist-parallel-regions", "mlir::ModuleOp"> {
+  let summary = "Hoist parallel regions to parent ops";
+  let dependentDialects = ["arc::ArcDialect", "mlir::omp::OpenMPDialect"];
+}
+
 def PrintStateInfo : Pass<"arc-print-state-info", "mlir::ModuleOp"> {
   let summary = "Print the state storage layout in JSON format";
   let constructor = "circt::arc::createPrintStateInfoPass()";

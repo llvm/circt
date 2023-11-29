@@ -5,6 +5,7 @@ add_circt_dialect_library(CIRCTArcTransforms
   Dedup.cpp
   GroupComputation.cpp
   GroupResetsAndEnables.cpp
+  HoistParallelRegions.cpp
   InferMemories.cpp
   InferStateProperties.cpp
   InlineArcs.cpp
@@ -19,6 +20,7 @@ add_circt_dialect_library(CIRCTArcTransforms
   LowerVectorizations.cpp
   MakeTables.cpp
   MuxToControlFlow.cpp
+  Parallelize.cpp
   PrintStateInfo.cpp
   SimplifyVariadicOps.cpp
   SplitLoops.cpp
@@ -37,6 +39,8 @@ add_circt_dialect_library(CIRCTArcTransforms
   CIRCTSeq
   CIRCTSupport
   MLIRFuncDialect
+  MLIRMemRefDialect
+  MLIROpenMPDialect
   MLIRLLVMDialect
   MLIRSCFDialect
   MLIRVectorDialect

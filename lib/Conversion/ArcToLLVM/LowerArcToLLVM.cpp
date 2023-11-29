@@ -24,6 +24,7 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMAttrs.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/OpenMP/OpenMPDialect.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/BuiltinDialect.h"
 #include "mlir/Transforms/DialectConversion.h"
@@ -362,6 +363,7 @@ static void populateLegality(ConversionTarget &target) {
   target.addLegalDialect<comb::CombDialect>();
   target.addLegalDialect<func::FuncDialect>();
   target.addLegalDialect<scf::SCFDialect>();
+  target.addLegalDialect<omp::OpenMPDialect>();
   target.addLegalDialect<LLVM::LLVMDialect>();
   target.addIllegalDialect<seq::SeqDialect>();
 
@@ -476,6 +478,7 @@ LogicalResult LowerArcToLLVMPass::lowerArcToLLVM() {
   RewritePatternSet patterns(&getContext());
   target.addLegalOp<mlir::ModuleOp>();
   target.addIllegalOp<arc::ModelOp>();
+  target.addLegalDialect<omp::OpenMPDialect>();
   populateSCFToControlFlowConversionPatterns(patterns);
   populateFuncToLLVMConversionPatterns(converter, patterns);
   cf::populateControlFlowToLLVMConversionPatterns(converter, patterns);

@@ -52,6 +52,8 @@ std::unique_ptr<mlir::Pass> createMakeTablesPass();
 std::unique_ptr<mlir::Pass> createMuxToControlFlowPass();
 std::unique_ptr<mlir::Pass>
 createPrintStateInfoPass(llvm::StringRef stateFile = "");
+std::unique_ptr<mlir::Pass>
+createParallelizePass(const ParallelizeOptions &options = {});
 std::unique_ptr<mlir::Pass> createSimplifyVariadicOpsPass();
 std::unique_ptr<mlir::Pass> createSplitLoopsPass();
 std::unique_ptr<mlir::Pass> createStripSVPass();

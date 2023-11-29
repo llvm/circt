@@ -8,6 +8,7 @@
 
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/Arc/ArcPasses.h"
+#include "mlir/Dialect/OpenMP/OpenMPDialect.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/Support/Debug.h"
@@ -84,7 +85,10 @@ void AllocateStatePass::allocateOps(Value storage, Block *block,
   };
 
   // Allocate storage for the operations.
-  OpBuilder builder(block->getParentOp());
+  auto *beforeOp = block->getParentOp();
+  while (isa<omp::SectionsOp, omp::ParallelOp>(beforeOp->getParentOp()))
+    beforeOp = beforeOp->getParentOp();
+  OpBuilder builder(beforeOp);
   for (auto *op : ops) {
     if (isa<AllocStateOp, RootInputOp, RootOutputOp>(op)) {
       auto result = op->getResult(0);
@@ -130,7 +134,7 @@ void AllocateStatePass::allocateOps(Value storage, Block *block,
     for (auto *user : llvm::make_early_inc_range(result.getUsers())) {
       auto &getter = getterForBlock[user->getBlock()];
       // Create a local getter in front of each user, except for
-      // `AllocStorageOp`s, for which we create a block-wider accessor.
+      // `AllocStorageOp`s, for which we create a block-wide accessor.
       auto userOrder = opOrder.lookup(user);
       if (!getter || !result.getDefiningOp<AllocStorageOp>()) {
         ImplicitLocOpBuilder builder(result.getLoc(), user);

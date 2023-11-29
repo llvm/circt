@@ -17,6 +17,7 @@ target_link_libraries(arcilator
   MLIRFuncInlinerExtension
   MLIRLLVMIRTransforms
   MLIRLLVMToLLVMIRTranslation
+  MLIROpenMPToLLVMIRTranslation
   MLIRParser
   MLIRTargetLLVMIRExport
 )

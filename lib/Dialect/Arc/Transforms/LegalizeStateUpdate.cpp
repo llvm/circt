@@ -8,6 +8,7 @@
 
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/Arc/ArcPasses.h"
+#include "mlir/Dialect/OpenMP/OpenMPDialect.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/Dominance.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -373,7 +374,10 @@ LogicalResult Legalizer::visitBlock(Block *block) {
       // Allocate a temporary state, read the current value of the state we are
       // legalizing, and write it to the temporary.
       ++numLegalizedWrites;
-      ImplicitLocOpBuilder builder(state.getLoc(), op);
+      auto *beforeOp = op;
+      while (isa<omp::SectionsOp, omp::ParallelOp>(beforeOp->getParentOp()))
+        beforeOp = beforeOp->getParentOp();
+      ImplicitLocOpBuilder builder(state.getLoc(), beforeOp);
       auto tmpState =
           builder.create<AllocStateOp>(state.getType(), storage, nullptr);
       auto stateValue = builder.create<StateReadOp>(state);

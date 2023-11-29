@@ -103,6 +103,15 @@ static cl::opt<unsigned> numGroups("group",
                                    cl::desc("Group clock tree computation"),
                                    cl::init(0), cl::cat(mainCategory));
 
+static cl::opt<bool> shouldParallelize("parallelize",
+                                       cl::desc("Parallelize computation"),
+                                       cl::init(false), cl::cat(mainCategory));
+
+static cl::opt<unsigned>
+    parallelTaskComplexity("task-complexity",
+                           cl::desc("Complexity of each parallel task"),
+                           cl::init(5000), cl::cat(mainCategory));
+
 static cl::opt<bool>
     shouldMakeLUTs("lookup-tables",
                    cl::desc("Optimize arcs into lookup tables"), cl::init(true),
@@ -248,6 +257,11 @@ static void populatePipeline(PassManager &pm) {
   pm.addPass(arc::createLowerStatePass());
   for (unsigned i = 0; i < numGroups; ++i)
     pm.addPass(arc::createGroupComputationPass());
+  if (shouldParallelize) {
+    arc::ParallelizeOptions opts;
+    opts.maxTaskComplexity = parallelTaskComplexity;
+    pm.addPass(arc::createParallelizePass(opts));
+  }
   pm.addPass(createCSEPass());
   pm.addPass(arc::createArcCanonicalizerPass());
 
@@ -276,6 +290,8 @@ static void populatePipeline(PassManager &pm) {
   pm.nest<arc::ModelOp>().addPass(arc::createAllocateStatePass());
   if (!stateFile.empty())
     pm.addPass(arc::createPrintStateInfoPass(stateFile));
+  if (shouldParallelize)
+    pm.addPass(arc::createHoistParallelRegionsPass());
   pm.addPass(arc::createLowerClocksToFuncsPass()); // no CSE between state alloc
                                                    // and clock func lowering
   pm.addPass(createCSEPass());
@@ -425,6 +441,7 @@ static LogicalResult executeArcilator(MLIRContext &context) {
 
   mlir::registerBuiltinDialectTranslation(registry);
   mlir::registerLLVMDialectTranslation(registry);
+  mlir::registerOpenMPDialectTranslation(registry);
   context.appendDialectRegistry(registry);
 
   // Process the input.
