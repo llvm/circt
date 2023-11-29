@@ -6,13 +6,9 @@ import sys
 platform = sys.argv[1]
 acc = esi.Accelerator(platform, sys.argv[2])
 
-import IPython
-
 m = acc.manifest()
 d = m.build_design(acc)
 
-# IPython.embed()
-print(d.ports)
 mem_write = d.ports[esi.AppID("write")].channels["write"]
 mem_write.connect()
 mem_read_addr = d.ports[esi.AppID("read")].channels["address"]

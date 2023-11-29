@@ -23,6 +23,8 @@ class MemComms:
 
 
 class MemWriter(Module):
+  """Write to address 3 the contents of address 2."""
+
   clk = Clock()
   rst = Input(Bits(1))
 
@@ -53,11 +55,13 @@ class Top(Module):
   def construct(ports):
     MemWriter(clk=ports.clk, rst=ports.rst)
 
+    # Pass through reads and writes from the host.
     ram_write = MemComms.write(AppID("write"))
     RamI64x8.write(ram_write, AppID("ram_write"))
     ram_read = MemComms.read(AppID("read"))
     RamI64x8.read(ram_read, AppID("ram_read"))
 
+    # Instantiate the RAM.
     RamI64x8.instantiate_builtin(appid=AppID("mem"),
                                  builtin="sv_mem",
                                  result_types=[],
@@ -68,6 +72,5 @@ if __name__ == "__main__":
   s = pycde.System([cosim.CosimBSP(Top)],
                    name="ESIMem",
                    output_directory=sys.argv[1])
-  s.run_passes(debug=True)
   s.compile()
   s.package()

@@ -26,6 +26,7 @@ class HostComms:
 
 
 class LoopbackInOutAdd7(Module):
+  """Loopback the request from the host, adding 7 to the first 15 bits."""
 
   @generator
   def construct(ports):
@@ -54,7 +55,6 @@ if __name__ == "__main__":
   s = pycde.System(cosim.CosimBSP(Top),
                    name="ESILoopback",
                    output_directory=sys.argv[1])
-  s.run_passes(debug=True)
   s.compile()
   s.package()
 
