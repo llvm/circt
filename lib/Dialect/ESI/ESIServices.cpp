@@ -40,19 +40,28 @@ ServiceGeneratorDispatcher::generate(ServiceImplementReqOp req,
              << req.getImplTypeAttr() << "'";
     return success();
   }
-  return genF->second(req, decl);
+
+  // Since we always need a record of generation, create it here then pass it to
+  // the generator for possible modification.
+  OpBuilder b(req);
+  auto implRecord = b.create<ServiceImplRecordOp>(
+      req.getLoc(), req.getAppID(), req.getServiceSymbolAttr(),
+      req.getImplTypeAttr(), b.getDictionaryAttr({}));
+  implRecord.getReqDetails().emplaceBlock();
+
+  return genF->second(req, decl, implRecord);
 }
 
 /// The generator for the "cosim" impl_type.
-static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
-                                                 ServiceDeclOpInterface) {
+static LogicalResult
+instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
+                            ServiceDeclOpInterface,
+                            ServiceImplRecordOp implRecord) {
   auto *ctxt = implReq.getContext();
   OpBuilder b(implReq);
   Value clk = implReq.getOperand(0);
   Value rst = implReq.getOperand(1);
-  SmallVector<NamedAttribute, 8> implDetails;
 
-  // Determine which EndpointID this generator should start with.
   if (implReq.getImplOpts()) {
     auto opts = implReq.getImplOpts()->getValue();
     for (auto nameAttr : opts) {
@@ -61,10 +70,7 @@ static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
     }
   }
 
-  auto implRecord = b.create<ServiceImplRecordOp>(
-      implReq.getLoc(), implReq.getAppID(), implReq.getServiceSymbolAttr(),
-      b.getStringAttr("cosim"), b.getDictionaryAttr(implDetails));
-  Block &connImplBlock = implRecord.getReqDetails().emplaceBlock();
+  Block &connImplBlock = implRecord.getReqDetails().front();
   OpBuilder implRecords = OpBuilder::atBlockEnd(&connImplBlock);
 
   // Assemble the name to use for an endpoint.
@@ -141,7 +147,8 @@ static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
 // array, hopefully inferred as a memory to the SV compiler.
 static LogicalResult
 instantiateSystemVerilogMemory(ServiceImplementReqOp implReq,
-                               ServiceDeclOpInterface decl) {
+                               ServiceDeclOpInterface decl,
+                               ServiceImplRecordOp) {
   if (!decl)
     return implReq.emitOpError(
         "Must specify a service declaration to use 'sv_mem'.");
