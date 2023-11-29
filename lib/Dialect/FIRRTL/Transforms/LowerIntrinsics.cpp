@@ -603,6 +603,23 @@ static bool lowerCirctHasBeenReset(InstanceGraph &ig, FModuleLike mod) {
   return true;
 }
 
+static bool lowerCirctProbe(InstanceGraph &ig, FModuleLike mod) {
+  // TODO add some conditions here?
+  for (auto *use : ig.lookup(mod)->uses()) {
+    auto inst = cast<InstanceOp>(use->getInstance().getOperation());
+    ImplicitLocOpBuilder builder(inst.getLoc(), inst);
+    auto clock =
+        builder.create<WireOp>(inst.getResult(0).getType()).getResult();
+    auto input =
+        builder.create<WireOp>(inst.getResult(1).getType()).getResult();
+    inst.getResult(0).replaceAllUsesWith(clock);
+    inst.getResult(1).replaceAllUsesWith(input);
+    builder.create<FPGAProbeIntrinsicOp>(clock, input);
+    inst.erase();
+  }
+  return true;
+}
+
 std::pair<const char *, std::function<bool(InstanceGraph &, FModuleLike)>>
     intrinsics[] = {
         {"circt.sizeof", lowerCirctSizeof},
@@ -644,7 +661,9 @@ std::pair<const char *, std::function<bool(InstanceGraph &, FModuleLike)>>
         {"circt.mux4cell", lowerCirctMuxCell<false>},
         {"circt_mux4cell", lowerCirctMuxCell<false>},
         {"circt.has_been_reset", lowerCirctHasBeenReset},
-        {"circt_has_been_reset", lowerCirctHasBeenReset}};
+        {"circt_has_been_reset", lowerCirctHasBeenReset},
+        {"circt.fpga_probe", lowerCirctProbe},
+        {"circt_fpga_probe", lowerCirctProbe}};
 
 // This is the main entrypoint for the lowering pass.
 void LowerIntrinsicsPass::runOnOperation() {
