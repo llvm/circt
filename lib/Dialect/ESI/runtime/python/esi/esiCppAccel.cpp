@@ -45,6 +45,34 @@ struct polymorphic_type_hook<ChannelPort> {
 
 // NOLINTNEXTLINE(readability-identifier-naming)
 PYBIND11_MODULE(esiCppAccel, m) {
+  py::class_<Type>(m, "Type")
+      .def_property_readonly("id", &Type::getID)
+      .def("__repr__", [](Type &t) { return "<" + t.getID() + ">"; });
+  py::class_<ChannelType, Type>(m, "ChannelType")
+      .def_property_readonly("inner", &ChannelType::getInner,
+                             py::return_value_policy::reference_internal);
+  py::enum_<BundleType::Direction>(m, "Direction")
+      .value("To", BundleType::Direction::To)
+      .value("From", BundleType::Direction::From)
+      .export_values();
+  py::class_<BundleType, Type>(m, "BundleType")
+      .def_property_readonly("channels", &BundleType::getChannels,
+                             py::return_value_policy::reference_internal);
+  py::class_<AnyType, Type>(m, "AnyType");
+  py::class_<BitVectorType, Type>(m, "BitVectorType")
+      .def_property_readonly("width", &BitVectorType::getWidth);
+  py::class_<BitsType, BitVectorType>(m, "BitsType");
+  py::class_<IntegerType, BitVectorType>(m, "IntegerType");
+  py::class_<SIntType, IntegerType>(m, "SIntType");
+  py::class_<UIntType, IntegerType>(m, "UIntType");
+  py::class_<StructType, Type>(m, "StructType")
+      .def_property_readonly("fields", &StructType::getFields,
+                             py::return_value_policy::reference_internal);
+  py::class_<ArrayType, Type>(m, "ArrayType")
+      .def_property_readonly("element", &ArrayType::getElementType,
+                             py::return_value_policy::reference_internal)
+      .def_property_readonly("size", &ArrayType::getSize);
+
   py::class_<ModuleInfo>(m, "ModuleInfo")
       .def_property_readonly("name", [](ModuleInfo &info) { return info.name; })
       .def_property_readonly("summary",
@@ -96,7 +124,9 @@ PYBIND11_MODULE(esiCppAccel, m) {
       });
 
   py::class_<ChannelPort>(m, "ChannelPort")
-      .def("connect", &ChannelPort::connect);
+      .def("connect", &ChannelPort::connect)
+      .def_property_readonly("type", &ChannelPort::getType,
+                             py::return_value_policy::reference_internal);
 
   py::class_<WriteChannelPort, ChannelPort>(m, "WriteChannelPort")
       .def("write", [](WriteChannelPort &p, std::vector<uint8_t> data) {
@@ -150,10 +180,6 @@ PYBIND11_MODULE(esiCppAccel, m) {
           "get_service_mmio",
           [](Accelerator &acc) { return acc.getService<services::MMIO>({}); },
           py::return_value_policy::reference_internal);
-
-  py::class_<Type>(m, "Type")
-      .def_property_readonly("id", &Type::getID)
-      .def("__repr__", [](Type &t) { return "<" + t.getID() + ">"; });
 
   py::class_<Manifest>(m, "Manifest")
       .def(py::init<std::string>())

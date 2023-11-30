@@ -47,14 +47,23 @@ constexpr uint32_t ExpectedVersionNumber = 0;
 /// but used by higher level APIs which add types.
 class ChannelPort {
 public:
+  ChannelPort(const Type &type) : type(type) {}
   virtual ~ChannelPort() = default;
+
   virtual void connect() {}
   virtual void disconnect() {}
+
+  const Type &getType() const { return type; }
+
+private:
+  const Type &type;
 };
 
 /// A ChannelPort which sends data to the accelerator.
 class WriteChannelPort : public ChannelPort {
 public:
+  using ChannelPort::ChannelPort;
+
   /// A very basic write API. Will likely change for performance reasons.
   virtual void write(const void *data, size_t size) = 0;
 };
@@ -62,6 +71,8 @@ public:
 /// A ChannelPort which reads data from the accelerator.
 class ReadChannelPort : public ChannelPort {
 public:
+  using ChannelPort::ChannelPort;
+
   /// Specify a buffer to read into and a maximum size to read. Returns the
   /// number of bytes read, or -1 on error. Basic API, will likely change for
   /// performance reasons.

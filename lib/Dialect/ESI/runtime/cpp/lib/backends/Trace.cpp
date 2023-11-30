@@ -155,9 +155,9 @@ private:
 namespace {
 class WriteTraceChannelPort : public WriteChannelPort {
 public:
-  WriteTraceChannelPort(TraceAccelerator::Impl &impl, const AppIDPath &id,
-                        const string &portName)
-      : impl(impl), id(id), portName(portName) {}
+  WriteTraceChannelPort(TraceAccelerator::Impl &impl, const Type &type,
+                        const AppIDPath &id, const string &portName)
+      : WriteChannelPort(type), impl(impl), id(id), portName(portName) {}
 
   virtual void write(const void *data, size_t size) override {
     impl.write(id, portName, data, size);
@@ -173,7 +173,8 @@ protected:
 namespace {
 class ReadTraceChannelPort : public ReadChannelPort {
 public:
-  ReadTraceChannelPort(TraceAccelerator::Impl &impl) {}
+  ReadTraceChannelPort(TraceAccelerator::Impl &impl, const Type &type)
+      : ReadChannelPort(type) {}
 
   virtual ssize_t read(void *data, size_t maxSize) override;
 };
@@ -201,9 +202,9 @@ public:
     for (auto [name, dir, type] : bundleType.getChannels()) {
       ChannelPort *port;
       if (BundlePort::isWrite(dir, svcDir))
-        port = new WriteTraceChannelPort(impl, idPath, name);
+        port = new WriteTraceChannelPort(impl, type, idPath, name);
       else
-        port = new ReadTraceChannelPort(impl);
+        port = new ReadTraceChannelPort(impl, type);
       channels.emplace(name, *port);
       impl.adoptChannelPort(port);
     }

@@ -222,8 +222,10 @@ void CosimChannelPort::disconnect() {
 namespace {
 class WriteCosimChannelPort : public WriteChannelPort {
 public:
-  WriteCosimChannelPort(CosimAccelerator::Impl &impl, string name)
-      : cosim(make_unique<CosimChannelPort>(impl, name)) {}
+  WriteCosimChannelPort(CosimAccelerator::Impl &impl, const Type &type,
+                        string name)
+      : WriteChannelPort(type),
+        cosim(make_unique<CosimChannelPort>(impl, name)) {}
 
   virtual ~WriteCosimChannelPort() = default;
 
@@ -243,8 +245,9 @@ void WriteCosimChannelPort::write(const void *data, size_t size) {
 namespace {
 class ReadCosimChannelPort : public ReadChannelPort {
 public:
-  ReadCosimChannelPort(CosimAccelerator::Impl &impl, string name)
-      : cosim(new CosimChannelPort(impl, name)) {}
+  ReadCosimChannelPort(CosimAccelerator::Impl &impl, const Type &type,
+                       string name)
+      : ReadChannelPort(type), cosim(new CosimChannelPort(impl, name)) {}
 
   virtual ~ReadCosimChannelPort() = default;
 
@@ -310,9 +313,9 @@ public:
 
       ChannelPort *port;
       if (BundlePort::isWrite(dir, svcDir))
-        port = new WriteCosimChannelPort(impl, channelName);
+        port = new WriteCosimChannelPort(impl, type, channelName);
       else
-        port = new ReadCosimChannelPort(impl, channelName);
+        port = new ReadCosimChannelPort(impl, type, channelName);
       impl.channels.emplace(port);
       channels.emplace(name, *port);
     }
