@@ -49,12 +49,17 @@ void registerHGLDDTranslation() {
   static llvm::cl::opt<std::string> outputPrefix(
       "hgldd-output-prefix", llvm::cl::desc("Prefix for output file locations"),
       llvm::cl::init(""));
+  static llvm::cl::opt<bool> onlyExistingFileLocs(
+      "hgldd-only-existing-file-locs",
+      llvm::cl::desc("Only consider locations in files that exist on disk"),
+      llvm::cl::init(false));
 
   auto getOptions = [] {
     EmitHGLDDOptions opts;
     opts.sourceFilePrefix = sourcePrefix;
     opts.outputFilePrefix = outputPrefix;
     opts.outputDirectory = directory;
+    opts.onlyExistingFileLocs = onlyExistingFileLocs;
     return opts;
   };
 

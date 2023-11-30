@@ -226,6 +226,11 @@ static cl::opt<std::string> hglddOutputDirectory(
     "hgldd-output-dir", cl::desc("Directory into which to emit HGLDD files"),
     cl::init(""), cl::value_desc("path"), cl::cat(mainCategory));
 
+static cl::opt<bool> hglddOnlyExistingFileLocs(
+    "hgldd-only-existing-file-locs",
+    cl::desc("Only consider locations in files that exist on disk"),
+    cl::init(false), cl::cat(mainCategory));
+
 static cl::opt<bool>
     emitBytecode("emit-bytecode",
                  cl::desc("Emit bytecode when generating MLIR output"),
@@ -269,6 +274,7 @@ static debug::EmitHGLDDOptions getHGLDDOptions() {
   opts.sourceFilePrefix = hglddSourcePrefix;
   opts.outputFilePrefix = hglddOutputPrefix;
   opts.outputDirectory = hglddOutputDirectory;
+  opts.onlyExistingFileLocs = hglddOnlyExistingFileLocs;
   return opts;
 }
 

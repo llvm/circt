@@ -18,6 +18,7 @@
 #include "mlir/Support/FileUtilities.h"
 #include "mlir/Support/IndentedOstream.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/JSON.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/ToolOutputFile.h"
@@ -77,9 +78,17 @@ static void findLocations(Location loc, unsigned level,
 /// Find the best location to report as source location ("HGL", emitted = false)
 /// or as emitted location ("HDL", emitted = true). Returns any non-FIR file it
 /// finds, and only falls back to FIR files if nothing else is found.
-static FileLineColLoc findBestLocation(Location loc, bool emitted) {
+static FileLineColLoc findBestLocation(Location loc, bool emitted,
+                                       bool fileMustExist) {
   SmallVector<FileLineColLoc> locs;
   findLocations(loc, emitted ? 1 : 0, locs);
+  if (fileMustExist) {
+    unsigned tail = 0;
+    for (unsigned head = 0, end = locs.size(); head != end; ++head)
+      if (llvm::sys::fs::exists(locs[head].getFilename().getValue()))
+        locs[tail++] = locs[head];
+    locs.resize(tail);
+  }
   for (auto loc : locs)
     if (!loc.getFilename().getValue().endswith(".fir"))
       return loc;
@@ -221,6 +230,10 @@ struct FileEmitter {
     if (slot == 0)
       slot = sourceFiles.size();
     return slot;
+  }
+
+  FileLineColLoc findBestLocation(Location loc, bool emitted) {
+    return ::findBestLocation(loc, emitted, options->onlyExistingFileLocs);
   }
 
   /// Find the best location and, if one is found, emit it under the given
@@ -800,7 +813,7 @@ Emitter::Emitter(Operation *module, const EmitHGLDDOptions &options)
   for (auto [moduleName, module] : di.moduleNodes) {
     StringAttr hdlFile;
     if (module->op)
-      if (auto fileLoc = findBestLocation(module->op->getLoc(), true))
+      if (auto fileLoc = findBestLocation(module->op->getLoc(), true, false))
         hdlFile = fileLoc.getFilename();
     groups[hdlFile].modules.push_back(module);
   }
