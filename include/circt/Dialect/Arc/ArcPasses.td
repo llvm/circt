@@ -42,6 +42,15 @@ def ArcCanonicalizer : Pass<"arc-canonicalizer", "mlir::ModuleOp"> {
   ];
 }
 
+def ArcDeadCodeElimination : Pass<"arc-dce", "mlir::ModuleOp"> {
+  let summary = "Eliminate dead arc states and calls";
+  let constructor = "createArcDeadCodeEliminationPass()";
+  let statistics = [
+    Statistic<"numUsesRemoved", "num-dce'd",
+      "Number of dead arc states and calls that were removed">,
+  ];
+}
+
 def Dedup : Pass<"arc-dedup", "mlir::ModuleOp"> {
   let summary = "Deduplicate identical arc definitions";
   let description = [{

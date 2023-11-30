@@ -228,6 +228,7 @@ static void populatePipeline(PassManager &pm) {
   pm.addPass(arc::createInlineModulesPass());
   pm.addPass(createCSEPass());
   pm.addPass(arc::createArcCanonicalizerPass());
+  pm.addPass(arc::createArcDeadCodeEliminationPass());
 
   // Perform arc-level optimizations that are not specific to software
   // simulation.
