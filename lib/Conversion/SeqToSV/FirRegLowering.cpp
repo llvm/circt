@@ -51,6 +51,97 @@ getForwardSliceSimple(Operation *root,
   }
 }
 
+// Construct SCC.
+//
+namespace circt {
+struct ValueSCC {
+  llvm::DenseMap<Value, size_t> order;
+  llvm::DenseMap<Value, size_t> lowlink;
+  llvm::DenseMap<Value, size_t> componentId;
+  unsigned componentIdGen = 0;
+  llvm::DenseSet<Value> visited;
+  unsigned index = 0;
+  llvm::SmallVector<Value> stack;
+  llvm::DenseSet<Value> onStack;
+  ValueSCC(Operation *rootOp) {
+    rootOp->walk([&](Operation *op) { visit(op); });
+  };
+
+  void visit(Value value) {
+    if (!visited.insert(value).second)
+      return;
+    order[value] = index;
+    lowlink[value] = index;
+    index++;
+    stack.push_back(value);
+    onStack.insert(value);
+    for (auto user : value.getUsers()) {
+      for (auto result : user->getResults()) {
+        if (!visited.contains(result)) {
+          visit(result);
+          lowlink[value] = std::min(lowlink[result], lowlink[value]);
+        } else if (onStack.contains(result)) {
+          lowlink[value] = std::min(lowlink[value], order[result]);
+        }
+      }
+    }
+    if (order[value] == lowlink[value]) {
+      while (stack.back() != value) {
+        onStack.erase(stack.back());
+        componentId[stack.pop_back_val()] = componentIdGen;
+      }
+      componentId[stack.pop_back_val()] = componentIdGen++;
+      onStack.erase(value);
+    }
+  }
+
+  void visit(Operation *op) {
+    for (auto value : op->getResults())
+      visit(value);
+  }
+
+  bool isInSameSCC(Value lhs, Value rhs) const {
+    auto lhsIt = componentId.find(lhs);
+    auto rhsIt = componentId.find(rhs);
+    return lhsIt != componentId.end() && rhsIt != componentId.end() &&
+           lhsIt->getSecond() == rhsIt->getSecond();
+  }
+
+  void erase(Value v) {
+    order.erase(v);
+    componentId.erase(v);
+    visited.erase(v);
+  }
+};
+} // namespace circt
+
+// static void
+// getBackwardSliceSimple(Operation *root,
+//                        llvm::DenseSet<Operation *> &backwardSlice,
+//                        llvm::function_ref<bool(Operation *)> filter =
+//                        nullptr) {
+//   SmallVector<Operation *> worklist({root});
+//
+//   while (!worklist.empty()) {
+//     Operation *op = worklist.pop_back_val();
+//
+//     if (!op)
+//       continue;
+//
+//     if (filter && !filter(op))
+//       continue;
+//
+//     for (Value operand : op->getOperands())
+//       if (auto operandOp = operand.getDefiningOp())
+//         if (backwardSlice.insert(operandOp).second)
+//           worklist.push_back(operandOp);
+//
+//     backwardSlice.insert(op);
+//   }
+// }
+
+FirRegLowering::~FirRegLowering() { delete scc; }
+
 void FirRegLowering::addToIfBlock(OpBuilder &builder, Value cond,
                                   const std::function<void()> &trueSide,
                                   const std::function<void()> &falseSide) {
@@ -68,6 +159,16 @@ void FirRegLowering::addToIfBlock(OpBuilder &builder, Value cond,
     builder.setInsertionPointToEnd(op.getElseBlock());
     falseSide();
   }
+}
+
+FirRegLowering::FirRegLowering(TypeConverter &typeConverter,
+                               hw::HWModuleOp module,
+                               bool disableRegRandomization,
+                               bool emitSeparateAlwaysBlocks)
+    : typeConverter(typeConverter), module(module),
+      disableRegRandomization(disableRegRandomization),
+      emitSeparateAlwaysBlocks(emitSeparateAlwaysBlocks) {
+  scc = new ValueSCC(module);
 }
 
 void FirRegLowering::lower() {
@@ -350,10 +451,6 @@ void FirRegLowering::createTree(OpBuilder &builder, Value reg, Value term,
   // want to create if/else structure for logic unrelated to the register's
   // enable.
   auto firReg = term.getDefiningOp<seq::FirRegOp>();
-  DenseSet<Operation *> regMuxFanout;
-  getForwardSliceSimple(firReg, regMuxFanout, [&](Operation *op) {
-    return op == firReg || !isa<sv::RegOp, seq::FirRegOp, hw::InstanceOp>(op);
-  });
 
   SmallVector<std::tuple<Block *, Value, Value, Value>> worklist;
   auto addToWorklist = [&](Value reg, Value term, Value next) {
@@ -381,7 +478,7 @@ void FirRegLowering::createTree(OpBuilder &builder, Value reg, Value term,
     // If this is a two-state mux within the fanout from the register, we use
     // if/else structure for proper enable inference.
     auto mux = next.getDefiningOp<comb::MuxOp>();
-    if (mux && mux.getTwoState() && regMuxFanout.contains(mux)) {
+    if (mux && mux.getTwoState() && scc->isInSameSCC(mux, firReg)) {
       addToIfBlock(
           builder, mux.getCond(),
           [&]() { addToWorklist(reg, term, mux.getTrueValue()); },
@@ -444,6 +541,7 @@ void FirRegLowering::createTree(OpBuilder &builder, Value reg, Value term,
   while (!opsToDelete.empty()) {
     auto value = opsToDelete.pop_back_val();
     assert(value.use_empty());
+    scc->erase(value);
     value.getDefiningOp()->erase();
   }
 }
@@ -459,6 +557,10 @@ FirRegLowering::RegLowerInfo FirRegLowering::lower(FirRegOp reg) {
 
   if (auto attr = reg->getAttrOfType<IntegerAttr>("firrtl.random_init_start"))
     svReg.randStart = attr.getUInt();
+  LLVM_DEBUG(
+      llvm::dbgs() << "[FirRegLowering] Start "
+                   << reg->getParentOfType<hw::HWModuleOp>().getModuleName()
+                   << " " << reg.getNameAttr() << "\n";);
 
   // Don't move these over
   reg->removeAttr("firrtl.random_init_start");
@@ -496,8 +598,13 @@ FirRegLowering::RegLowerInfo FirRegLowering::lower(FirRegOp reg) {
         module.getBodyBlock(), sv::EventControl::AtPosEdge, reg.getClk(),
         [&](OpBuilder &b) { createTree(b, svReg.reg, reg, reg.getNext()); });
   }
+  LLVM_DEBUG(
+      llvm::dbgs() << "[FirRegLowering] End "
+                   << reg->getParentOfType<hw::HWModuleOp>().getModuleName()
+                   << " " << reg.getNameAttr() << "\n";);
 
   reg.replaceAllUsesWith(regVal.getResult());
+  scc->erase(reg);
   reg.erase();
 
   return svReg;
