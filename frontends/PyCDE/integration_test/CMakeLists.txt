@@ -7,44 +7,48 @@
 # ===-----------------------------------------------------------------------===//
 
 
-set(PYCDE_INTEGRATION_TEST_DEPENDS
-  FileCheck count not split-file
-  circt-rtl-sim
-  PyCDE
-  esi-collateral
-  mlir-opt
-  hlstool
-  CIRCTPythonModules
-  ESIRuntime
-  ESIPythonRuntime
-)
-
-if (TARGET esi-collateral)
-  list(APPEND PYCDE_INTEGRATION_TEST_DEPENDS
+if(NOT ESI_RUNTIME)
+  message(WARNING "PyCDE integration tests require ESI_RUNTIME to be enabled")
+else()
+  set(PYCDE_INTEGRATION_TEST_DEPENDS
+    FileCheck count not split-file
+    circt-rtl-sim
+    PyCDE
     esi-collateral
+    mlir-opt
+    hlstool
+    CIRCTPythonModules
+    ESIRuntime
+    ESIPythonRuntime
   )
+
+  if (TARGET esi-collateral)
+    list(APPEND PYCDE_INTEGRATION_TEST_DEPENDS
+      esi-collateral
+    )
+  endif()
+
+  # If ESI Cosim is available to build then enable its tests.
+  if (TARGET EsiCosimDpiServer)
+    list(APPEND PYCDE_INTEGRATION_TEST_DEPENDS
+      EsiCosimDpiServer
+      esi-cosim-runner
+    )
+    get_property(ESI_COSIM_LIB_DIR TARGET EsiCosimDpiServer PROPERTY LIBRARY_OUTPUT_DIRECTORY)
+    set(ESI_COSIM_PATH ${ESI_COSIM_LIB_DIR}/libEsiCosimDpiServer.so)
+  endif()
+
+  set(PYCDE_INTEGRATION_TIMEOUT 60) # Set a 60s timeout on individual tests.
+  configure_lit_site_cfg(
+    ${CMAKE_CURRENT_SOURCE_DIR}/lit.site.cfg.py.in
+    ${CMAKE_CURRENT_BINARY_DIR}/lit.site.cfg.py
+    PyCDE_INTEGRATION_CONFIG
+    ${CMAKE_CURRENT_SOURCE_DIR}/lit.cfg.py
+  )
+
+  add_lit_testsuite(check-pycde-integration "Running the PyCDE integration tests"
+    ${CMAKE_CURRENT_BINARY_DIR}
+    DEPENDS ${PYCDE_INTEGRATION_TEST_DEPENDS}
+    )
+  set_target_properties(check-pycde-integration PROPERTIES FOLDER "PyCDEIntegrationTests")
 endif()
-
-# If ESI Cosim is available to build then enable its tests.
-if (TARGET EsiCosimDpiServer)
-  list(APPEND PYCDE_INTEGRATION_TEST_DEPENDS
-    EsiCosimDpiServer
-    esi-cosim-runner
-  )
-  get_property(ESI_COSIM_LIB_DIR TARGET EsiCosimDpiServer PROPERTY LIBRARY_OUTPUT_DIRECTORY)
-  set(ESI_COSIM_PATH ${ESI_COSIM_LIB_DIR}/libEsiCosimDpiServer.so)
-endif()
-
-set(PYCDE_INTEGRATION_TIMEOUT 60) # Set a 60s timeout on individual tests.
-configure_lit_site_cfg(
-  ${CMAKE_CURRENT_SOURCE_DIR}/lit.site.cfg.py.in
-  ${CMAKE_CURRENT_BINARY_DIR}/lit.site.cfg.py
-  PyCDE_INTEGRATION_CONFIG
-  ${CMAKE_CURRENT_SOURCE_DIR}/lit.cfg.py
-)
-
-add_lit_testsuite(check-pycde-integration "Running the PyCDE integration tests"
-  ${CMAKE_CURRENT_BINARY_DIR}
-  DEPENDS ${PYCDE_INTEGRATION_TEST_DEPENDS}
-  )
-set_target_properties(check-pycde-integration PROPERTIES FOLDER "PyCDEIntegrationTests")
