@@ -46,19 +46,28 @@ void exportVerilog(MlirContext ctx, bool disableOptimization) {
   CirctFirtoolFirtoolOptions options = circtFirtoolOptionsCreateDefault();
   circtFirtoolOptionsSetDisableOptimization(options, disableOptimization);
 
-  assert(mlirLogicalResultIsSuccess(
-      circtFirtoolPopulatePreprocessTransforms(pm, options)));
-  assert(mlirLogicalResultIsSuccess(circtFirtoolPopulateCHIRRTLToLowFIRRTL(
-      pm, options, mlirStringRefCreateFromCString("-"))));
-  assert(mlirLogicalResultIsSuccess(
-      circtFirtoolPopulateLowFIRRTLToHW(pm, options)));
-  assert(mlirLogicalResultIsSuccess(circtFirtoolPopulateHWToSV(pm, options)));
-  assert(mlirLogicalResultIsSuccess(
-      circtFirtoolPopulateExportVerilog(pm, options, exportCallback, NULL)));
-  assert(
-      mlirLogicalResultIsSuccess(circtFirtoolPopulateFinalizeIR(pm, options)));
-  assert(mlirLogicalResultIsSuccess(
-      mlirPassManagerRunOnOp(pm, mlirModuleGetOperation(module))));
+  MlirLogicalResult result =
+      circtFirtoolPopulatePreprocessTransforms(pm, options);
+  assert(mlirLogicalResultIsSuccess(result));
+
+  result = circtFirtoolPopulateCHIRRTLToLowFIRRTL(
+      pm, options, mlirStringRefCreateFromCString("-"));
+  assert(mlirLogicalResultIsSuccess(result));
+
+  result = circtFirtoolPopulateLowFIRRTLToHW(pm, options);
+  assert(mlirLogicalResultIsSuccess(result));
+
+  result = circtFirtoolPopulateHWToSV(pm, options);
+  assert(mlirLogicalResultIsSuccess(result));
+
+  result = circtFirtoolPopulateExportVerilog(pm, options, exportCallback, NULL);
+  assert(mlirLogicalResultIsSuccess(result));
+
+  result = circtFirtoolPopulateFinalizeIR(pm, options);
+  assert(mlirLogicalResultIsSuccess(result));
+
+  result = mlirPassManagerRunOnOp(pm, mlirModuleGetOperation(module));
+  assert(mlirLogicalResultIsSuccess(result));
 }
 
 void testExportVerilog(MlirContext ctx) {
