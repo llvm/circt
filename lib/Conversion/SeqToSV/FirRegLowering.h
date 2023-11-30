@@ -18,18 +18,20 @@
 #include "circt/Support/SymCache.h"
 
 namespace circt {
+struct ValueSCC;
 /// Lower FirRegOp to `sv.reg` and `sv.always`.
 class FirRegLowering {
 public:
   FirRegLowering(TypeConverter &typeConverter, hw::HWModuleOp module,
                  bool disableRegRandomization = false,
-                 bool emitSeparateAlwaysBlocks = false)
-      : typeConverter(typeConverter), module(module),
-        disableRegRandomization(disableRegRandomization),
-        emitSeparateAlwaysBlocks(emitSeparateAlwaysBlocks){};
+                 bool emitSeparateAlwaysBlocks = false);
+
+         
 
   void lower();
+    ~FirRegLowering();
 
+  void initBackwardSlice();
   bool needsRegRandomization() const { return needsRandom; }
 
   unsigned numSubaccessRestored = 0;
@@ -87,6 +89,8 @@ private:
 
   llvm::SmallDenseMap<APInt, hw::ConstantOp> constantCache;
   llvm::SmallDenseMap<std::pair<Value, unsigned>, Value> arrayIndexCache;
+  llvm::DenseSet<Operation *> regBackwardSlice;
+  ValueSCC* scc;
 
   TypeConverter &typeConverter;
   hw::HWModuleOp module;
