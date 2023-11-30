@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/Debug/DebugOps.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
@@ -510,6 +511,7 @@ private:
   struct InliningLevel {
     InliningLevel(ModuleInliningContext &mic, FModuleOp childModule)
         : mic(mic), childModule(childModule) {}
+
     /// Top-level inlining context.
     ModuleInliningContext &mic;
     /// Map of inner-refs to the new inner sym.
@@ -518,8 +520,11 @@ private:
     SmallVector<Operation *> newOps;
     /// Wires and other values introduced for ports.
     SmallVector<Value> wires;
-    /// Ths module being inlined (this "level").
+    /// The module being inlined (this "level").
     FModuleOp childModule;
+    /// The explicit debug scope of the inlined instance.
+    Value debugScope;
+
     ~InliningLevel() {
       replaceInnerRefUsers(newOps, relocatedInnerSyms,
                            mic.module.getNameAttr());
@@ -579,6 +584,11 @@ private:
   /// Inline any instances in the module which were marked for inlining.
   void inlineInstances(FModuleOp module);
 
+  /// Create a debug scope for an inlined instance at the current insertion
+  /// point of the `il.mic` builder.
+  void createDebugScope(InliningLevel &il, InstanceOp instance,
+                        Value parentScope = {});
+
   /// Identify all module-only NLA's, marking their MutableNLA's accordingly.
   void identifyNLAsTargetingOnlyModules();
 
@@ -634,6 +644,10 @@ private:
   /// from the InnerRefAttr to the list of HierPathOp names. The InnerRefAttr
   /// corresponds to the InstanceOp.
   DenseMap<InnerRefAttr, SmallVector<StringAttr>> instOpHierPaths;
+
+  /// The debug scopes created for inlined instances. Scopes that are unused
+  /// after inlining will be deleted again.
+  SmallVector<debug::ScopeOp> debugScopes;
 };
 } // namespace
 
@@ -649,6 +663,17 @@ bool Inliner::doesNLAMatchCurrentPath(hw::HierPathOp nla) {
 /// these are unique in the namespace.  Record renamed inner symbols
 /// in relocatedInnerSyms map for renaming local users.
 bool Inliner::rename(StringRef prefix, Operation *op, InliningLevel &il) {
+  // Debug operations with implicit module scope now need an explicit scope,
+  // since inlining has destroyed the module whose scope they implicitly used.
+  auto updateDebugScope = [&](auto op) {
+    if (!op.getScope())
+      op.getScopeMutable().assign(il.debugScope);
+  };
+  if (auto varOp = dyn_cast<debug::VariableOp>(op))
+    return updateDebugScope(varOp), false;
+  if (auto scopeOp = dyn_cast<debug::ScopeOp>(op))
+    return updateDebugScope(scopeOp), false;
+
   // Add a prefix to things that has a "name" attribute.  We don't prefix
   // memories since it will affect the name of the generated module.
   // TODO: We should find a way to prefix the instance of a memory module.
@@ -698,6 +723,13 @@ bool Inliner::rename(StringRef prefix, Operation *op, InliningLevel &il) {
 bool Inliner::renameInstance(
     StringRef prefix, InliningLevel &il, InstanceOp oldInst, InstanceOp newInst,
     const DenseMap<Attribute, Attribute> &symbolRenames) {
+  // TODO: There is currently no good way to annotate an explicit parent scope
+  // on instances. Just emit a note in debug runs until this is resolved.
+  LLVM_DEBUG({
+    if (il.debugScope)
+      llvm::dbgs() << "Discarding parent debug scope for " << oldInst << "\n";
+  });
+
   // Add this instance to the activeHierpaths. This ensures that NLAs that this
   // instance participates in will be updated correctly.
   auto parentActivePaths = activeHierpaths;
@@ -932,6 +964,7 @@ void Inliner::flattenInto(StringRef prefix, InliningLevel &il,
     currentPath.emplace_back(moduleName, instInnerSym);
 
     InliningLevel childIL(il.mic, childModule);
+    createDebugScope(childIL, instance, il.debugScope);
 
     // Create the wire mapping for results + ports.
     auto nestedPrefix = (prefix + instance.getName() + "_").str();
@@ -988,6 +1021,7 @@ void Inliner::flattenInstances(FModuleOp module) {
     mic.b.setInsertionPoint(instance);
 
     InliningLevel il(mic, target);
+    createDebugScope(il, instance);
 
     auto nestedPrefix = (instance.getName() + "_").str();
     mapPortsToWires(nestedPrefix, il, mapper, localSymbols);
@@ -1086,6 +1120,7 @@ void Inliner::inlineInto(StringRef prefix, InliningLevel &il, IRMapping &mapper,
     currentPath.emplace_back(moduleName, instInnerSym);
 
     InliningLevel childIL(il.mic, childModule);
+    createDebugScope(childIL, instance, il.debugScope);
 
     // Create the wire mapping for results + ports.
     auto nestedPrefix = (prefix + instance.getName() + "_").str();
@@ -1178,6 +1213,7 @@ void Inliner::inlineInstances(FModuleOp module) {
     auto nestedPrefix = (instance.getName() + "_").str();
 
     InliningLevel childIL(mic, target);
+    createDebugScope(childIL, instance);
 
     mapPortsToWires(nestedPrefix, childIL, mapper, {});
     for (unsigned i = 0, e = instance.getNumResults(); i < e; ++i)
@@ -1197,6 +1233,15 @@ void Inliner::inlineInstances(FModuleOp module) {
     // Erase the replaced instance.
     instance.erase();
   }
+}
+
+void Inliner::createDebugScope(InliningLevel &il, InstanceOp instance,
+                               Value parentScope) {
+  auto op = il.mic.b.create<debug::ScopeOp>(
+      instance.getLoc(), instance.getInstanceNameAttr(),
+      instance.getModuleNameAttr().getAttr(), parentScope);
+  debugScopes.push_back(op);
+  il.debugScope = op;
 }
 
 void Inliner::identifyNLAsTargetingOnlyModules() {
@@ -1307,6 +1352,13 @@ void Inliner::run() {
       inlineInstances(module);
     }
   }
+
+  // Delete debug scopes that ended up being unused. Erase them in reverse order
+  // since scopes at the back may have uses on scopes at the front.
+  for (auto scopeOp : llvm::reverse(debugScopes))
+    if (scopeOp.use_empty())
+      scopeOp.erase();
+  debugScopes.clear();
 
   // Delete all unreferenced modules.  Mark any NLAs that originate from dead
   // modules as also dead.
