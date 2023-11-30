@@ -32,13 +32,13 @@ using namespace arc;
 namespace {
 struct InferMemoriesPass
     : public arc::impl::InferMemoriesBase<InferMemoriesPass> {
+  using InferMemoriesBase::InferMemoriesBase;
+
   void runOnOperation() override;
 
   SmallVector<Operation *> opsToDelete;
   SmallPtrSet<StringAttr, 2> schemaNames;
   DenseMap<StringAttr, DictionaryAttr> memoryParams;
-
-  using InferMemoriesBase::tapPorts;
 };
 } // namespace
 
@@ -329,9 +329,6 @@ void InferMemoriesPass::runOnOperation() {
 }
 
 std::unique_ptr<Pass>
-arc::createInferMemoriesPass(std::optional<bool> tapPorts) {
-  auto pass = std::make_unique<InferMemoriesPass>();
-  if (tapPorts)
-    pass->tapPorts = *tapPorts;
-  return pass;
+arc::createInferMemoriesPass(const InferMemoriesOptions &options) {
+  return std::make_unique<InferMemoriesPass>(options);
 }

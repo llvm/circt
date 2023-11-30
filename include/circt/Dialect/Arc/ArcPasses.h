@@ -26,15 +26,13 @@ namespace arc {
 #include "circt/Dialect/Arc/ArcPasses.h.inc"
 
 std::unique_ptr<mlir::Pass>
-createAddTapsPass(std::optional<bool> tapPorts = {},
-                  std::optional<bool> tapWires = {},
-                  std::optional<bool> tapNamedValues = {});
+createAddTapsPass(const AddTapsOptions &options = {});
 std::unique_ptr<mlir::Pass> createAllocateStatePass();
 std::unique_ptr<mlir::Pass> createArcCanonicalizerPass();
 std::unique_ptr<mlir::Pass> createDedupPass();
 std::unique_ptr<mlir::Pass> createGroupResetsAndEnablesPass();
 std::unique_ptr<mlir::Pass>
-createInferMemoriesPass(std::optional<bool> tapPorts = {});
+createInferMemoriesPass(const InferMemoriesOptions &options = {});
 std::unique_ptr<mlir::Pass> createInferStatePropertiesPass();
 std::unique_ptr<mlir::Pass> createInlineArcsPass();
 std::unique_ptr<mlir::Pass> createInlineModulesPass();

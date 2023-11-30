@@ -181,7 +181,7 @@ static void populatePipeline(PassManager &pm) {
   if (verbosePassExecutions)
     pm.addInstrumentation(
         std::make_unique<VerbosePassInstrumentation<mlir::ModuleOp>>(
-            "fiarcilatorrtool"));
+            "arcilator"));
 
   // Pre-process the input such that it no longer contains any SV dialect ops
   // and external modules that are relevant to the arc transformation are
@@ -189,10 +189,19 @@ static void populatePipeline(PassManager &pm) {
   if (untilReached(UntilPreprocessing))
     return;
   pm.addPass(createLowerFirMemPass());
-  pm.addPass(
-      arc::createAddTapsPass(observePorts, observeWires, observeNamedValues));
+  {
+    arc::AddTapsOptions opts;
+    opts.tapPorts = observePorts;
+    opts.tapWires = observeWires;
+    opts.tapNamedValues = observeNamedValues;
+    pm.addPass(arc::createAddTapsPass(opts));
+  }
   pm.addPass(arc::createStripSVPass());
-  pm.addPass(arc::createInferMemoriesPass(observePorts));
+  {
+    arc::InferMemoriesOptions opts;
+    opts.tapPorts = observePorts;
+    pm.addPass(arc::createInferMemoriesPass(opts));
+  }
   pm.addPass(createCSEPass());
   pm.addPass(arc::createArcCanonicalizerPass());
 
