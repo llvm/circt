@@ -4,4 +4,10 @@
 
 from .accelerator import Accelerator
 
-from .esiCppAccel import AppID
+from .esiCppAccel import (AppID, Type, BundleType, ChannelType, ArrayType,
+                          StructType, BitsType, UIntType, SIntType)
+
+__all__ = [
+    "Accelerator", "AppID", "Type", "BundleType", "ChannelType", "ArrayType",
+    "StructType", "BitsType", "UIntType", "SIntType"
+]

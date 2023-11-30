@@ -11,6 +11,10 @@
 !sendI0 = !esi.bundle<[!esi.channel<i0> to "send"]>
 !recvI0 = !esi.bundle<[!esi.channel<i0> to "recv"]>
 
+!anyFrom = !esi.bundle<[
+  !esi.channel<!esi.any> from "recv",
+  !esi.channel<!esi.any> to "send"]>
+
 esi.service.decl @HostComms {
   esi.service.to_server @Send : !sendI8
   esi.service.to_client @Recv : !recvI8
@@ -33,6 +37,22 @@ hw.module @Loopback (in %clk: !seq.clock) {
   esi.service.req.to_server %sendi0_bundle -> <@MyService::@Send> (#esi.appid<"mysvc_send">) : !sendI0
 }
 
+esi.service.std.func @funcs
+
+!structFunc = !esi.bundle<[
+  !esi.channel<!hw.struct<a: ui4, b: si8>> to "arg",
+  !esi.channel<!hw.array<1xsi8>> from "result"]>
+
+hw.module @LoopbackStruct() {
+  %callBundle = esi.service.req.to_client <@funcs::@call> (#esi.appid<"structFunc">) : !structFunc
+  %arg = esi.bundle.unpack %resultChan from %callBundle : !structFunc
+
+  %argData, %valid = esi.unwrap.vr %arg, %ready : !hw.struct<a: ui4, b: si8>
+  %resultElem = hw.struct_extract %argData["b"] : !hw.struct<a: ui4, b: si8>
+  %resultArray = hw.array_create %resultElem : si8
+  %resultChan, %ready = esi.wrap.vr %resultArray, %valid : !hw.array<1xsi8>
+}
+
 esi.mem.ram @MemA i64 x 20
 !write = !hw.struct<address: i5, data: i64>
 !writeBundle = !esi.bundle<[!esi.channel<!write> to "req", !esi.channel<i0> from "ack"]>
@@ -45,8 +65,6 @@ hw.module @MemoryAccess1(in %clk : !seq.clock, in %rst : i1) {
   %writeBundle, %done = esi.bundle.pack %write_ch : !writeBundle
   esi.service.req.to_server %writeBundle -> <@MemA::@write> (#esi.appid<"internal_write">) : !writeBundle
 }
-
-esi.service.std.func @funcs
 
 !func1Signature = !esi.bundle<[!esi.channel<i16> to "arg", !esi.channel<i16> from "result"]>
 hw.module @CallableFunc1() {
@@ -63,4 +81,5 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
   hw.instance "m2" @Loopback (clk: %clk: !seq.clock) -> () {esi.appid=#esi.appid<"loopback_inst"[1]>}
   hw.instance "int_mem" @MemoryAccess1 (clk: %clk: !seq.clock, rst: %rst: i1) -> ()
   hw.instance "func1" @CallableFunc1() -> ()
+  hw.instance "loopback_struct" @LoopbackStruct() -> ()
 }

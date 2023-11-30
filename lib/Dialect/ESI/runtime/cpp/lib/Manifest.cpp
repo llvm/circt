@@ -39,6 +39,8 @@ class Manifest::Impl {
   friend class ::esi::Manifest;
 
 public:
+  using TypeCache = map<Type::ID, unique_ptr<Type>>;
+
   Impl(const string &jsonManifest);
 
   auto at(const string &key) const { return manifestJson.at(key); }
@@ -99,10 +101,8 @@ public:
   const Type &parseType(const nlohmann::json &typeJson);
 
 private:
-  BundleType *parseBundleType(const nlohmann::json &typeJson);
-
   vector<reference_wrapper<const Type>> _typeTable;
-  map<Type::ID, unique_ptr<Type>> _types;
+  TypeCache _types;
 
   // The parsed json.
   nlohmann::json manifestJson;
@@ -190,7 +190,7 @@ static ModuleInfo parseModuleInfo(const nlohmann::json &mod) {
 }
 
 //===----------------------------------------------------------------------===//
-// ManifestProxy class implementation.
+// Manifest::Impl class implementation.
 //===----------------------------------------------------------------------===//
 
 Manifest::Impl::Impl(const string &manifestStr) {
@@ -381,7 +381,12 @@ Manifest::Impl::getBundlePorts(AppIDPath idPath,
   return ret;
 }
 
-BundleType *Manifest::Impl::parseBundleType(const nlohmann::json &typeJson) {
+namespace {
+const Type &parseType(const nlohmann::json &typeJson,
+                      Manifest::Impl::TypeCache &cache);
+
+BundleType *parseBundleType(const nlohmann::json &typeJson,
+                            Manifest::Impl::TypeCache &cache) {
   assert(typeJson.at("mnemonic") == "bundle");
 
   vector<tuple<string, BundleType::Direction, const Type &>> channels;
@@ -396,33 +401,97 @@ BundleType *Manifest::Impl::parseBundleType(const nlohmann::json &typeJson) {
       throw runtime_error("Malformed manifest: unknown direction '" + dirStr +
                           "'");
     channels.emplace_back(chanJson.at("name"), dir,
-                          parseType(chanJson["type"]));
+                          parseType(chanJson["type"], cache));
   }
   return new BundleType(typeJson.at("circt_name"), channels);
 }
 
+ChannelType *parseChannelType(const nlohmann::json &typeJson,
+                              Manifest::Impl::TypeCache &cache) {
+  assert(typeJson.at("mnemonic") == "channel");
+  return new ChannelType(typeJson.at("circt_name"),
+                         parseType(typeJson.at("inner"), cache));
+}
+
+BitVectorType *parseInt(const nlohmann::json &typeJson,
+                        Manifest::Impl::TypeCache &cache) {
+  assert(typeJson.at("mnemonic") == "int");
+  std::string sign = typeJson.at("signedness");
+  uint64_t width = typeJson.at("hw_bitwidth");
+  Type::ID id = typeJson.at("circt_name");
+
+  if (sign == "signed")
+    return new SIntType(id, width);
+  else if (sign == "unsigned")
+    return new UIntType(id, width);
+  else if (sign == "signless")
+    return new BitsType(id, width);
+  else
+    throw runtime_error("Malformed manifest: unknown sign '" + sign + "'");
+}
+
+StructType *parseStruct(const nlohmann::json &typeJson,
+                        Manifest::Impl::TypeCache &cache) {
+  assert(typeJson.at("mnemonic") == "struct");
+  vector<tuple<string, const Type &>> fields;
+  for (auto &fieldJson : typeJson["fields"])
+    fields.emplace_back(fieldJson.at("name"),
+                        parseType(fieldJson["type"], cache));
+  return new StructType(typeJson.at("circt_name"), fields);
+}
+
+ArrayType *parseArray(const nlohmann::json &typeJson,
+                      Manifest::Impl::TypeCache &cache) {
+  assert(typeJson.at("mnemonic") == "array");
+  uint64_t size = typeJson.at("size");
+  return new ArrayType(typeJson.at("circt_name"),
+                       parseType(typeJson.at("element"), cache), size);
+}
+
+using TypeParser =
+    std::function<Type *(const nlohmann::json &, Manifest::Impl::TypeCache &)>;
+const std::map<std::string_view, TypeParser> typeParsers = {
+    {"bundle", parseBundleType},
+    {"channel", parseChannelType},
+    {"any",
+     [](const nlohmann::json &typeJson, Manifest::Impl::TypeCache &cache) {
+       return new AnyType(typeJson.at("circt_name"));
+     }},
+    {"int", parseInt},
+    {"struct", parseStruct},
+    {"array", parseArray},
+
+};
+
 // Parse a type if it doesn't already exist in the cache.
-const Type &Manifest::Impl::parseType(const nlohmann::json &typeJson) {
+const Type &parseType(const nlohmann::json &typeJson,
+                      Manifest::Impl::TypeCache &cache) {
   // We use the circt type string as a unique ID.
   string circt_name = typeJson.at("circt_name");
 
   // Check the cache.
-  auto typeF = _types.find(circt_name);
-  if (typeF != _types.end())
+  auto typeF = cache.find(circt_name);
+  if (typeF != cache.end())
     return *typeF->second;
 
   // Parse the type.
   string mnemonic = typeJson.at("mnemonic");
   Type *t;
-  if (mnemonic == "bundle")
-    t = parseBundleType(typeJson);
+  auto f = typeParsers.find(mnemonic);
+  if (f != typeParsers.end())
+    t = f->second(typeJson, cache);
   else
     // Types we don't know about are opaque.
     t = new Type(circt_name);
 
   // Insert into the cache.
-  _types.emplace(circt_name, unique_ptr<Type>(t));
+  cache.emplace(circt_name, unique_ptr<Type>(t));
   return *t;
+}
+} // namespace
+
+const Type &Manifest::Impl::parseType(const nlohmann::json &typeJson) {
+  return ::parseType(typeJson, _types);
 }
 
 void Manifest::Impl::populateTypes(const nlohmann::json &typesJson) {
