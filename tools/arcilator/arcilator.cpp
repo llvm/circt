@@ -89,6 +89,15 @@ static cl::opt<bool>
                        cl::desc("Make values with `sv.namehint` observable"),
                        cl::init(false), cl::cat(mainCategory));
 
+static cl::opt<bool> observeRegisters("observe-registers",
+                                      cl::desc("Make all registers observable"),
+                                      cl::init(false), cl::cat(mainCategory));
+
+static cl::opt<bool>
+    observeMemories("observe-memories",
+                    cl::desc("Make all memory contents observable"),
+                    cl::init(false), cl::cat(mainCategory));
+
 static cl::opt<std::string> stateFile("state-file", cl::desc("State file"),
                                       cl::value_desc("filename"), cl::init(""),
                                       cl::cat(mainCategory));
@@ -200,6 +209,7 @@ static void populatePipeline(PassManager &pm) {
   {
     arc::InferMemoriesOptions opts;
     opts.tapPorts = observePorts;
+    opts.tapMemories = observeMemories;
     pm.addPass(arc::createInferMemoriesPass(opts));
   }
   pm.addPass(createCSEPass());
@@ -208,7 +218,11 @@ static void populatePipeline(PassManager &pm) {
   // Restructure the input from a `hw.module` hierarchy to a collection of arcs.
   if (untilReached(UntilArcConversion))
     return;
-  pm.addPass(createConvertToArcsPass());
+  {
+    ConvertToArcsOptions opts;
+    opts.tapRegisters = observeRegisters;
+    pm.addPass(createConvertToArcsPass(opts));
+  }
   if (shouldDedup)
     pm.addPass(arc::createDedupPass());
   pm.addPass(arc::createInlineModulesPass());
