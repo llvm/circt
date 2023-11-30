@@ -172,6 +172,17 @@ LogicalResult StateOp::verify() {
 
 bool StateOp::isClocked() { return getLatency() > 0; }
 
+void StateOp::getEffects(
+    SmallVectorImpl<SideEffects::EffectInstance<MemoryEffects::Effect>>
+        &effects) {
+  auto *op = getOperation();
+  if (getLatency() > 0 && (op->hasAttr("name") || op->hasAttr("names"))) {
+    effects.push_back(MemoryEffects::Allocate::get());
+    effects.push_back(MemoryEffects::Read::get());
+    effects.push_back(MemoryEffects::Write::get());
+  }
+}
+
 //===----------------------------------------------------------------------===//
 // CallOp
 //===----------------------------------------------------------------------===//

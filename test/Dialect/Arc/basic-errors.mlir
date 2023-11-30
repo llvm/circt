@@ -3,7 +3,7 @@
 // expected-error @+1 {{body contains non-pure operation}}
 arc.define @Foo(%arg0: !seq.clock) {
   // expected-note @+1 {{first non-pure operation here:}}
-  arc.state @Bar() clock %arg0 lat 1 : () -> ()
+  arc.state @Bar() clock %arg0 lat 1 {name = "foo"} : () -> ()
   arc.output
 }
 arc.define @Bar() {
@@ -56,7 +56,7 @@ arc.define @Bar() {
 arc.define @SupportRecursiveMemoryEffects(%arg0: i1, %arg1: !seq.clock) {
   // expected-note @+1 {{first non-pure operation here:}}
   scf.if %arg0 {
-    arc.state @Bar() clock %arg1 lat 1 : () -> ()
+    arc.state @Bar() clock %arg1 lat 1 {name = "foo"} : () -> ()
   }
   arc.output
 }

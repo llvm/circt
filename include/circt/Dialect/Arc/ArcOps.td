@@ -133,6 +133,8 @@ def StateOp : ArcOp<"state", [
   DeclareOpInterfaceMethods<SymbolUserOpInterface>,
   AttrSizedOperandSegments,
   DeclareOpInterfaceMethods<ClockedOpInterface, ["isClocked"]>,
+  AlwaysSpeculatable,
+  DeclareOpInterfaceMethods<MemoryEffectsOpInterface>,
 ]> {
   let summary = "State transfer arc";
 
