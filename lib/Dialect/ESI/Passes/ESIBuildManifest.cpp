@@ -121,7 +121,8 @@ void ESIBuildManifestPass::runOnOperation() {
                                                compressedManifest.data()),
                                            compressedManifest.size())));
   } else {
-    mod->emitError() << "zlib not available but required for manifest support";
+    mod->emitWarning()
+        << "zlib not available but required for manifest support";
     signalPassFailure();
   }
 }
