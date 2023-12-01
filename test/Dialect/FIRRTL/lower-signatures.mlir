@@ -7,4 +7,6 @@ firrtl.circuit "Prop" {
     // CHECK: firrtl.propassign
     firrtl.propassign %y, %0 : !firrtl.string
   }
+
+
 }
