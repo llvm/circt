@@ -176,11 +176,11 @@ public:
   ReadTraceChannelPort(TraceAccelerator::Impl &impl, const Type &type)
       : ReadChannelPort(type) {}
 
-  virtual ssize_t read(void *data, size_t maxSize) override;
+  virtual std::ptrdiff_t read(void *data, size_t maxSize) override;
 };
 } // namespace
 
-ssize_t ReadTraceChannelPort::read(void *data, size_t maxSize) {
+std::ptrdiff_t ReadTraceChannelPort::read(void *data, size_t maxSize) {
   uint8_t *dataPtr = reinterpret_cast<uint8_t *>(data);
   for (size_t i = 0; i < maxSize; ++i)
     dataPtr[i] = rand() % 256;

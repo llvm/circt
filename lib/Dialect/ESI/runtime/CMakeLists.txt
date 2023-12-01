@@ -23,11 +23,11 @@
 ##
 ##===----------------------------------------------------------------------===//
 
-project(ESIRuntime)
 cmake_minimum_required(VERSION 3.20)
+project(ESIRuntime)
 include(FetchContent)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 
 # We need zlib to uncompress the manifest.
@@ -60,6 +60,11 @@ set(ESIPythonRuntimeSources
   python/esi/accelerator.py
   python/esi/esiCppAccel.pyi
 )
+
+IF(MSVC)
+    set(CMAKE_CXX_FLAGS "/EHa")
+    set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS 1)
+ENDIF(MSVC)
 
 # If Cap'nProto hasn't been explicitly disabled, find it.
 option(CAPNP_DISABLE "Disable Cap'nProto (needed for cosimulation).")
@@ -122,6 +127,12 @@ set(ESIRuntimePath "${CMAKE_CURRENT_BINARY_DIR}"
 # Pybind11 is used to wrap the ESIRuntime APIs.
 find_package(Python COMPONENTS Interpreter Development)
 if(Python_FOUND)
+  IF(MSVC)
+    # Work around an issue with pybind11 and cmake incompatibility on Windows in debug mode.
+    set_target_properties(Python::Module PROPERTIES
+          MAP_IMPORTED_CONFIG_DEBUG ";RELEASE")
+  ENDIF(MSVC)
+
   if(pybind11_DIR)
     message(STATUS "Using explicit pybind11 cmake directory: ${pybind11_DIR} (-Dpybind11_DIR to change)")
   else()
