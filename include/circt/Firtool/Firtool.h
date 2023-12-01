@@ -68,7 +68,17 @@ public:
 
   seq::ExternalizeClockGateOptions getClockGateOptions() const {
     return {ckgModuleName, ckgInputName,      ckgOutputName,
-            ckgEnableName, ckgTestEnableName, "ckg"};
+            ckgEnableName, ckgTestEnableName, ckgInstName};
+  }
+
+  FirtoolOptions &setClockGateOptions(seq::ExternalizeClockGateOptions &opts) {
+    ckgModuleName = opts.moduleName;
+    ckgInputName = opts.inputName;
+    ckgOutputName = opts.outputName;
+    ckgEnableName = opts.enableName;
+    ckgTestEnableName = opts.testEnableName;
+    ckgInstName = opts.instName;
+    return *this;
   }
 
   bool isDefaultOutputFilename() const { return outputFilename == "-"; }
@@ -373,6 +383,7 @@ private:
   std::string ckgOutputName;
   std::string ckgEnableName;
   std::string ckgTestEnableName;
+  std::string ckgInstName;
   bool exportModuleHierarchy;
   bool stripFirDebugInfo;
   bool stripDebugInfo;
