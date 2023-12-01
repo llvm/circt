@@ -123,7 +123,7 @@ circuit Top :
   ; CHECK: firrtl.module private @A
   module A : @[yy 2:2]
     output x: UInt<1> @[yy 2:2]
-    ; CHECK: firrtl.instance b @B(
+    ; CHECK-NEXT: firrtl.instance b @B(
     inst b of B
     x <= b.u
   module A_ : @[xx 1:1]
@@ -150,8 +150,8 @@ circuit Top :
   ; CHECK: firrtl.module @Top
   module Top :
     output out: UInt<1>
-    ; CHECK: firrtl.instance a1 @A(
-    ; CHECK: firrtl.instance a2 @A_(
+    ; CHECK-NEXT: firrtl.instance a1 @A(
+    ; CHECK-NEXT: firrtl.instance a2 @A_(
     inst a1 of A
     inst a2 of A_
     out <= and(a1.x, a2.y)
