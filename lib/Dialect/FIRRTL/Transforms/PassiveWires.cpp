@@ -43,10 +43,10 @@ struct PassiveWiresPass : public PassiveWiresBase<PassiveWiresPass> {
 void PassiveWiresPass::runOnOperation() {
   LLVM_DEBUG(
       llvm::dbgs() << "===- Running Passive Wires Pass "
-                      "------------------------------------------------===\n");
+                      "---------------------------------------------===\n");
   auto module = getOperation();
 
-  // First, expand any connects to resolve flips
+  // First, expand any connects to resolve flips.
   SmallVector<WireOp> wires;
   module.walk([&](Operation *op) -> WalkResult {
     if (auto wire = dyn_cast<WireOp>(op)) {
@@ -70,7 +70,7 @@ void PassiveWiresPass::runOnOperation() {
   // Second, remove flips from wires.
   for (auto w : wires) {
     auto r = w.getResult();
-    // in-place updates is safe as consumers don't care about flip
+    // In-place updates is safe as consumers don't care about flip.
     r.setType(type_cast<FIRRTLBaseType>(r.getType()).getPassiveType());
   }
 }
