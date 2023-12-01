@@ -680,7 +680,7 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       etcDisableModuleInlining(false),
       addVivadoRAMAddressConflictSynthesisBugWorkaround(false),
       ckgModuleName("EICG_wrapper"), ckgInputName("in"), ckgOutputName("out"),
-      ckgEnableName("en"), ckgTestEnableName("test_en"),
+      ckgEnableName("en"), ckgTestEnableName("test_en"), ckgInstName("ckg"),
       exportModuleHierarchy(false), stripFirDebugInfo(true),
       stripDebugInfo(false) {
   if (!clOptions.isConstructed())
