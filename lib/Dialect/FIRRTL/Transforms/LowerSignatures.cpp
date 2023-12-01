@@ -394,11 +394,11 @@ static void lowerModuleBody(FModuleOp mod,
     theBuilder.setInsertionPoint(inst);
     const auto &modPorts = ports.at(inst.getModuleNameAttr().getAttr());
 
-    // Create bounce wires for old signals
+    // Fix up the Instance
     SmallVector<PortInfo> instPorts; // Oh I wish ArrayRef was polymorphic.
     for (auto p : modPorts) {
       p.sym = {};
-      // Fix up the Instance
+      // Might need to partially copy stuff from the old instance.
       p.annotations = AnnotationSet{mod.getContext()};
       instPorts.push_back(p);
     }
@@ -414,7 +414,7 @@ static void lowerModuleBody(FModuleOp mod,
       if (!newDict.contains(na.getName()))
         newOp->setDiscardableAttr(na.getName(), na.getValue());
 
-    // Connect up the Instance to the bounce wires
+    // Connect up the old instance users to the new instance
     SmallVector<WireOp> bounce(inst.getNumResults());
     for (auto p : modPorts) {
       // No change?  No bounce wire.

@@ -67,7 +67,7 @@ void PassiveWiresPass::runOnOperation() {
     return WalkResult::advance();
   });
 
-  // Second, remove flips from wires.
+  // Second, remove flips from most things.
   while (!worklist.empty()) {
     auto *op = worklist.back();
     worklist.pop_back();
