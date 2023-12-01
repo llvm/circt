@@ -396,8 +396,12 @@ static void lowerModuleBody(FModuleOp mod,
 
     // Fix up the Instance
     SmallVector<PortInfo> instPorts; // Oh I wish ArrayRef was polymorphic.
-    for (auto p : modPorts)
+    for (auto p : modPorts) {
+      p.sym = {};
+      // Might need to partially copy stuff from the old instance.
+      p.annotations = AnnotationSet{mod.getContext()};
       instPorts.push_back(p);
+    }
     auto annos = inst.getAnnotations();
     auto newOp = theBuilder.create<InstanceOp>(
         instPorts, inst.getModuleName(), inst.getName(), inst.getNameKind(),
