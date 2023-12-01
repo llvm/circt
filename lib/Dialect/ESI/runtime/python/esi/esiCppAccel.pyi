@@ -1,17 +1,22 @@
-# Originally imported via:
-#    pybind11-stubgen -o lib/Dialect/ESI/runtime/python/ esi.esiCppAccel
-# Local modifications:
-#    None yet. Though we're assuming that we will have some at some point.
-
 from __future__ import annotations
+from . import types
 import typing
 
 __all__ = [
+<<<<<<< HEAD
     'Accelerator', 'AcceleratorConnection', 'AnyType', 'AppID', 'ArrayType',
     'BitVectorType', 'BitsType', 'BundlePort', 'BundleType', 'ChannelPort',
     'ChannelType', 'Direction', 'From', 'HWModule', 'Instance', 'IntegerType',
     'MMIO', 'Manifest', 'ModuleInfo', 'ReadChannelPort', 'SIntType',
     'StructType', 'SysInfo', 'To', 'Type', 'UIntType', 'WriteChannelPort'
+=======
+    'Accelerator', 'AnyType', 'AppID', 'ArrayType', 'BitVectorType', 'BitsType',
+    'BundlePort', 'BundleType', 'ChannelPort', 'ChannelType', 'Design',
+    'Direction', 'From', 'Instance', 'IntegerType', 'MMIO', 'Manifest',
+    'ModuleInfo', 'ReadChannelPort', 'SIntType', 'StructType', 'SysInfo', 'To',
+    'Type', 'UIntType', 'VoidType', 'WriteChannelPort',
+    'register_bundle_port_type', 'register_type_getter'
+>>>>>>> checkpoint
 ]
 
 
@@ -110,7 +115,7 @@ class ChannelPort:
     ...
 
   @property
-  def type(self) -> Type:
+  def type(self) -> typing.Any:
     ...
 
 
@@ -121,6 +126,24 @@ class ChannelType(Type):
     ...
 
 
+<<<<<<< HEAD
+=======
+class Design:
+
+  @property
+  def children(self) -> dict[AppID, Instance]:
+    ...
+
+  @property
+  def info(self) -> ModuleInfo | None:
+    ...
+
+  @property
+  def ports(self) -> dict[AppID, types.BundlePort]:
+    ...
+
+
+>>>>>>> checkpoint
 class Direction:
   """
     Members:
@@ -254,7 +277,7 @@ class ModuleInfo:
 
 class ReadChannelPort(ChannelPort):
 
-  def read(self, arg0: int) -> list[int]:
+  def read(self, arg0: int) -> bytearray:
     ...
 
 
@@ -265,7 +288,7 @@ class SIntType(IntegerType):
 class StructType(Type):
 
   @property
-  def fields(self) -> list[tuple[str, Type]]:
+  def fields(self) -> list[tuple[str, types.ESIType]]:
     ...
 
 
@@ -292,10 +315,22 @@ class UIntType(IntegerType):
   pass
 
 
+class VoidType(Type):
+  pass
+
+
 class WriteChannelPort(ChannelPort):
 
-  def write(self, arg0: list[int]) -> None:
+  def write(self, arg0: bytearray) -> None:
     ...
+
+
+def register_bundle_port_type(arg0: type) -> None:
+  ...
+
+
+def register_type_getter(arg0: typing.Callable) -> None:
+  ...
 
 
 From: Direction  # value = <Direction.From: 1>

@@ -44,7 +44,6 @@ public:
 
   Manifest(const Manifest &) = delete;
   Manifest(const std::string &jsonManifest);
-  ~Manifest();
 
   uint32_t getApiVersion() const;
   // Modules which have designer specified metadata.
@@ -69,7 +68,8 @@ private:
 
 } // namespace esi
 
+std::ostream &operator<<(std::ostream &os, const esi::AppID &id);
+std::ostream &operator<<(std::ostream &, const esi::AppIDPath &);
 std::ostream &operator<<(std::ostream &, const esi::ModuleInfo &);
-std::ostream &operator<<(std::ostream &, const esi::AppID &);
 
 #endif // ESI_MANIFEST_H

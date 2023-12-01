@@ -57,10 +57,14 @@ public:
            std::vector<std::unique_ptr<Instance>> children,
            std::vector<services::Service *> services,
            std::vector<BundlePort> ports);
+  virtual ~HWModule() = default;
 
   std::optional<ModuleInfo> getInfo() const { return info; }
-  const std::vector<std::unique_ptr<Instance>> &getChildrenOrdered() const {
-    return children;
+  std::vector<const Instance *> getChildrenOrdered() const {
+    std::vector<const Instance *> ret;
+    for (const auto &c : children)
+      ret.push_back(c.get());
+    return ret;
   }
   const std::map<AppID, Instance *> &getChildren() const { return childIndex; }
   const std::vector<BundlePort> &getPortsOrdered() const { return ports; }

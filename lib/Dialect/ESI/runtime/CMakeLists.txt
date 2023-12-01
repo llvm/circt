@@ -58,6 +58,7 @@ set(ESIRuntimeLinkLibraries
 set(ESIPythonRuntimeSources
   python/esi/__init__.py
   python/esi/accelerator.py
+  python/esi/types.py
   python/esi/esiCppAccel.pyi
 )
 

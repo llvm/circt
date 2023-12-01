@@ -88,7 +88,7 @@ unique_ptr<AcceleratorConnection>
 TraceAccelerator::connect(string connectionString) {
   string modeStr;
   string manifestPath;
-  string traceFile = "trace.json";
+  string traceFile = "trace.log";
 
   // Parse the connection string.
   // <mode>:<manifest path>[:<traceFile>]
