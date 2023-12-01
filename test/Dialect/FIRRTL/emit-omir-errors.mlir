@@ -80,7 +80,6 @@ firrtl.circuit "Foo" attributes {annotations = [{
   }}]
 }]} {
   firrtl.module @Foo() {
-    // expected-note @below {{tracker ID is '0 : i64'}}
     // expected-note @below {{tracker with same ID already found here}}
     %w_a = firrtl.wire {annotations = [{class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0 : i64, type = "OMMemberReferenceTarget"}]} : !firrtl.uint<1>
     // expected-error @below {{freechips.rocketchip.objectmodel.OMIRTracker annotation with same ID already found, must resolve to single target}}

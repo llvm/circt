@@ -644,9 +644,6 @@ void EmitOMIRPass::runOnOperation() {
                        "to single target";
         diag.attachNote(it->second.op->getLoc())
             << "tracker with same ID already found here";
-        diag.attachNote(it->second.op->getLoc())
-            << "tracker ID is '" << tracker.id << "'";
-
         anyFailures = true;
         return true;
       }
