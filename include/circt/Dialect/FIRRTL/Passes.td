@@ -102,6 +102,14 @@ def LowerSignatures : Pass<"firrtl-lower-signatures", "firrtl::CircuitOp"> {
   let constructor = "circt::firrtl::createLowerSignaturesPass()";
 }
 
+def PassiveWires : Pass<"firrtl-passive-wires", "firrtl::FModuleOp"> {
+  let summary = "Make FIRRTL wires have passive type";
+  let description = [{
+    Eliminate flips from aggregate types on wires.
+  }];
+  let constructor = "circt::firrtl::createPassiveWiresPass()";
+}
+
 
 def IMConstProp : Pass<"firrtl-imconstprop", "firrtl::CircuitOp"> {
   let summary = "Intermodule constant propagation and dead code elimination";
