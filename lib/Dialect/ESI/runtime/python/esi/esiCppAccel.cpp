@@ -135,7 +135,7 @@ PYBIND11_MODULE(esiCppAccel, m) {
   py::class_<ReadChannelPort, ChannelPort>(m, "ReadChannelPort")
       .def("read", [](ReadChannelPort &p, size_t maxSize) {
         std::vector<uint8_t> data(maxSize);
-        ssize_t size = p.read(data.data(), data.size());
+        std::ptrdiff_t size = p.read(data.data(), data.size());
         if (size < 0)
           throw std::runtime_error("read failed");
         data.resize(size);

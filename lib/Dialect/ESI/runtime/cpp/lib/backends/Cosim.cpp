@@ -151,7 +151,7 @@ public:
   void connect();
   void disconnect();
   void write(const void *data, size_t size);
-  ssize_t read(void *data, size_t maxSize);
+  std::ptrdiff_t read(void *data, size_t maxSize);
 
 protected:
   CosimAccelerator::Impl &impl;
@@ -171,7 +171,7 @@ void CosimChannelPort::write(const void *data, size_t size) {
   req.send().wait(impl.waitScope);
 }
 
-ssize_t CosimChannelPort::read(void *data, size_t maxSize) {
+std::ptrdiff_t CosimChannelPort::read(void *data, size_t maxSize) {
   auto req = ep.recvToHostRequest();
   auto resp = req.send().wait(impl.waitScope);
   if (!resp.getHasData())
@@ -253,7 +253,7 @@ public:
 
   virtual void connect() override { cosim->connect(); }
   virtual void disconnect() override { cosim->disconnect(); }
-  virtual ssize_t read(void *data, size_t maxSize) override;
+  virtual std::ptrdiff_t read(void *data, size_t maxSize) override;
 
 protected:
   std::unique_ptr<CosimChannelPort> cosim;
@@ -261,7 +261,7 @@ protected:
 
 } // namespace
 
-ssize_t ReadCosimChannelPort::read(void *data, size_t maxSize) {
+std::ptrdiff_t ReadCosimChannelPort::read(void *data, size_t maxSize) {
   return cosim->read(data, maxSize);
 }
 

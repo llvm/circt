@@ -76,7 +76,7 @@ public:
   /// Specify a buffer to read into and a maximum size to read. Returns the
   /// number of bytes read, or -1 on error. Basic API, will likely change for
   /// performance reasons.
-  virtual ssize_t read(void *data, size_t maxSize) = 0;
+  virtual std::ptrdiff_t read(void *data, size_t maxSize) = 0;
 };
 
 namespace services {

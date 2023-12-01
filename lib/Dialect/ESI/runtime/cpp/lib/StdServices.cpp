@@ -55,4 +55,5 @@ uint32_t MMIOSysInfo::getEsiVersion() const {
 
 vector<uint8_t> MMIOSysInfo::getCompressedManifest() const {
   assert(false && "Not implemented");
+  throw runtime_error("Not implemented");
 }
