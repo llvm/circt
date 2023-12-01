@@ -123,7 +123,6 @@ void ESIBuildManifestPass::runOnOperation() {
   } else {
     mod->emitWarning()
         << "zlib not available but required for manifest support";
-    signalPassFailure();
   }
 }
 
