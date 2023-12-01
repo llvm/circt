@@ -249,6 +249,18 @@ computeLoweringImpl(FModuleLike mod, PortConversion &newPorts, Convention conv,
              newPorts.size(),
              fieldID});
         return success();
+      })
+      .template Case<FIRRTLType>([&](FIRRTLType otherType) {
+        // Properties and other types wind up hear.
+        newPorts.push_back(
+            {{StringAttr::get(ctx, name), otherType,
+              isFlip ? Direction::Out : Direction::In,
+              symbolsForFieldIDRange(ctx, syms, fieldID, fieldID), port.loc,
+              annosForFieldIDRange(ctx, annos, fieldID, fieldID)},
+             portID,
+             newPorts.size(),
+             fieldID});
+        return success();
       });
 }
 
@@ -382,19 +394,15 @@ static void lowerModuleBody(FModuleOp mod,
     theBuilder.setInsertionPoint(inst);
     const auto &modPorts = ports.at(inst.getModuleNameAttr().getAttr());
 
-    SmallVector<Value> bounceWires;
     // Create bounce wires for old signals
-    for (auto r : inst.getResults()) {
-      auto wire = theBuilder.create<WireOp>(r.getType());
-      bounceWires.push_back(wire.getResult());
-      r.replaceAllUsesWith(wire.getResult());
-    }
-    // Fix up the Instance
     SmallVector<PortInfo> instPorts; // Oh I wish ArrayRef was polymorphic.
-    for (auto p : modPorts)
+    for (auto p : modPorts) {
+      p.sym = {};
+      // Fix up the Instance
+      p.annotations = AnnotationSet{mod.getContext()};
       instPorts.push_back(p);
+    }
     auto annos = inst.getAnnotations();
-    annos.dump();
     auto newOp = theBuilder.create<InstanceOp>(
         instPorts, inst.getModuleName(), inst.getName(), inst.getNameKind(),
         annos.getValue(), inst.getLowerToBind(), inst.getInnerSymAttr());
@@ -407,16 +415,30 @@ static void lowerModuleBody(FModuleOp mod,
         newOp->setDiscardableAttr(na.getName(), na.getValue());
 
     // Connect up the Instance to the bounce wires
-    for (auto [idx, p] : llvm::enumerate(modPorts)) {
-      if (p.isInput())
-        emitConnect(
-            theBuilder, newOp.getResult(p.resultID),
-            getValueByFieldID(theBuilder, bounceWires[p.portID], p.fieldID));
-      else
-        emitConnect(
-            theBuilder,
-            getValueByFieldID(theBuilder, bounceWires[p.portID], p.fieldID),
+    SmallVector<WireOp> bounce(inst.getNumResults());
+    for (auto p : modPorts) {
+      // No change?  No bounce wire.
+      if (p.fieldID == 0) {
+        inst.getResult(p.portID).replaceAllUsesWith(
             newOp.getResult(p.resultID));
+        continue;
+      }
+      if (!bounce[p.portID]) {
+        bounce[p.portID] =
+            theBuilder.create<WireOp>(inst.getResult(p.portID).getType());
+        inst.getResult(p.portID).replaceAllUsesWith(
+            bounce[p.portID].getResult());
+      }
+      // Connect up the Instance to the bounce wires
+      if (p.isInput())
+        emitConnect(theBuilder, newOp.getResult(p.resultID),
+                    getValueByFieldID(theBuilder, bounce[p.portID].getResult(),
+                                      p.fieldID));
+      else
+        emitConnect(theBuilder,
+                    getValueByFieldID(theBuilder, bounce[p.portID].getResult(),
+                                      p.fieldID),
+                    newOp.getResult(p.resultID));
     }
 
     inst.erase();
