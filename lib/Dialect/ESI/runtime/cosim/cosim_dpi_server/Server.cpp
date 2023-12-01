@@ -21,7 +21,7 @@
 #include "CosimDpi.capnp.h"
 #include <capnp/ez-rpc.h>
 #include <thread>
-#if WIN32
+#ifdef _WIN32
 #include <io.h>
 #else
 #include <unistd.h>
