@@ -116,7 +116,7 @@ void InferMemoriesPass::runOnOperation() {
     }
     auto memType = MemoryType::get(&getContext(), depth, wordType, addressTy);
     auto memOp = builder.create<MemoryOp>(memType);
-    if (!instOp.getInstanceName().empty())
+    if (tapMemories && !instOp.getInstanceName().empty())
       memOp->setAttr("name", instOp.getInstanceNameAttr());
 
     unsigned argIdx = 0;
