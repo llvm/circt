@@ -365,7 +365,7 @@ def EmptyPathOp : OMOp<"path_empty", [Pure]> {
     }
     ```
   }];
-  let results = (outs FrozenPathType:$result);
+  let results = (outs PathType:$result);
   let assemblyFormat = "attr-dict";
 }
 
