@@ -118,6 +118,8 @@ symbolsForFieldIDRange(MLIRContext *ctx,
   SmallVector<hw::InnerSymPropertiesAttr, 4> newSyms(b, e);
   if (newSyms.empty())
     return {};
+  for (auto& sym : newSyms)
+    sym = hw::InnerSymPropertiesAttr::get(ctx, sym.getName(), sym.getFieldID() - low, sym.getSymVisibility());
   return hw::InnerSymAttr::get(ctx, newSyms);
 }
 
@@ -128,7 +130,7 @@ annosForFieldIDRange(MLIRContext *ctx,
   AnnotationSet newAnnos(ctx);
   auto [b, e] = annos.find(low, high);
   for (; b != e; ++b)
-    newAnnos.addAnnotations(*b);
+    newAnnos.addAnnotations(Annotation(*b, b->getFieldID() - low));
   return newAnnos;
 }
 
