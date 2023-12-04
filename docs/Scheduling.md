@@ -273,6 +273,9 @@ as well as redundant iteration over the problem components.
 - [ChainingProblem](https://circt.llvm.org/doxygen/classcirct_1_1scheduling_1_1ChainingProblem.html):
   Extends `Problem` to consider the accumulation of physical propagation delays
   on combinational paths along SSA dependences.
+- ChainingCyclicProblem:
+  Extends `ChainingProblem` and `CyclicProblem` to consider the accumulation of physical propagation delays
+  on combinational paths along SSA dependences on a cyclic scheduling problem.
 
 NB: The classes listed above each model a *trait*-like aspect of scheduling.
 These can be used as-is, but are also intended for mixing and matching, even

@@ -520,6 +520,26 @@ struct Default<scheduling::ModuloProblem> {
       Default<scheduling::CyclicProblem>::instanceProperties;
 };
 
+template <>
+struct Default<scheduling::ChainingCyclicProblem> {
+  static constexpr auto operationProperties =
+      std::tuple_cat(Default<scheduling::Problem>::operationProperties,
+                     Default<scheduling::CyclicProblem>::operationProperties,
+                     Default<scheduling::ChainingProblem>::operationProperties);
+  static constexpr auto operatorTypeProperties = std::tuple_cat(
+      Default<scheduling::Problem>::operatorTypeProperties,
+      Default<scheduling::CyclicProblem>::operatorTypeProperties,
+      Default<scheduling::ChainingProblem>::operatorTypeProperties);
+  static constexpr auto dependenceProperties = std::tuple_cat(
+      Default<scheduling::Problem>::dependenceProperties,
+      Default<scheduling::CyclicProblem>::dependenceProperties,
+      Default<scheduling::ChainingProblem>::dependenceProperties);
+  static constexpr auto instanceProperties =
+      std::tuple_cat(Default<scheduling::Problem>::instanceProperties,
+                     Default<scheduling::CyclicProblem>::instanceProperties,
+                     Default<scheduling::ChainingProblem>::instanceProperties);
+};
+
 } // namespace ssp
 } // namespace circt
 

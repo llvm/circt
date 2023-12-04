@@ -408,6 +408,24 @@ LogicalResult ModuloProblem::verify() {
 }
 
 //===----------------------------------------------------------------------===//
+// ChainingCyclicProblem
+//===----------------------------------------------------------------------===//
+
+LogicalResult ChainingCyclicProblem::check() {
+  if (ChainingProblem::check().succeeded() &&
+      CyclicProblem::check().succeeded())
+    return success();
+  return failure();
+}
+
+LogicalResult ChainingCyclicProblem::verify() {
+  if (ChainingProblem::verify().succeeded() &&
+      CyclicProblem::verify().succeeded())
+    return success();
+  return failure();
+}
+
+//===----------------------------------------------------------------------===//
 // Dependence
 //===----------------------------------------------------------------------===//
 
