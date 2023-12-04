@@ -62,7 +62,9 @@ public:
       return;
     }
     if (fieldID)
-      setMember("circt.fieldID", IntegerAttr::get(IntegerType::get(anno.attr.getContext(), 32), APInt(32, fieldID)));
+      setMember("circt.fieldID",
+                IntegerAttr::get(IntegerType::get(anno.attr.getContext(), 32),
+                                 APInt(32, fieldID)));
   }
 
   /// Get the data dictionary of this attribute.

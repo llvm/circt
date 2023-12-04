@@ -118,8 +118,9 @@ symbolsForFieldIDRange(MLIRContext *ctx,
   SmallVector<hw::InnerSymPropertiesAttr, 4> newSyms(b, e);
   if (newSyms.empty())
     return {};
-  for (auto& sym : newSyms)
-    sym = hw::InnerSymPropertiesAttr::get(ctx, sym.getName(), sym.getFieldID() - low, sym.getSymVisibility());
+  for (auto &sym : newSyms)
+    sym = hw::InnerSymPropertiesAttr::get(
+        ctx, sym.getName(), sym.getFieldID() - low, sym.getSymVisibility());
   return hw::InnerSymAttr::get(ctx, newSyms);
 }
 

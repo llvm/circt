@@ -1293,9 +1293,7 @@ void EmitOMIRPass::addFieldID(FIRRTLType type, unsigned fieldID,
           result.push_back('.');
           result.append(name.begin(), name.end());
         })
-        .Default([](auto val) {
-          llvm::report_fatal_error("invalid fieldID");
-        });
+        .Default([](auto val) { llvm::report_fatal_error("invalid fieldID"); });
 }
 
 //===----------------------------------------------------------------------===//
