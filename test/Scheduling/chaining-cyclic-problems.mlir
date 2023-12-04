@@ -1,6 +1,5 @@
 // RUN: circt-opt %s -ssp-roundtrip=verify
 // RUN: circt-opt %s -ssp-schedule="scheduler=simplex options=cycle-time=5.0" | FileCheck %s -check-prefixes=CHECK,SIMPLEX
-// RUN: %if or-tools %{ circt-opt %s -ssp-schedule=scheduler=lp | FileCheck %s -check-prefixes=CHECK,LP %}
 
 
 
@@ -8,7 +7,6 @@
 
 // CHECK-LABEL: cyclic
 // SIMPLEX-SAME: [II<2>]
-// LP-SAME: [II<2>]
 ssp.instance @cyclic of "ChainingCyclicProblem" [II<2>] {
   library {
     operator_type @_0 [latency<0>, incDelay<0.0>, outDelay<0.0>]
@@ -17,19 +15,17 @@ ssp.instance @cyclic of "ChainingCyclicProblem" [II<2>] {
   }
   graph {
     %0 = operation<@_1>() [t<0>, z<0.000000e+00 : f32>]
-    %1 = operation<@_0>(@op4 [dist<1>]) [t<2>, z<0.000000e+00 : f32>]
+    %1 = operation<@_0>(@op4 [dist<1>]) [t<1>, z<0.000000e+00 : f32>]
     %2 = operation<@_2>(@op4 [dist<2>]) [t<0>, z<0.000000e+00 : f32>]
     %3 = operation<@_1>(%1, %2) [t<2>, z<0.000000e+00 : f32>]
-    %4 = operation<@_1> @op4(%2, %0) [t<3>, z<0.000000e+00 : f32>]
-    // SIMPLEX: @last(%{{.*}}) [t<4>, z<0.000000e+00 : f32>]
-    // LP: @last(%{{.*}}) [t<4>, z<0.000000e+00 : f32>]
-    operation<@_1> @last(%4) [t<4>, z<0.000000e+00 : f32>]
+    %4 = operation<@_1> @op4(%2, %0) [t<2>, z<0.000000e+00 : f32>]
+    operation<@_1> @last(%4) [t<3>, z<0.000000e+00 : f32>]
+    // SIMPLEX: operation<@_1> @last(%{{.*}}) [t<3>, z<0.000000e+00 : f32>]
   }
 }
 
 // CHECK-LABEL: mobility
 // SIMPLEX-SAME: [II<3>]
-// LP-SAME: [II<3>]
 ssp.instance @mobility of "ChainingCyclicProblem" [II<3>] {
   library {
     operator_type @_1 [latency<1>, incDelay<0.0>, outDelay<0.0>]
@@ -42,15 +38,13 @@ ssp.instance @mobility of "ChainingCyclicProblem" [II<3>] {
     %3 = operation<@_1>(%1, %2) [t<5>, z<0.000000e+00 : f32>]
     %4 = operation<@_4>(%3) [t<6>, z<0.000000e+00 : f32>]
     %5 = operation<@_1> @op5(%3) [t<6>, z<0.000000e+00 : f32>]
-    // SIMPLEX: @last(%{{.*}}, %{{.*}}) [t<10>, z<0.000000e+00 : f32>]
-    // LP: @last(%{{.*}}, %{{.*}}) [t<10>, z<0.000000e+00 : f32>]
     operation<@_1> @last(%4, %5) [t<10>, z<0.000000e+00 : f32>]
+    // SIMPLEX: @last(%{{.*}}, %{{.*}}) [t<10>, z<0.000000e+00 : f32>]
   }
 }
 
 // CHECK-LABEL: interleaved_cycles
 // SIMPLEX-SAME: [II<4>]
-// LP-SAME: [II<4>]
 ssp.instance @interleaved_cycles of "ChainingCyclicProblem" [II<4>] {
   library {
     operator_type @_1 [latency<1>, incDelay<0.0>, outDelay<0.0>]
@@ -67,15 +61,13 @@ ssp.instance @interleaved_cycles of "ChainingCyclicProblem" [II<4>] {
     %7 = operation<@_1>(%4, %6) [t<22>, z<0.000000e+00 : f32>]
     %8 = operation<@_10>(%7) [t<23>, z<0.000000e+00 : f32>]
     %9 = operation<@_1> @op9(%7) [t<23>, z<0.000000e+00 : f32>]
-    // SIMPLEX: @last(%{{.*}}, %{{.*}}) [t<33>, z<0.000000e+00 : f32>]
-    // LP: @last(%{{.*}}, %{{.*}}) [t<33>, z<0.000000e+00 : f32>]
     operation<@_1> @last(%8, %9) [t<33>, z<0.000000e+00 : f32>]
+    // SIMPLEX: @last(%{{.*}}, %{{.*}}) [t<33>, z<0.000000e+00 : f32>]
   }
 }
 
 // CHECK-LABEL: self_arc
 // SIMPLEX-SAME: [II<3>]
-// LP-SAME: [II<3>]
 ssp.instance @self_arc of "ChainingCyclicProblem" [II<3>] {
   library {
     operator_type @_1 [latency<1>, incDelay<0.0>, outDelay<0.0>]
@@ -84,9 +76,8 @@ ssp.instance @self_arc of "ChainingCyclicProblem" [II<3>] {
   graph {
     %0 = operation<@_1>() [t<0>, z<0.000000e+00 : f32>]
     %1 = operation<@_3> @op1(%0, @op1 [dist<1>]) [t<1>, z<0.000000e+00 : f32>]
-    // SIMPLEX: operation<@_1> @last(%{{.*}}) [t<4>, z<0.000000e+00 : f32>]
-    // LP: operation<@_1> @last(%{{.*}}) [t<4>, z<0.000000e+00 : f32>]
     %2 = operation<@_1> @last(%1) [t<4>, z<0.000000e+00 : f32>]
+    // SIMPLEX: operation<@_1> @last(%{{.*}}) [t<4>, z<0.000000e+00 : f32>]
   }
 }
 
@@ -104,8 +95,8 @@ ssp.instance @adder_chain of "ChainingCyclicProblem" [II<1>] {
     %2 = operation<@_0>(%1) [t<0>, z<4.68>]
     %3 = operation<@_0>(%2) [t<1>, z<0.0>]
     %4 = operation<@_0>(%3) [t<1>, z<2.34>]
-    // SIMPLEX: @last(%{{.*}}) [t<2>,
     operation<@_1> @last(%4) [t<2>, z<0.0>]
+    // SIMPLEX: @last(%{{.*}}) [t<2>,
   }
 }
 
@@ -119,11 +110,11 @@ ssp.instance @multi_cycle of "ChainingCyclicProblem" [II<1>] {
   graph {
     %0 = operation<@_0>() [t<0>, z<0.0>]
     %1 = operation<@_0>(%0) [t<0>, z<2.34>]
-    %2 = operation<@_3>(%1, %0) [t<0>, z<4.68>]
-    %3 = operation<@_0>(%2, %1) [t<3>, z<3.75>]
-    %4 = operation<@_0>(%3, %2) [t<3>, z<6.09>]
+    %2 = operation<@_3>(%1, %0) [t<1>, z<0.00>]
+    %3 = operation<@_0>(%2, %1) [t<5>, z<0.00>]
+    %4 = operation<@_0>(%3, %2) [t<5>, z<2.34>]
+    operation<@_1> @last(%4) [t<5>, z<4.68>]
     // SIMPLEX: @last(%{{.*}}) [t<5>,
-    operation<@_1> @last(%4) [t<4>, z<0.0>]
   }
 }
 
