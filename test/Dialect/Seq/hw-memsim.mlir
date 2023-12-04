@@ -5,6 +5,7 @@
 // RUN: circt-opt -pass-pipeline="builtin.module(hw-memory-sim{disable-mem-randomization})" %s | FileCheck %s --check-prefix COMMON --implicit-check-not RANDOMIZE_MEM
 // RUN: circt-opt -pass-pipeline="builtin.module(hw-memory-sim{disable-reg-randomization})" %s | FileCheck %s --check-prefix COMMON --implicit-check-not RANDOMIZE_REG
 // RUN: circt-opt -pass-pipeline="builtin.module(hw-memory-sim{disable-mem-randomization disable-reg-randomization})" %s | FileCheck %s --check-prefix COMMON --implicit-check-not RANDOMIZE_REG --implicit-check-not RANDOMIZE_MEM
+// RUN: circt-opt -pass-pipeline="builtin.module(hw-memory-sim{disable-mem-randomization disable-reg-randomization inline-mem})" %s | FileCheck %s --check-prefix INLINE --implicit-check-not @FIRRTLMem_
 // RUN: circt-opt -pass-pipeline="builtin.module(hw-memory-sim{add-vivado-ram-address-conflict-synthesis-bug-workaround})" %s | FileCheck %s --check-prefixes=CHECK,COMMON,VIVADO
 
 hw.generator.schema @FIRRTLMem, "FIRRTL_Memory", ["depth", "numReadPorts", "numWritePorts", "numReadWritePorts", "readLatency", "writeLatency", "width", "readUnderWrite", "writeUnderWrite", "writeClockIDs", "initFilename", "initIsBinary", "initIsInline"]
@@ -54,6 +55,46 @@ hw.module @simple(in %clock: i1, in %reset: i1, in %r0en: i1, in %mode: i1, in %
 
   hw.output %tmp41.ro_data_0, %tmp41.rw_rdata_0 : i16, i16
 }
+
+// INLINE:  hw.module @simple
+// INLINE-NEXT:    %[[vtrue:.+]] = hw.constant true
+// INLINE-NEXT:    %[[vc0_i4:.+]] = hw.constant 0 : i4
+// INLINE-NEXT:    %[[vtmp41_Memory:.+]] = sv.reg : !hw.inout<uarray<10xi16>> 
+// INLINE-NEXT:    %[[v0:.+]] = sv.array_index_inout %[[vtmp41_Memory]][%[[vc0_i4]]] : !hw.inout<uarray<10xi16>>, i4
+// INLINE-NEXT:    %[[v1:.+]] = sv.read_inout %[[v0]] : !hw.inout<i16>
+// INLINE-NEXT:    %[[vx_i16:.+]] = sv.constantX : i16
+// INLINE-NEXT:    %[[v2:.+]] = comb.mux %r0en, %[[v1]], %[[vx_i16]] : i16
+// INLINE-NEXT:    %[[vtrue_0:.+]] = hw.constant true
+// INLINE-NEXT:    %[[v3:.+]] = sv.wire : !hw.inout<i16>
+// INLINE-NEXT:    %[[v4:.+]] = sv.read_inout %[[v3]] : !hw.inout<i16>
+// INLINE-NEXT:    %[[vfalse:.+]] = hw.constant false
+// INLINE-NEXT:    %[[v5:.+]] = comb.icmp eq %mode, %[[vfalse]] : i1
+// INLINE-NEXT:    %[[v6:.+]] = comb.and %r0en, %[[v5]] : i1
+// INLINE-NEXT:    %[[v7:.+]] = sv.array_index_inout %[[vtmp41_Memory]][%[[vc0_i4]]] : !hw.inout<uarray<10xi16>>, i4
+// INLINE-NEXT:    %[[v8:.+]] = sv.read_inout %[[v7]] : !hw.inout<i16>
+// INLINE-NEXT:    %[[vx_i16_1:.+]] = sv.constantX : i16
+// INLINE-NEXT:    %[[v9:.+]] = comb.mux %[[v6]], %[[v8]], %[[vx_i16_1]] : i16
+// INLINE-NEXT:    sv.assign %[[v3]], %[[v9]] : i16
+// INLINE-NEXT:    sv.always posedge %clock {
+// INLINE-NEXT:      %[[v10:.+]] = comb.and %mode, %[[vtrue_0]] : i1
+// INLINE-NEXT:      %[[v11:.+]] = comb.and %r0en, %[[v10]] : i1
+// INLINE-NEXT:      sv.if %[[v11]] {
+// INLINE-NEXT:        %[[v12:.+]] = sv.array_index_inout %[[vtmp41_Memory]][%[[vc0_i4]]] : !hw.inout<uarray<10xi16>>, i4
+// INLINE-NEXT:        %[[vc0_i32:.+]] = hw.constant 0 : i32
+// INLINE-NEXT:        sv.passign %[[v12]], %data0 : i16
+// INLINE-NEXT:      }
+// INLINE-NEXT:    }
+// INLINE-NEXT:    %[[vtrue_2:.+]] = hw.constant true
+// INLINE-NEXT:    sv.always posedge %clock {
+// INLINE-NEXT:      %[[v10:.+]] = comb.and %r0en, %[[vtrue_2]] : i1
+// INLINE-NEXT:      sv.if %[[v10]] {
+// INLINE-NEXT:        %[[v11:.+]] = sv.array_index_inout %[[vtmp41_Memory]][%[[vc0_i4]]] : !hw.inout<uarray<10xi16>>, i4
+// INLINE-NEXT:        %[[vc0_i32:.+]] = hw.constant 0 : i32
+// INLINE-NEXT:        sv.passign %[[v11]], %data0 : i16
+// INLINE-NEXT:      }
+// INLINE-NEXT:    }
+// INLINE-NEXT:    hw.output %[[v2]], %[[v4]] : i16, i16
+// INLINE-NEXT:  }
 
 // COMMON-LABEL: @WriteOrderedSameClock
 hw.module @WriteOrderedSameClock(in %clock: i1, in %w0_addr: i4, in %w0_en: i1, in %w0_data: i8, in %w0_mask: i1, in %w1_addr: i4, in %w1_en: i1, in %w1_data: i8, in %w1_mask: i1) {
