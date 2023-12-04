@@ -246,11 +246,8 @@ void WireDFTPass::runOnOperation() {
 
         // Return true if the instance's parent is the module with the enable
         // signal or the bypass signal.
-        if (node->getParent()->getModule() == enableModule ||
-            node->getParent()->getModule() == clockDivBypassModule)
-          return true;
-
-        return false;
+        return node->getParent()->getModule() == enableModule ||
+               node->getParent()->getModule() == clockDivBypassModule;
       });
 
   // If there are no clock gates under the DUT, we can stop now.
