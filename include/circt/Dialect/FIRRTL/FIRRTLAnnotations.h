@@ -15,6 +15,7 @@
 
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinAttributes.h"
+#include "mlir/IR/BuiltinTypes.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/PointerLikeTypeTraits.h"
 
@@ -51,6 +52,17 @@ public:
 
   explicit Annotation(Attribute attr) : attr(attr) {
     assert(attr && "null attributes not allowed");
+  }
+
+  // Make a new annotation which is a clone of anno with a new fieldID.
+  Annotation(Annotation anno, uint64_t fieldID) : attr(anno.attr) {
+    auto oldFieldID = anno.getMember<IntegerAttr>("circt.fieldID");
+    if (oldFieldID && !fieldID) {
+      removeMember("circt.fieldID");
+      return;
+    }
+    if (fieldID)
+      setMember("circt.fieldID", IntegerAttr::get(IntegerType::get(anno.attr.getContext(), 32), APInt(32, fieldID)));
   }
 
   /// Get the data dictionary of this attribute.
