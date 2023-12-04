@@ -89,7 +89,6 @@ private:
 
   llvm::SmallDenseMap<APInt, hw::ConstantOp> constantCache;
   llvm::SmallDenseMap<std::pair<Value, unsigned>, Value> arrayIndexCache;
-  llvm::DenseSet<Operation *> regBackwardSlice;
   ValueSCC* scc;
 
   TypeConverter &typeConverter;
