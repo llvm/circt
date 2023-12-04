@@ -52,7 +52,6 @@ getForwardSliceSimple(Operation *root,
 }
 
 // Construct SCC.
-//
 namespace circt {
 struct ValueSCC {
   llvm::DenseMap<Value, size_t> order;
@@ -63,11 +62,83 @@ struct ValueSCC {
   unsigned index = 0;
   llvm::SmallVector<Value> stack;
   llvm::DenseSet<Value> onStack;
-  ValueSCC(Operation *rootOp) {
-    rootOp->walk([&](Operation *op) { visit(op); });
+  llvm::function_ref<bool(Operation *)> filter;
+  ValueSCC(HWModuleOp moduleOp,
+           llvm::function_ref<bool(Operation *)> f = nullptr) {
+    if (f)
+      filter = f;
+    for (Operation *rootOp : moduleOp.getOps<FirRegOp>())
+      tarjanSCCiterative(rootOp);
   };
 
-  void visit(Value value) {
+  void tarjanSCCiterative(Operation *rootOp) {
+    // Stack to simulate the recursive call stack
+    SmallVector<std::pair<Value, bool>> dfsStack;
+    for (auto val : rootOp->getResults())
+      dfsStack.push_back({val, true});
+
+    llvm::DenseMap<Value, Value> parentOf;
+    while (!dfsStack.empty()) {
+      Value visitVal = dfsStack.back().first;
+      auto &firstVisit = dfsStack.back().second;
+
+      if (firstVisit) {
+        order[visitVal] = lowlink[visitVal] = index++;
+        stack.push_back(visitVal);
+        onStack.insert(visitVal);
+      }
+
+      bool continueTraversal = false;
+      size_t minLowLink = lowlink[visitVal];
+      for (auto *user : visitVal.getUsers()) {
+        // If ops need to be filtered ignore them, cannot ignore rootOp,
+        // otherwise SCC cannot be computed.
+        if (user != rootOp && filter && filter(user))
+          continue;
+        for (auto childVal : user->getResults()) {
+          // set the firstvisit flag of visitVal to false.
+          firstVisit = false;
+          if (!order.contains(childVal)) {
+            // If child not yet visited.
+            dfsStack.push_back(std::make_pair(childVal, true));
+            continueTraversal = true;
+            parentOf[childVal] = visitVal;
+            // Simulate dfs traversal, defer visitVal traversal and start
+            // childVal traversal.
+            break;
+          }
+          if (parentOf[childVal] == visitVal) {
+            // Set lowLink of visitVal, if its the immediate parent of
+            // childVal.
+            minLowLink = std::min(minLowLink, lowlink[childVal]);
+          } else if (onStack.contains(childVal)) {
+            minLowLink = std::min(minLowLink, order[childVal]);
+          }
+        }
+        if (continueTraversal)
+          break;
+      }
+      if (continueTraversal)
+        continue;
+      lowlink[visitVal] = minLowLink;
+
+      if (lowlink[visitVal] == order[visitVal]) {
+        auto recordSCC = [&]() {
+          auto neighbor = stack.pop_back_val();
+          onStack.erase(neighbor);
+          componentId[neighbor] = componentIdGen;
+        };
+        while (stack.back() != visitVal)
+          recordSCC();
+        recordSCC();
+
+        ++componentIdGen;
+      }
+      dfsStack.pop_back();
+    }
+  }
+
+  void tarjanSCCrecursive(Value value) {
     if (!visited.insert(value).second)
       return;
     order[value] = index;
@@ -78,7 +149,7 @@ struct ValueSCC {
     for (auto user : value.getUsers()) {
       for (auto result : user->getResults()) {
         if (!visited.contains(result)) {
-          visit(result);
+          tarjanSCCrecursive(result);
           lowlink[value] = std::min(lowlink[result], lowlink[value]);
         } else if (onStack.contains(result)) {
           lowlink[value] = std::min(lowlink[value], order[result]);
@@ -88,16 +159,17 @@ struct ValueSCC {
     if (order[value] == lowlink[value]) {
       while (stack.back() != value) {
         onStack.erase(stack.back());
-        componentId[stack.pop_back_val()] = componentIdGen;
+        auto b = stack.pop_back_val();
+        componentId[b] = componentIdGen;
       }
       componentId[stack.pop_back_val()] = componentIdGen++;
       onStack.erase(value);
     }
   }
 
-  void visit(Operation *op) {
+  void visitRecursive(Operation *op) {
     for (auto value : op->getResults())
-      visit(value);
+      tarjanSCCrecursive(value);
   }
 
   bool isInSameSCC(Value lhs, Value rhs) const {
@@ -115,30 +187,6 @@ struct ValueSCC {
 };
 } // namespace circt
 
-// static void
-// getBackwardSliceSimple(Operation *root,
-//                        llvm::DenseSet<Operation *> &backwardSlice,
-//                        llvm::function_ref<bool(Operation *)> filter =
-//                        nullptr) {
-//   SmallVector<Operation *> worklist({root});
-//
-//   while (!worklist.empty()) {
-//     Operation *op = worklist.pop_back_val();
-//
-//     if (!op)
-//       continue;
-//
-//     if (filter && !filter(op))
-//       continue;
-//
-//     for (Value operand : op->getOperands())
-//       if (auto operandOp = operand.getDefiningOp())
-//         if (backwardSlice.insert(operandOp).second)
-//           worklist.push_back(operandOp);
-//
-//     backwardSlice.insert(op);
-//   }
-// }
 
 FirRegLowering::~FirRegLowering() { delete scc; }
 
@@ -168,7 +216,9 @@ FirRegLowering::FirRegLowering(TypeConverter &typeConverter,
     : typeConverter(typeConverter), module(module),
       disableRegRandomization(disableRegRandomization),
       emitSeparateAlwaysBlocks(emitSeparateAlwaysBlocks) {
-  scc = new ValueSCC(module);
+  scc = new ValueSCC(module, [&](Operation *op) {
+    return isa<sv::RegOp, seq::FirRegOp, hw::InstanceOp>(op);
+  });
 }
 
 void FirRegLowering::lower() {
@@ -557,10 +607,6 @@ FirRegLowering::RegLowerInfo FirRegLowering::lower(FirRegOp reg) {
 
   if (auto attr = reg->getAttrOfType<IntegerAttr>("firrtl.random_init_start"))
     svReg.randStart = attr.getUInt();
-  LLVM_DEBUG(
-      llvm::dbgs() << "[FirRegLowering] Start "
-                   << reg->getParentOfType<hw::HWModuleOp>().getModuleName()
-                   << " " << reg.getNameAttr() << "\n";);
 
   // Don't move these over
   reg->removeAttr("firrtl.random_init_start");
@@ -598,10 +644,6 @@ FirRegLowering::RegLowerInfo FirRegLowering::lower(FirRegOp reg) {
         module.getBodyBlock(), sv::EventControl::AtPosEdge, reg.getClk(),
         [&](OpBuilder &b) { createTree(b, svReg.reg, reg, reg.getNext()); });
   }
-  LLVM_DEBUG(
-      llvm::dbgs() << "[FirRegLowering] End "
-                   << reg->getParentOfType<hw::HWModuleOp>().getModuleName()
-                   << " " << reg.getNameAttr() << "\n";);
 
   reg.replaceAllUsesWith(regVal.getResult());
   scc->erase(reg);
