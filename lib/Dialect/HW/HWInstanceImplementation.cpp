@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/HW/InstanceImplementation.h"
+#include "circt/Dialect/HW/HWInstanceImplementation.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWSymCache.h"
 

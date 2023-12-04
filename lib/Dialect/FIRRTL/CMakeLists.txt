@@ -8,6 +8,7 @@ set(CIRCT_FIRRTL_Sources
   FIRRTLFieldSource.cpp
   FIRRTLFolds.cpp
   FIRRTLInstanceGraph.cpp
+  FIRRTLInstanceImplementation.cpp
   FIRRTLOpInterfaces.cpp
   FIRRTLOps.cpp
   FIRRTLTypes.cpp
