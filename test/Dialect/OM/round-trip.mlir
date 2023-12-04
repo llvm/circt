@@ -259,6 +259,10 @@ om.class @Path(%basepath: !om.basepath) {
   %1 = om.path_create reference %basepath @HierPath
   // CHECK: #om<path[Foo:foo, Bar:bar]>
   %2 = om.constant 1 : i1 { foo = #om<path[Foo:foo, Bar:bar]>}
+  // CHECK: %[[v3:.+]] = om.path_empty
+  %3 = om.path_empty
+  // CHECK: om.class.field @path_empty, %[[v3]] : !om.path
+  om.class.field @path_empty, %3 : !om.path
 }
 
 om.class @FrozenPath(%basepath: !om.frozenbasepath) {

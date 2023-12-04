@@ -440,7 +440,12 @@ static void lowerModuleBody(FModuleOp mod,
                                       p.fieldID),
                     newOp.getResult(p.resultID));
     }
-
+    // Zero Width ports may have dangling connects since they are not preserved
+    // and do not have bounce wires.
+    for (auto use : inst->getUsers()) {
+      assert(isa<StrictConnectOp>(use) || isa<ConnectOp>(use));
+      use->erase();
+    }
     inst.erase();
 
     return;

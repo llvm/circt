@@ -74,6 +74,8 @@ def InferMemories : Pass<"arc-infer-memories", "mlir::ModuleOp"> {
   let options = [
     Option<"tapPorts", "tap-ports", "bool", "true",
       "Make memory ports observable">,
+    Option<"tapMemories", "tap-memories", "bool", "true",
+      "Make memory contents observable">,
   ];
 }
 
