@@ -8,6 +8,7 @@ Checks: >
         -misc-unused-parameters,
         -misc-non-private-member-variables-in-classes,
         -misc-use-anonymous-namespace,
+        -misc-include-cleaner,
         readability-identifier-naming,
         bugprone-argument-comment,
         bugprone-assert-side-effect,
