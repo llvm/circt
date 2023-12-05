@@ -218,6 +218,11 @@ void WireDFTPass::runOnOperation() {
   // and collect all the ClockGate modules.  Search under DUT.
   llvm::SetVector<InstanceRecord *> clockGates;
   llvm::SetVector<InstanceRecord *> clockGatesWithBypass;
+
+  // Also track intrinsics themselves, and for compat with current code
+  // also track records of modules containing them.
+  llvm::SetVector<ClockGateIntrinsicOp> cgIntrinsics;
+  llvm::SetVector<InstanceRecord *> clockGateRecords;
   auto *lca = lowestCommonAncestor(
       instanceGraph.lookup(dut), [&](InstanceRecord *node) {
         auto module = node->getTarget()->getModule();
@@ -226,14 +231,27 @@ void WireDFTPass::runOnOperation() {
           clockGates.insert(node);
           return true;
         }
-        // Return true if this is the module with the enable signal or the
-        // bypass signal.
+
+        // Scan and gather all cg intrinsics in the target module.
+        // If any are found, will need to wire to this node.
+        bool hasCGIntrinsics = false;
+        module.walk([&](ClockGateIntrinsicOp cgOp) {
+          cgIntrinsics.insert(cgOp);
+          hasCGIntrinsics = true;
+        });
+        if (hasCGIntrinsics) {
+          clockGateRecords.insert(node);
+          return true;
+        }
+
+        // Return true if the instance's parent is the module with the enable
+        // signal or the bypass signal.
         return node->getParent()->getModule() == enableModule ||
                node->getParent()->getModule() == clockDivBypassModule;
       });
 
   // If there are no clock gates under the DUT, we can stop now.
-  if (clockGates.empty())
+  if (clockGates.empty() && cgIntrinsics.empty())
     return;
 
   // Stash UInt<1> type for use throughout.
@@ -352,7 +370,10 @@ void WireDFTPass::runOnOperation() {
   }
 
   // Check all gates we're wiring are only within the DUT.
-  if (!allUnder(clockGates.getArrayRef(), instanceGraph.lookup(dut))) {
+  // (Gather ClockGate instance records + records containing the intrinsics)
+  auto clockGateRecs = llvm::to_vector(
+      llvm::concat<InstanceRecord *const>(clockGates, clockGateRecords));
+  if (!allUnder(clockGateRecs, instanceGraph.lookup(dut))) {
     dut->emitError()
         << "clock gates within DUT must not be instantiated outside the DUT";
     return signalPassFailure();
@@ -381,7 +402,7 @@ void WireDFTPass::runOnOperation() {
 
   auto wireUp = [&](Value startSignal, FModuleOp signalModule,
                     StringAttr portName, StringRef portNameFriendly,
-                    unsigned targetPortNo, auto &targets) -> LogicalResult {
+                    auto &dests) -> LogicalResult {
     // This maps each module to its signal.
     DenseMap<InstanceGraphNode *, Value> signals;
 
@@ -466,30 +487,57 @@ void WireDFTPass::runOnOperation() {
       return arg;
     };
 
-    // Wire the signal to each clock gate using the helper above.
-    for (auto *instance : targets) {
-      auto *parent = instance->getParent();
-      auto module = cast<FModuleOp>(*parent->getModule());
-      auto builder = ImplicitLocOpBuilder::atBlockEnd(module->getLoc(),
-                                                      module.getBodyBlock());
-      emitConnect(
-          builder,
-          cast<InstanceOp>(*instance->getInstance()).getResult(targetPortNo),
-          getSignal(parent));
+    // Wire the signal to each provided destination.
+    // Insert connect at end, to ensure this "wins" re:last-connect.
+    // This may not be legal if destination is not top-level
+    // but this sort of assumption is made throughout and hasn't
+    // been a problem yet :(.
+    for (Value dest : dests) {
+      auto *op = dest.getDefiningOp();
+      assert(op && "block arguments not supported presently");
+      auto parent = op->getParentOfType<FModuleOp>();
+      assert(parent);
+      auto builder =
+          ImplicitLocOpBuilder::atBlockEnd(op->getLoc(), parent.getBodyBlock());
+      emitConnect(builder, dest, getSignal(instanceGraph.lookup(parent)));
     }
+
     return success();
   };
 
+  // Gather all test-enable targets: test-enable result of instance op's,
+  // as well as wires used as test-enable operand of the intrinsics.
+  // Once instance variant is deprecated, just feed list of intrinsics to the
+  // helper instead.
+  auto testEnableDests = llvm::map_to_vector(clockGates, [&](auto *rec) {
+    return cast<InstanceOp>(*rec->getInstance()).getResult(testEnPortNo);
+  });
+  llvm::append_range(
+      testEnableDests,
+      llvm::map_range(cgIntrinsics, [&](ClockGateIntrinsicOp cgOp) {
+        // Insert wire to run test-enable signal to,
+        // and change the CG intrinsic to use it as such.
+        auto builder = ImplicitLocOpBuilder(cgOp.getLoc(), cgOp);
+        auto wire = builder.create<WireOp>(enableSignal.getType());
+        cgOp.getTestEnableMutable().assign(wire.getResult());
+        return wire.getResult();
+      }));
   auto enablePortName = StringAttr::get(&getContext(), testEnPortName);
+  if (failed(wireUp(enableSignal, enableModule, enablePortName, "enable",
+                    testEnableDests)))
+    return signalPassFailure();
+
+  // Similarly, gather connection destinations for clock div bypass wiring.
+  // This does not exist on the intrinsic so just instance ops.
+  auto bypassDests = llvm::map_to_vector(clockGatesWithBypass, [&](auto *rec) {
+    return cast<InstanceOp>(*rec->getInstance())
+        .getResult(clockDivBypassPortNo);
+  });
   auto bypassPortName =
       StringAttr::get(&getContext(), requiredClockDivBypassPortName);
-  if (failed(wireUp(enableSignal, enableModule, enablePortName, "enable",
-                    testEnPortNo, clockGates)))
-    return signalPassFailure();
   if (needsClockDivBypassWiring &&
       failed(wireUp(clockDivBypassSignal, clockDivBypassModule, bypassPortName,
-                    "clock divider bypass", clockDivBypassPortNo,
-                    clockGatesWithBypass)))
+                    "clock divider bypass", bypassDests)))
     return signalPassFailure();
 
   // And we're done!
