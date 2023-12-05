@@ -525,11 +525,11 @@ struct Default<scheduling::ChainingCyclicProblem> {
   static constexpr auto operationProperties =
       std::tuple_cat(Default<scheduling::Problem>::operationProperties,
                      std::make_tuple(StartTimeInCycleAttr()));
-  static constexpr auto operatorTypeProperties = std::tuple_cat(
-      Default<scheduling::Problem>::operatorTypeProperties,
+  static constexpr auto operatorTypeProperties =
+      std::tuple_cat(Default<scheduling::Problem>::operatorTypeProperties,
                      std::make_tuple(IncomingDelayAttr(), OutgoingDelayAttr()));
-  static constexpr auto dependenceProperties = std::tuple_cat(
-      Default<scheduling::Problem>::dependenceProperties,
+  static constexpr auto dependenceProperties =
+      std::tuple_cat(Default<scheduling::Problem>::dependenceProperties,
                      std::make_tuple(DistanceAttr()));
   static constexpr auto instanceProperties =
       std::tuple_cat(Default<scheduling::Problem>::instanceProperties,
