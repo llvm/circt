@@ -31,6 +31,7 @@ namespace arc {
 } // namespace arc
 } // namespace circt
 
+using namespace mlir;
 using namespace circt;
 using namespace arc;
 
@@ -40,7 +41,7 @@ using namespace arc;
 
 /// A combination of SymbolCache and SymbolUserMap that also allows to add users
 /// and remove symbols on-demand.
-class SymbolHandler : public SymbolCache {
+class SymbolHandler : public SymbolCache, public RewriterBase::Listener {
 public:
   /// Return the users of the provided symbol operation.
   ArrayRef<Operation *> getUsers(Operation *symbol) const {
@@ -101,8 +102,38 @@ public:
                                   walkFn);
   }
 
+protected:
+  void notifyOperationInserted(Operation *op) override {}
+
+  void notifyOperationReplaced(Operation *op, ValueRange replacement) override {
+  }
+
+  void notifyOperationRemoved(Operation *op) override {
+    if (auto symDef = dyn_cast<SymbolOpInterface>(op)) {
+    }
+  }
+
+  void addSymbolDef(Operation *op) {}
+  void addSymbolUser(Operation *op) {}
+
+  void removeSymbolDef(Operation *def) {
+    assert(userMap.lookup(def).is_empty() &&
+           "Removing symbol def that still has uses!");
+    symbolCache.erase(cast<mlir::SymbolOpInterface>(def).getNameAttr());
+    userMap.erase(def);
+  }
+
+  void removeSymbolUser(Operation *user) {
+    auto it = defMap.find(user);
+    assert(it != defMap.end());
+    userMap[it->second].erase(user);
+    defMap.erase(it);
+  }
+
 private:
+  SymbolTableCollection &symbolTable;
   DenseMap<Operation *, SetVector<Operation *>> userMap;
+  DenseMap<Operation *, Operation *> defMap;
 };
 
 struct PatternStatistics {
@@ -513,6 +544,7 @@ void ArcCanonicalizerPass::runOnOperation() {
   config.enableRegionSimplification = false;
   config.maxIterations = 10;
   config.useTopDownTraversal = true;
+  config.listener = &cache;
 
   PatternStatistics statistics;
   RewritePatternSet symbolPatterns(&getContext());
