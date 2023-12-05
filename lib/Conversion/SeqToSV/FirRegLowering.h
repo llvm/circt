@@ -26,10 +26,8 @@ public:
                  bool disableRegRandomization = false,
                  bool emitSeparateAlwaysBlocks = false);
 
-         
-
   void lower();
-    ~FirRegLowering();
+  ~FirRegLowering();
 
   void initBackwardSlice();
   bool needsRegRandomization() const { return needsRandom; }
@@ -89,7 +87,7 @@ private:
 
   llvm::SmallDenseMap<APInt, hw::ConstantOp> constantCache;
   llvm::SmallDenseMap<std::pair<Value, unsigned>, Value> arrayIndexCache;
-  ValueSCC* scc;
+  ValueSCC *scc;
 
   TypeConverter &typeConverter;
   hw::HWModuleOp module;
