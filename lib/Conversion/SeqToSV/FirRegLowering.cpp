@@ -187,7 +187,6 @@ struct ValueSCC {
 };
 } // namespace circt
 
-
 FirRegLowering::~FirRegLowering() { delete scc; }
 
 void FirRegLowering::addToIfBlock(OpBuilder &builder, Value cond,
