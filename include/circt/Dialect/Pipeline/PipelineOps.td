@@ -73,7 +73,7 @@ class PipelineBase<string mnemonic, list<Trait> traits = []> :
       return static_cast<bool>(getStall());
     }
 
-    llvm::ArrayRef<BlockArgument> getInnerInputs() {
+    mlir::Block::BlockArgListType getInnerInputs() {
       return getEntryStage()->getArguments().take_front(getInputs().size());
     }
 
@@ -225,7 +225,7 @@ def ScheduledPipelineOp : PipelineBase<"scheduled"> {
 
     // Returns the data arguments for a stage. The stage enable signal is _not_ part
     // of the returned values.
-    llvm::ArrayRef<BlockArgument> getStageDataArgs(Block* stage) {
+    mlir::Block::BlockArgListType getStageDataArgs(Block* stage) {
       if(stage == getEntryStage())
         return getInnerInputs();
 
