@@ -1829,16 +1829,33 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
 
   // Handle registers with reset.
   if (auto regOp = dyn_cast<RegResetOp>(op)) {
+    SmallVector<std::tuple<FieldRefs, bool>> invFields;
+    // If the regreset is invalidated, it needs extra handling
+    walkDrivers(regOp.getResetValue(), true, false, false,
+      [](FieldRef dst, FieldRef src) {
+          if (src.isa<InvalidValueOp>())
+              invFields.push_back(std::make_tuple(dst, true);
+          else
+              invFields.push_back(std::make_tuple(src, false);
+      }));
+    bool dealWithInvalidates = false;
+    for (auto field: invFields) {
+        if (std::get<1>(field) == true) {
+            dealWithInvalidates = true;
+            break;
+        }
+    }
+    if (dealWithInvalidates) {
+      
+      for (auto field: invFields) {
+        if (std::get<1>(field) == true) {
+            
+        }
+      }
+    }
+    
     // If the register already has an async reset, leave it untouched.
-    if (type_isa<AsyncResetType>(regOp.getResetSignal().getType())) {
-	// check if the reg has subfields and if each of them has a valid reset
-	// 
-	// regOp.subfields.foreach { subfield =>
-	// 	subfield.getResetValue match
-	// 	DontCare => subfield.connect(0.U)
-	// 	_ => 
-	// } 
-	
+    if (type_isa<AsyncResetType>(regOp.getResetSignal().getType())) {	
       LLVM_DEBUG(llvm::dbgs()
                  << "- Skipping (has async reset) " << regOp << "\n of type\n\t" << regOp.getResetSignal().getType() << "\n\n");
       // The following performs the logic of `CheckResets` in the original
