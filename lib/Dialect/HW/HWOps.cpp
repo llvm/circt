@@ -2778,7 +2778,8 @@ LogicalResult UnionExtractOp::inferReturnTypes(
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   UnionExtractOpAdaptor op(operands, attrs,
                            properties.as<UnionExtractOp::Properties *>());
-  auto unionElements = hw::type_cast<UnionType>(op.getInput().getType()).getElements();
+  auto unionElements =
+      hw::type_cast<UnionType>(op.getInput().getType()).getElements();
   auto fieldIndex = op.getFieldIndex();
   if (fieldIndex >= unionElements.size()) {
     if (loc)
