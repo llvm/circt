@@ -60,7 +60,7 @@ def ClassOp : IbisOp<"class", [
   let extraClassDeclaration = [{
     // Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
-  
+
     Block* getBodyBlock() { return &getBody().front(); }
 
     StringAttr getModuleNameAttr() {
@@ -395,7 +395,7 @@ def VarOp : IbisOp<"var", [
 ]> {
   let summary = "Ibis variable definition";
   let description = [{
-    Defines an Ibis class member variable. The variable is typed with a 
+    Defines an Ibis class member variable. The variable is typed with a
     `memref.memref` type, and may define either a singleton or uni-dimensional
     array of values.
     `ibis.var` defines a symbol within the encompassing class scope which can
@@ -489,7 +489,7 @@ def PathStepAttr : AttrDef<IbisDialect, "PathStep", [TypedAttrInterface]> {
   );
   let mnemonic = "step";
   // Would like to either have no prefix before child, or `:`, but both are
-  // currently invalid due to 
+  // currently invalid due to
   // https://github.com/llvm/llvm-project/issues/64724
   let assemblyFormat = "`<` $direction (`,` $child^)? `:` $type  `>`";
   let genVerifyDecl = 1;
@@ -506,7 +506,7 @@ def PathOp : IbisOp<"path", [
     The `ibis.path` operation describes an instance hierarchy path relative to
     the current scope. The path is specified by a list of either parent or
     child identifiers (navigating up or down the hierarchy, respectively).
-    
+
     Scopes along the path are optionally typed, however, An `ibis.path` must
     lways terminate in a fully typed specifier, i.e. never an `!ibis.scoperef<>`.
 
@@ -532,7 +532,7 @@ def PathOp : IbisOp<"path", [
                                           mlir::OpaqueProperties properties,
                                           mlir::RegionRange regions,
                                           SmallVectorImpl<Type> &results);
-    
+
     auto getPathAsRange() {
       return getPath().getAsRange<PathStepAttr>();
     }
@@ -646,7 +646,7 @@ def GetPortOp : IbisOp<"get_port", [
   let description = [{
     Given an Ibis class reference, returns a port of said class. The port
     is specified by the symbol name of the port in the referenced class.
-    
+
     Importantly, the user must specify how they intend to use the op, by
     specifying the direction of the portref type that this op is generated with.
     If the request port is to be read from, the type must be `!ibis.portref<out T>`
@@ -654,7 +654,7 @@ def GetPortOp : IbisOp<"get_port", [
     This is to ensure that the usage is reflected in the get_port type which in
     turn is used by the tunneling passes to create the proper ports through the
     hierarchy.
-    
+
     This implies that the portref direction of the get_port op is independent of
     the actual direction of the target port, and only the inner portref type
     must match.
@@ -733,7 +733,7 @@ class PortLikeOp<string mnemonic, list<Trait> traits = []> :
     LogicalResult $cppClass::verify() {
       if(getType().isa<ScopeRefType>())
         return emitOpError("port type cannot be a scope reference");
-      
+
       return success();
     }
 
