@@ -8,9 +8,9 @@ hw.module @B() {}
 
 hw.module @A() {
   // expected-note @below {{see existing inner symbol definition here}}
-  hw.instance "h" sym @A @B() -> () 
+  hw.instance "h" sym @A @B() -> ()
   // expected-error @below {{redefinition of inner symbol named 'A'}}
-  hw.instance "h" sym @A @B() -> () 
+  hw.instance "h" sym @A @B() -> ()
 }
 
 // -----
