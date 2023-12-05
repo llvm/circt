@@ -472,8 +472,8 @@ class ChainingCyclicProblem : public virtual ChainingProblem,
   DEFINE_COMMON_MEMBERS(ChainingCyclicProblem)
 
 public:
-  virtual LogicalResult check() override;
-  virtual LogicalResult verify() override;
+  LogicalResult check() override;
+  LogicalResult verify() override;
 };
 
 } // namespace scheduling
