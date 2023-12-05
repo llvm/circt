@@ -1,5 +1,5 @@
 // REQUIRES: esi-cosim, rtl-sim
-// RUN: esi-cosim-runner.py --exec %s.py %s
+// RUN: %python esi-cosim-runner.py --exec %s.py %s
 
 
 import Cosim_DpiPkg::*;

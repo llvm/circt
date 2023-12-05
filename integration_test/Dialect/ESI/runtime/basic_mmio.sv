@@ -1,5 +1,5 @@
-// REQUIRES: esi-cosim, esi-runtime
-// RUN: esi-cosim-runner.py --exec %s.py %s
+// REQUIRES: esi-cosim, esi-runtime, rtl-sim
+// RUN: %python esi-cosim-runner.py --exec %s.py %s
 
 // Test the low level cosim MMIO functionality. This test has 1024 64-bit
 // registers as a memory. It is an error to write to register 0.

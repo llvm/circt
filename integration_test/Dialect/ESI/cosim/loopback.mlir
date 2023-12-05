@@ -1,9 +1,9 @@
-// REQUIRES: esi-cosim
+// REQUIRES: esi-cosim, rtl-sim
 // RUN: rm -rf %t6 && mkdir %t6 && cd %t6
 // RUN: circt-opt %s --esi-connect-services --esi-appid-hier=top=top --esi-build-manifest=top=top --esi-clean-metadata > %t4.mlir
 // RUN: circt-opt %t4.mlir --lower-esi-to-physical --lower-esi-bundles --lower-esi-ports --lower-esi-to-hw=platform=cosim --lower-seq-to-sv --export-split-verilog -o %t3.mlir
 // RUN: cd ..
-// RUN: esi-cosim-runner.py --exec %S/loopback.py %t6/*.sv
+// RUN: %python esi-cosim-runner.py --exec %S/loopback.py %t6/*.sv
 
 !sendI8 = !esi.bundle<[!esi.channel<i8> to "send"]>
 !recvI8 = !esi.bundle<[!esi.channel<i8> to "recv"]>
