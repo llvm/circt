@@ -166,28 +166,28 @@ systemc.module @emitcEmission () {
 
     // Test: emit.call without a result is emitted as a statement, having operands and attribute arguments
     // CHECK-NEXT: printf("result: %d, %d\0A", five, 6);
-    emitc.call "printf" (%five) {args=["result: %d, %d\n", 0 : index, 6 : i32]} : (!emitc.opaque<"int">) -> ()
+    emitc.call_opaque "printf" (%five) {args=["result: %d, %d\n", 0 : index, 6 : i32]} : (!emitc.opaque<"int">) -> ()
 
     // Test: emit.call without a result is emitted as a statement and having attribute arguments only
     // CHECK-NEXT: printf("result: %d\0A", 6);
-    emitc.call "printf" () {args=["result: %d\n", 6 : i32]} : () -> ()
+    emitc.call_opaque "printf" () {args=["result: %d\n", 6 : i32]} : () -> ()
 
     // Test: emit.call without a result is emitted as a statement, no operands, no attribute arguments
     // CHECK-NEXT: printf();
-    emitc.call "printf" () : () -> ()
+    emitc.call_opaque "printf" () : () -> ()
 
-    // Test: emitc.call with a result is inlined properly, having operands only
+    // Test: emitc.call_opaque with a result is inlined properly, having operands only
     // CHECK-NEXT: void* v0 = malloc(4);
     %3 = hw.constant 4 : i32
-    %4 = emitc.call "malloc" (%3) : (i32) -> !emitc.ptr<!emitc.opaque<"void">>
+    %4 = emitc.call_opaque "malloc" (%3) : (i32) -> !emitc.ptr<!emitc.opaque<"void">>
     %v0 = systemc.cpp.variable %4 : !emitc.ptr<!emitc.opaque<"void">>
 
-    // Test: emitc.call with a result is inlined properly, attribute arguments only
+    // Test: emitc.call_opaque with a result is inlined properly, attribute arguments only
     // CHECK-NEXT: void* v1 = malloc(4);
-    %5 = emitc.call "malloc" () {args=[4 : i32]}: () -> !emitc.ptr<!emitc.opaque<"void">>
+    %5 = emitc.call_opaque "malloc" () {args=[4 : i32]}: () -> !emitc.ptr<!emitc.opaque<"void">>
     %v1 = systemc.cpp.variable %5 : !emitc.ptr<!emitc.opaque<"void">>
 
-    // Test: emitc.call properly inserts parentheses when an argument has COMMA precedence
+    // Test: emitc.call_opaque properly inserts parentheses when an argument has COMMA precedence
     // TODO: no operation having COMMA precedence supported yet
 
     // Test: emit.cast adds parentheses around the operand when it has higher precedence than the operand
@@ -195,7 +195,7 @@ systemc.module @emitcEmission () {
 
     // Test: emit.cast does not add parentheses around the operand when it has lower precedence than the operand
     // CHECK-NEXT: int* v2 = (int*) malloc(4);
-    %6 = emitc.call "malloc" () {args=[4 : i32]} : () -> !emitc.ptr<!emitc.opaque<"void">>
+    %6 = emitc.call_opaque "malloc" () {args=[4 : i32]} : () -> !emitc.ptr<!emitc.opaque<"void">>
     %7 = emitc.cast %6 : !emitc.ptr<!emitc.opaque<"void">> to !emitc.ptr<!emitc.opaque<"int">>
     %v2 = systemc.cpp.variable %7 : !emitc.ptr<!emitc.opaque<"int">>
 
