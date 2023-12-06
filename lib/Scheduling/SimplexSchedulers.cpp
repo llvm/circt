@@ -1321,7 +1321,7 @@ LogicalResult ChainingCyclicSimplexScheduler::schedule() {
     prob.setStartTime(op, getStartTime(startTimeVariables[op]));
 
   auto filledIn = computeStartTimesInCycle(prob);
-  assert(succeeded(filledIn)); // Problem is known to be acyclic at this point.
+  assert(succeeded(filledIn));
   (void)filledIn;
 
   return success();
