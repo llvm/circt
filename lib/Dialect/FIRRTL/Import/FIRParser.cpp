@@ -1552,6 +1552,8 @@ private:
   ParseResult parsePathExp(Value &result);
   ParseResult parseRefExp(Value &result, const Twine &message);
   ParseResult parseStaticRefExp(Value &result, const Twine &message);
+  ParseResult parseRWProbeStaticRefExp(FieldRef &refResult, Type &type,
+                                       const Twine &message);
 
   template <typename subop>
   FailureOr<Value> emitCachedSubAccess(Value base,
@@ -3048,6 +3050,179 @@ ParseResult FIRStmtParser::parseStaticRefExp(Value &result,
   return failure(parseIdOrInstance() ||
                  parseOptionalExpPostscript(result, false));
 }
+/// static_reference ::= id
+///                  ::= static_reference '.' id
+///                  ::= static_reference '[' int ']'
+/// Populate `refResult` with rwprobe "root" and parsed indexing.
+/// Root is base-type target, and will be block argument or forceable.
+/// Also set `Type`, so we can handle const-ness while visiting.
+/// If root is an unbundled entry, replace with bounce wire and update
+/// the unbundled entry to point to this for future users.
+// NOLINTNEXTLINE(misc-no-recursion)
+ParseResult FIRStmtParser::parseRWProbeStaticRefExp(FieldRef &refResult,
+                                                    Type &type,
+                                                    const Twine &message) {
+  auto loc = getToken().getLoc();
+
+  StringRef id;
+  SymbolValueEntry symtabEntry;
+  if (parseId(id, message) ||
+      moduleContext.lookupSymbolEntry(symtabEntry, id, loc))
+    return failure();
+
+  // Three kinds of rwprobe targets:
+  // 1. Instance result.  Replace with a forceable wire, handle as (2).
+  // 2. Forceable declaration.
+  // 3. BlockArgument.
+
+  // Figure out what we have, and parse indexing.
+  Value result;
+  if (auto unbundledId = symtabEntry.dyn_cast<UnbundledID>()) {
+    // This means we have an instance.
+    auto &ubEntry = moduleContext.getUnbundledEntry(unbundledId - 1);
+
+    StringRef fieldName;
+    auto loc = getToken().getLoc();
+    if (parseToken(FIRToken::period, "expected '.' in field reference") ||
+        parseFieldId(fieldName, "expected field name"))
+      return failure();
+
+    // Find unbundled entry for the specified result/port.
+    // Get a reference to it--as we may update it (!!).
+    auto fieldAttr = StringAttr::get(getContext(), fieldName);
+    for (auto &elt : ubEntry) {
+      if (elt.first == fieldAttr) {
+        // Grab the unbundled entry /by reference/ so we can update it with the
+        // new forceable wire we insert (if not already done).
+        auto &instResult = elt.second;
+
+        // If it's already forceable, use that.
+        auto *defining = instResult.getDefiningOp();
+        assert(defining);
+        if (isa<Forceable>(defining)) {
+          assert(cast<Forceable>(defining).isForceable());
+          result = instResult;
+          break;
+        }
+
+        // Otherwise, replace with bounce wire.
+        auto type = instResult.getType();
+
+        // Either entire instance result is forceable + bounce wire, or reject.
+        // (even if rwprobe is of a portion of the port)
+        bool forceable = static_cast<bool>(
+            firrtl::detail::getForceableResultType(true, type));
+        if (!forceable)
+          return emitError(loc, "unable to force instance result of type ")
+                 << type;
+
+        // Create bounce wire for the instance result.
+        auto annotations = getConstants().emptyArrayAttr;
+        StringAttr sym = {};
+        SmallString<64> name;
+        (id + "_" + fieldName + "_bounce").toVector(name);
+        locationProcessor.setLoc(loc);
+        OpBuilder::InsertionGuard guard(builder);
+        builder.setInsertionPoint(defining);
+        auto bounce =
+            builder.create<WireOp>(type, name, NameKindEnum::InterestingName,
+                                   annotations, sym, /*forceable=*/true);
+        auto bounceVal = bounce.getData();
+
+        // Replace instance result with reads from bounce wire.
+        instResult.replaceAllUsesWith(bounceVal);
+
+        // Connect to/from the result per flow.
+        builder.setInsertionPointAfter(defining);
+        if (foldFlow(instResult) == Flow::Source)
+          emitConnect(builder, bounceVal, instResult);
+        else
+          emitConnect(builder, instResult, bounceVal);
+        // Set the parse result AND update `instResult` which is a reference to
+        // the unbundled entry for the instance result, so that future uses also
+        // find this new wire.
+        result = instResult = bounce.getDataRaw();
+        break;
+      }
+    }
+
+    if (!result) {
+      emitError(loc, "use of invalid field name '")
+          << fieldName << "' on bundle value";
+      return failure();
+    }
+  } else {
+    // This target can be a port or a regular value.
+    result = symtabEntry.get<Value>();
+  }
+
+  assert(result);
+  assert(isa<BlockArgument>(result) || result.getDefiningOp<Forceable>());
+
+  // We have our root value, we just need to parse the field id.
+  // Build up the FieldRef as processing indexing expressions, and
+  // compute the type so that we know the const-ness of the final expression.
+  refResult = FieldRef(result, 0);
+  type = result.getType();
+  while (true) {
+    if (consumeIf(FIRToken::period)) {
+      SmallVector<StringRef, 3> fields;
+      if (parseFieldIdSeq(fields, "expected field name"))
+        return failure();
+      for (auto fieldName : fields) {
+        if (auto bundle = type_dyn_cast<BundleType>(type)) {
+          if (auto index = bundle.getElementIndex(fieldName)) {
+            refResult = refResult.getSubField(bundle.getFieldID(*index));
+            type = bundle.getElementTypePreservingConst(*index);
+            continue;
+          }
+        } else if (auto bundle = type_dyn_cast<OpenBundleType>(type)) {
+          if (auto index = bundle.getElementIndex(fieldName)) {
+            refResult = refResult.getSubField(bundle.getFieldID(*index));
+            type = bundle.getElementTypePreservingConst(*index);
+            continue;
+          }
+        } else {
+          return emitError(loc, "subfield requires bundle operand")
+                 << "got " << type << "\n";
+        }
+        return emitError(loc,
+                         "unknown field '" + fieldName + "' in bundle type ")
+               << type;
+      }
+      continue;
+    }
+    if (consumeIf(FIRToken::l_square)) {
+      auto loc = getToken().getLoc();
+      int32_t index;
+      if (parseIntLit(index, "expected index") ||
+          parseToken(FIRToken::r_square, "expected ']'"))
+        return failure();
+
+      if (index < 0)
+        return emitError(loc, "invalid index specifier");
+
+      if (auto vector = type_dyn_cast<FVectorType>(type)) {
+        if ((unsigned)index < vector.getNumElements()) {
+          refResult = refResult.getSubField(vector.getFieldID(index));
+          type = vector.getElementTypePreservingConst();
+          continue;
+        }
+      } else if (auto vector = type_dyn_cast<OpenVectorType>(type)) {
+        if ((unsigned)index < vector.getNumElements()) {
+          refResult = refResult.getSubField(vector.getFieldID(index));
+          type = vector.getElementTypePreservingConst();
+          continue;
+        }
+      } else {
+        return emitError(loc, "subindex requires vector operand");
+      }
+      return emitError(loc, "out of range index '")
+             << index << "' for vector type " << type;
+    }
+    return success();
+  }
+}
 
 /// path ::= 'path(' StringLit ')'
 // NOLINTNEXTLINE(misc-no-recursion)
@@ -3163,9 +3338,11 @@ ParseResult FIRStmtParser::parseProbe(Value &result) {
 ParseResult FIRStmtParser::parseRWProbe(Value &result) {
   auto startTok = consumeToken(FIRToken::lp_rwprobe);
 
-  Value staticRef;
-  if (parseStaticRefExp(staticRef,
-                        "expected static reference expression in 'rwprobe'") ||
+  FieldRef staticRef;
+  Type parsedTargetType;
+  if (parseRWProbeStaticRefExp(
+          staticRef, parsedTargetType,
+          "expected static reference expression in 'rwprobe'") ||
       parseToken(FIRToken::r_paren, "expected ')' in 'rwprobe'"))
     return failure();
 
@@ -3175,20 +3352,23 @@ ParseResult FIRStmtParser::parseRWProbe(Value &result) {
   // Not public port (verifier)
 
   // Check probe expression is base-type.
-  auto targetType = type_dyn_cast<FIRRTLBaseType>(staticRef.getType());
+  auto targetType = type_dyn_cast<FIRRTLBaseType>(parsedTargetType);
   if (!targetType)
     return emitError(startTok.getLoc(),
                      "expected base-type expression in 'rwprobe', got ")
-           << staticRef.getType();
+           << parsedTargetType;
 
-  auto fieldRef = getFieldRefFromValue(staticRef);
-  auto target = fieldRef.getValue();
-
-  auto *definingOp = target.getDefiningOp();
+  auto root = staticRef.getValue();
+  auto *definingOp = root.getDefiningOp();
 
   if (isa_and_nonnull<MemOp, CombMemOp, SeqMemOp, MemoryPortOp,
                       MemoryDebugPortOp, MemoryPortAccessOp>(definingOp))
     return emitError(startTok.getLoc(), "cannot probe memories or their ports");
+
+  auto forceableType = firrtl::detail::getForceableResultType(true, targetType);
+  if (!forceableType)
+    return emitError(startTok.getLoc(), "cannot force target of type ")
+           << targetType;
 
   // Use Forceable if necessary (reset).
   if (targetType.hasUninferredReset()) {
@@ -3202,22 +3382,15 @@ ParseResult FIRStmtParser::parseRWProbe(Value &result) {
       return emitError(startTok.getLoc(), "rwprobe target not forceable")
           .attachNote(definingOp->getLoc());
 
-    // TODO: do the ref.sub work while parsing the static expression.
     result = getValueByFieldID(builder, forceable.getDataRef(),
-                               fieldRef.getFieldID());
-
+                               staticRef.getFieldID());
+    assert(result.getType() == forceableType);
     return success();
   }
 
-  // RWProbe op!
-  auto forceableType = firrtl::detail::getForceableResultType(true, targetType);
-  if (!forceableType)
-    return emitError(startTok.getLoc(), "cannot force target of type ")
-           << targetType;
-
   // Get InnerRef for target field.
   auto sym = getInnerRefTo(
-      getTargetFor(fieldRef),
+      getTargetFor(staticRef),
       [&](auto _) -> hw::InnerSymbolNamespace & { return modNameSpace; });
   result = builder.create<RWProbeOp>(forceableType, sym);
   return success();

@@ -1195,6 +1195,15 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK-NEXT: ref.define %rw, %[[NODE_RWREF]]
     define rw = rwprobe(n)
 
+  ; CHECK-LABEL: module private @RefsChildOpenAgg(
+  ; CHECK-SAME: in %in: !firrtl.openbundle<a: uint<1>, rw flip: rwprobe<uint<1>>> sym [<@[[SYM:[^,]+]],1,
+  module RefsChildOpenAgg :
+    input in : { a : UInt<1>, flip rw: RWProbe<UInt<1>> }
+    ; CHECK-NEXT: %[[IN_RW:[^ ]+]] = firrtl.opensubfield %in[rw]
+    ; CHECK-NEXT: %[[RWPROBE_IN_A:[^ ]+]] = firrtl.ref.rwprobe <@RefsChildOpenAgg::@[[SYM]]>
+    ; CHECK-NEXT: firrtl.ref.define %[[IN_RW]], %[[RWPROBE_IN_A]]
+    define in.rw = rwprobe(in.a)
+
   ; CHECK-LABEL: module private @Refs(
   module Refs :
     input in : const UInt<1>
@@ -1275,6 +1284,30 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: %[[AGG4_RW_0_b_x:.+]] = firrtl.ref.rwprobe <@Refs::@[[AGG4_0_b_x_SYM]]>
     ; CHECK-NEXT: firrtl.ref.define %field_rw, %[[AGG4_RW_0_b_x]]
     define field_rw = rwprobe(agg4[0].b.x)
+
+   ; CHECK: %inst_rw = firrtl.wire : !firrtl.rwprobe<uint<1>>
+   ; CHECK-NEXT: %inst_rw2 = firrtl.wire : !firrtl.rwprobe<uint<1>>
+   ; CHECK-NEXT: %rc2_in_bounce = firrtl.wire sym @[[RC2_IN_BOUNCE_SYM:[^ ]+]]
+   ; CHECK-NEXT: %rc2_in, %rc2_r, %rc2_rw = firrtl.instance rc2
+   ; CHECK-NEXT: firrtl.strictconnect %rc2_in, %rc2_in_bounce
+    wire inst_rw : RWProbe<UInt<1>>
+    wire inst_rw2 : RWProbe<UInt<1>>
+    inst rc2 of RefsChild
+
+    ; CHECK: %[[IN_CAST:[^ ]+]] = firrtl.constCast %in :
+    ; CHECK: firrtl.strictconnect %rc2_in_bounce, %[[IN_CAST]]
+    rc2.in <= in
+   ; CHECK-NEXT: firrtl.when %rc2_in_bounce :
+   ; CHECK-NEXT:   %[[RWPROBE_RC2_IN_BOUNCE_1:[^ ]+]] = firrtl.ref.rwprobe <@Refs::@[[RC2_IN_BOUNCE_SYM]]>
+   ; CHECK-NEXT:   firrtl.ref.define %inst_rw, %[[RWPROBE_RC2_IN_BOUNCE_1]]
+   ; CHECK-NEXT: }
+    when rc2.in:
+      define inst_rw = rwprobe(rc2.in)
+   ; CHECK-NEXT: firrtl.strictconnect %rc2_in_bounce,
+    rc2.in <= rc.in
+   ; CHECK-NEXT: %[[RWPROBE_RC2_IN_BOUNCE_2:[^ ]+]] = firrtl.ref.rwprobe <@Refs::@[[RC2_IN_BOUNCE_SYM]]>
+   ; CHECK-NEXT: firrtl.ref.define %inst_rw2, %[[RWPROBE_RC2_IN_BOUNCE_2]]
+    define inst_rw2 = rwprobe(rc2.in)
 
   ; CHECK-LABEL: module private @ForceRelease(
   module ForceRelease :
