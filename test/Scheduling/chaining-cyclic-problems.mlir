@@ -1,8 +1,6 @@
 // RUN: circt-opt %s -ssp-roundtrip=verify
 // RUN: circt-opt %s -ssp-schedule="scheduler=simplex options=cycle-time=5.0" | FileCheck %s -check-prefixes=CHECK,SIMPLEX
 
-
-
 // test from cyclic-problems.mlir
 
 // CHECK-LABEL: cyclic
