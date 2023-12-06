@@ -78,3 +78,12 @@ hw.module @instance_extern(in %arg0 : i32, in %arg1 : !Struct1, out out : !Struc
   %0:3 = hw.instance "l1" @level1_extern(arg0: %arg0 : i32, in: %arg1 : !Struct1, arg1: %arg0 : i32) -> (out0: i32, out: !Struct1, out1: i32)
   hw.output %0#1 : !Struct1
 }
+
+hw.module.extern @level1_extern2(out out1: i32, in %arg0 : i32, out out: !Struct1, in %in : !Struct1, in %arg1: i32, out out0 : i32 )
+// EXTERN-LABEL:  hw.module.extern @level1_extern2
+// EXTERN-SAME: out out1 : i32, in %arg0 : i32, out out.a : i1, out out.b : i2, in %in.a : i1, in %in.b : i2, in %arg1 : i32, out out0 : i32
+
+hw.module @instance_extern2(in %arg0 : i32, in %arg1 : !Struct1, out out : !Struct1) {
+  %0:3 = hw.instance "l1" @level1_extern(arg0: %arg0 : i32, in: %arg1 : !Struct1, arg1: %arg0 : i32) -> (out0: i32, out: !Struct1, out1: i32)
+  hw.output %0#1 : !Struct1
+}

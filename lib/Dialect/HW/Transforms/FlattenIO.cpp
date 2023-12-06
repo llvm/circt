@@ -276,6 +276,26 @@ updateNameAttribute(ModTy op, StringRef attrName,
   return newNames;
 }
 
+template <typename ModTy>
+static void updateModulePortNames(ModTy op, hw::ModuleType oldModType) {
+  // Module arg and result port names may not be ordered. So we cannot reuse
+  // updateNameAttribute. The arg and result order must be preserved.
+  SmallVector<Attribute> newNames;
+  SmallVector<hw::ModulePort> oldPorts(oldModType.getPorts().begin(),
+                                       oldModType.getPorts().end());
+  for (auto oldPort : oldPorts) {
+    auto oldName = oldPort.name;
+    if (auto structType = getStructType(oldPort.type)) {
+      for (auto field : structType.getElements()) {
+        newNames.push_back(StringAttr::get(
+            op->getContext(), oldName.getValue() + "." + field.name.str()));
+      }
+    } else
+      newNames.push_back(oldName);
+  }
+  op.setAllPortNames(newNames);
+}
+
 static llvm::SmallVector<Attribute>
 updateLocAttribute(DenseMap<unsigned, hw::StructType> &structMap,
                    ArrayAttr oldLocs) {
@@ -378,7 +398,10 @@ static LogicalResult flattenOpsOfType(ModuleOp module, bool recursive,
 
     DenseMap<Operation *, ArrayAttr> oldArgNames, oldResNames, oldArgLocs,
         oldResLocs;
+    DenseMap<Operation *, hw::ModuleType> oldModTypes;
+
     for (auto op : module.getOps<T>()) {
+      oldModTypes[op] = op.getHWModuleType();
       oldArgNames[op] = ArrayAttr::get(module.getContext(), op.getInputNames());
       oldResNames[op] =
           ArrayAttr::get(module.getContext(), op.getOutputNames());
@@ -395,14 +418,7 @@ static LogicalResult flattenOpsOfType(ModuleOp module, bool recursive,
     // Update the arg/res names of the module.
     for (auto op : module.getOps<T>()) {
       auto ioInfo = ioInfoMap[op];
-      auto newArgNames = updateNameAttribute(
-          op, "argNames", ioInfo.argStructs,
-          oldArgNames[op].template getAsValueRange<StringAttr>());
-      auto newResNames = updateNameAttribute(
-          op, "resultNames", ioInfo.resStructs,
-          oldResNames[op].template getAsValueRange<StringAttr>());
-      newArgNames.append(newResNames.begin(), newResNames.end());
-      op.setAllPortNames(newArgNames);
+      updateModulePortNames(op, oldModTypes[op]);
       auto newArgLocs = updateLocAttribute(ioInfo.argStructs, oldArgLocs[op]);
       auto newResLocs = updateLocAttribute(ioInfo.resStructs, oldResLocs[op]);
       newArgLocs.append(newResLocs.begin(), newResLocs.end());
@@ -497,5 +513,5 @@ private:
 
 std::unique_ptr<Pass> circt::hw::createFlattenIOPass(bool recursiveFlag,
                                                      bool flattenExternFlag) {
-  return std::make_unique<FlattenIOPass>(true, flattenExternFlag);
+  return std::make_unique<FlattenIOPass>(recursiveFlag, flattenExternFlag);
 }
