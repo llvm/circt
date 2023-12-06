@@ -39,7 +39,7 @@ struct ArcInlinerInterface : public mlir::DialectInlinerInterface {
     return false;
   }
   void handleTerminator(Operation *op,
-                        ArrayRef<Value> valuesToRepl) const override {
+                        mlir::ValueRange valuesToRepl) const override {
     assert(isa<arc::OutputOp>(op)); // arc does not have another terminator op
     for (auto [from, to] : llvm::zip(valuesToRepl, op->getOperands()))
       from.replaceAllUsesWith(to);
