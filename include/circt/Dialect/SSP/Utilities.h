@@ -523,17 +523,13 @@ struct Default<scheduling::ModuloProblem> {
 template <>
 struct Default<scheduling::ChainingCyclicProblem> {
   static constexpr auto operationProperties =
-      std::tuple_cat(Default<scheduling::Problem>::operationProperties,
-                     std::make_tuple(StartTimeInCycleAttr()));
+      Default<scheduling::ChainingProblem>::operationProperties;
   static constexpr auto operatorTypeProperties =
-      std::tuple_cat(Default<scheduling::Problem>::operatorTypeProperties,
-                     std::make_tuple(IncomingDelayAttr(), OutgoingDelayAttr()));
+      Default<scheduling::ChainingProblem>::operatorTypeProperties;
   static constexpr auto dependenceProperties =
-      std::tuple_cat(Default<scheduling::Problem>::dependenceProperties,
-                     std::make_tuple(DistanceAttr()));
+      Default<scheduling::CyclicProblem>::dependenceProperties;
   static constexpr auto instanceProperties =
-      std::tuple_cat(Default<scheduling::Problem>::instanceProperties,
-                     std::make_tuple(InitiationIntervalAttr()));
+      Default<scheduling::CyclicProblem>::instanceProperties;
 };
 
 } // namespace ssp
