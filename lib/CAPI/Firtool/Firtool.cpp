@@ -71,8 +71,6 @@ void circtFirtoolOptionsSetPreserveAggregate(
   case CIRCT_FIRTOOL_PRESERVE_AGGREGATE_MODE_ALL:
     converted = firrtl::PreserveAggregate::PreserveMode::All;
     break;
-  default:
-    llvm_unreachable("unknown preserve aggregate mode");
   }
 
   unwrap(options)->setPreserveAggregate(converted);
@@ -95,8 +93,6 @@ void circtFirtoolOptionsSetPreserveValues(
   case CIRCT_FIRTOOL_PRESERVE_VALUES_MODE_ALL:
     converted = firrtl::PreserveValues::PreserveMode::All;
     break;
-  default:
-    llvm_unreachable("unknown preserve values mode");
   }
 
   unwrap(options)->setPreserveValues(converted);
@@ -121,8 +117,6 @@ void circtFirtoolOptionsSetBuildMode(CirctFirtoolFirtoolOptions options,
   case CIRCT_FIRTOOL_BUILD_MODE_RELEASE:
     converted = firtool::FirtoolOptions::BuildMode::BuildModeRelease;
     break;
-  default:
-    llvm_unreachable("unknown build mode");
   }
 
   unwrap(options)->setBuildMode(converted);
@@ -167,8 +161,6 @@ void circtFirtoolOptionsSetCompanionMode(CirctFirtoolFirtoolOptions options,
   case CIRCT_FIRTOOL_COMPANION_MODE_DROP:
     converted = firrtl::CompanionMode::Drop;
     break;
-  default:
-    llvm_unreachable("unknown companion mode");
   }
 
   unwrap(options)->setCompanionMode(converted);
@@ -241,8 +233,6 @@ void circtFirtoolOptionsSetDisableRandom(CirctFirtoolFirtoolOptions options,
   case CIRCT_FIRTOOL_RANDOM_KIND_ALL:
     converted = firtool::FirtoolOptions::RandomKind::All;
     break;
-  default:
-    llvm_unreachable("unknown random kind");
   }
 
   unwrap(options)->setDisableRandom(converted);
