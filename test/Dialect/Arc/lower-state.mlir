@@ -28,8 +28,8 @@ hw.module @InputsAndOutputs(in %a: i42, in %b: i17, out c: i42, out d: i17) {
 }
 
 // CHECK-LABEL: arc.model "State" {
-hw.module @State(in %clk: !seq.clock, in %en: i1) {
-  %gclk = arc.clock_gate %clk, %en
+hw.module @State(in %clk: !seq.clock, in %en: i1, in %en2: i1) {
+  %gclk = seq.clock_gate %clk, %en, %en2
   %3 = arc.state @DummyArc(%6) clock %clk lat 1 : (i42) -> i42
   %4 = arc.state @DummyArc(%5) clock %gclk lat 1 : (i42) -> i42
   %5 = comb.add %3, %3 : i42
@@ -37,6 +37,7 @@ hw.module @State(in %clk: !seq.clock, in %en: i1) {
   // CHECK-NEXT: (%arg0: !arc.storage):
   // CHECK-NEXT: [[INCLK:%.+]] = arc.root_input "clk", %arg0 : (!arc.storage) -> !arc.state<i1>
   // CHECK-NEXT: [[INEN:%.+]] = arc.root_input "en", %arg0 : (!arc.storage) -> !arc.state<i1>
+  // CHECK-NEXT: [[INEN2:%.+]] = arc.root_input "en2", %arg0 : (!arc.storage) -> !arc.state<i1>
   // CHECK-NEXT: [[CLK_OLD:%.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i1>
   // CHECK-NEXT: [[S0:%.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i42>
   // CHECK-NEXT: [[S1:%.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i42>
@@ -52,11 +53,13 @@ hw.module @State(in %clk: !seq.clock, in %en: i1) {
   // CHECK-NEXT:   [[TMP1:%.+]] = comb.add [[TMP0]], [[TMP0]]
   // CHECK-NEXT:   [[TMP2:%.+]] = arc.state @DummyArc([[TMP1]]) lat 0 : (i42) -> i42
   // CHECK-NEXT:   arc.state_write [[S0]] = [[TMP2]] : <i42>
+  // CHECK-NEXT:   [[EN:%.+]] = arc.state_read [[INEN]] : <i1>
+  // CHECK-NEXT:   [[EN2:%.+]] = arc.state_read [[INEN2]] : <i1>
+  // CHECK-NEXT:   [[TMP3:%.+]] = comb.or [[EN]], [[EN2]] : i1
   // CHECK-NEXT:   [[TMP0:%.+]] = arc.state_read [[S0]] : <i42>
   // CHECK-NEXT:   [[TMP1:%.+]] = comb.add [[TMP0]], [[TMP0]]
   // CHECK-NEXT:   [[TMP2:%.+]] = arc.state @DummyArc([[TMP1]]) lat 0 : (i42) -> i42
-  // CHECK-NEXT:   [[EN:%.+]] = arc.state_read [[INEN]] : <i1>
-  // CHECK-NEXT:   arc.state_write [[S1]] = [[TMP2]] if [[EN]] : <i42>
+  // CHECK-NEXT:   arc.state_write [[S1]] = [[TMP2]] if [[TMP3]] : <i42>
   // CHECK-NEXT: }
 }
 

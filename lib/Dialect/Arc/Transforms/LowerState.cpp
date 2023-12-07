@@ -72,6 +72,8 @@ struct ClockLowering {
   IRMapping materializedValues;
   /// A cache of AND gates created for aggregating enable conditions.
   DenseMap<std::pair<Value, Value>, Value> andCache;
+  /// A cache of OR gates created for aggregating enable conditions.
+  DenseMap<std::pair<Value, Value>, Value> orCache;
 
   ClockLowering(Value clock, Operation *treeOp, Statistics &stats)
       : clock(clock), treeOp(treeOp), stats(stats), builder(treeOp) {
@@ -81,6 +83,7 @@ struct ClockLowering {
 
   Value materializeValue(Value value);
   Value getOrCreateAnd(Value lhs, Value rhs, Location loc);
+  Value getOrCreateOr(Value lhs, Value rhs, Location loc);
 };
 
 struct GatedClockLowering {
@@ -236,13 +239,27 @@ Value ClockLowering::getOrCreateAnd(Value lhs, Value rhs, Location loc) {
   return slot;
 }
 
+/// Create an OR gate if none with the given operands already exists. Note that
+/// the operands may be null, in which case the function will return the
+/// non-null operand, or null if both operands are null.
+Value ClockLowering::getOrCreateOr(Value lhs, Value rhs, Location loc) {
+  if (!lhs)
+    return rhs;
+  if (!rhs)
+    return lhs;
+  auto &slot = orCache[std::make_pair(lhs, rhs)];
+  if (!slot)
+    slot = builder.create<comb::OrOp>(loc, lhs, rhs);
+  return slot;
+}
+
 //===----------------------------------------------------------------------===//
 // Module Lowering
 //===----------------------------------------------------------------------===//
 
 GatedClockLowering ModuleLowering::getOrCreateClockLowering(Value clock) {
   // Look through clock gates.
-  if (auto ckgOp = clock.getDefiningOp<ClockGateOp>()) {
+  if (auto ckgOp = clock.getDefiningOp<seq::ClockGateOp>()) {
     // Reuse the existing lowering for this clock gate if possible.
     if (auto it = gatedClockLowerings.find(clock);
         it != gatedClockLowerings.end())
@@ -254,8 +271,11 @@ GatedClockLowering ModuleLowering::getOrCreateClockLowering(Value clock) {
     // we have to do is to add this clock gate's condition to that list.
     auto info = getOrCreateClockLowering(ckgOp.getInput());
     auto ckgEnable = info.clock.materializeValue(ckgOp.getEnable());
-    info.enable =
-        info.clock.getOrCreateAnd(info.enable, ckgEnable, ckgOp.getLoc());
+    auto ckgTestEnable = info.clock.materializeValue(ckgOp.getTestEnable());
+    info.enable = info.clock.getOrCreateAnd(
+        info.enable,
+        info.clock.getOrCreateOr(ckgEnable, ckgTestEnable, ckgOp.getLoc()),
+        ckgOp.getLoc());
     gatedClockLowerings.insert({clock, info});
     return info;
   }

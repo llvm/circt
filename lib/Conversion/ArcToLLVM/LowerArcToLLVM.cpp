@@ -240,10 +240,10 @@ struct MemoryWriteOpLowering : public OpConversionPattern<arc::MemoryWriteOp> {
 };
 
 /// A dummy lowering for clock gates to an AND gate.
-struct ClockGateOpLowering : public OpConversionPattern<arc::ClockGateOp> {
+struct ClockGateOpLowering : public OpConversionPattern<seq::ClockGateOp> {
   using OpConversionPattern::OpConversionPattern;
   LogicalResult
-  matchAndRewrite(arc::ClockGateOp op, OpAdaptor adaptor,
+  matchAndRewrite(seq::ClockGateOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
     rewriter.replaceOpWithNewOp<comb::AndOp>(op, adaptor.getInput(),
                                              adaptor.getEnable(), true);

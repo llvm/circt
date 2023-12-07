@@ -260,15 +260,6 @@ def CallOp : ArcOp<"call", [
   }];
 }
 
-def ClockGateOp : ArcOp<"clock_gate", [Pure]> {
-  let summary = "Clock gate";
-  let arguments = (ins ClockType:$input, I1:$enable);
-  let results = (outs ClockType:$output);
-  let assemblyFormat = [{
-    $input `,` $enable attr-dict
-  }];
-}
-
 def MemoryOp : ArcOp<"memory", [MemoryEffects<[MemAlloc]>]> {
   let summary = "Memory";
   let results = (outs MemoryType:$memory);
