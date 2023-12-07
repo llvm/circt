@@ -128,6 +128,7 @@ public:
     return addVivadoRAMAddressConflictSynthesisBugWorkaround;
   }
   bool shouldExtractTestCode() const { return extractTestCode; }
+  bool shouldFixupEICGWrapper() const { return fixupEICGWrapper; }
 
   // Setters, used by the CAPI
   FirtoolOptions &setOutputFilename(StringRef name) {
@@ -343,6 +344,11 @@ public:
     return *this;
   }
 
+  FirtoolOptions &setFixupEICGWrapper(bool value) {
+    fixupEICGWrapper = value;
+    return *this;
+  }
+
 private:
   std::string outputFilename;
   bool disableAnnotationsUnknown;
@@ -387,6 +393,7 @@ private:
   bool exportModuleHierarchy;
   bool stripFirDebugInfo;
   bool stripDebugInfo;
+  bool fixupEICGWrapper;
 };
 
 void registerFirtoolCLOptions();

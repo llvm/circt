@@ -45,7 +45,8 @@ LogicalResult firtool::populatePreprocessTransforms(mlir::PassManager &pm,
 LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
                                                   const FirtoolOptions &opt,
                                                   StringRef inputFilename) {
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerIntrinsicsPass());
+  pm.nest<firrtl::CircuitOp>().addPass(
+      firrtl::createLowerIntrinsicsPass(opt.shouldFixupEICGWrapper()));
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInjectDUTHierarchyPass());
 
@@ -647,6 +648,11 @@ struct FirtoolCmdOptions {
       "strip-debug-info",
       llvm::cl::desc("Disable source locator information in output Verilog"),
       llvm::cl::init(false)};
+
+  llvm::cl::opt<bool> fixupEICGWrapper{
+      "fixup-eicg-wrapper",
+      llvm::cl::desc("Lower `EICG_wrapper` modules into clock gate intrinsics"),
+      llvm::cl::init(false)};
 };
 } // namespace
 
@@ -682,7 +688,7 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       ckgModuleName("EICG_wrapper"), ckgInputName("in"), ckgOutputName("out"),
       ckgEnableName("en"), ckgTestEnableName("test_en"), ckgInstName("ckg"),
       exportModuleHierarchy(false), stripFirDebugInfo(true),
-      stripDebugInfo(false) {
+      stripDebugInfo(false), fixupEICGWrapper(false) {
   if (!clOptions.isConstructed())
     return;
   outputFilename = clOptions->outputFilename;
@@ -729,4 +735,5 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   exportModuleHierarchy = clOptions->exportModuleHierarchy;
   stripFirDebugInfo = clOptions->stripFirDebugInfo;
   stripDebugInfo = clOptions->stripDebugInfo;
+  fixupEICGWrapper = clOptions->fixupEICGWrapper;
 }
