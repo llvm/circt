@@ -9,7 +9,6 @@
 #include "circt/Conversion/ConvertToArcs.h"
 #include "../PassDetail.h"
 #include "circt/Dialect/Arc/ArcOps.h"
-#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Support/Namespace.h"
