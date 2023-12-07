@@ -276,7 +276,11 @@ as well as redundant iteration over the problem components.
 - [ChainingCyclicProblem](https://circt.llvm.org/doxygen/classcirct_1_1scheduling_1_1ChainingCyclicProblem.html):
   Extends `ChainingProblem` and `CyclicProblem` to consider the accumulation
   of physical propagation delays on combinational paths along SSA dependences
-  on a cyclic scheduling problem.
+  on a cyclic scheduling problem. In the `ChainingProblem` two dependent
+  operations may execute during the same clock period. This property does not
+  hold for backedges (i.e. dependences from another computation iteration).
+  Futhermore, the `Dependence` attribute should only be applied to backedges,
+  non-zero ssa dependences are not supported.
 
 NB: The classes listed above each model a *trait*-like aspect of scheduling.
 These can be used as-is, but are also intended for mixing and matching, even

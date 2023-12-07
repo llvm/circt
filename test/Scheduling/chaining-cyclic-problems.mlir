@@ -145,8 +145,8 @@ ssp.instance @mco_outgoing_delays of "ChainingCyclicProblem" [II<1>] {
 // SIMPLEX-SAME: [II<2>]
 ssp.instance @chaining_and_cyclic of "ChainingCyclicProblem" [II<2>] {
   library {
-    operator_type @adder [latency<0>, incDelay<1.0>, outDelay<1.0>]
-    operator_type @mult [latency<0>, incDelay<3.0>, outDelay<3.0>]
+    operator_type @_0 [latency<0>, incDelay<1.0>, outDelay<1.0>]
+    operator_type @_1 [latency<0>, incDelay<3.0>, outDelay<3.0>]
     operator_type @_2 [latency<1>, incDelay<0.0>, outDelay<0.75>]
     operator_type @_3 [latency<0>, incDelay<3.5>, outDelay<3.5>]
     operator_type @_4 [latency<1>, incDelay<1.2>, outDelay<1.2>]
@@ -154,12 +154,24 @@ ssp.instance @chaining_and_cyclic of "ChainingCyclicProblem" [II<2>] {
   }
 
   graph {
-    %0 = operation<@adder>(@op2 [dist<1>]) [t<0>, z<0.0>]
-    %1 = operation<@mult>(%0) [t<0>, z<1.0>]
+    %0 = operation<@_0>(@op2 [dist<1>]) [t<0>, z<0.0>]
+    %1 = operation<@_1>(%0) [t<0>, z<1.0>]
     %2 = operation<@_2> @op2(%0, @op4 [dist<1>]) [t<0>, z<1.0>]
     %3 = operation<@_3>(%0) [t<0>, z<1.0>]
     %4 = operation<@_4> @op4(%1, %3) [t<1>, z<0.0>]
     // SIMPLEX: @last(%{{.*}}) [t<2>, z<1.200000e+00 : f32>]
     %5 = operation<@_5> @last(%4, %2) [t<2>, z<1.2>]
+  }
+}
+
+// CHECK-LABEL: backedge_delay_propagation
+// SIMPLEX-SAME: [II<1>]
+ssp.instance @backedge_delay_propagation of "ChainingCyclicProblem" [II<1>] {
+  library {
+    operator_type @_0 [latency<0>, incDelay<1.0>, outDelay<1.0>]
+  }
+  graph {
+    // SIMPLEX: @last(@last [dist<1>]) [t<0>, z<0.000000e+00 : f32>]
+    %0 = operation<@_0> @last(@last [dist<1>]) [t<0>, z<0.000000e+00 : f32>]
   }
 }
