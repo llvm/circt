@@ -39,6 +39,8 @@ def FlattenIO : Pass<"hw-flatten-io", "mlir::ModuleOp"> {
       "Recursively flatten nested structs.">,
     Option<"flattenExtern", "flatten-extern", "bool", "false",
       "Flatten the extern modules also.">,
+    Option<"joinChar", "join-char", "char", "'.'",
+      "Use a custom character to construct the flattened names.">,
   ];
 }
 

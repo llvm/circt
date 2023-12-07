@@ -255,7 +255,8 @@ static DenseMap<Operation *, IOTypes> populateIOMap(mlir::ModuleOp module) {
 template <typename ModTy, typename T>
 static llvm::SmallVector<Attribute>
 updateNameAttribute(ModTy op, StringRef attrName,
-                    DenseMap<unsigned, hw::StructType> &structMap, T oldNames) {
+                    DenseMap<unsigned, hw::StructType> &structMap, T oldNames,
+                    char joinChar) {
   llvm::SmallVector<Attribute> newNames;
   for (auto [i, oldName] : llvm::enumerate(oldNames)) {
     // Was this arg/res index a struct?
@@ -270,10 +271,32 @@ updateNameAttribute(ModTy op, StringRef attrName,
     // index.
     auto structType = it->second;
     for (auto field : structType.getElements())
-      newNames.push_back(
-          StringAttr::get(op->getContext(), oldName + "." + field.name.str()));
+      newNames.push_back(StringAttr::get(
+          op->getContext(), oldName + Twine(joinChar) + field.name.str()));
   }
   return newNames;
+}
+
+template <typename ModTy>
+static void updateModulePortNames(ModTy op, hw::ModuleType oldModType,
+                                  char joinChar) {
+  // Module arg and result port names may not be ordered. So we cannot reuse
+  // updateNameAttribute. The arg and result order must be preserved.
+  SmallVector<Attribute> newNames;
+  SmallVector<hw::ModulePort> oldPorts(oldModType.getPorts().begin(),
+                                       oldModType.getPorts().end());
+  for (auto oldPort : oldPorts) {
+    auto oldName = oldPort.name;
+    if (auto structType = getStructType(oldPort.type)) {
+      for (auto field : structType.getElements()) {
+        newNames.push_back(StringAttr::get(
+            op->getContext(),
+            oldName.getValue() + Twine(joinChar) + field.name.str()));
+      }
+    } else
+      newNames.push_back(oldName);
+  }
+  op.setAllPortNames(newNames);
 }
 
 static llvm::SmallVector<Attribute>
@@ -337,7 +360,8 @@ static DenseMap<Operation *, IOInfo> populateIOInfoMap(mlir::ModuleOp module) {
 
 template <typename T>
 static LogicalResult flattenOpsOfType(ModuleOp module, bool recursive,
-                                      StringSet<> &externModules) {
+                                      StringSet<> &externModules,
+                                      char joinChar) {
   auto *ctx = module.getContext();
   FlattenIOTypeConverter typeConverter;
 
@@ -378,7 +402,10 @@ static LogicalResult flattenOpsOfType(ModuleOp module, bool recursive,
 
     DenseMap<Operation *, ArrayAttr> oldArgNames, oldResNames, oldArgLocs,
         oldResLocs;
+    DenseMap<Operation *, hw::ModuleType> oldModTypes;
+
     for (auto op : module.getOps<T>()) {
+      oldModTypes[op] = op.getHWModuleType();
       oldArgNames[op] = ArrayAttr::get(module.getContext(), op.getInputNames());
       oldResNames[op] =
           ArrayAttr::get(module.getContext(), op.getOutputNames());
@@ -395,14 +422,7 @@ static LogicalResult flattenOpsOfType(ModuleOp module, bool recursive,
     // Update the arg/res names of the module.
     for (auto op : module.getOps<T>()) {
       auto ioInfo = ioInfoMap[op];
-      auto newArgNames = updateNameAttribute(
-          op, "argNames", ioInfo.argStructs,
-          oldArgNames[op].template getAsValueRange<StringAttr>());
-      auto newResNames = updateNameAttribute(
-          op, "resultNames", ioInfo.resStructs,
-          oldResNames[op].template getAsValueRange<StringAttr>());
-      newArgNames.append(newResNames.begin(), newResNames.end());
-      op.setAllPortNames(newArgNames);
+      updateModulePortNames(op, oldModTypes[op], joinChar);
       auto newArgLocs = updateLocAttribute(ioInfo.argStructs, oldArgLocs[op]);
       auto newResLocs = updateLocAttribute(ioInfo.resStructs, oldResLocs[op]);
       newArgLocs.append(newResLocs.begin(), newResLocs.end());
@@ -432,14 +452,16 @@ static LogicalResult flattenOpsOfType(ModuleOp module, bool recursive,
 
       instanceOp.setInputNames(ArrayAttr::get(
           instanceOp.getContext(),
-          updateNameAttribute(instanceOp, "argNames", ioInfo.argStructs,
-                              oldArgNames[targetModule]
-                                  .template getAsValueRange<StringAttr>())));
+          updateNameAttribute(
+              instanceOp, "argNames", ioInfo.argStructs,
+              oldArgNames[targetModule].template getAsValueRange<StringAttr>(),
+              joinChar)));
       instanceOp.setOutputNames(ArrayAttr::get(
           instanceOp.getContext(),
-          updateNameAttribute(instanceOp, "resultNames", ioInfo.resStructs,
-                              oldResNames[targetModule]
-                                  .template getAsValueRange<StringAttr>())));
+          updateNameAttribute(
+              instanceOp, "resultNames", ioInfo.resStructs,
+              oldResNames[targetModule].template getAsValueRange<StringAttr>(),
+              joinChar)));
     }
 
     // Break if we've only lowering a single level of structs.
@@ -455,8 +477,9 @@ static LogicalResult flattenOpsOfType(ModuleOp module, bool recursive,
 
 template <typename... TOps>
 static bool flattenIO(ModuleOp module, bool recursive,
-                      StringSet<> &externModules) {
-  return (failed(flattenOpsOfType<TOps>(module, recursive, externModules)) ||
+                      StringSet<> &externModules, char joinChar) {
+  return (failed(flattenOpsOfType<TOps>(module, recursive, externModules,
+                                        joinChar)) ||
           ...);
 }
 
@@ -464,9 +487,10 @@ namespace {
 
 class FlattenIOPass : public circt::hw::FlattenIOBase<FlattenIOPass> {
 public:
-  FlattenIOPass(bool recursiveFlag, bool flattenExternFlag) {
+  FlattenIOPass(bool recursiveFlag, bool flattenExternFlag, char join) {
     recursive = recursiveFlag;
     flattenExtern = flattenExternFlag;
+    joinChar = join;
   }
 
   void runOnOperation() override {
@@ -475,14 +499,15 @@ public:
       // Record the extern modules, donot flatten them.
       for (auto m : module.getOps<hw::HWModuleExternOp>())
         externModules.insert(m.getModuleName());
-      if (flattenIO<hw::HWModuleOp, hw::HWModuleGeneratedOp>(module, recursive,
-                                                             externModules))
+      if (flattenIO<hw::HWModuleOp, hw::HWModuleGeneratedOp>(
+              module, recursive, externModules, joinChar))
         signalPassFailure();
       return;
     }
 
     if (flattenIO<hw::HWModuleOp, hw::HWModuleExternOp,
-                  hw::HWModuleGeneratedOp>(module, recursive, externModules))
+                  hw::HWModuleGeneratedOp>(module, recursive, externModules,
+                                           joinChar))
       signalPassFailure();
   };
 
@@ -496,6 +521,8 @@ private:
 //===----------------------------------------------------------------------===//
 
 std::unique_ptr<Pass> circt::hw::createFlattenIOPass(bool recursiveFlag,
-                                                     bool flattenExternFlag) {
-  return std::make_unique<FlattenIOPass>(true, flattenExternFlag);
+                                                     bool flattenExternFlag,
+                                                     char joinChar) {
+  return std::make_unique<FlattenIOPass>(recursiveFlag, flattenExternFlag,
+                                         joinChar);
 }
