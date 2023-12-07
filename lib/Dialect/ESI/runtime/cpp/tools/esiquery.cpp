@@ -15,7 +15,7 @@
 
 #include "esi/Accelerator.h"
 #include "esi/Manifest.h"
-#include "esi/StdServices.h"
+#include "esi/Services.h"
 
 #include <iostream>
 #include <map>
@@ -25,7 +25,7 @@ using namespace std;
 
 using namespace esi;
 
-void printInfo(ostream &os, Accelerator &acc);
+void printInfo(ostream &os, AcceleratorConnection &acc);
 
 int main(int argc, const char *argv[]) {
   // TODO: find a command line parser library rather than doing this by hand.
@@ -42,7 +42,7 @@ int main(int argc, const char *argv[]) {
     cmd = argv[3];
 
   try {
-    unique_ptr<Accelerator> acc = registry::connect(backend, conn);
+    unique_ptr<AcceleratorConnection> acc = registry::connect(backend, conn);
     const auto &info = *acc->getService<services::SysInfo>();
 
     if (cmd == "version")
@@ -66,7 +66,7 @@ int main(int argc, const char *argv[]) {
   }
 }
 
-void printInfo(ostream &os, Accelerator &acc) {
+void printInfo(ostream &os, AcceleratorConnection &acc) {
   string jsonManifest = acc.getService<services::SysInfo>()->getJsonManifest();
   Manifest m(jsonManifest);
   os << "API version: " << m.getApiVersion() << endl << endl;

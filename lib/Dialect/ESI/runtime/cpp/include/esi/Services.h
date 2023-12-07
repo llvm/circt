@@ -17,15 +17,51 @@
 //===----------------------------------------------------------------------===//
 
 // NOLINTNEXTLINE(llvm-header-guard)
-#ifndef ESI_RUNTIME_STDSERVICES_H
-#define ESI_RUNTIME_STDSERVICES_H
+#ifndef ESI_RUNTIME_SERVICES_H
+#define ESI_RUNTIME_SERVICES_H
 
-#include "esi/Accelerator.h"
+#include "esi/Common.h"
+#include "esi/Ports.h"
 
 #include <cstdint>
 
 namespace esi {
 namespace services {
+
+/// Parent class of all APIs modeled as 'services'. May or may not map to a
+/// hardware side 'service'.
+class Service {
+public:
+  using Type = const std::type_info &;
+  virtual ~Service() = default;
+
+  virtual std::string getServiceSymbol() const = 0;
+};
+
+/// A service for which there are no standard services registered. Requires
+/// ports be added to the design hierarchy instead of high level interfaces like
+/// the ones in StdServices.h.
+class CustomService : public Service {
+public:
+  CustomService(AppIDPath idPath, const ServiceImplDetails &details,
+                const HWClientDetails &clients);
+  virtual ~CustomService() = default;
+
+  virtual std::string getServiceSymbol() const override {
+    return serviceSymbol;
+  }
+
+  /// Request the host side channel ports for a particular instance (identified
+  /// by the AppID path). For convenience, provide the bundle type and direction
+  /// of the bundle port.
+  virtual std::map<std::string, ChannelPort &>
+  requestChannelsFor(AppIDPath, const BundleType &,
+                     BundlePort::Direction portDir) = 0;
+
+protected:
+  std::string serviceSymbol;
+  AppIDPath id;
+};
 
 /// Information about the Accelerator system.
 class SysInfo : public Service {
@@ -70,4 +106,4 @@ private:
 } // namespace services
 } // namespace esi
 
-#endif // ESI_RUNTIME_STDSERVICES_H
+#endif // ESI_RUNTIME_SERVICES_H
