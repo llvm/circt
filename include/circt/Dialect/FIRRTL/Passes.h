@@ -60,7 +60,8 @@ std::unique_ptr<mlir::Pass> createLowerBundleVectorTypesPass();
 
 std::unique_ptr<mlir::Pass> createLowerCHIRRTLPass();
 
-std::unique_ptr<mlir::Pass> createLowerIntrinsicsPass();
+std::unique_ptr<mlir::Pass>
+createLowerIntrinsicsPass(bool fixupEICGWrapper = false);
 
 std::unique_ptr<mlir::Pass> createIMConstPropPass();
 

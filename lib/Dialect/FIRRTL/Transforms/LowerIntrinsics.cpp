@@ -35,6 +35,7 @@ using namespace firrtl;
 namespace {
 struct LowerIntrinsicsPass : public LowerIntrinsicsBase<LowerIntrinsicsPass> {
   void runOnOperation() override;
+  using LowerIntrinsicsBase::fixupEICGWrapper;
 };
 } // end anonymous namespace
 
@@ -262,6 +263,36 @@ static bool lowerCirctClockGate(InstanceGraph &ig, FModuleLike mod) {
     inst.getResult(1).replaceAllUsesWith(en);
     auto out = builder.create<ClockGateIntrinsicOp>(in, en, Value{});
     inst.getResult(2).replaceAllUsesWith(out);
+    inst.erase();
+  }
+  return true;
+}
+
+static bool lowerEICGWrapperToClockGate(InstanceGraph &ig, FModuleLike mod) {
+  if (hasNPorts("EICG_wrapper", mod, 4) ||
+      namedPort("EICG_wrapper", mod, 0, "in") ||
+      namedPort("EICG_wrapper", mod, 1, "test_en") ||
+      namedPort("EICG_wrapper", mod, 2, "en") ||
+      namedPort("EICG_wrapper", mod, 3, "out") ||
+      typedPort<ClockType>("EICG_wrapper", mod, 0) ||
+      sizedPort<UIntType>("EICG_wrapper", mod, 1, 1) ||
+      sizedPort<UIntType>("EICG_wrapper", mod, 2, 1) ||
+      typedPort<ClockType>("EICG_wrapper", mod, 3) ||
+      hasNParam("EICG_wrapper", mod, 0))
+    return false;
+
+  for (auto *use : ig.lookup(mod)->uses()) {
+    auto inst = cast<InstanceOp>(use->getInstance().getOperation());
+    ImplicitLocOpBuilder builder(inst.getLoc(), inst);
+    auto in = builder.create<WireOp>(inst.getResult(0).getType()).getResult();
+    auto testEn =
+        builder.create<WireOp>(inst.getResult(1).getType()).getResult();
+    auto en = builder.create<WireOp>(inst.getResult(2).getType()).getResult();
+    inst.getResult(0).replaceAllUsesWith(in);
+    inst.getResult(1).replaceAllUsesWith(testEn);
+    inst.getResult(2).replaceAllUsesWith(en);
+    auto out = builder.create<ClockGateIntrinsicOp>(in, en, testEn);
+    inst.getResult(3).replaceAllUsesWith(out);
     inst.erase();
   }
   return true;
@@ -632,6 +663,7 @@ std::pair<const char *, std::function<bool(InstanceGraph &, FModuleLike)>>
         {"circt_plusargs_value", lowerCirctPlusArgValue},
         {"circt.clock_gate", lowerCirctClockGate},
         {"circt_clock_gate", lowerCirctClockGate},
+        {"EICG_wrapper", lowerEICGWrapperToClockGate}, // remove once EICG gone
         {"circt.ltl.and", lowerCirctLTLAnd},
         {"circt_ltl_and", lowerCirctLTLAnd},
         {"circt.ltl.or", lowerCirctLTLOr},
@@ -674,15 +706,21 @@ void LowerIntrinsicsPass::runOnOperation() {
     if (!isa<FExtModuleOp, FIntModuleOp>(op))
       continue;
     StringAttr intname;
-    if (isa<FExtModuleOp>(op)) {
-      auto anno = AnnotationSet(&op).getAnnotation("circt.Intrinsic");
-      if (!anno)
-        continue;
-      intname = anno.getMember<StringAttr>("intrinsic");
-      if (!intname) {
-        op.emitError("intrinsic annotation with no intrinsic name");
-        ++numFailures;
-        continue;
+    if (auto extMod = dyn_cast<FExtModuleOp>(op)) {
+      if (fixupEICGWrapper && extMod.getDefname() == "EICG_wrapper") {
+        // Remove this once `EICG_wrapper` is no longer special-cased by
+        // firtool.
+        intname = extMod.getDefnameAttr();
+      } else {
+        auto anno = AnnotationSet(&op).getAnnotation("circt.Intrinsic");
+        if (!anno)
+          continue;
+        intname = anno.getMember<StringAttr>("intrinsic");
+        if (!intname) {
+          op.emitError("intrinsic annotation with no intrinsic name");
+          ++numFailures;
+          continue;
+        }
       }
     } else {
       intname = cast<FIntModuleOp>(op).getIntrinsicAttr();
@@ -718,6 +756,9 @@ void LowerIntrinsicsPass::runOnOperation() {
 }
 
 /// This is the pass constructor.
-std::unique_ptr<mlir::Pass> circt::firrtl::createLowerIntrinsicsPass() {
-  return std::make_unique<LowerIntrinsicsPass>();
+std::unique_ptr<mlir::Pass>
+circt::firrtl::createLowerIntrinsicsPass(bool fixupEICGWrapper) {
+  auto pass = std::make_unique<LowerIntrinsicsPass>();
+  pass->fixupEICGWrapper = fixupEICGWrapper;
+  return pass;
 }
