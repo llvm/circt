@@ -72,19 +72,20 @@ set(ESI_RUNTIME_SRCS
 
   runtime/cpp/include/esi/backends/Cosim.h
   runtime/cpp/include/esi/backends/Trace.h
-  runtime/cpp/include/esi/Accelerator.h
-  runtime/cpp/include/esi/Design.h
-  runtime/cpp/include/esi/Manifest.h
-  runtime/cpp/include/esi/StdServices.h
-  runtime/cpp/include/esi/Types.h
   runtime/cpp/include/esi/Utils.h
+  runtime/cpp/include/esi/Accelerator.h
+  runtime/cpp/include/esi/Manifest.h
+  runtime/cpp/include/esi/Types.h
+  runtime/cpp/include/esi/Ports.h
+  runtime/cpp/include/esi/Services.h
+  runtime/cpp/include/esi/Common.h
   runtime/cpp/lib/backends/Cosim.cpp
   runtime/cpp/lib/backends/Trace.cpp
-  runtime/cpp/lib/Accelerator.cpp
-  runtime/cpp/lib/Design.cpp
-  runtime/cpp/lib/Manifest.cpp
-  runtime/cpp/lib/StdServices.cpp
   runtime/cpp/lib/Utils.cpp
+  runtime/cpp/lib/Manifest.cpp
+  runtime/cpp/lib/Services.cpp
+  runtime/cpp/lib/Accelerator.cpp
+  runtime/cpp/lib/Ports.cpp
   runtime/cpp/tools/esiquery.cpp
   runtime/cosim/CMakeLists.txt
   runtime/cosim/Cosim_MMIO.sv
@@ -100,10 +101,10 @@ set(ESI_RUNTIME_SRCS
   runtime/cosim/include/cosim/Server.h
   runtime/cosim/include/cosim/dpi.h
   runtime/cosim/include/dpi/svdpi.h
-  runtime/cosim/Cosim_Endpoint.sv
-  runtime/cosim/CosimDpi.capnp
   runtime/cosim/Cosim_DpiPkg.sv
   runtime/cosim/Cosim_Manifest.sv
+  runtime/cosim/Cosim_Endpoint.sv
+  runtime/cosim/CosimDpi.capnp
   runtime/python/esi/__init__.py
   runtime/python/esi/accelerator.py
   runtime/python/esi/esiCppAccel.cpp

@@ -11,8 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "esi/Accelerator.h"
-#include "esi/Design.h"
-#include "esi/StdServices.h"
+#include "esi/Services.h"
 
 #include <sstream>
 
@@ -153,37 +152,41 @@ PYBIND11_MODULE(esiCppAccel, m) {
 
   // Store this variable (not commonly done) as the "children" method needs for
   // "Instance" to be defined first.
-  auto design =
-      py::class_<Design>(m, "Design")
-          .def_property_readonly("info", &Design::getInfo)
-          .def_property_readonly("ports", &Design::getPorts,
+  auto hwmodule =
+      py::class_<HWModule>(m, "HWModule")
+          .def_property_readonly("info", &HWModule::getInfo)
+          .def_property_readonly("ports", &HWModule::getPorts,
                                  py::return_value_policy::reference_internal);
 
   // In order to inherit methods from "Design", it needs to be defined first.
-  py::class_<Instance, Design>(m, "Instance")
+  py::class_<Instance, HWModule>(m, "Instance")
       .def_property_readonly("id", &Instance::getID);
+
+  py::class_<Accelerator, HWModule>(m, "Accelerator");
 
   // Since this returns a vector of Instance*, we need to define Instance first
   // or else pybind11-stubgen complains.
-  design.def_property_readonly("children", &Design::getChildren,
-                               py::return_value_policy::reference_internal);
+  hwmodule.def_property_readonly("children", &HWModule::getChildren,
+                                 py::return_value_policy::reference_internal);
 
-  py::class_<Accelerator>(m, "Accelerator")
+  py::class_<AcceleratorConnection>(m, "AcceleratorConnection")
       .def(py::init(&registry::connect))
       .def(
           "sysinfo",
-          [](Accelerator &acc) {
+          [](AcceleratorConnection &acc) {
             return acc.getService<services::SysInfo>({});
           },
           py::return_value_policy::reference_internal)
       .def(
           "get_service_mmio",
-          [](Accelerator &acc) { return acc.getService<services::MMIO>({}); },
+          [](AcceleratorConnection &acc) {
+            return acc.getService<services::MMIO>({});
+          },
           py::return_value_policy::reference_internal);
 
   py::class_<Manifest>(m, "Manifest")
       .def(py::init<std::string>())
       .def_property_readonly("api_version", &Manifest::getApiVersion)
-      .def("build_design", &Manifest::buildDesign)
+      .def("build_accelerator", &Manifest::buildAccelerator)
       .def_property_readonly("type_table", &Manifest::getTypeTable);
 }

@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-//
+// Manifest parsing and API creation.
 //
 // DO NOT EDIT!
 // This file is distributed as part of an ESI package. The source for this file
@@ -18,6 +18,7 @@
 #ifndef ESI_MANIFEST_H
 #define ESI_MANIFEST_H
 
+#include "esi/Common.h"
 #include "esi/Types.h"
 
 #include <any>
@@ -31,69 +32,9 @@
 
 namespace esi {
 
-//===----------------------------------------------------------------------===//
-// Common accelerator description types.
-//===----------------------------------------------------------------------===//
-
-struct AppID {
-  std::string name;
-  std::optional<uint32_t> idx;
-
-  AppID(const AppID &) = default;
-  AppID(std::string name, std::optional<uint32_t> idx = std::nullopt)
-      : name(name), idx(idx) {}
-
-  bool operator==(const AppID &other) const {
-    return name == other.name && idx == other.idx;
-  }
-  bool operator!=(const AppID &other) const { return !(*this == other); }
-};
-bool operator<(const AppID &a, const AppID &b);
-
-class AppIDPath : public std::vector<AppID> {
-public:
-  using std::vector<AppID>::vector;
-
-  AppIDPath operator+(const AppIDPath &b);
-  std::string toStr() const;
-};
-bool operator<(const AppIDPath &a, const AppIDPath &b);
-std::ostream &operator<<(std::ostream &, const esi::AppIDPath &);
-
-struct ModuleInfo {
-  const std::optional<std::string> name;
-  const std::optional<std::string> summary;
-  const std::optional<std::string> version;
-  const std::optional<std::string> repo;
-  const std::optional<std::string> commitHash;
-  const std::map<std::string, std::any> extra;
-};
-
-/// A description of a service port. Used pretty exclusively in setting up the
-/// design.
-struct ServicePortDesc {
-  std::string name;
-  std::string portName;
-};
-
-/// A description of a hardware client. Used pretty exclusively in setting up
-/// the design.
-struct HWClientDetail {
-  AppIDPath relPath;
-  ServicePortDesc port;
-  std::map<std::string, std::any> implOptions;
-};
-using HWClientDetails = std::vector<HWClientDetail>;
-using ServiceImplDetails = std::map<std::string, std::any>;
-
-//===----------------------------------------------------------------------===//
-// Manifest parsing and API creation.
-//===----------------------------------------------------------------------===//
-
 // Forward declarations.
-namespace internal {} // namespace internal
+class AcceleratorConnection;
 class Accelerator;
-class Design;
 
 /// Class to parse a manifest. It also constructs the dynamic API for the
 /// accelerator.
@@ -110,7 +51,8 @@ public:
   std::vector<ModuleInfo> getModuleInfos() const;
 
   // Build a dynamic design hierarchy from the manifest.
-  std::unique_ptr<Design> buildDesign(Accelerator &acc) const;
+  std::unique_ptr<Accelerator>
+  buildAccelerator(AcceleratorConnection &acc) const;
 
   /// Get a Type from the manifest based on its ID. Types are uniqued here.
   std::optional<std::reference_wrapper<const Type>> getType(Type::ID id) const;
@@ -122,7 +64,7 @@ public:
   const std::vector<std::reference_wrapper<const Type>> &getTypeTable() const;
 
 private:
-  Impl &impl;
+  std::shared_ptr<Impl> impl;
 };
 
 } // namespace esi

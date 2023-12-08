@@ -29,12 +29,13 @@ namespace backends {
 namespace cosim {
 
 /// Connect to an ESI simulation.
-class CosimAccelerator : public esi::Accelerator {
+class CosimAccelerator : public esi::AcceleratorConnection {
 public:
   struct Impl;
 
   CosimAccelerator(std::string hostname, uint16_t port);
-  static std::unique_ptr<Accelerator> connect(std::string connectionString);
+  static std::unique_ptr<AcceleratorConnection>
+  connect(std::string connectionString);
 
 protected:
   virtual Service *createService(Service::Type service, AppIDPath path,

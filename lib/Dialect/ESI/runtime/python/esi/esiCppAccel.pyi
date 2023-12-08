@@ -7,15 +7,19 @@ from __future__ import annotations
 import typing
 
 __all__ = [
-    'Accelerator', 'AnyType', 'AppID', 'ArrayType', 'BitVectorType', 'BitsType',
-    'BundlePort', 'BundleType', 'ChannelPort', 'ChannelType', 'Design',
-    'Direction', 'From', 'Instance', 'IntegerType', 'MMIO', 'Manifest',
-    'ModuleInfo', 'ReadChannelPort', 'SIntType', 'StructType', 'SysInfo', 'To',
-    'Type', 'UIntType', 'WriteChannelPort'
+    'Accelerator', 'AcceleratorConnection', 'AnyType', 'AppID', 'ArrayType',
+    'BitVectorType', 'BitsType', 'BundlePort', 'BundleType', 'ChannelPort',
+    'ChannelType', 'Direction', 'From', 'HWModule', 'Instance', 'IntegerType',
+    'MMIO', 'Manifest', 'ModuleInfo', 'ReadChannelPort', 'SIntType',
+    'StructType', 'SysInfo', 'To', 'Type', 'UIntType', 'WriteChannelPort'
 ]
 
 
-class Accelerator:
+class Accelerator(HWModule):
+  pass
+
+
+class AcceleratorConnection:
 
   def __init__(self, arg0: str, arg1: str) -> None:
     ...
@@ -117,21 +121,6 @@ class ChannelType(Type):
     ...
 
 
-class Design:
-
-  @property
-  def children(self) -> dict[AppID, Instance]:
-    ...
-
-  @property
-  def info(self) -> ModuleInfo | None:
-    ...
-
-  @property
-  def ports(self) -> dict[AppID, BundlePort]:
-    ...
-
-
 class Direction:
   """
     Members:
@@ -185,7 +174,22 @@ class Direction:
     ...
 
 
-class Instance(Design):
+class HWModule:
+
+  @property
+  def children(self) -> dict[AppID, Instance]:
+    ...
+
+  @property
+  def info(self) -> ModuleInfo | None:
+    ...
+
+  @property
+  def ports(self) -> dict[AppID, BundlePort]:
+    ...
+
+
+class Instance(HWModule):
 
   @property
   def id(self) -> AppID:
@@ -210,7 +214,7 @@ class Manifest:
   def __init__(self, arg0: str) -> None:
     ...
 
-  def build_design(self, arg0: Accelerator) -> Design:
+  def build_accelerator(self, arg0: AcceleratorConnection) -> Accelerator:
     ...
 
   @property

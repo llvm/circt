@@ -3,7 +3,7 @@ import esi
 import sys
 
 platform = sys.argv[1]
-acc = esi.Accelerator(platform, sys.argv[2])
+acc = esi.AcceleratorConnection(platform, sys.argv[2])
 
 assert acc.sysinfo().esi_version() == 1
 m = acc.manifest()
@@ -36,7 +36,7 @@ for esiType in m.type_table:
   print(f"{esiType}:")
   print(f"  {strType(esiType)}")
 
-d = m.build_design(acc)
+d = m.build_accelerator(acc)
 
 loopback = d.children[esi.AppID("loopback_inst", 0)]
 appid = loopback.id

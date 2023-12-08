@@ -13,8 +13,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "esi/backends/Trace.h"
-#include "esi/Design.h"
-#include "esi/StdServices.h"
+
+#include "esi/Accelerator.h"
+#include "esi/Services.h"
 #include "esi/Utils.h"
 
 #include <fstream>
@@ -83,7 +84,8 @@ void TraceAccelerator::Impl::write(const AppIDPath &id, const string &portName,
   *traceWrite << "write " << id << '.' << portName << ": " << b64data << endl;
 }
 
-unique_ptr<Accelerator> TraceAccelerator::connect(string connectionString) {
+unique_ptr<AcceleratorConnection>
+TraceAccelerator::connect(string connectionString) {
   string modeStr;
   string manifestPath;
   string traceFile = "trace.json";

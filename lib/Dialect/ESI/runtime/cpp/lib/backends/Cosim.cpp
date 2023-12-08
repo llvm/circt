@@ -14,7 +14,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "esi/backends/Cosim.h"
-#include "esi/StdServices.h"
+#include "esi/Services.h"
 
 #include "CosimDpi.capnp.h"
 #include <capnp/ez-rpc.h>
@@ -33,7 +33,8 @@ using namespace esi::backends::cosim;
 /// traditional 'host:port' syntax and a path to 'cosim.cfg' which is output by
 /// the cosimulation when it starts (which is useful when it chooses its own
 /// port).
-unique_ptr<Accelerator> CosimAccelerator::connect(string connectionString) {
+unique_ptr<AcceleratorConnection>
+CosimAccelerator::connect(string connectionString) {
   string portStr;
   string host = "localhost";
 

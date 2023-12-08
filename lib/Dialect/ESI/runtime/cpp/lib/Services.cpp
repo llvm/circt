@@ -13,7 +13,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "esi/StdServices.h"
+#include "esi/Services.h"
+#include "esi/Accelerator.h"
 
 #include "zlib.h"
 
@@ -56,4 +57,15 @@ uint32_t MMIOSysInfo::getEsiVersion() const {
 vector<uint8_t> MMIOSysInfo::getCompressedManifest() const {
   assert(false && "Not implemented");
   throw runtime_error("Not implemented");
+}
+
+CustomService::CustomService(AppIDPath idPath,
+                             const ServiceImplDetails &details,
+                             const HWClientDetails &clients)
+    : id(idPath) {
+  if (auto f = details.find("service"); f != details.end()) {
+    serviceSymbol = any_cast<string>(f->second);
+    // Strip off initial '@'.
+    serviceSymbol = serviceSymbol.substr(1);
+  }
 }

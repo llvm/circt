@@ -32,7 +32,7 @@ namespace backends {
 namespace trace {
 
 /// Connect to an ESI simulation.
-class TraceAccelerator : public esi::Accelerator {
+class TraceAccelerator : public esi::AcceleratorConnection {
 public:
   enum Mode {
     // Write data sent to the accelerator to the trace file. Produce random
@@ -55,7 +55,8 @@ public:
 
   /// Parse the connection string and instantiate the accelerator. Format is:
   /// "<mode>:<manifest path>[:<traceFile>]".
-  static std::unique_ptr<Accelerator> connect(std::string connectionString);
+  static std::unique_ptr<AcceleratorConnection>
+  connect(std::string connectionString);
 
   /// Internal implementation.
   struct Impl;
