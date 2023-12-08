@@ -515,6 +515,9 @@ private:
       nextLID = getOpLID(next);
     }
 
+    // Assign a new LID to next
+    setOpLID(next.getDefiningOp());
+
     // Sanity check: at this point the next operation should have had it's btor2
     // counterpart emitted if not then something terrible must have happened.
     assert(nextLID != noLID);

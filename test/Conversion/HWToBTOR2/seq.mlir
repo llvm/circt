@@ -6,6 +6,9 @@ module {
     //CHECK:    [[NID2:[0-9]+]] input [[NID0]] en
     hw.module @Counter(in %clock : !seq.clock, in %reset : i1, in %en : i1) {
     %0 = seq.from_clock %clock
+    // Registers are all emitted before any other operation
+    //CHECK:    [[NID6:[0-9]+]] sort bitvec 32
+    //CHECK:    [[NID12:[0-9]+]] state [[NID6]] count
 
     //CHECK:    [[NID3:[0-9]+]] sort bitvec 28
     //CHECK:    [[NID4:[0-9]+]] constd [[NID3]] 0 
@@ -13,8 +16,7 @@ module {
 
     //CHECK:    [[NID5:[0-9]+]] constd [[NID0]] 0
     %false = hw.constant false
-
-    //CHECK:    [[NID6:[0-9]+]] sort bitvec 32
+    
     //CHECK:    [[NID7:[0-9]+]] constd [[NID6]] 22
     %c22_i32 = hw.constant 22 : i32
 
@@ -27,8 +29,7 @@ module {
 
     //CHECK:    [[NID11:[0-9]+]] constd [[NID6]] 0
     %c0_i32 = hw.constant 0 : i32
-
-    //CHECK:    [[NID12:[0-9]+]] state [[NID6]] count
+    
     %count = seq.firreg %9 clock %clock reset sync %reset, %c0_i32 {firrtl.random_init_start = 0 : ui64} : i32
 
     //CHECK:    [[NID13:[0-9]+]] eq [[NID0]] [[NID12]] [[NID7]]
