@@ -14,6 +14,7 @@
 #include "circt/Scheduling/DependenceIterator.h"
 
 #include "mlir/IR/Operation.h"
+
 using namespace circt;
 using namespace circt::scheduling;
 using namespace circt::scheduling::detail;
