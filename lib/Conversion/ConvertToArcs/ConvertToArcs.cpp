@@ -23,8 +23,8 @@ using llvm::MapVector;
 
 static bool isArcBreakingOp(Operation *op) {
   return op->hasTrait<OpTrait::ConstantLike>() ||
-         isa<hw::InstanceOp, seq::CompRegOp, ClockGateOp, MemoryOp,
-             ClockedOpInterface>(op) ||
+         isa<hw::InstanceOp, seq::CompRegOp, MemoryOp, ClockedOpInterface,
+             seq::ClockGateOp>(op) ||
          op->getNumResults() > 1;
 }
 
