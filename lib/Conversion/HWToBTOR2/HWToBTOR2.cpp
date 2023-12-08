@@ -96,45 +96,6 @@ private:
   // Keeps track of operations that have been declared
   DenseSet<Operation *> handledOps;
 
-  // Set of often reused strings in btor2 emission (to avoid typos and enable
-  // auto-complete)
-  static constexpr StringLiteral sortStr = "sort";
-  static constexpr StringLiteral bitvecStr = "bitvec";
-  static constexpr StringLiteral inputStr = "input";
-  static constexpr StringLiteral resetStr = "reset";
-  static constexpr StringLiteral outputStr = "output";
-  static constexpr StringLiteral zeroStr = "zero";
-  static constexpr StringLiteral oneStr = "one";
-  static constexpr StringLiteral constStr = "const";
-  static constexpr StringLiteral constdStr = "constd";
-  static constexpr StringLiteral consthStr = "consth";
-  static constexpr StringLiteral sliceStr = "slice";
-  static constexpr StringLiteral uextStr = "uext";
-  static constexpr StringLiteral addStr = "add";
-  static constexpr StringLiteral subStr = "sub";
-  static constexpr StringLiteral mulStr = "mul";
-  static constexpr StringLiteral andStr = "and";
-  static constexpr StringLiteral orStr = "or";
-  static constexpr StringLiteral xorStr = "xor";
-  static constexpr StringLiteral sllStr = "sll";
-  static constexpr StringLiteral srlStr = "srl"; // a.k.a. unsigned right shift
-  static constexpr StringLiteral sraStr = "sra"; // a.k.a. signed right shift
-  static constexpr StringLiteral sdivStr = "sdiv";
-  static constexpr StringLiteral udivStr = "udiv";
-  static constexpr StringLiteral smodStr = "smod";
-  static constexpr StringLiteral concatStr = "concat";
-  static constexpr StringLiteral notStr = "not";
-  static constexpr StringLiteral neqStr = "neq";
-  static constexpr StringLiteral hwNeqStr = "ne";
-  static constexpr StringLiteral iteStr = "ite";
-  static constexpr StringLiteral impliesStr = "implies"; // logical implication
-  static constexpr StringLiteral stateStr = "state";     // Register state
-  static constexpr StringLiteral nextStr = "next"; // Register state transition
-  static constexpr StringLiteral badStr = "bad";
-  static constexpr StringLiteral constraintStr = "constraint";
-  static constexpr StringLiteral wsStr = " ";  // WhiteSpace
-  static constexpr StringLiteral nlStr = "\n"; // NewLine
-
   // Constants used during the conversion
   static constexpr size_t noLID = -1UL;
   static constexpr int64_t noWidth = -1L;
@@ -244,7 +205,7 @@ private:
 
   /// String generation helper functions
 
-  // Generates a sort declaration instruction given a type (bitvecStr or array)
+  // Generates a sort declaration instruction given a type ("bitvec" or array)
   // and a width.
   void genSort(StringRef type, size_t width) {
     // Check that the sort wasn't already declared
@@ -255,8 +216,9 @@ private:
     size_t sortlid = setSortLID(width);
 
     // Build and return a sort declaration
-    os << sortlid << wsStr << sortStr << wsStr << type << wsStr << width
-       << nlStr;
+    os << sortlid << " "
+       << "sort"
+       << " " << type << " " << width << "\n";
   }
 
   // Generates an input declaration given a sort lid and a name.
@@ -265,7 +227,9 @@ private:
     size_t sid = sortToLIDMap.at(width);
 
     // Generate input declaration
-    os << inlid << wsStr << inputStr << wsStr << sid << wsStr << name << nlStr;
+    os << inlid << " "
+       << "input"
+       << " " << sid << " " << name << "\n";
   }
 
   // Generates a constant declaration given a value, a width and a name.
@@ -277,8 +241,9 @@ private:
     // Retrieve the lid associated with the sort (sid)
     size_t sid = sortToLIDMap.at(width);
 
-    os << opLID << wsStr << constdStr << wsStr << sid << wsStr << value
-       << nlStr;
+    os << opLID << " "
+       << "constd"
+       << " " << sid << " " << value << "\n";
   }
 
   // Generates a zero constant expression
@@ -295,7 +260,9 @@ private:
     size_t constlid = setConstLID(0, width);
 
     // Build and return the zero btor instruction
-    os << constlid << wsStr << zeroStr << wsStr << sid << nlStr;
+    os << constlid << " "
+       << "zero"
+       << " " << sid << "\n";
     return constlid;
   }
 
@@ -315,8 +282,8 @@ private:
     size_t op2LID = getOpLID(op2);
 
     // Build and return the string
-    os << opLID << wsStr << inst << wsStr << sid << wsStr << op1LID << wsStr
-       << op2LID << nlStr;
+    os << opLID << " " << inst << " " << sid << " " << op1LID << " " << op2LID
+       << "\n";
   }
 
   // Generates a slice instruction given an operand, the lowbit, and the width
@@ -332,8 +299,10 @@ private:
     size_t op0LID = getOpLID(op0);
 
     // Build and return the slice instruction
-    os << opLID << wsStr << sliceStr << wsStr << sid << wsStr << op0LID << wsStr
-       << (width - 1) << wsStr << lowbit << nlStr;
+    os << opLID << " "
+       << "slice"
+       << " " << sid << " " << op0LID << " " << (width - 1) << " " << lowbit
+       << "\n";
   }
 
   // Generates a constant declaration given a value, a width and a name
@@ -349,7 +318,7 @@ private:
     // Find the LID associated to the operand
     size_t op0LID = getOpLID(op0);
 
-    os << opLID << wsStr << inst << wsStr << sid << wsStr << op0LID << nlStr;
+    os << opLID << " " << inst << " " << sid << " " << op0LID << "\n";
   }
 
   // Generates a constant declaration given a value, a width and a name
@@ -366,7 +335,9 @@ private:
 
     // Build and return the btor2 string
     // Also update the lid as this instruction is not associated to an mlir op
-    os << lid++ << wsStr << badStr << wsStr << assertLID << nlStr;
+    os << lid++ << " "
+       << "bad"
+       << " " << assertLID << "\n";
   }
 
   // Generate a btor2 constraint given an expression from an assumption
@@ -383,7 +354,9 @@ private:
   void genConstraint(size_t exprLID) {
     // Build and return the btor2 string
     // Also update the lid as this instruction is not associated to an mlir op
-    os << lid++ << wsStr << constraintStr << wsStr << exprLID << nlStr;
+    os << lid++ << " "
+       << "constraint"
+       << " " << exprLID << "\n";
   }
 
   // Generate an ite instruction (if then else) given a predicate, two values
@@ -408,8 +381,9 @@ private:
     size_t sid = sortToLIDMap.at(width);
 
     // Build and return the ite instruction
-    os << opLID << wsStr << iteStr << wsStr << sid << wsStr << condLID << wsStr
-       << tLID << wsStr << fLID << nlStr;
+    os << opLID << " "
+       << "ite"
+       << " " << sid << " " << condLID << " " << tLID << " " << fLID << "\n";
   }
 
   // Generate a logical implication given a lhs and a rhs
@@ -430,8 +404,9 @@ private:
     size_t sid = sortToLIDMap.at(1);
 
     // Build and emit the implies operation
-    os << opLID << wsStr << impliesStr << wsStr << sid << wsStr << lhsLID
-       << wsStr << rhsLID << nlStr;
+    os << opLID << " "
+       << "implies"
+       << " " << sid << " " << lhsLID << " " << rhsLID << "\n";
   }
 
   // Generates a state instruction given a width and a name
@@ -443,7 +418,9 @@ private:
     size_t sid = sortToLIDMap.at(width);
 
     // Build and return the state instruction
-    os << opLID << wsStr << stateStr << wsStr << sid << wsStr << name << nlStr;
+    os << opLID << " "
+       << "state"
+       << " " << sid << " " << name << "\n";
   }
 
   // Generates a next instruction, given a width, a state LID, and a next value
@@ -458,8 +435,9 @@ private:
 
     // Build and return the next instruction
     // Also update the lid as this instruction is not associated to an mlir op
-    os << lid++ << wsStr << nextStr << wsStr << sid << wsStr << regLID << wsStr
-       << nextLID << nlStr;
+    os << lid++ << " "
+       << "next"
+       << " " << sid << " " << regLID << " " << nextLID << "\n";
   }
 
   // Verifies that the sort required for the given operation's btor2 emission
@@ -475,7 +453,7 @@ private:
 
     // Generate the sort regardles of resulting width (nothing will be added if
     // the sort already exists)
-    genSort(bitvecStr, width);
+    genSort("bitvec", width);
     return width;
   }
 
@@ -490,7 +468,7 @@ private:
     // Generate the reset condition (for sync & async resets)
     // We assume for now that the reset value is always 0
     size_t width = hw::getBitWidth(reg.getType());
-    genSort(bitvecStr, width);
+    genSort("bitvec", width);
 
     // Extract the `next` operation for each register (used to define the
     // transition). We need to check if next is a port to avoid nullptrs
@@ -568,7 +546,7 @@ public:
       inputLIDs[port.argNum] = lid;
 
       // We assume that the explicit name is always %reset for reset ports
-      if (iName == resetStr)
+      if (iName == "reset")
         resetLID = lid;
 
       // Increment the lid to keep it unique
@@ -622,43 +600,43 @@ public:
 
   // Visitors for the binary ops
   void visitComb(comb::AddOp op) {
-    visitBinOp(op, addStr, requireSort(op.getType()));
+    visitBinOp(op, "add", requireSort(op.getType()));
   }
   void visitComb(comb::SubOp op) {
-    visitBinOp(op, subStr, requireSort(op.getType()));
+    visitBinOp(op, "sub", requireSort(op.getType()));
   }
   void visitComb(comb::MulOp op) {
-    visitBinOp(op, mulStr, requireSort(op.getType()));
+    visitBinOp(op, "mul", requireSort(op.getType()));
   }
   void visitComb(comb::DivSOp op) {
-    visitBinOp(op, sdivStr, requireSort(op.getType()));
+    visitBinOp(op, "sdiv", requireSort(op.getType()));
   }
   void visitComb(comb::DivUOp op) {
-    visitBinOp(op, udivStr, requireSort(op.getType()));
+    visitBinOp(op, "udiv", requireSort(op.getType()));
   }
   void visitComb(comb::ModSOp op) {
-    visitBinOp(op, smodStr, requireSort(op.getType()));
+    visitBinOp(op, "smod", requireSort(op.getType()));
   }
   void visitComb(comb::ShlOp op) {
-    visitBinOp(op, sllStr, requireSort(op.getType()));
+    visitBinOp(op, "sll", requireSort(op.getType()));
   }
   void visitComb(comb::ShrUOp op) {
-    visitBinOp(op, srlStr, requireSort(op.getType()));
+    visitBinOp(op, "srl", requireSort(op.getType()));
   }
   void visitComb(comb::ShrSOp op) {
-    visitBinOp(op, sraStr, requireSort(op.getType()));
+    visitBinOp(op, "sra", requireSort(op.getType()));
   }
   void visitComb(comb::AndOp op) {
-    visitBinOp(op, andStr, requireSort(op.getType()));
+    visitBinOp(op, "and", requireSort(op.getType()));
   }
   void visitComb(comb::OrOp op) {
-    visitBinOp(op, orStr, requireSort(op.getType()));
+    visitBinOp(op, "or", requireSort(op.getType()));
   }
   void visitComb(comb::XorOp op) {
-    visitBinOp(op, xorStr, requireSort(op.getType()));
+    visitBinOp(op, "xor", requireSort(op.getType()));
   }
   void visitComb(comb::ConcatOp op) {
-    visitBinOp(op, concatStr, requireSort(op.getType()));
+    visitBinOp(op, "concat", requireSort(op.getType()));
   }
 
   // Extract ops translate to a slice operation in btor2 in a one-to-one manner
@@ -686,11 +664,11 @@ public:
     StringRef pred = stringifyICmpPredicate(op.getPredicate());
 
     // Check for special cases where hw doesn't align with btor syntax
-    if (pred == hwNeqStr)
-      pred = neqStr;
+    if (pred == "ne")
+      pred = "neq";
 
     // Width of result is always 1 for comparison
-    genSort(bitvecStr, 1);
+    genSort("bitvec", 1);
 
     // With the special cases out of the way, the emission is the same as that
     // of a binary op
@@ -725,7 +703,7 @@ public:
     Value expr = op.getExpression();
 
     // This sort is for assertion inversion and potential implies
-    genSort(bitvecStr, 1);
+    genSort("bitvec", 1);
 
     // Check for an overaching enable
     // In our case the sv.if operation will probably only be used when
@@ -738,10 +716,10 @@ public:
       genImplies(ifop, en, expr);
 
       // Generate the implies inversion
-      genUnaryOp(op, ifop, notStr, 1);
+      genUnaryOp(op, ifop, "not", 1);
     } else {
       // Generate the expression inversion
-      genUnaryOp(op, expr, notStr, 1);
+      genUnaryOp(op, expr, "not", 1);
     }
 
     // Genrate the bad btor2 intruction
