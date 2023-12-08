@@ -148,12 +148,12 @@ public:
     // Look for the original operation declaration
     // Make sure that wires are considered when looking for an lid
     Operation *defOp = getOpAlias(op);
-    if (opLIDMap.contains(defOp)) {
-      return opLIDMap[defOp];
-    }
+    auto &f = opLIDMap[defOp];
 
-    // Create a new lid for the op
-    return setOpLID(op);
+    // If the op isn't associated to an lid, assign it a new one
+    if (!f)
+      f = lid++;
+    return f;
   }
 
   // Associates the current lid to an operation
