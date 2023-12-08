@@ -141,6 +141,14 @@ def InstanceDeclOp : SystemCOp<"instance.decl", [
     bool isOptionalSymbol() { return false; }
 
     //===------------------------------------------------------------------===//
+    // InstanceGraphInstanceOpInterface Methods
+    //===------------------------------------------------------------------===//
+
+    StringAttr getReferencedModuleNameAttr() {
+      return getModuleNameAttr().getAttr();
+    }
+
+    //===------------------------------------------------------------------===//
     // PortList Methods
     //===------------------------------------------------------------------===//
     SmallVector<::circt::hw::PortInfo> getPortList();
