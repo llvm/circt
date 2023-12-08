@@ -27,6 +27,7 @@
 #include "circt/Dialect/SV/SVVisitors.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/Seq/SeqOps.h"
+#include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -58,7 +59,7 @@ private:
   // We need these in order to reference resluts as operands in btor2
 
   // Keeps track of the ids associated to each declared sort
-  // This is used in oder to guarantee that sorts are unique and to allow for
+  // This is used in order to guarantee that sorts are unique and to allow for
   // instructions to reference the given sorts (key: width, value: LID)
   DenseMap<size_t, size_t> sortToLIDMap;
   // Keeps track of {constant, width} -> LID mappings
@@ -87,6 +88,13 @@ private:
   // This is necessary, as we need to wait for the `next` operation to
   // have been converted to btor2 before we can emit the transition.
   SmallVector<Operation *> regOps;
+
+  // Used to perform a DFS search through the module to declare all operands
+  // before they are used
+  llvm::SmallMapVector<Operation *, OperandRange::iterator, 16> worklist;
+
+  // Keeps track of operations that have been declared
+  DenseSet<Operation *> handledOps;
 
   // Set of often reused strings in btor2 emission (to avoid typos and enable
   // auto-complete)
@@ -132,14 +140,11 @@ private:
   static constexpr int64_t noWidth = -1L;
 
   /// Field helper functions
-
+public:
   // Checks if an operation was declared
   // If so, its lid will be returned
-  // Otherwise -1 will be returned
-  size_t getOrCreateOpLID(Operation *op) {
-    if (op == nullptr)
-      return noLID;
-
+  // Otherwise a new lid will be assigned to the op
+  size_t getOpLID(Operation *op) {
     // Look for the original operation declaration
     // Make sure that wires are considered when looking for an lid
     Operation *defOp = getOpAlias(op);
@@ -147,35 +152,31 @@ private:
       return opLIDMap[defOp];
     }
 
-    // Create a new entry with the current LID
-    // if the op was not yet registered
-    opLIDMap[defOp] = lid;
-
-    return opLIDMap.at(defOp);
+    // Create a new lid for the op
+    return setOpLID(op);
   }
 
-  // Forces a new LID to be associated to the given op
-  size_t updateOpLID(Operation *op) {
-    if (op == nullptr)
-      return noLID;
-
-    opLIDMap[op] = lid;
-    return lid;
+  // Associates the current lid to an operation
+  // The LID is then incremented to maintain uniqueness
+  size_t setOpLID(Operation *op) {
+    size_t oplid = lid++;
+    opLIDMap[op] = oplid;
+    return oplid;
   }
 
   // Checks if an operation was declared
   // If so, its lid will be returned
   // Otherwise -1 will be returned
-  size_t getOrCreateOpLID(Value op) {
+  size_t getOpLID(Value value) {
     // Check for an operation alias
-    Operation *defOp = getOpAlias(op.getDefiningOp());
+    Operation *defOp = getOpAlias(value.getDefiningOp());
 
     if (auto it = opLIDMap.find(defOp); it != opLIDMap.end())
       return it->second;
 
     // Check for special case where op is actually a port
     // To do so, we start by checking if our operation is a block argument
-    if (BlockArgument barg = dyn_cast<BlockArgument>(op)) {
+    if (BlockArgument barg = dyn_cast<BlockArgument>(value)) {
       // Extract the block argument index and use that to get the line number
       size_t argIdx = barg.getArgNumber();
 
@@ -184,13 +185,11 @@ private:
         return it->second;
     }
 
-    // Create a new entry with the current LID
-    // if the op was not yet registered
-    opLIDMap[defOp] = lid;
-
-    return opLIDMap.at(defOp);
+    // Return -1 if no LID was found
+    return noLID;
   }
 
+private:
   // Checks if an operation has an alias. This is the case for wires
   // If so, the original operation is returned
   // Otherwise the argument is returned as it is the original op
@@ -216,9 +215,17 @@ private:
     return noLID;
   }
 
-  // Checks if a constant of a given size has been declared
-  // If so, its lid will be returned
-  // Otherwise -1 will be returned
+  // Associate the sort with a new lid
+  size_t setSortLID(size_t w) {
+    size_t sortlid = lid;
+    // Add the width to the declared sorts along with the associated line id
+    sortToLIDMap[w] = lid++;
+    return sortlid;
+  }
+
+  // Checks if a constant of a given size has been declared.
+  // If so, its lid will be returned.
+  // Otherwise -1 will be returned.
   size_t getConstLID(int64_t val, size_t w) {
     if (auto it = constToLIDMap.find({val, w}); it != constToLIDMap.end())
       return it->second;
@@ -227,95 +234,105 @@ private:
     return noLID;
   }
 
+  // Associates a constant declaration to a new lid
+  size_t setConstLID(int64_t val, size_t w) {
+    size_t constlid = lid;
+    // Keep track of this value in a constant declaration tracker
+    constToLIDMap[{0, w}] = lid++;
+    return constlid;
+  }
+
   /// String generation helper functions
 
   // Generates a sort declaration instruction given a type (bitvecStr or array)
-  // and a width
+  // and a width.
   void genSort(StringRef type, size_t width) {
     // Check that the sort wasn't already declared
     if (getSortLID(width) != noLID) {
       return; // If it has already been declared then return an empty string
     }
 
-    // Add the width to the declared sorts along with the associated line id
-    sortToLIDMap[width] = lid;
+    size_t sortlid = setSortLID(width);
 
     // Build and return a sort declaration
-    os << lid++ << wsStr << sortStr << wsStr << type << wsStr << width << nlStr;
+    os << sortlid << wsStr << sortStr << wsStr << type << wsStr << width
+       << nlStr;
   }
 
-  // Generates an input declaration given a sort lid and a name
-  void genInput(size_t width, StringRef name) {
+  // Generates an input declaration given a sort lid and a name.
+  void genInput(size_t inlid, size_t width, StringRef name) {
     // Retrieve the lid associated with the sort (sid)
     size_t sid = sortToLIDMap.at(width);
 
     // Generate input declaration
-    os << lid++ << wsStr << inputStr << wsStr << sid << wsStr << name << nlStr;
+    os << inlid << wsStr << inputStr << wsStr << sid << wsStr << name << nlStr;
   }
 
-  // Generates a constant declaration given a value, a width and a name
+  // Generates a constant declaration given a value, a width and a name.
   void genConst(int64_t value, size_t width, Operation *op) {
     // For now we're going to assume that the name isn't taken, given that hw is
     // already in SSA form
-    getOrCreateOpLID(op);
+    size_t opLID = getOpLID(op);
 
     // Retrieve the lid associated with the sort (sid)
     size_t sid = sortToLIDMap.at(width);
 
-    os << lid++ << wsStr << constdStr << wsStr << sid << wsStr << value
+    os << opLID << wsStr << constdStr << wsStr << sid << wsStr << value
        << nlStr;
   }
 
   // Generates a zero constant expression
-  void genZero(size_t width) {
+  size_t genZero(size_t width) {
     // Check if the constant has been created yet
-    if (getConstLID(0, width) != noLID)
-      return;
+    size_t zlid = getConstLID(0, width);
+    if (zlid != noLID)
+      return zlid;
 
     // Retrieve the lid associated with the sort (sid)
     size_t sid = sortToLIDMap.at(width);
 
-    // Keep track of this value in a constant declaration tracker
-    constToLIDMap[{0, width}] = lid;
+    // Associate an lid to the new constant
+    size_t constlid = setConstLID(0, width);
 
     // Build and return the zero btor instruction
-    os << lid++ << wsStr << zeroStr << wsStr << sid << nlStr;
+    os << constlid << wsStr << zeroStr << wsStr << sid << nlStr;
+    return constlid;
   }
 
   // Generates a binary operation instruction given an op name, two operands and
-  // a result width
+  // a result width.
   void genBinOp(StringRef inst, Operation *binop, Value op1, Value op2,
                 size_t width) {
     // Set the LID for this operation
-    getOrCreateOpLID(binop);
+    size_t opLID = getOpLID(binop);
 
     // Find the sort's lid
     size_t sid = sortToLIDMap.at(width);
 
     // Assuming that the operands were already emitted
     // Find the LIDs associated to the operands
-    size_t op1LID = getOrCreateOpLID(op1);
-    size_t op2LID = getOrCreateOpLID(op2);
+    size_t op1LID = getOpLID(op1);
+    size_t op2LID = getOpLID(op2);
 
     // Build and return the string
-    os << lid++ << wsStr << inst << wsStr << sid << wsStr << op1LID << wsStr
+    os << opLID << wsStr << inst << wsStr << sid << wsStr << op1LID << wsStr
        << op2LID << nlStr;
   }
 
   // Generates a slice instruction given an operand, the lowbit, and the width
   void genSlice(Operation *srcop, Value op0, size_t lowbit, int64_t width) {
     // Assign a LID to this operation
-    getOrCreateOpLID(srcop);
+    size_t opLID = getOpLID(srcop);
 
     // Find the sort's associated lid in order to use it in the instruction
     size_t sid = sortToLIDMap.at(width);
 
     // Assuming that the operand has already been emitted
     // Find the LID associated to the operand
-    size_t op0LID = getOrCreateOpLID(op0);
+    size_t op0LID = getOpLID(op0);
 
     // Build and return the slice instruction
-    os << lid++ << wsStr << sliceStr << wsStr << sid << wsStr << op0LID << wsStr
+    os << opLID << wsStr << sliceStr << wsStr << sid << wsStr << op0LID << wsStr
        << (width - 1) << wsStr << lowbit << nlStr;
   }
 
@@ -323,16 +340,16 @@ private:
   void genUnaryOp(Operation *srcop, Operation *op0, StringRef inst,
                   size_t width) {
     // Register the source operation with the current line id
-    getOrCreateOpLID(srcop);
+    size_t opLID = getOpLID(srcop);
 
     // Retrieve the lid associated with the sort (sid)
     size_t sid = sortToLIDMap.at(width);
 
     // Assuming that the operand has already been emitted
     // Find the LID associated to the operand
-    size_t op0LID = getOrCreateOpLID(op0);
+    size_t op0LID = getOpLID(op0);
 
-    os << lid++ << wsStr << inst << wsStr << sid << wsStr << op0LID << nlStr;
+    os << opLID << wsStr << inst << wsStr << sid << wsStr << op0LID << nlStr;
   }
 
   // Generates a constant declaration given a value, a width and a name
@@ -345,9 +362,10 @@ private:
   // point
   void genBad(Operation *assertop) {
     // Start by finding the expression lid
-    size_t assertLID = getOrCreateOpLID(assertop);
+    size_t assertLID = getOpLID(assertop);
 
     // Build and return the btor2 string
+    // Also update the lid as this instruction is not associated to an mlir op
     os << lid++ << wsStr << badStr << wsStr << assertLID << nlStr;
   }
 
@@ -355,7 +373,7 @@ private:
   // operation
   void genConstraint(Value expr) {
     // Start by finding the expression lid
-    size_t exprLID = getOrCreateOpLID(expr);
+    size_t exprLID = getOpLID(expr);
 
     genConstraint(exprLID);
   }
@@ -364,6 +382,7 @@ private:
   // operation
   void genConstraint(size_t exprLID) {
     // Build and return the btor2 string
+    // Also update the lid as this instruction is not associated to an mlir op
     os << lid++ << wsStr << constraintStr << wsStr << exprLID << nlStr;
   }
 
@@ -371,9 +390,9 @@ private:
   // and a res width
   void genIte(Operation *srcop, Value cond, Value t, Value f, int64_t width) {
     // Retrieve the operand lids, assuming they were emitted
-    size_t condLID = getOrCreateOpLID(cond);
-    size_t tLID = getOrCreateOpLID(t);
-    size_t fLID = getOrCreateOpLID(f);
+    size_t condLID = getOpLID(cond);
+    size_t tLID = getOpLID(t);
+    size_t fLID = getOpLID(f);
 
     genIte(srcop, condLID, tLID, fLID, width);
   }
@@ -383,21 +402,21 @@ private:
   void genIte(Operation *srcop, size_t condLID, size_t tLID, size_t fLID,
               int64_t width) {
     // Register the source operation with the current line id
-    updateOpLID(srcop);
+    size_t opLID = getOpLID(srcop);
 
     // Retrieve the lid associated with the sort (sid)
     size_t sid = sortToLIDMap.at(width);
 
     // Build and return the ite instruction
-    os << lid++ << wsStr << iteStr << wsStr << sid << wsStr << condLID << wsStr
+    os << opLID << wsStr << iteStr << wsStr << sid << wsStr << condLID << wsStr
        << tLID << wsStr << fLID << nlStr;
   }
 
   // Generate a logical implication given a lhs and a rhs
   void genImplies(Operation *srcop, Value lhs, Value rhs) {
     // Retrieve LIDs for the lhs and rhs
-    size_t lhsLID = getOrCreateOpLID(lhs);
-    size_t rhsLID = getOrCreateOpLID(rhs);
+    size_t lhsLID = getOpLID(lhs);
+    size_t rhsLID = getOpLID(rhs);
 
     genImplies(srcop, lhsLID, rhsLID);
   }
@@ -405,26 +424,26 @@ private:
   // Generate a logical implication given a lhs and a rhs
   void genImplies(Operation *srcop, size_t lhsLID, size_t rhsLID) {
     // Register the source operation with the current line id
-    getOrCreateOpLID(srcop);
+    size_t opLID = getOpLID(srcop);
 
     // Retrieve the lid associated with the sort (sid)
     size_t sid = sortToLIDMap.at(1);
 
     // Build and emit the implies operation
-    os << lid++ << wsStr << impliesStr << wsStr << sid << wsStr << lhsLID
+    os << opLID << wsStr << impliesStr << wsStr << sid << wsStr << lhsLID
        << wsStr << rhsLID << nlStr;
   }
 
   // Generates a state instruction given a width and a name
   void genState(Operation *srcop, int64_t width, StringRef name) {
     // Register the source operation with the current line id
-    getOrCreateOpLID(srcop);
+    size_t opLID = getOpLID(srcop);
 
     // Retrieve the lid associated with the sort (sid)
     size_t sid = sortToLIDMap.at(width);
 
     // Build and return the state instruction
-    os << lid++ << wsStr << stateStr << wsStr << sid << wsStr << name << nlStr;
+    os << opLID << wsStr << stateStr << wsStr << sid << wsStr << name << nlStr;
   }
 
   // Generates a next instruction, given a width, a state LID, and a next value
@@ -434,10 +453,11 @@ private:
     size_t sid = sortToLIDMap.at(width);
 
     // Retrieve the LIDs associated to reg and next
-    size_t regLID = getOrCreateOpLID(reg);
-    size_t nextLID = getOrCreateOpLID(next);
+    size_t regLID = getOpLID(reg);
+    size_t nextLID = getOpLID(next);
 
     // Build and return the next instruction
+    // Also update the lid as this instruction is not associated to an mlir op
     os << lid++ << wsStr << nextStr << wsStr << sid << wsStr << regLID << wsStr
        << nextLID << nlStr;
   }
@@ -459,7 +479,7 @@ private:
     return width;
   }
 
-  // Generates the transitions requires to finilize the register to state
+  // Generates the transitions required to finalize the register to state
   // transition system conversion
   void finilizeRegVisit(Operation *op) {
     // Check the register type (done to support non-firrtl registers as well)
@@ -471,8 +491,6 @@ private:
     // We assume for now that the reset value is always 0
     size_t width = hw::getBitWidth(reg.getType());
     genSort(bitvecStr, width);
-
-    size_t resetValLID = getOrCreateOpLID(reg.getResetValue().getDefiningOp());
 
     // Extract the `next` operation for each register (used to define the
     // transition). We need to check if next is a port to avoid nullptrs
@@ -494,16 +512,27 @@ private:
         nextLID = inputLIDs[argIdx];
       }
     } else {
-      nextLID = getOrCreateOpLID(next);
+      nextLID = getOpLID(next);
     }
 
     // Sanity check: at this point the next operation should have had it's btor2
     // counterpart emitted if not then something terrible must have happened.
     assert(nextLID != noLID);
 
-    // Generate the ite for the register update reset condition
-    // i.e. reg <= reset ? 0 : next
-    genIte(next.getDefiningOp(), resetLID, resetValLID, nextLID, width);
+    // Check if the register has a reset
+    if (resetLID != noLID) {
+      size_t resetValLID = noLID;
+
+      // Check for a reset value, if none exists assume it's zero
+      if (auto resval = reg.getResetValue())
+        resetValLID = getOpLID(resval.getDefiningOp());
+      else
+        resetValLID = genZero(width);
+
+      // Generate the ite for the register update reset condition
+      // i.e. reg <= reset ? 0 : next
+      genIte(next.getDefiningOp(), resetLID, resetValLID, nextLID, width);
+    }
 
     // Finally generate the next statement
     genNext(next, reg, width);
@@ -528,6 +557,9 @@ public:
       // translation into btor2
       int64_t w = requireSort(port.type);
 
+      // Save lid for later
+      size_t inlid = lid;
+
       // Record the defining operation's line ID (the module itself in the case
       // of ports)
       inputLIDs[port.argNum] = lid;
@@ -536,7 +568,10 @@ public:
       if (iName == resetStr)
         resetLID = lid;
 
-      genInput(w, iName);
+      // Increment the lid to keep it unique
+      lid++;
+
+      genInput(inlid, w, iName);
     }
   }
 
@@ -787,15 +822,65 @@ void ConvertHWToBTOR2Pass::runOnOperation() {
       visit(port);
     }
 
+    // Previsit all registers in the module in order to avoid dependency cylcles
+    module.walk([&](Operation *op) {
+      if (auto reg = dyn_cast<seq::FirRegOp>(op)) {
+        visit(reg);
+        handledOps.insert(op);
+      }
+    });
+
     // Visit all of the operations in our module
-    module.walk([&](Operation *op) { dispatchTypeOpVisitor(op); });
+    module.walk([&](Operation *op) {
+      // Check: instances are not (yet) supported
+      if (isa<hw::InstanceOp>(op)) {
+        op->emitOpError("not supported in BTOR2 conversion");
+        return;
+      }
+
+      // Don't process ops that have already been emitted
+      if (handledOps.contains(op))
+        return;
+
+      // Fill in our worklist
+      worklist.insert({op, op->operand_begin()});
+
+      // Process the elements in our worklist
+      while (!worklist.empty()) {
+        auto &[op, operandIt] = worklist.back();
+        if (operandIt == op->operand_end()) {
+          // All of the operands have been emitted, it is safe to emit our op
+          dispatchTypeOpVisitor(op);
+
+          // Record that our op has been emitted
+          handledOps.insert(op);
+          worklist.pop_back();
+          continue;
+        }
+
+        // Send the operands of our op to the worklist in case they are still
+        // un-emitted
+        Value operand = *(operandIt++);
+        auto *defOp = operand.getDefiningOp();
+
+        // Make sure that we don't emit the same operand twice
+        if (!defOp || handledOps.contains(defOp))
+          continue;
+
+        // This is triggered if our operand is already in the worklist and
+        // wasn't handled
+        if (!worklist.insert({defOp, defOp->operand_begin()}).second) {
+          op->emitError("dependency cycle");
+          return;
+        }
+      }
+    });
 
     // Iterate through the registers and generate the `next` instructions
     for (size_t i = 0; i < regOps.size(); ++i) {
       finilizeRegVisit(regOps[i]);
     }
   });
-
   // Clear data structures to allow for pass reuse
   sortToLIDMap.clear();
   constToLIDMap.clear();
@@ -803,6 +888,8 @@ void ConvertHWToBTOR2Pass::runOnOperation() {
   opAliasMap.clear();
   inputLIDs.clear();
   regOps.clear();
+  handledOps.clear();
+  worklist.clear();
 }
 
 // Constructor with a custom ostream
