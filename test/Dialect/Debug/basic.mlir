@@ -19,6 +19,13 @@ func.func @Foo(%arg0: i32, %arg1: index, %arg2: f64) {
   %1 = dbg.array [%arg1, %arg1] : index
   dbg.variable "megabar", %1 : !dbg.array
 
+  // CHECK-NEXT: [[TMP:%.+]] = dbg.scope "inlined", "Bar"
+  // CHECK-NEXT: dbg.variable {{.+}} scope [[TMP]]
+  // CHECK-NEXT: dbg.scope {{.+}} scope [[TMP]]
+  %2 = dbg.scope "inlined", "Bar"
+  dbg.variable "x", %arg0 scope %2 : i32
+  dbg.scope "y", "Baz" scope %2
+
   return
 }
 
