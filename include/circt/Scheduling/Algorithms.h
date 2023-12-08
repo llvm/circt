@@ -63,10 +63,10 @@ LogicalResult scheduleSimplex(ChainingProblem &prob, Operation *lastOp,
                               float cycleTime);
 
 /// Solve the resource-free cyclic, chaining-enabled problem using a linear
-/// programming-based and a handwritter implementation of the simplex algorithm.
+/// programming-based and a handwritten implementation of the simplex algorithm.
 /// This approach is an hybrid approach of the ChainingProblem simplex scheduler
 /// and the CyclicProblem simplex scheduler. The objectives include determining
-/// the smallest feasible initiation interval, and to minimie the start time of
+/// the smallest feasible initiation interval, and to minimize the start time of
 /// a given \p lastOp. Fails if the dependence graph contains cycles that does
 /// not include at least one edge with a non-zero distance, individual operator
 /// types have delays larger than \p cycleTime, or \p prob does not include
