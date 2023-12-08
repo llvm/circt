@@ -114,8 +114,21 @@ def InlineModules : Pass<"arc-inline-modules", "mlir::ModuleOp"> {
 def InferStateProperties : Pass<"arc-infer-state-properties",
                                 "mlir::ModuleOp"> {
   let summary = "Add resets and enables explicitly to the state operations";
-  let constructor = "circt::arc::createInferStatePropertiesPass()";
   let dependentDialects = ["circt::hw::HWDialect", "circt::comb::CombDialect"];
+  let options = [
+    Option<"detectEnables", "enables", "bool", "true", "Infer enable signals">,
+    Option<"detectResets", "resets", "bool", "true", "Infer reset signals">,
+  ];
+  let statistics = [
+    Statistic<"addedEnables", "added-enables",
+      "Enables added explicitly to a StateOp">,
+    Statistic<"addedResets", "added-resets",
+      "Resets added explicitly to a StateOp">,
+    Statistic<"missedEnables", "missed-enables",
+      "Detected enables that could not be added explicitly to a StateOp">,
+    Statistic<"missedResets", "missed-resets",
+      "Detected resets that could not be added explicitly to a StateOp">,
+  ];
 }
 
 def IsolateClocks : Pass<"arc-isolate-clocks", "mlir::ModuleOp"> {

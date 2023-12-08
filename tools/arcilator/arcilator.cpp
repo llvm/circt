@@ -108,6 +108,16 @@ static cl::opt<bool> shouldInline("inline", cl::desc("Inline arcs"),
 static cl::opt<bool> shouldDedup("dedup", cl::desc("Deduplicate arcs"),
                                  cl::init(true), cl::cat(mainCategory));
 
+static cl::opt<bool> shouldDetectEnables(
+    "detect-enables",
+    cl::desc("Infer enable conditions for states to avoid computation"),
+    cl::init(true), cl::cat(mainCategory));
+
+static cl::opt<bool> shouldDetectResets(
+    "detect-resets",
+    cl::desc("Infer reset conditions for states to avoid computation"),
+    cl::init(false), cl::cat(mainCategory));
+
 static cl::opt<bool>
     shouldMakeLUTs("lookup-tables",
                    cl::desc("Optimize arcs into lookup tables"), cl::init(true),
@@ -236,6 +246,12 @@ static void populatePipeline(PassManager &pm) {
   pm.addPass(arc::createSplitLoopsPass());
   if (shouldDedup)
     pm.addPass(arc::createDedupPass());
+  {
+    arc::InferStatePropertiesOptions opts;
+    opts.detectEnables = shouldDetectEnables;
+    opts.detectResets = shouldDetectResets;
+    pm.addPass(arc::createInferStateProperties(opts));
+  }
   pm.addPass(createCSEPass());
   pm.addPass(arc::createArcCanonicalizerPass());
   if (shouldMakeLUTs)
@@ -243,12 +259,6 @@ static void populatePipeline(PassManager &pm) {
   pm.addPass(createCSEPass());
   pm.addPass(arc::createArcCanonicalizerPass());
 
-  // TODO: the following is commented out because the backend does not support
-  // StateOp resets yet.
-  // pm.addPass(arc::createInferStatePropertiesPass());
-  // InferStateProperties does not remove all ops it bypasses and inserts a lot
-  // of constant ops that should be uniqued
-  // pm.addPass(createSimpleCanonicalizerPass());
   // Now some arguments may be unused because reset conditions are not passed as
   // inputs anymore pm.addPass(arc::createRemoveUnusedArcArgumentsPass());
   // Because we replace a lot of StateOp inputs with constants in the enable
