@@ -254,4 +254,56 @@ def MemoryDebugPortOp : CHIRRTLOp<"debugport", [InferTypeOpInterface,
                                           SmallVectorImpl<Type> &results);
   }];
 }
+
+def TmpConnectOp : CHIRRTLOp<"connect", []> {
+  let summary = "Connect two signals";
+  let description = [{
+    Connect Operation:
+    ```
+      firrtl.connect %dest, %src : t1, t2
+    ```
+    }];
+
+  let arguments = (ins ConnectableType:$dest, ConnectableType:$src);
+  let results = (outs);
+
+  let assemblyFormat =
+    "$dest `,` $src  attr-dict `:` qualified(type($dest)) `,` qualified(type($src))";
+
+//  let hasVerifier = 1;
+//  let hasCanonicalizer = true;
+}
+
+def WireOp : CHIRRTLOp<"wire", [
+  ParentOneOf<[
+      "firrtl::FModuleOp", "firrtl::LayerBlockOp",
+      "firrtl::WhenOp", "firrtl::MatchOp"
+      ]>, 
+  HasCustomSSAName,
+  FNamableOp, Forceable]> {
+  let summary = "Define a new wire";
+  let description = [{
+    Declare a new wire:
+    ```
+      %name = firrtl.wire : t1
+    ```
+    }];
+
+  let arguments = (ins StrAttr:$name, NameKindAttr:$nameKind,
+                       AnnotationArrayAttr:$annotations);
+  let results = (outs AnyType:$result, Optional<RefType>:$ref);
+
+//  let hasCanonicalizer = true;
+
+  let assemblyFormat = [{
+    `` custom<NameKind>($nameKind)
+    `` custom<FIRRTLImplicitSSAName>(attr-dict) `:`
+    qualified(type($result)) (`,` qualified(type($ref))^)?
+  }];
+
+  let extraClassDeclaration = [{
+    bool getForceable();
+  }];
+}
+
 #endif // CHIRRTL_TD

@@ -325,7 +325,7 @@ static LogicalResult applyAttributeAnnotation(const AnnoPathValue &target,
   if (!target.isLocal())
     return error() << "must be local";
 
-  if (!isa<FModuleOp, WireOp, NodeOp, RegOp, RegResetOp>(op))
+  if (!isa<FModuleOp, chirrtl::WireOp, firrtl::WireOp, NodeOp, RegOp, RegResetOp>(op))
     return error()
            << "unhandled operation. The target must be a module, wire, node or "
               "register";
@@ -706,7 +706,7 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
     }
 
     // If the sink is a wire with no users, then convert this to a node.
-    auto destOp = dyn_cast_or_null<WireOp>(dest.getDefiningOp());
+    auto destOp = dyn_cast_or_null<chirrtl::WireOp>(dest.getDefiningOp());
     if (destOp && dest.getUses().empty()) {
       builder.create<NodeOp>(src, destOp.getName())
           .setAnnotationsAttr(destOp.getAnnotations());

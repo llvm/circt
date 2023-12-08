@@ -13,8 +13,10 @@
 #include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Support/CustomDirectiveImpl.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/OpDefinition.h"
@@ -300,6 +302,71 @@ void SeqMemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 std::optional<size_t> SeqMemOp::getTargetResultIndex() {
   // Inner symbols on seq memory operations target the op not any result.
   return std::nullopt;
+}
+
+//===----------------------------------------------------------------------===//
+// WireOp
+//===----------------------------------------------------------------------===//
+
+// This is from FIRRTLOps.cpp, but I want to keep them static
+static void printElideAnnotations(OpAsmPrinter &p, Operation *op,
+                                  DictionaryAttr attr,
+                                  ArrayRef<StringRef> extraElides = {}) {
+  SmallVector<StringRef> elidedAttrs(extraElides.begin(), extraElides.end());
+  // Elide "annotations" if it is empty.
+  if (op->getAttrOfType<ArrayAttr>("annotations").empty())
+    elidedAttrs.push_back("annotations");
+  // Elide "nameKind".
+  elidedAttrs.push_back("nameKind");
+
+  p.printOptionalAttrDict(op->getAttrs(), elidedAttrs);
+}
+
+// This is from FIRRTLOps.cpp, but I want to keep them static
+static void printFIRRTLImplicitSSAName(OpAsmPrinter &p, Operation *op,
+                                       DictionaryAttr attrs) {
+  SmallVector<StringRef, 4> elides;
+  elides.push_back(hw::InnerSymbolTable::getInnerSymbolAttrName());
+  elides.push_back(Forceable::getForceableAttrName());
+  elideImplicitSSAName(p, op, attrs, elides);
+  printElideAnnotations(p, op, attrs, elides);
+}
+
+// This is from FIRRTLOps.cpp, but I want to keep them static
+static ParseResult parseElideAnnotations(OpAsmParser &parser,
+                                         NamedAttrList &resultAttrs) {
+  auto result = parser.parseOptionalAttrDict(resultAttrs);
+  if (!resultAttrs.get("annotations"))
+    resultAttrs.append("annotations", parser.getBuilder().getArrayAttr({}));
+
+  return result;
+}
+
+// This is from FIRRTLOps.cpp, but I want to keep them static
+static ParseResult parseFIRRTLImplicitSSAName(OpAsmParser &parser,
+                                              NamedAttrList &resultAttrs) {
+  if (parseElideAnnotations(parser, resultAttrs))
+    return failure();
+  inferImplicitSSAName(parser, resultAttrs);
+  return success();
+}
+
+// This is from FIRRTLOps.cpp, but I want to keep them static
+static void forceableAsmResultNames(Forceable op, StringRef name,
+                                    OpAsmSetValueNameFn setNameFn) {
+  if (name.empty())
+    return;
+  setNameFn(op.getDataRaw(), name);
+  if (op.isForceable())
+    setNameFn(op.getDataRef(), (name + "_ref").str());
+}
+
+bool chirrtl::WireOp::getForceable() {
+  return getNumResults() == 2;
+}
+
+void chirrtl::WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  return forceableAsmResultNames(*this, getName(), setNameFn);
 }
 
 //===----------------------------------------------------------------------===//

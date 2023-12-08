@@ -393,7 +393,7 @@ void LowerCHIRRTLPass::replaceMem(Operation *cmem, StringRef name,
     // If the address value is not something with a "name", then we do not use
     // enable inference.
     useEnableInference &=
-        !addressOp || isa<WireOp, NodeOp, RegOp, RegResetOp>(addressOp);
+        !addressOp || isa<chirrtl::WireOp, firrtl::WireOp, NodeOp, RegOp, RegResetOp>(addressOp);
 
     // Most memory ports just tie their enable line to one.
     if (!useEnableInference)
@@ -447,7 +447,7 @@ void LowerCHIRRTLPass::replaceMem(Operation *cmem, StringRef name,
         // TODO: SFC does not infer any enable when using a module port as the
         // address.  This seems like something that should be fixed sooner
         // rather than later.
-      } else if (isa<WireOp, RegResetOp, RegOp>(indexOp)) {
+      } else if (isa<chirrtl::WireOp, firrtl::WireOp, RegResetOp, RegOp>(indexOp)) {
         // If the address is a reference, then we set the enable whenever the
         // address is driven.
 

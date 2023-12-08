@@ -63,7 +63,8 @@ struct Emitter {
   // Statement emission
   void emitStatementsInBlock(Block &block);
   void emitStatement(WhenOp op);
-  void emitStatement(WireOp op);
+  void emitStatement(chirrtl::WireOp op);
+  void emitStatement(firrtl::WireOp op);
   void emitStatement(RegOp op);
   void emitStatement(RegResetOp op);
   void emitStatement(NodeOp op);
@@ -544,7 +545,7 @@ void Emitter::emitStatementsInBlock(Block &block) {
     if (isEmittedInline(&bodyOp))
       continue;
     TypeSwitch<Operation *>(&bodyOp)
-        .Case<WhenOp, WireOp, RegOp, RegResetOp, NodeOp, StopOp, SkipOp,
+        .Case<WhenOp, chirrtl::WireOp, firrtl::WireOp, RegOp, RegResetOp, NodeOp, StopOp, SkipOp,
               PrintFOp, AssertOp, AssumeOp, CoverOp, ConnectOp, StrictConnectOp,
               PropAssignOp, InstanceOp, AttachOp, MemOp, InvalidValueOp,
               SeqMemOp, CombMemOp, MemoryPortOp, MemoryDebugPortOp,
@@ -588,7 +589,18 @@ void Emitter::emitStatement(WhenOp op) {
   ps.scopedBox(PP::bbox2, [&]() { emitStatementsInBlock(elseBlock); });
 }
 
-void Emitter::emitStatement(WireOp op) {
+void Emitter::emitStatement(firrtl::WireOp op) {
+  auto legalName = legalize(op.getNameAttr());
+  addForceable(op, legalName);
+  startStatement();
+  ps.scopedBox(PP::ibox2, [&]() {
+    ps << "wire " << PPExtString(legalName);
+    emitTypeWithColon(op.getResult().getType());
+  });
+  emitLocationAndNewLine(op);
+}
+
+void Emitter::emitStatement(chirrtl::WireOp op) {
   auto legalName = legalize(op.getNameAttr());
   addForceable(op, legalName);
   startStatement();

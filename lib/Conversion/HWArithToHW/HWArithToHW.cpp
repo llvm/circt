@@ -265,13 +265,13 @@ static comb::ICmpPredicate lowerPredicate(ICmpPredicate pred, bool isSigned) {
     return comb::ICmpPredicate::eq;
   case ICmpPredicate::ne:
     return comb::ICmpPredicate::ne;
-  case ICmpPredicate::lt:                                                       \
-    return isSigned ? comb::ICmpPredicate::sltx : comb::ICmpPredicate::ult
-  case ICmpPredicate::ge:                                                       \
+  case ICmpPredicate::lt:                                                       
+    return isSigned ? comb::ICmpPredicate::slt : comb::ICmpPredicate::ult
+  case ICmpPredicate::ge:                                                       
     return isSigned ? comb::ICmpPredicate::sge : comb::ICmpPredicate::uge
-  case ICmpPredicate::le:                                                       \
+  case ICmpPredicate::le:                                                       
     return isSigned ? comb::ICmpPredicate::sle : comb::ICmpPredicate::ule
-  case ICmpPredicate::gt:                                                       \
+  case ICmpPredicate::gt:                                                       
     return isSigned ? comb::ICmpPredicate::sgt : comb::ICmpPredicate::ugt
   }
 

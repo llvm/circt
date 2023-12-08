@@ -12,7 +12,6 @@
 
 #include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
-#include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
@@ -37,7 +36,6 @@
 
 using namespace circt;
 using namespace firrtl;
-using namespace chirrtl;
 
 using hw::InnerRefAttr;
 using llvm::BitVector;
@@ -652,7 +650,7 @@ bool Inliner::rename(StringRef prefix, Operation *op, InliningLevel &il) {
   // Add a prefix to things that has a "name" attribute.  We don't prefix
   // memories since it will affect the name of the generated module.
   // TODO: We should find a way to prefix the instance of a memory module.
-  if (!isa<MemOp, SeqMemOp, CombMemOp, MemoryPortOp>(op)) {
+  if (!isa<MemOp>(op)) {
     if (auto nameAttr = op->getAttrOfType<StringAttr>("name"))
       op->setAttr("name", StringAttr::get(op->getContext(),
                                           (prefix + nameAttr.getValue())));

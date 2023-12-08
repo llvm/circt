@@ -24,6 +24,15 @@
 #include "mlir/Interfaces/InferTypeOpInterface.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
+namespace circt {
+    namespace firrtl {
+        class LayerBlockOp;
+        class WhenOp;
+        class MatchOp;
+        
+    }
+}
+
 // Pull in the dialect definition.
 #include "circt/Dialect/FIRRTL/CHIRRTLDialect.h.inc"
 

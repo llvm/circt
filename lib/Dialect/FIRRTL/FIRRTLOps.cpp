@@ -2769,11 +2769,11 @@ void RegResetOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   return forceableAsmResultNames(*this, getName(), setNameFn);
 }
 
-void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+void firrtl::WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   return forceableAsmResultNames(*this, getName(), setNameFn);
 }
 
-std::optional<size_t> WireOp::getTargetResultIndex() { return 0; }
+std::optional<size_t> firrtl::WireOp::getTargetResultIndex() { return 0; }
 
 void ObjectOp::build(OpBuilder &builder, OperationState &state, ClassLike klass,
                      StringRef name) {
@@ -3008,7 +3008,7 @@ static LogicalResult checkConnectConditionality(FConnectLike connect) {
   return success();
 }
 
-LogicalResult ConnectOp::verify() {
+LogicalResult firrtl::ConnectOp::verify() {
   auto dstType = getDest().getType();
   auto srcType = getSrc().getType();
   auto dstBaseType = type_dyn_cast<FIRRTLBaseType>(dstType);

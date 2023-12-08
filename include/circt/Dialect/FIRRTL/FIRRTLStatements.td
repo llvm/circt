@@ -55,6 +55,7 @@ def ConnectOp : FIRRTLOp<"connect", [FConnectLike]> {
 def SameAnonTypeOperands: PredOpTrait<
         "operands must be structurally equivalent",
         CPred<"areAnonymousTypesEquivalent(getOperand(0).getType(), getOperand(1).getType())">>;
+
 def StrictConnectOp : FIRRTLOp<"strictconnect", [FConnectLike,
                       SameAnonTypeOperands]> {
   let summary = "Connect two signals";

@@ -3110,23 +3110,22 @@ ParseResult FIRStmtParser::parseRWProbeStaticRefExp(FieldRef &refResult,
 
         // Either entire instance result is forceable + bounce wire, or reject.
         // (even if rwprobe is of a portion of the port)
-        bool forceable = static_cast<bool>(
-            firrtl::detail::getForceableResultType(true, type));
-        if (!forceable)
+        Type forceableType = 
+            firrtl::detail::getForceableResultType(true, type);
+        if (!forceableType)
           return emitError(loc, "unable to force instance result of type ")
                  << type;
 
         // Create bounce wire for the instance result.
         auto annotations = getConstants().emptyArrayAttr;
-        StringAttr sym = {};
         SmallString<64> name;
         (id + "_" + fieldName + "_bounce").toVector(name);
         locationProcessor.setLoc(loc);
         OpBuilder::InsertionGuard guard(builder);
         builder.setInsertionPoint(defining);
         auto bounce =
-            builder.create<WireOp>(type, name, NameKindEnum::InterestingName,
-                                   annotations, sym, /*forceable=*/true);
+            builder.create<chirrtl::WireOp>(type, forceableType, name, NameKindEnum::InterestingName,
+                                   annotations);
         auto bounceVal = bounce.getData();
 
         // Replace instance result with reads from bounce wire.
@@ -4096,16 +4095,19 @@ ParseResult FIRStmtParser::parseWire() {
   locationProcessor.setLoc(startTok.getLoc());
 
   auto annotations = getConstants().emptyArrayAttr;
-  StringAttr sym = {};
 
-  bool forceable = !!firrtl::detail::getForceableResultType(true, type);
+  Type forceableType = firrtl::detail::getForceableResultType(true, type);
   // Names of only-nonHW should be droppable.
   auto namekind = isa<PropertyType, RefType>(type)
                       ? NameKindEnum::DroppableName
                       : NameKindEnum::InterestingName;
 
-  auto result =
-      builder.create<WireOp>(type, id, namekind, annotations, sym, forceable);
+  chirrtl::WireOp result;
+  if (forceableType)
+        builder.create<chirrtl::WireOp>(type, forceableType, id, namekind, annotations);
+else
+        builder.create<chirrtl::WireOp>(type, id, namekind, annotations);
+
   return moduleContext.addSymbolEntry(id, result.getResult(),
                                       startTok.getLoc());
 }
