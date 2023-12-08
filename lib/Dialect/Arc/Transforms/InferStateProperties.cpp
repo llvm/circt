@@ -417,7 +417,6 @@ void InferStatePropertiesPass::runOnStateOp(
     if (!resetConditionMap.count(arc)) {
       SmallVector<ResetInfo> resetInfos;
       int numResets = 0;
-      ;
       for (auto &output : outputOp->getOpOperands()) {
         auto resetInfo = computeResetInfoFromPattern(output);
         resetInfos.push_back(resetInfo);
