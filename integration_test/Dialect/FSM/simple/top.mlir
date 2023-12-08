@@ -34,7 +34,8 @@ fsm.machine @top(%arg0: i1, %arg1: i1) -> (i8) attributes {initialState = "A"} {
   } transitions {
     fsm.transition @A guard {
       %g = comb.and %arg0, %arg1 : i1
-      fsm.return %g
+      %h = comb.and %arg0, %g : i1
+      fsm.return %h
     }
     fsm.transition @B
   }

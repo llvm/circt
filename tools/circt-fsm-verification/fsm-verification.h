@@ -100,10 +100,10 @@ using z3Fun = std::function <expr (vector<expr>)>;
 // };
 
 struct transition{
-  string from;
-  string to;
-  vector<z3Fun> guards;
-  vector<z3Fun> actions;
+  llvm::StringRef from;
+  llvm::StringRef to;
+  std::function<expr(vector<expr>)> guard;
+  std::function<expr(vector<expr>)> action;
 };
 
 // void print_cfg(CFG *cfg);
