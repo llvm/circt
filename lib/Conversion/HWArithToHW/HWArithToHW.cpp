@@ -260,24 +260,20 @@ namespace {
 // the information whether the comparison contains signed values to the
 // corresponding comb::ICmpPredicate.
 static comb::ICmpPredicate lowerPredicate(ICmpPredicate pred, bool isSigned) {
-#define _CREATE_HWARITH_ICMP_CASE(x)                                           \
-  case ICmpPredicate::x:                                                       \
-    return isSigned ? comb::ICmpPredicate::s##x : comb::ICmpPredicate::u##x
-
   switch (pred) {
   case ICmpPredicate::eq:
     return comb::ICmpPredicate::eq;
-
   case ICmpPredicate::ne:
     return comb::ICmpPredicate::ne;
-
-    _CREATE_HWARITH_ICMP_CASE(lt);
-    _CREATE_HWARITH_ICMP_CASE(ge);
-    _CREATE_HWARITH_ICMP_CASE(le);
-    _CREATE_HWARITH_ICMP_CASE(gt);
+  case ICmpPredicate::lt:                                                       \
+    return isSigned ? comb::ICmpPredicate::sltx : comb::ICmpPredicate::ult
+  case ICmpPredicate::ge:                                                       \
+    return isSigned ? comb::ICmpPredicate::sge : comb::ICmpPredicate::uge
+  case ICmpPredicate::le:                                                       \
+    return isSigned ? comb::ICmpPredicate::sle : comb::ICmpPredicate::ule
+  case ICmpPredicate::gt:                                                       \
+    return isSigned ? comb::ICmpPredicate::sgt : comb::ICmpPredicate::ugt
   }
-
-#undef _CREATE_HWARITH_ICMP_CASE
 
   llvm_unreachable(
       "Missing hwarith::ICmpPredicate to comb::ICmpPredicate lowering");
