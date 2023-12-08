@@ -472,7 +472,7 @@ class ChainingCyclicProblem : public virtual ChainingProblem,
   DEFINE_COMMON_MEMBERS(ChainingCyclicProblem)
 
 public:
-  LogicalResult checkSSADep(Dependence dep);
+  LogicalResult checkDefUse(Dependence dep);
   LogicalResult check() override;
   LogicalResult verify() override;
 };

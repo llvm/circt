@@ -14,7 +14,6 @@
 #include "circt/Scheduling/DependenceIterator.h"
 
 #include "mlir/IR/Operation.h"
-#include <iostream>
 using namespace circt;
 using namespace circt::scheduling;
 using namespace circt::scheduling::detail;
@@ -411,10 +410,10 @@ LogicalResult ModuloProblem::verify() {
 // ChainingCyclicProblem
 //===----------------------------------------------------------------------===//
 
-LogicalResult ChainingCyclicProblem::checkSSADep(Dependence dep) {
-  if (!dep.isAuxiliary() && (this->getDistance(dep).value_or(0) != 0))
+LogicalResult ChainingCyclicProblem::checkDefUse(Dependence dep) {
+  if (!dep.isAuxiliary() && (getDistance(dep).value_or(0) != 0))
     return getContainingOp()->emitError()
-           << "Non-zero ssa dependence not allowed.\n"
+           << "Def-use dependence cannot have non-zero distance.\n"
            << "On operation: " << *dep.getDestination() << ".\n";
   return success();
 }
@@ -422,7 +421,7 @@ LogicalResult ChainingCyclicProblem::checkSSADep(Dependence dep) {
 LogicalResult ChainingCyclicProblem::check() {
   for (auto *op : getOperations())
     for (auto &dep : getDependences(op))
-      if (failed(checkSSADep(dep)))
+      if (failed(checkDefUse(dep)))
         return failure();
 
   if (ChainingProblem::check().succeeded() &&
