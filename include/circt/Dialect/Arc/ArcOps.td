@@ -527,7 +527,7 @@ def StateReadOp : ArcOp<"state_read", [
 ]> {
   let summary = "Get a state's current value";
   let arguments = (ins StateType:$state);
-  let results = (outs AnyInteger:$value);
+  let results = (outs AnyType:$value);
   let assemblyFormat = [{
     $state attr-dict `:` type($state)
   }];
@@ -551,7 +551,7 @@ def StateWriteOp : ArcOp<"state_write", [
     immediately without affecting correctness. This allows later lowering passes
     to treat `arc.state_write` as an immediate assignment (without defering).
   }];
-  let arguments = (ins StateType:$state, AnyInteger:$value,
+  let arguments = (ins StateType:$state, AnyType:$value,
                        Optional<I1>:$condition);
   let assemblyFormat = [{
     $state `=` $value (`if` $condition^)? attr-dict `:` type($state)
