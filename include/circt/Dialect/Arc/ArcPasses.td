@@ -305,4 +305,12 @@ def StripSV : Pass<"arc-strip-sv", "mlir::ModuleOp"> {
                            "hw::HWDialect", "seq::SeqDialect"];
 }
 
+def StandardizeWidths : Pass<"arc-standardize-widths", "mlir::ModuleOp"> {
+  let summary = "Optimize integer widths";
+}
+
+def FuseWrites : Pass<"arc-fuse-writes", "arc::ModelOp"> {
+  let summary = "Fuse small writes";
+}
+
 #endif // CIRCT_DIALECT_ARC_ARCPASSES_TD

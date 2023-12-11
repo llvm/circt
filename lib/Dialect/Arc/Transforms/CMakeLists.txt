@@ -3,6 +3,7 @@ add_circt_dialect_library(CIRCTArcTransforms
   AllocateState.cpp
   ArcCanonicalizer.cpp
   Dedup.cpp
+  FuseWrites.cpp
   GroupResetsAndEnables.cpp
   InferMemories.cpp
   InferStateProperties.cpp
@@ -21,6 +22,7 @@ add_circt_dialect_library(CIRCTArcTransforms
   PrintStateInfo.cpp
   SimplifyVariadicOps.cpp
   SplitLoops.cpp
+  StandardizeWidths.cpp
   StripSV.cpp
 
   DEPENDS

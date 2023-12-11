@@ -424,7 +424,8 @@ int main(int argc, char **argv) {
   // Register all the dialects and create a context to work wtih.
   mlir::DialectRegistry registry;
   registerAllDialects(registry);
-  registry.insert<func::FuncDialect, scf::SCFDialect, LLVM::LLVMDialect>();
+  registry.insert<func::FuncDialect, scf::SCFDialect, LLVM::LLVMDialect,
+                  arith::ArithDialect>();
   arc::registerReducePatternDialectInterface(registry);
   firrtl::registerReducePatternDialectInterface(registry);
   hw::registerReducePatternDialectInterface(registry);
