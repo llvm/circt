@@ -281,7 +281,7 @@ void RpcServer::mainLoop(uint16_t port) {
   // TODO: Figure out how to do this properly, if possible.
   while (!stopSig) {
     waitScope.poll();
-    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
   }
 }
 

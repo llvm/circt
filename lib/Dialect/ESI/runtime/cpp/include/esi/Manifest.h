@@ -44,7 +44,6 @@ public:
 
   Manifest(const Manifest &) = delete;
   Manifest(const std::string &jsonManifest);
-  ~Manifest();
 
   uint32_t getApiVersion() const;
   // Modules which have designer specified metadata.
