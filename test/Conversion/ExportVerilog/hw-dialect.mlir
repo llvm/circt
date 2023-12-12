@@ -1467,3 +1467,19 @@ hw.module @Issue6275(out z: !hw.struct<a: !hw.array<2xstruct<b: i1>>>) {
   %0 = hw.aggregate_constant [[[false], [true]]] : !hw.struct<a: !hw.array<2xstruct<b: i1>>>
   hw.output %0 : !hw.struct<a: !hw.array<2xstruct<b: i1>>>
 }
+
+// CHECK: //spyglass disable_block NoAssignX-ML
+// CHECK-NEXT: //VCS coverage exclude_file
+// CHECK: module moduleWithWaiver
+// CHECK: //spyglass enable_block NoAssignX-ML
+// CHECK-NEXT: endmodule
+
+hw.module @moduleWithWaiver()
+  attributes {waivers = [#hw.waiver<NoAssignX>, #hw.waiver<ExcludeCoverage>]} {}
+
+// CHECK: //spyglass disable_block NoAssignX-ML
+// CHECK-NEXT: //VCS coverage exclude_file
+// CHECK-NEXT: interface MyInterface;
+// CHECK: //spyglass enable_block NoAssignX-ML
+// CHECK-NEXT: endinterface
+sv.interface @MyInterface attributes {waivers = [#hw.waiver<NoAssignX>, #hw.waiver<ExcludeCoverage>]} {}

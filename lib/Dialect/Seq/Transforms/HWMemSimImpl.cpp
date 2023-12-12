@@ -184,6 +184,9 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
   ImplicitLocOpBuilder b(op.getLoc(), op.getBody());
 
   InnerSymbolNamespace moduleNamespace(op);
+  if (readEnableMode == ReadEnableMode::Undefined)
+    op.setWaiversAttr(hw::addWaiver(
+        op.getWaiversAttr(), WaiverAttr::getWaiveXassign(b.getContext())));
 
   // Compute total number of mask bits.
   if (mem.maskGran == 0)
@@ -739,8 +742,9 @@ void HWMemSimImplPass::runOnOperation() {
             oldModule.getLoc(), nameAttr, oldModule.getPortList());
         if (auto outdir = oldModule->getAttr("output_file"))
           newModule->setAttr("output_file", outdir);
-        newModule.setCommentAttr(
-            builder.getStringAttr("VCS coverage exclude_file"));
+        newModule.setWaiversAttr(
+            hw::addWaiver(newModule.getWaiversAttr(),
+                          hw::WaiverAttr::getExcludeCoverage(&getContext())));
         newModule.setPrivate();
 
         HWMemSimImpl(readEnableMode, addMuxPragmas, disableMemRandomization,
