@@ -4,10 +4,10 @@ import random
 import sys
 
 platform = sys.argv[1]
-acc = esi.Accelerator(platform, sys.argv[2])
+acc = esi.AcceleratorConnection(platform, sys.argv[2])
 
 m = acc.manifest()
-d = m.build_design(acc)
+d = m.build_accelerator(acc)
 
 mem_write = d.ports[esi.AppID("write")].channels["write"]
 mem_write.connect()

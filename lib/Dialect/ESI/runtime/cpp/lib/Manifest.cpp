@@ -508,7 +508,6 @@ void Manifest::Impl::populateTypes(const nlohmann::json &typesJson) {
 //===----------------------------------------------------------------------===//
 
 Manifest::Manifest(const string &jsonManifest) : impl(new Impl(jsonManifest)) {}
-Manifest::~Manifest() { delete &impl; }
 
 uint32_t Manifest::getApiVersion() const {
   return impl->at("api_version").get<uint32_t>();

@@ -55,7 +55,7 @@ private:
   volatile bool stopSig;
   std::mutex m;
 
-  unsigned int esiVersion;
+  unsigned int esiVersion = -1;
   std::vector<uint8_t> compressedManifest;
 };
 
