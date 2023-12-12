@@ -25,9 +25,6 @@ using namespace circt;
 
 LogicalResult firtool::populatePreprocessTransforms(mlir::PassManager &pm,
                                                     const FirtoolOptions &opt) {
-  // Legalize away "open" aggregates to hw-only versions.
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerOpenAggsPass());
-
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createResolvePathsPass());
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerFIRRTLAnnotationsPass(
@@ -39,6 +36,11 @@ LogicalResult firtool::populatePreprocessTransforms(mlir::PassManager &pm,
     pm.nest<firrtl::CircuitOp>().addNestedPass<firrtl::FModuleOp>(
         firrtl::createMaterializeDebugInfoPass());
 
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerSignaturesPass());
+
+  // Legalize away "open" aggregates to hw-only versions.
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerOpenAggsPass());
+
   return success();
 }
 
@@ -48,7 +50,6 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   pm.nest<firrtl::CircuitOp>().addPass(
       firrtl::createLowerIntrinsicsPass(opt.shouldFixupEICGWrapper()));
 
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerSignaturesPass());
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInjectDUTHierarchyPass());
 

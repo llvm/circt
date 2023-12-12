@@ -37,24 +37,30 @@ static LogicalResult updateExpandedPort(StringRef field, AnnoTarget &ref) {
   return failure();
 }
 
+template<typename T>
+static FailureOr<unsigned> findBundleElementImpl(Operation *op, T type,
+                                             StringRef field) {
+  auto idx = type.getElementIndex(field);
+  if (!idx) {
+    op->emitError("cannot resolve field '")
+        << field << "' in subtype '" << type << "'";
+    return failure();
+  }
+  return *idx;
+}
+
 /// Try to resolve an non-array aggregate name from a target given the type and
 /// operation of the resolved target.  This needs to deal with places where we
 /// represent bundle returns as split into constituent parts.
 static FailureOr<unsigned> findBundleElement(Operation *op, Type type,
                                              StringRef field) {
-  auto bundle = type_dyn_cast<BundleType>(type);
-  if (!bundle) {
-    op->emitError("field access '")
-        << field << "' into non-bundle type '" << type << "'";
-    return failure();
-  }
-  auto idx = bundle.getElementIndex(field);
-  if (!idx) {
-    op->emitError("cannot resolve field '")
-        << field << "' in subtype '" << bundle << "'";
-    return failure();
-  }
-  return *idx;
+  if (auto bundle = type_dyn_cast<BundleType>(type))
+    return findBundleElementImpl(op, bundle, field);
+  if (auto bundle = type_dyn_cast<OpenBundleType>(type))
+    return findBundleElementImpl(op, bundle, field);
+  op->emitError("field access '")
+      << field << "' into non-bundle type '" << type << "'";
+  return failure();
 }
 
 /// Try to resolve an array index from a target given the type of the resolved
@@ -106,9 +112,13 @@ static FailureOr<unsigned> findFieldID(AnnoTarget &ref,
       auto result = findBundleElement(op, type, token.name);
       if (failed(result))
         return failure();
-      auto bundle = type_cast<BundleType>(type);
-      type = bundle.getElementType(*result);
-      fieldIdx += bundle.getFieldID(*result);
+      if (auto bundle = type_dyn_cast<BundleType>(type)) {
+        type = bundle.getElementType(*result);
+        fieldIdx += bundle.getFieldID(*result);
+      } else if (auto bundle = type_dyn_cast<OpenBundleType>(type)) {
+        type = bundle.getElementType(*result);
+        fieldIdx += bundle.getFieldID(*result);
+      }
     }
   }
   return fieldIdx;
