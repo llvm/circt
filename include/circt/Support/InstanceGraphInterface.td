@@ -30,15 +30,24 @@ def InstanceGraphInstanceOpInterface : OpInterface<"InstanceOpInterface"> {
     InterfaceMethod<"Get the name of the instance",
     "::mlir::StringAttr", "getInstanceNameAttr", (ins)>,
 
-    InterfaceMethod<"Get the name of the instantiated module",
-    "::llvm::StringRef", "getReferencedModuleName", (ins),
+    InterfaceMethod<"Get the name of all the possibly instantiated modules",
+    "::llvm::SmallVector<::llvm::StringRef, 1>", "getReferencedModuleNames", (ins),
     /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{ return $_op.getModuleName(); }]>,
+    /*defaultImplementation=*/[{
+      ::llvm::SmallVector<::llvm::StringRef, 1> targetNames;
+      for (::mlir::Attribute targetNameAttr : $_op.getReferencedModuleNamesAttr())
+        targetNames.push_back(
+            targetNameAttr.cast<::mlir::StringAttr>().getValue());
+      return targetNames;
+    }]>,
 
-    InterfaceMethod<"Get the name of the instantiated module",
-    "::mlir::StringAttr", "getReferencedModuleNameAttr", (ins),
+    InterfaceMethod<"Get the names of the instantiated modules",
+    "::mlir::ArrayAttr", "getReferencedModuleNamesAttr", (ins),
     /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{ return $_op.getModuleNameAttr().getAttr(); }]>,
+    /*defaultImplementation=*/[{
+      auto attr = $_op.getReferencedModuleNameAttr();
+      return ::mlir::ArrayAttr::get(attr.getContext(), {attr});
+    }]>,
   ];
 }
 

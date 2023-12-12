@@ -275,10 +275,11 @@ def __main__(args):
                          default=-1,
                          help="Number of cycles to run the simulator. " +
                          " -1 means don't stop.")
-  argparser.add_argument("--valgrind",
-                         dest="valgrind",
-                         action='store_true',
-                         help="Run the simulator under valgrind.")
+  argparser.add_argument(
+      "--valgrind",
+      dest="valgrind",
+      action='store_true',
+      help="Run the simulator under valgrind (Verilator only).")
 
   argparser.add_argument("sources",
                          nargs="+",

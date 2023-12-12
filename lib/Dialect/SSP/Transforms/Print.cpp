@@ -46,6 +46,8 @@ void PrintPass::runOnOperation() {
       printInstance<SharedOperatorsProblem>(instOp, os);
     else if (probName.equals("ModuloProblem"))
       printInstance<ModuloProblem>(instOp, os);
+    else if (probName.equals("ChainingCyclicProblem"))
+      printInstance<ChainingCyclicProblem>(instOp, os);
     else {
       auto instName = instOp.getSymName().value_or("unnamed");
       llvm::errs() << "ssp-print-instance: Unknown problem class '" << probName

@@ -41,19 +41,24 @@ using namespace firrtl;
 
 namespace {
 
-// These macros are used to provide hard-errors if a user tries to use the YAML
+// These are used to provide hard-errors if a user tries to use the YAML
 // infrastructure improperly.  We only implement conversion to YAML and not
 // conversion from YAML.  The LLVM YAML infrastructure doesn't provide the
 // ability to differentitate this and we don't need it for the purposes of
 // Grand Central.
-#define UNIMPLEMENTED_DEFAULT(clazz)                                           \
-  llvm_unreachable("default '" clazz                                           \
-                   "' construction is an intentionally *NOT* implemented "     \
-                   "YAML feature (you should never be using this)");
-#define UNIMPLEMENTED_DENORM(clazz)                                            \
-  llvm_unreachable("conversion from YAML to a '" clazz                         \
-                   "' is intentionally *NOT* implemented (you should not be "  \
-                   "converting from YAML to an interface)");
+static std::string noDefault(StringRef clazz) {
+  return ("default '" + clazz +
+          "' construction is an intentionally *NOT* implemented "
+          "YAML feature (you should never be using this)")
+      .str();
+}
+
+static std::string deNorm(StringRef clazz) {
+  return ("conversion from YAML to a '" + clazz +
+          "' is intentionally *NOT* implemented (you should not be "
+          "converting from YAML to an interface)")
+      .str();
+}
 
 // This namespace provides YAML-related collateral that is specific to Grand
 // Central and should not be placed in the `llvm::yaml` namespace.
@@ -208,11 +213,11 @@ struct MappingContextTraits<DescribedSignal, Context> {
     }
 
     /// A no-argument constructor is necessary to work with LLVM's YAML library.
-    Field(IO &io){UNIMPLEMENTED_DEFAULT("Field")}
+    Field(IO &io) { llvm_unreachable(noDefault("Field").c_str()); }
 
     /// This cannot be denomralized back to an interface op.
     DescribedSignal denormalize(IO &) {
-      UNIMPLEMENTED_DENORM("DescribedSignal")
+      llvm_unreachable(deNorm("DescribedSignal").c_str());
     }
   };
 
@@ -260,10 +265,10 @@ struct MappingContextTraits<DescribedInstance, Context> {
       }
     }
 
-    Instance(IO &io){UNIMPLEMENTED_DEFAULT("Instance")}
+    Instance(IO &io) { llvm_unreachable(noDefault("Instance").c_str()); }
 
     DescribedInstance denormalize(IO &) {
-      UNIMPLEMENTED_DENORM("DescribedInstance")
+      llvm_unreachable(deNorm("DescribedInstance").c_str());
     }
   };
 
@@ -366,11 +371,11 @@ struct MappingContextTraits<sv::InterfaceOp, Context> {
     }
 
     /// A no-argument constructor is necessary to work with LLVM's YAML library.
-    Interface(IO &io){UNIMPLEMENTED_DEFAULT("Interface")}
+    Interface(IO &io) { llvm_unreachable(noDefault("Interface").c_str()); }
 
     /// This cannot be denomralized back to an interface op.
     sv::InterfaceOp denormalize(IO &) {
-      UNIMPLEMENTED_DENORM("sv::InterfaceOp")
+      llvm_unreachable(deNorm("sv::InterfaceOp").c_str());
     }
   };
 

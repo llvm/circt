@@ -158,16 +158,15 @@ void StripSVPass::runOnOperation() {
         continue;
       }
 
-      // Replace clock gate instances with the dedicated arc op and stub
-      // out other external modules.
+      // Replace clock gate instances with the dedicated `seq.clock_gate` op and
+      // stub out other external modules.
       if (auto instOp = dyn_cast<hw::InstanceOp>(&op)) {
         auto modName = instOp.getModuleNameAttr().getAttr();
         ImplicitLocOpBuilder builder(instOp.getLoc(), instOp);
         if (clockGateModuleNames.contains(modName)) {
-          auto enable = builder.createOrFold<comb::OrOp>(
-              instOp.getOperand(1), instOp.getOperand(2), true);
-          auto gated =
-              builder.create<arc::ClockGateOp>(instOp.getOperand(0), enable);
+          auto gated = builder.create<seq::ClockGateOp>(
+              instOp.getOperand(0), instOp.getOperand(1), instOp.getOperand(2),
+              hw::InnerSymAttr{});
           instOp.replaceAllUsesWith(gated);
           opsToDelete.push_back(instOp);
         }

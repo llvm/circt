@@ -22,4 +22,15 @@ firrtl.circuit "Prop" {
   )  attributes {convention = #firrtl<convention scalarized>} { 
   }
 
+  // CHECK-LABEL: @AnalogBlackBox
+  firrtl.extmodule private @AnalogBlackBox<index: ui32 = 0>(out bus: !firrtl.analog<32>) attributes {convention = #firrtl<convention scalarized>, defname = "AnalogBlackBox"}
+  firrtl.module @AnalogBlackBoxModule(out %io: !firrtl.bundle<bus: analog<32>>) attributes {convention = #firrtl<convention scalarized>} {
+    // CHECK: %io = firrtl.wire interesting_name : !firrtl.bundle<bus: analog<32>> 
+    // CHECK: %0 = firrtl.subfield %io[bus] : !firrtl.bundle<bus: analog<32>> 
+    // CHECK: firrtl.attach %0, %io_bus : !firrtl.analog<32>, !firrtl.analog<32> 
+    %0 = firrtl.subfield %io[bus] : !firrtl.bundle<bus: analog<32>>
+    %impl_bus = firrtl.instance impl interesting_name @AnalogBlackBox(out bus: !firrtl.analog<32>)
+    firrtl.attach %0, %impl_bus : !firrtl.analog<32>, !firrtl.analog<32>
+  }
+
 }

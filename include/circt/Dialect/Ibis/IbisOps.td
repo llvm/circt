@@ -112,6 +112,10 @@ class InstanceOpBase<string mnemonic> : IbisOp<mnemonic, [
     mlir::FlatSymbolRefAttr getModuleNameAttr() {
       return getTargetNameAttr();
     }
+
+    StringAttr getReferencedModuleNameAttr() {
+      return getModuleNameAttr().getAttr();
+    }
   }];
 
   code extraInstanceClassDefinition = ?;

@@ -518,7 +518,11 @@ def InstanceOp : HWInstanceOpBase<"instance", [HWInstanceLike]> {
   let hasVerifier = 1;
 }
 
-def InstanceChoiceOp : HWInstanceOpBase<"instance_choice", []> {
+def InstanceChoiceOp : HWInstanceOpBase<"instance_choice", [
+    DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface, [
+      "getReferencedModuleNamesAttr"
+    ]>
+]> {
   let summary = "Represents an instance with a target-specific reference";
   let description = [{
     This represents an instance to a module which is determined based on the

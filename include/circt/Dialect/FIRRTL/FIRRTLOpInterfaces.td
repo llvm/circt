@@ -363,6 +363,16 @@ def FInstanceLike : OpInterface<"FInstanceLike", [
   let description = "Provide common  instance information.";
 
   let methods = [
+    InterfaceMethod<"Get the name of the instantiated module",
+    "::llvm::StringRef", "getReferencedModuleName", (ins),
+    /*methodBody=*/[{}],
+    /*defaultImplementation=*/[{ return $_op.getModuleName(); }]>,
+
+    InterfaceMethod<"Get the name of the instantiated module",
+    "::mlir::StringAttr", "getReferencedModuleNameAttr", (ins),
+    /*methodBody=*/[{}],
+    /*defaultImplementation=*/[{ return $_op.getModuleNameAttr().getAttr(); }]>,
+
     InterfaceMethod<"Get the referenced module via a symbol table.",
     "::mlir::Operation *", "getReferencedOperation",
     (ins "const SymbolTable&":$symtbl),

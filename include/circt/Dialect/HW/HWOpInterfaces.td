@@ -393,6 +393,16 @@ def HWInstanceLike : OpInterface<"HWInstanceLike", [
   let description = "Provide common  module information.";
 
   let methods = [
+    InterfaceMethod<"Get the name of the instantiated module",
+    "::llvm::StringRef", "getReferencedModuleName", (ins),
+    /*methodBody=*/[{}],
+    /*defaultImplementation=*/[{ return $_op.getModuleName(); }]>,
+
+    InterfaceMethod<"Get the name of the instantiated module",
+    "::mlir::StringAttr", "getReferencedModuleNameAttr", (ins),
+    /*methodBody=*/[{}],
+    /*defaultImplementation=*/[{ return $_op.getModuleNameAttr().getAttr(); }]>,
+
     InterfaceMethod<"Get the referenced module via a HW symbol cache.",
     "::mlir::Operation *", "getReferencedModuleCached", (ins
       "const ::circt::hw::HWSymbolCache *":$cache),

@@ -6,12 +6,10 @@ acc = esi.AcceleratorConnection(platform, sys.argv[2])
 
 assert acc.sysinfo().esi_version() == 1
 m = acc.manifest()
-# assert m.api_version == 1
-# print(m.type_table)
+assert m.api_version == 1
+print(m.type_table)
 
-# d = m.build_accelerator(acc)
-
-# loopback = d.children[esi.AppID("loopback_inout", 0)]
+d = m.build_accelerator(acc)
 
 # recv = d.ports[esi.AppID("loopback_inout")].channels["resp"]
 # recv.connect()

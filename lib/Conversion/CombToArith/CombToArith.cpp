@@ -139,21 +139,30 @@ struct ConcatOpConversion : OpConversionPattern<ConcatOp> {
                   ConversionPatternRewriter &rewriter) const override {
     Type type = op.getResult().getType();
     Location loc = op.getLoc();
-    unsigned nextInsertion = type.getIntOrFloatBitWidth();
 
+    // Handle the trivial case where we have only one operand. The concat is a
+    // no-op in this case.
+    if (op.getNumOperands() == 1) {
+      rewriter.replaceOp(op, adaptor.getOperands().back());
+      return success();
+    }
+
+    // The operand at the least significant bit position (the one all the way on
+    // the right at the highest index) does not need to be shifted and can just
+    // be zero-extended to the final bit width.
     Value aggregate =
-        rewriter.create<arith::ConstantOp>(loc, IntegerAttr::get(type, 0));
+        rewriter.createOrFold<ExtUIOp>(loc, type, adaptor.getOperands().back());
 
-    for (unsigned i = 0, e = op.getNumOperands(); i < e; i++) {
-      nextInsertion -=
-          adaptor.getOperands()[i].getType().getIntOrFloatBitWidth();
-
-      Value nextInsValue = rewriter.create<arith::ConstantOp>(
-          loc, IntegerAttr::get(type, nextInsertion));
-      Value extended =
-          rewriter.create<ExtUIOp>(loc, type, adaptor.getOperands()[i]);
-      Value shifted = rewriter.create<ShLIOp>(loc, extended, nextInsValue);
-      aggregate = rewriter.create<OrIOp>(loc, aggregate, shifted);
+    // Shift and OR all the other operands onto the aggregate. Skip the last
+    // operand because it has already been incorporated into the aggregate.
+    unsigned offset = type.getIntOrFloatBitWidth();
+    for (auto operand : adaptor.getOperands().drop_back()) {
+      offset -= operand.getType().getIntOrFloatBitWidth();
+      auto offsetConst = rewriter.create<arith::ConstantOp>(
+          loc, IntegerAttr::get(type, offset));
+      auto extended = rewriter.createOrFold<ExtUIOp>(loc, type, operand);
+      auto shifted = rewriter.createOrFold<ShLIOp>(loc, extended, offsetConst);
+      aggregate = rewriter.createOrFold<OrIOp>(loc, aggregate, shifted);
     }
 
     rewriter.replaceOp(op, aggregate);
