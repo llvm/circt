@@ -1150,7 +1150,7 @@ void Inliner::inlineInstances(FModuleOp module) {
     // participate in any HierPathOp. But the reTop might add a symbol to it, if
     // a HierPathOp is added to this Op.
     DenseMap<Attribute, Attribute> symbolRenames;
-    if (!rootMap[target.getNameAttr()].empty()) {
+    if (!rootMap[target.getNameAttr()].empty() && !toBeFlattened) {
       for (auto sym : rootMap[target.getNameAttr()]) {
         auto &mnla = nlaMap[sym];
         sym = mnla.reTop(module);
