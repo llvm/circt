@@ -155,7 +155,7 @@ for (auto &op : prob.getOperations())
   llvm::dbgs() << *prob.getStartTime(&op) << "\n";
 ```
 
-And that's it! For a more practical example, have a look at the 
+And that's it! For a more practical example, have a look at the
 [`AffineToPipeline`](https://github.com/llvm/circt/blob/main/lib/Conversion/AffineToPipeline/AffineToPipeline.cpp)
 pass.
 
@@ -273,6 +273,14 @@ as well as redundant iteration over the problem components.
 - [ChainingProblem](https://circt.llvm.org/doxygen/classcirct_1_1scheduling_1_1ChainingProblem.html):
   Extends `Problem` to consider the accumulation of physical propagation delays
   on combinational paths along SSA dependences.
+- [ChainingCyclicProblem](https://circt.llvm.org/doxygen/classcirct_1_1scheduling_1_1ChainingCyclicProblem.html):
+  Extends `ChainingProblem` and `CyclicProblem` to consider the accumulation
+  of physical propagation delays on combinational paths along SSA dependences
+  on a cyclic scheduling problem. Note that the problem does not model
+  propagation delays along inter-iteration dependences. These are commonly
+  represented as auxiliary dependences, which are already excluded in the
+  parent ChainingProblem. In addition, the ChainingCyclicProblem explicitly
+  prohibits the use of def-use dependences with a non-zero distance.
 
 NB: The classes listed above each model a *trait*-like aspect of scheduling.
 These can be used as-is, but are also intended for mixing and matching, even
@@ -300,7 +308,7 @@ chaining-enabled modulo scheduling problem.
 
 ## Utilities
 
-See 
+See
 [`Utilities.h`](https://github.com/llvm/circt/blob/main/include/circt/Scheduling/Utilities.h):
 - Topological graph traversal
 - DFA to compute combinational path delays

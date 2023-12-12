@@ -454,6 +454,29 @@ public:
   virtual LogicalResult verify() override;
 };
 
+/// This class models the accumulation of physical propagation delays on
+/// combinational paths along SSA dependences on a cyclic scheduling problem.
+///
+/// Each operator type is annotated with estimated values for incoming and
+/// outgoing delays. Combinational operators (zero-latency, no internal
+/// registers) have only a single delay; this important special case is modeled
+/// by setting the incoming and outgoing delays to the same values.
+///
+/// A solution to this problem comprises per-operation start times in a
+/// continuous unit, e.g. in nanoseconds, inside the discrete time steps/cycles
+/// determined by the underlying scheduling problem. Its solution can be used to
+/// construct a pipelined datapath with a fixed, integer initiation interval,
+/// in which the execution of multiple iterations/samples/etc. may overlap.
+class ChainingCyclicProblem : public virtual ChainingProblem,
+                              public virtual CyclicProblem {
+  DEFINE_COMMON_MEMBERS(ChainingCyclicProblem)
+
+public:
+  LogicalResult checkDefUse(Dependence dep);
+  LogicalResult check() override;
+  LogicalResult verify() override;
+};
+
 } // namespace scheduling
 } // namespace circt
 
