@@ -4650,6 +4650,7 @@ ParseResult FIRCircuitParser::skipToModuleEnd(unsigned indent) {
     case FIRToken::kw_module:
     case FIRToken::kw_public:
     case FIRToken::kw_layer:
+    case FIRToken::kw_option:
     case FIRToken::kw_type:
       // All module declarations should have the same indentation
       // level. Use this fact to differentiate between module
