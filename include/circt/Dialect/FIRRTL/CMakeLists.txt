@@ -47,4 +47,3 @@ add_circt_doc(Passes FIRRTLPasses -gen-pass-doc)
 # CHIRRTL
 add_circt_dialect(CHIRRTL chirrtl CHIRRTL)
 add_circt_dialect_doc(CHIRRTL chirrtl)
-add_circt_doc(CHIRRTLTypes Dialects/CHIRRTLTypes -gen-typedef-doc)
