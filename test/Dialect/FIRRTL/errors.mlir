@@ -2216,3 +2216,128 @@ firrtl.circuit "InputProbeExt" {
   // expected-error @below {{input probe not allowed on public module}}
   firrtl.extmodule @InputProbeExt(in in : !firrtl.openbundle<b flip: openbundle<p flip: probe<uint<1>>>>)
 }
+
+// -----
+
+firrtl.circuit "InvalidOption" {
+  firrtl.module private @Target() {}
+
+  firrtl.module @InvalidOption() {
+    // expected-error @below {{op option "Bad" does not exist}}
+    firrtl.instance_choice inst @Target alternatives @Bad { @FPGA -> @Target } ()
+  }
+}
+
+// -----
+
+firrtl.circuit "InvalidCase" {
+  firrtl.option @Platform {
+    firrtl.option_case @FPGA
+    firrtl.option_case @ASIC
+  }
+
+  firrtl.module private @Target() {}
+
+  firrtl.module @InvalidCase() {
+    // expected-error @below {{op option "Platform" does not contain option case @Platform::@BAD}}
+    firrtl.instance_choice inst @Target alternatives @Platform { @BAD -> @Target } ()
+  }
+}
+
+// -----
+
+firrtl.circuit "InvalidDefaultTarget" {
+  firrtl.option @Platform {
+    firrtl.option_case @FPGA
+    firrtl.option_case @ASIC
+  }
+
+  firrtl.module private @Target() {}
+
+  firrtl.module @InvalidTarget() {
+    // expected-error @below {{op invalid symbol reference}}
+    firrtl.instance_choice inst @BadTarget alternatives @Platform { @FPGA -> @Target } ()
+  }
+}
+
+// -----
+
+firrtl.circuit "InvalidTarget" {
+  firrtl.option @Platform {
+    firrtl.option_case @FPGA
+    firrtl.option_case @ASIC
+  }
+
+  firrtl.module private @Target() {}
+
+  firrtl.module @InvalidTarget() {
+    // expected-error @below {{op invalid symbol reference}}
+    firrtl.instance_choice inst @Target alternatives @Platform { @FPGA -> @BadTarget } ()
+  }
+}
+
+// -----
+
+firrtl.circuit "InvalidCaseTarget" {
+  firrtl.option @Platform {
+    firrtl.option_case @FPGA
+    firrtl.option_case @ASIC
+  }
+
+  firrtl.module private @Target() {}
+
+  firrtl.module @InvalidCaseTarget() {
+    // expected-error @below {{op option "BadPlatform" does not exist}}
+    firrtl.instance_choice inst @Target alternatives @BadPlatform { @FPGA -> @Target } ()
+  }
+}
+
+// -----
+
+firrtl.circuit "NoCases" {
+  firrtl.module private @Target() {}
+
+  firrtl.module @NoCases() {
+    // expected-error @below {{'firrtl.instance_choice' op must have at least one case}}
+    "firrtl.instance_choice"() {
+      moduleNames = [@Target],
+      caseNames = [],
+      name = "inst",
+      nameKind = #firrtl<name_kind interesting_name>,
+      portDirections = 0 : i0,
+      portNames = [],
+      annotations = [],
+      portAnnotations = []
+    } : () -> ()
+  }
+}
+
+// -----
+
+firrtl.circuit "MismatchedCases" {
+  firrtl.option @Platform {
+    firrtl.option_case @FPGA
+    firrtl.option_case @ASIC
+  }
+
+  firrtl.option @Perf {
+    firrtl.option_case @Fast
+    firrtl.option_case @Slow
+  }
+
+  firrtl.module private @Target() {}
+
+  firrtl.module @MismatchedCases() {
+    // expected-error @below {{op case @Perf::@Fast is not in the same option group as @Platform::@ASIC}}
+    "firrtl.instance_choice"() { 
+      moduleNames = [@Target, @Target, @Target],
+      caseNames = [@Platform::@ASIC, @Perf::@Fast],
+      name = "inst",
+      nameKind = #firrtl<name_kind interesting_name>,
+      portDirections = 0 : i0,
+      portNames = [],
+      annotations = [],
+      portAnnotations = []
+    } : () -> ()
+  }
+}

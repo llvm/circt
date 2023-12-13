@@ -223,6 +223,7 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
   if (path)
     newMod->setAttr("output_file", path);
   newMod.setCommentAttr(b.getStringAttr("VCS coverage exclude_file"));
+  newMod.setPrivate();
 
   // Update the mapping from old values to cloned values
   for (auto port : llvm::enumerate(realInputs)) {

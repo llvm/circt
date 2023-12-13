@@ -198,6 +198,8 @@ std::unique_ptr<mlir::Pass> createMaterializeDebugInfoPass();
 
 std::unique_ptr<mlir::Pass> createLintingPass();
 
+std::unique_ptr<mlir::Pass> createSpecializeOptionPass();
+
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/FIRRTL/Passes.h.inc"
