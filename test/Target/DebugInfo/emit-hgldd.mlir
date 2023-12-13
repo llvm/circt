@@ -470,3 +470,25 @@ hw.module @LegalizedNames() {
   %wire = hw.wire %false {hw.verilogName = "wire_1"} : i1
 }
 hw.module.extern @Dummy() attributes {verilogName = "CustomDummy"}
+
+// CHECK-LABEL: "obj_name": "InlineScopes"
+// CHECK:       "port_vars"
+// CHECK:         "var_name": "x"
+// CHECK:         "value": {"sig_name":"a"}
+// CHECK:       "children"
+// CHECK:         "name": "child"
+// CHECK:         "port_vars"
+// CHECK:           "var_name": "y"
+// CHECK:           "value": {"sig_name":"a"}
+// CHECK:         "children"
+// CHECK:           "name": "more"
+// CHECK:           "port_vars"
+// CHECK:             "var_name": "z"
+// CHECK:             "value": {"sig_name":"a"}
+hw.module @InlineScopes(in %a: i42) {
+  %1 = dbg.scope "child", "InlinedChild"
+  %2 = dbg.scope "more", "InlinedMore" scope %1
+  dbg.variable "x", %a : i42
+  dbg.variable "y", %a scope %1 : i42
+  dbg.variable "z", %a scope %2 : i42
+}

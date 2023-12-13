@@ -23,4 +23,25 @@ firrtl.module @Intrinsics(in %ui : !firrtl.uint, in %clock: !firrtl.clock, in %u
   %cg1 = firrtl.int.clock_gate %clock, %ui1, %ui1
 }
 
+// CHECK-LABEL: firrtl.option @Platform
+firrtl.option @Platform {
+  // CHECK:firrtl.option_case @FPGA
+  firrtl.option_case @FPGA
+  // CHECK:firrtl.option_case @ASIC
+  firrtl.option_case @ASIC
+}
+
+firrtl.module private @DefaultTarget(in %clock: !firrtl.clock) {}
+firrtl.module private @FPGATarget(in %clock: !firrtl.clock) {}
+firrtl.module private @ASICTarget(in %clock: !firrtl.clock) {}
+
+// CHECK-LABEL: firrtl.module @Foo
+firrtl.module @Foo(in %clock: !firrtl.clock) {
+  // CHECK: %inst_clock = firrtl.instance_choice inst interesting_name @DefaultTarget alternatives @Platform
+  // CHECK-SAME: { @FPGA -> @FPGATarget, @ASIC -> @ASICTarget } (in clock: !firrtl.clock)
+  %inst_clock = firrtl.instance_choice inst interesting_name @DefaultTarget alternatives @Platform
+    { @FPGA -> @FPGATarget, @ASIC -> @ASICTarget } (in clock: !firrtl.clock)
+  firrtl.strictconnect %inst_clock, %clock : !firrtl.clock
+}
+
 }
