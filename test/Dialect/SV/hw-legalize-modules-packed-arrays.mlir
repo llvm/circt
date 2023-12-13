@@ -4,15 +4,13 @@ module attributes {circt.loweringOptions = "disallowPackedArrays"} {
 hw.module @reject_arrays(in %arg0: i8, in %arg1: i8, in %arg2: i8,
                          in %arg3: i8, in %sel: i2, in %clock: i1,
                          out a: !hw.array<4xi8>) {
-  // This needs full-on "legalize types" for the HW dialect.
-  
   %reg = sv.reg  : !hw.inout<array<4xi8>>
   sv.alwaysff(posedge %clock)  {
-    // expected-error @+1 {{unsupported packed array expression}}
     %0 = hw.array_create %arg0, %arg1, %arg2, %arg3 : i8
     sv.passign %reg, %0 : !hw.array<4xi8>
   }
 
+  // This needs full-on "legalize types" for the HW dialect.
   // expected-error @+1 {{unsupported packed array expression}}
   %1 = sv.read_inout %reg : !hw.inout<array<4xi8>>
   hw.output %1 : !hw.array<4xi8>
@@ -52,9 +50,9 @@ hw.module @array_create_get_comb(in %arg0: i8, in %arg1: i8, in %arg2: i8, in %a
 // CHECK-LABEL: hw.module @array_create_get_default
 hw.module @array_create_get_default(in %arg0: i8, in %arg1: i8, in %arg2: i8, in %arg3: i8,
                             in %sel: i2) {
-  // CHECK: %casez_tmp = sv.reg  : !hw.inout<i8>
   // CHECK: sv.initial  {
   sv.initial {
+    // CHECK: %casez_tmp = sv.reg  : !hw.inout<i8>
     // CHECK:   %x_i8 = sv.constantX : i8
     // CHECK:   sv.case casez %sel : i2
     // CHECK:   case b00: {
@@ -70,6 +68,42 @@ hw.module @array_create_get_default(in %arg0: i8, in %arg1: i8, in %arg2: i8, in
     // CHECK:     sv.bpassign %casez_tmp, %x_i8 : i8
     // CHECK:   }
     %three_array = hw.array_create %arg2, %arg1, %arg0 : i8
+
+    // CHECK:   %0 = sv.read_inout %casez_tmp : !hw.inout<i8>
+    %2 = hw.array_get %three_array[%sel] : !hw.array<3xi8>, i2
+
+    // CHECK:   %1 = comb.icmp eq %0, %arg2 : i8
+    // CHECK:   sv.if %1  {
+    %cond = comb.icmp eq %2, %arg2 : i8
+    sv.if %cond {
+      sv.fatal 1
+    }
+  }
+}
+
+// CHECK-LABEL: hw.module @array_create_concat_get_default
+hw.module @array_create_concat_get_default(in %arg0: i8, in %arg1: i8, in %arg2: i8, in %arg3: i8,
+                            in %sel: i2) {
+  // CHECK: sv.initial  {
+  sv.initial {
+    // CHECK:   %casez_tmp = sv.reg : !hw.inout<i8>
+    // CHECK:   %x_i8 = sv.constantX : i8
+    // CHECK:   sv.case casez %sel : i2
+    // CHECK:   case b00: {
+    // CHECK:     sv.bpassign %casez_tmp, %arg0 : i8
+    // CHECK:   }
+    // CHECK:   case b01: {
+    // CHECK:     sv.bpassign %casez_tmp, %arg1 : i8
+    // CHECK:   }
+    // CHECK:   case b10: {
+    // CHECK:     sv.bpassign %casez_tmp, %arg2 : i8
+    // CHECK:   }
+    // CHECK:   default: {
+    // CHECK:     sv.bpassign %casez_tmp, %x_i8 : i8
+    // CHECK:   }
+    %one_array = hw.array_create %arg2 : i8
+    %two_array = hw.array_create %arg1, %arg0 : i8
+    %three_array = hw.array_concat %one_array, %two_array : !hw.array<1xi8>, !hw.array<2xi8>
 
     // CHECK:   %0 = sv.read_inout %casez_tmp : !hw.inout<i8>
     %2 = hw.array_get %three_array[%sel] : !hw.array<3xi8>, i2
@@ -107,6 +141,85 @@ hw.module @array_constant_get_comb(in %sel: i2, out a: i8) {
 
   // CHECK: hw.output %0 : i8
   hw.output %1 : i8
+}
+
+// CHECK-LABEL: hw.module @array_reg_mux_2
+hw.module @array_reg_mux_2(in %clock: i1, in %arg0: i8, in %arg1: i8, in %sel: i1, out a: i8) {
+  // CHECK: %reg = sv.reg : !hw.inout<i8>
+  // CHECK: %reg_0 = sv.reg name "reg" : !hw.inout<i8>
+  %reg = sv.reg : !hw.inout<array<2xi8>>
+  // CHECK: sv.alwaysff(posedge %clock) {
+  sv.alwaysff(posedge %clock)  {
+    // CHECK: sv.passign %reg, %arg1 : i8
+    // CHECK: sv.passign %reg_0, %arg0 : i8
+    %0 = hw.array_create %arg0, %arg1 : i8
+    sv.passign %reg, %0 : !hw.array<2xi8>
+  // CHECK: }
+  }
+
+  // CHECK: %0 = sv.read_inout %reg : !hw.inout<i8>
+  // CHECK: %1 = sv.read_inout %reg_0 : !hw.inout<i8>
+  // CHECK: %casez_tmp = sv.reg : !hw.inout<i8>
+  // CHECK: sv.alwayscomb {
+  // CHECK:   sv.case casez %sel : i1
+  // CHECK:   case b0: {
+  // CHECK:     sv.bpassign %casez_tmp, %0 : i8
+  // CHECK:   }
+  // CHECK:   default: {
+  // CHECK:     sv.bpassign %casez_tmp, %1 : i8
+  // CHECK:   }
+  // CHECK: }
+  %1 = sv.array_index_inout %reg[%sel] : !hw.inout<array<2xi8>>, i1
+  // CHECK: %2 = sv.read_inout %casez_tmp : !hw.inout<i8>
+  %2 = sv.read_inout %1 : !hw.inout<i8>
+  // CHECK: hw.output %2 : i8
+  hw.output %2 : i8
+}
+
+// CHECK-LABEL: hw.module @array_reg_mux_4
+hw.module @array_reg_mux_4(in %arg0: i8, in %arg1: i8, in %arg2: i8,
+                           in %arg3: i8, in %sel: i2, in %clock: i1,
+                           out a: i8) {
+  // CHECK: %reg = sv.reg : !hw.inout<i8>
+  // CHECK: %reg_0 = sv.reg name "reg" : !hw.inout<i8>
+  // CHECK: %reg_1 = sv.reg name "reg" : !hw.inout<i8>
+  // CHECK: %reg_2 = sv.reg name "reg" : !hw.inout<i8>
+  %reg = sv.reg : !hw.inout<array<4xi8>>
+  // CHECK: sv.alwaysff(posedge %clock) {
+  sv.alwaysff(posedge %clock)  {
+    // CHECK: sv.passign %reg, %arg3 : i8
+    // CHECK: sv.passign %reg_0, %arg2 : i8
+    // CHECK: sv.passign %reg_1, %arg1 : i8
+    // CHECK: sv.passign %reg_2, %arg0 : i8
+    %0 = hw.array_create %arg0, %arg1, %arg2, %arg3 : i8
+    sv.passign %reg, %0 : !hw.array<4xi8>
+  // CHECK: }
+  }
+  // CHECK: %0 = sv.read_inout %reg : !hw.inout<i8>
+  // CHECK: %1 = sv.read_inout %reg_0 : !hw.inout<i8>
+  // CHECK: %2 = sv.read_inout %reg_1 : !hw.inout<i8>
+  // CHECK: %3 = sv.read_inout %reg_2 : !hw.inout<i8>
+  // CHECK: %casez_tmp = sv.reg : !hw.inout<i8>
+  // CHECK: sv.alwayscomb {
+  // CHECK:   sv.case casez %sel : i2
+  // CHECK:   case b00: {
+  // CHECK:     sv.bpassign %casez_tmp, %0 : i8
+  // CHECK:   }
+  // CHECK:   case b01: {
+  // CHECK:     sv.bpassign %casez_tmp, %1 : i8
+  // CHECK:   }
+  // CHECK:   case b10: {
+  // CHECK:     sv.bpassign %casez_tmp, %2 : i8
+  // CHECK:   }
+  // CHECK:   default: {
+  // CHECK:     sv.bpassign %casez_tmp, %3 : i8
+  // CHECK:   }
+  // CHECK: }
+  %1 = sv.array_index_inout %reg[%sel] : !hw.inout<array<4xi8>>, i2
+  // CHECK: %4 = sv.read_inout %casez_tmp : !hw.inout<i8>
+  %2 = sv.read_inout %1 : !hw.inout<i8>
+  // CHECK: hw.output %4 : i8
+  hw.output %2 : i8
 }
 
 }  // end builtin.module

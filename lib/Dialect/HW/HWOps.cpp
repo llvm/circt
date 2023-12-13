@@ -14,9 +14,9 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/CustomDirectiveImpl.h"
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/HW/HWInstanceImplementation.h"
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/HW/HWVisitors.h"
-#include "circt/Dialect/HW/InstanceImplementation.h"
 #include "circt/Dialect/HW/ModuleImplementation.h"
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "circt/Support/Namespace.h"
@@ -354,7 +354,7 @@ static bool hasAdditionalAttributes(Op op,
 void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   // If the wire has an optional 'name' attribute, use it.
   auto nameAttr = (*this)->getAttrOfType<StringAttr>("name");
-  if (!nameAttr.getValue().empty())
+  if (nameAttr && !nameAttr.getValue().empty())
     setNameFn(getResult(), nameAttr.getValue());
 }
 
@@ -516,18 +516,19 @@ bool hw::isAnyModuleOrInstance(Operation *moduleOrInstance) {
 /// Return the signature for a module as a function type from the module itself
 /// or from an hw::InstanceOp.
 FunctionType hw::getModuleType(Operation *moduleOrInstance) {
-  if (auto instance = dyn_cast<InstanceOp>(moduleOrInstance)) {
-    SmallVector<Type> inputs(instance->getOperandTypes());
-    SmallVector<Type> results(instance->getResultTypes());
-    return FunctionType::get(instance->getContext(), inputs, results);
-  }
-
-  if (auto mod = dyn_cast<HWModuleLike>(moduleOrInstance))
-    return mod.getHWModuleType().getFuncType();
-
-  return cast<mlir::FunctionOpInterface>(moduleOrInstance)
-      .getFunctionType()
-      .cast<FunctionType>();
+  return TypeSwitch<Operation *, FunctionType>(moduleOrInstance)
+      .Case<InstanceOp, InstanceChoiceOp>([](auto instance) {
+        SmallVector<Type> inputs(instance->getOperandTypes());
+        SmallVector<Type> results(instance->getResultTypes());
+        return FunctionType::get(instance->getContext(), inputs, results);
+      })
+      .Case<HWModuleLike>(
+          [](auto mod) { return mod.getHWModuleType().getFuncType(); })
+      .Default([](Operation *op) {
+        return cast<mlir::FunctionOpInterface>(op)
+            .getFunctionType()
+            .cast<FunctionType>();
+      });
 }
 
 /// Return the name to use for the Verilog module that we're referencing
@@ -1185,15 +1186,17 @@ void HWModuleExternOp::getAsmBlockArgumentNames(
 
 template <typename ModTy>
 static SmallVector<Location> getAllPortLocs(ModTy module) {
-  SmallVector<Location> retval;
   auto locs = module.getPortLocs();
   if (locs) {
+    SmallVector<Location> retval;
     for (auto l : *locs)
       retval.push_back(cast<Location>(l));
     // Either we have a length of 0 or the correct length
     assert(!locs->size() || locs->size() == module.getNumPorts());
+    return retval;
   }
-  return retval;
+  return SmallVector<Location>(module.getNumPorts(),
+                               UnknownLoc::get(module.getContext()));
 }
 
 SmallVector<Location> HWModuleOp::getAllPortLocs() {
@@ -1383,8 +1386,9 @@ static SmallVector<PortInfo> getPortList(ModuleTy &mod) {
   auto modTy = mod.getHWModuleType();
   auto emptyDict = DictionaryAttr::get(mod.getContext());
   SmallVector<PortInfo> retval;
+  auto locs = mod.getAllPortLocs();
   for (unsigned i = 0, e = modTy.getNumPorts(); i < e; ++i) {
-    LocationAttr loc = mod.getPortLoc(i);
+    LocationAttr loc = locs[i];
     DictionaryAttr attrs =
         dyn_cast_or_null<DictionaryAttr>(mod.getPortAttrs(i));
     if (!attrs)
@@ -1445,10 +1449,6 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
 std::optional<size_t> InstanceOp::getTargetResultIndex() {
   // Inner symbols on instance operations target the op not any result.
   return std::nullopt;
-}
-
-Operation *InstanceOp::getReferencedModuleSlow() {
-  return getReferencedModuleCached(/*cache=*/nullptr);
 }
 
 LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
@@ -1537,103 +1537,146 @@ void InstanceOp::print(OpAsmPrinter &p) {
                        "argNames", "resultNames", "parameters"});
 }
 
-/// Return the name of the specified input port or null if it cannot be
-/// determined.
-StringAttr InstanceOp::getArgumentName(size_t idx) {
-  return instance_like_impl::getName(getArgNames(), idx);
+//===----------------------------------------------------------------------===//
+// InstanceChoiceOp
+//===----------------------------------------------------------------------===//
+
+std::optional<size_t> InstanceChoiceOp::getTargetResultIndex() {
+  // Inner symbols on instance operations target the op not any result.
+  return std::nullopt;
 }
 
-/// Return the name of the specified result or null if it cannot be
-/// determined.
-StringAttr InstanceOp::getResultName(size_t idx) {
-  return instance_like_impl::getName(getResultNames(), idx);
-}
-
-/// Change the name of the specified input port.
-void InstanceOp::setArgumentName(size_t i, StringAttr name) {
-  setInputNames(instance_like_impl::updateName(getArgNames(), i, name));
-}
-
-/// Change the name of the specified output port.
-void InstanceOp::setResultName(size_t i, StringAttr name) {
-  setOutputNames(instance_like_impl::updateName(getResultNames(), i, name));
-}
-
-/// Suggest a name for each result value based on the saved result names
-/// attribute.
-void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  instance_like_impl::getAsmResultNames(setNameFn, getInstanceName(),
-                                        getResultNames(), getResults());
-}
-
-SmallVector<PortInfo> InstanceOp::getPortList() {
-  SmallVector<PortInfo> ports;
-  auto emptyDict = DictionaryAttr::get(getContext());
-  auto argNames = (*this)->getAttrOfType<ArrayAttr>("argNames");
-  auto argTypes = getModuleType(*this).getInputs();
-  auto argLocs = (*this)->getAttrOfType<ArrayAttr>("argLocs");
-
-  auto resultNames = (*this)->getAttrOfType<ArrayAttr>("resultNames");
-  auto resultTypes = getModuleType(*this).getResults();
-  auto resultLocs = (*this)->getAttrOfType<ArrayAttr>("resultLocs");
-
-  ports.reserve(argTypes.size() + resultTypes.size());
-  for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
-    auto type = argTypes[i];
-    auto direction = ModulePort::Direction::Input;
-
-    if (auto inout = type.dyn_cast<InOutType>()) {
-      type = inout.getElementType();
-      direction = ModulePort::Direction::InOut;
+LogicalResult
+InstanceChoiceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  for (Attribute name : getModuleNamesAttr()) {
+    if (failed(instance_like_impl::verifyInstanceOfHWModule(
+            *this, name.cast<FlatSymbolRefAttr>(), getInputs(),
+            getResultTypes(), getArgNames(), getResultNames(), getParameters(),
+            symbolTable))) {
+      return failure();
     }
+  }
+  return success();
+}
 
-    LocationAttr loc;
-    if (argLocs)
-      loc = argLocs[i].cast<LocationAttr>();
-    ports.push_back(
-        {{argNames[i].cast<StringAttr>(), type, direction}, i, emptyDict, loc});
+LogicalResult InstanceChoiceOp::verify() {
+  auto module = (*this)->getParentOfType<HWModuleOp>();
+  if (!module)
+    return success();
+
+  auto moduleParameters = module->getAttrOfType<ArrayAttr>("parameters");
+  instance_like_impl::EmitErrorFn emitError =
+      [&](const std::function<bool(InFlightDiagnostic &)> &fn) {
+        auto diag = emitOpError();
+        if (fn(diag))
+          diag.attachNote(module->getLoc()) << "module declared here";
+      };
+  return instance_like_impl::verifyParameterStructure(
+      getParameters(), moduleParameters, emitError);
+}
+
+ParseResult InstanceChoiceOp::parse(OpAsmParser &parser,
+                                    OperationState &result) {
+  StringAttr instanceNameAttr;
+  InnerSymAttr innerSym;
+  SmallVector<Attribute> moduleNames;
+  SmallVector<Attribute> targetNames;
+  SmallVector<OpAsmParser::UnresolvedOperand, 4> inputsOperands;
+  SmallVector<Type, 1> inputsTypes, allResultTypes;
+  ArrayAttr argNames, resultNames, parameters;
+  auto noneType = parser.getBuilder().getType<NoneType>();
+
+  if (parser.parseAttribute(instanceNameAttr, noneType, "instanceName",
+                            result.attributes))
+    return failure();
+
+  if (succeeded(parser.parseOptionalKeyword("sym"))) {
+    // Parsing an optional symbol name doesn't fail, so no need to check the
+    // result.
+    if (parser.parseCustomAttributeWithFallback(innerSym))
+      return failure();
+    result.addAttribute(InnerSymbolTable::getInnerSymbolAttrName(), innerSym);
   }
 
-  for (unsigned i = 0, e = resultTypes.size(); i < e; ++i) {
-    LocationAttr loc;
-    if (resultLocs)
-      loc = resultLocs[i].cast<LocationAttr>();
-    ports.push_back({{resultNames[i].cast<StringAttr>(), resultTypes[i],
-                      ModulePort::Direction::Output},
-                     i,
-                     emptyDict,
-                     loc});
+  FlatSymbolRefAttr defaultModuleName;
+  if (parser.parseAttribute(defaultModuleName))
+    return failure();
+  moduleNames.push_back(defaultModuleName);
+
+  while (succeeded(parser.parseOptionalKeyword("or"))) {
+    FlatSymbolRefAttr moduleName;
+    StringAttr targetName;
+    if (parser.parseAttribute(moduleName) ||
+        parser.parseOptionalKeyword("if") || parser.parseAttribute(targetName))
+      return failure();
+    moduleNames.push_back(moduleName);
+    targetNames.push_back(targetName);
   }
-  return ports;
+
+  llvm::SMLoc parametersLoc, inputsOperandsLoc;
+  if (parser.getCurrentLocation(&parametersLoc) ||
+      parseOptionalParameterList(parser, parameters) ||
+      parseInputPortList(parser, inputsOperands, inputsTypes, argNames) ||
+      parser.resolveOperands(inputsOperands, inputsTypes, inputsOperandsLoc,
+                             result.operands) ||
+      parser.parseArrow() ||
+      parseOutputPortList(parser, allResultTypes, resultNames) ||
+      parser.parseOptionalAttrDict(result.attributes)) {
+    return failure();
+  }
+
+  result.addAttribute("moduleNames",
+                      ArrayAttr::get(parser.getContext(), moduleNames));
+  result.addAttribute("targetNames",
+                      ArrayAttr::get(parser.getContext(), targetNames));
+  result.addAttribute("argNames", argNames);
+  result.addAttribute("resultNames", resultNames);
+  result.addAttribute("parameters", parameters);
+  result.addTypes(allResultTypes);
+  return success();
 }
 
-PortInfo InstanceOp::getPort(size_t idx) { return getPortList()[idx]; }
+void InstanceChoiceOp::print(OpAsmPrinter &p) {
+  p << ' ';
+  p.printAttributeWithoutType(getInstanceNameAttr());
+  if (auto attr = getInnerSymAttr()) {
+    p << " sym ";
+    attr.print(p);
+  }
+  p << ' ';
 
-size_t InstanceOp::getNumPorts() {
-  return getNumInputPorts() + getNumOutputPorts();
+  auto moduleNames = getModuleNamesAttr();
+  auto targetNames = getTargetNamesAttr();
+  assert(moduleNames.size() == targetNames.size() + 1);
+
+  p.printAttributeWithoutType(moduleNames[0]);
+  for (size_t i = 0, n = targetNames.size(); i < n; ++i) {
+    p << " or ";
+    p.printAttributeWithoutType(moduleNames[i + 1]);
+    p << " if ";
+    p.printAttributeWithoutType(targetNames[i]);
+  }
+
+  printOptionalParameterList(p, *this, getParameters());
+  printInputPortList(p, *this, getInputs(), getInputs().getTypes(),
+                     getArgNames());
+  p << " -> ";
+  printOutputPortList(p, *this, getResultTypes(), getResultNames());
+
+  p.printOptionalAttrDict(
+      (*this)->getAttrs(),
+      /*elidedAttrs=*/{"instanceName",
+                       InnerSymbolTable::getInnerSymbolAttrName(),
+                       "moduleNames", "targetNames", "argNames", "resultNames",
+                       "parameters"});
 }
 
-size_t InstanceOp::getNumInputPorts() { return getNumOperands(); }
-
-size_t InstanceOp::getNumOutputPorts() { return getNumResults(); }
-
-size_t InstanceOp::getPortIdForInputId(size_t idx) { return idx; }
-
-size_t InstanceOp::getPortIdForOutputId(size_t idx) {
-  return idx + getNumInputPorts();
-}
-
-void InstanceOp::getValues(SmallVectorImpl<Value> &values,
-                           const ModulePortInfo &mpi) {
-  size_t inputPort = 0, resultPort = 0;
-  values.resize(mpi.size());
-  auto results = getResults();
-  auto inputs = getInputs();
-  for (auto [idx, port] : llvm::enumerate(mpi))
-    if (mpi.at(idx).isOutput())
-      values[idx] = results[resultPort++];
-    else
-      values[idx] = inputs[inputPort++];
+ArrayAttr InstanceChoiceOp::getReferencedModuleNamesAttr() {
+  SmallVector<Attribute> moduleNames;
+  for (Attribute attr : getModuleNamesAttr()) {
+    moduleNames.push_back(attr.cast<FlatSymbolRefAttr>().getAttr());
+  }
+  return ArrayAttr::get(getContext(), moduleNames);
 }
 
 //===----------------------------------------------------------------------===//
@@ -3127,7 +3170,27 @@ bool HierPathOp::isComponent() { return (bool)ref(); }
 // module port or a declaration inside the module.
 // 7. The last element of the namepath can also be a module symbol.
 LogicalResult HierPathOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
-  StringAttr expectedModuleName = {};
+  ArrayAttr expectedModuleNames = {};
+  auto checkExpectedModule = [&](Attribute name) -> LogicalResult {
+    if (!expectedModuleNames)
+      return success();
+    if (llvm::any_of(expectedModuleNames,
+                     [name](Attribute attr) { return attr == name; }))
+      return success();
+    auto diag = emitOpError() << "instance path is incorrect. Expected ";
+    size_t n = expectedModuleNames.size();
+    if (n != 1) {
+      diag << "one of ";
+    }
+    for (size_t i = 0; i < n; ++i) {
+      if (i != 0)
+        diag << ((i + 1 == n) ? " or " : ", ");
+      diag << expectedModuleNames[i].cast<StringAttr>();
+    }
+    diag << ". Instead found: " << name;
+    return diag;
+  };
+
   if (!getNamepath() || getNamepath().empty())
     return emitOpError() << "the instance path cannot be empty";
   for (unsigned i = 0, s = getNamepath().size() - 1; i < s; ++i) {
@@ -3137,17 +3200,17 @@ LogicalResult HierPathOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
              << "the instance path can only contain inner sym reference"
              << ", only the leaf can refer to a module symbol";
 
-    if (expectedModuleName && expectedModuleName != innerRef.getModule())
-      return emitOpError() << "instance path is incorrect. Expected module: "
-                           << expectedModuleName
-                           << " instead found: " << innerRef.getModule();
+    if (failed(checkExpectedModule(innerRef.getModule())))
+      return failure();
+
     auto instOp = ns.lookupOp<igraph::InstanceOpInterface>(innerRef);
     if (!instOp)
       return emitOpError() << " module: " << innerRef.getModule()
                            << " does not contain any instance with symbol: "
                            << innerRef.getName();
-    expectedModuleName = instOp.getReferencedModuleNameAttr();
+    expectedModuleNames = instOp.getReferencedModuleNamesAttr();
   }
+
   // The instance path has been verified. Now verify the last element.
   auto leafRef = getNamepath()[getNamepath().size() - 1];
   if (auto innerRef = leafRef.dyn_cast<hw::InnerRefAttr>()) {
@@ -3155,17 +3218,11 @@ LogicalResult HierPathOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
       return emitOpError() << " operation with symbol: " << innerRef
                            << " was not found ";
     }
-    if (expectedModuleName && expectedModuleName != innerRef.getModule())
-      return emitOpError() << "instance path is incorrect. Expected module: "
-                           << expectedModuleName
-                           << " instead found: " << innerRef.getModule();
-  } else if (expectedModuleName &&
-             expectedModuleName !=
-                 leafRef.cast<FlatSymbolRefAttr>().getAttr()) {
-    // This is the case when the nla is applied to a module.
-    return emitOpError() << "instance path is incorrect. Expected module: "
-                         << expectedModuleName << " instead found: "
-                         << leafRef.cast<FlatSymbolRefAttr>().getAttr();
+    if (failed(checkExpectedModule(innerRef.getModule())))
+      return failure();
+  } else if (failed(checkExpectedModule(
+                 leafRef.cast<FlatSymbolRefAttr>().getAttr()))) {
+    return failure();
   }
   return success();
 }

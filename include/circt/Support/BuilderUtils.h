@@ -12,6 +12,9 @@
 #include <variant>
 
 #include "circt/Support/LLVM.h"
+#include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 namespace circt {

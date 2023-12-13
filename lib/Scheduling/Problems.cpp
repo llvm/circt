@@ -408,6 +408,37 @@ LogicalResult ModuloProblem::verify() {
 }
 
 //===----------------------------------------------------------------------===//
+// ChainingCyclicProblem
+//===----------------------------------------------------------------------===//
+
+LogicalResult ChainingCyclicProblem::checkDefUse(Dependence dep) {
+  if (!dep.isAuxiliary() && (getDistance(dep).value_or(0) != 0))
+    return getContainingOp()->emitError()
+           << "Def-use dependence cannot have non-zero distance.\n"
+           << "On operation: " << *dep.getDestination() << ".\n";
+  return success();
+}
+
+LogicalResult ChainingCyclicProblem::check() {
+  for (auto *op : getOperations())
+    for (auto &dep : getDependences(op))
+      if (failed(checkDefUse(dep)))
+        return failure();
+
+  if (ChainingProblem::check().succeeded() &&
+      CyclicProblem::check().succeeded())
+    return success();
+  return failure();
+}
+
+LogicalResult ChainingCyclicProblem::verify() {
+  if (ChainingProblem::verify().succeeded() &&
+      CyclicProblem::verify().succeeded())
+    return success();
+  return failure();
+}
+
+//===----------------------------------------------------------------------===//
 // Dependence
 //===----------------------------------------------------------------------===//
 

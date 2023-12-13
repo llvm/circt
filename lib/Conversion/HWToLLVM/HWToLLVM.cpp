@@ -153,8 +153,8 @@ struct ArrayGetOpConversion : public ConvertOpToLLVMPattern<hw::ArrayGetOp> {
           op->getLoc(), IntegerType::get(rewriter.getContext(), 32),
           rewriter.getI32IntegerAttr(1));
       arrPtr = rewriter.create<LLVM::AllocaOp>(
-          op->getLoc(),
-          LLVM::LLVMPointerType::get(adaptor.getInput().getType()), oneC,
+          op->getLoc(), LLVM::LLVMPointerType::get(rewriter.getContext()),
+          adaptor.getInput().getType(), oneC,
           /*alignment=*/4);
       rewriter.create<LLVM::StoreOp>(op->getLoc(), adaptor.getInput(), arrPtr);
     }
@@ -166,16 +166,9 @@ struct ArrayGetOpConversion : public ConvertOpToLLVMPattern<hw::ArrayGetOp> {
     // During the ongoing migration to opaque types, use the constructor that
     // accepts an element type when the array pointer type is opaque, and
     // otherwise use the typed pointer constructor.
-    LLVM::GEPOp gep;
-    if (cast<LLVM::LLVMPointerType>(arrPtr.getType()).isOpaque())
-      gep = rewriter.create<LLVM::GEPOp>(
-          op->getLoc(), LLVM::LLVMPointerType::get(rewriter.getContext()),
-          arrTy, arrPtr, ArrayRef<LLVM::GEPArg>{0, zextIndex});
-    else
-      gep = rewriter.create<LLVM::GEPOp>(
-          op->getLoc(), LLVM::LLVMPointerType::get(elemTy), arrPtr,
-          ArrayRef<LLVM::GEPArg>{0, zextIndex});
-
+    auto gep = rewriter.create<LLVM::GEPOp>(
+        op->getLoc(), LLVM::LLVMPointerType::get(rewriter.getContext()), arrTy,
+        arrPtr, ArrayRef<LLVM::GEPArg>{0, zextIndex});
     rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, elemTy, gep);
 
     return success();
@@ -196,15 +189,13 @@ struct ArraySliceOpConversion
                   ConversionPatternRewriter &rewriter) const override {
 
     auto dstTy = typeConverter->convertType(op.getDst().getType());
-    auto elemTy = typeConverter->convertType(
-        op.getDst().getType().cast<hw::ArrayType>().getElementType());
 
     auto oneC = rewriter.create<LLVM::ConstantOp>(
         op->getLoc(), rewriter.getI32Type(), rewriter.getI32IntegerAttr(1));
 
     auto arrPtr = rewriter.create<LLVM::AllocaOp>(
-        op->getLoc(), LLVM::LLVMPointerType::get(adaptor.getInput().getType()),
-        oneC,
+        op->getLoc(), LLVM::LLVMPointerType::get(rewriter.getContext()),
+        adaptor.getInput().getType(), oneC,
         /*alignment=*/4);
 
     rewriter.create<LLVM::StoreOp>(op->getLoc(), adaptor.getInput(), arrPtr);
@@ -214,20 +205,11 @@ struct ArraySliceOpConversion
     // During the ongoing migration to opaque types, use the constructor that
     // accepts an element type when the array pointer type is opaque, and
     // otherwise use the typed pointer constructor.
-    LLVM::GEPOp gep;
-    if (cast<LLVM::LLVMPointerType>(arrPtr.getType()).isOpaque())
-      gep = rewriter.create<LLVM::GEPOp>(
-          op->getLoc(), LLVM::LLVMPointerType::get(rewriter.getContext()),
-          dstTy, arrPtr, ArrayRef<LLVM::GEPArg>{0, zextIndex});
-    else
-      gep = rewriter.create<LLVM::GEPOp>(
-          op->getLoc(), LLVM::LLVMPointerType::get(elemTy), arrPtr,
-          ArrayRef<LLVM::GEPArg>{0, zextIndex});
+    auto gep = rewriter.create<LLVM::GEPOp>(
+        op->getLoc(), LLVM::LLVMPointerType::get(rewriter.getContext()), dstTy,
+        arrPtr, ArrayRef<LLVM::GEPArg>{0, zextIndex});
 
-    auto cast = rewriter.create<LLVM::BitcastOp>(
-        op->getLoc(), LLVM::LLVMPointerType::get(dstTy), gep);
-
-    rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, dstTy, cast);
+    rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, dstTy, gep);
 
     return success();
   }
@@ -324,16 +306,13 @@ struct BitcastOpConversion : public ConvertOpToLLVMPattern<hw::BitcastOp> {
         op->getLoc(), rewriter.getI32Type(), rewriter.getI32IntegerAttr(1));
 
     auto ptr = rewriter.create<LLVM::AllocaOp>(
-        op->getLoc(), LLVM::LLVMPointerType::get(adaptor.getInput().getType()),
-        oneC,
+        op->getLoc(), LLVM::LLVMPointerType::get(rewriter.getContext()),
+        adaptor.getInput().getType(), oneC,
         /*alignment=*/4);
 
     rewriter.create<LLVM::StoreOp>(op->getLoc(), adaptor.getInput(), ptr);
 
-    auto cast = rewriter.create<LLVM::BitcastOp>(
-        op.getLoc(), LLVM::LLVMPointerType::get(resultTy), ptr);
-
-    rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, resultTy, cast);
+    rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, resultTy, ptr);
 
     return success();
   }

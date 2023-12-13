@@ -808,22 +808,16 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
     while (!sources.empty() && !sinks.empty()) {
       if (sources.top() != sinks.top())
         break;
-      auto newLCA = sources.top();
-      lca = cast<FModuleOp>(instanceGraph.getReferencedModule(newLCA));
+      auto newLCA = cast<InstanceOp>(*sources.top());
+      lca = cast<FModuleOp>(newLCA.getReferencedModule(instanceGraph));
       sources = sources.dropFront();
       sinks = sinks.dropFront();
     }
 
     LLVM_DEBUG({
       llvm::dbgs() << "    LCA: " << lca.getModuleName() << "\n"
-                   << "    sourcePaths:\n";
-      for (auto inst : sourcePaths[0])
-        llvm::dbgs() << "      - " << inst.getInstanceName() << " of "
-                     << inst.getReferencedModuleName() << "\n";
-      llvm::dbgs() << "    sinkPaths:\n";
-      for (auto inst : sinkPaths[0])
-        llvm::dbgs() << "      - " << inst.getInstanceName() << " of "
-                     << inst.getReferencedModuleName() << "\n";
+                   << "    sourcePath: " << sourcePaths[0] << "\n"
+                   << "    sinkPaths:  " << sinkPaths[0] << "\n";
     });
 
     // Pre-populate the connectionMap of the module with the source and sink.
@@ -885,8 +879,9 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
     auto addPorts = [&](igraph::InstancePath insts, Value val, Type tpe,
                         Direction dir) {
       StringRef name, instName;
-      for (auto inst : llvm::reverse(insts)) {
-        auto mod = instanceGraph.getReferencedModule<FModuleOp>(inst);
+      for (auto instNode : llvm::reverse(insts)) {
+        auto inst = cast<InstanceOp>(*instNode);
+        auto mod = inst.getReferencedModule<FModuleOp>(instanceGraph);
         if (name.empty()) {
           if (problem.newNameHint.empty())
             name = state.getNamespace(mod).newName(

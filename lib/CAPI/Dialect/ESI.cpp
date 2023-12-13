@@ -1,4 +1,8 @@
-//===- ESI.cpp - C Interface for the ESI Dialect --------------------------===//
+//===- ESI.cpp - C interface for the ESI dialect --------------------------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -82,8 +86,9 @@ void circtESIRegisterGlobalServiceGenerator(
     MlirStringRef impl_type, CirctESIServiceGeneratorFunc genFunc,
     void *userData) {
   ServiceGeneratorDispatcher::globalDispatcher().registerGenerator(
-      unwrap(impl_type), [genFunc, userData](ServiceImplementReqOp req,
-                                             ServiceDeclOpInterface decl) {
+      unwrap(impl_type),
+      [genFunc, userData](ServiceImplementReqOp req,
+                          ServiceDeclOpInterface decl, ServiceImplRecordOp) {
         return unwrap(genFunc(wrap(req), wrap(decl.getOperation()), userData));
       });
 }
@@ -134,6 +139,10 @@ MlirAttribute circtESIAppIDAttrGet(MlirContext ctxt, MlirStringRef name,
                                    uint64_t index) {
   return wrap(AppIDAttr::get(
       unwrap(ctxt), StringAttr::get(unwrap(ctxt), unwrap(name)), index));
+}
+MlirAttribute circtESIAppIDAttrGetNoIdx(MlirContext ctxt, MlirStringRef name) {
+  return wrap(AppIDAttr::get(
+      unwrap(ctxt), StringAttr::get(unwrap(ctxt), unwrap(name)), std::nullopt));
 }
 MlirStringRef circtESIAppIDAttrGetName(MlirAttribute attr) {
   return wrap(unwrap(attr).cast<AppIDAttr>().getName().getValue());

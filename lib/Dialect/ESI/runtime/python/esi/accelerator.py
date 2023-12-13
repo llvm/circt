@@ -5,10 +5,9 @@
 from . import esiCppAccel as cpp
 
 
-class Accelerator(cpp.Accelerator):
-  """A connection to an ESI accelerator."""
+class AcceleratorConnection(cpp.AcceleratorConnection):
+  """An ESI accelerator."""
 
-  @property
   def manifest(self) -> cpp.Manifest:
-    """Get and parse the accelerator manifest."""
+    """Returns the accelerator's manifest."""
     return cpp.Manifest(self.sysinfo().json_manifest())

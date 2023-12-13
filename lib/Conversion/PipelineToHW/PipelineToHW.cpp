@@ -184,8 +184,7 @@ public:
         // be clocked.
         if (isStallablePipeline) {
           dataReg = builder.create<seq::CompRegClockEnabledOp>(
-              stageOp->getLoc(), regIn, args.clock, stageValid,
-              regName.strref());
+              stageOp->getLoc(), regIn, args.clock, stageValid, regName);
         } else {
           dataReg = builder.create<seq::CompRegOp>(stageOp->getLoc(), regIn,
                                                    args.clock, regName);

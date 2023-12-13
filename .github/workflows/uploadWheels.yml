@@ -71,6 +71,11 @@ jobs:
     runs-on: ubuntu-20.04
     if: github.repository == 'llvm/circt' && (github.ref_type == 'tag' || github.event_name == 'schedule')
     needs: build_wheels
+    environment:
+      name: pypi
+      url: https://pypi.org/p/circt
+    permissions:
+      id-token: write
 
     steps:
       - name: Download wheels
@@ -86,6 +91,5 @@ jobs:
       - name: Upload wheels to pypi
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          password: ${{ secrets.PYPI_CIRCT_API_TOKEN }}
           packages-dir: wheelhouse/
           verify-metadata: false

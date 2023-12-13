@@ -12,7 +12,7 @@
 //
 // DO NOT EDIT!
 // This file is distributed as part of an ESI package. The source for this file
-// should always be modified within CIRCT (lib/dialect/ESI/runtime/cpp/esi.h).
+// should always be modified within CIRCT (lib/dialect/ESI/runtime/cpp).
 //
 //===----------------------------------------------------------------------===//
 
@@ -29,16 +29,21 @@ namespace backends {
 namespace cosim {
 
 /// Connect to an ESI simulation.
-class CosimAccelerator : public esi::Accelerator {
+class CosimAccelerator : public esi::AcceleratorConnection {
 public:
+  struct Impl;
+
   CosimAccelerator(std::string hostname, uint16_t port);
-  static std::unique_ptr<Accelerator> connect(std::string connectionString);
+  static std::unique_ptr<AcceleratorConnection>
+  connect(std::string connectionString);
 
 protected:
-  virtual Service *createService(Service::Type service) override;
+  virtual Service *createService(Service::Type service, AppIDPath path,
+                                 std::string implName,
+                                 const ServiceImplDetails &details,
+                                 const HWClientDetails &clients) override;
 
 private:
-  struct Impl;
   std::unique_ptr<Impl> impl;
 };
 

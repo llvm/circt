@@ -691,16 +691,16 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT:      declgroup GroupD, bind :
   // CHECK-NEXT:        declgroup GroupE, bind :
   // CHECK-NEXT:    declgroup GroupF, bind :
-  firrtl.declgroup @GroupA bind {
-    firrtl.declgroup @GroupB bind {
-      firrtl.declgroup @GroupC bind {
+  firrtl.layer @GroupA bind {
+    firrtl.layer @GroupB bind {
+      firrtl.layer @GroupC bind {
       }
-      firrtl.declgroup @GroupD bind {
-        firrtl.declgroup @GroupE bind {
+      firrtl.layer @GroupD bind {
+        firrtl.layer @GroupE bind {
         }
       }
     }
-    firrtl.declgroup @GroupF bind {
+    firrtl.layer @GroupF bind {
     }
   }
   // CHECK:      module ModuleWithGroups :
@@ -711,16 +711,16 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT:         group GroupE :
   // CHECK-NEXT:     group GroupF :
   firrtl.module @ModuleWithGroups() {
-    firrtl.group @GroupA {
-      firrtl.group @GroupA::@GroupB {
-        firrtl.group @GroupA::@GroupB::@GroupC {
+    firrtl.layerblock @GroupA {
+      firrtl.layerblock @GroupA::@GroupB {
+        firrtl.layerblock @GroupA::@GroupB::@GroupC {
         }
-        firrtl.group @GroupA::@GroupB::@GroupD {
-          firrtl.group @GroupA::@GroupB::@GroupD::@GroupE {
+        firrtl.layerblock @GroupA::@GroupB::@GroupD {
+          firrtl.layerblock @GroupA::@GroupB::@GroupD::@GroupE {
           }
         }
       }
-      firrtl.group @GroupA::@GroupF {
+      firrtl.layerblock @GroupA::@GroupF {
       }
     }
   }

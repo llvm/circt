@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-//
+// Manifest parsing and API creation.
 //
 // DO NOT EDIT!
 // This file is distributed as part of an ESI package. The source for this file
@@ -18,67 +18,52 @@
 #ifndef ESI_MANIFEST_H
 #define ESI_MANIFEST_H
 
+#include "esi/Common.h"
+#include "esi/Types.h"
+
 #include <any>
 #include <cstdint>
 #include <map>
 #include <memory>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
 namespace esi {
 
-//===----------------------------------------------------------------------===//
-// Common accelerator description types.
-//===----------------------------------------------------------------------===//
-
-struct AppID {
-  const std::string name;
-  const std::optional<uint32_t> idx;
-};
-using AppIDPath = std::vector<AppID>;
-
-struct ModuleInfo {
-  const std::optional<std::string> name;
-  const std::optional<std::string> summary;
-  const std::optional<std::string> version;
-  const std::optional<std::string> repo;
-  const std::optional<std::string> commitHash;
-  const std::map<std::string, std::any> extra;
-};
-
-struct ServicePort {
-  std::string name;
-  std::string portName;
-};
-
-//===----------------------------------------------------------------------===//
-// Manifest parsing and API creation.
-//===----------------------------------------------------------------------===//
-
 // Forward declarations.
-namespace internal {
-class ManifestProxy;
-} // namespace internal
+class AcceleratorConnection;
 class Accelerator;
-class Design;
 
 /// Class to parse a manifest. It also constructs the dynamic API for the
 /// accelerator.
 class Manifest {
 public:
-  Manifest(const std::string &jsonManifest);
-  ~Manifest();
+  class Impl;
 
-  uint32_t apiVersion() const;
+  Manifest(const Manifest &) = delete;
+  Manifest(const std::string &jsonManifest);
+
+  uint32_t getApiVersion() const;
   // Modules which have designer specified metadata.
-  std::vector<ModuleInfo> moduleInfos() const;
+  std::vector<ModuleInfo> getModuleInfos() const;
 
   // Build a dynamic design hierarchy from the manifest.
-  std::unique_ptr<Design> buildDesign(Accelerator &acc) const;
+  std::unique_ptr<Accelerator>
+  buildAccelerator(AcceleratorConnection &acc) const;
+
+  /// Get a Type from the manifest based on its ID. Types are uniqued here.
+  std::optional<std::reference_wrapper<const Type>> getType(Type::ID id) const;
+
+  /// The Type Table is an ordered list of types. The offset can be used to
+  /// compactly and uniquely within a design. It does not include all of the
+  /// types in a design -- just the ones listed in the 'types' section of the
+  /// manifest.
+  const std::vector<std::reference_wrapper<const Type>> &getTypeTable() const;
 
 private:
-  internal::ManifestProxy &manifest;
+  std::shared_ptr<Impl> impl;
 };
 
 } // namespace esi

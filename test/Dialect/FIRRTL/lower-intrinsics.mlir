@@ -1,4 +1,5 @@
-// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-lower-intrinsics))' %s   | FileCheck %s
+// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-lower-intrinsics))' %s | FileCheck %s --check-prefixes=CHECK,CHECK-NOEICG
+// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-lower-intrinsics{fixup-eicg-wrapper}))' %s | FileCheck %s --check-prefixes=CHECK,CHECK-EICG
 
 // CHECK-LABEL: "Foo"
 firrtl.circuit "Foo" {
@@ -219,5 +220,20 @@ firrtl.circuit "Foo" {
     firrtl.strictconnect %in_reset1, %reset1 : !firrtl.uint<1>
     firrtl.strictconnect %in_reset2, %reset2 : !firrtl.asyncreset
     firrtl.strictconnect %in_reset3, %reset3 : !firrtl.reset
+  }
+
+  // CHECK-NOEICG: LegacyClockGate
+  // CHECK-EICG-NOT: LegacyClockGate
+  firrtl.extmodule @LegacyClockGate(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock) attributes {defname = "EICG_wrapper"}
+
+  // CHECK: FixupEICGWrapper
+  firrtl.module @FixupEICGWrapper(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>) {
+    // CHECK-NOEICG: firrtl.instance
+    // CHECK-EICG-NOT: firrtl.instance
+    // CHECK-EICG: firrtl.int.clock_gate
+    %ckg_in, %ckg_test_en, %ckg_en, %ckg_out = firrtl.instance ckg @LegacyClockGate(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock)
+    firrtl.strictconnect %ckg_in, %clock : !firrtl.clock
+    firrtl.strictconnect %ckg_test_en, %en : !firrtl.uint<1>
+    firrtl.strictconnect %ckg_en, %en : !firrtl.uint<1>
   }
 }

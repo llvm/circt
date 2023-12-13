@@ -40,3 +40,25 @@ def RandomAccessMemoryDeclOp: ESI_Op<"mem.ram",
     static constexpr auto RespDirChannelIdx = 0;
   }];
 }
+
+def FuncServiceDeclOp : ESI_Op<"service.std.func",
+          [SingleBlock, NoTerminator, HasParent<"::mlir::ModuleOp">,
+           Symbol, DeclareOpInterfaceMethods<ServiceDeclOpInterface>]> {
+  let summary = "Function service";
+  let description = [{
+    Declares a service which provides a function call interface to a client.
+    
+    Ports:
+      to_client call(args: any) -> result: any
+        Client exposes a function call interface to the user and does not allow
+        out-of-order returns.
+
+      TODO: ports for out-of-order returns
+  }];
+
+  let arguments = (ins SymbolNameAttr:$sym_name);
+
+  let assemblyFormat = [{
+    $sym_name attr-dict
+  }];
+}

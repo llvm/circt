@@ -520,6 +520,18 @@ struct Default<scheduling::ModuloProblem> {
       Default<scheduling::CyclicProblem>::instanceProperties;
 };
 
+template <>
+struct Default<scheduling::ChainingCyclicProblem> {
+  static constexpr auto operationProperties =
+      Default<scheduling::ChainingProblem>::operationProperties;
+  static constexpr auto operatorTypeProperties =
+      Default<scheduling::ChainingProblem>::operatorTypeProperties;
+  static constexpr auto dependenceProperties =
+      Default<scheduling::CyclicProblem>::dependenceProperties;
+  static constexpr auto instanceProperties =
+      Default<scheduling::CyclicProblem>::instanceProperties;
+};
+
 } // namespace ssp
 } // namespace circt
 

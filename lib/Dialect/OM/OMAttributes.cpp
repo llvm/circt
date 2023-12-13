@@ -95,7 +95,7 @@ void PathAttr::print(AsmPrinter &odsPrinter) const {
   odsPrinter << '[';
   llvm::interleaveComma(getPath(), odsPrinter, [&](PathElement element) {
     odsPrinter.printKeywordOrString(element.module);
-    odsPrinter << '>';
+    odsPrinter << ':';
     odsPrinter.printKeywordOrString(element.instance);
   });
   odsPrinter << ']';
@@ -109,7 +109,7 @@ Attribute PathAttr::parse(AsmParser &odsParser, Type odsType) {
             std::string module;
             std::string instance;
             if (odsParser.parseKeywordOrString(&module) ||
-                odsParser.parseGreater() ||
+                odsParser.parseColon() ||
                 odsParser.parseKeywordOrString(&instance))
               return failure();
             path.emplace_back(StringAttr::get(context, module),

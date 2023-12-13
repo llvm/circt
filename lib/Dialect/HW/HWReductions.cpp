@@ -34,10 +34,12 @@ struct ModuleSizeCache {
     uint64_t size = 1;
     module->walk([&](Operation *op) {
       size += 1;
-      if (auto instOp = dyn_cast<HWInstanceLike>(op))
+      if (auto instOp = dyn_cast<HWInstanceLike>(op)) {
+        auto *node = instanceGraph.lookup(instOp.getReferencedModuleNameAttr());
         if (auto instModule =
-                instanceGraph.getReferencedModule<hw::HWModuleLike>(instOp))
+                dyn_cast_or_null<hw::HWModuleLike>(*node->getModule()))
           size += getModuleSize(instModule, instanceGraph);
+      }
     });
     moduleSizes.insert({module, size});
     return size;

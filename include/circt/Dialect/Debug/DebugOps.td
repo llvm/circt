@@ -19,6 +19,37 @@ class DebugOp<string mnemonic, list<Trait> traits = []> :
   Op<DebugDialect, mnemonic, traits>;
 
 
+def ScopeOp : DebugOp<"scope"> {
+  let summary = "Define a scope for debug values";
+  let description = [{
+    Creates an additional level of hierarchy in the DI, a "scope", which can be
+    used to group variables and other scopes.
+
+    Operations such as `hw.module` introduce an implicit scope. All debug
+    operations within a module are added to that implicit scope, unless they
+    have an explicit `scope` operand. Providing an explicit scope can be used to
+    represent inlined modules.
+
+    Scopes in DI do not necessarily have to correspond to levels of a module
+    hierarchy. They can also be used to model things like control flow scopes,
+    call stacks, and other source-language concepts.
+
+    The `scope` operand of any debug dialect operation must be defined locally
+    by a `dbg.scope` operation. It cannot be a block argument. (This is intended
+    as a temporary restriction, to be lifted in the future.)
+  }];
+  let arguments = (ins
+    StrAttr:$instanceName,
+    StrAttr:$moduleName,
+    Optional<ScopeType>:$scope
+  );
+  let results = (outs ScopeType:$result);
+  let assemblyFormat = [{
+    $instanceName `,` $moduleName (`scope` $scope^)? attr-dict
+  }];
+}
+
+
 def VariableOp : DebugOp<"variable"> {
   let summary = "A named value to be captured in debug info";
   let description = [{
@@ -34,10 +65,17 @@ def VariableOp : DebugOp<"variable"> {
     these source language values can be reconstituted from the actual IR values
     present at the end of compilation.
 
-    See the rationale for examples and details.
+    See the rationale for examples and details. See the `dbg.scope` operation
+    for additional details on how to use the `scope` operand.
   }];
-  let arguments = (ins StrAttr:$name, AnyType:$value);
-  let assemblyFormat = [{ $name `,` $value attr-dict `:` type($value) }];
+  let arguments = (ins
+    StrAttr:$name,
+    AnyType:$value,
+    Optional<ScopeType>:$scope
+  );
+  let assemblyFormat = [{
+    $name `,` $value (`scope` $scope^)? attr-dict `:` type($value)
+  }];
 }
 
 

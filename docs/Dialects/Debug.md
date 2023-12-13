@@ -140,6 +140,45 @@ still expose the constant values under the name `Depth` and `Width` in the debug
 info.
 
 
+## Tracking Inlined Modules
+
+The `dbg.scope` op can be used to track debug information about inlined modules.
+By default, operations such as `hw.module` in conjunction with `hw.instance`
+introduce an implicit module scope. All debug operations within a module are
+added to that implicit scope, unless they have an explicit `scope` operand. This
+explicit scope operand can be used to group the DI of an inlined module.
+Consider the following modules:
+
+```
+hw.module @Foo(in %a: i42) {
+  dbg.variable "a", %a : i42
+  hw.instance "bar" @Bar(x: %a: i42)
+}
+hw.module @Bar(in %x: i42) {
+  dbg.variable "x", %x : i42
+  %0 = comb.mul %x, %x : i42
+  dbg.variable "squared", %0 : i42
+}
+```
+
+If we inline module `Bar`, we can introduce a `dbg.scope` operation to represent
+the original instance, and group all debug variables in `Bar` under this
+explicit scope:
+
+```
+hw.module @Foo(in %a: i42) {
+  dbg.variable "a", %a : i42
+  %0 = dbg.scope "bar", "Bar"
+  dbg.variable "x", %a scope %0 : i42
+  %1 = comb.mul %a, %a : i42
+  dbg.variable "squared", %1 scope %0 : i42
+}
+```
+
+Despite the fact that the instance op no longer exists, the explicit `dbg.scope`
+op models the additional levle of hierarchy that used to exist in the input.
+
+
 ## Types
 
 

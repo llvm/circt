@@ -1,8 +1,7 @@
 import esi
-import os
 import sys
 
-acc = esi.Accelerator(sys.argv[1], sys.argv[2])
+acc = esi.AcceleratorConnection(sys.argv[1], sys.argv[2])
 
 mmio = acc.get_service_mmio()
 

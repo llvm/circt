@@ -299,9 +299,6 @@ FIRToken FIRLexer::lexTokenImpl() {
       return lexString(tokStart, /*isVerbatim=*/true);
 
     case '-':
-      if (*curPtr == '>')
-        return ++curPtr, formToken(FIRToken::minus_greater, tokStart);
-      return lexNumber(tokStart);
     case '+':
     case '0':
     case '1':

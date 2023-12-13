@@ -34,6 +34,8 @@ struct DIModule {
   SmallVector<DIVariable *, 0> variables;
   /// If this is an extern declaration.
   bool isExtern = false;
+  /// If this is an inline scope created by a `dbg.scope` operation.
+  bool isInline = false;
 };
 
 struct DIInstance {

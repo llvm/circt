@@ -121,6 +121,8 @@ void FirRegLowering::lower() {
   if (randomInit.empty() && presetInit.empty() && asyncResets.empty())
     return;
 
+  needsRandom = true;
+
   auto loc = module.getLoc();
   MLIRContext *context = module.getContext();
   auto randInitRef = sv::MacroIdentAttr::get(context, "RANDOMIZE_REG_INIT");

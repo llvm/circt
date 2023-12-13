@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt-c/Firtool/Firtool.h"
+#include "circt/Firtool/Firtool.h"
 
 #include "circt/Firtool/Firtool.h"
 #include "mlir/CAPI/IR.h"
@@ -16,271 +17,363 @@
 
 using namespace circt;
 
+DEFINE_C_API_PTR_METHODS(CirctFirtoolFirtoolOptions,
+                         circt::firtool::FirtoolOptions)
+
 //===----------------------------------------------------------------------===//
 // Option API.
 //===----------------------------------------------------------------------===//
 
-DEFINE_C_API_PTR_METHODS(FirtoolOptions, firtool::FirtoolOptions)
-
-FirtoolOptions firtoolOptionsCreateDefault() {
-  static auto category = llvm::cl::OptionCategory{"Firtool Options"};
-  auto *options = new firtool::FirtoolOptions{category};
+CirctFirtoolFirtoolOptions circtFirtoolOptionsCreateDefault() {
+  auto *options = new firtool::FirtoolOptions();
   return wrap(options);
 }
 
-void firtoolOptionsDestroy(FirtoolOptions options) { delete unwrap(options); }
+void circtFirtoolOptionsDestroy(CirctFirtoolFirtoolOptions options) {
+  delete unwrap(options);
+}
 
-#define DEFINE_FIRTOOL_OPTION_STRING(name, field)                              \
-  void firtoolOptionsSet##name(FirtoolOptions options, MlirStringRef value) {  \
-    unwrap(options)->field = unwrap(value).str();                              \
-  }                                                                            \
-  MlirStringRef firtoolOptionsGet##name(FirtoolOptions options) {              \
-    return wrap(unwrap(options)->field.getValue());                            \
+void circtFirtoolOptionsSetOutputFilename(CirctFirtoolFirtoolOptions options,
+                                          MlirStringRef filename) {
+  unwrap(options)->setOutputFilename(unwrap(filename));
+}
+
+void circtFirtoolOptionsSetDisableUnknownAnnotations(
+    CirctFirtoolFirtoolOptions options, bool disable) {
+  unwrap(options)->setDisableUnknownAnnotations(disable);
+}
+
+void circtFirtoolOptionsSetDisableAnnotationsClassless(
+    CirctFirtoolFirtoolOptions options, bool value) {
+  unwrap(options)->setDisableAnnotationsClassless(value);
+}
+
+void circtFirtoolOptionsSetLowerAnnotationsNoRefTypePorts(
+    CirctFirtoolFirtoolOptions options, bool value) {
+  unwrap(options)->setLowerAnnotationsNoRefTypePorts(value);
+}
+
+void circtFirtoolOptionsSetPreserveAggregate(
+    CirctFirtoolFirtoolOptions options,
+    CirctFirtoolPreserveAggregateMode value) {
+  firrtl::PreserveAggregate::PreserveMode converted;
+
+  switch (value) {
+  case CIRCT_FIRTOOL_PRESERVE_AGGREGATE_MODE_NONE:
+    converted = firrtl::PreserveAggregate::PreserveMode::None;
+    break;
+  case CIRCT_FIRTOOL_PRESERVE_AGGREGATE_MODE_ONE_DIM_VEC:
+    converted = firrtl::PreserveAggregate::PreserveMode::OneDimVec;
+    break;
+  case CIRCT_FIRTOOL_PRESERVE_AGGREGATE_MODE_VEC:
+    converted = firrtl::PreserveAggregate::PreserveMode::Vec;
+    break;
+  case CIRCT_FIRTOOL_PRESERVE_AGGREGATE_MODE_ALL:
+    converted = firrtl::PreserveAggregate::PreserveMode::All;
+    break;
   }
 
-#define DEFINE_FIRTOOL_OPTION_BOOL(name, field)                                \
-  void firtoolOptionsSet##name(FirtoolOptions options, bool value) {           \
-    unwrap(options)->field = value;                                            \
-  }                                                                            \
-  bool firtoolOptionsGet##name(FirtoolOptions options) {                       \
-    return unwrap(options)->field;                                             \
+  unwrap(options)->setPreserveAggregate(converted);
+}
+
+void circtFirtoolOptionsSetPreserveValues(
+    CirctFirtoolFirtoolOptions options, CirctFirtoolPreserveValuesMode value) {
+  firrtl::PreserveValues::PreserveMode converted;
+
+  switch (value) {
+  case CIRCT_FIRTOOL_PRESERVE_VALUES_MODE_STRIP:
+    converted = firrtl::PreserveValues::PreserveMode::Strip;
+    break;
+  case CIRCT_FIRTOOL_PRESERVE_VALUES_MODE_NONE:
+    converted = firrtl::PreserveValues::PreserveMode::None;
+    break;
+  case CIRCT_FIRTOOL_PRESERVE_VALUES_MODE_NAMED:
+    converted = firrtl::PreserveValues::PreserveMode::Named;
+    break;
+  case CIRCT_FIRTOOL_PRESERVE_VALUES_MODE_ALL:
+    converted = firrtl::PreserveValues::PreserveMode::All;
+    break;
   }
 
-#define DEFINE_FIRTOOL_OPTION_ENUM(name, field, enum_type, c_to_cpp, cpp_to_c) \
-  void firtoolOptionsSet##name(FirtoolOptions options, enum_type value) {      \
-    unwrap(options)->field = c_to_cpp(value);                                  \
-  }                                                                            \
-  enum_type firtoolOptionsGet##name(FirtoolOptions options) {                  \
-    return cpp_to_c(unwrap(options)->field);                                   \
+  unwrap(options)->setPreserveValues(converted);
+}
+
+void circtFirtoolOptionsSetEnableDebugInfo(CirctFirtoolFirtoolOptions options,
+                                           bool value) {
+  unwrap(options)->setEnableDebugInfo(value);
+}
+
+void circtFirtoolOptionsSetBuildMode(CirctFirtoolFirtoolOptions options,
+                                     CirctFirtoolBuildMode value) {
+  firtool::FirtoolOptions::BuildMode converted;
+
+  switch (value) {
+  case CIRCT_FIRTOOL_BUILD_MODE_DEFAULT:
+    converted = firtool::FirtoolOptions::BuildMode::BuildModeDefault;
+    break;
+  case CIRCT_FIRTOOL_BUILD_MODE_DEBUG:
+    converted = firtool::FirtoolOptions::BuildMode::BuildModeDebug;
+    break;
+  case CIRCT_FIRTOOL_BUILD_MODE_RELEASE:
+    converted = firtool::FirtoolOptions::BuildMode::BuildModeRelease;
+    break;
   }
 
-DEFINE_FIRTOOL_OPTION_STRING(OutputFilename, outputFilename)
-DEFINE_FIRTOOL_OPTION_BOOL(DisableAnnotationsUnknown, disableAnnotationsUnknown)
-DEFINE_FIRTOOL_OPTION_BOOL(DisableAnnotationsClassless,
-                           disableAnnotationsClassless)
-DEFINE_FIRTOOL_OPTION_BOOL(LowerAnnotationsNoRefTypePorts,
-                           lowerAnnotationsNoRefTypePorts)
-DEFINE_FIRTOOL_OPTION_ENUM(
-    PreserveAggregate, preserveAggregate, FirtoolPreserveAggregateMode,
-    [](FirtoolPreserveAggregateMode value) {
-      switch (value) {
-      case FIRTOOL_PRESERVE_AGGREGATE_MODE_NONE:
-        return firrtl::PreserveAggregate::None;
-      case FIRTOOL_PRESERVE_AGGREGATE_MODE_ONE_DIM_VEC:
-        return firrtl::PreserveAggregate::OneDimVec;
-      case FIRTOOL_PRESERVE_AGGREGATE_MODE_VEC:
-        return firrtl::PreserveAggregate::Vec;
-      case FIRTOOL_PRESERVE_AGGREGATE_MODE_ALL:
-        return firrtl::PreserveAggregate::All;
-      default: // NOLINT(clang-diagnostic-covered-switch-default)
-        llvm_unreachable("unknown preserve aggregate mode");
-      }
-    },
-    [](firrtl::PreserveAggregate::PreserveMode value) {
-      switch (value) {
-      case firrtl::PreserveAggregate::None:
-        return FIRTOOL_PRESERVE_AGGREGATE_MODE_NONE;
-      case firrtl::PreserveAggregate::OneDimVec:
-        return FIRTOOL_PRESERVE_AGGREGATE_MODE_ONE_DIM_VEC;
-      case firrtl::PreserveAggregate::Vec:
-        return FIRTOOL_PRESERVE_AGGREGATE_MODE_VEC;
-      case firrtl::PreserveAggregate::All:
-        return FIRTOOL_PRESERVE_AGGREGATE_MODE_ALL;
-      default: // NOLINT(clang-diagnostic-covered-switch-default)
-        llvm_unreachable("unknown preserve aggregate mode");
-      }
-    })
-DEFINE_FIRTOOL_OPTION_ENUM(
-    PreserveValues, preserveMode, FirtoolPreserveValuesMode,
-    [](FirtoolPreserveValuesMode value) {
-      switch (value) {
-      case FIRTOOL_PRESERVE_VALUES_MODE_NONE:
-        return firrtl::PreserveValues::None;
-      case FIRTOOL_PRESERVE_VALUES_MODE_NAMED:
-        return firrtl::PreserveValues::Named;
-      case FIRTOOL_PRESERVE_VALUES_MODE_ALL:
-        return firrtl::PreserveValues::All;
-      default: // NOLINT(clang-diagnostic-covered-switch-default)
-        llvm_unreachable("unknown preserve values mode");
-      }
-    },
-    [](firrtl::PreserveValues::PreserveMode value) {
-      switch (value) {
-      case firrtl::PreserveValues::None:
-        return FIRTOOL_PRESERVE_VALUES_MODE_NONE;
-      case firrtl::PreserveValues::Named:
-        return FIRTOOL_PRESERVE_VALUES_MODE_NAMED;
-      case firrtl::PreserveValues::All:
-        return FIRTOOL_PRESERVE_VALUES_MODE_ALL;
-      default: // NOLINT(clang-diagnostic-covered-switch-default)
-        llvm_unreachable("unknown preserve values mode");
-      }
-    })
-DEFINE_FIRTOOL_OPTION_ENUM(
-    BuildMode, buildMode, FirtoolBuildMode,
-    [](FirtoolBuildMode value) {
-      switch (value) {
-      case FIRTOOL_BUILD_MODE_DEBUG:
-        return firtool::FirtoolOptions::BuildModeDebug;
-      case FIRTOOL_BUILD_MODE_RELEASE:
-        return firtool::FirtoolOptions::BuildModeRelease;
-      default: // NOLINT(clang-diagnostic-covered-switch-default)
-        llvm_unreachable("unknown build mode");
-      }
-    },
-    [](firtool::FirtoolOptions::BuildMode value) {
-      switch (value) {
-      case firtool::FirtoolOptions::BuildModeDebug:
-        return FIRTOOL_BUILD_MODE_DEBUG;
-      case firtool::FirtoolOptions::BuildModeRelease:
-        return FIRTOOL_BUILD_MODE_RELEASE;
-      default: // NOLINT(clang-diagnostic-covered-switch-default)
-        llvm_unreachable("unknown build mode");
-      }
-    })
-DEFINE_FIRTOOL_OPTION_BOOL(DisableOptimization, disableOptimization)
-DEFINE_FIRTOOL_OPTION_BOOL(ExportChiselInterface, exportChiselInterface)
-DEFINE_FIRTOOL_OPTION_STRING(ChiselInterfaceOutDirectory,
-                             chiselInterfaceOutDirectory)
-DEFINE_FIRTOOL_OPTION_BOOL(VbToBv, vbToBV)
-DEFINE_FIRTOOL_OPTION_BOOL(Dedup, dedup)
-DEFINE_FIRTOOL_OPTION_ENUM(
-    CompanionMode, companionMode, FirtoolCompanionMode,
-    [](FirtoolCompanionMode value) {
-      switch (value) {
-      case FIRTOOL_COMPANION_MODE_BIND:
-        return firrtl::CompanionMode::Bind;
-      case FIRTOOL_COMPANION_MODE_INSTANTIATE:
-        return firrtl::CompanionMode::Instantiate;
-      case FIRTOOL_COMPANION_MODE_DROP:
-        return firrtl::CompanionMode::Drop;
-      default: // NOLINT(clang-diagnostic-covered-switch-default)
-        llvm_unreachable("unknown build mode");
-      }
-    },
-    [](firrtl::CompanionMode value) {
-      switch (value) {
-      case firrtl::CompanionMode::Bind:
-        return FIRTOOL_COMPANION_MODE_BIND;
-      case firrtl::CompanionMode::Instantiate:
-        return FIRTOOL_COMPANION_MODE_INSTANTIATE;
-      case firrtl::CompanionMode::Drop:
-        return FIRTOOL_COMPANION_MODE_DROP;
-      default: // NOLINT(clang-diagnostic-covered-switch-default)
-        llvm_unreachable("unknown build mode");
-      }
-    })
+  unwrap(options)->setBuildMode(converted);
+}
 
-DEFINE_FIRTOOL_OPTION_BOOL(DisableAggressiveMergeConnections,
-                           disableAggressiveMergeConnections)
-DEFINE_FIRTOOL_OPTION_BOOL(EmitOMIR, emitOMIR)
-DEFINE_FIRTOOL_OPTION_STRING(OMIROutFile, omirOutFile)
-DEFINE_FIRTOOL_OPTION_BOOL(LowerMemories, lowerMemories)
-DEFINE_FIRTOOL_OPTION_STRING(BlackBoxRootPath, blackBoxRootPath)
-DEFINE_FIRTOOL_OPTION_BOOL(ReplSeqMem, replSeqMem)
-DEFINE_FIRTOOL_OPTION_STRING(ReplSeqMemFile, replSeqMemFile)
-DEFINE_FIRTOOL_OPTION_BOOL(ExtractTestCode, extractTestCode)
-DEFINE_FIRTOOL_OPTION_BOOL(IgnoreReadEnableMem, ignoreReadEnableMem)
-DEFINE_FIRTOOL_OPTION_ENUM(
-    DisableRandom, disableRandom, FirtoolRandomKind,
-    [](FirtoolRandomKind value) {
-      switch (value) {
-      case FIRTOOL_RANDOM_KIND_NONE:
-        return firtool::FirtoolOptions::RandomKind::None;
-      case FIRTOOL_RANDOM_KIND_MEM:
-        return firtool::FirtoolOptions::RandomKind::Mem;
-      case FIRTOOL_RANDOM_KIND_REG:
-        return firtool::FirtoolOptions::RandomKind::Reg;
-      case FIRTOOL_RANDOM_KIND_ALL:
-        return firtool::FirtoolOptions::RandomKind::All;
-      default: // NOLINT(clang-diagnostic-covered-switch-default)
-        llvm_unreachable("unknown random kind");
-      }
-    },
-    [](firtool::FirtoolOptions::RandomKind value) {
-      switch (value) {
-      case firtool::FirtoolOptions::RandomKind::None:
-        return FIRTOOL_RANDOM_KIND_NONE;
-      case firtool::FirtoolOptions::RandomKind::Mem:
-        return FIRTOOL_RANDOM_KIND_MEM;
-      case firtool::FirtoolOptions::RandomKind::Reg:
-        return FIRTOOL_RANDOM_KIND_REG;
-      case firtool::FirtoolOptions::RandomKind::All:
-        return FIRTOOL_RANDOM_KIND_ALL;
-      default: // NOLINT(clang-diagnostic-covered-switch-default)
-        llvm_unreachable("unknown random kind");
-      }
-    })
-DEFINE_FIRTOOL_OPTION_STRING(OutputAnnotationFilename, outputAnnotationFilename)
-DEFINE_FIRTOOL_OPTION_BOOL(EnableAnnotationWarning, enableAnnotationWarning)
-DEFINE_FIRTOOL_OPTION_BOOL(AddMuxPragmas, addMuxPragmas)
-DEFINE_FIRTOOL_OPTION_BOOL(EmitChiselAssertsAsSVA, emitChiselAssertsAsSVA)
-DEFINE_FIRTOOL_OPTION_BOOL(EmitSeparateAlwaysBlocks, emitSeparateAlwaysBlocks)
-DEFINE_FIRTOOL_OPTION_BOOL(EtcDisableInstanceExtraction,
-                           etcDisableInstanceExtraction)
-DEFINE_FIRTOOL_OPTION_BOOL(EtcDisableRegisterExtraction,
-                           etcDisableRegisterExtraction)
-DEFINE_FIRTOOL_OPTION_BOOL(EtcDisableModuleInlining, etcDisableModuleInlining)
-DEFINE_FIRTOOL_OPTION_BOOL(AddVivadoRAMAddressConflictSynthesisBugWorkaround,
-                           addVivadoRAMAddressConflictSynthesisBugWorkaround)
-DEFINE_FIRTOOL_OPTION_STRING(CkgModuleName, ckgModuleName)
-DEFINE_FIRTOOL_OPTION_STRING(CkgInputName, ckgInputName)
-DEFINE_FIRTOOL_OPTION_STRING(CkgOutputName, ckgOutputName)
-DEFINE_FIRTOOL_OPTION_STRING(CkgEnableName, ckgEnableName)
-DEFINE_FIRTOOL_OPTION_STRING(CkgTestEnableName, ckgTestEnableName)
-DEFINE_FIRTOOL_OPTION_BOOL(ExportModuleHierarchy, exportModuleHierarchy)
-DEFINE_FIRTOOL_OPTION_BOOL(StripFirDebugInfo, stripFirDebugInfo)
-DEFINE_FIRTOOL_OPTION_BOOL(StripDebugInfo, stripDebugInfo)
+void circtFirtoolOptionsSetDisableOptimization(
+    CirctFirtoolFirtoolOptions options, bool value) {
+  unwrap(options)->setDisableOptimization(value);
+}
 
-#undef DEFINE_FIRTOOL_OPTION_STRING
-#undef DEFINE_FIRTOOL_OPTION_BOOL
-#undef DEFINE_FIRTOOL_OPTION_ENUM
+void circtFirtoolOptionsSetExportChiselInterface(
+    CirctFirtoolFirtoolOptions options, bool value) {
+  unwrap(options)->setExportChiselInterface(value);
+}
+
+void circtFirtoolOptionsSetChiselInterfaceOutDirectory(
+    CirctFirtoolFirtoolOptions options, MlirStringRef value) {
+  unwrap(options)->setChiselInterfaceOutDirectory(unwrap(value));
+}
+
+void circtFirtoolOptionsSetVbToBv(CirctFirtoolFirtoolOptions options,
+                                  bool value) {
+  unwrap(options)->setVbToBV(value);
+}
+
+void circtFirtoolOptionsSetNoDedup(CirctFirtoolFirtoolOptions options,
+                                   bool value) {
+  unwrap(options)->setNoDedup(value);
+}
+
+void circtFirtoolOptionsSetCompanionMode(CirctFirtoolFirtoolOptions options,
+                                         CirctFirtoolCompanionMode value) {
+  firrtl::CompanionMode converted;
+
+  switch (value) {
+  case CIRCT_FIRTOOL_COMPANION_MODE_BIND:
+    converted = firrtl::CompanionMode::Bind;
+    break;
+  case CIRCT_FIRTOOL_COMPANION_MODE_INSTANTIATE:
+    converted = firrtl::CompanionMode::Instantiate;
+    break;
+  case CIRCT_FIRTOOL_COMPANION_MODE_DROP:
+    converted = firrtl::CompanionMode::Drop;
+    break;
+  }
+
+  unwrap(options)->setCompanionMode(converted);
+}
+
+void circtFirtoolOptionsSetDisableAggressiveMergeConnections(
+    CirctFirtoolFirtoolOptions options, bool value) {
+  unwrap(options)->setDisableAggressiveMergeConnections(value);
+}
+
+void circtFirtoolOptionsSetDisableHoistingHWPassthrough(
+    CirctFirtoolFirtoolOptions options, bool value) {
+  unwrap(options)->setDisableHoistingHWPassthrough(value);
+}
+
+void circtFirtoolOptionsSetEmitOmir(CirctFirtoolFirtoolOptions options,
+                                    bool value) {
+  unwrap(options)->setEmitOMIR(value);
+}
+
+void circtFirtoolOptionsSetOmirOutFile(CirctFirtoolFirtoolOptions options,
+                                       MlirStringRef value) {
+  unwrap(options)->setOmirOutFile(unwrap(value));
+}
+
+void circtFirtoolOptionsSetLowerMemories(CirctFirtoolFirtoolOptions options,
+                                         bool value) {
+  unwrap(options)->setLowerMemories(value);
+}
+
+void circtFirtoolOptionsSetBlackBoxRootPath(CirctFirtoolFirtoolOptions options,
+                                            MlirStringRef value) {
+  unwrap(options)->setBlackBoxRootPath(unwrap(value));
+}
+
+void circtFirtoolOptionsSetReplSeqMem(CirctFirtoolFirtoolOptions options,
+                                      bool value) {
+  unwrap(options)->setReplSeqMem(value);
+}
+
+void circtFirtoolOptionsSetReplSeqMemFile(CirctFirtoolFirtoolOptions options,
+                                          MlirStringRef value) {
+  unwrap(options)->setReplSeqMemFile(unwrap(value));
+}
+
+void circtFirtoolOptionsSetExtractTestCode(CirctFirtoolFirtoolOptions options,
+                                           bool value) {
+  unwrap(options)->setExtractTestCode(value);
+}
+
+void circtFirtoolOptionsSetIgnoreReadEnableMem(
+    CirctFirtoolFirtoolOptions options, bool value) {
+  unwrap(options)->setIgnoreReadEnableMem(value);
+}
+
+void circtFirtoolOptionsSetDisableRandom(CirctFirtoolFirtoolOptions options,
+                                         CirctFirtoolRandomKind value) {
+  firtool::FirtoolOptions::RandomKind converted;
+
+  switch (value) {
+  case CIRCT_FIRTOOL_RANDOM_KIND_NONE:
+    converted = firtool::FirtoolOptions::RandomKind::None;
+    break;
+  case CIRCT_FIRTOOL_RANDOM_KIND_MEM:
+    converted = firtool::FirtoolOptions::RandomKind::Mem;
+    break;
+  case CIRCT_FIRTOOL_RANDOM_KIND_REG:
+    converted = firtool::FirtoolOptions::RandomKind::Reg;
+    break;
+  case CIRCT_FIRTOOL_RANDOM_KIND_ALL:
+    converted = firtool::FirtoolOptions::RandomKind::All;
+    break;
+  }
+
+  unwrap(options)->setDisableRandom(converted);
+}
+
+void circtFirtoolOptionsSetOutputAnnotationFilename(
+    CirctFirtoolFirtoolOptions options, MlirStringRef value) {
+  unwrap(options)->setOutputAnnotationFilename(unwrap(value));
+}
+
+void circtFirtoolOptionsSetEnableAnnotationWarning(
+    CirctFirtoolFirtoolOptions options, bool value) {
+  unwrap(options)->setEnableAnnotationWarning(value);
+}
+
+void circtFirtoolOptionsSetAddMuxPragmas(CirctFirtoolFirtoolOptions options,
+                                         bool value) {
+  unwrap(options)->setAddMuxPragmas(value);
+}
+
+void circtFirtoolOptionsSetEmitChiselAssertsAsSVA(
+    CirctFirtoolFirtoolOptions options, bool value) {
+  unwrap(options)->setEmitChiselAssertsAsSVA(value);
+}
+
+void circtFirtoolOptionsSetEmitSeparateAlwaysBlocks(
+    CirctFirtoolFirtoolOptions options, bool value) {
+  unwrap(options)->setEmitSeparateAlwaysBlocks(value);
+}
+
+void circtFirtoolOptionsSetEtcDisableInstanceExtraction(
+    CirctFirtoolFirtoolOptions options, bool value) {
+  unwrap(options)->setEtcDisableInstanceExtraction(value);
+}
+
+void circtFirtoolOptionsSetEtcDisableRegisterExtraction(
+    CirctFirtoolFirtoolOptions options, bool value) {
+  unwrap(options)->setEtcDisableRegisterExtraction(value);
+}
+
+void circtFirtoolOptionsSetEtcDisableModuleInlining(
+    CirctFirtoolFirtoolOptions options, bool value) {
+  unwrap(options)->setEtcDisableModuleInlining(value);
+}
+
+void circtFirtoolOptionsSetAddVivadoRAMAddressConflictSynthesisBugWorkaround(
+    CirctFirtoolFirtoolOptions options, bool value) {
+  unwrap(options)->setAddVivadoRAMAddressConflictSynthesisBugWorkaround(value);
+}
+
+void circtFirtoolOptionsSetCkgModuleName(CirctFirtoolFirtoolOptions options,
+                                         MlirStringRef value) {
+  unwrap(options)->setCkgModuleName(unwrap(value));
+}
+
+void circtFirtoolOptionsSetCkgInputName(CirctFirtoolFirtoolOptions options,
+                                        MlirStringRef value) {
+  unwrap(options)->setCkgInputName(unwrap(value));
+}
+
+void circtFirtoolOptionsSetCkgOutputName(CirctFirtoolFirtoolOptions options,
+                                         MlirStringRef value) {
+  unwrap(options)->setCkgOutputName(unwrap(value));
+}
+
+void circtFirtoolOptionsSetCkgEnableName(CirctFirtoolFirtoolOptions options,
+                                         MlirStringRef value) {
+  unwrap(options)->setCkgEnableName(unwrap(value));
+}
+
+void circtFirtoolOptionsSetCkgTestEnableName(CirctFirtoolFirtoolOptions options,
+                                             MlirStringRef value) {
+  unwrap(options)->setCkgTestEnableName(unwrap(value));
+}
+
+void circtFirtoolOptionsSetExportModuleHierarchy(
+    CirctFirtoolFirtoolOptions options, bool value) {
+  unwrap(options)->setExportModuleHierarchy(value);
+}
+
+void circtFirtoolOptionsSetStripFirDebugInfo(CirctFirtoolFirtoolOptions options,
+                                             bool value) {
+  unwrap(options)->setStripFirDebugInfo(value);
+}
+
+void circtFirtoolOptionsSetStripDebugInfo(CirctFirtoolFirtoolOptions options,
+                                          bool value) {
+  unwrap(options)->setStripDebugInfo(value);
+}
 
 //===----------------------------------------------------------------------===//
 // Populate API.
 //===----------------------------------------------------------------------===//
 
-MlirLogicalResult firtoolPopulatePreprocessTransforms(MlirPassManager pm,
-                                                      FirtoolOptions options) {
+MlirLogicalResult
+circtFirtoolPopulatePreprocessTransforms(MlirPassManager pm,
+                                         CirctFirtoolFirtoolOptions options) {
   return wrap(
       firtool::populatePreprocessTransforms(*unwrap(pm), *unwrap(options)));
 }
 
 MlirLogicalResult
-firtoolPopulateCHIRRTLToLowFIRRTL(MlirPassManager pm, FirtoolOptions options,
-                                  MlirStringRef inputFilename) {
+circtFirtoolPopulateCHIRRTLToLowFIRRTL(MlirPassManager pm,
+                                       CirctFirtoolFirtoolOptions options,
+                                       MlirStringRef inputFilename) {
   return wrap(firtool::populateCHIRRTLToLowFIRRTL(*unwrap(pm), *unwrap(options),
                                                   unwrap(inputFilename)));
 }
 
-MlirLogicalResult firtoolPopulateLowFIRRTLToHW(MlirPassManager pm,
-                                               FirtoolOptions options) {
+MlirLogicalResult
+circtFirtoolPopulateLowFIRRTLToHW(MlirPassManager pm,
+                                  CirctFirtoolFirtoolOptions options) {
   return wrap(firtool::populateLowFIRRTLToHW(*unwrap(pm), *unwrap(options)));
 }
 
-MlirLogicalResult firtoolPopulateHWToSV(MlirPassManager pm,
-                                        FirtoolOptions options) {
+MlirLogicalResult
+circtFirtoolPopulateHWToSV(MlirPassManager pm,
+                           CirctFirtoolFirtoolOptions options) {
   return wrap(firtool::populateHWToSV(*unwrap(pm), *unwrap(options)));
 }
 
-MlirLogicalResult firtoolPopulateExportVerilog(MlirPassManager pm,
-                                               FirtoolOptions options,
-                                               MlirStringCallback callback,
-                                               void *userData) {
+MlirLogicalResult
+circtFirtoolPopulateExportVerilog(MlirPassManager pm,
+                                  CirctFirtoolFirtoolOptions options,
+                                  MlirStringCallback callback, void *userData) {
   auto stream =
       std::make_unique<mlir::detail::CallbackOstream>(callback, userData);
   return wrap(firtool::populateExportVerilog(*unwrap(pm), *unwrap(options),
                                              std::move(stream)));
 }
 
-MlirLogicalResult firtoolPopulateExportSplitVerilog(MlirPassManager pm,
-                                                    FirtoolOptions options,
-                                                    MlirStringRef directory) {
+MlirLogicalResult
+circtFirtoolPopulateExportSplitVerilog(MlirPassManager pm,
+                                       CirctFirtoolFirtoolOptions options,
+                                       MlirStringRef directory) {
   return wrap(firtool::populateExportSplitVerilog(*unwrap(pm), *unwrap(options),
                                                   unwrap(directory)));
 }
 
-MlirLogicalResult firtoolPopulateFinalizeIR(MlirPassManager pm,
-                                            FirtoolOptions options) {
+MlirLogicalResult
+circtFirtoolPopulateFinalizeIR(MlirPassManager pm,
+                               CirctFirtoolFirtoolOptions options) {
   return wrap(firtool::populateFinalizeIR(*unwrap(pm), *unwrap(options)));
 }

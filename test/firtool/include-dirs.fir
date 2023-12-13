@@ -32,6 +32,10 @@
 ; ALTERNATE-NEXT: alternate
 ; FOUND-NEXT: generate_bad_circuit
 
-; Invalid circuit that generates errors with the specified source locator:
-circuit Test: @[subdir/source.dummy 2:3]
-  module Oops:
+; This is an invalid circuit that generates an error during compilation.  The
+; source locator is set at the site of the error.
+;
+FIRRTL version 3.3.0
+circuit Test:
+  module Test:
+    input a: Reset @[subdir/source.dummy 2:3]

@@ -332,16 +332,22 @@ LogicalResult CosimToHostLowering::matchAndRewrite(
 
   // Set all the parameters.
   SmallVector<Attribute, 8> params;
+  params.push_back(ParamDeclAttr::get("ENDPOINT_ID", ep.getIdAttr()));
   params.push_back(ParamDeclAttr::get("TO_HOST_TYPE_ID", getTypeID(type)));
-  params.push_back(ParamDeclAttr::get("TO_HOST_SIZE_BITS",
-                                      rewriter.getI32IntegerAttr(width)));
+  params.push_back(ParamDeclAttr::get(
+      "TO_HOST_SIZE_BITS", rewriter.getI32IntegerAttr(width > 0 ? width : 1)));
 
   // Set up the egest route to drive the EP's toHost ports.
   auto sendReady = bb.get(rewriter.getI1Type());
   UnwrapValidReadyOp unwrapSend =
       rewriter.create<UnwrapValidReadyOp>(loc, toHost, sendReady);
-  auto castedSendData = rewriter.create<hw::BitcastOp>(
-      loc, rewriter.getIntegerType(width), unwrapSend.getRawOutput());
+  Value castedSendData;
+  if (width > 0)
+    castedSendData = rewriter.create<hw::BitcastOp>(
+        loc, rewriter.getIntegerType(width), unwrapSend.getRawOutput());
+  else
+    castedSendData = rewriter.create<hw::ConstantOp>(
+        loc, rewriter.getIntegerType(1), rewriter.getBoolAttr(false));
 
   // Build or get the cached Cosim Endpoint module parameterization.
   Operation *symTable = ep->getParentWithTrait<OpTrait::SymbolTable>();
@@ -353,10 +359,10 @@ LogicalResult CosimToHostLowering::matchAndRewrite(
       adaptor.getClk(),
       adaptor.getRst(),
       unwrapSend.getValid(),
-      castedSendData.getResult(),
+      castedSendData,
   };
   auto cosimEpModule = rewriter.create<InstanceOp>(
-      loc, endpoint, ep.getNameAttr(), operands, ArrayAttr::get(ctxt, params));
+      loc, endpoint, ep.getIdAttr(), operands, ArrayAttr::get(ctxt, params));
   sendReady.setValue(cosimEpModule.getResult(0));
 
   // Replace the CosimEndpointOp op.
@@ -397,9 +403,11 @@ LogicalResult CosimFromHostLowering::matchAndRewrite(
 
   // Set all the parameters.
   SmallVector<Attribute, 8> params;
+  params.push_back(ParamDeclAttr::get("ENDPOINT_ID", ep.getIdAttr()));
   params.push_back(ParamDeclAttr::get("FROM_HOST_TYPE_ID", getTypeID(type)));
-  params.push_back(ParamDeclAttr::get("FROM_HOST_SIZE_BITS",
-                                      rewriter.getI32IntegerAttr(width)));
+  params.push_back(
+      ParamDeclAttr::get("FROM_HOST_SIZE_BITS",
+                         rewriter.getI32IntegerAttr(width > 0 ? width : 1)));
 
   // Get information necessary for injest path.
   auto recvReady = bb.get(rewriter.getI1Type());
@@ -410,20 +418,23 @@ LogicalResult CosimFromHostLowering::matchAndRewrite(
       builder.declareCosimEndpointFromHostModule(symTable);
 
   // Create replacement Cosim_Endpoint instance.
-  StringAttr nameAttr = ep->getAttr("name").dyn_cast_or_null<StringAttr>();
-  StringRef name = nameAttr ? nameAttr.getValue() : "CosimEndpointOp";
   Value operands[] = {adaptor.getClk(), adaptor.getRst(), recvReady};
-
   auto cosimEpModule = rewriter.create<InstanceOp>(
-      loc, endpoint, name, operands, ArrayAttr::get(ctxt, params));
+      loc, endpoint, ep.getIdAttr(), operands, ArrayAttr::get(ctxt, params));
 
   // Set up the injest path.
   Value recvDataFromCosim = cosimEpModule.getResult(1);
   Value recvValidFromCosim = cosimEpModule.getResult(0);
-  auto castedRecvData =
-      rewriter.create<hw::BitcastOp>(loc, type.getInner(), recvDataFromCosim);
+  Value castedRecvData;
+  if (width > 0)
+    castedRecvData =
+        rewriter.create<hw::BitcastOp>(loc, type.getInner(), recvDataFromCosim);
+  else
+    castedRecvData = rewriter.create<hw::ConstantOp>(
+        loc, rewriter.getIntegerType(0),
+        rewriter.getIntegerAttr(rewriter.getIntegerType(0), 0));
   WrapValidReadyOp wrapRecv = rewriter.create<WrapValidReadyOp>(
-      loc, castedRecvData.getResult(), recvValidFromCosim);
+      loc, castedRecvData, recvValidFromCosim);
   recvReady.setValue(wrapRecv.getReady());
 
   // Replace the CosimEndpointOp op.
@@ -466,30 +477,39 @@ LogicalResult CosimManifestLowering::matchAndRewrite(
   };
   rewriter.setInsertionPointToEnd(
       op->getParentOfType<mlir::ModuleOp>().getBody());
-  auto manifestModule = rewriter.create<HWModuleExternOp>(
+  auto cosimManifestExternModule = rewriter.create<HWModuleExternOp>(
       loc, rewriter.getStringAttr("Cosim_Manifest"), ports, "Cosim_Manifest",
       ArrayAttr::get(ctxt, params));
 
+  hw::ModulePortInfo portInfo({});
+  auto manifestMod = rewriter.create<hw::HWModuleOp>(
+      loc, rewriter.getStringAttr("__ESIManifest"), portInfo,
+      [&](OpBuilder &rewriter, const hw::HWModulePortAccessor &) {
+        // Assemble the manifest data into a constant.
+        SmallVector<Attribute> bytes;
+        for (char b : op.getCompressedManifest().getData())
+          bytes.push_back(rewriter.getI8IntegerAttr(b));
+        auto manifestConstant = rewriter.create<hw::AggregateConstantOp>(
+            loc, hw::UnpackedArrayType::get(rewriter.getI8Type(), bytes.size()),
+            rewriter.getArrayAttr(bytes));
+        auto manifestLogic =
+            rewriter.create<sv::LogicOp>(loc, manifestConstant.getType());
+        rewriter.create<sv::AssignOp>(loc, manifestLogic, manifestConstant);
+        auto manifest = rewriter.create<sv::ReadInOutOp>(loc, manifestLogic);
+
+        // Then instantiate the external module.
+        rewriter.create<hw::InstanceOp>(
+            loc, cosimManifestExternModule, "__manifest",
+            ArrayRef<Value>({manifest}),
+            rewriter.getArrayAttr({ParamDeclAttr::get(
+                "COMPRESSED_MANIFEST_SIZE",
+                rewriter.getI32IntegerAttr(bytes.size()))}));
+      });
+
   rewriter.setInsertionPoint(op);
+  rewriter.create<hw::InstanceOp>(loc, manifestMod, "__manifest",
+                                  ArrayRef<Value>({}));
 
-  // Assemble the manifest data into a constant.
-  SmallVector<Attribute> bytes;
-  for (char b : op.getCompressedManifest().getData())
-    bytes.push_back(rewriter.getI8IntegerAttr(b));
-  auto manifestConstant = rewriter.create<hw::AggregateConstantOp>(
-      loc, hw::UnpackedArrayType::get(rewriter.getI8Type(), bytes.size()),
-      rewriter.getArrayAttr(bytes));
-  auto manifestLogic =
-      rewriter.create<sv::LogicOp>(loc, manifestConstant.getType());
-  rewriter.create<sv::AssignOp>(loc, manifestLogic, manifestConstant);
-  auto manifest = rewriter.create<sv::ReadInOutOp>(loc, manifestLogic);
-
-  // Then instantiate the external module.
-  rewriter.create<hw::InstanceOp>(
-      loc, manifestModule, "__manifest", ArrayRef<Value>({manifest}),
-      rewriter.getArrayAttr(
-          {ParamDeclAttr::get("COMPRESSED_MANIFEST_SIZE",
-                              rewriter.getI32IntegerAttr(bytes.size()))}));
   rewriter.eraseOp(op);
   return success();
 }

@@ -38,6 +38,7 @@ firrtl.circuit "TargetChildModule" {
 firrtl.module @TargetChildModule() {
     // CHECK: %0 = firrtl.path reference distinct[0]<>
     %0 = firrtl.unresolved_path "OMReferenceTarget:~TargetChildModule|Child"
+    firrtl.instance child @Child()
 }
 // CHECK: firrtl.module @Child() attributes {annotations = [{class = "circt.tracker", id = distinct[0]<>}]}
 firrtl.module @Child() {}
@@ -182,4 +183,45 @@ firrtl.module @ReuseHierpathOp() {
 // CHECK-SAME: {circt.nonlocal = @nla, class = "circt.tracker", id = distinct[0]<>}
 // CHECK-SAME: {circt.nonlocal = @nla, class = "circt.tracker", id = distinct[1]<>}
 firrtl.module @Child() { }
+}
+
+// -----
+
+// CHECK-LABEL: firrtl.circuit "TargetWire"
+firrtl.circuit "TargetWire" {
+firrtl.module @TargetWire() {
+    %om = firrtl.object @OM()
+    // CHECK: %wire = firrtl.wire {annotations = [{class = "circt.tracker", id = distinct[0]<>}]} : !firrtl.uint<8>
+    %wire = firrtl.wire : !firrtl.uint<8>
+}
+
+firrtl.class @OM() {
+    // CHECK: %0 = firrtl.path reference distinct[0]<>
+    %0 = firrtl.unresolved_path "OMReferenceTarget:~TargetWire|TargetWire>wire"
+}
+}
+
+// -----
+
+// CHECK-LABEL: firrtl.circuit "TargetWire"
+firrtl.circuit "TargetWire" {
+firrtl.module @TargetWire() {
+    // CHECK: %wire = firrtl.wire {annotations = [{class = "circt.tracker", id = distinct[0]<>}]} : !firrtl.uint<8>
+    %wire = firrtl.wire : !firrtl.uint<8>
+    %test0 = firrtl.object @Test0()
+    %test1 = firrtl.object @Test1()
+}
+
+firrtl.class @Test0(){
+  %om = firrtl.object @OM()
+}
+
+firrtl.class @Test1() {
+  %om = firrtl.object @OM()
+}
+
+firrtl.class @OM() {
+    // CHECK: %0 = firrtl.path reference distinct[0]<>
+    %0 = firrtl.unresolved_path "OMReferenceTarget:~TargetWire|TargetWire>wire"
+}
 }

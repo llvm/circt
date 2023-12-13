@@ -37,13 +37,16 @@ class ReferableDeclOp<string mnemonic, list<Trait> traits = []> :
 class HardwareDeclOp<string mnemonic, list <Trait> traits = []> :
   ReferableDeclOp<mnemonic, traits # [
     ParentOneOf<[
-      "firrtl::FModuleOp", "firrtl::GroupOp",
+      "firrtl::FModuleOp", "firrtl::LayerBlockOp",
       "firrtl::WhenOp", "firrtl::MatchOp"]>]> {}
 
 def InstanceOp : HardwareDeclOp<"instance", [
+    DeclareOpInterfaceMethods<FInstanceLike>,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>,
-    DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface, ["getModuleName"]>,
-    ]> {
+    DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface, [
+      "getModuleName"
+    ]>,
+  ]> {
   let summary = "Instantiate an instance of a module";
   let description = [{
     This represents an instance of a module.  The results are the modules inputs
@@ -95,7 +98,17 @@ def InstanceOp : HardwareDeclOp<"instance", [
                    CArg<"ArrayRef<Attribute>", "{}">:$annotations,
                    CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
                    CArg<"bool","false">:$lowerToBind,
-                   CArg<"StringAttr", "StringAttr()">:$innerSym)>
+                   CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym)>,
+
+    /// Constructor when you have a port info list in hand.
+    OpBuilder<(ins "ArrayRef<PortInfo>":$ports,
+                   "::mlir::StringRef":$moduleName,
+                   "mlir::StringRef":$name,
+                   CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
+                   CArg<"ArrayRef<Attribute>", "{}">:$annotations,
+                   CArg<"bool","false">:$lowerToBind,
+                   CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym)>
+
   ];
 
   let extraClassDeclaration = [{
@@ -125,6 +138,21 @@ def InstanceOp : HardwareDeclOp<"instance", [
     /// conjuction with adding ports to the referenced module. This will emit
     /// the new InstanceOp to the same location.
     InstanceOp cloneAndInsertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports);
+
+    //===------------------------------------------------------------------===//
+    // Instance graph methods
+    //===------------------------------------------------------------------===//
+
+    // Quick lookup of the referenced module using the instance graph.
+    template <typename T = ::circt::igraph::ModuleOpInterface>
+    T getReferencedModule(::circt::igraph::InstanceGraph &instanceGraph) {
+      auto moduleNameAttr = getModuleNameAttr().getAttr();
+      auto *node =  instanceGraph.lookup(moduleNameAttr);
+      if (!node)
+        return nullptr;
+      Operation *moduleOp = node->getModule();
+      return dyn_cast_or_null<T>(moduleOp);
+    }
 
     //===------------------------------------------------------------------===//
     // PortList Methods
@@ -594,10 +622,13 @@ def ClockGateIntrinsicOp : FIRRTLOp<"int.clock_gate", [Pure]> {
 def ObjectOp :  FIRRTLOp<"object", [
     ParentOneOf<["firrtl::FModuleOp, firrtl::ClassOp"]>,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>,
-    DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface, [
+    DeclareOpInterfaceMethods<FInstanceLike, [
+      "getReferencedOperation",
       "getReferencedModuleName",
       "getReferencedModuleNameAttr",
-      "getReferencedModule"
+    ]>,
+    DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface, [
+      "getReferencedModuleSlow"
     ]>,
     DeclareOpInterfaceMethods<OpAsmOpInterface, [
       "getAsmResultNames"
@@ -622,7 +653,7 @@ def ObjectOp :  FIRRTLOp<"object", [
   let extraClassDeclaration = [{
     /// Lookup the module or extmodule for the symbol.  This returns null on
     /// invalid IR.
-    ClassLike getReferencedClass(SymbolTable& symbolTable);
+    ClassLike getReferencedClass(const SymbolTable &symbolTable);
 
     StringAttr getClassNameAttr();
     StringRef getClassName();

@@ -20,6 +20,7 @@
 #include "ExportVerilogInternals.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombVisitors.h"
+#include "circt/Dialect/Debug/DebugDialect.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
@@ -217,26 +218,16 @@ static void emitZeroWidthIndexingValue(PPS &os) {
   os << "/*Zero width*/ 1\'b0";
 }
 
-static StringRef getPortVerilogName(Operation *module, PortInfo port) {
-  char verilogNameAttr[] = "hw.verilogName";
-  if (port.attrs)
-    if (auto updatedName = port.attrs.get(verilogNameAttr))
-      return updatedName.cast<StringAttr>().getValue();
-  return port.name;
-}
-
 /// Return the verilog name of the port for the module.
 static StringRef getPortVerilogName(Operation *module, size_t portArgNum) {
-  auto htmo = cast<HWModuleLike>(module);
-  return getPortVerilogName(module, htmo.getPort(portArgNum));
+  return cast<HWModuleLike>(module).getPort(portArgNum).getVerilogName();
 }
 
 /// Return the verilog name of the port for the module.
 static StringRef getInputPortVerilogName(Operation *module, size_t portArgNum) {
   auto hml = cast<HWModuleLike>(module);
-  return getPortVerilogName(
-      module,
-      hml.getPort(hml.getHWModuleType().getPortIdForInputId(portArgNum)));
+  return hml.getPort(hml.getHWModuleType().getPortIdForInputId(portArgNum))
+      .getVerilogName();
 }
 
 /// This predicate returns true if the specified operation is considered a
@@ -3636,7 +3627,7 @@ void NameCollector::collectNames(Block &block) {
     // anyway.
     if (isa<InstanceOp, InterfaceInstanceOp>(op))
       continue;
-    if (isa<ltl::LTLDialect>(op.getDialect()))
+    if (isa<ltl::LTLDialect, debug::DebugDialect>(op.getDialect()))
       continue;
 
     if (!isVerilogExpression(&op)) {
@@ -4037,7 +4028,7 @@ LogicalResult StmtEmitter::visitStmt(OutputOp op) {
         ps << "// Zero width: ";
 
       ps << "assign" << PP::space;
-      ps << PPExtString(getPortVerilogName(parent, port));
+      ps << PPExtString(port.getVerilogName());
       ps << PP::space << "=" << PP::space;
       ps.scopedBox(PP::ibox0, [&]() {
         // If this is a zero-width constant then don't emit it (illegal). Else,
@@ -5000,8 +4991,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   // Get the max port name length so we can align the '('.
   size_t maxNameLength = 0;
   for (auto &elt : modPortInfo) {
-    maxNameLength =
-        std::max(maxNameLength, getPortVerilogName(moduleOp, elt).size());
+    maxNameLength = std::max(maxNameLength, elt.getVerilogName().size());
   }
 
   auto getWireForValue = [&](Value result) {
@@ -5054,7 +5044,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
     }
 
     ps.scopedBox(isZeroWidth ? PP::neverbox : PP::ibox2, [&]() {
-      auto modPortName = getPortVerilogName(moduleOp, modPort);
+      auto modPortName = modPort.getVerilogName();
       ps << "." << PPExtString(modPortName);
       ps.spaces(maxNameLength - modPortName.size() + 1);
       ps << "(";
@@ -5081,8 +5071,8 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
           // Keep this synchronized with countStatements() and
           // visitStmt(OutputOp).
           size_t outputPortNo = portVal.getUses().begin()->getOperandNumber();
-          ps << PPExtString(getPortVerilogName(
-              containingModule, containingPortList.atOutput(outputPortNo)));
+          ps << PPExtString(
+              containingPortList.atOutput(outputPortNo).getVerilogName());
         } else {
           portVal = getWireForValue(portVal);
           emitExpression(portVal, ops);
@@ -5223,8 +5213,8 @@ void StmtEmitter::emitStatement(Operation *op) {
     return;
 
   // Ignore LTL expressions as they are emitted as part of verification
-  // statements.
-  if (isa<ltl::LTLDialect>(op->getDialect()))
+  // statements. Ignore debug ops as they are emitted as part of debug info.
+  if (isa<ltl::LTLDialect, debug::DebugDialect>(op->getDialect()))
     return;
 
   // Handle HW statements, SV statements.
@@ -5610,7 +5600,7 @@ void ModuleEmitter::emitBind(BindOp op) {
     // Get the max port name length so we can align the '('.
     size_t maxNameLength = 0;
     for (auto &elt : childPortInfo) {
-      auto portName = getPortVerilogName(childMod, elt);
+      auto portName = elt.getVerilogName();
       elt.name = Builder(inst.getContext()).getStringAttr(portName);
       maxNameLength = std::max(maxNameLength, elt.getName().size());
     }
@@ -5666,8 +5656,8 @@ void ModuleEmitter::emitBind(BindOp op) {
           // If this is directly using the output port of the containing
           // module, just specify that directly.
           size_t outputPortNo = portVal.getUses().begin()->getOperandNumber();
-          ps << PPExtString(getPortVerilogName(
-              parentMod, parentPortList.atOutput(outputPortNo)));
+          ps << PPExtString(
+              parentPortList.atOutput(outputPortNo).getVerilogName());
         } else {
           portVal = portVal.getUsers().begin()->getOperand(0);
           ExprEmitter(*this, ops)
@@ -5875,7 +5865,7 @@ void ModuleEmitter::emitPortList(Operation *module,
           (hasOutputs ? 7 : 6) + (emitWireInPorts ? 5 : 0) + maxTypeWidth;
 
       // Emit the name.
-      ps << PPExtString(getPortVerilogName(module, portInfo.at(portIdx)));
+      ps << PPExtString(portInfo.at(portIdx).getVerilogName());
 
       // Emit array dimensions.
       ps.invokeWithStringOS(
@@ -5924,7 +5914,7 @@ void ModuleEmitter::emitPortList(Operation *module,
           ps.nbsp(startOfNamePos);
 
           // Emit the name.
-          StringRef name = getPortVerilogName(module, port);
+          StringRef name = port.getVerilogName();
           ps << PPExtString(name);
 
           // Emit array dimensions.

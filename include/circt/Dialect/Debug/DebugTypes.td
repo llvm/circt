@@ -14,6 +14,12 @@ include "mlir/IR/AttrTypeBase.td"
 
 class DebugTypeDef<string name> : TypeDef<DebugDialect, name> { }
 
+def ScopeType : DebugTypeDef<"Scope"> {
+  let mnemonic = "scope";
+  let summary = "debug scope";
+  let description = "The result of a `dbg.scope` operation.";
+}
+
 def StructType : DebugTypeDef<"Struct"> {
   let mnemonic = "struct";
   let summary = "debug struct aggregate";

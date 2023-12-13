@@ -1,4 +1,4 @@
-//===- Ltl.cpp - C Interface for the Ltl Dialect -----------------------===//
+//===- LTL.cpp - C interface for the LTL dialect --------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.

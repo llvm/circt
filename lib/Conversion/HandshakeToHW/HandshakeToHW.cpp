@@ -322,7 +322,9 @@ static LogicalResult convertExtMemoryOps(HWModuleOp mod) {
     // Get the attached extmemory external module.
     auto extmemInstance = cast<hw::InstanceOp>(*arg.getUsers().begin());
     auto extmemMod =
-        cast<hw::HWModuleExternOp>(extmemInstance.getReferencedModuleSlow());
+        cast<hw::HWModuleExternOp>(SymbolTable::lookupNearestSymbolFrom(
+            extmemInstance, extmemInstance.getModuleNameAttr()));
+
     ModulePortInfo portInfo(extmemMod.getPortList());
 
     // The extmemory external module's interface is a direct wrapping of the
@@ -1884,7 +1886,7 @@ static LogicalResult convertFuncOp(ESITypeConverter &typeConverter,
       UnitRateConversionPattern<arith::AndIOp, comb::AndOp>,
       UnitRateConversionPattern<arith::OrIOp, comb::OrOp>,
       UnitRateConversionPattern<arith::XOrIOp, comb::XorOp>,
-      UnitRateConversionPattern<arith::ShLIOp, comb::OrOp>,
+      UnitRateConversionPattern<arith::ShLIOp, comb::ShlOp>,
       UnitRateConversionPattern<arith::ShRUIOp, comb::ShrUOp>,
       UnitRateConversionPattern<arith::ShRSIOp, comb::ShrSOp>,
       UnitRateConversionPattern<arith::SelectOp, comb::MuxOp>,

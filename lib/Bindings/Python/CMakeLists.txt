@@ -23,17 +23,18 @@ declare_mlir_python_extension(CIRCTBindingsPythonExtension
     SVModule.cpp
   EMBED_CAPI_LINK_LIBS
     CIRCTCAPIComb
+    CIRCTCAPIDebug
     CIRCTCAPIESI
-    CIRCTCAPIMSFT
-    CIRCTCAPIHW
-    CIRCTCAPIHWArith
-    CIRCTCAPIOM
-    CIRCTCAPISeq
-    CIRCTCAPISV
     CIRCTCAPIExportVerilog
     CIRCTCAPIFSM
+    CIRCTCAPIHW
+    CIRCTCAPIHWArith
     CIRCTCAPIHandshake
     CIRCTCAPILTL
+    CIRCTCAPIMSFT
+    CIRCTCAPIOM
+    CIRCTCAPISV
+    CIRCTCAPISeq
     CIRCTCAPIVerif
     CIRCTCAPIConversion
     MLIRCAPITransforms
@@ -72,6 +73,14 @@ declare_mlir_dialect_python_bindings(
   SOURCES
     dialects/comb.py
   DIALECT_NAME comb)
+
+declare_mlir_dialect_python_bindings(
+  ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
+  ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
+  TD_FILE dialects/DebugOps.td
+  SOURCES
+    dialects/debug.py
+  DIALECT_NAME dbg)
 
 declare_mlir_dialect_python_bindings(
   ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
@@ -174,6 +183,7 @@ add_mlir_python_modules(CIRCTPythonModules
   INSTALL_PREFIX "python_packages/circt_core/circt"
   DECLARED_SOURCES
     MLIRPythonSources.Core
+    MLIRPythonSources.Dialects.builtin
     CIRCTBindingsPythonExtension
     CIRCTBindingsPythonSources
   COMMON_CAPI_LINK_LIBS

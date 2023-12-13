@@ -29,7 +29,7 @@
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/Support/Debug.h"
 
-#define DEBUG_TYPE "arc-lower-to-llvm"
+#define DEBUG_TYPE "lower-arc-to-llvm"
 
 using namespace mlir;
 using namespace circt;
@@ -72,7 +72,8 @@ struct AllocStorageOpLowering
     auto type = typeConverter->convertType(op.getType());
     if (!op.getOffset().has_value())
       return failure();
-    rewriter.replaceOpWithNewOp<LLVM::GEPOp>(op, type, adaptor.getInput(),
+    rewriter.replaceOpWithNewOp<LLVM::GEPOp>(op, type, rewriter.getI8Type(),
+                                             adaptor.getInput(),
                                              LLVM::GEPArg(*op.getOffset()));
     return success();
   }
@@ -92,14 +93,9 @@ struct AllocStateLikeOpLowering : public OpConversionPattern<ConcreteOp> {
     if (!offsetAttr)
       return failure();
     Value ptr = rewriter.create<LLVM::GEPOp>(
-        op->getLoc(), adaptor.getStorage().getType(), adaptor.getStorage(),
+        op->getLoc(), adaptor.getStorage().getType(), rewriter.getI8Type(),
+        adaptor.getStorage(),
         LLVM::GEPArg(offsetAttr.getValue().getZExtValue()));
-
-    // Cast the raw storage pointer to a pointer of the state's actual type.
-    auto type = typeConverter->convertType(op.getType());
-    if (type != ptr.getType())
-      ptr = rewriter.create<LLVM::BitcastOp>(op->getLoc(), type, ptr);
-
     rewriter.replaceOp(op, ptr);
     return success();
   }
@@ -110,7 +106,8 @@ struct StateReadOpLowering : public OpConversionPattern<arc::StateReadOp> {
   LogicalResult
   matchAndRewrite(arc::StateReadOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
-    rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, adaptor.getState());
+    auto type = typeConverter->convertType(op.getType());
+    rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, type, adaptor.getState());
     return success();
   }
 };
@@ -144,12 +141,9 @@ struct AllocMemoryOpLowering : public OpConversionPattern<arc::AllocMemoryOp> {
     if (!offsetAttr)
       return failure();
     Value ptr = rewriter.create<LLVM::GEPOp>(
-        op.getLoc(), adaptor.getStorage().getType(), adaptor.getStorage(),
+        op.getLoc(), adaptor.getStorage().getType(), rewriter.getI8Type(),
+        adaptor.getStorage(),
         LLVM::GEPArg(offsetAttr.getValue().getZExtValue()));
-
-    auto type = typeConverter->convertType(op.getType());
-    if (type != ptr.getType())
-      ptr = rewriter.create<LLVM::BitcastOp>(op.getLoc(), type, ptr);
 
     rewriter.replaceOp(op, ptr);
     return success();
@@ -163,12 +157,9 @@ struct StorageGetOpLowering : public OpConversionPattern<arc::StorageGetOp> {
                   ConversionPatternRewriter &rewriter) const final {
     Value offset = rewriter.create<LLVM::ConstantOp>(
         op.getLoc(), rewriter.getI32Type(), op.getOffsetAttr());
-    Value ptr = rewriter.create<LLVM::GEPOp>(op.getLoc(),
-                                             adaptor.getStorage().getType(),
-                                             adaptor.getStorage(), offset);
-    auto type = typeConverter->convertType(op.getType());
-    if (type != ptr.getType())
-      ptr = rewriter.create<LLVM::BitcastOp>(op.getLoc(), type, ptr);
+    Value ptr = rewriter.create<LLVM::GEPOp>(
+        op.getLoc(), adaptor.getStorage().getType(), rewriter.getI8Type(),
+        adaptor.getStorage(), offset);
     rewriter.replaceOp(op, ptr);
     return success();
   }
@@ -189,9 +180,9 @@ static MemoryAccess prepareMemoryAccess(Location loc, Value memory,
       loc, zextAddrType, rewriter.getI32IntegerAttr(type.getNumWords()));
   Value withinBounds = rewriter.create<LLVM::ICmpOp>(
       loc, LLVM::ICmpPredicate::ult, addr, addrLimit);
-  auto ptrType = LLVM::LLVMPointerType::get(type.getWordType());
-  Value ptr =
-      rewriter.create<LLVM::GEPOp>(loc, ptrType, memory, ValueRange{addr});
+  Value ptr = rewriter.create<LLVM::GEPOp>(
+      loc, LLVM::LLVMPointerType::get(memory.getContext()),
+      rewriter.getIntegerType(type.getStride() * 8), memory, ValueRange{addr});
   return {ptr, withinBounds};
 }
 
@@ -201,16 +192,18 @@ struct MemoryReadOpLowering : public OpConversionPattern<arc::MemoryReadOp> {
   matchAndRewrite(arc::MemoryReadOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
     auto type = typeConverter->convertType(op.getType());
-    auto access = prepareMemoryAccess(
-        op.getLoc(), adaptor.getMemory(), adaptor.getAddress(),
-        op.getMemory().getType().cast<MemoryType>(), rewriter);
+    auto memoryType = op.getMemory().getType().cast<MemoryType>();
+    auto access =
+        prepareMemoryAccess(op.getLoc(), adaptor.getMemory(),
+                            adaptor.getAddress(), memoryType, rewriter);
 
     // Only attempt to read the memory if the address is within bounds,
     // otherwise produce a zero value.
     rewriter.replaceOpWithNewOp<scf::IfOp>(
         op, access.withinBounds,
         [&](auto &builder, auto loc) {
-          Value loadOp = builder.template create<LLVM::LoadOp>(loc, access.ptr);
+          Value loadOp = builder.template create<LLVM::LoadOp>(
+              loc, memoryType.getWordType(), access.ptr);
           builder.template create<scf::YieldOp>(loc, loadOp);
         },
         [&](auto &builder, auto loc) {
@@ -247,38 +240,13 @@ struct MemoryWriteOpLowering : public OpConversionPattern<arc::MemoryWriteOp> {
 };
 
 /// A dummy lowering for clock gates to an AND gate.
-struct ClockGateOpLowering : public OpConversionPattern<arc::ClockGateOp> {
+struct ClockGateOpLowering : public OpConversionPattern<seq::ClockGateOp> {
   using OpConversionPattern::OpConversionPattern;
   LogicalResult
-  matchAndRewrite(arc::ClockGateOp op, OpAdaptor adaptor,
+  matchAndRewrite(seq::ClockGateOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
     rewriter.replaceOpWithNewOp<comb::AndOp>(op, adaptor.getInput(),
                                              adaptor.getEnable(), true);
-    return success();
-  }
-};
-
-struct ReturnOpLowering : public OpConversionPattern<func::ReturnOp> {
-  using OpConversionPattern::OpConversionPattern;
-  LogicalResult
-  matchAndRewrite(func::ReturnOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<func::ReturnOp>(op, adaptor.getOperands());
-    return success();
-  }
-};
-
-struct FuncCallOpLowering : public OpConversionPattern<func::CallOp> {
-  using OpConversionPattern::OpConversionPattern;
-  LogicalResult
-  matchAndRewrite(func::CallOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    SmallVector<Type> newResultTypes;
-    if (failed(
-            typeConverter->convertTypes(op->getResultTypes(), newResultTypes)))
-      return failure();
-    rewriter.replaceOpWithNewOp<func::CallOp>(
-        op, op.getCalleeAttr(), newResultTypes, adaptor.getOperands());
     return success();
   }
 };
@@ -317,74 +285,65 @@ struct ReplaceOpWithInputPattern : public OpConversionPattern<OpTy> {
 
 } // namespace
 
-static bool isArcType(Type type) {
-  return type.isa<StorageType>() || type.isa<MemoryType>() ||
-         type.isa<StateType>() || type.isa<seq::ClockType>();
-}
+//===----------------------------------------------------------------------===//
+// Pass Implementation
+//===----------------------------------------------------------------------===//
 
-static bool hasArcType(TypeRange types) {
-  return llvm::any_of(types, isArcType);
-}
+namespace {
+struct LowerArcToLLVMPass : public LowerArcToLLVMBase<LowerArcToLLVMPass> {
+  void runOnOperation() override;
+};
+} // namespace
 
-static bool hasArcType(ValueRange values) {
-  return hasArcType(values.getTypes());
-}
+void LowerArcToLLVMPass::runOnOperation() {
+  // Collect the symbols in the root op such that the HW-to-LLVM lowering can
+  // create LLVM globals with non-colliding names.
+  Namespace globals;
+  SymbolCache cache;
+  cache.addDefinitions(getOperation());
+  globals.add(cache);
 
-template <typename Op>
-static void addGenericLegality(ConversionTarget &target) {
-  target.addDynamicallyLegalOp<Op>([](Op op) {
-    return !hasArcType(op->getOperands()) && !hasArcType(op->getResults());
-  });
-}
+  // Setup the conversion target. Explicitly mark `scf.yield` legal since it
+  // does not have a conversion itself, which would cause it to fail
+  // legalization and for the conversion to abort. (It relies on its parent op's
+  // conversion to remove it.)
+  LLVMConversionTarget target(getContext());
+  target.addLegalOp<mlir::ModuleOp>();
+  target.addLegalOp<scf::YieldOp>(); // quirk of SCF dialect conversion
 
-static void populateLegality(ConversionTarget &target) {
-  target.addLegalDialect<mlir::BuiltinDialect>();
-  target.addLegalDialect<hw::HWDialect>();
-  target.addLegalDialect<comb::CombDialect>();
-  target.addLegalDialect<func::FuncDialect>();
-  target.addLegalDialect<scf::SCFDialect>();
-  target.addLegalDialect<LLVM::LLVMDialect>();
-  target.addIllegalDialect<seq::SeqDialect>();
-
-  target.addIllegalOp<arc::DefineOp>();
-  target.addIllegalOp<arc::OutputOp>();
-  target.addIllegalOp<arc::StateOp>();
-  target.addIllegalOp<arc::ClockTreeOp>();
-  target.addIllegalOp<arc::PassThroughOp>();
-
-  target.addDynamicallyLegalOp<func::FuncOp>([](func::FuncOp op) {
-    auto argsConverted = llvm::none_of(op.getBlocks(), [](auto &block) {
-      return hasArcType(block.getArguments());
-    });
-    auto resultsConverted = !hasArcType(op.getResultTypes());
-    return argsConverted && resultsConverted;
-  });
-  addGenericLegality<func::ReturnOp>(target);
-  addGenericLegality<func::CallOp>(target);
-}
-
-static void populateTypeConversion(TypeConverter &typeConverter) {
-  typeConverter.addConversion([&](seq::ClockType type) {
+  // Setup the arc dialect type conversion.
+  LLVMTypeConverter converter(&getContext());
+  converter.addConversion([&](seq::ClockType type) {
     return IntegerType::get(type.getContext(), 1);
   });
-  typeConverter.addConversion([&](StorageType type) {
-    return LLVM::LLVMPointerType::get(IntegerType::get(type.getContext(), 8));
+  converter.addConversion([&](StorageType type) {
+    return LLVM::LLVMPointerType::get(type.getContext());
   });
-  typeConverter.addConversion([&](MemoryType type) {
-    return LLVM::LLVMPointerType::get(
-        IntegerType::get(type.getContext(), type.getStride() * 8));
+  converter.addConversion([&](MemoryType type) {
+    return LLVM::LLVMPointerType::get(type.getContext());
   });
-  typeConverter.addConversion([&](StateType type) {
-    return LLVM::LLVMPointerType::get(
-        typeConverter.convertType(type.getType()));
+  converter.addConversion([&](StateType type) {
+    return LLVM::LLVMPointerType::get(type.getContext());
   });
-  typeConverter.addConversion([](hw::ArrayType type) { return type; });
-  typeConverter.addConversion([](mlir::IntegerType type) { return type; });
-}
 
-static void populateOpConversion(RewritePatternSet &patterns,
-                                 TypeConverter &typeConverter) {
-  auto *context = patterns.getContext();
+  // Setup the conversion patterns.
+  RewritePatternSet patterns(&getContext());
+
+  // MLIR patterns.
+  populateSCFToControlFlowConversionPatterns(patterns);
+  populateFuncToLLVMConversionPatterns(converter, patterns);
+  cf::populateControlFlowToLLVMConversionPatterns(converter, patterns);
+  arith::populateArithToLLVMConversionPatterns(converter, patterns);
+  populateAnyFunctionOpInterfaceTypeConversionPattern(patterns, converter);
+
+  // CIRCT patterns.
+  DenseMap<std::pair<Type, ArrayAttr>, LLVM::GlobalOp> constAggregateGlobalsMap;
+  populateHWToLLVMConversionPatterns(converter, patterns, globals,
+                                     constAggregateGlobalsMap);
+  populateHWToLLVMTypeConversions(converter);
+  populateCombToLLVMConversionPatterns(converter, patterns);
+
+  // Arc patterns.
   // clang-format off
   patterns.add<
     AllocMemoryOpLowering,
@@ -393,82 +352,21 @@ static void populateOpConversion(RewritePatternSet &patterns,
     AllocStateLikeOpLowering<arc::RootOutputOp>,
     AllocStorageOpLowering,
     ClockGateOpLowering,
-    FuncCallOpLowering,
     MemoryReadOpLowering,
     MemoryWriteOpLowering,
     ModelOpLowering,
     ReplaceOpWithInputPattern<seq::ToClockOp>,
     ReplaceOpWithInputPattern<seq::FromClockOp>,
-    ReturnOpLowering,
     StateReadOpLowering,
     StateWriteOpLowering,
     StorageGetOpLowering,
     ZeroCountOpLowering
-  >(typeConverter, context);
+  >(converter, &getContext());
   // clang-format on
 
-  mlir::populateFunctionOpInterfaceTypeConversionPattern<func::FuncOp>(
-      patterns, typeConverter);
-}
-
-//===----------------------------------------------------------------------===//
-// Pass Implementation
-//===----------------------------------------------------------------------===//
-
-namespace {
-struct LowerArcToLLVMPass : public LowerArcToLLVMBase<LowerArcToLLVMPass> {
-  void runOnOperation() override;
-  LogicalResult lowerToMLIR();
-  LogicalResult lowerArcToLLVM();
-};
-} // namespace
-
-void LowerArcToLLVMPass::runOnOperation() {
-  if (failed(lowerToMLIR()))
-    return signalPassFailure();
-
-  if (failed(lowerArcToLLVM()))
-    return signalPassFailure();
-}
-
-/// Perform the lowering to Func and SCF.
-LogicalResult LowerArcToLLVMPass::lowerToMLIR() {
-  LLVM_DEBUG(llvm::dbgs() << "Lowering arcs to Func/SCF dialects\n");
-  ConversionTarget target(getContext());
-  TypeConverter converter;
-  RewritePatternSet patterns(&getContext());
-  populateLegality(target);
-  populateTypeConversion(converter);
-  populateOpConversion(patterns, converter);
-  return applyPartialConversion(getOperation(), target, std::move(patterns));
-}
-
-/// Perform lowering to LLVM.
-LogicalResult LowerArcToLLVMPass::lowerArcToLLVM() {
-  LLVM_DEBUG(llvm::dbgs() << "Lowering to LLVM dialect\n");
-
-  Namespace globals;
-  SymbolCache cache;
-  cache.addDefinitions(getOperation());
-  globals.add(cache);
-
-  LLVMConversionTarget target(getContext());
-  LLVMTypeConverter converter(&getContext());
-  RewritePatternSet patterns(&getContext());
-  target.addLegalOp<mlir::ModuleOp>();
-  target.addIllegalOp<arc::ModelOp>();
-  populateSCFToControlFlowConversionPatterns(patterns);
-  populateFuncToLLVMConversionPatterns(converter, patterns);
-  cf::populateControlFlowToLLVMConversionPatterns(converter, patterns);
-
-  DenseMap<std::pair<Type, ArrayAttr>, LLVM::GlobalOp> constAggregateGlobalsMap;
-  populateHWToLLVMConversionPatterns(converter, patterns, globals,
-                                     constAggregateGlobalsMap);
-  populateHWToLLVMTypeConversions(converter);
-  populateCombToLLVMConversionPatterns(converter, patterns);
-  arith::populateArithToLLVMConversionPatterns(converter, patterns);
-
-  return applyFullConversion(getOperation(), target, std::move(patterns));
+  // Apply the conversion.
+  if (failed(applyFullConversion(getOperation(), target, std::move(patterns))))
+    signalPassFailure();
 }
 
 std::unique_ptr<OperationPass<ModuleOp>> circt::createLowerArcToLLVMPass() {

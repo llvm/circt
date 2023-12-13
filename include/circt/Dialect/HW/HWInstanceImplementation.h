@@ -1,4 +1,4 @@
-//===- InstanceImplementation.h - Instance-like Op utilities ----*- C++ -*-===//
+//===- HWInstanceImplementation.h - Instance-like Op utilities --*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -12,9 +12,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_HW_INSTANCEIMPLEMENTATION_H
-#define CIRCT_DIALECT_HW_INSTANCEIMPLEMENTATION_H
+#ifndef CIRCT_DIALECT_HW_HWINSTANCEIMPLEMENTATION_H
+#define CIRCT_DIALECT_HW_HWINSTANCEIMPLEMENTATION_H
 
+#include "circt/Dialect/HW/PortImplementation.h"
 #include "circt/Support/LLVM.h"
 #include <functional>
 
@@ -96,8 +97,12 @@ ArrayAttr updateName(ArrayAttr oldNames, size_t i, StringAttr name);
 void getAsmResultNames(OpAsmSetValueNameFn setNameFn, StringRef instanceName,
                        ArrayAttr resultNames, ValueRange results);
 
+/// Return the port list of an instance, based on the name, type and location
+/// attributes present on the instance.
+SmallVector<PortInfo> getPortList(Operation *instanceOp);
+
 } // namespace instance_like_impl
 } // namespace hw
 } // namespace circt
 
-#endif // CIRCT_DIALECT_HW_INSTANCEIMPLEMENTATION_H
+#endif // CIRCT_DIALECT_HW_HWINSTANCEIMPLEMENTATION_H

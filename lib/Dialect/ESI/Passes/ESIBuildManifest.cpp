@@ -75,11 +75,8 @@ void ESIBuildManifestPass::runOnOperation() {
   for (auto root : mod->getRegion(0).front().getOps<AppIDHierRootOp>())
     if (root.getTopModuleRef() == top)
       appidRoot = root;
-  if (!appidRoot) {
-    mod->emitError() << "No AppID hierarchy found for top level '" << top
-                     << "'";
-    return signalPassFailure();
-  }
+  if (!appidRoot)
+    return;
 
   // Gather the relevant types under the appid hierarchy root only. This avoids
   // scraping unnecessary types.
@@ -88,13 +85,14 @@ void ESIBuildManifestPass::runOnOperation() {
   // JSONify the manifest.
   std::string jsonManifest = json();
 
-  // Append a verbatim with the manifest to the end of the module.
-  OpBuilder b = OpBuilder::atBlockEnd(&mod->getRegion(0).getBlocks().front());
-  auto verbatim = b.create<sv::VerbatimOp>(b.getUnknownLoc(),
-                                           StringAttr::get(ctxt, jsonManifest));
-  auto outputFileAttr =
-      hw::OutputFileAttr::getFromFilename(ctxt, "esi_system_manifest.json");
-  verbatim->setAttr("output_file", outputFileAttr);
+  std::error_code ec;
+  llvm::raw_fd_ostream os("esi_system_manifest.json", ec);
+  if (ec) {
+    mod->emitError() << "Failed to open file for writing: " << ec.message();
+    signalPassFailure();
+  } else {
+    os << jsonManifest << "\n";
+  }
 
   // If zlib is available, compress the manifest and append it to the module.
   SmallVector<uint8_t, 10 * 1024> compressedManifest;
@@ -104,51 +102,27 @@ void ESIBuildManifestPass::runOnOperation() {
         ArrayRef((uint8_t *)jsonManifest.data(), jsonManifest.length()),
         compressedManifest, llvm::compression::zlib::BestSizeCompression);
 
-    // Append a verbatim with the compressed manifest to the end of the module.
-    auto compressedVerbatim = b.create<sv::VerbatimOp>(
-        b.getUnknownLoc(),
-        StringAttr::get(ctxt, StringRef((char *)compressedManifest.data(),
-                                        compressedManifest.size())));
-    auto compressedOutputFileAttr = hw::OutputFileAttr::getFromFilename(
-        ctxt, "esi_system_manifest.json.zlib");
-    compressedVerbatim->setAttr("output_file", compressedOutputFileAttr);
+    llvm::raw_fd_ostream bos("esi_system_manifest.json.zlib", ec);
+    if (ec) {
+      mod->emitError() << "Failed to open compressed file for writing: "
+                       << ec.message();
+      signalPassFailure();
+    } else {
+      bos.write((char *)compressedManifest.data(), compressedManifest.size());
+    }
 
-    b.setInsertionPoint(symCache.getDefinition(appidRoot.getTopModuleRefAttr())
-                            ->getRegion(0)
-                            .front()
-                            .getTerminator());
+    OpBuilder b(symCache.getDefinition(appidRoot.getTopModuleRefAttr())
+                    ->getRegion(0)
+                    .front()
+                    .getTerminator());
     b.create<CompressedManifestOp>(
         b.getUnknownLoc(),
         BlobAttr::get(ctxt, ArrayRef<char>(reinterpret_cast<char *>(
                                                compressedManifest.data()),
                                            compressedManifest.size())));
   } else {
-    mod->emitError() << "zlib not available but required for manifest support";
-    signalPassFailure();
-  }
-
-  // If directed, write the manifest to a file. Mostly for debugging.
-  if (!toFile.empty()) {
-    std::error_code ec;
-    llvm::raw_fd_ostream os(toFile, ec);
-    if (ec) {
-      mod->emitError() << "Failed to open file for writing: " << ec.message();
-      signalPassFailure();
-    } else {
-      os << jsonManifest << "\n";
-    }
-
-    // If the compressed manifest is available, output it also.
-    if (!compressedManifest.empty()) {
-      llvm::raw_fd_ostream bos(toFile + ".zlib", ec);
-      if (ec) {
-        mod->emitError() << "Failed to open compressed file for writing: "
-                         << ec.message();
-        signalPassFailure();
-      } else {
-        bos.write((char *)compressedManifest.data(), compressedManifest.size());
-      }
-    }
+    mod->emitWarning()
+        << "zlib not available but required for manifest support";
   }
 }
 

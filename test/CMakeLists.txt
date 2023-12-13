@@ -21,6 +21,7 @@ set(CIRCT_TEST_DEPENDS
   circt-capi-ir-test
   circt-capi-om-test
   circt-capi-firrtl-test
+  circt-capi-firtool-test
   circt-as
   circt-dis
   circt-opt

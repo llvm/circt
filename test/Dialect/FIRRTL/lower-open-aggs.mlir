@@ -195,8 +195,8 @@ firrtl.circuit "ManySymbols" {
   // CHECK-SAME: <@b,7,public>
   firrtl.extmodule @ManySymbols2(
     out mixed: !firrtl.openbundle<a: uint<1>,
-                                   x flip: openvector<openbundle<refsonly : openbundle<p: probe<bundle<a: uint<1>,
-                                                                                                       b: vector<uint<1>, 2>>>>,
+                                   x flip: openvector<openbundle<refsonly : openbundle<p flip: probe<bundle<a: uint<1>,
+                                                                                                            b: vector<uint<1>, 2>>>>,
                                                                  data flip: uint<1>
                                                       >, 2>,
                                    b: vector<uint<1>, 2>>

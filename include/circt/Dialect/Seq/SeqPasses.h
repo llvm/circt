@@ -19,13 +19,19 @@
 namespace circt {
 namespace seq {
 
+enum class ReadEnableMode { Zero, Ignore, Undefined };
+
 #define GEN_PASS_DECL_EXTERNALIZECLOCKGATE
+#define GEN_PASS_DECL_HWMEMSIMIMPL
 #include "circt/Dialect/Seq/SeqPasses.h.inc"
 
 std::unique_ptr<mlir::Pass> createLowerSeqHLMemPass();
 std::unique_ptr<mlir::Pass>
 createExternalizeClockGatePass(const ExternalizeClockGateOptions &options = {});
 std::unique_ptr<mlir::Pass> createLowerSeqFIFOPass();
+std::unique_ptr<mlir::Pass>
+createHWMemSimImplPass(const HWMemSimImplOptions &options = {});
+std::unique_ptr<mlir::Pass> createLowerSeqShiftRegPass();
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION

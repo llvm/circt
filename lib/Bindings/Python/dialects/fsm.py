@@ -106,19 +106,6 @@ class MachineOp(MachineOp):
 @_ods_cext.register_operation(_Dialect, replace=True)
 class TransitionOp(TransitionOp):
 
-  def __init__(self, next_state, *, loc=None, ip=None):
-    attributes = {
-        "nextState": FlatSymbolRefAttr.get(next_state),
-    }
-    super().__init__(
-        self.build_generic(attributes=attributes,
-                           results=[],
-                           operands=[],
-                           successors=None,
-                           regions=2,
-                           loc=loc,
-                           ip=ip))
-
   @staticmethod
   def create(to_state):
     op = fsm.TransitionOp(to_state)

@@ -51,4 +51,56 @@ def ExternalizeClockGate: Pass<"externalize-clock-gate", "mlir::ModuleOp"> {
   ];
 }
 
+def HWMemSimImpl : Pass<"hw-memory-sim", "ModuleOp"> {
+  let summary = "Implement FIRRTMMem memories nodes with simulation model";
+  let description = [{
+    This pass replaces generated module nodes of type FIRRTLMem with a model
+    suitable for simulation.
+  }];
+
+  let constructor = "circt::seq::createHWMemSimImplPass()";
+  let dependentDialects = ["circt::hw::HWDialect", "circt::sv::SVDialect"];
+
+  let options = [
+    Option<"disableMemRandomization", "disable-mem-randomization", "bool", "false",
+            "Disable emission of memory randomization code">,
+    Option<"disableRegRandomization", "disable-reg-randomization", "bool", "false",
+            "Disable emission of register randomization code">,
+    Option<"replSeqMem", "repl-seq-mem", "bool",
+                "false", "Prepare seq mems for macro replacement">,
+    Option<"readEnableMode", "read-enable-mode", "::circt::seq::ReadEnableMode",
+           "::circt::seq::ReadEnableMode::Undefined",
+           "specify the behaviour of the read enable signal", [{
+              ::llvm::cl::values(
+              clEnumValN(ReadEnableMode::Ignore, "ignore",
+                         "Ignore the read enable signal"),
+              clEnumValN(ReadEnableMode::Zero, "zero",
+                         "Output zeros when reads are disabled"),
+              clEnumValN(ReadEnableMode::Undefined, "undefined",
+                         "Output X when reads are disbled"))
+           }]>,
+    Option<"addMuxPragmas", "add-mux-pragmas", "bool", "false",
+            "Add mux pragmas to memory reads">,
+    Option<"addVivadoRAMAddressConflictSynthesisBugWorkaround",
+           "add-vivado-ram-address-conflict-synthesis-bug-workaround", "bool", "false",
+            "Add a vivado attribute to specify a ram style of an array register">
+
+   ];
+}
+
+def LowerSeqShiftReg : Pass<"lower-seq-shiftreg", "hw::HWModuleOp"> {
+  let summary = "Lower seq.shiftreg ops";
+  let description = [{
+    Default pass for lowering shift register operations. This will lower
+    into a chain of `seq.compreg.ce` operations.
+    Note that this is _not_ guaranteed to be a performant implementation,
+    but instead a default, fallback lowering path which is guaranteed to
+    provide a semantically valid path to verilog emissions.
+    Users are expected to provide a custom lowering pass to maps `seq.shiftreg`
+    operations to target-specific primitives.
+  }];
+  let constructor = "circt::seq::createLowerSeqShiftRegPass()";
+  let dependentDialects = ["circt::hw::HWDialect"];
+}
+
 #endif // CIRCT_DIALECT_SEQ_SEQPASSES

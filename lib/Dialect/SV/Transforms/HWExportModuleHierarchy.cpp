@@ -137,7 +137,6 @@ void HWExportModuleHierarchyPass::runOnOperation() {
 // Pass Creation
 //===----------------------------------------------------------------------===//
 
-std::unique_ptr<mlir::Pass>
-sv::createHWExportModuleHierarchyPass(std::optional<std::string> directory) {
+std::unique_ptr<mlir::Pass> sv::createHWExportModuleHierarchyPass() {
   return std::make_unique<HWExportModuleHierarchyPass>();
 }

@@ -563,3 +563,8 @@ hw.module @vectorize(in %in0: i4, in %in1: i4, out out0: i4) {
   }
   hw.output %0 : i4
 }
+
+// -----
+
+// expected-error @below {{state type must have a known bit width}}
+func.func @InvalidStateType(%arg0: !arc.state<index>)

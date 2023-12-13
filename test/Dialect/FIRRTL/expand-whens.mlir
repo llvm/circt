@@ -568,11 +568,11 @@ firrtl.module @PropInitOut(out %out : !firrtl.string) {
 }
 
 // Check that expand whens works for groups.
-firrtl.declgroup @GroupFoo bind {}
+firrtl.layer @GroupFoo bind {}
 // CHECK-LABEL: firrtl.module @WhenInGroup
 // CHECK-NOT:   firrtl.when
 firrtl.module @WhenInGroup(in %cond : !firrtl.uint<1>) {
-  firrtl.group @GroupFoo {
+  firrtl.layerblock @GroupFoo {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %c1_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %a = firrtl.wire : !firrtl.uint<1>
