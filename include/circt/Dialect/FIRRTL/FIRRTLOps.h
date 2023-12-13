@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_FIRRTL_OPS_H
 #define CIRCT_DIALECT_FIRRTL_OPS_H
 
+#include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.h"
 #include "circt/Dialect/HW/HWOpInterfaces.h"
