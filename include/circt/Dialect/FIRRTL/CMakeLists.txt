@@ -40,9 +40,11 @@ add_circt_doc(FIRRTLTypes Dialects/FIRRTLTypes -gen-typedef-doc)
 add_circt_doc(FIRRTLTypesImpl Dialects/FIRRTLTypesImpl -gen-typedef-doc)
 add_circt_doc(FIRRTLOpInterfaces Dialects/FIRRTLOpInterfaces -gen-op-interface-docs)
 
+
 # Generate Pass documentation.
 add_circt_doc(Passes FIRRTLPasses -gen-pass-doc)
 
 # CHIRRTL
 add_circt_dialect(CHIRRTL chirrtl CHIRRTL)
 add_circt_dialect_doc(CHIRRTL chirrtl)
+add_circt_doc(CHIRRTLTypes Dialects/CHIRRTLTypes -gen-typedef-doc)
