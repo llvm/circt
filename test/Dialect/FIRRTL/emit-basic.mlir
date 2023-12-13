@@ -744,4 +744,28 @@ firrtl.circuit "Foo" {
     %refcast = firrtl.ref.cast %q_ref : (!firrtl.rwprobe<uint<1>>) -> !firrtl.rwprobe<uint>
     firrtl.ref.define %p2, %refcast : !firrtl.rwprobe<uint>
   }
+
+  // CHECK-LABEL: option Platform :
+  firrtl.option @Platform {
+    // CHECK-NEXT: FPGA
+    firrtl.option_case @FPGA
+    // CHECK-NEXT: ASIC
+    firrtl.option_case @ASIC
+  }
+
+  // CHECK-LABEL: extmodule DefaultTarget
+  firrtl.extmodule private @DefaultTarget()
+  // CHECK-LABEL: extmodule FPGATarget
+  firrtl.extmodule private @FPGATarget()
+  // CHECK-LABEL: extmodule ASICTarget
+  firrtl.extmodule private @ASICTarget()
+
+  // CHECK-LABEL: module InstChoice :
+  firrtl.module public @InstChoice() {
+    // CHECK: instchoice inst of DefaultTarget, Platform :
+    // CHECK-NEXT:    FPGA => FPGATarget
+    // CHECK-NEXT:    ASIC => ASICTarget
+    firrtl.instance_choice inst @DefaultTarget alternatives @Platform
+      { @FPGA -> @FPGATarget, @ASIC -> @ASICTarget } ()
+  }
 }
