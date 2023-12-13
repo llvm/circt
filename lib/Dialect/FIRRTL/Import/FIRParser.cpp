@@ -3784,8 +3784,6 @@ ParseResult FIRStmtParser::parseInstanceChoice() {
   if (requireFeature({4, 0, 0}, "option groups/instance choices"))
     return failure();
 
-  LocWithInfo info(getToken().getLoc(), this);
-
   StringRef id;
   StringRef defaultModuleName;
   StringRef optionGroupName;
@@ -3794,7 +3792,7 @@ ParseResult FIRStmtParser::parseInstanceChoice() {
       parseId(defaultModuleName, "expected module name") ||
       parseId(optionGroupName, "expected option group name") ||
       parseToken(FIRToken::colon, "expected ':' after instchoice") ||
-      info.parseOptionalInfo())
+      parseOptionalInfo())
     return failure();
 
   locationProcessor.setLoc(startTok.getLoc());
@@ -5040,7 +5038,8 @@ ParseResult FIRCircuitParser::parseOptionDecl(CircuitOp circuit) {
   while (getIndentation() == baseIndent) {
     StringRef id;
     LocWithInfo caseInfo(getToken().getLoc(), this);
-    if (parseId(id, "expected an option case ID") || info.parseOptionalInfo())
+    if (parseId(id, "expected an option case ID") ||
+        caseInfo.parseOptionalInfo())
       return failure();
 
     if (!cases.insert(id).second)
