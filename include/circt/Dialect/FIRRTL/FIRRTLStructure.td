@@ -411,4 +411,56 @@ def LayerOp : FIRRTLOp<
   }];
 }
 
+def OptionOp : FIRRTLOp<"option", [
+    IsolatedFromAbove,
+    Symbol,
+    SymbolTable,
+    NoTerminator,
+    HasParent<"firrtl::CircuitOp">
+]> {
+  let summary = "An option group definition";
+  let description = [{
+    The `firrtl.option` operation defines a specializable parameter with a
+    known set of values, represented by the `firrtl.option_case` operations
+    nested underneath.
+
+    Operations which support specialization reference the option and its
+    cases to define the specializations they support.
+
+    Example:
+    ```mlir
+
+    firrtl.circuit {
+      firrtl.option @Target {
+        firrtl.option_case @FPGA
+        firrtl.option_case @ASIC
+      }
+    }
+    ```
+  }];
+
+  let arguments = (ins SymbolNameAttr:$sym_name);
+  let results = (outs);
+  let regions = (region SizedRegion<1>:$body);
+  let assemblyFormat = [{
+    $sym_name attr-dict-with-keyword $body
+  }];
+}
+
+def OptionCaseOp : FIRRTLOp<
+  "option_case", [Symbol, HasParent<"firrtl::OptionOp">]
+> {
+  let summary = "A configuration option value definition";
+  let description = [{
+    `firrtl.option_case` defines an acceptable value to be provided for an
+    option. Ops reference it to define their behavior when this case is active.
+  }];
+
+  let arguments = (ins SymbolNameAttr:$sym_name);
+  let results = (outs);
+  let assemblyFormat = [{
+    $sym_name attr-dict
+  }];
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLSTRUCTURE_TD

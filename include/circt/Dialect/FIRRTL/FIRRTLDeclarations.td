@@ -161,6 +161,57 @@ def InstanceOp : HardwareDeclOp<"instance", [
   }];
 }
 
+def InstanceChoiceOp : HardwareDeclOp<"instance_choice", [
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>
+  ]> {
+  let summary = "Creates an instance of a module based on a option";
+
+  let description = [{
+    The instance choice operation creates an instance choosing the target based
+    on the value of an option if one is specified, instantiating a default
+    target otherwise.
+
+    The port lists of all instance targets must match exactly.
+
+    Examples:
+    ```mlir
+    %0 = firrtl.instance_choice foo @Foo alternatives @Opt { @FPGA -> @FPGAFoo }
+      (in io: !firrtl.uint)
+    ```
+  }];
+
+  let arguments = (ins FlatSymbolRefArrayAttr:$moduleNames,
+                       SymbolRefArrayAttr:$caseNames,
+                       StrAttr:$name, NameKindAttr:$nameKind,
+                       APIntAttr:$portDirections, StrArrayAttr:$portNames,
+                       AnnotationArrayAttr:$annotations,
+                       PortAnnotationsAttr:$portAnnotations,
+                       OptionalAttr<InnerSymAttr>:$inner_sym);
+
+  let results = (outs Variadic<AnyType>:$results);
+
+  let hasVerifier = 1;
+  let hasCustomAssemblyFormat = 1;
+
+  let extraClassDeclaration = [{
+    /// Return the port direction for the specified result number.
+    Direction getPortDirection(size_t resultNo) {
+      return direction::get(getPortDirections()[resultNo]);
+    }
+  }];
+
+  let builders = [
+    OpBuilder<(ins "FModuleLike":$defaultModule,
+                   "ArrayRef<std::pair<OptionCaseOp, FModuleLike>>":$cases,
+                   "mlir::StringRef":$name,
+                   CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
+                   CArg<"ArrayRef<Attribute>", "{}">:$annotations,
+                   CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
+                   CArg<"StringAttr", "StringAttr()">:$innerSym)>
+  ];
+}
+
+
 def MemOp : HardwareDeclOp<"mem"> {
   let summary = "Define a new mem";
   let arguments =
