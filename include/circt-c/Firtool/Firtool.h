@@ -12,132 +12,238 @@
 extern "C" {
 #endif
 
-//===----------------------------------------------------------------------===//
-// Option API.
-//===----------------------------------------------------------------------===//
-
 #define DEFINE_C_API_STRUCT(name, storage)                                     \
   struct name {                                                                \
     storage *ptr;                                                              \
   };                                                                           \
   typedef struct name name
 
-DEFINE_C_API_STRUCT(FirtoolOptions, void);
+DEFINE_C_API_STRUCT(CirctFirtoolFirtoolOptions, void);
 
 #undef DEFINE_C_API_STRUCT
 
 // NOLINTNEXTLINE(modernize-use-using)
-typedef enum FirtoolPreserveAggregateMode {
-  FIRTOOL_PRESERVE_AGGREGATE_MODE_NONE,
-  FIRTOOL_PRESERVE_AGGREGATE_MODE_ONE_DIM_VEC,
-  FIRTOOL_PRESERVE_AGGREGATE_MODE_VEC,
-  FIRTOOL_PRESERVE_AGGREGATE_MODE_ALL,
-} FirtoolPreserveAggregateMode;
+typedef enum CirctFirtoolPreserveAggregateMode {
+  CIRCT_FIRTOOL_PRESERVE_AGGREGATE_MODE_NONE,
+  CIRCT_FIRTOOL_PRESERVE_AGGREGATE_MODE_ONE_DIM_VEC,
+  CIRCT_FIRTOOL_PRESERVE_AGGREGATE_MODE_VEC,
+  CIRCT_FIRTOOL_PRESERVE_AGGREGATE_MODE_ALL,
+} CirctFirtoolPreserveAggregateMode;
 
 // NOLINTNEXTLINE(modernize-use-using)
-typedef enum FirtoolPreserveValuesMode {
-  FIRTOOL_PRESERVE_VALUES_MODE_NONE,
-  FIRTOOL_PRESERVE_VALUES_MODE_NAMED,
-  FIRTOOL_PRESERVE_VALUES_MODE_ALL,
-} FirtoolPreserveValuesMode;
+typedef enum CirctFirtoolPreserveValuesMode {
+  CIRCT_FIRTOOL_PRESERVE_VALUES_MODE_STRIP,
+  CIRCT_FIRTOOL_PRESERVE_VALUES_MODE_NONE,
+  CIRCT_FIRTOOL_PRESERVE_VALUES_MODE_NAMED,
+  CIRCT_FIRTOOL_PRESERVE_VALUES_MODE_ALL,
+} CirctFirtoolPreserveValuesMode;
 
 // NOLINTNEXTLINE(modernize-use-using)
-typedef enum FirtoolCompanionMode {
-  FIRTOOL_COMPANION_MODE_BIND,
-  FIRTOOL_COMPANION_MODE_INSTANTIATE,
-  FIRTOOL_COMPANION_MODE_DROP,
-} FirtoolCompanionMode;
+typedef enum CirctFirtoolCompanionMode {
+  CIRCT_FIRTOOL_COMPANION_MODE_BIND,
+  CIRCT_FIRTOOL_COMPANION_MODE_INSTANTIATE,
+  CIRCT_FIRTOOL_COMPANION_MODE_DROP,
+} CirctFirtoolCompanionMode;
 
 // NOLINTNEXTLINE(modernize-use-using)
-typedef enum FirtoolBuildMode {
-  FIRTOOL_BUILD_MODE_DEBUG,
-  FIRTOOL_BUILD_MODE_RELEASE,
-} FirtoolBuildMode;
+typedef enum CirctFirtoolBuildMode {
+  CIRCT_FIRTOOL_BUILD_MODE_DEFAULT,
+  CIRCT_FIRTOOL_BUILD_MODE_DEBUG,
+  CIRCT_FIRTOOL_BUILD_MODE_RELEASE,
+} CirctFirtoolBuildMode;
 
 // NOLINTNEXTLINE(modernize-use-using)
-typedef enum FirtoolRandomKind {
-  FIRTOOL_RANDOM_KIND_NONE,
-  FIRTOOL_RANDOM_KIND_MEM,
-  FIRTOOL_RANDOM_KIND_REG,
-  FIRTOOL_RANDOM_KIND_ALL,
-} FirtoolRandomKind;
+typedef enum CirctFirtoolRandomKind {
+  CIRCT_FIRTOOL_RANDOM_KIND_NONE,
+  CIRCT_FIRTOOL_RANDOM_KIND_MEM,
+  CIRCT_FIRTOOL_RANDOM_KIND_REG,
+  CIRCT_FIRTOOL_RANDOM_KIND_ALL,
+} CirctFirtoolRandomKind;
 
-MLIR_CAPI_EXPORTED FirtoolOptions firtoolOptionsCreateDefault();
-MLIR_CAPI_EXPORTED void firtoolOptionsDestroy(FirtoolOptions options);
+MLIR_CAPI_EXPORTED CirctFirtoolFirtoolOptions
+circtFirtoolOptionsCreateDefault();
+MLIR_CAPI_EXPORTED void
+circtFirtoolOptionsDestroy(CirctFirtoolFirtoolOptions options);
 
-#define DECLARE_FIRTOOL_OPTION(name, type)                                     \
-  MLIR_CAPI_EXPORTED void firtoolOptionsSet##name(FirtoolOptions options,      \
-                                                  type value);                 \
-  MLIR_CAPI_EXPORTED type firtoolOptionsGet##name(FirtoolOptions options)
+MLIR_CAPI_EXPORTED void
+circtFirtoolOptionsSetOutputFilename(CirctFirtoolFirtoolOptions options,
+                                     MlirStringRef filename);
+MLIR_CAPI_EXPORTED void circtFirtoolOptionsSetDisableUnknownAnnotations(
+    CirctFirtoolFirtoolOptions options, bool disable);
 
-DECLARE_FIRTOOL_OPTION(OutputFilename, MlirStringRef);
-DECLARE_FIRTOOL_OPTION(DisableAnnotationsUnknown, bool);
-DECLARE_FIRTOOL_OPTION(DisableAnnotationsClassless, bool);
-DECLARE_FIRTOOL_OPTION(LowerAnnotationsNoRefTypePorts, bool);
-DECLARE_FIRTOOL_OPTION(PreserveAggregate, FirtoolPreserveAggregateMode);
-DECLARE_FIRTOOL_OPTION(PreserveValues, FirtoolPreserveValuesMode);
-DECLARE_FIRTOOL_OPTION(BuildMode, FirtoolBuildMode);
-DECLARE_FIRTOOL_OPTION(DisableOptimization, bool);
-DECLARE_FIRTOOL_OPTION(ExportChiselInterface, bool);
-DECLARE_FIRTOOL_OPTION(ChiselInterfaceOutDirectory, MlirStringRef);
-DECLARE_FIRTOOL_OPTION(VbToBv, bool);
-DECLARE_FIRTOOL_OPTION(Dedup, bool);
-DECLARE_FIRTOOL_OPTION(CompanionMode, FirtoolCompanionMode);
-DECLARE_FIRTOOL_OPTION(DisableAggressiveMergeConnections, bool);
-DECLARE_FIRTOOL_OPTION(EmitOMIR, bool);
-DECLARE_FIRTOOL_OPTION(OMIROutFile, MlirStringRef);
-DECLARE_FIRTOOL_OPTION(LowerMemories, bool);
-DECLARE_FIRTOOL_OPTION(BlackBoxRootPath, MlirStringRef);
-DECLARE_FIRTOOL_OPTION(ReplSeqMem, bool);
-DECLARE_FIRTOOL_OPTION(ReplSeqMemFile, MlirStringRef);
-DECLARE_FIRTOOL_OPTION(ExtractTestCode, bool);
-DECLARE_FIRTOOL_OPTION(IgnoreReadEnableMem, bool);
-DECLARE_FIRTOOL_OPTION(DisableRandom, FirtoolRandomKind);
-DECLARE_FIRTOOL_OPTION(OutputAnnotationFilename, MlirStringRef);
-DECLARE_FIRTOOL_OPTION(EnableAnnotationWarning, bool);
-DECLARE_FIRTOOL_OPTION(AddMuxPragmas, bool);
-DECLARE_FIRTOOL_OPTION(EmitChiselAssertsAsSVA, bool);
-DECLARE_FIRTOOL_OPTION(EmitSeparateAlwaysBlocks, bool);
-DECLARE_FIRTOOL_OPTION(EtcDisableInstanceExtraction, bool);
-DECLARE_FIRTOOL_OPTION(EtcDisableRegisterExtraction, bool);
-DECLARE_FIRTOOL_OPTION(EtcDisableModuleInlining, bool);
-DECLARE_FIRTOOL_OPTION(AddVivadoRAMAddressConflictSynthesisBugWorkaround, bool);
-DECLARE_FIRTOOL_OPTION(CkgModuleName, MlirStringRef);
-DECLARE_FIRTOOL_OPTION(CkgInputName, MlirStringRef);
-DECLARE_FIRTOOL_OPTION(CkgOutputName, MlirStringRef);
-DECLARE_FIRTOOL_OPTION(CkgEnableName, MlirStringRef);
-DECLARE_FIRTOOL_OPTION(CkgTestEnableName, MlirStringRef);
-DECLARE_FIRTOOL_OPTION(ExportModuleHierarchy, bool);
-DECLARE_FIRTOOL_OPTION(StripFirDebugInfo, bool);
-DECLARE_FIRTOOL_OPTION(StripDebugInfo, bool);
+MLIR_CAPI_EXPORTED void circtFirtoolOptionsSetDisableAnnotationsClassless(
+    CirctFirtoolFirtoolOptions options, bool value);
 
-#undef DECLARE_FIRTOOL_OPTION
+MLIR_CAPI_EXPORTED void circtFirtoolOptionsSetLowerAnnotationsNoRefTypePorts(
+    CirctFirtoolFirtoolOptions options, bool value);
+
+MLIR_CAPI_EXPORTED void circtFirtoolOptionsSetPreserveAggregate(
+    CirctFirtoolFirtoolOptions options,
+    CirctFirtoolPreserveAggregateMode value);
+
+MLIR_CAPI_EXPORTED void
+circtFirtoolOptionsSetPreserveValues(CirctFirtoolFirtoolOptions options,
+                                     CirctFirtoolPreserveValuesMode value);
+
+MLIR_CAPI_EXPORTED void
+circtFirtoolOptionsSetEnableDebugInfo(CirctFirtoolFirtoolOptions options,
+                                      bool value);
+
+MLIR_CAPI_EXPORTED void
+circtFirtoolOptionsSetBuildMode(CirctFirtoolFirtoolOptions options,
+                                CirctFirtoolBuildMode value);
+
+MLIR_CAPI_EXPORTED void
+circtFirtoolOptionsSetDisableOptimization(CirctFirtoolFirtoolOptions options,
+                                          bool value);
+
+MLIR_CAPI_EXPORTED void
+circtFirtoolOptionsSetExportChiselInterface(CirctFirtoolFirtoolOptions options,
+                                            bool value);
+
+MLIR_CAPI_EXPORTED void circtFirtoolOptionsSetChiselInterfaceOutDirectory(
+    CirctFirtoolFirtoolOptions options, MlirStringRef value);
+
+MLIR_CAPI_EXPORTED void
+circtFirtoolOptionsSetVbToBv(CirctFirtoolFirtoolOptions options, bool value);
+
+MLIR_CAPI_EXPORTED void
+circtFirtoolOptionsSetNoDedup(CirctFirtoolFirtoolOptions options, bool value);
+
+MLIR_CAPI_EXPORTED void
+circtFirtoolOptionsSetCompanionMode(CirctFirtoolFirtoolOptions options,
+                                    CirctFirtoolCompanionMode value);
+
+MLIR_CAPI_EXPORTED void circtFirtoolOptionsSetDisableAggressiveMergeConnections(
+    CirctFirtoolFirtoolOptions options, bool value);
+
+MLIR_CAPI_EXPORTED void circtFirtoolOptionsSetDisableHoistingHWPassthrough(
+    CirctFirtoolFirtoolOptions options, bool value);
+
+MLIR_CAPI_EXPORTED void
+circtFirtoolOptionsSetEmitOmir(CirctFirtoolFirtoolOptions options, bool value);
+
+MLIR_CAPI_EXPORTED void
+circtFirtoolOptionsSetOmirOutFile(CirctFirtoolFirtoolOptions options,
+                                  MlirStringRef value);
+
+MLIR_CAPI_EXPORTED void
+circtFirtoolOptionsSetLowerMemories(CirctFirtoolFirtoolOptions options,
+                                    bool value);
+
+MLIR_CAPI_EXPORTED void
+circtFirtoolOptionsSetBlackBoxRootPath(CirctFirtoolFirtoolOptions options,
+                                       MlirStringRef value);
+
+MLIR_CAPI_EXPORTED void
+circtFirtoolOptionsSetReplSeqMem(CirctFirtoolFirtoolOptions options,
+                                 bool value);
+
+MLIR_CAPI_EXPORTED void
+circtFirtoolOptionsSetReplSeqMemFile(CirctFirtoolFirtoolOptions options,
+                                     MlirStringRef value);
+
+MLIR_CAPI_EXPORTED void
+circtFirtoolOptionsSetExtractTestCode(CirctFirtoolFirtoolOptions options,
+                                      bool value);
+
+MLIR_CAPI_EXPORTED void
+circtFirtoolOptionsSetIgnoreReadEnableMem(CirctFirtoolFirtoolOptions options,
+                                          bool value);
+
+MLIR_CAPI_EXPORTED void
+circtFirtoolOptionsSetDisableRandom(CirctFirtoolFirtoolOptions options,
+                                    CirctFirtoolRandomKind value);
+
+MLIR_CAPI_EXPORTED void circtFirtoolOptionsSetOutputAnnotationFilename(
+    CirctFirtoolFirtoolOptions options, MlirStringRef value);
+
+MLIR_CAPI_EXPORTED void circtFirtoolOptionsSetEnableAnnotationWarning(
+    CirctFirtoolFirtoolOptions options, bool value);
+
+MLIR_CAPI_EXPORTED void
+circtFirtoolOptionsSetAddMuxPragmas(CirctFirtoolFirtoolOptions options,
+                                    bool value);
+
+MLIR_CAPI_EXPORTED void
+circtFirtoolOptionsSetEmitChiselAssertsAsSVA(CirctFirtoolFirtoolOptions options,
+                                             bool value);
+
+MLIR_CAPI_EXPORTED void circtFirtoolOptionsSetEmitSeparateAlwaysBlocks(
+    CirctFirtoolFirtoolOptions options, bool value);
+
+MLIR_CAPI_EXPORTED void circtFirtoolOptionsSetEtcDisableInstanceExtraction(
+    CirctFirtoolFirtoolOptions options, bool value);
+
+MLIR_CAPI_EXPORTED void circtFirtoolOptionsSetEtcDisableRegisterExtraction(
+    CirctFirtoolFirtoolOptions options, bool value);
+
+MLIR_CAPI_EXPORTED void circtFirtoolOptionsSetEtcDisableModuleInlining(
+    CirctFirtoolFirtoolOptions options, bool value);
+
+MLIR_CAPI_EXPORTED void
+circtFirtoolOptionsSetAddVivadoRAMAddressConflictSynthesisBugWorkaround(
+    CirctFirtoolFirtoolOptions options, bool value);
+
+MLIR_CAPI_EXPORTED void
+circtFirtoolOptionsSetCkgModuleName(CirctFirtoolFirtoolOptions options,
+                                    MlirStringRef value);
+
+MLIR_CAPI_EXPORTED void
+circtFirtoolOptionsSetCkgInputName(CirctFirtoolFirtoolOptions options,
+                                   MlirStringRef value);
+
+MLIR_CAPI_EXPORTED void
+circtFirtoolOptionsSetCkgOutputName(CirctFirtoolFirtoolOptions options,
+                                    MlirStringRef value);
+
+MLIR_CAPI_EXPORTED void
+circtFirtoolOptionsSetCkgEnableName(CirctFirtoolFirtoolOptions options,
+                                    MlirStringRef value);
+
+MLIR_CAPI_EXPORTED void
+circtFirtoolOptionsSetCkgTestEnableName(CirctFirtoolFirtoolOptions options,
+                                        MlirStringRef value);
+
+MLIR_CAPI_EXPORTED void
+circtFirtoolOptionsSetExportModuleHierarchy(CirctFirtoolFirtoolOptions options,
+                                            bool value);
+
+MLIR_CAPI_EXPORTED void
+circtFirtoolOptionsSetStripFirDebugInfo(CirctFirtoolFirtoolOptions options,
+                                        bool value);
+
+MLIR_CAPI_EXPORTED void
+circtFirtoolOptionsSetStripDebugInfo(CirctFirtoolFirtoolOptions options,
+                                     bool value);
 
 //===----------------------------------------------------------------------===//
 // Populate API.
 //===----------------------------------------------------------------------===//
 
-MLIR_CAPI_EXPORTED MlirLogicalResult
-firtoolPopulatePreprocessTransforms(MlirPassManager pm, FirtoolOptions options);
+MLIR_CAPI_EXPORTED MlirLogicalResult circtFirtoolPopulatePreprocessTransforms(
+    MlirPassManager pm, CirctFirtoolFirtoolOptions options);
 
-MLIR_CAPI_EXPORTED MlirLogicalResult firtoolPopulateCHIRRTLToLowFIRRTL(
-    MlirPassManager pm, FirtoolOptions options, MlirStringRef inputFilename);
+MLIR_CAPI_EXPORTED MlirLogicalResult circtFirtoolPopulateCHIRRTLToLowFIRRTL(
+    MlirPassManager pm, CirctFirtoolFirtoolOptions options,
+    MlirStringRef inputFilename);
 
-MLIR_CAPI_EXPORTED MlirLogicalResult
-firtoolPopulateLowFIRRTLToHW(MlirPassManager pm, FirtoolOptions options);
+MLIR_CAPI_EXPORTED MlirLogicalResult circtFirtoolPopulateLowFIRRTLToHW(
+    MlirPassManager pm, CirctFirtoolFirtoolOptions options);
 
-MLIR_CAPI_EXPORTED MlirLogicalResult
-firtoolPopulateHWToSV(MlirPassManager pm, FirtoolOptions options);
+MLIR_CAPI_EXPORTED MlirLogicalResult circtFirtoolPopulateHWToSV(
+    MlirPassManager pm, CirctFirtoolFirtoolOptions options);
 
-MLIR_CAPI_EXPORTED MlirLogicalResult
-firtoolPopulateExportVerilog(MlirPassManager pm, FirtoolOptions options,
-                             MlirStringCallback callback, void *userData);
+MLIR_CAPI_EXPORTED MlirLogicalResult circtFirtoolPopulateExportVerilog(
+    MlirPassManager pm, CirctFirtoolFirtoolOptions options,
+    MlirStringCallback callback, void *userData);
 
-MLIR_CAPI_EXPORTED MlirLogicalResult firtoolPopulateExportSplitVerilog(
-    MlirPassManager pm, FirtoolOptions options, MlirStringRef directory);
+MLIR_CAPI_EXPORTED MlirLogicalResult circtFirtoolPopulateExportSplitVerilog(
+    MlirPassManager pm, CirctFirtoolFirtoolOptions options,
+    MlirStringRef directory);
 
-MLIR_CAPI_EXPORTED MlirLogicalResult
-firtoolPopulateFinalizeIR(MlirPassManager pm, FirtoolOptions options);
+MLIR_CAPI_EXPORTED MlirLogicalResult circtFirtoolPopulateFinalizeIR(
+    MlirPassManager pm, CirctFirtoolFirtoolOptions options);
 
 #ifdef __cplusplus
 }

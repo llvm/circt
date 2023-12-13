@@ -97,6 +97,18 @@ static InstanceOp scheduleChainingProblemWithSimplex(InstanceOp instOp,
   return saveProblem(prob, builder);
 }
 
+static InstanceOp scheduleChainingCyclicProblemWithSimplex(InstanceOp instOp,
+                                                           Operation *lastOp,
+                                                           float cycleTime,
+                                                           OpBuilder &builder) {
+  auto prob = loadProblem<scheduling::ChainingCyclicProblem>(instOp);
+  if (failed(prob.check()) ||
+      failed(scheduling::scheduleSimplex(prob, lastOp, cycleTime)) ||
+      failed(prob.verify()))
+    return {};
+  return saveProblem(prob, builder);
+}
+
 static InstanceOp scheduleWithSimplex(InstanceOp instOp, StringRef options,
                                       OpBuilder &builder) {
   auto lastOp = getLastOp(instOp, options);
@@ -124,6 +136,14 @@ static InstanceOp scheduleWithSimplex(InstanceOp instOp, StringRef options,
                                                 cycleTime.value(), builder);
     llvm::errs() << "ssp-schedule: Missing option 'cycle-time' for "
                     "ChainingProblem simplex scheduler\n";
+    return {};
+  }
+  if (problemName.equals("ChainingCyclicProblem")) {
+    if (auto cycleTime = getCycleTime(options))
+      return scheduleChainingCyclicProblemWithSimplex(
+          instOp, lastOp, cycleTime.value(), builder);
+    llvm::errs() << "ssp-schedule: Missing option 'cycle-time' for "
+                    "ChainingCyclicProblem simplex scheduler\n";
     return {};
   }
 

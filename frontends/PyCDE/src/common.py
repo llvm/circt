@@ -10,6 +10,7 @@ from .circt import ir
 from .types import Type, Bundle, Channel, ChannelSignaling, ClockType, Bits
 
 from functools import singledispatchmethod
+from typing import Optional
 
 
 class ModuleDecl:
@@ -88,7 +89,7 @@ class AppID:
   AttributeName = "esi.appid"
 
   @singledispatchmethod
-  def __init__(self, name: str, idx: int):
+  def __init__(self, name: str, idx: Optional[int] = None):
     self._appid = esi.AppIDAttr.get(name, idx)
 
   @__init__.register(ir.Attribute)

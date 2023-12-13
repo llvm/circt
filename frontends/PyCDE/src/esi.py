@@ -2,12 +2,12 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from .common import (Input, Output, InputChannel, OutputChannel, _PyProxy,
-                     PortError)
+from .common import (AppID, Input, Output, _PyProxy, PortError)
 from .module import Generator, Module, ModuleLikeBuilderBase, PortProxyBase
-from .signals import ChannelSignal, Signal, _FromCirctValue
+from .signals import BundleSignal, ChannelSignal, Signal, _FromCirctValue
 from .system import System
-from .types import Channel, Type, types, _FromCirctType
+from .types import (Bits, Bundle, BundledChannel, Channel, ChannelDirection,
+                    Type, types, _FromCirctType)
 
 from .circt import ir
 from .circt.dialects import esi as raw_esi, hw, msft
@@ -25,43 +25,42 @@ PortReadySuffix = "esi.portReadySuffix"
 PortRdenSuffix = "esi.portRdenSuffix"
 PortEmptySuffix = "esi.portEmptySuffix"
 
-ToServer = InputChannel
-FromServer = OutputChannel
-
-
-class ToFromServer:
-  """A bidirectional channel declaration."""
-
-  def __init__(self, to_server_type: Type, to_client_type: Type):
-    self.to_server_type = Channel(to_server_type)
-    self.to_client_type = Channel(to_client_type)
-
 
 class ServiceDecl(_PyProxy):
   """Declare an ESI service interface."""
 
-  def __init__(self, cls: Type):
+  class To:
+    """Indicates a service has a 'to server' port with the given bundle type. It is the default."""
+
+    def __init__(self, bundle_type: Bundle):
+      self.bundle_type = bundle_type
+
+  class From:
+    """Indicates a service has a 'from server' port with the given bundle type."""
+
+    def __init__(self, bundle_type: Bundle):
+      self.bundle_type = bundle_type
+
+  def __init__(self, cls: type):
     self.name = cls.__name__
     if hasattr(cls, "_op"):
       self._op = cls._op
     else:
       self._op = raw_esi.CustomServiceDeclOp
     for (attr_name, attr) in vars(cls).items():
-      if isinstance(attr, InputChannel):
+      if isinstance(attr, Bundle):
         setattr(self, attr_name,
-                _RequestToServerConn(self, attr.type, None, attr_name))
-      elif isinstance(attr, OutputChannel):
+                _RequestToServerConnection(self, attr, attr_name))
+      elif isinstance(attr, ServiceDecl.To):
         setattr(self, attr_name,
-                _RequestToClientConn(self, None, attr.type, attr_name))
-      elif isinstance(attr, ToFromServer):
-        setattr(
-            self, attr_name,
-            _RequestToFromServerConn(self, attr.to_server_type,
-                                     attr.to_client_type, attr_name))
+                _RequestToServerConnection(self, attr.bundle_type, attr_name))
+      elif isinstance(attr, ServiceDecl.From):
+        setattr(self, attr_name,
+                _RequestFromServerConnection(self, attr.bundle_type, attr_name))
       elif isinstance(attr, (Input, Output)):
         raise TypeError(
             "Input and Output are not allowed in ESI service declarations. " +
-            " Use InputChannel and OutputChannel instead.")
+            " Use Bundles instead.")
 
   def _materialize_service_decl(self) -> str:
     """Create the ServiceDeclOp. We must do this lazily since this class gets
@@ -83,19 +82,14 @@ class ServiceDecl(_PyProxy):
         ports_block = ir.Block.create_at_start(decl.ports, [])
         with ir.InsertionPoint.at_block_begin(ports_block):
           for (_, attr) in self.__dict__.items():
-            if isinstance(attr, _RequestToServerConn):
-              raw_esi.ToServerOp(attr._name,
-                                 ir.TypeAttr.get(attr.to_server_type._type))
-            elif isinstance(attr, _RequestToClientConn):
-              raw_esi.ToClientOp(attr._name,
-                                 ir.TypeAttr.get(attr.to_client_type._type))
-            elif isinstance(attr, _RequestToFromServerConn):
-              raw_esi.ServiceDeclInOutOp(
-                  attr._name, ir.TypeAttr.get(attr.to_server_type._type),
-                  ir.TypeAttr.get(attr.to_client_type._type))
+            if isinstance(attr, _RequestToServerConnection):
+              raw_esi.ToServerOp(attr._name, ir.TypeAttr.get(attr.type._type))
+            elif isinstance(attr, _RequestFromServerConnection):
+              raw_esi.ToClientOp(attr._name, ir.TypeAttr.get(attr.type._type))
     return sym_name
 
   def instantiate_builtin(self,
+                          appid: AppID,
                           builtin: str,
                           result_types: List[Type] = [],
                           inputs: List[Signal] = []):
@@ -105,6 +99,7 @@ class ServiceDecl(_PyProxy):
     # TODO: figure out a way to verify the ports during this call.
     impl_results = raw_esi.ServiceInstanceOp(
         result=result_types,
+        appID=appid._appid,
         service_symbol=ir.FlatSymbolRefAttr.get(
             self._materialize_service_decl()),
         impl_type=ir.StringAttr.get(builtin),
@@ -112,75 +107,48 @@ class ServiceDecl(_PyProxy):
     return [_FromCirctValue(x) for x in impl_results]
 
 
-class _RequestConnection:
-  """Parent to 'request' proxy classes. Constructed as attributes on the
-  ServiceDecl class. Provides syntactic sugar for constructing service
-  connection requests."""
+class _RequestToServerConnection:
+  """Indicates a service with a 'to server' port. Call to create a 'to server'
+  (from client) connection request."""
 
-  def __init__(self, decl: ServiceDecl, to_server_type: Optional[Type],
-               to_client_type: Optional[Type], attr_name: str):
+  def __init__(self, decl: ServiceDecl, type: Bundle, attr_name: str):
     self.decl = decl
     self._name = ir.StringAttr.get(attr_name)
-    self.to_server_type = Channel(
-        to_server_type) if to_server_type is not None else None
-    self.to_client_type = Channel(
-        to_client_type) if to_client_type is not None else None
+    self.type = type
 
   @property
   def service_port(self) -> hw.InnerRefAttr:
     return hw.InnerRefAttr.get(self.decl.symbol, self._name)
 
-
-class _RequestToServerConn(_RequestConnection):
-
-  def __call__(self, chan: ChannelSignal, chan_name: str = ""):
+  def __call__(self, bundle: BundleSignal, appid: AppID):
     self.decl._materialize_service_decl()
-    raw_esi.RequestToServerConnectionOp(
-        self.service_port, chan.value,
-        ir.ArrayAttr.get([ir.StringAttr.get(chan_name)]))
+    raw_esi.RequestToServerConnectionOp(self.service_port, bundle.value,
+                                        appid._appid)
 
 
-class _RequestToClientConn(_RequestConnection):
+class _RequestFromServerConnection:
+  """Indicates a service with a 'from server' port. Call to create a 'from
+  server' (to client) connection request."""
 
-  def __call__(self, chan_name: str = "", type: Optional[Type] = None):
+  def __init__(self, decl: ServiceDecl, type: Bundle, attr_name: str):
+    self.decl = decl
+    self._name = ir.StringAttr.get(attr_name)
+    self.type = type
+
+  @property
+  def service_port(self) -> hw.InnerRefAttr:
+    return hw.InnerRefAttr.get(self.decl.symbol, self._name)
+
+  def __call__(self, appid: AppID):
     self.decl._materialize_service_decl()
-    if type is None:
-      type = self.to_client_type
-      if type == types.any:
-        raise ValueError(
-            "If service port has type 'any', then 'type' must be specified.")
-    if not isinstance(type, Channel):
-      type = types.channel(type)
-    req_op = raw_esi.RequestToClientConnectionOp(
-        type._type, self.service_port,
-        ir.ArrayAttr.get([ir.StringAttr.get(chan_name)]))
-    return ChannelSignal(req_op.result, type)
-
-
-class _RequestToFromServerConn(_RequestConnection):
-
-  def __call__(self,
-               to_server_channel: ChannelSignal,
-               chan_name: str = "",
-               to_client_type: Optional[Type] = None):
-    self.decl._materialize_service_decl()
-    type = to_client_type
-    if type is None:
-      type = self.to_client_type
-      if type == types.any:
-        raise ValueError(
-            "If service port has type 'any', then 'type' must be specified.")
-    if not isinstance(type, Channel):
-      type = types.channel(type)
-    to_client = raw_esi.RequestInOutChannelOp(
-        self.to_client_type._type, self.service_port, to_server_channel.value,
-        ir.ArrayAttr.get([ir.StringAttr.get(chan_name)]))
-    return ChannelSignal(to_client.result, type)
+    return _FromCirctValue(
+        raw_esi.RequestToClientConnectionOp(self.type._type, self.service_port,
+                                            appid._appid).toClient)
 
 
 def Cosim(decl: ServiceDecl, clk, rst):
   """Implement a service via cosimulation."""
-  decl.instantiate_builtin("cosim", [], [clk, rst])
+  decl.instantiate_builtin(AppID("cosim", 0), "cosim", [], [clk, rst])
 
 
 class NamedChannelValue(ChannelSignal):
@@ -214,8 +182,8 @@ class _OutputChannelSetter:
     self._chan_to_replace = None
 
 
-class _ServiceGeneratorChannels:
-  """Provide access to the channels which the service generator is responsible
+class _ServiceGeneratorBundles:
+  """Provide access to the bundles which the service generator is responsible
   for connecting up."""
 
   def __init__(self, mod: Module, req: raw_esi.ServiceImplementReqOp):
@@ -242,7 +210,7 @@ class _ServiceGeneratorChannels:
     assert len(self._output_reqs) == len(req.results) - num_output_ports
 
   @property
-  def to_server_reqs(self) -> List[NamedChannelValue]:
+  def reqs(self) -> List[NamedChannelValue]:
     """Get the list of incoming channels from the 'to server' connection
     requests."""
     return self._input_reqs
@@ -263,7 +231,7 @@ class ServiceImplementationModuleBuilder(ModuleLikeBuilderBase):
   no distinction between definition and instance -- ESI service providers are
   built where they are instantiated."""
 
-  def instantiate(self, impl, instance_name: str, **inputs):
+  def instantiate(self, impl, inputs: Dict[str, Signal], appid: AppID = None):
     # Each instantiation of the ServiceImplementation has its own
     # registration.
     opts = _service_generator_registry.register(impl)
@@ -274,6 +242,7 @@ class ServiceImplementationModuleBuilder(ModuleLikeBuilderBase):
       decl_sym = ir.FlatSymbolRefAttr.get(impl.decl._materialize_service_decl())
     return raw_esi.ServiceInstanceOp(
         result=[t._type for _, t in self.outputs],
+        appID=appid._appid,
         service_symbol=decl_sym,
         impl_type=_ServiceGeneratorRegistry._impl_type_name,
         inputs=[inputs[pn].value for pn, _ in self.inputs],
@@ -319,12 +288,12 @@ class ServiceImplementation(Module):
 
   BuilderType = ServiceImplementationModuleBuilder
 
-  def __init__(self, decl: Optional[ServiceDecl], **inputs):
+  def __init__(self, decl: Optional[ServiceDecl], **kwargs):
     """Instantiate a service provider for service declaration 'decl'. If decl,
     implementation is expected to handle any and all service declarations."""
 
     self.decl = decl
-    super().__init__(**inputs)
+    super().__init__(**kwargs)
 
   @property
   def name(self):
@@ -391,10 +360,17 @@ def DeclareRandomAccessMemory(inner_type: Type,
   class DeclareRandomAccessMemory:
     __name__ = name
     address_type = types.int((depth - 1).bit_length())
-    write_type = types.struct([('address', address_type), ('data', inner_type)])
+    write_struct = types.struct([('address', address_type),
+                                 ('data', inner_type)])
 
-    read = ToFromServer(to_server_type=address_type, to_client_type=inner_type)
-    write = ToFromServer(to_server_type=write_type, to_client_type=types.i0)
+    read = Bundle([
+        BundledChannel("address", ChannelDirection.TO, address_type),
+        BundledChannel("data", ChannelDirection.FROM, inner_type)
+    ])
+    write = Bundle([
+        BundledChannel("write", ChannelDirection.TO, write_struct),
+        BundledChannel("ack", ChannelDirection.FROM, Bits(0))
+    ])
 
     @staticmethod
     def _op(sym_name: ir.StringAttr):
@@ -506,7 +482,6 @@ class PureModule(Module):
 def package(sys: System):
   """Package all ESI collateral."""
 
-  import os
   import shutil
   __root_dir__ = Path(__file__).parent
 
@@ -521,17 +496,4 @@ def package(sys: System):
     build_dir = __root_dir__.parents[4]
     circt_lib_dir = build_dir / "tools" / "circt" / "lib"
     esi_lib_dir = circt_lib_dir / "Dialect" / "ESI"
-    shutil.copy(esi_lib_dir / "ESIPrimitives.sv", sys.hw_output_dir)
-
-  # Copy everything from the 'runtime' directory
-  for root, dir, files in os.walk(esi_lib_dir / "runtime"):
-    if ".dir" in dir:
-      continue
-    for file in files:
-      if ".cmake" in file or file.endswith(".o"):
-        continue
-      to_dir = sys.runtime_output_dir
-      if len(dir) > 0:
-        to_dir = to_dir / os.path.join(*dir)
-      to_dir.mkdir(parents=True, exist_ok=True)
-      shutil.copyfile(os.path.join(root, file), to_dir / file)
+  # shutil.copy(esi_lib_dir / "ESIPrimitives.sv", sys.hw_output_dir)

@@ -48,3 +48,29 @@ hw.module @Aggregates(in %data_a: i32, in %data_b: index, in %data_c_0: i17, in 
   %1 = dbg.struct {"a": %data_a, "b": %data_b, "c": %0} : i32, index, !dbg.array<i17>
   dbg.variable "data", %1 : !dbg.struct<i32, index, !dbg.array<i17>>
 }
+
+// CHECK-LABEL: Module "InlineScopes" for hw.module
+// CHECK:       Variable "a"
+// CHECK-NEXT:    Arg 0 of hw.module of type i42
+// CHECK:       Instance "inner" of "InnerModule" for dbg.scope
+// CHECK:         Module "InnerModule" for dbg.scope
+// CHECK:           Variable "b"
+// CHECK-NEXT:        Result 0 of comb.mul of type i42
+hw.module @InlineScopes(in %a: i42) {
+  dbg.variable "a", %a : i42
+  %0 = comb.mul %a, %a : i42
+  %1 = dbg.scope "inner", "InnerModule"
+  dbg.variable "b", %0 scope %1 : i42
+}
+
+// CHECK-LABEL: Module "NestedScopes" for hw.module
+// CHECK:       Instance "foo" of "Foo" for dbg.scope
+// CHECK:         Module "Foo" for dbg.scope
+// CHECK:           Instance "bar" of "Bar" for dbg.scope
+// CHECK:             Module "Bar" for dbg.scope
+// CHECK:               Variable "a"
+hw.module @NestedScopes(in %a: i42) {
+  %0 = dbg.scope "foo", "Foo"
+  %1 = dbg.scope "bar", "Bar" scope %0
+  dbg.variable "a", %a scope %1 : i42
+}

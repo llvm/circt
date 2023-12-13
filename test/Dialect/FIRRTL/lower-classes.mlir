@@ -150,47 +150,6 @@ firrtl.circuit "Component" {
     %dbl = firrtl.double 0.4
     firrtl.propassign %d, %dbl: !firrtl.double
   }
-
-  // CHECK-LABEL: om.class @MapTest
-  firrtl.class @MapTest(in %s1: !firrtl.string,
-                        in %s2: !firrtl.string,
-                        in %c1: !firrtl.class<@ClassTest()>,
-                        in %c2: !firrtl.class<@ClassTest()>,
-                        out %out_strings: !firrtl.map<string, string>,
-                        out %out_empty: !firrtl.map<string, string>,
-                        out %out_nested: !firrtl.map<string, map<string, string>>,
-                        out %out_objs: !firrtl.map<string, class<@ClassTest()>>) {
-    // Map of basic property types (strings)
-    // CHECK-NEXT: %[[TUPLE1:.+]] = om.tuple_create %s1, %s1
-    // CHECK-NEXT: %[[TUPLE2:.+]] = om.tuple_create %s2, %s2
-    // CHECK-NEXT: %[[STRINGS:.+]] = om.map_create %[[TUPLE1]], %[[TUPLE2]]
-    %strings = firrtl.map.create (%s1 -> %s1, %s2 -> %s2) : !firrtl.map<string, string>
-    firrtl.propassign %out_strings, %strings : !firrtl.map<string, string>
-
-    // Empty map
-    // CHECK-NEXT: %[[EMPTY:.+]] = om.map_create : !om.string, !om.string
-    %empty = firrtl.map.create : !firrtl.map<string, string>
-    firrtl.propassign %out_empty, %empty : !firrtl.map<string, string>
-
-    // Nested map
-    // CHECK-NEXT: %[[TUPLE1:.+]] = om.tuple_create %s1, %[[STRINGS]]
-    // CHECK-NEXT: %[[TUPLE2:.+]] = om.tuple_create %s2, %[[EMPTY]]
-    // CHECK-NEXT: %[[NESTED:.+]] = om.map_create %[[TUPLE1]], %[[TUPLE2]]
-    %nested = firrtl.map.create (%s1 -> %strings, %s2 -> %empty) : !firrtl.map<string, map<string, string>>
-    firrtl.propassign %out_nested, %nested: !firrtl.map<string, map<string, string>>
-
-    // Map of objects
-    // CHECK-NEXT: %[[TUPLE1:.+]] = om.tuple_create %s1, %c1
-    // CHECK-NEXT: %[[TUPLE2:.+]] = om.tuple_create %s2, %c2
-    // CHECK-NEXT: %[[OBJS:.+]] = om.map_create %[[TUPLE1]], %[[TUPLE2]]
-    %objs = firrtl.map.create (%s1 -> %c1, %s2 -> %c2) : !firrtl.map<string, class<@ClassTest()>>
-    firrtl.propassign %out_objs, %objs : !firrtl.map<string, class<@ClassTest()>>
-
-    // CHECK-NEXT: om.class.field @out_strings, %[[STRINGS]] : !om.map<!om.string, !om.string>
-    // CHECK-NEXT: om.class.field @out_empty, %[[EMPTY]] : !om.map<!om.string, !om.string>
-    // CHECK-NEXT: om.class.field @out_nested, %[[NESTED]] : !om.map<!om.string, !om.map<!om.string, !om.string>>
-    // CHECK-NEXT: om.class.field @out_objs, %[[OBJS]] : !om.map<!om.string, !om.class.type<@ClassTest>>
-  }
 }
 
 // CHECK-LABEL: firrtl.circuit "PathModule"
@@ -210,6 +169,8 @@ firrtl.circuit "PathModule" {
     %vector = firrtl.wire {annotations = [{circt.fieldID = 1 : i32, class = "circt.tracker", id = distinct[2]<>}]} : !firrtl.vector<uint<8>, 1>
     // CHECK: firrtl.instance child sym @child @Child()
     firrtl.instance child sym @child {annotations = [{class = "circt.tracker", id = distinct[4]<>}]} @Child()
+
+    %path_test = firrtl.object @PathTest()
   }
   hw.hierpath @NonLocal [@PathModule::@child, @Child]
   // CHECK: firrtl.module @Child() {
@@ -292,6 +253,9 @@ firrtl.circuit "PublicModule" {
 
 // CHECK-LABEL: firrtl.circuit "ModuleInstances"
 firrtl.circuit "ModuleInstances" {
+  // CHECK: hw.hierpath private @[[EXT_NLA:.+]] [@ModuleInstances::@[[EXT_SYM:.+]]]
+  // CHECK: hw.hierpath private @[[EXTDEFNAME_NLA:.+]] [@ModuleInstances::@[[EXTDEFNAME_SYM:.+]]]
+  // CHECK: hw.hierpath private @[[MOD_NLA:.+]] [@ModuleInstances::@[[MOD_SYM:.+]]]
   // CHECK: firrtl.extmodule private @ExtModule(in inputWire: !firrtl.uint<1>, out outputWire: !firrtl.uint<1>)
   firrtl.extmodule private @ExtModule(in inputWire: !firrtl.uint<1>, in inputProp: !firrtl.string, out outputWire: !firrtl.uint<1>, out outputProp: !firrtl.string)
 
@@ -308,11 +272,11 @@ firrtl.circuit "ModuleInstances" {
 
   // CHECK: firrtl.module @ModuleInstances(in %[[IN_WIRE1:.+]]: !firrtl.uint<1>, out %[[OUT_WIRE1:.+]]: !firrtl.uint<1>)
   firrtl.module @ModuleInstances(in %inputWire: !firrtl.uint<1>, in %inputProp: !firrtl.string, out %outputWire: !firrtl.uint<1>, out %outputProp: !firrtl.string) {
-    // CHECK: %[[EXT_IN_WIRE:.+]], %[[EXT_OUT_WIRE:.+]] = firrtl.instance ext @ExtModule
+    // CHECK: %[[EXT_IN_WIRE:.+]], %[[EXT_OUT_WIRE:.+]] = firrtl.instance ext sym @[[EXT_SYM]] @ExtModule
     %ext.inputWire, %ext.inputProp, %ext.outputWire, %ext.outputProp = firrtl.instance ext @ExtModule(in inputWire: !firrtl.uint<1>, in inputProp: !firrtl.string, out outputWire: !firrtl.uint<1>, out outputProp: !firrtl.string)
-    // CHECK: firrtl.instance extdefname @ExtModuleDefname
+    // CHECK: firrtl.instance extdefname sym @[[EXTDEFNAME_SYM]] @ExtModuleDefname
     %extdefname.inputProp, %extdefname.outputProp = firrtl.instance extdefname @ExtModuleDefname(in inputProp: !firrtl.string, out outputProp: !firrtl.string)
-    // CHECK: %[[MOD_IN_WIRE:.+]], %[[MOD_OUT_WIRE:.+]] = firrtl.instance mod @Module
+    // CHECK: %[[MOD_IN_WIRE:.+]], %[[MOD_OUT_WIRE:.+]] = firrtl.instance mod sym @[[MOD_SYM]] @Module
     %mod.inputWire, %mod.inputProp, %mod.outputWire, %mod.outputProp = firrtl.instance mod @Module(in inputWire: !firrtl.uint<1>, in inputProp: !firrtl.string, out outputWire: !firrtl.uint<1>, out outputProp: !firrtl.string)
 
     // CHECK: firrtl.strictconnect %[[EXT_IN_WIRE]], %[[IN_WIRE1]]
@@ -339,10 +303,13 @@ firrtl.circuit "ModuleInstances" {
   // CHECK:   om.class.field @outputProp, %[[IN_PROP0]] : !om.string
 
   // CHECK: om.class @ModuleInstances_Class(%basepath: !om.basepath, %[[IN_PROP1:.+]]: !om.string)
-  // CHECK:   %[[O0:.+]] = om.object @ExtModule_Class(%basepath, %[[IN_PROP1]])
+  // CHECK:   %[[BASEPATH:.+]] = om.basepath_create %basepath @[[EXT_NLA]]
+  // CHECK:   %[[O0:.+]] = om.object @ExtModule_Class(%[[BASEPATH]], %[[IN_PROP1]])
   // CHECK:   %[[F0:.+]] = om.object.field %[[O0]], [@outputProp]
+  // CHECK:   %[[BASEPATH:.+]] = om.basepath_create %basepath @[[EXTDEFNAME_NLA]]
   // CHECK:   om.object @TheRealName_Class
-  // CHECK:   %[[O1:.+]] = om.object @Module_Class(%basepath, %[[F0]])
+  // CHECK:   %[[BASEPATH:.+]] = om.basepath_create %basepath @[[MOD_NLA]]
+  // CHECK:   %[[O1:.+]] = om.object @Module_Class(%[[BASEPATH]], %[[F0]])
   // CHECK:   %[[F1:.+]] = om.object.field %[[O1]], [@outputProp]
   // CHECK:   om.class.field @outputProp, %[[F1]]
 }

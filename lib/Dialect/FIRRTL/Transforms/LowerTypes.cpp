@@ -404,7 +404,7 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
   bool visitStmt(StrictConnectOp op);
   bool visitStmt(RefDefineOp op);
   bool visitStmt(WhenOp op);
-  bool visitStmt(GroupOp op);
+  bool visitStmt(LayerBlockOp op);
 
   bool isFailed() const { return encounteredError; }
 
@@ -964,8 +964,8 @@ bool TypeLoweringVisitor::visitStmt(WhenOp op) {
   return false; // don't delete the when!
 }
 
-/// Lower any types declared in the group definition.
-bool TypeLoweringVisitor::visitStmt(GroupOp op) {
+/// Lower any types declared in layer blocks.
+bool TypeLoweringVisitor::visitStmt(LayerBlockOp op) {
   lowerBlock(op.getBody());
   return false;
 }
@@ -1334,6 +1334,10 @@ bool TypeLoweringVisitor::visitExpr(mlir::UnrealizedConversionCastOp op) {
     return builder->create<mlir::UnrealizedConversionCastOp>(field.type, input)
         .getResult(0);
   };
+  // If the input to the cast is not a FIRRTL type, getSubWhatever cannot handle
+  // it, donot lower the op.
+  if (!type_isa<FIRRTLType>(op->getOperand(0).getType()))
+    return false;
   return lowerProducer(op, clone);
 }
 
@@ -1440,7 +1444,7 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
   SmallVector<Attribute> newNames;
   SmallVector<Attribute> newPortAnno;
   PreserveAggregate::PreserveMode mode = getPreservationModeForModule(
-      cast<FModuleLike>(op.getReferencedModule(symTbl)));
+      cast<FModuleLike>(op.getReferencedOperation(symTbl)));
 
   endFields.push_back(0);
   for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {

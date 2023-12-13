@@ -78,12 +78,6 @@ LogicalResult circt::doTypeConversion(Operation *op, ValueRange operands,
     Region &region = op->getRegion(i);
     Region *newRegion = &newOp->getRegion(i);
 
-    // TypeConverter::SignatureConversion drops argument locations, so we need
-    // to manually copy them over (a verifier in e.g. HWModule checks this).
-    llvm::SmallVector<Location, 4> argLocs;
-    for (auto arg : region.getArguments())
-      argLocs.push_back(arg.getLoc());
-
     // Move the region and convert the region args.
     rewriter.inlineRegionBefore(region, *newRegion, newRegion->begin());
     TypeConverter::SignatureConversion result(newRegion->getNumArguments());
@@ -92,10 +86,6 @@ LogicalResult circt::doTypeConversion(Operation *op, ValueRange operands,
       return rewriter.notifyMatchFailure(op->getLoc(),
                                          "type conversion failed");
     rewriter.applySignatureConversion(newRegion, result, typeConverter);
-
-    // Apply the argument locations.
-    for (auto [arg, loc] : llvm::zip(newRegion->getArguments(), argLocs))
-      arg.setLoc(loc);
   }
   rewriter.finalizeRootUpdate(newOp);
 

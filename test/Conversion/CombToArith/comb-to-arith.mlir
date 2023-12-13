@@ -75,30 +75,30 @@ hw.module @test(in %arg0: i32, in %arg1: i32, in %arg2: i32, in %arg3: i32, in %
   // CHECK-NEXT: arith.trunci [[V0]] : i32 to i16
   %28 = comb.extract %arg0 from 5 : (i32) -> i16
 
-  // CHECK-NEXT: %c0_i64 = arith.constant 0 : i64
-  // CHECK-NEXT: %c32_i64 = arith.constant 32 : i64
-  // CHECK-NEXT: [[V1:%.+]] = arith.extui %arg0 : i32 to i64
-  // CHECK-NEXT: [[V2:%.+]] = arith.shli [[V1]], %c32_i64 : i64
-  // CHECK-NEXT: [[V3:%.+]] = arith.ori %c0_i64, [[V2]] : i64
-  // CHECK-NEXT: %c0_i64_0 = arith.constant 0 : i64
-  // CHECK-NEXT: [[V4:%.+]] = arith.extui %arg1 : i32 to i64
-  // CHECK-NEXT: [[V5:%.+]] = arith.shli [[V4]], %c0_i64_0 : i64
-  // CHECK-NEXT: arith.ori [[V3]], [[V5]] : i64
+  // CHECK-NEXT: [[AGG0:%.+]] = arith.extui %arg1 : i32 to i64
+  // CHECK-NEXT: [[C32:%.+]] = arith.constant 32 : i64
+  // CHECK-NEXT: [[V0:%.+]] = arith.extui %arg0 : i32 to i64
+  // CHECK-NEXT: [[V1:%.+]] = arith.shli [[V0]], [[C32]] : i64
+  // CHECK-NEXT: [[AGG1:%.+]] = arith.ori [[AGG0]], [[V1]] : i64
   %29 = comb.concat %arg0, %arg1 : i32, i32
 
   // CHECK-NEXT: arith.extsi %arg4 : i1 to i32
   %30 = comb.replicate %arg4 : (i1) -> i32
 
-  // CHECK-NEXT: [[C0:%.+]] = arith.constant 0 : i64
-  // CHECK-NEXT: [[C1:%.+]] = arith.constant 32 : i64
-  // CHECK-NEXT: [[V1:%.+]] = arith.extui %arg0 : i32 to i64
-  // CHECK-NEXT: [[V2:%.+]] = arith.shli [[V1]], [[C1]] : i64
-  // CHECK-NEXT: [[V3:%.+]] = arith.ori [[C0]], [[V2]] : i64
-  // CHECK-NEXT: [[C2:%.+]] = arith.constant 0 : i64
-  // CHECK-NEXT: [[V4:%.+]] = arith.extui %arg0 : i32 to i64
-  // CHECK-NEXT: [[V5:%.+]] = arith.shli [[V4]], [[C2]] : i64
-  // CHECK-NEXT: arith.ori [[V3]], [[V5]] : i64
+  // CHECK-NEXT: [[AGG0:%.+]] = arith.extui %arg0 : i32 to i64
+  // CHECK-NEXT: [[C32:%.+]] = arith.constant 32 : i64
+  // CHECK-NEXT: [[V0:%.+]] = arith.extui %arg0 : i32 to i64
+  // CHECK-NEXT: [[V1:%.+]] = arith.shli [[V0]], [[C32]] : i64
+  // CHECK-NEXT: [[AGG1:%.+]] = arith.ori [[AGG0]], [[V1]] : i64
   %31 = comb.replicate %arg0 : (i32) -> i64
+
+  // The following used to trigger the arith.extui verifier.
+  // CHECK-NEXT: scf.execute_region
+  // CHECK-NEXT: scf.yield %arg0 : i32
+  scf.execute_region -> i32 {
+    %32 = comb.concat %arg0 : i32
+    scf.yield %32 : i32
+  }
 }
 
 // CHECK-LABEL: @shlTest

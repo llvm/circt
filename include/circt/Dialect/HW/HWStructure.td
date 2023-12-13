@@ -386,12 +386,100 @@ def HWModuleGeneratedOp : HWModuleOpBase<"module.generated", [
   let hasVerifier = 1;
 }
 
-def InstanceOp : HWOp<"instance", [
-        DeclareOpInterfaceMethods<SymbolUserOpInterface>,
-        DeclareOpInterfaceMethods<PortList>,
-        DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
-        DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>,
-        DeclareOpInterfaceMethods<HWInstanceLike>]> {
+/// Base class for most instance-like operations.
+class HWInstanceOpBase<string mnemonic, list<Trait> traits = []> :
+    HWOp<mnemonic, traits # [
+      DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+      DeclareOpInterfaceMethods<PortList>,
+      DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+      DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>
+    ]>
+{
+  let extraClassDeclaration = [{
+    /// Return the name of the specified input port or null if it cannot be
+    /// determined.
+    StringAttr getArgumentName(size_t idx) {
+      return instance_like_impl::getName(getArgNames(), idx);
+    }
+
+    /// Return the name of the specified result or null if it cannot be
+    /// determined.
+    StringAttr getResultName(size_t idx) {
+      return instance_like_impl::getName(getResultNames(), idx);
+    }
+
+    /// Change the name of the specified input port.
+    void setArgumentName(size_t i, StringAttr name) {
+      setInputNames(instance_like_impl::updateName(getArgNames(), i, name));
+    }
+
+    /// Change the name of the specified output port.
+    void setResultName(size_t i, StringAttr name) {
+      setOutputNames(instance_like_impl::updateName(getResultNames(), i, name));
+    }
+
+    /// Change the names of all the input ports.
+    void setInputNames(ArrayAttr names) {
+      setArgNamesAttr(names);
+    }
+
+    /// Change the names of all the result ports.
+    void setOutputNames(ArrayAttr names) {
+      setResultNamesAttr(names);
+    }
+
+    /// Return the values for the port in port order.
+    /// Note: The module ports may not be input, output ordered. This computes
+    /// the port index to instance result/input Value mapping.
+    void getValues(SmallVectorImpl<Value> &values, const ModulePortInfo &mpi);
+  }];
+
+  let extraClassDefinition = [{
+    ::llvm::SmallVector<::circt::hw::PortInfo> $cppClass::getPortList() {
+      return instance_like_impl::getPortList(getOperation());
+    }
+
+    ::circt::hw::PortInfo $cppClass::getPort(size_t idx) {
+      return getPortList()[idx];
+    }
+
+    size_t $cppClass::getNumPorts() {
+      return getNumInputPorts() + getNumOutputPorts();
+    }
+
+    size_t $cppClass::getNumInputPorts() { return getNumOperands(); }
+
+    size_t $cppClass::getNumOutputPorts() { return getNumResults(); }
+
+    size_t $cppClass::getPortIdForInputId(size_t idx) { return idx; }
+
+    size_t $cppClass::getPortIdForOutputId(size_t idx) {
+      return idx + getNumInputPorts();
+    }
+
+    /// Suggest a name for each result value based on the saved result names
+    /// attribute.
+    void $cppClass::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+      ::circt::hw::instance_like_impl::getAsmResultNames(
+          setNameFn, getInstanceName(), getResultNames(), getResults());
+    }
+
+    void $cppClass::getValues(SmallVectorImpl<Value> &values,
+                              const ModulePortInfo &mpi) {
+      size_t inputPort = 0, resultPort = 0;
+      values.resize(mpi.size());
+      auto results = getResults();
+      auto inputs = getInputs();
+      for (auto [idx, port] : llvm::enumerate(mpi))
+        if (mpi.at(idx).isOutput())
+          values[idx] = results[resultPort++];
+        else
+          values[idx] = inputs[inputPort++];
+    }
+  }];
+}
+
+def InstanceOp : HWInstanceOpBase<"instance", [HWInstanceLike]> {
   let summary = "Create an instance of a module";
   let description = [{
     This represents an instance of a module. The inputs and results are
@@ -426,41 +514,43 @@ def InstanceOp : HWOp<"instance", [
     }]>,
   ];
 
-  let extraClassDeclaration = [{
-    /// Return the name of the specified input port or null if it cannot be
-    /// determined.
-    StringAttr getArgumentName(size_t i);
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+}
 
-    /// Return the name of the specified result or null if it cannot be
-    /// determined.
-    StringAttr getResultName(size_t i);
+def InstanceChoiceOp : HWInstanceOpBase<"instance_choice", [
+    DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface, [
+      "getReferencedModuleNamesAttr"
+    ]>
+]> {
+  let summary = "Represents an instance with a target-specific reference";
+  let description = [{
+    This represents an instance to a module which is determined based on the
+    target through the ABI. Besides a default implementation, other targets can
+    be associated with a string, which will later determined which reference
+    is chosen.
 
-    /// Change the name of the specified input port.
-    void setArgumentName(size_t i, StringAttr name);
+    For the purposes of analyses and transformations, it is assumed that any of
+    the targets is a possibility.
 
-    /// Change the name of the specified output port.
-    void setResultName(size_t i, StringAttr name);
-
-    /// Change the names of all the input ports.
-    void setInputNames(ArrayAttr names) {
-      setArgNamesAttr(names);
-    }
-
-    /// Change the names of all the result ports.
-    void setOutputNames(ArrayAttr names) {
-      setResultNamesAttr(names);
-    }
-
-    /// Lookup the module or extmodule for the symbol.  This returns null on
-    /// invalid IR.
-    Operation *getReferencedModuleSlow();
-
-    /// Return the values for the port in port order.
-    /// Note: The module ports may not be input, output ordered. This computes
-    /// the port index to instance result/input Value mapping.
-    void getValues(SmallVectorImpl<Value> &values, const ModulePortInfo &mpi);
-
+    Example:
+    ```mlir
+    %b = hw.instance_choice "inst" sym
+        @TargetDefault or
+        @TargetA if "A" or
+        @TargetB if "B"
+        (a: %a: i32) -> (b: i32)
+    ```
   }];
+
+  let arguments = (ins StrAttr:$instanceName,
+                       FlatSymbolRefArrayAttr:$moduleNames,
+                       StrArrayAttr:$targetNames,
+                       Variadic<AnyType>:$inputs,
+                       StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
+                       ParamDeclArrayAttr:$parameters,
+                       OptionalAttr<InnerSymAttr>:$inner_sym);
+  let results = (outs Variadic<AnyType>:$results);
 
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;

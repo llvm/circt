@@ -47,6 +47,12 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
     return;
   }
 
+  // More special connects
+  if (isa<AnalogType>(dstType)) {
+    builder.create<AttachOp>(ArrayRef{dst, src});
+    return;
+  }
+
   // If the types are the exact same we can just connect them.
   if (dstType == srcType && dstType.isPassive() &&
       !dstType.hasUninferredWidth()) {

@@ -63,12 +63,12 @@ struct ApplyOpEmitter : OpEmissionPattern<ApplyOp> {
 /// side effects. To make sure that calls with side effects are not reordered
 /// with interferring operations, a pre-pass has to emit VariableOp operations
 /// with the result of the call as initial value.
-class CallOpEmitter : public OpEmissionPattern<CallOp> {
+class CallOpEmitter : public OpEmissionPattern<CallOpaqueOp> {
 public:
   using OpEmissionPattern::OpEmissionPattern;
 
   MatchResult matchInlinable(Value value) override {
-    if (auto callOp = value.getDefiningOp<CallOp>()) {
+    if (auto callOp = value.getDefiningOp<CallOpaqueOp>()) {
       // TODO: template arguments not supported for now.
       if (callOp->getNumResults() == 1 && !callOp.getTemplateArgs())
         return Precedence::FUNCTION_CALL;
@@ -77,17 +77,17 @@ public:
   }
 
   void emitInlined(Value value, EmissionPrinter &p) override {
-    printCallOp(value.getDefiningOp<CallOp>(), p);
+    printCallOp(value.getDefiningOp<CallOpaqueOp>(), p);
   }
 
   bool matchStatement(Operation *op) override {
     // TODO: template arguments not supported for now.
-    if (auto callOp = dyn_cast<CallOp>(op))
+    if (auto callOp = dyn_cast<CallOpaqueOp>(op))
       return callOp->getNumResults() <= 1 && !callOp.getTemplateArgs();
     return false;
   }
 
-  void emitStatement(CallOp callOp, EmissionPrinter &p) override {
+  void emitStatement(CallOpaqueOp callOp, EmissionPrinter &p) override {
     if (callOp->getNumResults() != 0)
       return;
 
@@ -96,7 +96,7 @@ public:
   }
 
 private:
-  void printCallOp(CallOp callOp, EmissionPrinter &p) {
+  void printCallOp(CallOpaqueOp callOp, EmissionPrinter &p) {
     p << callOp.getCallee();
 
     p << "(";

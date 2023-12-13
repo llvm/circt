@@ -21,7 +21,7 @@
 #include "CosimDpi.capnp.h"
 #include <capnp/ez-rpc.h>
 #include <thread>
-#if WIN32
+#ifdef _WIN32
 #include <io.h>
 #else
 #include <unistd.h>
@@ -222,7 +222,7 @@ kj::Promise<void> CosimServer::open(OpenContext ctxt) {
   auto gotLock = ep->setInUse();
   KJ_REQUIRE(gotLock, "Endpoint in use");
 
-  ctxt.getResults().setIface(
+  ctxt.getResults().setEndpoint(
       EsiDpiEndpoint::Client(kj::heap<EndpointServer>(*ep)));
   return kj::READY_NOW;
 }
@@ -281,7 +281,7 @@ void RpcServer::mainLoop(uint16_t port) {
   // TODO: Figure out how to do this properly, if possible.
   while (!stopSig) {
     waitScope.poll();
-    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
   }
 }
 

@@ -18,8 +18,8 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
 ; ANNOTATIONS-SAME: {class = "circt.test", info = "a CircuitTarget Annotation"}
 ; ANNOTATIONS-SAME: {class = "circt.test", info = "a CircuitName Annotation"}
 
-; OMIR-DAG:   [[loc2:#loc[0-9]*]] = loc("Foo.scala":64:64) 
-; OMIR-DAG:   [[loc3:#loc[0-9]*]] = loc("Bar.scala":128:128) 
+; OMIR-DAG:   [[loc2:#loc[0-9]*]] = loc("Foo.scala":64:64)
+; OMIR-DAG:   [[loc3:#loc[0-9]*]] = loc("Bar.scala":128:128)
 ; OMIR-DAG:   [[loc0:#loc[0-9]*]] = loc(fused[[[loc2]], [[loc3]]])
 ; OMIR-DAG:   [[loc1:#loc[0-9]*]] = loc("Foo.scala":32:32)
 ; OMIR-LABEL: firrtl.circuit "test_mod"
@@ -44,8 +44,15 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
 ; OMIROUT-NEXT:         "value": "OMString:hello"
 ; OMIROUT-NEXT:       }
 
-; VERILOG-IR: sv.verbatim{{.*}}Standard header to adapt well known macros to our needs
-; VERILOG-IR: sv.macro.def @INIT_RANDOM_PROLOG_
+; VERILOG-IR: sv.macro.decl @ENABLE_INITIAL_MEM_
+; VERILOG-IR: sv.macro.decl @ENABLE_INITIAL_REG_
+; VERILOG-IR: sv.macro.decl @INIT_RANDOM_PROLOG_
+; VERILOG-IR: sv.macro.decl @RANDOMIZE_DELAY
+; VERILOG-IR: sv.macro.decl @INIT_RANDOM
+; VERILOG-IR: sv.macro.decl @RANDOM
+; VERILOG-IR: sv.macro.decl @RANDOMIZE
+; VERILOG-IR: sv.verbatim{{.*}}Standard header to adapt well known macros for register randomization
+
   type V3 = UInt<1>[3]
   type V2 = UInt<1>[2]
 
@@ -103,7 +110,7 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
 
 
 ; MLIR-LABEL: firrtl.module @test_mod(in %clock: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<2>, out %c: !firrtl.uint<1>, in %vec_0: !firrtl.uint<1>, in %vec_1: !firrtl.uint<1>, in %vec_2: !firrtl.uint<1>, out %out_implicitTrunc: !firrtl.uint<1>, out %out_prettifyExample: !firrtl.uint<1>, out %out_multibitMux: !firrtl.uint<1>, out %out_mux2cell_0: !firrtl.uint<1>, out %out_mux2cell_1: !firrtl.uint<1>) {{.*}}{
-; MLIR-NEXT:    %cat_a, %cat_b, %cat_c, %cat_d = firrtl.instance cat @Cat(in a: !firrtl.uint<2>, in b: !firrtl.uint<2>, in c: !firrtl.uint<2>, out d: !firrtl.uint<6>)
+; MLIR:         %cat_a, %cat_b, %cat_c, %cat_d = firrtl.instance cat @Cat(in a: !firrtl.uint<2>, in b: !firrtl.uint<2>, in c: !firrtl.uint<2>, out d: !firrtl.uint<6>)
 ; MLIR-NEXT:    firrtl.strictconnect %cat_a, %b : !firrtl.uint<2>
 ; MLIR-NEXT:    firrtl.strictconnect %cat_b, %b : !firrtl.uint<2>
 ; MLIR-NEXT:    firrtl.strictconnect %cat_c, %b : !firrtl.uint<2>

@@ -178,7 +178,7 @@ class CosimTestRunner:
       checkCount = 0
       while (not os.path.exists(portFileName)) and \
               simProc.poll() is None:
-        time.sleep(0.05)
+        time.sleep(0.1)
         checkCount += 1
         if checkCount > 200:
           raise Exception(f"Cosim never wrote cfg file: {portFileName}")

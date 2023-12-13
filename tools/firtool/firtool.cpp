@@ -121,16 +121,14 @@ static cl::opt<InfoLocHandling> infoLocHandling(
     cl::init(InfoLocHandling::PreferInfo), cl::cat(mainCategory));
 
 static cl::opt<bool>
-    scalarizeTopModule("scalarize-top-module",
-                       cl::desc("Scalarize the ports of the top module"),
-                       cl::init(true), cl::cat(mainCategory));
+    scalarizePublicModules("scalarize-public-modules",
+                           cl::desc("Scalarize all public modules"),
+                           cl::init(true), cl::cat(mainCategory));
 
 static cl::opt<bool>
     scalarizeExtModules("scalarize-ext-modules",
                         cl::desc("Scalarize the ports of any external modules"),
                         cl::init(true), cl::cat(mainCategory));
-
-static firtool::FirtoolOptions firtoolOptions(mainCategory);
 
 static cl::list<std::string>
     passPlugins("load-pass-plugin", cl::desc("Load passes from plugin library"),
@@ -228,6 +226,11 @@ static cl::opt<std::string> hglddOutputDirectory(
     "hgldd-output-dir", cl::desc("Directory into which to emit HGLDD files"),
     cl::init(""), cl::value_desc("path"), cl::cat(mainCategory));
 
+static cl::opt<bool> hglddOnlyExistingFileLocs(
+    "hgldd-only-existing-file-locs",
+    cl::desc("Only consider locations in files that exist on disk"),
+    cl::init(false), cl::cat(mainCategory));
+
 static cl::opt<bool>
     emitBytecode("emit-bytecode",
                  cl::desc("Emit bytecode when generating MLIR output"),
@@ -271,6 +274,7 @@ static debug::EmitHGLDDOptions getHGLDDOptions() {
   opts.sourceFilePrefix = hglddSourcePrefix;
   opts.outputFilePrefix = hglddOutputPrefix;
   opts.outputDirectory = hglddOutputDirectory;
+  opts.onlyExistingFileLocs = hglddOnlyExistingFileLocs;
   return opts;
 }
 
@@ -298,8 +302,10 @@ struct EmitSplitHGLDDPass
 
 /// Process a single buffer of the input.
 static LogicalResult processBuffer(
-    MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
+    MLIRContext &context, firtool::FirtoolOptions &firtoolOptions,
+    TimingScope &ts, llvm::SourceMgr &sourceMgr,
     std::optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
+
   // Add the annotation file if one was explicitly specified.
   unsigned numAnnotationFiles = 0;
   for (const auto &inputAnnotationFilename : inputAnnotationFilenames) {
@@ -339,7 +345,7 @@ static LogicalResult processBuffer(
     firrtl::FIRParserOptions options;
     options.infoLocatorHandling = infoLocHandling;
     options.numAnnotationFiles = numAnnotationFiles;
-    options.scalarizeTopModule = scalarizeTopModule;
+    options.scalarizePublicModules = scalarizePublicModules;
     options.scalarizeExtModules = scalarizeExtModules;
     module = importFIRFile(sourceMgr, &context, parserTimer, options);
   } else {
@@ -435,7 +441,7 @@ static LogicalResult processBuffer(
       break;
     case OutputSplitVerilog:
       if (failed(firtool::populateExportSplitVerilog(
-              pm, firtoolOptions, firtoolOptions.outputFilename)))
+              pm, firtoolOptions, firtoolOptions.getOutputFilename())))
         return failure();
       if (emitHGLDD)
         pm.addPass(std::make_unique<EmitSplitHGLDDPass>());
@@ -517,8 +523,8 @@ public:
 /// creates a regular or verifying diagnostic handler, depending on whether the
 /// user set the verifyDiagnostics option.
 static LogicalResult processInputSplit(
-    MLIRContext &context, TimingScope &ts,
-    std::unique_ptr<llvm::MemoryBuffer> buffer,
+    MLIRContext &context, firtool::FirtoolOptions &firtoolOptions,
+    TimingScope &ts, std::unique_ptr<llvm::MemoryBuffer> buffer,
     std::optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
   llvm::SourceMgr sourceMgr;
   sourceMgr.AddNewSourceBuffer(std::move(buffer), llvm::SMLoc());
@@ -527,23 +533,24 @@ static LogicalResult processInputSplit(
     SourceMgrDiagnosticHandler sourceMgrHandler(sourceMgr,
                                                 &context /*, shouldShow */);
     FileLineColLocsAsNotesDiagnosticHandler addLocs(&context);
-    return processBuffer(context, ts, sourceMgr, outputFile);
+    return processBuffer(context, firtoolOptions, ts, sourceMgr, outputFile);
   }
 
   SourceMgrDiagnosticVerifierHandler sourceMgrHandler(sourceMgr, &context);
   context.printOpOnDiagnostic(false);
-  (void)processBuffer(context, ts, sourceMgr, outputFile);
+  (void)processBuffer(context, firtoolOptions, ts, sourceMgr, outputFile);
   return sourceMgrHandler.verify();
 }
 
 /// Process the entire input provided by the user, splitting it up if the
 /// corresponding option was specified.
 static LogicalResult
-processInput(MLIRContext &context, TimingScope &ts,
-             std::unique_ptr<llvm::MemoryBuffer> input,
+processInput(MLIRContext &context, firtool::FirtoolOptions &firtoolOptions,
+             TimingScope &ts, std::unique_ptr<llvm::MemoryBuffer> input,
              std::optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
   if (!splitInputFile)
-    return processInputSplit(context, ts, std::move(input), outputFile);
+    return processInputSplit(context, firtoolOptions, ts, std::move(input),
+                             outputFile);
 
   // Emit an error if the user provides a separate annotation file alongside
   // split input. This is technically not a problem, but the user likely
@@ -561,7 +568,8 @@ processInput(MLIRContext &context, TimingScope &ts,
   return splitAndProcessBuffer(
       std::move(input),
       [&](std::unique_ptr<MemoryBuffer> buffer, raw_ostream &) {
-        return processInputSplit(context, ts, std::move(buffer), outputFile);
+        return processInputSplit(context, firtoolOptions, ts, std::move(buffer),
+                                 outputFile);
       },
       llvm::outs());
 }
@@ -569,7 +577,8 @@ processInput(MLIRContext &context, TimingScope &ts,
 /// This implements the top-level logic for the firtool command, invoked once
 /// command line options are parsed and LLVM/MLIR are all set up and ready to
 /// go.
-static LogicalResult executeFirtool(MLIRContext &context) {
+static LogicalResult executeFirtool(MLIRContext &context,
+                                    firtool::FirtoolOptions &firtoolOptions) {
   // Create the timing manager we use to sample execution times.
   DefaultTimingManager tm;
   applyDefaultTimingManagerCLOptions(tm);
@@ -603,24 +612,23 @@ static LogicalResult executeFirtool(MLIRContext &context) {
   if (outputFormat != OutputSplitVerilog) {
     // Create an output file.
     outputFile.emplace(
-        openOutputFile(firtoolOptions.outputFilename, &errorMessage));
+        openOutputFile(firtoolOptions.getOutputFilename(), &errorMessage));
     if (!(*outputFile)) {
       llvm::errs() << errorMessage << "\n";
       return failure();
     }
   } else {
     // Create an output directory.
-    if (firtoolOptions.outputFilename.isDefaultOption() ||
-        firtoolOptions.outputFilename == "-") {
+    if (firtoolOptions.isDefaultOutputFilename()) {
       llvm::errs() << "missing output directory: specify with -o=<dir>\n";
       return failure();
     }
     auto error =
-        llvm::sys::fs::create_directories(firtoolOptions.outputFilename);
+        llvm::sys::fs::create_directories(firtoolOptions.getOutputFilename());
     if (error) {
       llvm::errs() << "cannot create output directory '"
-                   << firtoolOptions.outputFilename << "': " << error.message()
-                   << "\n";
+                   << firtoolOptions.getOutputFilename()
+                   << "': " << error.message() << "\n";
       return failure();
     }
   }
@@ -632,7 +640,8 @@ static LogicalResult executeFirtool(MLIRContext &context) {
                       ltl::LTLDialect, debug::DebugDialect>();
 
   // Process the input.
-  if (failed(processInput(context, ts, std::move(input), outputFile)))
+  if (failed(processInput(context, firtoolOptions, ts, std::move(input),
+                          outputFile)))
     return failure();
 
   // If the result succeeded and we're emitting a file, close it.
@@ -704,15 +713,18 @@ int main(int argc, char **argv) {
   registerPassManagerCLOptions();
   registerDefaultTimingManagerCLOptions();
   registerAsmPrinterCLOptions();
+  firtool::registerFirtoolCLOptions();
   cl::AddExtraVersionPrinter(
       [](raw_ostream &os) { os << getCirctVersion() << '\n'; });
   // Parse pass names in main to ensure static initialization completed.
   cl::ParseCommandLineOptions(argc, argv, "MLIR-based FIRRTL compiler\n");
 
   MLIRContext context;
+  // Get firtool options from cmdline
+  firtool::FirtoolOptions firtoolOptions;
 
   // Do the guts of the firtool process.
-  auto result = executeFirtool(context);
+  auto result = executeFirtool(context, firtoolOptions);
 
   // Use "exit" instead of return'ing to signal completion.  This avoids
   // invoking the MLIRContext destructor, which spends a bunch of time

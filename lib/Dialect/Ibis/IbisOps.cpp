@@ -25,7 +25,7 @@ using namespace ibis;
 // parent scope of the provided `base` operation.
 template <typename T>
 static T lookupInModule(Operation *base, FlatSymbolRefAttr sym,
-                        SymbolTable *symbolTable) {
+                        const SymbolTable *symbolTable) {
   auto mod = base->getParentOfType<mlir::ModuleOp>();
   if (symbolTable)
     return dyn_cast<T>(symbolTable->lookupSymbolIn(mod, sym));
@@ -310,7 +310,7 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   return success();
 }
 
-ClassOp InstanceOp::getClass(SymbolTable *symbolTable) {
+ClassOp InstanceOp::getClass(const SymbolTable *symbolTable) {
   return lookupInModule<ClassOp>(getOperation(), getTargetNameAttr(),
                                  symbolTable);
 }
@@ -405,7 +405,7 @@ void PortReadOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 // ContainerInstanceOp
 //===----------------------------------------------------------------------===//
 
-ContainerOp ContainerInstanceOp::getContainer(SymbolTable *symbolTable) {
+ContainerOp ContainerInstanceOp::getContainer(const SymbolTable *symbolTable) {
   auto mod = getOperation()->getParentOfType<mlir::ModuleOp>();
   if (symbolTable)
     return dyn_cast_or_null<ContainerOp>(

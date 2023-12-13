@@ -55,7 +55,7 @@ struct PrefixingInliner : public InlinerInterface {
     return true;
   }
   void handleTerminator(Operation *op,
-                        ArrayRef<Value> valuesToRepl) const override {
+                        mlir::ValueRange valuesToRepl) const override {
     assert(isa<hw::OutputOp>(op));
     for (auto [from, to] : llvm::zip(valuesToRepl, op->getOperands()))
       from.replaceAllUsesWith(to);

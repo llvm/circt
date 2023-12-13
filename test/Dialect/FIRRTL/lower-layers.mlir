@@ -1,21 +1,21 @@
-// RUN: circt-opt -firrtl-lower-groups -split-input-file %s | FileCheck %s
+// RUN: circt-opt -firrtl-lower-layers -split-input-file %s | FileCheck %s
 
 firrtl.circuit "Simple" {
-  firrtl.declgroup @A bind {
-    firrtl.declgroup @B bind {
-      firrtl.declgroup @C bind {}
+  firrtl.layer @A bind {
+    firrtl.layer @B bind {
+      firrtl.layer @C bind {}
     }
   }
   firrtl.module @Simple() {
     %a = firrtl.wire : !firrtl.uint<1>
     %b = firrtl.wire : !firrtl.uint<2>
-    firrtl.group @A {
+    firrtl.layerblock @A {
       %aa = firrtl.node %a: !firrtl.uint<1>
       %c = firrtl.wire : !firrtl.uint<3>
-      firrtl.group @A::@B {
+      firrtl.layerblock @A::@B {
         %bb = firrtl.node %b: !firrtl.uint<2>
         %cc = firrtl.node %c: !firrtl.uint<3>
-        firrtl.group @A::@B::@C {
+        firrtl.layerblock @A::@B::@C {
           %ccc = firrtl.node %cc: !firrtl.uint<3>
         }
       }
@@ -66,7 +66,7 @@ firrtl.circuit "Simple" {
 //
 // CHECK:      firrtl.module @Simple() {
 // CHECK-NOT:  firrtl.module
-// CHECK-NOT:    firrtl.group
+// CHECK-NOT:    firrtl.layerblock
 // CHECK:        %[[A_B_C_cc:[_a-zA-Z0-9]+]] = firrtl.instance simple_A_B_C {
 // CHECK-SAME:     lowerToBind
 // CHECK-SAME:     output_file = #hw.output_file<"groups_Simple_A_B_C.sv"
@@ -96,12 +96,12 @@ firrtl.circuit "Simple" {
 // -----
 
 firrtl.circuit "ModuleNameConflict" {
-  firrtl.declgroup @A bind {}
+  firrtl.layer @A bind {}
   firrtl.module private @ModuleNameConflict_A() {}
   firrtl.module @ModuleNameConflict() {
     %a = firrtl.wire : !firrtl.uint<1>
     firrtl.instance foo @ModuleNameConflict_A()
-    firrtl.group @A {
+    firrtl.layerblock @A {
       %b = firrtl.node %a : !firrtl.uint<1>
     }
   }

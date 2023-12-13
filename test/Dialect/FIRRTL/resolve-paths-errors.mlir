@@ -74,3 +74,37 @@ firrtl.module @AmbiguousPath() {
 }
 firrtl.module @Child() {}
 }
+
+// -----
+
+firrtl.circuit "NoOwningModule" {
+firrtl.module @NoOwningModule() {
+    %wire = firrtl.wire : !firrtl.uint<8>
+}
+
+firrtl.class @Test(){
+  %om = firrtl.object @Test()
+  // expected-error @below {{path does not have a single owning module}}
+  %0 = firrtl.unresolved_path "OMReferenceTarget:~NoOwningModule|NoOwningModule>wire"
+}
+}
+
+// -----
+
+firrtl.circuit "UpwardPath" {
+firrtl.module @UpwardPath() {
+  %wire = firrtl.wire : !firrtl.uint<8>
+  firrtl.instance child @Child()
+}
+
+firrtl.module @Child() {
+  %om = firrtl.object @OM()
+
+}
+
+firrtl.class @OM(){
+  // expected-error @below {{unable to resolve path relative to owning module "Child"}}
+  %0 = firrtl.unresolved_path "OMReferenceTarget:~UpwardPath|UpwardPath>wire"
+}
+}
+

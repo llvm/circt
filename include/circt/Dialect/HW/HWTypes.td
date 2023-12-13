@@ -143,6 +143,8 @@ def InnerSymAttr : AttrDef<HWDialect, "InnerSym"> {
     }]>
   ];
   let extraClassDeclaration = [{
+    using ElementType = InnerSymPropertiesAttr;
+    
     /// Get the inner sym name for fieldID, if it exists.
     mlir::StringAttr getSymIfExists(uint64_t fieldID) const;
 

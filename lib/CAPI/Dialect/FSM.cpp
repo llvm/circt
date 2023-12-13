@@ -1,6 +1,8 @@
-//===- FSMDialect.cpp - C Interface for the FSM Dialect -------------------===//
+//===- FSM.cpp - C interface for the FSM dialect --------------------------===//
 //
-//  Implements a C Interface for the FSM Dialect
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 

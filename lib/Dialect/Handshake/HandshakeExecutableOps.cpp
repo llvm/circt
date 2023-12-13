@@ -19,7 +19,7 @@
 using namespace circt;
 using namespace circt::handshake;
 
-#define INDEX_WIDTH 32
+static constexpr int INDEX_WIDTH = 32;
 
 // Convert ValueRange to vectors
 static std::vector<mlir::Value> toVector(mlir::ValueRange range) {

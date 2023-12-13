@@ -14,6 +14,7 @@
 #include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
+#include "circt/Dialect/FIRRTL/FIRRTLInstanceImplementation.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
@@ -338,13 +339,6 @@ void CircuitOp::build(OpBuilder &builder, OperationState &result,
   bodyRegion->push_back(body);
 }
 
-// Return the main module that is the entry point of the circuit.
-FModuleLike CircuitOp::getMainModule(mlir::SymbolTable *symtbl) {
-  if (symtbl)
-    return symtbl->lookup<FModuleLike>(getName());
-  return dyn_cast_or_null<FModuleLike>(lookupSymbol(getName()));
-}
-
 static ParseResult parseCircuitOpAttrs(OpAsmParser &parser,
                                        NamedAttrList &resultAttrs) {
   auto result = parser.parseOptionalAttrDictWithKeyword(resultAttrs);
@@ -376,21 +370,6 @@ LogicalResult CircuitOp::verifyRegions() {
   }
 
   mlir::SymbolTable symtbl(getOperation());
-
-  // Check that a module matching the "main" module exists in the circuit.
-  auto mainModule = getMainModule(&symtbl);
-  if (!mainModule)
-    return emitOpError("must contain one module that matches main name '" +
-                       main + "'");
-
-  // Even though ClassOps are FModuleLike, they are not a hardware entity, so
-  // we ban them from being our top-module in the design.
-  if (isa<ClassOp>(mainModule))
-    return emitOpError("must have a non-class top module");
-
-  // Check that the main module is public.
-  if (!mainModule.isPublic())
-    return emitOpError("main module '" + main + "' must be public");
 
   // Store a mapping of defname to either the first external module
   // that defines it or, preferentially, the first external module
@@ -1913,18 +1892,11 @@ bool ExtClassOp::canDiscardOnUseEmpty() {
 // Declarations
 //===----------------------------------------------------------------------===//
 
-/// Lookup the module or extmodule for the symbol.  This returns null on
-/// invalid IR.
-Operation *InstanceOp::getReferencedModuleSlow() {
+SmallVector<::circt::hw::PortInfo> InstanceOp::getPortList() {
   auto circuit = (*this)->getParentOfType<CircuitOp>();
   if (!circuit)
-    return nullptr;
-
-  return circuit.lookupSymbol<FModuleLike>(getModuleNameAttr());
-}
-
-SmallVector<::circt::hw::PortInfo> InstanceOp::getPortList() {
-  return cast<hw::PortList>(getReferencedModuleSlow()).getPortList();
+    llvm::report_fatal_error("instance op not in circuit");
+  return circuit.lookupSymbol<hw::PortList>(getModuleNameAttr()).getPortList();
 }
 
 void InstanceOp::build(OpBuilder &builder, OperationState &result,
@@ -1980,7 +1952,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
                        FModuleLike module, StringRef name,
                        NameKindEnum nameKind, ArrayRef<Attribute> annotations,
                        ArrayRef<Attribute> portAnnotations, bool lowerToBind,
-                       StringAttr innerSym) {
+                       hw::InnerSymAttr innerSym) {
 
   // Gather the result types.
   SmallVector<Type> resultTypes;
@@ -2005,8 +1977,30 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
       NameKindEnumAttr::get(builder.getContext(), nameKind),
       module.getPortDirectionsAttr(), module.getPortNamesAttr(),
       builder.getArrayAttr(annotations), portAnnotationsAttr,
-      lowerToBind ? builder.getUnitAttr() : UnitAttr(),
-      innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr());
+      lowerToBind ? builder.getUnitAttr() : UnitAttr(), innerSym);
+}
+
+void InstanceOp::build(OpBuilder &builder, OperationState &odsState,
+                       ArrayRef<PortInfo> ports, StringRef moduleName,
+                       StringRef name, NameKindEnum nameKind,
+                       ArrayRef<Attribute> annotations, bool lowerToBind,
+                       hw::InnerSymAttr innerSym) {
+
+  // Gather the result types.
+  SmallVector<Type> newResultTypes;
+  SmallVector<Direction> newPortDirections;
+  SmallVector<Attribute> newPortNames;
+  SmallVector<Attribute> newPortAnnotations;
+  for (auto &p : ports) {
+    newResultTypes.push_back(p.type);
+    newPortDirections.push_back(p.direction);
+    newPortNames.push_back(p.name);
+    newPortAnnotations.push_back(p.annotations.getArrayAttr());
+  }
+
+  return build(builder, odsState, newResultTypes, moduleName, name, nameKind,
+               newPortDirections, newPortNames, annotations, newPortAnnotations,
+               lowerToBind, innerSym);
 }
 
 /// Builds a new `InstanceOp` with the ports listed in `portIndices` erased, and
@@ -2108,116 +2102,8 @@ InstanceOp::cloneAndInsertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
 }
 
 LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  auto module = (*this)->getParentOfType<FModuleOp>();
-  auto referencedModule = symbolTable.lookupNearestSymbolFrom<FModuleLike>(
-      *this, getModuleNameAttr());
-  if (!referencedModule) {
-    return emitOpError("invalid symbol reference");
-  }
-
-  // Check this is not a class.
-  if (isa<ClassOp /* ClassLike */>(referencedModule))
-    return emitOpError("must instantiate a module not a class")
-               .attachNote(referencedModule.getLoc())
-           << "class declared here";
-
-  // Check that this instance doesn't recursively instantiate its wrapping
-  // module.
-  if (referencedModule == module) {
-    auto diag = emitOpError()
-                << "is a recursive instantiation of its containing module";
-    return diag.attachNote(module.getLoc())
-           << "containing module declared here";
-  }
-
-  // Small helper add a note to the original declaration.
-  auto emitNote = [&](InFlightDiagnostic &&diag) -> InFlightDiagnostic && {
-    diag.attachNote(referencedModule->getLoc())
-        << "original module declared here";
-    return std::move(diag);
-  };
-
-  // Check that all the attribute arrays are the right length up front.  This
-  // lets us safely use the port name in error messages below.
-  size_t numResults = getNumResults();
-  size_t numExpected = referencedModule.getNumPorts();
-  if (numResults != numExpected) {
-    return emitNote(emitOpError() << "has a wrong number of results; expected "
-                                  << numExpected << " but got " << numResults);
-  }
-  if (getPortDirections().getBitWidth() != numExpected)
-    return emitNote(emitOpError("the number of port directions should be "
-                                "equal to the number of results"));
-  if (getPortNames().size() != numExpected)
-    return emitNote(emitOpError("the number of port names should be "
-                                "equal to the number of results"));
-  if (getPortAnnotations().size() != numExpected)
-    return emitNote(emitOpError("the number of result annotations should be "
-                                "equal to the number of results"));
-
-  // Check that the port names match the referenced module.
-  if (getPortNamesAttr() != referencedModule.getPortNamesAttr()) {
-    // We know there is an error, try to figure out whats wrong.
-    auto instanceNames = getPortNames();
-    auto moduleNames = referencedModule.getPortNamesAttr();
-    // First compare the sizes:
-    if (instanceNames.size() != moduleNames.size()) {
-      return emitNote(emitOpError()
-                      << "has a wrong number of directions; expected "
-                      << moduleNames.size() << " but got "
-                      << instanceNames.size());
-    }
-    // Next check the values:
-    for (size_t i = 0; i != numResults; ++i) {
-      if (instanceNames[i] != moduleNames[i]) {
-        return emitNote(emitOpError()
-                        << "name for port " << i << " must be "
-                        << moduleNames[i] << ", but got " << instanceNames[i]);
-      }
-    }
-    llvm_unreachable("should have found something wrong");
-  }
-
-  // Check that the types match.
-  for (size_t i = 0; i != numResults; i++) {
-    auto resultType = getResult(i).getType();
-    auto expectedType = referencedModule.getPortType(i);
-    if (resultType != expectedType) {
-      return emitNote(emitOpError()
-                      << "result type for " << getPortName(i) << " must be "
-                      << expectedType << ", but got " << resultType);
-    }
-  }
-
-  // Check that the port directions are consistent with the referenced module's.
-  if (getPortDirectionsAttr() != referencedModule.getPortDirectionsAttr()) {
-    // We know there is an error, try to figure out whats wrong.
-    auto instanceDirectionAttr = getPortDirectionsAttr();
-    auto moduleDirectionAttr = referencedModule.getPortDirectionsAttr();
-    // First compare the sizes:
-    auto expectedWidth = moduleDirectionAttr.getValue().getBitWidth();
-    auto actualWidth = instanceDirectionAttr.getValue().getBitWidth();
-    if (expectedWidth != actualWidth) {
-      return emitNote(emitOpError()
-                      << "has a wrong number of directions; expected "
-                      << expectedWidth << " but got " << actualWidth);
-    }
-    // Next check the values.
-    auto instanceDirs = direction::unpackAttribute(instanceDirectionAttr);
-    auto moduleDirs = direction::unpackAttribute(moduleDirectionAttr);
-    for (size_t i = 0; i != numResults; ++i) {
-      if (instanceDirs[i] != moduleDirs[i]) {
-        return emitNote(emitOpError()
-                        << "direction for " << getPortName(i) << " must be \""
-                        << direction::toString(moduleDirs[i])
-                        << "\", but got \""
-                        << direction::toString(instanceDirs[i]) << "\"");
-      }
-    }
-    llvm_unreachable("should have found something wrong");
-  }
-
-  return success();
+  return instance_like_impl::verifyReferencedModule(*this, symbolTable,
+                                                    getModuleNameAttr());
 }
 
 StringRef InstanceOp::getInstanceName() { return getName(); }
@@ -2921,21 +2807,13 @@ StringAttr ObjectOp::getClassNameAttr() {
 
 StringRef ObjectOp::getClassName() { return getType().getName(); }
 
-ClassLike ObjectOp::getReferencedClass(SymbolTable &symbolTable) {
+ClassLike ObjectOp::getReferencedClass(const SymbolTable &symbolTable) {
   auto symRef = getType().getNameAttr();
   return symbolTable.lookup<ClassLike>(symRef.getLeafReference());
 }
 
-Operation *ObjectOp::getReferencedModule(SymbolTable &symtbl) {
+Operation *ObjectOp::getReferencedOperation(const SymbolTable &symtbl) {
   return getReferencedClass(symtbl);
-}
-
-Operation *ObjectOp::getReferencedModuleSlow() {
-  auto circuit = (*this)->getParentOfType<CircuitOp>();
-  if (!circuit)
-    return nullptr;
-
-  return circuit.lookupSymbol<ClassLike>(getClassNameAttr());
 }
 
 StringRef ObjectOp::getInstanceName() { return getName(); }
@@ -3763,73 +3641,6 @@ LogicalResult ListCreateOp::verify() {
     return emitOpError("has elements of type ")
            << elementType << " instead of " << listElementType;
 
-  return success();
-}
-
-ParseResult MapCreateOp::parse(OpAsmParser &parser, OperationState &result) {
-  llvm::SmallVector<OpAsmParser::UnresolvedOperand, 16> keys;
-  llvm::SmallVector<OpAsmParser::UnresolvedOperand, 16> values;
-
-  MapType type;
-
-  auto parsePair = [&]() {
-    OpAsmParser::UnresolvedOperand key, value;
-    if (parser.parseOperand(key) || parser.parseArrow() ||
-        parser.parseOperand(value))
-      return failure();
-    keys.push_back(key);
-    values.push_back(value);
-    return success();
-  };
-  if (parser.parseCommaSeparatedList(OpAsmParser::Delimiter::OptionalParen,
-                                     parsePair) ||
-      parser.parseOptionalAttrDict(result.attributes) ||
-      parser.parseColonType(type))
-    return failure();
-  result.addTypes(type);
-
-  if (parser.resolveOperands(keys, type.getKeyType(), result.operands) ||
-      parser.resolveOperands(values, type.getValueType(), result.operands))
-    return failure();
-
-  return success();
-}
-
-void MapCreateOp::print(OpAsmPrinter &p) {
-  p << " ";
-  if (!getKeys().empty()) {
-    p << "(";
-    llvm::interleaveComma(llvm::zip_equal(getKeys(), getValues()), p,
-                          [&](auto pair) {
-                            auto &[key, value] = pair;
-                            p.printOperand(key);
-                            p << " -> ";
-                            p.printOperand(value);
-                          });
-    p << ")";
-  }
-  p.printOptionalAttrDict((*this)->getAttrs());
-  p << " : " << getType();
-}
-
-LogicalResult MapCreateOp::verify() {
-  if (getKeys().empty())
-    return success();
-
-  if (!llvm::all_equal(getKeys().getTypes()))
-    return emitOpError("has keys that are not all the same type");
-  if (!llvm::all_equal(getValues().getTypes()))
-    return emitOpError("has values that are not all the same type");
-
-  if (getKeys().front().getType() != getType().getKeyType())
-    return emitOpError("has unexpected key type ")
-           << getKeys().front().getType() << " instead of map key type "
-           << getType().getKeyType();
-
-  if (getValues().front().getType() != getType().getValueType())
-    return emitOpError("has unexpected value type ")
-           << getValues().front().getType() << " instead of map value type "
-           << getType().getValueType();
   return success();
 }
 
@@ -5654,39 +5465,40 @@ LogicalResult RWProbeOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
 }
 
 //===----------------------------------------------------------------------===//
-// Optional Group Operations
+// Layer Block Operations
 //===----------------------------------------------------------------------===//
 
-LogicalResult GroupOp::verify() {
-  auto groupName = getGroupName();
+LogicalResult LayerBlockOp::verify() {
+  auto layerName = getLayerName();
   auto *parentOp = (*this)->getParentOp();
 
   // Verify the correctness of the symbol reference.  Only verify that this
-  // group makes sense in its parent module or group.
-  auto nestedReferences = groupName.getNestedReferences();
+  // layer block makes sense in its parent module or layer block.
+  auto nestedReferences = layerName.getNestedReferences();
   if (nestedReferences.empty()) {
     if (!isa<FModuleOp>(parentOp)) {
-      auto diag = emitOpError() << "has an un-nested group symbol, but does "
+      auto diag = emitOpError() << "has an un-nested layer symbol, but does "
                                    "not have a 'firrtl.module' op as a parent";
       return diag.attachNote(parentOp->getLoc())
              << "illegal parent op defined here";
     }
   } else {
-    auto parentGroup = dyn_cast<GroupOp>(parentOp);
-    if (!parentGroup) {
+    auto parentLayerBlock = dyn_cast<LayerBlockOp>(parentOp);
+    if (!parentLayerBlock) {
       auto diag = emitOpError()
-                  << "has a nested group symbol, but does not have a '"
+                  << "has a nested layer symbol, but does not have a '"
                   << getOperationName() << "' op as a parent'";
       return diag.attachNote(parentOp->getLoc())
              << "illegal parent op defined here";
     }
-    auto parentGroupName = parentGroup.getGroupName();
-    if (parentGroupName.getRootReference() != groupName.getRootReference() ||
-        parentGroupName.getNestedReferences() !=
-            groupName.getNestedReferences().drop_back()) {
-      auto diag = emitOpError() << "is nested under an illegal group";
-      return diag.attachNote(parentGroup->getLoc())
-             << "illegal parent group defined here";
+    auto parentLayerBlockName = parentLayerBlock.getLayerName();
+    if (parentLayerBlockName.getRootReference() !=
+            layerName.getRootReference() ||
+        parentLayerBlockName.getNestedReferences() !=
+            layerName.getNestedReferences().drop_back()) {
+      auto diag = emitOpError() << "is nested under an illegal layer block";
+      return diag.attachNote(parentLayerBlock->getLoc())
+             << "illegal parent layer block defined here";
     }
   }
 
@@ -5694,13 +5506,13 @@ LogicalResult GroupOp::verify() {
   Block *body = getBody(0);
   bool failed = false;
   body->walk<mlir::WalkOrder::PreOrder>([&](Operation *op) {
-    // Skip nested groups.  Those will be verified separately.
-    if (isa<GroupOp>(op))
+    // Skip nested layer blocks.  Those will be verified separately.
+    if (isa<LayerBlockOp>(op))
       return WalkResult::skip();
     // Check all the operands of each op to make sure that only legal things are
     // captured.
     for (auto operand : op->getOperands()) {
-      // Any value captured from the current group is fine.
+      // Any value captured from the current layer block is fine.
       if (operand.getParentBlock() == body)
         continue;
       // Capture of a non-base type, e.g., reference is illegal.
@@ -5723,15 +5535,15 @@ LogicalResult GroupOp::verify() {
         return WalkResult::advance();
       }
     }
-    // Ensure that the group does not drive any sinks.
+    // Ensure that the layer block does not drive any sinks.
     if (auto connect = dyn_cast<FConnectLike>(op)) {
       auto dest = getFieldRefFromValue(connect.getDest()).getValue();
       if (dest.getParentBlock() == body)
         return WalkResult::advance();
       auto diag = connect.emitOpError()
                   << "connects to a destination which is defined outside its "
-                     "enclosing group";
-      diag.attachNote(getLoc()) << "enclosing group is defined here";
+                     "enclosing layer block";
+      diag.attachNote(getLoc()) << "enclosing layer block is defined here";
       diag.attachNote(dest.getLoc()) << "destination is defined here";
       failed = true;
     }
@@ -5743,10 +5555,11 @@ LogicalResult GroupOp::verify() {
   return success();
 }
 
-LogicalResult GroupOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  auto groupDeclOp = symbolTable.lookupNearestSymbolFrom<GroupDeclOp>(
-      *this, getGroupNameAttr());
-  if (!groupDeclOp) {
+LogicalResult
+LayerBlockOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto layerOp =
+      symbolTable.lookupNearestSymbolFrom<LayerOp>(*this, getLayerNameAttr());
+  if (!layerOp) {
     return emitOpError("invalid symbol reference");
   }
 

@@ -176,4 +176,14 @@ firrtl.circuit "Intrinsics" {
     firrtl.strictconnect %hbr1, %0 : !firrtl.uint<1>
     firrtl.strictconnect %hbr2, %1 : !firrtl.uint<1>
   }
+
+  // CHECK-LABEL: hw.module @FPGAProbe
+  firrtl.module @FPGAProbe(
+    in %clock: !firrtl.clock,
+    in %reset: !firrtl.uint<1>,
+    in %in: !firrtl.uint<8>
+   ) attributes {convention = #firrtl<convention scalarized>} {
+    // CHECK: hw.wire %in
+    firrtl.int.fpga_probe %clock, %in : !firrtl.uint<8>
+  }
 }

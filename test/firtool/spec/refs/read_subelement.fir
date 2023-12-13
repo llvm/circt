@@ -1,5 +1,5 @@
 ; RUN: firtool %s
-; RUN: firtool %s -preserve-aggregate=all -scalarize-top-module=false
+; RUN: firtool %s -preserve-aggregate=all -scalarize-public-modules=false
 FIRRTL version 3.0.0
 
 circuit Foo :
@@ -17,4 +17,3 @@ circuit Foo :
     inst f of Foo
     connect x, read(f.p.b) ; indirectly access the probed data
   ; SPEC EXAMPLE END
-

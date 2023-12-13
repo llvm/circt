@@ -919,6 +919,23 @@ def HasBeenResetIntrinsicOp : FIRRTLOp<"int.has_been_reset", [Pure]> {
   let assemblyFormat = "$clock `,` $reset attr-dict `:` type($reset)";
 }
 
+def FPGAProbeIntrinsicOp : FIRRTLOp<"int.fpga_probe", []> {
+  let summary = "Mark a value to be observed through FPGA debugging facilities";
+
+  let description = [{
+    The `firrtl.int.fpga_probe` intrinsic marks a value in
+    the IR to be made observable through FPGA debugging facilities. Most FPGAs
+    offer a form of signal observation or logic analyzer to debug a design. This
+    operation allows the IR to indicate which signals should be made observable
+    for debugging. Later FPGA-specific passes may then pick this information up
+    and materialize the necessary logic analyzers or tool scripts.
+  }];
+
+  let arguments = (ins AnyType:$input, NonConstClockType:$clock);
+  let results = (outs);
+  let assemblyFormat = "$clock `,` $input attr-dict `:` type($input)";
+}
+
 //===----------------------------------------------------------------------===//
 // Verbatim
 //===----------------------------------------------------------------------===//
@@ -1193,24 +1210,6 @@ def ListCreateOp : FIRRTLOp<"list.create", [Pure, SameTypeOperands]> {
 
   let arguments = (ins Variadic<PropertyType>:$elements);
   let results = (outs ListType:$result);
-
-  let hasCustomAssemblyFormat = 1;
-  let hasVerifier = 1;
-}
-
-def MapCreateOp : FIRRTLOp<"map.create", [Pure, SameVariadicOperandSize]> {
-  let summary = "Produce a map value";
-  let description = [{
-    Produces a value of map type containing the provided key/value elements.
-
-    Example:
-    ```mlir
-    %4 = firrtl.map.create (%0 -> %1, %2 -> %3) : !firrtl.map<string, integer>
-    ```
-  }];
-
-  let arguments = (ins Variadic<PropertyType>:$keys, Variadic<PropertyType>:$values);
-  let results = (outs MapType:$result);
 
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;

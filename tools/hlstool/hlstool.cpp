@@ -277,7 +277,7 @@ static void loadESILoweringPipeline(OpPassManager &pm) {
 static void loadHWLoweringPipeline(OpPassManager &pm) {
   pm.addPass(createSimpleCanonicalizerPass());
   pm.nest<hw::HWModuleOp>().addPass(circt::seq::createLowerSeqHLMemPass());
-  pm.addPass(sv::createHWMemSimImplPass(false, false));
+  pm.addPass(seq::createHWMemSimImplPass());
   pm.addPass(circt::createLowerSeqToSVPass());
   pm.nest<hw::HWModuleOp>().addPass(sv::createHWCleanupPass());
 

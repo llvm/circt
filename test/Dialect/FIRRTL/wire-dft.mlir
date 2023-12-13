@@ -236,3 +236,49 @@ firrtl.circuit "BypassWrong" {
   }
 }
 
+// Test wiring to clock gate intrinsic op.
+firrtl.circuit "Intrinsic" {
+  // CHECK: firrtl.module private @A(in %test_en: !firrtl.uint<1>)
+  firrtl.module private @A() {
+    // CHECK: %[[TEST_EN_WIRE:.+]] = firrtl.wire : !firrtl.uint<1>
+    %en = firrtl.constant 1 : !firrtl.uint<1>
+    %clk = firrtl.specialconstant 0 : !firrtl.clock
+    // CHECK: firrtl.int.clock_gate %{{[^,]+}}, %{{[^,]+}}, %[[TEST_EN_WIRE]]
+    %gated = firrtl.int.clock_gate %clk, %en
+    // CHECK: firrtl.strictconnect %[[TEST_EN_WIRE]], %test_en
+  }
+
+  // CHECK: module @Intrinsic(
+  firrtl.module @Intrinsic() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
+    // CHECK: %a_test_en = firrtl.instance a  @A(in test_en: !firrtl.uint<1>)
+    firrtl.instance a @A()
+    %test_en = firrtl.wire {annotations = [{class = "sifive.enterprise.firrtl.DFTTestModeEnableAnnotation"}]} : !firrtl.uint<1>
+    // CHECK: firrtl.strictconnect %a_test_en, %test_en
+  }
+}
+
+// Test wiring to clock gate intrinsic op AND EICG_wrapper.
+firrtl.circuit "Both" {
+  firrtl.extmodule @EICG_wrapper(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock) attributes {defname = "EICG_wrapper"}
+
+  // CHECK: firrtl.module private @A(in %test_en: !firrtl.uint<1>)
+  firrtl.module private @A() {
+    // CHECK: %[[TEST_EN_WIRE:.+]] = firrtl.wire : !firrtl.uint<1>
+    %int_en = firrtl.constant 1 : !firrtl.uint<1>
+    %clk = firrtl.specialconstant 0 : !firrtl.clock
+    // CHECK: firrtl.int.clock_gate %{{[^,]+}}, %{{[^,]+}}, %[[TEST_EN_WIRE]]
+    %gated = firrtl.int.clock_gate %clk, %int_en
+    // CHECK-DAG: firrtl.strictconnect %[[TEST_EN_WIRE]], %test_en
+
+    %in, %test_en, %en, %out = firrtl.instance eicg @EICG_wrapper(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock)
+    // CHECK-DAG: firrtl.strictconnect %eicg_test_en, %test_en : !firrtl.uint<1>
+  }
+
+  // CHECK: module @Both(
+  firrtl.module @Both() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
+    // CHECK: %a_test_en = firrtl.instance a  @A(in test_en: !firrtl.uint<1>)
+    firrtl.instance a @A()
+    %test_en = firrtl.wire {annotations = [{class = "sifive.enterprise.firrtl.DFTTestModeEnableAnnotation"}]} : !firrtl.uint<1>
+    // CHECK: firrtl.strictconnect %a_test_en, %test_en
+  }
+}

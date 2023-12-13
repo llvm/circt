@@ -664,6 +664,21 @@ void ServiceImplRecordOp::getDetails(SmallVectorImpl<NamedAttribute> &results) {
                        ArrayAttr::get(ctxt, reqDetails));
 }
 
+bool parseServiceImplRecordReqDetails(OpAsmParser &parser,
+                                      Region &reqDetailsRegion) {
+  parser.parseOptionalRegion(reqDetailsRegion);
+  if (reqDetailsRegion.empty())
+    reqDetailsRegion.emplaceBlock();
+  return false;
+}
+
+void printServiceImplRecordReqDetails(OpAsmPrinter &p, ServiceImplRecordOp,
+                                      Region &reqDetailsRegion) {
+  if (!reqDetailsRegion.empty() && !reqDetailsRegion.front().empty())
+    p.printRegion(reqDetailsRegion, /*printEntryBlockArgs=*/false,
+                  /*printBlockTerminators=*/false);
+}
+
 StringRef ServiceImplClientRecordOp::getManifestClass() {
   return "service_client";
 }
@@ -689,6 +704,9 @@ void ServiceRequestRecordOp::getDetails(
       getDirectionAttrName(),
       StringAttr::get(ctxt, stringifyBundleDirection(getDirection())));
   results.emplace_back(getBundleTypeAttrName(), getBundleTypeAttr());
+  results.emplace_back(getServicePortAttrName(), getServicePortAttr());
+  if (auto stdSvc = getStdServiceAttr())
+    results.emplace_back(getStdServiceAttrName(), getStdServiceAttr());
 }
 
 StringRef SymbolMetadataOp::getManifestClass() { return "sym_info"; }

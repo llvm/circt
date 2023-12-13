@@ -4,9 +4,9 @@ hw.hierpath private @nla_0 [@PathModule::@sym_0]
 hw.hierpath private @nla_1 [@PathModule::@sym_1]
 hw.hierpath private @nla_2 [@PathModule::@sym_2]
 hw.hierpath private @nla_3 [@PathModule::@child]
-hw.hierpath private @nla_4 [@Child]
+hw.hierpath private @nla_4 [@PathModule::@child, @Child]
 hw.hierpath private @nla_5 [@PathModule::@child, @Child::@sym]
-hw.hierpath private @nla_6 [@PublicLeaf]
+hw.hierpath private @nla_6 [@PublicMiddle::@leaf, @PublicLeaf]
 hw.module @PathModule(in %in: i1 {hw.exportPort = #hw<innerSym@sym>}) {
   %wire = hw.wire %wire sym @sym_0 {hw.verilogName = "wire"} : i8
   %array = hw.wire %array sym [<@sym_1,1,public>] {hw.verilogName = "array"}: !hw.array<1xi8>
@@ -23,7 +23,7 @@ hw.module private @Child() {
 }
 
 hw.module @PublicMiddle() {
-  hw.instance "leaf" @PublicLeaf() -> () {hw.verilogName = "leaf"}
+  hw.instance "leaf" sym @leaf @PublicLeaf() -> () {hw.verilogName = "leaf"}
 }
 
 hw.module private @PublicLeaf() {}

@@ -174,6 +174,10 @@ def HWInstanceOp : FSMOp<"hw_instance", [
 
     FlatSymbolRefAttr getModuleNameAttr();
 
+    StringAttr getReferencedModuleNameAttr() {
+      return getModuleNameAttr().getAttr();
+    }
+
     //===------------------------------------------------------------------===//
     // PortList Methods
     //===------------------------------------------------------------------===//

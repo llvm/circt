@@ -2845,6 +2845,16 @@ firrtl.module @CrashAllUnusedPorts() {
   firrtl.strictconnect %26, %c0_ui1 : !firrtl.uint<1>
 }
 
+// CHECK-LABEL: firrtl.module @Issue6237
+// CHECK-NEXT:    %c0_ui0 = firrtl.constant 0 : !firrtl.uint<0>
+// CHECK-NEXT:    firrtl.strictconnect %out, %c0_ui0 : !firrtl.uint<0>
+firrtl.module @Issue6237(out %out: !firrtl.uint<0>) {
+  %foo, %bar = firrtl.mem  Undefined  {depth = 3 : i64, groupID = 4 : ui32, name = "whatever", portNames = ["MPORT_1", "MPORT_5"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>, !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data flip: uint<0>>
+  %a = firrtl.subfield %bar[data] : !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data flip: uint<0>>
+  firrtl.strictconnect %out, %a : !firrtl.uint<0>
+}
+
+
 // CHECK-LABEL: firrtl.module @CrashRegResetWithOneReset
 firrtl.module @CrashRegResetWithOneReset(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %io_d: !firrtl.uint<1>, out %io_q: !firrtl.uint<1>, in %io_en: !firrtl.uint<1>) {
   %c1_asyncreset = firrtl.specialconstant 1 : !firrtl.asyncreset
@@ -3102,7 +3112,7 @@ firrtl.module @DonotUpdateInstanceName(in %in: !firrtl.uint<1>, out %a: !firrtl.
 }
 
 // CHECK-LABEL: @RefCastSame
-firrtl.module @RefCastSame(in %in: !firrtl.probe<uint<1>>, out %out: !firrtl.probe<uint<1>>) {
+firrtl.module private @RefCastSame(in %in: !firrtl.probe<uint<1>>, out %out: !firrtl.probe<uint<1>>) {
   // Drop no-op ref.cast's.
   // CHECK-NEXT:  firrtl.ref.define %out, %in
   // CHECK-NEXT:  }
@@ -3307,15 +3317,6 @@ firrtl.module @Whens(in %clock: !firrtl.clock, in %a: !firrtl.uint<1>, in %reset
   } else {
     firrtl.printf %clock, %reset, "baz!"  : !firrtl.clock, !firrtl.uint<1>
   }
-}
-
-// CHECK-LABEL: firrtl.module @UselessIndexBit
-firrtl.module @UselessIndexBit(in %a: !firrtl.uint<3>, out %b: !firrtl.uint<4>, in %c: !firrtl.uint<4>, in %d: !firrtl.uint<4>, in %e: !firrtl.uint<4>) attributes {convention = #firrtl<convention scalarized>} {
-  %c0_ui4 = firrtl.constant 0 : !firrtl.uint<4> {name = "ttable_2"}
-  %0 = firrtl.multibit_mux %a, %c0_ui4, %c0_ui4, %c0_ui4, %c0_ui4, %c0_ui4, %c0_ui4, %d, %c : !firrtl.uint<3>, !firrtl.uint<4>
-  firrtl.strictconnect %b, %0 : !firrtl.uint<4>
-  // CHECK: firrtl.mux({{.*}}, %d, %c)
-  // CHECK: firrtl.mux({{.*}}, %c0_ui4, {{.*}})
 }
 
 }

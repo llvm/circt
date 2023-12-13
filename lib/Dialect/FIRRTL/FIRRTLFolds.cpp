@@ -1692,68 +1692,6 @@ LogicalResult MultibitMuxOp::canonicalize(MultibitMuxOp op,
     }
   }
 
-  // Eliminate unneeded bits in the index.  These arise from duplicate values in
-  // the mux.  This is done by slicing the mux into a mux tree.
-  // multibit_mux(index, {a, b, a, c}) -> multibit_mux(index[0],
-  // multibit_mux(index[1], a,a), multibit_mux(index[1]}, {b,c})) Search for
-  // identities in specific bit slices.   This is robust to unknown width
-  // indexes.
-  for (uint64_t bit = 0,
-                lastbit = op.getIndex().getType().getBitWidthOrSentinel();
-       bit < lastbit; ++bit) {
-    for (int curval = 0; curval <= 1; ++curval) {
-      // We don't collect values here as the normal case is we don't find a
-      // match, so we don't want to move data around and do allocations.
-      Value v;
-      uint64_t count = 0;
-      for (uint64_t i = 0, e = op.getInputs().size(); i < e; ++i) {
-        if (((i >> bit) & 1) != curval)
-          continue;
-        ++count;
-        if (!v)
-          v = op.getInputs()[i];
-        if (v != op.getInputs()[i]) {
-          v = {};
-          break;
-        }
-      }
-      if (!v || count == 1)
-        continue;
-      // Found match, collect varying side of the future mux
-      SmallVector<Value> nonSimple;
-      for (uint64_t i = 0, e = op.getInputs().size(); i < e; ++i) {
-        if (((i >> bit) & 1) != curval)
-          nonSimple.push_back(op.getInputs()[i]);
-      }
-      Value indBit = rewriter.createOrFold<BitsPrimOp>(op.getLoc(),
-                                                       op.getIndex(), bit, bit);
-      Value indBitRemLow;
-      if (bit)
-        indBitRemLow = rewriter.createOrFold<BitsPrimOp>(
-            op.getLoc(), op.getIndex(), bit - 1, 0);
-      else
-        indBitRemLow = rewriter.create<ConstantOp>(
-            op.getLoc(), IntType::get(op.getContext(), false, 0),
-            APInt(0U, 0UL));
-      Value indBitRemHigh;
-      if (bit == lastbit - 1)
-        indBitRemHigh = rewriter.create<ConstantOp>(
-            op.getLoc(), IntType::get(op.getContext(), false, 0),
-            APInt(0U, 0UL));
-      else
-        indBitRemHigh = rewriter.createOrFold<BitsPrimOp>(
-            op.getLoc(), op.getIndex(), lastbit - 1, bit + 1);
-      Value indBitRem = rewriter.createOrFold<CatPrimOp>(
-          op.getLoc(), indBitRemHigh, indBitRemLow);
-      Value otherSide =
-          rewriter.create<MultibitMuxOp>(op.getLoc(), indBitRem, nonSimple);
-      Value high = curval ? otherSide : v;
-      Value low = curval ? v : otherSide;
-      replaceOpWithNewOpAndCopyName<MuxPrimOp>(rewriter, op, indBit, high, low);
-      return success();
-    }
-  }
-
   // If the size is 2, canonicalize into a normal mux to introduce more folds.
   if (op.getInputs().size() != 2)
     return failure();
@@ -2470,7 +2408,8 @@ struct FoldZeroWidthMemory : public mlir::RewritePattern {
     if (hasDontTouch(mem))
       return failure();
 
-    if (mem.getDataType().getBitWidthOrSentinel() != 0)
+    if (!firrtl::type_isa<IntType>(mem.getDataType()) ||
+        mem.getDataType().getBitWidthOrSentinel() != 0)
       return failure();
 
     // Make sure are users are safe to replace
@@ -2484,8 +2423,17 @@ struct FoldZeroWidthMemory : public mlir::RewritePattern {
     for (auto port : op->getResults()) {
       for (auto *user : llvm::make_early_inc_range(port.getUsers())) {
         SubfieldOp sfop = cast<SubfieldOp>(user);
-        replaceOpWithNewOpAndCopyName<WireOp>(rewriter, sfop,
-                                              sfop.getResult().getType());
+        StringRef fieldName = sfop.getFieldName();
+        auto wire = replaceOpWithNewOpAndCopyName<WireOp>(
+                        rewriter, sfop, sfop.getResult().getType())
+                        .getResult();
+        if (fieldName.ends_with("data")) {
+          // Make sure to write data ports.
+          auto zero = rewriter.create<firrtl::ConstantOp>(
+              wire.getLoc(), firrtl::type_cast<IntType>(wire.getType()),
+              APInt::getZero(0));
+          rewriter.create<StrictConnectOp>(wire.getLoc(), wire, zero);
+        }
       }
     }
     rewriter.eraseOp(op);

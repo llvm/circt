@@ -1,10 +1,4 @@
-// RUN: circt-opt --lower-firrtl-to-hw --verify-diagnostics %s | FileCheck %s --check-prefix CHECK --check-prefix RANDOMIZE
-// RUN: circt-opt --lower-firrtl-to-hw=disable-mem-randomization --verify-diagnostics %s | FileCheck %s
-
-// RANDOMIZE: sv.ifdef "RANDOMIZE"
-// RANDOMIZE-NEXT: else
-// RANDOMIZE-NEXT: sv.ifdef "RANDOMIZE_MEM_INIT"
-// RANDOMIZE-NEXT: sv.macro.def @RANDOMIZE ""
+// RUN: circt-opt --lower-firrtl-to-hw --verify-diagnostics %s | FileCheck %s --check-prefix CHECK
 
 firrtl.circuit "Foo" {
   // CHECK-LABEL: hw.module @Foo

@@ -25,6 +25,8 @@ using namespace hw;
 
 namespace {
 struct AddTapsPass : public arc::impl::AddTapsBase<AddTapsPass> {
+  using AddTapsBase::AddTapsBase;
+
   void runOnOperation() override {
     getOperation().walk([&](Operation *op) {
       TypeSwitch<Operation *>(op)
@@ -95,23 +97,9 @@ struct AddTapsPass : public arc::impl::AddTapsBase<AddTapsPass> {
       value = builder.createOrFold<seq::FromClockOp>(loc, value);
     builder.create<arc::TapOp>(loc, value, name);
   }
-
-  using AddTapsBase::tapNamedValues;
-  using AddTapsBase::tapPorts;
-  using AddTapsBase::tapWires;
 };
 } // namespace
 
-std::unique_ptr<Pass>
-arc::createAddTapsPass(std::optional<bool> tapPorts,
-                       std::optional<bool> tapWires,
-                       std::optional<bool> tapNamedValues) {
-  auto pass = std::make_unique<AddTapsPass>();
-  if (tapPorts)
-    pass->tapPorts = *tapPorts;
-  if (tapWires)
-    pass->tapWires = *tapWires;
-  if (tapNamedValues)
-    pass->tapNamedValues = *tapNamedValues;
-  return pass;
+std::unique_ptr<Pass> arc::createAddTapsPass(const AddTapsOptions &options) {
+  return std::make_unique<AddTapsPass>(options);
 }

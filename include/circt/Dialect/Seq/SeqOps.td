@@ -123,6 +123,49 @@ def CompRegClockEnabledOp : SeqOp<"compreg.ce",
   ];
 }
 
+def ShiftRegOp : SeqOp<"shiftreg", [
+  Pure,
+  Clocked,
+  Resettable,
+  AllTypesMatch<["input", "data"]>,
+  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+  DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>,
+  AttrSizedOperandSegments
+]> {
+  let summary = "Shift register";
+  let description = [{
+    The `seq.shiftreg` op represents a shift register. It takes the input
+    value and shifts it every cycle when `clockEnable` is asserted.
+    The `reset` and `resetValue` operands are optional and if present, every
+    entry in the shift register will be initialized to `resetValue` upon
+    assertion of the reset signal. Exact reset behavior (sync/async) is
+    implementation defined.
+  }];
+
+  let arguments = (ins
+    ConfinedAttr<I64Attr, [IntMinValue<1>]>:$numElements,
+    AnyType:$input,
+    ClockType:$clk,
+    I1:$clockEnable,
+    OptionalAttr<StrAttr>:$name,
+    Optional<I1>:$reset,
+    Optional<AnyType>:$resetValue,
+    Optional<AnyType>:$powerOnValue,
+    OptionalAttr<InnerSymAttr>:$inner_sym
+  );
+  let results = (outs AnyType:$data);
+  let hasVerifier = 1;
+
+  let assemblyFormat = [{
+    `[` $numElements `]`
+    (`sym` $inner_sym^)? custom<ImplicitSSAName>($name) $input `,` $clk `,` $clockEnable
+    (`reset` $reset^ `,` $resetValue)?
+    (`powerOn` $powerOnValue^)? attr-dict `:` type($data)
+    custom<OptionalTypeMatch>(ref(type($data)), ref($resetValue), type($resetValue))
+    custom<OptionalTypeMatch>(ref(type($data)), ref($powerOnValue), type($powerOnValue))
+  }];
+}
+
 //===----------------------------------------------------------------------===//
 // FIRRTL-flavored register
 //===----------------------------------------------------------------------===//
@@ -465,6 +508,7 @@ class DataMatchesFirMem<string memoryValue, string dataValue> :
     }]>;
 
 def FirMemReadOp : SeqOp<"firmem.read_port", [
+  Clocked,
   MemoryEffects<[MemRead]>,
   AddressMatchesFirMem<"memory", "address">,
   DataMatchesFirMem<"memory", "data">
@@ -481,12 +525,12 @@ def FirMemReadOp : SeqOp<"firmem.read_port", [
   let arguments = (ins
     FirMemType:$memory,
     AnySignlessInteger:$address,
-    ClockType:$clock,
+    ClockType:$clk,
     Optional<I1>:$enable
   );
   let results = (outs AnySignlessInteger:$data);
   let assemblyFormat = [{
-    $memory `[` $address `]` `,` `clock` $clock
+    $memory `[` $address `]` `,` `clock` $clk
     (`enable` $enable^)?
     attr-dict `:` type($memory)
   }];
@@ -494,6 +538,7 @@ def FirMemReadOp : SeqOp<"firmem.read_port", [
 }
 
 def FirMemWriteOp : SeqOp<"firmem.write_port", [
+  Clocked,
   MemoryEffects<[MemWrite]>,
   AddressMatchesFirMem<"memory", "address">,
   DataMatchesFirMem<"memory", "data">,
@@ -514,13 +559,13 @@ def FirMemWriteOp : SeqOp<"firmem.write_port", [
   let arguments = (ins
     FirMemType:$memory,
     AnySignlessInteger:$address,
-    ClockType:$clock,
+    ClockType:$clk,
     Optional<I1>:$enable,
     AnySignlessInteger:$data,
     Optional<AnySignlessInteger>:$mask
   );
   let assemblyFormat = [{
-    $memory `[` $address `]` `=` $data `,` `clock` $clock
+    $memory `[` $address `]` `=` $data `,` `clock` $clk
     (`enable` $enable^)? (`mask` $mask^)?
     attr-dict `:` type($memory) (`,` type($mask)^)?
   }];
@@ -529,6 +574,7 @@ def FirMemWriteOp : SeqOp<"firmem.write_port", [
 }
 
 def FirMemReadWriteOp : SeqOp<"firmem.read_write_port", [
+  Clocked,
   MemoryEffects<[MemRead, MemWrite]>,
   AddressMatchesFirMem<"memory", "address">,
   DataMatchesFirMem<"memory", "writeData">,
@@ -551,7 +597,7 @@ def FirMemReadWriteOp : SeqOp<"firmem.read_write_port", [
   let arguments = (ins
     FirMemType:$memory,
     AnySignlessInteger:$address,
-    ClockType:$clock,
+    ClockType:$clk,
     Optional<I1>:$enable,
     AnySignlessInteger:$writeData,
     I1:$mode,
@@ -559,7 +605,7 @@ def FirMemReadWriteOp : SeqOp<"firmem.read_write_port", [
   );
   let results = (outs AnySignlessInteger:$readData);
   let assemblyFormat = [{
-    $memory `[` $address `]` `=` $writeData `if` $mode `,` `clock` $clock
+    $memory `[` $address `]` `=` $writeData `if` $mode `,` `clock` $clk
     (`enable` $enable^)? (`mask` $mask^)?
     attr-dict `:` type($memory) (`,` type($mask)^)?
   }];

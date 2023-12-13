@@ -21,14 +21,13 @@ interface CosimDpiServer @0xe3d7f70c7065c46a {
   list @0 () -> (ifaces :List(EsiDpiInterfaceDesc));
   # Open one of them. Specify both the send and recv data types if want type
   # safety and your language supports it.
-  open @1 [S, T] (iface :EsiDpiInterfaceDesc) -> (iface :EsiDpiEndpoint);
+  open @1 (iface :EsiDpiInterfaceDesc) -> (endpoint :EsiDpiEndpoint);
 
   # Get the zlib-compressed JSON system manifest.
   getCompressedManifest @2 () -> (version :Int32, compressedManifest :Data);
 
   # Create a low level interface into the simulation.
   openLowLevel @3 () -> (lowLevel :EsiLowLevel);
-
 }
 
 # Description of a registered endpoint.

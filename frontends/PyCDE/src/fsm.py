@@ -189,7 +189,7 @@ class MachineModuleBuilder(ModuleLikeBuilderBase):
 
     return machine_op
 
-  def instantiate(self, impl, instance_name: str, **kwargs):
+  def instantiate(self, impl, kwargs, instance_name: str):
     circt_mod = self.circt_mod
 
     in_names = attribute_to_var(circt_mod.attributes['in_names'])
