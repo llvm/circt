@@ -199,6 +199,11 @@ def InstanceChoiceOp : HardwareDeclOp<"instance_choice", [
       return direction::get(getPortDirections()[resultNo]);
     }
 
+    /// Return the port name for the specified result number.
+    StringAttr getPortName(size_t resultNo) {
+      return cast<StringAttr>(getPortNames()[resultNo]);
+    }
+
     /// Return the default target attribute.
     FlatSymbolRefAttr getDefaultTargetAttr() {
       return getModuleNamesAttr()[0].cast<FlatSymbolRefAttr>();
@@ -211,6 +216,10 @@ def InstanceChoiceOp : HardwareDeclOp<"instance_choice", [
 
     /// Return the target for an option or the default if none specified.
     FlatSymbolRefAttr getTargetOrDefaultAttr(OptionCaseOp option);
+
+    /// Return the list of case-module mappings.
+    SmallVector<std::pair<SymbolRefAttr, FlatSymbolRefAttr>, 1> 
+    getTargetChoices();
   }];
 
   let builders = [

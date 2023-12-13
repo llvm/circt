@@ -2477,6 +2477,19 @@ InstanceChoiceOp::getTargetOrDefaultAttr(OptionCaseOp option) {
   }
   return getDefaultTargetAttr();
 }
+  
+SmallVector<std::pair<SymbolRefAttr, FlatSymbolRefAttr>, 1> 
+InstanceChoiceOp::getTargetChoices() {
+  auto caseNames = getCaseNamesAttr();
+  auto moduleNames = getModuleNamesAttr();
+  SmallVector<std::pair<SymbolRefAttr, FlatSymbolRefAttr>, 1> choices;
+  for (size_t i = 0; i < caseNames.size(); ++i) {
+    choices.emplace_back(caseNames[i].cast<SymbolRefAttr>(),
+    moduleNames[i + 1].cast<FlatSymbolRefAttr>());
+  }
+
+  return choices;
+}
 
 //===----------------------------------------------------------------------===//
 // MemOp
