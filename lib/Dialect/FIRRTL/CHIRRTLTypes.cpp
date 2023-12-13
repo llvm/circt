@@ -26,7 +26,6 @@ using namespace circt;
 using namespace chirrtl;
 using namespace firrtl;
 
-
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/FIRRTL/CHIRRTLTypes.cpp.inc"
 
@@ -70,4 +69,3 @@ void CHIRRTLDialect::registerTypes() {
 #include "circt/Dialect/FIRRTL/CHIRRTLTypes.cpp.inc"
       >();
 }
-
