@@ -516,7 +516,7 @@ void Emitter::emitModuleParameters(Operation *op, ArrayAttr parameters) {
 /// Emit a layer definition.
 void Emitter::emitDeclaration(LayerOp op) {
   startStatement();
-  ps << "declgroup " << PPExtString(op.getSymName()) << ", "
+  ps << "layer " << PPExtString(op.getSymName()) << ", "
      << PPExtString(stringifyLayerConvention(op.getConvention())) << " : ";
   emitLocationAndNewLine(op);
   ps.scopedBox(PP::bbox2, [&]() {
@@ -984,7 +984,7 @@ void Emitter::emitStatement(RefReleaseInitialOp op) {
 
 void Emitter::emitStatement(LayerBlockOp op) {
   startStatement();
-  ps << "group " << op.getLayerName().getLeafReference() << " :";
+  ps << "layerblock " << op.getLayerName().getLeafReference() << " :";
   emitLocationAndNewLine(op);
   auto *body = op.getBody();
   ps.scopedBox(PP::bbox2, [&]() { emitStatementsInBlock(*body); });
