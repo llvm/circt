@@ -6,7 +6,7 @@
 // CHECK-NOT: attributes
 // CHECK-NEXT: hw.module.extern @foo_assert
 // CHECK-NOT: attributes
-// CHECK: hw.module @issue1246_assert(in %clock : i1) attributes {comment = "VCS coverage exclude_file", output_file = #hw.output_file<"dir3{{/|\\\\}}", excludeFromFileList, includeReplicatedOps>}
+// CHECK: hw.module private @issue1246_assert(in %clock : i1) attributes {comment = "VCS coverage exclude_file", output_file = #hw.output_file<"dir3{{/|\\\\}}", excludeFromFileList, includeReplicatedOps>}
 // CHECK: sv.assert
 // CHECK: sv.error "Assertion failed"
 // CHECK: sv.error "assert:"
@@ -14,11 +14,11 @@
 // CHECK: sv.error "check [verif-library-assert] is included"
 // CHECK: sv.fatal 1
 // CHECK: foo_assert
-// CHECK: hw.module @issue1246_assume(in %clock : i1)
+// CHECK: hw.module private @issue1246_assume(in %clock : i1)
 // CHECK-SAME: attributes {comment = "VCS coverage exclude_file"}
 // CHECK: sv.assume
 // CHECK: foo_assume
-// CHECK: hw.module @issue1246_cover(in %clock : i1)
+// CHECK: hw.module private @issue1246_cover(in %clock : i1)
 // CHECK-SAME: attributes {comment = "VCS coverage exclude_file"}
 // CHECK: sv.cover
 // CHECK: foo_cover
@@ -85,7 +85,7 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
 
 // Check that we don't extract assertions from a module with "firrtl.extract.do_not_extract" attribute.
 //
-// CHECK-NOT:  hw.module @ModuleInTestHarness_assert
+// CHECK-NOT:  hw.module private @ModuleInTestHarness_assert
 // CHECK-NOT:  firrtl.extract.do_not_extract
 module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>} {
   hw.module @ModuleInTestHarness(in %clock: i1) attributes {"firrtl.extract.do_not_extract"} {
@@ -545,7 +545,7 @@ module {
     hw.instance "dut" @Foo(clock: %clock: !seq.clock, in: %in: i1) -> ()
     hw.output
   }
-  // CHECK: hw.module @Foo_cover(in %clock : !seq.clock, in %in : i1)
+  // CHECK: hw.module private @Foo_cover(in %clock : !seq.clock, in %in : i1)
   hw.module private @Foo(in %clock: !seq.clock, in %in: i1) {
     %0 = seq.from_clock %clock
     sv.cover.concurrent posedge %0, %in label "cover__hello"
@@ -563,7 +563,7 @@ module {
     %x = hw.instance "pF" @PortNameFoo(clock: %clock: !seq.clock, "": %in: i1) -> (o: i1)
     hw.output
   }
-  // CHECK-LABEL: hw.module @PortNameFoo_cover
+  // CHECK-LABEL: hw.module private @PortNameFoo_cover
   // CHECK-SAME: (in %clock : !seq.clock, in %port_1 : i1, in %port_2 : i1)
   hw.module private @PortNameFoo(in %clock: !seq.clock, in %1: i1, out o : i1) {
     // CHECK: hw.instance "PortNameFoo_cover"
