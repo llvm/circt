@@ -198,6 +198,19 @@ def InstanceChoiceOp : HardwareDeclOp<"instance_choice", [
     Direction getPortDirection(size_t resultNo) {
       return direction::get(getPortDirections()[resultNo]);
     }
+
+    /// Return the default target attribute.
+    FlatSymbolRefAttr getDefaultTargetAttr() {
+      return getModuleNamesAttr()[0].cast<FlatSymbolRefAttr>();
+    }
+
+    /// Return the name of the option group.
+    StringAttr getOptionNameAttr() {
+      return getCaseNames()[0].cast<SymbolRefAttr>().getRootReference();
+    }
+
+    /// Return the target for an option or the default if none specified.
+    FlatSymbolRefAttr getTargetOrDefaultAttr(OptionCaseOp option);
   }];
 
   let builders = [

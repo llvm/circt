@@ -2467,6 +2467,17 @@ InstanceChoiceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   return success();
 }
 
+FlatSymbolRefAttr
+InstanceChoiceOp::getTargetOrDefaultAttr(OptionCaseOp option) {
+  auto caseNames = getCaseNamesAttr();
+  for (size_t i = 0, n = caseNames.size(); i < n; ++i) {
+    StringAttr caseSym = caseNames[i].cast<SymbolRefAttr>().getLeafReference();
+    if (caseSym == option.getSymName())
+      return getModuleNamesAttr()[i + 1].cast<FlatSymbolRefAttr>();
+  }
+  return getDefaultTargetAttr();
+}
+
 //===----------------------------------------------------------------------===//
 // MemOp
 //===----------------------------------------------------------------------===//
