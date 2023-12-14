@@ -3122,7 +3122,7 @@ LogicalResult AttachOp::verify() {
 }
 
 /// Check if the source and sink are of appropriate flow.
-static LogicalResult checkConnectFlow(Operation *connect) {
+LogicalResult firrtl::checkConnectFlow(Operation *connect) {
   Value dst = connect->getOperand(0);
   Value src = connect->getOperand(1);
 
@@ -3186,10 +3186,10 @@ static bool isConstFieldDriven(FIRRTLBaseType type, bool isFlip = false,
 
 /// Checks that connections to 'const' destinations are not dependent on
 /// non-'const' conditions in when blocks.
-static LogicalResult checkConnectConditionality(FConnectLike connect) {
-  auto dest = connect.getDest();
+LogicalResult firrtl::checkConnectConditionality(Operation *connect) {
+  auto dest = connect->getOperand(0);
   auto destType = type_dyn_cast<FIRRTLBaseType>(dest.getType());
-  auto src = connect.getSrc();
+  auto src = connect->getOperand(1);
   auto srcType = type_dyn_cast<FIRRTLBaseType>(src.getType());
   if (!destType || !srcType)
     return success();
@@ -3237,7 +3237,7 @@ static LogicalResult checkConnectConditionality(FConnectLike connect) {
       if (auto whenOp = dyn_cast<WhenOp>(parentOp);
           whenOp && !whenOp.getCondition().getType().isConst()) {
         if (type.isConst())
-          return connect.emitOpError()
+          return connect->emitOpError()
                  << "assignment to 'const' type " << type
                  << " is dependent on a non-'const' condition";
         return connect->emitOpError()
@@ -3251,7 +3251,7 @@ static LogicalResult checkConnectConditionality(FConnectLike connect) {
   };
 
   auto emitSubaccessError = [&] {
-    return connect.emitError(
+    return connect->emitError(
         "assignment to non-'const' subaccess of 'const' type is disallowed");
   };
 
@@ -3278,7 +3278,7 @@ static LogicalResult checkConnectConditionality(FConnectLike connect) {
   return success();
 }
 
-LogicalResult ConnectOp::verify() {
+LogicalResult firrtl::ConnectOp::verify() {
   auto dstType = getDest().getType();
   auto srcType = getSrc().getType();
   auto dstBaseType = type_dyn_cast<FIRRTLBaseType>(dstType);

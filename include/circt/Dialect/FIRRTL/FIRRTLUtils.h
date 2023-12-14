@@ -27,6 +27,12 @@ namespace firrtl {
 void emitConnect(OpBuilder &builder, Location loc, Value lhs, Value rhs);
 void emitConnect(ImplicitLocOpBuilder &builder, Value lhs, Value rhs);
 
+/// Check the flow of a connect.
+LogicalResult checkConnectFlow(Operation *connect);
+
+/// Check the connect is const-correct in a when.
+LogicalResult checkConnectConditionality(Operation *connect);
+
 /// Utiility for generating a constant attribute.
 IntegerAttr getIntAttr(Type type, const APInt &value);
 
