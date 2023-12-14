@@ -185,7 +185,7 @@ def ConnectOp : CHIRRTLOp<"connect", []> {
   let description = [{
     Connect Operation:
     ```
-      firrtl.connect %dest, %src : t1, t2
+      chirrtl.connect %dest, %src : t1, t2
     ```
   }];
   let arguments = (ins AnyType:$dest, AnyType:$src);
