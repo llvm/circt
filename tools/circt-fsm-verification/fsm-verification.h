@@ -80,14 +80,12 @@ struct outputs{
 
 using z3Fun = std::function <expr (vector<expr>)>;
 
-
 // struct transition{
 //   string from;
 //   string to;
 //   std::vector<expr > *var_updates;
 //   Region guard_reg;
 // };
-
 
 // struct CFG{
 //   llvm::DenseMap<mlir::Value, z3::sort> variables;
@@ -102,7 +100,9 @@ using z3Fun = std::function <expr (vector<expr>)>;
 struct transition{
   string from;
   string to;
-  vector<z3Fun> guards;
+  z3Fun guard;
+  mlir::Region *guard_reg;
+  bool isGuard;
   vector<z3Fun> actions;
 };
 
