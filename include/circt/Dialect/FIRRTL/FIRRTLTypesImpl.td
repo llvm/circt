@@ -204,7 +204,7 @@ class BaseBundleTypeImpl<string name, string ElementType, list<Trait> traits = [
 
   let extraClassDeclaration = [{
     using ElementType = }] # ElementType # [{;
-  
+
     /// Each element of a bundle, which is a name and type.
     struct BundleElement {
       StringAttr name;

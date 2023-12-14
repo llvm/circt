@@ -180,4 +180,21 @@ def MemoryDebugPortOp : CHIRRTLOp<"debugport", [InferTypeOpInterface,
   }];
 }
 
+def ConnectOp : CHIRRTLOp<"connect", []> {
+  let summary = "Connect two signals";
+  let description = [{
+    Connect Operation:
+    ```
+      firrtl.connect %dest, %src : t1, t2
+    ```
+  }];
+  let arguments = (ins AnyType:$dest, AnyType:$src);
+  let results = (outs);
+
+  let assemblyFormat =
+    "$dest `,` $src  attr-dict `:` qualified(type($dest)) `,` qualified(type($src))";
+
+  let hasVerifier = 1;
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_CHIRRTLOPS_TD

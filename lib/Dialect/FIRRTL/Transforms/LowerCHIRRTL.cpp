@@ -45,7 +45,7 @@ struct LowerCHIRRTLPass : public LowerCHIRRTLPassBase<LowerCHIRRTLPass>,
   void visitExpr(SubaccessOp op);
   void visitExpr(SubfieldOp op);
   void visitExpr(SubindexOp op);
-  void visitStmt(ConnectOp op);
+  void visitStmt(firrtl::ConnectOp op);
   void visitStmt(StrictConnectOp op);
   void visitUnhandledOp(Operation *op);
 
@@ -238,7 +238,7 @@ MemDirAttr LowerCHIRRTLPass::inferMemoryPortKind(MemoryPortOp memPort) {
         }
         // Otherwise we are reading from a memory for the index.
         element.mode |= MemDirAttr::Read;
-      } else if (auto connectOp = dyn_cast<ConnectOp>(user)) {
+      } else if (auto connectOp = dyn_cast<firrtl::ConnectOp>(user)) {
         if (use.get() == connectOp.getDest()) {
           element.mode |= MemDirAttr::Write;
         } else {
@@ -455,7 +455,7 @@ void LowerCHIRRTLPass::replaceMem(Operation *cmem, StringRef name,
         // ones driving an invalid value.
         auto drivers =
             make_filter_range(indexOp->getUsers(), [&](Operation *op) {
-              if (auto connectOp = dyn_cast<ConnectOp>(op)) {
+              if (auto connectOp = dyn_cast<firrtl::ConnectOp>(op)) {
                 if (cmemoryPortAccess.getIndex() == connectOp.getDest())
                   return !dyn_cast_or_null<InvalidValueOp>(
                       connectOp.getSrc().getDefiningOp());
@@ -513,7 +513,7 @@ void LowerCHIRRTLPass::visitCHIRRTL(MemoryPortAccessOp memPortAccess) {
   opsToDelete.push_back(memPortAccess);
 }
 
-void LowerCHIRRTLPass::visitStmt(ConnectOp connect) {
+void LowerCHIRRTLPass::visitStmt(firrtl::ConnectOp connect) {
   // Check if we are writing to a memory and, if we are, replace the
   // destination.
   auto writeIt = wdataValues.find(connect.getDest());
