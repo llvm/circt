@@ -15,7 +15,7 @@ jobs:
     uses: ./.github/workflows/unifiedBuildTestAndInstall.yml
     with:
       runner: windows-2022
-      cmake_build_type: release
+      cmake_build_type: relwithdebinfo
       llvm_enable_assertions: ON
       build_shared_libs: OFF
       llvm_force_enable_stats: ON
