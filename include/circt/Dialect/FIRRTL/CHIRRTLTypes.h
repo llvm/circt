@@ -1,4 +1,4 @@
-//===- CHIRRTL.td - CHIRRTL dialect definition -------------*- tablegen -*-===//
+//===- CHIRRTLTypes.h - CHIRRTL Type System ---------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,20 +6,15 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This is the top level file for the CHIRRTL dialect.
+// This file defines the type system for the CHIRRTL Dialect.
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CHIRRTL_TD
-#define CHIRRTL_TD
+#ifndef CIRCT_DIALECT_CHIRRTL_TYPES_H
+#define CIRCT_DIALECT_CHIRRTL_TYPES_H
 
-// Dialect
-include "CHIRRTLDialect.td"
+// Include generated types.
+#define GET_TYPEDEF_CLASSES
+#include "circt/Dialect/FIRRTL/CHIRRTLTypes.h.inc"
 
-// Operations
-include "CHIRRTLOps.td"
-
-// Types
-include "CHIRRTLTypes.td"
-
-#endif // CHIRRTL_TD
+#endif // CIRCT_DIALECT_CHIRRTL_TYPES_H
