@@ -54,9 +54,10 @@ private:
   // Create a counter that attributes a unique id to each generated btor2 line
   size_t lid = 1;          // btor2 line identifiers usually start at 1
   size_t resetLID = noLID; // keeps track of the reset's LID
+  size_t nclocks = 0;
 
   // Create maps to keep track of lid associations
-  // We need these in order to reference resluts as operands in btor2
+  // We need these in order to reference results as operands in btor2
 
   // Keeps track of the ids associated to each declared sort
   // This is used in order to guarantee that sorts are unique and to allow for
@@ -66,7 +67,7 @@ private:
   // This is used in order to avoid duplicating constant declarations
   // in the output btor2. It is also useful when tracking
   // constants declarations that aren't tied to MLIR ops.
-  DenseMap<std::pair<int64_t, size_t>, size_t> constToLIDMap;
+  DenseMap<APInt, size_t> constToLIDMap;
   // Keeps track of the most recent update line for each operation
   // This allows for operations to be used throughout the btor file
   // with their most recent expression. Btor uses unique identifiers for each
@@ -188,7 +189,7 @@ private:
   // If so, its lid will be returned.
   // Otherwise -1 will be returned.
   size_t getConstLID(int64_t val, size_t w) {
-    if (auto it = constToLIDMap.find({val, w}); it != constToLIDMap.end())
+    if (auto it = constToLIDMap.find(APInt(w, val)); it != constToLIDMap.end())
       return it->second;
 
     // if no lid was found return -1
@@ -199,7 +200,7 @@ private:
   size_t setConstLID(int64_t val, size_t w) {
     size_t constlid = lid;
     // Keep track of this value in a constant declaration tracker
-    constToLIDMap[{0, w}] = lid++;
+    constToLIDMap[APInt(w, val)] = lid++;
     return constlid;
   }
 
@@ -459,11 +460,9 @@ private:
 
   // Generates the transitions required to finalize the register to state
   // transition system conversion
-  void finilizeRegVisit(Operation *op) {
+  void finalizeRegVisit(Operation *op) {
     // Check the register type (done to support non-firrtl registers as well)
-    auto reg = dyn_cast<seq::FirRegOp>(op);
-    if (!reg)
-      return;
+    auto reg = cast<seq::FirRegOp>(op);
 
     // Generate the reset condition (for sync & async resets)
     // We assume for now that the reset value is always 0
@@ -486,9 +485,8 @@ private:
       size_t argIdx = barg.getArgNumber();
 
       // Check that the extracted argument is in range before using it
-      if (inputLIDs.contains(argIdx)) {
-        nextLID = inputLIDs[argIdx];
-      }
+      nextLID = inputLIDs[argIdx];
+
     } else {
       nextLID = getOpLID(next);
     }
@@ -778,10 +776,16 @@ public:
         .Case<sv::MacroDefOp, sv::MacroDeclOp, sv::VerbatimOp,
               sv::VerbatimExprOp, sv::VerbatimExprSEOp, sv::IfOp, sv::IfDefOp,
               sv::IfDefProceduralOp, sv::AlwaysOp, sv::AlwaysCombOp,
-              sv::AlwaysFFOp, seq::FromClockOp, seq::ClockDivider,
-              seq::ClockGateOp, seq::ClockMuxOp, seq::ConstClockOp,
-              seq::ToClockOp, hw::OutputOp, hw::HWModuleOp>(
+              sv::AlwaysFFOp, seq::FromClockOp, hw::OutputOp, hw::HWModuleOp>(
             [&](auto expr) { ignore(op); })
+
+        // Make sure that the design only contains one clock
+        .Case<seq::FromClockOp>([&](auto expr) {
+          if (++nclocks > 1UL) {
+            op->emitOpError("Mutli-clock designs are not supported!");
+            return signalPassFailure();
+          }
+        })
 
         // Anything else is considered unsupported and might cause a wrong
         // behavior if ignored, so an error is thrown
@@ -859,7 +863,7 @@ void ConvertHWToBTOR2Pass::runOnOperation() {
 
     // Iterate through the registers and generate the `next` instructions
     for (size_t i = 0; i < regOps.size(); ++i) {
-      finilizeRegVisit(regOps[i]);
+      finalizeRegVisit(regOps[i]);
     }
   });
   // Clear data structures to allow for pass reuse
