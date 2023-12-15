@@ -868,7 +868,11 @@ hw.module @RegMuxInlining3(in %clock: !seq.clock, in %c: i1, out out: i8) {
 
   // CHECK: [[MUX:%.+]] = comb.mux
   // CHECK: sv.always posedge %clock {
-  // CHECK:   sv.passign [[REG0]], [[MUX]]
+  // CHECK:   sv.if %c {
+  // CHECK:     sv.passign [[REG0]]
+  // CHECK:   } else {
+  // CHECK:     sv.passign [[REG0]]
+  // CHECK:   }
   // CHECK:   sv.passign [[REG1]], [[REG0_READ]]
   // CHECK:   sv.passign [[REG2]], [[REG0_READ]]
   // CHECK: }
