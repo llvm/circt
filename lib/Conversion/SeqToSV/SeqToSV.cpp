@@ -395,7 +395,7 @@ void SeqToSVPass::runOnOperation() {
   mlir::parallelForEach(&getContext(), modules, [&](HWModuleOp module) {
     SeqToSVTypeConverter typeConverter;
     FirRegLowering regLowering(typeConverter, module, disableRegRandomization,
-                               emitSeparateAlwaysBlocks);
+                               emitSeparateAlwaysBlocks, nestdIfDepthLimit);
     regLowering.lower();
     if (regLowering.needsRegRandomization())
       needsRegRandomization = true;

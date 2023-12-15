@@ -1,6 +1,7 @@
 // RUN: circt-opt %s -verify-diagnostics --lower-seq-to-sv | FileCheck %s --check-prefixes=CHECK,COMMON
 // RUN: circt-opt %s -verify-diagnostics --pass-pipeline="builtin.module(lower-seq-to-sv{disable-reg-randomization})" | FileCheck %s --check-prefix COMMON --implicit-check-not RANDOMIZE_REG
 // RUN: circt-opt %s -verify-diagnostics --pass-pipeline="builtin.module(lower-seq-to-sv{emit-separate-always-blocks})" | FileCheck %s --check-prefixes SEPARATE
+// RUN: circt-opt %s -verify-diagnostics --pass-pipeline="builtin.module(lower-seq-to-sv{nested-if-depth-limit=1})" | FileCheck %s --check-prefixes COMMON,LIMIT
 
 // COMMON-LABEL: hw.module @lowering
 // SEPARATE-LABEL: hw.module @lowering
@@ -318,7 +319,7 @@ hw.module private @InitReg1(in %clock: !seq.clock, in %reset: i1, in %io_d: i32,
   // CHECK-NEXT:          %13 = sv.read_inout %10 : !hw.inout<i32>
   // CHECK-NEXT:          sv.bpassign %reg3, %13 : i32
   // CHECK-NEXT:       }
-  // COMMON-NEXT:      sv.if %reset {
+  // COMMON:         sv.if %reset {
   // COMMON-NEXT:        sv.bpassign %reg, %c0_i32 : i32
   // COMMON-NEXT:        sv.bpassign %reg3, %c1_i32 : i32
   // COMMON-NEXT:      }
@@ -782,15 +783,15 @@ hw.module @reg_of_clock_type(in %clk: !seq.clock, in %rst: i1, in %i: !seq.clock
 //   when c :
 //     connect r1, value
 //     connect r2, buzz
-// CHECK-LABEL: @RegMuxInlining1
+// COMMON-LABEL: @RegMuxInlining1
 hw.module @RegMuxInlining1(in %clock: !seq.clock, in %reset: i1, in %a: i1, in %b: i1, in %c: i1, in %foo: i8, in %bar: i8, in %fizz: i8, in %buzz: i8, out out: i8) {
-  // CHECK: [[REG0:%.+]] = sv.reg : !hw.inout<i8>
+  // COMMON: [[REG0:%.+]] = sv.reg : !hw.inout<i8>
   %r1 = seq.firreg %3 clock %clock : i8
 
-  // CHECK: [[REG1:%.+]] = sv.reg : !hw.inout<i8>
+  // COMMON: [[REG1:%.+]] = sv.reg : !hw.inout<i8>
   %r2 = seq.firreg %4 clock %clock : i8
 
-  // CHECK: [[VALUE:%.+]] = comb.mux bin %a, %foo, %bar
+  // COMMON: [[VALUE:%.+]] = comb.mux bin %a, %foo, %bar
   %0 = comb.mux bin %a, %foo, %bar {sv.namehint = "value"} : i8
 
   // CHECK: sv.always posedge %clock {
@@ -804,6 +805,15 @@ hw.module @RegMuxInlining1(in %clock: !seq.clock, in %reset: i1, in %a: i1, in %
   // CHECK:     }
   // CHECK:   }
   // CHECK: }
+  // LIMIT: sv.always posedge %clock {
+  // LIMIT:   sv.if %c {
+  // LIMIT:     sv.passign [[REG0]], [[VALUE]]
+  // LIMIT:     sv.passign [[REG1]], %buzz
+  // LIMIT:   } else {
+  // LIMIT:     sv.passign [[REG0]]
+  // LIMIT:     sv.passign [[REG1]]
+  // LIMIT:   }
+  // LIMIT: }
   %1 = comb.mux bin %b, %fizz, %r1 : i8
   %2 = comb.mux bin %b, %0, %r2 : i8
   %3 = comb.mux bin %c, %0, %1 : i8
@@ -822,9 +832,9 @@ hw.module @RegMuxInlining1(in %clock: !seq.clock, in %reset: i1, in %a: i1, in %
 //       connect r1, y
 //   else :
 //     connect r1, z
-// CHECK-LABEL: @RegMuxInlining2
+// COMMON-LABEL: @RegMuxInlining2
 hw.module @RegMuxInlining2(in %clock: !seq.clock, in %reset: i1, in %a: i1, in %b: i1, in %c: i1, in %x: i8, in %y: i8, in %z: i8, out out: i8) {
-  // CHECK: [[REG0:%.+]] = sv.reg : !hw.inout<i8>
+  // COMMON: [[REG0:%.+]] = sv.reg : !hw.inout<i8>
   %r1 = seq.firreg %2 clock %clock : i8
 
   // CHECK: sv.always posedge %clock {
@@ -841,6 +851,12 @@ hw.module @RegMuxInlining2(in %clock: !seq.clock, in %reset: i1, in %a: i1, in %
   // CHECK:     sv.passign [[REG0]], %z
   // CHECK:   }
   // CHECK: }
+  // LIMIT:   sv.if %a {
+  // LIMIT:     sv.passign [[REG0]]
+  // LIMIT:   } else {
+  // LIMIT:     sv.passign [[REG0]], %z
+  // LIMIT:   }
+  // LIMIT: }
   %0 = comb.mux bin %c, %x, %r1 : i8
   %1 = comb.mux bin %b, %0, %y : i8
   %2 = comb.mux bin %a, %1, %z : i8

@@ -658,6 +658,11 @@ struct FirtoolCmdOptions {
       "fixup-eicg-wrapper",
       llvm::cl::desc("Lower `EICG_wrapper` modules into clock gate intrinsics"),
       llvm::cl::init(false)};
+  llvm::cl::opt<int64_t> nestedIfDepthLimit{
+      "nested-if-depth-limit",
+      llvm::cl::desc("Set a limit for nested if depth created in firreg "
+                     "lowering. Use -1 for unlimited depth"),
+      llvm::cl::init(4096)};
 };
 } // namespace
 
@@ -693,7 +698,7 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       ckgModuleName("EICG_wrapper"), ckgInputName("in"), ckgOutputName("out"),
       ckgEnableName("en"), ckgTestEnableName("test_en"), ckgInstName("ckg"),
       exportModuleHierarchy(false), stripFirDebugInfo(true),
-      stripDebugInfo(false), fixupEICGWrapper(false) {
+      stripDebugInfo(false), fixupEICGWrapper(false), nestedIfDepthLimit(4096) {
   if (!clOptions.isConstructed())
     return;
   outputFilename = clOptions->outputFilename;
@@ -741,4 +746,5 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   stripFirDebugInfo = clOptions->stripFirDebugInfo;
   stripDebugInfo = clOptions->stripDebugInfo;
   fixupEICGWrapper = clOptions->fixupEICGWrapper;
+  nestedIfDepthLimit = clOptions->nestedIfDepthLimit;
 }

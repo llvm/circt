@@ -23,10 +23,12 @@ class FirRegLowering {
 public:
   FirRegLowering(TypeConverter &typeConverter, hw::HWModuleOp module,
                  bool disableRegRandomization = false,
-                 bool emitSeparateAlwaysBlocks = false)
+                 bool emitSeparateAlwaysBlocks = false,
+                 int64_t nestedIfDepthLimit = 2048)
       : typeConverter(typeConverter), module(module),
         disableRegRandomization(disableRegRandomization),
-        emitSeparateAlwaysBlocks(emitSeparateAlwaysBlocks){};
+        emitSeparateAlwaysBlocks(emitSeparateAlwaysBlocks),
+        nestedIfDepthLimit(nestedIfDepthLimit){};
 
   void lower();
 
@@ -95,6 +97,7 @@ private:
   bool emitSeparateAlwaysBlocks;
 
   bool needsRandom = false;
+  int64_t nestedIfDepthLimit;
 };
 } // namespace circt
 
