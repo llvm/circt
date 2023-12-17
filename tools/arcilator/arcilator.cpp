@@ -102,6 +102,12 @@ static cl::opt<std::string> stateFile("state-file", cl::desc("State file"),
                                       cl::value_desc("filename"), cl::init(""),
                                       cl::cat(mainCategory));
 
+static cl::opt<std::string> headerFile(
+    "state-file",
+    cl::desc(
+        "Where to generate the C++ header file to link to the generated model"),
+    cl::value_desc("filename"), cl::init(""), cl::cat(mainCategory));
+
 static cl::opt<bool> shouldInline("inline", cl::desc("Inline arcs"),
                                   cl::init(true), cl::cat(mainCategory));
 

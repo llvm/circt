@@ -6,6 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/Arc/Transforms/PrintStateInfo.h"
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/Arc/ArcPasses.h"
 #include "mlir/Pass/Pass.h"
@@ -28,30 +29,100 @@ using namespace arc;
 using namespace hw;
 
 //===----------------------------------------------------------------------===//
+// Utilities
+//===----------------------------------------------------------------------===//
+
+LogicalResult collectStates(Value storage, unsigned offset,
+                            std::vector<StateInfo> &stateInfos) {
+  for (auto *op : storage.getUsers()) {
+    if (auto substorage = dyn_cast<AllocStorageOp>(op)) {
+      if (!substorage.getOffset().has_value()) {
+        substorage.emitOpError(
+            "without allocated offset; run state allocation first");
+        return failure();
+      }
+      if (failed(circt::arc::collectStates(substorage.getOutput(),
+                                           *substorage.getOffset() + offset,
+                                           stateInfos)))
+        return failure();
+      continue;
+    }
+    if (!isa<AllocStateOp, RootInputOp, RootOutputOp, AllocMemoryOp>(op))
+      continue;
+    auto opName = op->getAttrOfType<StringAttr>("name");
+    if (!opName || opName.getValue().empty())
+      continue;
+    auto opOffset = op->getAttrOfType<IntegerAttr>("offset");
+    if (!opOffset) {
+      op->emitOpError("without allocated offset; run state allocation first");
+      return failure();
+    }
+    if (isa<AllocStateOp, RootInputOp, RootOutputOp>(op)) {
+      auto result = op->getResult(0);
+      auto &stateInfo = stateInfos.emplace_back();
+      stateInfo.type = StateInfo::Register;
+      if (isa<RootInputOp>(op))
+        stateInfo.type = StateInfo::Input;
+      else if (isa<RootOutputOp>(op))
+        stateInfo.type = StateInfo::Output;
+      else if (auto alloc = dyn_cast<AllocStateOp>(op)) {
+        if (alloc.getTap())
+          stateInfo.type = StateInfo::Wire;
+      }
+      stateInfo.name = opName.getValue();
+      stateInfo.offset = opOffset.getValue().getZExtValue() + offset;
+      stateInfo.numBits = result.getType().cast<StateType>().getBitWidth();
+      continue;
+    }
+    if (auto memOp = dyn_cast<AllocMemoryOp>(op)) {
+      auto stride = op->getAttrOfType<IntegerAttr>("stride");
+      if (!stride) {
+        op->emitOpError("without allocated stride; run state allocation first");
+        return failure();
+      }
+      auto memType = memOp.getType();
+      auto intType = memType.getWordType();
+      auto &stateInfo = stateInfos.emplace_back();
+      stateInfo.type = StateInfo::Memory;
+      stateInfo.name = opName.getValue();
+      stateInfo.offset = opOffset.getValue().getZExtValue() + offset;
+      stateInfo.numBits = intType.getWidth();
+      stateInfo.memoryStride = stride.getValue().getZExtValue();
+      stateInfo.memoryDepth = memType.getNumWords();
+      continue;
+    }
+  }
+  return success();
+}
+
+mlir::LogicalResult collectModels(mlir::ModuleOp module,
+                                  std::vector<ModelInfo> &modelInfos) {
+  for (auto modelOp : module.getOps<ModelOp>()) {
+    auto storageArg = modelOp.getBody().getArgument(0);
+    auto storageType = storageArg.getType().cast<StorageType>();
+
+    std::vector<StateInfo> stateInfos;
+    if (failed(circt::arc::collectStates(storageArg, 0, stateInfos)))
+      return failure();
+    llvm::sort(stateInfos,
+               [](auto &a, auto &b) { return a.offset < b.offset; });
+
+    modelInfos.emplace_back(modelOp.getName(), storageType.getSize(),
+                            std::move(stateInfos));
+  }
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // Pass Implementation
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct StateInfo {
-  enum Type { Input, Output, Register, Memory, Wire } type;
-  StringAttr name;
-  unsigned offset;
-  unsigned numBits;
-  unsigned memoryStride = 0; // byte separation between memory words
-  unsigned memoryDepth = 0;  // number of words in a memory
-};
-
-struct ModelInfo {
-  size_t numStateBytes;
-  std::vector<StateInfo> states;
-};
-
 struct PrintStateInfoPass
     : public arc::impl::PrintStateInfoBase<PrintStateInfoPass> {
   void runOnOperation() override;
   LogicalResult runOnOperation(llvm::raw_ostream &outputStream);
-  LogicalResult collectStates(Value storage, unsigned offset,
-                              std::vector<StateInfo> &stateInfos);
 
   using arc::impl::PrintStateInfoBase<PrintStateInfoPass>::stateFile;
 };
@@ -82,26 +153,22 @@ void PrintStateInfoPass::runOnOperation() {
 LogicalResult
 PrintStateInfoPass::runOnOperation(llvm::raw_ostream &outputStream) {
   llvm::json::OStream json(outputStream, 2);
-  bool anyFailed = false;
-  json.array([&] {
-    std::vector<StateInfo> states;
-    for (auto modelOp : getOperation().getOps<ModelOp>()) {
-      auto storageArg = modelOp.getBody().getArgument(0);
-      auto storageType = storageArg.getType().cast<StorageType>();
-      states.clear();
-      if (failed(collectStates(storageArg, 0, states))) {
-        anyFailed = true;
-        return;
-      }
-      llvm::sort(states, [](auto &a, auto &b) { return a.offset < b.offset; });
+  
+  // Collect model info in module.
+  std::vector<ModelInfo> models;
+  if (failed(circt::arc::collectModels(getOperation(), models)))
+    return failure();
 
+  // Serialize model info to JSON.
+  json.array([&] {
+    for (ModelInfo &model : models) {
       json.object([&] {
-        json.attribute("name", modelOp.getName());
-        json.attribute("numStateBytes", storageType.getSize());
+        json.attribute("name", model.name);
+        json.attribute("numStateBytes", model.numStateBytes);
         json.attributeArray("states", [&] {
-          for (const auto &state : states) {
+          for (const auto &state : model.states) {
             json.object([&] {
-              json.attribute("name", state.name.getValue());
+              json.attribute("name", state.name);
               json.attribute("offset", state.offset);
               json.attribute("numBits", state.numBits);
               auto typeStr = [](StateInfo::Type type) {
@@ -130,69 +197,7 @@ PrintStateInfoPass::runOnOperation(llvm::raw_ostream &outputStream) {
       });
     }
   });
-  return failure(anyFailed);
-}
-
-LogicalResult
-PrintStateInfoPass::collectStates(Value storage, unsigned offset,
-                                  std::vector<StateInfo> &stateInfos) {
-  for (auto *op : storage.getUsers()) {
-    if (auto substorage = dyn_cast<AllocStorageOp>(op)) {
-      if (!substorage.getOffset().has_value()) {
-        substorage.emitOpError(
-            "without allocated offset; run state allocation first");
-        return failure();
-      }
-      if (failed(collectStates(substorage.getOutput(),
-                               *substorage.getOffset() + offset, stateInfos)))
-        return failure();
-      continue;
-    }
-    if (!isa<AllocStateOp, RootInputOp, RootOutputOp, AllocMemoryOp>(op))
-      continue;
-    auto opName = op->getAttrOfType<StringAttr>("name");
-    if (!opName || opName.getValue().empty())
-      continue;
-    auto opOffset = op->getAttrOfType<IntegerAttr>("offset");
-    if (!opOffset) {
-      op->emitOpError("without allocated offset; run state allocation first");
-      return failure();
-    }
-    if (isa<AllocStateOp, RootInputOp, RootOutputOp>(op)) {
-      auto result = op->getResult(0);
-      auto &stateInfo = stateInfos.emplace_back();
-      stateInfo.type = StateInfo::Register;
-      if (isa<RootInputOp>(op))
-        stateInfo.type = StateInfo::Input;
-      else if (isa<RootOutputOp>(op))
-        stateInfo.type = StateInfo::Output;
-      else if (auto alloc = dyn_cast<AllocStateOp>(op)) {
-        if (alloc.getTap())
-          stateInfo.type = StateInfo::Wire;
-      }
-      stateInfo.name = opName;
-      stateInfo.offset = opOffset.getValue().getZExtValue() + offset;
-      stateInfo.numBits = result.getType().cast<StateType>().getBitWidth();
-      continue;
-    }
-    if (auto memOp = dyn_cast<AllocMemoryOp>(op)) {
-      auto stride = op->getAttrOfType<IntegerAttr>("stride");
-      if (!stride) {
-        op->emitOpError("without allocated stride; run state allocation first");
-        return failure();
-      }
-      auto memType = memOp.getType();
-      auto intType = memType.getWordType();
-      auto &stateInfo = stateInfos.emplace_back();
-      stateInfo.type = StateInfo::Memory;
-      stateInfo.name = opName;
-      stateInfo.offset = opOffset.getValue().getZExtValue() + offset;
-      stateInfo.numBits = intType.getWidth();
-      stateInfo.memoryStride = stride.getValue().getZExtValue();
-      stateInfo.memoryDepth = memType.getNumWords();
-      continue;
-    }
-  }
+  
   return success();
 }
 
