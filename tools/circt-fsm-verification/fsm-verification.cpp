@@ -141,19 +141,25 @@ z3Fun getActionExpr(llvm::DenseMap<mlir::Value, expr> expr_map, Region& action, 
   int num_op = 0;
 
   for(auto &op: action.getOps()){
-    // llvm::outs()<<op<<"\n";
+    llvm::outs()<<op<<"\n";
     if (auto updateop = dyn_cast<fsm::UpdateOp>(op)){
-      // llvm::outs()<<"update "<<updateop<<"\n";
-      expr_map.find(updateop.getOperands()[0])->second = getExpr(updateop.getOperands()[1], expr_map, c);
+      llvm::outs()<<"update "<<updateop<<"\n";
+      llvm::outs()<<"operand 0 "<<updateop.getOperands()[0]<<"\n";
+      llvm::outs()<<"operand 1 "<<updateop.getOperands()[1]<<"\n";
+
+      llvm::outs()<<"expr "<<getExpr(updateop.getOperands()[1], expr_map, c).to_string()<<"\n";
+      // llvm::outs()<<expr_map.find(updateop.getOperands()[0])->first<<"\n";
       z3Fun a = [&](vector<expr> vec) -> expr {
             llvm::DenseMap<mlir::Value, expr> expr_map_tmp;
             for(auto [value, expr]: llvm::zip(vecVal, vec)){
               expr_map_tmp.insert({value, expr});
             }
+            // expr_map_tmp.find(updateop.getOperands()[0])->second = getExpr(updateop.getOperands()[1], expr_map, c);
             return getExpr(updateop.getOperands()[1], expr_map, c);
           };
+      return a;
     } else {
-      // llvm::outs()<<"AO op result "<<op <<"\n";
+      llvm::outs()<<"AO op result "<<op <<"\n";
       vector<expr> vec;
       for (auto operand: op.getOperands()){
         vec.push_back(getExpr(operand, expr_map, c));
@@ -161,7 +167,6 @@ z3Fun getActionExpr(llvm::DenseMap<mlir::Value, expr> expr_map, Region& action, 
       expr_map.insert({op.getResult(0), manage_comb_exp(op, vec, c)});
     }
   }
-  return a;
 }
 
 
