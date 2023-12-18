@@ -1,4 +1,4 @@
-// RUN: arcilator %s --verify-diagnostics --split-input-file
+// RUN: arcilator %s --verify-diagnostics --until-before=preproc --split-input-file
 
 arc.model "Foo" {
 ^bb0(%arg0: !arc.storage<42>):

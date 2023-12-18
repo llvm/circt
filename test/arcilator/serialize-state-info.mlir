@@ -1,4 +1,4 @@
-// RUN: (arcilator %s --state-file=%t > /dev/null) && cat %t | FileCheck %s
+// RUN: (arcilator %s --state-file=%t --until-before=preproc > /dev/null) && (cat %t | FileCheck %s)
 
 // CHECK-LABEL: "name": "Foo"
 // CHECK-DAG: "numStateBytes": 5724
