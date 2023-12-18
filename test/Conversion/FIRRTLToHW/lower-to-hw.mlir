@@ -1581,3 +1581,22 @@ firrtl.circuit "ZeroWidthForeignOperand" {
     dbg.variable "v2", %a : !firrtl.uint<0>
   }
 }
+
+// -----
+
+// Check correct symbol mapping from output port to wire happens.
+firrtl.circuit "PortSym" {
+  firrtl.extmodule private @Blackbox(out bar: !firrtl.uint<1>)
+  // CHECK-LABEL: module @PortSym(
+  // CHECK-SAME: out a : i1 {hw.exportPort = #hw<innerSym@out_a_m>}
+  // CHECK-SAME: out out : i5, in %c : i1)
+  firrtl.module @PortSym(out %a: !firrtl.uint<1> sym @out_a_m, in %b: !firrtl.uint<0>, out %out: !firrtl.uint<5> sym @out_sym, in %c: !firrtl.uint<1>) attributes {convention = #firrtl<convention scalarized>} {
+    // CHECK: %[[OUT:.+]] = hw.wire %{{.+}} sym @out_sym
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %c1_ui5 = firrtl.constant 1 : !firrtl.uint<5>
+    firrtl.strictconnect %out, %c1_ui5 : !firrtl.uint<5>
+    %e_a = firrtl.instance sub1 @Blackbox(out bar: !firrtl.uint<1>)
+    firrtl.strictconnect %a, %e_a : !firrtl.uint<1>
+    %0 = firrtl.eq %out, %c1_ui5 : (!firrtl.uint<5>, !firrtl.uint<5>) -> !firrtl.uint<1>
+  }
+}
