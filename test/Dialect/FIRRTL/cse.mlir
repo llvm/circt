@@ -11,11 +11,11 @@ firrtl.module @And(in %in1: !firrtl.uint<4>, in %in2: !firrtl.uint<4>,
   // CHECK: %0 = firrtl.and %in1, %in2
   %0 = firrtl.and %in1, %in2 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
   // CHECK-NEXT: firrtl.connect %out1, %0
-  firrtl.connect %out1, %0 : !firrtl.uint<4>, !firrtl.uint<4>
+  chirrtl.connect %out1, %0 : !firrtl.uint<4>, !firrtl.uint<4>
 
   // CHECK-NEXT: firrtl.connect %out2, %0
   %1 = firrtl.and %in1, %in2 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
-  firrtl.connect %out2, %1 : !firrtl.uint<4>, !firrtl.uint<4>
+  chirrtl.connect %out2, %1 : !firrtl.uint<4>, !firrtl.uint<4>
 }
 
 // CHECK-LABEL: firrtl.module @Wire

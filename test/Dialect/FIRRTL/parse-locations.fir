@@ -10,7 +10,7 @@ circuit MyModule :  @[CIRCUIT.scala 127]
     input in: UInt      @[InputPort.scala 0:0]
     output out: UInt<8> @[OutputPort.scala 0:0]
 
-    ; CHECK: firrtl.connect {{.*}}loc("Somewhere.galaxy":42:1)
+    ; CHECK: chirrtl.connect {{.*}}loc("Somewhere.galaxy":42:1)
     out <= in   @[Somewhere.galaxy 42:1]
 
     ; CHECK: firrtl.node {{.*}}loc("Somewhere.galaxy":42:2)

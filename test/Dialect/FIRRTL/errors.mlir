@@ -930,7 +930,7 @@ firrtl.circuit "MismatchedRegister" {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     // expected-error @+1 {{type mismatch between register '!firrtl.vector<uint<1>, 1>' and reset value '!firrtl.uint<1>'}}
     %r = firrtl.regreset %clock, %reset, %c0_ui1  : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.vector<uint<1>, 1>
-    firrtl.connect %z, %r : !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>
+    firrtl.strictconnect %z, %r : !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>
   }
 }
 
@@ -1895,7 +1895,7 @@ firrtl.circuit "NonPassiveCapture" {
     firrtl.layerblock @A {
       %b = firrtl.wire : !firrtl.bundle<a flip: uint<1>>
       // expected-note @below {{operand is used here}}
-      firrtl.connect %b, %a : !firrtl.bundle<a flip: uint<1>>, !firrtl.bundle<a flip: uint<1>>
+      firrtl.strictconnect %b, %a : !firrtl.bundle<a flip: uint<1>>, !firrtl.bundle<a flip: uint<1>>
     }
   }
 }

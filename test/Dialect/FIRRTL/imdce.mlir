@@ -33,19 +33,19 @@ firrtl.circuit "top" {
 
   }
 
-  // CHECK-LABEL: firrtl.module private @mem(in %source: !firrtl.uint<1>) {
-  firrtl.module private @mem(in %source: !firrtl.uint<1>) {
+  // CHECK-LABEL: firrtl.module private @mem(in %source: !firrtl.uint<4>) {
+  firrtl.module private @mem(in %source: !firrtl.uint<4>) {
     // CHECK-NEXT: %ReadMemory_read0 = firrtl.mem Undefined {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}], depth = 16 : i64, name = "ReadMemory", portNames = ["read0"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<8>>
     %mem = firrtl.mem Undefined {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}], depth = 16 : i64, name = "ReadMemory", portNames = ["read0"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<8>>
     // CHECK-NEXT: %0 = firrtl.subfield %ReadMemory_read0[addr] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<8>>
-    // CHECK-NEXT: firrtl.connect %0, %source : !firrtl.uint<4>, !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.connect %0, %source : !firrtl.uint<4>, !firrtl.uint<4>
     // CHECK-NEXT: }
     %0 = firrtl.subfield %mem[addr] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<8>>
-    firrtl.connect %0, %source : !firrtl.uint<4>, !firrtl.uint<1>
+    firrtl.strictconnect %0, %source : !firrtl.uint<4>, !firrtl.uint<4>
   }
 
   // Ports of public modules should not be modified.
-  // CHECK-LABEL: firrtl.module @top(in %source: !firrtl.uint<1>, out %dest: !firrtl.uint<1>, in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
+  // CHECK-LABEL: firrtl.module @top(in %source: !firrtl.uint<4>, out %dest: !firrtl.uint<1>, in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
   firrtl.module @top(in %source: !firrtl.uint<1>, out %dest: !firrtl.uint<1>,
                      in %clock:!firrtl.clock, in %reset:!firrtl.uint<1>) {
     // CHECK-NEXT: %tmp = firrtl.node %source
@@ -70,8 +70,8 @@ firrtl.circuit "top" {
 
     // CHECK-NEXT: %mem_source = firrtl.instance mem @mem(in source: !firrtl.uint<1>)
     // CHECK-NEXT: firrtl.strictconnect %mem_source, %source : !firrtl.uint<1>
-    %mem_source  = firrtl.instance mem @mem(in source: !firrtl.uint<1>)
-    firrtl.strictconnect %mem_source, %source : !firrtl.uint<1>
+    %mem_source  = firrtl.instance mem @mem(in source: !firrtl.uint<4>)
+    firrtl.strictconnect %mem_source, %source : !firrtl.uint<4>
     // CHECK-NEXT: }
   }
 }

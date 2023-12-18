@@ -3278,41 +3278,6 @@ LogicalResult firrtl::checkConnectConditionality(Operation *connect) {
   return success();
 }
 
-LogicalResult firrtl::ConnectOp::verify() {
-  auto dstType = getDest().getType();
-  auto srcType = getSrc().getType();
-  auto dstBaseType = type_dyn_cast<FIRRTLBaseType>(dstType);
-  auto srcBaseType = type_dyn_cast<FIRRTLBaseType>(srcType);
-  if (!dstBaseType || !srcBaseType) {
-    if (dstType != srcType)
-      return emitError("may not connect different non-base types");
-  } else {
-    // Analog types cannot be connected and must be attached.
-    if (dstBaseType.containsAnalog() || srcBaseType.containsAnalog())
-      return emitError("analog types may not be connected");
-
-    // Destination and source types must be equivalent.
-    if (!areTypesEquivalent(dstBaseType, srcBaseType))
-      return emitError("type mismatch between destination ")
-             << dstBaseType << " and source " << srcBaseType;
-
-    // Truncation is banned in a connection: destination bit width must be
-    // greater than or equal to source bit width.
-    if (!isTypeLarger(dstBaseType, srcBaseType))
-      return emitError("destination ")
-             << dstBaseType << " is not as wide as the source " << srcBaseType;
-  }
-
-  // Check that the flows make sense.
-  if (failed(checkConnectFlow(*this)))
-    return failure();
-
-  if (failed(checkConnectConditionality(*this)))
-    return failure();
-
-  return success();
-}
-
 LogicalResult StrictConnectOp::verify() {
   if (auto type = type_dyn_cast<FIRRTLType>(getDest().getType())) {
     auto baseType = type_cast<FIRRTLBaseType>(type);

@@ -7,7 +7,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input in: UInt
     output out: UInt<8>
 
-    ; CHECK: firrtl.connect %out, %in : !firrtl.uint<8>, !firrtl.uint
+    ; CHECK: chirrtl.connect %out, %in : !firrtl.uint<8>, !firrtl.uint
     out <= in
 
   ; CHECK: }

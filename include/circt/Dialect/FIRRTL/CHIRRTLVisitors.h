@@ -29,7 +29,7 @@ public:
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<CombMemOp, MemoryPortOp, MemoryDebugPortOp,
-                       MemoryPortAccessOp, SeqMemOp>(
+                       MemoryPortAccessOp, SeqMemOp, ConnectOp>(
             [&](auto opNode) -> ResultType {
               return thisCast->visitCHIRRTL(opNode, args...);
             })
@@ -61,6 +61,7 @@ public:
   HANDLE(MemoryDebugPortOp);
   HANDLE(MemoryPortAccessOp);
   HANDLE(SeqMemOp);
+  HANDLE(ConnectOp);
 #undef HANDLE
 };
 

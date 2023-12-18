@@ -45,7 +45,7 @@ firrtl.module @ConstSubfield(in %a: !firrtl.const.bundle<a: uint<1>, b: sint<2>>
   // CHECK-NEXT: [[VAL:%.+]] = firrtl.subfield %a[a] : !firrtl.const.bundle<a: uint<1>, b: sint<2>>
   // CHECK-NEXT: firrtl.connect %b, [[VAL]] : !firrtl.const.uint<1>, !firrtl.const.uint<1>
   %0 = firrtl.subfield %a[a] : !firrtl.const.bundle<a: uint<1>, b: sint<2>>
-  firrtl.connect %b, %0 : !firrtl.const.uint<1>, !firrtl.const.uint<1>
+  chirrtl.connect %b, %0 : !firrtl.const.uint<1>, !firrtl.const.uint<1>
 }
 
 // Subfield of a mixed const bundle should always the same constness as the field type

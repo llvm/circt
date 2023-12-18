@@ -13,7 +13,7 @@ firrtl.module @ConstantPropagationSingleModule() {}
 firrtl.module @Top01(in %x: !firrtl.uint<5>, out %y: !firrtl.uint<1>) {
   %c0_ui = firrtl.constant 0 : !firrtl.uint
   %0 = firrtl.geq %x, %c0_ui : (!firrtl.uint<5>, !firrtl.uint) -> !firrtl.uint<1>
-  firrtl.connect %y, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+  chirrtl.connect %y, %0 : !firrtl.uint<1>, !firrtl.uint<1>
 }
 // CHECK-LABEL: firrtl.module @Top01
 // CHECK-NEXT: %[[K:.+]] = firrtl.constant 1

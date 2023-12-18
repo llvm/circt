@@ -8,7 +8,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input in: UInt
     output out: UInt<8>
 
-    ; CHECK: firrtl.connect %out, %in : !firrtl.uint<8>, !firrtl.uint
+    ; CHECK: chirrtl.connect %out, %in : !firrtl.uint<8>, !firrtl.uint
     out <= in
 
   ; CHECK: }
@@ -142,7 +142,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK-NEXT: firrtl.strictconnect %auto, [[INV]] : !firrtl.uint<1>
     auto is invalid
 
-    ; CHECK-NOT: firrtl.connect %reset
+    ; CHECK-NOT: chirrtl.connect %reset
     ; CHECK-NOT: firrtl.strictconnect %reset
     reset is invalid
 
@@ -464,7 +464,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   module expr_stmt_ambiguity :
     ; CHECK: %reg = firrtl.wire interesting_name : !firrtl.uint
     wire reg : UInt
-    ; CHECK: firrtl.connect %reg,
+    ; CHECK: chirrtl.connect %reg,
     reg <= UInt(42)
 
     ; CHECK: %write = firrtl.wire
@@ -477,7 +477,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   module expr_stmt_ambiguity2 :
     ; CHECK: firrtl.instance write interesting_name @circuit
     inst write of circuit
-    ; CHECK: firrtl.connect %write_in
+    ; CHECK: chirrtl.connect %write_in
     write.in <= UInt(1)
 
   ; CHECK-LABEL: firrtl.module private @oversize_shift(
@@ -718,13 +718,13 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   ; CHECK-LABEL: firrtl.module private @CheckInvalids
   module CheckInvalids_in0 :
     input in0 : UInt<1>
-    ; CHECK-NOT: firrtl.connect %in0
+    ; CHECK-NOT: chirrtl.connect %in0
     ; CHECK-NOT: firrtl.strictconnect %in0
     in0 is invalid
 
   module CheckInvalids_in1 :
     input in1 : { a : UInt<1>, b : UInt<1> }
-    ; CHECK-NOT: firrtl.connect %in1
+    ; CHECK-NOT: chirrtl.connect %in1
     ; CHECK-NOT: firrtl.strictconnect %in1
     in1 is invalid
 
@@ -1565,11 +1565,11 @@ circuit RadixEncodedIntegerLiterals:
 
     ; CHECK:      %[[c42_ui7:[-a-zA-Z_0-9]+]] = firrtl.constant 42
     ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c42_ui7]]
-    ; CHECK-NEXT: firrtl.connect %bu, %[[c_constCast]]
+    ; CHECK-NEXT: chirrtl.connect %bu, %[[c_constCast]]
     bu <= UInt(0b101010)
 
     ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c42_ui7]]
-    ; CHECK-NEXT: firrtl.connect %ou, %[[c_constCast]]
+    ; CHECK-NEXT: chirrtl.connect %ou, %[[c_constCast]]
     ou <= UInt(0o052)
 
     ; Note: this creates a second constant because the width of a parsed
@@ -1577,24 +1577,24 @@ circuit RadixEncodedIntegerLiterals:
     ;
     ; CHECK:      %[[c42_ui8:[-a-zA-Z_0-9]+]] = firrtl.constant 42
     ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c42_ui8]]
-    ; CHECK-NEXT: firrtl.connect %du0, %[[c_constCast]]
+    ; CHECK-NEXT: chirrtl.connect %du0, %[[c_constCast]]
     du0 <= UInt(42)
 
     ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c42_ui8]]
-    ; CHECK-NEXT: firrtl.connect %du1, %[[c_constCast]]
+    ; CHECK-NEXT: chirrtl.connect %du1, %[[c_constCast]]
     du1 <= UInt(0d42)
 
     ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c42_ui7]]
-    ; CHECK-NEXT: firrtl.connect %hu, %[[c_constCast]]
+    ; CHECK-NEXT: chirrtl.connect %hu, %[[c_constCast]]
     hu <= UInt(0h2a)
 
     ; CHECK:      %[[cn42_si7:[-a-zA-Z_0-9]+]] = firrtl.constant -42
     ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[cn42_si7]]
-    ; CHECK-NEXT: firrtl.connect %bs, %[[c_constCast]]
+    ; CHECK-NEXT: chirrtl.connect %bs, %[[c_constCast]]
     bs <= SInt(-0b101010)
 
     ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[cn42_si7]]
-    ; CHECK-NEXT: firrtl.connect %os, %[[c_constCast]]
+    ; CHECK-NEXT: chirrtl.connect %os, %[[c_constCast]]
     os <= SInt(-0o52)
 
     ; Note: this creates a second constant because the width of a parsed
@@ -1602,15 +1602,15 @@ circuit RadixEncodedIntegerLiterals:
     ;
     ; CHECK:      %[[cn42_si8:[-a-zA-Z_0-9]+]] = firrtl.constant -42
     ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[cn42_si8]]
-    ; CHECK-NEXT: firrtl.connect %dus0, %[[c_constCast]]
+    ; CHECK-NEXT: chirrtl.connect %dus0, %[[c_constCast]]
     dus0 <= SInt(-42)
 
     ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[cn42_si8]]
-    ; CHECK-NEXT: firrtl.connect %dus1, %[[c_constCast]]
+    ; CHECK-NEXT: chirrtl.connect %dus1, %[[c_constCast]]
     dus1 <= SInt(-0d42)
 
     ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[cn42_si7]]
-    ; CHECK-NEXT: firrtl.connect %hs, %[[c_constCast]]
+    ; CHECK-NEXT: chirrtl.connect %hs, %[[c_constCast]]
     hs <= SInt(-0h2a)
 
 ;// -----

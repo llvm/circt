@@ -149,19 +149,6 @@ def NotNot : Pat <
   (MoveNameHint $old, (AsUIntPrimOp $x)),
   []>;
 
-// connect(a:t,b:t) -> strictconnect(a,b)
-def ConnectSameType : Pat<
-  (ConnectOp $dst, $src),
-  (StrictConnectOp $dst, $src),
-  [(EqualTypes $dst, $src), (KnownWidth $dst)]>;
-
-// connect(a:t1,b:(t2<t1) -> strictconnect(a,(pad b))
-def ConnectExtension : Pat<
-  (ConnectOp $dst, $src),
-  (StrictConnectOp $dst, (PadPrimOp $src,
-    (NativeCodeCall<"type_cast<FIRRTLBaseType>($0.getType()).getBitWidthOrSentinel()"> $dst))),
-  [(IntType $dst), (IntType $src), (KnownWidth $dst), (KnownWidth $src), (mismatchTypes $src, $dst)]>;
-
 def LimitConstant32 : NativeCodeCall<
   "$_builder.getI32IntegerAttr($0.getValue().getLimitedValue(1ULL << 31))">;
 

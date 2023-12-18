@@ -43,7 +43,7 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
         src = builder.create<RefCastOp>(dstFType, src);
       builder.create<RefDefineOp>(dst, src);
     } else // Other types, give up and leave a connect
-      builder.create<ConnectOp>(dst, src);
+      builder.create<chirrtl::ConnectOp>(dst, src);
     return;
   }
 
@@ -67,7 +67,7 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
     // connect and let the verifier catch it.
     auto srcBundle = type_dyn_cast<BundleType>(srcType);
     if (!srcBundle || numElements != srcBundle.getNumElements()) {
-      builder.create<ConnectOp>(dst, src);
+      builder.create<chirrtl::ConnectOp>(dst, src);
       return;
     }
     for (size_t i = 0; i < numElements; ++i) {
@@ -87,7 +87,7 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
     // connect and let the verifier catch it.
     auto srcVector = type_dyn_cast<FVectorType>(srcType);
     if (!srcVector || numElements != srcVector.getNumElements()) {
-      builder.create<ConnectOp>(dst, src);
+      builder.create<chirrtl::ConnectOp>(dst, src);
       return;
     }
     for (size_t i = 0; i < numElements; ++i) {
@@ -119,7 +119,7 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
       src = builder.create<ConstCastOp>(dstType.getWidthlessType(), src);
     }
 
-    builder.create<ConnectOp>(dst, src);
+    builder.create<chirrtl::ConnectOp>(dst, src);
     return;
   }
 
@@ -154,7 +154,7 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
       !dstType.hasUninferredWidth()) {
     builder.create<StrictConnectOp>(dst, src);
   } else
-    builder.create<ConnectOp>(dst, src);
+    builder.create<chirrtl::ConnectOp>(dst, src);
 }
 
 IntegerAttr circt::firrtl::getIntAttr(Type type, const APInt &value) {

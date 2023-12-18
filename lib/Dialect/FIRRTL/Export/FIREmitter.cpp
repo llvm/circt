@@ -70,7 +70,7 @@ struct Emitter {
   void emitStatement(StopOp op);
   void emitStatement(SkipOp op);
   void emitStatement(PrintFOp op);
-  void emitStatement(firrtl::ConnectOp op);
+  void emitStatement(ConnectOp op);
   void emitStatement(StrictConnectOp op);
   void emitStatement(PropAssignOp op);
   void emitStatement(InstanceOp op);
@@ -545,7 +545,7 @@ void Emitter::emitStatementsInBlock(Block &block) {
       continue;
     TypeSwitch<Operation *>(&bodyOp)
         .Case<WhenOp, WireOp, RegOp, RegResetOp, NodeOp, StopOp, SkipOp,
-              PrintFOp, AssertOp, AssumeOp, CoverOp, firrtl::ConnectOp,
+              PrintFOp, AssertOp, AssumeOp, CoverOp, ConnectOp,
               StrictConnectOp, PropAssignOp, InstanceOp, AttachOp, MemOp,
               InvalidValueOp, SeqMemOp, CombMemOp, MemoryPortOp,
               MemoryDebugPortOp, MemoryPortAccessOp, RefDefineOp, RefForceOp,
@@ -721,7 +721,7 @@ void Emitter::emitVerifStatement(T op, StringRef mnemonic) {
   emitLocationAndNewLine(op);
 }
 
-void Emitter::emitStatement(firrtl::ConnectOp op) {
+void Emitter::emitStatement(ConnectOp op) {
   startStatement();
   if (FIRVersion(3, 0, 0) <= version) {
     ps.scopedBox(PP::ibox2, [&]() {
@@ -995,7 +995,7 @@ void Emitter::emitStatement(InvalidValueOp op) {
   // a connect.
   if (llvm::all_of(op->getUses(), [&](OpOperand &use) {
         return use.getOperandNumber() == 1 &&
-               isa<firrtl::ConnectOp, StrictConnectOp>(use.getOwner());
+               isa<ConnectOp, StrictConnectOp>(use.getOwner());
       }))
     return;
 

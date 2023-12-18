@@ -41,7 +41,7 @@ firrtl.module @Constants() {
 //  out <= in
 firrtl.module @MyModule(in %in : !firrtl.uint<8>,
                         out %out : !firrtl.uint<8>) {
-  firrtl.connect %out, %in : !firrtl.uint<8>, !firrtl.uint<8>
+  chirrtl.connect %out, %in : !firrtl.uint<8>, !firrtl.uint<8>
 }
 
 // CHECK-LABEL: firrtl.module @MyModule(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>)

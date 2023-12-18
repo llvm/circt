@@ -422,7 +422,7 @@ static void lowerModuleBody(FModuleOp mod,
     // Zero Width ports may have dangling connects since they are not preserved
     // and do not have bounce wires.
     for (auto *use : inst->getUsers()) {
-      assert(isa<StrictConnectOp>(use) || isa<ConnectOp>(use));
+      assert(isa<StrictConnectOp>(use) || isa<chirrtl::ConnectOp>(use));
       use->erase();
     }
     inst.erase();

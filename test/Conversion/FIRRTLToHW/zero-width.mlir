@@ -11,7 +11,7 @@ firrtl.circuit "Arithmetic" {
 
     // CHECK-DAG: [[MULZERO:%.+]] = hw.constant 0 : i3
     %0 = firrtl.mul %uin0c, %uin3c : (!firrtl.uint<0>, !firrtl.uint<3>) -> !firrtl.uint<3>
-    firrtl.connect %out0, %0 : !firrtl.uint<3>, !firrtl.uint<3>
+    chirrtl.connect %out0, %0 : !firrtl.uint<3>, !firrtl.uint<3>
 
     // Lowers to nothing.
     %m0 = firrtl.mul %uin0c, %uin0c : (!firrtl.uint<0>, !firrtl.uint<0>) -> !firrtl.uint<0>

@@ -400,7 +400,6 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
   bool visitExpr(RefSendOp op);
   bool visitExpr(RefResolveOp op);
   bool visitExpr(RefCastOp op);
-  bool visitStmt(ConnectOp op);
   bool visitStmt(StrictConnectOp op);
   bool visitStmt(RefDefineOp op);
   bool visitStmt(WhenOp op);
@@ -884,29 +883,6 @@ void TypeLoweringVisitor::lowerSAWritePath(Operation *op,
       emitConnect(*builder, leaf, op->getOperand(1));
     });
   }
-}
-
-// Expand connects of aggregates
-bool TypeLoweringVisitor::visitStmt(ConnectOp op) {
-  if (processSAPath(op))
-    return true;
-
-  // Attempt to get the bundle types.
-  SmallVector<FlatBundleFieldEntry> fields;
-
-  // We have to expand connections even if the aggregate preservation is true.
-  if (!peelType(op.getDest().getType(), fields, PreserveAggregate::None))
-    return false;
-
-  // Loop over the leaf aggregates.
-  for (const auto &field : llvm::enumerate(fields)) {
-    Value src = getSubWhatever(op.getSrc(), field.index());
-    Value dest = getSubWhatever(op.getDest(), field.index());
-    if (field.value().isOutput)
-      std::swap(src, dest);
-    emitConnect(*builder, dest, src);
-  }
-  return true;
 }
 
 // Expand connects of aggregates
