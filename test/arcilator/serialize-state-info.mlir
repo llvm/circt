@@ -1,5 +1,4 @@
-// RUN: circt-opt %s --arc-print-state-info=state-file=%t
-// RUN: cat %t | FileCheck %s
+// RUN: (arcilator %s --state-file=%t > /dev/null) && cat %t | FileCheck %s
 
 // CHECK-LABEL: "name": "Foo"
 // CHECK-DAG: "numStateBytes": 5724

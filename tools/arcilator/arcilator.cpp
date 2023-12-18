@@ -32,6 +32,7 @@
 #include "mlir/Dialect/LLVMIR/Transforms/Passes.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/AsmState.h"
+#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/OperationSupport.h"
 #include "mlir/Parser/Parser.h"
@@ -39,6 +40,7 @@
 #include "mlir/Pass/PassInstrumentation.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Support/FileUtilities.h"
+#include "mlir/Support/LogicalResult.h"
 #include "mlir/Support/Timing.h"
 #include "mlir/Support/ToolUtilities.h"
 #include "mlir/Target/LLVMIR/Dialect/All.h"
@@ -50,9 +52,11 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/InitLLVM.h"
+#include "llvm/Support/JSON.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/ToolOutputFile.h"
+#include "llvm/Support/raw_ostream.h"
 
 #include <iostream>
 #include <optional>
@@ -60,6 +64,7 @@
 using namespace llvm;
 using namespace mlir;
 using namespace circt;
+using namespace arc;
 
 //===----------------------------------------------------------------------===//
 // Command Line Arguments
@@ -101,12 +106,6 @@ static cl::opt<bool>
 static cl::opt<std::string> stateFile("state-file", cl::desc("State file"),
                                       cl::value_desc("filename"), cl::init(""),
                                       cl::cat(mainCategory));
-
-static cl::opt<std::string> headerFile(
-    "state-file",
-    cl::desc(
-        "Where to generate the C++ header file to link to the generated model"),
-    cl::value_desc("filename"), cl::init(""), cl::cat(mainCategory));
 
 static cl::opt<bool> shouldInline("inline", cl::desc("Inline arcs"),
                                   cl::init(true), cl::cat(mainCategory));
@@ -193,12 +192,166 @@ static cl::opt<OutputFormat> outputFormat(
     cl::init(OutputLLVM), cl::cat(mainCategory));
 
 //===----------------------------------------------------------------------===//
+// ModelInfo collection
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+/// Gathers information about a given Arc state.
+struct StateInfo {
+  enum Type { Input, Output, Register, Memory, Wire } type;
+  std::string name;
+  unsigned offset;
+  unsigned numBits;
+  unsigned memoryStride = 0; // byte separation between memory words
+  unsigned memoryDepth = 0;  // number of words in a memory
+};
+
+/// Gathers information about a given Arc model.
+struct ModelInfo {
+  std::string name;
+  size_t numStateBytes;
+  std::vector<StateInfo> states;
+
+  ModelInfo(std::string name, size_t numStateBytes,
+            std::vector<StateInfo> states)
+      : name(std::move(name)), numStateBytes(numStateBytes),
+        states(std::move(states)) {}
+};
+
+} // namespace
+
+/// Collects information about states within the provided Arc `storage`,
+/// assuming default `offset`, and adds it to `stateInfos`.
+static LogicalResult collectStates(mlir::Value storage, unsigned offset,
+                                   std::vector<StateInfo> &stateInfos) {
+  for (auto *op : storage.getUsers()) {
+    if (auto substorage = dyn_cast<AllocStorageOp>(op)) {
+      if (!substorage.getOffset().has_value())
+        return substorage.emitOpError(
+            "without allocated offset; run state allocation first");
+      if (failed(collectStates(substorage.getOutput(),
+                               *substorage.getOffset() + offset, stateInfos)))
+        return failure();
+      continue;
+    }
+    if (!isa<AllocStateOp, RootInputOp, RootOutputOp, AllocMemoryOp>(op))
+      continue;
+    auto opName = op->getAttrOfType<StringAttr>("name");
+    if (!opName || opName.getValue().empty())
+      continue;
+    auto opOffset = op->getAttrOfType<IntegerAttr>("offset");
+    if (!opOffset)
+      return op->emitOpError(
+          "without allocated offset; run state allocation first");
+    if (isa<AllocStateOp, RootInputOp, RootOutputOp>(op)) {
+      auto result = op->getResult(0);
+      auto &stateInfo = stateInfos.emplace_back();
+      stateInfo.type = StateInfo::Register;
+      if (isa<RootInputOp>(op))
+        stateInfo.type = StateInfo::Input;
+      else if (isa<RootOutputOp>(op))
+        stateInfo.type = StateInfo::Output;
+      else if (auto alloc = dyn_cast<AllocStateOp>(op)) {
+        if (alloc.getTap())
+          stateInfo.type = StateInfo::Wire;
+      }
+      stateInfo.name = opName.getValue();
+      stateInfo.offset = opOffset.getValue().getZExtValue() + offset;
+      stateInfo.numBits = result.getType().cast<StateType>().getBitWidth();
+      continue;
+    }
+    if (auto memOp = dyn_cast<AllocMemoryOp>(op)) {
+      auto stride = op->getAttrOfType<IntegerAttr>("stride");
+      if (!stride)
+        return op->emitOpError(
+            "without allocated stride; run state allocation first");
+      auto memType = memOp.getType();
+      auto intType = memType.getWordType();
+      auto &stateInfo = stateInfos.emplace_back();
+      stateInfo.type = StateInfo::Memory;
+      stateInfo.name = opName.getValue();
+      stateInfo.offset = opOffset.getValue().getZExtValue() + offset;
+      stateInfo.numBits = intType.getWidth();
+      stateInfo.memoryStride = stride.getValue().getZExtValue();
+      stateInfo.memoryDepth = memType.getNumWords();
+      continue;
+    }
+  }
+  return success();
+}
+
+/// Collects information about all Arc models in the provided `module`,
+/// and adds it to `modelInfos`.
+static mlir::LogicalResult collectModels(mlir::ModuleOp module,
+                                         std::vector<ModelInfo> &modelInfos) {
+  for (auto modelOp : module.getOps<ModelOp>()) {
+    auto storageArg = modelOp.getBody().getArgument(0);
+    auto storageType = storageArg.getType().cast<StorageType>();
+
+    std::vector<StateInfo> stateInfos;
+    if (failed(collectStates(storageArg, 0, stateInfos)))
+      return failure();
+    llvm::sort(stateInfos,
+               [](auto &a, auto &b) { return a.offset < b.offset; });
+
+    modelInfos.emplace_back(std::string(modelOp.getName()),
+                            storageType.getSize(), std::move(stateInfos));
+  }
+
+  return success();
+}
+
+static void serializeModelInfosToJson(llvm::raw_ostream &outputStream,
+                                      std::vector<ModelInfo> &modelInfos) {
+  llvm::json::OStream json(outputStream, 2);
+
+  json.array([&] {
+    for (ModelInfo &model : modelInfos) {
+      json.object([&] {
+        json.attribute("name", model.name);
+        json.attribute("numStateBytes", model.numStateBytes);
+        json.attributeArray("states", [&] {
+          for (const auto &state : model.states) {
+            json.object([&] {
+              json.attribute("name", state.name);
+              json.attribute("offset", state.offset);
+              json.attribute("numBits", state.numBits);
+              auto typeStr = [](StateInfo::Type type) {
+                switch (type) {
+                case StateInfo::Input:
+                  return "input";
+                case StateInfo::Output:
+                  return "output";
+                case StateInfo::Register:
+                  return "register";
+                case StateInfo::Memory:
+                  return "memory";
+                case StateInfo::Wire:
+                  return "wire";
+                }
+                return "";
+              };
+              json.attribute("type", typeStr(state.type));
+              if (state.type == StateInfo::Memory) {
+                json.attribute("stride", state.memoryStride);
+                json.attribute("depth", state.memoryDepth);
+              }
+            });
+          }
+        });
+      });
+    }
+  });
+}
+
+//===----------------------------------------------------------------------===//
 // Main Tool Logic
 //===----------------------------------------------------------------------===//
 
 /// Populate a pass manager with the arc simulator pipeline for the given
-/// command line options.
-static void populatePipeline(PassManager &pm) {
+/// command line options. This pipeline lowers modules to the Arc dialect.
+static void populateHwModuleToArcPipeline(PassManager &pm) {
   auto untilReached = [](Until until) {
     return until >= runUntilBefore || until > runUntilAfter;
   };
@@ -307,12 +460,18 @@ static void populatePipeline(PassManager &pm) {
     return;
   pm.addPass(arc::createLowerArcsToFuncsPass());
   pm.nest<arc::ModelOp>().addPass(arc::createAllocateStatePass());
-  if (!stateFile.empty())
-    pm.addPass(arc::createPrintStateInfoPass(stateFile));
   pm.addPass(arc::createLowerClocksToFuncsPass()); // no CSE between state alloc
                                                    // and clock func lowering
   pm.addPass(createCSEPass());
   pm.addPass(arc::createArcCanonicalizerPass());
+}
+
+/// Populate a pass manager with the Arc to LLVM pipeline for the given
+/// command line options. This pipeline lowers modules to LLVM IR.
+static void populateArcToLLVMPipeline(PassManager &pm) {
+  auto untilReached = [](Until until) {
+    return until >= runUntilBefore || until > runUntilAfter;
+  };
 
   // Lower the arcs and update functions to LLVM.
   if (untilReached(UntilLLVMLowering))
@@ -334,17 +493,47 @@ static LogicalResult processBuffer(
   if (!module)
     return failure();
 
-  PassManager pm(&context);
-  pm.enableVerifier(verifyPasses);
-  pm.enableTiming(ts);
-  if (failed(applyPassManagerCLOptions(pm)))
+  // Lower HwModule to Arc model.
+  PassManager pmArc(&context);
+  pmArc.enableVerifier(verifyPasses);
+  pmArc.enableTiming(ts);
+  if (failed(applyPassManagerCLOptions(pmArc)))
     return failure();
-  populatePipeline(pm);
+  populateHwModuleToArcPipeline(pmArc);
+
+  if (failed(pmArc.run(module.get())))
+    return failure();
+
+  // Collect generated model info.
+  std::vector<ModelInfo> modelInfos;
+  if (failed(collectModels(module.get(), modelInfos)))
+    return failure();
+
+  // Output state info as JSON if requested.
+  if (!stateFile.empty()) {
+    std::error_code ec;
+    llvm::ToolOutputFile outputFile(stateFile, ec,
+                                    llvm::sys::fs::OpenFlags::OF_None);
+    if (ec) {
+      llvm::errs() << "unable to open state file: " << ec.message();
+      return failure();
+    }
+    serializeModelInfosToJson(outputFile.os(), modelInfos);
+    outputFile.keep();
+  }
+
+  // Lower Arc model to LLVM IR.
+  PassManager pmLlvm(&context);
+  pmLlvm.enableVerifier(verifyPasses);
+  pmLlvm.enableTiming(ts);
+  if (failed(applyPassManagerCLOptions(pmLlvm)))
+    return failure();
+  populateArcToLLVMPipeline(pmLlvm);
 
   if (printDebugInfo && outputFormat == OutputLLVM)
     pm.addPass(LLVM::createDIScopeForLLVMFuncOpPass());
 
-  if (failed(pm.run(module.get())))
+  if (failed(pmLlvm.run(module.get())))
     return failure();
 
   // Handle MLIR output.
