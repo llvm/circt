@@ -829,7 +829,7 @@ void Emitter::emitStatement(InstanceChoiceOp op) {
      << PPExtString(legalize(op.getOptionNameAttr())) << " :";
   emitLocation(op);
   ps.scopedBox(PP::bbox2, [&] {
-    for (const auto [optSym, targetSym] : op.getTargetChoices()) {
+    for (const auto& [optSym, targetSym] : op.getTargetChoices()) {
       ps << PP::newline;
       ps << PPExtString(legalize(optSym.getLeafReference()));
       ps << " => ";
