@@ -36,8 +36,8 @@ int main() {
 
   context c; 
 
-  func_decl IA = c.function("IA", c.bv_sort(32),  c.bool_sort());
-  func_decl IB = c.function("IB", c.bv_sort(32), c.bool_sort());
+  func_decl IA = c.function("IA", c.bv_sort(32), c.bv_sort(32), c.bool_sort());
+  func_decl IB = c.function("IB", c.bv_sort(32), c.bv_sort(32), c.bool_sort());
 
   solver s(c);
 
@@ -51,7 +51,7 @@ int main() {
 
   s.add(forall(go, x, implies(IA(x), IB(AToB(c, x, go)))));
   s.add(forall(go, x, implies((IB(x) && trans_BA(c, x, go)), IA(BToA(c, x, go)))));
-  s.add(forall(go, x, implies((IB(x) && trans_BB(c, x, go)), IB(BToB(c,  x, go)))));
+  s.add(forall(go, x, implies((IB(x) && trans_BB(c, x, go)), IB(BToB(c, x, go)))));
   s.add(forall(go, x, implies((IA(x) && x != 0), 0)));
 
   std::cout<<s.check()<<std::endl;

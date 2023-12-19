@@ -130,13 +130,13 @@ expr getGuardExpr(llvm::DenseMap<mlir::Value, expr> expr_map, Region& guard, z3:
 }
 
 
-z3Fun getActionExpr(llvm::DenseMap<mlir::Value, expr> expr_map, Region& action, context& c, vector<mlir::Value> &vecVal){
+expr getActionExpr(llvm::DenseMap<mlir::Value, expr> expr_map, Region& action, context& c){
   llvm::outs()<<"------------------------ ACTION expr_map ------------------------"<<"\n";
   for (auto m: expr_map){
     llvm::outs()<<m.first<<"\n";
     llvm::outs()<<m.second.to_string()<<"\n";
   }
-  z3Fun a;
+  // z3Fun a;
 
   int num_op = 0;
 
@@ -149,15 +149,16 @@ z3Fun getActionExpr(llvm::DenseMap<mlir::Value, expr> expr_map, Region& action, 
 
       llvm::outs()<<"expr "<<getExpr(updateop.getOperands()[1], expr_map, c).to_string()<<"\n";
       // llvm::outs()<<expr_map.find(updateop.getOperands()[0])->first<<"\n";
-      z3Fun a = [&](vector<expr> vec) -> expr {
-            llvm::DenseMap<mlir::Value, expr> expr_map_tmp;
-            for(auto [value, expr]: llvm::zip(vecVal, vec)){
-              expr_map_tmp.insert({value, expr});
-            }
-            // expr_map_tmp.find(updateop.getOperands()[0])->second = getExpr(updateop.getOperands()[1], expr_map, c);
-            return getExpr(updateop.getOperands()[1], expr_map, c);
-          };
-      return a;
+      // z3Fun a = [&](vector<expr> vec) -> expr {
+      //       llvm::DenseMap<mlir::Value, expr> expr_map_tmp;
+      //       for(auto [value, expr]: llvm::zip(vecVal, vec)){
+      //         expr_map_tmp.insert({value, expr});
+      //       }
+      //       // expr_map_tmp.find(updateop.getOperands()[0])->second = getExpr(updateop.getOperands()[1], expr_map, c);
+      //       return getExpr(updateop.getOperands()[1], expr_map, c);
+      //     };
+      return getExpr(updateop.getOperands()[1], expr_map, c);
+      // return a;
     } else {
       llvm::outs()<<"AO op result "<<op <<"\n";
       vector<expr> vec;
@@ -251,7 +252,7 @@ void recOpsMgmt(Operation &mod, context &c, vector<expr> &arguments, llvm::Dense
                     return getGuardExpr(expr_map_tmp, r, c);
                   };
 
-                  auto x = c.int_const(("x"+to_string(num_op)).c_str());
+                  // auto x = c.int_const(("x"+to_string(num_op)).c_str());
 
                   t.guard = g;
 
@@ -260,10 +261,23 @@ void recOpsMgmt(Operation &mod, context &c, vector<expr> &arguments, llvm::Dense
                   t.guard_reg = trRegions[0];
                 }
 
+
+
                 if(!trRegions[1]->empty()){
                   Region &r = *trRegions[1];
+
+                  z3Fun a = [&](vector<expr> vec) -> expr {
+                        llvm::DenseMap<mlir::Value, expr> expr_map_tmp;
+                        for(auto [value, expr]: llvm::zip(vecVal, vec)){
+                          expr_map_tmp.insert({value, expr});
+                        }
+                        // expr_map_tmp.find(updateop.getOperands()[0])->second = getExpr(updateop.getOperands()[1], expr_map, c);
+                        return getActionExpr(expr_map_tmp, r, c);
+                      };
+
                   t.isAction = true;
-                  t.action = getActionExpr(expr_map, r, c, vecVal);
+                  t.action = a;
+                  llvm::outs()<<"AAAaction "<<t.action({c.int_const("int"), c.bool_const("const")}).to_string()<<"\n";
                 }
 
                 transitions.push_back(t);
@@ -374,8 +388,8 @@ void populateSolver(Operation &mod){
     llvm::outs()<<"from "<<row<<"\n";
     llvm::outs()<<"to "<<col<<"\n";
     if(t.isGuard && t.isAction){
-      llvm::outs()<<"guard "<< t.guard(solver_vars).to_string() <<"\n";
-      s.add(forall(solver_vars[0], solver_vars[1], implies((stateInvariants.at(t.from)(solver_vars[0], solver_vars[1]) && t.guard(solver_vars)), stateInvariants.at(t.to)(t.action(solver_vars)))));
+      llvm::outs()<<"action "<< t.action(solver_vars).to_string() <<"\n";
+      // s.add(forall(solver_vars[0], solver_vars[1], implies((stateInvariants.at(t.from)(solver_vars[0], solver_vars[1]) && t.guard(solver_vars)), stateInvariants.at(t.to)(t.action(solver_vars)))));
     // } 
     // else if (t.guards.size()>0){
       // llvm::outs()<<"guard "<< t.guards[0](solver_vars).to_string() <<"\n";
