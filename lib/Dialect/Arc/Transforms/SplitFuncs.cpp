@@ -65,7 +65,6 @@ void SplitFuncsPass::runOnOperation() {
   for (auto op : getOperation().getOps<FuncOp>())
     if (failed(lowerFunc(op, funcBuilder)))
       return signalPassFailure();
-  getOperation().dump();
 }
 
 LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp, OpBuilder funcBuilder) {
@@ -127,7 +126,7 @@ LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp, OpBuilder funcBuilder) {
     liveOut = liveness.getLiveOut(currentBlock);
     std::vector<Type> outTypes;
     std::vector<Value> outValues;
-    llvm::for_each(liveOut, [&outTypes, &outValues, &argMap](auto el) {
+    llvm::for_each(liveOut, [&outTypes, &outValues](auto el) {
       // auto argLookup = argMap.find(el);
       // if (argLookup != argMap.end() && false) {
       //   outValues.push_back(argLookup->second);
@@ -144,6 +143,7 @@ LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp, OpBuilder funcBuilder) {
     auto newFunc = funcBuilder.create<FuncOp>(
         funcOp->getLoc(), funcName,
         opBuilder.getFunctionType(argTypes, outTypes));
+    numFuncsCreated++;
     symbolTable->insert(newFunc);
     auto *funcBlock = newFunc.addEntryBlock();
     for (auto &op : make_early_inc_range(currentBlock->getOperations())) {
@@ -163,7 +163,7 @@ LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp, OpBuilder funcBuilder) {
     opBuilder.setInsertionPointToEnd(currentBlock);
     opBuilder.create<ReturnOp>(funcOp->getLoc(), ValueRange(outValues));
     for (auto pair : argMap) {
-      replaceAllUsesInRegionWith(pair.first, pair.second, newFunc.getBody());
+      replaceAllUsesInRegionWith(pair.first, pair.second, newFunc.getRegion());
     }
 
     opBuilder.setInsertionPointToStart(blocks[i + 1]);
@@ -172,10 +172,11 @@ LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp, OpBuilder funcBuilder) {
     auto callResults = callOp->getResults();
     argMap.clear();
     for (int k = 0; k < outValues.size(); k++) {
-      // replaceAllUsesInRegionWith(outValues[k], callResults[k],
-      //                            funcOp.getBody());
       argMap.push_back(std::pair(outValues[k], callResults[k]));
     }
+  }
+  for (auto pair : argMap) {
+    replaceAllUsesInRegionWith(pair.first, pair.second, funcOp.getRegion());
   }
   return success();
 }
