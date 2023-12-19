@@ -270,7 +270,8 @@ public:
 } // namespace hw
 } // namespace circt
 namespace llvm {
-template <> struct DenseMapInfo<circt::hw::detail::SCCNode> {
+template <>
+struct DenseMapInfo<circt::hw::detail::SCCNode> {
   using Node = circt::hw::detail::SCCNode;
 
   static Node getEmptyKey() {
@@ -290,7 +291,8 @@ template <> struct DenseMapInfo<circt::hw::detail::SCCNode> {
 };
 } // namespace llvm
 
-template <> struct llvm::GraphTraits<circt::hw::detail::SCCNode> {
+template <>
+struct llvm::GraphTraits<circt::hw::detail::SCCNode> {
   using NodeType = circt::hw::detail::SCCNode;
   using NodeRef = NodeType;
   using ChildIteratorType = circt::hw::detail::SCCIterator;
