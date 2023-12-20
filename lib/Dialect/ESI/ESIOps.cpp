@@ -630,10 +630,7 @@ void ESIPureModuleOp::removeAllPortAttrs() {
   emitError("No ports for port attributes)");
 }
 
-SmallVector<Attribute> ESIPureModuleOp::getAllPortAttrs() {
-  SmallVector<Attribute> retval;
-  return retval;
-}
+ArrayRef<Attribute> ESIPureModuleOp::getAllPortAttrs() { return {}; }
 
 void ESIPureModuleOp::setHWModuleType(hw::ModuleType type) {
   emitError("No ports for port types");
