@@ -391,7 +391,7 @@ void populateSolver(Operation &mod){
     llvm::outs()<<"to "<<col<<"\n";
     if(t.isGuard && t.isAction){
       llvm::outs()<<"-------- action&guard "<< t.action(solver_vars).to_string() <<"\n";
-      // s.add(forall(solver_vars[0], solver_vars[1], implies((stateInvariants.at(t.from)(solver_vars[0], solver_vars[1]) && t.guard(solver_vars)), stateInvariants.at(t.to)(t.action(solver_vars)))));
+      s.add(forall(solver_vars[0], implies((stateInvariants.at(t.from)(solver_vars[0]) && t.guard(solver_vars)), stateInvariants.at(t.to)(t.action(solver_vars)))));
     } else if (t.isGuard){
       llvm::outs()<<"-------- guard "<< t.guard(solver_vars).to_string() <<"\n";
       s.add(forall(solver_vars[0], implies((stateInvariants.at(t.from)(solver_vars[0]) && t.guard(solver_vars)), stateInvariants.at(t.to)(solver_vars[0]))));
