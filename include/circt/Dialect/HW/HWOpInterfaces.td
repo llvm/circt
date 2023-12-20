@@ -52,7 +52,7 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
     InterfaceMethod<"Get the module type",
     "::circt::hw::ModuleType", "getHWModuleType", (ins)>,
 
-    InterfaceMethod<"Get the port Attributes",
+    InterfaceMethod<"Get the port Attributes.  This will return either an empty array or an array of size numPorts.",
     "ArrayRef<Attribute>", "getAllPortAttrs", (ins)>,
 
     InterfaceMethod<"Set the port Attributes",
