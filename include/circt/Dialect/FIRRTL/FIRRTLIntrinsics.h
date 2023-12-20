@@ -131,10 +131,11 @@ private:
   template <typename T>
   void addConverter(DenseMap<StringAttr, ConverterFn> &map, StringRef name) {
     auto nameAttr = StringAttr::get(context, name);
-    map.try_emplace(nameAttr, [&](FModuleLike mod) -> LogicalResult {
-      T conv(name, mod);
-      return doLowering(mod, conv);
-    });
+    map.try_emplace(nameAttr,
+                    [this, nameAttr](FModuleLike mod) -> LogicalResult {
+                      T conv(nameAttr.getValue(), mod);
+                      return doLowering(mod, conv);
+                    });
   }
 
   LogicalResult doLowering(FModuleLike mod, IntrinsicConverter &conv);
