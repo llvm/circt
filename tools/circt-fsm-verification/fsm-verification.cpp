@@ -131,7 +131,7 @@ expr getGuardExpr(llvm::DenseMap<mlir::Value, expr> expr_map, Region& guard, z3:
 
 
 expr getActionExpr(llvm::DenseMap<mlir::Value, expr> expr_map, Region& action, context& c){
-  llvm::outs()<<"------------------------ ACTION expr_map ------------------------"<<"\n";
+  llvm::outs()<<"\n ACTION expr_map\n ";
   for (auto m: expr_map){
     llvm::outs()<<m.first<<"\n";
     llvm::outs()<<m.second.to_string()<<"\n";
@@ -209,7 +209,7 @@ void recOpsMgmt(Operation &mod, context &c, vector<expr> &arguments, llvm::Dense
           // llvm::outs()<<"state "<<state<<"\n";
           llvm::StringRef currentState = state.getName();
           // llvm::outs()<<"state "<<currentState.c_str()<<"\n";
-          func_decl I = c.function(currentState.str().c_str(), c.int_sort(), c.bool_sort(), c.bool_sort());
+          func_decl I = c.function(currentState.str().c_str(), c.int_sort(), c.bool_sort());
           stateInvariants.insert({currentState, I});
           llvm::outs()<<"inserting "<<currentState<<"\n";
           llvm::outs()<<"mapped to "<<I.to_string()<<"\n";
@@ -382,15 +382,22 @@ void populateSolver(Operation &mod){
     llvm::outs()<<v.to_string()<<"\n";
   }
 
+  s.add(forall(solver_vars[0], stateInvariants.at(transitions[0].from)(0)));
+
   for(auto t: transitions){
     int row = state_map.at(t.from);
     int col = state_map.at(t.to);
     llvm::outs()<<"from "<<row<<"\n";
     llvm::outs()<<"to "<<col<<"\n";
     if(t.isGuard && t.isAction){
-      llvm::outs()<<"action "<< t.action(solver_vars).to_string() <<"\n";
+      llvm::outs()<<"-------- action&guard "<< t.action(solver_vars).to_string() <<"\n";
       // s.add(forall(solver_vars[0], solver_vars[1], implies((stateInvariants.at(t.from)(solver_vars[0], solver_vars[1]) && t.guard(solver_vars)), stateInvariants.at(t.to)(t.action(solver_vars)))));
-    // } 
+    } else if (t.isGuard){
+      llvm::outs()<<"-------- guard "<< t.guard(solver_vars).to_string() <<"\n";
+      s.add(forall(solver_vars[0], implies((stateInvariants.at(t.from)(solver_vars[0]) && t.guard(solver_vars)), stateInvariants.at(t.to)(solver_vars[0]))));
+    } else if (t.isAction){
+      llvm::outs()<<"--------  action "<< t.action(solver_vars).to_string() <<"\n";
+      s.add(forall(solver_vars[0], implies(stateInvariants.at(t.from)(solver_vars[0]), stateInvariants.at(t.to)(t.action(solver_vars)))));
     // else if (t.guards.size()>0){
       // llvm::outs()<<"guard "<< t.guards[0](solver_vars).to_string() <<"\n";
       // s.add(forall(solver_vars[0], solver_vars[1], implies((stateInvariants.at(t.from)(solver_vars[0], solver_vars[1]) && t.guards[0](solver_vars)), stateInvariants.at(t.to)(solver_vars[0], solver_vars[1]))));
@@ -404,7 +411,7 @@ void populateSolver(Operation &mod){
     // s.add(forall(solver_vars[0], solver_vars[1], implies(stateInvariants.at(t.from)(solver_vars[0], solver_vars[1]), stateInvariants.at(t.to)(t.actions[0](solver_vars)))));  
     } else {
       llvm::outs()<<"inv "<<stateInvariants.at(t.from).to_string()<<"\n";
-      s.add(forall(solver_vars[0], solver_vars[1], implies(stateInvariants.at(t.from)(solver_vars[0], solver_vars[1]), stateInvariants.at(t.to)(solver_vars[0], solver_vars[1]))));
+      s.add(forall(solver_vars[0],  implies(stateInvariants.at(t.from)(solver_vars[0]), stateInvariants.at(t.to)(solver_vars[0]))));
     }
   }
 
