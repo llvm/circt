@@ -32,6 +32,7 @@
 #include "mlir/Dialect/LLVMIR/Transforms/Passes.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/AsmState.h"
+#include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/OperationSupport.h"
 #include "mlir/Parser/Parser.h"
@@ -272,7 +273,7 @@ static void populatePipeline(PassManager &pm) {
     pm.addPass(arc::createPrintStateInfoPass(stateFile));
   pm.addPass(arc::createLowerClocksToFuncsPass()); // no CSE between state alloc
                                                    // and clock func lowering
-  // pm.addPass(arc::createSplitFuncsPass());
+  pm.addPass(arc::createSplitFuncsPass());
   pm.addPass(createCSEPass());
   pm.addPass(arc::createArcCanonicalizerPass());
 
@@ -327,6 +328,19 @@ static LogicalResult processBuffer(
     auto outputTimer = ts.nest("Print LLVM output");
     llvm::LLVMContext llvmContext;
     auto llvmModule = mlir::translateModuleToLLVMIR(module.get(), llvmContext);
+    int j = 0;
+    for (auto &func: llvm::make_early_inc_range(llvmModule->getFunctionList())) {
+      if (func.getName().contains("_split_func")) {
+        func.removeFromParent();
+        std::optional<std::unique_ptr<llvm::ToolOutputFile>> thisOutputFile;
+        std::string errorMessage;
+        // Create an output file.
+        outputFile.emplace(openOutputFile(outputFilename + std::to_string(++j), &errorMessage));
+
+        func.print(thisOutputFile.value()->os(), nullptr);
+      }
+
+    }
     if (!llvmModule)
       return failure();
     llvmModule->print(outputFile.value()->os(), nullptr);

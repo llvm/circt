@@ -45,6 +45,10 @@ using mlir::OpTrait::ConstantLike;
 namespace {
 struct SplitFuncsPass : public arc::impl::SplitFuncsBase<SplitFuncsPass> {
   SplitFuncsPass() = default;
+  explicit SplitFuncsPass(unsigned splitBound)
+      : SplitFuncsPass() {
+    this->splitBound.setValue(splitBound);
+  }
   SplitFuncsPass(const SplitFuncsPass &pass) : SplitFuncsPass() {}
 
   void runOnOperation() override;
@@ -65,6 +69,7 @@ void SplitFuncsPass::runOnOperation() {
   for (auto op : getOperation().getOps<FuncOp>())
     if (failed(lowerFunc(op, funcBuilder)))
       return signalPassFailure();
+  getOperation().dump();
 }
 
 LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp, OpBuilder funcBuilder) {
@@ -89,7 +94,7 @@ LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp, OpBuilder funcBuilder) {
     blocks.push_back(block);
   }
 
-  int numOpsInBlock = 0;
+  unsigned numOpsInBlock = 0;
   std::vector<Block *>::iterator blockIter = blocks.begin();
   for (auto &op : llvm::make_early_inc_range(*frontBlock)) {
     if (numOpsInBlock >= splitBound) {
@@ -115,15 +120,13 @@ LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp, OpBuilder funcBuilder) {
     // argMap.insert(std::pair(oldArg, newArg));
   }
   Liveness liveness(funcOp);
+  // TODO: funcs is only here for debugging
   std::vector<Operation *> funcs;
-  auto liveOut = liveness.getLiveIn(blocks[0]);
-  Liveness::ValueSetT liveIn;
   auto argTypes = blocks.back()->getArgumentTypes();
   auto args = blocks.back()->getArguments();
   for (int i = 0; i < blocks.size() - 1; i++) {
-    liveIn = liveOut;
     Block *currentBlock = blocks[i];
-    liveOut = liveness.getLiveOut(currentBlock);
+    Liveness::ValueSetT liveOut = liveness.getLiveOut(currentBlock);
     std::vector<Type> outTypes;
     std::vector<Value> outValues;
     llvm::for_each(liveOut, [&outTypes, &outValues](auto el) {
@@ -139,6 +142,7 @@ LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp, OpBuilder funcBuilder) {
     opBuilder.setInsertionPoint(funcOp);
     SmallString<64> funcName;
     funcName.append(funcOp.getName());
+    funcName.append("_split_func");
     funcName.append(std::to_string(i));
     auto newFunc = funcBuilder.create<FuncOp>(
         funcOp->getLoc(), funcName,
@@ -152,7 +156,7 @@ LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp, OpBuilder funcBuilder) {
     }
     funcs.push_back(newFunc);
     currentBlock->erase();
-    currentBlock = funcBlock;
+    // currentBlock = funcBlock;
 
     int j = 0;
     for (auto el : args) {
@@ -160,7 +164,7 @@ LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp, OpBuilder funcBuilder) {
                                  newFunc.getRegion());
     }
 
-    opBuilder.setInsertionPointToEnd(currentBlock);
+    opBuilder.setInsertionPointToEnd(funcBlock);
     opBuilder.create<ReturnOp>(funcOp->getLoc(), ValueRange(outValues));
     for (auto pair : argMap) {
       replaceAllUsesInRegionWith(pair.first, pair.second, newFunc.getRegion());
@@ -182,5 +186,5 @@ LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp, OpBuilder funcBuilder) {
 }
 
 std::unique_ptr<Pass> arc::createSplitFuncsPass(unsigned splitBound) {
-  return std::make_unique<SplitFuncsPass>();
+  return std::make_unique<SplitFuncsPass>(splitBound);
 }
