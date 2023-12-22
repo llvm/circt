@@ -96,11 +96,11 @@ LogicalResult circt::arcilator::collectModels(mlir::ModuleOp module,
 }
 
 void circt::arcilator::serializeModelInfoToJson(
-    llvm::raw_ostream &outputStream, std::vector<ModelInfo> &modelInfos) {
+    llvm::raw_ostream &outputStream, std::vector<ModelInfo> &models) {
   llvm::json::OStream json(outputStream, 2);
 
   json.array([&] {
-    for (ModelInfo &model : modelInfos) {
+    for (ModelInfo &model : models) {
       json.object([&] {
         json.attribute("name", model.name);
         json.attribute("numStateBytes", model.numStateBytes);
