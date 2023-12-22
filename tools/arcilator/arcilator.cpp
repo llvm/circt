@@ -22,6 +22,7 @@
 #include "circt/InitAllPasses.h"
 #include "circt/Support/Passes.h"
 #include "circt/Support/Version.h"
+#include "circt/Tools/Arcilator/ModelInfo.h"
 #include "mlir/Bytecode/BytecodeReader.h"
 #include "mlir/Bytecode/BytecodeWriter.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -32,7 +33,6 @@
 #include "mlir/Dialect/LLVMIR/Transforms/Passes.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/AsmState.h"
-#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/OperationSupport.h"
 #include "mlir/Parser/Parser.h"
@@ -40,7 +40,6 @@
 #include "mlir/Pass/PassInstrumentation.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Support/FileUtilities.h"
-#include "mlir/Support/LogicalResult.h"
 #include "mlir/Support/Timing.h"
 #include "mlir/Support/ToolUtilities.h"
 #include "mlir/Target/LLVMIR/Dialect/All.h"
@@ -52,11 +51,9 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/InitLLVM.h"
-#include "llvm/Support/JSON.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/ToolOutputFile.h"
-#include "llvm/Support/raw_ostream.h"
 
 #include <iostream>
 #include <optional>
@@ -65,6 +62,7 @@ using namespace llvm;
 using namespace mlir;
 using namespace circt;
 using namespace arc;
+using namespace arcilator;
 
 //===----------------------------------------------------------------------===//
 // Command Line Arguments
@@ -190,160 +188,6 @@ static cl::opt<OutputFormat> outputFormat(
                clEnumValN(OutputDisabled, "disable-output",
                           "Do not output anything")),
     cl::init(OutputLLVM), cl::cat(mainCategory));
-
-//===----------------------------------------------------------------------===//
-// ModelInfo collection
-//===----------------------------------------------------------------------===//
-
-namespace {
-
-/// Gathers information about a given Arc state.
-struct StateInfo {
-  enum Type { Input, Output, Register, Memory, Wire } type;
-  std::string name;
-  unsigned offset;
-  unsigned numBits;
-  unsigned memoryStride = 0; // byte separation between memory words
-  unsigned memoryDepth = 0;  // number of words in a memory
-};
-
-/// Gathers information about a given Arc model.
-struct ModelInfo {
-  std::string name;
-  size_t numStateBytes;
-  std::vector<StateInfo> states;
-
-  ModelInfo(std::string name, size_t numStateBytes,
-            std::vector<StateInfo> states)
-      : name(std::move(name)), numStateBytes(numStateBytes),
-        states(std::move(states)) {}
-};
-
-} // namespace
-
-/// Collects information about states within the provided Arc `storage`,
-/// assuming default `offset`, and adds it to `stateInfos`.
-static LogicalResult collectStates(mlir::Value storage, unsigned offset,
-                                   std::vector<StateInfo> &stateInfos) {
-  for (auto *op : storage.getUsers()) {
-    if (auto substorage = dyn_cast<AllocStorageOp>(op)) {
-      if (!substorage.getOffset().has_value())
-        return substorage.emitOpError(
-            "without allocated offset; run state allocation first");
-      if (failed(collectStates(substorage.getOutput(),
-                               *substorage.getOffset() + offset, stateInfos)))
-        return failure();
-      continue;
-    }
-    if (!isa<AllocStateOp, RootInputOp, RootOutputOp, AllocMemoryOp>(op))
-      continue;
-    auto opName = op->getAttrOfType<StringAttr>("name");
-    if (!opName || opName.getValue().empty())
-      continue;
-    auto opOffset = op->getAttrOfType<IntegerAttr>("offset");
-    if (!opOffset)
-      return op->emitOpError(
-          "without allocated offset; run state allocation first");
-    if (isa<AllocStateOp, RootInputOp, RootOutputOp>(op)) {
-      auto result = op->getResult(0);
-      auto &stateInfo = stateInfos.emplace_back();
-      stateInfo.type = StateInfo::Register;
-      if (isa<RootInputOp>(op))
-        stateInfo.type = StateInfo::Input;
-      else if (isa<RootOutputOp>(op))
-        stateInfo.type = StateInfo::Output;
-      else if (auto alloc = dyn_cast<AllocStateOp>(op)) {
-        if (alloc.getTap())
-          stateInfo.type = StateInfo::Wire;
-      }
-      stateInfo.name = opName.getValue();
-      stateInfo.offset = opOffset.getValue().getZExtValue() + offset;
-      stateInfo.numBits = result.getType().cast<StateType>().getBitWidth();
-      continue;
-    }
-    if (auto memOp = dyn_cast<AllocMemoryOp>(op)) {
-      auto stride = op->getAttrOfType<IntegerAttr>("stride");
-      if (!stride)
-        return op->emitOpError(
-            "without allocated stride; run state allocation first");
-      auto memType = memOp.getType();
-      auto intType = memType.getWordType();
-      auto &stateInfo = stateInfos.emplace_back();
-      stateInfo.type = StateInfo::Memory;
-      stateInfo.name = opName.getValue();
-      stateInfo.offset = opOffset.getValue().getZExtValue() + offset;
-      stateInfo.numBits = intType.getWidth();
-      stateInfo.memoryStride = stride.getValue().getZExtValue();
-      stateInfo.memoryDepth = memType.getNumWords();
-      continue;
-    }
-  }
-  return success();
-}
-
-/// Collects information about all Arc models in the provided `module`,
-/// and adds it to `modelInfos`.
-static mlir::LogicalResult collectModels(mlir::ModuleOp module,
-                                         std::vector<ModelInfo> &modelInfos) {
-  for (auto modelOp : module.getOps<ModelOp>()) {
-    auto storageArg = modelOp.getBody().getArgument(0);
-    auto storageType = storageArg.getType().cast<StorageType>();
-
-    std::vector<StateInfo> stateInfos;
-    if (failed(collectStates(storageArg, 0, stateInfos)))
-      return failure();
-    llvm::sort(stateInfos,
-               [](auto &a, auto &b) { return a.offset < b.offset; });
-
-    modelInfos.emplace_back(std::string(modelOp.getName()),
-                            storageType.getSize(), std::move(stateInfos));
-  }
-
-  return success();
-}
-
-static void serializeModelInfosToJson(llvm::raw_ostream &outputStream,
-                                      std::vector<ModelInfo> &modelInfos) {
-  llvm::json::OStream json(outputStream, 2);
-
-  json.array([&] {
-    for (ModelInfo &model : modelInfos) {
-      json.object([&] {
-        json.attribute("name", model.name);
-        json.attribute("numStateBytes", model.numStateBytes);
-        json.attributeArray("states", [&] {
-          for (const auto &state : model.states) {
-            json.object([&] {
-              json.attribute("name", state.name);
-              json.attribute("offset", state.offset);
-              json.attribute("numBits", state.numBits);
-              auto typeStr = [](StateInfo::Type type) {
-                switch (type) {
-                case StateInfo::Input:
-                  return "input";
-                case StateInfo::Output:
-                  return "output";
-                case StateInfo::Register:
-                  return "register";
-                case StateInfo::Memory:
-                  return "memory";
-                case StateInfo::Wire:
-                  return "wire";
-                }
-                return "";
-              };
-              json.attribute("type", typeStr(state.type));
-              if (state.type == StateInfo::Memory) {
-                json.attribute("stride", state.memoryStride);
-                json.attribute("depth", state.memoryDepth);
-              }
-            });
-          }
-        });
-      });
-    }
-  });
-}
 
 //===----------------------------------------------------------------------===//
 // Main Tool Logic
@@ -518,7 +362,7 @@ static LogicalResult processBuffer(
       llvm::errs() << "unable to open state file: " << ec.message();
       return failure();
     }
-    serializeModelInfosToJson(outputFile.os(), modelInfos);
+    serializeModelInfoToJson(outputFile.os(), modelInfos);
     outputFile.keep();
   }
 
