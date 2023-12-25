@@ -421,12 +421,11 @@ static void lowerModuleBody(FModuleOp mod,
     }
     // Zero Width ports may have dangling connects since they are not preserved
     // and do not have bounce wires.
-    for (auto *use : inst->getUsers()) {
+    for (auto *use : llvm::make_early_inc_range(inst->getUsers())) {
       assert(isa<StrictConnectOp>(use) || isa<ConnectOp>(use));
       use->erase();
     }
-    inst.erase();
-
+    inst->erase();
     return;
   });
 }
