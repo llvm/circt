@@ -24,6 +24,9 @@ class AcceleratorConnection:
   def build_accelerator(self) -> "Accelerator":
     return Accelerator(self.manifest().build_accelerator(self.cpp_accel))
 
+  def get_service_mmio(self) -> cpp.MMIO:
+    return self.cpp_accel.get_service_mmio()
+
 
 class HWModule:
 

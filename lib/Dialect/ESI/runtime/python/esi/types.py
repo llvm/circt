@@ -4,7 +4,7 @@
 
 from . import esiCppAccel as cpp
 
-from typing import Callable, Dict, Optional, Tuple, Type
+from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
 
 
 def _get_esi_type(cpp_type: cpp.Type):
@@ -26,21 +26,37 @@ class ESIType:
   def __init__(self, cpp_type: cpp.Type):
     self.cpp_type = cpp_type
 
+  @property
+  def supports_host(self) -> Tuple[bool, Optional[str]]:
+    """Does this type support host communication via Python?"""
+    if self.bit_width % 8 != 0:
+      return (False, "runtime only supports types with multiple of 8 bits")
+    return (True, None)
+
   def is_valid(self, obj) -> bool:
     """Is a Python object compatible with HW type?"""
     assert False, "unimplemented"
 
   @property
+  def bit_width(self) -> int:
+    """Size of this type, in bits. Negative for unbounded types."""
+    assert False, "unimplemented"
+
+  @property
   def max_size(self) -> int:
     """Maximum size of a value of this type, in bytes."""
-    assert False, "unimplemented"
+    bitwidth = int((self.bit_width + 7) / 8)
+    if bitwidth < 0:
+      return bitwidth
+    return bitwidth
 
   def serialize(self, obj) -> bytearray:
     """Convert a Python object to a bytearray."""
     assert False, "unimplemented"
 
-  def deserialize(self, data: bytearray) -> object:
-    """Convert a bytearray to a Python object."""
+  def deserialize(self, data: bytearray) -> Tuple[object, bytearray]:
+    """Convert a bytearray to a Python object. Return the object and the
+    leftover bytes."""
     assert False, "unimplemented"
 
   def __str__(self) -> str:
@@ -53,17 +69,17 @@ class VoidType(ESIType):
     return obj is None
 
   @property
-  def max_size(self) -> int:
-    return 1
+  def bit_width(self) -> int:
+    return 8
 
   def serialize(self, obj) -> bytearray:
     # By convention, void is represented by a single byte of value 0.
     return bytearray([0])
 
-  def deserialize(self, data: bytearray) -> object:
+  def deserialize(self, data: bytearray) -> Tuple[object, bytearray]:
     if len(data) != 1:
       raise ValueError(f"void type cannot be represented by {data}")
-    return None
+    return (None, data[1:])
 
 
 __esi_mapping[cpp.VoidType] = VoidType
@@ -72,37 +88,42 @@ __esi_mapping[cpp.VoidType] = VoidType
 class BitsType(ESIType):
 
   def __init__(self, cpp_type: cpp.BitsType):
-    self.cpp_type = cpp_type
+    self.cpp_type: cpp.BitsType = cpp_type
 
   def is_valid(self, obj) -> bool:
-    return isinstance(obj, bytearray) and len(obj) == int(
-        (self.cpp_type.width + 7) / 8)
+    if not isinstance(obj, (bytearray, bytes, list)):
+      return False
+    if isinstance(obj, list) and not all(
+        [isinstance(b, int) and b.bit_length() <= 8 for b in obj]):
+      return False
+    return len(obj) == self.max_size
 
   @property
-  def max_size(self) -> int:
-    return int((self.cpp_type.width + 7) / 8)
+  def bit_width(self) -> int:
+    return self.cpp_type.width
 
-  def serialize(self, obj) -> bytearray:
-    return obj
+  def serialize(self, obj: Union[bytearray, bytes, List[int]]) -> bytearray:
+    if isinstance(obj, bytearray):
+      return obj
+    if isinstance(obj, bytes) or isinstance(obj, list):
+      return bytearray(obj)
+    raise ValueError(f"cannot convert {obj} to bytearray")
 
-  def deserialize(self, data: bytearray) -> object:
-    return data
+  def deserialize(self, data: bytearray) -> Tuple[object, bytearray]:
+    return (data[0:self.max_size], data[self.max_size:])
 
 
-__esi_mapping[cpp.BitVectorType] = BitsType
+__esi_mapping[cpp.BitsType] = BitsType
 
 
 class IntType(ESIType):
 
   def __init__(self, cpp_type: cpp.IntegerType):
-    self.cpp_type = cpp_type
+    self.cpp_type: cpp.IntegerType = cpp_type
 
   @property
-  def width(self) -> int:
+  def bit_width(self) -> int:
     return self.cpp_type.width
-
-
-__esi_mapping[cpp.IntegerType] = IntType
 
 
 class UIntType(IntType):
@@ -110,15 +131,22 @@ class UIntType(IntType):
   def is_valid(self, obj) -> bool:
     if not isinstance(obj, int):
       return False
-    if obj < 0 or obj >= 2**self.width:
+    if obj < 0 or obj.bit_length() > self.bit_width:
       return False
     return True
 
   def __str__(self) -> str:
-    return f"uint{self.width}"
+    return f"uint{self.bit_width}"
+
+  def serialize(self, obj: int) -> bytearray:
+    return bytearray(int.to_bytes(obj, self.max_size, "little"))
+
+  def deserialize(self, data: bytearray) -> Tuple[int, bytearray]:
+    return (int.from_bytes(data[0:self.max_size],
+                           "little"), data[self.max_size:])
 
 
-__esi_mapping[cpp.UIntType] = IntType
+__esi_mapping[cpp.UIntType] = UIntType
 
 
 class SIntType(IntType):
@@ -127,31 +155,48 @@ class SIntType(IntType):
     if not isinstance(obj, int):
       return False
     if obj < 0:
-      if obj < 2**(self.width - 1):
+      if (-1 * obj) > 2**(self.bit_width - 1):
         return False
     elif obj < 0:
-      if obj >= 2**self.width:
+      if obj >= 2**(self.bit_width - 1) - 1:
         return False
     return True
 
   def __str__(self) -> str:
-    return f"sint{self.width}"
+    return f"sint{self.bit_width}"
+
+  def serialize(self, obj: int) -> bytearray:
+    return bytearray(int.to_bytes(obj, self.max_size, "little", signed=True))
+
+  def deserialize(self, data: bytearray) -> Tuple[int, bytearray]:
+    return (int.from_bytes(data[0:self.max_size], "little",
+                           signed=True), data[self.max_size:])
 
 
-__esi_mapping[cpp.SIntType] = IntType
+__esi_mapping[cpp.SIntType] = SIntType
 
 
 class StructType(ESIType):
 
   def __init__(self, cpp_type: cpp.StructType):
     self.cpp_type = cpp_type
+    self.fields: List[Tuple[str, ESIType]] = [
+        (name, _get_esi_type(ty)) for (name, ty) in cpp_type.fields
+    ]
+
+  @property
+  def bit_width(self) -> int:
+    widths = [ty.bit_width for (_, ty) in self.fields]
+    if any([w < 0 for w in widths]):
+      return -1
+    return sum(widths)
 
   def is_valid(self, obj) -> bool:
     fields_count = 0
     if not isinstance(obj, dict):
       obj = obj.__dict__
 
-    for (fname, ftype) in self.cpp_type.fields:
+    for (fname, ftype) in self.fields:
       if fname not in obj:
         return False
       if not ftype.is_valid(obj[fname]):
@@ -161,12 +206,71 @@ class StructType(ESIType):
       return False
     return True
 
+  def serialize(self, obj) -> bytearray:
+    ret = bytearray()
+    for (fname, ftype) in reversed(self.fields):
+      fval = obj[fname]
+      ret.extend(ftype.serialize(fval))
+    return ret
+
+  def deserialize(self, data: bytearray) -> Tuple[Dict[str, Any], bytearray]:
+    ret = {}
+    for (fname, ftype) in reversed(self.fields):
+      (fval, data) = ftype.deserialize(data)
+      ret[fname] = fval
+    return (ret, data)
+
+
+__esi_mapping[cpp.StructType] = StructType
+
+
+class ArrayType(ESIType):
+
+  def __init__(self, cpp_type: cpp.ArrayType):
+    self.cpp_type = cpp_type
+    self.element_type = _get_esi_type(cpp_type.element)
+    self.size = cpp_type.size
+
+  @property
+  def bit_width(self) -> int:
+    return self.element_type.bit_width * self.size
+
+  def is_valid(self, obj) -> bool:
+    if not isinstance(obj, list):
+      return False
+    if len(obj) != self.size:
+      return False
+    for e in obj:
+      if not self.element_type.is_valid(e):
+        return False
+    return True
+
+  def serialize(self, lst: list) -> bytearray:
+    ret = bytearray()
+    for e in reversed(lst):
+      ret.extend(self.element_type.serialize(e))
+    return ret
+
+  def deserialize(self, data: bytearray) -> Tuple[List[Any], bytearray]:
+    ret = []
+    for _ in range(self.size):
+      (obj, data) = self.element_type.deserialize(data)
+      ret.append(obj)
+    ret.reverse()
+    return (ret, data)
+
+
+__esi_mapping[cpp.ArrayType] = ArrayType
+
 
 class Port:
 
   def __init__(self, cpp_port: cpp.ChannelPort):
     self.cpp_port = cpp_port
     self.type = _get_esi_type(cpp_port.type)
+    (supports_host, reason) = self.type.supports_host
+    if not supports_host:
+      raise TypeError(f"unsupported type: {reason}")
 
   def connect(self):
     self.cpp_port.connect()
@@ -177,7 +281,7 @@ class WritePort(Port):
 
   def __init__(self, cpp_port: cpp.WriteChannelPort):
     super().__init__(cpp_port)
-    self.cpp_port = cpp_port
+    self.cpp_port: cpp.WriteChannelPort = cpp_port
 
   def write(self, msg=None) -> bool:
     if not self.type.is_valid(msg):
@@ -191,14 +295,17 @@ class ReadPort(Port):
 
   def __init__(self, cpp_port: cpp.ReadChannelPort):
     super().__init__(cpp_port)
-    self.cpp_port = cpp_port
+    self.cpp_port: cpp.ReadChannelPort = cpp_port
 
   def read(self) -> Tuple[bool, Optional[object]]:
     """Read a message from the channel."""
     msg_bytes = self.cpp_port.read(self.type.max_size)
     if len(msg_bytes) == 0:
       return (False, None)
-    return (True, self.type.deserialize(msg_bytes))
+    (msg, leftover) = self.type.deserialize(msg_bytes)
+    if len(leftover) != 0:
+      raise ValueError(f"leftover bytes: {leftover}")
+    return (True, msg)
 
 
 class BundlePort:

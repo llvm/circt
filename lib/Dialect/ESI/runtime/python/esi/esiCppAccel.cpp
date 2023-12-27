@@ -66,15 +66,8 @@ PYBIND11_MODULE(esiCppAccel, m) {
   py::class_<SIntType, IntegerType>(m, "SIntType");
   py::class_<UIntType, IntegerType>(m, "UIntType");
   py::class_<StructType, Type>(m, "StructType")
-      .def_property_readonly(
-          "fields", &StructType::getFields,
-          // [](StructType st) {
-          //   py::list ret;
-          //   for (auto f : st.getFields())
-          //     ret.append(py::make_tuple(py::cast(f.first), py(f.second)));
-          //   return ret;
-          // },
-          py::return_value_policy::reference);
+      .def_property_readonly("fields", &StructType::getFields,
+                             py::return_value_policy::reference);
   py::class_<ArrayType, Type>(m, "ArrayType")
       .def_property_readonly("element", &ArrayType::getElementType,
                              py::return_value_policy::reference)

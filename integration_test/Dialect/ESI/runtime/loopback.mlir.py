@@ -1,3 +1,4 @@
+from typing import List, Optional
 import esi
 import esi.types as types
 import sys
@@ -69,24 +70,54 @@ assert isinstance(recv.type, types.BitsType)
 send = loopback.ports[esi.AppID("loopback_fromhw")].read_port("send")
 send.connect()
 
-data = [24]
-recv.write(bytearray(data))
+data = 24
+recv.write(int.to_bytes(data, 1, "little"))
 resp = False
 # Reads are non-blocking, so we need to poll.
+resp_data: bytearray
 while not resp:
   print("polling")
-  (resp, _) = send.read()
+  (resp, resp_data) = send.read()
+resp_int = int.from_bytes(resp_data, "little")
 
 # Trace platform intentionally produces random responses.
 if platform != "trace":
   print(f"data: {data}")
-  print(f"resp: {resp}")
-  assert resp == data
+  print(f"resp: {resp_int}")
+  assert resp_int == data
 
 # Placeholder until we have a runtime function API.
-myfunc = d.ports[esi.AppID("func1")]
-arg = myfunc.write_port("arg").connect()
-result = myfunc.read_port("result").connect()
+myfunc = d.ports[esi.AppID("structFunc")]
+arg_chan = myfunc.write_port("arg").connect()
+result_chan = myfunc.read_port("result").connect()
 
+arg = {"a": 10, "b": -22}
+arg_chan.write(arg)
 
+result: Optional[dict] = None
+resp = False
+while not resp:
+  print("polling")
+  (resp, result) = result_chan.read()
+
+print(f"result: {result}")
+if platform != "trace":
+  assert result == {"y": -22, "x": -21}
+
+myfunc = d.ports[esi.AppID("arrayFunc")]
+arg_chan = myfunc.write_port("arg").connect()
+result_chan = myfunc.read_port("result").connect()
+
+arg = [-22]
+arg_chan.write(arg)
+
+result: Optional[List[int]] = None
+resp = False
+while not resp:
+  print("polling")
+  (resp, result) = result_chan.read()
+
+print(f"result: {result}")
+if platform != "trace":
+  assert result == [-21, -22]
 print("PASS")
