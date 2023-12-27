@@ -1599,6 +1599,7 @@ private:
 
   // Declarations
   ParseResult parseInstance();
+  ParseResult parseInstanceChoice();
   ParseResult parseObject();
   ParseResult parseCombMem();
   ParseResult parseSeqMem();
@@ -1607,6 +1608,9 @@ private:
   ParseResult parseWire();
   ParseResult parseRegister(unsigned regIndent);
   ParseResult parseRegisterWithReset();
+
+  // Helper to fetch a module referenced by an instance-like statement.
+  FModuleLike getReferencedModule(SMLoc loc, StringRef moduleName);
 
   // The builder to build into.
   ImplicitLocOpBuilder builder;
@@ -2537,6 +2541,8 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
     // Declarations
   case FIRToken::kw_inst:
     return parseInstance();
+  case FIRToken::kw_instchoice:
+    return parseInstanceChoice();
   case FIRToken::kw_object:
     return parseObject();
   case FIRToken::kw_cmem:
@@ -3736,31 +3742,11 @@ ParseResult FIRStmtParser::parseInstance() {
   locationProcessor.setLoc(startTok.getLoc());
 
   // Look up the module that is being referenced.
-  auto circuit =
-      builder.getBlock()->getParentOp()->getParentOfType<CircuitOp>();
-  auto referencedModule =
-      dyn_cast_or_null<FModuleLike>(circuit.lookupSymbol(moduleName));
-  if (!referencedModule) {
-    emitError(startTok.getLoc(),
-              "use of undefined module name '" + moduleName + "' in instance");
+  auto referencedModule = getReferencedModule(startTok.getLoc(), moduleName);
+  if (!referencedModule)
     return failure();
-  }
-  if (isa<ClassOp /* ClassLike */>(referencedModule))
-    return emitError(startTok.getLoc(), "cannot create instance of class '" +
-                                            moduleName +
-                                            "', did you mean object?");
 
   SmallVector<PortInfo> modulePorts = referencedModule.getPorts();
-
-  // Make a bundle of the inputs and outputs of the specified module.
-  SmallVector<Type, 4> resultTypes;
-  resultTypes.reserve(modulePorts.size());
-  SmallVector<std::pair<StringAttr, Type>, 4> resultNamesAndTypes;
-
-  for (auto port : modulePorts) {
-    resultTypes.push_back(port.type);
-    resultNamesAndTypes.push_back({port.name, port.type});
-  }
 
   auto annotations = getConstants().emptyArrayAttr;
   SmallVector<Attribute, 4> portAnnotations(modulePorts.size(), annotations);
@@ -3783,6 +3769,123 @@ ParseResult FIRStmtParser::parseInstance() {
   moduleContext.unbundledValues.push_back(std::move(unbundledValueEntry));
   auto entryId = UnbundledID(moduleContext.unbundledValues.size());
   return moduleContext.addSymbolEntry(id, entryId, startTok.getLoc());
+}
+
+/// instance_choice ::=
+///   'inst_choice' id 'of' id id info? newline indent ( id "=>" id )+ dedent
+ParseResult FIRStmtParser::parseInstanceChoice() {
+  auto startTok = consumeToken(FIRToken::kw_instchoice);
+  SMLoc loc = startTok.getLoc();
+
+  // If this was actually the start of a connect or something else handle that.
+  if (auto isExpr = parseExpWithLeadingKeyword(startTok))
+    return *isExpr;
+
+  if (requireFeature({4, 0, 0}, "option groups/instance choices"))
+    return failure();
+
+  StringRef id;
+  StringRef defaultModuleName;
+  StringRef optionGroupName;
+  if (parseId(id, "expected instance name") ||
+      parseToken(FIRToken::kw_of, "expected 'of' in instance") ||
+      parseId(defaultModuleName, "expected module name") ||
+      parseId(optionGroupName, "expected option group name") ||
+      parseToken(FIRToken::colon, "expected ':' after instchoice") ||
+      parseOptionalInfo())
+    return failure();
+
+  locationProcessor.setLoc(startTok.getLoc());
+
+  // Look up the default module referenced by the instance choice.
+  // The port lists of all the other referenced modules must match this one.
+  auto defaultModule = getReferencedModule(loc, defaultModuleName);
+  if (!defaultModule)
+    return failure();
+
+  SmallVector<PortInfo> modulePorts = defaultModule.getPorts();
+
+  // Find the option group.
+  auto circuit =
+      builder.getBlock()->getParentOp()->getParentOfType<CircuitOp>();
+  auto optionGroup =
+      dyn_cast_or_null<OptionOp>(circuit.lookupSymbol(optionGroupName));
+  if (!optionGroup)
+    return emitError(loc,
+                     "use of undefined option group '" + optionGroupName + "'");
+
+  auto baseIndent = getIndentation();
+  SmallVector<std::pair<OptionCaseOp, FModuleLike>> caseModules;
+  while (getIndentation() == baseIndent) {
+    StringRef caseId;
+    StringRef caseModuleName;
+    if (parseId(caseId, "expected a case identifier") ||
+        parseToken(FIRToken::equal_greater,
+                   "expected '=> in instance choice definition") ||
+        parseId(caseModuleName, "expected module name"))
+      return failure();
+
+    auto caseModule = getReferencedModule(loc, caseModuleName);
+    if (!caseModule)
+      return failure();
+
+    for (const auto &[defaultPort, casePort] :
+         llvm::zip(modulePorts, caseModule.getPorts())) {
+      if (defaultPort.name != casePort.name)
+        return emitError(loc, "instance case module port '")
+               << casePort.name.getValue()
+               << "' does not match the default module port '"
+               << defaultPort.name.getValue() << "'";
+      if (defaultPort.type != casePort.type)
+        return emitError(loc, "instance case port '")
+               << casePort.name.getValue()
+               << "' type does not match the default module port";
+    }
+
+    auto optionCase =
+        dyn_cast_or_null<OptionCaseOp>(optionGroup.lookupSymbol(caseId));
+    if (!optionCase)
+      return emitError(loc, "use of undefined option case '" + caseId + "'");
+    caseModules.emplace_back(optionCase, caseModule);
+  }
+
+  auto annotations = getConstants().emptyArrayAttr;
+  SmallVector<Attribute, 4> portAnnotations(modulePorts.size(), annotations);
+
+  // Create an instance choice op.
+  StringAttr sym;
+  auto result = builder.create<InstanceChoiceOp>(
+      defaultModule, caseModules, id, NameKindEnum::InterestingName,
+      annotations.getValue(), portAnnotations, sym);
+
+  // Un-bundle the ports, identically to the regular instance operation.
+  UnbundledValueEntry unbundledValueEntry;
+  unbundledValueEntry.reserve(modulePorts.size());
+  for (size_t i = 0, e = modulePorts.size(); i != e; ++i)
+    unbundledValueEntry.push_back({modulePorts[i].name, result.getResult(i)});
+
+  moduleContext.unbundledValues.push_back(std::move(unbundledValueEntry));
+  auto entryId = UnbundledID(moduleContext.unbundledValues.size());
+  return moduleContext.addSymbolEntry(id, entryId, startTok.getLoc());
+}
+
+FModuleLike FIRStmtParser::getReferencedModule(SMLoc loc,
+                                               StringRef moduleName) {
+  auto circuit =
+      builder.getBlock()->getParentOp()->getParentOfType<CircuitOp>();
+  auto referencedModule =
+      dyn_cast_or_null<FModuleLike>(circuit.lookupSymbol(moduleName));
+  if (!referencedModule) {
+    emitError(loc,
+              "use of undefined module name '" + moduleName + "' in instance");
+    return {};
+  }
+  if (isa<ClassOp /* ClassLike */>(referencedModule)) {
+    emitError(loc, "cannot create instance of class '" + moduleName +
+                       "', did you mean object?");
+    return {};
+  }
+  return referencedModule;
 }
 
 /// object ::= 'object' id 'of' id info?
@@ -4299,6 +4402,8 @@ private:
 
   ParseResult parseTypeDecl();
 
+  ParseResult parseOptionDecl(CircuitOp circuit);
+
   ParseResult parseLayer(CircuitOp circuit);
 
   struct DeferredModuleToParse {
@@ -4543,6 +4648,7 @@ ParseResult FIRCircuitParser::skipToModuleEnd(unsigned indent) {
     case FIRToken::kw_module:
     case FIRToken::kw_public:
     case FIRToken::kw_layer:
+    case FIRToken::kw_option:
     case FIRToken::kw_type:
       // All module declarations should have the same indentation
       // level. Use this fact to differentiate between module
@@ -4868,6 +4974,10 @@ ParseResult FIRCircuitParser::parseToplevelDefinition(CircuitOp circuit,
     return emitError(getToken().getLoc(), "only modules may be public");
   case FIRToken::kw_type:
     return parseTypeDecl();
+  case FIRToken::kw_option:
+    if (requireFeature({4, 0, 0}, "option groups/instance choices"))
+      return failure();
+    return parseOptionDecl(circuit);
   default:
     return emitError(getToken().getLoc(), "unknown toplevel definition");
   }
@@ -4901,6 +5011,44 @@ ParseResult FIRCircuitParser::parseTypeDecl() {
   if (!getConstants().aliasMap.insert({id, type}).second)
     return emitError(loc) << "type alias `" << name.getValue()
                           << "` is already defined";
+  return success();
+}
+
+// Parse an option group declaration.
+ParseResult FIRCircuitParser::parseOptionDecl(CircuitOp circuit) {
+  StringRef id;
+  consumeToken();
+  auto loc = getToken().getLoc();
+
+  LocWithInfo info(getToken().getLoc(), this);
+  if (parseId(id, "expected an option group name") ||
+      parseToken(FIRToken::colon,
+                 "expected ':' after option group definition") ||
+      info.parseOptionalInfo())
+    return failure();
+
+  auto builder = OpBuilder::atBlockEnd(circuit.getBodyBlock());
+  auto optionOp = builder.create<OptionOp>(info.getLoc(), id);
+  auto *block = new Block;
+  optionOp.getBody().push_back(block);
+  builder.setInsertionPointToEnd(block);
+
+  auto baseIndent = getIndentation();
+  StringSet<> cases;
+  while (getIndentation() == baseIndent) {
+    StringRef id;
+    LocWithInfo caseInfo(getToken().getLoc(), this);
+    if (parseId(id, "expected an option case ID") ||
+        caseInfo.parseOptionalInfo())
+      return failure();
+
+    if (!cases.insert(id).second)
+      return emitError(loc)
+             << "duplicate option case definition '" << id << "'";
+
+    builder.create<OptionCaseOp>(caseInfo.getLoc(), id);
+  }
+
   return success();
 }
 
@@ -5129,6 +5277,7 @@ ParseResult FIRCircuitParser::parseCircuit(
     case FIRToken::kw_intmodule:
     case FIRToken::kw_layer:
     case FIRToken::kw_module:
+    case FIRToken::kw_option:
     case FIRToken::kw_public:
     case FIRToken::kw_type: {
       auto indent = getIndentation();

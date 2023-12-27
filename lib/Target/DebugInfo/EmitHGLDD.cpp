@@ -246,6 +246,7 @@ struct FileEmitter {
   void emit(JOStream &json);
   JValue emitLoc(FileLineColLoc loc, FileLineColLoc endLoc, bool emitted);
   void emitModule(JOStream &json, DIModule *module);
+  void emitModuleBody(JOStream &json, DIModule *module);
   void emitInstance(JOStream &json, DIInstance *instance);
   void emitVariable(JOStream &json, DIVariable *variable);
   EmittedExpr emitExpression(Value value);
@@ -523,6 +524,12 @@ void FileEmitter::emitModule(JOStream &json, DIModule *module) {
     findAndEmitLocOrGuess(json, "hgl_loc", op, false);
     findAndEmitLoc(json, "hdl_loc", op->getLoc(), true);
   }
+  emitModuleBody(json, module);
+  json.objectEnd();
+}
+
+/// Emit the debug info for a `DIModule` body.
+void FileEmitter::emitModuleBody(JOStream &json, DIModule *module) {
   json.attributeArray("port_vars", [&] {
     for (auto *var : module->variables)
       emitVariable(json, var);
@@ -531,23 +538,43 @@ void FileEmitter::emitModule(JOStream &json, DIModule *module) {
     for (auto *instance : module->instances)
       emitInstance(json, instance);
   });
-  json.objectEnd();
 }
 
 /// Emit the debug info for a `DIInstance`.
 void FileEmitter::emitInstance(JOStream &json, DIInstance *instance) {
   json.objectBegin();
+
+  // Emit the instance and module name.
   json.attribute("name", instance->name.getValue());
-  auto verilogName = getVerilogInstanceName(*instance);
-  if (verilogName != instance->name)
-    json.attribute("hdl_obj_name", verilogName.getValue());
-  json.attribute("obj_name", instance->module->name.getValue()); // HGL
-  json.attribute("module_name",
-                 getVerilogModuleName(*instance->module).getValue()); // HDL
+  if (!instance->module->isInline) {
+    auto verilogName = getVerilogInstanceName(*instance);
+    if (verilogName != instance->name)
+      json.attribute("hdl_obj_name", verilogName.getValue());
+
+    json.attribute("obj_name", instance->module->name.getValue()); // HGL
+    json.attribute("module_name",
+                   getVerilogModuleName(*instance->module).getValue()); // HDL
+  }
+
   if (auto *op = instance->op) {
     findAndEmitLoc(json, "hgl_loc", op->getLoc(), false);
     findAndEmitLoc(json, "hdl_loc", op->getLoc(), true);
   }
+
+  // Emit the module body inline if this is an inline scope.
+  if (instance->module->isInline) {
+    auto structNameHintLen = structNameHint.size();
+    if (!instance->module->name.empty()) {
+      structNameHint += '_';
+      structNameHint += instance->module->name.getValue();
+    } else if (!instance->name.empty()) {
+      structNameHint += '_';
+      structNameHint += instance->name.getValue();
+    }
+    emitModuleBody(json, instance->module);
+    structNameHint.resize(structNameHintLen);
+  }
+
   json.objectEnd();
 }
 

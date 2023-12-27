@@ -1154,3 +1154,95 @@ circuit RWProbeExprOOB :
 
    input out_0 : SInt<8>[5]
    out_0[4] <- out_0[5]
+
+;// -----
+
+FIRRTL version 3.9.0
+circuit Foo:
+  ; expected-error @below {{option groups/instance choices are a FIRRTL 4.0.0+ feature}}
+  option Platform:
+    FPGA
+    ASIC
+
+;// -----
+
+FIRRTL version 3.9.0
+circuit Foo:
+
+  module Foo:
+    ; expected-error @below {{option groups/instance choices are a FIRRTL 4.0.0+ feature}}
+    instchoice inst of DefaultTarget Platform :
+      FPGA => FPGATarget
+      ASIC => ASICTarget
+
+;// -----
+
+FIRRTL version 4.0.0
+circuit Foo:
+  option Platform:
+    FPGA
+
+  module DefaultTarget:
+    input clock: Clock
+
+  module FPGATarget:
+    input clock: UInt<1>
+
+  module Foo:
+    ; expected-error @below {{instance case port 'clock' type does not match the default module port}}
+    instchoice inst of DefaultTarget, Platform :
+      FPGA => FPGATarget
+
+;// -----
+
+FIRRTL version 4.0.0
+circuit Foo:
+  option Platform:
+    FPGA
+
+  module DefaultTarget:
+    input clock: Clock
+
+  module FPGATarget:
+    input x: UInt<1>
+
+  module Foo:
+    ; expected-error @below {{instance case module port 'x' does not match the default module port 'clock'}}
+    instchoice inst of DefaultTarget, Platform :
+      FPGA => FPGATarget
+
+;// -----
+
+FIRRTL version 4.0.0
+circuit Foo:
+  option Platform:
+    FPGA
+
+  module DefaultTarget:
+  module FPGATarget:
+
+  module Foo:
+    ; expected-error @below {{use of undefined option case 'ASIC'}}
+    instchoice inst of DefaultTarget, Platform :
+      ASIC => FPGATarget
+
+;// -----
+
+FIRRTL version 4.0.0
+circuit Foo:
+  module DefaultTarget:
+  module FPGATarget:
+
+  module Foo:
+    ; expected-error @below {{use of undefined option group 'Platform'}}
+    instchoice inst of DefaultTarget, Platform :
+      ASIC => FPGATarget
+
+;// -----
+
+FIRRTL version 4.0.0
+circuit Foo:
+  ; expected-error @below {{duplicate option case definition 'FPGA'}}
+  option Platform:
+    FPGA
+    FPGA

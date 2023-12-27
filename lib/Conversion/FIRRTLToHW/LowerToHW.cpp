@@ -1232,30 +1232,33 @@ LogicalResult FIRRTLModuleLowering::lowerModulePortsAndMoveBody(
   bodyBuilder.setInsertionPoint(cursor);
 
   // Insert argument casts, and re-vector users in the old body to use them.
-  SmallVector<PortInfo> ports = oldModule.getPorts();
-  assert(oldModule.getBody().getNumArguments() == ports.size() &&
+  SmallVector<PortInfo> firrtlPorts = oldModule.getPorts();
+  SmallVector<hw::PortInfo> hwPorts = newModule.getPortList();
+  assert(oldModule.getBody().getNumArguments() == firrtlPorts.size() &&
          "port count mismatch");
 
-  size_t nextNewArg = 0;
-  size_t firrtlArg = 0;
   SmallVector<Value, 4> outputs;
 
   // This is the terminator in the new module.
   auto outputOp = newModule.getBodyBlock()->getTerminator();
   ImplicitLocOpBuilder outputBuilder(oldModule.getLoc(), outputOp);
 
-  for (auto &port : ports) {
+  unsigned nextHWInputArg = 0;
+  int hwPortIndex = -1;
+  for (auto [firrtlPortIndex, port] : llvm::enumerate(firrtlPorts)) {
     // Inputs and outputs are both modeled as arguments in the FIRRTL level.
-    auto oldArg = oldModule.getBody().getArgument(firrtlArg++);
+    auto oldArg = oldModule.getBody().getArgument(firrtlPortIndex);
 
     bool isZeroWidth =
         type_isa<FIRRTLBaseType>(port.type) &&
         type_cast<FIRRTLBaseType>(port.type).getBitWidthOrSentinel() == 0;
+    if (!isZeroWidth)
+      ++hwPortIndex;
 
     if (!port.isOutput() && !isZeroWidth) {
       // Inputs and InOuts are modeled as arguments in the result, so we can
       // just map them over.  We model zero bit outputs as inouts.
-      Value newArg = newModule.getBody().getArgument(nextNewArg++);
+      Value newArg = newModule.getBody().getArgument(nextHWInputArg++);
 
       // Cast the argument to the old type, reintroducing sign information in
       // the hw.module body.
@@ -1298,13 +1301,12 @@ LogicalResult FIRRTLModuleLowering::lowerModulePortsAndMoveBody(
     if (!resultHWType.isInteger(0)) {
       auto output =
           castFromFIRRTLType(newArg.getResult(), resultHWType, outputBuilder);
-      auto idx = newModule.getNumInputPorts() + outputs.size();
       outputs.push_back(output);
 
       // If output port has symbol, move it to this wire.
-      if (auto sym = newModule.getPortList()[idx].getSym()) {
+      if (auto sym = hwPorts[hwPortIndex].getSym()) {
         newArg.setInnerSymAttr(sym);
-        newModule.setPortSymbolAttr(idx, {});
+        newModule.setPortSymbolAttr(hwPortIndex, {});
       }
     }
   }
