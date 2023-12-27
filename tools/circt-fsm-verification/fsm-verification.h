@@ -103,7 +103,7 @@ struct transition{
   z3Fun guard;
   mlir::Region *guard_reg;
   bool isGuard;
-  z3Fun action;
+  vector<z3Fun> actions;
   mlir::Region *action_reg;
   bool isAction;
 };
