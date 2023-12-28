@@ -15,6 +15,11 @@
 // design and communication channels symbolically. It will be generated once
 // (not here) then compiled into the host software.
 //
+// Note for hardware designers: the "design hierarchy" from the host API
+// perspective is not the same as the hardware module instance hierarchy.
+// Rather, it is only the relevant parts as defined by the AppID hierarchy --
+// levels in the hardware module instance hierarchy get skipped.
+//
 // DO NOT EDIT!
 // This file is distributed as part of an ESI package. The source for this file
 // should always be modified within CIRCT.
@@ -26,10 +31,8 @@
 #define ESI_DESIGN_H
 
 #include "esi/Manifest.h"
+#include "esi/Ports.h"
 
-#include <algorithm>
-#include <any>
-#include <cstdint>
 #include <string>
 
 namespace esi {
@@ -42,61 +45,31 @@ namespace services {
 class Service;
 }
 
-/// Services provide connections to 'bundles' -- collections of named,
-/// unidirectional communication channels. This class provides access to those
-/// ChannelPorts.
-class BundlePort {
+/// Represents either the top level or an instance of a hardware module.
+class HWModule {
+protected:
+  HWModule(std::optional<ModuleInfo> info,
+           std::vector<std::unique_ptr<Instance>> children,
+           std::vector<services::Service *> services,
+           std::vector<BundlePort> ports);
+
 public:
-  /// Direction of a bundle. This -- combined with the channel direction in the
-  /// bundle -- can be used to determine if a channel should be writing to or
-  /// reading from the accelerator.
-  enum Direction { ToServer, ToClient };
+  virtual ~HWModule() = default;
 
-  /// Compute the direction of a channel given the bundle direction and the
-  /// bundle port's direction.
-  static bool isWrite(BundleType::Direction bundleDir, Direction svcDir) {
-    if (svcDir == Direction::ToClient)
-      return bundleDir == BundleType::Direction::To;
-    return bundleDir == BundleType::Direction::From;
-  }
-
-  /// Construct a port.
-  BundlePort(AppID id, std::map<std::string, ChannelPort &> channels);
-
-  /// Get the ID of the port.
-  AppID getID() const { return _id; }
-
-  /// Get access to the raw byte streams of a channel. Intended for internal
-  /// usage and binding to other languages (e.g. Python) which have their own
-  /// message serialization code.
-  WriteChannelPort &getRawWrite(const std::string &name) const;
-  ReadChannelPort &getRawRead(const std::string &name) const;
-  const std::map<std::string, ChannelPort &> &getChannels() const {
-    return _channels;
-  }
-
-private:
-  AppID _id;
-  std::map<std::string, ChannelPort &> _channels;
-};
-
-class Design {
-public:
-  Design(std::optional<ModuleInfo> info,
-         std::vector<std::unique_ptr<Instance>> children,
-         std::vector<services::Service *> services,
-         std::vector<BundlePort> ports);
-  virtual ~Design() = default;
-
+  /// Access the module's metadata, if any.
   std::optional<ModuleInfo> getInfo() const { return info; }
+  /// Get a vector of the module's children in a deterministic order.
   std::vector<const Instance *> getChildrenOrdered() const {
     std::vector<const Instance *> ret;
     for (const auto &c : children)
       ret.push_back(c.get());
     return ret;
   }
+  /// Access the module's children by ID.
   const std::map<AppID, Instance *> &getChildren() const { return childIndex; }
+  /// Get the module's ports in a deterministic order.
   const std::vector<BundlePort> &getPortsOrdered() const { return ports; }
+  /// Access the module's ports by ID.
   const std::map<AppID, const BundlePort &> &getPorts() const {
     return portIndex;
   }
@@ -110,7 +83,9 @@ protected:
   const std::map<AppID, const BundlePort &> portIndex;
 };
 
-class Instance : public Design {
+/// Subclass of `HWModule` which represents a submodule instance. Adds an AppID,
+/// which the top level doesn't have or need.
+class Instance : public HWModule {
 public:
   Instance() = delete;
   Instance(const Instance &) = delete;
@@ -119,8 +94,9 @@ public:
            std::vector<std::unique_ptr<Instance>> children,
            std::vector<services::Service *> services,
            std::vector<BundlePort> ports)
-      : Design(info, std::move(children), services, ports), id(id) {}
+      : HWModule(info, std::move(children), services, ports), id(id) {}
 
+  /// Get the instance's ID, which it will always have.
   const AppID getID() const { return id; }
 
 protected:

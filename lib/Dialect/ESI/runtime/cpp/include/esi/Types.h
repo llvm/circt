@@ -16,13 +16,7 @@
 #ifndef ESI_TYPES_H
 #define ESI_TYPES_H
 
-#include <any>
-#include <assert.h>
-#include <cstdint>
 #include <map>
-#include <memory>
-#include <optional>
-#include <stdexcept>
 #include <string>
 #include <vector>
 

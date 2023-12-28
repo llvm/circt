@@ -160,7 +160,7 @@ PYBIND11_MODULE(esiCppAccel, m) {
           .def_property_readonly("ports", &HWModule::getPorts,
                                  py::return_value_policy::reference);
 
-  // In order to inherit methods from "Design", it needs to be defined first.
+  // In order to inherit methods from "HWModule", it needs to be defined first.
   py::class_<Instance, HWModule>(m, "Instance")
       .def_property_readonly("id", &Instance::getID);
 

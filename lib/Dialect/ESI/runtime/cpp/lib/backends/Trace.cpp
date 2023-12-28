@@ -18,6 +18,7 @@
 #include "esi/Services.h"
 #include "esi/Utils.h"
 
+#include <cassert>
 #include <fstream>
 #include <iostream>
 #include <regex>

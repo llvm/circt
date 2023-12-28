@@ -24,32 +24,6 @@ using namespace esi::services;
 
 namespace esi {
 
-/// Build an index of children by AppID.
-static map<AppID, Instance *>
-buildIndex(const vector<unique_ptr<Instance>> &insts) {
-  map<AppID, Instance *> index;
-  for (auto &item : insts)
-    index[item->getID()] = item.get();
-  return index;
-}
-
-/// Build an index of ports by AppID.
-static map<AppID, const BundlePort &>
-buildIndex(const vector<BundlePort> &ports) {
-  map<AppID, const BundlePort &> index;
-  for (auto &item : ports)
-    index.emplace(item.getID(), item);
-  return index;
-}
-
-HWModule::HWModule(std::optional<ModuleInfo> info,
-                   std::vector<std::unique_ptr<Instance>> children,
-                   std::vector<services::Service *> services,
-                   std::vector<BundlePort> ports)
-    : info(info), children(std::move(children)),
-      childIndex(buildIndex(this->children)), services(services), ports(ports),
-      portIndex(buildIndex(this->ports)) {}
-
 services::Service *AcceleratorConnection::getService(Service::Type svcType,
                                                      AppIDPath id,
                                                      std::string implName,

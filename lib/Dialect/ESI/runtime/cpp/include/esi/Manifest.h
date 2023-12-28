@@ -22,11 +22,8 @@
 #include "esi/Types.h"
 
 #include <any>
-#include <cstdint>
-#include <map>
 #include <memory>
 #include <optional>
-#include <stdexcept>
 #include <string>
 #include <vector>
 

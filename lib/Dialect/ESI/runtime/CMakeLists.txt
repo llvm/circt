@@ -44,6 +44,7 @@ include_directories(cpp/include)
 
 set(ESIRuntimeSources
   cpp/lib/Accelerator.cpp
+  cpp/lib/Design.cpp
   cpp/lib/Manifest.cpp
   cpp/lib/Services.cpp
   cpp/lib/Ports.cpp
