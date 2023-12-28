@@ -82,20 +82,21 @@ public:
   BundlePort(AppID id, std::map<std::string, ChannelPort &> channels);
 
   /// Get the ID of the port.
-  AppID getID() const { return _id; }
+  AppID getID() const { return id; }
 
   /// Get access to the raw byte streams of a channel. Intended for internal
   /// usage and binding to other languages (e.g. Python) which have their own
-  /// message serialization code.
+  /// message serialization code. Exposed publicly as an escape hatch, but
+  /// ordinary users should not use. You have been warned.
   WriteChannelPort &getRawWrite(const std::string &name) const;
   ReadChannelPort &getRawRead(const std::string &name) const;
   const std::map<std::string, ChannelPort &> &getChannels() const {
-    return _channels;
+    return channels;
   }
 
 private:
-  AppID _id;
-  std::map<std::string, ChannelPort &> _channels;
+  AppID id;
+  std::map<std::string, ChannelPort &> channels;
 };
 
 } // namespace esi
