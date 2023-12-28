@@ -38,9 +38,6 @@
 namespace esi {
 // Forward declarations.
 class Instance;
-class ChannelPort;
-class WriteChannelPort;
-class ReadChannelPort;
 namespace services {
 class Service;
 }

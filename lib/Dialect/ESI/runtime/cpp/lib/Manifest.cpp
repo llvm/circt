@@ -417,8 +417,8 @@ ChannelType *parseChannelType(const nlohmann::json &typeJson,
                          parseType(typeJson.at("inner"), cache));
 }
 
-Type *parseInt(const nlohmann::json &typeJson,
-               Manifest::Impl::TypeCache &cache) {
+BitVectorType *parseInt(const nlohmann::json &typeJson,
+                        Manifest::Impl::TypeCache &cache) {
   assert(typeJson.at("mnemonic") == "int");
   std::string sign = typeJson.at("signedness");
   uint64_t width = typeJson.at("hw_bitwidth");
