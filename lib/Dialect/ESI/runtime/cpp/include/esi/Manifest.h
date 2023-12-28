@@ -22,11 +22,8 @@
 #include "esi/Types.h"
 
 #include <any>
-#include <cstdint>
-#include <map>
 #include <memory>
 #include <optional>
-#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -68,7 +65,8 @@ private:
 
 } // namespace esi
 
+std::ostream &operator<<(std::ostream &os, const esi::AppID &id);
+std::ostream &operator<<(std::ostream &, const esi::AppIDPath &);
 std::ostream &operator<<(std::ostream &, const esi::ModuleInfo &);
-std::ostream &operator<<(std::ostream &, const esi::AppID &);
 
 #endif // ESI_MANIFEST_H

@@ -437,7 +437,7 @@ BitVectorType *parseInt(const nlohmann::json &typeJson,
 StructType *parseStruct(const nlohmann::json &typeJson,
                         Manifest::Impl::TypeCache &cache) {
   assert(typeJson.at("mnemonic") == "struct");
-  vector<tuple<string, const Type &>> fields;
+  vector<pair<string, const Type &>> fields;
   for (auto &fieldJson : typeJson["fields"])
     fields.emplace_back(fieldJson.at("name"),
                         parseType(fieldJson["type"], cache));
@@ -611,6 +611,8 @@ bool operator<(const AppIDPath &a, const AppIDPath &b) {
       return a[i] < b[i];
   return false;
 }
+} // namespace esi
+
 ostream &operator<<(ostream &os, const AppID &id) {
   os << id.name;
   if (id.idx)
@@ -625,4 +627,3 @@ ostream &operator<<(ostream &os, const AppIDPath &path) {
   }
   return os;
 }
-} // namespace esi
