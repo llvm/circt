@@ -21,25 +21,50 @@ using namespace arcilator;
 
 LogicalResult circt::arcilator::collectStates(Value storage, unsigned offset,
                                               std::vector<StateInfo> &states) {
-  for (auto *op : storage.getUsers()) {
+  struct StateCollectionJob {
+    mlir::Value::user_iterator nextToProcess;
+    mlir::Value::user_iterator end;
+    unsigned offset;
+
+    StateCollectionJob(Value storage, unsigned offset)
+        : nextToProcess(storage.user_begin()), end(storage.user_end()),
+          offset(offset) {}
+  };
+
+  SmallVector<StateCollectionJob, 4> jobStack{{storage, offset}};
+
+  while (!jobStack.empty()) {
+    StateCollectionJob &job = jobStack.back();
+
+    if (job.nextToProcess == job.end) {
+      jobStack.pop_back();
+      continue;
+    }
+
+    Operation *op = *job.nextToProcess++;
+    unsigned offset = job.offset;
+
     if (auto substorage = dyn_cast<AllocStorageOp>(op)) {
       if (!substorage.getOffset().has_value())
         return substorage.emitOpError(
             "without allocated offset; run state allocation first");
-      if (failed(collectStates(substorage.getOutput(),
-                               *substorage.getOffset() + offset, states)))
-        return failure();
+      Value substorageOutput = substorage.getOutput();
+      jobStack.emplace_back(substorageOutput, offset + *substorage.getOffset());
       continue;
     }
+
     if (!isa<AllocStateOp, RootInputOp, RootOutputOp, AllocMemoryOp>(op))
       continue;
+
     auto opName = op->getAttrOfType<StringAttr>("name");
     if (!opName || opName.getValue().empty())
       continue;
+
     auto opOffset = op->getAttrOfType<IntegerAttr>("offset");
     if (!opOffset)
       return op->emitOpError(
           "without allocated offset; run state allocation first");
+
     if (isa<AllocStateOp, RootInputOp, RootOutputOp>(op)) {
       auto result = op->getResult(0);
       auto &stateInfo = states.emplace_back();
@@ -57,6 +82,7 @@ LogicalResult circt::arcilator::collectStates(Value storage, unsigned offset,
       stateInfo.numBits = result.getType().cast<StateType>().getBitWidth();
       continue;
     }
+
     if (auto memOp = dyn_cast<AllocMemoryOp>(op)) {
       auto stride = op->getAttrOfType<IntegerAttr>("stride");
       if (!stride)
@@ -74,6 +100,7 @@ LogicalResult circt::arcilator::collectStates(Value storage, unsigned offset,
       continue;
     }
   }
+
   return success();
 }
 
@@ -95,12 +122,12 @@ LogicalResult circt::arcilator::collectModels(mlir::ModuleOp module,
   return success();
 }
 
-void circt::arcilator::serializeModelInfoToJson(
-    llvm::raw_ostream &outputStream, std::vector<ModelInfo> &models) {
+void circt::arcilator::serializeModelInfoToJson(llvm::raw_ostream &outputStream,
+                                                ArrayRef<ModelInfo> models) {
   llvm::json::OStream json(outputStream, 2);
 
   json.array([&] {
-    for (ModelInfo &model : models) {
+    for (const ModelInfo &model : models) {
       json.object([&] {
         json.attribute("name", model.name);
         json.attribute("numStateBytes", model.numStateBytes);

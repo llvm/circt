@@ -349,8 +349,8 @@ static LogicalResult processBuffer(
     return failure();
 
   // Collect generated model info.
-  std::vector<ModelInfo> modelInfos;
-  if (failed(collectModels(module.get(), modelInfos)))
+  std::vector<ModelInfo> models;
+  if (failed(collectModels(module.get(), models)))
     return failure();
 
   // Output state info as JSON if requested.
@@ -359,10 +359,10 @@ static LogicalResult processBuffer(
     llvm::ToolOutputFile outputFile(stateFile, ec,
                                     llvm::sys::fs::OpenFlags::OF_None);
     if (ec) {
-      llvm::errs() << "unable to open state file: " << ec.message();
+      llvm::errs() << "unable to open state file: " << ec.message() << '\n';
       return failure();
     }
-    serializeModelInfoToJson(outputFile.os(), modelInfos);
+    serializeModelInfoToJson(outputFile.os(), models);
     outputFile.keep();
   }
 

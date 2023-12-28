@@ -10,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_TOOLS_ARCILATOR_MODELINFO
-#define CIRCT_TOOLS_ARCILATOR_MODELINFO
+#ifndef CIRCT_TOOLS_ARCILATOR_MODELINFO_H
+#define CIRCT_TOOLS_ARCILATOR_MODELINFO_H
 
 #include "mlir/IR/BuiltinOps.h"
 #include "llvm/Support/raw_ostream.h"
@@ -55,9 +55,9 @@ mlir::LogicalResult collectModels(mlir::ModuleOp module,
 
 /// Serializes `models` to `outputStream` in JSON format.
 void serializeModelInfoToJson(llvm::raw_ostream &outputStream,
-                              std::vector<ModelInfo> &models);
+                              llvm::ArrayRef<ModelInfo> models);
 
 } // namespace arcilator
 } // namespace circt
 
-#endif // CIRCT_TOOLS_ARCILATOR_MODELINFO
+#endif // CIRCT_TOOLS_ARCILATOR_MODELINFO_H
