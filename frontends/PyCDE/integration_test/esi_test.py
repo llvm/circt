@@ -15,8 +15,8 @@ from pycde.types import (Bits, Bundle, BundledChannel, Channel,
 import sys
 
 TestBundle = Bundle([
-    BundledChannel("resp", ChannelDirection.TO, Bits(16)),
-    BundledChannel("req", ChannelDirection.FROM, Bits(24))
+    BundledChannel("resp", ChannelDirection.TO, UInt(16)),
+    BundledChannel("req", ChannelDirection.FROM, UInt(24))
 ])
 
 
@@ -30,14 +30,14 @@ class LoopbackInOutAdd7(Module):
 
   @generator
   def construct(ports):
-    loopback = Wire(Channel(Bits(16)))
+    loopback = Wire(Channel(UInt(16)))
     call_bundle, [from_host] = TestBundle.pack(resp=loopback)
     HostComms.req_resp(call_bundle, AppID("loopback_inout"))
 
     ready = Wire(Bits(1))
     data, valid = from_host.unwrap(ready)
-    plus7 = data.as_uint(15) + UInt(8)(7)
-    data_chan, data_ready = loopback.type.wrap(plus7.as_bits(), valid)
+    plus7 = data + 7
+    data_chan, data_ready = loopback.type.wrap(plus7.as_uint(16), valid)
     ready.assign(data_ready)
     loopback.assign(data_chan)
 

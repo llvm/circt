@@ -33,7 +33,7 @@ class ESIType:
       return (False, "runtime only supports types with multiple of 8 bits")
     return (True, None)
 
-  def is_valid(self, obj) -> bool:
+  def is_valid(self, obj) -> Tuple[bool, Optional[str]]:
     """Is a Python object compatible with HW type?"""
     assert False, "unimplemented"
 
@@ -65,8 +65,10 @@ class ESIType:
 
 class VoidType(ESIType):
 
-  def is_valid(self, obj) -> bool:
-    return obj is None
+  def is_valid(self, obj) -> Tuple[bool, Optional[str]]:
+    if obj is not None:
+      return (False, f"void type cannot must represented by None, not {obj}")
+    return (True, None)
 
   @property
   def bit_width(self) -> int:
@@ -90,13 +92,15 @@ class BitsType(ESIType):
   def __init__(self, cpp_type: cpp.BitsType):
     self.cpp_type: cpp.BitsType = cpp_type
 
-  def is_valid(self, obj) -> bool:
+  def is_valid(self, obj) -> Tuple[bool, Optional[str]]:
     if not isinstance(obj, (bytearray, bytes, list)):
-      return False
+      return (False, f"invalid type: {type(obj)}")
     if isinstance(obj, list) and not all(
         [isinstance(b, int) and b.bit_length() <= 8 for b in obj]):
-      return False
-    return len(obj) == self.max_size
+      return (False, f"list item too large: {obj}")
+    if len(obj) != self.max_size:
+      return (False, f"wrong size: {len(obj)}")
+    return (True, None)
 
   @property
   def bit_width(self) -> int:
@@ -128,12 +132,12 @@ class IntType(ESIType):
 
 class UIntType(IntType):
 
-  def is_valid(self, obj) -> bool:
+  def is_valid(self, obj) -> Tuple[bool, Optional[str]]:
     if not isinstance(obj, int):
-      return False
+      return (False, f"must be an int, not {type(obj)}")
     if obj < 0 or obj.bit_length() > self.bit_width:
-      return False
-    return True
+      return (False, f"out of range: {obj}")
+    return (True, None)
 
   def __str__(self) -> str:
     return f"uint{self.bit_width}"
@@ -151,16 +155,16 @@ __esi_mapping[cpp.UIntType] = UIntType
 
 class SIntType(IntType):
 
-  def is_valid(self, obj) -> bool:
+  def is_valid(self, obj) -> Tuple[bool, Optional[str]]:
     if not isinstance(obj, int):
-      return False
+      return (False, f"must be an int, not {type(obj)}")
     if obj < 0:
       if (-1 * obj) > 2**(self.bit_width - 1):
-        return False
+        return (False, f"out of range: {obj}")
     elif obj < 0:
       if obj >= 2**(self.bit_width - 1) - 1:
-        return False
-    return True
+        return (False, f"out of range: {obj}")
+    return (True, None)
 
   def __str__(self) -> str:
     return f"sint{self.bit_width}"
@@ -191,20 +195,21 @@ class StructType(ESIType):
       return -1
     return sum(widths)
 
-  def is_valid(self, obj) -> bool:
+  def is_valid(self, obj) -> Tuple[bool, Optional[str]]:
     fields_count = 0
     if not isinstance(obj, dict):
       obj = obj.__dict__
 
     for (fname, ftype) in self.fields:
       if fname not in obj:
-        return False
-      if not ftype.is_valid(obj[fname]):
-        return False
+        return (False, f"missing field '{fname}'")
+      fvalid, reason = ftype.is_valid(obj[fname])
+      if not fvalid:
+        return (False, f"invalid field '{fname}': {reason}")
       fields_count += 1
     if fields_count != len(obj):
-      return False
-    return True
+      return (False, "missing fields")
+    return (True, None)
 
   def serialize(self, obj) -> bytearray:
     ret = bytearray()
@@ -235,15 +240,16 @@ class ArrayType(ESIType):
   def bit_width(self) -> int:
     return self.element_type.bit_width * self.size
 
-  def is_valid(self, obj) -> bool:
+  def is_valid(self, obj) -> Tuple[bool, Optional[str]]:
     if not isinstance(obj, list):
-      return False
+      return (False, f"must be a list, not {type(obj)}")
     if len(obj) != self.size:
-      return False
-    for e in obj:
-      if not self.element_type.is_valid(e):
-        return False
-    return True
+      return (False, f"wrong size: expected {self.size} not {len(obj)}")
+    for (idx, e) in enumerate(obj):
+      evalid, reason = self.element_type.is_valid(e)
+      if not evalid:
+        return (False, f"invalid element {idx}: {reason}")
+    return (True, None)
 
   def serialize(self, lst: list) -> bytearray:
     ret = bytearray()
@@ -284,8 +290,10 @@ class WritePort(Port):
     self.cpp_port: cpp.WriteChannelPort = cpp_port
 
   def write(self, msg=None) -> bool:
-    if not self.type.is_valid(msg):
-      raise ValueError(f"'{msg}' cannot be converted to '{self.type}'")
+    valid, reason = self.type.is_valid(msg)
+    if not valid:
+      raise ValueError(
+          f"'{msg}' cannot be converted to '{self.type}': {reason}")
     msg_bytes: bytearray = self.type.serialize(msg)
     self.cpp_port.write(msg_bytes)
     return True

@@ -247,13 +247,14 @@ class System:
       # defined so we can go through and output the typedefs delcarations.
       lambda sys: TypeAlias.declare_aliases(sys.mod),
       "builtin.module(esi-appid-hier{{top={tops} }}, esi-build-manifest{{top={tops} }})",
-      "builtin.module(lower-hwarith-to-hw, msft-lower-constructs, msft-lower-instances)",
+      "builtin.module(msft-lower-constructs, msft-lower-instances)",
       "builtin.module(esi-clean-metadata)",
       "builtin.module(hw.module(lower-seq-hlmem))",
       "builtin.module(lower-esi-to-physical)",
       # TODO: support more than just cosim.
       "builtin.module(lower-esi-bundles, lower-esi-ports, lower-esi-to-hw{{platform=cosim}})",
       "builtin.module(convert-fsm-to-sv)",
+      "builtin.module(lower-hwarith-to-hw)",
       "builtin.module(lower-seq-to-sv)",
       "builtin.module(cse, canonicalize, cse)",
       "builtin.module(hw.module(prettify-verilog), hw.module(hw-cleanup))",

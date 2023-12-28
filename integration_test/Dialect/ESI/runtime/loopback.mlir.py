@@ -10,35 +10,8 @@ assert acc.sysinfo().esi_version() == 1
 m = acc.manifest()
 assert m.api_version == 1
 
-
-def strType(t: esi.Type) -> str:
-  return str(t)
-  # if isinstance(t, esi.BundleType):
-  #   return "bundle<[{}]>".format(", ".join([
-  #       f"{name} {direction} {strType(ty)}" for (name, direction,
-  #                                                ty) in t.channels
-  #   ]))
-  # if isinstance(t, esi.ChannelType):
-  #   return f"channel<{strType(t.inner)}>"
-  # if isinstance(t, esi.ArrayType):
-  #   return f"array<{strType(t.element)}, {t.size}>"
-  # if isinstance(t, esi.StructType):
-  #   return "struct<{}>".format(", ".join(
-  #       ["{name}: {strType(ty)}" for (name, ty) in t.fields]))
-  # if isinstance(t, esi.BitsType):
-  #   return f"bits<{t.width}>"
-  # if isinstance(t, esi.UIntType):
-  #   return f"uint<{t.width}>"
-  # if isinstance(t, esi.SIntType):
-  #   return f"sint<{t.width}>"
-  # if isinstance(t, esi.VoidType):
-  #   return "void"
-  # assert False, f"unknown type: {t}"
-
-
 for esiType in m.type_table:
-  print(f"{esiType}:")
-  print(f"  {strType(esiType)}")
+  print(f"{esiType}")
 
 d = acc.build_accelerator()
 

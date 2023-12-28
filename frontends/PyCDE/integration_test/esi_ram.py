@@ -12,7 +12,7 @@ from pycde.types import Bits
 
 import sys
 
-RamI64x8 = DeclareRandomAccessMemory(Bits(64), 8)
+RamI64x8 = DeclareRandomAccessMemory(Bits(64), 256)
 WriteType = RamI64x8.write.type.write
 
 
