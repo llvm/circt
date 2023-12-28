@@ -26,6 +26,7 @@ using namespace std;
 using namespace esi;
 
 void printInfo(ostream &os, AcceleratorConnection &acc);
+void printHier(ostream &os, AcceleratorConnection &acc);
 
 int main(int argc, const char *argv[]) {
   // TODO: find a command line parser library rather than doing this by hand.
@@ -51,7 +52,8 @@ int main(int argc, const char *argv[]) {
       cout << info.getJsonManifest() << endl;
     else if (cmd == "info")
       printInfo(cout, *acc);
-    // TODO: add a command to print out the instance hierarchy.
+    else if (cmd == "hier")
+      printHier(cout, *acc);
     else {
       cout << "Connection successful." << endl;
       if (!cmd.empty()) {
@@ -84,4 +86,39 @@ void printInfo(ostream &os, AcceleratorConnection &acc) {
   size_t i = 0;
   for (Type t : m.getTypeTable())
     os << "  " << i++ << ": " << t.getID() << endl;
+}
+
+void printPort(ostream &os, const BundlePort &port, string indent = "") {
+  os << indent << "  " << port.getID() << ":" << endl;
+  for (const auto &[name, chan] : port.getChannels()) {
+    os << indent << "    " << name << ": " << chan.getType().getID() << endl;
+  }
+}
+
+void printInstance(ostream &os, const HWModule *d, string indent = "") {
+  os << indent << "* Instance:";
+  if (auto inst = dynamic_cast<const Instance *>(d))
+    os << inst->getID() << endl;
+  else
+    os << "top" << endl;
+  os << indent << "* Ports:" << endl;
+  for (const BundlePort &port : d->getPortsOrdered())
+    printPort(os, port, indent + "  ");
+  std::vector<const Instance *> children = d->getChildrenOrdered();
+  if (!children.empty()) {
+    os << indent << "* Children:" << endl;
+    for (const Instance *child : d->getChildrenOrdered())
+      printInstance(os, child, indent + "  ");
+  }
+  os << endl;
+}
+
+void printHier(ostream &os, AcceleratorConnection &acc) {
+  Manifest manifest(acc.getService<services::SysInfo>()->getJsonManifest());
+  std::unique_ptr<Accelerator> design = manifest.buildAccelerator(acc);
+  os << "********************************" << endl;
+  os << "* Design hierarchy" << endl;
+  os << "********************************" << endl;
+  os << endl;
+  printInstance(os, design.get());
 }

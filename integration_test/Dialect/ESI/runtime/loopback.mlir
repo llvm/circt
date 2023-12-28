@@ -3,6 +3,7 @@
 // RUN: circt-opt %s --esi-connect-services --esi-appid-hier=top=top --esi-build-manifest=top=top --esi-clean-metadata > %t4.mlir
 // RUN: circt-opt %t4.mlir --lower-esi-to-physical --lower-esi-bundles --lower-esi-ports --lower-esi-to-hw=platform=cosim --lower-seq-to-sv --export-split-verilog -o %t3.mlir
 // RUN: cd ..
+// RUN: esiquery trace w:%t6/esi_system_manifest.json hier | FileCheck %s --check-prefix=QUERY-HIER
 // RUN: %python %s.py trace w:%t6/esi_system_manifest.json
 // RUN: %python esi-cosim-runner.py --exec %s.py %t6/*.sv
 
@@ -83,3 +84,39 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
   hw.instance "func1" @CallableFunc1() -> ()
   hw.instance "loopback_struct" @LoopbackStruct() -> ()
 }
+
+// QUERY-HIER: ********************************
+// QUERY-HIER: * Design hierarchy
+// QUERY-HIER: ********************************
+// QUERY-HIER: * Instance:top
+// QUERY-HIER: * Ports:
+// QUERY-HIER:     internal_write:
+// QUERY-HIER:       ack: !esi.channel<i0>
+// QUERY-HIER:       req: !esi.channel<!hw.struct<address: i5, data: i64>>
+// QUERY-HIER:     func1:
+// QUERY-HIER:       arg: !esi.channel<i16>
+// QUERY-HIER:       result: !esi.channel<i16>
+// QUERY-HIER:     structFunc:
+// QUERY-HIER:       arg: !esi.channel<!hw.struct<a: ui4, b: si8>>
+// QUERY-HIER:       result: !esi.channel<!hw.array<1xsi8>>
+// QUERY-HIER: * Children:
+// QUERY-HIER:   * Instance:loopback_inst[0]
+// QUERY-HIER:   * Ports:
+// QUERY-HIER:       loopback_tohw:
+// QUERY-HIER:         recv: !esi.channel<i8>
+// QUERY-HIER:       loopback_fromhw:
+// QUERY-HIER:         send: !esi.channel<i8>
+// QUERY-HIER:       mysvc_recv:
+// QUERY-HIER:         recv: !esi.channel<i0>
+// QUERY-HIER:       mysvc_send:
+// QUERY-HIER:         send: !esi.channel<i0>
+// QUERY-HIER:   * Instance:loopback_inst[1]
+// QUERY-HIER:   * Ports:
+// QUERY-HIER:       loopback_tohw:
+// QUERY-HIER:         recv: !esi.channel<i8>
+// QUERY-HIER:       loopback_fromhw:
+// QUERY-HIER:         send: !esi.channel<i8>
+// QUERY-HIER:       mysvc_recv:
+// QUERY-HIER:         recv: !esi.channel<i0>
+// QUERY-HIER:       mysvc_send:
+// QUERY-HIER:         send: !esi.channel<i0>
