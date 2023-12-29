@@ -96,3 +96,19 @@ om.class @ListCreateTest(%notpath: i1, %basepath : !om.basepath, %path : !om.pat
   // CHECK: om.class.field @nestedpath, [[NESTED_PATH_LIST]] : !om.list<!om.list<!om.frozenpath>>
   om.class.field @nestedpath, %3 : !om.list<!om.list<!om.path>>
 }
+
+// CHECK-LABEL om.class @PathListClass(%pathList: !om.list<!om.frozenpath>)
+om.class @PathListClass(%pathList : !om.list<!om.path>) {
+  om.class.field @pathList, %pathList : !om.list<!om.path>
+}
+
+// CHECK-LABEL om.class @PathListTest(%arg: !om.list<!om.frozenpath>)
+om.class @PathListTest(%arg : !om.list<!om.path>) {
+  // CHECK: om.object @PathListClass(%arg) : (!om.list<!om.frozenpath>)
+  om.object @PathListClass(%arg) : (!om.list<!om.path>) -> !om.class.type<@PathListClass>
+
+  // CHECK: [[RES:%.+]] = om.list_create
+  %0 = om.list_create : !om.path
+  // CHECK: om.object @PathListClass([[RES]]) : (!om.list<!om.frozenpath>)
+  om.object @PathListClass(%0) : (!om.list<!om.path>) -> !om.class.type<@PathListClass>
+}

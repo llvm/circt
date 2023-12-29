@@ -1417,3 +1417,32 @@ firrtl.circuit "PropertyUTurn" {
   }
   firrtl.extmodule @Consume(in in : !firrtl.string)
 }
+
+// -----
+
+// Test that inlining and flattening compose with nla well.
+firrtl.circuit "compose_nla" {
+  hw.hierpath private @nla1 [@test1::@sym, @test2::@sym, @test3]
+// CHECK-NOT:  hw.hierpath private @nla1
+firrtl.module @compose_nla() {
+// CHECK-LABEL: firrtl.module @compose_nla() {
+  firrtl.instance test1 @test1()
+  firrtl.instance test2 @test2()
+  firrtl.instance test3 @test3()
+}
+firrtl.module private @test1() attributes {annotations =
+        [{class = "firrtl.transforms.FlattenAnnotation"},
+         {class = "firrtl.passes.InlineAnnotation"}]} {
+  %test_wire = firrtl.wire : !firrtl.uint<2>
+  firrtl.instance test2 sym @sym @test2()
+  firrtl.instance test3 @test3()
+}
+firrtl.module private @test2() attributes {annotations =
+        [{class = "firrtl.passes.InlineAnnotation"}]} {
+  %test_wire = firrtl.wire : !firrtl.uint<2>
+  firrtl.instance test3 sym @sym @test3()
+}
+firrtl.module private @test3() {
+  %test_wire = firrtl.wire : !firrtl.uint<2>
+}
+}

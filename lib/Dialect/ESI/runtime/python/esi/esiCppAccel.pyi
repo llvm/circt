@@ -11,7 +11,8 @@ __all__ = [
     'BitVectorType', 'BitsType', 'BundlePort', 'BundleType', 'ChannelPort',
     'ChannelType', 'Direction', 'From', 'HWModule', 'Instance', 'IntegerType',
     'MMIO', 'Manifest', 'ModuleInfo', 'ReadChannelPort', 'SIntType',
-    'StructType', 'SysInfo', 'To', 'Type', 'UIntType', 'WriteChannelPort'
+    'StructType', 'SysInfo', 'To', 'Type', 'UIntType', 'VoidType',
+    'WriteChannelPort'
 ]
 
 
@@ -254,7 +255,7 @@ class ModuleInfo:
 
 class ReadChannelPort(ChannelPort):
 
-  def read(self, arg0: int) -> list[int]:
+  def read(self, arg0: int) -> bytearray:
     ...
 
 
@@ -292,9 +293,13 @@ class UIntType(IntegerType):
   pass
 
 
+class VoidType(Type):
+  pass
+
+
 class WriteChannelPort(ChannelPort):
 
-  def write(self, arg0: list[int]) -> None:
+  def write(self, arg0: bytearray) -> None:
     ...
 
 

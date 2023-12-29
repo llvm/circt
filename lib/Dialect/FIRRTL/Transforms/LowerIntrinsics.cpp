@@ -14,6 +14,7 @@
 
 #include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
+#include "circt/Dialect/FIRRTL/FIRRTLIntrinsics.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
@@ -29,210 +30,79 @@
 using namespace circt;
 using namespace firrtl;
 
-// Pass Infrastructure
-//===----------------------------------------------------------------------===//
-
 namespace {
-struct LowerIntrinsicsPass : public LowerIntrinsicsBase<LowerIntrinsicsPass> {
-  void runOnOperation() override;
-  using LowerIntrinsicsBase::fixupEICGWrapper;
-};
-} // end anonymous namespace
 
-static ParseResult hasNPorts(StringRef name, FModuleLike mod, unsigned n) {
-  if (mod.getPorts().size() != n) {
-    mod.emitError(name) << " has " << mod.getPorts().size()
-                        << " ports instead of " << n;
-    return failure();
+class CirctSizeofConverter : public IntrinsicConverter {
+public:
+  using IntrinsicConverter::IntrinsicConverter;
+
+  bool check() override {
+    return hasNPorts(2) || namedPort(0, "i") || namedPort(1, "size") ||
+           sizedPort<UIntType>(1, 32) || hasNParam(0);
   }
-  return success();
-}
 
-static ParseResult namedPort(StringRef name, FModuleLike mod, unsigned n,
-                             StringRef portName) {
-  auto ports = mod.getPorts();
-  if (n >= ports.size()) {
-    mod.emitError(name) << " missing port " << n;
-    return failure();
-  }
-  if (!ports[n].getName().equals(portName)) {
-    mod.emitError(name) << " port " << n << " named '" << ports[n].getName()
-                        << "' instead of '" << portName << "'";
-    return failure();
-  }
-  return success();
-}
-
-template <typename T>
-static ParseResult typedPort(StringRef name, FModuleLike mod, unsigned n) {
-  auto ports = mod.getPorts();
-  if (n >= ports.size()) {
-    mod.emitError(name) << " missing port " << n;
-    return failure();
-  }
-  if (!isa<T>(ports[n].type)) {
-    mod.emitError(name) << " port " << n << " not of correct type";
-    return failure();
-  }
-  return success();
-}
-
-template <typename T>
-static ParseResult sizedPort(StringRef name, FModuleLike mod, unsigned n,
-                             int32_t size) {
-  auto ports = mod.getPorts();
-  if (failed(typedPort<T>(name, mod, n)))
-    return failure();
-  if (cast<T>(ports[n].type).getWidth() != size) {
-    mod.emitError(name) << " port " << n << " not size " << size;
-    return failure();
-  }
-  return success();
-}
-
-static ParseResult resetPort(StringRef name, FModuleLike mod, unsigned n) {
-  auto ports = mod.getPorts();
-  if (n >= ports.size()) {
-    mod.emitError(name) << " missing port " << n;
-    return failure();
-  }
-  if (isa<ResetType, AsyncResetType>(ports[n].type))
-    return success();
-  if (auto uintType = dyn_cast<UIntType>(ports[n].type))
-    if (uintType.getWidth() == 1)
-      return success();
-  mod.emitError(name) << " port " << n << " not of correct type";
-  return failure();
-}
-
-static ParseResult hasNParam(StringRef name, FModuleLike mod, unsigned n,
-                             unsigned c = 0) {
-  unsigned num = 0;
-  if (mod.getParameters())
-    num = mod.getParameters().size();
-  if (num < n || num > n + c) {
-    auto d = mod.emitError(name) << " has " << num << " parameters instead of ";
-    if (c == 0)
-      d << n;
-    else
-      d << " between " << n << " and " << (n + c);
-    return failure();
-  }
-  return success();
-}
-
-static ParseResult namedParam(StringRef name, FModuleLike mod,
-                              StringRef paramName, bool optional = false) {
-  for (auto a : mod.getParameters()) {
-    auto param = cast<ParamDeclAttr>(a);
-    if (param.getName().getValue().equals(paramName)) {
-      if (isa<StringAttr>(param.getValue()))
-        return success();
-
-      mod.emitError(name) << " has parameter '" << param.getName()
-                          << "' which should be a string but is not";
-      return failure();
-    }
-  }
-  if (optional)
-    return success();
-  mod.emitError(name) << " is missing parameter " << paramName;
-  return failure();
-}
-
-static ParseResult namedIntParam(StringRef name, FModuleLike mod,
-                                 StringRef paramName, bool optional = false) {
-  for (auto a : mod.getParameters()) {
-    auto param = cast<ParamDeclAttr>(a);
-    if (param.getName().getValue().equals(paramName)) {
-      if (isa<IntegerAttr>(param.getValue()))
-        return success();
-
-      mod.emitError(name) << " has parameter '" << param.getName()
-                          << "' which should be an integer but is not";
-      return failure();
-    }
-  }
-  if (optional)
-    return success();
-  mod.emitError(name) << " is missing parameter " << paramName;
-  return failure();
-}
-
-static bool lowerCirctSizeof(InstanceGraph &ig, FModuleLike mod) {
-  auto ports = mod.getPorts();
-  if (hasNPorts("circt.sizeof", mod, 2) ||
-      namedPort("circt.sizeof", mod, 0, "i") ||
-      namedPort("circt.sizeof", mod, 1, "size") ||
-      sizedPort<UIntType>("circt.sizeof", mod, 1, 32) ||
-      hasNParam("circt.sizeof", mod, 0))
-    return false;
-
-  for (auto *use : ig.lookup(mod)->uses()) {
-    auto inst = cast<InstanceOp>(use->getInstance().getOperation());
+  void convert(InstanceOp inst) override {
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
-    auto inputWire = builder.create<WireOp>(ports[0].type).getResult();
+    auto inputTy = inst.getResult(0).getType();
+    auto inputWire = builder.create<WireOp>(inputTy).getResult();
     inst.getResult(0).replaceAllUsesWith(inputWire);
     auto size = builder.create<SizeOfIntrinsicOp>(inputWire);
     inst.getResult(1).replaceAllUsesWith(size);
     inst.erase();
   }
-  return true;
-}
+};
 
-static bool lowerCirctIsX(InstanceGraph &ig, FModuleLike mod) {
-  auto ports = mod.getPorts();
-  if (hasNPorts("circt.isX", mod, 2) || namedPort("circt.isX", mod, 0, "i") ||
-      namedPort("circt.isX", mod, 1, "found") ||
-      sizedPort<UIntType>("circt.isX", mod, 1, 1) ||
-      hasNParam("circt.isX", mod, 0))
-    return false;
+class CirctIsXConverter : public IntrinsicConverter {
+public:
+  using IntrinsicConverter::IntrinsicConverter;
 
-  for (auto *use : ig.lookup(mod)->uses()) {
-    auto inst = cast<InstanceOp>(use->getInstance().getOperation());
+  bool check() override {
+    return hasNPorts(2) || namedPort(0, "i") || namedPort(1, "found") ||
+           sizedPort<UIntType>(1, 1) || hasNParam(0);
+  }
+
+  void convert(InstanceOp inst) override {
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
-    auto inputWire = builder.create<WireOp>(ports[0].type).getResult();
+    auto inputTy = inst.getResult(0).getType();
+    auto inputWire = builder.create<WireOp>(inputTy).getResult();
     inst.getResult(0).replaceAllUsesWith(inputWire);
     auto size = builder.create<IsXIntrinsicOp>(inputWire);
     inst.getResult(1).replaceAllUsesWith(size);
     inst.erase();
   }
-  return true;
-}
+};
 
-static bool lowerCirctPlusArgTest(InstanceGraph &ig, FModuleLike mod) {
-  if (hasNPorts("circt.plusargs.test", mod, 1) ||
-      namedPort("circt.plusargs.test", mod, 0, "found") ||
-      sizedPort<UIntType>("circt.plusargs.test", mod, 0, 1) ||
-      hasNParam("circt.plusargs.test", mod, 1) ||
-      namedParam("circt.plusargs.test", mod, "FORMAT"))
-    return false;
+class CirctPlusArgTestConverter : public IntrinsicConverter {
+public:
+  using IntrinsicConverter::IntrinsicConverter;
 
-  auto param = cast<ParamDeclAttr>(mod.getParameters()[0]);
-  for (auto *use : ig.lookup(mod)->uses()) {
-    auto inst = cast<InstanceOp>(use->getInstance().getOperation());
+  bool check() override {
+    return hasNPorts(1) || namedPort(0, "found") || sizedPort<UIntType>(0, 1) ||
+           hasNParam(1) || namedParam("FORMAT");
+  }
+
+  void convert(InstanceOp inst) override {
+    auto param = cast<ParamDeclAttr>(mod.getParameters()[0]);
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
     auto newop = builder.create<PlusArgsTestIntrinsicOp>(
         cast<StringAttr>(param.getValue()));
     inst.getResult(0).replaceAllUsesWith(newop);
     inst.erase();
   }
-  return true;
-}
+};
 
-static bool lowerCirctPlusArgValue(InstanceGraph &ig, FModuleLike mod) {
-  if (hasNPorts("circt.plusargs.value", mod, 2) ||
-      namedPort("circt.plusargs.value", mod, 0, "found") ||
-      namedPort("circt.plusargs.value", mod, 1, "result") ||
-      sizedPort<UIntType>("circt.plusargs.value", mod, 0, 1) ||
-      hasNParam("circt.plusargs.value", mod, 1) ||
-      namedParam("circt.plusargs.value", mod, "FORMAT"))
-    return false;
+class CirctPlusArgValueConverter : public IntrinsicConverter {
+public:
+  using IntrinsicConverter::IntrinsicConverter;
 
-  auto param = cast<ParamDeclAttr>(mod.getParameters()[0]);
+  bool check() override {
+    return hasNPorts(2) || namedPort(0, "found") || namedPort(1, "result") ||
+           sizedPort<UIntType>(0, 1) || hasNParam(1) || namedParam("FORMAT");
+  }
 
-  for (auto *use : ig.lookup(mod)->uses()) {
-    auto inst = cast<InstanceOp>(use->getInstance().getOperation());
+  void convert(InstanceOp inst) override {
+
+    auto param = cast<ParamDeclAttr>(mod.getParameters()[0]);
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
     auto newop = builder.create<PlusArgsValueIntrinsicOp>(
         inst.getResultTypes(), cast<StringAttr>(param.getValue()));
@@ -240,22 +110,19 @@ static bool lowerCirctPlusArgValue(InstanceGraph &ig, FModuleLike mod) {
     inst.getResult(1).replaceAllUsesWith(newop.getResult());
     inst.erase();
   }
-  return true;
-}
+};
 
-static bool lowerCirctClockGate(InstanceGraph &ig, FModuleLike mod) {
-  if (hasNPorts("circt.clock_gate", mod, 3) ||
-      namedPort("circt.clock_gate", mod, 0, "in") ||
-      namedPort("circt.clock_gate", mod, 1, "en") ||
-      namedPort("circt.clock_gate", mod, 2, "out") ||
-      typedPort<ClockType>("circt.clock_gate", mod, 0) ||
-      sizedPort<UIntType>("circt.clock_gate", mod, 1, 1) ||
-      typedPort<ClockType>("circt.clock_gate", mod, 2) ||
-      hasNParam("circt.clock_gate", mod, 0))
-    return false;
+class CirctClockGateConverter : public IntrinsicConverter {
+public:
+  using IntrinsicConverter::IntrinsicConverter;
 
-  for (auto *use : ig.lookup(mod)->uses()) {
-    auto inst = cast<InstanceOp>(use->getInstance().getOperation());
+  bool check() override {
+    return hasNPorts(3) || namedPort(0, "in") || namedPort(1, "en") ||
+           namedPort(2, "out") || typedPort<ClockType>(0) ||
+           sizedPort<UIntType>(1, 1) || typedPort<ClockType>(2) || hasNParam(0);
+  }
+
+  void convert(InstanceOp inst) override {
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
     auto in = builder.create<WireOp>(inst.getResult(0).getType()).getResult();
     auto en = builder.create<WireOp>(inst.getResult(1).getType()).getResult();
@@ -265,24 +132,20 @@ static bool lowerCirctClockGate(InstanceGraph &ig, FModuleLike mod) {
     inst.getResult(2).replaceAllUsesWith(out);
     inst.erase();
   }
-  return true;
-}
+};
 
-static bool lowerEICGWrapperToClockGate(InstanceGraph &ig, FModuleLike mod) {
-  if (hasNPorts("EICG_wrapper", mod, 4) ||
-      namedPort("EICG_wrapper", mod, 0, "in") ||
-      namedPort("EICG_wrapper", mod, 1, "test_en") ||
-      namedPort("EICG_wrapper", mod, 2, "en") ||
-      namedPort("EICG_wrapper", mod, 3, "out") ||
-      typedPort<ClockType>("EICG_wrapper", mod, 0) ||
-      sizedPort<UIntType>("EICG_wrapper", mod, 1, 1) ||
-      sizedPort<UIntType>("EICG_wrapper", mod, 2, 1) ||
-      typedPort<ClockType>("EICG_wrapper", mod, 3) ||
-      hasNParam("EICG_wrapper", mod, 0))
-    return false;
+class EICGWrapperToClockGateConverter : public IntrinsicConverter {
+public:
+  using IntrinsicConverter::IntrinsicConverter;
 
-  for (auto *use : ig.lookup(mod)->uses()) {
-    auto inst = cast<InstanceOp>(use->getInstance().getOperation());
+  bool check() override {
+    return hasNPorts(4) || namedPort(0, "in") || namedPort(1, "test_en") ||
+           namedPort(2, "en") || namedPort(3, "out") ||
+           typedPort<ClockType>(0) || sizedPort<UIntType>(1, 1) ||
+           sizedPort<UIntType>(2, 1) || typedPort<ClockType>(3) || hasNParam(0);
+  }
+
+  void convert(InstanceOp inst) override {
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
     auto in = builder.create<WireOp>(inst.getResult(0).getType()).getResult();
     auto testEn =
@@ -295,33 +158,32 @@ static bool lowerEICGWrapperToClockGate(InstanceGraph &ig, FModuleLike mod) {
     inst.getResult(3).replaceAllUsesWith(out);
     inst.erase();
   }
-  return true;
-}
+};
 
 template <bool isMux2>
-static bool lowerCirctMuxCell(InstanceGraph &ig, FModuleLike mod) {
-  StringRef mnemonic = isMux2 ? "circt.mux2cell" : "circt.mux4cell";
-  unsigned portNum = isMux2 ? 4 : 6;
-  if (hasNPorts(mnemonic, mod, portNum) || namedPort(mnemonic, mod, 0, "sel") ||
-      typedPort<UIntType>(mnemonic, mod, 0)) {
+class CirctMuxCellConverter : public IntrinsicConverter {
+private:
+  static constexpr unsigned portNum = isMux2 ? 4 : 6;
+
+public:
+  using IntrinsicConverter::IntrinsicConverter;
+
+  bool check() override {
+    if (hasNPorts(portNum) || namedPort(0, "sel") || typedPort<UIntType>(0)) {
+      return true;
+    }
+    if (isMux2) {
+      if (namedPort(1, "high") || namedPort(2, "low") || namedPort(3, "out"))
+        return true;
+    } else {
+      if (namedPort(1, "v3") || namedPort(2, "v2") || namedPort(3, "v1") ||
+          namedPort(4, "v0") || namedPort(5, "out"))
+        return true;
+    }
     return false;
   }
 
-  if (isMux2) {
-    if (namedPort(mnemonic, mod, 1, "high") ||
-        namedPort(mnemonic, mod, 2, "low") ||
-        namedPort(mnemonic, mod, 3, "out"))
-      return false;
-  } else {
-    if (namedPort(mnemonic, mod, 1, "v3") ||
-        namedPort(mnemonic, mod, 2, "v2") ||
-        namedPort(mnemonic, mod, 3, "v1") ||
-        namedPort(mnemonic, mod, 4, "v0") || namedPort(mnemonic, mod, 5, "out"))
-      return false;
-  }
-
-  for (auto *use : ig.lookup(mod)->uses()) {
-    auto inst = cast<InstanceOp>(use->getInstance().getOperation());
+  void convert(InstanceOp inst) override {
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
     SmallVector<Value> operands;
     operands.reserve(portNum - 1);
@@ -338,23 +200,20 @@ static bool lowerCirctMuxCell(InstanceGraph &ig, FModuleLike mod) {
     inst.getResult(portNum - 1).replaceAllUsesWith(out);
     inst.erase();
   }
+};
 
-  return true;
-}
+class CirctLTLAndConverter : public IntrinsicConverter {
+public:
+  using IntrinsicConverter::IntrinsicConverter;
 
-static bool lowerCirctLTLAnd(InstanceGraph &ig, FModuleLike mod) {
-  if (hasNPorts("circt.ltl.and", mod, 3) ||
-      namedPort("circt.ltl.and", mod, 0, "lhs") ||
-      namedPort("circt.ltl.and", mod, 1, "rhs") ||
-      namedPort("circt.ltl.and", mod, 2, "out") ||
-      sizedPort<UIntType>("circt.ltl.and", mod, 0, 1) ||
-      sizedPort<UIntType>("circt.ltl.and", mod, 1, 1) ||
-      sizedPort<UIntType>("circt.ltl.and", mod, 2, 1) ||
-      hasNParam("circt.ltl.and", mod, 0))
-    return false;
+  bool check() override {
+    return hasNPorts(3) || namedPort(0, "lhs") || namedPort(1, "rhs") ||
+           namedPort(2, "out") || sizedPort<UIntType>(0, 1) ||
+           sizedPort<UIntType>(1, 1) || sizedPort<UIntType>(2, 1) ||
+           hasNParam(0);
+  }
 
-  for (auto *use : ig.lookup(mod)->uses()) {
-    auto inst = cast<InstanceOp>(use->getInstance().getOperation());
+  void convert(InstanceOp inst) override {
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
     auto lhs = builder.create<WireOp>(inst.getResult(0).getType()).getResult();
     auto rhs = builder.create<WireOp>(inst.getResult(1).getType()).getResult();
@@ -364,22 +223,20 @@ static bool lowerCirctLTLAnd(InstanceGraph &ig, FModuleLike mod) {
     inst.getResult(2).replaceAllUsesWith(out);
     inst.erase();
   }
-  return true;
-}
+};
 
-static bool lowerCirctLTLOr(InstanceGraph &ig, FModuleLike mod) {
-  if (hasNPorts("circt.ltl.or", mod, 3) ||
-      namedPort("circt.ltl.or", mod, 0, "lhs") ||
-      namedPort("circt.ltl.or", mod, 1, "rhs") ||
-      namedPort("circt.ltl.or", mod, 2, "out") ||
-      sizedPort<UIntType>("circt.ltl.or", mod, 0, 1) ||
-      sizedPort<UIntType>("circt.ltl.or", mod, 1, 1) ||
-      sizedPort<UIntType>("circt.ltl.or", mod, 2, 1) ||
-      hasNParam("circt.ltl.or", mod, 0))
-    return false;
+class CirctLTLOrConverter : public IntrinsicConverter {
+public:
+  using IntrinsicConverter::IntrinsicConverter;
 
-  for (auto *use : ig.lookup(mod)->uses()) {
-    auto inst = cast<InstanceOp>(use->getInstance().getOperation());
+  bool check() override {
+    return hasNPorts(3) || namedPort(0, "lhs") || namedPort(1, "rhs") ||
+           namedPort(2, "out") || sizedPort<UIntType>(0, 1) ||
+           sizedPort<UIntType>(1, 1) || sizedPort<UIntType>(2, 1) ||
+           hasNParam(0);
+  }
+
+  void convert(InstanceOp inst) override {
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
     auto lhs = builder.create<WireOp>(inst.getResult(0).getType()).getResult();
     auto rhs = builder.create<WireOp>(inst.getResult(1).getType()).getResult();
@@ -389,38 +246,38 @@ static bool lowerCirctLTLOr(InstanceGraph &ig, FModuleLike mod) {
     inst.getResult(2).replaceAllUsesWith(out);
     inst.erase();
   }
-  return true;
-}
+};
 
-static bool lowerCirctLTLDelay(InstanceGraph &ig, FModuleLike mod) {
-  if (hasNPorts("circt.ltl.delay", mod, 2) ||
-      namedPort("circt.ltl.delay", mod, 0, "in") ||
-      namedPort("circt.ltl.delay", mod, 1, "out") ||
-      sizedPort<UIntType>("circt.ltl.delay", mod, 0, 1) ||
-      sizedPort<UIntType>("circt.ltl.delay", mod, 1, 1) ||
-      hasNParam("circt.ltl.delay", mod, 1, 2) ||
-      namedIntParam("circt.ltl.delay", mod, "delay") ||
-      namedIntParam("circt.ltl.delay", mod, "length", true))
-    return false;
+class CirctLTLDelayConverter : public IntrinsicConverter {
+public:
+  CirctLTLDelayConverter(StringRef name, FModuleLike mod)
+      : IntrinsicConverter(name, mod) {
+    auto getI64Attr = [&](int64_t value) {
+      return IntegerAttr::get(IntegerType::get(mod.getContext(), 64), value);
+    };
 
-  auto getI64Attr = [&](int64_t value) {
-    return IntegerAttr::get(IntegerType::get(mod.getContext(), 64), value);
-  };
-  auto params = mod.getParameters();
-  auto delay = getI64Attr(params[0]
-                              .cast<ParamDeclAttr>()
-                              .getValue()
-                              .cast<IntegerAttr>()
-                              .getValue()
-                              .getZExtValue());
-  IntegerAttr length;
-  if (params.size() >= 2)
-    if (auto lengthDecl = cast<ParamDeclAttr>(params[1]))
-      length = getI64Attr(
-          cast<IntegerAttr>(lengthDecl.getValue()).getValue().getZExtValue());
+    auto params = mod.getParameters();
+    delay = getI64Attr(params[0]
+                           .cast<ParamDeclAttr>()
+                           .getValue()
+                           .cast<IntegerAttr>()
+                           .getValue()
+                           .getZExtValue());
 
-  for (auto *use : ig.lookup(mod)->uses()) {
-    auto inst = cast<InstanceOp>(use->getInstance().getOperation());
+    if (params.size() >= 2)
+      if (auto lengthDecl = cast<ParamDeclAttr>(params[1]))
+        length = getI64Attr(
+            cast<IntegerAttr>(lengthDecl.getValue()).getValue().getZExtValue());
+  }
+
+  bool check() override {
+    return hasNPorts(2) || namedPort(0, "in") || namedPort(1, "out") ||
+           sizedPort<UIntType>(0, 1) || sizedPort<UIntType>(1, 1) ||
+           hasNParam(1, 2) || namedIntParam("delay") ||
+           namedIntParam("length", true);
+  }
+
+  void convert(InstanceOp inst) override {
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
     auto in = builder.create<WireOp>(inst.getResult(0).getType()).getResult();
     inst.getResult(0).replaceAllUsesWith(in);
@@ -429,22 +286,24 @@ static bool lowerCirctLTLDelay(InstanceGraph &ig, FModuleLike mod) {
     inst.getResult(1).replaceAllUsesWith(out);
     inst.erase();
   }
-  return true;
-}
 
-static bool lowerCirctLTLConcat(InstanceGraph &ig, FModuleLike mod) {
-  if (hasNPorts("circt.ltl.concat", mod, 3) ||
-      namedPort("circt.ltl.concat", mod, 0, "lhs") ||
-      namedPort("circt.ltl.concat", mod, 1, "rhs") ||
-      namedPort("circt.ltl.concat", mod, 2, "out") ||
-      sizedPort<UIntType>("circt.ltl.concat", mod, 0, 1) ||
-      sizedPort<UIntType>("circt.ltl.concat", mod, 1, 1) ||
-      sizedPort<UIntType>("circt.ltl.concat", mod, 2, 1) ||
-      hasNParam("circt.ltl.concat", mod, 0))
-    return false;
+private:
+  IntegerAttr length;
+  IntegerAttr delay;
+};
 
-  for (auto *use : ig.lookup(mod)->uses()) {
-    auto inst = cast<InstanceOp>(use->getInstance().getOperation());
+class CirctLTLConcatConverter : public IntrinsicConverter {
+public:
+  using IntrinsicConverter::IntrinsicConverter;
+
+  bool check() override {
+    return hasNPorts(3) || namedPort(0, "lhs") || namedPort(1, "rhs") ||
+           namedPort(2, "out") || sizedPort<UIntType>(0, 1) ||
+           sizedPort<UIntType>(1, 1) || sizedPort<UIntType>(2, 1) ||
+           hasNParam(0);
+  }
+
+  void convert(InstanceOp inst) override {
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
     auto lhs = builder.create<WireOp>(inst.getResult(0).getType()).getResult();
     auto rhs = builder.create<WireOp>(inst.getResult(1).getType()).getResult();
@@ -454,20 +313,19 @@ static bool lowerCirctLTLConcat(InstanceGraph &ig, FModuleLike mod) {
     inst.getResult(2).replaceAllUsesWith(out);
     inst.erase();
   }
-  return true;
-}
+};
 
-static bool lowerCirctLTLNot(InstanceGraph &ig, FModuleLike mod) {
-  if (hasNPorts("circt.ltl.not", mod, 2) ||
-      namedPort("circt.ltl.not", mod, 0, "in") ||
-      namedPort("circt.ltl.not", mod, 1, "out") ||
-      sizedPort<UIntType>("circt.ltl.not", mod, 0, 1) ||
-      sizedPort<UIntType>("circt.ltl.not", mod, 1, 1) ||
-      hasNParam("circt.ltl.not", mod, 0))
-    return false;
+class CirctLTLNotConverter : public IntrinsicConverter {
+public:
+  using IntrinsicConverter::IntrinsicConverter;
 
-  for (auto *use : ig.lookup(mod)->uses()) {
-    auto inst = cast<InstanceOp>(use->getInstance().getOperation());
+  bool check() override {
+    return hasNPorts(2) || namedPort(0, "in") || namedPort(1, "out") ||
+           sizedPort<UIntType>(0, 1) || sizedPort<UIntType>(1, 1) ||
+           hasNParam(0);
+  }
+
+  void convert(InstanceOp inst) override {
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
     auto input =
         builder.create<WireOp>(inst.getResult(0).getType()).getResult();
@@ -476,22 +334,20 @@ static bool lowerCirctLTLNot(InstanceGraph &ig, FModuleLike mod) {
     inst.getResult(1).replaceAllUsesWith(out);
     inst.erase();
   }
-  return true;
-}
+};
 
-static bool lowerCirctLTLImplication(InstanceGraph &ig, FModuleLike mod) {
-  if (hasNPorts("circt.ltl.implication", mod, 3) ||
-      namedPort("circt.ltl.implication", mod, 0, "lhs") ||
-      namedPort("circt.ltl.implication", mod, 1, "rhs") ||
-      namedPort("circt.ltl.implication", mod, 2, "out") ||
-      sizedPort<UIntType>("circt.ltl.implication", mod, 0, 1) ||
-      sizedPort<UIntType>("circt.ltl.implication", mod, 1, 1) ||
-      sizedPort<UIntType>("circt.ltl.implication", mod, 2, 1) ||
-      hasNParam("circt.ltl.implication", mod, 0))
-    return false;
+class CirctLTLImplicationConverter : public IntrinsicConverter {
+public:
+  using IntrinsicConverter::IntrinsicConverter;
 
-  for (auto *use : ig.lookup(mod)->uses()) {
-    auto inst = cast<InstanceOp>(use->getInstance().getOperation());
+  bool check() override {
+    return hasNPorts(3) || namedPort(0, "lhs") || namedPort(1, "rhs") ||
+           namedPort(2, "out") || sizedPort<UIntType>(0, 1) ||
+           sizedPort<UIntType>(1, 1) || sizedPort<UIntType>(2, 1) ||
+           hasNParam(0);
+  }
+
+  void convert(InstanceOp inst) override {
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
     auto lhs = builder.create<WireOp>(inst.getResult(0).getType()).getResult();
     auto rhs = builder.create<WireOp>(inst.getResult(1).getType()).getResult();
@@ -502,20 +358,19 @@ static bool lowerCirctLTLImplication(InstanceGraph &ig, FModuleLike mod) {
     inst.getResult(2).replaceAllUsesWith(out);
     inst.erase();
   }
-  return true;
-}
+};
 
-static bool lowerCirctLTLEventually(InstanceGraph &ig, FModuleLike mod) {
-  if (hasNPorts("circt.ltl.eventually", mod, 2) ||
-      namedPort("circt.ltl.eventually", mod, 0, "in") ||
-      namedPort("circt.ltl.eventually", mod, 1, "out") ||
-      sizedPort<UIntType>("circt.ltl.eventually", mod, 0, 1) ||
-      sizedPort<UIntType>("circt.ltl.eventually", mod, 1, 1) ||
-      hasNParam("circt.ltl.eventually", mod, 0))
-    return false;
+class CirctLTLEventuallyConverter : public IntrinsicConverter {
+public:
+  using IntrinsicConverter::IntrinsicConverter;
 
-  for (auto *use : ig.lookup(mod)->uses()) {
-    auto inst = cast<InstanceOp>(use->getInstance().getOperation());
+  bool check() override {
+    return hasNPorts(2) || namedPort(0, "in") || namedPort(1, "out") ||
+           sizedPort<UIntType>(0, 1) || sizedPort<UIntType>(1, 1) ||
+           hasNParam(0);
+  }
+
+  void convert(InstanceOp inst) override {
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
     auto input =
         builder.create<WireOp>(inst.getResult(0).getType()).getResult();
@@ -524,22 +379,19 @@ static bool lowerCirctLTLEventually(InstanceGraph &ig, FModuleLike mod) {
     inst.getResult(1).replaceAllUsesWith(out);
     inst.erase();
   }
-  return true;
-}
+};
 
-static bool lowerCirctLTLClock(InstanceGraph &ig, FModuleLike mod) {
-  if (hasNPorts("circt.ltl.clock", mod, 3) ||
-      namedPort("circt.ltl.clock", mod, 0, "in") ||
-      namedPort("circt.ltl.clock", mod, 1, "clock") ||
-      namedPort("circt.ltl.clock", mod, 2, "out") ||
-      sizedPort<UIntType>("circt.ltl.clock", mod, 0, 1) ||
-      typedPort<ClockType>("circt.ltl.clock", mod, 1) ||
-      sizedPort<UIntType>("circt.ltl.clock", mod, 2, 1) ||
-      hasNParam("circt.ltl.clock", mod, 0))
-    return false;
+class CirctLTLClockConverter : public IntrinsicConverter {
+public:
+  using IntrinsicConverter::IntrinsicConverter;
 
-  for (auto *use : ig.lookup(mod)->uses()) {
-    auto inst = cast<InstanceOp>(use->getInstance().getOperation());
+  bool check() override {
+    return hasNPorts(3) || namedPort(0, "in") || namedPort(1, "clock") ||
+           namedPort(2, "out") || sizedPort<UIntType>(0, 1) ||
+           typedPort<ClockType>(1) || sizedPort<UIntType>(2, 1) || hasNParam(0);
+  }
+
+  void convert(InstanceOp inst) override {
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
     auto in = builder.create<WireOp>(inst.getResult(0).getType()).getResult();
     auto clock =
@@ -550,22 +402,20 @@ static bool lowerCirctLTLClock(InstanceGraph &ig, FModuleLike mod) {
     inst.getResult(2).replaceAllUsesWith(out);
     inst.erase();
   }
-  return true;
-}
+};
 
-static bool lowerCirctLTLDisable(InstanceGraph &ig, FModuleLike mod) {
-  if (hasNPorts("circt.ltl.disable", mod, 3) ||
-      namedPort("circt.ltl.disable", mod, 0, "in") ||
-      namedPort("circt.ltl.disable", mod, 1, "condition") ||
-      namedPort("circt.ltl.disable", mod, 2, "out") ||
-      sizedPort<UIntType>("circt.ltl.disable", mod, 0, 1) ||
-      sizedPort<UIntType>("circt.ltl.disable", mod, 1, 1) ||
-      sizedPort<UIntType>("circt.ltl.disable", mod, 2, 1) ||
-      hasNParam("circt.ltl.disable", mod, 0))
-    return false;
+class CirctLTLDisableConverter : public IntrinsicConverter {
+public:
+  using IntrinsicConverter::IntrinsicConverter;
 
-  for (auto *use : ig.lookup(mod)->uses()) {
-    auto inst = cast<InstanceOp>(use->getInstance().getOperation());
+  bool check() override {
+    return hasNPorts(3) || namedPort(0, "in") || namedPort(1, "condition") ||
+           namedPort(2, "out") || sizedPort<UIntType>(0, 1) ||
+           sizedPort<UIntType>(1, 1) || sizedPort<UIntType>(2, 1) ||
+           hasNParam(0);
+  }
+
+  void convert(InstanceOp inst) override {
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
     auto in = builder.create<WireOp>(inst.getResult(0).getType()).getResult();
     auto condition =
@@ -577,26 +427,26 @@ static bool lowerCirctLTLDisable(InstanceGraph &ig, FModuleLike mod) {
     inst.getResult(2).replaceAllUsesWith(out);
     inst.erase();
   }
-  return true;
-}
+};
 
 template <class Op>
-static bool lowerCirctVerif(InstanceGraph &ig, FModuleLike mod) {
-  if (hasNPorts("circt.verif.assert", mod, 1) ||
-      namedPort("circt.verif.assert", mod, 0, "property") ||
-      sizedPort<UIntType>("circt.verif.assert", mod, 0, 1) ||
-      hasNParam("circt.verif.assert", mod, 0, 1) ||
-      namedParam("circt.verif.assert", mod, "label", true))
-    return false;
+class CirctVerifConverter : public IntrinsicConverter {
+public:
+  using IntrinsicConverter::IntrinsicConverter;
 
-  auto params = mod.getParameters();
-  StringAttr label;
-  if (!params.empty())
-    if (auto labelDecl = cast<ParamDeclAttr>(params[0]))
-      label = cast<StringAttr>(labelDecl.getValue());
+  bool check() override {
+    return hasNPorts(1) || namedPort(0, "property") ||
+           sizedPort<UIntType>(0, 1) || hasNParam(0, 1) ||
+           namedParam("label", true);
+  }
 
-  for (auto *use : ig.lookup(mod)->uses()) {
-    auto inst = cast<InstanceOp>(use->getInstance().getOperation());
+  void convert(InstanceOp inst) override {
+    auto params = mod.getParameters();
+    StringAttr label;
+    if (!params.empty())
+      if (auto labelDecl = cast<ParamDeclAttr>(params[0]))
+        label = cast<StringAttr>(labelDecl.getValue());
+
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
     auto property =
         builder.create<WireOp>(inst.getResult(0).getType()).getResult();
@@ -604,22 +454,19 @@ static bool lowerCirctVerif(InstanceGraph &ig, FModuleLike mod) {
     builder.create<Op>(property, label);
     inst.erase();
   }
-  return true;
-}
+};
 
-static bool lowerCirctHasBeenReset(InstanceGraph &ig, FModuleLike mod) {
-  if (hasNPorts("circt.has_been_reset", mod, 3) ||
-      namedPort("circt.has_been_reset", mod, 0, "clock") ||
-      namedPort("circt.has_been_reset", mod, 1, "reset") ||
-      namedPort("circt.has_been_reset", mod, 2, "out") ||
-      typedPort<ClockType>("circt.has_been_reset", mod, 0) ||
-      resetPort("circt.has_been_reset", mod, 1) ||
-      sizedPort<UIntType>("circt.has_been_reset", mod, 2, 1) ||
-      hasNParam("circt.has_been_reset", mod, 0))
-    return false;
+class CirctHasBeenResetConverter : public IntrinsicConverter {
+public:
+  using IntrinsicConverter::IntrinsicConverter;
 
-  for (auto *use : ig.lookup(mod)->uses()) {
-    auto inst = cast<InstanceOp>(use->getInstance().getOperation());
+  bool check() override {
+    return hasNPorts(3) || namedPort(0, "clock") || namedPort(1, "reset") ||
+           namedPort(2, "out") || typedPort<ClockType>(0) || resetPort(1) ||
+           sizedPort<UIntType>(2, 1) || hasNParam(0);
+  }
+
+  void convert(InstanceOp inst) override {
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
     auto clock =
         builder.create<WireOp>(inst.getResult(0).getType()).getResult();
@@ -631,13 +478,13 @@ static bool lowerCirctHasBeenReset(InstanceGraph &ig, FModuleLike mod) {
     inst.getResult(2).replaceAllUsesWith(out);
     inst.erase();
   }
-  return true;
-}
+};
 
-static bool lowerCirctProbe(InstanceGraph &ig, FModuleLike mod) {
-  // TODO add some conditions here?
-  for (auto *use : ig.lookup(mod)->uses()) {
-    auto inst = cast<InstanceOp>(use->getInstance().getOperation());
+class CirctProbeConverter : public IntrinsicConverter {
+public:
+  using IntrinsicConverter::IntrinsicConverter;
+
+  void convert(InstanceOp inst) override {
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
     auto clock =
         builder.create<WireOp>(inst.getResult(0).getType()).getResult();
@@ -648,110 +495,63 @@ static bool lowerCirctProbe(InstanceGraph &ig, FModuleLike mod) {
     builder.create<FPGAProbeIntrinsicOp>(clock, input);
     inst.erase();
   }
-  return true;
-}
+};
 
-std::pair<const char *, std::function<bool(InstanceGraph &, FModuleLike)>>
-    intrinsics[] = {
-        {"circt.sizeof", lowerCirctSizeof},
-        {"circt_sizeof", lowerCirctSizeof},
-        {"circt.isX", lowerCirctIsX},
-        {"circt_isX", lowerCirctIsX},
-        {"circt.plusargs.test", lowerCirctPlusArgTest},
-        {"circt_plusargs_test", lowerCirctPlusArgTest},
-        {"circt.plusargs.value", lowerCirctPlusArgValue},
-        {"circt_plusargs_value", lowerCirctPlusArgValue},
-        {"circt.clock_gate", lowerCirctClockGate},
-        {"circt_clock_gate", lowerCirctClockGate},
-        {"EICG_wrapper", lowerEICGWrapperToClockGate}, // remove once EICG gone
-        {"circt.ltl.and", lowerCirctLTLAnd},
-        {"circt_ltl_and", lowerCirctLTLAnd},
-        {"circt.ltl.or", lowerCirctLTLOr},
-        {"circt_ltl_or", lowerCirctLTLOr},
-        {"circt.ltl.delay", lowerCirctLTLDelay},
-        {"circt_ltl_delay", lowerCirctLTLDelay},
-        {"circt.ltl.concat", lowerCirctLTLConcat},
-        {"circt_ltl_concat", lowerCirctLTLConcat},
-        {"circt.ltl.not", lowerCirctLTLNot},
-        {"circt_ltl_not", lowerCirctLTLNot},
-        {"circt.ltl.implication", lowerCirctLTLImplication},
-        {"circt_ltl_implication", lowerCirctLTLImplication},
-        {"circt.ltl.eventually", lowerCirctLTLEventually},
-        {"circt_ltl_eventually", lowerCirctLTLEventually},
-        {"circt.ltl.clock", lowerCirctLTLClock},
-        {"circt_ltl_clock", lowerCirctLTLClock},
-        {"circt.ltl.disable", lowerCirctLTLDisable},
-        {"circt_ltl_disable", lowerCirctLTLDisable},
-        {"circt.verif.assert", lowerCirctVerif<VerifAssertIntrinsicOp>},
-        {"circt_verif_assert", lowerCirctVerif<VerifAssertIntrinsicOp>},
-        {"circt.verif.assume", lowerCirctVerif<VerifAssumeIntrinsicOp>},
-        {"circt_verif_assume", lowerCirctVerif<VerifAssumeIntrinsicOp>},
-        {"circt.verif.cover", lowerCirctVerif<VerifCoverIntrinsicOp>},
-        {"circt_verif_cover", lowerCirctVerif<VerifCoverIntrinsicOp>},
-        {"circt.mux2cell", lowerCirctMuxCell<true>},
-        {"circt_mux2cell", lowerCirctMuxCell<true>},
-        {"circt.mux4cell", lowerCirctMuxCell<false>},
-        {"circt_mux4cell", lowerCirctMuxCell<false>},
-        {"circt.has_been_reset", lowerCirctHasBeenReset},
-        {"circt_has_been_reset", lowerCirctHasBeenReset},
-        {"circt.fpga_probe", lowerCirctProbe},
-        {"circt_fpga_probe", lowerCirctProbe}};
+} // namespace
+
+//===----------------------------------------------------------------------===//
+// Pass Infrastructure
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct LowerIntrinsicsPass : public LowerIntrinsicsBase<LowerIntrinsicsPass> {
+  void runOnOperation() override;
+  using LowerIntrinsicsBase::fixupEICGWrapper;
+};
+} // namespace
 
 // This is the main entrypoint for the lowering pass.
 void LowerIntrinsicsPass::runOnOperation() {
-  size_t numFailures = 0;
-  size_t numConverted = 0;
-  InstanceGraph &ig = getAnalysis<InstanceGraph>();
-  for (auto &op : llvm::make_early_inc_range(getOperation().getOps())) {
-    if (!isa<FExtModuleOp, FIntModuleOp>(op))
-      continue;
-    StringAttr intname;
-    if (auto extMod = dyn_cast<FExtModuleOp>(op)) {
-      if (fixupEICGWrapper && extMod.getDefname() == "EICG_wrapper") {
-        // Remove this once `EICG_wrapper` is no longer special-cased by
-        // firtool.
-        intname = extMod.getDefnameAttr();
-      } else {
-        auto anno = AnnotationSet(&op).getAnnotation("circt.Intrinsic");
-        if (!anno)
-          continue;
-        intname = anno.getMember<StringAttr>("intrinsic");
-        if (!intname) {
-          op.emitError("intrinsic annotation with no intrinsic name");
-          ++numFailures;
-          continue;
-        }
-      }
-    } else {
-      intname = cast<FIntModuleOp>(op).getIntrinsicAttr();
-      if (!intname) {
-        op.emitError("intrinsic module with no intrinsic name");
-        ++numFailures;
-        continue;
-      }
-    }
+  IntrinsicLowerings lowering(&getContext(), getAnalysis<InstanceGraph>());
+  lowering.add<CirctSizeofConverter>("circt.sizeof", "circt_sizeof");
+  lowering.add<CirctIsXConverter>("circt.isX", "circt_isX");
+  lowering.add<CirctPlusArgTestConverter>("circt.plusargs.test",
+                                          "circt_plusargs_test");
+  lowering.add<CirctPlusArgValueConverter>("circt.plusargs.value",
+                                           "circt_plusargs_value");
+  lowering.add<CirctClockGateConverter>("circt.clock_gate", "circt_clock_gate");
+  lowering.add<CirctLTLAndConverter>("circt.ltl.and", "circt_ltl_and");
+  lowering.add<CirctLTLOrConverter>("circt.ltl.or", "circt_ltl_or");
+  lowering.add<CirctLTLDelayConverter>("circt.ltl.delay", "circt_ltl_delay");
+  lowering.add<CirctLTLConcatConverter>("circt.ltl.concat", "circt_ltl_concat");
+  lowering.add<CirctLTLNotConverter>("circt.ltl.not", "circt_ltl_not");
+  lowering.add<CirctLTLImplicationConverter>("circt.ltl.implication",
+                                             "circt_ltl_implication");
+  lowering.add<CirctLTLEventuallyConverter>("circt.ltl.eventually",
+                                            "circt_ltl_eventually");
+  lowering.add<CirctLTLClockConverter>("circt.ltl.clock", "circt_ltl_clock");
+  lowering.add<CirctLTLDisableConverter>("circt.ltl.disable",
+                                         "circt_ltl_disable");
+  lowering.add<CirctVerifConverter<VerifAssertIntrinsicOp>>(
+      "circt.verif.assert", "circt_verif_assert");
+  lowering.add<CirctVerifConverter<VerifAssumeIntrinsicOp>>(
+      "circt.verif.assume", "circt_verif_assume");
+  lowering.add<CirctVerifConverter<VerifCoverIntrinsicOp>>("circt.verif.cover",
+                                                           "circt_verif_cover");
+  lowering.add<CirctMuxCellConverter<true>>("circt.mux2cell", "circt_mux2cell");
+  lowering.add<CirctMuxCellConverter<false>>("circt.mux4cell",
+                                             "circt_mux4cell");
+  lowering.add<CirctHasBeenResetConverter>("circt.has_been_reset",
+                                           "circt_has_been_reset");
+  lowering.add<CirctProbeConverter>("circt.fpga_probe", "circt_fpga_probe");
 
-    bool found = false;
-    for (const auto &intrinsic : intrinsics) {
-      if (intname.getValue().equals(intrinsic.first)) {
-        found = true;
-        if (intrinsic.second(ig, cast<FModuleLike>(op))) {
-          ++numConverted;
-          op.erase();
-        } else {
-          ++numFailures;
-        }
-        break;
-      }
-    }
-    if (!found) {
-      op.emitError("unknown intrinsic: '") << intname.getValue() << "'";
-      ++numFailures;
-    }
-  }
-  if (numFailures)
-    signalPassFailure();
-  if (!numConverted)
+  // Remove this once `EICG_wrapper` is no longer special-cased by firtool.
+  if (fixupEICGWrapper)
+    lowering.addExtmod<EICGWrapperToClockGateConverter>("EICG_wrapper");
+
+  if (failed(lowering.lower(getOperation())))
+    return signalPassFailure();
+  if (!lowering.getNumConverted())
     markAllAnalysesPreserved();
 }
 

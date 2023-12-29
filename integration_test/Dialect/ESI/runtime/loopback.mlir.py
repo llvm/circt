@@ -1,5 +1,6 @@
-from typing import List
+from typing import List, Optional
 import esi
+import esi.types as types
 import sys
 
 platform = sys.argv[1]
@@ -9,34 +10,10 @@ assert acc.sysinfo().esi_version() == 1
 m = acc.manifest()
 assert m.api_version == 1
 
-
-def strType(t: esi.Type) -> str:
-  if isinstance(t, esi.BundleType):
-    return "bundle<[{}]>".format(", ".join([
-        f"{name} {direction} {strType(ty)}" for (name, direction,
-                                                 ty) in t.channels
-    ]))
-  if isinstance(t, esi.ChannelType):
-    return f"channel<{strType(t.inner)}>"
-  if isinstance(t, esi.ArrayType):
-    return f"array<{strType(t.element)}, {t.size}>"
-  if isinstance(t, esi.StructType):
-    return "struct<{}>".format(", ".join(
-        ["{name}: {strType(ty)}" for (name, ty) in t.fields]))
-  if isinstance(t, esi.BitsType):
-    return f"bits<{t.width}>"
-  if isinstance(t, esi.UIntType):
-    return f"uint<{t.width}>"
-  if isinstance(t, esi.SIntType):
-    return f"sint<{t.width}>"
-  assert False, f"unknown type: {t}"
-
-
 for esiType in m.type_table:
-  print(f"{esiType}:")
-  print(f"  {strType(esiType)}")
+  print(f"{esiType}")
 
-d = m.build_accelerator(acc)
+d = acc.build_accelerator()
 
 loopback = d.children[esi.AppID("loopback_inst", 0)]
 appid = loopback.id
@@ -44,43 +21,76 @@ print(appid)
 assert appid.name == "loopback_inst"
 assert appid.idx == 0
 
-mysvc_send = loopback.ports[esi.AppID("mysvc_recv")].channels["recv"]
+mysvc_send = loopback.ports[esi.AppID("mysvc_recv")].write_port("recv")
 mysvc_send.connect()
-mysvc_send.write([0])
-assert str(mysvc_send.type) == "<!esi.channel<i0>>"
+mysvc_send.write(None)
+print(f"mysvc_send.type: {mysvc_send.type}")
+assert isinstance(mysvc_send.type, types.VoidType)
 
-mysvc_send = loopback.ports[esi.AppID("mysvc_send")].channels["send"]
+mysvc_send = loopback.ports[esi.AppID("mysvc_send")].read_port("send")
 mysvc_send.connect()
-resp: List[int] = []
+resp: bool = False
 # Reads are non-blocking, so we need to poll.
-while resp == []:
+while not resp:
   print("i0 polling")
-  resp = mysvc_send.read(1)
+  (resp, _) = mysvc_send.read()
 print(f"i0 resp: {resp}")
 
-recv = loopback.ports[esi.AppID("loopback_tohw")].channels["recv"]
+recv = loopback.ports[esi.AppID("loopback_tohw")].write_port("recv")
 recv.connect()
+assert isinstance(recv.type, types.BitsType)
 
-send = loopback.ports[esi.AppID("loopback_fromhw")].channels["send"]
+send = loopback.ports[esi.AppID("loopback_fromhw")].read_port("send")
 send.connect()
 
-data = [24]
-recv.write(data)
-resp = []
+data = 24
+recv.write(int.to_bytes(data, 1, "little"))
+resp = False
 # Reads are non-blocking, so we need to poll.
-while resp == []:
+resp_data: bytearray
+while not resp:
   print("polling")
-  resp = send.read(1)
+  (resp, resp_data) = send.read()
+resp_int = int.from_bytes(resp_data, "little")
 
 # Trace platform intentionally produces random responses.
 if platform != "trace":
   print(f"data: {data}")
-  print(f"resp: {resp}")
-  assert resp == data
+  print(f"resp: {resp_int}")
+  assert resp_int == data
 
 # Placeholder until we have a runtime function API.
-myfunc = d.ports[esi.AppID("func1")]
-myfunc.channels["arg"].connect()
-myfunc.channels["result"].connect()
+myfunc = d.ports[esi.AppID("structFunc")]
+arg_chan = myfunc.write_port("arg").connect()
+result_chan = myfunc.read_port("result").connect()
 
+arg = {"a": 10, "b": -22}
+arg_chan.write(arg)
+
+result: Optional[dict] = None
+resp = False
+while not resp:
+  print("polling")
+  (resp, result) = result_chan.read()
+
+print(f"result: {result}")
+if platform != "trace":
+  assert result == {"y": -22, "x": -21}
+
+myfunc = d.ports[esi.AppID("arrayFunc")]
+arg_chan = myfunc.write_port("arg").connect()
+result_chan = myfunc.read_port("result").connect()
+
+arg = [-22]
+arg_chan.write(arg)
+
+result: Optional[List[int]] = None
+resp = False
+while not resp:
+  print("polling")
+  (resp, result) = result_chan.read()
+
+print(f"result: {result}")
+if platform != "trace":
+  assert result == [-21, -22]
 print("PASS")

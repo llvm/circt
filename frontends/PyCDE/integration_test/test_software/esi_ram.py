@@ -1,4 +1,4 @@
-from typing import List
+from typing import Optional
 import esi
 import random
 import sys
@@ -6,30 +6,30 @@ import sys
 platform = sys.argv[1]
 acc = esi.AcceleratorConnection(platform, sys.argv[2])
 
-m = acc.manifest()
-d = m.build_accelerator(acc)
+d = acc.build_accelerator()
 
-mem_write = d.ports[esi.AppID("write")].channels["write"]
+mem_write = d.ports[esi.AppID("write")].write_port("write")
 mem_write.connect()
-mem_read_addr = d.ports[esi.AppID("read")].channels["address"]
+mem_read_addr = d.ports[esi.AppID("read")].write_port("address")
 mem_read_addr.connect()
-mem_read_data = d.ports[esi.AppID("read")].channels["data"]
+mem_read_data = d.ports[esi.AppID("read")].read_port("data")
 mem_read_data.connect()
 
 
-def read(addr: int) -> List[int]:
+def read(addr: int) -> bytearray:
   mem_read_addr.write([addr])
-  resp: List[int] = []
-  while resp == []:
-    resp = mem_read_data.read(8)
+  got_data = False
+  resp: Optional[bytearray] = None
+  while not got_data:
+    (got_data, resp) = mem_read_data.read()
   print(f"resp: {resp}")
   return resp
 
 
 # The contents of address 3 are continuously updated to the contents of address
 # 2 by the accelerator.
-data = [random.randint(0, 2**8 - 1) for _ in range(8)]
-mem_write.write(data + [2])
+data = bytearray([random.randint(0, 2**8 - 1) for _ in range(8)])
+mem_write.write({"address": [2], "data": data})
 resp = read(2)
 assert resp == data
 resp = read(3)
@@ -37,7 +37,7 @@ assert resp == data
 
 # Check this by writing to address 3 and reading from it. Shouldn't have
 # changed.
-zeros = [0] * 8
-mem_write.write(zeros + [3])
+zeros = bytearray([0] * 8)
+mem_write.write({"address": [3], "data": zeros})
 resp = read(3)
 assert resp == data
