@@ -1,3 +1,8 @@
+# Originally imported via:
+#    pybind11-stubgen -o lib/Dialect/ESI/runtime/python/ esi.esiCppAccel
+# Local modifications:
+#    None yet. Though we're assuming that we will have some at some point.
+
 from __future__ import annotations
 import typing
 
