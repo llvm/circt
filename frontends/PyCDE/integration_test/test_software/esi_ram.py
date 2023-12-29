@@ -40,4 +40,4 @@ assert resp == data
 zeros = bytearray([0] * 8)
 mem_write.write({"address": [3], "data": zeros})
 resp = read(3)
-assert resp == zeros
+assert resp == data

@@ -18,9 +18,6 @@
 #include "signal.h"
 #include <iostream>
 
-#include <chrono>
-#include <thread>
-
 vluint64_t timeStamp;
 
 // Stop the simulation gracefully on ctrl-c.
@@ -97,7 +94,6 @@ int main(int argc, char **argv) {
     dut.clk = !dut.clk;
     if (tfp)
       tfp->dump(timeStamp);
-    std::this_thread::sleep_for(std::chrono::milliseconds(10));
   }
 
   // Tell the simulator that we're going to exit. This flushes the output(s) and
