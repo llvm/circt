@@ -417,8 +417,8 @@ ChannelType *parseChannelType(const nlohmann::json &typeJson,
                          parseType(typeJson.at("inner"), cache));
 }
 
-BitVectorType *parseInt(const nlohmann::json &typeJson,
-                        Manifest::Impl::TypeCache &cache) {
+Type *parseInt(const nlohmann::json &typeJson,
+               Manifest::Impl::TypeCache &cache) {
   assert(typeJson.at("mnemonic") == "int");
   std::string sign = typeJson.at("signedness");
   uint64_t width = typeJson.at("hw_bitwidth");
@@ -428,7 +428,10 @@ BitVectorType *parseInt(const nlohmann::json &typeJson,
     return new SIntType(id, width);
   else if (sign == "unsigned")
     return new UIntType(id, width);
-  else if (sign == "signless")
+  else if (sign == "signless" && width == 0)
+    // By convention, a zero-width signless integer is a void type.
+    return new VoidType(id);
+  else if (sign == "signless" && width > 0)
     return new BitsType(id, width);
   else
     throw runtime_error("Malformed manifest: unknown sign '" + sign + "'");

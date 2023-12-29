@@ -66,6 +66,12 @@ private:
   const Type &inner;
 };
 
+/// The "void" type is a special type which can be used to represent no type.
+class VoidType : public Type {
+public:
+  VoidType(const ID &id) : Type(id) {}
+};
+
 /// The "any" type is a special type which can be used to represent any type, as
 /// identified by the type id. Said type id is guaranteed to be present in the
 /// manifest. Importantly, the "any" type id over the wire may not be a string
