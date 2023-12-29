@@ -10,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_TOOLS_ARCILATOR_MODELINFO_H
-#define CIRCT_TOOLS_ARCILATOR_MODELINFO_H
+#ifndef CIRCT_DIALECT_ARC_MODELINFO_H
+#define CIRCT_DIALECT_ARC_MODELINFO_H
 
 #include "mlir/IR/BuiltinOps.h"
 #include "llvm/Support/raw_ostream.h"
@@ -19,7 +19,7 @@
 #include <vector>
 
 namespace circt {
-namespace arcilator {
+namespace arc {
 
 /// Gathers information about a given Arc state.
 struct StateInfo {
@@ -57,7 +57,7 @@ mlir::LogicalResult collectModels(mlir::ModuleOp module,
 void serializeModelInfoToJson(llvm::raw_ostream &outputStream,
                               llvm::ArrayRef<ModelInfo> models);
 
-} // namespace arcilator
+} // namespace arc
 } // namespace circt
 
-#endif // CIRCT_TOOLS_ARCILATOR_MODELINFO_H
+#endif // CIRCT_DIALECT_ARC_MODELINFO_H

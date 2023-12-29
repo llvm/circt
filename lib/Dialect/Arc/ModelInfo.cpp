@@ -10,17 +10,16 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Tools/Arcilator/ModelInfo.h"
+#include "circt/Dialect/Arc/ModelInfo.h"
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "llvm/Support/JSON.h"
 
 using namespace mlir;
 using namespace circt;
 using namespace arc;
-using namespace arcilator;
 
-LogicalResult circt::arcilator::collectStates(Value storage, unsigned offset,
-                                              std::vector<StateInfo> &states) {
+LogicalResult circt::arc::collectStates(Value storage, unsigned offset,
+                                        std::vector<StateInfo> &states) {
   struct StateCollectionJob {
     mlir::Value::user_iterator nextToProcess;
     mlir::Value::user_iterator end;
@@ -104,8 +103,8 @@ LogicalResult circt::arcilator::collectStates(Value storage, unsigned offset,
   return success();
 }
 
-LogicalResult circt::arcilator::collectModels(mlir::ModuleOp module,
-                                              std::vector<ModelInfo> &models) {
+LogicalResult circt::arc::collectModels(mlir::ModuleOp module,
+                                        std::vector<ModelInfo> &models) {
   for (auto modelOp : module.getOps<ModelOp>()) {
     auto storageArg = modelOp.getBody().getArgument(0);
     auto storageType = storageArg.getType().cast<StorageType>();
@@ -122,8 +121,8 @@ LogicalResult circt::arcilator::collectModels(mlir::ModuleOp module,
   return success();
 }
 
-void circt::arcilator::serializeModelInfoToJson(llvm::raw_ostream &outputStream,
-                                                ArrayRef<ModelInfo> models) {
+void circt::arc::serializeModelInfoToJson(llvm::raw_ostream &outputStream,
+                                          ArrayRef<ModelInfo> models) {
   llvm::json::OStream json(outputStream, 2);
 
   json.array([&] {

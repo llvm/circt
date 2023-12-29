@@ -6,7 +6,6 @@ target_link_libraries(arcilator
   CIRCTArc
   CIRCTArcToLLVM
   CIRCTArcTransforms
-  CIRCTArcilatorLib
   CIRCTCombToArith
   CIRCTConvertToArcs
   CIRCTOM

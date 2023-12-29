@@ -22,7 +22,7 @@
 #include "circt/InitAllPasses.h"
 #include "circt/Support/Passes.h"
 #include "circt/Support/Version.h"
-#include "circt/Tools/Arcilator/ModelInfo.h"
+#include "circt/Dialect/Arc/ModelInfo.h"
 #include "mlir/Bytecode/BytecodeReader.h"
 #include "mlir/Bytecode/BytecodeWriter.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -62,7 +62,6 @@ using namespace llvm;
 using namespace mlir;
 using namespace circt;
 using namespace arc;
-using namespace arcilator;
 
 //===----------------------------------------------------------------------===//
 // Command Line Arguments
