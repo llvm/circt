@@ -34,6 +34,7 @@ if (ESI_RUNTIME)
   list(APPEND CIRCT_INTEGRATION_TEST_DEPENDS
     ESIRuntime
     ESIPythonRuntime
+    esiquery
   )
 endif()
 
