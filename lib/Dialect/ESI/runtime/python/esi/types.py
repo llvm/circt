@@ -1,21 +1,36 @@
+# ===-----------------------------------------------------------------------===#
 #  Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+# ===-----------------------------------------------------------------------===#
+#
+# The structure of the Python classes and hierarchy roughly mirrors the C++
+# side, but wraps the C++ objects. The wrapper classes sometimes add convenience
+# functionality and serve to return wrapped versions of the returned objects.
+#
+# ===-----------------------------------------------------------------------===#
+
+from __future__ import annotations
 
 from . import esiCppAccel as cpp
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+  from .accelerator import HWModule
 
 from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
 
 
 def _get_esi_type(cpp_type: cpp.Type):
-  # if cpp_type in __esi_mapping:
-  #   return __esi_mapping[type(cpp_type)](cpp_type)
+  """Get the wrapper class for a C++ type."""
   for cpp_type_cls, fn in __esi_mapping.items():
     if isinstance(cpp_type, cpp_type_cls):
       return fn(cpp_type)
   return ESIType(cpp_type)
 
 
+# Mapping from C++ types to functions constructing the Python object
+# corresponding to that type.
 __esi_mapping: Dict[Type, Callable] = {
     cpp.ChannelType: lambda cpp_type: _get_esi_type(cpp_type.inner)
 }
@@ -28,13 +43,16 @@ class ESIType:
 
   @property
   def supports_host(self) -> Tuple[bool, Optional[str]]:
-    """Does this type support host communication via Python?"""
+    """Does this type support host communication via Python? Returns either
+    '(True, None)' if it is, or '(False, reason)' if it is not."""
+
     if self.bit_width % 8 != 0:
       return (False, "runtime only supports types with multiple of 8 bits")
     return (True, None)
 
   def is_valid(self, obj) -> Tuple[bool, Optional[str]]:
-    """Is a Python object compatible with HW type?"""
+    """Is a Python object compatible with HW type?  Returns either '(True,
+    None)' if it is, or '(False, reason)' if it is not."""
     assert False, "unimplemented"
 
   @property
@@ -79,7 +97,7 @@ class VoidType(ESIType):
     return bytearray([0])
 
   def deserialize(self, data: bytearray) -> Tuple[object, bytearray]:
-    if len(data) != 1:
+    if len(data) == 0:
       raise ValueError(f"void type cannot be represented by {data}")
     return (None, data[1:])
 
@@ -113,7 +131,7 @@ class BitsType(ESIType):
       return bytearray(obj)
     raise ValueError(f"cannot convert {obj} to bytearray")
 
-  def deserialize(self, data: bytearray) -> Tuple[object, bytearray]:
+  def deserialize(self, data: bytearray) -> Tuple[bytearray, bytearray]:
     return (data[0:self.max_size], data[self.max_size:])
 
 
@@ -270,8 +288,11 @@ __esi_mapping[cpp.ArrayType] = ArrayType
 
 
 class Port:
+  """A unidirectional communication channel. This is the basic communication
+  method with an accelerator."""
 
-  def __init__(self, cpp_port: cpp.ChannelPort):
+  def __init__(self, owner: BundlePort, cpp_port: cpp.ChannelPort):
+    self.owner = owner
     self.cpp_port = cpp_port
     self.type = _get_esi_type(cpp_port.type)
     (supports_host, reason) = self.type.supports_host
@@ -284,12 +305,17 @@ class Port:
 
 
 class WritePort(Port):
+  """A unidirectional communication channel from the host to the accelerator."""
 
-  def __init__(self, cpp_port: cpp.WriteChannelPort):
-    super().__init__(cpp_port)
+  def __init__(self, owner: BundlePort, cpp_port: cpp.WriteChannelPort):
+    super().__init__(owner, cpp_port)
     self.cpp_port: cpp.WriteChannelPort = cpp_port
 
   def write(self, msg=None) -> bool:
+    """Write a typed message to the channel. Attempts to serialize 'msg' to what
+    the accelerator expects, but will fail if the object is not convertible to
+    the port type."""
+
     valid, reason = self.type.is_valid(msg)
     if not valid:
       raise ValueError(
@@ -300,13 +326,16 @@ class WritePort(Port):
 
 
 class ReadPort(Port):
+  """A unidirectional communication channel from the accelerator to the host."""
 
-  def __init__(self, cpp_port: cpp.ReadChannelPort):
-    super().__init__(cpp_port)
+  def __init__(self, owner: BundlePort, cpp_port: cpp.ReadChannelPort):
+    super().__init__(owner, cpp_port)
     self.cpp_port: cpp.ReadChannelPort = cpp_port
 
   def read(self) -> Tuple[bool, Optional[object]]:
-    """Read a message from the channel."""
+    """Read a typed message from the channel. Returns a deserialized object of a
+    type defined by the port type."""
+
     msg_bytes = self.cpp_port.read(self.type.max_size)
     if len(msg_bytes) == 0:
       return (False, None)
@@ -317,12 +346,14 @@ class ReadPort(Port):
 
 
 class BundlePort:
+  """A collections of named, unidirectional communication channels."""
 
-  def __init__(self, cpp_port: cpp.BundlePort):
+  def __init__(self, owner: HWModule, cpp_port: cpp.BundlePort):
+    self.owner = owner
     self.cpp_port = cpp_port
 
   def write_port(self, channel_name: str) -> WritePort:
-    return WritePort(self.cpp_port.getWrite(channel_name))
+    return WritePort(self, self.cpp_port.getWrite(channel_name))
 
   def read_port(self, channel_name: str) -> ReadPort:
-    return ReadPort(self.cpp_port.getRead(channel_name))
+    return ReadPort(self, self.cpp_port.getRead(channel_name))
