@@ -186,7 +186,7 @@ computeLoweringImpl(FModuleLike mod, PortConversion &newPorts, Convention conv,
         }
         return success();
       })
-      .template Case<FVectorType>([&](FVectorType vector) -> LogicalResult {
+      .Case<FVectorType>([&](FVectorType vector) -> LogicalResult {
         if (conv != Convention::Scalarized &&
             vector.getElementType().isPassive()) {
           auto lastId = fieldID + vector.getMaxFieldID();
@@ -228,7 +228,7 @@ computeLoweringImpl(FModuleLike mod, PortConversion &newPorts, Convention conv,
         }
         return success();
       })
-      .template Case<FEnumType>([&](FEnumType fenum) { return failure(); })
+      .Case<FEnumType>([&](FEnumType fenum) { return failure(); })
       .Default([&](FIRRTLType type) {
         // Properties and other types wind up here.
         newPorts.push_back(
