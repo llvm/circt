@@ -229,7 +229,7 @@ computeLoweringImpl(FModuleLike mod, PortConversion &newPorts, Convention conv,
         return success();
       })
       .template Case<FEnumType>([&](FEnumType fenum) { return failure(); })
-      .template Case<RefType, FIRRTLBaseType, FIRRTLType>([&](auto type) {
+      .Default([&](FIRRTLType type) {
         // Properties and other types wind up here.
         newPorts.push_back(
             {{StringAttr::get(ctx, name), type,
