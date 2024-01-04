@@ -13,13 +13,18 @@ on:
           - linux
           - macos
           - windows
+
+      # The following options only influence workflow_dispatch, and are ignored otherwise.
       runTests:
-        type: choice
         description: Run CIRCT tests
         default: false
-        options:
-          - true
-          - false
+        type: boolean
+
+      enableAssertsAndDebugInfo:
+        description: Build with assertions and debug information.
+        default: false
+        type: boolean
+
   # Run every day at 0700 UTC which is:
   #   - 0000 PDT / 2300 PST
   #   - 0300 EDT / 0200 EST
@@ -124,7 +129,7 @@ jobs:
         id: add-build-config-firtool
         run: |
           json='{"name":"firtool","install_target":"install-firtool install-om-linker","package_name_prefix":"firrtl-bin","mode":"release","assert":"OFF","shared":"OFF","stats":"ON"}'
-          if [[ ${{ github.event_name }} == 'schedule' ]] || [[ ${{ github.event_name }} == 'workflow_dispatch' ]]; then
+          if [[ ${{ github.event_name }} == 'schedule' ]] || ([[ ${{ github.event_name }} == 'workflow_dispatch' ]] && ${{ inputs.enableAssertsAndDebugInfo }}) then
             json=$(echo $json | jq -c '.assert = "ON" | .mode = "relwithdebinfo"')
           fi
           echo "out=$json" >> $GITHUB_OUTPUT
