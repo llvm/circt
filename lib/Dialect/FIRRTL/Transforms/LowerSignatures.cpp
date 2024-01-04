@@ -370,9 +370,8 @@ static LogicalResult lowerModuleSignature(FModuleLike module, Convention conv,
 
 static void lowerModuleBody(FModuleOp mod,
                             const DenseMap<StringAttr, PortConversion> &ports) {
-  ImplicitLocOpBuilder theBuilder(mod.getLoc(), mod.getContext());
   mod->walk([&](InstanceOp inst) -> void {
-    theBuilder.setInsertionPoint(inst);
+    ImplicitLocOpBuilder theBuilder(inst.getLoc(), inst);
     const auto &modPorts = ports.at(inst.getModuleNameAttr().getAttr());
 
     // Fix up the Instance

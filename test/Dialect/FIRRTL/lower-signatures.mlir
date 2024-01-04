@@ -1,4 +1,5 @@
 // RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-lower-signatures))' %s | FileCheck --check-prefixes=CHECK %s
+// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-lower-signatures))' --mlir-print-debuginfo %s | FileCheck --check-prefixes=CHECK-LOC %s
 
 firrtl.circuit "Prop" {
   // CHECK-LABEL @Prop(out %y: !firrtl.string)
@@ -34,3 +35,17 @@ firrtl.circuit "Prop" {
   }
 
 }
+
+// Instances should preserve their location.
+// See https://github.com/llvm/circt/issues/6535
+firrtl.circuit "PreserveLocation" {
+  firrtl.extmodule @Foo()
+  // CHECK-LOC-LABEL: firrtl.module @PreserveLocation
+  firrtl.module @PreserveLocation() {
+    // CHECK-LOC: firrtl.instance foo @Foo() loc([[LOC:#.+]])
+    firrtl.instance foo @Foo() loc(#instLoc)
+  } loc(#moduleLoc)
+}
+// CHECK-LOC: [[LOC]] = loc("someLoc":9001:1)
+#moduleLoc = loc("wrongLoc":42:1)
+#instLoc = loc("someLoc":9001:1)
