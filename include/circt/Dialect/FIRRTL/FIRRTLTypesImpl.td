@@ -391,7 +391,8 @@ def RefImpl : FIRRTLImplType<"Ref",
   }];
   let parameters = (ins TypeParameter<"::circt::firrtl::FIRRTLBaseType",
                                       "Type of reference target">:$type,
-                        "bool":$forceable);
+                        "bool":$forceable,
+                        OptionalParameter<"::mlir::SymbolRefAttr">:$layer);
   let genAccessors = true;
   let genStorageClass = true;
   let genVerifyDecl = true;
@@ -400,7 +401,8 @@ def RefImpl : FIRRTLImplType<"Ref",
   let skipDefaultBuilders = true;
   let builders = [
     TypeBuilderWithInferredContext<(ins "::circt::firrtl::FIRRTLBaseType":$type,
-                                        CArg<"bool", "false">:$forceable)>
+                                        CArg<"bool", "false">:$forceable,
+                                        CArg<"::mlir::SymbolRefAttr", "{}">:$layer)>
   ];
 
   let extraClassDeclaration = [{

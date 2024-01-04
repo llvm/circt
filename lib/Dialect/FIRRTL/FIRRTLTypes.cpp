@@ -105,11 +105,13 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
         printNestedType(vectorType.getElementType(), os);
         os << ", " << vectorType.getNumElements() << '>';
       })
-      .Case<RefType>([&](auto refType) {
+      .Case<RefType>([&](RefType refType) {
         if (refType.getForceable())
           os << "rw";
         os << "probe<";
         printNestedType(refType.getType(), os);
+        if (auto layer = refType.getLayer())
+          os << ", " << layer;
         os << '>';
       })
       .Case<StringType>([&](auto stringType) { os << "string"; })
@@ -329,31 +331,43 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
   // For now, support both firrtl.ref and firrtl.probe.
   if (name.equals("ref") || name.equals("probe")) {
     FIRRTLBaseType type;
+    SymbolRefAttr layer;
     // Don't pass `isConst` to `parseNestedBaseType since `ref` can point to
     // either `const` or non-`const` types
-    if (parser.parseLess() || parseNestedBaseType(type, parser) ||
-        parser.parseGreater())
+    if (parser.parseLess() || parseNestedBaseType(type, parser))
+      return failure();
+    if (parser.parseOptionalComma().succeeded())
+      if (parser.parseOptionalAttribute(layer).value())
+        return parser.emitError(parser.getNameLoc(),
+                                "expected symbol reference");
+    if (parser.parseGreater())
       return failure();
 
     if (failed(RefType::verify(
             [&]() { return parser.emitError(parser.getNameLoc()); }, type,
-            false)))
+            false, layer)))
       return failure();
 
-    return result = RefType::get(type, false), success();
+    return result = RefType::get(type, false, layer), success();
   }
   if (name.equals("rwprobe")) {
     FIRRTLBaseType type;
-    if (parser.parseLess() || parseNestedBaseType(type, parser) ||
-        parser.parseGreater())
+    SymbolRefAttr layer;
+    if (parser.parseLess() || parseNestedBaseType(type, parser))
+      return failure();
+    if (parser.parseOptionalComma().succeeded())
+      if (parser.parseOptionalAttribute(layer).value())
+        return parser.emitError(parser.getNameLoc(),
+                                "expected symbol reference");
+    if (parser.parseGreater())
       return failure();
 
     if (failed(RefType::verify(
-            [&]() { return parser.emitError(parser.getNameLoc()); }, type,
-            true)))
+            [&]() { return parser.emitError(parser.getNameLoc()); }, type, true,
+            layer)))
       return failure();
 
-    return result = RefType::get(type, true), success();
+    return result = RefType::get(type, true, layer), success();
   }
   if (name.equals("class")) {
     if (isConst)
@@ -2400,12 +2414,14 @@ BaseTypeAliasType::getIndexAndSubfieldID(uint64_t fieldID) const {
 // RefType
 //===----------------------------------------------------------------------===//
 
-auto RefType::get(FIRRTLBaseType type, bool forceable) -> RefType {
-  return Base::get(type.getContext(), type, forceable);
+auto RefType::get(FIRRTLBaseType type, bool forceable, SymbolRefAttr layer)
+    -> RefType {
+  return Base::get(type.getContext(), type, forceable, layer);
 }
 
 auto RefType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
-                     FIRRTLBaseType base, bool forceable) -> LogicalResult {
+                     FIRRTLBaseType base, bool forceable, SymbolRefAttr layer)
+    -> LogicalResult {
   if (!base.isPassive())
     return emitErrorFn() << "reference base type must be passive";
   if (forceable && base.containsConst())
