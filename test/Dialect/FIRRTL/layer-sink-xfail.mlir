@@ -11,7 +11,7 @@ firrtl.circuit "LayerSinkExpectedFailures" {
 
   // CHECk: firrtl.module @LayerSinkExpectedFailures
   firrtl.module @LayerSinkExpectedFailures(in %a: !firrtl.uint<1>) {
-
+    %wire_subaccess = firrtl.wire : !firrtl.vector<uint<1>, 2>
     %2 = firrtl.subaccess %wire_subaccess[%a] : !firrtl.vector<uint<1>, 2>, !firrtl.uint<1>
     firrtl.strictconnect %2, %2 : !firrtl.uint<1>
     firrtl.layerblock @Subaccess {
