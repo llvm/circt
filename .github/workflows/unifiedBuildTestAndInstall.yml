@@ -127,6 +127,8 @@ on:
 jobs:
   build-test-and-install:
     runs-on: ${{ inputs.runner }}
+    permissions:
+      contents: write # Upload assets to release.
     steps:
       - name: Clone llvm/circt
         uses: actions/checkout@v3
@@ -269,9 +271,10 @@ jobs:
           retention-days: 7
 
       - name: Upload Binaries (Tag)
-        uses: AButler/upload-release-assets@v2.0
+        uses: AButler/upload-release-assets@v3.0
         if: inputs.install && github.ref_type == 'tag'
         with:
           # The * will grab the .sha256 as well
           files: ${{ steps.name_archive.outputs.name }}*
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+          release-tag: ${{ github.ref_name }} # Upload to release tag when manually run.

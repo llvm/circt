@@ -30,6 +30,8 @@ jobs:
   publish-sources:
     if: github.ref_type == 'tag'
     runs-on: ubuntu-20.04
+    permissions:
+      contents: write # Upload assets to release.
     steps:
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
       # time.
@@ -51,11 +53,12 @@ jobs:
           shasum -a 256 circt-full-sources.tar.gz | cut -d ' ' -f1 > circt-full-sources.tar.gz.sha256
 
       - name: Upload Source Archive
-        uses: AButler/upload-release-assets@v2.0
+        uses: AButler/upload-release-assets@v3.0
         with:
           # The * will grab the .sha256 as well
           files: circt-full-sources.tar.gz*
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+          release-tag: ${{ github.ref_name }} # Upload to release tag when manually run.
 
   # This job sets up the build matrix.
   choose-matrix:
@@ -174,6 +177,8 @@ jobs:
     strategy:
       matrix:
         generated: ${{ fromJSON(needs.choose-matrix.outputs.matrix) }}
+    permissions:
+      contents: write # Upload assets to release.
     uses: ./.github/workflows/unifiedBuildTestAndInstall.yml
     with:
       runner: ${{ matrix.generated.runner }}
