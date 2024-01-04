@@ -935,10 +935,20 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     auto loc = getToken().getLoc();
     consumeToken();
     FIRRTLType type;
+    SmallVector<StringRef> layers;
 
     if (parseToken(FIRToken::less, "expected '<' in reference type") ||
-        parseType(type, "expected probe data type") ||
-        parseToken(FIRToken::greater, "expected '>' in reference type"))
+        parseType(type, "expected probe data type"))
+      return failure();
+    while (getToken().getKind() == FIRToken::identifier) {
+      StringRef layer;
+      if (parseId(layer, "expected layer name"))
+        return failure();
+      layers.push_back(layer);
+      if (getToken().getKind() == FIRToken::period)
+        consumeToken();
+    }
+    if (parseToken(FIRToken::greater, "expected '>' in reference type"))
       return failure();
 
     bool forceable = kind == FIRToken::kw_RWProbe;
@@ -953,7 +963,17 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     if (forceable && innerType.containsConst())
       return emitError(loc, "rwprobe cannot contain const");
 
-    result = RefType::get(innerType, forceable);
+    SymbolRefAttr layer;
+    if (!layers.empty()) {
+      auto nestedLayers =
+          llvm::map_range(ArrayRef(layers).drop_front(), [&](StringRef a) {
+            return FlatSymbolRefAttr::get(getContext(), a);
+          });
+      layer = SymbolRefAttr::get(getContext(), layers.front(),
+                                 llvm::to_vector(nestedLayers));
+    }
+
+    result = RefType::get(innerType, forceable, layer);
     break;
   }
 
