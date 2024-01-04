@@ -204,19 +204,16 @@ LogicalResult LowerClassesPass::processPaths(
 
       auto moduleName = target.getModule().getModuleNameAttr();
 
-      // Copy the middle part from the annotation's NLA.
+      // Verify a nonlocal annotation refers to a HierPathOp.
+      hw::HierPathOp hierPathOp;
       if (auto hierName = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal")) {
-        auto hierPathOp =
+        hierPathOp =
             dyn_cast<hw::HierPathOp>(symbolTable.lookup(hierName.getAttr()));
         if (!hierPathOp) {
           op->emitError("annotation does not point at a HierPathOp");
           error = true;
           return false;
         }
-        // Copy the old path, dropping the module name.
-        auto oldPath = hierPathOp.getNamepath().getValue();
-        llvm::append_range(path, llvm::reverse(oldPath.drop_back()));
-        moduleName = cast<hw::InnerRefAttr>(oldPath.front()).getModule();
       }
 
       auto [it, inserted] = pathInfoTable.try_emplace(id);
@@ -235,6 +232,34 @@ LogicalResult LowerClassesPass::processPaths(
       auto owningModule = owningModules.lookup(id);
       if (!owningModule)
         return true;
+
+      // Copy the middle part from the annotation's NLA.
+      if (hierPathOp) {
+        // Copy the old path, dropping the module name.
+        auto oldPath = hierPathOp.getNamepath().getValue();
+        llvm::append_range(path, llvm::reverse(oldPath.drop_back()));
+
+        // Set the moduleName based on the hierarchical path. If the
+        // owningModule is in the hierarichal path, set the moduleName to the
+        // owning module. Otherwise use the top of the hierarchical path.
+        bool pathContainsOwningModule =
+            llvm::any_of(oldPath, [&](auto pathFragment) {
+              return llvm::TypeSwitch<Attribute, bool>(pathFragment)
+                  .Case([&](hw::InnerRefAttr innerRef) {
+                    return innerRef.getModule() ==
+                           owningModule.getModuleNameAttr();
+                  })
+                  .Case([&](FlatSymbolRefAttr symRef) {
+                    return symRef.getAttr() == owningModule.getModuleNameAttr();
+                  })
+                  .Default([](auto attr) { return false; });
+            });
+        if (pathContainsOwningModule) {
+          moduleName = owningModule.getModuleNameAttr();
+        } else {
+          moduleName = cast<hw::InnerRefAttr>(oldPath.front()).getModule();
+        }
+      }
 
       // Copy the leading part of the hierarchical path from the owning module
       // to the start of the annotation's NLA.
