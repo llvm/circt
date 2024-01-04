@@ -132,7 +132,7 @@ def AnalogTypeImpl : FIRRTLImplType<"Analog",
   let genVerifyDecl = true;
 }
 
-class BaseVectorTypeImpl<string name, string ElementType, list<Trait> traits = [], string BaseType = ElementType> 
+class BaseVectorTypeImpl<string name, string ElementType, list<Trait> traits = [], string BaseType = ElementType>
   : FIRRTLImplType<name, traits # [DeclareTypeInterfaceMethods<FieldIDTypeInterface>], BaseType> {
   let summary = "a fixed size collection of elements, like an array.";
   let parameters = (ins
@@ -204,7 +204,7 @@ class BaseBundleTypeImpl<string name, string ElementType, list<Trait> traits = [
 
   let extraClassDeclaration = [{
     using ElementType = }] # ElementType # [{;
-  
+
     /// Each element of a bundle, which is a name and type.
     struct BundleElement {
       StringAttr name;
