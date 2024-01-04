@@ -127,6 +127,8 @@ on:
 jobs:
   build-test-and-install:
     runs-on: ${{ inputs.runner }}
+    permissions:
+      contents: write # Upload assets to release.
     steps:
       - name: Clone llvm/circt
         uses: actions/checkout@v3
