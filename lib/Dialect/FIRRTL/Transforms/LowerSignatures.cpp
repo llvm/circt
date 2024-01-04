@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
@@ -25,6 +26,7 @@
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Support/Debug.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
 #include "llvm/ADT/APSInt.h"
@@ -442,9 +444,7 @@ struct LowerSignaturesPass : public LowerSignaturesBase<LowerSignaturesPass> {
 
 // This is the main entrypoint for the lowering pass.
 void LowerSignaturesPass::runOnOperation() {
-  LLVM_DEBUG(
-      llvm::dbgs() << "===- Running Lower Signature Pass "
-                      "------------------------------------------------===\n");
+  LLVM_DEBUG(debugPassHeader(this) << "\n");
   // Cached attr
   AttrCache cache(&getContext());
 

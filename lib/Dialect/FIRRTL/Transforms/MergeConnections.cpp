@@ -22,8 +22,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Support/Debug.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
@@ -284,9 +286,9 @@ struct MergeConnectionsPass
 } // namespace
 
 void MergeConnectionsPass::runOnOperation() {
-  LLVM_DEBUG(llvm::dbgs() << "===----- Running MergeConnections "
-                             "--------------------------------------===\n"
-                          << "Module: '" << getOperation().getName() << "'\n";);
+  LLVM_DEBUG(debugPassHeader(this)
+             << "\n"
+             << "Module: '" << getOperation().getName() << "'\n");
 
   MergeConnection mergeConnection(getOperation(), enableAggressiveMerging);
   bool changed = mergeConnection.run();

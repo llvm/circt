@@ -7,10 +7,12 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Support/Debug.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/BitVector.h"
@@ -39,8 +41,7 @@ struct RemoveUnusedPortsPass
 
 void RemoveUnusedPortsPass::runOnOperation() {
   auto &instanceGraph = getAnalysis<InstanceGraph>();
-  LLVM_DEBUG(llvm::dbgs() << "===----- Remove unused ports -----==="
-                          << "\n");
+  LLVM_DEBUG(debugPassHeader(this) << "\n");
   // Iterate in the reverse order of instance graph iterator, i.e. from leaves
   // to top.
   for (auto *node : llvm::post_order(&instanceGraph))

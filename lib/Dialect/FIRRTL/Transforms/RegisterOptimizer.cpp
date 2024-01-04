@@ -11,7 +11,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Support/Debug.h"
 #include "mlir/IR/Dominance.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/Support/Debug.h"
@@ -132,9 +134,7 @@ void RegisterOptimizerPass::checkRegReset(mlir::DominanceInfo &dom,
 
 void RegisterOptimizerPass::runOnOperation() {
   auto mod = getOperation();
-  LLVM_DEBUG(llvm::dbgs() << "===----- Running RegisterOptimizer "
-                             "--------------------------------------===\n"
-                          << "Module: '" << mod.getName() << "'\n";);
+  LLVM_DEBUG(debugPassHeader(this) << "\n";);
 
   SmallVector<Operation *> toErase;
   mlir::DominanceInfo dom(mod);
