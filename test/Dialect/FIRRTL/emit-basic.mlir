@@ -704,13 +704,18 @@ firrtl.circuit "Foo" {
     }
   }
   // CHECK:      module ModuleWithGroups :
-  // CHECK-NEXT:   layerblock GroupA :
+  // CHECK-NEXT:   output a : Probe<UInt<1>, GroupA>
+  // CHECK-NEXT:   output b : RWProbe<UInt<1>, GroupA.GroupB>
+  // CHECK:        layerblock GroupA :
   // CHECK-NEXT:     layerblock GroupB :
   // CHECK-NEXT:       layerblock GroupC :
   // CHECK-NEXT:       layerblock GroupD :
   // CHECK-NEXT:         layerblock GroupE :
   // CHECK-NEXT:     layerblock GroupF :
-  firrtl.module @ModuleWithGroups() {
+  firrtl.module @ModuleWithGroups(
+    out %a: !firrtl.probe<uint<1>, @GroupA>,
+    out %b: !firrtl.rwprobe<uint<1>, @GroupA::@GroupB>
+  ) {
     firrtl.layerblock @GroupA {
       firrtl.layerblock @GroupA::@GroupB {
         firrtl.layerblock @GroupA::@GroupB::@GroupC {

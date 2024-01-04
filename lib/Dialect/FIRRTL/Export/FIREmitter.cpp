@@ -1378,6 +1378,14 @@ void Emitter::emitType(Type type, bool includeConst) {
           ps << "RW";
         ps << "Probe<";
         emitType(type.getType());
+        if (auto layer = type.getLayer()) {
+          ps << "," << PP::nbsp;
+          ps.addAsString(layer.getRootReference().getValue());
+          for (auto nested : layer.getNestedReferences()) {
+            ps << ".";
+            ps.addAsString(nested.getValue());
+          }
+        }
         ps << ">";
       })
       .Case<AnyRefType>([&](AnyRefType type) { ps << "AnyRef"; })
