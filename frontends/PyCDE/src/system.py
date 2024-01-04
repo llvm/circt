@@ -41,13 +41,13 @@ class System:
       "mod", "top_modules", "name", "passed", "_old_system_token", "_op_cache",
       "_generate_queue", "output_directory", "files", "mod_files",
       "packaging_funcs", "sw_api_langs", "_instance_roots", "_placedb",
-      "_appid_index"
+      "_appid_index", "platform"
   ]
 
   def __init__(self,
                top_modules: Union[list, Module],
-               name: str = None,
-               output_directory: str = None,
+               name: Optional[str] = None,
+               output_directory: Optional[str] = None,
                sw_api_langs: List[str] = None):
     from .module import Module
     self.passed = False
@@ -56,6 +56,7 @@ class System:
       self.top_modules = list(top_modules)
     else:
       self.top_modules = [top_modules]
+    self.platform = ""
     if name is None:
       self.name = self.top_modules[0].__name__
     else:
@@ -216,7 +217,7 @@ class System:
     pm = passmanager.PassManager.parse("builtin.module(canonicalize)")
     pm.run(self.mod.operation)
 
-  def generate(self, generator_names=[], iters=None):
+  def generate(self, generator_names=[], iters=None, skip_appid_idx=False):
     """Fully generate the system unless iters is specified. Iters specifies the
     number of generators to run. Useful for debugging. Maybe."""
     i = 0
@@ -226,7 +227,8 @@ class System:
         m.generate()
         i += 1
 
-    self._appid_index = esi.AppIDIndex(self.mod.operation)
+      if not skip_appid_idx:
+        self._appid_index = esi.AppIDIndex(self.mod.operation)
 
   def get_instance(self,
                    mod_cls: object,
@@ -252,7 +254,8 @@ class System:
       "builtin.module(hw.module(lower-seq-hlmem))",
       "builtin.module(lower-esi-to-physical)",
       # TODO: support more than just cosim.
-      "builtin.module(lower-esi-bundles, lower-esi-ports, lower-esi-to-hw{{platform=cosim}})",
+      "builtin.module(lower-esi-bundles, lower-esi-ports)",
+      "builtin.module(lower-esi-to-hw{{platform={platform}}})",
       "builtin.module(convert-fsm-to-sv)",
       "builtin.module(lower-hwarith-to-hw)",
       "builtin.module(lower-seq-to-sv)",
@@ -265,6 +268,7 @@ class System:
     if self.passed:
       return
     self.generate()
+    assert self.mod.operation.verify()
 
     tops = ",".join(
         [self._op_cache.get_pyproxy_symbol(m) for m in self.top_modules])
@@ -284,7 +288,8 @@ class System:
         if isinstance(phase, str):
           passes = phase.format(tops=tops,
                                 verilog_file=verilog_file,
-                                tcl_file=tcl_file).strip()
+                                tcl_file=tcl_file,
+                                platform=self.platform).strip()
           if aplog is not None:
             aplog.write(f"// passes ran: {passes}\n")
             aplog.flush()
@@ -303,6 +308,7 @@ class System:
           aplog.write(str(self.mod))
           aplog.close()
       self._op_cache.release_ops()
+      assert self.mod.operation.verify()
 
     self.passed = True
 

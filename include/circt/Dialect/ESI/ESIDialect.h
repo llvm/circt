@@ -29,6 +29,11 @@ namespace esi {
 
 void registerESIPasses();
 
+// Constants for MMIO registers
+constexpr uint32_t MagicNumberLo = 0xE5100E51; // ESI__ESI
+constexpr uint32_t MagicNumberHi = 0x207D98E5; // Random
+constexpr uint32_t VersionNumber = 0; // Version 0: format subject to change
+
 /// Name of dialect attribute which governs whether or not to bundle (i.e. use
 /// SystemVerilog interfaces) channel signal wires on external modules.
 constexpr StringRef extModBundleSignalsAttrName = "esi.bundle";

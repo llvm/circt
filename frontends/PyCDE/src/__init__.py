@@ -18,6 +18,27 @@ def __exit_ctxt():
   DefaultContext.__exit__(None, None, None)
 
 
+def print_diagnostic(diagnostic: ir.Diagnostic, indent: str):
+  print(f"{indent}Got diagnostic ({diagnostic.severity}): ", diagnostic)
+  if len(diagnostic.notes):
+    print(f"{indent}Notes:")
+    for note in diagnostic.notes:
+      print_diagnostic(note, indent + "  ")
+
+
+def handle_diagnostic(diagnostic: ir.Diagnostic):
+  print_diagnostic(diagnostic, "")
+  if diagnostic.severity == ir.DiagnosticSeverity.ERROR:
+    sys = System.current()
+    if sys is not None:
+      open("error_dump.mlir", "w").write(str(sys.mod.operation))
+  raise RuntimeError(diagnostic)
+  return True
+
+
+DefaultContext.attach_diagnostic_handler(handle_diagnostic)
+DefaultContext.emit_error_diagnostics = True
+
 from .common import (AppID, Clock, Reset, Input, InputChannel, Output,
                      OutputChannel)
 from .module import (generator, modparams, Module)

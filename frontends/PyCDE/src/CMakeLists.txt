@@ -48,6 +48,7 @@ declare_mlir_python_sources(PyCDESources
   Makefile.cosim
 
   bsp/__init__.py
+  bsp/common.py
   bsp/cosim.py
   bsp/xrt.py
   bsp/EsiXrtPython.cpp

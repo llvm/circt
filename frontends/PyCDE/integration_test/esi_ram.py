@@ -6,14 +6,14 @@
 
 import pycde
 from pycde import (AppID, Clock, Input, Module, generator)
-from pycde.esi import DeclareRandomAccessMemory, ServiceDecl
-from pycde.bsp import cosim
+from pycde.esi import DeclareRandomAccessMemory, ESISystem, ServiceDecl
+from pycde.bsp import cosim, xrt
 from pycde.types import Bits
 
 import sys
 
 RamI64x8 = DeclareRandomAccessMemory(Bits(64), 256)
-WriteType = RamI64x8.write.type.write
+WriteType = RamI64x8.write.type.req
 
 
 @ServiceDecl
@@ -38,12 +38,11 @@ class MemWriter(Module):
     RamI64x8.read(read_bundle, AppID("int_reader"))
 
     write_bundle_type = RamI64x8.write.type
-    write_data, _ = write_bundle_type.write.wrap(
-        {
-            'data': read_data,
-            'address': 3
-        }, read_valid)
-    write_bundle, [ack] = write_bundle_type.pack(write=write_data)
+    write_data, _ = write_bundle_type.req.wrap({
+        'data': read_data,
+        'address': 3
+    }, read_valid)
+    write_bundle, [ack] = write_bundle_type.pack(req=write_data)
     RamI64x8.write(write_bundle, appid=AppID("int_writer"))
 
 
@@ -56,10 +55,10 @@ class Top(Module):
     MemWriter(clk=ports.clk, rst=ports.rst)
 
     # Pass through reads and writes from the host.
-    ram_write = MemComms.write(AppID("write"))
-    RamI64x8.write(ram_write, AppID("ram_write"))
-    ram_read = MemComms.read(AppID("read"))
-    RamI64x8.read(ram_read, AppID("ram_read"))
+    # ram_write = MemComms.write(AppID("write"))
+    # RamI64x8.write(ram_write, AppID("ram_write"))
+    # ram_read = MemComms.read(AppID("read"))
+    # RamI64x8.read(ram_read, AppID("ram_read"))
 
     # Instantiate the RAM.
     RamI64x8.instantiate_builtin(appid=AppID("mem"),
@@ -69,8 +68,9 @@ class Top(Module):
 
 
 if __name__ == "__main__":
-  s = pycde.System([cosim.CosimBSP(Top)],
-                   name="ESIMem",
-                   output_directory=sys.argv[1])
+  # bsp = cosim.CosimBSP
+  bsp = xrt.XrtBSP
+  s = ESISystem(bsp(Top), name="ESIMem", output_directory=sys.argv[1])
+  s.run_passes(debug=True)
   s.compile()
   s.package()

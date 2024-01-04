@@ -4,10 +4,10 @@
 
 from .common import (AppID, Input, Output, _PyProxy, PortError)
 from .module import Generator, Module, ModuleLikeBuilderBase, PortProxyBase
-from .signals import BundleSignal, ChannelSignal, Signal, _FromCirctValue
+from .signals import BundleSignal, ChannelSignal, Signal, Struct, _FromCirctValue
 from .system import System
 from .types import (Bits, Bundle, BundledChannel, Channel, ChannelDirection,
-                    Type, types, _FromCirctType)
+                    StructType, Type, types, UInt, _FromCirctType)
 
 from .circt import ir
 from .circt.dialects import esi as raw_esi, hw, msft
@@ -229,6 +229,9 @@ class ServiceImplementationModuleBuilder(ModuleLikeBuilderBase):
     # Each instantiation of the ServiceImplementation has its own
     # registration.
     opts = _service_generator_registry.register(impl)
+    for pn, _ in self.inputs:
+      if pn not in inputs:
+        raise ValueError(f"Missing input port {pn}")
 
     # Create the op.
     decl_sym = None
@@ -330,14 +333,21 @@ class _ServiceGeneratorRegistry:
   def _implement_service(self, req: ir.Operation):
     """This is the callback which the ESI connect-services pass calls. Dispatch
     to the op-specified generator."""
-    assert isinstance(req.opview, raw_esi.ServiceImplementReqOp)
-    opts = ir.DictAttr(req.attributes["impl_opts"])
-    impl_name = opts["name"]
-    if impl_name not in self._registry:
+    try:
+      assert isinstance(req.opview, raw_esi.ServiceImplementReqOp)
+      opts = ir.DictAttr(req.attributes["impl_opts"])
+      impl_name = opts["name"]
+      if impl_name not in self._registry:
+        return False
+      (impl, sys) = self._registry[impl_name]
+      with sys:
+        ret = impl._builder.generate_svc_impl(serviceReq=req.opview)
+      sys.generate(skip_appid_idx=True)
+      return ret
+    except Exception as e:
+      print(e)
+      raise e
       return False
-    (impl, sys) = self._registry[impl_name]
-    with sys:
-      return impl._builder.generate_svc_impl(serviceReq=req.opview)
 
 
 _service_generator_registry = _ServiceGeneratorRegistry()
@@ -362,7 +372,7 @@ def DeclareRandomAccessMemory(inner_type: Type,
         BundledChannel("data", ChannelDirection.FROM, inner_type)
     ])
     write = Bundle([
-        BundledChannel("write", ChannelDirection.TO, write_struct),
+        BundledChannel("req", ChannelDirection.TO, write_struct),
         BundledChannel("ack", ChannelDirection.FROM, Bits(0))
     ])
 
@@ -473,7 +483,45 @@ class PureModule(Module):
     esi.ESIPureModuleParamOp(name, type_attr)
 
 
-def package(sys: System):
+class MMIOWriteCommandStruct(Struct):
+  address: UInt(32)
+  data: Bits(32)
+
+
+@ServiceDecl
+class MMIO:
+  read = Bundle([
+      BundledChannel("address", ChannelDirection.TO, UInt(32)),
+      BundledChannel("data", ChannelDirection.FROM, Bits(32))
+  ])
+  write = Bundle([
+      BundledChannel("write", ChannelDirection.TO, MMIOWriteCommandStruct),
+      BundledChannel("ack", ChannelDirection.FROM, Bits(0))
+  ])
+
+  @staticmethod
+  def _op(sym_name: ir.StringAttr):
+    return raw_esi.MMIOServiceDeclOp(sym_name)
+
+
+class ESISystem(System):
+  """A system which supports ESI services and BSPs."""
+
+  __slots__ = ["mmio"]
+
+  def __init__(self,
+               module: Module,
+               bsp=None,
+               name: Optional[str] = None,
+               output_directory: Optional[str] = None):
+    if bsp is not None:
+      module = bsp(module)
+    super().__init__([module], name, output_directory)
+
+    self.mmio = MMIO
+
+
+def package(sys: ESISystem):
   """Package all ESI collateral."""
 
   import shutil

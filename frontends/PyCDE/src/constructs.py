@@ -9,7 +9,7 @@ from .dialects import comb, msft, sv
 from .module import generator, modparams, Module, _BlockContext
 from .signals import ArraySignal, BitsSignal, BitVectorSignal, Signal
 from .signals import get_slice_bounds, _FromCirctValue
-from .types import dim, types, InOut, Type
+from .types import dim, types, Array, Bits, InOut, Type
 
 from .circt import ir
 from .circt.support import BackedgeBuilder
@@ -155,10 +155,10 @@ def ControlReg(clk: Signal, rst: Signal, asserts: List[Signal],
 
     class ControlReg(Module):
       clk = Clock()
-      rst = Input(types.i1)
-      out = Output(types.i1)
-      asserts = Input(dim(1, num_asserts))
-      resets = Input(dim(1, num_resets))
+      rst = Input(Bits(1))
+      out = Output(Bits(1))
+      asserts = Input(Array(Bits(1), num_asserts))
+      resets = Input(Array(Bits(1), num_resets))
 
       @generator
       def generate(ports):

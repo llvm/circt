@@ -4,11 +4,10 @@
 # RUN: %PYTHON% %s %t 2>&1
 # RUN: esi-cosim.py -- %PYTHON% %S/test_software/esi_test.py cosim env
 
-import pycde
 from pycde import (AppID, Clock, Input, Module, generator)
 from pycde.bsp import cosim
 from pycde.constructs import Wire
-from pycde.esi import ServiceDecl
+from pycde.esi import ESISystem, ServiceDecl
 from pycde.types import (Bits, Bundle, BundledChannel, Channel,
                          ChannelDirection, UInt)
 
@@ -52,9 +51,11 @@ class Top(Module):
 
 
 if __name__ == "__main__":
-  s = pycde.System(cosim.CosimBSP(Top),
-                   name="ESILoopback",
-                   output_directory=sys.argv[1])
+  s = ESISystem(Top,
+                bsp=cosim.CosimBSP,
+                name="ESILoopback",
+                output_directory=sys.argv[1])
+  s.run_passes(debug=True)
   s.compile()
   s.package()
 

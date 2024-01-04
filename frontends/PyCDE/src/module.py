@@ -4,12 +4,13 @@
 
 from __future__ import annotations
 from typing import List, Optional, Set, Tuple, Dict
+from weakref import proxy
 
 from .common import (AppID, Clock, Input, Output, PortError, _PyProxy, Reset)
 from .support import (get_user_loc, _obj_to_attribute, create_type_string,
                       create_const_zero)
 from .signals import ClockSignal, Signal, _FromCirctValue
-from .types import ClockType
+from .types import ClockType, Type
 
 from .circt import ir, support
 from .circt.dialects import hw
@@ -158,7 +159,7 @@ class PortProxyBase:
       if value is None:
         unconnected_ports.append(self._builder.outputs[idx][0])
     if len(unconnected_ports) > 0:
-      raise support.UnconnectedSignalError(self.name, unconnected_ports)
+      raise support.UnconnectedSignalError(self._name, unconnected_ports)
 
   def _clear(self):
     """TL;DR: Downgrade a shotgun to a handgun.
@@ -282,6 +283,7 @@ class ModuleLikeBuilderBase(_PyProxy):
       proxy_attrs[name] = property(fget=None, fset=fset)
       output_port_lookup[name] = idx
     proxy_attrs["_output_port_lookup"] = output_port_lookup
+    proxy_attrs["_name"] = self.modcls.__name__
 
     return type(self.modcls.__name__ + "Ports", (PortProxyBase,), proxy_attrs)
 
@@ -305,7 +307,7 @@ class ModuleLikeBuilderBase(_PyProxy):
       named_outputs[name] = fget
       setattr(self.modcls, name, property(fget=fget))
     setattr(self.modcls,
-            "_outputs",
+            "outputs",
             lambda self, outputs=named_outputs:
             {n: g(self) for n, g in outputs.items()})
 
@@ -449,7 +451,7 @@ class ModuleBuilder(ModuleLikeBuilderBase):
         if signal.type._type != ptype._type:
           raise ValueError(
               f"Wrong type on input signal '{name}'. Got '{signal.type}',"
-              f" expected '{type}'")
+              f" expected '{ptype}'")
         circt_inputs[name] = signal.value
       elif signal is None:
         if len(self.generators) > 0:
@@ -515,6 +517,7 @@ class Module(metaclass=ModuleLikeType):
   """
 
   BuilderType = ModuleBuilder
+  _builder: ModuleBuilder
 
   def __init__(self, instance_name: str = None, appid: AppID = None, **inputs):
     """Create an instance of this module. Instance namd and appid are optional.
@@ -547,6 +550,13 @@ class Module(metaclass=ModuleLikeType):
   @classmethod
   def print(cls, out=sys.stdout):
     cls._builder.print(out)
+
+  @classmethod
+  def inputs(cls) -> List[Tuple[str, Type]]:
+    """Get a dictionary of input port names to signals."""
+    if cls._builder.inputs is None:
+      return []
+    return cls._builder.inputs
 
 
 class modparams:

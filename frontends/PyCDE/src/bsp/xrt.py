@@ -6,8 +6,10 @@ from ..common import Clock, Input, Output
 from ..constructs import ControlReg, Wire
 from ..module import Module, generator
 from ..system import System
-from ..types import bit, types, Bits
+from ..types import UInt, bit, types, Bits
 from .. import esi
+
+from .common import AxiMMIO
 
 import glob
 from io import FileIO
@@ -16,56 +18,6 @@ import pathlib
 import shutil
 
 __dir__ = pathlib.Path(__file__).parent
-
-# Parameters for AXI4-Lite interface
-axil_addr_width = 32
-axil_data_width = 32
-axil_data_width_bytes = int(axil_data_width / 8)
-
-# Constants for MMIO registers
-MagicNumberLo = 0xE5100E51  # ESI__ESI
-MagicNumberHi = 0x207D98E5  # Random
-VersionNumber = 0  # Version 0: format subject to change
-
-
-# Signals from master
-def axil_in_type(addr_width, data_width):
-  return types.struct({
-      "awvalid": types.i1,
-      "awaddr": types.int(addr_width),
-      "wvalid": types.i1,
-      "wdata": types.int(data_width),
-      "wstrb": types.int(data_width // 8),
-      "arvalid": types.i1,
-      "araddr": types.int(addr_width),
-      "rready": types.i1,
-      "bready": types.i1
-  })
-
-
-# Signals to master
-def axil_out_type(data_width):
-  return types.struct({
-      "awready": types.i1,
-      "wready": types.i1,
-      "arready": types.i1,
-      "rvalid": types.i1,
-      "rdata": types.int(data_width),
-      "rresp": types.i2,
-      "bvalid": types.i1,
-      "bresp": types.i2
-  })
-
-
-def output_tcl(os: FileIO):
-  """Output Vitis tcl describing the registers."""
-
-  from jinja2 import Environment, FileSystemLoader, StrictUndefined
-
-  env = Environment(loader=FileSystemLoader(str(__dir__)),
-                    undefined=StrictUndefined)
-  template = env.get_template("xrt_package.tcl.j2")
-  os.write(template.render(system_name=System.current().name))
 
 
 def XrtBSP(user_module):
@@ -90,130 +42,65 @@ def XrtBSP(user_module):
   environment), set the PYTHON variable (e.g. 'PYTHON=python3.9').
   """
 
-  class XrtService(Module):
-    clk = Clock(types.i1)
-    rst = Input(types.i1)
-
-    axil_in = Input(axil_in_type(axil_addr_width, axil_data_width))
-    axil_out = Output(axil_out_type(axil_data_width))
-
-    @generator
-    def generate(self):
-      clk = self.clk
-      rst = self.rst
-
-      sys: System = System.current()
-      output_tcl((sys.hw_output_dir / "xrt_package.tcl").open("w"))
-
-      ######
-      # Write side.
-
-      # So that we don't wedge the AXI-lite for writes, just ack all of them.
-      write_happened = Wire(bit)
-      latched_aw = ControlReg(self.clk, self.rst, [self.axil_in.awvalid],
-                              [write_happened])
-      latched_w = ControlReg(self.clk, self.rst, [self.axil_in.wvalid],
-                             [write_happened])
-      write_happened.assign(latched_aw & latched_w)
-
-      ######
-      # Read side.
-
-      # Track the non-zero registers in the read address space.
-      rd_addr_data = {
-          16: Bits(32)(MagicNumberLo),
-          20: Bits(32)(MagicNumberHi),
-          24: Bits(32)(VersionNumber),
-      }
-
-      # Create an array out of the sparse value map 'rd_addr_data' and zero
-      # constants. Then create a potentially giant mux. There's probably a much
-      # better way to do this. I suspect this is a common high-level construct
-      # which should be automatically optimized, but I'm not sure how common
-      # this actually is.
-
-      max_addr_log2 = int(
-          math.ceil(math.log2(max([a for a in rd_addr_data.keys()]) + 1)))
-
-      # Convert the sparse dict into a zero filled array.
-      zero = types.int(axil_data_width)(0)
-      rd_space = [zero] * int(math.pow(2, max_addr_log2))
-      for (addr, val) in rd_addr_data.items():
-        rd_space[addr] = val
-
-      # Create the address index signal and do the muxing.
-      addr_slice = self.axil_in.araddr.slice(
-          types.int(axil_addr_width)(0), max_addr_log2)
-      rd_addr = addr_slice.reg(clk, rst)
-      rvalid = self.axil_in.arvalid.reg(clk, rst, cycles=2)
-      rdata = types.array(types.int(axil_data_width),
-                          len(rd_space))(rd_space)[rd_addr].reg(clk)
-
-      # Assign the module outputs.
-      self.axil_out = axil_out_type(axil_data_width)({
-          "awready": 1,
-          "wready": 1,
-          "arready": 1,
-          "rvalid": rvalid,
-          "rdata": rdata,
-          "rresp": 0,
-          "bvalid": write_happened,
-          "bresp": 0
-      })
+  XrtMaxAddr = 2**24
 
   class top(Module):
     ap_clk = Clock()
-    ap_resetn = Input(types.i1)
+    ap_resetn = Input(Bits(1))
 
     # AXI4-Lite slave interface
-    s_axi_control_AWVALID = Input(types.i1)
-    s_axi_control_AWREADY = Output(types.i1)
-    s_axi_control_AWADDR = Input(types.int(axil_addr_width))
-    s_axi_control_WVALID = Input(types.i1)
-    s_axi_control_WREADY = Output(types.i1)
-    s_axi_control_WDATA = Input(types.int(axil_data_width))
-    s_axi_control_WSTRB = Input(types.int(axil_data_width // 8))
-    s_axi_control_ARVALID = Input(types.i1)
-    s_axi_control_ARREADY = Output(types.i1)
-    s_axi_control_ARADDR = Input(types.int(axil_addr_width))
-    s_axi_control_RVALID = Output(types.i1)
-    s_axi_control_RREADY = Input(types.i1)
-    s_axi_control_RDATA = Output(types.int(axil_data_width))
-    s_axi_control_RRESP = Output(types.i2)
-    s_axi_control_BVALID = Output(types.i1)
-    s_axi_control_BREADY = Input(types.i1)
-    s_axi_control_BRESP = Output(types.i2)
+    s_axi_control_AWVALID = Input(Bits(1))
+    s_axi_control_AWREADY = Output(Bits(1))
+    s_axi_control_AWADDR = Input(Bits(32))
+    s_axi_control_WVALID = Input(Bits(1))
+    s_axi_control_WREADY = Output(Bits(1))
+    s_axi_control_WDATA = Input(Bits(32))
+    s_axi_control_WSTRB = Input(Bits(32 // 8))
+    s_axi_control_ARVALID = Input(Bits(1))
+    s_axi_control_ARREADY = Output(Bits(1))
+    s_axi_control_ARADDR = Input(Bits(32))
+    s_axi_control_RVALID = Output(Bits(1))
+    s_axi_control_RREADY = Input(Bits(1))
+    s_axi_control_RDATA = Output(Bits(32))
+    s_axi_control_RRESP = Output(Bits(2))
+    s_axi_control_BVALID = Output(Bits(1))
+    s_axi_control_BREADY = Input(Bits(1))
+    s_axi_control_BRESP = Output(Bits(2))
 
     @generator
     def construct(ports):
-
-      axil_in_sig = axil_in_type(axil_addr_width, axil_data_width)({
-          "awvalid": ports.s_axi_control_AWVALID,
-          "awaddr": ports.s_axi_control_AWADDR,
-          "wvalid": ports.s_axi_control_WVALID,
-          "wdata": ports.s_axi_control_WDATA,
-          "wstrb": ports.s_axi_control_WSTRB,
-          "arvalid": ports.s_axi_control_ARVALID,
-          "araddr": ports.s_axi_control_ARADDR,
-          "rready": ports.s_axi_control_RREADY,
-          "bready": ports.s_axi_control_BREADY,
-      })
+      System.current().platform = "xrt"
 
       rst = ~ports.ap_resetn
 
-      xrt = XrtService(clk=ports.ap_clk, rst=rst, axil_in=axil_in_sig)
-
-      axil_out = xrt.axil_out
+      addr_mask = Bits(32)(XrtMaxAddr - 1)
+      masked_awaddr = ports.s_axi_control_AWADDR & addr_mask
+      masked_araddr = ports.s_axi_control_ARADDR & addr_mask
+      xrt = AxiMMIO(
+          esi.MMIO,
+          appid=esi.AppID("xrt_mmio"),
+          clk=ports.ap_clk,
+          rst=rst,
+          awvalid=ports.s_axi_control_AWVALID,
+          awaddr=masked_awaddr.as_uint(),
+          wvalid=ports.s_axi_control_WVALID,
+          wdata=ports.s_axi_control_WDATA,
+          wstrb=ports.s_axi_control_WSTRB,
+          arvalid=ports.s_axi_control_ARVALID,
+          araddr=masked_araddr.as_uint(),
+          rready=ports.s_axi_control_RREADY,
+          bready=ports.s_axi_control_BREADY,
+      )
 
       # AXI-Lite control
-      ports.s_axi_control_AWREADY = axil_out['awready']
-      ports.s_axi_control_WREADY = axil_out['wready']
-      ports.s_axi_control_ARREADY = axil_out['arready']
-      ports.s_axi_control_RVALID = axil_out['rvalid']
-      ports.s_axi_control_RDATA = axil_out['rdata']
-      ports.s_axi_control_RRESP = axil_out['rresp']
-      ports.s_axi_control_BVALID = axil_out['bvalid']
-      ports.s_axi_control_BRESP = axil_out['bresp']
+      ports.s_axi_control_AWREADY = xrt.awready
+      ports.s_axi_control_WREADY = xrt.wready
+      ports.s_axi_control_ARREADY = xrt.arready
+      ports.s_axi_control_RVALID = xrt.rvalid
+      ports.s_axi_control_RDATA = xrt.rdata
+      ports.s_axi_control_RRESP = xrt.rresp
+      ports.s_axi_control_BVALID = xrt.bvalid
+      ports.s_axi_control_BRESP = xrt.bresp
 
       # Splice in the user's code
       # NOTE: the clock is `ports.ap_clk`
@@ -244,6 +131,10 @@ def XrtBSP(user_module):
       dst_makefile = sys.output_directory / "Makefile.xrt"
       dst_makefile.open("w").write(
           makefile_template.render(system_name=sys.name))
+      template = env.get_template("xrt_package.tcl.j2")
+      dst_package_tcl = sys.hw_output_dir / "xrt_package.tcl"
+      dst_package_tcl.open("w").write(
+          template.render(system_name=sys.name, max_mmio_size=XrtMaxAddr))
 
       shutil.copy(__dir__ / "xrt.ini", sys.output_directory / "xrt.ini")
       shutil.copy(__dir__ / "xsim.tcl", sys.output_directory / "xsim.tcl")

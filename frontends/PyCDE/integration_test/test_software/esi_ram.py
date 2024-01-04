@@ -1,14 +1,19 @@
+from telnetlib import IP
 from typing import Optional
 import esi
 import random
 import sys
 
+import IPython
+
 platform = sys.argv[1]
 acc = esi.AcceleratorConnection(platform, sys.argv[2])
 
+# IPython.embed()
+
 d = acc.build_accelerator()
 
-mem_write = d.ports[esi.AppID("write")].write_port("write")
+mem_write = d.ports[esi.AppID("write")].write_port("req")
 mem_write.connect()
 mem_read_addr = d.ports[esi.AppID("read")].write_port("address")
 mem_read_addr.connect()
@@ -41,3 +46,7 @@ zeros = bytearray([0] * 8)
 mem_write.write({"address": [3], "data": zeros})
 resp = read(3)
 assert resp == data
+
+mmio = acc.get_service_mmio()
+for addr in range(0, 16, 4):
+  print(f"MMIO {addr}: {mmio.read(addr)}")

@@ -1,0 +1,5 @@
+
+# /src/circt created via
+#   `ln -s <build dir>/tools/circt/python_packages/pycde/pycde/circt frontends/PyCDE/src/circt`
+# to help PyCDE devs with code completion.
+/src/circt

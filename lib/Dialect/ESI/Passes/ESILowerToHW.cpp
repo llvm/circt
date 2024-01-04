@@ -452,10 +452,101 @@ LogicalResult CosimFromHostLowering::matchAndRewrite(
 
 namespace {
 /// Lower `CompressedManifestOps` ops to a SystemVerilog extern module.
-struct CosimManifestLowering
-    : public OpConversionPattern<CompressedManifestOp> {
+struct MetadataRomLowering : public OpConversionPattern<CompressedManifestOp> {
 public:
   using OpConversionPattern::OpConversionPattern;
+  constexpr static StringRef MetadataRomName = "__ESI_Metadata_ROM";
+
+  LogicalResult matchAndRewrite(CompressedManifestOp, OpAdaptor adaptor,
+                                ConversionPatternRewriter &rewriter) const;
+
+protected:
+  LogicalResult createRomModule(CompressedManifestOp op,
+                                ConversionPatternRewriter &rewriter) const;
+};
+} // anonymous namespace
+
+LogicalResult MetadataRomLowering::createRomModule(
+    CompressedManifestOp op, ConversionPatternRewriter &rewriter) const {
+  Location loc = op.getLoc();
+  auto mlirModBody = op->getParentOfType<mlir::ModuleOp>();
+  rewriter.setInsertionPointToStart(mlirModBody.getBody());
+
+  if (Operation *existingExtern = mlirModBody.lookupSymbol(MetadataRomName)) {
+    if (!isa<hw::HWModuleExternOp>(existingExtern))
+      return rewriter.notifyMatchFailure(
+          op,
+          "Found " + MetadataRomName + " but it wasn't an HWModuleExternOp");
+    rewriter.eraseOp(existingExtern);
+  }
+
+  PortInfo ports[] = {
+      {{rewriter.getStringAttr("address"), rewriter.getIntegerType(30),
+        ModulePort::Direction::Input}},
+      {{rewriter.getStringAttr("data"), rewriter.getI32Type(),
+        ModulePort::Direction::Output}},
+  };
+  auto rom = rewriter.create<HWModuleOp>(
+      loc, rewriter.getStringAttr(MetadataRomName), ports);
+  Block *romBody = rom.getBodyBlock();
+  rewriter.setInsertionPointToStart(romBody);
+
+  ArrayRef<uint8_t> maniBytes = op.getCompressedManifest().getData();
+  SmallVector<uint32_t> words(4, 0);
+  words.push_back(MagicNumberLo);
+  words.push_back(MagicNumberHi);
+  words.push_back(VersionNumber);
+  words.push_back(maniBytes.size());
+
+  for (size_t i = 0; i < maniBytes.size() - 3; i += 4) {
+    uint32_t word = maniBytes[i] | (maniBytes[i + 1] << 8) |
+                    (maniBytes[i + 2] << 16) | (maniBytes[i + 3] << 24);
+    words.push_back(word);
+  }
+  size_t overHang = maniBytes.size() % 4;
+  if (overHang != 0) {
+    uint32_t word = 0;
+    for (size_t i = 0; i < overHang; ++i)
+      word |= maniBytes[maniBytes.size() - overHang + i] << (i * 8);
+    words.push_back(word);
+  }
+
+  SmallVector<Attribute> wordAttrs;
+  for (uint32_t word : words)
+    wordAttrs.push_back(rewriter.getI32IntegerAttr(word));
+  auto manifestConstant = rewriter.create<hw::AggregateConstantOp>(
+      loc, hw::UnpackedArrayType::get(rewriter.getI32Type(), words.size()),
+      rewriter.getArrayAttr(wordAttrs));
+  auto manifestReg =
+      rewriter.create<sv::RegOp>(loc, manifestConstant.getType());
+  rewriter.create<sv::AssignOp>(loc, manifestReg, manifestConstant);
+
+  size_t addrBits = llvm::Log2_64_Ceil(words.size());
+  auto slimmedIdx = rewriter.create<comb::ExtractOp>(
+      loc, romBody->getArgument(0), 0, addrBits);
+  auto readIdx =
+      rewriter.create<sv::ArrayIndexInOutOp>(loc, manifestReg, slimmedIdx);
+  auto readData = rewriter.create<sv::ReadInOutOp>(loc, readIdx);
+
+  if (auto term = romBody->getTerminator())
+    rewriter.eraseOp(term);
+  rewriter.create<hw::OutputOp>(loc, ValueRange{readData});
+  return success();
+}
+
+LogicalResult MetadataRomLowering::matchAndRewrite(
+    CompressedManifestOp op, OpAdaptor adaptor,
+    ConversionPatternRewriter &rewriter) const {
+  LogicalResult ret = createRomModule(op, rewriter);
+  rewriter.eraseOp(op);
+  return ret;
+}
+
+namespace {
+/// Lower `CompressedManifestOps` ops to a SystemVerilog extern module.
+struct CosimManifestLowering : public MetadataRomLowering {
+public:
+  using MetadataRomLowering::MetadataRomLowering;
 
   LogicalResult
   matchAndRewrite(CompressedManifestOp, OpAdaptor adaptor,
@@ -468,6 +559,10 @@ LogicalResult CosimManifestLowering::matchAndRewrite(
     ConversionPatternRewriter &rewriter) const {
   MLIRContext *ctxt = rewriter.getContext();
   Location loc = op.getLoc();
+
+  LogicalResult ret = createRomModule(op, rewriter);
+  if (failed(ret))
+    return ret;
 
   // Declare external module.
   Attribute params[] = {
@@ -494,7 +589,7 @@ LogicalResult CosimManifestLowering::matchAndRewrite(
       [&](OpBuilder &rewriter, const hw::HWModulePortAccessor &) {
         // Assemble the manifest data into a constant.
         SmallVector<Attribute> bytes;
-        for (char b : op.getCompressedManifest().getData())
+        for (uint8_t b : op.getCompressedManifest().getData())
           bytes.push_back(rewriter.getI8IntegerAttr(b));
         auto manifestConstant = rewriter.create<hw::AggregateConstantOp>(
             loc, hw::UnpackedArrayType::get(rewriter.getI8Type(), bytes.size()),
@@ -520,7 +615,6 @@ LogicalResult CosimManifestLowering::matchAndRewrite(
   rewriter.eraseOp(op);
   return success();
 }
-
 void ESItoHWPass::runOnOperation() {
   auto top = getOperation();
   auto *ctxt = &getContext();
@@ -560,6 +654,8 @@ void ESItoHWPass::runOnOperation() {
 
   if (platform == Platform::cosim) {
     pass1Patterns.insert<CosimManifestLowering>(ctxt);
+  } else if (platform == Platform::xrt) {
+    pass1Patterns.insert<MetadataRomLowering>(ctxt);
   }
 
   // Run the conversion.
