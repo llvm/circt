@@ -103,7 +103,8 @@ struct transition{
   z3Fun guard;
   mlir::Region *guard_reg;
   bool isGuard;
-  vector<z3Fun> actions;
+  // z3Fun action;
+  llvm::DenseMap<mlir::Value, expr> *var_updates;
   mlir::Region *action_reg;
   bool isAction;
 };

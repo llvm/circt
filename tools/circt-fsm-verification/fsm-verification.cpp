@@ -89,12 +89,12 @@ expr manage_comb_exp(Operation &op, vector<expr> vec, z3::context &c){
 }
 
 expr getExpr(mlir::Value v, llvm::DenseMap<mlir::Value, expr> expr_map, z3::context& c){
-  // llvm::outs()<<"get expr "<<v<<"\n";
+  llvm::outs()<<"\nget expr "<<v<<"\n";
   if(expr_map.find(v) != expr_map.end()){
-    // llvm::outs()<<"found "<<expr_map.at(v).to_string()<<"\n";
+    llvm::outs()<<"found "<<expr_map.at(v).to_string()<<"\n";
     return expr_map.at(v);
   } else if(auto constop = dyn_cast<hw::ConstantOp>(v.getDefiningOp())){
-    // llvm::outs()<<"constant "<<constop.getValue().getSExtValue()<<"\n";
+    llvm::outs()<<"constant "<<constop.getValue().getSExtValue()<<"\n";
     return c.int_val(constop.getValue().getSExtValue());
   } else{
     llvm::outs()<<"ERROR: variable "<<v<<" not found in the expression map\n";
@@ -119,6 +119,8 @@ expr getGuardExpr(llvm::DenseMap<mlir::Value, expr> expr_map, Region& guard, z3:
     for (auto operand: op.getOperands()){
       // llvm::outs()<<"operand "<<operand<<"\n";
       // llvm::outs()<<"expr "<<getExpr(operand, expr_map, c).to_string()<<"\n";
+        llvm::outs()<<"call getExpr 2\n";
+
       vec.push_back(getExpr(operand, expr_map, c));
     }
     // llvm::outs()<<"op result "<<op.getResult(0) <<"\n";
@@ -130,8 +132,8 @@ expr getGuardExpr(llvm::DenseMap<mlir::Value, expr> expr_map, Region& guard, z3:
 }
 
 
-llvm::DenseMap<mlir::Value, expr> getActionExpr(llvm::DenseMap<mlir::Value, expr> expr_map, Region& action, context& c){
-  llvm::DenseMap<mlir::Value, expr> actions;
+void getActionExpr(llvm::DenseMap<mlir::Value, expr> expr_map, Region& action, context& c, llvm::DenseMap<mlir::Value, expr> var_updates){
+  // vector<expr>
   llvm::outs()<<"\n ACTION expr_map\n ";
   for (auto m: expr_map){
     llvm::outs()<<m.first<<"\n";
@@ -145,10 +147,11 @@ llvm::DenseMap<mlir::Value, expr> getActionExpr(llvm::DenseMap<mlir::Value, expr
     llvm::outs()<<op<<"\n";
     if (auto updateop = dyn_cast<fsm::UpdateOp>(op)){
       llvm::outs()<<"update "<<updateop<<"\n";
-      llvm::outs()<<"operand 0 "<<updateop.getOperands()[0]<<"\n";
+      llvm::outs()<<"operand 0 type "<<updateop.getOperands()[0].getType()<<"\n";
       llvm::outs()<<"operand 1 "<<updateop.getOperands()[1]<<"\n";
+        llvm::outs()<<"call getExpr 3\n";
 
-      llvm::outs()<<"expr "<<getExpr(updateop.getOperands()[1], expr_map, c).to_string()<<"\n";
+      llvm::outs()<<"gotten expr "<<getExpr(updateop.getOperands()[1], expr_map, c).to_string()<<"\n";
       // llvm::outs()<<expr_map.find(updateop.getOperands()[0])->first<<"\n";
       // z3Fun a = [&](vector<expr> vec) -> expr {
       //       llvm::DenseMap<mlir::Value, expr> expr_map_tmp;
@@ -158,19 +161,24 @@ llvm::DenseMap<mlir::Value, expr> getActionExpr(llvm::DenseMap<mlir::Value, expr
       //       // expr_map_tmp.find(updateop.getOperands()[0])->second = getExpr(updateop.getOperands()[1], expr_map, c);
       //       return getExpr(updateop.getOperands()[1], expr_map, c);
       //     };
-      actions.insert({updateop.getOperands()[0], getExpr(updateop.getOperands()[1], expr_map, c)});
+      llvm::outs()<<"call getExpr 4\n";
+      mlir::Value vl = updateop.getOperands()[1];
+
+      var_updates.insert({vl, getExpr(updateop.getOperands()[1], expr_map, c)});
+
+      llvm::outs()<<"insertion complete\n";
       // return getExpr(updateop.getOperands()[1], expr_map, c);
       // return a;
     } else {
       llvm::outs()<<"AO op result "<<op <<"\n";
       vector<expr> vec;
       for (auto operand: op.getOperands()){
+        llvm::outs()<<"call getExpr 1\n";
         vec.push_back(getExpr(operand, expr_map, c));
       }
       expr_map.insert({op.getResult(0), manage_comb_exp(op, vec, c)});
     }
   }
-  return actions;
 }
 
 
@@ -269,42 +277,24 @@ void recOpsMgmt(Operation &mod, context &c, vector<expr> &arguments, llvm::Dense
                 if(!trRegions[1]->empty()){
                   Region &r = *trRegions[1];
 
-                  llvm::DenseMap<mlir::Value, expr> act_actions = getActionExpr(expr_map, r, c);
+                  llvm::DenseMap<mlir::Value, expr> var_updates;
 
-                  for (auto [key, v1]: act_actions){
-                        z3Fun a = [&](vector<expr> vec) -> expr {
-                        llvm::DenseMap<mlir::Value, expr> expr_map_tmp;
-                        for(auto [value, expr]: llvm::zip(vecVal, vec)){
-                          expr_map_tmp.insert({value, expr});
-                        }
-                        // expr_map_tmp.find(updateop.getOperands()[0])->second = getExpr(updateop.getOperands()[1], expr_map, c);
-                        return v1;
-                      };
-                      t.actions.push_back(a);
-                      t.isAction = true;
-                  }
 
-                  if (t.actions.size()!= var_map.size()){
-                    // llvm::outs()<<"ERROR: number of actions "<<t.actions.size()<<" is different from number of variables "<<arguments.size()+var_map.size()<<"\n";
-                    for(auto vr: var_map){
-                      if(act_actions.find(vr.first) == act_actions.end()){
-                        // llvm::outs()<<"ERROR: action for input "<<a<<" not found\n";
-                        z3Fun a = [&](vector<expr> vec) -> expr {
-                          llvm::DenseMap<mlir::Value, expr> expr_map_tmp;
-                          for(auto [value, expr]: llvm::zip(vecVal, vec)){
-                            expr_map_tmp.insert({value, expr});
-                          }
-                          // expr_map_tmp.find(updateop.getOperands()[0])->second = getExpr(updateop.getOperands()[1], expr_map, c);
-                          return vr.second;
-                        };
-                        t.actions.push_back(a);
+                  getActionExpr(expr_map, r, c, var_updates);
 
-                      }
-                    }
+                  t.var_updates = &var_updates;
 
-                  }
+                  // z3Fun a = [&](vector<expr> vec) -> expr {
+                      //   llvm::DenseMap<mlir::Value, expr> expr_map_tmp;
+                      //   for(auto [value, expr]: llvm::zip(vecVal, vec)){
+                      //     expr_map_tmp.insert({value, expr});
+                      //   }
+                      //   // expr_map_tmp.find(updateop.getOperands()[0])->second = getExpr(updateop.getOperands()[1], expr_map, c);
+                      //   return getActionExpr(expr_map_tmp, r, c);
+                      // };
 
-                  // t.isAction = true;
+                  t.isAction = true;
+                  // t.action = a;
                   // llvm::outs()<<"AAAaction "<<t.action({c.int_const("int"), c.bool_const("const")}).to_string()<<"\n";
                 }
 
@@ -419,16 +409,12 @@ void populateSolver(Operation &mod){
     llvm::outs()<<"to "<<col<<"\n";
     if(t.isGuard && t.isAction){
       // llvm::outs()<<"-------- action&guard "<< t.action(solver_vars).to_string() <<"\n";
-      for(auto ac: t.actions)
-        // s.add(forall(solver_vars[0], implies((stateInvariants.at(t.from)(solver_vars[0]) && t.guard(solver_vars)), stateInvariants.at(t.to)(ac(solver_vars)))));
       // s.add(forall(solver_vars[0], implies((stateInvariants.at(t.from)(solver_vars[0]) && t.guard(solver_vars)), stateInvariants.at(t.to)(t.action(solver_vars)))));
     } else if (t.isGuard){
       llvm::outs()<<"-------- guard "<< t.guard(solver_vars).to_string() <<"\n";
       s.add(forall(solver_vars[0], implies((stateInvariants.at(t.from)(solver_vars[0]) && t.guard(solver_vars)), stateInvariants.at(t.to)(solver_vars[0]))));
     } else if (t.isAction){
       // llvm::outs()<<"--------  action "<< t.action(solver_vars).to_string() <<"\n";
-      for(auto ac: t.actions)
-        // s.add(forall(solver_vars[0], implies(stateInvariants.at(t.from)(solver_vars[0]), stateInvariants.at(t.to)(ac(solver_vars)))));
       // s.add(forall(solver_vars[0], implies(stateInvariants.at(t.from)(solver_vars[0]), stateInvariants.at(t.to)(t.action(solver_vars)))));
     // else if (t.guards.size()>0){
       // llvm::outs()<<"guard "<< t.guards[0](solver_vars).to_string() <<"\n";
