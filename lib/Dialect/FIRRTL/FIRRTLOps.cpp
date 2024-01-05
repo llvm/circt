@@ -3572,12 +3572,20 @@ LogicalResult impl::inferReturnTypes(
   return failure();
 }
 
-/// Get an attribute by name from a list of named attributes. Aborts if the
-/// attribute does not exist.
-static Attribute getAttr(ArrayRef<NamedAttribute> attrs, StringRef name) {
+/// Get an attribute by name from a list of named attributes.  Return null if no
+/// attribute is found with that name.
+static Attribute maybeGetAttr(ArrayRef<NamedAttribute> attrs, StringRef name) {
   for (auto attr : attrs)
     if (attr.getName() == name)
       return attr.getValue();
+  return {};
+};
+
+/// Get an attribute by name from a list of named attributes. Aborts if the
+/// attribute does not exist.
+static Attribute getAttr(ArrayRef<NamedAttribute> attrs, StringRef name) {
+  if (auto attr = maybeGetAttr(attrs, name))
+    return attr;
   llvm::report_fatal_error("attribute '" + name + "' not found");
 }
 
