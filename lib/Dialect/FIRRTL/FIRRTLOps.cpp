@@ -3579,7 +3579,7 @@ static Attribute maybeGetAttr(ArrayRef<NamedAttribute> attrs, StringRef name) {
     if (attr.getName() == name)
       return attr.getValue();
   return {};
-};
+}
 
 /// Get an attribute by name from a list of named attributes. Aborts if the
 /// attribute does not exist.
