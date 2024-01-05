@@ -13,13 +13,27 @@ on:
           - linux
           - macos
           - windows
+
+      # The following options only influence workflow_dispatch, and are ignored otherwise.
       runTests:
-        type: choice
         description: Run CIRCT tests
         default: false
+        type: boolean
+
+      llvm_enable_assertions:
+        description: Build with assertions.
+        default: false
+        type: boolean
+
+      cmake_build_type:
+        required: true
+        type: choice
         options:
-          - true
-          - false
+          - release
+          - relwithdebinfo
+          - debug
+        default: release
+
   # Run every day at 0700 UTC which is:
   #   - 0000 PDT / 2300 PST
   #   - 0300 EDT / 0200 EST
@@ -123,10 +137,18 @@ jobs:
       - name: Add Build Config for firtool and om-linker
         id: add-build-config-firtool
         run: |
+          # Default configuration template.
           json='{"name":"firtool","install_target":"install-firtool install-om-linker","package_name_prefix":"firrtl-bin","mode":"release","assert":"OFF","shared":"OFF","stats":"ON"}'
-          if [[ ${{ github.event_name }} == 'schedule' ]] || [[ ${{ github.event_name }} == 'workflow_dispatch' ]]; then
-            json=$(echo $json | jq -c '.assert = "ON" | .mode = "relwithdebinfo"')
-          fi
+          case ${{ github.event_name }} in
+            # Workflow dispatch looks to input knobs for asserts and build type.
+            workflow_dispatch)
+              json=$(echo $json | jq -c '.assert = "${{ inputs.llvm_enable_assertions && 'ON' || 'OFF' }}" | .mode = "${{ inputs.cmake_build_type }}"')
+            ;;
+            # Scheulded runs are Release but with Asserts + Debug.
+            schedule)
+              json=$(echo $json | jq -c '.assert = "ON" | .mode = "relwithdebinfo"')
+            ;;
+          esac
           echo "out=$json" >> $GITHUB_OUTPUT
       - name: Add Build Config for CIRCT-full (shared)
         id: add-build-config-circt-full-shared
