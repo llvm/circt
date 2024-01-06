@@ -95,6 +95,36 @@ firrtl.circuit "Simple" {
 
 // -----
 
+firrtl.circuit "ProbeColors" {
+  firrtl.layer @A bind {}
+  firrtl.module @ProbeColors(
+    out %a : !firrtl.probe<uint<1>, @A>
+  ) {
+    %b = firrtl.wire : !firrtl.uint<1>
+    firrtl.layerblock @A {
+      %0 = firrtl.ref.send %b : !firrtl.uint<1>
+      %1 = firrtl.ref.cast %0 : (!firrtl.probe<uint<1>>) -> !firrtl.probe<uint<1>, @A>
+      firrtl.ref.define %a, %1 : !firrtl.probe<uint<1>, @A>
+    }
+  }
+}
+
+// CHECK-LABEL: firrtl.circuit "ProbeColors"
+//
+// CHECK:       firrtl.module private @ProbeColors_A(
+// CHECK-SAME:    in %[[b_port:[_a-zA-Z0-9]+]]: !firrtl.uint<1>
+// CHECK-SAME:    out %[[a_port:[_a-zA-Z0-9]+]]: !firrtl.probe<uint<1>, @A>
+//
+// CHECK-NEXT:    %[[b_send:[_a-zA-Z0-9]+]] = firrtl.ref.send %[[b_port]]
+// CHECK-NEXT:    firrtl.ref.define.unsafe %[[a_port]], %[[b_send]]
+//
+// CHECK:       firrtl.module @ProbeColors
+// CHECK:         %[[b_port:[_a-zA-Z0-9]+]], %[[a_port:[_a-zA-Z0-9]+]] = firrtl.instance probeColors_A
+// CHECK-NEXT:    firrtl.ref.define.unsafe %a, %[[a_port]]
+// CHECK-NEXT:    firrtl.strictconnect %[[b_port]], %b
+
+// -----
+
 firrtl.circuit "ModuleNameConflict" {
   firrtl.layer @A bind {}
   firrtl.module private @ModuleNameConflict_A() {}

@@ -1,4 +1,4 @@
-; RUN: firtool %s | FileCheck %s
+; RUN: firtool %s -split-input-file | FileCheck %s
 
 FIRRTL version 4.0.0
 circuit Foo: %[[
@@ -50,4 +50,61 @@ circuit Foo: %[[
 ; CHECK-NEXT:   bind Foo Foo_A foo_A (
 ; CHECK-NEXT:     ._in (in)
 ; CHECK-NEXT:   );
+; CHECK-NEXT:  `endif // groups_Foo_A
+
+; // -----
+
+FIRRTL version 4.0.0
+circuit Foo: %[[
+  {
+    "class": "firrtl.transforms.DontTouchAnnotation",
+    "target": "~Foo|Bar>b"
+  },
+  {
+    "class": "firrtl.transforms.DontTouchAnnotation",
+    "target": "~Foo|Foo>c"
+  }
+]]
+  layer A, bind:
+
+  module Bar:
+    output a: Probe<UInt<1>>
+    input x: UInt<1>
+
+    node b = UInt<1>(0)
+
+    layerblock A:
+      define a = probe(b)
+
+  module Foo:
+    input x: UInt<1>
+
+    inst bar of Bar
+    connect bar.x, x
+
+    layerblock A:
+
+      node c = read(bar.a)
+
+; CHECK-LABEL: module Bar_A(
+; CHECK-NEXT:    input _b
+; CHECK-NEXT:  );
+; CHECK:         wire _b_probe = _b;
+; CHECK-NEXT:  endmodule
+
+; CHECK-LABEL: module Foo_A(
+; CHECK-NEXT:    input _bar_a
+; CHECK-NEXT:  );
+; CHECK:         wire c = _bar_a;
+; CHECK-NEXT:  endmodule
+
+; CHECK-LABEL: FILE "groups_Foo_A.sv"
+; CHECK:       `ifndef groups_Foo_A
+; CHECK-NEXT:  `define groups_Foo_A
+; CHECK-NEXT:  bind Bar Bar_A bar_A (
+; CHECK-NEXT:    ._b (b)
+; CHECK-NEXT:  );
+; CHECK-NEXT:  bind Foo Foo_A foo_A (
+; CHECK-NEXT:    ._bar_a (Foo.bar.bar_A._b_probe)
+; CHECK-NEXT:  );
 ; CHECK-NEXT:  `endif // groups_Foo_A
