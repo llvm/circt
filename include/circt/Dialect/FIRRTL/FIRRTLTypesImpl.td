@@ -408,6 +408,12 @@ def RefImpl : FIRRTLImplType<"Ref",
   let extraClassDeclaration = [{
     /// Return the recursive properties of the type.
     RecursiveTypeProperties getRecursiveTypeProperties() const;
+
+    RefType removeLayer() const {
+      if (getLayer() == nullptr)
+        return *this;
+      return get(getType(), getForceable());
+    }
   }];
 }
 
