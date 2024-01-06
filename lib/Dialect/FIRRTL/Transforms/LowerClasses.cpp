@@ -368,10 +368,15 @@ void LowerClassesPass::runOnOperation() {
                           lowerClassLike(state.moduleLike, classLike);
                         });
 
-  // Completely erase Class module-likes
+  // Completely erase Class module-likes, and remove from the InstanceGraph.
   for (auto &[omClass, state] : loweringState.classLoweringStateTable) {
-    if (isa<firrtl::ClassLike>(state.moduleLike.getOperation()))
+    if (isa<firrtl::ClassLike>(state.moduleLike.getOperation())) {
+      InstanceGraphNode *node = instanceGraph.lookup(state.moduleLike);
+      for (auto *use : llvm::make_early_inc_range(node->uses()))
+        use->erase();
+      instanceGraph.erase(node);
       state.moduleLike.erase();
+    }
   }
 
   // Collect ops where Objects can be instantiated.
