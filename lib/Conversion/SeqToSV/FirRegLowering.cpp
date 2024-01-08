@@ -21,42 +21,6 @@ using llvm::MapVector;
 
 #define DEBUG_TYPE "lower-seq-firreg"
 
-namespace circt {
-// Construct SCC with each FirReg.
-struct FirRegSCC {
-  FirRegSCC(HWModuleOp moduleOp,
-            llvm::function_ref<bool(Operation *)> f = nullptr) {
-    using SccOpType = circt::hw::detail::SCCNode;
-    SccOpType sccOp(moduleOp, f, 0);
-
-    for (llvm::scc_iterator<SccOpType> i = llvm::scc_begin(sccOp),
-                                       e = llvm::scc_end(sccOp);
-         i != e; ++i) {
-      LLVM_DEBUG(llvm::dbgs() << "\n === Print SCC Nodes ====>");
-      for (auto node : *i) {
-        sccId[node.op] = sccIdGen;
-        LLVM_DEBUG(llvm::dbgs() << "\n scc: " << *node.op);
-      }
-      ++sccIdGen;
-    }
-  };
-
-  bool isInSameSCC(Operation *lhs, Operation *rhs) const {
-    auto lhsIt = sccId.find(lhs);
-    auto rhsIt = sccId.find(rhs);
-    return lhsIt != sccId.end() && rhsIt != sccId.end() &&
-           lhsIt->getSecond() == rhsIt->getSecond();
-  }
-  void erase(Operation *op) { sccId.erase(op); }
-
-private:
-  llvm::DenseMap<Operation *, size_t> sccId;
-  unsigned sccIdGen = 0;
-};
-} // namespace circt
-
-FirRegLowering::~FirRegLowering() { delete scc; }
-
 void FirRegLowering::addToIfBlock(OpBuilder &builder, Value cond,
                                   const std::function<void()> &trueSide,
                                   const std::function<void()> &falseSide) {
@@ -83,7 +47,7 @@ FirRegLowering::FirRegLowering(TypeConverter &typeConverter,
     : typeConverter(typeConverter), module(module),
       disableRegRandomization(disableRegRandomization),
       emitSeparateAlwaysBlocks(emitSeparateAlwaysBlocks) {
-  scc = new FirRegSCC(module, [&](Operation *op) {
+  scc = std::make_unique<FirRegSCC>(module, [&](Operation *op) {
     return isa<sv::RegOp, hw::InstanceOp>(op);
   });
 }
