@@ -3,9 +3,6 @@
 firrtl.circuit "Intrinsics" {
   // CHECK-LABEL: hw.module @Intrinsics
   firrtl.module @Intrinsics(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>) {
-    // CHECK-NEXT: %c0_i32 = hw.constant 0 : i32
-    // CHECK-NEXT: %z_i5 = sv.constantZ : i5
-    // CHECK-NEXT: %false = hw.constant false
     // CHECK-NEXT: [[CLK:%.+]] = seq.from_clock %clk
     // CHECK-NEXT: %x_i1 = sv.constantX : i1
     // CHECK-NEXT: [[T0:%.+]] = comb.icmp bin ceq %a, %x_i1
@@ -17,32 +14,10 @@ firrtl.circuit "Intrinsics" {
     %x0 = firrtl.node interesting_name %0 : !firrtl.uint<1>
     %x1 = firrtl.node interesting_name %1 : !firrtl.uint<1>
 
-    // CHECK-NEXT: [[FOO_STR:%.*]] = sv.constantStr "foo"
-    // CHECK-NEXT: [[FOO_DECL:%.*]] = sv.reg : !hw.inout<i1>
-    // CHECK-NEXT: sv.initial {
-    // CHECK-NEXT:   [[TMP:%.*]] = sv.system "test$plusargs"([[FOO_STR]])
-    // CHECK-NEXT:   sv.bpassign [[FOO_DECL]], [[TMP]]
-    // CHECK-NEXT: }
-    // CHECK-NEXT: [[FOO:%.*]] = sv.read_inout [[FOO_DECL]]
-    // CHECK-NEXT: [[BAR_VALUE_DECL:%.*]] = sv.reg : !hw.inout<i5>
-    // CHECK-NEXT: [[BAR_FOUND_DECL:%.*]] = sv.reg : !hw.inout<i1>
-    // CHECK-NEXT: sv.ifdef "SYNTHESIS" {
-    // CHECK-NEXT:   sv.assign [[BAR_VALUE_DECL]], %z_i5
-    // CHECK-SAME:     #sv.attribute<"This dummy assignment exists to avoid undriven lint warnings
-    // CHECK-SAME:     emitAsComment
-    // CHECK-NEXT:   sv.assign [[BAR_FOUND_DECL]], %false
-    // CHECK-NEXT: } else {
-    // CHECK-NEXT:   sv.initial {
-    // CHECK-NEXT:     [[BAR_STR:%.*]] = sv.constantStr "bar"
-    // CHECK-NEXT:     [[TMP:%.*]] = sv.system "value$plusargs"([[BAR_STR]], [[BAR_VALUE_DECL]])
-    // CHECK-NEXT:     [[TMP2:%.*]] = comb.icmp bin ne [[TMP]], %c0_i32
-    // CHECK-NEXT:     sv.bpassign [[BAR_FOUND_DECL]], [[TMP2]]
-    // CHECK-NEXT:   }
-    // CHECK-NEXT: }
-    // CHECK-NEXT: [[BAR_FOUND:%.*]] = sv.read_inout [[BAR_FOUND_DECL]]
-    // CHECK-NEXT: [[BAR_VALUE:%.*]] = sv.read_inout [[BAR_VALUE_DECL]]
-    // CHECK-NEXT: %x2 = hw.wire [[FOO]]
-    // CHECK-NEXT: %x3 = hw.wire [[BAR_FOUND]]
+    // CHECK-NEXT: [[FOO_TEST:%.+]] = sim.plusargs.test "foo"
+    // CHECK-NEXT: [[BAR_TEST:%.+]], [[BAR_VALUE:%.+]] = sim.plusargs.value "bar" : i5
+    // CHECK-NEXT: %x2 = hw.wire [[FOO_TEST]]
+    // CHECK-NEXT: %x3 = hw.wire [[BAR_TEST]]
     // CHECK-NEXT: %x4 = hw.wire [[BAR_VALUE]]
     %2 = firrtl.int.plusargs.test "foo"
     %3, %4 = firrtl.int.plusargs.value "bar" : !firrtl.uint<5>
