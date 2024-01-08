@@ -541,10 +541,10 @@ static bool isAssertOp(hw::HWSymbolCache &symCache, Operation *op) {
   // verifications. See FIRParserAsserts for more details.
   if (auto error = dyn_cast<ErrorOp>(op)) {
     if (auto message = error.getMessage())
-      return message->startswith("assert:") ||
-             message->startswith("assert failed (verification library)") ||
-             message->startswith("Assertion failed") ||
-             message->startswith("assertNotX:") ||
+      return message->starts_with("assert:") ||
+             message->starts_with("assert failed (verification library)") ||
+             message->starts_with("Assertion failed") ||
+             message->starts_with("assertNotX:") ||
              message->contains("[verif-library-assert]");
     return false;
   }

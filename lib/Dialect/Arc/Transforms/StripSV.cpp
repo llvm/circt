@@ -83,7 +83,7 @@ void StripSVPass::runOnOperation() {
   // Remove `sv.*` operation attributes.
   mlirModule.walk([](Operation *op) {
     auto isSVAttr = [](NamedAttribute attr) {
-      return attr.getName().getValue().startswith("sv.");
+      return attr.getName().getValue().starts_with("sv.");
     };
     if (llvm::any_of(op->getAttrs(), isSVAttr)) {
       SmallVector<NamedAttribute> newAttrs;

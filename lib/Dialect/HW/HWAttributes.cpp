@@ -127,7 +127,7 @@ OutputFileAttr OutputFileAttr::getAsDirectory(MLIRContext *context,
 }
 
 bool OutputFileAttr::isDirectory() {
-  return getFilename().getValue().endswith(llvm::sys::path::get_separator());
+  return getFilename().getValue().ends_with(llvm::sys::path::get_separator());
 }
 
 /// Option         ::= 'excludeFromFileList' | 'includeReplicatedOp'
