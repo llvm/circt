@@ -13,6 +13,7 @@ add_circt_library(CIRCTSupport
   FieldRef.cpp
   JSON.cpp
   LoweringOptions.cpp
+  Naming.cpp
   Passes.cpp
   Path.cpp
   PrettyPrinter.cpp

@@ -1741,18 +1741,23 @@ hw.module @Wires(in %a: i42) {
   // Wires should push their name or name hint onto their input when folding.
   %2 = comb.mul %a, %a : i42
   %3 = comb.mul %a, %a : i42
-  %4 = comb.mul %a, %a : i42
+  %4 = comb.mul %a, %a {sv.namehint = "preserve"} : i42
+  %5 = comb.mul %a, %a : i42
   %someName1 = hw.wire %2 : i42
-  %5 = hw.wire %3 {sv.namehint = "someName2"} : i42
-  %someName3 = hw.wire %4 {sv.namehint = "ignoredName"} : i42
+  %6 = hw.wire %3 {sv.namehint = "someName2"} : i42
+  %7 = hw.wire %4 {sv.namehint = "_ignored"} : i42
+  %someName3 = hw.wire %5 {sv.namehint = "someName3"} : i42
   hw.instance "names1" @WiresKeep(keep: %someName1: i42) -> ()
-  hw.instance "names2" @WiresKeep(keep: %5: i42) -> ()
-  hw.instance "names3" @WiresKeep(keep: %someName3: i42) -> ()
+  hw.instance "names2" @WiresKeep(keep: %6: i42) -> ()
+  hw.instance "names3" @WiresKeep(keep: %7: i42) -> ()
+  hw.instance "names4" @WiresKeep(keep: %someName3: i42) -> ()
   // CHECK-NEXT: %2 = comb.mul %a, %a {sv.namehint = "someName1"}
   // CHECK-NEXT: %3 = comb.mul %a, %a {sv.namehint = "someName2"}
-  // CHECK-NEXT: %4 = comb.mul %a, %a {sv.namehint = "someName3"}
+  // CHECK-NEXT: %4 = comb.mul %a, %a {sv.namehint = "preserve"}
+  // CHECK-NEXT: %5 = comb.mul %a, %a {sv.namehint = "someName3"}
   // CHECK-NEXT: hw.instance "names1" @WiresKeep(keep: %2: i42)
   // CHECK-NEXT: hw.instance "names2" @WiresKeep(keep: %3: i42)
   // CHECK-NEXT: hw.instance "names3" @WiresKeep(keep: %4: i42)
+  // CHECK-NEXT: hw.instance "names4" @WiresKeep(keep: %5: i42)
 }
 hw.module.extern @WiresKeep(in %keep: i42)
