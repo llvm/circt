@@ -21,6 +21,7 @@ include "FIRRTLStructure.td"
 include "FIRRTLDeclarations.td"
 include "FIRRTLStatements.td"
 include "FIRRTLExpressions.td"
+include "FIRRTLIntrinsics.td"
 
 // Types
 include "FIRRTLTypes.td"
