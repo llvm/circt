@@ -49,7 +49,7 @@ Attribute HWDialect::parseAttribute(DialectAsmParser &p, Type type) const {
     return attr;
 
   // Parse "#hw.param.expr.add" as ParamExprAttr.
-  if (attrName.startswith(ParamExprAttr::getMnemonic())) {
+  if (attrName.starts_with(ParamExprAttr::getMnemonic())) {
     auto string = attrName.drop_front(ParamExprAttr::getMnemonic().size());
     if (string.front() == '.')
       return parseParamExprWithOpcode(string.drop_front(), p, type);

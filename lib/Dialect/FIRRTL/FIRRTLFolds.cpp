@@ -161,7 +161,7 @@ bool circt::firrtl::isUselessName(StringRef name) {
   if (name.empty())
     return true;
   // Ignore _.*
-  return name.startswith("_T") || name.startswith("_WIRE");
+  return name.starts_with("_T") || name.starts_with("_WIRE");
 }
 
 /// Return true if the name is droppable. Note that this is different from
