@@ -18,6 +18,7 @@
 #include "circt/Support/SymCache.h"
 #include "llvm/ADT/DenseMapInfo.h"
 #include "llvm/ADT/GraphTraits.h"
+#include "llvm/ADT/SCCIterator.h"
 #include <variant>
 
 namespace circt {
@@ -309,7 +310,37 @@ struct llvm::GraphTraits<circt::hw::detail::SCCNode> {
 };
 
 namespace circt {
-struct FirRegSCC;
+
+// Construct the SCC that each FirRegOp belongs to.
+struct FirRegSCC {
+  FirRegSCC(hw::HWModuleOp moduleOp,
+            llvm::function_ref<bool(Operation *)> f = nullptr) {
+    using SccOpType = circt::hw::detail::SCCNode;
+    SccOpType sccOp(moduleOp, f, 0);
+
+    for (llvm::scc_iterator<SccOpType> i = llvm::scc_begin(sccOp),
+                                       e = llvm::scc_end(sccOp);
+         i != e; ++i) {
+      for (auto node : *i)
+        sccId[node.op] = sccIdGen;
+
+      ++sccIdGen;
+    }
+  };
+
+  bool isInSameSCC(Operation *lhs, Operation *rhs) const {
+    auto lhsIt = sccId.find(lhs);
+    auto rhsIt = sccId.find(rhs);
+    return lhsIt != sccId.end() && rhsIt != sccId.end() &&
+           lhsIt->getSecond() == rhsIt->getSecond();
+  }
+  void erase(Operation *op) { sccId.erase(op); }
+
+private:
+  llvm::DenseMap<Operation *, size_t> sccId;
+  unsigned sccIdGen = 0;
+};
+
 /// Lower FirRegOp to `sv.reg` and `sv.always`.
 class FirRegLowering {
 public:
@@ -318,9 +349,6 @@ public:
                  bool emitSeparateAlwaysBlocks = false);
 
   void lower();
-  ~FirRegLowering();
-
-  void initBackwardSlice();
   bool needsRegRandomization() const { return needsRandom; }
 
   unsigned numSubaccessRestored = 0;
@@ -378,7 +406,7 @@ private:
 
   llvm::SmallDenseMap<APInt, hw::ConstantOp> constantCache;
   llvm::SmallDenseMap<std::pair<Value, unsigned>, Value> arrayIndexCache;
-  FirRegSCC *scc;
+  std::unique_ptr<FirRegSCC> scc;
 
   TypeConverter &typeConverter;
   hw::HWModuleOp module;
