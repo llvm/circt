@@ -594,10 +594,10 @@ static LogicalResult executeFirtool(MLIRContext &context,
 
   // Figure out the input format if unspecified.
   if (inputFormat == InputUnspecified) {
-    if (StringRef(inputFilename).endswith(".fir"))
+    if (StringRef(inputFilename).ends_with(".fir"))
       inputFormat = InputFIRFile;
-    else if (StringRef(inputFilename).endswith(".mlir") ||
-             StringRef(inputFilename).endswith(".mlirbc") ||
+    else if (StringRef(inputFilename).ends_with(".mlir") ||
+             StringRef(inputFilename).ends_with(".mlirbc") ||
              mlir::isBytecode(*input))
       inputFormat = InputMLIRFile;
     else {
