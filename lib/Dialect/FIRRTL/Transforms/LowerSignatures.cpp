@@ -52,11 +52,12 @@ struct AttrCache {
     sPortTypes = StringAttr::get(context, "portTypes");
     sPortLocations = StringAttr::get(context, "portLocations");
     sPortAnnotations = StringAttr::get(context, "portAnnotations");
+    sInternalPaths = StringAttr::get(context, "internalPaths");
   }
   AttrCache(const AttrCache &) = default;
 
   StringAttr nameAttr, sPortDirections, sPortNames, sPortTypes, sPortLocations,
-      sPortAnnotations;
+      sPortAnnotations, sInternalPaths;
 };
 
 struct FieldMapEntry : public PortInfo {
@@ -329,7 +330,8 @@ static LogicalResult lowerModuleSignature(FModuleLike module, Convention conv,
     // handled differently below.
     if (attr.getName() != "portNames" && attr.getName() != "portDirections" &&
         attr.getName() != "portTypes" && attr.getName() != "portAnnotations" &&
-        attr.getName() != "portSyms" && attr.getName() != "portLocations")
+        attr.getName() != "portSyms" && attr.getName() != "portLocations" &&
+        attr.getName() != "internalPaths")
       newModuleAttrs.push_back(attr);
 
   SmallVector<Direction> newPortDirections;
@@ -338,6 +340,10 @@ static LogicalResult lowerModuleSignature(FModuleLike module, Convention conv,
   SmallVector<Attribute> newPortSyms;
   SmallVector<Attribute> newPortLocations;
   SmallVector<Attribute, 8> newPortAnnotations;
+  SmallVector<Attribute> newInternalPaths;
+
+  bool hasInternalPaths = false;
+  auto internalPaths = module->getAttrOfType<ArrayAttr>("internalPaths");
   for (auto p : newPorts) {
     newPortTypes.push_back(TypeAttr::get(p.type));
     newPortNames.push_back(p.name);
@@ -345,7 +351,14 @@ static LogicalResult lowerModuleSignature(FModuleLike module, Convention conv,
     newPortSyms.push_back(p.sym);
     newPortLocations.push_back(p.loc);
     newPortAnnotations.push_back(p.annotations.getArrayAttr());
+    if (internalPaths) {
+      auto internalPath = internalPaths[p.portID].cast<InternalPathAttr>();
+      newInternalPaths.push_back(internalPath);
+      if (internalPath.getPath())
+        hasInternalPaths = true;
+    }
   }
+
   newModuleAttrs.push_back(NamedAttribute(
       cache.sPortDirections,
       direction::packAttribute(module.getContext(), newPortDirections)));
@@ -361,6 +374,13 @@ static LogicalResult lowerModuleSignature(FModuleLike module, Convention conv,
 
   newModuleAttrs.push_back(NamedAttribute(
       cache.sPortAnnotations, theBuilder.getArrayAttr(newPortAnnotations)));
+
+  assert(newInternalPaths.empty() ||
+         newInternalPaths.size() == newPorts.size());
+  if (hasInternalPaths) {
+    newModuleAttrs.emplace_back(cache.sInternalPaths,
+                                theBuilder.getArrayAttr(newInternalPaths));
+  }
 
   // Update the module's attributes.
   module->setAttrs(newModuleAttrs);
