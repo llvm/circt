@@ -69,7 +69,6 @@ class AugmentedType<string name> : AttrDef<FIRRTLDialect, name> {
   code hasPrefix = [{
     StringAttr getPrefix() { return getUnderlying().getAs<StringAttr>("prefix"); }
   }];
-  let hasCustomAssemblyFormat = 1;
 }
 
 def AugmentedBundleType : AugmentedType<"AugmentedBundleType"> {
@@ -83,50 +82,58 @@ def AugmentedBundleType : AugmentedType<"AugmentedBundleType"> {
       bool isRoot() { return getID() != nullptr; }
     }];
   let mnemonic = "augmentedBundle";
-  let hasCustomAssemblyFormat = 1;
+  let assemblyFormat = "`<` $underlying `>`";
 }
 
 def AugmentedVectorType : AugmentedType<"AugmentedVectorType"> {
   let summary = "GrandCentral AugmentedVectorType";
   let extraClassDeclaration = defaultClassDeclaration # hasElements;
   let mnemonic = "augmentedVector";
+  let assemblyFormat = "`<` $underlying `>`";
 }
 
 def AugmentedGroundType : AugmentedType<"AugmentedGroundType"> {
   let summary = "GrandCentral AugmentedGroundType";
   let extraClassDeclaration = hasID # hasName;
   let mnemonic = "augmentedGround";
+  let assemblyFormat = "`<` $underlying `>`";
 }
 
 def AugmentedStringType : AugmentedType<"AugmentedStringType"> {
   let summary = "GrandCentral AugmentedStringType";
   let extraClassDeclaration = hasName;
   let mnemonic = "augmentedString";
+  let assemblyFormat = "`<` $underlying `>`";
 }
 def AugmentedBooleanType : AugmentedType<"AugmentedBooleanType"> {
   let summary = "GrandCentral AugmentedBooleanType";
   let extraClassDeclaration = hasName;
   let mnemonic = "augmentedBoolean";
+  let assemblyFormat = "`<` $underlying `>`";
 }
 def AugmentedIntegerType : AugmentedType<"AugmentedIntegerType"> {
   let summary = "GrandCentral AugmentedIntegerType";
   let extraClassDeclaration = hasName;
   let mnemonic = "augmentedInteger";
+  let assemblyFormat = "`<` $underlying `>`";
 }
 def AugmentedDoubleType : AugmentedType<"AugmentedDoubleType"> {
   let summary = "GrandCentral AugmentedDoubleType";
   let extraClassDeclaration = hasName;
   let mnemonic = "augmentedDouble";
+  let assemblyFormat = "`<` $underlying `>`";
 }
 def AugmentedLiteralType : AugmentedType<"AugmentedLiteralType"> {
   let summary = "GrandCentral AugmentedLiteralType";
   let extraClassDeclaration = hasName;
   let mnemonic = "augmentedLiteral";
+  let assemblyFormat = "`<` $underlying `>`";
 }
 def AugmentedDeletedType : AugmentedType<"AugmentedDeletedType"> {
   let summary = "GrandCentral AugmentedDeletedType";
   let extraClassDeclaration = hasName;
   let mnemonic = "augmentedDeleted";
+  let assemblyFormat = "`<` $underlying `>`";
 }
 
 
