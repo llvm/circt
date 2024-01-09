@@ -61,7 +61,7 @@ typedef enum CirctFirtoolRandomKind {
 } CirctFirtoolRandomKind;
 
 MLIR_CAPI_EXPORTED CirctFirtoolFirtoolOptions
-circtFirtoolOptionsCreateDefault();
+circtFirtoolOptionsCreateDefault(void);
 MLIR_CAPI_EXPORTED void
 circtFirtoolOptionsDestroy(CirctFirtoolFirtoolOptions options);
 

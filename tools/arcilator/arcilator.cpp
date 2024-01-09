@@ -336,7 +336,7 @@ static LogicalResult processBuffer(
   populatePipeline(pm);
 
   if (printDebugInfo && outputFormat == OutputLLVM)
-    pm.nest<LLVM::LLVMFuncOp>().addPass(LLVM::createDIScopeForLLVMFuncOpPass());
+    pm.addPass(LLVM::createDIScopeForLLVMFuncOpPass());
 
   if (failed(pm.run(module.get())))
     return failure();
