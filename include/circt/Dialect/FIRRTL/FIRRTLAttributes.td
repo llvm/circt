@@ -69,6 +69,7 @@ class AugmentedType<string name> : AttrDef<FIRRTLDialect, name> {
   code hasPrefix = [{
     StringAttr getPrefix() { return getUnderlying().getAs<StringAttr>("prefix"); }
   }];
+
 }
 
 def AugmentedBundleType : AugmentedType<"AugmentedBundleType"> {
