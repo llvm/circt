@@ -22,6 +22,7 @@
 #include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
+#include "circt/Support/Naming.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -261,6 +262,12 @@ public:
   LogicalResult
   matchAndRewrite(T op, typename T::Adaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
+    // If the cast had a better name than its input, propagate it.
+    if (Operation *inputOp = adaptor.getInput().getDefiningOp())
+      if (auto name = chooseName(op, inputOp))
+        rewriter.updateRootInPlace(
+            inputOp, [&] { inputOp->setAttr("sv.namehint", name); });
+
     rewriter.replaceOp(op, adaptor.getInput());
     return success();
   }

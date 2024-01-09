@@ -16,6 +16,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Support/APInt.h"
 #include "circt/Support/LLVM.h"
+#include "circt/Support/Naming.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/APSInt.h"
@@ -85,32 +86,6 @@ static bool isUInt1(Type type) {
   return true;
 }
 
-// Heuristic to pick the best name.
-// Good names are not useless, don't start with an underscore, minimize
-// underscores in them, and are short. This function deterministically favors
-// the second name on ties.
-static StringRef chooseName(StringRef a, StringRef b) {
-  if (a.empty())
-    return b;
-  if (b.empty())
-    return a;
-  if (isUselessName(a))
-    return b;
-  if (isUselessName(b))
-    return a;
-  if (a.starts_with("_"))
-    return b;
-  if (b.starts_with("_"))
-    return a;
-  if (b.count('_') < a.count('_'))
-    return b;
-  if (b.count('_') > a.count('_'))
-    return a;
-  if (a.size() > b.size())
-    return b;
-  return a;
-}
-
 /// Set the name of an op based on the best of two names:  The current name, and
 /// the name passed in.
 static void updateName(PatternRewriter &rewriter, Operation *op,
@@ -153,15 +128,6 @@ static OpTy replaceOpWithNewOpAndCopyName(PatternRewriter &rewriter,
       rewriter.replaceOpWithNewOp<OpTy>(op, std::forward<Args>(args)...);
   updateName(rewriter, newOp, name);
   return newOp;
-}
-
-/// Return true if this is a useless temporary name produced by FIRRTL.  We
-/// drop these as they don't convey semantic meaning.
-bool circt::firrtl::isUselessName(StringRef name) {
-  if (name.empty())
-    return true;
-  // Ignore _.*
-  return name.starts_with("_T") || name.starts_with("_WIRE");
 }
 
 /// Return true if the name is droppable. Note that this is different from
