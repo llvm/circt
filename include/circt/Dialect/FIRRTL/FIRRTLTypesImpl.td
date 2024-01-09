@@ -30,6 +30,8 @@ class FIRRTLImplType<string name,
   // which is common on FIRRTLBaseType anyway, so we generate the other
   // accessors manually
   let genAccessors = false;
+
+  let hasCustomAssemblyFormat = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -53,6 +55,7 @@ def SIntImpl : FIRRTLImplType<"SInt",
     int32_t getWidthOrSentinel() const;
     SIntType getConstType(bool isConst);
   }];
+  let mnemonic = "sint";
 }
 
 def UIntImpl : FIRRTLImplType<"UInt",
@@ -72,6 +75,7 @@ def UIntImpl : FIRRTLImplType<"UInt",
     int32_t getWidthOrSentinel() const;
     UIntType getConstType(bool isConst);
   }];
+  let mnemonic = "uint";
 }
 
 def ClockTypeImpl : FIRRTLImplType<"Clock"> {
@@ -86,6 +90,7 @@ def ClockTypeImpl : FIRRTLImplType<"Clock"> {
   let extraClassDeclaration = [{
     ClockType getConstType(bool isConst);
   }];
+  let mnemonic = "clock";
 }
 
 def ResetTypeImpl : FIRRTLImplType<"Reset"> {
@@ -100,6 +105,7 @@ def ResetTypeImpl : FIRRTLImplType<"Reset"> {
   let extraClassDeclaration = [{
     ResetType getConstType(bool isConst);
   }];
+  let mnemonic = "reset";
 }
 
 def AsyncResetTypeImpl : FIRRTLImplType<"AsyncReset"> {
@@ -114,6 +120,7 @@ def AsyncResetTypeImpl : FIRRTLImplType<"AsyncReset"> {
   let extraClassDeclaration = [{
     AsyncResetType getConstType(bool isConst);
   }];
+  let mnemonic = "asyncreset";
 }
 
 def AnalogTypeImpl : FIRRTLImplType<"Analog",
@@ -130,6 +137,7 @@ def AnalogTypeImpl : FIRRTLImplType<"Analog",
     AnalogType getConstType(bool isConst);
   }];
   let genVerifyDecl = true;
+  let mnemonic = "analog";
 }
 
 class BaseVectorTypeImpl<string name, string ElementType, list<Trait> traits = [], string BaseType = ElementType>
@@ -183,10 +191,12 @@ def FVectorImpl : BaseVectorTypeImpl<"FVector","::circt::firrtl::FIRRTLBaseType"
     /// Return this type with any type alias types recursively removed from itself.
     FIRRTLBaseType getAnonymousType();
   }];
+  let mnemonic = "vector";
 }
 
 def OpenVectorImpl : BaseVectorTypeImpl<"OpenVector","::circt::firrtl::FIRRTLType"> {
   let genVerifyDecl = 1;
+  let mnemonic = "vector.open";
 }
 
 class BaseBundleTypeImpl<string name, string ElementType, list<Trait> traits = [], string BaseType = ElementType>
@@ -280,10 +290,12 @@ def BundleImpl : BaseBundleTypeImpl<"Bundle","::circt::firrtl::FIRRTLBaseType"> 
     /// Return this type with any type alias types recursively removed from itself.
     FIRRTLBaseType getAnonymousType();
   }];
+  let mnemonic = "bundle";
 }
 
 def OpenBundleImpl : BaseBundleTypeImpl<"OpenBundle","::circt::firrtl::FIRRTLType"> {
   let genVerifyDecl = 1;
+  let mnemonic = "bundle.open";
 }
 
 def FEnumImpl : FIRRTLImplType<"FEnum", [DeclareTypeInterfaceMethods<FieldIDTypeInterface>]> {
@@ -292,6 +304,7 @@ def FEnumImpl : FIRRTLImplType<"FEnum", [DeclareTypeInterfaceMethods<FieldIDType
   let storageClass = "FEnumTypeStorage";
   let genVerifyDecl = true;
   let skipDefaultBuilders = true;
+  let mnemonic = "enum";
   let builders = [
     TypeBuilder<(ins "ArrayRef<EnumElement>":$elements, CArg<"bool", "false">:$isConst)>
   ];
@@ -384,6 +397,7 @@ def RefImpl : FIRRTLImplType<"Ref",
   let genAccessors = true;
   let genStorageClass = true;
   let genVerifyDecl = true;
+  let mnemonic = "ref";
 
   let skipDefaultBuilders = true;
   let builders = [
@@ -406,6 +420,7 @@ def BaseTypeAliasImpl : FIRRTLImplType<"BaseTypeAlias", [DeclareTypeInterfaceMet
   let storageClass = "BaseTypeAliasStorage";
   let genAccessors = true;
   let skipDefaultBuilders = true;
+  let mnemonic = "typeAlias";
   let extraClassDeclaration = [{
       // FIRRTLBaseType utils.
       FIRRTLBaseType getAnonymousType();
@@ -452,6 +467,7 @@ def ClassImpl : PropImplType<"Class", [
   );
   let genStorageClass = false;
   let genAccessors = false;
+  let mnemonic = "propClass";
   let builders = [
     TypeBuilderWithInferredContext<(ins
       "FlatSymbolRefAttr":$name,
@@ -490,18 +506,21 @@ def AnyRefImpl : PropImplType<"AnyRef"> {
     about the referred to object's fields, so subfield access, etc. is illegal.
   }];
   let genStorageClass = true;
+  let mnemonic = "propRef";
 }
 
 def StringImpl : PropImplType<"String"> {
   let summary = "An unlimited length string type. Not representable in hardware.";
   let parameters = (ins);
   let genStorageClass = true;
+  let mnemonic = "propString";
 }
 
 def IntegerImpl : PropImplType<"FInteger"> {
   let summary = "An unlimited length signed integer type.  Not representable in hardware.";
   let parameters = (ins);
   let genStorageClass = true;
+  let mnemonic = "propInt";
 }
 
 def ListImpl : PropImplType<"List"> {
@@ -509,6 +528,7 @@ def ListImpl : PropImplType<"List"> {
   let parameters = (ins TypeParameter<"circt::firrtl::PropertyType", "element type">:$elementType);
   let genStorageClass = true;
   let genAccessors = true;
+  let mnemonic = "propList";
 }
 
 def PathImpl : PropImplType<"Path"> {
@@ -516,18 +536,21 @@ def PathImpl : PropImplType<"Path"> {
   let parameters = (ins);
   let genStorageClass = true;
   let genAccessors = true;
+  let mnemonic = "propPath";
 }
 
 def BoolImpl : PropImplType<"Bool"> {
   let summary = "A boolean property.  Not representable in hardware.";
   let parameters = (ins);
   let genStorageClass = true;
+  let mnemonic = "propBool";
 }
 
 def DoubleImpl : PropImplType<"Double"> {
   let summary = "A double property.  Not representable in hardware.";
   let parameters = (ins);
   let genStorageClass = true;
+  let mnemonic = "propDouble";
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLTYPESIMPL_TD

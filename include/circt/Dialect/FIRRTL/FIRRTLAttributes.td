@@ -69,7 +69,7 @@ class AugmentedType<string name> : AttrDef<FIRRTLDialect, name> {
   code hasPrefix = [{
     StringAttr getPrefix() { return getUnderlying().getAs<StringAttr>("prefix"); }
   }];
-
+  let hasCustomAssemblyFormat = 1;
 }
 
 def AugmentedBundleType : AugmentedType<"AugmentedBundleType"> {
@@ -82,41 +82,51 @@ def AugmentedBundleType : AugmentedType<"AugmentedBundleType"> {
     hasPrefix # [{
       bool isRoot() { return getID() != nullptr; }
     }];
+  let mnemonic = "augmentedBundle";
+  let hasCustomAssemblyFormat = 1;
 }
 
 def AugmentedVectorType : AugmentedType<"AugmentedVectorType"> {
   let summary = "GrandCentral AugmentedVectorType";
   let extraClassDeclaration = defaultClassDeclaration # hasElements;
+  let mnemonic = "augmentedVector";
 }
 
 def AugmentedGroundType : AugmentedType<"AugmentedGroundType"> {
   let summary = "GrandCentral AugmentedGroundType";
   let extraClassDeclaration = hasID # hasName;
+  let mnemonic = "augmentedGround";
 }
 
 def AugmentedStringType : AugmentedType<"AugmentedStringType"> {
   let summary = "GrandCentral AugmentedStringType";
   let extraClassDeclaration = hasName;
+  let mnemonic = "augmentedString";
 }
 def AugmentedBooleanType : AugmentedType<"AugmentedBooleanType"> {
   let summary = "GrandCentral AugmentedBooleanType";
   let extraClassDeclaration = hasName;
+  let mnemonic = "augmentedBoolean";
 }
 def AugmentedIntegerType : AugmentedType<"AugmentedIntegerType"> {
   let summary = "GrandCentral AugmentedIntegerType";
   let extraClassDeclaration = hasName;
+  let mnemonic = "augmentedInteger";
 }
 def AugmentedDoubleType : AugmentedType<"AugmentedDoubleType"> {
   let summary = "GrandCentral AugmentedDoubleType";
   let extraClassDeclaration = hasName;
+  let mnemonic = "augmentedDouble";
 }
 def AugmentedLiteralType : AugmentedType<"AugmentedLiteralType"> {
   let summary = "GrandCentral AugmentedLiteralType";
   let extraClassDeclaration = hasName;
+  let mnemonic = "augmentedLiteral";
 }
 def AugmentedDeletedType : AugmentedType<"AugmentedDeletedType"> {
   let summary = "GrandCentral AugmentedDeletedType";
   let extraClassDeclaration = hasName;
+  let mnemonic = "augmentedDeleted";
 }
 
 
