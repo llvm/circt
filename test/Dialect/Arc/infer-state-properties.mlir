@@ -173,76 +173,76 @@ arc.define @onlyOneReset(%arg0: i1, %arg1: i1, %arg2: i1) -> (i1, i1) {
 // CHECK-LABEL: hw.module @testModule
 hw.module @testModule (in %arg0: i1, in %arg1: i1, in %arg2: i1, in %arg3: i1, in %clock: !seq.clock) {
   // COM: Test: AND based reset pattern detected
-  // CHECK: arc.state @ANDBasedReset(%arg0, %arg1, %arg2) clock %clock reset %arg0 lat 1 : (i1, i1, i1) -> i1
-  %0 = arc.state @ANDBasedReset(%arg0, %arg1, %arg2) clock %clock lat 1 : (i1, i1, i1) -> i1
+  // CHECK: arc.state @ANDBasedReset(%arg0, %arg1, %arg2) clock %clock reset %arg0 latency 1 : (i1, i1, i1) -> i1
+  %0 = arc.state @ANDBasedReset(%arg0, %arg1, %arg2) clock %clock latency 1 : (i1, i1, i1) -> i1
 
   // COM: Test: MUX based reset pattern detected
-  // CHECK: arc.state @MUXBasedReset(%arg0, %arg1, %arg2) clock %clock reset %arg0 lat 1 : (i1, i1, i1) -> i1
-  %1 = arc.state @MUXBasedReset(%arg0, %arg1, %arg2) clock %clock lat 1 : (i1, i1, i1) -> i1
+  // CHECK: arc.state @MUXBasedReset(%arg0, %arg1, %arg2) clock %clock reset %arg0 latency 1 : (i1, i1, i1) -> i1
+  %1 = arc.state @MUXBasedReset(%arg0, %arg1, %arg2) clock %clock latency 1 : (i1, i1, i1) -> i1
 
   // COM: Test: MUX based enable pattern detected
-  // CHECK: arc.state @enable(%true{{(_[0-9]+)?}}, %arg1, %arg2, %false{{(_[0-9]+)?}}) clock %clock enable %arg0 lat 1 : (i1, i1, i1, i1) -> i1
-  %2 = arc.state @enable(%arg0, %arg1, %arg2, %2) clock %clock lat 1 : (i1, i1, i1, i1) -> i1
+  // CHECK: arc.state @enable(%true{{(_[0-9]+)?}}, %arg1, %arg2, %false{{(_[0-9]+)?}}) clock %clock enable %arg0 latency 1 : (i1, i1, i1, i1) -> i1
+  %2 = arc.state @enable(%arg0, %arg1, %arg2, %2) clock %clock latency 1 : (i1, i1, i1, i1) -> i1
 
   // COM: Test: MUX based disable pattern detected
   // CHECK: [[DISABLE:%.+]] = comb.xor %arg0, %true{{(_[0-9]+)?}}
-  // CHECK: arc.state @disable(%false{{(_[0-9]+)?}}, %arg1, %arg2, %false{{(_[0-9]+)?}}) clock %clock enable [[DISABLE]] lat 1 : (i1, i1, i1, i1) -> i1
-  %3 = arc.state @disable(%arg0, %arg1, %arg2, %3) clock %clock lat 1 : (i1, i1, i1, i1) -> i1
+  // CHECK: arc.state @disable(%false{{(_[0-9]+)?}}, %arg1, %arg2, %false{{(_[0-9]+)?}}) clock %clock enable [[DISABLE]] latency 1 : (i1, i1, i1, i1) -> i1
+  %3 = arc.state @disable(%arg0, %arg1, %arg2, %3) clock %clock latency 1 : (i1, i1, i1, i1) -> i1
 
   // COM: Test: both reset and enable are detected in one go
-  // CHECK: arc.state @resetAndEnable(%true{{(_[0-9]+)?}}, %arg1, %arg2, %false{{(_[0-9]+)?}}, %arg3) clock %clock enable %arg0 reset %arg3 lat 1 : (i1, i1, i1, i1, i1) -> i1
-  %4 = arc.state @resetAndEnable(%arg0, %arg1, %arg2, %4, %arg3) clock %clock lat 1 : (i1, i1, i1, i1, i1) -> i1
+  // CHECK: arc.state @resetAndEnable(%true{{(_[0-9]+)?}}, %arg1, %arg2, %false{{(_[0-9]+)?}}, %arg3) clock %clock enable %arg0 reset %arg3 latency 1 : (i1, i1, i1, i1, i1) -> i1
+  %4 = arc.state @resetAndEnable(%arg0, %arg1, %arg2, %4, %arg3) clock %clock latency 1 : (i1, i1, i1, i1, i1) -> i1
 
   // COM: Test: mixed enables and disables do not work
-  // CHECK-NEXT: [[EN_DIS:%.+]]:2 = arc.state @mixedEnableAndDisable(%arg0, %arg1, %arg2, [[EN_DIS]]#0, [[EN_DIS]]#1) clock %clock lat 1 : (i1, i1, i1, i1, i1) -> (i1, i1)
-  %5, %6 = arc.state @mixedEnableAndDisable(%arg0, %arg1, %arg2, %5, %6) clock %clock lat 1 : (i1, i1, i1, i1, i1) -> (i1, i1)
+  // CHECK-NEXT: [[EN_DIS:%.+]]:2 = arc.state @mixedEnableAndDisable(%arg0, %arg1, %arg2, [[EN_DIS]]#0, [[EN_DIS]]#1) clock %clock latency 1 : (i1, i1, i1, i1, i1) -> (i1, i1)
+  %5, %6 = arc.state @mixedEnableAndDisable(%arg0, %arg1, %arg2, %5, %6) clock %clock latency 1 : (i1, i1, i1, i1, i1) -> (i1, i1)
 
   // COM: Test: mixed MUX and AND resets for different output work
-  // CHECK-NEXT: arc.state @mixedAndMuxReset(%arg0, %arg1, %arg2) clock %clock reset %arg0 lat 1 : (i1, i1, i1) -> (i1, i1)
-  %7, %8 = arc.state @mixedAndMuxReset(%arg0, %arg1, %arg2) clock %clock lat 1 : (i1, i1, i1) -> (i1, i1)
+  // CHECK-NEXT: arc.state @mixedAndMuxReset(%arg0, %arg1, %arg2) clock %clock reset %arg0 latency 1 : (i1, i1, i1) -> (i1, i1)
+  %7, %8 = arc.state @mixedAndMuxReset(%arg0, %arg1, %arg2) clock %clock latency 1 : (i1, i1, i1) -> (i1, i1)
 
   // COM: Test: mixed MUX and AND resets do not work when the reset conditions are different
-  // CHECK-NEXT: arc.state @mixedAndMuxResetDifferentConditions(%arg0, %arg1, %arg2, %arg3) clock %clock lat 1 : (i1, i1, i1, i1) -> (i1, i1)
-  %9, %10 = arc.state @mixedAndMuxResetDifferentConditions(%arg0, %arg1, %arg2, %arg3) clock %clock lat 1 : (i1, i1, i1, i1) -> (i1, i1)
+  // CHECK-NEXT: arc.state @mixedAndMuxResetDifferentConditions(%arg0, %arg1, %arg2, %arg3) clock %clock latency 1 : (i1, i1, i1, i1) -> (i1, i1)
+  %9, %10 = arc.state @mixedAndMuxResetDifferentConditions(%arg0, %arg1, %arg2, %arg3) clock %clock latency 1 : (i1, i1, i1, i1) -> (i1, i1)
 
   // COM: Test: Reset can be pulled out even if there is already a reset operand
   // CHECK-NEXT: [[NEW_RST:%.+]] = comb.or %arg1, %arg0 : i1
-  // CHECK-NEXT: arc.state @MUXBasedReset(%arg0, %arg1, %arg2) clock %clock reset [[NEW_RST]] lat 1 : (i1, i1, i1) -> i1
-  %11 = arc.state @MUXBasedReset(%arg0, %arg1, %arg2) clock %clock reset %arg1 lat 1 : (i1, i1, i1) -> i1
+  // CHECK-NEXT: arc.state @MUXBasedReset(%arg0, %arg1, %arg2) clock %clock reset [[NEW_RST]] latency 1 : (i1, i1, i1) -> i1
+  %11 = arc.state @MUXBasedReset(%arg0, %arg1, %arg2) clock %clock reset %arg1 latency 1 : (i1, i1, i1) -> i1
 
   // COM: Test: Enable can be pulled out even if there is already an enable operand
   // CHECK: [[NEW_EN:%.+]] = comb.and %arg1, %arg0 : i1
-  // CHECK: arc.state @enable(%true{{(_[0-9]+)?}}, %arg1, %arg2, %false{{(_[0-9]+)?}}) clock %clock enable [[NEW_EN]] lat 1 : (i1, i1, i1, i1) -> i1
-  %12 = arc.state @enable(%arg0, %arg1, %arg2, %12) clock %clock enable %arg1 lat 1 : (i1, i1, i1, i1) -> i1
+  // CHECK: arc.state @enable(%true{{(_[0-9]+)?}}, %arg1, %arg2, %false{{(_[0-9]+)?}}) clock %clock enable [[NEW_EN]] latency 1 : (i1, i1, i1, i1) -> i1
+  %12 = arc.state @enable(%arg0, %arg1, %arg2, %12) clock %clock enable %arg1 latency 1 : (i1, i1, i1, i1) -> i1
 
   // COM: Test: Reset can be pulled out even if there is already an enable operand
   // CHECK: [[RST_COND:%.+]] = comb.and %arg1, %arg0 : i1
-  // CHECK: arc.state @MUXBasedReset(%arg0, %arg1, %arg2) clock %clock enable %arg1 reset [[RST_COND]] lat 1 : (i1, i1, i1) -> i1
-  %13 = arc.state @MUXBasedReset(%arg0, %arg1, %arg2) clock %clock enable %arg1 lat 1 : (i1, i1, i1) -> i1
+  // CHECK: arc.state @MUXBasedReset(%arg0, %arg1, %arg2) clock %clock enable %arg1 reset [[RST_COND]] latency 1 : (i1, i1, i1) -> i1
+  %13 = arc.state @MUXBasedReset(%arg0, %arg1, %arg2) clock %clock enable %arg1 latency 1 : (i1, i1, i1) -> i1
 
   // COM: Test: mixed high and low resets cannot be pulled out
-  // CHECK-NEXT: arc.state @mixedAndMuxResetLowAndHigh(%arg0, %arg1, %arg2) clock %clock lat 1 : (i1, i1, i1) -> (i1, i1)
-  %14, %15 = arc.state @mixedAndMuxResetLowAndHigh(%arg0, %arg1, %arg2) clock %clock lat 1 : (i1, i1, i1) -> (i1, i1)
+  // CHECK-NEXT: arc.state @mixedAndMuxResetLowAndHigh(%arg0, %arg1, %arg2) clock %clock latency 1 : (i1, i1, i1) -> (i1, i1)
+  %14, %15 = arc.state @mixedAndMuxResetLowAndHigh(%arg0, %arg1, %arg2) clock %clock latency 1 : (i1, i1, i1) -> (i1, i1)
 
   // COM: Test: outputs with different enable conditions cannot be combined
-  // CHECK-NEXT: [[EN0:%.+]]:2 = arc.state @differentEnables(%arg0, %arg1, %arg2, [[EN0]]#0, [[EN0]]#1) clock %clock lat 1 : (i1, i1, i1, i1, i1) -> (i1, i1)
-  %16, %17 = arc.state @differentEnables(%arg0, %arg1, %arg2, %16, %17) clock %clock lat 1 : (i1, i1, i1, i1, i1) -> (i1, i1)
+  // CHECK-NEXT: [[EN0:%.+]]:2 = arc.state @differentEnables(%arg0, %arg1, %arg2, [[EN0]]#0, [[EN0]]#1) clock %clock latency 1 : (i1, i1, i1, i1, i1) -> (i1, i1)
+  %16, %17 = arc.state @differentEnables(%arg0, %arg1, %arg2, %16, %17) clock %clock latency 1 : (i1, i1, i1, i1, i1) -> (i1, i1)
 
   // COM: Test: enable where not all outputs have them (some have none rather than mismatching) cannot be combined
-  // CHECK-NEXT: [[EN1:%.+]]:2 = arc.state @onlyOneEnable(%arg0, %arg1, %arg2, [[EN1]]#0) clock %clock lat 1 : (i1, i1, i1, i1) -> (i1, i1)
-  %18, %19 = arc.state @onlyOneEnable(%arg0, %arg1, %arg2, %18) clock %clock lat 1 : (i1, i1, i1, i1) -> (i1, i1)
+  // CHECK-NEXT: [[EN1:%.+]]:2 = arc.state @onlyOneEnable(%arg0, %arg1, %arg2, [[EN1]]#0) clock %clock latency 1 : (i1, i1, i1, i1) -> (i1, i1)
+  %18, %19 = arc.state @onlyOneEnable(%arg0, %arg1, %arg2, %18) clock %clock latency 1 : (i1, i1, i1, i1) -> (i1, i1)
 
   // COM: Test: reset where not all outputs have them (some have none rather than mismatching) cannot be combined
-  // CHECK-NEXT: arc.state @onlyOneReset(%arg0, %arg1, %arg2) clock %clock lat 1 : (i1, i1, i1) -> (i1, i1)
-  %20, %21 = arc.state @onlyOneReset(%arg0, %arg1, %arg2) clock %clock lat 1 : (i1, i1, i1) -> (i1, i1)
+  // CHECK-NEXT: arc.state @onlyOneReset(%arg0, %arg1, %arg2) clock %clock latency 1 : (i1, i1, i1) -> (i1, i1)
+  %20, %21 = arc.state @onlyOneReset(%arg0, %arg1, %arg2) clock %clock latency 1 : (i1, i1, i1) -> (i1, i1)
 
   // COM: the next case can in theory be supported, but requires quite a bit more complexity in the pass
-  // CHECK-NEXT: [[EN2:%.+]] = arc.state @enableConditionHasOtherUse(%arg0, %arg1, [[EN2]]) clock %clock lat 1 : (i1, i1, i1) -> i1
-  %22 = arc.state @enableConditionHasOtherUse(%arg0, %arg1, %22) clock %clock lat 1 : (i1, i1, i1) -> i1
+  // CHECK-NEXT: [[EN2:%.+]] = arc.state @enableConditionHasOtherUse(%arg0, %arg1, [[EN2]]) clock %clock latency 1 : (i1, i1, i1) -> i1
+  %22 = arc.state @enableConditionHasOtherUse(%arg0, %arg1, %22) clock %clock latency 1 : (i1, i1, i1) -> i1
 
   // COM: Test: When the feedback loop has another use inside the arc, we can not simply replace it with constant 0
-  // CHECK: [[EN3:%.+]] = arc.state @enableFeedbackHasOtherUse(%true{{(_[0-9]+)?}}, %arg1, [[EN3]]) clock %clock enable %arg0 lat 1 : (i1, i1, i1) -> i1
-  %23 = arc.state @enableFeedbackHasOtherUse(%arg0, %arg1, %23) clock %clock lat 1 : (i1, i1, i1) -> i1
+  // CHECK: [[EN3:%.+]] = arc.state @enableFeedbackHasOtherUse(%true{{(_[0-9]+)?}}, %arg1, [[EN3]]) clock %clock enable %arg0 latency 1 : (i1, i1, i1) -> i1
+  %23 = arc.state @enableFeedbackHasOtherUse(%arg0, %arg1, %23) clock %clock latency 1 : (i1, i1, i1) -> i1
 }
 
 // TODO: test that patterns handle the case where the output is used for another thing as well properly

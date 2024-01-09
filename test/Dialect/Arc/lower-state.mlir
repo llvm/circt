@@ -30,8 +30,8 @@ hw.module @InputsAndOutputs(in %a: i42, in %b: i17, out c: i42, out d: i17) {
 // CHECK-LABEL: arc.model "State" {
 hw.module @State(in %clk: !seq.clock, in %en: i1, in %en2: i1) {
   %gclk = seq.clock_gate %clk, %en, %en2
-  %3 = arc.state @DummyArc(%6) clock %clk lat 1 : (i42) -> i42
-  %4 = arc.state @DummyArc(%5) clock %gclk lat 1 : (i42) -> i42
+  %3 = arc.state @DummyArc(%6) clock %clk latency 1 : (i42) -> i42
+  %4 = arc.state @DummyArc(%5) clock %gclk latency 1 : (i42) -> i42
   %5 = comb.add %3, %3 : i42
   %6 = comb.add %4, %4 : i42
   // CHECK-NEXT: (%arg0: !arc.storage):
@@ -65,8 +65,8 @@ hw.module @State(in %clk: !seq.clock, in %en: i1, in %en2: i1) {
 
 // CHECK-LABEL: arc.model "State2" {
 hw.module @State2(in %clk: !seq.clock) {
-  %3 = arc.state @DummyArc(%3) clock %clk lat 1 : (i42) -> i42
-  %4 = arc.state @DummyArc(%4) clock %clk lat 1 : (i42) -> i42
+  %3 = arc.state @DummyArc(%3) clock %clk latency 1 : (i42) -> i42
+  %4 = arc.state @DummyArc(%4) clock %clk latency 1 : (i42) -> i42
   // CHECK-NEXT: (%arg0: !arc.storage):
   // CHECK-NEXT: [[INCLK:%.+]] = arc.root_input "clk", %arg0 : (!arc.storage) -> !arc.state<i1>
   // CHECK-NEXT: [[CLK_OLD:%.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i1>
@@ -98,7 +98,7 @@ hw.module @NonMaskedMemoryWrite(in %clk0: !seq.clock) {
   %c0_i2 = hw.constant 0 : i2
   %c9001_i42 = hw.constant 9001 : i42
   %mem = arc.memory <4 x i42, i2>
-  arc.memory_write_port %mem, @identity(%c0_i2, %c9001_i42) clock %clk0 lat 1 : <4 x i42, i2>, i2, i42
+  arc.memory_write_port %mem, @identity(%c0_i2, %c9001_i42) clock %clk0 latency 1 : <4 x i42, i2>, i2, i42
 
   // CHECK-NEXT: (%arg0: !arc.storage):
   // CHECK-NEXT: [[INCLK:%.+]] = arc.root_input "clk0", %arg0 : (!arc.storage) -> !arc.state<i1>
@@ -147,7 +147,7 @@ hw.module @maskedMemoryWrite(in %clk: !seq.clock) {
   %c9001_i42 = hw.constant 9001 : i42
   %c1010_i42 = hw.constant 1010 : i42
   %mem = arc.memory <4 x i42, i2>
-  arc.memory_write_port %mem, @identity2(%c0_i2, %c9001_i42, %true, %c1010_i42) clock %clk enable mask lat 1 : <4 x i42, i2>, i2, i42, i1, i42
+  arc.memory_write_port %mem, @identity2(%c0_i2, %c9001_i42, %true, %c1010_i42) clock %clk enable mask latency 1 : <4 x i42, i2>, i2, i42, i1, i42
 }
 arc.define @identity2(%arg0: i2, %arg1: i42, %arg2: i1, %arg3: i42) -> (i2, i42, i1, i42) {
   arc.output %arg0, %arg1, %arg2, %arg3 : i2, i42, i1, i42
@@ -226,8 +226,8 @@ hw.module @MaterializeOpsWithRegions(in %clk0: !seq.clock, in %clk1: !seq.clock,
   // CHECK-NEXT:   arc.state_write
   // CHECK-NEXT: }
 
-  %1 = arc.state @DummyArc(%0) clock %clk0 lat 1 : (i42) -> i42
-  %2 = arc.state @DummyArc(%0) clock %clk1 lat 1 : (i42) -> i42
+  %1 = arc.state @DummyArc(%0) clock %clk0 latency 1 : (i42) -> i42
+  %2 = arc.state @DummyArc(%0) clock %clk1 latency 1 : (i42) -> i42
   hw.output %0 : i42
 }
 
@@ -242,7 +242,7 @@ arc.define @DummyArc2(%arg0: i42) -> (i42, i42) {
 hw.module @stateReset(in %clk: !seq.clock, in %arg0: i42, in %rst: i1, out out0: i42, out out1: i42) {
   %0 = arc.call @i1Identity(%rst) : (i1) -> (i1)
   %1 = arc.call @i1Identity(%rst) : (i1) -> (i1)
-  %2, %3 = arc.state @DummyArc2(%arg0) clock %clk enable %0 reset %1 lat 1 : (i42) -> (i42, i42)
+  %2, %3 = arc.state @DummyArc2(%arg0) clock %clk enable %0 reset %1 latency 1 : (i42) -> (i42, i42)
   hw.output %2, %3 : i42, i42
 }
 // CHECK-LABEL: arc.model "stateReset"
@@ -264,8 +264,8 @@ hw.module @stateReset(in %clk: !seq.clock, in %arg0: i42, in %rst: i1, out out0:
 // CHECK: }
 
 hw.module @SeparateResets(in %clock: !seq.clock, in %i0: i42, in %rst1: i1, in %rst2: i1, out out1: i42, out out2: i42) {
-  %0 = arc.state @DummyArc(%i0) clock %clock reset %rst1 lat 1 {names = ["foo"]} : (i42) -> i42
-  %1 = arc.state @DummyArc(%i0) clock %clock reset %rst2 lat 1 {names = ["bar"]} : (i42) -> i42
+  %0 = arc.state @DummyArc(%i0) clock %clock reset %rst1 latency 1 {names = ["foo"]} : (i42) -> i42
+  %1 = arc.state @DummyArc(%i0) clock %clock reset %rst2 latency 1 {names = ["bar"]} : (i42) -> i42
   hw.output %0, %1 : i42, i42
 }
 
@@ -295,7 +295,7 @@ hw.module @SeparateResets(in %clock: !seq.clock, in %i0: i42, in %rst1: i1, in %
 // Regression check on worklist producing false positive comb loop errors.
 // CHECK-LABEL: @CombLoopRegression
 hw.module @CombLoopRegression(in %clk: !seq.clock) {
-  %0 = arc.state @CombLoopRegressionArc1(%3, %3) clock %clk lat 1 : (i1, i1) -> i1
+  %0 = arc.state @CombLoopRegressionArc1(%3, %3) clock %clk latency 1 : (i1, i1) -> i1
   %1, %2 = arc.call @CombLoopRegressionArc2(%0) : (i1) -> (i1, i1)
   %3 = arc.call @CombLoopRegressionArc1(%1, %2) : (i1, i1) -> i1
 }
@@ -311,8 +311,8 @@ arc.define @CombLoopRegressionArc2(%arg0: i1) -> (i1, i1) {
 hw.module private @MemoryPortRegression(in %clock: !seq.clock, in %reset: i1, in %in: i3, out x: i3) {
   %0 = arc.memory <2 x i3, i1> {name = "ram_ext"}
   %1 = arc.memory_read_port %0[%3] : <2 x i3, i1>
-  arc.memory_write_port %0, @identity3(%3, %in) clock %clock lat 1 : <2 x i3, i1>, i1, i3
-  %3 = arc.state @Queue_arc_0(%reset) clock %clock lat 1 : (i1) -> i1
+  arc.memory_write_port %0, @identity3(%3, %in) clock %clock latency 1 : <2 x i3, i1>, i1, i3
+  %3 = arc.state @Queue_arc_0(%reset) clock %clock latency 1 : (i1) -> i1
   %4 = arc.call @Queue_arc_1(%1) : (i3) -> i3
   hw.output %4 : i3
 }
@@ -328,7 +328,7 @@ arc.define @Queue_arc_1(%arg0: i3) -> i3 {
 
 // CHECK-LABEL: arc.model "BlackBox"
 hw.module @BlackBox(in %clk: !seq.clock) {
-  %0 = arc.state @DummyArc(%2) clock %clk lat 1 : (i42) -> i42
+  %0 = arc.state @DummyArc(%2) clock %clk latency 1 : (i42) -> i42
   %1 = comb.and %0, %0 : i42
   %ext.c, %ext.d = hw.instance "ext" @BlackBoxExt(a: %0: i42, b: %1: i42) -> (c: i42, d: i42)
   %2 = comb.or %ext.c, %ext.d : i42

@@ -14,11 +14,11 @@ arc.define @Bar(%arg0: i42) -> i42 {
 
 // CHECK-LABEL: hw.module @Module
 hw.module @Module(in %clock: !seq.clock, in %enable: i1, in %a: i42, in %b: i9) {
-  // CHECK: arc.state @Foo(%a, %b) clock %clock lat 1 : (i42, i9) -> (i42, i9)
-  arc.state @Foo(%a, %b) clock %clock lat 1 : (i42, i9) -> (i42, i9)
+  // CHECK: arc.state @Foo(%a, %b) clock %clock latency 1 : (i42, i9) -> (i42, i9)
+  arc.state @Foo(%a, %b) clock %clock latency 1 : (i42, i9) -> (i42, i9)
 
-  // CHECK: arc.state @Foo(%a, %b) clock %clock enable %enable lat 1 : (i42, i9) -> (i42, i9)
-  arc.state @Foo(%a, %b) clock %clock enable %enable lat 1 : (i42, i9) -> (i42, i9)
+  // CHECK: arc.state @Foo(%a, %b) clock %clock enable %enable latency 1 : (i42, i9) -> (i42, i9)
+  arc.state @Foo(%a, %b) clock %clock enable %enable latency 1 : (i42, i9) -> (i42, i9)
 }
 
 // CHECK-LABEL: arc.define @SupportRecurisveMemoryEffects
@@ -115,14 +115,14 @@ hw.module @memoryOps(in %clk: !seq.clock, in %en: i1, in %mask: i32, in %arg: i1
 
   // CHECK-NEXT: %{{.+}} = arc.memory_read_port [[MEM]][%c0_i32] : <4 x i32, i32>
   %0 = arc.memory_read_port %mem[%c0_i32] : <4 x i32, i32>
-  // CHECK-NEXT: arc.memory_write_port [[MEM]], @identity1(%c0_i32, %c0_i32, %en) clock %clk enable lat 1 : <4 x i32, i32>, i32, i32, i1
-  arc.memory_write_port %mem, @identity1(%c0_i32, %c0_i32, %en) clock %clk enable lat 1 : <4 x i32, i32>, i32, i32, i1
-  // CHECK-NEXT: arc.memory_write_port [[MEM]], @identity2(%c0_i32, %c0_i32, %en, %mask) clock %clk enable mask lat 2 : <4 x i32, i32>, i32, i32, i1, i32
-  arc.memory_write_port %mem, @identity2(%c0_i32, %c0_i32, %en, %mask) clock %clk enable mask lat 2 : <4 x i32, i32>, i32, i32, i1, i32
-  // CHECK-NEXT: arc.memory_write_port [[MEM]], @identity3(%c0_i32, %c0_i32, %mask) clock %clk mask lat 3 : <4 x i32, i32>, i32, i32, i32
-  arc.memory_write_port %mem, @identity3(%c0_i32, %c0_i32, %mask) clock %clk mask lat 3 : <4 x i32, i32>, i32, i32, i32
-  // CHECK-NEXT: arc.memory_write_port [[MEM]], @identity(%c0_i32, %c0_i32) clock %clk lat 4 : <4 x i32, i32>, i32, i32
-  arc.memory_write_port %mem, @identity(%c0_i32, %c0_i32) clock %clk lat 4 : <4 x i32, i32>, i32, i32
+  // CHECK-NEXT: arc.memory_write_port [[MEM]], @identity1(%c0_i32, %c0_i32, %en) clock %clk enable latency 1 : <4 x i32, i32>, i32, i32, i1
+  arc.memory_write_port %mem, @identity1(%c0_i32, %c0_i32, %en) clock %clk enable latency 1 : <4 x i32, i32>, i32, i32, i1
+  // CHECK-NEXT: arc.memory_write_port [[MEM]], @identity2(%c0_i32, %c0_i32, %en, %mask) clock %clk enable mask latency 2 : <4 x i32, i32>, i32, i32, i1, i32
+  arc.memory_write_port %mem, @identity2(%c0_i32, %c0_i32, %en, %mask) clock %clk enable mask latency 2 : <4 x i32, i32>, i32, i32, i1, i32
+  // CHECK-NEXT: arc.memory_write_port [[MEM]], @identity3(%c0_i32, %c0_i32, %mask) clock %clk mask latency 3 : <4 x i32, i32>, i32, i32, i32
+  arc.memory_write_port %mem, @identity3(%c0_i32, %c0_i32, %mask) clock %clk mask latency 3 : <4 x i32, i32>, i32, i32, i32
+  // CHECK-NEXT: arc.memory_write_port [[MEM]], @identity(%c0_i32, %c0_i32) clock %clk latency 4 : <4 x i32, i32>, i32, i32
+  arc.memory_write_port %mem, @identity(%c0_i32, %c0_i32) clock %clk latency 4 : <4 x i32, i32>, i32, i32
 
   // CHECK-NEXT: arc.clock_domain
   arc.clock_domain (%arg) clock %clk : (i1) -> () {
@@ -132,10 +132,10 @@ hw.module @memoryOps(in %clk: !seq.clock, in %en: i1, in %mask: i32, in %arg: i1
     %mem2 = arc.memory <4 x i32, i32>
     // CHECK-NEXT: %{{.+}} = arc.memory_read_port [[MEM2]][%c1_i32] : <4 x i32, i32>
     %2 = arc.memory_read_port %mem2[%c1_i32] : <4 x i32, i32>
-    // CHECK-NEXT: arc.memory_write_port [[MEM2]], @identity1(%c1_i32, %c1_i32, %arg0) enable lat 1 : <4 x i32, i32>, i32, i32, i1
-    arc.memory_write_port %mem2, @identity1(%c1_i32, %c1_i32, %arg0) enable lat 1 : <4 x i32, i32>, i32, i32, i1
-    // CHECK-NEXT: arc.memory_write_port [[MEM2]], @identity(%c1_i32, %c1_i32) lat 1 : <4 x i32, i32>, i32, i32
-    arc.memory_write_port %mem2, @identity(%c1_i32, %c1_i32) lat 1 : <4 x i32, i32>, i32, i32
+    // CHECK-NEXT: arc.memory_write_port [[MEM2]], @identity1(%c1_i32, %c1_i32, %arg0) enable latency 1 : <4 x i32, i32>, i32, i32, i1
+    arc.memory_write_port %mem2, @identity1(%c1_i32, %c1_i32, %arg0) enable latency 1 : <4 x i32, i32>, i32, i32, i1
+    // CHECK-NEXT: arc.memory_write_port [[MEM2]], @identity(%c1_i32, %c1_i32) latency 1 : <4 x i32, i32>, i32, i32
+    arc.memory_write_port %mem2, @identity(%c1_i32, %c1_i32) latency 1 : <4 x i32, i32>, i32, i32
   }
 
   // CHECK: %{{.+}} = arc.memory_read [[MEM]][%c0_i32] : <4 x i32, i32>
@@ -166,7 +166,7 @@ hw.module @vectorize_in_clock_domain(in %in0: i2, in %in1: i2, in %in2: i1, in %
     ^bb0(%arg0: i2, %arg1: i2, %arg2: i1, %arg3: i1):
     %1:2 = arc.vectorize (%arg0, %arg1), (%arg2, %arg3) : (i2, i2, i1, i1) -> (i1, i1) {
     ^bb0(%arg4: i2, %arg5: i1):
-      %2 = arc.state @vectorizable(%arg4, %arg5) lat 1 : (i2, i1) -> i1
+      %2 = arc.state @vectorizable(%arg4, %arg5) latency 1 : (i2, i1) -> i1
       arc.vectorize.return %2 : i1
     }
     arc.output %1#0, %1#1 : i1, i1
@@ -183,7 +183,7 @@ arc.define @vectorizable(%arg0: i2, %arg1: i1) -> i1 {
 //       CHECK: arc.clock_domain
 //       CHECK: %{{.+}}:2 = arc.vectorize ({{.*}}, {{.*}}), ({{.*}}, {{.*}}) : (i2, i2, i1, i1) -> (i1, i1) {
 //       CHECK: ^bb0([[A:%.+]]: i2, [[B:%.+]]: i1):
-//       CHECK:   [[V1:%.+]] = arc.state @vectorizable([[A]], [[B]]) lat 1 : (i2, i1) -> i1
+//       CHECK:   [[V1:%.+]] = arc.state @vectorizable([[A]], [[B]]) latency 1 : (i2, i1) -> i1
 //       CHECK:   arc.vectorize.return [[V1]] : i1
 //       CHECK: }
 

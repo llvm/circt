@@ -8,10 +8,10 @@
 hw.module @passthoughChecks(in %clock: !seq.clock, in %in0: i1, in %in1: i1, out out0: i1, out out1: i1, out out2: i1, out out3: i1, out out4: i1, out out5: i1) {
   %0:2 = arc.call @passthrough(%in0, %in1) : (i1, i1) -> (i1, i1)
   %1:2 = arc.call @noPassthrough(%in0, %in1) : (i1, i1) -> (i1, i1)
-  %2:2 = arc.state @passthrough(%in0, %in1) clock %clock lat 1 : (i1, i1) -> (i1, i1)
+  %2:2 = arc.state @passthrough(%in0, %in1) clock %clock latency 1 : (i1, i1) -> (i1, i1)
   hw.output %0#0, %0#1, %1#0, %1#1, %2#0, %2#1 : i1, i1, i1, i1, i1, i1
   // CHECK-NEXT: [[V0:%.+]]:2 = arc.call @noPassthrough(%in0, %in1) :
-  // CHECK-NEXT: [[V2:%.+]]:2 = arc.state @passthrough(%in0, %in1) clock %clock lat 1 :
+  // CHECK-NEXT: [[V2:%.+]]:2 = arc.state @passthrough(%in0, %in1) clock %clock latency 1 :
   // CHECK-NEXT: hw.output %in0, %in1, [[V0]]#0, [[V0]]#1, [[V2]]#0, [[V2]]#1 :
 }
 arc.define @passthrough(%arg0: i1, %arg1: i1) -> (i1, i1) {
@@ -38,11 +38,11 @@ arc.define @memArcTrue(%arg0: i1, %arg1: i32) -> (i1, i32, i1) {
 hw.module @memoryWritePortCanonicalizations(in %clk: !seq.clock, in %addr: i1, in %data: i32) {
   // CHECK-NEXT: [[MEM:%.+]] = arc.memory <2 x i32, i1>
   %mem = arc.memory <2 x i32, i1>
-  arc.memory_write_port %mem, @memArcFalse(%addr, %data) clock %clk enable lat 1 : <2 x i32, i1>, i1, i32
-  // CHECK-NEXT: arc.memory_write_port [[MEM]], @memArcTrue_0(%addr, %data) clock %clk lat 1 :
-  arc.memory_write_port %mem, @memArcTrue(%addr, %data) clock %clk enable lat 1 : <2 x i32, i1>, i1, i32
-  // CHECK-NEXT: arc.memory_write_port [[MEM]], @memArcTrue_0(%addr, %data) clock %clk lat 1 :
-  arc.memory_write_port %mem, @memArcTrue(%addr, %data) clock %clk enable lat 1 : <2 x i32, i1>, i1, i32
+  arc.memory_write_port %mem, @memArcFalse(%addr, %data) clock %clk enable latency 1 : <2 x i32, i1>, i1, i32
+  // CHECK-NEXT: arc.memory_write_port [[MEM]], @memArcTrue_0(%addr, %data) clock %clk latency 1 :
+  arc.memory_write_port %mem, @memArcTrue(%addr, %data) clock %clk enable latency 1 : <2 x i32, i1>, i1, i32
+  // CHECK-NEXT: arc.memory_write_port [[MEM]], @memArcTrue_0(%addr, %data) clock %clk latency 1 :
+  arc.memory_write_port %mem, @memArcTrue(%addr, %data) clock %clk enable latency 1 : <2 x i32, i1>, i1, i32
   // COM: trivially dead operation, requires listener callback to keep symbol cache up-to-date
   %0:3 = arc.call @memArcTrue(%addr, %data) : (i1, i32) -> (i1, i32, i1)
   // CHECK-NEXT: hw.output
@@ -149,10 +149,10 @@ arc.define @OneOfThreeUsed(%arg0: i1, %arg1: i1, %arg2: i1) -> i1 {
 
 // CHECK: @test1
 hw.module @test1 (in %arg0: i1, in %arg1: i1, in %arg2: i1, in %clock: !seq.clock, out out0: i1, out out1: i1) {
-  // CHECK-NEXT: arc.state @OneOfThreeUsed(%arg1) clock %clock lat 1 : (i1) -> i1
-  %0 = arc.state @OneOfThreeUsed(%arg0, %arg1, %arg2) clock %clock lat 1 : (i1, i1, i1) -> i1
+  // CHECK-NEXT: arc.state @OneOfThreeUsed(%arg1) clock %clock latency 1 : (i1) -> i1
+  %0 = arc.state @OneOfThreeUsed(%arg0, %arg1, %arg2) clock %clock latency 1 : (i1, i1, i1) -> i1
   // CHECK-NEXT: arc.state @NestedCall(%arg1)
-  %1 = arc.state @NestedCall(%arg0, %arg1, %arg2) clock %clock lat 1 : (i1, i1, i1) -> i1
+  %1 = arc.state @NestedCall(%arg0, %arg1, %arg2) clock %clock latency 1 : (i1, i1, i1) -> i1
   hw.output %0, %1 : i1, i1
 }
 
