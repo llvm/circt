@@ -836,7 +836,7 @@ circt::firrtl::maybeStringToLocation(StringRef spelling, bool skipParsing,
                                      FileLineColLoc &fileLineColLocCache,
                                      MLIRContext *context) {
   // The spelling of the token looks something like "@[Decoupled.scala 221:8]".
-  if (!spelling.startswith("@[") || !spelling.endswith("]"))
+  if (!spelling.starts_with("@[") || !spelling.ends_with("]"))
     return {false, std::nullopt};
 
   spelling = spelling.drop_front(2).drop_back(1);

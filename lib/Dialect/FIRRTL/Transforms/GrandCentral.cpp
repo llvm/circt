@@ -1839,7 +1839,7 @@ void GrandCentralPass::runOnOperation() {
 
           // Handle annotations on the module.
           AnnotationSet::removeAnnotations(op, [&](Annotation annotation) {
-            if (!annotation.getClass().startswith(viewAnnoClass))
+            if (!annotation.getClass().starts_with(viewAnnoClass))
               return false;
             auto isNonlocal = annotation.getMember<FlatSymbolRefAttr>(
                                   "circt.nonlocal") != nullptr;

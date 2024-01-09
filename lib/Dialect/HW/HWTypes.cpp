@@ -169,10 +169,10 @@ static ParseResult parseHWElementType(Type &result, AsmParser &p) {
   auto typeString =
       StringRef(curPtr, fullString.size() - (curPtr - fullString.data()));
 
-  if (typeString.startswith("array<") || typeString.startswith("inout<") ||
-      typeString.startswith("uarray<") || typeString.startswith("struct<") ||
-      typeString.startswith("typealias<") || typeString.startswith("int<") ||
-      typeString.startswith("enum<")) {
+  if (typeString.starts_with("array<") || typeString.starts_with("inout<") ||
+      typeString.starts_with("uarray<") || typeString.starts_with("struct<") ||
+      typeString.starts_with("typealias<") || typeString.starts_with("int<") ||
+      typeString.starts_with("enum<")) {
     llvm::StringRef mnemonic;
     auto parseResult = generatedTypeParser(p, &mnemonic, result);
     return parseResult.has_value() ? success() : failure();

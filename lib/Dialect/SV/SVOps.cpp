@@ -105,7 +105,7 @@ getVerbatimExprAsmResultNames(Operation *op,
   auto isOkCharacter = [](char c) { return llvm::isAlnum(c) || c == '_'; };
   auto name = op->getAttrOfType<StringAttr>("format_string").getValue();
   // Ignore a leading ` in macro name.
-  if (name.startswith("`"))
+  if (name.starts_with("`"))
     name = name.drop_front();
   name = name.take_while(isOkCharacter);
   if (!name.empty())

@@ -1228,7 +1228,7 @@ void EmitterBase::emitTextWithSubstitutions(
       }
 
       // We must have a }} right after the digits.
-      if (!string.substr(next).startswith("}}"))
+      if (!string.substr(next).starts_with("}}"))
         continue;
 
       // We must be able to decode the integer into an unsigned.
@@ -4135,7 +4135,7 @@ LogicalResult StmtEmitter::visitSV(VerbatimOp op) {
 
   // Drop an extraneous \n off the end of the string if present.
   StringRef string = op.getFormatString();
-  if (string.endswith("\n"))
+  if (string.ends_with("\n"))
     string = string.drop_back();
 
   // Emit each \n separated piece of the string with each piece properly

@@ -90,10 +90,10 @@ static FileLineColLoc findBestLocation(Location loc, bool emitted,
     locs.resize(tail);
   }
   for (auto loc : locs)
-    if (!loc.getFilename().getValue().endswith(".fir"))
+    if (!loc.getFilename().getValue().ends_with(".fir"))
       return loc;
   for (auto loc : locs)
-    if (loc.getFilename().getValue().endswith(".fir"))
+    if (loc.getFilename().getValue().ends_with(".fir"))
       return loc;
   return {};
 }

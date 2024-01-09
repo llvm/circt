@@ -472,7 +472,7 @@ parseComponentSignature(OpAsmParser &parser, OperationState &result,
   SmallVector<Attribute> portNames;
   auto getPortName = [context](const auto &port) -> StringAttr {
     StringRef name = port.ssaName.name;
-    if (name.startswith("%"))
+    if (name.starts_with("%"))
       name = name.drop_front();
     return StringAttr::get(context, name);
   };
