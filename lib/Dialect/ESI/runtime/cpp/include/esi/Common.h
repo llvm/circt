@@ -21,6 +21,7 @@
 #include <optional>
 #include <string>
 #include <vector>
+#include <ctype>
 
 namespace esi {
 
