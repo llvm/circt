@@ -26,10 +26,6 @@ HOST_APP := $(BUILD)/host_app
 
 VPPFLAGS = --save-temps
 
-# Used for compiling C++ apps for XRT
-CXXFLAGS = -I$(XILINX_XRT)/include -I$(XILINX_VIVADO)/include -Wall -g -O0 -std=c++2a -fmessage-length=0
-LDFLAGS = -L$(XILINX_XRT)/lib -pthread -lxrt_coreutil
-
 # Platform must match the device + shell you're using
 # For Azure NP-series, use the official Azure Shell
 # For a local card or hw_emu mode, use the latest U250 XDMA Shell
@@ -53,7 +49,6 @@ device2xsa = $(strip $(patsubst %.xpfm, % , $(shell basename $(PLATFORM))))
 XSA := $(call device2xsa, $(PLATFORM))
 
 .PHONY: clean emconfig exec
-.INTERMEDIATE: azure_creds
 
 all: $(XCL_OUT) emconfig
 
@@ -91,7 +86,7 @@ ifeq ($(TARGET), hw)
 # https://learn.microsoft.com/en-us/azure/virtual-machines/field-programmable-gate-arrays-attestation
 IMAGE_AZ_BASENAME ?= $(NAME)_$(shell date +%s).hw
 IMAGE_AZ_NAME := $(USER)_$(IMAGE_AZ_BASENAME)
-azure: $(IMAGE_AZ_NAME).azure.xclbin
+azure: azure_creds $(IMAGE_AZ_NAME).azure.xclbin
 azure_creds:
 	@echo "*************************"
 	@echo "* Getting Azure credentials. MUST 'az login' first!"
@@ -127,7 +122,7 @@ $(IMAGE_AZ_NAME).azure.xclbin: azure_creds $(XCL_OUT) validate-fpgaimage.sh
 
 	bash validate-fpgaimage.sh --storage-account $(AZ_FPGA_STORAGE_ACCOUNT) \
 														 --container $(AZ_FPGA_STORAGE_CONTAINER) \
-														 --netlist-name $(IMAGE_AZ_NAME) \
+														 --netlist-name $(IMAGE_AZ_NAME).xclbin \
 														 --blob-container-sas "$(SAS)"
 
 	az storage blob download \
@@ -137,10 +132,11 @@ $(IMAGE_AZ_NAME).azure.xclbin: azure_creds $(XCL_OUT) validate-fpgaimage.sh
 		--sas-token "$(SAS)" \
 		--name $(IMAGE_AZ_NAME).azure.xclbin --file $(IMAGE_AZ_NAME).azure.xclbin
 
-validate-fpgaimage.sh:
+validate-fpgaimage.sh: validate-fpgaimage.sh
 	wget -O azure_validate.zip \
 		https://fpgaattestation.blob.core.windows.net/validationscripts/validate.zip
 	unzip azure_validate.zip
+	mv scripts/validate-fpgaimage.sh .
 
 azpackage: $(NAME)_azpackage.tar.gz
 $(NAME)_azpackage.tar.gz: $(IMAGE_AZ_NAME).azure.xclbin

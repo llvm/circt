@@ -25,6 +25,7 @@ using namespace std;
 
 using namespace esi;
 
+void printMMIO(ostream &os, AcceleratorConnection &acc);
 void printInfo(ostream &os, AcceleratorConnection &acc);
 void printHier(ostream &os, AcceleratorConnection &acc);
 
@@ -54,6 +55,8 @@ int main(int argc, const char *argv[]) {
       printInfo(cout, *acc);
     else if (cmd == "hier")
       printHier(cout, *acc);
+    else if (cmd == "mmio")
+      printMMIO(cout, *acc);
     else {
       cout << "Connection successful." << endl;
       if (!cmd.empty()) {
@@ -65,6 +68,15 @@ int main(int argc, const char *argv[]) {
   } catch (exception &e) {
     cerr << "Error: " << e.what() << endl;
     return -1;
+  }
+}
+
+void printMMIO(ostream &os, AcceleratorConnection &acc) {
+  auto mmio = acc.getService<services::MMIO>();
+  for (size_t i = 0; i <= 128; i = i + 4) {
+    uint32_t val = mmio->read(i);
+    os << std::hex;
+    os << "MMIO[" << i << "] = " << val << endl;
   }
 }
 

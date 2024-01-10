@@ -54,6 +54,7 @@ XrtAccelerator::connect(string connectionString) {
 
 struct esi::backends::xrt::XrtAccelerator::Impl {
   constexpr static char kernel[] = "esi_kernel";
+  // constexpr static char kernel[] = "krnl_vadd_rtl";
 
   Impl(string xclbin, string device_id) {
     if (device_id.empty())
@@ -61,12 +62,8 @@ struct esi::backends::xrt::XrtAccelerator::Impl {
     else
       device = ::xrt::device(device_id);
 
-    printf("Loaded device %s\n",
-           device.get_info<::xrt::info::device::name>().c_str());
     auto uuid = device.load_xclbin(xclbin);
-    printf("Loaded xclbin %s\n", xclbin.c_str());
     ip = ::xrt::ip(device, uuid, kernel);
-    printf("Loaded kernel %s\n", kernel);
   }
 
   ::xrt::device device;
@@ -83,10 +80,7 @@ class XrtMMIO : public MMIO {
 public:
   XrtMMIO(::xrt::ip &ip) : ip(ip) {}
 
-  uint32_t read(uint32_t addr) const override {
-    printf("Reading from addr %d\n", addr);
-    return ip.read_register(addr);
-  }
+  uint32_t read(uint32_t addr) const override { return ip.read_register(addr); }
   void write(uint32_t addr, uint32_t data) override {
     ip.write_register(addr, data);
   }
