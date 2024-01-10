@@ -727,6 +727,11 @@ void DedupPass::replaceArcWith(DefineOp oldArc, DefineOp newArc) {
     callOp.setCalleeFromCallable(newArcName);
     newUses.insert(callOp);
   }
+
+  oldArc.walk([&](mlir::CallOpInterface callOp) {
+    if (auto defOp = dyn_cast_or_null<DefineOp>(callOp.resolveCallable()))
+      callSites[defOp].remove(callOp);
+  });
   callSites.erase(oldArc);
   arcByName.erase(oldArc.getSymNameAttr());
   oldArc->erase();
