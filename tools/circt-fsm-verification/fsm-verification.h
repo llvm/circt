@@ -68,37 +68,9 @@ using namespace circt;
 using namespace std;
 using namespace z3; 
 
-struct variable{
-  mlir::Value name;
-  int initValue;
-};
-
-struct outputs{
-  string state_from;
-  mlir::Value name;
-};
-
 using z3Fun = std::function <expr (vector<expr>)>;
 
 using z3FunA = std::function <vector<expr> (vector<expr>)>;
-
-
-// struct transition{
-//   string from;
-//   string to;
-//   std::vector<expr > *var_updates;
-//   Region guard_reg;
-// };
-
-// struct CFG{
-//   llvm::DenseMap<mlir::Value, z3::sort> variables;
-//   string initialState;
-//   llvm::DenseMap<mlir::Value, expr> constants;
-//   std::vector<transition *> transitions;
-//   std::vector<outputs> outputs;
-//   std::vector<expr> inputs;
-//   vector<string> states;
-// };
 
 struct transition{
   string from;

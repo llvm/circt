@@ -236,8 +236,14 @@ void recOpsMgmt(Operation &mod, context &c, llvm::DenseMap<llvm::StringRef, func
             llvm::outs()<<"mapped to "<<c.int_const(var_op.getName().str().c_str()).to_string()<<"\n";
           }
           int initial_value = var_op.getInitValue().cast<IntegerAttr>().getInt();
-          var_map.insert({var_op.getResult(), c.int_const((var_op.getName().str()+"_"+to_string(initial_value)).c_str())});
-          expr_map.insert({var_op.getResult(), c.int_const(var_op.getName().str().c_str())});
+          string var_name = var_op.getName().str();
+          if(var_op.getName().str().find("arg") != std::string::npos){
+            // preserved keyword arg for arguments to avoid ambiguity when setting initial state values
+            var_name = "var"+to_string(num_args);
+            num_args++;
+          }
+          var_map.insert({var_op.getResult(), c.int_const((var_name+"_"+to_string(initial_value)).c_str())});
+          expr_map.insert({var_op.getResult(), c.int_const((var_name+"_"+to_string(initial_value)).c_str())});
         } else if(auto machine = dyn_cast<fsm::MachineOp>(op)){
           initialState = machine.getInitialState();
           vecVal = getVarValues(op);
