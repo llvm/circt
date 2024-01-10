@@ -13,6 +13,7 @@ add_circt_conversion_library(CIRCTFIRRTLToHW
   CIRCTHW
   CIRCTLTL
   CIRCTSeq
+  CIRCTSim
   CIRCTSV
   CIRCTVerif
   MLIRTransforms
