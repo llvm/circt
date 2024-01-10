@@ -17,6 +17,7 @@
 #define ESI_COMMON_H
 
 #include <any>
+#include <cstdint>
 #include <map>
 #include <optional>
 #include <string>
