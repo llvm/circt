@@ -16,9 +16,8 @@
 // CHECK-NEXT: out: 0
 
 
-fsm.machine @top() -> (i16) attributes {initialState = "A"} {
+fsm.machine @top(%go: i16) -> (i16) attributes {initialState = "A"} {
   %cnt = fsm.variable "cnt" {initValue = 0 : i16} : i16
-  
   %c_0 = hw.constant 0 : i16
   %c_1 = hw.constant 1 : i16
   %c_5 = hw.constant 5 : i16
@@ -27,7 +26,8 @@ fsm.machine @top() -> (i16) attributes {initialState = "A"} {
     fsm.output %cnt : i16
   } transitions {
     fsm.transition @B guard {
-      %eq = comb.icmp eq %c_1, %cnt : i16
+      %eq = comb.icmp eq %go, %c_1 : i16
+
       fsm.return %eq
     }
   }

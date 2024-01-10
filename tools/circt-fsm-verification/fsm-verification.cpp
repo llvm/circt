@@ -66,13 +66,7 @@ expr getExpr(mlir::Value v, llvm::DenseMap<mlir::Value, expr> expr_map, z3::cont
  * @brief Returns guard expression from corresponding region
 */
 expr getGuardExpr(llvm::DenseMap<mlir::Value, expr> expr_map, Region& guard, z3::context& c){
-  if(VERBOSE){
-    llvm::outs()<<"------------------------ GUARD expr_map ------------------------"<<"\n";
-    for (auto m: expr_map){
-      llvm::outs()<<m.first<<"\n";
-      llvm::outs()<<m.second.to_string()<<"\n";
-    }
-  }
+
   for(auto &op: guard.getOps()){
     if (auto retop = dyn_cast<fsm::ReturnOp>(op)){
       return expr_map.at(retop.getOperand());
@@ -138,8 +132,14 @@ void recOpsMgmt(Operation &mod, context &c, llvm::DenseMap<llvm::StringRef, func
       int num_args=0;
       for(auto a: block.getArguments()){
         expr input = c.bool_const(("arg"+to_string(num_args)).c_str());
+
+        if(VERBOSE){
+          llvm::outs()<<"inserting input "<<a<<"\n";
+          llvm::outs()<<"mapped to "<<input.to_string()<<"\n";
+        }
         expr_map.insert({a, input});
         var_map.insert({a, input});
+        vecVal.push_back(a);
         num_args++;
       }
 
@@ -222,8 +222,9 @@ void recOpsMgmt(Operation &mod, context &c, llvm::DenseMap<llvm::StringRef, func
                   t.isAction = true;
                 }
 
+
                 transitions.push_back(t);
-                
+
 
               } else {
                 llvm ::outs()<<"ERROR: transition region should only contain transitions\n";
@@ -231,10 +232,7 @@ void recOpsMgmt(Operation &mod, context &c, llvm::DenseMap<llvm::StringRef, func
             }
           }
         } else if(auto var_op = dyn_cast<fsm::VariableOp>(op)){
-          if(VERBOSE){
-            llvm::outs()<<"inserting variable "<<var_op.getResult()<<"\n";
-            llvm::outs()<<"mapped to "<<c.int_const(var_op.getName().str().c_str()).to_string()<<"\n";
-          }
+
           int initial_value = var_op.getInitValue().cast<IntegerAttr>().getInt();
           string var_name = var_op.getName().str();
           if(var_op.getName().str().find("arg") != std::string::npos){
@@ -242,16 +240,26 @@ void recOpsMgmt(Operation &mod, context &c, llvm::DenseMap<llvm::StringRef, func
             var_name = "var"+to_string(num_args);
             num_args++;
           }
+          if(VERBOSE){
+            llvm::outs()<<"inserting variable "<<var_op.getResult()<<"\n";
+            llvm::outs()<<"mapped to "<<(var_name+"_"+to_string(initial_value)).c_str()<<"\n";
+          }
           var_map.insert({var_op.getResult(), c.int_const((var_name+"_"+to_string(initial_value)).c_str())});
           expr_map.insert({var_op.getResult(), c.int_const((var_name+"_"+to_string(initial_value)).c_str())});
         } else if(auto machine = dyn_cast<fsm::MachineOp>(op)){
           initialState = machine.getInitialState();
-          vecVal = getVarValues(op);
+          vector<mlir::Value> vecVal2 = getVarValues(op);
+          for(auto v: vecVal2){
+            vecVal.push_back(v);
+          }
+
           recOpsMgmt(op, c, stateInvariants, expr_map, var_map, outputs, initialState, transitions, vecVal, s, state_map);
+
         }
       }
     }
   }
+
 
 }
 
@@ -280,6 +288,8 @@ void populateSolver(Operation &mod){
 
   vector<expr> solver_vars;
 
+
+
   if(VERBOSE){
     llvm::outs()<<"print state map"<<'\n';  
     for(auto s: state_map){
@@ -301,7 +311,13 @@ void populateSolver(Operation &mod){
     }
   }
 
+
+
   for(auto t: transitions){
+
+    if(VERBOSE){
+      llvm::outs()<<"transition from "<<t.from<<" to "<<t.to<<"\n";
+    }
     int row = state_map.at(t.from);
     int col = state_map.at(t.to);
     if(t.isGuard && t.isAction){
