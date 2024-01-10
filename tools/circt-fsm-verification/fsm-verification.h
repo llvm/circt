@@ -106,33 +106,10 @@ struct transition{
   z3Fun guard;
   mlir::Region *guard_reg;
   bool isGuard;
-  // z3Fun action;
   llvm::DenseMap<mlir::Value, z3FunA> var_updates;
   mlir::Region *action_reg;
   z3FunA action;
   bool isAction;
 };
-
-// void print_cfg(CFG *cfg);
-
-// void store_variable_declaration(Operation &op, CFG *cfg);
-
-// expr manage_comb_exp(Operation &op, context& c);
-
-// void manage_output_region(Region &region, CFG *cfg);
-
-// void manage_guard_region(Region &region, transition *t, context c);
-
-// void manage_action_region(Region &region, transition *t, context c);
-
-// void manage_transitions_region(Region &region, string current_state, CFG *cfg, context c);
-
-// void manage_state(Operation &op, CFG *cfg);
-
-// void explore_nested_blocks(Operation &op, int level,? CFG *cfg, context& ctx);
-
-// void parse_fsm(string input_file);
-
-// void manage_block_in_out(Block &op, CFG *cfg);
 
 void printSolverAssertions(z3::solver& solver);

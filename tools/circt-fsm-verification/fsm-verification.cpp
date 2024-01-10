@@ -12,6 +12,16 @@ using namespace std;
 using namespace z3;
 
 /**
+ * @brief Prints solver assertions
+*/
+void printSolverAssertions(z3::solver& solver) {
+  llvm::outs()<<"------------------------ SOLVER ------------------------"<<"\n";
+  llvm::outs()<<solver.to_smt2()<<"\n";
+  llvm::outs()<<"--------------------------------------------------------"<<"\n";
+}
+
+
+/**
  * @brief Returns values from VariableOp operators
 */
 vector<mlir::Value> getVarValues(Operation &op){
@@ -120,7 +130,7 @@ expr getActionExpr(llvm::DenseMap<mlir::Value, expr> expr_map, Region& action, c
 /**
  * @brief FSM operators management
 */
-void recOpsMgmt(Operation &mod, context &c, llvm::DenseMap<llvm::StringRef, func_decl> &stateInvariants, llvm::DenseMap<mlir::Value, expr> &expr_map, vector<mlir::Value> &outputs, string &initialState, vector<transition> &transitions, vector<mlir::Value> &vecVal, solver &s, llvm::DenseMap<llvm::StringRef, int> &state_map){
+void recOpsMgmt(Operation &mod, context &c, llvm::DenseMap<llvm::StringRef, func_decl> &stateInvariants, llvm::DenseMap<mlir::Value, expr> &expr_map, llvm::DenseMap<mlir::Value, expr> &var_map, vector<mlir::Value> &outputs, string &initialState, vector<transition> &transitions, vector<mlir::Value> &vecVal, solver &s, llvm::DenseMap<llvm::StringRef, int> &state_map){
     
     for (Region &rg : mod.getRegions()) {
     for (Block &block : rg) {
@@ -129,6 +139,7 @@ void recOpsMgmt(Operation &mod, context &c, llvm::DenseMap<llvm::StringRef, func
       for(auto a: block.getArguments()){
         expr input = c.bool_const(("arg"+to_string(num_args)).c_str());
         expr_map.insert({a, input});
+        var_map.insert({a, input});
         num_args++;
       }
 
@@ -224,11 +235,13 @@ void recOpsMgmt(Operation &mod, context &c, llvm::DenseMap<llvm::StringRef, func
             llvm::outs()<<"inserting variable "<<var_op.getResult()<<"\n";
             llvm::outs()<<"mapped to "<<c.int_const(var_op.getName().str().c_str()).to_string()<<"\n";
           }
+          int initial_value = var_op.getInitValue().cast<IntegerAttr>().getInt();
+          var_map.insert({var_op.getResult(), c.int_const((var_op.getName().str()+"_"+to_string(initial_value)).c_str())});
           expr_map.insert({var_op.getResult(), c.int_const(var_op.getName().str().c_str())});
         } else if(auto machine = dyn_cast<fsm::MachineOp>(op)){
           initialState = machine.getInitialState();
           vecVal = getVarValues(op);
-          recOpsMgmt(op, c, stateInvariants, expr_map, outputs, initialState, transitions, vecVal, s, state_map);
+          recOpsMgmt(op, c, stateInvariants, expr_map, var_map, outputs, initialState, transitions, vecVal, s, state_map);
         }
       }
     }
@@ -245,6 +258,8 @@ void populateSolver(Operation &mod){
 
   llvm::DenseMap<llvm::StringRef, func_decl> stateInvariants;
   llvm::DenseMap<mlir::Value, expr> expr_map;
+  llvm::DenseMap<mlir::Value, expr> var_map;
+
   llvm::DenseMap<llvm::StringRef, int> state_map;
 
 
@@ -255,7 +270,7 @@ void populateSolver(Operation &mod){
 
   vector<mlir::Value> vecVal;
 
-  recOpsMgmt(mod, c, stateInvariants, expr_map, outputs, initialState, transitions, vecVal, s, state_map);
+  recOpsMgmt(mod, c, stateInvariants, expr_map, var_map, outputs, initialState, transitions, vecVal, s, state_map);
 
   vector<expr> solver_vars;
 
@@ -266,19 +281,23 @@ void populateSolver(Operation &mod){
       llvm::outs()<<s.second<<"\n";
     }
     llvm::outs()<<"print solver vars"<<'\n';
-    for(auto v: solver_vars){
-      llvm::outs()<<v.to_string()<<"\n";
+    int i=0;
+    for(auto v: var_map){
+      solver_vars.push_back(c.int_const(v.second.to_string().c_str()));
+      llvm::outs()<<solver_vars[i].to_string()<<"\n";
+      if(v.second.to_string().find("arg") == std::string::npos){
+        // if it is a variable and not an argument
+        int init_value = stoi(v.second.to_string().substr(v.second.to_string().find("_")+1));
+        // initialize variables initial state
+        s.add(forall(solver_vars[i], stateInvariants.at(transitions[0].from)(init_value)));
+      }
+      i++;
     }
   }
-
-  // initialize variables initial state
-  s.add(forall(solver_vars[0], stateInvariants.at(transitions[0].from)(0)));
 
   for(auto t: transitions){
     int row = state_map.at(t.from);
     int col = state_map.at(t.to);
-    llvm::outs()<<"from "<<row<<"\n";
-    llvm::outs()<<"to "<<col<<"\n";
     if(t.isGuard && t.isAction){
       int idx_w = 0;
       for (auto v: solver_vars){
@@ -302,6 +321,10 @@ void populateSolver(Operation &mod){
     }
   }
 
+  if(VERBOSE){
+    printSolverAssertions(s);
+  }
+
 }
 
 
@@ -319,8 +342,6 @@ void parse_fsm(string input_file){
 
   llvm::DenseMap<mlir::Value, expr> expr_map;
 
-  cout << "parsing:\n" << input_file << endl;
-
   MLIRContext context(registry);
 
   // Parse the MLIR code into a module.
@@ -334,10 +355,12 @@ void parse_fsm(string input_file){
 }
 
 int main(int argc, char **argv){
-  
-  InitLLVM y(argc, argv);
 
-  parse_fsm("/Users/luisa/circt/integration_test/Dialect/FSM/variable/top.mlir");
+  string input = argv[1];
+
+  cout << "input file: " << input << endl;
+
+  parse_fsm(input);
 
   return 0;
 
