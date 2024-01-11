@@ -517,4 +517,11 @@ def NullSourceOp : ESI_Physical_Op<"null", [Pure]> {
   let assemblyFormat = [{ attr-dict `:` qualified(type($out)) }];
 }
 
+def SinkChannelAttr : AttrDef<ESI_Dialect, "NullChannel"> {
+  let summary = "An attribute which indicates a channel is unconnected.";
+  let mnemonic = "null";
+  let parameters = (ins "TypeAttr":$type);
+  let assemblyFormat = [{ $type }];
+}
+
 #endif // CIRCT_DIALECT_ESI_CHANNELS_TD

@@ -152,6 +152,13 @@ public:
     WrapValidReadyOp wrap = dyn_cast<WrapValidReadyOp>(op);
     UnwrapValidReadyOp unwrap = dyn_cast<UnwrapValidReadyOp>(op);
     if (wrap) {
+      if (wrap.getChanOutput().getUsers().empty()) {
+        auto c1 = rewriter.create<hw::ConstantOp>(wrap.getLoc(),
+                                                  rewriter.getI1Type(), 1);
+        rewriter.replaceOp(wrap, {nullptr, c1});
+        return success();
+      }
+
       if (!wrap.getChanOutput().hasOneUse() ||
           !(unwrap = dyn_cast<UnwrapValidReadyOp>(
                 wrap.getChanOutput().use_begin()->getOwner())))
