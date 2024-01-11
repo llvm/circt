@@ -83,8 +83,8 @@ hw.module @clockDomainCanonicalizer(in %clk: !seq.clock, in %data: i32, out out0
   // COM: check that memories only used in one clock domain are pulled in and
   // COM: constants are cloned when used in multiple clock domains.
   // CHECK: arc.clock_domain ()
-  // CHECK-NEXT: [[C0:%.+]] = hw.constant 0
   // CHECK-NEXT: [[T:%.+]] = hw.constant true
+  // CHECK-NEXT: [[C0:%.+]] = hw.constant 0
   // CHECK-NEXT: [[MEM:%.+]] = arc.memory
   // CHECK-NEXT: arc.memory_write_port [[MEM]], @memWrite([[C0]], [[C0]], [[T]]) enable lat 1 :
   %0 = arc.clock_domain (%c0_i32, %mem, %true) clock %clk : (i32, !arc.memory<4 x i32, i32>, i1) -> i32 {

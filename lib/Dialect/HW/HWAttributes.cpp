@@ -89,7 +89,7 @@ static std::string canonicalizeFilename(const Twine &directory,
   // separator and return it.
   // e.g. `directory` + `` -> `directory/`.
   auto separator = llvm::sys::path::get_separator();
-  if (nativeFilename.empty() && !nativeDirectory.endswith(separator)) {
+  if (nativeFilename.empty() && !nativeDirectory.ends_with(separator)) {
     nativeDirectory += separator;
     return std::string(nativeDirectory);
   }

@@ -79,8 +79,8 @@ hw.module @mul_cstfold(in %arg0 : i7, out result : i7) {
 }
 
 // CHECK-LABEL: hw.module @div_cstfold(in %arg0 : i7, out result : i7, out a : i7, out b : i7, out c : i7) {
-// CHECK-NEXT:    %c-3_i7 = hw.constant -3 : i7
 // CHECK-NEXT:    %c2_i7 = hw.constant 2 : i7
+// CHECK-NEXT:    %c-3_i7 = hw.constant -3 : i7
 // CHECK-NEXT:    hw.output %c2_i7, %arg0, %c-3_i7, %arg0 : i7, i7, i7, i7
 hw.module @div_cstfold(in %arg0 : i7, out result : i7, out a: i7, out b: i7, out c: i7) {
   %c1_i7 = hw.constant 1 : i7
@@ -1114,8 +1114,8 @@ hw.module @struct_extract1(in %a0: i3, in %a1: i5, out r0: i3) {
 }
 
 // CHECK-LABEL: hw.module @struct_extract2
-// CHECK-NEXT:    %c3_i7 = hw.constant 3 : i7
 // CHECK-NEXT:    %c1_i3 = hw.constant 1 : i3
+// CHECK-NEXT:    %c3_i7 = hw.constant 3 : i7
 // CHECK-NEXT:    hw.output %c1_i3, %c3_i7 : i3, i7
 hw.module @struct_extract2(out r0: i3, out r1: i7) {
   %s = hw.aggregate_constant [1 : i3, [3 : i7]] : !hw.struct<foo: i3, bar: !hw.struct<baz: i7>>

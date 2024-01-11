@@ -61,7 +61,8 @@ namespace patterns {
 
 OpFoldResult DelayOp::fold(FoldAdaptor adaptor) {
   // delay(s, 0, 0) -> s
-  if (adaptor.getDelay() == 0 && adaptor.getLength() == 0)
+  if (adaptor.getDelay() == 0 && adaptor.getLength() == 0 &&
+      !isa<SequenceType>(getResult().getType()))
     return getInput();
 
   return {};

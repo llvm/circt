@@ -6075,7 +6075,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
       file.ops.push_back(info);
       file.emitReplicatedOps = emitReplicatedOps;
       file.addToFilelist = addToFilelist;
-      file.isVerilog = outputPath.endswith(".sv");
+      file.isVerilog = outputPath.ends_with(".sv");
       for (auto fl : opFileList)
         fileLists[fl.getValue()].push_back(destFile);
     };
