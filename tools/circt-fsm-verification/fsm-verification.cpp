@@ -20,7 +20,6 @@ void printSolverAssertions(z3::solver& solver) {
   llvm::outs()<<"--------------------------------------------------------"<<"\n";
 }
 
-
 /**
  * @brief Returns values from VariableOp operators
 */
@@ -222,9 +221,7 @@ void recOpsMgmt(Operation &mod, context &c, llvm::DenseMap<llvm::StringRef, func
                   t.isAction = true;
                 }
 
-
                 transitions.push_back(t);
-
 
               } else {
                 llvm ::outs()<<"ERROR: transition region should only contain transitions\n";
