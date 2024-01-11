@@ -255,7 +255,7 @@ Manifest::Impl::getChildInstance(AppIDPath idPath, AcceleratorConnection &acc,
 
   auto children = getChildInstances(idPath, acc, activeServices, child);
   return make_unique<Instance>(parseID(child.at("app_id")), getModInfo(child),
-                               move(children), services,
+                               std::move(children), services,
                                getBundlePorts(idPath, activeServices, child));
 }
 
