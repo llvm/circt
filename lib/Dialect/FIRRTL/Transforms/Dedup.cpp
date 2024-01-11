@@ -1399,7 +1399,8 @@ void fixupAllModules(InstanceGraph &instanceGraph) {
         continue;
       ImplicitLocOpBuilder builder(inst.getLoc(), inst->getContext());
       builder.setInsertionPointAfter(inst);
-      for (unsigned i = 0, e = getNumPorts(module); i < e; ++i) {
+      auto e = getNumPorts(module);
+      for (unsigned i = 0; i < e; ++i) {
         auto result = inst.getResult(i);
         auto newType = module.getPortType(i);
         auto oldType = result.getType();
