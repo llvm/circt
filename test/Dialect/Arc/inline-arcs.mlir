@@ -8,7 +8,7 @@ func.func @Simple(%arg0: i4, %arg1: !seq.clock) -> (i4, i4) {
   // CHECK-NEXT: %0 = comb.and %arg0, %arg0
   // CHECK-NEXT: %1 = arc.state @SimpleB(%arg0) clock %arg1 lat 1
   // CHECK-NEXT: return %0, %1
-  %0 = arc.state @SimpleA(%arg0) lat 0 : (i4) -> i4
+  %0 = arc.call @SimpleA(%arg0) : (i4) -> i4
   %1 = arc.state @SimpleB(%arg0) clock %arg1 lat 1 : (i4) -> i4
   return %0, %1 : i4, i4
 }
@@ -26,7 +26,7 @@ arc.define @SimpleB(%arg0: i4) -> i4 {
 
 
 hw.module @nestedRegionTest(in %arg0: i4, in %arg1: i4, out out0: i4) {
-  %0 = arc.state @sub3(%arg0, %arg1) lat 0 : (i4, i4) -> i4
+  %0 = arc.call @sub3(%arg0, %arg1) : (i4, i4) -> i4
   hw.output %0 : i4
 }
 
@@ -54,8 +54,8 @@ arc.define @sub3(%arg0: i4, %arg1: i4) -> i4 {
 // CHECK-NEXT: hw.output [[IFRES]] : i4
 
 hw.module @opsInNestedRegionsAreAlsoCounted(in %arg0: i4, in %arg1: i4, out out0: i4, out out1: i4) {
-  %0 = arc.state @sub4(%arg0, %arg1) lat 0 : (i4, i4) -> i4
-  %1 = arc.state @sub4(%arg0, %arg1) lat 0 : (i4, i4) -> i4
+  %0 = arc.call @sub4(%arg0, %arg1) : (i4, i4) -> i4
+  %1 = arc.call @sub4(%arg0, %arg1) : (i4, i4) -> i4
   hw.output %0, %1 : i4, i4
 }
 
@@ -74,12 +74,12 @@ arc.define @sub4(%arg0: i4, %arg1: i4) -> i4 {
 }
 
 // CHECK-LABEL: hw.module @opsInNestedRegionsAreAlsoCounted
-// CHECK-NEXT:   [[STATERES1:%.+]] = arc.state @sub4(%arg0, %arg1) lat 0 : (i4, i4) -> i4
-// CHECK-NEXT:   [[STATERES2:%.+]] = arc.state @sub4(%arg0, %arg1) lat 0 : (i4, i4) -> i4
+// CHECK-NEXT:   [[STATERES1:%.+]] = arc.call @sub4(%arg0, %arg1) : (i4, i4) -> i4
+// CHECK-NEXT:   [[STATERES2:%.+]] = arc.call @sub4(%arg0, %arg1) : (i4, i4) -> i4
 // CHECK-NEXT:   hw.output [[STATERES1]], [[STATERES2]] : i4, i4
 
 hw.module @nestedBlockArgumentsTest(in %arg0: index, in %arg1: i4, out out0: i4) {
-  %0 = arc.state @sub5(%arg0, %arg1) lat 0 : (index, i4) -> i4
+  %0 = arc.call @sub5(%arg0, %arg1) : (index, i4) -> i4
   hw.output %0 : i4
 }
 
@@ -169,7 +169,7 @@ arc.define @ToBeRemoved3(%arg0: i32) -> i32 {
 
 // CHECK-LABEL: hw.module @onlyIntoArcs
 hw.module @onlyIntoArcs(in %arg0: i4, in %arg1: i4, in %arg2: !seq.clock, out out0: i4) {
-  %0 = arc.state @sub1(%arg0, %arg1) lat 0 : (i4, i4) -> i4
+  %0 = arc.call @sub1(%arg0, %arg1) : (i4, i4) -> i4
   hw.output %0 : i4
 }
 // CHECK-LABEL: arc.define @sub1

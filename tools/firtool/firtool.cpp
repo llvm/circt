@@ -31,6 +31,7 @@
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
+#include "circt/Dialect/Sim/SimDialect.h"
 #include "circt/Dialect/Verif/VerifDialect.h"
 #include "circt/Support/LoweringOptions.h"
 #include "circt/Support/LoweringOptionsParser.h"
@@ -637,7 +638,7 @@ static LogicalResult executeFirtool(MLIRContext &context,
   context.loadDialect<chirrtl::CHIRRTLDialect, firrtl::FIRRTLDialect,
                       hw::HWDialect, comb::CombDialect, seq::SeqDialect,
                       om::OMDialect, sv::SVDialect, verif::VerifDialect,
-                      ltl::LTLDialect, debug::DebugDialect>();
+                      ltl::LTLDialect, debug::DebugDialect, sim::SimDialect>();
 
   // Process the input.
   if (failed(processInput(context, firtoolOptions, ts, std::move(input),
@@ -705,6 +706,7 @@ int main(int argc, char **argv) {
     registerLowerFIRRTLToHWPass();
     registerLegalizeAnonEnumsPass();
     registerLowerSeqToSVPass();
+    registerLowerSimToSVPass();
     registerLowerVerifToSVPass();
   }
 

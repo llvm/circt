@@ -2329,7 +2329,7 @@ firrtl.circuit "MismatchedCases" {
 
   firrtl.module @MismatchedCases() {
     // expected-error @below {{op case @Perf::@Fast is not in the same option group as @Platform::@ASIC}}
-    "firrtl.instance_choice"() { 
+    "firrtl.instance_choice"() {
       moduleNames = [@Target, @Target, @Target],
       caseNames = [@Platform::@ASIC, @Perf::@Fast],
       name = "inst",

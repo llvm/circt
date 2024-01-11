@@ -218,7 +218,7 @@ def InstanceChoiceOp : HardwareDeclOp<"instance_choice", [
     FlatSymbolRefAttr getTargetOrDefaultAttr(OptionCaseOp option);
 
     /// Return the list of case-module mappings.
-    SmallVector<std::pair<SymbolRefAttr, FlatSymbolRefAttr>, 1> 
+    SmallVector<std::pair<SymbolRefAttr, FlatSymbolRefAttr>, 1>
     getTargetChoices();
   }];
 

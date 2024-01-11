@@ -132,7 +132,7 @@ def StateOp : ArcOp<"state", [
   CallOpInterface,
   DeclareOpInterfaceMethods<SymbolUserOpInterface>,
   AttrSizedOperandSegments,
-  DeclareOpInterfaceMethods<ClockedOpInterface, ["isClocked"]>,
+  DeclareOpInterfaceMethods<ClockedOpInterface>,
 ]> {
   let summary = "State transfer arc";
 
@@ -230,6 +230,7 @@ def StateOp : ArcOp<"state", [
 def CallOp : ArcOp<"call", [
   MemRefsNormalizable, Pure,
   CallOpInterface,
+  DeclareOpInterfaceMethods<ClockedOpInterface, ["isClocked", "eraseClock"]>,
   DeclareOpInterfaceMethods<SymbolUserOpInterface>
 ]> {
   let summary = "calls an arc";
@@ -240,6 +241,13 @@ def CallOp : ArcOp<"call", [
   let assemblyFormat = [{
     $arc `(` $inputs `)` attr-dict `:` functional-type(operands, results)
   }];
+
+  let builders = [
+    OpBuilder<(ins "DefineOp":$arc, CArg<"mlir::ValueRange", "{}">:$inputs), [{
+      build($_builder, $_state, arc.getFunctionType().getResults(),
+            mlir::SymbolRefAttr::get(arc), inputs);
+    }]>,
+  ];
 
   let extraClassDeclaration = [{
     operand_range getArgOperands() {

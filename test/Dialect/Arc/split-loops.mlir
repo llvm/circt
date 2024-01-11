@@ -2,11 +2,11 @@
 
 // CHECK-LABEL: hw.module @Simple(
 hw.module @Simple(in %clock: !seq.clock, in %a: i4, in %b: i4, out x: i4, out y: i4) {
-  // CHECK-NEXT: %0 = arc.state @SimpleArc_split_0(%a, %b)
-  // CHECK-NEXT: %1 = arc.state @SimpleArc_split_1(%0, %a)
-  // CHECK-NEXT: %2 = arc.state @SimpleArc_split_2(%0, %b)
+  // CHECK-NEXT: %0 = arc.call @SimpleArc_split_0(%a, %b)
+  // CHECK-NEXT: %1 = arc.call @SimpleArc_split_1(%0, %a)
+  // CHECK-NEXT: %2 = arc.call @SimpleArc_split_2(%0, %b)
   // CHECK-NEXT: hw.output %1, %2
-  %0:2 = arc.state @SimpleArc(%a, %b) lat 0 : (i4, i4) -> (i4, i4)
+  %0:2 = arc.call @SimpleArc(%a, %b) : (i4, i4) -> (i4, i4)
   hw.output %0#0, %0#1 : i4, i4
 }
 // CHECK-NEXT: }
@@ -35,11 +35,11 @@ arc.define @SimpleArc(%arg0: i4, %arg1: i4) -> (i4, i4) {
 
 // CHECK-LABEL: hw.module @Unchanged(
 hw.module @Unchanged(in %a: i4, out x: i4, out y0: i4, out y1: i4) {
-  // CHECK-NEXT: %0 = arc.state @UnchangedArc1(%a)
-  // CHECK-NEXT: %1:2 = arc.state @UnchangedArc2(%a)
+  // CHECK-NEXT: %0 = arc.call @UnchangedArc1(%a)
+  // CHECK-NEXT: %1:2 = arc.call @UnchangedArc2(%a)
   // CHECK-NEXT: hw.output %0, %1#0, %1#1
-  %0 = arc.state @UnchangedArc1(%a) lat 0 : (i4) -> i4
-  %1:2 = arc.state @UnchangedArc2(%a) lat 0 : (i4) -> (i4, i4)
+  %0 = arc.call @UnchangedArc1(%a) : (i4) -> i4
+  %1:2 = arc.call @UnchangedArc2(%a) : (i4) -> (i4, i4)
   hw.output %0, %1#0, %1#1 : i4, i4, i4
 }
 // CHECK-NEXT: }
@@ -65,10 +65,10 @@ arc.define @UnchangedArc2(%arg0: i4) -> (i4, i4) {
 
 // CHECK-LABEL: hw.module @Passthrough(
 hw.module @Passthrough(in %a: i4, in %b: i4, out x0: i4, out x1: i4, out y0: i4, out y1: i4) {
-  // CHECK-NEXT: %0 = arc.state @PassthroughArc2(%a)
+  // CHECK-NEXT: %0 = arc.call @PassthroughArc2(%a)
   // CHECK-NEXT: hw.output %a, %b, %0, %b
-  %0:2 = arc.state @PassthroughArc1(%a, %b) lat 0 : (i4, i4) -> (i4, i4)
-  %1:2 = arc.state @PassthroughArc2(%a, %b) lat 0 : (i4, i4) -> (i4, i4)
+  %0:2 = arc.call @PassthroughArc1(%a, %b) : (i4, i4) -> (i4, i4)
+  %1:2 = arc.call @PassthroughArc2(%a, %b) : (i4, i4) -> (i4, i4)
   hw.output %0#0, %0#1, %1#0, %1#1 : i4, i4, i4, i4
 }
 // CHECK-NEXT: }
@@ -91,11 +91,11 @@ arc.define @PassthroughArc2(%arg0: i4, %arg1: i4) -> (i4, i4) {
 
 // CHECK-LABEL: hw.module @NestedRegions(
 hw.module @NestedRegions(in %a: i4, in %b: i4, in %c: i4, out x: i4, out y: i4) {
-  // CHECK-NEXT: %0:3 = arc.state @NestedRegionsArc_split_0(%a, %b, %c)
-  // CHECK-NEXT: %1 = arc.state @NestedRegionsArc_split_1(%0#0, %0#1)
-  // CHECK-NEXT: %2 = arc.state @NestedRegionsArc_split_2(%0#2)
+  // CHECK-NEXT: %0:3 = arc.call @NestedRegionsArc_split_0(%a, %b, %c)
+  // CHECK-NEXT: %1 = arc.call @NestedRegionsArc_split_1(%0#0, %0#1)
+  // CHECK-NEXT: %2 = arc.call @NestedRegionsArc_split_2(%0#2)
   // CHECK-NEXT: hw.output %1, %2
-  %0, %1 = arc.state @NestedRegionsArc(%a, %b, %c) lat 0 : (i4, i4, i4) -> (i4, i4)
+  %0, %1 = arc.call @NestedRegionsArc(%a, %b, %c) : (i4, i4, i4) -> (i4, i4)
   hw.output %0, %1 : i4, i4
 }
 // CHECK-NEXT: }
@@ -134,13 +134,13 @@ arc.define @NestedRegionsArc(%arg0: i4, %arg1: i4, %arg2: i4) -> (i4, i4) {
 
 // CHECK-LABEL: hw.module @BreakFalseLoops(
 hw.module @BreakFalseLoops(in %a: i4, out x: i4, out y: i4) {
-  // CHECK-NEXT: %0 = arc.state @BreakFalseLoopsArc_split_0(%a)
-  // CHECK-NEXT: %1 = arc.state @BreakFalseLoopsArc_split_1(%0)
-  // CHECK-NEXT: %2 = arc.state @BreakFalseLoopsArc_split_0(%3)
-  // CHECK-NEXT: %3 = arc.state @BreakFalseLoopsArc_split_1(%a)
+  // CHECK-NEXT: %0 = arc.call @BreakFalseLoopsArc_split_0(%a)
+  // CHECK-NEXT: %1 = arc.call @BreakFalseLoopsArc_split_1(%0)
+  // CHECK-NEXT: %2 = arc.call @BreakFalseLoopsArc_split_0(%3)
+  // CHECK-NEXT: %3 = arc.call @BreakFalseLoopsArc_split_1(%a)
   // CHECK-NEXT: hw.output %1, %2
-  %0, %1 = arc.state @BreakFalseLoopsArc(%a, %0) lat 0 : (i4, i4) -> (i4, i4)
-  %2, %3 = arc.state @BreakFalseLoopsArc(%3, %a) lat 0 : (i4, i4) -> (i4, i4)
+  %0, %1 = arc.call @BreakFalseLoopsArc(%a, %0) : (i4, i4) -> (i4, i4)
+  %2, %3 = arc.call @BreakFalseLoopsArc(%3, %a) : (i4, i4) -> (i4, i4)
   hw.output %1, %2 : i4, i4
 }
 // CHECK-NEXT: }
@@ -165,10 +165,10 @@ arc.define @BreakFalseLoopsArc(%arg0: i4, %arg1: i4) -> (i4, i4) {
 
 // CHECK-LABEL: @SplitDependencyModule
 hw.module @SplitDependencyModule(in %a: i1, out x: i1, out y: i1) {
-  // CHECK-NEXT: %0 = arc.state @SplitDependency_split_1(%a, %a) lat 0 : (i1, i1) -> i1
-  // CHECK-NEXT: %1 = arc.state @SplitDependency_split_0(%a, %a, %0) lat 0 : (i1, i1, i1) -> i1
+  // CHECK-NEXT: %0 = arc.call @SplitDependency_split_1(%a, %a) : (i1, i1) -> i1
+  // CHECK-NEXT: %1 = arc.call @SplitDependency_split_0(%a, %a, %0) : (i1, i1, i1) -> i1
   // CHECK-NEXT: hw.output %0, %1 : i1, i1
-  %0, %1 = arc.state @SplitDependency(%a, %a, %a) lat 0 : (i1, i1, i1) -> (i1, i1)
+  %0, %1 = arc.call @SplitDependency(%a, %a, %a) : (i1, i1, i1) -> (i1, i1)
   hw.output %0, %1 : i1, i1
 }
 // CHECK-NEXT: }

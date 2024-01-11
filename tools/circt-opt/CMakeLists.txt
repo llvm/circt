@@ -70,6 +70,7 @@ target_link_libraries(circt-opt
   CIRCTSeq
   CIRCTSeqToSV
   CIRCTSeqTransforms
+  CIRCTSimToSV
   CIRCTSSP
   CIRCTSSPTransforms
   CIRCTCFToHandshake
