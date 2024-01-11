@@ -1,4 +1,4 @@
-; XFAIL: windows
+; XFAIL: system-windows
 ; RUN: firtool --verilog %s | FileCheck %s
 
 circuit Top : %[[
