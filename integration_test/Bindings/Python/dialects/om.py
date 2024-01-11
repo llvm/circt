@@ -7,6 +7,7 @@ from circt.ir import Context, InsertionPoint, Location, Module
 from circt.support import var_to_attribute
 
 from dataclasses import dataclass
+from typing import Dict
 
 with Context() as ctx, Location.unknown():
   circt.register_dialects(ctx)
@@ -200,7 +201,7 @@ for k, v in obj.map_create.items():
   print(k, v)
 
 obj = evaluator.instantiate("Client")
-object_dict: dict[om.Object, str] = {}
+object_dict: Dict[om.Object, str] = {}
 for field_name, data in obj:
   if isinstance(data, om.Object):
     object_dict[data] = field_name
