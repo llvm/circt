@@ -126,6 +126,9 @@ add_mlir_public_c_api_library(CIRCTCAPISV
 add_mlir_public_c_api_library(CIRCTCAPIFSM
   FSM.cpp
 
+  DEPENDS
+  CIRCTConversionPassIncGen
+
   LINK_LIBS PUBLIC
   MLIRCAPIIR
   CIRCTFSM
