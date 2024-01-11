@@ -26,7 +26,7 @@ hw.module @Passthrough(in %a: i4, out z: i4) {
 
 // CHECK-LABEL: hw.module @CombOnly
 hw.module @CombOnly(in %i0: i4, in %i1: i4, out z: i4) {
-  // CHECK-NEXT: [[TMP:%.+]] = arc.state @CombOnly_arc(%i0, %i1) lat 0
+  // CHECK-NEXT: [[TMP:%.+]] = arc.call @CombOnly_arc(%i0, %i1)
   // CHECK-NEXT: hw.output [[TMP]]
   %0 = comb.add %i0, %i1 : i4
   %1 = comb.xor %0, %i0 : i4
@@ -45,7 +45,7 @@ hw.module @CombOnly(in %i0: i4, in %i1: i4, out z: i4) {
 // CHECK-LABEL: hw.module @SplitAtConstants
 hw.module @SplitAtConstants(out z: i4) {
   // CHECK-NEXT: %c1_i4 = hw.constant 1
-  // CHECK-NEXT: [[TMP:%.+]] = arc.state @SplitAtConstants_arc(%c1_i4) lat 0
+  // CHECK-NEXT: [[TMP:%.+]] = arc.call @SplitAtConstants_arc(%c1_i4)
   // CHECK-NEXT: hw.output [[TMP]]
   %c1_i4 = hw.constant 1 : i4
   %0 = comb.add %c1_i4, %c1_i4 : i4
@@ -73,7 +73,7 @@ hw.module @SplitAtConstants(out z: i4) {
 hw.module @Pipeline(in %clock: !seq.clock, in %i0: i4, in %i1: i4, out z: i4) {
   // CHECK-NEXT: [[S0:%.+]] = arc.state @Pipeline_arc(%i0, %i1) clock %clock lat 1
   // CHECK-NEXT: [[S1:%.+]] = arc.state @Pipeline_arc_0([[S0]], %i0) clock %clock lat 1
-  // CHECK-NEXT: [[S2:%.+]] = arc.state @Pipeline_arc_1([[S1]], %i1) lat 0
+  // CHECK-NEXT: [[S2:%.+]] = arc.call @Pipeline_arc_1([[S1]], %i1)
   // CHECK-NEXT: hw.output [[S2]]
   %0 = comb.add %i0, %i1 : i4
   %1 = seq.compreg %0, %clock : i4
@@ -128,7 +128,7 @@ hw.module.extern private @Reshuffling2(out z0: i4, out z1: i4, out z2: i4, out z
 
 // CHECK-LABEL: hw.module @FactorOutCommonOps
 hw.module @FactorOutCommonOps(in %clock: !seq.clock, in %i0: i4, in %i1: i4, out o0: i4, out o1: i4) {
-  // CHECK-DAG: [[T0:%.+]] = arc.state @FactorOutCommonOps_arc_1(%i0, %i1) lat 0
+  // CHECK-DAG: [[T0:%.+]] = arc.call @FactorOutCommonOps_arc_1(%i0, %i1)
   %0 = comb.add %i0, %i1 : i4
   // CHECK-DAG: [[T1:%.+]] = arc.state @FactorOutCommonOps_arc([[T0]], %i0) clock %clock lat 1
   // CHECK-DAG: [[T2:%.+]] = arc.state @FactorOutCommonOps_arc_0([[T0]], %i1) clock %clock lat 1
@@ -154,9 +154,9 @@ hw.module @FactorOutCommonOps(in %clock: !seq.clock, in %i0: i4, in %i1: i4, out
 
 // CHECK-LABEL: hw.module @SplitAtInstance(
 hw.module @SplitAtInstance(in %a: i4, out z: i4) {
-  // CHECK-DAG: [[T0:%.+]] = arc.state @SplitAtInstance_arc(%a) lat 0
+  // CHECK-DAG: [[T0:%.+]] = arc.call @SplitAtInstance_arc(%a)
   // CHECK-DAG: [[T1:%.+]] = hw.instance "x" @SplitAtInstance2(a: [[T0]]: i4)
-  // CHECK-DAG: [[T2:%.+]] = arc.state @SplitAtInstance_arc_0([[T1]]) lat 0
+  // CHECK-DAG: [[T2:%.+]] = arc.call @SplitAtInstance_arc_0([[T1]])
   %0 = comb.mul %a, %a : i4
   %1 = hw.instance "x" @SplitAtInstance2(a: %0: i4) -> (z: i4)
   %2 = comb.shl %1, %1 : i4
@@ -228,6 +228,6 @@ hw.module @ObserveWires(in %in1: i32, in %in2: i32, out out: i32) {
 //       CHECK:   [[V1:%.+]] = comb.xor [[V0]], {{.*}} :
 //       CHECK:   arc.output [[V0]], [[V1]] :
 //       CHECK: hw.module @ObserveWires
-//   CHECK-DAG:   [[RES:%.+]]:2 = arc.state @[[ARC_NAME]]({{.*}}) lat 0 :
+//   CHECK-DAG:   [[RES:%.+]]:2 = arc.call @[[ARC_NAME]]({{.*}}) :
 //   CHECK-DAG:   arc.tap [[RES]]#0 {name = "z"} : i32
 //       CHECK:   hw.output %0#1 : i32

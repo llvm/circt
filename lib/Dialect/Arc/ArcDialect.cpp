@@ -22,10 +22,6 @@ struct ArcInlinerInterface : public mlir::DialectInlinerInterface {
 
   bool isLegalToInline(Operation *call, Operation *callable,
                        bool wouldBeCloned) const override {
-    if (auto stateOp = dyn_cast<StateOp>(call);
-        stateOp && stateOp.getLatency() == 0)
-      return true;
-
     return isa<CallOp>(call);
   }
   bool isLegalToInline(Region *dest, Region *src, bool wouldBeCloned,

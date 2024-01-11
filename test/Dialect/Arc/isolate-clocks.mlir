@@ -2,7 +2,7 @@
 
 // CHECK-LABEL: hw.module @basics
 hw.module @basics(in %clk0: !seq.clock, in %clk1: !seq.clock, in %clk2: !seq.clock, in %c0: i1, in %c1: i1, in %in: i32, out out0: i32, out out1: i32) {
-  // COM: check the basic things: clocked ops are grouped properly, lat 0 states
+  // COM: check the basic things: clocked ops are grouped properly
   // COM: are not considered clocked, clock domain materialization
   %0 = comb.and %c0, %c1 : i1
   %1 = arc.state @DummyArc(%in) clock %clk0 enable %0 reset %c1 lat 1 : (i32) -> i32
@@ -11,14 +11,14 @@ hw.module @basics(in %clk0: !seq.clock, in %clk1: !seq.clock, in %clk2: !seq.clo
   %2 = arc.memory_read_port %mem[%c0] : <2 x i32, i1>
   arc.memory_write_port %mem, @identity(%c1, %1) clock %clk0 lat 1 : <2 x i32, i1>, i1, i32
   %3 = arc.state @DummyArc(%4) clock %clk1 enable %0 reset %c1  lat 1 : (i32) -> i32
-  %4 = arc.state @DummyArc(%2) lat 0 : (i32) -> i32
+  %4 = arc.call @DummyArc(%2) : (i32) -> i32
   %5 = arc.state @DummyArc(%4) clock %clk2 lat 1 : (i32) -> i32
   hw.output %3, %5 : i32, i32
 
   // CHECK-NEXT: [[V0:%.+]] = comb.and %c0, %c1 : i1
   // CHECK-NEXT: [[MEM:%.+]] = arc.memory <2 x i32, i1>
   // CHECK-NEXT: [[V6:%.+]] = arc.memory_read_port [[MEM]][%c0] : <2 x i32, i1>
-  // CHECK-NEXT: [[V1:%.+]] = arc.state @DummyArc([[V6]]) lat 0 : (i32) -> i32
+  // CHECK-NEXT: [[V1:%.+]] = arc.call @DummyArc([[V6]]) : (i32) -> i32
   // CHECK-NEXT: arc.clock_domain ([[MEM]], %c1, %c0, [[V6]], [[V0]], %in) clock %clk0 : (!arc.memory<2 x i32, i1>, i1, i1, i32, i1, i32) -> () {
   // CHECK-NEXT: ^bb0(%arg0: !arc.memory<2 x i32, i1>, %arg1: i1, %arg2: i1, %arg3: i32, %arg4: i1, %arg5: i32):
   // CHECK-NEXT:   arc.memory_write_port %arg0, @identity(%arg1, [[V7:%.+]]) lat 1 :

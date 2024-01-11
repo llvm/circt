@@ -13,7 +13,7 @@ arc.define @Bar() {
 // -----
 
 hw.module @Foo(in %clock: !seq.clock) {
-  // expected-error @+1 {{'arc.state' op with non-zero latency outside a clock domain requires a clock}}
+  // expected-error @+1 {{'arc.state' op outside a clock domain requires a clock}}
   arc.state @Bar() lat 1 : () -> ()
 }
 arc.define @Bar() {
@@ -23,28 +23,8 @@ arc.define @Bar() {
 // -----
 
 hw.module @Foo(in %clock: !seq.clock) {
-  // expected-error @+1 {{'arc.state' op with zero latency cannot have a clock}}
+  // expected-error @+1 {{'arc.state' op latency must be a positive integer}}
   arc.state @Bar() clock %clock lat 0 : () -> ()
-}
-arc.define @Bar() {
-  arc.output
-}
-
-// -----
-
-hw.module @Foo(in %clock: !seq.clock, in %enable: i1) {
-  // expected-error @+1 {{'arc.state' op with zero latency cannot have an enable}}
-  arc.state @Bar() enable %enable lat 0 : () -> ()
-}
-arc.define @Bar() {
-  arc.output
-}
-
-// -----
-
-hw.module @Foo(in %clock: !seq.clock, in %reset: i1) {
-  // expected-error @+1 {{'arc.state' op with zero latency cannot have a reset}}
-  arc.state @Bar() reset %reset lat 0 : () -> ()
 }
 arc.define @Bar() {
   arc.output
