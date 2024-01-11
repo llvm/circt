@@ -362,7 +362,8 @@ static bool isOutlinable(OpOperand &operand) {
 namespace {
 struct DedupPass : public arc::impl::DedupBase<DedupPass> {
   void runOnOperation() override;
-  void replaceArcWith(DefineOp oldArc, DefineOp newArc);
+  void replaceArcWith(DefineOp oldArc, DefineOp newArc,
+                      SymbolTableCollection &symbolTable);
 
   /// A mapping from arc names to arc definitions.
   DenseMap<StringAttr, DefineOp> arcByName;
@@ -433,7 +434,7 @@ void DedupPass::runOnOperation() {
       LLVM_DEBUG(llvm::dbgs()
                  << "- Merge " << defineOp.getSymNameAttr() << " <- "
                  << otherDefineOp.getSymNameAttr() << "\n");
-      replaceArcWith(otherDefineOp, defineOp);
+      replaceArcWith(otherDefineOp, defineOp, symbolTable);
       arcHashes[otherIdx].defineOp = {};
     }
   }
@@ -710,13 +711,14 @@ void DedupPass::runOnOperation() {
                  << "  - Merged " << defineOp.getSymNameAttr() << " <- "
                  << otherDefineOp.getSymNameAttr() << "\n");
       addCallSiteOperands(callSites[otherDefineOp], newOperands);
-      replaceArcWith(otherDefineOp, defineOp);
+      replaceArcWith(otherDefineOp, defineOp, symbolTable);
       arcHashes[otherIdx].defineOp = {};
     }
   }
 }
 
-void DedupPass::replaceArcWith(DefineOp oldArc, DefineOp newArc) {
+void DedupPass::replaceArcWith(DefineOp oldArc, DefineOp newArc,
+                               SymbolTableCollection &symbolTable) {
   ++dedupPassNumArcsDeduped;
   auto oldArcOps = oldArc.getOps();
   dedupPassTotalOps += std::distance(oldArcOps.begin(), oldArcOps.end());
@@ -729,7 +731,8 @@ void DedupPass::replaceArcWith(DefineOp oldArc, DefineOp newArc) {
   }
 
   oldArc.walk([&](mlir::CallOpInterface callOp) {
-    if (auto defOp = dyn_cast_or_null<DefineOp>(callOp.resolveCallable()))
+    if (auto defOp =
+            dyn_cast_or_null<DefineOp>(callOp.resolveCallable(&symbolTable)))
       callSites[defOp].remove(callOp);
   });
   callSites.erase(oldArc);
