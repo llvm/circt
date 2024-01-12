@@ -52,8 +52,8 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
     InterfaceMethod<"Get the module type",
     "::circt::hw::ModuleType", "getHWModuleType", (ins)>,
 
-    InterfaceMethod<"Get the port Attributes",
-    "SmallVector<Attribute>", "getAllPortAttrs", (ins)>,
+    InterfaceMethod<"Get the port Attributes.  This will return either an empty array or an array of size numPorts.",
+    "ArrayRef<Attribute>", "getAllPortAttrs", (ins)>,
 
     InterfaceMethod<"Set the port Attributes",
     "void", "setAllPortAttrs", (ins "ArrayRef<Attribute>":$attrs)>,
@@ -169,11 +169,16 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
     }
 
     Attribute getPortAttrs(size_t idx) {
-      return $_op.getAllPortAttrs()[idx];
+      auto attrs = $_op.getAllPortAttrs();
+      if (attrs.empty())
+        return nullptr;
+      return attrs[idx];
     }
 
     SmallVector<Attribute> getAllInputAttrs() {
       auto attrs = $_op.getAllPortAttrs();
+      if (attrs.empty())
+        return {};
       auto num = $_op.getNumInputPorts();
       SmallVector<Attribute> retval(num);
       auto modType = $_op.getHWModuleType();
@@ -184,6 +189,8 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
 
     SmallVector<Attribute> getAllOutputAttrs() {
       auto attrs = $_op.getAllPortAttrs();
+      if (attrs.empty())
+        return {};
       auto num = $_op.getNumOutputPorts();
       SmallVector<Attribute> retval(num);
       auto modType = $_op.getHWModuleType();
@@ -214,13 +221,15 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
     }
 
     void setPortAttrs(size_t idx, DictionaryAttr attr) {
-      auto attrs = $_op.getAllPortAttrs();
+      SmallVector<Attribute> attrs($_op.getAllPortAttrs());
+      attrs.resize($_op.getNumPorts());
       attrs[idx] = attr;
       $_op.setAllPortAttrs(attrs);
     }
 
     void setPortAttr(size_t idx, StringAttr name, Attribute value) {
-      auto attrs = $_op.getAllPortAttrs();
+      SmallVector<Attribute> attrs($_op.getAllPortAttrs());
+      attrs.resize($_op.getNumPorts());
       NamedAttrList pattr(cast<DictionaryAttr>(attrs[idx]));
       Attribute oldValue;
       if (!value)
@@ -234,7 +243,8 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
     }
 
     void setPortAttrs(StringAttr attrName, ArrayRef<Attribute> newAttrs) {
-      auto attrs = $_op.getAllPortAttrs();
+      SmallVector<Attribute> attrs($_op.getAllPortAttrs());
+      attrs.resize($_op.getNumPorts());
       auto ctxt = $_op.getContext();
       assert(newAttrs.size() == attrs.size());
       for (size_t idx = 0, e = attrs.size(); idx != e; ++idx) {

@@ -1252,25 +1252,25 @@ void HWModuleGeneratedOp::setAllPortNames(ArrayRef<Attribute> names) {
   ::setAllPortNames(names, *this);
 }
 
-SmallVector<Attribute> HWModuleOp::getAllPortAttrs() {
+ArrayRef<Attribute> HWModuleOp::getAllPortAttrs() {
   auto attrs = getPerPortAttrs();
   if (attrs && !attrs->empty())
-    return {attrs->getValue().begin(), attrs->getValue().end()};
-  return SmallVector<Attribute>(getNumPorts());
+    return attrs->getValue();
+  return {};
 }
 
-SmallVector<Attribute> HWModuleExternOp::getAllPortAttrs() {
+ArrayRef<Attribute> HWModuleExternOp::getAllPortAttrs() {
   auto attrs = getPerPortAttrs();
   if (attrs && !attrs->empty())
-    return {attrs->getValue().begin(), attrs->getValue().end()};
-  return SmallVector<Attribute>(getNumPorts());
+    return attrs->getValue();
+  return {};
 }
 
-SmallVector<Attribute> HWModuleGeneratedOp::getAllPortAttrs() {
+ArrayRef<Attribute> HWModuleGeneratedOp::getAllPortAttrs() {
   auto attrs = getPerPortAttrs();
   if (attrs && !attrs->empty())
-    return {attrs->getValue().begin(), attrs->getValue().end()};
-  return SmallVector<Attribute>(getNumPorts());
+    return attrs->getValue();
+  return {};
 }
 
 void HWModuleOp::setAllPortAttrs(ArrayRef<Attribute> attrs) {
