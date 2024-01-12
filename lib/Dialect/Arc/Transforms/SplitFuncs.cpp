@@ -45,8 +45,7 @@ using mlir::OpTrait::ConstantLike;
 namespace {
 struct SplitFuncsPass : public arc::impl::SplitFuncsBase<SplitFuncsPass> {
   SplitFuncsPass() = default;
-  explicit SplitFuncsPass(unsigned splitBound)
-      : SplitFuncsPass() {
+  explicit SplitFuncsPass(unsigned splitBound) : SplitFuncsPass() {
     this->splitBound.setValue(splitBound);
   }
   SplitFuncsPass(const SplitFuncsPass &pass) : SplitFuncsPass() {}
@@ -69,7 +68,6 @@ void SplitFuncsPass::runOnOperation() {
   for (auto op : getOperation().getOps<FuncOp>())
     if (failed(lowerFunc(op, funcBuilder)))
       return signalPassFailure();
-  getOperation().dump();
 }
 
 LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp, OpBuilder funcBuilder) {
@@ -117,27 +115,34 @@ LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp, OpBuilder funcBuilder) {
     auto oldArg = frontBlock->getArgument(argIndex);
     auto newArg = blocks.back()->getArgument(argIndex);
     replaceAllUsesInRegionWith(oldArg, newArg, funcOp.getBody());
-    // argMap.insert(std::pair(oldArg, newArg));
   }
   Liveness liveness(funcOp);
   // TODO: funcs is only here for debugging
   std::vector<Operation *> funcs;
   auto argTypes = blocks.back()->getArgumentTypes();
   auto args = blocks.back()->getArguments();
-  for (int i = 0; i < blocks.size() - 1; i++) {
+  for (int i = blocks.size() - 2; i >= 0; i--) {
+    liveness = Liveness(funcOp);
     Block *currentBlock = blocks[i];
-    Liveness::ValueSetT liveOut = liveness.getLiveOut(currentBlock);
+    Liveness::ValueSetT liveOut = liveness.getLiveIn(blocks[i + 1]);
     std::vector<Type> outTypes;
     std::vector<Value> outValues;
     llvm::for_each(liveOut, [&outTypes, &outValues](auto el) {
-      // auto argLookup = argMap.find(el);
-      // if (argLookup != argMap.end() && false) {
-      //   outValues.push_back(argLookup->second);
-      //   outTypes.push_back(argLookup->second.getType());
-      // } else {
       outValues.push_back(el);
       outTypes.push_back(el.getType());
-      // }
+    });
+    opBuilder.setInsertionPointToEnd(currentBlock);
+    opBuilder.create<ReturnOp>(funcOp->getLoc(), ValueRange(outValues));
+  }
+
+  for (int i = 0; i < blocks.size() - 1; i++) {
+    Block *currentBlock = blocks[i];
+    Liveness::ValueSetT liveOut = liveness.getLiveIn(blocks[i + 1]);
+    std::vector<Type> outTypes;
+    std::vector<Value> outValues;
+    llvm::for_each(liveOut, [&outTypes, &outValues](auto el) {
+      outValues.push_back(el);
+      outTypes.push_back(el.getType());
     });
     opBuilder.setInsertionPoint(funcOp);
     SmallString<64> funcName;
@@ -156,20 +161,16 @@ LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp, OpBuilder funcBuilder) {
     }
     funcs.push_back(newFunc);
     currentBlock->erase();
-    // currentBlock = funcBlock;
 
+    opBuilder.setInsertionPointToEnd(funcBlock);
     int j = 0;
     for (auto el : args) {
       replaceAllUsesInRegionWith(el, newFunc.getArgument(j++),
                                  newFunc.getRegion());
     }
-
-    opBuilder.setInsertionPointToEnd(funcBlock);
-    opBuilder.create<ReturnOp>(funcOp->getLoc(), ValueRange(outValues));
     for (auto pair : argMap) {
       replaceAllUsesInRegionWith(pair.first, pair.second, newFunc.getRegion());
     }
-
     opBuilder.setInsertionPointToStart(blocks[i + 1]);
     Operation *callOp = opBuilder.create<func::CallOp>(
         funcOp->getLoc(), outTypes, funcName, args);
