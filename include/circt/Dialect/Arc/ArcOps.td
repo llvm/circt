@@ -147,7 +147,7 @@ def StateOp : ArcOp<"state", [
 
   let assemblyFormat = [{
     $arc `(` $inputs `)` (`clock` $clock^)? (`enable` $enable^)?
-    (`reset` $reset^)? `lat` $latency attr-dict
+    (`reset` $reset^)? `latency` $latency attr-dict
     `:` functional-type($inputs, results)
   }];
 
@@ -326,7 +326,7 @@ def MemoryWritePortOp : ArcOp<"memory_write_port", [
 
   let assemblyFormat = [{
     $memory `,` $arc  `(` $inputs `)` (`clock` $clock^)?  (`enable` $enable^)?
-    (`mask` $mask^)? `lat` $latency attr-dict `:`
+    (`mask` $mask^)? `latency` $latency attr-dict `:`
     type($memory) `,` type($inputs)
   }];
 

@@ -6,10 +6,10 @@
 // CHECK-LABEL: func.func @Simple
 func.func @Simple(%arg0: i4, %arg1: !seq.clock) -> (i4, i4) {
   // CHECK-NEXT: %0 = comb.and %arg0, %arg0
-  // CHECK-NEXT: %1 = arc.state @SimpleB(%arg0) clock %arg1 lat 1
+  // CHECK-NEXT: %1 = arc.state @SimpleB(%arg0) clock %arg1 latency 1
   // CHECK-NEXT: return %0, %1
   %0 = arc.call @SimpleA(%arg0) : (i4) -> i4
-  %1 = arc.state @SimpleB(%arg0) clock %arg1 lat 1 : (i4) -> i4
+  %1 = arc.state @SimpleB(%arg0) clock %arg1 latency 1 : (i4) -> i4
   return %0, %1 : i4, i4
 }
 // CHECK-NEXT:  }
@@ -102,8 +102,8 @@ arc.define @sub5(%arg0: index, %arg1: i4) -> i4 {
 
 // CHECK-LABEL: hw.module @TopLevel
 hw.module @TopLevel(in %clk: !seq.clock, in %arg0: i32, in %arg1: i32, out out0: i32, out out1: i32, out out2: i32, out out3: i32) {
-  %0:2 = arc.state @inlineIntoArc(%arg0, %arg1) clock %clk lat 1 : (i32, i32) -> (i32, i32)
-  %1:2 = arc.state @inlineIntoArc2(%arg0, %arg1) clock %clk lat 1 : (i32, i32) -> (i32, i32)
+  %0:2 = arc.state @inlineIntoArc(%arg0, %arg1) clock %clk latency 1 : (i32, i32) -> (i32, i32)
+  %1:2 = arc.state @inlineIntoArc2(%arg0, %arg1) clock %clk latency 1 : (i32, i32) -> (i32, i32)
   hw.output %0#0, %0#1, %1#0, %1#1 : i32, i32, i32, i32
 }
 
