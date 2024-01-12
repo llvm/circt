@@ -283,7 +283,7 @@ the structural details of a port into separate ops of which we currently
 only provide rudimentary read- and write ops.
 Example future ports could be:
 
-* **Assymetric port widths**
+* **Asymmetric port widths**
   Specified as a new `seq.asym_read` port which defines a read data width
   of some fraction of the native data size.
   ```mlir

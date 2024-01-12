@@ -158,8 +158,8 @@ hw.module @FirMem(in %addr : i4, in %clock : !seq.clock, in %data : i42, out out
   %c0_i3 = hw.constant 0 : i3
   %c-1_i3 = hw.constant -1 : i3
 
-  // CHECK: [[CLK_TRUE:%.+]] = seq.const_clock high
   // CHECK: [[CLK_FALSE:%.+]] = seq.const_clock low
+  // CHECK: [[CLK_TRUE:%.+]] = seq.const_clock high
   %clk_false = seq.to_clock %false
   %clk_true = seq.to_clock %true
 
@@ -219,8 +219,8 @@ hw.module @through_wire(in %clock : i1, out out: i1) {
 
 // CHECK-LABEL: @const_clock
 hw.module @const_clock(out clock_true : !seq.clock, out clock_false : !seq.clock) {
-  // CHECK: [[CLOCK_FALSE:%.+]] = seq.const_clock low
   // CHECK: [[CLOCK_TRUE:%.+]] = seq.const_clock high
+  // CHECK: [[CLOCK_FALSE:%.+]] = seq.const_clock low
 
   %true = hw.constant 1 : i1
   %clock_true = seq.to_clock %true

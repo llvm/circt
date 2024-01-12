@@ -17,6 +17,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Support/Debug.h"
 #include "circt/Support/FieldRef.h"
 #include "circt/Support/InstanceGraph.h"
 #include "circt/Support/InstanceGraphInterface.h"
@@ -724,8 +725,10 @@ static bool typeContainsReset(Type type) {
 /// populated with the reset networks in the circuit, alongside information on
 /// drivers and their types that contribute to the reset.
 void InferResetsPass::traceResets(CircuitOp circuit) {
-  LLVM_DEBUG(
-      llvm::dbgs() << "\n===----- Tracing uninferred resets -----===\n\n");
+  LLVM_DEBUG({
+    llvm::dbgs() << "\n";
+    debugHeader("Tracing uninferred resets") << "\n\n";
+  });
 
   SmallVector<std::pair<FModuleOp, SmallVector<Operation *>>> moduleToOps;
 
@@ -978,7 +981,10 @@ void InferResetsPass::traceResets(Type dstType, Value dst, unsigned dstID,
 //===----------------------------------------------------------------------===//
 
 LogicalResult InferResetsPass::inferAndUpdateResets() {
-  LLVM_DEBUG(llvm::dbgs() << "\n===----- Infer reset types -----===\n\n");
+  LLVM_DEBUG({
+    llvm::dbgs() << "\n";
+    debugHeader("Infer reset types") << "\n\n";
+  });
   for (auto it = resetClasses.begin(), end = resetClasses.end(); it != end;
        ++it) {
     if (!it->isLeader())
@@ -1234,8 +1240,10 @@ bool InferResetsPass::updateReset(FieldRef field, FIRRTLBaseType resetType) {
 //===----------------------------------------------------------------------===//
 
 LogicalResult InferResetsPass::collectAnnos(CircuitOp circuit) {
-  LLVM_DEBUG(
-      llvm::dbgs() << "\n===----- Gather async reset annotations -----===\n\n");
+  LLVM_DEBUG({
+    llvm::dbgs() << "\n";
+    debugHeader("Gather async reset annotations") << "\n\n";
+  });
   SmallVector<std::pair<FModuleOp, std::optional<Value>>> results;
   for (auto module : circuit.getOps<FModuleOp>())
     results.push_back({module, {}});
@@ -1389,8 +1397,10 @@ InferResetsPass::collectAnnos(FModuleOp module) {
 /// wrong in some cases, mainly when a module is instantiated multiple times
 /// within different reset domains.
 LogicalResult InferResetsPass::buildDomains(CircuitOp circuit) {
-  LLVM_DEBUG(
-      llvm::dbgs() << "\n===----- Build async reset domains -----===\n\n");
+  LLVM_DEBUG({
+    llvm::dbgs() << "\n";
+    debugHeader("Build async reset domains") << "\n\n";
+  });
 
   // Gather the domains.
   auto &instGraph = getAnalysis<InstanceGraph>();
@@ -1497,8 +1507,10 @@ void InferResetsPass::buildDomains(FModuleOp module,
 
 /// Determine how the reset for each module shall be implemented.
 void InferResetsPass::determineImpl() {
-  LLVM_DEBUG(
-      llvm::dbgs() << "\n===----- Determine implementation -----===\n\n");
+  LLVM_DEBUG({
+    llvm::dbgs() << "\n";
+    debugHeader("Determine implementation") << "\n\n";
+  });
   for (auto &it : domains) {
     auto module = cast<FModuleOp>(it.first);
     auto &domain = it.second.back().first;
@@ -1591,7 +1603,10 @@ void InferResetsPass::determineImpl(FModuleOp module, ResetDomain &domain) {
 
 /// Implement the async resets gathered in the pass' `domains` map.
 LogicalResult InferResetsPass::implementAsyncReset() {
-  LLVM_DEBUG(llvm::dbgs() << "\n===----- Implement async resets -----===\n\n");
+  LLVM_DEBUG({
+    llvm::dbgs() << "\n";
+    debugHeader("Implement async resets") << "\n\n";
+  });
   for (auto &it : domains)
     if (failed(implementAsyncReset(cast<FModuleOp>(it.first),
                                    it.second.back().first)))

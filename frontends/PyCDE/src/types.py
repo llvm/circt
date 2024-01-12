@@ -2,11 +2,11 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+from __future__ import annotations
+
 from collections import OrderedDict
 from functools import singledispatchmethod
 from typing import Any
-
-from numpy import single
 
 from .support import get_user_loc
 
@@ -619,31 +619,46 @@ class Bundle(Type):
   class PackSignalResults:
     """Access the FROM channels of a packed bundle in a convenient way."""
 
-    def __init__(self, results: typing.List["ChannelSignal"],
-                 bundle_type: "Bundle"):
+    def __init__(self, results: typing.List[ChannelSignal],
+                 bundle_type: Bundle):
       self.results = results
       self.bundle_type = bundle_type
-      from_channels = [
+
+      self.from_channels = {
+          name: result for (name, result) in zip([
+              c.name
+              for c in self.bundle_type.channels
+              if c.direction == ChannelDirection.FROM
+          ], results)
+      }
+
+      from_channels_idx = [
           c.name
           for c in self.bundle_type.channels
           if c.direction == ChannelDirection.FROM
       ]
       self._from_channels_idx = {
-          name: idx for idx, name in enumerate(from_channels)
+          name: idx for idx, name in enumerate(from_channels_idx)
       }
 
     @singledispatchmethod
-    def __getitem__(self, name: str) -> "ChannelSignal":
+    def __getitem__(self, name: str) -> ChannelSignal:
       return self.results[self._from_channels_idx[name]]
 
     @__getitem__.register(int)
-    def __getitem_int(self, idx: int) -> "ChannelSignal":
+    def __getitem_int(self, idx: int) -> ChannelSignal:
       return self.results[idx]
 
     def __getattr__(self, attrname: str):
       if attrname in self._from_channels_idx:
         return self.results[self._from_channels_idx[attrname]]
       return super().__getattribute__(attrname)
+
+    def __iter__(self):
+      return iter(self.from_channels.items())
+
+    def __len__(self):
+      return len(self.from_channels)
 
   def pack(
       self, **kwargs: typing.Dict[str, "ChannelSignal"]

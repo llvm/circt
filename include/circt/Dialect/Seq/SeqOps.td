@@ -432,7 +432,7 @@ def ClockMuxOp : SeqOp<"clock_mux", [Pure]> {
 // Clock Dividers
 //===----------------------------------------------------------------------===//
 
-def ClockDivider : SeqOp<"clock_div", [Pure]> {
+def ClockDividerOp : SeqOp<"clock_div", [Pure]> {
   let summary = "Produces a clock divided by a power of two";
   let description = [{
     The output clock is phase-aligned to the input clock.

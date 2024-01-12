@@ -16,13 +16,7 @@
 #ifndef ESI_TYPES_H
 #define ESI_TYPES_H
 
-#include <any>
-#include <assert.h>
-#include <cstdint>
 #include <map>
-#include <memory>
-#include <optional>
-#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -35,7 +29,7 @@ public:
   Type(const ID &id) : id(id) {}
   virtual ~Type() = default;
 
-  ID getID() { return id; }
+  ID getID() const { return id; }
 
 protected:
   ID id;
@@ -70,6 +64,12 @@ public:
 
 private:
   const Type &inner;
+};
+
+/// The "void" type is a special type which can be used to represent no type.
+class VoidType : public Type {
+public:
+  VoidType(const ID &id) : Type(id) {}
 };
 
 /// The "any" type is a special type which can be used to represent any type, as
@@ -121,7 +121,7 @@ public:
 /// Structs are an ordered collection of fields, each with a name and a type.
 class StructType : public Type {
 public:
-  using FieldVector = std::vector<std::tuple<std::string, const Type &>>;
+  using FieldVector = std::vector<std::pair<std::string, const Type &>>;
 
   StructType(const ID &id, const FieldVector &fields)
       : Type(id), fields(fields) {}

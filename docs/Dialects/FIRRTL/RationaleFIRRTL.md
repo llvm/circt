@@ -761,7 +761,7 @@ operations related to Chisel memories are often referred to as CHIRRTL.
 The main difference between Chisel and FIRRTL memories is that Chisel memories
 have an operation to add a memory port to a memory, while FIRRTL memories
 require all ports to be defined up front. Another difference is that Chisel
-memories have "enable inferrence", and are usually inferred to be enabled where
+memories have "enable inference", and are usually inferred to be enabled where
 they are declared. The following example shows a CHIRRTL memory declaration, and
 the standard FIRRTL memory equivalent.
 
@@ -1035,7 +1035,7 @@ to a constant zero.
 ## Intrinsics
 
 Intrinsics are implementation-defined constructs.  Intrinsics provide a way to
-extend the system with funcitonality without changing the langauge.  They form
+extend the system with functionality without changing the language.  They form
 an implementation-specific built-in library.  Unlike traditional libraries,
 implementations of intrinsics have access to internals of the compiler, allowing
 them to implement features not possible in the language.

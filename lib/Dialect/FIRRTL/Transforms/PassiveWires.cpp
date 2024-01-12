@@ -15,6 +15,7 @@
 #include "PassDetails.h"
 
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
+#include "circt/Support/Debug.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/Support/Debug.h"
 
@@ -41,9 +42,7 @@ struct PassiveWiresPass : public PassiveWiresBase<PassiveWiresPass> {
 
 // This is the main entrypoint for the lowering pass.
 void PassiveWiresPass::runOnOperation() {
-  LLVM_DEBUG(
-      llvm::dbgs() << "===- Running Passive Wires Pass "
-                      "---------------------------------------------===\n");
+  LLVM_DEBUG(debugPassHeader(this) << "\n";);
   auto module = getOperation();
 
   // First, expand any connects to resolve flips.

@@ -59,3 +59,9 @@ hw.module @BundleTest(in %s1_in : !esi.channel<i32>, out b_send : !esi.bundle<[!
   %bundle, %resp = esi.bundle.pack %s1_in : !esi.bundle<[!esi.channel<i32> to "req", !esi.channel<i1> from "resp"]>
   hw.output %bundle, %resp: !esi.bundle<[!esi.channel<i32> to "req", !esi.channel<i1> from "resp"]>, !esi.channel<i1>
 }
+
+hw.module @TestNullFold() {
+  %c0_i0 = hw.constant 0 : i0
+  %false = hw.constant false
+  %chanOutput, %ready = esi.wrap.vr %c0_i0, %false: i0
+}

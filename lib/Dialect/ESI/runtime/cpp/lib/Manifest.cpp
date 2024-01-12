@@ -255,7 +255,7 @@ Manifest::Impl::getChildInstance(AppIDPath idPath, AcceleratorConnection &acc,
 
   auto children = getChildInstances(idPath, acc, activeServices, child);
   return make_unique<Instance>(parseID(child.at("app_id")), getModInfo(child),
-                               move(children), services,
+                               std::move(children), services,
                                getBundlePorts(idPath, activeServices, child));
 }
 
@@ -417,8 +417,8 @@ ChannelType *parseChannelType(const nlohmann::json &typeJson,
                          parseType(typeJson.at("inner"), cache));
 }
 
-BitVectorType *parseInt(const nlohmann::json &typeJson,
-                        Manifest::Impl::TypeCache &cache) {
+Type *parseInt(const nlohmann::json &typeJson,
+               Manifest::Impl::TypeCache &cache) {
   assert(typeJson.at("mnemonic") == "int");
   std::string sign = typeJson.at("signedness");
   uint64_t width = typeJson.at("hw_bitwidth");
@@ -428,7 +428,10 @@ BitVectorType *parseInt(const nlohmann::json &typeJson,
     return new SIntType(id, width);
   else if (sign == "unsigned")
     return new UIntType(id, width);
-  else if (sign == "signless")
+  else if (sign == "signless" && width == 0)
+    // By convention, a zero-width signless integer is a void type.
+    return new VoidType(id);
+  else if (sign == "signless" && width > 0)
     return new BitsType(id, width);
   else
     throw runtime_error("Malformed manifest: unknown sign '" + sign + "'");
@@ -437,7 +440,7 @@ BitVectorType *parseInt(const nlohmann::json &typeJson,
 StructType *parseStruct(const nlohmann::json &typeJson,
                         Manifest::Impl::TypeCache &cache) {
   assert(typeJson.at("mnemonic") == "struct");
-  vector<tuple<string, const Type &>> fields;
+  vector<pair<string, const Type &>> fields;
   for (auto &fieldJson : typeJson["fields"])
     fields.emplace_back(fieldJson.at("name"),
                         parseType(fieldJson["type"], cache));
@@ -611,6 +614,8 @@ bool operator<(const AppIDPath &a, const AppIDPath &b) {
       return a[i] < b[i];
   return false;
 }
+} // namespace esi
+
 ostream &operator<<(ostream &os, const AppID &id) {
   os << id.name;
   if (id.idx)
@@ -625,4 +630,3 @@ ostream &operator<<(ostream &os, const AppIDPath &path) {
   }
   return os;
 }
-} // namespace esi

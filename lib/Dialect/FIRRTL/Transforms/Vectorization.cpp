@@ -16,6 +16,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Support/Debug.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
@@ -79,9 +80,9 @@ struct VectorizationPass : public VectorizationBase<VectorizationPass> {
 } // namespace
 
 void VectorizationPass::runOnOperation() {
-  LLVM_DEBUG(llvm::dbgs() << "===----- Running Vectorization "
-                             "--------------------------------------===\n"
-                          << "Module: '" << getOperation().getName() << "'\n";);
+  LLVM_DEBUG(debugPassHeader(this)
+                 << "\n"
+                 << "Module: '" << getOperation().getName() << "'\n";);
 
   RewritePatternSet patterns(&getContext());
   patterns

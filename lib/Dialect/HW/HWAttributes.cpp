@@ -49,7 +49,7 @@ Attribute HWDialect::parseAttribute(DialectAsmParser &p, Type type) const {
     return attr;
 
   // Parse "#hw.param.expr.add" as ParamExprAttr.
-  if (attrName.startswith(ParamExprAttr::getMnemonic())) {
+  if (attrName.starts_with(ParamExprAttr::getMnemonic())) {
     auto string = attrName.drop_front(ParamExprAttr::getMnemonic().size());
     if (string.front() == '.')
       return parseParamExprWithOpcode(string.drop_front(), p, type);
@@ -89,7 +89,7 @@ static std::string canonicalizeFilename(const Twine &directory,
   // separator and return it.
   // e.g. `directory` + `` -> `directory/`.
   auto separator = llvm::sys::path::get_separator();
-  if (nativeFilename.empty() && !nativeDirectory.endswith(separator)) {
+  if (nativeFilename.empty() && !nativeDirectory.ends_with(separator)) {
     nativeDirectory += separator;
     return std::string(nativeDirectory);
   }
@@ -127,7 +127,7 @@ OutputFileAttr OutputFileAttr::getAsDirectory(MLIRContext *context,
 }
 
 bool OutputFileAttr::isDirectory() {
-  return getFilename().getValue().endswith(llvm::sys::path::get_separator());
+  return getFilename().getValue().ends_with(llvm::sys::path::get_separator());
 }
 
 /// Option         ::= 'excludeFromFileList' | 'includeReplicatedOp'

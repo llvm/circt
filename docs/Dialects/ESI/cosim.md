@@ -76,7 +76,7 @@ module Cosim_Endpoint
 ```
 
 The RPC interface allows clients to query all the registered endpoints, grab
-a reference to one, and send/recieve messages and/or raw data. Once one
+a reference to one, and send/receive messages and/or raw data. Once one
 client opens an Endpoint, it is locked until said client closes it.
 
 ```capnp

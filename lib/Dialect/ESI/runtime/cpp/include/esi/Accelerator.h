@@ -21,12 +21,11 @@
 #ifndef ESI_ACCELERATOR_H
 #define ESI_ACCELERATOR_H
 
+#include "esi/Design.h"
 #include "esi/Manifest.h"
 #include "esi/Ports.h"
 #include "esi/Services.h"
 
-#include <any>
-#include <cstdint>
 #include <functional>
 #include <map>
 #include <memory>
@@ -46,54 +45,14 @@ constexpr uint32_t VersionNumberOffset = MagicNumOffset + 8;
 constexpr uint32_t ExpectedVersionNumber = 0;
 
 //===----------------------------------------------------------------------===//
-// Accelerator design hierarchy.
+// Accelerator design hierarchy root.
 //===----------------------------------------------------------------------===//
 
-class Instance;
-
-class HWModule {
-public:
-  HWModule(std::optional<ModuleInfo> info,
-           std::vector<std::unique_ptr<Instance>> children,
-           std::vector<services::Service *> services,
-           std::vector<BundlePort> ports);
-
-  std::optional<ModuleInfo> getInfo() const { return info; }
-  const std::vector<std::unique_ptr<Instance>> &getChildrenOrdered() const {
-    return children;
-  }
-  const std::map<AppID, Instance *> &getChildren() const { return childIndex; }
-  const std::vector<BundlePort> &getPortsOrdered() const { return ports; }
-  const std::map<AppID, const BundlePort &> &getPorts() const {
-    return portIndex;
-  }
-
-protected:
-  const std::optional<ModuleInfo> info;
-  const std::vector<std::unique_ptr<Instance>> children;
-  const std::map<AppID, Instance *> childIndex;
-  const std::vector<services::Service *> services;
-  const std::vector<BundlePort> ports;
-  const std::map<AppID, const BundlePort &> portIndex;
-};
-
-class Instance : public HWModule {
-public:
-  Instance() = delete;
-  Instance(const Instance &) = delete;
-  ~Instance() = default;
-  Instance(AppID id, std::optional<ModuleInfo> info,
-           std::vector<std::unique_ptr<Instance>> children,
-           std::vector<services::Service *> services,
-           std::vector<BundlePort> ports)
-      : HWModule(info, std::move(children), services, ports), id(id) {}
-
-  const AppID getID() const { return id; }
-
-protected:
-  const AppID id;
-};
-
+/// Top level accelerator class. Maintains a shared pointer to the manifest,
+/// which owns objects used in the design hierarchy owned by this class. Since
+/// this class owns the entire design hierarchy, when it gets destroyed the
+/// entire design hierarchy gets destroyed so all of the instances, ports, etc.
+/// are no longer valid pointers.
 class Accelerator : public HWModule {
 public:
   Accelerator() = delete;
@@ -115,6 +74,9 @@ private:
 // Connection to the accelerator and its services.
 //===----------------------------------------------------------------------===//
 
+/// Abstract class representing a connection to an accelerator. Actual
+/// connections (e.g. to a co-simulation or actual device) are implemented by
+/// subclasses.
 class AcceleratorConnection {
 public:
   virtual ~AcceleratorConnection() = default;

@@ -800,7 +800,7 @@ static Location mergeLoc(MLIRContext *context, Location to, Location from) {
       // simply add all of the internal locations.
       for (auto loc : fusedLoc.getLocations()) {
         if (FileLineColLoc fileLoc = dyn_cast<FileLineColLoc>(loc)) {
-          if (fileLoc.getFilename().strref().endswith(".fir")) {
+          if (fileLoc.getFilename().strref().ends_with(".fir")) {
             ++seenFIR;
             if (seenFIR > 8)
               continue;
@@ -813,7 +813,7 @@ static Location mergeLoc(MLIRContext *context, Location to, Location from) {
 
     // Might need to skip this fir.
     if (FileLineColLoc fileLoc = dyn_cast<FileLineColLoc>(loc)) {
-      if (fileLoc.getFilename().strref().endswith(".fir")) {
+      if (fileLoc.getFilename().strref().ends_with(".fir")) {
         ++seenFIR;
         if (seenFIR > 8)
           continue;
@@ -1399,7 +1399,7 @@ void fixupAllModules(InstanceGraph &instanceGraph) {
         continue;
       ImplicitLocOpBuilder builder(inst.getLoc(), inst->getContext());
       builder.setInsertionPointAfter(inst);
-      for (unsigned i = 0, e = getNumPorts(module); i < e; ++i) {
+      for (size_t i = 0, e = getNumPorts(module); i < e; ++i) {
         auto result = inst.getResult(i);
         auto newType = module.getPortType(i);
         auto oldType = result.getType();

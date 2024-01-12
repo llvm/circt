@@ -23,6 +23,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Support/Debug.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -1538,8 +1539,7 @@ GrandCentralPass::getEnclosingModule(Value value, FlatSymbolRefAttr sym) {
 
 /// This method contains the business logic of this pass.
 void GrandCentralPass::runOnOperation() {
-  LLVM_DEBUG(llvm::dbgs() << "===- Running Grand Central Views/Interface Pass "
-                             "-----------------------------===\n");
+  LLVM_DEBUG(debugPassHeader(this) << "\n");
 
   CircuitOp circuitOp = getOperation();
 
@@ -1839,7 +1839,7 @@ void GrandCentralPass::runOnOperation() {
 
           // Handle annotations on the module.
           AnnotationSet::removeAnnotations(op, [&](Annotation annotation) {
-            if (!annotation.getClass().startswith(viewAnnoClass))
+            if (!annotation.getClass().starts_with(viewAnnoClass))
               return false;
             auto isNonlocal = annotation.getMember<FlatSymbolRefAttr>(
                                   "circt.nonlocal") != nullptr;

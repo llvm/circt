@@ -145,7 +145,7 @@ Substitions also allow format specifier after a ':'. The meaning of said options
 depends on the operand type or the operation pointed to by the symbol. So far,
 the following format specifiers are supported:
 
-- Symbol refering to a `hw.hierpath`: the separation string for joining names
+- Symbol referring to a `hw.hierpath`: the separation string for joining names
 in the path. Defaults to ".".
 
 Example:

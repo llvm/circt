@@ -17,8 +17,8 @@
 #define ESI_COMMON_H
 
 #include <any>
+#include <cstdint>
 #include <map>
-#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -52,7 +52,6 @@ public:
   std::string toStr() const;
 };
 bool operator<(const AppIDPath &a, const AppIDPath &b);
-std::ostream &operator<<(std::ostream &, const esi::AppIDPath &);
 
 struct ModuleInfo {
   const std::optional<std::string> name;

@@ -1,8 +1,9 @@
 // REQUIRES: esi-cosim, esi-runtime, rtl-sim
 // RUN: rm -rf %t6 && mkdir %t6 && cd %t6
 // RUN: circt-opt %s --esi-connect-services --esi-appid-hier=top=top --esi-build-manifest=top=top --esi-clean-metadata > %t4.mlir
-// RUN: circt-opt %t4.mlir --lower-esi-to-physical --lower-esi-bundles --lower-esi-ports --lower-esi-to-hw=platform=cosim --lower-seq-to-sv --export-split-verilog -o %t3.mlir
+// RUN: circt-opt %t4.mlir --lower-esi-to-physical --lower-esi-bundles --lower-esi-ports --lower-esi-to-hw=platform=cosim --lower-seq-to-sv --lower-hwarith-to-hw --canonicalize --export-split-verilog -o %t3.mlir
 // RUN: cd ..
+// RUN: esiquery trace w:%t6/esi_system_manifest.json hier | FileCheck %s --check-prefix=QUERY-HIER
 // RUN: %python %s.py trace w:%t6/esi_system_manifest.json
 // RUN: %python esi-cosim-runner.py --exec %s.py %t6/*.sv
 
@@ -40,17 +41,38 @@ hw.module @Loopback (in %clk: !seq.clock) {
 esi.service.std.func @funcs
 
 !structFunc = !esi.bundle<[
-  !esi.channel<!hw.struct<a: ui4, b: si8>> to "arg",
-  !esi.channel<!hw.array<1xsi8>> from "result"]>
+  !esi.channel<!hw.struct<a: ui16, b: si8>> to "arg",
+  !esi.channel<!hw.struct<x: si8, y: si8>> from "result"]>
 
 hw.module @LoopbackStruct() {
   %callBundle = esi.service.req.to_client <@funcs::@call> (#esi.appid<"structFunc">) : !structFunc
   %arg = esi.bundle.unpack %resultChan from %callBundle : !structFunc
 
-  %argData, %valid = esi.unwrap.vr %arg, %ready : !hw.struct<a: ui4, b: si8>
-  %resultElem = hw.struct_extract %argData["b"] : !hw.struct<a: ui4, b: si8>
-  %resultArray = hw.array_create %resultElem : si8
-  %resultChan, %ready = esi.wrap.vr %resultArray, %valid : !hw.array<1xsi8>
+  %argData, %valid = esi.unwrap.vr %arg, %ready : !hw.struct<a: ui16, b: si8>
+  %resultElem = hw.struct_extract %argData["b"] : !hw.struct<a: ui16, b: si8>
+  %c1 = hwarith.constant 1 : si2
+  %resultPlusOne = hwarith.add %resultElem, %c1 : (si8, si2) -> si9
+  %resultPlusOneSliced = hwarith.cast %resultPlusOne : (si9) -> si8
+  %result = hw.struct_create (%resultPlusOneSliced, %resultElem) : !hw.struct<x: si8, y: si8>
+  %resultChan, %ready = esi.wrap.vr %result, %valid : !hw.struct<x: si8, y: si8>
+}
+
+!arrFunc = !esi.bundle<[
+  !esi.channel<!hw.array<1xsi8>> to "arg",
+  !esi.channel<!hw.array<2xsi8>> from "result"]>
+
+hw.module @LoopbackArray() {
+  %callBundle = esi.service.req.to_client <@funcs::@call> (#esi.appid<"arrayFunc">) : !arrFunc
+  %arg = esi.bundle.unpack %resultChan from %callBundle : !arrFunc
+
+  %argData, %valid = esi.unwrap.vr %arg, %ready : !hw.array<1xsi8>
+  %idx = hw.constant 0 : i0
+  %resultElem = hw.array_get %argData[%idx] : !hw.array<1xsi8>, i0
+  %c1 = hwarith.constant 1 : si2
+  %resultPlusOne = hwarith.add %resultElem, %c1 : (si8, si2) -> si9
+  %resultPlusOneSliced = hwarith.cast %resultPlusOne : (si9) -> si8
+  %result = hw.array_create %resultPlusOneSliced, %resultElem : si8
+  %resultChan, %ready = esi.wrap.vr %result, %valid : !hw.array<2xsi8>
 }
 
 esi.mem.ram @MemA i64 x 20
@@ -82,4 +104,44 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
   hw.instance "int_mem" @MemoryAccess1 (clk: %clk: !seq.clock, rst: %rst: i1) -> ()
   hw.instance "func1" @CallableFunc1() -> ()
   hw.instance "loopback_struct" @LoopbackStruct() -> ()
+  hw.instance "loopback_array" @LoopbackArray() -> ()
 }
+
+// QUERY-HIER: ********************************
+// QUERY-HIER: * Design hierarchy
+// QUERY-HIER: ********************************
+// QUERY-HIER: * Instance:top
+// QUERY-HIER: * Ports:
+// QUERY-HIER:     internal_write:
+// QUERY-HIER:       ack: !esi.channel<i0>
+// QUERY-HIER:       req: !esi.channel<!hw.struct<address: i5, data: i64>>
+// QUERY-HIER:     func1:
+// QUERY-HIER:       arg: !esi.channel<i16>
+// QUERY-HIER:       result: !esi.channel<i16>
+// QUERY-HIER:     structFunc:
+// QUERY-HIER:       arg: !esi.channel<!hw.struct<a: ui16, b: si8>>
+// QUERY-HIER:       result: !esi.channel<!hw.struct<x: si8, y: si8>>
+// QUERY-HIER:     arrayFunc:
+// QUERY-HIER:       arg: !esi.channel<!hw.array<1xsi8>>
+// QUERY-HIER:       result: !esi.channel<!hw.array<2xsi8>>
+// QUERY-HIER: * Children:
+// QUERY-HIER:   * Instance:loopback_inst[0]
+// QUERY-HIER:   * Ports:
+// QUERY-HIER:       loopback_tohw:
+// QUERY-HIER:         recv: !esi.channel<i8>
+// QUERY-HIER:       loopback_fromhw:
+// QUERY-HIER:         send: !esi.channel<i8>
+// QUERY-HIER:       mysvc_recv:
+// QUERY-HIER:         recv: !esi.channel<i0>
+// QUERY-HIER:       mysvc_send:
+// QUERY-HIER:         send: !esi.channel<i0>
+// QUERY-HIER:   * Instance:loopback_inst[1]
+// QUERY-HIER:   * Ports:
+// QUERY-HIER:       loopback_tohw:
+// QUERY-HIER:         recv: !esi.channel<i8>
+// QUERY-HIER:       loopback_fromhw:
+// QUERY-HIER:         send: !esi.channel<i8>
+// QUERY-HIER:       mysvc_recv:
+// QUERY-HIER:         recv: !esi.channel<i0>
+// QUERY-HIER:       mysvc_send:
+// QUERY-HIER:         send: !esi.channel<i0>

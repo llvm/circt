@@ -23,6 +23,7 @@
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
+#include "circt/Support/Debug.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/IRMapping.h"
 #include "llvm/ADT/BitVector.h"
@@ -1150,7 +1151,7 @@ void Inliner::inlineInstances(FModuleOp module) {
     // participate in any HierPathOp. But the reTop might add a symbol to it, if
     // a HierPathOp is added to this Op.
     DenseMap<Attribute, Attribute> symbolRenames;
-    if (!rootMap[target.getNameAttr()].empty()) {
+    if (!rootMap[target.getNameAttr()].empty() && !toBeFlattened) {
       for (auto sym : rootMap[target.getNameAttr()]) {
         auto &mnla = nlaMap[sym];
         sym = mnla.reTop(module);
@@ -1422,13 +1423,10 @@ void Inliner::run() {
 namespace {
 class InlinerPass : public InlinerBase<InlinerPass> {
   void runOnOperation() override {
-    LLVM_DEBUG(llvm::dbgs()
-               << "===- Running Module Inliner Pass "
-                  "--------------------------------------------===\n");
+    LLVM_DEBUG(debugPassHeader(this) << "\n");
     Inliner inliner(getOperation(), getAnalysis<SymbolTable>());
     inliner.run();
-    LLVM_DEBUG(llvm::dbgs() << "===--------------------------------------------"
-                               "------------------------------===\n");
+    LLVM_DEBUG(debugFooter() << "\n");
   }
 };
 } // namespace

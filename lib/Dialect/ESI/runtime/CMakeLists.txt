@@ -44,6 +44,7 @@ include_directories(cpp/include)
 
 set(ESIRuntimeSources
   cpp/lib/Accelerator.cpp
+  cpp/lib/Design.cpp
   cpp/lib/Manifest.cpp
   cpp/lib/Services.cpp
   cpp/lib/Ports.cpp
@@ -58,6 +59,7 @@ set(ESIRuntimeLinkLibraries
 set(ESIPythonRuntimeSources
   python/esi/__init__.py
   python/esi/accelerator.py
+  python/esi/types.py
   python/esi/esiCppAccel.pyi
 )
 

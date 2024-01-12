@@ -627,7 +627,7 @@ bool EmittedExpressionStateManager::dispatchHeuristic(Operation &op) {
           LoweringOptions::SpillLargeTermsWithNamehints))
     if (auto hint = op.getAttrOfType<StringAttr>("sv.namehint")) {
       // Spill wires if the name doesn't have a prefix "_".
-      if (!hint.getValue().startswith("_"))
+      if (!hint.getValue().starts_with("_"))
         return true;
       // If the name has prefix "_", spill if the size is greater than the
       // threshould.

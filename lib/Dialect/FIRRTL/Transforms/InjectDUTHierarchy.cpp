@@ -21,6 +21,7 @@
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
+#include "circt/Support/Debug.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "firrtl-inject-dut-hier"
@@ -69,8 +70,7 @@ static void addHierarchy(hw::HierPathOp path, FModuleOp dut,
 }
 
 void InjectDUTHierarchy::runOnOperation() {
-  LLVM_DEBUG(llvm::dbgs() << "===- Running InjectDUTHierarchyPass "
-                             "-----------------------------------------===\n");
+  LLVM_DEBUG(debugPassHeader(this) << "\n";);
 
   CircuitOp circuit = getOperation();
 
