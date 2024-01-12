@@ -291,13 +291,13 @@ public:
 
 /// Lower `seq.clock_div` to a behavioural clock divider
 ///
-class ClockDividerLowering : public OpConversionPattern<ClockDivider> {
+class ClockDividerLowering : public OpConversionPattern<ClockDividerOp> {
 public:
-  using OpConversionPattern<ClockDivider>::OpConversionPattern;
-  using OpConversionPattern<ClockDivider>::OpAdaptor;
+  using OpConversionPattern<ClockDividerOp>::OpConversionPattern;
+  using OpConversionPattern<ClockDividerOp>::OpAdaptor;
 
   LogicalResult
-  matchAndRewrite(ClockDivider clockDiv, OpAdaptor adaptor,
+  matchAndRewrite(ClockDividerOp clockDiv, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
     Location loc = clockDiv.getLoc();
 
