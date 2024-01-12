@@ -29,6 +29,26 @@ def IsXIntrinsicOp : FIRRTLOp<"int.isX",
   let assemblyFormat = "$arg attr-dict `:` type($arg)";
 }
 
+def HasBeenResetIntrinsicOp : FIRRTLOp<"int.has_been_reset", [Pure]> {
+  let summary = "Check that a proper reset has been seen.";
+  let description = [{
+    The result of `firrtl.int.has_been_reset` reads as 0 immediately after simulation
+    startup and after each power-cycle in a power-aware simulation. The result
+    remains 0 before and during reset and only switches to 1 after the reset is
+    deasserted again.
+
+    See the corresponding `verif.has_been_reset` operation.
+  }];
+  let arguments = (ins NonConstClockType:$clock, AnyResetType:$reset);
+  let results = (outs NonConstUInt1Type:$result);
+  let hasFolder = 1;
+  let assemblyFormat = "$clock `,` $reset attr-dict `:` type($reset)";
+}
+
+//===----------------------------------------------------------------------===//
+// Plusarg Intrinsics
+//===----------------------------------------------------------------------===//
+
 def PlusArgsTestIntrinsicOp : FIRRTLOp<"int.plusargs.test",
     [HasCustomSSAName, Pure]> {
   let summary = "SystemVerilog `$test$plusargs` call";
@@ -47,21 +67,9 @@ def PlusArgsValueIntrinsicOp : FIRRTLOp<"int.plusargs.value",
   let assemblyFormat = "$formatString attr-dict `:` type($result)";
 }
 
-def HasBeenResetIntrinsicOp : FIRRTLOp<"int.has_been_reset", [Pure]> {
-  let summary = "Check that a proper reset has been seen.";
-  let description = [{
-    The result of `firrtl.int.has_been_reset` reads as 0 immediately after simulation
-    startup and after each power-cycle in a power-aware simulation. The result
-    remains 0 before and during reset and only switches to 1 after the reset is
-    deasserted again.
-
-    See the corresponding `verif.has_been_reset` operation.
-  }];
-  let arguments = (ins NonConstClockType:$clock, AnyResetType:$reset);
-  let results = (outs NonConstUInt1Type:$result);
-  let hasFolder = 1;
-  let assemblyFormat = "$clock `,` $reset attr-dict `:` type($reset)";
-}
+//===----------------------------------------------------------------------===//
+// FPGA-specific intrinsics
+//===----------------------------------------------------------------------===//
 
 def FPGAProbeIntrinsicOp : FIRRTLOp<"int.fpga_probe", []> {
   let summary = "Mark a value to be observed through FPGA debugging facilities";
@@ -79,4 +87,33 @@ def FPGAProbeIntrinsicOp : FIRRTLOp<"int.fpga_probe", []> {
   let results = (outs);
   let assemblyFormat = "$clock `,` $input attr-dict `:` type($input)";
 }
+
+//===----------------------------------------------------------------------===//
+// Clock Gate Intrinsic
+//===----------------------------------------------------------------------===//
+
+def ClockGateIntrinsicOp : FIRRTLOp<"int.clock_gate", [Pure]> {
+  let summary = "Safely gates a clock with an enable signal";
+  let description = [{
+    The `int.clock_gate` enables and disables a clock safely, without glitches,
+    based on a boolean enable value. If the enable input is 1, the output clock
+    produced by the clock gate is identical to the input clock. If the enable
+    input is 0, the output clock is a constant zero.
+
+    The enable input is sampled at the rising edge of the input clock; any
+    changes on the enable before or after that edge are ignored and do not
+    affect the output clock.
+  }];
+
+  let arguments = (ins NonConstClockType:$input,
+                       NonConstUInt1Type:$enable,
+                       Optional<NonConstUInt1Type>:$test_enable);
+  let results = (outs NonConstClockType:$output);
+  let hasFolder = 1;
+  let hasCanonicalizeMethod = 1;
+  let assemblyFormat = [{
+    $input `,` $enable (`,` $test_enable^)? attr-dict
+  }];
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLINTRINSICS_TD
