@@ -31,7 +31,7 @@ class LoopbackInOutAdd7(Module):
   @generator
   def construct(ports):
     loopback = Wire(Channel(UInt(16)))
-    call_bundle, [from_host] = TestBundle.pack(resp=loopback)
+    call_bundle, [(_, from_host)] = TestBundle.pack(resp=loopback)
     HostComms.req_resp(call_bundle, AppID("loopback_inout"))
 
     ready = Wire(Bits(1))

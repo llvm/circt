@@ -33,7 +33,7 @@ class MemWriter(Module):
     read_bundle_type = RamI64x8.read.type
     address = 2
     (address_chan, ready) = read_bundle_type.address.wrap(address, True)
-    read_bundle, [data_chan] = read_bundle_type.pack(address=address_chan)
+    read_bundle, [(_, data_chan)] = read_bundle_type.pack(address=address_chan)
     read_data, read_valid = data_chan.unwrap(True)
     RamI64x8.read(read_bundle, AppID("int_reader"))
 
