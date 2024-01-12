@@ -76,7 +76,7 @@ $(BUILD)/emconfig.json:
 	emconfigutil --platform $(PLATFORM) --od $(BUILD)
 
 clean:
-	rm -rf $(BUILD) .Xil vivado* kernel *.jou *.log *.wdb *.wcfg *.protoinst *.csv
+	rm -rf $(BUILD) temp_kernel .Xil vivado* kernel *.jou *.log *.wdb *.wcfg *.protoinst *.csv
 	rm -f runtime/*.so
 
 # Targets which only apply to image builds.

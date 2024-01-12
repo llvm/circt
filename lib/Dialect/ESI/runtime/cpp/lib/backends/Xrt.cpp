@@ -54,7 +54,6 @@ XrtAccelerator::connect(string connectionString) {
 
 struct esi::backends::xrt::XrtAccelerator::Impl {
   constexpr static char kernel[] = "esi_kernel";
-  // constexpr static char kernel[] = "krnl_vadd_rtl";
 
   Impl(string xclbin, string device_id) {
     if (device_id.empty())
@@ -71,8 +70,8 @@ struct esi::backends::xrt::XrtAccelerator::Impl {
 };
 
 /// Construct and connect to a cosim server.
-XrtAccelerator::XrtAccelerator(string xclbin, string kernel) {
-  impl = make_unique<Impl>(xclbin, kernel);
+XrtAccelerator::XrtAccelerator(string xclbin, string device_id) {
+  impl = make_unique<Impl>(xclbin, device_id);
 }
 
 namespace {

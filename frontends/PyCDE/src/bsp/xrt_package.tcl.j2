@@ -40,56 +40,15 @@ ipx::edit_ip_in_project -upgrade true -name tmp_prj -directory $package_path $pa
 set core [ipx::current_core]
 
 # Associate AXI data & AXI-Lite control interfaces
-ipx::associate_bus_interfaces -busif m_axi_gmem -clock ap_clk $core
 ipx::associate_bus_interfaces -busif s_axi_control -clock ap_clk $core
 
 # Create the address space for CSRs
 set mem_map     [::ipx::add_memory_map "s_axi_control" $core]
 set addr_block  [::ipx::add_address_block "reg0" $mem_map]
 
-{# set_property range_minimum $addr_block #}
-
-# Tell Vitis about our CSRs
-set reg [::ipx::add_register "CTRL" $addr_block]
-set_property description "Control signals" $reg
-set_property address_offset 0x000 $reg
-set_property size 32 $reg
-set field [ipx::add_field AP_START $reg]
-set_property ACCESS {read-write} $field
-set_property BIT_OFFSET {0} $field
-set_property BIT_WIDTH {1} $field
-set_property DESCRIPTION {Control signal Register for 'ap_start'.} $field
-set_property MODIFIED_WRITE_VALUE {modify} $field
-set field [ipx::add_field AP_DONE $reg]
-set_property ACCESS {read-only} $field
-set_property BIT_OFFSET {1} $field
-set_property BIT_WIDTH {1} $field
-set_property DESCRIPTION {Control signal Register for 'ap_done'.} $field
-set_property READ_ACTION {modify} $field
-set field [ipx::add_field AP_IDLE $reg]
-set_property ACCESS {read-only} $field
-set_property BIT_OFFSET {2} $field
-set_property BIT_WIDTH {1} $field
-set_property DESCRIPTION {Control signal Register for 'ap_idle'.} $field
-set_property READ_ACTION {modify} $field
-set field [ipx::add_field AP_WR_START $reg]
-set_property ACCESS {read-write} $field
-set_property BIT_OFFSET {4} $field
-set_property BIT_WIDTH {1} $field
-set_property DESCRIPTION {Control signal Register for 'ap_wr_start'.} $field
-set_property MODIFIED_WRITE_VALUE {modify} $field
-set field [ipx::add_field AP_WR_DONE $reg]
-set_property ACCESS {read-only} $field
-set_property BIT_OFFSET {5} $field
-set_property BIT_WIDTH {1} $field
-set_property DESCRIPTION {Control signal Register for 'ap_wr_done'.} $field
-set_property READ_ACTION {modify} $field
-set field [ipx::add_field AP_WR_IDLE $reg]
-set_property ACCESS {read-only} $field
-set_property BIT_OFFSET {6} $field
-set_property BIT_WIDTH {1} $field
-set_property DESCRIPTION {Control signal Register for 'ap_wr_idle'.} $field
-set_property READ_ACTION {modify} $field
+set_property range 0x100000 $addr_block
+set_property range_resolve_type "immediate" $addr_block
+set_property range_minimum 0x100000 $addr_block
 
 set reg      [::ipx::add_register "EsiMagicNumberLow" $addr_block]
   set_property address_offset 16  $reg

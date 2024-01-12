@@ -53,14 +53,14 @@ def XrtBSP(user_module):
     # AXI4-Lite slave interface
     s_axi_control_AWVALID = Input(Bits(1))
     s_axi_control_AWREADY = Output(Bits(1))
-    s_axi_control_AWADDR = Input(Bits(32))
+    s_axi_control_AWADDR = Input(Bits(20))
     s_axi_control_WVALID = Input(Bits(1))
     s_axi_control_WREADY = Output(Bits(1))
     s_axi_control_WDATA = Input(Bits(32))
     s_axi_control_WSTRB = Input(Bits(32 // 8))
     s_axi_control_ARVALID = Input(Bits(1))
     s_axi_control_ARREADY = Output(Bits(1))
-    s_axi_control_ARADDR = Input(Bits(32))
+    s_axi_control_ARADDR = Input(Bits(20))
     s_axi_control_RVALID = Output(Bits(1))
     s_axi_control_RREADY = Input(Bits(1))
     s_axi_control_RDATA = Output(Bits(32))
@@ -69,68 +69,24 @@ def XrtBSP(user_module):
     s_axi_control_BREADY = Input(Bits(1))
     s_axi_control_BRESP = Output(Bits(2))
 
-    # AXI4 master interface
-    m_axi_gmem_AWVALID = Output(types.i1)
-    m_axi_gmem_AWREADY = Input(types.i1)
-    m_axi_gmem_AWADDR = Output(types.int(32))
-    m_axi_gmem_AWID = Output(types.int(id_width))
-    m_axi_gmem_AWLEN = Output(types.i8)
-    m_axi_gmem_AWSIZE = Output(types.i3)
-    m_axi_gmem_AWBURST = Output(types.i2)
-    m_axi_gmem_AWLOCK = Output(types.i2)
-    m_axi_gmem_AWCACHE = Output(types.i4)
-    m_axi_gmem_AWPROT = Output(types.i3)
-    m_axi_gmem_AWQOS = Output(types.i4)
-    m_axi_gmem_AWREGION = Output(types.i4)
-    m_axi_gmem_WVALID = Output(types.i1)
-    m_axi_gmem_WREADY = Input(types.i1)
-    m_axi_gmem_WDATA = Output(types.int(axi_width))
-    m_axi_gmem_WSTRB = Output(types.int(axi_width // 8))
-    m_axi_gmem_WLAST = Output(types.i1)
-    m_axi_gmem_ARVALID = Output(types.i1)
-    m_axi_gmem_ARREADY = Input(types.i1)
-    m_axi_gmem_ARADDR = Output(types.int(addr_width))
-    m_axi_gmem_ARID = Output(types.int(id_width))
-    m_axi_gmem_ARLEN = Output(types.i8)
-    m_axi_gmem_ARSIZE = Output(types.i3)
-    m_axi_gmem_ARBURST = Output(types.i2)
-    m_axi_gmem_ARLOCK = Output(types.i2)
-    m_axi_gmem_ARCACHE = Output(types.i4)
-    m_axi_gmem_ARPROT = Output(types.i3)
-    m_axi_gmem_ARQOS = Output(types.i4)
-    m_axi_gmem_ARREGION = Output(types.i4)
-    m_axi_gmem_RVALID = Input(types.i1)
-    m_axi_gmem_RREADY = Output(types.i1)
-    m_axi_gmem_RDATA = Input(types.int(axi_width))
-    m_axi_gmem_RLAST = Input(types.i1)
-    m_axi_gmem_RID = Input(types.int(id_width))
-    m_axi_gmem_RRESP = Input(types.i2)
-    m_axi_gmem_BVALID = Input(types.i1)
-    m_axi_gmem_BREADY = Output(types.i1)
-    m_axi_gmem_BRESP = Input(types.i2)
-    m_axi_gmem_BID = Input(types.int(id_width))
-
     @generator
     def construct(ports):
       System.current().platform = "xrt"
 
       rst = ~ports.ap_resetn
 
-      addr_mask = Bits(32)(XrtMaxAddr - 1)
-      masked_awaddr = ports.s_axi_control_AWADDR & addr_mask
-      masked_araddr = ports.s_axi_control_ARADDR & addr_mask
       xrt = AxiMMIO(
           esi.MMIO,
           appid=esi.AppID("xrt_mmio"),
           clk=ports.ap_clk,
           rst=rst,
           awvalid=ports.s_axi_control_AWVALID,
-          awaddr=masked_awaddr.as_uint(),
+          awaddr=ports.s_axi_control_AWADDR,
           wvalid=ports.s_axi_control_WVALID,
           wdata=ports.s_axi_control_WDATA,
           wstrb=ports.s_axi_control_WSTRB,
           arvalid=ports.s_axi_control_ARVALID,
-          araddr=masked_araddr.as_uint(),
+          araddr=ports.s_axi_control_ARADDR,
           rready=ports.s_axi_control_RREADY,
           bready=ports.s_axi_control_BREADY,
       )
@@ -139,45 +95,11 @@ def XrtBSP(user_module):
       ports.s_axi_control_AWREADY = xrt.awready
       ports.s_axi_control_WREADY = xrt.wready
       ports.s_axi_control_ARREADY = xrt.arready
-      ports.s_axi_control_RVALID = ports.s_axi_control_ARVALID.reg()
-      ports.s_axi_control_RDATA = ports.s_axi_control_ARADDR.reg()
+      ports.s_axi_control_RVALID = xrt.rvalid
+      ports.s_axi_control_RDATA = xrt.rdata
       ports.s_axi_control_RRESP = xrt.rresp
       ports.s_axi_control_BVALID = xrt.bvalid
       ports.s_axi_control_BRESP = xrt.bresp
-
-      # Splice in the user's code
-      # NOTE: the clock is `ports.ap_clk`
-      #       and reset is `ports.ap_resetn` which is active low
-      user_module(clk=ports.ap_clk, rst=rst)
-
-      ports.m_axi_gmem_AWVALID = 0
-      ports.m_axi_gmem_AWADDR = 0
-      ports.m_axi_gmem_AWID = 0
-      ports.m_axi_gmem_AWLEN = 0
-      ports.m_axi_gmem_AWSIZE = 0
-      ports.m_axi_gmem_AWBURST = 0
-      ports.m_axi_gmem_AWLOCK = 0
-      ports.m_axi_gmem_AWCACHE = 0
-      ports.m_axi_gmem_AWPROT = 0
-      ports.m_axi_gmem_AWQOS = 0
-      ports.m_axi_gmem_AWREGION = 0
-      ports.m_axi_gmem_WVALID = 0
-      ports.m_axi_gmem_WDATA = 0
-      ports.m_axi_gmem_WSTRB = 0
-      ports.m_axi_gmem_WLAST = 0
-      ports.m_axi_gmem_ARVALID = 0
-      ports.m_axi_gmem_ARADDR = 0
-      ports.m_axi_gmem_ARID = 0
-      ports.m_axi_gmem_ARLEN = 0
-      ports.m_axi_gmem_ARSIZE = 0
-      ports.m_axi_gmem_ARBURST = 0
-      ports.m_axi_gmem_ARLOCK = 0
-      ports.m_axi_gmem_ARCACHE = 0
-      ports.m_axi_gmem_ARPROT = 0
-      ports.m_axi_gmem_ARQOS = 0
-      ports.m_axi_gmem_ARREGION = 0
-      ports.m_axi_gmem_RREADY = 0
-      ports.m_axi_gmem_BREADY = 0
 
       # Copy additional sources
       sys: System = System.current()
