@@ -1253,3 +1253,11 @@ circuit Foo:
   option Platform:
     FPGA
     FPGA
+
+;// -----
+FIRRTL version 4.0.0
+circuit Foo:
+  layer A bind:
+  module Foo:
+    ; expected-error @below {{expected '>' to end reference type}}
+    output a: Probe<UInt<1>

@@ -942,14 +942,16 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
       return failure();
     while (getToken().getKind() == FIRToken::identifier) {
       StringRef layer;
-      if (parseId(layer, "expected layer name"))
-        return failure();
+      loc = getToken().getLoc();
+      (void)parseId(layer, "expected layer name");
       layers.push_back(layer);
       if (getToken().getKind() == FIRToken::period)
         consumeToken();
     }
-    if (parseToken(FIRToken::greater, "expected '>' in reference type"))
+    if (!consumeIf(FIRToken::greater)) {
+      emitError(loc, "expected '>' to end reference type");
       return failure();
+    }
 
     bool forceable = kind == FIRToken::kw_RWProbe;
 
