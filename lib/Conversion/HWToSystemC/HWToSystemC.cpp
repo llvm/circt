@@ -59,7 +59,8 @@ struct ConvertHWModule : public OpConversionPattern<HWModuleOp> {
     scModule.setVisibility(module.getVisibility());
 
     auto portAttrs = module.getAllPortAttrs();
-    scModule.setAllArgAttrs(portAttrs);
+    if (!portAttrs.empty())
+      scModule.setAllArgAttrs(portAttrs);
 
     // Create a systemc.func operation inside the module after the ctor.
     // TODO: implement logic to extract a better name and properly unique it.
