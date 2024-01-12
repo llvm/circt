@@ -902,6 +902,21 @@ OpFoldResult FromClockOp::fold(FoldAdaptor adaptor) {
 }
 
 //===----------------------------------------------------------------------===//
+// ClockInverterOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult ClockInverterOp::fold(FoldAdaptor adaptor) {
+  if (auto chainedInv = getInput().getDefiningOp<ClockInverterOp>())
+    return chainedInv.getInput();
+  if (auto clockAttr = dyn_cast_or_null<ClockConstAttr>(adaptor.getInput())) {
+    auto clockIn = clockAttr.getValue() == ClockConst::High;
+    return ClockConstAttr::get(getContext(),
+                               clockIn ? ClockConst::Low : ClockConst::High);
+  }
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
 // FIR memory helper
 //===----------------------------------------------------------------------===//
 
