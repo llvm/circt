@@ -10,6 +10,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SMT/SMTOps.h"
 #include "mlir/Analysis/TopologicalSortUtils.h"
+#include "circt/Dialect/Seq/SeqOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
@@ -92,6 +93,20 @@ struct InstanceOpConversion : OpConversionPattern<InstanceOp> {
   }
 };
 
+///
+template <typename OpTy>
+struct ReplaceWithInput : OpConversionPattern<OpTy> {
+  using OpConversionPattern<OpTy>::OpConversionPattern;
+  using OpAdaptor = typename OpTy::Adaptor;
+
+  LogicalResult
+  matchAndRewrite(OpTy op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOp(op, adaptor.getOperands());
+    return success();
+  }
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -117,6 +132,9 @@ void circt::populateHWToSMTTypeConverter(TypeConverter &converter) {
     if (type.getWidth() <= 0)
       return std::nullopt;
     return smt::BitVectorType::get(type.getContext(), type.getWidth());
+  });
+  converter.addConversion([](seq::ClockType type) -> std::optional<Type> {
+    return smt::BitVectorType::get(type.getContext(), 1);
   });
 
   // Default target materialization to convert from illegal types to legal
@@ -200,12 +218,16 @@ void circt::populateHWToSMTTypeConverter(TypeConverter &converter) {
 void circt::populateHWToSMTConversionPatterns(TypeConverter &converter,
                                               RewritePatternSet &patterns) {
   patterns.add<HWConstantOpConversion, HWModuleOpConversion, OutputOpConversion,
-               InstanceOpConversion>(converter, patterns.getContext());
+               InstanceOpConversion, ReplaceWithInput<seq::ToClockOp>,
+               ReplaceWithInput<seq::FromClockOp>>(converter,
+                                                   patterns.getContext());
 }
 
 void ConvertHWToSMTPass::runOnOperation() {
   ConversionTarget target(getContext());
   target.addIllegalDialect<hw::HWDialect>();
+  target.addIllegalOp<seq::FromClockOp>();
+  target.addIllegalOp<seq::ToClockOp>();
   target.addLegalDialect<smt::SMTDialect>();
   target.addLegalDialect<mlir::func::FuncDialect>();
 

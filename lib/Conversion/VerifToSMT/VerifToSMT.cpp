@@ -9,9 +9,13 @@
 #include "circt/Conversion/VerifToSMT.h"
 #include "circt/Conversion/HWToSMT.h"
 #include "circt/Dialect/SMT/SMTOps.h"
+#include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Dialect/Verif/VerifOps.h"
+#include "circt/Support/Namespace.h"
 #include "mlir/Conversion/ReconcileUnrealizedCasts/ReconcileUnrealizedCasts.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
@@ -146,6 +150,154 @@ struct LogicEquivalenceCheckingOpConversion
   }
 };
 
+///
+struct VerifBMCOpConversion : OpConversionPattern<verif::BMCOp> {
+  using OpConversionPattern<verif::BMCOp>::OpConversionPattern;
+
+  VerifBMCOpConversion(TypeConverter &converter, MLIRContext *context,
+                       Namespace &names)
+      : OpConversionPattern(converter, context), names(names) {}
+
+  LogicalResult
+  matchAndRewrite(verif::BMCOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+
+    Location loc = op.getLoc();
+    SmallVector<Type> oldInputTy(op.getCircuit().getArgumentTypes());
+    SmallVector<Type> inputTy, outputTy;
+    if (failed(typeConverter->convertTypes(oldInputTy, inputTy)))
+      return failure();
+    if (failed(typeConverter->convertTypes(
+            op.getCircuit().front().back().getOperandTypes(), outputTy)))
+      return failure();
+    if (failed(rewriter.convertRegionTypes(&op.getCircuit(), *typeConverter)))
+      return failure();
+
+    unsigned numRegs =
+        cast<IntegerAttr>(op->getAttr("num_regs")).getValue().getZExtValue();
+
+    auto funcTy = rewriter.getFunctionType(inputTy, outputTy);
+    func::FuncOp funcOp;
+    {
+      OpBuilder::InsertionGuard guard(rewriter);
+      rewriter.setInsertionPointToEnd(
+          op->getParentOfType<ModuleOp>().getBody());
+      funcOp = rewriter.create<func::FuncOp>(loc, names.newName("bmc"), funcTy);
+      rewriter.inlineRegionBefore(op.getCircuit(), funcOp.getFunctionBody(),
+                                  funcOp.end());
+      auto operands = funcOp.getBody().front().back().getOperands();
+      rewriter.eraseOp(&funcOp.getFunctionBody().front().back());
+      rewriter.setInsertionPointToEnd(&funcOp.getBody().front());
+      SmallVector<Value> toReturn;
+      for (unsigned i = 0; i < outputTy.size(); ++i)
+        toReturn.push_back(typeConverter->materializeTargetConversion(
+            rewriter, loc, outputTy[i], operands[i]));
+      rewriter.create<func::ReturnOp>(loc, toReturn);
+    }
+
+    auto solver =
+        rewriter.create<smt::SolverOp>(loc, rewriter.getI1Type(), ValueRange{});
+    rewriter.createBlock(&solver.getBodyRegion());
+
+    SmallVector<Value> inputDecls;
+    for (auto [oldTy, newTy] : llvm::zip(oldInputTy, inputTy)) {
+      if (isa<seq::ClockType>(oldTy))
+        inputDecls.push_back(rewriter.create<smt::BVConstantOp>(
+            loc, smt::BitVectorAttr::get(getContext(), 0, 1)));
+      else
+        inputDecls.push_back(rewriter.create<smt::DeclareFunOp>(loc, newTy));
+    }
+
+    Value lowerBound =
+        rewriter.create<arith::ConstantOp>(loc, rewriter.getI32IntegerAttr(0));
+    Value step =
+        rewriter.create<arith::ConstantOp>(loc, rewriter.getI32IntegerAttr(1));
+    Value upperBound =
+        rewriter.create<arith::ConstantOp>(loc, adaptor.getBoundAttr());
+    Value constFalse =
+        rewriter.create<arith::ConstantOp>(loc, rewriter.getBoolAttr(false));
+    Value constTrue =
+        rewriter.create<arith::ConstantOp>(loc, rewriter.getBoolAttr(true));
+    inputDecls.push_back(constFalse); // wasViolated?
+    auto forOp = rewriter.create<scf::ForOp>(
+        loc, lowerBound, upperBound, step, inputDecls,
+        [&](OpBuilder &builder, Location loc, Value i, ValueRange iterArgs) {
+          ValueRange phaseOneOuts =
+              builder.create<func::CallOp>(loc, funcOp, iterArgs.drop_back())
+                  ->getResults();
+          auto checkOp =
+              rewriter.create<smt::CheckOp>(loc, builder.getI1Type());
+          {
+            OpBuilder::InsertionGuard guard(builder);
+            builder.createBlock(&checkOp.getSatRegion());
+            builder.create<smt::YieldOp>(loc, constTrue);
+            builder.createBlock(&checkOp.getUnknownRegion());
+            builder.create<smt::YieldOp>(loc, constTrue);
+            builder.createBlock(&checkOp.getUnsatRegion());
+            builder.create<smt::YieldOp>(loc, constFalse);
+          }
+
+          Value violated = builder.create<arith::OrIOp>(
+              loc, checkOp.getResult(0), iterArgs.back());
+
+          SmallVector<Value> newDecls;
+          for (auto [oldTy, newTy] :
+               llvm::zip(TypeRange(oldInputTy).drop_back(numRegs),
+                         TypeRange(inputTy).drop_back(numRegs))) {
+            if (isa<seq::ClockType>(oldTy))
+              newDecls.push_back(builder.create<smt::BVConstantOp>(
+                  loc, smt::BitVectorAttr::get(getContext(), 1, 1)));
+            else
+              newDecls.push_back(builder.create<smt::DeclareFunOp>(loc, newTy));
+          }
+
+          newDecls.append(llvm::to_vector(phaseOneOuts.take_back(numRegs)));
+
+          ValueRange phaseTwoOuts =
+              builder.create<func::CallOp>(loc, funcOp, newDecls)->getResults();
+          auto phaseTwoCheckOp =
+              builder.create<smt::CheckOp>(loc, builder.getI1Type());
+          {
+            OpBuilder::InsertionGuard guard(builder);
+            builder.createBlock(&phaseTwoCheckOp.getSatRegion());
+            builder.create<smt::YieldOp>(loc, constTrue);
+            builder.createBlock(&phaseTwoCheckOp.getUnknownRegion());
+            builder.create<smt::YieldOp>(loc, constTrue);
+            builder.createBlock(&phaseTwoCheckOp.getUnsatRegion());
+            builder.create<smt::YieldOp>(loc, constFalse);
+          }
+          violated = builder.create<arith::OrIOp>(
+              loc, phaseTwoCheckOp.getResult(0), violated);
+
+          newDecls.clear();
+          for (auto [oldTy, newTy] :
+               llvm::zip(TypeRange(oldInputTy).drop_back(numRegs),
+                         TypeRange(inputTy).drop_back(numRegs))) {
+            if (isa<seq::ClockType>(oldTy))
+              newDecls.push_back(builder.create<smt::BVConstantOp>(
+                  loc, smt::BitVectorAttr::get(getContext(), 0, 1)));
+            else
+              newDecls.push_back(builder.create<smt::DeclareFunOp>(loc, newTy));
+          }
+
+          newDecls.append(SmallVector<Value>(phaseTwoOuts.take_back(numRegs)));
+          newDecls.push_back(violated);
+
+          builder.create<scf::YieldOp>(loc, newDecls);
+        });
+
+    Value res = rewriter.create<arith::XOrIOp>(loc, forOp->getResults().back(),
+                                               constTrue);
+    rewriter.create<smt::YieldOp>(loc, res);
+
+    rewriter.replaceOp(op, solver.getResults());
+
+    return success();
+  }
+
+  Namespace &names;
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -160,21 +312,29 @@ struct ConvertVerifToSMTPass
 } // namespace
 
 void circt::populateVerifToSMTConversionPatterns(TypeConverter &converter,
-                                                 RewritePatternSet &patterns) {
+                                                 RewritePatternSet &patterns,
+                                                 Namespace &names) {
   patterns.add<VerifAssertOpConversion, LogicEquivalenceCheckingOpConversion>(
       converter, patterns.getContext());
+  patterns.add<VerifBMCOpConversion>(converter, patterns.getContext(), names);
 }
 
 void ConvertVerifToSMTPass::runOnOperation() {
   ConversionTarget target(getContext());
   target.addIllegalDialect<verif::VerifDialect>();
-  target.addLegalDialect<smt::SMTDialect, arith::ArithDialect>();
+  target.addLegalDialect<smt::SMTDialect, arith::ArithDialect, scf::SCFDialect,
+                         func::FuncDialect>();
   target.addLegalOp<UnrealizedConversionCastOp>();
 
   RewritePatternSet patterns(&getContext());
   TypeConverter converter;
   populateHWToSMTTypeConverter(converter);
-  populateVerifToSMTConversionPatterns(converter, patterns);
+
+  SymbolCache symCache;
+  symCache.addDefinitions(getOperation());
+  Namespace names;
+  names.add(symCache);
+  populateVerifToSMTConversionPatterns(converter, patterns, names);
 
   if (failed(mlir::applyPartialConversion(getOperation(), target,
                                           std::move(patterns))))

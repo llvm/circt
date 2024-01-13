@@ -83,3 +83,15 @@ verif.lec {verif.some_attr} first {
 ^bb0(%arg0: i32, %arg1: i32):
   verif.yield %arg0, %arg1 : i32, i32 {verif.some_attr}
 }
+
+verif.bmc bound 10 attributes {verif.some_attr} {
+^bb0(%cycle: i64, %clk: !seq.clock, %arg0: i32):
+  verif.yield
+} circuit {
+^bb0(%clk: !seq.clock, %arg0: i32, %state0: i32):
+  %c-1_i32 = hw.constant -1 : i32
+  %0 = comb.add %arg0, %state0 : i32
+  // %state0 is the result of a seq.compreg taking %0 as input
+  %2 = comb.xor %state0, %c-1_i32 : i32
+  verif.yield %2, %0 : i32, i32
+}

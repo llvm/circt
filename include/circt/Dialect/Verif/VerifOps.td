@@ -200,7 +200,7 @@ def LogicEquivalenceCheckingOp : VerifOp<"lec", [
 
 def YieldOp : VerifOp<"yield", [
   Terminator,
-  ParentOneOf<["verif::LogicEquivalenceCheckingOp"]>
+  ParentOneOf<["verif::LogicEquivalenceCheckingOp", "verif::BMCOp"]>
 ]> {
   let summary = "yields values from a region";
 
@@ -212,6 +212,18 @@ def YieldOp : VerifOp<"yield", [
       build($_builder, $_state, std::nullopt);
     }]>,
   ];
+}
+
+def BMCOp : VerifOp<"bmc", []> {
+  let summary = "Perform a bounded model check";
+
+  let arguments = (ins I32Attr:$bound);
+  let regions = (region SizedRegion<1>:$circuit);
+  let results = (outs I1:$result);
+
+  let assemblyFormat = [{
+    `bound` $bound attr-dict-with-keyword $circuit
+  }];
 }
 
 #endif // CIRCT_DIALECT_VERIF_VERIFOPS_TD
