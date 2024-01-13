@@ -1,4 +1,5 @@
 add_circt_dialect_library(CIRCTSMT
+  SMTAttributes.cpp
   SMTDialect.cpp
   SMTOps.cpp
   SMTTypes.cpp
@@ -7,6 +8,7 @@ add_circt_dialect_library(CIRCTSMT
   ${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/SMT
 
   DEPENDS
+  CIRCTSMTAttrIncGen
   CIRCTSMTEnumsIncGen
   MLIRSMTIncGen
 

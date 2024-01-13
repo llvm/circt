@@ -25,3 +25,15 @@ void SMTDialect::registerTypes() {
 #include "circt/Dialect/SMT/SMTTypes.cpp.inc"
       >();
 }
+
+//===----------------------------------------------------------------------===//
+// BitVectorType
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+BitVectorType::verify(function_ref<InFlightDiagnostic()> emitError,
+                      unsigned width) {
+  if (width <= 0)
+    return emitError() << "bit-vector must have at least a width of one";
+  return success();
+}

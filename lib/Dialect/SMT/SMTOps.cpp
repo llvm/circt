@@ -14,5 +14,40 @@ using namespace circt;
 using namespace smt;
 using namespace mlir;
 
+//===----------------------------------------------------------------------===//
+// BVConstantOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult BVConstantOp::verify() {
+  if (getValue().getType() != getType())
+    return emitError(
+        "smt.bv.constant attribute bitwidth doesn't match return type");
+
+  return success();
+}
+
+LogicalResult BVConstantOp::inferReturnTypes(
+    mlir::MLIRContext *context, std::optional<mlir::Location> location,
+    ::mlir::ValueRange operands, ::mlir::DictionaryAttr attributes,
+    ::mlir::OpaqueProperties properties, ::mlir::RegionRange regions,
+    ::llvm::SmallVectorImpl<::mlir::Type> &inferredReturnTypes) {
+  inferredReturnTypes.push_back(
+      properties.as<Properties *>()->getValue().getType());
+  return success();
+}
+
+void BVConstantOp::getAsmResultNames(
+    function_ref<void(Value, StringRef)> setNameFn) {
+  SmallVector<char, 128> specialNameBuffer;
+  llvm::raw_svector_ostream specialName(specialNameBuffer);
+  specialName << "bv_" << getValue().getValueAsString(false);
+  setNameFn(getResult(), specialName.str());
+}
+
+OpFoldResult BVConstantOp::fold(FoldAdaptor adaptor) {
+  assert(adaptor.getOperands().empty() && "constant has no operands");
+  return getValueAttr();
+}
+
 #define GET_OP_CLASSES
 #include "circt/Dialect/SMT/SMT.cpp.inc"

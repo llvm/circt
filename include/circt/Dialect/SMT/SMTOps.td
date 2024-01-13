@@ -10,6 +10,7 @@
 #define CIRCT_DIALECT_SMT_SMTOPS_TD
 
 include "circt/Dialect/SMT/SMTDialect.td"
+include "circt/Dialect/SMT/SMTAttributes.td"
 include "circt/Dialect/SMT/SMTTypes.td"
 include "mlir/IR/EnumAttr.td"
 include "mlir/IR/OpAsmInterface.td"
@@ -18,6 +19,5 @@ include "mlir/Interfaces/SideEffectInterfaces.td"
 
 class SMTOp<string mnemonic, list<Trait> traits = []> :
   Op<SMTDialect, mnemonic, traits>;
-
 
 #endif // CIRCT_DIALECT_SMT_SMTOPS_TD
