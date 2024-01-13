@@ -51,5 +51,15 @@ func.func @core(%in: i8) {
   // CHECK-NEXT: }
   smt.check sat { } unknown { } unsat { }
 
+  // CHECK: %{{.*}} = smt.eq %{{.*}}, %{{.*}} {smt.some_attr} : !smt.bv<32>
+  %1 = smt.eq %b, %b {smt.some_attr} : !smt.bv<32>
+  // CHECK: %{{.*}} = smt.distinct %{{.*}}, %{{.*}} {smt.some_attr} : !smt.bv<32>
+  %2 = smt.distinct %b, %b {smt.some_attr} : !smt.bv<32>
+
+  // CHECK: %{{.*}} = smt.eq %{{.*}}, %{{.*}}, %{{.*}} : !smt.bool
+  %3 = smt.eq %a, %a, %a : !smt.bool
+  // CHECK: %{{.*}} = smt.distinct %{{.*}}, %{{.*}}, %{{.*}} : !smt.bool
+  %4 = smt.distinct %a, %a, %a : !smt.bool
+
   return
 }

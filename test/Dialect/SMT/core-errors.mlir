@@ -131,3 +131,19 @@ func.func @check_no_block_arguments() {
   }
   return
 }
+
+// -----
+
+func.func @too_few_operands() {
+  // expected-error @below {{'inputs' must have at least size 2, but got 0}}
+  smt.eq : !smt.bool
+  return
+}
+
+// -----
+
+func.func @too_few_operands(%a: !smt.bool) {
+  // expected-error @below {{'inputs' must have at least size 2, but got 1}}
+  smt.distinct %a : !smt.bool
+  return
+}

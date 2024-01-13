@@ -85,5 +85,69 @@ LogicalResult CheckOp::verifyRegions() {
   return success();
 }
 
+//===----------------------------------------------------------------------===//
+// EqOp
+//===----------------------------------------------------------------------===//
+
+static LogicalResult
+parseSameOperandTypeVariadicToBoolOp(OpAsmParser &parser,
+                                     OperationState &result) {
+  SmallVector<OpAsmParser::UnresolvedOperand, 4> inputs;
+  SMLoc loc = parser.getCurrentLocation();
+  Type type;
+
+  if (parser.parseOperandList(inputs) ||
+      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseType(type))
+    return failure();
+
+  result.addTypes(BoolType::get(parser.getContext()));
+  if (parser.resolveOperands(inputs, SmallVector<Type>(inputs.size(), type),
+                             loc, result.operands))
+    return failure();
+
+  return success();
+}
+
+ParseResult EqOp::parse(OpAsmParser &parser, OperationState &result) {
+  return parseSameOperandTypeVariadicToBoolOp(parser, result);
+}
+
+void EqOp::print(OpAsmPrinter &printer) {
+  printer << ' ' << getInputs();
+  printer.printOptionalAttrDict(getOperation()->getAttrs());
+  printer << " : " << getInputs().front().getType();
+}
+
+LogicalResult EqOp::verify() {
+  if (getInputs().size() < 2)
+    return emitOpError() << "'inputs' must have at least size 2, but got "
+                         << getInputs().size();
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// DistinctOp
+//===----------------------------------------------------------------------===//
+
+ParseResult DistinctOp::parse(OpAsmParser &parser, OperationState &result) {
+  return parseSameOperandTypeVariadicToBoolOp(parser, result);
+}
+
+void DistinctOp::print(OpAsmPrinter &printer) {
+  printer << ' ' << getInputs();
+  printer.printOptionalAttrDict(getOperation()->getAttrs());
+  printer << " : " << getInputs().front().getType();
+}
+
+LogicalResult DistinctOp::verify() {
+  if (getInputs().size() < 2)
+    return emitOpError() << "'inputs' must have at least size 2, but got "
+                         << getInputs().size();
+
+  return success();
+}
+
 #define GET_OP_CLASSES
 #include "circt/Dialect/SMT/SMT.cpp.inc"

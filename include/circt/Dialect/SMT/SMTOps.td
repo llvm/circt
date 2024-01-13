@@ -164,4 +164,62 @@ def YieldOp : SMTOp<"yield", [
   }]>];
 }
 
+def EqOp : SMTOp<"eq", [Pure, SameTypeOperands]> {
+  let summary = "returns true iff all operands are identical";
+  let description = [{
+    This operation compares the operands and returns true iff all operands are
+    identical. The semantics are equivalent to the `=` operator defined in the
+    SMT-LIB Standard 2.6 in the
+    [Core theory](https://smtlib.cs.uiowa.edu/Theories/Core.smt2).
+
+    Any SMT sort/type is allowed for the operands and it supports a variadic
+    number of operands, but requires at least two. This is because the `=`
+    operator is annotated with `:chainable` which means that `= a b c d` is
+    equivalent to `and (= a b) (= b c) (= c d)` where `and` is annotated
+    `:left-assoc`, i.e., it can be further rewritten to
+    `and (and (= a b) (= b c)) (= c d)`.
+  }];
+
+  let arguments = (ins Variadic<AnySMTType>:$inputs);
+  let results = (outs BoolType:$result);
+
+  let hasCustomAssemblyFormat = true;
+  let hasVerifier = true;
+}
+
+def DistinctOp : SMTOp<"distinct", [Pure, SameTypeOperands]> {
+  let summary = "returns true iff all operands are not identical to any other";
+  let description = [{
+    This operation compares the operands and returns true iff all operands are
+    not identical to any of the other operands. The semantics are equivalent to
+    the `distinct` operator defined in the SMT-LIB Standard 2.6 in the
+    [Core theory](https://smtlib.cs.uiowa.edu/Theories/Core.smt2).
+
+    Any SMT sort/type is allowed for the operands and it supports a variadic
+    number of operands, but requires at least two. This is because the
+    `distinct` operator is annotated with `:pairwise` which means that
+    `distinct a b c d` is equivalent to
+    ```
+    and (distinct a b) (distinct a c) (distinct a d)
+        (distinct b c) (distinct b d)
+        (distinct c d)
+    ```
+    where `and` is annotated `:left-assoc`, i.e., it can be further rewritten to
+    ```
+    (and (and (and (and (and (distinct a b)
+                             (distinct a c))
+                        (distinct a d))
+                   (distinct b c))
+              (distinct b d))
+         (distinct c d)
+    ```
+  }];
+
+  let arguments = (ins Variadic<AnySMTType>:$inputs);
+  let results = (outs BoolType:$result);
+
+  let hasCustomAssemblyFormat = true;
+  let hasVerifier = true;
+}
+
 #endif // CIRCT_DIALECT_SMT_SMTOPS_TD
