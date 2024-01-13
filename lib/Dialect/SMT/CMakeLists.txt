@@ -19,6 +19,7 @@ add_circt_dialect_library(CIRCTSMT
   MLIRIR
   MLIRInferTypeOpInterface
   MLIRSideEffectInterfaces
+  MLIRControlFlowInterfaces
 )
 
 add_dependencies(circt-headers
