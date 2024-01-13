@@ -1,6 +1,6 @@
 add_circt_dialect(SMT smt)
-add_circt_doc(SMTOps Dialects/SMTOps -gen-op-doc)
-add_circt_doc(SMTTypes Dialects/SMTTypes -gen-typedef-doc -dialect smt)
+add_circt_doc(SMT Dialects/SMTOps -gen-op-doc)
+add_circt_doc(SMT Dialects/SMTTypes -gen-typedef-doc -dialect smt)
 
 set(LLVM_TARGET_DEFINITIONS SMT.td)
 
