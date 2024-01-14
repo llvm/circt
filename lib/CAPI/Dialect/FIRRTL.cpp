@@ -9,6 +9,7 @@
 #include "circt-c/Dialect/FIRRTL.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "mlir/CAPI/IR.h"
 #include "mlir/CAPI/Registration.h"
@@ -274,4 +275,36 @@ MlirAttribute firrtlAttrGetEventControl(MlirContext ctx,
   }
 
   return wrap(EventControlAttr::get(unwrap(ctx), value));
+}
+
+FIRRTLValueFlow firrtlValueFoldFlow(MlirValue value, FIRRTLValueFlow flow) {
+  Flow flowValue;
+
+  switch (flow) {
+  case FIRRTL_VALUE_FLOW_NONE:
+    flowValue = Flow::None;
+    break;
+  case FIRRTL_VALUE_FLOW_SOURCE:
+    flowValue = Flow::Source;
+    break;
+  case FIRRTL_VALUE_FLOW_SINK:
+    flowValue = Flow::Sink;
+    break;
+  case FIRRTL_VALUE_FLOW_DUPLEX:
+    flowValue = Flow::Duplex;
+    break;
+  }
+
+  auto flowResult = firrtl::foldFlow(unwrap(value), flowValue);
+
+  switch (flowResult) {
+  case Flow::None:
+    return FIRRTL_VALUE_FLOW_NONE;
+  case Flow::Source:
+    return FIRRTL_VALUE_FLOW_SOURCE;
+  case Flow::Sink:
+    return FIRRTL_VALUE_FLOW_SINK;
+  case Flow::Duplex:
+    return FIRRTL_VALUE_FLOW_DUPLEX;
+  }
 }
