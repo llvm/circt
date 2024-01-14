@@ -147,3 +147,11 @@ func.func @too_few_operands(%a: !smt.bool) {
   smt.distinct %a : !smt.bool
   return
 }
+
+// -----
+
+func.func @ite_type_mismatch(%a: !smt.bool, %b: !smt.bv<32>) {
+  // expected-error @below {{failed to verify that all of {thenValue, elseValue, result} have same type}}
+  "smt.ite"(%a, %a, %b) {} : (!smt.bool, !smt.bool, !smt.bv<32>) -> !smt.bool
+  return
+}
