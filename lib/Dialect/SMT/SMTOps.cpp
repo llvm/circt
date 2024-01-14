@@ -61,6 +61,7 @@ LogicalResult SolverOp::verifyRegions() {
   if (getBody()->getArgumentTypes() != getInputs().getTypes())
     return emitOpError()
            << "block argument types must match the types of the 'inputs'";
+
   return success();
 }
 
@@ -147,6 +148,117 @@ LogicalResult DistinctOp::verify() {
                          << getInputs().size();
 
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// ExtractOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ExtractOp::verify() {
+  unsigned rangeWidth = getType().getWidth();
+  unsigned inputWidth = cast<BitVectorType>(getInput().getType()).getWidth();
+  if (getLowBit() + rangeWidth > inputWidth)
+    return emitOpError("range to be extracted is too big, expected range "
+                       "starting at index ")
+           << getLowBit() << " of length " << rangeWidth
+           << " requires input width of at least " << (getLowBit() + rangeWidth)
+           << ", but the input width is only " << inputWidth;
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// ConcatOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ConcatOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> location, ValueRange operands,
+    DictionaryAttr attributes, OpaqueProperties properties, RegionRange regions,
+    SmallVectorImpl<Type> &inferredReturnTypes) {
+  inferredReturnTypes.push_back(BitVectorType::get(
+      context, cast<BitVectorType>(operands[0].getType()).getWidth() +
+                   cast<BitVectorType>(operands[1].getType()).getWidth()));
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// RepeatOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult RepeatOp::verify() {
+  unsigned inputWidth = cast<BitVectorType>(getInput().getType()).getWidth();
+  unsigned resultWidth = getType().getWidth();
+  if (resultWidth % inputWidth != 0)
+    return emitOpError() << "result bit-vector width must be a multiple of the "
+                            "input bit-vector width";
+
+  return success();
+}
+
+unsigned RepeatOp::getCount() {
+  unsigned inputWidth = cast<BitVectorType>(getInput().getType()).getWidth();
+  unsigned resultWidth = getType().getWidth();
+  return resultWidth / inputWidth;
+}
+
+void RepeatOp::build(OpBuilder &builder, OperationState &state, unsigned count,
+                     Value input) {
+  unsigned inputWidth = cast<BitVectorType>(input.getType()).getWidth();
+  Type resultTy = BitVectorType::get(builder.getContext(), inputWidth * count);
+  build(builder, state, resultTy, input);
+}
+
+ParseResult RepeatOp::parse(OpAsmParser &parser, OperationState &result) {
+  OpAsmParser::UnresolvedOperand input;
+  Type inputType;
+  llvm::SMLoc countLoc = parser.getCurrentLocation();
+
+  APInt count;
+  if (parser.parseInteger(count) || parser.parseKeyword("times"))
+    return failure();
+
+  if (count.isNonPositive())
+    return parser.emitError(countLoc) << "integer must be positive";
+
+  llvm::SMLoc inputLoc = parser.getCurrentLocation();
+  if (parser.parseOperand(input) ||
+      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseType(inputType))
+    return failure();
+
+  if (parser.resolveOperand(input, inputType, result.operands))
+    return failure();
+
+  auto bvInputTy = dyn_cast<BitVectorType>(inputType);
+  if (!bvInputTy)
+    return parser.emitError(inputLoc) << "input must have bit-vector type";
+
+  // Make sure no assertions can trigger and no silent overflows can happen
+  // Bit-width is stored as 'uint64_t' parameter in 'BitVectorType'
+  const unsigned maxBw = 64;
+  if (count.getActiveBits() > maxBw)
+    return parser.emitError(countLoc)
+           << "integer must fit into " << maxBw << " bits";
+
+  // Store multiplication in an APInt twice the size to not have any overflow
+  // and check if it can be truncated to 'maxBw' bits without cutting of
+  // important bits.
+  APInt resultBw = bvInputTy.getWidth() * count.zext(2 * maxBw);
+  if (resultBw.getActiveBits() > maxBw)
+    return parser.emitError(countLoc)
+           << "result bit-width (provided integer times bit-width of the input "
+              "type) must fit into "
+           << maxBw << " bits";
+
+  Type resultTy =
+      BitVectorType::get(parser.getContext(), resultBw.getZExtValue());
+  result.addTypes(resultTy);
+  return success();
+}
+
+void RepeatOp::print(OpAsmPrinter &printer) {
+  printer << " " << getCount() << " times " << getInput();
+  printer.printOptionalAttrDict((*this)->getAttrs());
+  printer << " : " << getInput().getType();
 }
 
 #define GET_OP_CLASSES

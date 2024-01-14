@@ -61,5 +61,12 @@ func.func @bitvectors() {
   // CHECK: %{{.*}} = smt.bv.cmp uge [[C0]], [[C0]] {smt.some_attr} : !smt.bv<32>
   %24 = smt.bv.cmp uge %c, %c {smt.some_attr} : !smt.bv<32>
 
+  // CHECK: %{{.*}} = smt.bv.concat [[C0]], [[C0]] {smt.some_attr} : !smt.bv<32>, !smt.bv<32>
+  %25 = smt.bv.concat %c, %c {smt.some_attr} : !smt.bv<32>, !smt.bv<32>
+  // CHECK: %{{.*}} = smt.bv.extract [[C0]] from 8 {smt.some_attr} : (!smt.bv<32>) -> !smt.bv<16>
+  %26 = smt.bv.extract %c from 8 {smt.some_attr} : (!smt.bv<32>) -> !smt.bv<16>
+  // CHECK: %{{.*}} = smt.bv.repeat 2 times [[C0]] {smt.some_attr} : !smt.bv<32>
+  %27 = smt.bv.repeat 2 times %c {smt.some_attr} : !smt.bv<32>
+
   return
 }
