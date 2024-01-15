@@ -99,7 +99,7 @@ circuit Foo:
 
 | Folded Module   | Unfolded Modules  |
 | --------------- | ----------------- |
-| <img title="Folded Modules" src="includes/img/firrtl-folded-module.png"/> | <img title="Unfolded Modules" src="includes/img/firrtl-unfolded-module.png"/> |
+| <img title="Folded Modules" src="../../includes/img/firrtl-folded-module.png"/> | <img title="Unfolded Modules" src="../../includes/img/firrtl-unfolded-module.png"/> |
 
 Using targets (or multiple targets), any specific module, instance, or
 combination of instances can be expressed. Some examples include:
