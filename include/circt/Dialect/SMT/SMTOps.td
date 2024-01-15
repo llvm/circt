@@ -183,6 +183,12 @@ def EqOp : SMTOp<"eq", [Pure, SameTypeOperands]> {
   let arguments = (ins Variadic<AnySMTType>:$inputs);
   let results = (outs BoolType:$result);
 
+  let builders = [
+    OpBuilder<(ins "mlir::Value":$lhs, "mlir::Value":$rhs), [{
+      build($_builder, $_state, ValueRange{lhs, rhs});
+    }]>
+  ];
+
   let hasCustomAssemblyFormat = true;
   let hasVerifier = true;
 }
@@ -217,6 +223,12 @@ def DistinctOp : SMTOp<"distinct", [Pure, SameTypeOperands]> {
 
   let arguments = (ins Variadic<AnySMTType>:$inputs);
   let results = (outs BoolType:$result);
+
+  let builders = [
+    OpBuilder<(ins "mlir::Value":$lhs, "mlir::Value":$rhs), [{
+      build($_builder, $_state, ValueRange{lhs, rhs});
+    }]>
+  ];
 
   let hasCustomAssemblyFormat = true;
   let hasVerifier = true;
@@ -274,6 +286,12 @@ class VariadicBoolOp<string mnemonic, string desc> : SMTOp<mnemonic, [Pure]> {
   let arguments = (ins Variadic<BoolType>:$inputs);
   let results = (outs BoolType:$result);
   let assemblyFormat = "$inputs attr-dict";
+
+  let builders = [
+    OpBuilder<(ins "mlir::Value":$lhs, "mlir::Value":$rhs), [{
+      build($_builder, $_state, ValueRange{lhs, rhs});
+    }]>
+  ];
 }
 
 def AndOp : VariadicBoolOp<"and", "a boolean conjunction">;

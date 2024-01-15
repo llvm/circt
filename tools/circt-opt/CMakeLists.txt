@@ -22,6 +22,7 @@ target_link_libraries(circt-opt
   CIRCTCalyxToFSM
   CIRCTCalyxTransforms
   CIRCTComb
+  CIRCTCombToSMT
   CIRCTCombTransforms
   CIRCTConvertToArcs
   CIRCTDC
@@ -60,6 +61,7 @@ target_link_libraries(circt-opt
   CIRCTIbisTransforms
   CIRCTInteropDialect
   CIRCTHWToLLHD
+  CIRCTHWToSMT
   CIRCTHWToSystemC
   CIRCTHWToSV
   CIRCTHWTransforms

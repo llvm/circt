@@ -668,6 +668,26 @@ def ConvertCombToArith : Pass<"convert-comb-to-arith", "mlir::ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
+// ConvertCombToSMT
+//===----------------------------------------------------------------------===//
+
+def ConvertCombToSMT : Pass<"convert-comb-to-smt", "mlir::ModuleOp"> {
+  let summary = "Convert combinational ops and constants to SMT ops";
+  // Need to depend on HWDialect because some 'comb' canonicalization patterns
+  // build 'hw.constant' operations.
+  let dependentDialects = ["smt::SMTDialect", "hw::HWDialect"];
+}
+
+//===----------------------------------------------------------------------===//
+// ConvertHWToSMT
+//===----------------------------------------------------------------------===//
+
+def ConvertHWToSMT : Pass<"convert-hw-to-smt", "mlir::ModuleOp"> {
+  let summary = "Convert HW ops and constants to SMT ops";
+  let dependentDialects = ["smt::SMTDialect"];
+}
+
+//===----------------------------------------------------------------------===//
 // ConvertArcToLLVM
 //===----------------------------------------------------------------------===//
 
