@@ -5751,6 +5751,10 @@ void RefCastOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 
+void RefCastUnsafeOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+
 void RefResolveOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }

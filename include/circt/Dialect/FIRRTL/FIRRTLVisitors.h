@@ -59,7 +59,7 @@ public:
             TailPrimOp, VerbatimExprOp, HWStructCastOp, BitCastOp, RefSendOp,
             RefResolveOp, RefSubOp, RWProbeOp, XMRRefOp, XMRDerefOp,
             // Casts to deal with weird stuff
-            UninferredResetCastOp, ConstCastOp, RefCastOp,
+            UninferredResetCastOp, ConstCastOp, RefCastOp, RefCastUnsafeOp,
             mlir::UnrealizedConversionCastOp,
             // Property expressions.
             StringConstantOp, FIntegerConstantOp, BoolConstantOp,
@@ -205,6 +205,7 @@ public:
   HANDLE(mlir::UnrealizedConversionCastOp, Unhandled);
   HANDLE(BitCastOp, Unhandled);
   HANDLE(RefCastOp, Unhandled);
+  HANDLE(RefCastUnsafeOp, Unhandled);
 
   // Property expressions.
   HANDLE(StringConstantOp, Unhandled);

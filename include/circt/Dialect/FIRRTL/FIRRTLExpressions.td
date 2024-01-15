@@ -1226,6 +1226,32 @@ def RefCastOp : FIRRTLOp<"ref.cast",
      "$input attr-dict `:` functional-type($input, $result)";
 }
 
+def RefCastUnsafeOp : FIRRTLOp<"ref.cast.unsafe",
+    [HasCustomSSAName,
+     Pure,
+     CompatibleRefTypes<"result","input">]> {
+  let summary = "Cast between compatible reference types";
+  let description = [{
+    This op allows for casting between ref types without verifying the legality
+    of any layer-associated probe types.
+
+    Losslessly cast between any reference types.
+    Source and destination must be recursively identical or destination
+    has uninferred variants of the corresponding element in source.
+    ```
+      %result = firrtl.ref.cast %ref : (t1) -> t2
+    ```
+    }];
+
+  let arguments = (ins RefType:$input);
+  let results = (outs RefType:$result);
+
+  let hasFolder = 1;
+
+  let assemblyFormat =
+     "$input attr-dict `:` functional-type($input, $result)";
+}
+
 def RefResolveOp: FIRRTLExprOp<"ref.resolve",
                               [RefTypeConstraint<"ref","result">]> {
   let summary = "FIRRTL Resolve a Reference";

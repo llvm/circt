@@ -64,7 +64,13 @@ firrtl.layer @LayerA bind {
 firrtl.module @Layers(
   out %a: !firrtl.probe<uint<1>, @LayerA>,
   out %b: !firrtl.rwprobe<uint<1>, @LayerA::@LayerB>
-) {}
+) {
+
+  %0 = firrtl.wire : !firrtl.probe<uint<1>>
+  // CHECK: %1 = firrtl.ref.cast.unsafe %0 : (!firrtl.probe<uint<1>>) -> !firrtl.probe<uint<1>, @LayerA>
+  %1 = firrtl.ref.cast.unsafe %0 : (!firrtl.probe<uint<1>>) -> !firrtl.probe<uint<1>, @LayerA>
+
+}
 
 // CHECK-LABEL: firrtl.module @LayersEnabled
 // CHECK-SAME:    layers = [@LayerA]

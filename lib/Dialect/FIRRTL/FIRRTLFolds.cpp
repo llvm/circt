@@ -3238,6 +3238,13 @@ OpFoldResult RefCastOp::fold(FoldAdaptor adaptor) {
   return {};
 }
 
+OpFoldResult RefCastUnsafeOp::fold(FoldAdaptor adaptor) {
+  // RefCast is unnecessary if types match.
+  if (getInput().getType() == getType())
+    return getInput();
+  return {};
+}
+
 static bool isConstantZero(Value operand) {
   auto constOp = operand.getDefiningOp<ConstantOp>();
   return constOp && constOp.getValue().isZero();
