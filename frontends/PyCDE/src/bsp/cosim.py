@@ -20,7 +20,7 @@ def CosimBSP(user_module):
   """Wrap and return a cosimulation 'board support package' containing
   'user_module'"""
 
-  class top(Module):
+  class ESI_Cosim_Top(Module):
     clk = Clock()
     rst = Input(types.int(1))
 
@@ -35,4 +35,4 @@ def CosimBSP(user_module):
 
       System.current().add_packaging_step(esi.package)
 
-  return top
+  return ESI_Cosim_Top

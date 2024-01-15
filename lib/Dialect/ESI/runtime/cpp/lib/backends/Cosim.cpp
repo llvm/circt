@@ -42,7 +42,7 @@ CosimAccelerator::connect(string connectionString) {
   if ((colon = connectionString.find(':')) != string::npos) {
     portStr = connectionString.substr(colon + 1);
     host = connectionString.substr(0, colon);
-  } else {
+  } else if (connectionString.ends_with("cosim.cfg")) {
     ifstream cfg(connectionString);
     string line, key, value;
 
@@ -58,6 +58,19 @@ CosimAccelerator::connect(string connectionString) {
 
     if (portStr.size() == 0)
       throw runtime_error("port line not found in file");
+  } else if (connectionString == "env") {
+    char *hostEnv = getenv("ESI_COSIM_HOST");
+    if (hostEnv)
+      host = hostEnv;
+    else
+      host = "localhost";
+    char *portEnv = getenv("ESI_COSIM_PORT");
+    if (portEnv)
+      portStr = portEnv;
+    else
+      throw runtime_error("ESI_COSIM_PORT environment variable not set");
+  } else {
+    throw runtime_error("Invalid connection string '" + connectionString + "'");
   }
   uint16_t port = stoul(portStr);
   return make_unique<CosimAccelerator>(host, port);
