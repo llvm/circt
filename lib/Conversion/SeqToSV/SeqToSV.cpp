@@ -176,10 +176,8 @@ public:
         });
 
     // Create the gated clock signal.
-    Value gclk = rewriter.create<comb::AndOp>(
-        loc, clk, rewriter.create<sv::ReadInOutOp>(loc, enableLatch));
-    clockGate.replaceAllUsesWith(gclk);
-    rewriter.eraseOp(clockGate);
+    rewriter.replaceOpWithNewOp<comb::AndOp>(
+        clockGate, clk, rewriter.create<sv::ReadInOutOp>(loc, enableLatch));
     return success();
   }
 };
