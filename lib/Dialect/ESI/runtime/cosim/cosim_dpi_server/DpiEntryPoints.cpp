@@ -301,16 +301,28 @@ DPI int sv2cCosimserverMMIOReadTryGet(uint32_t *address) {
   if (!reqAddress.has_value())
     return -1;
   *address = reqAddress.value();
+  server->lowLevelBridge.readsOutstanding++;
   return 0;
 }
 
 DPI void sv2cCosimserverMMIOReadRespond(uint32_t data, char error) {
   assert(server);
+  if (server->lowLevelBridge.readsOutstanding == 0) {
+    printf("ERROR: More read responses than requests! Not queuing response.\n");
+    return;
+  }
+  server->lowLevelBridge.readsOutstanding--;
   server->lowLevelBridge.readResps.push(data, error);
 }
 
 DPI void sv2cCosimserverMMIOWriteRespond(char error) {
   assert(server);
+  if (server->lowLevelBridge.writesOutstanding == 0) {
+    printf(
+        "ERROR: More write responses than requests! Not queuing response.\n");
+    return;
+  }
+  server->lowLevelBridge.writesOutstanding--;
   server->lowLevelBridge.writeResps.push(error);
 }
 
@@ -321,5 +333,6 @@ DPI int sv2cCosimserverMMIOWriteTryGet(uint32_t *address, uint32_t *data) {
     return -1;
   *address = req.value().first;
   *data = req.value().second;
+  server->lowLevelBridge.writesOutstanding++;
   return 0;
 }

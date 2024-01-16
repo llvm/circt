@@ -54,6 +54,13 @@ def CompRegOp : SeqOp<"compreg",
 
   let builders = [
     /// Create a register with an inner_sym matching the register's name.
+    OpBuilder<(ins "Value":$input, "Value":$clk), [{
+      return build($_builder, $_state, input.getType(), input, clk,
+                   /*name*/ StringAttr(),
+                   /*reset*/ Value(), /*resetValue*/ Value(),
+                   /*powerOnValue*/ Value(), hw::InnerSymAttr());
+    }]>,
+    /// Create a register with an inner_sym matching the register's name.
     OpBuilder<(ins "Value":$input, "Value":$clk, "StringAttrOrRef":$name), [{
       auto nameAttr = name.get($_builder.getContext());
       return build($_builder, $_state, input.getType(), input, clk, nameAttr,

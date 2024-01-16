@@ -46,7 +46,7 @@ def XrtBSP(user_module):
   axi_width = 64
   addr_width = 64
 
-  class top(Module):
+  class XrtTop(Module):
     ap_clk = Clock()
     ap_resetn = Input(Bits(1))
 
@@ -101,10 +101,12 @@ def XrtBSP(user_module):
       ports.s_axi_control_BVALID = xrt.bvalid
       ports.s_axi_control_BRESP = xrt.bresp
 
+      user_module(clk=ports.ap_clk, rst=rst)
+
       # Copy additional sources
       sys: System = System.current()
       sys.add_packaging_step(esi.package)
-      sys.add_packaging_step(top.package)
+      sys.add_packaging_step(XrtTop.package)
 
     @staticmethod
     def package(sys: System):
@@ -133,4 +135,4 @@ def XrtBSP(user_module):
       shutil.copy(__dir__ / "xrt.ini", sys.output_directory / "xrt.ini")
       shutil.copy(__dir__ / "xsim.tcl", sys.output_directory / "xsim.tcl")
 
-  return top
+  return XrtTop

@@ -17,6 +17,7 @@
 #include "circt/Dialect/ESI/ESIOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Support/BackedgeBuilder.h"
 #include "circt/Support/LLVM.h"
 #include "circt/Support/SymCache.h"
@@ -481,6 +482,8 @@ LogicalResult ManifestRomLowering::createRomModule(
   }
 
   PortInfo ports[] = {
+      {{rewriter.getStringAttr("clk"), rewriter.getType<seq::ClockType>(),
+        ModulePort::Direction::Input}},
       {{rewriter.getStringAttr("address"), rewriter.getIntegerType(30),
         ModulePort::Direction::Input}},
       {{rewriter.getStringAttr("data"), rewriter.getI32Type(),
@@ -493,6 +496,7 @@ LogicalResult ManifestRomLowering::createRomModule(
 
   ArrayRef<uint8_t> maniBytes = op.getCompressedManifest().getData();
   SmallVector<uint32_t> words;
+  words.push_back(maniBytes.size());
 
   for (size_t i = 0; i < maniBytes.size() - 3; i += 4) {
     uint32_t word = maniBytes[i] | (maniBytes[i + 1] << 8) |
@@ -517,16 +521,19 @@ LogicalResult ManifestRomLowering::createRomModule(
       rewriter.create<sv::RegOp>(loc, manifestConstant.getType());
   rewriter.create<sv::AssignOp>(loc, manifestReg, manifestConstant);
 
+  Value clk = romBody->getArgument(0);
+  Value inputAddress = romBody->getArgument(1);
   size_t addrBits = llvm::Log2_64_Ceil(words.size());
-  auto slimmedIdx = rewriter.create<comb::ExtractOp>(
-      loc, romBody->getArgument(0), 0, addrBits);
+  auto slimmedIdx =
+      rewriter.create<comb::ExtractOp>(loc, inputAddress, 0, addrBits);
+  Value inputAddresReg = rewriter.create<seq::CompRegOp>(loc, slimmedIdx, clk);
   auto readIdx =
-      rewriter.create<sv::ArrayIndexInOutOp>(loc, manifestReg, slimmedIdx);
+      rewriter.create<sv::ArrayIndexInOutOp>(loc, manifestReg, inputAddresReg);
   auto readData = rewriter.create<sv::ReadInOutOp>(loc, readIdx);
-
+  Value readDataReg = rewriter.create<seq::CompRegOp>(loc, readData, clk);
   if (auto term = romBody->getTerminator())
     rewriter.eraseOp(term);
-  rewriter.create<hw::OutputOp>(loc, ValueRange{readData});
+  rewriter.create<hw::OutputOp>(loc, ValueRange{readDataReg});
   return success();
 }
 
@@ -632,6 +639,7 @@ void ESItoHWPass::runOnOperation() {
   pass1Target.addLegalDialect<comb::CombDialect>();
   pass1Target.addLegalDialect<HWDialect>();
   pass1Target.addLegalDialect<SVDialect>();
+  pass1Target.addLegalDialect<seq::SeqDialect>();
   pass1Target.addLegalOp<WrapValidReadyOp, UnwrapValidReadyOp>();
 
   pass1Target.addIllegalOp<WrapSVInterfaceOp, UnwrapSVInterfaceOp>();

@@ -3,6 +3,7 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from __future__ import annotations
+from re import T
 
 from .common import Clock, Input, Output
 from .dialects import comb, msft, sv
@@ -16,7 +17,7 @@ from .circt.support import BackedgeBuilder
 from .circt.dialects import msft as raw_msft
 
 import typing
-from typing import List, Union
+from typing import List, Optional, Union
 
 
 def NamedWire(type_or_value: Union[Type, Signal], name: str):
@@ -143,8 +144,11 @@ def Reg(type: Type,
   return value
 
 
-def ControlReg(clk: Signal, rst: Signal, asserts: List[Signal],
-               resets: List[Signal]) -> BitVectorSignal:
+def ControlReg(clk: Signal,
+               rst: Signal,
+               asserts: List[Signal],
+               resets: List[Signal],
+               name: Optional[str] = None) -> BitVectorSignal:
   """Constructs a 'control register' and returns the output. Asserts are signals
   which causes the output to go high (on the next cycle). Resets do the
   opposite. If both an assert and a reset are active on the same cycle, the
@@ -175,7 +179,8 @@ def ControlReg(clk: Signal, rst: Signal, asserts: List[Signal],
   return ControlReg(len(asserts), len(resets))(clk=clk,
                                                rst=rst,
                                                asserts=asserts,
-                                               resets=resets).out
+                                               resets=resets,
+                                               instance_name=name).out
 
 
 def Mux(sel: BitVectorSignal, *data_inputs: typing.List[Signal]):

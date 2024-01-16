@@ -73,7 +73,7 @@ int main(int argc, const char *argv[]) {
 
 void printMMIO(ostream &os, AcceleratorConnection &acc) {
   auto mmio = acc.getService<services::MMIO>();
-  for (size_t i = 0; i <= 128; i = i + 4) {
+  for (size_t i = 0; i <= 0x240; i = i + 4) {
     uint32_t val = mmio->read(i);
     os << std::hex;
     os << "MMIO[" << i << "] = " << val << endl;

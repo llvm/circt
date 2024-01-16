@@ -38,7 +38,7 @@ namespace esi {
 // Constants used by low-level APIs.
 //===----------------------------------------------------------------------===//
 
-constexpr uint32_t MetadataOffset = 16;
+constexpr uint32_t MetadataOffset = 8;
 constexpr uint32_t MagicNumberLo = 0xE5100E51;
 constexpr uint32_t MagicNumberHi = 0x207D98E5;
 constexpr uint32_t ExpectedVersionNumber = 0;

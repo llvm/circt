@@ -56,11 +56,12 @@ uint32_t MMIOSysInfo::getEsiVersion() const {
 }
 
 vector<uint8_t> MMIOSysInfo::getCompressedManifest() const {
-  uint32_t size = mmio->read(MetadataOffset + 12);
+  uint32_t manifestPtr = mmio->read(MetadataOffset + 12);
+  uint32_t size = mmio->read(manifestPtr);
   uint32_t numWords = (size + 3) / 4;
   vector<uint32_t> manifestWords(numWords);
   for (size_t i = 0; i < numWords; ++i)
-    manifestWords[i] = mmio->read(MetadataOffset + 16 + i * 4);
+    manifestWords[i] = mmio->read(manifestPtr + 4 + (i * 4));
 
   vector<uint8_t> manifest;
   for (size_t i = 0; i < size; ++i) {

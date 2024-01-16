@@ -85,12 +85,15 @@ def CosimBSP(user_module):
       sys.mmio._materialize_service_decl()
 
       axi_mmio_inputs = cosim_mmio.outputs()
+      axi_mmio_inputs["araddr"] = axi_mmio_inputs["araddr"][0:20]
       axi_mmio = AxiMMIO(sys.mmio,
                          appid=AppID("mmio"),
                          clk=ports.clk,
                          rst=ports.rst,
                          **axi_mmio_inputs)
       for pn, s in axi_mmio.outputs().items():
+        if pn == "awaddr":
+          s = s.pad_or_truncate(32)
         cosim_mmio_wire_inputs[pn].assign(s)
 
   return ESI_Cosim_Top
