@@ -7,7 +7,7 @@ hw.generator.schema @FIRRTLMem, "FIRRTL_Memory", ["depth", "numReadPorts", "numW
 hw.module @TestWOMemory(in %clock: !seq.clock, in %addr: i10, in %enable: i1, in %data: i8) {
   // CHECK-NOT: hw.instance
   // CHECK-NEXT: [[FOO:%.+]] = arc.memory <1024 x i8, i10> {name = "foo"}
-  // CHECK-NEXT: arc.memory_write_port [[FOO]], @mem_write{{.*}}(%addr, %data, %enable) clock %clock enable lat 1 : <1024 x i8, i10>, i10, i8, i1
+  // CHECK-NEXT: arc.memory_write_port [[FOO]], @mem_write{{.*}}(%addr, %data, %enable) clock %clock enable latency 1 : <1024 x i8, i10>, i10, i8, i1
   // CHECK-NEXT: hw.output
   hw.instance "foo" @WOMemory(W0_addr: %addr: i10, W0_en: %enable: i1, W0_clk: %clock: !seq.clock, W0_data: %data: i8) -> ()
 }
@@ -25,7 +25,7 @@ hw.module @TestWOMemoryWithMask(in %clock: !seq.clock, in %addr: i10, in %enable
   // CHECK-NEXT: [[MASK_BIT1:%.+]] = comb.extract %mask from 1 : (i2) -> i1
   // CHECK-NEXT: [[MASK_BYTE1:%.+]] = comb.replicate [[MASK_BIT1]] : (i1) -> i8
   // CHECK-NEXT: [[MASK:%.+]] = comb.concat [[MASK_BYTE1]], [[MASK_BYTE0]]
-  // CHECK-NEXT: arc.memory_write_port [[FOO]], @mem_write{{.*}}(%addr, %data, %enable, [[MASK]]) clock %clock enable mask lat 1 : <1024 x i16, i10>, i10, i16, i1, i16
+  // CHECK-NEXT: arc.memory_write_port [[FOO]], @mem_write{{.*}}(%addr, %data, %enable, [[MASK]]) clock %clock enable mask latency 1 : <1024 x i16, i10>, i10, i16, i1, i16
   // CHECK-NEXT: hw.output
   hw.instance "foo" @WOMemoryWithMask(W0_addr: %addr: i10, W0_en: %enable: i1, W0_clk: %clock: !seq.clock, W0_data: %data: i16, W0_mask: %mask: i2) -> ()
 }
@@ -83,7 +83,7 @@ hw.module @TestRWMemory(in %clock: !seq.clock, in %addr: i10, in %enable: i1, in
   // CHECK-NEXT: [[ZERO:%.+]] = hw.constant 0 : i8
   // CHECK-NEXT: [[MUX:%.+]] = comb.mux [[RENABLE]], [[RDATA]], [[ZERO]] : i8
   // CHECK-NEXT: [[WENABLE:%.+]] = comb.and %enable, %wmode
-  // CHECK-NEXT: arc.memory_write_port [[FOO]], @mem_write{{.*}}(%addr, %wdata, [[WENABLE]]) clock %clock enable lat 1 : <1024 x i8, i10>, i10, i8, i1
+  // CHECK-NEXT: arc.memory_write_port [[FOO]], @mem_write{{.*}}(%addr, %wdata, [[WENABLE]]) clock %clock enable latency 1 : <1024 x i8, i10>, i10, i8, i1
   // CHECK-NEXT: hw.output [[MUX]]
   %0 = hw.instance "foo" @RWMemory(RW0_addr: %addr: i10, RW0_en: %enable: i1, RW0_clk: %clock: !seq.clock, RW0_wmode: %wmode: i1, RW0_wdata: %wdata: i8) -> (RW0_rdata: i8)
   hw.output %0 : i8

@@ -14,6 +14,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/Seq/SeqTypes.h"
+#include "circt/Support/Naming.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/TypeSwitch.h"
 
@@ -836,7 +837,7 @@ circt::firrtl::maybeStringToLocation(StringRef spelling, bool skipParsing,
                                      FileLineColLoc &fileLineColLocCache,
                                      MLIRContext *context) {
   // The spelling of the token looks something like "@[Decoupled.scala 221:8]".
-  if (!spelling.startswith("@[") || !spelling.endswith("]"))
+  if (!spelling.starts_with("@[") || !spelling.ends_with("]"))
     return {false, std::nullopt};
 
   spelling = spelling.drop_front(2).drop_back(1);

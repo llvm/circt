@@ -22,6 +22,7 @@
 #include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
+#include "circt/Support/Naming.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -175,10 +176,8 @@ public:
         });
 
     // Create the gated clock signal.
-    Value gclk = rewriter.create<comb::AndOp>(
-        loc, clk, rewriter.create<sv::ReadInOutOp>(loc, enableLatch));
-    clockGate.replaceAllUsesWith(gclk);
-    rewriter.eraseOp(clockGate);
+    rewriter.replaceOpWithNewOp<comb::AndOp>(
+        clockGate, clk, rewriter.create<sv::ReadInOutOp>(loc, enableLatch));
     return success();
   }
 };
@@ -261,6 +260,13 @@ public:
   LogicalResult
   matchAndRewrite(T op, typename T::Adaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
+    // If the cast had a better name than its input, propagate it.
+    if (Operation *inputOp = adaptor.getInput().getDefiningOp())
+      if (!isa<mlir::UnrealizedConversionCastOp>(inputOp))
+        if (auto name = chooseName(op, inputOp))
+          rewriter.updateRootInPlace(
+              inputOp, [&] { inputOp->setAttr("sv.namehint", name); });
+
     rewriter.replaceOp(op, adaptor.getInput());
     return success();
   }
@@ -284,13 +290,13 @@ public:
 
 /// Lower `seq.clock_div` to a behavioural clock divider
 ///
-class ClockDividerLowering : public OpConversionPattern<ClockDivider> {
+class ClockDividerLowering : public OpConversionPattern<ClockDividerOp> {
 public:
-  using OpConversionPattern<ClockDivider>::OpConversionPattern;
-  using OpConversionPattern<ClockDivider>::OpAdaptor;
+  using OpConversionPattern<ClockDividerOp>::OpConversionPattern;
+  using OpConversionPattern<ClockDividerOp>::OpAdaptor;
 
   LogicalResult
-  matchAndRewrite(ClockDivider clockDiv, OpAdaptor adaptor,
+  matchAndRewrite(ClockDividerOp clockDiv, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
     Location loc = clockDiv.getLoc();
 

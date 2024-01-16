@@ -276,7 +276,7 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
     flavor = VerifFlavor::Cover;
   else if (fmt.consume_front("assertNotX:"))
     flavor = VerifFlavor::AssertNotX;
-  else if (fmt.startswith("Assertion failed"))
+  else if (fmt.starts_with("Assertion failed"))
     flavor = VerifFlavor::ChiselAssert;
   else
     return success();

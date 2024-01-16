@@ -81,7 +81,7 @@ class FIRRTLModuleLike<string mnemonic, list<Trait> traits = []> :
 
     size_t $cppClass::getNumInputPorts() {
       size_t count = 0;
-      for (unsigned i = 0, e = getNumPorts(); i < e; ++i)
+      for (size_t i = 0, e = getNumPorts(); i < e; ++i)
         if (getPortDirection(i) == Direction::In)
           ++count;
       return count;
@@ -89,14 +89,14 @@ class FIRRTLModuleLike<string mnemonic, list<Trait> traits = []> :
 
     size_t $cppClass::getNumOutputPorts() {
       size_t count = 0;
-      for (unsigned i = 0, e = getNumPorts(); i < e; ++i)
+      for (size_t i = 0, e = getNumPorts(); i < e; ++i)
         if (getPortDirection(i) == Direction::Out)
           ++count;
       return count;
     }
 
     size_t $cppClass::getPortIdForInputId(size_t idx) {
-      for (unsigned i = 0, e = getNumPorts(); i < e; ++i)
+      for (size_t i = 0, e = getNumPorts(); i < e; ++i)
         if (getPortDirection(i) == Direction::In) {
           if (!idx)
             return i;
@@ -107,7 +107,7 @@ class FIRRTLModuleLike<string mnemonic, list<Trait> traits = []> :
     }
 
     size_t $cppClass::getPortIdForOutputId(size_t idx) {
-      for (unsigned i = 0, e = getNumPorts(); i < e; ++i)
+      for (size_t i = 0, e = getNumPorts(); i < e; ++i)
         if (getPortDirection(i) == Direction::Out) {
           if (!idx)
             return i;

@@ -22,6 +22,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/FieldRefCache.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Support/Debug.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
@@ -831,8 +832,7 @@ struct LowerOpenAggsPass : public LowerOpenAggsBase<LowerOpenAggsPass> {
 
 // This is the main entrypoint for the lowering pass.
 void LowerOpenAggsPass::runOnOperation() {
-  LLVM_DEBUG(llvm::dbgs() << "===- Running Lower Open Aggregates Pass "
-                             "-------------------------------------===\n");
+  LLVM_DEBUG(debugPassHeader(this) << "\n");
   SmallVector<Operation *, 0> ops(getOperation().getOps<FModuleLike>());
 
   LLVM_DEBUG(llvm::dbgs() << "Visiting modules:\n");

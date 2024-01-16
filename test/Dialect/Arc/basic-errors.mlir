@@ -3,7 +3,7 @@
 // expected-error @+1 {{body contains non-pure operation}}
 arc.define @Foo(%arg0: !seq.clock) {
   // expected-note @+1 {{first non-pure operation here:}}
-  arc.state @Bar() clock %arg0 lat 1 : () -> ()
+  arc.state @Bar() clock %arg0 latency 1 : () -> ()
   arc.output
 }
 arc.define @Bar() {
@@ -13,8 +13,8 @@ arc.define @Bar() {
 // -----
 
 hw.module @Foo(in %clock: !seq.clock) {
-  // expected-error @+1 {{'arc.state' op with non-zero latency outside a clock domain requires a clock}}
-  arc.state @Bar() lat 1 : () -> ()
+  // expected-error @+1 {{'arc.state' op outside a clock domain requires a clock}}
+  arc.state @Bar() latency 1 : () -> ()
 }
 arc.define @Bar() {
   arc.output
@@ -23,28 +23,8 @@ arc.define @Bar() {
 // -----
 
 hw.module @Foo(in %clock: !seq.clock) {
-  // expected-error @+1 {{'arc.state' op with zero latency cannot have a clock}}
-  arc.state @Bar() clock %clock lat 0 : () -> ()
-}
-arc.define @Bar() {
-  arc.output
-}
-
-// -----
-
-hw.module @Foo(in %clock: !seq.clock, in %enable: i1) {
-  // expected-error @+1 {{'arc.state' op with zero latency cannot have an enable}}
-  arc.state @Bar() enable %enable lat 0 : () -> ()
-}
-arc.define @Bar() {
-  arc.output
-}
-
-// -----
-
-hw.module @Foo(in %clock: !seq.clock, in %reset: i1) {
-  // expected-error @+1 {{'arc.state' op with zero latency cannot have a reset}}
-  arc.state @Bar() reset %reset lat 0 : () -> ()
+  // expected-error @+1 {{'arc.state' op latency must be a positive integer}}
+  arc.state @Bar() clock %clock latency 0 : () -> ()
 }
 arc.define @Bar() {
   arc.output
@@ -56,7 +36,7 @@ arc.define @Bar() {
 arc.define @SupportRecursiveMemoryEffects(%arg0: i1, %arg1: !seq.clock) {
   // expected-note @+1 {{first non-pure operation here:}}
   scf.if %arg0 {
-    arc.state @Bar() clock %arg1 lat 1 : () -> ()
+    arc.state @Bar() clock %arg1 latency 1 : () -> ()
   }
   arc.output
 }
@@ -272,7 +252,7 @@ hw.module @stateOpInsideClockDomain(in %clk: !seq.clock) {
   arc.clock_domain (%clk) clock %clk : (!seq.clock) -> () {
   ^bb0(%arg0: !seq.clock):
     // expected-error @+1 {{inside a clock domain cannot have a clock}}
-    arc.state @dummyArc() clock %arg0 lat 1 : () -> ()
+    arc.state @dummyArc() clock %arg0 latency 1 : () -> ()
     arc.output
   }
   hw.output
@@ -289,7 +269,7 @@ hw.module @memoryWritePortOpInsideClockDomain(in %clk: !seq.clock) {
     %mem = arc.memory <4 x i32, i32>
     %c0_i32 = hw.constant 0 : i32
     // expected-error @+1 {{inside a clock domain cannot have a clock}}
-    arc.memory_write_port %mem, @identity(%c0_i32, %c0_i32, %arg0) clock %arg0 enable lat 1: !arc.memory<4 x i32, i32>, i32, i32, !seq.clock
+    arc.memory_write_port %mem, @identity(%c0_i32, %c0_i32, %arg0) clock %arg0 enable latency 1: !arc.memory<4 x i32, i32>, i32, i32, !seq.clock
     arc.output
   }
 }
@@ -303,7 +283,7 @@ hw.module @memoryWritePortOpOutsideClockDomain(in %clock: !seq.clock, in %en: i1
   %mem = arc.memory <4 x i32, i32>
   %c0_i32 = hw.constant 0 : i32
   // expected-error @+1 {{outside a clock domain requires a clock}}
-  arc.memory_write_port %mem, @identity(%c0_i32, %c0_i32, %en) lat 1 : !arc.memory<4 x i32, i32>, i32, i32, i1
+  arc.memory_write_port %mem, @identity(%c0_i32, %c0_i32, %en) latency 1 : !arc.memory<4 x i32, i32>, i32, i32, i1
 }
 arc.define @identity(%addr: i32, %data: i32, %enable: i1) -> (i32, i32, i1) {
   arc.output %addr, %data, %enable : i32, i32, i1
@@ -315,7 +295,7 @@ hw.module @memoryWritePortOpLatZero(in %clock: !seq.clock, in %en: i1) {
   %mem = arc.memory <4 x i32, i32>
   %c0_i32 = hw.constant 0 : i32
   // expected-error @+1 {{latency must be at least 1}}
-  arc.memory_write_port %mem, @identity(%c0_i32, %c0_i32, %en) lat 0 : !arc.memory<4 x i32, i32>, i32, i32, i1
+  arc.memory_write_port %mem, @identity(%c0_i32, %c0_i32, %en) latency 0 : !arc.memory<4 x i32, i32>, i32, i32, i1
 }
 arc.define @identity(%addr: i32, %data: i32, %enable: i1) -> (i32, i32, i1) {
   arc.output %addr, %data, %enable : i32, i32, i1

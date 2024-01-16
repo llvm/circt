@@ -44,4 +44,16 @@ firrtl.module @Foo(in %clock: !firrtl.clock) {
   firrtl.strictconnect %inst_clock, %clock : !firrtl.clock
 }
 
+firrtl.layer @LayerA bind {
+  firrtl.layer @LayerB bind {}
+}
+
+// CHECK-LABEL: firrtl.module @Layers
+// CHECK-SAME:    out %a: !firrtl.probe<uint<1>, @LayerA>
+// CHECK-SAME:    out %b: !firrtl.rwprobe<uint<1>, @LayerA::@LayerB>
+firrtl.module @Layers(
+  out %a: !firrtl.probe<uint<1>, @LayerA>,
+  out %b: !firrtl.rwprobe<uint<1>, @LayerA::@LayerB>
+) {}
+
 }

@@ -460,6 +460,8 @@ class VoidType
 public:
   static VoidType get(MLIRContext *context);
 
+  static constexpr StringLiteral name = "moore.void";
+
 protected:
   using Base::Base;
 };
@@ -469,6 +471,8 @@ class StringType
     : public Type::TypeBase<StringType, UnpackedType, DefaultTypeStorage> {
 public:
   static StringType get(MLIRContext *context);
+
+  static constexpr StringLiteral name = "moore.string";
 
 protected:
   using Base::Base;
@@ -480,6 +484,8 @@ class ChandleType
 public:
   static ChandleType get(MLIRContext *context);
 
+  static constexpr StringLiteral name = "moore.chandle";
+
 protected:
   using Base::Base;
 };
@@ -489,6 +495,8 @@ class EventType
     : public Type::TypeBase<EventType, UnpackedType, DefaultTypeStorage> {
 public:
   static EventType get(MLIRContext *context);
+
+  static constexpr StringLiteral name = "moore.event";
 
 protected:
   using Base::Base;
@@ -574,6 +582,8 @@ public:
   /// to the user in diagnostics.
   void format(llvm::raw_ostream &os) const;
 
+  static constexpr StringLiteral name = "moore.int";
+
 protected:
   using Base::Base;
 };
@@ -611,6 +621,8 @@ public:
   StringRef getKeyword() const { return getKeyword(getKind()); }
   /// Get the size of this type.
   unsigned getBitSize() const { return getBitSize(getKind()); }
+
+  static constexpr StringLiteral name = "moore.real";
 
 protected:
   using Base::Base;
@@ -747,6 +759,9 @@ protected:
 /// A packed named type. See `NamedTypeBase` for details.
 class PackedNamedType
     : public NamedTypeBase<PackedNamedType, PackedIndirectType> {
+public:
+  static constexpr StringLiteral name = "moore.packed_named";
+
 protected:
   using NamedBase::NamedBase;
 };
@@ -754,12 +769,18 @@ protected:
 /// An unpacked named type. See `NamedTypeBase` for details.
 class UnpackedNamedType
     : public NamedTypeBase<UnpackedNamedType, UnpackedIndirectType> {
+public:
+  static constexpr StringLiteral name = "moore.unpacked_named";
+
 protected:
   using NamedBase::NamedBase;
 };
 
 /// A packed named type. See `NamedTypeBase` for details.
 class PackedRefType : public RefTypeBase<PackedRefType, PackedIndirectType> {
+public:
+  static constexpr StringLiteral name = "moore.packed_ref";
+
 protected:
   using RefBase::RefBase;
 };
@@ -767,6 +788,9 @@ protected:
 /// An unpacked named type. See `NamedTypeBase` for details.
 class UnpackedRefType
     : public RefTypeBase<UnpackedRefType, UnpackedIndirectType> {
+public:
+  static constexpr StringLiteral name = "moore.unpacked_ref";
+
 protected:
   using RefBase::RefBase;
 };
@@ -819,6 +843,8 @@ class PackedUnsizedDim : public Type::TypeBase<PackedUnsizedDim, PackedDim,
 public:
   static PackedUnsizedDim get(PackedType inner);
 
+  static constexpr StringLiteral name = "moore.packed_unsized_dim";
+
 protected:
   using Base::Base;
   friend struct detail::DimStorage;
@@ -843,6 +869,8 @@ public:
 
   /// Allow implicit casts from `PackedRangeDim` to the actual range.
   operator Range() const { return getRange(); }
+
+  static constexpr StringLiteral name = "moore.packed_range_dim";
 
 protected:
   using Base::Base;
@@ -904,6 +932,8 @@ class UnpackedUnsizedDim
 public:
   static UnpackedUnsizedDim get(UnpackedType inner);
 
+  static constexpr StringLiteral name = "moore.unpacked_unsized_dim";
+
 protected:
   using Base::Base;
   friend struct detail::DimStorage;
@@ -918,6 +948,8 @@ public:
 
   /// Get the size of the array, i.e. the `a` in `[a]`.
   unsigned getSize() const;
+
+  static constexpr StringLiteral name = "moore.unpacked_array_dim";
 
 protected:
   using Base::Base;
@@ -943,6 +975,8 @@ public:
 
   /// Allow implicit casts from `UnpackedRangeDim` to the actual range.
   operator Range() const { return getRange(); }
+
+  static constexpr StringLiteral name = "moore.unpacked_range_dim";
 
 protected:
   using Base::Base;
@@ -972,6 +1006,8 @@ public:
   /// type `T` in a dimension `[T]`, or a null type in a dimension `[*]`.
   UnpackedType getIndexType() const;
 
+  static constexpr StringLiteral name = "moore.unpacked_assoc_dim";
+
 protected:
   using Base::Base;
   friend struct detail::DimStorage;
@@ -988,6 +1024,8 @@ public:
   /// Get the bound of the queue, i.e. the `a` in `[$:a]`. Returns `None` if the
   /// queue is unbounded.
   std::optional<unsigned> getBound() const;
+
+  static constexpr StringLiteral name = "moore.unpacked_queue_dim";
 
 protected:
   using Base::Base;
@@ -1020,6 +1058,8 @@ public:
   /// Format this enum in SystemVerilog syntax. Useful to present the enum back
   /// to the user in diagnostics.
   void format(llvm::raw_ostream &os) const;
+
+  static constexpr StringLiteral name = "moore.enum";
 
 protected:
   using Base::Base;
@@ -1144,6 +1184,8 @@ public:
   /// definition.
   operator const Struct &() const { return getStruct(); }
 
+  static constexpr StringLiteral name = "moore.packed_struct";
+
 protected:
   using Base::Base;
 };
@@ -1170,6 +1212,8 @@ public:
   /// Allow implicit casts from `UnpackedStructType` to the actual struct
   /// definition.
   operator const Struct &() const { return getStruct(); }
+
+  static constexpr StringLiteral name = "moore.unpacked_struct";
 
 protected:
   using Base::Base;

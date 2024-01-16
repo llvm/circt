@@ -29,7 +29,7 @@ add_mlir_public_c_api_library(CIRCTCAPIConversion
   CIRCTPipelineToHW
   CIRCTSCFToCalyx
   CIRCTSeqToSV
+  CIRCTSimToSV
   CIRCTCFToHandshake
   CIRCTVerifToSV
 )
-

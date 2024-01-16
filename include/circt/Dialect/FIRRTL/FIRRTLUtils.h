@@ -234,7 +234,8 @@ inline FIRRTLType mapBaseType(FIRRTLType type,
   return TypeSwitch<FIRRTLType, FIRRTLType>(type)
       .Case<FIRRTLBaseType>([&](auto base) { return fn(base); })
       .Case<RefType>([&](auto ref) {
-        return RefType::get(fn(ref.getType()), ref.getForceable());
+        return RefType::get(fn(ref.getType()), ref.getForceable(),
+                            ref.getLayer());
       });
 }
 
@@ -250,7 +251,7 @@ mapBaseTypeNullable(FIRRTLType type,
         auto result = fn(ref.getType());
         if (!result)
           return {};
-        return RefType::get(result, ref.getForceable());
+        return RefType::get(result, ref.getForceable(), ref.getLayer());
       });
 }
 

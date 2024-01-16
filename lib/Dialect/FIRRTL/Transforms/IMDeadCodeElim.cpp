@@ -12,6 +12,7 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/InnerSymbolTable.h"
+#include "circt/Support/Debug.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
@@ -298,9 +299,7 @@ void IMDeadCodeElimPass::forwardConstantOutputPort(FModuleOp module) {
 }
 
 void IMDeadCodeElimPass::runOnOperation() {
-  LLVM_DEBUG(
-      llvm::dbgs() << "===----- Inter-module Dead Code Elimination -----==="
-                   << "\n");
+  LLVM_DEBUG(debugPassHeader(this) << "\n";);
   auto circuits = getOperation().getOps<CircuitOp>();
   if (circuits.empty())
     return;

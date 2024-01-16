@@ -21,11 +21,10 @@ def ClockedOpInterface : OpInterface<"ClockedOpInterface"> {
   let cppNamespace = "::circt::arc";
 
   let methods = [
-    InterfaceMethod<[{
-        For operations that are only clocked under dynamic conditions. Ideally,
-        this should not exist as a conditionally clocked operation can ussually
-        be split into two operations (one clocked, one non-clocked) as it makes
-        using this interface more complicated.
+    StaticInterfaceMethod<[{
+        Allows non-clocked counterparts to clocked operations (e.g., `arc.call`)
+        to implement this interface to simplify the implementation of some
+        passes.
       }],
       "bool", "isClocked", (ins),
       /*methodBody=*/[{}],
@@ -33,18 +32,24 @@ def ClockedOpInterface : OpInterface<"ClockedOpInterface"> {
     InterfaceMethod<[{
         Returns the SSA value representing the clock signal. It is valid to
         return a null value if the operation is inside a clocked region and thus
-        the clock is defined by the operation with the clocked region.
+        the clock is defined by the operation with the clocked region, or if the
+        operation is not clocked as determined by the `isClocked` static
+        function.
       }],
-      "::mlir::Value", "getClock", (ins),
-      /*methodBody=*/[{}],
-      /*defaultImplementation=*/[{ return $_op.getClock(); }]>,
+      "::mlir::Value", "getClock">,
     InterfaceMethod<[{
         Removes the clock value, e.g., used when moving a clocked operation into
-        a clocked region.
+        a clocked region. If the operation already does not have a clock, this
+        should be a nop.
       }],
       "void", "eraseClock", (ins),
       /*methodBody=*/[{}],
       /*defaultImplementation=*/[{ return $_op.getClockMutable().clear(); }]>,
+    InterfaceMethod<[{
+        Returns the latency w.r.t. to the clock returned by the `getClock`
+        function.
+      }],
+      "uint32_t", "getLatency">,
   ];
 }
 

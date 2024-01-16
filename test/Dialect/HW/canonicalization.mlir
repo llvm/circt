@@ -79,8 +79,8 @@ hw.module @mul_cstfold(in %arg0 : i7, out result : i7) {
 }
 
 // CHECK-LABEL: hw.module @div_cstfold(in %arg0 : i7, out result : i7, out a : i7, out b : i7, out c : i7) {
-// CHECK-NEXT:    %c-3_i7 = hw.constant -3 : i7
 // CHECK-NEXT:    %c2_i7 = hw.constant 2 : i7
+// CHECK-NEXT:    %c-3_i7 = hw.constant -3 : i7
 // CHECK-NEXT:    hw.output %c2_i7, %arg0, %c-3_i7, %arg0 : i7, i7, i7, i7
 hw.module @div_cstfold(in %arg0 : i7, out result : i7, out a: i7, out b: i7, out c: i7) {
   %c1_i7 = hw.constant 1 : i7
@@ -1114,8 +1114,8 @@ hw.module @struct_extract1(in %a0: i3, in %a1: i5, out r0: i3) {
 }
 
 // CHECK-LABEL: hw.module @struct_extract2
-// CHECK-NEXT:    %c3_i7 = hw.constant 3 : i7
 // CHECK-NEXT:    %c1_i3 = hw.constant 1 : i3
+// CHECK-NEXT:    %c3_i7 = hw.constant 3 : i7
 // CHECK-NEXT:    hw.output %c1_i3, %c3_i7 : i3, i7
 hw.module @struct_extract2(out r0: i3, out r1: i7) {
   %s = hw.aggregate_constant [1 : i3, [3 : i7]] : !hw.struct<foo: i3, bar: !hw.struct<baz: i7>>
@@ -1741,18 +1741,23 @@ hw.module @Wires(in %a: i42) {
   // Wires should push their name or name hint onto their input when folding.
   %2 = comb.mul %a, %a : i42
   %3 = comb.mul %a, %a : i42
-  %4 = comb.mul %a, %a : i42
+  %4 = comb.mul %a, %a {sv.namehint = "preserve"} : i42
+  %5 = comb.mul %a, %a : i42
   %someName1 = hw.wire %2 : i42
-  %5 = hw.wire %3 {sv.namehint = "someName2"} : i42
-  %someName3 = hw.wire %4 {sv.namehint = "ignoredName"} : i42
+  %6 = hw.wire %3 {sv.namehint = "someName2"} : i42
+  %7 = hw.wire %4 {sv.namehint = "_ignored"} : i42
+  %someName3 = hw.wire %5 {sv.namehint = "someName3"} : i42
   hw.instance "names1" @WiresKeep(keep: %someName1: i42) -> ()
-  hw.instance "names2" @WiresKeep(keep: %5: i42) -> ()
-  hw.instance "names3" @WiresKeep(keep: %someName3: i42) -> ()
+  hw.instance "names2" @WiresKeep(keep: %6: i42) -> ()
+  hw.instance "names3" @WiresKeep(keep: %7: i42) -> ()
+  hw.instance "names4" @WiresKeep(keep: %someName3: i42) -> ()
   // CHECK-NEXT: %2 = comb.mul %a, %a {sv.namehint = "someName1"}
   // CHECK-NEXT: %3 = comb.mul %a, %a {sv.namehint = "someName2"}
-  // CHECK-NEXT: %4 = comb.mul %a, %a {sv.namehint = "someName3"}
+  // CHECK-NEXT: %4 = comb.mul %a, %a {sv.namehint = "preserve"}
+  // CHECK-NEXT: %5 = comb.mul %a, %a {sv.namehint = "someName3"}
   // CHECK-NEXT: hw.instance "names1" @WiresKeep(keep: %2: i42)
   // CHECK-NEXT: hw.instance "names2" @WiresKeep(keep: %3: i42)
   // CHECK-NEXT: hw.instance "names3" @WiresKeep(keep: %4: i42)
+  // CHECK-NEXT: hw.instance "names4" @WiresKeep(keep: %5: i42)
 }
 hw.module.extern @WiresKeep(in %keep: i42)

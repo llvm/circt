@@ -119,11 +119,13 @@ def CellOpInterface : OpInterface<"CellInterface"> {
       /*defaultImplementation=*/[{
         SmallVector<circt::calyx::PortInfo> ports;
         MLIRContext* context = $_op->getContext();
+        auto portAttrs = $_op.portAttributes();
+        portAttrs.resize($_op->getResults().size());
         auto zippedPortInfo = llvm::zip_equal(
           $_op->getResults(),
           $_op.portDirections(),
           $_op.portNames(),
-          $_op.portAttributes()
+          portAttrs
         );
         for (auto&& [result, direction, name, attributes] : zippedPortInfo)
           ports.push_back(PortInfo{

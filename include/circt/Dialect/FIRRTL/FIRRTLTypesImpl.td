@@ -47,6 +47,7 @@ def SIntImpl : FIRRTLImplType<"SInt",
     TypeBuilder<(ins)>,
   ];
   let genVerifyDecl = true;
+  let typeName = "firrtl.sint";
   let extraClassDeclaration = [{
     using WidthQualifiedTypeTrait<SIntType>::getWidth;
     using WidthQualifiedTypeTrait<SIntType>::hasWidth;
@@ -66,6 +67,7 @@ def UIntImpl : FIRRTLImplType<"UInt",
     TypeBuilder<(ins)>,
   ];
   let genVerifyDecl = true;
+  let typeName = "firrtl.uint";
   let extraClassDeclaration = [{
     using WidthQualifiedTypeTrait<UIntType>::getWidth;
     using WidthQualifiedTypeTrait<UIntType>::hasWidth;
@@ -78,6 +80,7 @@ def ClockTypeImpl : FIRRTLImplType<"Clock"> {
   let summary = "Clock signal";
   let parameters = (ins "bool":$isConst);
   let storageClass = "FIRRTLBaseTypeStorage";
+  let typeName = "firrtl.clock";
   let builders = [
     TypeBuilder<(ins), [{
       return $_get($_ctxt, false);
@@ -92,6 +95,7 @@ def ResetTypeImpl : FIRRTLImplType<"Reset"> {
   let summary = "Reset Signal";
   let parameters = (ins "bool":$isConst);
   let storageClass = "FIRRTLBaseTypeStorage";
+  let typeName = "firrtl.reset";
   let builders = [
     TypeBuilder<(ins), [{
       return $_get($_ctxt, false);
@@ -106,6 +110,7 @@ def AsyncResetTypeImpl : FIRRTLImplType<"AsyncReset"> {
   let summary = "AsyncReset signal";
   let parameters = (ins "bool":$isConst);
   let storageClass = "FIRRTLBaseTypeStorage";
+  let typeName = "firrtl.asyncreset";
   let builders = [
     TypeBuilder<(ins), [{
       return $_get($_ctxt, false);
@@ -121,6 +126,7 @@ def AnalogTypeImpl : FIRRTLImplType<"Analog",
   let summary = "Analog signal";
   let parameters = (ins "int32_t":$widthOrSentinel, "bool":$isConst);
   let storageClass = "WidthTypeStorage";
+  let typeName = "firrtl.analog";
   let builders = [
     TypeBuilder<(ins "std::optional<int32_t>":$width, CArg<"bool", "false">:$isConst)>,
     TypeBuilder<(ins)>,
@@ -132,7 +138,7 @@ def AnalogTypeImpl : FIRRTLImplType<"Analog",
   let genVerifyDecl = true;
 }
 
-class BaseVectorTypeImpl<string name, string ElementType, list<Trait> traits = [], string BaseType = ElementType> 
+class BaseVectorTypeImpl<string name, string ElementType, list<Trait> traits = [], string BaseType = ElementType>
   : FIRRTLImplType<name, traits # [DeclareTypeInterfaceMethods<FieldIDTypeInterface>], BaseType> {
   let summary = "a fixed size collection of elements, like an array.";
   let parameters = (ins
@@ -173,6 +179,7 @@ class BaseVectorTypeImpl<string name, string ElementType, list<Trait> traits = [
 }
 
 def FVectorImpl : BaseVectorTypeImpl<"FVector","::circt::firrtl::FIRRTLBaseType"> {
+  let typeName = "firrtl.vector";
   let firrtlExtraClassDeclaration = [{
     /// Return this type with any flip types recursively removed from itself.
     FIRRTLBaseType getPassiveType();
@@ -187,6 +194,7 @@ def FVectorImpl : BaseVectorTypeImpl<"FVector","::circt::firrtl::FIRRTLBaseType"
 
 def OpenVectorImpl : BaseVectorTypeImpl<"OpenVector","::circt::firrtl::FIRRTLType"> {
   let genVerifyDecl = 1;
+  let typeName = "firrtl.openvector";
 }
 
 class BaseBundleTypeImpl<string name, string ElementType, list<Trait> traits = [], string BaseType = ElementType>
@@ -204,7 +212,7 @@ class BaseBundleTypeImpl<string name, string ElementType, list<Trait> traits = [
 
   let extraClassDeclaration = [{
     using ElementType = }] # ElementType # [{;
-  
+
     /// Each element of a bundle, which is a name and type.
     struct BundleElement {
       StringAttr name;
@@ -270,6 +278,7 @@ class BaseBundleTypeImpl<string name, string ElementType, list<Trait> traits = [
 }
 
 def BundleImpl : BaseBundleTypeImpl<"Bundle","::circt::firrtl::FIRRTLBaseType"> {
+  let typeName = "firrtl.bundle";
   let firrtlExtraClassDeclaration = [{
     /// Return this type with any flip types recursively removed from itself.
     FIRRTLBaseType getPassiveType();
@@ -283,6 +292,7 @@ def BundleImpl : BaseBundleTypeImpl<"Bundle","::circt::firrtl::FIRRTLBaseType"> 
 }
 
 def OpenBundleImpl : BaseBundleTypeImpl<"OpenBundle","::circt::firrtl::FIRRTLType"> {
+  let typeName = "firrtl.openbundle";
   let genVerifyDecl = 1;
 }
 
@@ -291,6 +301,7 @@ def FEnumImpl : FIRRTLImplType<"FEnum", [DeclareTypeInterfaceMethods<FieldIDType
   let parameters = (ins "ArrayRef<EnumElement>":$elements, "bool":$isConst);
   let storageClass = "FEnumTypeStorage";
   let genVerifyDecl = true;
+  let typeName = "firrtl.enum";
   let skipDefaultBuilders = true;
   let builders = [
     TypeBuilder<(ins "ArrayRef<EnumElement>":$elements, CArg<"bool", "false">:$isConst)>
@@ -380,15 +391,18 @@ def RefImpl : FIRRTLImplType<"Ref",
   }];
   let parameters = (ins TypeParameter<"::circt::firrtl::FIRRTLBaseType",
                                       "Type of reference target">:$type,
-                        "bool":$forceable);
+                        "bool":$forceable,
+                        OptionalParameter<"::mlir::SymbolRefAttr">:$layer);
   let genAccessors = true;
   let genStorageClass = true;
   let genVerifyDecl = true;
+  let typeName = "firrtl.ref";
 
   let skipDefaultBuilders = true;
   let builders = [
     TypeBuilderWithInferredContext<(ins "::circt::firrtl::FIRRTLBaseType":$type,
-                                        CArg<"bool", "false">:$forceable)>
+                                        CArg<"bool", "false">:$forceable,
+                                        CArg<"::mlir::SymbolRefAttr", "{}">:$layer)>
   ];
 
   let extraClassDeclaration = [{
@@ -404,6 +418,7 @@ def BaseTypeAliasImpl : FIRRTLImplType<"BaseTypeAlias", [DeclareTypeInterfaceMet
     (ins  "StringAttr":$name, TypeParameter<"::circt::firrtl::FIRRTLBaseType",
                                             "An inner type">:$innerType);
   let storageClass = "BaseTypeAliasStorage";
+  let typeName = "firrtl.basetypealias";
   let genAccessors = true;
   let skipDefaultBuilders = true;
   let extraClassDeclaration = [{
@@ -451,6 +466,7 @@ def ClassImpl : PropImplType<"Class", [
     ArrayRefParameter<"ClassElement">:$elements
   );
   let genStorageClass = false;
+  let typeName = "firrtl.propClass";
   let genAccessors = false;
   let builders = [
     TypeBuilderWithInferredContext<(ins
@@ -490,18 +506,21 @@ def AnyRefImpl : PropImplType<"AnyRef"> {
     about the referred to object's fields, so subfield access, etc. is illegal.
   }];
   let genStorageClass = true;
+  let typeName = "firrtl.propRef";
 }
 
 def StringImpl : PropImplType<"String"> {
   let summary = "An unlimited length string type. Not representable in hardware.";
   let parameters = (ins);
   let genStorageClass = true;
+  let typeName = "firrtl.propString";
 }
 
 def IntegerImpl : PropImplType<"FInteger"> {
   let summary = "An unlimited length signed integer type.  Not representable in hardware.";
   let parameters = (ins);
   let genStorageClass = true;
+  let typeName = "firrtl.propInt";
 }
 
 def ListImpl : PropImplType<"List"> {
@@ -509,6 +528,7 @@ def ListImpl : PropImplType<"List"> {
   let parameters = (ins TypeParameter<"circt::firrtl::PropertyType", "element type">:$elementType);
   let genStorageClass = true;
   let genAccessors = true;
+  let typeName = "firrtl.propList";
 }
 
 def PathImpl : PropImplType<"Path"> {
@@ -516,18 +536,21 @@ def PathImpl : PropImplType<"Path"> {
   let parameters = (ins);
   let genStorageClass = true;
   let genAccessors = true;
+  let typeName = "firrtl.propPath";
 }
 
 def BoolImpl : PropImplType<"Bool"> {
   let summary = "A boolean property.  Not representable in hardware.";
   let parameters = (ins);
   let genStorageClass = true;
+  let typeName = "firrtl.propBool";
 }
 
 def DoubleImpl : PropImplType<"Double"> {
   let summary = "A double property.  Not representable in hardware.";
   let parameters = (ins);
   let genStorageClass = true;
+  let typeName = "firrtl.propDouble";
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLTYPESIMPL_TD

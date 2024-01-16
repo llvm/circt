@@ -35,7 +35,8 @@ static Type convertType(Type type) {
 
   if (auto refType = type_dyn_cast<RefType>(type)) {
     if (auto converted = convertType(refType.getType()))
-      return RefType::get(converted, refType.getForceable());
+      return RefType::get(converted, refType.getForceable(),
+                          refType.getLayer());
   }
 
   return {};

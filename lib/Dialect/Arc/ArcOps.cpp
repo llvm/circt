@@ -150,27 +150,17 @@ LogicalResult StateOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 }
 
 LogicalResult StateOp::verify() {
-  if (getLatency() > 0 && !getOperation()->getParentOfType<ClockDomainOp>() &&
-      !getClock())
-    return emitOpError(
-        "with non-zero latency outside a clock domain requires a clock");
+  if (getLatency() < 1)
+    return emitOpError("latency must be a positive integer");
 
-  if (getLatency() == 0) {
-    if (getClock())
-      return emitOpError("with zero latency cannot have a clock");
-    if (getEnable())
-      return emitOpError("with zero latency cannot have an enable");
-    if (getReset())
-      return emitOpError("with zero latency cannot have a reset");
-  }
+  if (!getOperation()->getParentOfType<ClockDomainOp>() && !getClock())
+    return emitOpError("outside a clock domain requires a clock");
 
   if (getOperation()->getParentOfType<ClockDomainOp>() && getClock())
     return emitOpError("inside a clock domain cannot have a clock");
 
   return success();
 }
-
-bool StateOp::isClocked() { return getLatency() > 0; }
 
 //===----------------------------------------------------------------------===//
 // CallOp
@@ -180,6 +170,14 @@ LogicalResult CallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   return verifyArcSymbolUse(*this, getInputs().getTypes(),
                             getResults().getTypes(), symbolTable);
 }
+
+bool CallOp::isClocked() { return false; }
+
+Value CallOp::getClock() { return Value{}; }
+
+void CallOp::eraseClock() {}
+
+uint32_t CallOp::getLatency() { return 0; }
 
 //===----------------------------------------------------------------------===//
 // MemoryWritePortOp

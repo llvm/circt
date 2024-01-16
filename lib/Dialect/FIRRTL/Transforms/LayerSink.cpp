@@ -12,6 +12,7 @@
 
 #include "PassDetails.h"
 
+#include "circt/Support/Debug.h"
 #include "mlir/IR/Dominance.h"
 #include "mlir/Interfaces/ControlFlowInterfaces.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
@@ -30,10 +31,9 @@ struct LayerSink : public LayerSinkBase<LayerSink> {
 } // end anonymous namespace
 
 void LayerSink::runOnOperation() {
-  LLVM_DEBUG(
-      llvm::dbgs() << "==----- Running LayerSink "
-                      "---------------------------------------------------===\n"
-                   << "Module: '" << getOperation().getName() << "'\n";);
+  LLVM_DEBUG(debugPassHeader(this)
+                 << "\n"
+                 << "Module: '" << getOperation().getName() << "'\n";);
   auto &domInfo = getAnalysis<mlir::DominanceInfo>();
   getOperation()->walk([&](LayerBlockOp layerBlock) {
     SmallVector<Region *> regionsToSink({&layerBlock.getRegion()});

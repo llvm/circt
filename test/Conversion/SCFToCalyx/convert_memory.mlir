@@ -95,8 +95,8 @@ module {
 // CHECK-SAME:                          %[[VAL_4:.*]]: i32,
 // CHECK-SAME:                          %[[VAL_5:.*]]: i1 {done}) {
 // CHECK:           %[[VAL_6:.*]] = hw.constant true
-// CHECK:           %[[VAL_7:.*]] = hw.constant 1 : i32
 // CHECK:           %[[VAL_8:.*]] = hw.constant 0 : i32
+// CHECK:           %[[VAL_7:.*]] = hw.constant 1 : i32
 // CHECK:           %[[VAL_9:.*]], %[[VAL_10:.*]] = calyx.std_slice @std_slice_0 : i32, i6
 // CHECK:           %[[VAL_11:.*]], %[[VAL_12:.*]], %[[VAL_13:.*]] = calyx.std_add @std_add_1 : i32, i32, i32
 // CHECK:           %[[VAL_14:.*]], %[[VAL_15:.*]], %[[VAL_16:.*]] = calyx.std_add @std_add_0 : i32, i32, i32
@@ -152,8 +152,8 @@ module {
 // CHECK-SAME:                          %[[VAL_4:.*]]: i32,
 // CHECK-SAME:                          %[[VAL_5:.*]]: i1 {done}) {
 // CHECK:           %[[VAL_6:.*]] = hw.constant true
-// CHECK:           %[[VAL_7:.*]] = hw.constant 1 : i32
 // CHECK:           %[[VAL_8:.*]] = hw.constant 0 : i32
+// CHECK:           %[[VAL_7:.*]] = hw.constant 1 : i32
 // CHECK:           %[[VAL_9:.*]], %[[VAL_10:.*]] = calyx.std_slice @std_slice_0 : i32, i6
 // CHECK:           %[[VAL_11:.*]], %[[VAL_12:.*]], %[[VAL_13:.*]] = calyx.std_add @std_add_2 : i32, i32, i32
 // CHECK:           %[[VAL_14:.*]], %[[VAL_15:.*]], %[[VAL_16:.*]] = calyx.std_add @std_add_1 : i32, i32, i32

@@ -19,7 +19,8 @@ LogicalResult WrapValidReadyOp::fold(FoldAdaptor,
                                      SmallVectorImpl<OpFoldResult> &results) {
   if (!getChanOutput().getUsers().empty())
     return failure();
-  results.push_back(mlir::UnitAttr::get(getContext()));
+  results.push_back(NullChannelAttr::get(
+      getContext(), TypeAttr::get(getChanOutput().getType())));
   results.push_back(IntegerAttr::get(IntegerType::get(getContext(), 1), 1));
   return success();
 }

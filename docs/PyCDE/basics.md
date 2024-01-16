@@ -71,7 +71,7 @@ Since CIRCT primarily targets hardware not software, it defines its own types.
 PyCDE exposes them through the `pycde.types.Type` class hierarchy.  PyCDE
 signals represent values on the target device. Signals have a particular `Type`
 (which is distinct from the signal objects' Python `type`) stored in their
-`type` instance member. `Type`s are heretofor referred to interchangably as
+`type` instance member. `Type`s are heretofor referred to interchangeably as
 "PyCDE type", "CIRCT type", or "Type".
 
 All signals extend the `pycde.signals.Signal` class, specialized by their Type.

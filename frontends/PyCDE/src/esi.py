@@ -159,52 +159,46 @@ class NamedChannelValue(ChannelSignal):
     super().__init__(input_chan, _FromCirctType(input_chan.type))
 
 
-class _OutputChannelSetter:
+class _OutputBundleSetter:
   """Return a list of these as a proxy for a 'request to client connection'.
   Users should call the 'assign' method with the `ChannelValue` which they
   have implemented for this request."""
 
-  def __init__(self, req: raw_esi.RequestToClientConnectionOp,
-               old_chan_to_replace: ChannelSignal):
-    self.type = Channel(_FromCirctType(req.toClient.type))
-    self.client_name = req.clientNamePath
-    self._chan_to_replace = old_chan_to_replace
+  def __init__(self, req: raw_esi.ServiceImplementConnReqOp,
+               old_value_to_replace: ir.OpResult):
+    self.type: Bundle = _FromCirctType(req.toClient.type)
+    self.client_name = req.relativeAppIDPath
+    self._bundle_to_replace: Optional[ir.OpResult] = old_value_to_replace
 
   def assign(self, new_value: ChannelSignal):
     """Assign the generated channel to this request."""
-    if self._chan_to_replace is None:
+    if self._bundle_to_replace is None:
       name_str = ".".join(self.client_name)
       raise ValueError(f"{name_str} has already been connected.")
     if new_value.type != self.type:
       raise TypeError(
           f"Channel type mismatch. Expected {self.type}, got {new_value.type}.")
-    msft.replaceAllUsesWith(self._chan_to_replace, new_value.value)
-    self._chan_to_replace = None
+    msft.replaceAllUsesWith(self._bundle_to_replace, new_value.value)
+    self._bundle_to_replace = None
 
 
 class _ServiceGeneratorBundles:
   """Provide access to the bundles which the service generator is responsible
   for connecting up."""
 
-  def __init__(self, mod: Module, req: raw_esi.ServiceImplementReqOp):
+  def __init__(self, mod: ModuleLikeBuilderBase,
+               req: raw_esi.ServiceImplementReqOp):
     self._req = req
     portReqsBlock = req.portReqs.blocks[0]
-
-    # Find the input channel requests and store named versions of the values.
-    self._input_reqs = [
-        NamedChannelValue(x.toServer, x.clientNamePath)
-        for x in portReqsBlock
-        if isinstance(x, raw_esi.RequestToServerConnectionOp)
-    ]
 
     # Find the output channel requests and store the settable proxies.
     num_output_ports = len(mod.outputs)
     to_client_reqs = [
         req for req in portReqsBlock
-        if isinstance(req, raw_esi.RequestToClientConnectionOp)
+        if isinstance(req, raw_esi.ServiceImplementConnReqOp)
     ]
     self._output_reqs = [
-        _OutputChannelSetter(req, self._req.results[num_output_ports + idx])
+        _OutputBundleSetter(req, self._req.results[num_output_ports + idx])
         for idx, req in enumerate(to_client_reqs)
     ]
     assert len(self._output_reqs) == len(req.results) - num_output_ports
@@ -216,12 +210,12 @@ class _ServiceGeneratorBundles:
     return self._input_reqs
 
   @property
-  def to_client_reqs(self) -> List[_OutputChannelSetter]:
+  def to_client_reqs(self) -> List[_OutputBundleSetter]:
     return self._output_reqs
 
   def check_unconnected_outputs(self):
     for req in self._output_reqs:
-      if req._chan_to_replace is not None:
+      if req._bundle_to_replace is not None:
         name_str = ".".join(req.client_name)
         raise ValueError(f"{name_str} has not been connected.")
 
@@ -231,7 +225,7 @@ class ServiceImplementationModuleBuilder(ModuleLikeBuilderBase):
   no distinction between definition and instance -- ESI service providers are
   built where they are instantiated."""
 
-  def instantiate(self, impl, inputs: Dict[str, Signal], appid: AppID = None):
+  def instantiate(self, impl, inputs: Dict[str, Signal], appid: AppID):
     # Each instantiation of the ServiceImplementation has its own
     # registration.
     opts = _service_generator_registry.register(impl)
@@ -260,14 +254,14 @@ class ServiceImplementationModuleBuilder(ModuleLikeBuilderBase):
     with self.GeneratorCtxt(self, ports, serviceReq, generator.loc):
 
       # Run the generator.
-      channels = _ServiceGeneratorChannels(self, serviceReq)
-      rc = generator.gen_func(ports, channels=channels)
+      bundles = _ServiceGeneratorBundles(self, serviceReq)
+      rc = generator.gen_func(ports, bundles=bundles)
       if rc is None:
         rc = True
       elif not isinstance(rc, bool):
         raise ValueError("Generators must a return a bool or None")
       ports._check_unconnected_outputs()
-      channels.check_unconnected_outputs()
+      bundles.check_unconnected_outputs()
 
       # Replace the output values from the service implement request op with
       # the generated values. Erase the service implement request op.

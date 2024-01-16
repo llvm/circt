@@ -2,7 +2,7 @@
 # RUN: rm -rf %t
 # RUN: mkdir %t && cd %t
 # RUN: %PYTHON% %s %t 2>&1
-# RUN: esi-cosim-runner.py --tmpdir %t --exec %S/test_software/esi_test.py `ls %t/hw/*.sv | grep -v driver.sv`
+# RUN: esi-cosim.py -- %PYTHON% %S/test_software/esi_test.py cosim env
 
 import pycde
 from pycde import (AppID, Clock, Input, Module, generator)
@@ -31,7 +31,7 @@ class LoopbackInOutAdd7(Module):
   @generator
   def construct(ports):
     loopback = Wire(Channel(UInt(16)))
-    call_bundle, [from_host] = TestBundle.pack(resp=loopback)
+    call_bundle, [(_, from_host)] = TestBundle.pack(resp=loopback)
     HostComms.req_resp(call_bundle, AppID("loopback_inout"))
 
     ready = Wire(Bits(1))

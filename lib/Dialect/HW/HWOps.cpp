@@ -20,6 +20,7 @@
 #include "circt/Dialect/HW/ModuleImplementation.h"
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "circt/Support/Namespace.h"
+#include "circt/Support/Naming.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Interfaces/FunctionImplementation.h"
@@ -380,14 +381,10 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
 
   // If the wire has a name or an `sv.namehint` attribute, propagate it as an
   // `sv.namehint` to the expression.
-  if (auto *inputOp = wire.getInput().getDefiningOp()) {
-    auto name = wire.getNameAttr();
-    if (!name || name.getValue().empty())
-      name = wire->getAttrOfType<StringAttr>("sv.namehint");
-    if (name)
+  if (auto *inputOp = wire.getInput().getDefiningOp())
+    if (auto name = chooseName(wire, inputOp))
       rewriter.updateRootInPlace(
           inputOp, [&] { inputOp->setAttr("sv.namehint", name); });
-  }
 
   rewriter.replaceOp(wire, wire.getInput());
   return success();
@@ -1255,25 +1252,25 @@ void HWModuleGeneratedOp::setAllPortNames(ArrayRef<Attribute> names) {
   ::setAllPortNames(names, *this);
 }
 
-SmallVector<Attribute> HWModuleOp::getAllPortAttrs() {
+ArrayRef<Attribute> HWModuleOp::getAllPortAttrs() {
   auto attrs = getPerPortAttrs();
   if (attrs && !attrs->empty())
-    return {attrs->getValue().begin(), attrs->getValue().end()};
-  return SmallVector<Attribute>(getNumPorts());
+    return attrs->getValue();
+  return {};
 }
 
-SmallVector<Attribute> HWModuleExternOp::getAllPortAttrs() {
+ArrayRef<Attribute> HWModuleExternOp::getAllPortAttrs() {
   auto attrs = getPerPortAttrs();
   if (attrs && !attrs->empty())
-    return {attrs->getValue().begin(), attrs->getValue().end()};
-  return SmallVector<Attribute>(getNumPorts());
+    return attrs->getValue();
+  return {};
 }
 
-SmallVector<Attribute> HWModuleGeneratedOp::getAllPortAttrs() {
+ArrayRef<Attribute> HWModuleGeneratedOp::getAllPortAttrs() {
   auto attrs = getPerPortAttrs();
   if (attrs && !attrs->empty())
-    return {attrs->getValue().begin(), attrs->getValue().end()};
-  return SmallVector<Attribute>(getNumPorts());
+    return attrs->getValue();
+  return {};
 }
 
 void HWModuleOp::setAllPortAttrs(ArrayRef<Attribute> attrs) {

@@ -1,6 +1,6 @@
 ; RUN: firtool %s | FileCheck %s
 
-FIRRTL version 3.2.0
+FIRRTL version 4.0.0
 circuit Foo: %[[
   {
     "class": "firrtl.transforms.DontTouchAnnotation",
@@ -11,16 +11,16 @@ circuit Foo: %[[
     "target": "~Foo|Foo>y"
   }
 ]]
-  declgroup A, bind:
-    declgroup B, bind:
+  layer A, bind:
+    layer B, bind:
 
   module Foo:
     input in: UInt<1>
 
-    group A:
+    layerblock A:
       node x = in
 
-      group B:
+      layerblock B:
         node y = x
 
 ; CHECK-LABEL: module Foo_A_B(

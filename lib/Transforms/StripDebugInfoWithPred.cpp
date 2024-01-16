@@ -72,7 +72,7 @@ void StripDebugInfoWithPred::runOnOperation() {
   if (!pred && !dropSuffix.empty()) {
     pred = [&](mlir::Location loc) {
       if (auto fileLoc = loc.dyn_cast<FileLineColLoc>())
-        return fileLoc.getFilename().getValue().endswith(dropSuffix);
+        return fileLoc.getFilename().getValue().ends_with(dropSuffix);
       return false;
     };
   }

@@ -405,9 +405,6 @@ void InferStatePropertiesPass::runOnStateOp(
     arc::StateOp stateOp, arc::DefineOp arc,
     DenseMap<arc::DefineOp, unsigned> &resetConditionMap) {
 
-  if (stateOp.getLatency() < 1)
-    return;
-
   auto outputOp = cast<arc::OutputOp>(arc.getBodyBlock().getTerminator());
   static constexpr unsigned visitedNoChange = -1;
 

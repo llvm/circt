@@ -8,37 +8,36 @@ hw.module @stateOpCanonicalizer(in %clk: !seq.clock, in %in: i32, in %en: i1, in
   %true = hw.constant true
   %false = hw.constant false
 
-  arc.state @Foo(%in) clock %clk lat 1 : (i32) -> ()
-  %0 = arc.state @Bar(%in) lat 0 : (i32) -> (i32)
-  // CHECK-NEXT: {{%.+}} = arc.state @Bar(%in) clock %clk lat 1 {name = "stateName"} : (i32) -> i32
-  %1 = arc.state @Bar(%in) clock %clk lat 1 {name = "stateName"} : (i32) -> i32
-  // CHECK-NEXT: {{%.+}} = arc.state @Bar(%in) clock %clk lat 1 {names = ["stateName"]} : (i32) -> i32
-  %2 = arc.state @Bar(%in) clock %clk lat 1 {names = ["stateName"]} : (i32) -> i32
+  arc.state @Foo(%in) clock %clk latency 1 : (i32) -> ()
+  // CHECK-NEXT: {{%.+}} = arc.state @Bar(%in) clock %clk latency 1 {name = "stateName"} : (i32) -> i32
+  %1 = arc.state @Bar(%in) clock %clk latency 1 {name = "stateName"} : (i32) -> i32
+  // CHECK-NEXT: {{%.+}} = arc.state @Bar(%in) clock %clk latency 1 {names = ["stateName"]} : (i32) -> i32
+  %2 = arc.state @Bar(%in) clock %clk latency 1 {names = ["stateName"]} : (i32) -> i32
 
-  %3 = arc.state @Passthrough(%in) clock %clk enable %false reset %false lat 1 : (i32) -> i32
-  // CHECK-NEXT: [[V4:%.+]] = arc.state @Passthrough(%in) clock %clk lat 1 : (i32) -> i32
-  %4 = arc.state @Passthrough(%in) clock %clk enable %true reset %false lat 1 : (i32) -> i32
-  %5 = arc.state @Passthrough(%in) clock %clk enable %false reset %true lat 1 : (i32) -> i32
-  %6 = arc.state @Passthrough(%in) clock %clk enable %true reset %true lat 1 : (i32) -> i32
+  %3 = arc.state @Passthrough(%in) clock %clk enable %false reset %false latency 1 : (i32) -> i32
+  // CHECK-NEXT: [[V4:%.+]] = arc.state @Passthrough(%in) clock %clk latency 1 : (i32) -> i32
+  %4 = arc.state @Passthrough(%in) clock %clk enable %true reset %false latency 1 : (i32) -> i32
+  %5 = arc.state @Passthrough(%in) clock %clk enable %false reset %true latency 1 : (i32) -> i32
+  %6 = arc.state @Passthrough(%in) clock %clk enable %true reset %true latency 1 : (i32) -> i32
 
-  %7 = arc.state @Passthrough(%in) clock %clk enable %false reset %rst lat 1 : (i32) -> i32
-  // CHECK-NEXT: [[V8:%.+]] = arc.state @Passthrough(%in) clock %clk reset %rst lat 1 : (i32) -> i32
-  %8 = arc.state @Passthrough(%in) clock %clk enable %true reset %rst lat 1 : (i32) -> i32
-  // CHECK-NEXT: [[V9:%.+]] = arc.state @Passthrough(%in) clock %clk enable %en lat 1 : (i32) -> i32
-  %9 = arc.state @Passthrough(%in) clock %clk enable %en reset %false lat 1 : (i32) -> i32
-  %10 = arc.state @Passthrough(%in) clock %clk enable %en reset %true lat 1 : (i32) -> i32
+  %7 = arc.state @Passthrough(%in) clock %clk enable %false reset %rst latency 1 : (i32) -> i32
+  // CHECK-NEXT: [[V8:%.+]] = arc.state @Passthrough(%in) clock %clk reset %rst latency 1 : (i32) -> i32
+  %8 = arc.state @Passthrough(%in) clock %clk enable %true reset %rst latency 1 : (i32) -> i32
+  // CHECK-NEXT: [[V9:%.+]] = arc.state @Passthrough(%in) clock %clk enable %en latency 1 : (i32) -> i32
+  %9 = arc.state @Passthrough(%in) clock %clk enable %en reset %false latency 1 : (i32) -> i32
+  %10 = arc.state @Passthrough(%in) clock %clk enable %en reset %true latency 1 : (i32) -> i32
 
-  %11:2 = arc.state @Passthrough2(%in, %in) clock %clk enable %false lat 1 : (i32, i32) -> (i32, i32)
-  // CHECK-NEXT: [[V12:%.+]]:2 = arc.state @Passthrough2(%in, %in) clock %clk lat 1 : (i32, i32) -> (i32, i32)
-  %12:2 = arc.state @Passthrough2(%in, %in) clock %clk enable %true lat 1 : (i32, i32) -> (i32, i32)
-  // CHECK-NEXT: [[V13:%.+]]:2 = arc.state @Passthrough2(%in, %in) clock %clk lat 1 : (i32, i32) -> (i32, i32)
-  %13:2 = arc.state @Passthrough2(%in, %in) clock %clk reset %false lat 1 : (i32, i32) -> (i32, i32)
-  %14:2 = arc.state @Passthrough2(%in, %in) clock %clk reset %true lat 1 : (i32, i32) -> (i32, i32)
+  %11:2 = arc.state @Passthrough2(%in, %in) clock %clk enable %false latency 1 : (i32, i32) -> (i32, i32)
+  // CHECK-NEXT: [[V12:%.+]]:2 = arc.state @Passthrough2(%in, %in) clock %clk latency 1 : (i32, i32) -> (i32, i32)
+  %12:2 = arc.state @Passthrough2(%in, %in) clock %clk enable %true latency 1 : (i32, i32) -> (i32, i32)
+  // CHECK-NEXT: [[V13:%.+]]:2 = arc.state @Passthrough2(%in, %in) clock %clk latency 1 : (i32, i32) -> (i32, i32)
+  %13:2 = arc.state @Passthrough2(%in, %in) clock %clk reset %false latency 1 : (i32, i32) -> (i32, i32)
+  %14:2 = arc.state @Passthrough2(%in, %in) clock %clk reset %true latency 1 : (i32, i32) -> (i32, i32)
 
-  // CHECK-NEXT: %{{.+}} = arc.state @Passthrough(%in) clock %clk enable %false reset %true lat 1 {name = "stateName"} : (i32) -> i32
-  %15 = arc.state @Passthrough(%in) clock %clk enable %false reset %true lat 1 {name = "stateName"} : (i32) -> i32
-  // CHECK-NEXT: %{{.+}} = arc.state @Passthrough(%in) clock %clk enable %false reset %true lat 1 {names = ["stateName"]} : (i32) -> i32
-  %16 = arc.state @Passthrough(%in) clock %clk enable %false reset %true lat 1 {names = ["stateName"]} : (i32) -> i32
+  // CHECK-NEXT: %{{.+}} = arc.state @Passthrough(%in) clock %clk enable %false reset %true latency 1 {name = "stateName"} : (i32) -> i32
+  %15 = arc.state @Passthrough(%in) clock %clk enable %false reset %true latency 1 {name = "stateName"} : (i32) -> i32
+  // CHECK-NEXT: %{{.+}} = arc.state @Passthrough(%in) clock %clk enable %false reset %true latency 1 {names = ["stateName"]} : (i32) -> i32
+  %16 = arc.state @Passthrough(%in) clock %clk enable %false reset %true latency 1 {names = ["stateName"]} : (i32) -> i32
 
   // CHECK-NEXT: hw.output %c0_i32, [[V4]], %c0_i32, %c0_i32, %c0_i32, [[V8]], [[V9]], %c0_i32, %c0_i32, %c0_i32, [[V12]]#0, [[V12]]#1, [[V13]]#0, [[V13]]#1, %c0_i32, %c0_i32 : i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32
   hw.output %3, %4, %5, %6, %7, %8, %9, %10, %11#0, %11#1, %12#0, %12#1, %13#0, %13#1, %14#0, %14#1 : i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32
@@ -84,13 +83,13 @@ hw.module @clockDomainCanonicalizer(in %clk: !seq.clock, in %data: i32, out out0
   // COM: check that memories only used in one clock domain are pulled in and
   // COM: constants are cloned when used in multiple clock domains.
   // CHECK: arc.clock_domain ()
-  // CHECK-NEXT: [[C0:%.+]] = hw.constant 0
   // CHECK-NEXT: [[T:%.+]] = hw.constant true
+  // CHECK-NEXT: [[C0:%.+]] = hw.constant 0
   // CHECK-NEXT: [[MEM:%.+]] = arc.memory
-  // CHECK-NEXT: arc.memory_write_port [[MEM]], @memWrite([[C0]], [[C0]], [[T]]) enable lat 1 :
+  // CHECK-NEXT: arc.memory_write_port [[MEM]], @memWrite([[C0]], [[C0]], [[T]]) enable latency 1 :
   %0 = arc.clock_domain (%c0_i32, %mem, %true) clock %clk : (i32, !arc.memory<4 x i32, i32>, i1) -> i32 {
   ^bb0(%arg0: i32, %arg1: !arc.memory<4 x i32, i32>, %arg2: i1):
-    arc.memory_write_port %arg1, @memWrite(%arg0, %arg0, %arg2) enable lat 1 : !arc.memory<4 x i32, i32>, i32, i32, i1
+    arc.memory_write_port %arg1, @memWrite(%arg0, %arg0, %arg2) enable latency 1 : !arc.memory<4 x i32, i32>, i32, i32, i1
     arc.output %arg0 : i32
   }
   // COM: check that unused inputs are removed, and constants are cloned into it
@@ -99,7 +98,7 @@ hw.module @clockDomainCanonicalizer(in %clk: !seq.clock, in %data: i32, out out0
   // CHECK-NEXT: arc.state
   %1 = arc.clock_domain (%true, %data) clock %clk : (i1, i32) -> i1 {
   ^bb0(%arg0: i1, %arg1: i32):
-    %1 = arc.state @identityi1(%arg0) lat 1 : (i1) -> i1
+    %1 = arc.state @identityi1(%arg0) latency 1 : (i1) -> i1
     arc.output %1 : i1
   }
   // COM: check that duplicate inputs are merged
@@ -107,7 +106,7 @@ hw.module @clockDomainCanonicalizer(in %clk: !seq.clock, in %data: i32, out out0
   %2 = arc.clock_domain (%data, %data, %data) clock %clk : (i32, i32, i32) -> i32 {
   ^bb0(%arg0: i32, %arg1: i32, %arg2: i32):
     %3 = comb.add %arg0, %arg1, %arg2 : i32
-    %4 = arc.state @Passthrough(%3) lat 1 : (i32) -> i32
+    %4 = arc.state @Passthrough(%3) latency 1 : (i32) -> i32
     arc.output %4 : i32
   }
   // COM: check that unused outputs are removed
@@ -121,8 +120,8 @@ hw.module @clockDomainCanonicalizer(in %clk: !seq.clock, in %data: i32, out out0
   ^bb0(%arg0: i32, %arg1: i32):
   // TODO: add op such that it is not folded away because it's just passthrough
     %3 = hw.constant 0 : i32
-    %4 = arc.state @Passthrough(%arg1) lat 1 : (i32) -> i32
-    %5 = arc.state @Passthrough(%arg0) lat 1 : (i32) -> i32
+    %4 = arc.state @Passthrough(%arg1) latency 1 : (i32) -> i32
+    %5 = arc.state @Passthrough(%arg0) latency 1 : (i32) -> i32
     arc.output %arg0, %3, %4, %5 : i32, i32, i32, i32
   }
 

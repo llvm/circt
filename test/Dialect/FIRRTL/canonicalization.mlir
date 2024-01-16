@@ -3163,9 +3163,9 @@ firrtl.module @Issue5650(in %io_y: !firrtl.uint<1>, out %io_x: !firrtl.uint<1>) 
 
 // CHECK-LABEL: @HasBeenReset
 firrtl.module @HasBeenReset(in %clock: !firrtl.clock, in %reset1: !firrtl.uint<1>, in %reset2: !firrtl.asyncreset, in %reset3: !firrtl.reset) {
-  // CHECK-NEXT: %c0_ui1 = firrtl.constant 0
   // CHECK-NEXT: %c0_clock = firrtl.specialconstant 0
   // CHECK-NEXT: %c1_clock = firrtl.specialconstant 1
+  // CHECK-NEXT: %c0_ui1 = firrtl.constant 0
   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
   %c0_asyncreset = firrtl.specialconstant 0 : !firrtl.asyncreset

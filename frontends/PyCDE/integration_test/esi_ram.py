@@ -2,7 +2,7 @@
 # RUN: rm -rf %t
 # RUN: mkdir %t && cd %t
 # RUN: %PYTHON% %s %t 2>&1
-# RUN: esi-cosim-runner.py --tmpdir %t --exec %S/test_software/esi_ram.py `ls %t/hw/*.sv | grep -v driver.sv`
+# RUN: esi-cosim.py -- %PYTHON% %S/test_software/esi_ram.py cosim env
 
 import pycde
 from pycde import (AppID, Clock, Input, Module, generator)
@@ -33,7 +33,7 @@ class MemWriter(Module):
     read_bundle_type = RamI64x8.read.type
     address = 2
     (address_chan, ready) = read_bundle_type.address.wrap(address, True)
-    read_bundle, [data_chan] = read_bundle_type.pack(address=address_chan)
+    read_bundle, [(_, data_chan)] = read_bundle_type.pack(address=address_chan)
     read_data, read_valid = data_chan.unwrap(True)
     RamI64x8.read(read_bundle, AppID("int_reader"))
 

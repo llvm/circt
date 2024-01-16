@@ -13,13 +13,27 @@ on:
           - linux
           - macos
           - windows
+
+      # The following options only influence workflow_dispatch, and are ignored otherwise.
       runTests:
-        type: choice
         description: Run CIRCT tests
         default: false
+        type: boolean
+
+      llvm_enable_assertions:
+        description: Build with assertions.
+        default: false
+        type: boolean
+
+      cmake_build_type:
+        required: true
+        type: choice
         options:
-          - true
-          - false
+          - release
+          - relwithdebinfo
+          - debug
+        default: release
+
   # Run every day at 0700 UTC which is:
   #   - 0000 PDT / 2300 PST
   #   - 0300 EDT / 0200 EST
@@ -30,6 +44,8 @@ jobs:
   publish-sources:
     if: github.ref_type == 'tag'
     runs-on: ubuntu-20.04
+    permissions:
+      contents: write # Upload assets to release.
     steps:
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
       # time.
@@ -51,11 +67,12 @@ jobs:
           shasum -a 256 circt-full-sources.tar.gz | cut -d ' ' -f1 > circt-full-sources.tar.gz.sha256
 
       - name: Upload Source Archive
-        uses: AButler/upload-release-assets@v2.0
+        uses: AButler/upload-release-assets@v3.0
         with:
           # The * will grab the .sha256 as well
           files: circt-full-sources.tar.gz*
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+          release-tag: ${{ github.ref_name }} # Upload to release tag when manually run.
 
   # This job sets up the build matrix.
   choose-matrix:
@@ -103,7 +120,7 @@ jobs:
         if: github.event_name == 'release' || ( github.event_name == 'workflow_dispatch' && inputs.os == 'windows' )
         env:
           os: windows
-          runner: windows-2019
+          runner: windows-2022
           arch: x64
           tar: tar czf
           archive: zip
@@ -120,10 +137,18 @@ jobs:
       - name: Add Build Config for firtool and om-linker
         id: add-build-config-firtool
         run: |
+          # Default configuration template.
           json='{"name":"firtool","install_target":"install-firtool install-om-linker","package_name_prefix":"firrtl-bin","mode":"release","assert":"OFF","shared":"OFF","stats":"ON"}'
-          if [[ ${{ github.event_name }} == 'schedule' ]] || [[ ${{ github.event_name }} == 'workflow_dispatch' ]]; then
-            json=$(echo $json | jq -c '.assert = "ON" | .mode = "relwithdebinfo"')
-          fi
+          case ${{ github.event_name }} in
+            # Workflow dispatch looks to input knobs for asserts and build type.
+            workflow_dispatch)
+              json=$(echo $json | jq -c '.assert = "${{ inputs.llvm_enable_assertions && 'ON' || 'OFF' }}" | .mode = "${{ inputs.cmake_build_type }}"')
+            ;;
+            # Scheulded runs are Release but with Asserts + Debug.
+            schedule)
+              json=$(echo $json | jq -c '.assert = "ON" | .mode = "relwithdebinfo"')
+            ;;
+          esac
           echo "out=$json" >> $GITHUB_OUTPUT
       - name: Add Build Config for CIRCT-full (shared)
         id: add-build-config-circt-full-shared
@@ -174,6 +199,8 @@ jobs:
     strategy:
       matrix:
         generated: ${{ fromJSON(needs.choose-matrix.outputs.matrix) }}
+    permissions:
+      contents: write # Upload assets to release.
     uses: ./.github/workflows/unifiedBuildTestAndInstall.yml
     with:
       runner: ${{ matrix.generated.runner }}
