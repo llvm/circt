@@ -262,9 +262,10 @@ public:
                   ConversionPatternRewriter &rewriter) const final {
     // If the cast had a better name than its input, propagate it.
     if (Operation *inputOp = adaptor.getInput().getDefiningOp())
-      if (auto name = chooseName(op, inputOp))
-        rewriter.updateRootInPlace(
-            inputOp, [&] { inputOp->setAttr("sv.namehint", name); });
+      if (!isa<mlir::UnrealizedConversionCastOp>(inputOp))
+        if (auto name = chooseName(op, inputOp))
+          rewriter.updateRootInPlace(
+              inputOp, [&] { inputOp->setAttr("sv.namehint", name); });
 
     rewriter.replaceOp(op, adaptor.getInput());
     return success();

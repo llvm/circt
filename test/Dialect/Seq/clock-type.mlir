@@ -85,3 +85,18 @@ hw.module @ClockArray(in %c: !hw.array<1x!seq.clock>, out oc: !hw.array<1x!seq.c
   %0 = hw.array_create %clock : !seq.clock
   hw.output %0 : !hw.array<1x!seq.clock>
 }
+
+hw.module.extern private @ClockSource(out clock : !seq.clock)
+hw.module.extern private @ClockSink(in %clock : !seq.clock)
+hw.module.extern private @WireSink(in %clock : i1)
+
+// CHECK-LABEL: hw.module @ClockCastUse
+hw.module @ClockCastUse() {
+  // CHECK: hw.instance "" @WireSink(clock: %clk.clock: i1) -> ()
+  // CHECK: hw.instance "" @ClockSink(clock: %clk.clock: i1) -> ()
+  // CHECK: %clk.clock = hw.instance "clk" @ClockSource() -> (clock: i1)
+  hw.instance "" @WireSink(clock : %wire : i1) -> ()
+  %wire = seq.from_clock %clk {sv.namehint = "X"}
+  hw.instance "" @ClockSink(clock : %clk : !seq.clock) -> ()
+  %clk = hw.instance "clk" @ClockSource() -> (clock : !seq.clock)
+}
