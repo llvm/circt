@@ -156,7 +156,7 @@ bool groupInRegion(Block *block, Operation *clockTreeOp,
       // For some currently unknown reason, just calling moveBefore
       // directly has the same output but is much slower
       rewriter->modifyOpInPlace(definition,
-                                  [&]() { definition->moveBefore(op); });
+                                [&]() { definition->moveBefore(op); });
       changed = true;
       worklist.push_back(definition);
     }

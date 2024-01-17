@@ -3199,7 +3199,7 @@ LogicalResult ClockGateIntrinsicOp::canonicalize(ClockGateIntrinsicOp op,
     if (auto constOp = testEnable.getDefiningOp<ConstantOp>()) {
       if (constOp.getValue().isZero()) {
         rewriter.modifyOpInPlace(op,
-                                   [&] { op.getTestEnableMutable().clear(); });
+                                 [&] { op.getTestEnableMutable().clear(); });
         return success();
       }
     }

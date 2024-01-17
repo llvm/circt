@@ -708,7 +708,7 @@ LogicalResult ClockGateOp::canonicalize(ClockGateOp op,
     if (auto constOp = testEnable.getDefiningOp<hw::ConstantOp>()) {
       if (constOp.getValue().isZero()) {
         rewriter.modifyOpInPlace(op,
-                                   [&] { op.getTestEnableMutable().clear(); });
+                                 [&] { op.getTestEnableMutable().clear(); });
         return success();
       }
     }
