@@ -209,7 +209,7 @@ def SymbolMetadataOp : ESI_Op<"manifest.sym", [
 def BlobAttr : ESI_Attr<"Blob"> {
   let summary = "A binary blob";
 
-  let parameters = (ins ArrayRefParameter<"char">:$data);
+  let parameters = (ins ArrayRefParameter<"uint8_t">:$data);
   let mnemonic = "blob";
   let hasCustomAssemblyFormat = 1;
 }
