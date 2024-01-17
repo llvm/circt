@@ -203,3 +203,14 @@ hw.module @CallableAccel1(in %clk: !seq.clock, in %rst: i1) {
   hw.instance "func1" @CallableFunc1() -> ()
   esi.service.instance #esi.appid<"funcComms"> svc @funcs impl as "cosim" (%clk, %rst) : (!seq.clock, i1) -> ()
 }
+
+esi.service.std.mmio @mmio
+!mmioReq = !esi.bundle<[!esi.channel<i32> from "offset", !esi.channel<i32> to "data"]>
+
+// CONN-LABEL:  hw.module @MMIOManifest(in %clk : !seq.clock, in %rst : i1, in %manifest : !esi.bundle<[!esi.channel<i32> from "offset", !esi.channel<i32> to "data"]>) {
+// CONN-NEXT:     esi.manifest.req #esi.appid<"manifest">, <@mmio::@read> std "esi.service.std.mmio", toClient, !esi.bundle<[!esi.channel<i32> from "offset", !esi.channel<i32> to "data"]>
+// CONN-NEXT:     %data = esi.bundle.unpack %data from %manifest : !esi.bundle<[!esi.channel<i32> from "offset", !esi.channel<i32> to "data"]>
+hw.module @MMIOManifest(in %clk: !seq.clock, in %rst: i1) {
+  %req = esi.service.req.to_client <@mmio::@read> (#esi.appid<"manifest">) : !mmioReq
+  %loopback = esi.bundle.unpack %loopback from %req : !mmioReq
+}
