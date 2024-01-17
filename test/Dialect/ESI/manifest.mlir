@@ -75,6 +75,17 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // HIER-NEXT:     esi.manifest.req #esi.appid<"func1">, <@funcs::@call> std "esi.service.std.func", toClient, !esi.bundle<[!esi.channel<i16> to "arg", !esi.channel<i16> from "result"]>
 // HIER-NEXT:   }
 
+// HW-LABEL:    hw.module @__ESI_Manifest_ROM(in %clk : !seq.clock, in %address : i30, out data : i32) {
+// HW:            [[R0:%.+]] = hw.aggregate_constant
+// HW:            [[R1:%.+]] = sv.reg : !hw.inout<uarray<279xi32>>
+// HW:            sv.assign [[R1]], [[R0]] : !hw.uarray<279xi32>
+// HW:            [[R2:%.+]] = comb.extract %address from 0 : (i30) -> i9
+// HW:            [[R3:%.+]] = seq.compreg  [[R2]], %clk : i9
+// HW:            [[R4:%.+]] = sv.array_index_inout [[R1]][[[R3]]] : !hw.inout<uarray<279xi32>>, i9
+// HW:            [[R5:%.+]] = sv.read_inout [[R4]] : !hw.inout<i32>
+// HW:            [[R6:%.+]] = seq.compreg  [[R5]], %clk : i32
+// HW:            hw.output [[R6]] : i32
+
 // HW-LABEL:    hw.module @top
 // HW:            hw.instance "__manifest" @__ESIManifest() -> ()
 // HW-LABEL:    hw.module.extern @Cosim_Manifest<COMPRESSED_MANIFEST_SIZE: i32>(in %compressed_manifest : !hw.uarray<#hw.param.decl.ref<"COMPRESSED_MANIFEST_SIZE">xi8>) attributes {verilogName = "Cosim_Manifest"}
