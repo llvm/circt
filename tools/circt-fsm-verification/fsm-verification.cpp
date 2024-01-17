@@ -2,6 +2,7 @@
 #include "circt/Dialect/FSM/FSMGraph.h"
 #include </Users/luisa/z3/src/api/c++/z3++.h>
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/StringRef.h"
 
 #define VERBOSE 1
 
@@ -152,7 +153,7 @@ expr getActionExpr(llvm::DenseMap<mlir::Value, expr> expr_map, Region& action, c
 /**
  * @brief FSM operators management
 */
-void recOpsMgmt(Operation &mod, context &c, llvm::DenseMap<llvm::StringRef, func_decl> &stateInvariants, llvm::DenseMap<mlir::Value, expr> &expr_map, llvm::DenseMap<mlir::Value, expr> &var_map, vector<mlir::Value> &outputs, string &initialState, vector<transition> &transitions, vector<mlir::Value> &vecVal, solver &s, llvm::DenseMap<llvm::StringRef, int> &state_map){
+void recOpsMgmt(Operation &mod, context &c, vector<llvm::StringRef> &stateInvariants, llvm::DenseMap<mlir::Value, expr> &expr_map, llvm::DenseMap<mlir::Value, expr> &var_map, vector<mlir::Value> &outputs, string &initialState, vector<transition> &transitions, vector<mlir::Value> &vecVal, solver &s, llvm::DenseMap<llvm::StringRef, int> &state_map){
     
     for (Region &rg : mod.getRegions()) {
     for (Block &block : rg) {
@@ -160,6 +161,9 @@ void recOpsMgmt(Operation &mod, context &c, llvm::DenseMap<llvm::StringRef, func
       int num_args=0;
       for(auto a: block.getArguments()){
         expr input = c.bool_const(("arg"+to_string(num_args)).c_str());
+        if(a.getType().isIntOrFloat()){ 
+          input = c.int_const(("arg"+to_string(num_args)).c_str());
+        }
 
         if(VERBOSE){
           llvm::outs()<<"inserting input "<<a<<"\n";
@@ -176,11 +180,10 @@ void recOpsMgmt(Operation &mod, context &c, llvm::DenseMap<llvm::StringRef, func
 
         if (auto state = dyn_cast<fsm::StateOp>(op)){
           llvm::StringRef currentState = state.getName();
-          func_decl I = c.function(currentState.str().c_str(), c.int_sort(), c.bool_sort());
-          stateInvariants.insert({currentState, I});
+          // func_decl I = c.function(currentState.str().c_str(), c.int_sort(), c.bool_sort());
+          stateInvariants.push_back(currentState);
           if(VERBOSE){
             llvm::outs()<<"inserting state "<<currentState<<"\n";
-            llvm::outs()<<"mapped to "<<I.to_string()<<"\n";
           }
 
           state_map.insert({currentState, state_num});
@@ -270,8 +273,12 @@ void recOpsMgmt(Operation &mod, context &c, llvm::DenseMap<llvm::StringRef, func
             llvm::outs()<<"inserting variable "<<var_op.getResult()<<"\n";
             llvm::outs()<<"mapped to "<<(var_name+"_"+to_string(initial_value)).c_str()<<"\n";
           }
-          var_map.insert({var_op.getResult(), c.int_const((var_name+"_"+to_string(initial_value)).c_str())});
-          expr_map.insert({var_op.getResult(), c.int_const((var_name+"_"+to_string(initial_value)).c_str())});
+          expr input = c.bool_const((var_name+"_"+to_string(initial_value)).c_str());
+          if(var_op.getResult().getType().isIntOrFloat()){ 
+            input = c.int_const(("arg"+to_string(num_args)).c_str());
+          }
+          var_map.insert({var_op.getResult(), input});
+          expr_map.insert({var_op.getResult(), input});
         } else if(auto machine = dyn_cast<fsm::MachineOp>(op)){
           initialState = machine.getInitialState();
           vector<mlir::Value> vecVal2 = getVarValues(op);
@@ -296,7 +303,7 @@ void populateSolver(Operation &mod){
 
   solver s(c);
 
-  llvm::DenseMap<llvm::StringRef, func_decl> stateInvariants;
+  vector<llvm::StringRef> stateInvariants;
   llvm::DenseMap<mlir::Value, expr> expr_map;
   llvm::DenseMap<mlir::Value, expr> var_map;
 
@@ -314,30 +321,51 @@ void populateSolver(Operation &mod){
 
   vector<expr> solver_vars;
 
+  vector<z3::sort> invInput;
+
+
+  llvm::DenseMap<llvm::StringRef, func_decl> stateInvariants_map;
+
 
 
   if(VERBOSE){
-    llvm::outs()<<"print state map"<<'\n';  
     for(auto s: state_map){
       llvm::outs()<<s.first<<"\n";
       llvm::outs()<<s.second<<"\n";
     }
     llvm::outs()<<"print solver vars"<<'\n';
-    int i=0;
-    for(auto v: var_map){
-      solver_vars.push_back(c.int_const(v.second.to_string().c_str()));
-      llvm::outs()<<solver_vars[i].to_string()<<"\n";
-      if(v.second.to_string().find("arg") == std::string::npos){
-        // if it is a variable and not an argument
-        int init_value = stoi(v.second.to_string().substr(v.second.to_string().find("_")+1));
-        // initialize variables initial state
-        s.add(forall(solver_vars[i], stateInvariants.at(transitions[0].from)(init_value)));
-      }
-      i++;
+  }
+  int i=0;
+
+  for(auto v: var_map){
+    expr input = c.bool_const(("arg"+to_string(i)).c_str());
+    z3::sort invIn = c.bool_sort();
+    if(v.first.getType().isIntOrFloat()){ 
+      input = c.int_const(("arg"+to_string(i)).c_str());
+      invIn = c.int_sort(); 
     }
+    solver_vars.push_back(input);
+    if(VERBOSE){
+      llvm::outs()<<solver_vars[i].to_string()<<"\n";
+    }
+    i++;
+    invInput.push_back(invIn);
   }
 
+  for(auto cs: stateInvariants){
+    llvm::outs()<<cs<<"\n";
+    func_decl I = c.function(cs.str().c_str(), i, invInput, c.bool_sort());
+    stateInvariants_map.insert({cs, I});
+  }
 
+  for (auto v: var_map){
+    if(v.second.to_string().find("arg") == std::string::npos){
+      // if it is a variable and not an argument
+      int init_value = stoi(v.second.to_string().substr(v.second.to_string().find("_")+1));
+      // initialize variables initial state
+      s.add(forall(solver_vars[i], stateInvariants_map.at(transitions[0].from)(init_value)));
+    }
+  }
 
   for(auto t: transitions){
 
@@ -349,23 +377,24 @@ void populateSolver(Operation &mod){
     if(t.isGuard && t.isAction){
       int idx_w = 0;
       for (auto v: solver_vars){
-          s.add(forall(v, implies((stateInvariants.at(t.from)(v) && t.guard(solver_vars)), stateInvariants.at(t.to)(t.action(solver_vars).at(idx_w)))));
+          s.add(forall(v, implies((stateInvariants_map.at(t.from)(v) && t.guard(solver_vars)), stateInvariants_map.at(t.to)(t.action(solver_vars).at(idx_w)))));
           idx_w++;
       }
     
     } else if (t.isGuard){
       for(auto v: solver_vars){
-        s.add(forall(v, implies((stateInvariants.at(t.from)(v) && t.guard(solver_vars)), stateInvariants.at(t.to)(v))));
+        s.add(forall(v, implies((stateInvariants_map.at(t.from)(v) && t.guard(solver_vars)), stateInvariants_map.at(t.to)(v))));
       }
     } else if (t.isAction){
       int idx_w = 0;
       for (auto v: solver_vars){
-          s.add(forall(v, implies((stateInvariants.at(t.from)(v)), stateInvariants.at(t.to)(t.action(solver_vars).at(idx_w)))));
+          s.add(forall(v, implies((stateInvariants_map.at(t.from)(v)), stateInvariants_map.at(t.to)(t.action(solver_vars).at(idx_w)))));
           idx_w++;
       }
     } else {
-      for(auto v: solver_vars)
-        s.add(forall(v, implies(stateInvariants.at(t.from)(v), stateInvariants.at(t.to)(v))));
+      for(auto v: solver_vars){
+        s.add(forall(v, implies(stateInvariants_map.at(t.from)(v), stateInvariants_map.at(t.to)(v))));
+      }
     }
   }
 
