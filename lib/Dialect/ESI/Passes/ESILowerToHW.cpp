@@ -458,10 +458,11 @@ namespace {
 struct ManifestRomLowering : public OpConversionPattern<CompressedManifestOp> {
 public:
   using OpConversionPattern::OpConversionPattern;
-  constexpr static StringRef ManifestRomName = "__ESI_Manifest_ROM";
+  constexpr static StringRef manifestRomName = "__ESI_Manifest_ROM";
 
-  LogicalResult matchAndRewrite(CompressedManifestOp, OpAdaptor adaptor,
-                                ConversionPatternRewriter &rewriter) const;
+  LogicalResult
+  matchAndRewrite(CompressedManifestOp, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override;
 
 protected:
   LogicalResult createRomModule(CompressedManifestOp op,
@@ -477,11 +478,11 @@ LogicalResult ManifestRomLowering::createRomModule(
 
   // Find possible existing module (which may have been created as a dummy
   // module) and erase it.
-  if (Operation *existingExtern = mlirModBody.lookupSymbol(ManifestRomName)) {
+  if (Operation *existingExtern = mlirModBody.lookupSymbol(manifestRomName)) {
     if (!isa<hw::HWModuleExternOp>(existingExtern))
       return rewriter.notifyMatchFailure(
           op,
-          "Found " + ManifestRomName + " but it wasn't an HWModuleExternOp");
+          "Found " + manifestRomName + " but it wasn't an HWModuleExternOp");
     rewriter.eraseOp(existingExtern);
   }
 
@@ -495,7 +496,7 @@ LogicalResult ManifestRomLowering::createRomModule(
         ModulePort::Direction::Output}},
   };
   auto rom = rewriter.create<HWModuleOp>(
-      loc, rewriter.getStringAttr(ManifestRomName), ports);
+      loc, rewriter.getStringAttr(manifestRomName), ports);
   Block *romBody = rom.getBodyBlock();
   rewriter.setInsertionPointToStart(romBody);
   Value clk = romBody->getArgument(0);
@@ -540,7 +541,7 @@ LogicalResult ManifestRomLowering::createRomModule(
       rewriter.create<sv::ArrayIndexInOutOp>(loc, manifestReg, inputAddresReg);
   auto readData = rewriter.create<sv::ReadInOutOp>(loc, readIdx);
   Value readDataReg = rewriter.create<seq::CompRegOp>(loc, readData, clk);
-  if (auto term = romBody->getTerminator())
+  if (auto *term = romBody->getTerminator())
     rewriter.eraseOp(term);
   rewriter.create<hw::OutputOp>(loc, ValueRange{readDataReg});
   return success();

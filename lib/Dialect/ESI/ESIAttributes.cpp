@@ -36,9 +36,9 @@ Attribute BlobAttr::parse(AsmParser &odsParser, Type odsType) {
     });
     return {};
   }
-  ArrayRef<uint8_t> unsigned_data(
-      reinterpret_cast<const uint8_t *>(data.data()), data.size());
-  return BlobAttr::get(odsParser.getBuilder().getContext(), unsigned_data);
+  ArrayRef<uint8_t> unsignedData(reinterpret_cast<const uint8_t *>(data.data()),
+                                 data.size());
+  return BlobAttr::get(odsParser.getBuilder().getContext(), unsignedData);
 }
 void BlobAttr::print(AsmPrinter &odsPrinter) const {
   odsPrinter << "<\"" << llvm::encodeBase64(getData()) << "\">";
