@@ -296,6 +296,14 @@ void recOpsMgmt(Operation &mod, context &c, vector<llvm::StringRef> &stateInvari
 
 }
 
+expr nestedForall(vector<expr> solver_vars, expr body, int i){
+  if(i==solver_vars.size()-1){
+    return body;
+  } else {
+    return forall(solver_vars[i], nestedForall(solver_vars, body, i+1));
+  }
+}
+
 
 void populateSolver(Operation &mod){
 
@@ -378,23 +386,27 @@ void populateSolver(Operation &mod){
     if(t.isGuard && t.isAction){
       int idx_w = 0;
       for (auto v: solver_vars){
-          s.add(forall(v, implies((stateInvariants_map.at(t.from)(v) && t.guard(solver_vars)), stateInvariants_map.at(t.to)(t.action(solver_vars).at(idx_w)))));
-          idx_w++;
+        expr body = implies((stateInvariants_map.at(t.from)(v) && t.guard(solver_vars)), stateInvariants_map.at(t.to)(t.action(solver_vars).at(idx_w)));
+        s.add(forall(v, body));
+        idx_w++;
       }
     
     } else if (t.isGuard){
       for(auto v: solver_vars){
-        s.add(forall(v, implies((stateInvariants_map.at(t.from)(v) && t.guard(solver_vars)), stateInvariants_map.at(t.to)(v))));
+        expr body = implies((stateInvariants_map.at(t.from)(v) && t.guard(solver_vars)), stateInvariants_map.at(t.to)(v));
+        s.add(forall(v, body));
       }
     } else if (t.isAction){
       int idx_w = 0;
       for (auto v: solver_vars){
-          s.add(forall(v, implies((stateInvariants_map.at(t.from)(v)), stateInvariants_map.at(t.to)(t.action(solver_vars).at(idx_w)))));
-          idx_w++;
+        expr body = implies((stateInvariants_map.at(t.from)(v)), stateInvariants_map.at(t.to)(t.action(solver_vars).at(idx_w)));
+        s.add(forall(v, body));
+        idx_w++;
       }
     } else {
       for(auto v: solver_vars){
-        s.add(forall(v, implies(stateInvariants_map.at(t.from)(v), stateInvariants_map.at(t.to)(v))));
+        expr body = implies(stateInvariants_map.at(t.from)(v), stateInvariants_map.at(t.to)(v));
+        s.add(forall(v, body));
       }
     }
   }
