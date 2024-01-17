@@ -321,11 +321,10 @@ void populateSolver(Operation &mod){
 
   vector<expr> solver_vars;
 
-  vector<z3::sort> invInput;
+  vector<Z3_sort> invInput;
 
 
   llvm::DenseMap<llvm::StringRef, func_decl> stateInvariants_map;
-
 
 
   if(VERBOSE){
@@ -353,9 +352,11 @@ void populateSolver(Operation &mod){
   }
 
   for(auto cs: stateInvariants){
+    const symbol cc = c.str_symbol(cs.str().c_str());
     llvm::outs()<<cs<<"\n";
-    func_decl I = c.function(cs.str().c_str(), i, invInput, c.bool_sort());
-    stateInvariants_map.insert({cs, I});
+    Z3_func_decl I = Z3_mk_func_decl(c, cc, i, invInput.data(), c.bool_sort());
+    func_decl I2 = func_decl(c, I);
+    stateInvariants_map.insert({cs, I2});
   }
 
   for (auto v: var_map){
