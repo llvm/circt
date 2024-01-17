@@ -383,7 +383,7 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
   // `sv.namehint` to the expression.
   if (auto *inputOp = wire.getInput().getDefiningOp())
     if (auto name = chooseName(wire, inputOp))
-      rewriter.updateRootInPlace(
+      rewriter.modifyOpInPlace(
           inputOp, [&] { inputOp->setAttr("sv.namehint", name); });
 
   rewriter.replaceOp(wire, wire.getInput());

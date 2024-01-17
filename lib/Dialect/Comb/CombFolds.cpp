@@ -75,7 +75,7 @@ static void replaceOpAndCopyName(PatternRewriter &rewriter, Operation *op,
   if (auto *newOp = newValue.getDefiningOp()) {
     auto name = op->getAttrOfType<StringAttr>("sv.namehint");
     if (name && !newOp->hasAttr("sv.namehint"))
-      rewriter.updateRootInPlace(newOp,
+      rewriter.modifyOpInPlace(newOp,
                                  [&] { newOp->setAttr("sv.namehint", name); });
   }
   rewriter.replaceOp(op, newValue);
@@ -91,7 +91,7 @@ static OpTy replaceOpWithNewOpAndCopyName(PatternRewriter &rewriter,
   auto newOp =
       rewriter.replaceOpWithNewOp<OpTy>(op, std::forward<Args>(args)...);
   if (name && !newOp->hasAttr("sv.namehint"))
-    rewriter.updateRootInPlace(newOp,
+    rewriter.modifyOpInPlace(newOp,
                                [&] { newOp->setAttr("sv.namehint", name); });
 
   return newOp;

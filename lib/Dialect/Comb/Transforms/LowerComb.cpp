@@ -56,7 +56,7 @@ public:
     Value f = b.create<hw::ConstantOp>(loc, b.getIntegerAttr(b.getI1Type(), 0));
 
     Value tree = getMux(loc, b, t, f, table, op.getInputs());
-    b.updateRootInPlace(tree.getDefiningOp(), [&]() {
+    b.modifyOpInPlace(tree.getDefiningOp(), [&]() {
       tree.getDefiningOp()->setDialectAttrs(op->getDialectAttrs());
     });
     b.replaceOp(op, tree);

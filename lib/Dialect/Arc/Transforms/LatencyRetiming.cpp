@@ -153,7 +153,7 @@ LatencyRetimingPattern::matchAndRewrite(ClockedOpInterface op,
         return;
       }
 
-      rewriter.updateRootInPlace(op, [&]() {
+      rewriter.modifyOpInPlace(op, [&]() {
         stateOp.setLatency(newLatency);
         if (!stateOp.getClock() && !isInClockDomain)
           stateOp.getClockMutable().assign(clock);
