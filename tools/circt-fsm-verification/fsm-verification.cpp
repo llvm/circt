@@ -43,8 +43,37 @@ expr manage_comb_exp(Operation &op, vector<expr> vec, z3::context &c){
     return expr(vec[0] && vec[1]);
     }
   else if(auto icmp = dyn_cast<comb::ICmpOp>(op)){
-    // TODO switch case
-    return expr(vec[0] == vec[1]);
+    circt::comb::ICmpPredicate predicate = icmp.getPredicate();
+    switch (predicate){
+      case circt::comb::ICmpPredicate::eq:
+        return expr(vec[0] == vec[1]);
+      case circt::comb::ICmpPredicate::ne:
+        return expr(vec[0] != vec[1]);
+      case circt::comb::ICmpPredicate::slt:
+        return expr(vec[0] < vec[1]);
+      case circt::comb::ICmpPredicate::sle:
+        return expr(vec[0] <= vec[1]);
+      case circt::comb::ICmpPredicate::sgt:
+        return expr(vec[0] > vec[1]);
+      case circt::comb::ICmpPredicate::sge:
+        return expr(vec[0] >= vec[1]);
+      case circt::comb::ICmpPredicate::ult:
+        return expr(vec[0] < vec[1]);
+      case circt::comb::ICmpPredicate::ule:
+        return expr(vec[0] <= vec[1]);
+      case circt::comb::ICmpPredicate::ugt:
+        return expr(vec[0] > vec[1]);
+      case circt::comb::ICmpPredicate::uge:
+        return expr(vec[0] >= vec[1]);
+      case circt::comb::ICmpPredicate::ceq:
+        return expr(vec[0] == vec[1]);
+      case circt::comb::ICmpPredicate::cne:
+        return expr(vec[0] != vec[1]);
+      case circt::comb::ICmpPredicate::weq: 
+        return expr(vec[0] == vec[1]);
+      case circt::comb::ICmpPredicate::wne:
+        return expr(vec[0] != vec[1]);
+    }
   }
 }
 
