@@ -475,6 +475,8 @@ class PureModule(Module):
 
 @ServiceDecl
 class MMIO:
+  """ESI standard service to request access to an MMIO region."""
+
   read = ServiceDecl.From(
       Bundle([
           BundledChannel("offset", ChannelDirection.TO, Bits(32)),
