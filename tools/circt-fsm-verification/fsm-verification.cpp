@@ -384,13 +384,8 @@ void populateSolver(Operation &mod){
     int row = state_map.at(t.from);
     int col = state_map.at(t.to);
     if(t.isGuard && t.isAction){
-      int idx_w = 0;
-      for (auto v: solver_vars){
-        expr body = implies((stateInvariants_map.at(t.from)(v) && t.guard(solver_vars)), stateInvariants_map.at(t.to)(t.action(solver_vars).at(idx_w)));
-        s.add(forall(v, body));
-        idx_w++;
-      }
-    
+      expr body = implies((stateInvariants_map.at(t.from)(solver_vars.data()) && t.guard(solver_vars)), stateInvariants_map.at(t.to)(t.action(solver_vars).data()));
+      s.add(nestedForall(solver_vars, body, 0));
     } else if (t.isGuard){
       for(auto v: solver_vars){
         expr body = implies((stateInvariants_map.at(t.from)(v) && t.guard(solver_vars)), stateInvariants_map.at(t.to)(v));
