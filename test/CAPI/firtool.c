@@ -79,7 +79,7 @@ void testExportVerilog(MlirContext ctx) {
   // CHECK-NEXT:   output [31:0] out     // -:4:45
   // CHECK-NEXT: );
   // CHECK-EMPTY:
-  // CHECK-NEXT:   assign out = in_1 & in_2;     // -:2:3, :6:10
+  // CHECK-NEXT:   assign out = in_1 & in_2;     // -:2:3, :5:10, :6:10
   // CHECK-NEXT: endmodule
 
   exportVerilog(ctx, true);
