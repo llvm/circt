@@ -20,6 +20,10 @@
 #include "circt/Dialect/HW/HWPasses.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/HW/HWVisitors.h"
+#include "circt/Dialect/LTL/LTLDialect.h"
+#include "circt/Dialect/LTL/LTLOps.h"
+#include "circt/Dialect/LTL/LTLTypes.h"
+#include "circt/Dialect/LTL/LTLVisitors.h"
 #include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/SV/SVOps.h"
@@ -27,6 +31,10 @@
 #include "circt/Dialect/SV/SVVisitors.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/Seq/SeqOps.h"
+#include "circt/Dialect/Verif/VerifDialect.h"
+#include "circt/Dialect/Verif/VerifOps.h"
+#include "circt/Dialect/Verif/VerifTypes.h.inc"
+#include "circt/Dialect/Verif/VerifVisitors.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/raw_ostream.h"
@@ -41,7 +49,9 @@ struct ConvertHWToBTOR2Pass
     : public ConvertHWToBTOR2Base<ConvertHWToBTOR2Pass>,
       public comb::CombinationalVisitor<ConvertHWToBTOR2Pass>,
       public sv::Visitor<ConvertHWToBTOR2Pass>,
-      public hw::TypeOpVisitor<ConvertHWToBTOR2Pass> {
+      public hw::TypeOpVisitor<ConvertHWToBTOR2Pass>,
+      public ltl::Visitor<ConvertHWToBTOR2Pass>,
+      public verif::Visitor<ConvertHWToBTOR2Pass> {
 public:
   ConvertHWToBTOR2Pass(raw_ostream &os) : os(os) {}
   // Executes the pass
@@ -156,10 +166,17 @@ private:
   // If so, the original operation is returned
   // Otherwise the argument is returned as it is the original op
   Operation *getOpAlias(Operation *op) {
-    if (auto it = opAliasMap.find(op); it != opAliasMap.end())
-      return it->second;
+    Operation *alias = op;
+
+    // Remove the alias until none are left (for wires of wires of wires ...)
+    auto it = opAliasMap.find(alias);
+    while (it != opAliasMap.end()) {
+      alias = it->second;
+      it = opAliasMap.find(alias);
+    }
+
     // If the op isn't an alias then simply return it
-    return op;
+    return alias;
   }
 
   // Updates or creates an entry for the given operation
@@ -690,10 +707,84 @@ public:
 
   void visitComb(Operation *op) { visitInvalidComb(op); }
 
-  void visitInvalidComb(Operation *op) {
-    // try sv ops
-    dispatchSVVisitor(op);
+  // Try ltl ops when comb is done
+  void visitInvalidComb(Operation *op) { dispatchLTLVisitor(op); }
+
+  // Implications in LTL are overlapping, so they are equivalent to a btor2
+  // implies statement
+  void visitLTL(ltl::ImplicationOp op) {
+    Value antecedent = op.getAntecedent();
+    Value consequent = op.getConsequent();
+
+    // As with the mux we assume that both tval and fval have the same width
+    // This width should be the same as the output width
+    int64_t w = requireSort(op.getType());
+
+    // Generate a btor2 implies statement from this
+    genImplies(op, antecedent, consequent);
   }
+
+  // Disable if ops translate to an ite:
+  // ite disable 0 value
+  void visitLTL(ltl::DisableOp op) {
+    Value input = op.getInput();
+    Value condition = op.getCondition();
+
+    // Generate a default value in case of a disable
+    int64_t w = requireSort(input.getType());
+    size_t zeroLID = genZero(w);
+
+    // Create the ite instruction using the condition as a diable
+    genIte(op, getOpLID(condition), zeroLID, getOpLID(input), w);
+  }
+
+  // LTL clocks are ignored for now and treated as wires
+  void visitLTL(ltl::ClockOp op) {
+    // Retrieve the aliased operation
+    Operation *defOp = op.getInput().getDefiningOp();
+    // Wires don't output anything so just record alias
+    setOpAlias(op, defOp);
+  }
+
+  // We don't support much ltl for now
+  void visitLTL(Operation *op) {
+    op->emitError(" is not supported yet!");
+    abort();
+  }
+
+  // Try verif ops when ltl is done
+  void visitInvalidLTL(Operation *op) { dispatchVerifVisitor(op); }
+
+  // Verif assertions are the same as sv assertion without the enable wrapped in
+  // a parenting if, as it is assumed that ltl::DisableOp is used beforehand
+  void visitVerif(verif::AssertOp op) {
+    Value prop = op.getProperty();
+
+    // This sort is for assertion inversion and potential implies
+    genSort("bitvec", 1);
+
+    // Generate the expression inversion because we want to check if the
+    // assertion can be broken
+    genUnaryOp(op, prop, "not", 1);
+
+    // Genrate the bad btor2 intruction using the inverse of the condition
+    genBad(op);
+  }
+
+  // Verif assume is identical to an sv assume for btor2 conversion
+  void visitVerif(verif::AssumeOp op) {
+    Value prop = op.getProperty();
+    genConstraint(prop);
+  }
+
+  // We don't support much verif yet either
+  void visitVerif(Operation *op) {
+    op->emitError(" is not supported yet!");
+    abort();
+  }
+
+  // Try sv ops when verif is done
+  void visitInvalidVerif(Operation *op) { dispatchSVVisitor(op); }
 
   // Assertions are negated then converted to a btor2 bad instruction
   void visitSV(sv::AssertOp op) {

@@ -32,4 +32,5 @@ add_mlir_public_c_api_library(CIRCTCAPIConversion
   CIRCTSimToSV
   CIRCTCFToHandshake
   CIRCTVerifToSV
+  CIRCTLTLToCore
 )
