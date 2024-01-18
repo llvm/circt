@@ -131,21 +131,20 @@ TEST(HWModuleOpTest, SetPortAttr) {
   SmallVector<PortInfo, 3> ports;
   auto ty = builder.getIntegerType(1);
 
+  ports.emplace_back(PortInfo{
+      {builder.getStringAttr("foo"), ty, hw::ModulePort::Direction::Input},
+      0,
+      {}});
 
-  ports.emplace_back(PortInfo{{builder.getStringAttr("foo"),
-                       ty, hw::ModulePort::Direction::Input},
-                      0,
-                      {}});
-  
-  ports.emplace_back(PortInfo{{builder.getStringAttr("bar"),
-                       ty, hw::ModulePort::Direction::Input},
-                      1,
-                      {}});
-  
-  ports.emplace_back(PortInfo{{builder.getStringAttr("baz"),
-                       ty, hw::ModulePort::Direction::Output},
-                      0,
-                      {}});
+  ports.emplace_back(PortInfo{
+      {builder.getStringAttr("bar"), ty, hw::ModulePort::Direction::Input},
+      1,
+      {}});
+
+  ports.emplace_back(PortInfo{
+      {builder.getStringAttr("baz"), ty, hw::ModulePort::Direction::Output},
+      0,
+      {}});
 
   auto top = builder.create<HWModuleOp>(builder.getStringAttr("Top"), ports);
 
@@ -157,11 +156,12 @@ TEST(HWModuleOpTest, SetPortAttr) {
 
   NamedAttrList namedAttrs;
   namedAttrs.append(fooStrAttr, UnitAttr::get(&context));
-  
-  top.setPortAttrs(top.getPortIdForInputId(0), namedAttrs.getDictionary(&context));
 
-  top.setPortAttr(top.getPortIdForOutputId(0),
-   bazStrAttr, UnitAttr::get(&context));
+  top.setPortAttrs(top.getPortIdForInputId(0),
+                   namedAttrs.getDictionary(&context));
+
+  top.setPortAttr(top.getPortIdForOutputId(0), bazStrAttr,
+                  UnitAttr::get(&context));
 
   // Check attribute constraints
   auto adaptor = HWModuleOpAdaptor(top);
@@ -186,10 +186,10 @@ TEST(HWModuleOpTest, SetPortAttr) {
   EXPECT_FALSE(bazDict.contains(fooStrAttr));
   EXPECT_TRUE(bazDict.contains(bazStrAttr));
 
-  top.setPortAttrs(top.getPortIdForInputId(0),  emptyDictAttr);
+  top.setPortAttrs(top.getPortIdForInputId(0), emptyDictAttr);
   EXPECT_NE(top.getPerPortAttrsAttr(), emptyArrayAttr);
   EXPECT_TRUE(adaptor.verify(loc).succeeded());
-  
+
   top.setPortAttrs(top.getPortIdForOutputId(0), emptyDictAttr);
   EXPECT_EQ(top.getPerPortAttrsAttr(), emptyArrayAttr);
   EXPECT_TRUE(adaptor.verify(loc).succeeded());
