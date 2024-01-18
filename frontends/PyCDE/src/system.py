@@ -226,7 +226,9 @@ class System:
         m.generate()
         i += 1
 
-    self._appid_index = esi.AppIDIndex(self.mod.operation)
+    if len(self._generate_queue) == 0:
+      self.mod.operation.verify()
+      self._appid_index = esi.AppIDIndex(self.mod.operation)
 
   def get_instance(self,
                    mod_cls: object,

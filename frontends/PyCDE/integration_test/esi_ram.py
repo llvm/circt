@@ -13,7 +13,7 @@ from pycde.types import Bits
 import sys
 
 RamI64x8 = DeclareRandomAccessMemory(Bits(64), 256)
-WriteType = RamI64x8.write.type.write
+WriteType = RamI64x8.write.type.req
 
 
 @ServiceDecl
@@ -38,12 +38,11 @@ class MemWriter(Module):
     RamI64x8.read(read_bundle, AppID("int_reader"))
 
     write_bundle_type = RamI64x8.write.type
-    write_data, _ = write_bundle_type.write.wrap(
-        {
-            'data': read_data,
-            'address': 3
-        }, read_valid)
-    write_bundle, [ack] = write_bundle_type.pack(write=write_data)
+    write_data, _ = write_bundle_type.req.wrap({
+        'data': read_data,
+        'address': 3
+    }, read_valid)
+    write_bundle, [ack] = write_bundle_type.pack(req=write_data)
     RamI64x8.write(write_bundle, appid=AppID("int_writer"))
 
 
