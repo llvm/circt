@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -split-input-file -verify-diagnostics
+// RUN: circt-opt %s -split-input-file -verify-diagnostics -allow-unregistered-dialect
 
 func.func @combinational_condition() {
   %c0_i32 = arith.constant 0 : i32
