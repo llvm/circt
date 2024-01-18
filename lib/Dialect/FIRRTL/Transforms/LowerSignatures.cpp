@@ -297,8 +297,10 @@ static LogicalResult lowerModuleSignature(FModuleLike module, Convention conv,
     // zero-length vectors.
     for (auto idx = 0U; idx < oldNumArgs; ++idx) {
       if (!bounceWires[idx]) {
-        bounceWires[idx] =
-            theBuilder.create<WireOp>(module.getPortType(idx)).getResult();
+        bounceWires[idx] = theBuilder
+                               .create<WireOp>(module.getPortType(idx),
+                                               module.getPortNameAttr(idx))
+                               .getResult();
       }
       body->getArgument(idx).replaceAllUsesWith(bounceWires[idx]);
     }
@@ -409,6 +411,7 @@ static void lowerModuleBody(FModuleOp mod,
 
     auto oldDict = inst->getDiscardableAttrDictionary();
     auto newDict = newOp->getDiscardableAttrDictionary();
+    auto oldNames = inst.getPortNamesAttr();
     SmallVector<NamedAttribute> newAttrs;
     for (auto na : oldDict)
       if (!newDict.contains(na.getName()))
@@ -424,8 +427,11 @@ static void lowerModuleBody(FModuleOp mod,
         continue;
       }
       if (!bounce[p.portID]) {
-        bounce[p.portID] =
-            theBuilder.create<WireOp>(inst.getResult(p.portID).getType());
+        bounce[p.portID] = theBuilder.create<WireOp>(
+            inst.getResult(p.portID).getType(),
+            theBuilder.getStringAttr(
+                inst.getName() + "." +
+                oldNames[p.portID].cast<StringAttr>().getValue()));
         inst.getResult(p.portID).replaceAllUsesWith(
             bounce[p.portID].getResult());
       }
