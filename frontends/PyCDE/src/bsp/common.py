@@ -2,14 +2,12 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from os import name
-from requests import head
 from ..common import Clock, Input, Output
-from ..constructs import ControlReg, Mux, NamedWire, Reg, Wire
+from ..constructs import ControlReg, Mux, NamedWire, Wire
 from .. import esi
 from ..module import Module, generator
-from ..signals import ArraySignal, BundleSignal
-from ..types import Array, Bits, ChannelDirection, UInt
+from ..signals import BundleSignal
+from ..types import Array, Bits, ChannelDirection
 
 from typing import Dict, Tuple
 
@@ -19,6 +17,9 @@ VersionNumber = 0  # Version 0: format subject to change
 
 
 class ESI_Manifest_ROM(Module):
+  """Module which will be created later by CIRCT which will contain the
+  compressed manifest."""
+
   module_name = "__ESI_Manifest_ROM"
 
   clk = Clock()
@@ -28,6 +29,28 @@ class ESI_Manifest_ROM(Module):
 
 
 class AxiMMIO(esi.ServiceImplementation):
+  """MMIO service implementation with an AXI-lite protocol. This assumes a 20
+  bit address bus for 1MB of addressable MMIO space. Which should be fine for
+  now, though nothing should assume this limit. It also only supports 32-bit
+  aligned accesses and just throws awary the lower two bits of address.
+  
+  Only allows for one outstanding request at a time. If a client doesn't return
+  a response, the MMIO service will hang. TODO: add some kind of timeout.
+   
+  Implementation-defined MMIO layout:
+    - 0x0: 0 constanst
+    - 0x4: 0 constanst
+    - 0x8: Magic number low (0xE5100E51)
+    - 0xC: Magic number high (random constant: 0x207D98E5)
+    - 0x10: ESI version number (0)
+    - 0x14: Location of the manifest ROM (absolute address)
+
+    - 0x100: Start of MMIO space for requests.
+
+    - addr(Manifest ROM) + 0: Size of compressed manifest
+    - addr(Manifest ROM) + 4: Start of compressed manifest
+  """
+
   clk = Clock()
   rst = Input(Bits(1))
 
@@ -57,7 +80,7 @@ class AxiMMIO(esi.ServiceImplementation):
   bready = Input(Bits(1))
   bresp = Output(Bits(2))
 
-  # Start at this address
+  # Start at this address for assigning MMIO addresses to service requests.
   initial_offset: int = 0x100
 
   @generator
@@ -86,23 +109,35 @@ class AxiMMIO(esi.ServiceImplementation):
     return read_table, write_table, manifest_loc
 
   def build_read(self, manifest_loc: int, bundles):
+    """Builds the read side of the MMIO service."""
+
+    # Currently just exposes the header and manifest. Not any of the possible
+    # service requests.
+
     i32 = Bits(32)
     i2 = Bits(2)
     i1 = Bits(1)
-    addr_width = self.araddr.type.width
 
     address_written = NamedWire(i1, "address_written")
     response_written = NamedWire(i1, "response_written")
 
+    # Only allow one outstanding request at a time. Don't clear it until the
+    # output has been transmitted. This way, we don't have to deal with
+    # backpressure.
     req_outstanding = ControlReg(self.clk,
                                  self.rst, [address_written],
                                  [response_written],
                                  name="req_outstanding")
     self.arready = ~req_outstanding
+
+    # Capture the address if a the bus transaction occured.
     address_written.assign(self.arvalid & ~req_outstanding)
     address = self.araddr.reg(self.clk, ce=address_written, name="address")
     address_valid = address_written.reg(name="address_valid")
+    address_words = address[2:]  # Lop off the lower two bits.
 
+    # Set up the output of the data response pipeline. `data_pipeline*` are to
+    # be connected below.
     data_pipeline_valid = NamedWire(i1, "data_pipeline_valid")
     data_pipeline = NamedWire(i32, "data_pipeline")
     data_pipeline_rresp = NamedWire(i2, "data_pipeline_rresp")
@@ -111,7 +146,6 @@ class AxiMMIO(esi.ServiceImplementation):
                                 [response_written],
                                 name="data_out_valid")
     self.rvalid = data_out_valid
-    response_written.assign(data_out_valid & self.rready)
     self.rdata = data_pipeline.reg(self.clk,
                                    self.rst,
                                    ce=data_pipeline_valid,
@@ -120,25 +154,26 @@ class AxiMMIO(esi.ServiceImplementation):
                                          self.rst,
                                          ce=data_pipeline_valid,
                                          name="data_pipeline_rresp_reg")
+    # Clear the `req_outstanding` flag when the response has been transmitted.
+    response_written.assign(data_out_valid & self.rready)
 
-    address_offset_words = address[2:]
-
-    header_upper = NamedWire(
-        address_offset_words[AxiMMIO.initial_offset.bit_length() - 2:],
-        "header_upper")
+    # Handle reads from the header (< 0x100).
+    header_upper = address_words[AxiMMIO.initial_offset.bit_length() - 2:]
+    # Is the address in the header?
     header_sel = (header_upper == header_upper.type(0))
     header_sel.name = "header_sel"
+    # Layout the header as an array.
     header = Array(Bits(32), 6)(
         [0, 0, MagicNumberLo, MagicNumberHi, VersionNumber, manifest_loc])
     header.name = "header"
-    header_valid = address_valid
-    header_line_sel = NamedWire(address[2:5], "header_line_sel")
-    header_out = header[header_line_sel]
+    header_response_valid = address_valid  # Zero latency read.
+    header_out = header[address[2:5]]
     header_out.name = "header_out"
     header_rresp = i2(0)
 
+    # Handle reads from the manifest.
     rom_address = NamedWire(
-        (address_offset_words.as_uint() - (manifest_loc >> 2)).as_bits(30),
+        (address_words.as_uint() - (manifest_loc >> 2)).as_bits(30),
         "rom_address")
     mani_rom = ESI_Manifest_ROM(clk=self.clk, address=rom_address)
     mani_valid = address_valid.reg(self.clk,
@@ -149,16 +184,18 @@ class AxiMMIO(esi.ServiceImplementation):
     mani_rresp = i2(0)
     # mani_sel = (address.as_uint() >= manifest_loc)
 
-    data_mux_inputs = [header_out, mani_rom.data]
-    data_valid_mux_inputs = [header_valid, mani_valid]
-    rresp_mux_inputs = [header_rresp, mani_rresp]
-
+    # Mux the output depending on whether or not the address is in the header.
     sel = NamedWire(~header_sel, "sel")
+    data_mux_inputs = [header_out, mani_rom.data]
     data_pipeline.assign(Mux(sel, *data_mux_inputs))
-    data_pipeline_rresp.assign(Mux(sel, *rresp_mux_inputs))
+    data_valid_mux_inputs = [header_response_valid, mani_valid]
     data_pipeline_valid.assign(Mux(sel, *data_valid_mux_inputs))
+    rresp_mux_inputs = [header_rresp, mani_rresp]
+    data_pipeline_rresp.assign(Mux(sel, *rresp_mux_inputs))
 
   def build_write(self, bundles):
+    # TODO: this.
+
     # So that we don't wedge the AXI-lite for writes, just ack all of them.
     write_happened = Wire(Bits(1))
     latched_aw = ControlReg(self.clk, self.rst, [self.awvalid],
