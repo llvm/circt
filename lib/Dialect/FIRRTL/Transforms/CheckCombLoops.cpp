@@ -32,6 +32,7 @@
 
 #include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
@@ -312,8 +313,7 @@ public:
   // the corresponding output port. The granularity of the connectivity
   // relations is per field.
   void handleInstanceOp(InstanceOp inst) {
-    auto refMod =
-        dyn_cast_or_null<FModuleOp>(*instanceGraph.getReferencedModule(inst));
+    auto refMod = inst.getReferencedModule<FModuleOp>(instanceGraph);
     // TODO: External modules not handled !!
     if (!refMod)
       return;
