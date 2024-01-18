@@ -8,7 +8,7 @@ acc = esi.AcceleratorConnection(platform, sys.argv[2])
 
 d = acc.build_accelerator()
 
-mem_write = d.ports[esi.AppID("write")].write_port("write")
+mem_write = d.ports[esi.AppID("write")].write_port("req")
 mem_write.connect()
 mem_read_addr = d.ports[esi.AppID("read")].write_port("address")
 mem_read_addr.connect()

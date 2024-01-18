@@ -362,7 +362,7 @@ def DeclareRandomAccessMemory(inner_type: Type,
         BundledChannel("data", ChannelDirection.FROM, inner_type)
     ])
     write = Bundle([
-        BundledChannel("write", ChannelDirection.TO, write_struct),
+        BundledChannel("req", ChannelDirection.TO, write_struct),
         BundledChannel("ack", ChannelDirection.FROM, Bits(0))
     ])
 
