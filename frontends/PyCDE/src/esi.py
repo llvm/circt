@@ -4,10 +4,10 @@
 
 from .common import (AppID, Input, Output, _PyProxy, PortError)
 from .module import Generator, Module, ModuleLikeBuilderBase, PortProxyBase
-from .signals import BundleSignal, ChannelSignal, Signal, _FromCirctValue
+from .signals import BundleSignal, ChannelSignal, Signal, Struct, _FromCirctValue
 from .system import System
 from .types import (Bits, Bundle, BundledChannel, Channel, ChannelDirection,
-                    Type, types, _FromCirctType)
+                    StructType, Type, types, UInt, _FromCirctType)
 
 from .circt import ir
 from .circt.dialects import esi as raw_esi, hw, msft
@@ -471,6 +471,21 @@ class PureModule(Module):
     else:
       type_attr = ir.TypeAttr.get(type._type)
     esi.ESIPureModuleParamOp(name, type_attr)
+
+
+@ServiceDecl
+class MMIO:
+  """ESI standard service to request access to an MMIO region."""
+
+  read = ServiceDecl.From(
+      Bundle([
+          BundledChannel("offset", ChannelDirection.TO, Bits(32)),
+          BundledChannel("data", ChannelDirection.FROM, Bits(32))
+      ]))
+
+  @staticmethod
+  def _op(sym_name: ir.StringAttr):
+    return raw_esi.MMIOServiceDeclOp(sym_name)
 
 
 def package(sys: System):

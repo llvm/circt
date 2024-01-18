@@ -1,11 +1,12 @@
 # RUN: rm -rf %t
 # RUN: %PYTHON% %s %t 2>&1 | FileCheck %s
 
-from pycde import (Clock, Input, InputChannel, OutputChannel, Module, generator,
-                   types)
+from pycde import (Clock, Input, InputChannel, OutputChannel, Module, System,
+                   generator, types)
 from pycde import esi
 from pycde.common import AppID, Output, RecvBundle, SendBundle
 from pycde.constructs import Wire
+from pycde.esi import MMIO
 from pycde.types import (Bits, Bundle, BundledChannel, Channel,
                          ChannelDirection, ChannelSignaling, UInt, ClockType)
 from pycde.testing import unittestmodule
@@ -126,3 +127,23 @@ class RecvBundleTest(Module):
   def build(self):
     to_channels = self.b_recv.unpack(resp=self.i1_in)
     self.s1_out = to_channels['req']
+
+
+# CHECK-LABEL:  hw.module @MMIOReq()
+# CHECK-NEXT:     %c0_i32 = hw.constant 0 : i32
+# CHECK-NEXT:     %false = hw.constant false
+# CHECK-NEXT:     [[B:%.+]] = esi.service.req.to_client <@MMIO::@read>(#esi.appid<"mmio_req">) : !esi.bundle<[!esi.channel<i32> to "offset", !esi.channel<i32> from "data"]>
+# CHECK-NEXT:     %chanOutput, %ready = esi.wrap.vr %c0_i32, %false : i32
+# CHECK-NEXT:     %offset = esi.bundle.unpack %chanOutput from [[B]] : !esi.bundle<[!esi.channel<i32> to "offset", !esi.channel<i32> from "data"]>
+@unittestmodule(esi_sys=True)
+class MMIOReq(Module):
+
+  @generator
+  def build(ports):
+    c32 = Bits(32)(0)
+    c1 = Bits(1)(0)
+
+    read_bundle = MMIO.read(AppID("mmio_req"))
+
+    data, _ = Channel(Bits(32)).wrap(c32, c1)
+    _ = read_bundle.unpack(data=data)
