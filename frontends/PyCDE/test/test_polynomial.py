@@ -109,7 +109,7 @@ class PolynomialSystem(Module):
     m.name = "pexternInst"
     w1.assign(0)
 
-    self._set_outputs(poly._outputs())
+    self._set_outputs(poly.outputs())
 
 
 poly = pycde.System([PolynomialSystem],
