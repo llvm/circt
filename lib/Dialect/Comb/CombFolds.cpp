@@ -1466,7 +1466,6 @@ LogicalResult XorOp::canonicalize(XorOp op, PatternRewriter &rewriter) {
   if (tryFlatteningOperands(op, rewriter))
     return success();
 
-
   // extracts only of xor(...) -> xor(extract()...)
   if (narrowOperationWidth(op, true, rewriter))
     return success();
