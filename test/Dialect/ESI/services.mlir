@@ -205,7 +205,7 @@ hw.module @CallableAccel1(in %clk: !seq.clock, in %rst: i1) {
 }
 
 esi.service.std.mmio @mmio
-!mmioReq = !esi.bundle<[!esi.channel<i32> from "offset", !esi.channel<i32> to "data"]>
+!mmioReq = !esi.bundle<[!esi.channel<i32> to "offset", !esi.channel<i32> from "data"]>
 
 // CONN-LABEL:  hw.module @MMIOManifest(in %clk : !seq.clock, in %rst : i1, in %manifest : !esi.bundle<[!esi.channel<i32> from "offset", !esi.channel<i32> to "data"]>) {
 // CONN-NEXT:     esi.manifest.req #esi.appid<"manifest">, <@mmio::@read> std "esi.service.std.mmio", toClient, !esi.bundle<[!esi.channel<i32> from "offset", !esi.channel<i32> to "data"]>
