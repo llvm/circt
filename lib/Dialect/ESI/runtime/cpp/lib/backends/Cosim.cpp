@@ -111,12 +111,12 @@ public:
   CosimMMIO(EsiLowLevel::Client &llClient, kj::WaitScope &waitScope)
       : llClient(llClient), waitScope(waitScope) {}
 
-  uint64_t read(uint32_t addr) const override {
+  uint32_t read(uint32_t addr) const override {
     auto req = llClient.readMMIORequest();
     req.setAddress(addr);
     return req.send().wait(waitScope).getData();
   }
-  void write(uint32_t addr, uint64_t data) override {
+  void write(uint32_t addr, uint32_t data) override {
     auto req = llClient.writeMMIORequest();
     req.setAddress(addr);
     req.setData(data);
@@ -350,8 +350,8 @@ Service *CosimAccelerator::createService(Service::Type svcType, AppIDPath id,
   if (svcType == typeid(MMIO))
     return new CosimMMIO(impl->lowLevel, impl->waitScope);
   else if (svcType == typeid(SysInfo))
-    // return new MMIOSysInfo(getService<MMIO>());
-    return new CosimSysInfo(impl->cosim, impl->waitScope);
+    return new MMIOSysInfo(getService<MMIO>());
+  // return new CosimSysInfo(impl->cosim, impl->waitScope);
   else if (svcType == typeid(CustomService) && implName == "cosim")
     return new CosimCustomService(*impl, id, details, clients);
   return nullptr;

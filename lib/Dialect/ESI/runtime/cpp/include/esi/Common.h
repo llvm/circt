@@ -84,4 +84,12 @@ using ServiceImplDetails = std::map<std::string, std::any>;
 std::ostream &operator<<(std::ostream &, const esi::ModuleInfo &);
 std::ostream &operator<<(std::ostream &, const esi::AppID &);
 
+//===----------------------------------------------------------------------===//
+// Functions which should be in the standard library.
+//===----------------------------------------------------------------------===//
+
+namespace esi {
+std::string to_hex(uint32_t val);
+}
+
 #endif // ESI_COMMON_H

@@ -337,7 +337,11 @@ class _ServiceGeneratorRegistry:
       return False
     (impl, sys) = self._registry[impl_name]
     with sys:
-      return impl._builder.generate_svc_impl(serviceReq=req.opview)
+      ret = impl._builder.generate_svc_impl(serviceReq=req.opview)
+    # The generator could have instantiated new modules, so we need to generate
+    # them.
+    sys.generate(skip_appid_index=True)
+    return ret
 
 
 _service_generator_registry = _ServiceGeneratorRegistry()
