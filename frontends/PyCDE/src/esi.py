@@ -338,8 +338,9 @@ class _ServiceGeneratorRegistry:
     (impl, sys) = self._registry[impl_name]
     with sys:
       ret = impl._builder.generate_svc_impl(serviceReq=req.opview)
-    # The generator could have instantiated new modules, so we need to generate
-    # them.
+    # The service implementation generator could have instantiated new modules,
+    # so we need to generate them. Don't run the appID indexer since during a
+    # pass, the IR can be invalid and the indexers assumes it is valid.
     sys.generate(skip_appid_index=True)
     return ret
 

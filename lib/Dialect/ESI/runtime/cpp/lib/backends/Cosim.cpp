@@ -347,14 +347,23 @@ Service *CosimAccelerator::createService(Service::Type svcType, AppIDPath id,
                                          std::string implName,
                                          const ServiceImplDetails &details,
                                          const HWClientDetails &clients) {
-  if (svcType == typeid(MMIO))
+  if (svcType == typeid(MMIO)) {
     return new CosimMMIO(impl->lowLevel, impl->waitScope);
-  else if (svcType == typeid(SysInfo))
-    return new MMIOSysInfo(getService<MMIO>());
-  // return new CosimSysInfo(impl->cosim, impl->waitScope);
-  else if (svcType == typeid(CustomService) && implName == "cosim")
+  } else if (svcType == typeid(SysInfo)) {
+    switch (manifestMethod) {
+    case ManifestMethod::Cosim:
+      return new CosimSysInfo(impl->cosim, impl->waitScope);
+    case ManifestMethod::MMIO:
+      return new MMIOSysInfo(getService<services::MMIO>());
+    }
+  } else if (svcType == typeid(CustomService) && implName == "cosim") {
     return new CosimCustomService(*impl, id, details, clients);
+  }
   return nullptr;
+}
+
+void CosimAccelerator::setManifestMethod(ManifestMethod method) {
+  manifestMethod = method;
 }
 
 REGISTER_ACCELERATOR("cosim", backends::cosim::CosimAccelerator);

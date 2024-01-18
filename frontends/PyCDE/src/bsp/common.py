@@ -33,10 +33,10 @@ class AxiMMIO(esi.ServiceImplementation):
   bit address bus for 1MB of addressable MMIO space. Which should be fine for
   now, though nothing should assume this limit. It also only supports 32-bit
   aligned accesses and just throws awary the lower two bits of address.
-  
+
   Only allows for one outstanding request at a time. If a client doesn't return
   a response, the MMIO service will hang. TODO: add some kind of timeout.
-   
+
   Implementation-defined MMIO layout:
     - 0x0: 0 constanst
     - 0x4: 0 constanst
@@ -45,10 +45,14 @@ class AxiMMIO(esi.ServiceImplementation):
     - 0x10: ESI version number (0)
     - 0x14: Location of the manifest ROM (absolute address)
 
-    - 0x100: Start of MMIO space for requests.
+    - 0x100: Start of MMIO space for requests. Mapping is contained in the
+             manifest so can be dynamically queried.
 
     - addr(Manifest ROM) + 0: Size of compressed manifest
     - addr(Manifest ROM) + 4: Start of compressed manifest
+
+  This layout _should_ be pretty standard, but different BSPs may have various
+  different restrictions.
   """
 
   clk = Clock()
@@ -176,11 +180,12 @@ class AxiMMIO(esi.ServiceImplementation):
         (address_words.as_uint() - (manifest_loc >> 2)).as_bits(30),
         "rom_address")
     mani_rom = ESI_Manifest_ROM(clk=self.clk, address=rom_address)
-    mani_valid = address_valid.reg(self.clk,
-                                   self.rst,
-                                   rst_value=i1(0),
-                                   cycles=2,
-                                   name="mani_valid_reg")
+    mani_valid = address_valid.reg(
+        self.clk,
+        self.rst,
+        rst_value=i1(0),
+        cycles=2,  # Two cycle read to match the ROM latency.
+        name="mani_valid_reg")
     mani_rresp = i2(0)
     # mani_sel = (address.as_uint() >= manifest_loc)
 

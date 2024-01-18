@@ -23,6 +23,9 @@ __root_dir__ = Path(__file__).parent.parent
 
 
 class Cosim_MMIO(Module):
+  """External module backed by DPI calls into the coimulation driver. Provides
+  an AXI-lite interface. An emulator."""
+
   clk = Clock()
   rst = Input(Bits(1))
 
@@ -72,6 +75,11 @@ def CosimBSP(user_module):
                                 impl_type=ir.StringAttr.get("cosim"),
                                 inputs=[ports.clk.value, ports.rst.value])
 
+      # Instantiate both the Cosim MMIO emulator and the AXI-lite MMIO service
+      # implementation and wire them together. The CosimMMIO emulator has a
+      # 32-bit address whereas the AXI-lite MMIO service implementation has a
+      # 20-bit address. Other than that, the ports are the same so use some
+      # PyCDE magic to wire them together.
       cosim_mmio_wire_inputs = {
           pn: Wire(ty)
           for pn, ty in Cosim_MMIO.inputs()
