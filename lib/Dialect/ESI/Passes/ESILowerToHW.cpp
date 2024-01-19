@@ -669,11 +669,12 @@ void ESItoHWPass::runOnOperation() {
   pass1Patterns.insert<CosimFromHostLowering>(esiBuilder);
   pass1Patterns.insert<NullSourceOpLowering>(ctxt);
 
-  if (platform == Platform::cosim) {
+  if (platform == Platform::cosim)
     pass1Patterns.insert<CosimManifestLowering>(ctxt);
-  } else if (platform == Platform::fpga) {
+  else if (platform == Platform::fpga)
     pass1Patterns.insert<ManifestRomLowering>(ctxt);
-  }
+  else
+    pass1Patterns.insert<RemoveOpLowering<CompressedManifestOp>>(ctxt);
 
   // Run the conversion.
   if (failed(

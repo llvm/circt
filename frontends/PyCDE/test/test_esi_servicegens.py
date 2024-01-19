@@ -1,7 +1,7 @@
 # RUN: rm -rf %t
 # RUN: %PYTHON% %s %t 2>&1 | FileCheck %s
 
-from pycde import (Clock, Input, Module, generator)
+from pycde import (Clock, Input, Module, System, generator)
 from pycde import esi
 from pycde.common import AppID, Output
 from pycde.constructs import Wire
@@ -114,6 +114,8 @@ class MultiplexerTop(Module):
 
   @generator
   def construct(ports):
+    System.current().platform = "cosim"
+
     m = MultiplexerService(HostComms,
                            appid=AppID("mux", 0),
                            clk=ports.clk,
