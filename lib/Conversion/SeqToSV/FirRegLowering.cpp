@@ -8,6 +8,7 @@
 
 #include "FirRegLowering.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/Seq/SeqOps.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/DenseSet.h"
@@ -48,7 +49,7 @@ FirRegLowering::FirRegLowering(TypeConverter &typeConverter,
       disableRegRandomization(disableRegRandomization),
       emitSeparateAlwaysBlocks(emitSeparateAlwaysBlocks) {
   scc = std::make_unique<FirRegSCC>(module, [&](Operation *op) {
-    return isa<sv::RegOp, hw::InstanceOp>(op);
+    return isa<sv::RegOp, seq::FirRegOp, hw::InstanceOp>(op);
   });
 }
 
