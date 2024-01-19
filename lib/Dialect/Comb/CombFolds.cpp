@@ -1453,7 +1453,7 @@ LogicalResult XorOp::canonicalize(XorOp op, PatternRewriter &rewriter) {
     }
   }
 
-  // and(x, and(...)) -> and(x, ...) -- flatten
+  // xor(x, xor(...)) -> xor(x, ...) -- flatten
   if (tryFlatteningOperands(op, rewriter))
     return success();
 
