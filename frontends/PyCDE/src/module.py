@@ -500,7 +500,7 @@ class ModuleBuilder(ModuleLikeBuilderBase):
       hw.OutputOp([o.value for o in ports._output_values])
 
 
-class Module(metaclass=ModuleLikeType):
+class Module(_PyProxy, metaclass=ModuleLikeType):
   """Subclass this class to define a regular PyCDE or external module. To define
   a module in PyCDE, supply a `@generator` method. To create an external module,
   don't. In either case, a list of ports is required.
@@ -522,6 +522,7 @@ class Module(metaclass=ModuleLikeType):
     """Create an instance of this module. Instance namd and appid are optional.
     All inputs must be specified. If a signal has not been produced yet, use the
     `Wire` construct and assign the signal to that wire later on."""
+    from .system import System
 
     kwargs = dict()
 
@@ -542,9 +543,13 @@ class Module(metaclass=ModuleLikeType):
         kwargs["appid"] = appid
 
     self.inst = self._builder.instantiate(self, inputs, **kwargs)
-
     if appid is not None:
       self.inst.operation.attributes[AppID.AttributeName] = appid._appid
+
+    System.current()._op_cache.register_pyproxy(self)
+
+  def clear_op_refs(self):
+    self.inst = None
 
   @classmethod
   def print(cls, out=sys.stdout):
