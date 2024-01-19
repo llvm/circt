@@ -47,16 +47,28 @@ string MMIO::getServiceSymbol() const { return "__builtin_MMIO"; }
 MMIOSysInfo::MMIOSysInfo(const MMIO *mmio) : mmio(mmio) {}
 
 uint32_t MMIOSysInfo::getEsiVersion() const {
-  uint32_t hi = mmio->read(MagicNumOffset);
-  uint32_t lo = mmio->read(MagicNumOffset + 4);
-  if (hi != MagicNumberHi || lo != MagicNumberLo)
-    throw runtime_error("ESI magic number not found");
-  return mmio->read(VersionNumberOffset);
+  uint32_t reg;
+  if ((reg = mmio->read(MetadataOffset)) != MagicNumberLo)
+    throw runtime_error("Invalid magic number low bits: " + toHex(reg));
+  if ((reg = mmio->read(MetadataOffset + 4)) != MagicNumberHi)
+    throw runtime_error("Invalid magic number high bits: " + toHex(reg));
+  return mmio->read(MetadataOffset + 8);
 }
 
 vector<uint8_t> MMIOSysInfo::getCompressedManifest() const {
-  assert(false && "Not implemented");
-  throw runtime_error("Not implemented");
+  uint32_t manifestPtr = mmio->read(MetadataOffset + 12);
+  uint32_t size = mmio->read(manifestPtr);
+  uint32_t numWords = (size + 3) / 4;
+  vector<uint32_t> manifestWords(numWords);
+  for (size_t i = 0; i < numWords; ++i)
+    manifestWords[i] = mmio->read(manifestPtr + 4 + (i * 4));
+
+  vector<uint8_t> manifest;
+  for (size_t i = 0; i < size; ++i) {
+    uint32_t word = manifestWords[i / 4];
+    manifest.push_back(word >> (8 * (i % 4)));
+  }
+  return manifest;
 }
 
 CustomService::CustomService(AppIDPath idPath,

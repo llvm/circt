@@ -15,6 +15,15 @@ mem_read_addr.connect()
 mem_read_data = d.ports[esi.AppID("read")].read_port("data")
 mem_read_data.connect()
 
+if (platform == "cosim"):
+  # Baseline
+  m = acc.manifest()
+
+  # MMIO method
+  acc.cpp_accel.set_manifest_method(esi.esiCppAccel.ManifestMMIO)
+  m_alt = acc.manifest()
+  assert len(m.type_table) == len(m_alt.type_table)
+
 
 def read(addr: int) -> bytearray:
   mem_read_addr.write([addr])

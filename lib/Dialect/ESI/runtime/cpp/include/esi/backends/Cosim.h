@@ -37,6 +37,14 @@ public:
   static std::unique_ptr<AcceleratorConnection>
   connect(std::string connectionString);
 
+  // Different ways to retrieve the manifest in Cosimulation.
+  enum ManifestMethod {
+    Cosim, // Use the backdoor cosim interface. Default.
+    MMIO,  // Use MMIO emulation.
+  };
+  // Set the way this connection will retrieve the manifest.
+  void setManifestMethod(ManifestMethod method);
+
 protected:
   virtual Service *createService(Service::Type service, AppIDPath path,
                                  std::string implName,
@@ -45,6 +53,7 @@ protected:
 
 private:
   std::unique_ptr<Impl> impl;
+  ManifestMethod manifestMethod = Cosim;
 };
 
 } // namespace cosim
