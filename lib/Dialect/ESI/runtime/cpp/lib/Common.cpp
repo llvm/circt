@@ -17,7 +17,7 @@
 #include <iostream>
 #include <sstream>
 
-std::string esi::to_hex(uint32_t val) {
+std::string esi::toHex(uint32_t val) {
   std::ostringstream ss;
   ss << std::hex << val;
   return ss.str();

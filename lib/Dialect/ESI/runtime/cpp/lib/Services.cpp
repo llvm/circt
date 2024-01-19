@@ -49,9 +49,9 @@ MMIOSysInfo::MMIOSysInfo(const MMIO *mmio) : mmio(mmio) {}
 uint32_t MMIOSysInfo::getEsiVersion() const {
   uint32_t reg;
   if ((reg = mmio->read(MetadataOffset)) != MagicNumberLo)
-    throw runtime_error("Invalid magic number low bits: " + to_hex(reg));
+    throw runtime_error("Invalid magic number low bits: " + toHex(reg));
   if ((reg = mmio->read(MetadataOffset + 4)) != MagicNumberHi)
-    throw runtime_error("Invalid magic number high bits: " + to_hex(reg));
+    throw runtime_error("Invalid magic number high bits: " + toHex(reg));
   return mmio->read(MetadataOffset + 8);
 }
 

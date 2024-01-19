@@ -89,7 +89,7 @@ std::ostream &operator<<(std::ostream &, const esi::AppID &);
 //===----------------------------------------------------------------------===//
 
 namespace esi {
-std::string to_hex(uint32_t val);
-}
+std::string toHex(uint32_t val);
+} // namespace esi
 
 #endif // ESI_COMMON_H
