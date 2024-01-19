@@ -52,8 +52,8 @@ declare_mlir_python_sources(PyCDESources
   bsp/cosim.py
   bsp/xrt.py
   bsp/EsiXrtPython.cpp
-  bsp/Makefile.xrt.j2
-  bsp/xrt_package.tcl.j2
+  bsp/Makefile.xrt.mk
+  bsp/xrt_package.tcl
   bsp/xrt_api.py
   bsp/xrt.ini
   bsp/xsim.tcl
