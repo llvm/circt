@@ -142,6 +142,10 @@ static bool shouldBeFlattened(Operation *op) {
 /// Example: op(1, 2, op(3, 4), 5) -> op(1, 2, 3, 4, 5)  // returns true
 ///
 static bool tryFlatteningOperands(Operation *op, PatternRewriter &rewriter) {
+  // Skip if the operation should be flattened by another operation.
+  if (shouldBeFlattened(op))
+    return false;
+
   auto inputs = op->getOperands();
 
   SmallVector<Value, 4> newOperands;
@@ -954,10 +958,6 @@ LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
   auto size = inputs.size();
   assert(size > 1 && "expected 2 or more operands, `fold` should handle this");
 
-  // Skip if the operation should be flattened by another operation.
-  if (shouldBeFlattened(op))
-    return failure();
-
   // and(x, and(...)) -> and(x, ...) -- flatten
   if (tryFlatteningOperands(op, rewriter))
     return success();
@@ -1244,10 +1244,6 @@ LogicalResult OrOp::canonicalize(OrOp op, PatternRewriter &rewriter) {
   auto size = inputs.size();
   assert(size > 1 && "expected 2 or more operands");
 
-  // Skip if the operation should be flattened by another operation.
-  if (shouldBeFlattened(op))
-    return failure();
-
   // or(x, or(...)) -> or(x, ...) -- flatten
   if (tryFlatteningOperands(op, rewriter))
     return success();
@@ -1458,10 +1454,6 @@ LogicalResult XorOp::canonicalize(XorOp op, PatternRewriter &rewriter) {
     }
   }
 
-  // Skip if the operation should be flattened by another operation.
-  if (shouldBeFlattened(op))
-    return failure();
-
   // and(x, and(...)) -> and(x, ...) -- flatten
   if (tryFlatteningOperands(op, rewriter))
     return success();
@@ -1625,10 +1617,6 @@ LogicalResult AddOp::canonicalize(AddOp op, PatternRewriter &rewriter) {
     return success();
   }
 
-  // Skip if the operation should be flattened by another operation.
-  if (shouldBeFlattened(op))
-    return failure();
-
   // add(a, add(...)) -> add(a, ...) -- flatten
   if (tryFlatteningOperands(op, rewriter))
     return success();
@@ -1720,10 +1708,6 @@ LogicalResult MulOp::canonicalize(MulOp op, PatternRewriter &rewriter) {
                                          newOperands);
     return success();
   }
-
-  // Skip if the operation should be flattened by another operation.
-  if (shouldBeFlattened(op))
-    return failure();
 
   // mul(a, mul(...)) -> mul(a, ...) -- flatten
   if (tryFlatteningOperands(op, rewriter))
