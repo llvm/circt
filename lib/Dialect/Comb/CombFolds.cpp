@@ -121,25 +121,62 @@ static inline ComplementMatcher<SubType> m_Complement(const SubType &subExpr) {
   return ComplementMatcher<SubType>(subExpr);
 }
 
+/// Return true if the op will be flattened afterwards. Op will be flattend if
+/// it has a single user which has a same op type.
+static bool shouldBeFlattened(Operation *op) {
+  assert((isa<AndOp, OrOp, XorOp, AddOp, MulOp>(op) &&
+          "must be commutative operations"));
+  if (op->hasOneUse()) {
+    auto *user = *op->getUsers().begin();
+    return user->getName() == op->getName() &&
+           op->getAttrOfType<UnitAttr>("twoState") ==
+               user->getAttrOfType<UnitAttr>("twoState");
+  }
+  return false;
+}
+
 /// Flattens a single input in `op` if `hasOneUse` is true and it can be defined
 /// as an Op. Returns true if successful, and false otherwise.
 ///
 /// Example: op(1, 2, op(3, 4), 5) -> op(1, 2, 3, 4, 5)  // returns true
 ///
 static bool tryFlatteningOperands(Operation *op, PatternRewriter &rewriter) {
+  // Skip if the operation should be flattened by another operation.
+  if (shouldBeFlattened(op))
+    return false;
+
   auto inputs = op->getOperands();
 
-  for (size_t i = 0, size = inputs.size(); i != size; ++i) {
-    Operation *flattenOp = inputs[i].getDefiningOp();
-    if (!flattenOp || flattenOp->getName() != op->getName())
-      continue;
+  SmallVector<Value, 4> newOperands;
+  SmallVector<Location, 4> newLocations{op->getLoc()};
+  newOperands.reserve(inputs.size());
+  struct Element {
+    decltype(inputs.begin()) current, end;
+  };
 
-    // Check for loops
-    if (flattenOp == op)
+  SmallVector<Element> worklist;
+  worklist.push_back({inputs.begin(), inputs.end()});
+  bool binFlag = op->hasAttrOfType<UnitAttr>("twoState");
+  bool changed = false;
+  while (!worklist.empty()) {
+    auto &element = worklist.back(); // Do not pop. Take ref.
+
+    // Pop when we finished traversing the current operand range.
+    if (element.current == element.end) {
+      worklist.pop_back();
       continue;
+    }
+
+    Value value = *element.current++;
+    auto *flattenOp = value.getDefiningOp();
+    if (!flattenOp || flattenOp->getName() != op->getName() ||
+        flattenOp == op || binFlag != op->hasAttrOfType<UnitAttr>("twoState")) {
+      newOperands.push_back(value);
+      continue;
+    }
 
     // Don't duplicate logic when it has multiple uses.
-    if (!inputs[i].hasOneUse()) {
+    if (!value.hasOneUse()) {
       // We can fold a multi-use binary operation into this one if this allows a
       // constant to fold though.  For example, fold
       //    (or a, b, c, (or d, cst1), cst2) --> (or a, b, c, d, cst1, cst2)
@@ -149,34 +186,30 @@ static bool tryFlatteningOperands(Operation *op, PatternRewriter &rewriter) {
       // between the two ops if duplicated.
       if (flattenOp->getNumOperands() != 2 || !isa<AndOp, OrOp, XorOp>(op) ||
           !flattenOp->getOperand(1).getDefiningOp<hw::ConstantOp>() ||
-          !inputs.back().getDefiningOp<hw::ConstantOp>())
+          !inputs.back().getDefiningOp<hw::ConstantOp>()) {
+        newOperands.push_back(value);
         continue;
+      }
     }
 
-    // Otherwise, flatten away.
+    changed = true;
+
+    // Otherwise, push operands into worklist.
     auto flattenOpInputs = flattenOp->getOperands();
-
-    SmallVector<Value, 4> newOperands;
-    newOperands.reserve(size + flattenOpInputs.size());
-
-    auto flattenOpIndex = inputs.begin() + i;
-    newOperands.append(inputs.begin(), flattenOpIndex);
-    newOperands.append(flattenOpInputs.begin(), flattenOpInputs.end());
-    newOperands.append(flattenOpIndex + 1, inputs.end());
-
-    Value result =
-        createGenericOp(op->getLoc(), op->getName(), newOperands, rewriter);
-
-    // If the original operation and flatten operand have bin flags, propagte
-    // the flag to new one.
-    if (op->hasAttrOfType<UnitAttr>("twoState") &&
-        flattenOp->hasAttrOfType<UnitAttr>("twoState"))
-      result.getDefiningOp()->setAttr("twoState", rewriter.getUnitAttr());
-
-    replaceOpAndCopyName(rewriter, op, result);
-    return true;
+    worklist.push_back({flattenOpInputs.begin(), flattenOpInputs.end()});
+    newLocations.push_back(flattenOp->getLoc());
   }
-  return false;
+
+  if (!changed)
+    return false;
+
+  Value result = createGenericOp(FusedLoc::get(op->getContext(), newLocations),
+                                 op->getName(), newOperands, rewriter);
+  if (binFlag)
+    result.getDefiningOp()->setAttr("twoState", rewriter.getUnitAttr());
+
+  replaceOpAndCopyName(rewriter, op, result);
+  return true;
 }
 
 // Given a range of uses of an operation, find the lowest and highest bits
@@ -924,6 +957,10 @@ LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
   auto size = inputs.size();
   assert(size > 1 && "expected 2 or more operands, `fold` should handle this");
 
+  // and(x, and(...)) -> and(x, ...) -- flatten
+  if (tryFlatteningOperands(op, rewriter))
+    return success();
+
   // and(..., x, ..., x) -> and(..., x, ...) -- idempotent
   // Trivial and(x), and(x, x) cases are handled by [AndOp::fold] above.
   if (size > 2 && canonicalizeIdempotentInputs(op, rewriter))
@@ -1030,10 +1067,6 @@ LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
           return success();
     }
   }
-
-  // and(x, and(...)) -> and(x, ...) -- flatten
-  if (tryFlatteningOperands(op, rewriter))
-    return success();
 
   // extracts only of and(...) -> and(extract()...)
   if (narrowOperationWidth(op, true, rewriter))
@@ -1210,6 +1243,10 @@ LogicalResult OrOp::canonicalize(OrOp op, PatternRewriter &rewriter) {
   auto size = inputs.size();
   assert(size > 1 && "expected 2 or more operands");
 
+  // or(x, or(...)) -> or(x, ...) -- flatten
+  if (tryFlatteningOperands(op, rewriter))
+    return success();
+
   // or(..., x, ..., x, ...) -> or(..., x) -- idempotent
   // Trivial or(x), or(x, x) cases are handled by [OrOp::fold].
   if (size > 2 && canonicalizeIdempotentInputs(op, rewriter))
@@ -1245,10 +1282,6 @@ LogicalResult OrOp::canonicalize(OrOp op, PatternRewriter &rewriter) {
           return success();
     }
   }
-
-  // or(x, or(...)) -> or(x, ...) -- flatten
-  if (tryFlatteningOperands(op, rewriter))
-    return success();
 
   // or(..., concat(x, cst1), concat(cst2, y)
   //    ==> or(..., concat(x, cst3, y)), when x and y don't overlap.
@@ -1420,7 +1453,7 @@ LogicalResult XorOp::canonicalize(XorOp op, PatternRewriter &rewriter) {
     }
   }
 
-  // xor(x, xor(...)) -> xor(x, ...) -- flatten
+  // and(x, and(...)) -> and(x, ...) -- flatten
   if (tryFlatteningOperands(op, rewriter))
     return success();
 
@@ -1583,7 +1616,7 @@ LogicalResult AddOp::canonicalize(AddOp op, PatternRewriter &rewriter) {
     return success();
   }
 
-  // add(x, add(...)) -> add(x, ...) -- flatten
+  // add(a, add(...)) -> add(a, ...) -- flatten
   if (tryFlatteningOperands(op, rewriter))
     return success();
 
