@@ -216,7 +216,7 @@ struct IfOpHoisting : OpConversionPattern<IfOp> {
   LogicalResult
   matchAndRewrite(IfOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.updateRootInPlace(op, [&]() {
+    rewriter.modifyOpInPlace(op, [&]() {
       if (!op.thenBlock()->without_terminator().empty()) {
         rewriter.splitBlock(op.thenBlock(), --op.thenBlock()->end());
         rewriter.inlineBlockBefore(&op.getThenRegion().front(), op);

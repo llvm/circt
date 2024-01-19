@@ -296,7 +296,7 @@ LogicalResult MemWritePortEnableAndMaskCanonicalizer::matchAndRewrite(
       if (arcMapping.count(defOp.getNameAttr())) {
         auto arcWithoutEnable = arcMapping[defOp.getNameAttr()];
         // Remove the enable attribute
-        rewriter.updateRootInPlace(op, [&]() {
+        rewriter.modifyOpInPlace(op, [&]() {
           op.setEnable(false);
           op.setArc(arcWithoutEnable.getValue());
         });
@@ -310,7 +310,7 @@ LogicalResult MemWritePortEnableAndMaskCanonicalizer::matchAndRewrite(
       symbolCache.removeDefinitionAndAllUsers(defOp);
 
       // Remove the enable attribute
-      rewriter.updateRootInPlace(op, [&]() {
+      rewriter.modifyOpInPlace(op, [&]() {
         op.setEnable(false);
         op.setArc(newName);
       });
@@ -334,9 +334,9 @@ LogicalResult MemWritePortEnableAndMaskCanonicalizer::matchAndRewrite(
 
       // Remove the enable output from the current arc
       auto *terminator = defOp.getBodyBlock().getTerminator();
-      rewriter.updateRootInPlace(
+      rewriter.modifyOpInPlace(
           terminator, [&]() { terminator->eraseOperand(op.getEnableIdx()); });
-      rewriter.updateRootInPlace(defOp, [&]() {
+      rewriter.modifyOpInPlace(defOp, [&]() {
         defOp.setName(newName);
         defOp.setFunctionType(
             rewriter.getFunctionType(defOp.getArgumentTypes(), newResultTypes));
@@ -536,7 +536,7 @@ SinkArcInputsPattern::matchAndRewrite(DefineOp op,
       else
         newInputs.push_back(value);
     }
-    rewriter.updateRootInPlace(
+    rewriter.modifyOpInPlace(
         callOp, [&]() { callOp.getArgOperandsMutable().assign(newInputs); });
     for (auto value : maybeUnusedValues)
       if (value.use_empty())

@@ -325,13 +325,13 @@ struct FuncOpPattern : public OpConversionPattern<func::FuncOp> {
   LogicalResult
   matchAndRewrite(func::FuncOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.startRootUpdate(op);
+    rewriter.startOpModification(op);
 
     if (!op.isExternal())
       if (failed(insertMergeBlocks(op.getRegion(), rewriter)))
         return failure();
 
-    rewriter.finalizeRootUpdate(op);
+    rewriter.finalizeOpModification(op);
     rewrittenFuncs.insert(op);
 
     return success();

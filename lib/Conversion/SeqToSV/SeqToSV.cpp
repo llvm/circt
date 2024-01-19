@@ -264,7 +264,7 @@ public:
     if (Operation *inputOp = adaptor.getInput().getDefiningOp())
       if (!isa<mlir::UnrealizedConversionCastOp>(inputOp))
         if (auto name = chooseName(op, inputOp))
-          rewriter.updateRootInPlace(
+          rewriter.modifyOpInPlace(
               inputOp, [&] { inputOp->setAttr("sv.namehint", name); });
 
     rewriter.replaceOp(op, adaptor.getInput());

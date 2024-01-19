@@ -59,7 +59,7 @@ static LogicalResult convertModuleOpTypes(HWModuleLike modOp,
     return failure();
 
   auto newType = ModuleType::get(rewriter.getContext(), newPorts);
-  rewriter.updateRootInPlace(modOp, [&] { modOp.setHWModuleType(newType); });
+  rewriter.modifyOpInPlace(modOp, [&] { modOp.setHWModuleType(newType); });
 
   return success();
 }
