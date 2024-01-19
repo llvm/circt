@@ -9,10 +9,10 @@ import typing
 __all__ = [
     'Accelerator', 'AcceleratorConnection', 'AnyType', 'AppID', 'ArrayType',
     'BitVectorType', 'BitsType', 'BundlePort', 'BundleType', 'ChannelPort',
-    'ChannelType', 'Cosim', 'CosimManifestMethod', 'Direction', 'From',
-    'HWModule', 'Instance', 'IntegerType', 'MMIO', 'Manifest', 'ModuleInfo',
-    'ReadChannelPort', 'SIntType', 'StructType', 'SysInfo', 'To', 'Type',
-    'UIntType', 'VoidType', 'WriteChannelPort'
+    'ChannelType', 'CosimManifestMethod', 'Direction', 'From', 'HWModule',
+    'Instance', 'IntegerType', 'MMIO', 'Manifest', 'ManifestCosim',
+    'ManifestMMIO', 'ModuleInfo', 'ReadChannelPort', 'SIntType', 'StructType',
+    'SysInfo', 'To', 'Type', 'UIntType', 'VoidType', 'WriteChannelPort'
 ]
 
 
@@ -129,17 +129,17 @@ class CosimManifestMethod:
   """
     Members:
     
-      Cosim
+      ManifestCosim
     
-      MMIO
+      ManifestMMIO
     """
-  Cosim: typing.ClassVar[
-      CosimManifestMethod]  # value = <CosimManifestMethod.Cosim: 0>
-  MMIO: typing.ClassVar[
-      CosimManifestMethod]  # value = <CosimManifestMethod.MMIO: 1>
+  ManifestCosim: typing.ClassVar[
+      CosimManifestMethod]  # value = <CosimManifestMethod.ManifestCosim: 0>
+  ManifestMMIO: typing.ClassVar[
+      CosimManifestMethod]  # value = <CosimManifestMethod.ManifestMMIO: 1>
   __members__: typing.ClassVar[dict[
       str,
-      CosimManifestMethod]]  # value = {'Cosim': <CosimManifestMethod.Cosim: 0>, 'MMIO': <CosimManifestMethod.MMIO: 1>}
+      CosimManifestMethod]]  # value = {'ManifestCosim': <CosimManifestMethod.ManifestCosim: 0>, 'ManifestMMIO': <CosimManifestMethod.ManifestMMIO: 1>}
 
   def __eq__(self, other: typing.Any) -> bool:
     ...
@@ -259,6 +259,15 @@ class IntegerType(BitVectorType):
   pass
 
 
+class MMIO:
+
+  def read(self, arg0: int) -> int:
+    ...
+
+  def write(self, arg0: int, arg1: int) -> None:
+    ...
+
+
 class Manifest:
 
   def __init__(self, arg0: str) -> None:
@@ -352,7 +361,7 @@ class WriteChannelPort(ChannelPort):
     ...
 
 
-Cosim: CosimManifestMethod  # value = <CosimManifestMethod.Cosim: 0>
 From: Direction  # value = <Direction.From: 1>
-MMIO: CosimManifestMethod  # value = <CosimManifestMethod.MMIO: 1>
+ManifestCosim: CosimManifestMethod  # value = <CosimManifestMethod.ManifestCosim: 0>
+ManifestMMIO: CosimManifestMethod  # value = <CosimManifestMethod.ManifestMMIO: 1>
 To: Direction  # value = <Direction.To: 0>

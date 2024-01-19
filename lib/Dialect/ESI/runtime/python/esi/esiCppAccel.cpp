@@ -175,8 +175,10 @@ PYBIND11_MODULE(esiCppAccel, m) {
 
   py::enum_<backends::cosim::CosimAccelerator::ManifestMethod>(
       m, "CosimManifestMethod")
-      .value("Cosim", backends::cosim::CosimAccelerator::ManifestMethod::Cosim)
-      .value("MMIO", backends::cosim::CosimAccelerator::ManifestMethod::MMIO)
+      .value("ManifestCosim",
+             backends::cosim::CosimAccelerator::ManifestMethod::Cosim)
+      .value("ManifestMMIO",
+             backends::cosim::CosimAccelerator::ManifestMethod::MMIO)
       .export_values();
 
   py::class_<AcceleratorConnection>(m, "AcceleratorConnection")

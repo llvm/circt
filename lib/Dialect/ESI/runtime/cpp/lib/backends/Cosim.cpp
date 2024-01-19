@@ -347,7 +347,7 @@ Service *CosimAccelerator::createService(Service::Type svcType, AppIDPath id,
                                          std::string implName,
                                          const ServiceImplDetails &details,
                                          const HWClientDetails &clients) {
-  if (svcType == typeid(MMIO)) {
+  if (svcType == typeid(services::MMIO)) {
     return new CosimMMIO(impl->lowLevel, impl->waitScope);
   } else if (svcType == typeid(SysInfo)) {
     switch (manifestMethod) {

@@ -20,7 +20,7 @@ if (platform == "cosim"):
   m = acc.manifest()
 
   # MMIO method
-  acc.cpp_accel.set_manifest_method(esi.esiCppAccel.CosimManifestMethod.MMIO)
+  acc.cpp_accel.set_manifest_method(esi.esiCppAccel.ManifestMMIO)
   m_alt = acc.manifest()
   assert len(m.type_table) == len(m_alt.type_table)
 
