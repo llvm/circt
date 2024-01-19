@@ -128,10 +128,9 @@ static bool shouldBeFlattened(Operation *op) {
           "must be commutative operations"));
   if (op->hasOneUse()) {
     auto *user = *op->getUsers().begin();
-    if (user->getName() == op->getName() &&
-        op->getAttrOfType<UnitAttr>("twoState") ==
-            user->getAttrOfType<UnitAttr>("twoState"))
-      return true;
+    return user->getName() == op->getName() &&
+           op->getAttrOfType<UnitAttr>("twoState") ==
+               user->getAttrOfType<UnitAttr>("twoState");
   }
   return false;
 }
