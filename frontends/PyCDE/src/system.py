@@ -19,6 +19,7 @@ from .esi_api import PythonApiBuilder
 
 from contextvars import ContextVar
 from collections.abc import Iterable
+import weakref
 import gc
 import os
 import pathlib
@@ -190,7 +191,7 @@ class System:
     return op
 
   @staticmethod
-  def current():
+  def current() -> System:
     """Get the top-most system in the stack created by `with System()`."""
     bb = _current_system.get(None)
     if bb is None:
@@ -342,7 +343,7 @@ class _OpCache:
   __slots__ = [
       "_module", "_symbols", "_pyproxy_symbols", "_symbol_pyproxy",
       "_instance_hier_cache", "_instance_hier_obj_cache", "_instance_cache",
-      "_module_inside_sym_cache", "_dyn_insts_in_inst"
+      "_module_inside_sym_cache", "_dyn_insts_in_inst", "_pyproxies"
   ]
 
   def __init__(self, module: ir.Module):
@@ -350,6 +351,7 @@ class _OpCache:
     self._symbols: Dict[str, ir.OpView] = None
     self._pyproxy_symbols: dict[_PyProxy, str] = {}
     self._symbol_pyproxy: dict[str, _PyProxy] = {}
+    self._pyproxies: Set[weakref.ref[_PyProxy]] = set()
 
     # InstanceHier caches are indexes are (module_sym, instance_name)
     self._instance_hier_cache: dict[(ir.FlatSymbolRefAttr, ir.StringAttr),
@@ -372,7 +374,18 @@ class _OpCache:
     self._instance_cache.clear()
     self._module_inside_sym_cache.clear()
     self._dyn_insts_in_inst.clear()
+    for proxy_ref in self._pyproxies:
+      proxy = proxy_ref()
+      if proxy is not None:
+        proxy.clear_op_refs()
+
     gc.collect()
+    # Pending https://github.com/llvm/llvm-project/pull/78663
+    # live_ops = ir.Context.current._get_live_operation_objects()
+    # for op in live_ops:
+    #   sys.stderr.write(f"Warning: {op} is still live. Referrers:\n")
+    #   for referrer in gc.get_referrers(op)[0]:
+    #     sys.stderr.write(f"  {referrer}\n")
     num_ops_live = ir.Context.current._clear_live_operations()
     if num_ops_live > 0:
       sys.stderr.write(
@@ -391,6 +404,10 @@ class _OpCache:
   def op(self, symbol: str) -> ir.OpView:
     """Resolve a symbol to an op."""
     return self.symbols[symbol]
+
+  def register_pyproxy(self, pyproxy: _PyProxy):
+    """Used to report a new _PyProxy to the cache which doesn't have a symbol."""
+    self._pyproxies.add(weakref.ref(pyproxy))
 
   def create_symbol(self, pyproxy: _PyProxy) -> Tuple[str, Callable]:
     """Create a unique symbol and add it to the cache. If it is to be preserved,
@@ -412,6 +429,7 @@ class _OpCache:
       self._symbols[symbol] = op
       self._pyproxy_symbols[pyproxy] = symbol
       self._symbol_pyproxy[symbol] = pyproxy
+      self._pyproxies.add(weakref.ref(pyproxy))
 
     return symbol, install
 

@@ -13,7 +13,7 @@ from .circt import ir
 from .circt.dialects import esi as raw_esi, hw, msft
 
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 __dir__ = Path(__file__).parent
 
@@ -300,8 +300,9 @@ class _ServiceGeneratorRegistry:
   _registered = False
   _impl_type_name = ir.StringAttr.get("pycde")
 
-  def __init__(self):
-    self._registry: Dict[str, ServiceImplementation] = {}
+  def __init__(self) -> None:
+    self._registry: Dict[ir.StringAttr, Tuple[ServiceImplementation,
+                                              System]] = {}
 
     # Register myself with ESI so I can dispatch to my internal registry.
     assert _ServiceGeneratorRegistry._registered is False, \
@@ -324,6 +325,7 @@ class _ServiceGeneratorRegistry:
       ctr += 1
       name = basename + "_" + str(ctr)
     name_attr = ir.StringAttr.get(name)
+
     self._registry[name_attr] = (service_implementation, System.current())
     return ir.DictAttr.get({"name": name_attr})
 
