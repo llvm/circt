@@ -28,10 +28,11 @@ namespace detail {
 struct SCCNode {
   Operation *op;
   llvm::function_ref<bool(Operation *)> filter;
+  Operation *root;
   unsigned index;
   explicit SCCNode(Operation *o, llvm::function_ref<bool(Operation *)> f,
-                   unsigned index)
-      : op(o), filter(f), index(index) {}
+                   Operation *root, unsigned index)
+      : op(o), filter(f), root(root), index(index) {}
   bool operator==(const SCCNode &other) const {
     return other.op == op && other.index == index;
   }
@@ -50,7 +51,7 @@ class PortIterator
 public:
   explicit PortIterator(SCCNode node, bool end = false)
       : module(cast<HWModuleOp>(node.op)), numPorts(module.getNumPorts()),
-        sccOp(node.op, node.filter, end ? numPorts : 0) {}
+        sccOp(node.op, node.filter, node.root, end ? numPorts : 0) {}
 
   bool operator==(const PortIterator &other) const {
     return other.sccOp == this->sccOp;
@@ -93,7 +94,7 @@ public:
 
   SCCNode operator*() {
     Operation &op = *modOpsIterator;
-    return SCCNode(&op, sccOp.filter, 0);
+    return SCCNode(&op, sccOp.filter, &op, 0);
   }
 
   ModOpIterator &operator++() {
@@ -179,7 +180,8 @@ public:
     }
     if (iterator != itEnd) {
       Operation *nextOp = iterator.getUser();
-      if (sccOp.filter && sccOp.filter(nextOp)) {
+      if (sccOp.filter && (!sccOp.root || sccOp.root != nextOp) &&
+          sccOp.filter(nextOp)) {
         ++iterator;
         getNextValid();
       }
@@ -196,7 +198,7 @@ public:
 
   SCCNode operator*() {
     Operation *op = iterator.getUser();
-    return SCCNode(op, sccOp.filter, 0);
+    return SCCNode(op, sccOp.filter, sccOp.root, 0);
   }
 
   OpUseIterator &operator++() {
@@ -274,11 +276,13 @@ struct DenseMapInfo<circt::hw::detail::SCCNode> {
   using Node = circt::hw::detail::SCCNode;
 
   static Node getEmptyKey() {
-    return Node(DenseMapInfo<mlir::Operation *>::getEmptyKey(), nullptr, 0);
+    return Node(DenseMapInfo<mlir::Operation *>::getEmptyKey(), nullptr,
+                nullptr, 0);
   }
 
   static Node getTombstoneKey() {
-    return Node(DenseMapInfo<mlir::Operation *>::getTombstoneKey(), nullptr, 0);
+    return Node(DenseMapInfo<mlir::Operation *>::getTombstoneKey(), nullptr,
+                nullptr, 0);
   }
 
   static unsigned getHashValue(const Node &node) {
@@ -316,7 +320,7 @@ struct FirRegSCC {
   FirRegSCC(hw::HWModuleOp moduleOp,
             llvm::function_ref<bool(Operation *)> f = nullptr) {
     using SccOpType = circt::hw::detail::SCCNode;
-    SccOpType sccOp(moduleOp, f, 0);
+    SccOpType sccOp(moduleOp, f, nullptr, 0);
 
     for (llvm::scc_iterator<SccOpType> i = llvm::scc_begin(sccOp),
                                        e = llvm::scc_end(sccOp);
