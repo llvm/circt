@@ -475,12 +475,63 @@ private:
     return width;
   }
 
-  // Generates the transitions required to finalize the register to state
-  // transition system conversion
-  void finalizeRegVisit(Operation *op) {
-    // Check the register type (done to support non-firrtl registers as well)
-    auto reg = cast<seq::FirRegOp>(op);
+  // Handles the concrete emission of a compregop's state and such
+  void finalizedCompRegVisit(seq::CompRegOp reg) {
+    // Generate the reset condition (for sync & async resets)
+    // We assume for now that the reset value is always 0
+    size_t width = hw::getBitWidth(reg.getType());
+    genSort("bitvec", width);
 
+    // Extract the `next` operation for each register (used to define the
+    // transition). We need to check if next is a port to avoid nullptrs
+    Value next = reg.getInput();
+
+    // Next should already be associated to an LID at this point
+    // As we are going to override it, we need to keep track of the original
+    // instruction
+    size_t nextLID = noLID;
+
+    // Check for special case where next is actually a port
+    // To do so, we start by checking if our operation is a block argument
+    if (BlockArgument barg = dyn_cast<BlockArgument>(next)) {
+      // Extract the block argument index and use that to get the line number
+      size_t argIdx = barg.getArgNumber();
+
+      // Check that the extracted argument is in range before using it
+      nextLID = inputLIDs[argIdx];
+
+    } else {
+      nextLID = getOpLID(next);
+    }
+
+    // Assign a new LID to next
+    setOpLID(next.getDefiningOp());
+
+    // Sanity check: at this point the next operation should have had it's btor2
+    // counterpart emitted if not then something terrible must have happened.
+    assert(nextLID != noLID);
+
+    // Check if the register has a reset
+    if (resetLID != noLID) {
+      size_t resetValLID = noLID;
+
+      // Check for a reset value, if none exists assume it's zero
+      if (auto resval = reg.getResetValue())
+        resetValLID = getOpLID(resval.getDefiningOp());
+      else
+        resetValLID = genZero(width);
+
+      // Generate the ite for the register update reset condition
+      // i.e. reg <= reset ? 0 : next
+      genIte(next.getDefiningOp(), resetLID, resetValLID, nextLID, width);
+    }
+
+    // Finally generate the next statement
+    genNext(next, reg, width);
+  }
+
+  // Handles the concrete emission of a firregop's state and such
+  void finalizedFirRegVisit(seq::FirRegOp reg) {
     // Generate the reset condition (for sync & async resets)
     // We assume for now that the reset value is always 0
     size_t width = hw::getBitWidth(reg.getType());
@@ -532,6 +583,18 @@ private:
 
     // Finally generate the next statement
     genNext(next, reg, width);
+  }
+
+  // Generates the transitions required to finalize the register to state
+  // transition system conversion
+  void finalizeRegVisit(Operation *op) {
+    // Check the register type (done to support non-firrtl registers as well)
+    if (auto reg = dyn_cast<seq::FirRegOp>(op))
+      finalizedFirRegVisit(reg);
+    else if (auto reg = dyn_cast<seq::CompRegOp>(op))
+      finalizedCompRegVisit(reg);
+    else
+      op->emitError("Invalid register type!");
   }
 
 public:
@@ -730,12 +793,8 @@ public:
     Value input = op.getInput();
     Value condition = op.getCondition();
 
-    // Generate a default value in case of a disable
-    int64_t w = requireSort(input.getType());
-    size_t zeroLID = genZero(w);
-
     // Create the ite instruction using the condition as a diable
-    genIte(op, getOpLID(condition), zeroLID, getOpLID(input), w);
+    genImplies(op, getOpLID(condition), getOpLID(input));
   }
 
   // LTL clocks are ignored for now and treated as wires
@@ -775,6 +834,10 @@ public:
   void visitVerif(verif::AssumeOp op) {
     Value prop = op.getProperty();
     genConstraint(prop);
+  }
+
+  void visitVerif(verif::HasBeenResetOp op) {
+    // Ignore
   }
 
   // We don't support much verif yet either
@@ -842,6 +905,21 @@ public:
   void visit(seq::FirRegOp reg) {
     // Start by retrieving the register's name and width
     StringRef regName = reg.getName();
+    int64_t w = requireSort(reg.getType());
+
+    // Generate state instruction (represents the register declaration)
+    genState(reg, w, regName);
+
+    // Record the operation for future `next` instruction generation
+    // This is required to model transitions between states (i.e. how a
+    // register's value evolves over time)
+    regOps.push_back(reg);
+  }
+
+  // Compregs behave in a smilar way as firregs for btor2 emission
+  void visit(seq::CompRegOp reg) {
+    // Start by retrieving the register's name and width
+    StringRef regName = reg.getName().value();
     int64_t w = requireSort(reg.getType());
 
     // Generate state instruction (represents the register declaration)
