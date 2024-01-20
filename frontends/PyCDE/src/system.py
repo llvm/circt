@@ -15,7 +15,6 @@ from .types import TypeAlias
 from . import circt
 from .circt import ir, passmanager
 from .circt.dialects import esi, hw, msft
-from .esi_api import PythonApiBuilder
 
 from contextvars import ContextVar
 from collections.abc import Iterable
