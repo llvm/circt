@@ -8,9 +8,20 @@ import pycde
 from pycde import (AppID, Clock, Input, Module, generator)
 from pycde.esi import DeclareRandomAccessMemory, ServiceDecl
 from pycde.bsp import cosim, xrt
+from pycde.module import Metadata
 from pycde.types import Bits
 
+import os
 import sys
+
+__dir__ = os.path.dirname(os.path.abspath(__file__))
+
+repo = None
+try:
+  import git
+  repo = git.Repo(__dir__, search_parent_directories=True)
+except ImportError:
+  pass
 
 RamI64x8 = DeclareRandomAccessMemory(Bits(64), 256)
 WriteType = RamI64x8.write.type.req
@@ -22,8 +33,18 @@ class MemComms:
   read = ServiceDecl.From(RamI64x8.read.type)
 
 
+class Dummy(Module):
+  """To test completely automated metadata collection."""
+
+  @generator
+  def construct(ports):
+    pass
+
+
 class MemWriter(Module):
   """Write to address 3 the contents of address 2."""
+
+  metadata = Metadata(version="0.1", misc={"numWriters": 1, "style": "stupid"})
 
   clk = Clock()
   rst = Input(Bits(1))
@@ -54,7 +75,8 @@ def Top(xrt: bool):
 
     @generator
     def construct(ports):
-      MemWriter(clk=ports.clk, rst=ports.rst)
+      Dummy(appid=AppID("dummy"))
+      MemWriter(clk=ports.clk, rst=ports.rst, appid=AppID("mem_writer"))
 
       # We don't have support for host--device channel communication on XRT yet.
       if not xrt:
@@ -82,5 +104,7 @@ if __name__ == "__main__":
   s = pycde.System(bsp(Top(is_xrt)),
                    name="ESIMem",
                    output_directory=sys.argv[1])
+  s.generate()
+  print(s.mod.operation)
   s.compile()
   s.package()

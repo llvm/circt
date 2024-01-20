@@ -15,14 +15,17 @@ mem_read_addr.connect()
 mem_read_data = d.ports[esi.AppID("read")].read_port("data")
 mem_read_data.connect()
 
+# Baseline
+m = acc.manifest()
 if (platform == "cosim"):
-  # Baseline
-  m = acc.manifest()
-
   # MMIO method
   acc.cpp_accel.set_manifest_method(esi.esiCppAccel.ManifestMMIO)
   m_alt = acc.manifest()
   assert len(m.type_table) == len(m_alt.type_table)
+
+info = m.module_infos
+assert len(info) == 3
+assert info[1].name == "Dummy"
 
 
 def read(addr: int) -> bytearray:
