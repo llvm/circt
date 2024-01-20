@@ -575,7 +575,8 @@ ostream &operator<<(ostream &os, const ModuleInfo &m) {
     os << ")";
   }
   if (m.summary)
-    os << ": " << *m.summary << "\n";
+    os << ": " << *m.summary;
+  os << "\n";
 
   if (!m.extra.empty()) {
     os << "  Extra metadata:\n";
