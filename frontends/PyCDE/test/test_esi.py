@@ -7,6 +7,7 @@ from pycde import esi
 from pycde.common import AppID, Output, RecvBundle, SendBundle
 from pycde.constructs import Wire
 from pycde.esi import MMIO
+from pycde.module import Metadata
 from pycde.types import (Bits, Bundle, BundledChannel, Channel,
                          ChannelDirection, ChannelSignaling, UInt, ClockType)
 from pycde.testing import unittestmodule
@@ -27,6 +28,9 @@ class HostComms:
   from_host = TestFromBundle
 
 
+# CHECK: esi.manifest.sym @LoopbackInOutTop name "LoopbackInOut" repo "{{.+}}" commit "{{.+}}" version "0.1" {bar = "baz", foo = 1 : i64}
+
+
 # CHECK-LABEL: hw.module @LoopbackInOutTop(in %clk : !seq.clock, in %rst : i1)
 # CHECK:         esi.service.instance #esi.appid<"cosim"[0]> svc @HostComms impl as "cosim"(%clk, %rst) : (!seq.clock, i1) -> ()
 # CHECK:         %bundle, %req = esi.bundle.pack %chanOutput : !esi.bundle<[!esi.channel<i16> to "resp", !esi.channel<i24> from "req"]>
@@ -38,6 +42,15 @@ class HostComms:
 class LoopbackInOutTop(Module):
   clk = Clock()
   rst = Input(types.i1)
+
+  metadata = Metadata(
+      name="LoopbackInOut",
+      version="0.1",
+      misc={
+          "foo": 1,
+          "bar": "baz"
+      },
+  )
 
   @generator
   def construct(self):
