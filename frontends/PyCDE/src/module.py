@@ -399,14 +399,15 @@ class ModuleBuilder(ModuleLikeBuilderBase):
     return ret
 
   def add_metadata(self, sys, symbol: str, meta: Optional[Metadata]):
-    """Add the specified metadata to the IR so it potentially gets included in
-    the manifest. (It'll only be included if one of the instances has an
-    appid.)
-
-    If not specified, sets the summary to the module docstring.
-
-    If GitPython is installed, the commit hash and repo are automatically
-    generated if not specified."""
+    """Add the metadata to the IR so it potentially gets included in the
+    manifest. (It'll only be included if one of the instances has an appid.) If
+    user did not specify the metadata (or components thereof), attempt to fill
+    them in automatically:
+      - Name defaults to the module name.
+      - Summary defaults to the module docstring.
+      - If GitPython is installed, the commit hash and repo are automatically
+        generated if neither are specified.
+    """
 
     from .dialects.esi import esi
 

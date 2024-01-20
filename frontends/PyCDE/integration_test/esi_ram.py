@@ -11,17 +11,7 @@ from pycde.bsp import cosim, xrt
 from pycde.module import Metadata
 from pycde.types import Bits
 
-import os
 import sys
-
-__dir__ = os.path.dirname(os.path.abspath(__file__))
-
-repo = None
-try:
-  import git
-  repo = git.Repo(__dir__, search_parent_directories=True)
-except ImportError:
-  pass
 
 RamI64x8 = DeclareRandomAccessMemory(Bits(64), 256)
 WriteType = RamI64x8.write.type.req
@@ -105,6 +95,5 @@ if __name__ == "__main__":
                    name="ESIMem",
                    output_directory=sys.argv[1])
   s.generate()
-  print(s.mod.operation)
   s.compile()
   s.package()
