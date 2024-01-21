@@ -28,7 +28,7 @@ class HostComms:
   from_host = TestFromBundle
 
 
-# CHECK: esi.manifest.sym @LoopbackInOutTop name "LoopbackInOut" repo "{{.+}}" commit "{{.+}}" version "0.1" {bar = "baz", foo = 1 : i64}
+# CHECK: esi.manifest.sym @LoopbackInOutTop name "LoopbackInOut" {{.*}}version "0.1" {bar = "baz", foo = 1 : i64}
 
 
 # CHECK-LABEL: hw.module @LoopbackInOutTop(in %clk : !seq.clock, in %rst : i1)
