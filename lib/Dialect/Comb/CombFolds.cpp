@@ -1235,6 +1235,205 @@ static bool canonicalizeOrOfConcatsWithCstOperands(OrOp op, size_t concatIdx1,
   return true;
 }
 
+/// Identifies integer range checks and simplifies them to minimise comparisons.
+///
+/// In an 'or' operation, tests of a variable belonging to a set of disjoint
+/// intervals are identified and merged whenever possible. 3 distinct patterns
+/// are considered to identify the intervals:
+///
+///   - icmp(ult, x, n),  constrains x < n
+///   - icmp(eq, x, n), constrains x = n
+///   - and(icmp(ugt, x, n), icmp(ult, x, m)) constrains n < x < m
+///
+/// For an individual value x, all the comparisons are collected and new
+/// comparisons are inserted to represent the intervals with fewer operations.
+///
+/// If a sequence of equality checks or(x == n, x == n + 1, ...) is detected,
+/// an interval is emitted only when at least 3 equality checks are folded into
+/// two unsigned comparisons.
+///
+/// All constants and operations operate in unsigned mode.
+///
+static bool tryMergeRanges(OrOp op, PatternRewriter &rewriter) {
+  if (!op.getTwoState() || op.getType().getIntOrFloatBitWidth() != 1)
+    return false;
+
+  // Wrapper around an operand representing an interval.
+  struct Interval {
+    /// Index of the input from which the check was extracted.
+    unsigned index;
+    /// Inclusive lower bound.
+    APInt lowerBound;
+    /// Inclusive upper bound.
+    APInt upperBound;
+
+    /// Returns true if this is an equality check.
+    bool isEqCheck() const { return lowerBound == upperBound; }
+  };
+
+  // Identify all the relevant patterns among the inputs,
+  // mark all others to be retained unchanged.
+  auto inputs = op.getInputs();
+  llvm::SmallBitVector keptOperands(inputs.size());
+  DenseMap<Value, SmallVector<Interval>> argChecks;
+
+  for (unsigned i = 0, n = inputs.size(); i < n; ++i) {
+    auto input = inputs[i];
+
+    // Find bound checks: and(x > n, x < m)
+    auto andOp = input.getDefiningOp<AndOp>();
+    if (andOp && andOp.getInputs().size() == 2 && andOp.getTwoState()) {
+      ICmpOp lhsOp = andOp.getInputs()[0].getDefiningOp<ICmpOp>();
+      ICmpOp rhsOp = andOp.getInputs()[1].getDefiningOp<ICmpOp>();
+
+      if (lhsOp && rhsOp && lhsOp.getTwoState() && rhsOp.getTwoState() &&
+          lhsOp.getLhs() == rhsOp.getLhs()) {
+        Value arg = lhsOp.getLhs();
+
+        APInt lhsBound, rhsBound;
+        if (matchPattern(lhsOp.getRhs(), m_ConstantInt(&lhsBound)) &&
+            matchPattern(rhsOp.getRhs(), m_ConstantInt(&rhsBound))) {
+          ICmpPredicate lhsPred = lhsOp.getPredicate();
+          ICmpPredicate rhsPred = rhsOp.getPredicate();
+          // If the lower bound is all ones or the upper bound is all
+          // zeros, the interval is empty and the comparisons are eliminated
+          // through other canonicalisers.
+          if (lhsPred == ICmpPredicate::ugt && rhsPred == ICmpPredicate::ult) {
+            if (!lhsBound.isAllOnes() && !rhsBound.isZero()) {
+              argChecks[arg].emplace_back(
+                  Interval{i, lhsBound + 1, rhsBound - 1});
+            }
+            continue;
+          }
+          if (lhsPred == ICmpPredicate::ult && rhsPred == ICmpPredicate::ugt) {
+            if (!rhsBound.isAllOnes() && !lhsBound.isZero()) {
+              argChecks[arg].emplace_back(
+                  Interval{i, rhsBound + 1, lhsBound - 1});
+            }
+            continue;
+          }
+        }
+      }
+    }
+
+    if (auto cmpOp = input.getDefiningOp<ICmpOp>();
+        cmpOp && cmpOp.getTwoState()) {
+      APInt v;
+      if (matchPattern(cmpOp.getRhs(), m_ConstantInt(&v))) {
+        // Find equality tests: x == n
+        if (cmpOp.getPredicate() == ICmpPredicate::eq) {
+          argChecks[cmpOp.getLhs()].emplace_back(Interval{i, v, v});
+          continue;
+        }
+        // Find upper bound tests: x < n
+        if (cmpOp.getPredicate() == ICmpPredicate::ult) {
+          if (!v.isZero()) {
+            argChecks[cmpOp.getLhs()].emplace_back(
+                Interval{i, APInt::getZero(v.getBitWidth()), v - 1});
+          }
+          continue;
+        }
+      }
+    }
+
+    keptOperands[i] = true;
+  }
+
+  // For each value, try to compress the associated checks.
+  llvm::SmallVector<Value> newOperands;
+  for (auto &[arg, checks] : argChecks) {
+    // Order the checks by their lower bounds.
+    std::stable_sort(checks.begin(), checks.end(), [&](auto &lhs, auto &rhs) {
+      return lhs.lowerBound.ult(rhs.lowerBound);
+    });
+
+    // Find sequences of overlapping checks and compress them.
+    for (auto *it = checks.begin(); it != checks.end();) {
+      auto *begin = it++;
+
+      auto lowerBound = begin->lowerBound;
+      APInt upperBound = begin->upperBound;
+      while (it != checks.end()) {
+        if (!upperBound.isAllOnes() && !it->lowerBound.ule(upperBound + 1))
+          break;
+
+        APInt itBound = it->upperBound;
+        if (itBound.ugt(upperBound))
+          upperBound = itBound;
+        ++it;
+      }
+
+      // If there is no overlap or the range consists of only two
+      // consecutive numbers, do not create a new range.
+      size_t n = std::distance(begin, it);
+      if (n == 1 ||
+          (n == 2 && begin->isEqCheck() && std::next(begin)->isEqCheck())) {
+        while (begin != it) {
+          keptOperands[begin->index] = true;
+          ++begin;
+        }
+        continue;
+      }
+
+      // Fuse the locations of all the operands.
+      llvm::SmallVector<Location> locations;
+      for (auto *op = begin; op != it; ++op)
+        locations.push_back(inputs[op->index].getLoc());
+
+      LocationAttr loc = rewriter.getFusedLoc(locations);
+
+      // Build the check for the upper bound.
+      Value upperBoundCheck;
+      if (!upperBound.isAllOnes()) {
+        upperBoundCheck = rewriter.create<ICmpOp>(
+            loc, rewriter.getI1Type(), ICmpPredicate::ult, arg,
+            rewriter.create<hw::ConstantOp>(loc, upperBound + 1),
+            /*twoState=*/true);
+      }
+
+      Value lowerBoundCheck;
+      if (!lowerBound.isZero()) {
+        // Build the check for the lower bound and unify with and.
+        lowerBoundCheck = rewriter.create<ICmpOp>(
+            loc, rewriter.getI1Type(), ICmpPredicate::ugt, arg,
+            rewriter.create<hw::ConstantOp>(loc, lowerBound - 1),
+            /*twoState=*/true);
+      }
+
+      if (lowerBoundCheck && upperBoundCheck)
+        newOperands.push_back(rewriter.create<AndOp>(
+            loc, lowerBoundCheck, upperBoundCheck, /*twoState=*/true));
+      else if (lowerBoundCheck)
+        newOperands.push_back(lowerBoundCheck);
+      else if (upperBoundCheck)
+        newOperands.push_back(upperBoundCheck);
+    }
+  }
+
+  if (newOperands.empty() && inputs.size() == keptOperands.count())
+    return false;
+
+  // Build a new operation, preserving unchanged inputs and
+  // adding the new simplified range checks.
+  SmallVector<Value> newInputs;
+  for (unsigned i = 0, n = inputs.size(); i < n; ++i)
+    if (keptOperands[i])
+      newInputs.push_back(inputs[i]);
+
+  for (auto &&op : newOperands)
+    newInputs.push_back(op);
+
+  if (newInputs.size() == 1)
+    rewriter.replaceOp(op, newInputs[0]);
+  else if (newInputs.empty())
+    rewriter.replaceOpWithNewOp<hw::ConstantOp>(op, APInt(1, 1));
+  else
+    replaceOpWithNewOpAndCopyName<OrOp>(rewriter, op, op.getType(), newInputs,
+                                        /*twoState=*/true);
+
+  return true;
+}
+
 LogicalResult OrOp::canonicalize(OrOp op, PatternRewriter &rewriter) {
   if (hasOperandsOutsideOfBlock(&*op))
     return failure();
@@ -1332,6 +1531,12 @@ LogicalResult OrOp::canonicalize(OrOp op, PatternRewriter &rewriter) {
       }
     }
   }
+
+  // or(eq(x, n), eq(x, n + 1), ...) -> or(and(n <= x, x <= n + ...), ...)
+  // or(and(a < x, x < b), and(c < x, x < d)) -> or(and(a <= x, x < c)) if c < b
+  // or(and(a < x, x < b), x = b) -> or(and(a < x, x < b + 1))
+  if (tryMergeRanges(op, rewriter))
+    return success();
 
   /// TODO: or(..., x, not(x)) -> or(..., '1) -- complement
   return failure();
