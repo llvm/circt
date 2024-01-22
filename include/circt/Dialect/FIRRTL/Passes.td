@@ -513,6 +513,14 @@ def CheckCombLoops : Pass<"firrtl-check-comb-loops", "firrtl::CircuitOp"> {
   let constructor = "circt::firrtl::createCheckCombLoopsPass()";
 }
 
+def CheckInit : Pass<"firrtl-check-init", "firrtl::FModuleOp"> {
+  let summary = "Check initialization and emit errors";
+  let description = [{
+    This pass checks wire and port initialization and emit errors.
+  }];
+  let constructor = "circt::firrtl::createCheckInitPass()";
+}
+
 def SFCCompat : Pass<"firrtl-sfc-compat", "firrtl::FModuleOp"> {
   let summary = "Perform SFC Compatibility fixes";
   let constructor = "circt::firrtl::createSFCCompatPass()";

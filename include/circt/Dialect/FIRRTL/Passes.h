@@ -137,6 +137,8 @@ createGrandCentralPass(CompanionMode companionMode = CompanionMode::Bind);
 
 std::unique_ptr<mlir::Pass> createCheckCombLoopsPass();
 
+std::unique_ptr<mlir::Pass> createCheckInitPass();
+
 std::unique_ptr<mlir::Pass> createSFCCompatPass();
 
 std::unique_ptr<mlir::Pass>
