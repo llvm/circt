@@ -38,17 +38,26 @@ FieldSource::FieldSource(Operation *operation) {
 void FieldSource::visitOp(Operation *op) {
   if (auto sf = dyn_cast<SubfieldOp>(op))
     return visitSubfield(sf);
+  if (auto sf = dyn_cast<OpenSubfieldOp>(op))
+    return visitOpenSubfield(sf);
+
   if (auto si = dyn_cast<SubindexOp>(op))
     return visitSubindex(si);
+  if (auto si = dyn_cast<OpenSubindexOp>(op))
+    return visitOpenSubindex(si);
+
   if (auto sa = dyn_cast<SubaccessOp>(op))
     return visitSubaccess(sa);
-  if (isa<WireOp, RegOp, RegResetOp>(op))
+
+  if (isa<WireOp, RegOp, RegResetOp, InvalidValueOp, chirrtl::MemoryPortOp>(op))
     return makeNodeForValue(op->getResult(0), op->getResult(0), {},
                             foldFlow(op->getResult(0)));
   if (auto mem = dyn_cast<MemOp>(op))
     return visitMem(mem);
   if (auto inst = dyn_cast<InstanceOp>(op))
     return visitInst(inst);
+  if (auto inst = dyn_cast<InstanceChoiceOp>(op))
+    return visitInstChoice(inst);
 
   // Track all other definitions of aggregates.
   if (op->getNumResults()) {
@@ -69,7 +78,25 @@ void FieldSource::visitSubfield(SubfieldOp sf) {
   makeNodeForValue(sf.getResult(), node->src, sv, foldFlow(sf));
 }
 
+void FieldSource::visitOpenSubfield(OpenSubfieldOp sf) {
+  auto value = sf.getInput();
+  const auto *node = nodeForValue(value);
+  assert(node && "node should be in the map");
+  auto sv = node->path;
+  sv.push_back(sf.getFieldIndex());
+  makeNodeForValue(sf.getResult(), node->src, sv, foldFlow(sf));
+}
+
 void FieldSource::visitSubindex(SubindexOp si) {
+  auto value = si.getInput();
+  const auto *node = nodeForValue(value);
+  assert(node && "node should be in the map");
+  auto sv = node->path;
+  sv.push_back(si.getIndex());
+  makeNodeForValue(si.getResult(), node->src, sv, foldFlow(si));
+}
+
+void FieldSource::visitOpenSubindex(OpenSubindexOp si) {
   auto value = si.getInput();
   const auto *node = nodeForValue(value);
   assert(node && "node should be in the map");
@@ -93,6 +120,11 @@ void FieldSource::visitMem(MemOp mem) {
 }
 
 void FieldSource::visitInst(InstanceOp inst) {
+  for (auto r : inst.getResults())
+    makeNodeForValue(r, r, {}, foldFlow(r));
+}
+
+void FieldSource::visitInstChoice(InstanceChoiceOp inst) {
   for (auto r : inst.getResults())
     makeNodeForValue(r, r, {}, foldFlow(r));
 }
