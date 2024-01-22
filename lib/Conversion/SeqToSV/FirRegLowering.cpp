@@ -48,6 +48,7 @@ FirRegLowering::FirRegLowering(TypeConverter &typeConverter,
     : typeConverter(typeConverter), module(module),
       disableRegRandomization(disableRegRandomization),
       emitSeparateAlwaysBlocks(emitSeparateAlwaysBlocks) {
+
   scc = std::make_unique<FirRegSCC>(module, [&](Operation *op) {
     return isa<sv::RegOp, seq::FirRegOp, hw::InstanceOp>(op);
   });

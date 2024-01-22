@@ -17,8 +17,11 @@
 #include "circt/Support/Namespace.h"
 #include "circt/Support/SymCache.h"
 #include "llvm/ADT/DenseMapInfo.h"
+#include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/GraphTraits.h"
 #include "llvm/ADT/SCCIterator.h"
+#include "llvm/Support/raw_ostream.h"
 #include <variant>
 
 namespace circt {
@@ -317,31 +320,69 @@ namespace circt {
 
 // Construct the SCC that each FirRegOp belongs to.
 struct FirRegSCC {
+  using SccOpType = circt::hw::detail::SCCNode;
   FirRegSCC(hw::HWModuleOp moduleOp,
             llvm::function_ref<bool(Operation *)> f = nullptr) {
-    using SccOpType = circt::hw::detail::SCCNode;
     SccOpType sccOp(moduleOp, f, nullptr, 0);
 
     for (llvm::scc_iterator<SccOpType> i = llvm::scc_begin(sccOp),
                                        e = llvm::scc_end(sccOp);
          i != e; ++i) {
-      for (auto node : *i)
-        sccId[node.op] = sccIdGen;
+      char numFirReg = 0;
+      for (auto node : *i) {
+        if (numFirReg < 2 && isa<seq::FirRegOp>(node.op))
+          ++numFirReg;
 
+        opSccIdMap[node.op] = sccIdGen;
+      }
+      if (numFirReg >= 2)
+        multipleFirReginSCC.insert(sccIdGen);
       ++sccIdGen;
     }
   };
+  llvm::SmallDenseSet<unsigned> multipleFirReginSCC;
 
-  bool isInSameSCC(Operation *lhs, Operation *rhs) const {
-    auto lhsIt = sccId.find(lhs);
-    auto rhsIt = sccId.find(rhs);
-    return lhsIt != sccId.end() && rhsIt != sccId.end() &&
-           lhsIt->getSecond() == rhsIt->getSecond();
+  bool isCombReachable(SccOpType &root, Operation *dest,
+                       llvm::SmallDenseSet<SccOpType> &visitedSet) const {
+    if (root.op == dest)
+      return true;
+    if (!visitedSet.insert(root).second)
+      return false;
+    for (hw::detail::OpUseIterator it(root), end(root, true); it != end; ++it) {
+      SccOpType n = *it;
+      if (isCombReachable(n, dest, visitedSet))
+        return true;
+    }
+
+    return false;
+  };
+
+  bool isInSameSCC(Operation *mux, Operation *reg) const {
+    auto lhsIt = opSccIdMap.find(mux);
+    auto rhsIt = opSccIdMap.find(reg);
+
+    if (lhsIt != opSccIdMap.end() && rhsIt != opSccIdMap.end() &&
+        lhsIt->getSecond() == rhsIt->getSecond()) {
+      auto id = lhsIt->getSecond();
+      if (!multipleFirReginSCC.contains(id))
+        return true;
+
+      auto filter = [&](Operation *op) {
+        auto sccIt = opSccIdMap.find(op);
+        return isa<seq::FirRegOp>(op) || sccIt == opSccIdMap.end() ||
+               sccIt->getSecond() != id;
+      };
+      SccOpType root(reg, filter, nullptr, 0);
+      llvm::SmallDenseSet<SccOpType> visitedSet;
+      return isCombReachable(root, mux, visitedSet);
+    }
+    return false;
   }
-  void erase(Operation *op) { sccId.erase(op); }
+
+  void erase(Operation *op) { opSccIdMap.erase(op); }
 
 private:
-  llvm::DenseMap<Operation *, size_t> sccId;
+  llvm::DenseMap<Operation *, size_t> opSccIdMap;
   unsigned sccIdGen = 0;
 };
 
