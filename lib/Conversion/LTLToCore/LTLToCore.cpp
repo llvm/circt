@@ -63,6 +63,19 @@ struct DisableOpConversion : OpConversionPattern<ltl::DisableOp> {
   }
 };
 
+/// Lower a ltl::DisableOp operation to Core operations
+struct ClockOpConversion : OpConversionPattern<ltl::ClockOp> {
+  using OpConversionPattern<ltl::ClockOp>::OpConversionPattern;
+
+  // LTL clock gets ignored and is modified via it's user operation
+  LogicalResult
+  matchAndRewrite(ltl::ClockOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
 struct HasBeenResetOpConversion : OpConversionPattern<verif::HasBeenResetOp> {
   using OpConversionPattern<verif::HasBeenResetOp>::OpConversionPattern;
 
@@ -79,18 +92,16 @@ struct HasBeenResetOpConversion : OpConversionPattern<verif::HasBeenResetOp> {
 
     // Create a backedge for the register to be used in the mux
     circt::BackedgeBuilder bb(rewriter, op.getLoc());
-    circt::Backedge reg = bb.get(rewriter.getNoneType());
+    circt::Backedge reg = bb.get(rewriter.getI1Type());
 
     // Generate a multiplexer to select the register's value
-    Value mux = rewriter.create<comb::MuxOp>(op.getLoc(), adaptor.getReset(),
-                                             constOne, reg);
+    Value mux = rewriter.replaceOpWithNewOp<comb::MuxOp>(op, adaptor.getReset(),
+                                                         constOne, reg);
 
     // Finally generate the register to set the backedge
     reg.setValue(rewriter.create<seq::CompRegOp>(
         op.getLoc(), mux, adaptor.getClock(), llvm::StringRef("hbr")));
 
-    // Get rid of the old operation
-    rewriter.eraseOp(op);
     return success();
   }
 };
@@ -105,8 +116,7 @@ struct VerifAssertOpConversion : OpConversionPattern<verif::AssertOp> {
                   ConversionPatternRewriter &rewriter) const override {
 
     // Start by making sure that the input is associated to a clock
-    Value prop = adaptor.getProperty();
-    auto ltlclk = dyn_cast<ltl::ClockOp>(prop.getDefiningOp());
+    auto ltlclk = dyn_cast<ltl::ClockOp>(adaptor.getProperty().getDefiningOp());
 
     // If it's not clocked then we can't generate a proper sv assertion
     if (!ltlclk)
@@ -114,9 +124,8 @@ struct VerifAssertOpConversion : OpConversionPattern<verif::AssertOp> {
 
     // Finish by genrating the parenting sv.always posedge clock from the ltl
     // clock, containing the generated sv.assert
-    rewriter.create<sv::AlwaysOp>(
-        op.getLoc(), (sv::EventControl)ltlclk.getEdge(), ltlclk.getClock(),
-        [&] {
+    rewriter.replaceOpWithNewOp<sv::AlwaysOp>(
+        op, (sv::EventControl)ltlclk.getEdge(), ltlclk.getClock(), [&] {
           // Generate the sv assertion using the input to the parenting clock
           rewriter.create<sv::AssertOp>(
               op.getLoc(), ltlclk.getInput(),
@@ -126,8 +135,8 @@ struct VerifAssertOpConversion : OpConversionPattern<verif::AssertOp> {
         });
 
     // Get rid of the two old operations
-    rewriter.eraseOp(ltlclk);
-    rewriter.eraseOp(op);
+    // rewriter.eraseOp(ltlclk);
+    // rewriter.eraseOp(op);
 
     return success();
   }
@@ -149,7 +158,8 @@ struct LowerLTLToCorePass : public LowerLTLToCoreBase<LowerLTLToCorePass> {
 void circt::populateLTLToCoreConversionPatterns(
     TypeConverter &converter, mlir::RewritePatternSet &patterns) {
   patterns.add<DisableOpConversion, HasBeenResetOpConversion,
-               VerifAssertOpConversion>(converter, patterns.getContext());
+               VerifAssertOpConversion, ClockOpConversion>(
+      converter, patterns.getContext());
 }
 
 // Simply applies the conversion patterns defined above
@@ -157,19 +167,30 @@ void LowerLTLToCorePass::runOnOperation() {
 
   // Set target dialects: We don't want to see any ltl verif left in the result
   ConversionTarget target(getContext());
-  target.addLegalDialect<HWDialect>();
+  target.addLegalDialect<hw::HWDialect>();
+  target.addLegalOp<hw::ConstantOp>();
   target.addLegalDialect<comb::CombDialect>();
+  target.addLegalOp<comb::OrOp>();
+  target.addLegalOp<comb::MuxOp>();
   target.addLegalDialect<sv::SVDialect>();
+  target.addLegalOp<sv::AssertOp>();
+  target.addLegalOp<sv::AlwaysOp>();
   target.addLegalDialect<seq::SeqDialect>();
+  target.addLegalOp<seq::CompRegOp>();
   target.addIllegalOp<verif::HasBeenResetOp>();
   target.addIllegalOp<verif::AssertOp>();
   target.addIllegalOp<ltl::DisableOp>();
   target.addIllegalOp<ltl::ClockOp>();
 
+  // Create type converters, mostly just to convert an ltl property to a bool
+  TypeConverter converter;
+  converter.addConversion([](ltl::PropertyType type) {
+    return IntegerType::get(type.getContext(), 1);
+  });
+  converter.addConversion([](Type type) { return type; });
+
   // Create the operation rewrite patters
   RewritePatternSet patterns(&getContext());
-  TypeConverter converter;
-  converter.addConversion([](Type type) { return type; });
   populateLTLToCoreConversionPatterns(converter, patterns);
 
   // Apply the conversions
