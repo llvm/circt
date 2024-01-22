@@ -182,6 +182,24 @@ public:
   }
 };
 
+// Lower seq.clock_inv to a regular inverter.
+//
+class ClockInverterLowering : public OpConversionPattern<ClockInverterOp> {
+public:
+  using OpConversionPattern<ClockInverterOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ClockInverterOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    auto loc = op.getLoc();
+    Value clk = adaptor.getInput();
+
+    Value one = rewriter.create<hw::ConstantOp>(loc, APInt(1, 1));
+    rewriter.replaceOpWithNewOp<comb::XorOp>(op, clk, one);
+    return success();
+  }
+};
+
 // Lower seq.clock_mux to a `comb.mux` op
 //
 class ClockMuxLowering : public OpConversionPattern<ClockMuxOp> {
@@ -425,6 +443,7 @@ void SeqToSVPass::runOnOperation() {
   patterns.add<ClockCastLowering<seq::FromClockOp>>(typeConverter, context);
   patterns.add<ClockCastLowering<seq::ToClockOp>>(typeConverter, context);
   patterns.add<ClockGateLowering>(typeConverter, context);
+  patterns.add<ClockInverterLowering>(typeConverter, context);
   patterns.add<ClockMuxLowering>(typeConverter, context);
   patterns.add<ClockDividerLowering>(typeConverter, context);
   patterns.add<ClockConstLowering>(typeConverter, context);

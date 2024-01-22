@@ -134,6 +134,25 @@ public:
   }
 };
 
+class CirctClockInverterConverter : public IntrinsicConverter {
+public:
+  using IntrinsicConverter::IntrinsicConverter;
+
+  bool check() override {
+    return hasNPorts(2) || namedPort(0, "in") || namedPort(1, "out") ||
+           typedPort<ClockType>(0) || typedPort<ClockType>(1) || hasNParam(0);
+  }
+
+  void convert(InstanceOp inst) override {
+    ImplicitLocOpBuilder builder(inst.getLoc(), inst);
+    auto in = builder.create<WireOp>(inst.getResult(0).getType()).getResult();
+    inst.getResult(0).replaceAllUsesWith(in);
+    auto out = builder.create<ClockInverterIntrinsicOp>(in);
+    inst.getResult(1).replaceAllUsesWith(out);
+    inst.erase();
+  }
+};
+
 class EICGWrapperToClockGateConverter : public IntrinsicConverter {
 public:
   using IntrinsicConverter::IntrinsicConverter;
@@ -520,6 +539,8 @@ void LowerIntrinsicsPass::runOnOperation() {
   lowering.add<CirctPlusArgValueConverter>("circt.plusargs.value",
                                            "circt_plusargs_value");
   lowering.add<CirctClockGateConverter>("circt.clock_gate", "circt_clock_gate");
+  lowering.add<CirctClockInverterConverter>("circt.clock_inv",
+                                            "circt_clock_inv");
   lowering.add<CirctLTLAndConverter>("circt.ltl.and", "circt_ltl_and");
   lowering.add<CirctLTLOrConverter>("circt.ltl.or", "circt_ltl_or");
   lowering.add<CirctLTLDelayConverter>("circt.ltl.delay", "circt_ltl_delay");
