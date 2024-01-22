@@ -161,8 +161,10 @@ void LowerLTLToCorePass::runOnOperation() {
   target.addLegalDialect<comb::CombDialect>();
   target.addLegalDialect<sv::SVDialect>();
   target.addLegalDialect<seq::SeqDialect>();
-  target.addIllegalDialect<verif::VerifDialect>();
-  target.addIllegalDialect<ltl::LTLDialect>();
+  target.addIllegalOp<verif::HasBeenResetOp>();
+  target.addIllegalOp<verif::AssertOp>();
+  target.addIllegalOp<ltl::DisableOp>();
+  target.addIllegalOp<ltl::ClockOp>();
 
   // Create the operation rewrite patters
   RewritePatternSet patterns(&getContext());
