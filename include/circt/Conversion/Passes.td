@@ -592,7 +592,7 @@ def LowerLTLToCore : Pass<"lower-ltl-to-core", "hw::HWModuleOp"> {
   let constructor = "circt::createLowerLTLToCorePass()";
   let dependentDialects = [
     "hw::HWDialect", "sv::SVDialect", "comb::CombDialect",
-    "seq::SeqDialect", "ltl::LTLDialect", "verif::VerifDialect"
+    "seq::SeqDialect"
   ];
 }
 

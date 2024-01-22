@@ -14,6 +14,7 @@
 #ifndef CIRCT_CONVERSION_LTLTOCORE_H
 #define CIRCT_CONVERSION_LTLTOCORE_H
 
+#include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/Pass.h"
 
@@ -24,6 +25,9 @@ class Pass;
 using namespace mlir;
 
 namespace circt {
+void populateLTLToCoreConversionPatterns(TypeConverter &converter,
+                                         RewritePatternSet &patterns);
+
 std::unique_ptr<mlir::Pass> createLowerLTLToCorePass();
 
 } // namespace circt

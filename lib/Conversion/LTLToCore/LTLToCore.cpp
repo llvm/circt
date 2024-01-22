@@ -20,6 +20,7 @@
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Dialect/Verif/VerifOps.h"
+#include "circt/Support/BackedgeBuilder.h"
 #include "circt/Support/Namespace.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
@@ -76,13 +77,20 @@ struct HasBeenResetOpConversion : OpConversionPattern<verif::HasBeenResetOp> {
         op.getLoc(), mlir::IntegerAttr::get(
                          getContext(), llvm::APSInt(llvm::StringRef("1"))));
 
+    // Create a backedge for the register to be used in the mux
+    circt::BackedgeBuilder bb(rewriter, op.getLoc());
+    circt::Backedge reg = bb.get(rewriter.getNoneType());
+
     // Generate a multiplexer to select the register's value
     Value mux = rewriter.create<comb::MuxOp>(op.getLoc(), adaptor.getReset(),
-                                             constOne /*, ???*/);
+                                             constOne, reg);
 
-    // Finally generate the register to replace the hasbeenresetOp
-    rewriter.replaceOpWithNewOp<seq::CompRegOp>(op, mux, adaptor.getClock(),
-                                                llvm::StringRef("hbr"));
+    // Finally generate the register to set the backedge
+    reg.setValue(rewriter.create<seq::CompRegOp>(
+        op.getLoc(), mux, adaptor.getClock(), llvm::StringRef("hbr")));
+
+    // Get rid of the old operation
+    rewriter.eraseOp(op);
     return success();
   }
 };
@@ -138,7 +146,35 @@ struct LowerLTLToCorePass : public LowerLTLToCoreBase<LowerLTLToCorePass> {
 };
 } // namespace
 
-void LowerLTLToCorePass::runOnOperation() {}
+void circt::populateLTLToCoreConversionPatterns(
+    TypeConverter &converter, mlir::RewritePatternSet &patterns) {
+  patterns.add<DisableOpConversion, HasBeenResetOpConversion,
+               VerifAssertOpConversion>(converter, patterns.getContext());
+}
+
+// Simply applies the conversion patterns defined above
+void LowerLTLToCorePass::runOnOperation() {
+
+  // Set target dialects: We don't want to see any ltl verif left in the result
+  ConversionTarget target(getContext());
+  target.addLegalDialect<HWDialect>();
+  target.addLegalDialect<comb::CombDialect>();
+  target.addLegalDialect<sv::SVDialect>();
+  target.addLegalDialect<seq::SeqDialect>();
+  target.addIllegalDialect<verif::VerifDialect>();
+  target.addIllegalDialect<ltl::LTLDialect>();
+
+  // Create the operation rewrite patters
+  RewritePatternSet patterns(&getContext());
+  TypeConverter converter;
+  converter.addConversion([](Type type) { return type; });
+  populateLTLToCoreConversionPatterns(converter, patterns);
+
+  // Apply the conversions
+  if (failed(
+          applyPartialConversion(getOperation(), target, std::move(patterns))))
+    return signalPassFailure();
+}
 
 // Basic default constructor
 std::unique_ptr<mlir::Pass> circt::createLowerLTLToCorePass() {
