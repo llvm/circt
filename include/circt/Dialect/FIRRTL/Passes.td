@@ -179,6 +179,7 @@ def Inliner : Pass<"firrtl-inliner", "firrtl::CircuitOp"> {
     ```
   }];
   let constructor = "circt::firrtl::createInlinerPass()";
+  let dependentDialects = ["debug::DebugDialect"];
 }
 
 def AddSeqMemPorts : Pass<"firrtl-add-seqmem-ports", "firrtl::CircuitOp"> {

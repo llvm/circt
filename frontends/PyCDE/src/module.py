@@ -3,7 +3,8 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from __future__ import annotations
-from typing import List, Optional, Set, Tuple, Dict
+from dataclasses import dataclass
+from typing import Any, List, Optional, Set, Tuple, Dict
 
 from .common import (AppID, Clock, Input, Output, PortError, _PyProxy, Reset)
 from .support import (get_user_loc, _obj_to_attribute, create_type_string,
@@ -18,6 +19,7 @@ from .circt.support import BackedgeBuilder, attribute_to_var
 import builtins
 from contextvars import ContextVar
 import inspect
+import os
 import sys
 
 # A memoization table for module parameterization function calls.
@@ -396,8 +398,68 @@ class ModuleBuilder(ModuleLikeBuilderBase):
       return sys._create_circt_mod(self)
     return ret
 
+  def add_metadata(self, sys, symbol: str, meta: Optional[Metadata]):
+    """Add the metadata to the IR so it potentially gets included in the
+    manifest. (It'll only be included if one of the instances has an appid.) If
+    user did not specify the metadata (or components thereof), attempt to fill
+    them in automatically:
+      - Name defaults to the module name.
+      - Summary defaults to the module docstring.
+      - If GitPython is installed, the commit hash and repo are automatically
+        generated if neither are specified.
+    """
+
+    from .dialects.esi import esi
+
+    if meta is None:
+      meta = Metadata()
+    elif not isinstance(meta, Metadata):
+      raise TypeError("Module metadata must be of type Metadata")
+
+    if meta.name is None:
+      meta.name = self.modcls.__name__
+
+    try:
+      # Attempt to automatically generate repo and commit hash using GitPython.
+      if meta.repo is None and meta.commit_hash is None:
+        import git
+        import inspect
+        modclsmodule = inspect.getmodule(self.modcls)
+        if modclsmodule is not None:
+          r = git.Repo(os.path.dirname(modclsmodule.__file__),
+                       search_parent_directories=True)
+          if r is not None:
+            meta.repo = r.remotes.origin.url
+            meta.commit_hash = r.head.object.hexsha
+    except Exception:
+      pass
+
+    if meta.summary is None and self.modcls.__doc__ is not None:
+      meta.summary = self.modcls.__doc__
+
+    with ir.InsertionPoint(sys.mod.body):
+      meta_op = esi.SymbolMetadataOp(
+          symbolRef=ir.FlatSymbolRefAttr.get(symbol),
+          name=ir.StringAttr.get(meta.name),
+          repo=ir.StringAttr.get(meta.repo) if meta.repo is not None else None,
+          commitHash=ir.StringAttr.get(meta.commit_hash)
+          if meta.commit_hash is not None else None,
+          version=ir.StringAttr.get(meta.version)
+          if meta.version is not None else None,
+          summary=ir.StringAttr.get(meta.summary)
+          if meta.summary is not None else None)
+      if meta.misc is not None:
+        for k, v in meta.misc.items():
+          meta_op.attributes[k] = _obj_to_attribute(v)
+
   def create_op(self, sys, symbol):
     """Callback for creating a module op."""
+
+    if hasattr(self.modcls, "metadata"):
+      meta = self.modcls.metadata
+      self.add_metadata(sys, symbol, meta)
+    else:
+      self.add_metadata(sys, symbol, None)
 
     if len(self.generators) > 0:
       if hasattr(self, "parameters") and self.parameters is not None:
@@ -615,6 +677,20 @@ class modparams:
     cls._builder.parameters = cache_key[1]
     _MODULE_CACHE[cache_key] = cls
     return cls
+
+
+@dataclass
+class Metadata:
+  """Metadata for a module. This is used to provide information about a module
+  in the ESI manifest. Set the classvar 'metadata' to an instance of this class
+  to provide metadata for a module."""
+
+  name: Optional[str] = None
+  repo: Optional[str] = None
+  commit_hash: Optional[str] = None
+  version: Optional[str] = None
+  summary: Optional[str] = None
+  misc: Optional[Dict[str, Any]] = None
 
 
 class ImportedModSpec(ModuleBuilder):

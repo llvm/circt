@@ -213,5 +213,6 @@ PYBIND11_MODULE(esiCppAccel, m) {
       .def_property_readonly("api_version", &Manifest::getApiVersion)
       .def("build_accelerator", &Manifest::buildAccelerator,
            py::return_value_policy::take_ownership)
-      .def_property_readonly("type_table", &Manifest::getTypeTable);
+      .def_property_readonly("type_table", &Manifest::getTypeTable)
+      .def_property_readonly("module_infos", &Manifest::getModuleInfos);
 }

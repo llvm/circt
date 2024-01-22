@@ -73,12 +73,13 @@ void printInfo(ostream &os, AcceleratorConnection &acc) {
   Manifest m(jsonManifest);
   os << "API version: " << m.getApiVersion() << endl << endl;
   os << "********************************" << endl;
-  os << "* Design information" << endl;
+  os << "* Module information" << endl;
   os << "********************************" << endl;
   os << endl;
   for (ModuleInfo mod : m.getModuleInfos())
-    os << mod << endl;
+    os << "- " << mod;
 
+  os << endl;
   os << "********************************" << endl;
   os << "* Type table" << endl;
   os << "********************************" << endl;

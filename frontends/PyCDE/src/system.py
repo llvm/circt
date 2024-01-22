@@ -15,7 +15,6 @@ from .types import TypeAlias
 from . import circt
 from .circt import ir, passmanager
 from .circt.dialects import esi, hw, msft
-from .esi_api import PythonApiBuilder
 
 from contextvars import ContextVar
 from collections.abc import Iterable
@@ -261,7 +260,8 @@ class System:
       "builtin.module(hw.module(lower-seq-hlmem))",
       "builtin.module(lower-esi-to-physical)",
       # TODO: support more than just cosim.
-      "builtin.module(lower-esi-bundles, lower-esi-ports, lower-esi-to-hw{{platform=cosim}})",
+      "builtin.module(lower-esi-bundles, lower-esi-ports)",
+      "builtin.module(lower-esi-to-hw{{platform={platform}}})",
       "builtin.module(convert-fsm-to-sv)",
       "builtin.module(lower-hwarith-to-hw)",
       "builtin.module(lower-seq-to-sv)",
@@ -293,7 +293,8 @@ class System:
         if isinstance(phase, str):
           passes = phase.format(tops=tops,
                                 verilog_file=verilog_file,
-                                tcl_file=tcl_file).strip()
+                                tcl_file=tcl_file,
+                                platform=self.platform).strip()
           if aplog is not None:
             aplog.write(f"// passes ran: {passes}\n")
             aplog.flush()

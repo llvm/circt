@@ -4,6 +4,7 @@
 #    None yet. Though we're assuming that we will have some at some point.
 
 from __future__ import annotations
+from ast import Mod
 import typing
 
 __all__ = [
@@ -282,6 +283,10 @@ class Manifest:
 
   @property
   def type_table(self) -> list[Type]:
+    ...
+
+  @property
+  def module_infos(self) -> list[ModuleInfo]:
     ...
 
 
