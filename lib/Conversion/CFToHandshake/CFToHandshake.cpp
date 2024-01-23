@@ -82,7 +82,7 @@ public:
 /// A partial lowering function may only replace a subset of the operations
 /// within the funcOp currently being lowered. However, the dialect conversion
 /// scheme requires the matched root operation to be replaced/updated, if the
-/// match was successful. To facilitate this, rewriter.updateRootInPlace
+/// match was successful. To facilitate this, rewriter.modifyOpInPlace
 /// wraps the partial update function.
 /// Next, the function operation is expected to go from illegal to legalized,
 /// after matchAndRewrite returned true. To work around this,
@@ -103,7 +103,7 @@ public:
   matchAndRewrite(Operation *op, ArrayRef<Value> /*operands*/,
                   ConversionPatternRewriter &rewriter) const override {
     assert(isa<TOp>(op));
-    rewriter.updateRootInPlace(
+    rewriter.modifyOpInPlace(
         op, [&] { loweringRes = fun(dyn_cast<TOp>(op), rewriter); });
     target.loweredOps[op] = true;
     return loweringRes;
@@ -171,7 +171,7 @@ public:
   LogicalResult
   matchAndRewrite(Operation *op, ArrayRef<Value> /*operands*/,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.updateRootInPlace(
+    rewriter.modifyOpInPlace(
         op, [&] { loweringRes = fun(target.region, rewriter); });
 
     target.opLowered = true;

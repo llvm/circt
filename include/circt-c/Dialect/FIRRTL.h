@@ -56,6 +56,14 @@ typedef enum FIRRTLEventControl {
 } FIRRTLEventControl;
 
 // NOLINTNEXTLINE(modernize-use-using)
+typedef enum FIRRTLValueFlow {
+  FIRRTL_VALUE_FLOW_NONE,
+  FIRRTL_VALUE_FLOW_SOURCE,
+  FIRRTL_VALUE_FLOW_SINK,
+  FIRRTL_VALUE_FLOW_DUPLEX,
+} FIRRTLValueFlow;
+
+// NOLINTNEXTLINE(modernize-use-using)
 typedef struct FIRRTLBundleField {
   MlirIdentifier name;
   bool isFlip;
@@ -137,6 +145,13 @@ MLIR_CAPI_EXPORTED MlirAttribute firrtlAttrGetMemDir(MlirContext ctx,
 
 MLIR_CAPI_EXPORTED MlirAttribute
 firrtlAttrGetEventControl(MlirContext ctx, FIRRTLEventControl eventControl);
+
+//===----------------------------------------------------------------------===//
+// Utility API.
+//===----------------------------------------------------------------------===//
+
+MLIR_CAPI_EXPORTED FIRRTLValueFlow firrtlValueFoldFlow(MlirValue value,
+                                                       FIRRTLValueFlow flow);
 
 #ifdef __cplusplus
 }

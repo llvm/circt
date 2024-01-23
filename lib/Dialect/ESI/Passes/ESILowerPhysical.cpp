@@ -146,7 +146,7 @@ PureModuleLowering::matchAndRewrite(ESIPureModuleOp pureMod, OpAdaptor adaptor,
   // Re-wire the inputs and erase them.
   for (auto input : inputs) {
     BlockArgument newArg;
-    rewriter.updateRootInPlace(hwMod, [&]() {
+    rewriter.modifyOpInPlace(hwMod, [&]() {
       newArg = body->addArgument(input.getResult().getType(), input.getLoc());
     });
     rewriter.replaceAllUsesWith(input.getResult(), newArg);

@@ -72,7 +72,7 @@ struct ConvertHWModule : public OpConversionPattern<HWModuleOp> {
 
     // Set the entity name attributes. Add block arguments for each output,
     // since LLHD entity outputs are still block arguments to the op.
-    rewriter.updateRootInPlace(entity, [&] {
+    rewriter.modifyOpInPlace(entity, [&] {
       entity.setName(module.getName());
       entityBodyRegion.addArguments(
           moduleOutputs, SmallVector<Location, 4>(moduleOutputs.size(),
@@ -241,7 +241,7 @@ struct ConvertInstance : public OpConversionPattern<InstanceOp> {
       // a ConnectOp rather than a PrbOp+DrvOp combo.
       for (auto &use : llvm::make_early_inc_range(result.getUses())) {
         if (isa<hw::OutputOp>(use.getOwner())) {
-          rewriter.updateRootInPlace(use.getOwner(), [&]() { use.set(sig); });
+          rewriter.modifyOpInPlace(use.getOwner(), [&]() { use.set(sig); });
         }
       }
 

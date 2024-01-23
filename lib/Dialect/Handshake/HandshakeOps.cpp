@@ -207,7 +207,7 @@ struct EliminateUnusedForkResultsPattern : mlir::OpRewritePattern<ForkOp> {
     auto operand = op.getOperand();
     auto newFork = rewriter.create<ForkOp>(
         op.getLoc(), operand, op.getNumResults() - unusedIndexes.size());
-    rewriter.updateRootInPlace(op, [&] {
+    rewriter.modifyOpInPlace(op, [&] {
       unsigned i = 0;
       for (auto oldRes : llvm::enumerate(op.getResults()))
         if (unusedIndexes.count(oldRes.index()) == 0)
@@ -232,7 +232,7 @@ struct EliminateForkToForkPattern : mlir::OpRewritePattern<ForkOp> {
     /// on if op is the single user of the value), but we'll let
     /// EliminateUnusedForkResultsPattern apply in that case.
     unsigned totalNumOuts = op.getSize() + parentForkOp.getSize();
-    rewriter.updateRootInPlace(parentForkOp, [&] {
+    rewriter.modifyOpInPlace(parentForkOp, [&] {
       /// Create a new parent fork op which produces all of the fork outputs and
       /// replace all of the uses of the old results.
       auto newParentForkOp = rewriter.create<ForkOp>(
@@ -364,7 +364,7 @@ struct EliminateCBranchIntoMuxPattern : OpRewritePattern<MuxOp> {
     if (!secondParentCBranch || firstParentCBranch != secondParentCBranch)
       return failure();
 
-    rewriter.updateRootInPlace(firstParentCBranch, [&] {
+    rewriter.modifyOpInPlace(firstParentCBranch, [&] {
       // Replace uses of the mux's output with cbranch's data input
       rewriter.replaceOp(op, firstParentCBranch.getDataOperand());
     });
@@ -738,7 +738,7 @@ LogicalResult EliminateSimpleControlMergesPattern::matchAndRewrite(
 
   for (auto &use : llvm::make_early_inc_range(dataResult.getUses())) {
     auto *user = use.getOwner();
-    rewriter.updateRootInPlace(
+    rewriter.modifyOpInPlace(
         user, [&]() { user->setOperand(use.getOperandNumber(), merge); });
   }
 

@@ -4,15 +4,16 @@
 #    None yet. Though we're assuming that we will have some at some point.
 
 from __future__ import annotations
+from ast import Mod
 import typing
 
 __all__ = [
     'Accelerator', 'AcceleratorConnection', 'AnyType', 'AppID', 'ArrayType',
     'BitVectorType', 'BitsType', 'BundlePort', 'BundleType', 'ChannelPort',
-    'ChannelType', 'Direction', 'From', 'HWModule', 'Instance', 'IntegerType',
-    'MMIO', 'Manifest', 'ModuleInfo', 'ReadChannelPort', 'SIntType',
-    'StructType', 'SysInfo', 'To', 'Type', 'UIntType', 'VoidType',
-    'WriteChannelPort'
+    'ChannelType', 'CosimManifestMethod', 'Direction', 'From', 'HWModule',
+    'Instance', 'IntegerType', 'MMIO', 'Manifest', 'ManifestCosim',
+    'ManifestMMIO', 'ModuleInfo', 'ReadChannelPort', 'SIntType', 'StructType',
+    'SysInfo', 'To', 'Type', 'UIntType', 'VoidType', 'WriteChannelPort'
 ]
 
 
@@ -26,6 +27,9 @@ class AcceleratorConnection:
     ...
 
   def get_service_mmio(self) -> MMIO:
+    ...
+
+  def set_manifest_method(self, arg0: CosimManifestMethod) -> None:
     ...
 
   def sysinfo(self) -> SysInfo:
@@ -119,6 +123,61 @@ class ChannelType(Type):
 
   @property
   def inner(self) -> Type:
+    ...
+
+
+class CosimManifestMethod:
+  """
+    Members:
+    
+      ManifestCosim
+    
+      ManifestMMIO
+    """
+  ManifestCosim: typing.ClassVar[
+      CosimManifestMethod]  # value = <CosimManifestMethod.ManifestCosim: 0>
+  ManifestMMIO: typing.ClassVar[
+      CosimManifestMethod]  # value = <CosimManifestMethod.ManifestMMIO: 1>
+  __members__: typing.ClassVar[dict[
+      str,
+      CosimManifestMethod]]  # value = {'ManifestCosim': <CosimManifestMethod.ManifestCosim: 0>, 'ManifestMMIO': <CosimManifestMethod.ManifestMMIO: 1>}
+
+  def __eq__(self, other: typing.Any) -> bool:
+    ...
+
+  def __getstate__(self) -> int:
+    ...
+
+  def __hash__(self) -> int:
+    ...
+
+  def __index__(self) -> int:
+    ...
+
+  def __init__(self, value: int) -> None:
+    ...
+
+  def __int__(self) -> int:
+    ...
+
+  def __ne__(self, other: typing.Any) -> bool:
+    ...
+
+  def __repr__(self) -> str:
+    ...
+
+  def __setstate__(self, state: int) -> None:
+    ...
+
+  def __str__(self) -> str:
+    ...
+
+  @property
+  def name(self) -> str:
+    ...
+
+  @property
+  def value(self) -> int:
     ...
 
 
@@ -226,6 +285,10 @@ class Manifest:
   def type_table(self) -> list[Type]:
     ...
 
+  @property
+  def module_infos(self) -> list[ModuleInfo]:
+    ...
+
 
 class ModuleInfo:
 
@@ -304,4 +367,6 @@ class WriteChannelPort(ChannelPort):
 
 
 From: Direction  # value = <Direction.From: 1>
+ManifestCosim: CosimManifestMethod  # value = <CosimManifestMethod.ManifestCosim: 0>
+ManifestMMIO: CosimManifestMethod  # value = <CosimManifestMethod.ManifestMMIO: 1>
 To: Direction  # value = <Direction.To: 0>

@@ -1,4 +1,4 @@
-//===- Cosim.h - ESI C++ cosimulation backend -------------------*- C++ -*-===//
+//===- Xrt.h - ESI XRT device backend ---------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,9 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This is a specialization of the ESI C++ API (backend) for connection into a
-// simulation of an ESI system. Currently uses Cap'nProto RPC, but that could
-// change. Requires Cap'nProto C++ library.
+// This is a specialization of the ESI C++ API (backend) for connection into
+// hardware on an XRT device. Requires XRT C++ library.
 //
 // DO NOT EDIT!
 // This file is distributed as part of an ESI package. The source for this file
@@ -17,8 +16,8 @@
 //===----------------------------------------------------------------------===//
 
 // NOLINTNEXTLINE(llvm-header-guard)
-#ifndef ESI_BACKENDS_COSIM_H
-#define ESI_BACKENDS_COSIM_H
+#ifndef ESI_BACKENDS_XRT_H
+#define ESI_BACKENDS_XRT_H
 
 #include "esi/Accelerator.h"
 
@@ -26,24 +25,16 @@
 
 namespace esi {
 namespace backends {
-namespace cosim {
+namespace xrt {
 
 /// Connect to an ESI simulation.
-class CosimAccelerator : public esi::AcceleratorConnection {
+class XrtAccelerator : public esi::AcceleratorConnection {
 public:
   struct Impl;
 
-  CosimAccelerator(std::string hostname, uint16_t port);
+  XrtAccelerator(std::string xclbin, std::string kernelName);
   static std::unique_ptr<AcceleratorConnection>
   connect(std::string connectionString);
-
-  // Different ways to retrieve the manifest in Cosimulation.
-  enum ManifestMethod {
-    Cosim, // Use the backdoor cosim interface. Default.
-    MMIO,  // Use MMIO emulation.
-  };
-  // Set the way this connection will retrieve the manifest.
-  void setManifestMethod(ManifestMethod method);
 
 protected:
   virtual Service *createService(Service::Type service, AppIDPath path,
@@ -53,11 +44,10 @@ protected:
 
 private:
   std::unique_ptr<Impl> impl;
-  ManifestMethod manifestMethod = Cosim;
 };
 
-} // namespace cosim
+} // namespace xrt
 } // namespace backends
 } // namespace esi
 
-#endif // ESI_BACKENDS_COSIM_H
+#endif // ESI_BACKENDS_XRT_H

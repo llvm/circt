@@ -707,8 +707,8 @@ LogicalResult ClockGateOp::canonicalize(ClockGateOp op,
   if (auto testEnable = op.getTestEnable()) {
     if (auto constOp = testEnable.getDefiningOp<hw::ConstantOp>()) {
       if (constOp.getValue().isZero()) {
-        rewriter.updateRootInPlace(op,
-                                   [&] { op.getTestEnableMutable().clear(); });
+        rewriter.modifyOpInPlace(op,
+                                 [&] { op.getTestEnableMutable().clear(); });
         return success();
       }
     }
@@ -788,7 +788,7 @@ LogicalResult FirMemReadOp::canonicalize(FirMemReadOp op,
                                          PatternRewriter &rewriter) {
   // Remove the enable if it is constant true.
   if (isConstAllOnes(op.getEnable())) {
-    rewriter.updateRootInPlace(op, [&] { op.getEnableMutable().erase(0); });
+    rewriter.modifyOpInPlace(op, [&] { op.getEnableMutable().erase(0); });
     return success();
   }
   return failure();
@@ -806,13 +806,13 @@ LogicalResult FirMemWriteOp::canonicalize(FirMemWriteOp op,
 
   // Remove the enable if it is constant true.
   if (auto enable = op.getEnable(); isConstAllOnes(enable)) {
-    rewriter.updateRootInPlace(op, [&] { op.getEnableMutable().erase(0); });
+    rewriter.modifyOpInPlace(op, [&] { op.getEnableMutable().erase(0); });
     anyChanges = true;
   }
 
   // Remove the mask if it is all ones.
   if (auto mask = op.getMask(); isConstAllOnes(mask)) {
-    rewriter.updateRootInPlace(op, [&] { op.getMaskMutable().erase(0); });
+    rewriter.modifyOpInPlace(op, [&] { op.getMaskMutable().erase(0); });
     anyChanges = true;
   }
 
@@ -838,13 +838,13 @@ LogicalResult FirMemReadWriteOp::canonicalize(FirMemReadWriteOp op,
 
   // Remove the enable if it is constant true.
   if (auto enable = op.getEnable(); isConstAllOnes(enable)) {
-    rewriter.updateRootInPlace(op, [&] { op.getEnableMutable().erase(0); });
+    rewriter.modifyOpInPlace(op, [&] { op.getEnableMutable().erase(0); });
     anyChanges = true;
   }
 
   // Remove the mask if it is all ones.
   if (auto mask = op.getMask(); isConstAllOnes(mask)) {
-    rewriter.updateRootInPlace(op, [&] { op.getMaskMutable().erase(0); });
+    rewriter.modifyOpInPlace(op, [&] { op.getMaskMutable().erase(0); });
     anyChanges = true;
   }
 
@@ -897,6 +897,21 @@ OpFoldResult FromClockOp::fold(FoldAdaptor adaptor) {
   if (auto clockAttr = dyn_cast_or_null<ClockConstAttr>(adaptor.getInput())) {
     auto ty = IntegerType::get(getContext(), 1);
     return IntegerAttr::get(ty, clockAttr.getValue() == ClockConst::High);
+  }
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
+// ClockInverterOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult ClockInverterOp::fold(FoldAdaptor adaptor) {
+  if (auto chainedInv = getInput().getDefiningOp<ClockInverterOp>())
+    return chainedInv.getInput();
+  if (auto clockAttr = dyn_cast_or_null<ClockConstAttr>(adaptor.getInput())) {
+    auto clockIn = clockAttr.getValue() == ClockConst::High;
+    return ClockConstAttr::get(getContext(),
+                               clockIn ? ClockConst::Low : ClockConst::High);
   }
   return {};
 }
