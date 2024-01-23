@@ -10,6 +10,7 @@
 #ifndef CONVERSION_SEQTOSV_FIRREGLOWERING_H
 #define CONVERSION_SEQTOSV_FIRREGLOWERING_H
 
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
@@ -322,61 +323,66 @@ struct FirRegSCC {
     for (llvm::scc_iterator<SccOpType> i = llvm::scc_begin(sccOp),
                                        e = llvm::scc_end(sccOp);
          i != e; ++i) {
-      char numFirReg = 0;
+      SmallVector<Operation *> sccRegs;
+      DenseSet<Operation *> sccOps;
       for (auto node : *i) {
-        if (numFirReg < 2 && isa<seq::FirRegOp>(node.op))
-          ++numFirReg;
-
+        sccOps.insert(node.op);
+        if (isa<seq::FirRegOp>(node.op))
+          sccRegs.push_back(node.op);
         opSccIdMap[node.op] = sccIdGen;
       }
-      if (numFirReg >= 2)
-        multipleFirReginSCC.insert(sccIdGen);
+      if (sccRegs.size() == 1) {
+        auto muxOps =
+            llvm::make_filter_range(sccOps, [&](Operation *op) -> bool {
+              return isa<comb::MuxOp>(op);
+            });
+        regToMuxSetMap[sccRegs[0]].insert(sccOps.begin(), sccOps.end());
+        continue;
+      }
+      for (auto *reg : sccRegs) {
+        getAllCombReachable(reg, sccOps);
+      }
       ++sccIdGen;
     }
   };
-  llvm::SmallDenseSet<unsigned> multipleFirReginSCC;
 
-  bool isCombReachable(SccOpType &root, Operation *dest,
-                       llvm::SmallDenseSet<SccOpType> &visitedSet) const {
-    if (root.op == dest)
-      return true;
-    if (!visitedSet.insert(root).second)
-      return false;
-    for (hw::detail::OpUseIterator it(root), end(root, true); it != end; ++it) {
-      SccOpType n = *it;
-      if (isCombReachable(n, dest, visitedSet))
-        return true;
+  bool getAllCombReachable(Operation *root, DenseSet<Operation *> sccOps) {
+    auto filter = [&](Operation *op) -> bool {
+      return (!sccOps.contains(op) || isa<seq::FirRegOp>(op));
+    };
+    SccOpType rootNode(root, filter, 0);
+    SmallVector<SccOpType> dfsQ;
+    llvm::SmallDenseSet<SccOpType> visitedSet;
+    dfsQ.push_back(rootNode);
+    while (!dfsQ.empty()) {
+      auto node = dfsQ.pop_back_val();
+      if (!visitedSet.insert(node).second)
+        continue;
+      if (isa<comb::MuxOp>(node.op))
+        regToMuxSetMap[root].insert(node.op);
+
+      for (hw::detail::OpUseIterator it(node), end(node, true); it != end;
+           ++it) {
+        SccOpType child = *it;
+        dfsQ.push_back(child);
+      }
     }
 
     return false;
-  };
+  }
 
   bool isInSameSCC(Operation *mux, Operation *reg) const {
-    auto lhsIt = opSccIdMap.find(mux);
-    auto rhsIt = opSccIdMap.find(reg);
-
-    if (lhsIt != opSccIdMap.end() && rhsIt != opSccIdMap.end() &&
-        lhsIt->getSecond() == rhsIt->getSecond()) {
-      auto id = lhsIt->getSecond();
-      if (!multipleFirReginSCC.contains(id))
-        return true;
-
-      auto filter = [&](Operation *op) {
-        auto sccIt = opSccIdMap.find(op);
-        return isa<seq::FirRegOp>(op) || sccIt == opSccIdMap.end() ||
-               sccIt->getSecond() != id;
-      };
-      SccOpType root(reg, filter, 0);
-      llvm::SmallDenseSet<SccOpType> visitedSet;
-      return isCombReachable(root, mux, visitedSet);
-    }
-    return false;
+    auto regIt = regToMuxSetMap.find(reg);
+    if (regIt == regToMuxSetMap.end())
+      return false;
+    return regIt->second.find(mux) != regIt->second.end();
   }
 
   void erase(Operation *op) { opSccIdMap.erase(op); }
 
 private:
   llvm::DenseMap<Operation *, size_t> opSccIdMap;
+  llvm::DenseMap<Operation *, llvm::SmallDenseSet<Operation *>> regToMuxSetMap;
   unsigned sccIdGen = 0;
 };
 
