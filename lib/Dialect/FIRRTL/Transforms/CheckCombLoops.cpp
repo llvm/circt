@@ -162,6 +162,9 @@ public:
           .Case<FConnectLike>([&](FConnectLike connect) {
             recordDataflow(connect.getDest(), connect.getSrc());
           })
+          .Case<mlir::UnrealizedConversionCastOp>([&](auto) {
+            // Assume external dialects mixed into FIRRTL do not close cycles.
+          })
           .Default([&](Operation *op) {
             // All other expressions.
             if (op->getNumResults() == 1) {
@@ -702,6 +705,7 @@ private:
 class CheckCombLoopsPass : public CheckCombLoopsBase<CheckCombLoopsPass> {
 public:
   void runOnOperation() override {
+    getOperation().dump();
     auto &instanceGraph = getAnalysis<InstanceGraph>();
     DenseMap<FModuleLike, DrivenBysMapType> modulePortPaths;
 

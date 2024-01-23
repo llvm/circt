@@ -282,7 +282,7 @@ firrtl.circuit "hasLoops"  {
     %5 = firrtl.subindex %b[0] : !firrtl.vector<uint<1>, 2>
     firrtl.strictconnect %5, %4 : !firrtl.uint<1>
   }
-   
+
   firrtl.module private @Bar(in %a: !firrtl.vector<uint<1>, 2>, out %b: !firrtl.vector<uint<1>, 2>) {
     %0 = firrtl.subindex %a[0] : !firrtl.vector<uint<1>, 2>
     %1 = firrtl.subindex %b[0] : !firrtl.vector<uint<1>, 2>
@@ -333,7 +333,7 @@ firrtl.circuit "hasLoops"  {
     %5 = firrtl.subindex %b[0] : !firrtl.vector<uint<1>, 2>
     firrtl.strictconnect %5, %4 : !firrtl.uint<1>
   }
-   
+
   firrtl.module private @Bar(in %a: !firrtl.vector<uint<1>, 2>, out %b: !firrtl.vector<uint<1>, 2>) {
     firrtl.strictconnect %b, %a : !firrtl.vector<uint<1>, 2>
   }
@@ -731,7 +731,7 @@ firrtl.circuit "forceLoop" {
     firrtl.connect %inner2_clk, %clk : !firrtl.clock, !firrtl.clock
     firrtl.connect %inner2_in, %y : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.ref.force %clk, %c, %w_ref, %inner2_in : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
-    %inner2_out = firrtl.ref.resolve %w_ref : !firrtl.rwprobe<uint<1>> 
+    %inner2_out = firrtl.ref.resolve %w_ref : !firrtl.rwprobe<uint<1>>
     firrtl.connect %z, %inner2_out : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %y, %z : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %d, %z : !firrtl.uint<1>, !firrtl.uint<1>
@@ -1027,10 +1027,23 @@ firrtl.circuit "FlipConnect2" {
   firrtl.module @FlipConnect2() {
     %in = firrtl.wire   : !firrtl.bundle<a flip: bundle<a flip: uint<1>>>
     %out  = firrtl.wire  : !firrtl.bundle<a flip: bundle<a flip: uint<1>>>
-    firrtl.connect %out, %in : !firrtl.bundle<a flip: bundle<a flip: uint<1>>>, 
+    firrtl.connect %out, %in : !firrtl.bundle<a flip: bundle<a flip: uint<1>>>,
     !firrtl.bundle<a flip: bundle<a flip: uint<1>>>
     %0 = firrtl.subfield %in[a] : !firrtl.bundle<a flip: bundle<a flip: uint<1>>>
     %1 = firrtl.subfield %out[a] : !firrtl.bundle<a flip: bundle<a flip: uint<1>>>
     firrtl.connect %1, %0 : !firrtl.bundle<a flip: uint<1>>,!firrtl.bundle<a flip: uint<1>>
+  }
+}
+
+// -----
+
+firrtl.circuit "UnrealizedConversionCast" {
+  firrtl.module @UnrealizedConversionCast() {
+    // Other dialects might need to close loops in their own ops. Since these
+    // interface with FIRRTL via unrealized conversion casts, assume they
+    // close no loops and trust the other dialects.
+    %b = firrtl.wire   : !firrtl.uint<32>
+    %a = builtin.unrealized_conversion_cast %b : !firrtl.uint<32> to !firrtl.uint<32>
+    firrtl.strictconnect %b, %a : !firrtl.uint<32>
   }
 }
