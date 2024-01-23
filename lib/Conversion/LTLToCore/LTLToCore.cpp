@@ -53,7 +53,7 @@ struct DisableOpConversion : OpConversionPattern<ltl::DisableOp> {
 
     // Generate the antecedant of the disable implication
     Value antecedent = rewriter.create<comb::XorOp>(
-        op.getLoc(), mlir::UnitAttr(), adaptor.getCondition(), constOne);*/
+        op.getLoc(), adaptor.getCondition(), constOne);*/
 
     // Replace the ltl::DisableOp with the OR part of the implication
     rewriter.replaceOpWithNewOp<comb::OrOp>(op, adaptor.getCondition(),
@@ -134,10 +134,6 @@ struct VerifAssertOpConversion : OpConversionPattern<verif::AssertOp> {
                                        sv::DeferAssert::Immediate),
               adaptor.getLabelAttr());
         });
-
-    // Get rid of the two old operations
-    // rewriter.eraseOp(ltlclk);
-    // rewriter.eraseOp(op);
 
     return success();
   }
