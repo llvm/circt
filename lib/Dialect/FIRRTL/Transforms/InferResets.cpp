@@ -1534,18 +1534,6 @@ void InferResetsPass::determineImpl() {
 ///     port name, and marks that as to be created.
 /// - Otherwise indicates that a port with the reset's name should be created.
 ///
-/// 
-/// - if i see a regreset, does it have subfields? for each subfield:
-///   - is the subfield only ever invalidated? if so, connect it to 0
-///   - is the subfield last-connected to something other than invalid? if so, ignore
-///
-/// fart currently looks at regresets and assumes that they are all
-/// reset to some value. this assumption is not true since users can
-/// set aggregate regresets to regular regs without a real reset value
-/// by connecting them to a dontcare. fart needs to check for
-/// invalidated fields of a reg reset (aggregate or otherwise) and set
-/// them to 0
-
 void InferResetsPass::determineImpl(FModuleOp module, ResetDomain &domain) {
   if (!domain.reset)
     return; // nothing to do if the module needs no reset
@@ -1827,16 +1815,22 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
     return;
   }
 
+
+  // regreset = [1 inv 0 ]
+  // ((src?, false), (dst=1, true), (src?, false))
+  // := [1 0 0]
+  // 
   // Handle registers with reset.
   if (auto regOp = dyn_cast<RegResetOp>(op)) {
-    SmallVector<std::tuple<FieldRefs, bool>> invFields;
+      // <src, dst, isInvalid>
+      SmallVector<std::tuple<FieldRefs, FieldRefs, bool>> invFields;
     // If the regreset is invalidated, it needs extra handling
     walkDrivers(regOp.getResetValue(), true, false, false,
       [](FieldRef dst, FieldRef src) {
           if (src.isa<InvalidValueOp>())
-              invFields.push_back(std::make_tuple(dst, true);
+              invFields.push_back(std::make_tuple(src, dst, true);
           else
-              invFields.push_back(std::make_tuple(src, false);
+              invFields.push_back(std::make_tuple(src, dst, false);
       }));
     bool dealWithInvalidates = false;
     for (auto field: invFields) {
@@ -1846,12 +1840,28 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
         }
     }
     if (dealWithInvalidates) {
-      
+      // create a new wire as a reset value
+        // create a wire as wireOp = ...
+        auto wireOp = builder.create<WireOp>(regOp.getDataType());
       for (auto field: invFields) {
-        if (std::get<1>(field) == true) {
-            
-        }
+          if (std::get<3>(field) == false) { // not invalid
+              auto dst = getValueByFieldID(builder, wireOp, std::get<1>(field));
+              auto src = std::get<2>(field);
+              builder.create<StrictConnectOp>(dst, src);
+          }
+          else { // invalid
+              // get the type of the dst from the field ref
+              // use typeswitch here?
+              auto dstType = std::get<2>(field).getElementType();
+              auto dst = builder.create
+              auto src = std::get<2>(field);
+              builder.create<StrictConnectOp>(dst, src);
+          }
       }
+      // regOp := wireOp
+                // check the insertion point
+                // getElementType                
+      builder.create<StrictConnectOp>(regOp, wireOp);
     }
     
     // If the register already has an async reset, leave it untouched.
