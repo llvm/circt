@@ -705,7 +705,6 @@ private:
 class CheckCombLoopsPass : public CheckCombLoopsBase<CheckCombLoopsPass> {
 public:
   void runOnOperation() override {
-    getOperation().dump();
     auto &instanceGraph = getAnalysis<InstanceGraph>();
     DenseMap<FModuleLike, DrivenBysMapType> modulePortPaths;
 
