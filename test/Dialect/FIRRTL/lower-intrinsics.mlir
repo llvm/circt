@@ -101,6 +101,24 @@ firrtl.circuit "Foo" {
     firrtl.strictconnect %en2, %en : !firrtl.uint<1>
   }
 
+  // CHECK-NOT: ClockInverter0
+  // CHECK-NOT: ClockInverter1
+  firrtl.extmodule @ClockInverter0(in in: !firrtl.clock, out out: !firrtl.clock) attributes {annotations = [{class = "circt.Intrinsic", intrinsic = "circt.clock_inv"}]}
+  firrtl.intmodule @ClockInverter1(in in: !firrtl.clock, out out: !firrtl.clock) attributes {intrinsic = "circt.clock_inv"}
+
+  // CHECK: ClockInverter
+  firrtl.module @ClockInverter(in %clk: !firrtl.clock) {
+    // CHECK-NOT: ClockInverter0
+    // CHECK: firrtl.int.clock_inv
+    %in1, %out1 = firrtl.instance "" @ClockInverter0(in in: !firrtl.clock, out out: !firrtl.clock)
+    firrtl.strictconnect %in1, %clk : !firrtl.clock
+
+    // CHECK-NOT: ClockInverter1
+    // CHECK: firrtl.int.clock_inv
+    %in2, %out2 = firrtl.instance "" @ClockInverter1(in in: !firrtl.clock, out out: !firrtl.clock)
+    firrtl.strictconnect %in2, %clk : !firrtl.clock
+  }
+
   // CHECK-NOT: LTLAnd
   // CHECK-NOT: LTLOr
   // CHECK-NOT: LTLDelay1

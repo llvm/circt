@@ -3,13 +3,14 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from __future__ import annotations
-from typing import List, Optional, Set, Tuple, Dict
+from dataclasses import dataclass
+from typing import Any, List, Optional, Set, Tuple, Dict
 
 from .common import (AppID, Clock, Input, Output, PortError, _PyProxy, Reset)
 from .support import (get_user_loc, _obj_to_attribute, create_type_string,
                       create_const_zero)
 from .signals import ClockSignal, Signal, _FromCirctValue
-from .types import ClockType
+from .types import ClockType, Type
 
 from .circt import ir, support
 from .circt.dialects import hw
@@ -18,6 +19,7 @@ from .circt.support import BackedgeBuilder, attribute_to_var
 import builtins
 from contextvars import ContextVar
 import inspect
+import os
 import sys
 
 # A memoization table for module parameterization function calls.
@@ -158,7 +160,7 @@ class PortProxyBase:
       if value is None:
         unconnected_ports.append(self._builder.outputs[idx][0])
     if len(unconnected_ports) > 0:
-      raise support.UnconnectedSignalError(self.name, unconnected_ports)
+      raise support.UnconnectedSignalError(self._name, unconnected_ports)
 
   def _clear(self):
     """TL;DR: Downgrade a shotgun to a handgun.
@@ -282,6 +284,7 @@ class ModuleLikeBuilderBase(_PyProxy):
       proxy_attrs[name] = property(fget=None, fset=fset)
       output_port_lookup[name] = idx
     proxy_attrs["_output_port_lookup"] = output_port_lookup
+    proxy_attrs["_name"] = self.modcls.__name__
 
     return type(self.modcls.__name__ + "Ports", (PortProxyBase,), proxy_attrs)
 
@@ -305,7 +308,7 @@ class ModuleLikeBuilderBase(_PyProxy):
       named_outputs[name] = fget
       setattr(self.modcls, name, property(fget=fget))
     setattr(self.modcls,
-            "_outputs",
+            "outputs",
             lambda self, outputs=named_outputs:
             {n: g(self) for n, g in outputs.items()})
 
@@ -395,8 +398,68 @@ class ModuleBuilder(ModuleLikeBuilderBase):
       return sys._create_circt_mod(self)
     return ret
 
+  def add_metadata(self, sys, symbol: str, meta: Optional[Metadata]):
+    """Add the metadata to the IR so it potentially gets included in the
+    manifest. (It'll only be included if one of the instances has an appid.) If
+    user did not specify the metadata (or components thereof), attempt to fill
+    them in automatically:
+      - Name defaults to the module name.
+      - Summary defaults to the module docstring.
+      - If GitPython is installed, the commit hash and repo are automatically
+        generated if neither are specified.
+    """
+
+    from .dialects.esi import esi
+
+    if meta is None:
+      meta = Metadata()
+    elif not isinstance(meta, Metadata):
+      raise TypeError("Module metadata must be of type Metadata")
+
+    if meta.name is None:
+      meta.name = self.modcls.__name__
+
+    try:
+      # Attempt to automatically generate repo and commit hash using GitPython.
+      if meta.repo is None and meta.commit_hash is None:
+        import git
+        import inspect
+        modclsmodule = inspect.getmodule(self.modcls)
+        if modclsmodule is not None:
+          r = git.Repo(os.path.dirname(modclsmodule.__file__),
+                       search_parent_directories=True)
+          if r is not None:
+            meta.repo = r.remotes.origin.url
+            meta.commit_hash = r.head.object.hexsha
+    except Exception:
+      pass
+
+    if meta.summary is None and self.modcls.__doc__ is not None:
+      meta.summary = self.modcls.__doc__
+
+    with ir.InsertionPoint(sys.mod.body):
+      meta_op = esi.SymbolMetadataOp(
+          symbolRef=ir.FlatSymbolRefAttr.get(symbol),
+          name=ir.StringAttr.get(meta.name),
+          repo=ir.StringAttr.get(meta.repo) if meta.repo is not None else None,
+          commitHash=ir.StringAttr.get(meta.commit_hash)
+          if meta.commit_hash is not None else None,
+          version=ir.StringAttr.get(meta.version)
+          if meta.version is not None else None,
+          summary=ir.StringAttr.get(meta.summary)
+          if meta.summary is not None else None)
+      if meta.misc is not None:
+        for k, v in meta.misc.items():
+          meta_op.attributes[k] = _obj_to_attribute(v)
+
   def create_op(self, sys, symbol):
     """Callback for creating a module op."""
+
+    if hasattr(self.modcls, "metadata"):
+      meta = self.modcls.metadata
+      self.add_metadata(sys, symbol, meta)
+    else:
+      self.add_metadata(sys, symbol, None)
 
     if len(self.generators) > 0:
       if hasattr(self, "parameters") and self.parameters is not None:
@@ -449,7 +512,7 @@ class ModuleBuilder(ModuleLikeBuilderBase):
         if signal.type._type != ptype._type:
           raise ValueError(
               f"Wrong type on input signal '{name}'. Got '{signal.type}',"
-              f" expected '{type}'")
+              f" expected '{ptype}'")
         circt_inputs[name] = signal.value
       elif signal is None:
         if len(self.generators) > 0:
@@ -499,7 +562,7 @@ class ModuleBuilder(ModuleLikeBuilderBase):
       hw.OutputOp([o.value for o in ports._output_values])
 
 
-class Module(metaclass=ModuleLikeType):
+class Module(_PyProxy, metaclass=ModuleLikeType):
   """Subclass this class to define a regular PyCDE or external module. To define
   a module in PyCDE, supply a `@generator` method. To create an external module,
   don't. In either case, a list of ports is required.
@@ -515,11 +578,13 @@ class Module(metaclass=ModuleLikeType):
   """
 
   BuilderType = ModuleBuilder
+  _builder: ModuleBuilder
 
   def __init__(self, instance_name: str = None, appid: AppID = None, **inputs):
     """Create an instance of this module. Instance namd and appid are optional.
     All inputs must be specified. If a signal has not been produced yet, use the
     `Wire` construct and assign the signal to that wire later on."""
+    from .system import System
 
     kwargs = dict()
 
@@ -540,13 +605,24 @@ class Module(metaclass=ModuleLikeType):
         kwargs["appid"] = appid
 
     self.inst = self._builder.instantiate(self, inputs, **kwargs)
-
     if appid is not None:
       self.inst.operation.attributes[AppID.AttributeName] = appid._appid
+
+    System.current()._op_cache.register_pyproxy(self)
+
+  def clear_op_refs(self):
+    self.inst = None
 
   @classmethod
   def print(cls, out=sys.stdout):
     cls._builder.print(out)
+
+  @classmethod
+  def inputs(cls) -> List[Tuple[str, Type]]:
+    """Get a dictionary of input port names to signals."""
+    if cls._builder.inputs is None:
+      return []
+    return cls._builder.inputs
 
 
 class modparams:
@@ -601,6 +677,20 @@ class modparams:
     cls._builder.parameters = cache_key[1]
     _MODULE_CACHE[cache_key] = cls
     return cls
+
+
+@dataclass
+class Metadata:
+  """Metadata for a module. This is used to provide information about a module
+  in the ESI manifest. Set the classvar 'metadata' to an instance of this class
+  to provide metadata for a module."""
+
+  name: Optional[str] = None
+  repo: Optional[str] = None
+  commit_hash: Optional[str] = None
+  version: Optional[str] = None
+  summary: Optional[str] = None
+  misc: Optional[Dict[str, Any]] = None
 
 
 class ImportedModSpec(ModuleBuilder):

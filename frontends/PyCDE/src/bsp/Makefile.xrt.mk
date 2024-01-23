@@ -11,7 +11,7 @@ VPP := $(XILINX_VITIS)/bin/v++
 # Note, the Azure shell verison is not officially supported in hw_emu mode
 TARGET := hw_emu
 
-NAME := {{system_name}}
+NAME := esi_image
 SRC := hw
 BUILD := build_$(TARGET)
 TEMP := $(BUILD)/temp
@@ -25,10 +25,6 @@ XCL_OUT := $(NAME).$(TARGET).xclbin
 HOST_APP := $(BUILD)/host_app
 
 VPPFLAGS = --save-temps
-
-# Used for compiling C++ apps for XRT
-CXXFLAGS = -I$(XILINX_XRT)/include -I$(XILINX_VIVADO)/include -Wall -g -O0 -std=c++2a -fmessage-length=0
-LDFLAGS = -L$(XILINX_XRT)/lib -pthread -lxrt_coreutil
 
 # Platform must match the device + shell you're using
 # For Azure NP-series, use the official Azure Shell
@@ -53,9 +49,8 @@ device2xsa = $(strip $(patsubst %.xpfm, % , $(shell basename $(PLATFORM))))
 XSA := $(call device2xsa, $(PLATFORM))
 
 .PHONY: clean emconfig exec
-.INTERMEDIATE: azure_creds
 
-all: esiXrtPython $(XCL_OUT) emconfig
+all: $(XCL_OUT) emconfig
 
 $(BUILD):
 	mkdir -p $(BUILD)
@@ -80,16 +75,8 @@ emconfig: $(BUILD)/emconfig.json
 $(BUILD)/emconfig.json:
 	emconfigutil --platform $(PLATFORM) --od $(BUILD)
 
-# Compile the Python interface driver.
-# TODO: build for a list of python versions.
-PY_EXT := $(shell $(PYTHON)-config --extension-suffix)
-PYBIND11_INC := $(shell $(PYTHON) -m pybind11 --includes)
-runtime/$(NAME)/esiXrtPython$(PY_EXT): runtime/$(NAME)/EsiXrtPython.cpp
-	$(CXX) -o runtime/$(NAME)/esiXrtPython$(PY_EXT) $^ $(CXXFLAGS) $(LDFLAGS) -shared -fPIC $(PYBIND11_INC)
-esiXrtPython: runtime/$(NAME)/esiXrtPython$(PY_EXT)
-
 clean:
-	rm -rf $(BUILD) .Xil vivado* kernel *.jou *.log *.wdb *.wcfg *.protoinst *.csv
+	rm -rf $(BUILD) temp_kernel .Xil vivado* kernel *.jou *.log *.wdb *.wcfg *.protoinst *.csv
 	rm -f runtime/*.so
 
 # Targets which only apply to image builds.
@@ -99,7 +86,7 @@ ifeq ($(TARGET), hw)
 # https://learn.microsoft.com/en-us/azure/virtual-machines/field-programmable-gate-arrays-attestation
 IMAGE_AZ_BASENAME ?= $(NAME)_$(shell date +%s).hw
 IMAGE_AZ_NAME := $(USER)_$(IMAGE_AZ_BASENAME)
-azure: $(IMAGE_AZ_NAME).azure.xclbin
+azure: azure_creds $(IMAGE_AZ_NAME).azure.xclbin
 azure_creds:
 	@echo "*************************"
 	@echo "* Getting Azure credentials. MUST 'az login' first!"
@@ -135,7 +122,7 @@ $(IMAGE_AZ_NAME).azure.xclbin: azure_creds $(XCL_OUT) validate-fpgaimage.sh
 
 	bash validate-fpgaimage.sh --storage-account $(AZ_FPGA_STORAGE_ACCOUNT) \
 														 --container $(AZ_FPGA_STORAGE_CONTAINER) \
-														 --netlist-name $(IMAGE_AZ_NAME) \
+														 --netlist-name $(IMAGE_AZ_NAME).xclbin \
 														 --blob-container-sas "$(SAS)"
 
 	az storage blob download \
@@ -149,6 +136,7 @@ validate-fpgaimage.sh:
 	wget -O azure_validate.zip \
 		https://fpgaattestation.blob.core.windows.net/validationscripts/validate.zip
 	unzip azure_validate.zip
+	mv scripts/validate-fpgaimage.sh .
 
 azpackage: $(NAME)_azpackage.tar.gz
 $(NAME)_azpackage.tar.gz: $(IMAGE_AZ_NAME).azure.xclbin

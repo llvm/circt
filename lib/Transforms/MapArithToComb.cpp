@@ -37,7 +37,7 @@ public:
   }
 };
 
-template <typename TFrom, typename TTo>
+template <typename TFrom, typename TTo, bool cloneAttrs = false>
 class OneToOnePattern : public OpConversionPattern<TFrom> {
 public:
   using OpConversionPattern<TFrom>::OpConversionPattern;
@@ -46,7 +46,9 @@ public:
   LogicalResult
   matchAndRewrite(TFrom op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<TTo>(op, adaptor.getOperands(), op->getAttrs());
+    rewriter.replaceOpWithNewOp<TTo>(
+        op, adaptor.getOperands(),
+        cloneAttrs ? op->getAttrs() : ArrayRef<::mlir::NamedAttribute>());
     return success();
   }
 };
@@ -169,7 +171,7 @@ public:
                     OneToOnePattern<arith::ShLIOp, comb::ShlOp>,
                     OneToOnePattern<arith::ShRSIOp, comb::ShrSOp>,
                     OneToOnePattern<arith::ShRUIOp, comb::ShrUOp>,
-                    OneToOnePattern<arith::ConstantOp, hw::ConstantOp>,
+                    OneToOnePattern<arith::ConstantOp, hw::ConstantOp, true>,
                     OneToOnePattern<arith::SelectOp, comb::MuxOp>,
                     ExtSConversionPattern, ExtZConversionPattern,
                     TruncateConversionPattern, CompConversionPattern>(

@@ -1158,7 +1158,7 @@ struct ClassOpSignatureConversion : public OpConversionPattern<om::ClassOp> {
                                            &result)))
       return failure();
 
-    rewriter.updateRootInPlace(classOp, []() {});
+    rewriter.modifyOpInPlace(classOp, []() {});
 
     return success();
   }
@@ -1184,7 +1184,7 @@ struct ClassExternOpSignatureConversion
                                            &result)))
       return failure();
 
-    rewriter.updateRootInPlace(classOp, []() {});
+    rewriter.modifyOpInPlace(classOp, []() {});
 
     return success();
   }

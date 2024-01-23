@@ -167,7 +167,7 @@ struct ParametricTypeConversionPattern : public ConversionPattern {
     llvm::SmallVector<Value, 4> convertedOperands;
     // Update the result types of the operation
     bool ok = true;
-    rewriter.updateRootInPlace(op, [&]() {
+    rewriter.modifyOpInPlace(op, [&]() {
       // Mutate result types
       for (auto it : llvm::enumerate(op->getResultTypes())) {
         FailureOr<Type> res =

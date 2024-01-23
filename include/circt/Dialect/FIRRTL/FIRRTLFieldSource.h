@@ -62,10 +62,13 @@ public:
 private:
   void visitOp(Operation *op);
   void visitSubfield(SubfieldOp sf);
+  void visitOpenSubfield(OpenSubfieldOp sf);
   void visitSubindex(SubindexOp si);
+  void visitOpenSubindex(OpenSubindexOp si);
   void visitSubaccess(SubaccessOp sa);
   void visitMem(MemOp mem);
   void visitInst(InstanceOp inst);
+  void visitInstChoice(InstanceChoiceOp inst);
 
   void makeNodeForValue(Value dst, Value src, ArrayRef<int64_t> path,
                         Flow flow);

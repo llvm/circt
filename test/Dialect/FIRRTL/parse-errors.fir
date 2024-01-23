@@ -330,7 +330,14 @@ circuit ProbeFlipType:
 
 circuit NestedProbes:
   module NestedProbes:
-    output p : Probe<Probe<UInt>> ; expected-error {{cannot nest reference types}}
+    output p : Probe<Probe<UInt>> ; expected-error {{invalid probe inner type, must be base-type}}
+
+;// -----
+FIRRTL version 3.1.0
+
+circuit ProbeOfProp:
+  module ProbeOfProp:
+    output p : Probe<Integer> ; expected-error {{invalid probe inner type, must be base-type}}
 
 ;// -----
 

@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -split-input-file -verify-diagnostics
+// RUN: circt-opt %s -split-input-file -verify-diagnostics -allow-unregistered-dialect
 
 func.func @combinational_condition() {
   %c0_i32 = arith.constant 0 : i32
@@ -67,11 +67,11 @@ func.func @only_stages() {
 
 func.func @only_stages() {
   %false = arith.constant 0 : i1
-  // expected-error @+1 {{'loopschedule.pipeline' op stages may only contain 'loopschedule.pipeline.stage' or 'loopschedule.terminator' ops, found %1 = "arith.addi"(%arg0, %arg0) : (i1, i1) -> i1}}
+  // expected-error @+1 {{'loopschedule.pipeline' op stages may only contain 'loopschedule.pipeline.stage' or 'loopschedule.terminator' ops, found "foo"() : () -> ()}}
   loopschedule.pipeline II = 1 iter_args(%arg0 = %false) : (i1) -> () {
     loopschedule.register %arg0 : i1
   } do {
-    %0 = arith.addi %arg0, %arg0 : i1
+    "foo"() : () -> ()
     loopschedule.terminator iter_args(), results() : () -> ()
   }
   return

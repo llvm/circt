@@ -117,6 +117,10 @@ class _PyProxy:
   def __init__(self, name: str):
     self.name = name
 
+  def clear_op_refs(self):
+    """Clear all references to IR ops."""
+    pass
+
 
 class PortError(Exception):
   pass

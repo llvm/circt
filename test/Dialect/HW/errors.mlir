@@ -1,20 +1,20 @@
 // RUN: circt-opt %s -split-input-file -verify-diagnostics
 
-func.func private @test_extract(%arg0: i4) {
+hw.module private @test_extract(in %arg0: i4) {
   // expected-error @+1 {{'comb.extract' op from bit too large for input}}
   %a = comb.extract %arg0 from 6 : (i4) -> i3
 }
 
 // -----
 
-func.func private @test_extract(%arg0: i4) {
+hw.module private @test_extract(in %arg0: i4) {
   // expected-error @+1 {{'comb.extract' op from bit too large for input}}
   %b = comb.extract %arg0 from 2 : (i4) -> i3
 }
 
 // -----
 
-func.func private @test_and() {
+hw.module private @test_and() {
   // expected-error @+1 {{'comb.and' op expected 1 or more operands}}
   %b = comb.and : i111
 }
@@ -28,7 +28,7 @@ hw.module @InnerSymVisibility() {
 
 // -----
 
-func.func private @notModule () {
+func.func @notModule () {
   return
 }
 
@@ -65,12 +65,12 @@ hw.module @A(out "": i1) { }
 // -----
 
 // expected-error @+1 {{expected non-function type}}
-func.func private @arrayDims(%a: !hw.array<3 x 4 x i5>) { }
+hw.module private @arrayDims(in %a: !hw.array<3 x 4 x i5>) { }
 
 // -----
 
 // expected-error @+1 {{invalid element for hw.inout type}}
-func.func private @invalidInout(%arg0: !hw.inout<tensor<*xf32>>) { }
+hw.module private @invalidInout(in %arg0: !hw.inout<tensor<*xf32>>) { }
 
 // -----
 

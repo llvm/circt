@@ -92,3 +92,8 @@ hw.module @clock_const() {
   // CHECK: seq.const_clock low
   %low = seq.const_clock low
 }
+
+hw.module @clock_inv(in %clock: !seq.clock) {
+  // CHECK: seq.clock_inv %clock
+  %inv = seq.clock_inv %clock
+}

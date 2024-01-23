@@ -52,9 +52,37 @@ void testExport(MlirContext ctx) {
   // CHECK-NEXT:     connect out, and(in_1, in_2) @[- 6:5]
 }
 
+void testValueFoldFlow(MlirContext ctx) {
+  // clang-format off
+  const char *testFIR =
+    "firrtl.circuit \"ValueFoldFlowTest\" {\n"
+    "  firrtl.module @ValueFoldFlowTest(in %in: !firrtl.uint<32>,\n"
+    "                                   out %out: !firrtl.uint<32>) {\n"
+    "    firrtl.connect %out, %in : !firrtl.uint<32>, !firrtl.uint<32>\n"
+    "  }\n"
+    "}\n";
+  // clang-format on
+  MlirModule module =
+      mlirModuleCreateParse(ctx, mlirStringRefCreateFromCString(testFIR));
+  MlirBlock mlirModule = mlirModuleGetBody(module);
+  MlirBlock firCircuit = mlirRegionGetFirstBlock(
+      mlirOperationGetRegion(mlirBlockGetFirstOperation(mlirModule), 0));
+  MlirBlock firModule = mlirRegionGetFirstBlock(
+      mlirOperationGetRegion(mlirBlockGetFirstOperation(firCircuit), 0));
+
+  MlirValue in = mlirBlockGetArgument(firModule, 0);
+  MlirValue out = mlirBlockGetArgument(firModule, 1);
+
+  assert(firrtlValueFoldFlow(in, FIRRTL_VALUE_FLOW_SOURCE) ==
+         FIRRTL_VALUE_FLOW_SOURCE);
+  assert(firrtlValueFoldFlow(out, FIRRTL_VALUE_FLOW_SOURCE) ==
+         FIRRTL_VALUE_FLOW_SINK);
+}
+
 int main(void) {
   MlirContext ctx = mlirContextCreate();
   mlirDialectHandleLoadDialect(mlirGetDialectHandle__firrtl__(), ctx);
   testExport(ctx);
+  testValueFoldFlow(ctx);
   return 0;
 }
