@@ -605,6 +605,7 @@ firrtl.module @Shr(in %in1u: !firrtl.uint<1>,
                    in %ins: !firrtl.sint,
                    in %in0u: !firrtl.uint<0>,
                    in %in0s: !firrtl.sint<0>,
+                   out %out0u: !firrtl.uint<0>,
                    out %out1s: !firrtl.sint<1>,
                    out %out1u: !firrtl.uint<1>,
                    out %out4u: !firrtl.uint<4>,
@@ -617,12 +618,12 @@ firrtl.module @Shr(in %in1u: !firrtl.uint<1>,
   firrtl.connect %out1u, %0 : !firrtl.uint<1>, !firrtl.uint<1>
 
   // CHECK: firrtl.strictconnect %out1u, %c0_ui1
-  %1 = firrtl.shr %in4u, 4 : (!firrtl.uint<4>) -> !firrtl.uint<1>
-  firrtl.connect %out1u, %1 : !firrtl.uint<1>, !firrtl.uint<1>
+  %1 = firrtl.shr %in4u, 4 : (!firrtl.uint<4>) -> !firrtl.uint<0>
+  firrtl.connect %out1u, %1 : !firrtl.uint<1>, !firrtl.uint<0>
 
   // CHECK: firrtl.strictconnect %out1u, %c0_ui1
-  %2 = firrtl.shr %in4u, 5 : (!firrtl.uint<4>) -> !firrtl.uint<1>
-  firrtl.connect %out1u, %2 : !firrtl.uint<1>, !firrtl.uint<1>
+  %2 = firrtl.shr %in4u, 5 : (!firrtl.uint<4>) -> !firrtl.uint<0>
+  firrtl.connect %out1u, %2 : !firrtl.uint<1>, !firrtl.uint<0>
 
   // CHECK: [[BITS:%.+]] = firrtl.bits %in4s 3 to 3
   // CHECK-NEXT: [[CAST:%.+]] = firrtl.asSInt [[BITS]]
@@ -664,9 +665,9 @@ firrtl.module @Shr(in %in1u: !firrtl.uint<1>,
   firrtl.connect %out1u, %9 : !firrtl.uint<1>, !firrtl.uint<0>
 
   // Issue #6608: https://github.com/llvm/circt/issues/6608
-  // CHECK: firrtl.strictconnect %out1u, %c0_ui1
-  %10 = firrtl.shr %in0u, 0 : (!firrtl.uint<0>) -> !firrtl.uint<1>
-  firrtl.strictconnect %out1u, %10 : !firrtl.uint<1>
+  // CHECK: firrtl.strictconnect %out0u, %c0_ui0
+  %10 = firrtl.shr %in0u, 0 : (!firrtl.uint<0>) -> !firrtl.uint<0>
+  firrtl.strictconnect %out0u, %10 : !firrtl.uint<0>
 
   // Issue #6608: https://github.com/llvm/circt/issues/6608
   // CHECK: firrtl.strictconnect %out1s, %c0_si1

@@ -83,8 +83,8 @@ firrtl.circuit "Arithmetic" {
   // See: https://github.com/llvm/circt/issues/6652
   // CHECK-LABEL: hw.module @ShrZW
   firrtl.module @ShrZW(in %x: !firrtl.uint<0>, out %out: !firrtl.uint<1>) attributes {convention = #firrtl<convention scalarized>} {
-    %0 = firrtl.shr %x, 5 : (!firrtl.uint<0>) -> !firrtl.uint<1>
-    firrtl.connect %out, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+    %0 = firrtl.shr %x, 5 : (!firrtl.uint<0>) -> !firrtl.uint<0>
+    firrtl.connect %out, %0 : !firrtl.uint<1>, !firrtl.uint<0>
     // CHECK:      %[[false:.+]] = hw.constant false
     // CHECK-NEXT: hw.output %false
   }

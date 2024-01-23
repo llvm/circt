@@ -3748,10 +3748,6 @@ LogicalResult FIRRTLLowering::visitExpr(ShlPrimOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitExpr(ShrPrimOp op) {
-  // If this is a 0-bit value shifted by any amount, then return a 1-bit zero.
-  if (isZeroBitFIRRTLType(op.getInput().getType()))
-    return setLowering(op, getOrCreateIntConstant(1, 0));
-
   auto input = getLoweredValue(op.getInput());
   if (!input)
     return failure();
@@ -3762,7 +3758,7 @@ LogicalResult FIRRTLLowering::visitExpr(ShrPrimOp op) {
   if (shiftAmount >= inWidth) {
     // Unsigned shift by full width returns a single-bit zero.
     if (type_cast<IntType>(op.getInput().getType()).isUnsigned())
-      return setLowering(op, getOrCreateIntConstant(1, 0));
+      return setLowering(op, {});
 
     // Signed shift by full width is equivalent to extracting the sign bit.
     shiftAmount = inWidth - 1;
