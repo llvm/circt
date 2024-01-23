@@ -42,6 +42,7 @@ struct ModuleInfo {
 
   // A map from symbols to classes.
   llvm::DenseMap<StringAttr, ClassLike> symbolToClasses;
+  llvm::DenseMap<StringAttr, HWModuleLike> symbolToHWModules;
 
   // A target module.
   ModuleOp module;
@@ -57,8 +58,11 @@ LogicalResult ModuleInfo::initialize() {
   for (auto &op : llvm::make_early_inc_range(module.getOps())) {
     if (auto classLike = dyn_cast<ClassLike>(op))
       symbolToClasses.insert({classLike.getSymNameAttr(), classLike});
-    else
-      op.erase();
+    else if (auto hwMod = dyn_cast<HWModuleLike>(op))
+      symbolToHWModules.insert({hwMod.getSymNameAttr(), hwMod});
+    else {
+      op.emitError(" not handled");
+    }
   }
   return success();
 }
@@ -108,24 +112,24 @@ void ModuleInfo::postProcess(const SymMappingTy &symMapping) {
 
 // Return a failure if classes cannot be resolved. Return true if
 // it's necessary to rename symbols.
-static FailureOr<bool> resolveClasses(StringAttr name,
-                                      ArrayRef<ClassLike> classes) {
-  bool existExternalClass = false;
+static FailureOr<bool> resolveHWModules(StringAttr name,
+                                      ArrayRef<HWModuleLike> hwModules) {
+  bool existsExternalModule = false;
   size_t countDefinition = 0;
-  ClassOp classOp;
+  HWModuleOp hwModule;
 
-  for (auto op : classes) {
-    if (isa<ClassExternOp>(op))
-      existExternalClass = true;
+  for (auto op : hwModules) {
+    if (isa<HWModuleExternOp>(op))
+      existsExternalModule = true;
     else {
-      classOp = cast<ClassOp>(op);
+      hwModule = cast<HWModuleOp>(op);
       ++countDefinition;
     }
   }
 
   // There must be exactly one definition if the symbol was referred by an
   // external class.
-  if (existExternalClass && countDefinition != 1) {
+  if (existsExternalModule && countDefinition != 1) {
     SmallVector<Location> classExternLocs;
     SmallVector<Location> classLocs;
     for (auto op : classes)
@@ -147,7 +151,111 @@ static FailureOr<bool> resolveClasses(StringAttr name,
     return failure();
   }
 
-  if (!existExternalClass)
+  if (!existsExternalModule)
+    return countDefinition != 1;
+
+  assert(classOp && countDefinition == 1);
+
+  // Raise errors if linked external modules are not compatible with the
+  // definition.
+  auto emitError = [&](Operation *op) {
+    auto diag = op->emitError()
+                << "failed to link class " << name
+                << " since declaration doesn't match the definition: ";
+    diag.attachNote(classOp.getLoc()) << "definition is here";
+    return diag;
+  };
+
+  llvm::MapVector<StringAttr, Type> classFields;
+  for (auto fieldOp : classOp.getOps<om::ClassFieldOp>())
+    classFields.insert({fieldOp.getNameAttr(), fieldOp.getType()});
+
+  for (auto op : classes) {
+    if (op == classOp)
+      continue;
+
+    if (classOp.getBodyBlock()->getNumArguments() !=
+        op.getBodyBlock()->getNumArguments())
+      return emitError(op) << "the number of arguments is not equal, "
+                           << classOp.getBodyBlock()->getNumArguments()
+                           << " vs " << op.getBodyBlock()->getNumArguments();
+    unsigned index = 0;
+    for (auto [l, r] : llvm::zip(classOp.getBodyBlock()->getArgumentTypes(),
+                                 op.getBodyBlock()->getArgumentTypes())) {
+      if (l != r)
+        return emitError(op) << index << "-th argument type is not equal, " << l
+                             << " vs " << r;
+      index++;
+    }
+    // Check declared fields.
+    llvm::DenseSet<StringAttr> declaredFields;
+    for (auto fieldOp : op.getBodyBlock()->getOps<om::ClassExternFieldOp>()) {
+      auto it = classFields.find(fieldOp.getNameAttr());
+
+      // Field not found in its definition.
+      if (it == classFields.end())
+        return emitError(op)
+               << "declaration has a field " << fieldOp.getNameAttr()
+               << " but not found in its definition";
+
+      if (it->second != fieldOp.getType())
+        return emitError(op)
+               << "declaration has a field " << fieldOp.getNameAttr()
+               << " but types don't match, " << it->second << " vs "
+               << fieldOp.getType();
+      declaredFields.insert(fieldOp.getNameAttr());
+    }
+
+    for (auto [fieldName, _] : classFields)
+      if (!declaredFields.count(fieldName))
+        return emitError(op) << "definition has a field " << fieldName
+                             << " but not found in this declaration";
+  }
+  return false;
+}
+
+// Return a failure if classes cannot be resolved. Return true if
+// it's necessary to rename symbols.
+static FailureOr<bool> resolveClasses(StringAttr name,
+                                      ArrayRef<ClassLike> classes) {
+  bool existsExternalModule = false;
+  size_t countDefinition = 0;
+  ClassOp classOp;
+
+  for (auto op : classes) {
+    if (isa<ClassExternOp>(op))
+      existsExternalModule = true;
+    else {
+      classOp = cast<ClassOp>(op);
+      ++countDefinition;
+    }
+  }
+
+  // There must be exactly one definition if the symbol was referred by an
+  // external class.
+  if (existsExternalModule && countDefinition != 1) {
+    SmallVector<Location> classExternLocs;
+    SmallVector<Location> classLocs;
+    for (auto op : classes)
+      (isa<ClassExternOp>(op) ? classExternLocs : classLocs)
+          .push_back(op.getLoc());
+
+    auto diag = emitError(classExternLocs.front())
+                << "class " << name << " is declared as an external class but "
+                << (countDefinition == 0 ? "there is no definition"
+                                         : "there are multiple definitions");
+    for (auto loc : ArrayRef(classExternLocs).drop_front())
+      diag.attachNote(loc) << "class " << name << " is declared here as well";
+
+    if (countDefinition != 0) {
+      // There are multiple definitions.
+      for (auto loc : classLocs)
+        diag.attachNote(loc) << "class " << name << " is defined here";
+    }
+    return failure();
+  }
+
+  if (!existsExternalModule)
     return countDefinition != 1;
 
   assert(classOp && countDefinition == 1);
@@ -241,12 +349,19 @@ void LinkModulesPass::runOnOperation() {
 
   // Construct a global map from symbols to class operations.
   llvm::MapVector<StringAttr, SmallVector<ClassLike>> symbolToClasses;
-  for (const auto &info : modules)
+  llvm::MapVector<StringAttr, SmallVector<HWModuleLike>> symbolToHWModules;
+  for (const auto &info : modules) {
     for (auto &[name, op] : info.symbolToClasses) {
       symbolToClasses[name].push_back(op);
       // Add names to avoid collision.
       (void)nameSpace.newName(name.getValue());
     }
+    for (auto &[name, op] : info.symbolToHWModules) {
+      symbolToHWModules[name].push_back(op);
+      // Add names to avoid collision.
+      (void)nameSpace.newName(name.getValue());
+    }
+  }
 
   // Resolve symbols. We consider a symbol used as an external module to be
   // "public" thus we cannot rename such symbols when there is collision. We
