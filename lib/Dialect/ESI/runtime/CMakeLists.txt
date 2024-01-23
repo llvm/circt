@@ -44,6 +44,7 @@ include_directories(cpp/include)
 
 set(ESIRuntimeSources
   cpp/lib/Accelerator.cpp
+  cpp/lib/Common.cpp
   cpp/lib/Design.cpp
   cpp/lib/Manifest.cpp
   cpp/lib/Services.cpp
@@ -62,6 +63,10 @@ set(ESIPythonRuntimeSources
   python/esi/types.py
   python/esi/esiCppAccel.pyi
 )
+set(ESIRuntimeIncludeDirs)
+set(ESIRuntimeCxxFlags)
+set(ESIRuntimeLinkFlags)
+set(ESIRuntimeLibDirs)
 
 IF(MSVC)
     set(CMAKE_CXX_FLAGS "/EHa")
@@ -105,12 +110,48 @@ if(CapnProto_FOUND)
   )
 endif()
 
+option(XRT_PATH "Path to XRT lib.")
+if (XRT_PATH)
+  message("-- XRT enabled with path ${XRT_PATH}")
+
+  set(ESIRuntimeSources
+    ${ESIRuntimeSources}
+    cpp/lib/backends/Xrt.cpp
+  )
+  set(ESIRuntimeIncludeDirs
+    ${ESIRuntimeIncludeDirs}
+    ${XRT_PATH}/include
+  )
+  set(ESIRuntimeCxxFlags
+    ${ESIRuntimeCxxFlags}
+    -fmessage-length=0
+    -Wno-nested-anon-types
+    -Wno-c++98-compat-extra-semi
+  )
+  set(ESIRuntimeLinkLibraries
+    ${ESIRuntimeLinkLibraries}
+    xrt_coreutil
+  )
+  set(ESIRuntimeLinkFlags
+    ${ESIRuntimeLinkFlags}
+    -pthread
+  )
+  set(ESIRuntimeLibDirs
+    ${ESIRuntimeLibDirs}
+    ${XRT_PATH}/lib
+  )
+endif()
+
 # The core API. For now, compile the backends into it directly.
 # TODO: make this a plugin architecture.
 add_library(ESIRuntime SHARED
   ${ESIRuntimeSources}
 )
 target_link_libraries(ESIRuntime PRIVATE ${ESIRuntimeLinkLibraries})
+target_include_directories(ESIRuntime PRIVATE ${ESIRuntimeIncludeDirs})
+target_compile_options(ESIRuntime PRIVATE ${ESIRuntimeCxxFlags})
+target_link_directories(ESIRuntime PRIVATE ${ESIRuntimeLibDirs})
+target_link_options(ESIRuntime PRIVATE ${ESIRuntimeLinkFlags})
 
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
   target_compile_options(ESIRuntime PRIVATE -Wno-covered-switch-default)

@@ -73,7 +73,7 @@ LogicalResult circt::doTypeConversion(Operation *op, ValueRange operands,
   Operation *newOp = rewriter.create(state);
 
   // Move the regions over, converting the signatures as we go.
-  rewriter.startRootUpdate(newOp);
+  rewriter.startOpModification(newOp);
   for (size_t i = 0, e = op->getNumRegions(); i < e; ++i) {
     Region &region = op->getRegion(i);
     Region *newRegion = &newOp->getRegion(i);
@@ -87,7 +87,7 @@ LogicalResult circt::doTypeConversion(Operation *op, ValueRange operands,
                                          "type conversion failed");
     rewriter.applySignatureConversion(newRegion, result, typeConverter);
   }
-  rewriter.finalizeRootUpdate(newOp);
+  rewriter.finalizeOpModification(newOp);
 
   rewriter.replaceOp(op, newOp->getResults());
   return success();

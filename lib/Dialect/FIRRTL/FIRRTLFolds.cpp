@@ -101,7 +101,7 @@ static void updateName(PatternRewriter &rewriter, Operation *op,
     newName = chooseName(newOpName.getValue(), name.getValue());
   // Only update if needed
   if (!newOpName || newOpName.getValue() != newName)
-    rewriter.updateRootInPlace(
+    rewriter.modifyOpInPlace(
         op, [&] { op->setAttr("name", rewriter.getStringAttr(newName)); });
 }
 
@@ -1374,7 +1374,7 @@ public:
                       mlir::PatternRewriter &rewriter,
                       bool updateInPlace) const {
     if (updateInPlace) {
-      rewriter.updateRootInPlace(mux, [&] {
+      rewriter.modifyOpInPlace(mux, [&] {
         mux.setOperand(1, high);
         mux.setOperand(2, low);
       });
@@ -1441,12 +1441,12 @@ public:
       return failure();
 
     if (Value v = tryCondTrue(mux.getHigh(), mux.getSel(), rewriter, true, 0)) {
-      rewriter.updateRootInPlace(mux, [&] { mux.setOperand(1, v); });
+      rewriter.modifyOpInPlace(mux, [&] { mux.setOperand(1, v); });
       return success();
     }
 
     if (Value v = tryCondFalse(mux.getLow(), mux.getSel(), rewriter, true, 0)) {
-      rewriter.updateRootInPlace(mux, [&] { mux.setOperand(2, v); });
+      rewriter.modifyOpInPlace(mux, [&] { mux.setOperand(2, v); });
       return success();
     }
 
@@ -1921,9 +1921,9 @@ struct NodeBypass : public mlir::RewritePattern {
     if (node.getInnerSym() || !AnnotationSet(node).canBeDeleted() ||
         node.use_empty() || node.isForceable())
       return failure();
-    rewriter.startRootUpdate(node);
+    rewriter.startOpModification(node);
     node.getResult().replaceAllUsesWith(node.getInput());
-    rewriter.finalizeRootUpdate(node);
+    rewriter.finalizeOpModification(node);
     return success();
   }
 };
@@ -3198,8 +3198,8 @@ LogicalResult ClockGateIntrinsicOp::canonicalize(ClockGateIntrinsicOp op,
   if (auto testEnable = op.getTestEnable()) {
     if (auto constOp = testEnable.getDefiningOp<ConstantOp>()) {
       if (constOp.getValue().isZero()) {
-        rewriter.updateRootInPlace(op,
-                                   [&] { op.getTestEnableMutable().clear(); });
+        rewriter.modifyOpInPlace(op,
+                                 [&] { op.getTestEnableMutable().clear(); });
         return success();
       }
     }

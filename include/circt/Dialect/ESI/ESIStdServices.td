@@ -62,3 +62,19 @@ def FuncServiceDeclOp : ESI_Op<"service.std.func",
     $sym_name attr-dict
   }];
 }
+
+def MMIOServiceDeclOp: ESI_Op<"service.std.mmio",
+          [HasParent<"::mlir::ModuleOp">, Symbol,
+           DeclareOpInterfaceMethods<ServiceDeclOpInterface>]> {
+  let summary = "MMIO service";
+  let description = [{
+    Declares a service to be backed by a MMIO interface, which is platform
+    dependent. Must be implemented by a BSP.
+  }];
+
+  let arguments = (ins SymbolNameAttr:$sym_name);
+
+  let assemblyFormat = [{
+    $sym_name attr-dict
+  }];
+}

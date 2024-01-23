@@ -4,16 +4,16 @@
 
 from .common import (AppID, Input, Output, _PyProxy, PortError)
 from .module import Generator, Module, ModuleLikeBuilderBase, PortProxyBase
-from .signals import BundleSignal, ChannelSignal, Signal, _FromCirctValue
+from .signals import BundleSignal, ChannelSignal, Signal, Struct, _FromCirctValue
 from .system import System
 from .types import (Bits, Bundle, BundledChannel, Channel, ChannelDirection,
-                    Type, types, _FromCirctType)
+                    StructType, Type, types, UInt, _FromCirctType)
 
 from .circt import ir
 from .circt.dialects import esi as raw_esi, hw, msft
 
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 __dir__ = Path(__file__).parent
 
@@ -300,8 +300,9 @@ class _ServiceGeneratorRegistry:
   _registered = False
   _impl_type_name = ir.StringAttr.get("pycde")
 
-  def __init__(self):
-    self._registry: Dict[str, ServiceImplementation] = {}
+  def __init__(self) -> None:
+    self._registry: Dict[ir.StringAttr, Tuple[ServiceImplementation,
+                                              System]] = {}
 
     # Register myself with ESI so I can dispatch to my internal registry.
     assert _ServiceGeneratorRegistry._registered is False, \
@@ -324,6 +325,7 @@ class _ServiceGeneratorRegistry:
       ctr += 1
       name = basename + "_" + str(ctr)
     name_attr = ir.StringAttr.get(name)
+
     self._registry[name_attr] = (service_implementation, System.current())
     return ir.DictAttr.get({"name": name_attr})
 
@@ -337,7 +339,12 @@ class _ServiceGeneratorRegistry:
       return False
     (impl, sys) = self._registry[impl_name]
     with sys:
-      return impl._builder.generate_svc_impl(serviceReq=req.opview)
+      ret = impl._builder.generate_svc_impl(serviceReq=req.opview)
+    # The service implementation generator could have instantiated new modules,
+    # so we need to generate them. Don't run the appID indexer since during a
+    # pass, the IR can be invalid and the indexers assumes it is valid.
+    sys.generate(skip_appid_index=True)
+    return ret
 
 
 _service_generator_registry = _ServiceGeneratorRegistry()
@@ -362,7 +369,7 @@ def DeclareRandomAccessMemory(inner_type: Type,
         BundledChannel("data", ChannelDirection.FROM, inner_type)
     ])
     write = Bundle([
-        BundledChannel("write", ChannelDirection.TO, write_struct),
+        BundledChannel("req", ChannelDirection.TO, write_struct),
         BundledChannel("ack", ChannelDirection.FROM, Bits(0))
     ])
 
@@ -471,6 +478,21 @@ class PureModule(Module):
     else:
       type_attr = ir.TypeAttr.get(type._type)
     esi.ESIPureModuleParamOp(name, type_attr)
+
+
+@ServiceDecl
+class MMIO:
+  """ESI standard service to request access to an MMIO region."""
+
+  read = ServiceDecl.From(
+      Bundle([
+          BundledChannel("offset", ChannelDirection.TO, Bits(32)),
+          BundledChannel("data", ChannelDirection.FROM, Bits(32))
+      ]))
+
+  @staticmethod
+  def _op(sym_name: ir.StringAttr):
+    return raw_esi.MMIOServiceDeclOp(sym_name)
 
 
 def package(sys: System):

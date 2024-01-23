@@ -203,7 +203,7 @@ public:
   matchAndRewrite(Operation *op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override {
     LogicalResult conversionStatus = success();
-    rewriter.updateRootInPlace(op, [&] {
+    rewriter.modifyOpInPlace(op, [&] {
       for (auto &region : op->getRegions()) {
         SSAMaximizationStrategy strategy;
         if (failed(maximizeSSA(region, strategy, rewriter)))

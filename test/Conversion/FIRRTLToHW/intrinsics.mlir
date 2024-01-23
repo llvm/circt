@@ -161,4 +161,14 @@ firrtl.circuit "Intrinsics" {
     // CHECK: hw.wire %in
     firrtl.int.fpga_probe %clock, %in : !firrtl.uint<8>
   }
+
+  // CHECK-LABEL: hw.module @ClockInverter
+  firrtl.module @ClockInverter(
+    in %clock_in: !firrtl.clock,
+    out %clock_out: !firrtl.clock
+  ) {
+    // CHECK: seq.clock_inv %clock_in
+    %0 = firrtl.int.clock_inv %clock_in
+    firrtl.strictconnect %clock_out, %0 : !firrtl.clock
+  }
 }

@@ -824,6 +824,58 @@ firrtl.circuit "CollidingSymbolsMultiInline" {
   }
 }
 
+// CHECK-LABEL: firrtl.circuit "TrackInliningInDebugInfo"
+firrtl.circuit "TrackInliningInDebugInfo" {
+  // CHECK: firrtl.module @TrackInliningInDebugInfo
+  firrtl.module @TrackInliningInDebugInfo() {
+    // CHECK: [[SCOPE_FOO:%.+]] = dbg.scope "foo", "Foo"
+    // CHECK: [[SCOPE_BAR:%.+]] = dbg.scope "bar", "Bar" scope [[SCOPE_FOO]]
+    // CHECK: dbg.variable "a", {{%.+}} scope [[SCOPE_BAR]]
+    // CHECK: [[SCOPE_IMPL:%.+]] = dbg.scope "impl", "Bugu" scope [[SCOPE_BAR]]
+    // CHECK: dbg.variable "b", {{%.+}} scope [[SCOPE_IMPL]]
+    firrtl.instance foo @Foo()
+  }
+  // CHECK-NOT: @Foo
+  firrtl.module private @Foo() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance bar @Bar()
+  }
+  // CHECK-NOT: @Bar
+  firrtl.module private @Bar() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    %wire = firrtl.wire : !firrtl.uint<1>
+    dbg.variable "a", %wire : !firrtl.uint<1>
+    firrtl.when %wire : !firrtl.uint<1> {
+      %0 = dbg.scope "impl", "Bugu"
+      dbg.variable "b", %wire scope %0 : !firrtl.uint<1>
+    }
+  }
+}
+
+// CHECK-LABEL: firrtl.circuit "TrackFlatteningInDebugInfo"
+firrtl.circuit "TrackFlatteningInDebugInfo" {
+  // CHECK: firrtl.module @TrackFlatteningInDebugInfo
+  firrtl.module @TrackFlatteningInDebugInfo() attributes {annotations = [{class = "firrtl.transforms.FlattenAnnotation"}]} {
+    // CHECK: [[SCOPE_FOO:%.+]] = dbg.scope "foo", "Foo"
+    // CHECK: [[SCOPE_BAR:%.+]] = dbg.scope "bar", "Bar" scope [[SCOPE_FOO]]
+    // CHECK: dbg.variable "a", {{%.+}} scope [[SCOPE_BAR]]
+    // CHECK: [[SCOPE_IMPL:%.+]] = dbg.scope "impl", "Bugu" scope [[SCOPE_BAR]]
+    // CHECK: dbg.variable "b", {{%.+}} scope [[SCOPE_IMPL]]
+    firrtl.instance foo @Foo()
+  }
+  // CHECK-NOT: @Foo
+  firrtl.module private @Foo() {
+    firrtl.instance bar @Bar()
+  }
+  // CHECK-NOT: @Bar
+  firrtl.module private @Bar() {
+    %wire = firrtl.wire : !firrtl.uint<1>
+    dbg.variable "a", %wire : !firrtl.uint<1>
+    firrtl.when %wire : !firrtl.uint<1> {
+      %0 = dbg.scope "impl", "Bugu"
+      dbg.variable "b", %wire scope %0 : !firrtl.uint<1>
+    }
+  }
+}
+
 // -----
 
 // Test proper hierarchical inlining of RefType

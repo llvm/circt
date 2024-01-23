@@ -3,20 +3,21 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from __future__ import annotations
+from re import T
 
 from .common import Clock, Input, Output
 from .dialects import comb, msft, sv
 from .module import generator, modparams, Module, _BlockContext
 from .signals import ArraySignal, BitsSignal, BitVectorSignal, Signal
 from .signals import get_slice_bounds, _FromCirctValue
-from .types import dim, types, InOut, Type
+from .types import dim, types, Array, Bits, InOut, Type
 
 from .circt import ir
 from .circt.support import BackedgeBuilder
 from .circt.dialects import msft as raw_msft
 
 import typing
-from typing import List, Union
+from typing import List, Optional, Union
 
 
 def NamedWire(type_or_value: Union[Type, Signal], name: str):
@@ -143,8 +144,11 @@ def Reg(type: Type,
   return value
 
 
-def ControlReg(clk: Signal, rst: Signal, asserts: List[Signal],
-               resets: List[Signal]) -> BitVectorSignal:
+def ControlReg(clk: Signal,
+               rst: Signal,
+               asserts: List[Signal],
+               resets: List[Signal],
+               name: Optional[str] = None) -> BitVectorSignal:
   """Constructs a 'control register' and returns the output. Asserts are signals
   which causes the output to go high (on the next cycle). Resets do the
   opposite. If both an assert and a reset are active on the same cycle, the
@@ -155,10 +159,10 @@ def ControlReg(clk: Signal, rst: Signal, asserts: List[Signal],
 
     class ControlReg(Module):
       clk = Clock()
-      rst = Input(types.i1)
-      out = Output(types.i1)
-      asserts = Input(dim(1, num_asserts))
-      resets = Input(dim(1, num_resets))
+      rst = Input(Bits(1))
+      out = Output(Bits(1))
+      asserts = Input(Array(Bits(1), num_asserts))
+      resets = Input(Array(Bits(1), num_resets))
 
       @generator
       def generate(ports):
@@ -175,7 +179,8 @@ def ControlReg(clk: Signal, rst: Signal, asserts: List[Signal],
   return ControlReg(len(asserts), len(resets))(clk=clk,
                                                rst=rst,
                                                asserts=asserts,
-                                               resets=resets).out
+                                               resets=resets,
+                                               instance_name=name).out
 
 
 def Mux(sel: BitVectorSignal, *data_inputs: typing.List[Signal]):

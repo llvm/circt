@@ -96,3 +96,4 @@ circuit Foo :
   module Bar :
     ; expected-error @+1 {{uninferred width: wire "a.c.e" is unconstrained}}
     wire a: { b : UInt<1>, c : { d : UInt<1>, e : UInt } }
+    a is invalid

@@ -53,6 +53,13 @@ def CompRegOp : SeqOp<"compreg",
   let hasVerifier = 1;
 
   let builders = [
+    /// Create a register with no name nor inner_sym.
+    OpBuilder<(ins "Value":$input, "Value":$clk), [{
+      return build($_builder, $_state, input.getType(), input, clk,
+                   /*name*/ StringAttr(),
+                   /*reset*/ Value(), /*resetValue*/ Value(),
+                   /*powerOnValue*/ Value(), hw::InnerSymAttr());
+    }]>,
     /// Create a register with an inner_sym matching the register's name.
     OpBuilder<(ins "Value":$input, "Value":$clk, "StringAttrOrRef":$name), [{
       auto nameAttr = name.get($_builder.getContext());
@@ -447,6 +454,31 @@ def ClockDividerOp : SeqOp<"clock_div", [Pure]> {
 
   let assemblyFormat = [{
     $clockIn `by` $pow2 attr-dict
+  }];
+}
+
+//===----------------------------------------------------------------------===//
+// Clock Inverter and Buffer
+//===----------------------------------------------------------------------===//
+
+def ClockInverterOp : SeqOp<"clock_inv", [Pure]> {
+  let summary = "Inverts the clock signal";
+  let description = [{
+    Note that the compiler can optimize inverters away, preventing their
+    use as part of explicit clock buffers.
+
+    ```
+    %inv_clock = seq.clock_inv %clock
+    ```
+  }];
+
+  let arguments = (ins ClockType:$input);
+  let results = (outs ClockType:$output);
+
+  let hasFolder = 1;
+
+  let assemblyFormat = [{
+    $input attr-dict
   }];
 }
 
