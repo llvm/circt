@@ -20,6 +20,10 @@
 #include "circt/Dialect/HW/HWPasses.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/HW/HWVisitors.h"
+#include "circt/Dialect/LTL/LTLDialect.h"
+#include "circt/Dialect/LTL/LTLOps.h"
+#include "circt/Dialect/LTL/LTLTypes.h"
+#include "circt/Dialect/LTL/LTLVisitors.h"
 #include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/SV/SVOps.h"
@@ -27,6 +31,10 @@
 #include "circt/Dialect/SV/SVVisitors.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/Seq/SeqOps.h"
+#include "circt/Dialect/Verif/VerifDialect.h"
+#include "circt/Dialect/Verif/VerifOps.h"
+#include "circt/Dialect/Verif/VerifTypes.h.inc"
+#include "circt/Dialect/Verif/VerifVisitors.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/raw_ostream.h"
@@ -41,7 +49,9 @@ struct ConvertHWToBTOR2Pass
     : public ConvertHWToBTOR2Base<ConvertHWToBTOR2Pass>,
       public comb::CombinationalVisitor<ConvertHWToBTOR2Pass>,
       public sv::Visitor<ConvertHWToBTOR2Pass>,
-      public hw::TypeOpVisitor<ConvertHWToBTOR2Pass> {
+      public hw::TypeOpVisitor<ConvertHWToBTOR2Pass>,
+      public ltl::Visitor<ConvertHWToBTOR2Pass>,
+      public verif::Visitor<ConvertHWToBTOR2Pass> {
 public:
   ConvertHWToBTOR2Pass(raw_ostream &os) : os(os) {}
   // Executes the pass
@@ -156,10 +166,17 @@ private:
   // If so, the original operation is returned
   // Otherwise the argument is returned as it is the original op
   Operation *getOpAlias(Operation *op) {
-    if (auto it = opAliasMap.find(op); it != opAliasMap.end())
-      return it->second;
+    Operation *alias = op;
+
+    // Remove the alias until none are left (for wires of wires of wires ...)
+    auto it = opAliasMap.find(alias);
+    while (it != opAliasMap.end()) {
+      alias = it->second;
+      it = opAliasMap.find(alias);
+    }
+
     // If the op isn't an alias then simply return it
-    return op;
+    return alias;
   }
 
   // Updates or creates an entry for the given operation
@@ -458,20 +475,14 @@ private:
     return width;
   }
 
-  // Generates the transitions required to finalize the register to state
-  // transition system conversion
-  void finalizeRegVisit(Operation *op) {
-    // Check the register type (done to support non-firrtl registers as well)
-    auto reg = cast<seq::FirRegOp>(op);
-
-    // Generate the reset condition (for sync & async resets)
-    // We assume for now that the reset value is always 0
-    size_t width = hw::getBitWidth(reg.getType());
+  // Emits the btor2 instructions required to define a state transition system
+  // for the given register
+  void finalizeGenRegVisit(Operation *reg, size_t width) {
     genSort("bitvec", width);
 
     // Extract the `next` operation for each register (used to define the
     // transition). We need to check if next is a port to avoid nullptrs
-    Value next = reg.getNext();
+    Value next = reg->getOperand(0);
 
     // Next should already be associated to an LID at this point
     // As we are going to override it, we need to keep track of the original
@@ -503,7 +514,7 @@ private:
       size_t resetValLID = noLID;
 
       // Check for a reset value, if none exists assume it's zero
-      if (auto resval = reg.getResetValue())
+      if (auto resval = reg->getOperand(3))
         resetValLID = getOpLID(resval.getDefiningOp());
       else
         resetValLID = genZero(width);
@@ -515,6 +526,19 @@ private:
 
     // Finally generate the next statement
     genNext(next, reg, width);
+  }
+
+  // Generates the transitions required to finalize the register to state
+  // transition system conversion
+  void finalizeRegVisit(Operation *op) {
+    // Check the register type (done to support non-firrtl registers as well)
+    TypeSwitch<Operation *, void>(op)
+        .Case<seq::FirRegOp, seq::CompRegOp>([&](auto reg) {
+          // Perform the concrete emission of the register for the given width
+          finalizeGenRegVisit(reg, hw::getBitWidth(reg.getType()));
+        })
+        // Non registers should never reach this function
+        .Default([&](auto expr) { op->emitError("Invalid register type!"); });
   }
 
 public:
@@ -690,10 +714,26 @@ public:
 
   void visitComb(Operation *op) { visitInvalidComb(op); }
 
-  void visitInvalidComb(Operation *op) {
-    // try sv ops
-    dispatchSVVisitor(op);
+  // Try ltl ops when comb is done
+  void visitInvalidComb(Operation *op) { dispatchLTLVisitor(op); }
+
+  // We don't support much ltl for now
+  void visitLTL(Operation *op) {
+    op->emitError(" is not supported yet!");
+    abort();
   }
+
+  // Try verif ops when ltl is done
+  void visitInvalidLTL(Operation *op) { dispatchVerifVisitor(op); }
+
+  // We don't support much verif yet either
+  void visitVerif(Operation *op) {
+    op->emitError(" is not supported yet!");
+    abort();
+  }
+
+  // Try sv ops when verif is done
+  void visitInvalidVerif(Operation *op) { dispatchSVVisitor(op); }
 
   // Assertions are negated then converted to a btor2 bad instruction
   void visitSV(sv::AssertOp op) {
@@ -762,6 +802,21 @@ public:
     regOps.push_back(reg);
   }
 
+  // Compregs behave in a smilar way as firregs for btor2 emission
+  void visit(seq::CompRegOp reg) {
+    // Start by retrieving the register's name and width
+    StringRef regName = reg.getName().value();
+    int64_t w = requireSort(reg.getType());
+
+    // Generate state instruction (represents the register declaration)
+    genState(reg, w, regName);
+
+    // Record the operation for future `next` instruction generation
+    // This is required to model transitions between states (i.e. how a
+    // register's value evolves over time)
+    regOps.push_back(reg);
+  }
+
   // Ignore all other explicitly mentionned operations
   // ** Purposefully left empty **
   void ignore(Operation *op) {}
@@ -809,10 +864,12 @@ void ConvertHWToBTOR2Pass::runOnOperation() {
 
     // Previsit all registers in the module in order to avoid dependency cylcles
     module.walk([&](Operation *op) {
-      if (auto reg = dyn_cast<seq::FirRegOp>(op)) {
-        visit(reg);
-        handledOps.insert(op);
-      }
+      TypeSwitch<Operation *, void>(op)
+          .Case<seq::FirRegOp, seq::CompRegOp>([&](auto reg) {
+            visit(reg);
+            handledOps.insert(op);
+          })
+          .Default([&](auto expr) {});
     });
 
     // Visit all of the operations in our module
