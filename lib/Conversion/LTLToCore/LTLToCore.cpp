@@ -71,6 +71,7 @@ struct ClockOpConversion : OpConversionPattern<ltl::ClockOp> {
   LogicalResult
   matchAndRewrite(ltl::ClockOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+    // rewriter.replaceOp(op, adaptor.getClock().getDefiningOp());
     rewriter.eraseOp(op);
     return success();
   }
@@ -87,8 +88,7 @@ struct HasBeenResetOpConversion : OpConversionPattern<verif::HasBeenResetOp> {
 
     // Generate the constant used to set the register value
     Value constOne = rewriter.create<hw::ConstantOp>(
-        op.getLoc(), mlir::IntegerAttr::get(
-                         getContext(), llvm::APSInt(llvm::StringRef("1"))));
+        op.getLoc(), mlir::IntegerType::get(op.getContext(), 1), 1);
 
     // Create a backedge for the register to be used in the mux
     circt::BackedgeBuilder bb(rewriter, op.getLoc());
@@ -100,7 +100,8 @@ struct HasBeenResetOpConversion : OpConversionPattern<verif::HasBeenResetOp> {
 
     // Finally generate the register to set the backedge
     reg.setValue(rewriter.create<seq::CompRegOp>(
-        op.getLoc(), mux, adaptor.getClock(), llvm::StringRef("hbr")));
+        op.getLoc(), mux, adaptor.getClock().getDefiningOp()->getOperand(0),
+        llvm::StringRef("hbr")));
 
     return success();
   }
@@ -157,9 +158,9 @@ struct LowerLTLToCorePass : public LowerLTLToCoreBase<LowerLTLToCorePass> {
 
 void circt::populateLTLToCoreConversionPatterns(
     TypeConverter &converter, mlir::RewritePatternSet &patterns) {
-  patterns.add<DisableOpConversion, HasBeenResetOpConversion,
-               VerifAssertOpConversion, ClockOpConversion>(
-      converter, patterns.getContext());
+  patterns.add<HasBeenResetOpConversion, VerifAssertOpConversion,
+               ClockOpConversion, DisableOpConversion>(converter,
+                                                       patterns.getContext());
 }
 
 // Simply applies the conversion patterns defined above
