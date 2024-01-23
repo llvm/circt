@@ -147,6 +147,8 @@ void ExtractInstancesPass::runOnOperation() {
   annotatedModules.clear();
   dutRootModules.clear();
   dutModules.clear();
+  dutModuleNames.clear();
+  dutPrefix = "";
   extractionWorklist.clear();
   extractionPaths.clear();
   originalInstanceParents.clear();
