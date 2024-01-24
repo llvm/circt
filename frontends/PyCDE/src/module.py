@@ -710,27 +710,12 @@ class ImportedModSpec(ModuleBuilder):
     self.modcls.hw_module = None
     return hw_module
 
-  def instantiate(self, module_inst, inputs, instance_name: str):
-    inst = self.circt_mod.instantiate(
-        instance_name,
-        **{
-            n: i.value if isinstance(i, Signal) else i
-            for (n, i) in inputs.items()
-        },
-        parameters={} if self.parameters is None else self.parameters,
-        loc=get_user_loc())
-    inst.operation.verify()
-    return inst.operation
-
 
 def import_hw_module(hw_module: hw.HWModuleOp):
   """Import a CIRCT module into PyCDE. Returns a standard Module subclass which
   operates just like an external PyCDE module.
 
-  For now, the imported module name MUST NOT conflict with any other modules.
-  
-  THIS IS BROKEN: https://github.com/llvm/circt/issues/6130"""
-  # TODO: fix me
+  For now, the imported module name MUST NOT conflict with any other modules."""
 
   # Get the module name to use in the generated class and as the external name.
   name = ir.StringAttr(hw_module.name).value
@@ -738,9 +723,9 @@ def import_hw_module(hw_module: hw.HWModuleOp):
   # Collect input and output ports as named Inputs and Outputs.
   modattrs = {}
   for input_name, block_arg in hw_module.inputs().items():
-    modattrs[input_name] = Input(block_arg.type, input_name)
+    modattrs[input_name] = Input(Type(block_arg.type), input_name)
   for output_name, output_type in hw_module.outputs().items():
-    modattrs[output_name] = Output(output_type, output_name)
+    modattrs[output_name] = Output(Type(output_type), output_name)
   modattrs["BuilderType"] = ImportedModSpec
   modattrs["hw_module"] = hw_module
 
