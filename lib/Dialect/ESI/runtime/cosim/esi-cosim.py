@@ -55,7 +55,7 @@ class SourceFiles:
 
   def add_dir(self, dir: Path):
     """Add all the RTL files in a directory to the source list."""
-    for file in dir.iterdir():
+    for file in sorted(dir.iterdir()):
       if file.is_file() and (file.suffix == ".sv" or file.suffix == ".v"):
         self.user.append(file)
 
@@ -175,7 +175,9 @@ class Verilator(Simulator):
         "--cc",
         "--top-module",
         self.sources.top,
+        "-DSIMULATION",
         "-sv",
+        "--timing",
         "--build",
         "--exe",
         "--assert",
@@ -195,7 +197,9 @@ class Verilator(Simulator):
 
     cp = subprocess.run(compile_cmd, capture_output=True, text=True)
     self.run_dir.mkdir(parents=True, exist_ok=True)
-    open(self.run_dir / "compile_stdout.log", "w").write(cp.stdout)
+    cso = open(self.run_dir / "compile_stdout.log", "w")
+    cso.write(" ".join(compile_cmd) + "\n")
+    cso.write(cp.stdout)
     open(self.run_dir / "compile_stderr.log", "w").write(cp.stderr)
     if cp.returncode != 0:
       print("====== Compilation failure:")

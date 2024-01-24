@@ -6,8 +6,9 @@ from .common import (AppID, Input, Output, _PyProxy, PortError)
 from .module import Generator, Module, ModuleLikeBuilderBase, PortProxyBase
 from .signals import BundleSignal, ChannelSignal, Signal, Struct, _FromCirctValue
 from .system import System
-from .types import (Bits, Bundle, BundledChannel, Channel, ChannelDirection,
-                    StructType, Type, types, UInt, _FromCirctType)
+from .types import (Any, Bits, Bundle, BundledChannel, Channel,
+                    ChannelDirection, StructType, Type, types, UInt,
+                    _FromCirctType)
 
 from .circt import ir
 from .circt.dialects import esi as raw_esi, hw, msft
@@ -493,6 +494,21 @@ class MMIO:
   @staticmethod
   def _op(sym_name: ir.StringAttr):
     return raw_esi.MMIOServiceDeclOp(sym_name)
+
+
+@ServiceDecl
+class FuncService:
+  """ESI standard service to request execution of a function."""
+
+  call = ServiceDecl.To(
+      Bundle([
+          BundledChannel("arg", ChannelDirection.FROM, Any()),
+          BundledChannel("result", ChannelDirection.TO, Any())
+      ]))
+
+  @staticmethod
+  def _op(sym_name: ir.StringAttr):
+    return raw_esi.FuncServiceDeclOp(sym_name)
 
 
 def package(sys: System):

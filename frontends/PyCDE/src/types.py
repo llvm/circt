@@ -6,7 +6,6 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from functools import singledispatchmethod
-from typing import Any
 
 from .support import get_user_loc
 
@@ -90,7 +89,9 @@ class Type:
 
   def __call__(self, obj, name: str = None) -> "Signal":
     """Create a Value of this type from a python object."""
-    assert not isinstance(obj, ir.Value)
+    assert not isinstance(
+        obj, ir.Value
+    ), "Not intended to be called on CIRCT Values, only Python objects."
     v = self._from_obj_or_sig(obj)
     if name is not None:
       v.name = name
@@ -331,8 +332,10 @@ class Array(Type):
 
 class StructType(Type):
 
-  def __new__(cls, fields: typing.Union[typing.List[typing.Tuple[str, Type]],
-                                        typing.Dict[str, Type]]):
+  def __new__(
+      cls, fields: typing.Union[typing.List[typing.Tuple[str, Type]],
+                                typing.Dict[str, Type]]
+  ) -> StructType:
     if isinstance(fields, dict):
       fields = list(fields.items())
     if not isinstance(fields, list):
@@ -583,7 +586,7 @@ class BundledChannel:
 class Bundle(Type):
   """A group of named, directed channels. Typically used in a service."""
 
-  def __new__(cls, channels: typing.List[BundledChannel]):
+  def __new__(cls, channels: typing.List[BundledChannel]) -> Bundle:
 
     def wrap_in_channel(ty: Type):
       if isinstance(ty, Channel):
