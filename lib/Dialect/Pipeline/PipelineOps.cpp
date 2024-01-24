@@ -616,8 +616,7 @@ LogicalResult ScheduledPipelineOp::verify() {
 }
 
 StageKind ScheduledPipelineOp::getStageKind(size_t stageIndex) {
-  size_t nStages = getNumStages();
-  assert(stageIndex < nStages && "invalid stage index");
+  assert(stageIndex < getNumStages() && "invalid stage index");
 
   if (!hasStall())
     return StageKind::Continuous;
