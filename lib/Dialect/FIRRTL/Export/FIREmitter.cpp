@@ -253,6 +253,18 @@ struct Emitter {
                                  [&](Value v) { emitSubExprIBox2(v); });
   }
 
+  /// Emit a (potentially nested) symbol reference as `A.B.C`.
+  void emitSymbol(SymbolRefAttr symbol) {
+    ps.ibox(2, IndentStyle::Block);
+    ps << symbol.getRootReference();
+    for (auto nested : symbol.getNestedReferences()) {
+      ps.zerobreak();
+      ps << ".";
+      ps << nested.getAttr();
+    }
+    ps.end();
+  }
+
 private:
   /// Emit an error and remark that emission failed.
   InFlightDiagnostic emitError(Operation *op, const Twine &message) {
@@ -1377,16 +1389,16 @@ void Emitter::emitType(Type type, bool includeConst) {
         if (type.getForceable())
           ps << "RW";
         ps << "Probe<";
+        ps.cbox(2, IndentStyle::Block);
+        ps.zerobreak();
         emitType(type.getType());
         if (auto layer = type.getLayer()) {
-          ps << "," << PP::nbsp;
-          ps.addAsString(layer.getRootReference().getValue());
-          for (auto nested : layer.getNestedReferences()) {
-            ps << ".";
-            ps.addAsString(nested.getValue());
-          }
+          ps << ",";
+          ps.space();
+          emitSymbol(type.getLayer());
         }
-        ps << ">";
+        ps << BreakToken(0, -2) << ">";
+        ps.end();
       })
       .Case<AnyRefType>([&](AnyRefType type) { ps << "AnyRef"; })
       .Case<StringType>([&](StringType type) { ps << "String"; })

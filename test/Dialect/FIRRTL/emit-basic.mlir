@@ -730,6 +730,33 @@ firrtl.circuit "Foo" {
     }
   }
 
+  // Test line-breaks for very large layer associations.
+  firrtl.layer @Group1234567890 bind {
+    firrtl.layer @Group1234567890 bind {
+      firrtl.layer @Group1234567890 bind {
+        firrtl.layer @Group1234567890 bind {
+          firrtl.layer @Group1234567890 bind {
+            firrtl.layer @Group1234567890 bind {
+              firrtl.layer @Group1234567890 bind {
+               firrtl.layer @Group1234567890 bind {}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // CHECK: module ModuleWithLongProbeColor
+  // CHECK-NEXT:  output o : Probe<
+  // CHECK-NEXT:    UInt<1>,
+  // CHECK-NEXT:    Group1234567890.Group1234567890.Group1234567890.Group1234567890
+  // CHECK-NEXT:      .Group1234567890.Group1234567890.Group1234567890.Group1234567890
+  // CHECK-NEXT:  >
+  firrtl.module @ModuleWithLongProbeColor(
+    out %o: !firrtl.probe<uint<1>, @Group1234567890::@Group1234567890::@Group1234567890::@Group1234567890::@Group1234567890::@Group1234567890::@Group1234567890::@Group1234567890>
+  ) {}
+
   // CHECK: module RWProbe :
   // CHECK-NEXT: input in : { a : UInt<1> }[2]
   // CHECK-NEXT: output p : RWProbe<UInt<1>>

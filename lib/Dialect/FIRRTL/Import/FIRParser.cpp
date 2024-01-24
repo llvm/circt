@@ -934,24 +934,29 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     auto kind = getToken().getKind();
     auto loc = getToken().getLoc();
     consumeToken();
-    FIRRTLType type;
-    SmallVector<StringRef> layers;
 
+    // Inner Type
+    FIRRTLType type;
     if (parseToken(FIRToken::less, "expected '<' in reference type") ||
         parseType(type, "expected probe data type"))
       return failure();
-    while (getToken().getKind() == FIRToken::identifier) {
-      StringRef layer;
-      loc = getToken().getLoc();
-      (void)parseId(layer, "expected layer name");
-      layers.push_back(layer);
-      if (getToken().getKind() == FIRToken::period)
-        consumeToken();
+
+    // Probe Color
+    SmallVector<StringRef> layers;
+    if (getToken().getKind() == FIRToken::identifier) {
+      if (requireFeature({3, 2, 0}, "colored probes"))
+        return failure();
+      do {
+        StringRef layer;
+        loc = getToken().getLoc();
+        if (parseId(layer, "expected layer name"))
+          return failure();
+        layers.push_back(layer);
+      } while (consumeIf(FIRToken::period));
     }
-    if (!consumeIf(FIRToken::greater)) {
-      emitError(loc, "expected '>' to end reference type");
-      return failure();
-    }
+
+    if (!consumeIf(FIRToken::greater))
+      return emitError(loc, "expected '>' to end reference type");
 
     bool forceable = kind == FIRToken::kw_RWProbe;
 
