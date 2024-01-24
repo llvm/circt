@@ -27,52 +27,17 @@ namespace firrtl {
 class FieldSource {
 
 public:
-  explicit FieldSource(Operation *operation);
+  explicit FieldSource(Operation *) {}
 
   struct PathNode {
-    PathNode(Value src, ArrayRef<int64_t> ar, Flow flow)
-        : src(src), flow(flow), path(ar) {}
     Value src;
-    Flow flow;
-    SmallVector<int64_t, 4> path;
-
-    /// Roots are operations which define the storage or aggregate value.
-    bool isRoot() const { return path.empty(); }
-
-    /// Writable sources can appear as a LHS of a connect given this node's
-    /// path.
-    bool isSrcWritable() const { return flow != Flow::Source; }
-
-    /// Transparent sources reflect a value written to them in the same cycle it
-    /// is written.  These are sources which provide dataflow backwards in SSA
-    /// during one logical execution of a module body.
-    /// A port may be transparent (no storage), but not be writable from the
-    /// side of the instance we are on.
-    bool isSrcTransparent() const {
-      // ports are wires
-      if (!src.getDefiningOp())
-        return true;
-      // ports are wires, on this side of the instance too.
-      return isa<WireOp, InstanceOp>(src.getDefiningOp());
-    }
+    size_t fieldID;
   };
 
-  const PathNode *nodeForValue(Value v) const;
+  PathNode nodeForValue(Value v);
 
 private:
-  void visitOp(Operation *op);
-  void visitSubfield(SubfieldOp sf);
-  void visitOpenSubfield(OpenSubfieldOp sf);
-  void visitSubindex(SubindexOp si);
-  void visitOpenSubindex(OpenSubindexOp si);
-  void visitSubaccess(SubaccessOp sa);
-  void visitMem(MemOp mem);
-  void visitInst(InstanceOp inst);
-  void visitInstChoice(InstanceChoiceOp inst);
-
-  void makeNodeForValue(Value dst, Value src, ArrayRef<int64_t> path,
-                        Flow flow);
-
+  PathNode computeSrc(Value v);
   DenseMap<Value, PathNode> paths;
 };
 

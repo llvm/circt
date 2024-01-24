@@ -26,119 +26,52 @@
 using namespace circt;
 using namespace firrtl;
 
-FieldSource::FieldSource(Operation *operation) {
-  FModuleOp mod = cast<FModuleOp>(operation);
-  // All ports define locations
-  for (auto port : mod.getBodyBlock()->getArguments())
-    makeNodeForValue(port, port, {}, foldFlow(port));
-
-  mod.walk<mlir::WalkOrder::PreOrder>([&](Operation *op) { visitOp(op); });
+static size_t addID(size_t base, size_t inc) {
+  if (base == ~0ULL)
+    return ~0ULL;
+  return base + inc;
 }
 
-void FieldSource::visitOp(Operation *op) {
-  if (auto sf = dyn_cast<SubfieldOp>(op))
-    return visitSubfield(sf);
-  if (auto sf = dyn_cast<OpenSubfieldOp>(op))
-    return visitOpenSubfield(sf);
-
-  if (auto si = dyn_cast<SubindexOp>(op))
-    return visitSubindex(si);
-  if (auto si = dyn_cast<OpenSubindexOp>(op))
-    return visitOpenSubindex(si);
-
-  if (auto sa = dyn_cast<SubaccessOp>(op))
-    return visitSubaccess(sa);
-
-  if (isa<WireOp, RegOp, RegResetOp, InvalidValueOp, chirrtl::MemoryPortOp>(op))
-    return makeNodeForValue(op->getResult(0), op->getResult(0), {},
-                            foldFlow(op->getResult(0)));
-  if (auto mem = dyn_cast<MemOp>(op))
-    return visitMem(mem);
-  if (auto inst = dyn_cast<InstanceOp>(op))
-    return visitInst(inst);
-  if (auto inst = dyn_cast<InstanceChoiceOp>(op))
-    return visitInstChoice(inst);
-
-  // Track all other definitions of aggregates.
-  if (op->getNumResults()) {
-    auto type = op->getResult(0).getType();
-    if (auto baseType = type_dyn_cast<FIRRTLBaseType>(type);
-        baseType && !baseType.isGround())
-      makeNodeForValue(op->getResult(0), op->getResult(0), {},
-                       foldFlow(op->getResult(0)));
-  }
-}
-
-void FieldSource::visitSubfield(SubfieldOp sf) {
-  auto value = sf.getInput();
-  const auto *node = nodeForValue(value);
-  assert(node && "node should be in the map");
-  auto sv = node->path;
-  sv.push_back(sf.getFieldIndex());
-  makeNodeForValue(sf.getResult(), node->src, sv, foldFlow(sf));
-}
-
-void FieldSource::visitOpenSubfield(OpenSubfieldOp sf) {
-  auto value = sf.getInput();
-  const auto *node = nodeForValue(value);
-  assert(node && "node should be in the map");
-  auto sv = node->path;
-  sv.push_back(sf.getFieldIndex());
-  makeNodeForValue(sf.getResult(), node->src, sv, foldFlow(sf));
-}
-
-void FieldSource::visitSubindex(SubindexOp si) {
-  auto value = si.getInput();
-  const auto *node = nodeForValue(value);
-  assert(node && "node should be in the map");
-  auto sv = node->path;
-  sv.push_back(si.getIndex());
-  makeNodeForValue(si.getResult(), node->src, sv, foldFlow(si));
-}
-
-void FieldSource::visitOpenSubindex(OpenSubindexOp si) {
-  auto value = si.getInput();
-  const auto *node = nodeForValue(value);
-  assert(node && "node should be in the map");
-  auto sv = node->path;
-  sv.push_back(si.getIndex());
-  makeNodeForValue(si.getResult(), node->src, sv, foldFlow(si));
-}
-
-void FieldSource::visitSubaccess(SubaccessOp sa) {
-  auto value = sa.getInput();
-  const auto *node = nodeForValue(value);
-  assert(node && "node should be in the map");
-  auto sv = node->path;
-  sv.push_back(-1);
-  makeNodeForValue(sa.getResult(), node->src, sv, foldFlow(sa));
-}
-
-void FieldSource::visitMem(MemOp mem) {
-  for (auto r : mem.getResults())
-    makeNodeForValue(r, r, {}, foldFlow(r));
-}
-
-void FieldSource::visitInst(InstanceOp inst) {
-  for (auto r : inst.getResults())
-    makeNodeForValue(r, r, {}, foldFlow(r));
-}
-
-void FieldSource::visitInstChoice(InstanceChoiceOp inst) {
-  for (auto r : inst.getResults())
-    makeNodeForValue(r, r, {}, foldFlow(r));
-}
-
-const FieldSource::PathNode *FieldSource::nodeForValue(Value v) const {
+// We allow recursion here since the recursion is actually on the type, not
+// on the IR.
+FieldSource::PathNode FieldSource::computeSrc(Value v) {
+  if (auto ba = dyn_cast<BlockArgument>(v))
+    return PathNode{v, 0};
   auto ii = paths.find(v);
-  if (ii == paths.end())
-    return nullptr;
-  return &ii->second;
+  if (ii != paths.end())
+    return ii->second;
+  return TypeSwitch<Operation *, PathNode>(v.getDefiningOp())
+      .template Case<SubfieldOp, OpenSubfieldOp>([&](auto indop) {
+        auto value = indop.getInput();
+        auto node = computeSrc(value);
+        size_t newID = addID(node.fieldID,
+                             indop.getInput().getType().base().getFieldID(indop.getFieldIndex()));
+        PathNode retval{node.src, newID};
+        paths[v] = retval;
+        return retval;
+      })
+      .template Case<SubindexOp, OpenSubindexOp>([&](auto indop) {
+        auto value = indop.getInput();
+        auto node = nodeForValue(value);
+        size_t newID = addID(node.fieldID,
+                             indop.getInput().getType().base().getFieldID(indop.getIndex()));
+        PathNode retval{node.src, newID};
+        paths[v] = retval;
+        return retval;
+      })
+      // Subaccesses can't maintain fieldID
+      .template Case<SubaccessOp>([&](auto indop) {
+        auto value = indop.getInput();
+        auto node = nodeForValue(value);
+        return PathNode{node.src, ~0ULL};
+      })
+      .Default([&](auto) {
+        return PathNode{v, 0};
+      });
 }
 
-void FieldSource::makeNodeForValue(Value dst, Value src, ArrayRef<int64_t> path,
-                                   Flow flow) {
-  auto ii = paths.try_emplace(dst, src, path, flow);
-  (void)ii;
-  assert(ii.second && "Double insert into the map");
+FieldSource::PathNode FieldSource::nodeForValue(Value v) {
+  auto p = computeSrc(v);
+  assert(p.src);
+  return p;
 }

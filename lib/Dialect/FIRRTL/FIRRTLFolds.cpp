@@ -523,7 +523,7 @@ OpFoldResult DShrPrimOp::fold(FoldAdaptor adaptor) {
       *this, adaptor.getOperands(), BinOpKind::DivideOrShift,
       [=](const APSInt &a, const APSInt &b) -> APInt {
         return getType().base().isUnsigned() || !a.getBitWidth() ? a.lshr(b)
-                                                                : a.ashr(b);
+                                                                 : a.ashr(b);
       });
 }
 
@@ -623,7 +623,8 @@ OpFoldResult XorPrimOp::fold(FoldAdaptor adaptor) {
   /// xor(x, x) -> 0
   if (getLhs() == getRhs())
     return getIntAttr(
-        getType(), APInt(std::max(getType().base().getWidthOrSentinel(), 0), 0));
+        getType(),
+        APInt(std::max(getType().base().getWidthOrSentinel(), 0), 0));
 
   return constFoldFIRRTLBinaryOp(
       *this, adaptor.getOperands(), BinOpKind::Normal,
