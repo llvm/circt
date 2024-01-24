@@ -10,6 +10,7 @@
 #ifndef CONVERSION_SEQTOSV_FIRREGLOWERING_H
 #define CONVERSION_SEQTOSV_FIRREGLOWERING_H
 
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
@@ -17,6 +18,7 @@
 #include "circt/Support/Namespace.h"
 #include "circt/Support/SymCache.h"
 #include "llvm/ADT/DenseMapInfo.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/GraphTraits.h"
 #include "llvm/ADT/SCCIterator.h"
 #include <variant>
@@ -28,11 +30,10 @@ namespace detail {
 struct SCCNode {
   Operation *op;
   llvm::function_ref<bool(Operation *)> filter;
-  Operation *root;
   unsigned index;
   explicit SCCNode(Operation *o, llvm::function_ref<bool(Operation *)> f,
-                   Operation *root, unsigned index)
-      : op(o), filter(f), root(root), index(index) {}
+                   unsigned index)
+      : op(o), filter(f), index(index) {}
   bool operator==(const SCCNode &other) const {
     return other.op == op && other.index == index;
   }
@@ -51,7 +52,7 @@ class PortIterator
 public:
   explicit PortIterator(SCCNode node, bool end = false)
       : module(cast<HWModuleOp>(node.op)), numPorts(module.getNumPorts()),
-        sccOp(node.op, node.filter, node.root, end ? numPorts : 0) {}
+        sccOp(node.op, node.filter, end ? numPorts : 0) {}
 
   bool operator==(const PortIterator &other) const {
     return other.sccOp == this->sccOp;
@@ -94,7 +95,7 @@ public:
 
   SCCNode operator*() {
     Operation &op = *modOpsIterator;
-    return SCCNode(&op, sccOp.filter, &op, 0);
+    return SCCNode(&op, sccOp.filter, 0);
   }
 
   ModOpIterator &operator++() {
@@ -180,8 +181,7 @@ public:
     }
     if (iterator != itEnd) {
       Operation *nextOp = iterator.getUser();
-      if (sccOp.filter && (!sccOp.root || sccOp.root != nextOp) &&
-          sccOp.filter(nextOp)) {
+      if (sccOp.filter && sccOp.filter(nextOp)) {
         ++iterator;
         getNextValid();
       }
@@ -198,7 +198,7 @@ public:
 
   SCCNode operator*() {
     Operation *op = iterator.getUser();
-    return SCCNode(op, sccOp.filter, sccOp.root, 0);
+    return SCCNode(op, sccOp.filter, 0);
   }
 
   OpUseIterator &operator++() {
@@ -276,13 +276,11 @@ struct DenseMapInfo<circt::hw::detail::SCCNode> {
   using Node = circt::hw::detail::SCCNode;
 
   static Node getEmptyKey() {
-    return Node(DenseMapInfo<mlir::Operation *>::getEmptyKey(), nullptr,
-                nullptr, 0);
+    return Node(DenseMapInfo<mlir::Operation *>::getEmptyKey(), nullptr, 0);
   }
 
   static Node getTombstoneKey() {
-    return Node(DenseMapInfo<mlir::Operation *>::getTombstoneKey(), nullptr,
-                nullptr, 0);
+    return Node(DenseMapInfo<mlir::Operation *>::getTombstoneKey(), nullptr, 0);
   }
 
   static unsigned getHashValue(const Node &node) {
@@ -317,32 +315,75 @@ namespace circt {
 
 // Construct the SCC that each FirRegOp belongs to.
 struct FirRegSCC {
+  using SccOpType = circt::hw::detail::SCCNode;
   FirRegSCC(hw::HWModuleOp moduleOp,
             llvm::function_ref<bool(Operation *)> f = nullptr) {
-    using SccOpType = circt::hw::detail::SCCNode;
-    SccOpType sccOp(moduleOp, f, nullptr, 0);
+    SccOpType sccOp(moduleOp, f, 0);
 
-    for (llvm::scc_iterator<SccOpType> i = llvm::scc_begin(sccOp),
+    for (llvm::scc_iterator<SccOpType> sccIter = llvm::scc_begin(sccOp),
                                        e = llvm::scc_end(sccOp);
-         i != e; ++i) {
-      for (auto node : *i)
-        sccId[node.op] = sccIdGen;
-
-      ++sccIdGen;
+         sccIter != e; ++sccIter) {
+      // List of registers in this SCC.
+      SmallVector<Operation *> sccRegs;
+      llvm::SmallDenseSet<Operation *> sccOps, muxOps;
+      for (auto node : *sccIter) {
+        sccOps.insert(node.op);
+        if (isa<seq::FirRegOp>(node.op))
+          sccRegs.push_back(node.op);
+        else if (isa<comb::MuxOp>(node.op))
+          muxOps.insert(node.op);
+      }
+      if (sccRegs.size() == 1) {
+        // Single register in SCC, nothing else to handle.
+        regToMuxSetMap[sccRegs[0]] = muxOps;
+        continue;
+      }
+      // If multiple registers, ensure reg -> reg chains are broken, and this
+      // enables a single mux to participate in multiple SCCs of different
+      // registers.
+      for (auto *reg : sccRegs) {
+        getAllCombReachable(reg, sccOps);
+      }
     }
   };
 
-  bool isInSameSCC(Operation *lhs, Operation *rhs) const {
-    auto lhsIt = sccId.find(lhs);
-    auto rhsIt = sccId.find(rhs);
-    return lhsIt != sccId.end() && rhsIt != sccId.end() &&
-           lhsIt->getSecond() == rhsIt->getSecond();
+  void getAllCombReachable(Operation *root,
+                           llvm::SmallDenseSet<Operation *> &sccOps) {
+    // Filter for Value users, consider only the ops within the SCC, and ignore
+    // FirRegOps.
+    auto filter = [&](Operation *op) -> bool {
+      return (!sccOps.contains(op) || isa<seq::FirRegOp>(op));
+    };
+    SccOpType rootNode(root, filter, 0);
+    SmallVector<SccOpType> dfsQ;
+    llvm::SmallDenseSet<SccOpType> visitedSet;
+    dfsQ.push_back(rootNode);
+    while (!dfsQ.empty()) {
+      auto node = dfsQ.pop_back_val();
+      if (!visitedSet.insert(node).second)
+        continue;
+      if (isa<comb::MuxOp>(node.op))
+        regToMuxSetMap[root].insert(node.op);
+
+      for (hw::detail::OpUseIterator it(node), end(node, true); it != end;
+           ++it) {
+        SccOpType child = *it;
+        dfsQ.push_back(child);
+      }
+    }
   }
-  void erase(Operation *op) { sccId.erase(op); }
+
+  bool isInSameSCC(Operation *mux, Operation *reg) const {
+    auto regIt = regToMuxSetMap.find(reg);
+    if (regIt == regToMuxSetMap.end())
+      return false;
+    return regIt->second.find(mux) != regIt->second.end();
+  }
+
+  void erase(seq::FirRegOp op) { regToMuxSetMap.erase(op); }
 
 private:
-  llvm::DenseMap<Operation *, size_t> sccId;
-  unsigned sccIdGen = 0;
+  llvm::DenseMap<Operation *, llvm::SmallDenseSet<Operation *>> regToMuxSetMap;
 };
 
 /// Lower FirRegOp to `sv.reg` and `sv.always`.

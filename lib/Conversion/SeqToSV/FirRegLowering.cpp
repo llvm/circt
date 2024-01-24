@@ -48,8 +48,9 @@ FirRegLowering::FirRegLowering(TypeConverter &typeConverter,
     : typeConverter(typeConverter), module(module),
       disableRegRandomization(disableRegRandomization),
       emitSeparateAlwaysBlocks(emitSeparateAlwaysBlocks) {
+
   scc = std::make_unique<FirRegSCC>(module, [&](Operation *op) {
-    return isa<sv::RegOp, seq::FirRegOp, hw::InstanceOp>(op);
+    return isa<sv::RegOp, hw::InstanceOp>(op);
   });
 }
 
@@ -423,7 +424,6 @@ void FirRegLowering::createTree(OpBuilder &builder, Value reg, Value term,
   while (!opsToDelete.empty()) {
     auto value = opsToDelete.pop_back_val();
     assert(value.use_empty());
-    scc->erase(value.getDefiningOp());
     value.getDefiningOp()->erase();
   }
 }
