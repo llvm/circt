@@ -84,6 +84,7 @@ struct StructuralHasherSharedConstants {
     moduleNameAttr = StringAttr::get(context, "moduleName");
     innerSymAttr = StringAttr::get(context, "inner_sym");
     portSymsAttr = StringAttr::get(context, "portSyms");
+    portNamesAttr = StringAttr::get(context, "portNames");
     nonessentialAttributes.insert(StringAttr::get(context, "annotations"));
     nonessentialAttributes.insert(StringAttr::get(context, "name"));
     nonessentialAttributes.insert(StringAttr::get(context, "portAnnotations"));
@@ -103,6 +104,9 @@ struct StructuralHasherSharedConstants {
 
   // This is a cached "portSyms" string attr.
   StringAttr portSymsAttr;
+
+  // This is a cached "portNames" string attr.
+  StringAttr portNamesAttr;
 
   // This is a set of every attribute we should ignore.
   DenseSet<Attribute> nonessentialAttributes;
@@ -210,8 +214,11 @@ private:
     for (auto namedAttr : dict) {
       auto name = namedAttr.getName();
       auto value = namedAttr.getValue();
-      // Skip names and annotations.
-      if (constants.nonessentialAttributes.contains(name))
+      // Skip names and annotations, except in certain cases.
+      // Names of ports are load bearing for classes, so we do hash those.
+      bool isClassPortNames =
+          isa<ClassLike>(op) && name == constants.portNamesAttr;
+      if (constants.nonessentialAttributes.contains(name) && !isClassPortNames)
         continue;
 
       // Hash the port types.
@@ -1550,17 +1557,6 @@ class DedupPass : public DedupBase<DedupPass> {
           if (!module.isPrivate() ||
               (!module.canDiscardOnUseEmpty() && !isa<ClassLike>(*module))) {
             return success();
-          }
-
-          // Minimal ClassLike dedup--only ClassLikes within FModuleOps.
-          if (isa<ClassLike>(*module)) {
-            InstanceGraphNode *node = instanceGraph.lookup(module);
-            bool onlyUsedInModules =
-                llvm::all_of(node->uses(), [](InstanceRecord *use) {
-                  return isa<FModuleOp>(*use->getParent()->getModule());
-                });
-            if (!onlyUsedInModules)
-              return success();
           }
 
           llvm::SmallSetVector<StringAttr, 1> groups;

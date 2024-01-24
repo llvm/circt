@@ -74,10 +74,12 @@ circuit Test : %[[
     connect out, foo
 
   class Foo_1 :
-    skip
+    output out_foo : Integer
+    propassign out_foo, Integer(1)
 
   class Foo_2 :
-    skip
+    output out_bar : Integer
+    propassign out_bar, Integer(1)
 
   ; CHECK-LABEL: om.class @OM_1(%basepath: !om.basepath)
   class OM_1 :
