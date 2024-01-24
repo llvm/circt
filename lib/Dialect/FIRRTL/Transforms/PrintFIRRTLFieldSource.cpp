@@ -22,28 +22,14 @@ struct PrintFIRRTLFieldSourcePass
     : public PrintFIRRTLFieldSourcePassBase<PrintFIRRTLFieldSourcePass> {
   PrintFIRRTLFieldSourcePass(raw_ostream &os) : os(os) {}
 
-  void visitValue(const FieldSource &fieldRefs, Value v) {
-    auto *p = fieldRefs.nodeForValue(v);
-    if (p) {
-      if (p->isRoot())
-        os << "ROOT: ";
-      else
-        os << "SUB:  " << v;
-      os << " : " << p->src << " : {";
-      llvm::interleaveComma(p->path, os);
-      os << "} ";
-      os << ((p->flow == Flow::Source) ? "Source"
-             : (p->flow == Flow::Sink) ? "Sink"
-                                       : "Duplex");
-      if (p->isSrcWritable())
-        os << " writable";
-      if (p->isSrcTransparent())
-        os << " transparent";
-      os << "\n";
+  void visitValue(FieldSource &fieldRefs, Value v) {
+    auto p = fieldRefs.nodeForValue(v);
+    if (p.src) {
+      os << " : " << p.src << " : " << p.fieldID << "\n";
     }
   }
 
-  void visitOp(const FieldSource &fieldRefs, Operation *op) {
+  void visitOp(FieldSource &fieldRefs, Operation *op) {
     for (auto r : op->getResults())
       visitValue(fieldRefs, r);
     // recurse in to regions

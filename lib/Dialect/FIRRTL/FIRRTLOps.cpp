@@ -3209,7 +3209,7 @@ static LogicalResult checkConnectConditionality(FConnectLike connect) {
           .Case<SubaccessOp>([&](SubaccessOp op) {
             if (op.getInput()
                     .getType()
-                    .get()
+                    .base()
                     .getElementTypePreservingConst()
                     .isConst())
               originalFieldType = originalFieldType.getConstType(true);
@@ -4025,7 +4025,7 @@ ParseResult FEnumCreateOp::parse(OpAsmParser &parser, OperationState &result) {
 //===----------------------------------------------------------------------===//
 
 LogicalResult IsTagOp::verify() {
-  if (getFieldIndex() >= getInput().getType().get().getNumElements())
+  if (getFieldIndex() >= getInput().getType().base().getNumElements())
     return emitOpError("element index is greater than the number of fields in "
                        "the bundle type");
   return success();
@@ -4214,7 +4214,7 @@ LogicalResult OpenSubfieldOp::verify() {
 }
 
 LogicalResult SubtagOp::verify() {
-  if (getFieldIndex() >= getInput().getType().get().getNumElements())
+  if (getFieldIndex() >= getInput().getType().base().getNumElements())
     return emitOpError("subfield element index is greater than the number "
                        "of fields in the bundle type");
   return success();
@@ -4309,7 +4309,7 @@ bool SubfieldOp::isFieldFlipped() {
   return bundle.getElement(getFieldIndex()).isFlip;
 }
 bool OpenSubfieldOp::isFieldFlipped() {
-  auto bundle = getInput().getType();
+  auto bundle = getInput().getType().base();
   return bundle.getElement(getFieldIndex()).isFlip;
 }
 

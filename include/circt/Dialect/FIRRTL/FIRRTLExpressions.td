@@ -233,7 +233,7 @@ def FEnumCreateOp : FIRRTLOp<"enumcreate"> {
   let extraClassDeclaration = [{
     /// Return the name attribute of the accessed field.
     StringAttr getFieldNameAttr() {
-      return getResult().getType().get().getElementNameAttr(getFieldIndex());
+      return getResult().getType().base().getElementNameAttr(getFieldIndex());
     }
 
     /// Return the name of the accessed field.
@@ -337,7 +337,7 @@ def SubindexOp : FIRRTLExprOp<"subindex"> {
   let firrtlExtraClassDeclaration = [{
     /// Return a `FieldRef` to the accessed field.
     FieldRef getAccessedField() {
-      return FieldRef(getInput(), getInput().getType().get().getFieldID(getIndex()));
+      return FieldRef(getInput(), getInput().getType().base().getFieldID(getIndex()));
     }
     using InputType = FVectorType;
   }];
@@ -364,7 +364,7 @@ def OpenSubindexOp : FIRRTLExprOp<"opensubindex"> {
   let firrtlExtraClassDeclaration = [{
     /// Return a `FieldRef` to the accessed field.
     FieldRef getAccessedField() {
-      return FieldRef(getInput(), getInput().getType().getFieldID(getIndex()));
+      return FieldRef(getInput(), getInput().getType().base().getFieldID(getIndex()));
     }
 
     using InputType = OpenVectorType;
@@ -464,13 +464,13 @@ def SubtagOp : FIRRTLExprOp<"subtag"> {
   let firrtlExtraClassDeclaration = [{
     /// Return a `FieldRef` to the accessed field.
     FieldRef getAccessedField() {
-      return FieldRef(getInput(), getInput().getType().get()
+      return FieldRef(getInput(), getInput().getType().base()
                                             .getFieldID(getFieldIndex()));
     }
 
     /// Return the name of the accessed field.
     StringAttr getFieldNameAttr() {
-      return getInput().getType().get().getElementNameAttr(getFieldIndex());
+      return getInput().getType().base().getElementNameAttr(getFieldIndex());
     }
 
     /// Return the name of the accessed field.
