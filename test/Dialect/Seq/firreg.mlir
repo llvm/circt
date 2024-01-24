@@ -875,3 +875,20 @@ hw.module @RegMuxInlining3(in %clock: !seq.clock, in %c: i1, out out: i8) {
   %0 = comb.mux bin %c, %r2, %r3 : i8
   hw.output %r1 : i8
 }
+
+ // CHECK-LABEL: hw.module @SharedMux
+ hw.module @SharedMux(in %clock: !seq.clock, in %cond : i1, out o: i2){
+    %mux = comb.mux bin %cond, %r1, %r2 : i2
+    %r1 = seq.firreg %mux clock %clock : i2
+    %r2 = seq.firreg %mux clock %clock : i2
+    hw.output %r2: i2
+    //CHECK: %r1 = sv.reg : !hw.inout<i2> 
+    //CHECK: %[[V1:.+]] = sv.read_inout %r1 : !hw.inout<i2>
+    //CHECK: %r2 = sv.reg : !hw.inout<i2> 
+    //CHECK: %[[V2:.+]] = sv.read_inout %r2 : !hw.inout<i2>
+    //CHECK: sv.always posedge %clock {
+    //CHECK:   sv.if %cond {
+    //CHECK:     sv.passign %r2, %[[V1]] : i2
+    //CHECK:   } else {
+    //CHECK:     sv.passign %r1, %[[V2]] : i2
+}
