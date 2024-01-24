@@ -846,7 +846,8 @@ LogicalResult Visitor::visitExpr(VectorCreateOp op) {
   }
 
   auto value = sinkVecDimIntoOperands(
-      builder, convertType(oldType.get().getElementType()), convertedOldFields);
+      builder, convertType(oldType.base().getElementType()),
+      convertedOldFields);
   valueMap[op.getResult()] = value;
   toDelete.push_back(op);
   return success();
