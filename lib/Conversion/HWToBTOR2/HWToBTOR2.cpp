@@ -20,10 +20,6 @@
 #include "circt/Dialect/HW/HWPasses.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/HW/HWVisitors.h"
-#include "circt/Dialect/LTL/LTLDialect.h"
-#include "circt/Dialect/LTL/LTLOps.h"
-#include "circt/Dialect/LTL/LTLTypes.h"
-#include "circt/Dialect/LTL/LTLVisitors.h"
 #include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/SV/SVOps.h"
@@ -31,10 +27,6 @@
 #include "circt/Dialect/SV/SVVisitors.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/Seq/SeqOps.h"
-#include "circt/Dialect/Verif/VerifDialect.h"
-#include "circt/Dialect/Verif/VerifOps.h"
-#include "circt/Dialect/Verif/VerifTypes.h.inc"
-#include "circt/Dialect/Verif/VerifVisitors.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/raw_ostream.h"
@@ -49,9 +41,7 @@ struct ConvertHWToBTOR2Pass
     : public ConvertHWToBTOR2Base<ConvertHWToBTOR2Pass>,
       public comb::CombinationalVisitor<ConvertHWToBTOR2Pass>,
       public sv::Visitor<ConvertHWToBTOR2Pass>,
-      public hw::TypeOpVisitor<ConvertHWToBTOR2Pass>,
-      public ltl::Visitor<ConvertHWToBTOR2Pass>,
-      public verif::Visitor<ConvertHWToBTOR2Pass> {
+      public hw::TypeOpVisitor<ConvertHWToBTOR2Pass> {
 public:
   ConvertHWToBTOR2Pass(raw_ostream &os) : os(os) {}
   // Executes the pass
@@ -715,25 +705,7 @@ public:
   void visitComb(Operation *op) { visitInvalidComb(op); }
 
   // Try ltl ops when comb is done
-  void visitInvalidComb(Operation *op) { dispatchLTLVisitor(op); }
-
-  // We don't support much ltl for now
-  void visitLTL(Operation *op) {
-    op->emitError(" is not supported yet!");
-    abort();
-  }
-
-  // Try verif ops when ltl is done
-  void visitInvalidLTL(Operation *op) { dispatchVerifVisitor(op); }
-
-  // We don't support much verif yet either
-  void visitVerif(Operation *op) {
-    op->emitError(" is not supported yet!");
-    abort();
-  }
-
-  // Try sv ops when verif is done
-  void visitInvalidVerif(Operation *op) { dispatchSVVisitor(op); }
+  void visitInvalidComb(Operation *op) { dispatchSVVisitor(op); }
 
   // Assertions are negated then converted to a btor2 bad instruction
   void visitSV(sv::AssertOp op) {
