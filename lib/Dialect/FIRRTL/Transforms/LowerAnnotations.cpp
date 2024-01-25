@@ -515,8 +515,10 @@ static llvm::StringMap<AnnoRecord> annotationRecords{{
 
 LogicalResult
 registerAnnotationRecord(StringRef annoClass, AnnoRecord annoRecord,
-                         const std::function<void(llvm::Twine)> &errorHandler) {
-
+                         const std::function<void(llvm::Twine)> &errorHandler,
+                         bool allowOverride) {
+  if (allowOverride)
+    annotationRecords.erase(annoClass);
   if (annotationRecords.insert({annoClass, annoRecord}).second)
     return LogicalResult::success();
   if (errorHandler)

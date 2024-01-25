@@ -449,7 +449,8 @@ struct AnnoRecord {
 /// Register external annotation records.
 LogicalResult registerAnnotationRecord(
     StringRef annoClass, AnnoRecord annoRecord,
-    const std::function<void(llvm::Twine)> &errorHandler = {});
+    const std::function<void(llvm::Twine)> &errorHandler = {},
+    bool allowOverride = false);
 
 ///===----------------------------------------------------------------------===//
 /// Standard Utility Resolvers
