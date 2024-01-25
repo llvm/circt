@@ -364,7 +364,7 @@ def OpenSubindexOp : FIRRTLExprOp<"opensubindex"> {
   let firrtlExtraClassDeclaration = [{
     /// Return a `FieldRef` to the accessed field.
     FieldRef getAccessedField() {
-      return FieldRef(getInput(), getInput().getType().getFieldID(getIndex()));
+      return FieldRef(getInput(), getInput().getType().base().getFieldID(getIndex()));
     }
 
     using InputType = OpenVectorType;

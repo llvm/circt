@@ -1153,7 +1153,7 @@ void Emitter::emitExpression(SubaccessOp op) {
 }
 
 void Emitter::emitExpression(OpenSubfieldOp op) {
-  auto type = op.getInput().getType();
+  auto type = op.getInput().getType().base();
   emitExpression(op.getInput());
   ps << "." << legalize(type.getElementNameAttr(op.getFieldIndex()));
 }

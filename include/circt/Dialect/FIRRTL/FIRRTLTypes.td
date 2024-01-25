@@ -1,3 +1,4 @@
+
 //===- FIRRTLTypes.td - FIRRTL Types Definition ------------*- tablegen -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
@@ -69,11 +70,11 @@ def AnalogType : FIRRTLDialectAliasTypeHelper<"AnalogType", "analog type">;
 
 def BundleType : FIRRTLDialectAliasTypeHelper<"BundleType", "bundle type">;
 
-def OpenBundleType : FIRRTLDialectTypeHelper<"OpenBundleType", "open bundle type">;
+def OpenBundleType : FIRRTLDialectAliasTypeHelper<"OpenBundleType", "open bundle type">;
 
 def FVectorType : FIRRTLDialectAliasTypeHelper<"FVectorType", "vector type">;
 
-def OpenVectorType : FIRRTLDialectTypeHelper<"OpenVectorType", "open vector type">;
+def OpenVectorType : FIRRTLDialectAliasTypeHelper<"OpenVectorType", "open vector type">;
 
 def FEnumType : FIRRTLDialectAliasTypeHelper<"FEnumType", "enum type">;
 

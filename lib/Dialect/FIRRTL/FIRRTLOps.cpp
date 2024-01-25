@@ -4309,7 +4309,7 @@ bool SubfieldOp::isFieldFlipped() {
   return bundle.getElement(getFieldIndex()).isFlip;
 }
 bool OpenSubfieldOp::isFieldFlipped() {
-  auto bundle = getInput().getType();
+  auto bundle = getInput().getType().base();
   return bundle.getElement(getFieldIndex()).isFlip;
 }
 
