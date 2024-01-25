@@ -59,7 +59,7 @@ jobs:
           if-no-files-found: error
 
   push_wheels:
-    name: Push wheels (Tag or Nightly)
+    name: Push wheels (Tag or Weekly)
     runs-on: ubuntu-20.04
     if: github.repository == 'llvm/circt' && (github.ref_type == 'tag' || github.event_name == 'schedule')
     needs: build_wheels
