@@ -156,22 +156,21 @@ private:
   // If so, the original operation is returned
   // Otherwise the argument is returned as it is the original op
   Operation *getOpAlias(Operation *op) {
-    Operation *alias = op;
 
     // Remove the alias until none are left (for wires of wires of wires ...)
-    auto it = opAliasMap.find(alias);
-    while (it != opAliasMap.end()) {
-      alias = it->second;
-      it = opAliasMap.find(alias);
+    if (auto it = opAliasMap.find(op); it != opAliasMap.end()) {
+      return it->second;
     }
 
     // If the op isn't an alias then simply return it
-    return alias;
+    return op;
   }
 
   // Updates or creates an entry for the given operation
   // associating it with the current lid
-  void setOpAlias(Operation *alias, Operation *op) { opAliasMap[alias] = op; }
+  void setOpAlias(Operation *alias, Operation *op) {
+    opAliasMap[alias] = getOpAlias(op);
+  }
 
   // Checks if a sort was declared with the given width
   // If so, its lid will be returned
@@ -467,13 +466,30 @@ private:
 
   // Emits the btor2 instructions required to define a state transition system
   // for the given register
-  void finalizeGenRegVisit(Operation *reg, size_t width) {
+  void finalizeGenRegVisit(Operation *reg, size_t width, Value next,
+                           Value resetVal) {}
+
+  // Generates the transitions required to finalize the register to state
+  // transition system conversion
+  void finalizeRegVisit(Operation *op) {
+    int64_t width;
+    Value next, resetVal;
+
+    // Extract the operands depending on the register type
+    if (auto reg = dyn_cast<seq::CompRegOp>(op)) {
+      width = hw::getBitWidth(reg.getType());
+      next = reg.getInput();
+      resetVal = reg.getResetValue();
+    } else if (auto reg = dyn_cast<seq::FirRegOp>(op)) {
+      width = hw::getBitWidth(reg.getType());
+      next = reg.getNext();
+      resetVal = reg.getResetValue();
+    } else
+      op->emitError("Invalid register operation !");
+
     genSort("bitvec", width);
 
-    // Extract the `next` operation for each register (used to define the
-    // transition). We need to check if next is a port to avoid nullptrs
-    Value next = reg->getOperand(0);
-
+    // Check if next is a port to avoid nullptrs
     // Next should already be associated to an LID at this point
     // As we are going to override it, we need to keep track of the original
     // instruction
@@ -504,8 +520,8 @@ private:
       size_t resetValLID = noLID;
 
       // Check for a reset value, if none exists assume it's zero
-      if (auto resval = reg->getOperand(3))
-        resetValLID = getOpLID(resval.getDefiningOp());
+      if (resetVal)
+        resetValLID = getOpLID(resetVal.getDefiningOp());
       else
         resetValLID = genZero(width);
 
@@ -515,20 +531,7 @@ private:
     }
 
     // Finally generate the next statement
-    genNext(next, reg, width);
-  }
-
-  // Generates the transitions required to finalize the register to state
-  // transition system conversion
-  void finalizeRegVisit(Operation *op) {
-    // Check the register type (done to support non-firrtl registers as well)
-    TypeSwitch<Operation *, void>(op)
-        .Case<seq::FirRegOp, seq::CompRegOp>([&](auto reg) {
-          // Perform the concrete emission of the register for the given width
-          finalizeGenRegVisit(reg, hw::getBitWidth(reg.getType()));
-        })
-        // Non registers should never reach this function
-        .Default([&](auto expr) { op->emitError("Invalid register type!"); });
+    genNext(next, op, width);
   }
 
 public:
@@ -704,7 +707,7 @@ public:
 
   void visitComb(Operation *op) { visitInvalidComb(op); }
 
-  // Try ltl ops when comb is done
+  // Try sv ops when comb is done
   void visitInvalidComb(Operation *op) { dispatchSVVisitor(op); }
 
   // Assertions are negated then converted to a btor2 bad instruction
@@ -774,7 +777,7 @@ public:
     regOps.push_back(reg);
   }
 
-  // Compregs behave in a smilar way as firregs for btor2 emission
+  // Compregs behave in a similar way as firregs for btor2 emission
   void visit(seq::CompRegOp reg) {
     // Start by retrieving the register's name and width
     StringRef regName = reg.getName().value();
