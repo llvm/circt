@@ -86,7 +86,7 @@ public:
                       });
     }
 
-    bool foriegnOps = false;
+    bool foreignOps = false;
     walk(module, [&](Operation *op) {
       llvm::TypeSwitch<Operation *>(op)
           .Case<RegOp, RegResetOp>([&](auto) {})
@@ -178,10 +178,12 @@ public:
             if (!op->getDialect() ||
                 !isa<FIRRTLDialect, chirrtl::CHIRRTLDialect>(
                     op->getDialect())) {
-              if (!foriegnOps)
+              if (!foreignOps && op->getNumResults() > 0 &&
+                  op->getNumOperands() > 0) {
                 op->emitRemark("Non-firrtl operations detected, combinatorial "
                                "loop checking may miss some loops.");
-              foriegnOps = true;
+                foreignOps = true;
+              }
               return;
             }
             // All other expressions.
