@@ -31,6 +31,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
@@ -84,6 +85,12 @@ public:
                         getOrAddNode(FieldRef(port, index));
                       });
     }
+
+    auto *firrtlDialect =
+        module->getContext()->getLoadedDialect<FIRRTLDialect>();
+    auto *chirrtlDialect =
+        module->getContext()->getLoadedDialect<chirrtl::CHIRRTLDialect>();
+
     walk(module, [&](Operation *op) {
       llvm::TypeSwitch<Operation *>(op)
           .Case<RegOp, RegResetOp>([&](auto) {})
@@ -163,9 +170,19 @@ public:
             recordDataflow(connect.getDest(), connect.getSrc());
           })
           .Case<mlir::UnrealizedConversionCastOp>([&](auto) {
-            // Assume external dialects mixed into FIRRTL do not close cycles.
+            // Casts are cast-like regardless of source
+            auto res = op->getResult(0);
+            for (auto src : op->getOperands())
+              recordDataflow(res, src);
           })
           .Default([&](Operation *op) {
+            // Non FIRRTL ops are not checked
+            auto *dialect = op->getDialect();
+            llvm::errs() << dialect << " " << firrtlDialect << " "
+                         << chirrtlDialect << "\n";
+            if (!((firrtlDialect && dialect == firrtlDialect) ||
+                  (chirrtlDialect && dialect == chirrtlDialect)))
+              return;
             // All other expressions.
             if (op->getNumResults() == 1) {
               auto res = op->getResult(0);
