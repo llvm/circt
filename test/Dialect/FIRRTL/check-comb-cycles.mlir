@@ -1054,7 +1054,10 @@ firrtl.circuit "OutsideDialect" {
     // Other dialects might need to close loops in their own ops. Ignore 
     // ops from other dialects
     %b = firrtl.wire   : !firrtl.uint<32>
+    // expected-remark @below {{Non-firrtl operations detected, combinatorial loop checking may miss some loops.}}
     %a = "foo"(%b) : (!firrtl.uint<32>) -> !firrtl.uint<32>
+    // Should only trigger once
+    %c = "foo"(%b) : (!firrtl.uint<32>) -> !firrtl.uint<32>
     firrtl.strictconnect %b, %a : !firrtl.uint<32>
   }
 }
