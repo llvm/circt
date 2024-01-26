@@ -158,9 +158,8 @@ private:
   Operation *getOpAlias(Operation *op) {
 
     // Remove the alias until none are left (for wires of wires of wires ...)
-    if (auto it = opAliasMap.find(op); it != opAliasMap.end()) {
+    if (auto it = opAliasMap.find(op); it != opAliasMap.end())
       return it->second;
-    }
 
     // If the op isn't an alias then simply return it
     return op;
@@ -464,11 +463,6 @@ private:
     return width;
   }
 
-  // Emits the btor2 instructions required to define a state transition system
-  // for the given register
-  void finalizeGenRegVisit(Operation *reg, size_t width, Value next,
-                           Value resetVal) {}
-
   // Generates the transitions required to finalize the register to state
   // transition system conversion
   void finalizeRegVisit(Operation *op) {
@@ -484,18 +478,19 @@ private:
       width = hw::getBitWidth(reg.getType());
       next = reg.getNext();
       resetVal = reg.getResetValue();
-    } else
+    } else {
       op->emitError("Invalid register operation !");
+      return;
+    }
 
     genSort("bitvec", width);
 
-    // Check if next is a port to avoid nullptrs
     // Next should already be associated to an LID at this point
     // As we are going to override it, we need to keep track of the original
     // instruction
     size_t nextLID = noLID;
 
-    // Check for special case where next is actually a port
+    // We need to check if the next value is a port to avoid nullptrs
     // To do so, we start by checking if our operation is a block argument
     if (BlockArgument barg = dyn_cast<BlockArgument>(next)) {
       // Extract the block argument index and use that to get the line number
