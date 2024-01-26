@@ -80,7 +80,7 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
         for (Operation *u : portVal.getUsers())
           if (auto sf = dyn_cast<SubfieldOp>(u)) {
             // Get the field name.
-            auto fName = sf.getInput().getType().get().getElementName(
+            auto fName = sf.getInput().getType().base().getElementName(
                 sf.getFieldIndex());
             // If this is the enable field, record the product terms(the And
             // expression tree).
@@ -188,7 +188,7 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
         // replace them.
         for (Operation *u : portVal.getUsers())
           if (auto sf = dyn_cast<SubfieldOp>(u)) {
-            StringRef fName = sf.getInput().getType().get().getElementName(
+            StringRef fName = sf.getInput().getType().base().getElementName(
                 sf.getFieldIndex());
             Value repl;
             if (isReadPort)
@@ -328,7 +328,7 @@ private:
         if (auto sf = dyn_cast<SubfieldOp>(u)) {
           // Get the field name.
           auto fName =
-              sf.getInput().getType().get().getElementName(sf.getFieldIndex());
+              sf.getInput().getType().base().getElementName(sf.getFieldIndex());
           // Check if this is the mask field.
           if (fName.contains("mask")) {
             // Already 1 bit, nothing to do.
@@ -379,7 +379,7 @@ private:
           auto sf =
               builder.create<SubfieldOp>(newPortVal, oldRes.getFieldIndex());
           auto fName =
-              sf.getInput().getType().get().getElementName(sf.getFieldIndex());
+              sf.getInput().getType().base().getElementName(sf.getFieldIndex());
           // Replace all mask fields with a one bit constant 1.
           // Replace all other fields with the new port.
           if (fName.contains("mask")) {

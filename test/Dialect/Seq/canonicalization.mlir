@@ -239,3 +239,22 @@ hw.module @const_clock_reg(in %clock : !seq.clock, out r_data : !seq.clock) {
   %1 = seq.firreg %1 clock %0 : !seq.clock
   hw.output %1 : !seq.clock
 }
+
+// CHECK-LABEL: @clock_inv
+hw.module @clock_inv(in %clock : !seq.clock, out clock_true : !seq.clock, out clock_false : !seq.clock, out same_clock: !seq.clock) {
+  %clk_low = seq.const_clock low
+  %clk_high = seq.const_clock high
+
+  %clk_inv_low = seq.clock_inv %clk_low
+  %clk_inv_high = seq.clock_inv %clk_high
+
+  %clk_inv = seq.clock_inv %clock
+  %clk_orig = seq.clock_inv %clk_inv
+
+
+  // CHECK: [[CLK_HIGH:%.+]] = seq.const_clock high
+  // CHECK: [[CLK_LOW:%.+]] = seq.const_clock low
+  // CHECK: hw.output [[CLK_HIGH]], [[CLK_LOW]], %clock
+  hw.output %clk_inv_low, %clk_inv_high, %clk_orig : !seq.clock, !seq.clock, !seq.clock
+
+}

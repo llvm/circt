@@ -612,7 +612,7 @@ public:
   // Support C++ implicit conversions to BaseTy.
   operator BaseTy() const { return circt::firrtl::type_cast<BaseTy>(*this); }
 
-  BaseTy get() const { return circt::firrtl::type_cast<BaseTy>(*this); }
+  BaseTy base() const { return circt::firrtl::type_cast<BaseTy>(*this); }
 };
 
 } // namespace firrtl

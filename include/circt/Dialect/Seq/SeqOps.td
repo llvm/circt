@@ -458,6 +458,31 @@ def ClockDividerOp : SeqOp<"clock_div", [Pure]> {
 }
 
 //===----------------------------------------------------------------------===//
+// Clock Inverter and Buffer
+//===----------------------------------------------------------------------===//
+
+def ClockInverterOp : SeqOp<"clock_inv", [Pure]> {
+  let summary = "Inverts the clock signal";
+  let description = [{
+    Note that the compiler can optimize inverters away, preventing their
+    use as part of explicit clock buffers.
+
+    ```
+    %inv_clock = seq.clock_inv %clock
+    ```
+  }];
+
+  let arguments = (ins ClockType:$input);
+  let results = (outs ClockType:$output);
+
+  let hasFolder = 1;
+
+  let assemblyFormat = [{
+    $input attr-dict
+  }];
+}
+
+//===----------------------------------------------------------------------===//
 // FIRRTL-flavored memory
 //===----------------------------------------------------------------------===//
 

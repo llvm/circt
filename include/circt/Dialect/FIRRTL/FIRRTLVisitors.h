@@ -48,9 +48,9 @@ public:
             CvtPrimOp, NegPrimOp, NotPrimOp, AndRPrimOp, OrRPrimOp, XorRPrimOp,
             // Intrinsic Expressions.
             IsXIntrinsicOp, PlusArgsValueIntrinsicOp, PlusArgsTestIntrinsicOp,
-            SizeOfIntrinsicOp, ClockGateIntrinsicOp, LTLAndIntrinsicOp,
-            LTLOrIntrinsicOp, LTLDelayIntrinsicOp, LTLConcatIntrinsicOp,
-            LTLNotIntrinsicOp, LTLImplicationIntrinsicOp,
+            SizeOfIntrinsicOp, ClockGateIntrinsicOp, ClockInverterIntrinsicOp,
+            LTLAndIntrinsicOp, LTLOrIntrinsicOp, LTLDelayIntrinsicOp,
+            LTLConcatIntrinsicOp, LTLNotIntrinsicOp, LTLImplicationIntrinsicOp,
             LTLEventuallyIntrinsicOp, LTLClockIntrinsicOp,
             LTLDisableIntrinsicOp, Mux2CellIntrinsicOp, Mux4CellIntrinsicOp,
             HasBeenResetIntrinsicOp, FPGAProbeIntrinsicOp,
@@ -166,6 +166,7 @@ public:
   HANDLE(PlusArgsTestIntrinsicOp, Unhandled);
   HANDLE(SizeOfIntrinsicOp, Unhandled);
   HANDLE(ClockGateIntrinsicOp, Unhandled);
+  HANDLE(ClockInverterIntrinsicOp, Unhandled);
   HANDLE(LTLAndIntrinsicOp, Unhandled);
   HANDLE(LTLOrIntrinsicOp, Unhandled);
   HANDLE(LTLDelayIntrinsicOp, Unhandled);

@@ -1,4 +1,3 @@
-# XFAIL: *
 # RUN: %PYTHON% %s %t | FileCheck %s
 
 from pycde.circt.ir import Module as IrModule
@@ -10,12 +9,12 @@ from pycde.module import import_hw_module
 import sys
 
 mlir_module = IrModule.parse("""
-hw.module @add(%a: i1, %b: i1) -> (out: i1) {
+hw.module @add(in %a: i1, in %b: i1, out out: i1) {
   %0 = comb.add %a, %b : i1
   hw.output %0 : i1
 }
 
-hw.module @and(%a: i1, %b: i1) -> (out: i1) {
+hw.module @and(in %a: i1, in %b: i1, out out: i1) {
   %0 = comb.and %a, %b : i1
   hw.output %0 : i1
 }
@@ -47,16 +46,16 @@ class Top(Module):
 system = System([Top], output_directory=sys.argv[1])
 system.generate()
 
-# CHECK: hw.module @Top(%a: i1, %b: i1) -> (out0: i1, out1: i1)
-# CHECK:   %add.out = hw.instance "add" @add(a: %a: i1, b: %b: i1) -> (out: i1)
-# CHECK:   %and.out = hw.instance "and" @and(a: %a: i1, b: %b: i1) -> (out: i1)
+# CHECK: hw.module @Top(in %a : i1, in %b : i1, out out0 : i1, out out1 : i1)
+# CHECK:   %add.out = hw.instance "add" sym @add @add(a: %a: i1, b: %b: i1) -> (out: i1)
+# CHECK:   %and.out = hw.instance "and" sym @and @and(a: %a: i1, b: %b: i1) -> (out: i1)
 # CHECK:   hw.output %add.out, %and.out : i1, i1
 
-# CHECK: hw.module @add(%a: i1, %b: i1) -> (out: i1)
+# CHECK: hw.module @add(in %a : i1, in %b : i1, out out : i1)
 # CHECK:   %0 = comb.add %a, %b : i1
 # CHECK:   hw.output %0 : i1
 
-# CHECK: hw.module @and(%a: i1, %b: i1) -> (out: i1)
+# CHECK: hw.module @and(in %a : i1, in %b : i1, out out : i1)
 # CHECK:   %0 = comb.and %a, %b : i1
 # CHECK:   hw.output %0 : i1
 system.print()

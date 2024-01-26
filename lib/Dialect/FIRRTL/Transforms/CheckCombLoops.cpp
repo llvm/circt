@@ -31,6 +31,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
@@ -84,6 +85,8 @@ public:
                         getOrAddNode(FieldRef(port, index));
                       });
     }
+
+    bool foreignOps = false;
     walk(module, [&](Operation *op) {
       llvm::TypeSwitch<Operation *>(op)
           .Case<RegOp, RegResetOp>([&](auto) {})
@@ -118,17 +121,17 @@ public:
           .Case<SubindexOp>([&](SubindexOp sub) {
             recordValueRefersToFieldRef(
                 sub.getInput(),
-                sub.getInput().getType().get().getFieldID(sub.getIndex()),
+                sub.getInput().getType().base().getFieldID(sub.getIndex()),
                 sub.getResult());
           })
           .Case<SubfieldOp>([&](SubfieldOp sub) {
             recordValueRefersToFieldRef(
                 sub.getInput(),
-                sub.getInput().getType().get().getFieldID(sub.getFieldIndex()),
+                sub.getInput().getType().base().getFieldID(sub.getFieldIndex()),
                 sub.getResult());
           })
           .Case<SubaccessOp>([&](SubaccessOp sub) {
-            auto vecType = sub.getInput().getType().get();
+            auto vecType = sub.getInput().getType().base();
             auto input = sub.getInput();
             auto result = sub.getResult();
             // Flatten the subaccess. The result can refer to any of the
@@ -162,7 +165,27 @@ public:
           .Case<FConnectLike>([&](FConnectLike connect) {
             recordDataflow(connect.getDest(), connect.getSrc());
           })
+          .Case<mlir::UnrealizedConversionCastOp>([&](auto) {
+            // Casts are cast-like regardless of source.
+            // UnrealizedConversionCastOp doesn't implement CastOpInterace,
+            // otherwise we would use it here.
+            for (auto res : op->getResults())
+              for (auto src : op->getOperands())
+                recordDataflow(res, src);
+          })
           .Default([&](Operation *op) {
+            // Non FIRRTL ops are not checked
+            if (!op->getDialect() ||
+                !isa<FIRRTLDialect, chirrtl::CHIRRTLDialect>(
+                    op->getDialect())) {
+              if (!foreignOps && op->getNumResults() > 0 &&
+                  op->getNumOperands() > 0) {
+                op->emitRemark("Non-firrtl operations detected, combinatorial "
+                               "loop checking may miss some loops.");
+                foreignOps = true;
+              }
+              return;
+            }
             // All other expressions.
             if (op->getNumResults() == 1) {
               auto res = op->getResult(0);
