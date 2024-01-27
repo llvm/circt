@@ -86,6 +86,8 @@ def FPGAProbeIntrinsicOp : FIRRTLOp<"int.fpga_probe", []> {
   let arguments = (ins AnyType:$input, NonConstClockType:$clock);
   let results = (outs);
   let assemblyFormat = "$clock `,` $input attr-dict `:` type($input)";
+
+  let hasCanonicalizeMethod = 1;
 }
 
 //===----------------------------------------------------------------------===//

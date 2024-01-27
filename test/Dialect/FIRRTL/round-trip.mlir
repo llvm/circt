@@ -23,6 +23,16 @@ firrtl.module @Intrinsics(in %ui : !firrtl.uint, in %clock: !firrtl.clock, in %u
   %cg1 = firrtl.int.clock_gate %clock, %ui1, %ui1
 }
 
+// CHECK-LABEL: firrtl.module @FPGAProbe
+firrtl.module @FPGAProbe(
+  in %clock: !firrtl.clock,
+  in %reset: !firrtl.uint<1>,
+  in %in: !firrtl.uint<8>
+) {
+  // CHECK: firrtl.int.fpga_probe %clock, %in : !firrtl.uint<8>
+  firrtl.int.fpga_probe %clock, %in : !firrtl.uint<8>
+}
+
 // CHECK-LABEL: firrtl.option @Platform
 firrtl.option @Platform {
   // CHECK:firrtl.option_case @FPGA
