@@ -1518,7 +1518,7 @@ OpFoldResult ShrPrimOp::fold(FoldAdaptor adaptor) {
   int shiftAmount = getAmount();
 
   // shr(x, 0) -> x
-  if (shiftAmount == 0)
+  if (shiftAmount == 0 && inputType.getWidthOrSentinel() != 0)
     return input;
 
   auto inputWidth = inputType.getWidthOrSentinel();
