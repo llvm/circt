@@ -1210,7 +1210,7 @@ static SmallVector<SubfieldOp> getAllFieldAccesses(Value structValue,
     assert(isa<SubfieldOp>(op));
     auto fieldAccess = cast<SubfieldOp>(op);
     auto elemIndex =
-        fieldAccess.getInput().getType().get().getElementIndex(field);
+        fieldAccess.getInput().getType().base().getElementIndex(field);
     if (elemIndex && *elemIndex == fieldAccess.getFieldIndex())
       accesses.push_back(fieldAccess);
   }
@@ -1544,6 +1544,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitExpr(PlusArgsTestIntrinsicOp op);
   LogicalResult visitExpr(PlusArgsValueIntrinsicOp op);
   LogicalResult visitExpr(FPGAProbeIntrinsicOp op);
+  LogicalResult visitExpr(ClockInverterIntrinsicOp op);
   LogicalResult visitExpr(SizeOfIntrinsicOp op);
   LogicalResult visitExpr(ClockGateIntrinsicOp op);
   LogicalResult visitExpr(LTLAndIntrinsicOp op);
@@ -3578,6 +3579,11 @@ LogicalResult FIRRTLLowering::visitExpr(ClockGateIntrinsicOp op) {
   return setLoweringTo<seq::ClockGateOp>(
       op, getLoweredValue(op.getInput()), getLoweredValue(op.getEnable()),
       testEnable, /*inner_sym=*/hw::InnerSymAttr{});
+}
+
+LogicalResult FIRRTLLowering::visitExpr(ClockInverterIntrinsicOp op) {
+  auto operand = getLoweredValue(op.getInput());
+  return setLoweringTo<seq::ClockInverterOp>(op, operand);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(LTLAndIntrinsicOp op) {

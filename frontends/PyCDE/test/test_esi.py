@@ -1,11 +1,13 @@
 # RUN: rm -rf %t
 # RUN: %PYTHON% %s %t 2>&1 | FileCheck %s
 
-from pycde import (Clock, Input, InputChannel, OutputChannel, Module, generator,
-                   types)
+from pycde import (Clock, Input, InputChannel, OutputChannel, Module, System,
+                   generator, types)
 from pycde import esi
 from pycde.common import AppID, Output, RecvBundle, SendBundle
 from pycde.constructs import Wire
+from pycde.esi import MMIO
+from pycde.module import Metadata
 from pycde.types import (Bits, Bundle, BundledChannel, Channel,
                          ChannelDirection, ChannelSignaling, UInt, ClockType)
 from pycde.testing import unittestmodule
@@ -26,6 +28,9 @@ class HostComms:
   from_host = TestFromBundle
 
 
+# CHECK: esi.manifest.sym @LoopbackInOutTop name "LoopbackInOut" {{.*}}version "0.1" {bar = "baz", foo = 1 : i64}
+
+
 # CHECK-LABEL: hw.module @LoopbackInOutTop(in %clk : !seq.clock, in %rst : i1)
 # CHECK:         esi.service.instance #esi.appid<"cosim"[0]> svc @HostComms impl as "cosim"(%clk, %rst) : (!seq.clock, i1) -> ()
 # CHECK:         %bundle, %req = esi.bundle.pack %chanOutput : !esi.bundle<[!esi.channel<i16> to "resp", !esi.channel<i24> from "req"]>
@@ -37,6 +42,15 @@ class HostComms:
 class LoopbackInOutTop(Module):
   clk = Clock()
   rst = Input(types.i1)
+
+  metadata = Metadata(
+      name="LoopbackInOut",
+      version="0.1",
+      misc={
+          "foo": 1,
+          "bar": "baz"
+      },
+  )
 
   @generator
   def construct(self):
@@ -126,3 +140,23 @@ class RecvBundleTest(Module):
   def build(self):
     to_channels = self.b_recv.unpack(resp=self.i1_in)
     self.s1_out = to_channels['req']
+
+
+# CHECK-LABEL:  hw.module @MMIOReq()
+# CHECK-NEXT:     %c0_i32 = hw.constant 0 : i32
+# CHECK-NEXT:     %false = hw.constant false
+# CHECK-NEXT:     [[B:%.+]] = esi.service.req.to_client <@MMIO::@read>(#esi.appid<"mmio_req">) : !esi.bundle<[!esi.channel<i32> to "offset", !esi.channel<i32> from "data"]>
+# CHECK-NEXT:     %chanOutput, %ready = esi.wrap.vr %c0_i32, %false : i32
+# CHECK-NEXT:     %offset = esi.bundle.unpack %chanOutput from [[B]] : !esi.bundle<[!esi.channel<i32> to "offset", !esi.channel<i32> from "data"]>
+@unittestmodule(esi_sys=True)
+class MMIOReq(Module):
+
+  @generator
+  def build(ports):
+    c32 = Bits(32)(0)
+    c1 = Bits(1)(0)
+
+    read_bundle = MMIO.read(AppID("mmio_req"))
+
+    data, _ = Channel(Bits(32)).wrap(c32, c1)
+    _ = read_bundle.unpack(data=data)

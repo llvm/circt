@@ -546,7 +546,7 @@ public:
 
     // Do the actual rewrite, marking this op as updated. Because the op is
     // marked as updated, the pattern driver will re-enqueue the op again.
-    rewriter.updateRootInPlace(
+    rewriter.modifyOpInPlace(
         op, [&] { partialPatternRes = partiallyLower(op, rewriter); });
 
     // Mark that this pattern has been applied to this op.
@@ -557,7 +557,7 @@ public:
 
   // Hook for subclasses to lower the op using the rewriter.
   //
-  // Note that this call is wrapped in `updateRootInPlace`, so any direct IR
+  // Note that this call is wrapped in `modifyOpInPlace`, so any direct IR
   // mutations that are legal to apply during a root update of op are allowed.
   //
   // Also note that this means the op will be re-enqueued to the greedy
@@ -615,7 +615,7 @@ public:
 
   // Hook for subclasses to lower the op using the rewriter.
   //
-  // Note that this call is wrapped in `updateRootInPlace`, so any direct IR
+  // Note that this call is wrapped in `modifyOpInPlace`, so any direct IR
   // mutations that are legal to apply during a root update of op are allowed.
   //
   // Also note that this means the op will be re-enqueued to the greedy

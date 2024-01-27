@@ -34,6 +34,21 @@ firrtl.circuit "Prop" {
     firrtl.attach %0, %impl_bus : !firrtl.analog<32>, !firrtl.analog<32>
   }
 
+  // CHECK-LABEL: firrtl.module private @Bar
+  firrtl.module private @Bar(out %in1: !firrtl.bundle<a flip: uint<1>, b flip: uint<1>>, in %in2: !firrtl.bundle<c: uint<1>>, in %out: !firrtl.bundle<d flip: uint<1>, e flip: uint<1>>) attributes {convention = #firrtl<convention scalarized>} {
+    // CHECK-NEXT: %in1 = firrtl.wire
+    // CHECK-NEXT: %in2 = firrtl.wire
+    // CHECK-NEXT: %out = firrtl.wire
+  }
+
+  // CHECK-LABEL: firrtl.module private @Foo
+  firrtl.module private @Foo() attributes {convention = #firrtl<convention scalarized>} {
+    %bar_in1, %bar_in2, %bar_out = firrtl.instance bar interesting_name @Bar(out in1: !firrtl.bundle<a flip: uint<1>, b flip: uint<1>>, in in2: !firrtl.bundle<c: uint<1>>, in out: !firrtl.bundle<d flip: uint<1>, e flip: uint<1>>)
+    // CHECK: %bar.in1 = firrtl.wire
+    // CHECK: %bar.in2 = firrtl.wire 
+    // CHECK: %bar.out = firrtl.wire
+  }
+
 }
 
 // Instances should preserve their location.

@@ -8,10 +8,6 @@
 
 include(AddMLIRPython)
 
-# Some of the PyCDE CMake code which is only used in Capnp builds uses newer
-# CMake features.
-cmake_minimum_required(VERSION 3.21.0)
-
 add_compile_definitions("MLIR_PYTHON_PACKAGE_PREFIX=pycde.circt.")
 
 declare_mlir_python_sources(PyCDESources
@@ -39,20 +35,15 @@ declare_mlir_python_sources(PyCDESources
   signals.py
   ndarray.py
   esi.py
-  esi_api.py
-  esi_runtime_common.py
   fsm.py
   testing.py
 
-  esi_api.py.j2
-  Makefile.cosim
-
   bsp/__init__.py
+  bsp/common.py
   bsp/cosim.py
   bsp/xrt.py
-  bsp/EsiXrtPython.cpp
-  bsp/Makefile.xrt.j2
-  bsp/xrt_package.tcl.j2
+  bsp/Makefile.xrt.mk
+  bsp/xrt_package.tcl
   bsp/xrt_api.py
   bsp/xrt.ini
   bsp/xsim.tcl
@@ -125,32 +116,3 @@ foreach(CFile IN LISTS CollateralFiles)
     COMPONENT PyCDE
   )
 endforeach()
-
-install(TARGETS circt-std-sim-drivers
-  PUBLIC_HEADER DESTINATION python_packages/pycde/collateral
-  COMPONENT PyCDE
-)
-if(ESI_COSIM)
-  add_dependencies(PyCDE EsiCosimDpiServer)
-  set_property(TARGET EsiCosimDpiServer PROPERTY INSTALL_RPATH "$ORIGIN")
-  install(TARGETS EsiCosimDpiServer
-    RUNTIME_DEPENDENCY_SET EsiCosimDpiServer_RUNTIME_DEPS
-    DESTINATION python_packages/pycde/collateral
-    COMPONENT PyCDE
-  )
-  install(RUNTIME_DEPENDENCY_SET EsiCosimDpiServer_RUNTIME_DEPS
-    DESTINATION python_packages/pycde/collateral
-    PRE_EXCLUDE_REGEXES .*
-    PRE_INCLUDE_REGEXES capnp kj
-    COMPONENT PyCDE
-  )
-  install(TARGETS MtiPli
-    DESTINATION python_packages/pycde/collateral
-    COMPONENT PyCDE
-  )
-  install(FILES
-    "$<TARGET_PROPERTY:EsiCosimCapnp,BINARY_DIR>/CosimDpi.capnp"
-    DESTINATION python_packages/pycde/collateral/runtime
-    COMPONENT PyCDE
-  )
-endif()

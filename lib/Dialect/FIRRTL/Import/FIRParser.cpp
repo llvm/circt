@@ -944,8 +944,8 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     bool forceable = kind == FIRToken::kw_RWProbe;
 
     auto innerType = type_dyn_cast<FIRRTLBaseType>(type);
-    if (!innerType || innerType.containsReference())
-      return emitError(loc, "cannot nest reference types");
+    if (!innerType)
+      return emitError(loc, "invalid probe inner type, must be base-type");
 
     if (!innerType.isPassive())
       return emitError(loc, "probe inner type must be passive");

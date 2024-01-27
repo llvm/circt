@@ -166,22 +166,17 @@ private:
   // If so, the original operation is returned
   // Otherwise the argument is returned as it is the original op
   Operation *getOpAlias(Operation *op) {
-    Operation *alias = op;
 
     // Remove the alias until none are left (for wires of wires of wires ...)
-    auto it = opAliasMap.find(alias);
-    while (it != opAliasMap.end()) {
-      alias = it->second;
-      it = opAliasMap.find(alias);
-    }
-
-    // If the op isn't an alias then simply return it
-    return alias;
+    if (auto it = opAliasMap.find(op); it != opAliasMap.end())
+      return it->second;
   }
 
   // Updates or creates an entry for the given operation
   // associating it with the current lid
-  void setOpAlias(Operation *alias, Operation *op) { opAliasMap[alias] = op; }
+  void setOpAlias(Operation *alias, Operation *op) {
+    opAliasMap[alias] = getOpAlias(op);
+  }
 
   // Checks if a sort was declared with the given width
   // If so, its lid will be returned
@@ -475,126 +470,70 @@ private:
     return width;
   }
 
-  // Handles the concrete emission of a compregop's state and such
-  void finalizedCompRegVisit(seq::CompRegOp reg) {
-    // Generate the reset condition (for sync & async resets)
-    // We assume for now that the reset value is always 0
-    size_t width = hw::getBitWidth(reg.getType());
-    genSort("bitvec", width);
-
-    // Extract the `next` operation for each register (used to define the
-    // transition). We need to check if next is a port to avoid nullptrs
-    Value next = reg.getInput();
-
-    // Next should already be associated to an LID at this point
-    // As we are going to override it, we need to keep track of the original
-    // instruction
-    size_t nextLID = noLID;
-
-    // Check for special case where next is actually a port
-    // To do so, we start by checking if our operation is a block argument
-    if (BlockArgument barg = dyn_cast<BlockArgument>(next)) {
-      // Extract the block argument index and use that to get the line number
-      size_t argIdx = barg.getArgNumber();
-
-      // Check that the extracted argument is in range before using it
-      nextLID = inputLIDs[argIdx];
-
-    } else {
-      nextLID = getOpLID(next);
-    }
-
-    // Assign a new LID to next
-    setOpLID(next.getDefiningOp());
-
-    // Sanity check: at this point the next operation should have had it's btor2
-    // counterpart emitted if not then something terrible must have happened.
-    assert(nextLID != noLID);
-
-    // Check if the register has a reset
-    if (resetLID != noLID) {
-      size_t resetValLID = noLID;
-
-      // Check for a reset value, if none exists assume it's zero
-      if (auto resval = reg.getResetValue())
-        resetValLID = getOpLID(resval.getDefiningOp());
-      else
-        resetValLID = genZero(width);
-
-      // Generate the ite for the register update reset condition
-      // i.e. reg <= reset ? 0 : next
-      genIte(next.getDefiningOp(), resetLID, resetValLID, nextLID, width);
-    }
-
-    // Finally generate the next statement
-    genNext(next, reg, width);
-  }
-
-  // Handles the concrete emission of a firregop's state and such
-  void finalizedFirRegVisit(seq::FirRegOp reg) {
-    // Generate the reset condition (for sync & async resets)
-    // We assume for now that the reset value is always 0
-    size_t width = hw::getBitWidth(reg.getType());
-    genSort("bitvec", width);
-
-    // Extract the `next` operation for each register (used to define the
-    // transition). We need to check if next is a port to avoid nullptrs
-    Value next = reg.getNext();
-
-    // Next should already be associated to an LID at this point
-    // As we are going to override it, we need to keep track of the original
-    // instruction
-    size_t nextLID = noLID;
-
-    // Check for special case where next is actually a port
-    // To do so, we start by checking if our operation is a block argument
-    if (BlockArgument barg = dyn_cast<BlockArgument>(next)) {
-      // Extract the block argument index and use that to get the line number
-      size_t argIdx = barg.getArgNumber();
-
-      // Check that the extracted argument is in range before using it
-      nextLID = inputLIDs[argIdx];
-
-    } else {
-      nextLID = getOpLID(next);
-    }
-
-    // Assign a new LID to next
-    setOpLID(next.getDefiningOp());
-
-    // Sanity check: at this point the next operation should have had it's btor2
-    // counterpart emitted if not then something terrible must have happened.
-    assert(nextLID != noLID);
-
-    // Check if the register has a reset
-    if (resetLID != noLID) {
-      size_t resetValLID = noLID;
-
-      // Check for a reset value, if none exists assume it's zero
-      if (auto resval = reg.getResetValue())
-        resetValLID = getOpLID(resval.getDefiningOp());
-      else
-        resetValLID = genZero(width);
-
-      // Generate the ite for the register update reset condition
-      // i.e. reg <= reset ? 0 : next
-      genIte(next.getDefiningOp(), resetLID, resetValLID, nextLID, width);
-    }
-
-    // Finally generate the next statement
-    genNext(next, reg, width);
-  }
-
   // Generates the transitions required to finalize the register to state
   // transition system conversion
   void finalizeRegVisit(Operation *op) {
-    // Check the register type (done to support non-firrtl registers as well)
-    if (auto reg = dyn_cast<seq::FirRegOp>(op))
-      finalizedFirRegVisit(reg);
-    else if (auto reg = dyn_cast<seq::CompRegOp>(op))
-      finalizedCompRegVisit(reg);
-    else
-      op->emitError("Invalid register type!");
+    int64_t width;
+    Value next, resetVal;
+
+    // Extract the operands depending on the register type
+    if (auto reg = dyn_cast<seq::CompRegOp>(op)) {
+      width = hw::getBitWidth(reg.getType());
+      next = reg.getInput();
+      resetVal = reg.getResetValue();
+    } else if (auto reg = dyn_cast<seq::FirRegOp>(op)) {
+      width = hw::getBitWidth(reg.getType());
+      next = reg.getNext();
+      resetVal = reg.getResetValue();
+    } else {
+      op->emitError("Invalid register operation !");
+      return;
+    }
+
+    genSort("bitvec", width);
+
+    // Next should already be associated to an LID at this point
+    // As we are going to override it, we need to keep track of the original
+    // instruction
+    size_t nextLID = noLID;
+
+    // We need to check if the next value is a port to avoid nullptrs
+    // To do so, we start by checking if our operation is a block argument
+    if (BlockArgument barg = dyn_cast<BlockArgument>(next)) {
+      // Extract the block argument index and use that to get the line number
+      size_t argIdx = barg.getArgNumber();
+
+      // Check that the extracted argument is in range before using it
+      nextLID = inputLIDs[argIdx];
+
+    } else {
+      nextLID = getOpLID(next);
+    }
+
+    // Assign a new LID to next
+    setOpLID(next.getDefiningOp());
+
+    // Sanity check: at this point the next operation should have had it's btor2
+    // counterpart emitted if not then something terrible must have happened.
+    assert(nextLID != noLID);
+
+    // Check if the register has a reset
+    if (resetLID != noLID) {
+      size_t resetValLID = noLID;
+
+      // Check for a reset value, if none exists assume it's zero
+      if (resetVal)
+        resetValLID = getOpLID(resetVal.getDefiningOp());
+      else
+        resetValLID = genZero(width);
+
+      // Generate the ite for the register update reset condition
+      // i.e. reg <= reset ? 0 : next
+      genIte(next.getDefiningOp(), resetLID, resetValLID, nextLID, width);
+    }
+
+    // Finally generate the next statement
+    genNext(next, op, width);
   }
 
 public:
@@ -770,84 +709,8 @@ public:
 
   void visitComb(Operation *op) { visitInvalidComb(op); }
 
-  // Try ltl ops when comb is done
-  void visitInvalidComb(Operation *op) { dispatchLTLVisitor(op); }
-
-  // Implications in LTL are overlapping, so they are equivalent to a btor2
-  // implies statement
-  void visitLTL(ltl::ImplicationOp op) {
-    Value antecedent = op.getAntecedent();
-    Value consequent = op.getConsequent();
-
-    // As with the mux we assume that both tval and fval have the same width
-    // This width should be the same as the output width
-    int64_t w = requireSort(op.getType());
-
-    // Generate a btor2 implies statement from this
-    genImplies(op, antecedent, consequent);
-  }
-
-  // Disable if ops translate to an ite:
-  // ite disable 0 value
-  void visitLTL(ltl::DisableOp op) {
-    Value input = op.getInput();
-    Value condition = op.getCondition();
-
-    // Create the ite instruction using the condition as a diable
-    genImplies(op, getOpLID(condition), getOpLID(input));
-  }
-
-  // LTL clocks are ignored for now and treated as wires
-  void visitLTL(ltl::ClockOp op) {
-    // Retrieve the aliased operation
-    Operation *defOp = op.getInput().getDefiningOp();
-    // Wires don't output anything so just record alias
-    setOpAlias(op, defOp);
-  }
-
-  // We don't support much ltl for now
-  void visitLTL(Operation *op) {
-    op->emitError(" is not supported yet!");
-    abort();
-  }
-
-  // Try verif ops when ltl is done
-  void visitInvalidLTL(Operation *op) { dispatchVerifVisitor(op); }
-
-  // Verif assertions are the same as sv assertion without the enable wrapped in
-  // a parenting if, as it is assumed that ltl::DisableOp is used beforehand
-  void visitVerif(verif::AssertOp op) {
-    Value prop = op.getProperty();
-
-    // This sort is for assertion inversion and potential implies
-    genSort("bitvec", 1);
-
-    // Generate the expression inversion because we want to check if the
-    // assertion can be broken
-    genUnaryOp(op, prop, "not", 1);
-
-    // Genrate the bad btor2 intruction using the inverse of the condition
-    genBad(op);
-  }
-
-  // Verif assume is identical to an sv assume for btor2 conversion
-  void visitVerif(verif::AssumeOp op) {
-    Value prop = op.getProperty();
-    genConstraint(prop);
-  }
-
-  void visitVerif(verif::HasBeenResetOp op) {
-    // Ignore
-  }
-
-  // We don't support much verif yet either
-  void visitVerif(Operation *op) {
-    op->emitError(" is not supported yet!");
-    abort();
-  }
-
-  // Try sv ops when verif is done
-  void visitInvalidVerif(Operation *op) { dispatchSVVisitor(op); }
+  // Try sv ops when comb is done
+  void visitInvalidComb(Operation *op) { dispatchSVVisitor(op); }
 
   // Assertions are negated then converted to a btor2 bad instruction
   void visitSV(sv::AssertOp op) {
@@ -916,7 +779,7 @@ public:
     regOps.push_back(reg);
   }
 
-  // Compregs behave in a smilar way as firregs for btor2 emission
+  // Compregs behave in a similar way as firregs for btor2 emission
   void visit(seq::CompRegOp reg) {
     // Start by retrieving the register's name and width
     StringRef regName = reg.getName().value();
@@ -978,10 +841,12 @@ void ConvertHWToBTOR2Pass::runOnOperation() {
 
     // Previsit all registers in the module in order to avoid dependency cylcles
     module.walk([&](Operation *op) {
-      if (auto reg = dyn_cast<seq::FirRegOp>(op)) {
-        visit(reg);
-        handledOps.insert(op);
-      }
+      TypeSwitch<Operation *, void>(op)
+          .Case<seq::FirRegOp, seq::CompRegOp>([&](auto reg) {
+            visit(reg);
+            handledOps.insert(op);
+          })
+          .Default([&](auto expr) {});
     });
 
     // Visit all of the operations in our module

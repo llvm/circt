@@ -166,7 +166,7 @@ void MergeCallArgs::rewrite(CallOp call, OpAdaptor adaptor,
                       method.getMethodName().getValue()));
 
   // Update the call to use just the new struct.
-  rewriter.updateRootInPlace(call, [&]() {
+  rewriter.modifyOpInPlace(call, [&]() {
     call.getOperandsMutable().clear();
     call.getOperandsMutable().append(newArg.getResult());
   });

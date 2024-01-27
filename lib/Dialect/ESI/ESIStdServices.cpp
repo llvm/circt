@@ -80,3 +80,29 @@ void FuncServiceDeclOp::getPortList(SmallVectorImpl<ServicePortInfo> &ports) {
                           ChannelType::get(ctxt, AnyType::get(ctxt))}},
           /*resettable=*/UnitAttr())});
 }
+
+void MMIOServiceDeclOp::getPortList(SmallVectorImpl<ServicePortInfo> &ports) {
+  auto *ctxt = getContext();
+  // Read only port.
+  ports.push_back(ServicePortInfo{
+      hw::InnerRefAttr::get(getSymNameAttr(), StringAttr::get(ctxt, "read")),
+      ServicePortInfo::Direction::toClient,
+      ChannelBundleType::get(
+          ctxt,
+          {BundledChannel{StringAttr::get(ctxt, "offset"), ChannelDirection::to,
+                          ChannelType::get(ctxt, IntegerType::get(ctxt, 32))},
+           BundledChannel{StringAttr::get(ctxt, "data"), ChannelDirection::from,
+                          ChannelType::get(ctxt, IntegerType::get(ctxt, 32))}},
+          /*resettable=*/UnitAttr())});
+  // Write only port.
+  ports.push_back(ServicePortInfo{
+      hw::InnerRefAttr::get(getSymNameAttr(), StringAttr::get(ctxt, "write")),
+      ServicePortInfo::Direction::toClient,
+      ChannelBundleType::get(
+          ctxt,
+          {BundledChannel{StringAttr::get(ctxt, "offset"), ChannelDirection::to,
+                          ChannelType::get(ctxt, IntegerType::get(ctxt, 32))},
+           BundledChannel{StringAttr::get(ctxt, "data"), ChannelDirection::to,
+                          ChannelType::get(ctxt, IntegerType::get(ctxt, 32))}},
+          /*resettable=*/UnitAttr())});
+}

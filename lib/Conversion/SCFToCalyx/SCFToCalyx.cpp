@@ -1059,7 +1059,7 @@ struct FuncOpConversion : public calyx::FuncOpPartialLoweringPattern {
         funcOp.getLoc(), rewriter.getStringAttr(funcOp.getSymName()), ports);
 
     std::string funcName = "func_" + funcOp.getSymName().str();
-    rewriter.updateRootInPlace(funcOp, [&]() { funcOp.setSymName(funcName); });
+    rewriter.modifyOpInPlace(funcOp, [&]() { funcOp.setSymName(funcName); });
 
     /// Mark this component as the toplevel.
     compOp->setAttr("toplevel", rewriter.getUnitAttr());

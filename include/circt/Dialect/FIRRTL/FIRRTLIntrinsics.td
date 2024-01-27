@@ -89,7 +89,7 @@ def FPGAProbeIntrinsicOp : FIRRTLOp<"int.fpga_probe", []> {
 }
 
 //===----------------------------------------------------------------------===//
-// Clock Gate Intrinsic
+// Clock Intrinsics
 //===----------------------------------------------------------------------===//
 
 def ClockGateIntrinsicOp : FIRRTLOp<"int.clock_gate", [Pure]> {
@@ -114,6 +114,23 @@ def ClockGateIntrinsicOp : FIRRTLOp<"int.clock_gate", [Pure]> {
   let assemblyFormat = [{
     $input `,` $enable (`,` $test_enable^)? attr-dict
   }];
+}
+
+def ClockInverterIntrinsicOp : FIRRTLOp<"int.clock_inv", []> {
+  let summary = "Inverts the clock signal";
+
+  let description = [{
+    The `firrtl.int.clock.inv` intrinsic takes a clock signal and inverts it.
+    It can be used to build registers and other operations which are triggered
+    by a negative clock edge relative to a reference signal. The compiler is
+    free to optimize inverters (particularly double inverters).
+
+    See the corresponding `seq.clock_inv` operation.
+  }];
+
+  let arguments = (ins NonConstClockType:$input);
+  let results = (outs NonConstClockType:$output);
+  let assemblyFormat = "$input attr-dict";
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLINTRINSICS_TD

@@ -178,7 +178,7 @@ static ModuleInfo parseModuleInfo(const nlohmann::json &mod) {
   for (auto &extra : mod.items())
     if (extra.key() != "name" && extra.key() != "summary" &&
         extra.key() != "version" && extra.key() != "repo" &&
-        extra.key() != "commit_hash" && extra.key() != "symbolRef")
+        extra.key() != "commitHash" && extra.key() != "symbolRef")
       extras[extra.key()] = getAny(extra.value());
 
   auto value = [&](const string &key) -> optional<string> {
@@ -187,8 +187,8 @@ static ModuleInfo parseModuleInfo(const nlohmann::json &mod) {
       return nullopt;
     return f.value();
   };
-  return ModuleInfo{value("name"), value("summary"),     value("version"),
-                    value("repo"), value("commit_hash"), extras};
+  return ModuleInfo{value("name"), value("summary"),    value("version"),
+                    value("repo"), value("commitHash"), extras};
 }
 
 //===----------------------------------------------------------------------===//
@@ -575,7 +575,8 @@ ostream &operator<<(ostream &os, const ModuleInfo &m) {
     os << ")";
   }
   if (m.summary)
-    os << ": " << *m.summary << "\n";
+    os << ": " << *m.summary;
+  os << "\n";
 
   if (!m.extra.empty()) {
     os << "  Extra metadata:\n";

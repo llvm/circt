@@ -9,6 +9,8 @@
 #ifndef COSIM_LOWLEVEL_H
 #define COSIM_LOWLEVEL_H
 
+#include <atomic>
+
 #include "cosim/Utils.h"
 
 namespace esi {
@@ -26,8 +28,11 @@ public:
 
   TSQueue<uint32_t> readReqs;
   TSQueue<std::pair<uint64_t, uint8_t>> readResps;
+  std::atomic<unsigned> readsOutstanding = 0;
+
   TSQueue<std::pair<uint32_t, uint64_t>> writeReqs;
   TSQueue<uint8_t> writeResps;
+  std::atomic<unsigned> writesOutstanding = 0;
 };
 
 } // namespace cosim
