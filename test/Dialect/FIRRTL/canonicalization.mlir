@@ -3324,4 +3324,23 @@ firrtl.module @Whens(in %clock: !firrtl.clock, in %a: !firrtl.uint<1>, in %reset
   }
 }
 
+// CHECK-LABEL: firrtl.module @UselessIndexBit
+firrtl.module @UselessIndexBit(in %a: !firrtl.uint<3>, out %b: !firrtl.uint<4>, in %c: !firrtl.uint<4>, in %d: !firrtl.uint<4>, in %e: !firrtl.uint<4>) attributes {convention = #firrtl<convention scalarized>} {
+  %c0_ui4 = firrtl.constant 0 : !firrtl.uint<4> {name = "ttable_2"}
+  %0 = firrtl.multibit_mux %a, %c0_ui4, %c0_ui4, %c0_ui4, %c0_ui4, %c0_ui4, %c0_ui4, %d, %c : !firrtl.uint<3>, !firrtl.uint<4>
+  firrtl.strictconnect %b, %0 : !firrtl.uint<4>
+  // CHECK: firrtl.mux({{.*}}, %d, %c)
+  // CHECK: firrtl.mux({{.*}}, %c0_ui4, {{.*}})
+}
+
+// CHECK-LABEL: firrtl.module @UselessIndexBit2
+firrtl.module @UselessIndexBit2(in %a: !firrtl.uint<3>, out %b: !firrtl.uint<4>, in %c: !firrtl.uint<4>, in %d: !firrtl.uint<4>, in %e: !firrtl.uint<4>) {
+  %0 = firrtl.multibit_mux %a, %c, %c, %e,  %c, %c, %c : !firrtl.uint<3>, !firrtl.uint<4>
+  firrtl.strictconnect %b, %0 : !firrtl.uint<4>
+  // CHECK: %0 = firrtl.bits %a 0 to 0
+  // CHECK: %1 = firrtl.bits %a 1 to 1 : (!firrtl.uint<3>) -> !firrtl.uint<1> 
+  // CHECK: %2 = firrtl.and %0, %1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1> 
+  // CHECK: firrtl.mux(%2, %e, %c) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4> 
+}
+
 }
