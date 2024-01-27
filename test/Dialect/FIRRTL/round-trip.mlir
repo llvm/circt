@@ -70,6 +70,9 @@ firrtl.module @Layers(
   // CHECK: %1 = firrtl.ref.cast.unsafe %0 : (!firrtl.probe<uint<1>>) -> !firrtl.probe<uint<1>, @LayerA>
   %1 = firrtl.ref.cast.unsafe %0 : (!firrtl.probe<uint<1>>) -> !firrtl.probe<uint<1>, @LayerA>
 
+  // CHECK: firrtl.ref.define.unsafe %a, %0 : !firrtl.probe<uint<1>, @LayerA>, !firrtl.probe<uint<1>>
+  firrtl.ref.define.unsafe %a, %0 : !firrtl.probe<uint<1>, @LayerA>, !firrtl.probe<uint<1>>
+
 }
 
 // CHECK-LABEL: firrtl.module @LayersEnabled

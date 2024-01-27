@@ -106,6 +106,35 @@ def RefDefineOp : FIRRTLOp<"ref.define", [SameTypeOperands, FConnectLike]> {
   }];
 }
 
+def RefDefineUnsafeOp : FIRRTLOp<"ref.define.unsafe", [FConnectLike]> {
+  let summary = "FIRRTL Define References";
+  let description = [{
+    Define a target reference to the source reference:
+    ```
+      firrtl.ref.define %dest, %src : ref<t1>
+    ```
+    Used to statically route reference from source to destination
+    through the design, one module at a time.
+
+    Similar to "connect" but cannot have multiple define's to same
+    destination and the define is never conditional even if under
+    a "when".
+
+    Source and destination must resolve statically.
+  }];
+  let arguments = (ins RefType:$dest, RefType:$src);
+
+  let hasVerifier = 1;
+
+  let assemblyFormat =
+    "$dest `,` $src  attr-dict `:` qualified(type($dest)) `,` qualified(type($src))";
+
+  let extraClassDeclaration = [{
+    static ConnectBehaviorKind getConnectBehaviorKind() {
+      return ConnectBehaviorKind::StaticSingleConnect;
+    }
+  }];
+}
 
 def PrintFOp : FIRRTLOp<"printf"> {
   let summary = "Formatted Print Statement";

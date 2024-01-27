@@ -227,14 +227,14 @@ public:
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<AttachOp, ConnectOp, StrictConnectOp, RefDefineOp,
-                       ForceOp, PrintFOp, SkipOp, StopOp, WhenOp, AssertOp,
-                       AssumeOp, CoverOp, PropAssignOp, RefForceOp,
-                       RefForceInitialOp, RefReleaseOp, RefReleaseInitialOp,
-                       VerifAssertIntrinsicOp, VerifAssumeIntrinsicOp,
-                       VerifCoverIntrinsicOp, LayerBlockOp>(
-            [&](auto opNode) -> ResultType {
-              return thisCast->visitStmt(opNode, args...);
-            })
+                       RefDefineUnsafeOp, ForceOp, PrintFOp, SkipOp, StopOp,
+                       WhenOp, AssertOp, AssumeOp, CoverOp, PropAssignOp,
+                       RefForceOp, RefForceInitialOp, RefReleaseOp,
+                       RefReleaseInitialOp, VerifAssertIntrinsicOp,
+                       VerifAssumeIntrinsicOp, VerifCoverIntrinsicOp,
+                       LayerBlockOp>([&](auto opNode) -> ResultType {
+          return thisCast->visitStmt(opNode, args...);
+        })
         .Default([&](auto expr) -> ResultType {
           return thisCast->visitInvalidStmt(op, args...);
         });
@@ -261,6 +261,7 @@ public:
   HANDLE(ConnectOp);
   HANDLE(StrictConnectOp);
   HANDLE(RefDefineOp);
+  HANDLE(RefDefineUnsafeOp);
   HANDLE(ForceOp);
   HANDLE(PrintFOp);
   HANDLE(SkipOp);
