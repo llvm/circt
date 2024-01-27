@@ -118,8 +118,8 @@ InstanceGraphNode *InstanceGraph::lookup(ModuleOpInterface op) {
 
 void InstanceGraph::replaceInstance(InstanceOpInterface inst,
                                     InstanceOpInterface newInst) {
-  ArrayAttr instRefs = inst.getReferencedModuleNamesAttr();
-  assert(instRefs == newInst.getReferencedModuleNamesAttr() &&
+  assert(inst.getReferencedModuleNamesAttr() ==
+             newInst.getReferencedModuleNamesAttr() &&
          "Both instances must be targeting the same modules");
 
   // Replace all edges between the module of the instance and all targets.

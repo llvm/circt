@@ -325,7 +325,7 @@ static SmallVector<SubfieldOp> getAllFieldAccesses(Value structValue,
     assert(isa<SubfieldOp>(op));
     auto fieldAccess = cast<SubfieldOp>(op);
     auto elemIndex =
-        fieldAccess.getInput().getType().get().getElementIndex(field);
+        fieldAccess.getInput().getType().base().getElementIndex(field);
     if (elemIndex && *elemIndex == fieldAccess.getFieldIndex())
       accesses.push_back(fieldAccess);
   }

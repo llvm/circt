@@ -1394,7 +1394,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         // If the constant has a known width, use that. Otherwise pick the
         // smallest number of bits necessary to represent the constant.
         Expr *e;
-        if (auto width = op.getType().get().getWidth())
+        if (auto width = op.getType().base().getWidth())
           e = solver.known(*width);
         else {
           auto v = op.getValue();
@@ -1496,7 +1496,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
       .Case<DivPrimOp>([&](auto op) {
         auto lhs = getExpr(op.getLhs());
         Expr *e;
-        if (op.getType().get().isSigned()) {
+        if (op.getType().base().isSigned()) {
           e = solver.add(lhs, solver.known(1));
         } else {
           e = lhs;
@@ -1542,7 +1542,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
       })
       .Case<CvtPrimOp>([&](auto op) {
         auto input = getExpr(op.getInput());
-        auto e = op.getInput().getType().get().isSigned()
+        auto e = op.getInput().getType().base().isSigned()
                      ? input
                      : solver.add(input, solver.known(1));
         setExpr(op.getResult(), e);

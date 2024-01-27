@@ -84,6 +84,7 @@ struct StructuralHasherSharedConstants {
     moduleNameAttr = StringAttr::get(context, "moduleName");
     innerSymAttr = StringAttr::get(context, "inner_sym");
     portSymsAttr = StringAttr::get(context, "portSyms");
+    portNamesAttr = StringAttr::get(context, "portNames");
     nonessentialAttributes.insert(StringAttr::get(context, "annotations"));
     nonessentialAttributes.insert(StringAttr::get(context, "name"));
     nonessentialAttributes.insert(StringAttr::get(context, "portAnnotations"));
@@ -103,6 +104,9 @@ struct StructuralHasherSharedConstants {
 
   // This is a cached "portSyms" string attr.
   StringAttr portSymsAttr;
+
+  // This is a cached "portNames" string attr.
+  StringAttr portNamesAttr;
 
   // This is a set of every attribute we should ignore.
   DenseSet<Attribute> nonessentialAttributes;
@@ -159,6 +163,15 @@ private:
 
   void update(OpResult result) {
     record(result.getAsOpaquePointer());
+
+    // Like instance ops, don't use object ops' result types since they might be
+    // replaced by dedup. Record the class names and lazily combine their hashes
+    // using the same mechanism as instances and modules.
+    if (auto objectOp = dyn_cast<ObjectOp>(result.getOwner())) {
+      referredModuleNames.push_back(objectOp.getType().getNameAttr().getAttr());
+      return;
+    }
+
     update(result.getType());
   }
 
@@ -201,8 +214,11 @@ private:
     for (auto namedAttr : dict) {
       auto name = namedAttr.getName();
       auto value = namedAttr.getValue();
-      // Skip names and annotations.
-      if (constants.nonessentialAttributes.contains(name))
+      // Skip names and annotations, except in certain cases.
+      // Names of ports are load bearing for classes, so we do hash those.
+      bool isClassPortNames =
+          isa<ClassLike>(op) && name == constants.portNamesAttr;
+      if (constants.nonessentialAttributes.contains(name) && !isClassPortNames)
         continue;
 
       // Hash the port types.
@@ -246,6 +262,11 @@ private:
 
       // Hash the interned pointer.
       update(name.getAsOpaquePointer());
+
+      // TODO: properly handle DistinctAttr, including its use in paths.
+      // See https://github.com/llvm/circt/issues/6583.
+      if (isa<DistinctAttr>(value))
+        continue;
 
       // If this is an symbol reference, we need to perform name erasure.
       if (auto innerRef = dyn_cast<hw::InnerRefAttr>(value))
@@ -588,6 +609,9 @@ struct Equivalence {
         if (failed(check(diag, a, cast<IntegerAttr>(aAttr), b,
                          cast<IntegerAttr>(bAttr))))
           return failure();
+      } else if (isa<DistinctAttr>(aAttr) && isa<DistinctAttr>(bAttr)) {
+        // TODO: properly handle DistinctAttr, including its use in paths.
+        // See https://github.com/llvm/circt/issues/6583
       } else if (aAttr != bAttr) {
         diag.attachNote(a->getLoc())
             << "first operation has attribute '" << attrName.getValue()
@@ -617,21 +641,22 @@ struct Equivalence {
   }
 
   // NOLINTNEXTLINE(misc-no-recursion)
-  LogicalResult check(InFlightDiagnostic &diag, InstanceOp a, InstanceOp b) {
-    auto aName = a.getModuleNameAttr().getAttr();
-    auto bName = b.getModuleNameAttr().getAttr();
+  LogicalResult check(InFlightDiagnostic &diag, FInstanceLike a,
+                      FInstanceLike b) {
+    auto aName = a.getReferencedModuleNameAttr();
+    auto bName = b.getReferencedModuleNameAttr();
     if (aName == bName)
       return success();
 
     // If the modules instantiate are different we will want to know why the
     // sub module did not dedupliate. This code recursively checks the child
     // module.
-    auto aModule = a.getReferencedModule(instanceGraph);
-    auto bModule = b.getReferencedModule(instanceGraph);
+    auto aModule = instanceGraph.lookup(aName)->getModule();
+    auto bModule = instanceGraph.lookup(bName)->getModule();
     // Create a new error for the submodule.
     diag.attachNote(std::nullopt)
-        << "in instance " << a.getNameAttr() << " of " << aName
-        << ", and instance " << b.getNameAttr() << " of " << bName;
+        << "in instance " << a.getInstanceNameAttr() << " of " << aName
+        << ", and instance " << b.getInstanceNameAttr() << " of " << bName;
     check(diag, aModule, bModule);
     return failure();
   }
@@ -648,8 +673,8 @@ struct Equivalence {
 
     // If its an instance operaiton, perform some checking and possibly
     // recurse.
-    if (auto aInst = dyn_cast<InstanceOp>(a)) {
-      auto bInst = cast<InstanceOp>(b);
+    if (auto aInst = dyn_cast<FInstanceLike>(a)) {
+      auto bInst = cast<FInstanceLike>(b);
       if (failed(check(diag, aInst, bInst)))
         return failure();
     }
@@ -940,9 +965,15 @@ private:
     auto *toNode = instanceGraph[toModule];
     auto toModuleRef = FlatSymbolRefAttr::get(toModule.getModuleNameAttr());
     for (auto *oldInstRec : llvm::make_early_inc_range(fromNode->uses())) {
-      auto inst = ::cast<InstanceOp>(*oldInstRec->getInstance());
-      inst.setModuleNameAttr(toModuleRef);
-      inst.setPortNamesAttr(toModule.getPortNamesAttr());
+      auto inst = oldInstRec->getInstance();
+      if (auto instOp = dyn_cast<InstanceOp>(*inst)) {
+        instOp.setModuleNameAttr(toModuleRef);
+        instOp.setPortNamesAttr(toModule.getPortNamesAttr());
+      } else if (auto objectOp = dyn_cast<ObjectOp>(*inst)) {
+        auto classLike = cast<ClassLike>(*toNode->getModule());
+        ClassType classType = detail::getInstanceTypeForClassLike(classLike);
+        objectOp.getResult().setType(classType);
+      }
       oldInstRec->getParent()->addInstance(inst, toNode);
       oldInstRec->erase();
     }
@@ -1523,14 +1554,8 @@ class DedupPass : public DedupBase<DedupPass> {
           // If module has symbol (name) that must be preserved even if unused,
           // skip it. All symbol uses must be supported, which is not true if
           // non-private.
-          if (!module.isPrivate() || !module.canDiscardOnUseEmpty()) {
-            return success();
-          }
-
-          // Explicitly skip class-like modules.  This is presently unreachable
-          // due to above and current implementation but check anyway as dedup
-          // code does not handle these or object operations.
-          if (isa<ClassLike>(*module)) {
+          if (!module.isPrivate() ||
+              (!module.canDiscardOnUseEmpty() && !isa<ClassLike>(*module))) {
             return success();
           }
 
