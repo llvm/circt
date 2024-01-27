@@ -153,10 +153,39 @@ struct LowerLTLToCorePass : public LowerLTLToCoreBase<LowerLTLToCorePass> {
 } // namespace
 
 void circt::populateLTLToCoreConversionPatterns(
-    TypeConverter &converter, mlir::RewritePatternSet &patterns) {
+    circt::LTLToCoreTypeConverter &converter,
+    mlir::RewritePatternSet &patterns) {
   patterns.add<HasBeenResetOpConversion, VerifAssertOpConversion,
                ClockOpConversion, DisableOpConversion>(converter,
                                                        patterns.getContext());
+}
+
+// Creates the type conversions and materializations needed for this pass to
+// work
+circt::LTLToCoreTypeConverter::LTLToCoreTypeConverter() {
+
+  converter.addConversion([](ltl::PropertyType type) {
+    return IntegerType::get(type.getContext(), 1);
+  });
+  converter.addConversion([](Type type) { return type; });
+
+  addTargetMaterialization(
+      [&](mlir::OpBuilder &builder, mlir::Type resultType,
+          mlir::ValueRange inputs,
+          mlir::Location loc) -> std::optional<mlir::Value> {
+        if (inputs.size() != 1)
+          return std::nullopt;
+        return inputs[0];
+      });
+
+  addSourceMaterialization(
+      [&](mlir::OpBuilder &builder, mlir::Type resultType,
+          mlir::ValueRange inputs,
+          mlir::Location loc) -> std::optional<mlir::Value> {
+        if (inputs.size() != 1)
+          return std::nullopt;
+        return inputs[0];
+      });
 }
 
 // Simply applies the conversion patterns defined above
@@ -180,11 +209,7 @@ void LowerLTLToCorePass::runOnOperation() {
   target.addIllegalOp<ltl::ClockOp>();
 
   // Create type converters, mostly just to convert an ltl property to a bool
-  TypeConverter converter;
-  converter.addConversion([](ltl::PropertyType type) {
-    return IntegerType::get(type.getContext(), 1);
-  });
-  converter.addConversion([](Type type) { return type; });
+  LTLToCoreTypeConverter converter;
 
   // Create the operation rewrite patters
   RewritePatternSet patterns(&getContext());

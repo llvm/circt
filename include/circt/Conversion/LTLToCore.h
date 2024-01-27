@@ -25,7 +25,14 @@ class Pass;
 using namespace mlir;
 
 namespace circt {
-void populateLTLToCoreConversionPatterns(TypeConverter &converter,
+/// A helper type converter class that automatically populates the relevant
+/// materializations and type conversions for converting HWArith to HW.
+class LTLToCoreTypeConverter : public mlir::TypeConverter {
+public:
+  LTLToCoreTypeConverter();
+};
+
+void populateLTLToCoreConversionPatterns(LTLToCoreTypeConverter &converter,
                                          RewritePatternSet &patterns);
 
 std::unique_ptr<mlir::Pass> createLowerLTLToCorePass();
