@@ -48,6 +48,7 @@ struct PortInfo : public ModulePort {
   // run, this will reflect the exact name of the port as emitted to the Verilog
   // output.
   StringRef getVerilogName() const;
+
   bool operator==(const PortInfo &other) const {
     return this->name == other.name && this->type == other.type &&
            this->dir == other.dir && this->argNum == other.argNum;

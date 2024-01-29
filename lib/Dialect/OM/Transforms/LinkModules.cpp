@@ -11,18 +11,13 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
-#include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "circt/Dialect/HW/HWOps.h"
-#include "circt/Dialect/HW/PortImplementation.h"
 #include "circt/Dialect/OM/OMOps.h"
 #include "circt/Dialect/OM/OMPasses.h"
 #include "circt/Support/Namespace.h"
 #include "mlir/IR/Builders.h"
-#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Threading.h"
-#include "mlir/IR/Visitors.h"
-#include "llvm/ADT/SmallVector.h"
 
 #include <memory>
 
@@ -233,13 +228,13 @@ static FailureOr<bool> resolveHWModules(StringAttr name,
 // it's necessary to rename symbols.
 static FailureOr<bool> resolveClasses(StringAttr name,
                                       ArrayRef<ClassLike> classes) {
-  bool existsExternalModule = false;
+  bool existExternalClass = false;
   size_t countDefinition = 0;
   ClassOp classOp;
 
   for (auto op : classes) {
     if (isa<ClassExternOp>(op))
-      existsExternalModule = true;
+      existExternalClass = true;
     else {
       classOp = cast<ClassOp>(op);
       ++countDefinition;
@@ -248,7 +243,7 @@ static FailureOr<bool> resolveClasses(StringAttr name,
 
   // There must be exactly one definition if the symbol was referred by an
   // external class.
-  if (existsExternalModule && countDefinition != 1) {
+  if (existExternalClass && countDefinition != 1) {
     SmallVector<Location> classExternLocs;
     SmallVector<Location> classLocs;
     for (auto op : classes)
@@ -270,7 +265,7 @@ static FailureOr<bool> resolveClasses(StringAttr name,
     return failure();
   }
 
-  if (!existsExternalModule)
+  if (!existExternalClass)
     return countDefinition != 1;
 
   assert(classOp && countDefinition == 1);
