@@ -530,37 +530,18 @@ void parse_fsm(string input_file){
       llvm::outs()<<"transition from "<<t.from<<" to "<<t.to<<"\n";
     }
     if(t.isGuard && t.isAction){
-      // func_decl g = findMyFun(t.from, stateInvMap_fun);
-      llvm ::outs()<<"1. function: "<< findMyFun(t.from, stateInvMap_fun).to_string() <<"\n";
-      llvm::outs()<<"1. solver vars: ";
-      for(auto v: *solverVars){
-        llvm::outs()<<v.to_string()<<" ";
-      }
-
-      vector<expr> vec = t.action(*solverVars);
-
       expr body = implies(findMyFun(t.from, stateInvMap_fun)(solverVars->at(0), solverVars->at(1)) && t.guard(*solverVars), findMyFun(t.to, stateInvMap_fun)(t.action(*solverVars)[0], t.action(*solverVars)[1]));
-      expr nested = nestedForall(*solverVars, body, 0);
-      // llvm::outs()<<"nested: "<<nested.to_string()<<"\n";
       s.add(nestedForall(*solverVars, body, 0));
     } else if (t.isGuard){
       expr body = implies((findMyFun(t.from, stateInvMap_fun)(solverVars->at(0), solverVars->at(1)) && t.guard(*solverVars)), findMyFun(t.to, stateInvMap_fun)(solverVars->at(0), solverVars->at(1)));
         s.add(nestedForall(*solverVars, body, 0));
     } else if (t.isAction){
-      llvm ::outs()<<"3. function: "<< findMyFun(t.from, stateInvMap_fun).to_string() <<"\n";
-      llvm::outs()<<"3. solver vars: ";
-      for(auto v: *solverVars){
-        llvm::outs()<<v.to_string()<<" ";
-      }
-
-      vector<expr> vec = t.action(*solverVars);
-
       expr body = implies(findMyFun(t.from, stateInvMap_fun)(solverVars->at(0), solverVars->at(1)), findMyFun(t.to, stateInvMap_fun)(t.action(*solverVars)[0], t.action(*solverVars)[1]));
       expr nested = nestedForall(*solverVars, body, 0);
       s.add(nestedForall(*solverVars, body, 0));
     } else {
       expr body = implies((findMyFun(t.from, stateInvMap_fun)(solverVars->at(0), solverVars->at(1))), findMyFun(t.to, stateInvMap_fun)(solverVars->at(0), solverVars->at(1)));
-        s.add(nestedForall(*solverVars, body, 0));
+      s.add(nestedForall(*solverVars, body, 0));
     }
 
   }
