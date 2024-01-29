@@ -1671,9 +1671,13 @@ circuit Layers:
     ; CHECK-NEXT:   }
     ; CHECK-NEXT: }
 
-  ; CHECK: firrtl.module @Layers
+  ; CHECK:      firrtl.module @Layers
+  ; CHECK-SAME:   out %b: !firrtl.probe<uint<1>, @A>
+  ; CHECK-SAME:   out %c: !firrtl.rwprobe<uint<1>, @A::@B>
   module Layers:
     input a: UInt<1>
+    output b: Probe<UInt<1>, A>
+    output c: RWProbe<UInt<1>, A.B>
 
     layerblock A:
       node A_a = a

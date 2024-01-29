@@ -704,13 +704,18 @@ firrtl.circuit "Foo" {
     }
   }
   // CHECK:      module ModuleWithGroups :
-  // CHECK-NEXT:   layerblock GroupA :
+  // CHECK-NEXT:   output a : Probe<UInt<1>, GroupA>
+  // CHECK-NEXT:   output b : RWProbe<UInt<1>, GroupA.GroupB>
+  // CHECK:        layerblock GroupA :
   // CHECK-NEXT:     layerblock GroupB :
   // CHECK-NEXT:       layerblock GroupC :
   // CHECK-NEXT:       layerblock GroupD :
   // CHECK-NEXT:         layerblock GroupE :
   // CHECK-NEXT:     layerblock GroupF :
-  firrtl.module @ModuleWithGroups() {
+  firrtl.module @ModuleWithGroups(
+    out %a: !firrtl.probe<uint<1>, @GroupA>,
+    out %b: !firrtl.rwprobe<uint<1>, @GroupA::@GroupB>
+  ) {
     firrtl.layerblock @GroupA {
       firrtl.layerblock @GroupA::@GroupB {
         firrtl.layerblock @GroupA::@GroupB::@GroupC {
@@ -724,6 +729,33 @@ firrtl.circuit "Foo" {
       }
     }
   }
+
+  // Test line-breaks for very large layer associations.
+  firrtl.layer @Group1234567890 bind {
+    firrtl.layer @Group1234567890 bind {
+      firrtl.layer @Group1234567890 bind {
+        firrtl.layer @Group1234567890 bind {
+          firrtl.layer @Group1234567890 bind {
+            firrtl.layer @Group1234567890 bind {
+              firrtl.layer @Group1234567890 bind {
+               firrtl.layer @Group1234567890 bind {}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // CHECK: module ModuleWithLongProbeColor
+  // CHECK-NEXT:  output o : Probe<
+  // CHECK-NEXT:    UInt<1>,
+  // CHECK-NEXT:    Group1234567890.Group1234567890.Group1234567890.Group1234567890
+  // CHECK-NEXT:      .Group1234567890.Group1234567890.Group1234567890.Group1234567890
+  // CHECK-NEXT:  >
+  firrtl.module @ModuleWithLongProbeColor(
+    out %o: !firrtl.probe<uint<1>, @Group1234567890::@Group1234567890::@Group1234567890::@Group1234567890::@Group1234567890::@Group1234567890::@Group1234567890::@Group1234567890>
+  ) {}
 
   // CHECK: module RWProbe :
   // CHECK-NEXT: input in : { a : UInt<1> }[2]

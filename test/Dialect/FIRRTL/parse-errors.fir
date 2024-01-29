@@ -1253,3 +1253,64 @@ circuit Foo:
   option Platform:
     FPGA
     FPGA
+
+;// -----
+FIRRTL version 3.1.0
+circuit Foo:
+
+  module Foo:
+    ; expected-error @below {{colored probes are a FIRRTL 3.2.0+ feature, but the specified FIRRTL version was 3.1.0}}
+    output a: Probe<UInt<1>, A>
+
+;// -----
+FIRRTL version 4.0.0
+circuit Foo:
+  layer A bind:
+  module Foo:
+    output a: Probe<
+    ; expected-error @below {{expected probe data type}}
+;// -----
+FIRRTL version 4.0.0
+circuit Foo:
+  layer A bind:
+  module Foo:
+    ; expected-error @below {{expected '<' in reference type}}
+    output a: Probe X
+
+;// -----
+FIRRTL version 4.0.0
+circuit Foo:
+  layer A bind:
+  module Foo:
+    output a: Probe
+    ; expected-error @below {{expected '<' in reference type}}
+;// -----
+FIRRTL version 4.0.0
+circuit Foo:
+  layer A bind:
+  module Foo:
+    ; expected-error @below {{expected probe data type}}
+    output a: Probe<>
+
+;// -----
+FIRRTL version 4.0.0
+circuit Foo:
+  layer A bind:
+  module Foo:
+    ; expected-error @below {{expected '>' to end reference type}}
+    output a: Probe<UInt<1>
+;// -----
+FIRRTL version 4.0.0
+circuit Foo:
+  layer A bind:
+  module Foo:
+    ; expected-error @below {{expected '>' to end reference type}}
+    output a: Probe<UInt<1> A
+
+;// -----
+FIRRTL version 4.0.0
+circuit Foo:
+  layer A bind:
+  module Foo:
+    ; expected-error @below {{expected layer name}}
+    output a: Probe<UInt<1> A.>
