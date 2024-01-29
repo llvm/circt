@@ -19,6 +19,7 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassInstrumentation.h"
 #include "mlir/Pass/PassManager.h"
+#include "mlir/Support/LLVM.h"
 #include "mlir/Target/LLVMIR/Dialect/All.h"
 #include "mlir/Target/LLVMIR/Export.h"
 #include "mlir/Transforms/Passes.h"
@@ -78,10 +79,27 @@ struct transition{
   z3Fun guard;
   mlir::Region *guard_reg;
   bool isGuard;
-  llvm::DenseMap<mlir::Value, z3FunA> var_updates;
   mlir::Region *action_reg;
   z3FunA action;
   bool isAction;
 };
+
+struct MyExprMap{
+  vector<expr> exprs;
+  vector<mlir::Value> values;
+};
+
+struct MyStateInvMap{
+  vector<mlir::StringRef> stateName;
+  vector<int> stateID;
+};
+
+struct MyStateInvMapFun{
+  vector<mlir::StringRef> stateName;
+  vector<func_decl> invFun;
+};
+
+
+
 
 void printSolverAssertions(z3::solver& solver);
