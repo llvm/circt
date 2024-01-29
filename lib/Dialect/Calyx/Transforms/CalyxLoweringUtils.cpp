@@ -792,10 +792,9 @@ BuildCallInstance::partiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
       auto portInfos = instanceOp.getReferencedComponent().getPortInfo();
       auto results = instanceOp.getResults();
       for (const auto &[portInfo, result] : llvm::zip(portInfos, results)) {
-        if (portInfo.hasAttribute(scfToCalyx::goPort) ||
-            portInfo.hasAttribute(scfToCalyx::resetPort))
+        if (portInfo.hasAttribute(goPort) || portInfo.hasAttribute(resetPort))
           rewriter.create<calyx::AssignOp>(callOp.getLoc(), result, constantOp);
-        else if (portInfo.hasAttribute(scfToCalyx::donePort))
+        else if (portInfo.hasAttribute(donePort))
           rewriter.create<calyx::GroupDoneOp>(callOp.getLoc(), result);
       }
     }

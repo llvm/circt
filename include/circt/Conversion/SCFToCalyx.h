@@ -25,12 +25,6 @@ namespace scfToCalyx {
 // used as the Calyx port name.
 static constexpr std::string_view sPortNameAttr = "calyx.port_name";
 
-// the goPort, donePort, and resetPort identify the attributes of the go, done
-// and reset port of the timing circuit.
-static constexpr std::string_view goPort = "go";
-static constexpr std::string_view donePort = "done";
-static constexpr std::string_view resetPort = "reset";
-
 } // namespace scfToCalyx
 
 /// Create an SCF to Calyx conversion pass.
