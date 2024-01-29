@@ -61,7 +61,7 @@
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/raw_ostream.h"
-#include <z3++.h>
+#include </Users/luisa/z3/src/api/c++/z3++.h>
 
 using namespace llvm;
 using namespace mlir;
