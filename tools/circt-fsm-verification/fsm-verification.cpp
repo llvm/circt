@@ -2,7 +2,7 @@
 #include "circt/Dialect/FSM/FSMGraph.h"
 #include "mlir/IR/Value.h"
 #include "mlir/Support/LLVM.h"
-#include </Users/luisa/z3/src/api/c++/z3++.h>
+#include <z3++.h>
 #include <vector>
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/StringRef.h"
