@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Calyx/CalyxLoweringUtils.h"
+#include "circt/Conversion/SCFToCalyx.h"
 #include "circt/Dialect/Calyx/CalyxHelpers.h"
 #include "circt/Dialect/Calyx/CalyxOps.h"
 #include "circt/Support/LLVM.h"
@@ -791,9 +792,9 @@ BuildCallInstance::partiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
       auto portInfos = instanceOp.getReferencedComponent().getPortInfo();
       auto results = instanceOp.getResults();
       for (const auto &[portInfo, result] : llvm::zip(portInfos, results)) {
-        if (portInfo.hasAttribute("go") || portInfo.hasAttribute("reset"))
+        if (portInfo.hasAttribute(goPort) || portInfo.hasAttribute(resetPort))
           rewriter.create<calyx::AssignOp>(callOp.getLoc(), result, constantOp);
-        else if (portInfo.hasAttribute("done"))
+        else if (portInfo.hasAttribute(donePort))
           rewriter.create<calyx::GroupDoneOp>(callOp.getLoc(), result);
       }
     }
