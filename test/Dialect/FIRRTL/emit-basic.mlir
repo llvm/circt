@@ -747,6 +747,18 @@ firrtl.circuit "Foo" {
     }
   }
 
+  // CHECK:      module ModuleWithEnabledLayers
+  // CHECK-NEXT:   enablelayer
+  // CHECK-NEXT:   GroupA
+  // CHECK-NEXT:   enablelayer
+  // CHECK-NEXT:   GroupA.GroupB
+  firrtl.module @ModuleWithEnabledLayers() attributes {
+    layers = [
+      @GroupA,
+      @GroupA::@GroupB
+    ]} {
+  }
+
   // CHECK: module ModuleWithLongProbeColor
   // CHECK-NEXT:  output o : Probe<
   // CHECK-NEXT:    UInt<1>,

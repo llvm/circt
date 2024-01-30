@@ -411,7 +411,14 @@ void Emitter::emitCircuit(CircuitOp op) {
 /// Emit an entire module.
 void Emitter::emitModule(FModuleOp op) {
   startStatement();
-  ps << "module " << PPExtString(legalize(op.getNameAttr())) << " :";
+  ps << "module " << PPExtString(legalize(op.getNameAttr()));
+  for (auto layer : op.getLayersAttr()) {
+    ps.space();
+    ps << "enablelayer";
+    ps.space();
+    emitSymbol(cast<SymbolRefAttr>(layer));
+  }
+  ps << " :";
   emitLocation(op);
   ps.scopedBox(PP::bbox2, [&]() {
     setPendingNewline();

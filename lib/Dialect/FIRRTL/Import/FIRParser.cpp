@@ -4953,10 +4953,33 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit, bool isPublic,
   StringAttr name;
   SmallVector<PortInfo, 8> portList;
   SmallVector<SMLoc> portLocs;
-  LocWithInfo info(getToken().getLoc(), this);
+  SmallVector<Attribute> layers;
+  SMLoc loc = getToken().getLoc();
+  LocWithInfo info(loc, this);
   consumeToken(FIRToken::kw_module);
-  if (parseId(name, "expected module name") ||
-      parseToken(FIRToken::colon, "expected ':' in module definition") ||
+  if (parseId(name, "expected module name"))
+    return failure();
+  while (getToken().getKind() == FIRToken::kw_enablelayer) {
+    if (requireFeature({4, 0, 0}, "modules with layers enabled"))
+      return failure();
+    consumeToken();
+    SmallVector<StringRef> parsedLayers;
+    do {
+      StringRef layer;
+      loc = getToken().getLoc();
+      if (parseId(layer, "expected layer name"))
+        return failure();
+      parsedLayers.push_back(layer);
+    } while (consumeIf(FIRToken::period));
+    if (!parsedLayers.empty()) {
+      auto nestedLayers = llvm::map_range(
+          ArrayRef(parsedLayers).drop_front(),
+          [&](StringRef a) { return FlatSymbolRefAttr::get(getContext(), a); });
+      layers.push_back(SymbolRefAttr::get(getContext(), parsedLayers.front(),
+                                          llvm::to_vector(nestedLayers)));
+    }
+  }
+  if (parseToken(FIRToken::colon, "expected ':' in module definition") ||
       info.parseOptionalInfo() || parsePortList(portList, portLocs, indent))
     return failure();
 
@@ -4969,8 +4992,9 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit, bool isPublic,
     convention = Convention::Scalarized;
   auto conventionAttr = ConventionAttr::get(getContext(), convention);
   auto builder = circuit.getBodyBuilder();
-  auto moduleOp = builder.create<FModuleOp>(info.getLoc(), name, conventionAttr,
-                                            portList, annotations);
+  auto moduleOp =
+      builder.create<FModuleOp>(info.getLoc(), name, conventionAttr, portList,
+                                annotations, builder.getArrayAttr(layers));
 
   auto visibility = isPublic ? SymbolTable::Visibility::Public
                              : SymbolTable::Visibility::Private;
