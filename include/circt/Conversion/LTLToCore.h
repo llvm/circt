@@ -17,6 +17,7 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/Pass.h"
+#include "mlir/Transforms/DialectConversion.h"
 
 namespace mlir {
 class Pass;
