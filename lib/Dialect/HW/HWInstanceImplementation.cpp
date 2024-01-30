@@ -13,17 +13,6 @@
 using namespace circt;
 using namespace circt::hw;
 
-Operation *
-instance_like_impl::getReferencedModule(const HWSymbolCache *cache,
-                                        Operation *instanceOp,
-                                        mlir::FlatSymbolRefAttr moduleName) {
-  if (cache)
-    if (auto *result = cache->getDefinition(moduleName))
-      return result;
-
-  return SymbolTable::lookupNearestSymbolFrom(instanceOp, moduleName);
-}
-
 LogicalResult instance_like_impl::verifyReferencedModule(
     Operation *instanceOp, SymbolTableCollection &symbolTable,
     mlir::FlatSymbolRefAttr moduleName, Operation *&module) {
