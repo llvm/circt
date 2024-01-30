@@ -26,119 +26,65 @@
 using namespace circt;
 using namespace firrtl;
 
+
 FieldSource::FieldSource(Operation *operation) {
+  // Ideally we would build this analysis lazily, but I don't want to make the 
+  // paths map mutable, since lookup needs to be constant.
+
   FModuleOp mod = cast<FModuleOp>(operation);
-  // All ports define locations
-  for (auto port : mod.getBodyBlock()->getArguments())
-    makeNodeForValue(port, port, {}, foldFlow(port));
-
-  mod.walk<mlir::WalkOrder::PreOrder>([&](Operation *op) { visitOp(op); });
+  mod.walk<mlir::WalkOrder::PreOrder>([&](Operation *op) { 
+//    if (isa<ConnectOp, StrictConnectOp>(op))
+  for (size_t i = 0; i < op->getNumOperands(); ++i)
+      visitValue(op->getOperand(i), [&](Value v, PathNode pn) {paths[v] = pn;});
+    });
 }
 
-void FieldSource::visitOp(Operation *op) {
-  if (auto sf = dyn_cast<SubfieldOp>(op))
-    return visitSubfield(sf);
-  if (auto sf = dyn_cast<OpenSubfieldOp>(op))
-    return visitOpenSubfield(sf);
-
-  if (auto si = dyn_cast<SubindexOp>(op))
-    return visitSubindex(si);
-  if (auto si = dyn_cast<OpenSubindexOp>(op))
-    return visitOpenSubindex(si);
-
-  if (auto sa = dyn_cast<SubaccessOp>(op))
-    return visitSubaccess(sa);
-
-  if (isa<WireOp, RegOp, RegResetOp, InvalidValueOp, chirrtl::MemoryPortOp>(op))
-    return makeNodeForValue(op->getResult(0), op->getResult(0), {},
-                            foldFlow(op->getResult(0)));
-  if (auto mem = dyn_cast<MemOp>(op))
-    return visitMem(mem);
-  if (auto inst = dyn_cast<InstanceOp>(op))
-    return visitInst(inst);
-  if (auto inst = dyn_cast<InstanceChoiceOp>(op))
-    return visitInstChoice(inst);
-
-  // Track all other definitions of aggregates.
-  if (op->getNumResults()) {
-    auto type = op->getResult(0).getType();
-    if (auto baseType = type_dyn_cast<FIRRTLBaseType>(type);
-        baseType && !baseType.isGround())
-      makeNodeForValue(op->getResult(0), op->getResult(0), {},
-                       foldFlow(op->getResult(0)));
+template <typename Fn>
+FieldSource::PathNode FieldSource::visitValue(Value v, Fn update) const {
+  // Blockargs are never cached, just regenerate.
+  if (auto arg = dyn_cast<BlockArgument>(v)) {
+    return PathNode{v, 0};
   }
-}
-
-void FieldSource::visitSubfield(SubfieldOp sf) {
-  auto value = sf.getInput();
-  const auto *node = nodeForValue(value);
-  assert(node && "node should be in the map");
-  auto sv = node->path;
-  sv.push_back(sf.getFieldIndex());
-  makeNodeForValue(sf.getResult(), node->src, sv, foldFlow(sf));
-}
-
-void FieldSource::visitOpenSubfield(OpenSubfieldOp sf) {
-  auto value = sf.getInput();
-  const auto *node = nodeForValue(value);
-  assert(node && "node should be in the map");
-  auto sv = node->path;
-  sv.push_back(sf.getFieldIndex());
-  makeNodeForValue(sf.getResult(), node->src, sv, foldFlow(sf));
-}
-
-void FieldSource::visitSubindex(SubindexOp si) {
-  auto value = si.getInput();
-  const auto *node = nodeForValue(value);
-  assert(node && "node should be in the map");
-  auto sv = node->path;
-  sv.push_back(si.getIndex());
-  makeNodeForValue(si.getResult(), node->src, sv, foldFlow(si));
-}
-
-void FieldSource::visitOpenSubindex(OpenSubindexOp si) {
-  auto value = si.getInput();
-  const auto *node = nodeForValue(value);
-  assert(node && "node should be in the map");
-  auto sv = node->path;
-  sv.push_back(si.getIndex());
-  makeNodeForValue(si.getResult(), node->src, sv, foldFlow(si));
-}
-
-void FieldSource::visitSubaccess(SubaccessOp sa) {
-  auto value = sa.getInput();
-  const auto *node = nodeForValue(value);
-  assert(node && "node should be in the map");
-  auto sv = node->path;
-  sv.push_back(-1);
-  makeNodeForValue(sa.getResult(), node->src, sv, foldFlow(sa));
-}
-
-void FieldSource::visitMem(MemOp mem) {
-  for (auto r : mem.getResults())
-    makeNodeForValue(r, r, {}, foldFlow(r));
-}
-
-void FieldSource::visitInst(InstanceOp inst) {
-  for (auto r : inst.getResults())
-    makeNodeForValue(r, r, {}, foldFlow(r));
-}
-
-void FieldSource::visitInstChoice(InstanceChoiceOp inst) {
-  for (auto r : inst.getResults())
-    makeNodeForValue(r, r, {}, foldFlow(r));
-}
-
-const FieldSource::PathNode *FieldSource::nodeForValue(Value v) const {
+  // Check cache.
   auto ii = paths.find(v);
-  if (ii == paths.end())
-    return nullptr;
-  return &ii->second;
+  if (ii != paths.end())
+    return ii->second;
+  
+  Operation* op = v.getDefiningOp();
+  return TypeSwitch<Operation*, PathNode>(op)
+  .Case<SubfieldOp>([&](auto subf) {
+    auto parent = visitValue(subf.getInput(), update);
+    PathNode retval{parent.src, parent.fieldID + subf.getInput().getType().base().getFieldID(subf.getFieldIndex())};
+    update(v, retval);
+    return retval;
+  })
+  .template Case<OpenSubfieldOp>([&](auto subf) {
+    auto parent = visitValue(subf.getInput(), update);
+    PathNode retval{parent.src, parent.fieldID + subf.getInput().getType().getFieldID(subf.getFieldIndex())};
+    update(v, retval);
+    return retval;
+  })
+  .template Case<WireOp, RegOp, RegResetOp, InstanceOp, InvalidValueOp>([&](auto def) {
+    return PathNode{v, 0};
+  })
+  .Default([&](auto* op) {
+    if (auto ft = type_isa<BundleType, FVectorType, OpenBundleType, OpenVectorType>(v.getType()))
+      op->emitError("not handled");
+    return PathNode{v, 0};
+  });
 }
 
-void FieldSource::makeNodeForValue(Value dst, Value src, ArrayRef<int64_t> path,
-                                   Flow flow) {
-  auto ii = paths.try_emplace(dst, src, path, flow);
-  (void)ii;
-  assert(ii.second && "Double insert into the map");
+// This only does lookup, due to the const-ness of analysis
+FieldSource::PathNode FieldSource::nodeForValue(Value v) const {
+  // Blockargs are never cached, just regenerate.
+  if (auto arg = dyn_cast<BlockArgument>(v)) {
+    return PathNode{v, 0};
+  }
+  // Check cache.
+  auto ii = paths.find(v);
+  if (ii != paths.end())
+    return ii->second;
+  
+  //Operation* op = v.getDefiningOp();
+  return visitValue(v, [](Value, PathNode){});
 }

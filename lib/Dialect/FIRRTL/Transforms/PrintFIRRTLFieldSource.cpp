@@ -23,23 +23,11 @@ struct PrintFIRRTLFieldSourcePass
   PrintFIRRTLFieldSourcePass(raw_ostream &os) : os(os) {}
 
   void visitValue(const FieldSource &fieldRefs, Value v) {
-    auto *p = fieldRefs.nodeForValue(v);
-    if (p) {
-      if (p->isRoot())
-        os << "ROOT: ";
-      else
-        os << "SUB:  " << v;
-      os << " : " << p->src << " : {";
-      llvm::interleaveComma(p->path, os);
-      os << "} ";
-      os << ((p->flow == Flow::Source) ? "Source"
-             : (p->flow == Flow::Sink) ? "Sink"
-                                       : "Duplex");
-      if (p->isSrcWritable())
-        os << " writable";
-      if (p->isSrcTransparent())
-        os << " transparent";
-      os << "\n";
+    auto p = fieldRefs.nodeForValue(v);
+    if (p.src) {
+      os << " : " << p.src << " : " << p.fieldID << " " << "\n";
+    } else {
+      os << " : not found\n";        
     }
   }
 

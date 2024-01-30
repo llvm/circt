@@ -107,81 +107,99 @@ static void markLeaves(BitVector &bits, Type t, bool isPort = false,
   }
 }
 
-//===----------------------------------------------------------------------===//
-// Pass Infrastructure
-//===----------------------------------------------------------------------===//
+static void markWrite(BitVector& bv, size_t fieldID) {
+    if (bv.size() <= fieldID)
+        bv.resize(fieldID + 1);
+    bv.set(fieldID);
+}
 
 namespace {
 class CheckInitPass : public CheckInitBase<CheckInitPass> {
+  // SetSets track initialized fieldIDs
+  using SetSet = DenseMap<Value, BitVector>;
+  struct RegionState {
+    // Values Inited in this state's regions.  To be intersected.
+    SetSet init;
+    // Children to merge into this state
+    SmallVector<Operation *, 4> children;
+    // Definitions from this state
+    SmallVector<Value> dests;
+  };
+
+  struct OpState {
+    SmallVector<RegionState, 2> regions;
+  };
+
+  SmallVector<Operation *> worklist;
+  DenseMap<Operation *, OpState> localInfo;
+
+  void processOp(Operation *op, FieldSource &fieldSource);
+
+public:
   void runOnOperation() override;
 };
 } // end anonymous namespace
 
-void CheckInitPass::runOnOperation() {
-  DenseMap<Value, BitVector> unsetFields;
-  auto &fieldsource = getAnalysis<FieldSource>();
+// compute the values set by op's regions.  A when, for example, ands the init
+// set as only fields set on both paths are unconditionally set by the when.
+void CheckInitPass::processOp(Operation *op, FieldSource &fieldSource) {
+  assert(localInfo.count(op) == 0);
+  auto &state = localInfo[op];
 
-  for (auto [idx, arg] :
-       llvm::enumerate(getOperation().getBodyBlock()->getArguments()))
-    markLeaves(unsetFields[arg], arg.getType(), true,
-               getOperation().getPortDirection(idx) == Direction::Out);
-
-  getOperation().walk([&](Operation *op) {
-    if (auto wire = dyn_cast<WireOp>(op)) {
-      assert(unsetFields.count(wire.getResult()) == 0);
-      auto &bits = unsetFields[wire.getResult()];
-      markLeaves(bits, wire.getResult().getType());
-    } else if (isa<RegOp, RegResetOp>(op)) {
-      assert(unsetFields.count(op->getResult(0)) == 0);
-      auto &bits = unsetFields[op->getResult(0)];
-      markLeaves(bits, op->getResult(0).getType());
-      bits.reset(); // Don't care about tracking writes
-    } else if (auto mem = dyn_cast<MemOp>(op)) {
-      for (auto result : mem.getResults()) {
-        assert(unsetFields.count(result) == 0);
-        auto &bits = unsetFields[result];
-        markLeaves(bits, result.getType());
+  for (auto &region : op->getRegions()) {
+    auto &local = state.regions.emplace_back();
+    for (auto &block : region) {
+      for (auto &opref : block) {
+        Operation *op = &opref;
+        if (auto wire = dyn_cast<WireOp>(op)) {
+          local.dests.push_back(wire.getResult());
+        } else if (isa<RegOp, RegResetOp>(op)) {
+          local.dests.push_back(op->getResult(0));
+        } else if (auto mem = dyn_cast<MemOp>(op)) {
+          for (auto result : mem.getResults())
+            local.dests.push_back(result);
+        } else if (auto memport = dyn_cast<chirrtl::MemoryPortOp>(op)) {
+          local.dests.push_back(memport.getResult(0));
+        } else if (auto inst = dyn_cast<InstanceOp>(op)) {
+          for (auto [idx, arg] : llvm::enumerate(inst.getResults()))
+            local.dests.push_back(arg);
+        } else if (auto inst = dyn_cast<InstanceChoiceOp>(op)) {
+          for (auto [idx, arg] : llvm::enumerate(inst.getResults()))
+            local.dests.push_back(arg);
+        } else if (auto con = dyn_cast<ConnectOp>(op)) {
+          auto node = fieldSource.nodeForValue(con.getDest());
+          markWrite(local.init[node.src], node.fieldID);
+        } else if (auto con = dyn_cast<StrictConnectOp>(op)) {
+          auto node = fieldSource.nodeForValue(con.getDest());
+          markWrite(local.init[node.src], node.fieldID);
+        } else if (auto def = dyn_cast<RefDefineOp>(op)) {
+          auto node = fieldSource.nodeForValue(def.getDest());
+          markWrite(local.init[node.src], node.fieldID);
+        } else if (isa<WhenOp, MatchOp>(op)) {
+          local.children.push_back(op);
+        }
       }
-    } else if (auto memport = dyn_cast<chirrtl::MemoryPortOp>(op)) {
-      assert(unsetFields.count(memport.getResult(0)) == 0);
-      auto &bits = unsetFields[memport.getResult(0)];
-      markLeaves(bits, memport.getResult(0).getType());
-      bits.reset();
-    } else if (auto inst = dyn_cast<InstanceOp>(op)) {
-      for (auto [idx, arg] : llvm::enumerate(inst.getResults())) {
-        assert(unsetFields.count(arg) == 0);
-        auto &bits = unsetFields[arg];
-        markLeaves(bits, arg.getType(), true,
-                   inst.getPortDirection(idx) == Direction::In);
-      }
-    } else if (auto inst = dyn_cast<InstanceChoiceOp>(op)) {
-      for (auto [idx, arg] : llvm::enumerate(inst.getResults())) {
-        assert(unsetFields.count(arg) == 0);
-        auto &bits = unsetFields[arg];
-        markLeaves(bits, arg.getType(), true,
-                   inst.getPortDirection(idx) == Direction::In);
-      }
-    } else if (auto con = dyn_cast<ConnectOp>(op)) {
-      auto *node = fieldsource.nodeForValue(con.getDest());
-      clearUnder(unsetFields[node->src], node->src.getType(), node->path);
-    } else if (auto con = dyn_cast<StrictConnectOp>(op)) {
-      auto *node = fieldsource.nodeForValue(con.getDest());
-      clearUnder(unsetFields[node->src], node->src.getType(), node->path);
-    } else if (auto def = dyn_cast<RefDefineOp>(op)) {
-      auto *node = fieldsource.nodeForValue(def.getDest());
-      clearUnder(unsetFields[node->src], node->src.getType(), node->path);
-    }
-  });
-
-  for (auto &[v, bits] : unsetFields) {
-    for (auto b : bits.set_bits()) {
-      getOperation()->dump();
-      if (auto *op = v.getDefiningOp())
-        op->emitError("unset field: ") << b;
-      else if (auto bv = dyn_cast<BlockArgument>(v))
-        bv.getOwner()->getParentOp()->emitError("unset field on port: ") << b;
     }
   }
+}
+
+void CheckInitPass::runOnOperation() {
+  auto &fieldSource = getAnalysis<FieldSource>();
+  worklist.push_back(getOperation());
+
+  // Each op should only be able to be inserted in the worklist once, so don't
+  // worry about keeping track of visited operations.
+  while (!worklist.empty()) {
+    Operation *op = worklist.back();
+    worklist.pop_back();
+    processOp(op, fieldSource);
+  }
+
+  // Modules are the only blocks with arguments, so capture them here only.
+  auto& topLevel = localInfo[getOperation()];
+  for (auto arg :
+       getOperation().getBodyBlock()->getArguments())
+    topLevel.regions[0].dests.push_back(arg);
 }
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createCheckInitPass() {
