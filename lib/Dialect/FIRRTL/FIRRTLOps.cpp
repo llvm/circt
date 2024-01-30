@@ -1519,7 +1519,17 @@ static LogicalResult verifyPortSymbolUses(FModuleLike module,
 }
 
 LogicalResult FModuleOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  return verifyPortSymbolUses(cast<FModuleLike>(getOperation()), symbolTable);
+  if (failed(
+          verifyPortSymbolUses(cast<FModuleLike>(getOperation()), symbolTable)))
+    return failure();
+
+  auto circuitOp = (*this)->getParentOfType<CircuitOp>();
+  for (auto layer : getLayers()) {
+    if (!symbolTable.lookupSymbolIn(circuitOp, cast<SymbolRefAttr>(layer)))
+      return emitOpError() << "enables unknown layer '" << layer << "'";
+  }
+
+  return success();
 }
 
 LogicalResult
@@ -3391,6 +3401,55 @@ LogicalResult StrictConnectOp::verify() {
   return success();
 }
 
+LogicalResult static verifyLayer(Operation *op, SymbolRefAttr opLayer) {
+  if (!opLayer)
+    return success();
+
+  auto moduleOp = op->getParentOfType<FModuleOp>();
+
+  // All the layers which are currently enabled.
+  SmallVector<Attribute> enabledLayers(moduleOp.getLayers());
+
+  auto layerBlockOp = op->getParentOfType<LayerBlockOp>();
+  if (layerBlockOp)
+    enabledLayers.push_back(layerBlockOp.getLayerName());
+
+  // The dest layer must be the same as the source layer or a parent of it.
+  for (Attribute attr : enabledLayers) {
+    SymbolRefAttr layerPointer = cast<SymbolRefAttr>(attr);
+    for (;;) {
+      if (!layerPointer)
+        break;
+
+      if (layerPointer == opLayer)
+        return success();
+
+      if (layerPointer.getNestedReferences().empty()) {
+        layerPointer = {};
+        continue;
+      }
+      layerPointer =
+          SymbolRefAttr::get(layerPointer.getRootReference(),
+                             layerPointer.getNestedReferences().drop_back());
+    }
+  }
+
+  auto diag = op->emitOpError()
+              << "cannot interact with layer '" << opLayer
+              << "' because it is not inside a '" << moduleOp.getOperationName()
+              << "' or '" << LayerBlockOp::getOperationName()
+              << "' which enables layer '" << opLayer << "' or a child layer";
+
+  if (layerBlockOp)
+    diag.attachNote(layerBlockOp.getLoc())
+        << "the enclosing '" << layerBlockOp.getOperationName()
+        << "' is defined here";
+
+  return diag.attachNote(moduleOp.getLoc())
+         << "the enclosing '" << moduleOp.getOperationName()
+         << "' is defined here";
+}
+
 LogicalResult RefDefineOp::verify() {
   // Check that the flows make sense.
   if (failed(checkConnectFlow(*this)))
@@ -3419,42 +3478,7 @@ LogicalResult RefDefineOp::verify() {
           "destination reference cannot be a cast of another reference");
   }
 
-  SymbolRefAttr layer;
-  auto layerBlockOp = (*this)->getParentOfType<LayerBlockOp>();
-  if (layerBlockOp)
-    layer = layerBlockOp.getLayerName();
-
-  // The dest layer must be the same as the source layer or a parent of it.
-  SymbolRefAttr layerPointer = layer;
-  auto destLayer = getDest().getType().getLayer();
-  for (;;) {
-    if (layerPointer == destLayer)
-      break;
-
-    if (!layerPointer) {
-      if (!layer)
-        return emitOpError()
-               << "defines to a layer-colored probe from outside a layerblock";
-      auto diag = emitOpError()
-                  << "defines to a probe colored with layer '" << destLayer
-                  << "' from a layerblock associated with layer '" << layer
-                  << "'. The define op must be in a layerblock associated with "
-                     "or a child of layer '"
-                  << destLayer << "'.";
-      return diag.attachNote(layerBlockOp.getLoc())
-             << "the layerblock was declared here";
-    }
-
-    if (layerPointer.getNestedReferences().empty()) {
-      layerPointer = {};
-      continue;
-    }
-    layerPointer =
-        SymbolRefAttr::get(layerPointer.getRootReference(),
-                           layerPointer.getNestedReferences().drop_back());
-  }
-
-  return success();
+  return verifyLayer(*this, getDest().getType().getLayer());
 }
 
 LogicalResult PropAssignOp::verify() {
@@ -5787,83 +5811,11 @@ FIRRTLType RefSubOp::inferReturnType(ValueRange operands,
 }
 
 LogicalResult RefCastOp::verify() {
-
-  SymbolRefAttr layer;
-  auto layerBlockOp = (*this)->getParentOfType<LayerBlockOp>();
-  if (layerBlockOp)
-    layer = layerBlockOp.getLayerName();
-
-  // The dest layer must be the same as the source layer or a parent of it.
-  SymbolRefAttr layerPointer = layer;
-  auto destLayer = getType().getLayer();
-  for (;;) {
-    if (layerPointer == destLayer)
-      break;
-
-    if (!layerPointer) {
-      if (!layer)
-        return emitOpError()
-               << "cannot cast to a layer from outside a layerblock";
-      auto diag = emitOpError()
-                  << "casts to a probe associated with layer '" << destLayer
-                  << "' from a layerblock associated with layer '" << layer
-                  << "'. The cast op must be in a layerblock associated with "
-                     "or a child of layer '"
-                  << destLayer << "'.";
-      return diag.attachNote(layerBlockOp.getLoc())
-             << "the layerblock was declared here";
-    }
-
-    if (layerPointer.getNestedReferences().empty()) {
-      layerPointer = {};
-      continue;
-    }
-    layerPointer =
-        SymbolRefAttr::get(layerPointer.getRootReference(),
-                           layerPointer.getNestedReferences().drop_back());
-  }
-
-  return success();
+  return verifyLayer(*this, getType().getLayer());
 }
 
 LogicalResult RefResolveOp::verify() {
-
-  SymbolRefAttr layer;
-  auto layerBlockOp = (*this)->getParentOfType<LayerBlockOp>();
-  if (layerBlockOp)
-    layer = layerBlockOp.getLayerName();
-
-  // The dest layer must be the same as the source layer or a parent of it.
-  SymbolRefAttr layerPointer = layer;
-  auto destLayer = getRef().getType().getLayer();
-  for (;;) {
-    if (layerPointer == destLayer)
-      break;
-
-    if (!layerPointer) {
-      if (!layer)
-        return emitOpError() << "cannot read from a layer-colored probe from "
-                                "outside a layerblock";
-      auto diag = emitOpError()
-                  << "reads from a probe colored with layer '" << destLayer
-                  << "' from a layerblock associated with layer '" << layer
-                  << "'. The resolve op must be in a layerblock associated "
-                     "with or a child of layer '"
-                  << destLayer << "'.";
-      return diag.attachNote(layerBlockOp.getLoc())
-             << "the layerblock was declared here";
-    }
-
-    if (layerPointer.getNestedReferences().empty()) {
-      layerPointer = {};
-      continue;
-    }
-    layerPointer =
-        SymbolRefAttr::get(layerPointer.getRootReference(),
-                           layerPointer.getNestedReferences().drop_back());
-  }
-
-  return success();
+  return verifyLayer(*this, getRef().getType().getLayer());
 }
 
 LogicalResult RWProbeOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
