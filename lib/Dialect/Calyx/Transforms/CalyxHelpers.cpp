@@ -63,28 +63,28 @@ void addMandatoryComponentPorts(PatternRewriter &rewriter,
                                 SmallVectorImpl<calyx::PortInfo> &ports) {
   MLIRContext *ctx = rewriter.getContext();
   ports.push_back({
-      rewriter.getStringAttr("clk"),
+      rewriter.getStringAttr(clkPort),
       rewriter.getI1Type(),
       calyx::Direction::Input,
-      getMandatoryPortAttr(ctx, "clk"),
+      getMandatoryPortAttr(ctx, clkPort),
   });
   ports.push_back({
-      rewriter.getStringAttr("reset"),
+      rewriter.getStringAttr(resetPort),
       rewriter.getI1Type(),
       calyx::Direction::Input,
-      getMandatoryPortAttr(ctx, "reset"),
+      getMandatoryPortAttr(ctx, resetPort),
   });
   ports.push_back({
-      rewriter.getStringAttr("go"),
+      rewriter.getStringAttr(goPort),
       rewriter.getI1Type(),
       calyx::Direction::Input,
-      getMandatoryPortAttr(ctx, "go"),
+      getMandatoryPortAttr(ctx, goPort),
   });
   ports.push_back({
-      rewriter.getStringAttr("done"),
+      rewriter.getStringAttr(donePort),
       rewriter.getI1Type(),
       calyx::Direction::Output,
-      getMandatoryPortAttr(ctx, "done"),
+      getMandatoryPortAttr(ctx, donePort),
   });
 }
 

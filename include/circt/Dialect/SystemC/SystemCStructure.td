@@ -237,11 +237,10 @@ def InteropVerilatedOp : SystemCOp<"interop.verilated", [
 
     /// Lookup the module or extmodule for the symbol.  This returns null on
     /// invalid IR.
-    Operation *getReferencedModule(const hw::HWSymbolCache *cache) {
-      return hw::instance_like_impl::getReferencedModule(cache, *this,
-                                                        getModuleNameAttr());
+    Operation *getReferencedModule() {
+      return SymbolTable::lookupNearestSymbolFrom(getOperation(),
+                                                  getModuleNameAttr());
     }
-    Operation *getReferencedModule() { return getReferencedModule(nullptr); }
 
     /// Get the instances's name.
     StringAttr getName() { return getInstanceNameAttr(); }

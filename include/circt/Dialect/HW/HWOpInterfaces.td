@@ -412,15 +412,6 @@ def HWInstanceLike : OpInterface<"HWInstanceLike", [
     "::mlir::StringAttr", "getReferencedModuleNameAttr", (ins),
     /*methodBody=*/[{}],
     /*defaultImplementation=*/[{ return $_op.getModuleNameAttr().getAttr(); }]>,
-
-    InterfaceMethod<"Get the referenced module via a HW symbol cache.",
-    "::mlir::Operation *", "getReferencedModuleCached", (ins
-      "const ::circt::hw::HWSymbolCache *":$cache),
-    /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{
-      return hw::instance_like_impl::getReferencedModule(
-          cache, $_op, $_op.getModuleNameAttr());
-    }]>,
   ];
 }
 

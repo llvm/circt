@@ -664,7 +664,8 @@ EmittedExpr FileEmitter::emitExpression(Value value) {
       instName = instOp.getInstanceNameAttr();
     if (!instName)
       return {};
-    auto *moduleOp = instOp.getReferencedModuleCached(symbolCache);
+    auto *moduleOp =
+        symbolCache->getDefinition(instOp.getReferencedModuleNameAttr());
     auto portName =
         cast<hw::HWModuleLike>(moduleOp)
             .getPort(instOp.getPortIdForOutputId(result.getResultNumber()))

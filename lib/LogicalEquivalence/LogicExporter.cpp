@@ -74,8 +74,10 @@ struct Visitor : public hw::StmtVisitor<Visitor, LogicalResult>,
   //===--------------------------------------------------------------------===//
 
   LogicalResult visitStmt(hw::InstanceOp op) {
-    if (auto hwModule = llvm::dyn_cast<hw::HWModuleOp>(
-            op.getReferencedModuleCached(/*cache=*/nullptr))) {
+    Operation *moduleOp =
+        SymbolTable::lookupNearestSymbolFrom(op, op.getModuleNameAttr());
+
+    if (auto hwModule = llvm::dyn_cast<hw::HWModuleOp>(moduleOp)) {
       circuit->addInstance(op.getInstanceName(), hwModule, op->getOperands(),
                            op->getResults());
       return success();

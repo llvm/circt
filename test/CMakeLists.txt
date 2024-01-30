@@ -43,6 +43,10 @@ if(CIRCT_LLHD_SIM_ENABLED)
   list(APPEND CIRCT_TEST_DEPENDS circt-llhd-signals-runtime-wrappers)
 endif()
 
+if(CIRCT_SLANG_FRONTEND_ENABLED)
+  list(APPEND CIRCT_TEST_DEPENDS circt-verilog)
+endif()
+
 add_lit_testsuite(check-circt "Running the CIRCT regression tests"
   ${CMAKE_CURRENT_BINARY_DIR}
   DEPENDS ${CIRCT_TEST_DEPENDS}

@@ -3289,3 +3289,34 @@ OpFoldResult HasBeenResetIntrinsicOp::fold(FoldAdaptor adaptor) {
 
   return {};
 }
+
+//===----------------------------------------------------------------------===//
+// FPGAProbeIntrinsicOp
+//===----------------------------------------------------------------------===//
+
+static bool isTypeEmpty(FIRRTLType type) {
+  return FIRRTLTypeSwitch<FIRRTLType, bool>(type)
+      .Case<FVectorType>(
+          [&](auto ty) -> bool { return isTypeEmpty(ty.getElementType()); })
+      .Case<BundleType>([&](auto ty) -> bool {
+        for (auto elem : ty.getElements())
+          if (!isTypeEmpty(elem.type))
+            return false;
+        return true;
+      })
+      .Case<IntType>([&](auto ty) { return ty.getWidth() == 0; })
+      .Default([](auto) -> bool { return false; });
+}
+
+LogicalResult FPGAProbeIntrinsicOp::canonicalize(FPGAProbeIntrinsicOp op,
+                                                 PatternRewriter &rewriter) {
+  auto firrtlTy = type_dyn_cast<FIRRTLType>(op.getInput().getType());
+  if (!firrtlTy)
+    return failure();
+
+  if (!isTypeEmpty(firrtlTy))
+    return failure();
+
+  rewriter.eraseOp(op);
+  return success();
+}

@@ -3324,4 +3324,13 @@ firrtl.module @Whens(in %clock: !firrtl.clock, in %a: !firrtl.uint<1>, in %reset
   }
 }
 
+firrtl.module @Probes(in %clock: !firrtl.clock) {
+  // CHECK-NOT: firrtl.int.fpga_probe %clock, %zero_width : !firrtl.uint<0>
+  %zero_width = firrtl.wire : !firrtl.uint<0>
+  firrtl.int.fpga_probe %clock, %zero_width : !firrtl.uint<0>
+  // CHECK-NOT: firrtl.int.fpga_probe %clock, %empty_bundle : !firrtl.bundle<a: uint<0>>
+  %empty_bundle = firrtl.wire : !firrtl.bundle<a: uint<0>>
+  firrtl.int.fpga_probe %clock, %empty_bundle : !firrtl.bundle<a: uint<0>>
+}
+
 }

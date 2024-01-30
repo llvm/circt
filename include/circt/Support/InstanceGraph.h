@@ -294,6 +294,8 @@ public:
 
   InstancePath dropFront() const { return InstancePath(path.drop_front()); }
 
+  InstancePath dropBack() const { return InstancePath(path.drop_back()); }
+
   InstanceOpInterface operator[](size_t idx) const { return path[idx]; }
   ArrayRef<InstanceOpInterface>::iterator begin() const { return path.begin(); }
   ArrayRef<InstanceOpInterface>::iterator end() const { return path.end(); }
