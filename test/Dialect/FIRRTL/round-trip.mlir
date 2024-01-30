@@ -66,4 +66,9 @@ firrtl.module @Layers(
   out %b: !firrtl.rwprobe<uint<1>, @LayerA::@LayerB>
 ) {}
 
+// CHECK-LABEL: firrtl.module @LayersEnabled
+// CHECK-SAME:    layers = [@LayerA]
+firrtl.module @LayersEnabled() attributes {layers = [@LayerA]} {
+}
+
 }

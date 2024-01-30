@@ -798,7 +798,8 @@ void FMemModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
 
 static void buildModule(OpBuilder &builder, OperationState &result,
                         StringAttr name, ArrayRef<PortInfo> ports,
-                        ArrayAttr annotations, bool withAnnotations = true) {
+                        ArrayAttr annotations, ArrayAttr layers,
+                        bool withAnnotations = true, bool withLayers = false) {
   // Add an attribute for the name.
   result.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), name);
 
@@ -843,19 +844,27 @@ static void buildModule(OpBuilder &builder, OperationState &result,
                         builder.getArrayAttr(portAnnotations));
   }
 
+  if (withLayers) {
+    if (!layers)
+      layers = builder.getArrayAttr({});
+    result.addAttribute("layers", layers);
+  }
+
   result.addRegion();
 }
 
 static void buildModuleWithoutAnnos(OpBuilder &builder, OperationState &result,
                                     StringAttr name, ArrayRef<PortInfo> ports) {
-  return buildModule(builder, result, name, ports, {},
+  return buildModule(builder, result, name, ports, {}, {},
                      /*withAnnotations=*/false);
 }
 
 void FModuleOp::build(OpBuilder &builder, OperationState &result,
                       StringAttr name, ConventionAttr convention,
-                      ArrayRef<PortInfo> ports, ArrayAttr annotations) {
-  buildModule(builder, result, name, ports, annotations);
+                      ArrayRef<PortInfo> ports, ArrayAttr annotations,
+                      ArrayAttr layers) {
+  buildModule(builder, result, name, ports, annotations, layers,
+              /*withAnnotations=*/true, /*withLayers=*/true);
   result.addAttribute("convention", convention);
 
   // Create a region and a block for the body.
@@ -873,7 +882,7 @@ void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
                          ArrayRef<PortInfo> ports, StringRef defnameAttr,
                          ArrayAttr annotations, ArrayAttr parameters,
                          ArrayAttr internalPaths) {
-  buildModule(builder, result, name, ports, annotations);
+  buildModule(builder, result, name, ports, annotations, {});
   result.addAttribute("convention", convention);
   if (!defnameAttr.empty())
     result.addAttribute("defname", builder.getStringAttr(defnameAttr));
@@ -888,7 +897,7 @@ void FIntModuleOp::build(OpBuilder &builder, OperationState &result,
                          StringAttr name, ArrayRef<PortInfo> ports,
                          StringRef intrinsicNameAttr, ArrayAttr annotations,
                          ArrayAttr parameters, ArrayAttr internalPaths) {
-  buildModule(builder, result, name, ports, annotations);
+  buildModule(builder, result, name, ports, annotations, {});
   result.addAttribute("intrinsic", builder.getStringAttr(intrinsicNameAttr));
   if (!parameters)
     parameters = builder.getArrayAttr({});
@@ -905,7 +914,7 @@ void FMemModuleOp::build(OpBuilder &builder, OperationState &result,
                          uint32_t writeLatency, uint64_t depth,
                          ArrayAttr annotations) {
   auto *context = builder.getContext();
-  buildModule(builder, result, name, ports, annotations);
+  buildModule(builder, result, name, ports, annotations, {});
   auto ui32Type = IntegerType::get(context, 32, IntegerType::Unsigned);
   auto ui64Type = IntegerType::get(context, 64, IntegerType::Unsigned);
   result.addAttribute("numReadPorts", IntegerAttr::get(ui32Type, numReadPorts));
@@ -1170,6 +1179,11 @@ static void printFModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
   if (op->getAttrOfType<ArrayAttr>("annotations").empty())
     omittedAttrs.push_back("annotations");
 
+  // If there are no enabled layers, then omit the empty array.
+  if (auto layers = op->getAttrOfType<ArrayAttr>("layers"))
+    if (layers.empty())
+      omittedAttrs.push_back("layers");
+
   p.printOptionalAttrDictWithKeyword(op->getAttrs(), omittedAttrs);
 }
 
@@ -1328,6 +1342,8 @@ ParseResult FModuleOp::parse(OpAsmParser &parser, OperationState &result) {
     result.addAttribute(
         "convention",
         ConventionAttr::get(result.getContext(), Convention::Internal));
+  if (!result.attributes.get("layers"))
+    result.addAttribute("layers", ArrayAttr::get(parser.getContext(), {}));
   return success();
 }
 
