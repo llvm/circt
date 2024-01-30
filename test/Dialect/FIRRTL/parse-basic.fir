@@ -1045,7 +1045,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
       stop(clock, enable, 1)
     ; CHECK: [[CONDINV:%.+]] = firrtl.not %cond
     ; CHECK: [[TMP1:%.+]] = firrtl.xorr [[CONDINV]]
-    ; CHECK-NEXT: [[TMP2:%.+]] = firrtl.verbatim.expr "{{[{][{]0[}][}]}} === 1'bx"([[TMP1]])
+    ; CHECK-NEXT: [[TMP2:%.+]] = firrtl.int.isX [[TMP1]]
     ; CHECK-NEXT: [[TMP:%.+]] = firrtl.or [[CONDINV]], [[TMP2]]
     ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "Hello Assert"(%value) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<42>
     ; CHECK-SAME: format = "sva"
@@ -1069,7 +1069,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
       stop(clock, enable, 1)
     ; CHECK: [[CONDINV:%.+]] = firrtl.not %cond
     ; CHECK: [[TMP1:%.+]] = firrtl.xorr [[CONDINV]]
-    ; CHECK-NEXT: [[TMP2:%.+]] = firrtl.verbatim.expr "{{[{][{]0[}][}]}} === 1'bx"([[TMP1]])
+    ; CHECK-NEXT: [[TMP2:%.+]] = firrtl.int.isX [[TMP1]]
     ; CHECK-NEXT: [[TMP:%.+]] = firrtl.or [[CONDINV]], [[TMP2]]
     ; CHECK-NEXT: firrtl.assume %clock, [[TMP]], %enable, "Hello Assume"(%value) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<42>
     ; CHECK-SAME: guards = ["USE_UNR_ONLY_CONSTRAINTS", "USE_FORMAL_ONLY_CONSTRAINTS"]
