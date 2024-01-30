@@ -220,7 +220,8 @@ jobs:
             -DCMAKE_CXX_COMPILER=${{ matrix.compiler.cxx }} \
             -DLLVM_EXTERNAL_LIT=`pwd`/../llvm/build/bin/llvm-lit \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-            -DLLVM_LIT_ARGS="-v"
+            -DLLVM_LIT_ARGS="-v" \
+            -DCIRCT_SLANG_FRONTEND_ENABLED=ON
           ninja check-circt check-circt-unit -j$(nproc)
           ninja circt-doc
 

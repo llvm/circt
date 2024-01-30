@@ -531,7 +531,8 @@ InstanceDeclOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 }
 
 SmallVector<hw::PortInfo> InstanceDeclOp::getPortList() {
-  return cast<hw::PortList>(getReferencedModuleCached(/*cache=*/nullptr))
+  return cast<hw::PortList>(SymbolTable::lookupNearestSymbolFrom(
+                                getOperation(), getReferencedModuleNameAttr()))
       .getPortList();
 }
 

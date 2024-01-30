@@ -406,7 +406,7 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
         printOp.emitError("printf-encoded assertNotX requires one operand");
         return failure();
       }
-      // Construct a `!whenCond | (value !== 1'bx)` predicate.
+      // Construct a `!whenCond | (^value !== 1'bx)` predicate.
       Value notCond = predicate;
       predicate = builder.create<XorRPrimOp>(printOp.getSubstitutions()[0]);
       predicate = builder.create<IsXIntrinsicOp>(predicate);
@@ -523,10 +523,9 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
       break;
     case PredicateModifier::TrueOrIsX:
       // Construct a `predicate | (^predicate === 1'bx)`.
-      Value orX = builder.create<XorRPrimOp>(predicate);
-      orX = builder.create<VerbatimExprOp>(UIntType::get(context, 1),
-                                           "{{0}} === 1'bx", orX);
-      predicate = builder.create<OrPrimOp>(predicate, orX);
+      Value isX =
+          builder.create<IsXIntrinsicOp>(builder.create<XorRPrimOp>(predicate));
+      predicate = builder.create<OrPrimOp>(predicate, isX);
       break;
     }
 
