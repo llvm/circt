@@ -557,7 +557,11 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
     set(ORIGINAL_CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
     set(ORIGINAL_BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS})
 
-    set(CMAKE_CXX_FLAGS "")
+    if (MSVC)
+      set(CMAKE_CXX_FLAGS "/EHsc")
+    else ()
+      set(CMAKE_CXX_FLAGS "")
+    endif ()
     set(BUILD_SHARED_LIBS OFF)
     FetchContent_MakeAvailable(slang)
 
