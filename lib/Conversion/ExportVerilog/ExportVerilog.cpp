@@ -4943,7 +4943,8 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   ops.insert(op);
 
   // Use the specified name or the symbol name as appropriate.
-  auto *moduleOp = op.getReferencedModuleCached(&state.symbolCache);
+  auto *moduleOp =
+      state.symbolCache.getDefinition(op.getReferencedModuleNameAttr());
   assert(moduleOp && "Invalid IR");
   ps << PPExtString(getVerilogModuleName(moduleOp));
 
@@ -5584,7 +5585,8 @@ void ModuleEmitter::emitBind(BindOp op) {
   ModulePortInfo parentPortList(parentMod.getPortList());
   auto parentVerilogName = getVerilogModuleNameAttr(parentMod);
 
-  Operation *childMod = inst.getReferencedModuleCached(&state.symbolCache);
+  Operation *childMod =
+      state.symbolCache.getDefinition(inst.getReferencedModuleNameAttr());
   auto childVerilogName = getVerilogModuleNameAttr(childMod);
 
   startStatement();
