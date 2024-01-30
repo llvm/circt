@@ -35,4 +35,22 @@ def BitVectorType : SMTTypeDef<"BitVector"> {
   let genVerifyDecl = true;
 }
 
+def ArrayType : SMTTypeDef<"Array"> {
+  let mnemonic = "array";
+  let description = [{
+    This type represents the `(Array X Y)` sort, where X and Y are any
+    sort/type, as described in the
+    [SMT ArrayEx theory](https://smtlib.cs.uiowa.edu/Theories/ArraysEx.smt2) of
+    the SMT-LIB standard 2.6.
+  }];
+
+  let parameters = (ins "mlir::Type":$domainType, "mlir::Type":$rangeType);
+  let assemblyFormat = "`<` `[` $domainType `->` $rangeType `]` `>`";
+
+  let genVerifyDecl = true;
+}
+
+def AnySMTType : Type<CPred<"smt::isAnySMTValueType($_self)">,
+                      "any SMT value type">;
+
 #endif // CIRCT_DIALECT_SMT_SMTTYPES_TD
