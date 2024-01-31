@@ -245,6 +245,7 @@ class Questa(Simulator):
         "vlog",
         "-sv",
         "+define+TOP_MODULE=" + self.sources.top,
+        "+define+SIMULATION",
         str(Questa.DefaultDriver),
     ]
     cmd += [str(p) for p in self.sources.rtl_sources]

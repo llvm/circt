@@ -71,18 +71,7 @@ class IbisClassBuilder(ModuleBuilder):
     # TODO: make this configurable.
     platform = "SimOnly"
     outdir = sys.hw_output_dir
-    files = [
-        "PipeDreamTypes.sv",
-        "PipeDreamInspectable.sv",
-        "FlipFlopChain.sv",
-        "ResetControl.sv",
-        "PipeDreamSemaphore.sv",
-        "PipeDreamWriteDelayFifo.sv",
-        "PipeDreamFifoDebug.sv",
-        "PipeDreamFifoPtrs.sv",
-        "PipeDreamShowAheadRegisterFifo.sv",
-        "PipeDreamFifoPtrsEx.sv",
-    ]
+    files = SvSupportPath.glob("*.sv")
     for idx, f in enumerate(files):
       shutil.copy(SvSupportPath / f, outdir / f"{idx}_{f}")
     for f in (SvSupportPath / "HAL" / platform).glob("*.sv"):
