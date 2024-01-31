@@ -51,10 +51,7 @@ TEST(InstanceGraphCAPITest, PostOrderTraversal) {
     size_t i;
     HWInstanceGraphNode topLevelNode;
   };
-  auto ctx = Context{
-      .i = 0,
-      .topLevelNode = hwInstanceGraphGetTopLevelNode(instanceGraph),
-  };
+  auto ctx = Context{0, hwInstanceGraphGetTopLevelNode(instanceGraph)};
 
   hwInstanceGraphForEachNode(
       instanceGraph,
@@ -92,7 +89,7 @@ TEST(InstanceGraphCAPITest, PostOrderTraversal) {
       },
       &ctx);
 
-  ASSERT_EQ(ctx.i, 5);
+  ASSERT_EQ(ctx.i, 5UL);
 }
 
 } // namespace
