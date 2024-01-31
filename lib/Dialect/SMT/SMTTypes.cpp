@@ -27,7 +27,7 @@ void SMTDialect::registerTypes() {
 }
 
 bool smt::isAnySMTValueType(Type type) {
-  return isa<BoolType, BitVectorType, ArrayType>(type);
+  return isa<BoolType, BitVectorType, ArrayType, IntType>(type);
 }
 
 //===----------------------------------------------------------------------===//
