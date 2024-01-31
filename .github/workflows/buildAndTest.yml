@@ -148,11 +148,13 @@ jobs:
             mode: debug
             assert: ON
             shared: ON
-          - cc: gcc
-            cxx: g++
+            slang: OFF
+          - cc: gcc-11
+            cxx: g++-11
             mode: release
             assert: OFF
             shared: OFF
+            slang: ON
 
     steps:
       - name: Configure Environment
@@ -221,7 +223,7 @@ jobs:
             -DLLVM_EXTERNAL_LIT=`pwd`/../llvm/build/bin/llvm-lit \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
             -DLLVM_LIT_ARGS="-v" \
-            -DCIRCT_SLANG_FRONTEND_ENABLED=ON
+            -DCIRCT_SLANG_FRONTEND_ENABLED=${{ matrix.compiler.slang }}
           ninja check-circt check-circt-unit -j$(nproc)
           ninja circt-doc
 

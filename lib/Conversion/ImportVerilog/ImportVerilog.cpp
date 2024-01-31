@@ -279,7 +279,7 @@ LogicalResult ImportContext::preprocessVerilog(llvm::raw_ostream &os) {
                                               diagnostics, optionBag);
     // Sources have to be pushed in reverse, as they form a stack in the
     // preprocessor. Last pushed source is processed first.
-    for (auto &buffer : slang::make_reverse_range(driver.buffers))
+    for (auto &buffer : llvm::reverse(driver.buffers))
       preprocessor.pushSource(buffer);
     if (failed(preprocessAndPrint(preprocessor)))
       return failure();
@@ -302,28 +302,15 @@ LogicalResult ImportContext::preprocessVerilog(llvm::raw_ostream &os) {
 // Entry Points
 //===----------------------------------------------------------------------===//
 
-/// Execute a callback and report any thrown exceptions as "internal slang
-/// error" MLIR diagnostics.
-static LogicalResult
-catchExceptions(llvm::function_ref<LogicalResult()> callback) {
-  try {
-    return callback();
-  } catch (const std::exception &e) {
-    return emitError(UnknownLoc(), "internal slang error: ") << e.what();
-  }
-}
-
 /// Parse the specified Verilog inputs into the specified MLIR context.
 LogicalResult circt::importVerilog(SourceMgr &sourceMgr,
                                    MLIRContext *mlirContext, TimingScope &ts,
                                    ModuleOp module,
                                    const ImportVerilogOptions *options) {
-  return catchExceptions([&] {
-    ImportContext context(mlirContext, ts, options);
-    if (failed(context.prepareDriver(sourceMgr)))
-      return failure();
-    return context.importVerilog(module);
-  });
+  ImportContext context(mlirContext, ts, options);
+  if (failed(context.prepareDriver(sourceMgr)))
+    return failure();
+  return context.importVerilog(module);
 }
 
 /// Run the files in a source manager through Slang's Verilog preprocessor and
@@ -332,10 +319,8 @@ LogicalResult circt::preprocessVerilog(SourceMgr &sourceMgr,
                                        MLIRContext *mlirContext,
                                        TimingScope &ts, llvm::raw_ostream &os,
                                        const ImportVerilogOptions *options) {
-  return catchExceptions([&] {
-    ImportContext context(mlirContext, ts, options);
-    if (failed(context.prepareDriver(sourceMgr)))
-      return failure();
-    return context.preprocessVerilog(os);
-  });
+  ImportContext context(mlirContext, ts, options);
+  if (failed(context.prepareDriver(sourceMgr)))
+    return failure();
+  return context.preprocessVerilog(os);
 }

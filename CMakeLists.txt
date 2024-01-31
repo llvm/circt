@@ -547,7 +547,7 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
     FetchContent_Declare(
       slang
       GIT_REPOSITORY https://github.com/MikePopoloski/slang.git
-      GIT_TAG v3.0
+      GIT_TAG v4.0
       GIT_SHALLOW ON)
     set(FETCHCONTENT_TRY_FIND_PACKAGE_MODE "NEVER")
 
@@ -558,11 +558,12 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
     set(ORIGINAL_BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS})
 
     if (MSVC)
-      set(CMAKE_CXX_FLAGS "/EHsc")
+      # MSVC seems to build without exception support by default anyway.
     else ()
-      set(CMAKE_CXX_FLAGS "")
+      set(CMAKE_CXX_FLAGS "-fno-exceptions -fno-rtti")
     endif ()
     set(BUILD_SHARED_LIBS OFF)
+    set(SLANG_USE_MIMALLOC OFF)
     FetchContent_MakeAvailable(slang)
 
     set(CMAKE_CXX_FLAGS ${ORIGINAL_CMAKE_CXX_FLAGS})
@@ -571,7 +572,7 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
     if(BUILD_SHARED_LIBS)
       set_target_properties(slang_slang PROPERTIES POSITION_INDEPENDENT_CODE ON)
       set_target_properties(fmt PROPERTIES POSITION_INDEPENDENT_CODE ON)
-      set_target_properties(unordered_dense PROPERTIES POSITION_INDEPENDENT_CODE ON)
+      set_target_properties(boost_unordered PROPERTIES POSITION_INDEPENDENT_CODE ON)
     endif()
 
     # The following feels *very* hacky, but CMake complains about the
@@ -579,11 +580,18 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
     # linking) without the latter being in an export set. I think we'd want to
     # statically link slang into the CIRCTImportVerilog library, but seems to be
     # harder than it ought to be.
-    set_property(
-      GLOBAL APPEND PROPERTY CIRCT_EXPORTS slang_slang unordered_dense fmt)
-    install(TARGETS slang_slang unordered_dense fmt EXPORT CIRCTTargets)
+    if(TARGET fmt)
+      set_property(GLOBAL APPEND PROPERTY CIRCT_EXPORTS fmt)
+      install(TARGETS fmt EXPORT CIRCTTargets)
+    endif()
+    if(TARGET boost_unordered)
+      set_property(GLOBAL APPEND PROPERTY CIRCT_EXPORTS boost_unordered)
+      install(TARGETS boost_unordered EXPORT CIRCTTargets)
+    endif()
+    set_property(GLOBAL APPEND PROPERTY CIRCT_EXPORTS slang_slang)
+    install(TARGETS slang_slang EXPORT CIRCTTargets)
   else()
-    find_package(slang 3.0 REQUIRED)
+    find_package(slang 4.0 REQUIRED)
   endif()
 endif()
 
