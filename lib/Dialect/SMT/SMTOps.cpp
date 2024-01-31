@@ -261,5 +261,19 @@ void RepeatOp::print(OpAsmPrinter &printer) {
   printer << " : " << getInput().getType();
 }
 
+//===----------------------------------------------------------------------===//
+// BoolConstantOp
+//===----------------------------------------------------------------------===//
+
+void BoolConstantOp::getAsmResultNames(
+    function_ref<void(Value, StringRef)> setNameFn) {
+  setNameFn(getResult(), getValue() ? "true" : "false");
+}
+
+OpFoldResult BoolConstantOp::fold(FoldAdaptor adaptor) {
+  assert(adaptor.getOperands().empty() && "constant has no operands");
+  return getValueAttr();
+}
+
 #define GET_OP_CLASSES
 #include "circt/Dialect/SMT/SMT.cpp.inc"

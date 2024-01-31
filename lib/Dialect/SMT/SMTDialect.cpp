@@ -34,6 +34,12 @@ Operation *SMTDialect::materializeConstant(OpBuilder &builder, Attribute value,
     }
   }
 
+  // BoolType constants can materialize into smt.constant
+  if (auto boolType = type.dyn_cast<BoolType>()) {
+    if (auto attrValue = value.dyn_cast<BoolAttr>())
+      return builder.create<BoolConstantOp>(loc, attrValue);
+  }
+
   return nullptr;
 }
 
