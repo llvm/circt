@@ -655,6 +655,11 @@ firrtl.module @Shr(in %in1u: !firrtl.uint<1>,
   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
   %9 = firrtl.dshr %in0u, %c1_ui1 : (!firrtl.uint<0>, !firrtl.uint<1>) -> !firrtl.uint<0>
   firrtl.connect %out1u, %9 : !firrtl.uint<1>, !firrtl.uint<0>
+
+  // Issue #6608: https://github.com/llvm/circt/issues/6608
+  // CHECK: firrtl.strictconnect %out1u, %c0_ui1
+  %10 = firrtl.shr %in0u, 0 : (!firrtl.uint<0>) -> !firrtl.uint<1>
+  firrtl.strictconnect %out1u, %10 : !firrtl.uint<1>
 }
 
 // CHECK-LABEL: firrtl.module @Tail
@@ -3317,6 +3322,15 @@ firrtl.module @Whens(in %clock: !firrtl.clock, in %a: !firrtl.uint<1>, in %reset
   } else {
     firrtl.printf %clock, %reset, "baz!"  : !firrtl.clock, !firrtl.uint<1>
   }
+}
+
+firrtl.module @Probes(in %clock: !firrtl.clock) {
+  // CHECK-NOT: firrtl.int.fpga_probe %clock, %zero_width : !firrtl.uint<0>
+  %zero_width = firrtl.wire : !firrtl.uint<0>
+  firrtl.int.fpga_probe %clock, %zero_width : !firrtl.uint<0>
+  // CHECK-NOT: firrtl.int.fpga_probe %clock, %empty_bundle : !firrtl.bundle<a: uint<0>>
+  %empty_bundle = firrtl.wire : !firrtl.bundle<a: uint<0>>
+  firrtl.int.fpga_probe %clock, %empty_bundle : !firrtl.bundle<a: uint<0>>
 }
 
 }

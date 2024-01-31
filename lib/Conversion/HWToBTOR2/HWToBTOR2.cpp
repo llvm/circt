@@ -156,15 +156,20 @@ private:
   // If so, the original operation is returned
   // Otherwise the argument is returned as it is the original op
   Operation *getOpAlias(Operation *op) {
+
+    // Remove the alias until none are left (for wires of wires of wires ...)
     if (auto it = opAliasMap.find(op); it != opAliasMap.end())
       return it->second;
+
     // If the op isn't an alias then simply return it
     return op;
   }
 
   // Updates or creates an entry for the given operation
   // associating it with the current lid
-  void setOpAlias(Operation *alias, Operation *op) { opAliasMap[alias] = op; }
+  void setOpAlias(Operation *alias, Operation *op) {
+    opAliasMap[alias] = getOpAlias(op);
+  }
 
   // Checks if a sort was declared with the given width
   // If so, its lid will be returned
@@ -461,24 +466,31 @@ private:
   // Generates the transitions required to finalize the register to state
   // transition system conversion
   void finalizeRegVisit(Operation *op) {
-    // Check the register type (done to support non-firrtl registers as well)
-    auto reg = cast<seq::FirRegOp>(op);
+    int64_t width;
+    Value next, resetVal;
 
-    // Generate the reset condition (for sync & async resets)
-    // We assume for now that the reset value is always 0
-    size_t width = hw::getBitWidth(reg.getType());
+    // Extract the operands depending on the register type
+    if (auto reg = dyn_cast<seq::CompRegOp>(op)) {
+      width = hw::getBitWidth(reg.getType());
+      next = reg.getInput();
+      resetVal = reg.getResetValue();
+    } else if (auto reg = dyn_cast<seq::FirRegOp>(op)) {
+      width = hw::getBitWidth(reg.getType());
+      next = reg.getNext();
+      resetVal = reg.getResetValue();
+    } else {
+      op->emitError("Invalid register operation !");
+      return;
+    }
+
     genSort("bitvec", width);
-
-    // Extract the `next` operation for each register (used to define the
-    // transition). We need to check if next is a port to avoid nullptrs
-    Value next = reg.getNext();
 
     // Next should already be associated to an LID at this point
     // As we are going to override it, we need to keep track of the original
     // instruction
     size_t nextLID = noLID;
 
-    // Check for special case where next is actually a port
+    // We need to check if the next value is a port to avoid nullptrs
     // To do so, we start by checking if our operation is a block argument
     if (BlockArgument barg = dyn_cast<BlockArgument>(next)) {
       // Extract the block argument index and use that to get the line number
@@ -503,8 +515,8 @@ private:
       size_t resetValLID = noLID;
 
       // Check for a reset value, if none exists assume it's zero
-      if (auto resval = reg.getResetValue())
-        resetValLID = getOpLID(resval.getDefiningOp());
+      if (resetVal)
+        resetValLID = getOpLID(resetVal.getDefiningOp());
       else
         resetValLID = genZero(width);
 
@@ -514,7 +526,7 @@ private:
     }
 
     // Finally generate the next statement
-    genNext(next, reg, width);
+    genNext(next, op, width);
   }
 
 public:
@@ -690,10 +702,8 @@ public:
 
   void visitComb(Operation *op) { visitInvalidComb(op); }
 
-  void visitInvalidComb(Operation *op) {
-    // try sv ops
-    dispatchSVVisitor(op);
-  }
+  // Try sv ops when comb is done
+  void visitInvalidComb(Operation *op) { dispatchSVVisitor(op); }
 
   // Assertions are negated then converted to a btor2 bad instruction
   void visitSV(sv::AssertOp op) {
@@ -762,6 +772,21 @@ public:
     regOps.push_back(reg);
   }
 
+  // Compregs behave in a similar way as firregs for btor2 emission
+  void visit(seq::CompRegOp reg) {
+    // Start by retrieving the register's name and width
+    StringRef regName = reg.getName().value();
+    int64_t w = requireSort(reg.getType());
+
+    // Generate state instruction (represents the register declaration)
+    genState(reg, w, regName);
+
+    // Record the operation for future `next` instruction generation
+    // This is required to model transitions between states (i.e. how a
+    // register's value evolves over time)
+    regOps.push_back(reg);
+  }
+
   // Ignore all other explicitly mentionned operations
   // ** Purposefully left empty **
   void ignore(Operation *op) {}
@@ -809,10 +834,12 @@ void ConvertHWToBTOR2Pass::runOnOperation() {
 
     // Previsit all registers in the module in order to avoid dependency cylcles
     module.walk([&](Operation *op) {
-      if (auto reg = dyn_cast<seq::FirRegOp>(op)) {
-        visit(reg);
-        handledOps.insert(op);
-      }
+      TypeSwitch<Operation *, void>(op)
+          .Case<seq::FirRegOp, seq::CompRegOp>([&](auto reg) {
+            visit(reg);
+            handledOps.insert(op);
+          })
+          .Default([&](auto expr) {});
     });
 
     // Visit all of the operations in our module

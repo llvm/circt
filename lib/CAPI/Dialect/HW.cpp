@@ -8,15 +8,20 @@
 
 #include "circt-c/Dialect/HW.h"
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/HW/HWInstanceGraph.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/CAPI/IR.h"
 #include "mlir/CAPI/Registration.h"
 #include "mlir/CAPI/Support.h"
+#include "llvm/ADT/PostOrderIterator.h"
 
 using namespace circt;
 using namespace circt::hw;
+
+DEFINE_C_API_PTR_METHODS(HWInstanceGraph, InstanceGraph)
+DEFINE_C_API_PTR_METHODS(HWInstanceGraphNode, igraph::InstanceGraphNode)
 
 //===----------------------------------------------------------------------===//
 // Dialect API.
@@ -295,4 +300,42 @@ hwOutputFileGetFromFileName(MlirAttribute fileName, bool excludeFromFileList,
   return wrap(OutputFileAttr::getFromFilename(
       fileNameStrAttr.getContext(), fileNameStrAttr.getValue(),
       excludeFromFileList, includeReplicatedOp));
+}
+
+MLIR_CAPI_EXPORTED HWInstanceGraph hwInstanceGraphGet(MlirOperation operation) {
+  return wrap(new InstanceGraph{unwrap(operation)});
+}
+
+MLIR_CAPI_EXPORTED void hwInstanceGraphDestroy(HWInstanceGraph instanceGraph) {
+  delete unwrap(instanceGraph);
+}
+
+MLIR_CAPI_EXPORTED HWInstanceGraphNode
+hwInstanceGraphGetTopLevelNode(HWInstanceGraph instanceGraph) {
+  return wrap(unwrap(instanceGraph)->getTopLevelNode());
+}
+
+MLIR_CAPI_EXPORTED void
+hwInstanceGraphForEachNode(HWInstanceGraph instanceGraph,
+                           HWInstanceGraphNodeCallback callback,
+                           void *userData) {
+  InstanceGraph *graph = unwrap(instanceGraph);
+  for (const auto &inst : llvm::post_order(graph)) {
+    callback(wrap(inst), userData);
+  }
+}
+
+MLIR_CAPI_EXPORTED bool hwInstanceGraphNodeEqual(HWInstanceGraphNode lhs,
+                                                 HWInstanceGraphNode rhs) {
+  return unwrap(lhs) == unwrap(rhs);
+}
+
+MLIR_CAPI_EXPORTED MlirModule
+hwInstanceGraphNodeGetModule(HWInstanceGraphNode node) {
+  return wrap(dyn_cast<ModuleOp>(unwrap(node)->getModule()));
+}
+
+MLIR_CAPI_EXPORTED MlirOperation
+hwInstanceGraphNodeGetModuleOp(HWInstanceGraphNode node) {
+  return wrap(unwrap(node)->getModule());
 }

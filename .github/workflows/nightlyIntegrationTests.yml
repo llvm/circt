@@ -96,7 +96,8 @@ jobs:
             -DMLIR_ENABLE_BINDINGS_PYTHON=ON \
             -DCIRCT_BINDINGS_PYTHON_ENABLED=ON \
             -DESI_RUNTIME=ON \
-            -DLLVM_LIT_ARGS="-v --show-unsupported ${{ matrix.lit-flags }}"
+            -DLLVM_LIT_ARGS="-v --show-unsupported ${{ matrix.lit-flags }}" \
+            -DCIRCT_SLANG_FRONTEND_ENABLED=ON
       - name: Test CIRCT
         run: |
           ninja -C build check-circt -j$(nproc)

@@ -31,11 +31,6 @@ namespace instance_like_impl {
 using EmitErrorFn =
     std::function<void(std::function<bool(InFlightDiagnostic &)>)>;
 
-/// Return a pointer to the referenced module operation.
-Operation *getReferencedModule(const HWSymbolCache *cache,
-                               Operation *instanceOp,
-                               mlir::FlatSymbolRefAttr moduleName);
-
 /// Verify that the instance refers to a valid HW module.
 LogicalResult verifyReferencedModule(Operation *instanceOp,
                                      SymbolTableCollection &symbolTable,

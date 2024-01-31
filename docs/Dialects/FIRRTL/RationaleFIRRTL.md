@@ -332,8 +332,9 @@ enabled.
 ## Symbols and Inner Symbols
 
 Symbols and Inner Symbols are documented in [Symbol
-Rationale](https://circt.llvm.org/docs/RationaleSymbols/).  This documents how symbols are used,
-their interaction with "Don't Touch", and the semantics imposed by them.
+Rationale](https://circt.llvm.org/docs/RationaleSymbols/).  This documents how
+symbols are used, their interaction with "Don't Touch", and the semantics
+imposed by them.
 
 Public Symbols indicate there are uses of an entity outside the analysis scope
 of the compiler.  This requires the entity be preserved in such a way as the
@@ -558,20 +559,34 @@ verification.
 
 ### Non-FIRRTL Types
 
-The FIRRTL dialect has limited support for foreign types, i.e., types that are defined outside the FIRRTL dialect. Almost all operations expect to be dealing with FIRRTL types, especially those that are sensitive to the type they operate on, like `firrtl.add` or `firrtl.connect`. However, a restricted set of operations allows for simple pass-through semantics of foreign types. These include the following:
+The FIRRTL dialect has limited support for foreign types, i.e., types that are
+defined outside the FIRRTL dialect. Almost all operations expect to be dealing
+with FIRRTL types, especially those that are sensitive to the type they operate
+on, like `firrtl.add` or `firrtl.connect`. However, a restricted set of
+operations allows for simple pass-through semantics of foreign types. These
+include the following:
 
 - Ports on a `firrtl.module`, where the foreign types are treated as opaque values moving in and out of the module
 - Ports on a `firrtl.instance`
 - `firrtl.wire` to allow for def-after-use cases; the wire must have a single strict connect that uniquely defines the wire's value
 - `firrtl.strictconnect` to module outputs, instance inputs, and wires
 
-The expected lowering for strict connects is for the connect to be eliminated and the right-hand-side source value of the connect being instead materialized in all places where the left hand side is used. Basically we want wires and connects to disappear, and all places where the wire is "read" should instead read the value that was driven onto the wire.
+The expected lowering for strict connects is for the connect to be eliminated
+and the right-hand-side source value of the connect being instead materialized
+in all places where the left hand side is used. Basically we want wires and
+connects to disappear, and all places where the wire is "read" should instead
+read the value that was driven onto the wire.
 
-The reason we provide this foreign type support is to allow for partial lowering of FIRRTL to HW and other dialects. Passes might lower a subset of types and operations to the target dialect and we need a mechanism to have the lowered values be passed around the FIRRTL module hierarchy untouched alongside the FIRRTL ops that are yet to be lowered.
+The reason we provide this foreign type support is to allow for partial lowering
+of FIRRTL to HW and other dialects. Passes might lower a subset of types and
+operations to the target dialect and we need a mechanism to have the lowered
+values be passed around the FIRRTL module hierarchy untouched alongside the
+FIRRTL ops that are yet to be lowered.
 
 ### Const Types
 
-FIRRTL hardware types can be specified as `const`, meaning they can only be assigned compile-time constant values or values of other `const` types.
+FIRRTL hardware types can be specified as `const`, meaning they can only be
+assigned compile-time constant values or values of other `const` types.
 
 ## Operations
 

@@ -436,10 +436,14 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     assert(clock, pred, en, "X equals Y when Z is valid")
     ; CHECK: firrtl.assert %clock, %pred, %en, "X equals Y when Z is valid" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {eventControl = 0 : i32, isConcurrent = false, name = "assert_0"}
     assert(clock, pred, en, "X equals Y when Z is valid") : assert_0
+    ; CHECK: firrtl.assert %clock, %pred, %en, "pred=%d, en=%d"(%pred, %en) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1> {eventControl = 0 : i32, isConcurrent = false, name = "assert_1"}
+    assert(clock, pred, en, "pred=%d, en=%d", pred, en) : assert_1
     ; CHECK: firrtl.assume %clock, %pred, %en, "X equals Y when Z is valid" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {eventControl = 0 : i32, isConcurrent = false}
     assume(clock, pred, en, "X equals Y when Z is valid")
     ; CHECK: firrtl.assume %clock, %pred, %en, "X equals Y when Z is valid" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {eventControl = 0 : i32, isConcurrent = false, name = "assume_0"}
     assume(clock, pred, en, "X equals Y when Z is valid") : assume_0
+    ; CHECK: firrtl.assume %clock, %pred, %en, "pred=%d, en=%d"(%pred, %en) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1> {eventControl = 0 : i32, isConcurrent = false, name = "assume_1"}
+    assume(clock, pred, en, "pred=%d, en=%d", pred, en) : assume_1
     ; CHECK: firrtl.cover %clock, %pred, %en, "X equals Y when Z is valid" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {eventControl = 0 : i32, isConcurrent = false}
     cover(clock, pred, en, "X equals Y when Z is valid")
     ; CHECK: firrtl.cover %clock, %pred, %en, "X equals Y when Z is valid" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {eventControl = 0 : i32, isConcurrent = false, name = "cover_0"}
@@ -1045,7 +1049,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
       stop(clock, enable, 1)
     ; CHECK: [[CONDINV:%.+]] = firrtl.not %cond
     ; CHECK: [[TMP1:%.+]] = firrtl.xorr [[CONDINV]]
-    ; CHECK-NEXT: [[TMP2:%.+]] = firrtl.verbatim.expr "{{[{][{]0[}][}]}} === 1'bx"([[TMP1]])
+    ; CHECK-NEXT: [[TMP2:%.+]] = firrtl.int.isX [[TMP1]]
     ; CHECK-NEXT: [[TMP:%.+]] = firrtl.or [[CONDINV]], [[TMP2]]
     ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "Hello Assert"(%value) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<42>
     ; CHECK-SAME: format = "sva"
@@ -1069,7 +1073,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
       stop(clock, enable, 1)
     ; CHECK: [[CONDINV:%.+]] = firrtl.not %cond
     ; CHECK: [[TMP1:%.+]] = firrtl.xorr [[CONDINV]]
-    ; CHECK-NEXT: [[TMP2:%.+]] = firrtl.verbatim.expr "{{[{][{]0[}][}]}} === 1'bx"([[TMP1]])
+    ; CHECK-NEXT: [[TMP2:%.+]] = firrtl.int.isX [[TMP1]]
     ; CHECK-NEXT: [[TMP:%.+]] = firrtl.or [[CONDINV]], [[TMP2]]
     ; CHECK-NEXT: firrtl.assume %clock, [[TMP]], %enable, "Hello Assume"(%value) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<42>
     ; CHECK-SAME: guards = ["USE_UNR_ONLY_CONSTRAINTS", "USE_FORMAL_ONLY_CONSTRAINTS"]
@@ -1671,9 +1675,13 @@ circuit Layers:
     ; CHECK-NEXT:   }
     ; CHECK-NEXT: }
 
-  ; CHECK: firrtl.module @Layers
+  ; CHECK:      firrtl.module @Layers
+  ; CHECK-SAME:   out %b: !firrtl.probe<uint<1>, @A>
+  ; CHECK-SAME:   out %c: !firrtl.rwprobe<uint<1>, @A::@B>
   module Layers:
     input a: UInt<1>
+    output b: Probe<UInt<1>, A>
+    output c: RWProbe<UInt<1>, A.B>
 
     layerblock A:
       node A_a = a

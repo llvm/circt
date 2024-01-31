@@ -294,11 +294,15 @@ public:
 
   InstancePath dropFront() const { return InstancePath(path.drop_front()); }
 
+  InstancePath dropBack() const { return InstancePath(path.drop_back()); }
+
   InstanceOpInterface operator[](size_t idx) const { return path[idx]; }
   ArrayRef<InstanceOpInterface>::iterator begin() const { return path.begin(); }
   ArrayRef<InstanceOpInterface>::iterator end() const { return path.end(); }
   size_t size() const { return path.size(); }
   bool empty() const { return path.empty(); }
+
+  bool operator==(const InstancePath &that) const { return path == that.path; }
 
   /// Print the path to any stream-like object.
   void print(llvm::raw_ostream &into) const;

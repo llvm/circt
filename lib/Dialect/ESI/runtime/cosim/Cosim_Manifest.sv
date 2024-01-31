@@ -18,10 +18,15 @@ module Cosim_Manifest
   parameter int COMPRESSED_MANIFEST_SIZE = 0,
   parameter int unsigned ESI_VERSION = 1
 )(
-  input byte unsigned compressed_manifest[COMPRESSED_MANIFEST_SIZE]
+  input logic [COMPRESSED_MANIFEST_SIZE-1:0][7:0] compressed_manifest
 );
 
+  byte unsigned compressed_manifest_bytes[COMPRESSED_MANIFEST_SIZE-1:0];
+  always_comb
+    for (int i=0; i<COMPRESSED_MANIFEST_SIZE; i++)
+      compressed_manifest_bytes[i] = compressed_manifest[i];
+
   always@(compressed_manifest)
-    cosim_set_manifest(ESI_VERSION, compressed_manifest);
+    cosim_set_manifest(ESI_VERSION, compressed_manifest_bytes);
 
 endmodule

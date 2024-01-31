@@ -234,7 +234,7 @@ static bool isNotSubAccess(Operation *op) {
     return true;
   ConstantOp arg =
       llvm::dyn_cast_or_null<ConstantOp>(sao.getIndex().getDefiningOp());
-  return arg && sao.getInput().getType().get().getNumElements() != 0;
+  return arg && sao.getInput().getType().base().getNumElements() != 0;
 }
 
 /// Look through and collect subfields leading to a subaccess.

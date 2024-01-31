@@ -1,4 +1,4 @@
-// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-check-comb-loops))' --split-input-file --verify-diagnostics %s | FileCheck %s
+// RUN: circt-opt -allow-unregistered-dialect --pass-pipeline='builtin.module(firrtl.circuit(firrtl-check-comb-loops))' --split-input-file --verify-diagnostics %s | FileCheck %s
 
 // Loop-free circuit
 // CHECK: firrtl.circuit "hasnoloops"
@@ -1038,12 +1038,51 @@ firrtl.circuit "FlipConnect2" {
 // -----
 
 firrtl.circuit "UnrealizedConversionCast" {
+  // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: UnrealizedConversionCast.{b <- b <- b}}}
   firrtl.module @UnrealizedConversionCast() {
-    // Other dialects might need to close loops in their own ops. Since these
-    // interface with FIRRTL via unrealized conversion casts, assume they
-    // close no loops and trust the other dialects.
+    // Casts have cast-like behavior
     %b = firrtl.wire   : !firrtl.uint<32>
     %a = builtin.unrealized_conversion_cast %b : !firrtl.uint<32> to !firrtl.uint<32>
+    firrtl.strictconnect %b, %a : !firrtl.uint<32>
+  }
+}
+
+// -----
+
+firrtl.circuit "OutsideDialect" {
+  firrtl.module @OutsideDialect() {
+    // Other dialects might need to close loops in their own ops. Ignore 
+    // ops from other dialects
+    %b = firrtl.wire   : !firrtl.uint<32>
+    // expected-remark @below {{Non-firrtl operations detected, combinatorial loop checking may miss some loops.}}
+    %a = "foo"(%b) : (!firrtl.uint<32>) -> !firrtl.uint<32>
+    // Should only trigger once
+    %c = "foo"(%b) : (!firrtl.uint<32>) -> !firrtl.uint<32>
+    firrtl.strictconnect %b, %a : !firrtl.uint<32>
+  }
+}
+
+// -----
+
+// Foreign op looks sink like, no loop
+firrtl.circuit "OutsideDialectSink" {
+  firrtl.module @OutsideDialectSink() {
+    // Other dialects might need to close loops in their own ops. Ignore 
+    // ops from other dialects
+    %b = firrtl.wire   : !firrtl.uint<32>
+    "foo"(%b) : (!firrtl.uint<32>) -> ()
+  }
+}
+
+// -----
+
+// Foreign op looks source like, no loop
+firrtl.circuit "OutsideDialectSource" {
+  firrtl.module @OutsideDialectSource() {
+    // Other dialects might need to close loops in their own ops. Ignore 
+    // ops from other dialects
+    %b = firrtl.wire   : !firrtl.uint<32>
+    %a = "foo"() : () -> !firrtl.uint<32>
     firrtl.strictconnect %b, %a : !firrtl.uint<32>
   }
 }
