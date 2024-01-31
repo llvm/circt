@@ -15,6 +15,7 @@
 extern "C" {
 #endif
 
+MLIR_CAPI_EXPORTED void registerCombPasses(void);
 MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(Combinational, comb);
 
 #ifdef __cplusplus
