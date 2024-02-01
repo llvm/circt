@@ -6,8 +6,9 @@ from .common import (AppID, Input, Output, _PyProxy, PortError)
 from .module import Generator, Module, ModuleLikeBuilderBase, PortProxyBase
 from .signals import BundleSignal, ChannelSignal, Signal, Struct, _FromCirctValue
 from .system import System
-from .types import (Bits, Bundle, BundledChannel, Channel, ChannelDirection,
-                    StructType, Type, types, UInt, _FromCirctType)
+from .types import (Any, Bits, Bundle, BundledChannel, Channel,
+                    ChannelDirection, StructType, Type, types, UInt,
+                    _FromCirctType)
 
 from .circt import ir
 from .circt.dialects import esi as raw_esi, hw, msft
@@ -100,10 +101,12 @@ class _RequestConnection:
   def service_port(self) -> hw.InnerRefAttr:
     return hw.InnerRefAttr.get(self.decl.symbol, self._name)
 
-  def __call__(self, appid: AppID):
+  def __call__(self, appid: AppID, type: Optional[Bundle] = None):
+    if type is None:
+      type = self.type
     self.decl._materialize_service_decl()
     return _FromCirctValue(
-        raw_esi.RequestConnectionOp(self.type._type, self.service_port,
+        raw_esi.RequestConnectionOp(type._type, self.service_port,
                                     appid._appid).toClient)
 
 
@@ -453,6 +456,20 @@ class MMIO:
   @staticmethod
   def _op(sym_name: ir.StringAttr):
     return raw_esi.MMIOServiceDeclOp(sym_name)
+
+
+@ServiceDecl
+class FuncService:
+  """ESI standard service to request execution of a function."""
+
+  call = Bundle([
+      BundledChannel("arg", ChannelDirection.TO, Any()),
+      BundledChannel("result", ChannelDirection.FROM, Any())
+  ])
+
+  @staticmethod
+  def _op(sym_name: ir.StringAttr):
+    return raw_esi.FuncServiceDeclOp(sym_name)
 
 
 def package(sys: System):
