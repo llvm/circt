@@ -61,9 +61,6 @@ LogicalResult ModuleInfo::initialize() {
       symbolToClasses.insert({classLike.getSymNameAttr(), classLike});
     else if (auto hwMod = dyn_cast<HWModuleLike>(op))
       symbolToHWModules.insert({hwMod.getModuleNameAttr(), hwMod});
-    else {
-      op.erase();
-    }
   }
   return success();
 }
@@ -125,6 +122,7 @@ void ModuleInfo::postProcess(const SymMappingTy &symMapping) {
         objectOp.setClassNameAttr(it->second);
     }
 
+    modReplacer.replaceElementsIn(op, true, false, false);
     // Otherwise update om.class types.
     replacer.replaceElementsIn(op,
                                /*replaceAttrs=*/false,
