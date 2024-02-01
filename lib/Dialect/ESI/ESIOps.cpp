@@ -402,24 +402,12 @@ static LogicalResult checkTypeMatch(Operation *req,
   return success();
 }
 
-LogicalResult RequestToClientConnectionOp::verifySymbolUses(
-    SymbolTableCollection &symbolTable) {
+LogicalResult
+RequestConnectionOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto svcPort = getServicePortInfo(*this, symbolTable, getServicePortAttr());
   if (failed(svcPort))
     return failure();
-  if (svcPort->direction != ServicePortInfo::Direction::toClient)
-    return emitOpError("Service port is not a to-client port");
   return checkTypeMatch(*this, svcPort->type, getToClient().getType(), false);
-}
-
-LogicalResult RequestToServerConnectionOp::verifySymbolUses(
-    SymbolTableCollection &symbolTable) {
-  auto svcPort = getServicePortInfo(*this, symbolTable, getServicePortAttr());
-  if (failed(svcPort))
-    return failure();
-  if (svcPort->direction != ServicePortInfo::Direction::toServer)
-    return emitOpError("Service port is not a to-server port");
-  return checkTypeMatch(*this, svcPort->type, getToServer().getType(), false);
 }
 
 LogicalResult ServiceImplementConnReqOp::verifySymbolUses(
@@ -431,14 +419,10 @@ LogicalResult ServiceImplementConnReqOp::verifySymbolUses(
 }
 
 void CustomServiceDeclOp::getPortList(SmallVectorImpl<ServicePortInfo> &ports) {
-  for (auto toServer : getOps<ToServerOp>())
-    ports.push_back(ServicePortInfo{
-        hw::InnerRefAttr::get(getSymNameAttr(), toServer.getInnerSymAttr()),
-        ServicePortInfo::Direction::toServer, toServer.getToServerType()});
-  for (auto toClient : getOps<ToClientOp>())
+  for (auto toClient : getOps<ServiceDeclPortOp>())
     ports.push_back(ServicePortInfo{
         hw::InnerRefAttr::get(getSymNameAttr(), toClient.getInnerSymAttr()),
-        ServicePortInfo::Direction::toClient, toClient.getToClientType()});
+        toClient.getToClientType()});
 }
 
 //===----------------------------------------------------------------------===//
@@ -697,9 +681,6 @@ void ServiceRequestRecordOp::getDetails(
     SmallVectorImpl<NamedAttribute> &results) {
   auto *ctxt = getContext();
   results.emplace_back(StringAttr::get(ctxt, "appID"), getRequestorAttr());
-  results.emplace_back(
-      getDirectionAttrName(),
-      StringAttr::get(ctxt, stringifyBundleDirection(getDirection())));
   results.emplace_back(getBundleTypeAttrName(), getBundleTypeAttr());
   results.emplace_back(getServicePortAttrName(), getServicePortAttr());
   if (auto stdSvc = getStdServiceAttr())
