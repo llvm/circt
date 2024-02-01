@@ -2774,49 +2774,65 @@ ParseResult FIRStmtParser::parseStop() {
   return success();
 }
 
-/// assert ::= 'assert(' exp exp exp StringLit ')' info?
+/// assert ::= 'assert(' exp exp exp StringLit exp*')' info?
 ParseResult FIRStmtParser::parseAssert() {
   auto startTok = consumeToken(FIRToken::lp_assert);
 
   Value clock, predicate, enable;
-  StringRef message;
+  StringRef formatString;
   StringAttr name;
   if (parseExp(clock, "expected clock expression in 'assert'") ||
       parseExp(predicate, "expected predicate in 'assert'") ||
       parseExp(enable, "expected enable in 'assert'") ||
-      parseGetSpelling(message) ||
-      parseToken(FIRToken::string, "expected message in 'assert'") ||
-      parseToken(FIRToken::r_paren, "expected ')' in 'assert'") ||
-      parseOptionalName(name) || parseOptionalInfo())
+      parseGetSpelling(formatString) ||
+      parseToken(FIRToken::string, "expected format string in 'assert'"))
+    return failure();
+
+  SmallVector<Value, 4> operands;
+  while (!consumeIf(FIRToken::r_paren)) {
+    operands.push_back({});
+    if (parseExp(operands.back(), "expected operand in 'assert'"))
+      return failure();
+  }
+
+  if (parseOptionalName(name) || parseOptionalInfo())
     return failure();
 
   locationProcessor.setLoc(startTok.getLoc());
-  auto messageUnescaped = FIRToken::getStringValue(message);
-  builder.create<AssertOp>(clock, predicate, enable, messageUnescaped,
-                           ValueRange{}, name.getValue());
+  auto formatStrUnescaped = FIRToken::getStringValue(formatString);
+  builder.create<AssertOp>(clock, predicate, enable, formatStrUnescaped,
+                           operands, name.getValue());
   return success();
 }
 
-/// assume ::= 'assume(' exp exp exp StringLit ')' info?
+/// assume ::= 'assume(' exp exp exp StringLit exp* ')' info?
 ParseResult FIRStmtParser::parseAssume() {
   auto startTok = consumeToken(FIRToken::lp_assume);
 
   Value clock, predicate, enable;
-  StringRef message;
+  StringRef formatString;
   StringAttr name;
   if (parseExp(clock, "expected clock expression in 'assume'") ||
       parseExp(predicate, "expected predicate in 'assume'") ||
       parseExp(enable, "expected enable in 'assume'") ||
-      parseGetSpelling(message) ||
-      parseToken(FIRToken::string, "expected message in 'assume'") ||
-      parseToken(FIRToken::r_paren, "expected ')' in 'assume'") ||
-      parseOptionalName(name) || parseOptionalInfo())
+      parseGetSpelling(formatString) ||
+      parseToken(FIRToken::string, "expected format string in 'assume'"))
+    return failure();
+
+  SmallVector<Value, 4> operands;
+  while (!consumeIf(FIRToken::r_paren)) {
+    operands.push_back({});
+    if (parseExp(operands.back(), "expected operand in 'assume'"))
+      return failure();
+  }
+
+  if (parseOptionalName(name) || parseOptionalInfo())
     return failure();
 
   locationProcessor.setLoc(startTok.getLoc());
-  auto messageUnescaped = FIRToken::getStringValue(message);
-  builder.create<AssumeOp>(clock, predicate, enable, messageUnescaped,
-                           ValueRange{}, name.getValue());
+  auto formatStrUnescaped = FIRToken::getStringValue(formatString);
+  builder.create<AssumeOp>(clock, predicate, enable, formatStrUnescaped,
+                           operands, name.getValue());
   return success();
 }
 

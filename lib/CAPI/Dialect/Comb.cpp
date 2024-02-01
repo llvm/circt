@@ -8,9 +8,12 @@
 
 #include "circt-c/Dialect/Comb.h"
 #include "circt/Dialect/Comb/CombDialect.h"
+#include "circt/Dialect/Comb/CombPasses.h"
 #include "mlir/CAPI/IR.h"
 #include "mlir/CAPI/Registration.h"
 #include "mlir/CAPI/Support.h"
+
+void registerCombPasses() { circt::comb::registerPasses(); }
 
 MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(Combinational, comb,
                                       circt::comb::CombDialect)

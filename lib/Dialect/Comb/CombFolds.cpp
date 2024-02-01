@@ -1989,6 +1989,9 @@ OpFoldResult MuxOp::fold(FoldAdaptor adaptor) {
   // mux (c, b, b) -> b
   if (getTrueValue() == getFalseValue())
     return getTrueValue();
+  if (auto tv = adaptor.getTrueValue())
+    if (tv == adaptor.getFalseValue())
+      return tv;
 
   // mux(0, a, b) -> b
   // mux(1, a, b) -> a

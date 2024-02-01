@@ -275,7 +275,7 @@ sv2cCosimserverSetManifest(unsigned int esiVersion,
   int size = svSizeOfArray(compressedManifest);
   std::vector<uint8_t> blob(size);
   for (int i = 0; i < size; ++i) {
-    blob[i] = *(char *)svGetArrElemPtr1(compressedManifest, i);
+    blob[size - i - 1] = *(char *)svGetArrElemPtr1(compressedManifest, i);
   }
   printf("[cosim] Setting manifest (esiVersion=%d, size=%d)\n", esiVersion,
          size);

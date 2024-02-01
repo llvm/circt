@@ -15,6 +15,17 @@
 extern "C" {
 #endif
 
+#define DEFINE_C_API_STRUCT(name, storage)                                     \
+  struct name {                                                                \
+    storage *ptr;                                                              \
+  };                                                                           \
+  typedef struct name name
+
+DEFINE_C_API_STRUCT(HWInstanceGraph, void);
+DEFINE_C_API_STRUCT(HWInstanceGraphNode, void);
+
+#undef DEFINE_C_API_STRUCT
+
 struct HWStructFieldInfo {
   MlirIdentifier name;
   MlirType type;
@@ -178,6 +189,34 @@ MLIR_CAPI_EXPORTED MlirAttribute hwParamVerbatimAttrGet(MlirAttribute text);
 MLIR_CAPI_EXPORTED bool hwAttrIsAOutputFileAttr(MlirAttribute);
 MLIR_CAPI_EXPORTED MlirAttribute hwOutputFileGetFromFileName(
     MlirAttribute text, bool excludeFromFileList, bool includeReplicatedOp);
+
+//===----------------------------------------------------------------------===//
+// InstanceGraph API.
+//===----------------------------------------------------------------------===//
+
+MLIR_CAPI_EXPORTED HWInstanceGraph hwInstanceGraphGet(MlirOperation operation);
+
+MLIR_CAPI_EXPORTED void hwInstanceGraphDestroy(HWInstanceGraph instanceGraph);
+
+MLIR_CAPI_EXPORTED HWInstanceGraphNode
+hwInstanceGraphGetTopLevelNode(HWInstanceGraph instanceGraph);
+
+// NOLINTNEXTLINE(modernize-use-using)
+typedef void (*HWInstanceGraphNodeCallback)(HWInstanceGraphNode, void *);
+
+MLIR_CAPI_EXPORTED void
+hwInstanceGraphForEachNode(HWInstanceGraph instanceGraph,
+                           HWInstanceGraphNodeCallback callback,
+                           void *userData);
+
+MLIR_CAPI_EXPORTED bool hwInstanceGraphNodeEqual(HWInstanceGraphNode lhs,
+                                                 HWInstanceGraphNode rhs);
+
+MLIR_CAPI_EXPORTED MlirModule
+hwInstanceGraphNodeGetModule(HWInstanceGraphNode node);
+
+MLIR_CAPI_EXPORTED MlirOperation
+hwInstanceGraphNodeGetModuleOp(HWInstanceGraphNode node);
 
 #ifdef __cplusplus
 }

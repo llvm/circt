@@ -585,7 +585,7 @@ LogicalResult CosimManifestLowering::matchAndRewrite(
       ParamDeclAttr::get("COMPRESSED_MANIFEST_SIZE", rewriter.getI32Type())};
   PortInfo ports[] = {
       {{rewriter.getStringAttr("compressed_manifest"),
-        rewriter.getType<hw::UnpackedArrayType>(
+        rewriter.getType<hw::ArrayType>(
             rewriter.getI8Type(),
             ParamDeclRefAttr::get(
                 rewriter.getStringAttr("COMPRESSED_MANIFEST_SIZE"),
@@ -608,7 +608,7 @@ LogicalResult CosimManifestLowering::matchAndRewrite(
         for (uint8_t b : op.getCompressedManifest().getData())
           bytes.push_back(rewriter.getI8IntegerAttr(b));
         auto manifestConstant = rewriter.create<hw::AggregateConstantOp>(
-            loc, hw::UnpackedArrayType::get(rewriter.getI8Type(), bytes.size()),
+            loc, hw::ArrayType::get(rewriter.getI8Type(), bytes.size()),
             rewriter.getArrayAttr(bytes));
         auto manifestLogic =
             rewriter.create<sv::LogicOp>(loc, manifestConstant.getType());

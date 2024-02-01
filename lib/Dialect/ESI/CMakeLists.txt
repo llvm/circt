@@ -106,6 +106,7 @@ set(ESI_RUNTIME_SRCS
   runtime/cosim/Cosim_Endpoint.sv
   runtime/cosim/CosimDpi.capnp
   runtime/cosim/driver.cpp
+  runtime/cosim/driver.sv
   runtime/cosim/esi-cosim.py
   runtime/python/esi/__init__.py
   runtime/python/esi/accelerator.py
