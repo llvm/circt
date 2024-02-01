@@ -401,18 +401,6 @@ def HWInstanceLike : OpInterface<"HWInstanceLike", [
     PortList, InstanceGraphInstanceOpInterface]> {
   let cppNamespace = "circt::hw";
   let description = "Provide common  module information.";
-
-  let methods = [
-    InterfaceMethod<"Get the name of the instantiated module",
-    "::llvm::StringRef", "getReferencedModuleName", (ins),
-    /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{ return $_op.getModuleName(); }]>,
-
-    InterfaceMethod<"Get the name of the instantiated module",
-    "::mlir::StringAttr", "getReferencedModuleNameAttr", (ins),
-    /*methodBody=*/[{}],
-    /*defaultImplementation=*/[{ return $_op.getModuleNameAttr().getAttr(); }]>,
-  ];
 }
 
 def InnerRefNamespace : NativeOpTrait<"InnerRefNamespace">;
