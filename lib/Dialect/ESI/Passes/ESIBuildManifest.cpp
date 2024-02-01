@@ -196,7 +196,6 @@ std::string ESIBuildManifestPass::json() {
           for (auto port : ports) {
             j.object([&] {
               j.attribute("name", port.port.getName().getValue());
-              j.attribute("direction", port.directionAsString());
               j.attribute("type", json(svcDecl, TypeAttr::get(port.type)));
             });
           }

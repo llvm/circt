@@ -199,12 +199,11 @@ public:
       : CustomService(idPath, details, clients), impl(impl) {}
 
   virtual map<string, ChannelPort &>
-  requestChannelsFor(AppIDPath idPath, const BundleType &bundleType,
-                     BundlePort::Direction svcDir) override {
+  requestChannelsFor(AppIDPath idPath, const BundleType &bundleType) override {
     map<string, ChannelPort &> channels;
     for (auto [name, dir, type] : bundleType.getChannels()) {
       ChannelPort *port;
-      if (BundlePort::isWrite(dir, svcDir))
+      if (BundlePort::isWrite(dir))
         port = new WriteTraceChannelPort(impl, type, idPath, name);
       else
         port = new ReadTraceChannelPort(impl, type);

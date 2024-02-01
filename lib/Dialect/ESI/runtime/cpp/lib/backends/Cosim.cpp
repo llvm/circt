@@ -307,8 +307,8 @@ public:
   }
 
   virtual map<string, ChannelPort &>
-  requestChannelsFor(AppIDPath fullPath, const BundleType &bundleType,
-                     BundlePort::Direction svcDir) override {
+  requestChannelsFor(AppIDPath fullPath,
+                     const BundleType &bundleType) override {
     // Find the client details for the port at 'fullPath'.
     auto f = clientChannelAssignments.find(fullPath);
     if (f == clientChannelAssignments.end())
@@ -326,7 +326,7 @@ public:
       string channelName = f->second;
 
       ChannelPort *port;
-      if (BundlePort::isWrite(dir, svcDir))
+      if (BundlePort::isWrite(dir))
         port = new WriteCosimChannelPort(impl, type, channelName);
       else
         port = new ReadCosimChannelPort(impl, type, channelName);

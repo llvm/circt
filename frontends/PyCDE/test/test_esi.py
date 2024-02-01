@@ -14,12 +14,11 @@ from pycde.testing import unittestmodule
 from pycde.signals import BitVectorSignal, ChannelSignal
 
 TestBundle = Bundle([
-    BundledChannel("resp", ChannelDirection.TO, Bits(16)),
-    BundledChannel("req", ChannelDirection.FROM, Bits(24))
+    BundledChannel("resp", ChannelDirection.FROM, Bits(16)),
+    BundledChannel("req", ChannelDirection.TO, Bits(24))
 ])
 
-TestFromBundle = Bundle(
-    [BundledChannel("ch1", ChannelDirection.FROM, Bits(32))])
+TestFromBundle = Bundle([BundledChannel("ch1", ChannelDirection.TO, Bits(32))])
 
 
 @esi.ServiceDecl
@@ -33,8 +32,8 @@ class HostComms:
 
 # CHECK-LABEL: hw.module @LoopbackInOutTop(in %clk : !seq.clock, in %rst : i1)
 # CHECK:         esi.service.instance #esi.appid<"cosim"[0]> svc @HostComms impl as "cosim"(%clk, %rst) : (!seq.clock, i1) -> ()
-# CHECK:         %bundle, %req = esi.bundle.pack %chanOutput : !esi.bundle<[!esi.channel<i16> to "resp", !esi.channel<i24> from "req"]>
-# CHECK:         esi.service.req.to_server %bundle -> <@HostComms::@req_resp>(#esi.appid<"loopback_inout"[0]>) : !esi.bundle<[!esi.channel<i16> to "resp", !esi.channel<i24> from "req"]>
+# CHECK:         [[B0:%.+]] = esi.service.req <@HostComms::@req_resp>(#esi.appid<"loopback_inout"[0]>) : !esi.bundle<[!esi.channel<i16> from "resp", !esi.channel<i24> to "req"]>
+# CHECK:         %req = esi.bundle.unpack %chanOutput from [[B0]] : !esi.bundle<[!esi.channel<i16> from "resp", !esi.channel<i24> to "req"]>
 # CHECK:         %rawOutput, %valid = esi.unwrap.vr %req, %ready : i24
 # CHECK:         [[R0:%.+]] = comb.extract %rawOutput from 0 : (i24) -> i16
 # CHECK:         %chanOutput, %ready = esi.wrap.vr [[R0]], %valid : i16
@@ -58,9 +57,9 @@ class LoopbackInOutTop(Module):
     esi.Cosim(HostComms, self.clk, self.rst)
 
     loopback = Wire(types.channel(types.i16))
-    call_bundle, froms = TestBundle.pack(resp=loopback)
+    call_bundle = HostComms.req_resp(AppID("loopback_inout", 0))
+    froms = call_bundle.unpack(resp=loopback)
     from_host = froms['req']
-    HostComms.req_resp(call_bundle, AppID("loopback_inout", 0))
 
     ready = Wire(types.i1)
     wide_data, valid = from_host.unwrap(ready)
@@ -145,7 +144,7 @@ class RecvBundleTest(Module):
 # CHECK-LABEL:  hw.module @MMIOReq()
 # CHECK-NEXT:     %c0_i32 = hw.constant 0 : i32
 # CHECK-NEXT:     %false = hw.constant false
-# CHECK-NEXT:     [[B:%.+]] = esi.service.req.to_client <@MMIO::@read>(#esi.appid<"mmio_req">) : !esi.bundle<[!esi.channel<i32> to "offset", !esi.channel<i32> from "data"]>
+# CHECK-NEXT:     [[B:%.+]] = esi.service.req <@MMIO::@read>(#esi.appid<"mmio_req">) : !esi.bundle<[!esi.channel<i32> to "offset", !esi.channel<i32> from "data"]>
 # CHECK-NEXT:     %chanOutput, %ready = esi.wrap.vr %c0_i32, %false : i32
 # CHECK-NEXT:     %offset = esi.bundle.unpack %chanOutput from [[B]] : !esi.bundle<[!esi.channel<i32> to "offset", !esi.channel<i32> from "data"]>
 @unittestmodule(esi_sys=True)

@@ -362,21 +362,11 @@ Manifest::Impl::getBundlePorts(AppIDPath idPath,
     const BundleType &bundleType =
         dynamic_cast<const BundleType &>(type->get());
 
-    BundlePort::Direction portDir;
-    string dirStr = content.at("direction");
-    if (dirStr == "toClient")
-      portDir = BundlePort::Direction::ToClient;
-    else if (dirStr == "toServer")
-      portDir = BundlePort::Direction::ToServer;
-    else
-      throw runtime_error("Malformed manifest: unknown direction '" + dirStr +
-                          "'");
-
     idPath.push_back(parseID(content.at("appID")));
     map<string, ChannelPort &> portChannels;
     // If we need to have custom ports (because of a custom service), add them.
     if (auto *customSvc = dynamic_cast<services::CustomService *>(svc->second))
-      portChannels = customSvc->requestChannelsFor(idPath, bundleType, portDir);
+      portChannels = customSvc->requestChannelsFor(idPath, bundleType);
     ret.emplace_back(idPath.back(), portChannels);
     // Since we share idPath between iterations, pop the last element before the
     // next iteration.
