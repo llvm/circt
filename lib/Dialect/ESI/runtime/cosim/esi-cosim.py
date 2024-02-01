@@ -55,7 +55,7 @@ class SourceFiles:
 
   def add_dir(self, dir: Path):
     """Add all the RTL files in a directory to the source list."""
-    for file in dir.iterdir():
+    for file in sorted(dir.iterdir()):
       if file.is_file() and (file.suffix == ".sv" or file.suffix == ".v"):
         self.user.append(file)
 
@@ -208,6 +208,7 @@ class Verilator(Simulator):
         "--cc",
         "--top-module",
         self.sources.top,
+        "-DSIMULATION",
         "-sv",
         "--build",
         "--exe",
@@ -243,6 +244,7 @@ class Questa(Simulator):
         "vlog",
         "-sv",
         "+define+TOP_MODULE=" + self.sources.top,
+        "+define+SIMULATION",
         str(Questa.DefaultDriver),
     ]
     cmd += [str(p) for p in self.sources.rtl_sources]
