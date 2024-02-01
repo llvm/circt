@@ -106,7 +106,7 @@ struct CLOptions {
 
   cl::list<std::string> defines{
       "D",
-      cl::desc("Define <macro> to <value> (or 1 if <value> ommitted) in all "
+      cl::desc("Define <macro> to <value> (or 1 if <value> omitted) in all "
                "source files"),
       cl::value_desc("<macro>=<value>"), cl::Prefix, cl::cat(cat)};
   cl::alias definesLong{"define-macro", cl::desc("Alias for -D"),
