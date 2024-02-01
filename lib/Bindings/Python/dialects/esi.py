@@ -20,18 +20,7 @@ class ChannelSignaling:
 
 
 @_ods_cext.register_operation(_Dialect, replace=True)
-class RequestToServerConnectionOp(RequestToServerConnectionOp):
-
-  @property
-  def clientNamePath(self) -> List[str]:
-    return [
-        ir.StringAttr(x).value
-        for x in ir.ArrayAttr(self.attributes["clientNamePath"])
-    ]
-
-
-@_ods_cext.register_operation(_Dialect, replace=True)
-class RequestToClientConnectionOp(RequestToClientConnectionOp):
+class RequestConnectionOp(RequestConnectionOp):
 
   @property
   def clientNamePath(self) -> List[str]:

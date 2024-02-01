@@ -57,14 +57,6 @@ def AppIDPathAttr : ESI_Attr<"AppIDPath"> {
   }];
 }
 
-def BundleDirection : I32EnumAttr<"BundleDirection",
-  "Direction of original request", [
-    I32EnumAttrCase<"toServer", 1>,
-    I32EnumAttrCase<"toClient", 2>,
-  ]> {
-  let cppNamespace = "::circt::esi";
-}
-
 def ServiceRequestRecordOp : ESI_Op<"manifest.req", [
         DeclareOpInterfaceMethods<IsManifestData>,
         DeclareOpInterfaceMethods<HasAppIDOpInterface>]> {
@@ -78,12 +70,11 @@ def ServiceRequestRecordOp : ESI_Op<"manifest.req", [
   let arguments = (ins AppIDAttr:$requestor,
                        InnerRefAttr:$servicePort,
                        OptionalAttr<StrAttr>:$stdService,
-                       BundleDirection:$direction,
                        TypeAttrOf<ChannelBundleType>:$bundleType);
 
   let assemblyFormat = [{
     qualified($requestor) `,` $servicePort (`std` $stdService^)?
-    `,` $direction `,` $bundleType attr-dict
+    `,` $bundleType attr-dict
   }];
 
   let extraClassDeclaration = [{

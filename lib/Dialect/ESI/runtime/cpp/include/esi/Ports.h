@@ -65,17 +65,10 @@ public:
 /// ChannelPorts.
 class BundlePort {
 public:
-  /// Direction of a bundle. This -- combined with the channel direction in the
-  /// bundle -- can be used to determine if a channel should be writing to or
-  /// reading from the accelerator.
-  enum Direction { ToServer, ToClient };
-
   /// Compute the direction of a channel given the bundle direction and the
   /// bundle port's direction.
-  static bool isWrite(BundleType::Direction bundleDir, Direction svcDir) {
-    if (svcDir == Direction::ToClient)
-      return bundleDir == BundleType::Direction::To;
-    return bundleDir == BundleType::Direction::From;
+  static bool isWrite(BundleType::Direction bundleDir) {
+    return bundleDir == BundleType::Direction::To;
   }
 
   /// Construct a port.

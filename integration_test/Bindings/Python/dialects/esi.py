@@ -60,7 +60,7 @@ with Context() as ctx:
 !recvI8 = !esi.bundle<[!esi.channel<i8> to "recv"]>
 
 esi.service.decl @HostComms {
-  esi.service.to_client @Recv : !recvI8
+  esi.service.port @Recv : !recvI8
 }
 
 hw.module @MsTop (in %clk : i1, out chksum : i8) {
@@ -70,7 +70,7 @@ hw.module @MsTop (in %clk : i1, out chksum : i8) {
 }
 
 hw.module @MsLoopback (in %clk : i1) {
-  %dataIn = esi.service.req.to_client <@HostComms::@Recv> (#esi.appid<"loopback_tohw">) : !recvI8
+  %dataIn = esi.service.req <@HostComms::@Recv> (#esi.appid<"loopback_tohw">) : !recvI8
 }
 """)
   pm = passmanager.PassManager.parse("builtin.module(esi-connect-services)")
