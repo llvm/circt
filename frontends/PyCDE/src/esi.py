@@ -460,11 +460,10 @@ class MMIO:
 class FuncService:
   """ESI standard service to request execution of a function."""
 
-  call = ServiceDecl.To(
-      Bundle([
-          BundledChannel("arg", ChannelDirection.FROM, Any()),
-          BundledChannel("result", ChannelDirection.TO, Any())
-      ]))
+  call = Bundle([
+      BundledChannel("arg", ChannelDirection.TO, Any()),
+      BundledChannel("result", ChannelDirection.FROM, Any())
+  ])
 
   @staticmethod
   def _op(sym_name: ir.StringAttr):

@@ -71,9 +71,10 @@ void FuncServiceDeclOp::getPortList(SmallVectorImpl<ServicePortInfo> &ports) {
       hw::InnerRefAttr::get(getSymNameAttr(), StringAttr::get(ctxt, "call")),
       ChannelBundleType::get(
           ctxt,
-          {BundledChannel{StringAttr::get(ctxt, "arg"), ChannelDirection::from,
+          {BundledChannel{StringAttr::get(ctxt, "arg"), ChannelDirection::to,
                           ChannelType::get(ctxt, AnyType::get(ctxt))},
-           BundledChannel{StringAttr::get(ctxt, "result"), ChannelDirection::to,
+           BundledChannel{StringAttr::get(ctxt, "result"),
+                          ChannelDirection::from,
                           ChannelType::get(ctxt, AnyType::get(ctxt))}},
           /*resettable=*/UnitAttr())});
 }

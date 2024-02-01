@@ -210,7 +210,6 @@ class Verilator(Simulator):
         self.sources.top,
         "-DSIMULATION",
         "-sv",
-        "--timing",
         "--build",
         "--exe",
         "--assert",
