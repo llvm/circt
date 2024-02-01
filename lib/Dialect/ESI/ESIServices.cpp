@@ -321,11 +321,9 @@ struct ESIConnectServicesPass
 
   void runOnOperation() override;
 
-  /// Bundles allow us to convert to_server requests to to_client requests,
-  /// which is how the canonical implementation connection request is defined.
-  /// Convert both to_server and to_client requests into the canonical
-  /// implementation connection request. This simplifies the rest of the pass
-  /// and the service implementation code.
+  /// Convert connection requests to service implement connection requests,
+  /// which have a relative appid path instead of just an appid. Leave being a
+  /// record for the manifest of the original request.
   void convertReq(RequestConnectionOp);
 
   /// "Bubble up" the specified requests to all of the instantiations of the
@@ -386,7 +384,6 @@ StringAttr ESIConnectServicesPass::getStdService(FlatSymbolRefAttr svcSym) {
 
 void ESIConnectServicesPass::convertReq(RequestConnectionOp req) {
   OpBuilder b(req);
-  // to_client requests are already in the canonical form, just the wrong op.
   auto newReq = b.create<ServiceImplementConnReqOp>(
       req.getLoc(), req.getToClient().getType(), req.getServicePortAttr(),
       ArrayAttr::get(&getContext(), {req.getAppIDAttr()}));
