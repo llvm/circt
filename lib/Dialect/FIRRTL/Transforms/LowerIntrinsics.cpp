@@ -518,6 +518,128 @@ public:
 
 } // namespace
 
+// Replace range of values with new wires and return them.
+template <typename R>
+static SmallVector<Value> replaceResults(OpBuilder &b, R &&range) {
+  return llvm::map_to_vector(range, [&b](auto v) {
+    auto w = b.create<WireOp>(v.getLoc(), v.getType()).getResult();
+    v.replaceAllUsesWith(w);
+    return w;
+  });
+}
+
+// Check ports are all inputs, emit diagnostic if not.
+static ParseResult allInputs(ArrayRef<PortInfo> ports) {
+  for (auto &p : ports) {
+    if (p.direction != Direction::In)
+      return mlir::emitError(p.loc, "expected input port");
+  }
+  return success();
+}
+
+// Get parameter by the given name.  Null if not found.
+static ParamDeclAttr getNamedParam(ArrayAttr params, StringRef name) {
+  for (auto a : params) {
+    auto param = cast<ParamDeclAttr>(a);
+    if (param.getName().getValue().equals(name))
+      return param;
+  }
+  return {};
+}
+
+namespace {
+
+template <class OpTy>
+class CirctAssertAssumeConverter : public IntrinsicConverter {
+public:
+  using IntrinsicConverter::IntrinsicConverter;
+
+  bool check() override {
+    return namedPort(0, "clock") || typedPort<ClockType>(0) ||
+           namedPort(1, "predicate") || sizedPort<UIntType>(1, 1) ||
+           namedPort(2, "enable") || sizedPort<UIntType>(2, 1) ||
+           namedParam("format") || namedParam("label", /*optional=*/true) ||
+           namedParam("guards", /*optional=*/true) || allInputs(mod.getPorts());
+    // TODO: Check all parameters accounted for.
+  }
+
+  void convert(InstanceOp inst) override {
+    ImplicitLocOpBuilder builder(inst.getLoc(), inst);
+    auto params = mod.getParameters();
+    auto format = getNamedParam(params, "format");
+    assert(format && "format parameter not found");
+    auto label = getNamedParam(params, "label");
+    auto guards = getNamedParam(params, "guards");
+
+    auto wires = replaceResults(builder, inst.getResults());
+
+    auto clock = wires[0];
+    auto predicate = wires[1];
+    auto enable = wires[2];
+
+    auto substitutions = ArrayRef(wires).drop_front(3);
+    auto name = label ? cast<StringAttr>(label.getValue()).strref() : "";
+
+    auto op = builder.template create<OpTy>(
+        clock, predicate, enable, cast<StringAttr>(format.getValue()),
+        substitutions, name, /*isConcurrent=*/true);
+    if (guards) {
+      SmallVector<StringRef> guardStrings;
+      cast<StringAttr>(guards.getValue()).strref().split(guardStrings, ';');
+      // TODO: Check identifier-ish? "ifdef 5" or "ifdef `asdf" are bad.
+      op->setAttr("guards", builder.getStrArrayAttr(guardStrings));
+    }
+
+    inst.erase();
+  }
+
+private:
+};
+
+class CirctCoverConverter : public IntrinsicConverter {
+public:
+  using IntrinsicConverter::IntrinsicConverter;
+
+  bool check() override {
+    return namedPort(0, "clock") || typedPort<ClockType>(0) ||
+           namedPort(1, "predicate") || sizedPort<UIntType>(1, 1) ||
+           namedPort(2, "enable") || sizedPort<UIntType>(2, 1) ||
+           hasNPorts(3) || allInputs(mod.getPorts()) ||
+           namedParam("label", /*optional=*/true) ||
+           namedParam("guards", /*optional=*/true);
+    // TODO: Check all parameters accounted for.
+  }
+
+  void convert(InstanceOp inst) override {
+    ImplicitLocOpBuilder builder(inst.getLoc(), inst);
+    auto params = mod.getParameters();
+    auto label = getNamedParam(params, "label");
+    auto guards = getNamedParam(params, "guards");
+
+    auto wires = replaceResults(builder, inst.getResults());
+
+    auto clock = wires[0];
+    auto predicate = wires[1];
+    auto enable = wires[2];
+
+    auto name = label ? cast<StringAttr>(label.getValue()).strref() : "";
+
+    auto op = builder.create<CoverOp>(
+        clock, predicate, enable, builder.getStringAttr("asdf"), ValueRange{},
+        name, /*isConcurrent=*/true);
+    if (guards) {
+      SmallVector<StringRef> guardStrings;
+      cast<StringAttr>(guards.getValue()).strref().split(guardStrings, ';');
+      // TODO: Check identifier-ish? "ifdef 5" or "ifdef `asdf" are bad.
+      op->setAttr("guards", builder.getStrArrayAttr(guardStrings));
+    }
+
+    inst.erase();
+  }
+};
+
+} // namespace
+
 //===----------------------------------------------------------------------===//
 // Pass Infrastructure
 //===----------------------------------------------------------------------===//
@@ -565,6 +687,11 @@ void LowerIntrinsicsPass::runOnOperation() {
   lowering.add<CirctHasBeenResetConverter>("circt.has_been_reset",
                                            "circt_has_been_reset");
   lowering.add<CirctProbeConverter>("circt.fpga_probe", "circt_fpga_probe");
+  lowering.add<CirctAssertAssumeConverter<AssertOp>>("circt.chisel_assert",
+                                                     "circt_chisel_assert");
+  lowering.add<CirctAssertAssumeConverter<AssumeOp>>("circt.chisel_assume",
+                                                     "circt_chisel_assume");
+  lowering.add<CirctCoverConverter>("circt.chisel_cover", "circt_chisel_cover");
 
   // Remove this once `EICG_wrapper` is no longer special-cased by firtool.
   if (fixupEICGWrapper)

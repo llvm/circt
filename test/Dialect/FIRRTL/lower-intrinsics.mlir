@@ -254,4 +254,30 @@ firrtl.circuit "Foo" {
     firrtl.strictconnect %ckg_test_en, %en : !firrtl.uint<1>
     firrtl.strictconnect %ckg_en, %en : !firrtl.uint<1>
   }
+
+  // CHECK-NOT: CirctAssert1
+  // CHECK-NOT: CirctAssert2
+  // CHECK-NOT: VerifAssume
+  // CHECK-NOT: VerifCover
+// TODO: 
+  // firrtl.intmodule @CirctAssert1() attributes {intrinsic = "circt.assert"}
+//  firrtl.intmodule @VerifAssert2<label: none = "hello">(in property: !firrtl.uint<1>) attributes {intrinsic = "circt.verif.assert"}
+//  firrtl.intmodule @VerifAssume(in property: !firrtl.uint<1>) attributes {intrinsic = "circt.verif.assume"}
+//  firrtl.intmodule @VerifCover(in property: !firrtl.uint<1>) attributes {intrinsic = "circt.verif.cover"}
+
+  // CHECK: firrtl.module @ChiselVerif()
+  firrtl.module @ChiselVerif() {
+    // COM: // CHECK-NOT: VerifAssert1
+    // COM: // CHECK-NOT: VerifAssert2
+    // COM: // CHECK-NOT: VerifAssume
+    // COM: // CHECK-NOT: VerifCover
+    // COM: // CHECK: firrtl.int.verif.assert {{%.+}} :
+    // COM: // CHECK: firrtl.int.verif.assert {{%.+}} {label = "hello"} :
+    // COM: // CHECK: firrtl.int.verif.assume {{%.+}} :
+    // COM: // CHECK: firrtl.int.verif.cover {{%.+}} :
+    %assert1.property = firrtl.instance "assert1" @VerifAssert1(in property: !firrtl.uint<1>)
+    %assert2.property = firrtl.instance "assert2" @VerifAssert2(in property: !firrtl.uint<1>)
+    %assume.property = firrtl.instance "assume" @VerifAssume(in property: !firrtl.uint<1>)
+    %cover.property = firrtl.instance "cover" @VerifCover(in property: !firrtl.uint<1>)
+  }
 }
