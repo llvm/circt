@@ -107,6 +107,12 @@ expr manage_comb_exp(Operation &op, vector<expr>& vec, z3::context &c){
   else if(auto and_op = dyn_cast<comb::AndOp>(op)){
     return expr(vec[0] && vec[1]);
     }
+  else if(auto xor_op = dyn_cast<comb::XorOp>(op)){
+    return expr(vec[0] ^ vec[1]);
+  }
+  else if(auto or_op = dyn_cast<comb::OrOp>(op)){
+    return expr(vec[0] | vec[1]);
+  }
   else if(auto icmp = dyn_cast<comb::ICmpOp>(op)){
     circt::comb::ICmpPredicate predicate = icmp.getPredicate();
     switch (predicate){
@@ -149,10 +155,17 @@ expr getExpr(mlir::Value v, MyExprMap expr_map, z3::context& c){
   llvm::outs()<<"getting expression for "<<v<<"\n";
   
   if(isValInExprMap(v, expr_map)){
+    llvm::outs () << "first case\n";
     return findMyExpr(v, expr_map);
   } else if(auto constop = dyn_cast<hw::ConstantOp>(v.getDefiningOp())){
-    return c.int_val(constop.getValue().getSExtValue());
+    llvm::outs () << "second case\n";
+    if(constop.getType().getIntOrFloatBitWidth()>1)
+      return c.int_val(constop.getValue().getSExtValue());
+    else
+      return c.bool_val(0);
+    llvm::outs () << "end of second case\n";
   } else{
+    llvm::outs () << "third case\n";
     llvm::outs()<<"ERROR: variable "<<v<<" not found in the expression map\n";
   }
 }
@@ -169,9 +182,16 @@ expr getGuardExpr(MyExprMap expr_map, Region& guard, z3::context& c){
     vector<expr> vec;
     for (auto operand: op.getOperands()){
       vec.push_back(getExpr(operand, expr_map, c));
+  llvm::outs() << "got here 1\n";
+
     }
+      llvm::outs() << "got here 2\n";
+
     expr_map.exprs.push_back(manage_comb_exp(op, vec, c));
-    expr_map.values.push_back(op.getResult(0));
+      llvm::outs() << "got here 3\n";
+
+    expr_map.values.push_back(op.getResult(0));  llvm::outs() << "got here 4\n";
+
     // expr_map.insert({op.getResult(0), manage_comb_exp(op, vec, c)});
   }
   return expr(c.bool_const("true"));
@@ -202,6 +222,8 @@ vector<expr> getActionExpr(Region& action, context& c, vector<mlir::Value>* to_u
               found = true;
               if(VERBOSE){
                 llvm::outs()<<"updated to "<<getExpr(updateop.getOperands()[1], expr_map, c).to_string()<<"\n";
+  llvm::outs() << "got here 3\n";
+
               }
             }
           } else {
@@ -209,6 +231,8 @@ vector<expr> getActionExpr(Region& action, context& c, vector<mlir::Value>* to_u
             for (auto operand: op.getOperands()){
               llvm::outs()<<"operand "<<operand<<"\n";
               vec.push_back(getExpr(operand, expr_map, c));
+  llvm::outs() << "got here 2\n";
+
             }
             expr_map.exprs.push_back(manage_comb_exp(op, vec, c));
             expr_map.values.push_back(op.getResult(0));
@@ -348,8 +372,10 @@ void populateST(Operation &mod, context &c, MyStateInvMap* stateInvMap, vector<t
                             for(auto [value, expr]: llvm::zip(*vecVal, vec)){
                               expr_map_tmp.exprs.push_back(expr);
                               expr_map_tmp.values.push_back(value);
+                              llvm::outs()<<"AAAA inserting: "<<expr.to_string()<<", "<<value<<"\n";
                               // expr_map_tmp.insert({value, expr});
                             }
+
                             return getGuardExpr(expr_map_tmp, r, c);
                           };
                           t.guard = g;
@@ -543,6 +569,7 @@ void parse_fsm(string input_file){
       llvm::outs()<<"invariant from: "<<findMyFun(t.from, stateInvMap_fun)(solverVars->size(), solverVars->data()).to_string()<<'\n';
       llvm::outs()<<"invariant to: "<<findMyFun(t.to, stateInvMap_fun)(solverVars->size(), solverVars->data()).to_string()<<'\n';
       llvm::outs()<<"guard: "<<t.guard(*solverVars).to_string()<<"\n";
+      llvm::outs()<<"to state function "<<findMyFun(t.to, stateInvMap_fun)(solverVars->size(), solverVars->data()).to_string()<<"\n";
 
       expr body = implies((findMyFun(t.from, stateInvMap_fun)(solverVars->size(), solverVars->data()) && t.guard(*solverVars)), findMyFun(t.to, stateInvMap_fun)(solverVars->size(), solverVars->data()));
       

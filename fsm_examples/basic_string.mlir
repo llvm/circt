@@ -1,7 +1,7 @@
 // FSM recognizing language 1001, we want to check that it only recognizes those strings 
 
 fsm.machine @top(%go: i1) -> () attributes {initialState = "A"} {
-    %c_0 = hw.constant 0 : i1
+    %c_0 = hw.constant 1 : i1
 
     fsm.state @A output  {
     } transitions {
@@ -9,7 +9,7 @@ fsm.machine @top(%go: i1) -> () attributes {initialState = "A"} {
         fsm.return %go
     }
     fsm.transition @A guard {
-        %neg = comb.icmp eq %go, %c_0 : i1
+        %neg = comb.xor %go, %c_0 : i1
         fsm.return %neg
     }
     }
@@ -20,7 +20,7 @@ fsm.machine @top(%go: i1) -> () attributes {initialState = "A"} {
         fsm.return %go
     }
     fsm.transition @C guard {
-        %neg = comb.icmp eq %go, %c_0 : i1
+        %neg = comb.xor %go, %c_0 : i1
         fsm.return %neg
     }
     }
@@ -31,7 +31,7 @@ fsm.machine @top(%go: i1) -> () attributes {initialState = "A"} {
         fsm.return %go
         }
         fsm.transition @D guard {
-        %neg = comb.icmp eq %go, %c_0 : i1
+        %neg = comb.xor %go, %c_0 : i1
         fsm.return %neg
         }
     }
@@ -42,7 +42,7 @@ fsm.machine @top(%go: i1) -> () attributes {initialState = "A"} {
         fsm.return %go
     }
     fsm.transition @A guard {
-        %neg = comb.icmp eq %go, %c_0 : i1
+        %neg = comb.xor %go, %c_0 : i1
         fsm.return %neg
     }
     }
