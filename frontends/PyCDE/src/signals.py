@@ -747,6 +747,17 @@ class BundleSignal(Signal):
         for idx, bc in enumerate(to_channels)
     }
 
+  def connect(self, other: BundleSignal):
+    """Connect two bundles together such that one drives the other."""
+    from .constructs import Wire
+    froms = [(bc.name, Wire(bc.channel))
+             for bc in other.type.channels
+             if bc.direction == ChannelDirection.FROM]
+    unpacked_other = other.unpack(**{name: wire for name, wire in froms})
+    unpacked_self = self.unpack(**unpacked_other)
+    for name, wire in froms:
+      wire.assign(unpacked_self[name])
+
 
 class ListSignal(Signal):
   pass

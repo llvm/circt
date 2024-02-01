@@ -29,18 +29,6 @@ PortEmptySuffix = "esi.portEmptySuffix"
 class ServiceDecl(_PyProxy):
   """Declare an ESI service interface."""
 
-  class To:
-    """Indicates a service has a 'to server' port with the given bundle type. It is the default."""
-
-    def __init__(self, bundle_type: Bundle):
-      self.bundle_type = bundle_type
-
-  class From:
-    """Indicates a service has a 'from server' port with the given bundle type."""
-
-    def __init__(self, bundle_type: Bundle):
-      self.bundle_type = bundle_type
-
   def __init__(self, cls: type):
     self.name = cls.__name__
     if hasattr(cls, "_op"):
@@ -49,17 +37,10 @@ class ServiceDecl(_PyProxy):
       self._op = raw_esi.CustomServiceDeclOp
     for (attr_name, attr) in vars(cls).items():
       if isinstance(attr, Bundle):
-        setattr(self, attr_name,
-                _RequestToServerConnection(self, attr, attr_name))
-      elif isinstance(attr, ServiceDecl.To):
-        setattr(self, attr_name,
-                _RequestToServerConnection(self, attr.bundle_type, attr_name))
-      elif isinstance(attr, ServiceDecl.From):
-        setattr(self, attr_name,
-                _RequestFromServerConnection(self, attr.bundle_type, attr_name))
+        setattr(self, attr_name, _RequestConnection(self, attr, attr_name))
       elif isinstance(attr, (Input, Output)):
         raise TypeError(
-            "Input and Output are not allowed in ESI service declarations. " +
+            "Input and Output are not allowed in ESI service declarations."
             " Use Bundles instead.")
 
   def _materialize_service_decl(self) -> str:
@@ -82,10 +63,9 @@ class ServiceDecl(_PyProxy):
         ports_block = ir.Block.create_at_start(decl.ports, [])
         with ir.InsertionPoint.at_block_begin(ports_block):
           for (_, attr) in self.__dict__.items():
-            if isinstance(attr, _RequestToServerConnection):
-              raw_esi.ToServerOp(attr._name, ir.TypeAttr.get(attr.type._type))
-            elif isinstance(attr, _RequestFromServerConnection):
-              raw_esi.ToClientOp(attr._name, ir.TypeAttr.get(attr.type._type))
+            if isinstance(attr, _RequestConnection):
+              raw_esi.ServiceDeclPortOp(attr._name,
+                                        ir.TypeAttr.get(attr.type._type))
     return sym_name
 
   def instantiate_builtin(self,
@@ -107,26 +87,7 @@ class ServiceDecl(_PyProxy):
     return [_FromCirctValue(x) for x in impl_results]
 
 
-class _RequestToServerConnection:
-  """Indicates a service with a 'to server' port. Call to create a 'to server'
-  (from client) connection request."""
-
-  def __init__(self, decl: ServiceDecl, type: Bundle, attr_name: str):
-    self.decl = decl
-    self._name = ir.StringAttr.get(attr_name)
-    self.type = type
-
-  @property
-  def service_port(self) -> hw.InnerRefAttr:
-    return hw.InnerRefAttr.get(self.decl.symbol, self._name)
-
-  def __call__(self, bundle: BundleSignal, appid: AppID):
-    self.decl._materialize_service_decl()
-    raw_esi.RequestToServerConnectionOp(self.service_port, bundle.value,
-                                        appid._appid)
-
-
-class _RequestFromServerConnection:
+class _RequestConnection:
   """Indicates a service with a 'from server' port. Call to create a 'from
   server' (to client) connection request."""
 
@@ -142,8 +103,8 @@ class _RequestFromServerConnection:
   def __call__(self, appid: AppID):
     self.decl._materialize_service_decl()
     return _FromCirctValue(
-        raw_esi.RequestToClientConnectionOp(self.type._type, self.service_port,
-                                            appid._appid).toClient)
+        raw_esi.RequestConnectionOp(self.type._type, self.service_port,
+                                    appid._appid).toClient)
 
 
 def Cosim(decl: ServiceDecl, clk, rst):
@@ -365,12 +326,12 @@ def DeclareRandomAccessMemory(inner_type: Type,
                                  ('data', inner_type)])
 
     read = Bundle([
-        BundledChannel("address", ChannelDirection.TO, address_type),
-        BundledChannel("data", ChannelDirection.FROM, inner_type)
+        BundledChannel("address", ChannelDirection.FROM, address_type),
+        BundledChannel("data", ChannelDirection.TO, inner_type)
     ])
     write = Bundle([
-        BundledChannel("req", ChannelDirection.TO, write_struct),
-        BundledChannel("ack", ChannelDirection.FROM, Bits(0))
+        BundledChannel("req", ChannelDirection.FROM, write_struct),
+        BundledChannel("ack", ChannelDirection.TO, Bits(0))
     ])
 
     @staticmethod
@@ -484,11 +445,10 @@ class PureModule(Module):
 class MMIO:
   """ESI standard service to request access to an MMIO region."""
 
-  read = ServiceDecl.From(
-      Bundle([
-          BundledChannel("offset", ChannelDirection.TO, Bits(32)),
-          BundledChannel("data", ChannelDirection.FROM, Bits(32))
-      ]))
+  read = Bundle([
+      BundledChannel("offset", ChannelDirection.TO, Bits(32)),
+      BundledChannel("data", ChannelDirection.FROM, Bits(32))
+  ])
 
   @staticmethod
   def _op(sym_name: ir.StringAttr):
