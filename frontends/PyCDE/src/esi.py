@@ -6,8 +6,9 @@ from .common import (AppID, Input, Output, _PyProxy, PortError)
 from .module import Generator, Module, ModuleLikeBuilderBase, PortProxyBase
 from .signals import BundleSignal, ChannelSignal, Signal, Struct, _FromCirctValue
 from .system import System
-from .types import (Bits, Bundle, BundledChannel, Channel, ChannelDirection,
-                    StructType, Type, types, UInt, _FromCirctType)
+from .types import (Any, Bits, Bundle, BundledChannel, Channel,
+                    ChannelDirection, StructType, Type, types, UInt,
+                    _FromCirctType)
 
 from .circt import ir
 from .circt.dialects import esi as raw_esi, hw, msft
@@ -100,10 +101,12 @@ class _RequestConnection:
   def service_port(self) -> hw.InnerRefAttr:
     return hw.InnerRefAttr.get(self.decl.symbol, self._name)
 
-  def __call__(self, appid: AppID):
+  def __call__(self, appid: AppID, type: Optional[Bundle] = None):
+    if type is None:
+      type = self.type
     self.decl._materialize_service_decl()
     return _FromCirctValue(
-        raw_esi.RequestConnectionOp(self.type._type, self.service_port,
+        raw_esi.RequestConnectionOp(type._type, self.service_port,
                                     appid._appid).toClient)
 
 
@@ -453,6 +456,43 @@ class MMIO:
   @staticmethod
   def _op(sym_name: ir.StringAttr):
     return raw_esi.MMIOServiceDeclOp(sym_name)
+
+
+class _FuncService(ServiceDecl):
+  """ESI standard service to request execution of a function."""
+
+  def __init__(self):
+    super().__init__(self.__class__)
+
+  def expose(self, name: AppID, arg_type: Type,
+             result: Signal) -> ChannelSignal:
+    """Expose a function to the ESI system. Arguments:
+      'name' is an AppID which is the function name.
+      'arg_type' is the type of the argument to the function.
+      'result' is a Signal which is the result of the function. Typically, it'll
+      be a Wire which gets assigned to later on.
+
+      Returns a Signal of 'arg_type' type which is the argument value from the
+      caller."""
+
+    bundle = Bundle([
+        BundledChannel("arg", ChannelDirection.TO, arg_type),
+        BundledChannel("result", ChannelDirection.FROM, result.type)
+    ])
+    self._materialize_service_decl()
+    func_call = raw_esi.RequestConnectionOp(
+        bundle._type, hw.InnerRefAttr.get(self.symbol,
+                                          ir.StringAttr.get("call")),
+        name._appid)
+    to_funcs = _FromCirctValue(func_call.toClient).unpack(result=result)
+    return to_funcs['arg']
+
+  @staticmethod
+  def _op(sym_name: ir.StringAttr):
+    return raw_esi.FuncServiceDeclOp(sym_name)
+
+
+FuncService = _FuncService()
 
 
 def package(sys: System):
