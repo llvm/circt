@@ -76,14 +76,14 @@ CallBundle = Bundle([
 
 
 # CHECK-LABEL:  hw.module @LoopbackCall(in %clk : !seq.clock, in %rst : i1) attributes {output_file = #hw.output_file<"LoopbackCall.sv", includeReplicatedOps>} {
-# CHECK-NEXT:     [[R0:%.+]] = esi.service.req <@FuncService::@call>(#esi.appid<"loopback">) : !esi.bundle<[!esi.channel<i16> from "result", !esi.channel<i24> to "arg"]>
-# CHECK-NEXT:     %arg = esi.bundle.unpack %chanOutput from [[R0]] : !esi.bundle<[!esi.channel<i16> from "result", !esi.channel<i24> to "arg"]>
+# CHECK-NEXT:     [[R0:%.+]] = esi.service.req <@_FuncService::@call>(#esi.appid<"loopback">) : !esi.bundle<[!esi.channel<i24> to "arg", !esi.channel<i16> from "result"]>
+# CHECK-NEXT:     %arg = esi.bundle.unpack %chanOutput from [[R0]] : !esi.bundle<[!esi.channel<i24> to "arg", !esi.channel<i16> from "result"]>
 # CHECK-NEXT:     %rawOutput, %valid = esi.unwrap.vr %arg, %ready : i24
 # CHECK-NEXT:     [[R1:%.+]] = comb.extract %rawOutput from 0 : (i24) -> i16
 # CHECK-NEXT:     %chanOutput, %ready = esi.wrap.vr [[R1]], %valid : i16
 # CHECK-NEXT:     hw.output
 # CHECK-NEXT:   }
-# CHECK-NEXT:   esi.service.std.func @FuncService
+# CHECK-NEXT:   esi.service.std.func @_FuncService
 @unittestmodule(print=True)
 class LoopbackCall(Module):
   clk = Clock()
@@ -97,12 +97,12 @@ class LoopbackCall(Module):
   @generator
   def construct(self):
     loopback = Wire(types.channel(types.i16))
-    call_bundle = esi.FuncService.call(AppID("loopback"), CallBundle)
-    froms = call_bundle.unpack(result=loopback)
-    from_host = froms['arg']
+    args = esi.FuncService.expose(name=AppID("loopback"),
+                                  arg_type=Bits(24),
+                                  result=loopback)
 
     ready = Wire(types.i1)
-    wide_data, valid = from_host.unwrap(ready)
+    wide_data, valid = args.unwrap(ready)
     data = wide_data[0:16]
     data_chan, data_ready = loopback.type.wrap(data, valid)
     ready.assign(data_ready)
