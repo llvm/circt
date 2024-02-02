@@ -1850,6 +1850,20 @@ circuit BasicProps :
     propassign nested, List<List<String>>(List<String>(), List<String>(String("test")), List<String>())
 
 ;// -----
+FIRRTL version 4.0.0
+
+; CHECK-LABEL: firrtl.circuit "IntegerArithmetic"
+circuit IntegerArithmetic :
+  module IntegerArithmetic :
+    input a : Integer
+    input b : Integer
+    output c : Integer
+
+    ; CHECK: [[C:%.+]] = firrtl.integer.add %a, %b
+    ; CHECK: firrtl.propassign %c, [[C]]
+    propassign c, integer_add(a, b)
+
+;// -----
 FIRRTL version 3.1.0
 
 ; CHECK-LABEL: circuit "BundleOfProps"
