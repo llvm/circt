@@ -4987,6 +4987,11 @@ FIRRTLType DShrPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
   return lhsi.getConstType(lhsi.isConst() && rhsu.isConst());
 }
 
+FIRRTLType impl::inferIntegerBinaryPrimResult(FIRRTLType lhs, FIRRTLType rhs,
+                                              std::optional<Location> loc) {
+  return FIntegerType::get(lhs.getContext());
+}
+
 //===----------------------------------------------------------------------===//
 // Unary Primitives
 //===----------------------------------------------------------------------===//
@@ -5748,6 +5753,9 @@ void GTPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 void HeadPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void IntegerAddOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 void IsTagOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {

@@ -935,6 +935,11 @@ LogicalResult NEQPrimOp::canonicalize(NEQPrimOp op, PatternRewriter &rewriter) {
       });
 }
 
+OpFoldResult IntegerAddOp::fold(FoldAdaptor adaptor) {
+  // TODO: implement constant folding, etc.
+  return {};
+}
+
 //===----------------------------------------------------------------------===//
 // Unary Operators
 //===----------------------------------------------------------------------===//

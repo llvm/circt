@@ -156,6 +156,8 @@ FIRRTLType inferElementwiseResult(FIRRTLType lhs, FIRRTLType rhs,
                                   std::optional<Location> loc);
 FIRRTLType inferComparisonResult(FIRRTLType lhs, FIRRTLType rhs,
                                  std::optional<Location> loc);
+FIRRTLType inferIntegerBinaryPrimResult(FIRRTLType lhs, FIRRTLType rhs,
+                                        std::optional<Location> loc);
 FIRRTLType inferReductionResult(FIRRTLType arg, std::optional<Location> loc);
 
 // Common parsed argument validation functions.

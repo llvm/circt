@@ -1181,6 +1181,26 @@ def DoubleConstantOp : FIRRTLOp<"double", [Pure, ConstantLike]> {
   let assemblyFormat = "$value attr-dict";
 }
 
+class IntegerBinaryPrimOp<string mnemonic, list<Trait> traits = []> :
+   BinaryPrimOp<mnemonic, FIntegerType, FIntegerType, FIntegerType,
+                [Pure] # traits> {
+  let inferType = "impl::inferIntegerBinaryPrimResult";
+}
+
+def IntegerAddOp : IntegerBinaryPrimOp<"integer.add", [Commutative]> {
+  let summary = "Add two FIntegerType values";
+  let description = [{
+    The add operation result is the arbitrary precision signed integer
+    arithmetic sum of `lhs` and `rhs`.
+
+    Example:
+    ```mlir
+    %2 = firrtl.integer.add %0, %1 : (!firrtl.integer, !firrtl.integer) ->
+                                         !firrtl.integer
+    ```
+  }];
+}
+
 //===----------------------------------------------------------------------===//
 // RefOperations: Operations on the RefType.
 //
