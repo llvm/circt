@@ -214,6 +214,7 @@ TOK_LPKEYWORD_PRIM(sub, SubPrimOp, 2)
 TOK_LPKEYWORD_PRIM(tail, TailPrimOp, 1)
 TOK_LPKEYWORD_PRIM(xor, XorPrimOp, 2)
 TOK_LPKEYWORD_PRIM(xorr, XorRPrimOp, 1)
+TOK_LPKEYWORD_PRIM(integer_add, IntegerAddOp, 2)
 
 #undef TOK_MARKER
 #undef TOK_IDENTIFIER
