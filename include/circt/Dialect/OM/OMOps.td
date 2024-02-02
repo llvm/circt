@@ -448,4 +448,26 @@ def AnyCastOp : OMOp<"any_cast", [Pure]> {
   let assemblyFormat =
      "$input attr-dict `:` functional-type($input, $result)";
 }
+
+class IntegerBinaryOp<string mnemonic, list<Trait> traits = []> :
+    OMOp<mnemonic, [Pure] # traits> {
+  let arguments = (ins OMIntegerType:$lhs, OMIntegerType:$rhs);
+
+  let results = (outs OMIntegerType:$result);
+
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($result)";
+}
+
+def IntegerAddOp : IntegerBinaryOp<"integer.add", [Commutative]> {
+  let summary = "Add two OMIntegerType values";
+  let description = [{
+    Add two OMIntegerType values.
+
+    Example:
+    ```mlir
+    %2 = om.integer.add %0, %1 : !om.integer
+    ```
+  }];
+}
+
 #endif // CIRCT_DIALECT_OM_OMOPS_TD
