@@ -536,6 +536,16 @@ PathCreateOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 }
 
 //===----------------------------------------------------------------------===//
+// IntegerAddOp
+//===----------------------------------------------------------------------===//
+
+FailureOr<llvm::APSInt>
+IntegerAddOp::evaluateIntegerOperation(const llvm::APSInt &lhs,
+                                       const llvm::APSInt &rhs) {
+  return success(lhs + rhs);
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 
