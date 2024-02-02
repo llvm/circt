@@ -441,9 +441,23 @@ bool LowerClassesPass::shouldCreateClass(FModuleLike moduleLike) {
   if (moduleLike.isPublic())
     return true;
 
-  return llvm::any_of(moduleLike.getPorts(), [](PortInfo port) {
+  // Create a class for modules with property ports.
+  bool hasClassPorts = llvm::any_of(moduleLike.getPorts(), [](PortInfo port) {
     return isa<PropertyType>(port.type);
   });
+
+  if (hasClassPorts)
+    return true;
+
+  // Create a class for modules that instantiate classes or modules with
+  // property ports.
+  for (auto op :
+       moduleLike.getOperation()->getRegion(0).getOps<FInstanceLike>())
+    for (auto result : op->getResults())
+      if (type_isa<PropertyType>(result.getType()))
+        return true;
+
+  return false;
 }
 
 // Create an OM Class op from a FIRRTL Class op or Module op with properties.
