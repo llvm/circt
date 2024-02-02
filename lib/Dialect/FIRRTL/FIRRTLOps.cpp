@@ -796,10 +796,10 @@ void FMemModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
   ::insertPorts(cast<FModuleLike>((Operation *)*this), ports);
 }
 
-static void buildModule(OpBuilder &builder, OperationState &result,
-                        StringAttr name, ArrayRef<PortInfo> ports,
-                        ArrayAttr annotations, ArrayAttr layers,
-                        bool withAnnotations = true, bool withLayers = false) {
+static void buildModuleLike(OpBuilder &builder, OperationState &result,
+                            StringAttr name, ArrayRef<PortInfo> ports,
+                            ArrayAttr annotations, ArrayAttr layers,
+                            bool withAnnotations, bool withLayers) {
   // Add an attribute for the name.
   result.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), name);
 
@@ -853,18 +853,25 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   result.addRegion();
 }
 
-static void buildModuleWithoutAnnos(OpBuilder &builder, OperationState &result,
-                                    StringAttr name, ArrayRef<PortInfo> ports) {
-  return buildModule(builder, result, name, ports, {}, {},
-                     /*withAnnotations=*/false);
+static void buildModule(OpBuilder &builder, OperationState &result,
+                        StringAttr name, ArrayRef<PortInfo> ports,
+                        ArrayAttr annotations, ArrayAttr layers) {
+  buildModuleLike(builder, result, name, ports, annotations, layers,
+                  /*withAnnotations=*/true, /*withLayers=*/true);
+}
+
+static void buildClass(OpBuilder &builder, OperationState &result,
+                       StringAttr name, ArrayRef<PortInfo> ports) {
+  return buildModuleLike(builder, result, name, ports, {}, {},
+                         /*withAnnotations=*/false,
+                         /*withLayers=*/false);
 }
 
 void FModuleOp::build(OpBuilder &builder, OperationState &result,
                       StringAttr name, ConventionAttr convention,
                       ArrayRef<PortInfo> ports, ArrayAttr annotations,
                       ArrayAttr layers) {
-  buildModule(builder, result, name, ports, annotations, layers,
-              /*withAnnotations=*/true, /*withLayers=*/true);
+  buildModule(builder, result, name, ports, annotations, layers);
   result.addAttribute("convention", convention);
 
   // Create a region and a block for the body.
@@ -881,8 +888,8 @@ void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
                          StringAttr name, ConventionAttr convention,
                          ArrayRef<PortInfo> ports, StringRef defnameAttr,
                          ArrayAttr annotations, ArrayAttr parameters,
-                         ArrayAttr internalPaths) {
-  buildModule(builder, result, name, ports, annotations, {});
+                         ArrayAttr internalPaths, ArrayAttr layers) {
+  buildModule(builder, result, name, ports, annotations, layers);
   result.addAttribute("convention", convention);
   if (!defnameAttr.empty())
     result.addAttribute("defname", builder.getStringAttr(defnameAttr));
@@ -896,8 +903,9 @@ void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
 void FIntModuleOp::build(OpBuilder &builder, OperationState &result,
                          StringAttr name, ArrayRef<PortInfo> ports,
                          StringRef intrinsicNameAttr, ArrayAttr annotations,
-                         ArrayAttr parameters, ArrayAttr internalPaths) {
-  buildModule(builder, result, name, ports, annotations, {});
+                         ArrayAttr parameters, ArrayAttr internalPaths,
+                         ArrayAttr layers) {
+  buildModule(builder, result, name, ports, annotations, layers);
   result.addAttribute("intrinsic", builder.getStringAttr(intrinsicNameAttr));
   if (!parameters)
     parameters = builder.getArrayAttr({});
@@ -912,9 +920,9 @@ void FMemModuleOp::build(OpBuilder &builder, OperationState &result,
                          uint32_t numReadWritePorts, uint32_t dataWidth,
                          uint32_t maskBits, uint32_t readLatency,
                          uint32_t writeLatency, uint64_t depth,
-                         ArrayAttr annotations) {
+                         ArrayAttr annotations, ArrayAttr layers) {
   auto *context = builder.getContext();
-  buildModule(builder, result, name, ports, annotations, {});
+  buildModule(builder, result, name, ports, annotations, layers);
   auto ui32Type = IntegerType::get(context, 32, IntegerType::Unsigned);
   auto ui64Type = IntegerType::get(context, 64, IntegerType::Unsigned);
   result.addAttribute("numReadPorts", IntegerAttr::get(ui32Type, numReadPorts));
@@ -1782,7 +1790,7 @@ void ClassOp::build(OpBuilder &builder, OperationState &result, StringAttr name,
                    [](const auto &port) { return port.annotations.empty(); }) &&
       "class ports may not have annotations");
 
-  buildModuleWithoutAnnos(builder, result, name, ports);
+  buildClass(builder, result, name, ports);
 
   // Create a region and a block for the body.
   auto *bodyRegion = result.regions[0].get();
@@ -1850,6 +1858,10 @@ ArrayAttr ClassOp::getPortAnnotationsAttr() {
   return ArrayAttr::get(getContext(), {});
 }
 
+ArrayAttr ClassOp::getLayersAttr() { return ArrayAttr::get(getContext(), {}); }
+
+ArrayRef<Attribute> ClassOp::getLayers() { return getLayersAttr(); }
+
 SmallVector<::circt::hw::PortInfo> ClassOp::getPortList() {
   return ::getPortListImpl(*this);
 }
@@ -1880,7 +1892,7 @@ void ExtClassOp::build(OpBuilder &builder, OperationState &result,
                    [](const auto &port) { return port.annotations.empty(); }) &&
       "class ports may not have annotations");
 
-  buildModuleWithoutAnnos(builder, result, name, ports);
+  buildClass(builder, result, name, ports);
 }
 
 void ExtClassOp::print(OpAsmPrinter &p) {
@@ -1919,6 +1931,12 @@ Convention ExtClassOp::getConvention() { return Convention::Internal; }
 ConventionAttr ExtClassOp::getConventionAttr() {
   return ConventionAttr::get(getContext(), getConvention());
 }
+
+ArrayAttr ExtClassOp::getLayersAttr() {
+  return ArrayAttr::get(getContext(), {});
+}
+
+ArrayRef<Attribute> ExtClassOp::getLayers() { return getLayersAttr(); }
 
 ArrayAttr ExtClassOp::getParameters() { return {}; }
 
