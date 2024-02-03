@@ -1432,7 +1432,10 @@ bool TypeLoweringVisitor::visitExpr(RefCastOp op) {
   auto clone = [&](const FlatBundleFieldEntry &field,
                    ArrayAttr attrs) -> Value {
     auto input = getSubWhatever(op.getInput(), field.index);
-    return builder->create<RefCastOp>(RefType::get(field.type), input);
+    return builder->create<RefCastOp>(RefType::get(field.type,
+                                                   op.getType().getForceable(),
+                                                   op.getType().getLayer()),
+                                      input);
   };
   return lowerProducer(op, clone);
 }

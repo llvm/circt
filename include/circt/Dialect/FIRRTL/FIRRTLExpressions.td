@@ -1220,6 +1220,7 @@ def RefCastOp : FIRRTLOp<"ref.cast",
   let results = (outs RefType:$result);
 
   let hasFolder = 1;
+  let hasVerifier = 1;
 
   let assemblyFormat =
      "$input attr-dict `:` functional-type($input, $result)";
@@ -1238,6 +1239,7 @@ def RefResolveOp: FIRRTLExprOp<"ref.resolve",
   let results = (outs FIRRTLBaseType:$result);
 
   let hasCanonicalizer = true;
+  let hasVerifier = 1;
 
   let assemblyFormat = "$ref attr-dict `:` qualified(type($ref))";
 }

@@ -1448,28 +1448,55 @@ LogicalResult FIntModuleOp::verify() {
   return success();
 }
 
+static LogicalResult verifyProbeType(RefType refType, Location loc,
+                                     CircuitOp circuitOp,
+                                     SymbolTableCollection &symbolTable,
+                                     Twine start) {
+  auto layer = refType.getLayer();
+  if (!layer)
+    return success();
+  auto *layerOp = symbolTable.lookupSymbolIn(circuitOp, layer);
+  if (!layerOp)
+    return emitError(loc) << start << " associated with layer '" << layer
+                          << "', but this layer was not defined";
+  if (!isa<LayerOp>(layerOp)) {
+    auto diag = emitError(loc)
+                << start << " associated with layer '" << layer
+                << "', but symbol '" << layer << "' does not refer to a '"
+                << LayerOp::getOperationName() << "' op";
+    return diag.attachNote(layerOp->getLoc()) << "symbol refers to this op";
+  }
+  return success();
+}
+
 static LogicalResult verifyPortSymbolUses(FModuleLike module,
                                           SymbolTableCollection &symbolTable) {
-  auto circuitOp = module->getParentOfType<CircuitOp>();
-
   // verify types in ports.
+  auto circuitOp = module->getParentOfType<CircuitOp>();
   for (size_t i = 0, e = module.getNumPorts(); i < e; ++i) {
     auto type = module.getPortType(i);
-    auto classType = dyn_cast<ClassType>(type);
-    if (!classType)
+
+    if (auto refType = type_dyn_cast<RefType>(type)) {
+      if (failed(verifyProbeType(
+              refType, module.getPortLocation(i), circuitOp, symbolTable,
+              Twine("probe port '") + module.getPortName(i) + "' is")))
+        return failure();
       continue;
+    }
 
-    // verify that the class exists.
-    auto className = classType.getNameAttr();
-    auto classOp = dyn_cast_or_null<ClassLike>(
-        symbolTable.lookupSymbolIn(circuitOp, className));
-    if (!classOp)
-      return module.emitOpError() << "references unknown class " << className;
+    if (auto classType = dyn_cast<ClassType>(type)) {
+      auto className = classType.getNameAttr();
+      auto classOp = dyn_cast_or_null<ClassLike>(
+          symbolTable.lookupSymbolIn(circuitOp, className));
+      if (!classOp)
+        return module.emitOpError() << "references unknown class " << className;
 
-    // verify that the result type agrees with the class definition.
-    if (failed(classOp.verifyType(classType,
-                                  [&]() { return module.emitOpError(); })))
-      return failure();
+      // verify that the result type agrees with the class definition.
+      if (failed(classOp.verifyType(classType,
+                                    [&]() { return module.emitOpError(); })))
+        return failure();
+      continue;
+    }
   }
 
   return success();
@@ -3045,6 +3072,16 @@ void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 std::optional<size_t> WireOp::getTargetResultIndex() { return 0; }
 
+LogicalResult WireOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto refType = type_dyn_cast<RefType>(getType(0));
+  if (!refType)
+    return success();
+
+  return verifyProbeType(
+      refType, getLoc(), getOperation()->getParentOfType<CircuitOp>(),
+      symbolTable, Twine("'") + getOperationName() + "' op is");
+}
+
 void ObjectOp::build(OpBuilder &builder, OperationState &state, ClassLike klass,
                      StringRef name) {
   build(builder, state, klass.getInstanceType(),
@@ -3364,6 +3401,41 @@ LogicalResult RefDefineOp::verify() {
     if (isa<RefCastOp>(op)) // Source flow, check anyway for now.
       return emitError(
           "destination reference cannot be a cast of another reference");
+  }
+
+  SymbolRefAttr layer;
+  auto layerBlockOp = (*this)->getParentOfType<LayerBlockOp>();
+  if (layerBlockOp)
+    layer = layerBlockOp.getLayerName();
+
+  // The dest layer must be the same as the source layer or a parent of it.
+  SymbolRefAttr layerPointer = layer;
+  auto destLayer = getDest().getType().getLayer();
+  for (;;) {
+    if (layerPointer == destLayer)
+      break;
+
+    if (!layerPointer) {
+      if (!layer)
+        return emitOpError()
+               << "defines to a layer-colored probe from outside a layerblock";
+      auto diag = emitOpError()
+                  << "defines to a probe colored with layer '" << destLayer
+                  << "' from a layerblock associated with layer '" << layer
+                  << "'. The define op must be in a layerblock associated with "
+                     "or a child of layer '"
+                  << destLayer << "'.";
+      return diag.attachNote(layerBlockOp.getLoc())
+             << "the layerblock was declared here";
+    }
+
+    if (layerPointer.getNestedReferences().empty()) {
+      layerPointer = {};
+      continue;
+    }
+    layerPointer =
+        SymbolRefAttr::get(layerPointer.getRootReference(),
+                           layerPointer.getNestedReferences().drop_back());
   }
 
   return success();
@@ -5678,7 +5750,7 @@ FIRRTLType RefSubOp::inferReturnType(ValueRange operands,
       return RefType::get(
           vectorType.getElementType().getConstType(
               vectorType.isConst() || vectorType.getElementType().isConst()),
-          refType.getForceable());
+          refType.getForceable(), refType.getLayer());
     return emitInferRetTypeError(loc, "out of range index '", fieldIdx,
                                  "' in RefType of vector type ", refType);
   }
@@ -5691,11 +5763,91 @@ FIRRTLType RefSubOp::inferReturnType(ValueRange operands,
     return RefType::get(bundleType.getElement(fieldIdx).type.getConstType(
                             bundleType.isConst() ||
                             bundleType.getElement(fieldIdx).type.isConst()),
-                        refType.getForceable());
+                        refType.getForceable(), refType.getLayer());
   }
 
   return emitInferRetTypeError(
       loc, "ref.sub op requires a RefType of vector or bundle base type");
+}
+
+LogicalResult RefCastOp::verify() {
+
+  SymbolRefAttr layer;
+  auto layerBlockOp = (*this)->getParentOfType<LayerBlockOp>();
+  if (layerBlockOp)
+    layer = layerBlockOp.getLayerName();
+
+  // The dest layer must be the same as the source layer or a parent of it.
+  SymbolRefAttr layerPointer = layer;
+  auto destLayer = getType().getLayer();
+  for (;;) {
+    if (layerPointer == destLayer)
+      break;
+
+    if (!layerPointer) {
+      if (!layer)
+        return emitOpError()
+               << "cannot cast to a layer from outside a layerblock";
+      auto diag = emitOpError()
+                  << "casts to a probe associated with layer '" << destLayer
+                  << "' from a layerblock associated with layer '" << layer
+                  << "'. The cast op must be in a layerblock associated with "
+                     "or a child of layer '"
+                  << destLayer << "'.";
+      return diag.attachNote(layerBlockOp.getLoc())
+             << "the layerblock was declared here";
+    }
+
+    if (layerPointer.getNestedReferences().empty()) {
+      layerPointer = {};
+      continue;
+    }
+    layerPointer =
+        SymbolRefAttr::get(layerPointer.getRootReference(),
+                           layerPointer.getNestedReferences().drop_back());
+  }
+
+  return success();
+}
+
+LogicalResult RefResolveOp::verify() {
+
+  SymbolRefAttr layer;
+  auto layerBlockOp = (*this)->getParentOfType<LayerBlockOp>();
+  if (layerBlockOp)
+    layer = layerBlockOp.getLayerName();
+
+  // The dest layer must be the same as the source layer or a parent of it.
+  SymbolRefAttr layerPointer = layer;
+  auto destLayer = getRef().getType().getLayer();
+  for (;;) {
+    if (layerPointer == destLayer)
+      break;
+
+    if (!layerPointer) {
+      if (!layer)
+        return emitOpError() << "cannot read from a layer-colored probe from "
+                                "outside a layerblock";
+      auto diag = emitOpError()
+                  << "reads from a probe colored with layer '" << destLayer
+                  << "' from a layerblock associated with layer '" << layer
+                  << "'. The resolve op must be in a layerblock associated "
+                     "with or a child of layer '"
+                  << destLayer << "'.";
+      return diag.attachNote(layerBlockOp.getLoc())
+             << "the layerblock was declared here";
+    }
+
+    if (layerPointer.getNestedReferences().empty()) {
+      layerPointer = {};
+      continue;
+    }
+    layerPointer =
+        SymbolRefAttr::get(layerPointer.getRootReference(),
+                           layerPointer.getNestedReferences().drop_back());
+  }
+
+  return success();
 }
 
 LogicalResult RWProbeOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
@@ -5793,16 +5945,10 @@ LogicalResult LayerBlockOp::verify() {
       // Any value captured from the current layer block is fine.
       if (operand.getParentBlock() == body)
         continue;
-      // Capture of a non-base type, e.g., reference is illegal.
+      // Capture of a non-base type, e.g., reference, is allowed.
       FIRRTLBaseType baseType = dyn_cast<FIRRTLBaseType>(operand.getType());
-      if (!baseType) {
-        auto diag = emitOpError()
-                    << "captures an operand which is not a FIRRTL base type";
-        diag.attachNote(operand.getLoc()) << "operand is defined here";
-        diag.attachNote(op->getLoc()) << "operand is used here";
-        failed = true;
+      if (!baseType)
         return WalkResult::advance();
-      }
       // Capturing a non-passive type is illegal.
       if (!baseType.isPassive()) {
         auto diag = emitOpError()

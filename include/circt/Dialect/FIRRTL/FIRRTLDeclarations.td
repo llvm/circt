@@ -572,7 +572,10 @@ def RegResetOp : HardwareDeclOp<"regreset", [Forceable]> {
   let hasVerifier = 1;
 }
 
-def WireOp : HardwareDeclOp<"wire", [Forceable]> {
+def WireOp : HardwareDeclOp<"wire", [
+    Forceable,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>
+]> {
   let summary = "Define a new wire";
   let description = [{
     Declare a new wire:
