@@ -546,9 +546,9 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
     include(FetchContent)
     FetchContent_Declare(
       slang
-      URL https://github.com/MikePopoloski/slang/archive/refs/tags/v3.0.tar.gz
-      URL_HASH SHA256=02d184133525f6330a32bef492761b8ff52d0a33caed08eb51733f63cddb08e3
-    )
+      GIT_REPOSITORY https://github.com/MikePopoloski/slang.git
+      GIT_TAG v3.0
+      GIT_SHALLOW ON)
     set(FETCHCONTENT_TRY_FIND_PACKAGE_MODE "NEVER")
 
     # Force Slang to be built as a static library to avoid messing around with
