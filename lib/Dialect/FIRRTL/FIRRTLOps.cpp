@@ -31,6 +31,7 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/FormatVariadic.h"
@@ -319,6 +320,128 @@ void getAsmBlockArgumentNamesImpl(Operation *op, mlir::Region &region,
 /// A forward declaration for `NameKind` attribute parser.
 static ParseResult parseNameKind(OpAsmParser &parser,
                                  firrtl::NameKindEnumAttr &result);
+
+//===----------------------------------------------------------------------===//
+// Layer Verification Utilities
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct CompareSymbolRefAttr {
+  // True if lhs is lexicographically less than rhs.
+  bool operator()(SymbolRefAttr lhs, SymbolRefAttr rhs) const {
+    auto cmp = lhs.getRootReference().compare(rhs.getRootReference());
+    if (cmp == -1)
+      return true;
+    if (cmp == 1)
+      return false;
+    auto lhsNested = lhs.getNestedReferences();
+    auto rhsNested = rhs.getNestedReferences();
+    auto lhsNestedSize = lhsNested.size();
+    auto rhsNestedSize = rhsNested.size();
+    auto e = std::min(lhsNestedSize, rhsNestedSize);
+    for (unsigned i = 0; i < e; ++i) {
+      auto cmp = lhsNested[i].getAttr().compare(rhsNested[i].getAttr());
+      if (cmp == -1)
+        return true;
+      if (cmp == 1)
+        return false;
+    }
+    return lhsNestedSize < rhsNestedSize;
+  }
+};
+} // namespace
+
+using LayerSet = SmallSet<SymbolRefAttr, 4, CompareSymbolRefAttr>;
+
+/// Get the ambient layers active at the given op.
+static LayerSet getAmbientLayersAt(Operation *op) {
+  // Crawl through the parent ops, accumulating all ambient layers at the given
+  // operation.
+  LayerSet result;
+  for (; op != nullptr; op = op->getParentOp()) {
+    if (auto module = dyn_cast<FModuleLike>(op)) {
+      auto layers = module.getLayersAttr().getAsRange<SymbolRefAttr>();
+      result.insert(layers.begin(), layers.end());
+      break;
+    }
+    if (auto layerblock = dyn_cast<LayerBlockOp>(op)) {
+      result.insert(layerblock.getLayerName());
+      continue;
+    }
+  }
+  return result;
+}
+
+/// Get the ambient layer requirements at the definition site of the value.
+static LayerSet getAmbientLayersFor(Value value) {
+  return getAmbientLayersAt(getFieldRefFromValue(value).getDefiningOp());
+}
+
+/// Get the effective layer requirements for the given value.
+/// The effective layers for a value is the union of
+///   - the ambient layers for the cannonical storage location.
+///   - any explicit layer annotations in the value's type.
+static LayerSet getLayersFor(Value value) {
+  auto result = getAmbientLayersFor(value);
+  if (auto type = dyn_cast<RefType>(value.getType()))
+    if (auto layer = type.getLayer())
+      result.insert(type.getLayer());
+  return result;
+}
+
+/// Check that the source layer is compatible with the destination layer.
+/// Either the source and destination are identical, or the source-layer
+/// is a parent of the destination. For example `A` is compatible with `A.B.C`,
+/// because any definition valid in `A` is also valid in `A.B.C`.
+static bool isLayerCompatibleWith(mlir::SymbolRefAttr srcLayer,
+                                  mlir::SymbolRefAttr dstLayer) {
+  // A non-colored probe may be cast to any colored probe.
+  if (!srcLayer)
+    return true;
+
+  // A colored probe cannot be cast to an uncolored probe.
+  if (!dstLayer)
+    return false;
+
+  // Return true if the srcLayer is a prefix of the dstLayer.
+  if (srcLayer.getRootReference() != dstLayer.getRootReference())
+    return false;
+
+  auto srcNames = srcLayer.getNestedReferences();
+  auto dstNames = dstLayer.getNestedReferences();
+  if (dstNames.size() < srcNames.size())
+    return false;
+
+  return llvm::all_of(llvm::zip_first(srcNames, dstNames),
+                      [](auto x) { return std::get<0>(x) == std::get<1>(x); });
+}
+
+/// Check that the source layer is present in the destination layers.
+static bool isLayerCompatibleWith(SymbolRefAttr srcLayer,
+                                  const LayerSet &dstLayers) {
+  // fast path: the required layer is directly listed in the provided layers.
+  if (dstLayers.contains(srcLayer))
+    return true;
+
+  // Slow path: the required layer is not directly listed in the provided
+  // layers, but the layer may still be provided by a nested layer.
+  return any_of(dstLayers, [=](SymbolRefAttr dstLayer) {
+    return isLayerCompatibleWith(srcLayer, dstLayer);
+  });
+}
+
+/// Check that the source layers are all present in the destination layers.
+/// True if all source layers are present in the destination.
+/// Outputs the set of source layers that are missing in the destination.
+static bool isLayerSetCompatibleWith(const LayerSet &src, const LayerSet &dst,
+                                     SmallVectorImpl<SymbolRefAttr> &missing) {
+  for (auto srcLayer : src)
+    if (!isLayerCompatibleWith(srcLayer, dst))
+      missing.push_back(srcLayer);
+
+  llvm::sort(missing, CompareSymbolRefAttr());
+  return missing.empty();
+}
 
 //===----------------------------------------------------------------------===//
 // CircuitOp
@@ -3419,55 +3542,6 @@ LogicalResult StrictConnectOp::verify() {
   return success();
 }
 
-LogicalResult static verifyLayer(Operation *op, SymbolRefAttr opLayer) {
-  if (!opLayer)
-    return success();
-
-  auto moduleOp = op->getParentOfType<FModuleOp>();
-
-  // All the layers which are currently enabled.
-  SmallVector<Attribute> enabledLayers(moduleOp.getLayers());
-
-  auto layerBlockOp = op->getParentOfType<LayerBlockOp>();
-  if (layerBlockOp)
-    enabledLayers.push_back(layerBlockOp.getLayerName());
-
-  // The dest layer must be the same as the source layer or a parent of it.
-  for (Attribute attr : enabledLayers) {
-    SymbolRefAttr layerPointer = cast<SymbolRefAttr>(attr);
-    for (;;) {
-      if (!layerPointer)
-        break;
-
-      if (layerPointer == opLayer)
-        return success();
-
-      if (layerPointer.getNestedReferences().empty()) {
-        layerPointer = {};
-        continue;
-      }
-      layerPointer =
-          SymbolRefAttr::get(layerPointer.getRootReference(),
-                             layerPointer.getNestedReferences().drop_back());
-    }
-  }
-
-  auto diag = op->emitOpError()
-              << "cannot interact with layer '" << opLayer
-              << "' because it is not inside a '" << moduleOp.getOperationName()
-              << "' or '" << LayerBlockOp::getOperationName()
-              << "' which enables layer '" << opLayer << "' or a child layer";
-
-  if (layerBlockOp)
-    diag.attachNote(layerBlockOp.getLoc())
-        << "the enclosing '" << layerBlockOp.getOperationName()
-        << "' is defined here";
-
-  return diag.attachNote(moduleOp.getLoc())
-         << "the enclosing '" << moduleOp.getOperationName()
-         << "' is defined here";
-}
-
 LogicalResult RefDefineOp::verify() {
   // Check that the flows make sense.
   if (failed(checkConnectFlow(*this)))
@@ -3496,7 +3570,21 @@ LogicalResult RefDefineOp::verify() {
           "destination reference cannot be a cast of another reference");
   }
 
-  return verifyLayer(*this, getDest().getType().getLayer());
+  // This define is only enabled when its ambient layers are active. Check
+  // that whenever the destination's layer requirements are met, that this
+  // op is enabled.
+  auto ambientLayers = getAmbientLayersAt(getOperation());
+  auto dstLayers = getLayersFor(getDest());
+  SmallVector<SymbolRefAttr> missingLayers;
+  if (!isLayerSetCompatibleWith(ambientLayers, dstLayers, missingLayers)) {
+    auto diag = emitOpError("has more layer requirements than destination");
+    auto &note = diag.attachNote();
+    note << "additional layers required: ";
+    interleaveComma(missingLayers, note);
+    return failure();
+  }
+
+  return success();
 }
 
 LogicalResult PropAssignOp::verify() {
@@ -5829,11 +5917,33 @@ FIRRTLType RefSubOp::inferReturnType(ValueRange operands,
 }
 
 LogicalResult RefCastOp::verify() {
-  return verifyLayer(*this, getType().getLayer());
+  auto srcLayers = getLayersFor(getInput());
+  auto dstLayers = getLayersFor(getResult());
+  SmallVector<SymbolRefAttr> missingLayers;
+  if (!isLayerSetCompatibleWith(srcLayers, dstLayers, missingLayers)) {
+    auto diag =
+        emitOpError("cannot discard layer requirements of input reference");
+    auto &note = diag.attachNote();
+    note << "discarding layer requirements: ";
+    llvm::interleaveComma(missingLayers, note);
+    return failure();
+  }
+  return success();
 }
 
 LogicalResult RefResolveOp::verify() {
-  return verifyLayer(*this, getRef().getType().getLayer());
+  auto srcLayers = getLayersFor(getRef());
+  auto dstLayers = getAmbientLayersAt(getOperation());
+  SmallVector<SymbolRefAttr> missingLayers;
+  if (!isLayerSetCompatibleWith(srcLayers, dstLayers, missingLayers)) {
+    auto diag =
+        emitOpError("ambient layers are insufficient to resolve reference");
+    auto &note = diag.attachNote();
+    note << "missing layer requirements: ";
+    interleaveComma(missingLayers, note);
+    return failure();
+  }
+  return success();
 }
 
 LogicalResult RWProbeOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
