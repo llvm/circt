@@ -1010,7 +1010,7 @@ firrtl.circuit "WireProbe" {
 }
 
 // -----
-// Test that all layer-colored probes produce Verilog macros after LowerXMR.
+// Test that ifdefs are correctly generated for layer-colored probes.
 
 firrtl.circuit "ProbeColors" {
   firrtl.layer @A bind {
@@ -1036,8 +1036,12 @@ firrtl.circuit "ProbeColors" {
 // CHECK:         sv.macro.decl @ref_ProbeColors_ProbeColors_a
 // CHECK-NEXT:    sv.macro.def @ref_ProbeColors_ProbeColors_a
 // CHECK-NEXT:    sv.macro.decl @ref_ProbeColors_ProbeColors_b
-// CHECK-NEXT:    sv.macro.def @ref_ProbeColors_ProbeColors_b
+// CHECK-NEXT:    sv.ifdef "groups_ProbeColors_A" {
+// CHECK-NEXT:      sv.ifdef "groups_ProbeColors_A_B" {
+// CHECK-NEXT:        sv.macro.def @ref_ProbeColors_ProbeColors_b
+// CHECK-NEXT:        sv.macro.def @ref_ProbeColors_ProbeColors_d{{.*}}
+// CHECK-NEXT:      }
+// CHECK-NEXT:      sv.macro.def @ref_ProbeColors_ProbeColors_c{{.*}}
+// CHECK-NEXT:    }
 // CHECK-NEXT:    sv.macro.decl @ref_ProbeColors_ProbeColors_c
-// CHECK-NEXT:    sv.macro.def @ref_ProbeColors_ProbeColors_c
 // CHECK-NEXT:    sv.macro.decl @ref_ProbeColors_ProbeColors_d
-// CHECK-NEXT:    sv.macro.def @ref_ProbeColors_ProbeColors_d
