@@ -87,8 +87,8 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     SmallVector<Operation *> forceAndReleaseOps;
     // The dataflow function, that propagates the reachable RefSendOp across
     // RefType Ops.
-    auto transferFunc = [&](Operation &op) -> LogicalResult {
-      return TypeSwitch<Operation *, LogicalResult>(&op)
+    auto transferFunc = [&](Operation *op) -> WalkResult {
+      return TypeSwitch<Operation *, WalkResult>(op)
           .Case<RefSendOp>([&](RefSendOp send) {
             // Get a reference to the actual signal to which the XMR will be
             // generated.
@@ -190,7 +190,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
             dataFlowClasses->unionSets(connect.getSrc(), connect.getDest());
             return success();
           })
-          .Case<RefSubOp>([&](RefSubOp op) -> LogicalResult {
+          .Case<RefSubOp>([&](RefSubOp op) {
             markForRemoval(op);
             if (isZeroWidth(op.getType().getType()))
               return success();
@@ -216,7 +216,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
             resolveOps.push_back(resolve);
             return success();
           })
-          .Case<RefCastOp>([&](RefCastOp op) {
+          .Case<RefCastOp, RefCastUnsafeOp>([&](auto op) {
             markForRemoval(op);
             if (!isZeroWidth(op.getType().getType()))
               dataFlowClasses->unionSets(op.getInput(), op.getResult());
@@ -242,7 +242,11 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
             forceAndReleaseOps.push_back(op);
             return success();
           })
-          .Default([&](auto) { return success(); });
+          .Case<LayerBlockOp>([&](auto op) {
+            layerBlocks.push_back(op);
+            return success();
+          })
+          .Default([&](auto) { return mlir::WalkResult::advance(); });
     };
 
     SmallVector<FModuleOp> publicModules;
@@ -258,9 +262,8 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
       if (module.isPublic())
         publicModules.push_back(module);
 
-      for (Operation &op : module.getBodyBlock()->getOperations())
-        if (transferFunc(op).failed())
-          return signalPassFailure();
+      if (module.walk(transferFunc).wasInterrupted())
+        return signalPassFailure();
 
       // Clear any enabled layers.
       module.setLayersAttr(ArrayAttr::get(module.getContext(), {}));
@@ -349,6 +352,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     circuitNamespace = nullptr;
     pathCache.clear();
     pathInsertPoint = {};
+    layerBlocks.clear();
   }
 
   /// Generate the ABI ref_<circuit>_<module> prefix string into `prefix`.
@@ -374,7 +378,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
   }
 
   LogicalResult resolveReferencePath(mlir::TypedValue<RefType> refVal,
-                                     ImplicitLocOpBuilder builder,
+                                     ImplicitLocOpBuilder &builder,
                                      mlir::FlatSymbolRefAttr &ref,
                                      SmallString<128> &stringLeaf) {
     assert(stringLeaf.empty());
@@ -715,6 +719,14 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     // the def is erased.
     for (Operation *op : llvm::reverse(opsToRemove))
       op->erase();
+    // Recursively erase layerblocks which are empty.
+    for (LayerBlockOp op : layerBlocks)
+      if (op.getBody()->empty())
+        op.erase();
+      else {
+        op.emitOpError() << "should be empty after LowerXMR runs, but was not";
+        return signalPassFailure();
+      }
     for (auto iter : refPortsToRemoveMap)
       if (auto mod = dyn_cast<FModuleOp>(iter.getFirst()))
         mod.erasePorts(iter.getSecond());
@@ -750,6 +762,12 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
           res.value().replaceAllUsesWith(newMem.getResult(res.index()));
         mem.erase();
       }
+
+    // All layers definitions can now be deleted.
+    for (auto layerOp : llvm::make_early_inc_range(
+             getOperation().getBodyBlock()->getOps<LayerOp>()))
+      layerOp.erase();
+
     opsToRemove.clear();
     refPortsToRemoveMap.clear();
     dataflowAt.clear();
@@ -829,6 +847,10 @@ private:
 
   /// RefResolve, RefSend, and Connects involving them that will be removed.
   SmallVector<Operation *> opsToRemove;
+
+  /// All layerblocks discovered.  This should be empty after garbage collection
+  /// and capable of being deleted.
+  SmallVector<LayerBlockOp> layerBlocks;
 
   /// Record the internal path to an external module or a memory.
   DenseMap<size_t, SmallString<128>> xmrPathSuffix;
