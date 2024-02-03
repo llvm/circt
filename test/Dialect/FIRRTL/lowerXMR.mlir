@@ -1008,3 +1008,40 @@ firrtl.circuit "WireProbe" {
     firrtl.ref.define %p, %w : !firrtl.probe<uint<5>>
   }
 }
+
+// -----
+// Test that ifdefs are correctly generated for layer-colored probes.
+
+firrtl.circuit "ProbeColors" {
+  firrtl.layer @A bind {
+    firrtl.layer @B bind {}
+  }
+  firrtl.module @ProbeColors(
+    out %a : !firrtl.probe<uint<1>>,
+    out %b : !firrtl.probe<uint<1>, @A::@B>,
+    out %c : !firrtl.probe<uint<1>, @A>,
+    out %d : !firrtl.probe<uint<1>, @A::@B>
+  ) {
+    %x = firrtl.wire : !firrtl.uint<1>
+    %0 = firrtl.ref.send %x : !firrtl.uint<1>
+    firrtl.ref.define.unsafe %a, %0 : !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>
+    firrtl.ref.define.unsafe %b, %0 : !firrtl.probe<uint<1>, @A::@B>, !firrtl.probe<uint<1>>
+    firrtl.ref.define.unsafe %c, %0 : !firrtl.probe<uint<1>, @A>, !firrtl.probe<uint<1>>
+    firrtl.ref.define.unsafe %d, %0 : !firrtl.probe<uint<1>, @A::@B>, !firrtl.probe<uint<1>>
+  }
+}
+
+// CHECK-LABEL: firrtl.circuit "ProbeColors"
+//
+// CHECK:         sv.macro.decl @ref_ProbeColors_ProbeColors_a
+// CHECK-NEXT:    sv.macro.def @ref_ProbeColors_ProbeColors_a
+// CHECK-NEXT:    sv.macro.decl @ref_ProbeColors_ProbeColors_b
+// CHECK-NEXT:    sv.ifdef "groups_ProbeColors_A" {
+// CHECK-NEXT:      sv.ifdef "groups_ProbeColors_A_B" {
+// CHECK-NEXT:        sv.macro.def @ref_ProbeColors_ProbeColors_b
+// CHECK-NEXT:        sv.macro.def @ref_ProbeColors_ProbeColors_d{{.*}}
+// CHECK-NEXT:      }
+// CHECK-NEXT:      sv.macro.def @ref_ProbeColors_ProbeColors_c{{.*}}
+// CHECK-NEXT:    }
+// CHECK-NEXT:    sv.macro.decl @ref_ProbeColors_ProbeColors_c
+// CHECK-NEXT:    sv.macro.decl @ref_ProbeColors_ProbeColors_d
