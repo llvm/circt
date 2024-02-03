@@ -747,18 +747,6 @@ firrtl.circuit "Foo" {
     }
   }
 
-  // CHECK:      module ModuleWithEnabledLayers
-  // CHECK-NEXT:   enablelayer
-  // CHECK-NEXT:   GroupA
-  // CHECK-NEXT:   enablelayer
-  // CHECK-NEXT:   GroupA.GroupB
-  firrtl.module @ModuleWithEnabledLayers() attributes {
-    layers = [
-      @GroupA,
-      @GroupA::@GroupB
-    ]} {
-  }
-
   // CHECK: module ModuleWithLongProbeColor
   // CHECK-NEXT:  output o : Probe<
   // CHECK-NEXT:    UInt<1>,
@@ -768,6 +756,48 @@ firrtl.circuit "Foo" {
   firrtl.module @ModuleWithLongProbeColor(
     out %o: !firrtl.probe<uint<1>, @Group1234567890::@Group1234567890::@Group1234567890::@Group1234567890::@Group1234567890::@Group1234567890::@Group1234567890::@Group1234567890>
   ) {}
+
+  // CHECK: module ModuleWithEnabledLayers enablelayer GroupA enablelayer GroupA.GroupB :
+  firrtl.module @ModuleWithEnabledLayers() attributes {
+    layers = [
+      @GroupA,
+      @GroupA::@GroupB
+    ]
+  } {}
+
+  // CHECK:      extmodule ExtModuleWithEnabledLayers
+  // CHECK-NEXT:     enablelayer GroupA
+  // CHECK-NEXT:     enablelayer GroupA.GroupB :
+  firrtl.extmodule @ExtModuleWithEnabledLayers() attributes {
+    layers = [
+      @GroupA,
+      @GroupA::@GroupB
+    ]
+  }
+
+  // CHECK:      intmodule IntModuleWithEnabledLayers
+  // CHECK-NEXT:     enablelayer GroupA
+  // CHECK-NEXT:     enablelayer GroupA.GroupB :
+  firrtl.intmodule @IntModuleWithEnabledLayers() attributes {
+    layers = [
+      @GroupA,
+      @GroupA::@GroupB
+    ]
+  }
+
+  // CHECK:      module ModuleWithLargeEnabledLayers
+  // CHECK-NEXT:     enablelayer Group1234567890.Group1234567890
+  // CHECK-NEXT:     enablelayer
+  // CHECK-NEXT:       Group1234567890.Group1234567890.Group1234567890.Group1234567890
+  // CHECK-NEXT:     enablelayer
+  // CHECK-NEXT:       Group1234567890.Group1234567890.Group1234567890.Group1234567890
+  // CHECK-NEXT:         .Group1234567890.Group1234567890.Group1234567890.Group1234567890 :
+  firrtl.module @ModuleWithLargeEnabledLayers() attributes {
+    layers = [
+      @Group1234567890::@Group1234567890,
+      @Group1234567890::@Group1234567890::@Group1234567890::@Group1234567890,
+      @Group1234567890::@Group1234567890::@Group1234567890::@Group1234567890::@Group1234567890::@Group1234567890::@Group1234567890::@Group1234567890
+    ]} {}
 
   // CHECK: module RWProbe :
   // CHECK-NEXT: input in : { a : UInt<1> }[2]
