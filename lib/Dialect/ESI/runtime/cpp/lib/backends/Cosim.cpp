@@ -90,6 +90,9 @@ struct esi::backends::cosim::CosimAccelerator::Impl {
   // rpcClient.
   set<unique_ptr<ChannelPort>> channels;
 
+  // Map from client path to channel assignments for that client.
+  map<AppIDPath, map<string, string>> clientChannelAssignments;
+
   Impl(string hostname, uint16_t port)
       : rpcClient(hostname, port), waitScope(rpcClient.getWaitScope()),
         cosim(rpcClient.getMain<CosimDpiServer>()), lowLevel(nullptr) {
@@ -98,6 +101,12 @@ struct esi::backends::cosim::CosimAccelerator::Impl {
     lowLevel = llPromise.wait(waitScope).getLowLevel();
   }
   ~Impl();
+
+  /// Request the host side channel ports for a particular instance (identified
+  /// by the AppID path). For convenience, provide the bundle type and direction
+  /// of the bundle port.
+  std::map<std::string, ChannelPort &> requestChannelsFor(AppIDPath,
+                                                          const BundleType *);
 };
 
 /// Construct and connect to a cosim server.
@@ -285,7 +294,7 @@ public:
   CosimCustomService(CosimAccelerator::Impl &impl, AppIDPath idPath,
                      const ServiceImplDetails &details,
                      const HWClientDetails &clients)
-      : CustomService(idPath, details, clients), impl(impl) {
+      : CustomService(idPath, details, clients) {
 
     // Compute our parents id path.
     AppIDPath prefix = std::move(idPath);
@@ -302,47 +311,48 @@ public:
                client.implOptions.at("channel_assignments")))
         channelAssignments[assignment.first] =
             any_cast<string>(assignment.second);
-      clientChannelAssignments[fullClientPath] = std::move(channelAssignments);
+      impl.clientChannelAssignments[fullClientPath] =
+          std::move(channelAssignments);
     }
   }
-
-  virtual map<string, ChannelPort &>
-  requestChannelsFor(AppIDPath fullPath,
-                     const BundleType *bundleType) override {
-    // Find the client details for the port at 'fullPath'.
-    auto f = clientChannelAssignments.find(fullPath);
-    if (f == clientChannelAssignments.end())
-      throw runtime_error("Could not find channel assignments for '" +
-                          fullPath.toStr() + "'");
-    const map<string, string> &channelAssignments = f->second;
-
-    // Each channel in a bundle has a separate cosim endpoint. Find them all.
-    map<string, ChannelPort &> channels;
-    for (auto [name, dir, type] : bundleType->getChannels()) {
-      auto f = channelAssignments.find(name);
-      if (f == channelAssignments.end())
-        throw runtime_error("Could not find channel assignment for '" +
-                            fullPath.toStr() + "." + name + "'");
-      string channelName = f->second;
-
-      ChannelPort *port;
-      if (BundlePort::isWrite(dir))
-        port = new WriteCosimChannelPort(impl, type, channelName);
-      else
-        port = new ReadCosimChannelPort(impl, type, channelName);
-      impl.channels.emplace(port);
-      channels.emplace(name, *port);
-    }
-    return channels;
-  }
-
-private:
-  // Map from client path to channel assignments for that client.
-  map<AppIDPath, map<string, string>> clientChannelAssignments;
-  CosimAccelerator::Impl &impl;
 };
 } // namespace
 
+map<string, ChannelPort &>
+CosimAccelerator::Impl::requestChannelsFor(AppIDPath idPath,
+                                           const BundleType *bundleType) {
+  // Find the client details for the port at 'fullPath'.
+  auto f = clientChannelAssignments.find(idPath);
+  if (f == clientChannelAssignments.end())
+    throw runtime_error("Could not find channel assignments for '" +
+                        idPath.toStr() + "'");
+  const map<string, string> &channelAssignments = f->second;
+
+  // Each channel in a bundle has a separate cosim endpoint. Find them all.
+  map<string, ChannelPort &> channelResults;
+  for (auto [name, dir, type] : bundleType->getChannels()) {
+    auto f = channelAssignments.find(name);
+    if (f == channelAssignments.end())
+      throw runtime_error("Could not find channel assignment for '" +
+                          idPath.toStr() + "." + name + "'");
+    string channelName = f->second;
+
+    ChannelPort *port;
+    if (BundlePort::isWrite(dir))
+      port = new WriteCosimChannelPort(*this, type, channelName);
+    else
+      port = new ReadCosimChannelPort(*this, type, channelName);
+    channels.emplace(port);
+    channelResults.emplace(name, *port);
+  }
+  return channelResults;
+}
+
+map<string, ChannelPort &>
+CosimAccelerator::requestChannelsFor(AppIDPath idPath,
+                                     const BundleType *bundleType) {
+  return impl->requestChannelsFor(idPath, bundleType);
+}
 Service *CosimAccelerator::createService(Service::Type svcType, AppIDPath id,
                                          std::string implName,
                                          const ServiceImplDetails &details,

@@ -80,6 +80,11 @@ class AcceleratorConnection {
 public:
   virtual ~AcceleratorConnection() = default;
 
+  /// Request the host side channel ports for a particular instance (identified
+  /// by the AppID path). For convenience, provide the bundle type.
+  virtual std::map<std::string, ChannelPort &>
+  requestChannelsFor(AppIDPath, const BundleType *) = 0;
+
   using Service = services::Service;
   /// Get a typed reference to a particular service type. Caller does *not* take
   /// ownership of the returned pointer -- the Accelerator object owns it.

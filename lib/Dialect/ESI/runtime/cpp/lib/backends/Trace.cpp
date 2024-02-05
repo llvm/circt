@@ -65,6 +65,12 @@ struct esi::backends::trace::TraceAccelerator::Impl {
                          const ServiceImplDetails &details,
                          const HWClientDetails &clients);
 
+  /// Request the host side channel ports for a particular instance (identified
+  /// by the AppID path). For convenience, provide the bundle type and direction
+  /// of the bundle port.
+  std::map<std::string, ChannelPort &> requestChannelsFor(AppIDPath,
+                                                          const BundleType *);
+
   void adoptChannelPort(ChannelPort *port) { channels.emplace_back(port); }
 
   void write(const AppIDPath &id, const string &portName, const void *data,
@@ -196,27 +202,31 @@ public:
   TraceCustomService(TraceAccelerator::Impl &impl, AppIDPath idPath,
                      const ServiceImplDetails &details,
                      const HWClientDetails &clients)
-      : CustomService(idPath, details, clients), impl(impl) {}
-
-  virtual map<string, ChannelPort &>
-  requestChannelsFor(AppIDPath idPath, const BundleType *bundleType) override {
-    map<string, ChannelPort &> channels;
-    for (auto [name, dir, type] : bundleType->getChannels()) {
-      ChannelPort *port;
-      if (BundlePort::isWrite(dir))
-        port = new WriteTraceChannelPort(impl, type, idPath, name);
-      else
-        port = new ReadTraceChannelPort(impl, type);
-      channels.emplace(name, *port);
-      impl.adoptChannelPort(port);
-    }
-    return channels;
-  }
-
-private:
-  TraceAccelerator::Impl &impl;
+      : CustomService(idPath, details, clients) {}
 };
 } // namespace
+
+map<string, ChannelPort &>
+TraceAccelerator::Impl::requestChannelsFor(AppIDPath idPath,
+                                           const BundleType *bundleType) {
+  map<string, ChannelPort &> channels;
+  for (auto [name, dir, type] : bundleType->getChannels()) {
+    ChannelPort *port;
+    if (BundlePort::isWrite(dir))
+      port = new WriteTraceChannelPort(*this, type, idPath, name);
+    else
+      port = new ReadTraceChannelPort(*this, type);
+    channels.emplace(name, *port);
+    adoptChannelPort(port);
+  }
+  return channels;
+}
+
+map<string, ChannelPort &>
+TraceAccelerator::requestChannelsFor(AppIDPath idPath,
+                                     const BundleType *bundleType) {
+  return impl->requestChannelsFor(idPath, bundleType);
+}
 
 Service *
 TraceAccelerator::Impl::createService(Service::Type svcType, AppIDPath idPath,
