@@ -452,6 +452,11 @@ private:
 
   FailureOr<EvaluatorValuePtr>
   evaluateConstant(ConstantOp op, ActualParameters actualParams, Location loc);
+
+  FailureOr<EvaluatorValuePtr> evaluateIntegerAdd(IntegerAddOp op,
+                                                  ActualParameters actualParams,
+                                                  Location loc);
+
   /// Instantiate an Object with its class name and actual parameters.
   FailureOr<EvaluatorValuePtr>
   evaluateObjectInstance(StringAttr className, ActualParameters actualParams,
