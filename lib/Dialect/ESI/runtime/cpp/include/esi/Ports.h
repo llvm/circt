@@ -28,16 +28,16 @@ namespace esi {
 /// but used by higher level APIs which add types.
 class ChannelPort {
 public:
-  ChannelPort(const Type &type) : type(type) {}
+  ChannelPort(const Type *type) : type(type) {}
   virtual ~ChannelPort() = default;
 
   virtual void connect() {}
   virtual void disconnect() {}
 
-  const Type &getType() const { return type; }
+  const Type *getType() const { return type; }
 
 private:
-  const Type &type;
+  const Type *type;
 };
 
 /// A ChannelPort which sends data to the accelerator.

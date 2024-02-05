@@ -55,7 +55,7 @@ public:
   /// by the AppID path). For convenience, provide the bundle type and direction
   /// of the bundle port.
   virtual std::map<std::string, ChannelPort &>
-  requestChannelsFor(AppIDPath, const BundleType &) = 0;
+  requestChannelsFor(AppIDPath, const BundleType *) = 0;
 
 protected:
   std::string serviceSymbol;
