@@ -137,16 +137,16 @@ PYBIND11_MODULE(esiCppAccel, m) {
   py::class_<WriteChannelPort, ChannelPort>(m, "WriteChannelPort")
       .def("write", [](WriteChannelPort &p, py::bytearray &data) {
         py::buffer_info info(py::buffer(data).request());
-        p.write(info.ptr, info.size);
+        std::vector<uint8_t> dataVec((uint8_t *)info.ptr,
+                                     (uint8_t *)info.ptr + info.size);
+        p.write(dataVec);
       });
   py::class_<ReadChannelPort, ChannelPort>(m, "ReadChannelPort")
-      .def("read", [](ReadChannelPort &p, size_t maxSize) -> py::bytearray {
-        std::vector<uint8_t> data(maxSize);
-        std::ptrdiff_t size = p.read(data.data(), data.size());
-        if (size < 0)
-          throw std::runtime_error("read failed");
-        data.resize(size);
-        return py::bytearray((char *)data.data(), data.size());
+      .def("read", [](ReadChannelPort &p) -> py::bytearray {
+        MessageData data;
+        if (!p.read(data))
+          return py::none();
+        return py::bytearray((const char *)data.getBytes(), data.getSize());
       });
 
   py::class_<BundlePort>(m, "BundlePort")

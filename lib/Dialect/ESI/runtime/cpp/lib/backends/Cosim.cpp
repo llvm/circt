@@ -175,8 +175,8 @@ public:
 
   void connect();
   void disconnect();
-  void write(const void *data, size_t size);
-  std::ptrdiff_t read(void *data, size_t maxSize);
+  void write(const MessageData &);
+  bool read(MessageData &);
 
 protected:
   CosimAccelerator::Impl &impl;
@@ -186,28 +186,26 @@ protected:
 };
 } // namespace
 
-void CosimChannelPort::write(const void *data, size_t size) {
+void CosimChannelPort::write(const MessageData &data) {
   if (!isConnected)
     throw runtime_error("Cannot write to a channel port that is not connected");
 
   auto req = ep.sendFromHostRequest();
-  req.setMsg(
-      capnp::Data::Reader(reinterpret_cast<const uint8_t *>(data), size));
+  req.setMsg(capnp::Data::Reader(data.getBytes(), data.getSize()));
   req.send().wait(impl.waitScope);
 }
 
-std::ptrdiff_t CosimChannelPort::read(void *data, size_t maxSize) {
+bool CosimChannelPort::read(MessageData &data) {
   auto req = ep.recvToHostRequest();
   auto resp = req.send().wait(impl.waitScope);
   if (!resp.getHasData())
-    return 0;
+    return false;
   capnp::Data::Reader msg = resp.getResp();
   size_t size = msg.size();
-  // TODO: buffer data over multiple calls.
-  if (size > maxSize)
-    return -1;
-  memcpy(data, msg.begin(), size);
-  return size;
+  std::vector<uint8_t> vec(size);
+  memcpy(vec.data(), msg.begin(), size);
+  data = MessageData(vec);
+  return true;
 }
 
 esi::backends::cosim::CosimAccelerator::Impl::~Impl() {
@@ -256,15 +254,15 @@ public:
 
   virtual void connect() override { cosim->connect(); }
   virtual void disconnect() override { cosim->disconnect(); }
-  virtual void write(const void *data, size_t size) override;
+  virtual void write(const MessageData &) override;
 
 protected:
   std::unique_ptr<CosimChannelPort> cosim;
 };
 } // namespace
 
-void WriteCosimChannelPort::write(const void *data, size_t size) {
-  cosim->write(data, size);
+void WriteCosimChannelPort::write(const MessageData &data) {
+  cosim->write(data);
 }
 
 namespace {
@@ -278,7 +276,7 @@ public:
 
   virtual void connect() override { cosim->connect(); }
   virtual void disconnect() override { cosim->disconnect(); }
-  virtual std::ptrdiff_t read(void *data, size_t maxSize) override;
+  virtual bool read(MessageData &) override;
 
 protected:
   std::unique_ptr<CosimChannelPort> cosim;
@@ -286,9 +284,7 @@ protected:
 
 } // namespace
 
-std::ptrdiff_t ReadCosimChannelPort::read(void *data, size_t maxSize) {
-  return cosim->read(data, maxSize);
-}
+bool ReadCosimChannelPort::read(MessageData &data) { return cosim->read(data); }
 
 namespace {
 class CosimCustomService : public services::CustomService {

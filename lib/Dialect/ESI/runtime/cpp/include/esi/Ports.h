@@ -46,7 +46,7 @@ public:
   using ChannelPort::ChannelPort;
 
   /// A very basic write API. Will likely change for performance reasons.
-  virtual void write(const void *data, size_t size) = 0;
+  virtual void write(const MessageData &) = 0;
 };
 
 /// A ChannelPort which reads data from the accelerator.
@@ -54,10 +54,10 @@ class ReadChannelPort : public ChannelPort {
 public:
   using ChannelPort::ChannelPort;
 
-  /// Specify a buffer to read into and a maximum size to read. Returns the
-  /// number of bytes read, or -1 on error. Basic API, will likely change for
-  /// performance reasons.
-  virtual std::ptrdiff_t read(void *data, size_t maxSize) = 0;
+  /// Specify a buffer to read into. Non-blocking. Returns true if message
+  /// successfully recieved. Basic API, will likely change for performance
+  /// and functionality reasons.
+  virtual bool read(MessageData &) = 0;
 };
 
 /// Services provide connections to 'bundles' -- collections of named,
