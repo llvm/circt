@@ -92,7 +92,7 @@ void TraceAccelerator::Impl::write(const AppIDPath &id, const string &portName,
 }
 
 unique_ptr<AcceleratorConnection>
-TraceAccelerator::connect(string connectionString) {
+TraceAccelerator::connect(Context &ctxt, string connectionString) {
   string modeStr;
   string manifestPath;
   string traceFile = "trace.log";
@@ -118,12 +118,14 @@ TraceAccelerator::connect(string connectionString) {
   else
     throw runtime_error("unknown mode '" + modeStr + "'");
 
-  return make_unique<TraceAccelerator>(mode, filesystem::path(manifestPath),
-                                       filesystem::path(traceFile));
+  return make_unique<TraceAccelerator>(
+      ctxt, mode, filesystem::path(manifestPath), filesystem::path(traceFile));
 }
 
-TraceAccelerator::TraceAccelerator(Mode mode, filesystem::path manifestJson,
-                                   filesystem::path traceFile) {
+TraceAccelerator::TraceAccelerator(Context &ctxt, Mode mode,
+                                   filesystem::path manifestJson,
+                                   filesystem::path traceFile)
+    : AcceleratorConnection(ctxt) {
   impl = make_unique<Impl>(mode, manifestJson, traceFile);
 }
 
