@@ -1,4 +1,5 @@
 // RUN: circt-opt %s --lower-ltl-to-core | FileCheck %s
+// Tests that an Assert Property high level statement can be converted correctly
 
 module {
   //CHECK:  hw.module @test(in %clock : !seq.clock, in %reset : i1, in %0 "" : i1)
