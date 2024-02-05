@@ -62,7 +62,8 @@ public:
 
   /// Get the bundle ports for the instance at 'idPath' and specified in
   /// 'instJson'. Look them up in 'activeServies'.
-  vector<BundlePort> getBundlePorts(AppIDPath idPath,
+  vector<BundlePort> getBundlePorts(AcceleratorConnection &acc,
+                                    AppIDPath idPath,
                                     const ServiceTable &activeServices,
                                     const nlohmann::json &instJson) const;
 
@@ -215,7 +216,7 @@ Manifest::Impl::buildAccelerator(AcceleratorConnection &acc,
   return make_unique<Accelerator>(
       getModInfo(designJson),
       getChildInstances({}, acc, activeSvcs, designJson), services,
-      getBundlePorts({}, activeSvcs, designJson), me);
+      getBundlePorts(acc, {}, activeSvcs, designJson), me);
 }
 
 optional<ModuleInfo>
@@ -252,9 +253,9 @@ Manifest::Impl::getChildInstance(AppIDPath idPath, AcceleratorConnection &acc,
       getServices(idPath, acc, child, activeServices);
 
   auto children = getChildInstances(idPath, acc, activeServices, child);
-  return make_unique<Instance>(parseID(child.at("app_id")), getModInfo(child),
-                               std::move(children), services,
-                               getBundlePorts(idPath, activeServices, child));
+  return make_unique<Instance>(
+      parseID(child.at("app_id")), getModInfo(child), std::move(children),
+      services, getBundlePorts(acc, idPath, activeServices, child));
 }
 
 services::Service *
@@ -321,7 +322,7 @@ Manifest::Impl::getServices(AppIDPath idPath, AcceleratorConnection &acc,
 }
 
 vector<BundlePort>
-Manifest::Impl::getBundlePorts(AppIDPath idPath,
+Manifest::Impl::getBundlePorts(AcceleratorConnection &acc, AppIDPath idPath,
                                const ServiceTable &activeServices,
                                const nlohmann::json &instJson) const {
   vector<BundlePort> ret;
@@ -361,9 +362,7 @@ Manifest::Impl::getBundlePorts(AppIDPath idPath,
 
     idPath.push_back(parseID(content.at("appID")));
     map<string, ChannelPort &> portChannels;
-    // If we need to have custom ports (because of a custom service), add them.
-    if (auto *customSvc = dynamic_cast<services::CustomService *>(svc->second))
-      portChannels = customSvc->requestChannelsFor(idPath, bundleType);
+    portChannels = acc.requestChannelsFor(idPath, bundleType);
     ret.emplace_back(idPath.back(), portChannels);
     // Since we share idPath between iterations, pop the last element before the
     // next iteration.

@@ -36,6 +36,12 @@ public:
   static std::unique_ptr<AcceleratorConnection>
   connect(std::string connectionString);
 
+  /// Request the host side channel ports for a particular instance (identified
+  /// by the AppID path). For convenience, provide the bundle type and direction
+  /// of the bundle port.
+  std::map<std::string, ChannelPort &>
+  requestChannelsFor(AppIDPath, const BundleType *) override;
+
 protected:
   virtual Service *createService(Service::Type service, AppIDPath path,
                                  std::string implName,

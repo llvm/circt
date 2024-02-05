@@ -61,6 +61,11 @@ public:
   /// Internal implementation.
   struct Impl;
 
+  /// Request the host side channel ports for a particular instance (identified
+  /// by the AppID path). For convenience, provide the bundle type.
+  std::map<std::string, ChannelPort &>
+  requestChannelsFor(AppIDPath, const BundleType *) override;
+
 protected:
   virtual Service *createService(Service::Type service, AppIDPath idPath,
                                  std::string implName,

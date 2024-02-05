@@ -65,6 +65,11 @@ struct esi::backends::xrt::XrtAccelerator::Impl {
     ip = ::xrt::ip(device, uuid, kernel);
   }
 
+  std::map<std::string, ChannelPort &> requestChannelsFor(AppIDPath,
+                                                          const BundleType *) {
+    throw runtime_error("XRT does not support channel communication yet");
+  }
+
   ::xrt::device device;
   ::xrt::ip ip;
 };
@@ -88,6 +93,12 @@ private:
   ::xrt::ip &ip;
 };
 } // namespace
+
+map<string, ChannelPort &>
+XrtAccelerator::requestChannelsFor(AppIDPath idPath,
+                                   const BundleType *bundleType) {
+  return impl->requestChannelsFor(idPath, bundleType);
+}
 
 Service *XrtAccelerator::createService(Service::Type svcType, AppIDPath id,
                                        std::string implName,

@@ -51,12 +51,6 @@ public:
     return serviceSymbol;
   }
 
-  /// Request the host side channel ports for a particular instance (identified
-  /// by the AppID path). For convenience, provide the bundle type and direction
-  /// of the bundle port.
-  virtual std::map<std::string, ChannelPort &>
-  requestChannelsFor(AppIDPath, const BundleType *) = 0;
-
 protected:
   std::string serviceSymbol;
   AppIDPath id;
