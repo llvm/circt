@@ -84,14 +84,12 @@ public:
   void populateTypes(const nlohmann::json &typesJson);
 
   // Forwarded from Manifest.
-  const vector<reference_wrapper<const Type>> &getTypeTable() const {
-    return _typeTable;
-  }
+  const vector<const Type *> &getTypeTable() const { return _typeTable; }
 
   // Forwarded from Manifest.
-  optional<reference_wrapper<const Type>> getType(Type::ID id) const {
+  optional<const Type *> getType(Type::ID id) const {
     if (auto f = _types.find(id); f != _types.end())
-      return *f->second;
+      return f->second.get();
     return nullopt;
   }
 
@@ -100,10 +98,10 @@ public:
   unique_ptr<Accelerator> buildAccelerator(AcceleratorConnection &acc,
                                            std::shared_ptr<Impl> me) const;
 
-  const Type &parseType(const nlohmann::json &typeJson);
+  const Type *parseType(const nlohmann::json &typeJson);
 
 private:
-  vector<reference_wrapper<const Type>> _typeTable;
+  vector<const Type *> _typeTable;
   TypeCache _types;
 
   // The parsed json.
@@ -359,24 +357,13 @@ Manifest::Impl::getBundlePorts(AppIDPath idPath,
     if (!type)
       throw runtime_error("Malformed manifest: could not find port type '" +
                           typeName + "'");
-    const BundleType &bundleType =
-        dynamic_cast<const BundleType &>(type->get());
-
-    BundlePort::Direction portDir;
-    string dirStr = content.at("direction");
-    if (dirStr == "toClient")
-      portDir = BundlePort::Direction::ToClient;
-    else if (dirStr == "toServer")
-      portDir = BundlePort::Direction::ToServer;
-    else
-      throw runtime_error("Malformed manifest: unknown direction '" + dirStr +
-                          "'");
+    const BundleType *bundleType = dynamic_cast<const BundleType *>(*type);
 
     idPath.push_back(parseID(content.at("appID")));
     map<string, ChannelPort &> portChannels;
     // If we need to have custom ports (because of a custom service), add them.
     if (auto *customSvc = dynamic_cast<services::CustomService *>(svc->second))
-      portChannels = customSvc->requestChannelsFor(idPath, bundleType, portDir);
+      portChannels = customSvc->requestChannelsFor(idPath, bundleType);
     ret.emplace_back(idPath.back(), portChannels);
     // Since we share idPath between iterations, pop the last element before the
     // next iteration.
@@ -386,14 +373,14 @@ Manifest::Impl::getBundlePorts(AppIDPath idPath,
 }
 
 namespace {
-const Type &parseType(const nlohmann::json &typeJson,
+const Type *parseType(const nlohmann::json &typeJson,
                       Manifest::Impl::TypeCache &cache);
 
 BundleType *parseBundleType(const nlohmann::json &typeJson,
                             Manifest::Impl::TypeCache &cache) {
   assert(typeJson.at("mnemonic") == "bundle");
 
-  vector<tuple<string, BundleType::Direction, const Type &>> channels;
+  vector<tuple<string, BundleType::Direction, const Type *>> channels;
   for (auto &chanJson : typeJson["channels"]) {
     string dirStr = chanJson.at("direction");
     BundleType::Direction dir;
@@ -440,7 +427,7 @@ Type *parseInt(const nlohmann::json &typeJson,
 StructType *parseStruct(const nlohmann::json &typeJson,
                         Manifest::Impl::TypeCache &cache) {
   assert(typeJson.at("mnemonic") == "struct");
-  vector<pair<string, const Type &>> fields;
+  vector<pair<string, const Type *>> fields;
   for (auto &fieldJson : typeJson["fields"])
     fields.emplace_back(fieldJson.at("name"),
                         parseType(fieldJson["type"], cache));
@@ -471,7 +458,7 @@ const std::map<std::string_view, TypeParser> typeParsers = {
 };
 
 // Parse a type if it doesn't already exist in the cache.
-const Type &parseType(const nlohmann::json &typeJson,
+const Type *parseType(const nlohmann::json &typeJson,
                       Manifest::Impl::TypeCache &cache) {
   // We use the circt type string as a unique ID.
   string circt_name = typeJson.at("circt_name");
@@ -479,7 +466,7 @@ const Type &parseType(const nlohmann::json &typeJson,
   // Check the cache.
   auto typeF = cache.find(circt_name);
   if (typeF != cache.end())
-    return *typeF->second;
+    return typeF->second.get();
 
   // Parse the type.
   string mnemonic = typeJson.at("mnemonic");
@@ -493,11 +480,11 @@ const Type &parseType(const nlohmann::json &typeJson,
 
   // Insert into the cache.
   cache.emplace(circt_name, unique_ptr<Type>(t));
-  return *t;
+  return t;
 }
 } // namespace
 
-const Type &Manifest::Impl::parseType(const nlohmann::json &typeJson) {
+const Type *Manifest::Impl::parseType(const nlohmann::json &typeJson) {
   return ::parseType(typeJson, _types);
 }
 
@@ -528,13 +515,13 @@ Manifest::buildAccelerator(AcceleratorConnection &acc) const {
   return impl->buildAccelerator(acc, impl);
 }
 
-optional<reference_wrapper<const Type>> Manifest::getType(Type::ID id) const {
+optional<const Type *> Manifest::getType(Type::ID id) const {
   if (auto f = impl->_types.find(id); f != impl->_types.end())
-    return *f->second;
+    return f->second.get();
   return nullopt;
 }
 
-const vector<reference_wrapper<const Type>> &Manifest::getTypeTable() const {
+const vector<const Type *> &Manifest::getTypeTable() const {
   return impl->getTypeTable();
 }
 

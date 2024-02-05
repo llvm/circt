@@ -119,8 +119,12 @@ LogicalResult AppIDIndex::walk(
       auto inst = dyn_cast<hw::HWInstanceLike>(op);
       assert(inst && "Search bottomed out. Invalid appid index.");
 
-      auto tgtMod = dyn_cast<hw::HWModuleLike>(
-          symCache.getDefinition(inst.getReferencedModuleNameAttr()));
+      auto moduleNames = inst.getReferencedModuleNamesAttr();
+      if (moduleNames.size() != 1)
+        return inst.emitError("expected an instance with a single reference");
+
+      auto tgtMod =
+          dyn_cast<hw::HWModuleLike>(symCache.getDefinition(moduleNames[0]));
       assert(tgtMod && "invalid module reference");
 
       ModuleAppIDs *ffModIds = containerAppIDs.at(tgtMod);
@@ -147,8 +151,12 @@ LogicalResult AppIDIndex::walk(
 
     // We must recurse on an instance.
     if (auto inst = dyn_cast<hw::HWInstanceLike>(op)) {
-      auto tgtMod = dyn_cast<hw::HWModuleLike>(
-          symCache.getDefinition(inst.getReferencedModuleNameAttr()));
+      auto moduleNames = inst.getReferencedModuleNamesAttr();
+      if (moduleNames.size() != 1)
+        return inst.emitError("expected an instance with a single reference");
+
+      auto tgtMod =
+          dyn_cast<hw::HWModuleLike>(symCache.getDefinition(moduleNames[0]));
       assert(tgtMod && "invalid module reference");
 
       if (failed(walk(top, tgtMod, pathStack, opStack, fn)))
@@ -198,11 +206,14 @@ FailureOr<ArrayAttr> AppIDIndex::getAppIDPathAttr(hw::HWModuleLike fromMod,
     if (getAppID(*op))
       break;
 
-    if (auto inst = dyn_cast<hw::HWInstanceLike>(op->getOperation()))
-      fromMod = cast<hw::HWModuleLike>(
-          symCache.getDefinition(inst.getReferencedModuleNameAttr()));
-    else
+    if (auto inst = dyn_cast<hw::HWInstanceLike>(op->getOperation())) {
+      auto moduleNames = inst.getReferencedModuleNamesAttr();
+      if (moduleNames.size() != 1)
+        return inst.emitError("expected an instance with a single reference");
+      fromMod = cast<hw::HWModuleLike>(symCache.getDefinition(moduleNames[0]));
+    } else {
       assert(false && "Search bottomed out");
+    }
   } while (true);
   return ArrayAttr::get(fromMod.getContext(), path);
 }
@@ -228,8 +239,13 @@ AppIDIndex::buildIndexFor(hw::HWModuleLike mod) {
 
     // If we encounter an instance op which isn't ID'd...
     if (auto inst = dyn_cast<hw::HWInstanceLike>(op)) {
-      auto tgtMod = dyn_cast<hw::HWModuleLike>(
-          symCache.getDefinition(inst.getReferencedModuleNameAttr()));
+      auto moduleNames = inst.getReferencedModuleNamesAttr();
+      if (moduleNames.size() != 1) {
+        inst.emitError("expected an instance with a single reference");
+        return WalkResult::interrupt();
+      }
+      auto tgtMod =
+          dyn_cast<hw::HWModuleLike>(symCache.getDefinition(moduleNames[0]));
       // Do the assert here to get a more precise message.
       assert(tgtMod && "invalid module reference");
 

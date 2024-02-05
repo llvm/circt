@@ -19,8 +19,8 @@ WriteType = RamI64x8.write.type.req
 
 @ServiceDecl
 class MemComms:
-  write = ServiceDecl.From(RamI64x8.write.type)
-  read = ServiceDecl.From(RamI64x8.read.type)
+  write = RamI64x8.write.type.inverted()
+  read = RamI64x8.read.type.inverted()
 
 
 class Dummy(Module):
@@ -44,17 +44,18 @@ class MemWriter(Module):
     read_bundle_type = RamI64x8.read.type
     address = 2
     (address_chan, ready) = read_bundle_type.address.wrap(address, True)
-    read_bundle, [(_, data_chan)] = read_bundle_type.pack(address=address_chan)
+    read_bundle = RamI64x8.read(AppID("int_reader"))
+    bundled_channels = read_bundle.unpack(address=address_chan)
+    data_chan = bundled_channels["data"]
     read_data, read_valid = data_chan.unwrap(True)
-    RamI64x8.read(read_bundle, AppID("int_reader"))
 
     write_bundle_type = RamI64x8.write.type
     write_data, _ = write_bundle_type.req.wrap({
         'data': read_data,
         'address': 3
     }, read_valid)
-    write_bundle, [ack] = write_bundle_type.pack(req=write_data)
-    RamI64x8.write(write_bundle, appid=AppID("int_writer"))
+    write_bundle = RamI64x8.write(appid=AppID("int_writer"))
+    write_bundle.unpack(req=write_data)
 
 
 def Top(xrt: bool):
@@ -71,10 +72,13 @@ def Top(xrt: bool):
       # We don't have support for host--device channel communication on XRT yet.
       if not xrt:
         # Pass through reads and writes from the host.
-        ram_write = MemComms.write(AppID("write"))
-        RamI64x8.write(ram_write, AppID("ram_write"))
-        ram_read = MemComms.read(AppID("read"))
-        RamI64x8.read(ram_read, AppID("ram_read"))
+        ram_write_host = MemComms.write(AppID("write"))
+        ram_write = RamI64x8.write(AppID("ram_write"))
+        ram_write.connect(ram_write_host)
+
+        ram_read_host = MemComms.read(AppID("read"))
+        ram_read = RamI64x8.read(AppID("ram_read"))
+        ram_read.connect(ram_read_host)
 
       # Instantiate the RAM.
       RamI64x8.instantiate_builtin(appid=AppID("mem"),

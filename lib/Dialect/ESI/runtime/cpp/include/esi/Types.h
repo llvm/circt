@@ -44,7 +44,7 @@ public:
   enum Direction { To, From };
 
   using ChannelVector =
-      std::vector<std::tuple<std::string, Direction, const Type &>>;
+      std::vector<std::tuple<std::string, Direction, const Type *>>;
 
   BundleType(const ID &id, const ChannelVector &channels)
       : Type(id), channels(channels) {}
@@ -59,11 +59,11 @@ protected:
 /// carry one values of one type.
 class ChannelType : public Type {
 public:
-  ChannelType(const ID &id, const Type &inner) : Type(id), inner(inner) {}
-  const Type &getInner() const { return inner; }
+  ChannelType(const ID &id, const Type *inner) : Type(id), inner(inner) {}
+  const Type *getInner() const { return inner; }
 
 private:
-  const Type &inner;
+  const Type *inner;
 };
 
 /// The "void" type is a special type which can be used to represent no type.
@@ -121,7 +121,7 @@ public:
 /// Structs are an ordered collection of fields, each with a name and a type.
 class StructType : public Type {
 public:
-  using FieldVector = std::vector<std::pair<std::string, const Type &>>;
+  using FieldVector = std::vector<std::pair<std::string, const Type *>>;
 
   StructType(const ID &id, const FieldVector &fields)
       : Type(id), fields(fields) {}
@@ -135,14 +135,14 @@ private:
 /// Arrays have a compile time specified (static) size and an element type.
 class ArrayType : public Type {
 public:
-  ArrayType(const ID &id, const Type &elementType, uint64_t size)
+  ArrayType(const ID &id, const Type *elementType, uint64_t size)
       : Type(id), elementType(elementType), size(size) {}
 
-  const Type &getElementType() const { return elementType; }
+  const Type *getElementType() const { return elementType; }
   uint64_t getSize() const { return size; }
 
 private:
-  const Type &elementType;
+  const Type *elementType;
   uint64_t size;
 };
 

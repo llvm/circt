@@ -13,10 +13,10 @@ print(m.type_table)
 
 d = acc.build_accelerator()
 
-recv = d.ports[esi.AppID("loopback_inout")].read_port("resp")
+recv = d.ports[esi.AppID("loopback_add7")].read_port("result")
 recv.connect()
 
-send = d.ports[esi.AppID("loopback_inout")].write_port("req")
+send = d.ports[esi.AppID("loopback_add7")].write_port("arg")
 send.connect()
 
 data = 10234

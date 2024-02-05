@@ -40,6 +40,16 @@ def FModuleLike : OpInterface<"FModuleLike", [Symbol, PortList, InstanceGraphMod
       "Convention", "getConvention">,
 
     //===------------------------------------------------------------------===//
+    // Enabled (AKA Required) Layers
+    //===------------------------------------------------------------------===//
+
+    InterfaceMethod<"Get the module's enabled layers",
+      "ArrayAttr", "getLayersAttr">,
+
+    InterfaceMethod<"Get the module's enabled layers.",
+      "ArrayRef<Attribute>", "getLayers">,
+
+    //===------------------------------------------------------------------===//
     // Port Directions
     //===------------------------------------------------------------------===//
 

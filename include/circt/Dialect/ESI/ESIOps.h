@@ -29,16 +29,8 @@ namespace esi {
 /// Describes a service port. In the unidirection case, either (but not both)
 /// type fields will be null.
 struct ServicePortInfo {
-  enum class Direction { toClient, toServer };
-
   hw::InnerRefAttr port;
-  Direction direction;
   ChannelBundleType type;
-
-  StringRef directionAsString() {
-    return direction == ServicePortInfo::Direction::toClient ? "toClient"
-                                                             : "toServer";
-  }
 };
 
 } // namespace esi

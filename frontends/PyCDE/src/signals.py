@@ -50,6 +50,11 @@ class Signal:
     those signal types, assuming the types of all the `Signal` are the same."""
     return _obj_to_value_infer_type(obj)
 
+  def bitcast(self, new_type: Type) -> Signal:
+    from .circt.dialects import hw
+    casted_value = hw.BitcastOp(new_type._type, self.value)
+    return _FromCirctValue(casted_value.result, new_type)
+
   def reg(self,
           clk=None,
           rst=None,
@@ -68,7 +73,6 @@ class Signal:
       clk = ClockSignal._get_current_clock_block()
       if clk is None:
         raise ValueError("If 'clk' not specified, must be in clock block")
-
     from .dialects import seq, hw
     from .types import types, Bits
     if name is None:
@@ -112,7 +116,6 @@ class Signal:
                                           clockEnable=ce,
                                           reset=rst,
                                           reset_value=rst_value,
-                                          clock_enable=ce,
                                           name=give_name,
                                           sym_name=give_name)
       if sv_attributes is not None:
@@ -189,6 +192,12 @@ class ClockSignal(Signal):
   @staticmethod
   def _get_current_clock_block():
     return _current_clock_context.get(None)
+
+  def to_bit(self):
+    from .dialects import seq
+    from .types import Bits
+    clk_i1 = seq.FromClockOp(self.value)
+    return BitsSignal(clk_i1, Bits(1))
 
 
 class InOutSignal(Signal):
@@ -746,6 +755,17 @@ class BundleSignal(Signal):
         bc.name: _FromCirctValue(to_channels_results[idx])
         for idx, bc in enumerate(to_channels)
     }
+
+  def connect(self, other: BundleSignal):
+    """Connect two bundles together such that one drives the other."""
+    from .constructs import Wire
+    froms = [(bc.name, Wire(bc.channel))
+             for bc in other.type.channels
+             if bc.direction == ChannelDirection.FROM]
+    unpacked_other = other.unpack(**{name: wire for name, wire in froms})
+    unpacked_self = self.unpack(**unpacked_other)
+    for name, wire in froms:
+      wire.assign(unpacked_self[name])
 
 
 class ListSignal(Signal):

@@ -1916,3 +1916,15 @@ circuit PublicModules:
   module Bar:
   ; CHECK: firrtl.module @PublicModules
   public module PublicModules:
+
+;// -----
+
+FIRRTL version 4.0.0
+; CHECK-LABLE: firrtl.circuit "LayerEnabledModule"
+circuit LayerEnabledModule:
+  layer A, bind:
+  layer B, bind:
+    layer C, bind:
+  ; CHECK: firrtl.module @LayerEnabledModule
+  ; CHECK-SAME: layers = [@A, @B::@C]
+  module LayerEnabledModule enablelayer A enablelayer B.C:

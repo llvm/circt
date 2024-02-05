@@ -426,6 +426,9 @@ bool isZeroBitType(Type type);
 /// that uses it.
 bool isExpressionEmittedInline(Operation *op, const LoweringOptions &options);
 
+/// Generates the macros used by instance choices.
+LogicalResult lowerHWInstanceChoices(mlir::ModuleOp module);
+
 /// For each module we emit, do a prepass over the structure, pre-lowering and
 /// otherwise rewriting operations we don't want to emit.
 LogicalResult prepareHWModule(Block &block, const LoweringOptions &options);
