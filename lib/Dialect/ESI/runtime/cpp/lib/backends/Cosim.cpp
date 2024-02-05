@@ -34,7 +34,7 @@ using namespace esi::backends::cosim;
 /// the cosimulation when it starts (which is useful when it chooses its own
 /// port).
 unique_ptr<AcceleratorConnection>
-CosimAccelerator::connect(string connectionString) {
+CosimAccelerator::connect(Context &ctxt, string connectionString) {
   string portStr;
   string host = "localhost";
 
@@ -73,7 +73,7 @@ CosimAccelerator::connect(string connectionString) {
     throw runtime_error("Invalid connection string '" + connectionString + "'");
   }
   uint16_t port = stoul(portStr);
-  return make_unique<CosimAccelerator>(host, port);
+  return make_unique<CosimAccelerator>(ctxt, host, port);
 }
 
 namespace {
@@ -110,7 +110,9 @@ struct esi::backends::cosim::CosimAccelerator::Impl {
 };
 
 /// Construct and connect to a cosim server.
-CosimAccelerator::CosimAccelerator(string hostname, uint16_t port) {
+CosimAccelerator::CosimAccelerator(Context &ctxt, string hostname,
+                                   uint16_t port)
+    : AcceleratorConnection(ctxt) {
   impl = make_unique<Impl>(hostname, port);
 }
 

@@ -32,9 +32,9 @@ class XrtAccelerator : public esi::AcceleratorConnection {
 public:
   struct Impl;
 
-  XrtAccelerator(std::string xclbin, std::string kernelName);
+  XrtAccelerator(Context &, std::string xclbin, std::string kernelName);
   static std::unique_ptr<AcceleratorConnection>
-  connect(std::string connectionString);
+  connect(Context &, std::string connectionString);
 
   /// Request the host side channel ports for a particular instance (identified
   /// by the AppID path). For convenience, provide the bundle type and direction

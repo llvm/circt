@@ -75,6 +75,10 @@ PYBIND11_MODULE(esiCppAccel, m) {
                              py::return_value_policy::reference)
       .def_property_readonly("size", &ArrayType::getSize);
 
+  py::class_<Context>(m, "Context")
+      .def(py::init<>())
+      .def("connect", &Context::connect);
+
   py::class_<ModuleInfo>(m, "ModuleInfo")
       .def_property_readonly("name", [](ModuleInfo &info) { return info.name; })
       .def_property_readonly("summary",
@@ -209,7 +213,7 @@ PYBIND11_MODULE(esiCppAccel, m) {
            });
 
   py::class_<Manifest>(m, "Manifest")
-      .def(py::init<std::string>())
+      .def(py::init<Context &, std::string>())
       .def_property_readonly("api_version", &Manifest::getApiVersion)
       .def("build_accelerator", &Manifest::buildAccelerator,
            py::return_value_policy::take_ownership)

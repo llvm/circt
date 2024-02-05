@@ -38,9 +38,7 @@ class Manifest::Impl {
   friend class ::esi::Manifest;
 
 public:
-  using TypeCache = map<Type::ID, unique_ptr<Type>>;
-
-  Impl(const string &jsonManifest);
+  Impl(Context &ctxt, const string &jsonManifest);
 
   auto at(const string &key) const { return manifestJson.at(key); }
 
@@ -84,26 +82,20 @@ public:
   /// Parse all the types and populate the types table.
   void populateTypes(const nlohmann::json &typesJson);
 
-  // Forwarded from Manifest.
+  /// Get the ordered list of types from the manifest.
   const vector<const Type *> &getTypeTable() const { return _typeTable; }
-
-  // Forwarded from Manifest.
-  optional<const Type *> getType(Type::ID id) const {
-    if (auto f = _types.find(id); f != _types.end())
-      return f->second.get();
-    return nullopt;
-  }
 
   /// Build a dynamic API for the Accelerator connection 'acc' based on the
   /// manifest stored herein.
-  unique_ptr<Accelerator> buildAccelerator(AcceleratorConnection &acc,
-                                           std::shared_ptr<Impl> me) const;
+  unique_ptr<Accelerator> buildAccelerator(AcceleratorConnection &acc) const;
 
   const Type *parseType(const nlohmann::json &typeJson);
 
 private:
+  Context &ctxt;
   vector<const Type *> _typeTable;
-  TypeCache _types;
+
+  optional<const Type *> getType(Type::ID id) const { return ctxt.getType(id); }
 
   // The parsed json.
   nlohmann::json manifestJson;
@@ -194,7 +186,7 @@ static ModuleInfo parseModuleInfo(const nlohmann::json &mod) {
 // Manifest::Impl class implementation.
 //===----------------------------------------------------------------------===//
 
-Manifest::Impl::Impl(const string &manifestStr) {
+Manifest::Impl::Impl(Context &ctxt, const string &manifestStr) : ctxt(ctxt) {
   manifestJson = nlohmann::ordered_json::parse(manifestStr);
 
   for (auto &mod : manifestJson.at("symbols"))
@@ -204,8 +196,7 @@ Manifest::Impl::Impl(const string &manifestStr) {
 }
 
 unique_ptr<Accelerator>
-Manifest::Impl::buildAccelerator(AcceleratorConnection &acc,
-                                 std::shared_ptr<Impl> me) const {
+Manifest::Impl::buildAccelerator(AcceleratorConnection &acc) const {
   auto designJson = manifestJson.at("design");
 
   // Get the initial active services table. Update it as we descend down.
@@ -216,7 +207,7 @@ Manifest::Impl::buildAccelerator(AcceleratorConnection &acc,
   return make_unique<Accelerator>(
       getModInfo(designJson),
       getChildInstances({}, acc, activeSvcs, designJson), services,
-      getBundlePorts(acc, {}, activeSvcs, designJson), me);
+      getBundlePorts(acc, {}, activeSvcs, designJson));
 }
 
 optional<ModuleInfo>
@@ -372,11 +363,9 @@ Manifest::Impl::getBundlePorts(AcceleratorConnection &acc, AppIDPath idPath,
 }
 
 namespace {
-const Type *parseType(const nlohmann::json &typeJson,
-                      Manifest::Impl::TypeCache &cache);
+const Type *parseType(const nlohmann::json &typeJson, Context &ctxt);
 
-BundleType *parseBundleType(const nlohmann::json &typeJson,
-                            Manifest::Impl::TypeCache &cache) {
+BundleType *parseBundleType(const nlohmann::json &typeJson, Context &cache) {
   assert(typeJson.at("mnemonic") == "bundle");
 
   vector<tuple<string, BundleType::Direction, const Type *>> channels;
@@ -396,15 +385,13 @@ BundleType *parseBundleType(const nlohmann::json &typeJson,
   return new BundleType(typeJson.at("circt_name"), channels);
 }
 
-ChannelType *parseChannelType(const nlohmann::json &typeJson,
-                              Manifest::Impl::TypeCache &cache) {
+ChannelType *parseChannelType(const nlohmann::json &typeJson, Context &cache) {
   assert(typeJson.at("mnemonic") == "channel");
   return new ChannelType(typeJson.at("circt_name"),
                          parseType(typeJson.at("inner"), cache));
 }
 
-Type *parseInt(const nlohmann::json &typeJson,
-               Manifest::Impl::TypeCache &cache) {
+Type *parseInt(const nlohmann::json &typeJson, Context &cache) {
   assert(typeJson.at("mnemonic") == "int");
   std::string sign = typeJson.at("signedness");
   uint64_t width = typeJson.at("hw_bitwidth");
@@ -423,8 +410,7 @@ Type *parseInt(const nlohmann::json &typeJson,
     throw runtime_error("Malformed manifest: unknown sign '" + sign + "'");
 }
 
-StructType *parseStruct(const nlohmann::json &typeJson,
-                        Manifest::Impl::TypeCache &cache) {
+StructType *parseStruct(const nlohmann::json &typeJson, Context &cache) {
   assert(typeJson.at("mnemonic") == "struct");
   vector<pair<string, const Type *>> fields;
   for (auto &fieldJson : typeJson["fields"])
@@ -433,21 +419,19 @@ StructType *parseStruct(const nlohmann::json &typeJson,
   return new StructType(typeJson.at("circt_name"), fields);
 }
 
-ArrayType *parseArray(const nlohmann::json &typeJson,
-                      Manifest::Impl::TypeCache &cache) {
+ArrayType *parseArray(const nlohmann::json &typeJson, Context &cache) {
   assert(typeJson.at("mnemonic") == "array");
   uint64_t size = typeJson.at("size");
   return new ArrayType(typeJson.at("circt_name"),
                        parseType(typeJson.at("element"), cache), size);
 }
 
-using TypeParser =
-    std::function<Type *(const nlohmann::json &, Manifest::Impl::TypeCache &)>;
+using TypeParser = std::function<Type *(const nlohmann::json &, Context &)>;
 const std::map<std::string_view, TypeParser> typeParsers = {
     {"bundle", parseBundleType},
     {"channel", parseChannelType},
     {"any",
-     [](const nlohmann::json &typeJson, Manifest::Impl::TypeCache &cache) {
+     [](const nlohmann::json &typeJson, Context &cache) {
        return new AnyType(typeJson.at("circt_name"));
      }},
     {"int", parseInt},
@@ -457,17 +441,12 @@ const std::map<std::string_view, TypeParser> typeParsers = {
 };
 
 // Parse a type if it doesn't already exist in the cache.
-const Type *parseType(const nlohmann::json &typeJson,
-                      Manifest::Impl::TypeCache &cache) {
+const Type *parseType(const nlohmann::json &typeJson, Context &cache) {
   // We use the circt type string as a unique ID.
   string circt_name = typeJson.at("circt_name");
+  if (optional<const Type *> t = cache.getType(circt_name))
+    return *t;
 
-  // Check the cache.
-  auto typeF = cache.find(circt_name);
-  if (typeF != cache.end())
-    return typeF->second.get();
-
-  // Parse the type.
   string mnemonic = typeJson.at("mnemonic");
   Type *t;
   auto f = typeParsers.find(mnemonic);
@@ -478,13 +457,13 @@ const Type *parseType(const nlohmann::json &typeJson,
     t = new Type(circt_name);
 
   // Insert into the cache.
-  cache.emplace(circt_name, unique_ptr<Type>(t));
+  cache.registerType(t);
   return t;
 }
 } // namespace
 
 const Type *Manifest::Impl::parseType(const nlohmann::json &typeJson) {
-  return ::parseType(typeJson, _types);
+  return ::parseType(typeJson, ctxt);
 }
 
 void Manifest::Impl::populateTypes(const nlohmann::json &typesJson) {
@@ -496,7 +475,10 @@ void Manifest::Impl::populateTypes(const nlohmann::json &typesJson) {
 // Manifest class implementation.
 //===----------------------------------------------------------------------===//
 
-Manifest::Manifest(const string &jsonManifest) : impl(new Impl(jsonManifest)) {}
+Manifest::Manifest(Context &ctxt, const string &jsonManifest)
+    : impl(new Impl(ctxt, jsonManifest)) {}
+
+Manifest::~Manifest() { delete impl; }
 
 uint32_t Manifest::getApiVersion() const {
   return impl->at("api_version").get<uint32_t>();
@@ -511,13 +493,7 @@ vector<ModuleInfo> Manifest::getModuleInfos() const {
 
 unique_ptr<Accelerator>
 Manifest::buildAccelerator(AcceleratorConnection &acc) const {
-  return impl->buildAccelerator(acc, impl);
-}
-
-optional<const Type *> Manifest::getType(Type::ID id) const {
-  if (auto f = impl->_types.find(id); f != impl->_types.end())
-    return f->second.get();
-  return nullopt;
+  return impl->buildAccelerator(acc);
 }
 
 const vector<const Type *> &Manifest::getTypeTable() const {

@@ -33,9 +33,9 @@ class CosimAccelerator : public esi::AcceleratorConnection {
 public:
   struct Impl;
 
-  CosimAccelerator(std::string hostname, uint16_t port);
+  CosimAccelerator(Context &, std::string hostname, uint16_t port);
   static std::unique_ptr<AcceleratorConnection>
-  connect(std::string connectionString);
+  connect(Context &, std::string connectionString);
 
   // Different ways to retrieve the manifest in Cosimulation.
   enum ManifestMethod {

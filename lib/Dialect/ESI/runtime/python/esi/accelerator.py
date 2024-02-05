@@ -15,16 +15,19 @@ from typing import Dict, Optional
 from .types import BundlePort
 from . import esiCppAccel as cpp
 
+# Global context for the C++ side.
+ctxt = cpp.Context()
+
 
 class AcceleratorConnection:
   """A connection to an ESI accelerator."""
 
   def __init__(self, platform: str, connection_str: str):
-    self.cpp_accel = cpp.AcceleratorConnection(platform, connection_str)
+    self.cpp_accel = cpp.AcceleratorConnection(ctxt, platform, connection_str)
 
   def manifest(self) -> cpp.Manifest:
     """Get and parse the accelerator manifest."""
-    return cpp.Manifest(self.cpp_accel.sysinfo().json_manifest())
+    return cpp.Manifest(ctxt, self.cpp_accel.sysinfo().json_manifest())
 
   def sysinfo(self) -> cpp.SysInfo:
     return self.cpp_accel.sysinfo()
