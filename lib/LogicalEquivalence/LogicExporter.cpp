@@ -87,6 +87,10 @@ struct Visitor : public hw::StmtVisitor<Visitor, LogicalResult>,
     return failure();
   }
 
+  LogicalResult visitStmt(hw::InstanceChoiceOp op) {
+    return op.emitError("instance choices are not supported");
+  }
+
   LogicalResult visitStmt(hw::OutputOp op) {
     for (auto operand : op.getOperands())
       circuit->addOutput(operand);

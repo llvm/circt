@@ -67,7 +67,7 @@ static bool shouldSpillWire(Operation &op, const LoweringOptions &options) {
 }
 
 // Given an instance, make sure all inputs are driven from wires or ports.
-static void spillWiresForInstanceInputs(InstanceOp op) {
+static void spillWiresForInstanceInputs(HWInstanceLike op) {
   Block *block = op->getParentOfType<HWModuleOp>().getBodyBlock();
   auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), block);
 
@@ -77,7 +77,7 @@ static void spillWiresForInstanceInputs(InstanceOp op) {
   size_t nextOpNo = 0;
   ModulePortInfo ports(op.getPortList());
   for (auto &port : ports.getInputs()) {
-    auto src = op.getOperand(nextOpNo);
+    auto src = op->getOperand(nextOpNo);
     ++nextOpNo;
 
     if (isSimpleReadOrPort(src))
@@ -94,12 +94,12 @@ static void spillWiresForInstanceInputs(InstanceOp op) {
     auto connect = builder.create<AssignOp>(newWire, src);
     newWireRead->moveBefore(op);
     connect->moveBefore(op);
-    op.setOperand(nextOpNo - 1, newWireRead);
+    op->setOperand(nextOpNo - 1, newWireRead);
   }
 }
 
 // Ensure that each output of an instance are used only by a wire
-static void lowerInstanceResults(InstanceOp op) {
+static void lowerInstanceResults(HWInstanceLike op) {
   Block *block = op->getParentOfType<HWModuleOp>().getBodyBlock();
   auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), block);
 
@@ -109,7 +109,7 @@ static void lowerInstanceResults(InstanceOp op) {
   size_t nextResultNo = 0;
   ModulePortInfo ports(op.getPortList());
   for (auto &port : ports.getOutputs()) {
-    auto result = op.getResult(nextResultNo);
+    auto result = op->getResult(nextResultNo);
     ++nextResultNo;
 
     // If the result doesn't have a user, the connection won't be emitted by
@@ -653,8 +653,8 @@ bool EmittedExpressionStateManager::shouldSpillWireBasedOnState(Operation &op) {
   // to a wire.
   if (op.hasOneUse()) {
     auto *singleUser = *op.getUsers().begin();
-    if (isa<hw::OutputOp, sv::AssignOp, sv::BPAssignOp, hw::InstanceOp>(
-            singleUser))
+    if (isa<hw::OutputOp, sv::AssignOp, sv::BPAssignOp, hw::InstanceOp,
+            hw::InstanceChoiceOp>(singleUser))
       return false;
 
     // If the single user is bitcast, we check the same property for the bitcast
@@ -856,13 +856,13 @@ static LogicalResult legalizeHWModule(Block &block,
     // (e.g. letting a temporary take the name of an unvisited wire). Adding
     // them now ensures any temporary generated will not use one of the names
     // previously declared.
-    if (auto instance = dyn_cast<InstanceOp>(op)) {
+    if (auto inst = dyn_cast<HWInstanceLike>(op)) {
       // Anchor return values to wires early
-      lowerInstanceResults(instance);
+      lowerInstanceResults(inst);
       // Anchor ports of instances when `disallowExpressionInliningInPorts` is
       // enabled.
       if (options.disallowExpressionInliningInPorts)
-        spillWiresForInstanceInputs(instance);
+        spillWiresForInstanceInputs(inst);
     }
 
     // If logic op is located in a procedural region, we have to move the logic
