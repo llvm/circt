@@ -20,10 +20,6 @@
 #include "circt/Dialect/HW/HWPasses.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/HW/HWVisitors.h"
-#include "circt/Dialect/LTL/LTLDialect.h"
-#include "circt/Dialect/LTL/LTLOps.h"
-#include "circt/Dialect/LTL/LTLTypes.h"
-#include "circt/Dialect/LTL/LTLVisitors.h"
 #include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/SV/SVOps.h"
@@ -31,10 +27,6 @@
 #include "circt/Dialect/SV/SVVisitors.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/Seq/SeqOps.h"
-#include "circt/Dialect/Verif/VerifDialect.h"
-#include "circt/Dialect/Verif/VerifOps.h"
-#include "circt/Dialect/Verif/VerifTypes.h.inc"
-#include "circt/Dialect/Verif/VerifVisitors.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/raw_ostream.h"
@@ -49,9 +41,7 @@ struct ConvertHWToBTOR2Pass
     : public ConvertHWToBTOR2Base<ConvertHWToBTOR2Pass>,
       public comb::CombinationalVisitor<ConvertHWToBTOR2Pass>,
       public sv::Visitor<ConvertHWToBTOR2Pass>,
-      public hw::TypeOpVisitor<ConvertHWToBTOR2Pass>,
-      public ltl::Visitor<ConvertHWToBTOR2Pass>,
-      public verif::Visitor<ConvertHWToBTOR2Pass> {
+      public hw::TypeOpVisitor<ConvertHWToBTOR2Pass> {
 public:
   ConvertHWToBTOR2Pass(raw_ostream &os) : os(os) {}
   // Executes the pass
@@ -170,6 +160,9 @@ private:
     // Remove the alias until none are left (for wires of wires of wires ...)
     if (auto it = opAliasMap.find(op); it != opAliasMap.end())
       return it->second;
+
+    // If the op isn't an alias then simply return it
+    return op;
   }
 
   // Updates or creates an entry for the given operation
@@ -510,13 +503,6 @@ private:
       nextLID = getOpLID(next);
     }
 
-    // Assign a new LID to next
-    setOpLID(next.getDefiningOp());
-
-    // Sanity check: at this point the next operation should have had it's btor2
-    // counterpart emitted if not then something terrible must have happened.
-    assert(nextLID != noLID);
-
     // Check if the register has a reset
     if (resetLID != noLID) {
       size_t resetValLID = noLID;
@@ -527,9 +513,21 @@ private:
       else
         resetValLID = genZero(width);
 
+      // Assign a new LID to next
+      setOpLID(next.getDefiningOp());
+
+      // Sanity check: at this point the next operation should have had it's
+      // btor2 counterpart emitted if not then something terrible must have
+      // happened.
+      assert(nextLID != noLID);
+
       // Generate the ite for the register update reset condition
       // i.e. reg <= reset ? 0 : next
       genIte(next.getDefiningOp(), resetLID, resetValLID, nextLID, width);
+    } else {
+      // Assign a new LID to next and perform a sanity check
+      setOpLID(next.getDefiningOp());
+      assert(nextLID != noLID);
     }
 
     // Finally generate the next statement

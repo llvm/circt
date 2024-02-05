@@ -42,20 +42,13 @@ struct DisableOpConversion : OpConversionPattern<ltl::DisableOp> {
 
   // DisableOp translates to an implication in to the form of
   // ~condition -> input
-  // As it is assumed that the inpu
   LogicalResult
   matchAndRewrite(ltl::DisableOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    // Generate the constant used to negate the
-    /*Value constOne = rewriter.create<hw::ConstantOp>(
-        op.getLoc(), mlir::IntegerAttr::get(
-                         getContext(), llvm::APSInt(llvm::StringRef("1"))));
 
-    // Generate the antecedant of the disable implication
-    Value antecedent = rewriter.create<comb::XorOp>(
-        op.getLoc(), adaptor.getCondition(), constOne);*/
-
-    // Replace the ltl::DisableOp with the OR part of the implication
+    // Replace the ltl::DisableOp with an OR op as it represents the a disabling
+    // implication: (implies (not condition) input) is equivalent to
+    // (or (not (not condition)) input) which becomes (or condition input)
     rewriter.replaceOpWithNewOp<comb::OrOp>(op, adaptor.getCondition(),
                                             adaptor.getInput());
 
@@ -162,6 +155,7 @@ struct LowerLTLToCorePass : public LowerLTLToCoreBase<LowerLTLToCorePass> {
 };
 } // namespace
 
+// Applies all of the conversion patterns needed for this lowering
 void circt::populateLTLToCoreConversionPatterns(
     circt::LTLToCoreTypeConverter &converter,
     mlir::RewritePatternSet &patterns) {
@@ -173,11 +167,13 @@ void circt::populateLTLToCoreConversionPatterns(
 // work
 circt::LTLToCoreTypeConverter::LTLToCoreTypeConverter() {
 
+  // Convert the ltl property type to a built-in type
   addConversion([](Type type) { return type; });
   addConversion([](ltl::PropertyType type) {
     return IntegerType::get(type.getContext(), 1);
   });
 
+  // Basic materializations
   addTargetMaterialization(
       [&](mlir::OpBuilder &builder, mlir::Type resultType,
           mlir::ValueRange inputs,
