@@ -28,8 +28,6 @@
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/SymbolTable.h"
 
-#define DEBUG_TYPE "lower-hw-instance-choices"
-
 using namespace mlir;
 using namespace circt;
 using namespace hw;
