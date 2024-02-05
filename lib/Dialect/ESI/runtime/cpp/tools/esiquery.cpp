@@ -85,14 +85,14 @@ void printInfo(ostream &os, AcceleratorConnection &acc) {
   os << "********************************" << endl;
   os << endl;
   size_t i = 0;
-  for (Type t : m.getTypeTable())
-    os << "  " << i++ << ": " << t.getID() << endl;
+  for (const Type *t : m.getTypeTable())
+    os << "  " << i++ << ": " << t->getID() << endl;
 }
 
 void printPort(ostream &os, const BundlePort &port, string indent = "") {
   os << indent << "  " << port.getID() << ":" << endl;
   for (const auto &[name, chan] : port.getChannels()) {
-    os << indent << "    " << name << ": " << chan.getType().getID() << endl;
+    os << indent << "    " << name << ": " << chan.getType()->getID() << endl;
   }
 }
 

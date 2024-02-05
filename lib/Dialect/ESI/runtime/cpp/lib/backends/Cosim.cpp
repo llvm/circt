@@ -236,7 +236,7 @@ void CosimChannelPort::disconnect() {
 namespace {
 class WriteCosimChannelPort : public WriteChannelPort {
 public:
-  WriteCosimChannelPort(CosimAccelerator::Impl &impl, const Type &type,
+  WriteCosimChannelPort(CosimAccelerator::Impl &impl, const Type *type,
                         string name)
       : WriteChannelPort(type),
         cosim(make_unique<CosimChannelPort>(impl, name)) {}
@@ -259,7 +259,7 @@ void WriteCosimChannelPort::write(const void *data, size_t size) {
 namespace {
 class ReadCosimChannelPort : public ReadChannelPort {
 public:
-  ReadCosimChannelPort(CosimAccelerator::Impl &impl, const Type &type,
+  ReadCosimChannelPort(CosimAccelerator::Impl &impl, const Type *type,
                        string name)
       : ReadChannelPort(type), cosim(new CosimChannelPort(impl, name)) {}
 
@@ -308,7 +308,7 @@ public:
 
   virtual map<string, ChannelPort &>
   requestChannelsFor(AppIDPath fullPath,
-                     const BundleType &bundleType) override {
+                     const BundleType *bundleType) override {
     // Find the client details for the port at 'fullPath'.
     auto f = clientChannelAssignments.find(fullPath);
     if (f == clientChannelAssignments.end())
@@ -318,7 +318,7 @@ public:
 
     // Each channel in a bundle has a separate cosim endpoint. Find them all.
     map<string, ChannelPort &> channels;
-    for (auto [name, dir, type] : bundleType.getChannels()) {
+    for (auto [name, dir, type] : bundleType->getChannels()) {
       auto f = channelAssignments.find(name);
       if (f == channelAssignments.end())
         throw runtime_error("Could not find channel assignment for '" +

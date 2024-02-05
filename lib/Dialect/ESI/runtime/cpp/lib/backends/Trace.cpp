@@ -158,7 +158,7 @@ private:
 namespace {
 class WriteTraceChannelPort : public WriteChannelPort {
 public:
-  WriteTraceChannelPort(TraceAccelerator::Impl &impl, const Type &type,
+  WriteTraceChannelPort(TraceAccelerator::Impl &impl, const Type *type,
                         const AppIDPath &id, const string &portName)
       : WriteChannelPort(type), impl(impl), id(id), portName(portName) {}
 
@@ -176,7 +176,7 @@ protected:
 namespace {
 class ReadTraceChannelPort : public ReadChannelPort {
 public:
-  ReadTraceChannelPort(TraceAccelerator::Impl &impl, const Type &type)
+  ReadTraceChannelPort(TraceAccelerator::Impl &impl, const Type *type)
       : ReadChannelPort(type) {}
 
   virtual std::ptrdiff_t read(void *data, size_t maxSize) override;
@@ -199,9 +199,9 @@ public:
       : CustomService(idPath, details, clients), impl(impl) {}
 
   virtual map<string, ChannelPort &>
-  requestChannelsFor(AppIDPath idPath, const BundleType &bundleType) override {
+  requestChannelsFor(AppIDPath idPath, const BundleType *bundleType) override {
     map<string, ChannelPort &> channels;
-    for (auto [name, dir, type] : bundleType.getChannels()) {
+    for (auto [name, dir, type] : bundleType->getChannels()) {
       ChannelPort *port;
       if (BundlePort::isWrite(dir))
         port = new WriteTraceChannelPort(impl, type, idPath, name);
