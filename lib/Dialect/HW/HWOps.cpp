@@ -1574,10 +1574,11 @@ LogicalResult InstanceChoiceOp::verify() {
 
 ParseResult InstanceChoiceOp::parse(OpAsmParser &parser,
                                     OperationState &result) {
+  StringAttr optionNameAttr;
   StringAttr instanceNameAttr;
   InnerSymAttr innerSym;
   SmallVector<Attribute> moduleNames;
-  SmallVector<Attribute> targetNames;
+  SmallVector<Attribute> caseNames;
   SmallVector<OpAsmParser::UnresolvedOperand, 4> inputsOperands;
   SmallVector<Type, 1> inputsTypes, allResultTypes;
   ArrayAttr argNames, resultNames, parameters;
@@ -1595,6 +1596,11 @@ ParseResult InstanceChoiceOp::parse(OpAsmParser &parser,
     result.addAttribute(InnerSymbolTable::getInnerSymbolAttrName(), innerSym);
   }
 
+  if (parser.parseKeyword("option") ||
+      parser.parseAttribute(optionNameAttr, noneType, "optionName",
+                            result.attributes))
+    return failure();
+
   FlatSymbolRefAttr defaultModuleName;
   if (parser.parseAttribute(defaultModuleName))
     return failure();
@@ -1607,7 +1613,7 @@ ParseResult InstanceChoiceOp::parse(OpAsmParser &parser,
         parser.parseOptionalKeyword("if") || parser.parseAttribute(targetName))
       return failure();
     moduleNames.push_back(moduleName);
-    targetNames.push_back(targetName);
+    caseNames.push_back(targetName);
   }
 
   llvm::SMLoc parametersLoc, inputsOperandsLoc;
@@ -1624,8 +1630,8 @@ ParseResult InstanceChoiceOp::parse(OpAsmParser &parser,
 
   result.addAttribute("moduleNames",
                       ArrayAttr::get(parser.getContext(), moduleNames));
-  result.addAttribute("targetNames",
-                      ArrayAttr::get(parser.getContext(), targetNames));
+  result.addAttribute("caseNames",
+                      ArrayAttr::get(parser.getContext(), caseNames));
   result.addAttribute("argNames", argNames);
   result.addAttribute("resultNames", resultNames);
   result.addAttribute("parameters", parameters);
@@ -1640,18 +1646,18 @@ void InstanceChoiceOp::print(OpAsmPrinter &p) {
     p << " sym ";
     attr.print(p);
   }
-  p << ' ';
+  p << " option " << getOptionNameAttr() << ' ';
 
   auto moduleNames = getModuleNamesAttr();
-  auto targetNames = getTargetNamesAttr();
-  assert(moduleNames.size() == targetNames.size() + 1);
+  auto caseNames = getCaseNamesAttr();
+  assert(moduleNames.size() == caseNames.size() + 1);
 
   p.printAttributeWithoutType(moduleNames[0]);
-  for (size_t i = 0, n = targetNames.size(); i < n; ++i) {
+  for (size_t i = 0, n = caseNames.size(); i < n; ++i) {
     p << " or ";
     p.printAttributeWithoutType(moduleNames[i + 1]);
     p << " if ";
-    p.printAttributeWithoutType(targetNames[i]);
+    p.printAttributeWithoutType(caseNames[i]);
   }
 
   printOptionalParameterList(p, *this, getParameters());
@@ -1664,8 +1670,8 @@ void InstanceChoiceOp::print(OpAsmPrinter &p) {
       (*this)->getAttrs(),
       /*elidedAttrs=*/{"instanceName",
                        InnerSymbolTable::getInnerSymbolAttrName(),
-                       "moduleNames", "targetNames", "argNames", "resultNames",
-                       "parameters"});
+                       "moduleNames", "caseNames", "argNames", "resultNames",
+                       "parameters", "optionName"});
 }
 
 ArrayAttr InstanceChoiceOp::getReferencedModuleNamesAttr() {
