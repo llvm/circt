@@ -336,10 +336,10 @@ class ReadPort(Port):
     """Read a typed message from the channel. Returns a deserialized object of a
     type defined by the port type."""
 
-    msg_bytes = self.cpp_port.read(self.type.max_size)
-    if len(msg_bytes) == 0:
+    buffer = self.cpp_port.read()
+    if buffer is None:
       return (False, None)
-    (msg, leftover) = self.type.deserialize(msg_bytes)
+    (msg, leftover) = self.type.deserialize(buffer)
     if len(leftover) != 0:
       raise ValueError(f"leftover bytes: {leftover}")
     return (True, msg)

@@ -170,8 +170,8 @@ public:
                         const AppIDPath &id, const string &portName)
       : WriteChannelPort(type), impl(impl), id(id), portName(portName) {}
 
-  virtual void write(const void *data, size_t size) override {
-    impl.write(id, portName, data, size);
+  virtual void write(const MessageData &data) override {
+    impl.write(id, portName, data.getBytes(), data.getSize());
   }
 
 protected:
@@ -187,15 +187,22 @@ public:
   ReadTraceChannelPort(TraceAccelerator::Impl &impl, const Type *type)
       : ReadChannelPort(type) {}
 
-  virtual std::ptrdiff_t read(void *data, size_t maxSize) override;
+  virtual bool read(MessageData &data) override;
 };
 } // namespace
 
-std::ptrdiff_t ReadTraceChannelPort::read(void *data, size_t maxSize) {
-  uint8_t *dataPtr = reinterpret_cast<uint8_t *>(data);
-  for (size_t i = 0; i < maxSize; ++i)
-    dataPtr[i] = rand() % 256;
-  return maxSize;
+bool ReadTraceChannelPort::read(MessageData &data) {
+  std::ptrdiff_t numBits = getType()->getBitWidth();
+  if (numBits < 0)
+    // TODO: support other types.
+    throw runtime_error("unsupported type for read: " + getType()->getID());
+
+  std::ptrdiff_t size = (numBits + 7) / 8;
+  std::vector<uint8_t> bytes(size);
+  for (std::ptrdiff_t i = 0; i < size; ++i)
+    bytes[i] = rand() % 256;
+  data = MessageData(bytes);
+  return true;
 }
 
 namespace {

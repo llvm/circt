@@ -30,6 +30,7 @@ public:
   virtual ~Type() = default;
 
   ID getID() const { return id; }
+  virtual std::ptrdiff_t getBitWidth() const { return -1; }
 
 protected:
   ID id;
@@ -50,6 +51,7 @@ public:
       : Type(id), channels(channels) {}
 
   const ChannelVector &getChannels() const { return channels; }
+  std::ptrdiff_t getBitWidth() const override { return -1; };
 
 protected:
   ChannelVector channels;
@@ -61,6 +63,7 @@ class ChannelType : public Type {
 public:
   ChannelType(const ID &id, const Type *inner) : Type(id), inner(inner) {}
   const Type *getInner() const { return inner; }
+  std::ptrdiff_t getBitWidth() const override { return inner->getBitWidth(); };
 
 private:
   const Type *inner;
@@ -70,6 +73,8 @@ private:
 class VoidType : public Type {
 public:
   VoidType(const ID &id) : Type(id) {}
+  // 'void' is 1 bit by convention.
+  std::ptrdiff_t getBitWidth() const override { return 1; };
 };
 
 /// The "any" type is a special type which can be used to represent any type, as
@@ -79,6 +84,7 @@ public:
 class AnyType : public Type {
 public:
   AnyType(const ID &id) : Type(id) {}
+  std::ptrdiff_t getBitWidth() const override { return -1; };
 };
 
 /// Bit vectors include signed, unsigned, and signless integers.
@@ -87,6 +93,7 @@ public:
   BitVectorType(const ID &id, uint64_t width) : Type(id), width(width) {}
 
   uint64_t getWidth() const { return width; }
+  std::ptrdiff_t getBitWidth() const override { return getWidth(); };
 
 private:
   uint64_t width;
@@ -127,6 +134,16 @@ public:
       : Type(id), fields(fields) {}
 
   const FieldVector &getFields() const { return fields; }
+  std::ptrdiff_t getBitWidth() const override {
+    std::ptrdiff_t size = 0;
+    for (auto [name, ty] : getFields()) {
+      std::ptrdiff_t fieldSize = ty->getBitWidth();
+      if (fieldSize < 0)
+        return -1;
+      size += fieldSize;
+    }
+    return size;
+  }
 
 private:
   FieldVector fields;
@@ -140,6 +157,12 @@ public:
 
   const Type *getElementType() const { return elementType; }
   uint64_t getSize() const { return size; }
+  std::ptrdiff_t getBitWidth() const override {
+    std::ptrdiff_t elementSize = elementType->getBitWidth();
+    if (elementSize < 0)
+      return -1;
+    return elementSize * size;
+  }
 
 private:
   const Type *elementType;
