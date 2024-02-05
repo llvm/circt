@@ -63,20 +63,6 @@ struct DisableOpConversion : OpConversionPattern<ltl::DisableOp> {
   }
 };
 
-/// Lower a ltl::DisableOp operation to Core operations
-struct ClockOpConversion : OpConversionPattern<ltl::ClockOp> {
-  using OpConversionPattern<ltl::ClockOp>::OpConversionPattern;
-
-  // LTL clock gets ignored and is modified via it's user operation
-  LogicalResult
-  matchAndRewrite(ltl::ClockOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    // rewriter.replaceOp(op, adaptor.getClock().getDefiningOp());
-    rewriter.eraseOp(op);
-    return success();
-  }
-};
-
 struct HasBeenResetOpConversion : OpConversionPattern<verif::HasBeenResetOp> {
   using OpConversionPattern<verif::HasBeenResetOp>::OpConversionPattern;
 
@@ -107,32 +93,56 @@ struct HasBeenResetOpConversion : OpConversionPattern<verif::HasBeenResetOp> {
   }
 };
 
-struct VerifAssertOpConversion : OpConversionPattern<verif::AssertOp> {
-  using OpConversionPattern<verif::AssertOp>::OpConversionPattern;
+struct LowerClockRelatedOpPatterns : OpConversionPattern<ltl::ClockOp> {
+  using OpConversionPattern<ltl::ClockOp>::OpConversionPattern;
 
-  // A verif assertion is translated together with it's parenting ltl clock
-  // This will yield an sv.always containing an sv.assert
   LogicalResult
-  matchAndRewrite(verif::AssertOp op, OpAdaptor adaptor,
+  matchAndRewrite(ltl::ClockOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+    // Match for a single verif.assert user, and replace the structure.
+    // Folding will recursively apply this pattern if multiple instances are
+    // found.
+    auto users = op.getResult().getUsers();
+    if (users.empty())
+      return rewriter.notifyMatchFailure(op, "No users found");
 
-    // Start by making sure that the input is associated to a clock
-    auto ltlclk = dyn_cast<ltl::ClockOp>(adaptor.getProperty().getDefiningOp());
+    for (auto *user : op.getResult().getUsers()) {
+      auto fusedLoc =
+          mlir::FusedLoc::get(getContext(), {op.getLoc(), user->getLoc()});
 
-    // If it's not clocked then we can't generate a proper sv assertion
-    if (!ltlclk)
-      op->emitError("Verif assertions must be clocked!!");
+      // Dispatch to the clock-specific patterns.
+      LogicalResult res =
+          llvm::TypeSwitch<Operation *, LogicalResult>(user)
+              .Case<verif::AssertOp>([&](auto assert) {
+                return rewriteAssertOp(fusedLoc, assert, adaptor, rewriter);
+              })
+              .Default([&](auto) {
+                return rewriter.notifyMatchFailure(
+                    op, "User of clock is not a verif.assert");
+              });
+      if (failed(res))
+        return res;
+    }
 
-    // Finish by genrating the parenting sv.always posedge clock from the ltl
+    // Clock can be removed as all users should have been handled by now.
+    rewriter.eraseOp(op);
+    return success();
+  }
+
+  LogicalResult rewriteAssertOp(Location loc, verif::AssertOp assertOp,
+                                OpAdaptor &adaptor,
+                                ConversionPatternRewriter &rewriter) const {
+    // Generate the parenting sv.always posedge clock from the ltl
     // clock, containing the generated sv.assert
     rewriter.replaceOpWithNewOp<sv::AlwaysOp>(
-        op, (sv::EventControl)ltlclk.getEdge(), ltlclk.getClock(), [&] {
-          // Generate the sv assertion using the input to the parenting clock
+        assertOp, (sv::EventControl)adaptor.getEdge(), adaptor.getClock(), [&] {
+          // Generate the sv assertion using the input to the parenting
+          // clock
           rewriter.create<sv::AssertOp>(
-              op.getLoc(), ltlclk.getInput(),
+              loc, adaptor.getInput(),
               sv::DeferAssertAttr::get(getContext(),
                                        sv::DeferAssert::Immediate),
-              adaptor.getLabelAttr());
+              assertOp.getLabelAttr());
         });
 
     return success();
@@ -155,19 +165,18 @@ struct LowerLTLToCorePass : public LowerLTLToCoreBase<LowerLTLToCorePass> {
 void circt::populateLTLToCoreConversionPatterns(
     circt::LTLToCoreTypeConverter &converter,
     mlir::RewritePatternSet &patterns) {
-  patterns.add<HasBeenResetOpConversion, VerifAssertOpConversion,
-               ClockOpConversion, DisableOpConversion>(converter,
-                                                       patterns.getContext());
+  patterns.add<HasBeenResetOpConversion, LowerClockRelatedOpPatterns,
+               DisableOpConversion>(converter, patterns.getContext());
 }
 
 // Creates the type conversions and materializations needed for this pass to
 // work
 circt::LTLToCoreTypeConverter::LTLToCoreTypeConverter() {
 
-  converter.addConversion([](ltl::PropertyType type) {
+  addConversion([](Type type) { return type; });
+  addConversion([](ltl::PropertyType type) {
     return IntegerType::get(type.getContext(), 1);
   });
-  converter.addConversion([](Type type) { return type; });
 
   addTargetMaterialization(
       [&](mlir::OpBuilder &builder, mlir::Type resultType,
@@ -191,7 +200,8 @@ circt::LTLToCoreTypeConverter::LTLToCoreTypeConverter() {
 // Simply applies the conversion patterns defined above
 void LowerLTLToCorePass::runOnOperation() {
 
-  // Set target dialects: We don't want to see any ltl verif left in the result
+  // Set target dialects: We don't want to see any ltl verif left in the
+  // result
   ConversionTarget target(getContext());
   target.addLegalDialect<hw::HWDialect>();
   target.addLegalOp<hw::ConstantOp>();
@@ -206,7 +216,6 @@ void LowerLTLToCorePass::runOnOperation() {
   target.addIllegalOp<verif::HasBeenResetOp>();
   target.addIllegalOp<verif::AssertOp>();
   target.addIllegalOp<ltl::DisableOp>();
-  target.addIllegalOp<ltl::ClockOp>();
 
   // Create type converters, mostly just to convert an ltl property to a bool
   LTLToCoreTypeConverter converter;
