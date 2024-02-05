@@ -14,6 +14,7 @@
 #include "mlir/IR/BuiltinAttributeInterfaces.h"
 #include "mlir/IR/Location.h"
 #include "mlir/IR/SymbolTable.h"
+#include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
 
@@ -129,6 +130,9 @@ FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::getOrCreateValue(
                        result.getDefiningOp())
                 .Case([&](ConstantOp op) {
                   return evaluateConstant(op, actualParams, loc);
+                })
+                .Case([&](IntegerAddOp op) {
+                  return evaluateIntegerAdd(op, actualParams, loc);
                 })
                 .Case<ObjectFieldOp>([&](auto op) {
                   // Create a reference value since the value pointed by object
@@ -339,6 +343,9 @@ circt::om::Evaluator::evaluateValue(Value value, ActualParameters actualParams,
             .Case([&](ConstantOp op) {
               return evaluateConstant(op, actualParams, loc);
             })
+            .Case([&](IntegerAddOp op) {
+              return evaluateIntegerAdd(op, actualParams, loc);
+            })
             .Case([&](ObjectOp op) {
               return evaluateObjectInstance(op, actualParams);
             })
@@ -392,6 +399,49 @@ circt::om::Evaluator::evaluateConstant(ConstantOp op,
                                        Location loc) {
   return success(std::make_shared<circt::om::evaluator::AttributeValue>(
       op.getValue(), loc));
+}
+
+// Evaluator dispatch function for integer addition.
+FailureOr<EvaluatorValuePtr> circt::om::Evaluator::evaluateIntegerAdd(
+    IntegerAddOp op, ActualParameters actualParams, Location loc) {
+  // Evaluate operands if necessary.
+  auto lhsResult = evaluateValue(op.getLhs(), actualParams, loc);
+  if (failed(lhsResult))
+    return lhsResult;
+  auto rhsResult = evaluateValue(op.getRhs(), actualParams, loc);
+  if (failed(rhsResult))
+    return rhsResult;
+
+  // TODO: if not fully evaluated, getOrCreateValue needs to return partially
+  // evaluated, and this needs to exit early.
+  assert(lhsResult.value()->isFullyEvaluated());
+  assert(rhsResult.value()->isFullyEvaluated());
+
+  // Extract the integer attributes.
+  auto extractAttr = [](evaluator::EvaluatorValue *value) {
+    return std::move(
+        llvm::TypeSwitch<evaluator::EvaluatorValue *, om::IntegerAttr>(value)
+            .Case([](evaluator::AttributeValue *val) {
+              return val->getAs<om::IntegerAttr>();
+            })
+            .Case([](evaluator::ReferenceValue *val) {
+              return dyn_cast<evaluator::AttributeValue>(val->getValue().get())
+                  ->getAs<om::IntegerAttr>();
+            }));
+  };
+
+  om::IntegerAttr lhs = extractAttr(lhsResult.value().get());
+  om::IntegerAttr rhs = extractAttr(rhsResult.value().get());
+  assert(lhs && rhs && "expected om::IntegerAttr for IntegerAddOp operands");
+
+  // Perform arbitrary precision signed integer addition.
+  APSInt result = lhs.getValue().getAPSInt() + rhs.getValue().getAPSInt();
+
+  // Package the result as a new om::IntegerAttr.
+  MLIRContext *ctx = op->getContext();
+  auto resultAttr =
+      om::IntegerAttr::get(ctx, mlir::IntegerAttr::get(ctx, result));
+  return success(std::make_shared<evaluator::AttributeValue>(resultAttr, loc));
 }
 
 /// Evaluator dispatch function for Object instances.

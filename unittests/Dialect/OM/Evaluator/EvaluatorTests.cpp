@@ -613,4 +613,93 @@ TEST(EvaluatorTests, InstantiateCycle) {
   ASSERT_TRUE(failed(result));
 }
 
+TEST(EvaluatorTests, IntegerAddition) {
+  StringRef mod = "om.class @IntegerAddition() {"
+                  "  %0 = om.constant #om.integer<1 : si3> : !om.integer"
+                  "  %1 = om.constant #om.integer<2 : si3> : !om.integer"
+                  "  %2 = om.integer.add %0, %1 : !om.integer"
+                  "  om.class.field @result, %2 : !om.integer"
+                  "}";
+
+  DialectRegistry registry;
+  registry.insert<OMDialect>();
+
+  MLIRContext context(registry);
+  context.getOrLoadDialect<OMDialect>();
+
+  OwningOpRef<ModuleOp> owning =
+      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
+
+  Evaluator evaluator(owning.release());
+
+  auto result =
+      evaluator.instantiate(StringAttr::get(&context, "IntegerAddition"), {});
+
+  ASSERT_TRUE(succeeded(result));
+
+  auto fieldValue = llvm::cast<evaluator::ObjectValue>(result.value().get())
+                        ->getField("result")
+                        .value();
+
+  ASSERT_EQ(3, llvm::cast<evaluator::AttributeValue>(fieldValue.get())
+                   ->getAs<circt::om::IntegerAttr>()
+                   .getValue()
+                   .getValue());
+}
+
+TEST(EvaluatorTests, IntegerAdditionObjects) {
+  StringRef mod = "om.class @Class1() {"
+                  "  %0 = om.constant #om.integer<1 : si3> : !om.integer"
+                  "  om.class.field @value, %0 : !om.integer"
+                  "}"
+                  ""
+                  "om.class @Class2() {"
+                  "  %0 = om.constant #om.integer<2 : si3> : !om.integer"
+                  "  om.class.field @value, %0 : !om.integer"
+                  "}"
+                  ""
+                  "om.class @IntegerAdditionObjects() {"
+                  "  %0 = om.object @Class1() : () -> !om.class.type<@Class1>"
+                  "  %1 = om.object.field %0, [@value] : "
+                  "(!om.class.type<@Class1>) -> !om.integer"
+                  ""
+                  "  %2 = om.object @Class2() : () -> !om.class.type<@Class2>"
+                  "  %3 = om.object.field %2, [@value] : "
+                  "(!om.class.type<@Class2>) -> !om.integer"
+                  ""
+                  "  %5 = om.integer.add %1, %3 : !om.integer"
+                  "  om.class.field @result, %5 : !om.integer"
+                  "}";
+
+  DialectRegistry registry;
+  registry.insert<OMDialect>();
+
+  MLIRContext context(registry);
+  context.getOrLoadDialect<OMDialect>();
+
+  OwningOpRef<ModuleOp> owning =
+      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
+
+  Evaluator evaluator(owning.release());
+
+  auto result = evaluator.instantiate(
+      StringAttr::get(&context, "IntegerAdditionObjects"), {});
+
+  ASSERT_TRUE(succeeded(result));
+
+  auto fieldValue = llvm::cast<evaluator::ObjectValue>(result.value().get())
+                        ->getField("result")
+                        .value();
+
+  ASSERT_EQ(3, llvm::cast<evaluator::AttributeValue>(fieldValue.get())
+                   ->getAs<circt::om::IntegerAttr>()
+                   .getValue()
+                   .getValue());
+}
+
+// TODO: test like the above, but make it so the operands aren't fully evaluated
+// yet by passing stuff into and out of objects.
+
+// TODO: test with cyclic arithmetic to ensure it gives a nice error.
+
 } // namespace
