@@ -1010,6 +1010,19 @@ struct IntegerMulOpConversion
   }
 };
 
+struct IntegerShrOpConversion
+    : public OpConversionPattern<firrtl::IntegerShrOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(firrtl::IntegerShrOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<om::IntegerShrOp>(op, adaptor.getLhs(),
+                                                  adaptor.getRhs());
+    return success();
+  }
+};
+
 struct PathOpConversion : public OpConversionPattern<firrtl::PathOp> {
 
   PathOpConversion(TypeConverter &typeConverter, MLIRContext *context,
@@ -1425,6 +1438,7 @@ static void populateRewritePatterns(
   patterns.add<DoubleConstantOpConversion>(converter, patterns.getContext());
   patterns.add<IntegerAddOpConversion>(converter, patterns.getContext());
   patterns.add<IntegerMulOpConversion>(converter, patterns.getContext());
+  patterns.add<IntegerShrOpConversion>(converter, patterns.getContext());
 }
 
 // Convert to OM ops and types in Classes or Modules.
