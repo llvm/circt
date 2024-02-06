@@ -5759,6 +5759,9 @@ void IntegerAddOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 void IntegerMulOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
+void IntegerShrOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
 void IsTagOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }

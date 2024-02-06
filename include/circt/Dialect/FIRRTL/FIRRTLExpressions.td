@@ -1228,6 +1228,21 @@ def IntegerMulOp : IntegerBinaryPrimOp<"integer.mul", [Commutative]> {
   }];
 }
 
+def IntegerShrOp : IntegerBinaryPrimOp<"integer.shr"> {
+  let summary = "Shift an FIntegerType value right by an FIntegerType value";
+  let description = [{
+    The shift right operation result is the arbitrary precision signed integer
+    arithmetic shift right of the lhs operand by the rhs operand. The rhs
+    operand must be non-negative.
+
+    Example:
+    ```mlir
+    %2 = firrtl.integer.shr %0, %1 : (!firrtl.integer, !firrtl.integer) ->
+                                         !firrtl.integer
+    ```
+  }];
+}
+
 //===----------------------------------------------------------------------===//
 // RefOperations: Operations on the RefType.
 //
