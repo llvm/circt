@@ -40,13 +40,13 @@ namespace {
 struct DisableOpConversion : OpConversionPattern<ltl::DisableOp> {
   using OpConversionPattern<ltl::DisableOp>::OpConversionPattern;
 
-  // DisableOp translates to an implication in to the form of
+  // DisableOp translates to an implication in the form of
   // ~condition -> input
   LogicalResult
   matchAndRewrite(ltl::DisableOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
 
-    // Replace the ltl::DisableOp with an OR op as it represents the a disabling
+    // Replace the ltl::DisableOp with an OR op as it represents a disabling
     // implication: (implies (not condition) input) is equivalent to
     // (or (not (not condition)) input) which becomes (or condition input)
     rewriter.replaceOpWithNewOp<comb::OrOp>(op, adaptor.getCondition(),
@@ -196,8 +196,8 @@ circt::LTLToCoreTypeConverter::LTLToCoreTypeConverter() {
 // Simply applies the conversion patterns defined above
 void LowerLTLToCorePass::runOnOperation() {
 
-  // Set target dialects: We don't want to see any ltl verif left in the
-  // result
+  // Set target dialects: We don't want to see any ltl or verif that might come
+  // from an AssertProperty left in the result
   ConversionTarget target(getContext());
   target.addLegalDialect<hw::HWDialect>();
   target.addLegalOp<hw::ConstantOp>();
