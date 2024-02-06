@@ -110,6 +110,7 @@ static void markLeaves(BitVector &bits, Type t, bool isPort = false,
 static void markWrite(BitVector& bv, size_t fieldID) {
     if (bv.size() <= fieldID)
         bv.resize(fieldID + 1);
+    llvm::errs() << "S " << fieldID << "\n";
     bv.set(fieldID);
 }
 
@@ -151,9 +152,7 @@ void CheckInitPass::processOp(Operation *op, FieldSource &fieldSource) {
     for (auto &block : region) {
       for (auto &opref : block) {
         Operation *op = &opref;
-        if (auto wire = dyn_cast<WireOp>(op)) {
-          local.dests.push_back(wire.getResult());
-        } else if (isa<RegOp, RegResetOp>(op)) {
+        if (isa<WireOp, RegOp, RegResetOp>(op)) {
           local.dests.push_back(op->getResult(0));
         } else if (auto mem = dyn_cast<MemOp>(op)) {
           for (auto result : mem.getResults())

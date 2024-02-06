@@ -64,6 +64,18 @@ FieldSource::PathNode FieldSource::visitValue(Value v, Fn update) const {
     update(v, retval);
     return retval;
   })
+  .template Case<SubindexOp>([&](auto subi) {
+    auto parent = visitValue(subi.getInput(), update);
+    PathNode retval{parent.src, parent.fieldID + subi.getInput().getType().base().getFieldID(subi.getIndex())};
+    update(v, retval);
+    return retval;
+  })
+  .template Case<OpenSubindexOp>([&](auto subi) {
+    auto parent = visitValue(subi.getInput(), update);
+    PathNode retval{parent.src, parent.fieldID + subi.getInput().getType().getFieldID(subi.getIndex())};
+    update(v, retval);
+    return retval;
+  })
   .template Case<WireOp, RegOp, RegResetOp, InstanceOp, InvalidValueOp>([&](auto def) {
     return PathNode{v, 0};
   })
