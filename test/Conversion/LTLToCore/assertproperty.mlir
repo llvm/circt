@@ -9,9 +9,9 @@ module {
     //CHECK:  %true = hw.constant true
     %true = hw.constant true
 
-    //CHECK:   %c0_i0 = hw.constant 0 : i0
+    //CHECK:   %false = hw.constant false
     //CHECK:   %2 = comb.or %reset, %hbr : i1
-    //CHECK:   %hbr = seq.compreg sym @hbr  %2, %clock powerOn %c0_i0 : i1  
+    //CHECK:   %hbr = seq.compreg sym @hbr  %2, %clock powerOn %false : i1  
     %9 = verif.has_been_reset %0, sync %reset
 
     //CHECK:  %3 = comb.xor bin %hbr, %true : i1
