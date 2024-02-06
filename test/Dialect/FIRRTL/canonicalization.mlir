@@ -599,12 +599,19 @@ firrtl.module @Shl(in %in1u: !firrtl.uint<1>,
 // CHECK-LABEL: firrtl.module @Shr
 firrtl.module @Shr(in %in1u: !firrtl.uint<1>,
                    in %in4u: !firrtl.uint<4>,
+                   in %inu: !firrtl.uint,
                    in %in1s: !firrtl.sint<1>,
                    in %in4s: !firrtl.sint<4>,
+                   in %ins: !firrtl.sint,
                    in %in0u: !firrtl.uint<0>,
+                   in %in0s: !firrtl.sint<0>,
                    out %out1s: !firrtl.sint<1>,
                    out %out1u: !firrtl.uint<1>,
-                   out %outu: !firrtl.uint<4>) {
+                   out %out4u: !firrtl.uint<4>,
+                   out %out4s: !firrtl.sint<4>,
+                   out %outu: !firrtl.uint,
+                   out %outs: !firrtl.sint
+                   ) {
   // CHECK: firrtl.strictconnect %out1u, %in1u
   %0 = firrtl.shr %in1u, 0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
   firrtl.connect %out1u, %0 : !firrtl.uint<1>, !firrtl.uint<1>
@@ -660,6 +667,35 @@ firrtl.module @Shr(in %in1u: !firrtl.uint<1>,
   // CHECK: firrtl.strictconnect %out1u, %c0_ui1
   %10 = firrtl.shr %in0u, 0 : (!firrtl.uint<0>) -> !firrtl.uint<1>
   firrtl.strictconnect %out1u, %10 : !firrtl.uint<1>
+
+  // Issue #6608: https://github.com/llvm/circt/issues/6608
+  // CHECK: firrtl.strictconnect %out1s, %c0_si1
+  %11 = firrtl.shr %in0s, 0 : (!firrtl.sint<0>) -> !firrtl.sint<1>
+  firrtl.strictconnect %out1s, %11 : !firrtl.sint<1>
+
+  // Issue #6608: https://github.com/llvm/circt/issues/6608
+  // CHECK: firrtl.strictconnect %out4u, %in4u
+  %12 = firrtl.shr %in4u, 0 : (!firrtl.uint<4>) -> !firrtl.uint<4>
+  firrtl.strictconnect %out4u, %12 : !firrtl.uint<4>
+
+  // Issue #6608: https://github.com/llvm/circt/issues/6608
+  // CHECK: firrtl.strictconnect %out4s, %in4s
+  %13 = firrtl.shr %in4s, 0 : (!firrtl.sint<4>) -> !firrtl.sint<4>
+  firrtl.strictconnect %out4s, %13 : !firrtl.sint<4>
+
+  // Issue #6608: https://github.com/llvm/circt/issues/6608
+  // Will change to drop op once FIRRTL spec changes sizeof(shr(uint))
+  // CHECK: %[[UINT:.+]] = firrtl.shr %inu
+  // CHECK: firrtl.connect %outu, %[[UINT]]
+  %14 = firrtl.shr %inu, 0 : (!firrtl.uint) -> !firrtl.uint
+  firrtl.connect %outu, %14 : !firrtl.uint, !firrtl.uint
+
+  // Issue #6608: https://github.com/llvm/circt/issues/6608
+  // CHECK: %[[SINT:.+]] = firrtl.shr %ins
+  // CHECK: firrtl.connect %outs, %[[SINT]]
+  %15 = firrtl.shr %ins, 0 : (!firrtl.sint) -> !firrtl.sint
+  firrtl.connect %outs, %15 : !firrtl.sint, !firrtl.sint
+
 }
 
 // CHECK-LABEL: firrtl.module @Tail
