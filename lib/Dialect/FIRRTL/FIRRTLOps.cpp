@@ -5919,50 +5919,61 @@ LogicalResult LayerBlockOp::verify() {
   }
 
   // Verify the body of the region.
-  Block *body = getBody(0);
-  bool failed = false;
-  body->walk<mlir::WalkOrder::PreOrder>([&](Operation *op) {
-    // Skip nested layer blocks.  Those will be verified separately.
-    if (isa<LayerBlockOp>(op))
-      return WalkResult::skip();
-    // Check all the operands of each op to make sure that only legal things are
-    // captured.
-    for (auto operand : op->getOperands()) {
-      // Any value captured from the current layer block is fine.
-      if (operand.getParentBlock() == body)
-        continue;
-      // Capture of a non-base type, e.g., reference, is allowed.
-      FIRRTLBaseType baseType = dyn_cast<FIRRTLBaseType>(operand.getType());
-      if (!baseType)
-        return WalkResult::advance();
-      // Capturing a non-passive type is illegal.
-      if (!baseType.isPassive()) {
-        auto diag = emitOpError()
-                    << "captures an operand which is not a passive type";
-        diag.attachNote(operand.getLoc()) << "operand is defined here";
-        diag.attachNote(op->getLoc()) << "operand is used here";
-        failed = true;
-        return WalkResult::advance();
-      }
-    }
-    // Ensure that the layer block does not drive any sinks.
-    if (auto connect = dyn_cast<FConnectLike>(op)) {
-      auto dest = getFieldRefFromValue(connect.getDest()).getValue();
-      if (dest.getParentBlock() == body)
-        return WalkResult::advance();
-      auto diag = connect.emitOpError()
-                  << "connects to a destination which is defined outside its "
-                     "enclosing layer block";
-      diag.attachNote(getLoc()) << "enclosing layer block is defined here";
-      diag.attachNote(dest.getLoc()) << "destination is defined here";
-      failed = true;
-    }
-    return WalkResult::advance();
-  });
-  if (failed)
-    return failure();
+  auto result = getBody(0)->walk<mlir::WalkOrder::PreOrder>(
+      [&](Operation *op) -> WalkResult {
+        // Skip nested layer blocks.  Those will be verified separately.
+        if (isa<LayerBlockOp>(op))
+          return WalkResult::skip();
 
-  return success();
+        // Check all the operands of each op to make sure that only legal things
+        // are captured.
+        for (auto operand : op->getOperands()) {
+          // Any value captured from the current layer block is fine.
+          if (auto *definingOp = operand.getDefiningOp())
+            if (getOperation()->isAncestor(definingOp))
+              continue;
+
+          // Capture of a non-base type, e.g., reference, is allowed.
+          FIRRTLBaseType type =
+              type_dyn_cast<FIRRTLBaseType>(operand.getType());
+          if (!type)
+            continue;
+
+          // Capturing a non-passive type is illegal.
+          if (!type.isPassive()) {
+            auto diag = emitOpError()
+                        << "captures an operand which is not a passive type";
+            diag.attachNote(operand.getLoc()) << "operand is defined here";
+            diag.attachNote(op->getLoc()) << "operand is used here";
+            return WalkResult::interrupt();
+          }
+        }
+
+        // Ensure that the layer block does not drive any sinks outside.
+        if (auto connect = dyn_cast<FConnectLike>(op)) {
+          // ref.define is allowed to drive probes outside the layerblock.
+          if (isa<RefDefineOp>(connect))
+            return WalkResult::advance();
+
+          // We can drive any destination inside the current layerblock.
+          auto dest = getFieldRefFromValue(connect.getDest()).getValue();
+          if (auto *destOp = dest.getDefiningOp())
+            if (getOperation()->isAncestor(destOp))
+              return WalkResult::advance();
+
+          auto diag =
+              connect.emitOpError()
+              << "connects to a destination which is defined outside its "
+                 "enclosing layer block";
+          diag.attachNote(getLoc()) << "enclosing layer block is defined here";
+          diag.attachNote(dest.getLoc()) << "destination is defined here";
+          return WalkResult::interrupt();
+        }
+
+        return WalkResult::advance();
+      });
+
+  return failure(result.wasInterrupted());
 }
 
 LogicalResult
