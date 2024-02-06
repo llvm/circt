@@ -1194,6 +1194,18 @@ def IntegerAddOp : IntegerBinaryPrimOp<"integer.add", [Commutative]> {
   }];
 }
 
+def IntegerMulOp : IntegerBinaryPrimOp<"integer.mul", [Commutative]> {
+  let summary = "Multiply two FIntegerType values";
+  let description = [{
+    Multiply two FIntegerType values.
+
+    Example:
+    ```mlir
+    %2 = firrtl.integer.mul %0, %1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+    ```
+  }];
+}
+
 //===----------------------------------------------------------------------===//
 // RefOperations: Operations on the RefType.
 //

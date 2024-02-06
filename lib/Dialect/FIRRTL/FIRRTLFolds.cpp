@@ -940,6 +940,11 @@ OpFoldResult IntegerAddOp::fold(FoldAdaptor adaptor) {
   return {};
 }
 
+OpFoldResult IntegerMulOp::fold(FoldAdaptor adaptor) {
+  // TODO: implement constant folding, etc.
+  return {};
+}
+
 //===----------------------------------------------------------------------===//
 // Unary Operators
 //===----------------------------------------------------------------------===//
