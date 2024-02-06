@@ -482,4 +482,16 @@ def IntegerMulOp : IntegerBinaryOp<"integer.mul", [Commutative]> {
   }];
 }
 
+def IntegerShrOp : IntegerBinaryOp<"integer.shr"> {
+  let summary = "Shift an OMIntegerType value right by an OMIntegerType value";
+  let description = [{
+    Arithmetic shift right of the lhs OMIntegerType value by the rhs OMIntegerType value.
+
+    Example:
+    ```mlir
+    %2 = om.integer.shr %0, %1 : !om.integer
+    ```
+  }];
+}
+
 #endif // CIRCT_DIALECT_OM_OMOPS_TD
