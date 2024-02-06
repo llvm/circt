@@ -150,7 +150,7 @@ struct LowerClockRelatedOpPatterns : OpConversionPattern<ltl::ClockOp> {
 
 namespace {
 struct LowerLTLToCorePass : public LowerLTLToCoreBase<LowerLTLToCorePass> {
-  LowerLTLToCorePass() {}
+  LowerLTLToCorePass() = default;
   void runOnOperation() override;
 };
 } // namespace
