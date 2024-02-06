@@ -9,12 +9,12 @@ module {
     //CHECK:  %true = hw.constant true
     %true = hw.constant true
 
-    //CHECK:  %true_0 = hw.constant true
-    //CHECK:  %2 = comb.mux %reset, %true_0, %hbr : i1
-    //CHECK:  %hbr = seq.compreg sym @hbr  %2, %clock : i1
+    //CHECK:   %c0_i0 = hw.constant 0 : i0
+    //CHECK:   %2 = comb.or %reset, %hbr : i1
+    //CHECK:   %hbr = seq.compreg sym @hbr  %2, %clock powerOn %c0_i0 : i1  
     %9 = verif.has_been_reset %0, sync %reset
 
-    //CHECK:  %3 = comb.xor bin %2, %true : i1
+    //CHECK:  %3 = comb.xor bin %hbr, %true : i1
     %10 = comb.xor bin %9, %true : i1
 
     //CHECK:  %4 = hw.wire %0 : i1

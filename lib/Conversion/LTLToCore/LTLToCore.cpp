@@ -66,21 +66,26 @@ struct HasBeenResetOpConversion : OpConversionPattern<verif::HasBeenResetOp> {
                   ConversionPatternRewriter &rewriter) const override {
 
     // Generate the constant used to set the register value
-    Value constOne = rewriter.create<hw::ConstantOp>(
-        op.getLoc(), mlir::IntegerType::get(op.getContext(), 1), 1);
+    Value constZero = rewriter.create<hw::ConstantOp>(
+        op.getLoc(), mlir::IntegerType::get(op.getContext(), 1), 0);
 
     // Create a backedge for the register to be used in the mux
     circt::BackedgeBuilder bb(rewriter, op.getLoc());
     circt::Backedge reg = bb.get(rewriter.getI1Type());
 
-    // Generate a multiplexer to select the register's value
-    Value mux = rewriter.replaceOpWithNewOp<comb::MuxOp>(op, adaptor.getReset(),
-                                                         constOne, reg);
+    // Generate an or between the reset and the register's value to store
+    // whether or not the reset has been active at least once
+    Value orReset =
+        rewriter.create<comb::OrOp>(op.getLoc(), adaptor.getReset(), reg);
+
+    // This register should not be reset, so we give it dummy reset and resetval
+    // operands to fit the build signature
+    Value reset, resetval;
 
     // Finally generate the register to set the backedge
-    reg.setValue(rewriter.create<seq::CompRegOp>(
-        op.getLoc(), mux, adaptor.getClock().getDefiningOp()->getOperand(0),
-        llvm::StringRef("hbr")));
+    reg.setValue(rewriter.replaceOpWithNewOp<seq::CompRegOp>(
+        op, orReset, adaptor.getClock().getDefiningOp()->getOperand(0), reset,
+        resetval, llvm::StringRef("hbr"), constZero));
 
     return success();
   }
