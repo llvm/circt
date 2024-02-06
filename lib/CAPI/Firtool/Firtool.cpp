@@ -323,6 +323,11 @@ void circtFirtoolOptionsSetStripDebugInfo(CirctFirtoolFirtoolOptions options,
   unwrap(options)->setStripDebugInfo(value);
 }
 
+void circtFirtoolOptionsSetDisableBlackBoxReourceFile(
+    CirctFirtoolFirtoolOptions options, bool value) {
+  unwrap(options)->setDisableBlackBoxResourceFile(value);
+}
+
 //===----------------------------------------------------------------------===//
 // Populate API.
 //===----------------------------------------------------------------------===//
