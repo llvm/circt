@@ -470,4 +470,16 @@ def IntegerAddOp : IntegerBinaryOp<"integer.add", [Commutative]> {
   }];
 }
 
+def IntegerMulOp : IntegerBinaryOp<"integer.mul", [Commutative]> {
+  let summary = "Multiply two OMIntegerType values";
+  let description = [{
+    Multiply two OMIntegerType values.
+
+    Example:
+    ```mlir
+    %2 = om.integer.mul %0, %1 : !om.integer
+    ```
+  }];
+}
+
 #endif // CIRCT_DIALECT_OM_OMOPS_TD
