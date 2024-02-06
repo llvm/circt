@@ -881,6 +881,17 @@ circuit Top:
     propassign c, integer_add(a, b)
 
 ;// -----
+FIRRTL version 3.1.0
+
+circuit Top:
+  module Top:
+    input a : Integer
+    input b : Integer
+    output c : Integer
+    ; expected-error @below {{Integer arithmetic expressions are a FIRRTL 4.0.0+ feature, but the specified FIRRTL version was 3.1.0}}
+    propassign c, integer_mul(a, b)
+
+;// -----
 FIRRTL version 3.3.0
 
 circuit Top:
