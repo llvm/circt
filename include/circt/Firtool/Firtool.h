@@ -129,6 +129,9 @@ public:
   }
   bool shouldExtractTestCode() const { return extractTestCode; }
   bool shouldFixupEICGWrapper() const { return fixupEICGWrapper; }
+  bool shouldDisableBlackBoxResourceFile() const {
+    return disableBlackBoxResourceFile;
+  }
 
   // Setters, used by the CAPI
   FirtoolOptions &setOutputFilename(StringRef name) {
@@ -349,6 +352,11 @@ public:
     return *this;
   }
 
+  FirtoolOptions &setDisableBlackBoxResourceFile(bool value) {
+    disableBlackBoxResourceFile = value;
+    return *this;
+  }
+
 private:
   std::string outputFilename;
   bool disableAnnotationsUnknown;
@@ -394,6 +402,7 @@ private:
   bool stripFirDebugInfo;
   bool stripDebugInfo;
   bool fixupEICGWrapper;
+  bool disableBlackBoxResourceFile;
 };
 
 void registerFirtoolCLOptions();

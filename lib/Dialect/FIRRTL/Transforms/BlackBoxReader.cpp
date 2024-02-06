@@ -95,6 +95,8 @@ struct BlackBoxReaderPass : public BlackBoxReaderBase<BlackBoxReaderPass> {
 
   using BlackBoxReaderBase::inputPrefix;
 
+  using BlackBoxReaderBase::disableBlackBoxResourceFile;
+
 private:
   /// A list of all files which will be included in the file list.  This is
   /// subset of all emitted files.
@@ -293,15 +295,21 @@ void BlackBoxReaderPass::runOnOperation() {
         },
         "\n");
 
-    // Put the file list in to a verbatim op.  Use "unknown location" so that no
-    // file info will unnecessarily print.
-    auto op =
-        builder.create<VerbatimOp>(builder.getUnknownLoc(), std::move(output));
+    if (!disableBlackBoxResourceFile) {
+      // Put the file list in to a verbatim op.  Use "unknown location" so that
+      // no file info will unnecessarily print.
+      auto op = builder.create<VerbatimOp>(builder.getUnknownLoc(),
+                                           std::move(output));
 
-    // Attach the output file information to the verbatim op.
-    op->setAttr("output_file", hw::OutputFileAttr::getFromFilename(
-                                   context, resourceFileName,
-                                   /*excludeFromFileList=*/true));
+      // Attach the output file information to the verbatim op.
+      op->setAttr("output_file", hw::OutputFileAttr::getFromFilename(
+                                     context, resourceFileName,
+                                     /*excludeFromFileList=*/true));
+    } else {
+      LLVM_DEBUG(
+          llvm::dbgs()
+          << "the output of black box resource file has been Disabled\n");
+    }
   }
 
   // If nothing has changed we can preserve the analysis.
@@ -469,9 +477,11 @@ bool BlackBoxReaderPass::isDut(Operation *module) {
 //===----------------------------------------------------------------------===//
 
 std::unique_ptr<mlir::Pass>
-circt::firrtl::createBlackBoxReaderPass(std::optional<StringRef> inputPrefix) {
+circt::firrtl::createBlackBoxReaderPass(std::optional<StringRef> inputPrefix,
+                                        bool disableBlackBoxResourceFile) {
   auto pass = std::make_unique<BlackBoxReaderPass>();
   if (inputPrefix)
     pass->inputPrefix = inputPrefix->str();
+  pass->disableBlackBoxResourceFile = disableBlackBoxResourceFile;
   return pass;
 }

@@ -120,7 +120,8 @@ std::unique_ptr<mlir::Pass> createPrintInstanceGraphPass();
 std::unique_ptr<mlir::Pass> createPrintNLATablePass();
 
 std::unique_ptr<mlir::Pass>
-createBlackBoxReaderPass(std::optional<mlir::StringRef> inputPrefix = {});
+createBlackBoxReaderPass(std::optional<mlir::StringRef> inputPrefix = {},
+                         bool disableBlackBoxResourceFile = false);
 
 enum class CompanionMode {
   // Lower companions to SystemVerilog binds.

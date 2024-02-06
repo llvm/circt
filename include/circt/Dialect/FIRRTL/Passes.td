@@ -427,7 +427,9 @@ def BlackBoxReader : Pass<"firrtl-blackbox-reader", "CircuitOp"> {
     Option<"inputPrefix", "input-prefix", "std::string", "",
       "Prefix for input paths in black box annotations. This should be the "
       "directory where the input file was located, to allow for annotations "
-      "relative to the input file.">
+      "relative to the input file.">,
+    Option<"disableBlackBoxResourceFile", "disable-blackbox-resource-file",
+      "bool", "false", "Disable the output of the black box resource file">
   ];
   let dependentDialects = ["sv::SVDialect", "hw::HWDialect"];
 }

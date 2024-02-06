@@ -183,8 +183,8 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   StringRef blackBoxRoot = opt.getBlackBoxRootPath().empty()
                                ? llvm::sys::path::parent_path(inputFilename)
                                : opt.getBlackBoxRootPath();
-  pm.nest<firrtl::CircuitOp>().addPass(
-      firrtl::createBlackBoxReaderPass(blackBoxRoot));
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createBlackBoxReaderPass(
+      blackBoxRoot, opt.shouldDisableBlackBoxResourceFile()));
 
   // Run SymbolDCE as late as possible, but before InnerSymbolDCE. This is for
   // hierpathop's and just for general cleanup.
@@ -614,6 +614,11 @@ struct FirtoolCmdOptions {
           "address conflict behavivor of combinational memories"),
       llvm::cl::init(false)};
 
+  llvm::cl::opt<bool> disableBlackBoxResourceFile{
+      "disable-blackbox-resource-file",
+      llvm::cl::desc("Disable the output of the black box resource file"),
+      llvm::cl::init(false)};
+
   //===----------------------------------------------------------------------===
   // External Clock Gate Options
   //===----------------------------------------------------------------------===
@@ -694,7 +699,8 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       ckgModuleName("EICG_wrapper"), ckgInputName("in"), ckgOutputName("out"),
       ckgEnableName("en"), ckgTestEnableName("test_en"), ckgInstName("ckg"),
       exportModuleHierarchy(false), stripFirDebugInfo(true),
-      stripDebugInfo(false), fixupEICGWrapper(false) {
+      stripDebugInfo(false), fixupEICGWrapper(false),
+      disableBlackBoxResourceFile(false) {
   if (!clOptions.isConstructed())
     return;
   outputFilename = clOptions->outputFilename;
@@ -742,4 +748,5 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   stripFirDebugInfo = clOptions->stripFirDebugInfo;
   stripDebugInfo = clOptions->stripDebugInfo;
   fixupEICGWrapper = clOptions->fixupEICGWrapper;
+  disableBlackBoxResourceFile = clOptions->disableBlackBoxResourceFile;
 }
