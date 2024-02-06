@@ -288,4 +288,7 @@ om.class @IntegerArithmetic() {
 
   // CHECK: om.integer.add %0, %1 : !om.integer
   %2 = om.integer.add %0, %1 : !om.integer
+
+  // CHECK: om.integer.mul %0, %1 : !om.integer
+  %3 = om.integer.mul %0, %1 : !om.integer
 }

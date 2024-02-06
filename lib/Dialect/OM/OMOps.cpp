@@ -546,6 +546,16 @@ IntegerAddOp::evaluateIntegerOperation(const llvm::APSInt &lhs,
 }
 
 //===----------------------------------------------------------------------===//
+// IntegerMulOp
+//===----------------------------------------------------------------------===//
+
+FailureOr<llvm::APSInt>
+IntegerMulOp::evaluateIntegerOperation(const llvm::APSInt &lhs,
+                                       const llvm::APSInt &rhs) {
+  return success(lhs * rhs);
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 

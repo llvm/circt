@@ -647,6 +647,40 @@ TEST(EvaluatorTests, IntegerBinaryArithmeticAdd) {
                    .getValue());
 }
 
+TEST(EvaluatorTests, IntegerBinaryArithmeticMul) {
+  StringRef mod = "om.class @IntegerBinaryArithmeticMul() {"
+                  "  %0 = om.constant #om.integer<2 : si3> : !om.integer"
+                  "  %1 = om.constant #om.integer<3 : si3> : !om.integer"
+                  "  %2 = om.integer.mul %0, %1 : !om.integer"
+                  "  om.class.field @result, %2 : !om.integer"
+                  "}";
+
+  DialectRegistry registry;
+  registry.insert<OMDialect>();
+
+  MLIRContext context(registry);
+  context.getOrLoadDialect<OMDialect>();
+
+  OwningOpRef<ModuleOp> owning =
+      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
+
+  Evaluator evaluator(owning.release());
+
+  auto result = evaluator.instantiate(
+      StringAttr::get(&context, "IntegerBinaryArithmeticMul"), {});
+
+  ASSERT_TRUE(succeeded(result));
+
+  auto fieldValue = llvm::cast<evaluator::ObjectValue>(result.value().get())
+                        ->getField("result")
+                        .value();
+
+  ASSERT_EQ(6, llvm::cast<evaluator::AttributeValue>(fieldValue.get())
+                   ->getAs<circt::om::IntegerAttr>()
+                   .getValue()
+                   .getValue());
+}
+
 TEST(EvaluatorTests, IntegerBinaryArithmeticObjects) {
   StringRef mod = "om.class @Class1() {"
                   "  %0 = om.constant #om.integer<1 : si3> : !om.integer"

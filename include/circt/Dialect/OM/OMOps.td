@@ -473,4 +473,17 @@ def IntegerAddOp : IntegerBinaryArithmeticOp<"integer.add", [Commutative]> {
   }];
 }
 
+def IntegerMulOp : IntegerBinaryArithmeticOp<"integer.mul", [Commutative]> {
+  let summary = "Multiply two OMIntegerType values";
+  let description = [{
+    Perform arbitrary prevision signed integer multiplication of two
+    OMIntegerType values.
+
+    Example:
+    ```mlir
+    %2 = om.integer.mul %0, %1 : !om.integer
+    ```
+  }];
+}
+
 #endif // CIRCT_DIALECT_OM_OMOPS_TD
