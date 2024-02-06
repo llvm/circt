@@ -339,5 +339,8 @@ firrtl.circuit "IntegerArithmetic" {
 
     // CHECK: om.integer.mul %0, %1 : !om.integer
     %3 = firrtl.integer.mul %0, %1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+
+    // CHECK: om.integer.shr %0, %1 : !om.integer
+    %4 = firrtl.integer.shr %0, %1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
   }
 }
