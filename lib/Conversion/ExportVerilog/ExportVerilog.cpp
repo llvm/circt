@@ -5010,8 +5010,6 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
 }
 
 LogicalResult StmtEmitter::visitStmt(InstanceChoiceOp op) {
-  HWModuleOp parentMod = op->getParentOfType<hw::HWModuleOp>();
-
   startStatement();
   Operation *choiceMacroDeclOp = state.symbolCache.getDefinition(
       op->getAttrOfType<FlatSymbolRefAttr>("hw.choiceTarget"));
@@ -6418,7 +6416,8 @@ static LogicalResult exportVerilogImpl(ModuleOp module, llvm::raw_ostream &os) {
 
 LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
   LoweringOptions options(module);
-  lowerHWInstanceChoices(module);
+  if (failed(lowerHWInstanceChoices(module)))
+    return failure();
   SmallVector<HWModuleOp> modulesToPrepare;
   module.walk([&](HWModuleOp op) { modulesToPrepare.push_back(op); });
   if (failed(failableParallelForEach(
@@ -6594,7 +6593,8 @@ static LogicalResult exportSplitVerilogImpl(ModuleOp module,
 
 LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
   LoweringOptions options(module);
-  lowerHWInstanceChoices(module);
+  if (failed(lowerHWInstanceChoices(module)))
+    return failure();
   SmallVector<HWModuleOp> modulesToPrepare;
   module.walk([&](HWModuleOp op) { modulesToPrepare.push_back(op); });
   if (failed(failableParallelForEach(
