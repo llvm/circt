@@ -45,6 +45,11 @@ public:
   // Get the module info (if any) for the module instance in 'json'.
   optional<ModuleInfo> getModInfo(const nlohmann::json &) const;
 
+  /// Go through the "service_decls" section of the manifest and populate the
+  /// services table as appropriate.
+  void scanServiceDecls(AcceleratorConnection &, const nlohmann::json &,
+                        ServiceTable &) const;
+
   /// Get a Service for the service specified in 'json'. Update the
   /// activeServices table.
   services::Service *getService(AppIDPath idPath, AcceleratorConnection &,
@@ -60,10 +65,10 @@ public:
 
   /// Get the bundle ports for the instance at 'idPath' and specified in
   /// 'instJson'. Look them up in 'activeServies'.
-  vector<BundlePort> getBundlePorts(AcceleratorConnection &acc,
-                                    AppIDPath idPath,
-                                    const ServiceTable &activeServices,
-                                    const nlohmann::json &instJson) const;
+  vector<std::unique_ptr<BundlePort>>
+  getBundlePorts(AcceleratorConnection &acc, AppIDPath idPath,
+                 const ServiceTable &activeServices,
+                 const nlohmann::json &instJson) const;
 
   /// Build the set of child instances (recursively) for the module instance
   /// description.
@@ -197,17 +202,23 @@ Manifest::Impl::Impl(Context &ctxt, const string &manifestStr) : ctxt(ctxt) {
 
 unique_ptr<Accelerator>
 Manifest::Impl::buildAccelerator(AcceleratorConnection &acc) const {
-  auto designJson = manifestJson.at("design");
+  ServiceTable activeSvcs;
 
   // Get the initial active services table. Update it as we descend down.
-  ServiceTable activeSvcs;
+  auto svcDecls = manifestJson.at("service_decls");
+  scanServiceDecls(acc, svcDecls, activeSvcs);
+
+  // Get the services instantiated at the top level.
+  auto designJson = manifestJson.at("design");
   vector<services::Service *> services =
       getServices({}, acc, designJson, activeSvcs);
 
+  // Get the ports at the top level.
+  auto ports = getBundlePorts(acc, {}, activeSvcs, designJson);
+
   return make_unique<Accelerator>(
       getModInfo(designJson),
-      getChildInstances({}, acc, activeSvcs, designJson), services,
-      getBundlePorts(acc, {}, activeSvcs, designJson));
+      getChildInstances({}, acc, activeSvcs, designJson), services, ports);
 }
 
 optional<ModuleInfo>
@@ -219,6 +230,27 @@ Manifest::Impl::getModInfo(const nlohmann::json &json) const {
   if (f != symbolInfoCache.end())
     return f->second;
   return nullopt;
+}
+
+void Manifest::Impl::scanServiceDecls(AcceleratorConnection &acc,
+                                      const nlohmann::json &svcDecls,
+                                      ServiceTable &activeServices) const {
+  for (auto &svcDecl : svcDecls) {
+    if (auto f = svcDecl.find("type_name"); f != svcDecl.end()) {
+      // Get the implementation details.
+      ServiceImplDetails svcDetails;
+      for (auto &detail : svcDecl.items())
+        svcDetails[detail.key()] = getAny(detail.value());
+
+      // Create the service.
+      services::Service::Type svcId =
+          services::ServiceRegistry::lookupServiceType(f.value());
+      auto svc = acc.getService(svcId, /*id=*/{}, /*implName=*/"",
+                                /*details=*/svcDetails, /*clients=*/{});
+      if (svc)
+        activeServices[svcDecl.at("symbol")] = svc;
+    }
+  }
 }
 
 vector<unique_ptr<Instance>>
@@ -233,6 +265,7 @@ Manifest::Impl::getChildInstances(AppIDPath idPath, AcceleratorConnection &acc,
     ret.emplace_back(getChildInstance(idPath, acc, activeServices, child));
   return ret;
 }
+
 unique_ptr<Instance>
 Manifest::Impl::getChildInstance(AppIDPath idPath, AcceleratorConnection &acc,
                                  ServiceTable activeServices,
@@ -244,9 +277,9 @@ Manifest::Impl::getChildInstance(AppIDPath idPath, AcceleratorConnection &acc,
       getServices(idPath, acc, child, activeServices);
 
   auto children = getChildInstances(idPath, acc, activeServices, child);
-  return make_unique<Instance>(
-      parseID(child.at("app_id")), getModInfo(child), std::move(children),
-      services, getBundlePorts(acc, idPath, activeServices, child));
+  auto ports = getBundlePorts(acc, idPath, activeServices, child);
+  return make_unique<Instance>(parseID(child.at("app_id")), getModInfo(child),
+                               std::move(children), services, ports);
 }
 
 services::Service *
@@ -289,11 +322,13 @@ Manifest::Impl::getService(AppIDPath idPath, AcceleratorConnection &acc,
 
   // Create the service.
   // TODO: Add support for 'standard' services.
-  auto svc = acc.getService<services::CustomService>(idPath, implName,
-                                                     svcDetails, clientDetails);
-
-  // Update the active services table.
-  activeServices[service] = svc;
+  services::Service::Type svcType =
+      services::ServiceRegistry::lookupServiceType(service);
+  services::Service *svc =
+      acc.getService(svcType, idPath, implName, svcDetails, clientDetails);
+  if (svc)
+    // Update the active services table.
+    activeServices[service] = svc;
   return svc;
 }
 
@@ -312,11 +347,11 @@ Manifest::Impl::getServices(AppIDPath idPath, AcceleratorConnection &acc,
   return ret;
 }
 
-vector<BundlePort>
+vector<std::unique_ptr<BundlePort>>
 Manifest::Impl::getBundlePorts(AcceleratorConnection &acc, AppIDPath idPath,
                                const ServiceTable &activeServices,
                                const nlohmann::json &instJson) const {
-  vector<BundlePort> ret;
+  vector<std::unique_ptr<BundlePort>> ret;
   auto contentsIter = instJson.find("contents");
   if (contentsIter == instJson.end())
     return ret;
@@ -329,20 +364,16 @@ Manifest::Impl::getBundlePorts(AcceleratorConnection &acc, AppIDPath idPath,
     std::string serviceName = "";
     if (auto f = content.find("servicePort"); f != content.end())
       serviceName = parseServicePort(f.value()).name;
-    auto svc = activeServices.find(serviceName);
-    if (svc == activeServices.end()) {
+    auto svcIter = activeServices.find(serviceName);
+    if (svcIter == activeServices.end()) {
       // If a specific service isn't found, search for the default service
       // (typically provided by a BSP).
-      if (svc = activeServices.find(""); svc == activeServices.end())
+      if (svcIter = activeServices.find(""); svcIter == activeServices.end())
         throw runtime_error(
             "Malformed manifest: could not find active service '" +
             serviceName + "'");
     }
-
-    // If the active service is null, then this is a port that is not connected
-    // externally. Or we don't have an implementation for it.
-    if (!svc->second)
-      continue;
+    services::Service *svc = svcIter->second;
 
     string typeName = content.at("bundleType").at("circt_name");
     auto type = getType(typeName);
@@ -350,11 +381,20 @@ Manifest::Impl::getBundlePorts(AcceleratorConnection &acc, AppIDPath idPath,
       throw runtime_error("Malformed manifest: could not find port type '" +
                           typeName + "'");
     const BundleType *bundleType = dynamic_cast<const BundleType *>(*type);
+    if (!bundleType)
+      throw runtime_error("Malformed manifest: type '" + typeName +
+                          "' is not a bundle type");
 
     idPath.push_back(parseID(content.at("appID")));
-    map<string, ChannelPort &> portChannels;
-    portChannels = acc.requestChannelsFor(idPath, bundleType);
-    ret.emplace_back(idPath.back(), portChannels);
+    map<string, ChannelPort &> portChannels =
+        acc.requestChannelsFor(idPath, bundleType);
+
+    services::ServicePort *svcPort =
+        svc->getPort(idPath, bundleType, portChannels, acc);
+    if (svcPort)
+      ret.emplace_back(svcPort);
+    else
+      ret.emplace_back(new BundlePort(idPath.back(), portChannels));
     // Since we share idPath between iterations, pop the last element before the
     // next iteration.
     idPath.pop_back();

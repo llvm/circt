@@ -158,6 +158,19 @@ PYBIND11_MODULE(esiCppAccel, m) {
       .def("getRead", &BundlePort::getRawRead,
            py::return_value_policy::reference);
 
+  py::class_<ServicePort, BundlePort>(m, "ServicePort");
+  py::class_<FuncService::Function, ServicePort>(m, "Function")
+      .def("call",
+           [](FuncService::Function &self, py::bytearray msg) -> py::bytearray {
+             py::buffer_info info(py::buffer(msg).request());
+             std::vector<uint8_t> dataVec((uint8_t *)info.ptr,
+                                          (uint8_t *)info.ptr + info.size);
+             MessageData data(dataVec);
+             auto ret = self.call(data);
+             return py::bytearray((const char *)ret.getBytes(), ret.getSize());
+           })
+      .def("connect", &FuncService::Function::connect);
+
   // Store this variable (not commonly done) as the "children" method needs for
   // "Instance" to be defined first.
   auto hwmodule =

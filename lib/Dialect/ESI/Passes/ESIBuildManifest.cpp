@@ -190,6 +190,9 @@ std::string ESIBuildManifestPass::json() {
         continue;
       j.object([&] {
         j.attribute("symbol", sym.getValue());
+        std::optional<StringRef> typeName = svcDecl.getTypeName();
+        if (typeName)
+          j.attribute("type_name", *typeName);
         llvm::SmallVector<ServicePortInfo, 8> ports;
         svcDecl.getPortList(ports);
         j.attributeArray("ports", [&]() {
