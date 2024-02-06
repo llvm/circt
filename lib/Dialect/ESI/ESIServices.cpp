@@ -321,13 +321,10 @@ struct ESIConnectServicesPass
 
   void runOnOperation() override;
 
-  /// Bundles allow us to convert to_server requests to to_client requests,
-  /// which is how the canonical implementation connection request is defined.
-  /// Convert both to_server and to_client requests into the canonical
-  /// implementation connection request. This simplifies the rest of the pass
-  /// and the service implementation code.
-  void convertReq(RequestToClientConnectionOp);
-  void convertReq(RequestToServerConnectionOp);
+  /// Convert connection requests to service implement connection requests,
+  /// which have a relative appid path instead of just an appid. Leave being a
+  /// record for the manifest of the original request.
+  void convertReq(RequestConnectionOp);
 
   /// "Bubble up" the specified requests to all of the instantiations of the
   /// module specified. Create and connect up ports to tunnel the ESI channels
@@ -356,12 +353,7 @@ void ESIConnectServicesPass::runOnOperation() {
   ModuleOp outerMod = getOperation();
   topLevelSyms.addDefinitions(outerMod);
 
-  outerMod.walk([&](Operation *op) {
-    if (auto req = dyn_cast<RequestToClientConnectionOp>(op))
-      convertReq(req);
-    else if (auto req = dyn_cast<RequestToServerConnectionOp>(op))
-      convertReq(req);
-  });
+  outerMod.walk([&](RequestConnectionOp req) { convertReq(req); });
 
   // Get a partially-ordered list of modules based on the instantiation DAG.
   // It's _very_ important that we process modules before their instantiations
@@ -390,72 +382,20 @@ StringAttr ESIConnectServicesPass::getStdService(FlatSymbolRefAttr svcSym) {
   return {};
 }
 
-void ESIConnectServicesPass::convertReq(
-    RequestToClientConnectionOp toClientReq) {
-  OpBuilder b(toClientReq);
-  // to_client requests are already in the canonical form, just the wrong op.
+void ESIConnectServicesPass::convertReq(RequestConnectionOp req) {
+  OpBuilder b(req);
   auto newReq = b.create<ServiceImplementConnReqOp>(
-      toClientReq.getLoc(), toClientReq.getToClient().getType(),
-      toClientReq.getServicePortAttr(),
-      ArrayAttr::get(&getContext(), {toClientReq.getAppIDAttr()}));
-  newReq->setDialectAttrs(toClientReq->getDialectAttrs());
-  toClientReq.getToClient().replaceAllUsesWith(newReq.getToClient());
+      req.getLoc(), req.getToClient().getType(), req.getServicePortAttr(),
+      ArrayAttr::get(&getContext(), {req.getAppIDAttr()}));
+  newReq->setDialectAttrs(req->getDialectAttrs());
+  req.getToClient().replaceAllUsesWith(newReq.getToClient());
 
   // Emit a record of the original request.
   b.create<ServiceRequestRecordOp>(
-      toClientReq.getLoc(), toClientReq.getAppID(),
-      toClientReq.getServicePortAttr(),
-      getStdService(toClientReq.getServicePortAttr().getModuleRef()),
-      BundleDirection::toClient, toClientReq.getToClient().getType());
-  toClientReq.erase();
-}
-
-void ESIConnectServicesPass::convertReq(
-    RequestToServerConnectionOp toServerReq) {
-  OpBuilder b(toServerReq);
-  BackedgeBuilder beb(b, toServerReq.getLoc());
-
-  // to_server requests need to be converted to bundles with the opposite
-  // directions.
-  ChannelBundleType toClientType =
-      toServerReq.getToServer().getType().getReversed();
-
-  // Create the new canonical request. It's modeled in the to_client form.
-  auto toClientReq = b.create<ServiceImplementConnReqOp>(
-      toServerReq.getLoc(), toClientType, toServerReq.getServicePortAttr(),
-      ArrayAttr::get(&getContext(), {toServerReq.getAppIDAttr()}));
-  toClientReq->setDialectAttrs(toServerReq->getDialectAttrs());
-
-  // Unpack the bundle coming from the new request.
-  SmallVector<Value, 8> unpackToClientFromChannels;
-  SmallVector<Backedge, 8> unpackToClientFromChannelsBackedges;
-  for (BundledChannel ch : toClientType.getChannels()) {
-    if (ch.direction == ChannelDirection::to)
-      continue;
-    unpackToClientFromChannelsBackedges.push_back(beb.get(ch.type));
-    unpackToClientFromChannels.push_back(
-        unpackToClientFromChannelsBackedges.back());
-  }
-  auto unpackToClient =
-      b.create<UnpackBundleOp>(toServerReq.getLoc(), toClientReq.getToClient(),
-                               unpackToClientFromChannels);
-
-  // Convert the unpacked channels to the original request's bundle type with
-  // another unpack.
-  auto unpackToServer =
-      b.create<UnpackBundleOp>(toServerReq.getLoc(), toServerReq.getToServer(),
-                               unpackToClient.getToChannels());
-  for (auto [v, be] : llvm::zip_equal(unpackToServer.getToChannels(),
-                                      unpackToClientFromChannelsBackedges))
-    be.setValue(v);
-
-  // Emit a record of the original request.
-  b.create<ServiceRequestRecordOp>(
-      toServerReq.getLoc(), toServerReq.getAppID(),
-      toServerReq.getServicePortAttr(),
-      getStdService(toServerReq.getServicePortAttr().getModuleRef()),
-      BundleDirection::toServer, toServerReq.getToServer().getType());
-  toServerReq.erase();
+      req.getLoc(), req.getAppID(), req.getServicePortAttr(),
+      getStdService(req.getServicePortAttr().getModuleRef()),
+      req.getToClient().getType());
+  req.erase();
 }
 
 LogicalResult ESIConnectServicesPass::process(hw::HWModuleLike mod) {

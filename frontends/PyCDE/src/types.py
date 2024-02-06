@@ -606,6 +606,15 @@ class Bundle(Type):
         for (name, dir, type) in self._type.channels
     ]
 
+  def inverted(self) -> "Bundle":
+    """Return a new bundle with all the channels direction inverted."""
+    return Bundle([
+        BundledChannel(
+            name, ChannelDirection.TO
+            if dir == ChannelDirection.FROM else ChannelDirection.FROM,
+            _FromCirctType(ty)) for (name, dir, ty) in self._type.channels
+    ])
+
   # Easy accessor for channel types by name.
   def __getattr__(self, attrname: str):
     for channel in self.channels:

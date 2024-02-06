@@ -236,9 +236,9 @@ def ChannelBundleType : ESI_Type<"ChannelBundle"> {
     transmitting messages from the sender to the receiver. Then, "from" means
     that the sender is getting messages from the receiver (typically responses).
 
-    When requesting a bundle from a service, the client is always considered the
-    sender. So the "to" direction is for the client to send messages to the
-    service.
+    When requesting a bundle from a service, the service is always considered
+    the sender; so, "to" means the service is sending messages to the client and
+    "from" means the service is receiving messages from the client.
   }];
 
   let mnemonic = "bundle";

@@ -302,6 +302,8 @@ public:
   size_t size() const { return path.size(); }
   bool empty() const { return path.empty(); }
 
+  bool operator==(const InstancePath &that) const { return path == that.path; }
+
   /// Print the path to any stream-like object.
   void print(llvm::raw_ostream &into) const;
 

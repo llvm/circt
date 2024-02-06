@@ -1869,22 +1869,6 @@ firrtl.circuit "WrongLayerBlockNesting" {
 
 // -----
 
-// A layer block captures a type which is not a FIRRTL base type.
-firrtl.circuit "NonBaseTypeCapture" {
-  firrtl.layer @A bind {}
-  firrtl.module @NonBaseTypeCapture(in %in: !firrtl.uint<1>) {
-    // expected-note @below {{operand is defined here}}
-     %ref = firrtl.ref.send %in : !firrtl.uint<1>
-    // expected-error @below {{'firrtl.layerblock' op captures an operand which is not a FIRRTL base type}}
-    firrtl.layerblock @A {
-      // expected-note @below {{operand is used here}}
-      %b = firrtl.ref.resolve %ref : !firrtl.probe<uint<1>>
-    }
-  }
-}
-
-// -----
-
 // A layer block captures a non-passive type.
 firrtl.circuit "NonPassiveCapture" {
   firrtl.layer @A bind {}
@@ -1918,6 +1902,126 @@ firrtl.circuit "LayerBlockDrivesSinksOutside" {
       }
     }
   }
+}
+
+// -----
+
+firrtl.circuit "IllegalRefDefine" {
+  firrtl.layer @A bind {}
+  firrtl.module @Bar(out %a: !firrtl.probe<uint<1>, @A>) {}
+  // expected-note @below {{the enclosing 'firrtl.module' is defined here}}
+  firrtl.module @IllegalRefDefine(out %a: !firrtl.probe<uint<1>, @A>) {
+    %bar_a = firrtl.instance bar interesting_name @Bar(out a: !firrtl.probe<uint<1>, @A>)
+    // expected-error @below {{'firrtl.ref.define' op cannot interact with layer '@A' because it is not inside a 'firrtl.module' or 'firrtl.layerblock' which enables layer '@A' or a child layer}}
+    firrtl.ref.define %a, %bar_a : !firrtl.probe<uint<1>, @A>
+  }
+}
+
+// -----
+
+firrtl.circuit "IllegalRefCastDestModule" {
+  // expected-note @below {{the enclosing 'firrtl.module' is defined here}}
+  firrtl.module @IllegalRefCastDestModule() {
+    %a = firrtl.wire : !firrtl.uint<1>
+    %0 = firrtl.ref.send %a : !firrtl.uint<1>
+    // expected-error @below {{'firrtl.ref.cast' op cannot interact with layer '@A' because it is not inside a 'firrtl.module' or 'firrtl.layerblock' which enables layer '@A' or a child layer}}
+    %1 = firrtl.ref.cast %0 : (!firrtl.probe<uint<1>>) -> !firrtl.probe<uint<1>, @A>
+  }
+}
+
+// -----
+
+firrtl.circuit "IllegalRefCastDestLayerBlock" {
+  firrtl.layer @A bind {
+  }
+  firrtl.layer @B bind {
+  }
+  // expected-note @below {{the enclosing 'firrtl.module' is defined here}}
+  firrtl.module @IllegalRefCastDestLayerBlock() {
+    // expected-note @below {{the enclosing 'firrtl.layerblock' is defined here}}
+    firrtl.layerblock @A {
+      %a = firrtl.wire : !firrtl.uint<1>
+      %0 = firrtl.ref.send %a : !firrtl.uint<1>
+      // expected-error @below {{'firrtl.ref.cast' op cannot interact with layer '@B' because it is not inside a 'firrtl.module' or 'firrtl.layerblock' which enables layer '@B' or a child layer}}
+      %1 = firrtl.ref.cast %0 : (!firrtl.probe<uint<1>>) -> !firrtl.probe<uint<1>, @B>
+    }
+  }
+}
+
+// -----
+
+firrtl.circuit "IllegalRefResolve_NotInLayerBlock" {
+  firrtl.layer @A bind {
+  }
+  // expected-note @below {{the enclosing 'firrtl.module' is defined here}}
+  firrtl.module @IllegalRefResolve_NotInLayerBlock() {
+    %0 = firrtl.wire : !firrtl.probe<uint<1>, @A>
+    // expected-error @below {{'firrtl.ref.resolve' op cannot interact with layer '@A' because it is not inside a 'firrtl.module' or 'firrtl.layerblock' which enables layer '@A' or a child layer}}
+    %1 = firrtl.ref.resolve %0 : !firrtl.probe<uint<1>, @A>
+  }
+}
+
+// -----
+
+firrtl.circuit "IllegalRefResolve_IllegalLayer" {
+  firrtl.layer @A bind {
+  }
+  firrtl.layer @B bind {
+  }
+  // expected-note @below {{the enclosing 'firrtl.module' is defined here}}
+  firrtl.module @IllegalRefResolve_IllegalLayer() {
+    %0 = firrtl.wire : !firrtl.probe<uint<1>, @A>
+    // expected-note @below {{the enclosing 'firrtl.layerblock' is defined here}}
+    firrtl.layerblock @B {
+      // expected-error @below {{'firrtl.ref.resolve' op cannot interact with layer '@A' because it is not inside a 'firrtl.module' or 'firrtl.layerblock' which enables layer '@A' or a child layer}}
+      %1 = firrtl.ref.resolve %0 : !firrtl.probe<uint<1>, @A>
+    }
+  }
+}
+
+// -----
+
+firrtl.circuit "InvalidProbeAssociationPort_SymbolDoesNotExist" {
+  // expected-error @below {{probe port 'a' is associated with layer '@B', but this layer was not defined}}
+  firrtl.module @InvalidProbeAssociationPort_SymbolDoesNotExist(out %a: !firrtl.probe<uint<1>, @B>) {
+  }
+}
+
+// -----
+
+firrtl.circuit "InvalidProbeAssociationPort_SymbolIsNotALayer" {
+  // expected-note @below {{symbol refers to this op}}
+  firrtl.module @B() {}
+  // expected-error @below {{probe port 'a' is associated with layer '@B', but symbol '@B' does not refer to a 'firrtl.layer' op}}
+  firrtl.module @InvalidProbeAssociationPort_SymbolIsNotALayer(out %a: !firrtl.probe<uint<1>, @B>) {
+  }
+}
+
+// -----
+
+firrtl.circuit "InvalidProbeAssociationWire_SymbolDoesNotExist" {
+  firrtl.module @InvalidProbeAssociationWire_SymbolDoesNotExist() {
+    // expected-error @below {{'firrtl.wire' op is associated with layer '@B', but this layer was not defined}}
+    %a = firrtl.wire : !firrtl.probe<uint<1>, @B>
+  }
+}
+
+// -----
+
+firrtl.circuit "InvalidProbeAssociationWire_SymbolIsNotALayer" {
+  // expected-note @below {{symbol refers to this op}}
+  firrtl.module @B() {}
+  firrtl.module @InvalidProbeAssociationWire_SymbolIsNotALayer() {
+    // expected-error @below {{'firrtl.wire' op is associated with layer '@B', but symbol '@B' does not refer to a 'firrtl.layer' op}}
+    %a = firrtl.wire : !firrtl.probe<uint<1>, @B>
+  }
+}
+
+// -----
+
+firrtl.circuit "UnknownEnabledLayer" {
+  // expected-error @below {{'firrtl.module' op enables unknown layer '@A'}}
+  firrtl.module @UnknownEnabledLayer() attributes {layers = [@A]} {}
 }
 
 // -----

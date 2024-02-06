@@ -36,6 +36,7 @@
 namespace py = pybind11;
 
 static void registerPasses() {
+  registerCombPasses();
   registerSeqPasses();
   registerSVPasses();
   registerFSMPasses();
