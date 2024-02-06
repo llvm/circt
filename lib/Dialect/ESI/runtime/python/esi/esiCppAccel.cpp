@@ -142,7 +142,7 @@ PYBIND11_MODULE(esiCppAccel, m) {
         p.write(dataVec);
       });
   py::class_<ReadChannelPort, ChannelPort>(m, "ReadChannelPort")
-      .def("read", [](ReadChannelPort &p) -> py::bytearray {
+      .def("read", [](ReadChannelPort &p) -> py::object {
         MessageData data;
         if (!p.read(data))
           return py::none();
