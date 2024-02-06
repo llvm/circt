@@ -20,6 +20,7 @@
 
 #include <exception>
 #include <memory>
+#include <optional>
 
 namespace esi {
 class AcceleratorConnection;

@@ -17,6 +17,7 @@
 #define ESI_TYPES_H
 
 #include <map>
+#include <cstdint>
 #include <string>
 #include <vector>
 
