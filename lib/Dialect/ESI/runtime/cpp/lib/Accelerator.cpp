@@ -50,11 +50,12 @@ void registerBackend(string name, BackendCreate create) {
 }
 } // namespace internal
 
-unique_ptr<AcceleratorConnection> connect(string backend, string connection) {
+unique_ptr<AcceleratorConnection> connect(Context &ctxt, string backend,
+                                          string connection) {
   auto f = internal::backendRegistry.find(backend);
   if (f == internal::backendRegistry.end())
     throw runtime_error("Backend not found");
-  return f->second(connection);
+  return f->second(ctxt, connection);
 }
 
 } // namespace registry
