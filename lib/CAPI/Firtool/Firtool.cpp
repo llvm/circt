@@ -323,7 +323,7 @@ void circtFirtoolOptionsSetStripDebugInfo(CirctFirtoolFirtoolOptions options,
   unwrap(options)->setStripDebugInfo(value);
 }
 
-void circtFirtoolOptionsSetDisableBlackBoxReourceFile(
+void circtFirtoolOptionsSetDisableBlackBoxResourceFile(
     CirctFirtoolFirtoolOptions options, bool value) {
   unwrap(options)->setDisableBlackBoxResourceFile(value);
 }
