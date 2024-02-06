@@ -217,6 +217,9 @@ MLIR_CAPI_EXPORTED void
 circtFirtoolOptionsSetStripDebugInfo(CirctFirtoolFirtoolOptions options,
                                      bool value);
 
+MLIR_CAPI_EXPORTED void circtFirtoolOptionsSetDisableBlackBoxReourceFile(
+    CirctFirtoolFirtoolOptions options, bool value);
+
 //===----------------------------------------------------------------------===//
 // Populate API.
 //===----------------------------------------------------------------------===//
