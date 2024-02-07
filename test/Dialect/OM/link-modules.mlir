@@ -132,22 +132,35 @@ module {
 // Check that symbol users are updated in nested regions.
 module {
   module {
-    // CHECK: hw.module private @M2_0
     hw.module private @M2() {}
-  }
-  module {
-    // CHECK: hw.module private @M2_1
-    hw.module private @M2() {}
+    hw.module private @C2() {}
+    hw.module private @C1() {}
   }
   module {
     hw.module private @M2() {}
+    hw.module private @C2() {}
+    hw.module private @C1() {}
+    hw.module private @M3() {}
+  }
+  module {
+    // CHECK: om.class @C2_module_2() {
+    om.class @C2() {
+    }
+    // CHECK: om.class @C1_module_2() {
+    om.class @C1() {
+    }
+    hw.module private @M2() {}
+    // CHECK: hw.module private @M3_1() {
+    hw.module private @M3() {}
     hw.module @M1(in %a: i1) {
-      sv.always posedge %a {
-        sv.if %a {
-          // CHECK: "random"() {symRefName = @M2_2, symRefName2 = @M2_2}
-          "random"() { symRefName = @M2, symRefName2 = @M2} : () -> ()
-        }
-      }
+      //CHECK:  %1 = "r3"() {symRefName = @M2_2, symRefName2 = @M3_1} : () -> !om.class.type<@C2_module_2>
+      %x = "r1"() ({
+        "r2"() ({
+          %b = "r3"() {symRefName = @M2, symRefName2 = @M3} : () -> !om.class.type<@C2>
+        }, {
+        }) : () -> ()
+      // CHECK:  {ref = @C1_module_2} : () -> !om.class.type<@C2_module_2>
+      }) {ref = @C1 } : () -> !om.class.type<@C2>
     }
   }
 }
