@@ -102,31 +102,6 @@ static Type mapLoweredType(Type type, FIRRTLBaseType fieldType) {
   return mapLoweredType(ftype, fieldType);
 }
 
-// NOLINTBEGIN(misc-no-recursion)
-/// Return true if the type has more than zero bitwidth.
-static bool hasZeroBitWidth(FIRRTLType type) {
-  return FIRRTLTypeSwitch<FIRRTLType, bool>(type)
-      .Case<BundleType>([&](auto bundle) {
-        for (size_t i = 0, e = bundle.getNumElements(); i < e; ++i) {
-          auto elt = bundle.getElement(i);
-          if (hasZeroBitWidth(elt.type))
-            return true;
-        }
-        return bundle.getNumElements() == 0;
-      })
-      .Case<FVectorType>([&](auto vector) {
-        if (vector.getNumElements() == 0)
-          return true;
-        return hasZeroBitWidth(vector.getElementType());
-      })
-      .Case<FIRRTLBaseType>([](auto groundType) {
-        return firrtl::getBitWidth(groundType).value_or(0) == 0;
-      })
-      .Case<RefType>([](auto ref) { return hasZeroBitWidth(ref.getType()); })
-      .Default([](auto) { return false; });
-}
-// NOLINTEND(misc-no-recursion)
-
 /// Return true if the type is a 1d vector type or ground type.
 static bool isOneDimVectorType(FIRRTLType type) {
   return FIRRTLTypeSwitch<FIRRTLType, bool>(type)
