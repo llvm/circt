@@ -123,6 +123,7 @@ LogicalResult IntrinsicLowerings::lower(CircuitOp circuit) {
       if (it != extmods.end()) {
         if (succeeded(it->second(op))) {
           op.erase();
+          ++numConverted;
         } else {
           ++numFailures;
         }
@@ -158,6 +159,7 @@ LogicalResult IntrinsicLowerings::lower(CircuitOp circuit) {
       ++numFailures;
       continue;
     }
+    ++numConverted;
     op.erase();
   }
 
