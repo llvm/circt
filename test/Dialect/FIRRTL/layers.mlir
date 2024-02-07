@@ -187,4 +187,18 @@ firrtl.circuit "Test" {
       firrtl.ref.define %0, %2 : !firrtl.probe<uint<1>, @A>
     }
   }
+
+  //===--------------------------------------------------------------------===//
+  // Properties Under Layers
+  //===--------------------------------------------------------------------===//
+
+  firrtl.extmodule @WithInputProp(in i : !firrtl.string)
+
+  firrtl.module @InstWithInputPropUnderLayerBlock() {
+    firrtl.layerblock @A {
+      %foo_in = firrtl.instance foo @WithInputProp(in i : !firrtl.string)
+      %str = firrtl.string "whatever"
+      firrtl.propassign %foo_in, %str : !firrtl.string
+    }
+  }
 }
