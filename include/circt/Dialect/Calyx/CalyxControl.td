@@ -14,8 +14,11 @@ def ControlLike : NativeOpTrait<"ControlLike"> {
   let cppNamespace = "::circt::calyx";
 }
 
+// ControlOp is a SymbolTable even though ControlLike ops are not Symbols
+// because in the lowering pipeline, we add FSM MachineOps under ControlOp, and
+// MachineOps are Symbols. See https://github.com/llvm/circt/issues/6667.
 def ControlOp : CalyxContainer<"control", [
-    HasParent<"ComponentOp">
+    HasParent<"ComponentOp">, SymbolTable
   ]> {
   let summary = "Calyx Control";
   let description = [{
