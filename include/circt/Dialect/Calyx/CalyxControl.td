@@ -15,7 +15,7 @@ def ControlLike : NativeOpTrait<"ControlLike"> {
 }
 
 def ControlOp : CalyxContainer<"control", [
-    HasParent<"ComponentOp">
+    HasParent<"ComponentOp">, SymbolTable
   ]> {
   let summary = "Calyx Control";
   let description = [{
