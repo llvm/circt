@@ -101,3 +101,33 @@ firrtl.circuit "Top" {
     }
   }
 }
+
+// -----
+
+firrtl.circuit "Top" {
+  firrtl.layer @A bind {}
+  firrtl.module @Foo() attributes {layers = [@A]} {}
+  firrtl.module @Top() {
+    // expected-error @below {{'firrtl.instance' op ambient layers are insufficient to instantiate module}}
+    // expected-note  @below {{missing layer requirements: @A}}
+    firrtl.instance foo {layers = [@A]} @Foo()
+  }
+}
+
+// -----
+
+firrtl.circuit "Top" {
+  firrtl.layer @A bind {}
+  firrtl.option @O {
+    firrtl.option_case @C1
+  }
+  firrtl.module @Foo() attributes {layers = [@A]} {}
+  firrtl.module @Bar() attributes {layers = [@A]} {}
+  firrtl.module @Top() {
+    // expected-error @below {{'firrtl.instance_choice' op ambient layers are insufficient to instantiate module}}
+    // expected-note  @below {{missing layer requirements: @A}}
+    firrtl.instance_choice foo {layers = [@A]} @Foo alternatives @O {
+      @C1 -> @Bar
+    } ()
+  }
+}
