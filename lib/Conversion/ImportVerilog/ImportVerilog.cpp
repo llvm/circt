@@ -215,7 +215,8 @@ LogicalResult ImportContext::prepareDriver(SourceMgr &sourceMgr) {
   driver.options.timeScale = options.timeScale;
   driver.options.allowUseBeforeDeclare = options.allowUseBeforeDeclare;
   driver.options.ignoreUnknownModules = options.ignoreUnknownModules;
-  driver.options.onlyLint = options.onlyLint;
+  driver.options.onlyLint =
+      options.mode == ImportVerilogOptions::Mode::OnlyLint;
   driver.options.topModules = options.topModules;
   driver.options.paramOverrides = options.paramOverrides;
 

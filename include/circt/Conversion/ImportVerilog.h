@@ -34,11 +34,16 @@ namespace circt {
 /// `Driver::addStandardArgs()` for some inspiration on how to expose these on
 /// the command line.
 struct ImportVerilogOptions {
-  /// Only lint the input, without elaboration and lowering to CIRCT IR.
-  bool onlyLint = false;
-
-  /// Only parse and elaborate the input, without mapping to CIRCT IR.
-  bool onlyParse = false;
+  /// Limit importing to linting or parsing only.
+  enum class Mode {
+    /// Only lint the input, without elaboration and lowering to CIRCT IR.
+    OnlyLint,
+    /// Only parse and elaborate the input, without mapping to CIRCT IR.
+    OnlyParse,
+    /// Perform a full import and mapping to CIRCT IR.
+    Full
+  };
+  Mode mode = Mode::Full;
 
   //===--------------------------------------------------------------------===//
   // Include paths
