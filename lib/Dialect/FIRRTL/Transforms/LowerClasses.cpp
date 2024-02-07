@@ -1127,7 +1127,7 @@ struct ClassFieldOpConversion : public OpConversionPattern<ClassFieldOp> {
   LogicalResult
   matchAndRewrite(ClassFieldOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<ClassFieldOp>(op, adaptor.getSymNameAttr(),
+    rewriter.replaceOpWithNewOp<ClassFieldOp>(op, adaptor.getNameAttr(),
                                               adaptor.getValue());
     return success();
   }
@@ -1143,8 +1143,8 @@ struct ClassExternFieldOpConversion
     auto type = typeConverter->convertType(adaptor.getType());
     if (!type)
       return failure();
-    rewriter.replaceOpWithNewOp<ClassExternFieldOp>(
-        op, adaptor.getSymNameAttr(), type);
+    rewriter.replaceOpWithNewOp<ClassExternFieldOp>(op, adaptor.getNameAttr(),
+                                                    type);
     return success();
   }
 };
