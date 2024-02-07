@@ -57,9 +57,7 @@ LogicalResult circt::om::evaluator::EvaluatorValue::finalize() {
 
 Type circt::om::evaluator::EvaluatorValue::getType() const {
   return llvm::TypeSwitch<const EvaluatorValue *, Type>(this)
-      .Case<AttributeValue>([](auto *attr) -> Type {
-        return cast<TypedAttr>(attr->getAttr()).getType();
-      })
+      .Case<AttributeValue>([](auto *attr) -> Type { return attr->getType(); })
       .Case<ObjectValue>([](auto *object) { return object->getObjectType(); })
       .Case<ListValue>([](auto *list) { return list->getListType(); })
       .Case<MapValue>([](auto *map) { return map->getMapType(); })
@@ -132,7 +130,12 @@ FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::getOrCreateValue(
                   return evaluateConstant(op, actualParams, loc);
                 })
                 .Case([&](IntegerAddOp op) {
-                  return evaluateIntegerAdd(op, actualParams, loc);
+                  // Create a partially evaluated AttributeValue of
+                  // om::IntegerType in case we need to delay evaluation.
+                  evaluator::EvaluatorValuePtr result =
+                      std::make_shared<evaluator::AttributeValue>(op.getType(),
+                                                                  loc);
+                  return success(result);
                 })
                 .Case<ObjectFieldOp>([&](auto op) {
                   // Create a reference value since the value pointed by object
@@ -404,18 +407,26 @@ circt::om::Evaluator::evaluateConstant(ConstantOp op,
 // Evaluator dispatch function for integer addition.
 FailureOr<EvaluatorValuePtr> circt::om::Evaluator::evaluateIntegerAdd(
     IntegerAddOp op, ActualParameters actualParams, Location loc) {
-  // Evaluate operands if necessary.
+  // Get the op's EvaluatorValue handle, in case it hasn't been evaluated yet.
+  auto handle = getOrCreateValue(op, actualParams, loc);
+
+  // If it's fully evaluated, we can return it.
+  if (handle.value()->isFullyEvaluated())
+    return handle;
+
+  // Evaluate operands if necessary, and return the partially evaluated value if
+  // they aren't ready.
   auto lhsResult = evaluateValue(op.getLhs(), actualParams, loc);
   if (failed(lhsResult))
     return lhsResult;
+  if (!lhsResult.value()->isFullyEvaluated())
+    return handle;
+
   auto rhsResult = evaluateValue(op.getRhs(), actualParams, loc);
   if (failed(rhsResult))
     return rhsResult;
-
-  // TODO: if not fully evaluated, getOrCreateValue needs to return partially
-  // evaluated, and this needs to exit early.
-  assert(lhsResult.value()->isFullyEvaluated());
-  assert(rhsResult.value()->isFullyEvaluated());
+  if (!rhsResult.value()->isFullyEvaluated())
+    return handle;
 
   // Extract the integer attributes.
   auto extractAttr = [](evaluator::EvaluatorValue *value) {
@@ -441,7 +452,18 @@ FailureOr<EvaluatorValuePtr> circt::om::Evaluator::evaluateIntegerAdd(
   MLIRContext *ctx = op->getContext();
   auto resultAttr =
       om::IntegerAttr::get(ctx, mlir::IntegerAttr::get(ctx, result));
-  return success(std::make_shared<evaluator::AttributeValue>(resultAttr, loc));
+
+  // Finalize the op result value.
+  auto handleValue = cast<evaluator::AttributeValue>(handle.value().get());
+  auto resultStatus = handleValue->setAttr(resultAttr);
+  if (failed(resultStatus))
+    return resultStatus;
+
+  auto finalizeStatus = handleValue->finalize();
+  if (failed(finalizeStatus))
+    return finalizeStatus;
+
+  return handle;
 }
 
 /// Evaluator dispatch function for Object instances.
@@ -827,4 +849,28 @@ void evaluator::PathValue::setBasepath(const BasePathValue &basepath) {
   newPath.append(oldPath.begin(), oldPath.end());
   path = PathAttr::get(path.getContext(), newPath);
   markFullyEvaluated();
+}
+
+//===----------------------------------------------------------------------===//
+// AttributeValue
+//===----------------------------------------------------------------------===//
+
+LogicalResult circt::om::evaluator::AttributeValue::setAttr(Attribute attr) {
+  if (cast<TypedAttr>(attr).getType() != this->type)
+    return mlir::emitError(getLoc(), "cannot set AttributeValue of type ")
+           << this->type << " to Attribute " << attr;
+  if (isFullyEvaluated())
+    return mlir::emitError(
+        getLoc(),
+        "cannot set AttributeValue that has already been fully evaluated");
+  this->attr = attr;
+  markFullyEvaluated();
+  return success();
+}
+
+LogicalResult circt::om::evaluator::AttributeValue::finalizeImpl() {
+  if (!isFullyEvaluated())
+    return mlir::emitError(
+        getLoc(), "cannot finalize AttributeValue that is not fully evaluated");
+  return success();
 }
