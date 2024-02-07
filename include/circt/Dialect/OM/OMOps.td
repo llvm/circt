@@ -450,7 +450,10 @@ def AnyCastOp : OMOp<"any_cast", [Pure]> {
 }
 
 class IntegerBinaryOp<string mnemonic, list<Trait> traits = []> :
-    OMOp<mnemonic, [Pure] # traits> {
+    OMOp<mnemonic, [
+      Pure,
+      DeclareOpInterfaceMethods<IntegerArithmeticInterface>
+    ] # traits> {
   let arguments = (ins OMIntegerType:$lhs, OMIntegerType:$rhs);
 
   let results = (outs OMIntegerType:$result);

@@ -647,7 +647,75 @@ TEST(EvaluatorTests, IntegerAddition) {
                    .getValue());
 }
 
-TEST(EvaluatorTests, IntegerAdditionObjects) {
+TEST(EvaluatorTests, IntegerMultiplication) {
+  StringRef mod = "om.class @IntegerMultiplication() {"
+                  "  %0 = om.constant #om.integer<2 : si3> : !om.integer"
+                  "  %1 = om.constant #om.integer<3 : si3> : !om.integer"
+                  "  %2 = om.integer.mul %0, %1 : !om.integer"
+                  "  om.class.field @result, %2 : !om.integer"
+                  "}";
+
+  DialectRegistry registry;
+  registry.insert<OMDialect>();
+
+  MLIRContext context(registry);
+  context.getOrLoadDialect<OMDialect>();
+
+  OwningOpRef<ModuleOp> owning =
+      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
+
+  Evaluator evaluator(owning.release());
+
+  auto result = evaluator.instantiate(
+      StringAttr::get(&context, "IntegerMultiplication"), {});
+
+  ASSERT_TRUE(succeeded(result));
+
+  auto fieldValue = llvm::cast<evaluator::ObjectValue>(result.value().get())
+                        ->getField("result")
+                        .value();
+
+  ASSERT_EQ(6, llvm::cast<evaluator::AttributeValue>(fieldValue.get())
+                   ->getAs<circt::om::IntegerAttr>()
+                   .getValue()
+                   .getValue());
+}
+
+TEST(EvaluatorTests, IntegerShiftRight) {
+  StringRef mod = "om.class @IntegerShiftRight() {"
+                  "  %0 = om.constant #om.integer<8 : si5> : !om.integer"
+                  "  %1 = om.constant #om.integer<2 : si3> : !om.integer"
+                  "  %2 = om.integer.shr %0, %1 : !om.integer"
+                  "  om.class.field @result, %2 : !om.integer"
+                  "}";
+
+  DialectRegistry registry;
+  registry.insert<OMDialect>();
+
+  MLIRContext context(registry);
+  context.getOrLoadDialect<OMDialect>();
+
+  OwningOpRef<ModuleOp> owning =
+      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
+
+  Evaluator evaluator(owning.release());
+
+  auto result =
+      evaluator.instantiate(StringAttr::get(&context, "IntegerShiftRight"), {});
+
+  ASSERT_TRUE(succeeded(result));
+
+  auto fieldValue = llvm::cast<evaluator::ObjectValue>(result.value().get())
+                        ->getField("result")
+                        .value();
+
+  ASSERT_EQ(2, llvm::cast<evaluator::AttributeValue>(fieldValue.get())
+                   ->getAs<circt::om::IntegerAttr>()
+                   .getValue()
+                   .getValue());
+}
+
+TEST(EvaluatorTests, IntegerArithmeticObjects) {
   StringRef mod = "om.class @Class1() {"
                   "  %0 = om.constant #om.integer<1 : si3> : !om.integer"
                   "  om.class.field @value, %0 : !om.integer"
@@ -658,7 +726,7 @@ TEST(EvaluatorTests, IntegerAdditionObjects) {
                   "  om.class.field @value, %0 : !om.integer"
                   "}"
                   ""
-                  "om.class @IntegerAdditionObjects() {"
+                  "om.class @IntegerArithmeticObjects() {"
                   "  %0 = om.object @Class1() : () -> !om.class.type<@Class1>"
                   "  %1 = om.object.field %0, [@value] : "
                   "(!om.class.type<@Class1>) -> !om.integer"
@@ -683,7 +751,7 @@ TEST(EvaluatorTests, IntegerAdditionObjects) {
   Evaluator evaluator(owning.release());
 
   auto result = evaluator.instantiate(
-      StringAttr::get(&context, "IntegerAdditionObjects"), {});
+      StringAttr::get(&context, "IntegerArithmeticObjects"), {});
 
   ASSERT_TRUE(succeeded(result));
 
@@ -697,7 +765,7 @@ TEST(EvaluatorTests, IntegerAdditionObjects) {
                    .getValue());
 }
 
-TEST(EvaluatorTests, IntegerAdditionObjectsDelayed) {
+TEST(EvaluatorTests, IntegerArithmeticObjectsDelayed) {
   StringRef mod =
       "om.class @Class1(%input: !om.integer) {"
       "  %0 = om.constant #om.integer<1 : si3> : !om.integer"
@@ -710,7 +778,7 @@ TEST(EvaluatorTests, IntegerAdditionObjectsDelayed) {
       "  om.class.field @value, %0 : !om.integer"
       "}"
       ""
-      "om.class @IntegerAdditionObjectsDelayed() {"
+      "om.class @IntegerArithmeticObjectsDelayed() {"
       "  %0 = om.object @Class1(%5) : (!om.integer) -> !om.class.type<@Class1>"
       "  %1 = om.object.field %0, [@value] : "
       "(!om.class.type<@Class1>) -> !om.integer"
@@ -735,7 +803,7 @@ TEST(EvaluatorTests, IntegerAdditionObjectsDelayed) {
   Evaluator evaluator(owning.release());
 
   auto result = evaluator.instantiate(
-      StringAttr::get(&context, "IntegerAdditionObjectsDelayed"), {});
+      StringAttr::get(&context, "IntegerArithmeticObjectsDelayed"), {});
 
   ASSERT_TRUE(succeeded(result));
 

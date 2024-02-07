@@ -54,4 +54,20 @@ def ClassFieldLike : OpInterface<"ClassFieldLike"> {
   ];
 }
 
+def IntegerArithmeticInterface : OpInterface<"IntegerArithmeticOp"> {
+  let cppNamespace = "circt::om";
+  let description = "Common interface for integer arithmetic ops.";
+  let methods = [
+    InterfaceMethod<"Get the lhs Value",
+      "mlir::Value", "getLhs", (ins)>,
+    InterfaceMethod<"Get the rhs Value",
+      "mlir::Value", "getRhs", (ins)>,
+    InterfaceMethod<"Get the result Value",
+      "mlir::Value", "getResult", (ins)>,
+    InterfaceMethod<"Evaluate the integer arithmetic operation",
+      "mlir::FailureOr<llvm::APSInt>", "evaluateIntegerOperation",
+      (ins "llvm::APSInt":$lhs, "llvm::APSInt":$rhs)>
+  ];
+}
+
 #endif // CIRCT_DIALECT_OM_OMOPINTERFACES_TD

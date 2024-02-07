@@ -538,6 +538,33 @@ PathCreateOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 }
 
 //===----------------------------------------------------------------------===//
+// IntegerAddOp
+//===----------------------------------------------------------------------===//
+
+FailureOr<llvm::APSInt>
+IntegerAddOp::evaluateIntegerOperation(llvm::APSInt lhs, llvm::APSInt rhs) {
+  return success(lhs + rhs);
+}
+
+//===----------------------------------------------------------------------===//
+// IntegerMulOp
+//===----------------------------------------------------------------------===//
+
+FailureOr<llvm::APSInt>
+IntegerMulOp::evaluateIntegerOperation(llvm::APSInt lhs, llvm::APSInt rhs) {
+  return success(lhs * rhs);
+}
+
+//===----------------------------------------------------------------------===//
+// IntegerShrOp
+//===----------------------------------------------------------------------===//
+
+FailureOr<llvm::APSInt>
+IntegerShrOp::evaluateIntegerOperation(llvm::APSInt lhs, llvm::APSInt rhs) {
+  return success(lhs >> rhs.getExtValue());
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 

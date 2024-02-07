@@ -129,12 +129,12 @@ FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::getOrCreateValue(
                 .Case([&](ConstantOp op) {
                   return evaluateConstant(op, actualParams, loc);
                 })
-                .Case([&](IntegerAddOp op) {
+                .Case([&](IntegerArithmeticOp op) {
                   // Create a partially evaluated AttributeValue of
                   // om::IntegerType in case we need to delay evaluation.
                   evaluator::EvaluatorValuePtr result =
-                      std::make_shared<evaluator::AttributeValue>(op.getType(),
-                                                                  loc);
+                      std::make_shared<evaluator::AttributeValue>(
+                          op.getResult().getType(), loc);
                   return success(result);
                 })
                 .Case<ObjectFieldOp>([&](auto op) {
@@ -346,8 +346,8 @@ circt::om::Evaluator::evaluateValue(Value value, ActualParameters actualParams,
             .Case([&](ConstantOp op) {
               return evaluateConstant(op, actualParams, loc);
             })
-            .Case([&](IntegerAddOp op) {
-              return evaluateIntegerAdd(op, actualParams, loc);
+            .Case([&](IntegerArithmeticOp op) {
+              return evaluateIntegerArithmetic(op, actualParams, loc);
             })
             .Case([&](ObjectOp op) {
               return evaluateObjectInstance(op, actualParams);
@@ -405,10 +405,10 @@ circt::om::Evaluator::evaluateConstant(ConstantOp op,
 }
 
 // Evaluator dispatch function for integer addition.
-FailureOr<EvaluatorValuePtr> circt::om::Evaluator::evaluateIntegerAdd(
-    IntegerAddOp op, ActualParameters actualParams, Location loc) {
+FailureOr<EvaluatorValuePtr> circt::om::Evaluator::evaluateIntegerArithmetic(
+    IntegerArithmeticOp op, ActualParameters actualParams, Location loc) {
   // Get the op's EvaluatorValue handle, in case it hasn't been evaluated yet.
-  auto handle = getOrCreateValue(op, actualParams, loc);
+  auto handle = getOrCreateValue(op.getResult(), actualParams, loc);
 
   // If it's fully evaluated, we can return it.
   if (handle.value()->isFullyEvaluated())
@@ -443,15 +443,20 @@ FailureOr<EvaluatorValuePtr> circt::om::Evaluator::evaluateIntegerAdd(
 
   om::IntegerAttr lhs = extractAttr(lhsResult.value().get());
   om::IntegerAttr rhs = extractAttr(rhsResult.value().get());
-  assert(lhs && rhs && "expected om::IntegerAttr for IntegerAddOp operands");
+  assert(lhs && rhs &&
+         "expected om::IntegerAttr for IntegerArithmeticOp operands");
 
   // Perform arbitrary precision signed integer addition.
-  APSInt result = lhs.getValue().getAPSInt() + rhs.getValue().getAPSInt();
+  FailureOr<APSInt> result = op.evaluateIntegerOperation(
+      lhs.getValue().getAPSInt(), rhs.getValue().getAPSInt());
+
+  if (failed(result))
+    return op->emitError("failed to evaluate integer operation");
 
   // Package the result as a new om::IntegerAttr.
   MLIRContext *ctx = op->getContext();
   auto resultAttr =
-      om::IntegerAttr::get(ctx, mlir::IntegerAttr::get(ctx, result));
+      om::IntegerAttr::get(ctx, mlir::IntegerAttr::get(ctx, result.value()));
 
   // Finalize the op result value.
   auto handleValue = cast<evaluator::AttributeValue>(handle.value().get());
