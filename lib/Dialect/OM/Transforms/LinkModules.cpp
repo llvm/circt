@@ -43,7 +43,13 @@ struct ModuleInfo {
 
   // A map from symbols to classes.
   llvm::DenseMap<StringAttr, ClassLike> symbolToClasses;
+  // A map from symbols to HWModules.
   llvm::DenseMap<StringAttr, HWModuleLike> symbolToHWModules;
+  // A map from symbols to all symbol ops.
+  llvm::DenseMap<StringAttr, Operation *> symbolToOps;
+
+  // The symbol attribute name.
+  const StringRef symAttrName = "sym_name";
 
   // A target module.
   ModuleOp module;
@@ -57,22 +63,27 @@ struct LinkModulesPass : public LinkModulesBase<LinkModulesPass> {
 
 LogicalResult ModuleInfo::initialize() {
   for (auto &op : llvm::make_early_inc_range(module.getOps())) {
-    if (auto classLike = dyn_cast<ClassLike>(op))
-      symbolToClasses.insert({classLike.getSymNameAttr(), classLike});
-    else if (auto hwMod = dyn_cast<HWModuleLike>(op))
-      symbolToHWModules.insert({hwMod.getModuleNameAttr(), hwMod});
+    // If the op delares a symbol.
+    if (op.hasAttr(symAttrName)) {
+      auto sym = op.getAttrOfType<StringAttr>(symAttrName);
+      symbolToOps.insert({sym, &op});
+      if (auto classLike = dyn_cast<ClassLike>(op))
+        symbolToClasses.insert({sym, classLike});
+      if (auto hwMod = dyn_cast<HWModuleLike>(op))
+        symbolToHWModules.insert({sym, hwMod});
+    }
   }
   return success();
 }
 
 void ModuleInfo::postProcess(const SymMappingTy &symMapping) {
   AttrTypeReplacer replacer;
-  AttrTypeReplacer modReplacer;
-  modReplacer.addReplacement([&](FlatSymbolRefAttr modName)
-                                 -> std::pair<FlatSymbolRefAttr, WalkResult> {
-    auto it = symMapping.find({module, modName.getAttr()});
+  replacer.addReplacement([&](FlatSymbolRefAttr oldSym)
+                              -> std::pair<FlatSymbolRefAttr, WalkResult> {
+    // Update all renamed symbol references.
+    auto it = symMapping.find({module, oldSym.getAttr()});
     if (it == symMapping.end())
-      return {modName, WalkResult::skip()};
+      return {oldSym, WalkResult::skip()};
     return {FlatSymbolRefAttr::get(it->getSecond()), WalkResult::skip()};
   });
   replacer.addReplacement(
@@ -88,44 +99,34 @@ void ModuleInfo::postProcess(const SymMappingTy &symMapping) {
       });
 
   module.walk<WalkOrder::PreOrder>([&](Operation *op) {
-    // External modules must be erased.
+    // Extern classes must be deleted.
     if (isa<ClassExternOp>(op)) {
       op->erase();
       // ClassExternFieldOp will be deleted as well.
       return WalkResult::skip();
     }
+    // External modules must be erased.
     if (isa<HWModuleExternOp>(op)) {
       op->erase();
       return WalkResult::skip();
     }
-    if (auto hwModule = dyn_cast<HWModuleOp>(op)) {
-      // Update its class name if changed.
-      auto it = symMapping.find({module, hwModule.getNameAttr()});
-      if (it != symMapping.end()) {
-        hwModule.setSymNameAttr(it->second);
-      } else {
-        modReplacer.recursivelyReplaceElementsIn(op, true, false, false);
-      }
 
-      return WalkResult::skip();
-    }
-
-    if (auto classOp = dyn_cast<ClassOp>(op)) {
-      // Update its class name if changed.
-      auto it = symMapping.find({module, classOp.getNameAttr()});
+    if (op->hasAttr(symAttrName)) {
+      // If the symbol for this op is renamed, update it.
+      auto it =
+          symMapping.find({module, op->getAttrOfType<StringAttr>(symAttrName)});
       if (it != symMapping.end())
-        classOp.setSymNameAttr(it->second);
-    } else if (auto objectOp = dyn_cast<ObjectOp>(op)) {
+        op->setAttr(symAttrName, it->second);
+    }
+    if (auto objectOp = dyn_cast<ObjectOp>(op)) {
       // Update its class name if changed..
       auto it = symMapping.find({module, objectOp.getClassNameAttr()});
       if (it != symMapping.end())
         objectOp.setClassNameAttr(it->second);
     }
 
-    modReplacer.replaceElementsIn(op, true, false, false);
-    // Otherwise update om.class types.
     replacer.replaceElementsIn(op,
-                               /*replaceAttrs=*/false,
+                               /*replaceAttrs=*/true,
                                /*replaceLocs=*/false,
                                /*replaceTypes=*/true);
     return WalkResult::advance();
@@ -135,24 +136,26 @@ void ModuleInfo::postProcess(const SymMappingTy &symMapping) {
 // Return a failure if modules cannot be resolved. Return true if
 // it's necessary to rename symbols.
 static FailureOr<bool> resolveHWModules(StringAttr name,
-                                        ArrayRef<HWModuleLike> hwModules) {
+                                        ArrayRef<HWModuleLike> modOps) {
   bool existsExternalModule = false;
   size_t countDefinition = 0;
   HWModuleOp hwModule;
 
   bool isPrivate = false;
   SmallVector<Location> publicModules;
-  for (auto op : hwModules) {
-    if (isa<HWModuleExternOp>(op))
+  SmallVector<HWModuleLike> hwModOps;
+  for (auto mod : modOps) {
+
+    if (isa<HWModuleExternOp>(mod))
       existsExternalModule = true;
     else if (!countDefinition) {
-      hwModule = cast<HWModuleOp>(op);
+      hwModule = cast<HWModuleOp>(mod);
       isPrivate = hwModule.isPrivate();
       ++countDefinition;
     } else if (hwModule.isPrivate() && isPrivate) {
       ++countDefinition;
     } else {
-      publicModules.push_back(op->getLoc());
+      publicModules.push_back(mod->getLoc());
     }
   }
 
@@ -173,7 +176,7 @@ static FailureOr<bool> resolveHWModules(StringAttr name,
   if (existsExternalModule && countDefinition != 1) {
     SmallVector<Location> modExternLocs;
     SmallVector<Location> modLocs;
-    for (auto op : hwModules)
+    for (auto op : modOps)
 
       (isa<HWModuleExternOp>(op) ? modExternLocs : modLocs)
           .push_back(op.getLoc());
@@ -211,7 +214,7 @@ static FailureOr<bool> resolveHWModules(StringAttr name,
 
   SmallVector<PortInfo> ports = hwModule.getPortList();
 
-  for (auto mod : hwModules) {
+  for (auto mod : modOps) {
     if (mod == hwModule)
       continue;
     auto modPorts = mod.getPortList();
@@ -358,16 +361,18 @@ void LinkModulesPass::runOnOperation() {
   // Construct a global map from symbols to class operations.
   llvm::MapVector<StringAttr, SmallVector<ClassLike>> symbolToClasses;
   llvm::MapVector<StringAttr, SmallVector<HWModuleLike>> symbolToHWModules;
+  llvm::MapVector<StringAttr, SmallVector<Operation *>> symbolToOps;
   for (const auto &info : modules) {
-    for (auto &[name, op] : info.symbolToClasses) {
-      symbolToClasses[name].push_back(op);
+
+    for (auto &[symName, symOp] : info.symbolToOps) {
       // Add names to avoid collision.
-      (void)nameSpace.newName(name.getValue());
-    }
-    for (auto &[name, op] : info.symbolToHWModules) {
-      symbolToHWModules[name].push_back(op);
-      // Add names to avoid collision.
-      (void)nameSpace.newName(name.getValue());
+      if (!symbolToOps.contains(symName))
+        (void)nameSpace.newName(symName.getValue());
+      if (auto classOp = dyn_cast<ClassLike>(symOp))
+        symbolToClasses[symName].push_back(classOp);
+      else if (auto modOp = dyn_cast<HWModuleLike>(symOp))
+        symbolToHWModules[symName].push_back(modOp);
+      symbolToOps[symName].push_back(symOp);
     }
   }
 
@@ -400,7 +405,7 @@ void LinkModulesPass::runOnOperation() {
     // We can resolve symbol collision for symbols not referred by external
     // classes. Create a new name using `om.namespace` attributes as a
     // suffix.
-    if (*result)
+    if (*result || (symbolToHWModules.contains(name)))
       for (auto op : classes) {
         auto enclosingModule = cast<mlir::ModuleOp>(op->getParentOp());
         auto nameSpaceId =
@@ -408,6 +413,18 @@ void LinkModulesPass::runOnOperation() {
         symMapping[{enclosingModule, name}] = StringAttr::get(
             &getContext(),
             nameSpace.newName(name.getValue(), nameSpaceId.getValue()));
+      }
+  }
+
+  for (auto &[name, symOps] : symbolToOps) {
+
+    if (symOps.size() > 1)
+      for (auto *op : symOps) {
+        if (isa<HWModuleLike, ClassLike>(op))
+          continue;
+        auto enclosingModule = cast<mlir::ModuleOp>(op->getParentOp());
+        symMapping[{enclosingModule, name}] =
+            StringAttr::get(&getContext(), nameSpace.newName(name.getValue()));
       }
   }
 

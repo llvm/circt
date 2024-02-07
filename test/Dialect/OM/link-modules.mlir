@@ -61,17 +61,94 @@ module {
 
 // -----
 
-// Check that OM ops are deleted.  Make the "delete-me" op a landmine that will
-// cause a symbol collision if it is _not_ deleted.
+// Check that all conflicting symbols are updated.
 module {
   module {
-    // CHECK-NOT: delete-me
-    "delete-me"() {sym_name = "Bar"} : () -> ()
-    om.class @Foo() {
-   }
+    // CHECK: "conflict-sym-name"() {sym_name = "Bar_0"} : () -> ()
+    "conflict-sym-name"() {sym_name = "Bar"} : () -> ()
+  }
+  module {
+    // CHECK: "conflict-sym-name"() {sym_name = "Bar_1"} : () -> ()
+    "conflict-sym-name"() {sym_name = "Bar"} : () -> ()
+  }
+  module {
+    // CHECK: "conflict-sym-name"() {sym_name = "Bar_2"} : () -> ()
+    "conflict-sym-name"() {sym_name = "Bar"} : () -> ()
   }
   module {
     om.class @Bar() {
    }
   }
 }
+
+// -----
+
+// Check that all conflicting classes are updated.
+module {
+  module {
+    // CHECK: hw.module @Conflict
+    hw.module @Conflict () {}
+  }
+  module {
+    // CHECK: om.class @Conflict_module_1
+    om.class @Conflict(){}
+  }
+}
+
+// -----
+
+// Check for linking of multiple modules.
+module {
+  module {
+    // CHECK: hw.module private @nla_0() {
+    hw.module private @nla() {}
+    // CHECK: hw.module private @M2_0
+    hw.module private @M2() {}
+  }
+  module {
+    // CHECK: hw.module private @nla_1() {
+    hw.module private @nla() {}
+    // CHECK: hw.module private @M2_1
+    hw.module private @M2() {}
+  }
+  module {
+    hw.module @top() {}
+    // CHECK: hw.hierpath private @nla_2 [@M1::@s1, @M2_2]
+    hw.hierpath private @nla [@M1::@s1, @M2]
+    // CHECK: hw.module private @M2_2()
+    hw.module private @M2() {}
+    hw.module @M1(in %a: i1) {
+      hw.instance "" sym @s1 @M2() -> ()
+    }
+    om.class @PathTest(%basepath : !om.basepath) {
+      // CHECK: %0 = om.path_create reference %basepath @nla_2
+      %0 = om.path_create reference %basepath @nla
+    }
+  }
+}
+
+// -----
+
+// Check that symbol users are updated in nested regions.
+module {
+  module {
+    // CHECK: hw.module private @M2_0
+    hw.module private @M2() {}
+  }
+  module {
+    // CHECK: hw.module private @M2_1
+    hw.module private @M2() {}
+  }
+  module {
+    hw.module private @M2() {}
+    hw.module @M1(in %a: i1) {
+      sv.always posedge %a {
+        sv.if %a {
+          // CHECK: "random"() {symRefName = @M2_2, symRefName2 = @M2_2}
+          "random"() { symRefName = @M2, symRefName2 = @M2} : () -> ()
+        }
+      }
+    }
+  }
+}
+
