@@ -539,11 +539,9 @@ static ParseResult allInputs(ArrayRef<PortInfo> ports) {
 
 // Get parameter by the given name.  Null if not found.
 static ParamDeclAttr getNamedParam(ArrayAttr params, StringRef name) {
-  for (auto a : params) {
-    auto param = cast<ParamDeclAttr>(a);
+  for (auto param : params.getAsRange<ParamDeclAttr>())
     if (param.getName().getValue().equals(name))
       return param;
-  }
   return {};
 }
 
