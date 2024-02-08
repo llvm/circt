@@ -6087,19 +6087,25 @@ LogicalResult LayerBlockOp::verify() {
             if (getOperation()->isAncestor(definingOp))
               continue;
 
-          // Capture of a non-base type, e.g., reference, is allowed.
-          FIRRTLBaseType type =
-              type_dyn_cast<FIRRTLBaseType>(operand.getType());
-          if (!type)
-            continue;
+          auto type = operand.getType();
 
-          // Capturing a non-passive type is illegal.
-          if (!type.isPassive()) {
-            auto diag = emitOpError()
-                        << "captures an operand which is not a passive type";
+          // Capture of a non-base type, e.g., reference, is allowed.
+          if (isa<PropertyType>(type)) {
+            auto diag = emitOpError() << "captures a property operand";
             diag.attachNote(operand.getLoc()) << "operand is defined here";
             diag.attachNote(op->getLoc()) << "operand is used here";
             return WalkResult::interrupt();
+          }
+
+          // Capturing a non-passive type is illegal.
+          if (auto baseType = type_dyn_cast<FIRRTLBaseType>(type)) {
+            if (!baseType.isPassive()) {
+              auto diag = emitOpError()
+                          << "captures an operand which is not a passive type";
+              diag.attachNote(operand.getLoc()) << "operand is defined here";
+              diag.attachNote(op->getLoc()) << "operand is used here";
+              return WalkResult::interrupt();
+            }
           }
         }
 
