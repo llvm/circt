@@ -17,6 +17,7 @@
 #include "circt/Support/Namespace.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/SymbolTable.h"
 #include "mlir/IR/Threading.h"
 
 #include <memory>
@@ -48,9 +49,6 @@ struct ModuleInfo {
   // A map from symbols to all symbol ops.
   llvm::DenseMap<StringAttr, Operation *> symbolToOps;
 
-  // The symbol attribute name.
-  const StringRef symAttrName = "sym_name";
-
   // A target module.
   ModuleOp module;
 };
@@ -64,8 +62,8 @@ struct LinkModulesPass : public LinkModulesBase<LinkModulesPass> {
 LogicalResult ModuleInfo::initialize() {
   for (auto &op : llvm::make_early_inc_range(module.getOps())) {
     // If the op delares a symbol.
-    if (op.hasAttr(symAttrName)) {
-      auto sym = op.getAttrOfType<StringAttr>(symAttrName);
+    if (auto symOp = dyn_cast<SymbolOpInterface>(op)) {
+      auto sym = symOp.getNameAttr();
       symbolToOps.insert({sym, &op});
       if (auto classLike = dyn_cast<ClassLike>(op))
         symbolToClasses.insert({sym, classLike});
@@ -111,12 +109,11 @@ void ModuleInfo::postProcess(const SymMappingTy &symMapping) {
       return WalkResult::skip();
     }
 
-    if (op->hasAttr(symAttrName)) {
+    if (auto symOp = dyn_cast<SymbolOpInterface>(op)) {
       // If the symbol for this op is renamed, update it.
-      auto it =
-          symMapping.find({module, op->getAttrOfType<StringAttr>(symAttrName)});
+      auto it = symMapping.find({module, symOp.getNameAttr()});
       if (it != symMapping.end())
-        op->setAttr(symAttrName, it->second);
+        symOp.setName(it->second);
     }
     if (auto objectOp = dyn_cast<ObjectOp>(op)) {
       // Update its class name if changed..
@@ -422,7 +419,7 @@ void LinkModulesPass::runOnOperation() {
       for (auto *op : symOps) {
         if (isa<HWModuleLike, ClassLike>(op))
           continue;
-        auto enclosingModule = cast<mlir::ModuleOp>(op->getParentOp());
+        auto enclosingModule = op->getParentOfType<mlir::ModuleOp>();
         symMapping[{enclosingModule, name}] =
             StringAttr::get(&getContext(), nameSpace.newName(name.getValue()));
       }

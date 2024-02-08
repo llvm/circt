@@ -61,28 +61,6 @@ module {
 
 // -----
 
-// Check that all conflicting symbols are updated.
-module {
-  module {
-    // CHECK: "conflict-sym-name"() {sym_name = "Bar_0"} : () -> ()
-    "conflict-sym-name"() {sym_name = "Bar"} : () -> ()
-  }
-  module {
-    // CHECK: "conflict-sym-name"() {sym_name = "Bar_1"} : () -> ()
-    "conflict-sym-name"() {sym_name = "Bar"} : () -> ()
-  }
-  module {
-    // CHECK: "conflict-sym-name"() {sym_name = "Bar_2"} : () -> ()
-    "conflict-sym-name"() {sym_name = "Bar"} : () -> ()
-  }
-  module {
-    om.class @Bar() {
-   }
-  }
-}
-
-// -----
-
 // Check that all conflicting classes are updated.
 module {
   module {
@@ -115,6 +93,8 @@ module {
     hw.module @top() {}
     // CHECK: hw.hierpath private @nla_2 [@M1::@s1, @M2_2]
     hw.hierpath private @nla [@M1::@s1, @M2]
+    // CHECK: hw.hierpath private @xmr [@M1::@s1, @M2_2]
+    hw.hierpath private @xmr [@M1::@s1, @M2]
     // CHECK: hw.module private @M2_2()
     hw.module private @M2() {}
     hw.module @M1(in %a: i1) {
@@ -164,4 +144,3 @@ module {
     }
   }
 }
-
