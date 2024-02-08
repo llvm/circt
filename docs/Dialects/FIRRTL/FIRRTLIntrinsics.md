@@ -129,9 +129,9 @@ Generate a particular Verilog sequence that's similar to an assertion.
 
 Has legacy special behavior and should not be used by new code.
 
-| Parameter | Type   | Description                        |
-| --------- | ------ | ---------------------------------- |
-| format    | string | Format string per SV 20.10, 21.2.1 |
+| Parameter | Type   | Description                                    |
+| --------- | ------ | ---------------------------------------------- |
+| format    | string | Format string per SV 20.10, 21.2.1.  Optional. |
 
 This intrinsic also accepts the `label` and `guard` parameters which
 are recorded but not used in the normal emission.
@@ -159,12 +159,12 @@ Example SV output:
 
 ### circt.chisel_assume
 
-Generate a clocked SV assume statement, with optional error message.
+Generate a clocked SV assume statement, with optional formatted error message.
 
 
 | Parameter | Type   | Description                                                                         |
 | --------- | ------ | ----------------------------------------------------------------------------------- |
-| format    | string | Format string per SV 20.10, 21.2.1                                                  |
+| format    | string | Format string per SV 20.10, 21.2.1.  Optional.                                      |
 | label     | string | Label for statement.  Optional.                                                     |
 | guards    | string | Semicolon-delimited list of pre-processor tokens to use as ifdef guards.  Optional. |
 
