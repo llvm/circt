@@ -179,7 +179,8 @@ def YieldOp : SMTOp<"yield", [
   Pure,
   Terminator,
   ReturnLike,
-  ParentOneOf<["smt::SolverOp", "smt::CheckOp"]>,
+  ParentOneOf<["smt::SolverOp", "smt::CheckOp",
+               "smt::ForallOp", "smt::ExistsOp"]>,
 ]> {
   let summary = "terminator operation for various regions of SMT operations";
   let arguments = (ins Variadic<AnyType>:$values);
@@ -336,5 +337,72 @@ def ImpliesOp : SMTOp<"implies", [Pure]> {
   let results = (outs BoolType:$result);
   let assemblyFormat = "$lhs `,` $rhs attr-dict";
 }
+
+class QuantifierOp<string mnemonic> : SMTOp<mnemonic, [
+  RecursivelySpeculatable,
+  RecursiveMemoryEffects,
+  SingleBlockImplicitTerminator<"smt::YieldOp">,
+]> {
+  let description = [{
+    This operation represents the }] # summary # [{ as described in the
+    [SMT-LIB 2.6 standard](https://smtlib.cs.uiowa.edu/papers/smt-lib-reference-v2.6-r2021-05-12.pdf).
+    It is part of the language itself rather than a theory or logic.
+
+    The operation specifies the name prefixes (as an optional attribute) and
+    types (as the types of the block arguments of the regions) of bound
+    variables that may be used in the 'body' of the operation. If a 'patterns'
+    region is specified, the block arguments must match the ones of the 'body'
+    region and (other than there) must be used at least once in the 'patterns'
+    region. It may also not contain any operations that bind variables, such as
+    quantifiers. While the 'body' region must always yield exactly one
+    `!smt.bool`-typed value, the 'patterns' region can yield an arbitrary number
+    (but at least one) of SMT values.
+
+    The 'no_patterns' attribute is only allowed when no 'patterns' region is
+    specified and forbids the solver to generate and use patterns for this
+    quantifier.
+
+    The 'weight' attribute indicates the importance of this quantifier being
+    instantiated compared to other quantifiers that may be present. The default
+    value is zero.
+
+    Both the 'no_patterns' and 'weight' attributes are annotations to the
+    quantifiers body term. Annotations and attributes are described in the
+    standard in sections 3.4, and 3.6 (specifically 3.6.5). SMT-LIB allows
+    adding custom attributes to provide solvers with additional metadata, e.g.,
+    hints such as above mentioned attributes. They are not part of the standard
+    themselves, but supported by common SMT solvers (e.g., Z3). 
+  }];
+
+  let arguments = (ins DefaultValuedAttr<I32Attr, "0">:$weight,
+                       UnitAttr:$noPattern,
+                       OptionalAttr<StrArrayAttr>:$boundVarNames);
+  let regions = (region SizedRegion<1>:$body,
+                        VariadicRegion<SizedRegion<1>>:$patterns);
+  let results = (outs BoolType:$result);
+
+  let builders = [
+    OpBuilder<(ins
+      "TypeRange":$boundVarTypes,
+      "function_ref<Value(OpBuilder &, Location, ValueRange)>":$bodyBuilder,
+      CArg<"std::optional<ArrayRef<StringRef>>", "std::nullopt">:$boundVarNames,
+      CArg<"function_ref<ValueRange(OpBuilder &, Location, ValueRange)>",
+           "{}">:$patternBuilder,
+      CArg<"uint32_t", "0">:$weight,
+      CArg<"bool", "false">:$noPattern)>
+  ];
+  let skipDefaultBuilders = true;
+
+  let assemblyFormat = [{
+    ($boundVarNames^)? (`no_pattern` $noPattern^)? (`weight` $weight^)?
+    attr-dict-with-keyword $body (`patterns` $patterns^)?
+  }];
+
+  let hasVerifier = true;
+  let hasRegionVerifier = true;
+}
+
+def ForallOp : QuantifierOp<"forall"> { let summary = "forall quantifier"; }
+def ExistsOp : QuantifierOp<"exists"> { let summary = "exists quantifier"; }
 
 #endif // CIRCT_DIALECT_SMT_SMTOPS_TD

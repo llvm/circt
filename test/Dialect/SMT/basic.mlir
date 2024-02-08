@@ -84,3 +84,94 @@ func.func @core(%in: i8) {
 
   return
 }
+
+// CHECK-LABEL: func @quantifiers
+func.func @quantifiers() {
+  // CHECK-NEXT: smt.forall ["a", "b"] weight 2 attributes {smt.some_attr} {
+  // CHECK-NEXT: ^bb0({{.*}}: !smt.bool, {{.*}}: !smt.bool):
+  // CHECK-NEXT:   smt.eq
+  // CHECK-NEXT:   smt.yield %{{.*}}
+  // CHECK-NEXT: } patterns {
+  // CHECK-NEXT: ^bb0(%{{.*}}: !smt.bool, %{{.*}}: !smt.bool):
+  // CHECK-NEXT:   smt.yield %{{.*}}
+  // CHECK-NEXT: }, {
+  // CHECK-NEXT: ^bb0(%{{.*}}: !smt.bool):
+  // CHECK-NEXT:   smt.yield %{{.*}}
+  // CHECK-NEXT: }
+  %0 = smt.forall ["a", "b"] weight 2 attributes {smt.some_attr} {
+  ^bb0(%arg2: !smt.bool, %arg3: !smt.bool):
+    %1 = smt.eq %arg2, %arg3 : !smt.bool
+    smt.yield %1 : !smt.bool
+  } patterns {
+  ^bb0(%arg2: !smt.bool, %arg3: !smt.bool):
+    smt.yield %arg2, %arg3 : !smt.bool, !smt.bool
+  }, {
+  ^bb0(%arg2: !smt.bool, %arg3: !smt.bool):
+    smt.yield %arg2, %arg3 : !smt.bool, !smt.bool
+  }
+
+  // CHECK-NEXT: smt.forall ["a", "b"] no_pattern attributes {smt.some_attr} {
+  // CHECK-NEXT: ^bb0({{.*}}: !smt.bool, {{.*}}: !smt.bool):
+  // CHECK-NEXT:   smt.eq
+  // CHECK-NEXT:   smt.yield %{{.*}}
+  // CHECK-NEXT: }
+  %1 = smt.forall ["a", "b"] no_pattern attributes {smt.some_attr} {
+  ^bb0(%arg2: !smt.bool, %arg3: !smt.bool):
+    %2 = smt.eq %arg2, %arg3 : !smt.bool
+    smt.yield %2 : !smt.bool
+  }
+
+  // CHECK-NEXT: smt.forall {
+  // CHECK-NEXT:   smt.constant
+  // CHECK-NEXT:   smt.yield %{{.*}}
+  // CHECK-NEXT: }
+  %2 = smt.forall {
+    %3 = smt.constant true
+    smt.yield %3 : !smt.bool
+  }
+
+  // CHECK-NEXT: smt.exists ["a", "b"] weight 2 attributes {smt.some_attr} {
+  // CHECK-NEXT: ^bb0({{.*}}: !smt.bool, {{.*}}: !smt.bool):
+  // CHECK-NEXT:   smt.eq
+  // CHECK-NEXT:   smt.yield %{{.*}}
+  // CHECK-NEXT: } patterns {
+  // CHECK-NEXT: ^bb0(%{{.*}}: !smt.bool, %{{.*}}: !smt.bool):
+  // CHECK-NEXT:   smt.yield %{{.*}}
+  // CHECK-NEXT: }, {
+  // CHECK-NEXT: ^bb0(%{{.*}}: !smt.bool):
+  // CHECK-NEXT:   smt.yield %{{.*}}
+  // CHECK-NEXT: }
+  %3 = smt.exists ["a", "b"] weight 2 attributes {smt.some_attr} {
+  ^bb0(%arg2: !smt.bool, %arg3: !smt.bool):
+    %4 = smt.eq %arg2, %arg3 : !smt.bool
+    smt.yield %4 : !smt.bool {smt.some_attr}
+  } patterns {
+  ^bb0(%arg2: !smt.bool, %arg3: !smt.bool):
+    smt.yield %arg2, %arg3 : !smt.bool, !smt.bool
+  }, {
+  ^bb0(%arg2: !smt.bool, %arg3: !smt.bool):
+    smt.yield %arg2, %arg3 : !smt.bool, !smt.bool
+  }
+
+  // CHECK-NEXT: smt.exists no_pattern attributes {smt.some_attr} {
+  // CHECK-NEXT: ^bb0({{.*}}: !smt.bool, {{.*}}: !smt.bool):
+  // CHECK-NEXT:   smt.eq
+  // CHECK-NEXT:   smt.yield %{{.*}}
+  // CHECK-NEXT: }
+  %4 = smt.exists no_pattern attributes {smt.some_attr} {
+  ^bb0(%arg2: !smt.bool, %arg3: !smt.bool):
+    %5 = smt.eq %arg2, %arg3 : !smt.bool
+    smt.yield %5 : !smt.bool {smt.some_attr}
+  }
+
+  // CHECK-NEXT: smt.exists [] {
+  // CHECK-NEXT:   smt.constant
+  // CHECK-NEXT:   smt.yield %{{.*}}
+  // CHECK-NEXT: }
+  %5 = smt.exists [] {
+    %6 = smt.constant true
+    smt.yield %6 : !smt.bool
+  }
+
+  return
+}
