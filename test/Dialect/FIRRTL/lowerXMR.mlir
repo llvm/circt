@@ -3,8 +3,8 @@
 // Test for same module lowering
 // CHECK-LABEL: firrtl.circuit "xmr"
 firrtl.circuit "xmr" {
-  // CHECK : #hw.innerNameRef<@xmr::@[[wSym]]>
-  // CHECK-LABEL: firrtl.module @xmr(out %o: !firrtl.uint<2>)
+  // CHECK-DAG: @xmr::@[[wSym:[a-zA-Z0-9]+]]
+  // CHECK: firrtl.module @xmr(out %o: !firrtl.uint<2>)
   firrtl.module @xmr(out %o: !firrtl.uint<2>) {
     %w = firrtl.wire : !firrtl.uint<2>
     %1 = firrtl.ref.send %w : !firrtl.uint<2>
@@ -12,7 +12,7 @@ firrtl.circuit "xmr" {
     // CHECK-NOT: firrtl.ref.resolve
     firrtl.strictconnect %o, %x : !firrtl.uint<2>
     // CHECK:      %w = firrtl.wire : !firrtl.uint<2>
-    // CHECK:      %w_probe = firrtl.node sym @[[wSym:[a-zA-Z0-9_]+]] interesting_name %w : !firrtl.uint<2>
+    // CHECK:      %w_probe = firrtl.node sym @[[wSym]] interesting_name %w : !firrtl.uint<2>
     // CHECK-NEXT: %[[#xmr:]] = firrtl.xmr.deref @xmrPath : !firrtl.uint<2>
     // CHECK:      firrtl.strictconnect %o, %[[#xmr]] : !firrtl.uint<2>
   }

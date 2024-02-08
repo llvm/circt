@@ -1920,7 +1920,7 @@ circuit PublicModules:
 ;// -----
 
 FIRRTL version 4.0.0
-; CHECK-LABLE: firrtl.circuit "LayerEnabledModule"
+; CHECK-LABEL: firrtl.circuit "LayerEnabledModule"
 circuit LayerEnabledModule:
   layer A, bind:
   layer B, bind:
