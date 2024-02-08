@@ -174,7 +174,6 @@ static FailureOr<bool> resolveHWModules(StringAttr name,
     SmallVector<Location> modExternLocs;
     SmallVector<Location> modLocs;
     for (auto op : modOps)
-
       (isa<HWModuleExternOp>(op) ? modExternLocs : modLocs)
           .push_back(op.getLoc());
 

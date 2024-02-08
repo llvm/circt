@@ -5,11 +5,9 @@ module {
   om.class @Conflict(){}
   hw.module private @M2() {}
   hw.module @M1(in %a: i1) {
-
-  sv.always posedge %a {
-    sv.if %a {
+    sv.ifdef  "a" {
       hw.instance "" sym @s1 @M2() -> ()
     }
   }
-  }
+  
 }

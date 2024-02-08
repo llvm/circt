@@ -9,10 +9,8 @@
 // CHECK-NEXT:     hw.output
 // CHECK-NEXT:   }
 // CHECK-NEXT:   hw.module @M1(in %a : i1) {
-// CHECK-NEXT:     sv.always posedge %a {
-// CHECK-NEXT:       sv.if %a {
-// CHECK-NEXT:         hw.instance "" sym @s1 @M2_0() -> ()
-// CHECK-NEXT:       }
+// CHECK-NEXT:     sv.ifdef "a" {
+// CHECK-NEXT:       hw.instance "" sym @s1 @M2_0() -> ()
 // CHECK-NEXT:     }
 // CHECK-NEXT:     hw.output
 // CHECK-NEXT:   }

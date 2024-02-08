@@ -133,7 +133,7 @@ module {
     // CHECK: hw.module private @M3_1() {
     hw.module private @M3() {}
     hw.module @M1(in %a: i1) {
-      //CHECK:  %1 = "r3"() {symRefName = @M2_2, symRefName2 = @M3_1} : () -> !om.class.type<@C2_module_2>
+      // CHECK:  %1 = "r3"() {symRefName = @M2_2, symRefName2 = @M3_1} : () -> !om.class.type<@C2_module_2>
       %x = "r1"() ({
         "r2"() ({
           %b = "r3"() {symRefName = @M2, symRefName2 = @M3} : () -> !om.class.type<@C2>
