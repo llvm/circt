@@ -61,7 +61,7 @@ public:
   Accelerator(std::optional<ModuleInfo> info,
               std::vector<std::unique_ptr<Instance>> children,
               std::vector<services::Service *> services,
-              std::vector<BundlePort> ports)
+              std::vector<std::unique_ptr<BundlePort>> &ports)
       : HWModule(info, std::move(children), services, ports) {}
 };
 

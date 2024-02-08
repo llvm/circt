@@ -96,17 +96,17 @@ def MachineOp : FSMOp<"machine", [
   let hasVerifier = 1;
 }
 
-def InstanceOp : FSMOp<"instance", [Symbol, HasCustomSSAName]> {
+def InstanceOp : FSMOp<"instance", [HasCustomSSAName]> {
   let summary = "Create an instance of a state machine";
   let description = [{
     `fsm.instance` represents an instance of a state machine, including an
     instance name and a symbol reference of the machine.
   }];
 
-  let arguments = (ins StrAttr:$sym_name, FlatSymbolRefAttr:$machine);
+  let arguments = (ins StrAttr:$name, FlatSymbolRefAttr:$machine);
   let results = (outs InstanceType:$instance);
 
-  let assemblyFormat = [{ $sym_name $machine attr-dict }];
+  let assemblyFormat = [{ $name $machine attr-dict }];
 
   let extraClassDeclaration = [{
     /// Lookup the machine for the symbol. This returns null on invalid IR.
@@ -145,7 +145,6 @@ def TriggerOp : FSMOp<"trigger", []> {
 }
 
 def HWInstanceOp : FSMOp<"hw_instance", [
-    Symbol,
     DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface>
   ]> {
   let summary = "Create a hardware-style instance of a state machine";
@@ -156,12 +155,12 @@ def HWInstanceOp : FSMOp<"hw_instance", [
     machine.
   }];
 
-  let arguments = (ins StrAttr:$sym_name, FlatSymbolRefAttr:$machine,
+  let arguments = (ins StrAttr:$name, FlatSymbolRefAttr:$machine,
                        Variadic<AnyType>:$inputs, ClockType:$clock, I1:$reset);
   let results = (outs Variadic<AnyType>:$outputs);
 
   let assemblyFormat = [{
-    $sym_name $machine attr-dict `(` $inputs `)`
+    $name $machine attr-dict `(` $inputs `)`
     `,` `clock` $clock `,` `reset` $reset `:` functional-type($inputs, $outputs)
   }];
 

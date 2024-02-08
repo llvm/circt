@@ -33,6 +33,9 @@ services::Service *AcceleratorConnection::getService(Service::Type svcType,
   if (cacheEntry == nullptr) {
     Service *svc = createService(svcType, id, implName, details, clients);
     if (!svc)
+      svc = ServiceRegistry::createService(this, svcType, id, implName, details,
+                                           clients);
+    if (!svc)
       return nullptr;
     cacheEntry = unique_ptr<Service>(svc);
   }

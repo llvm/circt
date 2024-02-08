@@ -157,35 +157,6 @@ public:
 };
 } // anonymous namespace
 
-namespace {
-/// Lower MSFT's ChannelOp to a set of registers.
-struct ChannelOpLowering : public OpConversionPattern<ChannelOp> {
-public:
-  ChannelOpLowering(MLIRContext *ctxt, LowerConstructsPass &pass)
-      : OpConversionPattern(ctxt), pass(pass) {}
-
-  LogicalResult
-  matchAndRewrite(ChannelOp chan, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const final {
-    Location loc = chan.getLoc();
-    Operation *mod = chan->getParentOfType<hw::HWModuleLike>();
-    assert(mod && "ChannelOp must be contained by module");
-    Namespace &ns = pass.getNamespaceFor(mod);
-    Value clk = chan.getClk();
-    Value v = chan.getInput();
-    for (uint64_t stageNum = 0, e = chan.getDefaultStages(); stageNum < e;
-         ++stageNum)
-      v = rewriter.create<seq::CompRegOp>(loc, v, clk,
-                                          ns.newName(chan.getSymName()));
-    rewriter.replaceOp(chan, {v});
-    return success();
-  }
-
-protected:
-  LowerConstructsPass &pass;
-};
-} // namespace
-
 void LowerConstructsPass::runOnOperation() {
   auto top = getOperation();
   auto *ctxt = &getContext();
@@ -196,8 +167,6 @@ void LowerConstructsPass::runOnOperation() {
   RewritePatternSet patterns(ctxt);
   patterns.insert<SystolicArrayOpLowering>(ctxt);
   target.addIllegalOp<SystolicArrayOp>();
-  patterns.insert<ChannelOpLowering>(ctxt, *this);
-  target.addIllegalOp<ChannelOp>();
 
   if (failed(mlir::applyPartialConversion(top, target, std::move(patterns))))
     signalPassFailure();

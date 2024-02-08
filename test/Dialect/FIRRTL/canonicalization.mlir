@@ -2594,12 +2594,12 @@ firrtl.module @DontMergeVector(out %o:!firrtl.vector<uint<1>, 1>, in %i:!firrtl.
   // CHECK-NEXT: firrtl.strictconnect %0, %i
 }
 
-// TODO: Move to an apporpriate place
+// TODO: Move to an appropriate place
 // Issue #2197
 // CHECK-LABEL: @Issue2197
 firrtl.module @Issue2197(in %clock: !firrtl.clock, out %x: !firrtl.uint<2>) {
-//  // _HECK: [[ZERO:%.+]] = firrtl.constant 0 : !firrtl.uint<2>
-//  // _HECK-NEXT: firrtl.strictconnect %x, [[ZERO]] : !firrtl.uint<2>
+//  // COM: CHECK: [[ZERO:%.+]] = firrtl.constant 0 : !firrtl.uint<2>
+//  // COM: CHECK-NEXT: firrtl.strictconnect %x, [[ZERO]] : !firrtl.uint<2>
 //  %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
 //  %_reg = firrtl.reg droppable_name %clock : !firrtl.clock, !firrtl.uint<2>
 //  %0 = firrtl.pad %invalid_ui1, 2 : (!firrtl.uint<1>) -> !firrtl.uint<2>
@@ -2655,8 +2655,8 @@ firrtl.module @Issue2251(out %o: !firrtl.sint<15>) {
 //  %invalid_si1 = firrtl.invalidvalue : !firrtl.sint<1>
 //  %0 = firrtl.pad %invalid_si1, 15 : (!firrtl.sint<1>) -> !firrtl.sint<15>
 //  firrtl.connect %o, %0 : !firrtl.sint<15>, !firrtl.sint<15>
-//  // _HECK:      %[[zero:.+]] = firrtl.constant 0 : !firrtl.sint<15>
-//  // _HECK-NEXT: firrtl.strictconnect %o, %[[zero]]
+//  // COM: CHECK:      %[[zero:.+]] = firrtl.constant 0 : !firrtl.sint<15>
+//  // COM: CHECK-NEXT: firrtl.strictconnect %o, %[[zero]]
 }
 
 // Issue mentioned in #2289

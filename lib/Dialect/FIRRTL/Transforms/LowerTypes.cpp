@@ -1466,7 +1466,8 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
       resultTypes, op.getModuleNameAttr(), op.getNameAttr(),
       op.getNameKindAttr(), direction::packAttribute(context, newDirs),
       builder->getArrayAttr(newNames), op.getAnnotations(),
-      builder->getArrayAttr(newPortAnno), op.getLowerToBindAttr(),
+      builder->getArrayAttr(newPortAnno), op.getLayersAttr(),
+      op.getLowerToBindAttr(),
       sym ? hw::InnerSymAttr::get(sym) : hw::InnerSymAttr());
 
   // Copy over any attributes which have not already been copied over by
