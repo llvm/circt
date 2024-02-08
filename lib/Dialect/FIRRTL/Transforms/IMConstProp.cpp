@@ -23,7 +23,6 @@
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/TinyPtrVector.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Support/Mutex.h"
 #include "llvm/Support/ScopedPrinter.h"
 
 using namespace circt;
@@ -178,7 +177,7 @@ namespace {
 struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
 
   void runOnOperation() override;
-  void rewriteModuleBody(FModuleOp module, llvm::sys::SmartMutex<true> &mutex);
+  void rewriteModuleBody(FModuleOp module);
 
   /// Returns true if the given block is executable.
   bool isBlockExecutable(Block *block) const {
@@ -380,10 +379,9 @@ void IMConstPropPass::runOnOperation() {
   }
 
   // Rewrite any constants in the modules.
-  llvm::sys::SmartMutex<true> mutex;
   mlir::parallelForEach(circuit.getContext(),
                         circuit.getBodyBlock()->getOps<FModuleOp>(),
-                        [&](auto op) { rewriteModuleBody(op, mutex); });
+                        [&](auto op) { rewriteModuleBody(op); });
 
   // Clean up our state for next time.
   instanceGraph = nullptr;
@@ -917,8 +915,7 @@ void IMConstPropPass::visitOperation(Operation *op, FieldRef changedField) {
   }
 }
 
-void IMConstPropPass::rewriteModuleBody(FModuleOp module,
-                                        llvm::sys::SmartMutex<true> &mutex) {
+void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
   auto *body = module.getBodyBlock();
   // If a module is unreachable, just ignore it.
   if (!executableBlocks.count(body))
@@ -977,15 +974,10 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module,
     };
 
     // TODO: Replace entire aggregate.
-    LatticeValue latticeValue;
-    {
-      llvm::sys::SmartScopedLock<true> cacheLock(mutex);
-      auto it = latticeValues.find(getOrCacheFieldRefFromValue(value));
-      if (it == latticeValues.end() || it->second.isOverdefined() ||
-          it->second.isUnknown())
-        return false;
-      latticeValue = it->second;
-    }
+    auto it = latticeValues.find(getFieldRefFromValue(value));
+    if (it == latticeValues.end() || it->second.isOverdefined() ||
+        it->second.isUnknown())
+      return false;
 
     // Cannot materialize constants for certain types.
     // TODO: Let materializeConstant tell us what it supports instead of this.
@@ -995,7 +987,7 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module,
       return false;
 
     auto cstValue =
-        getConst(latticeValue.getValue(), value.getType(), value.getLoc());
+        getConst(it->second.getValue(), value.getType(), value.getLoc());
 
     replaceIfNotConnect(cstValue);
     return true;
