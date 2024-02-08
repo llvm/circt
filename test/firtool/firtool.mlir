@@ -21,13 +21,17 @@ firrtl.circuit "Top" {
 
 // VERILOG-LABEL: module Top(
 // VERILOG-NEXT:    input  [7:0] in,
-// VERILOG-NEXT:    output [7:0] out);
+// VERILOG-NEXT:    output [7:0] out
+// VERILOG-NEXT:    );
+// VERILOG-EMPTY:
 // VERILOG-NEXT:    assign out = in;
 // VERILOG-NEXT:  endmodule
 
 // VERILOG-WITH-MLIR-LABEL: module Top(
 // VERILOG-WITH-MLIR-NEXT:    input  [7:0] in,
-// VERILOG-WITH-MLIR-NEXT:    output [7:0] out);
+// VERILOG-WITH-MLIR-NEXT:    output [7:0] out
+// VERILOG-WITH-MLIR-NEXT:  );
+// VERILOG-WITH-MLIR-EMPTY:
 // VERILOG-WITH-MLIR-NEXT:    assign out = in;
 // VERILOG-WITH-MLIR-NEXT:  endmodule
 
