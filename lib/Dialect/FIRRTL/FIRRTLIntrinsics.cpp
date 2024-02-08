@@ -109,7 +109,8 @@ LogicalResult IntrinsicLowerings::doLowering(FModuleLike mod,
   if (conv.check())
     return failure();
   for (auto *use : graph.lookup(mod)->uses())
-    conv.convert(use->getInstance<InstanceOp>());
+    if (failed(conv.convert(use->getInstance<InstanceOp>())))
+      return failure();
   return success();
 }
 

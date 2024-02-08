@@ -41,7 +41,7 @@ public:
            sizedPort<UIntType>(1, 32) || hasNParam(0);
   }
 
-  void convert(InstanceOp inst) override {
+  LogicalResult convert(InstanceOp inst) override {
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
     auto inputTy = inst.getResult(0).getType();
     auto inputWire = builder.create<WireOp>(inputTy).getResult();
@@ -49,6 +49,7 @@ public:
     auto size = builder.create<SizeOfIntrinsicOp>(inputWire);
     inst.getResult(1).replaceAllUsesWith(size);
     inst.erase();
+    return success();
   }
 };
 
@@ -61,7 +62,7 @@ public:
            sizedPort<UIntType>(1, 1) || hasNParam(0);
   }
 
-  void convert(InstanceOp inst) override {
+  LogicalResult convert(InstanceOp inst) override {
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
     auto inputTy = inst.getResult(0).getType();
     auto inputWire = builder.create<WireOp>(inputTy).getResult();
@@ -69,6 +70,7 @@ public:
     auto size = builder.create<IsXIntrinsicOp>(inputWire);
     inst.getResult(1).replaceAllUsesWith(size);
     inst.erase();
+    return success();
   }
 };
 
@@ -81,13 +83,14 @@ public:
            hasNParam(1) || namedParam("FORMAT");
   }
 
-  void convert(InstanceOp inst) override {
+  LogicalResult convert(InstanceOp inst) override {
     auto param = cast<ParamDeclAttr>(mod.getParameters()[0]);
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
     auto newop = builder.create<PlusArgsTestIntrinsicOp>(
         cast<StringAttr>(param.getValue()));
     inst.getResult(0).replaceAllUsesWith(newop);
     inst.erase();
+    return success();
   }
 };
 
@@ -100,8 +103,7 @@ public:
            sizedPort<UIntType>(0, 1) || hasNParam(1) || namedParam("FORMAT");
   }
 
-  void convert(InstanceOp inst) override {
-
+  LogicalResult convert(InstanceOp inst) override {
     auto param = cast<ParamDeclAttr>(mod.getParameters()[0]);
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
     auto newop = builder.create<PlusArgsValueIntrinsicOp>(
@@ -109,6 +111,7 @@ public:
     inst.getResult(0).replaceAllUsesWith(newop.getFound());
     inst.getResult(1).replaceAllUsesWith(newop.getResult());
     inst.erase();
+    return success();
   }
 };
 
@@ -122,7 +125,7 @@ public:
            sizedPort<UIntType>(1, 1) || typedPort<ClockType>(2) || hasNParam(0);
   }
 
-  void convert(InstanceOp inst) override {
+  LogicalResult convert(InstanceOp inst) override {
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
     auto in = builder.create<WireOp>(inst.getResult(0).getType()).getResult();
     auto en = builder.create<WireOp>(inst.getResult(1).getType()).getResult();
@@ -131,6 +134,7 @@ public:
     auto out = builder.create<ClockGateIntrinsicOp>(in, en, Value{});
     inst.getResult(2).replaceAllUsesWith(out);
     inst.erase();
+    return success();
   }
 };
 
@@ -143,13 +147,14 @@ public:
            typedPort<ClockType>(0) || typedPort<ClockType>(1) || hasNParam(0);
   }
 
-  void convert(InstanceOp inst) override {
+  LogicalResult convert(InstanceOp inst) override {
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
     auto in = builder.create<WireOp>(inst.getResult(0).getType()).getResult();
     inst.getResult(0).replaceAllUsesWith(in);
     auto out = builder.create<ClockInverterIntrinsicOp>(in);
     inst.getResult(1).replaceAllUsesWith(out);
     inst.erase();
+    return success();
   }
 };
 
@@ -158,24 +163,55 @@ public:
   using IntrinsicConverter::IntrinsicConverter;
 
   bool check() override {
-    return hasNPorts(4) || namedPort(0, "in") || namedPort(1, "test_en") ||
-           namedPort(2, "en") || namedPort(3, "out") ||
-           typedPort<ClockType>(0) || sizedPort<UIntType>(1, 1) ||
-           sizedPort<UIntType>(2, 1) || typedPort<ClockType>(3) || hasNParam(0);
+    if (!AnnotationSet(mod).empty()) {
+      mod.emitError(name)
+          << " cannot have annotations since it is an intrinsic";
+      return true;
+    }
+    if (mod.getPorts().size() == 4) {
+      return namedPort(0, "in") || namedPort(1, "test_en") ||
+             namedPort(2, "en") || namedPort(3, "out") ||
+             typedPort<ClockType>(0) || sizedPort<UIntType>(1, 1) ||
+             sizedPort<UIntType>(2, 1) || typedPort<ClockType>(3) ||
+             hasNParam(0);
+    }
+    if (mod.getPorts().size() == 3) {
+      return namedPort(0, "in") || namedPort(1, "en") || namedPort(2, "out") ||
+             typedPort<ClockType>(0) || sizedPort<UIntType>(1, 1) ||
+             typedPort<ClockType>(2) || hasNParam(0);
+    }
+    mod.emitError(name) << " has " << mod.getPorts().size()
+                        << " ports instead of 3 or 4";
+    return true;
   }
 
-  void convert(InstanceOp inst) override {
+  LogicalResult convert(InstanceOp inst) override {
+    if (!AnnotationSet(inst).empty())
+      return inst.emitError(name)
+             << " instance cannot have annotations since it is an intrinsic";
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
-    auto in = builder.create<WireOp>(inst.getResult(0).getType()).getResult();
-    auto testEn =
-        builder.create<WireOp>(inst.getResult(1).getType()).getResult();
-    auto en = builder.create<WireOp>(inst.getResult(2).getType()).getResult();
-    inst.getResult(0).replaceAllUsesWith(in);
-    inst.getResult(1).replaceAllUsesWith(testEn);
-    inst.getResult(2).replaceAllUsesWith(en);
-    auto out = builder.create<ClockGateIntrinsicOp>(in, en, testEn);
-    inst.getResult(3).replaceAllUsesWith(out);
+    if (mod.getPorts().size() == 4) {
+      // Ports: in, test_en, en, out
+      auto in = builder.create<WireOp>(inst.getResult(0).getType()).getResult();
+      auto testEn =
+          builder.create<WireOp>(inst.getResult(1).getType()).getResult();
+      auto en = builder.create<WireOp>(inst.getResult(2).getType()).getResult();
+      auto out = builder.create<ClockGateIntrinsicOp>(in, en, testEn);
+      inst.getResult(0).replaceAllUsesWith(in);
+      inst.getResult(1).replaceAllUsesWith(testEn);
+      inst.getResult(2).replaceAllUsesWith(en);
+      inst.getResult(3).replaceAllUsesWith(out);
+    } else {
+      // Ports: in, en, out
+      auto in = builder.create<WireOp>(inst.getResult(0).getType()).getResult();
+      auto en = builder.create<WireOp>(inst.getResult(1).getType()).getResult();
+      auto out = builder.create<ClockGateIntrinsicOp>(in, en, Value{});
+      inst.getResult(0).replaceAllUsesWith(in);
+      inst.getResult(1).replaceAllUsesWith(en);
+      inst.getResult(2).replaceAllUsesWith(out);
+    }
     inst.erase();
+    return success();
   }
 };
 
@@ -202,7 +238,7 @@ public:
     return false;
   }
 
-  void convert(InstanceOp inst) override {
+  LogicalResult convert(InstanceOp inst) override {
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
     SmallVector<Value> operands;
     operands.reserve(portNum - 1);
@@ -218,6 +254,7 @@ public:
       out = builder.create<Mux4CellIntrinsicOp>(operands);
     inst.getResult(portNum - 1).replaceAllUsesWith(out);
     inst.erase();
+    return success();
   }
 };
 
@@ -232,7 +269,7 @@ public:
            hasNParam(0);
   }
 
-  void convert(InstanceOp inst) override {
+  LogicalResult convert(InstanceOp inst) override {
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
     auto lhs = builder.create<WireOp>(inst.getResult(0).getType()).getResult();
     auto rhs = builder.create<WireOp>(inst.getResult(1).getType()).getResult();
@@ -241,6 +278,7 @@ public:
     auto out = builder.create<LTLAndIntrinsicOp>(lhs.getType(), lhs, rhs);
     inst.getResult(2).replaceAllUsesWith(out);
     inst.erase();
+    return success();
   }
 };
 
@@ -255,7 +293,7 @@ public:
            hasNParam(0);
   }
 
-  void convert(InstanceOp inst) override {
+  LogicalResult convert(InstanceOp inst) override {
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
     auto lhs = builder.create<WireOp>(inst.getResult(0).getType()).getResult();
     auto rhs = builder.create<WireOp>(inst.getResult(1).getType()).getResult();
@@ -264,6 +302,7 @@ public:
     auto out = builder.create<LTLOrIntrinsicOp>(lhs.getType(), lhs, rhs);
     inst.getResult(2).replaceAllUsesWith(out);
     inst.erase();
+    return success();
   }
 };
 
@@ -296,7 +335,7 @@ public:
            namedIntParam("length", true);
   }
 
-  void convert(InstanceOp inst) override {
+  LogicalResult convert(InstanceOp inst) override {
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
     auto in = builder.create<WireOp>(inst.getResult(0).getType()).getResult();
     inst.getResult(0).replaceAllUsesWith(in);
@@ -304,6 +343,7 @@ public:
         builder.create<LTLDelayIntrinsicOp>(in.getType(), in, delay, length);
     inst.getResult(1).replaceAllUsesWith(out);
     inst.erase();
+    return success();
   }
 
 private:
@@ -322,7 +362,7 @@ public:
            hasNParam(0);
   }
 
-  void convert(InstanceOp inst) override {
+  LogicalResult convert(InstanceOp inst) override {
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
     auto lhs = builder.create<WireOp>(inst.getResult(0).getType()).getResult();
     auto rhs = builder.create<WireOp>(inst.getResult(1).getType()).getResult();
@@ -331,6 +371,7 @@ public:
     auto out = builder.create<LTLConcatIntrinsicOp>(lhs.getType(), lhs, rhs);
     inst.getResult(2).replaceAllUsesWith(out);
     inst.erase();
+    return success();
   }
 };
 
@@ -344,7 +385,7 @@ public:
            hasNParam(0);
   }
 
-  void convert(InstanceOp inst) override {
+  LogicalResult convert(InstanceOp inst) override {
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
     auto input =
         builder.create<WireOp>(inst.getResult(0).getType()).getResult();
@@ -352,6 +393,7 @@ public:
     auto out = builder.create<LTLNotIntrinsicOp>(input.getType(), input);
     inst.getResult(1).replaceAllUsesWith(out);
     inst.erase();
+    return success();
   }
 };
 
@@ -366,7 +408,7 @@ public:
            hasNParam(0);
   }
 
-  void convert(InstanceOp inst) override {
+  LogicalResult convert(InstanceOp inst) override {
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
     auto lhs = builder.create<WireOp>(inst.getResult(0).getType()).getResult();
     auto rhs = builder.create<WireOp>(inst.getResult(1).getType()).getResult();
@@ -376,6 +418,7 @@ public:
         builder.create<LTLImplicationIntrinsicOp>(lhs.getType(), lhs, rhs);
     inst.getResult(2).replaceAllUsesWith(out);
     inst.erase();
+    return success();
   }
 };
 
@@ -389,7 +432,7 @@ public:
            hasNParam(0);
   }
 
-  void convert(InstanceOp inst) override {
+  LogicalResult convert(InstanceOp inst) override {
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
     auto input =
         builder.create<WireOp>(inst.getResult(0).getType()).getResult();
@@ -397,6 +440,7 @@ public:
     auto out = builder.create<LTLEventuallyIntrinsicOp>(input.getType(), input);
     inst.getResult(1).replaceAllUsesWith(out);
     inst.erase();
+    return success();
   }
 };
 
@@ -410,7 +454,7 @@ public:
            typedPort<ClockType>(1) || sizedPort<UIntType>(2, 1) || hasNParam(0);
   }
 
-  void convert(InstanceOp inst) override {
+  LogicalResult convert(InstanceOp inst) override {
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
     auto in = builder.create<WireOp>(inst.getResult(0).getType()).getResult();
     auto clock =
@@ -420,6 +464,7 @@ public:
     auto out = builder.create<LTLClockIntrinsicOp>(in.getType(), in, clock);
     inst.getResult(2).replaceAllUsesWith(out);
     inst.erase();
+    return success();
   }
 };
 
@@ -434,7 +479,7 @@ public:
            hasNParam(0);
   }
 
-  void convert(InstanceOp inst) override {
+  LogicalResult convert(InstanceOp inst) override {
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
     auto in = builder.create<WireOp>(inst.getResult(0).getType()).getResult();
     auto condition =
@@ -445,6 +490,7 @@ public:
         builder.create<LTLDisableIntrinsicOp>(in.getType(), in, condition);
     inst.getResult(2).replaceAllUsesWith(out);
     inst.erase();
+    return success();
   }
 };
 
@@ -459,7 +505,7 @@ public:
            namedParam("label", true);
   }
 
-  void convert(InstanceOp inst) override {
+  LogicalResult convert(InstanceOp inst) override {
     auto params = mod.getParameters();
     StringAttr label;
     if (!params.empty())
@@ -472,6 +518,7 @@ public:
     inst.getResult(0).replaceAllUsesWith(property);
     builder.create<Op>(property, label);
     inst.erase();
+    return success();
   }
 };
 
@@ -485,7 +532,7 @@ public:
            sizedPort<UIntType>(2, 1) || hasNParam(0);
   }
 
-  void convert(InstanceOp inst) override {
+  LogicalResult convert(InstanceOp inst) override {
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
     auto clock =
         builder.create<WireOp>(inst.getResult(0).getType()).getResult();
@@ -496,6 +543,7 @@ public:
     auto out = builder.create<HasBeenResetIntrinsicOp>(clock, reset);
     inst.getResult(2).replaceAllUsesWith(out);
     inst.erase();
+    return success();
   }
 };
 
@@ -503,7 +551,7 @@ class CirctProbeConverter : public IntrinsicConverter {
 public:
   using IntrinsicConverter::IntrinsicConverter;
 
-  void convert(InstanceOp inst) override {
+  LogicalResult convert(InstanceOp inst) override {
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
     auto clock =
         builder.create<WireOp>(inst.getResult(0).getType()).getResult();
@@ -513,6 +561,7 @@ public:
     inst.getResult(1).replaceAllUsesWith(input);
     builder.create<FPGAProbeIntrinsicOp>(clock, input);
     inst.erase();
+    return success();
   }
 };
 
@@ -562,7 +611,7 @@ public:
     // TODO: Check all parameters accounted for.
   }
 
-  void convert(InstanceOp inst) override {
+  LogicalResult convert(InstanceOp inst) override {
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
     auto params = mod.getParameters();
     auto format = getNamedParam(params, "format");
@@ -594,6 +643,7 @@ public:
       op->setAttr("format", builder.getStringAttr("ifElseFatal"));
 
     inst.erase();
+    return success();
   }
 
 private:
@@ -613,7 +663,7 @@ public:
     // TODO: Check all parameters accounted for.
   }
 
-  void convert(InstanceOp inst) override {
+  LogicalResult convert(InstanceOp inst) override {
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
     auto params = mod.getParameters();
     auto label = getNamedParam(params, "label");
@@ -639,6 +689,7 @@ public:
     }
 
     inst.erase();
+    return success();
   }
 };
 
