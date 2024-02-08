@@ -2093,27 +2093,24 @@ SmallVector<::circt::hw::PortInfo> InstanceOp::getPortList() {
   return circuit.lookupSymbol<hw::PortList>(getModuleNameAttr()).getPortList();
 }
 
-void InstanceOp::build(OpBuilder &builder, OperationState &result,
-                       TypeRange resultTypes, StringRef moduleName,
-                       StringRef name, NameKindEnum nameKind,
-                       ArrayRef<Direction> portDirections,
-                       ArrayRef<Attribute> portNames,
-                       ArrayRef<Attribute> annotations,
-                       ArrayRef<Attribute> portAnnotations, bool lowerToBind,
-                       StringAttr innerSym) {
+void InstanceOp::build(
+    OpBuilder &builder, OperationState &result, TypeRange resultTypes,
+    StringRef moduleName, StringRef name, NameKindEnum nameKind,
+    ArrayRef<Direction> portDirections, ArrayRef<Attribute> portNames,
+    ArrayRef<Attribute> annotations, ArrayRef<Attribute> portAnnotations,
+    ArrayRef<Attribute> layers, bool lowerToBind, StringAttr innerSym) {
   build(builder, result, resultTypes, moduleName, name, nameKind,
-        portDirections, portNames, annotations, portAnnotations, lowerToBind,
+        portDirections, portNames, annotations, portAnnotations, layers,
+        lowerToBind,
         innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr());
 }
 
-void InstanceOp::build(OpBuilder &builder, OperationState &result,
-                       TypeRange resultTypes, StringRef moduleName,
-                       StringRef name, NameKindEnum nameKind,
-                       ArrayRef<Direction> portDirections,
-                       ArrayRef<Attribute> portNames,
-                       ArrayRef<Attribute> annotations,
-                       ArrayRef<Attribute> portAnnotations, bool lowerToBind,
-                       hw::InnerSymAttr innerSym) {
+void InstanceOp::build(
+    OpBuilder &builder, OperationState &result, TypeRange resultTypes,
+    StringRef moduleName, StringRef name, NameKindEnum nameKind,
+    ArrayRef<Direction> portDirections, ArrayRef<Attribute> portNames,
+    ArrayRef<Attribute> annotations, ArrayRef<Attribute> portAnnotations,
+    ArrayRef<Attribute> layers, bool lowerToBind, hw::InnerSymAttr innerSym) {
   result.addTypes(resultTypes);
   result.addAttribute("moduleName",
                       SymbolRefAttr::get(builder.getContext(), moduleName));
@@ -2123,6 +2120,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
       direction::packAttribute(builder.getContext(), portDirections));
   result.addAttribute("portNames", builder.getArrayAttr(portNames));
   result.addAttribute("annotations", builder.getArrayAttr(annotations));
+  result.addAttribute("layers", builder.getArrayAttr(layers));
   if (lowerToBind)
     result.addAttribute("lowerToBind", builder.getUnitAttr());
   if (innerSym)
@@ -2171,15 +2169,16 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
       NameKindEnumAttr::get(builder.getContext(), nameKind),
       module.getPortDirectionsAttr(), module.getPortNamesAttr(),
       builder.getArrayAttr(annotations), portAnnotationsAttr,
-      lowerToBind ? builder.getUnitAttr() : UnitAttr(), innerSym);
+      module.getLayersAttr(), lowerToBind ? builder.getUnitAttr() : UnitAttr(),
+      innerSym);
 }
 
 void InstanceOp::build(OpBuilder &builder, OperationState &odsState,
                        ArrayRef<PortInfo> ports, StringRef moduleName,
                        StringRef name, NameKindEnum nameKind,
-                       ArrayRef<Attribute> annotations, bool lowerToBind,
+                       ArrayRef<Attribute> annotations,
+                       ArrayRef<Attribute> layers, bool lowerToBind,
                        hw::InnerSymAttr innerSym) {
-
   // Gather the result types.
   SmallVector<Type> newResultTypes;
   SmallVector<Direction> newPortDirections;
@@ -2194,7 +2193,26 @@ void InstanceOp::build(OpBuilder &builder, OperationState &odsState,
 
   return build(builder, odsState, newResultTypes, moduleName, name, nameKind,
                newPortDirections, newPortNames, annotations, newPortAnnotations,
-               lowerToBind, innerSym);
+               layers, lowerToBind, innerSym);
+}
+
+LogicalResult InstanceOp::verify() {
+  // The instance may only be instantiated under its required layers.
+  auto ambientLayers = getAmbientLayersAt(getOperation());
+  SmallVector<SymbolRefAttr> missingLayers;
+  for (auto layer : getLayersAttr().getAsRange<SymbolRefAttr>())
+    if (!isLayerCompatibleWith(layer, ambientLayers))
+      missingLayers.push_back(layer);
+
+  if (missingLayers.empty())
+    return success();
+
+  auto diag =
+      emitOpError("ambient layers are insufficient to instantiate module");
+  auto &note = diag.attachNote();
+  note << "missing layer requirements: ";
+  interleaveComma(missingLayers, note);
+  return failure();
 }
 
 /// Builds a new `InstanceOp` with the ports listed in `portIndices` erased, and
@@ -2219,7 +2237,7 @@ InstanceOp InstanceOp::erasePorts(OpBuilder &builder,
   auto newOp = builder.create<InstanceOp>(
       getLoc(), newResultTypes, getModuleName(), getName(), getNameKind(),
       newPortDirections, newPortNames, getAnnotations().getValue(),
-      newPortAnnotations, getLowerToBind(), getInnerSymAttr());
+      newPortAnnotations, getLayers(), getLowerToBind(), getInnerSymAttr());
 
   for (unsigned oldIdx = 0, newIdx = 0, numOldPorts = getNumResults();
        oldIdx != numOldPorts; ++oldIdx) {
@@ -2292,7 +2310,7 @@ InstanceOp::cloneAndInsertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
   return OpBuilder(*this).create<InstanceOp>(
       getLoc(), newPortTypes, getModuleName(), getName(), getNameKind(),
       newPortDirections, newPortNames, getAnnotations().getValue(),
-      newPortAnnos, getLowerToBind(), getInnerSymAttr());
+      newPortAnnos, getLayers(), getLowerToBind(), getInnerSymAttr());
 }
 
 LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
@@ -2316,12 +2334,14 @@ void InstanceOp::print(OpAsmPrinter &p) {
     p << ' ' << stringifyNameKindEnum(getNameKindAttr().getValue());
 
   // Print the attr-dict.
-  SmallVector<StringRef, 9> omittedAttrs = {"moduleName",     "name",
-                                            "portDirections", "portNames",
-                                            "portTypes",      "portAnnotations",
-                                            "inner_sym",      "nameKind"};
+  SmallVector<StringRef, 10> omittedAttrs = {
+      "moduleName", "name",      "portDirections",
+      "portNames",  "portTypes", "portAnnotations",
+      "inner_sym",  "nameKind"};
   if (getAnnotations().empty())
     omittedAttrs.push_back("annotations");
+  if (getLayers().empty())
+    omittedAttrs.push_back("layers");
   p.printOptionalAttrDict((*this)->getAttrs(), omittedAttrs);
 
   // Print the module name.
@@ -2390,10 +2410,12 @@ ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
     result.addAttribute("portAnnotations",
                         ArrayAttr::get(context, portAnnotations));
 
-  // Annotations and LowerToBind are omitted in the printed format if they are
-  // empty and false, respectively.
+  // Annotations, layers, and LowerToBind are omitted in the printed format
+  // if they are empty, empty, and false (respectively).
   if (!resultAttrs.get("annotations"))
     resultAttrs.append("annotations", parser.getBuilder().getArrayAttr({}));
+  if (!resultAttrs.get("layers"))
+    resultAttrs.append("layers", parser.getBuilder().getArrayAttr({}));
 
   // Add result types.
   result.types.reserve(portTypes.size());
@@ -2458,6 +2480,7 @@ void InstanceChoiceOp::build(
                defaultModule.getPortDirectionsAttr(),
                defaultModule.getPortNamesAttr(),
                builder.getArrayAttr(annotations), portAnnotationsAttr,
+               defaultModule.getLayersAttr(),
                innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr());
 }
 
@@ -2477,12 +2500,14 @@ void InstanceChoiceOp::print(OpAsmPrinter &p) {
     p << ' ' << stringifyNameKindEnum(getNameKindAttr().getValue());
 
   // Print the attr-dict.
-  SmallVector<StringRef, 9> omittedAttrs = {
+  SmallVector<StringRef, 10> omittedAttrs = {
       "moduleNames",     "caseNames", "name",
       "portDirections",  "portNames", "portTypes",
       "portAnnotations", "inner_sym", "nameKind"};
   if (getAnnotations().empty())
     omittedAttrs.push_back("annotations");
+  if (getLayers().empty())
+    omittedAttrs.push_back("layers");
   p.printOptionalAttrDict((*this)->getAttrs(), omittedAttrs);
 
   // Print the module name.
@@ -2603,10 +2628,12 @@ ParseResult InstanceChoiceOp::parse(OpAsmParser &parser,
     result.addAttribute("portAnnotations",
                         ArrayAttr::get(context, portAnnotations));
 
-  // Annotations and LowerToBind are omitted in the printed format if they are
-  // empty and false, respectively.
+  // Annotations, layers, and LowerToBind are omitted in the printed format if
+  // they are empty, empty, and false (respectively).
   if (!resultAttrs.get("annotations"))
     resultAttrs.append("annotations", parser.getBuilder().getArrayAttr({}));
+  if (!resultAttrs.get("layers"))
+    resultAttrs.append("layers", parser.getBuilder().getArrayAttr({}));
 
   // Add result types.
   result.types.reserve(portTypes.size());
@@ -2629,7 +2656,24 @@ LogicalResult InstanceChoiceOp::verify() {
   if (getModuleNamesAttr().size() != getCaseNamesAttr().size() + 1)
     return emitOpError() << "number of referenced modules does not match the "
                             "number of options";
-  return success();
+
+  // The modules may only be instantiated under their required layers (which
+  // are the same for all modules).
+  auto ambientLayers = getAmbientLayersAt(getOperation());
+  SmallVector<SymbolRefAttr> missingLayers;
+  for (auto layer : getLayersAttr().getAsRange<SymbolRefAttr>())
+    if (!isLayerCompatibleWith(layer, ambientLayers))
+      missingLayers.push_back(layer);
+
+  if (missingLayers.empty())
+    return success();
+
+  auto diag =
+      emitOpError("ambient layers are insufficient to instantiate module");
+  auto &note = diag.attachNote();
+  note << "missing layer requirements: ";
+  interleaveComma(missingLayers, note);
+  return failure();
 }
 
 LogicalResult

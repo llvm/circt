@@ -353,6 +353,17 @@ firrtl.circuit "InstanceCannotHavePortSymbols" {
 
 // -----
 
+firrtl.circuit "InstanceMissingLayers" {
+  // expected-note @below {{original module declared here}}
+  firrtl.extmodule @Ext(in in : !firrtl.uint<1>) attributes {layers = [@A]}
+  firrtl.module @InstanceMissingLayers() {
+    // expected-error @below {{'firrtl.instance' op layers must be [@A], but got []}}
+    %foo_in = firrtl.instance foo @Ext(in in : !firrtl.uint<1>)
+  }
+}
+
+// -----
+
 firrtl.circuit "EmptySym" {
   firrtl.module @EmptySym() {
     // expected-error @below {{inner symbol cannot have empty name}}
@@ -2364,7 +2375,8 @@ firrtl.circuit "NoCases" {
       portDirections = 0 : i0,
       portNames = [],
       annotations = [],
-      portAnnotations = []
+      portAnnotations = [],
+      layers = []
     } : () -> ()
   }
 }
@@ -2394,7 +2406,47 @@ firrtl.circuit "MismatchedCases" {
       portDirections = 0 : i0,
       portNames = [],
       annotations = [],
-      portAnnotations = []
+      portAnnotations = [],
+      layers = []
     } : () -> ()
   }
 }
+
+// -----
+
+firrtl.circuit "Top" {
+  firrtl.layer @A bind {}
+  firrtl.option @O {
+    firrtl.option_case @C
+  }
+  // expected-note @below {{original module declared here}}
+  firrtl.module @Foo() attributes {layers = [@A]} {}
+  firrtl.module @Bar() attributes {layers = [@A]} {}
+  firrtl.module @Top() {
+    // expected-error @below {{'firrtl.instance_choice' op layers must be [@A], but got []}}
+    firrtl.instance_choice foo @Foo alternatives @O {
+      @C -> @Bar
+    } ()
+  }
+}
+
+
+// -----
+
+firrtl.circuit "Top" {
+  firrtl.layer @A bind {}
+  firrtl.layer @B bind {}
+  firrtl.option @O {
+    firrtl.option_case @C
+  }
+  firrtl.module @Foo() attributes {layers = [@A]} {}
+  // expected-note @below {{original module declared here}}
+  firrtl.module @Bar() attributes {layers = [@B]} {}
+  firrtl.module @Top() attributes {layers = [@A, @B]} {
+    // expected-error @below {{'firrtl.instance_choice' op layers must be [@B], but got [@A]}}
+    firrtl.instance_choice foo {layers = [@A]} @Foo alternatives @O {
+      @C -> @Bar
+    } ()
+  }
+}
+
