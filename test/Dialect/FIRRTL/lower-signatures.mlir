@@ -77,7 +77,7 @@ firrtl.circuit "InternalPaths"  {
   // CHECK-SAME: #firrtl.internalpath
   // CHECK-SAME: #firrtl.internalpath
   // CHECK-SAME: #firrtl.internalpath<"some_probe">
-  // CHECK-sAME: ]
+  // CHECK-SAME: ]
   firrtl.extmodule private @BlackBox(
     out bundle : !firrtl.bundle<a: uint<32>, b: uint<23>>,
     out array : !firrtl.vector<uint<1>, 2>,
