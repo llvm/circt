@@ -346,3 +346,20 @@ firrtl.circuit "Foo" {
     firrtl.strictconnect %cover_enable, %enable : !firrtl.uint<1>
   }
 }
+
+// CHECK-LABEL: "FixupEICGWrapper2"
+firrtl.circuit "FixupEICGWrapper2" {
+  // CHECK-NOEICG: LegacyClockGateNoTestEn
+  // CHECK-EICG-NOT: LegacyClockGateNoTestEn
+  firrtl.extmodule @LegacyClockGateNoTestEn(in in: !firrtl.clock, in en: !firrtl.uint<1>, out out: !firrtl.clock) attributes {defname = "EICG_wrapper"}
+
+  // CHECK: FixupEICGWrapper2
+  firrtl.module @FixupEICGWrapper2(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>) {
+    // CHECK-NOEICG: firrtl.instance
+    // CHECK-EICG-NOT: firrtl.instance
+    // CHECK-EICG: firrtl.int.clock_gate
+    %ckg_in, %ckg_en, %ckg_out = firrtl.instance ckg @LegacyClockGateNoTestEn(in in: !firrtl.clock, in en: !firrtl.uint<1>, out out: !firrtl.clock)
+    firrtl.strictconnect %ckg_in, %clock : !firrtl.clock
+    firrtl.strictconnect %ckg_en, %en : !firrtl.uint<1>
+  }
+}
