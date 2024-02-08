@@ -1,4 +1,5 @@
 // RUN: circt-verilog %s -E -DBAR=1337 -DHELLO -I%S/include | FileCheck %s
+// REQUIRES: slang
 
 // CHECK-NOT: define FOO
 // CHECK: localparam X = 42
