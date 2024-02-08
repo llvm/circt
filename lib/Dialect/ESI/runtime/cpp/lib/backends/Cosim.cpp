@@ -286,48 +286,18 @@ protected:
 
 bool ReadCosimChannelPort::read(MessageData &data) { return cosim->read(data); }
 
-namespace {
-class CosimCustomService : public services::CustomService {
-public:
-  CosimCustomService(CosimAccelerator::Impl &impl, AppIDPath idPath,
-                     const ServiceImplDetails &details,
-                     const HWClientDetails &clients)
-      : CustomService(idPath, details, clients) {
-
-    // Compute our parents id path.
-    AppIDPath prefix = std::move(idPath);
-    prefix.pop_back();
-
-    // TODO: Sanity check that the cosim service was actually used. If not, the
-    // code below will fail.
-
-    // Get the channel assignments for each client.
-    for (auto client : clients) {
-      AppIDPath fullClientPath = prefix + client.relPath;
-      map<string, string> channelAssignments;
-      for (auto assignment : any_cast<map<string, any>>(
-               client.implOptions.at("channel_assignments")))
-        channelAssignments[assignment.first] =
-            any_cast<string>(assignment.second);
-      impl.clientChannelAssignments[fullClientPath] =
-          std::move(channelAssignments);
-    }
-  }
-};
-} // namespace
-
 map<string, ChannelPort &>
 CosimAccelerator::Impl::requestChannelsFor(AppIDPath idPath,
                                            const BundleType *bundleType) {
+  map<string, ChannelPort &> channelResults;
+
   // Find the client details for the port at 'fullPath'.
   auto f = clientChannelAssignments.find(idPath);
   if (f == clientChannelAssignments.end())
-    throw runtime_error("Could not find channel assignments for '" +
-                        idPath.toStr() + "'");
+    return channelResults;
   const map<string, string> &channelAssignments = f->second;
 
   // Each channel in a bundle has a separate cosim endpoint. Find them all.
-  map<string, ChannelPort &> channelResults;
   for (auto [name, dir, type] : bundleType->getChannels()) {
     auto f = channelAssignments.find(name);
     if (f == channelAssignments.end())
@@ -351,10 +321,29 @@ CosimAccelerator::requestChannelsFor(AppIDPath idPath,
                                      const BundleType *bundleType) {
   return impl->requestChannelsFor(idPath, bundleType);
 }
-Service *CosimAccelerator::createService(Service::Type svcType, AppIDPath id,
-                                         std::string implName,
+Service *CosimAccelerator::createService(Service::Type svcType,
+                                         AppIDPath idPath, std::string implName,
                                          const ServiceImplDetails &details,
                                          const HWClientDetails &clients) {
+  // Compute our parents idPath path.
+  AppIDPath prefix = std::move(idPath);
+  if (prefix.size() > 0)
+    prefix.pop_back();
+
+  if (implName == "cosim") {
+    // Get the channel assignments for each client.
+    for (auto client : clients) {
+      AppIDPath fullClientPath = prefix + client.relPath;
+      map<string, string> channelAssignments;
+      for (auto assignment : any_cast<map<string, any>>(
+               client.implOptions.at("channel_assignments")))
+        channelAssignments[assignment.first] =
+            any_cast<string>(assignment.second);
+      impl->clientChannelAssignments[fullClientPath] =
+          std::move(channelAssignments);
+    }
+  }
+
   if (svcType == typeid(services::MMIO)) {
     return new CosimMMIO(impl->lowLevel, impl->waitScope);
   } else if (svcType == typeid(SysInfo)) {
@@ -365,7 +354,7 @@ Service *CosimAccelerator::createService(Service::Type svcType, AppIDPath id,
       return new MMIOSysInfo(getService<services::MMIO>());
     }
   } else if (svcType == typeid(CustomService) && implName == "cosim") {
-    return new CosimCustomService(*impl, id, details, clients);
+    return new CustomService(idPath, details, clients);
   }
   return nullptr;
 }

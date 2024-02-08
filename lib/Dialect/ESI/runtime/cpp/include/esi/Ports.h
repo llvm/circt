@@ -73,6 +73,7 @@ public:
 
   /// Construct a port.
   BundlePort(AppID id, std::map<std::string, ChannelPort &> channels);
+  virtual ~BundlePort() = default;
 
   /// Get the ID of the port.
   AppID getID() const { return id; }

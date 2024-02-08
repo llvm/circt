@@ -369,6 +369,7 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // CHECK-NEXT:      },
 // CHECK-NEXT:      {
 // CHECK-NEXT:        "symbol": "funcs",
+// CHECK-NEXT:        "type_name": "esi.service.std.func",
 // CHECK-NEXT:        "ports": [
 // CHECK-NEXT:          {
 // CHECK-NEXT:            "name": "call",
