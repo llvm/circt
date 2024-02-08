@@ -556,7 +556,8 @@ public:
     return namedPort(0, "clock") || typedPort<ClockType>(0) ||
            namedPort(1, "predicate") || sizedPort<UIntType>(1, 1) ||
            namedPort(2, "enable") || sizedPort<UIntType>(2, 1) ||
-           namedParam("format") || namedParam("label", /*optional=*/true) ||
+           namedParam("format", /*optional=*/true) ||
+           namedParam("label", /*optional=*/true) ||
            namedParam("guards", /*optional=*/true) || allInputs(mod.getPorts());
     // TODO: Check all parameters accounted for.
   }
@@ -565,7 +566,6 @@ public:
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
     auto params = mod.getParameters();
     auto format = getNamedParam(params, "format");
-    assert(format && "format parameter not found");
     auto label = getNamedParam(params, "label");
     auto guards = getNamedParam(params, "guards");
 
@@ -577,10 +577,12 @@ public:
 
     auto substitutions = ArrayRef(wires).drop_front(3);
     auto name = label ? cast<StringAttr>(label.getValue()).strref() : "";
-
-    auto op = builder.template create<OpTy>(
-        clock, predicate, enable, cast<StringAttr>(format.getValue()),
-        substitutions, name, /*isConcurrent=*/true);
+    // Message is not optional, so provide empty string if not present.
+    auto message = format ? cast<StringAttr>(format.getValue())
+                          : builder.getStringAttr("");
+    auto op = builder.template create<OpTy>(clock, predicate, enable, message,
+                                            substitutions, name,
+                                            /*isConcurrent=*/true);
     if (guards) {
       SmallVector<StringRef> guardStrings;
       cast<StringAttr>(guards.getValue()).strref().split(guardStrings, ';');

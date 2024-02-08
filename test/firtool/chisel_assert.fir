@@ -8,7 +8,6 @@ circuit ChiselVerif:
     input predicate: UInt<1>
     input enable: UInt<1>
     intrinsic = circt_chisel_assert_assume
-    parameter format = "testing"
 
   intmodule AssertAssumeFormat:
     input clock: Clock
@@ -54,7 +53,7 @@ circuit ChiselVerif:
     input enable: UInt<1>
 
     ; CHECK: assert property
-    ; CHECK-SAME: "testing"
+    ; CHECK-NOT: $error
     ; CHECK: PROPERTY_AS_CONSTRAINT
     ; CHECK: assume
     inst assert of AssertAssume
