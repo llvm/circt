@@ -3748,6 +3748,10 @@ LogicalResult FIRRTLLowering::visitExpr(ShlPrimOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitExpr(ShrPrimOp op) {
+  // If this is a 0-bit value shifted by any amount, then return a 1-bit zero.
+  if (isZeroBitFIRRTLType(op.getInput().getType()))
+    return setLowering(op, getOrCreateIntConstant(1, 0));
+
   auto input = getLoweredValue(op.getInput());
   if (!input)
     return failure();
