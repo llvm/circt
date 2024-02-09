@@ -17,6 +17,7 @@
 #include "esi/Services.h"
 
 #include <nlohmann/json.hpp>
+#include <sstream>
 
 using namespace std;
 
