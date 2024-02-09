@@ -370,7 +370,7 @@ static LogicalResult processBuffer(
   populateArcToLLVMPipeline(pmLlvm);
 
   if (printDebugInfo && outputFormat == OutputLLVM)
-    pm.addPass(LLVM::createDIScopeForLLVMFuncOpPass());
+    pmLlvm.addPass(LLVM::createDIScopeForLLVMFuncOpPass());
 
   if (failed(pmLlvm.run(module.get())))
     return failure();
