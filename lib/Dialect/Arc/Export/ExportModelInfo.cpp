@@ -21,7 +21,7 @@ using namespace circt;
 using namespace arc;
 
 LogicalResult circt::arc::collectAndExportModelInfo(ModuleOp module,
-                                        llvm::raw_ostream &os) {
+                                                    llvm::raw_ostream &os) {
   SmallVector<ModelInfo> models;
   if (failed(collectModels(module, models)))
     return failure();
