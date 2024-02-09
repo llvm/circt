@@ -244,13 +244,10 @@ LogicalResult ImportContext::importVerilog(ModuleOp module) {
 /// stream.
 LogicalResult ImportContext::preprocessVerilog(llvm::raw_ostream &os) {
   auto parseTimer = ts.nest("Verilog preprocessing");
-  for (auto &buffer : driver.buffers) {
-    slang::BumpAllocator alloc;
-    slang::Diagnostics diagnostics;
-    slang::parsing::Preprocessor preprocessor(
-        driver.sourceManager, alloc, diagnostics, driver.createOptionBag());
-    preprocessor.pushSource(buffer);
 
+  // Run the preprocessor to completion across all sources previously added with
+  // `pushSource`, report diagnostics, and print the output.
+  auto preprocessAndPrint = [&](slang::parsing::Preprocessor &preprocessor) {
     slang::syntax::SyntaxPrinter output;
     output.setIncludeComments(false);
     while (true) {
@@ -260,14 +257,44 @@ LogicalResult ImportContext::preprocessVerilog(llvm::raw_ostream &os) {
         break;
     }
 
-    for (auto &diag : diagnostics) {
+    for (auto &diag : preprocessor.getDiagnostics()) {
       if (diag.isError()) {
         driver.diagEngine.issue(diag);
         return failure();
       }
     }
     os << output.str();
+    return success();
+  };
+
+  // Depending on whether the single-unit option is set, either add all source
+  // files to a single preprocessor such that they share define macros and
+  // directives, or create a separate preprocessor for each, such that each
+  // source file is in its own compilation unit.
+  auto optionBag = driver.createOptionBag();
+  if (driver.options.singleUnit == true) {
+    slang::BumpAllocator alloc;
+    slang::Diagnostics diagnostics;
+    slang::parsing::Preprocessor preprocessor(driver.sourceManager, alloc,
+                                              diagnostics, optionBag);
+    // Sources have to be pushed in reverse, as they form a stack in the
+    // preprocessor. Last pushed source is processed first.
+    for (auto &buffer : slang::make_reverse_range(driver.buffers))
+      preprocessor.pushSource(buffer);
+    if (failed(preprocessAndPrint(preprocessor)))
+      return failure();
+  } else {
+    for (auto &buffer : driver.buffers) {
+      slang::BumpAllocator alloc;
+      slang::Diagnostics diagnostics;
+      slang::parsing::Preprocessor preprocessor(driver.sourceManager, alloc,
+                                                diagnostics, optionBag);
+      preprocessor.pushSource(buffer);
+      if (failed(preprocessAndPrint(preprocessor)))
+        return failure();
+    }
   }
+
   return success();
 }
 
