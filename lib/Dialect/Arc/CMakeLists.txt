@@ -49,5 +49,6 @@ add_dependencies(circt-headers
   MLIRArcIncGen
 )
 
+add_subdirectory(Export)
 add_subdirectory(Interfaces)
 add_subdirectory(Transforms)

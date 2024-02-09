@@ -18,6 +18,7 @@
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/Arc/ArcPasses.h"
 #include "circt/Dialect/Arc/ModelInfo.h"
+#include "circt/Dialect/Arc/ModelInfoExport.h"
 #include "circt/Dialect/Seq/SeqPasses.h"
 #include "circt/InitAllDialects.h"
 #include "circt/InitAllPasses.h"
@@ -192,13 +193,13 @@ static cl::opt<OutputFormat> outputFormat(
 // Main Tool Logic
 //===----------------------------------------------------------------------===//
 
+static bool untilReached(Until until) {
+  return until >= runUntilBefore || until > runUntilAfter;
+}
+
 /// Populate a pass manager with the arc simulator pipeline for the given
 /// command line options. This pipeline lowers modules to the Arc dialect.
 static void populateHwModuleToArcPipeline(PassManager &pm) {
-  auto untilReached = [](Until until) {
-    return until >= runUntilBefore || until > runUntilAfter;
-  };
-
   if (verbosePassExecutions)
     pm.addInstrumentation(
         std::make_unique<VerbosePassInstrumentation<mlir::ModuleOp>>(
@@ -312,10 +313,6 @@ static void populateHwModuleToArcPipeline(PassManager &pm) {
 /// Populate a pass manager with the Arc to LLVM pipeline for the given
 /// command line options. This pipeline lowers modules to LLVM IR.
 static void populateArcToLLVMPipeline(PassManager &pm) {
-  auto untilReached = [](Until until) {
-    return until >= runUntilBefore || until > runUntilAfter;
-  };
-
   // Lower the arcs and update functions to LLVM.
   if (untilReached(UntilLLVMLowering))
     return;
@@ -347,13 +344,8 @@ static LogicalResult processBuffer(
   if (failed(pmArc.run(module.get())))
     return failure();
 
-  // Collect generated model info.
-  std::vector<ModelInfo> models;
-  if (failed(collectModels(module.get(), models)))
-    return failure();
-
   // Output state info as JSON if requested.
-  if (!stateFile.empty()) {
+  if (!stateFile.empty() && !untilReached(UntilStateLowering)) {
     std::error_code ec;
     llvm::ToolOutputFile outputFile(stateFile, ec,
                                     llvm::sys::fs::OpenFlags::OF_None);
@@ -361,7 +353,11 @@ static LogicalResult processBuffer(
       llvm::errs() << "unable to open state file: " << ec.message() << '\n';
       return failure();
     }
-    serializeModelInfoToJson(outputFile.os(), models);
+    if (failed(collectAndExportModelInfo(module.get(), outputFile.os()))) {
+      llvm::errs() << "failed to collect model info\n";
+      return failure();
+    }
+
     outputFile.keep();
   }
 

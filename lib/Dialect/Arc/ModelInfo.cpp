@@ -19,7 +19,7 @@ using namespace circt;
 using namespace arc;
 
 LogicalResult circt::arc::collectStates(Value storage, unsigned offset,
-                                        std::vector<StateInfo> &states) {
+                                        SmallVector<StateInfo> &states) {
   struct StateCollectionJob {
     mlir::Value::user_iterator nextToProcess;
     mlir::Value::user_iterator end;
@@ -104,12 +104,12 @@ LogicalResult circt::arc::collectStates(Value storage, unsigned offset,
 }
 
 LogicalResult circt::arc::collectModels(mlir::ModuleOp module,
-                                        std::vector<ModelInfo> &models) {
+                                        SmallVector<ModelInfo> &models) {
   for (auto modelOp : module.getOps<ModelOp>()) {
     auto storageArg = modelOp.getBody().getArgument(0);
     auto storageType = storageArg.getType().cast<StorageType>();
 
-    std::vector<StateInfo> states;
+    SmallVector<StateInfo> states;
     if (failed(collectStates(storageArg, 0, states)))
       return failure();
     llvm::sort(states, [](auto &a, auto &b) { return a.offset < b.offset; });

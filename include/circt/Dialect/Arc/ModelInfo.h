@@ -14,9 +14,9 @@
 #define CIRCT_DIALECT_ARC_MODELINFO_H
 
 #include "mlir/IR/BuiltinOps.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/raw_ostream.h"
 #include <string>
-#include <vector>
 
 namespace circt {
 namespace arc {
@@ -35,10 +35,10 @@ struct StateInfo {
 struct ModelInfo {
   std::string name;
   size_t numStateBytes;
-  std::vector<StateInfo> states;
+  llvm::SmallVector<StateInfo> states;
 
   ModelInfo(std::string name, size_t numStateBytes,
-            std::vector<StateInfo> states)
+            llvm::SmallVector<StateInfo> states)
       : name(std::move(name)), numStateBytes(numStateBytes),
         states(std::move(states)) {}
 };
@@ -46,12 +46,12 @@ struct ModelInfo {
 /// Collects information about states within the provided Arc model storage
 /// `storage`,  assuming default `offset`, and adds it to `states`.
 mlir::LogicalResult collectStates(mlir::Value storage, unsigned offset,
-                                  std::vector<StateInfo> &states);
+                                  llvm::SmallVector<StateInfo> &states);
 
 /// Collects information about all Arc models in the provided `module`,
 /// and adds it to `models`.
 mlir::LogicalResult collectModels(mlir::ModuleOp module,
-                                  std::vector<ModelInfo> &models);
+                                  llvm::SmallVector<ModelInfo> &models);
 
 /// Serializes `models` to `outputStream` in JSON format.
 void serializeModelInfoToJson(llvm::raw_ostream &outputStream,

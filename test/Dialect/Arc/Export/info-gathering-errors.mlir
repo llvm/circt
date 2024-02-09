@@ -1,4 +1,4 @@
-// RUN: arcilator %s --verify-diagnostics --until-before=preproc --split-input-file
+// RUN: circt-translate %s --export-arc-model-info --split-input-file --verify-diagnostics
 
 arc.model "Foo" {
 ^bb0(%arg0: !arc.storage<42>):
