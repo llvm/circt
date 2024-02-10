@@ -133,5 +133,13 @@ instance_like_impl::verifyReferencedModule(Operation *instanceOp,
     llvm_unreachable("should have found something wrong");
   }
 
+  // Check that the instance op lists the correct layer requirements.
+  auto instanceLayers = instanceOp->getAttrOfType<ArrayAttr>("layers");
+  auto moduleLayers = referencedModule.getLayersAttr();
+  if (instanceLayers != moduleLayers)
+    return emitNote(instanceOp->emitOpError()
+                    << "layers must be " << moduleLayers << ", but got "
+                    << instanceLayers);
+
   return success();
 }

@@ -17,6 +17,7 @@
 #define ESI_TYPES_H
 
 #include <map>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -30,6 +31,7 @@ public:
   virtual ~Type() = default;
 
   ID getID() const { return id; }
+  virtual std::ptrdiff_t getBitWidth() const { return -1; }
 
 protected:
   ID id;
@@ -44,12 +46,13 @@ public:
   enum Direction { To, From };
 
   using ChannelVector =
-      std::vector<std::tuple<std::string, Direction, const Type &>>;
+      std::vector<std::tuple<std::string, Direction, const Type *>>;
 
   BundleType(const ID &id, const ChannelVector &channels)
       : Type(id), channels(channels) {}
 
   const ChannelVector &getChannels() const { return channels; }
+  std::ptrdiff_t getBitWidth() const override { return -1; };
 
 protected:
   ChannelVector channels;
@@ -59,17 +62,20 @@ protected:
 /// carry one values of one type.
 class ChannelType : public Type {
 public:
-  ChannelType(const ID &id, const Type &inner) : Type(id), inner(inner) {}
-  const Type &getInner() const { return inner; }
+  ChannelType(const ID &id, const Type *inner) : Type(id), inner(inner) {}
+  const Type *getInner() const { return inner; }
+  std::ptrdiff_t getBitWidth() const override { return inner->getBitWidth(); };
 
 private:
-  const Type &inner;
+  const Type *inner;
 };
 
 /// The "void" type is a special type which can be used to represent no type.
 class VoidType : public Type {
 public:
   VoidType(const ID &id) : Type(id) {}
+  // 'void' is 1 bit by convention.
+  std::ptrdiff_t getBitWidth() const override { return 1; };
 };
 
 /// The "any" type is a special type which can be used to represent any type, as
@@ -79,6 +85,7 @@ public:
 class AnyType : public Type {
 public:
   AnyType(const ID &id) : Type(id) {}
+  std::ptrdiff_t getBitWidth() const override { return -1; };
 };
 
 /// Bit vectors include signed, unsigned, and signless integers.
@@ -87,6 +94,7 @@ public:
   BitVectorType(const ID &id, uint64_t width) : Type(id), width(width) {}
 
   uint64_t getWidth() const { return width; }
+  std::ptrdiff_t getBitWidth() const override { return getWidth(); };
 
 private:
   uint64_t width;
@@ -121,12 +129,22 @@ public:
 /// Structs are an ordered collection of fields, each with a name and a type.
 class StructType : public Type {
 public:
-  using FieldVector = std::vector<std::pair<std::string, const Type &>>;
+  using FieldVector = std::vector<std::pair<std::string, const Type *>>;
 
   StructType(const ID &id, const FieldVector &fields)
       : Type(id), fields(fields) {}
 
   const FieldVector &getFields() const { return fields; }
+  std::ptrdiff_t getBitWidth() const override {
+    std::ptrdiff_t size = 0;
+    for (auto [name, ty] : getFields()) {
+      std::ptrdiff_t fieldSize = ty->getBitWidth();
+      if (fieldSize < 0)
+        return -1;
+      size += fieldSize;
+    }
+    return size;
+  }
 
 private:
   FieldVector fields;
@@ -135,14 +153,20 @@ private:
 /// Arrays have a compile time specified (static) size and an element type.
 class ArrayType : public Type {
 public:
-  ArrayType(const ID &id, const Type &elementType, uint64_t size)
+  ArrayType(const ID &id, const Type *elementType, uint64_t size)
       : Type(id), elementType(elementType), size(size) {}
 
-  const Type &getElementType() const { return elementType; }
+  const Type *getElementType() const { return elementType; }
   uint64_t getSize() const { return size; }
+  std::ptrdiff_t getBitWidth() const override {
+    std::ptrdiff_t elementSize = elementType->getBitWidth();
+    if (elementSize < 0)
+      return -1;
+    return elementSize * size;
+  }
 
 private:
-  const Type &elementType;
+  const Type *elementType;
   uint64_t size;
 };
 

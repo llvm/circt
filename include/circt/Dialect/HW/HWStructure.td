@@ -539,6 +539,7 @@ def InstanceOp : HWInstanceOpBase<"instance", [HWInstanceLike]> {
 }
 
 def InstanceChoiceOp : HWInstanceOpBase<"instance_choice", [
+    HWInstanceLike,
     DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface, [
       "getReferencedModuleNamesAttr"
     ]>

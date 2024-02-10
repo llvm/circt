@@ -36,6 +36,8 @@ int main(int argc, const char *argv[]) {
     return -1;
   }
 
+  Context ctxt;
+
   const char *backend = argv[1];
   const char *conn = argv[2];
   string cmd;
@@ -43,7 +45,7 @@ int main(int argc, const char *argv[]) {
     cmd = argv[3];
 
   try {
-    unique_ptr<AcceleratorConnection> acc = registry::connect(backend, conn);
+    unique_ptr<AcceleratorConnection> acc = ctxt.connect(backend, conn);
     const auto &info = *acc->getService<services::SysInfo>();
 
     if (cmd == "version")
@@ -70,7 +72,7 @@ int main(int argc, const char *argv[]) {
 
 void printInfo(ostream &os, AcceleratorConnection &acc) {
   string jsonManifest = acc.getService<services::SysInfo>()->getJsonManifest();
-  Manifest m(jsonManifest);
+  Manifest m(acc.getCtxt(), jsonManifest);
   os << "API version: " << m.getApiVersion() << endl << endl;
   os << "********************************" << endl;
   os << "* Module information" << endl;
@@ -85,14 +87,14 @@ void printInfo(ostream &os, AcceleratorConnection &acc) {
   os << "********************************" << endl;
   os << endl;
   size_t i = 0;
-  for (Type t : m.getTypeTable())
-    os << "  " << i++ << ": " << t.getID() << endl;
+  for (const Type *t : m.getTypeTable())
+    os << "  " << i++ << ": " << t->getID() << endl;
 }
 
 void printPort(ostream &os, const BundlePort &port, string indent = "") {
   os << indent << "  " << port.getID() << ":" << endl;
   for (const auto &[name, chan] : port.getChannels()) {
-    os << indent << "    " << name << ": " << chan.getType().getID() << endl;
+    os << indent << "    " << name << ": " << chan.getType()->getID() << endl;
   }
 }
 
@@ -115,7 +117,8 @@ void printInstance(ostream &os, const HWModule *d, string indent = "") {
 }
 
 void printHier(ostream &os, AcceleratorConnection &acc) {
-  Manifest manifest(acc.getService<services::SysInfo>()->getJsonManifest());
+  Manifest manifest(acc.getCtxt(),
+                    acc.getService<services::SysInfo>()->getJsonManifest());
   std::unique_ptr<Accelerator> design = manifest.buildAccelerator(acc);
   os << "********************************" << endl;
   os << "* Design hierarchy" << endl;

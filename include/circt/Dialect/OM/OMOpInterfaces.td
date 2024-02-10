@@ -50,7 +50,9 @@ def ClassFieldLike : OpInterface<"ClassFieldLike"> {
 
   let methods = [
     InterfaceMethod<"Get the class-like field's type",
-      "mlir::Type", "getType", (ins)>
+      "mlir::Type", "getType", (ins)>,
+    InterfaceMethod<"Get the class-like field's name attribute",
+      "mlir::StringAttr", "getNameAttr", (ins)>
   ];
 }
 

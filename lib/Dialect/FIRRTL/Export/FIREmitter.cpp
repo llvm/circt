@@ -60,6 +60,7 @@ struct Emitter {
   void emitModuleParameters(Operation *op, ArrayAttr parameters);
   void emitDeclaration(LayerOp op);
   void emitDeclaration(OptionOp op);
+  void emitEnabledLayers(ArrayRef<Attribute> layers);
 
   // Statement emission
   void emitStatementsInBlock(Block &block);
@@ -408,11 +409,27 @@ void Emitter::emitCircuit(CircuitOp op) {
   symInfos = std::nullopt;
 }
 
+void Emitter::emitEnabledLayers(ArrayRef<Attribute> layers) {
+  for (auto layer : layers) {
+    ps << PP::space;
+    ps.cbox(2, IndentStyle::Block);
+    ps << "enablelayer" << PP::space;
+    emitSymbol(cast<SymbolRefAttr>(layer));
+    ps << PP::end;
+  }
+}
+
 /// Emit an entire module.
 void Emitter::emitModule(FModuleOp op) {
   startStatement();
-  ps << "module " << PPExtString(legalize(op.getNameAttr())) << " :";
+  ps.cbox(4, IndentStyle::Block);
+  if (op.isPublic())
+    ps << "public" << PP::nbsp;
+  ps << "module " << PPExtString(legalize(op.getNameAttr()));
+  emitEnabledLayers(op.getLayers());
+  ps << PP::nbsp << ":" << PP::end;
   emitLocation(op);
+
   ps.scopedBox(PP::bbox2, [&]() {
     setPendingNewline();
 
@@ -432,8 +449,12 @@ void Emitter::emitModule(FModuleOp op) {
 /// Emit an external module.
 void Emitter::emitModule(FExtModuleOp op) {
   startStatement();
-  ps << "extmodule " << PPExtString(legalize(op.getNameAttr())) << " :";
+  ps.cbox(4, IndentStyle::Block);
+  ps << "extmodule " << PPExtString(legalize(op.getNameAttr()));
+  emitEnabledLayers(op.getLayers());
+  ps << PP::nbsp << ":" << PP::end;
   emitLocation(op);
+
   ps.scopedBox(PP::bbox2, [&]() {
     setPendingNewline();
 
@@ -456,8 +477,12 @@ void Emitter::emitModule(FExtModuleOp op) {
 /// Emit an intrinsic module
 void Emitter::emitModule(FIntModuleOp op) {
   startStatement();
-  ps << "intmodule " << PPExtString(legalize(op.getNameAttr())) << " :";
+  ps.cbox(4, IndentStyle::Block);
+  ps << "intmodule " << PPExtString(legalize(op.getNameAttr()));
+  emitEnabledLayers(op.getLayers());
+  ps << PP::nbsp << ":" << PP::end;
   emitLocation(op);
+
   ps.scopedBox(PP::bbox2, [&]() {
     setPendingNewline();
 

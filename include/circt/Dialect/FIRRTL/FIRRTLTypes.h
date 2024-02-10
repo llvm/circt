@@ -203,6 +203,9 @@ bool isConst(Type type);
 /// guaranteed to be unchanging at circuit execution time
 bool containsConst(Type type);
 
+/// Return true if the type has zero bit width.
+bool hasZeroBitWidth(FIRRTLType type);
+
 /// Returns whether the two types are equivalent.  This implements the exact
 /// definition of type equivalence in the FIRRTL spec.  If the types being
 /// compared have any outer flips that encode FIRRTL module directions (input or

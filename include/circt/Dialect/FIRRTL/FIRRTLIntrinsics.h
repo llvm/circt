@@ -40,7 +40,7 @@ public:
   virtual bool check() { return false; }
 
   /// Transform an instance of the intrinsic.
-  virtual void convert(InstanceOp op) = 0;
+  virtual LogicalResult convert(InstanceOp op) = 0;
 
 protected:
   ParseResult hasNPorts(unsigned n);

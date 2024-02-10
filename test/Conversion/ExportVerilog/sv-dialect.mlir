@@ -1296,7 +1296,7 @@ hw.module.extern @MyExtModule(in %in: i8)
 hw.module.extern @ExtModule(in %in: i8, out out: i8)
 
 // CHECK-LABEL: module InlineBind
-// CHEC:        output wire_0
+// CHECK:       output [7:0] wire_0
 hw.module @InlineBind(in %a_in: i8, out wire: i8){
   // CHECK:      wire [7:0] _ext1_out;
   // CHECK-NEXT: wire [7:0] _GEN;

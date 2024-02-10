@@ -262,6 +262,9 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
         if (transferFunc(op).failed())
           return signalPassFailure();
 
+      // Clear any enabled layers.
+      module.setLayersAttr(ArrayAttr::get(module.getContext(), {}));
+
       // Since we walk operations pre-order and not along dataflow edges,
       // ref.sub may not be resolvable when we encounter them (they're not just
       // unification). This can happen when refs go through an output port or
@@ -348,18 +351,15 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     pathInsertPoint = {};
   }
 
-  /// Generate the ABI ref_<circuit>_<module> prefix string into `prefix`.
+  /// Generate the ABI ref_<module> prefix string into `prefix`.
   void getRefABIPrefix(FModuleLike mod, SmallVectorImpl<char> &prefix) {
     auto modName = mod.getModuleName();
-    auto circuitName = getOperation().getName();
     if (auto ext = dyn_cast<FExtModuleOp>(*mod)) {
       // Use defName for module portion, if set.
       if (auto defname = ext.getDefname(); defname && !defname->empty())
         modName = *defname;
-      // Assume(/require) all extmodule's are within their own circuit.
-      circuitName = modName;
     }
-    (Twine("ref_") + circuitName + "_" + modName).toVector(prefix);
+    (Twine("ref_") + modName).toVector(prefix);
   }
 
   /// Get full macro name as StringAttr for the specified ref port.
@@ -626,7 +626,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
       formatString += stringLeaf;
 
       // Insert a macro with the format:
-      // ref_<circuit-name>_<module-name>_<ref-name> <path>
+      // ref_<module-name>_<ref-name> <path>
       if (circuitRefPrefix.empty())
         getRefABIPrefix(module, circuitRefPrefix);
       auto macroName =
@@ -639,7 +639,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
           builder.getArrayAttr(ref ? ref : ArrayRef<Attribute>{}));
 
       // The macro will be exported to a file with the format:
-      // ref_<circuit-name>_<module-name>.sv
+      // ref_<module-name>.sv
       macroDefOp->setAttr("output_file",
                           hw::OutputFileAttr::getFromFilename(
                               &getContext(), circuitRefPrefix + ".sv"));

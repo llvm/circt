@@ -16,8 +16,11 @@
 // CHECK-LABEL: circuit Foo :
 // PRETTY-LABEL: circuit Foo :
 firrtl.circuit "Foo" {
-  // CHECK-LABEL: module Foo :
+  // CHECK-LABEL: public module Foo :
   firrtl.module @Foo() {}
+
+  // CHECK-LABEL: {{^ *}} module PrivateModule :
+  firrtl.module private @PrivateModule() {}
 
   // CHECK-LABEL: module PortsAndTypes :
   firrtl.module @PortsAndTypes(
@@ -756,6 +759,48 @@ firrtl.circuit "Foo" {
   firrtl.module @ModuleWithLongProbeColor(
     out %o: !firrtl.probe<uint<1>, @Group1234567890::@Group1234567890::@Group1234567890::@Group1234567890::@Group1234567890::@Group1234567890::@Group1234567890::@Group1234567890>
   ) {}
+
+  // CHECK: module ModuleWithEnabledLayers enablelayer GroupA enablelayer GroupA.GroupB :
+  firrtl.module private @ModuleWithEnabledLayers() attributes {
+    layers = [
+      @GroupA,
+      @GroupA::@GroupB
+    ]
+  } {}
+
+  // CHECK:      extmodule ExtModuleWithEnabledLayers
+  // CHECK-NEXT:     enablelayer GroupA
+  // CHECK-NEXT:     enablelayer GroupA.GroupB :
+  firrtl.extmodule @ExtModuleWithEnabledLayers() attributes {
+    layers = [
+      @GroupA,
+      @GroupA::@GroupB
+    ]
+  }
+
+  // CHECK:      intmodule IntModuleWithEnabledLayers
+  // CHECK-NEXT:     enablelayer GroupA
+  // CHECK-NEXT:     enablelayer GroupA.GroupB :
+  firrtl.intmodule @IntModuleWithEnabledLayers() attributes {
+    layers = [
+      @GroupA,
+      @GroupA::@GroupB
+    ]
+  }
+
+  // CHECK:      module ModuleWithLargeEnabledLayers
+  // CHECK-NEXT:     enablelayer Group1234567890.Group1234567890
+  // CHECK-NEXT:     enablelayer
+  // CHECK-NEXT:       Group1234567890.Group1234567890.Group1234567890.Group1234567890
+  // CHECK-NEXT:     enablelayer
+  // CHECK-NEXT:       Group1234567890.Group1234567890.Group1234567890.Group1234567890
+  // CHECK-NEXT:         .Group1234567890.Group1234567890.Group1234567890.Group1234567890 :
+  firrtl.module @ModuleWithLargeEnabledLayers() attributes {
+    layers = [
+      @Group1234567890::@Group1234567890,
+      @Group1234567890::@Group1234567890::@Group1234567890::@Group1234567890,
+      @Group1234567890::@Group1234567890::@Group1234567890::@Group1234567890::@Group1234567890::@Group1234567890::@Group1234567890::@Group1234567890
+    ]} {}
 
   // CHECK: module RWProbe :
   // CHECK-NEXT: input in : { a : UInt<1> }[2]

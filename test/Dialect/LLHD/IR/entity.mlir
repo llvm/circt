@@ -29,5 +29,5 @@
 // CHECK-NEXT: llhd.entity @out_of_names () -> () {
 "llhd.entity"() ({
 ^body:
-// CHECK-NEXT : }
+// CHECK-NEXT: }
 }) {sym_name="out_of_names", ins=0, function_type=()->()} : () -> ()

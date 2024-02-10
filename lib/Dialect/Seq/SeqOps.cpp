@@ -206,10 +206,10 @@ void HLMemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 void HLMemOp::build(OpBuilder &builder, OperationState &result, Value clk,
-                    Value rst, StringRef symName, llvm::ArrayRef<int64_t> shape,
+                    Value rst, StringRef name, llvm::ArrayRef<int64_t> shape,
                     Type elementType) {
   HLMemType t = HLMemType::get(builder.getContext(), shape, elementType);
-  HLMemOp::build(builder, result, t, clk, rst, symName);
+  HLMemOp::build(builder, result, t, clk, rst, name);
 }
 
 //===----------------------------------------------------------------------===//

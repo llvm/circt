@@ -37,7 +37,7 @@ using namespace esi::backends::xrt;
 ///  <xclbin>[:<device_id>]
 /// wherein <device_id> is in BDF format.
 unique_ptr<AcceleratorConnection>
-XrtAccelerator::connect(string connectionString) {
+XrtAccelerator::connect(Context &ctxt, string connectionString) {
   string xclbin;
   string device_id;
 
@@ -49,7 +49,7 @@ XrtAccelerator::connect(string connectionString) {
     device_id = connectionString.substr(colon + 1);
   }
 
-  return make_unique<XrtAccelerator>(xclbin, device_id);
+  return make_unique<XrtAccelerator>(ctxt, xclbin, device_id);
 }
 
 struct esi::backends::xrt::XrtAccelerator::Impl {
@@ -65,12 +65,18 @@ struct esi::backends::xrt::XrtAccelerator::Impl {
     ip = ::xrt::ip(device, uuid, kernel);
   }
 
+  std::map<std::string, ChannelPort &> requestChannelsFor(AppIDPath,
+                                                          const BundleType *) {
+    throw runtime_error("XRT does not support channel communication yet");
+  }
+
   ::xrt::device device;
   ::xrt::ip ip;
 };
 
 /// Construct and connect to a cosim server.
-XrtAccelerator::XrtAccelerator(string xclbin, string device_id) {
+XrtAccelerator::XrtAccelerator(Context &ctxt, string xclbin, string device_id)
+    : AcceleratorConnection(ctxt) {
   impl = make_unique<Impl>(xclbin, device_id);
 }
 
@@ -88,6 +94,12 @@ private:
   ::xrt::ip &ip;
 };
 } // namespace
+
+map<string, ChannelPort &>
+XrtAccelerator::requestChannelsFor(AppIDPath idPath,
+                                   const BundleType *bundleType) {
+  return impl->requestChannelsFor(idPath, bundleType);
+}
 
 Service *XrtAccelerator::createService(Service::Type svcType, AppIDPath id,
                                        std::string implName,

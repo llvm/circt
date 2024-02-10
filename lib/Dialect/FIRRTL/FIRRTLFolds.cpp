@@ -1516,12 +1516,14 @@ OpFoldResult ShrPrimOp::fold(FoldAdaptor adaptor) {
   auto input = this->getInput();
   IntType inputType = input.getType();
   int shiftAmount = getAmount();
+  auto inputWidth = inputType.getWidthOrSentinel();
 
   // shr(x, 0) -> x
-  if (shiftAmount == 0 && inputType.getWidthOrSentinel() != 0)
+  // Once the shr width changes, do this: shiftAmount == 0 &&
+  // (!inputType.isSigned() || inputWidth > 0)
+  if (shiftAmount == 0 && inputWidth > 0)
     return input;
 
-  auto inputWidth = inputType.getWidthOrSentinel();
   if (inputWidth == -1)
     return {};
   if (inputWidth == 0)

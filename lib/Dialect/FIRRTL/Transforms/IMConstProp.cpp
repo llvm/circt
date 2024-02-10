@@ -974,7 +974,7 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
     };
 
     // TODO: Replace entire aggregate.
-    auto it = latticeValues.find(getOrCacheFieldRefFromValue(value));
+    auto it = latticeValues.find(getFieldRefFromValue(value));
     if (it == latticeValues.end() || it->second.isOverdefined() ||
         it->second.isUnknown())
       return false;

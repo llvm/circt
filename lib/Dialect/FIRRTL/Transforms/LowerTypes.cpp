@@ -102,31 +102,6 @@ static Type mapLoweredType(Type type, FIRRTLBaseType fieldType) {
   return mapLoweredType(ftype, fieldType);
 }
 
-// NOLINTBEGIN(misc-no-recursion)
-/// Return true if the type has more than zero bitwidth.
-static bool hasZeroBitWidth(FIRRTLType type) {
-  return FIRRTLTypeSwitch<FIRRTLType, bool>(type)
-      .Case<BundleType>([&](auto bundle) {
-        for (size_t i = 0, e = bundle.getNumElements(); i < e; ++i) {
-          auto elt = bundle.getElement(i);
-          if (hasZeroBitWidth(elt.type))
-            return true;
-        }
-        return bundle.getNumElements() == 0;
-      })
-      .Case<FVectorType>([&](auto vector) {
-        if (vector.getNumElements() == 0)
-          return true;
-        return hasZeroBitWidth(vector.getElementType());
-      })
-      .Case<FIRRTLBaseType>([](auto groundType) {
-        return firrtl::getBitWidth(groundType).value_or(0) == 0;
-      })
-      .Case<RefType>([](auto ref) { return hasZeroBitWidth(ref.getType()); })
-      .Default([](auto) { return false; });
-}
-// NOLINTEND(misc-no-recursion)
-
 /// Return true if the type is a 1d vector type or ground type.
 static bool isOneDimVectorType(FIRRTLType type) {
   return FIRRTLTypeSwitch<FIRRTLType, bool>(type)
@@ -1432,7 +1407,10 @@ bool TypeLoweringVisitor::visitExpr(RefCastOp op) {
   auto clone = [&](const FlatBundleFieldEntry &field,
                    ArrayAttr attrs) -> Value {
     auto input = getSubWhatever(op.getInput(), field.index);
-    return builder->create<RefCastOp>(RefType::get(field.type), input);
+    return builder->create<RefCastOp>(RefType::get(field.type,
+                                                   op.getType().getForceable(),
+                                                   op.getType().getLayer()),
+                                      input);
   };
   return lowerProducer(op, clone);
 }
@@ -1488,7 +1466,8 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
       resultTypes, op.getModuleNameAttr(), op.getNameAttr(),
       op.getNameKindAttr(), direction::packAttribute(context, newDirs),
       builder->getArrayAttr(newNames), op.getAnnotations(),
-      builder->getArrayAttr(newPortAnno), op.getLowerToBindAttr(),
+      builder->getArrayAttr(newPortAnno), op.getLayersAttr(),
+      op.getLowerToBindAttr(),
       sym ? hw::InnerSymAttr::get(sym) : hw::InnerSymAttr());
 
   // Copy over any attributes which have not already been copied over by

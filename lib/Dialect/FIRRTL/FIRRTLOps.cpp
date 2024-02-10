@@ -31,6 +31,7 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/FormatVariadic.h"
@@ -319,6 +320,128 @@ void getAsmBlockArgumentNamesImpl(Operation *op, mlir::Region &region,
 /// A forward declaration for `NameKind` attribute parser.
 static ParseResult parseNameKind(OpAsmParser &parser,
                                  firrtl::NameKindEnumAttr &result);
+
+//===----------------------------------------------------------------------===//
+// Layer Verification Utilities
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct CompareSymbolRefAttr {
+  // True if lhs is lexicographically less than rhs.
+  bool operator()(SymbolRefAttr lhs, SymbolRefAttr rhs) const {
+    auto cmp = lhs.getRootReference().compare(rhs.getRootReference());
+    if (cmp == -1)
+      return true;
+    if (cmp == 1)
+      return false;
+    auto lhsNested = lhs.getNestedReferences();
+    auto rhsNested = rhs.getNestedReferences();
+    auto lhsNestedSize = lhsNested.size();
+    auto rhsNestedSize = rhsNested.size();
+    auto e = std::min(lhsNestedSize, rhsNestedSize);
+    for (unsigned i = 0; i < e; ++i) {
+      auto cmp = lhsNested[i].getAttr().compare(rhsNested[i].getAttr());
+      if (cmp == -1)
+        return true;
+      if (cmp == 1)
+        return false;
+    }
+    return lhsNestedSize < rhsNestedSize;
+  }
+};
+} // namespace
+
+using LayerSet = SmallSet<SymbolRefAttr, 4, CompareSymbolRefAttr>;
+
+/// Get the ambient layers active at the given op.
+static LayerSet getAmbientLayersAt(Operation *op) {
+  // Crawl through the parent ops, accumulating all ambient layers at the given
+  // operation.
+  LayerSet result;
+  for (; op != nullptr; op = op->getParentOp()) {
+    if (auto module = dyn_cast<FModuleLike>(op)) {
+      auto layers = module.getLayersAttr().getAsRange<SymbolRefAttr>();
+      result.insert(layers.begin(), layers.end());
+      break;
+    }
+    if (auto layerblock = dyn_cast<LayerBlockOp>(op)) {
+      result.insert(layerblock.getLayerName());
+      continue;
+    }
+  }
+  return result;
+}
+
+/// Get the ambient layer requirements at the definition site of the value.
+static LayerSet getAmbientLayersFor(Value value) {
+  return getAmbientLayersAt(getFieldRefFromValue(value).getDefiningOp());
+}
+
+/// Get the effective layer requirements for the given value.
+/// The effective layers for a value is the union of
+///   - the ambient layers for the cannonical storage location.
+///   - any explicit layer annotations in the value's type.
+static LayerSet getLayersFor(Value value) {
+  auto result = getAmbientLayersFor(value);
+  if (auto type = dyn_cast<RefType>(value.getType()))
+    if (auto layer = type.getLayer())
+      result.insert(type.getLayer());
+  return result;
+}
+
+/// Check that the source layer is compatible with the destination layer.
+/// Either the source and destination are identical, or the source-layer
+/// is a parent of the destination. For example `A` is compatible with `A.B.C`,
+/// because any definition valid in `A` is also valid in `A.B.C`.
+static bool isLayerCompatibleWith(mlir::SymbolRefAttr srcLayer,
+                                  mlir::SymbolRefAttr dstLayer) {
+  // A non-colored probe may be cast to any colored probe.
+  if (!srcLayer)
+    return true;
+
+  // A colored probe cannot be cast to an uncolored probe.
+  if (!dstLayer)
+    return false;
+
+  // Return true if the srcLayer is a prefix of the dstLayer.
+  if (srcLayer.getRootReference() != dstLayer.getRootReference())
+    return false;
+
+  auto srcNames = srcLayer.getNestedReferences();
+  auto dstNames = dstLayer.getNestedReferences();
+  if (dstNames.size() < srcNames.size())
+    return false;
+
+  return llvm::all_of(llvm::zip_first(srcNames, dstNames),
+                      [](auto x) { return std::get<0>(x) == std::get<1>(x); });
+}
+
+/// Check that the source layer is present in the destination layers.
+static bool isLayerCompatibleWith(SymbolRefAttr srcLayer,
+                                  const LayerSet &dstLayers) {
+  // fast path: the required layer is directly listed in the provided layers.
+  if (dstLayers.contains(srcLayer))
+    return true;
+
+  // Slow path: the required layer is not directly listed in the provided
+  // layers, but the layer may still be provided by a nested layer.
+  return any_of(dstLayers, [=](SymbolRefAttr dstLayer) {
+    return isLayerCompatibleWith(srcLayer, dstLayer);
+  });
+}
+
+/// Check that the source layers are all present in the destination layers.
+/// True if all source layers are present in the destination.
+/// Outputs the set of source layers that are missing in the destination.
+static bool isLayerSetCompatibleWith(const LayerSet &src, const LayerSet &dst,
+                                     SmallVectorImpl<SymbolRefAttr> &missing) {
+  for (auto srcLayer : src)
+    if (!isLayerCompatibleWith(srcLayer, dst))
+      missing.push_back(srcLayer);
+
+  llvm::sort(missing, CompareSymbolRefAttr());
+  return missing.empty();
+}
 
 //===----------------------------------------------------------------------===//
 // CircuitOp
@@ -796,9 +919,10 @@ void FMemModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
   ::insertPorts(cast<FModuleLike>((Operation *)*this), ports);
 }
 
-static void buildModule(OpBuilder &builder, OperationState &result,
-                        StringAttr name, ArrayRef<PortInfo> ports,
-                        ArrayAttr annotations, bool withAnnotations = true) {
+static void buildModuleLike(OpBuilder &builder, OperationState &result,
+                            StringAttr name, ArrayRef<PortInfo> ports,
+                            ArrayAttr annotations, ArrayAttr layers,
+                            bool withAnnotations, bool withLayers) {
   // Add an attribute for the name.
   result.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), name);
 
@@ -843,19 +967,34 @@ static void buildModule(OpBuilder &builder, OperationState &result,
                         builder.getArrayAttr(portAnnotations));
   }
 
+  if (withLayers) {
+    if (!layers)
+      layers = builder.getArrayAttr({});
+    result.addAttribute("layers", layers);
+  }
+
   result.addRegion();
 }
 
-static void buildModuleWithoutAnnos(OpBuilder &builder, OperationState &result,
-                                    StringAttr name, ArrayRef<PortInfo> ports) {
-  return buildModule(builder, result, name, ports, {},
-                     /*withAnnotations=*/false);
+static void buildModule(OpBuilder &builder, OperationState &result,
+                        StringAttr name, ArrayRef<PortInfo> ports,
+                        ArrayAttr annotations, ArrayAttr layers) {
+  buildModuleLike(builder, result, name, ports, annotations, layers,
+                  /*withAnnotations=*/true, /*withLayers=*/true);
+}
+
+static void buildClass(OpBuilder &builder, OperationState &result,
+                       StringAttr name, ArrayRef<PortInfo> ports) {
+  return buildModuleLike(builder, result, name, ports, {}, {},
+                         /*withAnnotations=*/false,
+                         /*withLayers=*/false);
 }
 
 void FModuleOp::build(OpBuilder &builder, OperationState &result,
                       StringAttr name, ConventionAttr convention,
-                      ArrayRef<PortInfo> ports, ArrayAttr annotations) {
-  buildModule(builder, result, name, ports, annotations);
+                      ArrayRef<PortInfo> ports, ArrayAttr annotations,
+                      ArrayAttr layers) {
+  buildModule(builder, result, name, ports, annotations, layers);
   result.addAttribute("convention", convention);
 
   // Create a region and a block for the body.
@@ -872,8 +1011,8 @@ void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
                          StringAttr name, ConventionAttr convention,
                          ArrayRef<PortInfo> ports, StringRef defnameAttr,
                          ArrayAttr annotations, ArrayAttr parameters,
-                         ArrayAttr internalPaths) {
-  buildModule(builder, result, name, ports, annotations);
+                         ArrayAttr internalPaths, ArrayAttr layers) {
+  buildModule(builder, result, name, ports, annotations, layers);
   result.addAttribute("convention", convention);
   if (!defnameAttr.empty())
     result.addAttribute("defname", builder.getStringAttr(defnameAttr));
@@ -887,8 +1026,9 @@ void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
 void FIntModuleOp::build(OpBuilder &builder, OperationState &result,
                          StringAttr name, ArrayRef<PortInfo> ports,
                          StringRef intrinsicNameAttr, ArrayAttr annotations,
-                         ArrayAttr parameters, ArrayAttr internalPaths) {
-  buildModule(builder, result, name, ports, annotations);
+                         ArrayAttr parameters, ArrayAttr internalPaths,
+                         ArrayAttr layers) {
+  buildModule(builder, result, name, ports, annotations, layers);
   result.addAttribute("intrinsic", builder.getStringAttr(intrinsicNameAttr));
   if (!parameters)
     parameters = builder.getArrayAttr({});
@@ -903,9 +1043,9 @@ void FMemModuleOp::build(OpBuilder &builder, OperationState &result,
                          uint32_t numReadWritePorts, uint32_t dataWidth,
                          uint32_t maskBits, uint32_t readLatency,
                          uint32_t writeLatency, uint64_t depth,
-                         ArrayAttr annotations) {
+                         ArrayAttr annotations, ArrayAttr layers) {
   auto *context = builder.getContext();
-  buildModule(builder, result, name, ports, annotations);
+  buildModule(builder, result, name, ports, annotations, layers);
   auto ui32Type = IntegerType::get(context, 32, IntegerType::Unsigned);
   auto ui64Type = IntegerType::get(context, 64, IntegerType::Unsigned);
   result.addAttribute("numReadPorts", IntegerAttr::get(ui32Type, numReadPorts));
@@ -1170,6 +1310,11 @@ static void printFModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
   if (op->getAttrOfType<ArrayAttr>("annotations").empty())
     omittedAttrs.push_back("annotations");
 
+  // If there are no enabled layers, then omit the empty array.
+  if (auto layers = op->getAttrOfType<ArrayAttr>("layers"))
+    if (layers.empty())
+      omittedAttrs.push_back("layers");
+
   p.printOptionalAttrDictWithKeyword(op->getAttrs(), omittedAttrs);
 }
 
@@ -1328,6 +1473,8 @@ ParseResult FModuleOp::parse(OpAsmParser &parser, OperationState &result) {
     result.addAttribute(
         "convention",
         ConventionAttr::get(result.getContext(), Convention::Internal));
+  if (!result.attributes.get("layers"))
+    result.addAttribute("layers", ArrayAttr::get(parser.getContext(), {}));
   return success();
 }
 
@@ -1448,35 +1595,72 @@ LogicalResult FIntModuleOp::verify() {
   return success();
 }
 
+static LogicalResult verifyProbeType(RefType refType, Location loc,
+                                     CircuitOp circuitOp,
+                                     SymbolTableCollection &symbolTable,
+                                     Twine start) {
+  auto layer = refType.getLayer();
+  if (!layer)
+    return success();
+  auto *layerOp = symbolTable.lookupSymbolIn(circuitOp, layer);
+  if (!layerOp)
+    return emitError(loc) << start << " associated with layer '" << layer
+                          << "', but this layer was not defined";
+  if (!isa<LayerOp>(layerOp)) {
+    auto diag = emitError(loc)
+                << start << " associated with layer '" << layer
+                << "', but symbol '" << layer << "' does not refer to a '"
+                << LayerOp::getOperationName() << "' op";
+    return diag.attachNote(layerOp->getLoc()) << "symbol refers to this op";
+  }
+  return success();
+}
+
 static LogicalResult verifyPortSymbolUses(FModuleLike module,
                                           SymbolTableCollection &symbolTable) {
-  auto circuitOp = module->getParentOfType<CircuitOp>();
-
   // verify types in ports.
+  auto circuitOp = module->getParentOfType<CircuitOp>();
   for (size_t i = 0, e = module.getNumPorts(); i < e; ++i) {
     auto type = module.getPortType(i);
-    auto classType = dyn_cast<ClassType>(type);
-    if (!classType)
+
+    if (auto refType = type_dyn_cast<RefType>(type)) {
+      if (failed(verifyProbeType(
+              refType, module.getPortLocation(i), circuitOp, symbolTable,
+              Twine("probe port '") + module.getPortName(i) + "' is")))
+        return failure();
       continue;
+    }
 
-    // verify that the class exists.
-    auto className = classType.getNameAttr();
-    auto classOp = dyn_cast_or_null<ClassLike>(
-        symbolTable.lookupSymbolIn(circuitOp, className));
-    if (!classOp)
-      return module.emitOpError() << "references unknown class " << className;
+    if (auto classType = dyn_cast<ClassType>(type)) {
+      auto className = classType.getNameAttr();
+      auto classOp = dyn_cast_or_null<ClassLike>(
+          symbolTable.lookupSymbolIn(circuitOp, className));
+      if (!classOp)
+        return module.emitOpError() << "references unknown class " << className;
 
-    // verify that the result type agrees with the class definition.
-    if (failed(classOp.verifyType(classType,
-                                  [&]() { return module.emitOpError(); })))
-      return failure();
+      // verify that the result type agrees with the class definition.
+      if (failed(classOp.verifyType(classType,
+                                    [&]() { return module.emitOpError(); })))
+        return failure();
+      continue;
+    }
   }
 
   return success();
 }
 
 LogicalResult FModuleOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  return verifyPortSymbolUses(cast<FModuleLike>(getOperation()), symbolTable);
+  if (failed(
+          verifyPortSymbolUses(cast<FModuleLike>(getOperation()), symbolTable)))
+    return failure();
+
+  auto circuitOp = (*this)->getParentOfType<CircuitOp>();
+  for (auto layer : getLayers()) {
+    if (!symbolTable.lookupSymbolIn(circuitOp, cast<SymbolRefAttr>(layer)))
+      return emitOpError() << "enables unknown layer '" << layer << "'";
+  }
+
+  return success();
 }
 
 LogicalResult
@@ -1729,7 +1913,7 @@ void ClassOp::build(OpBuilder &builder, OperationState &result, StringAttr name,
                    [](const auto &port) { return port.annotations.empty(); }) &&
       "class ports may not have annotations");
 
-  buildModuleWithoutAnnos(builder, result, name, ports);
+  buildClass(builder, result, name, ports);
 
   // Create a region and a block for the body.
   auto *bodyRegion = result.regions[0].get();
@@ -1797,6 +1981,10 @@ ArrayAttr ClassOp::getPortAnnotationsAttr() {
   return ArrayAttr::get(getContext(), {});
 }
 
+ArrayAttr ClassOp::getLayersAttr() { return ArrayAttr::get(getContext(), {}); }
+
+ArrayRef<Attribute> ClassOp::getLayers() { return getLayersAttr(); }
+
 SmallVector<::circt::hw::PortInfo> ClassOp::getPortList() {
   return ::getPortListImpl(*this);
 }
@@ -1827,7 +2015,7 @@ void ExtClassOp::build(OpBuilder &builder, OperationState &result,
                    [](const auto &port) { return port.annotations.empty(); }) &&
       "class ports may not have annotations");
 
-  buildModuleWithoutAnnos(builder, result, name, ports);
+  buildClass(builder, result, name, ports);
 }
 
 void ExtClassOp::print(OpAsmPrinter &p) {
@@ -1867,6 +2055,12 @@ ConventionAttr ExtClassOp::getConventionAttr() {
   return ConventionAttr::get(getContext(), getConvention());
 }
 
+ArrayAttr ExtClassOp::getLayersAttr() {
+  return ArrayAttr::get(getContext(), {});
+}
+
+ArrayRef<Attribute> ExtClassOp::getLayers() { return getLayersAttr(); }
+
 ArrayAttr ExtClassOp::getParameters() { return {}; }
 
 ArrayAttr ExtClassOp::getPortAnnotationsAttr() {
@@ -1899,27 +2093,24 @@ SmallVector<::circt::hw::PortInfo> InstanceOp::getPortList() {
   return circuit.lookupSymbol<hw::PortList>(getModuleNameAttr()).getPortList();
 }
 
-void InstanceOp::build(OpBuilder &builder, OperationState &result,
-                       TypeRange resultTypes, StringRef moduleName,
-                       StringRef name, NameKindEnum nameKind,
-                       ArrayRef<Direction> portDirections,
-                       ArrayRef<Attribute> portNames,
-                       ArrayRef<Attribute> annotations,
-                       ArrayRef<Attribute> portAnnotations, bool lowerToBind,
-                       StringAttr innerSym) {
+void InstanceOp::build(
+    OpBuilder &builder, OperationState &result, TypeRange resultTypes,
+    StringRef moduleName, StringRef name, NameKindEnum nameKind,
+    ArrayRef<Direction> portDirections, ArrayRef<Attribute> portNames,
+    ArrayRef<Attribute> annotations, ArrayRef<Attribute> portAnnotations,
+    ArrayRef<Attribute> layers, bool lowerToBind, StringAttr innerSym) {
   build(builder, result, resultTypes, moduleName, name, nameKind,
-        portDirections, portNames, annotations, portAnnotations, lowerToBind,
+        portDirections, portNames, annotations, portAnnotations, layers,
+        lowerToBind,
         innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr());
 }
 
-void InstanceOp::build(OpBuilder &builder, OperationState &result,
-                       TypeRange resultTypes, StringRef moduleName,
-                       StringRef name, NameKindEnum nameKind,
-                       ArrayRef<Direction> portDirections,
-                       ArrayRef<Attribute> portNames,
-                       ArrayRef<Attribute> annotations,
-                       ArrayRef<Attribute> portAnnotations, bool lowerToBind,
-                       hw::InnerSymAttr innerSym) {
+void InstanceOp::build(
+    OpBuilder &builder, OperationState &result, TypeRange resultTypes,
+    StringRef moduleName, StringRef name, NameKindEnum nameKind,
+    ArrayRef<Direction> portDirections, ArrayRef<Attribute> portNames,
+    ArrayRef<Attribute> annotations, ArrayRef<Attribute> portAnnotations,
+    ArrayRef<Attribute> layers, bool lowerToBind, hw::InnerSymAttr innerSym) {
   result.addTypes(resultTypes);
   result.addAttribute("moduleName",
                       SymbolRefAttr::get(builder.getContext(), moduleName));
@@ -1929,6 +2120,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
       direction::packAttribute(builder.getContext(), portDirections));
   result.addAttribute("portNames", builder.getArrayAttr(portNames));
   result.addAttribute("annotations", builder.getArrayAttr(annotations));
+  result.addAttribute("layers", builder.getArrayAttr(layers));
   if (lowerToBind)
     result.addAttribute("lowerToBind", builder.getUnitAttr());
   if (innerSym)
@@ -1977,15 +2169,16 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
       NameKindEnumAttr::get(builder.getContext(), nameKind),
       module.getPortDirectionsAttr(), module.getPortNamesAttr(),
       builder.getArrayAttr(annotations), portAnnotationsAttr,
-      lowerToBind ? builder.getUnitAttr() : UnitAttr(), innerSym);
+      module.getLayersAttr(), lowerToBind ? builder.getUnitAttr() : UnitAttr(),
+      innerSym);
 }
 
 void InstanceOp::build(OpBuilder &builder, OperationState &odsState,
                        ArrayRef<PortInfo> ports, StringRef moduleName,
                        StringRef name, NameKindEnum nameKind,
-                       ArrayRef<Attribute> annotations, bool lowerToBind,
+                       ArrayRef<Attribute> annotations,
+                       ArrayRef<Attribute> layers, bool lowerToBind,
                        hw::InnerSymAttr innerSym) {
-
   // Gather the result types.
   SmallVector<Type> newResultTypes;
   SmallVector<Direction> newPortDirections;
@@ -2000,7 +2193,26 @@ void InstanceOp::build(OpBuilder &builder, OperationState &odsState,
 
   return build(builder, odsState, newResultTypes, moduleName, name, nameKind,
                newPortDirections, newPortNames, annotations, newPortAnnotations,
-               lowerToBind, innerSym);
+               layers, lowerToBind, innerSym);
+}
+
+LogicalResult InstanceOp::verify() {
+  // The instance may only be instantiated under its required layers.
+  auto ambientLayers = getAmbientLayersAt(getOperation());
+  SmallVector<SymbolRefAttr> missingLayers;
+  for (auto layer : getLayersAttr().getAsRange<SymbolRefAttr>())
+    if (!isLayerCompatibleWith(layer, ambientLayers))
+      missingLayers.push_back(layer);
+
+  if (missingLayers.empty())
+    return success();
+
+  auto diag =
+      emitOpError("ambient layers are insufficient to instantiate module");
+  auto &note = diag.attachNote();
+  note << "missing layer requirements: ";
+  interleaveComma(missingLayers, note);
+  return failure();
 }
 
 /// Builds a new `InstanceOp` with the ports listed in `portIndices` erased, and
@@ -2025,7 +2237,7 @@ InstanceOp InstanceOp::erasePorts(OpBuilder &builder,
   auto newOp = builder.create<InstanceOp>(
       getLoc(), newResultTypes, getModuleName(), getName(), getNameKind(),
       newPortDirections, newPortNames, getAnnotations().getValue(),
-      newPortAnnotations, getLowerToBind(), getInnerSymAttr());
+      newPortAnnotations, getLayers(), getLowerToBind(), getInnerSymAttr());
 
   for (unsigned oldIdx = 0, newIdx = 0, numOldPorts = getNumResults();
        oldIdx != numOldPorts; ++oldIdx) {
@@ -2098,7 +2310,7 @@ InstanceOp::cloneAndInsertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
   return OpBuilder(*this).create<InstanceOp>(
       getLoc(), newPortTypes, getModuleName(), getName(), getNameKind(),
       newPortDirections, newPortNames, getAnnotations().getValue(),
-      newPortAnnos, getLowerToBind(), getInnerSymAttr());
+      newPortAnnos, getLayers(), getLowerToBind(), getInnerSymAttr());
 }
 
 LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
@@ -2122,12 +2334,14 @@ void InstanceOp::print(OpAsmPrinter &p) {
     p << ' ' << stringifyNameKindEnum(getNameKindAttr().getValue());
 
   // Print the attr-dict.
-  SmallVector<StringRef, 9> omittedAttrs = {"moduleName",     "name",
-                                            "portDirections", "portNames",
-                                            "portTypes",      "portAnnotations",
-                                            "inner_sym",      "nameKind"};
+  SmallVector<StringRef, 10> omittedAttrs = {
+      "moduleName", "name",      "portDirections",
+      "portNames",  "portTypes", "portAnnotations",
+      "inner_sym",  "nameKind"};
   if (getAnnotations().empty())
     omittedAttrs.push_back("annotations");
+  if (getLayers().empty())
+    omittedAttrs.push_back("layers");
   p.printOptionalAttrDict((*this)->getAttrs(), omittedAttrs);
 
   // Print the module name.
@@ -2196,10 +2410,12 @@ ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
     result.addAttribute("portAnnotations",
                         ArrayAttr::get(context, portAnnotations));
 
-  // Annotations and LowerToBind are omitted in the printed format if they are
-  // empty and false, respectively.
+  // Annotations, layers, and LowerToBind are omitted in the printed format
+  // if they are empty, empty, and false (respectively).
   if (!resultAttrs.get("annotations"))
     resultAttrs.append("annotations", parser.getBuilder().getArrayAttr({}));
+  if (!resultAttrs.get("layers"))
+    resultAttrs.append("layers", parser.getBuilder().getArrayAttr({}));
 
   // Add result types.
   result.types.reserve(portTypes.size());
@@ -2264,6 +2480,7 @@ void InstanceChoiceOp::build(
                defaultModule.getPortDirectionsAttr(),
                defaultModule.getPortNamesAttr(),
                builder.getArrayAttr(annotations), portAnnotationsAttr,
+               defaultModule.getLayersAttr(),
                innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr());
 }
 
@@ -2283,12 +2500,14 @@ void InstanceChoiceOp::print(OpAsmPrinter &p) {
     p << ' ' << stringifyNameKindEnum(getNameKindAttr().getValue());
 
   // Print the attr-dict.
-  SmallVector<StringRef, 9> omittedAttrs = {
+  SmallVector<StringRef, 10> omittedAttrs = {
       "moduleNames",     "caseNames", "name",
       "portDirections",  "portNames", "portTypes",
       "portAnnotations", "inner_sym", "nameKind"};
   if (getAnnotations().empty())
     omittedAttrs.push_back("annotations");
+  if (getLayers().empty())
+    omittedAttrs.push_back("layers");
   p.printOptionalAttrDict((*this)->getAttrs(), omittedAttrs);
 
   // Print the module name.
@@ -2409,10 +2628,12 @@ ParseResult InstanceChoiceOp::parse(OpAsmParser &parser,
     result.addAttribute("portAnnotations",
                         ArrayAttr::get(context, portAnnotations));
 
-  // Annotations and LowerToBind are omitted in the printed format if they are
-  // empty and false, respectively.
+  // Annotations, layers, and LowerToBind are omitted in the printed format if
+  // they are empty, empty, and false (respectively).
   if (!resultAttrs.get("annotations"))
     resultAttrs.append("annotations", parser.getBuilder().getArrayAttr({}));
+  if (!resultAttrs.get("layers"))
+    resultAttrs.append("layers", parser.getBuilder().getArrayAttr({}));
 
   // Add result types.
   result.types.reserve(portTypes.size());
@@ -2435,7 +2656,24 @@ LogicalResult InstanceChoiceOp::verify() {
   if (getModuleNamesAttr().size() != getCaseNamesAttr().size() + 1)
     return emitOpError() << "number of referenced modules does not match the "
                             "number of options";
-  return success();
+
+  // The modules may only be instantiated under their required layers (which
+  // are the same for all modules).
+  auto ambientLayers = getAmbientLayersAt(getOperation());
+  SmallVector<SymbolRefAttr> missingLayers;
+  for (auto layer : getLayersAttr().getAsRange<SymbolRefAttr>())
+    if (!isLayerCompatibleWith(layer, ambientLayers))
+      missingLayers.push_back(layer);
+
+  if (missingLayers.empty())
+    return success();
+
+  auto diag =
+      emitOpError("ambient layers are insufficient to instantiate module");
+  auto &note = diag.attachNote();
+  note << "missing layer requirements: ";
+  interleaveComma(missingLayers, note);
+  return failure();
 }
 
 LogicalResult
@@ -3045,6 +3283,16 @@ void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 std::optional<size_t> WireOp::getTargetResultIndex() { return 0; }
 
+LogicalResult WireOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto refType = type_dyn_cast<RefType>(getType(0));
+  if (!refType)
+    return success();
+
+  return verifyProbeType(
+      refType, getLoc(), getOperation()->getParentOfType<CircuitOp>(),
+      symbolTable, Twine("'") + getOperationName() + "' op is");
+}
+
 void ObjectOp::build(OpBuilder &builder, OperationState &state, ClassLike klass,
                      StringRef name) {
   build(builder, state, klass.getInstanceType(),
@@ -3364,6 +3612,20 @@ LogicalResult RefDefineOp::verify() {
     if (isa<RefCastOp>(op)) // Source flow, check anyway for now.
       return emitError(
           "destination reference cannot be a cast of another reference");
+  }
+
+  // This define is only enabled when its ambient layers are active. Check
+  // that whenever the destination's layer requirements are met, that this
+  // op is enabled.
+  auto ambientLayers = getAmbientLayersAt(getOperation());
+  auto dstLayers = getLayersFor(getDest());
+  SmallVector<SymbolRefAttr> missingLayers;
+  if (!isLayerSetCompatibleWith(ambientLayers, dstLayers, missingLayers)) {
+    auto diag = emitOpError("has more layer requirements than destination");
+    auto &note = diag.attachNote();
+    note << "additional layers required: ";
+    interleaveComma(missingLayers, note);
+    return failure();
   }
 
   return success();
@@ -5678,7 +5940,7 @@ FIRRTLType RefSubOp::inferReturnType(ValueRange operands,
       return RefType::get(
           vectorType.getElementType().getConstType(
               vectorType.isConst() || vectorType.getElementType().isConst()),
-          refType.getForceable());
+          refType.getForceable(), refType.getLayer());
     return emitInferRetTypeError(loc, "out of range index '", fieldIdx,
                                  "' in RefType of vector type ", refType);
   }
@@ -5691,11 +5953,41 @@ FIRRTLType RefSubOp::inferReturnType(ValueRange operands,
     return RefType::get(bundleType.getElement(fieldIdx).type.getConstType(
                             bundleType.isConst() ||
                             bundleType.getElement(fieldIdx).type.isConst()),
-                        refType.getForceable());
+                        refType.getForceable(), refType.getLayer());
   }
 
   return emitInferRetTypeError(
       loc, "ref.sub op requires a RefType of vector or bundle base type");
+}
+
+LogicalResult RefCastOp::verify() {
+  auto srcLayers = getLayersFor(getInput());
+  auto dstLayers = getLayersFor(getResult());
+  SmallVector<SymbolRefAttr> missingLayers;
+  if (!isLayerSetCompatibleWith(srcLayers, dstLayers, missingLayers)) {
+    auto diag =
+        emitOpError("cannot discard layer requirements of input reference");
+    auto &note = diag.attachNote();
+    note << "discarding layer requirements: ";
+    llvm::interleaveComma(missingLayers, note);
+    return failure();
+  }
+  return success();
+}
+
+LogicalResult RefResolveOp::verify() {
+  auto srcLayers = getLayersFor(getRef());
+  auto dstLayers = getAmbientLayersAt(getOperation());
+  SmallVector<SymbolRefAttr> missingLayers;
+  if (!isLayerSetCompatibleWith(srcLayers, dstLayers, missingLayers)) {
+    auto diag =
+        emitOpError("ambient layers are insufficient to resolve reference");
+    auto &note = diag.attachNote();
+    note << "missing layer requirements: ";
+    interleaveComma(missingLayers, note);
+    return failure();
+  }
+  return success();
 }
 
 LogicalResult RWProbeOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
@@ -5781,56 +6073,67 @@ LogicalResult LayerBlockOp::verify() {
   }
 
   // Verify the body of the region.
-  Block *body = getBody(0);
-  bool failed = false;
-  body->walk<mlir::WalkOrder::PreOrder>([&](Operation *op) {
-    // Skip nested layer blocks.  Those will be verified separately.
-    if (isa<LayerBlockOp>(op))
-      return WalkResult::skip();
-    // Check all the operands of each op to make sure that only legal things are
-    // captured.
-    for (auto operand : op->getOperands()) {
-      // Any value captured from the current layer block is fine.
-      if (operand.getParentBlock() == body)
-        continue;
-      // Capture of a non-base type, e.g., reference is illegal.
-      FIRRTLBaseType baseType = dyn_cast<FIRRTLBaseType>(operand.getType());
-      if (!baseType) {
-        auto diag = emitOpError()
-                    << "captures an operand which is not a FIRRTL base type";
-        diag.attachNote(operand.getLoc()) << "operand is defined here";
-        diag.attachNote(op->getLoc()) << "operand is used here";
-        failed = true;
-        return WalkResult::advance();
-      }
-      // Capturing a non-passive type is illegal.
-      if (!baseType.isPassive()) {
-        auto diag = emitOpError()
-                    << "captures an operand which is not a passive type";
-        diag.attachNote(operand.getLoc()) << "operand is defined here";
-        diag.attachNote(op->getLoc()) << "operand is used here";
-        failed = true;
-        return WalkResult::advance();
-      }
-    }
-    // Ensure that the layer block does not drive any sinks.
-    if (auto connect = dyn_cast<FConnectLike>(op)) {
-      auto dest = getFieldRefFromValue(connect.getDest()).getValue();
-      if (dest.getParentBlock() == body)
-        return WalkResult::advance();
-      auto diag = connect.emitOpError()
-                  << "connects to a destination which is defined outside its "
-                     "enclosing layer block";
-      diag.attachNote(getLoc()) << "enclosing layer block is defined here";
-      diag.attachNote(dest.getLoc()) << "destination is defined here";
-      failed = true;
-    }
-    return WalkResult::advance();
-  });
-  if (failed)
-    return failure();
+  auto result = getBody(0)->walk<mlir::WalkOrder::PreOrder>(
+      [&](Operation *op) -> WalkResult {
+        // Skip nested layer blocks.  Those will be verified separately.
+        if (isa<LayerBlockOp>(op))
+          return WalkResult::skip();
 
-  return success();
+        // Check all the operands of each op to make sure that only legal things
+        // are captured.
+        for (auto operand : op->getOperands()) {
+          // Any value captured from the current layer block is fine.
+          if (auto *definingOp = operand.getDefiningOp())
+            if (getOperation()->isAncestor(definingOp))
+              continue;
+
+          auto type = operand.getType();
+
+          // Capture of a non-base type, e.g., reference, is allowed.
+          if (isa<PropertyType>(type)) {
+            auto diag = emitOpError() << "captures a property operand";
+            diag.attachNote(operand.getLoc()) << "operand is defined here";
+            diag.attachNote(op->getLoc()) << "operand is used here";
+            return WalkResult::interrupt();
+          }
+
+          // Capturing a non-passive type is illegal.
+          if (auto baseType = type_dyn_cast<FIRRTLBaseType>(type)) {
+            if (!baseType.isPassive()) {
+              auto diag = emitOpError()
+                          << "captures an operand which is not a passive type";
+              diag.attachNote(operand.getLoc()) << "operand is defined here";
+              diag.attachNote(op->getLoc()) << "operand is used here";
+              return WalkResult::interrupt();
+            }
+          }
+        }
+
+        // Ensure that the layer block does not drive any sinks outside.
+        if (auto connect = dyn_cast<FConnectLike>(op)) {
+          // ref.define is allowed to drive probes outside the layerblock.
+          if (isa<RefDefineOp>(connect))
+            return WalkResult::advance();
+
+          // We can drive any destination inside the current layerblock.
+          auto dest = getFieldRefFromValue(connect.getDest()).getValue();
+          if (auto *destOp = dest.getDefiningOp())
+            if (getOperation()->isAncestor(destOp))
+              return WalkResult::advance();
+
+          auto diag =
+              connect.emitOpError()
+              << "connects to a destination which is defined outside its "
+                 "enclosing layer block";
+          diag.attachNote(getLoc()) << "enclosing layer block is defined here";
+          diag.attachNote(dest.getLoc()) << "destination is defined here";
+          return WalkResult::interrupt();
+        }
+
+        return WalkResult::advance();
+      });
+
+  return failure(result.wasInterrupted());
 }
 
 LogicalResult

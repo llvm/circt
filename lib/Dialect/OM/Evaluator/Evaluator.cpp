@@ -249,7 +249,7 @@ circt::om::Evaluator::evaluateObjectInstance(StringAttr className,
     }
 
   for (auto field : cls.getOps<ClassFieldOp>()) {
-    StringAttr name = field.getSymNameAttr();
+    StringAttr name = field.getNameAttr();
     Value value = field.getValue();
     FailureOr<evaluator::EvaluatorValuePtr> result =
         evaluateValue(value, actualParams, field.getLoc());
