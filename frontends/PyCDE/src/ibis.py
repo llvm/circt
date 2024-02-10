@@ -3,14 +3,12 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from .constructs import Wire
-from .module import Module, ModuleBuilder, PortProxyBase, generator
+from .module import Module, ModuleBuilder, generator
 from .system import System
 from .types import (Bits, Bundle, BundledChannel, ChannelDirection, Channel,
                     ClockType, StructType, Type)
 
 from .circt.dialects import hw
-from .circt.ir import FlatSymbolRefAttr, InsertionPoint, StringAttr
-from .circt.support import attribute_to_var
 
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, get_type_hints
@@ -59,6 +57,7 @@ def method(func: Callable):
 
 
 class IbisClassBuilder(ModuleBuilder):
+  SupportFiles: List[Path] = []
 
   @staticmethod
   def package(sys: System):
@@ -71,9 +70,9 @@ class IbisClassBuilder(ModuleBuilder):
     # TODO: make this configurable.
     platform = "SimOnly"
     outdir = sys.hw_output_dir
-    files = SvSupportPath.glob("*.sv")
-    for idx, f in enumerate(files):
-      shutil.copy(SvSupportPath / f, outdir / f"{idx}_{f}")
+
+    for idx, f in enumerate(IbisClassBuilder.SupportFiles):
+      shutil.copy(SvSupportPath / f, outdir / f"{idx}_{f.name}")
     for f in (SvSupportPath / "HAL" / platform).glob("*.sv"):
       shutil.copy(f, outdir)
 
@@ -103,6 +102,11 @@ class IbisClassBuilder(ModuleBuilder):
     self.src_file = None
     if hasattr(self.modcls, "src_file"):
       self.src_file = Path(self.modcls.src_file).resolve()
+    if hasattr(self.modcls, "support_files"):
+      IbisClassBuilder.SupportFiles = list([
+          Path(f.strip())
+          for f in Path(self.modcls.support_files).resolve().open().readlines()
+      ])
 
     self.clocks = {0}
     self.resets = {1}

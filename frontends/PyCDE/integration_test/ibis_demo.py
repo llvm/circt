@@ -8,6 +8,7 @@
 
 import pycde
 from pycde import Input, Module, generator, esi
+from pycde.module import Metadata
 from pycde.common import Clock
 from pycde.bsp import cosim
 from pycde.ibis import IbisClass, method
@@ -19,14 +20,30 @@ import sys
 __dirname__ = Path(__file__).parent
 
 
-class Foo(IbisClass):
-  # ibis -t=sv --circt --write-circt-ir --no-wrapper ~/empty.pd
-  # ibistool --lo --ir  emptyFoo.mlir > emptyFoo.lo.mlir
-  src_file = "emptyFoo.lo.mlir"
+class DemoTop(IbisClass):
+  # ibis -t=sv --circt --write-circt-ir --no-inspection \
+  #      --no-control-inspection --no-wrapper --no-debug-view \
+  #      --base-library $IBIS_LIB/base.pd --import-dir $IBIS_LIB/
+  # ibistool --lo --ir ibis_esi_demoDemoTop.mlir > ibis_esi_demoDemoTop.lo.mlir
+  src_file = "ibis_esi_demoDemoTop.lo.mlir"
   support_files = "support_files.f"
+
+  metadata = Metadata(version="0.1",
+                      summary="A demonstration of ESI and Ibis",
+                      misc={
+                          "crcWidth": 64,
+                          "style": "stupid"
+                      })
 
   @method
   def add(self, a: UInt(8), b: UInt(8), arr: Array(UInt(8), 16)) -> UInt(8):
+    pass
+
+  @method
+  def compute_crc(
+      self, identifier: UInt(8), input: Array(UInt(8), 64),
+      input_bytes: UInt(8), reset: UInt(8)
+  ) -> UInt(32):
     pass
 
 
@@ -36,8 +53,9 @@ class IbisTestSystem(Module):
 
   @generator
   def build(ports):
-    foo = Foo(clk=ports.clk, rst=ports.rst, appid=esi.AppID("empty"))
-    esi.FuncService.expose(foo.add, esi.AppID("add"))
+    top = DemoTop(clk=ports.clk, rst=ports.rst, appid=esi.AppID("empty"))
+    esi.FuncService.expose(top.add, esi.AppID("add"))
+    esi.FuncService.expose(top.compute_crc, esi.AppID("crc"))
 
 
 if __name__ == "__main__":

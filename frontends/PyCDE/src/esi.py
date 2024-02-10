@@ -3,6 +3,7 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from .common import (AppID, Input, Output, _PyProxy, PortError)
+from .constructs import Wire
 from .module import Generator, Module, ModuleLikeBuilderBase, PortProxyBase
 from .signals import BundleSignal, ChannelSignal, Signal, Struct, _FromCirctValue
 from .system import System
@@ -464,8 +465,28 @@ class _FuncService(ServiceDecl):
   def __init__(self):
     super().__init__(self.__class__)
 
-  def expose(self, name: AppID, arg_type: Type,
-             result: Signal) -> ChannelSignal:
+  def expose(self, func_bundle: BundleSignal, name: AppID):
+    """Expose a bundle to the host as a function. Bundle _must_ have 'arg' and
+    'result' channels going FROM the server and TO the server, respectively."""
+    self._materialize_service_decl()
+
+    func_bundle_type = func_bundle.type
+    bundle_type = Bundle([
+        BundledChannel("arg", ChannelDirection.TO, func_bundle.type.arg),
+        BundledChannel("result", ChannelDirection.FROM, func_bundle.type.result)
+    ])
+    func_call = _FromCirctValue(
+        raw_esi.RequestConnectionOp(
+            bundle_type._type,
+            hw.InnerRefAttr.get(self.symbol, ir.StringAttr.get("call")),
+            name._appid).result)
+    arg_wire = Wire(func_bundle.type.arg)
+    result = func_bundle.unpack(arg=arg_wire)["result"]
+    arg = func_call.unpack(result=result)["arg"]
+    arg_wire.assign(arg)
+
+  def get_call_chans(self, name: AppID, arg_type: Type,
+                     result: Signal) -> ChannelSignal:
     """Expose a function to the ESI system. Arguments:
       'name' is an AppID which is the function name.
       'arg_type' is the type of the argument to the function.
