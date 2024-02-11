@@ -259,7 +259,7 @@ firrtl.circuit "Foo" {
   // CHECK-NOT: CirctAssert2
   // CHECK-NOT: VerifAssume
   // CHECK-NOT: VerifCover
-// TODO: 
+// TODO:
   firrtl.intmodule private @AssertAssume<format: none = "testing">(in clock: !firrtl.clock, in predicate: !firrtl.uint<1>, in enable: !firrtl.uint<1>) attributes {intrinsic = "circt.chisel_assert_assume"}
   firrtl.intmodule private @AssertAssumeFormat<format: none = "message: %d",
                                                label: none = "label for assert with format string",
@@ -344,6 +344,21 @@ firrtl.circuit "Foo" {
     firrtl.strictconnect %cover_clock, %clock : !firrtl.clock
     firrtl.strictconnect %cover_predicate, %cond : !firrtl.uint<1>
     firrtl.strictconnect %cover_enable, %enable : !firrtl.uint<1>
+  }
+
+  // CHECK-NOT: firrtl.intmodule private @FPGAProbeIntrinsic
+  firrtl.intmodule private @FPGAProbeIntrinsic(in data: !firrtl.uint, in clock: !firrtl.clock) attributes {intrinsic = "circt_fpga_probe"}
+
+  // CHECK-LABEL: firrtl.module private @ProbeIntrinsicTest
+  firrtl.module private @ProbeIntrinsicTest(in %clock : !firrtl.clock, in %data : !firrtl.uint<32>) {
+    // CHECK:      [[DATA:%.+]] = firrtl.wire : !firrtl.uint
+    // CHECK-NEXT: [[CLOCK:%.+]] = firrtl.wire : !firrtl.clock
+    // CHECK-NEXT: firrtl.int.fpga_probe [[CLOCK]], [[DATA]] : !firrtl.uint
+    // CHECK-NEXT: firrtl.strictconnect [[CLOCK]], %clock : !firrtl.clock
+    // CHECK-NEXT: firrtl.connect [[DATA]], %data : !firrtl.uint, !firrtl.uint<32>
+    %mod_data, %mod_clock = firrtl.instance mod @FPGAProbeIntrinsic(in data: !firrtl.uint, in clock: !firrtl.clock)
+    firrtl.strictconnect %mod_clock, %clock : !firrtl.clock
+    firrtl.connect %mod_data, %data : !firrtl.uint, !firrtl.uint<32>
   }
 }
 

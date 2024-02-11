@@ -551,6 +551,11 @@ class CirctProbeConverter : public IntrinsicConverter {
 public:
   using IntrinsicConverter::IntrinsicConverter;
 
+  bool check() override {
+    return hasNPorts(2) || namedPort(0, "data") || namedPort(1, "clock") ||
+           typedPort<ClockType>(1) || hasNParam(0);
+  }
+
   LogicalResult convert(InstanceOp inst) override {
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
     auto clock =
