@@ -4,11 +4,11 @@ add_circt_tool(arcilator arcilator.cpp)
 target_link_libraries(arcilator
   PRIVATE
   CIRCTArc
-  CIRCTArcExportModelInfo
   CIRCTArcToLLVM
   CIRCTArcTransforms
   CIRCTCombToArith
   CIRCTConvertToArcs
+  CIRCTExportArc
   CIRCTOM
   CIRCTSeqToSV
   CIRCTSeqTransforms
