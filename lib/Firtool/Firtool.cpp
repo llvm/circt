@@ -81,13 +81,13 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
 
   if (opt.shouldExportChiselInterface()) {
     StringRef outdir = opt.getChiselInterfaceOutputDirectory();
-    if (outdir.empty())
-        outdir = opt.getOutputFilename();
-    if (outdir.empty()) {
+    if (opt.isDefaultOutputFilename() && outdir.empty()) {
       pm.nest<firrtl::CircuitOp>().addPass(createExportChiselInterfacePass());
     } else {
-      pm.nest<firrtl::CircuitOp>().addPass(createExportSplitChiselInterfacePass(
-          outdir));
+      if (outdir.empty())
+        outdir = opt.getOutputFilename();
+      pm.nest<firrtl::CircuitOp>().addPass(
+          createExportSplitChiselInterfacePass(outdir));
     }
   }
 
