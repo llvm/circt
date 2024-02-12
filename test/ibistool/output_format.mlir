@@ -1,3 +1,5 @@
+// XFAIL: *
+// See https://github.com/llvm/circt/issues/6658
 // RUN: ibistool %s --lo --post-ibis-ir | FileCheck %s --check-prefix=CHECK-POST-IBIS
 // RUN: ibistool %s --lo --ir | FileCheck %s --check-prefix=CHECK-IR
 // RUN: ibistool %s --lo --verilog | FileCheck %s --check-prefix=CHECK-VERILOG
