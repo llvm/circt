@@ -10,9 +10,9 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/Arc/ModelInfoExport.h"
 #include "circt/Dialect/Arc/ArcDialect.h"
 #include "circt/Dialect/Arc/ModelInfo.h"
-#include "circt/Dialect/Arc/ModelInfoExport.h"
 #include "mlir/Tools/mlir-translate/Translation.h"
 
 using namespace llvm;
