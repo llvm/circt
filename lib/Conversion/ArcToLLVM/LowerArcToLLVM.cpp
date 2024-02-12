@@ -11,6 +11,7 @@
 #include "circt/Conversion/CombToLLVM.h"
 #include "circt/Conversion/HWToLLVM.h"
 #include "circt/Dialect/Arc/ArcOps.h"
+#include "circt/Dialect/Arc/ModelInfo.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Support/Namespace.h"
@@ -40,6 +41,10 @@ using namespace hw;
 // Lowering Patterns
 //===----------------------------------------------------------------------===//
 
+static llvm::Twine evalSymbolFromModelName(StringRef modelName) {
+  return modelName + "_eval";
+}
+
 namespace {
 
 struct ModelOpLowering : public OpConversionPattern<arc::ModelOp> {
@@ -52,7 +57,8 @@ struct ModelOpLowering : public OpConversionPattern<arc::ModelOp> {
       rewriter.setInsertionPointToEnd(&op.getBodyBlock());
       rewriter.create<func::ReturnOp>(op.getLoc());
     }
-    auto funcName = rewriter.getStringAttr(op.getName() + "_eval");
+    auto funcName =
+        rewriter.getStringAttr(evalSymbolFromModelName(op.getName()));
     auto funcType =
         rewriter.getFunctionType(op.getBody().getArgumentTypes(), {});
     auto func =
@@ -286,6 +292,157 @@ struct ReplaceOpWithInputPattern : public OpConversionPattern<OpTy> {
 } // namespace
 
 //===----------------------------------------------------------------------===//
+// Simulation Orchestration Lowering Patterns
+//===----------------------------------------------------------------------===//
+
+static Value createPtrToPortState(ConversionPatternRewriter &rewriter,
+                                  Location loc, Value state,
+                                  const StateInfo *port) {
+  MLIRContext *ctx = rewriter.getContext();
+  return rewriter.create<LLVM::GEPOp>(loc, LLVM::LLVMPointerType::get(ctx),
+                                      IntegerType::get(ctx, 8), state,
+                                      LLVM::GEPArg(port->offset));
+}
+
+namespace {
+
+struct SimInstantiateLowering
+    : public OpConversionPattern<arc::SimInstantiate> {
+  SimInstantiateLowering(const TypeConverter &typeConverter,
+                         MLIRContext *context, ArrayRef<ModelInfo> modelInfo)
+      : OpConversionPattern(typeConverter, context), modelInfo(modelInfo) {}
+
+  LogicalResult
+  matchAndRewrite(arc::SimInstantiate op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    const ModelInfo *model = llvm::find_if(
+        modelInfo, [&](auto x) { return x.name == op.getType().getModel(); });
+    if (model == modelInfo.end()) {
+      op.emitError("model not found");
+      return failure();
+    }
+
+    ConversionPatternRewriter::InsertionGuard guard(rewriter);
+
+    Location loc = op.getLoc();
+    Value numStateBytes = rewriter.create<LLVM::ConstantOp>(
+        loc, rewriter.getIntegerType(sizeof(size_t) * 8), model->numStateBytes);
+    Value allocated = rewriter.replaceOpWithNewOp<LLVM::AllocaOp>(
+        op, LLVM::LLVMPointerType::get(getContext()), rewriter.getI8Type(),
+        numStateBytes);
+    rewriter.setInsertionPointAfterValue(allocated);
+    Value zero =
+        rewriter.create<LLVM::ConstantOp>(loc, rewriter.getI8Type(), 0);
+    rewriter.create<LLVM::MemsetOp>(loc, allocated, zero, numStateBytes, false);
+
+    return success();
+  }
+
+  ArrayRef<ModelInfo> modelInfo;
+};
+
+struct SimSetInputLowering : public OpConversionPattern<arc::SimSetInput> {
+  SimSetInputLowering(const TypeConverter &typeConverter, MLIRContext *context,
+                      ArrayRef<ModelInfo> modelInfo)
+      : OpConversionPattern(typeConverter, context), modelInfo(modelInfo) {}
+
+  LogicalResult
+  matchAndRewrite(arc::SimSetInput op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    const ModelInfo *model = llvm::find_if(modelInfo, [&](auto x) {
+      return x.name ==
+             op.getInstance().getType().cast<SimModelInstanceType>().getModel();
+    });
+    if (model == modelInfo.end())
+      return op.emitError("model not found");
+
+    const StateInfo *port = llvm::find_if(
+        model->states, [&](auto x) { return x.name == op.getInput(); });
+    if (port == model->states.end())
+      return op.emitError("input not found on model");
+
+    if (port->numBits != op.getValue().getType().getWidth())
+      return op.emitError("expected input of width ")
+             << port->numBits << ", got " << op.getValue().getType().getWidth();
+
+    if (port->type != StateInfo::Type::Input)
+      return op.emitError("provided port is not an input port");
+
+    Value statePtr = createPtrToPortState(rewriter, op.getLoc(),
+                                          adaptor.getInstance(), port);
+    rewriter.replaceOpWithNewOp<LLVM::StoreOp>(op, adaptor.getValue(),
+                                               statePtr);
+
+    return success();
+  }
+
+  ArrayRef<ModelInfo> modelInfo;
+};
+
+struct SimGetPortLowering : public OpConversionPattern<arc::SimGetPort> {
+  SimGetPortLowering(const TypeConverter &typeConverter, MLIRContext *context,
+                     ArrayRef<ModelInfo> modelInfo)
+      : OpConversionPattern(typeConverter, context), modelInfo(modelInfo) {}
+
+  LogicalResult
+  matchAndRewrite(arc::SimGetPort op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    const ModelInfo *model = llvm::find_if(modelInfo, [&](auto x) {
+      return x.name ==
+             op.getInstance().getType().cast<SimModelInstanceType>().getModel();
+    });
+    if (model == modelInfo.end())
+      return op.emitError("model not found");
+
+    const StateInfo *port = llvm::find_if(
+        model->states, [&](auto x) { return x.name == op.getPort(); });
+    if (port == model->states.end())
+      return op.emitError("port not found on model");
+
+    if (port->numBits != op.getValue().getType().getWidth())
+      return op.emitError("expected port of width ")
+             << port->numBits << ", got " << op.getValue().getType().getWidth();
+
+    Value statePtr = createPtrToPortState(rewriter, op.getLoc(),
+                                          adaptor.getInstance(), port);
+    rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, op.getValue().getType(),
+                                              statePtr);
+
+    return success();
+  }
+
+  ArrayRef<ModelInfo> modelInfo;
+};
+
+struct SimStepLowering : public OpConversionPattern<arc::SimStep> {
+  SimStepLowering(const TypeConverter &typeConverter, MLIRContext *context,
+                  ArrayRef<ModelInfo> modelInfo)
+      : OpConversionPattern(typeConverter, context), modelInfo(modelInfo) {}
+
+  LogicalResult
+  matchAndRewrite(arc::SimStep op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    const ModelInfo *model = llvm::find_if(modelInfo, [&](auto x) {
+      return x.name ==
+             op.getInstance().getType().cast<SimModelInstanceType>().getModel();
+    });
+    if (model == modelInfo.end())
+      return op.emitError("model not found");
+
+    StringAttr evalFunc =
+        rewriter.getStringAttr(evalSymbolFromModelName(model->name));
+    rewriter.replaceOpWithNewOp<LLVM::CallOp>(op, std::nullopt, evalFunc,
+                                              adaptor.getInstance());
+
+    return success();
+  }
+
+  ArrayRef<ModelInfo> modelInfo;
+};
+
+} // namespace
+
+//===----------------------------------------------------------------------===//
 // Pass Implementation
 //===----------------------------------------------------------------------===//
 
@@ -325,6 +482,9 @@ void LowerArcToLLVMPass::runOnOperation() {
   converter.addConversion([&](StateType type) {
     return LLVM::LLVMPointerType::get(type.getContext());
   });
+  converter.addConversion([&](SimModelInstanceType type) {
+    return LLVM::LLVMPointerType::get(type.getContext());
+  });
 
   // Setup the conversion patterns.
   RewritePatternSet patterns(&getContext());
@@ -362,6 +522,21 @@ void LowerArcToLLVMPass::runOnOperation() {
     StorageGetOpLowering,
     ZeroCountOpLowering
   >(converter, &getContext());
+  // clang-format
+
+  SmallVector<ModelInfo> models;
+  if (failed(collectModels(getOperation(), models))) {
+    signalPassFailure();
+    return;
+  }
+
+  // clang-format off
+  patterns.add<
+    SimInstantiateLowering,
+    SimSetInputLowering,
+    SimGetPortLowering,
+    SimStepLowering
+  >(converter, &getContext(), models);
   // clang-format on
 
   // Apply the conversion.

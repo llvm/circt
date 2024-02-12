@@ -567,6 +567,47 @@ def StateWriteOp : ArcOp<"state_write", [
 }
 
 //===----------------------------------------------------------------------===//
+// Simulation Orchestration
+//===----------------------------------------------------------------------===//
+
+def SimInstantiate : ArcOp<"sim.instantiate"> {
+  let summary = "Instantiates an Arc model for simulation";
+  let description = [{
+    TODO
+  }];
+  let results = (outs SimModelInstance:$instance);
+  let assemblyFormat = [{ attr-dict `:` type($instance) }];
+}
+
+def SimSetInput : ArcOp<"sim.set_input"> {
+  let summary = "Sets the value of an input of the model instance";
+  let description = [{
+    TODO
+  }];
+  let arguments = (ins SimModelInstance:$instance, StrAttr:$input, AnyInteger:$value);
+  let assemblyFormat = [{ $instance `,` $input `=` $value attr-dict `:` type($value) `,` type($instance) }];
+}
+
+def SimGetPort : ArcOp<"sim.get_port"> {
+  let summary = "Gets the value of a port of the model instance";
+  let description = [{
+    TODO
+  }];
+  let arguments = (ins SimModelInstance:$instance, StrAttr:$port);
+  let results = (outs AnyInteger:$value);
+  let assemblyFormat = [{ $instance `,` $port attr-dict `:` type($value) `,` type($instance) }];
+}
+
+def SimStep : ArcOp<"sim.step"> {
+  let summary = "Evaluates one step of the simulation for the provided model instance";
+  let description = [{
+    TODO
+  }];
+  let arguments = (ins SimModelInstance:$instance);
+  let assemblyFormat = [{ $instance attr-dict `:` type($instance) }];
+}
+
+//===----------------------------------------------------------------------===//
 // Miscellaneous
 //===----------------------------------------------------------------------===//
 
