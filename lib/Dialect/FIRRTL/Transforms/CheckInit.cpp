@@ -107,10 +107,10 @@ static void markLeaves(BitVector &bits, Type t, bool isPort = false,
   }
 }
 
-static void markWrite(BitVector& bv, size_t fieldID) {
+static void markWrite(BitVector& bv, Value v, size_t fieldID) {
     if (bv.size() <= fieldID)
         bv.resize(fieldID + 1);
-    llvm::errs() << "S " << fieldID << "\n";
+    llvm::errs() << "S " << v << " " << fieldID << "\n";
     bv.set(fieldID);
 }
 
@@ -127,12 +127,8 @@ class CheckInitPass : public CheckInitBase<CheckInitPass> {
     SmallVector<Value> dests;
   };
 
-  struct OpState {
-    SmallVector<RegionState, 2> regions;
-  };
-
   SmallVector<Operation *> worklist;
-  DenseMap<Operation *, OpState> localInfo;
+  DenseMap<Region*, RegionState> localInfo;
 
   void processOp(Operation *op, FieldSource &fieldSource);
 
@@ -144,11 +140,10 @@ public:
 // compute the values set by op's regions.  A when, for example, ands the init
 // set as only fields set on both paths are unconditionally set by the when.
 void CheckInitPass::processOp(Operation *op, FieldSource &fieldSource) {
-  assert(localInfo.count(op) == 0);
-  auto &state = localInfo[op];
+  llvm::errs() << "* " << op << "\n";
 
   for (auto &region : op->getRegions()) {
-    auto &local = state.regions.emplace_back();
+    auto &local = localInfo[&region];
     for (auto &block : region) {
       for (auto &opref : block) {
         Operation *op = &opref;
@@ -167,15 +162,16 @@ void CheckInitPass::processOp(Operation *op, FieldSource &fieldSource) {
             local.dests.push_back(arg);
         } else if (auto con = dyn_cast<ConnectOp>(op)) {
           auto node = fieldSource.nodeForValue(con.getDest());
-          markWrite(local.init[node.src], node.fieldID);
+          markWrite(local.init[node.src], node.src, node.fieldID);
         } else if (auto con = dyn_cast<StrictConnectOp>(op)) {
           auto node = fieldSource.nodeForValue(con.getDest());
-          markWrite(local.init[node.src], node.fieldID);
+          markWrite(local.init[node.src], node.src, node.fieldID);
         } else if (auto def = dyn_cast<RefDefineOp>(op)) {
           auto node = fieldSource.nodeForValue(def.getDest());
-          markWrite(local.init[node.src], node.fieldID);
+          markWrite(local.init[node.src], node.src, node.fieldID);
         } else if (isa<WhenOp, MatchOp>(op)) {
           local.children.push_back(op);
+          worklist.push_back(op);
         }
       }
     }
@@ -186,19 +182,39 @@ void CheckInitPass::runOnOperation() {
   auto &fieldSource = getAnalysis<FieldSource>();
   worklist.push_back(getOperation());
 
-  // Each op should only be able to be inserted in the worklist once, so don't
-  // worry about keeping track of visited operations.
-  while (!worklist.empty()) {
-    Operation *op = worklist.back();
-    worklist.pop_back();
+  // Late size check as it is growing.
+  for (size_t i = 0; i < worklist.size(); ++i)  {
+    Operation *op = worklist[i];
     processOp(op, fieldSource);
   }
 
   // Modules are the only blocks with arguments, so capture them here only.
-  auto& topLevel = localInfo[getOperation()];
+  auto& topLevel = localInfo[&getOperation().getRegion()];
   for (auto arg :
        getOperation().getBodyBlock()->getArguments())
-    topLevel.regions[0].dests.push_back(arg);
+    topLevel.dests.push_back(arg);
+
+  // Post-order traversal.
+  for (auto opiter = worklist.rbegin(); opiter != worklist.rend(); ++opiter) {
+    for (auto& r : (*opiter)->getRegions()) {
+      auto& state = localInfo[&r];
+      llvm::errs() << "dests:";
+      for (auto v: state.dests)
+        llvm::errs() << " " << v;
+      llvm::errs() << "\n";
+      llvm::errs() << "children: " << state.children.size() << "\n";
+      for (auto ii = state.init.begin(), ee = state.init.end(); ii != ee; ++ii) {
+        llvm::errs() << "\t" << ii->first << ": ";
+        for (auto bi = ii->second.set_bits_begin(), be = ii->second.set_bits_end(); bi != be; ++bi)
+          llvm::errs() <<  *bi;
+        llvm::errs() << "\n";
+        for (size_t bi = 0, be = ii->second.size(); bi != be; ++bi)
+          llvm::errs() <<  ii->second[bi];
+        llvm::errs() << "\n";
+
+      }
+    }
+  }
 }
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createCheckInitPass() {
