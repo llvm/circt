@@ -122,7 +122,7 @@ public:
   }
 
   /// Lowers a module to an intrinsic, given an intrinsic name.
-  LogicalResult lower(CircuitOp circuit);
+  LogicalResult lower(CircuitOp circuit, bool allowUnknownIntrinsics = false);
 
   /// Return the number of intrinsics converted.
   unsigned getNumConverted() const { return numConverted; }
