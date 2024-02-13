@@ -59,6 +59,7 @@ class IbisTestSystem(Module):
 
 
 if __name__ == "__main__":
+
   s = pycde.System(cosim.CosimBSP(IbisTestSystem),
                    name="IbisTest",
                    output_directory=sys.argv[1])
