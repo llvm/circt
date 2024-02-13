@@ -307,3 +307,20 @@ hw.module @constantInitRegWithBackEdge() {
   %reg = sv.reg init %false : !hw.inout<i1>
   %1 = sv.read_inout %reg : !hw.inout<i1>
 }
+
+// -----
+
+// CHECK-LABEL: @temporaryWireForReg
+hw.module @temporaryWireForReg() {
+  // CHECK: %[[WIRE:.*]] = sv.wire : !hw.inout<i1>
+  // CHECK-NEXT: %[[VAL_0:.*]] = sv.read_inout %[[WIRE]]  : !hw.inout<i1>
+  // CHECK-NEXT: %b = sv.reg init %[[VAL_0]] : !hw.inout<i1>
+  // CHECK-NEXT: %[[VAL_1:.*]] = sv.read_inout %b : !hw.inout<i1>
+  // CHECK-NEXT: %a = sv.reg init %[[VAL_1]] : !hw.inout<i1>
+  // CHECK-NEXT: %[[VAL_2:.*]] = sv.read_inout %a : !hw.inout<i1>
+  // CHECK-NEXT: sv.assign %[[WIRE]], %[[VAL_2]] : i1
+  %0 = sv.read_inout %a : !hw.inout<i1>
+  %1 = sv.read_inout %b : !hw.inout<i1>
+  %b = sv.reg init %0 : !hw.inout<i1>
+  %a = sv.reg init %1 : !hw.inout<i1>
+}
