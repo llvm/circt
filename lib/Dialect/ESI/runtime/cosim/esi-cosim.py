@@ -55,9 +55,24 @@ class SourceFiles:
 
   def add_dir(self, dir: Path):
     """Add all the RTL files in a directory to the source list."""
-    for file in dir.iterdir():
+    for file in sorted(dir.iterdir()):
       if file.is_file() and (file.suffix == ".sv" or file.suffix == ".v"):
         self.user.append(file)
+
+  def dpi_so_paths(self) -> List[Path]:
+    """Return a list of all the DPI shared object files."""
+
+    def find_so(name: str) -> Path:
+      for path in os.environ["LD_LIBRARY_PATH"].split(":"):
+        if os.name == "nt":
+          so = Path(path) / f"{name}.dll"
+        else:
+          so = Path(path) / f"lib{name}.so"
+        if so.exists():
+          return so
+      raise FileNotFoundError(f"Could not find {name}.so in LD_LIBRARY_PATH")
+
+    return [find_so(name) for name in self.dpi_so]
 
   @property
   def rtl_sources(self) -> List[Path]:
@@ -67,14 +82,32 @@ class SourceFiles:
 
 class Simulator:
 
+  # Some RTL simulators don't use stderr for error messages. Everything goes to
+  # stdout. Boo! They should feel bad about this. Also, they can specify that
+  # broken behavior by overriding this.
+  UsesStderr = True
+
   def __init__(self, sources: SourceFiles, run_dir: Path, debug: bool):
     self.sources = sources
     self.run_dir = run_dir
     self.debug = debug
 
-  def compile(self):
+  def compile_command(self) -> List[str]:
     """Compile the sources. Returns the exit code of the simulation compiler."""
     assert False, "Must be implemented by subclass"
+
+  def compile(self) -> int:
+    cp = subprocess.run(self.compile_command(), capture_output=True, text=True)
+    self.run_dir.mkdir(parents=True, exist_ok=True)
+    open(self.run_dir / "compile_stdout.log", "w").write(cp.stdout)
+    open(self.run_dir / "compile_stderr.log", "w").write(cp.stderr)
+    if cp.returncode != 0:
+      print("====== Compilation failure:")
+      if self.UsesStderr:
+        print(cp.stderr)
+      else:
+        print(cp.stdout)
+    return cp.returncode
 
   def run_command(self) -> List[str]:
     """Return the command to run the simulation."""
@@ -169,12 +202,13 @@ class Verilator(Simulator):
     if "VERILATOR_PATH" in os.environ:
       self.verilator = os.environ["VERILATOR_PATH"]
 
-  def compile(self) -> int:
-    compile_cmd: List[str] = [
+  def compile_command(self) -> List[str]:
+    cmd: List[str] = [
         self.verilator,
         "--cc",
         "--top-module",
         self.sources.top,
+        "-DSIMULATION",
         "-sv",
         "--build",
         "--exe",
@@ -183,28 +217,70 @@ class Verilator(Simulator):
     ]
     cflags = []
     if self.debug:
-      compile_cmd += ["--trace", "--trace-params", "--trace-structs"]
+      cmd += ["--trace", "--trace-params", "--trace-structs"]
       cflags.append("-DTRACE")
     if len(cflags) > 0:
-      compile_cmd += ["-CFLAGS", " ".join(cflags)]
+      cmd += ["-CFLAGS", " ".join(cflags)]
     if len(self.sources.dpi_so) > 0:
-      compile_cmd += [
-          "-LDFLAGS", " ".join(["-l" + so for so in self.sources.dpi_so])
-      ]
-    compile_cmd += [str(p) for p in self.sources.rtl_sources]
-
-    cp = subprocess.run(compile_cmd, capture_output=True, text=True)
-    self.run_dir.mkdir(parents=True, exist_ok=True)
-    open(self.run_dir / "compile_stdout.log", "w").write(cp.stdout)
-    open(self.run_dir / "compile_stderr.log", "w").write(cp.stderr)
-    if cp.returncode != 0:
-      print("====== Compilation failure:")
-      print(cp.stderr)
-    return cp.returncode
+      cmd += ["-LDFLAGS", " ".join(["-l" + so for so in self.sources.dpi_so])]
+    cmd += [str(p) for p in self.sources.rtl_sources]
+    return cmd
 
   def run_command(self):
     exe = Path.cwd() / "obj_dir" / ("V" + self.sources.top)
     return [str(exe)]
+
+
+class Questa(Simulator):
+  """Run and compile funcs for Questasim."""
+
+  DefaultDriver = CosimCollateralDir / "driver.sv"
+
+  # Questa doesn't use stderr for error messages. Everything goes to stdout.
+  UsesStderr = False
+
+  def compile_command(self) -> List[str]:
+    cmd = [
+        "vlog",
+        "-sv",
+        "+define+TOP_MODULE=" + self.sources.top,
+        "+define+SIMULATION",
+        str(Questa.DefaultDriver),
+    ]
+    cmd += [str(p) for p in self.sources.rtl_sources]
+    return cmd
+
+  def run_command(self) -> List[str]:
+    vsim = "vsim"
+    # Note: vsim exit codes say nothing about the test run's pass/fail even
+    # if $fatal is encountered in the simulation.
+    cmd = [
+        vsim,
+        "driver",
+        "-batch",
+        "-do",
+        "run -all",
+    ]
+    for lib in self.sources.dpi_so_paths():
+      svLib = os.path.splitext(lib)[0]
+      cmd.append("-sv_lib")
+      cmd.append(svLib)
+    if len(self.sources.dpi_so) > 0:
+      cmd.append("-cpppath")
+      cmd.append("/usr/bin/clang++")
+    return cmd
+
+  def run(self, inner_command: str) -> int:
+    """Override the Simulator.run() to add a soft link in the run directory (to
+    the work directory) before running vsim the usual way."""
+
+    # Create a soft link to the work directory.
+    workDir = self.run_dir / "work"
+    if not workDir.exists():
+      os.symlink(Path(os.getcwd()) / "work", workDir)
+
+    # Run the simulation.
+    return super().run(inner_command)
 
 
 def __main__(args):
@@ -258,10 +334,13 @@ def __main__(args):
 
   if args.sim == "verilator":
     sim = Verilator(sources, Path(args.rundir), args.debug)
+  elif args.sim == "questa":
+    sim = Questa(sources, Path(args.rundir), args.debug)
   else:
     print("Unknown simulator: " + args.sim)
     print("Supported simulators: ")
     print("  - verilator")
+    print("  - questa")
     return 1
 
   rc = sim.compile()

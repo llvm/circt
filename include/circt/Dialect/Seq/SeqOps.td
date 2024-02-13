@@ -296,14 +296,13 @@ def FIFOOp : SeqOp<"fifo", [
 }
 
 def HLMemOp : SeqOp<"hlmem", [
-     Symbol,
      Clocked,
      DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]> ]> {
 
   let summary = "Instantiate a high-level memory.";
   let description = "See the Seq dialect rationale for a longer description";
 
-  let arguments = (ins ClockType:$clk, I1:$rst, SymbolNameAttr:$sym_name);
+  let arguments = (ins ClockType:$clk, I1:$rst, SymbolNameAttr:$name);
   let results = (outs HLMemType:$handle);
 
   let extraClassDeclaration = [{
@@ -311,11 +310,11 @@ def HLMemOp : SeqOp<"hlmem", [
   }];
 
   let builders = [
-    OpBuilder<(ins "Value":$clk, "Value":$rst, "StringRef":$symName,
+    OpBuilder<(ins "Value":$clk, "Value":$rst, "StringRef":$name,
                    "llvm::ArrayRef<int64_t>":$shape, "Type":$elementType)>
   ];
 
-  let assemblyFormat = "$sym_name $clk `,` $rst attr-dict `:` type($handle)";
+  let assemblyFormat = "$name $clk `,` $rst attr-dict `:` type($handle)";
 }
 
 class HLMemTypeValueConstraint<string hlmemvalue, string value>

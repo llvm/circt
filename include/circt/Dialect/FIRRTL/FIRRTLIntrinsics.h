@@ -40,7 +40,7 @@ public:
   virtual bool check() { return false; }
 
   /// Transform an instance of the intrinsic.
-  virtual void convert(InstanceOp op) = 0;
+  virtual LogicalResult convert(InstanceOp op) = 0;
 
 protected:
   ParseResult hasNPorts(unsigned n);
@@ -122,7 +122,7 @@ public:
   }
 
   /// Lowers a module to an intrinsic, given an intrinsic name.
-  LogicalResult lower(CircuitOp circuit);
+  LogicalResult lower(CircuitOp circuit, bool allowUnknownIntrinsics = false);
 
   /// Return the number of intrinsics converted.
   unsigned getNumConverted() const { return numConverted; }

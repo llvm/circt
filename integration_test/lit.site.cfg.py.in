@@ -55,6 +55,8 @@ config.esi_collateral_path = "@ESI_COLLATERAL_PATH@"
 config.bindings_python_enabled = @CIRCT_BINDINGS_PYTHON_ENABLED@
 config.bindings_tcl_enabled = @CIRCT_BINDINGS_TCL_ENABLED@
 config.lec_enabled = "@CIRCT_LEC_ENABLED@"
+config.slang_frontend_enabled = "@CIRCT_SLANG_FRONTEND_ENABLED@"
+config.driver = "@CIRCT_SOURCE_DIR@/tools/circt-rtl-sim/driver.cpp"
 
 # Support substitution of the tools_dir with user parameters. This is
 # used when we can't determine the tool dir at configuration time.

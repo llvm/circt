@@ -327,3 +327,14 @@ firrtl.circuit "AnyCast" {
     firrtl.propassign %foo, %0 : !firrtl.anyref
   }
 }
+
+// CHECK-LABEL: firrtl.circuit "ModuleWithPropertySubmodule"
+firrtl.circuit "ModuleWithPropertySubmodule" {
+  firrtl.module private @ModuleWithPropertySubmodule() {
+    %c0 = firrtl.integer 0
+    %inst.prop = firrtl.instance inst @SubmoduleWithProperty(in prop: !firrtl.integer)
+    firrtl.propassign %inst.prop, %c0 : !firrtl.integer
+  }
+  firrtl.module private @SubmoduleWithProperty(in %prop: !firrtl.integer) {
+  }
+}

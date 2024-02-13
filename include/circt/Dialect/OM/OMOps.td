@@ -59,7 +59,6 @@ class OMClassLike<string mnemonic, list<Trait> traits = []> :
 
 class OMClassFieldLike<string mnemonic, list<Trait> traits = []> :
   OMOp<mnemonic, traits # [
-    Symbol,
     DeclareOpInterfaceMethods<ClassFieldLike>]> {
 }
 
@@ -89,12 +88,12 @@ def ClassOp : OMClassLike<"class"> {
 def ClassFieldOp : OMClassFieldLike<"class.field",
     [HasParent<"ClassOp">]> {
   let arguments = (ins
-    SymbolNameAttr:$sym_name,
+    SymbolNameAttr:$name,
     AnyType:$value
   );
 
   let assemblyFormat = [{
-    $sym_name `,` $value  attr-dict `:` type($value)
+    $name `,` $value  attr-dict `:` type($value)
   }];
 }
 
@@ -116,12 +115,12 @@ def ClassExternOp : OMClassLike<"class.extern"> {
 def ClassExternFieldOp : OMClassFieldLike<"class.extern.field",
     [HasParent<"ClassExternOp">]> {
   let arguments = (ins
-    SymbolNameAttr:$sym_name,
+    SymbolNameAttr:$name,
     TypeAttr:$type
   );
 
   let assemblyFormat = [{
-    $sym_name attr-dict `:` $type
+    $name attr-dict `:` $type
   }];
 }
 

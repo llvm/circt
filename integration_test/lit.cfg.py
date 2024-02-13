@@ -206,6 +206,12 @@ if config.lec_enabled != "":
   config.available_features.add('circt-lec')
   tools.append('circt-lec')
 
+# Add circt-verilog if the Slang frontend is enabled.
+if config.slang_frontend_enabled:
+  config.available_features.add('slang')
+  tools.append('circt-verilog')
+
+config.substitutions.append(('%driver', f'{config.driver}'))
 llvm_config.add_tool_substitutions(tools, tool_dirs)
 
 # cocotb availability

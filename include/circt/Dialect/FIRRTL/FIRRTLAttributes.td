@@ -15,6 +15,7 @@
 
 include "FIRRTLDialect.td"
 include "mlir/IR/BuiltinAttributeInterfaces.td"
+include "circt/Types.td"
 
 //===----------------------------------------------------------------------===//
 // FIRRTL Annotations Definition
@@ -228,5 +229,11 @@ def InternalPathAttr : AttrDef<FIRRTLDialect, "InternalPath"> {
 
 def InternalPathArrayAttr
   : TypedArrayAttrBase<InternalPathAttr, "InternalPath array attribute">;
+
+//===----------------------------------------------------------------------===//
+// Miscellaneous attributes
+//===----------------------------------------------------------------------===//
+
+def LayerArrayAttr : TypedArrayRefAttrBase<SymbolRefAttr, "an array of layers">;
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLATTRIBUTES_TD

@@ -68,7 +68,7 @@ hw.module public @CrossReferences() {
 // CHECK-LABEL: hw.module @ClockAgg(in %c : !hw.struct<clock: i1>, out oc : !hw.struct<clock: i1>)
 // CHECK: [[CLOCK:%.+]] = hw.struct_extract %c["clock"] : !hw.struct<clock: i1>
 // CHECK: [[STRUCT:%.+]] = hw.struct_create ([[CLOCK]]) : !hw.struct<clock: i1>
-// CHECL: hw.output [[STRUCT]] : !hw.struct<clock: i1>
+// CHECK: hw.output [[STRUCT]] : !hw.struct<clock: i1>
 hw.module @ClockAgg(in %c: !hw.struct<clock: !seq.clock>, out oc: !hw.struct<clock: !seq.clock>) {
   %clock = hw.struct_extract %c["clock"] : !hw.struct<clock: !seq.clock>
   %0 = hw.struct_create (%clock) : !hw.struct<clock: !seq.clock>

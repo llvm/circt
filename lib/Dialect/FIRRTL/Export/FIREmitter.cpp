@@ -60,6 +60,7 @@ struct Emitter {
   void emitModuleParameters(Operation *op, ArrayAttr parameters);
   void emitDeclaration(LayerOp op);
   void emitDeclaration(OptionOp op);
+  void emitEnabledLayers(ArrayRef<Attribute> layers);
 
   // Statement emission
   void emitStatementsInBlock(Block &block);
@@ -253,6 +254,18 @@ struct Emitter {
                                  [&](Value v) { emitSubExprIBox2(v); });
   }
 
+  /// Emit a (potentially nested) symbol reference as `A.B.C`.
+  void emitSymbol(SymbolRefAttr symbol) {
+    ps.ibox(2, IndentStyle::Block);
+    ps << symbol.getRootReference();
+    for (auto nested : symbol.getNestedReferences()) {
+      ps.zerobreak();
+      ps << ".";
+      ps << nested.getAttr();
+    }
+    ps.end();
+  }
+
 private:
   /// Emit an error and remark that emission failed.
   InFlightDiagnostic emitError(Operation *op, const Twine &message) {
@@ -396,11 +409,27 @@ void Emitter::emitCircuit(CircuitOp op) {
   symInfos = std::nullopt;
 }
 
+void Emitter::emitEnabledLayers(ArrayRef<Attribute> layers) {
+  for (auto layer : layers) {
+    ps << PP::space;
+    ps.cbox(2, IndentStyle::Block);
+    ps << "enablelayer" << PP::space;
+    emitSymbol(cast<SymbolRefAttr>(layer));
+    ps << PP::end;
+  }
+}
+
 /// Emit an entire module.
 void Emitter::emitModule(FModuleOp op) {
   startStatement();
-  ps << "module " << PPExtString(legalize(op.getNameAttr())) << " :";
+  ps.cbox(4, IndentStyle::Block);
+  if (op.isPublic())
+    ps << "public" << PP::nbsp;
+  ps << "module " << PPExtString(legalize(op.getNameAttr()));
+  emitEnabledLayers(op.getLayers());
+  ps << PP::nbsp << ":" << PP::end;
   emitLocation(op);
+
   ps.scopedBox(PP::bbox2, [&]() {
     setPendingNewline();
 
@@ -420,8 +449,12 @@ void Emitter::emitModule(FModuleOp op) {
 /// Emit an external module.
 void Emitter::emitModule(FExtModuleOp op) {
   startStatement();
-  ps << "extmodule " << PPExtString(legalize(op.getNameAttr())) << " :";
+  ps.cbox(4, IndentStyle::Block);
+  ps << "extmodule " << PPExtString(legalize(op.getNameAttr()));
+  emitEnabledLayers(op.getLayers());
+  ps << PP::nbsp << ":" << PP::end;
   emitLocation(op);
+
   ps.scopedBox(PP::bbox2, [&]() {
     setPendingNewline();
 
@@ -444,8 +477,12 @@ void Emitter::emitModule(FExtModuleOp op) {
 /// Emit an intrinsic module
 void Emitter::emitModule(FIntModuleOp op) {
   startStatement();
-  ps << "intmodule " << PPExtString(legalize(op.getNameAttr())) << " :";
+  ps.cbox(4, IndentStyle::Block);
+  ps << "intmodule " << PPExtString(legalize(op.getNameAttr()));
+  emitEnabledLayers(op.getLayers());
+  ps << PP::nbsp << ":" << PP::end;
   emitLocation(op);
+
   ps.scopedBox(PP::bbox2, [&]() {
     setPendingNewline();
 
@@ -1377,8 +1414,16 @@ void Emitter::emitType(Type type, bool includeConst) {
         if (type.getForceable())
           ps << "RW";
         ps << "Probe<";
+        ps.cbox(2, IndentStyle::Block);
+        ps.zerobreak();
         emitType(type.getType());
-        ps << ">";
+        if (auto layer = type.getLayer()) {
+          ps << ",";
+          ps.space();
+          emitSymbol(type.getLayer());
+        }
+        ps << BreakToken(0, -2) << ">";
+        ps.end();
       })
       .Case<AnyRefType>([&](AnyRefType type) { ps << "AnyRef"; })
       .Case<StringType>([&](StringType type) { ps << "String"; })

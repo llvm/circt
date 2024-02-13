@@ -164,6 +164,27 @@ firrtl.circuit "top" {
 }
 
 // -----
+// Reset annotation cannot target synchronous reset signals
+firrtl.circuit "top" {
+  firrtl.module @top() {
+    // expected-error @below {{'IgnoreFullAsyncResetAnnotation' must target async reset, but targets '!firrtl.uint<1>'}}
+    %innerReset = firrtl.wire {annotations = [{class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]} : !firrtl.uint<1>
+  }
+}
+
+// -----
+// Reset annotation cannot target reset signals which are inferred to be synchronous
+firrtl.circuit "top" {
+  firrtl.module @top() {
+   // expected-error @below {{'IgnoreFullAsyncResetAnnotation' must target async reset, but targets '!firrtl.uint<1>'}}
+    %innerReset = firrtl.wire {annotations = [{class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]} : !firrtl.reset
+    %invalid = firrtl.invalidvalue : !firrtl.reset
+    firrtl.strictconnect %innerReset, %invalid : !firrtl.reset
+  }
+}
+
+
+// -----
 // Ignore reset annotation cannot target port
 firrtl.circuit "top" {
   // expected-error @+1 {{IgnoreFullAsyncResetAnnotation' cannot target port; must target module instead}}

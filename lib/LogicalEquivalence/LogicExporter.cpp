@@ -74,8 +74,10 @@ struct Visitor : public hw::StmtVisitor<Visitor, LogicalResult>,
   //===--------------------------------------------------------------------===//
 
   LogicalResult visitStmt(hw::InstanceOp op) {
-    if (auto hwModule = llvm::dyn_cast<hw::HWModuleOp>(
-            op.getReferencedModuleCached(/*cache=*/nullptr))) {
+    Operation *moduleOp =
+        SymbolTable::lookupNearestSymbolFrom(op, op.getModuleNameAttr());
+
+    if (auto hwModule = llvm::dyn_cast<hw::HWModuleOp>(moduleOp)) {
       circuit->addInstance(op.getInstanceName(), hwModule, op->getOperands(),
                            op->getResults());
       return success();
@@ -83,6 +85,10 @@ struct Visitor : public hw::StmtVisitor<Visitor, LogicalResult>,
     op.emitError("instantiated module `" + op.getModuleName() +
                  "` is not an HW module");
     return failure();
+  }
+
+  LogicalResult visitStmt(hw::InstanceChoiceOp op) {
+    return op.emitError("instance choices are not supported");
   }
 
   LogicalResult visitStmt(hw::OutputOp op) {

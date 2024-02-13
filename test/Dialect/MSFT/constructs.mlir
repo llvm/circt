@@ -50,18 +50,6 @@ hw.module @PE(in %clk: !seq.clock, in %a: i8, in %b: i8, out sum: i8) {
   hw.output %sumDelay1 : i8
 }
 
-// CHECK-LABEL: hw.module @ChannelExample(in %clk : !seq.clock, in %a : i8, out out : i8) {
-// CHECK:         [[REG0:%.+]] = msft.constructs.channel %a %clk "chEx"(2) : i8
-// CHECK:         hw.output [[REG0]] : i8
-// LOWER-LABEL: hw.module @ChannelExample(in %clk : !seq.clock, in %a : i8, out out : i8) {
-// LOWER:         %chEx_0 = seq.compreg sym @chEx_0 %a, %clk : i8
-// LOWER:         %chEx_1 = seq.compreg sym @chEx_1 %chEx_0, %clk : i8
-// LOWER:         hw.output %chEx_1 : i8
-hw.module @ChannelExample (in %clk: !seq.clock, in %a : i8, out out: i8) {
-  %out = msft.constructs.channel %a %clk "chEx" (2) : i8
-  hw.output %out : i8
-}
-
 // CHECK-LABEL: hw.module @foo(in %in0 : i32, in %in1 : i32, in %in2 : i32, in %clk : !seq.clock, out out : i32) {
 // CHECK:       %0 = msft.hlc.linear clock %clk : i32 {
 // CHECK:         %1 = comb.mul %in0, %in1 : i32

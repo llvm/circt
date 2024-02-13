@@ -32,8 +32,8 @@ def CustomServiceDeclOp : ESI_Op<"service.decl",
 
     ```mlir
     esi.service.decl @HostComms {
-      esi.service.to_server send : !esi.channel<!esi.any>
-      esi.service.to_client recieve : !esi.channel<i8>
+      esi.service.port send : !esi.bundle<[!esi.any from "send"]>
+      esi.service.port recieve : !esi.channel<[i8 to "recv"]>
     }
     ```
   }];
@@ -46,18 +46,7 @@ def CustomServiceDeclOp : ESI_Op<"service.decl",
   }];
 }
 
-def ToServerOp : ESI_Op<"service.to_server",
-                        [HasParent<"::circt::esi::CustomServiceDeclOp">]> {
-  let summary = "An ESI service bundle being sent to the service";
-
-  let arguments = (ins SymbolNameAttr:$inner_sym,
-                       TypeAttrOf<ChannelBundleType>:$toServerType);
-  let assemblyFormat = [{
-    $inner_sym attr-dict `:` $toServerType
-  }];
-}
-
-def ToClientOp : ESI_Op<"service.to_client",
+def ServiceDeclPortOp : ESI_Op<"service.port",
                         [HasParent<"::circt::esi::CustomServiceDeclOp">]> {
   let summary = "An ESI service bundle being received by the client";
 
@@ -167,21 +156,7 @@ def ServiceImplementConnReqOp : ESI_Op<"service.impl_req.req", [
   }];
 }
 
-def RequestToServerConnectionOp : ESI_Op<"service.req.to_server", [
-        DeclareOpInterfaceMethods<HasAppIDOpInterface>,
-        DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
-  let summary = "Request a connection to send data";
-
-  let arguments = (ins InnerRefAttr:$servicePort,
-                       ChannelBundleType:$toServer,
-                       AppIDAttr:$appID);
-  let assemblyFormat = [{
-    $toServer `->` $servicePort `(` qualified($appID) `)`
-      attr-dict `:` qualified(type($toServer))
-  }];
-}
-
-def RequestToClientConnectionOp : ESI_Op<"service.req.to_client", [
+def RequestConnectionOp : ESI_Op<"service.req", [
         DeclareOpInterfaceMethods<HasAppIDOpInterface>,
         DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "Request a connection to receive data";

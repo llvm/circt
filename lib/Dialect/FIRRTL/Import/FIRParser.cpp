@@ -25,6 +25,7 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/IR/Verifier.h"
 #include "mlir/Support/Timing.h"
@@ -934,12 +935,29 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     auto kind = getToken().getKind();
     auto loc = getToken().getLoc();
     consumeToken();
-    FIRRTLType type;
 
+    // Inner Type
+    FIRRTLType type;
     if (parseToken(FIRToken::less, "expected '<' in reference type") ||
-        parseType(type, "expected probe data type") ||
-        parseToken(FIRToken::greater, "expected '>' in reference type"))
+        parseType(type, "expected probe data type"))
       return failure();
+
+    // Probe Color
+    SmallVector<StringRef> layers;
+    if (getToken().getKind() == FIRToken::identifier) {
+      if (requireFeature({3, 2, 0}, "colored probes"))
+        return failure();
+      do {
+        StringRef layer;
+        loc = getToken().getLoc();
+        if (parseId(layer, "expected layer name"))
+          return failure();
+        layers.push_back(layer);
+      } while (consumeIf(FIRToken::period));
+    }
+
+    if (!consumeIf(FIRToken::greater))
+      return emitError(loc, "expected '>' to end reference type");
 
     bool forceable = kind == FIRToken::kw_RWProbe;
 
@@ -953,7 +971,17 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     if (forceable && innerType.containsConst())
       return emitError(loc, "rwprobe cannot contain const");
 
-    result = RefType::get(innerType, forceable);
+    SymbolRefAttr layer;
+    if (!layers.empty()) {
+      auto nestedLayers =
+          llvm::map_range(ArrayRef(layers).drop_front(), [&](StringRef a) {
+            return FlatSymbolRefAttr::get(getContext(), a);
+          });
+      layer = SymbolRefAttr::get(getContext(), layers.front(),
+                                 llvm::to_vector(nestedLayers));
+    }
+
+    result = RefType::get(innerType, forceable, layer);
     break;
   }
 
@@ -1466,7 +1494,8 @@ struct LazyLocationListener : public OpBuilder::Listener {
 
   // Notification handler for when an operation is inserted into the builder.
   /// `op` is the operation that was inserted.
-  void notifyOperationInserted(Operation *op) override {
+  void notifyOperationInserted(Operation *op,
+                               mlir::IRRewriter::InsertPoint) override {
     assert(currentSMLoc != SMLoc() && "No .fir file location specified");
     assert(isActive && "Not parsing a statement");
     subOps.push_back({op, currentSMLoc});
@@ -2747,49 +2776,65 @@ ParseResult FIRStmtParser::parseStop() {
   return success();
 }
 
-/// assert ::= 'assert(' exp exp exp StringLit ')' info?
+/// assert ::= 'assert(' exp exp exp StringLit exp*')' info?
 ParseResult FIRStmtParser::parseAssert() {
   auto startTok = consumeToken(FIRToken::lp_assert);
 
   Value clock, predicate, enable;
-  StringRef message;
+  StringRef formatString;
   StringAttr name;
   if (parseExp(clock, "expected clock expression in 'assert'") ||
       parseExp(predicate, "expected predicate in 'assert'") ||
       parseExp(enable, "expected enable in 'assert'") ||
-      parseGetSpelling(message) ||
-      parseToken(FIRToken::string, "expected message in 'assert'") ||
-      parseToken(FIRToken::r_paren, "expected ')' in 'assert'") ||
-      parseOptionalName(name) || parseOptionalInfo())
+      parseGetSpelling(formatString) ||
+      parseToken(FIRToken::string, "expected format string in 'assert'"))
+    return failure();
+
+  SmallVector<Value, 4> operands;
+  while (!consumeIf(FIRToken::r_paren)) {
+    operands.push_back({});
+    if (parseExp(operands.back(), "expected operand in 'assert'"))
+      return failure();
+  }
+
+  if (parseOptionalName(name) || parseOptionalInfo())
     return failure();
 
   locationProcessor.setLoc(startTok.getLoc());
-  auto messageUnescaped = FIRToken::getStringValue(message);
-  builder.create<AssertOp>(clock, predicate, enable, messageUnescaped,
-                           ValueRange{}, name.getValue());
+  auto formatStrUnescaped = FIRToken::getStringValue(formatString);
+  builder.create<AssertOp>(clock, predicate, enable, formatStrUnescaped,
+                           operands, name.getValue());
   return success();
 }
 
-/// assume ::= 'assume(' exp exp exp StringLit ')' info?
+/// assume ::= 'assume(' exp exp exp StringLit exp* ')' info?
 ParseResult FIRStmtParser::parseAssume() {
   auto startTok = consumeToken(FIRToken::lp_assume);
 
   Value clock, predicate, enable;
-  StringRef message;
+  StringRef formatString;
   StringAttr name;
   if (parseExp(clock, "expected clock expression in 'assume'") ||
       parseExp(predicate, "expected predicate in 'assume'") ||
       parseExp(enable, "expected enable in 'assume'") ||
-      parseGetSpelling(message) ||
-      parseToken(FIRToken::string, "expected message in 'assume'") ||
-      parseToken(FIRToken::r_paren, "expected ')' in 'assume'") ||
-      parseOptionalName(name) || parseOptionalInfo())
+      parseGetSpelling(formatString) ||
+      parseToken(FIRToken::string, "expected format string in 'assume'"))
+    return failure();
+
+  SmallVector<Value, 4> operands;
+  while (!consumeIf(FIRToken::r_paren)) {
+    operands.push_back({});
+    if (parseExp(operands.back(), "expected operand in 'assume'"))
+      return failure();
+  }
+
+  if (parseOptionalName(name) || parseOptionalInfo())
     return failure();
 
   locationProcessor.setLoc(startTok.getLoc());
-  auto messageUnescaped = FIRToken::getStringValue(message);
-  builder.create<AssumeOp>(clock, predicate, enable, messageUnescaped,
-                           ValueRange{}, name.getValue());
+  auto formatStrUnescaped = FIRToken::getStringValue(formatString);
+  builder.create<AssumeOp>(clock, predicate, enable, formatStrUnescaped,
+                           operands, name.getValue());
   return success();
 }
 
@@ -4389,6 +4434,8 @@ private:
   ParseResult parseIntModule(CircuitOp circuit, unsigned indent);
   ParseResult parseModule(CircuitOp circuit, bool isPublic, unsigned indent);
 
+  ParseResult parseLayerName(SymbolRefAttr &result);
+  ParseResult parseOptionalEnabledLayers(ArrayAttr &result);
   ParseResult parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
                             SmallVectorImpl<SMLoc> &resultPortLocs,
                             unsigned indent);
@@ -4472,6 +4519,47 @@ ParseResult FIRCircuitParser::importOMIR(CircuitOp circuit, SMLoc loc,
     return failure();
   }
 
+  return success();
+}
+
+ParseResult FIRCircuitParser::parseLayerName(SymbolRefAttr &result) {
+  auto *context = getContext();
+  SmallVector<StringRef> strings;
+  do {
+    StringRef name;
+    if (parseId(name, "expected layer name"))
+      return failure();
+    strings.push_back(name);
+  } while (consumeIf(FIRToken::period));
+
+  SmallVector<FlatSymbolRefAttr> nested;
+  nested.reserve(strings.size() - 1);
+  for (unsigned i = 1, e = strings.size(); i < e; ++i)
+    nested.push_back(FlatSymbolRefAttr::get(context, strings[i]));
+
+  result = SymbolRefAttr::get(context, strings[0], nested);
+  return success();
+}
+
+ParseResult FIRCircuitParser::parseOptionalEnabledLayers(ArrayAttr &result) {
+  if (getToken().getKind() != FIRToken::kw_enablelayer) {
+    result = ArrayAttr::get(getContext(), {});
+    return success();
+  }
+
+  if (requireFeature({4, 0, 0}, "modules with layers enabled"))
+    return failure();
+
+  SmallVector<Attribute> layers;
+  do {
+    SymbolRefAttr layer;
+    consumeToken();
+    if (parseLayerName(layer))
+      return failure();
+    layers.push_back(layer);
+  } while (getToken().getKind() == FIRToken::kw_enablelayer);
+
+  result = ArrayAttr::get(getContext(), layers);
   return success();
 }
 
@@ -4828,11 +4916,13 @@ ParseResult FIRCircuitParser::parseExtClass(CircuitOp circuit,
 ParseResult FIRCircuitParser::parseExtModule(CircuitOp circuit,
                                              unsigned indent) {
   StringAttr name;
+  ArrayAttr layers;
   SmallVector<PortInfo, 8> portList;
   SmallVector<SMLoc> portLocs;
   LocWithInfo info(getToken().getLoc(), this);
   consumeToken(FIRToken::kw_extmodule);
   if (parseId(name, "expected extmodule name") ||
+      parseOptionalEnabledLayers(layers) ||
       parseToken(FIRToken::colon, "expected ':' in extmodule definition") ||
       info.parseOptionalInfo() || parsePortList(portList, portLocs, indent))
     return failure();
@@ -4860,7 +4950,7 @@ ParseResult FIRCircuitParser::parseExtModule(CircuitOp circuit,
   auto annotations = ArrayAttr::get(getContext(), {});
   auto extModuleOp = builder.create<FExtModuleOp>(
       info.getLoc(), name, conventionAttr, portList, defName, annotations,
-      parameters, internalPaths);
+      parameters, internalPaths, layers);
   auto visibility = isMainModule ? SymbolTable::Visibility::Public
                                  : SymbolTable::Visibility::Private;
   SymbolTable::setSymbolVisibility(extModuleOp, visibility);
@@ -4874,11 +4964,13 @@ ParseResult FIRCircuitParser::parseExtModule(CircuitOp circuit,
 ParseResult FIRCircuitParser::parseIntModule(CircuitOp circuit,
                                              unsigned indent) {
   StringAttr name;
+  ArrayAttr layers;
   SmallVector<PortInfo, 8> portList;
   SmallVector<SMLoc> portLocs;
   LocWithInfo info(getToken().getLoc(), this);
   consumeToken(FIRToken::kw_intmodule);
   if (parseId(name, "expected intmodule name") ||
+      parseOptionalEnabledLayers(layers) ||
       parseToken(FIRToken::colon, "expected ':' in intmodule definition") ||
       info.parseOptionalInfo() || parsePortList(portList, portLocs, indent))
     return failure();
@@ -4899,7 +4991,7 @@ ParseResult FIRCircuitParser::parseIntModule(CircuitOp circuit,
   auto builder = circuit.getBodyBuilder();
   builder
       .create<FIntModuleOp>(info.getLoc(), name, portList, intName, annotations,
-                            parameters, internalPaths)
+                            parameters, internalPaths, layers)
       .setPrivate();
   return success();
 }
@@ -4910,9 +5002,11 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit, bool isPublic,
   StringAttr name;
   SmallVector<PortInfo, 8> portList;
   SmallVector<SMLoc> portLocs;
+  ArrayAttr layers;
   LocWithInfo info(getToken().getLoc(), this);
   consumeToken(FIRToken::kw_module);
   if (parseId(name, "expected module name") ||
+      parseOptionalEnabledLayers(layers) ||
       parseToken(FIRToken::colon, "expected ':' in module definition") ||
       info.parseOptionalInfo() || parsePortList(portList, portLocs, indent))
     return failure();
@@ -4927,7 +5021,7 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit, bool isPublic,
   auto conventionAttr = ConventionAttr::get(getContext(), convention);
   auto builder = circuit.getBodyBuilder();
   auto moduleOp = builder.create<FModuleOp>(info.getLoc(), name, conventionAttr,
-                                            portList, annotations);
+                                            portList, annotations, layers);
 
   auto visibility = isPublic ? SymbolTable::Visibility::Public
                              : SymbolTable::Visibility::Private;

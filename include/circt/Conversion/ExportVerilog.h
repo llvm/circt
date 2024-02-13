@@ -22,6 +22,7 @@ std::unique_ptr<mlir::Pass>
 createTestApplyLoweringOptionPass(llvm::StringRef options);
 std::unique_ptr<mlir::Pass> createTestApplyLoweringOptionPass();
 
+std::unique_ptr<mlir::Pass> createHWLowerInstanceChoicesPass();
 std::unique_ptr<mlir::Pass> createPrepareForEmissionPass();
 std::unique_ptr<mlir::Pass> createLegalizeAnonEnumsPass();
 

@@ -19,6 +19,7 @@
 #define ESI_MANIFEST_H
 
 #include "esi/Common.h"
+#include "esi/Context.h"
 #include "esi/Types.h"
 
 #include <any>
@@ -40,7 +41,8 @@ public:
   class Impl;
 
   Manifest(const Manifest &) = delete;
-  Manifest(const std::string &jsonManifest);
+  Manifest(Context &ctxt, const std::string &jsonManifest);
+  ~Manifest();
 
   uint32_t getApiVersion() const;
   // Modules which have designer specified metadata.
@@ -50,17 +52,14 @@ public:
   std::unique_ptr<Accelerator>
   buildAccelerator(AcceleratorConnection &acc) const;
 
-  /// Get a Type from the manifest based on its ID. Types are uniqued here.
-  std::optional<std::reference_wrapper<const Type>> getType(Type::ID id) const;
-
   /// The Type Table is an ordered list of types. The offset can be used to
   /// compactly and uniquely within a design. It does not include all of the
   /// types in a design -- just the ones listed in the 'types' section of the
   /// manifest.
-  const std::vector<std::reference_wrapper<const Type>> &getTypeTable() const;
+  const std::vector<const Type *> &getTypeTable() const;
 
 private:
-  std::shared_ptr<Impl> impl;
+  Impl *impl;
 };
 
 } // namespace esi

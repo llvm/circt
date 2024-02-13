@@ -703,6 +703,7 @@ int main(int argc, char **argv) {
 
     // Conversion passes:
     registerPrepareForEmissionPass();
+    registerHWLowerInstanceChoicesPass();
     registerLowerFIRRTLToHWPass();
     registerLegalizeAnonEnumsPass();
     registerLowerSeqToSVPass();

@@ -26,7 +26,16 @@
 #include <cstdint>
 
 namespace esi {
+class AcceleratorConnection;
 namespace services {
+
+/// Add a custom interface to a service client at a particular point in the
+/// design hierarchy.
+class ServicePort : public BundlePort {
+public:
+  using BundlePort::BundlePort;
+  virtual ~ServicePort() = default;
+};
 
 /// Parent class of all APIs modeled as 'services'. May or may not map to a
 /// hardware side 'service'.
@@ -36,6 +45,14 @@ public:
   virtual ~Service() = default;
 
   virtual std::string getServiceSymbol() const = 0;
+
+  /// Get specialized port for this service to attach to the given appid path.
+  /// Null returns mean nothing to attach.
+  virtual ServicePort *getPort(AppIDPath id, const BundleType *type,
+                               const std::map<std::string, ChannelPort &> &,
+                               AcceleratorConnection &) const {
+    return nullptr;
+  }
 };
 
 /// A service for which there are no standard services registered. Requires
@@ -50,13 +67,6 @@ public:
   virtual std::string getServiceSymbol() const override {
     return serviceSymbol;
   }
-
-  /// Request the host side channel ports for a particular instance (identified
-  /// by the AppID path). For convenience, provide the bundle type and direction
-  /// of the bundle port.
-  virtual std::map<std::string, ChannelPort &>
-  requestChannelsFor(AppIDPath, const BundleType &,
-                     BundlePort::Direction portDir) = 0;
 
 protected:
   std::string serviceSymbol;
@@ -101,6 +111,52 @@ public:
 
 private:
   const MMIO *mmio;
+};
+
+/// Service for calling functions.
+class FuncService : public Service {
+public:
+  FuncService(AcceleratorConnection *acc, AppIDPath id, std::string implName,
+              ServiceImplDetails details, HWClientDetails clients);
+
+  virtual std::string getServiceSymbol() const override;
+  virtual ServicePort *getPort(AppIDPath id, const BundleType *type,
+                               const std::map<std::string, ChannelPort &> &,
+                               AcceleratorConnection &) const override;
+
+  /// A function call which gets attached to a service port.
+  class Function : public ServicePort {
+    friend class FuncService;
+    Function(AppID id, const std::map<std::string, ChannelPort &> &channels);
+
+  public:
+    void connect();
+    MessageData call(const MessageData &arg);
+
+  private:
+    WriteChannelPort &arg;
+    ReadChannelPort &result;
+  };
+
+private:
+  std::string symbol;
+};
+
+/// Registry of services which can be instantiated directly by the Accelerator
+/// class if the backend doesn't do anything special with a service.
+class ServiceRegistry {
+public:
+  /// Create a service instance from the given details. Returns nullptr if
+  /// 'svcType' isn't registered.
+  static Service *createService(AcceleratorConnection *acc,
+                                Service::Type svcType, AppIDPath id,
+                                std::string implName,
+                                ServiceImplDetails details,
+                                HWClientDetails clients);
+
+  /// Resolve a service type from a string. If the string isn't recognized,
+  /// default to CustomService.
+  static Service::Type lookupServiceType(const std::string &);
 };
 
 } // namespace services

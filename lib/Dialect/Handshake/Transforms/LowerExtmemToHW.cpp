@@ -208,26 +208,26 @@ LogicalResult HandshakeLowerExtmemToHWPass::wrapESI(
 
     // Load ports:
     for (unsigned i = 0; i < memType.loadPorts; ++i) {
-      auto reqPack = b.create<esi::PackBundleOp>(loc, readPortInfo.type,
-                                                 (Value)backedges[resIdx]);
-      b.create<esi::RequestToServerConnectionOp>(
-          loc, readPortInfo.port, reqPack.getBundle(),
+      auto req = b.create<esi::RequestConnectionOp>(
+          loc, readPortInfo.type, readPortInfo.port,
           esi::AppIDAttr::get(ctx, b.getStringAttr("load"), {}));
+      auto reqUnpack = b.create<esi::UnpackBundleOp>(
+          loc, req.getToClient(), ValueRange{backedges[resIdx]});
       instanceArgsFromThisMem.push_back(
-          reqPack.getFromChannels()
+          reqUnpack.getToChannels()
               [esi::RandomAccessMemoryDeclOp::RespDirChannelIdx]);
       ++resIdx;
     }
 
     // Store ports:
     for (unsigned i = 0; i < memType.storePorts; ++i) {
-      auto reqPack = b.create<esi::PackBundleOp>(loc, writePortInfo.type,
-                                                 (Value)backedges[resIdx]);
-      b.create<esi::RequestToServerConnectionOp>(
-          loc, writePortInfo.port, reqPack.getBundle(),
+      auto req = b.create<esi::RequestConnectionOp>(
+          loc, writePortInfo.type, writePortInfo.port,
           esi::AppIDAttr::get(ctx, b.getStringAttr("store"), {}));
+      auto reqUnpack = b.create<esi::UnpackBundleOp>(
+          loc, req.getToClient(), ValueRange{backedges[resIdx]});
       instanceArgsFromThisMem.push_back(
-          reqPack.getFromChannels()
+          reqUnpack.getToChannels()
               [esi::RandomAccessMemoryDeclOp::RespDirChannelIdx]);
       ++resIdx;
     }

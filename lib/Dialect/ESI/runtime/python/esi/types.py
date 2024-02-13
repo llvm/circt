@@ -336,10 +336,10 @@ class ReadPort(Port):
     """Read a typed message from the channel. Returns a deserialized object of a
     type defined by the port type."""
 
-    msg_bytes = self.cpp_port.read(self.type.max_size)
-    if len(msg_bytes) == 0:
+    buffer = self.cpp_port.read()
+    if buffer is None:
       return (False, None)
-    (msg, leftover) = self.type.deserialize(msg_bytes)
+    (msg, leftover) = self.type.deserialize(buffer)
     if len(leftover) != 0:
       raise ValueError(f"leftover bytes: {leftover}")
     return (True, msg)
@@ -347,6 +347,14 @@ class ReadPort(Port):
 
 class BundlePort:
   """A collections of named, unidirectional communication channels."""
+
+  # When creating a new port, we need to determine if it is a service port and
+  # instantiate it correctly.
+  def __new__(cls, owner: HWModule, cpp_port: cpp.BundlePort):
+    # TODO: add a proper registration mechanism for service ports.
+    if isinstance(cpp_port, cpp.Function):
+      return super().__new__(FunctionPort)
+    return super().__new__(cls)
 
   def __init__(self, owner: HWModule, cpp_port: cpp.BundlePort):
     self.owner = owner
@@ -357,3 +365,33 @@ class BundlePort:
 
   def read_port(self, channel_name: str) -> ReadPort:
     return ReadPort(self, self.cpp_port.getRead(channel_name))
+
+
+class FunctionPort(BundlePort):
+  """A pair of channels which carry the input and output of a function."""
+
+  def __init__(self, owner: HWModule, cpp_port: cpp.BundlePort):
+    super().__init__(owner, cpp_port)
+    self.arg_type = self.write_port("arg").type
+    self.result_type = self.read_port("result").type
+    self.connected = False
+
+  def connect(self):
+    self.cpp_port.connect()
+    self.connected = True
+
+  def call(self, **kwargs: Any) -> Any:
+    """Call the function with the given argument and returns the result."""
+    valid, reason = self.arg_type.is_valid(kwargs)
+    if not valid:
+      raise ValueError(
+          f"'{kwargs}' cannot be converted to '{self.arg_type}': {reason}")
+    arg_bytes: bytearray = self.arg_type.serialize(kwargs)
+    result_bytes = self.cpp_port.call(arg_bytes)
+    (msg, leftover) = self.result_type.deserialize(result_bytes)
+    if len(leftover) != 0:
+      raise ValueError(f"leftover bytes: {leftover}")
+    return msg
+
+  def __call__(self, *args: Any, **kwds: Any) -> Any:
+    return self.call(*args, **kwds)

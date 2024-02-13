@@ -17,6 +17,7 @@
 #include "esi/Services.h"
 
 #include <nlohmann/json.hpp>
+#include <sstream>
 
 using namespace std;
 
@@ -38,14 +39,17 @@ class Manifest::Impl {
   friend class ::esi::Manifest;
 
 public:
-  using TypeCache = map<Type::ID, unique_ptr<Type>>;
-
-  Impl(const string &jsonManifest);
+  Impl(Context &ctxt, const string &jsonManifest);
 
   auto at(const string &key) const { return manifestJson.at(key); }
 
   // Get the module info (if any) for the module instance in 'json'.
   optional<ModuleInfo> getModInfo(const nlohmann::json &) const;
+
+  /// Go through the "service_decls" section of the manifest and populate the
+  /// services table as appropriate.
+  void scanServiceDecls(AcceleratorConnection &, const nlohmann::json &,
+                        ServiceTable &) const;
 
   /// Get a Service for the service specified in 'json'. Update the
   /// activeServices table.
@@ -62,9 +66,10 @@ public:
 
   /// Get the bundle ports for the instance at 'idPath' and specified in
   /// 'instJson'. Look them up in 'activeServies'.
-  vector<BundlePort> getBundlePorts(AppIDPath idPath,
-                                    const ServiceTable &activeServices,
-                                    const nlohmann::json &instJson) const;
+  vector<std::unique_ptr<BundlePort>>
+  getBundlePorts(AcceleratorConnection &acc, AppIDPath idPath,
+                 const ServiceTable &activeServices,
+                 const nlohmann::json &instJson) const;
 
   /// Build the set of child instances (recursively) for the module instance
   /// description.
@@ -83,28 +88,20 @@ public:
   /// Parse all the types and populate the types table.
   void populateTypes(const nlohmann::json &typesJson);
 
-  // Forwarded from Manifest.
-  const vector<reference_wrapper<const Type>> &getTypeTable() const {
-    return _typeTable;
-  }
-
-  // Forwarded from Manifest.
-  optional<reference_wrapper<const Type>> getType(Type::ID id) const {
-    if (auto f = _types.find(id); f != _types.end())
-      return *f->second;
-    return nullopt;
-  }
+  /// Get the ordered list of types from the manifest.
+  const vector<const Type *> &getTypeTable() const { return _typeTable; }
 
   /// Build a dynamic API for the Accelerator connection 'acc' based on the
   /// manifest stored herein.
-  unique_ptr<Accelerator> buildAccelerator(AcceleratorConnection &acc,
-                                           std::shared_ptr<Impl> me) const;
+  unique_ptr<Accelerator> buildAccelerator(AcceleratorConnection &acc) const;
 
-  const Type &parseType(const nlohmann::json &typeJson);
+  const Type *parseType(const nlohmann::json &typeJson);
 
 private:
-  vector<reference_wrapper<const Type>> _typeTable;
-  TypeCache _types;
+  Context &ctxt;
+  vector<const Type *> _typeTable;
+
+  optional<const Type *> getType(Type::ID id) const { return ctxt.getType(id); }
 
   // The parsed json.
   nlohmann::json manifestJson;
@@ -195,7 +192,7 @@ static ModuleInfo parseModuleInfo(const nlohmann::json &mod) {
 // Manifest::Impl class implementation.
 //===----------------------------------------------------------------------===//
 
-Manifest::Impl::Impl(const string &manifestStr) {
+Manifest::Impl::Impl(Context &ctxt, const string &manifestStr) : ctxt(ctxt) {
   manifestJson = nlohmann::ordered_json::parse(manifestStr);
 
   for (auto &mod : manifestJson.at("symbols"))
@@ -205,19 +202,24 @@ Manifest::Impl::Impl(const string &manifestStr) {
 }
 
 unique_ptr<Accelerator>
-Manifest::Impl::buildAccelerator(AcceleratorConnection &acc,
-                                 std::shared_ptr<Impl> me) const {
-  auto designJson = manifestJson.at("design");
+Manifest::Impl::buildAccelerator(AcceleratorConnection &acc) const {
+  ServiceTable activeSvcs;
 
   // Get the initial active services table. Update it as we descend down.
-  ServiceTable activeSvcs;
+  auto svcDecls = manifestJson.at("service_decls");
+  scanServiceDecls(acc, svcDecls, activeSvcs);
+
+  // Get the services instantiated at the top level.
+  auto designJson = manifestJson.at("design");
   vector<services::Service *> services =
       getServices({}, acc, designJson, activeSvcs);
 
+  // Get the ports at the top level.
+  auto ports = getBundlePorts(acc, {}, activeSvcs, designJson);
+
   return make_unique<Accelerator>(
       getModInfo(designJson),
-      getChildInstances({}, acc, activeSvcs, designJson), services,
-      getBundlePorts({}, activeSvcs, designJson), me);
+      getChildInstances({}, acc, activeSvcs, designJson), services, ports);
 }
 
 optional<ModuleInfo>
@@ -229,6 +231,27 @@ Manifest::Impl::getModInfo(const nlohmann::json &json) const {
   if (f != symbolInfoCache.end())
     return f->second;
   return nullopt;
+}
+
+void Manifest::Impl::scanServiceDecls(AcceleratorConnection &acc,
+                                      const nlohmann::json &svcDecls,
+                                      ServiceTable &activeServices) const {
+  for (auto &svcDecl : svcDecls) {
+    if (auto f = svcDecl.find("type_name"); f != svcDecl.end()) {
+      // Get the implementation details.
+      ServiceImplDetails svcDetails;
+      for (auto &detail : svcDecl.items())
+        svcDetails[detail.key()] = getAny(detail.value());
+
+      // Create the service.
+      services::Service::Type svcId =
+          services::ServiceRegistry::lookupServiceType(f.value());
+      auto svc = acc.getService(svcId, /*id=*/{}, /*implName=*/"",
+                                /*details=*/svcDetails, /*clients=*/{});
+      if (svc)
+        activeServices[svcDecl.at("symbol")] = svc;
+    }
+  }
 }
 
 vector<unique_ptr<Instance>>
@@ -243,6 +266,7 @@ Manifest::Impl::getChildInstances(AppIDPath idPath, AcceleratorConnection &acc,
     ret.emplace_back(getChildInstance(idPath, acc, activeServices, child));
   return ret;
 }
+
 unique_ptr<Instance>
 Manifest::Impl::getChildInstance(AppIDPath idPath, AcceleratorConnection &acc,
                                  ServiceTable activeServices,
@@ -254,9 +278,9 @@ Manifest::Impl::getChildInstance(AppIDPath idPath, AcceleratorConnection &acc,
       getServices(idPath, acc, child, activeServices);
 
   auto children = getChildInstances(idPath, acc, activeServices, child);
+  auto ports = getBundlePorts(acc, idPath, activeServices, child);
   return make_unique<Instance>(parseID(child.at("app_id")), getModInfo(child),
-                               std::move(children), services,
-                               getBundlePorts(idPath, activeServices, child));
+                               std::move(children), services, ports);
 }
 
 services::Service *
@@ -299,11 +323,13 @@ Manifest::Impl::getService(AppIDPath idPath, AcceleratorConnection &acc,
 
   // Create the service.
   // TODO: Add support for 'standard' services.
-  auto svc = acc.getService<services::CustomService>(idPath, implName,
-                                                     svcDetails, clientDetails);
-
-  // Update the active services table.
-  activeServices[service] = svc;
+  services::Service::Type svcType =
+      services::ServiceRegistry::lookupServiceType(service);
+  services::Service *svc =
+      acc.getService(svcType, idPath, implName, svcDetails, clientDetails);
+  if (svc)
+    // Update the active services table.
+    activeServices[service] = svc;
   return svc;
 }
 
@@ -322,11 +348,11 @@ Manifest::Impl::getServices(AppIDPath idPath, AcceleratorConnection &acc,
   return ret;
 }
 
-vector<BundlePort>
-Manifest::Impl::getBundlePorts(AppIDPath idPath,
+vector<std::unique_ptr<BundlePort>>
+Manifest::Impl::getBundlePorts(AcceleratorConnection &acc, AppIDPath idPath,
                                const ServiceTable &activeServices,
                                const nlohmann::json &instJson) const {
-  vector<BundlePort> ret;
+  vector<std::unique_ptr<BundlePort>> ret;
   auto contentsIter = instJson.find("contents");
   if (contentsIter == instJson.end())
     return ret;
@@ -339,45 +365,37 @@ Manifest::Impl::getBundlePorts(AppIDPath idPath,
     std::string serviceName = "";
     if (auto f = content.find("servicePort"); f != content.end())
       serviceName = parseServicePort(f.value()).name;
-    auto svc = activeServices.find(serviceName);
-    if (svc == activeServices.end()) {
+    auto svcIter = activeServices.find(serviceName);
+    if (svcIter == activeServices.end()) {
       // If a specific service isn't found, search for the default service
       // (typically provided by a BSP).
-      if (svc = activeServices.find(""); svc == activeServices.end())
+      if (svcIter = activeServices.find(""); svcIter == activeServices.end())
         throw runtime_error(
             "Malformed manifest: could not find active service '" +
             serviceName + "'");
     }
-
-    // If the active service is null, then this is a port that is not connected
-    // externally. Or we don't have an implementation for it.
-    if (!svc->second)
-      continue;
+    services::Service *svc = svcIter->second;
 
     string typeName = content.at("bundleType").at("circt_name");
     auto type = getType(typeName);
     if (!type)
       throw runtime_error("Malformed manifest: could not find port type '" +
                           typeName + "'");
-    const BundleType &bundleType =
-        dynamic_cast<const BundleType &>(type->get());
-
-    BundlePort::Direction portDir;
-    string dirStr = content.at("direction");
-    if (dirStr == "toClient")
-      portDir = BundlePort::Direction::ToClient;
-    else if (dirStr == "toServer")
-      portDir = BundlePort::Direction::ToServer;
-    else
-      throw runtime_error("Malformed manifest: unknown direction '" + dirStr +
-                          "'");
+    const BundleType *bundleType = dynamic_cast<const BundleType *>(*type);
+    if (!bundleType)
+      throw runtime_error("Malformed manifest: type '" + typeName +
+                          "' is not a bundle type");
 
     idPath.push_back(parseID(content.at("appID")));
-    map<string, ChannelPort &> portChannels;
-    // If we need to have custom ports (because of a custom service), add them.
-    if (auto *customSvc = dynamic_cast<services::CustomService *>(svc->second))
-      portChannels = customSvc->requestChannelsFor(idPath, bundleType, portDir);
-    ret.emplace_back(idPath.back(), portChannels);
+    map<string, ChannelPort &> portChannels =
+        acc.requestChannelsFor(idPath, bundleType);
+
+    services::ServicePort *svcPort =
+        svc->getPort(idPath, bundleType, portChannels, acc);
+    if (svcPort)
+      ret.emplace_back(svcPort);
+    else
+      ret.emplace_back(new BundlePort(idPath.back(), portChannels));
     // Since we share idPath between iterations, pop the last element before the
     // next iteration.
     idPath.pop_back();
@@ -386,14 +404,12 @@ Manifest::Impl::getBundlePorts(AppIDPath idPath,
 }
 
 namespace {
-const Type &parseType(const nlohmann::json &typeJson,
-                      Manifest::Impl::TypeCache &cache);
+const Type *parseType(const nlohmann::json &typeJson, Context &ctxt);
 
-BundleType *parseBundleType(const nlohmann::json &typeJson,
-                            Manifest::Impl::TypeCache &cache) {
+BundleType *parseBundleType(const nlohmann::json &typeJson, Context &cache) {
   assert(typeJson.at("mnemonic") == "bundle");
 
-  vector<tuple<string, BundleType::Direction, const Type &>> channels;
+  vector<tuple<string, BundleType::Direction, const Type *>> channels;
   for (auto &chanJson : typeJson["channels"]) {
     string dirStr = chanJson.at("direction");
     BundleType::Direction dir;
@@ -410,15 +426,13 @@ BundleType *parseBundleType(const nlohmann::json &typeJson,
   return new BundleType(typeJson.at("circt_name"), channels);
 }
 
-ChannelType *parseChannelType(const nlohmann::json &typeJson,
-                              Manifest::Impl::TypeCache &cache) {
+ChannelType *parseChannelType(const nlohmann::json &typeJson, Context &cache) {
   assert(typeJson.at("mnemonic") == "channel");
   return new ChannelType(typeJson.at("circt_name"),
                          parseType(typeJson.at("inner"), cache));
 }
 
-Type *parseInt(const nlohmann::json &typeJson,
-               Manifest::Impl::TypeCache &cache) {
+Type *parseInt(const nlohmann::json &typeJson, Context &cache) {
   assert(typeJson.at("mnemonic") == "int");
   std::string sign = typeJson.at("signedness");
   uint64_t width = typeJson.at("hw_bitwidth");
@@ -437,31 +451,28 @@ Type *parseInt(const nlohmann::json &typeJson,
     throw runtime_error("Malformed manifest: unknown sign '" + sign + "'");
 }
 
-StructType *parseStruct(const nlohmann::json &typeJson,
-                        Manifest::Impl::TypeCache &cache) {
+StructType *parseStruct(const nlohmann::json &typeJson, Context &cache) {
   assert(typeJson.at("mnemonic") == "struct");
-  vector<pair<string, const Type &>> fields;
+  vector<pair<string, const Type *>> fields;
   for (auto &fieldJson : typeJson["fields"])
     fields.emplace_back(fieldJson.at("name"),
                         parseType(fieldJson["type"], cache));
   return new StructType(typeJson.at("circt_name"), fields);
 }
 
-ArrayType *parseArray(const nlohmann::json &typeJson,
-                      Manifest::Impl::TypeCache &cache) {
+ArrayType *parseArray(const nlohmann::json &typeJson, Context &cache) {
   assert(typeJson.at("mnemonic") == "array");
   uint64_t size = typeJson.at("size");
   return new ArrayType(typeJson.at("circt_name"),
                        parseType(typeJson.at("element"), cache), size);
 }
 
-using TypeParser =
-    std::function<Type *(const nlohmann::json &, Manifest::Impl::TypeCache &)>;
+using TypeParser = std::function<Type *(const nlohmann::json &, Context &)>;
 const std::map<std::string_view, TypeParser> typeParsers = {
     {"bundle", parseBundleType},
     {"channel", parseChannelType},
     {"any",
-     [](const nlohmann::json &typeJson, Manifest::Impl::TypeCache &cache) {
+     [](const nlohmann::json &typeJson, Context &cache) {
        return new AnyType(typeJson.at("circt_name"));
      }},
     {"int", parseInt},
@@ -471,17 +482,12 @@ const std::map<std::string_view, TypeParser> typeParsers = {
 };
 
 // Parse a type if it doesn't already exist in the cache.
-const Type &parseType(const nlohmann::json &typeJson,
-                      Manifest::Impl::TypeCache &cache) {
+const Type *parseType(const nlohmann::json &typeJson, Context &cache) {
   // We use the circt type string as a unique ID.
   string circt_name = typeJson.at("circt_name");
+  if (optional<const Type *> t = cache.getType(circt_name))
+    return *t;
 
-  // Check the cache.
-  auto typeF = cache.find(circt_name);
-  if (typeF != cache.end())
-    return *typeF->second;
-
-  // Parse the type.
   string mnemonic = typeJson.at("mnemonic");
   Type *t;
   auto f = typeParsers.find(mnemonic);
@@ -492,13 +498,13 @@ const Type &parseType(const nlohmann::json &typeJson,
     t = new Type(circt_name);
 
   // Insert into the cache.
-  cache.emplace(circt_name, unique_ptr<Type>(t));
-  return *t;
+  cache.registerType(t);
+  return t;
 }
 } // namespace
 
-const Type &Manifest::Impl::parseType(const nlohmann::json &typeJson) {
-  return ::parseType(typeJson, _types);
+const Type *Manifest::Impl::parseType(const nlohmann::json &typeJson) {
+  return ::parseType(typeJson, ctxt);
 }
 
 void Manifest::Impl::populateTypes(const nlohmann::json &typesJson) {
@@ -510,7 +516,10 @@ void Manifest::Impl::populateTypes(const nlohmann::json &typesJson) {
 // Manifest class implementation.
 //===----------------------------------------------------------------------===//
 
-Manifest::Manifest(const string &jsonManifest) : impl(new Impl(jsonManifest)) {}
+Manifest::Manifest(Context &ctxt, const string &jsonManifest)
+    : impl(new Impl(ctxt, jsonManifest)) {}
+
+Manifest::~Manifest() { delete impl; }
 
 uint32_t Manifest::getApiVersion() const {
   return impl->at("api_version").get<uint32_t>();
@@ -525,16 +534,10 @@ vector<ModuleInfo> Manifest::getModuleInfos() const {
 
 unique_ptr<Accelerator>
 Manifest::buildAccelerator(AcceleratorConnection &acc) const {
-  return impl->buildAccelerator(acc, impl);
+  return impl->buildAccelerator(acc);
 }
 
-optional<reference_wrapper<const Type>> Manifest::getType(Type::ID id) const {
-  if (auto f = impl->_types.find(id); f != impl->_types.end())
-    return *f->second;
-  return nullopt;
-}
-
-const vector<reference_wrapper<const Type>> &Manifest::getTypeTable() const {
+const vector<const Type *> &Manifest::getTypeTable() const {
   return impl->getTypeTable();
 }
 

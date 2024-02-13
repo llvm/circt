@@ -8,21 +8,11 @@ import pycde
 from pycde import (AppID, Clock, Input, Module, generator)
 from pycde.bsp import cosim
 from pycde.constructs import Wire
-from pycde.esi import ServiceDecl
+from pycde.esi import FuncService
 from pycde.types import (Bits, Bundle, BundledChannel, Channel,
                          ChannelDirection, UInt)
 
 import sys
-
-TestBundle = Bundle([
-    BundledChannel("resp", ChannelDirection.TO, UInt(16)),
-    BundledChannel("req", ChannelDirection.FROM, UInt(24))
-])
-
-
-@ServiceDecl
-class HostComms:
-  req_resp = TestBundle
 
 
 class LoopbackInOutAdd7(Module):
@@ -31,11 +21,12 @@ class LoopbackInOutAdd7(Module):
   @generator
   def construct(ports):
     loopback = Wire(Channel(UInt(16)))
-    call_bundle, [(_, from_host)] = TestBundle.pack(resp=loopback)
-    HostComms.req_resp(call_bundle, AppID("loopback_inout"))
+    args = FuncService.expose(AppID("loopback_add7"),
+                              arg_type=UInt(24),
+                              result=loopback)
 
     ready = Wire(Bits(1))
-    data, valid = from_host.unwrap(ready)
+    data, valid = args.unwrap(ready)
     plus7 = data + 7
     data_chan, data_ready = loopback.type.wrap(plus7.as_uint(16), valid)
     ready.assign(data_ready)

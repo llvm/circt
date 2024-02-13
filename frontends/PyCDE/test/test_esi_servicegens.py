@@ -13,8 +13,8 @@ from pycde.signals import BitsSignal, ChannelSignal
 from typing import Dict
 
 TestBundle = Bundle([
-    BundledChannel("resp", ChannelDirection.TO, Bits(16)),
-    BundledChannel("req", ChannelDirection.FROM, Bits(24))
+    BundledChannel("resp", ChannelDirection.FROM, Bits(16)),
+    BundledChannel("req", ChannelDirection.TO, Bits(24))
 ])
 
 
@@ -28,9 +28,9 @@ class LoopbackInOut(Module):
   @generator
   def construct(self):
     loopback = Wire(Channel(Bits(16)))
-    call_bundle, froms = TestBundle.pack(resp=loopback)
+    call_bundle = HostComms.req_resp(AppID("loopback_inout"))
+    froms = call_bundle.unpack(resp=loopback)
     from_host = froms['req']
-    HostComms.req_resp(call_bundle, AppID("loopback_inout", 0))
     ready = Wire(Bits(1))
     wide_data, valid = from_host.unwrap(ready)
     data = wide_data[0:16]
@@ -134,12 +134,12 @@ class MultiplexerTop(Module):
 # CHECK-LABEL: hw.module @MultiplexerTop(in %clk : i1, in %rst : i1, in %trunk_in : i256, in %trunk_in_valid : i1, in %trunk_out_ready : i1, out trunk_in_ready : i1, out trunk_out : i256, out trunk_out_valid : i1) attributes {output_file = #hw.output_file<"MultiplexerTop.sv", includeReplicatedOps>} {
 # CHECK:         %c0_i240 = hw.constant 0 : i240
 # CHECK:         [[R0:%.+]] = comb.extract %trunk_in from 0 {sv.namehint = "trunk_in_0upto24"} : (i256) -> i24
-# CHECK:         [[R1:%.+]] = comb.concat %c0_i240, %LoopbackInOut.loopback_inout_0_resp : i240, i16
-# CHECK:         %LoopbackInOut.loopback_inout_0_req_ready, %LoopbackInOut.loopback_inout_0_resp, %LoopbackInOut.loopback_inout_0_resp_valid = hw.instance "LoopbackInOut" sym @LoopbackInOut @LoopbackInOut(loopback_inout_0_req: [[R0]]: i24, loopback_inout_0_req_valid: %trunk_in_valid: i1, loopback_inout_0_resp_ready: %trunk_out_ready: i1) -> (loopback_inout_0_req_ready: i1, loopback_inout_0_resp: i16, loopback_inout_0_resp_valid: i1)
+# CHECK:         [[R1:%.+]] = comb.concat %c0_i240, %LoopbackInOut.loopback_inout_resp : i240, i16
+# CHECK:         %LoopbackInOut.loopback_inout_req_ready, %LoopbackInOut.loopback_inout_resp, %LoopbackInOut.loopback_inout_resp_valid = hw.instance "LoopbackInOut" sym @LoopbackInOut @LoopbackInOut(loopback_inout_req: [[R0]]: i24, loopback_inout_req_valid: %trunk_in_valid: i1, loopback_inout_resp_ready: %trunk_out_ready: i1) -> (loopback_inout_req_ready: i1, loopback_inout_resp: i16, loopback_inout_resp_valid: i1)
 # CHECK:         hw.instance "__manifest" @__ESIManifest() -> ()
-# CHECK:         hw.output %LoopbackInOut.loopback_inout_0_req_ready, [[R1]], %LoopbackInOut.loopback_inout_0_resp_valid : i1, i256, i1
+# CHECK:         hw.output %LoopbackInOut.loopback_inout_req_ready, [[R1]], %LoopbackInOut.loopback_inout_resp_valid : i1, i256, i1
 # CHECK:       }
-# CHECK-LABEL: hw.module @LoopbackInOut(in %loopback_inout_0_req : i24, in %loopback_inout_0_req_valid : i1, in %loopback_inout_0_resp_ready : i1, out loopback_inout_0_req_ready : i1, out loopback_inout_0_resp : i16, out loopback_inout_0_resp_valid : i1) attributes {output_file = #hw.output_file<"LoopbackInOut.sv", includeReplicatedOps>} {
-# CHECK:         [[R0:%.+]] = comb.extract %loopback_inout_0_req from 0 : (i24) -> i16
-# CHECK:         hw.output %loopback_inout_0_resp_ready, [[R0]], %loopback_inout_0_req_valid : i1, i16, i1
+# CHECK-LABEL: hw.module @LoopbackInOut(in %loopback_inout_req : i24, in %loopback_inout_req_valid : i1, in %loopback_inout_resp_ready : i1, out loopback_inout_req_ready : i1, out loopback_inout_resp : i16, out loopback_inout_resp_valid : i1) attributes {output_file = #hw.output_file<"LoopbackInOut.sv", includeReplicatedOps>} {
+# CHECK:         [[R0:%.+]] = comb.extract %loopback_inout_req from 0 : (i24) -> i16
+# CHECK:         hw.output %loopback_inout_resp_ready, [[R0]], %loopback_inout_req_valid : i1, i16, i1
 # CHECK:       }

@@ -599,12 +599,19 @@ firrtl.module @Shl(in %in1u: !firrtl.uint<1>,
 // CHECK-LABEL: firrtl.module @Shr
 firrtl.module @Shr(in %in1u: !firrtl.uint<1>,
                    in %in4u: !firrtl.uint<4>,
+                   in %inu: !firrtl.uint,
                    in %in1s: !firrtl.sint<1>,
                    in %in4s: !firrtl.sint<4>,
+                   in %ins: !firrtl.sint,
                    in %in0u: !firrtl.uint<0>,
+                   in %in0s: !firrtl.sint<0>,
                    out %out1s: !firrtl.sint<1>,
                    out %out1u: !firrtl.uint<1>,
-                   out %outu: !firrtl.uint<4>) {
+                   out %out4u: !firrtl.uint<4>,
+                   out %out4s: !firrtl.sint<4>,
+                   out %outu: !firrtl.uint,
+                   out %outs: !firrtl.sint
+                   ) {
   // CHECK: firrtl.strictconnect %out1u, %in1u
   %0 = firrtl.shr %in1u, 0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
   firrtl.connect %out1u, %0 : !firrtl.uint<1>, !firrtl.uint<1>
@@ -655,6 +662,40 @@ firrtl.module @Shr(in %in1u: !firrtl.uint<1>,
   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
   %9 = firrtl.dshr %in0u, %c1_ui1 : (!firrtl.uint<0>, !firrtl.uint<1>) -> !firrtl.uint<0>
   firrtl.connect %out1u, %9 : !firrtl.uint<1>, !firrtl.uint<0>
+
+  // Issue #6608: https://github.com/llvm/circt/issues/6608
+  // CHECK: firrtl.strictconnect %out1u, %c0_ui1
+  %10 = firrtl.shr %in0u, 0 : (!firrtl.uint<0>) -> !firrtl.uint<1>
+  firrtl.strictconnect %out1u, %10 : !firrtl.uint<1>
+
+  // Issue #6608: https://github.com/llvm/circt/issues/6608
+  // CHECK: firrtl.strictconnect %out1s, %c0_si1
+  %11 = firrtl.shr %in0s, 0 : (!firrtl.sint<0>) -> !firrtl.sint<1>
+  firrtl.strictconnect %out1s, %11 : !firrtl.sint<1>
+
+  // Issue #6608: https://github.com/llvm/circt/issues/6608
+  // CHECK: firrtl.strictconnect %out4u, %in4u
+  %12 = firrtl.shr %in4u, 0 : (!firrtl.uint<4>) -> !firrtl.uint<4>
+  firrtl.strictconnect %out4u, %12 : !firrtl.uint<4>
+
+  // Issue #6608: https://github.com/llvm/circt/issues/6608
+  // CHECK: firrtl.strictconnect %out4s, %in4s
+  %13 = firrtl.shr %in4s, 0 : (!firrtl.sint<4>) -> !firrtl.sint<4>
+  firrtl.strictconnect %out4s, %13 : !firrtl.sint<4>
+
+  // Issue #6608: https://github.com/llvm/circt/issues/6608
+  // Will change to drop op once FIRRTL spec changes sizeof(shr(uint))
+  // CHECK: %[[UINT:.+]] = firrtl.shr %inu
+  // CHECK: firrtl.connect %outu, %[[UINT]]
+  %14 = firrtl.shr %inu, 0 : (!firrtl.uint) -> !firrtl.uint
+  firrtl.connect %outu, %14 : !firrtl.uint, !firrtl.uint
+
+  // Issue #6608: https://github.com/llvm/circt/issues/6608
+  // CHECK: %[[SINT:.+]] = firrtl.shr %ins
+  // CHECK: firrtl.connect %outs, %[[SINT]]
+  %15 = firrtl.shr %ins, 0 : (!firrtl.sint) -> !firrtl.sint
+  firrtl.connect %outs, %15 : !firrtl.sint, !firrtl.sint
+
 }
 
 // CHECK-LABEL: firrtl.module @Tail
@@ -2553,12 +2594,12 @@ firrtl.module @DontMergeVector(out %o:!firrtl.vector<uint<1>, 1>, in %i:!firrtl.
   // CHECK-NEXT: firrtl.strictconnect %0, %i
 }
 
-// TODO: Move to an apporpriate place
+// TODO: Move to an appropriate place
 // Issue #2197
 // CHECK-LABEL: @Issue2197
 firrtl.module @Issue2197(in %clock: !firrtl.clock, out %x: !firrtl.uint<2>) {
-//  // _HECK: [[ZERO:%.+]] = firrtl.constant 0 : !firrtl.uint<2>
-//  // _HECK-NEXT: firrtl.strictconnect %x, [[ZERO]] : !firrtl.uint<2>
+//  // COM: CHECK: [[ZERO:%.+]] = firrtl.constant 0 : !firrtl.uint<2>
+//  // COM: CHECK-NEXT: firrtl.strictconnect %x, [[ZERO]] : !firrtl.uint<2>
 //  %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
 //  %_reg = firrtl.reg droppable_name %clock : !firrtl.clock, !firrtl.uint<2>
 //  %0 = firrtl.pad %invalid_ui1, 2 : (!firrtl.uint<1>) -> !firrtl.uint<2>
@@ -2614,8 +2655,8 @@ firrtl.module @Issue2251(out %o: !firrtl.sint<15>) {
 //  %invalid_si1 = firrtl.invalidvalue : !firrtl.sint<1>
 //  %0 = firrtl.pad %invalid_si1, 15 : (!firrtl.sint<1>) -> !firrtl.sint<15>
 //  firrtl.connect %o, %0 : !firrtl.sint<15>, !firrtl.sint<15>
-//  // _HECK:      %[[zero:.+]] = firrtl.constant 0 : !firrtl.sint<15>
-//  // _HECK-NEXT: firrtl.strictconnect %o, %[[zero]]
+//  // COM: CHECK:      %[[zero:.+]] = firrtl.constant 0 : !firrtl.sint<15>
+//  // COM: CHECK-NEXT: firrtl.strictconnect %o, %[[zero]]
 }
 
 // Issue mentioned in #2289
@@ -3317,6 +3358,15 @@ firrtl.module @Whens(in %clock: !firrtl.clock, in %a: !firrtl.uint<1>, in %reset
   } else {
     firrtl.printf %clock, %reset, "baz!"  : !firrtl.clock, !firrtl.uint<1>
   }
+}
+
+firrtl.module @Probes(in %clock: !firrtl.clock) {
+  // CHECK-NOT: firrtl.int.fpga_probe %clock, %zero_width : !firrtl.uint<0>
+  %zero_width = firrtl.wire : !firrtl.uint<0>
+  firrtl.int.fpga_probe %clock, %zero_width : !firrtl.uint<0>
+  // CHECK-NOT: firrtl.int.fpga_probe %clock, %empty_bundle : !firrtl.bundle<a: uint<0>>
+  %empty_bundle = firrtl.wire : !firrtl.bundle<a: uint<0>>
+  firrtl.int.fpga_probe %clock, %empty_bundle : !firrtl.bundle<a: uint<0>>
 }
 
 }

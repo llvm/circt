@@ -203,7 +203,7 @@ class MachineModuleBuilder(ModuleLikeBuilderBase):
 
     op = raw_fsm.HWInstanceOp(outputs=circt_mod.type.results,
                               inputs=inputs,
-                              sym_name=StringAttr.get(instance_name),
+                              name=StringAttr.get(instance_name),
                               machine=FlatSymbolRefAttr.get(
                                   StringAttr(
                                       circt_mod.attributes["sym_name"]).value),

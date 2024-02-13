@@ -62,6 +62,7 @@ def InstanceOp : HardwareDeclOp<"instance", [
                        APIntAttr:$portDirections, StrArrayAttr:$portNames,
                        AnnotationArrayAttr:$annotations,
                        PortAnnotationsAttr:$portAnnotations,
+                       LayerArrayAttr:$layers,
                        UnitAttr:$lowerToBind,
                        OptionalAttr<InnerSymAttr>:$inner_sym);
 
@@ -78,6 +79,7 @@ def InstanceOp : HardwareDeclOp<"instance", [
                    "::mlir::ArrayRef<Attribute>":$portNames,
                    CArg<"ArrayRef<Attribute>", "{}">:$annotations,
                    CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
+                   CArg<"::mlir::ArrayRef<Attribute>", "{}">:$layers,
                    CArg<"bool","false">:$lowerToBind,
                    CArg<"StringAttr", "StringAttr()">:$innerSym)>,
     OpBuilder<(ins "::mlir::TypeRange":$resultTypes,
@@ -88,6 +90,7 @@ def InstanceOp : HardwareDeclOp<"instance", [
                    "::mlir::ArrayRef<Attribute>":$portNames,
                    "ArrayRef<Attribute>":$annotations,
                    "ArrayRef<Attribute>":$portAnnotations,
+                   "::mlir::ArrayRef<Attribute>":$layers,
                    "bool":$lowerToBind,
                    "hw::InnerSymAttr":$innerSym)>,
 
@@ -106,9 +109,9 @@ def InstanceOp : HardwareDeclOp<"instance", [
                    "mlir::StringRef":$name,
                    CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
                    CArg<"ArrayRef<Attribute>", "{}">:$annotations,
+                   CArg<"ArrayRef<Attribute>", "{}">:$layers,
                    CArg<"bool","false">:$lowerToBind,
                    CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym)>
-
   ];
 
   let extraClassDeclaration = [{
@@ -159,6 +162,8 @@ def InstanceOp : HardwareDeclOp<"instance", [
     //===------------------------------------------------------------------===//
     SmallVector<::circt::hw::PortInfo> getPortList();
   }];
+
+  let hasVerifier = true;
 }
 
 def InstanceChoiceOp : HardwareDeclOp<"instance_choice", [
@@ -186,6 +191,7 @@ def InstanceChoiceOp : HardwareDeclOp<"instance_choice", [
                        APIntAttr:$portDirections, StrArrayAttr:$portNames,
                        AnnotationArrayAttr:$annotations,
                        PortAnnotationsAttr:$portAnnotations,
+                       LayerArrayAttr:$layers,
                        OptionalAttr<InnerSymAttr>:$inner_sym);
 
   let results = (outs Variadic<AnyType>:$results);
@@ -572,7 +578,10 @@ def RegResetOp : HardwareDeclOp<"regreset", [Forceable]> {
   let hasVerifier = 1;
 }
 
-def WireOp : HardwareDeclOp<"wire", [Forceable]> {
+def WireOp : HardwareDeclOp<"wire", [
+    Forceable,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>
+]> {
   let summary = "Define a new wire";
   let description = [{
     Declare a new wire:

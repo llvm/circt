@@ -1516,12 +1516,14 @@ OpFoldResult ShrPrimOp::fold(FoldAdaptor adaptor) {
   auto input = this->getInput();
   IntType inputType = input.getType();
   int shiftAmount = getAmount();
+  auto inputWidth = inputType.getWidthOrSentinel();
 
   // shr(x, 0) -> x
-  if (shiftAmount == 0)
+  // Once the shr width changes, do this: shiftAmount == 0 &&
+  // (!inputType.isSigned() || inputWidth > 0)
+  if (shiftAmount == 0 && inputWidth > 0)
     return input;
 
-  auto inputWidth = inputType.getWidthOrSentinel();
   if (inputWidth == -1)
     return {};
   if (inputWidth == 0)
@@ -3288,4 +3290,35 @@ OpFoldResult HasBeenResetIntrinsicOp::fold(FoldAdaptor adaptor) {
     return getIntZerosAttr(UIntType::get(getContext(), 1));
 
   return {};
+}
+
+//===----------------------------------------------------------------------===//
+// FPGAProbeIntrinsicOp
+//===----------------------------------------------------------------------===//
+
+static bool isTypeEmpty(FIRRTLType type) {
+  return FIRRTLTypeSwitch<FIRRTLType, bool>(type)
+      .Case<FVectorType>(
+          [&](auto ty) -> bool { return isTypeEmpty(ty.getElementType()); })
+      .Case<BundleType>([&](auto ty) -> bool {
+        for (auto elem : ty.getElements())
+          if (!isTypeEmpty(elem.type))
+            return false;
+        return true;
+      })
+      .Case<IntType>([&](auto ty) { return ty.getWidth() == 0; })
+      .Default([](auto) -> bool { return false; });
+}
+
+LogicalResult FPGAProbeIntrinsicOp::canonicalize(FPGAProbeIntrinsicOp op,
+                                                 PatternRewriter &rewriter) {
+  auto firrtlTy = type_dyn_cast<FIRRTLType>(op.getInput().getType());
+  if (!firrtlTy)
+    return failure();
+
+  if (!isTypeEmpty(firrtlTy))
+    return failure();
+
+  rewriter.eraseOp(op);
+  return success();
 }

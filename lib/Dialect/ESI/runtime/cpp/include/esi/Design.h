@@ -32,6 +32,7 @@
 
 #include "esi/Manifest.h"
 #include "esi/Ports.h"
+#include "esi/Services.h"
 
 #include <string>
 
@@ -40,7 +41,7 @@ namespace esi {
 class Instance;
 namespace services {
 class Service;
-}
+} // namespace services
 
 /// Represents either the top level or an instance of a hardware module.
 class HWModule {
@@ -48,7 +49,7 @@ protected:
   HWModule(std::optional<ModuleInfo> info,
            std::vector<std::unique_ptr<Instance>> children,
            std::vector<services::Service *> services,
-           std::vector<BundlePort> ports);
+           std::vector<std::unique_ptr<BundlePort>> &ports);
 
 public:
   virtual ~HWModule() = default;
@@ -65,7 +66,12 @@ public:
   /// Access the module's children by ID.
   const std::map<AppID, Instance *> &getChildren() const { return childIndex; }
   /// Get the module's ports in a deterministic order.
-  const std::vector<BundlePort> &getPortsOrdered() const { return ports; }
+  std::vector<std::reference_wrapper<BundlePort>> getPortsOrdered() const {
+    std::vector<std::reference_wrapper<BundlePort>> ret;
+    for (const auto &p : ports)
+      ret.push_back(*p);
+    return ret;
+  }
   /// Access the module's ports by ID.
   const std::map<AppID, const BundlePort &> &getPorts() const {
     return portIndex;
@@ -76,7 +82,7 @@ protected:
   const std::vector<std::unique_ptr<Instance>> children;
   const std::map<AppID, Instance *> childIndex;
   const std::vector<services::Service *> services;
-  const std::vector<BundlePort> ports;
+  const std::vector<std::unique_ptr<BundlePort>> ports;
   const std::map<AppID, const BundlePort &> portIndex;
 };
 
@@ -90,7 +96,7 @@ public:
   Instance(AppID id, std::optional<ModuleInfo> info,
            std::vector<std::unique_ptr<Instance>> children,
            std::vector<services::Service *> services,
-           std::vector<BundlePort> ports)
+           std::vector<std::unique_ptr<BundlePort>> &ports)
       : HWModule(info, std::move(children), services, ports), id(id) {}
 
   /// Get the instance's ID, which it will always have.

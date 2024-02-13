@@ -17,6 +17,8 @@
 #include "circt/Dialect/Arc/ArcInterfaces.h"
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/Arc/ArcPasses.h"
+#include "circt/Dialect/Arc/ModelInfo.h"
+#include "circt/Dialect/Arc/ModelInfoExport.h"
 #include "circt/Dialect/Seq/SeqPasses.h"
 #include "circt/InitAllDialects.h"
 #include "circt/InitAllPasses.h"
@@ -60,6 +62,7 @@
 using namespace llvm;
 using namespace mlir;
 using namespace circt;
+using namespace arc;
 
 //===----------------------------------------------------------------------===//
 // Command Line Arguments
@@ -190,13 +193,13 @@ static cl::opt<OutputFormat> outputFormat(
 // Main Tool Logic
 //===----------------------------------------------------------------------===//
 
-/// Populate a pass manager with the arc simulator pipeline for the given
-/// command line options.
-static void populatePipeline(PassManager &pm) {
-  auto untilReached = [](Until until) {
-    return until >= runUntilBefore || until > runUntilAfter;
-  };
+static bool untilReached(Until until) {
+  return until >= runUntilBefore || until > runUntilAfter;
+}
 
+/// Populate a pass manager with the arc simulator pipeline for the given
+/// command line options. This pipeline lowers modules to the Arc dialect.
+static void populateHwModuleToArcPipeline(PassManager &pm) {
   if (verbosePassExecutions)
     pm.addInstrumentation(
         std::make_unique<VerbosePassInstrumentation<mlir::ModuleOp>>(
@@ -301,13 +304,15 @@ static void populatePipeline(PassManager &pm) {
     return;
   pm.addPass(arc::createLowerArcsToFuncsPass());
   pm.nest<arc::ModelOp>().addPass(arc::createAllocateStatePass());
-  if (!stateFile.empty())
-    pm.addPass(arc::createPrintStateInfoPass(stateFile));
   pm.addPass(arc::createLowerClocksToFuncsPass()); // no CSE between state alloc
                                                    // and clock func lowering
   pm.addPass(createCSEPass());
   pm.addPass(arc::createArcCanonicalizerPass());
+}
 
+/// Populate a pass manager with the Arc to LLVM pipeline for the given
+/// command line options. This pipeline lowers modules to LLVM IR.
+static void populateArcToLLVMPipeline(PassManager &pm) {
   // Lower the arcs and update functions to LLVM.
   if (untilReached(UntilLLVMLowering))
     return;
@@ -328,17 +333,46 @@ static LogicalResult processBuffer(
   if (!module)
     return failure();
 
-  PassManager pm(&context);
-  pm.enableVerifier(verifyPasses);
-  pm.enableTiming(ts);
-  if (failed(applyPassManagerCLOptions(pm)))
+  // Lower HwModule to Arc model.
+  PassManager pmArc(&context);
+  pmArc.enableVerifier(verifyPasses);
+  pmArc.enableTiming(ts);
+  if (failed(applyPassManagerCLOptions(pmArc)))
     return failure();
-  populatePipeline(pm);
+  populateHwModuleToArcPipeline(pmArc);
+
+  if (failed(pmArc.run(module.get())))
+    return failure();
+
+  // Output state info as JSON if requested.
+  if (!stateFile.empty() && !untilReached(UntilStateLowering)) {
+    std::error_code ec;
+    llvm::ToolOutputFile outputFile(stateFile, ec,
+                                    llvm::sys::fs::OpenFlags::OF_None);
+    if (ec) {
+      llvm::errs() << "unable to open state file: " << ec.message() << '\n';
+      return failure();
+    }
+    if (failed(collectAndExportModelInfo(module.get(), outputFile.os()))) {
+      llvm::errs() << "failed to collect model info\n";
+      return failure();
+    }
+
+    outputFile.keep();
+  }
+
+  // Lower Arc model to LLVM IR.
+  PassManager pmLlvm(&context);
+  pmLlvm.enableVerifier(verifyPasses);
+  pmLlvm.enableTiming(ts);
+  if (failed(applyPassManagerCLOptions(pmLlvm)))
+    return failure();
+  populateArcToLLVMPipeline(pmLlvm);
 
   if (printDebugInfo && outputFormat == OutputLLVM)
-    pm.addPass(LLVM::createDIScopeForLLVMFuncOpPass());
+    pmLlvm.addPass(LLVM::createDIScopeForLLVMFuncOpPass());
 
-  if (failed(pm.run(module.get())))
+  if (failed(pmLlvm.run(module.get())))
     return failure();
 
   // Handle MLIR output.

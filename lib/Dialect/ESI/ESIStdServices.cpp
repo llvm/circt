@@ -29,13 +29,12 @@ static ServicePortInfo createReqResp(StringAttr sym, Twine name,
   auto *ctxt = reqType ? reqType.getContext() : respType.getContext();
   auto bundle = ChannelBundleType::get(
       ctxt,
-      {BundledChannel{StringAttr::get(ctxt, reqName), ChannelDirection::to,
+      {BundledChannel{StringAttr::get(ctxt, reqName), ChannelDirection::from,
                       ChannelType::get(ctxt, reqType)},
-       BundledChannel{StringAttr::get(ctxt, respName), ChannelDirection::from,
+       BundledChannel{StringAttr::get(ctxt, respName), ChannelDirection::to,
                       ChannelType::get(ctxt, respType)}},
       /*resettable=false*/ UnitAttr());
-  return {hw::InnerRefAttr::get(sym, StringAttr::get(ctxt, name)),
-          ServicePortInfo::Direction::toServer, bundle};
+  return {hw::InnerRefAttr::get(sym, StringAttr::get(ctxt, name)), bundle};
 }
 
 ServicePortInfo RandomAccessMemoryDeclOp::writePortInfo() {
@@ -70,7 +69,6 @@ void FuncServiceDeclOp::getPortList(SmallVectorImpl<ServicePortInfo> &ports) {
   auto *ctxt = getContext();
   ports.push_back(ServicePortInfo{
       hw::InnerRefAttr::get(getSymNameAttr(), StringAttr::get(ctxt, "call")),
-      ServicePortInfo::Direction::toClient,
       ChannelBundleType::get(
           ctxt,
           {BundledChannel{StringAttr::get(ctxt, "arg"), ChannelDirection::to,
@@ -86,7 +84,6 @@ void MMIOServiceDeclOp::getPortList(SmallVectorImpl<ServicePortInfo> &ports) {
   // Read only port.
   ports.push_back(ServicePortInfo{
       hw::InnerRefAttr::get(getSymNameAttr(), StringAttr::get(ctxt, "read")),
-      ServicePortInfo::Direction::toClient,
       ChannelBundleType::get(
           ctxt,
           {BundledChannel{StringAttr::get(ctxt, "offset"), ChannelDirection::to,
@@ -97,7 +94,6 @@ void MMIOServiceDeclOp::getPortList(SmallVectorImpl<ServicePortInfo> &ports) {
   // Write only port.
   ports.push_back(ServicePortInfo{
       hw::InnerRefAttr::get(getSymNameAttr(), StringAttr::get(ctxt, "write")),
-      ServicePortInfo::Direction::toClient,
       ChannelBundleType::get(
           ctxt,
           {BundledChannel{StringAttr::get(ctxt, "offset"), ChannelDirection::to,

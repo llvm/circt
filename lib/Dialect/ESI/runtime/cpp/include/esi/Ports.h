@@ -28,16 +28,16 @@ namespace esi {
 /// but used by higher level APIs which add types.
 class ChannelPort {
 public:
-  ChannelPort(const Type &type) : type(type) {}
+  ChannelPort(const Type *type) : type(type) {}
   virtual ~ChannelPort() = default;
 
   virtual void connect() {}
   virtual void disconnect() {}
 
-  const Type &getType() const { return type; }
+  const Type *getType() const { return type; }
 
 private:
-  const Type &type;
+  const Type *type;
 };
 
 /// A ChannelPort which sends data to the accelerator.
@@ -46,7 +46,7 @@ public:
   using ChannelPort::ChannelPort;
 
   /// A very basic write API. Will likely change for performance reasons.
-  virtual void write(const void *data, size_t size) = 0;
+  virtual void write(const MessageData &) = 0;
 };
 
 /// A ChannelPort which reads data from the accelerator.
@@ -54,10 +54,10 @@ class ReadChannelPort : public ChannelPort {
 public:
   using ChannelPort::ChannelPort;
 
-  /// Specify a buffer to read into and a maximum size to read. Returns the
-  /// number of bytes read, or -1 on error. Basic API, will likely change for
-  /// performance reasons.
-  virtual std::ptrdiff_t read(void *data, size_t maxSize) = 0;
+  /// Specify a buffer to read into. Non-blocking. Returns true if message
+  /// successfully recieved. Basic API, will likely change for performance
+  /// and functionality reasons.
+  virtual bool read(MessageData &) = 0;
 };
 
 /// Services provide connections to 'bundles' -- collections of named,
@@ -65,21 +65,15 @@ public:
 /// ChannelPorts.
 class BundlePort {
 public:
-  /// Direction of a bundle. This -- combined with the channel direction in the
-  /// bundle -- can be used to determine if a channel should be writing to or
-  /// reading from the accelerator.
-  enum Direction { ToServer, ToClient };
-
   /// Compute the direction of a channel given the bundle direction and the
   /// bundle port's direction.
-  static bool isWrite(BundleType::Direction bundleDir, Direction svcDir) {
-    if (svcDir == Direction::ToClient)
-      return bundleDir == BundleType::Direction::To;
-    return bundleDir == BundleType::Direction::From;
+  static bool isWrite(BundleType::Direction bundleDir) {
+    return bundleDir == BundleType::Direction::To;
   }
 
   /// Construct a port.
   BundlePort(AppID id, std::map<std::string, ChannelPort &> channels);
+  virtual ~BundlePort() = default;
 
   /// Get the ID of the port.
   AppID getID() const { return id; }
