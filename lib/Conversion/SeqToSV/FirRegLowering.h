@@ -17,373 +17,110 @@
 #include "circt/Support/LLVM.h"
 #include "circt/Support/Namespace.h"
 #include "circt/Support/SymCache.h"
-#include "llvm/ADT/DenseMapInfo.h"
-#include "llvm/ADT/DenseSet.h"
-#include "llvm/ADT/GraphTraits.h"
-#include "llvm/ADT/SCCIterator.h"
-#include <variant>
-
-namespace circt {
-namespace hw {
-namespace detail {
-
-struct SCCNode {
-  Operation *op;
-  llvm::function_ref<bool(Operation *)> filter;
-  unsigned index;
-  explicit SCCNode(Operation *o, llvm::function_ref<bool(Operation *)> f,
-                   unsigned index)
-      : op(o), filter(f), index(index) {}
-  bool operator==(const SCCNode &other) const {
-    return other.op == op && other.index == index;
-  }
-  bool operator!=(const SCCNode &other) const { return !(*this == other); }
-};
-
-// Port iterator is not being used currently, for the purpose of FirRegLowering,
-// only the FirReg are considered as roots for traversal.
-class PortIterator
-    : public llvm::iterator_facade_base<PortIterator, std::forward_iterator_tag,
-                                        SCCNode> {
-  HWModuleOp module;
-  unsigned numPorts;
-  SCCNode sccOp;
-
-public:
-  explicit PortIterator(SCCNode node, bool end = false)
-      : module(cast<HWModuleOp>(node.op)), numPorts(module.getNumPorts()),
-        sccOp(node.op, node.filter, end ? numPorts : 0) {}
-
-  bool operator==(const PortIterator &other) const {
-    return other.sccOp == this->sccOp;
-  }
-  bool operator!=(const PortIterator &other) const { return !(*this == other); }
-  SCCNode operator*() { return sccOp; }
-  PortIterator &operator++() {
-    assert(sccOp.index < numPorts);
-    ++sccOp.index;
-    return *this;
-  }
-  PortIterator operator++(int) {
-    PortIterator result(*this);
-    ++(*this);
-    return result;
-  }
-};
-
-class ModOpIterator
-    : public llvm::iterator_facade_base<ModOpIterator,
-                                        std::forward_iterator_tag, SCCNode> {
-  SCCNode sccOp;
-  HWModuleOp module;
-  Region::OpIterator modOpsEnd, modOpsIterator;
-
-public:
-  explicit ModOpIterator(SCCNode op, bool end = false)
-      : sccOp(op), module(cast<HWModuleOp>(sccOp.op)),
-        modOpsEnd(&module.getRegion(), true),
-        modOpsIterator(end ? modOpsEnd
-                           : module.getOps<seq::FirRegOp>().begin()) {}
-
-  bool operator==(const ModOpIterator &other) const {
-    return other.modOpsIterator == this->modOpsIterator;
-  }
-
-  bool operator!=(const ModOpIterator &other) const {
-    return !(*this == other);
-  }
-
-  SCCNode operator*() {
-    Operation &op = *modOpsIterator;
-    return SCCNode(&op, sccOp.filter, 0);
-  }
-
-  ModOpIterator &operator++() {
-    assert(modOpsIterator != modOpsEnd);
-    ++modOpsIterator;
-    return *this;
-  }
-
-  ModOpIterator operator++(int) {
-    ModOpIterator result(*this);
-    ++(*this);
-    return result;
-  }
-};
-
-class ModuleIterator
-    : public llvm::iterator_facade_base<ModuleIterator,
-                                        std::forward_iterator_tag, SCCNode> {
-  SCCNode sccOp;
-  PortIterator pIter, pIterEnd;
-  ModOpIterator opIter, opIterEnd;
-
-public:
-  explicit ModuleIterator(SCCNode op, bool end = false,
-                          bool ignorePorts = false)
-      : sccOp(op), pIter(op, end || ignorePorts), pIterEnd(op, true),
-        opIter(op, end || !ignorePorts), opIterEnd(op, true) {}
-
-  bool operator==(const ModuleIterator &other) const {
-    return other.pIter == this->pIter && other.opIter == this->opIter;
-  }
-
-  bool operator!=(const ModuleIterator &other) const {
-    return !(*this == other);
-  }
-
-  SCCNode operator*() {
-    if (pIter != pIterEnd)
-      return *pIter;
-    return *opIter;
-  }
-
-  ModuleIterator &operator++() {
-    if (pIter == pIterEnd)
-      ++opIter;
-    else
-      ++pIter;
-
-    return *this;
-  }
-
-  ModuleIterator operator++(int) {
-    ModuleIterator result(*this);
-    ++(*this);
-    return result;
-  }
-};
-
-class OpUseIterator
-    : public llvm::iterator_facade_base<OpUseIterator,
-                                        std::forward_iterator_tag, SCCNode> {
-  SCCNode sccOp;
-  mlir::Value::use_iterator iterator, itEnd;
-
-public:
-  explicit OpUseIterator(SCCNode op, bool end = false) : sccOp(op) {
-    iterator = itEnd = mlir::Value::use_iterator();
-    if (end || sccOp.op->getNumResults() == 0)
-      return;
-
-    iterator = sccOp.op->getResult(sccOp.index).use_begin();
-    getNextValid();
-  }
-
-  // NOLINTNEXTLINE(misc-no-recursion)
-  void getNextValid() {
-    if (iterator == itEnd) {
-      if (sccOp.index < sccOp.op->getNumResults() - 1)
-        ++sccOp.index;
-      else
-        return;
-      iterator = sccOp.op->getResult(sccOp.index).use_begin();
-    }
-    if (iterator != itEnd) {
-      Operation *nextOp = iterator.getUser();
-      if (sccOp.filter && sccOp.filter(nextOp)) {
-        ++iterator;
-        getNextValid();
-      }
-    }
-  }
-
-  bool operator==(const OpUseIterator &other) const {
-    return other.iterator == this->iterator;
-  }
-
-  bool operator!=(const OpUseIterator &other) const {
-    return !(*this == other);
-  }
-
-  SCCNode operator*() {
-    Operation *op = iterator.getUser();
-    return SCCNode(op, sccOp.filter, 0);
-  }
-
-  OpUseIterator &operator++() {
-    ++iterator;
-    getNextValid();
-
-    return *this;
-  }
-
-  OpUseIterator operator++(int) {
-    OpUseIterator result(*this);
-    ++(*this);
-    return result;
-  }
-};
-
-class SCCIterator
-    : public llvm::iterator_facade_base<SCCIterator, std::forward_iterator_tag,
-                                        SCCNode> {
-  SCCNode sccOp;
-
-  using IteratorType = std::variant<ModuleIterator, OpUseIterator>;
-  IteratorType iterator, itEnd;
-
-public:
-  explicit SCCIterator(SCCNode op, bool end = false)
-      : sccOp(op), iterator(init(end)), itEnd(init(true)) {}
-
-  IteratorType init(bool end = false) {
-    if (isa<HWModuleOp>(sccOp.op))
-      return ModuleIterator(sccOp, end, true);
-    return OpUseIterator(sccOp, end);
-  }
-
-  bool operator==(const SCCIterator &other) const {
-    return other.iterator == this->iterator;
-  }
-
-  bool operator!=(const SCCIterator &other) const { return !(*this == other); }
-
-  SCCNode operator*() {
-    switch (iterator.index()) {
-    case 0:
-      return *std::get<ModuleIterator>(iterator);
-    case 1:
-      return *std::get<OpUseIterator>(iterator);
-    default:
-      llvm_unreachable("invalid variant type");
-    }
-  }
-
-  SCCIterator &operator++() {
-    switch (iterator.index()) {
-    case 0:
-      return ++std::get<ModuleIterator>(iterator), *this;
-    case 1:
-      return ++std::get<OpUseIterator>(iterator), *this;
-    default:
-      llvm_unreachable("invalid variant type");
-    }
-  }
-
-  SCCIterator operator++(int) {
-    SCCIterator result(*this);
-    ++(*this);
-    return result;
-  }
-};
-} // namespace detail
-} // namespace hw
-} // namespace circt
-namespace llvm {
-template <>
-struct DenseMapInfo<circt::hw::detail::SCCNode> {
-  using Node = circt::hw::detail::SCCNode;
-
-  static Node getEmptyKey() {
-    return Node(DenseMapInfo<mlir::Operation *>::getEmptyKey(), nullptr, 0);
-  }
-
-  static Node getTombstoneKey() {
-    return Node(DenseMapInfo<mlir::Operation *>::getTombstoneKey(), nullptr, 0);
-  }
-
-  static unsigned getHashValue(const Node &node) {
-    return detail::combineHashValue(
-        DenseMapInfo<mlir::Operation *>::getHashValue(node.op), node.index);
-  }
-
-  static bool isEqual(const Node &lhs, const Node &rhs) { return lhs == rhs; }
-};
-} // namespace llvm
-
-template <>
-struct llvm::GraphTraits<circt::hw::detail::SCCNode> {
-  using NodeType = circt::hw::detail::SCCNode;
-  using NodeRef = NodeType;
-  using ChildIteratorType = circt::hw::detail::SCCIterator;
-
-  static NodeRef getEntryNode(NodeRef op) { return op; }
-
-  // NOLINTNEXTLINE(readability-identifier-naming)
-  static inline ChildIteratorType child_begin(NodeRef op) {
-    return circt::hw::detail::SCCIterator(op);
-  }
-
-  // NOLINTNEXTLINE(readability-identifier-naming)
-  static inline ChildIteratorType child_end(NodeRef op) {
-    return circt::hw::detail::SCCIterator(op, true);
-  }
-};
+#include "mlir/IR/Visitors.h"
+#include <mlir/IR/ValueRange.h>
+#include <stack>
+#include <unordered_set>
 
 namespace circt {
 
-// Construct the SCC that each FirRegOp belongs to.
-struct FirRegSCC {
-  using SccOpType = circt::hw::detail::SCCNode;
-  FirRegSCC(hw::HWModuleOp moduleOp,
-            llvm::function_ref<bool(Operation *)> f = nullptr) {
-    SccOpType sccOp(moduleOp, f, 0);
+using namespace hw;
+// This class computes the set of muxes that are reachable from an op.
+// The heuristic propagates the reachability only through the 3 ops, mux,
+// array_create and array_get. All other ops block the reachability.
+// This analysis is built lazily on every query.
+// The query: is a mux is reachable from a reg, results in a DFS traversal
+// of the IR rooted at the register. This traversal is completed and the result
+// is cached in a Map, for faster retrieval on any future query of any op in
+// this subgraph.
+class ReachableMuxes {
+public:
+  ReachableMuxes(HWModuleOp m) : module(m) {}
 
-    for (llvm::scc_iterator<SccOpType> i = llvm::scc_begin(sccOp),
-                                       e = llvm::scc_end(sccOp);
-         i != e; ++i) {
-      SmallVector<Operation *> sccRegs;
-      DenseSet<Operation *> sccOps;
-      for (auto node : *i) {
-        sccOps.insert(node.op);
-        if (isa<seq::FirRegOp>(node.op))
-          sccRegs.push_back(node.op);
-        opSccIdMap[node.op] = sccIdGen;
-      }
-      if (sccRegs.size() == 1) {
-        auto muxOps =
-            llvm::make_filter_range(sccOps, [&](Operation *op) -> bool {
-              return isa<comb::MuxOp>(op);
-            });
-        regToMuxSetMap[sccRegs[0]].insert(sccOps.begin(), sccOps.end());
-        continue;
-      }
-      for (auto *reg : sccRegs) {
-        getAllCombReachable(reg, sccOps);
-      }
-      ++sccIdGen;
-    }
-  };
-
-  bool getAllCombReachable(Operation *root, DenseSet<Operation *> sccOps) {
-    auto filter = [&](Operation *op) -> bool {
-      return (!sccOps.contains(op) || isa<seq::FirRegOp>(op));
-    };
-    SccOpType rootNode(root, filter, 0);
-    SmallVector<SccOpType> dfsQ;
-    llvm::SmallDenseSet<SccOpType> visitedSet;
-    dfsQ.push_back(rootNode);
-    while (!dfsQ.empty()) {
-      auto node = dfsQ.pop_back_val();
-      if (!visitedSet.insert(node).second)
-        continue;
-      if (isa<comb::MuxOp>(node.op))
-        regToMuxSetMap[root].insert(node.op);
-
-      for (hw::detail::OpUseIterator it(node), end(node, true); it != end;
-           ++it) {
-        SccOpType child = *it;
-        dfsQ.push_back(child);
-      }
-    }
-
-    return false;
+  bool isMuxReachableFrom(Operation *regOp, Operation *muxOp) {
+    return llvm::any_of(regOp->getResult(0).getUsers(), [&](Operation *user) {
+      if (opBlocksReachability(user))
+        return false;
+      buildReachabilityFrom(user);
+      return reachableMuxes[user].contains(muxOp);
+    });
   }
-
-  bool isInSameSCC(Operation *mux, Operation *reg) const {
-    auto regIt = regToMuxSetMap.find(reg);
-    if (regIt == regToMuxSetMap.end())
-      return false;
-    return regIt->second.find(mux) != regIt->second.end();
-  }
-
-  void erase(Operation *op) { opSccIdMap.erase(op); }
 
 private:
-  llvm::DenseMap<Operation *, size_t> opSccIdMap;
-  llvm::DenseMap<Operation *, llvm::SmallDenseSet<Operation *>> regToMuxSetMap;
-  unsigned sccIdGen = 0;
+  static inline bool opBlocksReachability(Operation *op) {
+    return (!isa<comb::MuxOp, ArrayGetOp, ArrayCreateOp>(op));
+  }
+  void buildReachabilityFrom(Operation *startNode) {
+    // This is a backward dataflow analysis.
+    // First build a graph rooted at the `startNode`. Every user of an operation
+    // that doesnot block the reachability is a child node. Then, the ops that
+    // are reachable from a node is computed as the union of the Reachability of
+    // all its child nodes.
+    // for all child in the Children(node)
+    // Reachability(node) = node + Union{Reachability(child)}
+    if (visited.find(startNode) != visited.end())
+      return;
+    // The op and its users information that needs to be tracked on the stack
+    // for an iterative DFS traversal.
+    struct OpUserInfo {
+      Operation *op;
+      const mlir::ResultRange::user_range userRange;
+      mlir::ResultRange::user_iterator userIter;
+
+      OpUserInfo(Operation *op)
+          : op(op), userRange(op->getUsers()), userIter(userRange.begin()) {}
+
+      // Increments the itertor to the next valid user op and returns false if
+      // the iterator reaches the end of the range.
+      auto getNextValid(mlir::ResultRange::user_iterator &iter) const {
+        for (; iter != userRange.end(); ++iter)
+          if (!opBlocksReachability(*iter))
+            return true;
+        return false;
+      }
+    };
+    // The stack to record enough information for an iterative post-order
+    // traversal.
+    std::stack<OpUserInfo> stk;
+
+    stk.emplace(startNode);
+
+    while (!stk.empty()) {
+      auto &info = stk.top();
+      Operation *currentNode = info.op;
+
+      // Node is being visited for the first time.
+      if (info.userIter == info.userRange.begin())
+        visited.insert(currentNode);
+      if (info.getNextValid(info.userIter)) {
+        Operation *child = *info.userIter;
+        ++info.userIter;
+        if (visited.find(child) == visited.end())
+          stk.emplace(child);
+
+      } else { // All children of the node have been visited
+        // Any op is reachable from itself.
+        reachableMuxes[currentNode].insert(currentNode);
+        auto userIterator = info.userRange.begin();
+        while (info.getNextValid(userIterator)) {
+          Operation *childOp = *userIterator;
+          reachableMuxes[currentNode].insert(childOp);
+          // Propagate the reachability backwards from m to currentNode.
+          auto iter = reachableMuxes.find(childOp);
+
+          if (iter != reachableMuxes.end())
+            reachableMuxes[currentNode].insert(iter->getSecond().begin(),
+                                               iter->getSecond().end());
+
+          ++userIterator;
+        }
+        stk.pop();
+      }
+    }
+  }
+  HWModuleOp module;
+  llvm::DenseMap<Operation *, llvm::SmallDenseSet<Operation *>> reachableMuxes;
+  std::unordered_set<Operation *> visited;
 };
 
 /// Lower FirRegOp to `sv.reg` and `sv.always`.
@@ -451,7 +188,7 @@ private:
 
   llvm::SmallDenseMap<APInt, hw::ConstantOp> constantCache;
   llvm::SmallDenseMap<std::pair<Value, unsigned>, Value> arrayIndexCache;
-  std::unique_ptr<FirRegSCC> scc;
+  std::unique_ptr<ReachableMuxes> reachableMuxes;
 
   TypeConverter &typeConverter;
   hw::HWModuleOp module;
