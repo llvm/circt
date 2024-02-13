@@ -290,16 +290,12 @@ hw.module private @InitReg1(in %clock: !seq.clock, in %reset: i1, in %io_d: i32,
   // COMMON-NEXT:  %5 = comb.add %3, %4 : i33
   // COMMON-NEXT:  %6 = comb.extract %5 from 1 : (i33) -> i32
   // COMMON-NEXT:  %7 = comb.mux bin %io_en, %io_d, %6 : i32
-  // COMMON-NEXT:  sv.always posedge %clock, posedge %reset  {
+  // COMMON-NEXT:  sv.always posedge %clock, posedge %reset {
   // COMMON-NEXT:    sv.if %reset {
   // COMMON-NEXT:      sv.passign %reg, %c0_i32 : i32
   // COMMON-NEXT:      sv.passign %reg3, %c1_i32 : i32
   // COMMON-NEXT:    } else {
-  // COMMON-NEXT:      sv.if %io_en {
-  // COMMON-NEXT:        sv.passign %reg, %io_d : i32
-  // COMMON-NEXT:      } else {
-  // COMMON-NEXT:        sv.passign %reg, %6 : i32
-  // COMMON-NEXT:      }
+  // COMMON-NEXT:      sv.passign %reg, %7 : i32
   // COMMON-NEXT:      sv.passign %reg3, %2 : i32
   // COMMON-NEXT:    }
   // COMMON-NEXT:  }

@@ -8,17 +8,10 @@
 
 #include "FirRegLowering.h"
 #include "circt/Dialect/Comb/CombOps.h"
-#include "circt/Dialect/HW/HWOps.h"
-#include "circt/Dialect/Seq/SeqOps.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/DenseSet.h"
-#include "llvm/ADT/SCCIterator.h"
-#include "llvm/ADT/STLExtras.h"
-#include "llvm/ADT/SmallVector.h"
-#include "llvm/Support/Casting.h"
 #include "llvm/Support/Debug.h"
-#include <stack>
 
 using namespace circt;
 using namespace hw;
@@ -26,112 +19,6 @@ using namespace seq;
 using llvm::MapVector;
 
 #define DEBUG_TYPE "lower-seq-firreg"
-
-class ReachableMuxes {
-  ReachableMuxes(HWModuleOp m) : module(m) {}
-  HWModuleOp module;
-  llvm::DenseMap<Operation *, llvm::SmallDenseSet<Operation *>> regToMuxSetMap;
-  llvm::DenseMap<Operation *, llvm::SmallDenseSet<Operation *>> reachableMuxes;
-  void getReachableMuxes(comb::MuxOp m, llvm::SmallDenseSet<comb::MuxOp> &set) {
-    llvm::DenseMap<comb::MuxOp, llvm::SmallDenseSet<comb::MuxOp>>
-        reachableMuxes;
-    for (auto *u : m->getUsers()) {
-      if (auto mux = dyn_cast<comb::MuxOp>(u)) {
-        llvm::SmallDenseSet<comb::MuxOp> muxSet;
-        getReachableMuxes(mux, muxSet);
-        set.insert(muxSet.begin(), muxSet.end());
-        reachableMuxes[mux] = muxSet;
-      }
-    }
-  }
-  void postOrderTraversal(Operation *startNode) {
-    std::stack<std::pair<Operation *, int>>
-        stk; // Pair of node and its current child index
-    std::unordered_set<Operation *> visited; // To keep track of visited nodes
-
-    stk.emplace(startNode,
-                -1); // Push start node with -1 to indicate it's not visited yet
-
-    while (!stk.empty()) {
-      Operation *currentNode = stk.top().first;
-      int &childIndex = stk.top().second;
-      SmallVector<Operation *> muxUsers(
-          llvm::make_filter_range(currentNode->getUsers(), [&](Operation *op) {
-            return isa<comb::MuxOp>(op);
-          }));
-
-      if (childIndex == -1) // Node is being visited for the first time
-        visited.insert(currentNode);
-      if ((unsigned)(childIndex + 1) < muxUsers.size()) {
-        auto *child = muxUsers[++childIndex];
-        if (visited.find(child) == visited.end())
-          stk.emplace(child, -1);
-
-      } else { // All children of the node have been visited
-        for (auto *m : muxUsers) {
-          reachableMuxes[currentNode].insert(m);
-          auto iter = reachableMuxes.find(m);
-          if (iter != reachableMuxes.end())
-            reachableMuxes[currentNode].insert(iter->getSecond().begin(),
-                                               iter->getSecond().end());
-        }
-        stk.pop();
-      }
-    }
-  }
-  void dfs() {
-    llvm::SmallDenseSet<comb::MuxOp> visitedSet;
-    for (auto rootMux : module.getOps<comb::MuxOp>()) {
-      if (!visitedSet.insert(rootMux).second)
-        continue;
-      SmallVector<comb::MuxOp> worklist({rootMux});
-      llvm::SmallDenseSet<comb::MuxOp> muxChain;
-      std::stack<comb::MuxOp> stack;
-      while (!worklist.empty()) {
-        auto op = worklist.pop_back_val();
-        stack.push(op);
-        auto result = op.getResult();
-        for (auto *user : result.getUsers()) {
-          if (auto mux = dyn_cast<comb::MuxOp>(user)) {
-            worklist.push_back(mux);
-            muxChain.insert(mux);
-            reachableMuxes[mux].insert(muxChain.begin(), muxChain.end());
-          }
-        }
-      }
-    }
-  }
-
-  // Reimplemented from SliceAnalysis to use a worklist rather than recursion
-  // and non-insert ordered set.
-  static void getForwardSliceSimple(
-      Operation *root, llvm::DenseSet<Operation *> &forwardSlice,
-      llvm::function_ref<bool(Operation *)> filter = nullptr) {
-    SmallVector<Operation *> worklist({root});
-
-    while (!worklist.empty()) {
-      Operation *op = worklist.pop_back_val();
-
-      if (!op)
-        continue;
-
-      if (filter && !filter(op))
-        continue;
-
-      for (Region &region : op->getRegions())
-        for (Block &block : region)
-          for (Operation &blockOp : block)
-            if (forwardSlice.insert(&blockOp).second)
-              worklist.push_back(&blockOp);
-      for (Value result : op->getResults())
-        for (Operation *userOp : result.getUsers())
-          if (forwardSlice.insert(userOp).second)
-            worklist.push_back(userOp);
-
-      forwardSlice.insert(op);
-    }
-  }
-};
 
 void FirRegLowering::addToIfBlock(OpBuilder &builder, Value cond,
                                   const std::function<void()> &trueSide,
@@ -160,9 +47,7 @@ FirRegLowering::FirRegLowering(TypeConverter &typeConverter,
       disableRegRandomization(disableRegRandomization),
       emitSeparateAlwaysBlocks(emitSeparateAlwaysBlocks) {
 
-  scc = std::make_unique<FirRegSCC>(module, [&](Operation *op) {
-    return isa<sv::RegOp, hw::InstanceOp>(op);
-  });
+  reachableMuxes = std::make_unique<ReachableMuxes>(module);
 }
 
 void FirRegLowering::lower() {
@@ -480,7 +365,8 @@ void FirRegLowering::createTree(OpBuilder &builder, Value reg, Value term,
     // If this is a two-state mux within the fanout from the register, we use
     // if/else structure for proper enable inference.
     auto mux = next.getDefiningOp<comb::MuxOp>();
-    if (mux && mux.getTwoState() && scc->isInSameSCC(mux, firReg)) {
+    if (mux && mux.getTwoState() &&
+        reachableMuxes->isMuxReachableFrom(firReg, mux)) {
       addToIfBlock(
           builder, mux.getCond(),
           [&]() { addToWorklist(reg, term, mux.getTrueValue()); },
@@ -543,7 +429,6 @@ void FirRegLowering::createTree(OpBuilder &builder, Value reg, Value term,
   while (!opsToDelete.empty()) {
     auto value = opsToDelete.pop_back_val();
     assert(value.use_empty());
-    scc->erase(value.getDefiningOp());
     value.getDefiningOp()->erase();
   }
 }
@@ -598,7 +483,6 @@ FirRegLowering::RegLowerInfo FirRegLowering::lower(FirRegOp reg) {
   }
 
   reg.replaceAllUsesWith(regVal.getResult());
-  scc->erase(reg);
   reg.erase();
 
   return svReg;
