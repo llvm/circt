@@ -77,11 +77,11 @@ struct transition{
   string from;
   string to;
   z3Fun guard;
-  mlir::Region *guard_reg;
   bool isGuard;
-  mlir::Region *action_reg;
   z3FunA action;
   bool isAction;
+  z3Fun output;
+  bool isOutput;
 };
 
 struct MyExprMap{
@@ -97,6 +97,11 @@ struct MyStateInvMap{
 struct MyStateInvMapFun{
   vector<mlir::StringRef> stateName;
   vector<func_decl> invFun;
+};
+
+struct MyStateInvMapOut{
+  vector<mlir::StringRef> stateName;
+  z3Fun output;
 };
 
 
