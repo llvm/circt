@@ -498,7 +498,7 @@ static bool isMovableDeclaration(Operation *op) {
 
   // If all operands (e.g. init value) are constant, it is safe to move
   return llvm::all_of(op->getOperands(), [](Value operand) -> bool {
-    auto defOp = operand.getDefiningOp();
+    auto *defOp = operand.getDefiningOp();
     return !!defOp && isConstantExpression(defOp);
   });
 }
