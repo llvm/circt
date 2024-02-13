@@ -467,9 +467,15 @@ static bool hoistNonSideEffectExpr(Operation *op) {
 
 /// Check whether an op is a declaration that can be moved.
 static bool isMovableDeclaration(Operation *op) {
-  return op->getNumResults() == 1 &&
-         op->getResult(0).getType().isa<InOutType, sv::InterfaceType>() &&
-         op->getNumOperands() == 0;
+  if (op->getNumResults() != 1 ||
+      !op->getResult(0).getType().isa<InOutType, sv::InterfaceType>())
+    return false;
+
+  // If all operands (e.g. init value) are constant, it is safe to move
+  return llvm::all_of(op->getOperands(), [](Value operand) -> bool {
+    auto defOp = operand.getDefiningOp();
+    return !!defOp && isConstantExpression(defOp);
+  });
 }
 
 //===----------------------------------------------------------------------===//

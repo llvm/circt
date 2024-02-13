@@ -292,3 +292,18 @@ module attributes {circt.loweringOptions = "disallowLocalVariables"} {
   }
   hw.hierpath @xmr [@Foo::@a]
 }
+
+
+// -----
+
+// CHECK-LABEL: @constantInitRegWithBackEdge
+hw.module @constantInitRegWithBackEdge() {
+  // CHECK: %reg = sv.reg init %false : !hw.inout<i1>
+  // CHECK-NEXT: %false = hw.constant false
+  // CHECK-NEXT: %[[VAL_0:.*]] = sv.read_inout %reg : !hw.inout<i1>
+  // CHECK-NEXT: %[[VAL_1:.*]] = comb.or %false, %[[VAL_0]] : i1
+  %false = hw.constant false
+  %0 = comb.or %false, %1 : i1
+  %reg = sv.reg init %false : !hw.inout<i1>
+  %1 = sv.read_inout %reg : !hw.inout<i1>
+}
