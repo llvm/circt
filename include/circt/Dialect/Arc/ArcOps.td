@@ -576,7 +576,7 @@ def SimInstantiate : ArcOp<"sim.instantiate"> {
     TODO
   }];
   let results = (outs SimModelInstance:$instance);
-  let assemblyFormat = [{ attr-dict `:` type($instance) }];
+  let assemblyFormat = [{ attr-dict `:` qualified(type($instance)) }];
 }
 
 def SimSetInput : ArcOp<"sim.set_input"> {
@@ -585,7 +585,7 @@ def SimSetInput : ArcOp<"sim.set_input"> {
     TODO
   }];
   let arguments = (ins SimModelInstance:$instance, StrAttr:$input, AnyInteger:$value);
-  let assemblyFormat = [{ $instance `,` $input `=` $value attr-dict `:` type($value) `,` type($instance) }];
+  let assemblyFormat = [{ $instance `,` $input `=` $value attr-dict `:` type($value) `,` qualified(type($instance)) }];
 }
 
 def SimGetPort : ArcOp<"sim.get_port"> {
@@ -595,7 +595,7 @@ def SimGetPort : ArcOp<"sim.get_port"> {
   }];
   let arguments = (ins SimModelInstance:$instance, StrAttr:$port);
   let results = (outs AnyInteger:$value);
-  let assemblyFormat = [{ $instance `,` $port attr-dict `:` type($value) `,` type($instance) }];
+  let assemblyFormat = [{ $instance `,` $port attr-dict `:` type($value) `,` qualified(type($instance)) }];
 }
 
 def SimStep : ArcOp<"sim.step"> {
@@ -604,7 +604,16 @@ def SimStep : ArcOp<"sim.step"> {
     TODO
   }];
   let arguments = (ins SimModelInstance:$instance);
-  let assemblyFormat = [{ $instance attr-dict `:` type($instance) }];
+  let assemblyFormat = [{ $instance attr-dict `:` qualified(type($instance)) }];
+}
+
+def SimEmitValue : ArcOp<"sim.emit"> {
+  let summary = "Sends a value to the simulation driver";
+  let description = [{
+    TODO
+  }];
+  let arguments = (ins StrAttr:$valueName, AnyInteger:$value);
+  let assemblyFormat = [{ $valueName `,` $value attr-dict `:` type($value) }];
 }
 
 //===----------------------------------------------------------------------===//

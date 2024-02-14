@@ -50,9 +50,9 @@ def StorageType : ArcTypeDef<"Storage"> {
 }
 
 def SimModelInstance : ArcTypeDef<"SimModelInstance"> {
-  let mnemonic = "sim.model";
+  let mnemonic = "sim.instance";
   let parameters = (ins "mlir::StringAttr":$model);
-  let assemblyFormat = "$model";
+  let assemblyFormat = "`<` $model `>`";
 }
 
 #endif // CIRCT_DIALECT_ARC_ARCTYPES_TD

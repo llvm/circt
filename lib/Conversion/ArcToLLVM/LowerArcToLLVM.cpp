@@ -440,6 +440,88 @@ struct SimStepLowering : public OpConversionPattern<arc::SimStep> {
   ArrayRef<ModelInfo> modelInfo;
 };
 
+/// Lowers SimEmitLowering to a printf call. This pattern will mutate the global
+/// module.
+struct SimEmitLowering : public OpConversionPattern<arc::SimEmitValue> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(arc::SimEmitValue op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    auto valueType = adaptor.getValue().getType().dyn_cast<IntegerType>();
+    if (!valueType)
+      return failure();
+
+    // Surprisingly, pointer printing is the only somewhat portable way to print
+    // in MLIR. This is because libc accepts arguments for which the size
+    // depends on the ABI, which is not realistically accessible outside of
+    // clang. The only part of the ABI that is predictable enough is pointer
+    // size.
+    llvm::TypeSize ptrSize = DataLayout::closest(op).getTypeSizeInBits(
+        LLVM::LLVMPointerType::get(getContext()));
+
+    uint64_t ptrSizeVal = ptrSize.getFixedValue();
+
+    if (static_cast<uint64_t>(valueType.getWidth()) > ptrSizeVal)
+      return op.emitError()
+             << "printing integers of width " << valueType.getWidth()
+             << " is not supported for this target triple (maximum is "
+             << ptrSizeVal << ")";
+
+    Location loc = op.getLoc();
+
+    Value toPrint = rewriter.create<LLVM::IntToPtrOp>(
+        loc, LLVM::LLVMPointerType::get(getContext()), adaptor.getValue());
+
+    ModuleOp moduleOp = op->getParentOfType<ModuleOp>();
+    if (!moduleOp)
+      return failure();
+
+    // Insert printf declaration if not available.
+    auto printfType =
+        LLVM::LLVMFunctionType::get(LLVM::LLVMVoidType::get(getContext()),
+                                    LLVM::LLVMPointerType::get(getContext()),
+                                    /*isVarArg=*/true);
+    if (!moduleOp.lookupSymbol<LLVM::LLVMFuncOp>("printf")) {
+      ConversionPatternRewriter::InsertionGuard insertGuard(rewriter);
+      rewriter.setInsertionPointToStart(moduleOp.getBody());
+      rewriter.create<LLVM::LLVMFuncOp>(moduleOp.getLoc(), "printf",
+                                        printfType);
+    }
+
+    FlatSymbolRefAttr printfSymbol =
+        FlatSymbolRefAttr::get(getContext(), "printf");
+
+    // Insert the format string if not already available.
+    SmallString<16> formatStrName{"_arc_sim_emit_"};
+    formatStrName.append(adaptor.getValueName());
+    LLVM::GlobalOp formatStrGlobal;
+    if (!(formatStrGlobal =
+              moduleOp.lookupSymbol<LLVM::GlobalOp>(formatStrName))) {
+      ConversionPatternRewriter::InsertionGuard insertGuard(rewriter);
+
+      SmallString<16> formatStr = adaptor.getValueName();
+      formatStr.append(" = %0.8p\n");
+      SmallVector<char> formatStrVec{formatStr.begin(), formatStr.end()};
+      formatStrVec.push_back(0);
+
+      rewriter.setInsertionPointToStart(moduleOp.getBody());
+      auto globalType =
+          LLVM::LLVMArrayType::get(rewriter.getI8Type(), formatStrVec.size());
+      formatStrGlobal = rewriter.create<LLVM::GlobalOp>(
+          loc, globalType, /*isConstant=*/true, LLVM::Linkage::Internal,
+          /*name=*/formatStrName, rewriter.getStringAttr(formatStrVec),
+          /*alignment=*/0);
+    }
+
+    Value formatStrGlobalPtr =
+        rewriter.create<LLVM::AddressOfOp>(loc, formatStrGlobal);
+    rewriter.replaceOpWithNewOp<LLVM::CallOp>(
+        op, printfType, printfSymbol, ValueRange{formatStrGlobalPtr, toPrint});
+
+    return success();
+  }
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -517,6 +599,7 @@ void LowerArcToLLVMPass::runOnOperation() {
     ModelOpLowering,
     ReplaceOpWithInputPattern<seq::ToClockOp>,
     ReplaceOpWithInputPattern<seq::FromClockOp>,
+    SimEmitLowering,
     StateReadOpLowering,
     StateWriteOpLowering,
     StorageGetOpLowering,
