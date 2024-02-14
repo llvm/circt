@@ -178,6 +178,10 @@ class PortProxyBase:
     self._builder = None
 
 
+class PropertyWithType(property):
+  type: Optional[Type] = None
+
+
 class ModuleLikeBuilderBase(_PyProxy):
   """`ModuleLikeBuilder`s are responsible for preparing `Module` and other
   module-like subclasses for use. They are responsible for scanning the
@@ -298,7 +302,9 @@ class ModuleLikeBuilderBase(_PyProxy):
       def fget(self):
         raise PortError("Cannot access signal via instance input")
 
-      setattr(self.modcls, name, property(fget=fget))
+      p = PropertyWithType(fget=fget)
+      p.type = port_type
+      setattr(self.modcls, name, p)
 
     named_outputs = {}
     for idx, (name, port_type) in enumerate(self.outputs):
@@ -306,8 +312,10 @@ class ModuleLikeBuilderBase(_PyProxy):
       def fget(self, idx=idx):
         return _FromCirctValue(self.inst.operation.results[idx])
 
+      p = property(fget=fget)
       named_outputs[name] = fget
-      setattr(self.modcls, name, property(fget=fget))
+      setattr(self.modcls, name, p)
+
     setattr(self.modcls,
             "outputs",
             lambda self, outputs=named_outputs:

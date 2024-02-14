@@ -2,6 +2,7 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+from numpy import isin
 from .common import (AppID, Input, Output, _PyProxy, PortError)
 from .constructs import Wire
 from .module import Generator, Module, ModuleLikeBuilderBase, PortProxyBase
@@ -465,25 +466,18 @@ class _FuncService(ServiceDecl):
   def __init__(self):
     super().__init__(self.__class__)
 
-  def expose(self, func_bundle: BundleSignal, name: AppID):
+  def get(self, name: AppID, func_type: Bundle) -> BundleSignal:
     """Expose a bundle to the host as a function. Bundle _must_ have 'arg' and
     'result' channels going FROM the server and TO the server, respectively."""
     self._materialize_service_decl()
 
-    func_bundle_type = func_bundle.type
-    bundle_type = Bundle([
-        BundledChannel("arg", ChannelDirection.TO, func_bundle.type.arg),
-        BundledChannel("result", ChannelDirection.FROM, func_bundle.type.result)
-    ])
     func_call = _FromCirctValue(
         raw_esi.RequestConnectionOp(
-            bundle_type._type,
+            func_type._type,
             hw.InnerRefAttr.get(self.symbol, ir.StringAttr.get("call")),
-            name._appid).result)
-    arg_wire = Wire(func_bundle.type.arg)
-    result = func_bundle.unpack(arg=arg_wire)["result"]
-    arg = func_call.unpack(result=result)["arg"]
-    arg_wire.assign(arg)
+            name._appid).toClient)
+    assert isinstance(func_call, BundleSignal)
+    return func_call
 
   def get_call_chans(self, name: AppID, arg_type: Type,
                      result: Signal) -> ChannelSignal:

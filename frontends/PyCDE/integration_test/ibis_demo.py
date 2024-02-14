@@ -6,6 +6,7 @@
 # Ibis does not currently simulate with Verilator.
 # RUN: esi-cosim.py --sim questa -- %PYTHON% %S/test_software/ibis_foo.py cosim env
 
+from symbol import func_type
 import pycde
 from pycde import Input, Module, generator, esi
 from pycde.module import Metadata
@@ -53,9 +54,14 @@ class IbisTestSystem(Module):
 
   @generator
   def build(ports):
-    top = DemoTop(clk=ports.clk, rst=ports.rst, appid=esi.AppID("empty"))
-    esi.FuncService.expose(top.add, esi.AppID("add"))
-    esi.FuncService.expose(top.compute_crc, esi.AppID("crc"))
+    add = esi.FuncService.get(esi.AppID("add"), func_type=DemoTop.add.type)
+    crc = esi.FuncService.get(esi.AppID("crc"),
+                              func_type=DemoTop.compute_crc.type)
+    DemoTop(clk=ports.clk,
+            rst=ports.rst,
+            appid=esi.AppID("demo"),
+            add=add,
+            compute_crc=crc)
 
 
 if __name__ == "__main__":

@@ -27,21 +27,18 @@ class IbisMethod:
                return_type: Optional[Type]):
     self.name = name
     self.arg_types = arg_types
+    self.arg_type = StructType(self.arg_types)
     if return_type is None:
       return_type = Bits(0)
     self.return_type = return_type
-
-  def get_esi_bundle_type(self) -> Bundle:
-    args = StructType(self.arg_types)
-    return Bundle([
-        BundledChannel("arg", ChannelDirection.FROM, args),
-        BundledChannel("result", ChannelDirection.TO, self.return_type)
+    self.func_type = Bundle([
+        BundledChannel("arg", ChannelDirection.TO, self.arg_type),
+        BundledChannel("result", ChannelDirection.FROM, self.return_type)
     ])
 
 
 def method(func: Callable):
   """Decorator to mark a function as an Ibis function."""
-
   type_hints = get_type_hints(func)
   arg_types: Dict[str, Type] = {}
   return_type: Optional[Type] = None
@@ -114,10 +111,10 @@ class IbisClassBuilder(ModuleBuilder):
         ("clk", ClockType()),
         ("rst", Bits(1)),
     ]
-    self.outputs = [(m.name, m.get_esi_bundle_type())
-                    for m in self.methods
-                    if m.name is not None]
-    # self.generators = [lambda ports, self=self: self.generate(ports)]
+    self.inputs.extend([
+        (m.name, m.func_type) for m in self.methods if m.name is not None
+    ])
+    self.outputs = []
     self.generators = {"default": generator(self.generate_wrapper)}
 
   def create_op(self, sys, symbol):
@@ -185,15 +182,13 @@ class IbisClassBuilder(ModuleBuilder):
       ibis_inputs[mname + "rden_in"].assign(rdy & ~empty_out)
 
       # Pack the bundle and set it on my output port.
-      bundle_type = m.get_esi_bundle_type()
-      bundle, [(_, arg_chan)] = bundle_type.pack(result=return_chan)
-      setattr(ports, m.name, bundle)
+      arg_chan = getattr(ports, m.name).unpack(result=return_chan)["arg"]
 
       # Call side is ready/valid.
       args_rdy = inst_outputs[mname + "rdy_out"]
       args, args_valid = arg_chan.unwrap(args_rdy)
       ibis_inputs[mname + "valid_in"].assign(args_valid)
-      for name, type in m.arg_types.items():
+      for name, _ in m.arg_types.items():
         input_wire = ibis_inputs[mname + name + "_in"]
         input_wire.assign(args[name].bitcast(input_wire.type))
 
