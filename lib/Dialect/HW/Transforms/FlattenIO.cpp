@@ -299,13 +299,11 @@ static void updateModulePortNames(ModTy op, hw::ModuleType oldModType,
   op.setAllPortNames(newNames);
 }
 
-static llvm::SmallVector<Attribute>
+static llvm::SmallVector<Location>
 updateLocAttribute(DenseMap<unsigned, hw::StructType> &structMap,
-                   ArrayAttr oldLocs) {
-  llvm::SmallVector<Attribute> newLocs;
-  if (!oldLocs)
-    return newLocs;
-  for (auto [i, oldLoc] : llvm::enumerate(oldLocs.getAsRange<Location>())) {
+                   SmallVectorImpl<Location> &oldLocs) {
+  llvm::SmallVector<Location> newLocs;
+  for (auto [i, oldLoc] : llvm::enumerate(oldLocs)) {
     // Was this arg/res index a struct?
     auto it = structMap.find(i);
     if (it == structMap.end()) {
@@ -400,8 +398,8 @@ static LogicalResult flattenOpsOfType(ModuleOp module, bool recursive,
              });
     });
 
-    DenseMap<Operation *, ArrayAttr> oldArgNames, oldResNames, oldArgLocs,
-        oldResLocs;
+    DenseMap<Operation *, ArrayAttr> oldArgNames, oldResNames;
+    DenseMap<Operation *, SmallVector<Location>> oldArgLocs, oldResLocs;
     DenseMap<Operation *, hw::ModuleType> oldModTypes;
 
     for (auto op : module.getOps<T>()) {
@@ -409,8 +407,8 @@ static LogicalResult flattenOpsOfType(ModuleOp module, bool recursive,
       oldArgNames[op] = ArrayAttr::get(module.getContext(), op.getInputNames());
       oldResNames[op] =
           ArrayAttr::get(module.getContext(), op.getOutputNames());
-      oldArgLocs[op] = op.getInputLocsAttr();
-      oldResLocs[op] = op.getOutputLocsAttr();
+      oldArgLocs[op] = op.getInputLocs();
+      oldResLocs[op] = op.getOutputLocs();
     }
 
     // Signature conversion and legalization patterns.
@@ -426,7 +424,7 @@ static LogicalResult flattenOpsOfType(ModuleOp module, bool recursive,
       auto newArgLocs = updateLocAttribute(ioInfo.argStructs, oldArgLocs[op]);
       auto newResLocs = updateLocAttribute(ioInfo.resStructs, oldResLocs[op]);
       newArgLocs.append(newResLocs.begin(), newResLocs.end());
-      op.setPortLocsAttr(ArrayAttr::get(op.getContext(), newArgLocs));
+      op.setAllPortLocs(newArgLocs);
       updateBlockLocations(op, ioInfo.argStructs);
     }
 
@@ -445,8 +443,8 @@ static LogicalResult flattenOpsOfType(ModuleOp module, bool recursive,
             ArrayAttr::get(module.getContext(), targetModule.getInputNames());
         oldResNames[targetModule] =
             ArrayAttr::get(module.getContext(), targetModule.getOutputNames());
-        oldArgLocs[targetModule] = targetModule.getInputLocsAttr();
-        oldResLocs[targetModule] = targetModule.getOutputLocsAttr();
+        oldArgLocs[targetModule] = targetModule.getInputLocs();
+        oldResLocs[targetModule] = targetModule.getOutputLocs();
       } else
         ioInfo = ioInfoMap[targetModule];
 

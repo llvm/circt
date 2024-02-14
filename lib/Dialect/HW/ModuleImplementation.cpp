@@ -392,18 +392,18 @@ static const char *directionAsString(ModulePort::Direction dir) {
   return "unknown";
 }
 
-void module_like_impl::printModuleSignatureNew(OpAsmPrinter &p, Operation *op) {
+void module_like_impl::printModuleSignatureNew(OpAsmPrinter &p,
+                                               HWModuleLike op) {
 
-  Region &body = op->getRegion(0);
+  Region &body = op.getModuleBody();
   bool isExternal = body.empty();
   SmallString<32> resultNameStr;
   mlir::OpPrintingFlags flags;
   unsigned curArg = 0;
 
-  auto typeAttr = op->getAttrOfType<TypeAttr>("module_type");
-  auto modType = cast<ModuleType>(typeAttr.getValue());
-  auto portAttrs = op->getAttrOfType<ArrayAttr>("per_port_attrs");
-  auto locAttrs = op->getAttrOfType<ArrayAttr>("port_locs");
+  auto modType = op.getHWModuleType();
+  auto portAttrs = op.getAllPortAttrs();
+  auto locAttrs = op.getAllPortLocs();
 
   p << '(';
   for (auto [i, port] : llvm::enumerate(modType.getPorts())) {
@@ -433,17 +433,18 @@ void module_like_impl::printModuleSignatureNew(OpAsmPrinter &p, Operation *op) {
     }
     p << " : ";
     p.printType(port.type);
-    if (portAttrs && !portAttrs.empty())
+    if (!portAttrs.empty())
       if (auto attr = dyn_cast<DictionaryAttr>(portAttrs[i]))
         p.printOptionalAttrDict(attr.getValue());
 
     // TODO: `printOptionalLocationSpecifier` will emit aliases for locations,
     // even if they are not printed.  This will have to be fixed upstream.  For
     // now, use what was specified on the command line.
-    if (flags.shouldPrintDebugInfo() && locAttrs)
-      if (auto loc = locAttrs[i])
-        if (!isa<UnknownLoc>(loc))
-          p.printOptionalLocationSpecifier(cast<Location>(loc));
+    if (flags.shouldPrintDebugInfo()) {
+      auto loc = locAttrs[i];
+      if (!isa<UnknownLoc>(loc))
+        p.printOptionalLocationSpecifier(cast<Location>(loc));
+    }
   }
 
   p << ')';
