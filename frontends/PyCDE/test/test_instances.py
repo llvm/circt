@@ -59,9 +59,9 @@ class Test(Module):
 t = pycde.System([Test], name="Test", output_directory=sys.argv[1])
 t.generate(["construct"])
 t.print()
-# CHECK: <pycde.Module: Test inputs: [('clk', Clk)] outputs: []>
+# CHECK: <pycde.Module: Test inputs: [clock clk] outputs: []>
 Test.print()
-# CHECK: <pycde.Module: UnParameterized inputs: [('clk', Clk), ('x', Bits<1>)] outputs: [('y', Bits<1>)]>
+# CHECK: <pycde.Module: UnParameterized inputs: [clock clk, input 'x': Bits<1>] outputs: [output 'y': Bits<1>]>
 UnParameterized.print()
 
 print(PhysLocation(PrimitiveType.DSP, 39, 25))
