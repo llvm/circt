@@ -456,7 +456,10 @@ void populateST(Operation &mod, context &c, MyStateInvMap* stateInvMap, MyStateI
 }
 
 expr nestedForall(vector<expr> solver_vars, expr body, int i){
-  if(i==solver_vars.size()){
+
+  llvm::outs()<<"current body, iter "<<i<<" "<<body<<"\n";
+
+  if(i==solver_vars.size()-1){ // last element (time) is nested separately as a special case
     return body;
   } else {
     return forall(solver_vars[i], nestedForall(solver_vars, body, i+1));
@@ -495,6 +498,12 @@ void populateInvInput(MyExprMap *varMap, context &c, vector<expr> *solverVars, v
     invInput->push_back(invIn);
   }
 
+  expr time = c.int_const("time");
+  z3::sort timeInv = c.int_sort();
+  
+
+  solverVars->push_back(time);
+  invInput->push_back(timeInv);
 
 }
 
@@ -508,6 +517,7 @@ void parse_fsm(string input_file){
     fsm::FSMDialect,
     hw::HWDialect
   >();
+
 
 
   MyExprMap *exprMap = new MyExprMap();
@@ -539,13 +549,8 @@ void parse_fsm(string input_file){
     llvm::outs()<<"initial state: "<<initialState<<"\n";
   }
 
-  int numArgs = populateArgs(mod, vecVal, varMap, c);
 
-  llvm::outs()<<"expr map after populateArgs:\n";
-  for(int i=0;i< exprMap->values.size();i++){
-    llvm::outs()<<"value "<<exprMap->values[i]<<"\n";
-    llvm::outs()<<"expr "<<exprMap->exprs[i].to_string()<<"\n";
-  }
+  int numArgs = populateArgs(mod, vecVal, varMap, c);
 
   if(VERBOSE){
     llvm::outs()<<"number of arguments: "<<numArgs<<"\n";
@@ -555,12 +560,6 @@ void parse_fsm(string input_file){
   }
 
   populateVars(mod, vecVal, varMap, c, numArgs);
-
-  llvm::outs()<<"expr map after populateVars:\n";
-  for(int i=0;i< exprMap->values.size();i++){
-    llvm::outs()<<"value "<<exprMap->values[i]<<"\n";
-    llvm::outs()<<"expr "<<exprMap->exprs[i].to_string()<<"\n";
-  }
 
   if(VERBOSE){
     llvm::outs()<<"number of variables + args: "<<vecVal->size()<<"\n";
@@ -573,13 +572,6 @@ void parse_fsm(string input_file){
 
 
   populateST(mod, c, stateInvMap, stateInvMapOut, transitions, vecVal);
-
-  llvm::outs()<<"expr map after populateST:\n";
-  for(int i=0;i< exprMap->values.size();i++){
-    llvm::outs()<<"value "<<exprMap->values[i]<<"\n";
-    llvm::outs()<<"expr "<<exprMap->exprs[i].to_string()<<"\n";
-  }
-
 
 
 
@@ -595,14 +587,17 @@ void parse_fsm(string input_file){
 
   populateStateInvMap(stateInvMap, c, invInput, stateInvMap_fun);
 
-
   for (auto v: varMap->exprs){
-    if(v.to_string().find("arg") == std::string::npos){
+    if(v.to_string().find("arg") == std::string::npos && solverVars->size() > 1){
       int init_value = stoi(v.to_string().substr(v.to_string().find("_")+1));
       expr body = findMyFun(transitions->at(0).from, stateInvMap_fun)(solverVars->at(0), init_value);
+      // llvm::outs()<<"initial body "<<body. <<"\n";
       s.add(nestedForall(*solverVars, body, 0));
     }
   }
+
+
+  llvm:: outs()<<"2 solverVars size "< <   solverVars->size()<<"\n";
 
   vector<int> outputVec;
 
@@ -614,25 +609,44 @@ void parse_fsm(string input_file){
 
     if(t.isGuard && t.isAction){
 
-      expr body = implies(findMyFun(t.from, stateInvMap_fun)(solverVars->size(), solverVars->data()) && t.guard(*solverVars), findMyFun(t.to, stateInvMap_fun)(t.action(*solverVars).size(), t.action(*solverVars).data()));
+      vector<expr> *solverVarsAfter = new vector<expr>;
+
+      copy(solverVars->begin(), solverVars->end(), back_inserter(*solverVarsAfter));
+
+      llvm::outs()<<"solverVarsAfter size "<<solverVarsAfter->size()<<"\n";
+      llvm::outs()<<"solverVars size "<<solverVars->size()<<"\n";
+
+      llvm::outs()<<"solverVars contains: \n";
+      for(auto v: *solverVars){
+        llvm::outs()<<v.to_string()<<"\n";
+      }
+      llvm::outs()<<"\n";
+
+      llvm::outs()<<"solverVarsAfter contains: \n";
+      for(auto v: *solverVarsAfter){
+        llvm::outs()<<v.to_string()<<"\n";
+      }
+
+
+
+      solverVarsAfter->at(solverVarsAfter->size()-1) = solverVars->at(solverVars->size()-1)+1;
+
+      expr body = implies(findMyFun(t.from, stateInvMap_fun)(solverVars->size(), solverVars->data()) && t.guard(*solverVars), findMyFun(t.to, stateInvMap_fun)(t.action(*solverVarsAfter).size(), t.action(*solverVarsAfter).data()));
       s.add(nestedForall(*solverVars, body, 0));
       
-    } else if (t.isGuard){
-      llvm::outs()<<"invariant from: "<<findMyFun(t.from, stateInvMap_fun)(solverVars->size(), solverVars->data()).to_string()<<'\n';
-      llvm::outs()<<"invariant to: "<<findMyFun(t.to, stateInvMap_fun)(solverVars->size(), solverVars->data()).to_string()<<'\n';
-      llvm::outs()<<"guard: "<<t.guard(*solverVars).to_string()<<"\n";
-      llvm::outs()<<"to state function "<<findMyFun(t.to, stateInvMap_fun)(solverVars->size(), solverVars->data()).to_string()<<"\n";
+    } 
+    // else if (t.isGuard){
 
-      expr body = implies((findMyFun(t.from, stateInvMap_fun)(solverVars->size(), solverVars->data()) && t.guard(*solverVars)), findMyFun(t.to, stateInvMap_fun)(solverVars->size(), solverVars->data()));
-      s.add(nestedForall(*solverVars, body, 0));
-    } else if (t.isAction){
-      expr body = implies(findMyFun(t.from, stateInvMap_fun)(solverVars->size(), solverVars->data()), findMyFun(t.to, stateInvMap_fun)(t.action(*solverVars).size(), t.action(*solverVars).data()));
-      expr nested = nestedForall(*solverVars, body, 0);
-      s.add(nestedForall(*solverVars, body, 0));
-    } else {
-      expr body = implies((findMyFun(t.from, stateInvMap_fun)(solverVars->size(), solverVars->data())), findMyFun(t.to, stateInvMap_fun)(solverVars->size(), solverVars->data()));
-      s.add(nestedForall(*solverVars, body, 0));
-    }
+    //   expr body = implies((findMyFun(t.from, stateInvMap_fun)(solverVars->size(), solverVars->data()) && t.guard(*solverVars)), findMyFun(t.to, stateInvMap_fun)(solverVars->size(), solverVars->data()));
+    //   s.add(nestedForall(*solverVars, body, 0));
+    // } else if (t.isAction){
+    //   expr body = implies(findMyFun(t.from, stateInvMap_fun)(solverVars->size(), solverVars->data()), findMyFun(t.to, stateInvMap_fun)(t.action(*solverVars).size(), t.action(*solverVars).data()));
+    //   expr nested = nestedForall(*solverVars, body, 0);
+    //   s.add(nestedForall(*solverVars, body, 0));
+    // } else {
+    //   expr body = implies((findMyFun(t.from, stateInvMap_fun)(solverVars->size(), solverVars->data())), findMyFun(t.to, stateInvMap_fun)(solverVars->size(), solverVars->data()));
+    //   s.add(nestedForall(*solverVars, body, 0));
+    // }
 
     // if(t.isOutput){
     //   model m = s.get_model();
