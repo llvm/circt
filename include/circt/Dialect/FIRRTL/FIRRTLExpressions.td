@@ -1192,7 +1192,7 @@ def IntegerAddOp : IntegerBinaryPrimOp<"integer.add", [Commutative]> {
   let summary = "Add two FIntegerType values";
   let description = [{
     The add operation result is the arbitrary precision signed integer
-    arithmetic sum of the two
+    arithmetic sum of the two operands.
 
     Example:
     ```mlir
