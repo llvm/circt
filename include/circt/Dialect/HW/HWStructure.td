@@ -566,7 +566,8 @@ def InstanceChoiceOp : HWInstanceOpBase<"instance_choice", [
 
   let arguments = (ins StrAttr:$instanceName,
                        FlatSymbolRefArrayAttr:$moduleNames,
-                       StrArrayAttr:$targetNames,
+                       StrAttr:$optionName,
+                       StrArrayAttr:$caseNames,
                        Variadic<AnyType>:$inputs,
                        StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
                        ParamDeclArrayAttr:$parameters,

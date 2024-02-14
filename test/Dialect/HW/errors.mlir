@@ -498,6 +498,6 @@ builtin.module @Nested {
 
 hw.module @Foo () {
   // expected-error @+1 {{Cannot find module definition 'DoesNotExist'}}
-  hw.instance_choice "inst" @DoesNotExist () -> ()
+  hw.instance_choice "inst" option "foo" @DoesNotExist () -> ()
 }
 
