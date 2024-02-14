@@ -539,9 +539,6 @@ StringAttr hw::getVerilogModuleNameAttr(Operation *module) {
   return module->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName());
 }
 
-// Flag for parsing different module types
-enum ExternModKind { PlainMod, ExternMod, GenMod };
-
 template <typename ModuleTy>
 static void
 buildModule(OpBuilder &builder, OperationState &result, StringAttr name,
@@ -902,8 +899,8 @@ addPortAttrsAndLocs(Builder &builder, OperationState &result,
 }
 
 template <typename ModuleTy>
-static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
-                                   ExternModKind modKind = PlainMod) {
+static ParseResult parseHWModuleOp(OpAsmParser &parser,
+                                   OperationState &result) {
 
   using namespace mlir::function_interface_impl;
   auto loc = parser.getCurrentLocation();
@@ -919,7 +916,7 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
 
   // Parse the generator information.
   FlatSymbolRefAttr kindAttr;
-  if (modKind == GenMod) {
+  if constexpr (std::is_same_v<ModuleTy, HWModuleGeneratedOp>) {
     if (parser.parseComma() ||
         parser.parseAttribute(kindAttr, "generatorKind", result.attributes)) {
       return failure();
@@ -958,7 +955,7 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
 
   // Parse the optional function body.
   auto *body = result.addRegion();
-  if (modKind == PlainMod) {
+  if (std::is_same_v<ModuleTy, HWModuleOp>) {
     if (parser.parseRegion(*body, entryArgs))
       return failure();
 
@@ -973,12 +970,12 @@ ParseResult HWModuleOp::parse(OpAsmParser &parser, OperationState &result) {
 
 ParseResult HWModuleExternOp::parse(OpAsmParser &parser,
                                     OperationState &result) {
-  return parseHWModuleOp<HWModuleExternOp>(parser, result, ExternMod);
+  return parseHWModuleOp<HWModuleExternOp>(parser, result);
 }
 
 ParseResult HWModuleGeneratedOp::parse(OpAsmParser &parser,
                                        OperationState &result) {
-  return parseHWModuleOp<HWModuleGeneratedOp>(parser, result, GenMod);
+  return parseHWModuleOp<HWModuleGeneratedOp>(parser, result);
 }
 
 FunctionType getHWModuleOpType(Operation *op) {
