@@ -168,19 +168,27 @@ struct FIRParser {
   //===--------------------------------------------------------------------===//
 
   ParseResult requireFeature(FIRVersion minimum, StringRef feature) {
+    return requireFeature(minimum, feature, getToken().getLoc());
+  }
+
+  ParseResult requireFeature(FIRVersion minimum, StringRef feature, SMLoc loc) {
     if (version < minimum)
-      return emitError() << feature << " are a FIRRTL " << minimum
-                         << "+ feature, but the specified FIRRTL version was "
-                         << version;
+      return emitError(loc)
+             << feature << " are a FIRRTL " << minimum
+             << "+ feature, but the specified FIRRTL version was " << version;
     return success();
   }
 
   ParseResult removedFeature(FIRVersion removedVersion, StringRef feature) {
+    return removedFeature(removedVersion, feature, getToken().getLoc());
+  }
+
+  ParseResult removedFeature(FIRVersion removedVersion, StringRef feature,
+                             SMLoc loc) {
     if (version >= removedVersion)
-      return emitError() << feature << " were removed in FIRRTL "
-                         << removedVersion
-                         << ", but the specified FIRRTL version was "
-                         << version;
+      return emitError(loc)
+             << feature << " were removed in FIRRTL " << removedVersion
+             << ", but the specified FIRRTL version was " << version;
     return success();
   }
 
