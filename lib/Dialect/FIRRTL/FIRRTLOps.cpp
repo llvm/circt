@@ -4987,11 +4987,6 @@ FIRRTLType DShrPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
   return lhsi.getConstType(lhsi.isConst() && rhsu.isConst());
 }
 
-FIRRTLType impl::inferIntegerBinaryPrimResult(FIRRTLType lhs, FIRRTLType rhs,
-                                              std::optional<Location> loc) {
-  return FIntegerType::get(lhs.getContext());
-}
-
 //===----------------------------------------------------------------------===//
 // Unary Primitives
 //===----------------------------------------------------------------------===//

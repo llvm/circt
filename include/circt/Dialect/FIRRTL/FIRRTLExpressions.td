@@ -1183,15 +1183,16 @@ def DoubleConstantOp : FIRRTLOp<"double", [Pure, ConstantLike]> {
 
 class IntegerBinaryPrimOp<string mnemonic, list<Trait> traits = []> :
    BinaryPrimOp<mnemonic, FIntegerType, FIntegerType, FIntegerType,
-                [Pure] # traits> {
-  let inferType = "impl::inferIntegerBinaryPrimResult";
+                [Pure, SameOperandsAndResultType] # traits> {
+  // We use the standard inferReturnTypes from SameOperandsAndResultType.
+  let inferReturnTypesDecl = "";
 }
 
 def IntegerAddOp : IntegerBinaryPrimOp<"integer.add", [Commutative]> {
   let summary = "Add two FIntegerType values";
   let description = [{
     The add operation result is the arbitrary precision signed integer
-    arithmetic sum of `lhs` and `rhs`.
+    arithmetic sum of the two
 
     Example:
     ```mlir
