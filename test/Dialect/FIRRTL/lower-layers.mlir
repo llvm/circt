@@ -471,3 +471,76 @@ firrtl.circuit "ModuleNameConflict" {
 // CHECK:         firrtl.instance foo @ModuleNameConflict_A()
 // CHECK-NEXT:    firrtl.instance {{[_a-zA-Z0-9]+}} {lowerToBind,
 // CHECK-SAME:      @[[groupModule]](
+
+// -----
+// Layerblock lowering must allow a value to be captured twice.
+// https://github.com/llvm/circt/issues/6694
+
+firrtl.circuit "CaptureHardwareMultipleTimes" {
+  firrtl.layer @A bind {
+    firrtl.layer @B bind {}
+  }
+
+  // CHECK: firrtl.module private @[[A:.+]](in %[[p:.+]]: !firrtl.uint<1>) {
+  // CHECK:   %0 = firrtl.add %[[p]], %[[p]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
+  // CHECK: }
+  // CHECK: firrtl.module @CaptureSrcTwice() {
+  // CHECK:   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+  // CHECK:   %[[p:.+]] = firrtl.instance {{.+}} @[[A]]
+  // CHECK:   firrtl.strictconnect %[[p]], %c0_ui1 : !firrtl.uint<1>
+  // CHECK: }
+  firrtl.module @CaptureSrcTwice() {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    firrtl.layerblock @A {
+      %0 = firrtl.add %c0_ui1, %c0_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
+    }
+  }
+
+  // CHECK: firrtl.module private @[[A:.+]](out %[[dst:.+]]: !firrtl.probe<uint<1>>, in %[[src:.+]]: !firrtl.uint<1>)
+  // CHECK:   %0 = firrtl.ref.send %[[src]] : !firrtl.uint<1>
+  // CHECK:   %w2 = firrtl.wire : !firrtl.probe<uint<1>>
+  // CHECK:   firrtl.ref.define %[[dst]], %w2 : !firrtl.probe<uint<1>>
+  // CHECK:   %1 = firrtl.ref.resolve %0 : !firrtl.probe<uint<1>>
+  // CHECK: }
+  // CHECK: firrtl.module @CaptureAsDstThenSrc() {
+  // CHECK:   %w1 = firrtl.wire : !firrtl.probe<uint<1>>
+  // CHECK:   %[[out:.+]], %[[in:.+]] = firrtl.instance {{.+}} @[[A]](out {{.+}}: !firrtl.probe<uint<1>>, in {{.+}}: !firrtl.uint<1>)
+  // CHECK:   %0 = firrtl.ref.resolve %w1 : !firrtl.probe<uint<1>>
+  // CHECK:   firrtl.strictconnect %[[in]], %0 : !firrtl.uint<1>
+  // CHECK:   firrtl.ref.define %w1, %[[out]] : !firrtl.probe<uint<1>>
+  // CHECK: }
+  firrtl.module @CaptureAsDstThenSrc() {
+    %w1 = firrtl.wire : !firrtl.probe<uint<1>, @A>
+    firrtl.layerblock @A {
+      // capture first as a sink.
+      %w2 = firrtl.wire : !firrtl.probe<uint<1>, @A>
+      firrtl.ref.define %w1, %w2 : !firrtl.probe<uint<1>, @A>
+      // Capture again, as a source.
+      %2 = firrtl.ref.resolve %w1 : !firrtl.probe<uint<1>, @A>
+    }
+  }
+
+  // CHECK: firrtl.module private @[[A:.+]](in %[[src:.+]]: !firrtl.uint<1>, out %[[dst:.+]]: !firrtl.probe<uint<1>>)
+  // CHECK:   %0 = firrtl.ref.send %[[src]] : !firrtl.uint<1>
+  // CHECK:   %1 = firrtl.ref.resolve %0 : !firrtl.probe<uint<1>>
+  // CHECK:   %w2 = firrtl.wire : !firrtl.probe<uint<1>>
+  // CHECK:   firrtl.ref.define %[[dst]], %w2 : !firrtl.probe<uint<1>>
+  // CHECK: }
+  // CHECK: firrtl.module @CaptureAsSrcThenDst() {
+  // CHECK:   %w1 = firrtl.wire : !firrtl.probe<uint<1>>
+  // CHECK:   %[[in:.+]], %[[out:.+]] = firrtl.instance {{.+}} @[[A]]
+  // CHECK:   firrtl.ref.define %w1, %[[out]] : !firrtl.probe<uint<1>>
+  // CHECK:   %0 = firrtl.ref.resolve %w1 : !firrtl.probe<uint<1>>
+  // CHECK:   firrtl.strictconnect %[[in]], %0 : !firrtl.uint<1>
+  // CHECK: }
+  firrtl.module @CaptureAsSrcThenDst() {
+    %w1 = firrtl.wire : !firrtl.probe<uint<1>, @A>
+    firrtl.layerblock @A {
+      // capture first as a source.
+      %2 = firrtl.ref.resolve %w1 : !firrtl.probe<uint<1>, @A>
+      // capture again, as a sink.
+      %w2 = firrtl.wire : !firrtl.probe<uint<1>, @A>
+      firrtl.ref.define %w1, %w2 : !firrtl.probe<uint<1>, @A>
+    }
+  }
+}

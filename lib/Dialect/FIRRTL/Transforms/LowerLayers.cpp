@@ -24,6 +24,17 @@ using namespace circt;
 using namespace firrtl;
 
 //===----------------------------------------------------------------------===//
+// Helpers
+//===----------------------------------------------------------------------===//
+
+static bool isAncestor(Operation *op, Value value) {
+  if (auto result = dyn_cast<OpResult>(value))
+    return op->isAncestor(result.getOwner());
+  auto argument = cast<BlockArgument>(value);
+  return op->isAncestor(argument.getOwner()->getParentOp());
+}
+
+//===----------------------------------------------------------------------===//
 // Type Conversion
 //===----------------------------------------------------------------------===//
 
@@ -231,7 +242,6 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp) {
 
     // Create an input port for an operand that is captured from outside.
     auto createInputPort = [&](Value operand, Location loc) {
-      auto portNum = ports.size();
       auto operandName = getFieldName(FieldRef(operand, 0), true);
 
       // If the value is a ref, we must resolve the ref inside the parent,
@@ -247,15 +257,21 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp) {
       // Update the layer block's body with arguments as we will swap this body
       // into the module when we create it.  If this is a ref type, then add a
       // refsend to convert from the non-ref type input port.
-      body->addArgument(type, loc);
-      Value replacement = body->getArgument(portNum);
+      Value replacement = body->addArgument(type, loc);
       if (isa<RefType>(operand.getType())) {
         OpBuilder::InsertionGuard guard(builder);
         builder.setInsertionPointToStart(body);
         replacement = builder.create<RefSendOp>(loc, replacement);
       }
-      operand.replaceUsesWithIf(replacement, [&](OpOperand &operand) {
-        return layerBlock->isAncestor(operand.getOwner());
+      operand.replaceUsesWithIf(replacement, [&](OpOperand &use) {
+        auto *user = use.getOwner();
+        if (!layerBlock->isAncestor(user))
+          return false;
+        if (auto connectLike = dyn_cast<FConnectLike>(user)) {
+          if (use.getOperandNumber() == 0)
+            return false;
+        }
+        return true;
       });
 
       connectValues.push_back({operand, ConnectKind::NonRef});
@@ -294,12 +310,18 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp) {
 
       ports.push_back({builder.getStringAttr("_" + operandName.first), refType,
                        Direction::Out, /*sym=*/{}, /*loc=*/loc});
-      body->addArgument(refType, loc);
+      Value replacement = body->addArgument(refType, loc);
       if (isa<RefType>(dest.getType())) {
-        dest.replaceUsesWithIf(body->getArgument(portNum),
-                               [&](OpOperand &operand) {
-                                 return operand.getOwner()->getBlock() == body;
-                               });
+        dest.replaceUsesWithIf(replacement, [&](OpOperand &use) {
+          auto *user = use.getOwner();
+          if (!layerBlock->isAncestor(user))
+            return false;
+          if (auto connectLike = dyn_cast<FConnectLike>(user)) {
+            if (use.getOperandNumber() == 0)
+              return true;
+          }
+          return false;
+        });
         connectValues.push_back({dest, ConnectKind::Ref});
         return;
       }
@@ -339,39 +361,35 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp) {
 
       if (auto refSend = dyn_cast<RefSendOp>(op)) {
         auto src = refSend.getBase();
-        auto *srcOp = src.getDefiningOp();
-        auto srcInLayerBlock = srcOp && layerBlock->isAncestor(srcOp);
-        if (!srcInLayerBlock)
+        if (!isAncestor(layerBlock, src))
           createInputPort(src, op.getLoc());
         continue;
       }
 
       if (auto refCast = dyn_cast<RefCastOp>(op)) {
-        auto *srcOp = refCast.getInput().getDefiningOp();
-        auto srcInLayerBlock = srcOp && layerBlock->isAncestor(srcOp);
-        if (!srcInLayerBlock)
+        if (!isAncestor(layerBlock, refCast))
           createInputPort(refCast.getInput(), op.getLoc());
         continue;
       }
 
       if (auto connect = dyn_cast<FConnectLike>(op)) {
-        auto *srcOp = connect.getSrc().getDefiningOp();
-        auto *dstOp = connect.getDest().getDefiningOp();
-        auto srcInLayerBlock = srcOp && layerBlock->isAncestor(srcOp);
-        auto dstInLayerBlock = dstOp && layerBlock->isAncestor(dstOp);
+        auto src = connect.getSrc();
+        auto dst = connect.getDest();
+        auto srcInLayerBlock = isAncestor(layerBlock, src);
+        auto dstInLayerBlock = isAncestor(layerBlock, dst);
         if (!srcInLayerBlock && !dstInLayerBlock) {
           connect->moveBefore(layerBlock);
           continue;
         }
         // Create an input port.
         if (!srcInLayerBlock) {
-          createInputPort(connect.getSrc(), op.getLoc());
+          createInputPort(src, op.getLoc());
           continue;
         }
         // Create an output port.
         if (!dstInLayerBlock) {
-          createOutputPort(connect.getDest(), connect.getSrc());
-          if (!connect.getDest().getType().isa<RefType>())
+          createOutputPort(dst, src);
+          if (!dst.getType().isa<RefType>())
             connect.erase();
           continue;
         }
@@ -404,9 +422,7 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp) {
 
       // For any other ops, create input ports for any captured operands.
       for (auto operand : op.getOperands()) {
-        auto *operandOp = operand.getDefiningOp();
-        auto operandInBlock = operandOp && layerBlock->isAncestor(operandOp);
-        if (!operandInBlock)
+        if (!isAncestor(layerBlock, operand))
           createInputPort(operand, op.getLoc());
       }
     }
