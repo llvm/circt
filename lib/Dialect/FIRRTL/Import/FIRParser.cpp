@@ -25,6 +25,7 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/IR/Verifier.h"
 #include "mlir/Support/Timing.h"
@@ -1493,7 +1494,8 @@ struct LazyLocationListener : public OpBuilder::Listener {
 
   // Notification handler for when an operation is inserted into the builder.
   /// `op` is the operation that was inserted.
-  void notifyOperationInserted(Operation *op) override {
+  void notifyOperationInserted(Operation *op,
+                               mlir::IRRewriter::InsertPoint) override {
     assert(currentSMLoc != SMLoc() && "No .fir file location specified");
     assert(isActive && "Not parsing a statement");
     subOps.push_back({op, currentSMLoc});

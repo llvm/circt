@@ -163,25 +163,50 @@ static void lowerUsersToTemporaryWire(Operation &op,
 
   auto createWireForResult = [&](Value result, StringAttr name) {
     Value newWire;
-    // If the op is in a procedural region, use logic op.
-    if (isProceduralRegion)
-      newWire = builder.create<LogicOp>(result.getType(), name);
-    else
-      newWire = builder.create<sv::WireOp>(result.getType(), name);
+    Type wireElementType = result.getType();
+    bool isResultInOut = false;
 
-    while (!result.use_empty()) {
-      auto newWireRead = builder.create<ReadInOutOp>(newWire);
-      OpOperand &use = *result.getUses().begin();
-      use.set(newWireRead);
-      newWireRead->moveBefore(use.getOwner());
+    // If the result already is an InOut, make sure to not wrap it again
+    if (auto inoutType = hw::type_dyn_cast<hw::InOutType>(result.getType())) {
+      wireElementType = inoutType.getElementType();
+      isResultInOut = true;
     }
 
-    Operation *connect;
+    // If the op is in a procedural region, use logic op.
     if (isProceduralRegion)
-      connect = builder.create<BPAssignOp>(newWire, result);
+      newWire = builder.create<LogicOp>(wireElementType, name);
     else
-      connect = builder.create<AssignOp>(newWire, result);
+      newWire = builder.create<sv::WireOp>(wireElementType, name);
+
+    // Replace all uses with newWire. Wrap in ReadInOutOp if required.
+    while (!result.use_empty()) {
+      OpOperand &use = *result.getUses().begin();
+      if (isResultInOut) {
+        use.set(newWire);
+      } else {
+        auto newWireRead = builder.create<ReadInOutOp>(newWire);
+        use.set(newWireRead);
+        newWireRead->moveBefore(use.getOwner());
+      }
+    }
+
+    // Assign the original result to the temporary wire.
+    Operation *connect;
+    ReadInOutOp resultRead;
+
+    if (isResultInOut)
+      resultRead = builder.create<ReadInOutOp>(result);
+
+    if (isProceduralRegion)
+      connect = builder.create<BPAssignOp>(
+          newWire, isResultInOut ? resultRead.getResult() : result);
+    else
+      connect = builder.create<AssignOp>(
+          newWire, isResultInOut ? resultRead.getResult() : result);
+
     connect->moveAfter(&op);
+    if (resultRead)
+      resultRead->moveBefore(connect);
 
     // Move the temporary to the appropriate place.
     if (!emitWireAtBlockBegin) {
@@ -467,9 +492,15 @@ static bool hoistNonSideEffectExpr(Operation *op) {
 
 /// Check whether an op is a declaration that can be moved.
 static bool isMovableDeclaration(Operation *op) {
-  return op->getNumResults() == 1 &&
-         op->getResult(0).getType().isa<InOutType, sv::InterfaceType>() &&
-         op->getNumOperands() == 0;
+  if (op->getNumResults() != 1 ||
+      !op->getResult(0).getType().isa<InOutType, sv::InterfaceType>())
+    return false;
+
+  // If all operands (e.g. init value) are constant, it is safe to move
+  return llvm::all_of(op->getOperands(), [](Value operand) -> bool {
+    auto *defOp = operand.getDefiningOp();
+    return !!defOp && isConstantExpression(defOp);
+  });
 }
 
 //===----------------------------------------------------------------------===//

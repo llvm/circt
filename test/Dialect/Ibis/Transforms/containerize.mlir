@@ -1,3 +1,5 @@
+// XFAIL: *
+// See https://github.com/llvm/circt/issues/6658
 // RUN: circt-opt --ibis-containerize %s | FileCheck %s
 
 // CHECK-LABEL:   ibis.container @A_B

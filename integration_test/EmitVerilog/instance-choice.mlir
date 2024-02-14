@@ -23,7 +23,7 @@ hw.module public @top(in %clk : i1, in %rst : i1) {
   %reg = sv.reg : !hw.inout<i32>
 
   %a = sv.read_inout %reg : !hw.inout<i32>
-  %b = hw.instance_choice "inst1" sym @inst1 @TargetDefault or @TargetA if "A" or @TargetB if "B"(a: %a: i32) -> (b: i32)
+  %b = hw.instance_choice "inst1" sym @inst1 option "Perf" @TargetDefault or @TargetA if "A" or @TargetB if "B"(a: %a: i32) -> (b: i32)
 
   sv.alwaysff(posedge %clk) {
     sv.if %rst {
