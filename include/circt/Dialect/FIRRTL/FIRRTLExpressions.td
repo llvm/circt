@@ -60,8 +60,10 @@ class FIRRTLExprOp<string mnemonic, list<Trait> traits = []> :
   // Additional class declarations to emit alongside the type inference.
   code firrtlExtraClassDeclaration = "";
 
-  let extraClassDeclaration = firrtlExtraClassDeclaration # inferTypeDecl #
-      parseValidatorDecl # [{
+  // Declaration of the InferTypeOpInterface method. This is a default
+  // implementation, using the inferType and inferTypeDecl machinery, but
+  // subclasses can override this to omit it or provide something else.
+  code inferReturnTypesDecl = [{
     /// Infer the return types of this operation. This is called by the
     /// `InferTypeOpInterface`. We simply forward to a narrower
     /// operation-specific implementation which is sufficient for FIRRTL ops.
@@ -75,7 +77,10 @@ class FIRRTLExprOp<string mnemonic, list<Trait> traits = []> :
       return impl::inferReturnTypes(context, loc, operands, attrs, properties,
         regions, results, &inferReturnType);
     }
+  }];
 
+  let extraClassDeclaration = firrtlExtraClassDeclaration # inferTypeDecl #
+      parseValidatorDecl # inferReturnTypesDecl # [{
     /// Check that the parser has consumed the correct number of operands and
     /// constants, and infer the appropriate return type for the operation.
     static FIRRTLType validateAndInferReturnType(ValueRange operands,
