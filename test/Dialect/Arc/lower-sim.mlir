@@ -4,7 +4,8 @@ hw.module @id(in %i: i8, in %j: i8, out o: i8) {
     hw.output %i : i8
 }
 
-// CHECK: llvm.mlir.global internal constant @[[format_str:.*]]("result = %0.8p\0A\00")
+// CHECK-DAG: llvm.mlir.global internal constant @[[format_str:.*]]("result = %0.8p\0A\00")
+// CHECK-DAG: llvm.mlir.global internal constant @[[format_str2:.*]]("result2 = %0.8p\0A\00")
 // CHECK-LABEL: llvm.func @full
 func.func @full() -> i8 {
     %c = arith.constant 24 : i8
@@ -31,6 +32,13 @@ func.func @full() -> i8 {
 
     // CHECK-DAG: %[[to_print:.*]] = llvm.inttoptr %[[result]] : i8 to !llvm.ptr
     // CHECK-DAG: %[[format_str_ptr:.*]] = llvm.mlir.addressof @[[format_str]] : !llvm.ptr
+    // CHECK: llvm.call @printf(%[[format_str_ptr]], %[[to_print]])
+    arc.sim.emit "result", %result : i8
+
+    // CHECK-DAG: %[[format_str2_ptr:.*]] = llvm.mlir.addressof @[[format_str2]] : !llvm.ptr
+    // CHECK: llvm.call @printf(%[[format_str2_ptr]], %[[to_print]])
+    arc.sim.emit "result2", %result : i8
+
     // CHECK: llvm.call @printf(%[[format_str_ptr]], %[[to_print]])
     arc.sim.emit "result", %result : i8
 
