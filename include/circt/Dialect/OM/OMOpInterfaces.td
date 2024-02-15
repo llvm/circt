@@ -68,7 +68,7 @@ def IntegerBinaryArithmeticInterface : OpInterface<"IntegerBinaryArithmeticOp"> 
       "mlir::Value", "getResult", (ins)>,
     InterfaceMethod<"Evaluate the integer binary arithmetic operation",
       "mlir::FailureOr<llvm::APSInt>", "evaluateIntegerOperation",
-      (ins "llvm::APSInt":$lhs, "llvm::APSInt":$rhs)>
+      (ins "const llvm::APSInt &":$lhs, "const llvm::APSInt &":$rhs)>
   ];
 }
 
