@@ -760,7 +760,7 @@ updateInstanceInClass(InstanceOp firrtlInstance, hw::HierPathOp hierPath,
     // Value as an actual parameter to the Object instance.
     auto propertyAssignment = getPropertyAssignment(propertyResult);
     assert(propertyAssignment && "properties require single assignment");
-    actualParameters.push_back(propertyAssignment.getSrc());
+    actualParameters.push_back(propertyAssignment.getSrcMutable().get());
 
     // Erase the property assignment.
     opsToErase.push_back(propertyAssignment);
