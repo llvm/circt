@@ -2290,12 +2290,23 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result) {
       return failure();                                                        \
     }                                                                          \
     result = builder.create<CLASS>(resultTy, operands, attrs);                 \
-    return success();                                                          \
+    break;                                                                     \
   }
 #include "FIRTokenKinds.def"
   }
-
-  llvm_unreachable("all cases should return");
+  // Don't add code here, the common cases of these switch statements will be
+  // merged. This allows for fixing up primops after they have been created.
+  switch (kind) {
+  default:
+    break;
+  case FIRToken::lp_shr:
+    // For FIRRTL versions earlier than 4.0.0, insert pad(_, 1) around any
+    // unsigned shr This ensures the minimum width is 1 (but can be greater)
+    if (version < FIRVersion(4, 0, 0) && type_isa<UIntType>(result.getType()))
+      result = builder.create<PadPrimOp>(result, 1);
+    break;
+  }
+  return success();
 }
 
 /// integer-literal-exp ::= 'UInt' optional-width '(' intLit ')'

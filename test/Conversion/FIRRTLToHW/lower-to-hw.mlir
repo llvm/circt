@@ -145,7 +145,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: = comb.extract [[CONCAT1]] from 3 : (i8) -> i5
     %11 = firrtl.shr %6, 3 : (!firrtl.uint<8>) -> !firrtl.uint<5>
 
-    %12 = firrtl.shr %6, 8 : (!firrtl.uint<8>) -> !firrtl.uint<1>
+    %12 = firrtl.shr %6, 8 : (!firrtl.uint<8>) -> !firrtl.uint<0>
 
     // CHECK-NEXT: = comb.extract %in3 from 7 : (i8) -> i1
     %13 = firrtl.shr %in3, 8 : (!firrtl.sint<8>) -> !firrtl.sint<1>
