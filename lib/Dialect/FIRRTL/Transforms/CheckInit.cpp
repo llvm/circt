@@ -131,11 +131,66 @@ class CheckInitPass : public CheckInitBase<CheckInitPass> {
   DenseMap<Region*, RegionState> localInfo;
 
   void processOp(Operation *op, FieldSource &fieldSource);
+  void reportRegion(Value decl, Type t, size_t fieldID, bool needed, BitVector& vals);
+  void emitInitError(Value decl, size_t fieldID);
 
 public:
   void runOnOperation() override;
 };
 } // end anonymous namespace
+
+static bool checkBit(BitVector& vals, size_t idx) {
+  if (vals.size() <= idx)
+    return false;
+  return vals[idx];
+}
+
+void CheckInitPass::emitInitError(Value decl, size_t fieldID) {
+  bool isPort = isa<BlockArgument>(decl);
+  auto err = isPort ? getOperation()->emitError("Port is not") :
+  decl.getDefiningOp()->emitError("Wire is not");
+  if (fieldID == 0) {
+    err << " initialized.";
+  } else {
+    err << " fully initialized. (" << fieldID << ")";
+  }
+}
+
+// Check (recursively) that decl at fieldID, whose type at fieldID is t, has a
+// bit set in vals
+void CheckInitPass::reportRegion(Value decl, Type t, size_t fieldID, bool needed, BitVector& vals ) {
+  llvm::errs() << "Test[" << fieldID << "]: " << decl << "\n";
+  // May recursively handle subtypes.
+  if (!needed || checkBit(vals, fieldID))
+    return;
+
+  // Explicitly test each subtype.
+  if (auto bundle = dyn_cast<BundleType>(t)) {
+    for (size_t idx = 0, e = bundle.getNumElements(); idx != e; ++idx)
+      reportRegion(decl, bundle.getElementType(idx), 
+                 needed ^ bundle.getElement(idx).isFlip,
+                 fieldID + bundle.getFieldID(idx), vals);
+    return;
+  } else if (auto bundle = dyn_cast<OpenBundleType>(t)) {
+    for (size_t idx = 0, e = bundle.getNumElements(); idx != e; ++idx)
+      reportRegion(decl, bundle.getElementType(idx), 
+                 needed ^ bundle.getElement(idx).isFlip,
+                 fieldID + bundle.getFieldID(idx), vals);
+    return;
+  } else if (auto vec = dyn_cast<FVectorType>(t)) {
+    for (size_t idx = 0, e = vec.getNumElements(); idx != e; ++idx)
+      reportRegion(decl, vec.getElementType(), needed,
+                 fieldID + vec.getFieldID(idx), vals);
+    return;
+  } else if (auto vec = dyn_cast<OpenVectorType>(t)) {
+    for (size_t idx = 0, e = vec.getNumElements(); idx != e; ++idx)
+      reportRegion(decl, vec.getElementType(), needed,
+                 fieldID + vec.getFieldID(idx), vals);
+    return;
+  }
+
+  emitInitError(decl, fieldID);
+}
 
 // compute the values set by op's regions.  A when, for example, ands the init
 // set as only fields set on both paths are unconditionally set by the when.
@@ -198,9 +253,12 @@ void CheckInitPass::runOnOperation() {
   for (auto opiter = worklist.rbegin(); opiter != worklist.rend(); ++opiter) {
     for (auto& r : (*opiter)->getRegions()) {
       auto& state = localInfo[&r];
-      llvm::errs() << "dests:";
-      for (auto v: state.dests)
-        llvm::errs() << " " << v;
+      for (auto v: state.dests) {
+        bool needed = true;
+        if (auto b = dyn_cast<BlockArgument>(v))
+          needed = getOperation().getPortDirection(b.getArgNumber()) == Direction::Out;
+        reportRegion(v, v.getType(), 0, needed, state.init[v]);
+      }
       llvm::errs() << "\n";
       llvm::errs() << "children: " << state.children.size() << "\n";
       for (auto ii = state.init.begin(), ee = state.init.end(); ii != ee; ++ii) {
