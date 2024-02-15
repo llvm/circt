@@ -398,7 +398,7 @@ def HWMutableModuleLike : OpInterface<"HWMutableModuleLike", [HWModuleLike]> {
 
 
 def HWInstanceLike : OpInterface<"HWInstanceLike", [
-    PortList, InstanceGraphInstanceOpInterface]> {
+    InstanceGraphInstanceOpInterface]> {
   let cppNamespace = "circt::hw";
   let description = "Provide common  module information.";
 }
