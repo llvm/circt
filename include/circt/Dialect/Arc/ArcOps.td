@@ -573,7 +573,7 @@ def StateWriteOp : ArcOp<"state_write", [
 def SimInstantiate : ArcOp<"sim.instantiate"> {
   let summary = "Instantiates an Arc model for simulation";
   let description = [{
-    TODO
+    Creates an instance of an Arc model in scope, in order to simulate it.
   }];
   let results = (outs SimModelInstance:$instance);
   let assemblyFormat = [{ attr-dict `:` qualified(type($instance)) }];
@@ -582,35 +582,47 @@ def SimInstantiate : ArcOp<"sim.instantiate"> {
 def SimSetInput : ArcOp<"sim.set_input"> {
   let summary = "Sets the value of an input of the model instance";
   let description = [{
-    TODO
+    Sets the value of an input port in a specific instance of a model. The
+    provided input port must be of input type and contain an integer of the
+    right size.
   }];
-  let arguments = (ins SimModelInstance:$instance, StrAttr:$input, AnyInteger:$value);
-  let assemblyFormat = [{ $instance `,` $input `=` $value attr-dict `:` type($value) `,` qualified(type($instance)) }];
+  let arguments = (ins SimModelInstance:$instance,
+                       StrAttr:$input,
+                       AnyInteger:$value);
+  let assemblyFormat =
+    [{ $instance `,` $input `=` $value attr-dict
+       `:` type($value) `,` qualified(type($instance)) }];
 }
 
 def SimGetPort : ArcOp<"sim.get_port"> {
   let summary = "Gets the value of a port of the model instance";
   let description = [{
-    TODO
+    Gets the value of the given port in a specific instance of a model. The
+    provided input port must be of the provided size.
   }];
   let arguments = (ins SimModelInstance:$instance, StrAttr:$port);
   let results = (outs AnyInteger:$value);
-  let assemblyFormat = [{ $instance `,` $port attr-dict `:` type($value) `,` qualified(type($instance)) }];
+  let assemblyFormat =
+    [{ $instance `,` $port attr-dict
+       `:` type($value) `,` qualified(type($instance)) }];
 }
 
 def SimStep : ArcOp<"sim.step"> {
-  let summary = "Evaluates one step of the simulation for the provided model instance";
+  let summary =
+    "Evaluates one step of the simulation for the provided model instance";
   let description = [{
-    TODO
+    Evaluates one step of the simulation for the provided model instance,
   }];
   let arguments = (ins SimModelInstance:$instance);
-  let assemblyFormat = [{ $instance attr-dict `:` qualified(type($instance)) }];
+  let assemblyFormat =
+    [{ $instance attr-dict `:` qualified(type($instance)) }];
 }
 
 def SimEmitValue : ArcOp<"sim.emit"> {
   let summary = "Sends a value to the simulation driver";
   let description = [{
-    TODO
+    Sends a named value to the simulation driver. This is notably useful
+    for printing values during simulation.
   }];
   let arguments = (ins StrAttr:$valueName, AnyInteger:$value);
   let assemblyFormat = [{ $valueName `,` $value attr-dict `:` type($value) }];
