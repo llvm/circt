@@ -2252,6 +2252,10 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result) {
   case FIRToken::lp_tail:
     attrNames.push_back(getConstants().amountIdentifier);
     break;
+  case FIRToken::lp_integer_add:
+    if (requireFeature({4, 0, 0}, "Integer arithmetic expressions", loc))
+      return failure();
+    break;
   }
 
   if (operands.size() != numOperandsExpected) {

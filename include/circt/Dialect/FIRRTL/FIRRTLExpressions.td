@@ -1186,6 +1186,18 @@ class IntegerBinaryPrimOp<string mnemonic, list<Trait> traits = []> :
                 [Pure, SameOperandsAndResultType] # traits> {
   // We use the standard inferReturnTypes from SameOperandsAndResultType.
   let inferReturnTypesDecl = "";
+
+  // We use a static inferType that always returns FIntegerType.
+  let inferType = "getFIntegerType";
+
+  // Define the getFIntegerType inline in ODS.
+  let firrtlExtraClassDeclaration = [{
+    static FIntegerType getFIntegerType(FIRRTLType lhs,
+                                        FIRRTLType rhs,
+                                        std::optional<Location> loc) {
+      return FIntegerType::get(lhs.getContext());
+    }
+  }];
 }
 
 def IntegerAddOp : IntegerBinaryPrimOp<"integer.add", [Commutative]> {
