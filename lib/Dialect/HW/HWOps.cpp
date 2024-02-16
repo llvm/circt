@@ -674,7 +674,9 @@ static void modifyModuleArgs(
 /// The operation must be any of the module-like operations.
 ///
 /// This is marked deprecated as it's only used from HandshakeToHW and
-/// PortConverter and is likely broken and not currently tested.
+/// PortConverter and is likely broken and not currently tested.  Users of this
+/// are still written dealing with input and output ports separately, which is
+/// an old and broken style.
 [[deprecated]] static void
 modifyModulePorts(Operation *op,
                   ArrayRef<std::pair<unsigned, PortInfo>> insertInputs,
