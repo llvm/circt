@@ -113,16 +113,6 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
     }
 
     /// Return the set of names on input and inout ports
-    SmallVector<StringAttr> getInputNamesStr() {
-      return $_op.getHWModuleType().getInputNamesStr();
-    }
-
-    /// Return the set of names on output ports
-    SmallVector<StringAttr> getOutputNamesStr() {
-      return $_op.getHWModuleType().getOutputNamesStr();
-    }
-
-    /// Return the set of names on input and inout ports
     SmallVector<Attribute> getInputNames() {
       return $_op.getHWModuleType().getInputNames();
     }
@@ -133,15 +123,18 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
     }
 
     void setInputNames(ArrayRef<Attribute> names) {
-      SmallVector<Attribute> newNames(names.begin(), names.end());
-      auto resNames = $_op.getOutputNames();
-      newNames.append(resNames.begin(), resNames.end());
+      auto type = $_op.getHWModuleType();
+      SmallVector<Attribute> newNames(type.getPortNames());
+      for (size_t idx = 0, e = names.size(); idx != e; ++idx)
+        newNames[type.getPortIdForInputId(idx)] = names[idx];
       $_op.setAllPortNames(newNames);
     }
 
     void setOutputNames(ArrayRef<Attribute> names) {
-      SmallVector<Attribute> newNames = $_op.getInputNames();
-      newNames.append(names.begin(), names.end());
+      auto type = $_op.getHWModuleType();
+      SmallVector<Attribute> newNames(type.getPortNames());
+      for (size_t idx = 0, e = names.size(); idx != e; ++idx)
+        newNames[type.getPortIdForOutputId(idx)] = names[idx];
       $_op.setAllPortNames(newNames);
     }
 
@@ -200,16 +193,23 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
     }
 
     void setAllInputAttrs(ArrayRef<Attribute> attrs) {
-      SmallVector<Attribute> retval(attrs.begin(), attrs.end());
-      auto resAttrs = $_op.getAllOutputAttrs();
-      retval.append(resAttrs.begin(), resAttrs.end());
-      $_op.setAllPortAttrs(retval);
+      auto type = $_op.getHWModuleType();
+      SmallVector<Attribute> newAttrs($_op.getAllPortAttrs());
+      if (newAttrs.empty())
+        newAttrs.resize($_op.getNumPorts());
+      for (size_t idx = 0, e = attrs.size(); idx != e; ++idx)
+        newAttrs[type.getPortIdForInputId(idx)] = attrs[idx];
+      $_op.setAllPortAttrs(newAttrs);
     }
 
     void setAllOutputAttrs(ArrayRef<Attribute> attrs) {
-      SmallVector<Attribute> retval = $_op.getAllInputAttrs();
-      retval.append(attrs.begin(), attrs.end());
-      $_op.setAllPortAttrs(retval);
+      auto type = $_op.getHWModuleType();
+      SmallVector<Attribute> newAttrs($_op.getAllPortAttrs());
+      if (newAttrs.empty())
+        newAttrs.resize($_op.getNumPorts());
+      for (size_t idx = 0, e = attrs.size(); idx != e; ++idx)
+        newAttrs[type.getPortIdForOutputId(idx)] = attrs[idx];
+      $_op.setAllPortAttrs(newAttrs);
     }
 
     Attribute getInputAttrs(size_t idx) {

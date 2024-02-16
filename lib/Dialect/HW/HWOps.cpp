@@ -672,11 +672,15 @@ static void modifyModuleArgs(
 /// the module in the same order as they were listed in the `insert*` array.
 ///
 /// The operation must be any of the module-like operations.
-void hw::modifyModulePorts(
-    Operation *op, ArrayRef<std::pair<unsigned, PortInfo>> insertInputs,
-    ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs,
-    ArrayRef<unsigned> removeInputs, ArrayRef<unsigned> removeOutputs,
-    Block *body) {
+///
+/// This is marked deprecated as it's only used from HandshakeToHW and
+/// PortConverter and is likely broken and not currently tested.
+[[deprecated]] static void
+modifyModulePorts(Operation *op,
+                  ArrayRef<std::pair<unsigned, PortInfo>> insertInputs,
+                  ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs,
+                  ArrayRef<unsigned> removeInputs,
+                  ArrayRef<unsigned> removeOutputs, Block *body = nullptr) {
   auto moduleOp = cast<HWModuleLike>(op);
   auto *context = moduleOp.getContext();
 
@@ -781,8 +785,8 @@ void HWModuleOp::modifyPorts(
     ArrayRef<std::pair<unsigned, PortInfo>> insertInputs,
     ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs,
     ArrayRef<unsigned> eraseInputs, ArrayRef<unsigned> eraseOutputs) {
-  hw::modifyModulePorts(*this, insertInputs, insertOutputs, eraseInputs,
-                        eraseOutputs);
+  modifyModulePorts(*this, insertInputs, insertOutputs, eraseInputs,
+                    eraseOutputs);
 }
 
 /// Return the name to use for the Verilog module that we're referencing
@@ -833,8 +837,8 @@ void HWModuleExternOp::modifyPorts(
     ArrayRef<std::pair<unsigned, PortInfo>> insertInputs,
     ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs,
     ArrayRef<unsigned> eraseInputs, ArrayRef<unsigned> eraseOutputs) {
-  hw::modifyModulePorts(*this, insertInputs, insertOutputs, eraseInputs,
-                        eraseOutputs);
+  modifyModulePorts(*this, insertInputs, insertOutputs, eraseInputs,
+                    eraseOutputs);
 }
 
 void HWModuleExternOp::appendOutputs(
@@ -872,8 +876,8 @@ void HWModuleGeneratedOp::modifyPorts(
     ArrayRef<std::pair<unsigned, PortInfo>> insertInputs,
     ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs,
     ArrayRef<unsigned> eraseInputs, ArrayRef<unsigned> eraseOutputs) {
-  hw::modifyModulePorts(*this, insertInputs, insertOutputs, eraseInputs,
-                        eraseOutputs);
+  modifyModulePorts(*this, insertInputs, insertOutputs, eraseInputs,
+                    eraseOutputs);
 }
 
 void HWModuleGeneratedOp::appendOutputs(
@@ -1150,8 +1154,8 @@ HWModuleOp::insertInput(unsigned index, StringAttr name, Type ty) {
   port.name = nameAttr;
   port.dir = ModulePort::Direction::Input;
   port.type = ty;
-  hw::modifyModulePorts(getOperation(), {std::make_pair(index, port)}, {}, {},
-                        {}, body);
+  modifyModulePorts(getOperation(), {std::make_pair(index, port)}, {}, {}, {},
+                    body);
 
   // Add a new argument.
   return {nameAttr, body->getArgument(index)};
@@ -1172,8 +1176,8 @@ void HWModuleOp::insertOutputs(unsigned index,
     port.type = value.getType();
     indexedNewPorts.emplace_back(index, port);
   }
-  hw::modifyModulePorts(getOperation(), {}, indexedNewPorts, {}, {},
-                        getBodyBlock());
+  modifyModulePorts(getOperation(), {}, indexedNewPorts, {}, {},
+                    getBodyBlock());
 
   // Rewrite the output op.
   for (auto &[name, value] : outputs)
