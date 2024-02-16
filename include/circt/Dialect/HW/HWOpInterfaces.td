@@ -65,7 +65,7 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
     "SmallVector<Location>", "getAllPortLocs", (ins)>,
 
     InterfaceMethod<"Set the port Locations",
-    "void", "setAllPortLocs", (ins "ArrayRef<Location>":$locs)>,
+    "void", "setAllPortLocsAttrs", (ins "ArrayRef<Attribute>":$locs)>,
 
     InterfaceMethod<"Set the module type (and port names)",
     "void", "setHWModuleType", (ins "::circt::hw::ModuleType":$type)>,
@@ -259,6 +259,11 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
       $_op.setAllPortAttrs(attrs);
     }
 
+    void setAllPortLocs(ArrayRef<Location> locs) {
+      std::vector<Attribute> nLocs(locs.begin(), locs.end());
+      $_op.setAllPortLocsAttrs(nLocs);
+    }
+
     Location getPortLoc(size_t idx) {
       return $_op.getAllPortLocs()[idx];
     }
@@ -293,13 +298,14 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
       return ArrayAttr::get($_op->getContext(), retval);
     }
 
-    void setInputLocs(ArrayRef<Location> inAttrs) {
-      assert(inAttrs.size() == $_op.getNumInputPorts());
-      auto outAttrs = getOutputLocs();
-      SmallVector<Location> attrs;
-      attrs.append(inAttrs.begin(), inAttrs.end());
-      attrs.append(outAttrs.begin(), outAttrs.end());
-      $_op.setAllPortLocs(attrs);
+    void setInputLocs(ArrayRef<Location> inLocs) {
+      assert(inLocs.size() == $_op.getNumInputPorts());
+      auto type = $_op.getHWModuleType();
+      SmallVector<Location> newLocs($_op.getAllPortLocs());
+      for (size_t idx = 0, e = inLocs.size(); idx != e; ++idx)
+        newLocs[type.getPortIdForInputId(idx)] = inLocs[idx];
+      $_op.setAllPortLocs(newLocs);
+
     }
 
     SmallVector<Location> getOutputLocs() {
@@ -318,13 +324,13 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
       return ArrayAttr::get($_op->getContext(), retval);
     }
 
-    void setOutputLocs(ArrayRef<Location> outAttrs) {
-      assert(outAttrs.size() == $_op.getNumOutputPorts());
-      auto inAttrs = getInputLocs();
-      SmallVector<Location> attrs;
-      attrs.append(inAttrs.begin(), inAttrs.end());
-      attrs.append(outAttrs.begin(), outAttrs.end());
-      $_op.setAllPortLocs(attrs);
+    void setOutputLocs(ArrayRef<Location> outLocs) {
+      assert(outLocs.size() == $_op.getNumOutputPorts());
+      auto type = $_op.getHWModuleType();
+      SmallVector<Location> newLocs($_op.getAllPortLocs());
+      for (size_t idx = 0, e = outLocs.size(); idx != e; ++idx)
+        newLocs[type.getPortIdForOutputId(idx)] = outLocs[idx];
+      $_op.setAllPortLocs(newLocs);
     }
   }];
 

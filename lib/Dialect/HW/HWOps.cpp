@@ -1246,13 +1246,7 @@ SmallVector<Location> HWModuleGeneratedOp::getAllPortLocs() {
   return ::getAllPortLocs(*this);
 }
 
-template <typename ModTy>
-static void setAllPortLocs(ArrayRef<Location> locs, ModTy module) {
-  std::vector<Attribute> nLocs(locs.begin(), locs.end());
-  module.setPortLocsAttr(ArrayAttr::get(module.getContext(), nLocs));
-}
-
-void HWModuleOp::setAllPortLocs(ArrayRef<Location> locs) {
+void HWModuleOp::setAllPortLocsAttrs(ArrayRef<Attribute> locs) {
   SmallVector<Attribute> resultLocs;
   unsigned inputCount = 0;
   auto modType = getModuleType();
@@ -1261,17 +1255,17 @@ void HWModuleOp::setAllPortLocs(ArrayRef<Location> locs) {
     if (modType.isOutput(i))
       resultLocs.push_back(locs[i]);
     else
-      body->getArgument(inputCount++).setLoc(locs[i]);
+      body->getArgument(inputCount++).setLoc(cast<Location>(locs[i]));
   }
   setResultLocsAttr(ArrayAttr::get(getContext(), resultLocs));
 }
 
-void HWModuleExternOp::setAllPortLocs(ArrayRef<Location> locs) {
-  ::setAllPortLocs(locs, *this);
+void HWModuleExternOp::setAllPortLocsAttrs(ArrayRef<Attribute> locs) {
+  setPortLocsAttr(ArrayAttr::get(getContext(), locs));
 }
 
-void HWModuleGeneratedOp::setAllPortLocs(ArrayRef<Location> locs) {
-  ::setAllPortLocs(locs, *this);
+void HWModuleGeneratedOp::setAllPortLocsAttrs(ArrayRef<Attribute> locs) {
+  setPortLocsAttr(ArrayAttr::get(getContext(), locs));
 }
 
 template <typename ModTy>
