@@ -447,4 +447,30 @@ def AnyCastOp : OMOp<"any_cast", [Pure]> {
   let assemblyFormat =
      "$input attr-dict `:` functional-type($input, $result)";
 }
+
+class IntegerBinaryArithmeticOp<string mnemonic, list<Trait> traits = []> :
+    OMOp<mnemonic, [
+      Pure,
+      DeclareOpInterfaceMethods<IntegerBinaryArithmeticInterface>
+    ] # traits> {
+  let arguments = (ins OMIntegerType:$lhs, OMIntegerType:$rhs);
+
+  let results = (outs OMIntegerType:$result);
+
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($result)";
+}
+
+def IntegerAddOp : IntegerBinaryArithmeticOp<"integer.add", [Commutative]> {
+  let summary = "Add two OMIntegerType values";
+  let description = [{
+    Perform arbitrary precision signed integer addition of two OMIntegerType
+    values.
+
+    Example:
+    ```mlir
+    %2 = om.integer.add %0, %1 : !om.integer
+    ```
+  }];
+}
+
 #endif // CIRCT_DIALECT_OM_OMOPS_TD
