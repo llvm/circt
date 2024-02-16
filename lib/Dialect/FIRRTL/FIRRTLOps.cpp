@@ -671,15 +671,17 @@ SmallVector<::circt::hw::PortInfo> FMemModuleOp::getPortList() {
 }
 
 static hw::PortInfo getPortImpl(FModuleLike module, size_t idx) {
+  auto aname = StringAttr::get(module.getContext(),
+                               hw::HWModuleLike::getPortSymbolAttrName());
+  auto emptyDict = DictionaryAttr::get(module.getContext());
+  auto sym = module.getPortSymbolAttr(idx);
   return {{module.getPortNameAttr(idx), module.getPortType(idx),
            dirFtoH(module.getPortDirection(idx))},
           idx,
-          DictionaryAttr::get(
-              module.getContext(),
-              ArrayRef<mlir::NamedAttribute>{NamedAttribute{
-                  StringAttr::get(module.getContext(),
-                                  hw::HWModuleLike::getPortSymbolAttrName()),
-                  module.getPortSymbolAttr(idx)}}),
+          sym ? DictionaryAttr::get(
+                    module.getContext(),
+                    ArrayRef<mlir::NamedAttribute>{NamedAttribute{aname, sym}})
+              : emptyDict,
           module.getPortLocation(idx)};
 }
 

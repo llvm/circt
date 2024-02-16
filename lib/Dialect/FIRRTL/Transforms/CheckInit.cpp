@@ -23,101 +23,46 @@ using namespace mlir;
 using namespace circt;
 using namespace firrtl;
 
-static void clearUnder(BitVector &bits, Type t, ArrayRef<int64_t> path,
-                       uint64_t fieldBase = 0) {
-  if (auto bundle = dyn_cast<BundleType>(t)) {
-    if (path.empty()) {
-      for (size_t idx = 0, e = bundle.getNumElements(); idx != e; ++idx)
-        clearUnder(bits, bundle.getElementType(idx), path,
-                   fieldBase + bundle.getFieldID(idx));
-    } else {
-      clearUnder(bits, bundle.getElementType(path.front()), path.drop_front(),
-                 fieldBase + bundle.getFieldID(path.front()));
-    }
-  } else if (auto bundle = dyn_cast<OpenBundleType>(t)) {
-    if (path.empty()) {
-      for (size_t idx = 0, e = bundle.getNumElements(); idx != e; ++idx)
-        clearUnder(bits, bundle.getElementType(idx), path,
-                   fieldBase + bundle.getFieldID(idx));
-    } else {
-      clearUnder(bits, bundle.getElementType(path.front()), path.drop_front(),
-                 fieldBase + bundle.getFieldID(path.front()));
-    }
-  } else if (auto vec = dyn_cast<FVectorType>(t)) {
-    if (path.empty()) {
-      for (size_t idx = 0, e = vec.getNumElements(); idx != e; ++idx)
-        clearUnder(bits, vec.getElementType(), path,
-                   fieldBase + vec.getFieldID(idx));
-    } else {
-      clearUnder(bits, vec.getElementType(), path.drop_front(),
-                 fieldBase + vec.getFieldID(path.front()));
-    }
-  } else if (auto vec = dyn_cast<OpenVectorType>(t)) {
-    if (path.empty()) {
-      for (size_t idx = 0, e = vec.getNumElements(); idx != e; ++idx)
-        clearUnder(bits, vec.getElementType(), path,
-                   fieldBase + vec.getFieldID(idx));
-    } else {
-      clearUnder(bits, vec.getElementType(), path.drop_front(),
-                 fieldBase + vec.getFieldID(path.front()));
-    }
-  } else {
-    assert(bits.size() > fieldBase);
-    LLVM_DEBUG({
-      llvm::errs() << "found " << fieldBase;
-      if (bits[fieldBase])
-        llvm::errs() << " needed";
-      llvm::errs() << "\n";
-    });
-    bits.reset(fieldBase);
-  }
+// SetSets track initialized fieldIDs
+using SetSet = DenseMap<Value, BitVector>;
+
+static void markWrite(BitVector &bv, Value v, size_t fieldID) {
+  if (bv.size() <= fieldID)
+    bv.resize(fieldID + 1);
+  //    llvm::errs() << "S " << v << " " << fieldID << "\n";
+  bv.set(fieldID);
 }
 
-static void markLeaves(BitVector &bits, Type t, bool isPort = false,
-                       bool isFlip = false, uint64_t fieldBase = 0) {
-  LLVM_DEBUG({
-    llvm::errs() << "port:" << isPort << " flip:" << isFlip
-                 << " id:" << fieldBase << " ";
-    t.dump();
-  });
-  if (auto bundle = dyn_cast<BundleType>(t)) {
-    for (size_t idx = 0, e = bundle.getNumElements(); idx != e; ++idx)
-      markLeaves(bits, bundle.getElementType(idx), isPort,
-                 isFlip ^ bundle.getElement(idx).isFlip,
-                 fieldBase + bundle.getFieldID(idx));
-  } else if (auto bundle = dyn_cast<OpenBundleType>(t)) {
-    for (size_t idx = 0, e = bundle.getNumElements(); idx != e; ++idx)
-      markLeaves(bits, bundle.getElementType(idx), isPort,
-                 isFlip ^ bundle.getElement(idx).isFlip,
-                 fieldBase + bundle.getFieldID(idx));
-  } else if (auto vec = dyn_cast<FVectorType>(t)) {
-    for (size_t idx = 0, e = vec.getNumElements(); idx != e; ++idx)
-      markLeaves(bits, vec.getElementType(), isPort, isFlip,
-                 fieldBase + vec.getFieldID(idx));
-  } else if (auto vec = dyn_cast<OpenVectorType>(t)) {
-    for (size_t idx = 0, e = vec.getNumElements(); idx != e; ++idx)
-      markLeaves(bits, vec.getElementType(), isPort, isFlip,
-                 fieldBase + vec.getFieldID(idx));
-  } else {
-    if (isPort && !isFlip)
-      return;
-    LLVM_DEBUG({ llvm::errs() << "need " << fieldBase << "\n"; });
-    bits.resize(std::max(fieldBase + 1, (uint64_t)bits.size()));
-    bits.set(fieldBase);
-  }
+static void dumpBV(const BitVector &vals) {
+  for (size_t i = 0, e = vals.size(); i != e; ++i)
+    llvm::errs() << vals[i];
 }
 
-static void markWrite(BitVector& bv, Value v, size_t fieldID) {
-    if (bv.size() <= fieldID)
-        bv.resize(fieldID + 1);
-    llvm::errs() << "S " << v << " " << fieldID << "\n";
-    bv.set(fieldID);
+static void unionSetSet(SetSet &dest, const SetSet &src) {
+  // now merge from src for commmon elements
+  for (auto &[v, bv] : src)
+    dest[v] |= bv;
+}
+
+static void intersectSetSet(SetSet &dest, const SetSet &src) {
+
+  // Filter dest to get rid of things not in src.
+  SmallVector<Value> toDelete;
+  for (auto &[v, bv] : dest)
+    if (!src.count(v))
+      toDelete.push_back(v);
+  for (auto v : toDelete)
+    dest.erase(v);
+
+  // Intersect anything common.  Everything in dest is in src at this point, but
+  // not vice versa.
+  for (auto &[v, bv] : src)
+    if (dest.count(v))
+      dest[v] &= bv;
 }
 
 namespace {
 class CheckInitPass : public CheckInitBase<CheckInitPass> {
-  // SetSets track initialized fieldIDs
-  using SetSet = DenseMap<Value, BitVector>;
   struct RegionState {
     // Values Inited in this state's regions.  To be intersected.
     SetSet init;
@@ -128,10 +73,11 @@ class CheckInitPass : public CheckInitBase<CheckInitPass> {
   };
 
   SmallVector<Operation *> worklist;
-  DenseMap<Region*, RegionState> localInfo;
+  DenseMap<Region *, RegionState> localInfo;
 
   void processOp(Operation *op, FieldSource &fieldSource);
-  void reportRegion(Value decl, Type t, size_t fieldID, bool needed, BitVector& vals);
+  void reportRegion(Value decl, Type t, size_t fieldID, bool needed,
+                    bool alwaysNeeded, BitVector &vals);
   void emitInitError(Value decl, size_t fieldID);
 
 public:
@@ -139,53 +85,88 @@ public:
 };
 } // end anonymous namespace
 
-static bool checkBit(BitVector& vals, size_t idx) {
+static bool checkBit(BitVector &vals, size_t idx) {
   if (vals.size() <= idx)
     return false;
   return vals[idx];
 }
 
+static std::string nameForField(Type t, size_t fieldID) {
+  //  llvm::errs() << "N: " << t << " @" << fieldID << "\n";
+  if (auto bundle = dyn_cast<BundleType>(t)) {
+    auto idx = bundle.getIndexForFieldID(fieldID);
+    auto fid = bundle.getFieldID(idx);
+    if (fieldID == fid)
+      return bundle.getElementName(idx).str();
+    return bundle.getElementName(idx).str() + "." +
+           nameForField(bundle.getElementType(idx), fieldID - fid);
+  } else if (auto bundle = dyn_cast<OpenBundleType>(t)) {
+    auto idx = bundle.getIndexForFieldID(fieldID);
+    auto fid = bundle.getFieldID(idx);
+    if (fieldID == fid)
+      return bundle.getElementName(idx).str();
+    return bundle.getElementName(idx).str() + "." +
+           nameForField(bundle.getElementType(idx), fieldID - fid);
+  } else if (auto vec = dyn_cast<FVectorType>(t)) {
+    return "some vector thing";
+  } else if (auto vec = dyn_cast<OpenVectorType>(t)) {
+    return "some vector thing";
+  }
+  return "INVALID";
+}
+
+static StringRef getPortName(BlockArgument b) {
+  FModuleOp mod = cast<FModuleOp>(b.getOwner()->getParentOp());
+  return mod.getPort(b.getArgNumber()).getName();
+}
+
 void CheckInitPass::emitInitError(Value decl, size_t fieldID) {
   bool isPort = isa<BlockArgument>(decl);
-  auto err = isPort ? getOperation()->emitError("Port is not") :
-  decl.getDefiningOp()->emitError("Wire is not");
+  auto err = isPort ? (getOperation()->emitError("Port `")
+                       << getPortName(cast<BlockArgument>(decl)) << "` is not")
+                    : decl.getDefiningOp()->emitError("Wire is not");
   if (fieldID == 0) {
     err << " initialized.";
   } else {
-    err << " fully initialized. (" << fieldID << ")";
+    err << " fully initialized at field `"
+        << nameForField(decl.getType(), fieldID) << "`.";
   }
 }
 
 // Check (recursively) that decl at fieldID, whose type at fieldID is t, has a
 // bit set in vals
-void CheckInitPass::reportRegion(Value decl, Type t, size_t fieldID, bool needed, BitVector& vals ) {
-  llvm::errs() << "Test[" << fieldID << "]: " << decl << "\n";
+void CheckInitPass::reportRegion(Value decl, Type t, size_t fieldID,
+                                 bool needed, bool alwaysNeeded,
+                                 BitVector &vals) {
+  //  llvm::errs() << "Test[" << fieldID << "]: " << decl << " " << t << " ";
+  //  dumpBV(vals);
+  //  llvm::errs() << "\n";
   // May recursively handle subtypes.
-  if (!needed || checkBit(vals, fieldID))
+  if ((!needed && !alwaysNeeded) || checkBit(vals, fieldID))
     return;
 
   // Explicitly test each subtype.
   if (auto bundle = dyn_cast<BundleType>(t)) {
     for (size_t idx = 0, e = bundle.getNumElements(); idx != e; ++idx)
-      reportRegion(decl, bundle.getElementType(idx), 
-                 needed ^ bundle.getElement(idx).isFlip,
-                 fieldID + bundle.getFieldID(idx), vals);
+      reportRegion(decl, bundle.getElementType(idx),
+                   fieldID + bundle.getFieldID(idx),
+                   needed ^ bundle.getElement(idx).isFlip, alwaysNeeded, vals);
     return;
   } else if (auto bundle = dyn_cast<OpenBundleType>(t)) {
     for (size_t idx = 0, e = bundle.getNumElements(); idx != e; ++idx)
-      reportRegion(decl, bundle.getElementType(idx), 
-                 needed ^ bundle.getElement(idx).isFlip,
-                 fieldID + bundle.getFieldID(idx), vals);
+      reportRegion(decl, bundle.getElementType(idx),
+                   fieldID + bundle.getFieldID(idx),
+                   needed ^ bundle.getElement(idx).isFlip, alwaysNeeded, vals);
     return;
   } else if (auto vec = dyn_cast<FVectorType>(t)) {
     for (size_t idx = 0, e = vec.getNumElements(); idx != e; ++idx)
-      reportRegion(decl, vec.getElementType(), needed,
-                 fieldID + vec.getFieldID(idx), vals);
+      reportRegion(decl, vec.getElementType(), fieldID + vec.getFieldID(idx),
+                   needed, alwaysNeeded, vals);
     return;
   } else if (auto vec = dyn_cast<OpenVectorType>(t)) {
     for (size_t idx = 0, e = vec.getNumElements(); idx != e; ++idx)
-      reportRegion(decl, vec.getElementType(), needed,
-                 fieldID + vec.getFieldID(idx), vals);
+      reportRegion(decl, vec.getElementType(), fieldID + vec.getFieldID(idx),
+                   needed, alwaysNeeded, vals);
     return;
   }
 
@@ -195,7 +176,7 @@ void CheckInitPass::reportRegion(Value decl, Type t, size_t fieldID, bool needed
 // compute the values set by op's regions.  A when, for example, ands the init
 // set as only fields set on both paths are unconditionally set by the when.
 void CheckInitPass::processOp(Operation *op, FieldSource &fieldSource) {
-  llvm::errs() << "* " << op << "\n";
+  //  llvm::errs() << "* " << op << " r(" << op->getNumRegions() << ")\n";
 
   for (auto &region : op->getRegions()) {
     auto &local = localInfo[&region];
@@ -238,41 +219,62 @@ void CheckInitPass::runOnOperation() {
   worklist.push_back(getOperation());
 
   // Late size check as it is growing.
-  for (size_t i = 0; i < worklist.size(); ++i)  {
+  for (size_t i = 0; i < worklist.size(); ++i) {
     Operation *op = worklist[i];
     processOp(op, fieldSource);
   }
 
   // Modules are the only blocks with arguments, so capture them here only.
-  auto& topLevel = localInfo[&getOperation().getRegion()];
-  for (auto arg :
-       getOperation().getBodyBlock()->getArguments())
+  auto &topLevel = localInfo[&getOperation().getRegion()];
+  for (auto arg : getOperation().getBodyBlock()->getArguments())
     topLevel.dests.push_back(arg);
 
   // Post-order traversal.
   for (auto opiter = worklist.rbegin(); opiter != worklist.rend(); ++opiter) {
-    for (auto& r : (*opiter)->getRegions()) {
-      auto& state = localInfo[&r];
-      for (auto v: state.dests) {
-        bool needed = true;
-        if (auto b = dyn_cast<BlockArgument>(v))
-          needed = getOperation().getPortDirection(b.getArgNumber()) == Direction::Out;
-        reportRegion(v, v.getType(), 0, needed, state.init[v]);
-      }
-      llvm::errs() << "\n";
-      llvm::errs() << "children: " << state.children.size() << "\n";
-      for (auto ii = state.init.begin(), ee = state.init.end(); ii != ee; ++ii) {
-        llvm::errs() << "\t" << ii->first << ": ";
-        for (auto bi = ii->second.set_bits_begin(), be = ii->second.set_bits_end(); bi != be; ++bi)
-          llvm::errs() <<  *bi;
-        llvm::errs() << "\n";
-        for (size_t bi = 0, be = ii->second.size(); bi != be; ++bi)
-          llvm::errs() <<  ii->second[bi];
-        llvm::errs() << "\n";
+    for (auto &r : (*opiter)->getRegions()) {
+      auto &state = localInfo[&r];
 
+      for (auto *op : state.children) {
+        //        llvm::errs() << "+ " << op << " r(" << op->getNumRegions() <<
+        //        ")\n";
+        // Union the child's regions.  This is safe as all multi-region ops are
+        // exclusive control flow.
+        assert(localInfo.count(&op->getRegion(0)));
+        SetSet result = localInfo[&op->getRegion(0)].init;
+        for (size_t i = 1, e = op->getNumRegions(); i < e; ++i) {
+          assert(localInfo.count(&op->getRegion(i)));
+          intersectSetSet(result, localInfo[&op->getRegion(i)].init);
+        }
+        // Else blocks get elided, causing a hole in the loop above.
+        if (isa<WhenOp>(op) && op->getNumRegions() == 1)
+          result.clear();
+
+        // Merge anything initialized in all paths into the current region's
+        // set.  Not all ops will have
+        unionSetSet(state.init, result);
+      }
+
+      for (auto v : state.dests) {
+        bool needed = true;
+        bool alwaysNeeded = false;
+        if (auto b = dyn_cast<BlockArgument>(v)) {
+          needed = getOperation().getPortDirection(b.getArgNumber()) ==
+                   Direction::Out;
+        } else if (auto inst = dyn_cast<InstanceOp>(v.getDefiningOp())) {
+          needed = inst.getPortDirection(cast<OpResult>(v).getResultNumber()) ==
+                   Direction::In;
+        } else {
+          // Wires need both flip directions to be connected.
+          alwaysNeeded = true;
+        }
+        reportRegion(v, v.getType(), 0, needed, alwaysNeeded, state.init[v]);
       }
     }
   }
+
+  // Prepare for next run.
+  worklist.clear();
+  localInfo.clear();
 }
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createCheckInitPass() {
