@@ -20,6 +20,67 @@ using llvm::MapVector;
 
 #define DEBUG_TYPE "lower-seq-firreg"
 
+bool ReachableMuxes::isMuxReachableFrom(seq::FirRegOp regOp,
+                                        comb::MuxOp muxOp) {
+  return llvm::any_of(regOp.getResult().getUsers(), [&](Operation *user) {
+    if (opBlocksReachability(user))
+      return false;
+    buildReachabilityFrom(user);
+    return reachableMuxes[user].contains(muxOp);
+  });
+}
+
+void ReachableMuxes::buildReachabilityFrom(Operation *startNode) {
+  // This is a backward dataflow analysis.
+  // First build a graph rooted at the `startNode`. Every user of an operation
+  // that doesnot block the reachability is a child node. Then, the ops that
+  // are reachable from a node is computed as the union of the Reachability of
+  // all its child nodes.
+  // The dataflow can be expressed as, for all child in the Children(node)
+  // Reachability(node) = node + Union{Reachability(child)}
+  if (visited.find(startNode) != visited.end())
+    return;
+  // The stack to record enough information for an iterative post-order
+  // traversal.
+
+  llvm::SmallVector<OpUserInfo> stk;
+
+  stk.emplace_back(startNode);
+
+  while (!stk.empty()) {
+    auto &info = stk.back();
+    Operation *currentNode = info.op;
+
+    // Node is being visited for the first time.
+    if (info.userIter == info.userRange.begin())
+      visited.insert(currentNode);
+    if (info.getNextValid(info.userIter)) {
+      Operation *child = *info.userIter;
+      ++info.userIter;
+      if (visited.find(child) == visited.end())
+        stk.emplace_back(child);
+
+    } else { // All children of the node have been visited
+      // Any op is reachable from itself.
+      reachableMuxes[currentNode].insert(currentNode);
+      auto userIterator = info.userRange.begin();
+      while (info.getNextValid(userIterator)) {
+        Operation *childOp = *userIterator;
+        reachableMuxes[currentNode].insert(childOp);
+        // Propagate the reachability backwards from m to currentNode.
+        auto iter = reachableMuxes.find(childOp);
+
+        if (iter != reachableMuxes.end())
+          reachableMuxes[currentNode].insert(iter->getSecond().begin(),
+                                             iter->getSecond().end());
+
+        ++userIterator;
+      }
+      stk.pop_back();
+    }
+  }
+}
+
 void FirRegLowering::addToIfBlock(OpBuilder &builder, Value cond,
                                   const std::function<void()> &trueSide,
                                   const std::function<void()> &falseSide) {
