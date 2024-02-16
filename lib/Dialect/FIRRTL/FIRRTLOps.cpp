@@ -5359,8 +5359,11 @@ FIRRTLType ShrPrimOp::inferReturnType(ValueRange operands,
         loc, "shr input must be integer and amount must be >= 0");
 
   int32_t width = inputi.getWidthOrSentinel();
-  if (width != -1)
-    width = std::max<int32_t>(1, width - amount);
+  if (width != -1) {
+    // UInt saturates at 0 bits, SInt at 1 bit
+    int32_t minWidth = inputi.isUnsigned() ? 0 : 1;
+    width = std::max<int32_t>(minWidth, width - amount);
+  }
 
   return IntType::get(input.getContext(), inputi.isSigned(), width,
                       inputi.isConst());
@@ -5748,6 +5751,9 @@ void GTPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 void HeadPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void IntegerAddOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 void IsTagOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {

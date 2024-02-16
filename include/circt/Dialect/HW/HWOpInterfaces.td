@@ -65,7 +65,7 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
     "SmallVector<Location>", "getAllPortLocs", (ins)>,
 
     InterfaceMethod<"Set the port Locations",
-    "void", "setAllPortLocs", (ins "ArrayRef<Location>":$locs)>,
+    "void", "setAllPortLocsAttrs", (ins "ArrayRef<Attribute>":$locs)>,
 
     InterfaceMethod<"Set the module type (and port names)",
     "void", "setHWModuleType", (ins "::circt::hw::ModuleType":$type)>,
@@ -113,16 +113,6 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
     }
 
     /// Return the set of names on input and inout ports
-    SmallVector<StringAttr> getInputNamesStr() {
-      return $_op.getHWModuleType().getInputNamesStr();
-    }
-
-    /// Return the set of names on output ports
-    SmallVector<StringAttr> getOutputNamesStr() {
-      return $_op.getHWModuleType().getOutputNamesStr();
-    }
-
-    /// Return the set of names on input and inout ports
     SmallVector<Attribute> getInputNames() {
       return $_op.getHWModuleType().getInputNames();
     }
@@ -133,15 +123,18 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
     }
 
     void setInputNames(ArrayRef<Attribute> names) {
-      SmallVector<Attribute> newNames(names.begin(), names.end());
-      auto resNames = $_op.getOutputNames();
-      newNames.append(resNames.begin(), resNames.end());
+      auto type = $_op.getHWModuleType();
+      SmallVector<Attribute> newNames(type.getPortNames());
+      for (size_t idx = 0, e = names.size(); idx != e; ++idx)
+        newNames[type.getPortIdForInputId(idx)] = names[idx];
       $_op.setAllPortNames(newNames);
     }
 
     void setOutputNames(ArrayRef<Attribute> names) {
-      SmallVector<Attribute> newNames = $_op.getInputNames();
-      newNames.append(names.begin(), names.end());
+      auto type = $_op.getHWModuleType();
+      SmallVector<Attribute> newNames(type.getPortNames());
+      for (size_t idx = 0, e = names.size(); idx != e; ++idx)
+        newNames[type.getPortIdForOutputId(idx)] = names[idx];
       $_op.setAllPortNames(newNames);
     }
 
@@ -200,16 +193,23 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
     }
 
     void setAllInputAttrs(ArrayRef<Attribute> attrs) {
-      SmallVector<Attribute> retval(attrs.begin(), attrs.end());
-      auto resAttrs = $_op.getAllOutputAttrs();
-      retval.append(resAttrs.begin(), resAttrs.end());
-      $_op.setAllPortAttrs(retval);
+      auto type = $_op.getHWModuleType();
+      SmallVector<Attribute> newAttrs($_op.getAllPortAttrs());
+      if (newAttrs.empty())
+        newAttrs.resize($_op.getNumPorts());
+      for (size_t idx = 0, e = attrs.size(); idx != e; ++idx)
+        newAttrs[type.getPortIdForInputId(idx)] = attrs[idx];
+      $_op.setAllPortAttrs(newAttrs);
     }
 
     void setAllOutputAttrs(ArrayRef<Attribute> attrs) {
-      SmallVector<Attribute> retval = $_op.getAllInputAttrs();
-      retval.append(attrs.begin(), attrs.end());
-      $_op.setAllPortAttrs(retval);
+      auto type = $_op.getHWModuleType();
+      SmallVector<Attribute> newAttrs($_op.getAllPortAttrs());
+      if (newAttrs.empty())
+        newAttrs.resize($_op.getNumPorts());
+      for (size_t idx = 0, e = attrs.size(); idx != e; ++idx)
+        newAttrs[type.getPortIdForOutputId(idx)] = attrs[idx];
+      $_op.setAllPortAttrs(newAttrs);
     }
 
     Attribute getInputAttrs(size_t idx) {
@@ -259,6 +259,11 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
       $_op.setAllPortAttrs(attrs);
     }
 
+    void setAllPortLocs(ArrayRef<Location> locs) {
+      std::vector<Attribute> nLocs(locs.begin(), locs.end());
+      $_op.setAllPortLocsAttrs(nLocs);
+    }
+
     Location getPortLoc(size_t idx) {
       return $_op.getAllPortLocs()[idx];
     }
@@ -293,13 +298,14 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
       return ArrayAttr::get($_op->getContext(), retval);
     }
 
-    void setInputLocs(ArrayRef<Location> inAttrs) {
-      assert(inAttrs.size() == $_op.getNumInputPorts());
-      auto outAttrs = getOutputLocs();
-      SmallVector<Location> attrs;
-      attrs.append(inAttrs.begin(), inAttrs.end());
-      attrs.append(outAttrs.begin(), outAttrs.end());
-      $_op.setAllPortLocs(attrs);
+    void setInputLocs(ArrayRef<Location> inLocs) {
+      assert(inLocs.size() == $_op.getNumInputPorts());
+      auto type = $_op.getHWModuleType();
+      SmallVector<Location> newLocs($_op.getAllPortLocs());
+      for (size_t idx = 0, e = inLocs.size(); idx != e; ++idx)
+        newLocs[type.getPortIdForInputId(idx)] = inLocs[idx];
+      $_op.setAllPortLocs(newLocs);
+
     }
 
     SmallVector<Location> getOutputLocs() {
@@ -318,13 +324,13 @@ def HWModuleLike : OpInterface<"HWModuleLike", [
       return ArrayAttr::get($_op->getContext(), retval);
     }
 
-    void setOutputLocs(ArrayRef<Location> outAttrs) {
-      assert(outAttrs.size() == $_op.getNumOutputPorts());
-      auto inAttrs = getInputLocs();
-      SmallVector<Location> attrs;
-      attrs.append(inAttrs.begin(), inAttrs.end());
-      attrs.append(outAttrs.begin(), outAttrs.end());
-      $_op.setAllPortLocs(attrs);
+    void setOutputLocs(ArrayRef<Location> outLocs) {
+      assert(outLocs.size() == $_op.getNumOutputPorts());
+      auto type = $_op.getHWModuleType();
+      SmallVector<Location> newLocs($_op.getAllPortLocs());
+      for (size_t idx = 0, e = outLocs.size(); idx != e; ++idx)
+        newLocs[type.getPortIdForOutputId(idx)] = outLocs[idx];
+      $_op.setAllPortLocs(newLocs);
     }
   }];
 
@@ -398,7 +404,7 @@ def HWMutableModuleLike : OpInterface<"HWMutableModuleLike", [HWModuleLike]> {
 
 
 def HWInstanceLike : OpInterface<"HWInstanceLike", [
-    PortList, InstanceGraphInstanceOpInterface]> {
+    InstanceGraphInstanceOpInterface]> {
   let cppNamespace = "circt::hw";
   let description = "Provide common  module information.";
 }

@@ -22,7 +22,7 @@ hw.module public @top(in %a: i32, out b: i32, out d: i32) {
   // CHECK-NEXT:    .a (a),
   // CHECK-NEXT:    .b (b)
   // CHECK-NEXT: );
-  %b = hw.instance_choice "inst1" sym @inst1 @TargetDefault or @TargetA if "A" or @TargetB if "B"(a: %a: i32) -> (b: i32)
+  %b = hw.instance_choice "inst1" sym @inst1 option "Perf" @TargetDefault or @TargetA if "A" or @TargetB if "B"(a: %a: i32) -> (b: i32)
 
   // CHECK:      `ifndef __circt_choice_top_inst2
   // CHECK-NEXT: `define __circt_choice_top_inst2 TargetDefault
@@ -32,7 +32,7 @@ hw.module public @top(in %a: i32, out b: i32, out d: i32) {
   // CHECK-NEXT:   .b (_inst2_b)
   // CHECK-NEXT: );
 
-  %c = hw.instance_choice "inst2" sym @inst2 @TargetDefault or @TargetA if "A" or @TargetB if "B"(a: %a: i32) -> (b: i32)
+  %c = hw.instance_choice "inst2" sym @inst2 option "Perf" @TargetDefault or @TargetA if "A" or @TargetB if "B"(a: %a: i32) -> (b: i32)
 
   %d = comb.add %c, %a : i32
 

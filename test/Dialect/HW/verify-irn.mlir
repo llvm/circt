@@ -39,5 +39,5 @@ hw.module @XMRRefD() {
   %a = sv.wire sym @a : !hw.inout<i2>
 }
 hw.module @XMRRefOp() {
-  hw.instance_choice "foo" sym @foo @XMRRefA or @XMRRefB if "B" or @XMRRefC if "C"() -> ()
+  hw.instance_choice "foo" sym @foo option "bar" @XMRRefA or @XMRRefB if "B" or @XMRRefC if "C"() -> ()
 }

@@ -23,14 +23,61 @@
 using namespace circt;
 using namespace firrtl;
 
+//===----------------------------------------------------------------------===//
+// Helpers
+//===----------------------------------------------------------------------===//
+
+static bool isAncestor(Operation *op, Value value) {
+  if (auto result = dyn_cast<OpResult>(value))
+    return op->isAncestor(result.getOwner());
+  auto argument = cast<BlockArgument>(value);
+  return op->isAncestor(argument.getOwner()->getParentOp());
+}
+
+//===----------------------------------------------------------------------===//
+// Type Conversion
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+/// Indicates the kind of reference that was captured.
+enum class ConnectKind {
+  /// A normal captured value.  This is a read of a value outside the
+  /// layerblock.
+  NonRef,
+  /// A reference.  This is a destination of a ref define.
+  Ref
+};
+
+struct ConnectInfo {
+  Value value;
+  ConnectKind kind;
+};
+
+} // namespace
+
 class LowerLayersPass : public LowerLayersBase<LowerLayersPass> {
   /// Safely build a new module with a given namehint.  This handles geting a
   /// lock to modify the top-level circuit.
   FModuleOp buildNewModule(OpBuilder &builder, Location location,
                            Twine namehint, SmallVectorImpl<PortInfo> &ports);
 
-  /// Function to process each module.
-  void runOnModule(FModuleOp moduleOp);
+  /// Strip layer colors from the module's interface.
+  void runOnModuleLike(FModuleLike moduleLike);
+
+  /// Extract layerblocks and strip probe colors from all ops under the module.
+  void runOnModuleBody(FModuleOp moduleOp);
+
+  /// Update the module's port types to remove any explicit layer requirements
+  /// from any probe types.
+  void removeLayersFromPorts(FModuleLike moduleLike);
+
+  /// Update the value's type to remove any layers from any probe types.
+  void removeLayersFromValue(Value value);
+
+  /// Remove any layers from the result of the cast. If the cast becomes a nop,
+  /// remove the cast itself from the IR.
+  void removeLayersFromRefCast(RefCastOp cast);
 
   /// Entry point for the function.
   void runOnOperation() override;
@@ -58,13 +105,79 @@ FModuleOp LowerLayersPass::buildNewModule(OpBuilder &builder, Location location,
   return newModule;
 }
 
-/// Process a module to remove any layer blocks it has.
-void LowerLayersPass::runOnModule(FModuleOp moduleOp) {
+void LowerLayersPass::removeLayersFromValue(Value value) {
+  auto type = dyn_cast<RefType>(value.getType());
+  if (!type || !type.getLayer())
+    return;
+  value.setType(type.removeLayer());
+}
+
+void LowerLayersPass::removeLayersFromRefCast(RefCastOp cast) {
+  auto result = cast.getResult();
+  auto oldType = result.getType();
+  if (oldType.getLayer()) {
+    auto input = cast.getInput();
+    auto srcType = input.getType();
+    auto newType = oldType.removeLayer();
+    if (newType == srcType) {
+      result.replaceAllUsesWith(input);
+      cast->erase();
+      return;
+    }
+    result.setType(newType);
+  }
+}
+
+void LowerLayersPass::removeLayersFromPorts(FModuleLike moduleLike) {
+  auto oldTypeAttrs = moduleLike.getPortTypesAttr();
+  SmallVector<Attribute> newTypeAttrs;
+  newTypeAttrs.reserve(oldTypeAttrs.size());
+  bool changed = false;
+
+  for (auto typeAttr : oldTypeAttrs.getAsRange<TypeAttr>()) {
+    if (auto refType = dyn_cast<RefType>(typeAttr.getValue())) {
+      if (refType.getLayer()) {
+        typeAttr = TypeAttr::get(refType.removeLayer());
+        changed = true;
+      }
+    }
+    newTypeAttrs.push_back(typeAttr);
+  }
+
+  if (!changed)
+    return;
+
+  moduleLike->setAttr(FModuleLike::getPortTypesAttrName(),
+                      ArrayAttr::get(moduleLike.getContext(), newTypeAttrs));
+
+  if (auto moduleOp = dyn_cast<FModuleOp>(moduleLike.getOperation())) {
+    for (auto arg : moduleOp.getBodyBlock()->getArguments())
+      removeLayersFromValue(arg);
+  }
+}
+
+void LowerLayersPass::runOnModuleLike(FModuleLike moduleLike) {
   LLVM_DEBUG({
-    llvm::dbgs() << "Module: " << moduleOp.getModuleName() << "\n";
+    llvm::dbgs() << "Module: " << moduleLike.getModuleName() << "\n";
     llvm::dbgs() << "  Examining Layer Blocks:\n";
   });
 
+  // Strip away layers from the interface of the module-like op.
+  TypeSwitch<Operation *, void>(moduleLike.getOperation())
+      .Case<FModuleOp>([&](auto op) {
+        op.setLayers({});
+        removeLayersFromPorts(op);
+        runOnModuleBody(op);
+      })
+      .Case<FExtModuleOp, FIntModuleOp, FMemModuleOp>([&](auto op) {
+        op.setLayers({});
+        removeLayersFromPorts(op);
+      })
+      .Case<ClassOp, ExtClassOp>([](auto) {})
+      .Default([](auto) { assert(0 && "unknown module-like op"); });
+}
+
+void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp) {
   CircuitOp circuitOp = moduleOp->getParentOfType<CircuitOp>();
   StringRef circuitName = circuitOp.getName();
 
@@ -85,6 +198,26 @@ void LowerLayersPass::runOnModule(FModuleOp moduleOp) {
   // 4. Instantiate the new module outside the layer block and hook it up.
   // 5. Erase the layer block.
   moduleOp.walk<mlir::WalkOrder::PostOrder>([&](Operation *op) {
+    // Strip layer requirements from any op that might represent a probe.
+    if (auto wire = dyn_cast<WireOp>(op)) {
+      removeLayersFromValue(wire.getResult());
+      return WalkResult::advance();
+    }
+    if (auto sub = dyn_cast<RefSubOp>(op)) {
+      removeLayersFromValue(sub.getResult());
+      return WalkResult::advance();
+    }
+    if (auto instance = dyn_cast<InstanceOp>(op)) {
+      instance.setLayers({});
+      for (auto result : instance.getResults())
+        removeLayersFromValue(result);
+      return WalkResult::advance();
+    }
+    if (auto cast = dyn_cast<RefCastOp>(op)) {
+      removeLayersFromRefCast(cast);
+      return WalkResult::advance();
+    }
+
     auto layerBlock = dyn_cast<LayerBlockOp>(op);
     if (!layerBlock)
       return WalkResult::advance();
@@ -104,29 +237,44 @@ void LowerLayersPass::runOnModule(FModuleOp moduleOp) {
     // block.
     SmallVector<PortInfo> ports;
 
-    // Connectsion that need to be made to the instance of the derived module.
-    SmallVector<Value> connectValues;
+    // Connection that need to be made to the instance of the derived module.
+    SmallVector<ConnectInfo> connectValues;
 
     // Create an input port for an operand that is captured from outside.
-    //
-    // TODO: If we allow capturing reference types, this will need to be
-    // updated.
     auto createInputPort = [&](Value operand, Location loc) {
-      auto portNum = ports.size();
       auto operandName = getFieldName(FieldRef(operand, 0), true);
 
-      ports.push_back({builder.getStringAttr("_" + operandName.first),
-                       operand.getType(), Direction::In, /*sym=*/{},
+      // If the value is a ref, we must resolve the ref inside the parent,
+      // passing the input as a value instead of a ref. Inside the layer, we
+      // convert (ref.send) the value back into a ref.
+      auto type = operand.getType();
+      if (auto refType = dyn_cast<RefType>(type))
+        type = refType.getType();
+
+      ports.push_back({builder.getStringAttr("_" + operandName.first), type,
+                       Direction::In, /*sym=*/{},
                        /*loc=*/loc});
       // Update the layer block's body with arguments as we will swap this body
-      // into the module when we create it.
-      body->addArgument(operand.getType(), loc);
-      operand.replaceUsesWithIf(body->getArgument(portNum),
-                                [&](OpOperand &operand) {
-                                  return operand.getOwner()->getBlock() == body;
-                                });
+      // into the module when we create it.  If this is a ref type, then add a
+      // refsend to convert from the non-ref type input port.
+      Value replacement = body->addArgument(type, loc);
+      if (isa<RefType>(operand.getType())) {
+        OpBuilder::InsertionGuard guard(builder);
+        builder.setInsertionPointToStart(body);
+        replacement = builder.create<RefSendOp>(loc, replacement);
+      }
+      operand.replaceUsesWithIf(replacement, [&](OpOperand &use) {
+        auto *user = use.getOwner();
+        if (!layerBlock->isAncestor(user))
+          return false;
+        if (auto connectLike = dyn_cast<FConnectLike>(user)) {
+          if (use.getOperandNumber() == 0)
+            return false;
+        }
+        return true;
+      });
 
-      connectValues.push_back(operand);
+      connectValues.push_back({operand, ConnectKind::NonRef});
     };
 
     // Set the location intelligently.  Use the location of the capture if this
@@ -145,21 +293,39 @@ void LowerLayersPass::runOnModule(FModuleOp moduleOp) {
       return loc;
     };
 
-    // Create an output probe port port and adds the ref.define/ref.send to
-    // drive the port.
+    // Create an output probe port port and adds a ref.define/ref.send to
+    // drive the port if this was not already capturing a ref type.
     auto createOutputPort = [&](Value dest, Value src) {
       auto loc = getPortLoc(dest);
       auto portNum = ports.size();
       auto operandName = getFieldName(FieldRef(dest, 0), true);
 
-      auto refType = RefType::get(
-          type_cast<FIRRTLBaseType>(dest.getType()).getPassiveType(),
-          /*forceable=*/false);
+      RefType refType;
+      if (auto oldRef = dyn_cast<RefType>(dest.getType()))
+        refType = oldRef;
+      else
+        refType = RefType::get(
+            type_cast<FIRRTLBaseType>(dest.getType()).getPassiveType(),
+            /*forceable=*/false);
 
       ports.push_back({builder.getStringAttr("_" + operandName.first), refType,
                        Direction::Out, /*sym=*/{}, /*loc=*/loc});
-      body->addArgument(refType, loc);
-      connectValues.push_back(dest);
+      Value replacement = body->addArgument(refType, loc);
+      if (isa<RefType>(dest.getType())) {
+        dest.replaceUsesWithIf(replacement, [&](OpOperand &use) {
+          auto *user = use.getOwner();
+          if (!layerBlock->isAncestor(user))
+            return false;
+          if (auto connectLike = dyn_cast<FConnectLike>(user)) {
+            if (use.getOperandNumber() == 0)
+              return true;
+          }
+          return false;
+        });
+        connectValues.push_back({dest, ConnectKind::Ref});
+        return;
+      }
+      connectValues.push_back({dest, ConnectKind::NonRef});
       OpBuilder::InsertionGuard guard(builder);
       builder.setInsertionPointAfterValue(src);
       builder.create<RefDefineOp>(
@@ -179,11 +345,10 @@ void LowerLayersPass::runOnModule(FModuleOp moduleOp) {
       // outside the layer block.  We will hook it up later once we replace the
       // layer block with an instance.
       if (auto instOp = dyn_cast<InstanceOp>(op)) {
-        // Ignore any instance which this pass did not create from a nested
-        // layer block. Instances which are not marked lowerToBind do not need
-        // to be split out.
+        // Ignore instances which this pass did not create.
         if (!createdInstances.contains(instOp))
           continue;
+
         LLVM_DEBUG({
           llvm::dbgs()
               << "      Found instance created from nested layer block:\n"
@@ -194,31 +359,51 @@ void LowerLayersPass::runOnModule(FModuleOp moduleOp) {
         continue;
       }
 
+      if (auto refSend = dyn_cast<RefSendOp>(op)) {
+        auto src = refSend.getBase();
+        if (!isAncestor(layerBlock, src))
+          createInputPort(src, op.getLoc());
+        continue;
+      }
+
+      if (auto refCast = dyn_cast<RefCastOp>(op)) {
+        if (!isAncestor(layerBlock, refCast))
+          createInputPort(refCast.getInput(), op.getLoc());
+        continue;
+      }
+
       if (auto connect = dyn_cast<FConnectLike>(op)) {
-        auto srcInLayerBlock = connect.getSrc().getParentBlock() == body;
-        auto destInLayerBlock = connect.getDest().getParentBlock() == body;
-        if (!srcInLayerBlock && !destInLayerBlock) {
+        auto src = connect.getSrc();
+        auto dst = connect.getDest();
+        auto srcInLayerBlock = isAncestor(layerBlock, src);
+        auto dstInLayerBlock = isAncestor(layerBlock, dst);
+        if (!srcInLayerBlock && !dstInLayerBlock) {
           connect->moveBefore(layerBlock);
           continue;
         }
         // Create an input port.
         if (!srcInLayerBlock) {
-          createInputPort(connect.getSrc(), op.getLoc());
+          createInputPort(src, op.getLoc());
           continue;
         }
         // Create an output port.
-        if (!destInLayerBlock) {
-          createOutputPort(connect.getDest(), connect.getSrc());
-          connect.erase();
+        if (!dstInLayerBlock) {
+          createOutputPort(dst, src);
+          if (!dst.getType().isa<RefType>())
+            connect.erase();
           continue;
         }
         // Source and destination in layer block.  Nothing to do.
         continue;
       }
 
-      // Pattern match the following structure.  Move the ref.resolve outside
-      // the layer block.  The strictconnect will be moved outside in the next
-      // loop iteration:
+      // Pre-emptively de-squiggle connections that we are creating.  This will
+      // later be cleaned up by the de-squiggling pass.  However, there is no
+      // point in creating deeply squiggled connections if we don't have to.
+      //
+      // This pattern matches the following structure.  Move the ref.resolve
+      // outside the layer block.  The strictconnect will be moved outside in
+      // the next loop iteration:
       //     %0 = ...
       //     %1 = ...
       //     firrtl.layerblock {
@@ -226,7 +411,8 @@ void LowerLayersPass::runOnModule(FModuleOp moduleOp) {
       //       firrtl.strictconnect %1, %2
       //     }
       if (auto refResolve = dyn_cast<RefResolveOp>(op))
-        if (refResolve.getResult().hasOneUse())
+        if (refResolve.getResult().hasOneUse() &&
+            refResolve.getRef().getParentBlock() != body)
           if (auto connect = dyn_cast<StrictConnectOp>(
                   *refResolve.getResult().getUsers().begin()))
             if (connect.getDest().getParentBlock() != body) {
@@ -235,9 +421,10 @@ void LowerLayersPass::runOnModule(FModuleOp moduleOp) {
             }
 
       // For any other ops, create input ports for any captured operands.
-      for (auto operand : op.getOperands())
-        if (operand.getParentBlock() != body)
+      for (auto operand : op.getOperands()) {
+        if (!isAncestor(layerBlock, operand))
           createInputPort(operand, op.getLoc());
+      }
     }
 
     // Create the new module.  This grabs a lock to modify the circuit.
@@ -257,11 +444,18 @@ void LowerLayersPass::runOnModule(FModuleOp moduleOp) {
         llvm::dbgs() << "          - name: " << port.getName() << "\n"
                      << "            type: " << port.type << "\n"
                      << "            direction: " << port.direction << "\n"
-                     << "            value: " << value << "\n";
+                     << "            value: " << value.value << "\n"
+                     << "            kind: "
+                     << (value.kind == ConnectKind::NonRef ? "NonRef" : "Ref")
+                     << "\n";
       }
     });
 
     // Replace the original layer block with an instance.  Hook up the instance.
+    // Intentionally create instance with probe ports which do not have an
+    // associated layer.  This is illegal IR that will be made legal by the end
+    // of the pass.  This is done to avoid having to revisit and rewrite each
+    // instance everytime it is moved into a parent layer.
     builder.setInsertionPointAfter(layerBlock);
     auto moduleName = newModule.getModuleName();
     auto instanceOp = builder.create<InstanceOp>(
@@ -288,13 +482,22 @@ void LowerLayersPass::runOnModule(FModuleOp moduleOp) {
          ++portNum) {
       OpBuilder::InsertionGuard guard(builder);
       builder.setInsertionPointAfterValue(instanceOp.getResult(portNum));
-      if (instanceOp.getPortDirection(portNum) == Direction::In)
+      if (instanceOp.getPortDirection(portNum) == Direction::In) {
+        auto src = connectValues[portNum].value;
+        if (isa<RefType>(src.getType()))
+          src = builder.create<RefResolveOp>(
+              newModule.getPortLocationAttr(portNum), src);
         builder.create<StrictConnectOp>(newModule.getPortLocationAttr(portNum),
-                                        instanceOp.getResult(portNum),
-                                        connectValues[portNum]);
+                                        instanceOp.getResult(portNum), src);
+      } else if (instanceOp.getResult(portNum).getType().isa<RefType>() &&
+                 connectValues[portNum].kind == ConnectKind::Ref)
+        builder.create<RefDefineOp>(getPortLoc(connectValues[portNum].value),
+                                    connectValues[portNum].value,
+                                    instanceOp.getResult(portNum));
       else
         builder.create<StrictConnectOp>(
-            getPortLoc(connectValues[portNum]), connectValues[portNum],
+            getPortLoc(connectValues[portNum].value),
+            connectValues[portNum].value,
             builder.create<RefResolveOp>(newModule.getPortLocationAttr(portNum),
                                          instanceOp.getResult(portNum)));
     }
@@ -331,14 +534,11 @@ void LowerLayersPass::runOnOperation() {
     });
   });
 
-  // Early exit if no work to do.
-  if (moduleNames.empty())
-    return markAllAnalysesPreserved();
-
   // Lower the layer blocks of each module.
-  SmallVector<FModuleOp> modules(circuitOp.getBodyBlock()->getOps<FModuleOp>());
-  llvm::parallelForEach(modules,
-                        [&](FModuleOp moduleOp) { runOnModule(moduleOp); });
+  SmallVector<FModuleLike> modules(
+      circuitOp.getBodyBlock()->getOps<FModuleLike>());
+  parallelForEach(modules,
+                  [this](FModuleLike module) { runOnModuleLike(module); });
 
   // Generate the header and footer of each bindings file.  The body will be
   // populated later when binds are exported to Verilog.  This produces text

@@ -1572,8 +1572,10 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
       })
       .Case<ShrPrimOp>([&](auto op) {
         auto input = getExpr(op.getInput());
+        // UInt saturates at 0 bits, SInt at 1 bit
+        auto minWidth = op.getInput().getType().base().isUnsigned() ? 0 : 1;
         auto e = solver.max(solver.add(input, solver.known(-op.getAmount())),
-                            solver.known(1));
+                            solver.known(minWidth));
         setExpr(op.getResult(), e);
       })
 

@@ -122,7 +122,7 @@ def HWModuleOp : HWModuleOpBase<"module",
   let arguments = (ins SymbolNameAttr:$sym_name,
                        TypeAttrOf<ModuleType>:$module_type,
                        OptionalAttr<DictArrayAttr>:$per_port_attrs,
-                       OptionalAttr<LocationArrayAttr>:$port_locs,
+                       OptionalAttr<LocationArrayAttr>:$result_locs,
                        ParamDeclArrayAttr:$parameters,
                        OptionalAttr<StrAttr>:$comment);
   let results = (outs);
@@ -566,7 +566,8 @@ def InstanceChoiceOp : HWInstanceOpBase<"instance_choice", [
 
   let arguments = (ins StrAttr:$instanceName,
                        FlatSymbolRefArrayAttr:$moduleNames,
-                       StrArrayAttr:$targetNames,
+                       StrAttr:$optionName,
+                       StrArrayAttr:$caseNames,
                        Variadic<AnyType>:$inputs,
                        StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
                        ParamDeclArrayAttr:$parameters,

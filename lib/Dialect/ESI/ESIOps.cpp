@@ -598,7 +598,7 @@ SmallVector<Location> ESIPureModuleOp::getAllPortLocs() {
   return retval;
 }
 
-void ESIPureModuleOp::setAllPortLocs(ArrayRef<Location> locs) {
+void ESIPureModuleOp::setAllPortLocsAttrs(ArrayRef<Attribute> locs) {
   emitError("No ports for port locations");
 }
 

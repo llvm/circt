@@ -292,3 +292,35 @@ module attributes {circt.loweringOptions = "disallowLocalVariables"} {
   }
   hw.hierpath @xmr [@Foo::@a]
 }
+
+
+// -----
+
+// CHECK-LABEL: @constantInitRegWithBackEdge
+hw.module @constantInitRegWithBackEdge() {
+  // CHECK: %reg = sv.reg init %false : !hw.inout<i1>
+  // CHECK-NEXT: %false = hw.constant false
+  // CHECK-NEXT: %[[VAL_0:.*]] = sv.read_inout %reg : !hw.inout<i1>
+  // CHECK-NEXT: %[[VAL_1:.*]] = comb.or %false, %[[VAL_0]] : i1
+  %false = hw.constant false
+  %0 = comb.or %false, %1 : i1
+  %reg = sv.reg init %false : !hw.inout<i1>
+  %1 = sv.read_inout %reg : !hw.inout<i1>
+}
+
+// -----
+
+// CHECK-LABEL: @temporaryWireForReg
+hw.module @temporaryWireForReg() {
+  // CHECK: %[[WIRE:.*]] = sv.wire : !hw.inout<i1>
+  // CHECK-NEXT: %[[VAL_0:.*]] = sv.read_inout %[[WIRE]]  : !hw.inout<i1>
+  // CHECK-NEXT: %b = sv.reg init %[[VAL_0]] : !hw.inout<i1>
+  // CHECK-NEXT: %[[VAL_1:.*]] = sv.read_inout %b : !hw.inout<i1>
+  // CHECK-NEXT: %a = sv.reg init %[[VAL_1]] : !hw.inout<i1>
+  // CHECK-NEXT: %[[VAL_2:.*]] = sv.read_inout %a : !hw.inout<i1>
+  // CHECK-NEXT: sv.assign %[[WIRE]], %[[VAL_2]] : i1
+  %0 = sv.read_inout %a : !hw.inout<i1>
+  %1 = sv.read_inout %b : !hw.inout<i1>
+  %b = sv.reg init %0 : !hw.inout<i1>
+  %a = sv.reg init %1 : !hw.inout<i1>
+}

@@ -199,11 +199,11 @@ class ServiceImplementationModuleBuilder(ModuleLikeBuilderBase):
     if impl.decl is not None:
       decl_sym = ir.FlatSymbolRefAttr.get(impl.decl._materialize_service_decl())
     return raw_esi.ServiceInstanceOp(
-        result=[t._type for _, t in self.outputs],
+        result=[p.type._type for p in self.outputs],
         appID=appid._appid,
         service_symbol=decl_sym,
         impl_type=_ServiceGeneratorRegistry._impl_type_name,
-        inputs=[inputs[pn].value for pn, _ in self.inputs],
+        inputs=[inputs[p.name].value for p in self.inputs],
         impl_opts=opts,
         loc=self.loc)
 

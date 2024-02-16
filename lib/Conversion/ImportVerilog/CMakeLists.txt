@@ -31,6 +31,9 @@ endif ()
 add_circt_translation_library(CIRCTImportVerilog
   ImportVerilog.cpp
 
+  DEPENDS
+  slang_slang
+
   LINK_LIBS PUBLIC
   MLIRTranslateLib
   PRIVATE

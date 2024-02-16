@@ -66,6 +66,14 @@ static bool shouldSpillWire(Operation &op, const LoweringOptions &options) {
   return !ExportVerilog::isExpressionEmittedInline(&op, options);
 }
 
+static StringAttr getArgName(Operation *op, size_t idx) {
+  if (auto inst = dyn_cast<InstanceOp>(op))
+    return inst.getArgumentName(idx);
+  else if (auto inst = dyn_cast<InstanceChoiceOp>(op))
+    return inst.getArgumentName(idx);
+  return {};
+}
+
 // Given an instance, make sure all inputs are driven from wires or ports.
 static void spillWiresForInstanceInputs(HWInstanceLike op) {
   Block *block = op->getParentOfType<HWModuleOp>().getBodyBlock();
@@ -74,28 +82,33 @@ static void spillWiresForInstanceInputs(HWInstanceLike op) {
   SmallString<32> nameTmp{"_", op.getInstanceName(), "_"};
   auto namePrefixSize = nameTmp.size();
 
-  size_t nextOpNo = 0;
-  ModulePortInfo ports(op.getPortList());
-  for (auto &port : ports.getInputs()) {
-    auto src = op->getOperand(nextOpNo);
-    ++nextOpNo;
+  for (size_t opNum = 0, e = op->getNumOperands(); opNum != e; ++opNum) {
+    auto src = op->getOperand(opNum);
 
     if (isSimpleReadOrPort(src))
       continue;
 
     nameTmp.resize(namePrefixSize);
-    if (port.name)
-      nameTmp += port.name.getValue().str();
+    if (auto n = getArgName(op, opNum))
+      nameTmp += n.getValue().str();
     else
-      nameTmp += std::to_string(nextOpNo - 1);
+      nameTmp += std::to_string(opNum);
 
     auto newWire = builder.create<sv::WireOp>(src.getType(), nameTmp);
     auto newWireRead = builder.create<ReadInOutOp>(newWire);
     auto connect = builder.create<AssignOp>(newWire, src);
     newWireRead->moveBefore(op);
     connect->moveBefore(op);
-    op->setOperand(nextOpNo - 1, newWireRead);
+    op->setOperand(opNum, newWireRead);
   }
+}
+
+static StringAttr getResName(Operation *op, size_t idx) {
+  if (auto inst = dyn_cast<InstanceOp>(op))
+    return inst.getResultName(idx);
+  else if (auto inst = dyn_cast<InstanceChoiceOp>(op))
+    return inst.getResultName(idx);
+  return {};
 }
 
 // Ensure that each output of an instance are used only by a wire
@@ -106,11 +119,8 @@ static void lowerInstanceResults(HWInstanceLike op) {
   SmallString<32> nameTmp{"_", op.getInstanceName(), "_"};
   auto namePrefixSize = nameTmp.size();
 
-  size_t nextResultNo = 0;
-  ModulePortInfo ports(op.getPortList());
-  for (auto &port : ports.getOutputs()) {
-    auto result = op->getResult(nextResultNo);
-    ++nextResultNo;
+  for (size_t resNum = 0, e = op->getNumResults(); resNum != e; ++resNum) {
+    auto result = op->getResult(resNum);
 
     // If the result doesn't have a user, the connection won't be emitted by
     // Emitter, so there's no need to create a wire for it. However, if the
@@ -131,10 +141,10 @@ static void lowerInstanceResults(HWInstanceLike op) {
     }
 
     nameTmp.resize(namePrefixSize);
-    if (port.name)
-      nameTmp += port.name.getValue().str();
+    if (auto n = getResName(op, resNum))
+      nameTmp += n.getValue().str();
     else
-      nameTmp += std::to_string(nextResultNo - 1);
+      nameTmp += std::to_string(resNum);
     Value newWire = builder.create<sv::WireOp>(result.getType(), nameTmp);
 
     while (!result.use_empty()) {
@@ -163,25 +173,50 @@ static void lowerUsersToTemporaryWire(Operation &op,
 
   auto createWireForResult = [&](Value result, StringAttr name) {
     Value newWire;
-    // If the op is in a procedural region, use logic op.
-    if (isProceduralRegion)
-      newWire = builder.create<LogicOp>(result.getType(), name);
-    else
-      newWire = builder.create<sv::WireOp>(result.getType(), name);
+    Type wireElementType = result.getType();
+    bool isResultInOut = false;
 
-    while (!result.use_empty()) {
-      auto newWireRead = builder.create<ReadInOutOp>(newWire);
-      OpOperand &use = *result.getUses().begin();
-      use.set(newWireRead);
-      newWireRead->moveBefore(use.getOwner());
+    // If the result already is an InOut, make sure to not wrap it again
+    if (auto inoutType = hw::type_dyn_cast<hw::InOutType>(result.getType())) {
+      wireElementType = inoutType.getElementType();
+      isResultInOut = true;
     }
 
-    Operation *connect;
+    // If the op is in a procedural region, use logic op.
     if (isProceduralRegion)
-      connect = builder.create<BPAssignOp>(newWire, result);
+      newWire = builder.create<LogicOp>(wireElementType, name);
     else
-      connect = builder.create<AssignOp>(newWire, result);
+      newWire = builder.create<sv::WireOp>(wireElementType, name);
+
+    // Replace all uses with newWire. Wrap in ReadInOutOp if required.
+    while (!result.use_empty()) {
+      OpOperand &use = *result.getUses().begin();
+      if (isResultInOut) {
+        use.set(newWire);
+      } else {
+        auto newWireRead = builder.create<ReadInOutOp>(newWire);
+        use.set(newWireRead);
+        newWireRead->moveBefore(use.getOwner());
+      }
+    }
+
+    // Assign the original result to the temporary wire.
+    Operation *connect;
+    ReadInOutOp resultRead;
+
+    if (isResultInOut)
+      resultRead = builder.create<ReadInOutOp>(result);
+
+    if (isProceduralRegion)
+      connect = builder.create<BPAssignOp>(
+          newWire, isResultInOut ? resultRead.getResult() : result);
+    else
+      connect = builder.create<AssignOp>(
+          newWire, isResultInOut ? resultRead.getResult() : result);
+
     connect->moveAfter(&op);
+    if (resultRead)
+      resultRead->moveBefore(connect);
 
     // Move the temporary to the appropriate place.
     if (!emitWireAtBlockBegin) {
@@ -467,9 +502,15 @@ static bool hoistNonSideEffectExpr(Operation *op) {
 
 /// Check whether an op is a declaration that can be moved.
 static bool isMovableDeclaration(Operation *op) {
-  return op->getNumResults() == 1 &&
-         op->getResult(0).getType().isa<InOutType, sv::InterfaceType>() &&
-         op->getNumOperands() == 0;
+  if (op->getNumResults() != 1 ||
+      !op->getResult(0).getType().isa<InOutType, sv::InterfaceType>())
+    return false;
+
+  // If all operands (e.g. init value) are constant, it is safe to move
+  return llvm::all_of(op->getOperands(), [](Value operand) -> bool {
+    auto *defOp = operand.getDefiningOp();
+    return !!defOp && isConstantExpression(defOp);
+  });
 }
 
 //===----------------------------------------------------------------------===//
