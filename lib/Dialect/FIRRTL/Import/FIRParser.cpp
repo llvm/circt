@@ -2951,6 +2951,7 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
 /// enum-exp ::= enum-type '(' Id ( ',' exp )? ')'
 ParseResult FIRStmtParser::parseEnumExp(Value &value) {
   auto startLoc = getToken().getLoc();
+  locationProcessor.setLoc(startLoc);
   FIRRTLType type;
   if (parseEnumType(type))
     return failure();
