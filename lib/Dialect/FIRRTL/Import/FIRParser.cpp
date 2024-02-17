@@ -2971,7 +2971,7 @@ ParseResult FIRStmtParser::parseEnumExp(Value &value) {
   if (consumeIf(FIRToken::r_paren)) {
     // If the payload is not specified, we create a 0 bit unsigned integer
     // constant.
-    auto type = IntType::get(builder.getContext(), false, 0);
+    auto type = IntType::get(builder.getContext(), false, 0, true);
     Type attrType = IntegerType::get(getContext(), 0, IntegerType::Unsigned);
     auto attr = builder.getIntegerAttr(attrType, APInt(0, 0, false));
     input = builder.create<ConstantOp>(type, attr);

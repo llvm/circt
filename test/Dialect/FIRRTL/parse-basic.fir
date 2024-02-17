@@ -1159,8 +1159,8 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: %0 = firrtl.enumcreate Some(%c0_ui8) : (!firrtl.const.uint<8>) -> !firrtl.enum<Some: uint<8>, None: uint<0>>
     ; CHECK: %some = firrtl.node interesting_name %0 : !firrtl.enum<Some: uint<8>, None: uint<0>>
     node some = {|Some : UInt<8>, None|}(Some, UInt<8>(0))
-    ; CHECK: %c0_ui0 = firrtl.constant 0 : !firrtl.uint<0>
-    ; CHECK: %1 = firrtl.enumcreate None(%c0_ui0) : (!firrtl.uint<0>) -> !firrtl.enum<Some: uint<8>, None: uint<0>>
+    ; CHECK: %c0_ui0 = firrtl.constant 0 : !firrtl.const.uint<0>
+    ; CHECK: %1 = firrtl.enumcreate None(%c0_ui0) : (!firrtl.const.uint<0>) -> !firrtl.enum<Some: uint<8>, None: uint<0>>
     ; CHECK: %none = firrtl.node {{.*}} %1 : !firrtl.enum<Some: uint<8>, None: uint<0>>
     node none = {|Some : UInt<8>, None|}(None)
 
