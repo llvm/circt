@@ -1,4 +1,4 @@
-//===- HWDialect.h - HW dialect declaration ---------------------*- C++ -*-===//
+//===- HWEnums.cpp - Implement the HW enums -------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,18 +6,15 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file defines an HW MLIR dialect.
+// This file implements the HW enums.
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_HW_HWDIALECT_H
-#define CIRCT_DIALECT_HW_HWDIALECT_H
-
-#include "circt/Support/LLVM.h"
+#include "circt/Dialect/HW/HWEnums.h"
 #include "mlir/IR/BuiltinAttributes.h"
-#include "mlir/IR/Dialect.h"
 
-// Pull in the dialect definition.
-#include "circt/Dialect/HW/HWDialect.h.inc"
+using namespace circt;
+using namespace hw;
 
-#endif // CIRCT_DIALECT_HW_HWDIALECT_H
+// Provide implementations for the enums we use.
+#include "circt/Dialect/HW/HWEnums.cpp.inc"
