@@ -2982,7 +2982,6 @@ ParseResult FIRStmtParser::parseEnumExp(Value &value) {
       return failure();
   }
 
-  locationProcessor.setLoc(startLoc);
   value = builder.create<FEnumCreateOp>(enumType, tag, input);
   return success();
 }
