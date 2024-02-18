@@ -465,12 +465,11 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp) {
         NameKindEnum::DroppableName,
         /*annotations=*/ArrayRef<Attribute>{},
         /*portAnnotations=*/ArrayRef<Attribute>{}, /*lowerToBind=*/true);
-    // TODO: Change this to "layers_" once we switch to FIRRTL 4.0.0+.
     instanceOp->setAttr("output_file",
                         hw::OutputFileAttr::getFromFilename(
                             builder.getContext(),
 
-                            "groups_" + circuitName + "_" + layerName + ".sv",
+                            "layers_" + circuitName + "_" + layerName + ".sv",
                             /*excludeFromFileList=*/true));
     createdInstances.try_emplace(instanceOp, newModule);
 
@@ -544,14 +543,13 @@ void LowerLayersPass::runOnOperation() {
   // populated later when binds are exported to Verilog.  This produces text
   // like:
   //
-  //     `include "groups_A.sv"
-  //     `include "groups_A_B.sv"
-  //     `ifndef groups_A_B_C
-  //     `define groups_A_B_C
+  //     `include "layers_A.sv"
+  //     `include "layers_A_B.sv"
+  //     `ifndef layers_A_B_C
+  //     `define layers_A_B_C
   //     <body>
-  //     `endif // groups_A_B_C
+  //     `endif // layers_A_B_C
   //
-  // TODO: Change this comment to "layers_" once we switch to FIRRTL 4.0.0+.
   // TODO: This would be better handled without the use of verbatim ops.
   OpBuilder builder(circuitOp);
   SmallVector<std::pair<LayerOp, StringAttr>> layers;
@@ -562,9 +560,8 @@ void LowerLayersPass::runOnOperation() {
       layers.pop_back();
     builder.setInsertionPointToStart(circuitOp.getBodyBlock());
 
-    // Save the "groups_CIRCUIT_GROUP" string as this is reused a bunch.
-    // TODO: Change this to "layers_" once we switch to FIRRTL 4.0.0+.
-    SmallString<32> prefix("groups_");
+    // Save the "layers_CIRCUIT_GROUP" string as this is reused a bunch.
+    SmallString<32> prefix("layers_");
     prefix.append(circuitName);
     prefix.append("_");
     for (auto [layer, _] : layers) {
