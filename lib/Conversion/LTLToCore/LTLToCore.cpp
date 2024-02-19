@@ -224,7 +224,7 @@ struct LowerClockRelatedOpPatterns : OpConversionPattern<ltl::ClockOp> {
     // Generate the parenting sv.always posedge clock from the ltl
     // clock, containing the generated sv.assert
     rewriter.replaceOpWithNewOp<sv::AlwaysOp>(
-        assertOp, hwToSvEventControl(adaptor.getEdge()), adaptor.getClock(),
+        assertOp, LTLToSVEventControl(adaptor.getEdge()), adaptor.getClock(),
         [&] {
           // Generate the sv assertion using the input to the parenting
           // clock
@@ -295,9 +295,8 @@ void LowerLTLToCorePass::runOnOperation() {
 
   // Create the operation rewrite patters
   RewritePatternSet patterns(&getContext());
-  patterns.add<HasBeenResetOpConversion, AssertOpConversionPattern,
-               ClockOpConversionPattern, DisableOpConversion>(
-      converter, patterns.getContext());
+  patterns.add<HasBeenResetOpConversion, LowerClockRelatedOpPatterns,
+               DisableOpConversion>(converter, patterns.getContext());
 
   // Apply the conversions
   if (failed(
