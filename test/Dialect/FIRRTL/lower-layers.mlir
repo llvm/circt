@@ -544,3 +544,37 @@ firrtl.circuit "CaptureHardwareMultipleTimes" {
     }
   }
 }
+
+// -----
+// HierPathOps are rewritten when operations with inner symbols inside
+// layerblocks are moved into new modules.
+// https://github.com/llvm/circt/issues/6717
+
+firrtl.circuit "HierPathOps" {
+  hw.hierpath @nla1 [@Foo::@foo_A]
+  hw.hierpath @nla2 [@Foo::@bar, @Bar]
+  hw.hierpath private @nla3 [@Foo::@baz]
+  firrtl.layer @A  bind {}
+  firrtl.module @Bar() {}
+  firrtl.module @Foo() {
+    %0 = firrtl.wire sym @foo_A : !firrtl.uint<1>
+    firrtl.layerblock @A {
+      firrtl.instance bar sym @bar @Bar()
+      %1 = firrtl.wire sym @baz : !firrtl.uint<1>
+    }
+  }
+}
+
+// CHECK-LABEL: firrtl.circuit "HierPathOps"
+//
+// CHECK:         hw.hierpath         @nla1 [@Foo::@foo_A]
+// CHECK-NEXT:    hw.hierpath         @nla2 [@Foo::@[[inst_sym:[_A-Za-z0-9]+]], @[[mod_sym:[_A-Za-z0-9]+]]::@bar, @Bar]
+// CHECK-NEXT:    hw.hierpath private @nla3 [@Foo::@[[inst_sym]], @[[mod_sym]]::@baz]
+//
+// CHECK:         firrtl.module {{.*}} @[[mod_sym]]()
+// CHECK-NEXT:      firrtl.instance bar sym @bar
+// CHECK-NEXT:      firrtl.wire sym @baz
+//
+// CHECK:         firrtl.module @Foo()
+// CHECK-NEXT:      firrtl.wire sym @foo_A :
+// CHECK-NEXT:      firrtl.instance {{.*}} sym @[[inst_sym]]

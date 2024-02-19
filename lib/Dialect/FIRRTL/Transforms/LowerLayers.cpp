@@ -13,6 +13,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Mutex.h"
@@ -56,6 +57,12 @@ struct ConnectInfo {
 
 } // namespace
 
+// A mapping of an old InnerRefAttr to the new inner symbol and module name that
+// need to be spliced into the old InnerRefAttr.  This is used to fix
+// hierarchical path operations after layers are converted to modules.
+using InnerRefMap =
+    DenseMap<hw::InnerRefAttr, std::pair<hw::InnerSymAttr, StringAttr>>;
+
 class LowerLayersPass : public LowerLayersBase<LowerLayersPass> {
   /// Safely build a new module with a given namehint.  This handles geting a
   /// lock to modify the top-level circuit.
@@ -63,10 +70,10 @@ class LowerLayersPass : public LowerLayersBase<LowerLayersPass> {
                            Twine namehint, SmallVectorImpl<PortInfo> &ports);
 
   /// Strip layer colors from the module's interface.
-  void runOnModuleLike(FModuleLike moduleLike);
+  InnerRefMap runOnModuleLike(FModuleLike moduleLike);
 
   /// Extract layerblocks and strip probe colors from all ops under the module.
-  void runOnModuleBody(FModuleOp moduleOp);
+  void runOnModuleBody(FModuleOp moduleOp, InnerRefMap &innerRefMap);
 
   /// Update the module's port types to remove any explicit layer requirements
   /// from any probe types.
@@ -156,18 +163,19 @@ void LowerLayersPass::removeLayersFromPorts(FModuleLike moduleLike) {
   }
 }
 
-void LowerLayersPass::runOnModuleLike(FModuleLike moduleLike) {
+InnerRefMap LowerLayersPass::runOnModuleLike(FModuleLike moduleLike) {
   LLVM_DEBUG({
     llvm::dbgs() << "Module: " << moduleLike.getModuleName() << "\n";
     llvm::dbgs() << "  Examining Layer Blocks:\n";
   });
 
   // Strip away layers from the interface of the module-like op.
+  InnerRefMap innerRefMap;
   TypeSwitch<Operation *, void>(moduleLike.getOperation())
       .Case<FModuleOp>([&](auto op) {
         op.setLayers({});
         removeLayersFromPorts(op);
-        runOnModuleBody(op);
+        runOnModuleBody(op, innerRefMap);
       })
       .Case<FExtModuleOp, FIntModuleOp, FMemModuleOp>([&](auto op) {
         op.setLayers({});
@@ -175,11 +183,15 @@ void LowerLayersPass::runOnModuleLike(FModuleLike moduleLike) {
       })
       .Case<ClassOp, ExtClassOp>([](auto) {})
       .Default([](auto) { assert(0 && "unknown module-like op"); });
+
+  return innerRefMap;
 }
 
-void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp) {
+void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
+                                      InnerRefMap &innerRefMap) {
   CircuitOp circuitOp = moduleOp->getParentOfType<CircuitOp>();
   StringRef circuitName = circuitOp.getName();
+  hw::InnerSymbolNamespace ns(moduleOp);
 
   // A map of instance ops to modules that this pass creates.  This is used to
   // check if this was an instance that we created and to do fast module
@@ -333,7 +345,14 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp) {
           builder.create<RefSendOp>(loc, src)->getResult(0));
     };
 
+    SmallVector<hw::InnerSymAttr> innerSyms;
     for (auto &op : llvm::make_early_inc_range(*body)) {
+      // Record any operations inside the layer block which have inner symbols.
+      // Theses may have symbol users which need to be updated.
+      if (auto symOp = dyn_cast<hw::InnerSymbolOpInterface>(op))
+        if (auto innerSym = symOp.getInnerSymAttr())
+          innerSyms.push_back(innerSym);
+
       // Handle instance ops that were created from nested layer blocks.  These
       // ops need to be moved outside the layer block to avoid nested binds.
       // Nested binds are illegal in the SystemVerilog specification (and
@@ -458,13 +477,18 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp) {
     // instance everytime it is moved into a parent layer.
     builder.setInsertionPointAfter(layerBlock);
     auto moduleName = newModule.getModuleName();
+    auto instanceName =
+        (Twine((char)tolower(moduleName[0])) + moduleName.drop_front()).str();
     auto instanceOp = builder.create<InstanceOp>(
         layerBlock.getLoc(), /*moduleName=*/newModule,
         /*name=*/
-        (Twine((char)tolower(moduleName[0])) + moduleName.drop_front()).str(),
-        NameKindEnum::DroppableName,
+        instanceName, NameKindEnum::DroppableName,
         /*annotations=*/ArrayRef<Attribute>{},
-        /*portAnnotations=*/ArrayRef<Attribute>{}, /*lowerToBind=*/true);
+        /*portAnnotations=*/ArrayRef<Attribute>{}, /*lowerToBind=*/true,
+        /*innerSym=*/
+        (innerSyms.empty() ? hw::InnerSymAttr{}
+                           : hw::InnerSymAttr::get(builder.getStringAttr(
+                                 ns.newName(instanceName)))));
     instanceOp->setAttr("output_file",
                         hw::OutputFileAttr::getFromFilename(
                             builder.getContext(),
@@ -472,6 +496,18 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp) {
                             "layers_" + circuitName + "_" + layerName + ".sv",
                             /*excludeFromFileList=*/true));
     createdInstances.try_emplace(instanceOp, newModule);
+
+    LLVM_DEBUG(llvm::dbgs() << "        moved inner refs:\n");
+    for (hw::InnerSymAttr innerSym : innerSyms) {
+      auto oldInnerRef = hw::InnerRefAttr::get(moduleOp.getModuleNameAttr(),
+                                               innerSym.getSymName());
+      auto splice = std::make_pair(instanceOp.getInnerSymAttr(),
+                                   newModule.getModuleNameAttr());
+      innerRefMap.insert({oldInnerRef, splice});
+      LLVM_DEBUG(llvm::dbgs() << "          - ref: " << oldInnerRef << "\n"
+                              << "            splice: " << splice.first << ", "
+                              << splice.second << "\n";);
+    }
 
     // Connect instance ports to values.
     assert(ports.size() == connectValues.size() &&
@@ -533,11 +569,51 @@ void LowerLayersPass::runOnOperation() {
     });
   });
 
+  auto mergeMaps = [](auto &&a, auto &&b) {
+    for (auto bb : b)
+      a.insert(bb);
+    return std::forward<decltype(a)>(a);
+  };
+
   // Lower the layer blocks of each module.
   SmallVector<FModuleLike> modules(
       circuitOp.getBodyBlock()->getOps<FModuleLike>());
-  parallelForEach(modules,
-                  [this](FModuleLike module) { runOnModuleLike(module); });
+  auto innerRefMap =
+      transformReduce(circuitOp.getContext(), modules, InnerRefMap{}, mergeMaps,
+                      [this](FModuleLike mod) { return runOnModuleLike(mod); });
+
+  // Rewrite any hw::HierPathOps which have namepaths that contain rewritting
+  // inner refs.
+  //
+  // TODO: This unnecessarily computes a new namepath for every hw::HierPathOp
+  // even if that namepath is not used.  It would be better to only build the
+  // new namepath when a change is needed, e.g., by recording updates to the
+  // namepath.
+  for (hw::HierPathOp hierPathOp : circuitOp.getOps<hw::HierPathOp>()) {
+    SmallVector<Attribute> newNamepath;
+    bool modified = false;
+    for (auto attr : hierPathOp.getNamepath()) {
+      hw::InnerRefAttr innerRef = dyn_cast<hw::InnerRefAttr>(attr);
+      if (!innerRef) {
+        newNamepath.push_back(attr);
+        continue;
+      }
+      auto it = innerRefMap.find(innerRef);
+      if (it == innerRefMap.end()) {
+        newNamepath.push_back(attr);
+        continue;
+      }
+
+      auto &[inst, mod] = it->getSecond();
+      newNamepath.push_back(
+          hw::InnerRefAttr::get(innerRef.getModule(), inst.getSymName()));
+      newNamepath.push_back(hw::InnerRefAttr::get(mod, innerRef.getName()));
+      modified = true;
+    }
+    if (modified)
+      hierPathOp.setNamepathAttr(
+          ArrayAttr::get(circuitOp.getContext(), newNamepath));
+  }
 
   // Generate the header and footer of each bindings file.  The body will be
   // populated later when binds are exported to Verilog.  This produces text
