@@ -12,6 +12,7 @@
 
 #include "circt/Conversion/LTLToCore.h"
 #include "../PassDetail.h"
+#include "circt/Conversion/HWToSV.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/LTL/LTLDialect.h"
@@ -30,6 +31,18 @@
 using namespace mlir;
 using namespace circt;
 using namespace hw;
+
+static sv::EventControl LTLToSVEventControl(ltl::ClockEdge ce) {
+  switch (ce) {
+  case ltl::ClockEdge::Pos:
+    return sv::EventControl::AtPosEdge;
+  case ltl::ClockEdge::Neg:
+    return sv::EventControl::AtNegEdge;
+  case ltl::ClockEdge::Both:
+    return sv::EventControl::AtEdge;
+  }
+  llvm_unreachable("Unknown event control kind");
+}
 
 //===----------------------------------------------------------------------===//
 // Conversion patterns
@@ -59,17 +72,19 @@ struct DisableOpConversion : OpConversionPattern<ltl::DisableOp> {
 struct HasBeenResetOpConversion : OpConversionPattern<verif::HasBeenResetOp> {
   using OpConversionPattern<verif::HasBeenResetOp>::OpConversionPattern;
 
-  // HasBeenReset generates a 1 bit register that is set to one if the reset
-  // value is found to be active at any point
+  // HasBeenReset generates a 1 bit register that is set to one once the reset
+  // has been raised and lowered at at least once.
   LogicalResult
   matchAndRewrite(verif::HasBeenResetOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-
+    auto i1 = rewriter.getI1Type();
     // Generate the constant used to set the register value
-    Value constZero = rewriter.create<hw::ConstantOp>(
-        op.getLoc(), mlir::IntegerType::get(op.getContext(), 1), 0);
+    Value constZero = rewriter.create<hw::ConstantOp>(op.getLoc(), i1, 0);
 
-    // Create a backedge for the register to be used in the mux
+    // Generate the constant used to enegate the
+    Value constOne = rewriter.create<hw::ConstantOp>(op.getLoc(), i1, 1);
+
+    // Create a backedge for the register to be used in the OrOp
     circt::BackedgeBuilder bb(rewriter, op.getLoc());
     circt::Backedge reg = bb.get(rewriter.getI1Type());
 
@@ -83,13 +98,89 @@ struct HasBeenResetOpConversion : OpConversionPattern<verif::HasBeenResetOp> {
     Value reset, resetval;
 
     // Finally generate the register to set the backedge
-    reg.setValue(rewriter.replaceOpWithNewOp<seq::CompRegOp>(
-        op, orReset, adaptor.getClock().getDefiningOp()->getOperand(0), reset,
-        resetval, llvm::StringRef("hbr"), constZero));
+    reg.setValue(rewriter.create<seq::CompRegOp>(
+        op.getLoc(), orReset,
+        rewriter.createOrFold<seq::ToClockOp>(op.getLoc(), adaptor.getClock()),
+        reset, resetval, llvm::StringRef("hbr"), constZero));
+
+    // We also need to consider the case where we are currently in a reset cycle
+    // in which case our hbr register should be down-
+    // Practically this means converting it to (and hbr (not reset))
+    Value notReset =
+        rewriter.create<comb::XorOp>(op.getLoc(), adaptor.getReset(), constOne);
+    rewriter.replaceOpWithNewOp<comb::AndOp>(op, reg, notReset);
 
     return success();
   }
 };
+
+/*struct ClockOpConversionPattern : OpConversionPattern<ltl::ClockOp> {
+  using OpConversionPattern<ltl::ClockOp>::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(ltl::ClockOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
+struct AssertOpConversionPattern : OpConversionPattern<verif::AssertOp> {
+  using OpConversionPattern<verif::AssertOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(verif::AssertOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+
+    // Retrieve predecessor clock and use it to generate the alwaysop
+    return llvm::TypeSwitch<Operation *, LogicalResult>(
+               adaptor.getProperty().getDefiningOp())
+        .Case<mlir::UnrealizedConversionCastOp>([&](auto cast) {
+          auto inputs = cast->getOperand(0);
+          if (auto clockop = dyn_cast<ltl::ClockOp>(inputs.getDefiningOp())) {
+            // Generate the parenting sv.always posedge clock from the ltl
+            // clock, containing the generated sv.assert
+            rewriter.replaceOpWithNewOp<sv::AlwaysOp>(
+                clockop, LTLToSVEventControl(clockop.getEdge()),
+                clockop.getClock(), [&] {
+                  // Generate the sv assertion using the input to the
+                  // parenting clock
+                  rewriter.replaceOpWithNewOp<sv::AssertOp>(
+                      op, clockop.getInput(),
+                      sv::DeferAssertAttr::get(getContext(),
+                                               sv::DeferAssert::Immediate),
+                      op.getLabelAttr());
+                });
+
+            return success();
+          }
+          return rewriter.notifyMatchFailure(
+              op, "verif.assert property is not associated to a clock! " +
+                      inputs.getDefiningOp()->getName().getStringRef());
+        })
+        .Case<ltl::ClockOp>([&](auto clockop) {
+          // Generate the parenting sv.always posedge clock from the ltl
+          // clock, containing the generated sv.assert
+          rewriter.replaceOpWithNewOp<sv::AlwaysOp>(
+              clockop, LTLToSVEventControl(clockop.getEdge()),
+              clockop.getClock(), [&] {
+                // Generate the sv assertion using the input to the
+                // parenting clock
+                rewriter.replaceOpWithNewOp<sv::AssertOp>(
+                    op, clockop.getInput(),
+                    sv::DeferAssertAttr::get(getContext(),
+                                             sv::DeferAssert::Immediate),
+                    op.getLabelAttr());
+              });
+
+          return success();
+        })
+        .Default([&](auto e) {
+          return rewriter.notifyMatchFailure(
+              op, "verif.assert property is not associated to a clock! " +
+                      e->getName().getStringRef());
+        });
+  }
+};*/
 
 struct LowerClockRelatedOpPatterns : OpConversionPattern<ltl::ClockOp> {
   using OpConversionPattern<ltl::ClockOp>::OpConversionPattern;
@@ -133,7 +224,8 @@ struct LowerClockRelatedOpPatterns : OpConversionPattern<ltl::ClockOp> {
     // Generate the parenting sv.always posedge clock from the ltl
     // clock, containing the generated sv.assert
     rewriter.replaceOpWithNewOp<sv::AlwaysOp>(
-        assertOp, (sv::EventControl)adaptor.getEdge(), adaptor.getClock(), [&] {
+        assertOp, hwToSvEventControl(adaptor.getEdge()), adaptor.getClock(),
+        [&] {
           // Generate the sv assertion using the input to the parenting
           // clock
           rewriter.create<sv::AssertOp>(
@@ -160,44 +252,6 @@ struct LowerLTLToCorePass : public LowerLTLToCoreBase<LowerLTLToCorePass> {
 };
 } // namespace
 
-// Applies all of the conversion patterns needed for this lowering
-void circt::populateLTLToCoreConversionPatterns(
-    circt::LTLToCoreTypeConverter &converter,
-    mlir::RewritePatternSet &patterns) {
-  patterns.add<HasBeenResetOpConversion, LowerClockRelatedOpPatterns,
-               DisableOpConversion>(converter, patterns.getContext());
-}
-
-// Creates the type conversions and materializations needed for this pass to
-// work
-circt::LTLToCoreTypeConverter::LTLToCoreTypeConverter() {
-
-  // Convert the ltl property type to a built-in type
-  addConversion([](Type type) { return type; });
-  addConversion([](ltl::PropertyType type) {
-    return IntegerType::get(type.getContext(), 1);
-  });
-
-  // Basic materializations
-  addTargetMaterialization(
-      [&](mlir::OpBuilder &builder, mlir::Type resultType,
-          mlir::ValueRange inputs,
-          mlir::Location loc) -> std::optional<mlir::Value> {
-        if (inputs.size() != 1)
-          return std::nullopt;
-        return inputs[0];
-      });
-
-  addSourceMaterialization(
-      [&](mlir::OpBuilder &builder, mlir::Type resultType,
-          mlir::ValueRange inputs,
-          mlir::Location loc) -> std::optional<mlir::Value> {
-        if (inputs.size() != 1)
-          return std::nullopt;
-        return inputs[0];
-      });
-}
-
 // Simply applies the conversion patterns defined above
 void LowerLTLToCorePass::runOnOperation() {
 
@@ -205,25 +259,45 @@ void LowerLTLToCorePass::runOnOperation() {
   // from an AssertProperty left in the result
   ConversionTarget target(getContext());
   target.addLegalDialect<hw::HWDialect>();
-  target.addLegalOp<hw::ConstantOp>();
   target.addLegalDialect<comb::CombDialect>();
-  target.addLegalOp<comb::OrOp>();
-  target.addLegalOp<comb::MuxOp>();
   target.addLegalDialect<sv::SVDialect>();
-  target.addLegalOp<sv::AssertOp>();
-  target.addLegalOp<sv::AlwaysOp>();
   target.addLegalDialect<seq::SeqDialect>();
-  target.addLegalOp<seq::CompRegOp>();
-  target.addIllegalOp<verif::HasBeenResetOp>();
-  target.addIllegalOp<verif::AssertOp>();
-  target.addIllegalOp<ltl::DisableOp>();
+  target.addIllegalDialect<ltl::LTLDialect>();
+  target.addIllegalDialect<verif::VerifDialect>();
 
   // Create type converters, mostly just to convert an ltl property to a bool
-  LTLToCoreTypeConverter converter;
+  mlir::TypeConverter converter;
+
+  // Convert the ltl property type to a built-in type
+  converter.addConversion([](IntegerType type) { return type; });
+  converter.addConversion([](ltl::PropertyType type) {
+    return IntegerType::get(type.getContext(), 1);
+  });
+
+  // Basic materializations
+  converter.addTargetMaterialization(
+      [&](mlir::OpBuilder &builder, mlir::Type resultType,
+          mlir::ValueRange inputs,
+          mlir::Location loc) -> std::optional<mlir::Value> {
+        if (inputs.size() != 1)
+          return std::nullopt;
+        return inputs[0];
+      });
+
+  converter.addSourceMaterialization(
+      [&](mlir::OpBuilder &builder, mlir::Type resultType,
+          mlir::ValueRange inputs,
+          mlir::Location loc) -> std::optional<mlir::Value> {
+        if (inputs.size() != 1)
+          return std::nullopt;
+        return inputs[0];
+      });
 
   // Create the operation rewrite patters
   RewritePatternSet patterns(&getContext());
-  populateLTLToCoreConversionPatterns(converter, patterns);
+  patterns.add<HasBeenResetOpConversion, AssertOpConversionPattern,
+               ClockOpConversionPattern, DisableOpConversion>(
+      converter, patterns.getContext());
 
   // Apply the conversions
   if (failed(

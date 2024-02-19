@@ -1,4 +1,4 @@
-//===- HWToBTOR2.h - HW to BTOR2 conversion pass ----------------*- C++ -*-===//
+//===- LTLToCore.h - LTL to Core conversion pass ----------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -19,22 +19,9 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 
-namespace mlir {
-class Pass;
-} // namespace mlir
-
 using namespace mlir;
 
 namespace circt {
-/// A helper type converter class that automatically populates the relevant
-/// materializations and type conversions for converting HWArith to HW.
-class LTLToCoreTypeConverter : public mlir::TypeConverter {
-public:
-  LTLToCoreTypeConverter();
-};
-
-void populateLTLToCoreConversionPatterns(LTLToCoreTypeConverter &converter,
-                                         RewritePatternSet &patterns);
 
 std::unique_ptr<mlir::Pass> createLowerLTLToCorePass();
 
