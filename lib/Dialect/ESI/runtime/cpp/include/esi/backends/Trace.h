@@ -50,16 +50,21 @@ public:
   /// \param manifestJson The path to the manifest JSON file.
   /// \param traceFile The path to the trace file. For 'Write' mode, this file
   ///   is opened for writing. For 'Read' mode, this file is opened for reading.
-  TraceAccelerator(Mode mode, std::filesystem::path manifestJson,
+  TraceAccelerator(Context &, Mode mode, std::filesystem::path manifestJson,
                    std::filesystem::path traceFile);
 
   /// Parse the connection string and instantiate the accelerator. Format is:
   /// "<mode>:<manifest path>[:<traceFile>]".
   static std::unique_ptr<AcceleratorConnection>
-  connect(std::string connectionString);
+  connect(Context &, std::string connectionString);
 
   /// Internal implementation.
   struct Impl;
+
+  /// Request the host side channel ports for a particular instance (identified
+  /// by the AppID path). For convenience, provide the bundle type.
+  std::map<std::string, ChannelPort &>
+  requestChannelsFor(AppIDPath, const BundleType *) override;
 
 protected:
   virtual Service *createService(Service::Type service, AppIDPath idPath,

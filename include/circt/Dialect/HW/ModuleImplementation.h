@@ -22,6 +22,8 @@
 namespace circt {
 namespace hw {
 
+class HWModuleLike;
+
 namespace module_like_impl {
 
 struct PortParse : OpAsmParser::Argument {
@@ -48,7 +50,7 @@ void printModuleSignature(OpAsmPrinter &p, Operation *op,
 ParseResult parseModuleSignature(OpAsmParser &parser,
                                  SmallVectorImpl<PortParse> &args,
                                  TypeAttr &modType);
-void printModuleSignatureNew(OpAsmPrinter &p, Operation *op);
+void printModuleSignatureNew(OpAsmPrinter &p, HWModuleLike op);
 
 } // namespace module_like_impl
 } // namespace hw

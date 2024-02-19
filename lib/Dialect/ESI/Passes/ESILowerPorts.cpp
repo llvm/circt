@@ -563,7 +563,7 @@ void ESIPortsPass::updateInstance(HWModuleExternOp mod, InstanceOp inst) {
   }
 
   // Create the new instance!
-  InstanceOp newInst = instBuilder.create<InstanceOp>(
+  auto newInst = instBuilder.create<hw::InstanceOp>(
       mod, inst.getInstanceNameAttr(), newOperands, inst.getParameters(),
       inst.getInnerSymAttr());
 

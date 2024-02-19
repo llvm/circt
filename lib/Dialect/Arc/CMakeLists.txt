@@ -3,6 +3,7 @@ set(CIRCT_Arc_Sources
   ArcFolds.cpp
   ArcOps.cpp
   ArcTypes.cpp
+  ModelInfo.cpp
 )
 
 set(LLVM_OPTIONAL_SOURCES
@@ -48,5 +49,6 @@ add_dependencies(circt-headers
   MLIRArcIncGen
 )
 
+add_subdirectory(Export)
 add_subdirectory(Interfaces)
 add_subdirectory(Transforms)

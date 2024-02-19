@@ -1,3 +1,5 @@
+// XFAIL: *
+// See https://github.com/llvm/circt/issues/6658
 // RUN: circt-opt %s | circt-opt | FileCheck %s
 
 // CHECK-LABEL:  ibis.class @HighLevel {

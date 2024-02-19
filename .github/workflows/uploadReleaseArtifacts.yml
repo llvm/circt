@@ -155,10 +155,15 @@ jobs:
         run: |
           json='{"name":"CIRCT-full shared","install_target":"install","package_name_prefix":"circt-full-shared","mode":"release","assert":"OFF","shared":"ON","stats":"ON"}'
           echo "out=$json" >> $GITHUB_OUTPUT
+      - name: Add Build Config for CIRCT-full (static)
+        id: add-build-config-circt-full-static
+        run: |
+          json='{"name":"CIRCT-full static","install_target":"install","package_name_prefix":"circt-full-static","mode":"release","assert":"OFF","shared":"OFF","stats":"ON"}'
+          echo "out=$json" >> $GITHUB_OUTPUT
       - name: Build JSON Payloads
         id: build-json-payloads
         run: |
-          echo '${{ steps.add-build-config-firtool.outputs.out }}' '${{ steps.add-build-config-circt-full-shared.outputs.out }}' | jq -sc . > build_configs.json
+          echo '${{ steps.add-build-config-firtool.outputs.out }}' '${{ steps.add-build-config-circt-full-shared.outputs.out }}' '${{ steps.add-build-config-circt-full-static.outputs.out }}' | jq -sc . > build_configs.json
           echo '${{ steps.add-linux.outputs.out }}' '${{ steps.add-macos.outputs.out }}' '${{ steps.add-windows.outputs.out }}' | jq -sc . > runners.json
 
           cat runners.json build_configs.json | jq -sc '[combinations | add]' > matrix-raw.json

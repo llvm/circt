@@ -259,8 +259,7 @@ def ModuleTypeImpl : HWType<"Module"> {
     Type getPortType(size_t);
     Type getInputType(size_t);
     Type getOutputType(size_t);
-    SmallVector<StringAttr> getInputNamesStr();
-    SmallVector<StringAttr> getOutputNamesStr();
+    SmallVector<Attribute> getPortNames();
     SmallVector<Attribute> getInputNames();
     SmallVector<Attribute> getOutputNames();
     StringAttr getPortNameAttr(size_t);

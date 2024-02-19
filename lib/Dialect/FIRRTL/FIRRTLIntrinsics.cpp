@@ -109,11 +109,13 @@ LogicalResult IntrinsicLowerings::doLowering(FModuleLike mod,
   if (conv.check())
     return failure();
   for (auto *use : graph.lookup(mod)->uses())
-    conv.convert(use->getInstance<InstanceOp>());
+    if (failed(conv.convert(use->getInstance<InstanceOp>())))
+      return failure();
   return success();
 }
 
-LogicalResult IntrinsicLowerings::lower(CircuitOp circuit) {
+LogicalResult IntrinsicLowerings::lower(CircuitOp circuit,
+                                        bool allowUnknownIntrinsics) {
   unsigned numFailures = 0;
   for (auto op : llvm::make_early_inc_range(circuit.getOps<FModuleLike>())) {
     StringAttr intname;
@@ -123,6 +125,7 @@ LogicalResult IntrinsicLowerings::lower(CircuitOp circuit) {
       if (it != extmods.end()) {
         if (succeeded(it->second(op))) {
           op.erase();
+          ++numConverted;
         } else {
           ++numFailures;
         }
@@ -152,12 +155,16 @@ LogicalResult IntrinsicLowerings::lower(CircuitOp circuit) {
 
     // Find the converter and apply it.
     auto it = intmods.find(intname);
-    if (it == intmods.end())
+    if (it == intmods.end()) {
+      if (allowUnknownIntrinsics)
+        continue;
       return op.emitError() << "intrinsic not recognized";
+    }
     if (failed(it->second(op))) {
       ++numFailures;
       continue;
     }
+    ++numConverted;
     op.erase();
   }
 

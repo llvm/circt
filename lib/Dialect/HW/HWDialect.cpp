@@ -111,6 +111,3 @@ Operation *HWDialect::materializeConstant(OpBuilder &builder, Attribute value,
 
   return nullptr;
 }
-
-// Provide implementations for the enums we use.
-#include "circt/Dialect/HW/HWEnums.cpp.inc"

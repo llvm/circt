@@ -308,7 +308,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     node n4 = bits(i8, 4, 2)
 
     ; CHECK: firrtl.shl %i8, 4 : (!firrtl.uint<8>) -> !firrtl.uint<12>
-    ; CHECK: firrtl.shr %i8, 8 : (!firrtl.uint<8>) -> !firrtl.uint<1>
+    ; CHECK: firrtl.shr %i8, 8 : (!firrtl.uint<8>) -> !firrtl.uint<0>
     node n5 = or(shl(i8, 4), shr(i8, 8))
 
     ; CHECK: firrtl.dshl %i8, %{{.*}} : (!firrtl.uint<8>, !firrtl.const.uint<4>) -> !firrtl.uint<23>
@@ -487,7 +487,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   ; CHECK-LABEL: firrtl.module private @oversize_shift(
   module oversize_shift :
     wire value : UInt<2>
-    ; CHECK: firrtl.shr %value, 5 : (!firrtl.uint<2>) -> !firrtl.uint<1>
+    ; CHECK: firrtl.shr %value, 5 : (!firrtl.uint<2>) -> !firrtl.uint<0>
     node n = shr(value, 5)
 
   ; CHECK-LABEL: firrtl.module private @when_else_ambiguity(
@@ -1157,8 +1157,12 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
     ; CHECK: %c0_ui8 = firrtl.constant 0 : !firrtl.const.uint<8>
     ; CHECK: %0 = firrtl.enumcreate Some(%c0_ui8) : (!firrtl.const.uint<8>) -> !firrtl.enum<Some: uint<8>, None: uint<0>>
-    ; CHECK: %n = firrtl.node interesting_name %0 : !firrtl.enum<Some: uint<8>, None: uint<0>>
-    node n = {|Some : UInt<8>, None|}(Some, UInt<8>(0))
+    ; CHECK: %some = firrtl.node interesting_name %0 : !firrtl.enum<Some: uint<8>, None: uint<0>>
+    node some = {|Some : UInt<8>, None|}(Some, UInt<8>(0))
+    ; CHECK: %c0_ui0 = firrtl.constant 0 : !firrtl.const.uint<0>
+    ; CHECK: %1 = firrtl.enumcreate None(%c0_ui0) : (!firrtl.const.uint<0>) -> !firrtl.enum<Some: uint<8>, None: uint<0>>
+    ; CHECK: %none = firrtl.node {{.*}} %1 : !firrtl.enum<Some: uint<8>, None: uint<0>>
+    node none = {|Some : UInt<8>, None|}(None)
 
     ; CHECK: firrtl.match %i : !firrtl.enum<Some: uint<8>, None: uint<0>> {
     match i:
@@ -1850,6 +1854,20 @@ circuit BasicProps :
     propassign nested, List<List<String>>(List<String>(), List<String>(String("test")), List<String>())
 
 ;// -----
+FIRRTL version 4.0.0
+
+; CHECK-LABEL: firrtl.circuit "IntegerArithmetic"
+circuit IntegerArithmetic :
+  module IntegerArithmetic :
+    input a : Integer
+    input b : Integer
+    output c : Integer
+
+    ; CHECK: [[C:%.+]] = firrtl.integer.add %a, %b
+    ; CHECK: firrtl.propassign %c, [[C]]
+    propassign c, integer_add(a, b)
+
+;// -----
 FIRRTL version 3.1.0
 
 ; CHECK-LABEL: circuit "BundleOfProps"
@@ -1920,7 +1938,7 @@ circuit PublicModules:
 ;// -----
 
 FIRRTL version 4.0.0
-; CHECK-LABLE: firrtl.circuit "LayerEnabledModule"
+; CHECK-LABEL: firrtl.circuit "LayerEnabledModule"
 circuit LayerEnabledModule:
   layer A, bind:
   layer B, bind:
@@ -1928,3 +1946,127 @@ circuit LayerEnabledModule:
   ; CHECK: firrtl.module @LayerEnabledModule
   ; CHECK-SAME: layers = [@A, @B::@C]
   module LayerEnabledModule enablelayer A enablelayer B.C:
+
+  ; CHECK: firrtl.module private @UserOfLayerEnabledModule
+  ; CHECK-SAME: layers = [@A, @B::@C]
+  module UserOfLayerEnabledModule enablelayer A enablelayer B.C:
+    ; CHECK: firrtl.instance i interesting_name {layers = [@A, @B::@C]} @LayerEnabledModule()
+    inst i of LayerEnabledModule
+
+;// -----
+
+FIRRTL version 3.3.0
+; CHECK-LABEL: circuit "StaticShiftRight"
+circuit StaticShiftRight:
+  ; CHECK: firrtl.module @StaticShiftRight
+  module StaticShiftRight:
+    input a : UInt<8>
+    input b : UInt<0>
+    input c : SInt<8>
+    input d : SInt<0>
+
+    wire w : UInt
+    connect w, a
+
+    wire x : SInt
+    connect x, c
+
+    ; CHECK: %0 = firrtl.shr %a, 1
+    ; CHECK: %1 = firrtl.pad %0, 1
+    ; CHECK: %a_1 = firrtl.node {{.*}} %1 : !firrtl.uint<7>
+    node a_1 = shr(a, 1)
+    ; CHECK: %2 = firrtl.shr %a, 8
+    ; CHECK: %3 = firrtl.pad %2, 1
+    ; CHECK: %a_2 = firrtl.node {{.*}} %3 : !firrtl.uint<1>
+    node a_2 = shr(a, 8)
+    ; CHECK: %4 = firrtl.shr %a, 10
+    ; CHECK: %5 = firrtl.pad %4, 1
+    ; CHECK: %a_3 = firrtl.node {{.*}} %5 : !firrtl.uint<1>
+    node a_3 = shr(a, 10)
+    ; CHECK: %6 = firrtl.shr %b, 0
+    ; CHECK: %7 = firrtl.pad %6, 1
+    ; CHECK: %b_1 = firrtl.node {{.*}} %7 : !firrtl.uint<1>
+    node b_1 = shr(b, 0)
+    ; CHECK: %8 = firrtl.shr %b, 1
+    ; CHECK: %9 = firrtl.pad %8, 1
+    ; CHECK: %b_2 = firrtl.node {{.*}} %9 : !firrtl.uint<1>
+    node b_2 = shr(b, 1)
+    ; CHECK: %10 = firrtl.shr %w, 10
+    ; CHECK: %11 = firrtl.pad %10, 1
+    ; CHECK: %w_1 = firrtl.node {{.*}} %11 : !firrtl.uint
+    node w_1 = shr(w, 10)
+
+    ; CHECK: %12 = firrtl.shr %c, 1
+    ; CHECK: %c_1 = firrtl.node {{.*}} %12 : !firrtl.sint<7>
+    node c_1 = shr(c, 1)
+    ; CHECK: %13 = firrtl.shr %c, 8
+    ; CHECK: %c_2 = firrtl.node {{.*}} %13 : !firrtl.sint<1>
+    node c_2 = shr(c, 8)
+    ; CHECK: %14 = firrtl.shr %c, 10
+    ; CHECK: %c_3 = firrtl.node {{.*}} %14 : !firrtl.sint<1>
+    node c_3 = shr(c, 10)
+    ; CHECK: %15 = firrtl.shr %d, 0
+    ; CHECK: %d_1 = firrtl.node {{.*}} %15 : !firrtl.sint<1>
+    node d_1 = shr(d, 0)
+    ; CHECK: %16 = firrtl.shr %d, 1
+    ; CHECK: %d_2 = firrtl.node {{.*}} %16 : !firrtl.sint<1>
+    node d_2 = shr(d, 1)
+    ; CHECK: %17 = firrtl.shr %x, 10
+    ; CHECK: %x_1 = firrtl.node {{.*}} %17 : !firrtl.sint
+    node x_1 = shr(x, 10)
+
+;// -----
+
+FIRRTL version 4.0.0
+; CHECK-LABEL: circuit "StaticShiftRight"
+circuit StaticShiftRight:
+  ; CHECK: firrtl.module @StaticShiftRight
+  module StaticShiftRight:
+    input a : UInt<8>
+    input b : UInt<0>
+    input c : SInt<8>
+    input d : SInt<0>
+
+    wire w : UInt
+    connect w, a
+
+    wire x : SInt
+    connect x, c
+
+    ; CHECK: %0 = firrtl.shr %a, 1
+    ; CHECK: %a_1 = firrtl.node {{.*}} %0 : !firrtl.uint<7>
+    node a_1 = shr(a, 1)
+    ; CHECK: %1 = firrtl.shr %a, 8
+    ; CHECK: %a_2 = firrtl.node {{.*}} %1 : !firrtl.uint<0>
+    node a_2 = shr(a, 8)
+    ; CHECK: %2 = firrtl.shr %a, 10
+    ; CHECK: %a_3 = firrtl.node {{.*}} %2 : !firrtl.uint<0>
+    node a_3 = shr(a, 10)
+    ; CHECK: %3 = firrtl.shr %b, 0
+    ; CHECK: %b_1 = firrtl.node {{.*}} %3 : !firrtl.uint<0>
+    node b_1 = shr(b, 0)
+    ; CHECK: %4 = firrtl.shr %b, 1
+    ; CHECK: %b_2 = firrtl.node {{.*}} %4 : !firrtl.uint<0>
+    node b_2 = shr(b, 1)
+    ; CHECK: %5 = firrtl.shr %w, 10
+    ; CHECK: %w_1 = firrtl.node {{.*}} %5 : !firrtl.uint
+    node w_1 = shr(w, 10)
+
+    ; CHECK: %6 = firrtl.shr %c, 1
+    ; CHECK: %c_1 = firrtl.node {{.*}} %6 : !firrtl.sint<7>
+    node c_1 = shr(c, 1)
+    ; CHECK: %7 = firrtl.shr %c, 8
+    ; CHECK: %c_2 = firrtl.node {{.*}} %7 : !firrtl.sint<1>
+    node c_2 = shr(c, 8)
+    ; CHECK: %8 = firrtl.shr %c, 10
+    ; CHECK: %c_3 = firrtl.node {{.*}} %8 : !firrtl.sint<1>
+    node c_3 = shr(c, 10)
+    ; CHECK: %9 = firrtl.shr %d, 0
+    ; CHECK: %d_1 = firrtl.node {{.*}} %9 : !firrtl.sint<1>
+    node d_1 = shr(d, 0)
+    ; CHECK: %10 = firrtl.shr %d, 1
+    ; CHECK: %d_2 = firrtl.node {{.*}} %10 : !firrtl.sint<1>
+    node d_2 = shr(d, 1)
+    ; CHECK: %11 = firrtl.shr %x, 10
+    ; CHECK: %x_1 = firrtl.node {{.*}} %11 : !firrtl.sint
+    node x_1 = shr(x, 10)

@@ -21,6 +21,7 @@
 #ifndef ESI_ACCELERATOR_H
 #define ESI_ACCELERATOR_H
 
+#include "esi/Context.h"
 #include "esi/Design.h"
 #include "esi/Manifest.h"
 #include "esi/Ports.h"
@@ -60,13 +61,8 @@ public:
   Accelerator(std::optional<ModuleInfo> info,
               std::vector<std::unique_ptr<Instance>> children,
               std::vector<services::Service *> services,
-              std::vector<BundlePort> ports,
-              std::shared_ptr<Manifest::Impl> manifestImpl)
-      : HWModule(info, std::move(children), services, ports),
-        manifestImpl(manifestImpl) {}
-
-private:
-  std::shared_ptr<Manifest::Impl> manifestImpl;
+              std::vector<std::unique_ptr<BundlePort>> &ports)
+      : HWModule(info, std::move(children), services, ports) {}
 };
 
 //===----------------------------------------------------------------------===//
@@ -78,7 +74,15 @@ private:
 /// subclasses.
 class AcceleratorConnection {
 public:
+  AcceleratorConnection(Context &ctxt) : ctxt(ctxt) {}
+
   virtual ~AcceleratorConnection() = default;
+  Context &getCtxt() const { return ctxt; }
+
+  /// Request the host side channel ports for a particular instance (identified
+  /// by the AppID path). For convenience, provide the bundle type.
+  virtual std::map<std::string, ChannelPort &>
+  requestChannelsFor(AppIDPath, const BundleType *) = 0;
 
   using Service = services::Service;
   /// Get a typed reference to a particular service type. Caller does *not* take
@@ -112,20 +116,23 @@ private:
   /// Accelerator objects get deconstructed.
   using ServiceCacheKey = std::tuple<const std::type_info *, AppIDPath>;
   std::map<ServiceCacheKey, std::unique_ptr<Service>> serviceCache;
+
+  /// ESI accelerator context.
+  Context &ctxt;
 };
 
 namespace registry {
 
 // Connect to an ESI accelerator given a backend name and connection specifier.
 // Alternatively, instantiate the backend directly (if you're using C++).
-std::unique_ptr<AcceleratorConnection> connect(std::string backend,
-                                               std::string connection);
+std::unique_ptr<AcceleratorConnection>
+connect(Context &ctxt, std::string backend, std::string connection);
 
 namespace internal {
 
 /// Backends can register themselves to be connected via a connection string.
-using BackendCreate =
-    std::function<std::unique_ptr<AcceleratorConnection>(std::string)>;
+using BackendCreate = std::function<std::unique_ptr<AcceleratorConnection>(
+    Context &, std::string)>;
 void registerBackend(std::string name, BackendCreate create);
 
 // Helper struct to

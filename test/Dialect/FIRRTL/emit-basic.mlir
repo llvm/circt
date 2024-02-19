@@ -16,8 +16,11 @@
 // CHECK-LABEL: circuit Foo :
 // PRETTY-LABEL: circuit Foo :
 firrtl.circuit "Foo" {
-  // CHECK-LABEL: module Foo :
+  // CHECK-LABEL: public module Foo :
   firrtl.module @Foo() {}
+
+  // CHECK-LABEL: {{^ *}} module PrivateModule :
+  firrtl.module private @PrivateModule() {}
 
   // CHECK-LABEL: module PortsAndTypes :
   firrtl.module @PortsAndTypes(
@@ -758,7 +761,7 @@ firrtl.circuit "Foo" {
   ) {}
 
   // CHECK: module ModuleWithEnabledLayers enablelayer GroupA enablelayer GroupA.GroupB :
-  firrtl.module @ModuleWithEnabledLayers() attributes {
+  firrtl.module private @ModuleWithEnabledLayers() attributes {
     layers = [
       @GroupA,
       @GroupA::@GroupB

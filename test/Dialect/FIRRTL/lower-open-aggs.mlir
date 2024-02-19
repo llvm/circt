@@ -304,8 +304,8 @@ firrtl.circuit "WireProbes" {
 firrtl.circuit "WireSymbols" {
   // CHECK-LABEL: module{{.*}} @WireSymbols
   firrtl.module @WireSymbols() {
-    // CHECk-NEXT: %a = firrtl.wire sym [<@sym_a_c, 1, public>] : !firrtl.bundle<c: uint<1>>
-    // CHECk-NEXT: %a_b = firrtl.wire : !firrtl.string
+    // CHECK-NEXT: %a = firrtl.wire sym [<@sym_a_c,1,public>] : !firrtl.bundle<c: uint<1>>
+    // CHECK-NEXT: %a_b = firrtl.wire : !firrtl.string
     %a = firrtl.wire sym [<@sym_a_c, 2, public>] : !firrtl.openbundle<b: string, c: uint<1>>
   }
 }

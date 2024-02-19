@@ -268,15 +268,6 @@ def MuxToControlFlow : Pass<"arc-mux-to-control-flow", "mlir::ModuleOp"> {
   let dependentDialects = ["mlir::scf::SCFDialect"];
 }
 
-def PrintStateInfo : Pass<"arc-print-state-info", "mlir::ModuleOp"> {
-  let summary = "Print the state storage layout in JSON format";
-  let constructor = "circt::arc::createPrintStateInfoPass()";
-  let options = [
-    Option<"stateFile", "state-file", "std::string", "",
-      "Emit file with state description">
-  ];
-}
-
 def SimplifyVariadicOps : Pass<"arc-simplify-variadic-ops", "mlir::ModuleOp"> {
   let summary = "Convert variadic ops into distributed binary ops";
   let constructor = "circt::arc::createSimplifyVariadicOpsPass()";

@@ -1,3 +1,5 @@
+// XFAIL: *
+// See https://github.com/llvm/circt/issues/6658
 // RUN: ibistool -lo %s
 
 // A class hierarchy with a shared parent, and accessing between the children

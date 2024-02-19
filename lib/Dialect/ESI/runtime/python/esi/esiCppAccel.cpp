@@ -75,6 +75,10 @@ PYBIND11_MODULE(esiCppAccel, m) {
                              py::return_value_policy::reference)
       .def_property_readonly("size", &ArrayType::getSize);
 
+  py::class_<Context>(m, "Context")
+      .def(py::init<>())
+      .def("connect", &Context::connect);
+
   py::class_<ModuleInfo>(m, "ModuleInfo")
       .def_property_readonly("name", [](ModuleInfo &info) { return info.name; })
       .def_property_readonly("summary",
@@ -133,16 +137,16 @@ PYBIND11_MODULE(esiCppAccel, m) {
   py::class_<WriteChannelPort, ChannelPort>(m, "WriteChannelPort")
       .def("write", [](WriteChannelPort &p, py::bytearray &data) {
         py::buffer_info info(py::buffer(data).request());
-        p.write(info.ptr, info.size);
+        std::vector<uint8_t> dataVec((uint8_t *)info.ptr,
+                                     (uint8_t *)info.ptr + info.size);
+        p.write(dataVec);
       });
   py::class_<ReadChannelPort, ChannelPort>(m, "ReadChannelPort")
-      .def("read", [](ReadChannelPort &p, size_t maxSize) -> py::bytearray {
-        std::vector<uint8_t> data(maxSize);
-        std::ptrdiff_t size = p.read(data.data(), data.size());
-        if (size < 0)
-          throw std::runtime_error("read failed");
-        data.resize(size);
-        return py::bytearray((char *)data.data(), data.size());
+      .def("read", [](ReadChannelPort &p) -> py::object {
+        MessageData data;
+        if (!p.read(data))
+          return py::none();
+        return py::bytearray((const char *)data.getBytes(), data.getSize());
       });
 
   py::class_<BundlePort>(m, "BundlePort")
@@ -153,6 +157,19 @@ PYBIND11_MODULE(esiCppAccel, m) {
            py::return_value_policy::reference)
       .def("getRead", &BundlePort::getRawRead,
            py::return_value_policy::reference);
+
+  py::class_<ServicePort, BundlePort>(m, "ServicePort");
+  py::class_<FuncService::Function, ServicePort>(m, "Function")
+      .def("call",
+           [](FuncService::Function &self, py::bytearray msg) -> py::bytearray {
+             py::buffer_info info(py::buffer(msg).request());
+             std::vector<uint8_t> dataVec((uint8_t *)info.ptr,
+                                          (uint8_t *)info.ptr + info.size);
+             MessageData data(dataVec);
+             auto ret = self.call(data);
+             return py::bytearray((const char *)ret.getBytes(), ret.getSize());
+           })
+      .def("connect", &FuncService::Function::connect);
 
   // Store this variable (not commonly done) as the "children" method needs for
   // "Instance" to be defined first.
@@ -209,7 +226,7 @@ PYBIND11_MODULE(esiCppAccel, m) {
            });
 
   py::class_<Manifest>(m, "Manifest")
-      .def(py::init<std::string>())
+      .def(py::init<Context &, std::string>())
       .def_property_readonly("api_version", &Manifest::getApiVersion)
       .def("build_accelerator", &Manifest::buildAccelerator,
            py::return_value_policy::take_ownership)

@@ -349,12 +349,10 @@ circt::om::ObjectFieldOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     // Verify the field exists on the ClassOp.
     auto field = fields[i];
     ClassFieldLike fieldDef;
-    classDef.walk([&](SymbolOpInterface symbol) {
-      if (auto fieldLike = dyn_cast<ClassFieldLike>(symbol.getOperation())) {
-        if (symbol.getNameAttr() == field.getAttr()) {
-          fieldDef = fieldLike;
-          return WalkResult::interrupt();
-        }
+    classDef.walk([&](ClassFieldLike fieldLike) {
+      if (fieldLike.getNameAttr() == field.getAttr()) {
+        fieldDef = fieldLike;
+        return WalkResult::interrupt();
       }
       return WalkResult::advance();
     });
@@ -535,6 +533,16 @@ PathCreateOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   if (!hierPath)
     return emitOpError("invalid symbol reference");
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// IntegerAddOp
+//===----------------------------------------------------------------------===//
+
+FailureOr<llvm::APSInt>
+IntegerAddOp::evaluateIntegerOperation(const llvm::APSInt &lhs,
+                                       const llvm::APSInt &rhs) {
+  return success(lhs + rhs);
 }
 
 //===----------------------------------------------------------------------===//
