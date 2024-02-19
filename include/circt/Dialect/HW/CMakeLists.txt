@@ -7,6 +7,7 @@ mlir_tablegen(HWAttributes.cpp.inc -gen-attrdef-defs)
 add_public_tablegen_target(MLIRHWAttrIncGen)
 add_dependencies(circt-headers MLIRHWAttrIncGen)
 
+set(LLVM_TARGET_DEFINITIONS HWEnums.td)
 mlir_tablegen(HWEnums.h.inc -gen-enum-decls)
 mlir_tablegen(HWEnums.cpp.inc -gen-enum-defs)
 add_public_tablegen_target(MLIRHWEnumsIncGen)

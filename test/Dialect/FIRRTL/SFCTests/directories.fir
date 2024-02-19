@@ -123,7 +123,7 @@ circuit TestHarness:
 ; CHECK:            endmodule
 
 ; SITEST_DUT:       FILE "testbench.sitest.json"
-; SITEST-DUT-NOT:   FILE
+; SITEST_DUT-NOT:   FILE
 ; SITEST_DUT:         "Foo_BlackBox"
 
 ; SITEST_DUT:       FILE "design.sitest.json"
@@ -132,7 +132,7 @@ circuit TestHarness:
 ; SITEST_DUT-DAG:     "Baz_BlackBox"
 
 ; SITEST_NODUT:     FILE "testbench.sitest.json"
-; SITEST-NODUT-NOT: FILE
+; SITEST_NODUT-NOT: FILE
 
 ; MLIR_OUT:  om.class @SitestBlackBoxModulesSchema(%moduleName: !om.sym_ref) {
 ; MLIR_OUT:    om.class.field @moduleName, %moduleName : !om.sym_ref

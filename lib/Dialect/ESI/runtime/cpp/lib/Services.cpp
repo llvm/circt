@@ -81,3 +81,61 @@ CustomService::CustomService(AppIDPath idPath,
     serviceSymbol = serviceSymbol.substr(1);
   }
 }
+
+FuncService::FuncService(AcceleratorConnection *acc, AppIDPath idPath,
+                         std::string implName, ServiceImplDetails details,
+                         HWClientDetails clients) {
+  if (auto f = details.find("service"); f != details.end())
+    // Strip off initial '@'.
+    symbol = any_cast<string>(f->second).substr(1);
+}
+
+std::string FuncService::getServiceSymbol() const { return symbol; }
+
+ServicePort *
+FuncService::getPort(AppIDPath id, const BundleType *type,
+                     const std::map<std::string, ChannelPort &> &channels,
+                     AcceleratorConnection &acc) const {
+  return new Function(id.back(), channels);
+}
+
+FuncService::Function::Function(
+    AppID id, const std::map<std::string, ChannelPort &> &channels)
+    : ServicePort(id, channels),
+      arg(dynamic_cast<WriteChannelPort &>(channels.at("arg"))),
+      result(dynamic_cast<ReadChannelPort &>(channels.at("result"))) {
+  if (channels.size() != 2)
+    throw runtime_error("FuncService must have exactly two channels");
+}
+
+void FuncService::Function::connect() {
+  arg.connect();
+  result.connect();
+}
+
+MessageData FuncService::Function::call(const MessageData &argData) {
+  arg.write(argData);
+  MessageData resultData;
+  // TODO: Return a future instead of spin blocking.
+  while (!result.read(resultData))
+    ;
+  return resultData;
+}
+
+Service *ServiceRegistry::createService(AcceleratorConnection *acc,
+                                        Service::Type svcType, AppIDPath id,
+                                        std::string implName,
+                                        ServiceImplDetails details,
+                                        HWClientDetails clients) {
+  // TODO: Add a proper registration mechanism.
+  if (svcType == typeid(FuncService))
+    return new FuncService(acc, id, implName, details, clients);
+  return nullptr;
+}
+
+Service::Type ServiceRegistry::lookupServiceType(const std::string &svcName) {
+  // TODO: Add a proper registration mechanism.
+  if (svcName == "esi.service.std.func")
+    return typeid(FuncService);
+  return typeid(CustomService);
+}

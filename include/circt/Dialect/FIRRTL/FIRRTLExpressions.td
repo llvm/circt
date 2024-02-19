@@ -60,8 +60,10 @@ class FIRRTLExprOp<string mnemonic, list<Trait> traits = []> :
   // Additional class declarations to emit alongside the type inference.
   code firrtlExtraClassDeclaration = "";
 
-  let extraClassDeclaration = firrtlExtraClassDeclaration # inferTypeDecl #
-      parseValidatorDecl # [{
+  // Declaration of the InferTypeOpInterface method. This is a default
+  // implementation, using the inferType and inferTypeDecl machinery, but
+  // subclasses can override this to omit it or provide something else.
+  code inferReturnTypesDecl = [{
     /// Infer the return types of this operation. This is called by the
     /// `InferTypeOpInterface`. We simply forward to a narrower
     /// operation-specific implementation which is sufficient for FIRRTL ops.
@@ -75,7 +77,10 @@ class FIRRTLExprOp<string mnemonic, list<Trait> traits = []> :
       return impl::inferReturnTypes(context, loc, operands, attrs, properties,
         regions, results, &inferReturnType);
     }
+  }];
 
+  let extraClassDeclaration = firrtlExtraClassDeclaration # inferTypeDecl #
+      parseValidatorDecl # inferReturnTypesDecl # [{
     /// Check that the parser has consumed the correct number of operands and
     /// constants, and infer the appropriate return type for the operation.
     static FIRRTLType validateAndInferReturnType(ValueRange operands,
@@ -1174,6 +1179,39 @@ def DoubleConstantOp : FIRRTLOp<"double", [Pure, ConstantLike]> {
   let results = (outs DoubleType:$result);
   let hasFolder = 1;
   let assemblyFormat = "$value attr-dict";
+}
+
+class IntegerBinaryPrimOp<string mnemonic, list<Trait> traits = []> :
+   BinaryPrimOp<mnemonic, FIntegerType, FIntegerType, FIntegerType,
+                [Pure, SameOperandsAndResultType] # traits> {
+  // We use the standard inferReturnTypes from SameOperandsAndResultType.
+  let inferReturnTypesDecl = "";
+
+  // We use a static inferType that always returns FIntegerType.
+  let inferType = "getFIntegerType";
+
+  // Define the getFIntegerType inline in ODS.
+  let firrtlExtraClassDeclaration = [{
+    static FIntegerType getFIntegerType(FIRRTLType lhs,
+                                        FIRRTLType rhs,
+                                        std::optional<Location> loc) {
+      return FIntegerType::get(lhs.getContext());
+    }
+  }];
+}
+
+def IntegerAddOp : IntegerBinaryPrimOp<"integer.add", [Commutative]> {
+  let summary = "Add two FIntegerType values";
+  let description = [{
+    The add operation result is the arbitrary precision signed integer
+    arithmetic sum of the two operands.
+
+    Example:
+    ```mlir
+    %2 = firrtl.integer.add %0, %1 : (!firrtl.integer, !firrtl.integer) ->
+                                         !firrtl.integer
+    ```
+  }];
 }
 
 //===----------------------------------------------------------------------===//

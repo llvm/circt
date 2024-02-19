@@ -423,6 +423,8 @@ void Emitter::emitEnabledLayers(ArrayRef<Attribute> layers) {
 void Emitter::emitModule(FModuleOp op) {
   startStatement();
   ps.cbox(4, IndentStyle::Block);
+  if (op.isPublic())
+    ps << "public" << PP::nbsp;
   ps << "module " << PPExtString(legalize(op.getNameAttr()));
   emitEnabledLayers(op.getLayers());
   ps << PP::nbsp << ":" << PP::end;

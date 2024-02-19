@@ -3758,7 +3758,7 @@ LogicalResult FIRRTLLowering::visitExpr(ShrPrimOp op) {
   if (shiftAmount >= inWidth) {
     // Unsigned shift by full width returns a single-bit zero.
     if (type_cast<IntType>(op.getInput().getType()).isUnsigned())
-      return setLowering(op, getOrCreateIntConstant(1, 0));
+      return setLowering(op, {});
 
     // Signed shift by full width is equivalent to extracting the sign bit.
     shiftAmount = inWidth - 1;

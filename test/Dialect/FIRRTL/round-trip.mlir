@@ -71,4 +71,13 @@ firrtl.module @Layers(
 firrtl.module @LayersEnabled() attributes {layers = [@LayerA]} {
 }
 
+// CHECK-LABEL: firrtl.module @PropertyArithmetic
+firrtl.module @PropertyArithmetic() {
+  %0 = firrtl.integer 1
+  %1 = firrtl.integer 2
+
+  // CHECK: firrtl.integer.add %0, %1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+  %2 = firrtl.integer.add %0, %1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+}
+
 }

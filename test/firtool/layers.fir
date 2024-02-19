@@ -35,19 +35,19 @@ circuit Foo: %[[
 ; CHECK-NEXT:    wire x_probe = x;
 ; CHECK-NEXT:  endmodule
 
-; CHECK-LABEL: FILE "groups_Foo_A_B.sv"
-; CHECK:       `include "groups_Foo_A.sv"
-; CHECK-NEXT:  `ifndef groups_Foo_A_B
-; CHECK-NEXT:  `define groups_Foo_A_B
+; CHECK-LABEL: FILE "layers_Foo_A_B.sv"
+; CHECK:       `include "layers_Foo_A.sv"
+; CHECK-NEXT:  `ifndef layers_Foo_A_B
+; CHECK-NEXT:  `define layers_Foo_A_B
 ; CHECK-NEXT:  bind Foo Foo_A_B foo_A_B (
 ; CHECK-NEXT:    _x (Foo.foo_A.x_probe)
 ; CHECK-NEXT:  );
-; CHECK-NEXT:  `endif // groups_Foo_A_B
+; CHECK-NEXT:  `endif // layers_Foo_A_B
 
-; CHECK-LABEL: FILE "groups_Foo_A.sv"
-; CHECK:       `ifndef groups_Foo_A
-; CHECK-NEXT:  `define groups_Foo_A
+; CHECK-LABEL: FILE "layers_Foo_A.sv"
+; CHECK:       `ifndef layers_Foo_A
+; CHECK-NEXT:  `define layers_Foo_A
 ; CHECK-NEXT:   bind Foo Foo_A foo_A (
 ; CHECK-NEXT:     ._in (in)
 ; CHECK-NEXT:   );
-; CHECK-NEXT:  `endif // groups_Foo_A
+; CHECK-NEXT:  `endif // layers_Foo_A

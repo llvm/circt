@@ -798,16 +798,16 @@ def MacroDeclOp : SVOp<"macro.decl", [Symbol]> {
   let summary = "System verilog macro declaration";
 
   let description = [{
-    The `sv.macro.def` declares a macro in System Verilog.  This is a 
-    declaration; the body of the macro, which produces a verilog macro 
+    The `sv.macro.def` declares a macro in System Verilog.  This is a
+    declaration; the body of the macro, which produces a verilog macro
     definition is created with a `macro.def` operation.
-   
+
     Lacking args will be a macro without "()".  An empty args will be an empty "()".
 
     The verilog name is the spelling of the macro when emitting verilog.
   }];
 
-  let arguments = (ins SymbolNameAttr:$sym_name, 
+  let arguments = (ins SymbolNameAttr:$sym_name,
                        OptionalAttr<StrArrayAttr>:$args,
                        OptionalAttr<StrAttr>:$verilogName);
   let results = (outs);
@@ -818,7 +818,7 @@ def MacroDeclOp : SVOp<"macro.decl", [Symbol]> {
 }
 
 
-def MacroDefOp : SVOp<"macro.def", 
+def MacroDefOp : SVOp<"macro.def",
     [DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "System verilog macro definition";
 
@@ -829,14 +829,14 @@ def MacroDefOp : SVOp<"macro.def",
     This is modeled similarly to verbatim in that the contents of the macro are
     opaque (plain string).  Given the general power of macros, this op does not
     try to capture a return type.
-  
-    This operation produces a definition for the macro declaration referenced by 
+
+    This operation produces a definition for the macro declaration referenced by
     `sym_name`.  Argument lists are picked up from that operation.
 
     sv.macro.def allows operand substitutions with {{0}} syntax.
   }];
 
-  let arguments = (ins FlatSymbolRefAttr:$macroName, 
+  let arguments = (ins FlatSymbolRefAttr:$macroName,
                        StrAttr:$format_string,
                        DefaultValuedAttr<NameRefArrayAttr,"{}">:$symbols);
   let results = (outs);

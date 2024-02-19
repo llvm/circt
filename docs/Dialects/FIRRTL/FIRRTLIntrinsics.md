@@ -94,3 +94,108 @@ The enable input is sampled at the rising edge of the input clock; any changes o
 | in   | input     | Clock    | input clock                 |
 | en   | input     | UInt<1>  | enable for the output clock |
 | out  | output    | Clock    | gated output clock          |
+
+### circt.chisel_assert_assume
+
+Generate a clocked SV assertion with companion assume statement.
+
+Has legacy special behavior and should not be used by new code.
+
+| Parameter | Type   | Description                                                                         |
+| --------- | ------ | ----------------------------------------------------------------------------------- |
+| format    | string | Format string per SV 20.10, 21.2.1.  Optional.                                      |
+| label     | string | Label for assert/assume.  Optional.                                                 |
+| guards    | string | Semicolon-delimited list of pre-processor tokens to use as ifdef guards.  Optional. |
+
+| Port      | Direction | Type     | Description                |
+| --------- | --------- | -------- | -------------------------- |
+| clock     | input     | Clock    | input clock                |
+| predicate | input     | UInt<1>  | predicate to assert/assume |
+| enable    | input     | UInt<1>  | enable signal              |
+| ...       | input     | Signals  | arguments to format string |
+
+Example output:
+```systemverilog
+wire _GEN = ~enable | cond;
+assert__label: assert property (@(posedge clock) _GEN) else $error("message");
+`ifdef USE_PROPERTY_AS_CONSTRAINT
+  assume__label: assume property (@(posedge clock) _GEN);
+`endif // USE_PROPERTY_AS_CONSTRAINT
+```
+
+### circt.chisel_ifelsefatal
+
+Generate a particular Verilog sequence that's similar to an assertion.
+
+Has legacy special behavior and should not be used by new code.
+
+| Parameter | Type   | Description                                    |
+| --------- | ------ | ---------------------------------------------- |
+| format    | string | Format string per SV 20.10, 21.2.1.  Optional. |
+
+This intrinsic also accepts the `label` and `guard` parameters which
+are recorded but not used in the normal emission.
+
+| Port      | Direction | Type     | Description                 |
+| --------- | --------- | -------- | --------------------------- |
+| clock     | input     | Clock    | input clock                 |
+| predicate | input     | UInt<1>  | predicate to check          |
+| enable    | input     | UInt<1>  | enable signal               |
+| ...       | input     | Signals  | arguments to format string  |
+
+Example SV output:
+```systemverilog
+`ifndef SYNTHESIS
+  always @(posedge clock) begin
+    if (enable & ~cond) begin
+      if (`ASSERT_VERBOSE_COND_)
+        $error("message");
+      if (`STOP_COND_)
+        $fatal;
+    end
+  end // always @(posedge)
+`endif // not def SYNTHESIS
+```
+
+### circt.chisel_assume
+
+Generate a clocked SV assume statement, with optional formatted error message.
+
+
+| Parameter | Type   | Description                                                                         |
+| --------- | ------ | ----------------------------------------------------------------------------------- |
+| format    | string | Format string per SV 20.10, 21.2.1.  Optional.                                      |
+| label     | string | Label for assume statement.  Optional.                                              |
+| guards    | string | Semicolon-delimited list of pre-processor tokens to use as ifdef guards.  Optional. |
+
+| Port      | Direction | Type     | Description                |
+| --------- | --------- | -------- | -------------------------- |
+| clock     | input     | Clock    | input clock                |
+| predicate | input     | UInt<1>  | predicate to assume        |
+| enable    | input     | UInt<1>  | enable signal              |
+| ...       | input     | Signals  | arguments to format string |
+
+Example SV output:
+```systemverilog
+assume__label: assume property (@(posedge clock) ~enable | cond) else $error("message");	
+```
+
+### circt.chisel_cover
+
+Generate a clocked SV cover statement.
+
+| Parameter | Type   | Description                                                                         |
+| --------- | ------ | ----------------------------------------------------------------------------------- |
+| label     | string | Label for cover statement.  Optional.                                               |
+| guards    | string | Semicolon-delimited list of pre-processor tokens to use as ifdef guards.  Optional. |
+
+| Port      | Direction | Type     | Description        |
+| --------- | --------- | -------- | ------------------ |
+| clock     | input     | Clock    | input clock        |
+| predicate | input     | UInt<1>  | predicate to cover |
+| enable    | input     | UInt<1>  | enable signal      |
+
+Example SV output:
+```systemverilog
+cover__label: cover property (@(posedge clock) enable & cond);
+```

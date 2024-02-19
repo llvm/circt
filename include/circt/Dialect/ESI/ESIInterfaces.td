@@ -110,6 +110,15 @@ def ServiceDeclOpInterface : OpInterface<"ServiceDeclOpInterface"> {
       (ins "llvm::SmallVectorImpl<ServicePortInfo>&":$ports)
     >,
     InterfaceMethod<
+      "Return a well-known name for this service type.",
+      "std::optional<StringRef>", "getTypeName",
+      (ins),
+      /*methodBody=*/"",
+      /*defaultImplementation=*/[{
+        return {};
+      }]
+    >,
+    InterfaceMethod<
       "Get info on a particular port.",
       "FailureOr<ServicePortInfo>", "getPortInfo",
       (ins "StringAttr":$portName),

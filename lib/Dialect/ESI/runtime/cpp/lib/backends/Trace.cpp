@@ -22,6 +22,7 @@
 #include <fstream>
 #include <iostream>
 #include <regex>
+#include <sstream>
 
 using namespace std;
 
@@ -188,10 +189,16 @@ public:
       : ReadChannelPort(type) {}
 
   virtual bool read(MessageData &data) override;
+
+private:
+  size_t numReads = 0;
 };
 } // namespace
 
 bool ReadTraceChannelPort::read(MessageData &data) {
+  if ((++numReads & 0x1) == 1)
+    return false;
+
   std::ptrdiff_t numBits = getType()->getBitWidth();
   if (numBits < 0)
     // TODO: support other types.

@@ -935,6 +935,12 @@ LogicalResult NEQPrimOp::canonicalize(NEQPrimOp op, PatternRewriter &rewriter) {
       });
 }
 
+OpFoldResult IntegerAddOp::fold(FoldAdaptor adaptor) {
+  // TODO: implement constant folding, etc.
+  // Tracked in https://github.com/llvm/circt/issues/6696.
+  return {};
+}
+
 //===----------------------------------------------------------------------===//
 // Unary Operators
 //===----------------------------------------------------------------------===//
@@ -1516,12 +1522,14 @@ OpFoldResult ShrPrimOp::fold(FoldAdaptor adaptor) {
   auto input = this->getInput();
   IntType inputType = input.getType();
   int shiftAmount = getAmount();
+  auto inputWidth = inputType.getWidthOrSentinel();
 
   // shr(x, 0) -> x
-  if (shiftAmount == 0 && inputType.getWidthOrSentinel() != 0)
+  // Once the shr width changes, do this: shiftAmount == 0 &&
+  // (!inputType.isSigned() || inputWidth > 0)
+  if (shiftAmount == 0 && inputWidth > 0)
     return input;
 
-  auto inputWidth = inputType.getWidthOrSentinel();
   if (inputWidth == -1)
     return {};
   if (inputWidth == 0)
@@ -1530,7 +1538,7 @@ OpFoldResult ShrPrimOp::fold(FoldAdaptor adaptor) {
   // shr(x, cst) where cst is all of x's bits and x is unsigned is 0.
   // If x is signed, it is the sign bit.
   if (shiftAmount >= inputWidth && inputType.isUnsigned())
-    return getIntAttr(getType(), APInt(1, 0));
+    return getIntAttr(getType(), APInt(0, 0, false));
 
   // Constant fold.
   if (auto cst = getConstant(adaptor.getInput())) {
