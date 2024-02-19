@@ -129,6 +129,16 @@ PYBIND11_MODULE(esiCppAccel, m) {
                (std::hash<uint32_t>{}(id.idx.value_or(-1)) << 1);
       });
 
+  py::class_<std::future<MessageData>>(m, "MessageDataFuture")
+      .def("valid", &std::future<MessageData>::valid)
+      .def("wait", &std::future<MessageData>::wait)
+      .def("get", [](std::future<MessageData> &f) {
+        printf("Waiting for data\n");
+        MessageData data = f.get();
+        printf("Got data of size %lu\n", data.getSize());
+        return py::bytearray((const char *)data.getBytes(), data.getSize());
+      });
+
   py::class_<ChannelPort>(m, "ChannelPort")
       .def("connect", &ChannelPort::connect)
       .def_property_readonly("type", &ChannelPort::getType,
@@ -142,12 +152,15 @@ PYBIND11_MODULE(esiCppAccel, m) {
         p.write(dataVec);
       });
   py::class_<ReadChannelPort, ChannelPort>(m, "ReadChannelPort")
-      .def("read", [](ReadChannelPort &p) -> py::object {
-        MessageData data;
-        if (!p.read(data))
-          return py::none();
-        return py::bytearray((const char *)data.getBytes(), data.getSize());
-      });
+      .def("read",
+           [](ReadChannelPort &p) -> py::object {
+             MessageData data;
+             if (!p.read(data))
+               return py::none();
+             return py::bytearray((const char *)data.getBytes(),
+                                  data.getSize());
+           })
+      .def("read_async", &ReadChannelPort::readAsync);
 
   py::class_<BundlePort>(m, "BundlePort")
       .def_property_readonly("id", &BundlePort::getID)
@@ -160,15 +173,17 @@ PYBIND11_MODULE(esiCppAccel, m) {
 
   py::class_<ServicePort, BundlePort>(m, "ServicePort");
   py::class_<FuncService::Function, ServicePort>(m, "Function")
-      .def("call",
-           [](FuncService::Function &self, py::bytearray msg) -> py::bytearray {
-             py::buffer_info info(py::buffer(msg).request());
-             std::vector<uint8_t> dataVec((uint8_t *)info.ptr,
-                                          (uint8_t *)info.ptr + info.size);
-             MessageData data(dataVec);
-             auto ret = self.call(data);
-             return py::bytearray((const char *)ret.getBytes(), ret.getSize());
-           })
+      .def(
+          "call",
+          [](FuncService::Function &self,
+             py::bytearray msg) -> std::future<MessageData> {
+            py::buffer_info info(py::buffer(msg).request());
+            std::vector<uint8_t> dataVec((uint8_t *)info.ptr,
+                                         (uint8_t *)info.ptr + info.size);
+            MessageData data(dataVec);
+            return self.call(data);
+          },
+          py::return_value_policy::take_ownership)
       .def("connect", &FuncService::Function::connect);
 
   // Store this variable (not commonly done) as the "children" method needs for
