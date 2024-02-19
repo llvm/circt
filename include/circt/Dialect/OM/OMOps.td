@@ -59,7 +59,6 @@ class OMClassLike<string mnemonic, list<Trait> traits = []> :
 
 class OMClassFieldLike<string mnemonic, list<Trait> traits = []> :
   OMOp<mnemonic, traits # [
-    Symbol,
     DeclareOpInterfaceMethods<ClassFieldLike>]> {
 }
 
@@ -89,12 +88,12 @@ def ClassOp : OMClassLike<"class"> {
 def ClassFieldOp : OMClassFieldLike<"class.field",
     [HasParent<"ClassOp">]> {
   let arguments = (ins
-    SymbolNameAttr:$sym_name,
+    SymbolNameAttr:$name,
     AnyType:$value
   );
 
   let assemblyFormat = [{
-    $sym_name `,` $value  attr-dict `:` type($value)
+    $name `,` $value  attr-dict `:` type($value)
   }];
 }
 
@@ -116,12 +115,12 @@ def ClassExternOp : OMClassLike<"class.extern"> {
 def ClassExternFieldOp : OMClassFieldLike<"class.extern.field",
     [HasParent<"ClassExternOp">]> {
   let arguments = (ins
-    SymbolNameAttr:$sym_name,
+    SymbolNameAttr:$name,
     TypeAttr:$type
   );
 
   let assemblyFormat = [{
-    $sym_name attr-dict `:` $type
+    $name attr-dict `:` $type
   }];
 }
 
@@ -448,4 +447,30 @@ def AnyCastOp : OMOp<"any_cast", [Pure]> {
   let assemblyFormat =
      "$input attr-dict `:` functional-type($input, $result)";
 }
+
+class IntegerBinaryArithmeticOp<string mnemonic, list<Trait> traits = []> :
+    OMOp<mnemonic, [
+      Pure,
+      DeclareOpInterfaceMethods<IntegerBinaryArithmeticInterface>
+    ] # traits> {
+  let arguments = (ins OMIntegerType:$lhs, OMIntegerType:$rhs);
+
+  let results = (outs OMIntegerType:$result);
+
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($result)";
+}
+
+def IntegerAddOp : IntegerBinaryArithmeticOp<"integer.add", [Commutative]> {
+  let summary = "Add two OMIntegerType values";
+  let description = [{
+    Perform arbitrary precision signed integer addition of two OMIntegerType
+    values.
+
+    Example:
+    ```mlir
+    %2 = om.integer.add %0, %1 : !om.integer
+    ```
+  }];
+}
+
 #endif // CIRCT_DIALECT_OM_OMOPS_TD

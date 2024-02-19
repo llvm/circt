@@ -61,18 +61,9 @@ if platform != "trace":
 
 # Placeholder until we have a runtime function API.
 myfunc = d.ports[esi.AppID("structFunc")]
-arg_chan = myfunc.write_port("arg").connect()
-result_chan = myfunc.read_port("result").connect()
+myfunc.connect()
 
-arg = {"a": 10, "b": -22}
-arg_chan.write(arg)
-
-result: Optional[dict] = None
-resp = False
-while not resp:
-  print("polling")
-  (resp, result) = result_chan.read()
-
+result = myfunc(a=10, b=-22)
 print(f"result: {result}")
 if platform != "trace":
   assert result == {"y": -22, "x": -21}

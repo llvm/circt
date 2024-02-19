@@ -79,6 +79,24 @@ struct HWClientDetail {
 using HWClientDetails = std::vector<HWClientDetail>;
 using ServiceImplDetails = std::map<std::string, std::any>;
 
+/// A logical chunk of data representing serialized data. Currently, just a
+/// wrapper for a vector of bytes, which is not efficient in terms of memory
+/// copying. This will change in the future as will the API.
+class MessageData {
+public:
+  /// Adopts the data vector buffer.
+  MessageData() = default;
+  MessageData(std::vector<uint8_t> &data) : data(std::move(data)) {}
+  ~MessageData() = default;
+
+  const uint8_t *getBytes() const { return data.data(); }
+  /// Get the size of the data in bytes.
+  size_t getSize() const { return data.size(); }
+
+private:
+  std::vector<uint8_t> data;
+};
+
 } // namespace esi
 
 std::ostream &operator<<(std::ostream &, const esi::ModuleInfo &);

@@ -61,6 +61,10 @@ def FuncServiceDeclOp : ESI_Op<"service.std.func",
   let assemblyFormat = [{
     $sym_name attr-dict
   }];
+
+  let extraClassDeclaration = [{
+    std::optional<StringRef> getTypeName() { return "esi.service.std.func"; }
+  }];
 }
 
 def MMIOServiceDeclOp: ESI_Op<"service.std.mmio",

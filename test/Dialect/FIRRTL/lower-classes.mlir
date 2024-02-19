@@ -327,3 +327,33 @@ firrtl.circuit "AnyCast" {
     firrtl.propassign %foo, %0 : !firrtl.anyref
   }
 }
+
+// CHECK-LABEL: firrtl.circuit "ModuleWithPropertySubmodule"
+firrtl.circuit "ModuleWithPropertySubmodule" {
+  // CHECK: om.class @ModuleWithPropertySubmodule_Class
+  firrtl.module private @ModuleWithPropertySubmodule() {
+    %c0 = firrtl.integer 0
+    // CHECK: om.object @SubmoduleWithProperty_Class
+    %inst.prop = firrtl.instance inst @SubmoduleWithProperty(in prop: !firrtl.integer)
+    firrtl.propassign %inst.prop, %c0 : !firrtl.integer
+  }
+  // CHECK: om.class @SubmoduleWithProperty_Class
+  firrtl.module private @SubmoduleWithProperty(in %prop: !firrtl.integer) {
+  }
+}
+
+// CHECK-LABEL: firrtl.circuit "DownwardReferences"
+firrtl.circuit "DownwardReferences" {
+  firrtl.class @MyClass() {
+  }
+  firrtl.module @MyClassUser(in %myClassIn: !firrtl.class<@MyClass()>) {
+  }
+  firrtl.module @DownwardReferences() {
+    // CHECK: [[OBJ:%.+]] = om.object @MyClass
+    %myClass = firrtl.object @MyClass()
+    // CHECK: [[BP:%.+]] = om.basepath_create
+    // CHECK: om.object @MyClassUser_Class([[BP]], [[OBJ]])
+    %myClassUser.myClassIn = firrtl.instance myClassUser @MyClassUser(in myClassIn: !firrtl.class<@MyClass()>)
+    firrtl.propassign %myClassUser.myClassIn, %myClass : !firrtl.class<@MyClass()>
+  }
+}

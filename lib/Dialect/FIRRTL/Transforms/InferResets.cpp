@@ -1299,8 +1299,16 @@ InferResetsPass::collectAnnos(FModuleOp module) {
                                                    Annotation anno) {
     Value arg = module.getArgument(argNum);
     if (anno.isClass(fullAsyncResetAnnoClass)) {
+      if (!isa<AsyncResetType>(arg.getType())) {
+        mlir::emitError(arg.getLoc(), "'IgnoreFullAsyncResetAnnotation' must "
+                                      "target async reset, but targets ")
+            << arg.getType();
+        anyFailed = true;
+        return true;
+      }
       reset = arg;
       conflictingAnnos.insert({anno, reset.getLoc()});
+
       return true;
     }
     if (anno.isClass(ignoreFullAsyncResetAnnoClass)) {
@@ -1332,7 +1340,15 @@ InferResetsPass::collectAnnos(FModuleOp module) {
 
       // At this point we know that we have a WireOp/NodeOp. Process the reset
       // annotations.
+      auto resultType = op->getResult(0).getType();
       if (anno.isClass(fullAsyncResetAnnoClass)) {
+        if (!isa<AsyncResetType>(resultType)) {
+          mlir::emitError(op->getLoc(), "'IgnoreFullAsyncResetAnnotation' must "
+                                        "target async reset, but targets ")
+              << resultType;
+          anyFailed = true;
+          return true;
+        }
         reset = op->getResult(0);
         conflictingAnnos.insert({anno, reset.getLoc()});
         return true;

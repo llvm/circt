@@ -50,7 +50,25 @@ def ClassFieldLike : OpInterface<"ClassFieldLike"> {
 
   let methods = [
     InterfaceMethod<"Get the class-like field's type",
-      "mlir::Type", "getType", (ins)>
+      "mlir::Type", "getType", (ins)>,
+    InterfaceMethod<"Get the class-like field's name attribute",
+      "mlir::StringAttr", "getNameAttr", (ins)>
+  ];
+}
+
+def IntegerBinaryArithmeticInterface : OpInterface<"IntegerBinaryArithmeticOp"> {
+  let cppNamespace = "circt::om";
+  let description = "Common interface for integer binary arithmetic ops.";
+  let methods = [
+    InterfaceMethod<"Get the lhs Value",
+      "mlir::Value", "getLhs", (ins)>,
+    InterfaceMethod<"Get the rhs Value",
+      "mlir::Value", "getRhs", (ins)>,
+    InterfaceMethod<"Get the result Value",
+      "mlir::Value", "getResult", (ins)>,
+    InterfaceMethod<"Evaluate the integer binary arithmetic operation",
+      "mlir::FailureOr<llvm::APSInt>", "evaluateIntegerOperation",
+      (ins "const llvm::APSInt &":$lhs, "const llvm::APSInt &":$rhs)>
   ];
 }
 

@@ -254,4 +254,127 @@ firrtl.circuit "Foo" {
     firrtl.strictconnect %ckg_test_en, %en : !firrtl.uint<1>
     firrtl.strictconnect %ckg_en, %en : !firrtl.uint<1>
   }
+
+  // CHECK-NOT: CirctAssert1
+  // CHECK-NOT: CirctAssert2
+  // CHECK-NOT: VerifAssume
+  // CHECK-NOT: VerifCover
+// TODO:
+  firrtl.intmodule private @AssertAssume<format: none = "testing">(in clock: !firrtl.clock, in predicate: !firrtl.uint<1>, in enable: !firrtl.uint<1>) attributes {intrinsic = "circt.chisel_assert_assume"}
+  firrtl.intmodule private @AssertAssumeFormat<format: none = "message: %d",
+                                               label: none = "label for assert with format string",
+                                               guards: none = "MACRO_GUARD;ASDF">(
+                                                 in clock: !firrtl.clock,
+                                                 in predicate: !firrtl.uint<1>,
+                                                 in enable: !firrtl.uint<1>,
+                                                 in val: !firrtl.uint<1>
+                                               ) attributes {intrinsic = "circt.chisel_assert_assume"}
+  firrtl.intmodule private @IfElseFatalFormat<format: none = "ief: %d",
+                                              label: none = "label for ifelsefatal assert",
+                                              guards: none = "MACRO_GUARD;ASDF">(
+                                                in clock: !firrtl.clock,
+                                                in predicate: !firrtl.uint<1>,
+                                                in enable: !firrtl.uint<1>,
+                                                in val: !firrtl.uint<1>
+                                              ) attributes {intrinsic = "circt.chisel_ifelsefatal"}
+  firrtl.intmodule private @Assume<format: none = "text: %d",
+                                   label: none = "label for assume">(
+                                     in clock: !firrtl.clock,
+                                     in predicate: !firrtl.uint<1>,
+                                     in enable: !firrtl.uint<1>,
+                                     in val: !firrtl.uint<1>
+                                   ) attributes {intrinsic = "circt.chisel_assume"}
+  firrtl.intmodule private @CoverLabel<label: none = "label for cover">(
+                                         in clock: !firrtl.clock,
+                                         in predicate: !firrtl.uint<1>,
+                                         in enable: !firrtl.uint<1>
+                                       ) attributes {intrinsic = "circt.chisel_cover"}
+  // CHECK-NOT: @AssertAssume
+  // CHECK-NOT: @AssertAssumeFormat
+  // CHECK-NOT: @IfElseFatalFormat
+  // CHECK-NOT: @Assume
+  // CHECK-NOT: @CoverLabel
+
+  // CHECK: firrtl.module @ChiselVerif(
+  firrtl.module @ChiselVerif(in %clock: !firrtl.clock,
+                             in %cond: !firrtl.uint<1>,
+                             in %enable: !firrtl.uint<1>) {
+    // CHECK-NOT: firrtl.instance
+    // CHECK: firrtl.assert %{{.+}}, %{{.+}}, %{{.+}}, "testing" :
+    // CHECK-SAME: isConcurrent = true
+    %assert_clock, %assert_predicate, %assert_enable = firrtl.instance assert interesting_name @AssertAssume(in clock: !firrtl.clock, in predicate: !firrtl.uint<1>, in enable: !firrtl.uint<1>)
+    firrtl.strictconnect %assert_clock, %clock : !firrtl.clock
+    firrtl.strictconnect %assert_predicate, %cond : !firrtl.uint<1>
+    firrtl.strictconnect %assert_enable, %enable : !firrtl.uint<1>
+    // CHECK-NOT: firrtl.instance
+    // CHECK: firrtl.assert %{{.+}}, %{{.+}}, %{{.+}}, "message: %d"(
+    // CHECK-SAME: guards = ["MACRO_GUARD", "ASDF"]
+    // CHECK-SAME: isConcurrent = true
+    // CHECK-SAME: name = "label for assert with format string"
+    %assertFormat_clock, %assertFormat_predicate, %assertFormat_enable, %assertFormat_val = firrtl.instance assertFormat interesting_name @AssertAssumeFormat(in clock: !firrtl.clock, in predicate: !firrtl.uint<1>, in enable: !firrtl.uint<1>, in val: !firrtl.uint<1>)
+    firrtl.strictconnect %assertFormat_clock, %clock : !firrtl.clock
+    firrtl.strictconnect %assertFormat_predicate, %cond : !firrtl.uint<1>
+    firrtl.strictconnect %assertFormat_enable, %enable : !firrtl.uint<1>
+    firrtl.strictconnect %assertFormat_val, %cond : !firrtl.uint<1>
+    // CHECK-NOT: firrtl.instance
+    // CHECK: firrtl.assert %{{.+}}, %{{.+}}, %{{.+}}, "ief: %d"(
+    // CHECK-SAME: format = "ifElseFatal"
+    // CHECK-SAME: guards = ["MACRO_GUARD", "ASDF"]
+    // CHECK-SAME: isConcurrent = true
+    // CHECK-SAME: name = "label for ifelsefatal assert"
+    %ief_clock, %ief_predicate, %ief_enable, %ief_val = firrtl.instance ief interesting_name @IfElseFatalFormat(in clock: !firrtl.clock, in predicate: !firrtl.uint<1>, in enable: !firrtl.uint<1>, in val: !firrtl.uint<1>)
+    firrtl.strictconnect %ief_clock, %clock : !firrtl.clock
+    firrtl.strictconnect %ief_predicate, %cond : !firrtl.uint<1>
+    firrtl.strictconnect %ief_enable, %enable : !firrtl.uint<1>
+    firrtl.strictconnect %ief_val, %enable : !firrtl.uint<1>
+    // CHECK-NOT: firrtl.instance
+    // CHECK: firrtl.assume %{{.+}}, %{{.+}}, %{{.+}}, "text: %d"(
+    // CHECK-SAME: isConcurrent = true
+    // CHECK-SAME: name = "label for assume"
+    %assume_clock, %assume_predicate, %assume_enable, %assume_val = firrtl.instance assume interesting_name @Assume(in clock: !firrtl.clock, in predicate: !firrtl.uint<1>, in enable: !firrtl.uint<1>, in val: !firrtl.uint<1>)
+    firrtl.strictconnect %assume_clock, %clock : !firrtl.clock
+    firrtl.strictconnect %assume_predicate, %cond : !firrtl.uint<1>
+    firrtl.strictconnect %assume_enable, %enable : !firrtl.uint<1>
+    firrtl.strictconnect %assume_val, %enable : !firrtl.uint<1>
+    // CHECK-NOT: firrtl.instance
+    // CHECK: firrtl.cover %{{.+}}, %{{.+}}, %{{.+}}, "" :
+    // CHECK-SAME: isConcurrent = true
+    // CHECK-SAME: name = "label for cover"
+    %cover_clock, %cover_predicate, %cover_enable = firrtl.instance cover interesting_name @CoverLabel(in clock: !firrtl.clock, in predicate: !firrtl.uint<1>, in enable: !firrtl.uint<1>)
+    firrtl.strictconnect %cover_clock, %clock : !firrtl.clock
+    firrtl.strictconnect %cover_predicate, %cond : !firrtl.uint<1>
+    firrtl.strictconnect %cover_enable, %enable : !firrtl.uint<1>
+  }
+
+  // CHECK-NOT: firrtl.intmodule private @FPGAProbeIntrinsic
+  firrtl.intmodule private @FPGAProbeIntrinsic(in data: !firrtl.uint, in clock: !firrtl.clock) attributes {intrinsic = "circt_fpga_probe"}
+
+  // CHECK-LABEL: firrtl.module private @ProbeIntrinsicTest
+  firrtl.module private @ProbeIntrinsicTest(in %clock : !firrtl.clock, in %data : !firrtl.uint<32>) {
+    // CHECK:      [[DATA:%.+]] = firrtl.wire : !firrtl.uint
+    // CHECK-NEXT: [[CLOCK:%.+]] = firrtl.wire : !firrtl.clock
+    // CHECK-NEXT: firrtl.int.fpga_probe [[CLOCK]], [[DATA]] : !firrtl.uint
+    // CHECK-NEXT: firrtl.strictconnect [[CLOCK]], %clock : !firrtl.clock
+    // CHECK-NEXT: firrtl.connect [[DATA]], %data : !firrtl.uint, !firrtl.uint<32>
+    %mod_data, %mod_clock = firrtl.instance mod @FPGAProbeIntrinsic(in data: !firrtl.uint, in clock: !firrtl.clock)
+    firrtl.strictconnect %mod_clock, %clock : !firrtl.clock
+    firrtl.connect %mod_data, %data : !firrtl.uint, !firrtl.uint<32>
+  }
+}
+
+// CHECK-LABEL: "FixupEICGWrapper2"
+firrtl.circuit "FixupEICGWrapper2" {
+  // CHECK-NOEICG: LegacyClockGateNoTestEn
+  // CHECK-EICG-NOT: LegacyClockGateNoTestEn
+  firrtl.extmodule @LegacyClockGateNoTestEn(in in: !firrtl.clock, in en: !firrtl.uint<1>, out out: !firrtl.clock) attributes {defname = "EICG_wrapper"}
+
+  // CHECK: FixupEICGWrapper2
+  firrtl.module @FixupEICGWrapper2(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>) {
+    // CHECK-NOEICG: firrtl.instance
+    // CHECK-EICG-NOT: firrtl.instance
+    // CHECK-EICG: firrtl.int.clock_gate
+    %ckg_in, %ckg_en, %ckg_out = firrtl.instance ckg @LegacyClockGateNoTestEn(in in: !firrtl.clock, in en: !firrtl.uint<1>, out out: !firrtl.clock)
+    firrtl.strictconnect %ckg_in, %clock : !firrtl.clock
+    firrtl.strictconnect %ckg_en, %en : !firrtl.uint<1>
+  }
 }

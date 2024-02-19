@@ -135,7 +135,8 @@ public:
 
   void notifyOperationRemoved(Operation *op) override { remove(op); }
 
-  void notifyOperationInserted(Operation *op) override {
+  void notifyOperationInserted(Operation *op,
+                               mlir::IRRewriter::InsertPoint) override {
     // TODO: if an operation is inserted that defines a symbol and the symbol
     // already has uses, those users are not added.
     add(op);

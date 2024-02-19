@@ -441,9 +441,23 @@ bool LowerClassesPass::shouldCreateClass(FModuleLike moduleLike) {
   if (moduleLike.isPublic())
     return true;
 
-  return llvm::any_of(moduleLike.getPorts(), [](PortInfo port) {
+  // Create a class for modules with property ports.
+  bool hasClassPorts = llvm::any_of(moduleLike.getPorts(), [](PortInfo port) {
     return isa<PropertyType>(port.type);
   });
+
+  if (hasClassPorts)
+    return true;
+
+  // Create a class for modules that instantiate classes or modules with
+  // property ports.
+  for (auto op :
+       moduleLike.getOperation()->getRegion(0).getOps<FInstanceLike>())
+    for (auto result : op->getResults())
+      if (type_isa<PropertyType>(result.getType()))
+        return true;
+
+  return false;
 }
 
 // Create an OM Class op from a FIRRTL Class op or Module op with properties.
@@ -746,7 +760,7 @@ updateInstanceInClass(InstanceOp firrtlInstance, hw::HierPathOp hierPath,
     // Value as an actual parameter to the Object instance.
     auto propertyAssignment = getPropertyAssignment(propertyResult);
     assert(propertyAssignment && "properties require single assignment");
-    actualParameters.push_back(propertyAssignment.getSrc());
+    actualParameters.push_back(propertyAssignment.getSrcMutable().get());
 
     // Erase the property assignment.
     opsToErase.push_back(propertyAssignment);
@@ -1127,7 +1141,7 @@ struct ClassFieldOpConversion : public OpConversionPattern<ClassFieldOp> {
   LogicalResult
   matchAndRewrite(ClassFieldOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<ClassFieldOp>(op, adaptor.getSymNameAttr(),
+    rewriter.replaceOpWithNewOp<ClassFieldOp>(op, adaptor.getNameAttr(),
                                               adaptor.getValue());
     return success();
   }
@@ -1143,8 +1157,8 @@ struct ClassExternFieldOpConversion
     auto type = typeConverter->convertType(adaptor.getType());
     if (!type)
       return failure();
-    rewriter.replaceOpWithNewOp<ClassExternFieldOp>(
-        op, adaptor.getSymNameAttr(), type);
+    rewriter.replaceOpWithNewOp<ClassExternFieldOp>(op, adaptor.getNameAttr(),
+                                                    type);
     return success();
   }
 };

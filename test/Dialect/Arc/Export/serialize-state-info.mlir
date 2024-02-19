@@ -1,5 +1,4 @@
-// RUN: circt-opt %s --arc-print-state-info=state-file=%t
-// RUN: cat %t | FileCheck %s
+// RUN: circt-translate %s --export-arc-model-info | FileCheck %s
 
 // CHECK-LABEL: "name": "Foo"
 // CHECK-DAG: "numStateBytes": 5724

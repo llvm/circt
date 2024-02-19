@@ -95,6 +95,7 @@ public:
   bool shouldDisableOptimization() const { return disableOptimization; }
   bool shouldLowerMemories() const { return lowerMemories; }
   bool shouldDedup() const { return !noDedup; }
+  bool shouldRunWireDFT() const { return runWireDFT; }
   bool shouldEnableDebugInfo() const { return enableDebugInfo; }
   bool shouldIgnoreReadEnableMemories() const { return ignoreReadEnableMem; }
   bool shouldEmitOMIR() const { return emitOMIR; }
@@ -363,6 +364,7 @@ private:
   std::string chiselInterfaceOutDirectory;
   bool vbToBV;
   bool noDedup;
+  bool runWireDFT;
   firrtl::CompanionMode companionMode;
   bool disableAggressiveMergeConnections;
   bool disableHoistingHWPassthrough;

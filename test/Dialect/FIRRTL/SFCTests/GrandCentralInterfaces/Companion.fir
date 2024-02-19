@@ -69,7 +69,7 @@ circuit Foo : %[[
 
     ; DROP-NOT: module Companion
     ; DROP:     module Foo
-    ; DROP NOT: Companion
+    ; DROP-NOT: Companion
     ; DROP: endmodule
     ; DROP:     FILE "gct.yaml"
     ; DROP:     []

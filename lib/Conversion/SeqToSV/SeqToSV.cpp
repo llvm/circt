@@ -194,8 +194,12 @@ public:
     auto loc = op.getLoc();
     Value clk = adaptor.getInput();
 
+    StringAttr name = op->getAttrOfType<StringAttr>("sv.namehint");
     Value one = rewriter.create<hw::ConstantOp>(loc, APInt(1, 1));
-    rewriter.replaceOpWithNewOp<comb::XorOp>(op, clk, one);
+    auto newOp = rewriter.replaceOpWithNewOp<comb::XorOp>(op, clk, one);
+    if (name)
+      rewriter.modifyOpInPlace(newOp,
+                               [&] { newOp->setAttr("sv.namehint", name); });
     return success();
   }
 };

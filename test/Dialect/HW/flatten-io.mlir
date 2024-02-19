@@ -71,7 +71,7 @@ hw.module @instance_extern2(in %arg0 : i32, in %arg1 : !Struct1, out out : !Stru
 }
 
 // EXTERN-LABEL: hw.module.extern @level1_extern
-// EXERN-SAME: (in %arg0 : i32, in %in_a : i1, in %in_b : i2, in %arg1 : i32, out out0 : i32, out out_a : i1, out out_b : i2, out out1 : i32)
+// EXTERN-SAME: (in %arg0 : i32, in %in_a : i1, in %in_b : i2, in %arg1 : i32, out out0 : i32, out out_a : i1, out out_b : i2, out out1 : i32)
 // BASIC-LABEL: hw.module.extern @level1_extern(in %arg0 : i32, in %in : !hw.struct<a: i1, b: i2>, in %arg1 : i32, out out0 : i32, out out : !hw.struct<a: i1, b: i2>, out out1 : i32)
 hw.module.extern @level1_extern(in %arg0 : i32, in %in : !Struct1, in %arg1: i32, out out0 : i32, out out: !Struct1, out out1: i32)
 

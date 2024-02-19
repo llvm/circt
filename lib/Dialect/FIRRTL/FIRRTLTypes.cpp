@@ -831,6 +831,30 @@ bool firrtl::containsConst(Type type) {
       .Default(false);
 }
 
+// NOLINTBEGIN(misc-no-recursion)
+bool firrtl::hasZeroBitWidth(FIRRTLType type) {
+  return FIRRTLTypeSwitch<FIRRTLType, bool>(type)
+      .Case<BundleType>([&](auto bundle) {
+        for (size_t i = 0, e = bundle.getNumElements(); i < e; ++i) {
+          auto elt = bundle.getElement(i);
+          if (hasZeroBitWidth(elt.type))
+            return true;
+        }
+        return bundle.getNumElements() == 0;
+      })
+      .Case<FVectorType>([&](auto vector) {
+        if (vector.getNumElements() == 0)
+          return true;
+        return hasZeroBitWidth(vector.getElementType());
+      })
+      .Case<FIRRTLBaseType>([](auto groundType) {
+        return firrtl::getBitWidth(groundType).value_or(0) == 0;
+      })
+      .Case<RefType>([](auto ref) { return hasZeroBitWidth(ref.getType()); })
+      .Default([](auto) { return false; });
+}
+// NOLINTEND(misc-no-recursion)
+
 /// Helper to implement the equivalence logic for a pair of bundle elements.
 /// Note that the FIRRTL spec requires bundle elements to have the same
 /// orientation, but this only compares their passive types. The FIRRTL dialect

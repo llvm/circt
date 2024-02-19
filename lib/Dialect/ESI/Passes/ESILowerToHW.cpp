@@ -86,8 +86,8 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
   operands.push_back(unwrap.getRawOutput());
   operands.push_back(unwrap.getValid());
   operands.push_back(stageReady);
-  auto stageInst = rewriter.create<InstanceOp>(loc, stageModule, pipeStageName,
-                                               operands, stageParams);
+  auto stageInst = rewriter.create<hw::InstanceOp>(
+      loc, stageModule, pipeStageName, operands, stageParams);
   auto stageInstResults = stageInst.getResults();
 
   // Set a_ready (from the unwrap) back edge correctly to its output from
@@ -369,7 +369,7 @@ LogicalResult CosimToHostLowering::matchAndRewrite(
       unwrapSend.getValid(),
       castedSendData,
   };
-  auto cosimEpModule = rewriter.create<InstanceOp>(
+  auto cosimEpModule = rewriter.create<hw::InstanceOp>(
       loc, endpoint, ep.getIdAttr(), operands, ArrayAttr::get(ctxt, params));
   sendReady.setValue(cosimEpModule.getResult(0));
 
@@ -427,7 +427,7 @@ LogicalResult CosimFromHostLowering::matchAndRewrite(
 
   // Create replacement Cosim_Endpoint instance.
   Value operands[] = {adaptor.getClk(), adaptor.getRst(), recvReady};
-  auto cosimEpModule = rewriter.create<InstanceOp>(
+  auto cosimEpModule = rewriter.create<hw::InstanceOp>(
       loc, endpoint, ep.getIdAttr(), operands, ArrayAttr::get(ctxt, params));
 
   // Set up the injest path.
