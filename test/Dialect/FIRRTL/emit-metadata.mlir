@@ -188,6 +188,20 @@ firrtl.circuit "DualReadsSMem" {
   // CHECK{LITERAL}: sv.verbatim "[\0A {\0A \22module_name\22: \22{{0}}\22,\0A \22depth\22: 12,\0A \22width\22: 42,\0A \22masked\22: false,\0A \22read\22: 2,\0A \22write\22: 1,\0A \22readwrite\22: 0,\0A \22extra_ports\22: [],\0A \22hierarchy\22: [\0A \22{{1}}.DualReads_ext\22\0A ]\0A }\0A]"
   // CHECK: symbols = [@DualReads_ext, @DualReadsSMem]}
   // CHECK{LITERAL}: sv.verbatim "name {{0}} depth 12 width 42 ports write,read,read\0A" {output_file = #hw.output_file<"'dut.conf'", excludeFromFileList>, symbols = [@DualReads_ext]}
+
+}
+
+// -----
+
+// CHECK-LABEL: firrtl.circuit "ReadOnlyMemory"
+firrtl.circuit "ReadOnlyMemory" {
+  firrtl.module @ReadOnlyMemory() {
+    %0:4 = firrtl.instance rom_ext sym @rom_ext_0 @rom_ext(in R0_addr: !firrtl.uint<9>, in R0_en: !firrtl.uint<1>, in R0_clk: !firrtl.clock, out R0_data: !firrtl.uint<32>)
+  }
+  firrtl.memmodule @rom_ext(in R0_addr: !firrtl.uint<9>, in R0_en: !firrtl.uint<1>, in R0_clk: !firrtl.clock, out R0_data: !firrtl.uint<32>) attributes {dataWidth = 32 : ui32, depth = 512 : ui64, extraPorts = [], maskBits = 0 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 0 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
+  // CHECK{LITERAL}: sv.verbatim "[\0A  {\0A \22module_name\22: \22{{0}}\22,\0A \22depth\22: 512,\0A \22width\22: 32,\0A \22masked\22: false,\0A \22read\22: 1,\0A \22write\22: 0,\0A \22readwrite\22: 0,\0A \22extra_ports\22: [],\0A \22hierarchy\22: [\0A \22{{1}}.rom_ext\22\0A ]\0A }\0A]"
+  // CHECK: symbols = [@rom_ext, @ReadOnlyMemory]}
+  // CHECK{LITERAL}: sv.verbatim "name {{0}} depth 512 width 32 ports read\0A" {output_file = #hw.output_file<"'dut.conf'", excludeFromFileList>, symbols = [@rom_ext]}
 }
 
 // -----
