@@ -13,6 +13,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Mutex.h"
@@ -22,6 +23,17 @@
 
 using namespace circt;
 using namespace firrtl;
+
+//===----------------------------------------------------------------------===//
+// Helpers
+//===----------------------------------------------------------------------===//
+
+static bool isAncestor(Operation *op, Value value) {
+  if (auto result = dyn_cast<OpResult>(value))
+    return op->isAncestor(result.getOwner());
+  auto argument = cast<BlockArgument>(value);
+  return op->isAncestor(argument.getOwner()->getParentOp());
+}
 
 //===----------------------------------------------------------------------===//
 // Type Conversion
@@ -45,6 +57,12 @@ struct ConnectInfo {
 
 } // namespace
 
+// A mapping of an old InnerRefAttr to the new inner symbol and module name that
+// need to be spliced into the old InnerRefAttr.  This is used to fix
+// hierarchical path operations after layers are converted to modules.
+using InnerRefMap =
+    DenseMap<hw::InnerRefAttr, std::pair<hw::InnerSymAttr, StringAttr>>;
+
 class LowerLayersPass : public LowerLayersBase<LowerLayersPass> {
   /// Safely build a new module with a given namehint.  This handles geting a
   /// lock to modify the top-level circuit.
@@ -52,10 +70,10 @@ class LowerLayersPass : public LowerLayersBase<LowerLayersPass> {
                            Twine namehint, SmallVectorImpl<PortInfo> &ports);
 
   /// Strip layer colors from the module's interface.
-  void runOnModuleLike(FModuleLike moduleLike);
+  InnerRefMap runOnModuleLike(FModuleLike moduleLike);
 
   /// Extract layerblocks and strip probe colors from all ops under the module.
-  void runOnModuleBody(FModuleOp moduleOp);
+  void runOnModuleBody(FModuleOp moduleOp, InnerRefMap &innerRefMap);
 
   /// Update the module's port types to remove any explicit layer requirements
   /// from any probe types.
@@ -145,18 +163,19 @@ void LowerLayersPass::removeLayersFromPorts(FModuleLike moduleLike) {
   }
 }
 
-void LowerLayersPass::runOnModuleLike(FModuleLike moduleLike) {
+InnerRefMap LowerLayersPass::runOnModuleLike(FModuleLike moduleLike) {
   LLVM_DEBUG({
     llvm::dbgs() << "Module: " << moduleLike.getModuleName() << "\n";
     llvm::dbgs() << "  Examining Layer Blocks:\n";
   });
 
   // Strip away layers from the interface of the module-like op.
+  InnerRefMap innerRefMap;
   TypeSwitch<Operation *, void>(moduleLike.getOperation())
       .Case<FModuleOp>([&](auto op) {
         op.setLayers({});
         removeLayersFromPorts(op);
-        runOnModuleBody(op);
+        runOnModuleBody(op, innerRefMap);
       })
       .Case<FExtModuleOp, FIntModuleOp, FMemModuleOp>([&](auto op) {
         op.setLayers({});
@@ -164,11 +183,15 @@ void LowerLayersPass::runOnModuleLike(FModuleLike moduleLike) {
       })
       .Case<ClassOp, ExtClassOp>([](auto) {})
       .Default([](auto) { assert(0 && "unknown module-like op"); });
+
+  return innerRefMap;
 }
 
-void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp) {
+void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
+                                      InnerRefMap &innerRefMap) {
   CircuitOp circuitOp = moduleOp->getParentOfType<CircuitOp>();
   StringRef circuitName = circuitOp.getName();
+  hw::InnerSymbolNamespace ns(moduleOp);
 
   // A map of instance ops to modules that this pass creates.  This is used to
   // check if this was an instance that we created and to do fast module
@@ -231,7 +254,6 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp) {
 
     // Create an input port for an operand that is captured from outside.
     auto createInputPort = [&](Value operand, Location loc) {
-      auto portNum = ports.size();
       auto operandName = getFieldName(FieldRef(operand, 0), true);
 
       // If the value is a ref, we must resolve the ref inside the parent,
@@ -247,15 +269,21 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp) {
       // Update the layer block's body with arguments as we will swap this body
       // into the module when we create it.  If this is a ref type, then add a
       // refsend to convert from the non-ref type input port.
-      body->addArgument(type, loc);
-      Value replacement = body->getArgument(portNum);
+      Value replacement = body->addArgument(type, loc);
       if (isa<RefType>(operand.getType())) {
         OpBuilder::InsertionGuard guard(builder);
         builder.setInsertionPointToStart(body);
         replacement = builder.create<RefSendOp>(loc, replacement);
       }
-      operand.replaceUsesWithIf(replacement, [&](OpOperand &operand) {
-        return layerBlock->isAncestor(operand.getOwner());
+      operand.replaceUsesWithIf(replacement, [&](OpOperand &use) {
+        auto *user = use.getOwner();
+        if (!layerBlock->isAncestor(user))
+          return false;
+        if (auto connectLike = dyn_cast<FConnectLike>(user)) {
+          if (use.getOperandNumber() == 0)
+            return false;
+        }
+        return true;
       });
 
       connectValues.push_back({operand, ConnectKind::NonRef});
@@ -294,12 +322,18 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp) {
 
       ports.push_back({builder.getStringAttr("_" + operandName.first), refType,
                        Direction::Out, /*sym=*/{}, /*loc=*/loc});
-      body->addArgument(refType, loc);
+      Value replacement = body->addArgument(refType, loc);
       if (isa<RefType>(dest.getType())) {
-        dest.replaceUsesWithIf(body->getArgument(portNum),
-                               [&](OpOperand &operand) {
-                                 return operand.getOwner()->getBlock() == body;
-                               });
+        dest.replaceUsesWithIf(replacement, [&](OpOperand &use) {
+          auto *user = use.getOwner();
+          if (!layerBlock->isAncestor(user))
+            return false;
+          if (auto connectLike = dyn_cast<FConnectLike>(user)) {
+            if (use.getOperandNumber() == 0)
+              return true;
+          }
+          return false;
+        });
         connectValues.push_back({dest, ConnectKind::Ref});
         return;
       }
@@ -311,7 +345,14 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp) {
           builder.create<RefSendOp>(loc, src)->getResult(0));
     };
 
+    SmallVector<hw::InnerSymAttr> innerSyms;
     for (auto &op : llvm::make_early_inc_range(*body)) {
+      // Record any operations inside the layer block which have inner symbols.
+      // Theses may have symbol users which need to be updated.
+      if (auto symOp = dyn_cast<hw::InnerSymbolOpInterface>(op))
+        if (auto innerSym = symOp.getInnerSymAttr())
+          innerSyms.push_back(innerSym);
+
       // Handle instance ops that were created from nested layer blocks.  These
       // ops need to be moved outside the layer block to avoid nested binds.
       // Nested binds are illegal in the SystemVerilog specification (and
@@ -339,39 +380,35 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp) {
 
       if (auto refSend = dyn_cast<RefSendOp>(op)) {
         auto src = refSend.getBase();
-        auto *srcOp = src.getDefiningOp();
-        auto srcInLayerBlock = srcOp && layerBlock->isAncestor(srcOp);
-        if (!srcInLayerBlock)
+        if (!isAncestor(layerBlock, src))
           createInputPort(src, op.getLoc());
         continue;
       }
 
       if (auto refCast = dyn_cast<RefCastOp>(op)) {
-        auto *srcOp = refCast.getInput().getDefiningOp();
-        auto srcInLayerBlock = srcOp && layerBlock->isAncestor(srcOp);
-        if (!srcInLayerBlock)
+        if (!isAncestor(layerBlock, refCast))
           createInputPort(refCast.getInput(), op.getLoc());
         continue;
       }
 
       if (auto connect = dyn_cast<FConnectLike>(op)) {
-        auto *srcOp = connect.getSrc().getDefiningOp();
-        auto *dstOp = connect.getDest().getDefiningOp();
-        auto srcInLayerBlock = srcOp && layerBlock->isAncestor(srcOp);
-        auto dstInLayerBlock = dstOp && layerBlock->isAncestor(dstOp);
+        auto src = connect.getSrc();
+        auto dst = connect.getDest();
+        auto srcInLayerBlock = isAncestor(layerBlock, src);
+        auto dstInLayerBlock = isAncestor(layerBlock, dst);
         if (!srcInLayerBlock && !dstInLayerBlock) {
           connect->moveBefore(layerBlock);
           continue;
         }
         // Create an input port.
         if (!srcInLayerBlock) {
-          createInputPort(connect.getSrc(), op.getLoc());
+          createInputPort(src, op.getLoc());
           continue;
         }
         // Create an output port.
         if (!dstInLayerBlock) {
-          createOutputPort(connect.getDest(), connect.getSrc());
-          if (!connect.getDest().getType().isa<RefType>())
+          createOutputPort(dst, src);
+          if (!dst.getType().isa<RefType>())
             connect.erase();
           continue;
         }
@@ -404,9 +441,7 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp) {
 
       // For any other ops, create input ports for any captured operands.
       for (auto operand : op.getOperands()) {
-        auto *operandOp = operand.getDefiningOp();
-        auto operandInBlock = operandOp && layerBlock->isAncestor(operandOp);
-        if (!operandInBlock)
+        if (!isAncestor(layerBlock, operand))
           createInputPort(operand, op.getLoc());
       }
     }
@@ -442,21 +477,37 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp) {
     // instance everytime it is moved into a parent layer.
     builder.setInsertionPointAfter(layerBlock);
     auto moduleName = newModule.getModuleName();
+    auto instanceName =
+        (Twine((char)tolower(moduleName[0])) + moduleName.drop_front()).str();
     auto instanceOp = builder.create<InstanceOp>(
         layerBlock.getLoc(), /*moduleName=*/newModule,
         /*name=*/
-        (Twine((char)tolower(moduleName[0])) + moduleName.drop_front()).str(),
-        NameKindEnum::DroppableName,
+        instanceName, NameKindEnum::DroppableName,
         /*annotations=*/ArrayRef<Attribute>{},
-        /*portAnnotations=*/ArrayRef<Attribute>{}, /*lowerToBind=*/true);
-    // TODO: Change this to "layers_" once we switch to FIRRTL 4.0.0+.
+        /*portAnnotations=*/ArrayRef<Attribute>{}, /*lowerToBind=*/true,
+        /*innerSym=*/
+        (innerSyms.empty() ? hw::InnerSymAttr{}
+                           : hw::InnerSymAttr::get(builder.getStringAttr(
+                                 ns.newName(instanceName)))));
     instanceOp->setAttr("output_file",
                         hw::OutputFileAttr::getFromFilename(
                             builder.getContext(),
 
-                            "groups_" + circuitName + "_" + layerName + ".sv",
+                            "layers_" + circuitName + "_" + layerName + ".sv",
                             /*excludeFromFileList=*/true));
     createdInstances.try_emplace(instanceOp, newModule);
+
+    LLVM_DEBUG(llvm::dbgs() << "        moved inner refs:\n");
+    for (hw::InnerSymAttr innerSym : innerSyms) {
+      auto oldInnerRef = hw::InnerRefAttr::get(moduleOp.getModuleNameAttr(),
+                                               innerSym.getSymName());
+      auto splice = std::make_pair(instanceOp.getInnerSymAttr(),
+                                   newModule.getModuleNameAttr());
+      innerRefMap.insert({oldInnerRef, splice});
+      LLVM_DEBUG(llvm::dbgs() << "          - ref: " << oldInnerRef << "\n"
+                              << "            splice: " << splice.first << ", "
+                              << splice.second << "\n";);
+    }
 
     // Connect instance ports to values.
     assert(ports.size() == connectValues.size() &&
@@ -518,24 +569,63 @@ void LowerLayersPass::runOnOperation() {
     });
   });
 
+  auto mergeMaps = [](auto &&a, auto &&b) {
+    for (auto bb : b)
+      a.insert(bb);
+    return std::forward<decltype(a)>(a);
+  };
+
   // Lower the layer blocks of each module.
   SmallVector<FModuleLike> modules(
       circuitOp.getBodyBlock()->getOps<FModuleLike>());
-  parallelForEach(modules,
-                  [this](FModuleLike module) { runOnModuleLike(module); });
+  auto innerRefMap =
+      transformReduce(circuitOp.getContext(), modules, InnerRefMap{}, mergeMaps,
+                      [this](FModuleLike mod) { return runOnModuleLike(mod); });
+
+  // Rewrite any hw::HierPathOps which have namepaths that contain rewritting
+  // inner refs.
+  //
+  // TODO: This unnecessarily computes a new namepath for every hw::HierPathOp
+  // even if that namepath is not used.  It would be better to only build the
+  // new namepath when a change is needed, e.g., by recording updates to the
+  // namepath.
+  for (hw::HierPathOp hierPathOp : circuitOp.getOps<hw::HierPathOp>()) {
+    SmallVector<Attribute> newNamepath;
+    bool modified = false;
+    for (auto attr : hierPathOp.getNamepath()) {
+      hw::InnerRefAttr innerRef = dyn_cast<hw::InnerRefAttr>(attr);
+      if (!innerRef) {
+        newNamepath.push_back(attr);
+        continue;
+      }
+      auto it = innerRefMap.find(innerRef);
+      if (it == innerRefMap.end()) {
+        newNamepath.push_back(attr);
+        continue;
+      }
+
+      auto &[inst, mod] = it->getSecond();
+      newNamepath.push_back(
+          hw::InnerRefAttr::get(innerRef.getModule(), inst.getSymName()));
+      newNamepath.push_back(hw::InnerRefAttr::get(mod, innerRef.getName()));
+      modified = true;
+    }
+    if (modified)
+      hierPathOp.setNamepathAttr(
+          ArrayAttr::get(circuitOp.getContext(), newNamepath));
+  }
 
   // Generate the header and footer of each bindings file.  The body will be
   // populated later when binds are exported to Verilog.  This produces text
   // like:
   //
-  //     `include "groups_A.sv"
-  //     `include "groups_A_B.sv"
-  //     `ifndef groups_A_B_C
-  //     `define groups_A_B_C
+  //     `include "layers_A.sv"
+  //     `include "layers_A_B.sv"
+  //     `ifndef layers_A_B_C
+  //     `define layers_A_B_C
   //     <body>
-  //     `endif // groups_A_B_C
+  //     `endif // layers_A_B_C
   //
-  // TODO: Change this comment to "layers_" once we switch to FIRRTL 4.0.0+.
   // TODO: This would be better handled without the use of verbatim ops.
   OpBuilder builder(circuitOp);
   SmallVector<std::pair<LayerOp, StringAttr>> layers;
@@ -546,9 +636,8 @@ void LowerLayersPass::runOnOperation() {
       layers.pop_back();
     builder.setInsertionPointToStart(circuitOp.getBodyBlock());
 
-    // Save the "groups_CIRCUIT_GROUP" string as this is reused a bunch.
-    // TODO: Change this to "layers_" once we switch to FIRRTL 4.0.0+.
-    SmallString<32> prefix("groups_");
+    // Save the "layers_CIRCUIT_GROUP" string as this is reused a bunch.
+    SmallString<32> prefix("layers_");
     prefix.append(circuitName);
     prefix.append("_");
     for (auto [layer, _] : layers) {

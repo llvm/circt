@@ -168,19 +168,27 @@ struct FIRParser {
   //===--------------------------------------------------------------------===//
 
   ParseResult requireFeature(FIRVersion minimum, StringRef feature) {
+    return requireFeature(minimum, feature, getToken().getLoc());
+  }
+
+  ParseResult requireFeature(FIRVersion minimum, StringRef feature, SMLoc loc) {
     if (version < minimum)
-      return emitError() << feature << " are a FIRRTL " << minimum
-                         << "+ feature, but the specified FIRRTL version was "
-                         << version;
+      return emitError(loc)
+             << feature << " are a FIRRTL " << minimum
+             << "+ feature, but the specified FIRRTL version was " << version;
     return success();
   }
 
   ParseResult removedFeature(FIRVersion removedVersion, StringRef feature) {
+    return removedFeature(removedVersion, feature, getToken().getLoc());
+  }
+
+  ParseResult removedFeature(FIRVersion removedVersion, StringRef feature,
+                             SMLoc loc) {
     if (version >= removedVersion)
-      return emitError() << feature << " were removed in FIRRTL "
-                         << removedVersion
-                         << ", but the specified FIRRTL version was "
-                         << version;
+      return emitError(loc)
+             << feature << " were removed in FIRRTL " << removedVersion
+             << ", but the specified FIRRTL version was " << version;
     return success();
   }
 
@@ -2244,6 +2252,10 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result) {
   case FIRToken::lp_tail:
     attrNames.push_back(getConstants().amountIdentifier);
     break;
+  case FIRToken::lp_integer_add:
+    if (requireFeature({4, 0, 0}, "Integer arithmetic expressions", loc))
+      return failure();
+    break;
   }
 
   if (operands.size() != numOperandsExpected) {
@@ -2278,12 +2290,23 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result) {
       return failure();                                                        \
     }                                                                          \
     result = builder.create<CLASS>(resultTy, operands, attrs);                 \
-    return success();                                                          \
+    break;                                                                     \
   }
 #include "FIRTokenKinds.def"
   }
-
-  llvm_unreachable("all cases should return");
+  // Don't add code here, the common cases of these switch statements will be
+  // merged. This allows for fixing up primops after they have been created.
+  switch (kind) {
+  default:
+    break;
+  case FIRToken::lp_shr:
+    // For FIRRTL versions earlier than 4.0.0, insert pad(_, 1) around any
+    // unsigned shr This ensures the minimum width is 1 (but can be greater)
+    if (version < FIRVersion(4, 0, 0) && type_isa<UIntType>(result.getType()))
+      result = builder.create<PadPrimOp>(result, 1);
+    break;
+  }
+  return success();
 }
 
 /// integer-literal-exp ::= 'UInt' optional-width '(' intLit ')'
@@ -2928,6 +2951,7 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
 /// enum-exp ::= enum-type '(' Id ( ',' exp )? ')'
 ParseResult FIRStmtParser::parseEnumExp(Value &value) {
   auto startLoc = getToken().getLoc();
+  locationProcessor.setLoc(startLoc);
   FIRRTLType type;
   if (parseEnumType(type))
     return failure();
@@ -2947,7 +2971,7 @@ ParseResult FIRStmtParser::parseEnumExp(Value &value) {
   if (consumeIf(FIRToken::r_paren)) {
     // If the payload is not specified, we create a 0 bit unsigned integer
     // constant.
-    auto type = IntType::get(builder.getContext(), false, 0);
+    auto type = IntType::get(builder.getContext(), false, 0, true);
     Type attrType = IntegerType::get(getContext(), 0, IntegerType::Unsigned);
     auto attr = builder.getIntegerAttr(attrType, APInt(0, 0, false));
     input = builder.create<ConstantOp>(type, attr);
@@ -2958,7 +2982,6 @@ ParseResult FIRStmtParser::parseEnumExp(Value &value) {
       return failure();
   }
 
-  locationProcessor.setLoc(startLoc);
   value = builder.create<FEnumCreateOp>(enumType, tag, input);
   return success();
 }

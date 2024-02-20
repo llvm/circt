@@ -13,13 +13,13 @@ circuit TestHarness:
   ; CHECK: module DUT_Verification(
   ; CHECK:   input        _clock,
   ; CHECK:   input [31:0] _a
-  ; CHECK: ); 
+  ; CHECK: );
   ; CHECK:   reg  [31:0] pc_d;
   ; CHECK:   wire [31:0] pc_d_probe = pc_d;
   ; CHECK:   always @(posedge _clock)
   ; CHECK:     pc_d <= _a;
   ; CHECK: endmodule
- 
+
   ; CHECK: module DUT(
   ; CHECK:   input         clock,
   ; CHECK:   input  [31:0] a,
@@ -91,9 +91,9 @@ circuit TestHarness:
     layerblock Verification:
       printf(clock, reset, "The last PC was: %x", read(dut.trace))
 
-; CHECK: // ----- 8< ----- FILE "groups_TestHarness_Verification.sv" ----- 8< -----
-; CHECK: `ifndef groups_TestHarness_Verification
-; CHECK: `define groups_TestHarness_Verification
+; CHECK: // ----- 8< ----- FILE "layers_TestHarness_Verification.sv" ----- 8< -----
+; CHECK: `ifndef layers_TestHarness_Verification
+; CHECK: `define layers_TestHarness_Verification
 ; CHECK: bind DUT DUT_Verification dUT_Verification (
 ; CHECK:   ._clock (clock),
 ; CHECK:   ._a     (a)
@@ -103,4 +103,4 @@ circuit TestHarness:
 ; CHECK:   ._clock     (clock),
 ; CHECK:   ._reset     (reset)
 ; CHECK: );
-; CHECK: `endif // groups_TestHarness_Verification
+; CHECK: `endif // layers_TestHarness_Verification

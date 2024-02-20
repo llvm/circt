@@ -2,6 +2,7 @@ set(CIRCT_HW_Sources
   ConversionPatterns.cpp
   CustomDirectiveImpl.cpp
   HWAttributes.cpp
+  HWEnums.cpp
   HWDialect.cpp
   HWInstanceGraph.cpp
   HWInstanceImplementation.cpp

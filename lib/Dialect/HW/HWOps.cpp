@@ -672,11 +672,17 @@ static void modifyModuleArgs(
 /// the module in the same order as they were listed in the `insert*` array.
 ///
 /// The operation must be any of the module-like operations.
-void hw::modifyModulePorts(
-    Operation *op, ArrayRef<std::pair<unsigned, PortInfo>> insertInputs,
-    ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs,
-    ArrayRef<unsigned> removeInputs, ArrayRef<unsigned> removeOutputs,
-    Block *body) {
+///
+/// This is marked deprecated as it's only used from HandshakeToHW and
+/// PortConverter and is likely broken and not currently tested.  Users of this
+/// are still written dealing with input and output ports separately, which is
+/// an old and broken style.
+[[deprecated]] static void
+modifyModulePorts(Operation *op,
+                  ArrayRef<std::pair<unsigned, PortInfo>> insertInputs,
+                  ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs,
+                  ArrayRef<unsigned> removeInputs,
+                  ArrayRef<unsigned> removeOutputs, Block *body = nullptr) {
   auto moduleOp = cast<HWModuleLike>(op);
   auto *context = moduleOp.getContext();
 
@@ -781,8 +787,8 @@ void HWModuleOp::modifyPorts(
     ArrayRef<std::pair<unsigned, PortInfo>> insertInputs,
     ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs,
     ArrayRef<unsigned> eraseInputs, ArrayRef<unsigned> eraseOutputs) {
-  hw::modifyModulePorts(*this, insertInputs, insertOutputs, eraseInputs,
-                        eraseOutputs);
+  modifyModulePorts(*this, insertInputs, insertOutputs, eraseInputs,
+                    eraseOutputs);
 }
 
 /// Return the name to use for the Verilog module that we're referencing
@@ -833,8 +839,8 @@ void HWModuleExternOp::modifyPorts(
     ArrayRef<std::pair<unsigned, PortInfo>> insertInputs,
     ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs,
     ArrayRef<unsigned> eraseInputs, ArrayRef<unsigned> eraseOutputs) {
-  hw::modifyModulePorts(*this, insertInputs, insertOutputs, eraseInputs,
-                        eraseOutputs);
+  modifyModulePorts(*this, insertInputs, insertOutputs, eraseInputs,
+                    eraseOutputs);
 }
 
 void HWModuleExternOp::appendOutputs(
@@ -872,8 +878,8 @@ void HWModuleGeneratedOp::modifyPorts(
     ArrayRef<std::pair<unsigned, PortInfo>> insertInputs,
     ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs,
     ArrayRef<unsigned> eraseInputs, ArrayRef<unsigned> eraseOutputs) {
-  hw::modifyModulePorts(*this, insertInputs, insertOutputs, eraseInputs,
-                        eraseOutputs);
+  modifyModulePorts(*this, insertInputs, insertOutputs, eraseInputs,
+                    eraseOutputs);
 }
 
 void HWModuleGeneratedOp::appendOutputs(
@@ -1150,8 +1156,8 @@ HWModuleOp::insertInput(unsigned index, StringAttr name, Type ty) {
   port.name = nameAttr;
   port.dir = ModulePort::Direction::Input;
   port.type = ty;
-  hw::modifyModulePorts(getOperation(), {std::make_pair(index, port)}, {}, {},
-                        {}, body);
+  modifyModulePorts(getOperation(), {std::make_pair(index, port)}, {}, {}, {},
+                    body);
 
   // Add a new argument.
   return {nameAttr, body->getArgument(index)};
@@ -1172,8 +1178,8 @@ void HWModuleOp::insertOutputs(unsigned index,
     port.type = value.getType();
     indexedNewPorts.emplace_back(index, port);
   }
-  hw::modifyModulePorts(getOperation(), {}, indexedNewPorts, {}, {},
-                        getBodyBlock());
+  modifyModulePorts(getOperation(), {}, indexedNewPorts, {}, {},
+                    getBodyBlock());
 
   // Rewrite the output op.
   for (auto &[name, value] : outputs)
@@ -1240,13 +1246,7 @@ SmallVector<Location> HWModuleGeneratedOp::getAllPortLocs() {
   return ::getAllPortLocs(*this);
 }
 
-template <typename ModTy>
-static void setAllPortLocs(ArrayRef<Location> locs, ModTy module) {
-  std::vector<Attribute> nLocs(locs.begin(), locs.end());
-  module.setPortLocsAttr(ArrayAttr::get(module.getContext(), nLocs));
-}
-
-void HWModuleOp::setAllPortLocs(ArrayRef<Location> locs) {
+void HWModuleOp::setAllPortLocsAttrs(ArrayRef<Attribute> locs) {
   SmallVector<Attribute> resultLocs;
   unsigned inputCount = 0;
   auto modType = getModuleType();
@@ -1255,17 +1255,17 @@ void HWModuleOp::setAllPortLocs(ArrayRef<Location> locs) {
     if (modType.isOutput(i))
       resultLocs.push_back(locs[i]);
     else
-      body->getArgument(inputCount++).setLoc(locs[i]);
+      body->getArgument(inputCount++).setLoc(cast<Location>(locs[i]));
   }
   setResultLocsAttr(ArrayAttr::get(getContext(), resultLocs));
 }
 
-void HWModuleExternOp::setAllPortLocs(ArrayRef<Location> locs) {
-  ::setAllPortLocs(locs, *this);
+void HWModuleExternOp::setAllPortLocsAttrs(ArrayRef<Attribute> locs) {
+  setPortLocsAttr(ArrayAttr::get(getContext(), locs));
 }
 
-void HWModuleGeneratedOp::setAllPortLocs(ArrayRef<Location> locs) {
-  ::setAllPortLocs(locs, *this);
+void HWModuleGeneratedOp::setAllPortLocsAttrs(ArrayRef<Attribute> locs) {
+  setPortLocsAttr(ArrayAttr::get(getContext(), locs));
 }
 
 template <typename ModTy>
