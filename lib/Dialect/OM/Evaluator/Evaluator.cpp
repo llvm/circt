@@ -436,7 +436,7 @@ circt::om::Evaluator::evaluateIntegerBinaryArithmetic(
               return val->getAs<om::IntegerAttr>();
             })
             .Case([](evaluator::ReferenceValue *val) {
-              return cast<evaluator::AttributeValue>(val->getValue().get())
+              return cast<evaluator::AttributeValue>(val->getStrippedValue().get())
                   ->getAs<om::IntegerAttr>();
             }));
   };
