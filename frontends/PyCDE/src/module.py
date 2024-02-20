@@ -314,14 +314,16 @@ class ModuleLikeBuilderBase(_PyProxy):
     """For each port, replace it with a property to provide access to the
     instances output in OTHER generators which are instantiating this module."""
 
+    def fgets_dict(s, outs):
+      return {n: g.fget(s) for n, g in outs.items()}
+
     named_outputs = {}
     for port in self.outputs:
       assert port.name is not None
       named_outputs[port.name] = port
     setattr(self.modcls,
             "outputs",
-            lambda self, outputs=named_outputs:
-            {n: g.fget(self) for n, g in outputs.items()})
+            lambda s, outs=named_outputs: fgets_dict(s, outs))
 
   @property
   def name(self):
