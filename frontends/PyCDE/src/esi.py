@@ -2,9 +2,7 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from numpy import isin
 from .common import (AppID, Input, Output, _PyProxy, PortError)
-from .constructs import Wire
 from .module import Generator, Module, ModuleLikeBuilderBase, PortProxyBase
 from .signals import BundleSignal, ChannelSignal, Signal, _FromCirctValue
 from .system import System

@@ -7,7 +7,7 @@ from .constructs import Wire
 from .module import Module, ModuleBuilder, generator
 from .system import System
 from .types import (Bits, Bundle, BundledChannel, ChannelDirection, Channel,
-                    ClockType, StructType, Type)
+                    StructType, Type)
 
 from .circt.dialects import hw
 
@@ -23,12 +23,16 @@ if "IBIS_SVSUPPORT" in os.environ:
 
 
 class IbisMethod:
+  """Replace a decorated method with this class as a record. Used during class
+  scanning to identify Ibis methods."""
 
   def __init__(self, name: Optional[str], arg_types: Dict[str, Type],
                return_type: Optional[Type]):
     self.name = name
     self.arg_types = arg_types
+    # Assemble the args into a single struct type.
     self.arg_type = StructType(self.arg_types)
+    # i0 is used for void.
     if return_type is None:
       return_type = Bits(0)
     self.return_type = return_type
@@ -55,6 +59,9 @@ def method(func: Callable):
 
 
 class IbisClassBuilder(ModuleBuilder):
+  """Ibis-specific module builder. This is used to scan a class for Ibis
+  methods, import the Ibis module, and create the wrapper module."""
+
   SupportFiles: List[Path] = []
 
   @staticmethod
@@ -106,38 +113,44 @@ class IbisClassBuilder(ModuleBuilder):
           for f in Path(self.modcls.support_files).resolve().open().readlines()
       ])
 
+    # Fixed ports -- clock and reset.
     self.clocks = {0}
     self.resets = {1}
     self.ports = [
         Clock("clk"),
         Input(Bits(1), "rst"),
     ]
+    # Method ports.
     self.ports.extend([
         Input(m.func_type, m.name) for m in self.methods if m.name is not None
     ])
+    # Add indexes to the ports.
     for idx, port in enumerate(self.ports):
       port.idx = idx
+    # Ibis-specific generator.
     self.generators = {"default": generator(self.generate_wrapper)}
 
   def create_op(self, sys, symbol):
     """Creation callback for creating an Ibis method wrapper."""
 
+    # Add metadata to the manifest, if any.
     if hasattr(self.modcls, "metadata"):
       meta = self.modcls.metadata
       self.add_metadata(sys, symbol, meta)
     else:
       self.add_metadata(sys, symbol, None)
 
+    # Import the Ibis module to be wrapped.
     if self.src_file is None:
       raise RuntimeError(
           f"Could not find source file for module {self.modcls.name}")
-
     imported = sys.import_mlir(open(self.src_file).read())
     if self.modcls.__name__ not in imported:
       raise RuntimeError(
           f"Could not find module {self.modcls.name} in {self.src_file}")
     self.imported_mod = imported[self.modcls.__name__]
 
+    # Finally, create the module which this method is supposed to return.
     return hw.HWModuleOp(
         symbol,
         [(p.name, p.type._type) for p in self.inputs],
@@ -148,13 +161,16 @@ class IbisClassBuilder(ModuleBuilder):
     )
 
   def generate_wrapper(self, ports):
+    """Instantiate and wrap an Ibis module."""
     System.current().add_packaging_step(IbisClassBuilder.package)
 
-    # Instantiate the Ibis module and connect its outputs.
+    # Ports we shouldn't touch.
     exclude_ports = {
         "clk", "clk1", "rst_in", "stall_rate_in", "inspection_value_in",
         "stall_rate_valid_in"
     }
+
+    # Create wires for all the inputs and instantiate the Ibis module.
     ibis_inputs = {
         p.name: Wire(p.type, p.name)
         for p in self.imported_mod.inputs()
@@ -171,6 +187,7 @@ class IbisClassBuilder(ModuleBuilder):
     )
     inst_outputs = ibis_instance.outputs()
 
+    # For each method, connect the Ibis module to the ESI ports.
     for m in self.methods:
       assert m.name is not None
       mname = m.name + "_"
@@ -196,11 +213,12 @@ class IbisClassBuilder(ModuleBuilder):
 
   @property
   def name(self) -> str:
+    """Name the wrapper module."""
     ibis_cls_name = super().name
     return ibis_cls_name + "_esi_wrapper"
 
 
 class IbisClass(Module):
-  """Base class to be extended for describing an Ibis class methodj."""
+  """Base class to be extended for describing an Ibis class method."""
 
   BuilderType = IbisClassBuilder
