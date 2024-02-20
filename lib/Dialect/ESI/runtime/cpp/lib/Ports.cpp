@@ -14,6 +14,7 @@
 
 #include "esi/Ports.h"
 
+#include <chrono>
 #include <stdexcept>
 
 using namespace std;
@@ -40,4 +41,16 @@ ReadChannelPort &BundlePort::getRawRead(const string &name) const {
   if (!read)
     throw runtime_error("Channel '" + name + "' is not a read channel");
   return *read;
+}
+
+std::future<MessageData> ReadChannelPort::readAsync() {
+  // TODO: running this deferred is a horrible idea considering that it blocks!
+  // It's a hack since Capnp RPC refuses to work with multiple threads.
+  return std::async(std::launch::deferred, [this]() {
+    MessageData output;
+    while (!read(output)) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    return output;
+  });
 }

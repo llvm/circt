@@ -131,7 +131,7 @@ public:
 
   public:
     void connect();
-    MessageData call(const MessageData &arg);
+    std::future<MessageData> call(const MessageData &arg);
 
   private:
     WriteChannelPort &arg;
