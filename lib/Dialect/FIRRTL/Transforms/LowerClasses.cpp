@@ -984,6 +984,45 @@ struct ListCreateOpConversion
   }
 };
 
+struct IntegerAddOpConversion
+    : public OpConversionPattern<firrtl::IntegerAddOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(firrtl::IntegerAddOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<om::IntegerAddOp>(op, adaptor.getLhs(),
+                                                  adaptor.getRhs());
+    return success();
+  }
+};
+
+struct IntegerMulOpConversion
+    : public OpConversionPattern<firrtl::IntegerMulOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(firrtl::IntegerMulOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<om::IntegerMulOp>(op, adaptor.getLhs(),
+                                                  adaptor.getRhs());
+    return success();
+  }
+};
+
+struct IntegerShrOpConversion
+    : public OpConversionPattern<firrtl::IntegerShrOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(firrtl::IntegerShrOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<om::IntegerShrOp>(op, adaptor.getLhs(),
+                                                  adaptor.getRhs());
+    return success();
+  }
+};
+
 struct PathOpConversion : public OpConversionPattern<firrtl::PathOp> {
 
   PathOpConversion(TypeConverter &typeConverter, MLIRContext *context,
@@ -1397,6 +1436,9 @@ static void populateRewritePatterns(
   patterns.add<ListCreateOpConversion>(converter, patterns.getContext());
   patterns.add<BoolConstantOpConversion>(converter, patterns.getContext());
   patterns.add<DoubleConstantOpConversion>(converter, patterns.getContext());
+  patterns.add<IntegerAddOpConversion>(converter, patterns.getContext());
+  patterns.add<IntegerMulOpConversion>(converter, patterns.getContext());
+  patterns.add<IntegerShrOpConversion>(converter, patterns.getContext());
 }
 
 // Convert to OM ops and types in Classes or Modules.

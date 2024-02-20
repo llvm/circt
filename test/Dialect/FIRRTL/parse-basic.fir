@@ -1862,10 +1862,20 @@ circuit IntegerArithmetic :
     input a : Integer
     input b : Integer
     output c : Integer
+    output d : Integer
+    output e : Integer
 
     ; CHECK: [[C:%.+]] = firrtl.integer.add %a, %b
     ; CHECK: firrtl.propassign %c, [[C]]
     propassign c, integer_add(a, b)
+
+    ; CHECK: [[D:%.+]] = firrtl.integer.mul %a, %b
+    ; CHECK: firrtl.propassign %d, [[D]]
+    propassign d, integer_mul(a, b)
+
+    ; CHECK: [[E:%.+]] = firrtl.integer.shr %a, %b
+    ; CHECK: firrtl.propassign %e, [[E]]
+    propassign e, integer_shr(a, b)
 
 ;// -----
 FIRRTL version 3.1.0

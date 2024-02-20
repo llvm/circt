@@ -6,10 +6,9 @@ from numpy import isin
 from .common import (AppID, Input, Output, _PyProxy, PortError)
 from .constructs import Wire
 from .module import Generator, Module, ModuleLikeBuilderBase, PortProxyBase
-from .signals import BundleSignal, ChannelSignal, Signal, Struct, _FromCirctValue
+from .signals import BundleSignal, ChannelSignal, Signal, _FromCirctValue
 from .system import System
-from .types import (Any, Bits, Bundle, BundledChannel, Channel,
-                    ChannelDirection, StructType, Type, types, UInt,
+from .types import (Bits, Bundle, BundledChannel, ChannelDirection, Type, types,
                     _FromCirctType)
 
 from .circt import ir
