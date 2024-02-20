@@ -368,13 +368,12 @@ class BundlePort:
     return ReadPort(self, self.cpp_port.getRead(channel_name))
 
 
-class MessaageFuture(Future):
+class MessageFuture(Future):
   """A specialization of `Future` for ESI messages. Wraps the cpp object and
   deserializes the result.  Hopefully overrides all the methods necessary for
   proper operation, which is assumed to be not all of them."""
 
   def __init__(self, result_type: Type, cpp_future: cpp.MessageDataFuture):
-    print("mf const")
     self.result_type = result_type
     self.cpp_future = cpp_future
 
@@ -419,7 +418,7 @@ class FunctionPort(BundlePort):
           f"'{kwargs}' cannot be converted to '{self.arg_type}': {reason}")
     arg_bytes: bytearray = self.arg_type.serialize(kwargs)
     cpp_future = self.cpp_port.call(arg_bytes)
-    return MessaageFuture(self.result_type, cpp_future)
+    return MessageFuture(self.result_type, cpp_future)
 
   def __call__(self, *args: Any, **kwds: Any) -> Future:
     return self.call(*args, **kwds)

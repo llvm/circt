@@ -133,9 +133,7 @@ PYBIND11_MODULE(esiCppAccel, m) {
       .def("valid", &std::future<MessageData>::valid)
       .def("wait", &std::future<MessageData>::wait)
       .def("get", [](std::future<MessageData> &f) {
-        printf("Waiting for data\n");
         MessageData data = f.get();
-        printf("Got data of size %lu\n", data.getSize());
         return py::bytearray((const char *)data.getBytes(), data.getSize());
       });
 

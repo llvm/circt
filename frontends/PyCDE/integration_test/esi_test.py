@@ -21,9 +21,9 @@ class LoopbackInOutAdd7(Module):
   @generator
   def construct(ports):
     loopback = Wire(Channel(UInt(16)))
-    args = FuncService.expose(AppID("loopback_add7"),
-                              arg_type=UInt(24),
-                              result=loopback)
+    args = FuncService.get_call_chans(AppID("loopback_add7"),
+                                      arg_type=UInt(24),
+                                      result=loopback)
 
     ready = Wire(Bits(1))
     data, valid = args.unwrap(ready)
