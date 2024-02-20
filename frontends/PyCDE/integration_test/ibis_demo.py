@@ -54,9 +54,9 @@ class IbisTestSystem(Module):
 
   @generator
   def build(ports):
-    add = esi.FuncService.get(esi.AppID("add"), func_type=DemoTop.add.type)
+    add = esi.FuncService.get(esi.AppID("add"), func_type=DemoTop.add.func_type)
     crc = esi.FuncService.get(esi.AppID("crc"),
-                              func_type=DemoTop.compute_crc.type)
+                              func_type=DemoTop.compute_crc.func_type)
     DemoTop(clk=ports.clk,
             rst=ports.rst,
             appid=esi.AppID("demo"),

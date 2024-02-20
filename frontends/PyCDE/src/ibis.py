@@ -2,6 +2,7 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+from .common import Clock, Input
 from .constructs import Wire
 from .module import Module, ModuleBuilder, generator
 from .system import System
@@ -107,14 +108,15 @@ class IbisClassBuilder(ModuleBuilder):
 
     self.clocks = {0}
     self.resets = {1}
-    self.inputs = [
-        ("clk", ClockType()),
-        ("rst", Bits(1)),
+    self.ports = [
+        Clock("clk"),
+        Input(Bits(1), "rst"),
     ]
-    self.inputs.extend([
-        (m.name, m.func_type) for m in self.methods if m.name is not None
+    self.ports.extend([
+        Input(m.func_type, m.name) for m in self.methods if m.name is not None
     ])
-    self.outputs = []
+    for idx, port in enumerate(self.ports):
+      port.idx = idx
     self.generators = {"default": generator(self.generate_wrapper)}
 
   def create_op(self, sys, symbol):
@@ -138,8 +140,8 @@ class IbisClassBuilder(ModuleBuilder):
 
     return hw.HWModuleOp(
         symbol,
-        [(n, t._type) for (n, t) in self.inputs],
-        [(n, t._type) for (n, t) in self.outputs],
+        [(p.name, p.type._type) for p in self.inputs],
+        [(p.name, p.type._type) for p in self.outputs],
         attributes=self.attributes,
         loc=self.loc,
         ip=sys._get_ip(),
@@ -154,9 +156,9 @@ class IbisClassBuilder(ModuleBuilder):
         "stall_rate_valid_in"
     }
     ibis_inputs = {
-        n: Wire(t, n)
-        for (n, t) in self.imported_mod.inputs()
-        if n not in exclude_ports
+        p.name: Wire(p.type, p.name)
+        for p in self.imported_mod.inputs()
+        if p.name not in exclude_ports
     }
     ibis_instance = self.imported_mod(
         clk=ports.clk.to_bit(),

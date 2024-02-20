@@ -534,7 +534,7 @@ class ModuleBuilder(ModuleLikeBuilderBase):
           raise PortError(
               f"Port {name} cannot be None (disconnected ports only allowed "
               "on extern mods.")
-        circt_inputs[name] = create_const_zero(port.type)
+        circt_inputs[name] = create_const_zero(port.type).value
       else:
         # If it's not a signal, assume the user wants to specify a constant and
         # try to convert it to a hardware constant.
