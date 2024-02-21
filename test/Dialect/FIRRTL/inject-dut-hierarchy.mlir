@@ -157,3 +157,27 @@ firrtl.circuit "Refs" attributes {
     %dut_in, %dut_tap = firrtl.instance dut sym @dut @DUT(in in: !firrtl.uint<1>, out out: !firrtl.ref<uint<1>>)
   }
 }
+
+// -----
+
+// CHECK-LABEL: firrtl.circuit "Properties"
+firrtl.circuit "Properties" attributes {
+    annotations = [{class = "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation", name = "Foo"}]
+  } {
+
+  firrtl.module private @DUT(
+    in %in: !firrtl.integer, out %out: !firrtl.integer
+  ) attributes {
+    annotations = [
+      {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}
+    ]}
+  {
+    // CHECK: [[IN:%.+]], [[OUT:%.+]] = firrtl.instance Foo
+    // CHECK: firrtl.propassign [[IN]], %in
+    // CHECK: firrtl.propassign %out, [[OUT]]
+    firrtl.propassign %out, %in : !firrtl.integer
+  }
+  firrtl.module @Properties() {
+    %dut_in, %dut_out = firrtl.instance dut sym @dut @DUT(in in: !firrtl.integer, out out: !firrtl.integer)
+  }
+}
