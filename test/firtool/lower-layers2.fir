@@ -11,13 +11,13 @@ circuit TestHarness:
   layer Verification bind:
 
   ; CHECK: module DUT_Verification(
-  ; CHECK:   input        _clock,
-  ; CHECK:   input [31:0] _a
+  ; CHECK:   input        clock,
+  ; CHECK:   input [31:0] a
   ; CHECK: );
   ; CHECK:   reg  [31:0] pc_d;
   ; CHECK:   wire [31:0] pc_d_probe = pc_d;
-  ; CHECK:   always @(posedge _clock)
-  ; CHECK:     pc_d <= _a;
+  ; CHECK:   always @(posedge clock)
+  ; CHECK:     pc_d <= a;
   ; CHECK: endmodule
 
   ; CHECK: module DUT(
@@ -52,14 +52,14 @@ circuit TestHarness:
       define trace = x
 
   ; CHECK: module TestHarness_Verification(
-  ; CHECK:   input [31:0] _dut_trace,
-  ; CHECK:   input        _clock,
-  ; CHECK:                _reset
+  ; CHECK:   input [31:0] dut_trace,
+  ; CHECK:   input        clock,
+  ; CHECK:                reset
   ; CHECK: );
   ; CHECK:   `ifndef SYNTHESIS
-  ; CHECK:     always @(posedge _clock) begin
-  ; CHECK:       if ((`PRINTF_COND_) & _reset)
-  ; CHECK:         $fwrite(32'h80000002, "The last PC was: %x", _dut_trace);
+  ; CHECK:     always @(posedge clock) begin
+  ; CHECK:       if ((`PRINTF_COND_) & reset)
+  ; CHECK:         $fwrite(32'h80000002, "The last PC was: %x", dut_trace);
   ; CHECK:     end // always @(posedge)
   ; CHECK:   `endif // not def SYNTHESIS
   ; CHECK: endmodule
@@ -94,13 +94,13 @@ circuit TestHarness:
 ; CHECK: // ----- 8< ----- FILE "layers_TestHarness_Verification.sv" ----- 8< -----
 ; CHECK: `ifndef layers_TestHarness_Verification
 ; CHECK: `define layers_TestHarness_Verification
-; CHECK: bind DUT DUT_Verification dUT_Verification (
-; CHECK:   ._clock (clock),
-; CHECK:   ._a     (a)
+; CHECK: bind DUT DUT_Verification verification (
+; CHECK:   .clock (clock),
+; CHECK:   .a     (a)
 ; CHECK: );
-; CHECK: bind TestHarness TestHarness_Verification testHarness_Verification (
-; CHECK:   ._dut_trace (TestHarness.dut.dUT_Verification.pc_d_probe),
-; CHECK:   ._clock     (clock),
-; CHECK:   ._reset     (reset)
+; CHECK: bind TestHarness TestHarness_Verification verification (
+; CHECK:   .dut_trace (TestHarness.dut.verification.pc_d_probe),
+; CHECK:   .clock     (clock),
+; CHECK:   .reset     (reset)
 ; CHECK: );
 ; CHECK: `endif // layers_TestHarness_Verification

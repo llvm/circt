@@ -28,7 +28,7 @@ circuit Foo: %[[
       define b = probe(c)
 
   ; CHECK: module Foo();
-  ; CHECK:   wire d = Foo.bar.bar_Verification.c_probe;
+  ; CHECK:   wire d = Foo.bar.verification.c_probe;
   ; CHECK:   Bar bar ();
   ; CHECK: endmodule
   public module Foo enablelayer Verification:
@@ -37,4 +37,3 @@ circuit Foo: %[[
 
     node d = read(bar.b)
     connect bar.a, d
-

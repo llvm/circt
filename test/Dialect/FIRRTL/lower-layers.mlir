@@ -225,8 +225,8 @@ firrtl.circuit "Test" {
 
   // Src Outside Layerblock.
   //
-  // CHECK: firrtl.module private @[[A:.+]](in %_: !firrtl.uint<1>) {
-  // CHECK:   %0 = firrtl.ref.send %_ : !firrtl.uint<1>
+  // CHECK: firrtl.module private @[[A:.+]](in %[[p:.+]]: !firrtl.uint<1>) {
+  // CHECK:   %0 = firrtl.ref.send %[[p]] : !firrtl.uint<1>
   // CHECK:   %1 = firrtl.wire : !firrtl.probe<uint<1>>
   // CHECK:   firrtl.ref.define %1, %0 : !firrtl.probe<uint<1>>
   // CHECK: }
@@ -422,19 +422,19 @@ firrtl.circuit "Simple" {
 // CHECK:      firrtl.module @Simple() {
 // CHECK-NOT:  firrtl.module
 // CHECK-NOT:    firrtl.layerblock
-// CHECK:        %[[A_B_C_cc:[_a-zA-Z0-9]+]] = firrtl.instance simple_A_B_C {
+// CHECK:        %[[A_B_C_cc:[_a-zA-Z0-9]+]] = firrtl.instance a_b_c {
 // CHECK-SAME:     lowerToBind
 // CHECK-SAME:     output_file = #hw.output_file<"layers_Simple_A_B_C.sv"
 // CHECK-SAME:     excludeFromFileList
 // CHECK-SAME:     @Simple_A_B_C(
-// CHECK-NEXT:   %[[A_B_b:[_a-zA-Z0-9]+]], %[[A_B_c:[_a-zA-Z0-9]+]], %[[A_B_cc:[_a-zA-Z0-9]+]] = firrtl.instance simple_A_B {
+// CHECK-NEXT:   %[[A_B_b:[_a-zA-Z0-9]+]], %[[A_B_c:[_a-zA-Z0-9]+]], %[[A_B_cc:[_a-zA-Z0-9]+]] = firrtl.instance a_b {
 // CHECK-SAME:     lowerToBind
 // CHECK-SAME:     output_file = #hw.output_file<"layers_Simple_A_B.sv", excludeFromFileList>
 // CHECK-SAME:     @Simple_A_B(
 // CHECK-NEXT:   %[[A_B_cc_resolve:[_a-zA-Z0-9]+]] = firrtl.ref.resolve %[[A_B_cc]]
 // CHECK-NEXT:   firrtl.strictconnect %[[A_B_C_cc]], %[[A_B_cc_resolve]]
 // CHECK-NEXT:   firrtl.strictconnect %[[A_B_b]], %b
-// CHECK-NEXT:   %[[A_a:[_a-zA-Z0-9]+]], %[[A_c:[_a-zA-Z0-9]+]] = firrtl.instance simple_A {
+// CHECK-NEXT:   %[[A_a:[_a-zA-Z0-9]+]], %[[A_c:[_a-zA-Z0-9]+]] = firrtl.instance a {
 // CHECK-SAME:     lowerToBind
 // CHECK-SAME:     output_file = #hw.output_file<"layers_Simple_A.sv", excludeFromFileList>
 // CHECK-SAME:     @Simple_A(
