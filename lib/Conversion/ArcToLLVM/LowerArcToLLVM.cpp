@@ -475,20 +475,9 @@ struct SimEmitValueOpLowering
     if (!moduleOp)
       return failure();
 
-    // Insert printf declaration if not available.
-    auto printfType =
-        LLVM::LLVMFunctionType::get(LLVM::LLVMVoidType::get(getContext()),
-                                    LLVM::LLVMPointerType::get(getContext()),
-                                    /*isVarArg=*/true);
-    if (!moduleOp.lookupSymbol<LLVM::LLVMFuncOp>("printf")) {
-      ConversionPatternRewriter::InsertionGuard insertGuard(rewriter);
-      rewriter.setInsertionPointToStart(moduleOp.getBody());
-      rewriter.create<LLVM::LLVMFuncOp>(moduleOp.getLoc(), "printf",
-                                        printfType);
-    }
-
-    FlatSymbolRefAttr printfSymbol =
-        FlatSymbolRefAttr::get(getContext(), "printf");
+    auto printfFunc = LLVM::lookupOrCreateFn(
+        moduleOp, "printf", LLVM::LLVMPointerType::get(getContext()),
+        LLVM::LLVMVoidType::get(getContext()), true);
 
     // Insert the format string if not already available.
     SmallString<16> formatStrName{"_arc_sim_emit_"};
@@ -515,7 +504,7 @@ struct SimEmitValueOpLowering
     Value formatStrGlobalPtr =
         rewriter.create<LLVM::AddressOfOp>(loc, formatStrGlobal);
     rewriter.replaceOpWithNewOp<LLVM::CallOp>(
-        op, printfType, printfSymbol, ValueRange{formatStrGlobalPtr, toPrint});
+        op, printfFunc, ValueRange{formatStrGlobalPtr, toPrint});
 
     return success();
   }
