@@ -570,16 +570,21 @@ def StateWriteOp : ArcOp<"state_write", [
 // Simulation Orchestration
 //===----------------------------------------------------------------------===//
 
-def SimInstantiate : ArcOp<"sim.instantiate"> {
+def SimInstantiateOp : ArcOp<"sim.instantiate", [MemoryEffects<[MemAlloc]>,
+                                                 NoTerminator]> {
   let summary = "Instantiates an Arc model for simulation";
   let description = [{
     Creates an instance of an Arc model in scope, in order to simulate it.
+    The model can be used from within the associated region, modelling its
+    lifetime.
   }];
-  let results = (outs SimModelInstance:$instance);
-  let assemblyFormat = [{ attr-dict `:` qualified(type($instance)) }];
+  let regions = (region SizedRegion<1>:$body);
+
+  let hasRegionVerifier = 1;
+  let hasCustomAssemblyFormat = 1;
 }
 
-def SimSetInput : ArcOp<"sim.set_input"> {
+def SimSetInputOp : ArcOp<"sim.set_input", [MemoryEffects<[MemWrite]>]> {
   let summary = "Sets the value of an input of the model instance";
   let description = [{
     Sets the value of an input port in a specific instance of a model. The
@@ -594,7 +599,7 @@ def SimSetInput : ArcOp<"sim.set_input"> {
        `:` type($value) `,` qualified(type($instance)) }];
 }
 
-def SimGetPort : ArcOp<"sim.get_port"> {
+def SimGetPortOp : ArcOp<"sim.get_port", [MemoryEffects<[MemRead]>]> {
   let summary = "Gets the value of a port of the model instance";
   let description = [{
     Gets the value of the given port in a specific instance of a model. The
@@ -607,18 +612,19 @@ def SimGetPort : ArcOp<"sim.get_port"> {
        `:` type($value) `,` qualified(type($instance)) }];
 }
 
-def SimStep : ArcOp<"sim.step"> {
+def SimStepOp : ArcOp<"sim.step", [MemoryEffects<[MemRead, MemWrite]>]> {
   let summary =
     "Evaluates one step of the simulation for the provided model instance";
   let description = [{
     Evaluates one step of the simulation for the provided model instance,
+    updating ports accordingly.
   }];
   let arguments = (ins SimModelInstance:$instance);
   let assemblyFormat =
     [{ $instance attr-dict `:` qualified(type($instance)) }];
 }
 
-def SimEmitValue : ArcOp<"sim.emit"> {
+def SimEmitValueOp : ArcOp<"sim.emit"> {
   let summary = "Sends a value to the simulation driver";
   let description = [{
     Sends a named value to the simulation driver. This is notably useful

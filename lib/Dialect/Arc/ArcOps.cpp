@@ -425,6 +425,56 @@ bool VectorizeOp::isBodyVectorized() {
   return false;
 }
 
+//===----------------------------------------------------------------------===//
+// SimInstantiateOp
+//===----------------------------------------------------------------------===//
+
+void SimInstantiateOp::print(OpAsmPrinter &p) {
+  BlockArgument modelArg = getBody().getArgument(0);
+  auto modelType = cast<SimModelInstanceType>(modelArg.getType());
+
+  p << " ";
+  p.printSymbolName(modelType.getModel());
+  p << " as ";
+  p.printRegionArgument(modelArg, {}, true);
+  p << " ";
+
+  p.printRegion(getBody(), false);
+}
+
+ParseResult SimInstantiateOp::parse(OpAsmParser &parser,
+                                    OperationState &result) {
+  StringAttr modelName;
+  if (failed(parser.parseSymbolName(modelName)))
+    return failure();
+
+  if (failed(parser.parseKeyword("as")))
+    return failure();
+
+  OpAsmParser::Argument modelArg;
+  if (failed(parser.parseArgument(modelArg, false, false)))
+    return failure();
+
+  modelArg.type = SimModelInstanceType::get(result.getContext(), modelName);
+
+  std::unique_ptr<Region> body = std::make_unique<Region>();
+  if (failed(parser.parseRegion(*body, {modelArg})))
+    return failure();
+
+  result.addRegion(std::move(body));
+  return success();
+}
+
+LogicalResult SimInstantiateOp::verifyRegions() {
+  Region &body = getBody();
+  if (body.getNumArguments() != 1)
+    return emitError("entry block of body region must have the model instance "
+                     "as a single argument");
+  if (!llvm::isa<SimModelInstanceType>(body.getArgument(0).getType()))
+    return emitError("entry block argument type is not a model instance");
+  return success();
+}
+
 #include "circt/Dialect/Arc/ArcInterfaces.cpp.inc"
 
 #define GET_OP_CLASSES
