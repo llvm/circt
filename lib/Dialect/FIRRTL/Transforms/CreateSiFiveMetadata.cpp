@@ -252,7 +252,9 @@ CreateSiFiveMetadataPass::emitMemoryMetadata(ObjectModelIR &omir) {
     seqMemSymbols.push_back(memExtSym);
     // Compute the mask granularity.
     auto isMasked = mem.isMasked();
-    auto maskGran = width / mem.getMaskBits();
+    auto maskGran = width;
+    if (isMasked)
+      maskGran /= mem.getMaskBits();
     // Now create the config string for the memory.
     std::string portStr;
     for (uint32_t i = 0; i < mem.getNumWritePorts(); ++i) {
