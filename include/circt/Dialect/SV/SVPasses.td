@@ -141,7 +141,7 @@ def HWExportModuleHierarchy : Pass<"hw-export-module-hierarchy",
   }];
 
   let constructor = "circt::sv::createHWExportModuleHierarchyPass()";
-  let dependentDialects = ["circt::sv::SVDialect"];
+  let dependentDialects = ["circt::emit::EmitDialect", "circt::sv::SVDialect"];
 }
 
 def HWEliminateInOutPorts : Pass<"hw-eliminate-inout-ports",
