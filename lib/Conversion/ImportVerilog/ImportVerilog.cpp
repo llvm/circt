@@ -236,8 +236,26 @@ LogicalResult ImportContext::prepareDriver(SourceMgr &sourceMgr) {
 /// Parse and elaborate the prepared source files, and populate the given MLIR
 /// `module` with corresponding operations.
 LogicalResult ImportContext::importVerilog(ModuleOp module) {
-  // This is where the Slang AST to CIRCT op conversion will go.
-  return success();
+  // Parse the input.
+  auto parseTimer = ts.nest("Verilog parser");
+  bool parseSuccess = driver.parseAllSources();
+  parseTimer.stop();
+
+  // Elaborate the input.
+  auto compileTimer = ts.nest("Verilog elaboration");
+  auto compilation = driver.createCompilation();
+  for (auto &diag : compilation->getAllDiagnostics())
+    driver.diagEngine.issue(diag);
+  if (!parseSuccess || driver.diagEngine.getNumErrors() > 0)
+    return failure();
+  compileTimer.stop();
+
+  // TODO: Traverse the parsed Verilog AST and map it to the equivalent CIRCT
+  // ops.
+
+  // Run the verifier on the constructed module to ensure it is clean.
+  auto verifierTimer = ts.nest("Post-parse verification");
+  return verify(module);
 }
 
 /// Preprocess the prepared source files and print them to the given output
@@ -338,4 +356,18 @@ LogicalResult circt::preprocessVerilog(SourceMgr &sourceMgr,
       return failure();
     return context.preprocessVerilog(os);
   });
+}
+
+/// Entry point as an MLIR translation.
+void circt::registerFromVerilogTranslation() {
+  static TranslateToMLIRRegistration fromVerilog(
+      "import-verilog", "import Verilog or SystemVerilog",
+      [](llvm::SourceMgr &sourceMgr, MLIRContext *context) {
+        TimingScope ts;
+        OwningOpRef<ModuleOp> module(
+            ModuleOp::create(UnknownLoc::get(context)));
+        if (failed(importVerilog(sourceMgr, context, ts, module.get())))
+          module = {};
+        return module;
+      });
 }
