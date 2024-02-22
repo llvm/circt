@@ -134,20 +134,20 @@ circuit TestHarness:
 ; SITEST_NODUT:     FILE "testbench.sitest.json"
 ; SITEST_NODUT-NOT: FILE
 
-; MLIR_OUT:  om.class @SitestBlackBoxModulesSchema(%moduleName: !om.sym_ref) {
-; MLIR_OUT:    om.class.field @moduleName, %moduleName : !om.sym_ref
+; MLIR_OUT:  om.class @SitestBlackBoxModulesSchema(%basepath: !om.basepath, %moduleName_in: !om.string) {
+; MLIR_OUT:    om.class.field @moduleName, %moduleName_in : !om.string
 ; MLIR_OUT:  }
 
-; MLIR_OUT:  om.class @SitestBlackBoxMetadata() {
-; MLIR_OUT:    %0 = om.constant #om.sym_ref<@Foo_BlackBox> : !om.sym_ref
-; MLIR_OUT:    %1 = om.object @SitestBlackBoxModulesSchema(%0) : (!om.sym_ref) -> !om.class.type<@SitestBlackBoxModulesSchema>
-; MLIR_OUT:    om.class.field @exterMod_Foo_BlackBox, %1 : !om.class.type<@SitestBlackBoxModulesSchema>
-; MLIR_OUT:    %2 = om.constant #om.sym_ref<@Bar_BlackBox> : !om.sym_ref
-; MLIR_OUT:    %3 = om.object @SitestBlackBoxModulesSchema(%2) : (!om.sym_ref) -> !om.class.type<@SitestBlackBoxModulesSchema>
-; MLIR_OUT:    om.class.field @exterMod_Bar_BlackBox, %3 : !om.class.type<@SitestBlackBoxModulesSchema>
-; MLIR_OUT:    %4 = om.constant #om.sym_ref<@Baz_BlackBox> : !om.sym_ref
-; MLIR_OUT:    %5 = om.object @SitestBlackBoxModulesSchema(%4) : (!om.sym_ref) -> !om.class.type<@SitestBlackBoxModulesSchema>
-; MLIR_OUT:    om.class.field @exterMod_Baz_BlackBox, %5 : !om.class.type<@SitestBlackBoxModulesSchema>
+; MLIR_OUT:  om.class @SitestBlackBoxMetadata(%basepath: !om.basepath)
+; MLIR_OUT:    %0 = om.constant "Foo_BlackBox" : !om.string
+; MLIR_OUT:    %1 = om.object @SitestBlackBoxModulesSchema(%basepath, %0) : (!om.basepath, !om.string) -> !om.class.type<@SitestBlackBoxModulesSchema>
+; MLIR_OUT:    %2 = om.constant "Bar_BlackBox" : !om.string
+; MLIR_OUT:    %3 = om.object @SitestBlackBoxModulesSchema(%basepath, %2) : (!om.basepath, !om.string) -> !om.class.type<@SitestBlackBoxModulesSchema>
+; MLIR_OUT:    %4 = om.constant "Baz_BlackBox" : !om.string
+; MLIR_OUT:    %5 = om.object @SitestBlackBoxModulesSchema(%basepath, %4) : (!om.basepath, !om.string) -> !om.class.type<@SitestBlackBoxModulesSchema>
+; MLIR_OUT:    om.class.field @[[V1:.+]], %1 : !om.class.type<@SitestBlackBoxModulesSchema>
+; MLIR_OUT:    om.class.field @[[V2:.+]], %3 : !om.class.type<@SitestBlackBoxModulesSchema>
+; MLIR_OUT:    om.class.field @[[V3:.+]], %5 : !om.class.type<@SitestBlackBoxModulesSchema>
 ; MLIR_OUT:  }
 
 ; MLIR_OUT:  om.class @MemorySchema(%name: !om.sym_ref, %depth: ui64, %width: ui32, %maskBits: ui32, %readPorts: ui32, %writePorts: ui32, %readwritePorts: ui32, %writeLatency: ui32, %readLatency: ui32) {

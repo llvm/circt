@@ -39,25 +39,29 @@ firrtl.circuit "retime0" attributes { annotations = [{
   }]} { }
 }
 // CHECK-LABEL: firrtl.circuit "retime0"   {
-// CHECK:         firrtl.module @retime0() {
+// CHECK:         firrtl.module @retime0() 
+// CHECK-SAME:               [{class = "circt.tracker", id = distinct[0]<>}]
+// CHECK:           %sifive_metadata = firrtl.object @SiFive_Metadata()
 // CHECK:         firrtl.module @retime1() {
 // CHECK:         firrtl.module @retime2() {
 // CHECK:               emit.file "retime_modules.json" {
 // CHECK-NEXT{LITERAL}:   sv.verbatim "[\0A \22{{0}}\22,\0A \22{{1}}\22\0A]" {symbols = [@retime0, @retime2]}
 // CHECK-NEXT:          }
 
-// CHECK:   om.class @RetimeModulesSchema(%moduleName: !om.sym_ref) {
-// CHECK-NEXT:     om.class.field @moduleName, %moduleName : !om.sym_ref
-// CHECK-NEXT:   }
-
-// CHECK:   om.class @RetimeModulesMetadata() {
-// CHECK-NEXT:     %0 = om.constant #om.sym_ref<@retime0> : !om.sym_ref
-// CHECK-NEXT:     %1 = om.object @RetimeModulesSchema(%0) : (!om.sym_ref) -> !om.class.type<@RetimeModulesSchema>
-// CHECK-NEXT:     om.class.field @[[m1:.+]], %1 : !om.class.type<@RetimeModulesSchema>
-// CHECK-NEXT:     %2 = om.constant #om.sym_ref<@retime2> : !om.sym_ref
-// CHECK-NEXT:     %3 = om.object @RetimeModulesSchema(%2) : (!om.sym_ref) -> !om.class.type<@RetimeModulesSchema>
-// CHECK-NEXT:     om.class.field @[[m2:.+]], %3 : !om.class.type<@RetimeModulesSchema>
-// CHECK-NEXT:   }
+// CHECK:  firrtl.class @RetimeModulesSchema(in %[[moduleName_in:.+]]: !firrtl.path, out %moduleName: !firrtl.path) {
+// CHECK:    firrtl.propassign %moduleName, %[[moduleName_in]] : !firrtl.path
+// CHECK:  }
+// CHECK:  firrtl.class @RetimeModulesMetadata@RetimeModulesMetadata(out %retime0_field: !firrtl.class<@RetimeModulesSchema(in moduleName_in: !firrtl.path, out moduleName: !firrtl.path)>, out %retime2_field: !firrtl.class<@RetimeModulesSchema(in moduleName_in: !firrtl.path, out moduleName: !firrtl.path)>)
+// CHECK:    %0 = firrtl.path reference distinct[0]<>
+// CHECK:    %retime0 = firrtl.object @RetimeModulesSchema
+// CHECK:    %1 = firrtl.object.subfield %retime0
+// CHECK:    firrtl.propassign %[[retime0_field]], %retime0 : !firrtl.class\<@RetimeModulesSchema
+// CHECK:    %2 = firrtl.path reference distinct[1]<>
+// CHECK:    %retime2 = firrtl.object @RetimeModulesSchema
+// CHECK:    %3 = firrtl.object.subfield %retime2
+// CHECK:    firrtl.propassign %3, %2 : !firrtl.path
+// CHECK:    firrtl.propassign %[[retime2field]], %retime2 : !firrtl.class<@RetimeModulesSchema
+    
 
 // -----
 
