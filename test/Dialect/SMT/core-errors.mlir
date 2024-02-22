@@ -25,7 +25,7 @@ func.func @no_smt_value_enters_solver(%arg0: !smt.bool) {
 func.func @no_smt_value_exits_solver() {
   // expected-error @below {{result #0 must be variadic of any non-smt type, but got '!smt.bool'}}
   %0 = smt.solver() : () -> !smt.bool {
-    %a = smt.declare_const "a" : !smt.bool
+    %a = smt.declare_fun "a" : !smt.bool
     smt.yield %a : !smt.bool
   }
   return
@@ -411,5 +411,63 @@ func.func @forall_patterns_region_no_var_binding_operations() {
     }
     smt.yield %arg2 : !smt.bool
   }
+  return
+}
+
+// -----
+
+func.func @exists_bound_variable_type_invalid() {
+  // expected-error @below {{bound variables must by any non-function SMT value}}
+  %1 = smt.exists ["a", "b"] {
+  ^bb0(%arg2: !smt.func<(!smt.int) !smt.int>, %arg3: !smt.bool):
+    smt.yield %arg3 : !smt.bool
+  }
+  return
+}
+
+// -----
+
+func.func @forall_bound_variable_type_invalid() {
+  // expected-error @below {{bound variables must by any non-function SMT value}}
+  %1 = smt.forall ["a", "b"] {
+  ^bb0(%arg2: !smt.func<(!smt.int) !smt.int>, %arg3: !smt.bool):
+    smt.yield %arg3 : !smt.bool
+  }
+  return
+}
+
+// -----
+
+// expected-error @below {{domain types must be any non-function SMT type}}
+func.func @func_domain_no_smt_type(%arg0: !smt.func<(i32) !smt.bool>) {
+  return
+}
+
+// -----
+
+// expected-error @below {{range type must be any non-function SMT type}}
+func.func @func_range_no_smt_type(%arg0: !smt.func<(!smt.bool) i32>) {
+  return
+}
+
+// -----
+
+// expected-error @below {{range type must be any non-function SMT type}}
+func.func @func_range_no_smt_type(%arg0: !smt.func<(!smt.bool) !smt.func<(!smt.bool) !smt.bool>>) {
+  return
+}
+
+// -----
+
+func.func @func_range_no_smt_type(%arg0: !smt.func<(!smt.bool) !smt.bool>) {
+  // expected-error @below {{0 operands present, but expected 1}}
+  smt.apply_func %arg0() : !smt.func<(!smt.bool) !smt.bool>
+  return
+}
+
+// -----
+
+// expected-error @below {{sort parameter types must be any non-function SMT type}}
+func.func @sort_type_no_smt_type(%arg0: !smt.sort<"sortname"[i32]>) {
   return
 }

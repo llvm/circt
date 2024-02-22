@@ -21,6 +21,9 @@ namespace smt {
 /// Returns whether the given type is an SMT value type.
 bool isAnySMTValueType(mlir::Type type);
 
+/// Returns whether the given type is an SMT value type (excluding functions).
+bool isAnyNonFuncSMTValueType(mlir::Type type);
+
 } // namespace smt
 } // namespace circt
 

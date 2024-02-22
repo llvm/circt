@@ -21,20 +21,38 @@ include "mlir/Interfaces/ControlFlowInterfaces.td"
 class SMTOp<string mnemonic, list<Trait> traits = []> :
   Op<SMTDialect, mnemonic, traits>;
 
-def DeclareConstOp : SMTOp<"declare_const", [
+def DeclareFunOp : SMTOp<"declare_fun", [
   DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>
 ]> {
   let summary = "declare a symbolic value of a given sort";
   let description = [{
-    This operation declares a symbolic value just as the `declare-const`
-    statement in SMT-LIB 2.6. The result type determines the SMT sort of the
-    symbolic value. The returned value can then be used to refer to the symbolic
-    value instead of using the identifier like in SMT-LIB.
+    This operation declares a symbolic value just as the `declare-const` and
+    `declare-func` statements in SMT-LIB 2.6. The result type determines the SMT
+    sort of the symbolic value. The returned value can then be used to refer to
+    the symbolic value instead of using the identifier like in SMT-LIB.
 
     The optionally provided string will be used as a prefix for the newly
     generated identifier (useful for easier readability when exporting to
-    SMT-LIB). Each `declare_const` will always provide a unique new symbolic
-    value even if the identifier strings are the same.
+    SMT-LIB). Each `declare` will always provide a unique new symbolic value
+    even if the identifier strings are the same.
+
+    Note that there does not exist a separate operation equivalent to
+    SMT-LIBs `define-fun` since
+    ```
+    (define-fun f (a Int) Int (-a))
+    ```
+    is only syntactic sugar for
+    ```
+    %f = smt.declare_fun : !smt.func<(!smt.int) !smt.int>
+    %0 = smt.forall {
+    ^bb0(%arg0: !smt.int):
+      %1 = smt.apply_func %f(%arg0) : !smt.func<(!smt.int) !smt.int>
+      %2 = smt.int.neg %arg0
+      %3 = smt.eq %1, %2 : !smt.int
+      smt.yield %3 : !smt.bool
+    }
+    smt.assert %0
+    ```
 
     Note that this operation cannot be marked as Pure since two operations (even
     with the same identifier string) could then be CSEd, leading to incorrect
@@ -99,7 +117,7 @@ def SolverOp : SMTOp<"solver", [
     ```mlir
     %0:2 = smt.solver (%in) {smt.some_attr} : (i8) -> (i8, i32) {
     ^bb0(%arg0: i8):
-      %c = smt.declare_const "c" : !smt.bool
+      %c = smt.declare_fun "c" : !smt.bool
       smt.assert %c
       %1 = smt.check sat {
         %c1_i32 = arith.constant 1 : i32
@@ -188,6 +206,29 @@ def YieldOp : SMTOp<"yield", [
   let builders = [OpBuilder<(ins), [{
     build($_builder, $_state, std::nullopt);
   }]>];
+}
+
+def ApplyFuncOp : SMTOp<"apply_func", [
+  Pure,
+  TypesMatchWith<"summary", "func", "result",
+                 "cast<SMTFuncType>($_self).getRangeType()">,
+  RangedTypesMatchWith<"summary", "func", "args",
+                       "cast<SMTFuncType>($_self).getDomainTypes()">
+]> {
+  let summary = "apply a function";
+  let description = [{
+    This operation performs a function application as described in the
+    [SMT-LIB 2.6 standard](https://smtlib.cs.uiowa.edu/papers/smt-lib-reference-v2.6-r2021-05-12.pdf).
+    It is part of the language itself rather than a theory or logic.
+  }];
+
+  let arguments = (ins SMTFuncType:$func,
+                       Variadic<AnyNonFuncSMTType>:$args);
+  let results = (outs AnyNonFuncSMTType:$result);
+
+  let assemblyFormat = [{
+    $func `(` $args `)` attr-dict `:` qualified(type($func))
+  }];
 }
 
 def EqOp : SMTOp<"eq", [Pure, SameTypeOperands]> {
@@ -357,6 +398,9 @@ class QuantifierOp<string mnemonic> : SMTOp<mnemonic, [
     quantifiers. While the 'body' region must always yield exactly one
     `!smt.bool`-typed value, the 'patterns' region can yield an arbitrary number
     (but at least one) of SMT values.
+
+    The bound variables can be any SMT type except of functions, since SMT only
+    supports first-order logic.
 
     The 'no_patterns' attribute is only allowed when no 'patterns' region is
     specified and forbids the solver to generate and use patterns for this

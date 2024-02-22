@@ -1,18 +1,22 @@
 // RUN: circt-opt %s | circt-opt | FileCheck %s
 
 // CHECK-LABEL: func @types
-// CHECK-SAME:  (%{{.*}}: !smt.bool, %{{.*}}: !smt.bv<32>, %{{.*}}: !smt.int)
-func.func @types(%arg0: !smt.bool, %arg1: !smt.bv<32>, %arg2: !smt.int) {
+// CHECK-SAME:  (%{{.*}}: !smt.bool, %{{.*}}: !smt.bv<32>, %{{.*}}: !smt.int, %{{.*}}: !smt.sort<"uninterpreted_sort">, %{{.*}}: !smt.sort<"uninterpreted_sort"[!smt.bool, !smt.int]>, %{{.*}}: !smt.func<(!smt.bool, !smt.bool) !smt.bool>)
+func.func @types(%arg0: !smt.bool, %arg1: !smt.bv<32>, %arg2: !smt.int, %arg3: !smt.sort<"uninterpreted_sort">, %arg4: !smt.sort<"uninterpreted_sort"[!smt.bool, !smt.int]>, %arg5: !smt.func<(!smt.bool, !smt.bool) !smt.bool>) {
   return
 }
 
 func.func @core(%in: i8) {
-  // CHECK: %a = smt.declare_const "a" {smt.some_attr} : !smt.bool
-  %a = smt.declare_const "a" {smt.some_attr} : !smt.bool
-  // CHECK: smt.declare_const {smt.some_attr} : !smt.bv<32>
-  %b = smt.declare_const {smt.some_attr} : !smt.bv<32>
-  // CHECK: smt.declare_const {smt.some_attr} : !smt.int
-  %c = smt.declare_const {smt.some_attr} : !smt.int
+  // CHECK: %a = smt.declare_fun "a" {smt.some_attr} : !smt.bool
+  %a = smt.declare_fun "a" {smt.some_attr} : !smt.bool
+  // CHECK: smt.declare_fun {smt.some_attr} : !smt.bv<32>
+  %b = smt.declare_fun {smt.some_attr} : !smt.bv<32>
+  // CHECK: smt.declare_fun {smt.some_attr} : !smt.int
+  %c = smt.declare_fun {smt.some_attr} : !smt.int
+  // CHECK: smt.declare_fun {smt.some_attr} : !smt.sort<"uninterpreted_sort">
+  %d = smt.declare_fun {smt.some_attr} : !smt.sort<"uninterpreted_sort">
+  // CHECK: smt.declare_fun {smt.some_attr} : !smt.func<(!smt.int, !smt.bool) !smt.bool>
+  %e = smt.declare_fun {smt.some_attr} : !smt.func<(!smt.int, !smt.bool) !smt.bool>
 
   // CHECK: smt.constant true {smt.some_attr}
   %true = smt.constant true {smt.some_attr}
@@ -81,6 +85,9 @@ func.func @core(%in: i8) {
   %9 = smt.xor %a, %a, %a {smt.some_attr}
   // CHECK: %{{.*}} = smt.implies %{{.*}}, %{{.*}} {smt.some_attr}
   %10 = smt.implies %a, %a {smt.some_attr}
+
+  // CHECK: smt.apply_func %{{.*}}(%{{.*}}, %{{.*}}) {smt.some_attr} : !smt.func<(!smt.int, !smt.bool) !smt.bool>
+  %11 = smt.apply_func %e(%c, %a) {smt.some_attr} : !smt.func<(!smt.int, !smt.bool) !smt.bool>
 
   return
 }
