@@ -6,12 +6,12 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file contains private APIs the parser uses to load annotations.
+// This file contains public APIs for loading annotations.
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef FIRANNOTATIONS_H
-#define FIRANNOTATIONS_H
+#ifndef CIRCT_DIALECT_FIRRTL_IMPORT_FIRANNOTATIONS_H
+#define CIRCT_DIALECT_FIRRTL_IMPORT_FIRANNOTATIONS_H
 
 #include "circt/Support/LLVM.h"
 #include "llvm/ADT/SmallVector.h"
@@ -23,25 +23,18 @@ class Value;
 } // namespace json
 } // namespace llvm
 
-namespace mlir {
-class ArrayAttr;
-}
-
 namespace circt {
 namespace firrtl {
 
-class CircuitOp;
-class PrintFOp;
-
-/// Convert a JSON value containing OMIR JSON (an array of OMNodes), convert
-/// this to an OMIRAnnotation, and add it to a mutable `annotations` argument.
-bool fromOMIRJSON(llvm::json::Value &value,
-                  SmallVectorImpl<Attribute> &annotations,
-                  llvm::json::Path path, MLIRContext *context);
-
-ParseResult foldWhenEncodedVerifOp(PrintFOp printOp);
+/// Deserialize a JSON value into FIRRTL Annotations.  Annotations are
+/// represented as a Target-keyed arrays of attributes.  The input JSON value is
+/// checked, at runtime, to be an array of objects.  Returns true if successful,
+/// false if unsuccessful.
+bool importAnnotationsFromJSONRaw(llvm::json::Value &value,
+                                  SmallVectorImpl<Attribute> &annotations,
+                                  llvm::json::Path path, MLIRContext *context);
 
 } // namespace firrtl
 } // namespace circt
 
-#endif // FIRANNOTATIONS_H
+#endif // CIRCT_DIALECT_FIRRTL_IMPORT_FIRANNOTATIONS_H
