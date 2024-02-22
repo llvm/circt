@@ -18,6 +18,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
+#include "circt/Dialect/FIRRTL/Import/FIRAnnotations.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Support/LLVM.h"
@@ -4507,7 +4508,8 @@ FIRCircuitParser::importAnnotationsRaw(SMLoc loc, StringRef annotationsStr,
 
   json::Path::Root root;
   llvm::StringMap<ArrayAttr> thisAnnotationMap;
-  if (!fromJSONRaw(annotations.get(), attrs, root, getContext())) {
+  if (!importAnnotationsFromJSONRaw(annotations.get(), attrs, root,
+                                    getContext())) {
     auto diag = emitError(loc, "Invalid/unsupported annotation format");
     std::string jsonErrorMessage =
         "See inline comments for problem area in JSON:\n";

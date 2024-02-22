@@ -7,11 +7,11 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt-c/Dialect/FIRRTL.h"
-#include "../../Dialect/FIRRTL/Import/FIRAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
+#include "circt/Dialect/FIRRTL/Import/FIRAnnotations.h"
 #include "mlir/CAPI/IR.h"
 #include "mlir/CAPI/Registration.h"
 #include "mlir/CAPI/Support.h"
@@ -325,7 +325,8 @@ bool firrtlImportAnnotationsFromJSONRaw(
 
   json::Path::Root root;
   SmallVector<Attribute> annos;
-  if (!fromJSONRaw(annotations.get(), annos, root, ctxUnwrapped)) {
+  if (!importAnnotationsFromJSONRaw(annotations.get(), annos, root,
+                                    ctxUnwrapped)) {
     return false;
   }
 
