@@ -1,6 +1,9 @@
 // RUN: circt-translate --import-verilog --verify-diagnostics --split-input-file %s
 // REQUIRES: slang
 
+// Internal issue in Slang v3 about jump depending on uninitialised value.
+// UNSUPPORTED: valgrind
+
 // expected-error @below {{expected ';'}}
 module Foo 4;
 endmodule
