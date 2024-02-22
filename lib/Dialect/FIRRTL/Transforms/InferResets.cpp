@@ -1815,53 +1815,53 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
     return;
   }
 
-
-  // regreset = [1 inv 0 ]
-  // ((src?, false), (dst=1, true), (src?, false))
-  // := [1 0 0]
-  // 
   // Handle registers with reset.
   if (auto regOp = dyn_cast<RegResetOp>(op)) {
-      // <src, dst, isInvalid>
-      SmallVector<std::tuple<FieldRefs, FieldRefs, bool>> invFields;
-    // If the regreset is invalidated, it needs extra handling
+     // Bookkeping structure to track fields and their drivers, and
+     // whether they're invalid
+      struct invField {
+          FieldRef src;
+          FieldRef dst;
+          bool isInvalidOp;
+          invField(FieldRef s, FieldRef d, bool isInv) : src(s), dst(d), isInvalidOp(isInv) {};
+      };
+      
+    SmallVector<invField> invFields;
+
     walkDrivers(regOp.getResetValue(), true, false, false,
-      [](FieldRef dst, FieldRef src) {
-          if (src.isa<InvalidValueOp>())
-              invFields.push_back(std::make_tuple(src, dst, true);
-          else
-              invFields.push_back(std::make_tuple(src, dst, false);
-      }));
+      [&invFields](FieldRef dst, FieldRef src) {
+          invFields.push_back(invField(src, dst, src.isa<InvalidValueOp>()));
+          return true;
+      });
+    
     bool dealWithInvalidates = false;
     for (auto field: invFields) {
-        if (std::get<1>(field) == true) {
+        if (field.isInvalidOp)
             dealWithInvalidates = true;
-            break;
-        }
+        break;
     }
+    
     if (dealWithInvalidates) {
       // create a new wire as a reset value
         // create a wire as wireOp = ...
         auto wireOp = builder.create<WireOp>(regOp.getDataType());
       for (auto field: invFields) {
-          if (std::get<3>(field) == false) { // not invalid
-              auto dst = getValueByFieldID(builder, wireOp, std::get<1>(field));
-              auto src = std::get<2>(field);
-              builder.create<StrictConnectOp>(dst, src);
+          if (!field.isInvalidOp) { // not invalid
+              auto dst = getValueByFieldID(builder, wireOp->getResult(0), field.dst);
+              auto src = field.src.getValue();
+              LLVM_DEBUG(llvm::dbgs() << "src: \n\t" << src <<"\n dst: \n\t" << dst <<" \n\n");
+              builder.create<StrictConnectOp>(src, dst);
           }
           else { // invalid
-              // get the type of the dst from the field ref
-              // use typeswitch here?
-              auto dstType = std::get<2>(field).getElementType();
-              auto dst = builder.create
-              auto src = std::get<2>(field);
-              builder.create<StrictConnectOp>(dst, src);
+              auto dstType = field.dst.getValue().getType();
+              auto dst_firrtl_type = type_dyn_cast<FIRRTLBaseType>(dstType);
+              auto dst = createZeroValue(builder, dst_firrtl_type);
+              auto src = field.src.getValue();
+              LLVM_DEBUG(llvm::dbgs() << "src: \n\t" << src <<"\n dst: \n\t" << dst <<" \n\n");
+              builder.create<StrictConnectOp>(src, dst);
           }
       }
-      // regOp := wireOp
-                // check the insertion point
-                // getElementType                
-      builder.create<StrictConnectOp>(regOp, wireOp);
+      builder.create<StrictConnectOp>(regOp.getResult(), wireOp.getResult());
     }
     
     // If the register already has an async reset, leave it untouched.
