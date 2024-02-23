@@ -15,6 +15,7 @@
 
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "circt/Dialect/Sim/SimDialect.td"
+include "circt/Dialect/Seq/SeqTypes.td"
 
 class SimOp<string mnemonic, list<Trait> traits = []> :
     Op<SimDialect, mnemonic, traits>;
@@ -33,6 +34,24 @@ def PlusArgsValueOp : SimOp<"plusargs.value", [Pure]> {
   let arguments = (ins StrAttr:$formatString);
   let results = (outs I1:$found, AnyType:$result);
   let assemblyFormat = "$formatString attr-dict `:` type($result)";
+}
+
+def FinishOp : SimOp<"finish"> {
+  let summary = "Simulation finish condition";
+
+  let arguments = (ins ClockType:$clk, I1:$cond);
+  let results = (outs);
+
+  let assemblyFormat = "$clk `,` $cond attr-dict";
+}
+
+def FatalOp : SimOp<"fatal"> {
+  let summary = "Simulation failure condition";
+
+  let arguments = (ins ClockType:$clk, I1:$cond);
+  let results = (outs);
+
+  let assemblyFormat = "$clk `,` $cond attr-dict";
 }
 
 #endif // CIRCT_DIALECT_SIM_SIMOPS_TD
