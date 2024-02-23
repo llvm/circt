@@ -182,6 +182,9 @@ struct ObjectModelIR {
   void addBlackBoxModule(FExtModuleOp module) {
     if (!blackBoxModulesSchemaClass)
       addBlackBoxModulesSchema();
+    StringRef defName = *module.getDefname();
+    if (!blackboxModules.insert(defName).second)
+      return;
     auto builderOM = mlir::ImplicitLocOpBuilder::atBlockEnd(
         module.getLoc(), blackBoxMetadataClass.getBodyBlock());
     auto modEntry = builderOM.create<StringConstantOp>(module.getDefnameAttr());
@@ -318,6 +321,7 @@ struct ObjectModelIR {
       "readLatency", "hierarchy"};
   StringRef retimeModulesParamNames[1] = {"moduleName"};
   StringRef blackBoxModulesParamNames[1] = {"moduleName"};
+  llvm::SmallDenseSet<StringRef> blackboxModules;
 };
 
 class CreateSiFiveMetadataPass
