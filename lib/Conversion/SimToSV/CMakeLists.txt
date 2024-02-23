@@ -9,4 +9,5 @@ add_circt_conversion_library(CIRCTSimToSV
 
   LINK_LIBS PUBLIC
   CIRCTSim
+  CIRCTSeq
 )

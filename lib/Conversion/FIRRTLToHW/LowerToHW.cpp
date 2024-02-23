@@ -4205,30 +4205,21 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
 // Stop lowers into a nested series of behavioral statements plus $fatal
 // or $finish.
 LogicalResult FIRRTLLowering::visitStmt(StopOp op) {
-  auto clock = getLoweredNonClockValue(op.getClock());
+  auto clock = getLoweredValue(op.getClock());
   auto cond = getLoweredValue(op.getCond());
   if (!clock || !cond)
     return failure();
 
-  // Emit an "#ifndef SYNTHESIS" guard into the always block.
-  addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {
-    // Emit this into an "sv.always posedge" body.
-    addToAlwaysBlock(clock, [&]() {
-      circuitState.used_STOP_COND = true;
+  circuitState.used_STOP_COND = true;
 
-      // Emit an "sv.if '`STOP_COND_ & cond' into the #ifndef.
-      Value ifCond =
-          builder.create<sv::MacroRefExprOp>(cond.getType(), "STOP_COND_");
-      ifCond = builder.createOrFold<comb::AndOp>(ifCond, cond, true);
-      addIfProceduralBlock(ifCond, [&]() {
-        // Emit the sv.fatal or sv.finish.
-        if (op.getExitCode())
-          builder.create<sv::FatalOp>();
-        else
-          builder.create<sv::FinishOp>();
-      });
-    });
-  });
+  Value stopCond =
+      builder.create<sv::MacroRefExprOp>(cond.getType(), "STOP_COND_");
+  Value exitCond = builder.createOrFold<comb::AndOp>(stopCond, cond, true);
+
+  if (op.getExitCode())
+    builder.create<sim::FatalOp>(clock, exitCond);
+  else
+    builder.create<sim::FinishOp>(clock, exitCond);
 
   return success();
 }
