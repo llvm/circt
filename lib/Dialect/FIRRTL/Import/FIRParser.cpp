@@ -4966,7 +4966,7 @@ ParseResult FIRCircuitParser::parseExtModule(CircuitOp circuit,
 
   if (version >= FIRVersion{4, 0, 0}) {
     for (auto [pi, loc] : llvm::zip_equal(portList, portLocs)) {
-      if (auto ftype = dyn_cast<FIRRTLType>(pi.type)) {
+      if (auto ftype = type_dyn_cast<FIRRTLType>(pi.type)) {
         if (ftype.hasUninferredWidth())
           return emitError(loc, "extmodule port must have known width");
       }
@@ -5050,7 +5050,7 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit, bool isPublic,
 
   if (isPublic && version >= FIRVersion{4, 0, 0}) {
     for (auto [pi, loc] : llvm::zip_equal(portList, portLocs)) {
-      if (auto ftype = dyn_cast<FIRRTLType>(pi.type)) {
+      if (auto ftype = type_dyn_cast<FIRRTLType>(pi.type)) {
         if (ftype.hasUninferredWidth())
           return emitError(loc, "public module port must have known width");
         if (ftype.hasUninferredReset())

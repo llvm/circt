@@ -1348,7 +1348,6 @@ circuit Foo:
     ; expected-error @below {{expected layer name}}
     output a: Probe<UInt<1> A.>
 
-
 ;// -----
 FIRRTL version 4.0.0
 circuit UnknownWidthPublic:
