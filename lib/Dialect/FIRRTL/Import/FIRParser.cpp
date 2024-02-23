@@ -4964,6 +4964,15 @@ ParseResult FIRCircuitParser::parseExtModule(CircuitOp circuit,
   if (parseParameterList(parameters) || parseRefList(portList, internalPaths))
     return failure();
 
+  if (version >= FIRVersion{4, 0, 0}) {
+    for (auto [pi, loc] : llvm::zip_equal(portList, portLocs)) {
+      if (auto ftype = type_dyn_cast<FIRRTLType>(pi.type)) {
+        if (ftype.hasUninferredWidth())
+          return emitError(loc, "extmodule port must have known width");
+      }
+    }
+  }
+
   auto builder = circuit.getBodyBuilder();
   auto isMainModule = (name == circuit.getName());
   auto convention =
@@ -5038,6 +5047,18 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit, bool isPublic,
 
   // The main module is implicitly public.
   isPublic |= name == circuit.getName();
+
+  if (isPublic && version >= FIRVersion{4, 0, 0}) {
+    for (auto [pi, loc] : llvm::zip_equal(portList, portLocs)) {
+      if (auto ftype = type_dyn_cast<FIRRTLType>(pi.type)) {
+        if (ftype.hasUninferredWidth())
+          return emitError(loc, "public module port must have known width");
+        if (ftype.hasUninferredReset())
+          return emitError(loc,
+                           "public module port must have concrete reset type");
+      }
+    }
+  }
 
   ArrayAttr annotations = getConstants().emptyArrayAttr;
   auto convention = Convention::Internal;

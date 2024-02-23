@@ -1347,3 +1347,24 @@ circuit Foo:
   module Foo:
     ; expected-error @below {{expected layer name}}
     output a: Probe<UInt<1> A.>
+
+;// -----
+FIRRTL version 4.0.0
+circuit UnknownWidthPublic:
+  public module UnknownWidthPublic:
+    ; expected-error @below {{public module port must have known width}}
+    output a: UInt
+
+;// -----
+FIRRTL version 4.0.0
+circuit UnknownWidthExt:
+  extmodule UnknownWidthExt:
+    ; expected-error @below {{extmodule port must have known width}}
+    output a: { x: UInt }
+
+;// -----
+FIRRTL version 4.0.0
+circuit AbstractResetPublic:
+  module AbstractResetPublic:
+    ; expected-error @below {{public module port must have concrete reset type}}
+    input r: Reset
