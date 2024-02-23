@@ -38,7 +38,8 @@ namespace {
 
 // Rewrites cases where an input port is being read in the instantiating module.
 // Replaces the input port read by the assignment value of the input port.
-static LogicalResult replaceReadsOfWrites(ContainerOp containerOp) {
+static LogicalResult
+replaceReadsOfWrites(ContainerOpInterface ContainerOpInterface) {
   // Partition out all of the get_port's wrt. their target port symbol.
   struct PortAccesses {
     GetPortOp getAsInput;
@@ -50,13 +51,14 @@ static LogicalResult replaceReadsOfWrites(ContainerOp containerOp) {
                  /*portName*/ llvm::DenseMap<StringAttr, PortAccesses>>
       instancePortAccessMap;
 
-  for (auto getPortOp : containerOp.getOps<GetPortOp>()) {
+  for (auto getPortOp :
+       ContainerOpInterface.getBodyBlock()->getOps<GetPortOp>()) {
     PortAccesses &portAccesses =
         instancePortAccessMap[getPortOp.getInstance()]
                              [getPortOp.getPortSymbolAttr().getAttr()];
     if (getPortOp.getDirection() == Direction::Input) {
       if (portAccesses.getAsInput)
-        return containerOp.emitError(
+        return ContainerOpInterface.emitError(
             "multiple input get_ports - please CSE the input IR");
       portAccesses.getAsInput = getPortOp;
       for (auto *user : getPortOp->getUsers()) {
@@ -69,7 +71,7 @@ static LogicalResult replaceReadsOfWrites(ContainerOp containerOp) {
       }
     } else {
       if (portAccesses.getAsOutput)
-        return containerOp.emitError(
+        return ContainerOpInterface.emitError(
             "multiple get_port as output - please CSE the input IR");
       portAccesses.getAsOutput = getPortOp;
 
@@ -190,8 +192,9 @@ struct CleanSelfdriversPass
 } // anonymous namespace
 
 LogicalResult CleanSelfdriversPass::cleanInstanceSide() {
-  for (ContainerOp containerOp : getOperation().getOps<ContainerOp>())
-    if (failed(replaceReadsOfWrites(containerOp)))
+  for (ContainerOpInterface ContainerOpInterface :
+       getOperation().getOps<ContainerOpInterface>())
+    if (failed(replaceReadsOfWrites(ContainerOpInterface)))
       return failure();
 
   return success();

@@ -28,8 +28,8 @@ ibis.class @MultipleThis {
 
 // -----
 
-// expected-error @+1 {{'ibis.container' op must contain a 'ibis.this' operation}}
-ibis.container @NoThis {
+// expected-error @+1 {{'ibis.container.outer' op must contain a 'ibis.this' operation}}
+ibis.container.outer @NoThis {
 }
 
 // -----
