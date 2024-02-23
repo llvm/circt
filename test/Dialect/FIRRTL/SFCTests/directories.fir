@@ -150,25 +150,59 @@ circuit TestHarness:
 ; MLIR_OUT:    om.class.field @[[V3:.+]], %5 : !om.class.type<@SitestBlackBoxModulesSchema>
 ; MLIR_OUT:  }
 
-; MLIR_OUT:  om.class @MemorySchema(%name: !om.sym_ref, %depth: ui64, %width: ui32, %maskBits: ui32, %readPorts: ui32, %writePorts: ui32, %readwritePorts: ui32, %writeLatency: ui32, %readLatency: ui32) {
-; MLIR_OUT:    om.class.field @name, %name : !om.sym_ref
-; MLIR_OUT:    om.class.field @depth, %depth : ui64
-; MLIR_OUT:    om.class.field @width, %width : ui32
-; MLIR_OUT:    om.class.field @maskBits, %maskBits : ui32
-; MLIR_OUT:    om.class.field @readPorts, %readPorts : ui32
-; MLIR_OUT:    om.class.field @writePorts, %writePorts : ui32
-; MLIR_OUT:    om.class.field @readwritePorts, %readwritePorts : ui32
-; MLIR_OUT:    om.class.field @writeLatency, %writeLatency : ui32
-; MLIR_OUT:    om.class.field @readLatency, %readLatency : ui32
+; MLIR_OUT:  om.class @MemorySchema(%basepath: !om.basepath, %name_in: !om.string, %depth_in: !om.integer, %width_in: !om.integer, %maskBits_in: !om.integer, %readPorts_in: !om.integer, %writePorts_in: !om.integer, %readwritePorts_in: !om.integer, %writeLatency_in: !om.integer, %readLatency_in: !om.integer, %hierarchy_in: !om.list<!om.path>) {
+; MLIR_OUT:    om.class.field @name, %name_in : !om.string
+; MLIR_OUT:    om.class.field @depth, %depth_in : !om.integer
+; MLIR_OUT:    om.class.field @width, %width_in : !om.integer
+; MLIR_OUT:    om.class.field @maskBits, %maskBits_in : !om.integer
+; MLIR_OUT:    om.class.field @readPorts, %readPorts_in : !om.integer
+; MLIR_OUT:    om.class.field @writePorts, %writePorts_in : !om.integer
+; MLIR_OUT:    om.class.field @readwritePorts, %readwritePorts_in : !om.integer
+; MLIR_OUT:    om.class.field @writeLatency, %writeLatency_in : !om.integer
+; MLIR_OUT:    om.class.field @readLatency, %readLatency_in : !om.integer
+; MLIR_OUT:    om.class.field @hierarchy, %hierarchy_in : !om.list<!om.path>
 ; MLIR_OUT:  }
-; MLIR_OUT:  om.class @MemoryMetadata() {
-; MLIR_OUT:    om.constant #om.sym_ref<@foo_m_ext> : !om.sym_ref
-; MLIR_OUT:    om.object @MemorySchema
-; MLIR_OUT:    om.constant #om.sym_ref<@bar_m_ext> : !om.sym_ref
-; MLIR_OUT:    om.object @MemorySchema
-; MLIR_OUT:    om.constant #om.sym_ref<@baz_m_ext> : !om.sym_ref
-; MLIR_OUT:    om.object @MemorySchema
-; MLIR_OUT:  }
+; MLIR_OUT:  om.class @MemoryMetadata(%basepath: !om.basepath)
+; MLIR_OUT:     om.path_create reference %basepath @memNLA
+; MLIR_OUT:     om.list_create
+; MLIR_OUT:     om.object @MemorySchema
+; MLIR_OUT:     om.constant "foo_m_ext" : !om.string
+; MLIR_OUT:     om.constant #om.integer<1 : ui64> : !om.integer
+; MLIR_OUT:     om.constant #om.integer<8 : ui32> : !om.integer
+; MLIR_OUT:     om.constant #om.integer<1 : ui32> : !om.integer
+; MLIR_OUT:     om.constant #om.integer<1 : ui32> : !om.integer
+; MLIR_OUT:     om.constant #om.integer<1 : ui32> : !om.integer
+; MLIR_OUT:     om.constant #om.integer<0 : ui32> : !om.integer
+; MLIR_OUT:     om.constant #om.integer<1 : ui32> : !om.integer
+; MLIR_OUT:     om.constant #om.integer<1 : ui32> : !om.integer
+; MLIR_OUT:     om.path_create reference %basepath @memNLA_0
+; MLIR_OUT:     om.list_create
+; MLIR_OUT:     om.object @MemorySchema
+; MLIR_OUT:     om.constant "bar_m_ext" : !om.string
+; MLIR_OUT:     om.constant #om.integer<2 : ui64> : !om.integer
+; MLIR_OUT:     om.constant #om.integer<8 : ui32> : !om.integer
+; MLIR_OUT:     om.constant #om.integer<1 : ui32> : !om.integer
+; MLIR_OUT:     om.constant #om.integer<1 : ui32> : !om.integer
+; MLIR_OUT:     om.constant #om.integer<1 : ui32> : !om.integer
+; MLIR_OUT:     om.constant #om.integer<0 : ui32> : !om.integer
+; MLIR_OUT:     om.constant #om.integer<1 : ui32> : !om.integer
+; MLIR_OUT:     om.constant #om.integer<1 : ui32> : !om.integer
+; MLIR_OUT:     om.path_create reference %basepath @memNLA_1
+; MLIR_OUT:     om.path_create reference %basepath @memNLA_2
+; MLIR_OUT:     om.list_create
+; MLIR_OUT:     om.object @MemorySchema
+; MLIR_OUT:     om.constant "baz_m_ext" : !om.string
+; MLIR_OUT:     om.constant #om.integer<3 : ui64> : !om.integer
+; MLIR_OUT:     om.constant #om.integer<8 : ui32> : !om.integer
+; MLIR_OUT:     om.constant #om.integer<1 : ui32> : !om.integer
+; MLIR_OUT:     om.constant #om.integer<1 : ui32> : !om.integer
+; MLIR_OUT:     om.constant #om.integer<1 : ui32> : !om.integer
+; MLIR_OUT:     om.constant #om.integer<0 : ui32> : !om.integer
+; MLIR_OUT:     om.constant #om.integer<1 : ui32> : !om.integer
+; MLIR_OUT:     om.constant #om.integer<1 : ui32> : !om.integer
+; MLIR_OUT:    om.class.field @foo_m_ext_field
+; MLIR_OUT:    om.class.field @bar_m_ext_field
+; MLIR_OUT:    om.class.field @baz_m_ext_field
 
 ; SITEST_NODUT:     FILE "design.sitest.json"
 ; SITEST_NODUT-NOT: FILE
