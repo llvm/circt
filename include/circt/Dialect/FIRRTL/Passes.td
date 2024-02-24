@@ -429,7 +429,11 @@ def BlackBoxReader : Pass<"firrtl-blackbox-reader", "CircuitOp"> {
       "directory where the input file was located, to allow for annotations "
       "relative to the input file.">
   ];
-  let dependentDialects = ["sv::SVDialect", "hw::HWDialect"];
+  let dependentDialects = [
+      "emit::EmitDialect",
+      "hw::HWDialect",
+      "sv::SVDialect"
+  ];
 }
 
 def PrefixModules : Pass<"firrtl-prefix-modules", "firrtl::CircuitOp"> {
@@ -862,7 +866,7 @@ def SpecializeOption :
   let constructor = "circt::firrtl::createSpecializeOptionPass()";
 
   let options = [
-    ListOption<"select", "select", "std::string", 
+    ListOption<"select", "select", "std::string",
                "Options to specialize, in option=case format">,
   ];
   let statistics = [
