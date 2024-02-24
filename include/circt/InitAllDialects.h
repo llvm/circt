@@ -20,6 +20,7 @@
 #include "circt/Dialect/DC/DCDialect.h"
 #include "circt/Dialect/Debug/DebugDialect.h"
 #include "circt/Dialect/ESI/ESIDialect.h"
+#include "circt/Dialect/Emit/EmitDialect.h"
 #include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FSM/FSMOps.h"
@@ -55,6 +56,7 @@ inline void registerAllDialects(mlir::DialectRegistry &registry) {
     comb::CombDialect,
     dc::DCDialect,
     debug::DebugDialect,
+    emit::EmitDialect,
     esi::ESIDialect,
     firrtl::FIRRTLDialect,
     fsm::FSMDialect,
