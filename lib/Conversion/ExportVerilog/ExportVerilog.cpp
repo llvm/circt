@@ -21,6 +21,7 @@
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombVisitors.h"
 #include "circt/Dialect/Debug/DebugDialect.h"
+#include "circt/Dialect/Emit/EmitOps.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
@@ -1010,12 +1011,13 @@ public:
                                const LoweringOptions &options,
                                const HWSymbolCache &symbolCache,
                                const GlobalNameTable &globalNames,
+                               const FileMapping &fileMapping,
                                llvm::formatted_raw_ostream &os,
                                StringAttr fileName, OpLocMap &verilogLocMap)
       : designOp(designOp), shared(shared), options(options),
-        symbolCache(symbolCache), globalNames(globalNames), os(os),
-        verilogLocMap(verilogLocMap), pp(os, options.emittedLineLength),
-        fileName(fileName) {
+        symbolCache(symbolCache), globalNames(globalNames),
+        fileMapping(fileMapping), os(os), verilogLocMap(verilogLocMap),
+        pp(os, options.emittedLineLength), fileName(fileName) {
     pp.setListener(&saver);
   }
   /// This is the root mlir::ModuleOp that holds the whole design being emitted.
@@ -1032,6 +1034,9 @@ public:
   /// This tracks global names where the Verilog name needs to be different than
   /// the IR name.
   const GlobalNameTable &globalNames;
+
+  /// Tracks the referenceable files through their symbol.
+  const FileMapping &fileMapping;
 
   /// The stream to emit to. Use a formatted_raw_ostream, to easily get the
   /// current location(line,column) on the stream. This is required to record
@@ -6027,6 +6032,75 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
 }
 
 //===----------------------------------------------------------------------===//
+// Emitter for files & file lists.
+//===----------------------------------------------------------------------===//
+
+class FileEmitter : public EmitterBase {
+public:
+  explicit FileEmitter(VerilogEmitterState &state) : EmitterBase(state) {}
+
+  void emit(emit::FileOp op);
+  void emit(emit::FileListOp op);
+
+private:
+  void emitOp(emit::VerbatimOp op);
+};
+
+void FileEmitter::emit(emit::FileOp op) {
+  for (Operation &op : *op.getBodyBlock()) {
+    TypeSwitch<Operation *>(&op)
+        .Case<emit::VerbatimOp>([&](auto op) { emitOp(op); })
+        .Default([&](auto op) {
+          op->emitError("cannot be emitted to a file");
+          state.encounteredError = true;
+        });
+  }
+  ps.eof();
+}
+
+void FileEmitter::emit(emit::FileListOp op) {
+  // Find the associated file ops and write the paths on individual lines.
+  for (auto sym : op.getFiles()) {
+    auto fileName = cast<FlatSymbolRefAttr>(sym).getAttr();
+
+    auto it = state.fileMapping.find(fileName);
+    if (it == state.fileMapping.end()) {
+      op->emitError() << " references an invalid file: " << sym;
+      state.encounteredError = true;
+      continue;
+    }
+
+    auto file = cast<emit::FileOp>(it->second);
+    ps << PP::neverbox << PPExtString(file.getFileName()) << PP::end
+       << PP::newline;
+  }
+  ps.eof();
+}
+
+void FileEmitter::emitOp(emit::VerbatimOp op) {
+  startStatement();
+
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+
+  // Emit each line of the string at a time, emitting the
+  // location comment after the last emitted line.
+  StringRef text = op.getText();
+
+  ps << PP::neverbox;
+  do {
+    const auto &[lhs, rhs] = text.split('\n');
+    ps << PPExtString(lhs);
+    if (!rhs.empty())
+      ps << PP::end << PP::newline << PP::neverbox;
+    text = rhs;
+  } while (!text.empty());
+  ps << PP::end;
+
+  emitLocationInfoAndNewLine(ops);
+}
+
+//===----------------------------------------------------------------------===//
 // Top level "file" emitter logic
 //===----------------------------------------------------------------------===//
 
@@ -6072,9 +6146,11 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
   for (auto &op : *designOp.getBody()) {
     auto info = OpFileInfo{&op, replicatedOps.size()};
 
+    bool isFileOp = isa<emit::FileOp, emit::FileListOp>(&op);
+
     bool hasFileName = false;
-    bool emitReplicatedOps = true;
-    bool addToFilelist = true;
+    bool emitReplicatedOps = !isFileOp;
+    bool addToFilelist = !isFileOp;
 
     outputPath.clear();
 
@@ -6126,6 +6202,11 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
     // Separate the operation into dedicated output file, or emit into the
     // root file, or replicate in all output files.
     TypeSwitch<Operation *>(&op)
+        .Case<emit::FileOp, emit::FileListOp>([&](auto file) {
+          // Emit file ops to their respective files.
+          fileMapping.try_emplace(file.getSymNameAttr(), file);
+          separateFile(file, file.getFileName());
+        })
         .Case<HWModuleOp>([&](auto mod) {
           // Build the IR cache.
           symbolCache.addDefinition(mod.getNameAttr(), mod);
@@ -6271,6 +6352,8 @@ static void emitOperation(VerilogEmitterState &state, Operation *op) {
       .Case<TypeScopeOp>([&](auto typedecls) {
         ModuleEmitter(state).emitStatement(typedecls);
       })
+      .Case<emit::FileOp, emit::FileListOp>(
+          [&](auto op) { FileEmitter(state).emit(op); })
       .Case<MacroDefOp>(
           [&](auto op) { ModuleEmitter(state).emitStatement(op); })
       .Default([&](auto *op) {
@@ -6297,7 +6380,8 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit,
     // on the stream.
     OpLocMap verilogLocMap(os);
     VerilogEmitterState state(designOp, *this, options, symbolCache,
-                              globalNames, os, fileName, verilogLocMap);
+                              globalNames, fileMapping, os, fileName,
+                              verilogLocMap);
     size_t lineOffset = 0;
     for (auto &entry : thingsToEmit) {
       entry.verilogLocs.setStream(os);
@@ -6337,7 +6421,7 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit,
     // Each `thingToEmit` (op) uses a unique map to store verilog locations.
     stringOrOp.verilogLocs.setStream(rs);
     VerilogEmitterState state(designOp, *this, options, symbolCache,
-                              globalNames, rs, fileName,
+                              globalNames, fileMapping, rs, fileName,
                               stringOrOp.verilogLocs);
     emitOperation(state, op);
     stringOrOp.setString(buffer);
@@ -6361,7 +6445,8 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit,
 
     // If this wasn't emitted to a string (e.g. it is a bind) do so now.
     VerilogEmitterState state(designOp, *this, options, symbolCache,
-                              globalNames, os, fileName, entry.verilogLocs);
+                              globalNames, fileMapping, os, fileName,
+                              entry.verilogLocs);
     emitOperation(state, op);
     state.addVerilogLocToOps(0, fileName);
   }
