@@ -27,7 +27,7 @@ indicate to the compiler that a wire "foo" should not be optimized away.
 ```json
 {
   "class":"firrtl.transforms.DontTouchAnnotation",
-  "target""~MyCircuit|MyModule>foo"
+  "target":"~MyCircuit|MyModule>foo"
 }
 ```
 
