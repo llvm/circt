@@ -50,40 +50,6 @@ static sv::EventControl LTLToSVEventControl(ltl::ClockEdge ce) {
 //===----------------------------------------------------------------------===//
 
 namespace {
-/// Lower a ltl::DelayOp operation to core operations
-
-struct DelayOpConversion : OpConversionPattern<ltl::DelayOp> {
-  using OpConversionPattern<ltl::DelayOp>::OpConversionPattern;
-
-  // DelayOp can be implemented directly without an explicit automata
-  // conversion. This is done by creating a counter register that keeps track of
-  // the number of elapsed cycles. A second register is also created to keep
-  // track of the state of our delay evaluation state machine:
-  // (Waiting for Start) – reach min-delay → (Searching for 1):
-  //    – find a one → DONE
-  //    – no 1 but reach max delay → FAIL
-  // This second registers does so by tracking whether or not the sequence holds
-  // during the delay period. The final assertion checks that the fail state is
-  // never reached.
-  LogicalResult
-  matchAndRewrite(ltl::DelayOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    // Start by computing the width of the generated register
-    size_t max = adaptor.getDelay() + adaptor.getLength().value_or(0);
-    uint64_t reg_w = llvm::Log2_64(max) + 1;
-
-    // Generate the register width type
-    auto iw = IntegerType::get(getContext(), reg_w);
-
-    // Retrieve the clock associated to this op
-
-    // Generate the counter's next expression
-    Value constOne = rewriter.create<hw::ConstantOp>(op.getLoc(), iw, 1);
-    // Value next = rewriter.create<seq::CompRegOp>(op.getLoc(), )
-
-    return success();
-  }
-};
 
 /// Lower a ltl::DisableOp operation to Core operations
 /*struct DisableOpConversion : OpConversionPattern<ltl::DisableOp> {
@@ -171,12 +137,127 @@ struct AssertOpConversionPattern : OpConversionPattern<verif::AssertOp> {
                                             op.getInput());
   }
 
-  void make_implication(Location loc, Value antecedent, Value consequent,
-                        ConversionPatternRewriter &rewriter) const {
+  // Creates and returns a logical implication:
+  // a -> b which is encoded as !a || b
+  // The Value for the OrOp will be returned
+  Value make_implication(Location loc, Value antecedent, Value consequent,
+                         ConversionPatternRewriter &rewriter) const {
     Value constOne =
         rewriter.create<hw::ConstantOp>(loc, rewriter.getI1Type(), 1);
     Value n_a = rewriter.create<comb::XorOp>(loc, antecedent, constOne);
-    rewriter.create<comb::OrOp>(loc, n_a, consequent);
+    return rewriter.create<comb::OrOp>(loc, n_a, consequent);
+  }
+
+  // NOI case: Generate a register delaying our antecedent
+  // for each cycle in delay_n, as well as a register to count the
+  // delay, e.g. a ##n true |-> b would have the following assertion:
+  // assert(delay < n || (!a_n || b) || reset)
+
+  bool make_non_overlapping_implication(
+      ltl::ImplicationOp implop, ltl::DelayOp delay_n, ltl::ClockOp ltlclock,
+      ltl::ConcatOp concat, ConversionPatternRewriter &rewriter) const {
+
+    // Start by recovering the number of registers we need to generate
+    uint64_t delay_cycles = delay_n.getDelay();
+
+    // The width of our delay register can simply be log2(delay_cycles) +
+    // 1 as we can saturate it once it's reached delay_cycles
+    uint64_t delay_reg_w = llvm::Log2_64(delay_cycles) + 1;
+    auto idrw = IntegerType::get(getContext(), delay_reg_w);
+
+    // Build out the delay register: delay' = delay + 1; reset(delay, 0)
+    // Generate the constant used to enegate the
+    Value constZero = rewriter.create<hw::ConstantOp>(concat.getLoc(), idrw, 0);
+
+    // Create a constant to be used in the delay next statement
+    Value constOneW =
+        rewriter.create<hw::ConstantOp>(delay_n.getLoc(), idrw, 1);
+
+    // Create a backedge for the delay register
+    circt::BackedgeBuilder bb(rewriter, delay_n.getLoc());
+    circt::Backedge delay_reg = bb.get(idrw);
+
+    // Increment the delay register by 1
+    Value delay_inc =
+        rewriter.create<comb::AddOp>(delay_n.getLoc(), delay_reg, constOneW);
+
+    // Saturate the register if it reaches the delay, i.e. delay' = (delay
+    // == delay_cycles) ? delay_cycles : delay + 1
+    Value delay_max =
+        rewriter.create<hw::ConstantOp>(delay_n.getLoc(), idrw, delay_cycles);
+    Value delay_eq_max = rewriter.create<comb::ICmpOp>(
+        delay_n.getLoc(),
+        comb::ICmpPredicateAttr::get(getContext(), comb::ICmpPredicate::eq),
+        delay_reg, delay_max, mlir::UnitAttr::get(getContext()));
+    Value delay_mux = rewriter.create<comb::MuxOp>(
+        delay_n.getLoc(), delay_eq_max, delay_max, delay_inc);
+
+    // Retrieve Parent module and look for a reset
+    hw::HWModuleOp parent = dyn_cast<hw::HWModuleOp>(ltlclock->getParentOp());
+    Value reset;
+
+    // Find reset
+    if (parent)
+      for (PortInfo &pi : parent.getPortList())
+        if (pi.getName() == "reset")
+          reset = parent.getArgumentForInput(pi.argNum);
+
+    // Sanity check: Enforce the existence of a reset
+    if (!reset) {
+      delay_n->emitError("Parent Module must have a reset argument!");
+      return false;
+    }
+
+    // Extract the actual clock
+    auto clock = rewriter.createOrFold<seq::ToClockOp>(delay_n.getLoc(),
+                                                       ltlclock.getClock());
+
+    // Create the actual register
+    delay_reg.setValue(rewriter.create<seq::CompRegOp>(
+        delay_n.getLoc(), delay_mux, clock, reset, constZero, llvm::StringRef(),
+        constZero));
+
+    // Previous register in the pipeline
+    Value a_i;
+
+    // Generate reset values
+    auto delayinputtype = delay_n.getInput().getType();
+    auto itype =
+        isa<IntegerType>(delayinputtype)
+            ? delayinputtype
+            : IntegerType::get(getContext(), hw::getBitWidth(delayinputtype));
+    Value resetVal =
+        rewriter.create<hw::ConstantOp>(delay_n.getLoc(), itype, 0);
+
+    // Create the first register in the pipeline
+    a_i = rewriter.create<seq::CompRegOp>(delay_n.getLoc(), delay_n.getInput(),
+                                          clock, reset, resetVal,
+                                          llvm::StringRef("_0"), resetVal);
+
+    // Create a pipeline of delay registers
+    for (size_t i = 1; i < delay_cycles; ++i)
+      a_i = rewriter.create<seq::CompRegOp>(delay_n.getLoc(), a_i, clock, reset,
+                                            resetVal, llvm::StringRef("_" + i),
+                                            resetVal);
+
+    // Generate the final assertion: assert(delay_reg < delay_max ||
+    // (a_i -> consequent) || reset)
+    Value cond_min = rewriter.create<comb::ICmpOp>(
+        delay_n.getLoc(),
+        comb::ICmpPredicateAttr::get(getContext(), comb::ICmpPredicate::ult),
+        delay_reg, delay_max, mlir::UnitAttr::get(getContext()));
+    Value constOne_ai =
+        rewriter.create<hw::ConstantOp>(delay_n.getLoc(), a_i.getType(), 1);
+    Value not_ai =
+        rewriter.create<comb::XorOp>(delay_n.getLoc(), a_i, constOne_ai);
+    Value impl_ai_consequent = rewriter.create<comb::OrOp>(
+        delay_n.getLoc(), not_ai, implop.getConsequent());
+    Value cond_lhs = rewriter.create<comb::OrOp>(delay_n.getLoc(), cond_min,
+                                                 impl_ai_consequent);
+
+    // Finally create the final assertion condition
+    rewriter.create<comb::OrOp>(delay_n.getLoc(), cond_lhs, reset);
+    return true;
   }
 
   // Special case : we want to detect the Non-overlapping implication
@@ -184,13 +265,19 @@ struct AssertOpConversionPattern : OpConversionPattern<verif::AssertOp> {
   // antecedent : ltl::concatOp || immediate predicate
   // consequent : any other non-sequence op
   // We want to support a ##n true |-> b and a |-> b
-  bool visit(ltl::ImplicationOp implop,
-             ConversionPatternRewriter &rewriter) const {
+  bool visit(ltl::ImplicationOp implop, ConversionPatternRewriter &rewriter,
+             ltl::ClockOp ltlclock) const {
+    // Sanity check: Make sure that a clock was found for the assertion that
+    // uses this implication
+    if (!ltlclock) {
+      implop->emitError("No clock was found associated to this sequence!");
+      return false;
+    }
+
     // Figure out what pattern we are in
     // a: Non-Overlapping Implication (NOI) or b: Overlapping Implication (OI)
     Operation *antecedent = implop.getAntecedent().getDefiningOp();
     Operation *consequent = implop.getConsequent().getDefiningOp();
-    auto i1 = rewriter.getI1Type();
 
     // Check that the consequent is legal (non-property type)
     bool isLegal =
@@ -235,12 +322,13 @@ struct AssertOpConversionPattern : OpConversionPattern<verif::AssertOp> {
         // Figure out what our NOI delay is
         auto delay_n = dyn_cast<ltl::DelayOp>(inputs.back().getDefiningOp());
         if (delay_n) {
-          // NOI case: We need to generate a register delaying our antecedent
-          // for each cycle in delay_n, as well as a register to count the
-          // delay, e.g. a ##n true |-> b would have the following assertion:
-          // assert(delay < n || (!a_n || b) || reset)
+          // NOI case: generate the hardware needed to encode the
+          // non-overlapping implication
+          if (!make_non_overlapping_implication(implop, delay_n, ltlclock,
+                                                concat, rewriter))
+            return false;
 
-          // TODO: Implement NOI case
+          rewriter.eraseOp(delay_n);
         } else {
           concat->emitError("Antecedent must be of the form a ##n true");
           return false;
@@ -251,6 +339,7 @@ struct AssertOpConversionPattern : OpConversionPattern<verif::AssertOp> {
         make_implication(implop.getLoc(), inputs.front(),
                          implop.getConsequent(), rewriter);
       }
+      rewriter.eraseOp(concat);
     } else {
       // OI case: simply generate an implication so
       // (or (not antecedant) consequent)
@@ -277,7 +366,7 @@ struct AssertOpConversionPattern : OpConversionPattern<verif::AssertOp> {
       bool isLegal =
           llvm::TypeSwitch<Operation *, bool>(cur_op)
               .Case<ltl::ImplicationOp>([&](auto implop) {
-                if (!visit(implop, rewriter)) {
+                if (!visit(implop, rewriter, ltlclock)) {
                   implop->emitError(
                       "Invalid implication format, only a ##n true |-> b or  a "
                       "|-> b are supported!");
