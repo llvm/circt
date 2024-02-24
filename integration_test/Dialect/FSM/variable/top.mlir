@@ -26,7 +26,7 @@ fsm.machine @top(%go: i1) -> (i16) attributes {initialState = "A"} {
     fsm.output %cnt : i16
   } transitions {
     fsm.transition @B guard {
-      fsm.return %go
+
     }
   }
 

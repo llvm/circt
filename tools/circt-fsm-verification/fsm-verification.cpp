@@ -21,16 +21,15 @@ using namespace z3;
  * @brief Prints solver assertions
 */
 void printSolverAssertions(z3::solver& solver) {
-  llvm::outs()<<"------------------------ SOLVER ------------------------"<<"\n";
+  llvm::outs()<<"---------------------------- SOLVER ----------------------------"<<"\n";
   llvm::outs()<<solver.to_smt2()<<"\n";
-
 
   llvm::outs()<<"------------------------ SOLVER RETURNS ------------------------"<<"\n";
   llvm::outs()<<solver.check()<<"\n";
-  llvm::outs()<<"------------------------ COUNTEREXAMPLE ------------------------"<<"\n";
+  llvm::outs()<<"--------------------------- INVARIANT --------------------------"<<"\n";
 
   llvm::outs()<<solver.get_model().to_string()<<"\n";
-  llvm::outs()<<"--------------------------------------------------------"<<"\n";
+  llvm::outs()<<"-------------------------- END -------------------------------"<<"\n";
 
 }
 
@@ -48,16 +47,8 @@ vector<mlir::Value> actionsCounter(Region& action){
 }
 
 /**
- * @brief Returns values from VariableOp operators
+ * @brief Returns expression from MyExprMap structure
 */
-// vector<mlir::Value> getVarValues(Operation &op){
-//   vector<mlir::Value> vec;
-//   op.walk([&](fsm::VariableOp v){
-//     vec.push_back(v.getResult());
-//   });
-//   return vec;
-// }
-
 expr findMyExpr(mlir::Value v, MyExprMap expr_map){
   int i=0;
   for(auto vl: expr_map.values){
@@ -172,27 +163,8 @@ expr getExpr(mlir::Value v, MyExprMap expr_map, z3::context& c){
   }
 }
 
-// expr getOutputExpr(MyExprMap expr_map, Region& out, z3::context& c){
-//     for(auto &op: out.getOps()){
-//     if (auto outop = dyn_cast<fsm::OutputOp>(op)){
-//       return findMyExpr(outop.getOperands()[0], expr_map); //expr_map.at(retop.getOperand());
-//     } 
-//     vector<expr> vec;
-//     for (auto operand: op.getOperands()){
-//       vec.push_back(getExpr(operand, expr_map, c));
-
-//     }
-
-//     expr_map.exprs.push_back(manage_comb_exp(op, vec, c));
-
-//     expr_map.values.push_back(op.getResult(0));  
-
-//     // expr_map.insert({op.getResult(0), manage_comb_exp(op, vec, c)});
-//   }
-// }
-
 /**
- * @brief Returns guard expression from corresponding region
+ * @brief Returns guard expression for input region
 */
 expr getGuardExpr(MyExprMap expr_map, Region& guard, z3::context& c){
 
@@ -212,25 +184,14 @@ expr getGuardExpr(MyExprMap expr_map, Region& guard, z3::context& c){
   return expr(c.bool_const("true"));
 }
 
-// input: region action, context, vector of values to update
-// output: vector of expressions to update
-
+/**
+ * @brief Returns actions for all expressions for the input region
+*/
 vector<expr> getActionExpr(Region& action, context& c, vector<mlir::Value>* to_update, MyExprMap expr_map){
-  // if(VERBOSE){
-  //   llvm::outs()<<"vb1\n";
-  //   llvm::outs()<<"\t\taction exprMap size "<<expr_map.values.size()<<"\n";
-  //   for(int i=0;i< expr_map.values.size();i++){
-  //     llvm::outs()<<"\t\tvalue "<<expr_map.values[i]<<"\n";
-  //     llvm::outs()<<"\t\texpr "<<expr_map.exprs[i].to_string()<<"\n";
-  //   }
-  // }
+
   vector<expr> updated_vec;
   for (auto v: *to_update){
-    // if(VERBOSE){
-    //   llvm::outs()<<"vb2\n";
 
-    //   llvm::outs()<<"\t\tupdating "<<v<<"\n";
-    // } 
     bool found = false;
       for(auto &op: action.getOps()){
         if(!found){
@@ -238,11 +199,7 @@ vector<expr> getActionExpr(Region& action, context& c, vector<mlir::Value>* to_u
             if(v == updateop.getOperands()[0]){
               updated_vec.push_back(getExpr(updateop.getOperands()[1], expr_map, c));
               found = true;
-    //           if(VERBOSE){
-    // llvm::outs()<<"vb3\n";
 
-    //             llvm::outs()<<"updated to "<<getExpr(updateop.getOperands()[1], expr_map, c).to_string()<<"\n";
-    //           }
             }
           } else {
             vector<expr> vec;
@@ -252,7 +209,6 @@ vector<expr> getActionExpr(Region& action, context& c, vector<mlir::Value>* to_u
             }
             expr_map.exprs.push_back(manage_comb_exp(op, vec, c));
             expr_map.values.push_back(op.getResult(0));
-            // expr_map.insert({op.getResult(0), manage_comb_exp(op, vec, c)});
           }
         }
 
@@ -264,6 +220,7 @@ vector<expr> getActionExpr(Region& action, context& c, vector<mlir::Value>* to_u
   }
   return updated_vec;
 }
+
 
 int populateArgs(Operation &mod, vector<mlir::Value> *vecVal, MyExprMap *varMap, z3::context &c){
   int numArgs = 0;
@@ -279,15 +236,8 @@ int populateArgs(Operation &mod, vector<mlir::Value> *vecVal, MyExprMap *varMap,
                     input = c.int_const(("arg"+to_string(numArgs)).c_str());
                   }
 
-                  if(VERBOSE){
-    llvm::outs()<<"vb4\n";
-                    
-                    llvm::outs()<<"inserting input "<<a<<"\n";
-                    llvm::outs()<<"mapped to "<<input.to_string()<<"\n";
-                  }
                   varMap->exprs.push_back(input);
                   varMap->values.push_back(a);
-                  // varMap->insert({a, input});
                   vecVal->push_back(a);
                   numArgs++;
                 }
@@ -328,12 +278,6 @@ void populateVars(Operation &mod, vector<mlir::Value>* vecVal, MyExprMap * varMa
                     // preserved keyword arg for arguments to avoid ambiguity when setting initial state values
                     varName = "var"+to_string(numArgs);
                     numArgs++;
-                  }
-                  if(VERBOSE){
-    llvm::outs()<<"vb5\n";
-
-                    llvm::outs()<<"inserting variable "<<varOp.getResult()<<"\n";
-                    llvm::outs()<<"mapped to "<<(varName+"_"+to_string(initValue)).c_str()<<"\n";
                   }
                   expr input = c.bool_const((varName+"_"+to_string(initValue)).c_str());
                   if(varOp.getResult().getType().getIntOrFloatBitWidth()>1){ 
@@ -417,47 +361,27 @@ void populateST(Operation &mod, context &c, MyStateInvMap* stateInvMap, MyStateI
                           vector<mlir::Value> to_update = actionsCounter(*trRegions[1]);
                           Region &r = *trRegions[1];
                           z3FunA a = [&r, vecVal, &c](vector<expr> vec) -> vector<expr> {
-                            vector<expr> vec_no_time = vec;
-                            expr time = vec_no_time[vec_no_time.size()-1];
-                            vec_no_time.pop_back();
+                            // vector<expr> vec_no_time = vec;
+                            // expr time = vec_no_time[vec_no_time.size()-1];
+                            // vec_no_time.pop_back();
                             MyExprMap expr_map_tmp;
-                            for(auto [value, expr]: llvm::zip(*vecVal, vec_no_time)){
+                            for(auto [value, expr]: llvm::zip(*vecVal, vec)){
                               expr_map_tmp.exprs.push_back(expr);
                               expr_map_tmp.values.push_back(value);
-                              // expr_map_tmp.insert({value, expr});
-    //                           if(VERBOSE){
-    // llvm::outs()<<"vb7\n";
 
-    //                             llvm::outs()<<"\tAC inserting "<<value<<"\n";
-    //                             llvm::outs()<<"\tAC mapped to "<<expr.to_string()<<"\n";
-    //                           }
                             }
 
-                            vector<expr> vec2 = getActionExpr(r, c, vecVal, expr_map_tmp); 
+                            return getActionExpr(r, c, vecVal, expr_map_tmp); 
 
-                            vec2.push_back(time);
+                            // vec2.push_back(time);
 
-                            return vec2;
+                            // return vec2;
                           };
                           t.action = a;
                           t.isAction = true;
                         }
 
-                        // if(existsOutput){
 
-                        //   t.isOutput = true;
-                        //   z3Fun o = [&outreg, vecVal, &c](vector<expr> vec) {
-                        //     MyExprMap expr_map_tmp;
-                        //     for(auto [value, expr]: llvm::zip(*vecVal, vec)){
-                        //       expr_map_tmp.exprs.push_back(expr);
-                        //       expr_map_tmp.values.push_back(value);
-                        //       // expr_map_tmp.insert({value, expr});
-                        //     }
-
-                        //     return getOutputExpr(expr_map_tmp, outreg, c);
-                        //   };
-                        //   t.output = o;
-                        // }
                         transitions->push_back(t);
                       }
                     }
@@ -507,8 +431,6 @@ void populateInvInput(MyExprMap *varMap, context &c, vector<expr> *solverVars, v
     }
     solverVars->push_back(input);
     if(VERBOSE){
-    llvm::outs()<<"vb8\n";
-
       llvm::outs()<<"solverVars now: "<<solverVars->at(i).to_string()<<"\n";
     }
     i++;
@@ -517,7 +439,6 @@ void populateInvInput(MyExprMap *varMap, context &c, vector<expr> *solverVars, v
 
 
 }
-
 
 void parse_fsm(string input_file){
 
@@ -545,6 +466,7 @@ void parse_fsm(string input_file){
   z3::context c;
 
   solver s(c);
+
 
   MyStateInvMap *stateInvMap = new MyStateInvMap();
 
@@ -602,11 +524,11 @@ void parse_fsm(string input_file){
 
   populateInvInput(varMap, c, solverVars, invInput);
 
-  expr time = c.int_const("time");
-  z3::sort timeInv = c.int_sort();
+  // expr time = c.int_const("time");
+  // z3::sort timeInv = c.int_sort();
   
-  solverVars->push_back(time);
-  invInput->push_back(timeInv);
+  // solverVars->push_back(time);
+  // invInput->push_back(timeInv);
 
   populateStateInvMap(stateInvMap, c, invInput, stateInvMap_fun);
 
@@ -619,89 +541,59 @@ void parse_fsm(string input_file){
   for (auto v: varMap->exprs){
     if(v.to_string().find("arg") == std::string::npos && solverVars->size() > 1 && strcmp(v.to_string().c_str(), "time")){
       int init_value = stoi(v.to_string().substr(v.to_string().find("_")+1));
-      // is this right?
       solverVarsInit->at(j) = c.int_val(init_value);
     }
     j++;
   }
 
-  solverVarsInit->at(solverVarsInit->size()-1) = c.int_val(0);
+  // solverVarsInit->at(solverVarsInit->size()-1) = c.int_val(0);
 
 
   // initialize time to 0
   expr body = findMyFun(transitions->at(0).from, stateInvMap_fun)(solverVarsInit->size(), solverVarsInit->data());
+  // initial condition
   s.add(nestedForall(*solverVars, body, 0));
 
   int time_bound = 100;
-
 
   vector<int> outputVec;
 
   for(auto t: *transitions){
 
     if(VERBOSE){
-    llvm::outs()<<"vb12\n";
-
       llvm::outs()<<"\n\n\ntransition from "<<t.from<<" to "<<t.to<<"\n";
     }
     vector<expr> *solverVarsAfter = new vector<expr>;
 
 
-    copy(solverVars->begin(), solverVars->end(), back_inserter(*solverVarsAfter));
-    solverVarsAfter->at(solverVarsAfter->size()-1) = solverVars->at(solverVars->size()-1)+1;
+    // copy(solverVars->begin(), solverVars->end(), back_inserter(*solverVarsAfter));
+    // solverVarsAfter->at(solverVarsAfter->size()-1) = solverVars->at(solverVars->size()-1)+1;
 
     if(t.isGuard && t.isAction){
-      expr body = implies(findMyFun(t.from, stateInvMap_fun)(solverVars->size(), solverVars->data()) && t.guard(*solverVars), findMyFun(t.to, stateInvMap_fun)(t.action(*solverVarsAfter).size(), t.action(*solverVarsAfter).data()));
-      s.add(forall(solverVars->at(solverVars->size()-1), implies(solverVars->at(solverVars->size()-1)<time_bound, nestedForall(*solverVars, body, 1))));
+      // expr body = implies(findMyFun(t.from, stateInvMap_fun)(solverVars->size(), solverVars->data()) && t.guard(*solverVars), findMyFun(t.to, stateInvMap_fun)(t.action(*solverVarsAfter).size(), t.action(*solverVarsAfter).data()));
+      // s.add((nestedForall(*solverVars, body, 1)));
     } 
     else if (t.isGuard){
-      expr body = implies((findMyFun(t.from, stateInvMap_fun)(solverVars->size(), solverVars->data()) && t.guard(*solverVars)), findMyFun(t.to, stateInvMap_fun)(solverVarsAfter->size(), solverVarsAfter->data()));
-      s.add(forall(solverVars->at(solverVars->size()-1), implies(solverVars->at(solverVars->size()-1)<time_bound, nestedForall(*solverVars, body, 1))));
+      // expr body = implies((findMyFun(t.from, stateInvMap_fun)(solverVars->size(), solverVars->data()) && t.guard(*solverVars)), findMyFun(t.to, stateInvMap_fun)(solverVarsAfter->size(), solverVarsAfter->data()));
+      // s.add((nestedForall(*solverVars, body, 1)));
 
     } else if (t.isAction){
-      // llvm::outs()<<"starting invariant: "<<findMyFun(t.from, stateInvMap_fun)(solverVars->size(), solverVars->data()).to_string()<<"\n";
-      // for(auto v: t.action(*solverVarsAfter)){
-      //   llvm::outs()<<"action var: "<<v.to_string()<<"\n";
-      // }
-      // llvm::outs()<<"arriving invariant: "<<findMyFun(t.to, stateInvMap_fun)(t.action(*solverVars).size(), t.action(*solverVars).data()).to_string()<<"\n";
-      expr body = implies(findMyFun(t.from, stateInvMap_fun)(solverVars->size(), solverVars->data()), findMyFun(t.to, stateInvMap_fun)(t.action(*solverVarsAfter).size(), t.action(*solverVarsAfter).data()));
-      s.add(forall(solverVars->at(solverVars->size()-1), implies(solverVars->at(solverVars->size()-1)<time_bound, nestedForall(*solverVars, body, 1))));
+
+      // expr body = implies(findMyFun(t.from, stateInvMap_fun)(solverVars->size(), solverVars->data()), findMyFun(t.to, stateInvMap_fun)(t.action(*solverVarsAfter).size(), t.action(*solverVarsAfter).data()));
+      // s.add((nestedForall(*solverVars, body, 1)));
 
     } else {
       expr body = implies((findMyFun(t.from, stateInvMap_fun)(solverVars->size(), solverVars->data())), findMyFun(t.to, stateInvMap_fun)(solverVarsAfter->size(), solverVarsAfter->data()));
-      s.add(forall(solverVars->at(solverVars->size()-1), implies(solverVars->at(solverVars->size()-1)<time_bound, nestedForall(*solverVars, body, 1))));
+      s.add((nestedForall(*solverVars, body, 1)));
 
     }
 
-    // if(t.isOutput){
-    //   model m = s.get_model();
-    //   outputVec.push_back(m.eval(t.output(*solverVars)));
-    //   // outputVec.push_back(t.output(*solverVars).to);
-    // }
   }
 
-  s.add(forall(solverVars->at(solverVars->size()-1), implies(solverVars->at(solverVars->size()-1)<time_bound, solverVars->at(solverVars->size()-1)!=solverVars->at(0))));
-  
+  // state 0 is followed by state 1
+  // s.add(forall(solverVars->at(solverVars->size()-1), implies(solverVars->at(solverVars->size()-1)<time_bound,       ); 
 
-  // expr assertion = implies((findMyFun(transitions->at(0).to, stateInvMap_fun)(solverVars->at(0), solverVars->at(1)) && solverVars->at(1)>5), false);
-
-
-  // s.add(nestedForall(*solverVars, assertion, 0));
-
-
-
-    printSolverAssertions(s);
-    // llvm::outs()<<"outputVec size "<<outputVec.size()<<"\n";
-    // for(auto o: outputVec){
-    //   llvm::outs()<<"output "<<o<<"\n";
-    // }
-
-
-
-
-
-
-
+  printSolverAssertions(s);
 
 }
 
@@ -716,3 +608,4 @@ int main(int argc, char **argv){
   return 0;
 
 }
+
