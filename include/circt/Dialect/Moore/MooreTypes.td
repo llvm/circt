@@ -14,9 +14,14 @@
 #define CIRCT_DIALECT_MOORE_MOORETYPES
 
 include "circt/Dialect/Moore/MooreDialect.td"
+include "mlir/IR/AttrTypeBase.td"
+include "mlir/IR/EnumAttr.td"
+
 
 class MooreType<Pred condition, string description, string cppClassName>
   : DialectType<MooreDialect, condition, description, cppClassName>;
+
+class MooreTypeDef<string name> : TypeDef<MooreDialect, name> { }
 
 def PackedType : MooreType<CPred<"$_self.isa<moore::PackedType>()">,
   "packed type", "moore::PackedType">;
@@ -40,6 +45,18 @@ def MooreIntType : MooreType<CPred<"$_self.isa<moore::IntType>()">,
 //===----------------------------------------------------------------------===//
 // LValue / RValue predicates
 //===----------------------------------------------------------------------===//
+
+def LValueTypeImpl : MooreTypeDef<"LValue"> {
+  let mnemonic = "lvalue";
+  let parameters = (ins "::mlir::Type":$nestedType);
+  let assemblyFormat = "`<` $nestedType `>`";
+
+  let builders = [
+    AttrBuilderWithInferredContext<(ins "::mlir::Type":$nestedType), [{
+      return $_get(nestedType.getContext(), nestedType);
+    }]>
+  ];
+}
 
 class MooreLValueTypeOf<list<Type> allowedTypes>
   : ContainerType<AnyTypeOf<allowedTypes>,
