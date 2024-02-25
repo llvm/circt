@@ -96,9 +96,10 @@ void testImportAnnotations(MlirContext ctx) {
     \"target\":\"~AnnoTest|AnnoTest>in\"\
   }]";
   MlirAttribute rawAnnotationsAttr;
-  assert(firrtlImportAnnotationsFromJSONRaw(
+  bool succeeded = firrtlImportAnnotationsFromJSONRaw(
       ctx, mlirStringRefCreateFromCString(rawAnnotationsJSON),
-      &rawAnnotationsAttr));
+      &rawAnnotationsAttr);
+  assert(succeeded);
   mlirOperationSetAttributeByName(
       firCircuit, mlirStringRefCreateFromCString("rawAnnotations"),
       rawAnnotationsAttr);
