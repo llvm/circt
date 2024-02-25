@@ -20,9 +20,33 @@ endmodule
 
 // -----
 
-module Baz;
+module Foo;
   mailbox a;
   string b;
   // expected-error @below {{value of type 'string' cannot be assigned to type 'mailbox'}}
   initial a = b;
+endmodule
+
+// -----
+
+module Foo;
+  // expected-error @below {{unsupported construct}}
+  genvar a;
+endmodule
+
+// -----
+
+module Foo(
+  // expected-error @below {{unsupported module port}}
+  input a
+);
+endmodule
+
+// -----
+
+// expected-error @below {{unsupported construct}}
+package Foo;
+endpackage
+
+module Bar;
 endmodule

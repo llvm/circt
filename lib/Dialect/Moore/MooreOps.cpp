@@ -17,6 +17,26 @@ using namespace circt;
 using namespace circt::moore;
 
 //===----------------------------------------------------------------------===//
+// InstanceOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto *module =
+      symbolTable.lookupNearestSymbolFrom(*this, getModuleNameAttr());
+  if (module == nullptr)
+    return emitError("unknown symbol name '") << getModuleName() << "'";
+
+  // It must be some sort of module.
+  if (!isa<SVModuleOp>(module))
+    return emitError("symbol '")
+           << getModuleName()
+           << "' must reference a 'moore.module', but got a '"
+           << module->getName() << "' instead";
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // ConcatOp
 //===----------------------------------------------------------------------===//
 
