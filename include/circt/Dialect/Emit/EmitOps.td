@@ -50,8 +50,12 @@ def FileOp : EmitOp<"file", [
     // insertion point of the builder is moved inside the body of the file op.
     OpBuilder<(ins "StringRef":$fileName, "StringRef":$symName,
                     CArg<"llvm::function_ref<void()>">:$bodyCtor)>,
-    OpBuilder<(ins "StringRef":$fileName,
+    OpBuilder<(ins "StringAttr":$fileName,
                     CArg<"llvm::function_ref<void()>">:$bodyCtor)>,
+    OpBuilder<(ins "StringRef":$fileName,
+                    CArg<"llvm::function_ref<void()>">:$bodyCtor), [{
+      return build($_builder, $_state, $_builder.getStringAttr(fileName), bodyCtor);
+    }]>
   ];
 
   let extraClassDeclaration = [{

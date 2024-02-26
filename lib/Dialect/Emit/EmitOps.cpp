@@ -36,12 +36,11 @@ void FileOp::build(OpBuilder &builder, OperationState &result,
 }
 
 void FileOp::build(OpBuilder &builder, OperationState &result,
-                   StringRef fileName, llvm::function_ref<void()> bodyCtor) {
-  MLIRContext *context = builder.getContext();
+                   StringAttr fileName, llvm::function_ref<void()> bodyCtor) {
   OpBuilder::InsertionGuard guard(builder);
 
   auto &props = result.getOrAddProperties<Properties>();
-  props.file_name = StringAttr::get(context, fileName);
+  props.file_name = fileName;
 
   builder.createBlock(result.addRegion());
   if (bodyCtor)
