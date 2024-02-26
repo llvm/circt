@@ -499,6 +499,27 @@ else()
 endif()
 
 #-------------------------------------------------------------------------------
+# Z3 Configuration (for integration tests to check SMT-LIB export)
+#-------------------------------------------------------------------------------
+
+# If z3 hasn't been explicitly disabled, find it.
+option(Z3_DISABLE "Disable the z3 tests.")
+if (Z3_DISABLE)
+  message(STATUS "Disabling tests requiring z3.")
+else()
+  # Search for the `z3` command.
+  find_program(Z3_PATH "z3")
+  if(EXISTS ${Z3_PATH})
+    # Then strip the filename.
+    get_filename_component(Z3_PATH ${Z3_PATH} DIRECTORY)
+    message(STATUS "Found z3 at ${Z3_PATH}.")
+  else()
+    set(Z3_PATH "")
+    message(STATUS "Did NOT find z3.")
+  endif()
+endif()
+
+#-------------------------------------------------------------------------------
 # Python Configuration
 #-------------------------------------------------------------------------------
 

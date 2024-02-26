@@ -201,6 +201,12 @@ if config.lec_enabled != "":
   config.available_features.add('circt-lec')
   tools.append('circt-lec')
 
+# Enable z3 if it has been detected.
+if config.z3_path != "":
+  tool_dirs.append(config.z3_path)
+  tools.append('z3')
+  config.available_features.add('z3')
+
 # Add circt-verilog if the Slang frontend is enabled.
 if config.slang_frontend_enabled:
   config.available_features.add('slang')

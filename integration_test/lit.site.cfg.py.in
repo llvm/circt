@@ -53,6 +53,7 @@ config.esi_runtime_path = "@ESIRuntimePath@"
 config.bindings_python_enabled = @CIRCT_BINDINGS_PYTHON_ENABLED@
 config.bindings_tcl_enabled = @CIRCT_BINDINGS_TCL_ENABLED@
 config.lec_enabled = "@CIRCT_LEC_ENABLED@"
+config.z3_path = "@Z3_PATH@"
 config.slang_frontend_enabled = "@CIRCT_SLANG_FRONTEND_ENABLED@"
 config.arcilator_jit_enabled = @ARCILATOR_JIT_ENABLED@
 config.driver = "@CIRCT_SOURCE_DIR@/tools/circt-rtl-sim/driver.cpp"
