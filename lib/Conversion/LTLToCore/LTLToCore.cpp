@@ -129,12 +129,12 @@ struct HasBeenResetOpConversion : OpConversionPattern<verif::HasBeenResetOp> {
 struct AssertOpConversionPattern : OpConversionPattern<verif::AssertOp> {
   using OpConversionPattern<verif::AssertOp>::OpConversionPattern;
 
-  void visit(ltl::DisableOp op, ConversionPatternRewriter &rewriter) const {
+  Value visit(ltl::DisableOp op, ConversionPatternRewriter &rewriter) const {
     // Replace the ltl::DisableOp with an OR op as it represents a disabling
     // implication: (implies (not condition) input) is equivalent to
     // (or (not (not condition)) input) which becomes (or condition input)
-    rewriter.replaceOpWithNewOp<comb::OrOp>(op, op.getCondition(),
-                                            op.getInput());
+    return rewriter.replaceOpWithNewOp<comb::OrOp>(op, op.getCondition(),
+                                                   op.getInput());
   }
 
   // Creates and returns a logical implication:
@@ -356,6 +356,7 @@ struct AssertOpConversionPattern : OpConversionPattern<verif::AssertOp> {
 
     Operation *cur_op, *next_op;
     ltl::ClockOp ltlclock;
+    Value disableOp;
 
     // Start with the assertion's operand
     cur_op = adaptor.getProperty().getDefiningOp();
@@ -376,7 +377,7 @@ struct AssertOpConversionPattern : OpConversionPattern<verif::AssertOp> {
                 return true;
               })
               .Case<ltl::DisableOp>([&](auto disable) {
-                visit(disable, rewriter);
+                disableOp = visit(disable, rewriter);
                 next_op = disable.getInput().getDefiningOp();
                 return true;
               })
@@ -398,7 +399,7 @@ struct AssertOpConversionPattern : OpConversionPattern<verif::AssertOp> {
               });
       if (!isLegal)
         return rewriter.notifyMatchFailure(op,
-                                           " Current operatioj is invalid!");
+                                           " Current operation is invalid!");
 
       // Go to the next operation
       cur_op = next_op;
@@ -409,6 +410,10 @@ struct AssertOpConversionPattern : OpConversionPattern<verif::AssertOp> {
       return rewriter.notifyMatchFailure(
           op, "verif.assert property is not associated to a clock! ");
 
+    if (!disableOp)
+      return rewriter.notifyMatchFailure(
+          op, "verif.assert property is not properly disabled! ");
+
     // Generate the parenting sv.always posedge clock from the ltl
     // clock, containing the generated sv.assert
     rewriter.create<sv::AlwaysOp>(
@@ -416,15 +421,14 @@ struct AssertOpConversionPattern : OpConversionPattern<verif::AssertOp> {
         ltlclock.getClock(), [&] {
           // Generate the sv assertion using the input to the
           // parenting clock
-          rewriter.create<sv::AssertOp>(
-              op.getLoc(), ltlclock.getInput(),
+          rewriter.replaceOpWithNewOp<sv::AssertOp>(
+              op, disableOp,
               sv::DeferAssertAttr::get(getContext(),
                                        sv::DeferAssert::Immediate),
               op.getLabelAttr());
         });
 
     rewriter.eraseOp(ltlclock);
-    rewriter.eraseOp(op);
 
     return success();
   }
@@ -510,8 +514,7 @@ void LowerLTLToCorePass::runOnOperation() {
   target.addLegalDialect<comb::CombDialect>();
   target.addLegalDialect<sv::SVDialect>();
   target.addLegalDialect<seq::SeqDialect>();
-  target.addIllegalDialect<ltl::LTLDialect>();
-  target.addLegalOp<ltl::ClockOp>();
+  target.addLegalDialect<ltl::LTLDialect>();
   target.addIllegalDialect<verif::VerifDialect>();
 
   // Create type converters, mostly just to convert an ltl property to a bool
