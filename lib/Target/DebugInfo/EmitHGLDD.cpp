@@ -641,43 +641,20 @@ EmittedExpr FileEmitter::emitExpression(Value value) {
   auto result = cast<OpResult>(value);
   auto *op = result.getOwner();
 
-  // If the operation has only this one result and is named in some form, use
-  // that name.
-  if (op->getNumResults() == 1) {
-    // If a `hw.verilogName` is available, emit the value as just a reference to
-    // that name.
+  // If this is a combinational operation, and it produces a single result, and
+  // it has a `hw.verilogName` associated with it, use that name.
+  if (op->getNumResults() == 1 && isa<comb::CombDialect>(op->getDialect()))
     if (auto name = op->getAttrOfType<StringAttr>("hw.verilogName");
         name && !name.empty())
       return {hglddSigName(name), result.getType()};
 
-    // Use the "name" attribute of certain Verilog-visible ops directly.
-    if (auto name = op->getAttrOfType<StringAttr>("name");
-        name && !name.empty() &&
-        isa<hw::WireOp, sv::WireOp, sv::RegOp, sv::LogicOp>(op))
+  // If the operation is a named signal in the output Verilog, use that name.
+  if (isa<hw::WireOp, sv::WireOp, sv::RegOp, sv::LogicOp>(op)) {
+    auto name = op->getAttrOfType<StringAttr>("hw.verilogName");
+    if (!name || name.empty())
+      name = op->getAttrOfType<StringAttr>("name");
+    if (name && !name.empty())
       return {hglddSigName(name), result.getType()};
-  }
-
-  // Emit references to instance ports as `<instName>.<portName>`.
-  if (auto instOp = dyn_cast<hw::InstanceOp>(op)) {
-    auto instName = instOp->getAttrOfType<StringAttr>("hw.verilogName");
-    if (!instName)
-      instName = instOp.getInstanceNameAttr();
-    if (!instName)
-      return {};
-    auto *moduleOp =
-        symbolCache->getDefinition(instOp.getReferencedModuleNameAttr());
-    auto portName =
-        cast<hw::HWModuleLike>(moduleOp)
-            .getPort(instOp.getPortIdForOutputId(result.getResultNumber()))
-            .getVerilogName();
-    if (portName.empty())
-      return {};
-    auto inner = hglddSigName(instName);
-    return {JObject({
-                {"var_ref", std::move(inner)},
-                {"field", portName},
-            }),
-            result.getType()};
   }
 
   // Emit constants directly.
@@ -902,6 +879,30 @@ EmittedExpr FileEmitter::emitExpression(Value value) {
       return {};
     return {hglddOperator("?:", {cond.expr, lhs.expr, rhs.expr}),
             muxOp.getType()};
+  }
+
+  // As a last resort, look for any named wire-like ops this value feeds into.
+  // This is useful for instance output ports for example since we cannot access
+  // instance ports as `<instName>.<portName>` in HGLDD. Instead, we look for a
+  // wire hooked up to the instance output, which is very likely to be present
+  // after Verilog emission.
+  for (auto &use : result.getUses()) {
+    auto *user = use.getOwner();
+    // Use name of `hw.wire` that carries this value.
+    if (auto wireOp = dyn_cast<hw::WireOp>(user))
+      if (wireOp.getInput() == result)
+        return emitExpression(wireOp);
+    // Use name of `sv.assign` destination that is assigned this value.
+    if (auto assignOp = dyn_cast<sv::AssignOp>(user))
+      if (assignOp.getSrc() == result)
+        return emitExpression(assignOp.getDest());
+    // Use module output port name that carries this value.
+    if (isa<hw::OutputOp>(user)) {
+      auto mod = cast<hw::HWModuleLike>(user->getParentOp());
+      auto modType = mod.getHWModuleType();
+      auto portName = modType.getOutputName(use.getOperandNumber());
+      return {hglddSigName(portName), result.getType()};
+    }
   }
 
   return {};
