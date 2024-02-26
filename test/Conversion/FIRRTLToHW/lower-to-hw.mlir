@@ -1572,3 +1572,34 @@ firrtl.circuit "PortSym" {
     %0 = firrtl.eq %out, %c1_ui5 : (!firrtl.uint<5>, !firrtl.uint<5>) -> !firrtl.uint<1>
   }
 }
+
+// -----
+
+// Test various aspects of output file behavior.
+
+firrtl.circuit "Directories" attributes {
+  annotations = [
+    {
+      class = "sifive.enterprise.firrtl.TestBenchDirAnnotation",
+      dirname = "testbench"
+    }
+  ]
+} {
+  // CHECK-LABEL: hw.module private @Directories_A
+  // CHECK-SAME:    output_file = #hw.output_file<"hello/"
+  firrtl.module private @Directories_A() attributes {
+    output_file = #hw.output_file<"hello/", excludeFromFileList>
+  } {}
+  firrtl.module private @DUT() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.firrtl.MarkDUTAnnotation"
+      }
+    ]
+  } {
+  }
+  firrtl.module @Directories() {
+    firrtl.instance dut @DUT()
+    firrtl.instance dut_A @Directories_A()
+  }
+}

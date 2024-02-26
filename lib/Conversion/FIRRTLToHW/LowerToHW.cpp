@@ -1073,9 +1073,11 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
     newModule->setAttr("firrtl.extract.cover.extra", builder.getUnitAttr());
 
   // If this is in the test harness, make sure it goes to the test directory.
+  // Do not update output file information if it is already present.
   if (auto testBenchDir = loweringState.getTestBenchDirectory())
     if (loweringState.isInTestHarness(oldModule)) {
-      newModule->setAttr("output_file", testBenchDir);
+      if (!newModule->hasAttr("output_file"))
+        newModule->setAttr("output_file", testBenchDir);
       newModule->setAttr("firrtl.extract.do_not_extract",
                          builder.getUnitAttr());
       newModule.setCommentAttr(
