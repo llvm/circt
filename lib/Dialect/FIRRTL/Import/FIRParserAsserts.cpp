@@ -222,18 +222,18 @@ parseAssertionFormat(const ExtractionSummaryCursor<StringRef> &ex) {
 /// Depending on the nature the verification operation, the `stop` may be
 /// optional. The Scala implementation simply removes all `stop`s that have the
 /// same condition as the printf.
-ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
+FailureOr<bool> circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
   auto *context = printOp.getContext();
   auto whenStmt = dyn_cast<WhenOp>(printOp->getParentOp());
 
   // If the parent of printOp is not when, printOp doesn't encode a
   // verification.
   if (!whenStmt)
-    return success();
+    return false;
 
   // The when blocks we're interested in don't have an else region.
   if (whenStmt.hasElseRegion())
-    return success();
+    return false;
 
   // The when blocks we're interested in contain a `PrintFOp` and an optional
   // `StopOp` with the same clock and condition as the print.
@@ -262,7 +262,7 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
   else if (fmt.starts_with("Assertion failed"))
     flavor = VerifFlavor::ChiselAssert;
   else
-    return success();
+    return false;
 
   // optional `stop(clock, enable, ...)`
   //
@@ -277,7 +277,7 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
     auto stopOp = dyn_cast<StopOp>(*opIt++);
     if (!stopOp || opIt != opEnd || stopOp.getClock() != printOp.getClock() ||
         stopOp.getCond() != printOp.getCond())
-      return success();
+      return false;
     stopOp.erase();
   }
 
@@ -403,7 +403,8 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
     if (flavor == VerifFlavor::AssertNotX) {
       label = "notX";
       if (printOp.getSubstitutions().size() != 1) {
-        printOp.emitError("printf-encoded assertNotX requires one operand");
+        return printOp.emitError(
+            "printf-encoded assertNotX requires one operand");
         return failure();
       }
       // Construct a `!whenCond | (^value !== 1'bx)` predicate.
@@ -617,5 +618,5 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
   // Clean up the `WhenOp` if it has become completely empty.
   if (thenBlock.empty())
     whenStmt.erase();
-  return success();
+  return true;
 }
