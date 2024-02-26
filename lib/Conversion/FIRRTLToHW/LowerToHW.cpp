@@ -243,6 +243,18 @@ struct CircuitLoweringState {
     } else if (dut == testHarness) {
       testHarness = nullptr;
     }
+
+    // Pre-populate the dutModules member with a list of all modules that are
+    // determined to be under the DUT.
+    auto inDUT = [&](igraph::ModuleOpInterface child) {
+      if (auto parent = dyn_cast<igraph::ModuleOpInterface>(*dut))
+        return getInstanceGraph().isAncestor(child, parent);
+      return dut == child;
+    };
+    circuitOp->walk([&](FModuleLike moduleOp) {
+      if (inDUT(moduleOp))
+        dutModules.insert(moduleOp);
+    });
   }
 
   Operation *getNewModule(Operation *oldModule) {
@@ -282,9 +294,7 @@ struct CircuitLoweringState {
   // Return true if this module is the DUT or is instantiated by the DUT.
   // Returns false if the module is not instantiated by the DUT.
   bool isInDUT(igraph::ModuleOpInterface child) {
-    if (auto parent = dyn_cast<igraph::ModuleOpInterface>(*dut))
-      return getInstanceGraph().isAncestor(child, parent);
-    return dut == child;
+    return dutModules.contains(child);
   }
 
   hw::OutputFileAttr getTestBenchDirectory() { return testBenchDirectory; }
@@ -318,6 +328,13 @@ private:
   /// Cache of module symbols.  We need to test hirarchy-based properties to
   /// lower annotaitons.
   InstanceGraph &instanceGraph;
+
+  /// The set of modules that are instantiated under the DUT.  This is
+  /// precomputed as a module being under the DUT may rely on knowledge of
+  /// properties of the instance and is not suitable for querying in the
+  /// parallel execution region of this pass when the backing instances may
+  /// already be erased.
+  DenseSet<igraph::ModuleOpInterface> dutModules;
 
   // Record the set of remaining annotation classes. This is used to warn only
   // once about any annotation class.
