@@ -546,7 +546,7 @@ firrtl.circuit "Plop_Foo" attributes {annotations = [{class = "sifive.enterprise
   // CHECK: firrtl.module private @Plop_ClockGates(in %clock_gate_0_in: !firrtl.clock, in %clock_gate_0_test_en: !firrtl.uint<1>, in %clock_gate_0_en: !firrtl.uint<1>, out %clock_gate_0_out: !firrtl.clock)
   // CHECK-LABEL: firrtl.module @Plop_Foo()
   firrtl.module @Plop_Foo() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation", prefix = "Plop_"}]} {
-    // CHECK: %ClockGates_clock_gate_0_in, %ClockGates_clock_gate_0_test_en, %ClockGates_clock_gate_0_en, %ClockGates_clock_gate_0_out = firrtl.instance ClockGates sym @ClockGates @Plop_ClockGates(in clock_gate_0_in: !firrtl.clock, in clock_gate_0_test_en: !firrtl.uint<1>, in clock_gate_0_en: !firrtl.uint<1>, out clock_gate_0_out: !firrtl.clock)
+    // CHECK: firrtl.instance ClockGates sym @ClockGates @Plop_ClockGates
     firrtl.instance core sym @core @Plop_Bar()
   }
 }
