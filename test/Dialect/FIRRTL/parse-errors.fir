@@ -1368,3 +1368,9 @@ circuit AbstractResetPublic:
   module AbstractResetPublic:
     ; expected-error @below {{public module port must have concrete reset type}}
     input r: Reset
+
+;// -----
+FIRRTL version 4.0.0
+circuit PrivateMainModule:
+  ; expected-error @below {{private main modules were removed in FIRRTL 4.0.0}}
+  module PrivateMainModule:
