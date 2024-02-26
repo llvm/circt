@@ -218,3 +218,19 @@ firrtl.circuit "NonConstantAsyncReset_Aggregate1" {
     %r0 = firrtl.regreset %clock, %reset, %value : !firrtl.clock, !firrtl.asyncreset, !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
   }
 }
+
+// -----
+
+// CHECK-LABEL: "WalksNestedRegions"
+firrtl.circuit "WalksNestedRegions" {
+  firrtl.module @WalksNestedRegions(in %a: !firrtl.uint<1>) {
+    // CHECK: firrtl.when
+    firrtl.when %a : !firrtl.uint<1> {
+      // CHECK-NOT: firrtl.invalidvalue
+      // CHECK-NEXT: %[[zero:[_A-Za-z0-9]+]] = firrtl.constant 0
+      %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
+      // CHECK-NEXT: %0 = firrtl.node %[[zero]]
+      %0 = firrtl.node %invalid_ui1 : !firrtl.uint<1>
+    }
+  }
+}

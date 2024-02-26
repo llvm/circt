@@ -56,7 +56,7 @@ class Cosim_MMIO(Module):
   bresp = Input(Bits(2))
 
 
-def CosimBSP(user_module):
+def CosimBSP(user_module: Module) -> Module:
   """Wrap and return a cosimulation 'board support package' containing
   'user_module'"""
 

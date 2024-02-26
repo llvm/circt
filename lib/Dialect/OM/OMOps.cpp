@@ -546,6 +546,32 @@ IntegerAddOp::evaluateIntegerOperation(const llvm::APSInt &lhs,
 }
 
 //===----------------------------------------------------------------------===//
+// IntegerMulOp
+//===----------------------------------------------------------------------===//
+
+FailureOr<llvm::APSInt>
+IntegerMulOp::evaluateIntegerOperation(const llvm::APSInt &lhs,
+                                       const llvm::APSInt &rhs) {
+  return success(lhs * rhs);
+}
+
+//===----------------------------------------------------------------------===//
+// IntegerShrOp
+//===----------------------------------------------------------------------===//
+
+FailureOr<llvm::APSInt>
+IntegerShrOp::evaluateIntegerOperation(const llvm::APSInt &lhs,
+                                       const llvm::APSInt &rhs) {
+  // Check non-negative constraint from operation semantics.
+  if (!rhs.isNonNegative())
+    return emitOpError("shift amount must be non-negative");
+  // Check size constraint from implementation detail of using getExtValue.
+  if (!rhs.isRepresentableByInt64())
+    return emitOpError("shift amount must be representable in 64 bits");
+  return success(lhs >> rhs.getExtValue());
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 

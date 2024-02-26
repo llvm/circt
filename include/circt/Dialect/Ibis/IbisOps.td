@@ -568,52 +568,76 @@ def ThisOp : IbisOp<"this", [
 // Low-level Ibis operations
 // ===---------------------------------------------------------------------===//
 
-def ContainerOp : IbisOp<"container", [
-  Symbol,
-  // TODO: @mortbopet: ContainerOp should be an innersymbol table (or equivalent)
-  // whenever we figure out how to support nested symbol tables...
-  // InnerSymbolTable
+class ContainerOp<string mnemonic, list<Trait> traits> : IbisOp<mnemonic,
+  traits # [
+  ContainerOpInterface,
   SingleBlock,
   NoTerminator, NoRegionArguments,
-  ScopeOpInterface, IsolatedFromAbove,
+  IsolatedFromAbove,
   InstanceGraphModuleOpInterface,
   RegionKindInterface
 ]> {
   let summary = "Ibis container";
   let description = [{
-    An ibis container describes a collection of logic nested within an Ibis class.
+    An ibis container describes a collection of logic nested within an Ibis
+    class. We have two container types (ops): one for the outermost containers
+    and one for the nested containers (inner). The outer container is a symbol
+    and sits in the symbol table at the top level. So as to not violate the
+    symbol table rules, the inner container is an InnerSymbol and is contained
+    in the InnerSymbolTable that the outer container defines.
   }];
 
-  let arguments = (ins SymbolNameAttr:$sym_name);
   let regions = (region SizedRegion<1>:$body);
 
+  code extraContainerClassDeclaration = [{}];
+  let extraClassDeclaration = extraContainerClassDeclaration # [{
+    // Implement RegionKindInterface.
+    static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
+  }];
+
+  let skipDefaultBuilders = 1;
+}
+
+def OuterContainerOp : ContainerOp<"container.outer", [
+  Symbol, InnerSymbolTable, ScopeOpInterface]> {
+  let arguments = (ins SymbolNameAttr:$sym_name);
   let assemblyFormat = [{
     $sym_name attr-dict-with-keyword $body
   }];
 
-  let extraClassDeclaration = [{
-    // Implement RegionKindInterface.
-    static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
+  let builders = [
+    OpBuilder<(ins "StringAttr":$symbol), [{
+      auto region = $_state.addRegion();
+      region->push_back(new Block());
+      $_state.addAttribute(getSymNameAttrName($_state.name), symbol);
+    }]>
+  ];
+}
 
-    Block* getBodyBlock() { return &getBody().front(); }
 
+def InnerContainerOp : ContainerOp<"container.inner", [
+  DeclareOpInterfaceMethods<InnerSymbol>]> {
+  let arguments = (ins InnerSymAttr:$inner_sym);
+  let assemblyFormat = [{
+    $inner_sym attr-dict-with-keyword $body
+  }];
+
+  let builders = [
+    OpBuilder<(ins "::circt::hw::InnerSymAttr":$symbol), [{
+      auto region = $_state.addRegion();
+      region->push_back(new Block());
+      $_state.addAttribute(getInnerSymAttrName($_state.name), symbol);
+    }]>
+  ];
+
+  let extraContainerClassDeclaration = [{
+    StringAttr getSymNameAttr() {
+      return getInnerSymAttr().getSymName();
+    }
     StringAttr getModuleNameAttr() {
       return getSymNameAttr();
     }
-
-    llvm::StringRef getModuleName() {
-      return getSymName();
-    }
   }];
-
-  let skipDefaultBuilders = 1;
-  let builders = [
-    OpBuilder<(ins "StringAttr":$name), [{
-      auto region = $_state.addRegion();
-      region->push_back(new Block());
-      $_state.addAttribute(getSymNameAttrName($_state.name), name);
-    }]>
-  ];
 }
 
 def ContainerInstanceOp : InstanceOpBase<"container.instance"> {
@@ -624,7 +648,7 @@ def ContainerInstanceOp : InstanceOpBase<"container.instance"> {
 
   let extraInstanceClassDeclaration = [{
     // Return the container this instance is instantiating.
-    ContainerOp getContainer(const SymbolTable* symbolTable = nullptr);
+    ContainerOpInterface getContainer(const SymbolTable* symbolTable = nullptr);
 
     Operation* getReferencedModuleSlow();
     Operation* getReferencedModule(const SymbolTable&);
@@ -694,7 +718,7 @@ def GetPortOp : IbisOp<"get_port", [
 class PortLikeOp<string mnemonic, list<Trait> traits = []> :
     IbisOp<mnemonic, !listconcat(traits, [
       PortOpInterface,
-      ParentOneOf<["ClassOp", "ContainerOp"]>,
+      ParentOneOf<["ClassOp", "OuterContainerOp", "InnerContainerOp"]>,
       InferTypeOpInterface,
       HasCustomSSAName,
       DeclareOpInterfaceMethods<InnerSymbol,["getTargetResultIndex"]>
@@ -775,7 +799,7 @@ def OutputPortOp : PortLikeOp<"port.output"> {
 class WireLikeOp<string mnemonic, list<Trait> traits = []> :
     IbisOp<mnemonic, !listconcat(traits, [
       PortOpInterface,
-      ParentOneOf<["ClassOp", "ContainerOp"]>,
+      ParentOneOf<["ClassOp", "OuterContainerOp", "InnerContainerOp"]>,
       HasCustomSSAName,
       DeclareOpInterfaceMethods<InnerSymbol,["getTargetResultIndex"]>
   ])> {

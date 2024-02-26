@@ -47,7 +47,7 @@ circuit ChiselVerif:
     parameter label = "label for cover"
 
   ; CHECK: module ChiselVerif
-  module ChiselVerif:
+  public module ChiselVerif:
     input clock: Clock
     input cond: UInt<1>
     input enable: UInt<1>

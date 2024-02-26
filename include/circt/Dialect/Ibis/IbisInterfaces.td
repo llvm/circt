@@ -168,4 +168,42 @@ def MethodLikeOpInterface : OpInterface<"MethodLikeOpInterface"> {
   }];
 }
 
+def ContainerOpInterface : OpInterface<"ContainerOpInterface"> {
+  let cppNamespace = "circt::ibis";
+  let description = [{
+    An interface for Ibis operations that contain other operations.
+  }];
+
+  let methods = [
+    InterfaceMethod<
+      "Returns the body of the container",
+      "mlir::Block*", "getBodyBlock",
+      (ins), [{}], /*defaultImplementation=*/ [{
+        return &$_op.getBody().front();
+      }]
+    >,
+    InterfaceMethod<
+      "Returns the symbol name",
+      "StringAttr", "getSymNameAttr",
+      (ins), [{
+        return $_op.getSymNameAttr();
+      }]
+    >,
+    InterfaceMethod<
+      "Returns the module name as a string attribute",
+      "StringAttr", "getModuleNameAttr",
+      (ins), [{
+        return $_op.getModuleNameAttr();
+      }]
+    >,
+    InterfaceMethod<
+      "Returns the module name",
+      "StringRef", "getModuleName",
+      (ins), [{
+        return $_op.getModuleNameAttr().getValue();
+      }]
+    >
+  ];
+}
+
 #endif // CIRCT_DIALECT_IBIS_INTERFACES_TD

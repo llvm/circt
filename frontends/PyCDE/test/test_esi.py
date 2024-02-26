@@ -1,17 +1,16 @@
 # RUN: rm -rf %t
 # RUN: %PYTHON% %s %t 2>&1 | FileCheck %s
 
-from pycde import (Clock, Input, InputChannel, OutputChannel, Module, System,
-                   generator, types)
+from pycde import (Clock, Input, InputChannel, OutputChannel, Module, generator,
+                   types)
 from pycde import esi
-from pycde.common import AppID, Output, RecvBundle, SendBundle
+from pycde.common import AppID, RecvBundle, SendBundle
 from pycde.constructs import Wire
 from pycde.esi import MMIO
 from pycde.module import Metadata
 from pycde.types import (Bits, Bundle, BundledChannel, Channel,
-                         ChannelDirection, ChannelSignaling, UInt, ClockType)
+                         ChannelDirection, UInt, ClockType)
 from pycde.testing import unittestmodule
-from pycde.signals import BitVectorSignal, ChannelSignal
 
 TestBundle = Bundle([
     BundledChannel("resp", ChannelDirection.FROM, Bits(16)),
@@ -97,9 +96,9 @@ class LoopbackCall(Module):
   @generator
   def construct(self):
     loopback = Wire(types.channel(types.i16))
-    args = esi.FuncService.expose(name=AppID("loopback"),
-                                  arg_type=Bits(24),
-                                  result=loopback)
+    args = esi.FuncService.get_call_chans(name=AppID("loopback"),
+                                          arg_type=Bits(24),
+                                          result=loopback)
 
     ready = Wire(types.i1)
     wide_data, valid = args.unwrap(ready)

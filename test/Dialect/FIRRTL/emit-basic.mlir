@@ -23,7 +23,7 @@ firrtl.circuit "Foo" {
   firrtl.module private @PrivateModule() {}
 
   // CHECK-LABEL: module PortsAndTypes :
-  firrtl.module @PortsAndTypes(
+  firrtl.module private @PortsAndTypes(
     // CHECK-NEXT: input a00 : Clock
     // CHECK-NEXT: input a01 : Reset
     // CHECK-NEXT: input a02 : AsyncReset
@@ -76,7 +76,7 @@ firrtl.circuit "Foo" {
   }
 
   // CHECK-LABEL: module Statements :
-  firrtl.module @Statements(in %ui1: !firrtl.uint<1>, in %someAddr: !firrtl.uint<8>, in %someClock: !firrtl.clock, in %someReset: !firrtl.reset, out %someOut: !firrtl.uint<1>, out %ref: !firrtl.probe<uint<1>>) {
+  firrtl.module private @Statements(in %ui1: !firrtl.uint<1>, in %someAddr: !firrtl.uint<8>, in %someClock: !firrtl.clock, in %someReset: !firrtl.reset, out %someOut: !firrtl.uint<1>, out %ref: !firrtl.probe<uint<1>>) {
     // CHECK: when ui1 :
     // CHECK:   skip
     firrtl.when %ui1 : !firrtl.uint<1> {
@@ -443,9 +443,9 @@ firrtl.circuit "Foo" {
     firrtl.ref.define %out_b_0_y_2, %b_0_y_2 : !firrtl.probe<uint<2>>
   }
 
-  firrtl.extmodule @MyParameterizedExtModule<DEFAULT: i64 = 0, DEPTH: f64 = 3.242000e+01, FORMAT: none = "xyz_timeout=%d\0A", WIDTH: i8 = 32>(in in: !firrtl.uint, out out: !firrtl.uint<8>) attributes {defname = "name_thing"}
+  firrtl.extmodule @MyParameterizedExtModule<DEFAULT: i64 = 0, DEPTH: f64 = 3.242000e+01, FORMAT: none = "xyz_timeout=%d\0A", WIDTH: i8 = 32>(in in: !firrtl.uint<1>, out out: !firrtl.uint<8>) attributes {defname = "name_thing"}
   // CHECK-LABEL: extmodule MyParameterizedExtModule :
-  // CHECK-NEXT:    input in : UInt
+  // CHECK-NEXT:    input in : UInt<1>
   // CHECK-NEXT:    output out : UInt<8>
   // CHECK-NEXT:    defname = name_thing
   // CHECK-NEXT:    parameter DEFAULT = 0
@@ -472,7 +472,7 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT:    parameter DEPTH = 32.42
 
   // CHECK-LABEL: module ConstTypes :
-  firrtl.module @ConstTypes(
+  firrtl.module private @ConstTypes(
     // CHECK-NEXT: input a00 : const Clock
     // CHECK-NEXT: input a01 : const Reset
     // CHECK-NEXT: input a02 : const AsyncReset
@@ -513,7 +513,7 @@ firrtl.circuit "Foo" {
     in %_0: !firrtl.uint<1>
   ) attributes {portNames = ["0"]} {}
   // CHECK-LABEL: module `0Foo` :
-  firrtl.module @"0Foo"(
+  firrtl.module private @"0Foo"(
     // CHECK-NEXT: input `0` : Clock
     // CHECK-NEXT: input `1` : Reset
     // CHECK-NEXT: input `2` : AsyncReset

@@ -16,6 +16,7 @@
 #include "circt/Conversion/Passes.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Debug/DebugDialect.h"
+#include "circt/Dialect/Emit/EmitDialect.h"
 #include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRParser.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
@@ -635,10 +636,11 @@ static LogicalResult executeFirtool(MLIRContext &context,
   }
 
   // Register our dialects.
-  context.loadDialect<chirrtl::CHIRRTLDialect, firrtl::FIRRTLDialect,
-                      hw::HWDialect, comb::CombDialect, seq::SeqDialect,
-                      om::OMDialect, sv::SVDialect, verif::VerifDialect,
-                      ltl::LTLDialect, debug::DebugDialect, sim::SimDialect>();
+  context.loadDialect<chirrtl::CHIRRTLDialect, emit::EmitDialect,
+                      firrtl::FIRRTLDialect, hw::HWDialect, comb::CombDialect,
+                      seq::SeqDialect, om::OMDialect, sv::SVDialect,
+                      verif::VerifDialect, ltl::LTLDialect, debug::DebugDialect,
+                      sim::SimDialect>();
 
   // Process the input.
   if (failed(processInput(context, firtoolOptions, ts, std::move(input),

@@ -15,6 +15,7 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Dialect/Sim/SimDialect.h"
 #include "circt/Dialect/Sim/SimOps.h"
 #include "mlir/IR/Builders.h"
@@ -109,6 +110,34 @@ public:
   }
 };
 
+template <typename FromOp, typename ToOp>
+class SimulatorStopLowering : public OpConversionPattern<FromOp> {
+public:
+  using OpConversionPattern<FromOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(FromOp op, typename FromOp::Adaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    auto loc = op.getLoc();
+
+    Value clockCast = rewriter.create<seq::FromClockOp>(loc, adaptor.getClk());
+
+    rewriter.create<sv::IfDefOp>(
+        loc, "SYNTHESIS", [&] {},
+        [&] {
+          rewriter.create<sv::AlwaysOp>(
+              loc, sv::EventControl::AtPosEdge, clockCast, [&] {
+                rewriter.create<sv::IfOp>(loc, adaptor.getCond(),
+                                          [&] { rewriter.create<ToOp>(loc); });
+              });
+        });
+
+    rewriter.eraseOp(op);
+
+    return success();
+  }
+};
+
 namespace {
 struct SimToSVPass : public LowerSimToSVBase<SimToSVPass> {
   void runOnOperation() override {
@@ -119,11 +148,14 @@ struct SimToSVPass : public LowerSimToSVBase<SimToSVPass> {
     target.addIllegalDialect<SimDialect>();
     target.addLegalDialect<sv::SVDialect>();
     target.addLegalDialect<hw::HWDialect>();
+    target.addLegalDialect<seq::SeqDialect>();
     target.addLegalDialect<comb::CombDialect>();
 
     RewritePatternSet patterns(context);
     patterns.add<PlusArgsTestLowering>(context);
     patterns.add<PlusArgsValueLowering>(context);
+    patterns.add<SimulatorStopLowering<sim::FinishOp, sv::FinishOp>>(context);
+    patterns.add<SimulatorStopLowering<sim::FatalOp, sv::FatalOp>>(context);
     if (failed(applyPartialConversion(circuit, target, std::move(patterns))))
       signalPassFailure();
   }

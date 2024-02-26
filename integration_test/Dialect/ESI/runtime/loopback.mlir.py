@@ -53,20 +53,23 @@ while not resp:
   (resp, resp_data) = send.read()
 resp_int = int.from_bytes(resp_data, "little")
 
+print(f"data: {data}")
+print(f"resp: {resp_int}")
 # Trace platform intentionally produces random responses.
 if platform != "trace":
-  print(f"data: {data}")
-  print(f"resp: {resp_int}")
   assert resp_int == data
 
 # Placeholder until we have a runtime function API.
 myfunc = d.ports[esi.AppID("structFunc")]
 myfunc.connect()
 
-result = myfunc(a=10, b=-22)
-print(f"result: {result}")
-if platform != "trace":
-  assert result == {"y": -22, "x": -21}
+for _ in range(10):
+  future_result = myfunc(a=10, b=-22)
+  result = future_result.result()
+
+  print(f"result: {result}")
+  if platform != "trace":
+    assert result == {"y": -22, "x": -21}
 
 myfunc = d.ports[esi.AppID("arrayFunc")]
 arg_chan = myfunc.write_port("arg").connect()

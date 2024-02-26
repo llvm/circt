@@ -225,8 +225,8 @@ firrtl.circuit "Test" {
 
   // Src Outside Layerblock.
   //
-  // CHECK: firrtl.module private @[[A:.+]](in %_: !firrtl.uint<1>) {
-  // CHECK:   %0 = firrtl.ref.send %_ : !firrtl.uint<1>
+  // CHECK: firrtl.module private @[[A:.+]](in %[[p:.+]]: !firrtl.uint<1>) {
+  // CHECK:   %0 = firrtl.ref.send %[[p]] : !firrtl.uint<1>
   // CHECK:   %1 = firrtl.wire : !firrtl.probe<uint<1>>
   // CHECK:   firrtl.ref.define %1, %0 : !firrtl.probe<uint<1>>
   // CHECK: }
@@ -422,19 +422,19 @@ firrtl.circuit "Simple" {
 // CHECK:      firrtl.module @Simple() {
 // CHECK-NOT:  firrtl.module
 // CHECK-NOT:    firrtl.layerblock
-// CHECK:        %[[A_B_C_cc:[_a-zA-Z0-9]+]] = firrtl.instance simple_A_B_C {
+// CHECK:        %[[A_B_C_cc:[_a-zA-Z0-9]+]] = firrtl.instance a_b_c {
 // CHECK-SAME:     lowerToBind
 // CHECK-SAME:     output_file = #hw.output_file<"layers_Simple_A_B_C.sv"
 // CHECK-SAME:     excludeFromFileList
 // CHECK-SAME:     @Simple_A_B_C(
-// CHECK-NEXT:   %[[A_B_b:[_a-zA-Z0-9]+]], %[[A_B_c:[_a-zA-Z0-9]+]], %[[A_B_cc:[_a-zA-Z0-9]+]] = firrtl.instance simple_A_B {
+// CHECK-NEXT:   %[[A_B_b:[_a-zA-Z0-9]+]], %[[A_B_c:[_a-zA-Z0-9]+]], %[[A_B_cc:[_a-zA-Z0-9]+]] = firrtl.instance a_b {
 // CHECK-SAME:     lowerToBind
 // CHECK-SAME:     output_file = #hw.output_file<"layers_Simple_A_B.sv", excludeFromFileList>
 // CHECK-SAME:     @Simple_A_B(
 // CHECK-NEXT:   %[[A_B_cc_resolve:[_a-zA-Z0-9]+]] = firrtl.ref.resolve %[[A_B_cc]]
 // CHECK-NEXT:   firrtl.strictconnect %[[A_B_C_cc]], %[[A_B_cc_resolve]]
 // CHECK-NEXT:   firrtl.strictconnect %[[A_B_b]], %b
-// CHECK-NEXT:   %[[A_a:[_a-zA-Z0-9]+]], %[[A_c:[_a-zA-Z0-9]+]] = firrtl.instance simple_A {
+// CHECK-NEXT:   %[[A_a:[_a-zA-Z0-9]+]], %[[A_c:[_a-zA-Z0-9]+]] = firrtl.instance a {
 // CHECK-SAME:     lowerToBind
 // CHECK-SAME:     output_file = #hw.output_file<"layers_Simple_A.sv", excludeFromFileList>
 // CHECK-SAME:     @Simple_A(
@@ -544,3 +544,37 @@ firrtl.circuit "CaptureHardwareMultipleTimes" {
     }
   }
 }
+
+// -----
+// HierPathOps are rewritten when operations with inner symbols inside
+// layerblocks are moved into new modules.
+// https://github.com/llvm/circt/issues/6717
+
+firrtl.circuit "HierPathOps" {
+  hw.hierpath @nla1 [@Foo::@foo_A]
+  hw.hierpath @nla2 [@Foo::@bar, @Bar]
+  hw.hierpath private @nla3 [@Foo::@baz]
+  firrtl.layer @A  bind {}
+  firrtl.module @Bar() {}
+  firrtl.module @Foo() {
+    %0 = firrtl.wire sym @foo_A : !firrtl.uint<1>
+    firrtl.layerblock @A {
+      firrtl.instance bar sym @bar @Bar()
+      %1 = firrtl.wire sym @baz : !firrtl.uint<1>
+    }
+  }
+}
+
+// CHECK-LABEL: firrtl.circuit "HierPathOps"
+//
+// CHECK:         hw.hierpath         @nla1 [@Foo::@foo_A]
+// CHECK-NEXT:    hw.hierpath         @nla2 [@Foo::@[[inst_sym:[_A-Za-z0-9]+]], @[[mod_sym:[_A-Za-z0-9]+]]::@bar, @Bar]
+// CHECK-NEXT:    hw.hierpath private @nla3 [@Foo::@[[inst_sym]], @[[mod_sym]]::@baz]
+//
+// CHECK:         firrtl.module {{.*}} @[[mod_sym]]()
+// CHECK-NEXT:      firrtl.instance bar sym @bar
+// CHECK-NEXT:      firrtl.wire sym @baz
+//
+// CHECK:         firrtl.module @Foo()
+// CHECK-NEXT:      firrtl.wire sym @foo_A :
+// CHECK-NEXT:      firrtl.instance {{.*}} sym @[[inst_sym]]

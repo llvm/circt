@@ -133,9 +133,17 @@ struct AttributeValue : EvaluatorValue {
   AttributeValue(Attribute attr)
       : AttributeValue(attr, mlir::UnknownLoc::get(attr.getContext())) {}
   AttributeValue(Attribute attr, Location loc)
-      : EvaluatorValue(attr.getContext(), Kind::Attr, loc), attr(attr) {
+      : EvaluatorValue(attr.getContext(), Kind::Attr, loc), attr(attr),
+        type(cast<TypedAttr>(attr).getType()) {
     markFullyEvaluated();
   }
+
+  // Constructors for partially evaluated AttributeValue.
+  AttributeValue(Type type)
+      : AttributeValue(mlir::UnknownLoc::get(type.getContext())) {}
+  AttributeValue(Type type, Location loc)
+      : EvaluatorValue(type.getContext(), Kind::Attr, loc), type(type) {}
+
   Attribute getAttr() const { return attr; }
   template <typename AttrTy>
   AttrTy getAs() const {
@@ -145,13 +153,17 @@ struct AttributeValue : EvaluatorValue {
     return e->getKind() == Kind::Attr;
   }
 
-  // Finalize the value.
-  LogicalResult finalizeImpl() { return success(); }
+  // Set Attribute for partially evaluated case.
+  LogicalResult setAttr(Attribute attr);
 
-  Type getType() const { return attr.cast<TypedAttr>().getType(); }
+  // Finalize the value.
+  LogicalResult finalizeImpl();
+
+  Type getType() const { return type; }
 
 private:
   Attribute attr = {};
+  Type type;
 };
 
 // This perform finalization to `value`.
@@ -452,6 +464,11 @@ private:
 
   FailureOr<EvaluatorValuePtr>
   evaluateConstant(ConstantOp op, ActualParameters actualParams, Location loc);
+
+  FailureOr<EvaluatorValuePtr>
+  evaluateIntegerBinaryArithmetic(IntegerBinaryArithmeticOp op,
+                                  ActualParameters actualParams, Location loc);
+
   /// Instantiate an Object with its class name and actual parameters.
   FailureOr<EvaluatorValuePtr>
   evaluateObjectInstance(StringAttr className, ActualParameters actualParams,

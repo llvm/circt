@@ -1,5 +1,6 @@
 add_circt_dialect(Moore moore)
-add_circt_dialect_doc(Moore moore)
+add_circt_doc(MooreOps Dialects/MooreOps -gen-op-doc)
+add_circt_doc(MooreTypes Dialects/MooreTypes -gen-typedef-doc -dialect moore)
 
 set(LLVM_TARGET_DEFINITIONS Moore.td)
 

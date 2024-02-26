@@ -11,7 +11,11 @@ include "mlir/Pass/PassBase.td"
 def ExportTcl: Pass<"msft-export-tcl", "mlir::ModuleOp"> {
   let summary = "Create tcl ops";
   let constructor = "circt::msft::createExportTclPass()";
-  let dependentDialects = ["circt::sv::SVDialect", "circt::hw::HWDialect"];
+  let dependentDialects = [
+    "circt::emit::EmitDialect",
+    "circt::hw::HWDialect",
+    "circt::sv::SVDialect",
+  ];
   let options = [
     ListOption<"tops", "tops", "std::string",
                "List of top modules to export Tcl for",
