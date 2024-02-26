@@ -50,7 +50,7 @@ firrtl.circuit "Foo" attributes {annotations = [
   // CHECK-NEXT:   emit.verbatim "/* Bar */\0A"
   // CHECK-NEXT: }
   // CHECK:      emit.file "baz{{/|\\\\}}Baz.sv" sym @blackbox_Baz.sv {
-  // CHECK-NEXT:   emit.verbatim "/* Baz */\0A"
+  // CHECK-NEXT:   emit.verbatim "/* Baz */{{(\\0D)?}}\0A"
   // CHECK-NEXT: }
   // CHECK:      emit.file "qux{{/|\\\\}}NotQux.jpeg" sym @blackbox_Qux.sv {
   // CHECK-NEXT:   emit.verbatim "/* Qux */\0A"
