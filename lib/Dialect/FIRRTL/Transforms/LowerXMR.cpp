@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/Emit/EmitOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
@@ -602,10 +603,13 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
   }
 
   LogicalResult handlePublicModuleRefPorts(FModuleOp module) {
-    auto builder = ImplicitLocOpBuilder::atBlockBegin(
-        module.getLoc(), getOperation().getBodyBlock());
+    auto *body = getOperation().getBodyBlock();
 
+    // Find all the output reference ports.
     SmallString<128> circuitRefPrefix;
+    SmallVector<std::tuple<StringAttr, StringAttr, ArrayAttr>> ports;
+    auto declBuilder =
+        ImplicitLocOpBuilder::atBlockBegin(module.getLoc(), body);
     for (size_t portIndex = 0, numPorts = module.getNumPorts();
          portIndex != numPorts; ++portIndex) {
       auto refType = type_dyn_cast<RefType>(module.getPortType(portIndex));
@@ -614,10 +618,9 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
         continue;
       auto portValue =
           module.getArgument(portIndex).cast<mlir::TypedValue<RefType>>();
-
       mlir::FlatSymbolRefAttr ref;
       SmallString<128> stringLeaf;
-      if (failed(resolveReferencePath(portValue, builder, ref, stringLeaf)))
+      if (failed(resolveReferencePath(portValue, declBuilder, ref, stringLeaf)))
         return failure();
 
       SmallString<128> formatString;
@@ -631,19 +634,24 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
         getRefABIPrefix(module, circuitRefPrefix);
       auto macroName =
           getRefABIMacroForPort(module, portIndex, circuitRefPrefix);
-      builder.create<sv::MacroDeclOp>(macroName, ArrayAttr(), StringAttr());
-
-      auto macroDefOp = builder.create<sv::MacroDefOp>(
-          FlatSymbolRefAttr::get(macroName),
-          builder.getStringAttr(formatString),
-          builder.getArrayAttr(ref ? ref : ArrayRef<Attribute>{}));
-
-      // The macro will be exported to a file with the format:
-      // ref_<module-name>.sv
-      macroDefOp->setAttr("output_file",
-                          hw::OutputFileAttr::getFromFilename(
-                              &getContext(), circuitRefPrefix + ".sv"));
+      declBuilder.create<sv::MacroDeclOp>(macroName, ArrayAttr(), StringAttr());
+      ports.emplace_back(macroName, declBuilder.getStringAttr(formatString),
+                         ref ? declBuilder.getArrayAttr({ref}) : ArrayAttr{});
     }
+
+    // Create a file only if the module has at least one ref port.
+    if (ports.empty())
+      return success();
+
+    // The macros will be exported to a `ref_<module-name>.sv` file.
+    // In the IR, the file is inserted before the module.
+    auto fileBuilder = ImplicitLocOpBuilder(module.getLoc(), module);
+    fileBuilder.create<emit::FileOp>(circuitRefPrefix + ".sv", [&] {
+      for (auto [macroName, formatString, symbols] : ports) {
+        fileBuilder.create<sv::MacroDefOp>(FlatSymbolRefAttr::get(macroName),
+                                           formatString, symbols);
+      }
+    });
 
     return success();
   }
