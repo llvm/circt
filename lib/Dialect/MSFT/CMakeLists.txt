@@ -18,11 +18,12 @@ add_circt_dialect_library(CIRCTMSFT
   ${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/MSFT
 
   DEPENDS
+  CIRCTEmit
   CIRCTHW
   CIRCTSV
   MLIRMSFTIncGen
   MLIRMSFTExtraIncGen
-  
+
   LINK_COMPONENTS
   Support
 
@@ -30,6 +31,7 @@ add_circt_dialect_library(CIRCTMSFT
   MLIRIR
   MLIRTransforms
   MLIRInferTypeOpInterface
+  CIRCTEmit
   CIRCTHW
   CIRCTSeq
   CIRCTSV
