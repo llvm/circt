@@ -276,7 +276,7 @@ firrtl.circuit "ExtractClockGatesSimple" attributes {annotations = [{class = "si
   // CHECK-LABEL: firrtl.module @ExtractClockGatesSimple
   firrtl.module @ExtractClockGatesSimple(in %clock: !firrtl.clock, in %test_en: !firrtl.uint<1>, in %en: !firrtl.uint<1>) {
     // CHECK: firrtl.instance gate @EICG_wrapper
-    %dut_clock,  %dut_test_en,  %dut_en = firrtl.instance dut @DUTModule(in clock: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>)
+    %dut_clock, %dut_test_en, %dut_en = firrtl.instance dut @DUTModule(in clock: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>)
     firrtl.connect %dut_clock, %clock : !firrtl.clock, !firrtl.clock
     firrtl.connect %dut_test_en, %test_en: !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %dut_en, %en : !firrtl.uint<1>, !firrtl.uint<1>
