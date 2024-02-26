@@ -247,8 +247,14 @@ struct CircuitLoweringState {
     // Pre-populate the dutModules member with a list of all modules that are
     // determined to be under the DUT.
     auto inDUT = [&](igraph::ModuleOpInterface child) {
+      auto isBind = [](igraph::InstanceRecord *instRec) {
+        auto inst = instRec->getInstance();
+        if (auto *finst = dyn_cast<InstanceOp>(&inst))
+          return finst->getLowerToBind();
+        return false;
+      };
       if (auto parent = dyn_cast<igraph::ModuleOpInterface>(*dut))
-        return getInstanceGraph().isAncestor(child, parent);
+        return getInstanceGraph().isAncestor(child, parent, isBind);
       return dut == child;
     };
     circuitOp->walk([&](FModuleLike moduleOp) {
@@ -292,7 +298,8 @@ struct CircuitLoweringState {
   FModuleLike getTestHarness() { return testHarness; }
 
   // Return true if this module is the DUT or is instantiated by the DUT.
-  // Returns false if the module is not instantiated by the DUT.
+  // Returns false if the module is not instantiated by the DUT or is
+  // instantiated under a bind.
   bool isInDUT(igraph::ModuleOpInterface child) {
     return dutModules.contains(child);
   }
