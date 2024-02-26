@@ -249,11 +249,11 @@ hw.module @Expressions(in %a: i1, in %b: i1) {
   %5 = sv.read_inout %svLogic : !hw.inout<i1>
   dbg.variable "readLogic", %5 : i1
 
-  // CHECK-LABEL: "var_name": "wire"
+  // CHECK-LABEL: "var_name": "myWire"
   // CHECK: "value": {"sig_name":"hwWire"}
   // CHECK: "type_name": "logic"
   %hwWire = hw.wire %a : i1
-  dbg.variable "wire", %hwWire : i1
+  dbg.variable "myWire", %hwWire : i1
 
   // CHECK-LABEL: "var_name": "unaryParity"
   // CHECK: "value": {"opcode":"^","operands":[{"sig_name":"a"}]}
@@ -388,23 +388,23 @@ hw.module @Expressions(in %a: i1, in %b: i1) {
   dbg.variable "cmpUge", %29 : i1
   dbg.variable "cmpSge", %30 : i1
 
-  // CHECK-LABEL: "var_name": "and"
+  // CHECK-LABEL: "var_name": "opAnd"
   // CHECK: "value": {"opcode":"&","operands":[{"sig_name":"a"},{"sig_name":"b"}]}
   // CHECK: "type_name": "logic"
   %31 = comb.and %a, %b : i1
-  dbg.variable "and", %31 : i1
+  dbg.variable "opAnd", %31 : i1
 
-  // CHECK-LABEL: "var_name": "or"
+  // CHECK-LABEL: "var_name": "opOr"
   // CHECK: "value": {"opcode":"|","operands":[{"sig_name":"a"},{"sig_name":"b"}]}
   // CHECK: "type_name": "logic"
   %32 = comb.or %a, %b : i1
-  dbg.variable "or", %32 : i1
+  dbg.variable "opOr", %32 : i1
 
-  // CHECK-LABEL: "var_name": "xor"
+  // CHECK-LABEL: "var_name": "opXor"
   // CHECK: "value": {"opcode":"^","operands":[{"sig_name":"a"},{"sig_name":"b"}]}
   // CHECK: "type_name": "logic"
   %33 = comb.xor %a, %b : i1
-  dbg.variable "xor", %33 : i1
+  dbg.variable "opXor", %33 : i1
 
   // CHECK-LABEL: "var_name": "concat"
   // CHECK: "value": {"opcode":"{}","operands":[{"sig_name":"a"},{"sig_name":"b"},{"sig_name":"explicitName"}]}
@@ -451,17 +451,17 @@ hw.module.extern @SingleResult(out outPort: i1) attributes {verilogName = "Custo
 
 // CHECK-LABEL: "module_name": "LegalizedNames"
 // CHECK:       "port_vars"
-// CHECK:          "var_name": "wire"
+// CHECK:          "var_name": "myWire"
 // CHECK:          "value": {"sig_name":"wire_1"}
 // CHECK:       "children"
-// CHECK:         "name": "reg"
+// CHECK:         "name": "myInst"
 // CHECK:         "hdl_obj_name": "reg_0"
 // CHECK:         "obj_name": "Dummy"
 // CHECK:         "module_name": "CustomDummy"
 hw.module @LegalizedNames() {
-  hw.instance "reg" @Dummy() -> () {hw.verilogName = "reg_0"}
+  hw.instance "myInst" @Dummy() -> () {hw.verilogName = "reg_0"}
   %false = hw.constant false
-  %wire = hw.wire %false {hw.verilogName = "wire_1"} : i1
+  %myWire = hw.wire %false {hw.verilogName = "wire_1"} : i1
 }
 hw.module.extern @Dummy() attributes {verilogName = "CustomDummy"}
 
@@ -553,3 +553,27 @@ hw.module @Issue6735_Case2(out x : i36, out y : i36) {
   hw.output %a, %b : i36, i36
 }
 hw.module.extern @MultipleResults(out a : i36, out b : i36)
+
+// CHECK-LABEL: "obj_name": "Issue6749"
+hw.module @Issue6749(in %a: i42) {
+  // Variables with empty names must have a non-empty name in the output.
+  // CHECK-NOT: "var_name": ""
+  dbg.variable "", %a : i42
+
+  // Uniquify duplicate variable names.
+  // CHECK: "var_name": "myVar"
+  // CHECK-NOT: "var_name": "myVar"
+  // CHECK: "var_name": "myVar_0"
+  dbg.variable "myVar", %a : i42
+  dbg.variable "myVar", %a : i42
+
+  // Uniquify Verilog keyword collisions.
+  // CHECK-NOT: "var_name": "signed"
+  // CHECK: "var_name": "signed_0"
+  dbg.variable "signed", %a : i42
+
+  // Scopes with empty names must have a non-empty name in the output.
+  // CHECK: "children": [
+  // CHECK-NOT: "name": ""
+  %scope = dbg.scope "", "SomeScope"
+}
