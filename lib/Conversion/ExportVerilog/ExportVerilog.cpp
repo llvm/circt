@@ -6050,6 +6050,8 @@ void FileEmitter::emit(emit::FileOp op) {
   for (Operation &op : *op.getBodyBlock()) {
     TypeSwitch<Operation *>(&op)
         .Case<emit::VerbatimOp>([&](auto op) { emitOp(op); })
+        .Case<VerbatimOp, IfDefOp, MacroDefOp>(
+            [&](auto op) { ModuleEmitter(state).emitStatement(op); })
         .Default([&](auto op) {
           op->emitError("cannot be emitted to a file");
           state.encounteredError = true;
