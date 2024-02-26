@@ -7,7 +7,7 @@ firrtl.circuit "empty" {
 // CHECK-LABEL: firrtl.circuit "empty"   {
 // CHECK-NEXT:    firrtl.module @empty() {
 // CHECK-NEXT:    }
-// CHECK-NEXT:    emit.file "metadata/seq_mems.json" {
+// CHECK-NEXT:    emit.file "metadata{{/|\\\\}}seq_mems.json" {
 // CHECK-NEXT:      sv.verbatim "[]"
 // CHECK-NEXT:    }
 // CHECK-NEXT:    emit.file "dut.conf" {
