@@ -8,6 +8,7 @@ add_circt_dialect_library(CIRCTMSFTTransforms
   CIRCTMSFTTransformsIncGen
 
   LINK_LIBS PUBLIC
+  CIRCTEmit
   CIRCTMSFT
   CIRCTHW
   CIRCTSV
