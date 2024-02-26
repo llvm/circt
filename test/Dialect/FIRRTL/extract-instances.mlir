@@ -398,7 +398,7 @@ firrtl.circuit "ExtractClockGatesComposed" attributes {annotations = [
   }
   firrtl.module private @DUTModule(in %clock: !firrtl.clock, in %test_en: !firrtl.uint<1>, in %en: !firrtl.uint<1>) attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
     firrtl.instance mem_ext @mem_ext()
-    %gate_in, %gate_test_en, %gate_en, %gate_out = firrtl.instance gate sym @sym @EICG_wrapper(in in: !firrtl.clock,  in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock)
+    %gate_in, %gate_test_en, %gate_en, %gate_out = firrtl.instance gate sym @sym @EICG_wrapper(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock)
     firrtl.connect %gate_in, %clock : !firrtl.clock, !firrtl.clock
     firrtl.connect %gate_test_en, %test_en : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %gate_en, %en : !firrtl.uint<1>, !firrtl.uint<1>
