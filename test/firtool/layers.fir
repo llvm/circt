@@ -24,14 +24,14 @@ circuit Foo: %[[
         node y = x
 
 ; CHECK-LABEL: module Foo_A_B(
-; CHECK-NEXT:    input _x
+; CHECK-NEXT:    input x
 ; CHECK-NEXT:  );
-; CHECK:         wire y = _x;
+; CHECK:         wire y = x;
 ; CHECK-NEXT:  endmodule
 
 ; CHECK-LABEL: module Foo_A(
-; CHECK-NEXT:    input _in
-; CHECK:         wire x = _in;
+; CHECK-NEXT:    input in
+; CHECK:         wire x = in;
 ; CHECK-NEXT:    wire x_probe = x;
 ; CHECK-NEXT:  endmodule
 
@@ -39,15 +39,15 @@ circuit Foo: %[[
 ; CHECK:       `include "layers_Foo_A.sv"
 ; CHECK-NEXT:  `ifndef layers_Foo_A_B
 ; CHECK-NEXT:  `define layers_Foo_A_B
-; CHECK-NEXT:  bind Foo Foo_A_B foo_A_B (
-; CHECK-NEXT:    _x (Foo.foo_A.x_probe)
+; CHECK-NEXT:  bind Foo Foo_A_B a_b (
+; CHECK-NEXT:    x (Foo.a.x_probe)
 ; CHECK-NEXT:  );
 ; CHECK-NEXT:  `endif // layers_Foo_A_B
 
 ; CHECK-LABEL: FILE "layers_Foo_A.sv"
 ; CHECK:       `ifndef layers_Foo_A
 ; CHECK-NEXT:  `define layers_Foo_A
-; CHECK-NEXT:   bind Foo Foo_A foo_A (
-; CHECK-NEXT:     ._in (in)
+; CHECK-NEXT:   bind Foo Foo_A a (
+; CHECK-NEXT:     .in (in)
 ; CHECK-NEXT:   );
 ; CHECK-NEXT:  `endif // layers_Foo_A

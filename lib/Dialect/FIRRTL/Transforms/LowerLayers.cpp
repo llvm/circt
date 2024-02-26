@@ -35,10 +35,6 @@ static bool isAncestor(Operation *op, Value value) {
   return op->isAncestor(argument.getOwner()->getParentOp());
 }
 
-//===----------------------------------------------------------------------===//
-// Type Conversion
-//===----------------------------------------------------------------------===//
-
 namespace {
 
 /// Indicates the kind of reference that was captured.
@@ -62,6 +58,64 @@ struct ConnectInfo {
 // hierarchical path operations after layers are converted to modules.
 using InnerRefMap =
     DenseMap<hw::InnerRefAttr, std::pair<hw::InnerSymAttr, StringAttr>>;
+
+//===----------------------------------------------------------------------===//
+// Naming Helpers
+//===----------------------------------------------------------------------===//
+
+static void appendName(StringRef name, SmallString<32> &output,
+                       bool toLower = false) {
+  if (name.empty())
+    return;
+  if (!output.empty())
+    output.append("_");
+  output.append(name);
+  if (!toLower)
+    return;
+  auto i = output.size() - name.size();
+  output[i] = llvm::toLower(output[i]);
+}
+
+static void appendName(SymbolRefAttr name, SmallString<32> &output,
+                       bool toLower = false) {
+  appendName(name.getRootReference(), output, toLower);
+  for (auto nested : name.getNestedReferences())
+    appendName(nested.getValue(), output, toLower);
+}
+
+/// For a layer `@A::@B::@C` in module Module,
+/// the generated module is called `Module_A_B_C`.
+static SmallString<32> moduleNameForLayer(StringRef moduleName,
+                                          SymbolRefAttr layerName) {
+  SmallString<32> result;
+  appendName(moduleName, result);
+  appendName(layerName, result);
+  return result;
+}
+
+/// For a layerblock `@A::@B::@C`,
+/// the generated instance is called `a_b_c`.
+static SmallString<32> instanceNameForLayer(SymbolRefAttr layerName) {
+  SmallString<32> result;
+  appendName(layerName, result, /*toLower=*/true);
+  return result;
+}
+
+/// For all layerblocks `@A::@B::@C` in a circuit called Circuit,
+/// the output filename is `layers_Circuit_A_B_C.sv`.
+static SmallString<32> fileNameForLayer(StringRef circuitName,
+                                        SymbolRefAttr layerName) {
+  SmallString<32> result;
+  result.append("layers");
+  appendName(circuitName, result);
+  appendName(layerName, result);
+  result.append(".sv");
+  return result;
+}
+
+//===----------------------------------------------------------------------===//
+// LowerLayersPass
+//===----------------------------------------------------------------------===//
 
 class LowerLayersPass : public LowerLayersBase<LowerLayersPass> {
   /// Safely build a new module with a given namehint.  This handles geting a
@@ -234,14 +288,6 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
     if (!layerBlock)
       return WalkResult::advance();
 
-    // Compute the expanded layer name.  For layer @A::@B::@C, this is "A_B_C".
-    SmallString<32> layerName(layerBlock.getLayerName().getRootReference());
-    for (auto ref : layerBlock.getLayerName().getNestedReferences()) {
-      layerName.append("_");
-      layerName.append(ref.getValue());
-    }
-    LLVM_DEBUG(llvm::dbgs() << "    - Layer: " << layerName << "\n");
-
     Block *body = layerBlock.getBody(0);
     OpBuilder builder(moduleOp);
 
@@ -254,7 +300,7 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
 
     // Create an input port for an operand that is captured from outside.
     auto createInputPort = [&](Value operand, Location loc) {
-      auto operandName = getFieldName(FieldRef(operand, 0), true);
+      const auto &[portName, _] = getFieldName(FieldRef(operand, 0), true);
 
       // If the value is a ref, we must resolve the ref inside the parent,
       // passing the input as a value instead of a ref. Inside the layer, we
@@ -263,8 +309,8 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
       if (auto refType = dyn_cast<RefType>(type))
         type = refType.getType();
 
-      ports.push_back({builder.getStringAttr("_" + operandName.first), type,
-                       Direction::In, /*sym=*/{},
+      ports.push_back({builder.getStringAttr(portName), type, Direction::In,
+                       /*sym=*/{},
                        /*loc=*/loc});
       // Update the layer block's body with arguments as we will swap this body
       // into the module when we create it.  If this is a ref type, then add a
@@ -310,7 +356,7 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
     auto createOutputPort = [&](Value dest, Value src) {
       auto loc = getPortLoc(dest);
       auto portNum = ports.size();
-      auto operandName = getFieldName(FieldRef(dest, 0), true);
+      const auto &[portName, _] = getFieldName(FieldRef(dest, 0), true);
 
       RefType refType;
       if (auto oldRef = dyn_cast<RefType>(dest.getType()))
@@ -320,8 +366,8 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
             type_cast<FIRRTLBaseType>(dest.getType()).getPassiveType(),
             /*forceable=*/false);
 
-      ports.push_back({builder.getStringAttr("_" + operandName.first), refType,
-                       Direction::Out, /*sym=*/{}, /*loc=*/loc});
+      ports.push_back({builder.getStringAttr(portName), refType, Direction::Out,
+                       /*sym=*/{}, /*loc=*/loc});
       Value replacement = body->addArgument(refType, loc);
       if (isa<RefType>(dest.getType())) {
         dest.replaceUsesWithIf(replacement, [&](OpOperand &use) {
@@ -476,9 +522,7 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
     // of the pass.  This is done to avoid having to revisit and rewrite each
     // instance everytime it is moved into a parent layer.
     builder.setInsertionPointAfter(layerBlock);
-    auto moduleName = newModule.getModuleName();
-    auto instanceName =
-        (Twine((char)tolower(moduleName[0])) + moduleName.drop_front()).str();
+    auto instanceName = instanceNameForLayer(layerBlock.getLayerName());
     auto instanceOp = builder.create<InstanceOp>(
         layerBlock.getLoc(), /*moduleName=*/newModule,
         /*name=*/
@@ -489,12 +533,11 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
         (innerSyms.empty() ? hw::InnerSymAttr{}
                            : hw::InnerSymAttr::get(builder.getStringAttr(
                                  ns.newName(instanceName)))));
-    instanceOp->setAttr("output_file",
-                        hw::OutputFileAttr::getFromFilename(
-                            builder.getContext(),
 
-                            "layers_" + circuitName + "_" + layerName + ".sv",
-                            /*excludeFromFileList=*/true));
+    auto fileName = fileNameForLayer(circuitName, layerBlock.getLayerName());
+    instanceOp->setAttr("output_file", hw::OutputFileAttr::getFromFilename(
+                                           builder.getContext(), fileName,
+                                           /*excludeFromFileList=*/true));
     createdInstances.try_emplace(instanceOp, newModule);
 
     LLVM_DEBUG(llvm::dbgs() << "        moved inner refs:\n");
@@ -559,13 +602,9 @@ void LowerLayersPass::runOnOperation() {
   CircuitNamespace ns(circuitOp);
   circuitOp->walk([&](FModuleOp moduleOp) {
     moduleOp->walk([&](LayerBlockOp layerBlockOp) {
-      SmallString<32> layerName(layerBlockOp.getLayerName().getRootReference());
-      for (auto ref : layerBlockOp.getLayerName().getNestedReferences()) {
-        layerName.append("_");
-        layerName.append(ref.getValue());
-      }
-      moduleNames.insert({layerBlockOp, ns.newName(moduleOp.getModuleName() +
-                                                   "_" + layerName)});
+      auto name = moduleNameForLayer(moduleOp.getModuleName(),
+                                     layerBlockOp.getLayerName());
+      moduleNames.insert({layerBlockOp, ns.newName(name)});
     });
   });
 
