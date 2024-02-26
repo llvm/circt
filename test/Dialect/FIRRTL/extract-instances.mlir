@@ -539,7 +539,7 @@ firrtl.circuit "InstSymConflict" {
 firrtl.circuit "Plop_Foo" attributes {annotations = [{class = "sifive.enterprise.firrtl.ExtractClockGatesFileAnnotation", filename = "ckgates.txt", group = "ClockGates"}]} {
   // CHECK: hw.hierpath @nla_1 [@Plop_Foo::@ClockGates, @Plop_ClockGates::@ckg, @EICG_wrapper]
   hw.hierpath @nla_1 [@Plop_Foo::@core, @Plop_Bar::@ckg, @EICG_wrapper]
-  firrtl.extmodule private @EICG_wrapper(in in: !firrtl.clock,  in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock) attributes {defname = "EICG_wrapper"}
+  firrtl.extmodule private @EICG_wrapper(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock) attributes {defname = "EICG_wrapper"}
   firrtl.module private @Plop_Bar() {
     %gate_in, %gate_test_en, %gate_en, %gate_out = firrtl.instance ckg sym @ckg @EICG_wrapper(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock)
   }
