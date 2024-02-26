@@ -52,7 +52,7 @@ def FileOp : EmitOp<"file", [
                     CArg<"llvm::function_ref<void()>">:$bodyCtor)>,
     OpBuilder<(ins "StringAttr":$fileName,
                     CArg<"llvm::function_ref<void()>">:$bodyCtor)>,
-    OpBuilder<(ins "StringRef":$fileName,
+    OpBuilder<(ins "const Twine &":$fileName,
                     CArg<"llvm::function_ref<void()>">:$bodyCtor), [{
       return build($_builder, $_state, $_builder.getStringAttr(fileName), bodyCtor);
     }]>
