@@ -388,7 +388,7 @@ firrtl.circuit "ExtractClockGatesComposed" attributes {annotations = [
   hw.hierpath private @nla0 [@DUTModule::@sym, @EICG_wrapper]
   // CHECK: hw.hierpath private @nla1 [@ExtractClockGatesComposed::[[SYM1:.+]], @EICG_wrapper]
   hw.hierpath private @nla1 [@Child::@sym, @EICG_wrapper]
-  firrtl.extmodule private @EICG_wrapper(in in: !firrtl.clock,  in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock) attributes {defname = "EICG_wrapper"}
+  firrtl.extmodule private @EICG_wrapper(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock) attributes {defname = "EICG_wrapper"}
   firrtl.memmodule @mem_ext() attributes {dataWidth = 8 : ui32, depth = 8 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
   firrtl.module private @Child(in %clock: !firrtl.clock, in %test_en: !firrtl.uint<1>, in %en: !firrtl.uint<1>) {
     %gate_in, %gate_test_en, %gate_en, %gate_out = firrtl.instance gate sym @sym @EICG_wrapper(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock)
