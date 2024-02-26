@@ -6090,7 +6090,8 @@ void FileEmitter::emitOp(emit::VerbatimOp op) {
   ps << PP::neverbox;
   do {
     const auto &[lhs, rhs] = text.split('\n');
-    ps << PPExtString(lhs);
+    if (!lhs.empty())
+      ps << PPExtString(lhs);
     if (!rhs.empty())
       ps << PP::end << PP::newline << PP::neverbox;
     text = rhs;

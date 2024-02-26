@@ -6,9 +6,12 @@
 // FILE-NEXT: WithNewlines
 // FILE-NEXT: A
 // FILE-NEXT: B
+// FILE-NEXT: WithEmptyNewlines
+// FILE: X
 emit.file "some-file.sv" sym @SomeFile.sv {
   emit.verbatim "SimpleVerbatim"
   emit.verbatim "WithNewlines\nA\nB\n"
+  emit.verbatim "WithEmptyNewlines\n\n\nX"
 }
 
 // FILELIST: some-file.sv
