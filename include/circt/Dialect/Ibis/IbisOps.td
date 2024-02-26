@@ -579,7 +579,12 @@ class ContainerOp<string mnemonic, list<Trait> traits> : IbisOp<mnemonic,
 ]> {
   let summary = "Ibis container";
   let description = [{
-    An ibis container describes a collection of logic nested within an Ibis class.
+    An ibis container describes a collection of logic nested within an Ibis
+    class. We have two container types (ops): one for the outermost containers
+    and one for the nested containers (inner). The outer container is a symbol
+    and sits in the symbol table at the top level. So as to not violate the
+    symbol table rules, the inner container is an InnerSymbol and is contained
+    in the InnerSymbolTable that the outer container defines.
   }];
 
   let regions = (region SizedRegion<1>:$body);
