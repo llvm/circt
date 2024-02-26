@@ -36,20 +36,36 @@ firrtl.circuit "Foo" attributes {annotations = [
     firrtl.instance foo3 @ExtFoo3()
     firrtl.instance dut @DUTBlackboxes()
   }
-  // CHECK: sv.verbatim "// world" {output_file = #hw.output_file<"..{{/|\\\\}}testbench{{/|\\\\}}hello.v">}
-  // CHECK: sv.verbatim "// world" {output_file = #hw.output_file<"cover{{/|\\\\}}hello2.v">}
-  // CHECK: sv.verbatim "// world" {output_file = #hw.output_file<"..{{/|\\\\}}testbench{{/|\\\\}}hello3.v">}
-  // CHECK: sv.verbatim "/* Bar */\0A" {output_file = #hw.output_file<"bar{{/|\\\\}}Bar.v">}
-  // CHECK: sv.verbatim "/* Baz */{{(\\0D)?}}\0A" {output_file = #hw.output_file<"baz{{/|\\\\}}Baz.sv">}
-  // CHECK: sv.verbatim "/* Qux */\0A" {output_file = #hw.output_file<"qux{{/|\\\\}}NotQux.jpeg">}
-  // CHECK: sv.verbatim "..{{/|\\\\}}testbench{{/|\\\\}}hello.v\0A
-  // CHECK-SAME:         ..{{/|\\\\}}testbench{{/|\\\\}}hello3.v\0A
-  // CHECK-SAME:         bar{{/|\\\\}}Bar.v\0A
-  // CHECK-SAME:         baz{{/|\\\\}}Baz.sv\0A
-  // CHECK-SAME:         cover{{/|\\\\}}hello2.v\0A
-  // CHECK-SAME:         qux{{/|\\\\}}NotQux.jpeg"
-  // CHECK-SAME: output_file = #hw.output_file<"firrtl_black_box_resource_files.f", excludeFromFileList>
+
+  // CHECK:      emit.file "..{{/|\\\\}}testbench{{/|\\\\}}hello.v" sym @blackbox_hello.v {
+  // CHECK-NEXT:   emit.verbatim "// world"
+  // CHECK-NEXT: }
+  // CHECK:      emit.file "cover{{/|\\\\}}hello2.v" sym @blackbox_hello2.v {
+  // CHECK-NEXT:   emit.verbatim "// world"
+  // CHECK-NEXT: }
+  // CHECK:      emit.file "..{{/|\\\\}}testbench{{/|\\\\}}hello3.v" sym @blackbox_hello3.v {
+  // CHECK-NEXT:   emit.verbatim "// world"
+  // CHECK-NEXT: }
+  // CHECK:      emit.file "bar{{/|\\\\}}Bar.v" sym @blackbox_Bar.v {
+  // CHECK-NEXT:   emit.verbatim "/* Bar */\0A"
+  // CHECK-NEXT: }
+  // CHECK:      emit.file "baz{{/|\\\\}}Baz.sv" sym @blackbox_Baz.sv {
+  // CHECK-NEXT:   emit.verbatim "/* Baz */{{(\\0D)?}}\0A"
+  // CHECK-NEXT: }
+  // CHECK:      emit.file "qux{{/|\\\\}}NotQux.jpeg" sym @blackbox_Qux.sv {
+  // CHECK-NEXT:   emit.verbatim "/* Qux */\0A"
+  // CHECK-NEXT: }
+
+  // CHECK:      emit.file_list "firrtl_black_box_resource_files.f", [
+  // CHECK-SAME:   @blackbox_hello.v
+  // CHECK-SAME:   @blackbox_hello3.v
+  // CHECK-SAME:   @blackbox_Bar.v
+  // CHECK-SAME:   @blackbox_Baz.sv
+  // CHECK-SAME:   @blackbox_hello2.v
+  // CHECK-SAME:   @blackbox_Qux.sv
+  // CHECK-SAME: ] sym @blackbox_filelist
 }
+
 //--- NoDUT.mlir
 // Check that a TestBenchDirAnnotation has no effect without the presence of a
 // MarkDUTAnnotation.
@@ -72,7 +88,10 @@ firrtl.circuit "NoDUT" attributes {annotations = [
   firrtl.module @NoDUT() {
     firrtl.instance noDUTBlackBox @NoDUTBlackBox()
   }
-  // CHECK:      sv.verbatim "module NoDUTBlackBox()
-  // CHECK-SAME:   #hw.output_file<".{{/|\\\\}}NoDUTBlackBox.sv">
-  // CHECK:      sv.verbatim "NoDUTBlackBox.sv"
+  // CHECK:      emit.file ".{{/|\\\\}}NoDUTBlackBox.sv" sym @blackbox_NoDUTBlackBox.sv {
+  // CHECK-NEXT:   emit.verbatim "module NoDUTBlackBox();\0Aendmodule\0A"
+  // CHECK-NEXT: }
+  // CHECK:      emit.file_list "firrtl_black_box_resource_files.f", [
+  // CHECK-SAME:   @blackbox_NoDUTBlackBox.sv
+  // CHECK-SAME: ] sym @blackbox_filelist
 }

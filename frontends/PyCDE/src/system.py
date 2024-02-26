@@ -137,7 +137,7 @@ class System:
   #     "canonicalize",
   # ]
 
-  def import_mlir(self, module, lowering=None):
+  def import_mlir(self, module, lowering=None) -> Dict[str, Any]:
     """Import mlir asm created elsewhere into our space."""
 
     compat_mod = ir.Module.parse(str(module))
@@ -265,6 +265,7 @@ class System:
       "builtin.module(convert-fsm-to-sv)",
       "builtin.module(lower-hwarith-to-hw)",
       "builtin.module(lower-seq-to-sv)",
+      "builtin.module(lower-comb)",
       "builtin.module(cse, canonicalize, cse)",
       "builtin.module(hw.module(prettify-verilog), hw.module(hw-cleanup))",
       "builtin.module(msft-export-tcl{{tops={tops} tcl-file={tcl_file}}})"

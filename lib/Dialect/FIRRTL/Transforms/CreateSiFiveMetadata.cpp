@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/Emit/EmitOps.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
@@ -30,6 +31,7 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/Support/JSON.h"
+#include "llvm/Support/Path.h"
 
 using namespace circt;
 using namespace firrtl;
@@ -169,7 +171,6 @@ class CreateSiFiveMetadataPass
   LogicalResult emitRetimeModulesMetadata(ObjectModelIR &omir);
   LogicalResult emitSitestBlackboxMetadata(ObjectModelIR &omir);
   LogicalResult emitMemoryMetadata(ObjectModelIR &omir);
-  void getDependentDialects(mlir::DialectRegistry &registry) const override;
   void runOnOperation() override;
 
   /// Get the cached namespace for a module.
@@ -252,7 +253,9 @@ CreateSiFiveMetadataPass::emitMemoryMetadata(ObjectModelIR &omir) {
     seqMemSymbols.push_back(memExtSym);
     // Compute the mask granularity.
     auto isMasked = mem.isMasked();
-    auto maskGran = width / mem.getMaskBits();
+    auto maskGran = width;
+    if (isMasked)
+      maskGran /= mem.getMaskBits();
     // Now create the config string for the memory.
     std::string portStr;
     for (uint32_t i = 0; i < mem.getNumWritePorts(); ++i) {
@@ -373,25 +376,29 @@ CreateSiFiveMetadataPass::emitMemoryMetadata(ObjectModelIR &omir) {
       metadataDir = dir.getValue();
 
   // Use unknown loc to avoid printing the location in the metadata files.
-  auto dutVerbatimOp = builder.create<sv::VerbatimOp>(
-      dutJsonBuffer, ValueRange(), builder.getArrayAttr(jsonSymbols));
-  auto fileAttr = hw::OutputFileAttr::getFromDirectoryAndFilename(
-      context, metadataDir, "seq_mems.json", /*excludeFromFilelist=*/true);
-  dutVerbatimOp->setAttr("output_file", fileAttr);
-
-  auto confVerbatimOp = builder.create<sv::VerbatimOp>(
-      seqMemConfStr, ValueRange(), builder.getArrayAttr(seqMemSymbols));
-  if (replSeqMemFile.empty()) {
-    emitError(circuitOp->getLoc())
-        << "metadata emission failed, the option "
-           "`-repl-seq-mem-file=<filename>` is mandatory for specifying a "
-           "valid seq mem metadata file";
-    return failure();
+  {
+    SmallString<128> seqMemsJsonPath(metadataDir);
+    llvm::sys::path::append(seqMemsJsonPath, "seq_mems.json");
+    builder.create<emit::FileOp>(seqMemsJsonPath, [&] {
+      builder.create<sv::VerbatimOp>(dutJsonBuffer, ValueRange{},
+                                     builder.getArrayAttr(jsonSymbols));
+    });
   }
 
-  fileAttr = hw::OutputFileAttr::getFromFilename(context, replSeqMemFile,
-                                                 /*excludeFromFilelist=*/true);
-  confVerbatimOp->setAttr("output_file", fileAttr);
+  {
+    if (replSeqMemFile.empty()) {
+      emitError(circuitOp->getLoc())
+          << "metadata emission failed, the option "
+             "`-repl-seq-mem-file=<filename>` is mandatory for specifying a "
+             "valid seq mem metadata file";
+      return failure();
+    }
+
+    builder.create<emit::FileOp>(replSeqMemFile, [&] {
+      builder.create<sv::VerbatimOp>(seqMemConfStr, ValueRange{},
+                                     builder.getArrayAttr(seqMemSymbols));
+    });
+  }
 
   return success();
 }
@@ -481,13 +488,12 @@ CreateSiFiveMetadataPass::emitRetimeModulesMetadata(ObjectModelIR &omir) {
   });
 
   // Put the retime information in a verbatim operation.
-  auto builder = OpBuilder::atBlockEnd(circuitOp.getBodyBlock());
-  auto verbatimOp = builder.create<sv::VerbatimOp>(
-      builder.getUnknownLoc(), buffer, ValueRange(),
-      builder.getArrayAttr(symbols));
-  auto fileAttr = hw::OutputFileAttr::getFromFilename(
-      context, filename, /*excludeFromFilelist=*/true);
-  verbatimOp->setAttr("output_file", fileAttr);
+  auto builder = ImplicitLocOpBuilder::atBlockEnd(UnknownLoc::get(context),
+                                                  circuitOp.getBodyBlock());
+  builder.create<emit::FileOp>(filename, [&] {
+    builder.create<sv::VerbatimOp>(builder.getStringAttr(buffer), ValueRange{},
+                                   builder.getArrayAttr(symbols));
+  });
   return success();
 }
 
@@ -574,14 +580,13 @@ CreateSiFiveMetadataPass::emitSitestBlackboxMetadata(ObjectModelIR &omir) {
         j.value(name);
     });
 
-    auto *body = circuitOp.getBodyBlock();
     // Put the information in a verbatim operation.
-    auto builder = OpBuilder::atBlockEnd(body);
-    auto verbatimOp =
-        builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), buffer);
-    auto fileAttr = hw::OutputFileAttr::getFromFilename(
-        context, filename, /*excludeFromFilelist=*/true);
-    verbatimOp->setAttr("output_file", fileAttr);
+    auto builder = ImplicitLocOpBuilder::atBlockEnd(UnknownLoc::get(context),
+                                                    circuitOp.getBodyBlock());
+
+    builder.create<emit::FileOp>(filename, [&] {
+      builder.create<emit::VerbatimOp>(StringAttr::get(context, buffer));
+    });
   };
 
   createOutput(testModules, testFilename);
@@ -592,12 +597,6 @@ CreateSiFiveMetadataPass::emitSitestBlackboxMetadata(ObjectModelIR &omir) {
     AnnotationSet::removeAnnotations(op, scalaClassAnnoClass);
 
   return success();
-}
-
-void CreateSiFiveMetadataPass::getDependentDialects(
-    mlir::DialectRegistry &registry) const {
-  // We need this for SV verbatim and HW attributes.
-  registry.insert<hw::HWDialect, sv::SVDialect, om::OMDialect>();
 }
 
 void CreateSiFiveMetadataPass::runOnOperation() {

@@ -325,6 +325,9 @@ private:
   size_t length;
 };
 
+/// Mapping from symbols to file operations.
+using FileMapping = DenseMap<StringAttr, Operation *>;
+
 /// This class tracks the top-level state for the emitters, which is built and
 /// then shared across all per-file emissions that happen in parallel.
 struct SharedEmitterState {
@@ -362,6 +365,9 @@ struct SharedEmitterState {
 
   /// Information about renamed global symbols, parameters, etc.
   const GlobalNameTable globalNames;
+
+  /// Tracks the referenceable files through their symbol.
+  FileMapping fileMapping;
 
   explicit SharedEmitterState(ModuleOp designOp, const LoweringOptions &options,
                               GlobalNameTable globalNames)

@@ -80,11 +80,14 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferResetsPass());
 
   if (opt.shouldExportChiselInterface()) {
-    if (opt.getChiselInterfaceOutputDirectory().empty()) {
+    StringRef outdir = opt.getChiselInterfaceOutputDirectory();
+    if (opt.isDefaultOutputFilename() && outdir.empty()) {
       pm.nest<firrtl::CircuitOp>().addPass(createExportChiselInterfacePass());
     } else {
-      pm.nest<firrtl::CircuitOp>().addPass(createExportSplitChiselInterfacePass(
-          opt.getChiselInterfaceOutputDirectory()));
+      if (outdir.empty())
+        outdir = opt.getOutputFilename();
+      pm.nest<firrtl::CircuitOp>().addPass(
+          createExportSplitChiselInterfacePass(outdir));
     }
   }
 
@@ -266,6 +269,7 @@ LogicalResult firtool::populateHWToSV(mlir::PassManager &pm,
         opt.shouldEtcDisableModuleInlining()));
 
   pm.addPass(seq::createExternalizeClockGatePass(opt.getClockGateOptions()));
+  pm.addNestedPass<hw::HWModuleOp>(circt::createLowerSimToSVPass());
   pm.addPass(circt::createLowerSeqToSVPass(
       {/*disableRegRandomization=*/!opt.isRandomEnabled(
            FirtoolOptions::RandomKind::Reg),
@@ -273,7 +277,6 @@ LogicalResult firtool::populateHWToSV(mlir::PassManager &pm,
        !opt.isRandomEnabled(FirtoolOptions::RandomKind::Mem),
        /*emitSeparateAlwaysBlocks=*/
        opt.shouldEmitSeparateAlwaysBlocks()}));
-  pm.addNestedPass<hw::HWModuleOp>(circt::createLowerSimToSVPass());
   pm.addNestedPass<hw::HWModuleOp>(createLowerVerifToSVPass());
   pm.addPass(seq::createHWMemSimImplPass(
       {/*disableMemRandomization=*/!opt.isRandomEnabled(

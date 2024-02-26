@@ -39,10 +39,6 @@ bool fromOMIRJSON(llvm::json::Value &value,
                   SmallVectorImpl<Attribute> &annotations,
                   llvm::json::Path path, MLIRContext *context);
 
-bool fromJSONRaw(llvm::json::Value &value,
-                 SmallVectorImpl<Attribute> &annotations, llvm::json::Path path,
-                 MLIRContext *context);
-
 ParseResult foldWhenEncodedVerifOp(PrintFOp printOp);
 
 } // namespace firrtl

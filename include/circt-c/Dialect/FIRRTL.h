@@ -153,6 +153,11 @@ firrtlAttrGetEventControl(MlirContext ctx, FIRRTLEventControl eventControl);
 MLIR_CAPI_EXPORTED FIRRTLValueFlow firrtlValueFoldFlow(MlirValue value,
                                                        FIRRTLValueFlow flow);
 
+MLIR_CAPI_EXPORTED bool
+firrtlImportAnnotationsFromJSONRaw(MlirContext ctx,
+                                   MlirStringRef annotationsStr,
+                                   MlirAttribute *importedAnnotationsArray);
+
 #ifdef __cplusplus
 }
 #endif

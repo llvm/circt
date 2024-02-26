@@ -113,13 +113,10 @@ void FuncService::Function::connect() {
   result.connect();
 }
 
-MessageData FuncService::Function::call(const MessageData &argData) {
+std::future<MessageData>
+FuncService::Function::call(const MessageData &argData) {
   arg.write(argData);
-  MessageData resultData;
-  // TODO: Return a future instead of spin blocking.
-  while (!result.read(resultData))
-    ;
-  return resultData;
+  return result.readAsync();
 }
 
 Service *ServiceRegistry::createService(AcceleratorConnection *acc,

@@ -15,6 +15,7 @@
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRParser.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
+#include "circt/Dialect/FIRRTL/Import/FIRAnnotations.h"
 #include "circt/Support/JSON.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -53,9 +54,9 @@ bool circt::firrtl::fromOMIRJSON(json::Value &value,
 /// represented as a Target-keyed arrays of attributes.  The input JSON value is
 /// checked, at runtime, to be an array of objects.  Returns true if successful,
 /// false if unsuccessful.
-bool circt::firrtl::fromJSONRaw(json::Value &value,
-                                SmallVectorImpl<Attribute> &annotations,
-                                json::Path path, MLIRContext *context) {
+bool circt::firrtl::importAnnotationsFromJSONRaw(
+    json::Value &value, SmallVectorImpl<Attribute> &annotations,
+    json::Path path, MLIRContext *context) {
 
   // The JSON value must be an array of objects.  Anything else is reported as
   // invalid.

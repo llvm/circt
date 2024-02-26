@@ -1,5 +1,3 @@
-// XFAIL: *
-// See https://github.com/llvm/circt/issues/6658
 // RUN: circt-opt %s | circt-opt | FileCheck %s
 
 // CHECK-LABEL:  ibis.class @HighLevel {
@@ -67,7 +65,7 @@ ibis.class @HighLevel {
 // CHECK-NEXT:    %true = hw.constant true
 // CHECK-NEXT:    %out_wire = ibis.wire.output @out_wire, %true : i1
 // CHECK-NEXT:    %a = ibis.instance @a, @A 
-// CHECK-NEXT:    ibis.container @D {
+// CHECK-NEXT:    ibis.container.inner @D {
 // CHECK-NEXT:      %this_0 = ibis.this @D 
 // CHECK-NEXT:      %parent = ibis.path [#ibis.step<parent : !ibis.scoperef<@LowLevel>> : !ibis.scoperef<@LowLevel>]
 // CHECK-NEXT:      %parent.LowLevel_in.ref = ibis.get_port %parent, @LowLevel_in : !ibis.scoperef<@LowLevel> -> !ibis.portref<in i1>
@@ -102,7 +100,7 @@ ibis.class @LowLevel {
   // Instantiation
   %a = ibis.instance @a, @A
 
-  ibis.container @D {
+  ibis.container.inner @D {
     %this_d = ibis.this @D
     %parent_C = ibis.path [
       #ibis.step<parent : !ibis.scoperef<@LowLevel>>
@@ -126,6 +124,20 @@ ibis.class @LowLevel {
 
     // Test hw.instance ops inside a container (symbol table usage)
     hw.instance "foo" @externModule() -> ()
+  }
+}
+
+// CHECK-LABEL:  ibis.container.outer @O {
+// CHECK-NEXT:     %this = ibis.this @O
+// CHECK-NEXT:     ibis.container.inner @I {
+// CHECK-NEXT:       %this_0 = ibis.this @I
+// CHECK-NEXT:     }
+// CHECK-NEXT:   }
+
+ibis.container.outer @O {
+  %thisO = ibis.this @O
+  ibis.container.inner @I {
+    %thisI = ibis.this @I
   }
 }
 

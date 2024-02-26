@@ -43,8 +43,14 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
       if (dstFType != srcFType)
         src = builder.create<RefCastOp>(dstFType, src);
       builder.create<RefDefineOp>(dst, src);
-    } else // Other types, give up and leave a connect
+    } else if (type_isa<PropertyType>(dstFType) &&
+               type_isa<PropertyType>(srcFType)) {
+      // Properties use propassign.
+      builder.create<PropAssignOp>(dst, src);
+    } else {
+      // Other types, give up and leave a connect
       builder.create<ConnectOp>(dst, src);
+    }
     return;
   }
 

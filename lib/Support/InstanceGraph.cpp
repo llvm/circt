@@ -136,8 +136,9 @@ void InstanceGraph::replaceInstance(InstanceOpInterface inst,
   }
 }
 
-bool InstanceGraph::isAncestor(ModuleOpInterface child,
-                               ModuleOpInterface parent) {
+bool InstanceGraph::isAncestor(
+    ModuleOpInterface child, ModuleOpInterface parent,
+    llvm::function_ref<bool(InstanceRecord *)> skipInstance) {
   DenseSet<InstanceGraphNode *> seen;
   SmallVector<InstanceGraphNode *> worklist;
   auto *cn = lookup(child);
@@ -149,6 +150,8 @@ bool InstanceGraph::isAncestor(ModuleOpInterface child,
     if (node->getModule() == parent)
       return true;
     for (auto *use : node->uses()) {
+      if (skipInstance(use))
+        continue;
       auto *mod = use->getParent();
       if (!seen.count(mod)) {
         seen.insert(mod);

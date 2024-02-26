@@ -10,9 +10,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-include "mlir/Interfaces/InferTypeOpInterface.td"
-
-
 def ConstantOp : MIROp<"constant", [Pure]> {
   let summary = "A constant value";
 

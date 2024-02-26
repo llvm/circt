@@ -18,12 +18,20 @@
 #include "mlir/Tools/mlir-translate/MlirTranslateMain.h"
 #include "llvm/Support/PrettyStackTrace.h"
 
+#ifdef CIRCT_SLANG_FRONTEND_ENABLED
+#include "circt/Conversion/ImportVerilog.h"
+#endif
+
 int main(int argc, char **argv) {
   // Set the bug report message to indicate users should file issues on
   // llvm/circt and not llvm/llvm-project.
   llvm::setBugReportMsg(circt::circtBugReportMsg);
 
   circt::registerAllTranslations();
+#ifdef CIRCT_SLANG_FRONTEND_ENABLED
+  circt::registerFromVerilogTranslation();
+#endif
+
   return mlir::failed(
       mlir::mlirTranslateMain(argc, argv, "CIRCT Translation Testing Tool"));
 }
