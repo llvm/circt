@@ -10,9 +10,10 @@
 #define CIRCT_DIALECT_ARC_ARCOPS_TD
 
 include "circt/Dialect/Arc/ArcDialect.td"
-include "circt/Dialect/Arc/ArcTypes.td"
-include "circt/Dialect/Seq/SeqTypes.td"
 include "circt/Dialect/Arc/ArcInterfaces.td"
+include "circt/Dialect/Arc/ArcTypes.td"
+include "circt/Dialect/HW/HWTypes.td"
+include "circt/Dialect/Seq/SeqTypes.td"
 include "mlir/IR/EnumAttr.td"
 include "mlir/Interfaces/FunctionInterfaces.td"
 include "mlir/IR/OpAsmInterface.td"
@@ -570,8 +571,9 @@ def StateWriteOp : ArcOp<"state_write", [
 // Simulation Orchestration
 //===----------------------------------------------------------------------===//
 
-def SimInstantiateOp : ArcOp<"sim.instantiate", [MemoryEffects<[MemAlloc]>,
-                                                 NoTerminator]> {
+def SimInstantiateOp : ArcOp<"sim.instantiate",
+  [MemoryEffects<[MemAlloc]>, NoTerminator,
+   DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "Instantiates an Arc model for simulation";
   let description = [{
     Creates an instance of an Arc model in scope, in order to simulate it.
@@ -584,7 +586,9 @@ def SimInstantiateOp : ArcOp<"sim.instantiate", [MemoryEffects<[MemAlloc]>,
   let hasCustomAssemblyFormat = 1;
 }
 
-def SimSetInputOp : ArcOp<"sim.set_input", [MemoryEffects<[MemWrite]>]> {
+def SimSetInputOp : ArcOp<"sim.set_input",
+  [MemoryEffects<[MemWrite]>,
+   DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "Sets the value of an input of the model instance";
   let description = [{
     Sets the value of an input port in a specific instance of a model. The
@@ -593,26 +597,29 @@ def SimSetInputOp : ArcOp<"sim.set_input", [MemoryEffects<[MemWrite]>]> {
   }];
   let arguments = (ins SimModelInstance:$instance,
                        StrAttr:$input,
-                       AnyInteger:$value);
+                       AnyType:$value);
   let assemblyFormat =
     [{ $instance `,` $input `=` $value attr-dict
        `:` type($value) `,` qualified(type($instance)) }];
 }
 
-def SimGetPortOp : ArcOp<"sim.get_port", [MemoryEffects<[MemRead]>]> {
+def SimGetPortOp : ArcOp<"sim.get_port",
+  [MemoryEffects<[MemRead]>, DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "Gets the value of a port of the model instance";
   let description = [{
     Gets the value of the given port in a specific instance of a model. The
     provided input port must be of the provided size.
   }];
   let arguments = (ins SimModelInstance:$instance, StrAttr:$port);
-  let results = (outs AnyInteger:$value);
+  let results = (outs AnyType:$value);
   let assemblyFormat =
     [{ $instance `,` $port attr-dict
        `:` type($value) `,` qualified(type($instance)) }];
 }
 
-def SimStepOp : ArcOp<"sim.step", [MemoryEffects<[MemRead, MemWrite]>]> {
+def SimStepOp : ArcOp<"sim.step",
+  [MemoryEffects<[MemRead, MemWrite]>,
+   DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary =
     "Evaluates one step of the simulation for the provided model instance";
   let description = [{
@@ -630,7 +637,7 @@ def SimEmitValueOp : ArcOp<"sim.emit"> {
     Sends a named value to the simulation driver. This is notably useful
     for printing values during simulation.
   }];
-  let arguments = (ins StrAttr:$valueName, AnyInteger:$value);
+  let arguments = (ins StrAttr:$valueName, AnyType:$value);
   let assemblyFormat = [{ $valueName `,` $value attr-dict `:` type($value) }];
 }
 
@@ -645,13 +652,18 @@ def TapOp : ArcOp<"tap"> {
 }
 
 def ModelOp : ArcOp<"model", [RegionKindInterface, IsolatedFromAbove,
-                              NoTerminator]> {
+                              NoTerminator, Symbol]> {
   let summary = "A model with stratified clocks";
-  let arguments = (ins StrAttr:$name);
+  let description = [{
+    A model with stratified clocks. The `io` optional attribute
+    specifies the I/O of the module associated to this model.
+  }];
+  let arguments = (ins StrAttr:$sym_name,
+                       TypeAttrOf<ModuleType>:$io);
   let regions = (region SizedRegion<1>:$body);
 
   let assemblyFormat = [{
-    $name attr-dict-with-keyword $body
+    $sym_name `io` $io attr-dict-with-keyword $body
   }];
 
   let extraClassDeclaration = [{

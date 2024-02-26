@@ -279,6 +279,17 @@ struct ZeroCountOpLowering : public OpConversionPattern<arc::ZeroCountOp> {
   }
 };
 
+struct SeqConstClockLowering : public OpConversionPattern<seq::ConstClockOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(seq::ConstClockOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<LLVM::ConstantOp>(
+        op, rewriter.getI1Type(), static_cast<int64_t>(op.getValue()));
+    return success();
+  }
+};
+
 template <typename OpTy>
 struct ReplaceOpWithInputPattern : public OpConversionPattern<OpTy> {
   using OpConversionPattern<OpTy>::OpConversionPattern;
@@ -335,8 +346,6 @@ struct SimInstantiateOpLowering
     auto modelIt = modelInfo.find(
         cast<SimModelInstanceType>(op.getBody().getArgument(0).getType())
             .getModel());
-    if (modelIt == modelInfo.end())
-      return op.emitError("model not found");
     ModelInfoMap &model = modelIt->second;
 
     ModuleOp moduleOp = op->getParentOfType<ModuleOp>();
@@ -378,22 +387,17 @@ struct SimSetInputOpLowering : public ModelAwarePattern<arc::SimSetInputOp> {
                   ConversionPatternRewriter &rewriter) const final {
     auto modelIt = modelInfo.find(
         cast<SimModelInstanceType>(op.getInstance().getType()).getModel());
-    if (modelIt == modelInfo.end())
-      return op.emitError("model not found");
     ModelInfoMap &model = modelIt->second;
 
     auto portIt = model.states.find(op.getInput());
-    if (portIt == model.states.end())
-      return op.emitError("input not found on model");
+    if (portIt == model.states.end()) {
+      // If the port is not found in the state, it means the model does not
+      // actually use it. Thus this operation is a no-op.
+      rewriter.eraseOp(op);
+      return success();
+    }
+
     StateInfo &port = portIt->second;
-
-    if (port.numBits != op.getValue().getType().getWidth())
-      return op.emitError("expected input of width ")
-             << port.numBits << ", got " << op.getValue().getType().getWidth();
-
-    if (port.type != StateInfo::Type::Input)
-      return op.emitError("provided port is not an input port");
-
     Value statePtr = createPtrToPortState(rewriter, op.getLoc(),
                                           adaptor.getInstance(), port);
     rewriter.replaceOpWithNewOp<LLVM::StoreOp>(op, adaptor.getValue(),
@@ -411,19 +415,18 @@ struct SimGetPortOpLowering : public ModelAwarePattern<arc::SimGetPortOp> {
                   ConversionPatternRewriter &rewriter) const final {
     auto modelIt = modelInfo.find(
         cast<SimModelInstanceType>(op.getInstance().getType()).getModel());
-    if (modelIt == modelInfo.end())
-      return op.emitError("model not found");
     ModelInfoMap &model = modelIt->second;
 
     auto portIt = model.states.find(op.getPort());
-    if (portIt == model.states.end())
-      return op.emitError("port not found on model");
+    if (portIt == model.states.end()) {
+      // If the port is not found in the state, it means the model does not
+      // actually set it. Thus this operation returns 0.
+      rewriter.replaceOpWithNewOp<LLVM::ConstantOp>(
+          op, typeConverter->convertType(op.getValue().getType()), 0);
+      return success();
+    }
+
     StateInfo &port = portIt->second;
-
-    if (port.numBits != op.getValue().getType().getWidth())
-      return op.emitError("expected port of width ")
-             << port.numBits << ", got " << op.getValue().getType().getWidth();
-
     Value statePtr = createPtrToPortState(rewriter, op.getLoc(),
                                           adaptor.getInstance(), port);
     rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, op.getValue().getType(),
@@ -441,8 +444,6 @@ struct SimStepOpLowering : public ModelAwarePattern<arc::SimStepOp> {
                   ConversionPatternRewriter &rewriter) const final {
     StringRef modelName =
         cast<SimModelInstanceType>(op.getInstance().getType()).getModel();
-    if (!modelInfo.contains(modelName))
-      return op.emitError("model not found");
 
     StringAttr evalFunc =
         rewriter.getStringAttr(evalSymbolFromModelName(modelName));
@@ -587,6 +588,7 @@ void LowerArcToLLVMPass::runOnOperation() {
     ModelOpLowering,
     ReplaceOpWithInputPattern<seq::ToClockOp>,
     ReplaceOpWithInputPattern<seq::FromClockOp>,
+    SeqConstClockLowering,
     SimEmitValueOpLowering,
     StateReadOpLowering,
     StateWriteOpLowering,

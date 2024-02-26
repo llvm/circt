@@ -1,12 +1,12 @@
 // RUN: circt-opt %s --arc-lower-state | FileCheck %s
 
-// CHECK-LABEL: arc.model "Empty" {
+// CHECK-LABEL: arc.model "Empty"
 // CHECK-NEXT:  ^bb0(%arg0: !arc.storage):
 // CHECK-NEXT:  }
 hw.module @Empty() {
 }
 
-// CHECK-LABEL: arc.model "InputsAndOutputs" {
+// CHECK-LABEL: arc.model "InputsAndOutputs"
 hw.module @InputsAndOutputs(in %a: i42, in %b: i17, out c: i42, out d: i17) {
   %0 = comb.add %a, %a : i42
   %1 = comb.add %b, %b : i17
@@ -27,7 +27,7 @@ hw.module @InputsAndOutputs(in %a: i42, in %b: i17, out c: i42, out d: i17) {
   // CHECK-NEXT: }
 }
 
-// CHECK-LABEL: arc.model "State" {
+// CHECK-LABEL: arc.model "State"
 hw.module @State(in %clk: !seq.clock, in %en: i1, in %en2: i1) {
   %gclk = seq.clock_gate %clk, %en, %en2
   %3 = arc.state @DummyArc(%6) clock %clk latency 1 : (i42) -> i42
@@ -63,7 +63,7 @@ hw.module @State(in %clk: !seq.clock, in %en: i1, in %en2: i1) {
   // CHECK-NEXT: }
 }
 
-// CHECK-LABEL: arc.model "State2" {
+// CHECK-LABEL: arc.model "State2"
 hw.module @State2(in %clk: !seq.clock) {
   %3 = arc.state @DummyArc(%3) clock %clk latency 1 : (i42) -> i42
   %4 = arc.state @DummyArc(%4) clock %clk latency 1 : (i42) -> i42
