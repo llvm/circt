@@ -5039,7 +5039,8 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit, bool isPublic,
   SmallVector<PortInfo, 8> portList;
   SmallVector<SMLoc> portLocs;
   ArrayAttr layers;
-  LocWithInfo info(getToken().getLoc(), this);
+  auto modLoc = getToken().getLoc();
+  LocWithInfo info(modLoc, this);
   consumeToken(FIRToken::kw_module);
   if (parseId(name, "expected module name") ||
       parseOptionalEnabledLayers(layers) ||
@@ -5048,7 +5049,11 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit, bool isPublic,
     return failure();
 
   // The main module is implicitly public.
-  isPublic |= name == circuit.getName();
+  if (name == circuit.getName()) {
+    if (!isPublic && removedFeature({4, 0, 0}, "private main modules", modLoc))
+      return failure();
+    isPublic = true;
+  }
 
   if (isPublic && version >= FIRVersion{4, 0, 0}) {
     for (auto [pi, loc] : llvm::zip_equal(portList, portLocs)) {

@@ -14,7 +14,7 @@ circuit Foo: %[[
   layer A, bind:
     layer B, bind:
 
-  module Foo:
+  public module Foo:
     input in: UInt<1>
 
     layerblock A:

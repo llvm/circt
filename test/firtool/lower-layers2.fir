@@ -76,7 +76,7 @@ circuit TestHarness:
   ; CHECK:     .b     (b)
   ; CHECK:   );
   ; CHECK: endmodule
-  module TestHarness:
+  public module TestHarness:
     input clock: Clock
     input reset: UInt<1>
     input a: UInt<32>
