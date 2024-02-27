@@ -77,6 +77,26 @@ static bool isSupportedModuleOp(Operation *moduleOp) {
   return llvm::isa<arc::ModelOp, hw::HWModuleLike>(moduleOp);
 }
 
+/// Fetches the operation pointed to by `pointing` with name `symbol`, checking
+/// that it is a supported model operation for simulation.
+static Operation *getSupportedModuleOp(SymbolTableCollection &symbolTable,
+                                       Operation *pointing, StringAttr symbol) {
+  Operation *moduleOp = symbolTable.lookupNearestSymbolFrom(pointing, symbol);
+  if (!moduleOp) {
+    pointing->emitOpError("model not found");
+    return nullptr;
+  }
+
+  if (!isSupportedModuleOp(moduleOp)) {
+    pointing->emitOpError("model symbol does not point to a supported model "
+                          "operation, points to ")
+        << moduleOp->getName() << " instead";
+    return nullptr;
+  }
+
+  return moduleOp;
+}
+
 static std::optional<hw::ModulePort> getModulePort(Operation *moduleOp,
                                                    StringRef portName) {
   auto findRightPort = [&](auto ports) -> std::optional<hw::ModulePort> {
@@ -469,6 +489,9 @@ void SimInstantiateOp::print(OpAsmPrinter &p) {
   p.printSymbolName(modelType.getModel());
   p << " as ";
   p.printRegionArgument(modelArg, {}, true);
+
+  p.printOptionalAttrDictWithKeyword(getOperation()->getAttrs());
+
   p << " ";
 
   p.printRegion(getBody(), false);
@@ -485,6 +508,9 @@ ParseResult SimInstantiateOp::parse(OpAsmParser &parser,
 
   OpAsmParser::Argument modelArg;
   if (failed(parser.parseArgument(modelArg, false, false)))
+    return failure();
+
+  if (failed(parser.parseOptionalAttrDictWithKeyword(result.attributes)))
     return failure();
 
   modelArg.type = SimModelInstanceType::get(result.getContext(), modelName);
@@ -509,16 +535,12 @@ LogicalResult SimInstantiateOp::verifyRegions() {
 
 LogicalResult
 SimInstantiateOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  Operation *moduleOp = symbolTable.lookupNearestSymbolFrom(
-      getOperation(),
+  Operation *moduleOp = getSupportedModuleOp(
+      symbolTable, getOperation(),
       llvm::cast<SimModelInstanceType>(getBody().getArgument(0).getType())
           .getModel());
   if (!moduleOp)
-    return emitOpError("model not found");
-
-  if (!isSupportedModuleOp(moduleOp))
-    return emitOpError(
-        "model symbol does not point to a supported model operation");
+    return failure();
 
   return success();
 }
@@ -529,15 +551,11 @@ SimInstantiateOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 
 LogicalResult
 SimSetInputOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  Operation *moduleOp = symbolTable.lookupNearestSymbolFrom(
-      getOperation(),
+  Operation *moduleOp = getSupportedModuleOp(
+      symbolTable, getOperation(),
       llvm::cast<SimModelInstanceType>(getInstance().getType()).getModel());
   if (!moduleOp)
-    return emitOpError("model not found");
-
-  if (!isSupportedModuleOp(moduleOp))
-    return emitOpError(
-        "model symbol does not point to a supported model operation");
+    return failure();
 
   std::optional<hw::ModulePort> port = getModulePort(moduleOp, getInput());
   if (!port)
@@ -561,15 +579,11 @@ SimSetInputOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 
 LogicalResult
 SimGetPortOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  Operation *moduleOp = symbolTable.lookupNearestSymbolFrom(
-      getOperation(),
+  Operation *moduleOp = getSupportedModuleOp(
+      symbolTable, getOperation(),
       llvm::cast<SimModelInstanceType>(getInstance().getType()).getModel());
   if (!moduleOp)
-    return emitOpError("model not found");
-
-  if (!isSupportedModuleOp(moduleOp))
-    return emitOpError(
-        "model symbol does not point to a supported model operation");
+    return failure();
 
   std::optional<hw::ModulePort> port = getModulePort(moduleOp, getPort());
   if (!port)
@@ -588,15 +602,11 @@ SimGetPortOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 //===----------------------------------------------------------------------===//
 
 LogicalResult SimStepOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  Operation *moduleOp = symbolTable.lookupNearestSymbolFrom(
-      getOperation(),
+  Operation *moduleOp = getSupportedModuleOp(
+      symbolTable, getOperation(),
       llvm::cast<SimModelInstanceType>(getInstance().getType()).getModel());
   if (!moduleOp)
-    return emitOpError("model not found");
-
-  if (!isSupportedModuleOp(moduleOp))
-    return emitOpError(
-        "model symbol does not point to a supported model operation");
+    return failure();
 
   return success();
 }

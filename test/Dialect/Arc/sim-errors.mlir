@@ -24,10 +24,6 @@ func.func @invalid_arg() {
 
 // -----
 
-hw.module @id(in %i: i8, in %j: i8, out o: i8) {
-    hw.output %i : i8
-}
-
 func.func @model_not_found() {
     // expected-error @+1 {{model not found}}
     arc.sim.instantiate @unknown as %model {}

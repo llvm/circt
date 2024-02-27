@@ -592,8 +592,8 @@ def SimSetInputOp : ArcOp<"sim.set_input",
   let summary = "Sets the value of an input of the model instance";
   let description = [{
     Sets the value of an input port in a specific instance of a model. The
-    provided input port must be of input type and contain an integer of the
-    right size.
+    provided input port must be of input type on the model and its type must
+    match the type of the value operand.
   }];
   let arguments = (ins SimModelInstance:$instance,
                        StrAttr:$input,
@@ -608,7 +608,7 @@ def SimGetPortOp : ArcOp<"sim.get_port",
   let summary = "Gets the value of a port of the model instance";
   let description = [{
     Gets the value of the given port in a specific instance of a model. The
-    provided input port must be of the provided size.
+    provided port must be of the type of the expected value.
   }];
   let arguments = (ins SimModelInstance:$instance, StrAttr:$port);
   let results = (outs AnyType:$value);
@@ -658,7 +658,7 @@ def ModelOp : ArcOp<"model", [RegionKindInterface, IsolatedFromAbove,
     A model with stratified clocks. The `io` optional attribute
     specifies the I/O of the module associated to this model.
   }];
-  let arguments = (ins StrAttr:$sym_name,
+  let arguments = (ins SymbolNameAttr:$sym_name,
                        TypeAttrOf<ModuleType>:$io);
   let regions = (region SizedRegion<1>:$body);
 

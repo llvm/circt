@@ -347,3 +347,24 @@ hw.module @vectorize_both_sides_lowered(in %in0: i1, in %in1: i1, in %in2: i1, i
 //       CHECK: [[V8:%.+]] = vector.extract [[V7]][0]
 //       CHECK: [[V9:%.+]] = vector.extract [[V7]][1]
 //       CHECK: hw.output [[V3]], [[V4]], [[V8]], [[V9]] :
+
+// -----
+
+// CHECK-LABEL: hw.module @sim_test
+hw.module @sim_test(in %a : i8, out b : i8) {
+  hw.output %a : i8
+}
+
+// CHECK-LABEL: func.func @no_attr
+func.func @no_attr() {
+  // CHECK: arc.sim.instantiate @sim_test as %{{.*}} {
+  arc.sim.instantiate @sim_test as %model {}
+  return
+}
+
+// CHECK-LABEL: func.func @with_attr
+func.func @with_attr() {
+  // CHECK: arc.sim.instantiate @sim_test as %{{.*}} attributes {foo = "foo"} {
+  arc.sim.instantiate @sim_test as %model attributes {foo = "foo"} {}
+  return
+}

@@ -595,7 +595,7 @@ void LowerArcToLLVMPass::runOnOperation() {
     StorageGetOpLowering,
     ZeroCountOpLowering
   >(converter, &getContext());
-  // clang-format
+  // clang-format on
 
   SmallVector<ModelInfo> models;
   if (failed(collectModels(getOperation(), models))) {
