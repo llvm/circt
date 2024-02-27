@@ -608,18 +608,16 @@ void LowerArcToLLVMPass::runOnOperation() {
     llvm::DenseMap<StringRef, StateInfo> states(modelInfo.states.size());
     for (StateInfo &stateInfo : modelInfo.states)
       states.insert({stateInfo.name, stateInfo});
-    modelMap.insert({modelInfo.name, ModelInfoMap {
-      .numStateBytes = modelInfo.numStateBytes,
-      .states = std::move(states),
-    }});
+    modelMap.insert(
+        {modelInfo.name, ModelInfoMap{
+                             .numStateBytes = modelInfo.numStateBytes,
+                             .states = std::move(states),
+                         }});
   }
 
-  patterns.add<
-    SimInstantiateOpLowering,
-    SimSetInputOpLowering,
-    SimGetPortOpLowering,
-    SimStepOpLowering
-  >(converter, &getContext(), modelMap);
+  patterns.add<SimInstantiateOpLowering, SimSetInputOpLowering,
+               SimGetPortOpLowering, SimStepOpLowering>(
+      converter, &getContext(), modelMap);
 
   // Apply the conversion.
   if (failed(applyFullConversion(getOperation(), target, std::move(patterns))))
