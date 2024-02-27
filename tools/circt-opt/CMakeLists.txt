@@ -88,6 +88,7 @@ target_link_libraries(circt-opt
   CIRCTTransforms
   CIRCTVerif
   CIRCTVerifToSV
+  CIRCTLTLToCore
 
   MLIRIR
   MLIRLLVMDialect
