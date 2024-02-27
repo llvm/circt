@@ -13,10 +13,12 @@
 #ifndef CIRCT_DIALECT_MOORE_MOOREDIALECT
 #define CIRCT_DIALECT_MOORE_MOOREDIALECT
 
+include "mlir/IR/DialectBase.td"
+
 def MooreDialect : Dialect {
   let name = "moore";
 
-  let summary = "Types and operations for Moore dialect";
+  let summary = "Types and operations for the Moore dialect";
   let description = [{
     This dialect defines the `moore` dialect, which represents various
     SystemVerilog-specific constructs without ambiguities and all types
@@ -32,9 +34,6 @@ def MooreDialect : Dialect {
     void printType(Type, DialectAsmPrinter &) const override;
   }];
   let useDefaultTypePrinterParser = 0;
-
-  // Opt-out of properties for now, must migrate by LLVM 19.  #5273.
-  let usePropertiesForAttributes = 0;
 }
 
 #endif // CIRCT_DIALECT_MOORE_MOOREDIALECT

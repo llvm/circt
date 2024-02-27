@@ -361,28 +361,14 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
   // CHECK-LABEL: hw.module private @Stop
   firrtl.module private @Stop(in %clock1: !firrtl.clock, in %clock2: !firrtl.clock, in %reset: !firrtl.uint<1>) {
-    // CHECK: [[CLOCK2:%.+]] = seq.from_clock %clock2
-    // CHECK: [[CLOCK1:%.+]] = seq.from_clock %clock1
-
-    // CHECK-NEXT: sv.ifdef "SYNTHESIS" {
-    // CHECK-NEXT: } else {
-    // CHECK-NEXT:   sv.always posedge [[CLOCK1]] {
-    // CHECK-NEXT:     %STOP_COND_ = sv.macro.ref @STOP_COND_
-    // CHECK-NEXT:     [[COND:%.+]] = comb.and bin %STOP_COND_, %reset : i1
-    // CHECK-NEXT:     sv.if [[COND]] {
-    // CHECK-NEXT:       sv.fatal
-    // CHECK-NEXT:     }
-    // CHECK-NEXT:   }
+    // CHECK-NEXT: [[STOP_COND_1:%.+]] = sv.macro.ref @STOP_COND_
+    // CHECK-NEXT: [[COND:%.+]] = comb.and bin [[STOP_COND_1]], %reset : i1
+    // CHECK-NEXT: sim.fatal %clock1, [[COND]]
     firrtl.stop %clock1, %reset, 42 : !firrtl.clock, !firrtl.uint<1>
 
-    // CHECK-NEXT:   sv.always posedge [[CLOCK2]] {
-    // CHECK-NEXT:     %STOP_COND_ = sv.macro.ref @STOP_COND_
-    // CHECK-NEXT:     [[COND:%.+]] = comb.and bin %STOP_COND_, %reset : i1
-    // CHECK-NEXT:     sv.if [[COND]] {
-    // CHECK-NEXT:       sv.finish
-    // CHECK-NEXT:     }
-    // CHECK-NEXT:   }
-    // CHECK-NEXT: }
+    // CHECK-NEXT: [[STOP_COND_2:%.+]] = sv.macro.ref @STOP_COND_
+    // CHECK-NEXT: [[COND:%.+]] = comb.and bin [[STOP_COND_2:%.+]], %reset : i1
+    // CHECK-NEXT: sim.finish %clock2, [[COND]]
     firrtl.stop %clock2, %reset, 0 : !firrtl.clock, !firrtl.uint<1>
   }
 

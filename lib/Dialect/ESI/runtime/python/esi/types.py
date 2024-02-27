@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
   from .accelerator import HWModule
 
+from concurrent.futures import Future
 from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
 
 
@@ -367,6 +368,34 @@ class BundlePort:
     return ReadPort(self, self.cpp_port.getRead(channel_name))
 
 
+class MessageFuture(Future):
+  """A specialization of `Future` for ESI messages. Wraps the cpp object and
+  deserializes the result.  Hopefully overrides all the methods necessary for
+  proper operation, which is assumed to be not all of them."""
+
+  def __init__(self, result_type: Type, cpp_future: cpp.MessageDataFuture):
+    self.result_type = result_type
+    self.cpp_future = cpp_future
+
+  def running(self) -> bool:
+    return True
+
+  def done(self) -> bool:
+    return self.cpp_future.valid()
+
+  def result(self, timeout: Optional[Union[int, float]] = None) -> Any:
+    # TODO: respect timeout
+    self.cpp_future.wait()
+    result_bytes = self.cpp_future.get()
+    (msg, leftover) = self.result_type.deserialize(result_bytes)
+    if len(leftover) != 0:
+      raise ValueError(f"leftover bytes: {leftover}")
+    return msg
+
+  def add_done_callback(self, fn: Callable[[Future], object]) -> None:
+    raise NotImplementedError("add_done_callback is not implemented")
+
+
 class FunctionPort(BundlePort):
   """A pair of channels which carry the input and output of a function."""
 
@@ -380,18 +409,16 @@ class FunctionPort(BundlePort):
     self.cpp_port.connect()
     self.connected = True
 
-  def call(self, **kwargs: Any) -> Any:
-    """Call the function with the given argument and returns the result."""
+  def call(self, **kwargs: Any) -> Future:
+    """Call the function with the given argument and returns a future of the
+    result."""
     valid, reason = self.arg_type.is_valid(kwargs)
     if not valid:
       raise ValueError(
           f"'{kwargs}' cannot be converted to '{self.arg_type}': {reason}")
     arg_bytes: bytearray = self.arg_type.serialize(kwargs)
-    result_bytes = self.cpp_port.call(arg_bytes)
-    (msg, leftover) = self.result_type.deserialize(result_bytes)
-    if len(leftover) != 0:
-      raise ValueError(f"leftover bytes: {leftover}")
-    return msg
+    cpp_future = self.cpp_port.call(arg_bytes)
+    return MessageFuture(self.result_type, cpp_future)
 
-  def __call__(self, *args: Any, **kwds: Any) -> Any:
+  def __call__(self, *args: Any, **kwds: Any) -> Future:
     return self.call(*args, **kwds)

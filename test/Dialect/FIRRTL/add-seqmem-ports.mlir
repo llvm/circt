@@ -9,7 +9,9 @@ firrtl.circuit "NoMems" attributes {annotations = [
     filename = "sram.txt"
   }]} {
   firrtl.module @NoMems() {}
-  // CHECK: sv.verbatim "" {output_file = #hw.output_file<"metadata{{/|\\\\}}sram.txt", excludeFromFileList>}
+  // CHECK:      emit.file "metadata{{/|\\\\}}sram.txt" {
+  // CHECK-NEXT:   sv.verbatim ""
+  // CHECK-NEXT: }
 }
 
 // Test for when there is a memory but no ports are added. The output file
@@ -25,7 +27,9 @@ firrtl.circuit "NoAddedPorts" attributes {annotations = [
   firrtl.module @NoAddedPorts() {
     %0:4 = firrtl.instance MWrite_ext  @MWrite_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>)
   }
-  // CHECK: sv.verbatim "" {output_file = #hw.output_file<"metadata{{/|\\\\}}sram.txt", excludeFromFileList>}
+  // CHECK:      emit.file "metadata{{/|\\\\}}sram.txt" {
+  // CHECK-NEXT:   sv.verbatim ""
+  // CHECK-NEXT: }
 }
 
 // Test for when there is no memory and we try to add ports. The output file
@@ -45,7 +49,9 @@ firrtl.circuit "NoMemory" attributes {annotations = [
   }]} {
   firrtl.module @NoMemory() {
   }
-  // CHECK: sv.verbatim "" {output_file = #hw.output_file<"metadata{{/|\\\\}}sram.txt", excludeFromFileList>}
+  // CHECK:      emit.file "metadata{{/|\\\\}}sram.txt" {
+  // CHECK-NEXT:   sv.verbatim ""
+  // CHECK-NEXT: }
 }
 
 // Test for a single added port.
@@ -167,10 +173,11 @@ firrtl.circuit "Complex" attributes {annotations = [
   firrtl.module @Complex() {
     firrtl.instance dut @DUT()
   }
-  // CHECK: sv.verbatim
-  // CHECK-SAME{LITERAL}: 0 -> {{0}}.{{1}}
-  // CHECK-SAME{LITERAL}: 1 -> {{0}}.{{2}}.{{3}}
-  // CHECK-SAME{LITERAL}: 2 -> {{0}}.{{4}}
-  // CHECK-SAME: {output_file = #hw.output_file<"metadata{{/|\\\\}}sram.txt", excludeFromFileList>,
-  // CHECK-SAME: symbols = [@DUT, #hw.innerNameRef<@DUT::@[[MWRITE_EXT]]>, #hw.innerNameRef<@DUT::@[[CHILD]]>, #hw.innerNameRef<@Child::@[[CHILD_MWRITE_EXT]]>, #hw.innerNameRef<@DUT::@[[MWRITE_EXT_0]]>]
+  // CHECK:               emit.file "metadata{{/|\\\\}}sram.txt" {
+  // CHECK-NEXT:            sv.verbatim
+  // CHECK-SAME{LITERAL}:     0 -> {{0}}.{{1}}
+  // CHECK-SAME{LITERAL}:     1 -> {{0}}.{{2}}.{{3}}
+  // CHECK-SAME{LITERAL}:     2 -> {{0}}.{{4}}
+  // CHECK-SAME:              {symbols = [@DUT, #hw.innerNameRef<@DUT::@[[MWRITE_EXT]]>, #hw.innerNameRef<@DUT::@[[CHILD]]>, #hw.innerNameRef<@Child::@[[CHILD_MWRITE_EXT]]>, #hw.innerNameRef<@DUT::@[[MWRITE_EXT_0]]>]}
+  // CHECK-NEXT:          }
 }

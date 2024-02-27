@@ -11,12 +11,16 @@
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
+#include "circt/Dialect/FIRRTL/Import/FIRAnnotations.h"
 #include "mlir/CAPI/IR.h"
 #include "mlir/CAPI/Registration.h"
 #include "mlir/CAPI/Support.h"
+#include "llvm/Support/JSON.h"
 
 using namespace circt;
 using namespace firrtl;
+
+namespace json = llvm::json;
 
 //===----------------------------------------------------------------------===//
 // Dialect API.
@@ -307,4 +311,25 @@ FIRRTLValueFlow firrtlValueFoldFlow(MlirValue value, FIRRTLValueFlow flow) {
   case Flow::Duplex:
     return FIRRTL_VALUE_FLOW_DUPLEX;
   }
+}
+
+bool firrtlImportAnnotationsFromJSONRaw(
+    MlirContext ctx, MlirStringRef annotationsStr,
+    MlirAttribute *importedAnnotationsArray) {
+  auto annotations = json::parse(unwrap(annotationsStr));
+  if (!annotations) {
+    return false;
+  }
+
+  auto *ctxUnwrapped = unwrap(ctx);
+
+  json::Path::Root root;
+  SmallVector<Attribute> annos;
+  if (!importAnnotationsFromJSONRaw(annotations.get(), annos, root,
+                                    ctxUnwrapped)) {
+    return false;
+  }
+
+  *importedAnnotationsArray = wrap(ArrayAttr::get(ctxUnwrapped, annos));
+  return true;
 }

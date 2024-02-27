@@ -16,6 +16,7 @@
 #ifndef DIALECT_MSFT_TRANSFORMS_PASSDETAILS_H
 #define DIALECT_MSFT_TRANSFORMS_PASSDETAILS_H
 
+#include "circt/Dialect/Emit/EmitDialect.h"
 #include "circt/Dialect/MSFT/MSFTOps.h"
 #include "circt/Dialect/MSFT/MSFTPasses.h"
 #include "circt/Dialect/SV/SVOps.h"

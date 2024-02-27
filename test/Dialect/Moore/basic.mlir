@@ -1,5 +1,15 @@
 // RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
 
+// CHECK-LABEL: moore.module @Foo
+moore.module @Foo {
+  // CHECK: moore.instance "foo" @Foo
+  moore.instance "foo" @Foo
+}
+
+// CHECK-LABEL: moore.module @Bar
+moore.module @Bar {
+}
+
 // CHECK-LABEL: llhd.entity @test1
 llhd.entity @test1() -> () {
   // CHECK-NEXT: [[CONST:%.*]] = moore.mir.constant 5 : !moore.int

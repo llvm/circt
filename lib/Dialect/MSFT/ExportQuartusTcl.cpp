@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/Emit/EmitOps.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWSymCache.h"
@@ -332,17 +333,12 @@ LogicalResult TclEmitter::emit(Operation *hwMod, StringRef outputFile) {
   }
 
   // Create a verbatim op containing the Tcl and symbol references.
-  OpBuilder builder = OpBuilder::atBlockEnd(hwMod->getBlock());
-  auto verbatim = builder.create<sv::VerbatimOp>(
-      builder.getUnknownLoc(), os.str(), ValueRange{},
-      builder.getArrayAttr(state.symbolRefs));
-
-  // When requested, give the verbatim op an output file.
-  if (!outputFile.empty()) {
-    auto outputFileAttr =
-        OutputFileAttr::getFromFilename(builder.getContext(), outputFile);
-    verbatim->setAttr("output_file", outputFileAttr);
-  }
+  auto builder = ImplicitLocOpBuilder::atBlockEnd(
+      UnknownLoc::get(hwMod->getContext()), hwMod->getBlock());
+  builder.create<emit::FileOp>(outputFile, [&] {
+    builder.create<sv::VerbatimOp>(os.str(), ValueRange{},
+                                   builder.getArrayAttr(state.symbolRefs));
+  });
 
   return success();
 }

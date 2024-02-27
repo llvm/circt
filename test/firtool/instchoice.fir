@@ -18,7 +18,7 @@ circuit Foo:
   module ASICTarget:
     input clock: Clock
 
-  module Foo:
+  public module Foo:
     input clock: Clock
 
     ; CHECK: %inst_clock = firrtl.instance_choice inst interesting_name @DefaultTarget

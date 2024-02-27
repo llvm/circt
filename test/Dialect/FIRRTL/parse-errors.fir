@@ -790,7 +790,7 @@ circuit UnsupportedVersionGroups:
 
 FIRRTL version 4.1.0
 circuit RemovedGroups:
-  module RemovedGroups:
+  public module RemovedGroups:
     ; expected-error @below {{optional groups were removed in FIRRTL 4.0.0, but the specified FIRRTL version was 4.1.0}}
     group A:
 
@@ -817,7 +817,7 @@ circuit LayerAndCircuitShareName:
   layer LayerAndCircuitShareName, bind :
 
   ; expected-error @below {{redefinition of symbol named 'LayerAndCircuitShareName'}}
-  module LayerAndCircuitShareName:
+  public module LayerAndCircuitShareName:
 
 ;// -----
 
@@ -879,6 +879,28 @@ circuit Top:
     output c : Integer
     ; expected-error @below {{Integer arithmetic expressions are a FIRRTL 4.0.0+ feature, but the specified FIRRTL version was 3.1.0}}
     propassign c, integer_add(a, b)
+
+;// -----
+FIRRTL version 3.1.0
+
+circuit Top:
+  module Top:
+    input a : Integer
+    input b : Integer
+    output c : Integer
+    ; expected-error @below {{Integer arithmetic expressions are a FIRRTL 4.0.0+ feature, but the specified FIRRTL version was 3.1.0}}
+    propassign c, integer_mul(a, b)
+
+;// -----
+FIRRTL version 3.1.0
+
+circuit Top:
+  module Top:
+    input a : Integer
+    input b : Integer
+    output c : Integer
+    ; expected-error @below {{Integer arithmetic expressions are a FIRRTL 4.0.0+ feature, but the specified FIRRTL version was 3.1.0}}
+    propassign c, integer_shr(a, b)
 
 ;// -----
 FIRRTL version 3.3.0
@@ -1158,7 +1180,7 @@ FIRRTL version 4.0.0
 circuit PublicNonModule:
   ; expected-error @below {{only modules may be public}}
   public extmodule Foo:
-  module PublicNonModule:
+  public module PublicNonModule:
 
 ;// -----
 circuit RWProbeExprOOB :
@@ -1206,7 +1228,7 @@ circuit Foo:
   module FPGATarget:
     input clock: UInt<1>
 
-  module Foo:
+  public module Foo:
     ; expected-error @below {{instance case port 'clock' type does not match the default module port}}
     instchoice inst of DefaultTarget, Platform :
       FPGA => FPGATarget
@@ -1224,7 +1246,7 @@ circuit Foo:
   module FPGATarget:
     input x: UInt<1>
 
-  module Foo:
+  public module Foo:
     ; expected-error @below {{instance case module port 'x' does not match the default module port 'clock'}}
     instchoice inst of DefaultTarget, Platform :
       FPGA => FPGATarget
@@ -1239,7 +1261,7 @@ circuit Foo:
   module DefaultTarget:
   module FPGATarget:
 
-  module Foo:
+  public module Foo:
     ; expected-error @below {{use of undefined option case 'ASIC'}}
     instchoice inst of DefaultTarget, Platform :
       ASIC => FPGATarget
@@ -1251,7 +1273,7 @@ circuit Foo:
   module DefaultTarget:
   module FPGATarget:
 
-  module Foo:
+  public module Foo:
     ; expected-error @below {{use of undefined option group 'Platform'}}
     instchoice inst of DefaultTarget, Platform :
       ASIC => FPGATarget
@@ -1277,14 +1299,14 @@ circuit Foo:
 FIRRTL version 4.0.0
 circuit Foo:
   layer A bind:
-  module Foo:
+  public module Foo:
     output a: Probe<
     ; expected-error @below {{expected probe data type}}
 ;// -----
 FIRRTL version 4.0.0
 circuit Foo:
   layer A bind:
-  module Foo:
+  public module Foo:
     ; expected-error @below {{expected '<' in reference type}}
     output a: Probe X
 
@@ -1292,14 +1314,14 @@ circuit Foo:
 FIRRTL version 4.0.0
 circuit Foo:
   layer A bind:
-  module Foo:
+  public module Foo:
     output a: Probe
     ; expected-error @below {{expected '<' in reference type}}
 ;// -----
 FIRRTL version 4.0.0
 circuit Foo:
   layer A bind:
-  module Foo:
+  public module Foo:
     ; expected-error @below {{expected probe data type}}
     output a: Probe<>
 
@@ -1307,14 +1329,14 @@ circuit Foo:
 FIRRTL version 4.0.0
 circuit Foo:
   layer A bind:
-  module Foo:
+  public module Foo:
     ; expected-error @below {{expected '>' to end reference type}}
     output a: Probe<UInt<1>
 ;// -----
 FIRRTL version 4.0.0
 circuit Foo:
   layer A bind:
-  module Foo:
+  public module Foo:
     ; expected-error @below {{expected '>' to end reference type}}
     output a: Probe<UInt<1> A
 
@@ -1322,6 +1344,33 @@ circuit Foo:
 FIRRTL version 4.0.0
 circuit Foo:
   layer A bind:
-  module Foo:
+  public module Foo:
     ; expected-error @below {{expected layer name}}
     output a: Probe<UInt<1> A.>
+
+;// -----
+FIRRTL version 4.0.0
+circuit UnknownWidthPublic:
+  public module UnknownWidthPublic:
+    ; expected-error @below {{public module port must have known width}}
+    output a: UInt
+
+;// -----
+FIRRTL version 4.0.0
+circuit UnknownWidthExt:
+  extmodule UnknownWidthExt:
+    ; expected-error @below {{extmodule port must have known width}}
+    output a: { x: UInt }
+
+;// -----
+FIRRTL version 4.0.0
+circuit AbstractResetPublic:
+  public module AbstractResetPublic:
+    ; expected-error @below {{public module port must have concrete reset type}}
+    input r: Reset
+
+;// -----
+FIRRTL version 4.0.0
+circuit PrivateMainModule:
+  ; expected-error @below {{private main modules were removed in FIRRTL 4.0.0}}
+  module PrivateMainModule:

@@ -26,6 +26,10 @@ namespace hw {
 class HWDialect;
 } // namespace hw
 
+namespace emit {
+class EmitDialect;
+} // namespace emit
+
 namespace sv {
 class SVDialect;
 } // namespace sv

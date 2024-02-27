@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/Emit/EmitOps.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
@@ -23,6 +24,7 @@
 #include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Parallel.h"
+#include "llvm/Support/Path.h"
 
 using namespace circt;
 using namespace firrtl;
@@ -70,7 +72,7 @@ struct AddSeqMemPortsPass : public AddSeqMemPortsBase<AddSeqMemPortsPass> {
   InstanceGraph *instanceGraph;
 
   /// If the metadata output file was specified in an annotation.
-  hw::OutputFileAttr outputFile;
+  StringAttr outputFile;
 
   /// This is the list of every port to be added to each sequential memory.
   SmallVector<PortInfo> userPorts;
@@ -119,9 +121,9 @@ LogicalResult AddSeqMemPortsPass::processFileAnno(Location loc,
                      "AddSeqMemPortsFileAnnotation requires field 'filename' "
                      "of string type");
 
-  outputFile = hw::OutputFileAttr::getFromDirectoryAndFilename(
-      &getContext(), metadataDir, filename.getValue(),
-      /*excludeFromFilelist=*/true);
+  SmallString<128> outputFilePath(metadataDir);
+  llvm::sys::path::append(outputFilePath, filename.getValue());
+  outputFile = StringAttr::get(&getContext(), outputFilePath);
   return success();
 }
 
@@ -320,10 +322,11 @@ void AddSeqMemPortsPass::createOutputFile(igraph::ModuleOpInterface module) {
   }
 
   // Put the information in a verbatim operation.
-  auto verbatimOp = builder.create<sv::VerbatimOp>(
-      builder.getUnknownLoc(), buffer, ValueRange{},
-      builder.getArrayAttr(params));
-  verbatimOp->setAttr("output_file", outputFile);
+  auto loc = builder.getUnknownLoc();
+  builder.create<emit::FileOp>(loc, outputFile, [&] {
+    builder.create<sv::VerbatimOp>(loc, buffer, ValueRange{},
+                                   builder.getArrayAttr(params));
+  });
   anythingChanged = true;
 }
 

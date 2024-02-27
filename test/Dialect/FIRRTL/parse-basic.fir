@@ -1682,7 +1682,7 @@ circuit Layers:
   ; CHECK:      firrtl.module @Layers
   ; CHECK-SAME:   out %b: !firrtl.probe<uint<1>, @A>
   ; CHECK-SAME:   out %c: !firrtl.rwprobe<uint<1>, @A::@B>
-  module Layers:
+  public module Layers:
     input a: UInt<1>
     output b: Probe<UInt<1>, A>
     output c: RWProbe<UInt<1>, A.B>
@@ -1858,14 +1858,24 @@ FIRRTL version 4.0.0
 
 ; CHECK-LABEL: firrtl.circuit "IntegerArithmetic"
 circuit IntegerArithmetic :
-  module IntegerArithmetic :
+  public module IntegerArithmetic :
     input a : Integer
     input b : Integer
     output c : Integer
+    output d : Integer
+    output e : Integer
 
     ; CHECK: [[C:%.+]] = firrtl.integer.add %a, %b
     ; CHECK: firrtl.propassign %c, [[C]]
     propassign c, integer_add(a, b)
+
+    ; CHECK: [[D:%.+]] = firrtl.integer.mul %a, %b
+    ; CHECK: firrtl.propassign %d, [[D]]
+    propassign d, integer_mul(a, b)
+
+    ; CHECK: [[E:%.+]] = firrtl.integer.shr %a, %b
+    ; CHECK: firrtl.propassign %e, [[E]]
+    propassign e, integer_shr(a, b)
 
 ;// -----
 FIRRTL version 3.1.0
@@ -1945,7 +1955,7 @@ circuit LayerEnabledModule:
     layer C, bind:
   ; CHECK: firrtl.module @LayerEnabledModule
   ; CHECK-SAME: layers = [@A, @B::@C]
-  module LayerEnabledModule enablelayer A enablelayer B.C:
+  public module LayerEnabledModule enablelayer A enablelayer B.C:
 
   ; CHECK: firrtl.module private @UserOfLayerEnabledModule
   ; CHECK-SAME: layers = [@A, @B::@C]
@@ -2021,7 +2031,7 @@ FIRRTL version 4.0.0
 ; CHECK-LABEL: circuit "StaticShiftRight"
 circuit StaticShiftRight:
   ; CHECK: firrtl.module @StaticShiftRight
-  module StaticShiftRight:
+  public module StaticShiftRight:
     input a : UInt<8>
     input b : UInt<0>
     input c : SInt<8>
