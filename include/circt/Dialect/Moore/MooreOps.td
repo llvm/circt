@@ -26,7 +26,6 @@ class MIROp<string mnemonic, list<Trait> traits = []> :
   MooreOp<"mir." # mnemonic, traits>;
 
 include "circt/Dialect/Moore/MIRExpressions.td"
-include "circt/Dialect/Moore/MIRStatements.td"
 
 //===----------------------------------------------------------------------===//
 // Structure
