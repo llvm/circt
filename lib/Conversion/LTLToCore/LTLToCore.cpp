@@ -51,26 +51,6 @@ static sv::EventControl LTLToSVEventControl(ltl::ClockEdge ce) {
 
 namespace {
 
-/// Lower a ltl::DisableOp operation to Core operations
-/*struct DisableOpConversion : OpConversionPattern<ltl::DisableOp> {
-  using OpConversionPattern<ltl::DisableOp>::OpConversionPattern;
-
-  // DisableOp translates to an implication in the form of
-  // ~condition -> input
-  LogicalResult
-  matchAndRewrite(ltl::DisableOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-
-    // Replace the ltl::DisableOp with an OR op as it represents a disabling
-    // implication: (implies (not condition) input) is equivalent to
-    // (or (not (not condition)) input) which becomes (or condition input)
-    rewriter.replaceOpWithNewOp<comb::OrOp>(op, adaptor.getCondition(),
-                                            adaptor.getInput());
-
-    return success();
-  }
-};*/
-
 struct HasBeenResetOpConversion : OpConversionPattern<verif::HasBeenResetOp> {
   using OpConversionPattern<verif::HasBeenResetOp>::OpConversionPattern;
 
@@ -115,16 +95,6 @@ struct HasBeenResetOpConversion : OpConversionPattern<verif::HasBeenResetOp> {
     return success();
   }
 };
-
-/*struct ClockOpConversionPattern : OpConversionPattern<ltl::ClockOp> {
-  using OpConversionPattern<ltl::ClockOp>::OpConversionPattern;
-  LogicalResult
-  matchAndRewrite(ltl::ClockOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    rewriter.eraseOp(op);
-    return success();
-  }
-};*/
 
 struct AssertOpConversionPattern : OpConversionPattern<verif::AssertOp> {
   using OpConversionPattern<verif::AssertOp>::OpConversionPattern;
@@ -464,63 +434,6 @@ struct AssertOpConversionPattern : OpConversionPattern<verif::AssertOp> {
     return success();
   }
 };
-
-/*struct LowerClockRelatedOpPatterns : OpConversionPattern<ltl::ClockOp> {
-  using OpConversionPattern<ltl::ClockOp>::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(ltl::ClockOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    // Match for a single verif.assert user, and replace the structure.
-    // Folding will recursively apply this pattern if multiple instances are
-    // found.
-    auto users = op.getResult().getUsers();
-    if (users.empty())
-      return rewriter.notifyMatchFailure(op, "No users found");
-
-    for (auto *user : op.getResult().getUsers()) {
-      auto fusedLoc =
-          mlir::FusedLoc::get(getContext(), {op.getLoc(), user->getLoc()});
-
-      // Dispatch to the clock-specific patterns.
-      LogicalResult res =
-          llvm::TypeSwitch<Operation *, LogicalResult>(user)
-              .Case<verif::AssertOp>([&](auto assert) {
-                return rewriteAssertOp(fusedLoc, assert, adaptor, rewriter);
-              })
-              .Default([&](auto) {
-                return rewriter.notifyMatchFailure(
-                    op, "User of clock is not a verif.assert");
-              });
-      if (failed(res))
-        return res;
-    }
-
-    // Clock can be removed as all users should have been handled by now.
-    rewriter.eraseOp(op);
-    return success();
-  }
-
-  LogicalResult rewriteAssertOp(Location loc, verif::AssertOp assertOp,
-                                OpAdaptor &adaptor,
-                                ConversionPatternRewriter &rewriter) const {
-    // Generate the parenting sv.always posedge clock from the ltl
-    // clock, containing the generated sv.assert
-    rewriter.replaceOpWithNewOp<sv::AlwaysOp>(
-        assertOp, LTLToSVEventControl(adaptor.getEdge()), adaptor.getClock(),
-        [&] {
-          // Generate the sv assertion using the input to the parenting
-          // clock
-          rewriter.create<sv::AssertOp>(
-              loc, adaptor.getInput(),
-              sv::DeferAssertAttr::get(getContext(),
-                                       sv::DeferAssert::Immediate),
-              assertOp.getLabelAttr());
-        });
-
-    return success();
-  }
-};*/
 
 } // namespace
 

@@ -9,25 +9,28 @@ module {
     //CHECK:  %true = hw.constant true
     %true = hw.constant true
 
-    //CHECK:   %false = hw.constant false
-    //CHECK:   %2 = comb.or %reset, %hbr : i1
-    //CHECK:   %hbr = seq.compreg sym @hbr  %2, %clock powerOn %false : i1  
+    //CHECK:  %false = hw.constant false
+    //CHECK:  %true_0 = hw.constant true
+    //CHECK:  %2 = comb.or %reset, %hbr : i1
+    //CHECK:  %hbr = seq.compreg sym @hbr  %2, %clock powerOn %false : i1  
     %9 = verif.has_been_reset %0, sync %reset
 
-    //CHECK:  %3 = comb.xor bin %hbr, %true : i1
+    //CHECK:  %3 = comb.xor %reset, %true_0 : i1
+    //CHECK:  %4 = comb.and %hbr, %3 : i1
+    //CHECK:  %5 = comb.xor bin %4, %true : i1
     %10 = comb.xor bin %9, %true : i1
 
-    //CHECK:  %4 = hw.wire %0 : i1
+    //CHECK:  %6 = hw.wire %0 : i1
     %11 = hw.wire %8 : i1
 
-    //CHECK:  %5 = hw.wire %3 : i1
+    //CHECK:  %7 = hw.wire %5 : i1
     %12 = hw.wire %10 : i1
 
-    //CHECK:  %6 = comb.or %5, %4 : i1
+    //CHECK:  %8 = comb.or %7, %6 : i1
     %13 = ltl.disable %11 if %12 : i1
 
     //CHECK:  sv.always posedge %1 {
-    //CHECK:    sv.assert %6, immediate
+    //CHECK:    sv.assert %8, immediate
     //CHECK:  }
     %14 = ltl.clock %13, posedge %0 : !ltl.property
     verif.assert %14 : !ltl.property
