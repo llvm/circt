@@ -115,8 +115,8 @@ struct AssertOpConversionPattern : OpConversionPattern<verif::AssertOp> {
                         ConversionPatternRewriter &rewriter) const {
     Value constOne =
         rewriter.create<hw::ConstantOp>(loc, rewriter.getI1Type(), 1);
-    Value n_a = rewriter.create<comb::XorOp>(loc, antecedent, constOne);
-    return rewriter.create<comb::OrOp>(loc, n_a, consequent);
+    Value nA = rewriter.create<comb::XorOp>(loc, antecedent, constOne);
+    return rewriter.create<comb::OrOp>(loc, nA, consequent);
   }
 
   // NOI case: Generate a register delaying our antecedent
