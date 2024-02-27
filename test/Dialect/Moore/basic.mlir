@@ -4,6 +4,10 @@
 moore.module @Foo {
   // CHECK: moore.instance "foo" @Foo
   moore.instance "foo" @Foo
+  // CHECK: %myVar = moore.variable : !moore.bit
+  %myVar = moore.variable : !moore.bit
+  // CHECK: [[TMP:%.+]] = moore.variable name "myVar" : !moore.bit
+  moore.variable name "myVar" : !moore.bit
 }
 
 // CHECK-LABEL: moore.module @Bar

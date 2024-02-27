@@ -36,3 +36,9 @@ endmodule
 module Parent;
   Child child();
 endmodule
+
+// CHECK-LABEL: moore.module @Foo
+module Foo;
+  // CHECK: %myVar = moore.variable
+  var myVar;
+endmodule
