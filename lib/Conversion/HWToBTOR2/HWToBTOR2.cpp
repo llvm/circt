@@ -158,8 +158,14 @@ private:
   Operation *getOpAlias(Operation *op) {
 
     // Remove the alias until none are left (for wires of wires of wires ...)
-    if (auto it = opAliasMap.find(op); it != opAliasMap.end())
+    if (auto it = opAliasMap.find(op); it != opAliasMap.end()) {
+      // check for aliases of inputs
+      if (!it->second) {
+        op->emitError("BTOR2 emission does not support for wires of inputs!");
+        return op;
+      }
       return it->second;
+    }
 
     // If the op isn't an alias then simply return it
     return op;
@@ -270,6 +276,21 @@ private:
        << "zero"
        << " " << sid << "\n";
     return constlid;
+  }
+
+  // Generates an init statement, which allows for the use of powerOnValue
+  // operands in compreg registers
+  void genInit(Operation *reg, Value initVal, int64_t width) {
+    // Retrieve the various identifiers we require for this
+    size_t regLID = getOpLID(reg);
+    size_t sid = sortToLIDMap.at(width);
+    size_t initValLID = getOpLID(initVal);
+
+    // Build and emit the string (the lid here doesn't need to be associated to
+    // an op as it won't be used)
+    os << lid++ << " "
+       << "init"
+       << " " << sid << " " << regLID << " " << initValLID << "\n";
   }
 
   // Generates a binary operation instruction given an op name, two operands and
@@ -503,13 +524,6 @@ private:
       nextLID = getOpLID(next);
     }
 
-    // Assign a new LID to next
-    setOpLID(next.getDefiningOp());
-
-    // Sanity check: at this point the next operation should have had it's btor2
-    // counterpart emitted if not then something terrible must have happened.
-    assert(nextLID != noLID);
-
     // Check if the register has a reset
     if (resetLID != noLID) {
       size_t resetValLID = noLID;
@@ -520,9 +534,21 @@ private:
       else
         resetValLID = genZero(width);
 
+      // Assign a new LID to next
+      setOpLID(next.getDefiningOp());
+
+      // Sanity check: at this point the next operation should have had it's
+      // btor2 counterpart emitted if not then something terrible must have
+      // happened.
+      assert(nextLID != noLID);
+
       // Generate the ite for the register update reset condition
       // i.e. reg <= reset ? 0 : next
       genIte(next.getDefiningOp(), resetLID, resetValLID, nextLID, width);
+    } else {
+      // Assign a new LID to next and perform a sanity check
+      setOpLID(next.getDefiningOp());
+      assert(nextLID != noLID);
     }
 
     // Finally generate the next statement
@@ -778,8 +804,29 @@ public:
     StringRef regName = reg.getName().value();
     int64_t w = requireSort(reg.getType());
 
-    // Generate state instruction (represents the register declaration)
-    genState(reg, w, regName);
+    // Check for initial values which must be emitted before the state in btor2
+    Value pov = reg.getPowerOnValue();
+    if (pov) {
+      // Check that the powerOn value is a non-null constant
+      if (!isa_and_nonnull<hw::ConstantOp>(pov.getDefiningOp()))
+        reg->emitError("PowerOn Value must be constant!!");
+
+      // Visit the powerOn Value to generate the constant
+      dispatchTypeOpVisitor(pov.getDefiningOp());
+
+      // Add it to the list of visited operations
+      handledOps.insert(pov.getDefiningOp());
+
+      // Generate state instruction (represents the register declaration)
+      genState(reg, w, regName);
+
+      // Finally generate the init statement
+      genInit(reg, pov, w);
+
+    } else {
+      // Only generate the state instruction and nothing else
+      genState(reg, w, regName);
+    }
 
     // Record the operation for future `next` instruction generation
     // This is required to model transitions between states (i.e. how a
