@@ -158,8 +158,14 @@ private:
   Operation *getOpAlias(Operation *op) {
 
     // Remove the alias until none are left (for wires of wires of wires ...)
-    if (auto it = opAliasMap.find(op); it != opAliasMap.end())
+    if (auto it = opAliasMap.find(op); it != opAliasMap.end()) {
+      // check for aliases of inputs
+      if (!it->second) {
+        op->emitError("BTOR2 emission does not support for wires of inputs!");
+        return op;
+      }
       return it->second;
+    }
 
     // If the op isn't an alias then simply return it
     return op;
