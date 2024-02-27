@@ -213,21 +213,20 @@ struct AssertOpConversionPattern : OpConversionPattern<verif::AssertOp> {
 
     // Generate the final assertion: assert(delayReg < delayMax ||
     // (aI -> consequent) || reset)
-    Value cond_min = rewriter.create<comb::ICmpOp>(
+    Value condMin = rewriter.create<comb::ICmpOp>(
         delayN.getLoc(),
         comb::ICmpPredicateAttr::get(getContext(), comb::ICmpPredicate::ult),
         delayReg, delayMax, mlir::UnitAttr::get(getContext()));
-    Value constOne_ai =
+    Value constOneAi =
         rewriter.create<hw::ConstantOp>(delayN.getLoc(), aI.getType(), 1);
-    Value not_ai =
-        rewriter.create<comb::XorOp>(delayN.getLoc(), aI, constOne_ai);
-    Value impl_ai_consequent = rewriter.create<comb::OrOp>(
-        delayN.getLoc(), not_ai, implop.getConsequent());
-    Value cond_lhs = rewriter.create<comb::OrOp>(delayN.getLoc(), cond_min,
-                                                 impl_ai_consequent);
+    Value notAi = rewriter.create<comb::XorOp>(delayN.getLoc(), aI, constOneAi);
+    Value implAiConsequent = rewriter.create<comb::OrOp>(
+        delayN.getLoc(), notAi, implop.getConsequent());
+    Value condLhs =
+        rewriter.create<comb::OrOp>(delayN.getLoc(), condMin, implAiConsequent);
 
     // Finally create the final assertion condition
-    res = rewriter.create<comb::OrOp>(delayN.getLoc(), cond_lhs, reset);
+    res = rewriter.create<comb::OrOp>(delayN.getLoc(), condLhs, reset);
     return true;
   }
 
@@ -284,14 +283,14 @@ struct AssertOpConversionPattern : OpConversionPattern<verif::AssertOp> {
     if (concat) {
       // We are only supporting sequences of the type a ##n true
       auto inputs = concat.getInputs();
-      auto n_inputs = inputs.size();
-      if (n_inputs > 2) {
+      auto nInputs = inputs.size();
+      if (nInputs > 2) {
         concat->emitError("Antecedent must be of the form a ##n true");
         return false;
       }
 
       // Figure out if we are in the NOI case of "a ##n true"
-      if (n_inputs == 2) {
+      if (nInputs == 2) {
         if (!isa<BlockArgument>(inputs.front())) {
           if (dyn_cast<ltl::DelayOp>(inputs.front().getDefiningOp())) {
             concat->emitError("Antecedent must be of the form a ##n true");
@@ -337,19 +336,19 @@ struct AssertOpConversionPattern : OpConversionPattern<verif::AssertOp> {
   matchAndRewrite(verif::AssertOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
 
-    Operation *cur_op, *next_op;
+    Operation *curOp, *nextOp;
     ltl::ClockOp ltlclock;
     Value disableOp, convimplop;
     llvm::SmallVector<Operation *> defferlist;
 
     // Start with the assertion's operand
-    cur_op = adaptor.getProperty().getDefiningOp();
+    curOp = adaptor.getProperty().getDefiningOp();
 
     // Walk backwards from the assertion and generate all of the operands first
-    while (cur_op != nullptr) {
+    while (curOp != nullptr) {
       // TODO make this into a DFS aproach with a worklist (again)
       bool isLegal =
-          llvm::TypeSwitch<Operation *, bool>(cur_op)
+          llvm::TypeSwitch<Operation *, bool>(curOp)
               .Case<ltl::ImplicationOp>([&](auto implop) {
                 if (!visit(implop, rewriter, ltlclock, convimplop)) {
                   implop->emitError(
@@ -357,28 +356,28 @@ struct AssertOpConversionPattern : OpConversionPattern<verif::AssertOp> {
                       "|-> b are supported!");
                   return false;
                 }
-                next_op = nullptr;
+                nextOp = nullptr;
                 return true;
               })
               .Case<ltl::DisableOp>([&](auto disable) {
                 defferlist.push_back(disable);
-                next_op = disable.getInput().getDefiningOp();
+                nextOp = disable.getInput().getDefiningOp();
                 return true;
               })
               .Case<ltl::ClockOp>([&](auto clockop) {
                 // Simply register the clock that we just found and move onto
                 // the clocked operation
                 ltlclock = clockop;
-                next_op = clockop.getInput().getDefiningOp();
+                nextOp = clockop.getInput().getDefiningOp();
                 return true;
               })
               .Case<mlir::UnrealizedConversionCastOp>([&](auto cast) {
                 // Simply forward the operand to be converted
-                next_op = cast->getOperand(0).getDefiningOp();
+                nextOp = cast->getOperand(0).getDefiningOp();
                 return true;
               })
               .Default([&](auto e) {
-                next_op = nullptr;
+                nextOp = nullptr;
                 return true;
               });
       if (!isLegal)
@@ -386,7 +385,7 @@ struct AssertOpConversionPattern : OpConversionPattern<verif::AssertOp> {
                                            " Current operation is invalid!");
 
       // Go to the next operation
-      cur_op = next_op;
+      curOp = nextOp;
     }
 
     // Convert the operations that have been deferred (only disables for now)
