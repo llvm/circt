@@ -48,13 +48,13 @@ firrtl.circuit "ExtractBlackBoxesSimple" attributes {annotations = [{class = "fi
     firrtl.connect %out, %dut_out : !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %dut_in, %in : !firrtl.uint<8>, !firrtl.uint<8>
   }
-  // CHECK: sv.verbatim "
-  // CHECK-SAME{LITERAL}: bb_0 -> {{0}}.{{1}}\0A
-  // CHECK-SAME: output_file = #hw.output_file<"BlackBoxes.txt", excludeFromFileList>
-  // CHECK-SAME: symbols = [
-  // CHECK-SAME: @DUTModule
-  // CHECK-SAME: #hw.innerNameRef<@DUTModule::[[WRAPPER_SYM]]>
-  // CHECK-SAME: ]
+  // CHECK:               emit.file "BlackBoxes.txt" {
+  // CHECK-NEXT:            sv.verbatim "
+  // CHECK-SAME{LITERAL}:     bb_0 -> {{0}}.{{1}}\0A
+  // CHECK-SAME:              symbols = [
+  // CHECK-SAME:                @DUTModule
+  // CHECK-SAME:                #hw.innerNameRef<@DUTModule::[[WRAPPER_SYM]]>
+  // CHECK-SAME:              ]
 }
 
 //===----------------------------------------------------------------------===//
@@ -146,14 +146,14 @@ firrtl.circuit "ExtractBlackBoxesSimple2" attributes {annotations = [{class = "f
     firrtl.connect %out, %dut_out : !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %dut_in, %in : !firrtl.uint<8>, !firrtl.uint<8>
   }
-  // CHECK: sv.verbatim "
-  // CHECK-SAME{LITERAL}: prefix_0 -> {{0}}.{{1}}\0A
-  // CHECK-SAME{LITERAL}: prefix_1 -> {{0}}.{{1}}\0A
-  // CHECK-SAME: output_file = #hw.output_file<"BlackBoxes.txt", excludeFromFileList>
-  // CHECK-SAME: symbols = [
-  // CHECK-SAME: @DUTModule
-  // CHECK-SAME: @DUTModule::[[WRAPPER_SYM]]
-  // CHECK-SAME: ]
+  // CHECK:               emit.file "BlackBoxes.txt" {
+  // CHECK-NEXT:            sv.verbatim "
+  // CHECK-SAME{LITERAL}:     prefix_0 -> {{0}}.{{1}}\0A
+  // CHECK-SAME{LITERAL}:     prefix_1 -> {{0}}.{{1}}\0A
+  // CHECK-SAME:              symbols = [
+  // CHECK-SAME:                @DUTModule
+  // CHECK-SAME:                @DUTModule::[[WRAPPER_SYM]]
+  // CHECK-SAME:              ]
 }
 
 //===----------------------------------------------------------------------===//
@@ -250,14 +250,14 @@ firrtl.circuit "ExtractBlackBoxesIntoDUTSubmodule"  {
     firrtl.connect %out, %tb_out : !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %tb_in, %in : !firrtl.uint<8>, !firrtl.uint<8>
   }
-  // CHECK: sv.verbatim "
-  // CHECK-SAME{LITERAL}: bb_0 -> {{0}}.{{1}}\0A
-  // CHECK-SAME{LITERAL}: bb_1 -> {{0}}.{{1}}\0A
-  // CHECK-SAME: output_file = #hw.output_file<"BlackBoxes.txt", excludeFromFileList>
-  // CHECK-SAME: symbols = [
-  // CHECK-SAME: @DUTModule
-  // CHECK-SAME: @DUTModule::[[WRAPPER_SYM]]
-  // CHECK-SAME: ]
+  // CHECK:               emit.file "BlackBoxes.txt" {
+  // CHECK-NEXT:            sv.verbatim "
+  // CHECK-SAME{LITERAL}:     bb_0 -> {{0}}.{{1}}\0A
+  // CHECK-SAME{LITERAL}:     bb_1 -> {{0}}.{{1}}\0A
+  // CHECK-SAME:              symbols = [
+  // CHECK-SAME:                @DUTModule
+  // CHECK-SAME:                @DUTModule::[[WRAPPER_SYM]]
+  // CHECK-SAME:              ]
 }
 
 //===----------------------------------------------------------------------===//
@@ -279,12 +279,12 @@ firrtl.circuit "ExtractClockGatesSimple" attributes {annotations = [{class = "si
     firrtl.connect %dut_clock, %clock : !firrtl.clock, !firrtl.clock
     firrtl.connect %dut_en, %en : !firrtl.uint<1>, !firrtl.uint<1>
   }
-  // CHECK: sv.verbatim "
-  // CHECK-SAME{LITERAL}: clock_gate_0 -> {{0}}\0A
-  // CHECK-SAME: output_file = #hw.output_file<"ClockGates.txt", excludeFromFileList>
-  // CHECK-SAME: symbols = [
-  // CHECK-SAME: @DUTModule
-  // CHECK-SAME: ]
+  // CHECK:               emit.file "ClockGates.txt" {
+  // CHECK-NEXT:            sv.verbatim "
+  // CHECK-SAME{LITERAL}:     clock_gate_0 -> {{0}}\0A
+  // CHECK-SAME:              symbols = [
+  // CHECK-SAME:                @DUTModule
+  // CHECK-SAME:              ]
 }
 
 //===----------------------------------------------------------------------===//
@@ -356,14 +356,14 @@ firrtl.circuit "ExtractClockGatesMixed" attributes {annotations = [{class = "sif
     firrtl.connect %intf_out, %dut_out : !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %dut_in, %intf_in : !firrtl.uint<8>, !firrtl.uint<8>
   }
-  // CHECK: sv.verbatim "
-  // CHECK-SAME{LITERAL}: clock_gate_0 -> {{0}}.{{1}}\0A
-  // CHECK-SAME{LITERAL}: clock_gate_1 -> {{0}}\0A
-  // CHECK-SAME: output_file = #hw.output_file<"ClockGates.txt", excludeFromFileList>
-  // CHECK-SAME: symbols = [
-  // CHECK-SAME: @DUTModule
-  // CHECK-SAME: @DUTModule::@inst
-  // CHECK-SAME: ]
+  // CHECK:               emit.file "ClockGates.txt" {
+  // CHECK-NEXT:            sv.verbatim "
+  // CHECK-SAME{LITERAL}:     clock_gate_0 -> {{0}}.{{1}}\0A
+  // CHECK-SAME{LITERAL}:     clock_gate_1 -> {{0}}\0A
+  // CHECK-SAME:              symbols = [
+  // CHECK-SAME:                @DUTModule
+  // CHECK-SAME:                @DUTModule::@inst
+  // CHECK-SAME:              ]
 }
 
 //===----------------------------------------------------------------------===//
@@ -404,21 +404,22 @@ firrtl.circuit "ExtractClockGatesComposed" attributes {annotations = [
     firrtl.connect %dut_clock, %clock : !firrtl.clock, !firrtl.clock
     firrtl.connect %dut_en, %en : !firrtl.uint<1>, !firrtl.uint<1>
   }
-  // CHECK: sv.verbatim ""
-  // CHECK: sv.verbatim "
-  // CHECK-SAME{LITERAL}: clock_gate_0 -> {{0}}.{{1}}\0A
-  // CHECK-SAME{LITERAL}: clock_gate_1 -> {{0}}\0A
-  // CHECK-SAME: output_file = #hw.output_file<"ClockGates.txt", excludeFromFileList>
-  // CHECK-SAME: symbols = [
-  // CHECK-SAME: @DUTModule
-  // CHECK-SAME: #hw.innerNameRef<@DUTModule::[[SYM0]]>
-  // CHECK-SAME: ]
-  // CHECK: sv.verbatim "
-  // CHECK-SAME{LITERAL}: mem_wiring_0 -> {{0}}\0A
-  // CHECK-SAME: output_file = #hw.output_file<"SeqMems.txt", excludeFromFileList>
-  // CHECK-SAME: symbols = [
-  // CHECK-SAME: @DUTModule
-  // CHECK-SAME: ]
+
+  // CHECK:               emit.file "SeqMems.txt" {
+  // CHECK-NEXT:            sv.verbatim "
+  // CHECK-SAME{LITERAL}:     mem_wiring_0 -> {{0}}\0A
+  // CHECK-SAME:              symbols = [
+  // CHECK-SAME:                @DUTModule
+  // CHECK-SAME:              ]
+
+  // CHECK:               emit.file "ClockGates.txt" {
+  // CHECK-NEXT:            sv.verbatim "
+  // CHECK-SAME{LITERAL}:     clock_gate_0 -> {{0}}.{{1}}\0A
+  // CHECK-SAME{LITERAL}:     clock_gate_1 -> {{0}}\0A
+  // CHECK-SAME:              symbols = [
+  // CHECK-SAME:                @DUTModule
+  // CHECK-SAME:                #hw.innerNameRef<@DUTModule::[[SYM0]]>
+  // CHECK-SAME:              ]
 }
 
 //===----------------------------------------------------------------------===//
@@ -444,14 +445,13 @@ firrtl.circuit "ExtractSeqMemsSimple2" attributes {annotations = [{class = "sifi
     // CHECK-NEXT: firrtl.instance dut sym [[DUT_SYM:@.+]] @DUTModule
     // CHECK-NEXT: firrtl.instance mem_ext @mem_ext
   }
-  // CHECK: sv.verbatim ""
-  // CHECK: sv.verbatim "
-  // CHECK-SAME{LITERAL}: mem_wiring_0 -> {{0}}.{{1}}\0A
-  // CHECK-SAME: output_file = #hw.output_file<"SeqMems.txt", excludeFromFileList>
-  // CHECK-SAME: symbols = [
-  // CHECK-SAME: @DUTModule
-  // CHECK-SAME: @DUTModule::[[MEM_SYM]]
-  // CHECK-SAME: ]
+  // CHECK:               emit.file "SeqMems.txt" {
+  // CHECK-NEXT:            sv.verbatim "
+  // CHECK-SAME{LITERAL}:     mem_wiring_0 -> {{0}}.{{1}}\0A
+  // CHECK-SAME:              symbols = [
+  // CHECK-SAME:                @DUTModule
+  // CHECK-SAME:                @DUTModule::[[MEM_SYM]]
+  // CHECK-SAME:              ]
 }
 
 //===----------------------------------------------------------------------===//
@@ -461,8 +461,7 @@ firrtl.circuit "ExtractSeqMemsSimple2" attributes {annotations = [{class = "sifi
 // CHECK: firrtl.circuit "ExtractSeqMemsNoExtraction"
 firrtl.circuit "ExtractSeqMemsNoExtraction"  attributes {annotations = [{class = "sifive.enterprise.firrtl.ExtractSeqMemsFileAnnotation", filename = "SeqMems.txt"}]} {
   firrtl.module @ExtractSeqMemsNoExtraction() {}
-  // CHECK: sv.verbatim ""
-  // CHECK-SAME: output_file = #hw.output_file<"SeqMems.txt", excludeFromFileList>
+  // CHECK: emit.file "SeqMems.txt"
 }
 
 //===----------------------------------------------------------------------===//
@@ -510,14 +509,15 @@ firrtl.circuit "InstSymConflict" {
     firrtl.strictconnect %dut_in, %in : !firrtl.uint<8>
     firrtl.strictconnect %out, %dut_out : !firrtl.uint<8>
   }
-  // CHECK: sv.verbatim "
-  // CHECK-SAME{LITERAL}: bb_1 -> {{0}}.{{1}}\0A
-  // CHECK-SAME{LITERAL}: bb_0 -> {{0}}.{{2}}\0A
-  // CHECK-SAME: symbols = [
-  // CHECK-SAME: @DUTModule
-  // CHECK-SAME: #hw.innerNameRef<@DUTModule::@mod1>
-  // CHECK-SAME: #hw.innerNameRef<@DUTModule::@mod2>
-  // CHECK-SAME: ]
+  // CHECK:               emit.file "BlackBoxes.txt" {
+  // CHECK-NEXT:            sv.verbatim "
+  // CHECK-SAME{LITERAL}:     bb_1 -> {{0}}.{{1}}\0A
+  // CHECK-SAME{LITERAL}:     bb_0 -> {{0}}.{{2}}\0A
+  // CHECK-SAME:              symbols = [
+  // CHECK-SAME:                @DUTModule
+  // CHECK-SAME:                #hw.innerNameRef<@DUTModule::@mod1>
+  // CHECK-SAME:                #hw.innerNameRef<@DUTModule::@mod2>
+  // CHECK-SAME:              ]
 }
 
 // Module prefixing should not break extraction.
