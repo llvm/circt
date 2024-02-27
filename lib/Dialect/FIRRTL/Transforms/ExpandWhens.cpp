@@ -729,6 +729,12 @@ LogicalResult ModuleVisitor::checkInitialization() {
 
     // Get the op which defines the sink, and emit an error.
     FieldRef dest = std::get<0>(destAndConnect);
+
+    // zero-width wires do not need to be initialized
+    if (auto op = type_dyn_cast<FIRRTLBaseType>(dest.getValue().getType()))
+      if (op.getBitWidthOrSentinel() == 0)
+        continue;
+
     auto loc = dest.getValue().getLoc();
     auto *definingOp = dest.getDefiningOp();
     if (auto mod = dyn_cast<FModuleLike>(definingOp))

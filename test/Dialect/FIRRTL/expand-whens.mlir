@@ -630,4 +630,12 @@ firrtl.module @ModuleWithObjectWire(in %in: !firrtl.class<@ClassWithInput(in in:
   firrtl.propassign %0, %in : !firrtl.class<@ClassWithInput(in in: !firrtl.string)>
 }
 
+// Check that no error is emitted for zero width wires
+// CHECK: firrtl.module @ZeroWidthWire() {
+// CHECK:   %0 = firrtl.wire : !firrtl.uint<0>
+// CHECK: }
+firrtl.module @ZeroWidthWire() {
+  %0 = firrtl.wire : !firrtl.uint<0>
+}
+
 }
