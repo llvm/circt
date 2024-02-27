@@ -165,6 +165,7 @@ void ExtractInstancesPass::runOnOperation() {
   dutModuleNames.clear();
   dutPrefix = "";
   extractionWorklist.clear();
+  files.clear();
   extractionPaths.clear();
   originalInstanceParents.clear();
   extractedInstances.clear();
