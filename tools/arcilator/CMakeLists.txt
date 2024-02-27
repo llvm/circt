@@ -15,6 +15,7 @@ target_link_libraries(arcilator
   CIRCTSupport
   CIRCTTransforms
   MLIRBuiltinToLLVMIRTranslation
+  MLIRExecutionEngine
   MLIRFuncInlinerExtension
   MLIRLLVMIRTransforms
   MLIRLLVMToLLVMIRTranslation
