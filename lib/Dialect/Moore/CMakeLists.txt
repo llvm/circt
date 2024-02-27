@@ -15,6 +15,7 @@ add_circt_dialect_library(CIRCTMoore
   Support
 
   LINK_LIBS PUBLIC
+  CIRCTSupport
   MLIRIR
   MLIRInferTypeOpInterface
 )

@@ -11,6 +11,7 @@
 
 include "circt/Dialect/Moore/MooreDialect.td"
 include "circt/Dialect/Moore/MooreTypes.td"
+include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/OpBase.td"
 include "mlir/IR/RegionKindInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
@@ -69,6 +70,27 @@ def InstanceOp : MooreOp<"instance", [
                        FlatSymbolRefAttr:$moduleName);
   let assemblyFormat = [{
     $instanceName $moduleName attr-dict
+  }];
+}
+
+//===----------------------------------------------------------------------===//
+// Declarations
+//===----------------------------------------------------------------------===//
+
+def VariableOp : MooreOp<"variable", [
+  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+  OptionalTypesMatchWith<"initial value and variable types match",
+    "result", "initial", "$_self">,
+]> {
+  let summary = "A variable declaration";
+  let description = [{
+    See IEEE 1800-2017 § 6.8 "Variable declarations".
+  }];
+  let arguments = (ins StrAttr:$name, Optional<UnpackedType>:$initial);
+  let results = (outs UnpackedType:$result);
+  let assemblyFormat = [{
+    `` custom<ImplicitSSAName>($name) ($initial^)? attr-dict
+    `:` type($result)
   }];
 }
 

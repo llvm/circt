@@ -41,6 +41,13 @@ struct Context {
   /// Convert a slang `SourceLocation` into an MLIR `Location`.
   Location convertLocation(slang::SourceLocation loc);
 
+  /// Convert a slang type into an MLIR type. Returns null on failure. Uses the
+  /// provided location for error reporting, or tries to guess one from the
+  /// given type. Types tend to have unreliable location information, so it's
+  /// generally a good idea to pass in a location.
+  Type convertType(const slang::ast::Type &type, LocationAttr loc = {});
+  Type convertType(const slang::ast::DeclaredType &type);
+
   /// Convert hierarchy and structure AST nodes to MLIR ops.
   LogicalResult convertCompilation(slang::ast::Compilation &compilation);
   moore::SVModuleOp

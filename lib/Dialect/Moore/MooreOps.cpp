@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Moore/MooreOps.h"
+#include "circt/Support/CustomDirectiveImpl.h"
 #include "mlir/IR/Builders.h"
 
 using namespace circt;
@@ -34,6 +35,14 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
            << module->getName() << "' instead";
 
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// VariableOp
+//===----------------------------------------------------------------------===//
+
+void VariableOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getResult(), getName());
 }
 
 //===----------------------------------------------------------------------===//
