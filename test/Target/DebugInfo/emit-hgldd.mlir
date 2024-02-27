@@ -99,7 +99,7 @@ hw.module private @Bar(in %x: i32 loc(#loc7), out y: i32 loc(#loc8)) {
   dbg.variable "inX", %x : i32 loc(#loc7)
   dbg.variable "outY", %0 : i32 loc(#loc8)
   dbg.variable "varZ", %0 : i32 loc(#loc9)
-  %1 = comb.add %0, %x {hw.verilogName = "some_verilog_name"} : i32 loc(#loc9)
+  %1 = comb.add %0, %x : i32 loc(#loc9)
   dbg.variable "add", %1 : i32 loc(#loc9)
   hw.output %0 : i32 loc(#loc6)
 } loc(fused[#loc6, "emitted"(#loc11)])
@@ -185,17 +185,7 @@ hw.module @Expressions(in %a: i1, in %b: i1) {
   // CHECK: "type_name": "logic"
   dbg.variable "blockArg", %a : i1
 
-  // CHECK-LABEL: "var_name": "explicitlyNamed"
-  // CHECK: "value": {"sig_name":"explicitName"}
-  // CHECK: "type_name": "logic"
-  %0 = comb.add %a, %a {hw.verilogName = "explicitName"} : i1
-  dbg.variable "explicitlyNamed", %0 : i1
-
-  // CHECK-LABEL: "var_name": "instPort"
-  // CHECK: "value": {"field":"outPort","var_ref":{"sig_name":"someInst"}}
-  // CHECK: "type_name": "logic"
-  %1 = hw.instance "someInst" @SingleResult() -> (outPort: i1)
-  dbg.variable "instPort", %1 : i1
+  %0 = hw.wire %a {hw.verilogName = "explicitName"} : i1
 
   // CHECK-LABEL: "var_name": "constA"
   // CHECK: "value": {"bit_vector":"00000010100111001"}
@@ -492,3 +482,70 @@ hw.module @InlineScopes(in %a: i42) {
   dbg.variable "y", %a scope %1 : i42
   dbg.variable "z", %a scope %2 : i42
 }
+
+// See https://github.com/llvm/circt/issues/6735
+// CHECK-LABEL: "obj_name": "Issue6735_Case1"
+hw.module @Issue6735_Case1(out someOutput: i1) {
+  // Don't use instance name as signal name directly.
+  // CHECK: "var_name": "varA"
+  // CHECK-NOT: "sig_name":"instA"
+  // CHECK-NOT: "sig_name":"instAVerilog"
+  // CHECK: "sig_name":"wireA"
+  %0 = hw.instance "instA" @SingleResult() -> (outPort: i1) {hw.verilogName = "instAVerilog"}
+  dbg.variable "varA", %0 : i1
+  %wireA = hw.wire %0 : i1
+
+  // Use SV declarations to refer to instance output.
+  // CHECK: "var_name": "varB"
+  // CHECK-NOT: "sig_name":"instB"
+  // CHECK-NOT: "field":"outPort"
+  // CHECK: "sig_name":"wireB"
+  %b = hw.instance "instB" @SingleResult() -> (outPort: i1)
+  dbg.variable "varB", %b : i1
+  %wireB = sv.wire : !hw.inout<i1>
+  sv.assign %wireB, %b : i1
+  // CHECK: "var_name": "varC"
+  // CHECK-NOT: "sig_name":"instC"
+  // CHECK-NOT: "field":"outPort"
+  // CHECK: "sig_name":"wireC"
+  %c = hw.instance "instC" @SingleResult() -> (outPort: i1)
+  dbg.variable "varC", %c : i1
+  %wireC = sv.logic : !hw.inout<i1>
+  sv.assign %wireC, %c : i1
+  // CHECK: "var_name": "varD"
+  // CHECK-NOT: "sig_name":"instD"
+  // CHECK-NOT: "field":"outPort"
+  // CHECK: "sig_name":"wireD"
+  %d = hw.instance "instD" @SingleResult() -> (outPort: i1)
+  dbg.variable "varD", %d : i1
+  %wireD = sv.logic : !hw.inout<i1>
+  sv.assign %wireD, %d : i1
+
+  // Use module's output port name to refer to instance output.
+  // CHECK: "var_name": "varZ"
+  // CHECK-NOT: "sig_name":"instZ"
+  // CHECK-NOT: "field":"outPort"
+  // CHECK: "sig_name":"someOutput"
+  %z = hw.instance "instZ" @SingleResult() -> (outPort: i1)
+  dbg.variable "varZ", %z : i1
+  hw.output %z : i1
+}
+
+// CHECK-LABEL: "obj_name": "Issue6735_Case2"
+hw.module @Issue6735_Case2(out x : i36, out y : i36 {hw.verilogName = "verilogY"}) {
+  %a, %b = hw.instance "bar" @MultipleResults() -> (a: i36, b: i36)
+  // CHECK: "var_name": "portA"
+  // CHECK-NOT: "field":"a"
+  // CHECK-NOT: "var_ref":
+  // CHECK-NOT: "sig_name":"bar"
+  // CHECK: "sig_name":"x"
+  dbg.variable "portA", %a : i36
+  // CHECK: "var_name": "portB"
+  // CHECK-NOT: "field":"b"
+  // CHECK-NOT: "var_ref":
+  // CHECK-NOT: "sig_name":"bar"
+  // CHECK: "sig_name":"verilogY"
+  dbg.variable "portB", %b : i36
+  hw.output %a, %b : i36, i36
+}
+hw.module.extern @MultipleResults(out a : i36, out b : i36)
