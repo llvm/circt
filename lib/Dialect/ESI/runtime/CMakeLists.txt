@@ -193,7 +193,11 @@ endif()
 
 # Pybind11 is used to wrap the ESIRuntime APIs.
 find_package(Python COMPONENTS Interpreter Development)
-if(Python_FOUND)
+if(not Python_FOUND)
+  if (WHEEL_BUILD)
+    message (FATAL_ERROR "python-dev is required for a wheel build.")
+  endif()
+else()
   IF(MSVC)
     # Work around an issue with pybind11 and cmake incompatibility on Windows in debug mode.
     set_target_properties(Python::Module PROPERTIES
