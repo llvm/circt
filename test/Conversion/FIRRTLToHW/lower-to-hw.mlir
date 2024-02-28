@@ -1586,12 +1586,12 @@ firrtl.circuit "Directories" attributes {
   ]
 } {
   // CHECK-LABEL: hw.module private @Directories_A
-  // CHECK-SAME:    output_file = #hw.output_file<"hello/"
+  // CHECK-SAME:    output_file = #hw.output_file<"hello{{/|\\\\}}"
   firrtl.module private @Directories_A() attributes {
     output_file = #hw.output_file<"hello/", excludeFromFileList>
   } {}
   // CHECK:       hw.module private @BoundUnderDUT
-  // CHECK-SAME:    output_file = #hw.output_file<"testbench/"
+  // CHECK-SAME:    output_file = #hw.output_file<"testbench{{/|\\\\}}"
   firrtl.module private @BoundUnderDUT() {}
   firrtl.module private @DUT() attributes {
     annotations = [

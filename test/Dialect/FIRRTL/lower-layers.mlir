@@ -613,12 +613,12 @@ firrtl.circuit "Foo" attributes {
 // CHECK-LABEL: firrtl.circuit "Foo"
 //
 // CHECK:       sv.verbatim
-// CHECK-SAME:    #hw.output_file<"testbench{{[/\]}}layers_Foo_A.sv", excludeFromFileList>
+// CHECK-SAME:    #hw.output_file<"testbench{{/|\\\\}}layers_Foo_A.sv", excludeFromFileList>
 //
 // CHECK:       firrtl.module {{.*}} @Bar_A
-// CHECK-SAME:    #hw.output_file<"testbench{{[/\]}}", excludeFromFileList>
+// CHECK-SAME:    #hw.output_file<"testbench{{/|\\\\}}", excludeFromFileList>
 // CHECK:       firrtl.module {{.*}} @Foo_A
-// CHECK-SAME:    #hw.output_file<"testbench{{[/\]}}", excludeFromFileList>
+// CHECK-SAME:    #hw.output_file<"testbench{{/|\\\\}}", excludeFromFileList>
 //
 // CHECK:       sv.verbatim
-// CHECK-SAME:    #hw.output_file<"testbench{{[/\]}}layers_Foo_A.sv", excludeFromFileList>
+// CHECK-SAME:    #hw.output_file<"testbench{{/|\\\\}}layers_Foo_A.sv", excludeFromFileList>
