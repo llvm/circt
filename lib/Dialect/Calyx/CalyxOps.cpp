@@ -2092,8 +2092,8 @@ SmallVector<StringRef> SeqMemoryOp::portNames() {
         StringAttr::get(this->getContext(), "addr" + std::to_string(i));
     portNames.push_back(nameAttr.getValue());
   }
-  portNames.append({"write_data", "write_en", "write_done", clkPort,
-                    "read_data", "read_en", "read_done"});
+  portNames.append({clkPort, "reset", "content_en", "write_en",
+                    "write_data", "read_data", "done"});
   return portNames;
 }
 
@@ -2101,7 +2101,7 @@ SmallVector<Direction> SeqMemoryOp::portDirections() {
   SmallVector<Direction> portDirections;
   for (size_t i = 0, e = getAddrSizes().size(); i != e; ++i)
     portDirections.push_back(Input);
-  portDirections.append({Input, Input, Output, Input, Output, Input, Output});
+  portDirections.append({Input, Input, Input, Input, Input, Output, Output});
   return portDirections;
 }
 
@@ -2115,19 +2115,18 @@ SmallVector<DictionaryAttr> SeqMemoryOp::portAttributes() {
   // Use a boolean to indicate this attribute is used.
   IntegerAttr isSet = IntegerAttr::get(builder.getIndexType(), 1);
   IntegerAttr isTwo = IntegerAttr::get(builder.getIndexType(), 2);
-  NamedAttrList writeEn, writeDone, clk, reset, readEn, readDone;
+  NamedAttrList writeEn, done, clk, reset, contentEn;
   writeEn.append(goPort, isSet);
-  writeDone.append(donePort, isSet);
+  done.append(donePort, isSet);
   clk.append(clkPort, isSet);
-  readEn.append(goPort, isTwo);
-  readDone.append(donePort, isTwo);
-  portAttributes.append({DictionaryAttr::get(context),     // Write Data
+  contentEn.append(goPort, isTwo);
+  portAttributes.append({clk.getDictionary(context),       // Clk
+                         reset.getDictionary(context),     // Reset
+                         contentEn.getDictionary(context), // Content enable
                          writeEn.getDictionary(context),   // Write enable
-                         writeDone.getDictionary(context), // Write done
-                         clk.getDictionary(context),       // Clk
-                         DictionaryAttr::get(context),     // Out
-                         readEn.getDictionary(context),    // Read enable
-                         readDone.getDictionary(context)}  // Read done
+                         DictionaryAttr::get(context),     // Write data
+                         DictionaryAttr::get(context),     // Read data
+                         done.getDictionary(context)}      // Done
   );
   return portAttributes;
 }
@@ -2143,13 +2142,13 @@ void SeqMemoryOp::build(OpBuilder &builder, OperationState &state,
   SmallVector<Type> types;
   for (int64_t size : addrSizes)
     types.push_back(builder.getIntegerType(size)); // Addresses
-  types.push_back(builder.getIntegerType(width));  // Write data
-  types.push_back(builder.getI1Type());            // Write enable
-  types.push_back(builder.getI1Type());            // Write done
   types.push_back(builder.getI1Type());            // Clk
+  types.push_back(builder.getI1Type());            // Reset
+  types.push_back(builder.getI1Type());            // Content enable
+  types.push_back(builder.getI1Type());            // Write enable
+  types.push_back(builder.getIntegerType(width));  // Write data
   types.push_back(builder.getIntegerType(width));  // Read data
-  types.push_back(builder.getI1Type());            // Read enable
-  types.push_back(builder.getI1Type());            // Read done
+  types.push_back(builder.getI1Type());            // Done
   state.addTypes(types);
 }
 
@@ -2163,7 +2162,7 @@ LogicalResult SeqMemoryOp::verify() {
            << numDims << ") and address sizes (" << numAddrs << ")";
 
   size_t numExtraPorts =
-      7; // write data/enable/done, clk, and read data/enable/done.
+      7; // write data/enable, clk, reset, read data, content enable, and done.
   if (getNumResults() != numAddrs + numExtraPorts)
     return emitOpError("incorrect number of address ports, expected ")
            << numAddrs;

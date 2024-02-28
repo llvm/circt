@@ -85,12 +85,12 @@ void buildAssignmentsForRegisterWrite(OpBuilder &builder,
 // external memories.
 struct MemoryPortsImpl {
   std::optional<Value> readData;
-  std::optional<Value> readEn;
-  std::optional<Value> readDone;
+  std::optional<Value> readOrContentEn;
   std::optional<Value> writeData;
   std::optional<Value> writeEn;
-  std::optional<Value> writeDone;
+  std::optional<Value> done;
   SmallVector<Value> addrPorts;
+  std::optional<bool> isContentEn;
 };
 
 // Represents the interface of memory in Calyx. The various lowering passes
@@ -105,16 +105,16 @@ struct MemoryInterface {
   // Getter methods for each memory interface port.
   Value readData();
   Value readEn();
-  Value readDone();
+  Value contentEn();
   Value writeData();
   Value writeEn();
-  Value writeDone();
+  Value done();
   std::optional<Value> readDataOpt();
   std::optional<Value> readEnOpt();
-  std::optional<Value> readDoneOpt();
+  std::optional<Value> contentEnOpt();
   std::optional<Value> writeDataOpt();
   std::optional<Value> writeEnOpt();
-  std::optional<Value> writeDoneOpt();
+  std::optional<Value> doneOpt();
   ValueRange addrPorts();
 
 private:

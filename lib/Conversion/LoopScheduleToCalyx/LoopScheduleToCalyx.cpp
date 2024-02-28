@@ -475,8 +475,14 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   rewriter.create<calyx::AssignOp>(
       storeOp.getLoc(), memoryInterface.writeEn(),
       createConstant(storeOp.getLoc(), rewriter, getComponent(), 1, 1));
+  if (memoryInterface.contentEnOpt().has_value()) {
+    // If memory has content enable, it must be asserted when writing
+    rewriter.create<calyx::AssignOp>(
+        storeOp.getLoc(), memoryInterface.contentEn(),
+        createConstant(storeOp.getLoc(), rewriter, getComponent(), 1, 1));
+  }
   rewriter.create<calyx::GroupDoneOp>(storeOp.getLoc(),
-                                      memoryInterface.writeDone());
+                                      memoryInterface.done());
 
   getState<ComponentLoweringState>().registerNonPipelineOperations(storeOp,
                                                                    group);
@@ -828,7 +834,7 @@ struct FuncOpConversion : public calyx::FuncOpPartialLoweringPattern {
       unsigned outPortsIt = extMemPortIndices.getSecond().second +
                             compOp.getInputPortInfo().size();
       extMemPorts.readData = compOp.getArgument(inPortsIt++);
-      extMemPorts.writeDone = compOp.getArgument(inPortsIt);
+      extMemPorts.done = compOp.getArgument(inPortsIt);
       extMemPorts.writeData = compOp.getArgument(outPortsIt++);
       unsigned nAddresses = extMemPortIndices.getFirst()
                                 .getType()
