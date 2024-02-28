@@ -40,8 +40,6 @@ config.substitutions.append(
 config.substitutions.append(
     ('%TCL_PATH%', config.circt_src_root + '/build/lib/'))
 config.substitutions.append(('%CIRCT_SOURCE%', config.circt_src_root))
-config.substitutions.append(
-    ('%ESI_COLLATERAL_PATH%', config.esi_collateral_path))
 
 llvm_config.with_system_environment(['HOME', 'INCLUDE', 'LIB', 'TMP', 'TEMP'])
 
@@ -81,8 +79,7 @@ tool_dirs = [
 ]
 tools = [
     'circt-opt', 'circt-translate', 'firtool', 'circt-rtl-sim.py',
-    'esi-cosim-runner.py', 'equiv-rtl.sh', 'handshake-runner', 'hlstool',
-    'ibistool'
+    'equiv-rtl.sh', 'handshake-runner', 'hlstool', 'ibistool'
 ]
 
 # Enable python if its path was configured
@@ -181,9 +178,7 @@ if config.esi_runtime == "1":
   # Enable ESI cosim tests if they have been built.
   if config.esi_cosim_path != "":
     config.available_features.add('esi-cosim')
-    config.substitutions.append(
-        ('%ESIINC%', f'{config.circt_include_dir}/circt/Dialect/ESI/'))
-    config.substitutions.append(('%ESICOSIM%', f'{config.esi_cosim_path}'))
+    tools.append('esi-cosim.py')
 
 # Enable Python bindings tests if they're supported.
 if config.bindings_python_enabled:

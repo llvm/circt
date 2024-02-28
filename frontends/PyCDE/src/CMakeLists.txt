@@ -86,13 +86,8 @@ add_mlir_python_modules(PyCDE
     PyCDE_CIRCTPythonCAPI
 )
 
-add_dependencies(PyCDE
-  PyCDE_CIRCTPythonModules
-  esi-collateral
-)
-add_dependencies(install-PyCDE
-  install-PyCDE_CIRCTPythonModules
-)
+add_dependencies(PyCDE PyCDE_CIRCTPythonModules)
+add_dependencies(install-PyCDE install-PyCDE_CIRCTPythonModules)
 
 install(IMPORTED_RUNTIME_ARTIFACTS PyCDE_CIRCTPythonCAPI
   RUNTIME_DEPENDENCY_SET PyCDE_RUNTIME_DEPS
@@ -105,15 +100,3 @@ install(RUNTIME_DEPENDENCY_SET PyCDE_RUNTIME_DEPS
   PRE_INCLUDE_REGEXES capnp kj
   COMPONENT PyCDE
 )
-
-# Add necessary ESI collateral to the package.
-get_target_property(CollateralPrefix esi-collateral BINARY_DIR)
-get_target_property(CollateralFiles esi-collateral SOURCES)
-foreach(CFile IN LISTS CollateralFiles)
-  get_filename_component(CDir ${CFile} DIRECTORY)
-  install(FILES
-    "${CollateralPrefix}/${CFile}"
-    DESTINATION "python_packages/pycde/collateral/${CDir}"
-    COMPONENT PyCDE
-  )
-endforeach()
