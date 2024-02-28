@@ -21,6 +21,7 @@
 #include "circt/Dialect/Seq/SeqAttributes.h"
 #include "circt/Dialect/Seq/SeqPasses.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/Transforms/InliningUtils.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Path.h"
 
@@ -700,6 +701,69 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
   });
 }
 
+namespace {
+
+struct PrefixingInliner : public mlir::InlinerInterface {
+  ImplicitLocOpBuilder &b;
+  InnerSymbolNamespace &moduleNamespace;
+  StringRef moduleName;
+  StringRef prefix;
+  PrefixingInliner(MLIRContext *context, ImplicitLocOpBuilder &b,
+                   InnerSymbolNamespace &moduleNamespace, StringRef moduleName,
+                   StringRef prefix)
+      : mlir::InlinerInterface(context), b(b), moduleNamespace(moduleNamespace),
+        moduleName(moduleName), prefix(prefix) {}
+
+  bool isLegalToInline(Region *dest, Region *src, bool wouldBeCloned,
+                       IRMapping &valueMapping) const override {
+    return true;
+  }
+  bool isLegalToInline(Operation *op, Region *dest, bool wouldBeCloned,
+                       IRMapping &valueMapping) const override {
+    return true;
+  }
+  void handleTerminator(Operation *op,
+                        ArrayRef<Value> valuesToRepl) const override {
+    assert(isa<hw::OutputOp>(op));
+    for (auto [from, to] : llvm::zip(valuesToRepl, op->getOperands()))
+      from.replaceAllUsesWith(to);
+  }
+  void processInlinedBlocks(
+      iterator_range<Region::iterator> inlinedBlocks) override {
+    for (Block &block : inlinedBlocks)
+      block.walk([&](Operation *op) {
+        if (auto name = op->getAttrOfType<StringAttr>("name");
+            name && !name.getValue().empty()) {
+          op->setAttr("name", StringAttr::get(name.getContext(),
+                                              prefix + "_" + name.getValue()));
+        }
+        if (auto symOp = dyn_cast<hw::InnerSymbolOpInterface>(op)) {
+          if (auto innerName = symOp.getInnerSymAttr()) {
+            symOp.setInnerSymbolAttr(
+                hw::InnerSymAttr::get(b.getStringAttr(moduleNamespace.newName(
+                    prefix + "_" + innerName.getSymName().str()))));
+          }
+        } else if (auto verbatim = dyn_cast<sv::VerbatimOp>(op)) {
+          if (auto syms = verbatim.getSymbolsAttr()) {
+            SmallVector<Attribute, 4> refs;
+            for (auto sym : syms) {
+              if (auto ref = dyn_cast<InnerRefAttr>(sym)) {
+                refs.push_back(hw::InnerRefAttr::get(
+                    b.getStringAttr(moduleName),
+                    b.getStringAttr(prefix + "_" + ref.getName().str())));
+              } else {
+                refs.push_back(sym);
+              }
+            }
+            verbatim.setSymbolsAttr(b.getArrayAttr(refs));
+          }
+        }
+      });
+  }
+};
+
+} // end anonymous namespace
+
 void HWMemSimImplPass::runOnOperation() {
   auto topModule = getOperation();
 
@@ -713,6 +777,7 @@ void HWMemSimImplPass::runOnOperation() {
 
   SmallVector<HWModuleGeneratedOp> toErase;
   bool anythingChanged = false;
+  DenseMap<HWModuleOp, bool> wrapperModules;
 
   for (auto op :
        llvm::make_early_inc_range(topModule.getOps<HWModuleGeneratedOp>())) {
@@ -737,6 +802,9 @@ void HWMemSimImplPass::runOnOperation() {
       } else {
         auto newModule = builder.create<HWModuleOp>(
             oldModule.getLoc(), nameAttr, oldModule.getPortList());
+        // cannot inline memories that have out-of-lien file initialization
+        if (mem.initFilename.empty() || mem.initIsInline)
+          wrapperModules.insert({newModule, false});
         if (auto outdir = oldModule->getAttr("output_file"))
           newModule->setAttr("output_file", outdir);
         newModule.setCommentAttr(
@@ -753,6 +821,50 @@ void HWMemSimImplPass::runOnOperation() {
       oldModule.erase();
       anythingChanged = true;
     }
+  }
+
+  // inline the memory modules created in the previous stage if
+  // inlineMem option enabled
+  if (inlineMem && !wrapperModules.empty()) {
+    SmallVector<InstanceOp> inlinedInstances;
+    auto &symbolTable = getAnalysis<SymbolTable>();
+    std::unique_ptr<ImplicitLocOpBuilder> b;
+    std::unique_ptr<InnerSymbolNamespace> moduleNamespace;
+    for (auto mod :
+         llvm::make_early_inc_range(topModule.getOps<HWModuleOp>())) {
+      for (auto inst : mod.getOps<InstanceOp>()) {
+        auto mem = symbolTable.lookup<HWModuleOp>(inst.getModuleName());
+        if (!wrapperModules.contains(mem))
+          continue;
+        if (inst.getInnerNameAttr()) {
+          // memory instances with inner symbols should not be inlined
+          // mark them as used so that the wrapper module is not removed
+          wrapperModules[mem] = true;
+          continue;
+        }
+        if (!b)
+          b = std::make_unique<ImplicitLocOpBuilder>(mod.getLoc(),
+                                                     mod.getBody());
+        if (!moduleNamespace)
+          moduleNamespace = std::make_unique<InnerSymbolNamespace>(mod);
+        PrefixingInliner interface(&getContext(), *b, *moduleNamespace,
+                                   mod.getModuleName(), inst.getInstanceName());
+        if (failed(mlir::inlineRegion(interface, &mem.getBody(), inst,
+                                      inst.getOperands(), inst.getResults(),
+                                      std::nullopt, true))) {
+          inst.emitError("failed to inline '")
+              << mod.getModuleName() << "' into instance '"
+              << inst.getInstanceName() << "'";
+          return signalPassFailure();
+        }
+        inlinedInstances.push_back(inst);
+      }
+    }
+    for (auto inst : inlinedInstances)
+      inst.erase();
+    for (auto [mod, used] : wrapperModules)
+      if (!used)
+        mod.erase();
   }
 
   if (!anythingChanged)

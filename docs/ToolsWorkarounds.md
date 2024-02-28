@@ -133,3 +133,122 @@ cause the bug to manifest (since they are version dependent), thus there isn't
 a universal fix that can be applied in the generated verilog.
 
 https://github.com/llvm/circt/commit/e9f443be475e0ef796c0c6af1ce09d6e783fcd5a
+
+# Inline memory module wrappers
+
+By default, firtool wraps each memory in its own module and instantiates it inside the parent module.
+
+Vivado, for example, does not merge memories with shift registers at their outputs when there is a module boundary between them. This can make it harder to achieve good timing.
+
+## Example
+
+Input FIRRTL:
+
+```
+FIRRTL version 3.0.0
+circuit Foo:
+  module Foo:
+    input r: {addr: UInt<3>, en: UInt<1>, clk: Clock, flip data: UInt<32>}
+    input w: {addr: UInt<3>, en: UInt<1>, clk: Clock, data: UInt<32>, mask: UInt<1>}
+
+    mem memory :
+      data-type => UInt<32>
+      depth => 8
+      read-latency => 1
+      write-latency => 1
+      reader => r
+      writer => w
+      read-under-write => undefined
+
+
+    connect memory.r, r
+    connect memory.w, w
+```
+
+Default output Verilog. The memory is inside a newly created module: 
+
+```Verilog
+module memory_8x32(
+  input  [2:0]  R0_addr,
+  input         R0_en,
+                R0_clk,
+  output [31:0] R0_data,
+  input  [2:0]  W0_addr,
+  input         W0_en,
+                W0_clk,
+  input  [31:0] W0_data
+);
+
+  reg [31:0] Memory[0:7];
+  reg        _R0_en_d0;
+  reg [2:0]  _R0_addr_d0;
+  always @(posedge R0_clk) begin
+    _R0_en_d0 <= R0_en;
+    _R0_addr_d0 <= R0_addr;
+  end // always @(posedge)
+  always @(posedge W0_clk) begin
+    if (W0_en & 1'h1)
+      Memory[W0_addr] <= W0_data;
+  end // always @(posedge)
+  assign R0_data = _R0_en_d0 ? Memory[_R0_addr_d0] : 32'bx;
+endmodule
+
+module Foo(
+  input  [2:0]  r_addr,
+  input         r_en,
+                r_clk,
+  output [31:0] r_data,
+  input  [2:0]  w_addr,
+  input         w_en,
+                w_clk,
+  input  [31:0] w_data,
+  input         w_mask
+);
+
+  memory_8x32 memory_ext (
+    .R0_addr (r_addr),
+    .R0_en   (r_en),
+    .R0_clk  (r_clk),
+    .R0_data (r_data),
+    .W0_addr (w_addr),
+    .W0_en   (w_en & w_mask),
+    .W0_clk  (w_clk),
+    .W0_data (w_data)
+  );
+endmodule
+```
+
+## Workaround
+
+Compile with `firtool --inline-mem` to inline the content of the memory wrapper module into the parent module.
+
+With this option, the memory is emitted inside the parent module.
+
+```Verilog
+module Foo(
+  input  [2:0]  r_addr,
+  input         r_en,
+                r_clk,
+  output [31:0] r_data,
+  input  [2:0]  w_addr,
+  input         w_en,
+                w_clk,
+  input  [31:0] w_data,
+  input         w_mask
+);
+
+  reg [31:0] memory_ext_Memory[0:7];
+  reg        memory_ext__R0_en_d0;
+  reg [2:0]  memory_ext__R0_addr_d0;
+  always @(posedge r_clk) begin
+    memory_ext__R0_en_d0 <= r_en;
+    memory_ext__R0_addr_d0 <= r_addr;
+  end // always @(posedge)
+  always @(posedge w_clk) begin
+    if (w_en & w_mask & 1'h1)
+      memory_ext_Memory[w_addr] <= w_data;
+  end // always @(posedge)
+  assign r_data =
+    memory_ext__R0_en_d0 ? memory_ext_Memory[memory_ext__R0_addr_d0] : 32'bx;
+endmodule
+```
