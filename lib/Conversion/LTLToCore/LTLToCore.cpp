@@ -264,64 +264,69 @@ struct AssertOpConversionPattern : OpConversionPattern<verif::AssertOp> {
               })
               .Default([&](auto) { return true; });
 
-    bool isAntecedentLegal =
-        llvm::TypeSwitch<Operation *, bool>(antecedent)
-            .Case<ltl::AndOp, ltl::ClockOp, ltl::DelayOp, ltl::DisableOp,
-                  ltl::EventuallyOp, ltl::ImplicationOp, ltl::NotOp, ltl::OrOp>(
-                [&](auto op) {
-                  op->emitError("Invalid antecedent type, must be an immediate "
-                                "predicate or a concat op!");
-                  return false;
-                })
-            .Default([&](auto) { return true; });
+    bool isAntecedentLegal = true;
+    if (!isa<BlockArgument>(implop.getAntecedent()))
+      isAntecedentLegal =
+          llvm::TypeSwitch<Operation *, bool>(antecedent)
+              .Case<ltl::AndOp, ltl::ClockOp, ltl::DelayOp, ltl::DisableOp,
+                    ltl::EventuallyOp, ltl::ImplicationOp, ltl::NotOp,
+                    ltl::OrOp>([&](auto op) {
+                op->emitError("Invalid antecedent type, must be an immediate "
+                              "predicate or a concat op!");
+                return false;
+              })
+              .Default([&](auto) { return true; });
 
     if (bool isLegal = !(isConsequentLegal && isAntecedentLegal))
       return isLegal;
 
-    // Check for NOI case
-    auto concat = dyn_cast<ltl::ConcatOp>(antecedent);
-    if (concat) {
-      // We are only supporting sequences of the type a ##n true
-      auto inputs = concat.getInputs();
-      auto nInputs = inputs.size();
-      if (nInputs > 2) {
-        concat->emitError("Antecedent must be of the form a ##n true");
-        return false;
-      }
-
-      // Figure out if we are in the NOI case of "a ##n true"
-      if (nInputs == 2) {
-        if (!isa<BlockArgument>(inputs.front())) {
-          if (dyn_cast<ltl::DelayOp>(inputs.front().getDefiningOp())) {
-            concat->emitError("Antecedent must be of the form a ##n true");
-            return false;
-          }
-        }
-        // Figure out what our NOI delay is
-        // Make sure that we aren't trying to case a block argument
-        ltl::DelayOp delayN;
-        if (!isa<BlockArgument>(inputs.back())) {
-          if ((delayN =
-                   dyn_cast<ltl::DelayOp>(inputs.back().getDefiningOp()))) {
-            // NOI case: generate the hardware needed to encode the
-            // non-overlapping implication
-            if (!makeNonOverlappingImplication(implop, delayN, ltlclock, concat,
-                                               rewriter, res))
-              return false;
-
-            rewriter.eraseOp(delayN);
-          }
-        } else {
+    // Check for NOI case: If antecedent is an input, then we know that no delay
+    // is associated to the implication and thus it's an overlapping implication
+    if (!isa<BlockArgument>(implop.getAntecedent())) {
+      auto concat = dyn_cast<ltl::ConcatOp>(antecedent);
+      if (concat) {
+        // We are only supporting sequences of the type a ##n true
+        auto inputs = concat.getInputs();
+        auto nInputs = inputs.size();
+        if (nInputs > 2) {
           concat->emitError("Antecedent must be of the form a ##n true");
           return false;
         }
-      } else {
-        // OI case: simply generate an implication so
-        // (or (not antecedant) consequent)
-        res = makeImplication(implop.getLoc(), inputs.front(),
-                              implop.getConsequent(), rewriter);
+
+        // Figure out if we are in the NOI case of "a ##n true"
+        if (nInputs == 2) {
+          if (!isa<BlockArgument>(inputs.front())) {
+            if (dyn_cast<ltl::DelayOp>(inputs.front().getDefiningOp())) {
+              concat->emitError("Antecedent must be of the form a ##n true");
+              return false;
+            }
+          }
+          // Figure out what our NOI delay is
+          // Make sure that we aren't trying to case a block argument
+          ltl::DelayOp delayN;
+          if (!isa<BlockArgument>(inputs.back())) {
+            if ((delayN =
+                     dyn_cast<ltl::DelayOp>(inputs.back().getDefiningOp()))) {
+              // NOI case: generate the hardware needed to encode the
+              // non-overlapping implication
+              if (!makeNonOverlappingImplication(implop, delayN, ltlclock,
+                                                 concat, rewriter, res))
+                return false;
+
+              rewriter.eraseOp(delayN);
+            }
+          } else {
+            concat->emitError("Antecedent must be of the form a ##n true");
+            return false;
+          }
+        } else {
+          // OI case: simply generate an implication so
+          // (or (not antecedant) consequent)
+          res = makeImplication(implop.getLoc(), inputs.front(),
+                                implop.getConsequent(), rewriter);
+        }
+        rewriter.eraseOp(concat);
       }
-      rewriter.eraseOp(concat);
     } else {
       // OI case: simply generate an implication so
       // (or (not antecedant) consequent)
