@@ -67,7 +67,7 @@ static bool shouldSpillWire(Operation &op, const LoweringOptions &options) {
 }
 
 static StringAttr getArgName(Operation *op, size_t idx) {
-  if (auto inst = dyn_cast<InstanceOp>(op))
+  if (auto inst = dyn_cast<hw::InstanceOp>(op))
     return inst.getArgumentName(idx);
   else if (auto inst = dyn_cast<InstanceChoiceOp>(op))
     return inst.getArgumentName(idx);
@@ -104,7 +104,7 @@ static void spillWiresForInstanceInputs(HWInstanceLike op) {
 }
 
 static StringAttr getResName(Operation *op, size_t idx) {
-  if (auto inst = dyn_cast<InstanceOp>(op))
+  if (auto inst = dyn_cast<hw::InstanceOp>(op))
     return inst.getResultName(idx);
   else if (auto inst = dyn_cast<InstanceChoiceOp>(op))
     return inst.getResultName(idx);

@@ -1711,27 +1711,42 @@ void GrandCentralPass::runOnOperation() {
   instancePaths = &instancePathCache;
 
   /// Contains the set of modules which are instantiated by the DUT, but not a
-  /// companion or instantiated by a companion.  If no DUT exists, treat the top
-  /// module as if it were the DUT.  This works by doing a depth-first walk of
-  /// the instance graph, starting from the "effective" DUT and stopping the
-  /// search at any modules which are known companions.
-  DenseSet<igraph::ModuleOpInterface> dutModules;
-  FModuleOp effectiveDUT = dut;
-  if (!effectiveDUT)
-    effectiveDUT = cast<FModuleOp>(
-        *instancePaths->instanceGraph.getTopLevelNode()->getModule());
-  auto dfRange =
-      llvm::depth_first(instancePaths->instanceGraph.lookup(effectiveDUT));
-  for (auto i = dfRange.begin(), e = dfRange.end(); i != e;) {
-    auto module = cast<FModuleLike>(*i->getModule());
-    if (AnnotationSet(module).hasAnnotation(companionAnnoClass)) {
-      i.skipChildren();
-      continue;
+  /// companion, instantiated by a companion, or instantiated under a bind.  If
+  /// no DUT exists, treat the top module as if it were the DUT.  This works by
+  /// doing a depth-first walk of the instance graph, starting from the
+  /// "effective" DUT and stopping the search at any modules which are known
+  /// companions or any instances which are marked "lowerToBind".
+  DenseSet<InstanceGraphNode *> dutModules;
+  InstanceGraphNode *effectiveDUT;
+  if (dut)
+    effectiveDUT = instancePaths->instanceGraph.lookup(dut);
+  else
+    effectiveDUT = instancePaths->instanceGraph.getTopLevelNode();
+  {
+    SmallVector<InstanceGraphNode *> modules({effectiveDUT});
+    while (!modules.empty()) {
+      auto *m = modules.pop_back_val();
+      for (InstanceRecord *a : *m) {
+        auto *mod = a->getTarget();
+        // Skip modules that we've visited, that are are under the companion
+        // module, or are bound/under a layer block.
+        if (auto block = a->getInstance()->getParentOfType<LayerBlockOp>()) {
+          auto diag = a->getInstance().emitOpError()
+                      << "is instantiated under a '" << block.getOperationName()
+                      << "' op which is unexpected by GrandCentral (did you "
+                         "forget to run the LowerLayers pass?)";
+          diag.attachNote(block.getLoc())
+              << "the '" << block.getOperationName() << "' op is here";
+          removalError = true;
+        }
+        if (dutModules.contains(mod) ||
+            AnnotationSet(mod->getModule()).hasAnnotation(companionAnnoClass) ||
+            cast<InstanceOp>(*a->getInstance()).getLowerToBind())
+          continue;
+        modules.push_back(mod);
+        dutModules.insert(mod);
+      }
     }
-    dutModules.insert(i->getModule<igraph::ModuleOpInterface>());
-    // Manually increment the iterator to avoid walking off the end from
-    // skipChildren.
-    ++i;
   }
 
   // Maybe return the lone instance of a module.  Generate errors on the op if
@@ -1765,7 +1780,6 @@ void GrandCentralPass::runOnOperation() {
   /// (2) the leafMap.  Annotations are removed as they are discovered and if
   /// they are not malformed.
   DenseSet<Operation *> modulesToDelete;
-  removalError = false;
   circuitOp.walk([&](Operation *op) {
     TypeSwitch<Operation *>(op)
         .Case<RegOp, RegResetOp, WireOp, NodeOp>([&](auto op) {
@@ -1950,12 +1964,11 @@ void GrandCentralPass::runOnOperation() {
                 // Check to see if we should change the output directory of a
                 // module.  Only update in the following conditions:
                 //   1) The module is the companion.
-                //   2) The module is NOT instantiated by the effective DUT.
+                //   2) The module is NOT instantiated by the effective DUT or
+                //      is under a bind.
                 auto *modNode = instancePaths->instanceGraph.lookup(mod);
                 SmallVector<InstanceRecord *> instances(modNode->uses());
-                if (modNode != companionNode &&
-                    dutModules.count(
-                        modNode->getModule<igraph::ModuleOpInterface>()))
+                if (modNode != companionNode && dutModules.count(modNode))
                   continue;
 
                 LLVM_DEBUG({

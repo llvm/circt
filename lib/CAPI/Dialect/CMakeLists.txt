@@ -50,6 +50,7 @@ add_mlir_public_c_api_library(CIRCTCAPIFIRRTL
   LINK_LIBS PUBLIC
   MLIRCAPIIR
   CIRCTFIRRTL
+  CIRCTImportFIRFile
 )
 
 add_mlir_public_c_api_library(CIRCTCAPICHIRRTL

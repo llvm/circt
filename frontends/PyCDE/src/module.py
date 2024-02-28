@@ -125,6 +125,7 @@ class PortProxyBase:
   PyCDE developer."""
 
   def __init__(self, block_args, builder):
+    assert builder is not None
     self._block_args = block_args
     if builder.outputs is not None:
       self._output_values: List[Optional[Signal]] = [None] * len(
@@ -313,14 +314,16 @@ class ModuleLikeBuilderBase(_PyProxy):
     """For each port, replace it with a property to provide access to the
     instances output in OTHER generators which are instantiating this module."""
 
+    def fgets_dict(s, outs):
+      return {n: g.fget(s) for n, g in outs.items()}
+
     named_outputs = {}
     for port in self.outputs:
       assert port.name is not None
       named_outputs[port.name] = port
     setattr(self.modcls,
             "outputs",
-            lambda self, outputs=named_outputs:
-            {n: g.fget(self) for n, g in outputs.items()})
+            lambda s, outs=named_outputs: fgets_dict(s, outs))
 
   @property
   def name(self):
@@ -336,6 +339,60 @@ class ModuleLikeBuilderBase(_PyProxy):
         f"<pycde.Module: {self.name} inputs: {self.inputs} "
         f"outputs: {self.outputs}>",
         file=out)
+
+  def add_metadata(self, sys, symbol: str, meta: Optional[Metadata]):
+    """Add the metadata to the IR so it potentially gets included in the
+    manifest. (It'll only be included if one of the instances has an appid.) If
+    user did not specify the metadata (or components thereof), attempt to fill
+    them in automatically:
+      - Name defaults to the module name.
+      - Summary defaults to the module docstring.
+      - If GitPython is installed, the commit hash and repo are automatically
+        generated if neither are specified.
+    """
+
+    from .dialects.esi import esi
+
+    if meta is None:
+      meta = Metadata()
+    elif not isinstance(meta, Metadata):
+      raise TypeError("Module metadata must be of type Metadata")
+
+    if meta.name is None:
+      meta.name = self.modcls.__name__
+
+    try:
+      # Attempt to automatically generate repo and commit hash using GitPython.
+      if meta.repo is None and meta.commit_hash is None:
+        import git
+        import inspect
+        modclsmodule = inspect.getmodule(self.modcls)
+        if modclsmodule is not None:
+          r = git.Repo(os.path.dirname(modclsmodule.__file__),
+                       search_parent_directories=True)
+          if r is not None:
+            meta.repo = r.remotes.origin.url
+            meta.commit_hash = r.head.object.hexsha
+    except Exception:
+      pass
+
+    if meta.summary is None and self.modcls.__doc__ is not None:
+      meta.summary = self.modcls.__doc__
+
+    with ir.InsertionPoint(sys.mod.body):
+      meta_op = esi.SymbolMetadataOp(
+          symbolRef=ir.FlatSymbolRefAttr.get(symbol),
+          name=ir.StringAttr.get(meta.name),
+          repo=ir.StringAttr.get(meta.repo) if meta.repo is not None else None,
+          commitHash=ir.StringAttr.get(meta.commit_hash)
+          if meta.commit_hash is not None else None,
+          version=ir.StringAttr.get(meta.version)
+          if meta.version is not None else None,
+          summary=ir.StringAttr.get(meta.summary)
+          if meta.summary is not None else None)
+      if meta.misc is not None:
+        for k, v in meta.misc.items():
+          meta_op.attributes[k] = _obj_to_attribute(v)
 
   class GeneratorCtxt:
     """Provides an context which most genertors need."""
@@ -408,60 +465,6 @@ class ModuleBuilder(ModuleLikeBuilderBase):
       return sys._create_circt_mod(self)
     return ret
 
-  def add_metadata(self, sys, symbol: str, meta: Optional[Metadata]):
-    """Add the metadata to the IR so it potentially gets included in the
-    manifest. (It'll only be included if one of the instances has an appid.) If
-    user did not specify the metadata (or components thereof), attempt to fill
-    them in automatically:
-      - Name defaults to the module name.
-      - Summary defaults to the module docstring.
-      - If GitPython is installed, the commit hash and repo are automatically
-        generated if neither are specified.
-    """
-
-    from .dialects.esi import esi
-
-    if meta is None:
-      meta = Metadata()
-    elif not isinstance(meta, Metadata):
-      raise TypeError("Module metadata must be of type Metadata")
-
-    if meta.name is None:
-      meta.name = self.modcls.__name__
-
-    try:
-      # Attempt to automatically generate repo and commit hash using GitPython.
-      if meta.repo is None and meta.commit_hash is None:
-        import git
-        import inspect
-        modclsmodule = inspect.getmodule(self.modcls)
-        if modclsmodule is not None:
-          r = git.Repo(os.path.dirname(modclsmodule.__file__),
-                       search_parent_directories=True)
-          if r is not None:
-            meta.repo = r.remotes.origin.url
-            meta.commit_hash = r.head.object.hexsha
-    except Exception:
-      pass
-
-    if meta.summary is None and self.modcls.__doc__ is not None:
-      meta.summary = self.modcls.__doc__
-
-    with ir.InsertionPoint(sys.mod.body):
-      meta_op = esi.SymbolMetadataOp(
-          symbolRef=ir.FlatSymbolRefAttr.get(symbol),
-          name=ir.StringAttr.get(meta.name),
-          repo=ir.StringAttr.get(meta.repo) if meta.repo is not None else None,
-          commitHash=ir.StringAttr.get(meta.commit_hash)
-          if meta.commit_hash is not None else None,
-          version=ir.StringAttr.get(meta.version)
-          if meta.version is not None else None,
-          summary=ir.StringAttr.get(meta.summary)
-          if meta.summary is not None else None)
-      if meta.misc is not None:
-        for k, v in meta.misc.items():
-          meta_op.attributes[k] = _obj_to_attribute(v)
-
   def create_op(self, sys, symbol):
     """Callback for creating a module op."""
 
@@ -529,7 +532,7 @@ class ModuleBuilder(ModuleLikeBuilderBase):
           raise PortError(
               f"Port {name} cannot be None (disconnected ports only allowed "
               "on extern mods.")
-        circt_inputs[name] = create_const_zero(port.type)
+        circt_inputs[name] = create_const_zero(port.type).value
       else:
         # If it's not a signal, assume the user wants to specify a constant and
         # try to convert it to a hardware constant.
@@ -587,7 +590,7 @@ class Module(_PyProxy, metaclass=ModuleLikeType):
   instance constructed exclusively for the generator.
   """
 
-  BuilderType = ModuleBuilder
+  BuilderType: type[ModuleLikeBuilderBase] = ModuleBuilder
   _builder: ModuleBuilder
 
   def __init__(self, instance_name: str = None, appid: AppID = None, **inputs):

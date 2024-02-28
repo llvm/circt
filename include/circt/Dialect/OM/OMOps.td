@@ -473,4 +473,31 @@ def IntegerAddOp : IntegerBinaryArithmeticOp<"integer.add", [Commutative]> {
   }];
 }
 
+def IntegerMulOp : IntegerBinaryArithmeticOp<"integer.mul", [Commutative]> {
+  let summary = "Multiply two OMIntegerType values";
+  let description = [{
+    Perform arbitrary prevision signed integer multiplication of two
+    OMIntegerType values.
+
+    Example:
+    ```mlir
+    %2 = om.integer.mul %0, %1 : !om.integer
+    ```
+  }];
+}
+
+def IntegerShrOp : IntegerBinaryArithmeticOp<"integer.shr"> {
+  let summary = "Shift an OMIntegerType value right by an OMIntegerType value";
+  let description = [{
+    Perform arbitrary precision signed integer arithmetic shift right of the lhs
+    OMIntegerType value by the rhs OMIntegerType value. The rhs value must be
+    non-negative.
+
+    Example:
+    ```mlir
+    %2 = om.integer.shr %0, %1 : !om.integer
+    ```
+  }];
+}
+
 #endif // CIRCT_DIALECT_OM_OMOPS_TD

@@ -1,10 +1,8 @@
-// XFAIL: *
-// See https://github.com/llvm/circt/issues/6658
 // RUN: circt-opt --pass-pipeline='builtin.module(ibis.class(ibis-convert-methods-to-containers))' %s | FileCheck %s
 
 // CHECK-LABEL:   ibis.class @ToContainers {
 // CHECK:           %[[VAL_0:.*]] = ibis.this @ToContainers
-// CHECK:           ibis.container @foo {
+// CHECK:           ibis.container.inner @foo {
 // CHECK:             %[[VAL_1:.*]] = ibis.this @foo
 // CHECK:             %[[VAL_2:.*]] = ibis.port.input @arg0 : !dc.value<i32>
 // CHECK:             %[[VAL_3:.*]] = ibis.port.read %[[VAL_2]] : !ibis.portref<in !dc.value<i32>>

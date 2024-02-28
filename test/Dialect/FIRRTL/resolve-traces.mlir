@@ -11,13 +11,10 @@ firrtl.circuit "Foo" {
 
 // Test that a local module annotation is resolved.
 //
+// CHECK:               emit.file "{{.*}}Foo.anno.json" {
 // CHECK:               class{{.*}}:{{.*}}chisel3.experimental.Trace$TraceAnnotation
 // CHECK-SAME{LITERAL}:   \22target\22: \22~Foo|{{0}}\22
 // CHECK-SAME:            \22chiselTarget\22:  \22~Foo|Original\22
-
-// Test that the output file is set to include the circuit name.
-//
-// CHECK-SAME: #hw.output_file<{{.*}}Foo.anno.json
 
 // Test that the symbols are correct.
 // CHECK-SAME: symbols = [@Foo]

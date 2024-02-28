@@ -19,6 +19,8 @@
 #include "esi/Common.h"
 #include "esi/Types.h"
 
+#include <future>
+
 namespace esi {
 
 /// Unidirectional channels are the basic communication primitive between the
@@ -58,6 +60,12 @@ public:
   /// successfully recieved. Basic API, will likely change for performance
   /// and functionality reasons.
   virtual bool read(MessageData &) = 0;
+
+  /// Asynchronous read. Returns a future which will be set when the message is
+  /// recieved. Could this subsume the synchronous read API?
+  /// The default implementation of this is really bad and should be overridden.
+  /// It simply polls `read` in a loop.
+  virtual std::future<MessageData> readAsync();
 };
 
 /// Services provide connections to 'bundles' -- collections of named,

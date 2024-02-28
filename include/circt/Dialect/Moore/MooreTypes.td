@@ -14,6 +14,9 @@
 #define CIRCT_DIALECT_MOORE_MOORETYPES
 
 include "circt/Dialect/Moore/MooreDialect.td"
+include "mlir/IR/AttrTypeBase.td"
+include "mlir/IR/EnumAttr.td"
+
 
 class MooreType<Pred condition, string description, string cppClassName>
   : DialectType<MooreDialect, condition, description, cppClassName>;
@@ -36,17 +39,5 @@ def SimpleBitVectorType : MooreType<CPred<[{
 
 def MooreIntType : MooreType<CPred<"$_self.isa<moore::IntType>()">,
   "an SystemVerilog int", "moore::IntType">;
-
-//===----------------------------------------------------------------------===//
-// LValue / RValue predicates
-//===----------------------------------------------------------------------===//
-
-class MooreLValueTypeOf<list<Type> allowedTypes>
-  : ContainerType<AnyTypeOf<allowedTypes>,
-    CPred<"$_self.isa<moore::LValueType>()">,
-    "$_self.cast<moore::LValueType>().getNestedType()", "Moore LValue type">;
-
-def MooreLValueType : MooreLValueTypeOf<[AnyType]>;
-def MooreRValueType : AnyTypeOf<[MooreIntType]>;
 
 #endif // CIRCT_DIALECT_MOORE_MOORETYPES

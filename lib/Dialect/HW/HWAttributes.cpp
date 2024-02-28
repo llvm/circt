@@ -171,16 +171,6 @@ void OutputFileAttr::print(AsmPrinter &p) const {
 }
 
 //===----------------------------------------------------------------------===//
-// FileListAttr
-//===----------------------------------------------------------------------===//
-
-FileListAttr FileListAttr::getFromFilename(MLIRContext *context,
-                                           const Twine &filename) {
-  auto canonicalized = canonicalizeFilename("", filename);
-  return FileListAttr::get(StringAttr::get(context, canonicalized));
-}
-
-//===----------------------------------------------------------------------===//
 // EnumFieldAttr
 //===----------------------------------------------------------------------===//
 

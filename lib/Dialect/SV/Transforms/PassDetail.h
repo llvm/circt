@@ -17,6 +17,10 @@
 
 namespace circt {
 
+namespace emit {
+class EmitDialect;
+} // namespace emit
+
 namespace comb {
 class CombDialect;
 }

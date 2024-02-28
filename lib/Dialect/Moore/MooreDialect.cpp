@@ -10,7 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/Moore/MIROps.h"
+#include "circt/Dialect/Moore/MooreOps.h"
 
 using namespace circt;
 using namespace circt::moore;

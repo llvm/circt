@@ -38,10 +38,12 @@ void MooreDialect::registerTypes() {
            PackedNamedType, PackedRefType, UnpackedNamedType, UnpackedRefType,
            PackedUnsizedDim, PackedRangeDim, UnpackedUnsizedDim,
            UnpackedArrayDim, UnpackedRangeDim, UnpackedAssocDim,
-           UnpackedQueueDim, EnumType, PackedStructType, UnpackedStructType,
+           UnpackedQueueDim, EnumType, PackedStructType, UnpackedStructType>();
+
+  addTypes<
 #define GET_TYPEDEF_LIST
 #include "circt/Dialect/Moore/MooreTypes.cpp.inc"
-           >();
+      >();
 }
 
 //===----------------------------------------------------------------------===//
@@ -1562,12 +1564,11 @@ static ParseResult parseMooreType(DialectAsmParser &parser, Subset subset,
                                   Type &type) {
   llvm::SMLoc loc = parser.getCurrentLocation();
   StringRef mnemonic;
-  OptionalParseResult result = generatedTypeParser(parser, &mnemonic, type);
-  if (result.has_value())
-    return result.value();
+  if (parser.parseKeyword(&mnemonic))
+    return failure();
 
-  result = customTypeParser(parser, mnemonic, subset, loc, type);
-  if (result.has_value())
+  if (auto result = customTypeParser(parser, mnemonic, subset, loc, type);
+      result.has_value())
     return result.value();
 
   parser.emitError(loc) << "unknown type `" << mnemonic
@@ -1578,8 +1579,6 @@ static ParseResult parseMooreType(DialectAsmParser &parser, Subset subset,
 /// Print a type registered with this dialect.
 static void printMooreType(Type type, DialectAsmPrinter &printer,
                            Subset subset) {
-  if (succeeded(generatedTypePrinter(type, printer)))
-    return;
   if (succeeded(customTypePrinter(type, printer, subset)))
     return;
   assert(false && "no printer for unknown `moore` dialect type");

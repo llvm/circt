@@ -1,0 +1,45 @@
+[build-system]
+requires = [
+  "setuptools>=68",
+  "setuptools_scm>=8.0",
+  "wheel",
+  "cmake>=3.20",
+  "pybind11>=2.9",
+]
+build-backend = "setuptools.build_meta"
+
+# Enable version inference from Git.
+[tool.setuptools_scm]
+root = "../../../.."
+tag_regex = "^ESIRuntime-(\\d+\\.\\d+\\.\\d+)?$"
+local_scheme = "no-local-version"
+git_describe_command = "git describe --dirty --tags --long --match ESIRuntime*"
+
+[tool.cibuildwheel]
+build-frontend = "build"
+
+[project]
+name = "esiaccel"
+dynamic = ["version"]
+description = "ESI accelerators runtime"
+authors = [{ name = "John Demme", email = "John.Demme@microsoft.com" }]
+dependencies = []
+requires-python = ">=3.8"
+license = { file = "LICENSE" }
+keywords = ["accelerator", "hardware", "runtime"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: Implementation :: CPython",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+]
+
+[project.scripts]
+esiquery = "esiaccel.utils:run_esiquery"
+esi-cosim = "esiaccel.utils:run_esi_cosim"

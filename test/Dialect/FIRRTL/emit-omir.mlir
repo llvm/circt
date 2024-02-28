@@ -11,8 +11,9 @@ firrtl.circuit "NoOMIR" {
 // CHECK-LABEL: firrtl.circuit "NoOMIR" {
 // CHECK-NEXT:    firrtl.module @NoOMIR() {
 // CHECK-NEXT:    }
-// CHECK-NEXT:    sv.verbatim "[]"
-// CHECK-SAME:    #hw.output_file<"omir.json", excludeFromFileList>}
+// CHECK-NEXT:    emit.file "omir.json" {
+// CHECK-NEXT:      sv.verbatim "[]"
+// CHECK-NEXT:    }
 // CHECK-NEXT:  }
 
 //===----------------------------------------------------------------------===//
@@ -26,8 +27,9 @@ firrtl.circuit "NoNodes" attributes {annotations = [{class = "freechips.rocketch
 // CHECK-LABEL: firrtl.circuit "NoNodes" {
 // CHECK-NEXT:    firrtl.module @NoNodes() {
 // CHECK-NEXT:    }
-// CHECK-NEXT:    sv.verbatim "[]"
-// CHECK-SAME:    excludeFromFileList>}
+// CHECK-NEXT:    emit.file "omir.json" {
+// CHECK-NEXT:      sv.verbatim "[]"
+// CHECK-NEXT:    }
 // CHECK-NEXT:  }
 
 //===----------------------------------------------------------------------===//
@@ -42,11 +44,14 @@ firrtl.circuit "EmptyNode" attributes {annotations = [{class = "freechips.rocket
 // CHECK-LABEL: firrtl.circuit "EmptyNode" {
 // CHECK-NEXT:    firrtl.module @EmptyNode() {
 // CHECK-NEXT:    }
-// CHECK-NEXT:    sv.verbatim
-// CHECK-SAME:    \22info\22: \22UnlocatableSourceInfo\22
-// CHECK-SAME:    \22id\22: \22OMID:0\22
-// CHECK-SAME:    \22fields\22: []
-// CHECK-SAME:    excludeFromFileList>}
+// CHECK-NEXT:    emit.file "omir.json" {
+// CHECK-NEXT:      sv.verbatim
+// CHECK-SAME:      {
+// CHECK-SAME:        \22info\22: \22UnlocatableSourceInfo\22
+// CHECK-SAME:        \22id\22: \22OMID:0\22
+// CHECK-SAME:        \22fields\22: []
+// CHECK-SAME:      }
+// CHECK-NEXT:    }
 // CHECK-NEXT:  }
 
 //===----------------------------------------------------------------------===//
@@ -63,22 +68,25 @@ firrtl.circuit "SourceLocators" attributes {annotations = [{class = "freechips.r
 // CHECK-LABEL: firrtl.circuit "SourceLocators" {
 // CHECK-NEXT:    firrtl.module @SourceLocators() {
 // CHECK-NEXT:    }
-// CHECK-NEXT:    sv.verbatim
-// CHECK-SAME:    \22info\22: \22@[A 0:1]\22
-// CHECK-SAME:    \22id\22: \22OMID:0\22
-// CHECK-SAME:    \22fields\22: [
+// CHECK-NEXT:    emit.file "omir.json" {
+// CHECK-NEXT:      sv.verbatim
 // CHECK-SAME:      {
-// CHECK-SAME:        \22info\22: \22@[C 4:5 D 6:7]\22
-// CHECK-SAME:        \22name\22: \22y\22
-// CHECK-SAME:        \22value\22: \22OMReference:0\22
+// CHECK-SAME:        \22info\22: \22@[A 0:1]\22
+// CHECK-SAME:        \22id\22: \22OMID:0\22
+// CHECK-SAME:        \22fields\22: [
+// CHECK-SAME:          {
+// CHECK-SAME:            \22info\22: \22@[C 4:5 D 6:7]\22
+// CHECK-SAME:            \22name\22: \22y\22
+// CHECK-SAME:            \22value\22: \22OMReference:0\22
+// CHECK-SAME:          }
+// CHECK-SAME:          {
+// CHECK-SAME:            \22info\22: \22@[B 2:3]\22
+// CHECK-SAME:            \22name\22: \22x\22
+// CHECK-SAME:            \22value\22: \22OMReference:0\22
+// CHECK-SAME:          }
+// CHECK-SAME:        ]
 // CHECK-SAME:      }
-// CHECK-SAME:      {
-// CHECK-SAME:        \22info\22: \22@[B 2:3]\22
-// CHECK-SAME:        \22name\22: \22x\22
-// CHECK-SAME:        \22value\22: \22OMReference:0\22
-// CHECK-SAME:      }
-// CHECK-SAME:    ]
-// CHECK-SAME:    excludeFromFileList>}
+// CHECK-NEXT:    }
 // CHECK-NEXT:  }
 
 //===----------------------------------------------------------------------===//
@@ -109,41 +117,48 @@ firrtl.circuit "AllTypesSupported" attributes {annotations = [{
 // CHECK-LABEL: firrtl.circuit "AllTypesSupported" {
 // CHECK-NEXT:    firrtl.module @AllTypesSupported() {
 // CHECK-NEXT:    }
-// CHECK-NEXT:    sv.verbatim
-// CHECK-SAME:    \22name\22: \22OMBoolean\22
-// CHECK-SAME:    \22value\22: true
-// CHECK-SAME:    \22name\22: \22OMInt1\22
-// CHECK-SAME:    \22value\22: 9001
-// CHECK-SAME:    \22name\22: \22OMInt2\22
-// CHECK-SAME:    \22value\22: -42
-// CHECK-SAME:    \22name\22: \22OMDouble\22
-// CHECK-SAME:    \22value\22: 3.14
-// CHECK-SAME:    \22name\22: \22OMID\22
-// CHECK-SAME:    \22value\22: \22OMID:1337\22
-// CHECK-SAME:    \22name\22: \22OMReference\22
-// CHECK-SAME:    \22value\22: \22OMReference:0\22
-// CHECK-SAME:    \22name\22: \22OMBigInt\22
-// CHECK-SAME:    \22value\22: \22OMBigInt:42\22
-// CHECK-SAME:    \22name\22: \22OMLong\22
-// CHECK-SAME:    \22value\22: \22OMLong:ff\22
-// CHECK-SAME:    \22name\22: \22OMString\22
-// CHECK-SAME:    \22value\22: \22OMString:hello\22
-// CHECK-SAME:    \22name\22: \22OMBigDecimal\22
-// CHECK-SAME:    \22value\22: \22OMBigDecimal:10.5\22
-// CHECK-SAME:    \22name\22: \22OMDeleted\22
-// CHECK-SAME:    \22value\22: \22OMDeleted\22
-// CHECK-SAME:    \22name\22: \22OMArray\22
-// CHECK-SAME:    \22value\22: [
-// CHECK-SAME:      true
-// CHECK-SAME:      9001
-// CHECK-SAME:      \22OMString:bar\22
-// CHECK-SAME:    ]
-// CHECK-SAME:    \22name\22: \22OMMap\22
-// CHECK-SAME:    \22value\22: {
-// CHECK-SAME:      \22bar\22: 9001
-// CHECK-SAME:      \22foo\22: true
-// CHECK-SAME:    }
-// CHECK-SAME:    excludeFromFileList>}
+// CHECK-NEXT:    emit.file "omir.json" {
+// CHECK-NEXT:      sv.verbatim
+// CHECK-SAME:      {
+// CHECK-SAME:        [
+// CHECK-SAME:          {
+// CHECK-SAME:            \22name\22: \22OMBoolean\22
+// CHECK-SAME:            \22value\22: true
+// CHECK-SAME:            \22name\22: \22OMInt1\22
+// CHECK-SAME:            \22value\22: 9001
+// CHECK-SAME:            \22name\22: \22OMInt2\22
+// CHECK-SAME:            \22value\22: -42
+// CHECK-SAME:            \22name\22: \22OMDouble\22
+// CHECK-SAME:            \22value\22: 3.14
+// CHECK-SAME:            \22name\22: \22OMID\22
+// CHECK-SAME:            \22value\22: \22OMID:1337\22
+// CHECK-SAME:            \22name\22: \22OMReference\22
+// CHECK-SAME:            \22value\22: \22OMReference:0\22
+// CHECK-SAME:            \22name\22: \22OMBigInt\22
+// CHECK-SAME:            \22value\22: \22OMBigInt:42\22
+// CHECK-SAME:            \22name\22: \22OMLong\22
+// CHECK-SAME:            \22value\22: \22OMLong:ff\22
+// CHECK-SAME:            \22name\22: \22OMString\22
+// CHECK-SAME:            \22value\22: \22OMString:hello\22
+// CHECK-SAME:            \22name\22: \22OMBigDecimal\22
+// CHECK-SAME:            \22value\22: \22OMBigDecimal:10.5\22
+// CHECK-SAME:            \22name\22: \22OMDeleted\22
+// CHECK-SAME:            \22value\22: \22OMDeleted\22
+// CHECK-SAME:            \22name\22: \22OMArray\22
+// CHECK-SAME:            \22value\22: [
+// CHECK-SAME:              true
+// CHECK-SAME:              9001
+// CHECK-SAME:              \22OMString:bar\22
+// CHECK-SAME:            ]
+// CHECK-SAME:            \22name\22: \22OMMap\22
+// CHECK-SAME:            \22value\22: {
+// CHECK-SAME:              \22bar\22: 9001
+// CHECK-SAME:              \22foo\22: true
+// CHECK-SAME:            }
+// CHECK-SAME:          }
+// CHECK-SAME:        ]
+// CHECK-SAME:      }
+// CHECK-NEXT:    }
 // CHECK-NEXT:  }
 
 //===----------------------------------------------------------------------===//
@@ -175,6 +190,7 @@ firrtl.circuit "LocalTrackers" attributes {annotations = [{
 // CHECK-NEXT:      firrtl.instance a sym [[SYMA:@[a-zA-Z0-9_]+]] @A()
 // CHECK-NEXT:      %b = firrtl.wire sym [[SYMB:@[a-zA-Z0-9_]+]] : !firrtl.uint<42>
 // CHECK-NEXT:    }
+// CHECK-NEXT:    emit.file "omir.json" {
 // CHECK-NEXT:    sv.verbatim
 // CHECK-SAME:           \22name\22: \22OMReferenceTarget1\22
 // CHECK-SAME{LITERAL}:  \22value\22: \22OMReferenceTarget:~LocalTrackers|{{0}}\22
@@ -222,7 +238,8 @@ firrtl.circuit "NonLocalTrackers" attributes {annotations = [{
 }
 // CHECK:       firrtl.instance a sym [[SYMA:@[a-zA-Z0-9_]+]]
 // CHECK:       firrtl.instance b sym [[SYMB:@[a-zA-Z0-9_]+]]
-// CHECK:       sv.verbatim
+// CHECK:       emit.file "omir.json" {
+// CHECK-NEXT:    sv.verbatim
 // CHECK-SAME:           \22name\22: \22OMReferenceTarget1\22
 // CHECK-SAME{LITERAL}:  \22value\22: \22OMReferenceTarget:~NonLocalTrackers|{{0}}/{{1}}:{{2}}/{{3}}:{{4}}\22
 // CHECK-SAME:           \22name\22: \22OMReferenceTarget2\22
@@ -510,7 +527,8 @@ firrtl.circuit "SRAMPaths" attributes {annotations = [{
 // CHECK-NOT:         circt.nonlocal
 // CHECK-SAME:        @Submodule()
 // CHECK-NEXT:    }
-// CHECK-NEXT:    sv.verbatim
+// CHECK-NEXT:    emit.file "omir.json" {
+// CHECK-NEXT:      sv.verbatim
 
 // CHECK-SAME:           \22id\22: \22OMID:0\22
 // CHECK-SAME:             \22name\22: \22omType\22
@@ -532,14 +550,15 @@ firrtl.circuit "SRAMPaths" attributes {annotations = [{
 // CHECK-NOT:                {{.+}}
 // CHECK-SAME:               {{[^\\]+}}\22
 
-// CHECK-SAME:    symbols = [
-// CHECK-SAME:      @SRAMPaths,
-// CHECK-SAME:      #hw.innerNameRef<@SRAMPaths::[[SYMSUB]]>,
-// CHECK-SAME:      @Submodule,
-// CHECK-SAME:      #hw.innerNameRef<@Submodule::[[SYMMEM1]]>,
-// CHECK-SAME:      @MySRAM,
-// CHECK-SAME:      #hw.innerNameRef<@Submodule::[[SYMMEM2]]>
-// CHECK-SAME:    ]}
+// CHECK-SAME:      symbols = [
+// CHECK-SAME:        @SRAMPaths,
+// CHECK-SAME:        #hw.innerNameRef<@SRAMPaths::[[SYMSUB]]>,
+// CHECK-SAME:        @Submodule,
+// CHECK-SAME:        #hw.innerNameRef<@Submodule::[[SYMMEM1]]>,
+// CHECK-SAME:        @MySRAM,
+// CHECK-SAME:        #hw.innerNameRef<@Submodule::[[SYMMEM2]]>
+// CHECK-SAME:      ]}
+// CHECK-NEXT:    }
 // CHECK-NEXT:  }
 
 //===----------------------------------------------------------------------===//
@@ -1001,7 +1020,8 @@ firrtl.circuit "FixPath"  attributes {annotations = [
   // CHECK-LABEL: firrtl.circuit "FixPath"
   // CHECK:         firrtl.module @FixPath
   // CHECK:           firrtl.instance d  @D()
-  // CHECK:         sv.verbatim
+  // CHECK:         emit.file "omir.json" {
+  // CHECK-NEXT:      sv.verbatim
   // CHECK-SAME:               name\22: \22dutInstance\22,\0A
   // CHECK-SAME{LITERAL}:      OMMemberInstanceTarget:~FixPath|{{0}}/{{1}}:{{2}}
   // CHECK-SAME:               name\22: \22pwm\22,\0A
@@ -1010,5 +1030,5 @@ firrtl.circuit "FixPath"  attributes {annotations = [
   // CHECK-SAME{LITERAL}:      value\22: \22OMMemberInstanceTarget:~C|{{2}}/{{4}}:{{5}}
   // CHECK-SAME:               name\22: \22d\22,\0A
   // CHECK-SAME{LITERAL}:      value\22: \22OMMemberInstanceTarget:~FixPath|{{5}}\22\0A
-  // CHECK-SAME:      {output_file = #hw.output_file<"omir.json", excludeFromFileList>, symbols = [@FixPath, #hw.innerNameRef<@FixPath::@c>, @C, #hw.innerNameRef<@C::@in>, #hw.innerNameRef<@C::@cd>, @D]}
+  // CHECK-SAME:      {symbols = [@FixPath, #hw.innerNameRef<@FixPath::@c>, @C, #hw.innerNameRef<@C::@in>, #hw.innerNameRef<@C::@cd>, @D]}
 }

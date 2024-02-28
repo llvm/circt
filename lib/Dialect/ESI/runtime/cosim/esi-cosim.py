@@ -25,7 +25,8 @@ import textwrap
 import time
 from typing import List
 
-CosimCollateralDir = Path(os.path.dirname(os.path.realpath(__file__)))
+_thisdir = Path(__file__).parent
+CosimCollateralDir = _thisdir.parent / "cosim"
 
 
 def is_port_open(port) -> bool:

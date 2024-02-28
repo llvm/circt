@@ -361,28 +361,14 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
   // CHECK-LABEL: hw.module private @Stop
   firrtl.module private @Stop(in %clock1: !firrtl.clock, in %clock2: !firrtl.clock, in %reset: !firrtl.uint<1>) {
-    // CHECK: [[CLOCK2:%.+]] = seq.from_clock %clock2
-    // CHECK: [[CLOCK1:%.+]] = seq.from_clock %clock1
-
-    // CHECK-NEXT: sv.ifdef "SYNTHESIS" {
-    // CHECK-NEXT: } else {
-    // CHECK-NEXT:   sv.always posedge [[CLOCK1]] {
-    // CHECK-NEXT:     %STOP_COND_ = sv.macro.ref @STOP_COND_
-    // CHECK-NEXT:     [[COND:%.+]] = comb.and bin %STOP_COND_, %reset : i1
-    // CHECK-NEXT:     sv.if [[COND]] {
-    // CHECK-NEXT:       sv.fatal
-    // CHECK-NEXT:     }
-    // CHECK-NEXT:   }
+    // CHECK-NEXT: [[STOP_COND_1:%.+]] = sv.macro.ref @STOP_COND_
+    // CHECK-NEXT: [[COND:%.+]] = comb.and bin [[STOP_COND_1]], %reset : i1
+    // CHECK-NEXT: sim.fatal %clock1, [[COND]]
     firrtl.stop %clock1, %reset, 42 : !firrtl.clock, !firrtl.uint<1>
 
-    // CHECK-NEXT:   sv.always posedge [[CLOCK2]] {
-    // CHECK-NEXT:     %STOP_COND_ = sv.macro.ref @STOP_COND_
-    // CHECK-NEXT:     [[COND:%.+]] = comb.and bin %STOP_COND_, %reset : i1
-    // CHECK-NEXT:     sv.if [[COND]] {
-    // CHECK-NEXT:       sv.finish
-    // CHECK-NEXT:     }
-    // CHECK-NEXT:   }
-    // CHECK-NEXT: }
+    // CHECK-NEXT: [[STOP_COND_2:%.+]] = sv.macro.ref @STOP_COND_
+    // CHECK-NEXT: [[COND:%.+]] = comb.and bin [[STOP_COND_2:%.+]], %reset : i1
+    // CHECK-NEXT: sim.finish %clock2, [[COND]]
     firrtl.stop %clock2, %reset, 0 : !firrtl.clock, !firrtl.uint<1>
   }
 
@@ -1584,5 +1570,40 @@ firrtl.circuit "PortSym" {
     %e_a = firrtl.instance sub1 @Blackbox(out bar: !firrtl.uint<1>)
     firrtl.strictconnect %a, %e_a : !firrtl.uint<1>
     %0 = firrtl.eq %out, %c1_ui5 : (!firrtl.uint<5>, !firrtl.uint<5>) -> !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// Test various aspects of output file behavior.
+
+firrtl.circuit "Directories" attributes {
+  annotations = [
+    {
+      class = "sifive.enterprise.firrtl.TestBenchDirAnnotation",
+      dirname = "testbench"
+    }
+  ]
+} {
+  // CHECK-LABEL: hw.module private @Directories_A
+  // CHECK-SAME:    output_file = #hw.output_file<"hello/"
+  firrtl.module private @Directories_A() attributes {
+    output_file = #hw.output_file<"hello/", excludeFromFileList>
+  } {}
+  // CHECK:       hw.module private @BoundUnderDUT
+  // CHECK-SAME:    output_file = #hw.output_file<"testbench/"
+  firrtl.module private @BoundUnderDUT() {}
+  firrtl.module private @DUT() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.firrtl.MarkDUTAnnotation"
+      }
+    ]
+  } {
+    firrtl.instance boundUnderDUT {lowerToBind} @BoundUnderDUT()
+  }
+  firrtl.module @Directories() {
+    firrtl.instance dut @DUT()
+    firrtl.instance dut_A @Directories_A()
   }
 }

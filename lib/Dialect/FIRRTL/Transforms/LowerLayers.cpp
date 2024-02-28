@@ -10,9 +10,11 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Mutex.h"
@@ -34,10 +36,6 @@ static bool isAncestor(Operation *op, Value value) {
   return op->isAncestor(argument.getOwner()->getParentOp());
 }
 
-//===----------------------------------------------------------------------===//
-// Type Conversion
-//===----------------------------------------------------------------------===//
-
 namespace {
 
 /// Indicates the kind of reference that was captured.
@@ -56,6 +54,70 @@ struct ConnectInfo {
 
 } // namespace
 
+// A mapping of an old InnerRefAttr to the new inner symbol and module name that
+// need to be spliced into the old InnerRefAttr.  This is used to fix
+// hierarchical path operations after layers are converted to modules.
+using InnerRefMap =
+    DenseMap<hw::InnerRefAttr, std::pair<hw::InnerSymAttr, StringAttr>>;
+
+//===----------------------------------------------------------------------===//
+// Naming Helpers
+//===----------------------------------------------------------------------===//
+
+static void appendName(StringRef name, SmallString<32> &output,
+                       bool toLower = false) {
+  if (name.empty())
+    return;
+  if (!output.empty())
+    output.append("_");
+  output.append(name);
+  if (!toLower)
+    return;
+  auto i = output.size() - name.size();
+  output[i] = llvm::toLower(output[i]);
+}
+
+static void appendName(SymbolRefAttr name, SmallString<32> &output,
+                       bool toLower = false) {
+  appendName(name.getRootReference(), output, toLower);
+  for (auto nested : name.getNestedReferences())
+    appendName(nested.getValue(), output, toLower);
+}
+
+/// For a layer `@A::@B::@C` in module Module,
+/// the generated module is called `Module_A_B_C`.
+static SmallString<32> moduleNameForLayer(StringRef moduleName,
+                                          SymbolRefAttr layerName) {
+  SmallString<32> result;
+  appendName(moduleName, result);
+  appendName(layerName, result);
+  return result;
+}
+
+/// For a layerblock `@A::@B::@C`,
+/// the generated instance is called `a_b_c`.
+static SmallString<32> instanceNameForLayer(SymbolRefAttr layerName) {
+  SmallString<32> result;
+  appendName(layerName, result, /*toLower=*/true);
+  return result;
+}
+
+/// For all layerblocks `@A::@B::@C` in a circuit called Circuit,
+/// the output filename is `layers_Circuit_A_B_C.sv`.
+static SmallString<32> fileNameForLayer(StringRef circuitName,
+                                        SymbolRefAttr layerName) {
+  SmallString<32> result;
+  result.append("layers");
+  appendName(circuitName, result);
+  appendName(layerName, result);
+  result.append(".sv");
+  return result;
+}
+
+//===----------------------------------------------------------------------===//
+// LowerLayersPass
+//===----------------------------------------------------------------------===//
+
 class LowerLayersPass : public LowerLayersBase<LowerLayersPass> {
   /// Safely build a new module with a given namehint.  This handles geting a
   /// lock to modify the top-level circuit.
@@ -63,10 +125,10 @@ class LowerLayersPass : public LowerLayersBase<LowerLayersPass> {
                            Twine namehint, SmallVectorImpl<PortInfo> &ports);
 
   /// Strip layer colors from the module's interface.
-  void runOnModuleLike(FModuleLike moduleLike);
+  InnerRefMap runOnModuleLike(FModuleLike moduleLike);
 
   /// Extract layerblocks and strip probe colors from all ops under the module.
-  void runOnModuleBody(FModuleOp moduleOp);
+  void runOnModuleBody(FModuleOp moduleOp, InnerRefMap &innerRefMap);
 
   /// Update the module's port types to remove any explicit layer requirements
   /// from any probe types.
@@ -79,6 +141,14 @@ class LowerLayersPass : public LowerLayersBase<LowerLayersPass> {
   /// remove the cast itself from the IR.
   void removeLayersFromRefCast(RefCastOp cast);
 
+  /// Set an output file attribute pointing at the testbench directory if a
+  /// testbench directory is known to the pass.
+  void maybeSetOutputDir(Operation *op);
+
+  /// Set an output file attribute pointing at the provided filename.  Prepend
+  /// the testbench directory if one is known to the pass.
+  void setOutputFile(Operation *op, const Twine &filename);
+
   /// Entry point for the function.
   void runOnOperation() override;
 
@@ -87,6 +157,16 @@ class LowerLayersPass : public LowerLayersBase<LowerLayersPass> {
 
   /// A map of layer blocks to module name that should be created for it.
   DenseMap<LayerBlockOp, StringRef> moduleNames;
+
+  /// The design-under-test (DUT) as indicated by the presence of a
+  /// "sifive.enterprise.firrtl.MarkDUTAnnotation".  This will be null if no
+  /// annotation is present.
+  FModuleOp dut;
+
+  /// The directory for verification collateral as indicated by the presence of
+  /// a "sifive.enterprise.firrtl.TestBenchDirAnnotation".  Empty if not
+  /// specified.
+  StringRef testBenchDir;
 };
 
 /// Multi-process safe function to build a module in the circuit and return it.
@@ -101,6 +181,7 @@ FModuleOp LowerLayersPass::buildNewModule(OpBuilder &builder, Location location,
       location, builder.getStringAttr(namehint),
       ConventionAttr::get(builder.getContext(), Convention::Internal), ports,
       ArrayAttr{});
+  maybeSetOutputDir(newModule);
   SymbolTable::setSymbolVisibility(newModule, SymbolTable::Visibility::Private);
   return newModule;
 }
@@ -156,18 +237,19 @@ void LowerLayersPass::removeLayersFromPorts(FModuleLike moduleLike) {
   }
 }
 
-void LowerLayersPass::runOnModuleLike(FModuleLike moduleLike) {
+InnerRefMap LowerLayersPass::runOnModuleLike(FModuleLike moduleLike) {
   LLVM_DEBUG({
     llvm::dbgs() << "Module: " << moduleLike.getModuleName() << "\n";
     llvm::dbgs() << "  Examining Layer Blocks:\n";
   });
 
   // Strip away layers from the interface of the module-like op.
+  InnerRefMap innerRefMap;
   TypeSwitch<Operation *, void>(moduleLike.getOperation())
       .Case<FModuleOp>([&](auto op) {
         op.setLayers({});
         removeLayersFromPorts(op);
-        runOnModuleBody(op);
+        runOnModuleBody(op, innerRefMap);
       })
       .Case<FExtModuleOp, FIntModuleOp, FMemModuleOp>([&](auto op) {
         op.setLayers({});
@@ -175,11 +257,15 @@ void LowerLayersPass::runOnModuleLike(FModuleLike moduleLike) {
       })
       .Case<ClassOp, ExtClassOp>([](auto) {})
       .Default([](auto) { assert(0 && "unknown module-like op"); });
+
+  return innerRefMap;
 }
 
-void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp) {
+void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
+                                      InnerRefMap &innerRefMap) {
   CircuitOp circuitOp = moduleOp->getParentOfType<CircuitOp>();
   StringRef circuitName = circuitOp.getName();
+  hw::InnerSymbolNamespace ns(moduleOp);
 
   // A map of instance ops to modules that this pass creates.  This is used to
   // check if this was an instance that we created and to do fast module
@@ -222,14 +308,6 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp) {
     if (!layerBlock)
       return WalkResult::advance();
 
-    // Compute the expanded layer name.  For layer @A::@B::@C, this is "A_B_C".
-    SmallString<32> layerName(layerBlock.getLayerName().getRootReference());
-    for (auto ref : layerBlock.getLayerName().getNestedReferences()) {
-      layerName.append("_");
-      layerName.append(ref.getValue());
-    }
-    LLVM_DEBUG(llvm::dbgs() << "    - Layer: " << layerName << "\n");
-
     Block *body = layerBlock.getBody(0);
     OpBuilder builder(moduleOp);
 
@@ -242,7 +320,7 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp) {
 
     // Create an input port for an operand that is captured from outside.
     auto createInputPort = [&](Value operand, Location loc) {
-      auto operandName = getFieldName(FieldRef(operand, 0), true);
+      const auto &[portName, _] = getFieldName(FieldRef(operand, 0), true);
 
       // If the value is a ref, we must resolve the ref inside the parent,
       // passing the input as a value instead of a ref. Inside the layer, we
@@ -251,8 +329,8 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp) {
       if (auto refType = dyn_cast<RefType>(type))
         type = refType.getType();
 
-      ports.push_back({builder.getStringAttr("_" + operandName.first), type,
-                       Direction::In, /*sym=*/{},
+      ports.push_back({builder.getStringAttr(portName), type, Direction::In,
+                       /*sym=*/{},
                        /*loc=*/loc});
       // Update the layer block's body with arguments as we will swap this body
       // into the module when we create it.  If this is a ref type, then add a
@@ -298,7 +376,7 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp) {
     auto createOutputPort = [&](Value dest, Value src) {
       auto loc = getPortLoc(dest);
       auto portNum = ports.size();
-      auto operandName = getFieldName(FieldRef(dest, 0), true);
+      const auto &[portName, _] = getFieldName(FieldRef(dest, 0), true);
 
       RefType refType;
       if (auto oldRef = dyn_cast<RefType>(dest.getType()))
@@ -308,8 +386,8 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp) {
             type_cast<FIRRTLBaseType>(dest.getType()).getPassiveType(),
             /*forceable=*/false);
 
-      ports.push_back({builder.getStringAttr("_" + operandName.first), refType,
-                       Direction::Out, /*sym=*/{}, /*loc=*/loc});
+      ports.push_back({builder.getStringAttr(portName), refType, Direction::Out,
+                       /*sym=*/{}, /*loc=*/loc});
       Value replacement = body->addArgument(refType, loc);
       if (isa<RefType>(dest.getType())) {
         dest.replaceUsesWithIf(replacement, [&](OpOperand &use) {
@@ -333,7 +411,14 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp) {
           builder.create<RefSendOp>(loc, src)->getResult(0));
     };
 
+    SmallVector<hw::InnerSymAttr> innerSyms;
     for (auto &op : llvm::make_early_inc_range(*body)) {
+      // Record any operations inside the layer block which have inner symbols.
+      // Theses may have symbol users which need to be updated.
+      if (auto symOp = dyn_cast<hw::InnerSymbolOpInterface>(op))
+        if (auto innerSym = symOp.getInnerSymAttr())
+          innerSyms.push_back(innerSym);
+
       // Handle instance ops that were created from nested layer blocks.  These
       // ops need to be moved outside the layer block to avoid nested binds.
       // Nested binds are illegal in the SystemVerilog specification (and
@@ -457,22 +542,34 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp) {
     // of the pass.  This is done to avoid having to revisit and rewrite each
     // instance everytime it is moved into a parent layer.
     builder.setInsertionPointAfter(layerBlock);
-    auto moduleName = newModule.getModuleName();
+    auto instanceName = instanceNameForLayer(layerBlock.getLayerName());
     auto instanceOp = builder.create<InstanceOp>(
         layerBlock.getLoc(), /*moduleName=*/newModule,
         /*name=*/
-        (Twine((char)tolower(moduleName[0])) + moduleName.drop_front()).str(),
-        NameKindEnum::DroppableName,
+        instanceName, NameKindEnum::DroppableName,
         /*annotations=*/ArrayRef<Attribute>{},
-        /*portAnnotations=*/ArrayRef<Attribute>{}, /*lowerToBind=*/true);
-    // TODO: Change this to "layers_" once we switch to FIRRTL 4.0.0+.
-    instanceOp->setAttr("output_file",
-                        hw::OutputFileAttr::getFromFilename(
-                            builder.getContext(),
+        /*portAnnotations=*/ArrayRef<Attribute>{}, /*lowerToBind=*/true,
+        /*innerSym=*/
+        (innerSyms.empty() ? hw::InnerSymAttr{}
+                           : hw::InnerSymAttr::get(builder.getStringAttr(
+                                 ns.newName(instanceName)))));
 
-                            "groups_" + circuitName + "_" + layerName + ".sv",
-                            /*excludeFromFileList=*/true));
+    auto fileName = fileNameForLayer(circuitName, layerBlock.getLayerName());
+    setOutputFile(instanceOp, fileName);
+
     createdInstances.try_emplace(instanceOp, newModule);
+
+    LLVM_DEBUG(llvm::dbgs() << "        moved inner refs:\n");
+    for (hw::InnerSymAttr innerSym : innerSyms) {
+      auto oldInnerRef = hw::InnerRefAttr::get(moduleOp.getModuleNameAttr(),
+                                               innerSym.getSymName());
+      auto splice = std::make_pair(instanceOp.getInnerSymAttr(),
+                                   newModule.getModuleNameAttr());
+      innerRefMap.insert({oldInnerRef, splice});
+      LLVM_DEBUG(llvm::dbgs() << "          - ref: " << oldInnerRef << "\n"
+                              << "            splice: " << splice.first << ", "
+                              << splice.second << "\n";);
+    }
 
     // Connect instance ports to values.
     assert(ports.size() == connectValues.size() &&
@@ -507,6 +604,28 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp) {
   });
 }
 
+/// Set an output file attribute on the provided operation if the pass has a
+/// non-empty test bench directory.
+void LowerLayersPass::maybeSetOutputDir(Operation *op) {
+  if (!testBenchDir.empty() && dut)
+    op->setAttr("output_file", hw::OutputFileAttr::getAsDirectory(
+                                   op->getContext(), testBenchDir,
+                                   /*excludeFromFileList=*/true));
+}
+
+void LowerLayersPass::setOutputFile(Operation *op, const Twine &filename) {
+  if (!testBenchDir.empty() && dut) {
+    op->setAttr("output_file", hw::OutputFileAttr::getFromDirectoryAndFilename(
+                                   op->getContext(), testBenchDir, filename,
+                                   /*excludeFromFileList=*/true));
+
+    return;
+  }
+  op->setAttr("output_file", hw::OutputFileAttr::getFromFilename(
+                                 op->getContext(), filename,
+                                 /*excludeFromFileList=*/true));
+}
+
 /// Process a circuit to remove all layer blocks in each module and top-level
 /// layer definition.
 void LowerLayersPass::runOnOperation() {
@@ -519,39 +638,90 @@ void LowerLayersPass::runOnOperation() {
   llvm::sys::SmartMutex<true> mutex;
   circuitMutex = &mutex;
 
+  // Extract information from circuit-level annotations.
+  for (auto anno : AnnotationSet(circuitOp)) {
+    if (!anno.isClass(testBenchDirAnnoClass))
+      continue;
+    auto dir = anno.getMember<StringAttr>("dirname");
+    assert(dir && "invalid test bench annotation");
+    testBenchDir = dir.getValue();
+  }
+
   // Determine names for all modules that will be created.  Do this serially to
-  // avoid non-determinism from creating these in the parallel region.
+  // avoid non-determinism from creating these in the parallel region.  While
+  // walking modules, set the DUT if it is so marked.
   CircuitNamespace ns(circuitOp);
-  circuitOp->walk([&](FModuleOp moduleOp) {
+  WalkResult result = circuitOp->walk([&](FModuleOp moduleOp) {
+    if (failed(extractDUT(moduleOp, dut)))
+      return WalkResult::interrupt();
     moduleOp->walk([&](LayerBlockOp layerBlockOp) {
-      SmallString<32> layerName(layerBlockOp.getLayerName().getRootReference());
-      for (auto ref : layerBlockOp.getLayerName().getNestedReferences()) {
-        layerName.append("_");
-        layerName.append(ref.getValue());
-      }
-      moduleNames.insert({layerBlockOp, ns.newName(moduleOp.getModuleName() +
-                                                   "_" + layerName)});
+      auto name = moduleNameForLayer(moduleOp.getModuleName(),
+                                     layerBlockOp.getLayerName());
+      moduleNames.insert({layerBlockOp, ns.newName(name)});
     });
+    return WalkResult::advance();
   });
+
+  if (result.wasInterrupted())
+    return signalPassFailure();
+
+  auto mergeMaps = [](auto &&a, auto &&b) {
+    for (auto bb : b)
+      a.insert(bb);
+    return std::forward<decltype(a)>(a);
+  };
 
   // Lower the layer blocks of each module.
   SmallVector<FModuleLike> modules(
       circuitOp.getBodyBlock()->getOps<FModuleLike>());
-  parallelForEach(modules,
-                  [this](FModuleLike module) { runOnModuleLike(module); });
+  auto innerRefMap =
+      transformReduce(circuitOp.getContext(), modules, InnerRefMap{}, mergeMaps,
+                      [this](FModuleLike mod) { return runOnModuleLike(mod); });
+
+  // Rewrite any hw::HierPathOps which have namepaths that contain rewritting
+  // inner refs.
+  //
+  // TODO: This unnecessarily computes a new namepath for every hw::HierPathOp
+  // even if that namepath is not used.  It would be better to only build the
+  // new namepath when a change is needed, e.g., by recording updates to the
+  // namepath.
+  for (hw::HierPathOp hierPathOp : circuitOp.getOps<hw::HierPathOp>()) {
+    SmallVector<Attribute> newNamepath;
+    bool modified = false;
+    for (auto attr : hierPathOp.getNamepath()) {
+      hw::InnerRefAttr innerRef = dyn_cast<hw::InnerRefAttr>(attr);
+      if (!innerRef) {
+        newNamepath.push_back(attr);
+        continue;
+      }
+      auto it = innerRefMap.find(innerRef);
+      if (it == innerRefMap.end()) {
+        newNamepath.push_back(attr);
+        continue;
+      }
+
+      auto &[inst, mod] = it->getSecond();
+      newNamepath.push_back(
+          hw::InnerRefAttr::get(innerRef.getModule(), inst.getSymName()));
+      newNamepath.push_back(hw::InnerRefAttr::get(mod, innerRef.getName()));
+      modified = true;
+    }
+    if (modified)
+      hierPathOp.setNamepathAttr(
+          ArrayAttr::get(circuitOp.getContext(), newNamepath));
+  }
 
   // Generate the header and footer of each bindings file.  The body will be
   // populated later when binds are exported to Verilog.  This produces text
   // like:
   //
-  //     `include "groups_A.sv"
-  //     `include "groups_A_B.sv"
-  //     `ifndef groups_A_B_C
-  //     `define groups_A_B_C
+  //     `include "layers_A.sv"
+  //     `include "layers_A_B.sv"
+  //     `ifndef layers_A_B_C
+  //     `define layers_A_B_C
   //     <body>
-  //     `endif // groups_A_B_C
+  //     `endif // layers_A_B_C
   //
-  // TODO: Change this comment to "layers_" once we switch to FIRRTL 4.0.0+.
   // TODO: This would be better handled without the use of verbatim ops.
   OpBuilder builder(circuitOp);
   SmallVector<std::pair<LayerOp, StringAttr>> layers;
@@ -562,9 +732,8 @@ void LowerLayersPass::runOnOperation() {
       layers.pop_back();
     builder.setInsertionPointToStart(circuitOp.getBodyBlock());
 
-    // Save the "groups_CIRCUIT_GROUP" string as this is reused a bunch.
-    // TODO: Change this to "layers_" once we switch to FIRRTL 4.0.0+.
-    SmallString<32> prefix("groups_");
+    // Save the "layers_CIRCUIT_GROUP" string as this is reused a bunch.
+    SmallString<32> prefix("layers_");
     prefix.append(circuitName);
     prefix.append("_");
     for (auto [layer, _] : layers) {
@@ -573,10 +742,6 @@ void LowerLayersPass::runOnOperation() {
     }
     prefix.append(layerOp.getSymName());
 
-    auto outputFileAttr = hw::OutputFileAttr::getFromFilename(
-        builder.getContext(), prefix + ".sv",
-        /*excludeFromFileList=*/true);
-
     SmallString<128> includes;
     for (auto [_, strAttr] : layers) {
       includes.append(strAttr);
@@ -584,16 +749,16 @@ void LowerLayersPass::runOnOperation() {
     }
 
     // Write header to a verbatim.
-    builder
-        .create<sv::VerbatimOp>(layerOp.getLoc(), includes + "`ifndef " +
-                                                      prefix + "\n" +
-                                                      "`define " + prefix)
-        ->setAttr("output_file", outputFileAttr);
+    setOutputFile(builder.create<sv::VerbatimOp>(
+                      layerOp.getLoc(), includes + "`ifndef " + prefix + "\n" +
+                                            "`define " + prefix),
+                  prefix + ".sv");
 
     // Write footer to a verbatim.
     builder.setInsertionPointToEnd(circuitOp.getBodyBlock());
-    builder.create<sv::VerbatimOp>(layerOp.getLoc(), "`endif // " + prefix)
-        ->setAttr("output_file", outputFileAttr);
+    setOutputFile(
+        builder.create<sv::VerbatimOp>(layerOp.getLoc(), "`endif // " + prefix),
+        prefix + ".sv");
 
     if (!layerOp.getBody().getOps<LayerOp>().empty())
       layers.push_back(

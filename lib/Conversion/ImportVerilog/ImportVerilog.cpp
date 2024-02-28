@@ -10,8 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Conversion/ImportVerilog.h"
-#include "mlir/IR/BuiltinOps.h"
+#include "ImportVerilogInternals.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/Verifier.h"
@@ -28,6 +27,7 @@
 
 using namespace mlir;
 using namespace circt;
+using namespace ImportVerilog;
 
 using llvm::SourceMgr;
 
@@ -58,6 +58,10 @@ convertLocation(MLIRContext *context, const slang::SourceManager &sourceManager,
     return FileLineColLoc::get(context, fileName, line, column);
   }
   return UnknownLoc::get(context);
+}
+
+Location Context::convertLocation(slang::SourceLocation loc) {
+  return ::convertLocation(getContext(), sourceManager, bufferFilePaths, loc);
 }
 
 namespace {
@@ -145,9 +149,9 @@ struct DenseMapInfo<slang::BufferID> {
 namespace {
 const static ImportVerilogOptions defaultOptions;
 
-struct ImportContext {
-  ImportContext(MLIRContext *mlirContext, TimingScope &ts,
-                const ImportVerilogOptions *options)
+struct ImportDriver {
+  ImportDriver(MLIRContext *mlirContext, TimingScope &ts,
+               const ImportVerilogOptions *options)
       : mlirContext(mlirContext), ts(ts),
         options(options ? *options : defaultOptions) {}
 
@@ -177,8 +181,8 @@ struct ImportContext {
 
 /// Populate the Slang driver with source files from the given `sourceMgr`, and
 /// configure driver options based on the `ImportVerilogOptions` passed to the
-/// `ImportContext` constructor.
-LogicalResult ImportContext::prepareDriver(SourceMgr &sourceMgr) {
+/// `ImportDriver` constructor.
+LogicalResult ImportDriver::prepareDriver(SourceMgr &sourceMgr) {
   // Use slang's driver which conveniently packages a lot of the things we
   // need for compilation.
   auto diagClient =
@@ -235,14 +239,37 @@ LogicalResult ImportContext::prepareDriver(SourceMgr &sourceMgr) {
 
 /// Parse and elaborate the prepared source files, and populate the given MLIR
 /// `module` with corresponding operations.
-LogicalResult ImportContext::importVerilog(ModuleOp module) {
-  // This is where the Slang AST to CIRCT op conversion will go.
-  return success();
+LogicalResult ImportDriver::importVerilog(ModuleOp module) {
+  // Parse the input.
+  auto parseTimer = ts.nest("Verilog parser");
+  bool parseSuccess = driver.parseAllSources();
+  parseTimer.stop();
+
+  // Elaborate the input.
+  auto compileTimer = ts.nest("Verilog elaboration");
+  auto compilation = driver.createCompilation();
+  for (auto &diag : compilation->getAllDiagnostics())
+    driver.diagEngine.issue(diag);
+  if (!parseSuccess || driver.diagEngine.getNumErrors() > 0)
+    return failure();
+  compileTimer.stop();
+
+  // Traverse the parsed Verilog AST and map it to the equivalent CIRCT ops.
+  mlirContext->loadDialect<moore::MooreDialect>();
+  auto conversionTimer = ts.nest("Verilog to dialect mapping");
+  Context context(module, driver.sourceManager, bufferFilePaths);
+  if (failed(context.convertCompilation(*compilation)))
+    return failure();
+  conversionTimer.stop();
+
+  // Run the verifier on the constructed module to ensure it is clean.
+  auto verifierTimer = ts.nest("Post-parse verification");
+  return verify(module);
 }
 
 /// Preprocess the prepared source files and print them to the given output
 /// stream.
-LogicalResult ImportContext::preprocessVerilog(llvm::raw_ostream &os) {
+LogicalResult ImportDriver::preprocessVerilog(llvm::raw_ostream &os) {
   auto parseTimer = ts.nest("Verilog preprocessing");
 
   // Run the preprocessor to completion across all sources previously added with
@@ -319,10 +346,10 @@ LogicalResult circt::importVerilog(SourceMgr &sourceMgr,
                                    ModuleOp module,
                                    const ImportVerilogOptions *options) {
   return catchExceptions([&] {
-    ImportContext context(mlirContext, ts, options);
-    if (failed(context.prepareDriver(sourceMgr)))
+    ImportDriver importDriver(mlirContext, ts, options);
+    if (failed(importDriver.prepareDriver(sourceMgr)))
       return failure();
-    return context.importVerilog(module);
+    return importDriver.importVerilog(module);
   });
 }
 
@@ -333,9 +360,23 @@ LogicalResult circt::preprocessVerilog(SourceMgr &sourceMgr,
                                        TimingScope &ts, llvm::raw_ostream &os,
                                        const ImportVerilogOptions *options) {
   return catchExceptions([&] {
-    ImportContext context(mlirContext, ts, options);
-    if (failed(context.prepareDriver(sourceMgr)))
+    ImportDriver importDriver(mlirContext, ts, options);
+    if (failed(importDriver.prepareDriver(sourceMgr)))
       return failure();
-    return context.preprocessVerilog(os);
+    return importDriver.preprocessVerilog(os);
   });
+}
+
+/// Entry point as an MLIR translation.
+void circt::registerFromVerilogTranslation() {
+  static TranslateToMLIRRegistration fromVerilog(
+      "import-verilog", "import Verilog or SystemVerilog",
+      [](llvm::SourceMgr &sourceMgr, MLIRContext *context) {
+        TimingScope ts;
+        OwningOpRef<ModuleOp> module(
+            ModuleOp::create(UnknownLoc::get(context)));
+        if (failed(importVerilog(sourceMgr, context, ts, module.get())))
+          module = {};
+        return module;
+      });
 }

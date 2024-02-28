@@ -357,3 +357,20 @@ firrtl.circuit "DownwardReferences" {
     firrtl.propassign %myClassUser.myClassIn, %myClass : !firrtl.class<@MyClass()>
   }
 }
+
+// CHECK-LABEL: firrtl.circuit "IntegerArithmetic"
+firrtl.circuit "IntegerArithmetic" {
+  firrtl.module @IntegerArithmetic() {
+    %0 = firrtl.integer 1
+    %1 = firrtl.integer 2
+
+    // CHECK: om.integer.add %0, %1 : !om.integer
+    %2 = firrtl.integer.add %0, %1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+
+    // CHECK: om.integer.mul %0, %1 : !om.integer
+    %3 = firrtl.integer.mul %0, %1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+
+    // CHECK: om.integer.shr %0, %1 : !om.integer
+    %4 = firrtl.integer.shr %0, %1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+  }
+}

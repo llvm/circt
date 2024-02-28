@@ -405,13 +405,14 @@ void PortReadOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 // ContainerInstanceOp
 //===----------------------------------------------------------------------===//
 
-ContainerOp ContainerInstanceOp::getContainer(const SymbolTable *symbolTable) {
+ContainerOpInterface
+ContainerInstanceOp::getContainer(const SymbolTable *symbolTable) {
   auto mod = getOperation()->getParentOfType<mlir::ModuleOp>();
   if (symbolTable)
-    return dyn_cast_or_null<ContainerOp>(
+    return dyn_cast_or_null<ContainerOpInterface>(
         symbolTable->lookupSymbolIn(mod, getTargetNameAttr()));
 
-  return mod.lookupSymbol<ContainerOp>(getTargetNameAttr());
+  return mod.lookupSymbol<ContainerOpInterface>(getTargetNameAttr());
 }
 
 LogicalResult
@@ -426,6 +427,10 @@ ContainerInstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 
 void ContainerInstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   setNameFn(getResult(), genValueNameAttr(getResult()));
+}
+
+std::optional<size_t> InnerContainerOp::getTargetResultIndex() {
+  return std::nullopt;
 }
 
 //===----------------------------------------------------------------------===//

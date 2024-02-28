@@ -10,14 +10,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-include "mlir/Interfaces/InferTypeOpInterface.td"
-
-
 def ConstantOp : MIROp<"constant", [Pure]> {
   let summary = "A constant value";
 
   let arguments = (ins I32Attr:$value);
-  let results = (outs MooreRValueType:$result);
+  let results = (outs MooreIntType:$result);
   let assemblyFormat = "$value attr-dict `:` qualified(type($result))";
 }
 

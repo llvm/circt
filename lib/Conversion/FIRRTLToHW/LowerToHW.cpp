@@ -243,6 +243,24 @@ struct CircuitLoweringState {
     } else if (dut == testHarness) {
       testHarness = nullptr;
     }
+
+    // Pre-populate the dutModules member with a list of all modules that are
+    // determined to be under the DUT.
+    auto inDUT = [&](igraph::ModuleOpInterface child) {
+      auto isBind = [](igraph::InstanceRecord *instRec) {
+        auto inst = instRec->getInstance();
+        if (auto *finst = dyn_cast<InstanceOp>(&inst))
+          return finst->getLowerToBind();
+        return false;
+      };
+      if (auto parent = dyn_cast<igraph::ModuleOpInterface>(*dut))
+        return getInstanceGraph().isAncestor(child, parent, isBind);
+      return dut == child;
+    };
+    circuitOp->walk([&](FModuleLike moduleOp) {
+      if (inDUT(moduleOp))
+        dutModules.insert(moduleOp);
+    });
   }
 
   Operation *getNewModule(Operation *oldModule) {
@@ -280,11 +298,10 @@ struct CircuitLoweringState {
   FModuleLike getTestHarness() { return testHarness; }
 
   // Return true if this module is the DUT or is instantiated by the DUT.
-  // Returns false if the module is not instantiated by the DUT.
+  // Returns false if the module is not instantiated by the DUT or is
+  // instantiated under a bind.
   bool isInDUT(igraph::ModuleOpInterface child) {
-    if (auto parent = dyn_cast<igraph::ModuleOpInterface>(*dut))
-      return getInstanceGraph().isAncestor(child, parent);
-    return dut == child;
+    return dutModules.contains(child);
   }
 
   hw::OutputFileAttr getTestBenchDirectory() { return testBenchDirectory; }
@@ -318,6 +335,13 @@ private:
   /// Cache of module symbols.  We need to test hirarchy-based properties to
   /// lower annotaitons.
   InstanceGraph &instanceGraph;
+
+  /// The set of modules that are instantiated under the DUT.  This is
+  /// precomputed as a module being under the DUT may rely on knowledge of
+  /// properties of the instance and is not suitable for querying in the
+  /// parallel execution region of this pass when the backing instances may
+  /// already be erased.
+  DenseSet<igraph::ModuleOpInterface> dutModules;
 
   // Record the set of remaining annotation classes. This is used to warn only
   // once about any annotation class.
@@ -1056,9 +1080,11 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
     newModule->setAttr("firrtl.extract.cover.extra", builder.getUnitAttr());
 
   // If this is in the test harness, make sure it goes to the test directory.
+  // Do not update output file information if it is already present.
   if (auto testBenchDir = loweringState.getTestBenchDirectory())
     if (loweringState.isInTestHarness(oldModule)) {
-      newModule->setAttr("output_file", testBenchDir);
+      if (!newModule->hasAttr("output_file"))
+        newModule->setAttr("output_file", testBenchDir);
       newModule->setAttr("firrtl.extract.do_not_extract",
                          builder.getUnitAttr());
       newModule.setCommentAttr(
@@ -4205,30 +4231,21 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
 // Stop lowers into a nested series of behavioral statements plus $fatal
 // or $finish.
 LogicalResult FIRRTLLowering::visitStmt(StopOp op) {
-  auto clock = getLoweredNonClockValue(op.getClock());
+  auto clock = getLoweredValue(op.getClock());
   auto cond = getLoweredValue(op.getCond());
   if (!clock || !cond)
     return failure();
 
-  // Emit an "#ifndef SYNTHESIS" guard into the always block.
-  addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {
-    // Emit this into an "sv.always posedge" body.
-    addToAlwaysBlock(clock, [&]() {
-      circuitState.used_STOP_COND = true;
+  circuitState.used_STOP_COND = true;
 
-      // Emit an "sv.if '`STOP_COND_ & cond' into the #ifndef.
-      Value ifCond =
-          builder.create<sv::MacroRefExprOp>(cond.getType(), "STOP_COND_");
-      ifCond = builder.createOrFold<comb::AndOp>(ifCond, cond, true);
-      addIfProceduralBlock(ifCond, [&]() {
-        // Emit the sv.fatal or sv.finish.
-        if (op.getExitCode())
-          builder.create<sv::FatalOp>();
-        else
-          builder.create<sv::FinishOp>();
-      });
-    });
-  });
+  Value stopCond =
+      builder.create<sv::MacroRefExprOp>(cond.getType(), "STOP_COND_");
+  Value exitCond = builder.createOrFold<comb::AndOp>(stopCond, cond, true);
+
+  if (op.getExitCode())
+    builder.create<sim::FatalOp>(clock, exitCond);
+  else
+    builder.create<sim::FinishOp>(clock, exitCond);
 
   return success();
 }

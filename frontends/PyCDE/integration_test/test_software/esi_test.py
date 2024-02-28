@@ -1,4 +1,4 @@
-import esi
+import esiaccel as esi
 
 import sys
 from typing import Optional

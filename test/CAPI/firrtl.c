@@ -79,10 +79,43 @@ void testValueFoldFlow(MlirContext ctx) {
          FIRRTL_VALUE_FLOW_SINK);
 }
 
+void testImportAnnotations(MlirContext ctx) {
+  // clang-format off
+  const char *testFIR =
+    "firrtl.circuit \"AnnoTest\" {\n"
+    "  firrtl.module @AnnoTest(in %in: !firrtl.uint<32>) {}\n"
+    "}\n";
+  // clang-format on
+  MlirModule module =
+      mlirModuleCreateParse(ctx, mlirStringRefCreateFromCString(testFIR));
+  MlirBlock mlirModule = mlirModuleGetBody(module);
+  MlirOperation firCircuit = mlirBlockGetFirstOperation(mlirModule);
+
+  const char *rawAnnotationsJSON = "[{\
+    \"class\":\"firrtl.transforms.DontTouchAnnotation\",\
+    \"target\":\"~AnnoTest|AnnoTest>in\"\
+  }]";
+  MlirAttribute rawAnnotationsAttr;
+  bool succeeded = firrtlImportAnnotationsFromJSONRaw(
+      ctx, mlirStringRefCreateFromCString(rawAnnotationsJSON),
+      &rawAnnotationsAttr);
+  assert(succeeded);
+  mlirOperationSetAttributeByName(
+      firCircuit, mlirStringRefCreateFromCString("rawAnnotations"),
+      rawAnnotationsAttr);
+
+  mlirOperationPrint(mlirModuleGetOperation(module), exportCallback, NULL);
+
+  // clang-format off
+  // CHECK: firrtl.circuit "AnnoTest" attributes {rawAnnotations = [{class = "firrtl.transforms.DontTouchAnnotation", target = "~AnnoTest|AnnoTest>in"}]} {
+  // clang-format on
+}
+
 int main(void) {
   MlirContext ctx = mlirContextCreate();
   mlirDialectHandleLoadDialect(mlirGetDialectHandle__firrtl__(), ctx);
   testExport(ctx);
   testValueFoldFlow(ctx);
+  testImportAnnotations(ctx);
   return 0;
 }

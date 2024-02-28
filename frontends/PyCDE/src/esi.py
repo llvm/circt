@@ -4,10 +4,9 @@
 
 from .common import (AppID, Input, Output, _PyProxy, PortError)
 from .module import Generator, Module, ModuleLikeBuilderBase, PortProxyBase
-from .signals import BundleSignal, ChannelSignal, Signal, Struct, _FromCirctValue
+from .signals import BundleSignal, ChannelSignal, Signal, _FromCirctValue
 from .system import System
-from .types import (Any, Bits, Bundle, BundledChannel, Channel,
-                    ChannelDirection, StructType, Type, types, UInt,
+from .types import (Bits, Bundle, BundledChannel, ChannelDirection, Type, types,
                     _FromCirctType)
 
 from .circt import ir
@@ -464,8 +463,21 @@ class _FuncService(ServiceDecl):
   def __init__(self):
     super().__init__(self.__class__)
 
-  def expose(self, name: AppID, arg_type: Type,
-             result: Signal) -> ChannelSignal:
+  def get(self, name: AppID, func_type: Bundle) -> BundleSignal:
+    """Expose a bundle to the host as a function. Bundle _must_ have 'arg' and
+    'result' channels going FROM the server and TO the server, respectively."""
+    self._materialize_service_decl()
+
+    func_call = _FromCirctValue(
+        raw_esi.RequestConnectionOp(
+            func_type._type,
+            hw.InnerRefAttr.get(self.symbol, ir.StringAttr.get("call")),
+            name._appid).toClient)
+    assert isinstance(func_call, BundleSignal)
+    return func_call
+
+  def get_call_chans(self, name: AppID, arg_type: Type,
+                     result: Signal) -> ChannelSignal:
     """Expose a function to the ESI system. Arguments:
       'name' is an AppID which is the function name.
       'arg_type' is the type of the argument to the function.

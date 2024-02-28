@@ -193,7 +193,11 @@ def AddSeqMemPorts : Pass<"firrtl-add-seqmem-ports", "firrtl::CircuitOp"> {
     the extra ports.
   }];
   let constructor = "circt::firrtl::createAddSeqMemPortsPass()";
-  let dependentDialects = ["sv::SVDialect", "hw::HWDialect"];
+  let dependentDialects = [
+    "emit::EmitDialect",
+    "sv::SVDialect",
+    "hw::HWDialect"
+  ];
   let statistics = [
     Statistic<"numAddedPorts", "num-added-ports", "Number of extra ports added">,
   ];
@@ -210,7 +214,12 @@ def CreateSiFiveMetadata : Pass<"firrtl-emit-metadata", "mlir::ModuleOp"> {
     Option<"replSeqMemFile", "repl-seq-mem-file", "std::string", "",
       "File to which emit seq meme metadata">
   ];
-  let dependentDialects = ["hw::HWDialect", "om::OMDialect"];
+  let dependentDialects = [
+      "emit::EmitDialect",
+      "hw::HWDialect",
+      "om::OMDialect",
+      "sv::SVDialect",
+  ];
 }
 
 def FlattenMemory : Pass<"firrtl-flatten-memory", "firrtl::FModuleOp"> {
@@ -282,7 +291,11 @@ def EmitOMIR : Pass<"firrtl-emit-omir", "firrtl::CircuitOp"> {
   let constructor = "circt::firrtl::createEmitOMIRPass()";
   let options = [Option<"outputFilename", "file", "std::string", "",
       "Output file for the JSON-serialized OMIR data">];
-  let dependentDialects = ["sv::SVDialect", "hw::HWDialect"];
+  let dependentDialects = [
+      "emit::EmitDialect",
+      "sv::SVDialect",
+      "hw::HWDialect"
+  ];
 }
 
 def LowerMatches : Pass<"firrtl-lower-matches", "firrtl::FModuleOp"> {
@@ -429,7 +442,11 @@ def BlackBoxReader : Pass<"firrtl-blackbox-reader", "CircuitOp"> {
       "directory where the input file was located, to allow for annotations "
       "relative to the input file.">
   ];
-  let dependentDialects = ["sv::SVDialect", "hw::HWDialect"];
+  let dependentDialects = [
+      "emit::EmitDialect",
+      "hw::HWDialect",
+      "sv::SVDialect"
+  ];
 }
 
 def PrefixModules : Pass<"firrtl-prefix-modules", "firrtl::CircuitOp"> {
@@ -584,7 +601,11 @@ def ExtractInstances : Pass<"firrtl-extract-instances", "firrtl::CircuitOp"> {
     - `ExtractClockGatesFileAnnotation`
   }];
   let constructor = "circt::firrtl::createExtractInstancesPass()";
-  let dependentDialects = ["sv::SVDialect", "circt::hw::HWDialect"];
+  let dependentDialects = [
+    "emit::EmitDialect",
+    "circt::hw::HWDialect",
+    "sv::SVDialect",
+  ];
 }
 
 def MemToRegOfVec : Pass<"firrtl-mem-to-reg-of-vec", "firrtl::CircuitOp"> {
@@ -665,7 +686,10 @@ def LowerXMR : Pass<"firrtl-lower-xmr", "firrtl::CircuitOp"> {
     This pass lowers RefType ops and ports to verbatim encoded XMRs.
   }];
   let constructor = "circt::firrtl::createLowerXMRPass()";
-  let dependentDialects = ["sv::SVDialect"];
+  let dependentDialects = [
+    "emit::EmitDialect",
+    "sv::SVDialect"
+  ];
 }
 
 def LowerIntrinsics : Pass<"firrtl-lower-intrinsics", "firrtl::CircuitOp"> {
@@ -705,7 +729,7 @@ def ResolveTraces : Pass<"firrtl-resolve-traces", "firrtl::CircuitOp"> {
   let constructor = "circt::firrtl::createResolveTracesPass()";
   let options = [Option<"outputAnnotationFilename", "file", "std::string", "",
       "Output file for the JSON-serialized Trace Annotations">];
-  let dependentDialects = ["sv::SVDialect"];
+  let dependentDialects = ["emit::EmitDialect", "sv::SVDialect"];
 }
 
 def InnerSymbolDCE : Pass<"firrtl-inner-symbol-dce", "mlir::ModuleOp"> {
@@ -870,7 +894,7 @@ def SpecializeOption :
   let constructor = "circt::firrtl::createSpecializeOptionPass()";
 
   let options = [
-    ListOption<"select", "select", "std::string", 
+    ListOption<"select", "select", "std::string",
                "Options to specialize, in option=case format">,
   ];
   let statistics = [

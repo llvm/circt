@@ -146,6 +146,9 @@ preprocessVerilog(llvm::SourceMgr &sourceMgr, mlir::MLIRContext *context,
                   mlir::TimingScope &ts, llvm::raw_ostream &os,
                   const ImportVerilogOptions *options = nullptr);
 
+/// Register the `import-verilog` MLIR translation.
+void registerFromVerilogTranslation();
+
 /// Return a human-readable string describing the slang frontend version linked
 /// into CIRCT.
 std::string getSlangVersion();
