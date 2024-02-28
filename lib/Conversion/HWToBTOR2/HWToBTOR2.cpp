@@ -827,7 +827,6 @@ public:
       // Finally generate the init statement
       genInit(reg, pov, w);
 
-
     } else {
       // Only generate the state instruction and nothing else
       genState(reg, w, regName);
