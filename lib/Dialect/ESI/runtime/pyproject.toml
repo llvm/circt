@@ -26,6 +26,3 @@ description = "ESI accelerators runtime"
 authors = [{ name = "John Demme", email = "John.Demme@microsoft.com" }]
 dependencies = []
 requires-python = ">=3.8"
-
-# [project.urls]
-# "Homepage" = "https://circt.llvm.org/"

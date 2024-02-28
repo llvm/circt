@@ -1,4 +1,5 @@
-# Build/install the pycde python package. Blatantly copied from npcomp.
+# Build/install the ESI runtime python package.
+#
 # To install:
 #   pip install .
 # To build a wheel:
@@ -10,7 +11,7 @@
 #
 # On CIs, it is often advantageous to re-use/control the CMake build directory.
 # This can be set with the PYCDE_CMAKE_BUILD_DIR env var.
-import glob
+
 import os
 import shutil
 import subprocess
