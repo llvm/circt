@@ -481,8 +481,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
         storeOp.getLoc(), memoryInterface.contentEn(),
         createConstant(storeOp.getLoc(), rewriter, getComponent(), 1, 1));
   }
-  rewriter.create<calyx::GroupDoneOp>(storeOp.getLoc(),
-                                      memoryInterface.done());
+  rewriter.create<calyx::GroupDoneOp>(storeOp.getLoc(), memoryInterface.done());
 
   getState<ComponentLoweringState>().registerNonPipelineOperations(storeOp,
                                                                    group);

@@ -453,8 +453,8 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
         calyx::createConstant(loadOp.getLoc(), rewriter, getComponent(), 1, 1);
     auto zeroI1 =
         calyx::createConstant(loadOp.getLoc(), rewriter, getComponent(), 1, 0);
-    rewriter.create<calyx::AssignOp>(loadOp.getLoc(), memoryInterface.contentEn(),
-                                     oneI1);
+    rewriter.create<calyx::AssignOp>(loadOp.getLoc(),
+                                     memoryInterface.contentEn(), oneI1);
     rewriter.create<calyx::AssignOp>(loadOp.getLoc(), memoryInterface.writeEn(),
                                      zeroI1);
     regWriteEn = memoryInterface.done();
@@ -531,8 +531,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
         storeOp.getLoc(), memoryInterface.contentEn(),
         createConstant(storeOp.getLoc(), rewriter, getComponent(), 1, 1));
   }
-  rewriter.create<calyx::GroupDoneOp>(storeOp.getLoc(),
-                                      memoryInterface.done());
+  rewriter.create<calyx::GroupDoneOp>(storeOp.getLoc(), memoryInterface.done());
 
   return success();
 }

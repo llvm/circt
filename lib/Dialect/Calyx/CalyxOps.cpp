@@ -17,6 +17,7 @@
 #include "circt/Dialect/HW/HWTypes.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/DialectImplementation.h"
@@ -2092,8 +2093,8 @@ SmallVector<StringRef> SeqMemoryOp::portNames() {
         StringAttr::get(this->getContext(), "addr" + std::to_string(i));
     portNames.push_back(nameAttr.getValue());
   }
-  portNames.append({clkPort, "reset", "content_en", "write_en",
-                    "write_data", "read_data", "done"});
+  portNames.append({clkPort, "reset", "content_en", "write_en", "write_data",
+                    "read_data", "done"});
   return portNames;
 }
 
@@ -2115,15 +2116,15 @@ SmallVector<DictionaryAttr> SeqMemoryOp::portAttributes() {
   // Use a boolean to indicate this attribute is used.
   IntegerAttr isSet = IntegerAttr::get(builder.getIndexType(), 1);
   IntegerAttr isTwo = IntegerAttr::get(builder.getIndexType(), 2);
-  NamedAttrList writeEn, done, clk, reset, contentEn;
-  writeEn.append(goPort, isSet);
+  NamedAttrList done, clk, reset, contentEn;
   done.append(donePort, isSet);
   clk.append(clkPort, isSet);
+  clk.append(resetPort, isSet);
   contentEn.append(goPort, isTwo);
   portAttributes.append({clk.getDictionary(context),       // Clk
                          reset.getDictionary(context),     // Reset
                          contentEn.getDictionary(context), // Content enable
-                         writeEn.getDictionary(context),   // Write enable
+                         DictionaryAttr::get(context),     // Write enable
                          DictionaryAttr::get(context),     // Write data
                          DictionaryAttr::get(context),     // Read data
                          done.getDictionary(context)}      // Done
