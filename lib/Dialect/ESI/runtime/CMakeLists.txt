@@ -205,7 +205,7 @@ if(Python3_FOUND)
   else()
     message(STATUS "Checking for pybind11 in python path...")
     execute_process(
-      COMMAND "${Python_EXECUTABLE}"
+      COMMAND "${Python3_EXECUTABLE}"
       -c "import pybind11;print(pybind11.get_cmake_dir(), end='')"
       WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
       RESULT_VARIABLE STATUS
