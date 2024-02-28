@@ -6170,14 +6170,6 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
       addToFilelist = !attr.getExcludeFromFilelist().getValue();
     }
 
-    // Collect extra file lists to output the file to.
-    SmallVector<StringAttr> opFileList;
-    if (auto fl = op.getAttrOfType<hw::FileListAttr>("output_filelist"))
-      opFileList.push_back(fl.getFilename());
-    if (auto fla = op.getAttrOfType<ArrayAttr>("output_filelist"))
-      for (auto fl : fla)
-        opFileList.push_back(fl.cast<hw::FileListAttr>().getFilename());
-
     auto separateFile = [&](Operation *op, Twine defaultFileName = "") {
       // If we're emitting to a separate file and the output_file attribute
       // didn't specify a filename, take the default one if present or emit an
@@ -6198,8 +6190,6 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
       file.emitReplicatedOps = emitReplicatedOps;
       file.addToFilelist = addToFilelist;
       file.isVerilog = outputPath.ends_with(".sv");
-      for (auto fl : opFileList)
-        fileLists[fl.getValue()].push_back(destFile);
     };
 
     // Separate the operation into dedicated output file, or emit into the
