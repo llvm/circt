@@ -39,3 +39,7 @@ classifiers = [
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
 ]
+
+[project.scripts]
+esiquery = "esiaccel.utils:run_esiquery"
+esi-cosim = "esiaccel.utils:run_esi_cosim"

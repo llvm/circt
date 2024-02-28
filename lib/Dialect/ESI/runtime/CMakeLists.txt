@@ -64,6 +64,7 @@ set(ESIPythonRuntimeSources
   python/esiaccel/__init__.py
   python/esiaccel/accelerator.py
   python/esiaccel/types.py
+  python/esiaccel/utils.py
   python/esiaccel/esiCppAccel.pyi
 )
 set(ESIRuntimeIncludeDirs)
