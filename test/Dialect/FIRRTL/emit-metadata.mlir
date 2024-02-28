@@ -39,14 +39,11 @@ firrtl.circuit "retime0" attributes { annotations = [{
   }]} { }
 }
 // CHECK-LABEL: firrtl.circuit "retime0"   {
-// CHECK:         firrtl.module @retime0() 
+// CHECK:         firrtl.module @retime0(out %metadataObj: !firrtl.class<@SiFive_Metadata()>)
 // CHECK-SAME:               [{class = "circt.tracker", id = distinct[0]<>}]
 // CHECK:           %sifive_metadata = firrtl.object @SiFive_Metadata()
 // CHECK:         firrtl.module @retime1() {
-// CHECK:         firrtl.module @retime2() {
-// CHECK:               emit.file "retime_modules.json" {
-// CHECK-NEXT{LITERAL}:   sv.verbatim "[\0A \22{{0}}\22,\0A \22{{1}}\22\0A]" {symbols = [@retime0, @retime2]}
-// CHECK-NEXT:          }
+// CHECK:         firrtl.module @retime2() attributes {annotations = [{class = "circt.tracker", id = distinct[1]<>}]}
 
 // CHECK:  firrtl.class @RetimeModulesSchema(in %[[moduleName_in:.+]]: !firrtl.path, out %moduleName: !firrtl.path) {
 // CHECK:    firrtl.propassign %moduleName, %[[moduleName_in]] : !firrtl.path
@@ -60,7 +57,10 @@ firrtl.circuit "retime0" attributes { annotations = [{
 // CHECK:    %retime2 = firrtl.object @RetimeModulesSchema
 // CHECK:    firrtl.object.subfield %retime2
 // CHECK:    firrtl.propassign %[[retime2field]], %retime2
-    
+
+// CHECK:               emit.file "retime_modules.json" {
+// CHECK-NEXT{LITERAL}:   sv.verbatim "[\0A \22{{0}}\22,\0A \22{{1}}\22\0A]" {symbols = [@retime0, @retime2]}
+// CHECK-NEXT:          }
 
 // -----
 
@@ -193,15 +193,6 @@ firrtl.circuit "OneMemory" {
   }
   firrtl.memmodule @MWrite_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>, in user_input: !firrtl.uint<5>) attributes {dataWidth = 42 : ui32, depth = 12 : ui64, extraPorts = [{direction = "input", name = "user_input", width = 5 : ui32}], maskBits = 1 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
 
-  // CHECK:               emit.file "metadata{{/|\\\\}}seq_mems.json" {
-  // CHECK-NEXT{LITERAL}:   sv.verbatim  "[\0A {\0A \22module_name\22: \22{{0}}\22,\0A \22depth\22: 12,\0A \22width\22: 42,\0A \22masked\22: false,\0A \22read\22: 0,\0A \22write\22: 1,\0A \22readwrite\22: 0,\0A \22extra_ports\22: [\0A {\0A \22name\22: \22user_input\22,\0A \22direction\22: \22input\22,\0A \22width\22: 5\0A }\0A ],\0A \22hierarchy\22: [\0A \22{{1}}.MWrite_ext\22\0A ]\0A }\0A]"
-  // CHECK-SAME:              {symbols = [@MWrite_ext, @OneMemory]}
-  // CHECK-NEXT:          }
-
-  // CHECK:               emit.file "dut.conf" {
-  // CHECK-NEXT{LITERAL}:   sv.verbatim "name {{0}} depth 12 width 42 ports write\0A"
-  // CHECK-SAME:              {symbols = [@MWrite_ext]}
-  // CHECK-NEXT:          }
 
   // CHECK:  firrtl.class @MemorySchema
   // CHECK:    firrtl.propassign %name, %name_in : !firrtl.string
@@ -239,6 +230,16 @@ firrtl.circuit "OneMemory" {
   // CHECK:   firrtl.object.subfield %MWrite_ext[hierarchy_in]
   // CHECK:   firrtl.propassign %MWrite_ext_field, %MWrite_ext
   // CHECK: }
+
+  // CHECK:               emit.file "metadata{{/|\\\\}}seq_mems.json" {
+  // CHECK-NEXT{LITERAL}:   sv.verbatim  "[\0A {\0A \22module_name\22: \22{{0}}\22,\0A \22depth\22: 12,\0A \22width\22: 42,\0A \22masked\22: false,\0A \22read\22: 0,\0A \22write\22: 1,\0A \22readwrite\22: 0,\0A \22extra_ports\22: [\0A {\0A \22name\22: \22user_input\22,\0A \22direction\22: \22input\22,\0A \22width\22: 5\0A }\0A ],\0A \22hierarchy\22: [\0A \22{{1}}.MWrite_ext\22\0A ]\0A }\0A]"
+  // CHECK-SAME:              {symbols = [@MWrite_ext, @OneMemory]}
+  // CHECK-NEXT:          }
+
+  // CHECK:               emit.file "dut.conf" {
+  // CHECK-NEXT{LITERAL}:   sv.verbatim "name {{0}} depth 12 width 42 ports write\0A"
+  // CHECK-SAME:              {symbols = [@MWrite_ext]}
+  // CHECK-NEXT:          }
 }
 
 // -----

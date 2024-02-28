@@ -275,10 +275,10 @@ struct ObjectModelIR {
     builderOM.create<PropAssignOp>(blockarg, object);
   }
 
-  void instantiateSifiveMetadata(FModuleOp topMod) {
+  ObjectOp instantiateSifiveMetadata(FModuleOp topMod) {
     if (!blackBoxMetadataClass && !memoryMetadataClass &&
         !retimeModulesMetadataClass)
-      return;
+      return {};
     auto builder = mlir::ImplicitLocOpBuilder::atBlockEnd(
         mlir::UnknownLoc::get(circtOp->getContext()), circtOp.getBodyBlock());
     SmallVector<PortInfo> mports;
@@ -299,8 +299,8 @@ struct ObjectModelIR {
           builder.getStringAttr("retime_modules_metadata"));
 
     builder.setInsertionPointToEnd(topMod.getBodyBlock());
-    builder.create<ObjectOp>(sifiveMetadataClass,
-                             builder.getStringAttr("sifive_metadata"));
+    return builder.create<ObjectOp>(sifiveMetadataClass,
+                                    builder.getStringAttr("sifive_metadata"));
   }
 
   /// Get the cached namespace for a module.
@@ -330,7 +330,6 @@ class CreateSiFiveMetadataPass
   LogicalResult emitSitestBlackboxMetadata(ObjectModelIR &omir);
   LogicalResult emitMemoryMetadata(ObjectModelIR &omir,
                                    InstancePathCache &instancePathCache);
-  void getDependentDialects(mlir::DialectRegistry &registry) const override;
   void runOnOperation() override;
 
   /// Get the cached namespace for a module.
@@ -793,8 +792,15 @@ void CreateSiFiveMetadataPass::runOnOperation() {
       failed(emitMemoryMetadata(omir, instancePathCache)))
     return signalPassFailure();
   FModuleOp topMod = dyn_cast<FModuleOp>(instanceGraph.getTopLevelModule());
-  if (topMod)
-    omir.instantiateSifiveMetadata(topMod);
+  if (topMod) {
+    if (auto objectOp = omir.instantiateSifiveMetadata(topMod)) {
+      SmallVector<std::pair<unsigned, PortInfo>> ports = {
+          {topMod.getNumPorts(),
+           PortInfo(StringAttr::get(objectOp->getContext(), "metadataObj"),
+                    objectOp.getType(), Direction::Out)}};
+      topMod.insertPorts(ports);
+    }
+  }
 
   // This pass does not modify the hierarchy.
   markAnalysesPreserved<InstanceGraph>();
