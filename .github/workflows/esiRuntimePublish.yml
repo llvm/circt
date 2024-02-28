@@ -1,6 +1,11 @@
 name: Publish ESI Runtime
 
 on:
+  push:
+    tags:
+      - ESIRuntime-*
+  schedule:
+    - cron: 0 12 * * 1
   workflow_dispatch:
 
 jobs:
@@ -54,8 +59,11 @@ jobs:
   push_wheels:
     name: Push wheels (Tag or Weekly)
     runs-on: ubuntu-20.04
-    if: github.repository == 'llvm/circt'
+    if: github.repository == 'llvm/circt' && (github.ref_type == 'tag' || github.event_name == 'schedule')
     needs: build_wheels
+    environment:
+      name: pypi
+      url: https://pypi.org/p/esiaccel
     permissions:
       id-token: write
 
