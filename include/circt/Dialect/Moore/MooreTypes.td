@@ -21,8 +21,6 @@ include "mlir/IR/EnumAttr.td"
 class MooreType<Pred condition, string description, string cppClassName>
   : DialectType<MooreDialect, condition, description, cppClassName>;
 
-class MooreTypeDef<string name> : TypeDef<MooreDialect, name> { }
-
 def PackedType : MooreType<CPred<"$_self.isa<moore::PackedType>()">,
   "packed type", "moore::PackedType">;
 
@@ -41,29 +39,5 @@ def SimpleBitVectorType : MooreType<CPred<[{
 
 def MooreIntType : MooreType<CPred<"$_self.isa<moore::IntType>()">,
   "an SystemVerilog int", "moore::IntType">;
-
-//===----------------------------------------------------------------------===//
-// LValue / RValue predicates
-//===----------------------------------------------------------------------===//
-
-def LValueTypeImpl : MooreTypeDef<"LValue"> {
-  let mnemonic = "lvalue";
-  let parameters = (ins "::mlir::Type":$nestedType);
-  let assemblyFormat = "`<` $nestedType `>`";
-
-  let builders = [
-    AttrBuilderWithInferredContext<(ins "::mlir::Type":$nestedType), [{
-      return $_get(nestedType.getContext(), nestedType);
-    }]>
-  ];
-}
-
-class MooreLValueTypeOf<list<Type> allowedTypes>
-  : ContainerType<AnyTypeOf<allowedTypes>,
-    CPred<"$_self.isa<moore::LValueType>()">,
-    "$_self.cast<moore::LValueType>().getNestedType()", "Moore LValue type">;
-
-def MooreLValueType : MooreLValueTypeOf<[AnyType]>;
-def MooreRValueType : AnyTypeOf<[MooreIntType]>;
 
 #endif // CIRCT_DIALECT_MOORE_MOORETYPES

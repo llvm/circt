@@ -593,7 +593,11 @@ def ExtractInstances : Pass<"firrtl-extract-instances", "firrtl::CircuitOp"> {
     - `ExtractClockGatesFileAnnotation`
   }];
   let constructor = "circt::firrtl::createExtractInstancesPass()";
-  let dependentDialects = ["sv::SVDialect", "circt::hw::HWDialect"];
+  let dependentDialects = [
+    "emit::EmitDialect",
+    "circt::hw::HWDialect",
+    "sv::SVDialect",
+  ];
 }
 
 def MemToRegOfVec : Pass<"firrtl-mem-to-reg-of-vec", "firrtl::CircuitOp"> {

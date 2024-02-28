@@ -4,6 +4,10 @@
 moore.module @Foo {
   // CHECK: moore.instance "foo" @Foo
   moore.instance "foo" @Foo
+  // CHECK: %myVar = moore.variable : !moore.bit
+  %myVar = moore.variable : !moore.bit
+  // CHECK: [[TMP:%.+]] = moore.variable name "myVar" : !moore.bit
+  moore.variable name "myVar" : !moore.bit
 }
 
 // CHECK-LABEL: moore.module @Bar
@@ -13,11 +17,7 @@ moore.module @Bar {
 // CHECK-LABEL: llhd.entity @test1
 llhd.entity @test1() -> () {
   // CHECK-NEXT: [[CONST:%.*]] = moore.mir.constant 5 : !moore.int
-  // CHECK-NEXT: [[VAR:%.*]] = moore.mir.vardecl "varname" = 3 : !moore.int
-  // CHECK-NEXT: moore.mir.assign [[VAR]], [[CONST]] : !moore.int
   %0 = moore.mir.constant 5 : !moore.int
-  %1 = moore.mir.vardecl "varname" = 3 : !moore.int
-  moore.mir.assign %1, %0 : !moore.int
 }
 
 // CHECK-LABEL: func @Expressions

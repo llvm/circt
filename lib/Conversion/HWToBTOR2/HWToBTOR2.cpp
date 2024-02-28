@@ -281,7 +281,8 @@ private:
   // Generates an init statement, which allows for the use of powerOnValue
   // operands in compreg registers
   void genInit(Operation *reg, Value initVal, int64_t width) {
-    // Retrieve the various identifies we require for this
+
+    // Retrieve the various identifiers we require for this
     size_t regLID = getOpLID(reg);
     size_t sid = sortToLIDMap.at(width);
     size_t initValLID = getOpLID(initVal);
@@ -809,9 +810,12 @@ public:
     // Check for initial values which must be emitted before the state in btor2
     Value pov = reg.getPowerOnValue();
     if (pov) {
-      // Start by visiting the powerOnValue, we make the assumption that it will
-      // always be a constant and thus no operands need to be added to the
-      // worklist
+
+      // Check that the powerOn value is a non-null constant
+      if (!isa_and_nonnull<hw::ConstantOp>(pov.getDefiningOp()))
+        reg->emitError("PowerOn Value must be constant!!");
+
+      // Visit the powerOn Value to generate the constant
       dispatchTypeOpVisitor(pov.getDefiningOp());
 
       // Add it to the list of visited operations
@@ -821,7 +825,8 @@ public:
       genState(reg, w, regName);
 
       // Finally generate the init statement
-      genInit((Operation *)reg, pov, w);
+      genInit(reg, pov, w);
+
 
     } else {
       // Only generate the state instruction and nothing else

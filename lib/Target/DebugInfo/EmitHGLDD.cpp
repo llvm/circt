@@ -160,11 +160,50 @@ static bool makePathRelative(StringRef path, StringRef relativeTo,
   return outputIt == outputEnd;
 }
 
+/// Legalize the given `name` such that it only consists of valid identifier
+/// characters in Verilog and does not collide with any Verilog keyword, and
+/// uniquify the resulting name such that it does not collide with any of the
+/// names stored in the `nextGeneratedNameIDs` map.
+///
+/// The HGLDD output is likely to be ingested by tools that have been developed
+/// to debug Verilog code. These have the limitation of only supporting valid
+/// Verilog identifiers for signals and other names. HGLDD therefore requires
+/// these names to be valid Verilog identifiers.
+static StringRef legalizeName(StringRef name,
+                              llvm::StringMap<size_t> &nextGeneratedNameIDs) {
+  return sv::legalizeName(name, nextGeneratedNameIDs, true);
+}
+
 //===----------------------------------------------------------------------===//
 // HGLDD File Emission
 //===----------------------------------------------------------------------===//
 
 namespace {
+
+/// Contextual information for HGLDD emission shared across multiple HGLDD
+/// files. This struct keeps the DI analysis, symbol caches, and namespaces for
+/// name uniquification.
+struct GlobalState {
+  /// The root operation.
+  Operation *op;
+  /// The emission options.
+  const EmitHGLDDOptions &options;
+  /// The debug info analysis constructed for the root operation.
+  DebugInfo di;
+  /// A symbol cache with all top-level symbols in the root operation.
+  hw::HWSymbolCache symbolCache;
+  /// A uniquified name for each emitted DI module.
+  SmallDenseMap<DIModule *, StringRef> moduleNames;
+  /// A namespace used to deduplicate the names of HGLDD "objects" during
+  /// emission. This includes modules and struct type declarations.
+  llvm::StringMap<size_t> objectNamespace;
+
+  GlobalState(Operation *op, const EmitHGLDDOptions &options)
+      : op(op), options(options), di(op) {
+    symbolCache.addDefinitions(op);
+    symbolCache.freeze();
+  }
+};
 
 /// An emitted type.
 struct EmittedType {
@@ -234,13 +273,18 @@ static llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
 
 /// Contextual information for a single HGLDD file to be emitted.
 struct FileEmitter {
-  const EmitHGLDDOptions *options = nullptr;
-  const hw::HWSymbolCache *symbolCache = nullptr;
-  SmallVector<DIModule *> modules;
-  SmallString<64> outputFileName;
+  GlobalState &state;
   StringAttr hdlFile;
+  FileEmitter(GlobalState &state, StringAttr hdlFile)
+      : state(state), hdlFile(hdlFile) {}
+
+  /// The DI modules to be emitted into this HGLDD file.
+  SmallVector<DIModule *> modules;
+  /// The name of the output HGLDD file.
+  SmallString<64> outputFileName;
+
+  llvm::StringMap<size_t> moduleNamespace;
   SmallMapVector<StringAttr, std::pair<StringAttr, unsigned>, 8> sourceFiles;
-  Namespace objectNamespace;
   SmallMapVector<JValue, StringRef, 8> structDefs;
   SmallString<128> structNameHint;
 
@@ -256,7 +300,7 @@ struct FileEmitter {
   unsigned getSourceFile(StringAttr sourceFile, bool emitted);
 
   FileLineColLoc findBestLocation(Location loc, bool emitted) {
-    return ::findBestLocation(loc, emitted, options->onlyExistingFileLocs);
+    return ::findBestLocation(loc, emitted, state.options.onlyExistingFileLocs);
   }
 
   /// Find the best location and, if one is found, emit it under the given
@@ -333,6 +377,19 @@ struct FileEmitter {
     if (auto fileLoc = findBestLocation(loc, true))
       into["hdl_loc"] = emitLoc(fileLoc, {}, true);
   }
+
+  /// Return the legalized and uniquified name of a DI module. Asserts that the
+  /// module has such a name.
+  StringRef getModuleName(DIModule *module) {
+    auto name = state.moduleNames.lookup(module);
+    assert(!name.empty() &&
+           "moduleNames should contain a name for every module");
+    return name;
+  }
+
+  StringRef legalizeInModuleNamespace(StringRef name) {
+    return legalizeName(name, moduleNamespace);
+  }
 };
 
 } // namespace
@@ -360,7 +417,7 @@ unsigned FileEmitter::getSourceFile(StringAttr sourceFile, bool emitted) {
   // (`emitted` is true), or the source file prefix if this is a source file
   // (`emitted` is false).
   StringRef filePrefix =
-      emitted ? options->outputFilePrefix : options->sourceFilePrefix;
+      emitted ? state.options.outputFilePrefix : state.options.sourceFilePrefix;
   if (!filePrefix.empty()) {
     SmallString<64> buffer = filePrefix;
     path::append(buffer, sourceFile.getValue());
@@ -420,9 +477,6 @@ void FileEmitter::emit(llvm::raw_ostream &os) {
 }
 
 void FileEmitter::emit(JOStream &json) {
-  for (auto *module : modules)
-    objectNamespace.newName(module->name.getValue());
-
   // The "HGLDD" header field needs to be the first in the JSON file (which
   // violates the JSON spec, but what can you do). But we only know after module
   // emission what the contents of the header will be.
@@ -514,10 +568,11 @@ StringAttr getVerilogInstanceName(DIInstance &inst) {
 
 /// Emit the debug info for a `DIModule`.
 void FileEmitter::emitModule(JOStream &json, DIModule *module) {
+  moduleNamespace = state.objectNamespace;
   structNameHint = module->name.getValue();
   json.objectBegin();
   json.attribute("kind", "module");
-  json.attribute("obj_name", module->name.getValue()); // HGL
+  json.attribute("obj_name", getModuleName(module)); // HGL
   json.attribute("module_name",
                  getVerilogModuleName(*module).getValue()); // HDL
   if (module->isExtern)
@@ -547,13 +602,15 @@ void FileEmitter::emitInstance(JOStream &json, DIInstance *instance) {
   json.objectBegin();
 
   // Emit the instance and module name.
-  json.attribute("name", instance->name.getValue());
+  auto instanceName = legalizeInModuleNamespace(instance->name.getValue());
+  json.attribute("name", instanceName);
   if (!instance->module->isInline) {
     auto verilogName = getVerilogInstanceName(*instance);
-    if (verilogName != instance->name)
+    if (verilogName != instanceName)
       json.attribute("hdl_obj_name", verilogName.getValue());
 
-    json.attribute("obj_name", instance->module->name.getValue()); // HGL
+    json.attribute("obj_name",
+                   getModuleName(instance->module)); // HGL
     json.attribute("module_name",
                    getVerilogModuleName(*instance->module).getValue()); // HDL
   }
@@ -571,7 +628,7 @@ void FileEmitter::emitInstance(JOStream &json, DIInstance *instance) {
       structNameHint += instance->module->name.getValue();
     } else if (!instance->name.empty()) {
       structNameHint += '_';
-      structNameHint += instance->name.getValue();
+      structNameHint += instanceName;
     }
     emitModuleBody(json, instance->module);
     structNameHint.resize(structNameHintLen);
@@ -583,7 +640,8 @@ void FileEmitter::emitInstance(JOStream &json, DIInstance *instance) {
 /// Emit the debug info for a `DIVariable`.
 void FileEmitter::emitVariable(JOStream &json, DIVariable *variable) {
   json.objectBegin();
-  json.attribute("var_name", variable->name.getValue());
+  auto variableName = legalizeInModuleNamespace(variable->name.getValue());
+  json.attribute("var_name", variableName);
   findAndEmitLoc(json, "hgl_loc", variable->loc, false);
   findAndEmitLoc(json, "hdl_loc", variable->loc, true);
 
@@ -591,7 +649,7 @@ void FileEmitter::emitVariable(JOStream &json, DIVariable *variable) {
   if (auto value = variable->value) {
     auto structNameHintLen = structNameHint.size();
     structNameHint += '_';
-    structNameHint += variable->name.getValue();
+    structNameHint += variableName;
     emitted = emitExpression(value);
     structNameHint.resize(structNameHintLen);
   }
@@ -641,43 +699,13 @@ EmittedExpr FileEmitter::emitExpression(Value value) {
   auto result = cast<OpResult>(value);
   auto *op = result.getOwner();
 
-  // If the operation has only this one result and is named in some form, use
-  // that name.
-  if (op->getNumResults() == 1) {
-    // If a `hw.verilogName` is available, emit the value as just a reference to
-    // that name.
-    if (auto name = op->getAttrOfType<StringAttr>("hw.verilogName");
-        name && !name.empty())
+  // If the operation is a named signal in the output Verilog, use that name.
+  if (isa<hw::WireOp, sv::WireOp, sv::RegOp, sv::LogicOp>(op)) {
+    auto name = op->getAttrOfType<StringAttr>("hw.verilogName");
+    if (!name || name.empty())
+      name = op->getAttrOfType<StringAttr>("name");
+    if (name && !name.empty())
       return {hglddSigName(name), result.getType()};
-
-    // Use the "name" attribute of certain Verilog-visible ops directly.
-    if (auto name = op->getAttrOfType<StringAttr>("name");
-        name && !name.empty() &&
-        isa<hw::WireOp, sv::WireOp, sv::RegOp, sv::LogicOp>(op))
-      return {hglddSigName(name), result.getType()};
-  }
-
-  // Emit references to instance ports as `<instName>.<portName>`.
-  if (auto instOp = dyn_cast<hw::InstanceOp>(op)) {
-    auto instName = instOp->getAttrOfType<StringAttr>("hw.verilogName");
-    if (!instName)
-      instName = instOp.getInstanceNameAttr();
-    if (!instName)
-      return {};
-    auto *moduleOp =
-        symbolCache->getDefinition(instOp.getReferencedModuleNameAttr());
-    auto portName =
-        cast<hw::HWModuleLike>(moduleOp)
-            .getPort(instOp.getPortIdForOutputId(result.getResultNumber()))
-            .getVerilogName();
-    if (portName.empty())
-      return {};
-    auto inner = hglddSigName(instName);
-    return {JObject({
-                {"var_ref", std::move(inner)},
-                {"field", portName},
-            }),
-            result.getType()};
   }
 
   // Emit constants directly.
@@ -735,9 +763,11 @@ EmittedExpr FileEmitter::emitExpression(Value value) {
 
     // Assemble the struct type definition.
     JArray fieldDefs;
+    llvm::StringMap<size_t> structNamespace;
     for (auto [type, name, loc] : types) {
       JObject fieldDef;
-      fieldDef["var_name"] = name.getValue();
+      fieldDef["var_name"] =
+          std::string(legalizeName(name.getValue(), structNamespace));
       fieldDef["type_name"] = type.name;
       if (auto dims = type.emitPackedDims(); !dims.empty())
         fieldDef["packed_range"] = std::move(dims);
@@ -746,7 +776,7 @@ EmittedExpr FileEmitter::emitExpression(Value value) {
       findAndSetLocs(fieldDef, loc);
       fieldDefs.push_back(std::move(fieldDef));
     }
-    auto structName = objectNamespace.newName(structNameHint);
+    auto structName = legalizeName(structNameHint, state.objectNamespace);
     JObject structDef;
     structDef["kind"] = "struct";
     structDef["obj_name"] = structName;
@@ -904,6 +934,31 @@ EmittedExpr FileEmitter::emitExpression(Value value) {
             muxOp.getType()};
   }
 
+  // As a last resort, look for any named wire-like ops this value feeds into.
+  // This is useful for instance output ports for example since we cannot access
+  // instance ports as `<instName>.<portName>` in HGLDD. Instead, we look for a
+  // wire hooked up to the instance output, which is very likely to be present
+  // after Verilog emission.
+  for (auto &use : result.getUses()) {
+    auto *user = use.getOwner();
+    // Use name of `hw.wire` that carries this value.
+    if (auto wireOp = dyn_cast<hw::WireOp>(user))
+      if (wireOp.getInput() == result)
+        return emitExpression(wireOp);
+    // Use name of `sv.assign` destination that is assigned this value.
+    if (auto assignOp = dyn_cast<sv::AssignOp>(user))
+      if (assignOp.getSrc() == result)
+        return emitExpression(assignOp.getDest());
+    // Use module output port name that carries this value.
+    if (isa<hw::OutputOp>(user)) {
+      auto mod = cast<hw::HWModuleLike>(user->getParentOp());
+      auto portName = mod.getPort(mod.getHWModuleType().getPortIdForOutputId(
+                                      use.getOperandNumber()))
+                          .getVerilogName();
+      return {hglddSigName(portName), result.getType()};
+    }
+  }
+
   return {};
 }
 
@@ -917,40 +972,36 @@ namespace {
 /// files. This struct is used to determine an initial split of debug info files
 /// and to distribute work.
 struct Emitter {
-  DebugInfo di;
+  GlobalState state;
   SmallVector<FileEmitter, 0> files;
-  hw::HWSymbolCache symbolCache;
-
   Emitter(Operation *module, const EmitHGLDDOptions &options);
 };
 
 } // namespace
 
 Emitter::Emitter(Operation *module, const EmitHGLDDOptions &options)
-    : di(module) {
-  symbolCache.addDefinitions(module);
-  symbolCache.freeze();
-
+    : state(module, options) {
   // Group the DI modules according to their emitted file path. Modules that
   // don't have an emitted file path annotated are collected in a separate
   // group. That group, with a null `StringAttr` key, is emitted into a separate
   // "global.dd" file.
   MapVector<StringAttr, FileEmitter> groups;
-  for (auto [moduleName, module] : di.moduleNodes) {
+  for (auto [moduleName, module] : state.di.moduleNodes) {
     StringAttr hdlFile;
     if (module->op)
       if (auto fileLoc = findBestLocation(module->op->getLoc(), true, false))
         hdlFile = fileLoc.getFilename();
-    groups[hdlFile].modules.push_back(module);
+    auto &fileEmitter =
+        groups.try_emplace(hdlFile, state, hdlFile).first->second;
+    fileEmitter.modules.push_back(module);
+    state.moduleNames[module] =
+        legalizeName(module->name.getValue(), state.objectNamespace);
   }
 
   // Determine the output file names and move the emitters into the `files`
   // member.
   files.reserve(groups.size());
   for (auto &[hdlFile, emitter] : groups) {
-    emitter.symbolCache = &symbolCache;
-    emitter.options = &options;
-    emitter.hdlFile = hdlFile;
     emitter.outputFileName = options.outputDirectory;
     StringRef fileName = hdlFile ? hdlFile.getValue() : "global";
     if (llvm::sys::path::is_absolute(fileName))

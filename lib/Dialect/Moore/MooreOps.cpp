@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Moore/MooreOps.h"
+#include "circt/Support/CustomDirectiveImpl.h"
 #include "mlir/IR/Builders.h"
 
 using namespace circt;
@@ -37,6 +38,14 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 }
 
 //===----------------------------------------------------------------------===//
+// VariableOp
+//===----------------------------------------------------------------------===//
+
+void VariableOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getResult(), getName());
+}
+
+//===----------------------------------------------------------------------===//
 // ConcatOp
 //===----------------------------------------------------------------------===//
 
@@ -55,22 +64,6 @@ LogicalResult ConcatOp::inferReturnTypes(
   results.push_back(
       SimpleBitVectorType(domain, Sign::Unsigned, size).getType(context));
   return success();
-}
-
-//===----------------------------------------------------------------------===//
-// Custom LValue parser and printer
-//===----------------------------------------------------------------------===//
-
-static ParseResult parseLValueType(OpAsmParser &p, Type &lValueType) {
-  Type type;
-  if (p.parseType(type))
-    return p.emitError(p.getCurrentLocation(), "expected type");
-  lValueType = LValueType::get(type);
-  return success();
-}
-
-static void printLValueType(OpAsmPrinter &p, Operation *, Type lValueType) {
-  p.printType(lValueType.cast<LValueType>().getNestedType());
 }
 
 //===----------------------------------------------------------------------===//

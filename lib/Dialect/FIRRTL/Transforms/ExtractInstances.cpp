@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/Emit/EmitOps.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
@@ -91,6 +92,17 @@ struct ExtractInstancesPass
     return newPathOp;
   }
 
+  /// Return a handle to the unique instance of file with a given name.
+  emit::FileOp getOrCreateFile(StringRef fileName) {
+    auto [it, inserted] = files.try_emplace(fileName, emit::FileOp{});
+    if (inserted) {
+      auto builder = ImplicitLocOpBuilder::atBlockEnd(
+          UnknownLoc::get(&getContext()), getOperation().getBodyBlock());
+      it->second = builder.create<emit::FileOp>(fileName);
+    }
+    return it->second;
+  }
+
   bool anythingChanged;
   bool anyFailures;
 
@@ -114,6 +126,9 @@ struct ExtractInstancesPass
 
   /// A worklist of instances that need to be moved.
   SmallVector<std::pair<InstanceOp, ExtractionInfo>> extractionWorklist;
+
+  /// A mapping from file names to file ops for de-duplication.
+  DenseMap<StringRef, emit::FileOp> files;
 
   /// The path along which instances have been extracted. This essentially
   /// documents the original location of the instance in reverse. Every push
@@ -150,6 +165,7 @@ void ExtractInstancesPass::runOnOperation() {
   dutModuleNames.clear();
   dutPrefix = "";
   extractionWorklist.clear();
+  files.clear();
   extractionPaths.clear();
   originalInstanceParents.clear();
   extractedInstances.clear();
@@ -372,17 +388,10 @@ void ExtractInstancesPass::collectAnnos() {
   // mark them as to be extracted.
   // somewhat configurable.
   if (!memoryFileName.empty()) {
-    // Create an empty verbatim to guarantee that this file will exist even if
-    // no memories are found.  This is done to align with the SFC implementation
-    // of this pass where the file is always created.  This does introduce an
-    // additional leading newline in the file.
-    auto *context = circuit.getContext();
-    auto builder = ImplicitLocOpBuilder::atBlockEnd(UnknownLoc::get(context),
-                                                    circuit.getBodyBlock());
-    builder.create<sv::VerbatimOp>("")->setAttr(
-        "output_file",
-        hw::OutputFileAttr::getFromFilename(context, memoryFileName,
-                                            /*excludeFromFilelist=*/true));
+    // Create a potentially empty file if a name is specified. This is done to
+    // align with the SFC implementation of this pass where the file is always
+    // created.  This does introduce an additional leading newline in the file.
+    getOrCreateFile(memoryFileName);
 
     for (auto module : circuit.getOps<FMemModuleOp>()) {
       LLVM_DEBUG(llvm::dbgs() << "Memory `" << module.getModuleName() << "`\n");
@@ -984,7 +993,6 @@ void ExtractInstancesPass::groupInstances() {
 /// instance per line in the form `<prefix> -> <original-path>`.
 void ExtractInstancesPass::createTraceFiles() {
   LLVM_DEBUG(llvm::dbgs() << "\nGenerating trace files\n");
-  auto builder = OpBuilder::atBlockEnd(getOperation().getBodyBlock());
 
   // Group the extracted instances by their trace file name.
   SmallDenseMap<StringRef, SmallVector<InstanceOp>> instsByTraceFile;
@@ -1016,6 +1024,8 @@ void ExtractInstancesPass::createTraceFiles() {
       os << "{{" << id << "}}";
     };
 
+    auto file = getOrCreateFile(fileName);
+    auto builder = OpBuilder::atBlockEnd(file.getBodyBlock());
     for (auto inst : insts) {
       StringRef prefix(instPrefices[inst]);
       if (prefix.empty()) {
@@ -1059,12 +1069,8 @@ void ExtractInstancesPass::createTraceFiles() {
     }
 
     // Put the information in a verbatim operation.
-    auto verbatimOp = builder.create<sv::VerbatimOp>(
-        builder.getUnknownLoc(), buffer, ValueRange{},
-        builder.getArrayAttr(symbols));
-    auto fileAttr = hw::OutputFileAttr::getFromFilename(
-        builder.getContext(), fileName, /*excludeFromFilelist=*/true);
-    verbatimOp->setAttr("output_file", fileAttr);
+    builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), buffer,
+                                   ValueRange{}, builder.getArrayAttr(symbols));
   }
 }
 

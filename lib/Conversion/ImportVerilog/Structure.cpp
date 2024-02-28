@@ -25,11 +25,21 @@ struct MemberVisitor {
   MemberVisitor(Context &context, Location loc)
       : context(context), loc(loc), builder(context.builder) {}
 
-  /// Skip semicolons.
+  // Skip empty members (stray semicolons).
   LogicalResult visit(const slang::ast::EmptyMemberSymbol &) {
     return success();
   }
 
+  // Skip members that are implicitly imported from some other scope for the
+  // sake of name resolution, such as enum variant names.
+  LogicalResult visit(const slang::ast::TransparentMemberSymbol &) {
+    return success();
+  }
+
+  // Skip typedefs.
+  LogicalResult visit(const slang::ast::TypeAliasType &) { return success(); }
+
+  // Handle instances.
   LogicalResult visit(const slang::ast::InstanceSymbol &instNode) {
     auto targetModule = context.convertModuleHeader(&instNode.body);
     if (!targetModule)
@@ -39,6 +49,23 @@ struct MemberVisitor {
         loc, builder.getStringAttr(instNode.name),
         FlatSymbolRefAttr::get(targetModule.getSymNameAttr()));
 
+    return success();
+  }
+
+  // Handle variables.
+  LogicalResult visit(const slang::ast::VariableSymbol &varNode) {
+    auto type = context.convertType(*varNode.getDeclaredType());
+    if (!type)
+      return failure();
+
+    Value initial;
+    if (const auto *initNode = varNode.getInitializer()) {
+      return mlir::emitError(loc,
+                             "variable initializer expressions not supported");
+    }
+
+    builder.create<moore::VariableOp>(
+        loc, type, builder.getStringAttr(varNode.name), initial);
     return success();
   }
 

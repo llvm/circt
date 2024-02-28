@@ -50,3 +50,10 @@ endpackage
 
 module Bar;
 endmodule
+
+// -----
+
+module Foo;
+  // expected-error @below {{variable initializer expressions not supported}}
+  int a = 0;
+endmodule
