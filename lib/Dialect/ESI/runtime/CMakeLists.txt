@@ -192,8 +192,8 @@ if (WHEEL_BUILD)
 endif()
 
 # Pybind11 is used to wrap the ESIRuntime APIs.
-find_package(Python COMPONENTS Interpreter Development)
-if(Python_FOUND)
+find_package(Python3 COMPONENTS Interpreter Development)
+if(Python3_FOUND)
   IF(MSVC)
     # Work around an issue with pybind11 and cmake incompatibility on Windows in debug mode.
     set_target_properties(Python::Module PROPERTIES
@@ -205,7 +205,7 @@ if(Python_FOUND)
   else()
     message(STATUS "Checking for pybind11 in python path...")
     execute_process(
-      COMMAND "${Python_EXECUTABLE}"
+      COMMAND "${Python3_EXECUTABLE}"
       -c "import pybind11;print(pybind11.get_cmake_dir(), end='')"
       WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
       RESULT_VARIABLE STATUS
@@ -222,6 +222,9 @@ if(Python_FOUND)
   find_package(pybind11 CONFIG)
   if (NOT pybind11_FOUND)
     message (STATUS "Could not find pybind11. Disabling Python API.")
+    if (WHEEL_BUILD)
+      message (FATAL_ERROR "pybind11 is required for a wheel build.")
+    endif()
   else()
     # Compile Pybind11 module and copy to the correct python directory.
     pybind11_add_module(esiCppAccel python/esiaccel/esiCppAccel.cpp)
@@ -289,5 +292,9 @@ if(Python_FOUND)
         ${ESIPythonRuntimeSources}
         esiCppAccel
     )
+  endif()
+else() # Python not found.
+  if (WHEEL_BUILD)
+    message (FATAL_ERROR "python-dev is required for a wheel build.")
   endif()
 endif()

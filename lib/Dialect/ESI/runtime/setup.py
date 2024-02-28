@@ -1,3 +1,7 @@
+#  Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+#  See https://llvm.org/LICENSE.txt for license information.
+#  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
 # Build/install the ESI runtime python package.
 #
 # To install:
@@ -13,9 +17,11 @@
 # This can be set with the PYCDE_CMAKE_BUILD_DIR env var.
 
 import os
+import platform
 import shutil
 import subprocess
 import sys
+import sysconfig
 
 from distutils.command.build import build as _build
 from setuptools import find_namespace_packages, setup, Extension
@@ -62,7 +68,7 @@ class CMakeBuild(build_py):
     cmake_args = [
         "-DCMAKE_BUILD_TYPE={}".format(cfg),  # not used on MSVC, but no harm
         "-DCAPNP_PATH={}".format(os.getenv("CAPNP_PATH")),
-        "-DPython_EXECUTABLE={}".format(sys.executable.replace("\\", "/")),
+        "-DPython3_EXECUTABLE={}".format(sys.executable.replace("\\", "/")),
         "-DWHEEL_BUILD=ON",
     ]
     cxx = os.getenv("CXX")
@@ -76,6 +82,25 @@ class CMakeBuild(build_py):
     if "CIRCT_EXTRA_CMAKE_ARGS" in os.environ:
       cmake_args += os.environ["CIRCT_EXTRA_CMAKE_ARGS"].split(" ")
 
+    # HACK: CMake fails to auto-detect static linked Python installations, which
+    # happens to be what exists on manylinux. We detect this and give it a dummy
+    # library file to reference (which is checks exists but never gets
+    # used).
+    if platform.system() == "Linux":
+      python_libdir = sysconfig.get_config_var('LIBDIR')
+      python_library = sysconfig.get_config_var('LIBRARY')
+      if python_libdir and not os.path.isabs(python_library):
+        python_library = os.path.join(python_libdir, python_library)
+      if python_library and not os.path.exists(python_library):
+        print("Detected static linked python. Faking a library for cmake.")
+        fake_libdir = os.path.join(cmake_build_dir, "fake_python", "lib")
+        os.makedirs(fake_libdir, exist_ok=True)
+        fake_library = os.path.join(fake_libdir,
+                                    sysconfig.get_config_var('LIBRARY'))
+        subprocess.check_call(["ar", "q", fake_library])
+        cmake_args.append("-DPython3_LIBRARY:PATH={}".format(fake_library))
+
+    # Finally run the cmake configure.
     subprocess.check_call(["cmake", src_dir] + cmake_args, cwd=cmake_build_dir)
 
     # Run the build.
