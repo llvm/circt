@@ -29,6 +29,8 @@ include(FetchContent)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
+set(CMAKE_INSTALL_RPATH "$ORIGIN/../lib")
+set(CMAKE_INSTALL_RPATH_USE_LINK_PATH FALSE)
 
 # We need zlib to uncompress the manifest.
 find_package(ZLIB REQUIRED)
@@ -96,9 +98,6 @@ if(CapnProto_FOUND)
   message("-- ESI cosim enabled")
 
   message(STATUS "Found Cap'nProto at ${CapnProto_DIR}.")
-  set(CMAKE_INSTALL_RPATH ${capnp_LIBDIR})
-  set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
-
   add_subdirectory(cosim)
 
   set(ESIRuntimeSources
@@ -153,6 +152,21 @@ target_include_directories(ESIRuntime PRIVATE ${ESIRuntimeIncludeDirs})
 target_compile_options(ESIRuntime PRIVATE ${ESIRuntimeCxxFlags})
 target_link_directories(ESIRuntime PRIVATE ${ESIRuntimeLibDirs})
 target_link_options(ESIRuntime PRIVATE ${ESIRuntimeLinkFlags})
+install(TARGETS ESIRuntime
+  DESTINATION lib
+  COMPONENT ESIRuntime
+)
+install(IMPORTED_RUNTIME_ARTIFACTS ESIRuntime
+  RUNTIME_DEPENDENCY_SET ESIRuntime_RUNTIME_DEPS
+  DESTINATION lib
+  COMPONENT ESIRuntime
+)
+install(RUNTIME_DEPENDENCY_SET ESIRuntime_RUNTIME_DEPS
+  DESTINATION lib
+  PRE_EXCLUDE_REGEXES .*
+  PRE_INCLUDE_REGEXES capnp kj
+  COMPONENT ESIRuntime
+)
 
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
   target_compile_options(ESIRuntime PRIVATE -Wno-covered-switch-default)
@@ -163,10 +177,19 @@ add_executable(esiquery
   cpp/tools/esiquery.cpp
 )
 target_link_libraries(esiquery PRIVATE ESIRuntime)
+install(TARGETS esiquery
+  DESTINATION bin
+  COMPONENT ESIRuntime
+)
 
 # Global variable for the path to the ESI runtime for use by tests.
 set(ESIRuntimePath "${CMAKE_CURRENT_BINARY_DIR}"
   CACHE INTERNAL "Path to ESI runtime" FORCE)
+
+option(WHEEL_BUILD "Set up the build for a Python wheel." OFF)
+if (WHEEL_BUILD)
+  message(STATUS "Setting up for a Python wheel build.")
+endif()
 
 # Pybind11 is used to wrap the ESIRuntime APIs.
 find_package(Python COMPONENTS Interpreter Development)
@@ -203,6 +226,17 @@ if(Python_FOUND)
     # Compile Pybind11 module and copy to the correct python directory.
     pybind11_add_module(esiCppAccel python/esi/esiCppAccel.cpp)
     target_link_libraries(esiCppAccel PRIVATE ESIRuntime)
+
+    if (WHEEL_BUILD)
+      set_target_properties(esiCppAccel PROPERTIES
+        INSTALL_RPATH "$ORIGIN/lib")
+    else()
+      set_target_properties(esiCppAccel PROPERTIES
+        INSTALL_RPATH "$ORIGIN/../../lib")
+    endif()
+    set_target_properties(esiCppAccel PROPERTIES
+      INSTALL_RPATH_USE_LINK_PATH FALSE)
+
     add_custom_command(
         TARGET esiCppAccel
         POST_BUILD
@@ -210,9 +244,20 @@ if(Python_FOUND)
             $<TARGET_FILE:esiCppAccel>
             "${CMAKE_CURRENT_BINARY_DIR}/python/esi/$<TARGET_FILE_NAME:esiCppAccel>"
     )
+    if (WHEEL_BUILD)
+      install(TARGETS esiCppAccel
+        DESTINATION .
+        COMPONENT ESIRuntime
+      )
+    else()
+      install(TARGETS esiCppAccel
+        DESTINATION python/esi
+        COMPONENT ESIRuntime
+      )
+    endif()
 
-    # Copy each of the Python sources to the build dir.
     foreach(pysrc ${ESIPythonRuntimeSources})
+      # Copy each of the Python sources to the build dir.
       add_custom_command(
           OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${pysrc}
           COMMAND ${CMAKE_COMMAND} -E copy
@@ -220,6 +265,21 @@ if(Python_FOUND)
               ${CMAKE_CURRENT_BINARY_DIR}/${pysrc}
           DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${pysrc}
       )
+
+      # Specify the install location for the Python sources.
+      get_filename_component(DEST ${pysrc} DIRECTORY)
+      # If we're building a wheel, we need to install to the root directory.
+      if (WHEEL_BUILD)
+        cmake_path(GET DEST PARENT_PATH DEST)
+        cmake_path(GET DEST PARENT_PATH DEST)
+        if (DEST STREQUAL "")
+          set(DEST ".")
+        endif()
+      endif()
+
+      install(FILES ${pysrc}
+        DESTINATION ${DEST}
+        COMPONENT ESIRuntime)
     endforeach()
 
     # Custom target for the Python runtime just aggregates the python sources
@@ -229,6 +289,5 @@ if(Python_FOUND)
         ${ESIPythonRuntimeSources}
         esiCppAccel
     )
-
   endif()
 endif()

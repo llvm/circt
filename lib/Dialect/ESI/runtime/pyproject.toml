@@ -1,0 +1,28 @@
+[build-system]
+requires = [
+  "setuptools>=68",
+  "setuptools_scm>=8.0",
+  "wheel",
+  "cmake>=3.12",
+  "pybind11>=2.9",
+]
+build-backend = "setuptools.build_meta"
+
+# Enable version inference from Git.
+[tool.setuptools_scm]
+root = "../../../.."
+tag_regex = "^ESIRuntime-(\\d+\\.\\d+\\.\\d+)?$"
+local_scheme = "no-local-version"
+git_describe_command = "git describe --dirty --tags --long --match ESIRuntime*"
+
+[tool.cibuildwheel]
+build-frontend = "build"
+manylinux-x86_64-image = "ghcr.io/circt/images/pycde-build"
+
+[project]
+name = "esiaccel"
+dynamic = ["version"]
+description = "ESI accelerators runtime"
+authors = [{ name = "John Demme", email = "John.Demme@microsoft.com" }]
+dependencies = []
+requires-python = ">=3.8"
