@@ -4,17 +4,25 @@
 
 sv.macro.decl @Macro
 
+hw.module private @SomeModule() {
+}
+
 // FILE: SimpleVerbatim
 // FILE-NEXT: WithNewlines
 // FILE-NEXT: A
 // FILE-NEXT: B
 // FILE-NEXT: WithEmptyNewlines
-// FILE: X
+// FILE-EMPTY:
+// FILE-EMPTY:
+// FILE-NEXT: X
 // FILE-NEXT: `ifdef Macro
 // FILE-NEXT:   `define Macro 1
 // FILE-NEXT: `else
 // FILE-NEXT:   `define Macro 2
 // FILE-NEXT: `endif
+// FILE-NEXT: module SomeModule();
+// FILE-NEXT: endmodule
+// FILE-EMPTY:
 // FILE-NEXT: Some Reference: Macro
 
 emit.file "some-file.sv" sym @SomeFile.sv {
@@ -27,6 +35,8 @@ emit.file "some-file.sv" sym @SomeFile.sv {
   } else {
     sv.macro.def @Macro "2"
   }
+
+  emit.ref @SomeModule
 
   sv.verbatim "Some Reference: {{0}}" {symbols = [@Macro]}
 }
