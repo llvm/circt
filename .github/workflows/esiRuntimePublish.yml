@@ -21,12 +21,7 @@ jobs:
       - name: Get CIRCT
         uses: actions/checkout@v3
         with:
-          fetch-depth: 2
-          submodules: "true"
-
-      - name: Unshallow CIRCT
-        run: |
-          git fetch --force --unshallow --tags --no-recurse-submodules
+          submodules: false
 
       - name: Setup Python
         uses: actions/setup-python@v3

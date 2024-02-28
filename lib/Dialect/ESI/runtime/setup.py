@@ -76,6 +76,7 @@ class CMakeBuild(build_py):
     if "CIRCT_EXTRA_CMAKE_ARGS" in os.environ:
       cmake_args += os.environ["CIRCT_EXTRA_CMAKE_ARGS"].split(" ")
 
+    print("CMake args: ", cmake_args)
     subprocess.check_call(["cmake", src_dir] + cmake_args, cwd=cmake_build_dir)
 
     # Run the build.
