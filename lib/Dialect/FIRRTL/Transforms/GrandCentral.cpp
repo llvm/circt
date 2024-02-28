@@ -24,6 +24,7 @@
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Support/Debug.h"
+#include "circt/Support/FilteredGraph.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -1720,15 +1721,18 @@ void GrandCentralPass::runOnOperation() {
   if (!effectiveDUT)
     effectiveDUT = cast<FModuleOp>(
         *instancePaths->instanceGraph.getTopLevelNode()->getModule());
-  auto dfRange =
-      llvm::depth_first(instancePaths->instanceGraph.lookup(effectiveDUT));
+  // Use filter graph but don't filter anything yet.
+  auto fGraph =
+      make_filtered_graph(instancePaths->instanceGraph.lookup(effectiveDUT),
+                          [](auto edge) { return true; });
+  auto dfRange = make_df_range(fGraph);
   for (auto i = dfRange.begin(), e = dfRange.end(); i != e;) {
-    auto module = cast<FModuleLike>(*i->getModule());
+    auto module = cast<FModuleLike>(*(**i)->getModule());
     if (AnnotationSet(module).hasAnnotation(companionAnnoClass)) {
       i.skipChildren();
       continue;
     }
-    dutModules.insert(i->getModule<igraph::ModuleOpInterface>());
+    dutModules.insert((**i)->getModule<igraph::ModuleOpInterface>());
     // Manually increment the iterator to avoid walking off the end from
     // skipChildren.
     ++i;

@@ -360,20 +360,35 @@ struct llvm::GraphTraits<circt::igraph::InstanceGraphNode *> {
   using NodeType = circt::igraph::InstanceGraphNode;
   using NodeRef = NodeType *;
 
-  // Helper for getting the module referenced by the instance op.
-  static NodeRef getChild(const circt::igraph::InstanceRecord *record) {
-    return record->getTarget();
-  }
+  using EdgeType = circt::igraph::InstanceRecord;
+  using EdgeRef = EdgeType *;
+
+  using ChildEdgeIteratorType = NodeType::iterator;
+
+  // NOLINTNEXTLINE(readability-identifier-naming)
+  static NodeRef edge_dest(EdgeRef edge) { return edge->getTarget(); }
 
   using ChildIteratorType =
-      llvm::mapped_iterator<NodeType::iterator, decltype(&getChild)>;
+      llvm::mapped_iterator<ChildEdgeIteratorType, decltype(&edge_dest)>;
 
   static NodeRef getEntryNode(NodeRef node) { return node; }
+
+  // NOLINTNEXTLINE(readability-identifier-naming)
   static ChildIteratorType child_begin(NodeRef node) {
-    return {node->begin(), &getChild};
+    return {child_edge_begin(node), &edge_dest};
   }
+  // NOLINTNEXTLINE(readability-identifier-naming)
   static ChildIteratorType child_end(NodeRef node) {
-    return {node->end(), &getChild};
+    return {child_edge_end(node), &edge_dest};
+  }
+
+  // NOLINTNEXTLINE(readability-identifier-naming)
+  static ChildEdgeIteratorType child_edge_begin(NodeRef node) {
+    return node->begin();
+  }
+  // NOLINTNEXTLINE(readability-identifier-naming)
+  static ChildEdgeIteratorType child_edge_end(NodeRef node) {
+    return node->end();
   }
 };
 
@@ -383,22 +398,37 @@ struct llvm::GraphTraits<llvm::Inverse<circt::igraph::InstanceGraphNode *>> {
   using NodeType = circt::igraph::InstanceGraphNode;
   using NodeRef = NodeType *;
 
-  // Helper for getting the module containing the instance op.
-  static NodeRef getParent(const circt::igraph::InstanceRecord *record) {
-    return record->getParent();
-  }
+  using EdgeType = circt::igraph::InstanceRecord;
+  using EdgeRef = EdgeType *;
+
+  using ChildEdgeIteratorType = NodeType::UseIterator;
+
+  // NOLINTNEXTLINE(readability-identifier-naming)
+  static NodeRef edge_dest(EdgeRef edge) { return edge->getParent(); }
 
   using ChildIteratorType =
-      llvm::mapped_iterator<NodeType::UseIterator, decltype(&getParent)>;
+      llvm::mapped_iterator<ChildEdgeIteratorType, decltype(&edge_dest)>;
 
   static NodeRef getEntryNode(Inverse<NodeRef> inverse) {
     return inverse.Graph;
   }
+
+  // NOLINTNEXTLINE(readability-identifier-naming)
   static ChildIteratorType child_begin(NodeRef node) {
-    return {node->usesBegin(), &getParent};
+    return {child_edge_begin(node), &edge_dest};
   }
+  // NOLINTNEXTLINE(readability-identifier-naming)
   static ChildIteratorType child_end(NodeRef node) {
-    return {node->usesEnd(), &getParent};
+    return {child_edge_end(node), &edge_dest};
+  }
+
+  // NOLINTNEXTLINE(readability-identifier-naming)
+  static ChildEdgeIteratorType child_edge_begin(NodeRef node) {
+    return node->usesBegin();
+  }
+  // NOLINTNEXTLINE(readability-identifier-naming)
+  static ChildEdgeIteratorType child_edge_end(NodeRef node) {
+    return node->usesEnd();
   }
 };
 
