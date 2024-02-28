@@ -17,7 +17,6 @@ git_describe_command = "git describe --dirty --tags --long --match ESIRuntime*"
 
 [tool.cibuildwheel]
 build-frontend = "build"
-manylinux-x86_64-image = "ghcr.io/circt/images/pycde-build"
 
 [project]
 name = "esiaccel"

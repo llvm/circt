@@ -14,8 +14,8 @@ jobs:
         config:
           - os: ubuntu-20.04
             cibw_build: cp38-manylinux_x86_64
-          - os: ubuntu-20.04
-            cibw_build: cp310-manylinux_x86_64
+          # - os: ubuntu-20.04
+            # cibw_build: cp310-manylinux_x86_64
 
     steps:
       - name: Get CIRCT
@@ -38,8 +38,7 @@ jobs:
         run: python -m cibuildwheel --output-dir wheelhouse ./lib/Dialect/ESI/runtime
         env:
           CIBW_BUILD: ${{ matrix.config.cibw_build }}
-          CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
-          CIBW_BUILD_FRONTEND: build
+          CIBW_MANYLINUX_X86_64_IMAGE: ghcr.io/circt/images/pycde-build
           SETUPTOOLS_SCM_DEBUG: True
 
       - name: Upload (stage) wheels as artifacts
