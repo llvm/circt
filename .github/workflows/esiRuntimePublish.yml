@@ -50,3 +50,28 @@ jobs:
           path: ./wheelhouse/*.whl
           retention-days: 7
           if-no-files-found: error
+
+  push_wheels:
+    name: Push wheels (Tag or Weekly)
+    runs-on: ubuntu-20.04
+    if: github.repository == 'llvm/circt'
+    needs: build_wheels
+    permissions:
+      id-token: write
+
+    steps:
+      - name: Download wheels
+        uses: actions/download-artifact@v3
+        with:
+          name: python-wheels
+          path: ./wheelhouse/
+
+      - name: List downloaded wheels
+        run: ls -laR
+        working-directory: ./wheelhouse/
+
+      - name: Upload wheels to pypi
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: wheelhouse/
+          verify-metadata: false
