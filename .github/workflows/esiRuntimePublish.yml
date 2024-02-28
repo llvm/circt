@@ -27,6 +27,8 @@ jobs:
             cibw_build: cp311-manylinux_x86_64
           - os: ubuntu-20.04
             cibw_build: cp312-manylinux_x86_64
+          - os: ubuntu-20.04
+            cibw_build: cp313-manylinux_x86_64
 
     steps:
       - name: Get CIRCT
