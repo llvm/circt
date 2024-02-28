@@ -33,7 +33,6 @@ FieldSource::FieldSource(Operation *operation) {
 
   FModuleOp mod = cast<FModuleOp>(operation);
   mod.walk<mlir::WalkOrder::PreOrder>([&](Operation *op) { 
-//    if (isa<ConnectOp, StrictConnectOp>(op))
   for (size_t i = 0; i < op->getNumOperands(); ++i)
       visitValue(op->getOperand(i), [&](Value v, PathNode pn) {paths[v] = pn;});
     });
@@ -76,12 +75,10 @@ FieldSource::PathNode FieldSource::visitValue(Value v, Fn update) const {
     update(v, retval);
     return retval;
   })
-  .template Case<WireOp, RegOp, RegResetOp, InstanceOp, InvalidValueOp>([&](auto def) {
+  .template Case<WireOp, RegOp, RegResetOp, InstanceOp, InvalidValueOp, chirrtl::MemoryPortOp>([&](auto def) {
     return PathNode{v, 0};
   })
   .Default([&](auto* op) {
-    if (auto ft = type_isa<BundleType, FVectorType, OpenBundleType, OpenVectorType>(v.getType()))
-      op->emitError("not handled");
     return PathNode{v, 0};
   });
 }

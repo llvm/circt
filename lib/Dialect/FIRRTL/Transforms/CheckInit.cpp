@@ -29,7 +29,7 @@ using SetSet = DenseMap<Value, BitVector>;
 static void markWrite(BitVector &bv, Value v, size_t fieldID) {
   if (bv.size() <= fieldID)
     bv.resize(fieldID + 1);
-  //    llvm::errs() << "S " << v << " " << fieldID << "\n";
+  LLVM_DEBUG(llvm::errs() << "S " << v << " " << fieldID << "\n";);
   bv.set(fieldID);
 }
 
@@ -72,6 +72,7 @@ class CheckInitPass : public CheckInitBase<CheckInitPass> {
     SmallVector<Value> dests;
   };
 
+  bool failed;
   SmallVector<Operation *> worklist;
   DenseMap<Region *, RegionState> localInfo;
 
@@ -92,7 +93,7 @@ static bool checkBit(BitVector &vals, size_t idx) {
 }
 
 static std::string nameForField(Type t, size_t fieldID) {
-  //  llvm::errs() << "N: " << t << " @" << fieldID << "\n";
+  LLVM_DEBUG(llvm::errs() << "N: " << t << " @" << fieldID << "\n";);
   if (auto bundle = dyn_cast<BundleType>(t)) {
     auto idx = bundle.getIndexForFieldID(fieldID);
     auto fid = bundle.getFieldID(idx);
@@ -120,17 +121,42 @@ static StringRef getPortName(BlockArgument b) {
   return mod.getPort(b.getArgNumber()).getName();
 }
 
+static StringRef getMemPortName(Value v) {
+  MemOp mem = cast<MemOp>(v.getDefiningOp());
+  return mem.getPortName(cast<OpResult>(v).getResultNumber());
+}
+
+static StringRef getCMemPortName(Value v) {
+  chirrtl::MemoryPortOp mem = cast<chirrtl::MemoryPortOp>(v.getDefiningOp());
+  return mem.getName();
+}
+
+static StringRef getInstPortName(Value v) {
+  InstanceOp inst = cast<InstanceOp>(v.getDefiningOp());
+  return inst.getPortName(cast<OpResult>(v).getResultNumber());
+}
+
 void CheckInitPass::emitInitError(Value decl, size_t fieldID) {
-  bool isPort = isa<BlockArgument>(decl);
-  auto err = isPort ? (getOperation()->emitError("Port `")
-                       << getPortName(cast<BlockArgument>(decl)) << "` is not")
-                    : decl.getDefiningOp()->emitError("Wire is not");
+
+  InFlightDiagnostic err = [&](){
+  if (auto ba = dyn_cast<BlockArgument>(decl))
+return getOperation()->emitError("Port `")
+                       << getPortName(ba) << "`";
+if (isa<InstanceOp>(decl.getDefiningOp()))
+    return decl.getDefiningOp()->emitError("Instance input `") << getInstPortName(decl) << "`";
+  if (isa<chirrtl::MemoryPortOp>(decl.getDefiningOp()))
+    return decl.getDefiningOp()->emitError("Memory port `") << getCMemPortName(decl) << "`";
+  if (isa<MemOp>(decl.getDefiningOp()))
+    return decl.getDefiningOp()->emitError("Memory port `") << getMemPortName(decl) << "`";
+  return decl.getDefiningOp()->emitError("Wire");
+  }();
   if (fieldID == 0) {
-    err << " initialized.";
+    err << " is not initialized.";
   } else {
-    err << " fully initialized at field `"
+    err << " is not fully initialized at field `"
         << nameForField(decl.getType(), fieldID) << "`.";
   }
+  failed = true;
 }
 
 // Check (recursively) that decl at fieldID, whose type at fieldID is t, has a
@@ -138,32 +164,34 @@ void CheckInitPass::emitInitError(Value decl, size_t fieldID) {
 void CheckInitPass::reportRegion(Value decl, Type t, size_t fieldID,
                                  bool needed, bool alwaysNeeded,
                                  BitVector &vals) {
-  //  llvm::errs() << "Test[" << fieldID << "]: " << decl << " " << t << " ";
-  //  dumpBV(vals);
-  //  llvm::errs() << "\n";
+  LLVM_DEBUG(
+  llvm::errs() << "Test[" << fieldID << "]: \n\t" << decl << " \n\t" << t << " \n\t";
+  dumpBV(vals);
+  llvm::errs() << " n:" << needed << " a:" << alwaysNeeded << "\n";
+  );
   // May recursively handle subtypes.
-  if ((!needed && !alwaysNeeded) || checkBit(vals, fieldID))
+  if ((!needed && !alwaysNeeded) || checkBit(vals, fieldID) || type_isa<RefType>(t) || type_isa<AnalogType>(t))
     return;
 
   // Explicitly test each subtype.
-  if (auto bundle = dyn_cast<BundleType>(t)) {
+  if (auto bundle = type_dyn_cast<BundleType>(t)) {
     for (size_t idx = 0, e = bundle.getNumElements(); idx != e; ++idx)
       reportRegion(decl, bundle.getElementType(idx),
                    fieldID + bundle.getFieldID(idx),
                    needed ^ bundle.getElement(idx).isFlip, alwaysNeeded, vals);
     return;
-  } else if (auto bundle = dyn_cast<OpenBundleType>(t)) {
+  } else if (auto bundle = type_dyn_cast<OpenBundleType>(t)) {
     for (size_t idx = 0, e = bundle.getNumElements(); idx != e; ++idx)
       reportRegion(decl, bundle.getElementType(idx),
                    fieldID + bundle.getFieldID(idx),
                    needed ^ bundle.getElement(idx).isFlip, alwaysNeeded, vals);
     return;
-  } else if (auto vec = dyn_cast<FVectorType>(t)) {
+  } else if (auto vec = type_dyn_cast<FVectorType>(t)) {
     for (size_t idx = 0, e = vec.getNumElements(); idx != e; ++idx)
       reportRegion(decl, vec.getElementType(), fieldID + vec.getFieldID(idx),
                    needed, alwaysNeeded, vals);
     return;
-  } else if (auto vec = dyn_cast<OpenVectorType>(t)) {
+  } else if (auto vec = type_dyn_cast<OpenVectorType>(t)) {
     for (size_t idx = 0, e = vec.getNumElements(); idx != e; ++idx)
       reportRegion(decl, vec.getElementType(), fieldID + vec.getFieldID(idx),
                    needed, alwaysNeeded, vals);
@@ -176,20 +204,20 @@ void CheckInitPass::reportRegion(Value decl, Type t, size_t fieldID,
 // compute the values set by op's regions.  A when, for example, ands the init
 // set as only fields set on both paths are unconditionally set by the when.
 void CheckInitPass::processOp(Operation *op, FieldSource &fieldSource) {
-  //  llvm::errs() << "* " << op << " r(" << op->getNumRegions() << ")\n";
+  LLVM_DEBUG(llvm::errs() << "* " << op << " r(" << op->getNumRegions() << ")\n";);
 
   for (auto &region : op->getRegions()) {
     auto &local = localInfo[&region];
     for (auto &block : region) {
       for (auto &opref : block) {
         Operation *op = &opref;
-        if (isa<WireOp, RegOp, RegResetOp>(op)) {
+        if (isa<WireOp>(op)) {
           local.dests.push_back(op->getResult(0));
         } else if (auto mem = dyn_cast<MemOp>(op)) {
           for (auto result : mem.getResults())
             local.dests.push_back(result);
         } else if (auto memport = dyn_cast<chirrtl::MemoryPortOp>(op)) {
-          local.dests.push_back(memport.getResult(0));
+          //Inferred Memory Ports are weird and we don't try to check them
         } else if (auto inst = dyn_cast<InstanceOp>(op)) {
           for (auto [idx, arg] : llvm::enumerate(inst.getResults()))
             local.dests.push_back(arg);
@@ -205,6 +233,9 @@ void CheckInitPass::processOp(Operation *op, FieldSource &fieldSource) {
         } else if (auto def = dyn_cast<RefDefineOp>(op)) {
           auto node = fieldSource.nodeForValue(def.getDest());
           markWrite(local.init[node.src], node.src, node.fieldID);
+        } else if (auto prop = dyn_cast<PropAssignOp>(op)) {
+          auto node = fieldSource.nodeForValue(prop.getDest());
+          markWrite(local.init[node.src], node.src, node.fieldID);
         } else if (isa<WhenOp, MatchOp>(op)) {
           local.children.push_back(op);
           worklist.push_back(op);
@@ -215,6 +246,8 @@ void CheckInitPass::processOp(Operation *op, FieldSource &fieldSource) {
 }
 
 void CheckInitPass::runOnOperation() {
+  failed = false;
+
   auto &fieldSource = getAnalysis<FieldSource>();
   worklist.push_back(getOperation());
 
@@ -235,8 +268,7 @@ void CheckInitPass::runOnOperation() {
       auto &state = localInfo[&r];
 
       for (auto *op : state.children) {
-        //        llvm::errs() << "+ " << op << " r(" << op->getNumRegions() <<
-        //        ")\n";
+        LLVM_DEBUG(llvm::errs() << "+ " << op << " r(" << op->getNumRegions() << ")\n";);
         // Union the child's regions.  This is safe as all multi-region ops are
         // exclusive control flow.
         assert(localInfo.count(&op->getRegion(0)));
@@ -263,7 +295,7 @@ void CheckInitPass::runOnOperation() {
         } else if (auto inst = dyn_cast<InstanceOp>(v.getDefiningOp())) {
           needed = inst.getPortDirection(cast<OpResult>(v).getResultNumber()) ==
                    Direction::In;
-        } else {
+        } else if (isa<WireOp>(v.getDefiningOp())) {
           // Wires need both flip directions to be connected.
           alwaysNeeded = true;
         }
@@ -271,6 +303,9 @@ void CheckInitPass::runOnOperation() {
       }
     }
   }
+
+  if (failed)
+    signalPassFailure();
 
   // Prepare for next run.
   worklist.clear();
