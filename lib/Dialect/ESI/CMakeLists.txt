@@ -108,10 +108,10 @@ set(ESI_RUNTIME_SRCS
   runtime/cosim/driver.cpp
   runtime/cosim/driver.sv
   runtime/cosim/esi-cosim.py
-  runtime/python/esi/__init__.py
-  runtime/python/esi/accelerator.py
-  runtime/python/esi/esiCppAccel.cpp
-  runtime/python/esi/esiCppAccel.pyi
+  runtime/python/esiaccel/__init__.py
+  runtime/python/esiaccel/accelerator.py
+  runtime/python/esiaccel/esiCppAccel.cpp
+  runtime/python/esiaccel/esiCppAccel.pyi
   runtime/CMakeLists.txt
 )
 

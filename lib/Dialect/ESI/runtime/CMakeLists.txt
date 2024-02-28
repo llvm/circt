@@ -61,10 +61,10 @@ set(ESIRuntimeLinkLibraries
   nlohmann_json::nlohmann_json
 )
 set(ESIPythonRuntimeSources
-  python/esi/__init__.py
-  python/esi/accelerator.py
-  python/esi/types.py
-  python/esi/esiCppAccel.pyi
+  python/esiaccel/__init__.py
+  python/esiaccel/accelerator.py
+  python/esiaccel/types.py
+  python/esiaccel/esiCppAccel.pyi
 )
 set(ESIRuntimeIncludeDirs)
 set(ESIRuntimeCxxFlags)
@@ -224,7 +224,7 @@ if(Python_FOUND)
     message (STATUS "Could not find pybind11. Disabling Python API.")
   else()
     # Compile Pybind11 module and copy to the correct python directory.
-    pybind11_add_module(esiCppAccel python/esi/esiCppAccel.cpp)
+    pybind11_add_module(esiCppAccel python/esiaccel/esiCppAccel.cpp)
     target_link_libraries(esiCppAccel PRIVATE ESIRuntime)
 
     if (WHEEL_BUILD)
@@ -242,7 +242,7 @@ if(Python_FOUND)
         POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy
             $<TARGET_FILE:esiCppAccel>
-            "${CMAKE_CURRENT_BINARY_DIR}/python/esi/$<TARGET_FILE_NAME:esiCppAccel>"
+            "${CMAKE_CURRENT_BINARY_DIR}/python/esiaccel/$<TARGET_FILE_NAME:esiCppAccel>"
     )
     if (WHEEL_BUILD)
       install(TARGETS esiCppAccel
@@ -251,7 +251,7 @@ if(Python_FOUND)
       )
     else()
       install(TARGETS esiCppAccel
-        DESTINATION python/esi
+        DESTINATION python/esiaccel
         COMPONENT ESIRuntime
       )
     endif()

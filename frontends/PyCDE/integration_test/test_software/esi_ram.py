@@ -1,5 +1,5 @@
 from typing import Optional
-import esi
+import esiaccel as esi
 import random
 import sys
 

@@ -1,7 +1,7 @@
-import esi
+import esiaccel
 import sys
 
-acc = esi.AcceleratorConnection(sys.argv[1], sys.argv[2])
+acc = esiaccel.AcceleratorConnection(sys.argv[1], sys.argv[2])
 
 mmio = acc.get_service_mmio()
 
