@@ -281,7 +281,6 @@ private:
   // Generates an init statement, which allows for the use of powerOnValue
   // operands in compreg registers
   void genInit(Operation *reg, Value initVal, int64_t width) {
-
     // Retrieve the various identifiers we require for this
     size_t regLID = getOpLID(reg);
     size_t sid = sortToLIDMap.at(width);
@@ -496,12 +495,10 @@ private:
       width = hw::getBitWidth(reg.getType());
       next = reg.getInput();
       resetVal = reg.getResetValue();
-
     } else if (auto reg = dyn_cast<seq::FirRegOp>(op)) {
       width = hw::getBitWidth(reg.getType());
       next = reg.getNext();
       resetVal = reg.getResetValue();
-
     } else {
       op->emitError("Invalid register operation !");
       return;
@@ -810,7 +807,6 @@ public:
     // Check for initial values which must be emitted before the state in btor2
     Value pov = reg.getPowerOnValue();
     if (pov) {
-
       // Check that the powerOn value is a non-null constant
       if (!isa_and_nonnull<hw::ConstantOp>(pov.getDefiningOp()))
         reg->emitError("PowerOn Value must be constant!!");
