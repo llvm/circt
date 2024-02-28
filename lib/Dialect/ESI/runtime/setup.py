@@ -62,7 +62,7 @@ class CMakeBuild(build_py):
     cmake_args = [
         "-DCMAKE_BUILD_TYPE={}".format(cfg),  # not used on MSVC, but no harm
         "-DCAPNP_PATH={}".format(os.getenv("CAPNP_PATH")),
-        "-DPython_EXECUTABLE={}".format(sys.executable.replace("\\", "/")),
+        "-DPython3_EXECUTABLE={}".format(sys.executable.replace("\\", "/")),
         "-DWHEEL_BUILD=ON",
     ]
     cxx = os.getenv("CXX")
@@ -77,7 +77,7 @@ class CMakeBuild(build_py):
       cmake_args += os.environ["CIRCT_EXTRA_CMAKE_ARGS"].split(" ")
 
     print("CMake args: ", cmake_args)
-    sys.stdout.flush()
+    sys.stdout.flush
     subprocess.check_call(["cmake", src_dir] + cmake_args, cwd=cmake_build_dir)
 
     # Run the build.
