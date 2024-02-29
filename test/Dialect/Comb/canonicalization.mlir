@@ -1662,3 +1662,12 @@ hw.module @cantCombineOppositeNonBinCmpIntoConstant(in %tag_0: i4, in %tag_1: i4
             %opposite_xor_or, %opposite_xor_and :
             i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i4, i4
 }
+
+// https://github.com/llvm/circt/issues/6767
+// CHECK-LABEL: @Issue6767
+hw.module @Issue6767(in %arg0 : i64, out out: i32) {
+  // CHECK:  %0 = comb.extract %arg0 from 0 {custom_dialect.attr = "test"} : (i64) -> i32
+  %0 = comb.extract %arg0 from 0 : (i64) -> i42
+  %1 = comb.extract %0 from 0 {custom_dialect.attr = "test"} : (i42) -> i32
+  hw.output %1 : i32
+}
