@@ -230,7 +230,9 @@ class Verilator(Simulator):
         "--assert",
         str(Verilator.DefaultDriver),
     ]
-    cflags = []
+    cflags = [
+        "-DTOP_MODULE=" + self.sources.top,
+    ]
     if self.debug:
       cmd += ["--trace", "--trace-params", "--trace-structs"]
       cflags.append("-DTRACE")

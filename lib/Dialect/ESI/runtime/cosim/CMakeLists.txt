@@ -30,7 +30,7 @@ install(TARGETS EsiCosimCapnp
   COMPONENT ESIRuntime
 )
 
-install(FILES
+set(cosim_collateral
   Cosim_DpiPkg.sv
   Cosim_Endpoint.sv
   Cosim_Manifest.sv
@@ -38,10 +38,25 @@ install(FILES
 
   driver.sv
   driver.cpp
+)
 
+install(FILES
+  ${cosim_collateral}
   DESTINATION cosim
   COMPONENT ESIRuntime
 )
+
+add_custom_target(esi-cosim
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+          ${CMAKE_CURRENT_SOURCE_DIR}/esi-cosim.py
+          ${CIRCT_TOOLS_DIR}/esi-cosim.py)
+foreach (cf ${cosim_collateral})
+  add_custom_command(TARGET esi-cosim POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+              ${CMAKE_CURRENT_SOURCE_DIR}/${cf}
+              ${CIRCT_TOOLS_DIR}/../cosim/${cf}
+  )
+endforeach()
 install(FILES
   esi-cosim.py
   DESTINATION bin

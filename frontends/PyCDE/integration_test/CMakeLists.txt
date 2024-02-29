@@ -14,7 +14,6 @@ else()
     FileCheck count not split-file
     circt-rtl-sim
     PyCDE
-    esi-collateral
     mlir-opt
     hlstool
     CIRCTPythonModules
@@ -22,20 +21,13 @@ else()
     ESIPythonRuntime
   )
 
-  if (TARGET esi-collateral)
-    list(APPEND PYCDE_INTEGRATION_TEST_DEPENDS
-      esi-collateral
-    )
-  endif()
-
   # If ESI Cosim is available to build then enable its tests.
   if (TARGET EsiCosimDpiServer)
     list(APPEND PYCDE_INTEGRATION_TEST_DEPENDS
       EsiCosimDpiServer
-      esi-cosim-runner
+      esi-cosim
     )
-    get_property(ESI_COSIM_LIB_DIR TARGET EsiCosimDpiServer PROPERTY LIBRARY_OUTPUT_DIRECTORY)
-    set(ESI_COSIM_PATH ${ESI_COSIM_LIB_DIR}/libEsiCosimDpiServer.so)
+
   endif()
 
   set(PYCDE_INTEGRATION_TIMEOUT 60) # Set a 60s timeout on individual tests.
