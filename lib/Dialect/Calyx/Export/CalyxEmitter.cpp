@@ -119,9 +119,9 @@ private:
               static constexpr std::string_view sCompile = "compile";
               return {sCompile};
             })
-        .Case<NotLibOp, AndLibOp, OrLibOp, XorLibOp, SubLibOp,
-              GtLibOp, LtLibOp, EqLibOp, NeqLibOp, GeLibOp, LeLibOp, LshLibOp,
-              RshLibOp, SliceLibOp, PadLibOp, MuxLibOp>(
+        .Case<NotLibOp, AndLibOp, OrLibOp, XorLibOp, SubLibOp, GtLibOp, LtLibOp,
+              EqLibOp, NeqLibOp, GeLibOp, LeLibOp, LshLibOp, RshLibOp,
+              SliceLibOp, PadLibOp, MuxLibOp>(
             [&](auto op) -> FailureOr<StringRef> {
               static constexpr std::string_view sCore = "core";
               return {sCore};
