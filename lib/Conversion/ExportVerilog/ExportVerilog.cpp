@@ -6052,10 +6052,8 @@ void FileEmitter::emit(emit::FileOp op) {
         .Case<emit::VerbatimOp>([&](auto op) { emitOp(op); })
         .Case<VerbatimOp, IfDefOp, MacroDefOp>(
             [&](auto op) { ModuleEmitter(state).emitStatement(op); })
-        .Default([&](auto op) {
-          op->emitError("cannot be emitted to a file");
-          state.encounteredError = true;
-        });
+        .Default(
+            [&](auto op) { emitOpError(op, "cannot be emitted to a file"); });
   }
   ps.eof();
 }
@@ -6067,8 +6065,7 @@ void FileEmitter::emit(emit::FileListOp op) {
 
     auto it = state.fileMapping.find(fileName);
     if (it == state.fileMapping.end()) {
-      op->emitError() << " references an invalid file: " << sym;
-      state.encounteredError = true;
+      emitOpError(op, " references an invalid file: ") << sym;
       continue;
     }
 
