@@ -18,19 +18,19 @@ module {
     //CHECK:  %4 = comb.xor bin %3, %true {sv.namehint = "disable"} : i1
 
     // NOI becomes this big block
-    //CHECK:  %false_1 = hw.constant false
-    //CHECK:  %true_2 = hw.constant true
-    //CHECK:  %5 = comb.add %delay_, %true_2 : i1
-    //CHECK:  %true_3 = hw.constant true
-    //CHECK:  %6 = comb.icmp bin eq %delay_, %true_3 : i1
-    //CHECK:  %7 = comb.mux %6, %true_3, %5 : i1
-    //CHECK:  %delay_ = seq.compreg sym @delay_  %7, %clock reset %reset, %false_1 powerOn %false_1 : i1  
-    //CHECK:  %false_4 = hw.constant false
-    //CHECK:  %_0 = seq.compreg sym @_0  %true, %clock reset %reset, %false_4 powerOn %false_4 : i1  
-    //CHECK:  %8 = comb.icmp bin ult %delay_, %true_3 : i1
-    //CHECK:  %true_5 = hw.constant true
-    //CHECK:  %9 = comb.xor %_0, %true_5 : i1
-    //CHECK:  %10 = comb.or %9, %b : i1
+    //CHECK:   %false_1 = hw.constant false
+    //CHECK:   %true_2 = hw.constant true
+    //CHECK:   %5 = comb.add %delay_, %true_2 : i1
+    //CHECK:   %true_3 = hw.constant true
+    //CHECK:   %6 = comb.icmp bin eq %delay_, %true_3 : i1
+    //CHECK:   %7 = comb.mux %6, %true_3, %5 : i1
+    //CHECK:   %delay_ = seq.compreg sym @delay_  %7, %clock reset %reset, %false_1 powerOn %false_1 : i1  
+    //CHECK:   %false_4 = hw.constant false
+    //CHECK:   %antecedent_0 = seq.compreg sym @antecedent_0  %a, %clock reset %reset, %false_4 powerOn %false_4 : i1  
+    //CHECK:   %8 = comb.icmp bin ult %delay_, %true_3 : i1
+    //CHECK:   %true_5 = hw.constant true
+    //CHECK:   %9 = comb.xor %antecedent_0, %true_5 : i1
+    //CHECK:   %10 = comb.or %9, %b : i1
     %1 = ltl.delay %true, 1, 0 : i1
     %2 = ltl.concat %a, %1 : i1, !ltl.sequence
     %3 = ltl.implication %2, %b : !ltl.sequence, i1

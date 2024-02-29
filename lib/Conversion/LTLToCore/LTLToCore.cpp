@@ -191,25 +191,24 @@ struct AssertOpConversionPattern : OpConversionPattern<verif::AssertOp> {
 
     // Previous register in the pipeline
     Value aI;
+    Value a = concat.getInputs().front();
 
     // Generate reset values
-    auto delayinputtype = delayN.getInput().getType();
-    auto itype =
-        isa<IntegerType>(delayinputtype)
-            ? delayinputtype
-            : IntegerType::get(getContext(), hw::getBitWidth(delayinputtype));
+    auto aType = a.getType();
+    auto itype = isa<IntegerType>(aType)
+                     ? aType
+                     : IntegerType::get(getContext(), hw::getBitWidth(aType));
     Value resetVal = rewriter.create<hw::ConstantOp>(delayN.getLoc(), itype, 0);
 
-    // Create the first register in the pipeline
-    aI = rewriter.create<seq::CompRegOp>(delayN.getLoc(), delayN.getInput(),
-                                         clock, reset, resetVal,
-                                         llvm::StringRef("_0"), resetVal);
+    aI = rewriter.create<seq::CompRegOp>(
+        delayN.getLoc(), a, clock, reset, resetVal,
+        llvm::StringRef("antecedent_0"), resetVal);
 
     // Create a pipeline of delay registers
     for (size_t i = 1; i < delayCycles; ++i)
       aI = rewriter.create<seq::CompRegOp>(
           delayN.getLoc(), aI, clock, reset, resetVal,
-          llvm::StringRef("_" + std::to_string(i)), resetVal);
+          llvm::StringRef("antecedent_" + std::to_string(i)), resetVal);
 
     // Generate the final assertion: assert(delayReg < delayMax ||
     // (aI -> consequent) || reset)
