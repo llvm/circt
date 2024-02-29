@@ -30,7 +30,11 @@ if (ESI_RUNTIME)
 
   # If ESI Cosim is available to build then enable its tests.
   if (TARGET EsiCosimDpiServer)
-    list(APPEND CIRCT_INTEGRATION_TEST_DEPENDS EsiCosimDpiServer)
+    list(APPEND CIRCT_INTEGRATION_TEST_DEPENDS
+      EsiCosimDpiServer
+      esi-cosim
+    )
+
   endif()
 endif()
 
