@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_HW_OPS_H
 #define CIRCT_DIALECT_HW_OPS_H
 
+#include "circt/Dialect/Emit/EmitOpInterfaces.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/HW/HWEnums.h"
 #include "circt/Dialect/HW/HWOpInterfaces.h"

@@ -6043,15 +6043,17 @@ public:
   void emit(emit::FileListOp op);
 
 private:
+  void emitOp(emit::RefOp op);
   void emitOp(emit::VerbatimOp op);
 };
 
 void FileEmitter::emit(emit::FileOp op) {
   for (Operation &op : *op.getBodyBlock()) {
     TypeSwitch<Operation *>(&op)
-        .Case<emit::VerbatimOp>([&](auto op) { emitOp(op); })
+        .Case<emit::VerbatimOp, emit::RefOp>([&](auto op) { emitOp(op); })
         .Case<VerbatimOp, IfDefOp, MacroDefOp>(
             [&](auto op) { ModuleEmitter(state).emitStatement(op); })
+        .Case<BindOp>([&](auto op) { ModuleEmitter(state).emitBind(op); })
         .Default(
             [&](auto op) { emitOpError(op, "cannot be emitted to a file"); });
   }
@@ -6074,6 +6076,18 @@ void FileEmitter::emit(emit::FileListOp op) {
        << PP::newline;
   }
   ps.eof();
+}
+
+void FileEmitter::emitOp(emit::RefOp op) {
+  StringAttr target = op.getTargetAttr().getAttr();
+  auto *targetOp = state.symbolCache.getDefinition(target);
+  assert(targetOp->hasTrait<emit::Emittable>() && "target must be emittable");
+
+  TypeSwitch<Operation *>(targetOp)
+      .Case<hw::HWModuleOp>(
+          [&](auto module) { ModuleEmitter(state).emitHWModule(module); })
+      .Default(
+          [&](auto op) { emitOpError(op, "cannot be emitted to a file"); });
 }
 
 void FileEmitter::emitOp(emit::VerbatimOp op) {
@@ -6127,6 +6141,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
         modulesContainingBinds.insert(moduleOp);
     });
   };
+
   /// Collect any port marked as being referenced via symbol.
   auto collectPorts = [&](auto moduleOp) {
     auto portInfo = moduleOp.getPortList();
@@ -6141,6 +6156,12 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
       }
     }
   };
+
+  // Create a mapping identifying the files each symbol is emitted to.
+  DenseMap<StringAttr, SmallVector<emit::FileOp>> symbolsToFiles;
+  for (auto file : designOp.getOps<emit::FileOp>())
+    for (auto refs : file.getOps<emit::RefOp>())
+      symbolsToFiles[refs.getTargetAttr().getAttr()].push_back(file);
 
   SmallString<32> outputPath;
   for (auto &op : *designOp.getBody()) {
@@ -6199,15 +6220,28 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
         })
         .Case<HWModuleOp>([&](auto mod) {
           // Build the IR cache.
-          symbolCache.addDefinition(mod.getNameAttr(), mod);
+          auto sym = mod.getNameAttr();
+          symbolCache.addDefinition(sym, mod);
           collectPorts(mod);
           collectInstanceSymbolsAndBinds(mod);
 
-          // Emit into a separate file named after the module.
-          if (attr || separateModules)
-            separateFile(mod, getVerilogModuleName(mod) + ".sv");
-          else
-            rootFile.ops.push_back(info);
+          if (auto it = symbolsToFiles.find(sym); it != symbolsToFiles.end()) {
+            if (it->second.size() != 1 || attr) {
+              // This is a temporary check, present as long as both
+              // output_file and file operations are used.
+              op.emitError("modules can be emitted to a single file");
+              encounteredError = true;
+            } else {
+              // The op is not separated into a file as it will be
+              // pulled into the unique file operation it references.
+            }
+          } else {
+            // Emit into a separate file named after the module.
+            if (attr || separateModules)
+              separateFile(mod, getVerilogModuleName(mod) + ".sv");
+            else
+              rootFile.ops.push_back(info);
+          }
         })
         .Case<InterfaceOp>([&](InterfaceOp intf) {
           // Build the IR cache.

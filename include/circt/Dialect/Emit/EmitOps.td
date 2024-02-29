@@ -84,6 +84,23 @@ def VerbatimOp : EmitOp<"verbatim", [HasParent<"circt::emit::FileOp">]> {
   }];
 }
 
+def RefOp : EmitOp<"ref", [
+  HasParent<"circt::emit::FileOp">,
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>
+]> {
+  let summary = "Print a referenced SV operation inline into the file";
+  let description = [{
+    The `emit.ref` operation targets an op via a symbol, emitting its
+    contents into the file it is part of. The set of targetable
+    operations and the emission rules are defined in ExportVerilog.
+  }];
+
+  let arguments = (ins FlatSymbolRefAttr:$target);
+
+  let assemblyFormat = [{
+    $target attr-dict
+  }];
+}
 
 def FileListOp : EmitOp<"file_list", [
     Symbol,
