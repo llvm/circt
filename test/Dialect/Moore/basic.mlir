@@ -6,8 +6,21 @@ moore.module @Foo {
   moore.instance "foo" @Foo
   // CHECK: %myVar = moore.variable : !moore.bit
   %myVar = moore.variable : !moore.bit
-  // CHECK: [[TMP:%.+]] = moore.variable name "myVar" : !moore.bit
-  moore.variable name "myVar" : !moore.bit
+  // CHECK: [[TMP:%.+]] = moore.variable name "myVar" %myVar : !moore.bit
+  moore.variable name "myVar" %myVar : !moore.bit
+
+  // CHECK: moore.procedure initial {
+  // CHECK: moore.procedure final {
+  // CHECK: moore.procedure always {
+  // CHECK: moore.procedure always_comb {
+  // CHECK: moore.procedure always_latch {
+  // CHECK: moore.procedure always_ff {
+  moore.procedure initial {}
+  moore.procedure final {}
+  moore.procedure always {}
+  moore.procedure always_comb {}
+  moore.procedure always_latch {}
+  moore.procedure always_ff {}
 }
 
 // CHECK-LABEL: moore.module @Bar

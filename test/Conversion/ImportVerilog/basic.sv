@@ -37,8 +37,39 @@ module Parent;
   Child child();
 endmodule
 
-// CHECK-LABEL: moore.module @Foo
-module Foo;
+// CHECK-LABEL: moore.module @Basic
+module Basic;
   // CHECK: %myVar = moore.variable
   var myVar;
+
+  // CHECK: moore.procedure initial {
+  // CHECK: }
+  initial;
+
+  // CHECK: moore.procedure final {
+  // CHECK: }
+  final begin end
+
+  // CHECK: moore.procedure always {
+  // CHECK:   %x = moore.variable
+  // CHECK:   %y = moore.variable
+  // CHECK: }
+  always begin
+    int x;
+    begin
+      int y;
+    end
+  end
+
+  // CHECK: moore.procedure always_comb {
+  // CHECK: }
+  always_comb begin end
+
+  // CHECK: moore.procedure always_latch {
+  // CHECK: }
+  always_latch begin end
+
+  // CHECK: moore.procedure always_ff {
+  // CHECK: }
+  always_ff @* begin end
 endmodule

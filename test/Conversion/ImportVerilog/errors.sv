@@ -57,3 +57,22 @@ module Foo;
   // expected-error @below {{variable initializer expressions not supported}}
   int a = 0;
 endmodule
+
+// -----
+
+module Foo;
+  initial begin
+    // expected-error @below {{variable initializer expressions not supported}}
+    automatic int a = 0;
+  end
+endmodule
+
+// -----
+
+module Foo;
+  int a;
+  initial begin
+    // expected-error @below {{unsupported statement}}
+    release a;
+  end
+endmodule
