@@ -84,15 +84,21 @@ static void replaceOpAndCopyName(PatternRewriter &rewriter, Operation *op,
 /// A wrapper of `PatternRewriter::replaceOpWithNewOp` to propagate
 /// "sv.namehint" attribute. If a replaced op has a "sv.namehint" attribute,
 /// this function propagates the name to the new value.
-template <typename OpTy, typename... Args>
-static OpTy replaceOpWithNewOpAndCopyName(PatternRewriter &rewriter,
-                                          Operation *op, Args &&...args) {
-  auto name = op->getAttrOfType<StringAttr>("sv.namehint");
+template <typename NewOpTy, typename OldOpTy, typename... Args>
+static NewOpTy replaceOpWithNewOpAndCopyName(PatternRewriter &rewriter,
+                                             OldOpTy op, Args &&...args) {
   auto newOp =
-      rewriter.replaceOpWithNewOp<OpTy>(op, std::forward<Args>(args)...);
-  if (name && !newOp->hasAttr("sv.namehint"))
-    rewriter.modifyOpInPlace(newOp,
-                             [&] { newOp->setAttr("sv.namehint", name); });
+      rewriter.replaceOpWithNewOp<NewOpTy>(op, std::forward<Args>(args)...);
+
+  if constexpr (std::is_same<NewOpTy, OldOpTy>::value) {
+    rewriter.modifyOpInPlace(
+        newOp, [&] { newOp->setDialectAttrs(op->getDialectAttrs()); });
+  } else {
+    auto name = op->template getAttrOfType<StringAttr>("sv.namehint");
+    if (name && !newOp->hasAttr("sv.namehint"))
+      rewriter.modifyOpInPlace(newOp,
+                               [&] { newOp->setAttr("sv.namehint", name); });
+  }
 
   return newOp;
 }
