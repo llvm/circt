@@ -1,4 +1,4 @@
-// RUN: om-linker %S/Inputs/a.mlir %S/Inputs/b.mlir | FileCheck %s
+// RUN: om-linker %S/Inputs/a.mlir %S/Inputs/b.mlir %S/Inputs/other.mlir | FileCheck %s
 // CHECK:      module {
 // CHECK-NEXT:   om.class @A(%arg: i1) {
 // CHECK-NEXT:   }
