@@ -8,6 +8,7 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/Support/raw_ostream.h"
+#include "time.h"
 
 #define VERBOSE 0
 
@@ -554,7 +555,7 @@ void parse_fsm(string input_file){
   // initial condition
   s.add(nestedForall(*solverVars, body, 0));
 
-  int time_bound = 10;
+  int time_bound = 50;
 
   vector<int> outputVec;
 
@@ -584,14 +585,18 @@ void parse_fsm(string input_file){
 
     } else {
       expr body = implies((findMyFun(t.from, stateInvMap_fun)(solverVars->size(), solverVars->data())), findMyFun(t.to, stateInvMap_fun)(solverVarsAfter->size(), solverVarsAfter->data()));
-      s.add(forall(solverVars->at(solverVars->size()-1), implies((solverVars->at(solverVars->size()-1)>=0 && solverVars->at(solverVars->size()-1)<time_bound), ((nestedForall(*solverVars, body, 1))))));
+      s.add(forall(solverVars->at(solverVars->size()-1),  implies((solverVars->at(solverVars->size()-1)>=0 && solverVars->at(solverVars->size()-1)<time_bound), ((nestedForall(*solverVars, body, 1))))));
 
     }
 
   }
 
-  // state 0 is followed by state 1
-  // s.add(forall(solverVars->at(solverVars->size()-1), implies(solverVars->at(solverVars->size()-1)<time_bound,       ); 
+  // bounded checking 
+  body = implies((findMyFun("B", stateInvMap_fun)(solverVars->size(), solverVars->data()) && solverVars->at(0) > 10), false);
+  s.add(forall(solverVars->at(solverVars->size()-1),  implies((solverVars->at(solverVars->size()-1)>=0 && solverVars->at(solverVars->size()-1)<time_bound), ((nestedForall(*solverVars, body, 1))))));
+
+
+
 
   printSolverAssertions(s);
 
