@@ -314,22 +314,20 @@ struct AssertOpConversionPattern : OpConversionPattern<verif::AssertOp> {
                 delayN->emitError("Only a ##n true |-> b is supported. RHS of "
                                   "the concatenation must be true");
                 return false;
-              } else {
-                if (hwconst.getValue().isZero()) {
-                  delayN->emitError(
-                      "Only a ##n true |-> b is supported. RHS of "
-                      "the concatenation must be true");
-                  return false;
-                }
-
-                // NOI case: generate the hardware needed to encode the
-                // non-overlapping implication
-                if (!makeNonOverlappingImplication(implop, delayN, ltlclock,
-                                                   concat, rewriter, res))
-                  return false;
-
-                rewriter.eraseOp(delayN);
               }
+              if (hwconst.getValue().isZero()) {
+                delayN->emitError("Only a ##n true |-> b is supported. RHS of "
+                                  "the concatenation must be true");
+                return false;
+              }
+
+              // NOI case: generate the hardware needed to encode the
+              // non-overlapping implication
+              if (!makeNonOverlappingImplication(implop, delayN, ltlclock,
+                                                 concat, rewriter, res))
+                return false;
+
+              rewriter.eraseOp(delayN);
             }
           } else {
             concat->emitError("Antecedent must be of the form a ##n true");
