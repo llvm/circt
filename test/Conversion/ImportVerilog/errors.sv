@@ -54,17 +54,17 @@ endmodule
 // -----
 
 module Foo;
-  // expected-error @below {{variable initializer expressions not supported}}
-  int a = 0;
+  int x;
+  // expected-error @below {{delayed assignments not supported}}
+  initial x <= #1ns x;
 endmodule
 
 // -----
 
 module Foo;
-  initial begin
-    // expected-error @below {{variable initializer expressions not supported}}
-    automatic int a = 0;
-  end
+  int x;
+  // expected-error @below {{delayed continuous assignments not supported}}
+  assign #1ns x = x;
 endmodule
 
 // -----

@@ -157,4 +157,51 @@ def VariableOp : MooreOp<"variable", [
   }];
 }
 
+//===----------------------------------------------------------------------===//
+// Assignments
+//===----------------------------------------------------------------------===//
+
+class AssignOpBase<string mnemonic, list<Trait> traits = []> :
+    MooreOp<mnemonic, traits # [SameTypeOperands]> {
+  let arguments = (ins AnyType:$dst, AnyType:$src);
+  let assemblyFormat = [{
+    $dst `,` $src attr-dict `:` type($src)
+  }];
+}
+
+def ContinuousAssignOp : AssignOpBase<"assign", [HasParent<"SVModuleOp">]> {
+  let summary = "Continuous assignment within a module";
+  let description = [{
+    A continuous assignment in module scope, such as `assign x = y;`, which
+    continuously drives the value on the right-hand side onto the left-hand
+    side.
+
+    See IEEE 1800-2017 § 10.3 "Continuous assignments".
+  }];
+}
+
+def BlockingAssignOp : AssignOpBase<"blocking_assign"> {
+  let summary = "Blocking procedural assignment";
+  let description = [{
+    A blocking procedural assignment in a sequential block, such as `x = y`. The
+    effects of the assignment are visible to any subsequent operations in the
+    block.
+
+    See IEEE 1800-2017 § 10.4.1 "Blocking procedural assignments".
+  }];
+}
+
+def NonBlockingAssignOp : AssignOpBase<"nonblocking_assign"> {
+  let summary = "Nonblocking procedural assignment";
+  let description = [{
+    A nonblocking procedural assignment in a sequential block, such as `x <= y;`
+    or `x <= @(posedge y) z` or `x <= #1ns y`. The assignment does not take
+    effect immediately. Subsequent operations in the block do not see the
+    effects of this assignment. Instead, the assignment is scheduled to happen
+    in a subsequent time step as dictated by the delay or event control.
+
+    See IEEE 1800-2017 § 10.4.2 "Nonblocking procedural assignments".
+  }];
+}
+
 #endif // CIRCT_DIALECT_MOORE_MOOREOPS

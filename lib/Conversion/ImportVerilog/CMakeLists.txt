@@ -29,6 +29,7 @@ else ()
 endif ()
 
 add_circt_translation_library(CIRCTImportVerilog
+  Expressions.cpp
   ImportVerilog.cpp
   Statements.cpp
   Structure.cpp
