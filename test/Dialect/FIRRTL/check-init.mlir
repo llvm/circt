@@ -60,3 +60,14 @@ firrtl.circuit "simpleoutref"   {
   }
 }
 
+// -----
+
+// CHECK: firrtl.circuit "vecSimple"
+firrtl.circuit "vecSimple" {
+  firrtl.module @vecSimple(in %a: !firrtl.uint<1>, out %x: !firrtl.vector<uint<1>, 2>) {
+    %t0 = firrtl.subindex %x[0] : !firrtl.vector<uint<1>, 2>
+    %t1 = firrtl.subindex %x[1] : !firrtl.vector<uint<1>, 2>
+    firrtl.strictconnect %t0, %a : !firrtl.uint<1>
+    firrtl.strictconnect %t1, %a : !firrtl.uint<1>
+  }
+}

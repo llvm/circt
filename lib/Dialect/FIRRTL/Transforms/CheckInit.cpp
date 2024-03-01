@@ -109,9 +109,19 @@ static std::string nameForField(Type t, size_t fieldID) {
     return bundle.getElementName(idx).str() + "." +
            nameForField(bundle.getElementType(idx), fieldID - fid);
   } else if (auto vec = dyn_cast<FVectorType>(t)) {
-    return "some vector thing";
+    auto idx = vec.getIndexForFieldID(fieldID);
+    auto fid = vec.getFieldID(idx);
+    if (fieldID == fid)
+      return "[" + std::to_string(idx) + "]";
+    return "[" + std::to_string(idx) + "]." +
+           nameForField(vec.getElementType(), fieldID - fid);
   } else if (auto vec = dyn_cast<OpenVectorType>(t)) {
-    return "some vector thing";
+    auto idx = vec.getIndexForFieldID(fieldID);
+    auto fid = vec.getFieldID(idx);
+    if (fieldID == fid)
+      return "[" + std::to_string(idx) + "]";
+    return "[" + std::to_string(idx) + "]." +
+           nameForField(vec.getElementType(), fieldID - fid);
   }
   return "INVALID";
 }
@@ -138,17 +148,19 @@ static StringRef getInstPortName(Value v) {
 
 void CheckInitPass::emitInitError(Value decl, size_t fieldID) {
 
-  InFlightDiagnostic err = [&](){
-  if (auto ba = dyn_cast<BlockArgument>(decl))
-return getOperation()->emitError("Port `")
-                       << getPortName(ba) << "`";
-if (isa<InstanceOp>(decl.getDefiningOp()))
-    return decl.getDefiningOp()->emitError("Instance input `") << getInstPortName(decl) << "`";
-  if (isa<chirrtl::MemoryPortOp>(decl.getDefiningOp()))
-    return decl.getDefiningOp()->emitError("Memory port `") << getCMemPortName(decl) << "`";
-  if (isa<MemOp>(decl.getDefiningOp()))
-    return decl.getDefiningOp()->emitError("Memory port `") << getMemPortName(decl) << "`";
-  return decl.getDefiningOp()->emitError("Wire");
+  InFlightDiagnostic err = [&]() {
+    if (auto ba = dyn_cast<BlockArgument>(decl))
+      return getOperation()->emitError("Port `") << getPortName(ba) << "`";
+    if (isa<InstanceOp>(decl.getDefiningOp()))
+      return decl.getDefiningOp()->emitError("Instance input `")
+             << getInstPortName(decl) << "`";
+    if (isa<chirrtl::MemoryPortOp>(decl.getDefiningOp()))
+      return decl.getDefiningOp()->emitError("Memory port `")
+             << getCMemPortName(decl) << "`";
+    if (isa<MemOp>(decl.getDefiningOp()))
+      return decl.getDefiningOp()->emitError("Memory port `")
+             << getMemPortName(decl) << "`";
+    return decl.getDefiningOp()->emitError("Wire");
   }();
   if (fieldID == 0) {
     err << " is not initialized.";
@@ -161,16 +173,19 @@ if (isa<InstanceOp>(decl.getDefiningOp()))
 
 // Check (recursively) that decl at fieldID, whose type at fieldID is t, has a
 // bit set in vals
+// Pending improvement is to check children of an aggregate and if all of them
+// are uninitialized, then emit the error at that point instead of for each
+// field.
 void CheckInitPass::reportRegion(Value decl, Type t, size_t fieldID,
                                  bool needed, bool alwaysNeeded,
                                  BitVector &vals) {
-  LLVM_DEBUG(
-  llvm::errs() << "Test[" << fieldID << "]: \n\t" << decl << " \n\t" << t << " \n\t";
-  dumpBV(vals);
-  llvm::errs() << " n:" << needed << " a:" << alwaysNeeded << "\n";
-  );
+  LLVM_DEBUG(llvm::errs() << "Test[" << fieldID << "]: \n\t" << decl << " \n\t"
+                          << t << " \n\t";
+             dumpBV(vals);
+             llvm::errs() << " n:" << needed << " a:" << alwaysNeeded << "\n";);
   // May recursively handle subtypes.
-  if ((!needed && !alwaysNeeded) || checkBit(vals, fieldID) || type_isa<RefType>(t) || type_isa<AnalogType>(t))
+  if ((!needed && !alwaysNeeded) || checkBit(vals, fieldID) ||
+      type_isa<RefType>(t) || type_isa<AnalogType>(t))
     return;
 
   // Explicitly test each subtype.
@@ -204,7 +219,8 @@ void CheckInitPass::reportRegion(Value decl, Type t, size_t fieldID,
 // compute the values set by op's regions.  A when, for example, ands the init
 // set as only fields set on both paths are unconditionally set by the when.
 void CheckInitPass::processOp(Operation *op, FieldSource &fieldSource) {
-  LLVM_DEBUG(llvm::errs() << "* " << op << " r(" << op->getNumRegions() << ")\n";);
+  LLVM_DEBUG(llvm::errs() << "* " << op << " r(" << op->getNumRegions()
+                          << ")\n";);
 
   for (auto &region : op->getRegions()) {
     auto &local = localInfo[&region];
@@ -217,7 +233,7 @@ void CheckInitPass::processOp(Operation *op, FieldSource &fieldSource) {
           for (auto result : mem.getResults())
             local.dests.push_back(result);
         } else if (auto memport = dyn_cast<chirrtl::MemoryPortOp>(op)) {
-          //Inferred Memory Ports are weird and we don't try to check them
+          // Inferred Memory Ports are weird and we don't try to check them
         } else if (auto inst = dyn_cast<InstanceOp>(op)) {
           for (auto [idx, arg] : llvm::enumerate(inst.getResults()))
             local.dests.push_back(arg);
@@ -268,7 +284,8 @@ void CheckInitPass::runOnOperation() {
       auto &state = localInfo[&r];
 
       for (auto *op : state.children) {
-        LLVM_DEBUG(llvm::errs() << "+ " << op << " r(" << op->getNumRegions() << ")\n";);
+        LLVM_DEBUG(llvm::errs()
+                       << "+ " << op << " r(" << op->getNumRegions() << ")\n";);
         // Union the child's regions.  This is safe as all multi-region ops are
         // exclusive control flow.
         assert(localInfo.count(&op->getRegion(0)));
