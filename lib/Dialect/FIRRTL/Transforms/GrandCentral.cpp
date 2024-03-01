@@ -1728,6 +1728,11 @@ void GrandCentralPass::runOnOperation() {
       auto *m = modules.pop_back_val();
       for (InstanceRecord *a : *m) {
         auto *mod = a->getTarget();
+
+        // Skip classes, which don't apply here.
+        if (isa<ClassLike>(mod->getModule().getOperation()))
+          continue;
+
         // Skip modules that we've visited, that are are under the companion
         // module, or are bound/under a layer block.
         if (auto block = a->getInstance()->getParentOfType<LayerBlockOp>()) {
