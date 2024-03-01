@@ -306,13 +306,30 @@ struct AssertOpConversionPattern : OpConversionPattern<verif::AssertOp> {
           if (!isa<BlockArgument>(inputs.back())) {
             if ((delayN =
                      dyn_cast<ltl::DelayOp>(inputs.back().getDefiningOp()))) {
-              // NOI case: generate the hardware needed to encode the
-              // non-overlapping implication
-              if (!makeNonOverlappingImplication(implop, delayN, ltlclock,
-                                                 concat, rewriter, res))
-                return false;
 
-              rewriter.eraseOp(delayN);
+              // Make sure that you only allow for a ##n true |-> b
+              hw::ConstantOp hwconst;
+              if (!(hwconst = dyn_cast<hw::ConstantOp>(
+                        delayN.getInput().getDefiningOp()))) {
+                delayN->emitError("Only a ##n true |-> b is supported. RHS of "
+                                  "the concatenation must be true");
+                return false;
+              } else {
+                if (hwconst.getValue().isZero()) {
+                  delayN->emitError(
+                      "Only a ##n true |-> b is supported. RHS of "
+                      "the concatenation must be true");
+                  return false;
+                }
+
+                // NOI case: generate the hardware needed to encode the
+                // non-overlapping implication
+                if (!makeNonOverlappingImplication(implop, delayN, ltlclock,
+                                                   concat, rewriter, res))
+                  return false;
+
+                rewriter.eraseOp(delayN);
+              }
             }
           } else {
             concat->emitError("Antecedent must be of the form a ##n true");
