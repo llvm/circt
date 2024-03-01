@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Comb/CombDialect.h"
+#include "circt/Dialect/Emit/EmitDialect.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/OM/OMDialect.h"
 #include "circt/Dialect/OM/OMPasses.h"
@@ -207,6 +208,7 @@ int main(int argc, char **argv) {
   MLIRContext context;
   // Register post-export dialects.
   context.loadDialect<comb::CombDialect>();
+  context.loadDialect<emit::EmitDialect>();
   context.loadDialect<hw::HWDialect>();
   context.loadDialect<om::OMDialect>();
   context.loadDialect<sv::SVDialect>();
