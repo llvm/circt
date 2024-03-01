@@ -485,9 +485,7 @@ void SimInstantiateOp::print(OpAsmPrinter &p) {
   BlockArgument modelArg = getBody().getArgument(0);
   auto modelType = cast<SimModelInstanceType>(modelArg.getType());
 
-  p << " ";
-  p.printSymbolName(modelType.getModel());
-  p << " as ";
+  p << " " << modelType.getModel() << " as ";
   p.printRegionArgument(modelArg, {}, true);
 
   p.printOptionalAttrDictWithKeyword(getOperation()->getAttrs());
@@ -513,7 +511,9 @@ ParseResult SimInstantiateOp::parse(OpAsmParser &parser,
   if (failed(parser.parseOptionalAttrDictWithKeyword(result.attributes)))
     return failure();
 
-  modelArg.type = SimModelInstanceType::get(result.getContext(), modelName);
+  auto ctxt = result.getContext();
+  modelArg.type =
+      SimModelInstanceType::get(ctxt, FlatSymbolRefAttr::get(ctxt, modelName));
 
   std::unique_ptr<Region> body = std::make_unique<Region>();
   if (failed(parser.parseRegion(*body, {modelArg})))
@@ -538,7 +538,8 @@ SimInstantiateOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   Operation *moduleOp = getSupportedModuleOp(
       symbolTable, getOperation(),
       llvm::cast<SimModelInstanceType>(getBody().getArgument(0).getType())
-          .getModel());
+          .getModel()
+          .getAttr());
   if (!moduleOp)
     return failure();
 
@@ -553,7 +554,9 @@ LogicalResult
 SimSetInputOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   Operation *moduleOp = getSupportedModuleOp(
       symbolTable, getOperation(),
-      llvm::cast<SimModelInstanceType>(getInstance().getType()).getModel());
+      llvm::cast<SimModelInstanceType>(getInstance().getType())
+          .getModel()
+          .getAttr());
   if (!moduleOp)
     return failure();
 
@@ -581,7 +584,9 @@ LogicalResult
 SimGetPortOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   Operation *moduleOp = getSupportedModuleOp(
       symbolTable, getOperation(),
-      llvm::cast<SimModelInstanceType>(getInstance().getType()).getModel());
+      llvm::cast<SimModelInstanceType>(getInstance().getType())
+          .getModel()
+          .getAttr());
   if (!moduleOp)
     return failure();
 
@@ -604,7 +609,9 @@ SimGetPortOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 LogicalResult SimStepOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   Operation *moduleOp = getSupportedModuleOp(
       symbolTable, getOperation(),
-      llvm::cast<SimModelInstanceType>(getInstance().getType()).getModel());
+      llvm::cast<SimModelInstanceType>(getInstance().getType())
+          .getModel()
+          .getAttr());
   if (!moduleOp)
     return failure();
 

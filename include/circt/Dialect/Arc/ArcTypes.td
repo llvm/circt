@@ -51,7 +51,7 @@ def StorageType : ArcTypeDef<"Storage"> {
 
 def SimModelInstance : ArcTypeDef<"SimModelInstance"> {
   let mnemonic = "sim.instance";
-  let parameters = (ins "mlir::StringAttr":$model);
+  let parameters = (ins "mlir::FlatSymbolRefAttr":$model);
   let assemblyFormat = "`<` $model `>`";
 }
 

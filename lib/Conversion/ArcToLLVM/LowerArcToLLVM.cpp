@@ -345,7 +345,7 @@ struct SimInstantiateOpLowering
                   ConversionPatternRewriter &rewriter) const final {
     auto modelIt = modelInfo.find(
         cast<SimModelInstanceType>(op.getBody().getArgument(0).getType())
-            .getModel());
+            .getModel().getValue());
     ModelInfoMap &model = modelIt->second;
 
     ModuleOp moduleOp = op->getParentOfType<ModuleOp>();
@@ -386,7 +386,7 @@ struct SimSetInputOpLowering : public ModelAwarePattern<arc::SimSetInputOp> {
   matchAndRewrite(arc::SimSetInputOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
     auto modelIt = modelInfo.find(
-        cast<SimModelInstanceType>(op.getInstance().getType()).getModel());
+        cast<SimModelInstanceType>(op.getInstance().getType()).getModel().getValue());
     ModelInfoMap &model = modelIt->second;
 
     auto portIt = model.states.find(op.getInput());
@@ -414,7 +414,7 @@ struct SimGetPortOpLowering : public ModelAwarePattern<arc::SimGetPortOp> {
   matchAndRewrite(arc::SimGetPortOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
     auto modelIt = modelInfo.find(
-        cast<SimModelInstanceType>(op.getInstance().getType()).getModel());
+        cast<SimModelInstanceType>(op.getInstance().getType()).getModel().getValue());
     ModelInfoMap &model = modelIt->second;
 
     auto portIt = model.states.find(op.getPort());
@@ -443,7 +443,7 @@ struct SimStepOpLowering : public ModelAwarePattern<arc::SimStepOp> {
   matchAndRewrite(arc::SimStepOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
     StringRef modelName =
-        cast<SimModelInstanceType>(op.getInstance().getType()).getModel();
+        cast<SimModelInstanceType>(op.getInstance().getType()).getModel().getValue();
 
     StringAttr evalFunc =
         rewriter.getStringAttr(evalSymbolFromModelName(modelName));

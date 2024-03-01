@@ -17,18 +17,18 @@ func.func @full() {
     // CHECK: "llvm.intr.memset"(%[[state]], %[[zero]], %[[size]]) <{isVolatile = false}>
     arc.sim.instantiate @id as %model {
         // CHECK-NEXT: llvm.store %[[c]], %[[state]] : i8
-        arc.sim.set_input %model, "i" = %c : i8, !arc.sim.instance<"id">
+        arc.sim.set_input %model, "i" = %c : i8, !arc.sim.instance<@id>
 
         // CHECK-NEXT: %[[j_ptr:.*]] = llvm.getelementptr %[[state]][1] : (!llvm.ptr) -> !llvm.ptr, i8
         // CHECK-NEXT: llvm.store %[[c]], %[[j_ptr]] : i8
-        arc.sim.set_input %model, "j" = %c : i8, !arc.sim.instance<"id">
+        arc.sim.set_input %model, "j" = %c : i8, !arc.sim.instance<@id>
 
         // CHECK-NEXT: llvm.call @id_eval(%[[state]])
-        arc.sim.step %model : !arc.sim.instance<"id">
+        arc.sim.step %model : !arc.sim.instance<@id>
 
         // CHECK-NEXT: %[[o_ptr:.*]] = llvm.getelementptr %[[state]][2] : (!llvm.ptr) -> !llvm.ptr, i8
         // CHECK-NEXT: %[[result:.*]] = llvm.load %[[o_ptr]] : !llvm.ptr -> i8
-        %result = arc.sim.get_port %model, "o" : i8, !arc.sim.instance<"id">
+        %result = arc.sim.get_port %model, "o" : i8, !arc.sim.instance<@id>
 
         // CHECK-DAG: %[[to_print:.*]] = llvm.inttoptr %[[result]] : i8 to !llvm.ptr
         // CHECK-DAG: %[[format_str_ptr:.*]] = llvm.mlir.addressof @[[format_str]] : !llvm.ptr
