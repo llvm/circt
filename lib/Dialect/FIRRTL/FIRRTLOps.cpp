@@ -494,6 +494,9 @@ LogicalResult CircuitOp::verifyRegions() {
 
   mlir::SymbolTable symtbl(getOperation());
 
+  if (!symtbl.lookup(main))
+    return emitOpError().append("Module with same name as circuit not found");
+
   // Store a mapping of defname to either the first external module
   // that defines it or, preferentially, the first external module
   // that defines it and has no parameters.
