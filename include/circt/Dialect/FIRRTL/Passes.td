@@ -534,7 +534,7 @@ def CheckCombLoops : Pass<"firrtl-check-comb-loops", "firrtl::CircuitOp"> {
 def CheckInit : Pass<"firrtl-check-init", "firrtl::FModuleOp"> {
   let summary = "Check initialization and emit errors";
   let description = [{
-    This pass checks wire and port initialization and emit errors.
+    This pass checks wire and port initialization and emits errors.
   }];
   let constructor = "circt::firrtl::createCheckInitPass()";
 }

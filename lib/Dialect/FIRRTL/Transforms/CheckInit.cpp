@@ -1,4 +1,4 @@
-//===- CheckInit.cpp - Ensure all wires are initialized ------*- C++ -*-===//
+//===- CheckInit.cpp - Ensure all wires are initialized ---------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -7,9 +7,9 @@
 //===----------------------------------------------------------------------===//
 //
 // This file defines the CheckInit pass.  This pass checks that all wires are
-// initialized (connected too).
+// initialized (connected to).
 //
-// One assumption is that dynamic vector indexes cannot contribute to 
+// One assumption is that dynamic vector indexes cannot contribute to
 // initialization as you don't know the index.  It is possible that for an
 // n-length vector, n dynamic indexes and connects could be constructed such
 // that the dynamic indexes are coupled enough that they guarantee coverage of
@@ -100,36 +100,24 @@ static bool checkBit(BitVector &vals, size_t idx) {
 
 static std::string nameForField(Type t, size_t fieldID) {
   LLVM_DEBUG(llvm::errs() << "N: " << t << " @" << fieldID << "\n";);
-  if (auto bundle = dyn_cast<BundleType>(t)) {
-    auto idx = bundle.getIndexForFieldID(fieldID);
-    auto fid = bundle.getFieldID(idx);
-    if (fieldID == fid)
-      return bundle.getElementName(idx).str();
-    return bundle.getElementName(idx).str() + "." +
-           nameForField(bundle.getElementType(idx), fieldID - fid);
-  } else if (auto bundle = dyn_cast<OpenBundleType>(t)) {
-    auto idx = bundle.getIndexForFieldID(fieldID);
-    auto fid = bundle.getFieldID(idx);
-    if (fieldID == fid)
-      return bundle.getElementName(idx).str();
-    return bundle.getElementName(idx).str() + "." +
-           nameForField(bundle.getElementType(idx), fieldID - fid);
-  } else if (auto vec = dyn_cast<FVectorType>(t)) {
-    auto idx = vec.getIndexForFieldID(fieldID);
-    auto fid = vec.getFieldID(idx);
-    if (fieldID == fid)
-      return "[" + std::to_string(idx) + "]";
-    return "[" + std::to_string(idx) + "]." +
-           nameForField(vec.getElementType(), fieldID - fid);
-  } else if (auto vec = dyn_cast<OpenVectorType>(t)) {
-    auto idx = vec.getIndexForFieldID(fieldID);
-    auto fid = vec.getFieldID(idx);
-    if (fieldID == fid)
-      return "[" + std::to_string(idx) + "]";
-    return "[" + std::to_string(idx) + "]." +
-           nameForField(vec.getElementType(), fieldID - fid);
-  }
-  return "INVALID";
+  return FIRRTLTypeSwitch<Type, std::string>(t)
+      .Case<BundleType, OpenBundleType>([fieldID](auto bundle) {
+        auto idx = bundle.getIndexForFieldID(fieldID);
+        auto fid = bundle.getFieldID(idx);
+        if (fieldID == fid)
+          return bundle.getElementName(idx).str();
+        return bundle.getElementName(idx).str() + "." +
+               nameForField(bundle.getElementType(idx), fieldID - fid);
+      })
+      .Case<FVectorType, OpenVectorType>([fieldID](auto vec) {
+        auto idx = vec.getIndexForFieldID(fieldID);
+        auto fid = vec.getFieldID(idx);
+        if (fieldID == fid)
+          return "[" + std::to_string(idx) + "]";
+        return "[" + std::to_string(idx) + "]." +
+               nameForField(vec.getElementType(), fieldID - fid);
+      })
+      .Default([](auto) { return "INVALID"; });
 }
 
 static StringRef getPortName(BlockArgument b) {
@@ -195,31 +183,21 @@ void CheckInitPass::reportRegion(Value decl, Type t, size_t fieldID,
     return;
 
   // Explicitly test each subtype.
-  if (auto bundle = type_dyn_cast<BundleType>(t)) {
-    for (size_t idx = 0, e = bundle.getNumElements(); idx != e; ++idx)
-      reportRegion(decl, bundle.getElementType(idx),
-                   fieldID + bundle.getFieldID(idx),
-                   needed ^ bundle.getElement(idx).isFlip, alwaysNeeded, vals);
-    return;
-  } else if (auto bundle = type_dyn_cast<OpenBundleType>(t)) {
-    for (size_t idx = 0, e = bundle.getNumElements(); idx != e; ++idx)
-      reportRegion(decl, bundle.getElementType(idx),
-                   fieldID + bundle.getFieldID(idx),
-                   needed ^ bundle.getElement(idx).isFlip, alwaysNeeded, vals);
-    return;
-  } else if (auto vec = type_dyn_cast<FVectorType>(t)) {
-    for (size_t idx = 0, e = vec.getNumElements(); idx != e; ++idx)
-      reportRegion(decl, vec.getElementType(), fieldID + vec.getFieldID(idx),
-                   needed, alwaysNeeded, vals);
-    return;
-  } else if (auto vec = type_dyn_cast<OpenVectorType>(t)) {
-    for (size_t idx = 0, e = vec.getNumElements(); idx != e; ++idx)
-      reportRegion(decl, vec.getElementType(), fieldID + vec.getFieldID(idx),
-                   needed, alwaysNeeded, vals);
-    return;
-  }
-
-  emitInitError(decl, fieldID);
+  FIRRTLTypeSwitch<Type>(t)
+      .Case<BundleType, OpenBundleType>([&](auto bundle) {
+        for (size_t idx = 0, e = bundle.getNumElements(); idx != e; ++idx)
+          reportRegion(decl, bundle.getElementType(idx),
+                       fieldID + bundle.getFieldID(idx),
+                       needed ^ bundle.getElement(idx).isFlip, alwaysNeeded,
+                       vals);
+      })
+      .Case<FVectorType, OpenVectorType>([&](auto vec) {
+        for (size_t idx = 0, e = vec.getNumElements(); idx != e; ++idx)
+          reportRegion(decl, vec.getElementType(),
+                       fieldID + vec.getFieldID(idx), needed, alwaysNeeded,
+                       vals);
+      })
+      .Default([&](auto) { emitInitError(decl, fieldID); });
 }
 
 // compute the values set by op's regions.  A when, for example, ands the init

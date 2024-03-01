@@ -1,9 +1,9 @@
-; RUNF: firtool %s -parse-only -mlir-print-debuginfo --mlir-print-local-scope 2>&1 | FileCheck %s --check-prefixes=COMMON,PREFER
-; RUNF: firtool %s -parse-only -mlir-print-debuginfo --mlir-print-local-scope -fuse-info-locators | FileCheck %s --check-prefixes=COMMON,FUSE
-; RUNF: firtool %s -parse-only -mlir-print-debuginfo --mlir-print-local-scope -prefer-info-locators | FileCheck %s --check-prefixes=COMMON,PREFER
-; RUNF: firtool %s -parse-only -mlir-print-debuginfo --mlir-print-local-scope -ignore-info-locators | FileCheck %s --check-prefixes=COMMON,IGNORE
+; RUN: firtool %s -parse-only -mlir-print-debuginfo --mlir-print-local-scope 2>&1 | FileCheck %s --check-prefixes=COMMON,PREFER
+; RUN: firtool %s -parse-only -mlir-print-debuginfo --mlir-print-local-scope -fuse-info-locators | FileCheck %s --check-prefixes=COMMON,FUSE
+; RUN: firtool %s -parse-only -mlir-print-debuginfo --mlir-print-local-scope -prefer-info-locators | FileCheck %s --check-prefixes=COMMON,PREFER
+; RUN: firtool %s -parse-only -mlir-print-debuginfo --mlir-print-local-scope -ignore-info-locators | FileCheck %s --check-prefixes=COMMON,IGNORE
 
-; RUNF: not firtool %s -fuse-info-locators 2>&1 | FileCheck %s --check-prefixes=DIAG
+; RUN: not firtool %s -fuse-info-locators 2>&1 | FileCheck %s --check-prefixes=DIAG
 ; DIAG: path/to/Foo.scala:273:69: error:
 ; DIAG: locators-diagnostics.fir:20:5: note: additional location here
 ; DIAG: locators-diagnostics.fir:23:5: error:
