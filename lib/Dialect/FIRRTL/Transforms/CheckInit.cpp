@@ -9,6 +9,12 @@
 // This file defines the CheckInit pass.  This pass checks that all wires are
 // initialized (connected too).
 //
+// One assumption is that dynamic vector indexes cannot contribute to 
+// initialization as you don't know the index.  It is possible that for an
+// n-length vector, n dynamic indexes and connects could be constructed such
+// that the dynamic indexes are coupled enough that they guarantee coverage of
+// all elements.  We ignore this.
+//
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
