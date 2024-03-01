@@ -5,6 +5,8 @@
 // expected-error @below {{invalid option format: "worst"}}
 firrtl.circuit "Foo" {
 
+firrtl.extmodule @Foo ()
+
 firrtl.option @Platform {
   firrtl.option_case @FPGA
   firrtl.option_case @ASIC

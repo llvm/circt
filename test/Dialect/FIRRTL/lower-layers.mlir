@@ -481,6 +481,8 @@ firrtl.circuit "CaptureHardwareMultipleTimes" {
     firrtl.layer @B bind {}
   }
 
+  firrtl.extmodule @CaptureHardwareMultipleTimes ()
+
   // CHECK: firrtl.module private @[[A:.+]](in %[[p:.+]]: !firrtl.uint<1>) {
   // CHECK:   %0 = firrtl.add %[[p]], %[[p]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
   // CHECK: }
@@ -551,6 +553,7 @@ firrtl.circuit "CaptureHardwareMultipleTimes" {
 // https://github.com/llvm/circt/issues/6717
 
 firrtl.circuit "HierPathOps" {
+  firrtl.extmodule @HierPathOps ()
   hw.hierpath @nla1 [@Foo::@foo_A]
   hw.hierpath @nla2 [@Foo::@bar, @Bar]
   hw.hierpath private @nla3 [@Foo::@baz]
